@@ -65,3 +65,4 @@ obj-$(CONFIG_QPNP_MISC) += qpnp-misc.o
 obj-y				+= qcom/
 obj-$(CONFIG_TI_DRV2667) += ti_drv2667.o
 obj-$(CONFIG_QCOM_LIQUID_DOCK)	+= qcom_liquid_dock.o
+obj-$(CONFIG_HAPTIC_ISA1200)		+= isa1200.o
