@@ -38,7 +38,6 @@ struct ashmem_pin {
 #define ASHMEM_CACHE_CLEAN_RANGE	_IO(__ASHMEMIOC, 12)
 #define ASHMEM_CACHE_INV_RANGE		_IO(__ASHMEMIOC, 13)
 
-
 /* support of 32bit userspace on 64bit platforms */
 #ifdef CONFIG_COMPAT
 #define COMPAT_ASHMEM_SET_SIZE		_IOW(__ASHMEMIOC, 3, compat_size_t)
