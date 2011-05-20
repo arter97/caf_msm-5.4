@@ -1377,7 +1377,7 @@ static int do_prevent_allow(struct fsg_common *common)
 		return -EINVAL;
 	}
 
-	if (curlun->prevent_medium_removal && !prevent)
+	if (!curlun->nofua && curlun->prevent_medium_removal && !prevent)
 		fsg_lun_fsync_sub(curlun);
 	curlun->prevent_medium_removal = prevent;
 	return 0;
@@ -2942,6 +2942,7 @@ int fsg_common_create_lun(struct fsg_common *common, struct fsg_lun_config *cfg,
 	lun->ro = cfg->cdrom || cfg->ro;
 	lun->initially_ro = lun->ro;
 	lun->removable = !!cfg->removable;
+	lun->nofua = !!cfg->nofua;
 
 	if (!common->sysfs) {
 		/* we DON'T own the name!*/
