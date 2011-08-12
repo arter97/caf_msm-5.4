@@ -23,6 +23,7 @@
 #include <linux/err.h>
 #include <linux/types.h>
 #include <trace/events/iommu.h>
+#include <linux/scatterlist.h>
 
 #define IOMMU_READ	(1 << 0)
 #define IOMMU_WRITE	(1 << 1)
@@ -110,6 +111,10 @@ struct iommu_ops {
 		   phys_addr_t paddr, size_t size, int prot);
 	size_t (*unmap)(struct iommu_domain *domain, unsigned long iova,
 		     size_t size);
+	int (*map_range)(struct iommu_domain *domain, unsigned int iova,
+		    struct scatterlist *sg, unsigned int len, int prot);
+	int (*unmap_range)(struct iommu_domain *domain, unsigned int iova,
+		      unsigned int len);
 	phys_addr_t (*iova_to_phys)(struct iommu_domain *domain, dma_addr_t iova);
 	int (*domain_has_cap)(struct iommu_domain *domain,
 			      unsigned long cap);
@@ -153,6 +158,10 @@ extern int iommu_map(struct iommu_domain *domain, unsigned long iova,
 		     phys_addr_t paddr, size_t size, int prot);
 extern size_t iommu_unmap(struct iommu_domain *domain, unsigned long iova,
 		       size_t size);
+extern int iommu_map_range(struct iommu_domain *domain, unsigned int iova,
+		    struct scatterlist *sg, unsigned int len, int prot);
+extern int iommu_unmap_range(struct iommu_domain *domain, unsigned int iova,
+		      unsigned int len);
 extern phys_addr_t iommu_iova_to_phys(struct iommu_domain *domain, dma_addr_t iova);
 extern int iommu_domain_has_cap(struct iommu_domain *domain,
 				unsigned long cap);
@@ -290,6 +299,19 @@ static inline int iommu_domain_window_enable(struct iommu_domain *domain,
 static inline void iommu_domain_window_disable(struct iommu_domain *domain,
 					       u32 wnd_nr)
 {
+}
+
+static inline int iommu_map_range(struct iommu_domain *domain,
+				  unsigned int iova, struct scatterlist *sg,
+				  unsigned int len, int prot)
+{
+	return -ENODEV;
+}
+
+static inline int iommu_unmap_range(struct iommu_domain *domain,
+				    unsigned int iova, unsigned int len)
+{
+	return -ENODEV;
 }
 
 static inline phys_addr_t iommu_iova_to_phys(struct iommu_domain *domain, dma_addr_t iova)
