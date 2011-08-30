@@ -67,11 +67,12 @@ static unsigned int no_tty_ports;
 static unsigned int no_smd_ports;
 static unsigned int no_hsic_sports;
 static unsigned int nr_ports;
+static unsigned int gser_next_free_port;
 
 static struct port_info {
 	enum transport_type	transport;
 	unsigned		port_num;
-	unsigned		client_port_num;
+	unsigned char		client_port_num;
 } gserial_ports[GSERIAL_NO_PORTS];
 
 static inline struct f_gser *func_to_gser(struct usb_function *f)
@@ -262,7 +263,7 @@ static struct usb_gadget_strings *gser_strings[] = {
 	NULL,
 };
 
-static int gport_setup(struct usb_configuration *c)
+int gport_setup(struct usb_configuration *c)
 {
 	int ret = 0;
 	int port_idx;
@@ -271,8 +272,15 @@ static int gport_setup(struct usb_configuration *c)
 	pr_debug("%s: no_tty_ports: %u no_smd_ports: %u no_hsic_sports: %u nr_ports: %u\n",
 		__func__, no_tty_ports, no_smd_ports, no_hsic_sports, nr_ports);
 
-	if (no_tty_ports)
-		ret = gserial_setup(c->cdev->gadget, no_tty_ports);
+	if (no_tty_ports) {
+		for (i = 0; i < no_tty_ports; i++) {
+			ret = gserial_alloc_line(
+					&gserial_ports[i].client_port_num);
+			if (ret)
+				return ret;
+		}
+	}
+
 	if (no_smd_ports)
 		ret = gsmd_setup(c->cdev->gadget, no_smd_ports);
 	if (no_hsic_sports) {
@@ -296,6 +304,14 @@ static int gport_setup(struct usb_configuration *c)
 	}
 
 	return ret;
+}
+
+void gport_cleanup(void)
+{
+	int i;
+
+	for (i = 0; i < no_tty_ports; i++)
+		gserial_free_line(gserial_ports[i].client_port_num);
 }
 
 static int gport_connect(struct f_gser *gser)
@@ -864,7 +880,9 @@ static void gser_free_inst(struct usb_function_instance *f)
 	struct f_serial_opts *opts;
 
 	opts = container_of(f, struct f_serial_opts, func_inst);
-	gserial_free_line(opts->port_num);
+	if (!nr_ports)
+		gserial_free_line(opts->port_num);
+
 	kfree(opts);
 }
 
@@ -878,10 +896,14 @@ static struct usb_function_instance *gser_alloc_inst(void)
 		return ERR_PTR(-ENOMEM);
 
 	opts->func_inst.free_func_inst = gser_free_inst;
-	ret = gserial_alloc_line(&opts->port_num);
-	if (ret) {
-		kfree(opts);
-		return ERR_PTR(ret);
+
+	/* Check if tty registration is handled here or not */
+	if (!nr_ports) {
+		ret = gserial_alloc_line(&opts->port_num);
+		if (ret) {
+			kfree(opts);
+			return ERR_PTR(ret);
+		}
 	}
 	config_group_init_type_name(&opts->func_inst.group, "",
 				    &serial_func_type);
@@ -895,6 +917,7 @@ static void gser_free(struct usb_function *f)
 
 	serial = func_to_gser(f);
 	kfree(serial);
+	gser_next_free_port--;
 }
 
 static void gser_unbind(struct usb_configuration *c, struct usb_function *f)
@@ -923,6 +946,9 @@ static struct usb_function *gser_alloc(struct usb_function_instance *fi)
 #ifdef CONFIG_MODEM_SUPPORT
 	spin_lock_init(&gser->lock);
 #endif
+	if (nr_ports)
+		opts->port_num = gser_next_free_port++;
+
 	gser->port_num = opts->port_num;
 
 	gser->port.func.name = "gser";
@@ -963,9 +989,11 @@ MODULE_AUTHOR("David Brownell");
 /**
  * gserial_init_port - bind a gserial_port to its transport
  */
-static int gserial_init_port(int port_num, const char *name)
+int gserial_init_port(int port_num, const char *name,
+		const char *port_name)
 {
 	enum transport_type transport;
+	int ret = 0;
 
 	if (port_num >= GSERIAL_NO_PORTS)
 		return -ENODEV;
@@ -979,7 +1007,6 @@ static int gserial_init_port(int port_num, const char *name)
 
 	switch (transport) {
 	case USB_GADGET_XPORT_TTY:
-		gserial_ports[port_num].client_port_num = no_tty_ports;
 		no_tty_ports++;
 		break;
 	case USB_GADGET_XPORT_SMD:
@@ -987,6 +1014,9 @@ static int gserial_init_port(int port_num, const char *name)
 		no_smd_ports++;
 		break;
 	case USB_GADGET_XPORT_HSIC:
+		ghsic_ctrl_set_port_name(port_name, name);
+		ghsic_data_set_port_name(port_name, name);
+
 		/*client port number will be updated in gport_setup*/
 		no_hsic_sports++;
 		break;
@@ -998,5 +1028,5 @@ static int gserial_init_port(int port_num, const char *name)
 
 	nr_ports++;
 
-	return 0;
+	return ret;
 }
