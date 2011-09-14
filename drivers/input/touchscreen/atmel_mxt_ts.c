@@ -189,9 +189,9 @@
 #define MXT_BOOT_VALUE		0xa5
 #define MXT_BACKUP_VALUE	0x55
 #define MXT_BACKUP_TIME		50	/* msec */
-#define MXT_RESET_TIME		200	/* msec */
+#define MXT_RESET_TIME		250	/* msec */
 #define MXT224_RESET_TIME		65	/* msec */
-#define MXT1386_RESET_TIME		200	/* msec */
+#define MXT1386_RESET_TIME		250	/* msec */
 #define MXT_RESET_NOCHGREAD		400	/* msec */
 
 #define MXT_FWRESET_TIME	175	/* msec */
@@ -830,6 +830,22 @@ static void mxt_free_object_table(struct mxt_data *data)
 	data->T19_reportid = 0;
 }
 
+static void mxt_reset_delay(struct mxt_data *data)
+{
+	struct mxt_info *info = &data->info;
+
+	switch (info->family_id) {
+	case MXT224_ID:
+		msleep(MXT224_RESET_TIME);
+		break;
+	case MXT1386_ID:
+		msleep(MXT1386_RESET_TIME);
+		break;
+	default:
+		msleep(MXT_RESET_TIME);
+	}
+}
+
 static int mxt_initialize(struct mxt_data *data)
 {
 	struct i2c_client *client = data->client;
@@ -874,9 +890,9 @@ static int mxt_initialize(struct mxt_data *data)
 					&command_register);
 		if (error)
 			return error;
-		msleep(2);
-	} while ((command_register != 0) && (timeout_counter++ <= 100));
-	if (timeout_counter >= 100) {
+		usleep_range(1000, 2000);
+	} while ((command_register != 0) && (++timeout_counter <= 100));
+	if (timeout_counter > 100) {
 		dev_err(&client->dev, "No response after backup!\n");
 		return -EIO;
 	}
@@ -886,27 +902,7 @@ static int mxt_initialize(struct mxt_data *data)
 	mxt_write_object(data, MXT_GEN_COMMAND_T6,
 			MXT_COMMAND_RESET, 1);
 
-	if (data->pdata->read_chg == NULL) {
-		msleep(MXT_RESET_NOCHGREAD);
-	} else {
-		switch (info->family_id) {
-		case MXT224_ID:
-			msleep(MXT224_RESET_TIME);
-			break;
-		case MXT1386_ID:
-			msleep(MXT1386_RESET_TIME);
-			break;
-		default:
-			msleep(MXT_RESET_TIME);
-		}
-		timeout_counter = 0;
-		while ((timeout_counter++ <= 100) && data->pdata->read_chg())
-			msleep(2);
-		if (timeout_counter >= 100) {
-			dev_err(&client->dev, "No response after reset!\n");
-			return -EIO;
-		}
-	}
+	mxt_reset_delay(data);
 
 	/* Update matrix size at info struct */
 	error = mxt_read_reg(client, MXT_MATRIX_X_SIZE, &val);
@@ -1048,7 +1044,8 @@ static int mxt_load_fw(struct device *dev, const char *fn)
 	/* Change to the bootloader mode */
 	mxt_write_object(data, MXT_GEN_COMMAND_T6,
 			MXT_COMMAND_RESET, MXT_BOOT_VALUE);
-	msleep(MXT_RESET_TIME);
+
+	mxt_reset_delay(data);
 
 	/* Change to slave address of bootloader */
 	if (client->addr == MXT_APP_LOW)
@@ -1218,7 +1215,7 @@ static int mxt_power_on(struct mxt_data *data, bool on)
 		}
 	}
 
-	msleep(50);
+	msleep(100);
 
 	return 0;
 
@@ -1521,7 +1518,7 @@ static int mxt_resume(struct device *dev)
 	mxt_write_object(data, MXT_GEN_COMMAND_T6,
 			MXT_COMMAND_RESET, 1);
 
-	msleep(MXT_RESET_TIME);
+	mxt_reset_delay(data);
 
 	mutex_lock(&input_dev->mutex);
 
