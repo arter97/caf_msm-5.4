@@ -25,6 +25,7 @@
 
 /* Family ID */
 #define MXT224_ID	0x80
+#define MXT224E_ID	0x81
 #define MXT1386_ID	0xA0
 
 /* Version */
@@ -201,6 +202,7 @@
 #define MXT_BACKUP_TIME		50	/* msec */
 #define MXT_RESET_TIME		250	/* msec */
 #define MXT224_RESET_TIME		65	/* msec */
+#define MXT224E_RESET_TIME		22	/* msec */
 #define MXT1386_RESET_TIME		250	/* msec */
 #define MXT_RESET_NOCHGREAD		400	/* msec */
 
@@ -819,6 +821,9 @@ static void mxt_reset_delay(struct mxt_data *data)
 	switch (info->family_id) {
 	case MXT224_ID:
 		msleep(MXT224_RESET_TIME);
+		break;
+	case MXT224E_ID:
+		msleep(MXT224E_RESET_TIME);
 		break;
 	case MXT1386_ID:
 		msleep(MXT1386_RESET_TIME);
