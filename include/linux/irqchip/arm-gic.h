@@ -82,6 +82,11 @@ void gic_init_bases(unsigned int, int, void __iomem *, void __iomem *,
 void gic_cascade_irq(unsigned int gic_nr, unsigned int irq);
 void gic_cpu_if_down(void);
 
+#ifdef CONFIG_ARM_GIC
+void gic_set_irq_secure(unsigned int irq);
+#else
+static inline void gic_set_irq_secure(unsigned int irq) { }
+#endif
 static inline void gic_init(unsigned int nr, int start,
 			    void __iomem *dist , void __iomem *cpu)
 {

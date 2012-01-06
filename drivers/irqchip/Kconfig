@@ -11,6 +11,9 @@ config ARM_GIC
 config GIC_NON_BANKED
 	bool
 
+config GIC_SECURE
+	bool
+
 config ARM_NVIC
 	bool
 	select IRQ_DOMAIN
