@@ -1383,6 +1383,12 @@ static void mxt_input_close(struct input_dev *dev)
 
 }
 
+static int reg_set_optimum_mode_check(struct regulator *reg, int load_uA)
+{
+	return (regulator_count_voltages(reg) > 0) ?
+		regulator_set_optimum_mode(reg, load_uA) : 0;
+}
+
 static int mxt_power_on(struct mxt_data *data, bool on)
 {
 	int rc;
@@ -1390,7 +1396,7 @@ static int mxt_power_on(struct mxt_data *data, bool on)
 	if (on == false)
 		goto power_off;
 
-	rc = regulator_set_optimum_mode(data->vcc_ana, MXT_ACTIVE_LOAD_UA);
+	rc = reg_set_optimum_mode_check(data->vcc_ana, MXT_ACTIVE_LOAD_UA);
 	if (rc < 0) {
 		dev_err(&data->client->dev,
 			"Regulator vcc_ana set_opt failed rc=%d\n", rc);
@@ -1405,8 +1411,8 @@ static int mxt_power_on(struct mxt_data *data, bool on)
 	}
 
 	if (data->pdata->digital_pwr_regulator) {
-		rc = regulator_set_optimum_mode(data->vcc_dig,
-						MXT_ACTIVE_LOAD_DIG_UA);
+		rc = reg_set_optimum_mode_check(data->vcc_dig,
+					MXT_ACTIVE_LOAD_DIG_UA);
 		if (rc < 0) {
 			dev_err(&data->client->dev,
 				"Regulator vcc_dig set_opt failed rc=%d\n",
@@ -1423,7 +1429,7 @@ static int mxt_power_on(struct mxt_data *data, bool on)
 	}
 
 	if (data->pdata->i2c_pull_up) {
-		rc = regulator_set_optimum_mode(data->vcc_i2c, MXT_I2C_LOAD_UA);
+		rc = reg_set_optimum_mode_check(data->vcc_i2c, MXT_I2C_LOAD_UA);
 		if (rc < 0) {
 			dev_err(&data->client->dev,
 				"Regulator vcc_i2c set_opt failed rc=%d\n", rc);
@@ -1444,28 +1450,28 @@ static int mxt_power_on(struct mxt_data *data, bool on)
 
 error_reg_en_vcc_i2c:
 	if (data->pdata->i2c_pull_up)
-		regulator_set_optimum_mode(data->vcc_i2c, 0);
+		reg_set_optimum_mode_check(data->vcc_i2c, 0);
 error_reg_opt_i2c:
 	if (data->pdata->digital_pwr_regulator)
 		regulator_disable(data->vcc_dig);
 error_reg_en_vcc_dig:
 	if (data->pdata->digital_pwr_regulator)
-		regulator_set_optimum_mode(data->vcc_dig, 0);
+		reg_set_optimum_mode_check(data->vcc_dig, 0);
 error_reg_opt_vcc_dig:
 	regulator_disable(data->vcc_ana);
 error_reg_en_vcc_ana:
-	regulator_set_optimum_mode(data->vcc_ana, 0);
+	reg_set_optimum_mode_check(data->vcc_ana, 0);
 	return rc;
 
 power_off:
-	regulator_set_optimum_mode(data->vcc_ana, 0);
+	reg_set_optimum_mode_check(data->vcc_ana, 0);
 	regulator_disable(data->vcc_ana);
 	if (data->pdata->digital_pwr_regulator) {
-		regulator_set_optimum_mode(data->vcc_dig, 0);
+		reg_set_optimum_mode_check(data->vcc_dig, 0);
 		regulator_disable(data->vcc_dig);
 	}
 	if (data->pdata->i2c_pull_up) {
-		regulator_set_optimum_mode(data->vcc_i2c, 0);
+		reg_set_optimum_mode_check(data->vcc_i2c, 0);
 		regulator_disable(data->vcc_i2c);
 	}
 	msleep(50);
@@ -1898,7 +1904,7 @@ static int mxt_regulator_lpm(struct mxt_data *data, bool on)
 	if (on == false)
 		goto regulator_hpm;
 
-	rc = regulator_set_optimum_mode(data->vcc_ana, MXT_LPM_LOAD_UA);
+	rc = reg_set_optimum_mode_check(data->vcc_ana, MXT_LPM_LOAD_UA);
 	if (rc < 0) {
 		dev_err(&data->client->dev,
 			"Regulator vcc_ana set_opt failed rc=%d\n", rc);
@@ -1906,7 +1912,7 @@ static int mxt_regulator_lpm(struct mxt_data *data, bool on)
 	}
 
 	if (data->pdata->digital_pwr_regulator) {
-		rc = regulator_set_optimum_mode(data->vcc_dig,
+		rc = reg_set_optimum_mode_check(data->vcc_dig,
 						MXT_LPM_LOAD_DIG_UA);
 		if (rc < 0) {
 			dev_err(&data->client->dev,
@@ -1916,7 +1922,7 @@ static int mxt_regulator_lpm(struct mxt_data *data, bool on)
 	}
 
 	if (data->pdata->i2c_pull_up) {
-		rc = regulator_set_optimum_mode(data->vcc_i2c,
+		rc = reg_set_optimum_mode_check(data->vcc_i2c,
 						MXT_I2C_LPM_LOAD_UA);
 		if (rc < 0) {
 			dev_err(&data->client->dev,
@@ -1929,7 +1935,7 @@ static int mxt_regulator_lpm(struct mxt_data *data, bool on)
 
 regulator_hpm:
 
-	rc = regulator_set_optimum_mode(data->vcc_ana, MXT_ACTIVE_LOAD_UA);
+	rc = reg_set_optimum_mode_check(data->vcc_ana, MXT_ACTIVE_LOAD_UA);
 	if (rc < 0) {
 		dev_err(&data->client->dev,
 			"Regulator vcc_ana set_opt failed rc=%d\n", rc);
@@ -1937,7 +1943,7 @@ regulator_hpm:
 	}
 
 	if (data->pdata->digital_pwr_regulator) {
-		rc = regulator_set_optimum_mode(data->vcc_dig,
+		rc = reg_set_optimum_mode_check(data->vcc_dig,
 						 MXT_ACTIVE_LOAD_DIG_UA);
 		if (rc < 0) {
 			dev_err(&data->client->dev,
@@ -1947,7 +1953,7 @@ regulator_hpm:
 	}
 
 	if (data->pdata->i2c_pull_up) {
-		rc = regulator_set_optimum_mode(data->vcc_i2c, MXT_I2C_LOAD_UA);
+		rc = reg_set_optimum_mode_check(data->vcc_i2c, MXT_I2C_LOAD_UA);
 		if (rc < 0) {
 			dev_err(&data->client->dev,
 				"Regulator vcc_i2c set_opt failed rc=%d\n", rc);
@@ -1958,21 +1964,21 @@ regulator_hpm:
 	return 0;
 
 fail_regulator_lpm:
-	regulator_set_optimum_mode(data->vcc_ana, MXT_ACTIVE_LOAD_UA);
+	reg_set_optimum_mode_check(data->vcc_ana, MXT_ACTIVE_LOAD_UA);
 	if (data->pdata->digital_pwr_regulator)
-		regulator_set_optimum_mode(data->vcc_dig,
-						MXT_ACTIVE_LOAD_DIG_UA);
+		reg_set_optimum_mode_check(data->vcc_dig,
+					MXT_ACTIVE_LOAD_DIG_UA);
 	if (data->pdata->i2c_pull_up)
-		regulator_set_optimum_mode(data->vcc_i2c, MXT_I2C_LOAD_UA);
+		reg_set_optimum_mode_check(data->vcc_i2c, MXT_I2C_LOAD_UA);
 
 	return rc;
 
 fail_regulator_hpm:
-	regulator_set_optimum_mode(data->vcc_ana, MXT_LPM_LOAD_UA);
+	reg_set_optimum_mode_check(data->vcc_ana, MXT_LPM_LOAD_UA);
 	if (data->pdata->digital_pwr_regulator)
-		regulator_set_optimum_mode(data->vcc_dig, MXT_LPM_LOAD_DIG_UA);
+		reg_set_optimum_mode_check(data->vcc_dig, MXT_LPM_LOAD_DIG_UA);
 	if (data->pdata->i2c_pull_up)
-		regulator_set_optimum_mode(data->vcc_i2c, MXT_I2C_LPM_LOAD_UA);
+		reg_set_optimum_mode_check(data->vcc_i2c, MXT_I2C_LPM_LOAD_UA);
 
 	return rc;
 }
