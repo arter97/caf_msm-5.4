@@ -4052,6 +4052,7 @@ int xhci_set_usb2_hardware_lpm(struct usb_hcd *hcd,
 	unsigned long	flags;
 	int		hird, exit_latency;
 	int		ret;
+	bool		delay;
 
 	if (hcd->speed == HCD_USB3 || !xhci->hw_lpm_support ||
 			!udev->lpm_capable)
@@ -4063,6 +4064,9 @@ int xhci_set_usb2_hardware_lpm(struct usb_hcd *hcd,
 
 	if (udev->usb2_hw_lpm_capable != 1)
 		return -EPERM;
+
+	if (xhci->quirks & XHCI_PORTSC_DELAY)
+		delay = true;
 
 	spin_lock_irqsave(&xhci->lock, flags);
 
@@ -4110,6 +4114,8 @@ int xhci_set_usb2_hardware_lpm(struct usb_hcd *hcd,
 
 			hlpm_val = xhci_calculate_usb2_hw_lpm_params(udev);
 			writel(hlpm_val, hlpm_addr);
+			if (delay)
+				ndelay(100);
 			/* flush write */
 			readl(hlpm_addr);
 		} else {
@@ -4119,14 +4125,20 @@ int xhci_set_usb2_hardware_lpm(struct usb_hcd *hcd,
 		pm_val &= ~PORT_HIRD_MASK;
 		pm_val |= PORT_HIRD(hird) | PORT_RWE | PORT_L1DS(udev->slot_id);
 		writel(pm_val, pm_addr);
+		if (delay)
+			ndelay(100);
 		pm_val = readl(pm_addr);
 		pm_val |= PORT_HLE;
 		writel(pm_val, pm_addr);
+		if (delay)
+			ndelay(100);
 		/* flush write */
 		readl(pm_addr);
 	} else {
 		pm_val &= ~(PORT_HLE | PORT_RWE | PORT_HIRD_MASK | PORT_L1DS_MASK);
 		writel(pm_val, pm_addr);
+		if (delay)
+			ndelay(100);
 		/* flush write */
 		readl(pm_addr);
 		if (udev->usb2_hw_lpm_besl_capable) {
