@@ -3761,7 +3761,7 @@ static int udc_probe(struct ci13xxx_udc_driver *driver, struct device *dev,
 	udc->gadget.dev.release  = udc_release;
 
 	if (udc->udc_driver->flags & CI13XXX_REQUIRE_TRANSCEIVER) {
-		udc->transceiver = usb_get_phy();
+		udc->transceiver = usb_get_phy(USB_PHY_TYPE_USB2);
 		if (udc->transceiver == NULL) {
 			retval = -ENODEV;
 			goto free_udc;

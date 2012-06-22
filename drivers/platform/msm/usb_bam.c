@@ -630,7 +630,7 @@ static int disconnect_pipe(u8 idx)
 
 static void usb_bam_resume_core(enum usb_bam cur_bam)
 {
-	struct usb_phy *phy = usb_get_phy();
+	struct usb_phy *phy = usb_get_phy(USB_PHY_TYPE_USB2);
 
 	if (cur_bam != HSUSB_BAM)
 		return;
@@ -641,7 +641,7 @@ static void usb_bam_resume_core(enum usb_bam cur_bam)
 
 static void usb_bam_start_lpm(bool disconnect)
 {
-	struct usb_phy *phy = usb_get_phy();
+	struct usb_phy *phy = usb_get_phy(USB_PHY_TYPE_USB2);
 
 	BUG_ON(phy == NULL);
 
@@ -1258,7 +1258,7 @@ static void usb_bam_start_suspend(struct work_struct *w)
 
 static void usb_bam_finish_resume(struct work_struct *w)
 {
-	struct usb_phy *phy = usb_get_phy();
+	struct usb_phy *phy = usb_get_phy(USB_PHY_TYPE_USB2);
 
 	BUG_ON(phy == NULL);
 	pr_debug("%s: enter", __func__);

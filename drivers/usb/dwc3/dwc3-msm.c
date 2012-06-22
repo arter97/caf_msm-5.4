@@ -3012,7 +3012,7 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "Failed to vote for bus scaling\n");
 	}
 
-	mdwc->otg_xceiv = usb_get_phy();
+	mdwc->otg_xceiv = usb_get_phy(USB_PHY_TYPE_USB2);
 	/* Register with OTG if present, ignore USB2 OTG using other PHY */
 	if (mdwc->otg_xceiv &&
 			!(mdwc->otg_xceiv->flags & ENABLE_SECONDARY_PHY)) {

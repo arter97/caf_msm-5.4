@@ -176,7 +176,7 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	if (ret)
 		goto put_usb3_hcd;
 
-	phy = usb_get_phy();
+	phy = usb_get_phy(USB_PHY_TYPE_USB2);
 	/* Register with OTG if present, ignore USB2 OTG using other PHY */
 	if (phy && phy->otg && !(phy->flags & ENABLE_SECONDARY_PHY)) {
 		dev_dbg(&pdev->dev, "%s otg support available\n", __func__);
