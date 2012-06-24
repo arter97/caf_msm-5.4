@@ -19,6 +19,7 @@
 
 struct android_usb_platform_data {
 	u32 swfi_latency;
+	u8 usb_core_id;
 };
 
 extern int gport_setup(struct usb_configuration *c);
