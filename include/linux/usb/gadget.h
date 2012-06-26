@@ -536,6 +536,8 @@ struct usb_gadget_ops {
  * @quirk_ep_out_aligned_size: epout requires buffer size to be aligned to
  *	MaxPacketSize.
  * @xfer_isr_count: UI (transfer complete) interrupts count
+ * @usb_core_id: Identifies the usb core controlled by this usb_gadget.
+ *		 Used in case of more then one core operates concurrently.
  *
  * Gadgets have a mostly-portable "gadget driver" implementing device
  * functions, handling all usb configurations and interfaces.  Gadget
@@ -579,6 +581,7 @@ struct usb_gadget {
 	bool				remote_wakeup;
 	void				*private;
 	u32				xfer_isr_count;
+	u8				usb_core_id;
 };
 #define work_to_gadget(w)	(container_of((w), struct usb_gadget, work))
 
@@ -853,6 +856,8 @@ static inline int usb_gadget_disconnect(struct usb_gadget *gadget)
  * @suspend: Invoked on USB suspend.  May be called in_interrupt.
  * @resume: Invoked on USB resume.  May be called in_interrupt.
  * @driver: Driver model state for this driver.
+ * @usb_core_id: Identifies the usb core controlled by this usb_gadget_driver.
+ *               Used in case of more then one core operates concurrently.
  *
  * Devices are disabled till a gadget driver successfully bind()s, which
  * means the driver will handle setup() requests needed to enumerate (and
@@ -912,6 +917,8 @@ struct usb_gadget_driver {
 
 	/* FIXME support safe rmmod */
 	struct device_driver	driver;
+
+	u8			usb_core_id;
 };
 
 
