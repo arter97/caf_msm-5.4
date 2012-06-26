@@ -2733,7 +2733,7 @@ static int msm72k_probe(struct platform_device *pdev)
 		return usb_free(ui, -ENOMEM);
 
 	ui->xceiv = usb_get_phy(USB_PHY_TYPE_USB2);
-	if (!ui->xceiv)
+	if (IS_ERR_OR_NULL(ui->xceiv))
 		return usb_free(ui, -ENODEV);
 
 	otg = to_msm_otg(ui->xceiv);
