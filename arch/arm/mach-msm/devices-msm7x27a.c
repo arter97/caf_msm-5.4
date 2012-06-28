@@ -1592,6 +1592,7 @@ struct clock_init_data msm8625_dummy_clock_init_data __initdata = {
 enum {
 	MSM8625,
 	MSM8625A,
+	MSM8625AB,
 };
 
 static int __init msm8625_cpu_id(void)
@@ -1611,6 +1612,11 @@ static int __init msm8625_cpu_id(void)
 	case 0x774:
 	case 0x781:
 		cpu = MSM8625A;
+		break;
+	case 0x775:
+	case 0x776:
+	case 0x782:
+		cpu = MSM8625AB;
 		break;
 	default:
 		pr_err("Invalid Raw ID\n");
@@ -1634,9 +1640,12 @@ int __init msm7x2x_misc_init(void)
 			acpuclk_init(&acpuclk_7x27aa_soc_data);
 		else if (msm8625_cpu_id() == MSM8625A)
 			acpuclk_init(&acpuclk_8625_soc_data);
-	 } else {
+		else if (msm8625_cpu_id() == MSM8625AB)
+			acpuclk_init(&acpuclk_8625ab_soc_data);
+	} else {
 		acpuclk_init(&acpuclk_7x27a_soc_data);
 	 }
+
 
 
 	return 0;
