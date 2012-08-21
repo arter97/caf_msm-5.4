@@ -1619,6 +1619,7 @@ static int __init msm8625_cpu_id(void)
 	case 0x775:
 	case 0x776:
 	case 0x77D:
+	case 0x779:
 	case 0x782:
 	case 0x8D2:
 		cpu = MSM8625AB;
