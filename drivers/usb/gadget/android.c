@@ -30,6 +30,8 @@
 #include <linux/usb/gadget.h>
 #include <linux/usb/android.h>
 
+#include <linux/qcom/diag_dload.h>
+
 #include "gadget_chips.h"
 
 #include "f_fs.c"
@@ -115,10 +117,12 @@ struct android_dev {
 	char ffs_aliases[256];
 };
 
+struct dload_struct __iomem *diag_dload;
 static struct class *android_class;
 static struct android_dev *_android_dev;
 static int android_bind_config(struct usb_configuration *c);
 static void android_unbind_config(struct usb_configuration *c);
+static int usb_diag_update_pid_and_serial_num(uint32_t pid, const char *snum);
 
 /* string IDs are assigned dynamically */
 #define STRING_MANUFACTURER_IDX		0
@@ -733,7 +737,7 @@ static int diag_function_bind_config(struct android_usb_function *f,
 {
 	char *name;
 	char buf[32], *b;
-	int err = -1;
+	int once = 0, err = -1;
 	int (*notify)(uint32_t, const char *);
 
 	strlcpy(buf, diag_clients, sizeof(buf));
@@ -742,6 +746,10 @@ static int diag_function_bind_config(struct android_usb_function *f,
 	while (b) {
 		notify = NULL;
 		name = strsep(&b, ",");
+		/* Allow only first diag channel to update pid and serial no */
+		if (!once++)
+			notify = usb_diag_update_pid_and_serial_num;
+
 		if (name) {
 			err = diag_function_add(c, name, notify);
 			if (err)
@@ -2018,10 +2026,49 @@ static void android_destroy_device(struct android_dev *dev)
 	device_destroy(android_class, dev->dev->devt);
 }
 
+static int usb_diag_update_pid_and_serial_num(u32 pid, const char *snum)
+{
+	struct dload_struct local_diag_dload = { 0 };
+	int *src, *dst, i;
+
+	if (!diag_dload) {
+		pr_debug("%s: unable to update PID and serial_no\n", __func__);
+		return -ENODEV;
+	}
+
+	pr_debug("%s: dload:%p pid:%x serial_num:%s\n",
+				__func__, diag_dload, pid, snum);
+
+	/* update pid */
+	local_diag_dload.magic_struct.pid = PID_MAGIC_ID;
+	local_diag_dload.pid = pid;
+
+	/* update serial number */
+	if (!snum) {
+		local_diag_dload.magic_struct.serial_num = 0;
+		memset(&local_diag_dload.serial_number, 0,
+				SERIAL_NUMBER_LENGTH);
+	} else {
+		local_diag_dload.magic_struct.serial_num = SERIAL_NUM_MAGIC_ID;
+		strlcpy((char *)&local_diag_dload.serial_number, snum,
+				SERIAL_NUMBER_LENGTH);
+	}
+
+	/* Copy to shared struct (accesses need to be 32 bit aligned) */
+	src = (int *)&local_diag_dload;
+	dst = (int *)diag_dload;
+
+	for (i = 0; i < sizeof(*diag_dload) / 4; i++)
+		*dst++ = *src++;
+
+	return 0;
+}
+
 static int android_probe(struct platform_device *pdev)
 {
 	struct android_usb_platform_data *pdata = pdev->dev.platform_data;
 	struct android_dev *dev = _android_dev;
+	struct resource *res;
 	int ret = 0;
 
 	dev->pdata = pdata;
@@ -2029,6 +2076,19 @@ static int android_probe(struct platform_device *pdev)
 	android_class = class_create(THIS_MODULE, "android_usb");
 	if (IS_ERR(android_class))
 		return PTR_ERR(android_class);
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (res) {
+		diag_dload = devm_ioremap(&pdev->dev, res->start,
+							resource_size(res));
+		if (!diag_dload) {
+			dev_err(&pdev->dev, "ioremap failed\n");
+			ret = -ENOMEM;
+			goto err_dev;
+		}
+	} else {
+		dev_dbg(&pdev->dev, "failed to get mem resource\n");
+	}
 
 	ret = android_create_device(dev);
 	if (ret) {
@@ -2071,8 +2131,17 @@ static int android_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static struct of_device_id usb_android_dt_match[] = {
+	{	.compatible = "qcom,android-usb",
+	},
+	{}
+};
+
 static struct platform_driver android_platform_driver = {
-	.driver = { .name = "android_usb"},
+	.driver = {
+		.name = "android_usb",
+		.of_match_table = usb_android_dt_match,
+	},
 	.probe = android_probe,
 	.remove = android_remove,
 };
