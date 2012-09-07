@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/mempool.h>
 #include <linux/mutex.h>
+#include <linux/spinlock.h>
 #include <linux/workqueue.h>
 #include <mach/msm_smd.h>
 #include <asm/atomic.h>
@@ -267,7 +268,6 @@ struct diagchar_dev {
 	struct diag_request *write_ptr_mdm;
 #endif
 #ifdef CONFIG_DIAG_HSIC_PIPE
-	unsigned char *buf_in_hsic;
 	int hsic_initialized;
 	int hsic_ch;
 	int hsic_device_enabled;
@@ -297,6 +297,7 @@ struct diagchar_dev {
 	mempool_t *diag_hsic_write_pool;
 	int num_hsic_buf_tbl_entries;
 	struct diag_write_device *hsic_buf_tbl;
+	spinlock_t hsic_spinlock;
 #endif
 };
 
