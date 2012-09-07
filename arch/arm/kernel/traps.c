@@ -37,6 +37,8 @@
 #include <asm/system_misc.h>
 #include <asm/opcodes.h>
 
+#include <trace/events/exception.h>
+
 static const char *handler[]= {
 	"prefetch abort",
 	"data abort",
@@ -442,6 +444,8 @@ asmlinkage void __exception do_undefinstr(struct pt_regs *regs)
 		return;
 
 die_sig:
+	trace_undef_instr(regs, (void *)pc);
+
 #ifdef CONFIG_DEBUG_USER
 	if (user_debug & UDBG_UNDEFINED) {
 		printk(KERN_INFO "%s (%d): undefined instruction: pc=%p\n",
