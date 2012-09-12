@@ -63,3 +63,4 @@ endif
 obj-$(CONFIG_QFP_FUSE) += qfp_fuse.o
 obj-$(CONFIG_QPNP_MISC) += qpnp-misc.o
 obj-y				+= qcom/
+obj-$(CONFIG_TI_DRV2667) += ti_drv2667.o
