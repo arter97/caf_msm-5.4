@@ -905,6 +905,15 @@ static int ehci_hsic_urb_enqueue(struct usb_hcd *hcd, struct urb *urb,
 
 static int ehci_hsic_bus_suspend(struct usb_hcd *hcd)
 {
+	struct msm_hsic_hcd *mehci = hcd_to_hsic(hcd);
+
+	if (!(readl_relaxed(USB_PORTSC) & PORT_PE)) {
+		dbg_log_event(NULL, "RH suspend attempt failed", 0);
+		dev_dbg(mehci->dev, "%s:port is not enabled skip suspend\n",
+				__func__);
+		return -EAGAIN;
+	}
+
 	dbg_log_event(NULL, "Suspend RH", 0);
 	return ehci_bus_suspend(hcd);
 }
