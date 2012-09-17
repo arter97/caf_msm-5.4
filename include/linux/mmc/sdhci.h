@@ -98,6 +98,17 @@ struct sdhci_host {
 #define SDHCI_QUIRK2_BROKEN_HS200			(1<<6)
 /* Controller does not support DDR50 */
 #define SDHCI_QUIRK2_BROKEN_DDR50			(1<<7)
+/*
+ * Read Transfer Active/ Write Transfer Active may be not
+ * de-asserted after end of transaction. Issue reset for DAT line.
+ */
+#define SDHCI_QUIRK2_RDWR_TX_ACTIVE_EOT			(1<<4)
+/*
+ * Slow interrupt clearance at 400KHz may cause
+ * host controller driver interrupt handler to
+ * be called twice.
+ */
+#define SDHCI_QUIRK2_SLOW_INT_CLR			(1<<5)
 
 	int irq;		/* Device IRQ */
 	void __iomem *ioaddr;	/* Mapped address */
