@@ -1361,6 +1361,9 @@ int usb_suspend(struct device *dev, pm_message_t msg)
 {
 	struct usb_device	*udev = to_usb_device(dev);
 
+	if (udev->bus->skip_resume && udev->state == USB_STATE_SUSPENDED)
+		return 0;
+
 	do_unbind_rebind(udev, DO_UNBIND);
 	choose_wakeup(udev, msg);
 	return usb_suspend_both(udev, msg);
@@ -1371,6 +1374,15 @@ int usb_resume(struct device *dev, pm_message_t msg)
 {
 	struct usb_device	*udev = to_usb_device(dev);
 	int			status;
+
+	/*
+	 * Some buses would like to keep their devices in suspend
+	 * state after system resume.  Their resume happen when
+	 * a remote wakeup is detected or interface driver start
+	 * I/O.
+	 */
+	if (udev->bus->skip_resume)
+		return 0;
 
 	/* For PM complete calls, all we do is rebind interfaces */
 	if (msg.event == PM_EVENT_ON) {
