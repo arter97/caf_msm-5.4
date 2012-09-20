@@ -57,6 +57,10 @@
 #include "u_bam_data.c"
 #include "u_ether.c"
 #include "u_qc_ether.c"
+#ifdef CONFIG_SND_PCM
+#include "u_uac1.c"
+#include "f_uac1.c"
+#endif
 
 USB_ETHERNET_MODULE_PARAMETERS();
 
@@ -964,6 +968,20 @@ static struct android_usb_function mbim_function = {
 	.ctrlrequest	= mbim_function_ctrlrequest,
 	.attributes	= mbim_function_attributes,
 };
+
+#ifdef CONFIG_SND_PCM
+/* PERIPHERAL AUDIO */
+static int audio_function_bind_config(struct android_usb_function *f,
+					  struct usb_configuration *c)
+{
+	return audio_bind_config(c);
+}
+
+static struct android_usb_function audio_function = {
+	.name		= "audio",
+	.bind_config	= audio_function_bind_config,
+};
+#endif
 
 
 /* DIAG */
@@ -2028,6 +2046,9 @@ static struct android_usb_function *supported_functions[] = {
 	&ffs_function,
 	&mbim_function,
 	&ecm_qc_function,
+#ifdef CONFIG_SND_PCM
+	&audio_function,
+#endif
 	&rmnet_function,
 	&diag_function,
 	&qdss_function,
