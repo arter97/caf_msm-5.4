@@ -422,3 +422,4 @@ extern struct platform_device apq_device_tz_log;
 extern struct platform_device apq_cpudai_mi2s;
 extern struct platform_device apq_cpudai_i2s_rx;
 extern struct platform_device apq_cpudai_i2s_tx;
+

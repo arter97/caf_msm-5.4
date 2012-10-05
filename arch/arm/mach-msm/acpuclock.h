@@ -111,5 +111,7 @@ extern struct acpuclk_soc_data acpuclk_9615_soc_data;
 extern struct acpuclk_soc_data acpuclk_8930_soc_data;
 extern struct acpuclk_soc_data acpuclk_8064_soc_data;
 extern struct acpuclk_soc_data acpuclk_8625_soc_data;
+extern struct acpuclk_soc_data acpuclk_8625ab_soc_data;
 
-#endif
+#endif /*__ARCH_ARM_MACH_MSM_ACPUCLOCK_H*/
+
