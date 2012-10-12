@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -32,6 +32,7 @@
 #define LPASS_BE_INCALL_RECORD_RX "(Backend) INCALL_RECORD_TX"
 #define LPASS_BE_INCALL_RECORD_TX "(Backend) INCALL_RECORD_RX"
 #define LPASS_BE_SEC_I2S_RX "(Backend) SECONDARY_I2S_RX"
+#define LPASS_BE_SEC_I2S_TX "(Backend) SECONDARY_I2S_TX"
 
 #define LPASS_BE_MI2S_RX "(Backend) MI2S_RX"
 #define LPASS_BE_MI2S_TX "(Backend) MI2S_TX"
@@ -88,6 +89,7 @@ enum {
 	MSM_BACKEND_DAI_MI2S_RX,
 	MSM_BACKEND_DAI_MI2S_TX,
 	MSM_BACKEND_DAI_SEC_I2S_RX,
+	MSM_BACKEND_DAI_SEC_I2S_TX,
 	MSM_BACKEND_DAI_SLIMBUS_1_RX,
 	MSM_BACKEND_DAI_SLIMBUS_1_TX,
 	MSM_BACKEND_DAI_SLIMBUS_4_RX,
