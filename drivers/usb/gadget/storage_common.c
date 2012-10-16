@@ -437,7 +437,7 @@ ssize_t fsg_store_file(struct fsg_lun *curlun, struct rw_semaphore *filesem,
 	int		rc = 0;
 
 
-#ifndef CONFIG_USB_ANDROID_MASS_STORAGE
+#if !defined(CONFIG_USB_G_ANDROID)
 	/* disabled in android because we need to allow closing the backing file
 	 * if the media was removed
 	 */
