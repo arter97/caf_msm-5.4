@@ -781,7 +781,7 @@ u32 vidc_insert_addr_table_kernel(struct video_client_ctx *client_ctx,
 		*num_of_buffers = *num_of_buffers + 1;
 		DBG("%s() : client_ctx = %p, user_virt_addr = 0x%08lx, "
 			"kernel_vaddr = 0x%08lx inserted!", __func__,
-			client_ctx, user_vaddr, *kernel_vaddr);
+			client_ctx, user_vaddr, kernel_vaddr);
 	}
 	mutex_unlock(&client_ctx->enrty_queue_lock);
 	return true;
