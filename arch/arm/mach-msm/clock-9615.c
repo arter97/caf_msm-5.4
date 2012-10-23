@@ -820,35 +820,6 @@ static struct branch_clk usb_hsic_hsio_cal_clk = {
 };
 
 /* Fast Peripheral Bus Clocks */
-static struct branch_clk ce1_core_clk = {
-	.b = {
-		.ctl_reg = CE1_CORE_CLK_CTL_REG,
-		.en_mask = BIT(4),
-		.hwcg_reg =  CE1_CORE_CLK_CTL_REG,
-		.hwcg_mask = BIT(6),
-		.halt_reg = CLK_HALT_CFPB_STATEC_REG,
-		.halt_bit = 27,
-	},
-	.c = {
-		.dbg_name = "ce1_core_clk",
-		.ops = &clk_ops_branch,
-		CLK_INIT(ce1_core_clk.c),
-	},
-};
-static struct branch_clk ce1_p_clk = {
-	.b = {
-		.ctl_reg = CE1_HCLK_CTL_REG,
-		.en_mask = BIT(4),
-		.halt_reg = CLK_HALT_CFPB_STATEC_REG,
-		.halt_bit = 1,
-	},
-	.c = {
-		.dbg_name = "ce1_p_clk",
-		.ops = &clk_ops_branch,
-		CLK_INIT(ce1_p_clk.c),
-	},
-};
-
 static struct branch_clk dma_bam_p_clk = {
 	.b = {
 		.ctl_reg = DMA_BAM_HCLK_CTL,
@@ -1429,12 +1400,10 @@ static struct measure_sel measure_mux[] = {
 	{ TEST_PER_LS(0x88), &usb_hsic_xcvr_clk.c },
 	{ TEST_PER_LS(0x8B), &usb_hsic_hsio_cal_clk.c },
 	{ TEST_PER_LS(0x8D), &usb_hs1_sys_clk.c },
-	{ TEST_PER_LS(0x92), &ce1_p_clk.c },
 	{ TEST_PER_HS(0x18), &sfab_clk.c },
 	{ TEST_PER_HS(0x18), &sfab_a_clk.c },
 	{ TEST_PER_HS(0x26), &q6sw_clk },
 	{ TEST_PER_HS(0x27), &q6fw_clk },
-	{ TEST_PER_LS(0xA4), &ce1_core_clk.c },
 	{ TEST_PER_HS(0x2A), &adm0_clk.c },
 	{ TEST_PER_HS(0x34), &ebi1_clk.c },
 	{ TEST_PER_HS(0x34), &ebi1_a_clk.c },
@@ -1654,8 +1623,6 @@ static struct clk_lookup msm_clocks_9615[] = {
 	CLK_LOOKUP("core_clk",		prng_clk.c,		"msm_rng.0"),
 	CLK_LOOKUP("core_clk",		sdc1_clk.c,		"msm_sdcc.1"),
 	CLK_LOOKUP("core_clk",		sdc2_clk.c,		"msm_sdcc.2"),
-	CLK_LOOKUP("iface_clk",		ce1_p_clk.c,		""),
-	CLK_LOOKUP("core_clk",		ce1_core_clk.c,		""),
 	CLK_LOOKUP("dma_bam_pclk",	dma_bam_p_clk.c,	NULL),
 
 	CLK_LOOKUP("iface_clk",	gsbi3_p_clk.c, "spi_qsd.0"),
@@ -1720,11 +1687,6 @@ static struct clk_lookup msm_clocks_9615[] = {
 	CLK_LOOKUP("dfab_clk",		dfab_sps_clk.c,		"msm_sps"),
 	CLK_LOOKUP("bus_clk",		dfab_bam_dmux_clk.c,	"BAM_RMNT"),
 	CLK_LOOKUP("mem_clk",		ebi1_adm_clk.c, "msm_dmov"),
-
-	CLK_LOOKUP("iface_clk",		ce1_p_clk.c,		"qce.0"),
-	CLK_LOOKUP("iface_clk",		ce1_p_clk.c,		"qcrypto.0"),
-	CLK_LOOKUP("core_clk",		ce1_core_clk.c,		"qce.0"),
-	CLK_LOOKUP("core_clk",		ce1_core_clk.c,		"qcrypto.0"),
 
 	CLK_LOOKUP("q6sw_clk",		q6sw_clk, NULL),
 	CLK_LOOKUP("q6fw_clk",		q6fw_clk, NULL),
