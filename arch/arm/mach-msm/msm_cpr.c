@@ -53,6 +53,7 @@ void __iomem *virt_start_ptr;
 static struct platform_device *cpr_pdev;
 
 static bool enable = 1;
+static bool disable_cpr;
 module_param(enable, bool, 0644);
 MODULE_PARM_DESC(enable, "CPR Enable");
 
@@ -333,12 +334,12 @@ void cpr_irq_clr_and_nack(struct msm_cpr *cpr, uint32_t mask)
 	cpr_write_reg(cpr, RBIF_CONT_NACK_CMD, 0x1);
 }
 
-static void cpr_irq_set(struct msm_cpr *cpr, uint32_t irq, bool enable)
+static void cpr_irq_set(struct msm_cpr *cpr, uint32_t irq, bool enable_irq)
 {
 	uint32_t irq_enabled;
 
 	irq_enabled = cpr_read_reg(cpr, RBIF_IRQ_EN(cpr->config->irq_line));
-	if (enable == 1)
+	if (enable_irq == 1)
 		irq_enabled |= irq;
 	else
 		irq_enabled &= ~irq;
@@ -858,7 +859,7 @@ static int msm_cpr_suspend(void)
 
 void msm_cpr_pm_resume(void)
 {
-	if (!enable)
+	if (!enable || disable_cpr)
 		return;
 
 	msm_cpr_resume();
@@ -867,7 +868,7 @@ EXPORT_SYMBOL(msm_cpr_pm_resume);
 
 void msm_cpr_pm_suspend(void)
 {
-	if (!enable)
+	if (!enable || disable_cpr)
 		return;
 
 	msm_cpr_suspend();
@@ -882,7 +883,7 @@ void msm_cpr_disable(void)
 {
 	struct msm_cpr *cpr;
 
-	if (!enable)
+	if (!enable || disable_cpr)
 		return;
 
 	cpr = platform_get_drvdata(cpr_pdev);
@@ -895,7 +896,7 @@ void msm_cpr_enable(void)
 {
 	struct msm_cpr *cpr;
 
-	if (!enable)
+	if (!enable || disable_cpr)
 		return;
 
 	cpr = platform_get_drvdata(cpr_pdev);
@@ -920,6 +921,12 @@ static int __devinit msm_cpr_probe(struct platform_device *pdev)
 		pr_err("CPR: Platform data is not available\n");
 		enable = false;
 		return -EIO;
+	}
+
+	if (pdata->disable_cpr == true) {
+		pr_err("CPR disabled by modem\n");
+		disable_cpr = true;
+		return -EPERM;
 	}
 
 	cpr = devm_kzalloc(&pdev->dev, sizeof(struct msm_cpr), GFP_KERNEL);
