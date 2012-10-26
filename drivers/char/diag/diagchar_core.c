@@ -229,6 +229,12 @@ static int diagchar_close(struct inode *inode, struct file *file)
 	* This call will remove any pending registrations of such client
 	*/
 	diagchar_ioctl(NULL, DIAG_IOCTL_DCI_DEINIT, 0);
+
+	if (driver->callback_process &&
+		(driver->callback_process->tgid == current->tgid)) {
+		driver->callback_process = NULL;
+	}
+
 #ifdef CONFIG_DIAG_OVER_USB
 	/* If the SD logging process exits, change logging to USB mode */
 	if (driver->logging_process_id == current->tgid) {
@@ -473,9 +479,19 @@ long diagchar_ioctl(struct file *filp,
 		mutex_lock(&driver->diagchar_mutex);
 		temp = driver->logging_mode;
 		driver->logging_mode = (int)ioarg;
-		if (driver->logging_mode == MEMORY_DEVICE_MODE)
+		if (temp == driver->logging_mode) {
+			mutex_unlock(&driver->diagchar_mutex);
+			pr_alert("diag: forbidden logging change requested\n");
+			return 0;
+		}
+		if (driver->logging_mode == CALLBACK_MODE)
+			driver->callback_process = current;
+
+		if (driver->logging_mode == MEMORY_DEVICE_MODE) {
 			driver->mask_check = 1;
-		if (driver->logging_mode == UART_MODE) {
+		}
+		if (driver->logging_mode == UART_MODE ||
+			driver->logging_mode == CALLBACK_MODE) {
 			driver->mask_check = 0;
 			driver->logging_mode = MEMORY_DEVICE_MODE;
 		}
@@ -633,11 +649,11 @@ static int diagchar_read(struct file *file, char __user *buf, size_t count,
 				  driver->data_ready[index]);
 	mutex_lock(&driver->diagchar_mutex);
 
-	if ((driver->data_ready[index] & USER_SPACE_LOG_TYPE) && (driver->
+	if ((driver->data_ready[index] & USER_SPACE_DATA_TYPE) && (driver->
 					logging_mode == MEMORY_DEVICE_MODE)) {
 		pr_debug("diag: process woken up\n");
 		/*Copy the type of data being passed*/
-		data_type = driver->data_ready[index] & USER_SPACE_LOG_TYPE;
+		data_type = driver->data_ready[index] & USER_SPACE_DATA_TYPE;
 		COPY_USER_SPACE_OR_EXIT(buf, data_type, 4);
 		/* place holder for number of data field */
 		ret += 4;
@@ -810,7 +826,7 @@ drop_hsic:
 		/* copy number of data fields */
 		COPY_USER_SPACE_OR_EXIT(buf+4, num_data, 4);
 		ret -= 4;
-		driver->data_ready[index] ^= USER_SPACE_LOG_TYPE;
+		driver->data_ready[index] ^= USER_SPACE_DATA_TYPE;
 		if (driver->ch)
 			queue_work(driver->diag_wq,
 					 &(driver->diag_read_smd_work));
@@ -827,10 +843,10 @@ drop_hsic:
 #endif
 		APPEND_DEBUG('n');
 		goto exit;
-	} else if (driver->data_ready[index] & USER_SPACE_LOG_TYPE) {
+	} else if (driver->data_ready[index] & USER_SPACE_DATA_TYPE) {
 		/* In case, the thread wakes up and the logging mode is
 		not memory device any more, the condition needs to be cleared */
-		driver->data_ready[index] ^= USER_SPACE_LOG_TYPE;
+		driver->data_ready[index] ^= USER_SPACE_DATA_TYPE;
 	}
 
 	if (driver->data_ready[index] & DEINIT_TYPE) {
@@ -940,7 +956,7 @@ static int diagchar_write(struct file *file, const char __user *buf,
 							payload_size);
 		return err;
 	}
-	if (pkt_type == USER_SPACE_LOG_TYPE) {
+	if (pkt_type == USER_SPACE_DATA_TYPE) {
 		err = copy_from_user(driver->user_space_data, buf + 4,
 							 payload_size);
 		/* Check masks for On-Device logging */
@@ -1303,6 +1319,7 @@ static int __init diagchar_init(void)
 		driver->poolsize_write_struct = poolsize_write_struct;
 		driver->num_clients = max_clients;
 		driver->logging_mode = USB_MODE;
+		driver->callback_process = NULL;
 		driver->mask_check = 0;
 		mutex_init(&driver->diagchar_mutex);
 		init_waitqueue_head(&driver->wait_q);
