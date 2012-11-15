@@ -30,12 +30,7 @@
 #include "diagfwd.h"
 #include "diagfwd_hsic.h"
 
-#define N_MDM_WRITE	8
-#define N_MDM_READ	1
-
 #define READ_HSIC_BUF_SIZE 2048
-
-#define NUM_HSIC_BUF_TBL_ENTRIES N_MDM_WRITE
 
 static void diag_read_hsic_work_fn(struct work_struct *work)
 {
@@ -74,6 +69,13 @@ static void diag_read_hsic_work_fn(struct work_struct *work)
 
 		write_ptrs_available--;
 
+		/*
+		 * No sense queuing a read if the hsic bridge was
+		 * closed in another thread
+		 */
+		if (!driver->hsic_ch)
+			break;
+
 		buf_in_hsic = diagmem_alloc(driver, READ_HSIC_BUF_SIZE,
 							POOL_TYPE_HSIC);
 		if (buf_in_hsic) {
@@ -105,13 +107,14 @@ static void diag_read_hsic_work_fn(struct work_struct *work)
 	} while (buf_in_hsic);
 
 	/*
-	 * If there are no buffers available or for some reason there
-	 * was no hsic data, and if no unrecoverable error occurred
+	 * If there are read buffers available and for some reason the
+	 * read was not queued, and if no unrecoverable error occurred
 	 * (-ENODEV is an unrecoverable error), then set up the next read
 	 */
-	if ((num_reads_submitted == 0) && (err != -ENODEV))
-		queue_work(driver->diag_hsic_wq,
-				 &driver->diag_read_hsic_work);
+	if ((driver->count_hsic_pool < driver->poolsize_hsic) &&
+		(num_reads_submitted == 0) && (err != -ENODEV) &&
+		(driver->hsic_ch != 0))
+		queue_work(driver->diag_hsic_wq, &driver->diag_read_hsic_work);
 }
 
 static void diag_hsic_read_complete_callback(void *ctxt, char *buf,
@@ -130,8 +133,12 @@ static void diag_hsic_read_complete_callback(void *ctxt, char *buf,
 		return;
 	}
 
-	/* Note that zero length is valid and still needs to be sent */
-	if (actual_size >= 0) {
+	/*
+	 * Note that zero length is valid and still needs to be sent to
+	 * the USB only when we are logging data to the USB
+	 */
+	if ((actual_size > 0) ||
+		((actual_size == 0) && (driver->logging_mode == USB_MODE))) {
 		if (!buf) {
 			pr_err("diag: Out of diagmem for HSIC\n");
 		} else {
@@ -144,7 +151,7 @@ static void diag_hsic_read_complete_callback(void *ctxt, char *buf,
 			/* If an error, return buffer to the pool */
 			if (err) {
 				diagmem_free(driver, buf, POOL_TYPE_HSIC);
-				pr_err("diag: In %s, error calling diag_device_write, err: %d\n",
+				pr_err_ratelimited("diag: In %s, error calling diag_device_write, err: %d\n",
 					__func__, err);
 			}
 		}
@@ -211,10 +218,10 @@ static void diag_hsic_resume(void *ctxt)
 	pr_debug("diag: hsic_resume\n");
 	driver->hsic_suspend = 0;
 
-	if ((driver->logging_mode == MEMORY_DEVICE_MODE) ||
-				(driver->usb_mdm_connected))
-		queue_work(driver->diag_hsic_wq,
-			 &driver->diag_read_hsic_work);
+	if ((driver->count_hsic_pool < driver->poolsize_hsic) &&
+		((driver->logging_mode == MEMORY_DEVICE_MODE) ||
+		(driver->usb_mdm_connected)))
+		queue_work(driver->diag_hsic_wq, &driver->diag_read_hsic_work);
 }
 
 static struct diag_bridge_ops hsic_diag_bridge_ops = {
@@ -504,10 +511,6 @@ static int diag_hsic_probe(struct platform_device *pdev)
 	pr_debug("diag: in %s\n", __func__);
 	if (!driver->hsic_device_enabled) {
 		driver->read_len_mdm = 0;
-		if (driver->buf_in_hsic == NULL)
-			driver->buf_in_hsic = kzalloc(IN_BUF_SIZE, GFP_KERNEL);
-		if (driver->buf_in_hsic == NULL)
-			goto err;
 		if (driver->usb_buf_mdm_out  == NULL)
 			driver->usb_buf_mdm_out = kzalloc(USB_MAX_OUT_BUF,
 								 GFP_KERNEL);
@@ -562,7 +565,6 @@ static int diag_hsic_probe(struct platform_device *pdev)
 	return err;
 err:
 	pr_err("DIAG could not initialize buf for HSIC\n");
-	kfree(driver->buf_in_hsic);
 	kfree(driver->usb_buf_mdm_out);
 	kfree(driver->usb_read_mdm_ptr);
 	if (driver->diag_hsic_wq)
@@ -613,6 +615,8 @@ void diagfwd_hsic_init(void)
 	driver->diag_hsic_wq = create_singlethread_workqueue("diag_hsic_wq");
 	driver->write_len_mdm = 0;
 	driver->num_hsic_buf_tbl_entries = 0;
+	spin_lock_init(&driver->hsic_spinlock);
+
 	if (driver->hsic_buf_tbl == NULL)
 		driver->hsic_buf_tbl = kzalloc(NUM_HSIC_BUF_TBL_ENTRIES *
 				sizeof(struct diag_write_device), GFP_KERNEL);
@@ -667,7 +671,6 @@ void diagfwd_hsic_exit(void)
 #ifdef CONFIG_DIAG_OVER_USB
 	usb_diag_close(driver->mdm_ch);
 #endif
-	kfree(driver->buf_in_hsic);
 	kfree(driver->usb_buf_mdm_out);
 	kfree(driver->hsic_buf_tbl);
 	kfree(driver->usb_read_mdm_ptr);
