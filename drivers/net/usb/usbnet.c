@@ -83,7 +83,7 @@ static u8	node_id [ETH_ALEN];
 
 static const char driver_name [] = "usbnet";
 
-static struct workqueue_struct	*usbnet_wq;
+struct workqueue_struct	*usbnet_wq;
 
 /* use ethtool to change the level for any given device */
 static int msg_level = -1;
@@ -458,12 +458,11 @@ EXPORT_SYMBOL_GPL(usbnet_defer_kevent);
 
 /*-------------------------------------------------------------------------*/
 
-static void rx_complete (struct urb *urb);
-
 static int rx_submit (struct usbnet *dev, struct urb *urb, gfp_t flags)
 {
 	struct sk_buff		*skb;
 	struct skb_data		*entry;
+	usb_complete_t		complete_fn;
 	int			retval = 0;
 	unsigned long		lockflags;
 	size_t			size = dev->rx_urb_size;
@@ -487,8 +486,13 @@ static int rx_submit (struct usbnet *dev, struct urb *urb, gfp_t flags)
 	entry->dev = dev;
 	entry->length = 0;
 
+	if (dev->driver_info->rx_complete)
+		complete_fn = dev->driver_info->rx_complete;
+	else
+		complete_fn = rx_complete;
+
 	usb_fill_bulk_urb (urb, dev->udev, dev->in,
-		skb->data, size, rx_complete, skb);
+		skb->data, size, complete_fn, skb);
 
 	spin_lock_irqsave (&dev->rxq.lock, lockflags);
 
@@ -564,7 +568,7 @@ done:
 
 /*-------------------------------------------------------------------------*/
 
-static void rx_complete (struct urb *urb)
+void rx_complete(struct urb *urb)
 {
 	struct sk_buff		*skb = (struct sk_buff *) urb->context;
 	struct skb_data		*entry = (struct skb_data *) skb->cb;
@@ -654,6 +658,7 @@ block:
 	}
 	netif_dbg(dev, rx_err, dev->net, "no read resubmitted\n");
 }
+EXPORT_SYMBOL_GPL(rx_complete);
 
 /*-------------------------------------------------------------------------*/
 void usbnet_pause_rx(struct usbnet *dev)
@@ -753,7 +758,7 @@ EXPORT_SYMBOL_GPL(usbnet_unlink_rx_urbs);
 /*-------------------------------------------------------------------------*/
 
 // precondition: never called in_interrupt
-static void usbnet_terminate_urbs(struct usbnet *dev)
+void usbnet_terminate_urbs(struct usbnet *dev)
 {
 	DECLARE_WAITQUEUE(wait, current);
 	int temp;
@@ -776,6 +781,7 @@ static void usbnet_terminate_urbs(struct usbnet *dev)
 	set_current_state(TASK_RUNNING);
 	remove_wait_queue(&dev->wait, &wait);
 }
+EXPORT_SYMBOL_GPL(usbnet_terminate_urbs);
 
 int usbnet_stop (struct net_device *net)
 {
