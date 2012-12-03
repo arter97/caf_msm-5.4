@@ -1715,10 +1715,15 @@ static void a2xx_cp_intrcallback(struct kgsl_device *device)
 				KGSL_MEMSTORE_OFFSET(KGSL_MEMSTORE_GLOBAL,
 					current_context));
 		if (context_id < KGSL_MEMSTORE_MAX) {
-			kgsl_sharedmem_writel(&rb->device->memstore,
+			/* reset per context ts_cmp_enable */
+			kgsl_sharedmem_writel(&device->memstore,
 					KGSL_MEMSTORE_OFFSET(context_id,
 						ts_cmp_enable), 0);
-			device->last_expired_ctxt_id = context_id;
+			/* Always reset global timestamp ts_cmp_enable */
+			kgsl_sharedmem_writel(&device->memstore,
+					KGSL_MEMSTORE_OFFSET(
+						KGSL_MEMSTORE_GLOBAL,
+						ts_cmp_enable), 0);
 			wmb();
 		}
 		KGSL_CMD_WARN(rb->device, "ringbuffer rb interrupt\n");
