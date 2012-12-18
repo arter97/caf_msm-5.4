@@ -317,8 +317,6 @@ static int mdm9615_auxpcm_rate = SAMPLE_RATE_8KHZ;
 static struct clk *codec_clk;
 static int clk_users;
 
-static int mdm9615_headset_gpios_configured;
-
 static struct snd_soc_jack hs_jack;
 static struct snd_soc_jack button_jack;
 
@@ -2331,57 +2329,6 @@ static struct snd_soc_card snd_soc_card_mdm9615 = {
 
 static struct platform_device *mdm9615_snd_device;
 
-static int mdm9615_configure_headset_mic_gpios(void)
-{
-	int ret;
-	struct pm_gpio param = {
-		.direction      = PM_GPIO_DIR_OUT,
-		.output_buffer  = PM_GPIO_OUT_BUF_CMOS,
-		.output_value   = 1,
-		.pull	   = PM_GPIO_PULL_NO,
-		.vin_sel	= PM_GPIO_VIN_S4,
-		.out_strength   = PM_GPIO_STRENGTH_MED,
-		.function       = PM_GPIO_FUNC_NORMAL,
-	};
-
-	ret = gpio_request(PM8018_GPIO_PM_TO_SYS(23), "AV_SWITCH");
-	if (ret) {
-		pr_err("%s: Failed to request gpio %d\n", __func__,
-			PM8018_GPIO_PM_TO_SYS(23));
-		return ret;
-	}
-
-	ret = pm8xxx_gpio_config(PM8018_GPIO_PM_TO_SYS(23), &param);
-	if (ret)
-		pr_err("%s: Failed to configure gpio %d\n", __func__,
-			PM8018_GPIO_PM_TO_SYS(23));
-	else
-		gpio_direction_output(PM8018_GPIO_PM_TO_SYS(23), 0);
-
-	ret = gpio_request(PM8018_GPIO_PM_TO_SYS(35), "US_EURO_SWITCH");
-	if (ret) {
-		pr_err("%s: Failed to request gpio %d\n", __func__,
-			PM8018_GPIO_PM_TO_SYS(35));
-		gpio_free(PM8018_GPIO_PM_TO_SYS(23));
-		return ret;
-	}
-	ret = pm8xxx_gpio_config(PM8018_GPIO_PM_TO_SYS(35), &param);
-	if (ret)
-		pr_err("%s: Failed to configure gpio %d\n", __func__,
-			PM8018_GPIO_PM_TO_SYS(35));
-	else
-		gpio_direction_output(PM8018_GPIO_PM_TO_SYS(35), 0);
-
-	return 0;
-}
-static void mdm9615_free_headset_mic_gpios(void)
-{
-	if (mdm9615_headset_gpios_configured) {
-		gpio_free(PM8018_GPIO_PM_TO_SYS(23));
-		gpio_free(PM8018_GPIO_PM_TO_SYS(35));
-	}
-}
-
 void  __init install_codec_i2s_gpio(void)
 {
 	msm_gpiomux_install(msm9615_audio_prim_i2s_codec_configs,
@@ -2441,11 +2388,6 @@ static int __init mdm9615_audio_init(void)
 		kfree(mbhc_cfg.calibration);
 		return ret;
 	}
-	if (mdm9615_configure_headset_mic_gpios()) {
-		pr_err("%s Fail to configure headset mic gpios\n", __func__);
-		mdm9615_headset_gpios_configured = 0;
-	} else
-		mdm9615_headset_gpios_configured = 1;
 
 	atomic_set(&msm9615_auxpcm_ref, 0);
 	atomic_set(&msm9615_sec_auxpcm_ref, 0);
@@ -2469,7 +2411,6 @@ static void __exit mdm9615_audio_exit(void)
 		pr_err("%s: Not the right machine type\n", __func__);
 		return ;
 	}
-	mdm9615_free_headset_mic_gpios();
 	platform_device_unregister(mdm9615_snd_device);
 	kfree(mbhc_cfg.calibration);
 	iounmap(msm9x15_i2s_ctl.sif_virt_addr);
