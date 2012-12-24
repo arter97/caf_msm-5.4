@@ -1064,7 +1064,8 @@ static int wfdioc_s_parm(struct file *filp, void *fh,
 	struct v4l2_qcom_frameskip frameskip;
 	int64_t frame_interval, max_frame_interval;
 	void *extendedmode = NULL;
-	enum vsg_modes mode = VSG_MODE_VFR;
+	enum vsg_modes vsg_mode = VSG_MODE_VFR;
+	enum venc_framerate_modes venc_mode = VENC_MODE_VFR;
 
 
 	if (a->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
@@ -1114,7 +1115,8 @@ static int wfdioc_s_parm(struct file *filp, void *fh,
 			goto set_parm_fail;
 
 		max_frame_interval = (int64_t)frameskip.maxframeinterval;
-		mode = VSG_MODE_VFR;
+		vsg_mode = VSG_MODE_VFR;
+		venc_mode = VENC_MODE_VFR;
 
 		rc = v4l2_subdev_call(&wfd_dev->vsg_sdev, core,
 				ioctl, VSG_SET_MAX_FRAME_INTERVAL,
@@ -1122,19 +1124,24 @@ static int wfdioc_s_parm(struct file *filp, void *fh,
 
 		if (rc)
 			goto set_parm_fail;
-
-		rc = v4l2_subdev_call(&wfd_dev->vsg_sdev, core,
-				ioctl, VSG_SET_MODE, &mode);
-
-		if (rc)
-			goto set_parm_fail;
 	} else {
-		mode = VSG_MODE_CFR;
-		rc = v4l2_subdev_call(&wfd_dev->vsg_sdev, core,
-				ioctl, VSG_SET_MODE, &mode);
+		vsg_mode = VSG_MODE_CFR;
+		venc_mode = VENC_MODE_CFR;
+	}
 
-		if (rc)
-			goto set_parm_fail;
+	rc = v4l2_subdev_call(&wfd_dev->vsg_sdev, core,
+			ioctl, VSG_SET_MODE, &vsg_mode);
+	if (rc) {
+		WFD_MSG_ERR("Setting FR mode for VSG failed\n");
+		goto set_parm_fail;
+	}
+
+	rc = v4l2_subdev_call(&wfd_dev->enc_sdev, core,
+			ioctl, SET_FRAMERATE_MODE,
+			&venc_mode);
+	if (rc) {
+		WFD_MSG_ERR("Setting FR mode for VENC failed\n");
+		goto set_parm_fail;
 	}
 
 set_parm_fail:
