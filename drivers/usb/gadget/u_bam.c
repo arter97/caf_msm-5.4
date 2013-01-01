@@ -100,6 +100,8 @@ struct bam_ch_info {
 	u32					src_pipe_idx;
 	u32					dst_pipe_idx;
 	u8					connection_idx;
+	enum transport_type trans;
+	struct usb_bam_connect_ipa_params *ipa_params;
 
 	/* stats */
 	unsigned int		pending_with_bam;
@@ -639,6 +641,21 @@ static void gbam_disconnect_work(struct work_struct *w)
 	clear_bit(BAM_CH_OPENED, &d->flags);
 }
 
+static void gbam2bam_disconnect_work(struct work_struct *w)
+{
+	struct gbam_port *port = container_of(w, struct gbam_port, connect_w);
+	struct bam_ch_info *d = &port->data_ch;
+	int ret;
+
+	if (d->trans == USB_GADGET_XPORT_BAM2BAM_IPA) {
+		ret = usb_bam_disconnect_ipa(d->connection_idx, d->ipa_params);
+		if (ret)
+			pr_err("%s: usb_bam_disconnect_ipa failed: err:%d\n",
+				__func__, ret);
+		rmnet_bridge_disconnect();
+	}
+}
+
 static void gbam_connect_work(struct work_struct *w)
 {
 	struct gbam_port *port = container_of(w, struct gbam_port, connect_w);
@@ -679,12 +696,38 @@ static void gbam2bam_connect_work(struct work_struct *w)
 	u32 sps_params;
 	int ret;
 
-	ret = usb_bam_connect(d->connection_idx, &d->src_pipe_idx,
-						  &d->dst_pipe_idx);
-	if (ret) {
-		pr_err("%s: usb_bam_connect failed: err:%d\n",
-			__func__, ret);
-		return;
+	if (d->trans == USB_GADGET_XPORT_BAM2BAM) {
+		ret = usb_bam_connect(d->connection_idx, &d->src_pipe_idx,
+							  &d->dst_pipe_idx);
+		if (ret) {
+			pr_err("%s: usb_bam_connect failed: err:%d\n",
+				__func__, ret);
+			return;
+		}
+	} else if (d->trans == USB_GADGET_XPORT_BAM2BAM_IPA) {
+		d->ipa_params->client = IPA_CLIENT_USB_CONS;
+		d->ipa_params->dir = PEER_PERIPHERAL_TO_USB;
+		ret = usb_bam_connect_ipa(d->ipa_params);
+		if (ret) {
+			pr_err("%s: usb_bam_connect_ipa failed: err:%d\n",
+				__func__, ret);
+			return;
+		}
+
+		d->ipa_params->client = IPA_CLIENT_USB_PROD;
+		d->ipa_params->dir = USB_TO_PEER_PERIPHERAL;
+		/* Currently only DMA mode is supported */
+		d->ipa_params->ipa_ep_cfg.mode.mode = IPA_DMA;
+		d->ipa_params->ipa_ep_cfg.mode.dst =
+				IPA_CLIENT_A2_TETHERED_CONS;
+		ret = usb_bam_connect_ipa(d->ipa_params);
+		if (ret) {
+			pr_err("%s: usb_bam_connect_ipa failed: err:%d\n",
+				__func__, ret);
+			return;
+		}
+		rmnet_bridge_connect(d->ipa_params->prod_clnt_hdl,
+				d->ipa_params->cons_clnt_hdl, 0);
 	}
 
 	d->rx_req = usb_ep_alloc_request(port->port_usb->out, GFP_KERNEL);
@@ -872,6 +915,7 @@ static int gbam2bam_port_alloc(int portno)
 	spin_lock_init(&port->port_lock_dl);
 
 	INIT_WORK(&port->connect_w, gbam2bam_connect_work);
+	INIT_WORK(&port->disconnect_w, gbam2bam_disconnect_work);
 
 	/* data ch */
 	d = &port->data_ch;
@@ -992,7 +1036,8 @@ static void gbam_debugfs_init(void)
 static void gam_debugfs_init(void) { }
 #endif
 
-void gbam_disconnect(struct grmnet *gr, u8 port_num, enum transport_type trans)
+void gbam_disconnect(struct grmnet *gr, u8 port_num, enum transport_type trans,
+			struct usb_bam_connect_ipa_params *ipa_params)
 {
 	struct gbam_port	*port;
 	unsigned long		flags;
@@ -1007,7 +1052,8 @@ void gbam_disconnect(struct grmnet *gr, u8 port_num, enum transport_type trans)
 		return;
 	}
 
-	if (trans == USB_GADGET_XPORT_BAM2BAM &&
+	if ((trans == USB_GADGET_XPORT_BAM2BAM ||
+		 trans == USB_GADGET_XPORT_BAM2BAM_IPA) &&
 		port_num >= n_bam2bam_ports) {
 		pr_err("%s: invalid bam2bam portno#%d\n",
 			   __func__, port_num);
@@ -1043,12 +1089,14 @@ void gbam_disconnect(struct grmnet *gr, u8 port_num, enum transport_type trans)
 	gr->in->driver_data = NULL;
 	gr->out->driver_data = NULL;
 
-	if (trans == USB_GADGET_XPORT_BAM)
+	if (trans == USB_GADGET_XPORT_BAM ||
+		trans == USB_GADGET_XPORT_BAM2BAM_IPA)
 		queue_work(gbam_wq, &port->disconnect_w);
 }
 
 int gbam_connect(struct grmnet *gr, u8 port_num,
-				 enum transport_type trans, u8 connection_idx)
+				 enum transport_type trans, u8 connection_idx,
+				 struct usb_bam_connect_ipa_params *ipa_params)
 {
 	struct gbam_port	*port;
 	struct bam_ch_info	*d;
@@ -1062,7 +1110,9 @@ int gbam_connect(struct grmnet *gr, u8 port_num,
 		return -ENODEV;
 	}
 
-	if (trans == USB_GADGET_XPORT_BAM2BAM && port_num >= n_bam2bam_ports) {
+	if ((trans == USB_GADGET_XPORT_BAM2BAM ||
+		trans == USB_GADGET_XPORT_BAM2BAM_IPA)
+		&& port_num >= n_bam2bam_ports) {
 		pr_err("%s: invalid portno#%d\n", __func__, port_num);
 		return -ENODEV;
 	}
@@ -1114,8 +1164,15 @@ int gbam_connect(struct grmnet *gr, u8 port_num,
 	if (trans == USB_GADGET_XPORT_BAM2BAM) {
 		port->gr = gr;
 		d->connection_idx = connection_idx;
+	} else if (trans == USB_GADGET_XPORT_BAM2BAM_IPA) {
+		d->ipa_params = ipa_params;
+		port->gr = gr;
+		d->ipa_params->src_pipe = &(d->src_pipe_idx);
+		d->ipa_params->dst_pipe = &(d->dst_pipe_idx);
+		d->ipa_params->idx = connection_idx;
 	}
 
+	d->trans = trans;
 	queue_work(gbam_wq, &port->connect_w);
 
 	return 0;
@@ -1194,7 +1251,8 @@ void gbam_suspend(struct grmnet *gr, u8 port_num, enum transport_type trans)
 	struct gbam_port	*port;
 	struct bam_ch_info *d;
 
-	if (trans != USB_GADGET_XPORT_BAM2BAM)
+	if (trans != USB_GADGET_XPORT_BAM2BAM &&
+		trans != USB_GADGET_XPORT_BAM2BAM_IPA)
 		return;
 
 	port = bam2bam_ports[port_num];
@@ -1210,7 +1268,8 @@ void gbam_resume(struct grmnet *gr, u8 port_num, enum transport_type trans)
 	struct gbam_port	*port;
 	struct bam_ch_info *d;
 
-	if (trans != USB_GADGET_XPORT_BAM2BAM)
+	if (trans != USB_GADGET_XPORT_BAM2BAM &&
+		trans != USB_GADGET_XPORT_BAM2BAM_IPA)
 		return;
 
 	port = bam2bam_ports[port_num];
