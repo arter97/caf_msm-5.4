@@ -75,6 +75,16 @@ enum msm_otg_phy_reg_mode {
 	USB_PHY_REG_LPM_OFF,
 };
 
+static char *override_phy_init;
+module_param(override_phy_init, charp, S_IRUGO|S_IWUSR);
+MODULE_PARM_DESC(override_phy_init,
+	"Override HSUSB PHY Init Settings");
+
+unsigned int lpm_disconnect_thresh = 1000;
+module_param(lpm_disconnect_thresh , uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(lpm_disconnect_thresh,
+	"Delay before entering LPM on USB disconnect");
+
 static DECLARE_COMPLETION(pmic_vbus_init);
 static struct msm_otg *the_msm_otg;
 static bool debug_aca_enabled;
@@ -2213,7 +2223,12 @@ static void msm_otg_sm_work(struct work_struct *w)
 			msm_otg_notify_charger(motg, 0);
 			msm_otg_reset(otg);
 			pm_runtime_put_noidle(otg->dev);
-			pm_runtime_suspend(otg->dev);
+			/*
+			 * Only if autosuspend was enabled in probe, it will be
+			 * used here. Otherwise, no delay will be used.
+			 */
+			pm_runtime_mark_last_busy(otg->dev);
+			pm_runtime_autosuspend(otg->dev);
 		}
 		break;
 	case OTG_STATE_B_SRP_INIT:
@@ -3587,6 +3602,12 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	wake_lock(&motg->wlock);
 	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
+
+	if (motg->pdata->delay_lpm_on_disconnect) {
+		pm_runtime_set_autosuspend_delay(&pdev->dev,
+			lpm_disconnect_thresh);
+		pm_runtime_use_autosuspend(&pdev->dev);
+	}
 
 	if (motg->pdata->bus_scale_table) {
 		motg->bus_perf_client =
