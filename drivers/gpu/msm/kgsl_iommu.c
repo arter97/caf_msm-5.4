@@ -1232,11 +1232,15 @@ static void kgsl_iommu_default_setstate(struct kgsl_mmu *mmu,
 	/* Mask off the lsb of the pt base address since lsb will not change */
 	pt_base &= (KGSL_IOMMU_TTBR0_PA_MASK << KGSL_IOMMU_TTBR0_PA_SHIFT);
 
+	/* For SMMU-v1 we have to idle the core
+	 * for both page table update and tlbflush
+	 */
+	kgsl_idle(mmu->device, KGSL_TIMEOUT_DEFAULT);
+
 	/* Acquire GPU-CPU sync Lock here */
 	msm_iommu_lock();
 
 	if (flags & KGSL_MMUFLAGS_PTUPDATE) {
-		kgsl_idle(mmu->device, KGSL_TIMEOUT_DEFAULT);
 		for (i = 0; i < iommu->unit_count; i++) {
 			/* get the lsb value which should not change when
 			 * changing ttbr0 */
