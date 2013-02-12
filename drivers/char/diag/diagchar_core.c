@@ -1041,6 +1041,12 @@ static int diagchar_write(struct file *file, const char __user *buf,
 	if (pkt_type == USER_SPACE_DATA_TYPE) {
 		err = copy_from_user(driver->user_space_data, buf + 4,
 							 payload_size);
+
+		if (err) {
+			pr_err("diag: copy failed for user space data\n");
+			return -EIO;
+		}
+
 		/* Check masks for On-Device logging */
 		if (driver->mask_check) {
 			if (!mask_request_validate(driver->user_space_data)) {
