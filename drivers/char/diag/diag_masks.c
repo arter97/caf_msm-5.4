@@ -490,6 +490,8 @@ void diag_send_feature_mask_update(struct diag_smd_info *smd_info)
 	feature_byte |= F_DIAG_LOG_ON_DEMAND_RSP_ON_MASTER;
 	feature_byte |= driver->supports_separate_cmdrsp ?
 				F_DIAG_REQ_RSP_CHANNEL : 0;
+	feature_byte |= driver->supports_apps_hdlc_encoding ?
+				F_DIAG_HDLC_ENCODE_IN_APPS_MASK : 0;
 	memcpy(buf+header_size, &feature_byte, FEATURE_MASK_LEN_BYTES);
 	total_len = header_size + FEATURE_MASK_LEN_BYTES;
 
