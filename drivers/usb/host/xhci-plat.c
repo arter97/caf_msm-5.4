@@ -18,6 +18,7 @@
 #include <linux/of.h>
 #include <linux/dma-mapping.h>
 #include <linux/usb/otg.h>
+#include <linux/usb/msm_hsusb.h>
 
 #include "xhci.h"
 
@@ -152,6 +153,10 @@ static int xhci_plat_probe(struct platform_device *pdev)
 		goto release_mem_region;
 	}
 
+	pm_runtime_set_active(&pdev->dev);
+	pm_runtime_enable(&pdev->dev);
+	pm_runtime_get_sync(&pdev->dev);
+
 	ret = usb_add_hcd(hcd, irq, IRQF_SHARED);
 	if (ret)
 		goto unmap_registers;
@@ -179,7 +184,7 @@ static int xhci_plat_probe(struct platform_device *pdev)
 		goto put_usb3_hcd;
 
 	phy = devm_usb_get_phy(&pdev->dev, USB_PHY_TYPE_USB2);
-	if (phy && phy->otg) {
+	if (phy && phy->otg && !(phy->flags & ENABLE_SECONDARY_PHY)) {
 		dev_dbg(&pdev->dev, "%s otg support available\n", __func__);
 		ret = otg_set_host(phy->otg, &hcd->self);
 		if (ret) {
@@ -187,14 +192,11 @@ static int xhci_plat_probe(struct platform_device *pdev)
 				__func__);
 			goto put_usb3_hcd;
 		}
-		pm_runtime_set_active(&pdev->dev);
-		pm_runtime_enable(&pdev->dev);
 	} else {
 		pm_runtime_no_callbacks(&pdev->dev);
-		pm_runtime_set_active(&pdev->dev);
-		pm_runtime_enable(&pdev->dev);
-		pm_runtime_get(&pdev->dev);
 	}
+
+	pm_runtime_put(&pdev->dev);
 
 	return 0;
 
@@ -230,12 +232,8 @@ static int xhci_plat_remove(struct platform_device *dev)
 	usb_put_hcd(hcd);
 	kfree(xhci);
 
-	if (phy && phy->otg) {
+	if (phy && phy->otg)
 		otg_set_host(phy->otg, NULL);
-	} else {
-		pm_runtime_put(&dev->dev);
-		pm_runtime_disable(&dev->dev);
-	}
 
 	return 0;
 }
