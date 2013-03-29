@@ -467,7 +467,7 @@ static int msm_ehci_link_clk_reset(struct msm_hcd *mhcd, bool assert)
 	int ret;
 
 	if (assert) {
-		if (!IS_ERR(mhcd->alt_core_clk)) {
+		if (mhcd->alt_core_clk) {
 			ret = clk_reset(mhcd->alt_core_clk, CLK_RESET_ASSERT);
 		} else {
 			/* Using asynchronous block reset to the hardware */
@@ -478,7 +478,7 @@ static int msm_ehci_link_clk_reset(struct msm_hcd *mhcd, bool assert)
 		if (ret)
 			dev_err(mhcd->dev, "usb clk assert failed\n");
 	} else {
-		if (!IS_ERR(mhcd->alt_core_clk)) {
+		if (mhcd->alt_core_clk) {
 			ret = clk_reset(mhcd->alt_core_clk, CLK_RESET_DEASSERT);
 		} else {
 			ret = clk_reset(mhcd->core_clk, CLK_RESET_DEASSERT);
@@ -550,7 +550,7 @@ static int msm_hsusb_reset(struct msm_hcd *mhcd)
 	unsigned long timeout;
 	int ret;
 
-	if (!IS_ERR(mhcd->alt_core_clk))
+	if (mhcd->alt_core_clk)
 		clk_prepare_enable(mhcd->alt_core_clk);
 
 	ret = msm_ehci_phy_reset(mhcd);
@@ -584,7 +584,7 @@ static int msm_hsusb_reset(struct msm_hcd *mhcd)
 	/* Ensure that RESET operation is completed before turning off clock */
 	mb();
 
-	if (!IS_ERR(mhcd->alt_core_clk))
+	if (mhcd->alt_core_clk)
 		clk_disable_unprepare(mhcd->alt_core_clk);
 
 	/*rising edge interrupts with Dp rise and fall enabled*/
@@ -692,7 +692,7 @@ static int msm_ehci_suspend(struct msm_hcd *mhcd)
 	clk_disable_unprepare(mhcd->core_clk);
 
 	/* usb phy does not require TCXO clock, hence vote for TCXO disable */
-	if (!IS_ERR(mhcd->xo_clk)) {
+	if (mhcd->xo_clk) {
 		clk_disable_unprepare(mhcd->xo_clk);
 	} else {
 		ret = msm_xo_mode_vote(mhcd->xo_handle, MSM_XO_MODE_OFF);
@@ -771,7 +771,7 @@ static int msm_ehci_resume(struct msm_hcd *mhcd)
 	pm_stay_awake(mhcd->dev);
 
 	/* Vote for TCXO when waking up the phy */
-	if (!IS_ERR(mhcd->xo_clk)) {
+	if (mhcd->xo_clk) {
 		clk_prepare_enable(mhcd->xo_clk);
 	} else {
 		ret = msm_xo_mode_vote(mhcd->xo_handle, MSM_XO_MODE_ON);
@@ -1187,16 +1187,24 @@ static int msm_ehci_init_clocks(struct msm_hcd *mhcd, u32 init)
 
 	/* 60MHz alt_core_clk is for LINK to be used during PHY RESET  */
 	mhcd->alt_core_clk = clk_get(mhcd->dev, "alt_core_clk");
-	if (IS_ERR(mhcd->alt_core_clk))
-		dev_dbg(mhcd->dev, "failed to get alt_core_clk\n");
-	else
+	if (IS_ERR(mhcd->alt_core_clk)) {
+		ret = PTR_ERR(mhcd->alt_core_clk);
+		mhcd->alt_core_clk = NULL;
+		if (ret != -EPROBE_DEFER)
+			dev_dbg(mhcd->dev, "failed to get alt_core_clk\n");
+		else
+			goto clk_exit;
+	} else {
 		clk_set_rate(mhcd->alt_core_clk, 60000000);
+	}
 
 	/* iface_clk is required for data transfers */
 	mhcd->iface_clk = clk_get(mhcd->dev, "iface_clk");
 	if (IS_ERR(mhcd->iface_clk)) {
-		dev_err(mhcd->dev, "failed to get iface_clk\n");
 		ret = PTR_ERR(mhcd->iface_clk);
+		mhcd->iface_clk = NULL;
+		if (ret != -EPROBE_DEFER)
+			dev_err(mhcd->dev, "failed to get iface_clk\n");
 		goto put_alt_core_clk;
 	}
 
@@ -1206,17 +1214,25 @@ static int msm_ehci_init_clocks(struct msm_hcd *mhcd, u32 init)
 	 */
 	mhcd->core_clk = clk_get(mhcd->dev, "core_clk");
 	if (IS_ERR(mhcd->core_clk)) {
-		dev_err(mhcd->dev, "failed to get core_clk\n");
 		ret = PTR_ERR(mhcd->core_clk);
+		mhcd->core_clk = NULL;
+		if (ret != -EPROBE_DEFER)
+			dev_err(mhcd->dev, "failed to get core_clk\n");
 		goto put_iface_clk;
 	}
 	clk_set_rate(mhcd->core_clk, INT_MAX);
 
 	mhcd->phy_sleep_clk = clk_get(mhcd->dev, "sleep_clk");
-	if (IS_ERR(mhcd->phy_sleep_clk))
-		dev_dbg(mhcd->dev, "failed to get sleep_clk\n");
-	else
+	if (IS_ERR(mhcd->phy_sleep_clk)) {
+		ret = PTR_ERR(mhcd->phy_sleep_clk);
+		mhcd->phy_sleep_clk = NULL;
+		if (ret != -EPROBE_DEFER)
+			dev_dbg(mhcd->dev, "failed to get sleep_clk\n");
+		else
+			goto put_core_clk;
+	} else {
 		clk_prepare_enable(mhcd->phy_sleep_clk);
+	}
 
 	clk_prepare_enable(mhcd->core_clk);
 	clk_prepare_enable(mhcd->iface_clk);
@@ -1229,16 +1245,18 @@ put_clocks:
 		clk_disable_unprepare(mhcd->core_clk);
 	}
 	clk_put(mhcd->core_clk);
-	if (!IS_ERR(mhcd->phy_sleep_clk)) {
+	if (mhcd->phy_sleep_clk) {
 		clk_disable_unprepare(mhcd->phy_sleep_clk);
 		clk_put(mhcd->phy_sleep_clk);
 	}
+put_core_clk:
+	clk_put(mhcd->core_clk);
 put_iface_clk:
 	clk_put(mhcd->iface_clk);
 put_alt_core_clk:
-	if (!IS_ERR(mhcd->alt_core_clk))
+	if (mhcd->alt_core_clk)
 		clk_put(mhcd->alt_core_clk);
-
+clk_exit:
 	return ret;
 }
 
@@ -1279,6 +1297,28 @@ static int __devinit ehci_msm2_probe(struct platform_device *pdev)
 
 	dev_dbg(&pdev->dev, "ehci_msm2 probe\n");
 
+	hcd = usb_create_hcd(&msm_hc2_driver, &pdev->dev,
+				dev_name(&pdev->dev));
+	if (!hcd) {
+		dev_err(&pdev->dev, "Unable to create HCD\n");
+		return  -ENOMEM;
+	}
+
+	mhcd = hcd_to_mhcd(hcd);
+	mhcd->dev = &pdev->dev;
+
+	mhcd->xo_clk = clk_get(&pdev->dev, "xo");
+	if (IS_ERR(mhcd->xo_clk)) {
+		ret = PTR_ERR(mhcd->xo_clk);
+		mhcd->xo_clk = NULL;
+		if (ret == -EPROBE_DEFER)
+			goto put_hcd;
+	}
+
+	ret = msm_ehci_init_clocks(mhcd, 1);
+	if (ret)
+		goto xo_put;
+
 	if (pdev->dev.of_node) {
 		dev_dbg(&pdev->dev, "device tree enabled\n");
 		pdev->dev.platform_data = ehci_msm2_dt_to_pdata(pdev);
@@ -1294,27 +1334,20 @@ static int __devinit ehci_msm2_probe(struct platform_device *pdev)
 	if (!pdev->dev.coherent_dma_mask)
 		pdev->dev.coherent_dma_mask = DMA_BIT_MASK(32);
 
-	hcd = usb_create_hcd(&msm_hc2_driver, &pdev->dev,
-				dev_name(&pdev->dev));
-	if (!hcd) {
-		dev_err(&pdev->dev, "Unable to create HCD\n");
-		return  -ENOMEM;
-	}
-
 	hcd_to_bus(hcd)->skip_resume = true;
 
 	hcd->irq = platform_get_irq(pdev, 0);
 	if (hcd->irq < 0) {
 		dev_err(&pdev->dev, "Unable to get IRQ resource\n");
 		ret = hcd->irq;
-		goto put_hcd;
+		goto deinit_clocks;
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res) {
 		dev_err(&pdev->dev, "Unable to get memory resource\n");
 		ret = -ENODEV;
-		goto put_hcd;
+		goto deinit_clocks;
 	}
 
 	hcd->rsrc_start = res->start;
@@ -1323,11 +1356,9 @@ static int __devinit ehci_msm2_probe(struct platform_device *pdev)
 	if (!hcd->regs) {
 		dev_err(&pdev->dev, "ioremap failed\n");
 		ret = -ENOMEM;
-		goto put_hcd;
+		goto deinit_clocks;
 	}
 
-	mhcd = hcd_to_mhcd(hcd);
-	mhcd->dev = &pdev->dev;
 
 	spin_lock_init(&mhcd->wakeup_lock);
 
@@ -1346,8 +1377,7 @@ static int __devinit ehci_msm2_probe(struct platform_device *pdev)
 	}
 
 	snprintf(pdev_name, PDEV_NAME_LEN, "%s.%d", pdev->name, pdev->id);
-	mhcd->xo_clk = clk_get(&pdev->dev, "xo");
-	if (!IS_ERR(mhcd->xo_clk)) {
+	if (mhcd->xo_clk) {
 		ret = clk_prepare_enable(mhcd->xo_clk);
 	} else {
 		mhcd->xo_handle = msm_xo_get(MSM_XO_TCXO_D0, pdev_name);
@@ -1355,6 +1385,7 @@ static int __devinit ehci_msm2_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "%s fail to get handle for X0 D0\n",
 								__func__);
 			ret = PTR_ERR(mhcd->xo_handle);
+			mhcd->xo_handle = NULL;
 			goto free_async_irq;
 		} else {
 			ret = msm_xo_mode_vote(mhcd->xo_handle, MSM_XO_MODE_ON);
@@ -1382,24 +1413,17 @@ static int __devinit ehci_msm2_probe(struct platform_device *pdev)
 
 	spin_lock_init(&mhcd->wakeup_lock);
 
-	ret = msm_ehci_init_clocks(mhcd, 1);
-	if (ret) {
-		dev_err(&pdev->dev, "unable to initialize clocks\n");
-		ret = -ENODEV;
-		goto devote_xo_handle;
-	}
-
 	ret = msm_ehci_init_vddcx(mhcd, 1);
 	if (ret) {
 		dev_err(&pdev->dev, "unable to initialize VDDCX\n");
 		ret = -ENODEV;
-		goto deinit_clocks;
+		goto devote_xo_handle;
 	}
 
 	ret = msm_ehci_config_vddcx(mhcd, 1);
 	if (ret) {
 		dev_err(&pdev->dev, "hsusb vddcx configuration failed\n");
-		goto deinit_vddcx;
+		goto devote_xo_handle;
 	}
 
 	ret = msm_ehci_ldo_init(mhcd, 1);
@@ -1502,25 +1526,30 @@ deinit_ldo:
 	msm_ehci_ldo_init(mhcd, 0);
 deinit_vddcx:
 	msm_ehci_init_vddcx(mhcd, 0);
-deinit_clocks:
-	msm_ehci_init_clocks(mhcd, 0);
 devote_xo_handle:
 	if (mhcd->resume_gpio)
 		gpio_free(mhcd->resume_gpio);
-	if (!IS_ERR(mhcd->xo_clk))
+	if (mhcd->xo_clk)
 		clk_disable_unprepare(mhcd->xo_clk);
 	else
 		msm_xo_mode_vote(mhcd->xo_handle, MSM_XO_MODE_OFF);
 free_xo_handle:
-	if (!IS_ERR(mhcd->xo_clk))
+	if (mhcd->xo_clk) {
 		clk_put(mhcd->xo_clk);
-	else
+		mhcd->xo_clk = NULL;
+	} else {
 		msm_xo_put(mhcd->xo_handle);
+	}
 free_async_irq:
 	if (mhcd->async_irq)
 		free_irq(mhcd->async_irq, mhcd);
 unmap:
 	iounmap(hcd->regs);
+deinit_clocks:
+	msm_ehci_init_clocks(mhcd, 0);
+xo_put:
+	if (mhcd->xo_clk)
+		clk_put(mhcd->xo_clk);
 put_hcd:
 	usb_put_hcd(hcd);
 
@@ -1557,7 +1586,7 @@ static int __devexit ehci_msm2_remove(struct platform_device *pdev)
 
 	usb_remove_hcd(hcd);
 
-	if (!IS_ERR(mhcd->xo_clk)) {
+	if (mhcd->xo_clk) {
 		clk_disable_unprepare(mhcd->xo_clk);
 		clk_put(mhcd->xo_clk);
 	} else {
