@@ -20,6 +20,7 @@
 #include <linux/debugfs.h>
 #include <linux/list.h>
 #include <linux/mfd/wcd9xxx/core.h>
+#include <linux/mfd/wcd9xxx/core-resource.h>
 #include <linux/mfd/wcd9xxx/wcd9xxx_registers.h>
 #include <linux/mfd/wcd9xxx/wcd9320_registers.h>
 #include <linux/mfd/wcd9xxx/pdata.h>
@@ -429,7 +430,7 @@ void *wcd9xxx_mbhc_cal_btn_det_mp(
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(wcd9xxx_mbhc_cal_btn_det_mp);
+EXPORT_SYMBOL(wcd9xxx_mbhc_cal_btn_det_mp);
 
 static void wcd9xxx_calibrate_hs_polling(struct wcd9xxx_mbhc *mbhc)
 {
@@ -533,7 +534,7 @@ static void __hphocp_off_report(struct wcd9xxx_mbhc *mbhc, u32 jack_status,
 			mbhc->hphlocp_cnt = 0;
 		else
 			mbhc->hphrocp_cnt = 0;
-		wcd9xxx_enable_irq(codec->control_data, irq);
+		wcd9xxx_enable_irq(mbhc->resmgr->core_res, irq);
 	}
 }
 
@@ -662,7 +663,7 @@ static int wcd9xxx_cancel_btn_work(struct wcd9xxx_mbhc *mbhc)
 	if (r)
 		/* if scheduled mbhc.mbhc_btn_dwork is canceled from here,
 		 * we have to unlock from here instead btn_work */
-		wcd9xxx_unlock_sleep(mbhc->resmgr->core);
+		wcd9xxx_unlock_sleep(mbhc->resmgr->core_res);
 	return r;
 }
 
@@ -834,7 +835,7 @@ static void wcd9xxx_schedule_hs_detect_plug(struct wcd9xxx_mbhc *mbhc,
 	pr_debug("%s: scheduling wcd9xxx_correct_swch_plug\n", __func__);
 	WCD9XXX_BCL_ASSERT_LOCKED(mbhc->resmgr);
 	mbhc->hs_detect_work_stop = false;
-	wcd9xxx_lock_sleep(mbhc->resmgr->core);
+	wcd9xxx_lock_sleep(mbhc->resmgr->core_res);
 	schedule_work(work);
 }
 
@@ -850,7 +851,7 @@ static void wcd9xxx_cancel_hs_detect_plug(struct wcd9xxx_mbhc *mbhc,
 	if (cancel_work_sync(work)) {
 		pr_debug("%s: correct_plug_swch is canceled\n",
 			 __func__);
-		wcd9xxx_unlock_sleep(mbhc->resmgr->core);
+		wcd9xxx_unlock_sleep(mbhc->resmgr->core_res);
 	}
 	WCD9XXX_BCL_LOCK(mbhc->resmgr);
 }
@@ -916,7 +917,7 @@ static short __wcd9xxx_codec_sta_dce(struct wcd9xxx_mbhc *mbhc, int dce,
 	short bias_value;
 	struct snd_soc_codec *codec = mbhc->codec;
 
-	wcd9xxx_disable_irq(mbhc->resmgr->core, WCD9XXX_IRQ_MBHC_POTENTIAL);
+	wcd9xxx_disable_irq(mbhc->resmgr->core_res, WCD9XXX_IRQ_MBHC_POTENTIAL);
 	if (noreldetection)
 		wcd9xxx_turn_onoff_rel_detection(codec, false);
 
@@ -957,7 +958,7 @@ static short __wcd9xxx_codec_sta_dce(struct wcd9xxx_mbhc *mbhc, int dce,
 
 	if (noreldetection)
 		wcd9xxx_turn_onoff_rel_detection(codec, true);
-	wcd9xxx_enable_irq(mbhc->resmgr->core, WCD9XXX_IRQ_MBHC_POTENTIAL);
+	wcd9xxx_enable_irq(mbhc->resmgr->core_res, WCD9XXX_IRQ_MBHC_POTENTIAL);
 
 	return bias_value;
 }
@@ -1549,7 +1550,7 @@ static int wcd9xxx_enable_hs_detect(struct wcd9xxx_mbhc *mbhc,
 		snd_soc_update_bits(codec, mbhc->resmgr->reg_addr->micb_4_mbhc,
 				    0x3, mbhc->mbhc_cfg->micbias);
 
-	wcd9xxx_enable_irq(mbhc->resmgr->core, WCD9XXX_IRQ_MBHC_INSERTION);
+	wcd9xxx_enable_irq(mbhc->resmgr->core_res, WCD9XXX_IRQ_MBHC_INSERTION);
 	snd_soc_update_bits(codec, WCD9XXX_A_CDC_MBHC_INT_CTL, 0x1, 0x1);
 	pr_debug("%s: leave\n", __func__);
 
@@ -1962,7 +1963,7 @@ static irqreturn_t wcd9xxx_hs_insert_irq(int irq, void *data)
 
 	pr_debug("%s: enter\n", __func__);
 	WCD9XXX_BCL_LOCK(mbhc->resmgr);
-	wcd9xxx_disable_irq(codec->control_data, WCD9XXX_IRQ_MBHC_INSERTION);
+	wcd9xxx_disable_irq(mbhc->resmgr->core_res, WCD9XXX_IRQ_MBHC_INSERTION);
 
 	is_mb_trigger = !!(snd_soc_read(codec, mbhc->mbhc_bias_regs.mbhc_reg) &
 			   0x10);
@@ -2008,7 +2009,7 @@ static void wcd9xxx_btn_lpress_fn(struct work_struct *work)
 			    mbhc->buttons_pressed);
 
 	pr_debug("%s: leave\n", __func__);
-	wcd9xxx_unlock_sleep(mbhc->resmgr->core);
+	wcd9xxx_unlock_sleep(mbhc->resmgr->core_res);
 }
 
 static void wcd9xxx_mbhc_insert_work(struct work_struct *work)
@@ -2016,12 +2017,12 @@ static void wcd9xxx_mbhc_insert_work(struct work_struct *work)
 	struct delayed_work *dwork;
 	struct wcd9xxx_mbhc *mbhc;
 	struct snd_soc_codec *codec;
-	struct wcd9xxx *core;
+	struct wcd9xxx_core_resource *core_res;
 
 	dwork = to_delayed_work(work);
 	mbhc = container_of(dwork, struct wcd9xxx_mbhc, mbhc_insert_dwork);
 	codec = mbhc->codec;
-	core = mbhc->resmgr->core;
+	core_res = mbhc->resmgr->core_res;
 
 	pr_debug("%s:\n", __func__);
 
@@ -2029,9 +2030,9 @@ static void wcd9xxx_mbhc_insert_work(struct work_struct *work)
 	snd_soc_update_bits(codec, mbhc->mbhc_bias_regs.mbhc_reg, 0x90, 0x00);
 	snd_soc_update_bits(codec, WCD9XXX_A_MBHC_HPH, 0x13, 0x00);
 	snd_soc_update_bits(codec, mbhc->mbhc_bias_regs.ctl_reg, 0x01, 0x00);
-	wcd9xxx_disable_irq_sync(core, WCD9XXX_IRQ_MBHC_INSERTION);
+	wcd9xxx_disable_irq_sync(core_res, WCD9XXX_IRQ_MBHC_INSERTION);
 	wcd9xxx_mbhc_detect_plug_type(mbhc);
-	wcd9xxx_unlock_sleep(core);
+	wcd9xxx_unlock_sleep(core_res);
 }
 
 static bool wcd9xxx_mbhc_fw_validate(const struct firmware *fw)
@@ -2316,7 +2317,7 @@ static void wcd9xxx_correct_swch_plug(struct work_struct *work)
 	}
 	pr_debug("%s: leave current_plug(%d)\n", __func__, mbhc->current_plug);
 	/* unlock sleep */
-	wcd9xxx_unlock_sleep(mbhc->resmgr->core);
+	wcd9xxx_unlock_sleep(mbhc->resmgr->core_res);
 }
 
 static void wcd9xxx_swch_irq_handler(struct wcd9xxx_mbhc *mbhc)
@@ -2411,13 +2412,13 @@ static irqreturn_t wcd9xxx_mech_plug_detect_irq(int irq, void *data)
 	struct wcd9xxx_mbhc *mbhc = data;
 
 	pr_debug("%s: enter\n", __func__);
-	if (unlikely(wcd9xxx_lock_sleep(mbhc->resmgr->core) == false)) {
+	if (unlikely(wcd9xxx_lock_sleep(mbhc->resmgr->core_res) == false)) {
 		pr_warn("%s: failed to hold suspend\n", __func__);
 		r = IRQ_NONE;
 	} else {
 		/* Call handler */
 		wcd9xxx_swch_irq_handler(mbhc);
-		wcd9xxx_unlock_sleep(mbhc->resmgr->core);
+		wcd9xxx_unlock_sleep(mbhc->resmgr->core_res);
 	}
 
 	pr_debug("%s: leave %d\n", __func__, r);
@@ -2593,7 +2594,7 @@ irqreturn_t wcd9xxx_dce_handler(int irq, void *data)
 	short dce[d->n_btn_meas + 1], sta;
 	s32 mv[d->n_btn_meas + 1], mv_s[d->n_btn_meas + 1];
 	struct snd_soc_codec *codec = mbhc->codec;
-	struct wcd9xxx *core = mbhc->resmgr->core;
+	struct wcd9xxx_core_resource *core_res = mbhc->resmgr->core_res;
 	int n_btn_meas = d->n_btn_meas;
 	void *calibration = mbhc->mbhc_cfg->calibration;
 
@@ -2729,11 +2730,11 @@ irqreturn_t wcd9xxx_dce_handler(int irq, void *data)
 
 		mask = wcd9xxx_get_button_mask(btn);
 		mbhc->buttons_pressed |= mask;
-		wcd9xxx_lock_sleep(core);
+		wcd9xxx_lock_sleep(core_res);
 		if (schedule_delayed_work(&mbhc->mbhc_btn_dwork,
 					  msecs_to_jiffies(400)) == 0) {
 			WARN(1, "Button pressed twice without release event\n");
-			wcd9xxx_unlock_sleep(core);
+			wcd9xxx_unlock_sleep(core_res);
 		}
 	} else {
 		pr_debug("%s: bogus button press, too short press?\n",
@@ -2817,7 +2818,7 @@ static irqreturn_t wcd9xxx_hphl_ocp_irq(int irq, void *data)
 			snd_soc_update_bits(codec, WCD9XXX_A_RX_HPH_OCP_CTL,
 					    0x10, 0x10);
 		} else {
-			wcd9xxx_disable_irq(codec->control_data,
+			wcd9xxx_disable_irq(mbhc->resmgr->core_res,
 					  WCD9XXX_IRQ_HPH_PA_OCPL_FAULT);
 			mbhc->hph_status |= SND_JACK_OC_HPHL;
 			wcd9xxx_jack_report(mbhc, &mbhc->headset_jack,
@@ -2847,7 +2848,7 @@ static irqreturn_t wcd9xxx_hphr_ocp_irq(int irq, void *data)
 		snd_soc_update_bits(codec, WCD9XXX_A_RX_HPH_OCP_CTL, 0x10,
 				    0x10);
 	} else {
-		wcd9xxx_disable_irq(mbhc->resmgr->core,
+		wcd9xxx_disable_irq(mbhc->resmgr->core_res,
 				    WCD9XXX_IRQ_HPH_PA_OCPR_FAULT);
 		mbhc->hph_status |= SND_JACK_OC_HPHR;
 		wcd9xxx_jack_report(mbhc, &mbhc->headset_jack,
@@ -2928,7 +2929,7 @@ static void wcd9xxx_mbhc_cal(struct wcd9xxx_mbhc *mbhc)
 	struct snd_soc_codec *codec = mbhc->codec;
 
 	pr_debug("%s: enter\n", __func__);
-	wcd9xxx_disable_irq(codec->control_data, WCD9XXX_IRQ_MBHC_POTENTIAL);
+	wcd9xxx_disable_irq(mbhc->resmgr->core_res, WCD9XXX_IRQ_MBHC_POTENTIAL);
 	wcd9xxx_turn_onoff_rel_detection(codec, false);
 
 	/* t_dce and t_sta are updated by wcd9xxx_update_mbhc_clk_rate() */
@@ -3043,7 +3044,7 @@ static void wcd9xxx_mbhc_cal(struct wcd9xxx_mbhc *mbhc)
 				    0x80, 0x80);
 	usleep_range(100, 100);
 
-	wcd9xxx_enable_irq(codec->control_data, WCD9XXX_IRQ_MBHC_POTENTIAL);
+	wcd9xxx_enable_irq(mbhc->resmgr->core_res, WCD9XXX_IRQ_MBHC_POTENTIAL);
 	wcd9xxx_turn_onoff_rel_detection(codec, true);
 
 	pr_debug("%s: leave\n", __func__);
@@ -3104,8 +3105,8 @@ static void wcd9xxx_mbhc_setup(struct wcd9xxx_mbhc *mbhc)
 static int wcd9xxx_setup_jack_detect_irq(struct wcd9xxx_mbhc *mbhc)
 {
 	int ret = 0;
-	void *core = mbhc->resmgr->core;
 	struct snd_soc_codec *codec = mbhc->codec;
+	void *core_res = mbhc->resmgr->core_res;
 	int jack_irq;
 
 	if (mbhc->mbhc_cb && mbhc->mbhc_cb->jack_detect_irq)
@@ -3134,7 +3135,7 @@ static int wcd9xxx_setup_jack_detect_irq(struct wcd9xxx_mbhc *mbhc)
 		snd_soc_update_bits(mbhc->codec, WCD9XXX_A_RX_HPH_OCP_CTL,
 				    1 << 1, 1 << 1);
 
-		ret = wcd9xxx_request_irq(core, jack_irq,
+		ret = wcd9xxx_request_irq(core_res, jack_irq,
 					  wcd9xxx_mech_plug_detect_irq,
 					  "Jack Detect",
 					  mbhc);
@@ -3169,9 +3170,9 @@ static int wcd9xxx_init_and_calibrate(struct wcd9xxx_mbhc *mbhc)
 	if (!IS_ERR_VALUE(ret)) {
 		snd_soc_update_bits(codec, WCD9XXX_A_RX_HPH_OCP_CTL, 0x10,
 				    0x10);
-		wcd9xxx_enable_irq(codec->control_data,
+		wcd9xxx_enable_irq(mbhc->resmgr->core_res,
 				   WCD9XXX_IRQ_HPH_PA_OCPL_FAULT);
-		wcd9xxx_enable_irq(codec->control_data,
+		wcd9xxx_enable_irq(mbhc->resmgr->core_res,
 				   WCD9XXX_IRQ_HPH_PA_OCPR_FAULT);
 
 		/* Initialize mechanical mbhc */
@@ -3401,7 +3402,7 @@ int wcd9xxx_mbhc_start(struct wcd9xxx_mbhc *mbhc,
 	pr_debug("%s: leave %d\n", __func__, rc);
 	return rc;
 }
-EXPORT_SYMBOL_GPL(wcd9xxx_mbhc_start);
+EXPORT_SYMBOL(wcd9xxx_mbhc_start);
 
 static enum wcd9xxx_micbias_num
 wcd9xxx_event_to_micbias(const enum wcd9xxx_notify_event event)
@@ -3968,7 +3969,7 @@ int wcd9xxx_mbhc_init(struct wcd9xxx_mbhc *mbhc, struct wcd9xxx_resmgr *resmgr,
 		      bool impedance_det_en)
 {
 	int ret;
-	void *core;
+	void *core_res;
 
 	pr_debug("%s: enter\n", __func__);
 	memset(&mbhc->mbhc_bias_regs, 0, sizeof(struct mbhc_micbias_regs));
@@ -4026,18 +4027,18 @@ int wcd9xxx_mbhc_init(struct wcd9xxx_mbhc *mbhc, struct wcd9xxx_resmgr *resmgr,
 
 	wcd9xxx_init_debugfs(mbhc);
 
-	core = mbhc->resmgr->core;
-	ret = wcd9xxx_request_irq(core, WCD9XXX_IRQ_MBHC_INSERTION,
+	core_res = mbhc->resmgr->core_res;
+	ret = wcd9xxx_request_irq(core_res, WCD9XXX_IRQ_MBHC_INSERTION,
 				  wcd9xxx_hs_insert_irq,
 				  "Headset insert detect", mbhc);
 	if (ret) {
-		pr_err("%s: Failed to request irq %d\n", __func__,
-		       WCD9XXX_IRQ_MBHC_INSERTION);
+		pr_err("%s: Failed to request irq %d, ret = %d\n", __func__,
+		       WCD9XXX_IRQ_MBHC_INSERTION, ret);
 		goto err_insert_irq;
 	}
-	wcd9xxx_disable_irq(core, WCD9XXX_IRQ_MBHC_INSERTION);
+	wcd9xxx_disable_irq(core_res, WCD9XXX_IRQ_MBHC_INSERTION);
 
-	ret = wcd9xxx_request_irq(core, WCD9XXX_IRQ_MBHC_REMOVAL,
+	ret = wcd9xxx_request_irq(core_res, WCD9XXX_IRQ_MBHC_REMOVAL,
 				  wcd9xxx_hs_remove_irq,
 				  "Headset remove detect", mbhc);
 	if (ret) {
@@ -4046,7 +4047,7 @@ int wcd9xxx_mbhc_init(struct wcd9xxx_mbhc *mbhc, struct wcd9xxx_resmgr *resmgr,
 		goto err_remove_irq;
 	}
 
-	ret = wcd9xxx_request_irq(core, WCD9XXX_IRQ_MBHC_POTENTIAL,
+	ret = wcd9xxx_request_irq(core_res, WCD9XXX_IRQ_MBHC_POTENTIAL,
 				  wcd9xxx_dce_handler, "DC Estimation detect",
 				  mbhc);
 	if (ret) {
@@ -4055,7 +4056,7 @@ int wcd9xxx_mbhc_init(struct wcd9xxx_mbhc *mbhc, struct wcd9xxx_resmgr *resmgr,
 		goto err_potential_irq;
 	}
 
-	ret = wcd9xxx_request_irq(core, WCD9XXX_IRQ_MBHC_RELEASE,
+	ret = wcd9xxx_request_irq(core_res, WCD9XXX_IRQ_MBHC_RELEASE,
 				  wcd9xxx_release_handler,
 				  "Button Release detect", mbhc);
 	if (ret) {
@@ -4064,7 +4065,7 @@ int wcd9xxx_mbhc_init(struct wcd9xxx_mbhc *mbhc, struct wcd9xxx_resmgr *resmgr,
 		goto err_release_irq;
 	}
 
-	ret = wcd9xxx_request_irq(core, WCD9XXX_IRQ_HPH_PA_OCPL_FAULT,
+	ret = wcd9xxx_request_irq(core_res, WCD9XXX_IRQ_HPH_PA_OCPL_FAULT,
 				  wcd9xxx_hphl_ocp_irq, "HPH_L OCP detect",
 				  mbhc);
 	if (ret) {
@@ -4072,9 +4073,9 @@ int wcd9xxx_mbhc_init(struct wcd9xxx_mbhc *mbhc, struct wcd9xxx_resmgr *resmgr,
 		       WCD9XXX_IRQ_HPH_PA_OCPL_FAULT);
 		goto err_hphl_ocp_irq;
 	}
-	wcd9xxx_disable_irq(core, WCD9XXX_IRQ_HPH_PA_OCPL_FAULT);
+	wcd9xxx_disable_irq(core_res, WCD9XXX_IRQ_HPH_PA_OCPL_FAULT);
 
-	ret = wcd9xxx_request_irq(core, WCD9XXX_IRQ_HPH_PA_OCPR_FAULT,
+	ret = wcd9xxx_request_irq(core_res, WCD9XXX_IRQ_HPH_PA_OCPR_FAULT,
 				  wcd9xxx_hphr_ocp_irq, "HPH_R OCP detect",
 				  mbhc);
 	if (ret) {
@@ -4082,7 +4083,7 @@ int wcd9xxx_mbhc_init(struct wcd9xxx_mbhc *mbhc, struct wcd9xxx_resmgr *resmgr,
 		       WCD9XXX_IRQ_HPH_PA_OCPR_FAULT);
 		goto err_hphr_ocp_irq;
 	}
-	wcd9xxx_disable_irq(codec->control_data, WCD9XXX_IRQ_HPH_PA_OCPR_FAULT);
+	wcd9xxx_disable_irq(core_res, WCD9XXX_IRQ_HPH_PA_OCPR_FAULT);
 
 	wcd9xxx_regmgr_cond_register(resmgr, 1 << WCD9XXX_COND_HPH_MIC |
 					     1 << WCD9XXX_COND_HPH);
@@ -4091,43 +4092,44 @@ int wcd9xxx_mbhc_init(struct wcd9xxx_mbhc *mbhc, struct wcd9xxx_resmgr *resmgr,
 	return ret;
 
 err_hphr_ocp_irq:
-	wcd9xxx_free_irq(core, WCD9XXX_IRQ_HPH_PA_OCPL_FAULT, mbhc);
+	wcd9xxx_free_irq(core_res, WCD9XXX_IRQ_HPH_PA_OCPL_FAULT, mbhc);
 err_hphl_ocp_irq:
-	wcd9xxx_free_irq(core, WCD9XXX_IRQ_MBHC_RELEASE, mbhc);
+	wcd9xxx_free_irq(core_res, WCD9XXX_IRQ_MBHC_RELEASE, mbhc);
 err_release_irq:
-	wcd9xxx_free_irq(core, WCD9XXX_IRQ_MBHC_POTENTIAL, mbhc);
+	wcd9xxx_free_irq(core_res, WCD9XXX_IRQ_MBHC_POTENTIAL, mbhc);
 err_potential_irq:
-	wcd9xxx_free_irq(core, WCD9XXX_IRQ_MBHC_REMOVAL, mbhc);
+	wcd9xxx_free_irq(core_res, WCD9XXX_IRQ_MBHC_REMOVAL, mbhc);
 err_remove_irq:
-	wcd9xxx_free_irq(core, WCD9XXX_IRQ_MBHC_INSERTION, mbhc);
+	wcd9xxx_free_irq(core_res, WCD9XXX_IRQ_MBHC_INSERTION, mbhc);
 err_insert_irq:
 	wcd9xxx_resmgr_unregister_notifier(mbhc->resmgr, &mbhc->nblock);
 
 	pr_debug("%s: leave ret %d\n", __func__, ret);
 	return ret;
 }
-EXPORT_SYMBOL_GPL(wcd9xxx_mbhc_init);
+EXPORT_SYMBOL(wcd9xxx_mbhc_init);
 
 void wcd9xxx_mbhc_deinit(struct wcd9xxx_mbhc *mbhc)
 {
-	void *cdata = mbhc->codec->control_data;
+	struct wcd9xxx_core_resource *core_res =
+				mbhc->resmgr->core_res;
 
 	wcd9xxx_regmgr_cond_deregister(mbhc->resmgr, 1 << WCD9XXX_COND_HPH_MIC |
 						     1 << WCD9XXX_COND_HPH);
 
-	wcd9xxx_free_irq(cdata, WCD9XXX_IRQ_MBHC_RELEASE, mbhc);
-	wcd9xxx_free_irq(cdata, WCD9XXX_IRQ_MBHC_POTENTIAL, mbhc);
-	wcd9xxx_free_irq(cdata, WCD9XXX_IRQ_MBHC_REMOVAL, mbhc);
-	wcd9xxx_free_irq(cdata, WCD9XXX_IRQ_MBHC_INSERTION, mbhc);
+	wcd9xxx_free_irq(core_res, WCD9XXX_IRQ_MBHC_RELEASE, mbhc);
+	wcd9xxx_free_irq(core_res, WCD9XXX_IRQ_MBHC_POTENTIAL, mbhc);
+	wcd9xxx_free_irq(core_res, WCD9XXX_IRQ_MBHC_REMOVAL, mbhc);
+	wcd9xxx_free_irq(core_res, WCD9XXX_IRQ_MBHC_INSERTION, mbhc);
 
 	if (mbhc->mbhc_cb && mbhc->mbhc_cb->free_irq)
 		mbhc->mbhc_cb->free_irq(mbhc);
 	else
-		wcd9xxx_free_irq(cdata, WCD9320_IRQ_MBHC_JACK_SWITCH,
+		wcd9xxx_free_irq(core_res, WCD9320_IRQ_MBHC_JACK_SWITCH,
 				 mbhc);
 
-	wcd9xxx_free_irq(cdata, WCD9XXX_IRQ_HPH_PA_OCPL_FAULT, mbhc);
-	wcd9xxx_free_irq(cdata, WCD9XXX_IRQ_HPH_PA_OCPR_FAULT, mbhc);
+	wcd9xxx_free_irq(core_res, WCD9XXX_IRQ_HPH_PA_OCPL_FAULT, mbhc);
+	wcd9xxx_free_irq(core_res, WCD9XXX_IRQ_HPH_PA_OCPR_FAULT, mbhc);
 
 	if (mbhc->mbhc_fw)
 		release_firmware(mbhc->mbhc_fw);
@@ -4136,7 +4138,7 @@ void wcd9xxx_mbhc_deinit(struct wcd9xxx_mbhc *mbhc)
 
 	wcd9xxx_cleanup_debugfs(mbhc);
 }
-EXPORT_SYMBOL_GPL(wcd9xxx_mbhc_deinit);
+EXPORT_SYMBOL(wcd9xxx_mbhc_deinit);
 
 MODULE_DESCRIPTION("wcd9xxx MBHC module");
 MODULE_LICENSE("GPL v2");
