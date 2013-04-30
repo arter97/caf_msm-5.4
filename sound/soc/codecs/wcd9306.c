@@ -2927,6 +2927,7 @@ static int tapan_write(struct snd_soc_codec *codec, unsigned int reg,
 	unsigned int value)
 {
 	int ret;
+	struct wcd9xxx *wcd9xxx = codec->control_data;
 
 	if (reg == SND_SOC_NOPM)
 		return 0;
@@ -2940,13 +2941,14 @@ static int tapan_write(struct snd_soc_codec *codec, unsigned int reg,
 				reg, ret);
 	}
 
-	return wcd9xxx_reg_write(codec->control_data, reg, value);
+	return wcd9xxx_reg_write(&wcd9xxx->core_res, reg, value);
 }
 static unsigned int tapan_read(struct snd_soc_codec *codec,
 				unsigned int reg)
 {
 	unsigned int val;
 	int ret;
+	struct wcd9xxx *wcd9xxx = codec->control_data;
 
 	if (reg == SND_SOC_NOPM)
 		return 0;
@@ -2963,7 +2965,7 @@ static unsigned int tapan_read(struct snd_soc_codec *codec,
 				reg, ret);
 	}
 
-	val = wcd9xxx_reg_read(codec->control_data, reg);
+	val = wcd9xxx_reg_read(&wcd9xxx->core_res, reg);
 	return val;
 }
 
@@ -4667,8 +4669,11 @@ static int tapan_setup_irqs(struct tapan_priv *tapan)
 {
 	int ret = 0;
 	struct snd_soc_codec *codec = tapan->codec;
+	struct wcd9xxx *wcd9xxx = codec->control_data;
+	struct wcd9xxx_core_resource *core_res =
+							&wcd9xxx->core_res;
 
-	ret = wcd9xxx_request_irq(codec->control_data, WCD9XXX_IRQ_SLIMBUS,
+	ret = wcd9xxx_request_irq(core_res, WCD9XXX_IRQ_SLIMBUS,
 				  tapan_slimbus_irq, "SLIMBUS Slave", tapan);
 	if (ret)
 		pr_err("%s: Failed to request irq %d\n", __func__,
@@ -4682,7 +4687,10 @@ static int tapan_setup_irqs(struct tapan_priv *tapan)
 static void tapan_cleanup_irqs(struct tapan_priv *tapan)
 {
 	struct snd_soc_codec *codec = tapan->codec;
-	wcd9xxx_free_irq(codec->control_data, WCD9XXX_IRQ_SLIMBUS, tapan);
+	struct wcd9xxx *wcd9xxx = codec->control_data;
+	struct wcd9xxx_core_resource *core_res =
+							&wcd9xxx->core_res;
+	wcd9xxx_free_irq(core_res, WCD9XXX_IRQ_SLIMBUS, tapan);
 }
 
 
@@ -4757,7 +4765,7 @@ int tapan_hs_detect(struct snd_soc_codec *codec,
 	struct tapan_priv *tapan = snd_soc_codec_get_drvdata(codec);
 	return wcd9xxx_mbhc_start(&tapan->mbhc, mbhc_cfg);
 }
-EXPORT_SYMBOL_GPL(tapan_hs_detect);
+EXPORT_SYMBOL(tapan_hs_detect);
 
 static int tapan_post_reset_cb(struct wcd9xxx *wcd9xxx)
 {
@@ -4849,6 +4857,7 @@ static int tapan_codec_probe(struct snd_soc_codec *codec)
 	int ret = 0;
 	int i, rco_clk_rate;
 	void *ptr = NULL;
+	struct wcd9xxx_core_resource *core_res;
 
 	codec->control_data = dev_get_drvdata(codec->dev->parent);
 	control = codec->control_data;
@@ -4873,8 +4882,9 @@ static int tapan_codec_probe(struct snd_soc_codec *codec)
 
 	/* codec resmgr module init */
 	wcd9xxx = codec->control_data;
+	core_res = &wcd9xxx->core_res;
 	pdata = dev_get_platdata(codec->dev->parent);
-	ret = wcd9xxx_resmgr_init(&tapan->resmgr, codec, wcd9xxx, pdata,
+	ret = wcd9xxx_resmgr_init(&tapan->resmgr, codec, core_res, pdata,
 				  &tapan_reg_address);
 	if (ret) {
 		pr_err("%s: wcd9xxx init failed %d\n", __func__, ret);
