@@ -551,7 +551,7 @@ static int ecm_qc_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 				);
 			ecm->port.cdc_filter = DEFAULT_FILTER;
 			DBG(cdev, "activate ecm\n");
-			net = gether_qc_connect_name(&ecm->port, "ecm0");
+			net = gether_qc_connect_name(&ecm->port, "ecm0", true);
 			if (IS_ERR(net))
 				return PTR_ERR(net);
 
