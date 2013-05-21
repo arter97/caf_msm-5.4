@@ -1082,6 +1082,7 @@ static int usb_bam_init(void)
 	usb_props.summing_threshold = USB_SUMMING_THRESHOLD;
 	usb_props.event_threshold = 512;
 	usb_props.num_pipes = pdata->usb_bam_num_pipes;
+	usb_props.options = SPS_BAM_OPT_IRQ_WAKEUP;
 
 	ret = sps_register_bam_device(&usb_props, &h_bam);
 	if (ret < 0) {
