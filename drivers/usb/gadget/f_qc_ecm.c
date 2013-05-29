@@ -67,6 +67,7 @@ struct f_ecm_qc {
 	struct usb_request		*notify_req;
 	u8				notify_state;
 	bool				is_open;
+	struct data_port		bam_port;
 };
 
 static inline struct f_ecm_qc *func_to_ecm_qc(struct usb_function *f)
@@ -101,8 +102,9 @@ static inline unsigned ecm_qc_bitrate(struct usb_gadget *g)
 #define ECM_QC_LOG2_STATUS_INTERVAL_MSEC	5	/* 1 << 5 == 32 msec */
 #define ECM_QC_STATUS_BYTECOUNT		16	/* 8 byte header + data */
 
-/* currently only one std ecm instance is supported */
+/* Currently only one std ecm instance is supported - port index 0. */
 #define ECM_QC_NO_PORTS						1
+#define ECM_QC_ACTIVE_PORT					0
 
 /* interface descriptor: */
 
@@ -286,8 +288,6 @@ static struct usb_gadget_strings *ecm_qc_strings[] = {
 	NULL,
 };
 
-static struct data_port ecm_qc_bam_port;
-
 static int ecm_qc_bam_setup(void)
 {
 	int ret;
@@ -304,13 +304,14 @@ static int ecm_qc_bam_setup(void)
 static int ecm_qc_bam_connect(struct f_ecm_qc *dev)
 {
 	int ret;
+	struct usb_composite_dev *cdev = dev->port.func.config->cdev;
 
-	ecm_qc_bam_port.cdev = dev->port.func.config->cdev;
-	ecm_qc_bam_port.in = dev->port.in_ep;
-	ecm_qc_bam_port.out = dev->port.out_ep;
+	dev->bam_port.cdev = cdev;
+	dev->bam_port.in = dev->port.in_ep;
+	dev->bam_port.out = dev->port.out_ep;
 
 	/* currently we use the first connection */
-	ret = bam_data_connect(&ecm_qc_bam_port, 0, 0);
+	ret = bam_data_connect(&dev->bam_port, 0, 0);
 	if (ret) {
 		pr_err("bam_data_connect failed: err:%d\n",
 				ret);
@@ -326,7 +327,7 @@ static int ecm_qc_bam_disconnect(struct f_ecm_qc *dev)
 {
 	pr_debug("dev:%p. %s Disconnect BAM.\n", dev, __func__);
 
-	bam_data_disconnect(&ecm_qc_bam_port, 0);
+	bam_data_disconnect(&dev->bam_port, 0);
 
 	return 0;
 }
@@ -604,6 +605,20 @@ static void ecm_qc_disable(struct usb_function *f)
 	}
 }
 
+static void ecm_qc_suspend(struct usb_function *f)
+{
+	pr_debug("ecm suspended\n");
+
+	bam_data_suspend(ECM_QC_ACTIVE_PORT);
+}
+
+static void ecm_qc_resume(struct usb_function *f)
+{
+	pr_debug("ecm resumed\n");
+
+	bam_data_resume(ECM_QC_ACTIVE_PORT);
+}
+
 /*-------------------------------------------------------------------------*/
 
 /*
@@ -864,6 +879,8 @@ ecm_qc_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN])
 	ecm->port.func.get_alt = ecm_qc_get_alt;
 	ecm->port.func.setup = ecm_qc_setup;
 	ecm->port.func.disable = ecm_qc_disable;
+	ecm->port.func.suspend = ecm_qc_suspend;
+	ecm->port.func.resume = ecm_qc_resume;
 
 	status = usb_add_function(c, &ecm->port.func);
 	if (status) {
