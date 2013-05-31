@@ -32,6 +32,11 @@
 
 #define IRSC_COMPLETION_TIMEOUT_MS 30000
 #define SEC_RULES_HASH_SZ 32
+
+#ifndef SIZE_MAX
+#define SIZE_MAX ((size_t)-1)
+#endif
+
 struct security_rule {
 	struct list_head list;
 	uint32_t service_id;
@@ -99,6 +104,7 @@ int msm_ipc_config_sec_rules(void *arg)
 	struct config_sec_rules_args sec_rules_arg;
 	struct security_rule *rule, *temp_rule;
 	int key;
+	size_t group_info_sz;
 	int ret;
 
 	if (current_euid())
@@ -111,6 +117,13 @@ int msm_ipc_config_sec_rules(void *arg)
 
 	if (sec_rules_arg.num_group_info <= 0)
 		return -EINVAL;
+
+	if (sec_rules_arg.num_group_info > (SIZE_MAX / sizeof(gid_t))) {
+		pr_err("%s: Integer Overflow %d * %d\n", __func__,
+			sizeof(gid_t), sec_rules_arg.num_group_info);
+		return -EINVAL;
+	}
+	group_info_sz = sec_rules_arg.num_group_info * sizeof(gid_t);
 
 	rule = kzalloc(sizeof(struct security_rule), GFP_KERNEL);
 	if (!rule) {
