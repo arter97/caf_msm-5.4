@@ -196,6 +196,12 @@ struct mmc_hotplug {
 	void *handler_priv;
 };
 
+enum dev_state {
+	DEV_SUSPENDING = 1,
+	DEV_SUSPENDED,
+	DEV_RESUMED,
+};
+
 struct mmc_host {
 	struct device		*parent;
 	struct device		class_dev;
@@ -413,6 +419,7 @@ struct mmc_host {
 		struct delayed_work work;
 		enum mmc_load	state;
 	} clk_scaling;
+	enum dev_state dev_status;
 	unsigned long		private[0] ____cacheline_aligned;
 };
 
