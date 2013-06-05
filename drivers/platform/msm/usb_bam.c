@@ -503,7 +503,8 @@ static void usb_bam_work(struct work_struct *w)
 	struct usb_bam_event_info *event_info =
 		container_of(w, struct usb_bam_event_info, event_w);
 
-	event_info->callback(event_info->param);
+	if (event_info->callback)
+		event_info->callback(event_info->param);
 }
 
 static void usb_bam_wake_cb(struct sps_event_notify *notify)
