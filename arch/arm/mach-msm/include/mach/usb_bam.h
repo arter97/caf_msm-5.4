@@ -152,7 +152,7 @@ void get_bam2bam_connection_info(u8 conn_idx, enum usb_bam_pipe_dir pipe_dir,
  * Resets the entire USB BAM.
  *
  */
-int usb_bam_reset(void);
+int usb_bam_reset(bool to_reconnect);
 
 /**
  * Indicates if the client of the USB BAM is ready to start
@@ -162,6 +162,12 @@ int usb_bam_reset(void);
  *
  */
 int usb_bam_client_ready(bool ready);
+/**
+* Returns upon reset completion if reset is in progress
+* immediately otherwise.
+*
+*/
+void usb_bam_reset_complete(void);
 
 #else
 static inline int usb_bam_connect(u8 idx, u32 *src_pipe_idx, u32 *dst_pipe_idx)
@@ -206,7 +212,7 @@ static inline void get_bam2bam_connection_info(u8 conn_idx,
 	return;
 }
 
-static inline int usb_bam_reset(void)
+static inline int usb_bam_reset(bool to_reconnect)
 {
 	return -ENODEV;
 }
@@ -216,5 +222,9 @@ static inline int usb_bam_client_ready(bool ready)
 	return -ENODEV;
 }
 
+static inline void usb_bam_reset_complete(void)
+{
+	return;
+}
 #endif
 #endif				/* _USB_BAM_H_ */
