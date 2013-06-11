@@ -2714,13 +2714,32 @@ static int mxt_probe(struct i2c_client *client,
 		goto err_free_object;
 	}
 
+	if (gpio_is_valid(pdata->reset_gpio)) {
+		/* configure touchscreen reset out gpio */
+		error = gpio_request(pdata->reset_gpio, "mxt_reset_gpio");
+		if (error) {
+			dev_err(&client->dev, "unable to request gpio [%d]\n",
+						pdata->reset_gpio);
+			goto err_regulator_on;
+		}
+
+		error = gpio_direction_output(pdata->reset_gpio, 0);
+		if (error) {
+			dev_err(&client->dev,
+				"unable to set direction for gpio [%d]\n",
+				pdata->reset_gpio);
+			goto err_reset_gpio_req;
+		}
+		mxt_reset_delay(data);
+	}
+
 	if (pdata->power_on)
 		error = pdata->power_on(true);
 	else
 		error = mxt_power_on(data, true);
 	if (error) {
 		dev_err(&client->dev, "Failed to power on hardware\n");
-		goto err_regulator_on;
+		goto err_reset_gpio_req;
 	}
 
 	if (gpio_is_valid(pdata->irq_gpio)) {
@@ -2745,20 +2764,12 @@ static int mxt_probe(struct i2c_client *client,
 	}
 
 	if (gpio_is_valid(pdata->reset_gpio)) {
-		/* configure touchscreen reset out gpio */
-		error = gpio_request(pdata->reset_gpio, "mxt_reset_gpio");
-		if (error) {
-			dev_err(&client->dev, "unable to request gpio [%d]\n",
-						pdata->reset_gpio);
-			goto err_irq_gpio_req;
-		}
-
 		error = gpio_direction_output(pdata->reset_gpio, 1);
 		if (error) {
 			dev_err(&client->dev,
 				"unable to set direction for gpio [%d]\n",
 				pdata->reset_gpio);
-			goto err_reset_gpio_req;
+				goto err_irq_gpio_req;
 		}
 	}
 
@@ -2773,7 +2784,7 @@ static int mxt_probe(struct i2c_client *client,
 
 	error = mxt_initialize(data);
 	if (error)
-		goto err_reset_gpio_req;
+		goto err_irq_gpio_req;
 
 	__set_bit(EV_ABS, input_dev->evbit);
 	__set_bit(EV_KEY, input_dev->evbit);
@@ -2882,9 +2893,8 @@ err_unregister_device:
 	input_dev = NULL;
 err_free_irq:
 	free_irq(client->irq, data);
-err_reset_gpio_req:
-	if (gpio_is_valid(pdata->reset_gpio))
-		gpio_free(pdata->reset_gpio);
+err_free_object:
+	kfree(data->object_table);
 err_irq_gpio_req:
 	if (gpio_is_valid(pdata->irq_gpio))
 		gpio_free(pdata->irq_gpio);
@@ -2893,6 +2903,9 @@ err_power_on:
 		pdata->power_on(false);
 	else
 		mxt_power_on(data, false);
+err_reset_gpio_req:
+	if (gpio_is_valid(pdata->reset_gpio))
+		gpio_free(pdata->reset_gpio);
 err_regulator_on:
 	if (pdata->init_hw)
 		pdata->init_hw(false);
