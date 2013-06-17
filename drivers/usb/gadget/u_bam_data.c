@@ -36,6 +36,7 @@ static int n_bam2bam_data_ports;
 
 struct data_port {
 	struct usb_composite_dev	*cdev;
+	struct usb_function		*func;
 	struct usb_ep			*in;
 	struct usb_ep			*out;
 };
@@ -115,59 +116,23 @@ static int bam_data_peer_reset_cb(void *param)
 	struct bam_data_port	*port = (struct bam_data_port *)param;
 	struct bam_data_ch_info *d;
 	int ret;
-	bool reenable_eps = false;
 
 	d = &port->data_ch;
 
 	pr_debug("%s: reset by peer\n", __func__);
 
-	/* Disable the relevant EPs if currently EPs are enabled */
-	if (port->port_usb && port->port_usb->in &&
-	  port->port_usb->in->driver_data) {
-		usb_ep_disable(port->port_usb->out);
-		usb_ep_disable(port->port_usb->in);
-
-		port->port_usb->in->driver_data = NULL;
-		port->port_usb->out->driver_data = NULL;
-		reenable_eps = true;
-	}
-
 	/* Disable BAM */
 	msm_hw_bam_disable(1);
 
 	/* Reset BAM */
-	ret = usb_bam_reset();
+	ret = usb_bam_reset(0);
 	if (ret) {
 		pr_err("%s: BAM reset failed %d\n", __func__, ret);
-		goto reenable_eps;
+		return ret;
 	}
 
 	/* Enable BAM */
 	msm_hw_bam_disable(0);
-
-reenable_eps:
-	/* Re-Enable the relevant EPs, if EPs were originally enabled */
-	if (reenable_eps) {
-		ret = usb_ep_enable(port->port_usb->in);
-		if (ret) {
-			pr_err("%s: usb_ep_enable failed eptype:IN ep:%p",
-				__func__, port->port_usb->in);
-			return ret;
-		}
-		port->port_usb->in->driver_data = port;
-
-		ret = usb_ep_enable(port->port_usb->out);
-		if (ret) {
-			pr_err("%s: usb_ep_enable failed eptype:OUT ep:%p",
-				__func__, port->port_usb->out);
-			port->port_usb->in->driver_data = 0;
-			return ret;
-		}
-		port->port_usb->out->driver_data = port;
-
-		bam_data_start_endless_rx(port);
-		bam_data_start_endless_tx(port);
-	}
 
 	/* Unregister the peer reset callback */
 	usb_bam_register_peer_reset_cb(d->connection_idx, NULL, NULL);
@@ -184,6 +149,7 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 	int ret;
 
 	pr_debug("%s: Connect workqueue started", __func__);
+	usb_bam_reset_complete();
 
 	ret = usb_bam_connect(d->connection_idx, &d->src_pipe_idx,
 						  &d->dst_pipe_idx);
@@ -330,6 +296,11 @@ int bam_data_connect(struct data_port *gr, u8 port_num,
 
 	d = &port->data_ch;
 
+	if (!gr) {
+		pr_err("data port is null\n");
+		return -ENODEV;
+	}
+
 	ret = usb_ep_enable(gr->in);
 	if (ret) {
 		pr_err("usb_ep_enable failed eptype:IN ep:%p", gr->in);
@@ -354,6 +325,23 @@ int bam_data_connect(struct data_port *gr, u8 port_num,
 	return 0;
 }
 
+int bam_data_destroy(unsigned int no_bam2bam_port)
+{
+	struct bam_data_ch_info	*d;
+	struct bam_data_port	*port;
+
+	port = bam2bam_data_ports[no_bam2bam_port];
+	d = &port->data_ch;
+
+	pr_debug("bam_data_destroy: Freeing ports\n");
+	bam2bam_data_port_free(no_bam2bam_port);
+	if (bam_data_wq)
+		destroy_workqueue(bam_data_wq);
+	bam_data_wq = NULL;
+
+	return 0;
+}
+
 int bam_data_setup(unsigned int no_bam2bam_port)
 {
 	int	i;
@@ -364,6 +352,11 @@ int bam_data_setup(unsigned int no_bam2bam_port)
 	if (!no_bam2bam_port || no_bam2bam_port > BAM2BAM_DATA_N_PORTS) {
 		pr_err("Invalid num of ports count:%d\n", no_bam2bam_port);
 		return -EINVAL;
+	}
+
+	if (bam_data_wq) {
+		pr_debug("bam_data is already setup");
+		return 0;
 	}
 
 	bam_data_wq = alloc_workqueue("k_bam_data",

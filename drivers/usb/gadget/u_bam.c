@@ -706,6 +706,7 @@ static void gbam2bam_connect_work(struct work_struct *w)
 	unsigned long flags;
 
 	if (d->trans == USB_GADGET_XPORT_BAM2BAM) {
+		usb_bam_reset_complete();
 		ret = usb_bam_connect(d->connection_idx, &d->src_pipe_idx,
 							  &d->dst_pipe_idx);
 		if (ret) {
@@ -828,7 +829,7 @@ static int gbam_peer_reset_cb(void *param)
 	msm_hw_bam_disable(1);
 
 	/* Reset BAM */
-	ret = usb_bam_reset();
+	ret = usb_bam_reset(0);
 	if (ret) {
 		pr_err("%s: BAM reset failed %d\n", __func__, ret);
 		goto reenable_eps;

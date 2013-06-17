@@ -307,6 +307,7 @@ static int ecm_qc_bam_connect(struct f_ecm_qc *dev)
 	struct usb_composite_dev *cdev = dev->port.func.config->cdev;
 
 	dev->bam_port.cdev = cdev;
+	dev->bam_port.func = &dev->port.func;
 	dev->bam_port.in = dev->port.in_ep;
 	dev->bam_port.out = dev->port.out_ep;
 
@@ -793,6 +794,7 @@ ecm_qc_unbind(struct usb_configuration *c, struct usb_function *f)
 
 	DBG(c->cdev, "ecm unbind\n");
 
+	bam_data_destroy(0);
 	if (gadget_is_dualspeed(c->cdev->gadget))
 		usb_free_descriptors(f->hs_descriptors);
 	usb_free_descriptors(f->descriptors);

@@ -79,6 +79,7 @@ void __iomem *qscratch_ram1_reg;
 struct clk *mem_clk;
 struct clk *mem_iface_clk;
 struct usb_bam_peer_handhskae_info peer_handhskae_info;
+static struct completion reset_done;
 
 static int connect_pipe(u8 conn_idx, enum usb_bam_pipe_dir pipe_dir,
 						u32 *usb_pipe_idx)
@@ -487,6 +488,10 @@ int usb_bam_client_ready(bool ready)
 	}
 
 	peer_handhskae_info.client_ready = ready;
+	if (peer_handhskae_info.state == USB_BAM_SM_PLUG_ACKED && !ready) {
+			pr_debug("Starting reset sequence");
+			INIT_COMPLETION(reset_done);
+	}
 
 	spin_unlock(&usb_bam_lock);
 	if (!queue_work(usb_bam_wq, &peer_handhskae_info.reset_event.event_w)) {
@@ -541,6 +546,7 @@ static void usb_bam_sm_work(struct work_struct *w)
 	case USB_BAM_SM_PLUG_ACKED:
 		if (!peer_handhskae_info.client_ready) {
 			spin_unlock(&usb_bam_lock);
+			pr_debug("Starting A2 reset sequence");
 			smsm_change_state(SMSM_APPS_STATE,
 				SMSM_USB_PLUG_UNPLUG, 0);
 			spin_lock(&usb_bam_lock);
@@ -553,6 +559,8 @@ static void usb_bam_sm_work(struct work_struct *w)
 			peer_handhskae_info.reset_event.
 				callback(peer_handhskae_info.reset_event.param);
 			spin_lock(&usb_bam_lock);
+			complete_all(&reset_done);
+			pr_debug("Finished reset sequence");
 			peer_handhskae_info.state = USB_BAM_SM_INIT;
 			peer_handhskae_info.ack_received = 0;
 		}
@@ -746,7 +754,16 @@ int usb_bam_disconnect_ipa(u8 idx,
 
 }
 
-int usb_bam_reset(void)
+void usb_bam_reset_complete(void)
+{
+	pr_debug("Waiting for reset compelte");
+	if (wait_for_completion_interruptible_timeout(&reset_done, 10*HZ) <= 0)
+		pr_warn("Timeout while waiting for reset");
+
+	pr_debug("Finished Waiting for reset complete");
+}
+
+int usb_bam_reset(bool to_reconnect)
 {
 	struct usb_bam_connect_info *connection;
 	int i;
@@ -775,6 +792,9 @@ int usb_bam_reset(void)
 	/* Reset USB/HSIC BAM */
 	if (sps_device_reset(h_bam))
 		pr_err("%s: BAM reset failed\n", __func__);
+
+	if (!to_reconnect)
+		return ret;
 
 	/* Reconnect all pipes */
 	for (i = 0; i < CONNECTIONS_NUM; i++) {
@@ -1166,7 +1186,9 @@ static int usb_bam_probe(struct platform_device *pdev)
 
 	spin_lock_init(&usb_bam_lock);
 	INIT_WORK(&peer_handhskae_info.reset_event.event_w, usb_bam_sm_work);
-
+	init_completion(&reset_done);
+	complete(&reset_done);
+	
 	mem_clk = devm_clk_get(&pdev->dev, "mem_clk");
 	if (IS_ERR(mem_clk))
 		dev_dbg(&pdev->dev, "failed to get mem_clock\n");
