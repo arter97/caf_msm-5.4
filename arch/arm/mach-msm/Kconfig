@@ -286,6 +286,7 @@ config ARCH_MSM9615
 	select ARM_GIC
 	select GIC_SECURE
 	select ARCH_MSM_CORTEX_A5
+	select HAVE_ARCH_HAS_CURRENT_TIMER
 	select CPU_V7
 	select MSM_V2_TLMM
 	select MSM_GPIOMUX
