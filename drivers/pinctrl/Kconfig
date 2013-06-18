@@ -45,6 +45,16 @@ config PINCTRL_PXA910
 	depends on ARCH_MMP
 	select PINCTRL_PXA3xx
 
+config PINCTRL_MSM
+	depends on OF
+	bool
+	select PINMUX
+	select GENERIC_PINCONF
+
+config PINCTRL_MSM_TLMM_V3
+	bool
+	select PINCTRL_MSM
+
 config PINCTRL_SIRF
 	bool "CSR SiRFprimaII pin controller driver"
 	depends on ARCH_PRIMA2
