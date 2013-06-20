@@ -184,6 +184,8 @@ struct pll_config {
 	u32 mn_ena_mask;
 	u32 main_output_val;
 	u32 main_output_mask;
+	u32 aux_output_val;
+	u32 aux_output_mask;
 };
 
 struct pll_config_regs {
