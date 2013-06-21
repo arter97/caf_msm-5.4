@@ -194,6 +194,7 @@
 		qcom,enable-hbm;
 		hsic,consider-ipa-handshake;
 		qcom,ahb-async-bridge-bypass;
+		hsic,disable-cerr;
 	};
 
 	qcom,usbbam@f9a44000 {
