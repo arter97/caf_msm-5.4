@@ -256,15 +256,23 @@ static int ehci_msm_pm_resume(struct device *dev)
 {
 	struct usb_hcd *hcd = dev_get_drvdata(dev);
 	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
+	int ret;
 
 	dev_dbg(dev, "ehci-msm PM resume\n");
 
 	if (!hcd->rh_registered)
 		return 0;
 
-	ehci_prepare_ports_for_controller_resume(hcd_to_ehci(hcd));
+	/* Notify OTG to bring hw out of LPM before restoring wakeup flags */
+	ret = usb_phy_set_suspend(ehci->transceiver, 0);
+	if (ret)
+		return ret;
 
-	return usb_phy_set_suspend(ehci->transceiver, 0);
+	ehci_prepare_ports_for_controller_resume(hcd_to_ehci(hcd));
+	/* Resume root-hub to handle USB event if any else initiate LPM again */
+	usb_hcd_resume_root_hub(hcd);
+
+	return ret;
 }
 #endif
 
