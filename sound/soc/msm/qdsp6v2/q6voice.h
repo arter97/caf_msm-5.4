@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1506,6 +1506,7 @@ int voc_send_cvp_stop_vocpcm(uint32_t session_id);
 void voc_register_hpcm_evt_cb(hostpcm_cb_fn hostpcm_cb,
 			      void *private_data);
 void voc_deregister_hpcm_evt_cb(void);
+
 uint32_t voc_get_session_id(char *name);
 
 int voc_start_playback(uint32_t set);
