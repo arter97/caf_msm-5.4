@@ -4820,6 +4820,9 @@ int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 	retval = xhci_reset(xhci);
 	if (retval)
 		goto error;
+
+	if (xhci->quirks & XHCI_RESET_DELAY)
+		usleep_range(350, 1000);
 	xhci_dbg(xhci, "Reset complete\n");
 
 	/* Set dma_mask and coherent_dma_mask to 64-bits,
