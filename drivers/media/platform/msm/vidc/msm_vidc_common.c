@@ -946,7 +946,29 @@ static void  handle_seq_hdr_done(enum command_response cmd, void *data)
 
 void handle_cmd_response(enum command_response cmd, void *data)
 {
+	struct msm_vidc_cb_cmd_done *response = data;
+	struct msm_vidc_core *core = NULL;
+	struct msm_vidc_inst *inst = NULL;
 	dprintk(VIDC_DBG, "Command response = %d\n", cmd);
+
+	if (!response) {
+		dprintk(VIDC_ERR, "Invalid command response\n");
+		return;
+	}
+	core = get_vidc_core(response->device_id);
+	if (!core) {
+		dprintk(VIDC_ERR, "Invalid core");
+		return;
+	}
+	list_for_each_entry(inst, &core->instances, list)
+		if (inst == (struct msm_vidc_inst *) response->session_id)
+			break;
+	if (core->state == VIDC_CORE_INVALID ||
+		(inst && inst->state == MSM_VIDC_CORE_INVALID)) {
+		dprintk(VIDC_ERR, "Recvd f/w response %d in bad state\n", cmd);
+		return;
+	}
+
 	switch (cmd) {
 	case SYS_INIT_DONE:
 		handle_sys_init_done(cmd, data);
