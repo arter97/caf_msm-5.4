@@ -950,7 +950,18 @@ rdev_set_ap_chanwidth(struct cfg80211_registered_device *rdev,
 	trace_rdev_set_ap_chanwidth(&rdev->wiphy, dev, chandef);
 	ret = rdev->ops->set_ap_chanwidth(&rdev->wiphy, dev, chandef);
 	trace_rdev_return_int(&rdev->wiphy, ret);
+	return ret;
+}
 
+static inline int rdev_channel_switch(struct cfg80211_registered_device *rdev,
+				      struct net_device *dev,
+				      struct cfg80211_csa_settings *params)
+{
+	int ret;
+
+	trace_rdev_channel_switch(&rdev->wiphy, dev, params);
+	ret = rdev->ops->channel_switch(&rdev->wiphy, dev, params);
+	trace_rdev_return_int(&rdev->wiphy, ret);
 	return ret;
 }
 
