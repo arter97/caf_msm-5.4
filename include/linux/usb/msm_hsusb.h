@@ -228,6 +228,8 @@ enum usb_vdd_value {
  *              interrupt threshold (ITC), when log2_itc is
  *              between 1 to 7.
  * @l1_supported: enable link power management support.
+ * @dpdm_pulldown_added: Indicates whether pull down resistors are
+		connected on data lines or not.
  */
 struct msm_otg_platform_data {
 	int *phy_init_seq;
@@ -255,6 +257,7 @@ struct msm_otg_platform_data {
 	const char *mhl_dev_name;
 	int log2_itc;
 	bool l1_supported;
+	bool dpdm_pulldown_added;
 };
 
 /* phy related flags */
@@ -525,12 +528,14 @@ struct usb_ext_notification {
 };
 #ifdef CONFIG_USB_BAM
 bool msm_bam_lpm_ok(void);
+void msm_bam_notify_lpm_resume(void);
 void msm_bam_set_hsic_host_dev(struct device *dev);
 void msm_bam_wait_for_hsic_prod_granted(void);
 bool msm_bam_hsic_lpm_ok(void);
 void msm_bam_hsic_notify_on_resume(void);
 #else
 static inline bool msm_bam_lpm_ok(void) { return true; }
+static inline void msm_bam_notify_lpm_resume(void) {}
 static inline void msm_bam_set_hsic_host_dev(struct device *dev) {}
 static inline void msm_bam_wait_for_hsic_prod_granted(void) {}
 static inline bool msm_bam_hsic_lpm_ok(void) { return true; }
