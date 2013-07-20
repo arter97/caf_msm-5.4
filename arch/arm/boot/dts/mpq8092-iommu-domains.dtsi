@@ -10,23 +10,22 @@
  * GNU General Public License for more details.
  */
 
-/dts-v1/;
-/include/ "msm8226-v1.dtsi"
-/include/ "msm8226-qrd.dtsi"
-/include/ "dsi-panel-hx8394a-720p-video.dtsi"
-
-/ {
-	model = "Qualcomm MSM 8226 QRD";
-	compatible = "qcom,msm8226-qrd", "qcom,msm8226", "qcom,qrd";
-	qcom,msm-id = <145 0x2000b 0>,
-		      <158 0x2000b 0>,
-		      <159 0x2000b 0>,
-		      <198 0x2000b 0>;
-};
-
 &soc {
-        qcom,mdss_dsi_hx8394a_720p_video {
-                status = "ok";
-		qcom,cont-splash-enabled;
-        };
+	qcom,iommu-domains {
+		compatible = "qcom,iommu-domains";
+
+		venus_domain_ns: qcom,iommu-domain1 {
+			label = "venus_ns";
+			qcom,iommu-contexts = <&venus_ns>;
+			qcom,virtual-addr-pool = <0x40000000 0x3f000000
+						  0x7f000000 0x1000000>;
+		};
+
+		venus_domain_cp: qcom,iommu-domain2 {
+			label = "venus_cp";
+			qcom,iommu-contexts = <&venus_cp>;
+			qcom,virtual-addr-pool = <0x1000000 0x3f000000>;
+			qcom,secure-domain;
+		};
+	};
 };
