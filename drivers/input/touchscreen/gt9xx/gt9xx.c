@@ -41,6 +41,7 @@
  *          2. new esd & slide wakeup optimization
  *                  By Meta, 2013/06/08
  */
+#include <linux/regulator/consumer.h>
 #include "gt9xx.h"
 
 #ifdef CONFIG_OF
@@ -61,6 +62,11 @@
 #define GTP_I2C_ADDRESS_HIGH	0x14
 #define GTP_I2C_ADDRESS_LOW	0x5D
 #define CFG_GROUP_LEN(p_cfg_grp)  (sizeof(p_cfg_grp) / sizeof(p_cfg_grp[0]))
+
+#define GOODIX_VTG_MIN_UV	2600000
+#define GOODIX_VTG_MAX_UV	3300000
+#define GOODIX_I2C_VTG_MIN_UV	1800000
+#define GOODIX_I2C_VTG_MAX_UV	1800000
 
 #define RESET_DELAY_T3_US	200	/* T3: > 100us */
 #define RESET_DELAY_T4		20	/* T4: > 5ms */
@@ -1356,6 +1362,167 @@ exit_free_inputdev:
 	return ret;
 }
 
+/*******************************************************
+Function:
+	Turn on/off the device power.
+Input:
+	ts:private data.
+	on: On/Off control.
+Output:
+	Executive outcomes.
+	0: succeed, otherwise: failed.
+*******************************************************/
+static int goodix_power_on(struct goodix_ts_data *ts, bool on)
+{
+	int ret;
+
+	if (!on)
+		goto power_off;
+
+	if (gpio_is_valid(ts->pdata->ldo_en_gpio))
+		gpio_set_value(ts->pdata->ldo_en_gpio, 1);
+	else
+		dev_info(&ts->client->dev,
+				"%s: Invalid LDO control gpio\n", __func__);
+	if (!IS_ERR(ts->vdd)) {
+		ret = regulator_enable(ts->vdd);
+		if (ret) {
+			dev_err(&ts->client->dev,
+				"Regulator vdd enable failed ret=%d\n", ret);
+			goto err_enable_vdd;
+		}
+	}
+	if (!IS_ERR(ts->vcc_i2c)) {
+		ret = regulator_enable(ts->vcc_i2c);
+		if (ret) {
+			dev_err(&ts->client->dev,
+				"Regulator vcc_i2c enable failed ret=%d\n",
+				ret);
+			regulator_disable(ts->vdd);
+			goto err_enable_vcc_i2c;
+			}
+	}
+
+	return 0;
+
+err_enable_vcc_i2c:
+	if (!IS_ERR(ts->vdd))
+		ret = regulator_disable(ts->vdd);
+
+err_enable_vdd:
+	if (gpio_is_valid(ts->pdata->ldo_en_gpio))
+		gpio_set_value(ts->pdata->ldo_en_gpio, 0);
+
+	return ret;
+
+power_off:
+	if (!IS_ERR(ts->vcc_i2c)) {
+		ret = regulator_disable(ts->vcc_i2c);
+		if (ret)
+			dev_err(&ts->client->dev,
+				"Regulator vcc_i2c disable failed ret=%d\n",
+				ret);
+	}
+
+	if (!IS_ERR(ts->vdd)) {
+		ret = regulator_disable(ts->vdd);
+		if (ret)
+			dev_err(&ts->client->dev,
+				"Regulator vdd disable failed ret=%d\n", ret);
+	}
+
+	if (gpio_is_valid(ts->pdata->ldo_en_gpio))
+		gpio_set_value(ts->pdata->ldo_en_gpio, 0);
+
+	return 0;
+}
+
+static int goodix_power_init(struct goodix_ts_data *ts, bool on)
+{
+	int ret;
+
+	if (!on)
+		goto pwr_deinit;
+
+	if (gpio_is_valid(ts->pdata->ldo_en_gpio)) {
+		ret = gpio_request(ts->pdata->ldo_en_gpio, "GTP_LDO");
+		if (ret) {
+			dev_err(&ts->client->dev,
+				"LDO control gpio request failed\n");
+			return ret;
+		}
+
+		ret = gpio_direction_output(ts->pdata->ldo_en_gpio, 0);
+		if (ret) {
+			dev_err(&ts->client->dev,
+				"set_direction for LDO control gpio failed\n");
+			goto err_gpio_free;
+		}
+	} else
+		dev_info(&ts->client->dev,
+				"%s: Invalid LDO control gpio\n", __func__);
+
+	ts->vdd = regulator_get(&ts->client->dev, "vdd");
+	if (IS_ERR(ts->vdd)) {
+		ret = PTR_ERR(ts->vdd);
+		dev_info(&ts->client->dev,
+			"Regulator get failed vdd ret=%d\n", ret);
+	} else if (regulator_count_voltages(ts->vdd) > 0) {
+		ret = regulator_set_voltage(ts->vdd, GOODIX_VTG_MIN_UV,
+					   GOODIX_VTG_MAX_UV);
+		if (ret) {
+			dev_err(&ts->client->dev,
+				"Regulator set_vtg failed vdd ret=%d\n", ret);
+			goto err_vdd_put;
+		}
+	}
+
+	ts->vcc_i2c = regulator_get(&ts->client->dev, "vcc_i2c");
+	if (IS_ERR(ts->vcc_i2c)) {
+		ret = PTR_ERR(ts->vcc_i2c);
+		dev_info(&ts->client->dev,
+			"Regulator get failed vcc_i2c ret=%d\n", ret);
+	} else if (regulator_count_voltages(ts->vcc_i2c) > 0) {
+		ret = regulator_set_voltage(ts->vcc_i2c, GOODIX_I2C_VTG_MIN_UV,
+					   GOODIX_I2C_VTG_MAX_UV);
+		if (ret) {
+			dev_err(&ts->client->dev,
+			"Regulator set_vtg failed vcc_i2c ret=%d\n", ret);
+			goto err_vcc_i2c_put;
+		}
+	}
+
+	return 0;
+
+err_vcc_i2c_put:
+	regulator_put(ts->vcc_i2c);
+
+	if ((!IS_ERR(ts->vdd)) && (regulator_count_voltages(ts->vdd) > 0))
+		regulator_set_voltage(ts->vdd, 0, GOODIX_VTG_MAX_UV);
+err_vdd_put:
+	regulator_put(ts->vdd);
+err_gpio_free:
+	gpio_free(ts->pdata->ldo_en_gpio);
+
+	return ret;
+
+pwr_deinit:
+	gpio_free(ts->pdata->ldo_en_gpio);
+
+	if ((!IS_ERR(ts->vdd)) &&
+		(regulator_count_voltages(ts->vdd) > 0))
+		regulator_set_voltage(ts->vdd, 0, GOODIX_VTG_MAX_UV);
+
+	regulator_put(ts->vdd);
+
+	if ((!IS_ERR(ts->vcc_i2c)) &&
+		(regulator_count_voltages(ts->vcc_i2c) > 0))
+		regulator_set_voltage(ts->vcc_i2c, 0, GOODIX_I2C_VTG_MAX_UV);
+
+	regulator_put(ts->vcc_i2c);
+	return 0;
+}
+
 static int goodix_ts_get_dt_coords(struct device *dev, char *name,
 				struct goodix_ts_platform_data *pdata)
 {
@@ -1529,8 +1696,19 @@ static int goodix_ts_probe(struct i2c_client *client,
 	spin_lock_init(&ts->irq_lock);          /* 2.6.39 later */
 	/* ts->irq_lock = SPIN_LOCK_UNLOCKED; */   /* 2.6.39 & before */
 	i2c_set_clientdata(client, ts);
-
 	ts->gtp_rawdiff_mode = 0;
+
+	ret = goodix_power_init(ts, true);
+	if (ret) {
+		dev_err(&client->dev, "GTP power init failed\n");
+		goto exit_free_client_data;
+	}
+
+	ret = goodix_power_on(ts, true);
+	if (ret) {
+		dev_err(&client->dev, "GTP power on failed\n");
+		goto exit_deinit_power;
+	}
 
 	ret = gtp_request_io_port(ts);
 	if (ret) {
@@ -1617,6 +1795,10 @@ exit_free_io_port:
 	if (gpio_is_valid(pdata->irq_gpio))
 		gpio_free(pdata->irq_gpio);
 exit_power_off:
+	goodix_power_on(ts, false);
+exit_deinit_power:
+	goodix_power_init(ts, false);
+exit_free_client_data:
 	i2c_set_clientdata(client, NULL);
 	kfree(ts);
 	return ret;
@@ -1671,6 +1853,8 @@ static int goodix_ts_remove(struct i2c_client *client)
 		if (gpio_is_valid(ts->pdata->irq_gpio))
 			gpio_free(ts->pdata->irq_gpio);
 
+		goodix_power_on(ts, false);
+		goodix_power_init(ts, false);
 		i2c_set_clientdata(client, NULL);
 		kfree(ts);
 	}
