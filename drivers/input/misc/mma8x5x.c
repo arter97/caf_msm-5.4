@@ -52,6 +52,8 @@
 #define MMA8X5X_STATUS_ZYXDR	0x08
 #define MMA8X5X_BUF_SIZE	7
 
+#define	MMA_SHUTTEDDOWN		(1 << 31)
+
 struct sensor_regulator {
 	struct regulator *vreg;
 	const char *name;
@@ -183,7 +185,6 @@ static int mma8x5x_config_regulator(struct i2c_client *client, bool on)
 {
 	int rc = 0, i;
 	int num_vreg = sizeof(mma_vreg)/sizeof(struct sensor_regulator);
-
 	if (on) {
 		for (i = 0; i < num_vreg; i++) {
 			mma_vreg[i].vreg = regulator_get(&client->dev,
@@ -615,6 +616,9 @@ static int mma8x5x_suspend(struct device *dev)
 	struct mma8x5x_data *pdata = i2c_get_clientdata(client);
 	if (pdata->active == MMA_ACTIVED)
 		mma8x5x_device_stop(client);
+	if (!mma8x5x_config_regulator(client, 0))
+		/* The highest bit sotres the power state */
+		pdata->active |= MMA_SHUTTEDDOWN;
 	return 0;
 }
 
@@ -623,11 +627,28 @@ static int mma8x5x_resume(struct device *dev)
 	int val = 0;
 	struct i2c_client *client = to_i2c_client(dev);
 	struct mma8x5x_data *pdata = i2c_get_clientdata(client);
+	if (pdata->active & MMA_SHUTTEDDOWN) {
+		if (mma8x5x_config_regulator(client, 1))
+			goto out;
+
+		if (i2c_smbus_write_byte_data(client, MMA8X5X_CTRL_REG1, 0))
+			goto out;
+
+		if (i2c_smbus_write_byte_data(client, MMA8X5X_XYZ_DATA_CFG,
+				pdata->mode))
+			goto out;
+
+		msleep(MODE_CHANGE_DELAY_MS);
+		pdata->active &= ~MMA_SHUTTEDDOWN;
+	}
 	if (pdata->active == MMA_ACTIVED) {
 		val = i2c_smbus_read_byte_data(client, MMA8X5X_CTRL_REG1);
 		i2c_smbus_write_byte_data(client, MMA8X5X_CTRL_REG1, val|0x01);
 	}
-	return 0;
+
+out:
+	dev_err(&client->dev, "%s:failed during resume operation", __func__);
+	return -EIO;
 
 }
 #endif
