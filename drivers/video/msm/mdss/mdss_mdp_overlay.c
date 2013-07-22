@@ -823,7 +823,7 @@ int mdss_mdp_overlay_kickoff(struct msm_fb_data_type *mfd)
 		}
 		if (pipe->back_buf.num_planes) {
 			buf = &pipe->back_buf;
-		} else if (ctl->play_cnt == 0) {
+		} else if (ctl->play_cnt == 0 && pipe->front_buf.num_planes) {
 			pipe->params_changed++;
 			buf = &pipe->front_buf;
 		} else if (!pipe->params_changed) {
@@ -1757,6 +1757,10 @@ static int mdss_fb_set_metadata(struct msm_fb_data_type *mfd,
 			return -EPERM;
 		ret = mdss_misr_crc_set(mdata, &metadata->data.misr_request);
 		break;
+	case metadata_op_wb_format:
+		ret = mdss_mdp_wb_set_format(mfd,
+				metadata->data.mixer_cfg.writeback_format);
+		break;
 	default:
 		pr_warn("unsupported request to MDP META IOCTL\n");
 		ret = -EINVAL;
@@ -1797,6 +1801,9 @@ static int mdss_fb_get_metadata(struct msm_fb_data_type *mfd,
 		if (!mfd->panel_power_on)
 			return -EPERM;
 		ret = mdss_misr_crc_get(mdata, &metadata->data.misr_request);
+		break;
+	case metadata_op_wb_format:
+		ret = mdss_mdp_wb_get_format(mfd, &metadata->data.mixer_cfg);
 		break;
 	default:
 		pr_warn("Unsupported request to MDP META IOCTL.\n");
@@ -2002,6 +2009,8 @@ static int mdss_mdp_overlay_off(struct msm_fb_data_type *mfd)
 {
 	int rc;
 	struct mdss_overlay_private *mdp5_data;
+	struct mdss_mdp_mixer *mixer;
+
 	if (!mfd)
 		return -ENODEV;
 
@@ -2019,6 +2028,15 @@ static int mdss_mdp_overlay_off(struct msm_fb_data_type *mfd)
 		return 0;
 
 	mdss_mdp_overlay_free_fb_pipe(mfd);
+
+	mixer = mdss_mdp_mixer_get(mdp5_data->ctl, MDSS_MDP_MIXER_MUX_LEFT);
+	if (mixer)
+		mixer->cursor_enabled = 0;
+
+	mixer = mdss_mdp_mixer_get(mdp5_data->ctl, MDSS_MDP_MIXER_MUX_RIGHT);
+	if (mixer)
+		mixer->cursor_enabled = 0;
+
 	if (!mfd->ref_cnt) {
 		mdss_mdp_overlay_release_all(mfd);
 	} else {
