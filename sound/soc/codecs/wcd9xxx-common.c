@@ -414,14 +414,16 @@ static const struct wcd9xxx_imped_val imped_index[] = {
 
 static inline void
 wcd9xxx_enable_clsh_block(struct snd_soc_codec *codec,
-			  struct wcd9xxx_clsh_cdc_data *clsh_d, bool on)
+			  struct wcd9xxx_clsh_cdc_data *clsh_d, bool enable)
 {
-	pr_debug("%s: enter on %d, clsh_users %d\n", __func__, on,
+	pr_debug("%s: enter enable %d, clsh_users %d\n", __func__, enable,
 		 clsh_d->clsh_users);
-	if ((on && ++clsh_d->clsh_users == 1) ||
-	    (!on && --clsh_d->clsh_users == 0))
+	if ((enable && ++clsh_d->clsh_users == 1) ||
+	    (!enable && --clsh_d->clsh_users == 0))
 		snd_soc_update_bits(codec, WCD9XXX_A_CDC_CLSH_B1_CTL,
-				    0x01, on ? 0x01 : 0x00);
+				    0x01, enable ? 0x01 : 0x00);
+	dev_dbg(codec->dev, "%s: clsh_users %d, enable %d", __func__,
+		clsh_d->clsh_users, enable);
 }
 
 static inline void wcd9xxx_enable_anc_delay(
@@ -434,14 +436,16 @@ static inline void wcd9xxx_enable_anc_delay(
 
 static inline void
 wcd9xxx_enable_buck(struct snd_soc_codec *codec,
-		    struct wcd9xxx_clsh_cdc_data *clsh_d, bool on)
+		    struct wcd9xxx_clsh_cdc_data *clsh_d, bool enable)
 {
-	pr_debug("%s: enter on %d buck_users %d\n", __func__, on,
+	pr_debug("%s: enter enable %d buck_users %d\n", __func__, enable,
 		 clsh_d->buck_users);
-	if ((on && ++clsh_d->buck_users == 1) ||
-	    (!on && --clsh_d->buck_users == 0))
+	if ((enable && ++clsh_d->buck_users == 1) ||
+	    (!enable && --clsh_d->buck_users == 0))
 		snd_soc_update_bits(codec, WCD9XXX_A_BUCK_MODE_1,
-				    0x80, on ? 0x80 : 0x00);
+				    0x80, enable ? 0x80 : 0x00);
+	dev_dbg(codec->dev, "%s: buck_users %d, enable %d", __func__,
+		clsh_d->buck_users, enable);
 }
 
 static void (*clsh_state_fp[NUM_CLSH_STATES])(struct snd_soc_codec *,
@@ -482,21 +486,6 @@ done:
 	if (buf[0] == '\0')
 		snprintf(buf, buflen, "[STATE_UNKNOWN]");
 	return buf;
-}
-
-static void wcd9xxx_cfg_clsh_buck(
-		struct snd_soc_codec *codec)
-{
-	int i;
-	const struct wcd9xxx_reg_mask_val reg_set[] = {
-		{WCD9XXX_A_BUCK_CTRL_CCL_1, 0xF0, 0x50},
-	};
-
-	for (i = 0; i < ARRAY_SIZE(reg_set); i++)
-		snd_soc_update_bits(codec, reg_set[i].reg, reg_set[i].mask,
-						    reg_set[i].val);
-
-	dev_dbg(codec->dev, "%s: Programmed buck parameters", __func__);
 }
 
 static void wcd9xxx_cfg_clsh_param_common(
@@ -670,7 +659,7 @@ static void wcd9xxx_set_buck_mode(struct snd_soc_codec *codec, u8 buck_vref)
 {
 	int i;
 	const struct wcd9xxx_reg_mask_val reg_set[] = {
-		{WCD9XXX_A_BUCK_MODE_5, 0x02, 0x03},
+		{WCD9XXX_A_BUCK_MODE_5, 0x02, 0x02},
 		{WCD9XXX_A_BUCK_MODE_4, 0xFF, buck_vref},
 		{WCD9XXX_A_BUCK_MODE_1, 0x04, 0x04},
 		{WCD9XXX_A_BUCK_MODE_3, 0x04, 0x00},
@@ -828,7 +817,6 @@ static void wcd9xxx_clsh_state_ear(struct snd_soc_codec *codec,
 {
 	pr_debug("%s: enter %s\n", __func__, is_enable ? "enable" : "disable");
 	if (is_enable) {
-		wcd9xxx_cfg_clsh_buck(codec);
 		wcd9xxx_cfg_clsh_param_common(codec);
 		wcd9xxx_cfg_clsh_param_ear(codec);
 		wcd9xxx_enable_clsh_block(codec, clsh_d, true);
@@ -859,7 +847,6 @@ static void wcd9xxx_clsh_state_hph_l(struct snd_soc_codec *codec,
 		 req_state);
 
 	if (is_enable) {
-		wcd9xxx_cfg_clsh_buck(codec);
 		wcd9xxx_cfg_clsh_param_common(codec);
 		wcd9xxx_cfg_clsh_param_hph(codec);
 		wcd9xxx_enable_clsh_block(codec, clsh_d, true);
@@ -889,7 +876,6 @@ static void wcd9xxx_clsh_state_hph_r(struct snd_soc_codec *codec,
 		 req_state);
 
 	if (is_enable) {
-		wcd9xxx_cfg_clsh_buck(codec);
 		wcd9xxx_cfg_clsh_param_common(codec);
 		wcd9xxx_cfg_clsh_param_hph(codec);
 		wcd9xxx_enable_clsh_block(codec, clsh_d, true);
@@ -918,7 +904,7 @@ static void wcd9xxx_clsh_state_hph_st(struct snd_soc_codec *codec,
 
 	if (is_enable) {
 		wcd9xxx_clsh_comp_req(codec, clsh_d, CLSH_COMPUTE_HPH_L, true);
-		wcd9xxx_clsh_comp_req(codec, clsh_d,  CLSH_COMPUTE_HPH_R, true);
+		wcd9xxx_clsh_comp_req(codec, clsh_d, CLSH_COMPUTE_HPH_R, true);
 	} else {
 		dev_dbg(codec->dev, "%s: stub fallback to hph_st\n", __func__);
 	}
@@ -928,7 +914,8 @@ static void wcd9xxx_clsh_state_lo(struct snd_soc_codec *codec,
 		struct wcd9xxx_clsh_cdc_data *clsh_d,
 		u8 req_state, bool is_enable)
 {
-	pr_debug("%s: enter %s\n", __func__, is_enable ? "enable" : "disable");
+	pr_debug("%s: enter %s, buck_mv %d\n", __func__,
+		 is_enable ? "enable" : "disable", clsh_d->buck_mv);
 
 	if (is_enable) {
 		wcd9xxx_set_buck_mode(codec, BUCK_VREF_1P8V);
@@ -947,9 +934,9 @@ static void wcd9xxx_clsh_state_lo(struct snd_soc_codec *codec,
 			usleep_range(NCP_SETTLE_TIME_US,
 				     NCP_SETTLE_TIME_US + 10);
 			snd_soc_update_bits(codec, WCD9XXX_A_BUCK_MODE_5,
-					    0x01, 0x01);
+					    0x01, (0x01 & 0x03));
 			snd_soc_update_bits(codec, WCD9XXX_A_BUCK_MODE_5,
-					    0xFB, (0x02 << 2));
+					    0xFC, (0xFC & 0xB));
 		}
 		snd_soc_update_bits(codec, WCD9XXX_A_BUCK_MODE_1, 0x04, 0x00);
 	} else {
