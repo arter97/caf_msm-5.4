@@ -34,6 +34,9 @@ Optional properties:
  - goodix,no-force-update	: To specify force update is allowed.
  - goodix,button-map	: Button map of key codes. The number of key codes
 				depend on panel.
+ - goodix,cfg-data	: Touchpanel controller configuration data, ask vendor
+				to provide that. Default configuration will be
+				used if this property is not present.
 
 Example:
 i2c@f9927000 {
