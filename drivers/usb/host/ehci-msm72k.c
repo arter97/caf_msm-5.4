@@ -1,6 +1,6 @@
 /* ehci-msm.c - HSUSB Host Controller Driver Implementation
  *
- * Copyright (c) 2008-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2013, The Linux Foundation. All rights reserved.
  *
  * Partly derived from ehci-fsl.c and ehci-hcd.c
  * Copyright (c) 2000-2004 by David Brownell
@@ -626,7 +626,7 @@ static int msm_xusb_init_host(struct platform_device *pdev,
 			pdata->vbus_power(pdata->phy_info, 0);
 
 		INIT_WORK(&mhcd->otg_work, msm_hsusb_otg_work);
-		mhcd->xceiv = usb_get_transceiver();
+		mhcd->xceiv = usb_get_phy();
 		if (!mhcd->xceiv)
 			return -ENODEV;
 		otg = container_of(mhcd->xceiv, struct msm_otg, phy);
@@ -744,7 +744,7 @@ static void msm_xusb_uninit_host(struct msmusb_hcd *mhcd)
 			pdata->vbus_init(0);
 		hcd_to_ehci(hcd)->transceiver = NULL;
 		otg_set_host(mhcd->xceiv->otg, NULL);
-		usb_put_transceiver(mhcd->xceiv);
+		usb_put_phy(mhcd->xceiv);
 		cancel_work_sync(&mhcd->otg_work);
 		break;
 	case USB_PHY_SERIAL_PMIC:

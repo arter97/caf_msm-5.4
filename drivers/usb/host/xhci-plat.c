@@ -176,7 +176,7 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	if (ret)
 		goto put_usb3_hcd;
 
-	phy = usb_get_transceiver();
+	phy = usb_get_phy();
 	/* Register with OTG if present, ignore USB2 OTG using other PHY */
 	if (phy && phy->otg && !(phy->flags & ENABLE_SECONDARY_PHY)) {
 		dev_dbg(&pdev->dev, "%s otg support available\n", __func__);
@@ -184,7 +184,7 @@ static int xhci_plat_probe(struct platform_device *pdev)
 		if (ret) {
 			dev_err(&pdev->dev, "%s otg_set_host failed\n",
 				__func__);
-			usb_put_transceiver(phy);
+			usb_put_phy(phy);
 			goto put_usb3_hcd;
 		}
 	} else {
@@ -230,7 +230,7 @@ static int xhci_plat_remove(struct platform_device *dev)
 
 	if (phy && phy->otg) {
 		otg_set_host(phy->otg, NULL);
-		usb_put_transceiver(phy);
+		usb_put_phy(phy);
 	}
 
 	return 0;
