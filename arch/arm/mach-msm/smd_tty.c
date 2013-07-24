@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/smd_tty.c
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -86,6 +86,7 @@ static struct smd_config smd_configs[] = {
 	{5, "APPS_RIVA_ANT_CMD", NULL, SMD_APPS_WCNSS},
 	{6, "APPS_RIVA_ANT_DATA", NULL, SMD_APPS_WCNSS},
 	{7, "DATA1", NULL, SMD_APPS_MODEM},
+	{8, "DATA4", NULL, SMD_APPS_MODEM},
 	{11, "DATA11", NULL, SMD_APPS_MODEM},
 	{21, "DATA21", NULL, SMD_APPS_MODEM},
 	{27, "GPSNMEA", NULL, SMD_APPS_MODEM},
