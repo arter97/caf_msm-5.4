@@ -7,11 +7,14 @@ Required properties:
     - 0, 1, 2, 3
 - compatible :
     - "qcom,camera-led-flash"
+    - "qcom,led-flash"
 - qcom,flash-type : Should contain type flash device
     - 1 for LED flash
     - 2 for strobe flash
 - qcom,flash-source : Should contain array of phandles to flash source nodes.
     - pm8941_flash0 pm8941_flash1
+- qcom,gpio-flash-en : Should contain gpio array index gpio flash enable pin
+- qcom,gpio-flash-now : Should contain gpio array index gpio flash now pin
 
 Example:
 
@@ -20,4 +23,22 @@ qcom,camera-led-flash {
 	compatible = "qcom,camera-led-flash";
 	qcom,flash-type = <1>;
 	qcom,flash-source = <&pm8941_flash0 &pm8941_flash1>;
+};
+
+qcom,led-flash@60 {
+	cell-index = <0>;
+	reg = <0x60>;
+	qcom,slave-id = <0x60 0x00 0x0011>;
+	compatible = "qcom,led-flash";
+	qcom,flash-name = "adp1600";
+	qcom,flash-type = <1>;
+	qcom,gpio-no-mux = <0>;
+	gpios = <&msmgpio 18 0>,
+		<&msmgpio 19 0>;
+	qcom,gpio-flash-en = <0>;
+	qcom,gpio-flash-now = <1>;
+	qcom,gpio-req-tbl-num = <0 1>;
+	qcom,gpio-req-tbl-flags = <0 0>;
+	qcom,gpio-req-tbl-label = "FLASH_EN",
+			"FLASH_NOW";
 };
