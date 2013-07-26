@@ -132,12 +132,6 @@ static int ufshcd_pltfrm_probe(struct platform_device *pdev)
 		goto out_iounmap;
 	}
 
-	err = dma_set_coherent_mask(dev, dev->coherent_dma_mask);
-	if (err) {
-		dev_err(&pdev->dev, "set dma mask failed\n");
-		goto out_iounmap;
-	}
-
 	err = ufshcd_init(&pdev->dev, &hba, mmio_base, irq_res->start);
 	if (err) {
 		dev_err(&pdev->dev, "Intialization failed\n");
@@ -184,12 +178,12 @@ static int ufshcd_pltfrm_remove(struct platform_device *pdev)
 		mem_size = resource_size(mem_res);
 		release_mem_region(mem_res->start, mem_size);
 	}
-	platform_set_drvdata(pdev, NULL);
 	return 0;
 }
 
 static const struct of_device_id ufs_of_match[] = {
 	{ .compatible = "jedec,ufs-1.1"},
+	{},
 };
 
 static const struct dev_pm_ops ufshcd_dev_pm_ops = {

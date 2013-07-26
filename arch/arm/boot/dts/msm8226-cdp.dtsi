@@ -319,7 +319,7 @@
 				qcom,ctrl-delay-us = <0>;
 				qcom,boost-curr-lim = <3>;
 				qcom,cp-sel = <0>;
-				qcom,switch-freq = <2>;
+				qcom,switch-freq = <11>;
 				qcom,ovp-val = <0>;
 				qcom,num-strings = <1>;
 				qcom,id = <0>;
@@ -414,10 +414,6 @@
 	qcom,bat-if@1200 {
 		status = "disabled";
 	};
-};
-
-&usb_otg_sw {
-	status = "okay";
 };
 
 &pm8226_vadc {
