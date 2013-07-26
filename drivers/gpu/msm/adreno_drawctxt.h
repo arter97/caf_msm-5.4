@@ -54,6 +54,8 @@
 #define CTXT_FLAGS_SKIP_EOF             BIT(15)
 /* Context no fault tolerance */
 #define CTXT_FLAGS_NO_FAULT_TOLERANCE  BIT(16)
+/* Force the preamble for the next submission */
+#define CTXT_FLAGS_FORCE_PREAMBLE      BIT(17)
 
 /* Symbolic table for the adreno draw context type */
 #define ADRENO_DRAWCTXT_TYPES \
@@ -198,6 +200,9 @@ struct kgsl_context *adreno_drawctxt_create(struct kgsl_device_private *,
 int adreno_drawctxt_detach(struct kgsl_context *context);
 
 void adreno_drawctxt_destroy(struct kgsl_context *context);
+
+void adreno_drawctxt_sched(struct kgsl_device *device,
+		struct kgsl_context *context);
 
 int adreno_drawctxt_switch(struct adreno_device *adreno_dev,
 				struct adreno_context *drawctxt,

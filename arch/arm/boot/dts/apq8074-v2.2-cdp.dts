@@ -10,23 +10,25 @@
  * GNU General Public License for more details.
  */
 
-&soc {
-	qcom,iommu-domains {
-		compatible = "qcom,iommu-domains";
+/dts-v1/;
 
-		venus_domain_ns: qcom,iommu-domain1 {
-			label = "venus_ns";
-			qcom,iommu-contexts = <&venus_ns>;
-			qcom,virtual-addr-pool = <0x40000000 0x3f000000
-						  0x7f000000 0x1000000>;
-		};
+/include/ "apq8074-v2.2.dtsi"
+/include/ "msm8974-cdp.dtsi"
 
-		venus_domain_cp: qcom,iommu-domain2 {
-			label = "venus_cp";
-			qcom,iommu-contexts = <&venus_cp>;
-			qcom,virtual-addr-pool = <0x1000000 0x1f800000
-						  0x20800000 0x1f800000>;
-			qcom,secure-domain;
-		};
-	};
+/ {
+	model = "Qualcomm APQ 8074v2.2 CDP";
+	compatible = "qcom,apq8074-cdp", "qcom,apq8074", "qcom,cdp";
+	qcom,msm-id = <184 1 0x20002>;
+};
+
+&usb3 {
+	interrupt-parent = <&usb3>;
+	interrupts = <0 1>;
+	#interrupt-cells = <1>;
+	interrupt-map-mask = <0x0 0xffffffff>;
+	interrupt-map = <0x0 0 &intc 0 133 0
+			 0x0 1 &spmi_bus 0x0 0x0 0x9 0x0>;
+	interrupt-names = "hs_phy_irq", "pmic_id_irq";
+
+	qcom,misc-ref = <&pm8941_misc>;
 };

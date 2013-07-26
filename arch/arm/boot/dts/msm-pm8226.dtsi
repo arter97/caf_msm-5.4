@@ -83,6 +83,7 @@
 			qcom,thermal-mitigation = <1500 700 600 325>;
 			qcom,resume-soc = <99>;
 			qcom,tchg-mins = <150>;
+			qcom,chg-vadc = <&pm8226_vadc>;
 
 			qcom,chgr@1000 {
 				status = "disabled";
@@ -140,19 +141,6 @@
 							"bat-fet-on",
 							"vcp-on",
 							"psi";
-
-			};
-
-			pm8226_chg_otg: qcom,usb-chgpth@1300 {
-				status = "disabled";
-				reg = <0x1300 0x100>;
-				interrupts =	<0 0x13 0x0>,
-						<0 0x13 0x1>,
-						<0x0 0x13 0x2>;
-
-				interrupt-names =	"coarse-det-usb",
-							"usbin-valid",
-							"chg-gone";
 			};
 
 			pm8226_chg_boost: qcom,boost@1500 {
@@ -163,6 +151,21 @@
 
 				interrupt-names =	"boost-pwr-ok",
 							"limit-error";
+			};
+
+
+			pm8226_chg_otg: qcom,usb-chgpth@1300 {
+				status = "disabled";
+				reg = <0x1300 0x100>;
+				interrupts =	<0 0x13 0x0>,
+						<0 0x13 0x1>,
+						<0x0 0x13 0x2>,
+						<0x0 0x13 0x3>;
+
+				interrupt-names =	"coarse-det-usb",
+							"usbin-valid",
+							"chg-gone",
+							"usb-ocp";
 			};
 
 			qcom,chg-misc@1600 {
@@ -196,6 +199,7 @@
 			qcom,high-ocv-correction-limit-uv = <50>;
 			qcom,hold-soc-est = <3>;
 			qcom,low-voltage-threshold = <3420000>;
+			qcom,bms-vadc = <&pm8226_vadc>;
 
 			qcom,bms-iadc@3800 {
 				reg = <0x3800 0x100>;
@@ -396,7 +400,7 @@
 			};
 		};
 
-		iadc@3600 {
+		pm8226_iadc: iadc@3600 {
 			compatible = "qcom,qpnp-iadc";
 			reg = <0x3600 0x100>;
 			#address-cells = <1>;
@@ -405,6 +409,7 @@
 			interrupt-names = "eoc-int-en-set";
 			qcom,adc-bit-resolution = <16>;
 			qcom,adc-vdd-reference = <1800>;
+			qcom,iadc-vadc = <&pm8226_vadc>;
 
 			chan@0 {
 				label = "internal_rsense";
@@ -431,6 +436,7 @@
 						"low-thr-en-set";
 			qcom,adc-bit-resolution = <15>;
 			qcom,adc-vdd-reference = <1800>;
+			qcom,adc_tm-vadc = <&pm8226_vadc>;
 		};
 
 		qcom,temp-alarm@2400 {
@@ -440,6 +446,7 @@
 			label = "pm8226_tz";
 			qcom,channel-num = <8>;
 			qcom,threshold-set = <0>;
+			qcom,temp_alarm-vadc = <&pm8226_vadc>;
 		};
 
 		qcom,pm8226_rtc {
