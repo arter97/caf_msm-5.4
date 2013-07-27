@@ -1029,21 +1029,27 @@ static int gtp_init_panel(struct goodix_ts_data *ts)
 		return -EINVAL;
 	}
 
-	config_data = devm_kzalloc(&client->dev,
+	if (ts->pdata->gtp_cfg_len) {
+		config_data = ts->pdata->config_data;
+		ts->config_data = ts->pdata->config_data;
+		ts->gtp_cfg_len = ts->pdata->gtp_cfg_len;
+	} else {
+		config_data = devm_kzalloc(&client->dev,
 			GTP_CONFIG_MAX_LENGTH + GTP_ADDR_LENGTH,
-			GFP_KERNEL);
-	if (!config_data) {
-		dev_err(&client->dev,
-				"Not enough memory for panel config data\n");
-		return -ENOMEM;
-	}
+				GFP_KERNEL);
+		if (!config_data) {
+			dev_err(&client->dev,
+					"Not enough memory for panel config data\n");
+			return -ENOMEM;
+		}
 
-	ts->config_data = config_data;
-	config_data[0] = GTP_REG_CONFIG_DATA >> 8;
-	config_data[1] = GTP_REG_CONFIG_DATA & 0xff;
-	memset(&config_data[GTP_ADDR_LENGTH], 0, GTP_CONFIG_MAX_LENGTH);
-	memcpy(&config_data[GTP_ADDR_LENGTH], send_cfg_buf[sensor_id],
-			ts->gtp_cfg_len);
+		ts->config_data = config_data;
+		config_data[0] = GTP_REG_CONFIG_DATA >> 8;
+		config_data[1] = GTP_REG_CONFIG_DATA & 0xff;
+		memset(&config_data[GTP_ADDR_LENGTH], 0, GTP_CONFIG_MAX_LENGTH);
+		memcpy(&config_data[GTP_ADDR_LENGTH], send_cfg_buf[sensor_id],
+				ts->gtp_cfg_len);
+	}
 
 #if GTP_CUSTOM_CFG
 	config_data[RESOLUTION_LOC] =
@@ -1629,6 +1635,28 @@ static int goodix_parse_dt(struct device *dev,
 	} else {
 		pdata->ldo_en_gpio = -1;
 		pdata->ldo_en_gpio_flags = 0;
+	}
+
+	prop = of_find_property(np, "goodix,cfg-data", &pdata->gtp_cfg_len);
+	if (prop && prop->value) {
+		pdata->config_data = devm_kzalloc(dev,
+			GTP_CONFIG_MAX_LENGTH + GTP_ADDR_LENGTH, GFP_KERNEL);
+		if (!pdata->config_data) {
+			dev_err(dev, "Not enough memory for panel config data\n");
+			return -ENOMEM;
+		}
+
+		pdata->config_data[0] = GTP_REG_CONFIG_DATA >> 8;
+		pdata->config_data[1] = GTP_REG_CONFIG_DATA & 0xff;
+		memset(&pdata->config_data[GTP_ADDR_LENGTH], 0,
+					GTP_CONFIG_MAX_LENGTH);
+		memcpy(&pdata->config_data[GTP_ADDR_LENGTH],
+				prop->value, pdata->gtp_cfg_len);
+
+	} else {
+		dev_err(dev,
+			"Unable to get configure data, default will be used.\n");
+		pdata->gtp_cfg_len = 0;
 	}
 
 	return 0;
