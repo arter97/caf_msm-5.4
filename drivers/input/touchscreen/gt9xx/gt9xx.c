@@ -41,9 +41,11 @@
  *          2. new esd & slide wakeup optimization
  *                  By Meta, 2013/06/08
  */
-
 #include "gt9xx.h"
 
+#ifdef CONFIG_OF
+#include <linux/of_gpio.h>
+#endif
 
 #if GTP_ICS_SLOT_REPORT
 #include <linux/input/mt.h>
@@ -1354,6 +1356,118 @@ exit_free_inputdev:
 	return ret;
 }
 
+static int goodix_ts_get_dt_coords(struct device *dev, char *name,
+				struct goodix_ts_platform_data *pdata)
+{
+	struct property *prop;
+	struct device_node *np = dev->of_node;
+	int coords_size, rc;
+	u32 coords[GOODIX_COORDS_ARR_SIZE];
+
+	prop = of_find_property(np, name, NULL);
+	if (!prop)
+		return -EINVAL;
+	if (!prop->value)
+		return -ENODATA;
+
+	coords_size = prop->length / sizeof(u32);
+	if (coords_size != GOODIX_COORDS_ARR_SIZE) {
+		dev_err(dev, "invalid %s\n", name);
+		return -EINVAL;
+	}
+
+	rc = of_property_read_u32_array(np, name, coords, coords_size);
+	if (rc && (rc != -EINVAL)) {
+		dev_err(dev, "Unable to read %s\n", name);
+		return rc;
+	}
+
+	if (!strcmp(name, "goodix,panel-coords")) {
+		pdata->panel_minx = coords[0];
+		pdata->panel_miny = coords[1];
+		pdata->panel_maxx = coords[2];
+		pdata->panel_maxy = coords[3];
+	} else if (!strcmp(name, "goodix,display-coords")) {
+		pdata->x_min = coords[0];
+		pdata->y_min = coords[1];
+		pdata->x_max = coords[2];
+		pdata->y_max = coords[3];
+	} else {
+		dev_err(dev, "unsupported property %s\n", name);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int goodix_parse_dt(struct device *dev,
+			struct goodix_ts_platform_data *pdata)
+{
+	int rc;
+	struct device_node *np = dev->of_node;
+	struct property *prop;
+	u32 temp_val, num_buttons;
+	u32 button_map[MAX_BUTTONS];
+
+	rc = goodix_ts_get_dt_coords(dev, "goodix,panel-coords", pdata);
+	if (rc && (rc != -EINVAL))
+		return rc;
+
+	rc = goodix_ts_get_dt_coords(dev, "goodix,display-coords", pdata);
+	if (rc)
+		return rc;
+
+	pdata->i2c_pull_up = of_property_read_bool(np,
+						"goodix,i2c-pull-up");
+
+	pdata->no_force_update = of_property_read_bool(np,
+						"goodix,no-force-update");
+	/* reset, irq gpio info */
+	pdata->reset_gpio = of_get_named_gpio_flags(np, "goodix,reset-gpio",
+				0, &pdata->reset_gpio_flags);
+	if (pdata->reset_gpio < 0)
+		return pdata->reset_gpio;
+
+	pdata->irq_gpio = of_get_named_gpio_flags(np, "goodix,irq-gpio",
+				0, &pdata->irq_gpio_flags);
+	if (pdata->irq_gpio < 0)
+		return pdata->irq_gpio;
+
+	rc = of_property_read_u32(np, "goodix,family-id", &temp_val);
+	if (!rc)
+		pdata->family_id = temp_val;
+	else
+		return rc;
+
+	prop = of_find_property(np, "goodix,button-map", NULL);
+	if (prop) {
+		num_buttons = prop->length / sizeof(temp_val);
+		if (num_buttons > MAX_BUTTONS)
+			return -EINVAL;
+
+		rc = of_property_read_u32_array(np,
+			"goodix,button-map", button_map,
+			num_buttons);
+		if (rc) {
+			dev_err(dev, "Unable to read key codes\n");
+			return rc;
+		}
+	}
+
+	prop = of_find_property(np, "goodix,ldo-en-gpio", NULL);
+	if (prop) {
+		pdata->ldo_en_gpio =
+			of_get_named_gpio_flags(np, "goodix,ldo-en-gpio",
+			0, &pdata->ldo_en_gpio_flags);
+		if (pdata->ldo_en_gpio < 0)
+			return pdata->ldo_en_gpio;
+	} else {
+		pdata->ldo_en_gpio = -1;
+		pdata->ldo_en_gpio_flags = 0;
+	}
+
+	return 0;
+}
 /*******************************************************
 Function:
 	I2c probe.
@@ -1368,15 +1482,36 @@ Output:
 static int goodix_ts_probe(struct i2c_client *client,
 			   const struct i2c_device_id *id)
 {
+	struct goodix_ts_platform_data *pdata;
 	struct goodix_ts_data *ts;
 	u16 version_info;
 	int ret;
 
 	dev_dbg(&client->dev, "GTP I2C Address: 0x%02x\n", client->addr);
+	if (client->dev.of_node) {
+		pdata = devm_kzalloc(&client->dev,
+			sizeof(struct goodix_ts_platform_data), GFP_KERNEL);
+		if (!pdata) {
+			dev_err(&client->dev,
+				"GTP Failed to allocate memory for pdata\n");
+			return -ENOMEM;
+		}
+
+		ret = goodix_parse_dt(&client->dev, pdata);
+		if (ret)
+			return ret;
+	} else
+		pdata = client->dev.platform_data;
+
+	if (!pdata) {
+		dev_err(&client->dev, "GTP invalid pdata\n");
+		return -EINVAL;
+	}
 
 #if GTP_ESD_PROTECT
 	i2c_connect_client = client;
 #endif
+
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		dev_err(&client->dev, "GTP I2C not supported\n");
 		return -ENODEV;
@@ -1390,6 +1525,7 @@ static int goodix_ts_probe(struct i2c_client *client,
 
 	memset(ts, 0, sizeof(*ts));
 	ts->client = client;
+	ts->pdata = pdata;
 	spin_lock_init(&ts->irq_lock);          /* 2.6.39 later */
 	/* ts->irq_lock = SPIN_LOCK_UNLOCKED; */   /* 2.6.39 & before */
 	i2c_set_clientdata(client, ts);
@@ -1476,6 +1612,10 @@ exit_free_irq:
 exit_free_inputdev:
 	kfree(ts->config_data);
 exit_free_io_port:
+	if (gpio_is_valid(pdata->reset_gpio))
+		gpio_free(pdata->reset_gpio);
+	if (gpio_is_valid(pdata->irq_gpio))
+		gpio_free(pdata->irq_gpio);
 exit_power_off:
 	i2c_set_clientdata(client, NULL);
 	kfree(ts);
@@ -1755,6 +1895,11 @@ static const struct i2c_device_id goodix_ts_id[] = {
 	{ }
 };
 
+static struct of_device_id goodix_match_table[] = {
+	{ .compatible = "goodix,gt9xx", },
+	{ },
+};
+
 static struct i2c_driver goodix_ts_driver = {
 	.probe      = goodix_ts_probe,
 	.remove     = goodix_ts_remove,
@@ -1766,6 +1911,7 @@ static struct i2c_driver goodix_ts_driver = {
 	.driver = {
 		.name     = GTP_I2C_NAME,
 		.owner    = THIS_MODULE,
+		.of_match_table = goodix_match_table,
 	},
 };
 
