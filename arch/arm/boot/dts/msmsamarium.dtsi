@@ -42,7 +42,7 @@
 		interrupt-controller;
 		#interrupt-cells = <2>;
 		reg = <0xfd510000 0x4000>;
-		ngpio = <145>;
+		ngpio = <146>;
 		interrupts = <0 208 0>;
 		qcom,direct-connect-irqs = <8>;
 	};
@@ -241,6 +241,18 @@
 		#size-cells = <0>;
 		cell-index = <0>;
 		qcom,not-wakeup;     /* Needed until MPM is fully configured. */
+	};
+
+	tsens: tsens@fc4a8000 {
+		compatible = "qcom,msm-tsens";
+		reg = <0xfc4a8000 0x2000>,
+		      <0xfc4bc000 0x1000>;
+		reg-names = "tsens_physical", "tsens_eeprom_physical";
+		interrupts = <0 184 0>;
+		qcom,sensors = <11>;
+		qcom,slope = <3200 3200 3200 3200 3200 3200 3200 3200 3200
+				3200 3200>;
+		qcom,calib-mode = "fuse_map1";
 	};
 };
 
