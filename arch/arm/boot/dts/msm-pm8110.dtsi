@@ -59,16 +59,17 @@
 
 			qcom,vddmax-mv = <4200>;
 			qcom,vddsafe-mv = <4230>;
-			qcom,vinmin-mv = <4200>;
+			qcom,vinmin-mv = <4300>;
 			qcom,vbatdet-mv = <4100>;
 			qcom,ibatmax-ma = <1500>;
 			qcom,ibatterm-ma = <100>;
 			qcom,ibatsafe-ma = <1500>;
 			qcom,thermal-mitigation = <1500 700 600 325>;
-			qcom,vbatdet-delta-mv = <350>;
+			qcom,vbatdet-delta-mv = <100>;
 			qcom,resume-soc = <99>;
 			qcom,tchg-mins = <150>;
 			qcom,chg-vadc = <&pm8110_vadc>;
+			qcom,chg-adc_tm = <&pm8110_adc_tm>;
 
 			qcom,chgr@1000 {
 				status = "disabled";
@@ -252,7 +253,7 @@
 			};
 		};
 
-		iadc@3600 {
+		pm8110_iadc: iadc@3600 {
 			compatible = "qcom,qpnp-iadc";
 			reg = <0x3600 0x100>;
 			#address-cells = <1>;
@@ -327,6 +328,8 @@
 			qcom,high-ocv-correction-limit-uv = <50>;
 			qcom,hold-soc-est = <3>;
 			qcom,bms-vadc = <&pm8110_vadc>;
+			qcom,bms-iadc = <&pm8110_iadc>;
+			qcom,bms-adc_tm = <&pm8110_adc_tm>;
 
 			qcom,bms-iadc@3800 {
 				reg = <0x3800 0x100>;

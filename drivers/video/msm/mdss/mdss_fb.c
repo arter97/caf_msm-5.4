@@ -274,8 +274,8 @@ static void mdss_fb_shutdown(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd = platform_get_drvdata(pdev);
 
-	if (mfd->ref_cnt > 1)
-		mfd->ref_cnt = 1;
+	for (; mfd->ref_cnt > 1; mfd->ref_cnt--)
+		pm_runtime_put(mfd->fbi->dev);
 
 	mdss_fb_release(mfd->fbi, 0);
 }
@@ -1096,7 +1096,8 @@ static int mdss_fb_open(struct fb_info *info, int user)
 					   mfd->op_enable);
 		if (result) {
 			pm_runtime_put(info->dev);
-			pr_err("mdss_fb_open: can't turn on display!\n");
+			pr_err("can't turn on fb%d! rc=%d\n", mfd->index,
+				result);
 			return result;
 		}
 	}
@@ -1122,8 +1123,7 @@ static int mdss_fb_release(struct fb_info *info, int user)
 		ret = mdss_fb_blank_sub(FB_BLANK_POWERDOWN, info,
 				       mfd->op_enable);
 		if (ret) {
-			pr_err("can't turn off display attached to fb%d!\n",
-				mfd->index);
+			pr_err("can't turn off fb%d! rc=%d\n", mfd->index, ret);
 			return ret;
 		}
 	}

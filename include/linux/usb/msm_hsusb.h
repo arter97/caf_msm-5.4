@@ -314,6 +314,7 @@ struct msm_otg_platform_data {
  * @pclk: clock struct of iface_clk.
  * @phy_reset_clk: clock struct of phy_clk.
  * @core_clk: clock struct of core_bus_clk.
+ * @sleep_clk: clock struct of sleep_clk for USB PHY.
  * @core_clk_rate: core clk max frequency
  * @regs: ioremapped register base address.
  * @inputs: OTG state machine inputs(Id, SessValid etc).
@@ -350,6 +351,7 @@ struct msm_otg {
 	struct clk *pclk;
 	struct clk *phy_reset_clk;
 	struct clk *core_clk;
+	struct clk *sleep_clk;
 	long core_clk_rate;
 	struct resource *io_res;
 	void __iomem *regs;
@@ -461,11 +463,20 @@ struct ci13xxx_platform_data {
 	bool l1_supported;
 };
 
+/**
+ * struct msm_hsic_host_platform_data - platform device data
+ *              for msm_hsic_host driver.
+ * @phy_sof_workaround: Enable ALL PHY SOF bug related workarounds for
+		SUSPEND, RESET and RESUME.
+ * @phy_susp_sof_workaround: Enable PHY SOF workaround only for SUSPEND.
+ *
+ */
 struct msm_hsic_host_platform_data {
 	unsigned strobe;
 	unsigned data;
 	bool ignore_cal_pad_config;
 	bool phy_sof_workaround;
+	bool phy_susp_sof_workaround;
 	u32 reset_delay;
 	int strobe_pad_offset;
 	int data_pad_offset;
