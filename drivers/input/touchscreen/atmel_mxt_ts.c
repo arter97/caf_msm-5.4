@@ -2842,9 +2842,10 @@ static int fb_notifier_callback(struct notifier_block *self,
 	if (evdata && evdata->data && event == FB_EVENT_BLANK && mxt_dev_data &&
 			mxt_dev_data->client) {
 		blank = evdata->data;
-		if (*blank == FB_BLANK_UNBLANK)
+		if (*blank == FB_BLANK_UNBLANK && !mxt_dev_data->regs_enabled)
 			mxt_resume(&mxt_dev_data->client->dev);
-		else if (*blank == FB_BLANK_POWERDOWN)
+		else if (*blank == FB_BLANK_POWERDOWN &&
+						mxt_dev_data->regs_enabled)
 			mxt_suspend(&mxt_dev_data->client->dev);
 	}
 
