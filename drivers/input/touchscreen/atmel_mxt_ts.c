@@ -394,7 +394,7 @@ struct mxt_data {
 	const char *fw_name;
 	bool no_force_update;
 	bool lpm_support;
-	bool regs_enabled;
+	bool dev_sleep;
 
 #if defined(CONFIG_SECURE_TOUCH)
 	atomic_t st_enabled;
@@ -2206,11 +2206,6 @@ static int mxt_power_on(struct mxt_data *data, bool on)
 	if (on == false)
 		goto power_off;
 
-	if (data->regs_enabled) {
-		dev_dbg(&data->client->dev, "regs are already enabled\n");
-		return 0;
-	}
-
 	rc = reg_set_optimum_mode_check(data->vcc_ana, MXT_ACTIVE_LOAD_UA);
 	if (rc < 0) {
 		dev_err(&data->client->dev,
@@ -2259,8 +2254,6 @@ static int mxt_power_on(struct mxt_data *data, bool on)
 		}
 	}
 
-	data->regs_enabled = true;
-
 	msleep(130);
 
 	return 0;
@@ -2281,12 +2274,6 @@ error_reg_en_vcc_ana:
 	return rc;
 
 power_off:
-
-	if (!data->regs_enabled) {
-		dev_dbg(&data->client->dev, "regs are already disabled\n");
-		return 0;
-	}
-
 	reg_set_optimum_mode_check(data->vcc_ana, 0);
 	regulator_disable(data->vcc_ana);
 	if (data->pdata->digital_pwr_regulator) {
@@ -2297,8 +2284,6 @@ power_off:
 		reg_set_optimum_mode_check(data->vcc_i2c, 0);
 		regulator_disable(data->vcc_i2c);
 	}
-
-	data->regs_enabled = false;
 
 	msleep(50);
 	return 0;
@@ -2499,6 +2484,11 @@ static int mxt_suspend(struct device *dev)
 	struct input_dev *input_dev = data->input_dev;
 	int error;
 
+	if (data->dev_sleep) {
+		dev_dbg(dev, "Device already in sleep\n");
+		return 0;
+	}
+
 	disable_irq(data->irq);
 
 	mutex_lock(&input_dev->mutex);
@@ -2529,6 +2519,7 @@ static int mxt_suspend(struct device *dev)
 		}
 	}
 
+	data->dev_sleep = true;
 	return 0;
 }
 
@@ -2538,6 +2529,11 @@ static int mxt_resume(struct device *dev)
 	struct mxt_data *data = i2c_get_clientdata(client);
 	struct input_dev *input_dev = data->input_dev;
 	int error;
+
+	if (!data->dev_sleep) {
+		dev_dbg(dev, "Device already in resume\n");
+		return 0;
+	}
 
 	/* put regulators back in active power mode */
 	if (data->lpm_support) {
@@ -2582,6 +2578,7 @@ static int mxt_resume(struct device *dev)
 
 	enable_irq(data->irq);
 
+	data->dev_sleep = false;
 	return 0;
 }
 
@@ -2968,6 +2965,7 @@ static int mxt_probe(struct i2c_client *client,
 	data->pdata = pdata;
 	data->no_force_update = pdata->no_force_update;
 	data->lpm_support = !pdata->no_lpm_support;
+	data->dev_sleep = false;
 
 	__set_bit(EV_ABS, input_dev->evbit);
 	__set_bit(EV_KEY, input_dev->evbit);
