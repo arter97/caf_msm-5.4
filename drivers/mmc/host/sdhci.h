@@ -295,6 +295,9 @@ struct sdhci_ops {
 	unsigned int	(*get_max_segments)(void);
 	void	(*platform_bus_voting)(struct sdhci_host *host, u32 enable);
 	void    (*disable_data_xfer)(struct sdhci_host *host);
+	int	(*config_auto_tuning_cmd)(struct sdhci_host *host,
+					  bool enable,
+					  u32 type);
 };
 
 #ifdef CONFIG_MMC_SDHCI_IO_ACCESSORS
