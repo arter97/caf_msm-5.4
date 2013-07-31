@@ -246,6 +246,7 @@ struct msm_otg_platform_data {
 	bool l1_supported;
 	bool dpdm_pulldown_added;
 	int vddmin_gpio;
+	bool rw_during_lpm_workaround;
 };
 
 /* phy related flags */
