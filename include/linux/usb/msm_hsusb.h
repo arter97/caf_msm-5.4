@@ -220,6 +220,7 @@ struct msm_otg_platform_data {
 	bool core_clk_always_on_workaround;
 	bool delay_lpm_on_disconnect;
 	struct msm_bus_scale_pdata *bus_scale_table;
+	bool rw_during_lpm_workaround;
 };
 
 /* Timeout (in msec) values (min - max) associated with OTG timers */
