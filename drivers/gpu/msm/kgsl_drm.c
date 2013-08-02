@@ -81,7 +81,7 @@
 #define MDSS_MDP_REG_INTR_EN			0x00110
 #define MDSS_MDP_REG_INTR_STATUS		0x00114
 #define MDSS_MDP_REG_INTR_CLEAR		0x00118
-
+#define MDSS_MDP_VSYNC_IRQ		0x08000000
 #define MDSS_MDP_INTR_INTF_1_VSYNC		BIT(27)
 
 struct drm_kgsl_gem_object_wait_list_entry {
@@ -1623,9 +1623,18 @@ kgsl_drm_irq_postinstall(struct drm_device *dev)
 {
 	struct drm_kgsl_private *dev_priv =
 		(struct drm_kgsl_private *)dev->dev_private;
+	u32 mask = readl_relaxed(dev_priv->regs +
+		MDSS_MDP_REG_INTR_EN);
 
 	DRM_DEBUG("%s:regs[0x%x]\n", __func__, (int)dev_priv->regs);
 
+	mask |= MDSS_MDP_VSYNC_IRQ;
+	writel_relaxed(MDSS_MDP_VSYNC_IRQ,
+		dev_priv->regs + MDSS_MDP_REG_INTR_CLEAR);
+	writel_relaxed(mask,
+		dev_priv->regs + MDSS_MDP_REG_INTR_EN);
+
+	enable_irq(dev_priv->irq);
 	dev->irq_enabled = 1;
 
 	return 0;
@@ -1636,9 +1645,15 @@ kgsl_drm_irq_uninstall(struct drm_device *dev)
 {
 	struct drm_kgsl_private *dev_priv =
 		(struct drm_kgsl_private *)dev->dev_private;
+	u32 mask = readl_relaxed(dev_priv->regs +
+		MDSS_MDP_REG_INTR_EN);
 
 	DRM_DEBUG("%s:regs[0x%x]\n", __func__, (int)dev_priv->regs);
 
+	mask &= ~MDSS_MDP_VSYNC_IRQ;
+	writel_relaxed(mask, dev_priv->regs + MDSS_MDP_REG_INTR_EN);
+
+	disable_irq(dev_priv->irq);
 	dev->irq_enabled = 0;
 }
 
