@@ -28,6 +28,7 @@
 
 #define MDSS_REG_HW_VERSION				0x0
 #define MDSS_REG_HW_INTR_STATUS				0x10
+#define MDSS_MDP_REG_DRM_INTR_STATUS                    0x14
 
 #define MDSS_INTR_MDP				BIT(0)
 #define MDSS_INTR_DSI0				BIT(4)
