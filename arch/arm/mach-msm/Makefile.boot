@@ -72,7 +72,7 @@ endif
    zreladdr-$(CONFIG_ARCH_MSM9615)	:= 0x40808000
 
 # MSM9625
-   zreladdr-$(CONFIG_ARCH_MSM9625)	:= 0x00208000
+   zreladdr-$(CONFIG_ARCH_MSM9625)	:= 0x00308000
         dtb-$(CONFIG_ARCH_MSM9625)	+= msm9625-v1-cdp.dtb
         dtb-$(CONFIG_ARCH_MSM9625)	+= msm9625-v1-mtp.dtb
         dtb-$(CONFIG_ARCH_MSM9625)	+= msm9625-v1-rumi.dtb
