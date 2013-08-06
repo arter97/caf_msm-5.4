@@ -1648,7 +1648,6 @@ kgsl_drm_irq_postinstall(struct drm_device *dev)
 	writel_relaxed(mask,
 		dev_priv->regs + MDSS_MDP_REG_INTR_EN);
 
-	enable_irq(dev_priv->irq);
 	dev->irq_enabled = 1;
 
 	mdss_mdp_clk_ctrl(0, false);
@@ -1673,7 +1672,6 @@ kgsl_drm_irq_uninstall(struct drm_device *dev)
 	mask &= ~MDSS_MDP_VSYNC_IRQ;
 	writel_relaxed(mask, dev_priv->regs + MDSS_MDP_REG_INTR_EN);
 
-	disable_irq(dev_priv->irq);
 	dev->irq_enabled = 0;
 
 	mdss_mdp_clk_ctrl(0, false);
