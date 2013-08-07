@@ -202,8 +202,6 @@ static const struct {
 		512, 0, 2, SZ_128K, 0x3FF037, 0x3FF016 },
 };
 
-static bool adreno_isidle(struct kgsl_device *device);
-
 /**
  * adreno_perfcounter_init: Reserve kernel performance counters
  * @device: device to configure
@@ -2293,8 +2291,7 @@ int adreno_soft_reset(struct kgsl_device *device)
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	int ret;
 
-	/* If the jump table index is 0 soft reset is not supported */
-	if ((!adreno_dev->pm4_jt_idx) || (!adreno_dev->gpudev->soft_reset)) {
+	if (!adreno_dev->gpudev->soft_reset) {
 		dev_WARN_ONCE(device->dev, 1, "Soft reset not supported");
 		return -EINVAL;
 	}
@@ -2331,10 +2328,15 @@ int adreno_soft_reset(struct kgsl_device *device)
 	device->ftbl->irqctrl(device, 1);
 
 	/*
-	 * Restart the ringbuffer - we can go down the warm start path because
-	 * power was never yanked
+	 * If we have offsets for the jump tables we can try to do a warm start,
+	 * otherwise do a full ringbuffer restart
 	 */
-	ret = adreno_ringbuffer_warm_start(&adreno_dev->ringbuffer);
+
+	if (adreno_dev->pm4_jt_idx)
+		ret = adreno_ringbuffer_warm_start(&adreno_dev->ringbuffer);
+	else
+		ret = adreno_ringbuffer_start(&adreno_dev->ringbuffer);
+
 	if (ret)
 		return ret;
 
@@ -2350,7 +2352,7 @@ int adreno_soft_reset(struct kgsl_device *device)
  * Return true if the GPU hardware is idle and there are no commands pending in
  * the ringbuffer
  */
-static bool adreno_isidle(struct kgsl_device *device)
+bool adreno_isidle(struct kgsl_device *device)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	unsigned int rptr;

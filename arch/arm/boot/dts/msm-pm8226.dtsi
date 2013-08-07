@@ -85,6 +85,12 @@
 			qcom,tchg-mins = <150>;
 			qcom,chg-vadc = <&pm8226_vadc>;
 			qcom,chg-adc_tm = <&pm8226_adc_tm>;
+			qcom,ibatmax-warm-ma = <350>;
+			qcom,warm-bat-decidegc = <450>;
+			qcom,warm-bat-mv = <4100>;
+			qcom,cool-bat-decidegc = <100>;
+			qcom,cool-bat-mv = <4100>;
+			qcom,ibatmax-cool-ma = <350>;
 
 			qcom,chgr@1000 {
 				status = "disabled";
@@ -219,14 +225,14 @@
 						<0x0 0x40 0x6>,
 						<0x0 0x40 0x7>;
 
-				interrupt-names = "vsense_for_r",
-						  "vsense_avg",
-						  "sw_cc_thr",
-						  "ocv_thr",
-						  "charge_begin",
-						  "good_ocv",
+				interrupt-names = "cc_thr",
 						  "ocv_for_r",
-						  "cc_thr";
+						  "good_ocv",
+						  "charge_begin",
+						  "ocv_thr",
+						  "sw_cc_thr",
+						  "vsense_avg",
+						  "vsense_for_r";
 			};
 		};
 
