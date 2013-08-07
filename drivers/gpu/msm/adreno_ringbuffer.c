@@ -548,18 +548,6 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 	unsigned int gpuaddr = rb->device->memstore.gpuaddr;
 	bool profile_ready;
 
-	/*
-	 * If in stream ib profiling is enabled and there are counters
-	 * assigned, then space needs to be reserved for profiling.  This
-	 * space in the ringbuffer is always consumed (might be filled with
-	 * NOPs in error case.  profile_ready needs to be consistent through
-	 * the _addcmds call since it is allocating additional ringbuffer
-	 * command space.
-	 */
-	profile_ready = !adreno_is_a2xx(adreno_dev) &&
-		adreno_profile_assignments_ready(&adreno_dev->profile) &&
-		!(flags & KGSL_CMD_FLAGS_INTERNAL_ISSUE);
-
 	/* The global timestamp always needs to be incremented */
 	rb->global_ts++;
 
@@ -571,8 +559,31 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 		context_id = drawctxt->base.id;
 	}
 
-	if (drawctxt)
+	if (drawctxt) {
+		/*
+		 * guard the internal timestamp After detach we cannot touch the
+		 * internal timestamp to maintain order in kgsl world
+		 */
+		mutex_lock(&drawctxt->mutex);
+		if (kgsl_context_detached(&drawctxt->base)) {
+			rb->global_ts--;
+			mutex_unlock(&drawctxt->mutex);
+			return -EINVAL;
+		}
 		drawctxt->internal_timestamp = rb->global_ts;
+		mutex_unlock(&drawctxt->mutex);
+	}
+	/*
+	 * If in stream ib profiling is enabled and there are counters
+	 * assigned, then space needs to be reserved for profiling.  This
+	 * space in the ringbuffer is always consumed (might be filled with
+	 * NOPs in error case.  profile_ready needs to be consistent through
+	 * the _addcmds call since it is allocating additional ringbuffer
+	 * command space.
+	 */
+	profile_ready = !adreno_is_a2xx(adreno_dev) &&
+		adreno_profile_assignments_ready(&adreno_dev->profile) &&
+		!(flags & KGSL_CMD_FLAGS_INTERNAL_ISSUE);
 
 	/* reserve space to temporarily turn off protected mode
 	*  error checking if needed

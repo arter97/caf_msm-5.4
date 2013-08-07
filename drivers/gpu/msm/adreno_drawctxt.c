@@ -489,6 +489,7 @@ int adreno_drawctxt_detach(struct kgsl_context *context)
 	struct adreno_device *adreno_dev;
 	struct adreno_context *drawctxt;
 	int ret;
+	unsigned int last_internal_time;
 
 	if (context == NULL)
 		return 0;
@@ -533,11 +534,12 @@ int adreno_drawctxt_detach(struct kgsl_context *context)
 		mutex_lock(&drawctxt->mutex);
 	}
 
+	last_internal_time = drawctxt->internal_timestamp;
 	mutex_unlock(&drawctxt->mutex);
 
 	/* Wait for the last global timestamp to pass before continuing */
 	ret = adreno_drawctxt_wait_global(adreno_dev, context,
-		drawctxt->internal_timestamp, 10 * 1000);
+		last_internal_time, 10 * 1000);
 
 	adreno_profile_process_results(device);
 
