@@ -1957,7 +1957,8 @@ static int __devinit ehci_hsic_msm_probe(struct platform_device *pdev)
 				dev_name(&pdev->dev));
 	if (!hcd) {
 		dev_err(&pdev->dev, "Unable to create HCD\n");
-		return  -ENOMEM;
+		ret = -ENOMEM;
+		goto put_parent;
 	}
 
 	hcd_to_bus(hcd)->skip_resume = true;
@@ -2177,6 +2178,9 @@ unmap:
 	iounmap(hcd->regs);
 put_hcd:
 	usb_put_hcd(hcd);
+put_parent:
+	if (pdev->dev.parent)
+		pm_runtime_put_sync(pdev->dev.parent);
 
 	return ret;
 }
