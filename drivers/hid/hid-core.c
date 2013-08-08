@@ -1234,10 +1234,6 @@ int hid_connect(struct hid_device *hdev, unsigned int connect_mask)
 	if ((connect_mask & HID_CONNECT_HIDINPUT) && !hidinput_connect(hdev,
 				connect_mask & HID_CONNECT_HIDINPUT_FORCE))
 		hdev->claimed |= HID_CLAIMED_INPUT;
-	if (hdev->quirks & HID_QUIRK_MULTITOUCH) {
-		/* this device should be handled by hid-multitouch, skip it */
-		return -ENODEV;
-	}
 
 	if ((connect_mask & HID_CONNECT_HIDDEV) && hdev->hiddev_connect &&
 			!hdev->hiddev_connect(hdev,
@@ -1679,10 +1675,6 @@ static int hid_bus_match(struct device *dev, struct device_driver *drv)
 	struct hid_driver *hdrv = container_of(drv, struct hid_driver, driver);
 	struct hid_device *hdev = container_of(dev, struct hid_device, dev);
 
-	if ((hdev->quirks & HID_QUIRK_MULTITOUCH) &&
-		!strncmp(hdrv->name, "hid-multitouch", 14))
-		return 1;
-
 	if (!hid_match_device(hdev, hdrv))
 		return 0;
 
@@ -1707,11 +1699,8 @@ static int hid_device_probe(struct device *dev)
 	if (!hdev->driver) {
 		id = hid_match_device(hdev, hdrv);
 		if (id == NULL) {
-			if (!((hdev->quirks & HID_QUIRK_MULTITOUCH) &&
-				!strncmp(hdrv->name, "hid-multitouch", 14))) {
-				ret = -ENODEV;
-				goto unlock;
-			}
+			ret = -ENODEV;
+			goto unlock;
 		}
 
 		hdev->driver = hdrv;
