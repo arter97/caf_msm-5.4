@@ -344,9 +344,8 @@ static int kxtj9_device_power_on(struct kxtj9_data *tj9)
 			dev_err(&tj9->client->dev, "power on failed");
 			goto err_exit;
 		}
-
-		/* The chip takes more time than expected to boot up */
-		msleep(200);
+		/* Use 80ms as vendor suggested. */
+		msleep(80);
 	}
 
 err_exit:
