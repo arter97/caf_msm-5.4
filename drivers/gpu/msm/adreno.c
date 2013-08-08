@@ -1820,6 +1820,7 @@ static int adreno_stop(struct kgsl_device *device)
 int adreno_reset(struct kgsl_device *device)
 {
 	int ret = 0;
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 
 	/* Try soft reset first */
 	if (adreno_soft_reset(device) != 0) {
@@ -1847,6 +1848,8 @@ int adreno_reset(struct kgsl_device *device)
 	/* Set the page table back to the default page table */
 	kgsl_mmu_setstate(&device->mmu, device->mmu.defaultpagetable,
 			KGSL_MEMSTORE_GLOBAL);
+	kgsl_context_put(&adreno_dev->drawctxt_active->base);
+	adreno_dev->drawctxt_active = NULL;
 
 	return ret;
 }
