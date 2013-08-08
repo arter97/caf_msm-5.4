@@ -43,7 +43,7 @@ static unsigned int _dispatcher_inflight = 15;
 static unsigned int _cmdbatch_timeout = 2000;
 
 /* Interval for reading and comparing fault detection registers */
-static unsigned int _fault_timer_interval = 50;
+static unsigned int _fault_timer_interval = 100;
 
 /* Local array for the current set of fault detect registers */
 static unsigned int fault_detect_regs[FT_DETECT_REGS_COUNT];
@@ -893,7 +893,17 @@ static int dispatcher_do_fault(struct kgsl_device *device)
 	int ret, i, count = 0;
 	int fault, first = 0;
 	bool pagefault = false;
-	BUG_ON(dispatcher->inflight == 0);
+
+	/*
+	 * Return early if no command inflight - can happen on
+	 * false hang detects
+	 */
+	if (dispatcher->inflight == 0) {
+		fault = atomic_xchg(&dispatcher->fault, 0);
+		if (fault)
+			pr_err("dispatcher_do_fault with 0 inflight commands\n");
+		return 0;
+	}
 
 	fault = atomic_xchg(&dispatcher->fault, 0);
 	if (fault == 0)
@@ -1015,8 +1025,10 @@ static int dispatcher_do_fault(struct kgsl_device *device)
 	 * because we won't see this cmdbatch again
 	 */
 
-	if (fault == ADRENO_TIMEOUT_FAULT)
+	if (fault == ADRENO_TIMEOUT_FAULT) {
+		pr_err("long IB falut policy set invalidate\n");
 		bitmap_zero(&cmdbatch->fault_policy, BITS_PER_LONG);
+	}
 
 	/*
 	 * If the context had a GPU page fault then it is likely it would fault
@@ -1313,6 +1325,8 @@ static void adreno_dispatcher_work(struct work_struct *work)
 		break;
 	}
 
+	if (dispatcher_do_fault(device))
+		goto done;
 	/*
 	 * Decrement the active count to 0 - this will allow the system to go
 	 * into suspend even if there are queued command batches
