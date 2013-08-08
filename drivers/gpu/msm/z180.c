@@ -240,10 +240,13 @@ static void z180_cleanup_pt(struct kgsl_device *device,
 	struct z180_device *z180_dev = Z180_DEVICE(device);
 
 	kgsl_mmu_unmap(pagetable, &device->mmu.setstate_memory);
+	kgsl_mmu_put_gpuaddr(pagetable, &device->mmu.setstate_memory);
 
 	kgsl_mmu_unmap(pagetable, &device->memstore);
+	kgsl_mmu_put_gpuaddr(pagetable, &device->memstore);
 
 	kgsl_mmu_unmap(pagetable, &z180_dev->ringbuffer.cmdbufdesc);
+	kgsl_mmu_put_gpuaddr(pagetable, &z180_dev->ringbuffer.cmdbufdesc);
 }
 
 static int z180_setup_pt(struct kgsl_device *device,
@@ -276,9 +279,11 @@ static int z180_setup_pt(struct kgsl_device *device,
 
 error_unmap_dummy:
 	kgsl_mmu_unmap(pagetable, &device->mmu.setstate_memory);
+	kgsl_mmu_put_gpuaddr(pagetable, &device->mmu.setstate_memory);
 
 error_unmap_memstore:
 	kgsl_mmu_unmap(pagetable, &device->memstore);
+	kgsl_mmu_put_gpuaddr(pagetable, &device->memstore);
 
 error:
 	return result;

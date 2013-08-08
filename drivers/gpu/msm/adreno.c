@@ -834,14 +834,19 @@ static void adreno_cleanup_pt(struct kgsl_device *device,
 	struct adreno_ringbuffer *rb = &adreno_dev->ringbuffer;
 
 	kgsl_mmu_unmap(pagetable, &rb->buffer_desc);
+	kgsl_mmu_put_gpuaddr(pagetable, &rb->buffer_desc);
 
 	kgsl_mmu_unmap(pagetable, &device->memstore);
+	kgsl_mmu_put_gpuaddr(pagetable, &device->memstore);
 
 	kgsl_mmu_unmap(pagetable, &adreno_dev->pwron_fixup);
+	kgsl_mmu_put_gpuaddr(pagetable, &adreno_dev->pwron_fixup);
 
 	kgsl_mmu_unmap(pagetable, &device->mmu.setstate_memory);
+	kgsl_mmu_put_gpuaddr(pagetable, &device->mmu.setstate_memory);
 
 	kgsl_mmu_unmap(pagetable, &adreno_dev->profile.shared_buffer);
+	kgsl_mmu_put_gpuaddr(pagetable, &adreno_dev->profile.shared_buffer);
 }
 
 static int adreno_setup_pt(struct kgsl_device *device,
