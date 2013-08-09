@@ -76,6 +76,8 @@ endif
 # APQ8084
    zreladdr-$(CONFIG_ARCH_APQ8084)	:= 0x00008000
         dtb-$(CONFIG_ARCH_APQ8084)	+= apq8084-sim.dtb
+        dtb-$(CONFIG_ARCH_APQ8084)	+= apq8084-cdp.dtb
+        dtb-$(CONFIG_ARCH_APQ8084)	+= apq8084-interposer-cdp.dtb
 
 # MSMKRYPTON
    zreladdr-$(CONFIG_ARCH_MSMKRYPTON)	:= 0x00008000
