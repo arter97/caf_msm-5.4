@@ -127,6 +127,8 @@ struct gbam_port {
 
 	struct work_struct	connect_w;
 	struct work_struct	disconnect_w;
+	struct work_struct	suspend_w;
+	struct work_struct	resume_w;
 };
 
 static struct bam_portmaster {
@@ -539,7 +541,9 @@ static void gbam_start_endless_rx(struct gbam_port *port)
 	struct bam_ch_info *d = &port->data_ch;
 	int status;
 
+	spin_lock(&port->port_lock_ul);
 	if (!port->port_usb) {
+		spin_unlock(&port->port_lock_ul);
 		pr_err("%s: port->port_usb is NULL", __func__);
 		return;
 	}
@@ -548,6 +552,7 @@ static void gbam_start_endless_rx(struct gbam_port *port)
 	status = usb_ep_queue(port->port_usb->out, d->rx_req, GFP_ATOMIC);
 	if (status)
 		pr_err("%s: error enqueuing transfer, %d\n", __func__, status);
+	spin_unlock(&port->port_lock_ul);
 }
 
 static void gbam_start_endless_tx(struct gbam_port *port)
@@ -555,7 +560,9 @@ static void gbam_start_endless_tx(struct gbam_port *port)
 	struct bam_ch_info *d = &port->data_ch;
 	int status;
 
+	spin_lock(&port->port_lock_dl);
 	if (!port->port_usb) {
+		spin_unlock(&port->port_lock_dl);
 		pr_err("%s: port->port_usb is NULL", __func__);
 		return;
 	}
@@ -564,6 +571,8 @@ static void gbam_start_endless_tx(struct gbam_port *port)
 	status = usb_ep_queue(port->port_usb->in, d->tx_req, GFP_ATOMIC);
 	if (status)
 		pr_err("%s: error enqueuing transfer, %d\n", __func__, status);
+	spin_unlock(&port->port_lock_dl);
+
 }
 
 static void gbam_stop_endless_rx(struct gbam_port *port)
@@ -571,7 +580,9 @@ static void gbam_stop_endless_rx(struct gbam_port *port)
 	struct bam_ch_info *d = &port->data_ch;
 	int status;
 
+	spin_lock(&port->port_lock_ul);
 	if (!port->port_usb) {
+		spin_unlock(&port->port_lock_ul);
 		pr_err("%s: port->port_usb is NULL", __func__);
 		return;
 	}
@@ -580,14 +591,17 @@ static void gbam_stop_endless_rx(struct gbam_port *port)
 	status = usb_ep_dequeue(port->port_usb->out, d->rx_req);
 	if (status)
 		pr_err("%s: error dequeuing transfer, %d\n", __func__, status);
-
+	spin_unlock(&port->port_lock_ul);
 }
+
 static void gbam_stop_endless_tx(struct gbam_port *port)
 {
 	struct bam_ch_info *d = &port->data_ch;
 	int status;
 
+	spin_lock(&port->port_lock_dl);
 	if (!port->port_usb) {
+		spin_unlock(&port->port_lock_dl);
 		pr_err("%s: port->port_usb is NULL", __func__);
 		return;
 	}
@@ -596,6 +610,7 @@ static void gbam_stop_endless_tx(struct gbam_port *port)
 	status = usb_ep_dequeue(port->port_usb->in, d->tx_req);
 	if (status)
 		pr_err("%s: error dequeuing transfer, %d\n", __func__, status);
+	spin_unlock(&port->port_lock_dl);
 }
 
 static void gbam_start(void *param, enum usb_bam_pipe_dir dir)
@@ -888,6 +903,46 @@ static void gbam2bam_connect_work(struct work_struct *w)
 	pr_debug("%s: done\n", __func__);
 }
 
+static int gbam_wake_cb(void *param)
+{
+	struct gbam_port	*port = (struct gbam_port *)param;
+	struct bam_ch_info *d;
+	struct f_rmnet		*dev;
+
+	dev = port_to_rmnet(port->gr);
+	d = &port->data_ch;
+
+	pr_debug("%s: woken up by peer\n", __func__);
+
+	return usb_gadget_wakeup(dev->cdev->gadget);
+}
+
+static void gbam2bam_suspend_work(struct work_struct *w)
+{
+	struct gbam_port *port = container_of(w, struct gbam_port, suspend_w);
+	struct bam_ch_info *d = &port->data_ch;
+
+	pr_debug("%s: suspend work started\n", __func__);
+
+	usb_bam_register_wake_cb(d->dst_connection_idx, gbam_wake_cb, port);
+	if (d->trans == USB_GADGET_XPORT_BAM2BAM_IPA) {
+		usb_bam_register_start_stop_cbs(gbam_start, gbam_stop, port);
+		usb_bam_suspend(&d->ipa_params);
+	}
+}
+
+static void gbam2bam_resume_work(struct work_struct *w)
+{
+	struct gbam_port *port = container_of(w, struct gbam_port, resume_w);
+	struct bam_ch_info *d = &port->data_ch;
+
+	pr_debug("%s: resume work started\n", __func__);
+
+	usb_bam_register_wake_cb(d->dst_connection_idx, NULL, NULL);
+	if (d->trans == USB_GADGET_XPORT_BAM2BAM_IPA)
+		usb_bam_resume(&d->ipa_params);
+}
+
 static int gbam_peer_reset_cb(void *param)
 {
 	struct gbam_port	*port = (struct gbam_port *)param;
@@ -1117,6 +1172,8 @@ static int gbam2bam_port_alloc(int portno)
 
 	INIT_WORK(&port->connect_w, gbam2bam_connect_work);
 	INIT_WORK(&port->disconnect_w, gbam2bam_disconnect_work);
+	INIT_WORK(&port->suspend_w, gbam2bam_suspend_work);
+	INIT_WORK(&port->resume_w, gbam2bam_resume_work);
 
 	/* data ch */
 	d = &port->data_ch;
@@ -1441,20 +1498,6 @@ free_bam_ports:
 	return ret;
 }
 
-static int gbam_wake_cb(void *param)
-{
-	struct gbam_port	*port = (struct gbam_port *)param;
-	struct bam_ch_info *d;
-	struct f_rmnet		*dev;
-
-	dev = port_to_rmnet(port->gr);
-	d = &port->data_ch;
-
-	pr_debug("%s: woken up by peer\n", __func__);
-
-	return usb_gadget_wakeup(dev->cdev->gadget);
-}
-
 void gbam_suspend(struct grmnet *gr, u8 port_num, enum transport_type trans)
 {
 	struct gbam_port	*port;
@@ -1469,11 +1512,7 @@ void gbam_suspend(struct grmnet *gr, u8 port_num, enum transport_type trans)
 
 	pr_debug("%s: suspended port %d\n", __func__, port_num);
 
-	usb_bam_register_wake_cb(d->dst_connection_idx, gbam_wake_cb, port);
-	if (trans == USB_GADGET_XPORT_BAM2BAM_IPA) {
-		usb_bam_register_start_stop_cbs(gbam_start, gbam_stop, port);
-		usb_bam_suspend(&d->ipa_params);
-	}
+	queue_work(gbam_wq, &port->suspend_w);
 }
 
 void gbam_resume(struct grmnet *gr, u8 port_num, enum transport_type trans)
@@ -1490,7 +1529,5 @@ void gbam_resume(struct grmnet *gr, u8 port_num, enum transport_type trans)
 
 	pr_debug("%s: resumed port %d\n", __func__, port_num);
 
-	usb_bam_register_wake_cb(d->dst_connection_idx, NULL, NULL);
-	if (trans == USB_GADGET_XPORT_BAM2BAM_IPA)
-		usb_bam_resume(&d->ipa_params);
+	queue_work(gbam_wq, &port->resume_w);
 }

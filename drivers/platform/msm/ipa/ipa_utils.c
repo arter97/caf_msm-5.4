@@ -252,7 +252,7 @@ int ipa_generate_hw_rule(enum ipa_ip_type ip,
 			/* 0 => offset of TOS in v4 header */
 			*buf = ipa_write_8(0, *buf);
 			*buf = ipa_write_32((attrib->tos_mask << 16), *buf);
-			*buf = ipa_write_32(attrib->tos_value, *buf);
+			*buf = ipa_write_32((attrib->tos_value << 16), *buf);
 			*buf = ipa_pad_to_32(*buf);
 			ofst_meq32++;
 		}
@@ -589,17 +589,24 @@ int ipa_generate_hw_rule(enum ipa_ip_type ip,
 		}
 
 		if (attrib->attrib_mask & IPA_FLT_TOS_MASKED) {
-			if (ipa_ofst_meq32[ofst_meq32] == -1) {
-				IPAERR("ran out of meq32 eq\n");
+			if (ipa_ofst_meq128[ofst_meq128] == -1) {
+				IPAERR("ran out of meq128 eq\n");
 				return -EPERM;
 			}
-			*en_rule |= ipa_ofst_meq32[ofst_meq32];
-			/* 0 => offset of TOS in v4 header */
+			*en_rule |= ipa_ofst_meq128[ofst_meq128];
+			/* 0 => offset of TOS in v6 header */
 			*buf = ipa_write_8(0, *buf);
 			*buf = ipa_write_32((attrib->tos_mask << 20), *buf);
-			*buf = ipa_write_32(attrib->tos_value, *buf);
+			*buf = ipa_write_32(0, *buf);
+			*buf = ipa_write_32(0, *buf);
+			*buf = ipa_write_32(0, *buf);
+
+			*buf = ipa_write_32((attrib->tos_value << 20), *buf);
+			*buf = ipa_write_32(0, *buf);
+			*buf = ipa_write_32(0, *buf);
+			*buf = ipa_write_32(0, *buf);
 			*buf = ipa_pad_to_32(*buf);
-			ofst_meq32++;
+			ofst_meq128++;
 		}
 
 		if (attrib->attrib_mask & IPA_FLT_FLOW_LABEL) {
@@ -1396,12 +1403,8 @@ void ipa_bam_reg_dump(void)
 	if (__ratelimit(&_rs)) {
 		ipa_inc_client_enable_clks();
 		pr_err("IPA BAM START\n");
-		sps_get_bam_debug_info(ipa_ctx->bam_handle, 5, 1048575, 0, 0);
+		sps_get_bam_debug_info(ipa_ctx->bam_handle, 5, 479182, 0, 0);
 		sps_get_bam_debug_info(ipa_ctx->bam_handle, 93, 0, 0, 0);
-		pr_err("BAM-DMA BAM START\n");
-		sps_get_bam_debug_info(sps_dma_get_bam_handle(), 5, 1044480,
-				0, 0);
-		sps_get_bam_debug_info(sps_dma_get_bam_handle(), 93, 0, 0, 0);
 		ipa_dec_client_disable_clks();
 	}
 }
