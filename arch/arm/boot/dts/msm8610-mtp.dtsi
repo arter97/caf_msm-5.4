@@ -114,22 +114,6 @@
 			fsl,irq-gpio = <&msmgpio 81 0x00>;
 			fsl,sensors-position = <5>;
 		};
-		capella@60 {
-			compatible = "capella,cm36283";
-			reg = <0x60>;
-			interrupt-parent = <&msmgpio>;
-			interrupts = <80 0x2>;
-			vdd-supply = <&pm8110_l19>;
-			vio-supply = <&pm8110_l14>;
-			capella,intr = <80>;
-			capella,levels = <0x0A 0xA0 0xE1 0x140 0x280 0x500 0xA28 0x16A8 0x1F40 0x2800>;
-			capella,slave_addr = <0x60>;
-			capella,ps_close_thd_set = <0xa>;
-			capella,ps_away_thd_set = <0x5>;
-			capella,ls_cmd = <0x44>;  /* PS_IT=160ms, INT_PERS=2*/
-			capella,ps_conf1_val = <0x0006>;	/*CM36283_PS_ITB_1_2 | CM36283_PS_DR_1_40| CM36283_PS_IT_1T | CM36283_PS_PERS_2 | CM36283_PS_RES_1*/
-			capella,ps_conf3_val = <0x3010>; /* CM36283_PS_MS_NORMAL | CM36283_PS_PROL_255 | CM36283_PS_SMART_PERS_ENABLE, */
-		};
 	};
 
 	gen-vkeys {
