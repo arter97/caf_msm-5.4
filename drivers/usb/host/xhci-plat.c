@@ -178,7 +178,8 @@ static int xhci_plat_probe(struct platform_device *pdev)
 
 	phy = usb_get_phy(USB_PHY_TYPE_USB2);
 	/* Register with OTG if present, ignore USB2 OTG using other PHY */
-	if (phy && phy->otg && !(phy->flags & ENABLE_SECONDARY_PHY)) {
+	if (!IS_ERR_OR_NULL(phy)
+		&& phy->otg && !(phy->flags & ENABLE_SECONDARY_PHY)) {
 		dev_dbg(&pdev->dev, "%s otg support available\n", __func__);
 		ret = otg_set_host(phy->otg, &hcd->self);
 		if (ret) {

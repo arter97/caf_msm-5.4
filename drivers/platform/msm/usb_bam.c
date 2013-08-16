@@ -634,7 +634,7 @@ static void usb_bam_resume_core(enum usb_bam cur_bam)
 
 	if (cur_bam != HSUSB_BAM)
 		return;
-	BUG_ON(phy == NULL);
+	BUG_ON(IS_ERR_OR_NULL(phy));
 	pr_debug("%s: resume core", __func__);
 	pm_runtime_resume(phy->dev);
 }
@@ -643,7 +643,7 @@ static void usb_bam_start_lpm(bool disconnect)
 {
 	struct usb_phy *phy = usb_get_phy(USB_PHY_TYPE_USB2);
 
-	BUG_ON(phy == NULL);
+	BUG_ON(IS_ERR_OR_NULL(phy));
 
 	spin_lock(&usb_bam_ipa_handshake_info_lock);
 
@@ -1260,7 +1260,7 @@ static void usb_bam_finish_resume(struct work_struct *w)
 {
 	struct usb_phy *phy = usb_get_phy(USB_PHY_TYPE_USB2);
 
-	BUG_ON(phy == NULL);
+	BUG_ON(IS_ERR_OR_NULL(phy));
 	pr_debug("%s: enter", __func__);
 	mutex_lock(&info.suspend_resume_mutex);
 	/* Suspend happened in the meantime */

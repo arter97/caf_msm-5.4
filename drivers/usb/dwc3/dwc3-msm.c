@@ -3014,7 +3014,7 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 
 	mdwc->otg_xceiv = usb_get_phy(USB_PHY_TYPE_USB2);
 	/* Register with OTG if present, ignore USB2 OTG using other PHY */
-	if (mdwc->otg_xceiv &&
+	if (!IS_ERR_OR_NULL(mdwc->otg_xceiv) &&
 			!(mdwc->otg_xceiv->flags & ENABLE_SECONDARY_PHY)) {
 		/* Skip charger detection for simulator targets */
 		if (!mdwc->charger.skip_chg_detect) {
