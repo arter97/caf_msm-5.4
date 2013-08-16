@@ -153,7 +153,7 @@ struct usb_phy {
 
 
 /* for board-specific init logic */
-extern int usb_set_transceiver(struct usb_phy *);
+extern int usb_add_phy(struct usb_phy *);
 
 #if defined(CONFIG_NOP_USB_XCEIV) || (defined(CONFIG_NOP_USB_XCEIV_MODULE) && defined(MODULE))
 /* sometimes transceivers are accessed only through e.g. ULPI */
@@ -208,16 +208,16 @@ extern int otg_send_event(enum usb_otg_event event);
 
 /* for usb host and peripheral controller drivers */
 #ifdef CONFIG_USB_OTG_UTILS
-extern struct usb_phy *usb_get_transceiver(void);
-extern void usb_put_transceiver(struct usb_phy *);
+extern struct usb_phy *usb_get_phy(void);
+extern void usb_put_phy(struct usb_phy *);
 extern const char *otg_state_string(enum usb_otg_state state);
 #else
-static inline struct usb_phy *usb_get_transceiver(void)
+static inline struct usb_phy *usb_get_phy(void)
 {
 	return NULL;
 }
 
-static inline void usb_put_transceiver(struct usb_phy *x)
+static inline void usb_put_phy(struct usb_phy *x)
 {
 }
 

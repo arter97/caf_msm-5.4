@@ -210,15 +210,14 @@ static int ohci_omap_init(struct usb_hcd *hcd)
 
 #ifdef	CONFIG_USB_OTG
 	if (need_transceiver) {
-		ohci->transceiver = usb_get_transceiver();
+		ohci->transceiver = usb_get_phy();
 		if (ohci->transceiver) {
 			int	status = otg_set_host(ohci->transceiver->otg,
 						&ohci_to_hcd(ohci)->self);
 			dev_dbg(hcd->self.controller, "init %s transceiver, status %d\n",
 					ohci->transceiver->label, status);
 			if (status) {
-				if (ohci->transceiver)
-					put_device(ohci->transceiver->dev);
+				usb_put_phy(ohci->transceiver);
 				return status;
 			}
 		} else {
@@ -405,7 +404,7 @@ usb_hcd_omap_remove (struct usb_hcd *hcd, struct platform_device *pdev)
 	usb_remove_hcd(hcd);
 	if (ohci->transceiver) {
 		(void) otg_set_host(ohci->transceiver->otg, 0);
-		put_device(ohci->transceiver->dev);
+		usb_put_phy(ohci->transceiver);
 	}
 	if (machine_is_omap_osk())
 		gpio_free(9);

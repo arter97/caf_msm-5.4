@@ -3012,7 +3012,7 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "Failed to vote for bus scaling\n");
 	}
 
-	mdwc->otg_xceiv = usb_get_transceiver();
+	mdwc->otg_xceiv = usb_get_phy();
 	/* Register with OTG if present, ignore USB2 OTG using other PHY */
 	if (mdwc->otg_xceiv &&
 			!(mdwc->otg_xceiv->flags & ENABLE_SECONDARY_PHY)) {
@@ -3067,7 +3067,7 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 	return 0;
 
 put_xcvr:
-	usb_put_transceiver(mdwc->otg_xceiv);
+	usb_put_phy(mdwc->otg_xceiv);
 put_psupply:
 	if (mdwc->usb_psy.dev)
 		power_supply_unregister(&mdwc->usb_psy);
@@ -3126,7 +3126,7 @@ static int __devexit dwc3_msm_remove(struct platform_device *pdev)
 		debugfs_remove_recursive(dwc3_debugfs_root);
 	if (mdwc->otg_xceiv) {
 		dwc3_start_chg_det(&mdwc->charger, false);
-		usb_put_transceiver(mdwc->otg_xceiv);
+		usb_put_phy(mdwc->otg_xceiv);
 	}
 	if (mdwc->usb_psy.dev)
 		power_supply_unregister(&mdwc->usb_psy);

@@ -4496,9 +4496,9 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	if (pdata->enable_sec_phy)
 		phy->flags |= ENABLE_SECONDARY_PHY;
 
-	ret = usb_set_transceiver(&motg->phy);
+	ret = usb_add_phy(&motg->phy);
 	if (ret) {
-		dev_err(&pdev->dev, "usb_set_transceiver failed\n");
+		dev_err(&pdev->dev, "usb_add_phy failed\n");
 		goto free_async_irq;
 	}
 
@@ -4593,7 +4593,7 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	return 0;
 
 remove_phy:
-	usb_set_transceiver(NULL);
+	usb_add_phy(NULL);
 free_async_irq:
 	if (motg->async_irq)
 		free_irq(motg->async_irq, motg);
@@ -4690,7 +4690,7 @@ static int __devexit msm_otg_remove(struct platform_device *pdev)
 	msm_hsusb_mhl_switch_enable(motg, 0);
 	if (motg->pdata->pmic_id_irq)
 		free_irq(motg->pdata->pmic_id_irq, motg);
-	usb_set_transceiver(NULL);
+	usb_add_phy(NULL);
 	free_irq(motg->irq, motg);
 
 	if ((motg->pdata->phy_type == SNPS_28NM_INTEGRATED_PHY) &&

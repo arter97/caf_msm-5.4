@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2824,7 +2824,7 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	dev->set_clk = msm_otg_set_clk;
 	dev->reset = otg_reset;
 	dev->phy.io_ops = &msm_otg_io_ops;
-	if (usb_set_transceiver(&dev->phy)) {
+	if (usb_add_phy(&dev->phy)) {
 		WARN_ON(1);
 		goto free_otg_irq;
 	}
