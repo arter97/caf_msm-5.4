@@ -2824,7 +2824,7 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	dev->set_clk = msm_otg_set_clk;
 	dev->reset = otg_reset;
 	dev->phy.io_ops = &msm_otg_io_ops;
-	if (usb_add_phy(&dev->phy)) {
+	if (usb_add_phy(&dev->phy, USB_PHY_TYPE_USB2)) {
 		WARN_ON(1);
 		goto free_otg_irq;
 	}

@@ -626,7 +626,7 @@ static int msm_xusb_init_host(struct platform_device *pdev,
 			pdata->vbus_power(pdata->phy_info, 0);
 
 		INIT_WORK(&mhcd->otg_work, msm_hsusb_otg_work);
-		mhcd->xceiv = usb_get_phy();
+		mhcd->xceiv = usb_get_phy(USB_PHY_TYPE_USB2);
 		if (!mhcd->xceiv)
 			return -ENODEV;
 		otg = container_of(mhcd->xceiv, struct msm_otg, phy);
