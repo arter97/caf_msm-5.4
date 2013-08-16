@@ -49,6 +49,16 @@ struct vfe_subscribe_info {
 	uint32_t active;
 };
 
+enum msm_isp_pack_fmt {
+	QCOM,
+	MIPI,
+	DPCM6,
+	DPCM8,
+	PLAIN8,
+	PLAIN16,
+	MAX_ISP_PACK_FMT,
+};
+
 enum msm_isp_camif_update_state {
 	NO_UPDATE,
 	ENABLE_CAMIF,
@@ -290,7 +300,7 @@ struct msm_vfe_src_info {
 	enum msm_vfe_inputmux input_mux;
 	uint32_t width;
 	long pixel_clock;
-	uint32_t input_format;
+	uint32_t input_format;/*V4L2 pix format with bayer pattern*/
 };
 
 enum msm_wm_ub_cfg_type {
@@ -386,10 +396,12 @@ struct vfe_device {
 	struct resource *vfe_irq;
 	struct resource *vfe_mem;
 	struct resource *vfe_vbif_mem;
+	struct resource *tcsr_mem;
 	struct resource *vfe_io;
 	struct resource *vfe_vbif_io;
 	void __iomem *vfe_base;
 	void __iomem *vfe_vbif_base;
+	void __iomem *tcsr_base;
 
 	struct device *iommu_ctx[MAX_IOMMU_CTX];
 
@@ -414,6 +426,7 @@ struct vfe_device {
 	struct msm_vfe_tasklet_queue_cmd
 		tasklet_queue_cmd[MSM_VFE_TASKLETQ_SIZE];
 
+	uint32_t soc_hw_version;
 	uint32_t vfe_hw_version;
 	struct msm_vfe_hardware_info *hw_info;
 	struct msm_vfe_axi_shared_data axi_data;
