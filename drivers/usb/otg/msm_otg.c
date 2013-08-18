@@ -866,7 +866,7 @@ static int msm_otg_suspend(struct msm_otg *motg)
 	bool host_bus_suspend, device_bus_suspend, dcp, prop_charger;
 	u32 phy_ctrl_val = 0, cmd_val;
 	unsigned ret;
-	u32 portsc;
+	u32 portsc, config2;
 
 	if (atomic_read(&motg->in_lpm))
 		return 0;
@@ -991,6 +991,17 @@ static int msm_otg_suspend(struct msm_otg *motg)
 		phy_ctrl_val = readl_relaxed(USB_PHY_CTRL);
 		phy_ctrl_val |= PHY_CLAMP_DPDMSE_EN;
 		if (motg->caps & ALLOW_PHY_RETENTION && pdata->vddmin_gpio) {
+
+			/*
+			 * This is HW WA needed when PHY_CLAMP_DPDMSE_EN is
+			 * enabled and we put the phy in retention mode.
+			 * Without this WA, the async_irq will be fired right
+			 * after suspending whithout any bus resume.
+			 */
+			config2 = readl_relaxed(USB_GENCONFIG2);
+			config2 &= ~GENCFG2_DPSE_DMSE_HV_INTR_EN;
+			writel_relaxed(config2, USB_GENCONFIG2);
+
 			phy_ctrl_val &= ~PHY_RETEN;
 			motg->lpm_flags |= PHY_RETENTIONED;
 			gpio_direction_output(pdata->vddmin_gpio, 1);
