@@ -983,6 +983,12 @@ static int msm_otg_suspend(struct msm_otg *motg)
 			phy_ctrl_val |= PHY_CLAMP_DPDMSE_EN;
 		writel_relaxed(phy_ctrl_val & ~PHY_RETEN, USB_PHY_CTRL);
 		motg->lpm_flags |= PHY_RETENTIONED;
+	} else if (device_bus_suspend && !dcp &&
+			(pdata->mpm_dpshv_int || pdata->mpm_dmshv_int)) {
+		/* DP DM HV interrupts are used for bus resume from XO off */
+		phy_ctrl_val = readl_relaxed(USB_PHY_CTRL);
+		phy_ctrl_val |= PHY_CLAMP_DPDMSE_EN;
+		writel_relaxed(phy_ctrl_val, USB_PHY_CTRL);
 	}
 
 	/* Ensure that above operation is completed before turning off clocks */
@@ -1039,15 +1045,18 @@ static int msm_otg_suspend(struct msm_otg *motg)
 		if (pdata->otg_control == OTG_PHY_CONTROL &&
 			pdata->mpm_otgsessvld_int)
 			msm_mpm_set_pin_wake(pdata->mpm_otgsessvld_int, 1);
-		if (host_bus_suspend && pdata->mpm_dpshv_int)
+		if ((host_bus_suspend || device_bus_suspend) &&
+				pdata->mpm_dpshv_int)
 			msm_mpm_set_pin_wake(pdata->mpm_dpshv_int, 1);
-		if (host_bus_suspend && pdata->mpm_dmshv_int)
+		if ((host_bus_suspend || device_bus_suspend) &&
+				pdata->mpm_dmshv_int)
 			msm_mpm_set_pin_wake(pdata->mpm_dmshv_int, 1);
 	}
 	if (bus)
 		clear_bit(HCD_FLAG_HW_ACCESSIBLE, &(bus_to_hcd(bus))->flags);
 
 	motg->host_bus_suspend = host_bus_suspend;
+	motg->device_bus_suspend = device_bus_suspend;
 	atomic_set(&motg->in_lpm, 1);
 	/* Enable ASYNC IRQ (if present) during LPM */
 	if (motg->async_irq)
@@ -1118,6 +1127,10 @@ static int msm_otg_resume(struct msm_otg *motg)
 		phy_ctrl_val &= ~(PHY_CLAMP_DPDMSE_EN);
 		writel_relaxed(phy_ctrl_val, USB_PHY_CTRL);
 		motg->lpm_flags &= ~PHY_RETENTIONED;
+	} else if (motg->device_bus_suspend) {
+		phy_ctrl_val = readl_relaxed(USB_PHY_CTRL);
+		phy_ctrl_val &= ~(PHY_CLAMP_DPDMSE_EN);
+		writel_relaxed(phy_ctrl_val, USB_PHY_CTRL);
 	}
 
 	temp = readl(USB_USBCMD);
@@ -1163,9 +1176,11 @@ skip_phy_resume:
 		if (pdata->otg_control == OTG_PHY_CONTROL &&
 			pdata->mpm_otgsessvld_int)
 			msm_mpm_set_pin_wake(pdata->mpm_otgsessvld_int, 0);
-		if (motg->host_bus_suspend && pdata->mpm_dpshv_int)
+		if ((motg->host_bus_suspend || motg->device_bus_suspend) &&
+			pdata->mpm_dpshv_int)
 			msm_mpm_set_pin_wake(pdata->mpm_dpshv_int, 0);
-		if (motg->host_bus_suspend && pdata->mpm_dmshv_int)
+		if ((motg->host_bus_suspend || motg->device_bus_suspend) &&
+			pdata->mpm_dmshv_int)
 			msm_mpm_set_pin_wake(pdata->mpm_dmshv_int, 0);
 	}
 	if (bus)
