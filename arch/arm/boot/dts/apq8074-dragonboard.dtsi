@@ -62,6 +62,7 @@
 
 	hsic_hub {
 		compatible = "qcom,hsic-smsc-hub";
+		smsc,model-id = <4604>;
 		#address-cells = <1>;
 		#size-cells = <1>;
 		ranges;
@@ -604,7 +605,7 @@
 	};
 
 	qcom,dc-chgpth@1400 {
-		status = "ok";
+		status = "disabled";
 	};
 
 	qcom,boost@1500 {
