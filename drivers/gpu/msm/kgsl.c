@@ -1974,7 +1974,11 @@ static long kgsl_ioctl_rb_issueibcmds(struct kgsl_device_private *dev_priv,
 		cmdbatch, &param->timestamp);
 
 free_cmdbatch:
-	if (result)
+	/*
+	 * -EPROTO is a "success" error - it just tells the user that the
+	 * context had previously faulted
+	 */
+	if (result && result != -EPROTO)
 		kgsl_cmdbatch_destroy(cmdbatch);
 
 done:
@@ -2022,7 +2026,11 @@ static long kgsl_ioctl_submit_commands(struct kgsl_device_private *dev_priv,
 		cmdbatch, &param->timestamp);
 
 free_cmdbatch:
-	if (result)
+	/*
+	 * -EPROTO is a "success" error - it just tells the user that the
+	 * context had previously faulted
+	 */
+	if (result && result != -EPROTO)
 		kgsl_cmdbatch_destroy(cmdbatch);
 
 done:
