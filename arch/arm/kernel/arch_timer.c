@@ -16,7 +16,7 @@
 
 #include <clocksource/arm_arch_timer.h>
 
-static unsigned long arch_timer_read_counter_long(void)
+static notrace unsigned long arch_timer_read_counter_long(void)
 {
 	return arch_timer_read_counter();
 }
