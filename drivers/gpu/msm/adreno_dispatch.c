@@ -219,10 +219,6 @@ static void  dispatcher_queue_context(struct adreno_device *adreno_dev,
 {
 	struct adreno_dispatcher *dispatcher = &adreno_dev->dispatcher;
 
-	/* Refuse to queue a detached context */
-	if (kgsl_context_detached(&drawctxt->base))
-		return;
-
 	spin_lock(&dispatcher->plist_lock);
 
 	if (plist_node_empty(&drawctxt->pending)) {
@@ -458,17 +454,8 @@ static int _adreno_dispatcher_issuecmds(struct adreno_device *adreno_dev)
 			adreno_gpu_fault(adreno_dev) != 0)
 			break;
 
-		/*
-		 * We have to get the spin lock here to protect the nodes, not
-		 * the list
-		 */
-
-		spin_lock(&dispatcher->plist_lock);
-
-		if (plist_head_empty(&tmp)) {
-			spin_unlock(&dispatcher->plist_lock);
+		if (plist_head_empty(&tmp))
 			break;
-		}
 
 		/* Get the next entry on the list */
 		drawctxt = plist_first_entry(&tmp, struct adreno_context,
@@ -476,8 +463,6 @@ static int _adreno_dispatcher_issuecmds(struct adreno_device *adreno_dev)
 
 		/* Remove it from the list */
 		plist_del(&drawctxt->pending, &tmp);
-
-		spin_unlock(&dispatcher->plist_lock);
 
 		if (kgsl_context_detached(&drawctxt->base) ||
 			drawctxt->state == ADRENO_CONTEXT_STATE_INVALID) {
