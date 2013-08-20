@@ -2321,8 +2321,7 @@ static int a3xx_create_gmem_shadow(struct adreno_device *adreno_dev,
 	tmp_ctx.gmem_base = adreno_dev->gmem_base;
 
 	result = kgsl_allocate(&drawctxt->context_gmem_shadow.gmemshadow,
-		drawctxt->base.proc_priv->pagetable,
-		drawctxt->context_gmem_shadow.size);
+		drawctxt->base.pagetable, drawctxt->context_gmem_shadow.size);
 
 	if (result)
 		return result;
@@ -2356,7 +2355,7 @@ static int a3xx_drawctxt_create(struct adreno_device *adreno_dev,
 	 */
 
 	ret = kgsl_allocate(&drawctxt->gpustate,
-		drawctxt->base.proc_priv->pagetable, CONTEXT_SIZE);
+		drawctxt->base.pagetable, CONTEXT_SIZE);
 
 	if (ret)
 		return ret;
@@ -2479,7 +2478,7 @@ static int a3xx_drawctxt_restore(struct adreno_device *adreno_dev,
 	if (ret)
 		return ret;
 
-	kgsl_mmu_setstate(&device->mmu, context->base.proc_priv->pagetable,
+	kgsl_mmu_setstate(&device->mmu, context->base.pagetable,
 			context->base.id);
 
 	/*
