@@ -423,12 +423,8 @@ static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 	 * the GPU and trigger a snapshot. To stall the transaction return
 	 * EBUSY error.
 	 */
-	if (adreno_dev->ft_pf_policy & KGSL_FT_PAGEFAULT_GPUHALT_ENABLE) {
-		/* turn off GPU IRQ so we don't get faults from it too */
-		kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_OFF);
-		adreno_dispatcher_irq_fault(device);
+	if (adreno_dev->ft_pf_policy & KGSL_FT_PAGEFAULT_GPUHALT_ENABLE)
 		ret = -EBUSY;
-	}
 done:
 	return ret;
 }
@@ -1209,12 +1205,10 @@ static phys_addr_t kgsl_iommu_get_default_ttbr0(struct kgsl_mmu *mmu,
 	return 0;
 }
 
-static int kgsl_iommu_setstate(struct kgsl_mmu *mmu,
+static void kgsl_iommu_setstate(struct kgsl_mmu *mmu,
 				struct kgsl_pagetable *pagetable,
 				unsigned int context_id)
 {
-	int ret = 0;
-
 	if (mmu->flags & KGSL_FLAGS_STARTED) {
 		/* page table not current, then setup mmu to use new
 		 *  specified page table
@@ -1225,12 +1219,10 @@ static int kgsl_iommu_setstate(struct kgsl_mmu *mmu,
 			flags |= kgsl_mmu_pt_get_flags(mmu->hwpagetable,
 							mmu->device->id) |
 							KGSL_MMUFLAGS_TLBFLUSH;
-			ret = kgsl_setstate(mmu, context_id,
+			kgsl_setstate(mmu, context_id,
 				KGSL_MMUFLAGS_PTUPDATE | flags);
 		}
 	}
-
-	return ret;
 }
 
 /*
@@ -1900,40 +1892,31 @@ kgsl_iommu_get_current_ptbase(struct kgsl_mmu *mmu)
  * cpu
  * Return - void
  */
-static int kgsl_iommu_default_setstate(struct kgsl_mmu *mmu,
+static void kgsl_iommu_default_setstate(struct kgsl_mmu *mmu,
 					uint32_t flags)
 {
 	struct kgsl_iommu *iommu = mmu->priv;
 	int temp;
 	int i;
-	int ret = 0;
 	phys_addr_t pt_base = kgsl_iommu_get_pt_base_addr(mmu,
 						mmu->hwpagetable);
 	phys_addr_t pt_val;
 
-	ret = kgsl_iommu_enable_clk(mmu, KGSL_IOMMU_CONTEXT_USER);
-
-	if (ret) {
+	if (kgsl_iommu_enable_clk(mmu, KGSL_IOMMU_CONTEXT_USER)) {
 		KGSL_DRV_ERR(mmu->device, "Failed to enable iommu clocks\n");
-		return ret;
+		return;
 	}
 
 	/* For v0 SMMU GPU needs to be idle for tlb invalidate as well */
-	if (msm_soc_version_supports_iommu_v0()) {
-		ret = kgsl_idle(mmu->device);
-		if (ret)
-			return ret;
-	}
+	if (msm_soc_version_supports_iommu_v0())
+		kgsl_idle(mmu->device);
 
 	/* Acquire GPU-CPU sync Lock here */
 	_iommu_lock();
 
 	if (flags & KGSL_MMUFLAGS_PTUPDATE) {
-		if (!msm_soc_version_supports_iommu_v0()) {
-			ret = kgsl_idle(mmu->device);
-			if (ret)
-				goto unlock;
-		}
+		if (!msm_soc_version_supports_iommu_v0())
+			kgsl_idle(mmu->device);
 		for (i = 0; i < iommu->unit_count; i++) {
 			/* get the lsb value which should not change when
 			 * changing ttbr0 */
@@ -1994,13 +1977,12 @@ static int kgsl_iommu_default_setstate(struct kgsl_mmu *mmu,
 			}
 		}
 	}
-unlock:
+
 	/* Release GPU-CPU sync Lock here */
 	_iommu_unlock();
 
 	/* Disable smmu clock */
 	kgsl_iommu_disable_clk_on_ts(mmu, 0, false);
-	return ret;
 }
 
 /*
@@ -2057,7 +2039,6 @@ struct kgsl_mmu_ops iommu_ops = {
 	.mmu_pagefault_resume = kgsl_iommu_pagefault_resume,
 	.mmu_get_current_ptbase = kgsl_iommu_get_current_ptbase,
 	.mmu_enable_clk = kgsl_iommu_enable_clk,
-	.mmu_disable_clk = kgsl_iommu_disable_clk,
 	.mmu_disable_clk_on_ts = kgsl_iommu_disable_clk_on_ts,
 	.mmu_get_default_ttbr0 = kgsl_iommu_get_default_ttbr0,
 	.mmu_get_reg_gpuaddr = kgsl_iommu_get_reg_gpuaddr,

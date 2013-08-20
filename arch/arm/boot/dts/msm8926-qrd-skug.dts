@@ -8,11 +8,15 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
  */
 
-#include "adreno.h"
+/dts-v1/;
+/include/ "msm8926.dtsi"
+/include/ "msm8226-qrd.dtsi"
 
-/* Instantiate tracepoints */
-#define CREATE_TRACE_POINTS
-#include "adreno_trace.h"
+/ {
+	model = "Qualcomm MSM 8926 QRD SKUG";
+	compatible = "qcom,msm8926-qrd", "qcom,msm8926", "qcom,qrd";
+	qcom,board-id = <11 5>;
+	qcom,msm-id = <200 0>;
+};
