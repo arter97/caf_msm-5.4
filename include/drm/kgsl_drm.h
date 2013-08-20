@@ -240,6 +240,8 @@ struct drm_kgsl_gem_cache_ops {
 	uint32_t length;
 };
 
+#ifdef __KERNEL__
 extern void mdss_mdp_clk_ctrl(int enable, int isr);
+#endif /* __KERNEL__ */
 
 #endif
