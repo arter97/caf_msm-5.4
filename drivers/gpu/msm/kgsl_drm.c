@@ -116,6 +116,7 @@ struct drm_kgsl_private {
 	void __iomem *regs;
 	size_t reg_size;
 	unsigned int irq;
+	bool fake_vbl;
 	struct work_struct fake_vbl_work;
 	atomic_t vbl_received[DRM_KGSL_CRTC_MAX];
 };
@@ -1584,6 +1585,7 @@ kgsl_drm_enable_vblank(struct drm_device *dev, int crtc)
 
 	switch (crtc) {
 	case DRM_KGSL_CRTC_FAKE:
+		dev_priv->fake_vbl = true;
 		schedule_work(&dev_priv->fake_vbl_work);
 		break;
 	default:
@@ -1596,10 +1598,21 @@ kgsl_drm_enable_vblank(struct drm_device *dev, int crtc)
 static void
 kgsl_drm_disable_vblank(struct drm_device *dev, int crtc)
 {
+	struct drm_kgsl_private *dev_priv =
+		(struct drm_kgsl_private *)dev->dev_private;
+
 	DRM_DEBUG("%s:crtc[%d]\n", __func__, crtc);
 
 	if (crtc > DRM_KGSL_CRTC_MAX)
 		DRM_ERROR("failed to disable vblank.\n");
+
+	switch (crtc) {
+	case DRM_KGSL_CRTC_FAKE:
+		dev_priv->fake_vbl = false;
+		break;
+	default:
+		break;
+	}
 }
 
 static irqreturn_t
@@ -1653,6 +1666,8 @@ kgsl_drm_fake_vblank_handler(struct work_struct *work)
 	DRM_DEBUG("%s\n", __func__);
 	drm_handle_vblank(dev_priv->drm_dev, DRM_KGSL_CRTC_FAKE);
 
+	if (dev_priv->fake_vbl)
+		schedule_work(&dev_priv->fake_vbl_work);
 }
 
 static void
