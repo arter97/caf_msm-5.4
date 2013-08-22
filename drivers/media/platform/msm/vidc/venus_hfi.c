@@ -1882,6 +1882,7 @@ static int venus_hfi_core_init(void *device)
 
 	dev->intr_status = 0;
 	INIT_LIST_HEAD(&dev->sess_head);
+	mutex_init(&dev->session_lock);
 	venus_hfi_set_registers(dev);
 
 	if (!dev->hal_client) {

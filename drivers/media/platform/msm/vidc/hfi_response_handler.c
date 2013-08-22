@@ -80,7 +80,7 @@ static enum vidc_status hfi_map_err_status(int hfi_err)
 	return vidc_err;
 }
 
-static int validate_session_pkt(struct list_head *sessions,
+static int sanitize_session_pkt(struct list_head *sessions,
 		struct hal_session *sess, struct mutex *session_lock)
 {
 	struct hal_session *session;
@@ -254,13 +254,13 @@ static void hfi_process_event_notify(
 	case HFI_EVENT_SESSION_ERROR:
 		dprintk(VIDC_INFO,
 			"HFI_EVENT_SESSION_ERROR[%u]\n", pkt->session_id);
-		if (!validate_session_pkt(sessions, sess, session_lock))
+		if (!sanitize_session_pkt(sessions, sess, session_lock))
 			hfi_process_session_error(callback, device_id, pkt);
 		break;
 	case HFI_EVENT_SESSION_SEQUENCE_CHANGED:
 		dprintk(VIDC_INFO, "HFI_EVENT_SESSION_SEQUENCE_CHANGED[%u]\n",
 			pkt->session_id);
-		if (!validate_session_pkt(sessions, sess, session_lock))
+		if (!sanitize_session_pkt(sessions, sess, session_lock))
 			hfi_process_sess_evt_seq_changed(callback,
 				device_id, pkt);
 		break;
@@ -271,7 +271,7 @@ static void hfi_process_event_notify(
 	case HFI_EVENT_RELEASE_BUFFER_REFERENCE:
 		dprintk(VIDC_INFO, "HFI_EVENT_RELEASE_BUFFER_REFERENCE[%u]\n",
 			pkt->session_id);
-		if (!validate_session_pkt(sessions, sess, session_lock))
+		if (!sanitize_session_pkt(sessions, sess, session_lock))
 			hfi_process_evt_release_buffer_ref(callback,
 				device_id, pkt);
 		break;
@@ -1311,6 +1311,14 @@ u32 hfi_process_msg_packet(
 		return rc;
 	}
 
+#define SANITIZE_SESSION_PKT(msg_pkt) ({ \
+		sess = (struct hal_session *) \
+				(((struct vidc_hal_session_cmd_pkt *) \
+				msg_pkt)->session_id); \
+		if (sanitize_session_pkt(sessions, sess, session_lock)) \
+			break; \
+	})
+
 	dprintk(VIDC_INFO, "Received: 0x%x in ", msg_hdr->packet);
 	rc = (u32) msg_hdr->packet;
 	sess = (struct hal_session *)((struct
@@ -1318,6 +1326,7 @@ u32 hfi_process_msg_packet(
 
 	switch (msg_hdr->packet) {
 	case HFI_MSG_EVENT_NOTIFY:
+		SANITIZE_SESSION_PKT(msg_hdr);
 		hfi_process_event_notify(callback, device_id,
 			(struct hfi_msg_event_notify_packet *) msg_hdr,
 			sessions, session_lock);
@@ -1331,10 +1340,10 @@ u32 hfi_process_msg_packet(
 	case HFI_MSG_SYS_PC_PREP_DONE:
 		break;
 	case HFI_MSG_SYS_SESSION_INIT_DONE:
-		if (!validate_session_pkt(sessions, sess, session_lock))
-			hfi_process_session_init_done(callback, device_id,
-				(struct hfi_msg_sys_session_init_done_packet *)
-						msg_hdr);
+		SANITIZE_SESSION_PKT(msg_hdr);
+		hfi_process_session_init_done(callback, device_id,
+			(struct hfi_msg_sys_session_init_done_packet *)
+					msg_hdr);
 		break;
 	case HFI_MSG_SYS_PROPERTY_INFO:
 		hfi_process_sys_property_info(
@@ -1342,55 +1351,54 @@ u32 hfi_process_msg_packet(
 			msg_hdr);
 		break;
 	case HFI_MSG_SYS_SESSION_END_DONE:
-		if (!validate_session_pkt(sessions, sess, session_lock))
-			hfi_process_session_end_done(callback, device_id,
-				(struct hfi_msg_sys_session_end_done_packet *)
-						msg_hdr);
+		SANITIZE_SESSION_PKT(msg_hdr);
+		hfi_process_session_end_done(callback, device_id,
+			(struct hfi_msg_sys_session_end_done_packet *)
+					msg_hdr);
 		break;
 	case HFI_MSG_SESSION_LOAD_RESOURCES_DONE:
-		if (!validate_session_pkt(sessions, sess, session_lock))
-			hfi_process_session_load_res_done(callback, device_id,
+		SANITIZE_SESSION_PKT(msg_hdr);
+		hfi_process_session_load_res_done(callback, device_id,
 			(struct hfi_msg_session_load_resources_done_packet *)
 						msg_hdr);
 		break;
 	case HFI_MSG_SESSION_START_DONE:
-		if (!validate_session_pkt(sessions, sess, session_lock))
-			hfi_process_session_start_done(callback, device_id,
-				(struct hfi_msg_session_start_done_packet *)
-						msg_hdr);
+		SANITIZE_SESSION_PKT(msg_hdr);
+		hfi_process_session_start_done(callback, device_id,
+			(struct hfi_msg_session_start_done_packet *)
+					msg_hdr);
 		break;
 	case HFI_MSG_SESSION_STOP_DONE:
-		if (!validate_session_pkt(sessions, sess, session_lock))
-			hfi_process_session_stop_done(callback, device_id,
-				(struct hfi_msg_session_stop_done_packet *)
-						msg_hdr);
+		SANITIZE_SESSION_PKT(msg_hdr);
+		hfi_process_session_stop_done(callback, device_id,
+			(struct hfi_msg_session_stop_done_packet *)
+					msg_hdr);
 		break;
 	case HFI_MSG_SESSION_EMPTY_BUFFER_DONE:
-		if (!validate_session_pkt(sessions, sess, session_lock))
-			hfi_process_session_etb_done(callback, device_id,
+		SANITIZE_SESSION_PKT(msg_hdr);
+		hfi_process_session_etb_done(callback, device_id,
 			(struct hfi_msg_session_empty_buffer_done_packet *)
 						msg_hdr);
 		break;
 	case HFI_MSG_SESSION_FILL_BUFFER_DONE:
-		if (!validate_session_pkt(sessions, sess, session_lock))
-			hfi_process_session_ftb_done(callback, device_id,
-						msg_hdr);
+		SANITIZE_SESSION_PKT(msg_hdr);
+		hfi_process_session_ftb_done(callback, device_id, msg_hdr);
 		break;
 	case HFI_MSG_SESSION_FLUSH_DONE:
-		if (!validate_session_pkt(sessions, sess, session_lock))
-			hfi_process_session_flush_done(callback, device_id,
-				(struct hfi_msg_session_flush_done_packet *)
-						msg_hdr);
+		SANITIZE_SESSION_PKT(msg_hdr);
+		hfi_process_session_flush_done(callback, device_id,
+			(struct hfi_msg_session_flush_done_packet *)
+					msg_hdr);
 		break;
 	case HFI_MSG_SESSION_PROPERTY_INFO:
-		if (!validate_session_pkt(sessions, sess, session_lock))
-			hfi_process_session_prop_info(callback, device_id,
-				(struct hfi_msg_session_property_info_packet *)
-						msg_hdr);
+		SANITIZE_SESSION_PKT(msg_hdr);
+		hfi_process_session_prop_info(callback, device_id,
+			(struct hfi_msg_session_property_info_packet *)
+					msg_hdr);
 		break;
 	case HFI_MSG_SESSION_RELEASE_RESOURCES_DONE:
-		if (!validate_session_pkt(sessions, sess, session_lock))
-			hfi_process_session_rel_res_done(callback, device_id,
+		SANITIZE_SESSION_PKT(msg_hdr);
+		hfi_process_session_rel_res_done(callback, device_id,
 			(struct hfi_msg_session_release_resources_done_packet *)
 						msg_hdr);
 		break;
@@ -1400,27 +1408,28 @@ u32 hfi_process_msg_packet(
 						msg_hdr);
 		break;
 	case HFI_MSG_SESSION_GET_SEQUENCE_HEADER_DONE:
-		if (!validate_session_pkt(sessions, sess, session_lock))
-			hfi_process_session_get_seq_hdr_done(
+		SANITIZE_SESSION_PKT(msg_hdr);
+		hfi_process_session_get_seq_hdr_done(
 			callback, device_id, (struct
 			hfi_msg_session_get_sequence_header_done_packet*)
 						msg_hdr);
 		break;
 	case HFI_MSG_SESSION_RELEASE_BUFFERS_DONE:
-		if (!validate_session_pkt(sessions, sess, session_lock))
-			hfi_process_session_rel_buf_done(callback, device_id,
-			(struct hfi_msg_session_release_buffers_done_packet *)
-						msg_hdr);
+		SANITIZE_SESSION_PKT(msg_hdr);
+		hfi_process_session_rel_buf_done(
+			callback, device_id, (struct
+			hfi_msg_session_release_buffers_done_packet*)
+			msg_hdr);
 		break;
 	case HFI_MSG_SYS_SESSION_ABORT_DONE:
-		if (!validate_session_pkt(sessions, sess, session_lock))
-			hfi_process_session_abort_done(callback, device_id,
-			(struct hfi_msg_sys_session_abort_done_packet *)
-						msg_hdr);
+		SANITIZE_SESSION_PKT(msg_hdr);
+		hfi_process_session_abort_done(callback, device_id, (struct
+			hfi_msg_sys_session_abort_done_packet*) msg_hdr);
 		break;
 	default:
 		dprintk(VIDC_DBG, "UNKNOWN_MSG_TYPE : %d", msg_hdr->packet);
 		break;
 	}
+#undef SANITIZE_SESSION_PKT
 	return rc;
 }
