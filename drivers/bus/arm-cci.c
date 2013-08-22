@@ -567,9 +567,18 @@ static int cci_pmu_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res) {
+		dev_warn(&pdev->dev, "Failed to get mem resource\n");
+		ret = -EINVAL;
+		goto memalloc_err;
+	};
+
 	pmu->base = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(pmu->base))
-		return -ENOMEM;
+	if (!pmu->base) {
+		dev_warn(&pdev->dev, "Failed to ioremap\n");
+		ret = -ENOMEM;
+		goto memalloc_err;
+	}
 
 	/*
 	 * CCI PMU has 5 overflow signals - one per counter; but some may be tied
@@ -594,18 +603,22 @@ static int cci_pmu_probe(struct platform_device *pdev)
 	if (i < CCI_PMU_MAX_HW_EVENTS) {
 		dev_warn(&pdev->dev, "In-correct number of interrupts: %d, should be %d\n",
 			i, CCI_PMU_MAX_HW_EVENTS);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto memalloc_err;
 	}
 
 	pmu->port_ranges = port_range_by_rev();
 	if (!pmu->port_ranges) {
 		dev_warn(&pdev->dev, "CCI PMU version not supported\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto memalloc_err;
 	}
 
 	pmu->cci_pmu = devm_kzalloc(&pdev->dev, sizeof(*(pmu->cci_pmu)), GFP_KERNEL);
-	if (!pmu->cci_pmu)
-		return -ENOMEM;
+	if (!pmu->cci_pmu) {
+		ret = -ENOMEM;
+		goto memalloc_err;
+	}
 
 	pmu->hw_events.events = pmu->events;
 	pmu->hw_events.used_mask = pmu->used_mask;
@@ -613,9 +626,15 @@ static int cci_pmu_probe(struct platform_device *pdev)
 
 	ret = cci_pmu_init(pmu->cci_pmu, pdev);
 	if (ret)
-		return ret;
+		goto pmuinit_err;
 
 	return 0;
+
+pmuinit_err:
+	kfree(pmu->cci_pmu);
+memalloc_err:
+	kfree(pmu);
+	return ret;
 }
 
 static int cci_platform_probe(struct platform_device *pdev)
