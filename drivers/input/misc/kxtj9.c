@@ -344,8 +344,9 @@ static int kxtj9_device_power_on(struct kxtj9_data *tj9)
 			dev_err(&tj9->client->dev, "power on failed");
 			goto err_exit;
 		}
-		/* Use 80ms as vendor suggested. */
-		msleep(80);
+
+		/* The chip takes more time than expected to boot up */
+		msleep(200);
 	}
 
 err_exit:
@@ -924,8 +925,10 @@ static int kxtj9_suspend(struct device *dev)
 
 	mutex_lock(&input_dev->mutex);
 
-	if (input_dev->users)
+	if (input_dev->users) {
+		disable_irq(client->irq);
 		kxtj9_disable(tj9);
+	}
 
 	mutex_unlock(&input_dev->mutex);
 	return 0;
@@ -940,8 +943,10 @@ static int kxtj9_resume(struct device *dev)
 
 	mutex_lock(&input_dev->mutex);
 
-	if (input_dev->users)
+	if (input_dev->users) {
 		kxtj9_enable(tj9);
+		enable_irq(client->irq);
+	}
 
 	mutex_unlock(&input_dev->mutex);
 	return retval;
