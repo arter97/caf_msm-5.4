@@ -66,6 +66,11 @@ static ssize_t diag_dbgfs_read_status(struct file *file, char __user *ubuf,
 		"Modem CMD in_busy_1: %d\n"
 		"Modem CMD in_busy_2: %d\n"
 		"DCI CMD Modem in_busy_1: %d\n"
+		"supports apps hdlc encoding: %d\n"
+		"Modem hdlc encoding: %d\n"
+		"Lpass hdlc encoding: %d\n"
+		"RIVA hdlc encoding: %d\n"
+		"Modem CMD hdlc encoding: %d\n"
 		"logging_mode: %d\n",
 		(unsigned int)driver->smd_data[MODEM_DATA].ch,
 		(unsigned int)driver->smd_data[LPASS_DATA].ch,
@@ -96,6 +101,11 @@ static ssize_t diag_dbgfs_read_status(struct file *file, char __user *ubuf,
 		driver->smd_cmd[MODEM_DATA].in_busy_1,
 		driver->smd_cmd[MODEM_DATA].in_busy_2,
 		driver->smd_dci_cmd[MODEM_DATA].in_busy_1,
+		driver->supports_apps_hdlc_encoding,
+		driver->smd_data[MODEM_DATA].encode_hdlc,
+		driver->smd_data[LPASS_DATA].encode_hdlc,
+		driver->smd_data[WCNSS_DATA].encode_hdlc,
+		driver->smd_cmd[MODEM_DATA].encode_hdlc,
 		driver->logging_mode);
 
 #ifdef CONFIG_DIAG_OVER_USB

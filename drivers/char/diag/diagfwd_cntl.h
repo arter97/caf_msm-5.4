@@ -46,8 +46,14 @@
  */
 #define F_DIAG_REQ_RSP_CHANNEL		0x10
 
+ /* Perform hdlc encoding of data coming from smd channel */
+#define F_DIAG_HDLC_ENCODE_IN_APPS_MASK	0x40
+
 #define ENABLE_SEPARATE_CMDRSP	1
 #define DISABLE_SEPARATE_CMDRSP	0
+
+#define ENABLE_APPS_HDLC_ENCODING	1
+#define DISABLE_APPS_HDLC_ENCODING	0
 
 struct cmd_code_range {
 	uint16_t cmd_code_lo;
