@@ -13,43 +13,7 @@
 /*
  * As a general rule, only version-specific property overrides should be placed
  * inside this file. However, device definitions should be placed inside the
- * msm8226.dtsi file.
+ * msm8610.dtsi file.
  */
 
-/include/ "msm8226.dtsi"
-/include/ "msm8226-v1-pm.dtsi"
-
-&tsens {
-	qcom,sensors = <4>;
-	qcom,slope = <2901 2846 3038 2955>;
-};
-
-&gdsc_venus {
-	qcom,skip-logic-collapse;
-	qcom,retain-periph;
-	qcom,retain-mem;
-};
-
-&gdsc_mdss {
-	qcom,skip-logic-collapse;
-	qcom,retain-periph;
-	qcom,retain-mem;
-};
-
-&gdsc_jpeg {
-	qcom,skip-logic-collapse;
-	qcom,retain-periph;
-	qcom,retain-mem;
-};
-
-&gdsc_vfe {
-	qcom,skip-logic-collapse;
-	qcom,retain-periph;
-	qcom,retain-mem;
-};
-
-&gdsc_oxili_cx {
-	qcom,skip-logic-collapse;
-	qcom,retain-periph;
-	qcom,retain-mem;
-};
+/include/ "msm8610.dtsi"
