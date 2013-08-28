@@ -24,7 +24,7 @@
 		qcom,saw2-spm-cmd-wfi = [60 03 60 0b 0f];
 		qcom,saw2-spm-cmd-spc = [20 10 80 30 90 5b 60 03 60 3b 76 76
 				0b 94 5b 80 10 26 30 0f];
-		qcom,saw2-spm-cmd-pc = [20 10 80 30 90 5b 60 07 60 3b 76 76
+		qcom,saw2-spm-cmd-pc = [20 10 80 30 90 5b 60 03 60 3b 76 76
 				0b 94 5b 80 10 26 30 0f];
 	};
 
@@ -41,7 +41,7 @@
 		qcom,saw2-spm-cmd-wfi = [60 03 60 0b 0f];
 		qcom,saw2-spm-cmd-spc = [20 10 80 30 90 5b 60 03 60 3b 76 76
 				0b 94 5b 80 10 26 30 0f];
-		qcom,saw2-spm-cmd-pc = [20 10 80 30 90 5b 60 07 60 3b 76 76
+		qcom,saw2-spm-cmd-pc = [20 10 80 30 90 5b 60 03 60 3b 76 76
 				0b 94 5b 80 10 26 30 0f];
 	};
 
@@ -58,7 +58,7 @@
 		qcom,saw2-spm-cmd-wfi = [60 03 60 0b 0f];
 		qcom,saw2-spm-cmd-spc = [20 10 80 30 90 5b 60 03 60 3b 76 76
 				0b 94 5b 80 10 26 30 0f];
-		qcom,saw2-spm-cmd-pc = [20 10 80 30 90 5b 60 07 60 3b 76 76
+		qcom,saw2-spm-cmd-pc = [20 10 80 30 90 5b 60 03 60 3b 76 76
 				0b 94 5b 80 10 26 30 0f];
 	};
 
@@ -75,7 +75,7 @@
 		qcom,saw2-spm-cmd-wfi = [60 03 60 0b 0f];
 		qcom,saw2-spm-cmd-spc = [20 10 80 30 90 5b 60 03 60 3b 76 76
 				0b 94 5b 80 10 26 30 0f];
-		qcom,saw2-spm-cmd-pc = [20 10 80 30 90 5b 60 07 60 3b 76 76
+		qcom,saw2-spm-cmd-pc = [20 10 80 30 90 5b 60 03 60 3b 76 76
 				0b 94 5b 80 10 26 30 0f];
 	};
 
@@ -179,7 +179,7 @@
 			<0xff 176>, /* o_wcss_apss_smsm_irq */
 			<0xff 177>, /* o_wcss_apss_wlan_data_xfer_done */
 			<0xff 178>, /* o_wcss_apss_wlan_rx_data_avail */
-			<0xff 179>, /* o_wcss_apss_asic_intr
+			<0xff 179>, /* o_wcss_apss_asic_intr */
 			<0xff 181>, /* o_wcss_apss_wdog_bite_and_reset_rdy */
 			<0xff 188>, /* lpass_irq_out_apcs(0) */
 			<0xff 189>, /* lpass_irq_out_apcs(1) */
