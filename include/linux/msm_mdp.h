@@ -360,9 +360,9 @@ struct mdp_qseed_cfg_data {
 struct mdp_csc_cfg {
 	/* flags for enable CSC, toggling RGB,YUV input/output */
 	uint32_t flags;
-	uint32_t csc_mv[9];
-	uint32_t csc_pre_bv[3];
-	uint32_t csc_post_bv[3];
+	int csc_mv[9];
+	int csc_pre_bv[3];
+	int csc_post_bv[3];
 	uint32_t csc_pre_lv[6];
 	uint32_t csc_post_lv[6];
 };

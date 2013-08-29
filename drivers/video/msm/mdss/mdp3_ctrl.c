@@ -815,25 +815,33 @@ int mdp3_validate_csc_data(struct mdp_csc_cfg_data *data)
 {
 	int i;
 	for (i = 0; i < 9; i++) {
-		if (data->csc_data.csc_mv[i] >=
-				MDP_HISTOGRAM_CSC_MATRIX_MAX)
+		if ((data->csc_data.csc_mv[i] >= MDP_DMA_CSC_MATRIX_MAX) ||
+				(data->csc_data.csc_mv[i] <
+				-MDP_DMA_CSC_MATRIX_MAX))
 			return -EINVAL;
+		data->csc_data.csc_mv[i] &= MDP_DMA_CSC_MATRIX_MASK;
 	}
 	for (i = 0; i < 3; i++) {
-		if (data->csc_data.csc_pre_bv[i] >=
-				MDP_HISTOGRAM_CSC_VECTOR_MAX)
+		if ((data->csc_data.csc_pre_bv[i] >= MDP_DMA_CSC_BV_MAX) ||
+				(data->csc_data.csc_pre_bv[i] <
+				-MDP_DMA_CSC_BV_MAX))
 			return -EINVAL;
-		if (data->csc_data.csc_post_bv[i] >=
-				MDP_HISTOGRAM_CSC_VECTOR_MAX)
+		if ((data->csc_data.csc_post_bv[i] >= MDP_DMA_CSC_BV_MAX) ||
+				(data->csc_data.csc_post_bv[i] <
+				-MDP_DMA_CSC_BV_MAX))
 			return -EINVAL;
+		/* Mask the reserved bits */
+		data->csc_data.csc_pre_bv[i] &= MDP_DMA_CSC_BV_LV_MASK;
+		data->csc_data.csc_post_bv[i] &= MDP_DMA_CSC_BV_LV_MASK;
 	}
 	for (i = 0; i < 6; i++) {
-		if (data->csc_data.csc_pre_lv[i] >=
-				MDP_HISTOGRAM_CSC_VECTOR_MAX)
+		if (data->csc_data.csc_pre_lv[i] >= MDP_DMA_CSC_LV_MAX)
 			return -EINVAL;
-		if (data->csc_data.csc_post_lv[i] >=
-				MDP_HISTOGRAM_CSC_VECTOR_MAX)
+		if (data->csc_data.csc_post_lv[i] >= MDP_DMA_CSC_LV_MAX)
 			return -EINVAL;
+		/* Mask the reserved bits */
+		data->csc_data.csc_pre_lv[i] &= MDP_DMA_CSC_BV_LV_MASK;
+		data->csc_data.csc_post_lv[i] &= MDP_DMA_CSC_BV_LV_MASK;
 	}
 	return 0;
 }
