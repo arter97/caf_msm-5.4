@@ -90,6 +90,9 @@ struct usb_phy {
 	int	(*init)(struct usb_phy *x);
 	void	(*shutdown)(struct usb_phy *x);
 
+	/* set additional settings parameters post-init */
+	int	(*set_params)(struct usb_phy *x);
+
 	/* effective for B devices, ignored for A-peripheral */
 	int	(*set_power)(struct usb_phy *x,
 				unsigned mA);
@@ -155,6 +158,15 @@ usb_phy_shutdown(struct usb_phy *x)
 {
 	if (x->shutdown)
 		x->shutdown(x);
+}
+
+static inline int
+usb_phy_set_params(struct usb_phy *x)
+{
+	if (x->set_params)
+		return x->set_params(x);
+
+	return 0;
 }
 
 /* for usb host and peripheral controller drivers */
