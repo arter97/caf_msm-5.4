@@ -2963,8 +2963,12 @@ static int __devinit android_probe(struct platform_device *pdev)
 
 	ret = usb_composite_probe(&android_usb_driver, android_bind);
 	if (ret) {
-		pr_err("%s(): Failed to register android "
-				 "composite driver\n", __func__);
+		/* Perhaps UDC hasn't probed yet, try again later */
+		if (ret == -ENODEV)
+			ret = -EPROBE_DEFER;
+		else
+			pr_err("%s(): Failed to register android composite driver\n",
+				__func__);
 		goto err_probe;
 	}
 
