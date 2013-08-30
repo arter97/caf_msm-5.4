@@ -46,6 +46,7 @@ enum {
 	SMD_MODEM = SMEM_MODEM,
 	SMD_Q6 = SMEM_Q6,
 	SMD_DSPS = SMEM_DSPS,
+	SMD_TZ = SMEM_DSPS,
 	SMD_WCNSS = SMEM_WCNSS,
 	SMD_MODEM_Q6_FW = SMEM_MODEM_Q6_FW,
 	SMD_RPM = SMEM_RPM,
@@ -72,6 +73,7 @@ enum {
 	SMD_MODEM_RPM,
 	SMD_QDSP_RPM,
 	SMD_WCNSS_RPM,
+	SMD_TZ_RPM,
 	SMD_NUM_TYPE,
 	SMD_LOOPBACK_TYPE = 100,
 
@@ -314,6 +316,15 @@ int smd_is_pkt_avail(smd_channel_t *ch);
  */
 int __init msm_smd_init(void);
 
+/**
+ * smd_remote_ss_to_edge() - return edge type from remote ss type
+ * @name:	remote subsystem name
+ *
+ * Returns the edge type connected between the local subsystem(APPS)
+ * and remote subsystem @name.
+ */
+int smd_remote_ss_to_edge(const char *name);
+
 #else
 
 static inline int smd_open(const char *name, smd_channel_t **ch, void *priv,
@@ -444,6 +455,11 @@ static inline int smd_is_pkt_avail(smd_channel_t *ch)
 static inline int __init msm_smd_init(void)
 {
 	return 0;
+}
+
+static inline int smd_remote_ss_to_edge(const char *name)
+{
+	return -EINVAL;
 }
 #endif
 

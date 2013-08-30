@@ -52,6 +52,7 @@
 		vdd-supply = <&pma8084_l22>;
 		vddio-supply = <&pma8084_l12>;
 		vdda-supply = <&pma8084_l2>;
+		qcom,platform-reset-gpio = <&pma8084_gpios 20 0>;
 	};
 
 	qcom,mdss_dsi@fd922e00 {
@@ -187,4 +188,20 @@
 
 &tspp {
 	vdd_cx-supply = <&pma8084_s2_corner>;
+};
+
+&krait_regulator_pmic {
+	status = "ok";
+
+	qcom,ctl@2900 {
+		status = "ok";
+	};
+
+	qcom,ps@2a00 {
+		status = "ok";
+	};
+
+	qcom,freq@2b00 {
+		status = "ok";
+	};
 };

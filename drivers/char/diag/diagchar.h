@@ -64,6 +64,8 @@
 #define NUM_MEMORY_POOLS	4
 #endif
 
+#define MAX_SSID_PER_RANGE	200
+
 #define MODEM_DATA		0
 #define LPASS_DATA		1
 #define WCNSS_DATA		2
@@ -73,7 +75,13 @@
 #define HSIC_2_DATA		6
 #define SMUX_DATA		10
 #define APPS_PROC		1
-#define MSG_MASK_SIZE 10000
+/*
+ * Each row contains First (uint32_t), Last (uint32_t), Actual
+ * last (uint32_t) values along with the range of SSIDs
+ * (MAX_SSID_PER_RANGE*uint32_t).
+ * And there are MSG_MASK_TBL_CNT rows.
+ */
+#define MSG_MASK_SIZE		((MAX_SSID_PER_RANGE+3) * 4 * MSG_MASK_TBL_CNT)
 #define LOG_MASK_SIZE 8000
 #define EVENT_MASK_SIZE 1000
 #define USER_SPACE_DATA 8192
@@ -217,6 +225,7 @@ struct diag_smd_info {
 	int peripheral;	/* The peripheral this smd channel communicates with */
 	int type;	/* The type of smd channel (data, control, dci) */
 	uint16_t peripheral_mask;
+	int encode_hdlc; /* Whether data is raw and needs to be hdlc encoded */
 
 	smd_channel_t *ch;
 	smd_channel_t *ch_save;
@@ -229,10 +238,15 @@ struct diag_smd_info {
 	unsigned char *buf_in_1;
 	unsigned char *buf_in_2;
 
+	unsigned char *buf_in_1_raw;
+	unsigned char *buf_in_2_raw;
+
 	struct diag_request *write_ptr_1;
 	struct diag_request *write_ptr_2;
 
 	struct diag_nrt_wake_lock nrt_lock;
+
+	struct workqueue_struct *wq;
 
 	struct work_struct diag_read_smd_work;
 	struct work_struct diag_notify_update_smd_work;
@@ -270,6 +284,7 @@ struct diagchar_dev {
 	unsigned int buf_tbl_size;
 	int use_device_tree;
 	int supports_separate_cmdrsp;
+	int supports_apps_hdlc_encoding;
 	/* The state requested in the STM command */
 	int stm_state_requested[NUM_STM_PROCESSORS];
 	/* The current STM state */
@@ -301,7 +316,7 @@ struct diagchar_dev {
 	mempool_t *diag_hdlc_pool;
 	mempool_t *diag_user_pool;
 	mempool_t *diag_write_struct_pool;
-	struct mutex diagmem_mutex;
+	spinlock_t diag_mem_lock;
 	int count;
 	int count_hdlc_pool;
 	int count_user_pool;
@@ -355,9 +370,12 @@ struct diagchar_dev {
 	struct work_struct diag_drain_work;
 	struct workqueue_struct *diag_cntl_wq;
 	uint8_t *msg_masks;
+	uint8_t msg_status;
 	uint8_t *log_masks;
+	uint8_t log_status;
 	int log_masks_length;
 	uint8_t *event_masks;
+	uint8_t event_status;
 	uint8_t log_on_demand_support;
 	struct diag_master_table *table;
 	uint8_t *pkt_buf;
@@ -384,7 +402,6 @@ struct diagchar_dev {
 	struct diag_request *write_ptr_mdm;
 #endif
 #ifdef CONFIG_DIAGFWD_BRIDGE_CODE
-	spinlock_t hsic_ready_spinlock;
 	/* common for all bridges */
 	struct work_struct diag_connect_work;
 	struct work_struct diag_disconnect_work;
@@ -406,5 +423,6 @@ extern int wrap_enabled;
 extern uint16_t wrap_count;
 
 void diag_get_timestamp(char *time_str);
+int diag_find_polling_reg(int i);
 
 #endif

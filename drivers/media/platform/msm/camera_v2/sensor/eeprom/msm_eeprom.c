@@ -98,6 +98,7 @@ static struct msm_camera_i2c_fn_t msm_eeprom_cci_func_tbl = {
 	.i2c_read = msm_camera_cci_i2c_read,
 	.i2c_read_seq = msm_camera_cci_i2c_read_seq,
 	.i2c_write = msm_camera_cci_i2c_write,
+	.i2c_write_seq = msm_camera_cci_i2c_write_seq,
 	.i2c_write_table = msm_camera_cci_i2c_write_table,
 	.i2c_write_seq_table = msm_camera_cci_i2c_write_seq_table,
 	.i2c_write_table_w_microdelay =
@@ -180,7 +181,17 @@ int32_t read_eeprom_memory(struct msm_eeprom_ctrl_t *e_ctrl)
 				return rc;
 			}
 		}
-
+		if (emap[j].pageen.valid_size) {
+			e_ctrl->i2c_client.addr_type = emap[j].pageen.addr_t;
+			rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write(
+				&(e_ctrl->i2c_client), emap[j].pageen.addr,
+				emap[j].pageen.data, emap[j].pageen.data_t);
+				msleep(emap[j].pageen.delay);
+			if (rc < 0) {
+				pr_err("%s: page enable failed\n", __func__);
+				return rc;
+			}
+		}
 		if (emap[j].poll.valid_size) {
 			e_ctrl->i2c_client.addr_type = emap[j].poll.addr_t;
 			rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_poll(
@@ -204,6 +215,16 @@ int32_t read_eeprom_memory(struct msm_eeprom_ctrl_t *e_ctrl)
 			}
 			memptr += emap[j].mem.valid_size;
 		}
+		if (emap[j].pageen.valid_size) {
+			e_ctrl->i2c_client.addr_type = emap[j].pageen.addr_t;
+			rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write(
+				&(e_ctrl->i2c_client), emap[j].pageen.addr,
+				0, emap[j].pageen.data_t);
+			if (rc < 0) {
+				pr_err("%s: page disable failed\n", __func__);
+				return rc;
+			}
+		}
 	}
 	return rc;
 }
@@ -212,7 +233,7 @@ static int msm_eeprom_alloc_memory_map(struct msm_eeprom_ctrl_t *e_ctrl,
 				       struct device_node *of)
 {
 	int i, rc = 0;
-	char property[12];
+	char property[14];
 	uint32_t count = 6;
 	struct msm_eeprom_board_info *eb = e_ctrl->eboard_info;
 
@@ -239,6 +260,12 @@ static int msm_eeprom_alloc_memory_map(struct msm_eeprom_ctrl_t *e_ctrl,
 			pr_err("%s: failed %d\n", __func__, __LINE__);
 			goto out;
 		}
+
+		snprintf(property, 14, "qcom,pageen%d", i);
+		rc = of_property_read_u32_array(of, property,
+			(uint32_t *) &eb->eeprom_map[i].pageen, count);
+		if (rc < 0)
+			pr_err("%s: pageen not needed\n", __func__);
 
 		snprintf(property, 12, "qcom,poll%d", i);
 		rc = of_property_read_u32_array(of, property,

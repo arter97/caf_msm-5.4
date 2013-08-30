@@ -409,11 +409,9 @@ static int mdss_mdp_video_wait4comp(struct mdss_mdp_ctl *ctl, void *arg)
 	if (ctx->polling_en) {
 		rc = mdss_mdp_video_pollwait(ctl);
 	} else {
-		rc = wait_for_completion_interruptible_timeout(&ctx->vsync_comp,
+		rc = wait_for_completion_timeout(&ctx->vsync_comp,
 				usecs_to_jiffies(VSYNC_TIMEOUT_US));
-		if (rc < 0) {
-			pr_warn("vsync wait interrupted ctl=%d\n", ctl->num);
-		} else if (rc == 0) {
+		if (rc == 0) {
 			pr_warn("vsync wait timeout %d, fallback to poll mode\n",
 					ctl->num);
 			ctx->polling_en++;
@@ -481,9 +479,9 @@ static int mdss_mdp_video_display(struct mdss_mdp_ctl *ctl, void *arg)
 		mdp_video_write(ctx, MDSS_MDP_REG_INTF_TIMING_ENGINE_EN, 1);
 		wmb();
 
-		rc = wait_for_completion_interruptible_timeout(&ctx->vsync_comp,
+		rc = wait_for_completion_timeout(&ctx->vsync_comp,
 				usecs_to_jiffies(VSYNC_TIMEOUT_US));
-		WARN(rc <= 0, "timeout (%d) enabling timegen on ctl=%d\n",
+		WARN(rc == 0, "timeout (%d) enabling timegen on ctl=%d\n",
 				rc, ctl->num);
 
 		ctx->timegen_en = true;

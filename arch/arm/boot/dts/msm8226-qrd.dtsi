@@ -16,7 +16,6 @@
 &soc {
 	serial@f991f000 {
 		status = "ok";
-		qcom,cont-splash-enabled;
 	};
 
 	i2c@f9927000 { /* BLSP1 QUP5 */
@@ -98,7 +97,7 @@
 			compatible = "micrel,ks8851";
 			reg = <3>;
 			interrupt-parent = <&msmgpio>;
-			interrupts = <0 115 0>;
+			interrupts = <115 0x8>;
 			spi-max-frequency = <4800000>;
 			rst-gpio = <&msmgpio 114 0>;
 			vdd-io-supply = <&pm8226_lvs1>;
@@ -116,10 +115,28 @@
 			"MIC BIAS1 External", "Handset Mic",
 			"AMIC2", "MIC BIAS2 External",
 			"MIC BIAS2 External", "Headset Mic",
-			"AMIC3", "MIC BIAS1 External",
-			"MIC BIAS1 External", "ANCRight Headset Mic",
 			"AMIC4", "MIC BIAS2 External",
+			"MIC BIAS2 External", "ANCRight Headset Mic",
+			"AMIC5", "MIC BIAS2 External",
 			"MIC BIAS2 External", "ANCLeft Headset Mic";
+
+		qcom,cdc-mclk-gpios = <&pm8226_gpios 1 0>;
+		qcom,cdc-vdd-spkr-gpios = <&pm8226_gpios 2 0>;
+		qcom,cdc-us-euro-gpios = <&msmgpio 69 0>;
+	};
+
+	sound-9302 {
+		qcom,audio-routing =
+			"RX_BIAS", "MCLK",
+			"LDO_H", "MCLK",
+			"SPK_OUT", "MCLK",
+			"SPK_OUT", "EXT_VDD_SPKR",
+			"AMIC1", "MIC BIAS1 External",
+			"MIC BIAS1 External", "Handset Mic",
+			"AMIC2", "MIC BIAS2 External",
+			"MIC BIAS2 External", "Headset Mic",
+			"AMIC3", "MIC BIAS1 External",
+			"MIC BIAS1 External", "Handset Mic";
 
 		qcom,cdc-mclk-gpios = <&pm8226_gpios 1 0>;
 		qcom,cdc-vdd-spkr-gpios = <&pm8226_gpios 2 0>;
@@ -327,7 +344,7 @@
 				qcom,ctrl-delay-us = <0>;
 				qcom,boost-curr-lim = <3>;
 				qcom,cp-sel = <0>;
-				qcom,switch-freq = <2>;
+				qcom,switch-freq = <11>;
 				qcom,ovp-val = <0>;
 				qcom,num-strings = <1>;
 				qcom,id = <0>;
@@ -440,4 +457,8 @@
 		qcom,hw-settle-time = <2>;
 		qcom,fast-avg-setup = <0>;
 	};
+};
+
+&android_usb {
+	qcom,android-usb-cdrom;
 };

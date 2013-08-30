@@ -39,6 +39,7 @@
 #define MAX_DOWNSCALE_RATIO	4
 #define MAX_UPSCALE_RATIO	20
 #define MAX_DECIMATION		4
+#define MDP_MIN_VBP		4
 
 #define C3_ALPHA	3	/* alpha */
 #define C2_R_Cr		2	/* R/Cr */
@@ -333,6 +334,7 @@ struct mdss_mdp_pipe {
 	u8 mixer_stage;
 	u8 is_fg;
 	u8 alpha;
+	u8 blend_op;
 	u8 overfetch_disable;
 	u32 transp;
 
@@ -361,8 +363,8 @@ struct mdss_mdp_writeback_arg {
 };
 
 struct mdss_overlay_private {
-	int vsync_pending;
 	ktime_t vsync_time;
+	struct sysfs_dirent *vsync_event_sd;
 	int borderfill_enable;
 	int overlay_play_enable;
 	int hw_refresh;
@@ -375,7 +377,6 @@ struct mdss_overlay_private {
 	struct list_head overlay_list;
 	struct list_head pipes_used;
 	struct list_head pipes_cleanup;
-	struct work_struct vsync_work;
 	bool mixer_swap;
 };
 

@@ -134,10 +134,18 @@ static int wfd_vidbuf_queue_setup(struct vb2_queue *q,
 
 static void wfd_vidbuf_wait_prepare(struct vb2_queue *q)
 {
+	struct file *priv_data = (struct file *)(q->drv_priv);
+	struct wfd_inst *inst = file_to_inst(priv_data);
+
+	mutex_unlock(&inst->vb2_lock);
 }
 
 static void wfd_vidbuf_wait_finish(struct vb2_queue *q)
 {
+	struct file *priv_data = (struct file *)(q->drv_priv);
+	struct wfd_inst *inst = file_to_inst(priv_data);
+
+	mutex_lock(&inst->vb2_lock);
 }
 
 static unsigned long wfd_enc_addr_to_mdp_addr(struct wfd_inst *inst,
@@ -1026,10 +1034,9 @@ static int wfdioc_dqbuf(struct file *filp, void *fh,
 
 	WFD_MSG_DBG("Waiting to dequeue buffer\n");
 
-	/* XXX: If we switch to non-blocking mode in the future,
-	 * we'll need to lock this with vb2_lock */
-	rc = vb2_dqbuf(&inst->vid_bufq, b, false /* blocking */);
-
+	mutex_lock(&inst->vb2_lock);
+	rc = vb2_dqbuf(&inst->vid_bufq, b, false);
+	mutex_unlock(&inst->vb2_lock);
 	if (rc)
 		WFD_MSG_ERR("Failed to dequeue buffer\n");
 	else
@@ -1124,7 +1131,9 @@ static int wfdioc_s_parm(struct file *filp, void *fh,
 	struct wfd_device *wfd_dev = video_drvdata(filp);
 	struct wfd_inst *inst = file_to_inst(filp);
 	struct v4l2_qcom_frameskip frameskip;
-	int64_t frame_interval, max_frame_interval;
+	int64_t frame_interval = 0,
+		max_frame_interval = 0,
+		frame_interval_variance = 0;
 	void *extendedmode = NULL;
 	enum vsg_modes vsg_mode = VSG_MODE_VFR;
 	enum venc_framerate_modes venc_mode = VENC_MODE_VFR;
@@ -1177,6 +1186,7 @@ static int wfdioc_s_parm(struct file *filp, void *fh,
 			goto set_parm_fail;
 
 		max_frame_interval = (int64_t)frameskip.maxframeinterval;
+		frame_interval_variance = frameskip.fpsvariance;
 		vsg_mode = VSG_MODE_VFR;
 		venc_mode = VENC_MODE_VFR;
 
@@ -1204,6 +1214,16 @@ static int wfdioc_s_parm(struct file *filp, void *fh,
 	if (rc) {
 		WFD_MSG_ERR("Setting FR mode for VENC failed\n");
 		goto set_parm_fail;
+	}
+
+	if (frame_interval_variance) {
+		rc = v4l2_subdev_call(&wfd_dev->vsg_sdev, core,
+				ioctl, VSG_SET_FRAME_INTERVAL_VARIANCE,
+				&frame_interval_variance);
+		if (rc) {
+			WFD_MSG_ERR("Setting FR variance for VSG failed\n");
+			goto set_parm_fail;
+		}
 	}
 
 set_parm_fail:
