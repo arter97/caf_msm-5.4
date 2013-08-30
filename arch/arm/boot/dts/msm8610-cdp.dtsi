@@ -129,6 +129,8 @@
             "MIC BIAS Internal2", "Headset Mic",
             "AMIC1", "MIC BIAS External",
             "AMIC2", "MIC BIAS Internal2";
+
+		qcom,headset-jack-type-NC;
     };
 
 	qcom,dsi_v2_truly_wvga_video {
