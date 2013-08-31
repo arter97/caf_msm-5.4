@@ -75,7 +75,7 @@
 			compatible = "micrel,ks8851";
 			reg = <3>;
 			interrupt-parent = <&msmgpio>;
-			interrupts = <0 115 0>;
+			interrupts = <115 0x8>;
 			spi-max-frequency = <4800000>;
 			rst-gpio = <&msmgpio 114 0>;
 			vdd-io-supply = <&pm8226_lvs1>;
@@ -105,6 +105,24 @@
 			"MIC BIAS3 External", "Digital Mic3",
 			"DMIC4", "MIC BIAS3 External",
 			"MIC BIAS3 External", "Digital Mic4";
+
+		qcom,cdc-mclk-gpios = <&pm8226_gpios 1 0>;
+		qcom,cdc-vdd-spkr-gpios = <&pm8226_gpios 2 0>;
+		qcom,headset-jack-type-NO;
+	};
+
+	sound-9302 {
+		qcom,audio-routing =
+			"RX_BIAS", "MCLK",
+			"LDO_H", "MCLK",
+			"SPK_OUT", "MCLK",
+			"SPK_OUT", "EXT_VDD_SPKR",
+			"AMIC1", "MIC BIAS1 External",
+			"MIC BIAS1 External", "Handset Mic",
+			"AMIC2", "MIC BIAS2 External",
+			"MIC BIAS2 External", "Headset Mic",
+			"AMIC3", "MIC BIAS1 External",
+			"MIC BIAS1 External", "Handset Mic";
 
 		qcom,cdc-mclk-gpios = <&pm8226_gpios 1 0>;
 		qcom,cdc-vdd-spkr-gpios = <&pm8226_gpios 2 0>;
@@ -318,7 +336,7 @@
 				qcom,ctrl-delay-us = <0>;
 				qcom,boost-curr-lim = <3>;
 				qcom,cp-sel = <0>;
-				qcom,switch-freq = <2>;
+				qcom,switch-freq = <11>;
 				qcom,ovp-val = <0>;
 				qcom,num-strings = <1>;
 				qcom,id = <0>;
@@ -413,10 +431,6 @@
 	qcom,bat-if@1200 {
 		status = "disabled";
 	};
-};
-
-&usb_otg_sw {
-	status = "okay";
 };
 
 &pm8226_vadc {

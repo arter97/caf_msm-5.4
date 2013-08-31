@@ -240,6 +240,7 @@ static void __iomem *virt_bases[N_BASES];
 #define                 GFX3D_CMD_RCGR	    0x4000
 #define               OXILI_GFX3D_CBCR	    0x4028
 #define                OXILI_GFX3D_BCR	    0x4030
+#define                 GMEM_GFX3D_BCR	    0x4040
 #define                  OXILI_AHB_BCR	    0x4044
 #define                 OXILI_AHB_CBCR	    0x403C
 #define                   AHB_CMD_RCGR	    0x5000
@@ -507,6 +508,7 @@ static DEFINE_CLK_VOTER(bimc_msmbus_clk, &bimc_clk.c, LONG_MAX);
 static DEFINE_CLK_VOTER(bimc_msmbus_a_clk, &bimc_a_clk.c, LONG_MAX);
 static DEFINE_CLK_VOTER(bimc_acpu_a_clk, &bimc_a_clk.c, LONG_MAX);
 
+static DEFINE_CLK_VOTER(pnoc_keepalive_a_clk, &pnoc_a_clk.c, LONG_MAX);
 static DEFINE_CLK_VOTER(pnoc_sps_clk, &pnoc_clk.c, LONG_MAX);
 static DEFINE_CLK_VOTER(pnoc_iommu_clk, &pnoc_clk.c, LONG_MAX);
 
@@ -2146,6 +2148,7 @@ static struct branch_clk csi_ahb_clk = {
 
 static struct branch_clk csi_vfe_clk = {
 	.cbcr_reg = CSI_VFE_CBCR,
+	.bcr_reg = CSI_VFE_BCR,
 	.has_sibling = 1,
 	.base = &virt_bases[MMSS_BASE],
 	.c = {
@@ -2216,6 +2219,7 @@ static struct branch_clk dsi_pclk_clk = {
 
 static struct branch_clk gmem_gfx3d_clk = {
 	.cbcr_reg = GMEM_GFX3D_CBCR,
+	.bcr_reg = GMEM_GFX3D_BCR,
 	.has_sibling = 1,
 	.base = &virt_bases[MMSS_BASE],
 	.c = {
@@ -2357,6 +2361,7 @@ static struct branch_clk mmss_mmssnoc_bto_ahb_clk = {
 
 static struct branch_clk oxili_ahb_clk = {
 	.cbcr_reg = OXILI_AHB_CBCR,
+	.bcr_reg = OXILI_AHB_BCR,
 	.has_sibling = 1,
 	.base = &virt_bases[MMSS_BASE],
 	.c = {
@@ -2368,6 +2373,7 @@ static struct branch_clk oxili_ahb_clk = {
 
 static struct branch_clk oxili_gfx3d_clk = {
 	.cbcr_reg = OXILI_GFX3D_CBCR,
+	.bcr_reg = OXILI_GFX3D_BCR,
 	.has_sibling = 0,
 	.base = &virt_bases[MMSS_BASE],
 	.c = {
@@ -2380,6 +2386,7 @@ static struct branch_clk oxili_gfx3d_clk = {
 
 static struct branch_clk vfe_clk = {
 	.cbcr_reg = VFE_CBCR,
+	.bcr_reg = VFE_BCR,
 	.has_sibling = 1,
 	.base = &virt_bases[MMSS_BASE],
 	.c = {
@@ -2392,6 +2399,7 @@ static struct branch_clk vfe_clk = {
 
 static struct branch_clk vfe_ahb_clk = {
 	.cbcr_reg = VFE_AHB_CBCR,
+	.bcr_reg = VFE_AHB_BCR,
 	.has_sibling = 1,
 	.base = &virt_bases[MMSS_BASE],
 	.c = {
@@ -2403,6 +2411,7 @@ static struct branch_clk vfe_ahb_clk = {
 
 static struct branch_clk vfe_axi_clk = {
 	.cbcr_reg = VFE_AXI_CBCR,
+	.bcr_reg = VFE_AXI_BCR,
 	.has_sibling = 1,
 	.base = &virt_bases[MMSS_BASE],
 	 /* FIXME: Remove this once simulation is fixed. */
@@ -2749,7 +2758,7 @@ static struct measure_clk measure_clk = {
 };
 
 static struct clk_lookup msm_clocks_8610[] = {
-	CLK_LOOKUP("xo",	cxo_otg_clk.c, "msm_otg"),
+	CLK_LOOKUP("xo",	cxo_otg_clk.c, "f9a55000.usb"),
 	CLK_LOOKUP("xo",	cxo_lpass_pil_clk.c, "fe200000.qcom,lpass"),
 	CLK_LOOKUP("xo",        cxo_lpm_clk.c, "fc4281d0.qcom,mpm"),
 
@@ -2767,7 +2776,7 @@ static struct clk_lookup msm_clocks_8610[] = {
 	CLK_LOOKUP("core_clk",  gcc_blsp1_uart3_apps_clk.c, "f991f000.serial"),
 	CLK_LOOKUP("iface_clk",  gcc_blsp1_ahb_clk.c, "f991e000.serial"),
 	CLK_LOOKUP("core_clk",  gcc_blsp1_uart2_apps_clk.c, "f991e000.serial"),
-
+	CLK_LOOKUP("bus_clk", pnoc_keepalive_a_clk.c, ""),
 	CLK_LOOKUP("dfab_clk", pnoc_sps_clk.c, "msm_sps"),
 
 	CLK_LOOKUP("bus_clk", snoc_clk.c, ""),
@@ -2924,7 +2933,7 @@ static struct clk_lookup msm_clocks_8610[] = {
 	CLK_LOOKUP("core_clk",           gcc_sdcc1_apps_clk.c, "msm_sdcc.1"),
 	CLK_LOOKUP("iface_clk",            gcc_sdcc2_ahb_clk.c, "msm_sdcc.2"),
 	CLK_LOOKUP("core_clk",           gcc_sdcc2_apps_clk.c, "msm_sdcc.2"),
-	CLK_LOOKUP("core_clk",      gcc_usb2a_phy_sleep_clk.c, ""),
+	CLK_LOOKUP("sleep_clk",      gcc_usb2a_phy_sleep_clk.c, "f9a55000.usb"),
 	CLK_LOOKUP("iface_clk",           gcc_usb_hs_ahb_clk.c, "f9a55000.usb"),
 	CLK_LOOKUP("core_clk",        gcc_usb_hs_system_clk.c, "f9a55000.usb"),
 
@@ -3132,6 +3141,14 @@ static struct clk_lookup msm_clocks_8610[] = {
 	CLK_LOOKUP("iface_clk",    gcc_ce1_ahb_clk.c, "fd404000.qcom,qcrypto"),
 	CLK_LOOKUP("bus_clk",      gcc_ce1_axi_clk.c, "fd404000.qcom,qcrypto"),
 	CLK_LOOKUP("core_clk_src", ce1_clk_src.c,     "fd404000.qcom,qcrypto"),
+
+	/* GDSC clocks */
+	CLK_LOOKUP("core_clk", vfe_clk.c,	"fd8c36a4.qcom,gdsc"),
+	CLK_LOOKUP("iface_clk", vfe_ahb_clk.c,	"fd8c36a4.qcom,gdsc"),
+	CLK_LOOKUP("bus_clk",  vfe_axi_clk.c,	"fd8c36a4.qcom,gdsc"),
+	CLK_LOOKUP("core_clk", oxili_gfx3d_clk.c, "fd8c4034.qcom,gdsc"),
+	CLK_LOOKUP("iface_clk", oxili_ahb_clk.c, "fd8c4034.qcom,gdsc"),
+	CLK_LOOKUP("mem_clk", gmem_gfx3d_clk.c, "fd8c4034.qcom,gdsc"),
 };
 
 static struct clk_lookup msm_clocks_8610_rumi[] = {
@@ -3229,8 +3246,11 @@ static void __init msm8610_clock_post_init(void)
 	 * to remain on whenever CPUs aren't power collapsed.
 	 */
 	clk_prepare_enable(&gcc_xo_a_clk_src.c);
-
-
+	/*
+	 * Hold an active set vote for the PNOC AHB source. Sleep set vote is 0.
+	 */
+	clk_set_rate(&pnoc_keepalive_a_clk.c, 19200000);
+	clk_prepare_enable(&pnoc_keepalive_a_clk.c);
 	/* Set rates for single-rate clocks. */
 	clk_set_rate(&usb_hs_system_clk_src.c,
 			usb_hs_system_clk_src.freq_tbl[0].freq_hz);
