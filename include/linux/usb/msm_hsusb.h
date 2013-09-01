@@ -201,6 +201,9 @@ enum usb_vdd_value {
  * @delay_lpm_on_disconnect: Use a delay before entering LPM
  *              upon USB cable disconnection.
  * @bus_scale_table: parameters for bus bandwidth requirements
+ * @rw_during_lpm_workaround: Determines whether remote-wakeup
+ *		during low-power mode workaround will be
+ *		applied.
  */
 struct msm_otg_platform_data {
 	int *phy_init_seq;
@@ -325,6 +328,7 @@ struct msm_otg {
 	atomic_t pm_suspended;
 	atomic_t in_lpm;
 	atomic_t suspend_work_pending;
+	atomic_t set_fpr_with_lpm_exit;
 	int async_int;
 	unsigned cur_power;
 	struct delayed_work chg_work;
