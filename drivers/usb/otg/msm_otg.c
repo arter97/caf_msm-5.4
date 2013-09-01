@@ -1178,7 +1178,9 @@ static int msm_otg_resume(struct msm_otg *motg)
 
 	is_remote_wakeup = in_device_mode && bus_is_suspended;
 
-	if (is_remote_wakeup && pdata->rw_during_lpm_workaround) {
+	if (is_remote_wakeup &&
+	    (atomic_read(&(motg->set_fpr_with_lpm_exit)) ||
+	     pdata->rw_during_lpm_workaround)) {
 		/* In some targets there is a HW issue with remote wakeup
 		 * during low-power mode. As a workaround, the FPR bit
 		 * is written simultaneously with the clearing of the
@@ -1188,6 +1190,8 @@ static int msm_otg_resume(struct msm_otg *motg)
 			(readl_relaxed(USB_PORTSC) & ~PORTSC_PHCD) |
 			PORTSC_FPR_MASK,
 			USB_PORTSC);
+
+		atomic_set(&(motg->set_fpr_with_lpm_exit), 0);
 	} else {
 		writel_relaxed(readl_relaxed(USB_PORTSC) & ~PORTSC_PHCD,
 			USB_PORTSC);
@@ -3982,6 +3986,12 @@ struct msm_otg_platform_data *msm_otg_dt_to_pdata(struct platform_device *pdev)
 	if (res_gpio < 0)
 		res_gpio = 0;
 	pdata->vddmin_gpio = res_gpio;
+
+	pdata->rw_during_lpm_workaround = of_property_read_bool(node,
+				"qcom,hsusb-otg-rw-during-lpm-workaround");
+
+	pdata->rw_during_lpm_workaround = of_property_read_bool(node,
+				"qcom,hsusb-otg-rw-during-lpm-workaround");
 
 	pdata->rw_during_lpm_workaround = of_property_read_bool(node,
 				"qcom,hsusb-otg-rw-during-lpm-workaround");
