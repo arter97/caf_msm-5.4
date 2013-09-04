@@ -201,6 +201,12 @@
 		};
 	};
 
+	qcom,vidc {
+		compatible = "qcom,msm-vidc";
+		qcom,hfi = "q6";
+		qcom,max-hw-load = <244800>; /* 1080p @ 30 * 1  */
+	};
+
 	qcom,wfd {
 		compatible = "qcom,msm-wfd";
 	};
