@@ -123,6 +123,7 @@
 		qcom,saw2-spm-cmd-gdhs = [00 32 42 07 44 50 02 32 50 0f];
 		qcom,saw2-spm-cmd-pc = [00 10 32 b0 11 42 07 01 b0 12 44
 				50 02 32 50 0f];
+		qcom,L2-spm-is-apcs-master;
 	};
 
 	qcom,lpm-levels {
@@ -344,5 +345,13 @@
 		compatible = "qcom,rpmrbcpr-stats";
 		reg = <0xfc000000 0x1a0000>;
 		qcom,start-offset = <0x190010>;
+	};
+
+	qcom,rpm-master-stats@fc428150 {
+		compatible = "qcom,rpm-master-stats";
+		reg = <0xfc428150 0x3200>;
+		qcom,masters = "APSS", "MPSS", "LPSS", "PRONTO";
+		qcom,master-stats-version = <2>;
+		qcom,master-offset = <2560>;
 	};
 };
