@@ -16,6 +16,7 @@
 #include <mach/qdsp6v2/rtac.h>
 #include <linux/msm_ion.h>
 #include <sound/voice_params.h>
+#include <sound/voip_notify.h>
 
 #define MAX_VOC_PKT_SIZE 642
 #define SESSION_NAME_LEN 20
@@ -543,6 +544,14 @@ struct vss_imemory_cmd_unmap_t {
 
 #define VSS_ISTREAM_CMD_SET_PACKET_EXCHANGE_MODE	0x0001136A
 
+#define VSS_INOTIFY_CMD_LISTEN_FOR_EVENT_CLASS		0x00012E56
+
+#define VSS_INOTIFY_CMD_CANCEL_EVENT_CLASS		0x00012E57
+
+#define VSS_IAVSYNC_EVENT_CLASS_RX			0x00012EE1
+
+#define VSS_IAVSYNC_EVT_RX_PATH_DELAY			0x00012EE2
+
 struct vss_iplayback_cmd_start_t {
 	uint16_t port_id;
 	/*
@@ -899,6 +908,20 @@ struct vss_istream_cmd_set_oob_packet_exchange_config_t {
 struct vss_istream_cmd_set_packet_exchange_mode_t {
 	struct apr_hdr hdr;
 	uint32_t mode;
+} __packed;
+
+struct cvs_register_notify_cmd {
+	struct apr_hdr hdr;
+	uint32_t class_id;
+} __packed;
+
+struct cvs_deregister_notify_cmd {
+	struct apr_hdr hdr;
+	uint32_t class_id;
+} __packed;
+
+struct vss_iavsync_evt_rx_path_delay_t {
+	uint32_t delay_us;
 } __packed;
 
 /* TO CVP commands */
@@ -1313,6 +1336,12 @@ struct voice_data {
 	struct voice_rec_route_state rec_route_state;
 
 	struct voip_driver_info voip_info;
+
+	struct voip_event_info voip_evt_info;
+
+	spinlock_t voip_lock;
+
+	wait_queue_head_t voip_notify_wait;
 };
 
 struct cal_mem {
@@ -1468,5 +1497,8 @@ uint32_t voc_get_session_id(char *name);
 int voc_start_playback(uint32_t set, uint16_t port_id);
 int voc_start_record(uint32_t port_id, uint32_t set, uint32_t session_id);
 int voice_get_idx_for_session(u32 session_id);
+
+int voc_client_reg_evt(struct voip_event_type event, bool state);
+int voc_get_voip_evt(struct voip_event *evt);
 
 #endif

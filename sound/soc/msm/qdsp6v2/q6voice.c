@@ -96,6 +96,7 @@ static int voice_alloc_and_map_cal_mem(struct voice_data *v);
 static int voice_alloc_and_map_oob_mem(struct voice_data *v);
 
 static struct voice_data *voice_get_session_by_idx(int idx);
+static void notify_client(uint32_t evt, uint32_t val, struct voice_data *v);
 
 static void voice_itr_init(struct voice_session_itr *itr,
 			   u32 session_id)
@@ -1979,6 +1980,64 @@ static int voice_send_stop_voice_cmd(struct voice_data *v)
 	return 0;
 fail:
 	return -EINVAL;
+}
+
+static int voice_send_cvs_register_avrx_delay_cmd(struct voice_data *v,
+						  bool reg)
+{
+	struct cvs_register_notify_cmd cvs_reg_notify_cmd;
+	int ret = 0;
+	memset(&cvs_reg_notify_cmd, 0, sizeof(cvs_reg_notify_cmd));
+
+	if (v == NULL) {
+		pr_err("%s: v is NULL\n", __func__);
+
+		ret = -EINVAL;
+		goto done;
+	}
+
+	if (!common.apr_q6_cvs) {
+		pr_err("%s: apr_cvs is NULL\n", __func__);
+
+		ret = -EINVAL;
+		goto done;
+	}
+
+	cvs_reg_notify_cmd.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
+				APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
+	cvs_reg_notify_cmd.hdr.pkt_size = APR_PKT_SIZE(APR_HDR_SIZE,
+				sizeof(cvs_reg_notify_cmd) - APR_HDR_SIZE);
+	cvs_reg_notify_cmd.hdr.src_port =
+				voice_get_idx_for_session(v->session_id);
+	cvs_reg_notify_cmd.hdr.dest_port = voice_get_cvs_handle(v);
+	cvs_reg_notify_cmd.hdr.token = 0;
+	if (reg) {
+		cvs_reg_notify_cmd.hdr.opcode =
+				VSS_INOTIFY_CMD_LISTEN_FOR_EVENT_CLASS;
+	} else {
+		cvs_reg_notify_cmd.hdr.opcode =
+				VSS_INOTIFY_CMD_CANCEL_EVENT_CLASS;
+	}
+
+	cvs_reg_notify_cmd.class_id = VSS_IAVSYNC_EVENT_CLASS_RX;
+
+	v->cvs_state = CMD_STATUS_FAIL;
+	ret = apr_send_pkt(common.apr_q6_cvs,
+			  (uint32_t *) &cvs_reg_notify_cmd);
+	if (ret < 0) {
+		pr_err("%s: Error %d registering(%d) CVS notification\n",
+			__func__, ret, reg);
+
+		goto done;
+	}
+	ret = wait_event_timeout(v->cvs_wait,
+				 (v->cvs_state == CMD_STATUS_SUCCESS),
+				 msecs_to_jiffies(TIMEOUT_MS));
+	if (!ret)
+		pr_err("%s: Command timeout\n", __func__);
+
+done:
+	return ret;
 }
 
 static int voice_send_cvs_register_cal_cmd(struct voice_data *v)
@@ -4770,11 +4829,24 @@ int voc_end_voice_call(uint32_t session_id)
 {
 	struct voice_data *v = voice_get_session(session_id);
 	int ret = 0;
+	struct voip_event_type event;
 
 	if (v == NULL) {
 		pr_err("%s: invalid session_id 0x%x\n", __func__, session_id);
 
 		return -EINVAL;
+	}
+
+	pr_debug("%s: Deregister notification events\n", __func__);
+
+	if (is_voip_session(v->session_id) ||
+	    is_voip2_session(v->session_id)) {
+		event.vsid = v->session_id;
+		event.event = VOIP_EVT_STREAM_ACTIVITY;
+		voc_client_reg_evt(event, 0);
+
+		event.event = VOIP_EVT_RX_DELAY;
+		voc_client_reg_evt(event, 0);
 	}
 
 	mutex_lock(&v->lock);
@@ -5000,6 +5072,9 @@ int voc_start_voice_call(uint32_t session_id)
 			pr_err("start voice failed\n");
 			goto fail;
 		}
+
+		if (v->voip_evt_info.reg_state & VOIP_EVT_RX_DELAY)
+			voice_send_cvs_register_avrx_delay_cmd(v, true);
 
 		v->voc_state = VOC_RUN;
 	} else {
@@ -5297,6 +5372,8 @@ static int32_t qdsp_cvs_callback(struct apr_client_data *data, void *priv)
 			case VSS_ISTREAM_CMD_SET_PACKET_EXCHANGE_MODE:
 			case VSS_ISTREAM_CMD_SET_OOB_PACKET_EXCHANGE_CONFIG:
 			case VSS_ISTREAM_CMD_SET_RX_DTMF_DETECTION:
+			case VSS_INOTIFY_CMD_LISTEN_FOR_EVENT_CLASS:
+			case VSS_INOTIFY_CMD_CANCEL_EVENT_CLASS:
 				pr_debug("%s: cmd = 0x%x\n", __func__, ptr[0]);
 				v->cvs_state = CMD_STATUS_SUCCESS;
 				wake_up(&v->cvs_wait);
@@ -5435,9 +5512,19 @@ static int32_t qdsp_cvs_callback(struct apr_client_data *data, void *priv)
 			pr_debug("%s: APR_RSP_ACCEPTED for 0x%x:\n",
 				 __func__, ptr[0]);
 	} else if (data->opcode == VSS_ISTREAM_EVT_NOT_READY) {
-		pr_debug("Recd VSS_ISTREAM_EVT_NOT_READY\n");
+		pr_debug("%s: Recd VSS_ISTREAM_EVT_NOT_READY\n", __func__);
+
+		if (v->voip_evt_info.reg_state & VOIP_EVT_STREAM_ACTIVITY) {
+			notify_client(VOIP_EVT_STREAM_ACTIVITY,
+				      VOIP_STREAM_INACTIVE, v);
+		}
 	} else if (data->opcode == VSS_ISTREAM_EVT_READY) {
-		pr_debug("Recd VSS_ISTREAM_EVT_READY\n");
+		pr_debug("%s: Recd VSS_ISTREAM_EVT_READY\n", __func__);
+
+		if (v->voip_evt_info.reg_state & VOIP_EVT_STREAM_ACTIVITY) {
+			notify_client(VOIP_EVT_STREAM_ACTIVITY,
+				      VOIP_STREAM_ACTIVE, v);
+		}
 	} else if (data->opcode ==  VOICE_EVT_GET_PARAM_ACK) {
 		pr_debug("%s: VOICE_EVT_GET_PARAM_ACK\n", __func__);
 		ptr = data->payload;
@@ -5467,6 +5554,27 @@ static int32_t qdsp_cvs_callback(struct apr_client_data *data, void *priv)
 					c->dtmf_info.private_data);
 		} else {
 			pr_err("Invalid packet\n");
+		}
+	} else if (data->opcode == VSS_IAVSYNC_EVT_RX_PATH_DELAY) {
+		struct vss_iavsync_evt_rx_path_delay_t *rx_path_delay;
+		uint32_t *voc_pkt = data->payload;
+		uint32_t pkt_len = data->payload_size;
+
+		if ((voc_pkt != NULL) &&
+		    (pkt_len ==
+			sizeof(struct vss_iavsync_evt_rx_path_delay_t))) {
+
+			rx_path_delay =
+			(struct vss_iavsync_evt_rx_path_delay_t *) voc_pkt;
+			pr_debug("%s: RX_PATH_DELAY: %d", __func__,
+				 rx_path_delay->delay_us);
+
+			if (v->voip_evt_info.reg_state & VOIP_EVT_RX_DELAY) {
+				notify_client(VOIP_EVT_RX_DELAY,
+					      rx_path_delay->delay_us, v);
+			}
+		} else {
+			pr_err("%s: Invalid packet\n", __func__);
 		}
 	}  else
 		pr_debug("Unknown opcode 0x%x\n", data->opcode);
@@ -5849,6 +5957,138 @@ int is_voc_initialized(void)
 	return module_initialized;
 }
 
+int voc_client_reg_evt(struct voip_event_type event, bool state)
+{
+	int ret = 0;
+	uint32_t evt = event.event;
+	struct voice_data *v = NULL;
+
+	pr_debug("%s: evt: %u, state %u\n", __func__, evt, state);
+
+	if (is_voip_session(event.vsid) || is_voip2_session(event.vsid))
+		v = voice_get_session(event.vsid);
+
+	if (v == NULL) {
+		pr_err("%s: v = NULL\n", __func__);
+
+		ret = -EINVAL;
+		goto done;
+	}
+
+	mutex_lock(&v->lock);
+
+	if (evt == VOIP_EVT_STREAM_ACTIVITY) {
+		if (state)
+			v->voip_evt_info.reg_state |= VOIP_EVT_STREAM_ACTIVITY;
+		else
+			v->voip_evt_info.reg_state &= ~VOIP_EVT_STREAM_ACTIVITY;
+
+	} else if (evt == VOIP_EVT_RX_DELAY) {
+		if (state) {
+			v->voip_evt_info.reg_state |= VOIP_EVT_RX_DELAY;
+			voice_send_cvs_register_avrx_delay_cmd(v, true);
+		} else {
+			v->voip_evt_info.reg_state &= ~VOIP_EVT_RX_DELAY;
+			voice_send_cvs_register_avrx_delay_cmd(v, false);
+		}
+	} else {
+		pr_err("%s: invalid event\n", __func__);
+
+		ret = -EINVAL;
+	}
+
+	mutex_unlock(&v->lock);
+done:
+	pr_debug("%s: set voip_evt_info.reg_state :%d\n", __func__,
+		 v->voip_evt_info.reg_state);
+
+	return ret;
+}
+
+static void notify_client(uint32_t evt, uint32_t val, struct voice_data *v)
+{
+	unsigned long spin_flags;
+	bool new_event = false;
+
+	pr_debug("%s: notify\n", __func__);
+
+	if (v == NULL) {
+		pr_err("%s: v is NULL\n", __func__);
+		return;
+	}
+	spin_lock_irqsave(&v->voip_lock, spin_flags);
+
+	if (evt == VOIP_EVT_STREAM_ACTIVITY) {
+		v->voip_evt_info.evt_stream_activity = val;
+		v->voip_evt_info.state |= VOIP_EVT_STREAM_ACTIVITY;
+		new_event = true;
+	} else if (evt == VOIP_EVT_RX_DELAY) {
+		v->voip_evt_info.evt_rx_delay = val;
+		v->voip_evt_info.state |= VOIP_EVT_RX_DELAY;
+		new_event = true;
+	}
+	spin_unlock_irqrestore(&v->voip_lock, spin_flags);
+
+	if (new_event)
+		wake_up(&v->voip_notify_wait);
+	else
+		pr_err("%s: Invalid Event: %d\n", __func__, evt);
+
+}
+
+int voc_get_voip_evt(struct voip_event *evt)
+{
+	struct voice_data *v = NULL;
+	unsigned long spin_flags;
+
+	evt->event = 0;
+	evt->value = 0;
+
+	pr_debug("%s: vsid: %x", __func__, evt->vsid);
+
+	if (is_voip_session(evt->vsid) || is_voip2_session(evt->vsid))
+		v = voice_get_session(evt->vsid);
+
+	if (v == NULL) {
+		pr_err("%s: v = NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	/*
+	 * The do...while() loop first checks if there is a pending event
+	 * that we recieved before this function was called. If yes, return
+	 * that event. Otherwise, wait for an event.
+	 *
+	 * The calling thread just requests for an event, and when an event
+	 * is recieved the event type and the value is returned.
+	 * Thus, the same thread requests for all the events.
+	 */
+	do {
+		spin_lock_irqsave(&v->voip_lock, spin_flags);
+
+		if (v->voip_evt_info.state & VOIP_EVT_STREAM_ACTIVITY) {
+			evt->event = VOIP_EVT_STREAM_ACTIVITY;
+			evt->value = v->voip_evt_info.evt_stream_activity;
+			v->voip_evt_info.state &= ~VOIP_EVT_STREAM_ACTIVITY;
+		} else if (v->voip_evt_info.state & VOIP_EVT_RX_DELAY) {
+			evt->event = VOIP_EVT_RX_DELAY;
+			evt->value = v->voip_evt_info.evt_rx_delay;
+			v->voip_evt_info.state &= ~VOIP_EVT_RX_DELAY;
+		}
+
+		spin_unlock_irqrestore(&v->voip_lock, spin_flags);
+
+		if (!evt->event) {
+			pr_debug("%s: wait for notification\n", __func__);
+
+			wait_event_interruptible(v->voip_notify_wait,
+						 v->voip_evt_info.state);
+		}
+	} while (!evt->event);
+
+	return 0;
+}
+
 static int __init voice_init(void)
 {
 	int rc = 0, i = 0;
@@ -5889,12 +6129,20 @@ static int __init voice_init(void)
 		common.voice[i].sidetone_gain = 0x512;
 		common.voice[i].dtmf_rx_detect_en = 0;
 		common.voice[i].lch_mode = 0;
+		common.voice[i].voip_evt_info.state = 0;
+		common.voice[i].voip_evt_info.reg_state = 0;
+		common.voice[i].voip_evt_info.evt_stream_activity = 0;
+		common.voice[i].voip_evt_info.evt_rx_delay = 0;
 
 		common.voice[i].voc_state = VOC_INIT;
+
+		spin_lock_init(&common.voice[i].voip_lock);
 
 		init_waitqueue_head(&common.voice[i].mvm_wait);
 		init_waitqueue_head(&common.voice[i].cvs_wait);
 		init_waitqueue_head(&common.voice[i].cvp_wait);
+
+		init_waitqueue_head(&common.voice[i].voip_notify_wait);
 
 		mutex_init(&common.voice[i].lock);
 	}
