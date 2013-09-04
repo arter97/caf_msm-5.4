@@ -56,6 +56,8 @@
 #include <asm/unwind.h>
 #include <asm/memblock.h>
 
+#include <mach/socinfo.h>
+
 #if defined(CONFIG_DEPRECATED_PARAM_STRUCT)
 #include "compat.h"
 #endif
@@ -931,6 +933,14 @@ static int __init meminfo_cmp(const void *_a, const void *_b)
 	return cmp < 0 ? -1 : cmp > 0 ? 1 : 0;
 }
 
+static const char* get_machine_name(const char* name)
+{
+	if (cpu_is_msm8228())
+		return "Qualcomm MSM 8228 (Flattened Device Tree)";
+	else
+		return name;
+}
+
 void __init setup_arch(char **cmdline_p)
 {
 	struct machine_desc *mdesc;
@@ -940,7 +950,7 @@ void __init setup_arch(char **cmdline_p)
 	if (!mdesc)
 		mdesc = setup_machine_tags(machine_arch_type);
 	machine_desc = mdesc;
-	machine_name = mdesc->name;
+	machine_name = get_machine_name(mdesc->name);
 
 	setup_dma_zone(mdesc);
 
