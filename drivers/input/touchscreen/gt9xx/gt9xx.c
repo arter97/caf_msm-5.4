@@ -43,10 +43,14 @@
  *                  By Meta, 2013/06/08
  */
 
-#include <linux/regulator/consumer.h>
 #include "gt9xx.h"
 
 #include <linux/of_gpio.h>
+#include <linux/input.h>
+#include <linux/irq.h>
+#include <linux/interrupt.h>
+#include <linux/module.h>
+#include <linux/regulator/consumer.h>
 
 #if GTP_ICS_SLOT_REPORT
 #include <linux/input/mt.h>
@@ -57,9 +61,6 @@
 #define GOODIX_COORDS_ARR_SIZE	4
 #define MAX_BUTTONS		4
 
-/* HIGH: 0x28/0x29, LOW: 0xBA/0xBB */
-#define GTP_I2C_ADDRESS_HIGH	0x14
-#define GTP_I2C_ADDRESS_LOW	0x5D
 #define CFG_GROUP_LEN(p_cfg_grp)  (sizeof(p_cfg_grp) / sizeof(p_cfg_grp[0]))
 
 #define GOODIX_VTG_MIN_UV	2600000
@@ -93,7 +94,6 @@ static const char *const key_names[] = {
 #endif
 #endif
 
-static void gtp_reset_guitar(struct goodix_ts_data *ts, int ms);
 static void gtp_int_sync(struct goodix_ts_data *ts, int ms);
 static int gtp_i2c_test(struct i2c_client *client);
 
@@ -110,7 +110,6 @@ static struct delayed_work gtp_esd_check_work;
 static struct workqueue_struct *gtp_esd_check_workqueue;
 static void gtp_esd_check_func(struct work_struct *work);
 static int gtp_init_ext_watchdog(struct i2c_client *client);
-struct i2c_client  *i2c_connect_client;
 #endif
 
 #if GTP_SLIDE_WAKEUP
@@ -125,7 +124,7 @@ static s8 gtp_enter_doze(struct goodix_ts_data *ts);
 bool init_done;
 static u8 chip_gt9xxs;  /* true if ic is gt9xxs, like gt915s */
 u8 grp_cfg_version;
-
+struct i2c_client  *i2c_connect_client;
 /*******************************************************
 Function:
 	Read data from the i2c slave device.
@@ -280,7 +279,7 @@ Output:
 	result of i2c write operation.
 	> 0: succeed, otherwise: failed
 *********************************************************/
-static int gtp_send_cfg(struct goodix_ts_data *ts)
+int gtp_send_cfg(struct goodix_ts_data *ts)
 {
 	int ret;
 #if GTP_DRIVER_SEND_CFG
@@ -751,7 +750,7 @@ Input:
 Output:
 	None.
 *******************************************************/
-static void gtp_reset_guitar(struct goodix_ts_data *ts, int ms)
+void gtp_reset_guitar(struct goodix_ts_data *ts, int ms)
 {
 	GTP_DEBUG_FUNC();
 
@@ -1724,9 +1723,7 @@ static int goodix_ts_probe(struct i2c_client *client,
 		return -EINVAL;
 	}
 
-#if GTP_ESD_PROTECT
 	i2c_connect_client = client;
-#endif
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		dev_err(&client->dev, "GTP I2C not supported\n");
@@ -1775,7 +1772,7 @@ static int goodix_ts_probe(struct i2c_client *client,
 		goto exit_free_io_port;
 	}
 
-#if GTP_AUTO_UPDATE
+#ifdef CONFIG_GT9XX_TOUCHPANEL_UPDATE
 	ret = gup_init_update_proc(ts);
 	if (ret < 0) {
 		dev_err(&client->dev,
@@ -1829,7 +1826,7 @@ static int goodix_ts_probe(struct i2c_client *client,
 	if (ts->use_irq)
 		gtp_irq_enable(ts);
 
-#if GTP_CREATE_WR_NODE
+#ifdef CONFIG_GT9XX_TOUCHPANEL_DEBUG
 	init_wr_node(client);
 #endif
 
@@ -1897,7 +1894,7 @@ static int goodix_ts_remove(struct i2c_client *client)
 	unregister_early_suspend(&ts->early_suspend);
 #endif
 
-#if GTP_CREATE_WR_NODE
+#ifdef CONFIG_GT9XX_TOUCHPANEL_DEBUG
 	uninit_wr_node();
 #endif
 
@@ -2160,6 +2157,11 @@ static void gtp_esd_check_func(struct work_struct *work)
 	u8 test[4] = {0x80, 0x40};
 
 	GTP_DEBUG_FUNC();
+
+	if (!i2c_connect_client) {
+		pr_err("<<-GTP->> No I2C connect client for ESD\n");
+		return -EIO;
+	}
 
 	ts = i2c_get_clientdata(i2c_connect_client);
 

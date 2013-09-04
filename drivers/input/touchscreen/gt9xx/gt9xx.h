@@ -25,17 +25,10 @@
 
 #include <linux/kernel.h>
 #include <linux/i2c.h>
-#include <linux/irq.h>
-#include <linux/input.h>
 #include <linux/slab.h>
-#include <linux/interrupt.h>
 #include <linux/delay.h>
-#include <linux/kernel.h>
-#include <linux/module.h>
 #include <linux/gpio.h>
-#include <linux/regulator/consumer.h>
-#include <linux/firmware.h>
-#include <linux/debugfs.h>
+#include <linux/uaccess.h>
 
 #if defined(CONFIG_FB)
 #include <linux/notifier.h>
@@ -109,13 +102,6 @@ extern u16 total_len;
 #define GTP_POWER_CTRL_SLEEP	0
 #define GTP_ICS_SLOT_REPORT	1
 
-/* auto updated by .bin file as default */
-#define GTP_AUTO_UPDATE			0
-/* auto updated by head_fw_array in gt9xx_firmware.h,
- * function together with GTP_AUTO_UPDATE */
-#define GTP_HEADER_FW_UPDATE	0
-
-#define GTP_CREATE_WR_NODE		0
 #define GTP_ESD_PROTECT			0
 #define GTP_WITH_PEN			0
 
@@ -123,10 +109,27 @@ extern u16 total_len;
 /* double-click wakeup, function together with GTP_SLIDE_WAKEUP */
 #define GTP_DBL_CLK_WAKEUP		0
 
-#define GTP_DEBUG_ON			1
+#define GTP_DEBUG_ON			0
 #define GTP_DEBUG_ARRAY_ON		0
 #define GTP_DEBUG_FUNC_ON		0
 
+/*
+  * #define GTP_CREATE_WR_NODE is deprecated.
+  * define CONFIG_GT9XX_TOUCHPANEL_DEBUG in kernel configure to enable Goodix
+  * touch panel debug interface.
+*/
+
+/*
+  * #define GTP_AUTO_UPDATE is deprecated.
+  * define CONFIG_GT9XX_TOUCHPANEL_UPDATE in kernel configure to enable Goodix
+  * touch panel debug interface.
+  * Enable this feature will automatically search new firmware in .bin file
+  * format and do update if new firmware is found.
+*/
+
+/* auto updated by head_fw_array in gt9xx_firmware.h,
+ * function together with CONFIG_GT9XX_TOUCHPANEL_UPDATE */
+#define GTP_HEADER_FW_UPDATE	0
 /*************************** PART2:TODO define *******************************/
 /* STEP_1(REQUIRED): Define Configuration Information Group(s) */
 /* Sensor_ID Map: */
@@ -222,6 +225,10 @@ extern u16 total_len;
 #define SWITCH_OFF				0
 #define SWITCH_ON				1
 
+/* HIGH: 0x28/0x29, LOW: 0xBA/0xBB */
+#define GTP_I2C_ADDRESS_HIGH	0x14
+#define GTP_I2C_ADDRESS_LOW		0x5D
+
 /* Registers define */
 #define GTP_READ_COOR_ADDR		0x814E
 #define GTP_REG_SLEEP			0x8040
@@ -267,15 +274,26 @@ extern u16 total_len;
 					y = z;\
 				} while (0)
 /*****************************End of Part III********************************/
-
+#if GTP_ESD_PROTECT
 void gtp_esd_switch(struct i2c_client *client, int on);
+#endif
+int gtp_i2c_read_dbl_check(struct i2c_client *client,
+			u16 addr, u8 *rxbuf, int len);
+int gtp_send_cfg(struct goodix_ts_data *ts);
+void gtp_reset_guitar(struct goodix_ts_data *ts, int ms);
+void gtp_irq_disable(struct goodix_ts_data *ts);
+void gtp_irq_enable(struct goodix_ts_data *ts);
 
-#if GTP_CREATE_WR_NODE
-extern s32 init_wr_node(struct i2c_client *client);
-extern void uninit_wr_node(void);
+#ifdef CONFIG_GT9XX_TOUCHPANEL_DEBUG
+s32 init_wr_node(struct i2c_client *client);
+void uninit_wr_node(void);
 #endif
 
-#if GTP_AUTO_UPDATE
-extern u8 gup_init_update_proc(struct goodix_ts_data *ts);
+#ifdef CONFIG_GT9XX_TOUCHPANEL_UPDATE
+u8 gup_init_update_proc(struct goodix_ts_data *ts);
+s32 gup_enter_update_mode(struct i2c_client *client);
+void gup_leave_update_mode(struct i2c_client *client);
+s32 gup_update_proc(void *dir);
+extern struct i2c_client  *i2c_connect_client;
 #endif
 #endif /* _GOODIX_GT9XX_H_ */
