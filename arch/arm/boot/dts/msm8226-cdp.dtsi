@@ -274,7 +274,7 @@
 			qcom,led_mpp_4 {
 				label = "mpp";
 				linux,name = "green";
-				linux,default-trigger = "none";
+				linux,default-trigger = "battery-full";
 				qcom,default-state = "off";
 				qcom,max-current = <40>;
 				qcom,current-setting = <5>;
@@ -300,7 +300,7 @@
 			qcom,led_mpp_6 {
 				label = "mpp";
 				linux,name = "red";
-				linux,default-trigger = "none";
+				linux,default-trigger = "battery-charging";
 				qcom,default-state = "off";
 				qcom,max-current = <40>;
 				qcom,current-setting = <5>;
@@ -341,6 +341,12 @@
 				qcom,num-strings = <1>;
 				qcom,id = <0>;
 			};
+		};
+
+		qcom,vibrator@c000 {
+			status = "okay";
+			qcom,vib-timeout-ms = <15000>;
+			qcom,vib-vtg-level-mV = <3100>;
 		};
 	};
 };
