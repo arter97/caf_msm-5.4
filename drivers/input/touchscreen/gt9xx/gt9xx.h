@@ -88,6 +88,7 @@ struct goodix_ts_data {
 	u8  fixed_cfg;
 	u8  esd_running;
 	u8  fw_error;
+	bool	power_on;
 	struct regulator *avdd;
 	struct regulator *vdd;
 	struct regulator *vcc_i2c;
@@ -106,7 +107,7 @@ extern u16 total_len;
 #define GTP_CHANGE_X2Y			0
 #define GTP_DRIVER_SEND_CFG		1
 #define GTP_HAVE_TOUCH_KEY		1
-#define GTP_POWER_CTRL_SLEEP	0
+#define GTP_POWER_CTRL_SLEEP	1
 #define GTP_ICS_SLOT_REPORT	1
 
 /* auto updated by .bin file as default */
@@ -119,6 +120,7 @@ extern u16 total_len;
 #define GTP_ESD_PROTECT			0
 #define GTP_WITH_PEN			0
 
+/* This cannot work when GTP_POWER_CTRL_SLEEP is on */
 #define GTP_SLIDE_WAKEUP		0
 /* double-click wakeup, function together with GTP_SLIDE_WAKEUP */
 #define GTP_DBL_CLK_WAKEUP		0
