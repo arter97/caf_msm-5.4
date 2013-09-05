@@ -824,10 +824,18 @@ static void handle_fbd(enum command_response cmd, void *data)
 		(u32)fill_buf_done->packet_buffer1);
 	if (vb) {
 		vb->v4l2_planes[0].bytesused = fill_buf_done->filled_len1;
+		vb->v4l2_planes[0].data_offset = fill_buf_done->offset1;
 		vb->v4l2_planes[0].reserved[2] = fill_buf_done->start_x_coord;
 		vb->v4l2_planes[0].reserved[3] = fill_buf_done->start_y_coord;
 		vb->v4l2_planes[0].reserved[4] = fill_buf_done->frame_width;
 		vb->v4l2_planes[0].reserved[5] = fill_buf_done->frame_height;
+		if (vb->v4l2_planes[0].data_offset > vb->v4l2_planes[0].length)
+			dprintk(VIDC_INFO, "fbd:data_offset overflow length\n");
+		if (vb->v4l2_planes[0].bytesused > vb->v4l2_planes[0].length)
+			dprintk(VIDC_INFO, "fbd:bytesused overflow length\n");
+		if ((u8 *)vb->v4l2_planes[0].m.userptr !=
+			response->input_done.packet_buffer)
+			dprintk(VIDC_INFO, "fbd:Unexpected buffer address\n");
 		if (!(fill_buf_done->flags1 &
 			HAL_BUFFERFLAG_TIMESTAMPINVALID) &&
 			fill_buf_done->filled_len1) {
@@ -880,8 +888,9 @@ static void handle_fbd(enum command_response cmd, void *data)
 			msm_vidc_debugfs_update(inst,
 				MSM_VIDC_DEBUGFS_EVENT_FBD);
 
-		dprintk(VIDC_DBG, "Filled length = %d; flags %x\n",
+		dprintk(VIDC_DBG, "Filled length = %d; offset = %d; flags %x\n",
 				vb->v4l2_planes[0].bytesused,
+				vb->v4l2_planes[0].data_offset,
 				vb->v4l2_buf.flags);
 		mutex_lock(&inst->bufq[CAPTURE_PORT].lock);
 		vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
@@ -908,6 +917,7 @@ static void handle_fbd(enum command_response cmd, void *data)
 				vb = list_first_entry(&q->vb2_bufq.queued_list,
 					struct vb2_buffer, queued_entry);
 				vb->v4l2_planes[0].bytesused = 0;
+				vb->v4l2_planes[0].data_offset = 0;
 				vb->v4l2_buf.flags |= V4L2_BUF_FLAG_EOS;
 				mutex_lock(&q->lock);
 				vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
@@ -939,12 +949,14 @@ static void  handle_seq_hdr_done(enum command_response cmd, void *data)
 	}
 
 	vb->v4l2_planes[0].bytesused = fill_buf_done->filled_len1;
+	vb->v4l2_planes[0].data_offset = fill_buf_done->offset1;
 
 	vb->v4l2_buf.flags = V4L2_QCOM_BUF_FLAG_CODECCONFIG;
 	vb->v4l2_buf.timestamp = ns_to_timeval(0);
 
-	dprintk(VIDC_DBG, "Filled length = %d; flags %x\n",
+	dprintk(VIDC_DBG, "Filled length = %d; offset = %d; flags %x\n",
 				vb->v4l2_planes[0].bytesused,
+				vb->v4l2_planes[0].data_offset,
 				vb->v4l2_buf.flags);
 	mutex_lock(&inst->bufq[CAPTURE_PORT].lock);
 	vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
@@ -2348,6 +2360,7 @@ static void msm_comm_flush_in_invalid_state(struct msm_vidc_inst *inst)
 					queued_entry);
 			if (vb) {
 				vb->v4l2_planes[0].bytesused = 0;
+				vb->v4l2_planes[0].data_offset = 0;
 				mutex_lock(&inst->bufq[CAPTURE_PORT].lock);
 				vb2_buffer_done(vb,
 						VB2_BUF_STATE_DONE);
@@ -2365,6 +2378,7 @@ static void msm_comm_flush_in_invalid_state(struct msm_vidc_inst *inst)
 					queued_entry);
 			if (vb) {
 				vb->v4l2_planes[0].bytesused = 0;
+				vb->v4l2_planes[0].data_offset = 0;
 				mutex_lock(&inst->bufq[OUTPUT_PORT].lock);
 				vb2_buffer_done(vb,
 						VB2_BUF_STATE_DONE);
