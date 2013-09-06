@@ -74,6 +74,7 @@
 #define RESET_DELAY_T4		20	/* T4: > 5ms */
 
 #define	PHY_BUF_SIZE		32
+#define PROP_NAME_SIZE		24
 
 #define GTP_MAX_TOUCH		5
 #define GTP_ESD_CHECK_CIRCLE_MS	2000
@@ -934,26 +935,10 @@ static int gtp_init_panel(struct goodix_ts_data *ts)
 	u8 opr_buf[16];
 	u8 sensor_id = 0;
 
-	u8 cfg_info_group1[] = CTP_CFG_GROUP1;
-	u8 cfg_info_group2[] = CTP_CFG_GROUP2;
-	u8 cfg_info_group3[] = CTP_CFG_GROUP3;
-	u8 cfg_info_group4[] = CTP_CFG_GROUP4;
-	u8 cfg_info_group5[] = CTP_CFG_GROUP5;
-	u8 cfg_info_group6[] = CTP_CFG_GROUP6;
-	u8 *send_cfg_buf[] = {cfg_info_group1, cfg_info_group2,
-		cfg_info_group3, cfg_info_group4,
-		cfg_info_group5, cfg_info_group6};
-
-	u8 cfg_info_len[] = {CFG_GROUP_LEN(cfg_info_group1),
-		CFG_GROUP_LEN(cfg_info_group2),
-		CFG_GROUP_LEN(cfg_info_group3),
-		CFG_GROUP_LEN(cfg_info_group4),
-		CFG_GROUP_LEN(cfg_info_group5),
-		CFG_GROUP_LEN(cfg_info_group6)};
-
 	GTP_DEBUG("Config Groups\' Lengths: %d, %d, %d, %d, %d, %d",
-			cfg_info_len[0], cfg_info_len[1], cfg_info_len[2],
-			cfg_info_len[3], cfg_info_len[4], cfg_info_len[5]);
+			ts->pdata->gtp_cfg_len[0], ts->pdata->gtp_cfg_len[1],
+			ts->pdata->gtp_cfg_len[2], ts->pdata->gtp_cfg_len[3],
+			ts->pdata->gtp_cfg_len[4], ts->pdata->gtp_cfg_len[5]);
 
 	ret = gtp_i2c_read_dbl_check(ts->client, 0x41E4, opr_buf, 1);
 	if (SUCCESS == ret) {
@@ -964,14 +949,16 @@ static int gtp_init_panel(struct goodix_ts_data *ts)
 			return -EINVAL;
 		}
 	}
-	if ((!cfg_info_len[1]) && (!cfg_info_len[2]) && (!cfg_info_len[3])
-		&& (!cfg_info_len[4]) && (!cfg_info_len[5])) {
+
+	if ((!ts->pdata->gtp_cfg_len[1]) && (!ts->pdata->gtp_cfg_len[2])
+		&& (!ts->pdata->gtp_cfg_len[3]) && (!ts->pdata->gtp_cfg_len[4])
+		&& (!ts->pdata->gtp_cfg_len[5])) {
 		sensor_id = 0;
 	} else {
 		ret = gtp_i2c_read_dbl_check(ts->client, GTP_REG_SENSOR_ID,
 			&sensor_id, 1);
 		if (SUCCESS == ret) {
-			if (sensor_id >= 0x06) {
+			if (sensor_id >= GOODIX_CFG_GROUP) {
 				dev_err(&client->dev,
 					"Invalid sensor_id(0x%02X), No Config Sent!",
 					sensor_id);
@@ -983,24 +970,23 @@ static int gtp_init_panel(struct goodix_ts_data *ts)
 			return -EINVAL;
 		}
 	}
-	GTP_DEBUG("Sensor_ID: %d", sensor_id);
+	GTP_DEBUG("Sensor ID selected: %d", sensor_id);
 
-	ts->gtp_cfg_len = cfg_info_len[sensor_id];
-
-	if (ts->gtp_cfg_len < GTP_CONFIG_MIN_LENGTH) {
+	if (ts->pdata->gtp_cfg_len[sensor_id] < GTP_CONFIG_MIN_LENGTH ||
+		!ts->pdata->config_data[sensor_id]) {
 		dev_err(&client->dev,
-				"Sensor_ID(%d) matches with NULL or INVALID CONFIG GROUP! NO Config Sent! You need to check you header file CFG_GROUP section!\n",
+				"Sensor_ID(%d) matches with NULL or INVALID CONFIG GROUP!\n",
 				sensor_id);
 		return -EINVAL;
 	}
+
 	ret = gtp_i2c_read_dbl_check(ts->client, GTP_REG_CONFIG_DATA,
 		&opr_buf[0], 1);
-
 	if (ret == SUCCESS) {
 		if (opr_buf[0] < 90) {
 			/* backup group config version */
-			grp_cfg_version = send_cfg_buf[sensor_id][0];
-			send_cfg_buf[sensor_id][0] = 0x00;
+			grp_cfg_version = ts->pdata->config_data[sensor_id][0];
+			ts->pdata->config_data[sensor_id][0] = 0x00;
 			ts->fixed_cfg = 0;
 		} else {
 			/* treated as fixed config, not send config */
@@ -1015,27 +1001,9 @@ static int gtp_init_panel(struct goodix_ts_data *ts)
 		return -EINVAL;
 	}
 
-	if (ts->pdata->gtp_cfg_len) {
-		config_data = ts->pdata->config_data;
-		ts->config_data = ts->pdata->config_data;
-		ts->gtp_cfg_len = ts->pdata->gtp_cfg_len;
-	} else {
-		config_data = devm_kzalloc(&client->dev,
-			GTP_CONFIG_MAX_LENGTH + GTP_ADDR_LENGTH,
-				GFP_KERNEL);
-		if (!config_data) {
-			dev_err(&client->dev,
-					"Not enough memory for panel config data\n");
-			return -ENOMEM;
-		}
-
-		ts->config_data = config_data;
-		config_data[0] = GTP_REG_CONFIG_DATA >> 8;
-		config_data[1] = GTP_REG_CONFIG_DATA & 0xff;
-		memset(&config_data[GTP_ADDR_LENGTH], 0, GTP_CONFIG_MAX_LENGTH);
-		memcpy(&config_data[GTP_ADDR_LENGTH], send_cfg_buf[sensor_id],
-				ts->gtp_cfg_len);
-	}
+	config_data = ts->pdata->config_data[sensor_id];
+	ts->config_data = ts->pdata->config_data[sensor_id];
+	ts->gtp_cfg_len = ts->pdata->gtp_cfg_len[sensor_id];
 
 #if GTP_CUSTOM_CFG
 	config_data[RESOLUTION_LOC] =
@@ -1604,6 +1572,8 @@ static int goodix_parse_dt(struct device *dev,
 	struct property *prop;
 	u32 temp_val, num_buttons;
 	u32 button_map[MAX_BUTTONS];
+	char prop_name[PROP_NAME_SIZE];
+	int i, read_cfg_num;
 
 	rc = goodix_ts_get_dt_coords(dev, "goodix,panel-coords", pdata);
 	if (rc && (rc != -EINVAL))
@@ -1650,26 +1620,33 @@ static int goodix_parse_dt(struct device *dev,
 		}
 	}
 
-	prop = of_find_property(np, "goodix,cfg-data", &pdata->gtp_cfg_len);
-	if (prop && prop->value) {
-		pdata->config_data = devm_kzalloc(dev,
-			GTP_CONFIG_MAX_LENGTH + GTP_ADDR_LENGTH, GFP_KERNEL);
-		if (!pdata->config_data) {
-			dev_err(dev, "Not enough memory for panel config data\n");
-			return -ENOMEM;
-		}
+	read_cfg_num = 0;
+	for (i = 0; i < GOODIX_CFG_GROUP; i++) {
+		snprintf(prop_name, PROP_NAME_SIZE, "goodix,cfg-data%d", i);
+		prop = of_find_property(np, prop_name, &pdata->gtp_cfg_len[i]);
+		if (prop && prop->value) {
+			pdata->config_data[i] = devm_kzalloc(dev,
+				GTP_CONFIG_MAX_LENGTH + GTP_ADDR_LENGTH,
+				GFP_KERNEL);
+			if (!pdata->config_data[i]) {
+				dev_err(dev,
+					"Not enough memory for panel config data %d\n",
+					i);
+				return -ENOMEM;
+			}
 
-		pdata->config_data[0] = GTP_REG_CONFIG_DATA >> 8;
-		pdata->config_data[1] = GTP_REG_CONFIG_DATA & 0xff;
-		memset(&pdata->config_data[GTP_ADDR_LENGTH], 0,
-					GTP_CONFIG_MAX_LENGTH);
-		memcpy(&pdata->config_data[GTP_ADDR_LENGTH],
-				prop->value, pdata->gtp_cfg_len);
-	} else {
-		dev_err(dev,
-			"Unable to get configure data, default will be used.\n");
-		pdata->gtp_cfg_len = 0;
+			pdata->config_data[i][0] = GTP_REG_CONFIG_DATA >> 8;
+			pdata->config_data[i][1] = GTP_REG_CONFIG_DATA & 0xff;
+			memset(&pdata->config_data[i][GTP_ADDR_LENGTH], 0,
+						GTP_CONFIG_MAX_LENGTH);
+			memcpy(&pdata->config_data[i][GTP_ADDR_LENGTH],
+					prop->value, pdata->gtp_cfg_len[i]);
+			read_cfg_num++;
+		} else {
+			pdata->gtp_cfg_len[i] = 0;
+		}
 	}
+	dev_dbg(dev, "%d config data read from device tree.\n", read_cfg_num);
 
 	return 0;
 }
