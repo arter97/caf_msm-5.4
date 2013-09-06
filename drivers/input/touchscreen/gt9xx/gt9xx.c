@@ -1261,7 +1261,9 @@ static int gtp_request_io_port(struct goodix_ts_data *ts)
 		ret = -EINVAL;
 		goto free_reset_gpio;
 	}
-	gpio_direction_input(pdata->reset_gpio);
+	/* Must keep reset and INT pin low before IC power ON */
+	gpio_direction_output(pdata->irq_gpio, 0);
+	gpio_direction_output(pdata->reset_gpio, 0);
 
 	return ret;
 
@@ -1794,10 +1796,16 @@ static int goodix_ts_probe(struct i2c_client *client,
 	ts->gtp_rawdiff_mode = 0;
 	ts->power_on = false;
 
+	ret = gtp_request_io_port(ts);
+	if (ret) {
+		dev_err(&client->dev, "GTP request IO port failed.\n");
+		goto exit_free_client_data;
+	}
+
 	ret = goodix_power_init(ts);
 	if (ret) {
 		dev_err(&client->dev, "GTP power init failed\n");
-		goto exit_free_client_data;
+		goto exit_free_io_port;
 	}
 
 	ret = goodix_power_on(ts);
@@ -1806,18 +1814,12 @@ static int goodix_ts_probe(struct i2c_client *client,
 		goto exit_deinit_power;
 	}
 
-	ret = gtp_request_io_port(ts);
-	if (ret) {
-		dev_err(&client->dev, "GTP request IO port failed.\n");
-		goto exit_power_off;
-	}
-
 	gtp_reset_guitar(ts, 20);
 
 	ret = gtp_i2c_test(client);
 	if (ret != 2) {
 		dev_err(&client->dev, "I2C communication ERROR!\n");
-		goto exit_free_io_port;
+		goto exit_power_off;
 	}
 
 #ifdef CONFIG_GT9XX_TOUCHPANEL_UPDATE
@@ -1906,15 +1908,15 @@ exit_free_irq:
 	}
 exit_free_inputdev:
 	kfree(ts->config_data);
+exit_power_off:
+	goodix_power_off(ts);
+exit_deinit_power:
+	goodix_power_deinit(ts);
 exit_free_io_port:
 	if (gpio_is_valid(pdata->reset_gpio))
 		gpio_free(pdata->reset_gpio);
 	if (gpio_is_valid(pdata->irq_gpio))
 		gpio_free(pdata->irq_gpio);
-exit_power_off:
-	goodix_power_off(ts);
-exit_deinit_power:
-	goodix_power_deinit(ts);
 exit_free_client_data:
 	i2c_set_clientdata(client, NULL);
 	kfree(ts);
