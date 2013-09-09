@@ -180,6 +180,14 @@
 
 };
 
+&pm8226_chg {
+	qcom,tchg-mins = <300>;
+	qcom,vinmin-mv = <4450>;
+	qcom,ibatmax-ma = <1000>;
+	qcom,ibatsafe-ma = <1000>;
+	qcom,thermal-mitigation = <1000 700 600 325>;
+};
+
 &pm8226_vadc {
 	chan@13 {
 		label = "camera2_id";
