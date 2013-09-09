@@ -1,6 +1,6 @@
 /* Copyright (C) 2008 Google, Inc.
  * Copyright (C) 2008 HTC Corporation
- * Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -1075,6 +1075,7 @@ int audio_aio_open(struct q6audio_aio *audio, struct file *file)
 	int rc = 0;
 	int i;
 	struct audio_aio_event *e_node = NULL;
+	struct list_head *ptr, *next;
 
 	/* Settings will be re-config at AUDIO_SET_CONFIG,
 	 * but at least we need to have initial config
@@ -1127,14 +1128,19 @@ int audio_aio_open(struct q6audio_aio *audio, struct file *file)
 		else {
 			pr_err("%s[%p]:event pkt alloc failed\n",
 				__func__, audio);
-			break;
+			rc = -ENOMEM;
+			goto cleanup;
 		}
 	}
 	return 0;
+cleanup:
+	list_for_each_safe(ptr, next, &audio->free_event_queue) {
+		e_node = list_first_entry(&audio->free_event_queue,
+				   struct audio_aio_event, list);
+		list_del(&e_node->list);
+		kfree(e_node);
+	}
 fail:
-	q6asm_audio_client_free(audio->ac);
-	kfree(audio->codec_cfg);
-	kfree(audio);
 	return rc;
 }
 
