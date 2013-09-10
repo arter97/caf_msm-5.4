@@ -151,6 +151,7 @@ struct mdss_mdp_ctl {
 	u32 bus_ib_quota;
 	u32 clk_rate;
 	u32 perf_changed;
+	int force_screen_state;
 
 	struct mdss_data_type *mdata;
 	struct msm_fb_data_type *mfd;
@@ -172,7 +173,7 @@ struct mdss_mdp_ctl {
 					struct mdss_mdp_vsync_handler *);
 	int (*remove_vsync_handler) (struct mdss_mdp_ctl *,
 					struct mdss_mdp_vsync_handler *);
-
+	int (*config_fps_fnc) (struct mdss_mdp_ctl *ctl, int new_fps);
 	void *priv_data;
 };
 
@@ -380,6 +381,17 @@ struct mdss_mdp_perf_params {
 	u32 mdp_clk_rate;
 };
 
+/**
+ * enum mdss_screen_state - Screen states that MDP can be forced into
+ *
+ * @MDSS_SCREEN_DEFAULT:	Do not force MDP into any screen state.
+ * @MDSS_SCREEN_FORCE_BLANK:	Force MDP to generate blank color fill screen.
+ */
+enum mdss_screen_state {
+	MDSS_SCREEN_DEFAULT,
+	MDSS_SCREEN_FORCE_BLANK,
+};
+
 #define is_vig_pipe(_pipe_id_) ((_pipe_id_) <= MDSS_MDP_SSPP_VIG2)
 static inline void mdss_mdp_ctl_write(struct mdss_mdp_ctl *ctl,
 				      u32 reg, u32 val)
@@ -568,7 +580,7 @@ u32 mdss_mdp_fb_stride(u32 fb_index, u32 xres, int bpp);
 int mdss_panel_register_done(struct mdss_panel_data *pdata);
 int mdss_mdp_limited_lut_igc_config(struct mdss_mdp_ctl *ctl);
 int mdss_mdp_calib_config(struct mdp_calib_config_data *cfg, u32 *copyback);
-
+int mdss_mdp_ctl_update_fps(struct mdss_mdp_ctl *ctl, int fps);
 int mdss_mdp_pipe_is_staged(struct mdss_mdp_pipe *pipe);
 
 #define mfd_to_mdp5_data(mfd) (mfd->mdp.private1)

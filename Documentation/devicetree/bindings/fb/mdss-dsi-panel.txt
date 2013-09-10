@@ -88,6 +88,12 @@ Optional properties:
 - qcom,mdss-pan-porch-values:		An array of size 6 that specifies the panel blanking values.
 - qcom,mdss-pan-underflow-clr:		Specifies the controller settings for the panel underflow clear
 					settings. Default value is 0xff.
+- qcom,mdss-dsi-pan-enable-dynamic-fps:	Boolean used to enable change in frame rate dynamically.
+- qcom,mdss-dsi-pan-fps-update:		A string that specifies when to change the frame rate.
+					"dfps_suspend_resume_mode"= FPS change request is
+						implemented during suspend/resume.
+					"dfps_immediate_clk_mode" = FPS change request is
+						implemented immediately using DSI clocks.
 - qcom,mdss-pan-bl-ctrl:		A string that specifies the implementation of backlight
 					control for this panel.
 					"bl_ctrl_pwm" = Backlight controlled by PWM gpio.
@@ -217,6 +223,8 @@ Example:
 		qcom,mdss-pan-dsi-mdp-tr = <0x04>;
 		qcom,mdss-pan-dsi-dma-tr = <0x04>;
 		qcom,mdss-pan-frame-rate = <60>;
+		qcom,mdss-dsi-pan-enable-dynamic-fps;
+		qcom,mdss-dsi-pan-fps-update = "dfps_suspend_resume_mode";
 		qcom,panel-on-cmds = [32 01 00 00 00 00 02 00 00];
 		qcom,on-cmds-dsi-state = "DSI_LP_MODE";
 		qcom,panel-off-cmds = [22 01 00 00 00 00 00];
