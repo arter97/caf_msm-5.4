@@ -188,7 +188,7 @@ static void bam2bam_data_disconnect_work(struct work_struct *w)
 		if (ret)
 			pr_err("usb_bam_disconnect_ipa failed: err:%d\n", ret);
 		if (d->func_type == USB_FUNC_MBIM)
-			teth_bridge_disconnect(IPA_CLIENT_USB_PROD);
+			teth_bridge_disconnect(d->ipa_params.src_client);
 
 	}
 }
@@ -209,7 +209,7 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 	if (d->trans == USB_GADGET_XPORT_BAM2BAM_IPA) {
 		if (d->func_type == USB_FUNC_MBIM) {
 			ret = teth_bridge_init(&usb_notify_cb, &priv,
-					IPA_CLIENT_USB_PROD);
+					d->ipa_params.src_client);
 			if (ret) {
 				pr_err("%s:teth_bridge_init() failed\n",
 				      __func__);
@@ -219,8 +219,6 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 			d->ipa_params.priv = priv;
 			d->ipa_params.ipa_ep_cfg.mode.mode = IPA_BASIC;
 		}
-
-		d->ipa_params.client = IPA_CLIENT_USB_PROD;
 		d->ipa_params.dir = USB_TO_PEER_PERIPHERAL;
 		if (d->func_type == USB_FUNC_ECM) {
 			d->ipa_params.notify = ecm_qc_get_ipa_rx_cb();
@@ -232,8 +230,6 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 				__func__, ret);
 			return;
 		}
-
-		d->ipa_params.client = IPA_CLIENT_USB_CONS;
 		d->ipa_params.dir = PEER_PERIPHERAL_TO_USB;
 		if (d->func_type == USB_FUNC_ECM) {
 			d->ipa_params.notify = ecm_qc_get_ipa_tx_cb();
@@ -253,7 +249,7 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 				d->ipa_params.cons_clnt_hdl;
 			connect_params.tethering_mode =
 				TETH_TETHERING_MODE_MBIM;
-			connect_params.client_type = IPA_CLIENT_USB_PROD;
+			connect_params.client_type = d->ipa_params.src_client;
 			ret = teth_bridge_connect(&connect_params);
 			if (ret) {
 				pr_err("%s:teth_bridge_connect() failed\n",
@@ -615,8 +611,9 @@ static void bam2bam_data_suspend_work(struct work_struct *w)
 
 	usb_bam_register_wake_cb(d->dst_connection_idx, bam_data_wake_cb, port);
 	if (d->trans == USB_GADGET_XPORT_BAM2BAM_IPA) {
-		usb_bam_register_start_stop_cbs(bam_data_start, bam_data_stop,
-									port);
+		usb_bam_register_start_stop_cbs(d->dst_connection_idx,
+						bam_data_start, bam_data_stop,
+						port);
 		usb_bam_suspend(&d->ipa_params);
 	}
 }
