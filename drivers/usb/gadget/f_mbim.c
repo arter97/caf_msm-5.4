@@ -81,7 +81,6 @@ struct f_mbim {
 	atomic_t	write_excl;
 
 	wait_queue_head_t read_wq;
-	wait_queue_head_t write_wq;
 
 	u8				port_num;
 	struct data_port		bam_port;
@@ -1302,10 +1301,6 @@ static int mbim_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 
 	pr_info("SET DEVICE ONLINE");
 
-	/* wakeup file threads */
-	wake_up(&mbim->read_wq);
-	wake_up(&mbim->write_wq);
-
 	return 0;
 
 fail:
@@ -1631,18 +1626,6 @@ mbim_read(struct file *fp, char __user *buf, size_t count, loff_t *pos)
 		return -EBUSY;
 	}
 
-	/* block until mbim online */
-	while (!(atomic_read(&dev->online) || atomic_read(&dev->error))) {
-		pr_err("USB cable not connected. Wait.\n");
-		ret = wait_event_interruptible(dev->read_wq,
-			(atomic_read(&dev->online) ||
-			atomic_read(&dev->error)));
-		if (ret < 0) {
-			mbim_unlock(&dev->read_excl);
-			return -ERESTARTSYS;
-		}
-	}
-
 	if (atomic_read(&dev->error)) {
 		mbim_unlock(&dev->read_excl);
 		return -EIO;
@@ -1873,7 +1856,6 @@ static int mbim_init(int instances)
 		mbim_ports[i].port_num = i;
 
 		init_waitqueue_head(&dev->read_wq);
-		init_waitqueue_head(&dev->write_wq);
 
 		atomic_set(&dev->open_excl, 0);
 		atomic_set(&dev->ioctl_excl, 0);
