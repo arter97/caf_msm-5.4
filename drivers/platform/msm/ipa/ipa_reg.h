@@ -203,7 +203,6 @@ Common Registers
 #define IPA_DEBUG_CNT_CTRL_n_DBG_CNT_EN_BMSK 0x1
 #define IPA_DEBUG_CNT_CTRL_n_DBG_CNT_EN_SHFT 0x0
 
-
 #endif
 
 

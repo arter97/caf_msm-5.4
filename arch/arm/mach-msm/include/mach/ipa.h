@@ -313,6 +313,9 @@ struct ipa_sys_connect_params {
 struct ipa_tx_meta {
 	u8 mbim_stream_id;
 	bool mbim_stream_id_valid;
+	u8 pkt_init_dst_ep;
+	bool pkt_init_dst_ep_valid;
+	bool pkt_init_dst_ep_remote;
 };
 
 /**
