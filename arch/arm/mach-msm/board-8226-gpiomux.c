@@ -85,6 +85,12 @@ static struct gpiomux_setting gpio_spi_cs_config = {
 	.pull = GPIOMUX_PULL_DOWN,
 };
 
+static struct gpiomux_setting gpio_spi_cs_eth_config = {
+	.func = GPIOMUX_FUNC_4,
+	.drv = GPIOMUX_DRV_6MA,
+	.pull = GPIOMUX_PULL_DOWN,
+};
+
 static struct gpiomux_setting wcnss_5wire_suspend_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv  = GPIOMUX_DRV_2MA,
@@ -199,6 +205,12 @@ static struct msm_gpiomux_config msm_blsp_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &gpio_i2c_config,
 		},
 	},
+	{
+		.gpio      = 22,		/* BLSP1 QUP1 SPI_CS_ETH */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gpio_spi_cs_eth_config,
+		},
+	},
 	{					/*  NFC   */
 		.gpio      = 10,		/* BLSP1 QUP3 I2C_DAT */
 		.settings = {
@@ -233,8 +245,7 @@ static struct msm_gpiomux_config msm_synaptics_configs[] __initdata = {
 static struct gpiomux_setting gpio_nc_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
-	.pull = GPIOMUX_PULL_DOWN,
-	.dir = GPIOMUX_OUT_LOW,
+	.pull = GPIOMUX_PULL_NONE,
 };
 
 static struct gpiomux_setting goodix_ldo_en_act_cfg = {
@@ -273,7 +284,7 @@ static struct gpiomux_setting goodix_reset_sus_cfg = {
 	.pull = GPIOMUX_PULL_UP,
 };
 
-static struct msm_gpiomux_config msm_qrd_blsp_configs[] __initdata = {
+static struct msm_gpiomux_config msm_skuf_blsp_configs[] __initdata = {
 	{
 		.gpio      = 2,		/* NC */
 		.settings = {
@@ -300,7 +311,7 @@ static struct msm_gpiomux_config msm_qrd_blsp_configs[] __initdata = {
 	},
 };
 
-static struct msm_gpiomux_config msm_qrd_goodix_configs[] __initdata = {
+static struct msm_gpiomux_config msm_skuf_goodix_configs[] __initdata = {
 	{
 		.gpio = 15,		/* LDO EN */
 		.settings = {
@@ -356,8 +367,9 @@ static struct gpiomux_setting nfc_regc_act_cfg = {
 
 static struct gpiomux_setting nfc_regc_sus_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_6MA,
-	.pull = GPIOMUX_PULL_UP,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_NONE,
+	.dir = GPIOMUX_OUT_LOW,
 };
 
 static struct gpiomux_setting nfc_wake_act_cfg = {
@@ -368,11 +380,12 @@ static struct gpiomux_setting nfc_wake_act_cfg = {
 
 static struct gpiomux_setting nfc_wake_sus_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_6MA,
-	.pull = GPIOMUX_PULL_UP,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_NONE,
+	.dir = GPIOMUX_OUT_LOW,
 };
 
-static struct msm_gpiomux_config msm_qrd_nfc_configs[] __initdata = {
+static struct msm_gpiomux_config msm_skuf_nfc_configs[] __initdata = {
 	{					/*  NFC  LDO EN */
 		.gpio      = 0,
 		.settings = {
@@ -560,20 +573,6 @@ static struct msm_gpiomux_config msm_sensor_configs[] __initdata = {
 		},
 	},
 	{
-		.gpio = 22, /* CAM1_VDD */
-		.settings = {
-			[GPIOMUX_ACTIVE]    = &cam_settings[3],
-			[GPIOMUX_SUSPENDED] = &cam_settings[4],
-		},
-	},
-	{
-		.gpio = 34, /* CAM1 VCM_PWDN */
-		.settings = {
-			[GPIOMUX_ACTIVE]    = &cam_settings[3],
-			[GPIOMUX_SUSPENDED] = &cam_settings[4],
-		},
-	},
-	{
 		.gpio = 35, /* CAM2_STANDBY_N */
 		.settings = {
 			[GPIOMUX_ACTIVE]    = &cam_settings[3],
@@ -589,6 +588,24 @@ static struct msm_gpiomux_config msm_sensor_configs[] __initdata = {
 	},
 
 };
+
+static struct msm_gpiomux_config msm_sensor_configs_skuf_plus[] __initdata = {
+	{
+		.gpio = 22, /* CAM1_VDD */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_settings[3],
+			[GPIOMUX_SUSPENDED] = &cam_settings[4],
+		},
+	},
+	{
+		.gpio = 34, /* CAM1 VCM_PWDN */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_settings[3],
+			[GPIOMUX_SUSPENDED] = &cam_settings[4],
+		},
+	},
+};
+
 
 static struct gpiomux_setting auxpcm_act_cfg = {
 	.func = GPIOMUX_FUNC_1,
@@ -749,9 +766,9 @@ void __init msm8226_init_gpiomux(void)
 	msm_gpiomux_install(msm_keypad_configs,
 			ARRAY_SIZE(msm_keypad_configs));
 
-	if (of_board_is_qrd())
-		msm_gpiomux_install(msm_qrd_blsp_configs,
-			ARRAY_SIZE(msm_qrd_blsp_configs));
+	if (of_board_is_skuf())
+		msm_gpiomux_install(msm_skuf_blsp_configs,
+			ARRAY_SIZE(msm_skuf_blsp_configs));
 	else
 		msm_gpiomux_install(msm_blsp_configs,
 			ARRAY_SIZE(msm_blsp_configs));
@@ -760,20 +777,26 @@ void __init msm8226_init_gpiomux(void)
 				ARRAY_SIZE(wcnss_5wire_interface));
 
 	msm_gpiomux_install(&sd_card_det, 1);
-	if (of_board_is_qrd())
-		msm_gpiomux_install(msm_qrd_goodix_configs,
-				ARRAY_SIZE(msm_qrd_goodix_configs));
+	if (of_board_is_skuf())
+		msm_gpiomux_install(msm_skuf_goodix_configs,
+				ARRAY_SIZE(msm_skuf_goodix_configs));
 	else
 		msm_gpiomux_install(msm_synaptics_configs,
 				ARRAY_SIZE(msm_synaptics_configs));
 
-	if (of_board_is_qrd())
-		msm_gpiomux_install(msm_qrd_nfc_configs,
-				ARRAY_SIZE(msm_qrd_nfc_configs));
+	if (of_board_is_skuf())
+		msm_gpiomux_install(msm_skuf_nfc_configs,
+				ARRAY_SIZE(msm_skuf_nfc_configs));
 
 	msm_gpiomux_install_nowrite(msm_lcd_configs,
 			ARRAY_SIZE(msm_lcd_configs));
+
 	msm_gpiomux_install(msm_sensor_configs, ARRAY_SIZE(msm_sensor_configs));
+
+	if (of_board_is_skuf())
+		msm_gpiomux_install(msm_sensor_configs_skuf_plus,
+			ARRAY_SIZE(msm_sensor_configs_skuf_plus));
+
 	msm_gpiomux_install(msm_auxpcm_configs,
 			ARRAY_SIZE(msm_auxpcm_configs));
 
