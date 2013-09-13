@@ -251,10 +251,12 @@ static int diagchar_close(struct inode *inode, struct file *file)
 	*/
 	diagchar_ioctl(NULL, DIAG_IOCTL_DCI_DEINIT, 0);
 
+	mutex_lock(&driver->diagchar_mutex);
 	if (driver->callback_process &&
 		(driver->callback_process->tgid == current->tgid)) {
 		driver->callback_process = NULL;
 	}
+	mutex_unlock(&driver->diagchar_mutex);
 
 #ifdef CONFIG_DIAG_OVER_USB
 	/* If the SD logging process exits, change logging to USB mode */
