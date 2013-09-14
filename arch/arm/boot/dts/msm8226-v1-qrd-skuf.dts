@@ -237,3 +237,7 @@
 &dsi_nt35521_720_vid {
 	qcom,cont-splash-enabled;
 };
+
+&dsi_himax8394a_720_vid {
+	qcom,cont-splash-enabled;
+};
