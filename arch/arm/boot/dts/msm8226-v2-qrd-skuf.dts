@@ -139,6 +139,10 @@
 			FF FF FF FF 06 01];
 		};
 	};
+	usb@f9a55000 {
+		qcom,hsusb-otg-phy-init-seq =
+			<0x44 0x80 0x3a 0x81 0x31 0x82 0x33 0x83 0xffffffff>;
+	};
 };
 
 &spmi_bus {
