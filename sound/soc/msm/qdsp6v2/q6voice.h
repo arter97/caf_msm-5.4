@@ -1362,6 +1362,8 @@ struct voice_data {
 
 	struct mutex lock;
 
+	bool disable_topology;
+
 	uint16_t sidetone_gain;
 	uint8_t tty_mode;
 	/* slowtalk enable value */
@@ -1459,6 +1461,7 @@ enum {
 #define VOLTE_SESSION_VSID  0x10C02000
 #define VOIP_SESSION_VSID   0x10004000
 #define ALL_SESSION_VSID    0xFFFFFFFF
+#define VSID_MAX            ALL_SESSION_VSID
 
 /* called  by alsa driver */
 int voc_set_pp_enable(uint32_t session_id, uint32_t module_id,
@@ -1478,6 +1481,7 @@ int voc_set_rx_vol_index(uint32_t session_id, uint32_t dir, uint32_t voc_idx);
 int voc_set_tx_mute(uint32_t session_id, uint32_t dir, uint32_t mute);
 int voc_set_rx_device_mute(uint32_t session_id, uint32_t mute);
 int voc_get_rx_device_mute(uint32_t session_id);
+int voc_disable_topology(uint32_t session_id, uint32_t disable);
 int voc_disable_cvp(uint32_t session_id);
 int voc_enable_cvp(uint32_t session_id);
 int voc_set_route_flag(uint32_t session_id, uint8_t path_dir, uint8_t set);
