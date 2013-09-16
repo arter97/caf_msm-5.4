@@ -1048,6 +1048,10 @@ static int diag_process_apps_pkt(unsigned char *buf, int len)
 			*(int *)(driver->apps_rsp_buf + 4) = 0x3; /* op. ID */
 			*(int *)(driver->apps_rsp_buf + 8) = 0x0; /* success */
 			payload_length = 8 + ((*(int *)(buf + 4)) + 7)/8;
+			if (payload_length > APPS_BUF_SIZE - 12) {
+				pr_err("diag: log masks: buffer overflow\n");
+				return -EIO;
+			}
 			for (i = 0; i < payload_length; i++)
 				*(int *)(driver->apps_rsp_buf+12+i) = *(buf+i);
 			if (driver->ch_cntl)
@@ -1111,6 +1115,10 @@ static int diag_process_apps_pkt(unsigned char *buf, int len)
 								 rt_last_ssid) {
 					rt_mask_size = 4 * (rt_last_ssid -
 							 rt_first_ssid + 1);
+					if (rt_mask_size > APPS_BUF_SIZE - 8) {
+						pr_err("diag: rt masks: buffer overflow\n");
+						return -EIO;
+					}
 					memcpy(driver->apps_rsp_buf+8,
 						 rt_mask_ptr, rt_mask_size);
 					ENCODE_RSP_AND_SEND(8+rt_mask_size-1);
@@ -1125,7 +1133,17 @@ static int diag_process_apps_pkt(unsigned char *buf, int len)
 	else if ((*buf == 0x7d) && (*(buf+1) == 0x4)) {
 		ssid_first = *(uint16_t *)(buf + 2);
 		ssid_last = *(uint16_t *)(buf + 4);
+		if (ssid_last < ssid_first) {
+			pr_err("diag: Invalid msg mask ssid values, first: %d, last: %d\n",
+				ssid_first, ssid_last);
+			return -EIO;
+		}
 		ssid_range = 4 * (ssid_last - ssid_first + 1);
+		if (ssid_range > APPS_BUF_SIZE - 8) {
+			pr_err("diag: Not enough space for message mask, ssid_range: %d\n",
+				ssid_range);
+			return -EIO;
+		}
 		pr_debug("diag: received mask update for ssid_first = %d,"
 				" ssid_last = %d", ssid_first, ssid_last);
 		diag_update_msg_mask(ssid_first, ssid_last , buf + 8);
