@@ -57,6 +57,8 @@ struct gether {
 	unsigned			ul_max_pkts_per_xfer;
 	unsigned			dl_max_pkts_per_xfer;
 	bool				multi_pkt_xfer;
+	bool				rx_trigger_enabled;
+	bool				rx_triggered;
 	struct sk_buff			*(*wrap)(struct gether *port,
 						struct sk_buff *skb);
 	int				(*unwrap)(struct gether *port,
@@ -84,6 +86,7 @@ int gether_setup_name(struct usb_gadget *g, u8 ethaddr[ETH_ALEN],
 /* connect/disconnect is handled by individual functions */
 struct net_device *gether_connect(struct gether *);
 void gether_disconnect(struct gether *);
+int gether_up(struct gether *);
 
 /* Some controllers can't support CDC Ethernet (ECM) ... */
 static inline bool can_support_ecm(struct usb_gadget *gadget)
@@ -109,6 +112,7 @@ int eem_bind_config(struct usb_configuration *c);
 int rndis_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN]);
 int rndis_bind_config_vendor(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
 				u32 vendorID, const char *manufacturer);
+int rndis_rx_trigger(void);
 
 #else
 
@@ -121,6 +125,12 @@ rndis_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN])
 static inline int
 rndis_bind_config_vendor(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
 				u32 vendorID, const char *manufacturer)
+{
+	return 0;
+}
+
+static inline int
+rndis_rx_trigger(void)
 {
 	return 0;
 }
