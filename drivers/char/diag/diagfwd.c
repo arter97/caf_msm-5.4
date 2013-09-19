@@ -1227,6 +1227,7 @@ static int diag_process_apps_pkt(unsigned char *buf, int len)
 		}
 #endif
 	}
+
 	/* Check for registered clients and forward packet to apropriate proc */
 	cmd_code = (int)(*(char *)buf);
 	temp++;
@@ -1584,10 +1585,16 @@ void diag_process_hdlc(void *data, unsigned len)
 
 	ret = diag_hdlc_decode(&hdlc);
 
-	if (ret)
+	if (hdlc.dest_idx < 4) {
+		pr_err("diag: Integer underflow in hdlc processing\n");
+		return;
+	}
+	if (ret) {
 		type = diag_process_apps_pkt(driver->hdlc_buf,
 							  hdlc.dest_idx - 3);
-	else if (driver->debug_flag) {
+		if (type < 0)
+			return;
+	} else if (driver->debug_flag) {
 		printk(KERN_ERR "Packet dropped due to bad HDLC coding/CRC"
 				" errors or partial packet received, packet"
 				" length = %d\n", len);
