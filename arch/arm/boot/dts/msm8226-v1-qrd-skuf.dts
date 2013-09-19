@@ -13,7 +13,6 @@
 /dts-v1/;
 /include/ "msm8226-v1.dtsi"
 /include/ "msm8226-qrd.dtsi"
-/include/ "dsi-panel-nt35521-720p-video.dtsi"
 
 / {
 	model = "Qualcomm MSM 8226v1 QRD";
@@ -22,11 +21,6 @@
 };
 
 &soc {
-	qcom,mdss_dsi_nt35521_720p_video {
-		status = "ok";
-		qcom,cont-splash-enabled;
-	};
-
 	sound {
 		qcom,model = "msm8226-tapan-skuf-snd-card";
 
@@ -175,4 +169,12 @@
 
 &pm8226_chg {
 	qcom,battery-data = <&qrd_batterydata>;
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_nt35521_720_vid>;
+};
+
+&dsi_nt35521_720_vid {
+	qcom,cont-splash-enabled;
 };

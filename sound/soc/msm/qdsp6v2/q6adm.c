@@ -18,8 +18,6 @@
 #include <linux/atomic.h>
 #include <linux/wait.h>
 
-#include <mach/qdsp6v2/rtac.h>
-
 #include <sound/apr_audio-v2.h>
 #include <mach/qdsp6v2/apr.h>
 #include <sound/q6adm-v2.h>
@@ -33,7 +31,9 @@
 
 #define RESET_COPP_ID 99
 #define INVALID_COPP_ID 0xFF
-#define ADM_GET_PARAMETER_LENGTH 350
+/* Used for inband payload copy, max size is 4k */
+/* 2 is to account for module & param ID in payload */
+#define ADM_GET_PARAMETER_LENGTH  (4096 - APR_HDR_SIZE - 2 * sizeof(uint32_t))
 
 
 enum {
@@ -42,6 +42,7 @@ enum {
 	ADM_RX_AUDVOL_CAL,
 	ADM_TX_AUDVOL_CAL,
 	ADM_CUSTOM_TOP_CAL,
+	ADM_RTAC,
 	ADM_MAX_CAL_TYPES
 };
 
@@ -469,6 +470,10 @@ static int32_t adm_callback(struct apr_client_data *data, void *priv)
 			this_adm.apr = NULL;
 			reset_custom_topology_flags();
 			this_adm.set_custom_topology = 1;
+			for (i = 0; i < ADM_MAX_CAL_TYPES; i++)
+				atomic_set(&this_adm.mem_map_cal_handles[i],
+					0);
+			rtac_clear_mapping(ADM_RTAC_CAL);
 		}
 		pr_debug("Resetting calibration blocks");
 		for (i = 0; i < MAX_AUDPROC_TYPES; i++) {
@@ -525,7 +530,8 @@ static int32_t adm_callback(struct apr_client_data *data, void *priv)
 				if (payload[1] != 0) {
 					pr_err("%s: ADM map error, resuming\n",
 						__func__);
-					atomic_set(&this_adm.copp_stat[0], 1);
+					atomic_set(&this_adm.copp_stat[index],
+							1);
 					wake_up(&this_adm.wait[index]);
 				}
 				break;
@@ -580,13 +586,18 @@ static int32_t adm_callback(struct apr_client_data *data, void *priv)
 			if (payload[0] != 0)
 				pr_err("%s: ADM_CMDRSP_GET_PP_PARAMS_V5 returned error = 0x%x\n",
 					__func__, payload[0]);
-			rtac_make_adm_callback(payload,
-				data->payload_size);
-			adm_get_parameters[0] = payload[3];
-			pr_debug("GET_PP PARAM:received parameter length: %x\n",
-					adm_get_parameters[0]);
-			for (i = 0; i < payload[3]; i++)
-				adm_get_parameters[1+i] = payload[4+i];
+			if (rtac_make_adm_callback(payload,
+					data->payload_size))
+				break;
+
+			if (data->payload_size > (4 * sizeof(uint32_t))) {
+				adm_get_parameters[0] = payload[3];
+				pr_debug("GET_PP PARAM:received parameter length: %x\n",
+						adm_get_parameters[0]);
+				/* storing param size then params */
+				for (i = 0; i < payload[3]; i++)
+					adm_get_parameters[1+i] = payload[4+i];
+			}
 			atomic_set(&this_adm.copp_stat[index], 1);
 			wake_up(&this_adm.wait[index]);
 			break;
@@ -596,7 +607,7 @@ static int32_t adm_callback(struct apr_client_data *data, void *priv)
 			atomic_set(&this_adm.mem_map_cal_handles[
 				atomic_read(&this_adm.mem_map_cal_index)],
 				*payload);
-			atomic_set(&this_adm.copp_stat[0], 1);
+			atomic_set(&this_adm.copp_stat[index], 1);
 			wake_up(&this_adm.wait[index]);
 			break;
 		default:
@@ -637,8 +648,8 @@ void send_adm_custom_topology(int port_id)
 		/* Only call this once */
 		this_adm.set_custom_topology = 0;
 
-		result = adm_memory_map_regions(port_id, &cal_block.cal_paddr,
-					0, &size, 1);
+		result = adm_memory_map_regions(port_id,
+				&cal_block.cal_paddr, 0, &size, 1);
 		if (result < 0) {
 			pr_err("%s: mmap did not work! addr = 0x%x, size = %d\n",
 				__func__, cal_block.cal_paddr,
@@ -760,11 +771,15 @@ static void send_adm_cal(int port_id, int path)
 	int			result = 0;
 	s32			acdb_path;
 	struct acdb_cal_block	aud_cal;
-	int			size = 4096;
+	int			size;
 	pr_debug("%s\n", __func__);
 
 	/* Maps audio_dev_ctrl path definition to ACDB definition */
 	acdb_path = path - 1;
+	if (acdb_path == TX_CAL)
+		size = 4096 * 4;
+	else
+		size = 4096;
 
 	pr_debug("%s: Sending audproc cal\n", __func__);
 	get_audproc_cal(acdb_path, &aud_cal);
@@ -777,9 +792,7 @@ static void send_adm_cal(int port_id, int path)
 		this_adm.mem_addr_audproc[acdb_path].cal_size)) {
 
 		if (this_adm.mem_addr_audproc[acdb_path].cal_paddr != 0)
-			adm_memory_unmap_regions(port_id,
-				&this_adm.mem_addr_audproc[acdb_path].
-				cal_paddr, &size, 1);
+			adm_memory_unmap_regions(port_id);
 
 		result = adm_memory_map_regions(port_id, &aud_cal.cal_paddr,
 						0, &size, 1);
@@ -813,9 +826,7 @@ static void send_adm_cal(int port_id, int path)
 		this_adm.mem_addr_audvol[acdb_path].cal_size)) {
 
 		if (this_adm.mem_addr_audvol[acdb_path].cal_paddr != 0)
-			adm_memory_unmap_regions(port_id,
-				&this_adm.mem_addr_audvol[acdb_path].cal_paddr,
-				&size, 1);
+			adm_memory_unmap_regions(port_id);
 
 		result = adm_memory_map_regions(port_id, &aud_cal.cal_paddr,
 						0, &size, 1);
@@ -836,6 +847,133 @@ static void send_adm_cal(int port_id, int path)
 	else
 		pr_debug("%s: Audvol cal not sent for port id: %#x, path %d\n",
 			__func__, port_id, acdb_path);
+}
+
+int adm_map_rtac_block(struct rtac_cal_block_data *cal_block)
+{
+	int	result = 0;
+	pr_debug("%s\n", __func__);
+
+	if (cal_block == NULL) {
+		pr_err("%s: cal_block is NULL!\n",
+			__func__);
+		result = -EINVAL;
+		goto done;
+	}
+
+	if (cal_block->cal_data.paddr == 0) {
+		pr_debug("%s: No address to map!\n",
+			__func__);
+		result = -EINVAL;
+		goto done;
+	}
+
+	if (cal_block->map_data.map_size == 0) {
+		pr_debug("%s: map size is 0!\n",
+			__func__);
+		result = -EINVAL;
+		goto done;
+	}
+
+	/* valid port ID needed for callback use primary I2S */
+	atomic_set(&this_adm.mem_map_cal_index, ADM_RTAC);
+	result = adm_memory_map_regions(PRIMARY_I2S_RX,
+			&cal_block->cal_data.paddr, 0,
+			&cal_block->map_data.map_size, 1);
+	if (result < 0) {
+		pr_err("%s: RTAC mmap did not work! addr = 0x%x, size = %d\n",
+			__func__, cal_block->cal_data.paddr,
+			cal_block->map_data.map_size);
+		goto done;
+	}
+
+	cal_block->map_data.map_handle = atomic_read(
+		&this_adm.mem_map_cal_handles[ADM_RTAC]);
+done:
+	return result;
+}
+
+int adm_unmap_rtac_block(uint32_t *mem_map_handle)
+{
+	int	result = 0;
+	pr_debug("%s\n", __func__);
+
+	if (mem_map_handle == NULL) {
+		pr_debug("%s: Map handle is NULL, nothing to unmap\n",
+			__func__);
+		goto done;
+	}
+
+	if (*mem_map_handle == 0) {
+		pr_debug("%s: Map handle is 0, nothing to unmap\n",
+			__func__);
+		goto done;
+	}
+
+	if (*mem_map_handle != atomic_read(
+			&this_adm.mem_map_cal_handles[ADM_RTAC])) {
+		pr_err("%s: Map handles do not match! Unmapping RTAC, RTAC map 0x%x, ADM map 0x%x\n",
+			__func__, *mem_map_handle, atomic_read(
+			&this_adm.mem_map_cal_handles[ADM_RTAC]));
+
+		/* if mismatch use handle passed in to unmap */
+		atomic_set(&this_adm.mem_map_cal_handles[ADM_RTAC],
+			   *mem_map_handle);
+	}
+
+	/* valid port ID needed for callback use primary I2S */
+	atomic_set(&this_adm.mem_map_cal_index, ADM_RTAC);
+	result = adm_memory_unmap_regions(PRIMARY_I2S_RX);
+	if (result < 0) {
+		pr_debug("%s: adm_memory_unmap_regions failed, error %d\n",
+			__func__, result);
+	} else {
+		atomic_set(&this_adm.mem_map_cal_handles[ADM_RTAC], 0);
+		*mem_map_handle = 0;
+	}
+done:
+	return result;
+}
+
+int adm_unmap_cal_blocks(void)
+{
+	int	i;
+	int	result = 0;
+	int	result2 = 0;
+
+	for (i = 0; i < ADM_MAX_CAL_TYPES; i++) {
+		if (atomic_read(&this_adm.mem_map_cal_handles[i]) != 0) {
+
+			if (i <= ADM_TX_AUDPROC_CAL) {
+				this_adm.mem_addr_audproc[i].cal_paddr = 0;
+				this_adm.mem_addr_audproc[i].cal_size = 0;
+			} else if (i <= ADM_TX_AUDVOL_CAL) {
+				this_adm.mem_addr_audvol
+					[(i - ADM_RX_AUDVOL_CAL)].cal_paddr
+					= 0;
+				this_adm.mem_addr_audvol
+					[(i - ADM_RX_AUDVOL_CAL)].cal_size
+					= 0;
+			} else if (i == ADM_CUSTOM_TOP_CAL) {
+				this_adm.set_custom_topology = 1;
+			} else {
+				continue;
+			}
+
+			/* valid port ID needed for callback use primary I2S */
+			atomic_set(&this_adm.mem_map_cal_index, i);
+			result2 = adm_memory_unmap_regions(PRIMARY_I2S_RX);
+			if (result2 < 0) {
+				pr_err("%s: adm_memory_unmap_regions failed, err %d\n",
+						__func__, result2);
+				result = result2;
+			} else {
+				atomic_set(&this_adm.mem_map_cal_handles[i],
+					0);
+			}
+		}
+	}
+	return result;
 }
 
 int adm_connect_afe_port(int mode, int session_id, int port_id)
@@ -1294,7 +1432,7 @@ int adm_memory_map_regions(int port_id,
 		++mregions;
 	}
 
-	atomic_set(&this_adm.copp_stat[0], 0);
+	atomic_set(&this_adm.copp_stat[index], 0);
 	ret = apr_send_pkt(this_adm.apr, (uint32_t *) mmap_region_cmd);
 	if (ret < 0) {
 		pr_err("%s: mmap_regions op[0x%x]rc[%d]\n", __func__,
@@ -1304,7 +1442,7 @@ int adm_memory_map_regions(int port_id,
 	}
 
 	ret = wait_event_timeout(this_adm.wait[index],
-			atomic_read(&this_adm.copp_stat[0]), 5 * HZ);
+			atomic_read(&this_adm.copp_stat[index]), 5 * HZ);
 	if (!ret) {
 		pr_err("%s: timeout. waited for memory_map\n", __func__);
 		ret = -EINVAL;
@@ -1315,8 +1453,7 @@ fail_cmd:
 	return ret;
 }
 
-int adm_memory_unmap_regions(int32_t port_id, uint32_t *buf_add,
-			uint32_t *bufsz, uint32_t bufcnt)
+int adm_memory_unmap_regions(int32_t port_id)
 {
 	struct  avs_cmd_shared_mem_unmap_regions unmap_regions;
 	int     ret = 0;
