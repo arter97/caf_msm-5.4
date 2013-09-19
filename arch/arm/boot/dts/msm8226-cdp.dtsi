@@ -10,17 +10,11 @@
  * GNU General Public License for more details.
  */
 
-/include/ "dsi-panel-nt35590-720p-video.dtsi"
 /include/ "msm8226-camera-sensor-cdp.dtsi"
 
 &soc {
 	serial@f991f000 {
 		status = "ok";
-	};
-
-	qcom,mdss_dsi_nt35590_720p_video {
-		status = "ok";
-		qcom,cont-splash-enabled;
 	};
 
 	i2c@f9927000 { /* BLSP1 QUP5 */
@@ -461,4 +455,16 @@
 		qcom,hw-settle-time = <2>;
 		qcom,fast-avg-setup = <0>;
 	};
+};
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_nt35590_720_vid>;
+};
+
+&dsi_nt35590_720_vid {
+	qcom,cont-splash-enabled;
 };
