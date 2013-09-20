@@ -385,6 +385,25 @@ static int msm_voice2_volume_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int msm_voice_topology_disable_get(struct snd_kcontrol *kcontrol,
+					  struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = 0;
+	return 0;
+}
+
+static int msm_voice_topology_disable_put(struct snd_kcontrol *kcontrol,
+					  struct snd_ctl_elem_value *ucontrol)
+{
+	int disable = ucontrol->value.integer.value[0];
+	uint32_t session_id = ucontrol->value.integer.value[1];
+
+	pr_debug("%s: disable = %d, session_id = %d\n", __func__, disable,
+	         session_id);
+
+	return voc_disable_topology(session_id, disable);
+}
+
 static int msm_voice_mute_get(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
@@ -561,6 +580,9 @@ static struct snd_kcontrol_new msm_voice_controls[] = {
 				msm_voice_mute_get, msm_voice_mute_put),
 	SOC_SINGLE_EXT("Voice Rx Volume", SND_SOC_NOPM, 0, 5, 0,
 				msm_voice_volume_get, msm_voice_volume_put),
+	SOC_SINGLE_MULTI_EXT("Voice Topology Disable", SND_SOC_NOPM, 0,
+			     VSID_MAX, 0, 2, msm_voice_topology_disable_get,
+			     msm_voice_topology_disable_put),
 	SOC_ENUM_EXT("TTY Mode", msm_tty_mode_enum[0], msm_voice_tty_mode_get,
 				msm_voice_tty_mode_put),
 	SOC_SINGLE_EXT("Slowtalk Enable", SND_SOC_NOPM, 0, 1, 0,
