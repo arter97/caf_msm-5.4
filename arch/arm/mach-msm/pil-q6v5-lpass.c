@@ -380,9 +380,7 @@ static irqreturn_t adsp_wdog_bite_irq(int irq, void *dev_id)
 {
 	struct lpass_data *drv = dev_id;
 
-	disable_irq_nosync(drv->wdog_irq);
 	schedule_work(&drv->work);
-
 	return IRQ_HANDLED;
 }
 
