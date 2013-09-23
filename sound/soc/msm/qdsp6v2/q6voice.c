@@ -1544,7 +1544,8 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 	switch (common.mvs_info.media_type) {
 	case VSS_MEDIA_ID_EVRC_MODEM:
 	case VSS_MEDIA_ID_4GV_NB_MODEM:
-	case VSS_MEDIA_ID_4GV_WB_MODEM: {
+	case VSS_MEDIA_ID_4GV_WB_MODEM:
+	case VSS_MEDIA_ID_4GV_NW_MODEM: {
 		struct cvs_set_cdma_enc_minmax_rate_cmd cvs_set_cdma_rate;
 
 		pr_debug("Setting EVRC min-max rate\n");
@@ -1561,8 +1562,10 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 		cvs_set_cdma_rate.hdr.token = 0;
 		cvs_set_cdma_rate.hdr.opcode =
 				VSS_ISTREAM_CMD_CDMA_SET_ENC_MINMAX_RATE;
-		cvs_set_cdma_rate.cdma_rate.min_rate = common.mvs_info.rate;
-		cvs_set_cdma_rate.cdma_rate.max_rate = common.mvs_info.rate;
+		cvs_set_cdma_rate.cdma_rate.min_rate =
+				common.mvs_info.evrc_min_rate;
+		cvs_set_cdma_rate.cdma_rate.max_rate =
+				common.mvs_info.evrc_max_rate;
 
 		v->cvs_state = CMD_STATUS_FAIL;
 
@@ -1580,6 +1583,13 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 
 			goto fail;
 		}
+
+		if (common.mvs_info.media_type != VSS_MEDIA_ID_EVRC_MODEM) {
+			ret = voice_set_dtx(v);
+			if (ret < 0)
+				goto fail;
+		}
+
 		break;
 	}
 	case VSS_MEDIA_ID_AMR_NB_MODEM: {
@@ -3622,7 +3632,8 @@ fail:
 	return -EINVAL;
 }
 
-static int voice_send_stream_mute_cmd(struct voice_data *v)
+static int voice_send_stream_mute_cmd(struct voice_data *v, uint16_t direction,
+				     uint16_t mute_flag, uint32_t ramp_duration)
 {
 	struct cvs_set_mute_cmd cvs_mute_cmd;
 	int ret = 0;
@@ -3650,10 +3661,9 @@ static int voice_send_stream_mute_cmd(struct voice_data *v)
 	cvs_mute_cmd.hdr.dest_port = voice_get_cvs_handle(v);
 	cvs_mute_cmd.hdr.token = 0;
 	cvs_mute_cmd.hdr.opcode = VSS_IVOLUME_CMD_MUTE_V2;
-	cvs_mute_cmd.cvs_set_mute.direction = VSS_IVOLUME_DIRECTION_TX;
-	cvs_mute_cmd.cvs_set_mute.mute_flag = v->stream_tx.stream_mute;
-	cvs_mute_cmd.cvs_set_mute.ramp_duration_ms =
-				v->stream_tx.stream_mute_ramp_duration_ms;
+	cvs_mute_cmd.cvs_set_mute.direction = direction;
+	cvs_mute_cmd.cvs_set_mute.mute_flag = mute_flag;
+	cvs_mute_cmd.cvs_set_mute.ramp_duration_ms = ramp_duration;
 
 	v->cvs_state = CMD_STATUS_FAIL;
 	ret = apr_send_pkt(common.apr_q6_cvs, (uint32_t *) &cvs_mute_cmd);
@@ -4309,6 +4319,13 @@ int voc_enable_cvp(uint32_t session_id)
 						VSS_IVOLUME_DIRECTION_RX,
 						VSS_IVOLUME_MUTE_ON,
 						DEFAULT_MUTE_RAMP_DURATION);
+			/* Send unmute cmd as the TX stream
+			 * might be muted previously
+			 */
+			voice_send_stream_mute_cmd(v,
+						VSS_IVOLUME_DIRECTION_TX,
+						VSS_IVOLUME_MUTE_OFF,
+						DEFAULT_MUTE_RAMP_DURATION);
 		} else if (v->lch_mode == VOICE_LCH_STOP) {
 			pr_debug("%s: TX and RX mute OFF\n", __func__);
 
@@ -4323,7 +4340,10 @@ int voc_enable_cvp(uint32_t session_id)
 			/* Reset lch mode when VOICE_LCH_STOP is recieved */
 			v->lch_mode = 0;
 			/* Apply cached mute setting */
-			voice_send_stream_mute_cmd(v);
+			voice_send_stream_mute_cmd(v,
+				VSS_IVOLUME_DIRECTION_TX,
+				v->stream_tx.stream_mute,
+				v->stream_tx.stream_mute_ramp_duration_ms);
 		} else {
 			pr_debug("%s: Mute commands not sent for lch_mode=%d\n",
 				 __func__, v->lch_mode);
@@ -4403,7 +4423,10 @@ int voc_set_tx_mute(uint32_t session_id, uint32_t dir, uint32_t mute,
 								ramp_duration;
 			if (is_voc_state_active(v->voc_state) &&
 				(v->lch_mode == 0))
-				ret = voice_send_stream_mute_cmd(v);
+				ret = voice_send_stream_mute_cmd(v,
+				VSS_IVOLUME_DIRECTION_TX,
+				v->stream_tx.stream_mute,
+				v->stream_tx.stream_mute_ramp_duration_ms);
 			mutex_unlock(&v->lock);
 		} else {
 			pr_err("%s: invalid session_id 0x%x\n", __func__,
@@ -4889,7 +4912,10 @@ int voc_start_voice_call(uint32_t session_id)
 		if (ret < 0)
 			pr_err("voice volume failed\n");
 
-		ret = voice_send_stream_mute_cmd(v);
+		ret = voice_send_stream_mute_cmd(v,
+				VSS_IVOLUME_DIRECTION_TX,
+				v->stream_tx.stream_mute,
+				v->stream_tx.stream_mute_ramp_duration_ms);
 		if (ret < 0)
 			pr_err("voice mute failed\n");
 
@@ -4929,14 +4955,18 @@ void voc_register_dtmf_rx_detection_cb(dtmf_rx_det_cb_fn dtmf_rx_ul_cb,
 }
 
 void voc_config_vocoder(uint32_t media_type,
-			  uint32_t rate,
-			  uint32_t network_type,
-			  uint32_t dtx_mode)
+			uint32_t rate,
+			uint32_t network_type,
+			uint32_t dtx_mode,
+			uint32_t evrc_min_rate,
+			uint32_t evrc_max_rate)
 {
 	common.mvs_info.media_type = media_type;
 	common.mvs_info.rate = rate;
 	common.mvs_info.network_type = network_type;
 	common.mvs_info.dtx_mode = dtx_mode;
+	common.mvs_info.evrc_min_rate = evrc_min_rate;
+	common.mvs_info.evrc_max_rate = evrc_max_rate;
 }
 
 static int32_t qdsp_mvm_callback(struct apr_client_data *data, void *priv)
@@ -5487,6 +5517,8 @@ static int voice_free_oob_shared_mem(void)
 
 	rc = msm_audio_ion_free(v->shmem_info.sh_buf.client,
 				v->shmem_info.sh_buf.handle);
+	v->shmem_info.sh_buf.client = NULL;
+	v->shmem_info.sh_buf.handle = NULL;
 	if (rc < 0) {
 		pr_err("%s: Error:%d freeing memory\n", __func__, rc);
 
