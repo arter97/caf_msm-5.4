@@ -313,6 +313,7 @@ static int mdss_fb_probe(struct platform_device *pdev)
 	mfd->index = fbi_list_index;
 	mfd->mdp_fb_page_protection = MDP_FB_PAGE_PROTECTION_WRITECOMBINE;
 
+	mfd->ext_ad_ctrl = -1;
 	mfd->bl_level = 0;
 	mfd->bl_scale = 1024;
 	mfd->bl_min_lvl = 30;
@@ -703,11 +704,8 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 
 			mfd->op_enable = false;
 			curr_pwr_state = mfd->panel_power_on;
-			mutex_lock(&mfd->bl_lock);
-			mdss_fb_set_backlight(mfd, 0);
 			mfd->panel_power_on = false;
 			bl_updated = 0;
-			mutex_unlock(&mfd->bl_lock);
 
 			ret = mfd->mdp.off_fnc(mfd);
 			if (ret)

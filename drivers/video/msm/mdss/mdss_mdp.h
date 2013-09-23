@@ -116,6 +116,7 @@ typedef void (*mdp_vsync_handler_t)(struct mdss_mdp_ctl *, ktime_t);
 
 struct mdss_mdp_vsync_handler {
 	bool enabled;
+	bool cmd_post_flush;
 	mdp_vsync_handler_t vsync_handler;
 	struct list_head list;
 };
@@ -272,6 +273,7 @@ struct mdss_ad_info {
 	struct mutex lock;
 	struct work_struct calc_work;
 	struct msm_fb_data_type *mfd;
+	struct msm_fb_data_type *bl_mfd;
 	struct mdss_mdp_vsync_handler handle;
 	struct completion comp;
 	u32 last_str;
@@ -384,6 +386,7 @@ struct mdss_overlay_private {
 
 	struct mdss_mdp_data free_list[MAX_FREE_LIST_SIZE];
 	int free_list_size;
+	int ad_state;
 };
 
 struct mdss_mdp_perf_params {
