@@ -155,6 +155,14 @@
 	/include/ "batterydata-qrd-4v35-2500mah.dtsi"
 };
 
+&pm8226_bms {
+	qcom,battery-data = <&qrd_batterydata>;
+};
+
+&pm8226_chg {
+	qcom,battery-data = <&qrd_batterydata>;
+};
+
 &mdss_dsi0 {
 	qcom,dsi-pref-prim-pan = <&dsi_nt35521_720_vid>;
 };
