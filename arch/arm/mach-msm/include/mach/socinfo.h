@@ -499,6 +499,15 @@ static inline int cpu_is_msm8226(void)
 #endif
 }
 
+static inline int cpu_is_msm8228(void)
+{
+#ifdef CONFIG_ARCH_MSM8226
+	return ((225 > socinfo_get_id()) && (socinfo_get_id() > 218));
+#else
+	return 0;
+#endif
+}
+
 static inline int cpu_is_msm8610(void)
 {
 #ifdef CONFIG_ARCH_MSM8610
