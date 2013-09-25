@@ -788,10 +788,8 @@ int mdss_dsi_panel_init(struct device_node *node,
 		pr_info("%s: Panel Name = %s\n", __func__, panel_name);
 
 	rc = mdss_panel_parse_dt(node, vendor_pdata);
-	if (rc) {
-		pr_err("%s:%d panel dt parse failed\n", __func__, __LINE__);
+	if (rc)
 		return rc;
-	}
 
 	vendor_pdata->on = mdss_dsi_panel_on;
 	vendor_pdata->off = mdss_dsi_panel_off;
