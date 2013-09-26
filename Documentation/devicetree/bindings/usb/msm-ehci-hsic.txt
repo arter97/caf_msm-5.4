@@ -63,6 +63,8 @@ Optional properties :
   When CERR is programmed to zero, hw ignores transaction failures. ECHI stack
   programs the CERR  to 3 by default. When this flag is true, CERR is set to
   zero and transaction errors are ignored.
+- qcom,disable-internal-clk-gating: If present then internal clock gating in
+  controller is disabled. Internal clock gating is enabled by default in hw.
 
 - Refer to "Documentation/devicetree/bindings/arm/msm/msm_bus.txt" for
   below optional properties:
