@@ -53,6 +53,7 @@
 
 #define MDP_CORE_HW_VERSION	0x03040310
 struct mdp3_hw_resource *mdp3_res;
+int pf_log_cnt; /* pagefault */
 
 #define MDP_BUS_VECTOR_ENTRY_DMA(ab_val, ib_val)		\
 	{						\
@@ -571,6 +572,15 @@ static int mdp3_irq_setup(void)
 	return 0;
 }
 
+static int mdp3_iommu_fault_handler(struct iommu_domain *domain,
+		struct device *dev, unsigned long iova, int flags, void *token)
+{
+	if ((pf_log_cnt % 20) == 0)
+		pr_err("MDP IOMMU page fault: iova 0x%lx\n", iova);
+	pf_log_cnt++;
+	return 0;
+}
+
 int mdp3_iommu_attach(int context)
 {
 	struct mdp3_iommu_ctx_map *context_map;
@@ -646,6 +656,9 @@ int mdp3_iommu_domain_init(void)
 			else
 				return PTR_ERR(mdp3_iommu_domains[i].domain);
 		}
+		iommu_set_fault_handler(mdp3_iommu_domains[i].domain,
+					mdp3_iommu_fault_handler,
+					NULL);
 	}
 
 	mdp3_res->domains = mdp3_iommu_domains;
