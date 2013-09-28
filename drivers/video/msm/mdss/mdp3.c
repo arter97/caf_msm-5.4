@@ -864,6 +864,7 @@ int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data)
 	int ret = -EINVAL;
 	int fb_num;
 	unsigned long *start, *len;
+	unsigned long iova_length = 0;
 	struct ion_client *iclient = mdp3_res->ion_client;
 	int dom = (mdp3_res->domains + MDP3_IOMMU_DOMAIN)->domain_idx;
 
@@ -908,8 +909,17 @@ int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data)
 			return ret;
 		}
 
+		ret = ion_handle_get_size(iclient, data->srcp_ihdl,
+						&iova_length);
+		if (IS_ERR_VALUE(ret)) {
+			ion_free(iclient, data->srcp_ihdl);
+			pr_err("failed to get ion handle size (%d)\n", ret);
+			return ret;
+		}
+		iova_length *= 2;
+
 		ret = ion_map_iommu(iclient, data->srcp_ihdl, dom,
-		    0, SZ_4K, 0, start, len, 0, 0);
+		    0, SZ_4K, iova_length, start, len, 0, 0);
 
 		if (IS_ERR_VALUE(ret)) {
 			ion_free(iclient, data->srcp_ihdl);
