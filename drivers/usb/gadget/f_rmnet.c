@@ -467,8 +467,6 @@ static void frmnet_unbind(struct usb_configuration *c, struct usb_function *f)
 	struct f_rmnet *dev = func_to_rmnet(f);
 
 	pr_debug("%s: portno:%d\n", __func__, dev->port_num);
-	gbam_destroy(dev->port_num);
-
 	if (gadget_is_dualspeed(c->cdev->gadget))
 		usb_free_descriptors(f->hs_descriptors);
 	usb_free_descriptors(f->descriptors);
