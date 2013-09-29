@@ -1447,11 +1447,6 @@ static int ft5x06_ts_probe(struct i2c_client *client,
 
 	dev_info(&client->dev, "Device ID = 0x%x\n", reg_value);
 
-	if (pdata->family_id != reg_value) {
-		dev_err(&client->dev, "%s:Unsupported controller\n", __func__);
-		goto free_reset_gpio;
-	}
-
 	data->family_id = reg_value;
 
 	err = request_threaded_irq(client->irq, NULL,
