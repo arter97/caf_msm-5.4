@@ -1167,6 +1167,11 @@ static int diagchar_read(struct file *file, char __user *buf, size_t count,
 		return -EINVAL;
 	}
 
+	if (!buf) {
+		pr_err("diag: bad address from user side");
+		return -EFAULT;
+	}
+
 	wait_event_interruptible(driver->wait_q, driver->data_ready[index]);
 
 	mutex_lock(&driver->diagchar_mutex);
