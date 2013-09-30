@@ -363,8 +363,6 @@ static int bam2bam_data_port_alloc(int portno)
 	d = &port->data_ch;
 	d->port = port;
 	bam2bam_data_ports[portno] = port;
-	d->ipa_params.src_client = IPA_CLIENT_USB_PROD;
-	d->ipa_params.dst_client = IPA_CLIENT_USB_CONS;
 
 	pr_debug("port:%p portno:%d\n", port, portno);
 
