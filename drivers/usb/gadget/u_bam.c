@@ -815,8 +815,6 @@ static void gbam2bam_connect_work(struct work_struct *w)
 		d->ipa_params.notify = usb_notify_cb;
 		d->ipa_params.priv = priv;
 		d->ipa_params.ipa_ep_cfg.mode.mode = IPA_BASIC;
-
-		d->ipa_params.client = IPA_CLIENT_USB_PROD;
 		d->ipa_params.dir = USB_TO_PEER_PERIPHERAL;
 		ret = usb_bam_connect_ipa(&d->ipa_params);
 		if (ret) {
@@ -824,8 +822,6 @@ static void gbam2bam_connect_work(struct work_struct *w)
 				__func__, ret);
 			return;
 		}
-
-		d->ipa_params.client = IPA_CLIENT_USB_CONS;
 		d->ipa_params.dir = PEER_PERIPHERAL_TO_USB;
 		ret = usb_bam_connect_ipa(&d->ipa_params);
 		if (ret) {
@@ -1141,9 +1137,11 @@ static int gbam2bam_port_alloc(int portno)
 	/* data ch */
 	d = &port->data_ch;
 	d->port = port;
+	d->ipa_params.src_client = IPA_CLIENT_USB_PROD;
+	d->ipa_params.dst_client = IPA_CLIENT_USB_CONS;
 	bam2bam_ports[portno] = port;
 
-	pr_debug("%s: port:%p portno:%d\n", __func__, port, portno);
+	pr_debug("%s: port:%p portno	:%d\n", __func__, port, portno);
 
 	return 0;
 }

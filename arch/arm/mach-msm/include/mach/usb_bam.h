@@ -58,7 +58,8 @@ struct usb_bam_connect_ipa_params {
 	u32 prod_clnt_hdl;
 	u32 cons_clnt_hdl;
 	/* params assigned by the CD */
-	enum ipa_client_type client;
+	enum ipa_client_type src_client;
+	enum ipa_client_type dst_client;
 	struct ipa_ep_cfg ipa_ep_cfg;
 	void *priv;
 	void (*notify)(void *priv, enum ipa_dp_evt_type evt,
