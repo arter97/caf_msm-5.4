@@ -46,9 +46,6 @@ struct grmnet {
 	void (*connect)(struct grmnet *g);
 };
 
-#define NR_QTI_PORTS	5
-#define NR_RMNET_PORTS	5
-
 enum ctrl_client {
 	FRMNET_CTRL_CLIENT,
 	GPS_CTRL_CLIENT,
@@ -69,7 +66,7 @@ int gsmd_ctrl_connect(struct grmnet *gr, int port_num);
 void gsmd_ctrl_disconnect(struct grmnet *gr, u8 port_num);
 int gsmd_ctrl_setup(enum ctrl_client client_num, unsigned int count,
 					u8 *first_port_idx);
-int gqti_ctrl_connect(struct grmnet *gr, u8 port_num);
-void gqti_ctrl_disconnect(struct grmnet *gr, u8 port_num);
+int gqti_ctrl_connect(struct grmnet *gr);
+void gqti_ctrl_disconnect(struct grmnet *gr);
 
 #endif /* __U_RMNET_H*/
