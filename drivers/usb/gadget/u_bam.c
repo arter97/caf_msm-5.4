@@ -705,6 +705,7 @@ static void gbam2bam_connect_work(struct work_struct *w)
 	int ret;
 	unsigned long flags;
 
+	pr_debug("%s: Connect workqueue started", __func__);
 	if (d->trans == USB_GADGET_XPORT_BAM2BAM) {
 		usb_bam_reset_complete();
 		ret = usb_bam_connect(d->connection_idx, &d->src_pipe_idx,
@@ -805,25 +806,12 @@ static int gbam_peer_reset_cb(void *param)
 	struct f_rmnet		*dev;
 	struct usb_gadget *gadget;
 	int ret;
-	bool reenable_eps = false;
 
 	dev = port_to_rmnet(port->gr);
 	d = &port->data_ch;
 
 	gadget = dev->cdev->gadget;
-
 	pr_debug("%s: reset by peer\n", __func__);
-
-	/* Disable the relevant EPs if currently EPs are enabled */
-	if (port->port_usb && port->port_usb->in &&
-	  port->port_usb->in->driver_data) {
-		usb_ep_disable(port->port_usb->out);
-		usb_ep_disable(port->port_usb->in);
-
-		port->port_usb->in->driver_data = NULL;
-		port->port_usb->out->driver_data = NULL;
-		reenable_eps = true;
-	}
 
 	/* Disable BAM */
 	msm_hw_bam_disable(1);
@@ -832,40 +820,14 @@ static int gbam_peer_reset_cb(void *param)
 	ret = usb_bam_reset(0);
 	if (ret) {
 		pr_err("%s: BAM reset failed %d\n", __func__, ret);
-		goto reenable_eps;
+		return ret;
 	}
 
 	/* Enable BAM */
 	msm_hw_bam_disable(0);
-
-reenable_eps:
-	/* Re-Enable the relevant EPs, if EPs were originally enabled */
-	if (reenable_eps) {
-		ret = usb_ep_enable(port->port_usb->in);
-		if (ret) {
-			pr_err("%s: usb_ep_enable failed eptype:IN ep:%p",
-				__func__, port->port_usb->in);
-			return ret;
-		}
-		port->port_usb->in->driver_data = port;
-
-		ret = usb_ep_enable(port->port_usb->out);
-		if (ret) {
-			pr_err("%s: usb_ep_enable failed eptype:OUT ep:%p",
-				__func__, port->port_usb->out);
-			port->port_usb->in->driver_data = 0;
-			return ret;
-		}
-		port->port_usb->out->driver_data = port;
-
-		gbam_start_endless_rx(port);
-		gbam_start_endless_tx(port);
-	}
-
 	/* Unregister the peer reset callback */
 	if (d->trans == USB_GADGET_XPORT_BAM2BAM && port->port_num == 0)
 		usb_bam_register_peer_reset_cb(d->connection_idx, NULL, NULL);
-
 	return 0;
 }
 
@@ -1294,6 +1256,16 @@ int gbam_connect(struct grmnet *gr, u8 port_num,
 	return 0;
 }
 
+int gbam_destroy(unsigned int no_bam2bam_port)
+{
+	pr_debug("gbam_destroy: Freeing ports\n");
+	gbam2bam_port_free(no_bam2bam_port);
+	if (gbam_wq)
+		destroy_workqueue(gbam_wq);
+	gbam_wq = NULL;
+	return 0;
+}
+
 int gbam_setup(unsigned int no_bam_port, unsigned int no_bam2bam_port)
 {
 	int	i;
@@ -1308,7 +1280,10 @@ int gbam_setup(unsigned int no_bam_port, unsigned int no_bam2bam_port)
 				__func__, no_bam_port, no_bam2bam_port);
 		return -EINVAL;
 	}
-
+	if (gbam_wq) {
+		pr_debug("gbam_wq is already setup");
+		return 0;
+	}
 	gbam_wq = alloc_workqueue("k_gbam", WQ_UNBOUND | WQ_MEM_RECLAIM, 1);
 	if (!gbam_wq) {
 		pr_err("%s: Unable to create workqueue gbam_wq\n",
