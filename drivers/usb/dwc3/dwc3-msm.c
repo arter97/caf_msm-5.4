@@ -197,6 +197,7 @@ struct dwc3_msm {
 	struct delayed_work	resume_work;
 	struct work_struct	restart_usb_work;
 	struct wake_lock	wlock;
+	struct work_struct	usb_block_reset_work;
 	struct dwc3_charger	charger;
 	struct usb_phy		*otg_xceiv;
 	struct delayed_work	chg_work;
@@ -1428,6 +1429,11 @@ static void dwc3_msm_notify_event(struct dwc3 *dwc, unsigned event)
 	case DWC3_CONTROLLER_ERROR_EVENT:
 		dev_info(mdwc->dev, "DWC3_CONTROLLER_ERROR_EVENT received\n");
 		dwc3_msm_dump_phy_info(mdwc);
+		/*
+		 * schedule work for doing block reset for recovery from erratic
+		 * error event.
+		 */
+		queue_work(system_nrt_wq, &mdwc->usb_block_reset_work);
 		break;
 	case DWC3_CONTROLLER_RESET_EVENT:
 		dev_dbg(mdwc->dev, "DWC3_CONTROLLER_RESET_EVENT received\n");
@@ -1467,6 +1473,16 @@ static void dwc3_msm_block_reset(bool core_reset)
 	dwc3_msm_dbm_soft_reset(1);
 	usleep_range(1000, 1200);
 	dwc3_msm_dbm_soft_reset(0);
+}
+
+static void dwc3_block_reset_usb_work(struct work_struct *w)
+{
+	struct dwc3_msm *mdwc = container_of(w, struct dwc3_msm,
+						usb_block_reset_work);
+
+	dev_dbg(mdwc->dev, "%s\n", __func__);
+
+	dwc3_msm_block_reset(true);
 }
 
 static void dwc3_chg_enable_secondary_det(struct dwc3_msm *mdwc)
@@ -2393,6 +2409,7 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&msm->chg_work, dwc3_chg_detect_work);
 	INIT_DELAYED_WORK(&msm->resume_work, dwc3_resume_work);
 	INIT_WORK(&msm->restart_usb_work, dwc3_restart_usb_work);
+	INIT_WORK(&msm->usb_block_reset_work, dwc3_block_reset_usb_work);
 	INIT_WORK(&msm->id_work, dwc3_id_work);
 	INIT_DELAYED_WORK(&msm->init_adc_work, dwc3_init_adc_work);
 
