@@ -58,8 +58,7 @@ struct usb_bam_connect_ipa_params {
 	u32 prod_clnt_hdl;
 	u32 cons_clnt_hdl;
 	/* params assigned by the CD */
-	enum ipa_client_type src_client;
-	enum ipa_client_type dst_client;
+	enum ipa_client_type client;
 	struct ipa_ep_cfg ipa_ep_cfg;
 	void *priv;
 	void (*notify)(void *priv, enum ipa_dp_evt_type evt,
@@ -128,15 +127,10 @@ struct usb_bam_pipe_connect {
 	struct usb_bam_event_info event;
 	bool enabled;
 	bool suspended;
-	bool cons_stopped;
-	bool prod_stopped;
 	int ipa_clnt_hdl;
 	void *priv;
 	int (*activity_notify)(void *priv);
 	int (*inactivity_notify)(void *priv);
-	void (*start)(void *, enum usb_bam_pipe_dir);
-	void (*stop)(void *, enum usb_bam_pipe_dir);
-	void *start_stop_param;
 };
 
 /**
@@ -232,8 +226,6 @@ int usb_bam_register_peer_reset_cb(int (*callback)(void *), void *param);
 /**
  * Register callbacks for start/stop of transfers.
  *
- * @idx - Connection index
- *
  * @start - the callback function that will be called in USB
  *				driver to start transfers
  * @stop - the callback function that will be called in USB
@@ -245,7 +237,6 @@ int usb_bam_register_peer_reset_cb(int (*callback)(void *), void *param);
  *
  */
 int usb_bam_register_start_stop_cbs(
-	u8 idx,
 	void (*start)(void *, enum usb_bam_pipe_dir),
 	void (*stop)(void *, enum usb_bam_pipe_dir),
 	void *param);

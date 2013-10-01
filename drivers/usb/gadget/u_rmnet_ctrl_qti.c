@@ -15,14 +15,12 @@
 #include <linux/poll.h>
 #include <linux/usb/rmnet_ctrl_qti.h>
 
-
 #include "u_rmnet.h"
 
 struct rmnet_ctrl_qti_port {
-	struct grmnet	*port_usb;
+	struct grmnet		*port_usb;
 
 	bool		is_open;
-	int index;
 
 	atomic_t	connected;
 	atomic_t	line_state;
@@ -32,13 +30,13 @@ struct rmnet_ctrl_qti_port {
 	atomic_t	write_excl;
 	atomic_t	ioctl_excl;
 
-	wait_queue_head_t	read_wq;
+	wait_queue_head_t read_wq;
 
 	struct list_head	cpkt_req_q;
 
-	spinlock_t	lock;
+	spinlock_t			lock;
 };
-static struct rmnet_ctrl_qti_port *ctrl_port[NR_QTI_PORTS];
+static struct rmnet_ctrl_qti_port *ctrl_port;
 
 static inline int rmnet_ctrl_lock(atomic_t *excl)
 {
@@ -60,8 +58,7 @@ static void rmnet_ctrl_queue_notify(struct rmnet_ctrl_qti_port *port)
 	unsigned long		flags;
 	struct rmnet_ctrl_pkt	*cpkt = NULL;
 
-	pr_debug("%s: Queue empty packet for QTI for port%d",
-		 __func__, port->index);
+	pr_debug("%s: Queue empty packet for QTI", __func__);
 
 	spin_lock_irqsave(&port->lock, flags);
 	if (!port->is_open) {
@@ -89,7 +86,7 @@ static int grmnet_ctrl_qti_send_cpkt_tomodem(u8 portno,
 	void *buf, size_t len)
 {
 	unsigned long		flags;
-	struct rmnet_ctrl_qti_port	*port;
+	struct rmnet_ctrl_qti_port	*port = ctrl_port;
 	struct rmnet_ctrl_pkt *cpkt;
 
 	if (len > MAX_QTI_PKT_SIZE) {
@@ -97,12 +94,6 @@ static int grmnet_ctrl_qti_send_cpkt_tomodem(u8 portno,
 				len, MAX_QTI_PKT_SIZE);
 		return -EINVAL;
 	}
-
-	if (portno > NR_QTI_PORTS) {
-		pr_err("%s: Invalid QTI port %d\n", __func__, portno);
-		return -ENODEV;
-	}
-	port = ctrl_port[portno];
 
 	cpkt = alloc_rmnet_ctrl_pkt(len, GFP_ATOMIC);
 	if (IS_ERR(cpkt)) {
@@ -118,8 +109,7 @@ static int grmnet_ctrl_qti_send_cpkt_tomodem(u8 portno,
 
 	/* drop cpkt if port is not open */
 	if (!port->is_open) {
-		pr_err("rmnet file handler %p(index=%d) is not open",
-		       port, port->index);
+		pr_err("rmnet file handler %p is not open", port);
 		spin_unlock_irqrestore(&port->lock, flags);
 		free_rmnet_ctrl_pkt(cpkt);
 		return 0;
@@ -138,13 +128,7 @@ static int grmnet_ctrl_qti_send_cpkt_tomodem(u8 portno,
 static void
 gqti_ctrl_notify_modem(void *gptr, u8 portno, int val)
 {
-	struct rmnet_ctrl_qti_port *port;
-
-	if (portno > NR_QTI_PORTS) {
-		pr_err("%s: Invalid QTI port %d\n", __func__, portno);
-		return;
-	}
-	port = ctrl_port[portno];
+	struct rmnet_ctrl_qti_port	*port = ctrl_port;
 
 	atomic_set(&port->line_state, val);
 
@@ -152,28 +136,19 @@ gqti_ctrl_notify_modem(void *gptr, u8 portno, int val)
 	rmnet_ctrl_queue_notify(port);
 }
 
-int gqti_ctrl_connect(struct grmnet *gr, u8 port_num)
+int gqti_ctrl_connect(struct grmnet *gr)
 {
 	struct rmnet_ctrl_qti_port	*port;
 	unsigned long		flags;
 
 	pr_debug("%s: grmnet:%p\n", __func__, gr);
-	if (port_num > NR_QTI_PORTS) {
-		pr_err("%s: Invalid QTI port %d\n", __func__, port_num);
-		return -ENODEV;
-	}
-	port = ctrl_port[port_num];
 
 	if (!gr) {
 		pr_err("%s: grmnet port is null\n", __func__);
 		return -ENODEV;
 	}
 
-	if (port_num > NR_QTI_PORTS) {
-		pr_err("%s: Invalid QTI port %d\n", __func__, port_num);
-		return -ENODEV;
-	}
-	port = ctrl_port[port_num];
+	port = ctrl_port;
 
 	spin_lock_irqsave(&port->lock, flags);
 	port->port_usb = gr;
@@ -190,9 +165,9 @@ int gqti_ctrl_connect(struct grmnet *gr, u8 port_num)
 	return 0;
 }
 
-void gqti_ctrl_disconnect(struct grmnet *gr, u8 port_num)
+void gqti_ctrl_disconnect(struct grmnet *gr)
 {
-	struct rmnet_ctrl_qti_port	*port;
+	struct rmnet_ctrl_qti_port	*port = ctrl_port;
 	unsigned long		flags;
 	struct rmnet_ctrl_pkt	*cpkt;
 
@@ -203,12 +178,6 @@ void gqti_ctrl_disconnect(struct grmnet *gr, u8 port_num)
 		return;
 	}
 
-	if (port_num > NR_QTI_PORTS) {
-		pr_err("%s: Invalid QTI port %d\n", __func__, port_num);
-		return;
-	}
-
-	port = ctrl_port[port_num];
 	if (port && port->port_usb && port->port_usb->disconnect)
 		port->port_usb->disconnect(port->port_usb);
 
@@ -236,24 +205,19 @@ void gqti_ctrl_disconnect(struct grmnet *gr, u8 port_num)
 static int rmnet_ctrl_open(struct inode *ip, struct file *fp)
 {
 	unsigned long		flags;
-	struct miscdevice *rmnet_device = fp->private_data;
-	struct rmnet_ctrl_qti_port *port;
 
-	port = dev_get_drvdata(rmnet_device->this_device);
+	pr_debug("Open rmnet_ctrl_qti device file\n");
 
-	pr_debug("Open rmnet_ctrl_qti device file name=%s(index=%d)\n",
-		rmnet_device->name, port->index);
-
-	if (rmnet_ctrl_lock(&port->open_excl)) {
-		pr_err("Already opened\n");
+	if (rmnet_ctrl_lock(&ctrl_port->open_excl)) {
+		pr_debug("Already opened\n");
 		return -EBUSY;
 	}
 
-	fp->private_data = port;
+	fp->private_data = ctrl_port;
 
-	spin_lock_irqsave(&port->lock, flags);
-	port->is_open = true;
-	spin_unlock_irqrestore(&port->lock, flags);
+	spin_lock_irqsave(&ctrl_port->lock, flags);
+	ctrl_port->is_open = true;
+	spin_unlock_irqrestore(&ctrl_port->lock, flags);
 
 	return 0;
 }
@@ -353,7 +317,7 @@ rmnet_ctrl_write(struct file *fp, const char __user *buf, size_t count,
 	unsigned long flags;
 	int ret = 0;
 
-	pr_debug("%s: Enter(%d) port_index=%d", __func__, count, port->index);
+	pr_debug("%s: Enter(%d)", __func__, count);
 
 	if (!count) {
 		pr_debug("zero length ctrl pkt\n");
@@ -485,78 +449,57 @@ static const struct file_operations rmnet_ctrl_fops = {
 	.poll = rmnet_ctrl_poll,
 };
 
-static struct miscdevice rmnet_device[NR_QTI_PORTS];
-#define RMNET_CTRL_QTI_NAME "rmnet_ctrl"
-static char name[NR_QTI_PORTS][sizeof(RMNET_CTRL_QTI_NAME) + 2];
+static struct miscdevice rmnet_device = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "rmnet_ctrl",
+	.fops = &rmnet_ctrl_fops,
+};
 
 static int __init gqti_ctrl_init(void)
 {
-	int ret, i, size = sizeof(RMNET_CTRL_QTI_NAME)+2;
+	int ret;
 	struct rmnet_ctrl_qti_port *port = NULL;
 
-	for (i = 0; i < NR_QTI_PORTS; i++) {
-		if (i == 0)
-			strlcat(name[i], RMNET_CTRL_QTI_NAME, size);
-		else 
-			sprintf(name[i], "%s%d", RMNET_CTRL_QTI_NAME, i);
-
-		rmnet_device[i].name = name[i];
-		rmnet_device[i].fops = &rmnet_ctrl_fops;
-		rmnet_device[i].minor = MISC_DYNAMIC_MINOR;
+	port = kzalloc(sizeof(struct rmnet_ctrl_qti_port), GFP_KERNEL);
+	if (!port) {
+		pr_err("Failed to allocate rmnet control device\n");
+		return -ENOMEM;
 	}
 
-	for (i = 0; i < NR_QTI_PORTS; i++) {
-		port = kzalloc(sizeof(struct rmnet_ctrl_qti_port), GFP_KERNEL);
-		if (!port) {
-			pr_err("Failed to allocate rmnet control device\n");
-			ret = -ENOMEM;
-			goto fail_init;
-		}
+	INIT_LIST_HEAD(&port->cpkt_req_q);
+	spin_lock_init(&port->lock);
 
-		INIT_LIST_HEAD(&port->cpkt_req_q);
-		spin_lock_init(&port->lock);
+	atomic_set(&port->open_excl, 0);
+	atomic_set(&port->read_excl, 0);
+	atomic_set(&port->write_excl, 0);
+	atomic_set(&port->ioctl_excl, 0);
+	atomic_set(&port->connected, 0);
+	atomic_set(&port->line_state, 0);
 
-		atomic_set(&port->open_excl, 0);
-		atomic_set(&port->read_excl, 0);
-		atomic_set(&port->write_excl, 0);
-		atomic_set(&port->ioctl_excl, 0);
-		atomic_set(&port->connected, 0);
-		atomic_set(&port->line_state, 0);
+	init_waitqueue_head(&port->read_wq);
 
-		init_waitqueue_head(&port->read_wq);
+	ctrl_port = port;
 
-		ctrl_port[i] = port;
-		port->index = i;
-
-		ret = misc_register(&rmnet_device[i]);
-		if (ret) {
-			pr_err("rmnet control driver failed to register");
-			goto fail_init;
-		}
-		dev_set_drvdata(rmnet_device[i].this_device, port);
+	ret = misc_register(&rmnet_device);
+	if (ret) {
+		pr_err("rmnet control driver failed to register");
+		goto fail_init;
 	}
 
 	return ret;
 
 fail_init:
-	for (; i >= 0; i--) {
-		if (ctrl_port[i])
-			kfree(ctrl_port[i]);
-		ctrl_port[i] = NULL;
-	}
+	kfree(port);
+	ctrl_port = NULL;
 	return ret;
 }
 module_init(gqti_ctrl_init);
 
 static void __exit gqti_ctrl_cleanup(void)
 {
-	int i;
+	misc_deregister(&rmnet_device);
 
-	for (i = 0; i < NR_QTI_PORTS; i++) {
-		misc_deregister(&rmnet_device[i]);
-
-		kfree(ctrl_port[i]);
-		ctrl_port[i] = NULL;
-	}
+	kfree(ctrl_port);
+	ctrl_port = NULL;
 }
 module_exit(gqti_ctrl_cleanup);
