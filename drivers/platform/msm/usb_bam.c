@@ -451,9 +451,11 @@ static int connect_pipe_ipa(u8 idx,
 	if (dir == USB_TO_PEER_PERIPHERAL) {
 		usb_phy_addr = pipe_connect->src_phy_addr;
 		ipa_in_params.client_ep_idx = pipe_connect->src_pipe_index;
+		ipa_in_params.client = ipa_params->src_client;
 	} else {
 		usb_phy_addr = pipe_connect->dst_phy_addr;
 		ipa_in_params.client_ep_idx = pipe_connect->dst_pipe_index;
+		ipa_in_params.client = ipa_params->dst_client;
 	}
 	/* Get HSUSB / HSIC bam handle */
 	ret = sps_phy2h(usb_phy_addr, &usb_handle);
@@ -473,7 +475,6 @@ static int connect_pipe_ipa(u8 idx,
 	ipa_in_params.data_fifo_sz = pipe_connect->data_fifo_size;
 	ipa_in_params.notify = ipa_params->notify;
 	ipa_in_params.priv = ipa_params->priv;
-	ipa_in_params.client = ipa_params->client;
 
 	/* If BAM is using dedicated SPS pipe memory, get it */
 
