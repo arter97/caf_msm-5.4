@@ -538,7 +538,6 @@ static int connect_to_bam(void)
 	}
 	if (sps_ctrl_bam_dma_clk(true))
 		WARN_ON(1);
-
 	memset(&connect_params, 0, sizeof(struct ipa_sys_connect_params));
 	connect_params.client = IPA_CLIENT_A2_TETHERED_CONS;
 	connect_params.notify = ipa_tethered_notify;
@@ -581,10 +580,8 @@ static int connect_to_bam(void)
 		goto bridge_embedded_ul_failed;
 	}
 	memset(&connect_params, 0, sizeof(struct ipa_sys_connect_params));
-
 	connect_params.ipa_ep_cfg.hdr.hdr_len = sizeof(struct bam_mux_hdr);
 	connect_params.ipa_ep_cfg.hdr.hdr_ofst_metadata_valid = 1;
-	/* take 4 bytes, the second byte in the metadata is the ch_id*/
 	connect_params.ipa_ep_cfg.hdr.hdr_ofst_metadata = 4;
 	connect_params.client = IPA_CLIENT_A2_EMBEDDED_PROD;
 	connect_params.notify = ipa_embedded_notify;
@@ -921,7 +918,7 @@ static int bam_mux_write_cmd(void *data, u32 len)
 }
 
 /**
- * a2_mux_get_client_handles() - provide the tethered/embedded
+ * a2_mux_get_tethered_client_handles() - provide the tethred
  *		pipe handles for post setup configuration
  * @lcid: logical channel ID
  * @clnt_cons_handle: [out] consumer pipe handle
@@ -929,22 +926,16 @@ static int bam_mux_write_cmd(void *data, u32 len)
  *
  * Returns: 0 on success, negative on failure
  */
-int a2_mux_get_client_handles(enum a2_mux_logical_channel_id lcid,
+int a2_mux_get_tethered_client_handles(enum a2_mux_logical_channel_id lcid,
 		unsigned int *clnt_cons_handle,
 		unsigned int *clnt_prod_handle)
 {
-	if (!a2_mux_ctx->a2_mux_initialized || lcid >= A2_MUX_NUM_CHANNELS
-			|| lcid < A2_MUX_WWAN_0)
+	if (!a2_mux_ctx->a2_mux_initialized || lcid != A2_MUX_TETHERED_0)
 		return -ENODEV;
 	if (!clnt_cons_handle || !clnt_prod_handle)
 		return -EINVAL;
-	if (lcid == A2_MUX_TETHERED_0) {
-		*clnt_prod_handle = a2_mux_ctx->tethered_prod;
-		*clnt_cons_handle = a2_mux_ctx->tethered_cons;
-	} else {
-		*clnt_prod_handle = a2_mux_ctx->embedded_prod;
-		*clnt_cons_handle = a2_mux_ctx->embedded_cons;
-	}
+	*clnt_prod_handle = a2_mux_ctx->tethered_prod;
+	*clnt_cons_handle = a2_mux_ctx->tethered_cons;
 	return 0;
 }
 
@@ -1090,8 +1081,7 @@ static int a2_mux_add_hdr(enum a2_mux_logical_channel_id lcid)
 
 	IPADBG("%s: ch %d\n", __func__, lcid);
 
-	if (lcid < A2_MUX_WWAN_0 || lcid >= A2_MUX_NUM_CHANNELS ||
-				lcid == A2_MUX_TETHERED_0) {
+	if (lcid < A2_MUX_WWAN_0 || lcid > A2_MUX_WWAN_7) {
 		IPAERR("%s: non valid lcid passed: %d\n", __func__, lcid);
 		return -EINVAL;
 	}
@@ -1193,17 +1183,11 @@ static int a2_mux_del_hdr(enum a2_mux_logical_channel_id lcid)
 
 	IPADBG("%s: ch %d\n", __func__, lcid);
 
-	if (lcid < A2_MUX_WWAN_0 || lcid >= A2_MUX_NUM_CHANNELS ||
-			lcid == A2_MUX_TETHERED_0) {
+	if (lcid < A2_MUX_WWAN_0 || lcid > A2_MUX_WWAN_7) {
 		IPAERR("invalid lcid passed: %d\n", lcid);
 		return -EINVAL;
 	}
 
-	if (a2_mux_ctx->bam_ch[lcid].v4_hdr_hdl == 0 ||
-			a2_mux_ctx->bam_ch[lcid].v6_hdr_hdl == 0) {
-		IPADBG("no hdrs for ch %d, exit Del hdrs\n", lcid);
-		return 0;
-	}
 
 	hdrs = kzalloc(sizeof(struct ipa_ioc_del_hdr) +
 		       2 * sizeof(struct ipa_hdr_del), GFP_KERNEL);
@@ -1338,7 +1322,8 @@ int a2_mux_open_channel(enum a2_mux_logical_channel_id lcid,
 		}
 		rc = a2_mux_add_hdr(lcid);
 		if (rc) {
-			IPAERR("a2_mux_add_hdr failed %d; ch: %d\n", rc, lcid);
+			IPAERR("a2_mux_add_hdr failed %d; ch: %d\n",
+			       rc, lcid);
 			return rc;
 		}
 	}
@@ -1553,7 +1538,6 @@ static int a2_mux_initialize_context(int handle)
 			__func__);
 		return -ENOMEM;
 	}
-
 	return 0;
 }
 
@@ -1571,6 +1555,7 @@ int a2_mux_init(void)
 	u32 a2_bam_mem_size;
 	u32 a2_bam_irq;
 	struct sps_bam_props a2_props;
+
 
 	IPADBG("%s A2 MUX\n", __func__);
 	rc = ipa_get_a2_mux_bam_info(&a2_bam_mem_base,
