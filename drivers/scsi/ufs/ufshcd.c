@@ -3630,8 +3630,10 @@ out:
 	 * If we failed to initialize the device or the device is not
 	 * present, turn off the power/clocks etc.
 	 */
-	if (ret && !ufshcd_eh_in_progress(hba) && !hba->pm_op_in_progress)
+	if (ret && !ufshcd_eh_in_progress(hba) && !hba->pm_op_in_progress) {
+		pm_runtime_put_sync(hba->dev);
 		ufshcd_hba_exit(hba);
+	}
 
 	return ret;
 }
@@ -4094,9 +4096,6 @@ static int ufshcd_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	enum ufs_dev_pwr_mode req_dev_pwr_mode;
 	enum uic_link_state req_link_state;
 
-	if (!hba)
-		return 0;
-
 	hba->pm_op_in_progress = 1;
 	pm_lvl = ufshcd_is_runtime_pm(pm_op) ? hba->rpm_lvl : hba->spm_lvl;
 	req_dev_pwr_mode = ufs_get_pm_lvl_to_dev_pwr_mode(pm_lvl);
@@ -4212,9 +4211,6 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	int ret;
 	enum uic_link_state old_link_state;
 
-	if (!hba)
-		return 0;
-
 	hba->pm_op_in_progress = 1;
 	old_link_state = hba->uic_link_state;
 	/* Make sure clocks are enabled before accessing controller */
@@ -4301,6 +4297,9 @@ int ufshcd_system_suspend(struct ufs_hba *hba)
 {
 	int ret = 0;
 
+	if (!hba || !hba->is_powered)
+		goto out;
+
 	if (pm_runtime_suspended(hba->dev)) {
 		if (hba->rpm_lvl == hba->spm_lvl)
 			/*
@@ -4339,8 +4338,11 @@ EXPORT_SYMBOL(ufshcd_system_suspend);
 
 int ufshcd_system_resume(struct ufs_hba *hba)
 {
-	if (pm_runtime_suspended(hba->dev))
-		/* Let the runtime resume take care of resuming it */
+	if (!hba || !hba->is_powered || pm_runtime_suspended(hba->dev))
+		/*
+		 * Let the runtime resume take care of resuming
+		 * if runtime suspended.
+		 */
 		return 0;
 	else
 		return ufshcd_resume(hba, UFS_SYSTEM_PM);
@@ -4357,7 +4359,10 @@ EXPORT_SYMBOL(ufshcd_system_resume);
  */
 int ufshcd_runtime_suspend(struct ufs_hba *hba)
 {
-	return ufshcd_suspend(hba, UFS_RUNTIME_PM);
+	if (!hba || !hba->is_powered)
+		return 0;
+	else
+		return ufshcd_suspend(hba, UFS_RUNTIME_PM);
 }
 EXPORT_SYMBOL(ufshcd_runtime_suspend);
 
@@ -4384,7 +4389,10 @@ EXPORT_SYMBOL(ufshcd_runtime_suspend);
  */
 int ufshcd_runtime_resume(struct ufs_hba *hba)
 {
-	return ufshcd_resume(hba, UFS_RUNTIME_PM);
+	if (!hba || !hba->is_powered)
+		return 0;
+	else
+		return ufshcd_resume(hba, UFS_RUNTIME_PM);
 }
 EXPORT_SYMBOL(ufshcd_runtime_resume);
 
