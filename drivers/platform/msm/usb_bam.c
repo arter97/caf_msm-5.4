@@ -904,7 +904,7 @@ static int cons_request_resource(enum usb_bam cur_bam)
 	case HSUSB_BAM:
 		if (ctx.pipes_enabled_per_bam[HSUSB_BAM] &&
 		    info.connect_complete &&
-			!info.cons_stopped && !info.prod_stopped) {
+			!info.cons_stopped) {
 			pr_debug("%s: ACK on cons_request", __func__);
 			ret = 0;
 		} else if (ctx.pipes_enabled_per_bam[HSUSB_BAM] &&
@@ -1274,7 +1274,6 @@ static void usb_bam_finish_resume(struct work_struct *w)
 	info.lpm_wait_handshake[HSUSB_BAM] = true;
 	spin_unlock(&usb_bam_ipa_handshake_info_lock);
 
-	wait_for_prod_granted(HSUSB_BAM);
 	if (info.cons_stopped) {
 		ipa_resume_pipes();
 		if (info.start) {
@@ -1285,13 +1284,20 @@ static void usb_bam_finish_resume(struct work_struct *w)
 		}
 	}
 
+	notify_usb_connected(HSUSB_BAM);
+	wait_for_prod_granted(HSUSB_BAM);
+
 	if (info.start) {
 		spin_lock(&usb_bam_ipa_handshake_info_lock);
 		info.start(info.start_stop_param, USB_TO_PEER_PERIPHERAL);
 		info.prod_stopped = false;
 		spin_unlock(&usb_bam_ipa_handshake_info_lock);
 	}
-	notify_usb_connected(HSUSB_BAM);
+	if (info.cur_cons_state[HSUSB_BAM] == IPA_RM_RESOURCE_GRANTED) {
+		pr_debug("%s: Notify CONS_GRANTED\n", __func__);
+		ipa_rm_notify_completion(IPA_RM_RESOURCE_GRANTED,
+				 ipa_rm_resource_cons[HSUSB_BAM]);
+	}
 	mutex_unlock(&info.suspend_resume_mutex);
 	pr_debug("%s: done", __func__);
 }
