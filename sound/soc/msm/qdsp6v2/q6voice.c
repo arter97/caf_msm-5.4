@@ -86,12 +86,12 @@ static int32_t qdsp_cvp_callback(struct apr_client_data *data, void *priv);
 static int voice_send_set_pp_enable_cmd(struct voice_data *v,
 					uint32_t module_id, int enable);
 static int is_cal_memory_allocated(void);
-static int is_voip_memory_allocated(void);
+static int is_voip_memory_allocated(struct voice_data *v);
 static int voice_alloc_cal_mem_map_table(void);
 static int voice_alloc_rtac_mem_map_table(void);
-static int voice_alloc_oob_shared_mem(void);
-static int voice_free_oob_shared_mem(void);
-static int voice_alloc_oob_mem_table(void);
+static int voice_alloc_oob_shared_mem(struct voice_data *v);
+static int voice_free_oob_shared_mem(struct voice_data *v);
+static int voice_alloc_oob_mem_table(struct voice_data *v);
 static int voice_alloc_and_map_cal_mem(struct voice_data *v);
 static int voice_alloc_and_map_oob_mem(struct voice_data *v);
 
@@ -140,6 +140,7 @@ static bool voice_is_valid_session_id(uint32_t session_id)
 	case VOICE2_SESSION_VSID:
 	case VOLTE_SESSION_VSID:
 	case VOIP_SESSION_VSID:
+	case VOIP2_SESSION_VSID:
 	case QCHAT_SESSION_VSID:
 	case ALL_SESSION_VSID:
 		ret = true;
@@ -236,6 +237,8 @@ char *voc_get_session_name(u32 session_id)
 		session_name = QCHAT_SESSION_NAME;
 	} else if (session_id == common.voice[VOC_PATH_FULL].session_id) {
 		session_name = VOIP_SESSION_NAME;
+	} else if (session_id == common.voice[VOC_PATH_VOIP2_FULL].session_id) {
+		session_name = VOIP2_SESSION_NAME;
 	}
 	return session_name;
 }
@@ -256,6 +259,9 @@ uint32_t voc_get_session_id(char *name)
 		else if (!strncmp(name, "QCHAT session", 13))
 			session_id =
 			common.voice[VOC_PATH_QCHAT_PASSIVE].session_id;
+		else if (!strcmp(name, "VoIP2 session"))
+			session_id =
+			common.voice[VOC_PATH_VOIP2_FULL].session_id;
 		else
 			session_id = common.voice[VOC_PATH_FULL].session_id;
 
@@ -285,6 +291,10 @@ static struct voice_data *voice_get_session(u32 session_id)
 
 	case VOIP_SESSION_VSID:
 		v = &common.voice[VOC_PATH_FULL];
+		break;
+
+	case VOIP2_SESSION_VSID:
+		v = &common.voice[VOC_PATH_VOIP2_FULL];
 		break;
 
 	case QCHAT_SESSION_VSID:
@@ -327,6 +337,10 @@ int voice_get_idx_for_session(u32 session_id)
 		idx = VOC_PATH_FULL;
 		break;
 
+	case VOIP2_SESSION_VSID:
+		idx = VOC_PATH_VOIP2_FULL;
+		break;
+
 	case QCHAT_SESSION_VSID:
 		idx = VOC_PATH_QCHAT_PASSIVE;
 		break;
@@ -353,6 +367,11 @@ static struct voice_data *voice_get_session_by_idx(int idx)
 static bool is_voip_session(u32 session_id)
 {
 	return (session_id == common.voice[VOC_PATH_FULL].session_id);
+}
+
+static bool is_voip2_session(u32 session_id)
+{
+	return (session_id == common.voice[VOC_PATH_VOIP2_FULL].session_id);
 }
 
 static bool is_volte_session(u32 session_id)
@@ -427,6 +446,7 @@ static void init_session_id(void)
 	common.voice[VOC_PATH_VOLTE_PASSIVE].session_id = VOLTE_SESSION_VSID;
 	common.voice[VOC_PATH_VOICE2_PASSIVE].session_id = VOICE2_SESSION_VSID;
 	common.voice[VOC_PATH_FULL].session_id = VOIP_SESSION_VSID;
+	common.voice[VOC_PATH_VOIP2_FULL].session_id = VOIP2_SESSION_VSID;
 	common.voice[VOC_PATH_QCHAT_PASSIVE].session_id = QCHAT_SESSION_VSID;
 }
 
@@ -553,7 +573,8 @@ static int voice_send_dual_control_cmd(struct voice_data *v)
 		return -EINVAL;
 	}
 	pr_debug("%s: Send Dual Control command to MVM\n", __func__);
-	if (!is_voip_session(v->session_id)) {
+	if (!is_voip_session(v->session_id) &&
+	    !is_voip2_session(v->session_id)) {
 		mvm_handle = voice_get_mvm_handle(v);
 		mvm_voice_ctl_cmd.hdr.hdr_field = APR_HDR_FIELD(
 						APR_MSG_TYPE_SEQ_CMD,
@@ -627,7 +648,8 @@ static int voice_create_mvm_cvs_session(struct voice_data *v)
 	/* send cmd to create mvm session and wait for response */
 
 	if (!mvm_handle) {
-		if (!is_voip_session(v->session_id)) {
+		if (!is_voip_session(v->session_id) &&
+		    !is_voip2_session(v->session_id)) {
 			mvm_session_cmd.hdr.hdr_field = APR_HDR_FIELD(
 						APR_MSG_TYPE_SEQ_CMD,
 						APR_HDR_LEN(APR_HDR_SIZE),
@@ -693,10 +715,15 @@ static int voice_create_mvm_cvs_session(struct voice_data *v)
 			mvm_session_cmd.hdr.token = 0;
 			mvm_session_cmd.hdr.opcode =
 				VSS_IMVM_CMD_CREATE_FULL_CONTROL_SESSION;
-			strlcpy(mvm_session_cmd.mvm_session.name,
+			if (is_voip2_session(v->session_id)) {
+				strlcpy(mvm_session_cmd.mvm_session.name,
+				VOIP2_SESSION_VSID_STR,
+				sizeof(mvm_session_cmd.mvm_session.name));
+			} else {
+				strlcpy(mvm_session_cmd.mvm_session.name,
 				"default voip",
 				sizeof(mvm_session_cmd.mvm_session.name));
-
+			}
 			v->mvm_state = CMD_STATUS_FAIL;
 
 			ret = apr_send_pkt(apr_mvm,
@@ -718,7 +745,8 @@ static int voice_create_mvm_cvs_session(struct voice_data *v)
 	}
 	/* send cmd to create cvs session */
 	if (!cvs_handle) {
-		if (!is_voip_session(v->session_id)) {
+		if (!is_voip_session(v->session_id) &&
+		    !is_voip2_session(v->session_id)) {
 			pr_debug("%s: creating CVS passive session\n",
 				 __func__);
 
@@ -792,14 +820,20 @@ static int voice_create_mvm_cvs_session(struct voice_data *v)
 				VSS_ISTREAM_CMD_CREATE_FULL_CONTROL_SESSION;
 			cvs_full_ctl_cmd.cvs_session.direction = 2;
 			cvs_full_ctl_cmd.cvs_session.enc_media_type =
-						common.mvs_info.media_type;
+						v->voip_info.media_type;
 			cvs_full_ctl_cmd.cvs_session.dec_media_type =
-						common.mvs_info.media_type;
+						v->voip_info.media_type;
 			cvs_full_ctl_cmd.cvs_session.network_id =
-					       common.mvs_info.network_type;
-			strlcpy(cvs_full_ctl_cmd.cvs_session.name,
+						v->voip_info.network_type;
+			if (is_voip2_session(v->session_id)) {
+				strlcpy(cvs_full_ctl_cmd.cvs_session.name,
+				VOIP2_SESSION_VSID_STR,
+				sizeof(cvs_full_ctl_cmd.cvs_session.name));
+			} else {
+				strlcpy(cvs_full_ctl_cmd.cvs_session.name,
 				"default q6 voice",
 				sizeof(cvs_full_ctl_cmd.cvs_session.name));
+			}
 
 			v->cvs_state = CMD_STATUS_FAIL;
 
@@ -887,7 +921,7 @@ static int voice_destroy_mvm_cvs_session(struct voice_data *v)
 	cvs_handle = voice_get_cvs_handle(v);
 
 	/* MVM, CVS sessions are destroyed only for Full control sessions. */
-	if (is_voip_session(v->session_id)) {
+	if (is_voip_session(v->session_id) || is_voip2_session(v->session_id)) {
 		pr_debug("%s: MVM detach stream, VOC_STATE: %d\n", __func__,
 				v->voc_state);
 
@@ -937,6 +971,7 @@ static int voice_destroy_mvm_cvs_session(struct voice_data *v)
 	}
 
 	if (is_voip_session(v->session_id) ||
+	    is_voip2_session(v->session_id) ||
 	    is_qchat_session(v->session_id) ||
 	    v->voc_state == VOC_ERROR) {
 		/* Destroy CVS. */
@@ -1174,9 +1209,9 @@ static int voice_set_dtx(struct voice_data *v)
 	cvs_set_dtx.hdr.dest_port = cvs_handle;
 	cvs_set_dtx.hdr.token = 0;
 	cvs_set_dtx.hdr.opcode = VSS_ISTREAM_CMD_SET_ENC_DTX_MODE;
-	cvs_set_dtx.dtx_mode.enable = common.mvs_info.dtx_mode;
+	cvs_set_dtx.dtx_mode.enable = v->voip_info.dtx_mode;
 
-	pr_debug("%s: Setting DTX %d\n", __func__, common.mvs_info.dtx_mode);
+	pr_debug("%s: Setting DTX %d\n", __func__, v->voip_info.dtx_mode);
 
 	v->cvs_state = CMD_STATUS_FAIL;
 
@@ -1228,7 +1263,7 @@ static int voice_send_mvm_media_type_cmd(struct voice_data *v)
 	mvm_set_cal_media_type.hdr.dest_port = mvm_handle;
 	mvm_set_cal_media_type.hdr.token = 0;
 	mvm_set_cal_media_type.hdr.opcode = VSS_IMVM_CMD_SET_CAL_MEDIA_TYPE;
-	mvm_set_cal_media_type.media_id = common.mvs_info.media_type;
+	mvm_set_cal_media_type.media_id = v->voip_info.media_type;
 	pr_debug("%s: setting media_id as %x\n",
 		 __func__ , mvm_set_cal_media_type.media_id);
 
@@ -1369,23 +1404,30 @@ int voc_alloc_cal_shared_memory(void)
 	return rc;
 }
 
-int voc_alloc_voip_shared_memory(void)
+int voc_alloc_voip_shared_memory(uint32_t session_id)
 {
 	int rc = 0;
+	struct voice_data *v = voice_get_session(session_id);
+
+	if (v == NULL) {
+		pr_err("%s: invalid session_id 0x%x\n", __func__, session_id);
+
+		return -EINVAL;
+	}
 
 	/* Allocate shared memory for OOB Voip */
-	rc = voice_alloc_oob_shared_mem();
+	rc = voice_alloc_oob_shared_mem(v);
 	if (rc < 0) {
 		pr_err("%s: Failed to alloc shared memory for OOB rc:%d\n",
 			   __func__, rc);
 	} else {
 		/* Allocate mem map table for OOB */
-		rc = voice_alloc_oob_mem_table();
+		rc = voice_alloc_oob_mem_table(v);
 		if (rc < 0) {
 			pr_err("%s: Failed to alloc mem map talbe rc:%d\n",
 			       __func__, rc);
 
-			voice_free_oob_shared_mem();
+			voice_free_oob_shared_mem(v);
 		}
 	}
 
@@ -1462,15 +1504,13 @@ done:
 }
 
 
-static int is_voip_memory_allocated(void)
+static int is_voip_memory_allocated(struct voice_data *v)
 {
 	bool ret;
-	struct voice_data *v = voice_get_session(
-				common.voice[VOC_PATH_FULL].session_id);
 
 	if (v == NULL) {
 		pr_err("%s: v is NULL, session_id:%d\n", __func__,
-		common.voice[VOC_PATH_FULL].session_id);
+		       v->session_id);
 
 		ret = false;
 		goto done;
@@ -1520,8 +1560,8 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 	cvs_set_media_cmd.hdr.dest_port = cvs_handle;
 	cvs_set_media_cmd.hdr.token = 0;
 	cvs_set_media_cmd.hdr.opcode = VSS_ISTREAM_CMD_SET_MEDIA_TYPE;
-	cvs_set_media_cmd.media_type.tx_media_id = common.mvs_info.media_type;
-	cvs_set_media_cmd.media_type.rx_media_id = common.mvs_info.media_type;
+	cvs_set_media_cmd.media_type.tx_media_id = v->voip_info.media_type;
+	cvs_set_media_cmd.media_type.rx_media_id = v->voip_info.media_type;
 
 	v->cvs_state = CMD_STATUS_FAIL;
 
@@ -1541,7 +1581,7 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 		goto fail;
 	}
 	/* Set encoder properties. */
-	switch (common.mvs_info.media_type) {
+	switch (v->voip_info.media_type) {
 	case VSS_MEDIA_ID_EVRC_MODEM:
 	case VSS_MEDIA_ID_4GV_NB_MODEM:
 	case VSS_MEDIA_ID_4GV_WB_MODEM:
@@ -1563,9 +1603,9 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 		cvs_set_cdma_rate.hdr.opcode =
 				VSS_ISTREAM_CMD_CDMA_SET_ENC_MINMAX_RATE;
 		cvs_set_cdma_rate.cdma_rate.min_rate =
-				common.mvs_info.evrc_min_rate;
+				v->voip_info.evrc_min_rate;
 		cvs_set_cdma_rate.cdma_rate.max_rate =
-				common.mvs_info.evrc_max_rate;
+				v->voip_info.evrc_max_rate;
 
 		v->cvs_state = CMD_STATUS_FAIL;
 
@@ -1584,7 +1624,7 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 			goto fail;
 		}
 
-		if (common.mvs_info.media_type != VSS_MEDIA_ID_EVRC_MODEM) {
+		if (v->voip_info.media_type != VSS_MEDIA_ID_EVRC_MODEM) {
 			ret = voice_set_dtx(v);
 			if (ret < 0)
 				goto fail;
@@ -1609,7 +1649,7 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 		cvs_set_amr_rate.hdr.token = 0;
 		cvs_set_amr_rate.hdr.opcode =
 					VSS_ISTREAM_CMD_VOC_AMR_SET_ENC_RATE;
-		cvs_set_amr_rate.amr_rate.mode = common.mvs_info.rate;
+		cvs_set_amr_rate.amr_rate.mode = v->voip_info.rate;
 
 		v->cvs_state = CMD_STATUS_FAIL;
 
@@ -1651,7 +1691,7 @@ static int voice_config_cvs_vocoder(struct voice_data *v)
 		cvs_set_amrwb_rate.hdr.token = 0;
 		cvs_set_amrwb_rate.hdr.opcode =
 					VSS_ISTREAM_CMD_VOC_AMRWB_SET_ENC_RATE;
-		cvs_set_amrwb_rate.amrwb_rate.mode = common.mvs_info.rate;
+		cvs_set_amrwb_rate.amrwb_rate.mode = v->voip_info.rate;
 
 		v->cvs_state = CMD_STATUS_FAIL;
 
@@ -3073,7 +3113,7 @@ static int voice_setup_vocproc(struct voice_data *v)
 	/* send tty mode if tty device is used */
 	voice_send_tty_mode_cmd(v);
 
-	if (is_voip_session(v->session_id)) {
+	if (is_voip_session(v->session_id) || is_voip2_session(v->session_id)) {
 		ret = voice_send_mvm_cal_network_cmd(v);
 		if (ret < 0)
 			pr_err("%s: voice_send_mvm_cal_network_cmd: %d\n",
@@ -3255,7 +3295,7 @@ static int voice_send_netid_timing_cmd(struct voice_data *v)
 	mvm_set_network.hdr.dest_port = mvm_handle;
 	mvm_set_network.hdr.token = 0;
 	mvm_set_network.hdr.opcode = VSS_ICOMMON_CMD_SET_NETWORK;
-	mvm_set_network.network.network_id = common.mvs_info.network_type;
+	mvm_set_network.network.network_id = v->voip_info.network_type;
 
 	v->mvm_state = CMD_STATUS_FAIL;
 	ret = apr_send_pkt(apr_mvm, (uint32_t *) &mvm_set_network);
@@ -4910,7 +4950,8 @@ int voc_start_voice_call(uint32_t session_id)
 				 __func__, ret);
 		}
 
-		if (is_voip_session(session_id)) {
+		if (is_voip_session(session_id) ||
+		    is_voip2_session(session_id)) {
 			/* Allocate oob mem if not already allocated and
 			 * memory map the oob memory block.
 			 */
@@ -4973,13 +5014,23 @@ fail:
 	return ret;
 }
 
-void voc_register_mvs_cb(ul_cb_fn ul_cb,
-			   dl_cb_fn dl_cb,
-			   void *private_data)
+int voc_register_mvs_cb(uint32_t session_id,
+			ul_cb_fn ul_cb,
+			dl_cb_fn dl_cb,
+			void *private_data)
 {
-	common.mvs_info.ul_cb = ul_cb;
-	common.mvs_info.dl_cb = dl_cb;
-	common.mvs_info.private_data = private_data;
+	struct voice_data *v = voice_get_session(session_id);
+
+	if (v == NULL) {
+		pr_err("%s: invalid session_id 0x%x\n", __func__, session_id);
+
+		return -EINVAL;
+	}
+	v->voip_info.ul_cb = ul_cb;
+	v->voip_info.dl_cb = dl_cb;
+	v->voip_info.private_data = private_data;
+
+	return 0;
 }
 
 void voc_register_dtmf_rx_detection_cb(dtmf_rx_det_cb_fn dtmf_rx_ul_cb,
@@ -4989,19 +5040,29 @@ void voc_register_dtmf_rx_detection_cb(dtmf_rx_det_cb_fn dtmf_rx_ul_cb,
 	common.dtmf_info.private_data = private_data;
 }
 
-void voc_config_vocoder(uint32_t media_type,
-			uint32_t rate,
-			uint32_t network_type,
-			uint32_t dtx_mode,
-			uint32_t evrc_min_rate,
-			uint32_t evrc_max_rate)
+int voc_config_vocoder(uint32_t session_id,
+		       uint32_t media_type,
+		       uint32_t rate,
+		       uint32_t network_type,
+		       uint32_t dtx_mode,
+		       uint32_t evrc_min_rate,
+		       uint32_t evrc_max_rate)
 {
-	common.mvs_info.media_type = media_type;
-	common.mvs_info.rate = rate;
-	common.mvs_info.network_type = network_type;
-	common.mvs_info.dtx_mode = dtx_mode;
-	common.mvs_info.evrc_min_rate = evrc_min_rate;
-	common.mvs_info.evrc_max_rate = evrc_max_rate;
+	struct voice_data *v = voice_get_session(session_id);
+
+	if (v == NULL) {
+		pr_err("%s: invalid session_id 0x%x\n", __func__, session_id);
+
+		return -EINVAL;
+	}
+	v->voip_info.media_type = media_type;
+	v->voip_info.rate = rate;
+	v->voip_info.network_type = network_type;
+	v->voip_info.dtx_mode = dtx_mode;
+	v->voip_info.evrc_min_rate = evrc_min_rate;
+	v->voip_info.evrc_max_rate = evrc_max_rate;
+
+	return 0;
 }
 
 static int32_t qdsp_mvm_callback(struct apr_client_data *data, void *priv)
@@ -5298,12 +5359,12 @@ static int32_t qdsp_cvs_callback(struct apr_client_data *data, void *priv)
 			VSS_ISTREAM_EVT_OOB_NOTIFY_ENC_BUFFER_CONSUMED;
 
 		cvs_voc_pkt = v->shmem_info.sh_buf.buf[1].data;
-		if (cvs_voc_pkt != NULL &&  common.mvs_info.ul_cb != NULL) {
+		if (cvs_voc_pkt != NULL &&  v->voip_info.ul_cb != NULL) {
 			/* cvs_voc_pkt[0] contains tx timestamp */
-			common.mvs_info.ul_cb((uint8_t *)&cvs_voc_pkt[3],
-					      cvs_voc_pkt[2],
-					      cvs_voc_pkt[0],
-					      common.mvs_info.private_data);
+			v->voip_info.ul_cb((uint8_t *)&cvs_voc_pkt[3],
+					   cvs_voc_pkt[2],
+					   cvs_voc_pkt[0],
+					   v->voip_info.private_data);
 		} else
 			pr_err("%s: cvs_voc_pkt or ul_cb is NULL\n", __func__);
 
@@ -5347,14 +5408,13 @@ static int32_t qdsp_cvs_callback(struct apr_client_data *data, void *priv)
 				 VSS_ISTREAM_EVT_OOB_NOTIFY_DEC_BUFFER_READY;
 
 		cvs_voc_pkt = (uint32_t *)(v->shmem_info.sh_buf.buf[0].data);
-		if (cvs_voc_pkt != NULL && common.mvs_info.dl_cb != NULL) {
+		if (cvs_voc_pkt != NULL && v->voip_info.dl_cb != NULL) {
 			/* Set timestamp to 0 and advance the pointer */
 			cvs_voc_pkt[0] = 0;
 			/* Set media_type and advance the pointer */
-			cvs_voc_pkt[1] = common.mvs_info.media_type;
-			common.mvs_info.dl_cb(
-					      (uint8_t *)&cvs_voc_pkt[2],
-					      common.mvs_info.private_data);
+			cvs_voc_pkt[1] = v->voip_info.media_type;
+			v->voip_info.dl_cb((uint8_t *)&cvs_voc_pkt[2],
+					   v->voip_info.private_data);
 			ret = apr_send_pkt(apr_cvs, (uint32_t *) &send_dec_buf);
 			if (ret < 0) {
 				pr_err("%s: Err send DEC_BUF_READY_NOTIFI %d\n",
@@ -5534,13 +5594,11 @@ static int32_t qdsp_cvp_callback(struct apr_client_data *data, void *priv)
 	return 0;
 }
 
-static int voice_free_oob_shared_mem(void)
+static int voice_free_oob_shared_mem(struct voice_data *v)
 {
 	int rc = 0;
 	int cnt = 0;
 	int bufcnt = NUM_OF_BUFFERS;
-	struct voice_data *v = voice_get_session(
-				common.voice[VOC_PATH_FULL].session_id);
 
 	mutex_lock(&common.common_lock);
 	if (v == NULL) {
@@ -5575,7 +5633,7 @@ done:
 	return rc;
 }
 
-static int voice_alloc_oob_shared_mem(void)
+static int voice_alloc_oob_shared_mem(struct voice_data *v)
 {
 	int cnt = 0;
 	int rc = 0;
@@ -5584,8 +5642,6 @@ static int voice_alloc_oob_shared_mem(void)
 	dma_addr_t phys;
 	int bufsz = BUFFER_BLOCK_SIZE;
 	int bufcnt = NUM_OF_BUFFERS;
-	struct voice_data *v = voice_get_session(
-				common.voice[VOC_PATH_FULL].session_id);
 
 	mutex_lock(&common.common_lock);
 	if (v == NULL) {
@@ -5632,12 +5688,10 @@ done:
 	return rc;
 }
 
-static int voice_alloc_oob_mem_table(void)
+static int voice_alloc_oob_mem_table(struct voice_data *v)
 {
 	int rc = 0;
 	int len;
-	struct voice_data *v = voice_get_session(
-				common.voice[VOC_PATH_FULL].session_id);
 
 	mutex_lock(&common.common_lock);
 	if (v == NULL) {
@@ -5764,8 +5818,8 @@ static int voice_alloc_and_map_oob_mem(struct voice_data *v)
 		return -EINVAL;
 	}
 
-	if (!is_voip_memory_allocated()) {
-		ret = voc_alloc_voip_shared_memory();
+	if (!is_voip_memory_allocated(v)) {
+		ret = voc_alloc_voip_shared_memory(v->session_id);
 		if (ret < 0) {
 			pr_err("%s: Failed to create voip oob memory %d\n",
 				   __func__, ret);
@@ -5808,9 +5862,6 @@ static int __init voice_init(void)
 	common.default_vol_ramp_duration_ms = DEFAULT_VOLUME_RAMP_DURATION;
 	common.default_mute_ramp_duration_ms = DEFAULT_MUTE_RAMP_DURATION;
 
-	/* Initialize MVS info. */
-	common.mvs_info.network_type = VSS_NETWORK_ID_DEFAULT;
-
 	mutex_init(&common.common_lock);
 
 	/* Initialize session id with vsid */
@@ -5819,6 +5870,7 @@ static int __init voice_init(void)
 	for (i = 0; i < MAX_VOC_SESSIONS; i++) {
 
 		/* initialize dev_rx and dev_tx */
+		common.voice[i].voip_info.network_type = VSS_NETWORK_ID_DEFAULT;
 		common.voice[i].dev_rx.dev_mute =  common.default_mute_val;
 		common.voice[i].dev_tx.dev_mute =  common.default_mute_val;
 		common.voice[i].dev_rx.volume_step_value =

@@ -155,14 +155,16 @@ static int voip_get_rate_type(uint32_t mode,
 static int voip_config_vocoder(struct snd_pcm_substream *substream);
 static int msm_voip_mode_rate_config_put(struct snd_kcontrol *kcontrol,
 					struct snd_ctl_elem_value *ucontrol);
-static int msm_voip_mode_rate_config_get(struct snd_kcontrol *kcontrol,
-					struct snd_ctl_elem_value *ucontrol);
 static int msm_voip_evrc_min_max_rate_config_put(struct snd_kcontrol *kcontrol,
 					 struct snd_ctl_elem_value *ucontrol);
-static int msm_voip_evrc_min_max_rate_config_get(struct snd_kcontrol *kcontrol,
-					 struct snd_ctl_elem_value *ucontrol);
 
-static struct voip_drv_info voip_info;
+enum {
+	VOIP_SESSION_INDEX,
+	VOIP2_SESSION_INDEX,
+	VOIP_SESSION_INDEX_MAX,
+};
+
+static struct voip_drv_info voip_info[VOIP_SESSION_INDEX_MAX];
 
 static struct snd_pcm_hardware msm_pcm_hardware = {
 	.info =                 (SNDRV_PCM_INFO_MMAP |
@@ -184,13 +186,130 @@ static struct snd_pcm_hardware msm_pcm_hardware = {
 	.fifo_size =            0,
 };
 
+struct voip_session_itr {
+	int cur_idx;
+	int session_idx;
+};
+
+static bool voip_is_valid_session_id(uint32_t session_id)
+{
+	bool ret = false;
+
+	switch (session_id) {
+	case VOIP_SESSION_VSID:
+	case VOIP2_SESSION_VSID:
+	case ALL_SESSION_VSID:
+		ret = true;
+		break;
+	default:
+		pr_err("%s: Invalid session_id : %x\n", __func__, session_id);
+
+		break;
+	}
+
+	return ret;
+}
+
+int voip_get_idx_for_session(u32 session_id)
+{
+	int idx = 0;
+
+	switch (session_id) {
+	case VOIP_SESSION_VSID:
+		idx = VOIP_SESSION_INDEX;
+		break;
+
+	case VOIP2_SESSION_VSID:
+		idx = VOIP2_SESSION_INDEX;
+		break;
+
+	case ALL_SESSION_VSID:
+		idx = VOIP_SESSION_INDEX_MAX - 1;
+		break;
+
+	default:
+		pr_err("%s: Invalid session_id : %x\n", __func__, session_id);
+
+		break;
+	}
+
+	return idx;
+}
+
+static void voip_itr_init(struct voip_session_itr *itr,
+			  u32 session_id)
+{
+	if (itr == NULL)
+		return;
+
+	itr->session_idx = voip_get_idx_for_session(session_id);
+	if (session_id == ALL_SESSION_VSID)
+		itr->cur_idx = 0;
+	else
+		itr->cur_idx = itr->session_idx;
+
+}
+
+static struct voip_drv_info *voip_get_session_by_idx(int idx)
+{
+	return ((idx < 0 || idx >= VOIP_SESSION_INDEX_MAX) ?
+				NULL : &voip_info[idx]);
+}
+
+static bool voip_itr_get_next_session(struct voip_session_itr *itr,
+				      struct voip_drv_info **voip)
+{
+	bool ret = false;
+
+	if (itr == NULL)
+		return false;
+
+	pr_debug("%s : cur idx = %d session idx = %d",
+		 __func__, itr->cur_idx, itr->session_idx);
+
+	if (itr->cur_idx <= itr->session_idx) {
+		ret = true;
+		*voip = voip_get_session_by_idx(itr->cur_idx);
+		itr->cur_idx++;
+	} else {
+		*voip = NULL;
+	}
+
+	return ret;
+}
+
+static bool is_voip2(struct voip_drv_info *pvoip2)
+{
+	if (pvoip2 == &voip_info[VOIP2_SESSION_INDEX])
+		return true;
+	else
+		return false;
+}
+
+static uint32_t get_session_id(struct voip_drv_info *pvoip)
+{
+	uint32_t session_id = 0;
+
+	if (is_voip2(pvoip))
+		session_id = voc_get_session_id(VOIP2_SESSION_NAME);
+	else
+		session_id = voc_get_session_id(VOIP_SESSION_NAME);
+
+	return session_id;
+}
 
 static int msm_voip_mute_put(struct snd_kcontrol *kcontrol,
 			     struct snd_ctl_elem_value *ucontrol)
 {
 	int ret = 0;
+	struct voip_drv_info *v = NULL;
+	struct voip_session_itr itr;
 	int mute = ucontrol->value.integer.value[0];
 	int ramp_duration = ucontrol->value.integer.value[1];
+	uint32_t session_id = ucontrol->value.integer.value[2];
+
+	pr_debug("%s: mute: %d ramp_duration: %d session_id: %d\n",
+		 __func__, mute, ramp_duration, session_id);
 
 	if ((mute < 0) || (mute > 1) || (ramp_duration < 0)) {
 		pr_err(" %s Invalid arguments", __func__);
@@ -199,12 +318,29 @@ static int msm_voip_mute_put(struct snd_kcontrol *kcontrol,
 		goto done;
 	}
 
-	pr_debug("%s: mute=%d ramp_duration=%d\n", __func__, mute,
-		ramp_duration);
+	if (!voip_is_valid_session_id(session_id)) {
+		pr_err("%s: Invalid session id:%u\n", __func__,
+		       session_id);
 
-	voc_set_tx_mute(voc_get_session_id(VOIP_SESSION_NAME), TX_PATH, mute,
-					ramp_duration);
+		ret = -EINVAL;
+		goto done;
+	}
 
+	voip_itr_init(&itr, session_id);
+	while (voip_itr_get_next_session(&itr, &v)) {
+		if (v != NULL) {
+			mutex_lock(&v->lock);
+			voc_set_tx_mute(get_session_id(v), TX_PATH,
+					mute, ramp_duration);
+			mutex_unlock(&v->lock);
+		} else {
+			pr_err("%s: invalid session_id 0x%x\n", __func__,
+			       session_id);
+
+			ret = -EINVAL;
+			break;
+		}
+	}
 done:
 	return ret;
 }
@@ -213,8 +349,14 @@ static int msm_voip_gain_put(struct snd_kcontrol *kcontrol,
 			     struct snd_ctl_elem_value *ucontrol)
 {
 	int ret = 0;
+	struct voip_drv_info *v = NULL;
+	struct voip_session_itr itr;
 	int volume = ucontrol->value.integer.value[0];
 	int ramp_duration = ucontrol->value.integer.value[1];
+	uint32_t session_id = ucontrol->value.integer.value[2];
+
+	pr_debug("%s: volume: %d ramp_duration: %d session_id: %d\n",
+		 __func__, volume, ramp_duration, session_id);
 
 	if ((volume < 0) || (ramp_duration < 0)) {
 		pr_err(" %s Invalid arguments", __func__);
@@ -223,14 +365,29 @@ static int msm_voip_gain_put(struct snd_kcontrol *kcontrol,
 		goto done;
 	}
 
-	pr_debug("%s: volume: %d ramp_duration: %d\n", __func__, volume,
-		ramp_duration);
+	if (!voip_is_valid_session_id(session_id)) {
+		pr_err("%s: Invalid session id:%u\n", __func__,
+		       session_id);
 
-	voc_set_rx_vol_step(voc_get_session_id(VOIP_SESSION_NAME),
-						RX_PATH,
-						volume,
-						ramp_duration);
+		ret = -EINVAL;
+		goto done;
+	}
 
+	voip_itr_init(&itr, session_id);
+	while (voip_itr_get_next_session(&itr, &v)) {
+		if (v != NULL) {
+			mutex_lock(&v->lock);
+			voc_set_rx_vol_step(get_session_id(v), RX_PATH,
+					    volume, ramp_duration);
+			mutex_unlock(&v->lock);
+		} else {
+			pr_err("%s: invalid session_id 0x%x\n", __func__,
+			       session_id);
+
+			ret = -EINVAL;
+			break;
+		}
+	}
 done:
 	return ret;
 }
@@ -238,43 +395,53 @@ done:
 static int msm_voip_dtx_mode_put(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
-	mutex_lock(&voip_info.lock);
+	int ret = 0;
+	struct voip_session_itr itr;
+	struct voip_drv_info *v = NULL;
+	int dtx_mode = ucontrol->value.integer.value[0];
+	uint32_t session_id = ucontrol->value.integer.value[1];
 
-	voip_info.dtx_mode  = ucontrol->value.integer.value[0];
+	pr_debug("%s: mode=%d,session_id=%d\n", __func__, dtx_mode,
+		 session_id);
 
-	pr_debug("%s: dtx: %d\n", __func__, voip_info.dtx_mode);
+	if (!voip_is_valid_session_id(session_id)) {
+		pr_err("%s: Invalid session id:%u\n", __func__,
+		       session_id);
 
-	mutex_unlock(&voip_info.lock);
+		ret = -EINVAL;
+		goto done;
+	}
 
-	return 0;
-}
-static int msm_voip_dtx_mode_get(struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_value *ucontrol)
-{
-	mutex_lock(&voip_info.lock);
+	voip_itr_init(&itr, session_id);
+	while (voip_itr_get_next_session(&itr, &v)) {
+		if (v != NULL) {
+			mutex_lock(&v->lock);
+			v->dtx_mode = dtx_mode;
+			mutex_unlock(&v->lock);
+		} else {
+			pr_err("%s: invalid session_id 0x%x\n", __func__,
+				session_id);
 
-	ucontrol->value.integer.value[0] = voip_info.dtx_mode;
-
-	mutex_unlock(&voip_info.lock);
-
-	return 0;
+			ret = -EINVAL;
+			break;
+		}
+	}
+done:
+	return ret;
 }
 
 static struct snd_kcontrol_new msm_voip_controls[] = {
-	SOC_SINGLE_MULTI_EXT("Voip Tx Mute", SND_SOC_NOPM, 0,
-			     MAX_RAMP_DURATION,
-			     0, 2, NULL, msm_voip_mute_put),
-	SOC_SINGLE_MULTI_EXT("Voip Rx Gain", SND_SOC_NOPM, 0,
-			     MAX_RAMP_DURATION,
-			     0, 2, NULL, msm_voip_gain_put),
-	SOC_SINGLE_MULTI_EXT("Voip Mode Rate Config", SND_SOC_NOPM, 0, 23850,
-			     0, 2, msm_voip_mode_rate_config_get,
-			     msm_voip_mode_rate_config_put),
+	SOC_SINGLE_MULTI_EXT("Voip Tx Mute", SND_SOC_NOPM, 0, VSID_MAX,
+			     0, 3, NULL, msm_voip_mute_put),
+	SOC_SINGLE_MULTI_EXT("Voip Rx Gain", SND_SOC_NOPM, 0, VSID_MAX,
+			     0, 3, NULL, msm_voip_gain_put),
+	SOC_SINGLE_MULTI_EXT("Voip Mode Rate Config", SND_SOC_NOPM, 0, VSID_MAX,
+			     0, 3, NULL, msm_voip_mode_rate_config_put),
 	SOC_SINGLE_MULTI_EXT("Voip Evrc Min Max Rate Config", SND_SOC_NOPM,
-			     0, 4, 0, 2, msm_voip_evrc_min_max_rate_config_get,
+			     0, VSID_MAX, 0, 3, NULL,
 			     msm_voip_evrc_min_max_rate_config_put),
-	SOC_SINGLE_EXT("Voip Dtx Mode", SND_SOC_NOPM, 0, 1, 0,
-		       msm_voip_dtx_mode_get, msm_voip_dtx_mode_put),
+	SOC_SINGLE_MULTI_EXT("Voip Dtx Mode", SND_SOC_NOPM, 0, VSID_MAX, 0, 2,
+			     NULL, msm_voip_dtx_mode_put),
 };
 
 static int msm_pcm_voip_probe(struct snd_soc_platform *platform)
@@ -521,10 +688,18 @@ static int msm_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 static int msm_pcm_open(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
-	struct voip_drv_info *prtd = &voip_info;
+	struct voip_drv_info *prtd;
 	int ret = 0;
 
-	pr_debug("%s, VoIP\n", __func__);
+	if (!strncmp("VoIP2", substream->pcm->id, strlen("VoIP2"))) {
+		prtd = &voip_info[VOIP2_SESSION_INDEX];
+		pr_debug("%s: Open VoIP2 Substream Id=%s\n",
+			 __func__, substream->pcm->id);
+	} else {
+		prtd = &voip_info[VOIP_SESSION_INDEX];
+		pr_debug("%s: Open VoIP Substream Id=%s\n",
+			 __func__, substream->pcm->id);
+	}
 	mutex_lock(&prtd->lock);
 
 	runtime->hw = msm_pcm_hardware;
@@ -697,6 +872,7 @@ static int msm_pcm_close(struct snd_pcm_substream *substream)
 	struct snd_pcm_runtime *runtime;
 	struct voip_drv_info *prtd;
 	unsigned long dsp_flags;
+	uint32_t session_id = 0;
 
 	if (substream == NULL) {
 		pr_err("substream is NULL\n");
@@ -717,9 +893,12 @@ static int msm_pcm_close(struct snd_pcm_substream *substream)
 	if (!prtd->playback_instance && !prtd->capture_instance) {
 		if (prtd->state == VOIP_STARTED) {
 			prtd->state = VOIP_STOPPED;
-			voc_end_voice_call(
-					voc_get_session_id(VOIP_SESSION_NAME));
-			voc_register_mvs_cb(NULL, NULL, prtd);
+			session_id = get_session_id(prtd);
+			if (session_id) {
+				voc_end_voice_call(session_id);
+				voc_register_mvs_cb(session_id,
+						    NULL, NULL, prtd);
+			}
 		}
 		/* release all buffer */
 		/* release in_queue and free_in_queue */
@@ -799,6 +978,8 @@ static int voip_config_vocoder(struct snd_pcm_substream *substream)
 	uint32_t rate_type = 0;
 	uint32_t evrc_min_rate_type = 0;
 	uint32_t evrc_max_rate_type = 0;
+	uint32_t session_id = 0;
+	uint32_t network_id;
 
 	if ((runtime->format != FORMAT_SPECIAL) &&
 	    ((prtd->mode == MODE_AMR) || (prtd->mode == MODE_AMR_WB) ||
@@ -890,28 +1071,31 @@ static int voip_config_vocoder(struct snd_pcm_substream *substream)
 			  __func__, evrc_min_rate_type, evrc_max_rate_type);
 	}
 	if ((prtd->play_samp_rate == 8000) &&
-	    (prtd->cap_samp_rate == 8000))
-		voc_config_vocoder(media_type, rate_type,
-				   VSS_NETWORK_ID_VOIP_NB,
-				   voip_info.dtx_mode,
-				   evrc_min_rate_type,
-				   evrc_max_rate_type);
-	else if ((prtd->play_samp_rate == 16000) &&
-		 (prtd->cap_samp_rate == 16000))
-		voc_config_vocoder(media_type, rate_type,
-				   VSS_NETWORK_ID_VOIP_WB,
-				   voip_info.dtx_mode,
-				   evrc_min_rate_type,
-				   evrc_max_rate_type);
-	else {
+	    (prtd->cap_samp_rate == 8000)) {
+		network_id = VSS_NETWORK_ID_VOIP_NB;
+	} else if ((prtd->play_samp_rate == 16000) &&
+		   (prtd->cap_samp_rate == 16000)) {
+		network_id = VSS_NETWORK_ID_VOIP_WB;
+	} else {
 		pr_debug("%s: Invalid rate playback %d, capture %d\n",
 			 __func__, prtd->play_samp_rate,
 			 prtd->cap_samp_rate);
 
 		ret = -EINVAL;
+		goto done;
+	}
+	session_id = get_session_id(prtd);
+	if (session_id) {
+		voc_config_vocoder(session_id, media_type, rate_type,
+				   network_id, prtd->dtx_mode,
+				   evrc_min_rate_type,
+				   evrc_max_rate_type);
+	} else {
+		pr_err("%s: Invalid session_id: %d\n", __func__, session_id);
+
+		ret = -EINVAL;
 	}
 done:
-
 	return ret;
 }
 
@@ -920,6 +1104,7 @@ static int msm_pcm_prepare(struct snd_pcm_substream *substream)
 	int ret = 0;
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct voip_drv_info *prtd = runtime->private_data;
+	uint32_t session_id = 0;
 
 	mutex_lock(&prtd->lock);
 
@@ -938,19 +1123,27 @@ static int msm_pcm_prepare(struct snd_pcm_substream *substream)
 			goto done;
 		}
 
-		voc_register_mvs_cb(voip_process_ul_pkt,
-				    voip_process_dl_pkt, prtd);
+		session_id = get_session_id(prtd);
+		if (session_id) {
+			voc_register_mvs_cb(session_id,
+					    voip_process_ul_pkt,
+					    voip_process_dl_pkt, prtd);
 
-		ret = voc_start_voice_call(
-				voc_get_session_id(VOIP_SESSION_NAME));
+			ret = voc_start_voice_call(session_id);
 
-		if (ret < 0) {
-			pr_err("%s: voc_start_voice_call() failed err %d",
-			       __func__, ret);
+			if (ret < 0) {
+				pr_err("%s: voc_start_voice_call() failed err %d",
+				       __func__, ret);
 
-			goto done;
+				goto done;
+			}
+			prtd->state = VOIP_STARTED;
+		} else {
+			pr_err("%s: Invalid session id %d\n", __func__,
+			       session_id);
+
+			ret = -EINVAL;
 		}
-		prtd->state = VOIP_STARTED;
 	}
 done:
 	mutex_unlock(&prtd->lock);
@@ -1011,11 +1204,10 @@ static int msm_pcm_hw_params(struct snd_pcm_substream *substream,
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct snd_dma_buffer *dma_buf = &substream->dma_buffer;
 	struct voip_buf_node *buf_node = NULL;
+	struct voip_drv_info *prtd = runtime->private_data;
 	int i = 0, offset = 0;
 
-	pr_debug("%s: voip\n", __func__);
-
-	mutex_lock(&voip_info.lock);
+	mutex_lock(&prtd->lock);
 
 	dma_buf->dev.type = SNDRV_DMA_TYPE_DEV;
 	dma_buf->dev.dev = substream->pcm->card->dev;
@@ -1026,7 +1218,8 @@ static int msm_pcm_hw_params(struct snd_pcm_substream *substream,
 			&dma_buf->addr, GFP_KERNEL);
 	if (!dma_buf->area) {
 		pr_err("%s:MSM VOIP dma_alloc failed\n", __func__);
-		mutex_unlock(&voip_info.lock);
+
+		mutex_unlock(&prtd->lock);
 		return -ENOMEM;
 	}
 
@@ -1037,82 +1230,102 @@ static int msm_pcm_hw_params(struct snd_pcm_substream *substream,
 		for (i = 0; i < VOIP_MAX_Q_LEN; i++) {
 			buf_node = (void *)dma_buf->area + offset;
 
-			list_add_tail(&buf_node->list,
-					&voip_info.free_in_queue);
+			list_add_tail(&buf_node->list, &prtd->free_in_queue);
 			offset = offset + sizeof(struct voip_buf_node);
 		}
 	} else {
 		for (i = 0; i < VOIP_MAX_Q_LEN; i++) {
 			buf_node = (void *) dma_buf->area + offset;
-			list_add_tail(&buf_node->list,
-					&voip_info.free_out_queue);
+			list_add_tail(&buf_node->list, &prtd->free_out_queue);
 			offset = offset + sizeof(struct voip_buf_node);
 		}
 	}
 
-	mutex_unlock(&voip_info.lock);
+	mutex_unlock(&prtd->lock);
 
 	snd_pcm_set_runtime_buffer(substream, &substream->dma_buffer);
 
 	return 0;
 }
 
-static int msm_voip_mode_rate_config_get(struct snd_kcontrol *kcontrol,
-					struct snd_ctl_elem_value *ucontrol)
-{
-	mutex_lock(&voip_info.lock);
-
-	ucontrol->value.integer.value[0] = voip_info.mode;
-	ucontrol->value.integer.value[1] = voip_info.rate;
-
-	mutex_unlock(&voip_info.lock);
-
-	return 0;
-}
-
 static int msm_voip_mode_rate_config_put(struct snd_kcontrol *kcontrol,
-					struct snd_ctl_elem_value *ucontrol)
-{
-	mutex_lock(&voip_info.lock);
-
-	voip_info.mode = ucontrol->value.integer.value[0];
-	voip_info.rate = ucontrol->value.integer.value[1];
-
-	pr_debug("%s: mode=%d,rate=%d\n", __func__, voip_info.mode,
-		voip_info.rate);
-
-	mutex_unlock(&voip_info.lock);
-
-	return 0;
-}
-
-static int msm_voip_evrc_min_max_rate_config_get(struct snd_kcontrol *kcontrol,
 					 struct snd_ctl_elem_value *ucontrol)
 {
-	mutex_lock(&voip_info.lock);
+	int ret = 0;
+	struct voip_session_itr itr;
+	struct voip_drv_info *v = NULL;
+	int mode = ucontrol->value.integer.value[0];
+	int rate = ucontrol->value.integer.value[1];
+	uint32_t session_id = ucontrol->value.integer.value[2];
 
-	ucontrol->value.integer.value[0] = voip_info.evrc_min_rate;
-	ucontrol->value.integer.value[1] = voip_info.evrc_max_rate;
+	pr_debug("%s: mode=%d, rate=%d, session_id=%d\n", __func__, mode,
+		 rate, session_id);
 
-	mutex_unlock(&voip_info.lock);
+	if (!voip_is_valid_session_id(session_id)) {
+		pr_err("%s: Invalid session id:%u\n", __func__,
+		       session_id);
 
-	return 0;
+		ret = -EINVAL;
+		goto done;
+	}
+
+	voip_itr_init(&itr, session_id);
+	while (voip_itr_get_next_session(&itr, &v)) {
+		if (v != NULL) {
+			mutex_lock(&v->lock);
+			v->mode = mode;
+			v->rate = rate;
+			mutex_unlock(&v->lock);
+		} else {
+			pr_err("%s: invalid session_id 0x%x\n", __func__,
+				session_id);
+
+			ret = -EINVAL;
+			break;
+		}
+	}
+done:
+	return ret;
 }
 
 static int msm_voip_evrc_min_max_rate_config_put(struct snd_kcontrol *kcontrol,
 					 struct snd_ctl_elem_value *ucontrol)
 {
-	mutex_lock(&voip_info.lock);
+	int ret = 0;
+	struct voip_session_itr itr;
+	struct voip_drv_info *v = NULL;
+	uint32_t evrc_min_rate = ucontrol->value.integer.value[0];
+	uint32_t evrc_max_rate = ucontrol->value.integer.value[1];
+	uint32_t session_id = ucontrol->value.integer.value[2];
 
-	voip_info.evrc_min_rate = ucontrol->value.integer.value[0];
-	voip_info.evrc_max_rate = ucontrol->value.integer.value[1];
+	pr_debug("%s: min_rate=%d, max_rate=%d, session_id=%d\n", __func__,
+		 evrc_min_rate, evrc_max_rate, session_id);
 
-	pr_debug("%s(): evrc_min_rate=%d,evrc_max_rate=%d\n", __func__,
-		  voip_info.evrc_min_rate, voip_info.evrc_max_rate);
+	if (!voip_is_valid_session_id(session_id)) {
+		pr_err("%s: Invalid session id:%u\n", __func__,
+		       session_id);
 
-	mutex_unlock(&voip_info.lock);
+		ret = -EINVAL;
+		goto done;
+	}
 
-	return 0;
+	voip_itr_init(&itr, session_id);
+	while (voip_itr_get_next_session(&itr, &v)) {
+		if (v != NULL) {
+			mutex_lock(&v->lock);
+			v->evrc_min_rate = evrc_min_rate;
+			v->evrc_max_rate = evrc_max_rate;
+			mutex_unlock(&v->lock);
+		} else {
+			pr_err("%s: invalid session_id 0x%x\n", __func__,
+				session_id);
+
+			ret = -EINVAL;
+			break;
+		}
+	}
+done:
+	return ret;
 }
 
 static int voip_get_rate_type(uint32_t mode, uint32_t rate,
@@ -1313,6 +1526,7 @@ static struct snd_soc_platform_driver msm_soc_platform = {
 static __devinit int msm_pcm_probe(struct platform_device *pdev)
 {
 	int rc;
+	uint32_t session_id;
 
 	if (!is_voc_initialized()) {
 		pr_debug("%s: voice module not initialized yet, deferring probe()\n",
@@ -1333,9 +1547,17 @@ static __devinit int msm_pcm_probe(struct platform_device *pdev)
 		       __func__, rc);
 	}
 
-	rc = voc_alloc_voip_shared_memory();
+	session_id = voc_get_session_id(VOIP_SESSION_NAME);
+	rc = voc_alloc_voip_shared_memory(session_id);
 	if (rc < 0) {
 		pr_err("%s: error allocating shared mem err %d\n",
+		       __func__, rc);
+	}
+
+	session_id = voc_get_session_id(VOIP2_SESSION_NAME);
+	rc = voc_alloc_voip_shared_memory(session_id);
+	if (rc < 0) {
+		pr_err("%s: error allocating VoIP2 shared mem err %d\n",
 		       __func__, rc);
 	}
 
@@ -1374,20 +1596,25 @@ static struct platform_driver msm_pcm_driver = {
 
 static int __init msm_soc_platform_init(void)
 {
+	int i;
+
 	memset(&voip_info, 0, sizeof(voip_info));
-	voip_info.mode = MODE_PCM;
-	mutex_init(&voip_info.lock);
 
-	spin_lock_init(&voip_info.dsp_lock);
-	spin_lock_init(&voip_info.dsp_ul_lock);
+	for (i = 0; i < VOIP_SESSION_INDEX_MAX; i++) {
+		voip_info[i].mode = MODE_PCM;
+		mutex_init(&voip_info[i].lock);
 
-	init_waitqueue_head(&voip_info.out_wait);
-	init_waitqueue_head(&voip_info.in_wait);
+		spin_lock_init(&voip_info[i].dsp_lock);
+		spin_lock_init(&voip_info[i].dsp_ul_lock);
 
-	INIT_LIST_HEAD(&voip_info.in_queue);
-	INIT_LIST_HEAD(&voip_info.free_in_queue);
-	INIT_LIST_HEAD(&voip_info.out_queue);
-	INIT_LIST_HEAD(&voip_info.free_out_queue);
+		init_waitqueue_head(&voip_info[i].out_wait);
+		init_waitqueue_head(&voip_info[i].in_wait);
+
+		INIT_LIST_HEAD(&voip_info[i].in_queue);
+		INIT_LIST_HEAD(&voip_info[i].free_in_queue);
+		INIT_LIST_HEAD(&voip_info[i].out_queue);
+		INIT_LIST_HEAD(&voip_info[i].free_out_queue);
+	}
 
 	return platform_driver_register(&msm_pcm_driver);
 }

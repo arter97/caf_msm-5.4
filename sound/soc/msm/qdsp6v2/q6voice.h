@@ -1226,7 +1226,7 @@ typedef void (*dtmf_rx_det_cb_fn)(uint8_t *pkt,
 				  char *session,
 				  void *private_data);
 
-struct mvs_driver_info {
+struct voip_driver_info {
 	uint32_t media_type;
 	uint32_t rate;
 	uint32_t network_type;
@@ -1311,6 +1311,8 @@ struct voice_data {
 	struct incall_music_info music_info;
 
 	struct voice_rec_route_state rec_route_state;
+
+	struct voip_driver_info voip_info;
 };
 
 struct cal_mem {
@@ -1319,7 +1321,15 @@ struct cal_mem {
 	void *buf;
 };
 
-#define MAX_VOC_SESSIONS 5
+enum {
+	VOC_PATH_PASSIVE = 0,
+	VOC_PATH_FULL,
+	VOC_PATH_VOLTE_PASSIVE,
+	VOC_PATH_VOICE2_PASSIVE,
+	VOC_PATH_QCHAT_PASSIVE,
+	VOC_PATH_VOIP2_FULL,
+	MAX_VOC_SESSIONS,
+};
 
 struct common_data {
 	/* these default values are for all devices */
@@ -1347,8 +1357,6 @@ struct common_data {
 
 	struct mutex common_lock;
 
-	struct mvs_driver_info mvs_info;
-
 	struct dtmf_driver_info dtmf_info;
 
 	struct voice_data voice[MAX_VOC_SESSIONS];
@@ -1361,19 +1369,21 @@ struct voice_session_itr {
 	int session_idx;
 };
 
-void voc_register_mvs_cb(ul_cb_fn ul_cb,
+int voc_register_mvs_cb(uint32_t session_id,
+			ul_cb_fn ul_cb,
 			dl_cb_fn dl_cb,
 			void *private_data);
 
 void voc_register_dtmf_rx_detection_cb(dtmf_rx_det_cb_fn dtmf_rx_ul_cb,
 				       void *private_data);
 
-void voc_config_vocoder(uint32_t media_type,
-			uint32_t rate,
-			uint32_t network_type,
-			uint32_t dtx_mode,
-			uint32_t evrc_min_rate,
-			uint32_t evrc_max_rate);
+int voc_config_vocoder(uint32_t session_id,
+		       uint32_t media_type,
+		       uint32_t rate,
+		       uint32_t network_type,
+		       uint32_t dtx_mode,
+		       uint32_t evrc_min_rate,
+		       uint32_t evrc_max_rate);
 
 enum {
 	DEV_RX = 0,
@@ -1385,26 +1395,22 @@ enum {
 	TX_PATH,
 };
 
-
-#define VOC_PATH_PASSIVE 0
-#define VOC_PATH_FULL 1
-#define VOC_PATH_VOLTE_PASSIVE 2
-#define VOC_PATH_VOICE2_PASSIVE 3
-#define VOC_PATH_QCHAT_PASSIVE 4
-
 #define MAX_SESSION_NAME_LEN 32
 #define VOICE_SESSION_NAME  "Voice session"
 #define VOIP_SESSION_NAME   "VoIP session"
+#define VOIP2_SESSION_NAME  "VoIP2 session"
 #define VOLTE_SESSION_NAME  "VoLTE session"
 #define VOICE2_SESSION_NAME "Voice2 session"
 #define QCHAT_SESSION_NAME  "QCHAT session"
 
 #define VOICE2_SESSION_VSID_STR "10DC1000"
 #define QCHAT_SESSION_VSID_STR "10803000"
+#define VOIP2_SESSION_VSID_STR "10004100"
 #define VOICE_SESSION_VSID  0x10C01000
 #define VOICE2_SESSION_VSID 0x10DC1000
 #define VOLTE_SESSION_VSID  0x10C02000
 #define VOIP_SESSION_VSID   0x10004000
+#define VOIP2_SESSION_VSID  0x10004100
 #define QCHAT_SESSION_VSID  0x10803000
 #define ALL_SESSION_VSID    0xFFFFFFFF
 #define VSID_MAX            ALL_SESSION_VSID
@@ -1448,7 +1454,7 @@ uint8_t voc_get_route_flag(uint32_t session_id, uint8_t path_dir);
 int voc_enable_dtmf_rx_detection(uint32_t session_id, uint32_t enable);
 void voc_disable_dtmf_det_on_active_sessions(void);
 int voc_alloc_cal_shared_memory(void);
-int voc_alloc_voip_shared_memory(void);
+int voc_alloc_voip_shared_memory(uint32_t session_id);
 int is_voc_initialized(void);
 int voc_register_vocproc_vol_table(void);
 int voc_deregister_vocproc_vol_table(void);
