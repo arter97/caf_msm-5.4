@@ -33,7 +33,9 @@
 
 #define RESET_COPP_ID 99
 #define INVALID_COPP_ID 0xFF
-#define ADM_GET_PARAMETER_LENGTH 350
+/* Used for inband payload copy, max size is 4k */
+/* 3 is to account for module, param ID & param size in payload */
+#define ADM_GET_PARAMETER_LENGTH  (4096 - APR_HDR_SIZE - 3 * sizeof(uint32_t))
 
 
 enum {
@@ -76,7 +78,7 @@ static struct adm_multi_ch_map multi_ch_map = { false,
 						{0, 0, 0, 0, 0, 0, 0, 0}
 					      };
 
-static int adm_dolby_get_parameters[ADM_GET_PARAMETER_LENGTH];
+static int adm_get_parameters[ADM_GET_PARAMETER_LENGTH];
 
 int srs_trumedia_open(int port_id, int srs_tech_id, void *srs_params)
 {
@@ -399,8 +401,8 @@ int adm_dolby_dap_get_params(int port_id, uint32_t module_id, uint32_t param_id,
 		goto dolby_dap_get_param_return;
 	}
 	if (params_data) {
-		for (i = 0; i < adm_dolby_get_parameters[0]; i++)
-			params_data[i] = adm_dolby_get_parameters[1+i];
+		for (i = 0; i < adm_get_parameters[0]; i++)
+			params_data[i] = adm_get_parameters[1+i];
 	}
 	rc = 0;
 dolby_dap_get_param_return:
@@ -580,13 +582,21 @@ static int32_t adm_callback(struct apr_client_data *data, void *priv)
 			if (payload[0] != 0)
 				pr_err("%s: ADM_CMDRSP_GET_PP_PARAMS_V5 returned error = 0x%x\n",
 					__func__, payload[0]);
-			rtac_make_adm_callback(payload,
-				data->payload_size);
-			adm_dolby_get_parameters[0] = payload[3];
-			pr_debug("GET_PP PARAM:received parameter length: %x\n",
-					adm_dolby_get_parameters[0]);
-			for (i = 0; i < payload[3]; i++)
-				adm_dolby_get_parameters[1+i] = payload[4+i];
+			if (rtac_make_adm_callback(payload,
+					data->payload_size))
+				break;
+
+			/* payload[3] is the param size, check if payload */
+			/* is big enough and has a valid param size */
+			if ((data->payload_size > (4 * sizeof(uint32_t))) &&
+				(payload[3] <= ADM_GET_PARAMETER_LENGTH)) {
+				adm_get_parameters[0] = payload[3];
+				pr_debug("GET_PP PARAM:received parameter length: %x\n",
+						adm_get_parameters[0]);
+				/* storing param size then params */
+				for (i = 0; i < payload[3]; i++)
+					adm_get_parameters[1+i] = payload[4+i];
+			}
 			atomic_set(&this_adm.copp_stat[index], 1);
 			wake_up(&this_adm.wait[index]);
 			break;
