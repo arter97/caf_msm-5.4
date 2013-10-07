@@ -59,10 +59,6 @@
 
 #include "debug.h"
 
-static char *maximum_speed = "super";
-module_param(maximum_speed, charp, 0);
-MODULE_PARM_DESC(maximum_speed, "Maximum supported speed.");
-
 /* -------------------------------------------------------------------------- */
 
 #define DWC3_DEVS_POSSIBLE	32
@@ -519,6 +515,40 @@ void dwc3_notify_event(struct dwc3 *dwc, unsigned event)
 }
 EXPORT_SYMBOL(dwc3_notify_event);
 
+/**
+ * of_usb_get_maximum_speed - Get maximum requested speed for a given USB
+ * controller.
+ * @np: Pointer to the given device_node
+ *
+ * The function gets the maximum speed string from property "maximum-speed",
+ * and returns the corresponding enum usb_device_speed.
+ */
+static enum usb_device_speed of_usb_get_maximum_speed(struct device_node *np)
+{
+	const char *maximum_speed;
+	int err;
+	int i;
+	static const char *const speed_names[] = {
+		[USB_SPEED_UNKNOWN] = "UNKNOWN",
+		[USB_SPEED_LOW] = "low-speed",
+		[USB_SPEED_FULL] = "full-speed",
+		[USB_SPEED_HIGH] = "high-speed",
+		[USB_SPEED_WIRELESS] = "wireless",
+		[USB_SPEED_SUPER] = "super-speed",
+	};
+
+
+	err = of_property_read_string(np, "maximum-speed", &maximum_speed);
+	if (err < 0)
+		return USB_SPEED_UNKNOWN;
+
+	for (i = 0; i < ARRAY_SIZE(speed_names); i++)
+		if (strcmp(maximum_speed, speed_names[i]) == 0)
+			return i;
+
+	return USB_SPEED_UNKNOWN;
+}
+
 #define DWC3_ALIGN_MASK		(16 - 1)
 
 static u64 dwc3_dma_mask = DMA_BIT_MASK(64);
@@ -598,19 +628,13 @@ static int __devinit dwc3_probe(struct platform_device *pdev)
 	dwc->regs_size	= resource_size(res);
 	dwc->dev	= dev;
 
-	if (!strncmp("super", maximum_speed, 5))
-		dwc->maximum_speed = DWC3_DCFG_SUPERSPEED;
-	else if (!strncmp("high", maximum_speed, 4))
-		dwc->maximum_speed = DWC3_DCFG_HIGHSPEED;
-	else if (!strncmp("full", maximum_speed, 4))
-		dwc->maximum_speed = DWC3_DCFG_FULLSPEED1;
-	else if (!strncmp("low", maximum_speed, 3))
-		dwc->maximum_speed = DWC3_DCFG_LOWSPEED;
-	else
-		dwc->maximum_speed = DWC3_DCFG_SUPERSPEED;
-
 	dwc->needs_fifo_resize = of_property_read_bool(node, "tx-fifo-resize");
 	host_only_mode = of_property_read_bool(node, "host-only-mode");
+	dwc->maximum_speed = of_usb_get_maximum_speed(node);
+
+	/* default to superspeed if no maximum_speed passed */
+	if (dwc->maximum_speed == USB_SPEED_UNKNOWN)
+		dwc->maximum_speed = USB_SPEED_SUPER;
 
 	pm_runtime_no_callbacks(dev);
 	pm_runtime_set_active(dev);
