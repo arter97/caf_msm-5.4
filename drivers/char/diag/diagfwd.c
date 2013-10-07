@@ -95,7 +95,7 @@ do {									\
 } while (0)
 
 #define CHK_OVERFLOW(bufStart, start, end, length) \
-((bufStart <= start) && (end - start >= length)) ? 1 : 0
+((bufStart <= start) && (end - start >= length) && (length > 0)) ? 1 : 0
 
 /* Determine if this device uses a device tree */
 #ifdef CONFIG_OF
@@ -1604,8 +1604,15 @@ void diag_process_hdlc(void *data, unsigned len)
 
 	ret = diag_hdlc_decode(&hdlc);
 
+	/*
+	 * If the message is 3 bytes or less in length then the message is
+	 * too short. A message will need 4 bytes minimum, since there are
+	 * 2 bytes for the CRC and 1 byte for the ending 0x7e for the hdlc
+	 * encoding
+	 */
 	if (hdlc.dest_idx < 4) {
-		pr_err("diag: Integer underflow in hdlc processing\n");
+		pr_err_ratelimited("diag: In %s, message is too short, len: %d,"
+			" dest len: %d\n", __func__, len, hdlc.dest_idx);
 		return;
 	}
 	if (ret) {
