@@ -986,7 +986,9 @@ static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
 					struct hpcm_buf_node, list);
 			list_del(&buf_node->list);
 			spin_unlock_irqrestore(&dai_data->dsp_lock, dsp_flags);
-			ret = copy_to_user(buf, &buf_node->frame, count);
+			ret = copy_to_user(buf,
+					   &buf_node->frame.voc_pkt,
+					   buf_node->frame.len);
 			if (ret) {
 				pr_err("%s: Copy to user retuned %d\n",
 					__func__, ret);
