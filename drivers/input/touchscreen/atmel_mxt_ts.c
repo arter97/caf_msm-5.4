@@ -41,7 +41,6 @@
 #include <linux/completion.h>
 #include <linux/pm_runtime.h>
 #include <linux/errno.h>
-#include <asm/system.h>
 #include <linux/atomic.h>
 #endif
 
