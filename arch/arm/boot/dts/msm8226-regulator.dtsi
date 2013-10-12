@@ -458,3 +458,7 @@
 		status = "disabled";
 	};
 };
+
+&pm8226_chg_batif {
+	regulator-name = "batfet";
+};
