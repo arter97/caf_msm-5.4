@@ -1512,6 +1512,7 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 	struct mdss_data_type *mdata = platform_get_drvdata(pdev);
 	u32 data;
 	int rc;
+	struct property *prop = NULL;
 
 	rc = of_property_read_u32(pdev->dev.of_node, "qcom,mdss-rot-block-size",
 		&data);
@@ -1521,6 +1522,9 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 					       "qcom,mdss-has-bwc");
 	mdata->has_decimation = of_property_read_bool(pdev->dev.of_node,
 		"qcom,mdss-has-decimation");
+	prop = of_find_property(pdev->dev.of_node, "batfet-supply", NULL);
+	mdata->batfet_required = prop ? true : false;
+
 	return 0;
 }
 
@@ -1596,6 +1600,33 @@ struct mdss_data_type *mdss_mdp_get_mdata()
 	return mdss_res;
 }
 
+void mdss_mdp_batfet_ctrl(struct mdss_data_type *mdata, int enable)
+{
+	if (!mdata->batfet_required)
+		return;
+
+	if (!mdata->batfet) {
+		if (enable) {
+			mdata->batfet = devm_regulator_get(&mdata->pdev->dev,
+				"batfet");
+			if (IS_ERR_OR_NULL(mdata->batfet)) {
+				pr_debug("unable to get batfet reg. rc=%d\n",
+					PTR_RET(mdata->batfet));
+				mdata->batfet = NULL;
+				return;
+			}
+		} else {
+			pr_debug("Batfet regulator disable w/o enable\n");
+			return;
+		}
+	}
+
+	if (enable)
+		regulator_enable(mdata->batfet);
+	else
+		regulator_disable(mdata->batfet);
+}
+
 static void mdss_mdp_footswitch_ctrl(struct mdss_data_type *mdata, int on)
 {
 	if (!mdata->fs)
@@ -1603,14 +1634,18 @@ static void mdss_mdp_footswitch_ctrl(struct mdss_data_type *mdata, int on)
 
 	if (on) {
 		pr_debug("Enable MDP FS\n");
-		if (!mdata->fs_ena)
+		if (!mdata->fs_ena) {
 			regulator_enable(mdata->fs);
+			mdss_mdp_batfet_ctrl(mdata, true);
+		}
 		mdata->fs_ena = true;
 	} else {
 		pr_debug("Disable MDP FS\n");
 		mdss_iommu_dettach(mdata);
-		if (mdata->fs_ena)
+		if (mdata->fs_ena) {
 			regulator_disable(mdata->fs);
+			mdss_mdp_batfet_ctrl(mdata, false);
+		}
 		mdata->fs_ena = false;
 	}
 }
