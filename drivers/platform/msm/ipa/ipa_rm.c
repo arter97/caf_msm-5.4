@@ -33,6 +33,8 @@ static const char *resource_name_to_str[IPA_RM_RESOURCE_MAX] = {
 	__stringify(IPA_RM_RESOURCE_WWAN_6_PROD),
 	__stringify(IPA_RM_RESOURCE_WWAN_7_PROD),
 	__stringify(IPA_RM_RESOURCE_WLAN_PROD),
+	__stringify(IPA_RM_RESOURCE_ODU_PROD),
+	__stringify(IPA_RM_RESOURCE_ODU_BRIDGE_PROD),
 	__stringify(IPA_RM_RESOURCE_A2_CONS),
 	__stringify(IPA_RM_RESOURCE_USB_CONS),
 	__stringify(IPA_RM_RESOURCE_HSIC_CONS),
