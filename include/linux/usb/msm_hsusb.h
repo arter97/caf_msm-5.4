@@ -464,6 +464,7 @@ struct msm_hsic_host_platform_data {
 	bool phy_sof_workaround;
 	bool phy_susp_sof_workaround;
 	bool phy_reset_sof_workaround;
+	bool dis_internal_clk_gating;
 	int strobe_pad_offset;
 	int data_pad_offset;
 
