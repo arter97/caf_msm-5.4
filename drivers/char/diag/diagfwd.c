@@ -1252,7 +1252,6 @@ static int diag_process_apps_pkt(unsigned char *buf, int len)
 		}
 #endif
 	}
-
 	/* Check for registered clients and forward packet to apropriate proc */
 	cmd_code = (int)(*(char *)buf);
 	temp++;
@@ -1610,23 +1609,10 @@ void diag_process_hdlc(void *data, unsigned len)
 
 	ret = diag_hdlc_decode(&hdlc);
 
-	/*
-	 * If the message is 3 bytes or less in length then the message is
-	 * too short. A message will need 4 bytes minimum, since there are
-	 * 2 bytes for the CRC and 1 byte for the ending 0x7e for the hdlc
-	 * encoding
-	 */
-	if (hdlc.dest_idx < 4) {
-		pr_err_ratelimited("diag: In %s, message is too short, len: %d,"
-			" dest len: %d\n", __func__, len, hdlc.dest_idx);
-		return;
-	}
-	if (ret) {
+	if (ret) 
 		type = diag_process_apps_pkt(driver->hdlc_buf,
 							  hdlc.dest_idx - 3);
-		if (type < 0)
-			return;
-	} else if (driver->debug_flag) {
+	 else if (driver->debug_flag) {
 		printk(KERN_ERR "Packet dropped due to bad HDLC coding/CRC"
 				" errors or partial packet received, packet"
 				" length = %d\n", len);
