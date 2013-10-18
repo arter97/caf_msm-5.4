@@ -10,21 +10,15 @@
  * GNU General Public License for more details.
  */
 
-&soc {
-	qcom,ion {
+/include/ "msm8974pro-pm8941.dtsi"
 
-		qcom,ion-heap@23 { /* OTHER PIL HEAP */
-			compatible = "qcom,msm-ion-reserve";
-			reg = <23>;
-			qcom,heap-align = <0x1000>;
-			qcom,memory-fixed = <0x05a00000 0x2100000>;
-		};
-
-		qcom,ion-heap@26 { /* MODEM HEAP */
-			compatible = "qcom,msm-ion-reserve";
-			reg = <26>;
-			qcom,heap-align = <0x1000>;
-			qcom,memory-fixed = <0x08000000 0x5000000>;
-		};
-	};
+/ {
+	qcom,msm-id = <208 0x10000>,
+		      <209 0x10000>,
+		      <211 0x10000>,
+		      <212 0x10000>,
+		      <214 0x10000>,
+		      <215 0x10000>,
+		      <217 0x10000>,
+		      <218 0x10000>;
 };

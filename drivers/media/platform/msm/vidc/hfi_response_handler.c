@@ -163,6 +163,38 @@ static void hfi_process_sess_evt_seq_changed(
 	callback(VIDC_EVENT_CHANGE, &cmd_done);
 }
 
+static void hfi_process_evt_release_buffer_ref(
+		msm_vidc_callback callback, u32 device_id,
+		struct hfi_msg_event_notify_packet *pkt)
+{
+	struct msm_vidc_cb_cmd_done cmd_done = {0};
+	struct msm_vidc_cb_event event_notify = {0};
+
+	struct hfi_msg_release_buffer_ref_event_packet *data;
+
+	dprintk(VIDC_DBG, "RECEIVED:EVENT_NOTIFY - release_buffer_reference");
+	if (sizeof(struct hfi_msg_event_notify_packet)
+		> pkt->size) {
+		dprintk(VIDC_ERR, "hal_process_session_init_done:bad_pkt_size");
+		return;
+	}
+
+	data = (struct hfi_msg_release_buffer_ref_event_packet *)
+				pkt->rg_ext_event_data;
+
+	cmd_done.device_id = device_id;
+	cmd_done.session_id = ((struct hal_session *) pkt->session_id)->
+		session_id;
+	cmd_done.status = VIDC_ERR_NONE;
+	cmd_done.size = sizeof(struct msm_vidc_cb_event);
+
+	event_notify.hal_event_type = HAL_EVENT_RELEASE_BUFFER_REFERENCE;
+	event_notify.packet_buffer = data->packet_buffer;
+	event_notify.exra_data_buffer = data->exra_data_buffer;
+	cmd_done.data = &event_notify;
+	callback(VIDC_EVENT_CHANGE, &cmd_done);
+}
+
 static void hfi_process_sys_error(
 		msm_vidc_callback callback, u32 device_id)
 {
@@ -180,7 +212,19 @@ static void hfi_process_session_error(
 	cmd_done.device_id = device_id;
 	cmd_done.session_id = ((struct hal_session *) pkt->session_id)->
 		session_id;
-	callback(SESSION_ERROR, &cmd_done);
+	dprintk(VIDC_INFO, "Received : SESSION_ERROR with event id : %d\n",
+		pkt->event_data1);
+	switch (pkt->event_data1) {
+	case HFI_ERR_SESSION_INVALID_SCALE_FACTOR:
+	case HFI_ERR_SESSION_UNSUPPORT_BUFFERTYPE:
+	case HFI_ERR_SESSION_UNSUPPORTED_SETTING:
+		dprintk(VIDC_INFO, "Non Fatal : HFI_EVENT_SESSION_ERROR\n");
+		break;
+	default:
+		dprintk(VIDC_ERR, "HFI_EVENT_SESSION_ERROR\n");
+		callback(SESSION_ERROR, &cmd_done);
+		break;
+	}
 }
 static void hfi_process_event_notify(
 		msm_vidc_callback callback, u32 device_id,
@@ -204,7 +248,7 @@ static void hfi_process_event_notify(
 		hfi_process_sys_error(callback, device_id);
 		break;
 	case HFI_EVENT_SESSION_ERROR:
-		dprintk(VIDC_ERR, "HFI_EVENT_SESSION_ERROR");
+		dprintk(VIDC_INFO, "HFI_EVENT_SESSION_ERROR");
 		if (!validate_session_pkt(sessions, sess, session_lock))
 			hfi_process_session_error(callback, device_id, pkt);
 		break;
@@ -216,6 +260,10 @@ static void hfi_process_event_notify(
 		break;
 	case HFI_EVENT_SESSION_PROPERTY_CHANGED:
 		dprintk(VIDC_INFO, "HFI_EVENT_SESSION_PROPERTY_CHANGED");
+		break;
+	case HFI_EVENT_RELEASE_BUFFER_REFERENCE:
+		dprintk(VIDC_INFO, "HFI_EVENT_RELEASE_BUFFER_REFERENCE\n");
+		hfi_process_evt_release_buffer_ref(callback, device_id, pkt);
 		break;
 	default:
 		dprintk(VIDC_WARN, "hal_process_event_notify:unkown_event_id");
