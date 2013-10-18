@@ -10,21 +10,17 @@
  * GNU General Public License for more details.
  */
 
-&soc {
-	qcom,ion {
+/dts-v1/;
 
-		qcom,ion-heap@23 { /* OTHER PIL HEAP */
-			compatible = "qcom,msm-ion-reserve";
-			reg = <23>;
-			qcom,heap-align = <0x1000>;
-			qcom,memory-fixed = <0x05a00000 0x2100000>;
-		};
+/include/ "msm8974pro-ab-pm8941.dtsi"
+/include/ "msm8974-mtp.dtsi"
 
-		qcom,ion-heap@26 { /* MODEM HEAP */
-			compatible = "qcom,msm-ion-reserve";
-			reg = <26>;
-			qcom,heap-align = <0x1000>;
-			qcom,memory-fixed = <0x08000000 0x5000000>;
-		};
-	};
+/ {
+	model = "Qualcomm MSM 8974Pro-AA/AB MTP";
+	compatible = "qcom,msm8974-mtp", "qcom,msm8974", "qcom,mtp";
+	qcom,board-id = <8 0>;
+};
+
+&sdhc_1 {
+	qcom,pad-drv-on = <0x4 0x4 0x4>; /* 10mA, 10mA, 10mA */
 };
