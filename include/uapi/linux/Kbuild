@@ -95,6 +95,7 @@ header-y += cramfs_fs.h
 header-y += cuda.h
 header-y += cyclades.h
 header-y += cycx_cfm.h
+header-y += danipc_ioctl.h
 header-y += dcbnl.h
 header-y += dccp.h
 header-y += dlm.h
