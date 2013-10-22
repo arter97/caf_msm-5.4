@@ -1619,13 +1619,16 @@ void diag_process_hdlc(void *data, unsigned len)
 	if (hdlc.dest_idx < 4) {
 		pr_err_ratelimited("diag: In %s, message is too short, len: %d,"
 			" dest len: %d\n", __func__, len, hdlc.dest_idx);
+		mutex_unlock(&driver->diag_hdlc_mutex);
 		return;
 	}
 	if (ret) {
 		type = diag_process_apps_pkt(driver->hdlc_buf,
 							  hdlc.dest_idx - 3);
-		if (type < 0)
+		if (type < 0) {
+			mutex_unlock(&driver->diag_hdlc_mutex);
 			return;
+		}
 	} else if (driver->debug_flag) {
 		printk(KERN_ERR "Packet dropped due to bad HDLC coding/CRC"
 				" errors or partial packet received, packet"
