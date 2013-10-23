@@ -71,6 +71,18 @@ struct mdp_csc_cfg mdp_csc_convert[MDSS_MDP_MAX_CSC] = {
 		{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
 		{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
 	},
+	[MDSS_MDP_CSC_YUV_10BIT_2RGB] = {
+		0,
+		{
+			0x0254, 0x0000, 0x0331,
+			0x0254, 0x1F38, 0x1E61,
+			0x0254, 0x0409, 0x0000,
+		},
+		{ 0x7C0, 0x600, 0x600,},
+		{ 0x0, 0x0, 0x0,},
+		{ 0x4, 0x3AC, 0x4, 0x3AC, 0x4, 0x3AC,},
+		{ 0x0, 0x3FF, 0x0, 0x3FF, 0x0, 0x3FF,},
+	},
 };
 
 #define CSC_MV_OFF	0x0
@@ -844,9 +856,32 @@ static int pp_vig_pipe_setup(struct mdss_mdp_pipe *pipe, u32 *op)
 		 * previously configured pipe need to re-configure CSC matrix
 		 */
 		if (pipe->play_cnt == 0) {
-			mdss_mdp_csc_setup(MDSS_MDP_BLOCK_SSPP, pipe->num, 1,
-					   MDSS_MDP_CSC_YUV2RGB);
+			if (pipe->src_fmt->is_yuv &&
+				pipe->src_fmt->extend_pix_fmt)
+				mdss_mdp_csc_setup(MDSS_MDP_BLOCK_SSPP,
+					pipe->num, 1,
+					MDSS_MDP_CSC_YUV_10BIT_2RGB);
+			else
+				mdss_mdp_csc_setup(MDSS_MDP_BLOCK_SSPP,
+					pipe->num, 1,
+					MDSS_MDP_CSC_YUV2RGB);
 		}
+	}
+
+	if ((mdata->mdp_rev == MDSS_MDP_HW_REV_200) &&
+		(pipe->flags & MDP_VPU_PIPE) &&
+			pipe->src_fmt->is_yuv) {
+		opmode |= (1 << 24); /* Chroma Up */
+		writel_relaxed(0x8C8DC42B, pipe->base +
+			MDSS_MDP_REG_VIG_CHROMA_UP_0_COEFF);
+		writel_relaxed(0x796DD028, pipe->base +
+			MDSS_MDP_REG_VIG_CHROMA_UP_1_3_COEFF_LOW);
+		writel_relaxed(0x3FFF1978, pipe->base +
+			MDSS_MDP_REG_VIG_CHROMA_UP_1_3_COEFF_HIGH);
+		writel_relaxed(0x4A1D440E, pipe->base +
+			MDSS_MDP_REG_VIG_CHROMA_UP_2_COEFF);
+		writel_relaxed(0, pipe->base +
+			MDSS_MDP_REG_VID_0_CHROMA_UP_CTL);
 	}
 
 	pp_hist_setup(&opmode, MDSS_PP_SSPP_CFG | pipe->num, pipe->mixer);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,6 +27,16 @@ enum {
 	COLOR_5BIT,
 	COLOR_6BIT,
 	COLOR_8BIT,
+};
+
+	/*
+	 * extend pixel format,
+	 */
+enum {
+	EXTEND_FMT_NONE,
+	EXTEND_FMT_10BIT_444,
+	EXTEND_FMT_10BIT_422,
+	EXTEND_FMT_10BIT_422_BWC,
 };
 
 #define FMT_RGB_565(fmt, e0, e1, e2)				\
@@ -193,6 +203,14 @@ static struct mdss_mdp_format_params mdss_mdp_format_map[] = {
 		.element = { C1_B_Cb, C2_R_Cr, C0_G_Y },
 	},
 	{
+		FMT_YUV_COMMON(MDP_YCBYCR_H2V1),
+		.fetch_planes = MDSS_MDP_PLANE_INTERLEAVED,
+		.chroma_sample = MDSS_MDP_CHROMA_H2V1,
+		.unpack_count = 4,
+		.bpp = 2,
+		.element = { C2_R_Cr, C0_G_Y, C1_B_Cb, C0_G_Y },
+	},
+	{
 		FMT_YUV_COMMON(MDP_YCRYCB_H2V1),
 		.fetch_planes = MDSS_MDP_PLANE_INTERLEAVED,
 		.chroma_sample = MDSS_MDP_CHROMA_H2V1,
@@ -201,12 +219,58 @@ static struct mdss_mdp_format_params mdss_mdp_format_map[] = {
 		.element = { C1_B_Cb, C0_G_Y, C2_R_Cr, C0_G_Y },
 	},
 	{
-		FMT_YUV_COMMON(MDP_YCBYCR_H2V1),
+		.format = MDP_XRGB_2AAA,
 		.fetch_planes = MDSS_MDP_PLANE_INTERLEAVED,
+		.unpack_tight = 1,
+		.unpack_align_msb = 0,
+		.alpha_enable = 0,
+		.chroma_sample = 0,
+		.unpack_count = 3,
+		.extend_pix_fmt = EXTEND_FMT_10BIT_444,
+		.bpp = 4,
+		.element = {C1_B_Cb, C0_G_Y, C2_R_Cr, C0_G_Y},
+		.bits = {
+			[C3_ALPHA] = COLOR_4BIT,
+			[C2_R_Cr] = COLOR_8BIT,
+			[C0_G_Y] = COLOR_8BIT,
+			[C1_B_Cb] = COLOR_8BIT,
+		},
+	},
+	{
+		.format = MDP_YCBYCR_H2V1_10,
+		.fetch_planes = MDSS_MDP_PLANE_INTERLEAVED,
+		.is_yuv = 1,
+		.unpack_tight = 1,
+		.unpack_align_msb = 0,
+		.alpha_enable = 0,
 		.chroma_sample = MDSS_MDP_CHROMA_H2V1,
 		.unpack_count = 4,
+		.extend_pix_fmt = EXTEND_FMT_10BIT_422,
 		.bpp = 2,
-		.element = { C2_R_Cr, C0_G_Y, C1_B_Cb, C0_G_Y },
+		.element = {C2_R_Cr, C0_G_Y, C1_B_Cb, C0_G_Y},
+		.bits = {
+			[C2_R_Cr] = COLOR_8BIT,
+			[C0_G_Y] = COLOR_8BIT,
+			[C1_B_Cb] = COLOR_8BIT,
+		},
+	},
+	{
+		.format = MDP_YCBYCR_H2V1_10_BWC,
+		.fetch_planes = MDSS_MDP_PLANE_INTERLEAVED,
+		.is_yuv = 1,
+		.unpack_tight = 1,
+		.unpack_align_msb = 0,
+		.alpha_enable = 0,
+		.chroma_sample = MDSS_MDP_CHROMA_H2V1,
+		.unpack_count = 4,
+		.extend_pix_fmt = EXTEND_FMT_10BIT_422_BWC,
+		.bpp = 2,
+		.element = {C2_R_Cr, C0_G_Y, C1_B_Cb, C0_G_Y},
+		.bits = {
+			[C2_R_Cr] = COLOR_8BIT,
+			[C0_G_Y] = COLOR_8BIT,
+			[C1_B_Cb] = COLOR_8BIT,
+		},
 	},
 
 };

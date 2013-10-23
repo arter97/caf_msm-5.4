@@ -959,11 +959,25 @@ static int mdss_mdp_format_setup(struct mdss_mdp_pipe *pipe)
 	unpack = (fmt->element[3] << 24) | (fmt->element[2] << 16) |
 			(fmt->element[1] << 8) | (fmt->element[0] << 0);
 	src_format |= ((fmt->unpack_count - 1) << 12) |
+			(fmt->extend_pix_fmt << 26) |
 			(fmt->unpack_tight << 17) |
 			(fmt->unpack_align_msb << 18) |
 			((fmt->bpp - 1) << 9);
 
 	mdss_mdp_pipe_sspp_setup(pipe, &opmode);
+
+	if (pipe->src_fmt->format == MDP_YCBYCR_H2V1_10_BWC) {
+		mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_VPU_BWC_DEC_OP_MODE,
+			(1 << 30) | (1 << 29) | /* 422, 10 bit */
+			(1 << 27) | (2 << 24) | /* default value */
+			(3 << 16) | (3 << 14) | (3 << 12) | /* default value */
+			(2 << 9) | (3 << 7) | (3 << 5) | /* default value */
+			(1 << 11) | (7 << 0)); /* default value */
+		mdss_mdp_pipe_write(pipe,
+			MDSS_MDP_REG_SSPP_VPU_BWC_DEC_VID_QNTBITS, 4);
+
+		mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_VPU_BWC_CTRL, 0);
+	}
 
 	if (fmt->tile && mdata->highest_bank_bit) {
 		mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_FETCH_CONFIG,

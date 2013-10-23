@@ -97,6 +97,7 @@ enum mdss_mdp_csc_type {
 	MDSS_MDP_CSC_YUV2RGB,
 	MDSS_MDP_CSC_RGB2YUV,
 	MDSS_MDP_CSC_YUV2YUV,
+	MDSS_MDP_CSC_YUV_10BIT_2RGB,
 	MDSS_MDP_MAX_CSC
 };
 
@@ -219,6 +220,7 @@ struct mdss_mdp_format_params {
 	u8 is_yuv;
 
 	u8 frame_format;
+	u8 extend_pix_fmt;
 	u8 chroma_sample;
 	u8 solid_fill;
 	u8 fetch_planes;
