@@ -83,6 +83,9 @@ Parent node optional properties:
 					for the boost regulator.
 - qcom,resume-soc			Capacity in percent at which charging should resume
 					when a fully charged battery drops below this level.
+- qcom,ibat-calibration-enabled		Indicates if ibat calibration is enabled. This is
+					required for devices which have a ibat trim error
+					causing ibatmax to go out of spec.
 
 Sub node required structure:
 - A qcom,chg node must be a child of an SPMI node that has specified
