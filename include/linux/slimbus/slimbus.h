@@ -1008,7 +1008,7 @@ extern struct slim_controller *slim_busnum_to_ctrl(u32 busnum);
 extern int slim_register_board_info(struct slim_boardinfo const *info,
 					unsigned n);
 #else
-int slim_register_board_info(struct slim_boardinfo const *info,
+static inline int slim_register_board_info(struct slim_boardinfo const *info,
 					unsigned n)
 {
 	return 0;
