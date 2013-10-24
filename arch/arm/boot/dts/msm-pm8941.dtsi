@@ -189,6 +189,7 @@
 			qcom,vbatdet-delta-mv = <100>;
 			qcom,resume-soc = <99>;
 			qcom,tchg-mins = <150>;
+			qcom,ibat-calibration-enabled;
 
 			qcom,chgr@1000 {
 				status = "disabled";
