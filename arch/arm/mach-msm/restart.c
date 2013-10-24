@@ -91,10 +91,20 @@ static struct notifier_block panic_blk = {
 static void set_dload_mode(int on)
 {
 	if (dload_mode_addr) {
-		__raw_writel(on ? 0xE47B337D : 0, dload_mode_addr);
-		__raw_writel(on ? 0xCE14091A : 0,
-		       dload_mode_addr + sizeof(unsigned int));
-		mb();
+		if(on) {
+			__raw_writel(0xE47B337D, dload_mode_addr);
+			__raw_writel(0xCE14091A, dload_mode_addr + sizeof(unsigned int));
+			mb();
+			if((__raw_readl(dload_mode_addr)!= 0xE47B337D) || (__raw_readl(dload_mode_addr+0x4) != 0xCE14091A))
+				pr_err("WTF!!! DLOAD MODE VALUE IS NOT WHAT WE JUST SET IT TO BE\n");
+		}
+		else {
+			__raw_writel(0, dload_mode_addr);
+			__raw_writel(0,dload_mode_addr + sizeof(unsigned int));
+			mb();
+			if((__raw_readl(dload_mode_addr)!= 0x0) || (__raw_readl(dload_mode_addr+0x4) != 0x0))
+				pr_err("WTF!!! DLOAD MODE VALUE IS NOT WHAT WE JUST SET IT TO BE\n");
+		}
 		dload_mode_enabled = on;
 	}
 }
