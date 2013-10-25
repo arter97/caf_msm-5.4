@@ -17,6 +17,7 @@
  */
 
 /include/ "msm8974-v2.0-1.dtsi"
+/include/ "apq8074-v2.0-1-ion.dtsi"
 
 &soc {
 	qcom,qseecom@a700000 {
@@ -53,5 +54,10 @@
 &sdcc3 {
 	qcom,sup-voltages = <2000 2000>;
 	status = "ok";
+};
+
+&ehci {
+	hsusb_vdd_dig-supply = <&pm8841_s2_corner>;
+	qcom,vdd-voltage-level = <1 2 3 5 7>;
 };
 

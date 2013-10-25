@@ -115,8 +115,8 @@
 			qcom,mode = "wfi";
 			qcom,l2 = "l2_cache_active";
 			qcom,latency-us = <1>;
-			qcom,ss-power = <784>;
-			qcom,energy-overhead = <190000>;
+			qcom,ss-power = <530>;
+			qcom,energy-overhead = <52800>;
 			qcom,time-overhead = <100>;
 		};
 
@@ -124,30 +124,30 @@
 			reg = <0x1>;
 			qcom,mode = "standalone_pc";
 			qcom,l2 = "l2_cache_active";
-			qcom,latency-us = <3000>;
-			qcom,ss-power = <725>;
-			qcom,energy-overhead = <99500>;
-			qcom,time-overhead = <3130>;
+			qcom,latency-us = <500>;
+			qcom,ss-power = <410>;
+			qcom,energy-overhead = <603400>;
+			qcom,time-overhead = <1200>;
 		};
 
 		qcom,lpm-level@2 {
 			reg = <0x2>;
 			qcom,mode = "pc";
 			qcom,l2 = "l2_cache_gdhs";
-			qcom,latency-us = <20000>;
-			qcom,ss-power = <138>;
-			qcom,energy-overhead = <1208400>;
-			qcom,time-overhead = <9200>;
+			qcom,latency-us = <10700>;
+			qcom,ss-power = <325>;
+			qcom,energy-overhead = <441250>;
+			qcom,time-overhead = <1020>;
 		};
 
 		qcom,lpm-level@3 {
 			reg = <0x3>;
 			qcom,mode = "pc";
 			qcom,l2 = "l2_cache_pc";
-			qcom,latency-us = <30000>;
-			qcom,ss-power = <110>;
-			qcom,energy-overhead = <1250300>;
-			qcom,time-overhead = <9500>;
+			qcom,latency-us = <11700>;
+			qcom,ss-power = <315>;
+			qcom,energy-overhead = <1027150>;
+			qcom,time-overhead = <2400>;
 		};
 	};
 
@@ -170,6 +170,7 @@
 			<53 104>, /* mdss_irq */
 			<62 222>, /* ee0_krait_hlos_spmi_periph_irq */
 			<2 216>, /* tsens_upper_lower_int */
+			<41 63>,  /* dino_gen_purpose_irq35 */
 			<0xff 56>,  /* q6_wdog_expired_irq */
 			<0xff 57>,  /* mss_to_apps_irq(0) */
 			<0xff 58>,  /* mss_to_apps_irq(1) */
@@ -212,45 +213,43 @@
 
 		qcom,gpio-parent = <&msmgpio>;
 		qcom,gpio-map = <3  1>,
-			<4  4 >,
-			<5  5 >,
-			<6  9 >,
-			<7  13>,
-			<8  17>,
-			<9  21>,
-			<10  27>,
-			<11  29>,
-			<12  31>,
-			<13  33>,
-			<14  35>,
-			<15  37>,
-			<16  38>,
-			<17  39>,
-			<18  41>,
-			<19  46>,
-			<20  48>,
-			<21  49>,
-			<22  50>,
-			<23  51>,
-			<24  52>,
-			<25  54>,
-			<26  62>,
-			<27  63>,
-			<28  64>,
-			<29  65>,
-			<30  66>,
-			<31  67>,
-			<32  68>,
-			<33  69>,
-			<34  71>,
-			<35  72>,
-			<36  106>,
-			<37  107>,
-			<38  108>,
-			<39  109>,
-			<40  110>,
-			<54  111>,
-			<55  113>;
+			<4  5 >,
+			<5  9 >,
+			<6  14>,
+			<7  15>,
+			<8  32>,
+			<9  33>,
+			<10  34>,
+			<11  35>,
+			<12  41>,
+			<13  42>,
+			<14  72>,
+			<15  73>,
+			<16  74>,
+			<17  75>,
+			<18  76>,
+			<19  77>,
+			<20  78>,
+			<21  79>,
+			<22  80>,
+			<23  81>,
+			<24  82>,
+			<25  83>,
+			<26  84>,
+			<27  85>,
+			<28  87>,
+			<29  90>,
+			<30  91>,
+			<31  92>,
+			<32  93>,
+			<33  94>,
+			<34  95>,
+			<35  96>,
+			<36  97>,
+			<37  98>,
+			<38  99>,
+			<39  100>,
+			<40  101>;
 	};
 
 	qcom,pm-8x60@fe805664 {

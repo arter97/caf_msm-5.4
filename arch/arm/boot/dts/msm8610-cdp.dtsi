@@ -121,19 +121,16 @@
 		};
 	};
 
-    sound {
-        qcom,audio-routing =
-            "RX_BIAS", "MCLK",
-            "INT_LDO_H", "MCLK",
-            "MIC BIAS External", "Handset Mic",
-            "MIC BIAS Internal2", "Headset Mic",
-            "AMIC1", "MIC BIAS External",
-            "AMIC2", "MIC BIAS Internal2";
+	sound {
+		qcom,audio-routing =
+			"RX_BIAS", "MCLK",
+			"INT_LDO_H", "MCLK",
+			"MIC BIAS External", "Handset Mic",
+			"MIC BIAS Internal2", "Headset Mic",
+			"AMIC1", "MIC BIAS External",
+			"AMIC2", "MIC BIAS Internal2";
+		qcom,headset-jack-type-NC;
     };
-
-	qcom,dsi_v2_truly_wvga_video {
-		qcom,cont-splash-enabled;
-	};
 };
 
 &i2c_cdc  {
@@ -175,6 +172,7 @@
 
 		qcom,cdc-on-demand-supplies = "cdc-vdda-cp",
 					      "cdc-vdd-mic-bias";
+		qcom,cdc-micbias1-ext-cap;
 	};
 
 	msm8x10_wcd_codec@77{
@@ -398,4 +396,20 @@
 	qcom,setb-gpios-drv =  <7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7>;
 	qcom,setb-gpios-pull = <0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0>;
 	qcom,setb-gpios-dir =  <2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2>;
+};
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_truly_wvga_vid>;
+};
+
+&dsi_truly_wvga_vid {
+	qcom,cont-splash-enabled;
+};
+
+&dsi_truly_wvga_cmd {
+	qcom,cont-splash-enabled;
 };

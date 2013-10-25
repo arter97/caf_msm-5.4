@@ -632,11 +632,11 @@ static void adreno_cleanup_pt(struct kgsl_device *device,
 
 	kgsl_mmu_unmap(pagetable, &device->memstore);
 
-	kgsl_mmu_unmap(pagetable, &adreno_dev->profile.shared_buffer);
-
 	kgsl_mmu_unmap(pagetable, &adreno_dev->pwron_fixup);
 
 	kgsl_mmu_unmap(pagetable, &device->mmu.setstate_memory);
+
+	kgsl_mmu_unmap(pagetable, &adreno_dev->profile.shared_buffer);
 }
 
 static int adreno_setup_pt(struct kgsl_device *device,
@@ -648,6 +648,12 @@ static int adreno_setup_pt(struct kgsl_device *device,
 
 	result = kgsl_mmu_map_global(pagetable, &rb->buffer_desc);
 
+	/*
+	 * ALERT: Order of these mapping is important to
+	 * Keep the most used entries like memptrs, memstore
+	 * and mmu setstate memory by TLB prefetcher.
+	 */
+
 	if (!result)
 		result = kgsl_mmu_map_global(pagetable, &rb->memptrs_desc);
 
@@ -656,16 +662,15 @@ static int adreno_setup_pt(struct kgsl_device *device,
 
 	if (!result)
 		result = kgsl_mmu_map_global(pagetable,
-			&adreno_dev->profile.shared_buffer);
-
-	if (!result)
-		result = kgsl_mmu_map_global(pagetable,
 			&adreno_dev->pwron_fixup);
-
 
 	if (!result)
 		result = kgsl_mmu_map_global(pagetable,
 			&device->mmu.setstate_memory);
+
+	if (!result)
+		result = kgsl_mmu_map_global(pagetable,
+			&adreno_dev->profile.shared_buffer);
 
 	if (result) {
 		/* On error clean up what we have wrought */
@@ -678,8 +683,8 @@ static int adreno_setup_pt(struct kgsl_device *device,
 	 * For the IOMMU, this will be used to restrict access to the
 	 * mapped registers.
 	 */
-	device->mh.mpu_range = device->mmu.setstate_memory.gpuaddr +
-				device->mmu.setstate_memory.size;
+	device->mh.mpu_range = adreno_dev->profile.shared_buffer.gpuaddr +
+				adreno_dev->profile.shared_buffer.size;
 
 	return 0;
 }
@@ -805,6 +810,8 @@ static unsigned int _adreno_iommu_setstate_v1(struct kgsl_device *device,
 	int i;
 	unsigned int ttbr0, tlbiall, tlbstatus, tlbsync, mmu_ctrl;
 
+	cmds += adreno_add_idle_cmds(adreno_dev, cmds);
+
 	for (i = 0; i < num_iommu_units; i++) {
 		ttbr0_val = kgsl_mmu_get_default_ttbr0(&device->mmu,
 				i, KGSL_IOMMU_CONTEXT_USER);
@@ -892,8 +899,14 @@ static unsigned int _adreno_iommu_setstate_v1(struct kgsl_device *device,
 					KGSL_IOMMU_CTX_TLBSTATUS) >> 2;
 			cmds += adreno_wait_reg_eq(cmds, tlbstatus, 0,
 					KGSL_IOMMU_CTX_TLBSTATUS_SACTIVE, 0xF);
+			/* release all commands with wait_for_me */
+			*cmds++ = cp_type3_packet(CP_WAIT_FOR_ME, 1);
+			*cmds++ = 0;
 		}
 	}
+
+	cmds += adreno_add_idle_cmds(adreno_dev, cmds);
+
 	return cmds - cmds_orig;
 }
 
@@ -1689,8 +1702,8 @@ static int adreno_init(struct kgsl_device *device)
 	/* Power down the device */
 	kgsl_pwrctrl_disable(device);
 
-	/* Certain targets need the fixup.  You know who you are */
-	if (adreno_is_a330v2(adreno_dev))
+	/* Enable the power on shader corruption fix for all A3XX targets */
+	if (adreno_is_a3xx(adreno_dev))
 		adreno_a3xx_pwron_fixup_init(adreno_dev);
 
 	return 0;
@@ -3107,6 +3120,7 @@ static int adreno_setproperty(struct kgsl_device *device,
 				adreno_dev->fast_hang_detect = 1;
 				kgsl_pwrscale_enable(device);
 			} else {
+				kgsl_pwrctrl_wake(device);
 				device->pwrctrl.ctrl_flags = KGSL_PWR_ON;
 				adreno_dev->fast_hang_detect = 0;
 				kgsl_pwrscale_disable(device);
@@ -3655,6 +3669,8 @@ unsigned int adreno_ft_detect(struct kgsl_device *device,
 			}
 		}
 		for (i = 0; i < FT_DETECT_REGS_COUNT; i++) {
+			if (ft_detect_regs[i] == 0)
+				continue;
 			if (curr_reg_val[i] != prev_reg_val[i])
 				fast_hang_detected = 0;
 		}
@@ -3716,8 +3732,12 @@ unsigned int adreno_ft_detect(struct kgsl_device *device,
 
 	/* If hangs are not detected copy the current reg values
 	 * to previous values and return no hang */
-	for (i = 0; i < FT_DETECT_REGS_COUNT; i++)
-			prev_reg_val[i] = curr_reg_val[i];
+	for (i = 0; i < FT_DETECT_REGS_COUNT; i++) {
+		if (ft_detect_regs[i] == 0)
+			continue;
+		prev_reg_val[i] = curr_reg_val[i];
+	}
+
 	return 0;
 }
 

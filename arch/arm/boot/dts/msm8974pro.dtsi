@@ -33,12 +33,20 @@
 		compatible = "qcom,msm-imem";
 		reg = <0xfe805000 0x1000>; /* Address and size of IMEM */
 	};
+
+	qcom,msm-thermal {
+		/delete-property/ qcom,pmic-sw-mode-temp;
+		/delete-property/ qcom,pmic-sw-mode-temp-hysteresis;
+		/delete-property/ qcom,pmic-sw-mode-regs;
+	};
 };
 
 /* GPU overrides */
 &msm_gpu {
 	/* Updated chip ID */
 	qcom,chipid = <0x03030002>;
+
+	qcom,initial-pwrlevel = <6>;
 
 	/* Updated bus bandwidth requirements */
 	qcom,msm-bus,vectors-KBps =
@@ -63,41 +71,69 @@
 
                qcom,gpu-pwrlevel@0 {
                        reg = <0>;
-                       qcom,gpu-freq = <550000000>;
+                       qcom,gpu-freq = <578000000>;
                        qcom,bus-freq = <5>;
                        qcom,io-fraction = <33>;
                };
 
-               qcom,gpu-pwrlevel@1 {
-                       reg = <1>;
-                       qcom,gpu-freq = <320000000>;
+		qcom,gpu-pwrlevel@1 {
+			reg = <1>;
+			qcom,gpu-freq = <462400000>;
+			qcom,bus-freq = <4>;
+			qcom,io-fraction = <33>;
+		};
+
+		qcom,gpu-pwrlevel@2 {
+			reg = <2>;
+			qcom,gpu-freq = <462400000>;
+			qcom,bus-freq = <3>;
+			qcom,io-fraction = <66>;
+		};
+
+		qcom,gpu-pwrlevel@3 {
+			reg = <3>;
+			qcom,gpu-freq = <389000000>;
+			qcom,bus-freq = <4>;
+			qcom,io-fraction = <66>;
+		};
+
+		qcom,gpu-pwrlevel@4 {
+			reg = <4>;
+			qcom,gpu-freq = <389000000>;
+			qcom,bus-freq = <3>;
+			qcom,io-fraction = <66>;
+		};
+
+               qcom,gpu-pwrlevel@5 {
+                       reg = <5>;
+                       qcom,gpu-freq = <330000000>;
                        qcom,bus-freq = <4>;
                        qcom,io-fraction = <66>;
                };
 
-               qcom,gpu-pwrlevel@2 {
-                       reg = <2>;
-                       qcom,gpu-freq = <320000000>;
+               qcom,gpu-pwrlevel@6 {
+                       reg = <6>;
+                       qcom,gpu-freq = <330000000>;
                        qcom,bus-freq = <3>;
                        qcom,io-fraction = <66>;
                };
 
-               qcom,gpu-pwrlevel@3 {
-                       reg = <3>;
+               qcom,gpu-pwrlevel@7 {
+                       reg = <7>;
                        qcom,gpu-freq = <200000000>;
                        qcom,bus-freq = <2>;
                        qcom,io-fraction = <100>;
                };
 
-               qcom,gpu-pwrlevel@4 {
-                       reg = <4>;
+               qcom,gpu-pwrlevel@8 {
+                       reg = <8>;
                        qcom,gpu-freq = <200000000>;
                        qcom,bus-freq = <1>;
                        qcom,io-fraction = <100>;
                };
 
-               qcom,gpu-pwrlevel@5 {
-                       reg = <5>;
+               qcom,gpu-pwrlevel@9 {
+                       reg = <9>;
                        qcom,gpu-freq = <27000000>;
                        qcom,bus-freq = <0>;
                        qcom,io-fraction = <0>;
@@ -178,24 +214,25 @@
 	qcom,vidc-iommu-domains {
 		qcom,domain-ns {
 			qcom,vidc-domain-phandle = <&venus_domain_ns>;
-			qcom,vidc-partition-buffer-types = <0x1ff>,
-							<0x200>;
+			qcom,vidc-partition-buffer-types = <0x7ff>,
+							<0x800>;
 		};
 		qcom,domain-sec-bs {
 			qcom,vidc-domain-phandle = <&venus_domain_sec_bitstream>;
-			qcom,vidc-partition-buffer-types = <0x91>;
+			qcom,vidc-partition-buffer-types = <0x241>;
 		};
 		qcom,domain-sec-px {
 			qcom,vidc-domain-phandle = <&venus_domain_sec_pixel>;
-			qcom,vidc-partition-buffer-types = <0x42>;
+			qcom,vidc-partition-buffer-types = <0x106>;
 		};
 		qcom,domain-sec-np {
 			qcom,vidc-domain-phandle = <&venus_domain_sec_non_pixel>;
-			qcom,vidc-partition-buffer-types = <0x120>;
+			qcom,vidc-partition-buffer-types = <0x480>;
 		};
 	};
 };
 
 &memory_hole {
-	qcom,memblock-remove = <0x05400000 0xab00000>; /* Address and size of the hole */
+	qcom,memblock-remove = <0x05a00000 0x7800000
+				0x0fa00000 0x500000>; /* Address and size of the hole */
 };

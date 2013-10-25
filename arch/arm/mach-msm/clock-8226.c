@@ -238,12 +238,6 @@ DEFINE_CLK_RPM_SMD_XO_BUFFER_PINCTRL(cxo_a0_pin, cxo_a0_a_pin, A0_ID);
 DEFINE_CLK_RPM_SMD_XO_BUFFER_PINCTRL(cxo_a1_pin, cxo_a1_a_pin, A1_ID);
 DEFINE_CLK_RPM_SMD_XO_BUFFER_PINCTRL(cxo_a2_pin, cxo_a2_a_pin, A2_ID);
 
-struct measure_mux_entry {
-	struct clk *c;
-	int base;
-	u32 debug_mux;
-};
-
 static struct branch_clk oxilicx_axi_clk;
 
 #define MSS_DEBUG_CLOCK_CTL  0x0078
@@ -328,6 +322,7 @@ static struct branch_clk oxilicx_axi_clk;
 #define CAMSS_VFE_VFE_AXI_CBCR                             (0x36BC)
 #define CAMSS_CSI_VFE0_BCR                                 (0x3700)
 #define CAMSS_CSI_VFE0_CBCR                                (0x3704)
+#define CAMSS_MICRO_BCR                                    (0x3490)
 #define OXILI_GFX3D_CBCR                                   (0x4028)
 #define OXILICX_BCR                                        (0x4030)
 #define OXILICX_AXI_CBCR                                   (0x4038)
@@ -1558,6 +1553,13 @@ static struct branch_clk gcc_usb_hsic_system_clk = {
 	},
 };
 
+#ifdef CONFIG_DEBUG_FS
+struct measure_mux_entry {
+	struct clk *c;
+	int base;
+	u32 debug_mux;
+};
+
 static struct measure_mux_entry measure_mux_GCC[] = {
 	{ &gcc_mss_cfg_ahb_clk.c,  GCC_BASE, 0x0030 },
 	{ &gcc_mss_q6_bimc_axi_clk.c,  GCC_BASE, 0x0031 },
@@ -1603,8 +1605,17 @@ static struct measure_mux_entry measure_mux_GCC[] = {
 	{ &gcc_ce1_axi_clk.c,  GCC_BASE, 0x0139 },
 	{ &gcc_ce1_ahb_clk.c,  GCC_BASE, 0x013a },
 	{ &gcc_lpass_q6_axi_clk.c,  GCC_BASE, 0x0160 },
-	{&dummy_clk, N_BASES, 0x0000},
+	{ &pnoc_clk.c, GCC_BASE, 0x010},
+	{ &snoc_clk.c, GCC_BASE, 0x000},
+	{ &cnoc_clk.c, GCC_BASE, 0x008},
+	/*
+	 * measure the gcc_bimc_kpss_axi_clk instead to account for the DDR
+	 * rate being gcc_bimc_clk/2.
+	 */
+	{ &bimc_clk.c, GCC_BASE, 0x155},
+	{ &dummy_clk, N_BASES, 0x0000},
 };
+#endif /* CONFIG_DEBUG_FS */
 
 static struct pll_vote_clk mmpll0_pll = {
 	.en_reg = (void __iomem *)MMSS_PLL_VOTE_APCS,
@@ -2357,6 +2368,7 @@ static struct branch_clk camss_mclk1_clk = {
 static struct branch_clk camss_micro_ahb_clk = {
 	.cbcr_reg = CAMSS_MICRO_AHB_CBCR,
 	.has_sibling = 1,
+	.bcr_reg = CAMSS_MICRO_BCR,
 	.base = &virt_bases[MMSS_BASE],
 	.c = {
 		.dbg_name = "camss_micro_ahb_clk",
@@ -2676,6 +2688,7 @@ static struct branch_clk venus0_vcodec0_clk = {
 	},
 };
 
+#ifdef CONFIG_DEBUG_FS
 static struct measure_mux_entry measure_mux_MMSS[] = {
 	{ &mmss_mmssnoc_bto_ahb_clk.c,  MMSS_BASE, 0x0002 },
 	{ &mmss_misc_ahb_clk.c,  MMSS_BASE, 0x0003 },
@@ -2725,8 +2738,10 @@ static struct measure_mux_entry measure_mux_MMSS[] = {
 	{ &camss_csi1rdi_clk.c,  MMSS_BASE, 0x0049 },
 	{ &camss_csi1pix_clk.c,  MMSS_BASE, 0x004a },
 	{ &camss_ispif_ahb_clk.c,  MMSS_BASE, 0x0055 },
+	{ &mmssnoc_ahb_clk.c,  MMSS_BASE, 0x0001 },
 	{&dummy_clk, N_BASES, 0x0000},
 };
+#endif /* CONFIG_DEBUG_FS */
 
 static struct branch_clk q6ss_ahb_lfabif_clk = {
 	.cbcr_reg = Q6SS_AHB_LFABIF_CBCR,
@@ -2762,12 +2777,14 @@ static struct branch_clk q6ss_xo_clk = {
 	},
 };
 
+#ifdef CONFIG_DEBUG_FS
 static struct measure_mux_entry measure_mux_LPASS[] = {
 	{ &q6ss_ahbm_clk.c,  LPASS_BASE, 0x001d },
 	{ &q6ss_ahb_lfabif_clk.c,  LPASS_BASE, 0x001e },
 	{ &q6ss_xo_clk.c,  LPASS_BASE, 0x002b },
 	{&dummy_clk, N_BASES, 0x0000},
 };
+#endif /* CONFIG_DEBUG_FS */
 
 
 static DEFINE_CLK_MEASURE(apc0_m_clk);
@@ -2776,6 +2793,7 @@ static DEFINE_CLK_MEASURE(apc2_m_clk);
 static DEFINE_CLK_MEASURE(apc3_m_clk);
 static DEFINE_CLK_MEASURE(l2_m_clk);
 
+#ifdef CONFIG_DEBUG_FS
 static struct  measure_mux_entry measure_mux_APSS[] = {
 	{&apc0_m_clk,                    APCS_BASE, 0x00010},
 	{&apc1_m_clk,                    APCS_BASE, 0x00114},
@@ -2784,6 +2802,7 @@ static struct  measure_mux_entry measure_mux_APSS[] = {
 	{&l2_m_clk,                      APCS_BASE, 0x01000},
 	{&dummy_clk, N_BASES, 0x0000}
 };
+#endif /* CONFIG_DEBUG_FS */
 
 #define APCS_SH_PLL_MODE        (0x000)
 #define APCS_SH_PLL_L_VAL       (0x004)
@@ -2820,6 +2839,8 @@ static struct pll_freq_tbl apcs_pll_freq[] = {
 	F_APCS_PLL(1305600000, 68, 0x0, 0x1, 0x0, 0x0, 0x0),
 	F_APCS_PLL(1344000000, 70, 0x0, 0x1, 0x0, 0x0, 0x0),
 	F_APCS_PLL(1401600000, 73, 0x0, 0x1, 0x0, 0x0, 0x0),
+	F_APCS_PLL(1497600000, 78, 0x0, 0x1, 0x0, 0x0, 0x0),
+	F_APCS_PLL(1593600000, 83, 0x0, 0x1, 0x0, 0x0, 0x0),
 	PLL_F_END
 };
 

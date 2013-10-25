@@ -378,9 +378,7 @@ static irqreturn_t adsp_wdog_bite_irq(int irq, void *dev_id)
 {
 	struct lpass_data *drv = subsys_to_drv(dev_id);
 
-	disable_irq_nosync(drv->subsys_desc.wdog_bite_irq);
 	schedule_work(&drv->work);
-
 	return IRQ_HANDLED;
 }
 
@@ -496,7 +494,7 @@ static int __devinit pil_lpass_driver_probe(struct platform_device *pdev)
 	if (!lpass_status) {
 		pr_err("%s: kobject create failed\n", __func__);
 		ret = -ENOMEM;
-		goto err_notif_modem;
+		goto err_create_kobj;
 	}
 
 	ret = sysfs_create_group(lpass_status, &attr_group);
@@ -509,6 +507,8 @@ static int __devinit pil_lpass_driver_probe(struct platform_device *pdev)
 	return 0;
 err_kobj:
 	kobject_put(lpass_status);
+err_create_kobj:
+	subsys_notif_unregister_notifier(drv->modem_notif_hdle, &mnb);
 err_notif_modem:
 	subsys_notif_unregister_notifier(drv->wcnss_notif_hdle, &wnb);
 err_notif_wcnss:

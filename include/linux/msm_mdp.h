@@ -187,6 +187,7 @@ enum {
 #define MDP_BACKEND_COMPOSITION		0x00040000
 #define MDP_BORDERFILL_SUPPORTED	0x00010000
 #define MDP_SECURE_OVERLAY_SESSION      0x00008000
+#define MDP_SECURE_DISPLAY_OVERLAY_SESSION	0x00002000
 #define MDP_OV_PIPE_FORCE_DMA		0x00004000
 #define MDP_MEMORY_ID_TYPE_FB		0x00001000
 #define MDP_BWC_EN			0x00000400
@@ -838,6 +839,7 @@ struct msmfb_metadata {
 struct mdp_buf_sync {
 	uint32_t flags;
 	uint32_t acq_fen_fd_cnt;
+	uint32_t session_id;
 	int *acq_fen_fd;
 	int *rel_fen_fd;
 };
@@ -862,6 +864,7 @@ struct mdp_display_commit {
 	uint32_t wait_for_finish;
 	struct fb_var_screeninfo var;
 	struct mdp_buf_fence buf_fence;
+	struct mdp_rect roi;
 };
 
 struct mdp_page_protection {

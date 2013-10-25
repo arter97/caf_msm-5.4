@@ -94,9 +94,20 @@ Required properties
 				The offsets are calculated from "mdp_phys"
 				defined in reg property. The number of offsets
 				defiend should reflect the number of progammable
-				interface blocks avaialble in hardware.
+				interface blocks available in hardware.
+- qcom,mdss-pref-prim-intf:	A string which indicates the configured hardware
+				interface between MDP and the primary panel.
+				Individual panel controller drivers initialize
+				hardware based on this property.
+				Based on the interfaces supported at present,
+				possible values are:
+				- "dsi"
+				- "edp"
+				- "hdmi"
 
 Optional properties:
+- vdd-cx-supply :	Phandle for vdd CX regulator device node.
+- batfet-supply :	Phandle for battery FET regulator device node.
 - qcom,vbif-settings :	Array with key-value pairs of constant VBIF register
 			settings used to setup MDSS QoS for optimum performance.
 			The key used should be offset from "vbif_phys" register
@@ -154,15 +165,22 @@ Subnode properties:
 			 enabled if framebuffer size is less than max mixer
 			 width; 2) the defaut even split is enabled if frambuffer
 			 size is greater than max mixer width.
+- qcom,memblock-reserve: Specifies the memory location and the size reserved
+			 for the framebuffer used to display the splash screen.
+			 This property is required whenever the continuous splash
+			 screen feature is enabled for the corresponding
+			 framebuffer device.
 
 Example:
-	qcom,mdss_mdp@fd900000 {
+	mdss_mdp: qcom,mdss_mdp@fd900000 {
 		compatible = "qcom,mdss_mdp";
 		reg = <0xfd900000 0x22100>,
 			<0xfd924000 0x1000>;
 		reg-names = "mdp_phys", "vbif_phys";
 		interrupts = <0 72 0>;
 		vdd-supply = <&gdsc_mdss>;
+		vdd-cx-supply = <&pm8841_s2_corner>;
+		batfet-supply = <&pm8941_chg_batif>;
 		qcom,max-clk-rate = <320000000>;
 		qcom,vbif-settings = <0x0004 0x00000001>,
 				     <0x00D8 0x00000707>;
@@ -179,6 +197,7 @@ Example:
 		qcom,mdss-smp-data = <22 4096>;
 		qcom,mdss-rot-block-size = <64>;
 		qcom,mdss-smp-mb-per-pipe = <2>;
+		qcom,mdss-pref-prim-intf = "dsi";
 		qcom,mdss-has-bwc;
 		qcom,mdss-has-decimation;
 		qcom,mdss-has-wfd-blk;

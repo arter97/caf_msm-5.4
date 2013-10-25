@@ -64,7 +64,12 @@
 
 #define HFI_ERR_SESSION_STREAM_CORRUPT		(HFI_COMMON_BASE + 0x100B)
 #define HFI_ERR_SESSION_ENC_OVERFLOW		(HFI_COMMON_BASE + 0x100C)
-#define  HFI_ERR_SESSION_UNSUPPORTED_STREAM	(HFI_COMMON_BASE + 0x100D)
+#define HFI_ERR_SESSION_UNSUPPORTED_STREAM	(HFI_COMMON_BASE + 0x100D)
+#define HFI_ERR_SESSION_CMDSIZE			(HFI_COMMON_BASE + 0x100E)
+#define HFI_ERR_SESSION_UNSUPPORT_CMD		(HFI_COMMON_BASE + 0x100F)
+#define HFI_ERR_SESSION_UNSUPPORT_BUFFERTYPE	(HFI_COMMON_BASE + 0x1010)
+#define HFI_ERR_SESSION_BUFFERCOUNT_TOOSMALL	(HFI_COMMON_BASE + 0x1011)
+#define HFI_ERR_SESSION_INVALID_SCALE_FACTOR	(HFI_COMMON_BASE + 0x1012)
 
 #define HFI_EVENT_SYS_ERROR				(HFI_COMMON_BASE + 0x1)
 #define HFI_EVENT_SESSION_ERROR			(HFI_COMMON_BASE + 0x2)
@@ -80,6 +85,7 @@
 #define HFI_VIDEO_CODEC_SPARK				0x00000200
 #define HFI_VIDEO_CODEC_VP8				0x00001000
 #define HFI_VIDEO_CODEC_HEVC				0x00002000
+#define HFI_VIDEO_CODEC_HEVC_HYBRID			0x00004000
 
 #define HFI_H264_PROFILE_BASELINE			0x00000001
 #define HFI_H264_PROFILE_MAIN				0x00000002
@@ -430,6 +436,11 @@ struct hfi_intra_refresh {
 
 struct hfi_idr_period {
 	u32 idr_period;
+};
+
+struct hfi_operations_type {
+	u32 rotation;
+	u32 flip;
 };
 
 struct hfi_max_num_b_frames {
@@ -841,6 +852,12 @@ struct hfi_msg_event_notify_packet {
 	u32 event_data1;
 	u32 event_data2;
 	u32 rg_ext_event_data[1];
+};
+
+struct hfi_msg_release_buffer_ref_event_packet {
+	u8 *packet_buffer;
+	u8 *exra_data_buffer;
+	u32 output_tag;
 };
 
 struct hfi_msg_sys_init_done_packet {

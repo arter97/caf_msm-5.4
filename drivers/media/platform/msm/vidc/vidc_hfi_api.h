@@ -186,6 +186,22 @@ enum hal_domain {
 	HAL_UNUSED_DOMAIN = 0x10000000,
 };
 
+enum multi_stream {
+	HAL_VIDEO_DECODER_NONE = 0x00000000,
+	HAL_VIDEO_DECODER_PRIMARY = 0x00000001,
+	HAL_VIDEO_DECODER_SECONDARY = 0x00000002,
+	HAL_VIDEO_DECODER_BOTH_OUTPUTS = 0x00000004,
+	HAL_VIDEO_UNUSED_OUTPUTS = 0x10000000,
+};
+
+enum hal_core_capabilities {
+	HAL_VIDEO_ENCODER_ROTATION_CAPABILITY = 0x00000001,
+	HAL_VIDEO_ENCODER_SCALING_CAPABILITY = 0x00000002,
+	HAL_VIDEO_ENCODER_DEINTERLACE_CAPABILITY = 0x00000004,
+	HAL_VIDEO_DECODER_MULTI_STREAM_CAPABILITY = 0x00000008,
+	HAL_VIDEO_UNUSED_CAPABILITY      = 0x10000000,
+};
+
 enum hal_video_codec {
 	HAL_VIDEO_CODEC_UNKNOWN  = 0x00000000,
 	HAL_VIDEO_CODEC_MVC      = 0x00000001,
@@ -202,6 +218,7 @@ enum hal_video_codec {
 	HAL_VIDEO_CODEC_VP7      = 0x00000800,
 	HAL_VIDEO_CODEC_VP8      = 0x00001000,
 	HAL_VIDEO_CODEC_HEVC     = 0x00002000,
+	HAL_VIDEO_CODEC_HEVC_HYBRID     = 0x00004000,
 	HAL_UNUSED_CODEC = 0x10000000,
 };
 
@@ -863,12 +880,14 @@ enum hal_flush {
 enum hal_event_type {
 	HAL_EVENT_SEQ_CHANGED_SUFFICIENT_RESOURCES,
 	HAL_EVENT_SEQ_CHANGED_INSUFFICIENT_RESOURCES,
+	HAL_EVENT_RELEASE_BUFFER_REFERENCE,
 	HAL_UNUSED_SEQCHG = 0x10000000,
 };
 
 enum buffer_mode_type {
-	HAL_BUFFER_MODE_STATIC = 0x00000000,
-	HAL_BUFFER_MODE_RING,
+	HAL_BUFFER_MODE_STATIC = 0x001,
+	HAL_BUFFER_MODE_RING = 0x010,
+	HAL_BUFFER_MODE_DYNAMIC = 0x100,
 };
 
 struct hal_buffer_alloc_mode {
@@ -930,6 +949,8 @@ struct msm_vidc_cb_event {
 	u32 height;
 	u32 width;
 	u32 hal_event_type;
+	u8 *packet_buffer;
+	u8 *exra_data_buffer;
 };
 
 /* Data callback structure */
@@ -1013,10 +1034,9 @@ struct vidc_hal_session_init_done {
 	struct hal_uncompressed_format_supported uncomp_format;
 	struct hal_interlace_format_supported HAL_format;
 	struct hal_nal_stream_format_supported nal_stream_format;
-/*	struct hal_profile_level_supported profile_level;
-	// allocate and released memory for above. */
 	struct hal_intra_refresh intra_refresh;
 	struct hal_seq_header_info seq_hdr_info;
+	enum buffer_mode_type alloc_mode_out;
 };
 
 struct buffer_requirements {
@@ -1039,6 +1059,14 @@ enum fw_info {
 	FW_REGISTER_SIZE,
 	FW_IRQ,
 	FW_INFO_MAX,
+};
+
+enum dev_info {
+	DEV_CLOCK_COUNT,
+	DEV_CLOCK_ENABLED,
+	DEV_PWR_COUNT,
+	DEV_PWR_ENABLED,
+	DEV_INFO_MAX
 };
 
 #define call_hfi_op(q, op, args...)			\
@@ -1094,11 +1122,13 @@ struct hfi_device {
 	int (*load_fw)(void *dev);
 	void (*unload_fw)(void *dev);
 	int (*get_fw_info)(void *dev, enum fw_info info);
+	int (*get_info) (void *dev, enum dev_info info);
 	int (*get_stride_scanline)(int color_fmt, int width,
 		int height,	int *stride, int *scanlines);
 	int (*capability_check)(u32 fourcc, u32 width,
 		u32 *max_width, u32 *max_height);
 	int (*session_clean)(void *sess);
+	int (*get_core_capabilities)(void);
 };
 
 typedef void (*hfi_cmd_response_callback) (enum command_response cmd,
