@@ -33,7 +33,7 @@
 
 		adsp_mem: adsp_region {
 			linux,contiguous-region;
-			reg = <0 0x2000000>;
+			reg = <0 0x2a00000>;
 			label = "adsp_mem";
 		};
 
@@ -158,6 +158,7 @@
 		compatible = "qcom,msm-vidc";
 		reg = <0xfdc00000 0xff000>;
 		interrupts = <0 44 0>;
+		vdd-supply = <&gdsc_venus>;
 		qcom,load-freq-tbl = <352800 160000000>,
 			<244800 133330000>,
 			<108000  66700000>;
@@ -188,16 +189,22 @@
 		qcom,vidc-iommu-domains {
 			qcom,domain-ns {
 				qcom,vidc-domain-phandle = <&venus_domain_ns>;
-				qcom,vidc-partition-buffer-types = <0x1ff>,
-							<0x200>;
+				qcom,vidc-partition-buffer-types = <0x7ff>,
+							<0x800>;
 			};
 
 			qcom,domain-cp {
 				qcom,vidc-domain-phandle = <&venus_domain_cp>;
-				qcom,vidc-partition-buffer-types = <0x2>,
-							<0x1f1>;
+				qcom,vidc-partition-buffer-types = <0x6>,
+							<0x7c1>;
 			};
 		};
+	};
+
+	qcom,vidc {
+		compatible = "qcom,msm-vidc";
+		qcom,hfi = "q6";
+		qcom,max-hw-load = <108000>; /* 720p @ 30 * 1  */
 	};
 
 	qcom,wfd {
@@ -290,6 +297,37 @@
 		compatible = "qcom,android-usb";
 		reg = <0xfe8050c8 0xc8>;
 		qcom,android-usb-swfi-latency = <1>;
+	};
+
+	hsic_host: hsic@f9a00000 {
+		status = "disabled";
+		compatible = "qcom,hsic-host";
+		reg = <0xf9a00000 0x400>;
+		#address-cells = <0>;
+		interrupt-parent = <&hsic_host>;
+		interrupts = <0 1 2>;
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0xffffffff>;
+		interrupt-map = <0 &intc 0 136 0
+			1 &intc 0 148 0
+			2 &msmgpio 115 0x8>;
+		interrupt-names = "core_irq", "async_irq", "wakeup";
+		hsic_vdd_dig-supply = <&pm8226_s1_corner>;
+		HSIC_GDSC-supply = <&gdsc_usb_hsic>;
+		hsic,strobe-gpio = <&msmgpio 115 0x00>;
+		hsic,data-gpio = <&msmgpio 116 0x00>;
+		hsic,ignore-cal-pad-config;
+		hsic,strobe-pad-offset = <0x2050>;
+		hsic,data-pad-offset = <0x2054>;
+		qcom,phy-susp-sof-workaround;
+		hsic,vdd-voltage-level = <1 5 7>;
+
+		qcom,msm-bus,name = "hsic";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<85 512 0 0>,
+				<85 512 40000 160000>;
 	};
 
 	wcd9xxx_intc: wcd9xxx-irq {
@@ -437,6 +475,10 @@
 		qcom,msm-dai-q6-dev-id = <8>;
 	};
 
+	qcom,msm-lsm-client {
+		compatible = "qcom,msm-lsm-client";
+	};
+
 	qcom,msm-dai-q6 {
 		compatible = "qcom,msm-dai-q6";
 		qcom,msm-dai-q6-sb-0-rx {
@@ -478,6 +520,11 @@
 			compatible = "qcom,msm-dai-q6-dev";
 			qcom,msm-dai-q6-dev-id = <16393>;
 		};
+
+		qcom,msm-dai-q6-sb-5-tx {
+                        compatible = "qcom,msm-dai-q6-dev";
+                        qcom,msm-dai-q6-dev-id = <16395>;
+                };
 
 		qcom,msm-dai-q6-bt-sco-rx {
 			compatible = "qcom,msm-dai-q6-dev";
@@ -575,6 +622,7 @@
 		gpios = <&msmgpio 40 0>, <&msmgpio 41 0>, <&msmgpio 42 0>, <&msmgpio 43 0>, <&msmgpio 44 0>;
 		qcom,has-pronto-hw;
 		qcom,has-autodetect-xo;
+		qcom,wcnss-adc_tm = <&pm8226_adc_tm>;
 	};
 
 	qcom,msm-adsp-sensors {
@@ -1071,6 +1119,10 @@
 		qcom,core-limit-temp = <80>;
 		qcom,core-temp-hysteresis = <10>;
 		qcom,core-control-mask = <0xe>;
+		qcom,hotplug-temp = <110>;
+		qcom,hotplug-temp-hysteresis = <20>;
+		qcom,cpu-sensors = "tsens_tz_sensor5", "tsens_tz_sensor5",
+				"tsens_tz_sensor2", "tsens_tz_sensor2";
 		qcom,vdd-restriction-temp = <5>;
 		qcom,vdd-restriction-temp-hysteresis = <10>;
 		vdd-dig-supply = <&pm8226_s1_floor_corner>;

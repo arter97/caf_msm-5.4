@@ -222,7 +222,8 @@ config VECTORS_BASE
 	default DRAM_BASE if REMAP_VECTORS_TO_RAM
 	default 0x00000000
 	help
-	  The base address of exception vectors.
+	  The base address of exception vectors.  This must be two pages
+	  in size.
 
 config ARM_PATCH_PHYS_VIRT
 	bool "Patch physical to virtual translations at runtime" if EMBEDDED
@@ -1854,6 +1855,11 @@ config ENABLE_DMM
 
 config DONT_MAP_HOLE_AFTER_MEMBANK0
 	def_bool n
+	depends on ENABLE_VMALLOC_SAVING=n
+
+config ENABLE_VMALLOC_SAVING
+	def_bool n
+	depends on DONT_MAP_HOLE_AFTER_MEMBANK0=n
 
 config HOLES_IN_ZONE
 	def_bool n

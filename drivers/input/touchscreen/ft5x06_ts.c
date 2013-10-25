@@ -336,7 +336,6 @@ static irqreturn_t ft5x06_ts_interrupt(int irq, void *dev_id)
 			input_report_abs(ip_dev, ABS_MT_PRESSURE, pressure);
 		} else {
 			input_mt_report_slot_state(ip_dev, MT_TOOL_FINGER, 0);
-			input_report_abs(ip_dev, ABS_MT_PRESSURE, 0);
 		}
 	}
 
@@ -1247,6 +1246,9 @@ static int ft5x06_parse_dt(struct device *dev,
 	pdata->fw_vkey_support = of_property_read_bool(np,
 						"focaltech,fw-vkey-support");
 
+	pdata->ignore_id_check = of_property_read_bool(np,
+						"focaltech,ignore-id-check");
+
 	rc = of_property_read_u32(np, "focaltech,family-id", &temp_val);
 	if (!rc)
 		pdata->family_id = temp_val;
@@ -1447,7 +1449,7 @@ static int ft5x06_ts_probe(struct i2c_client *client,
 
 	dev_info(&client->dev, "Device ID = 0x%x\n", reg_value);
 
-	if (pdata->family_id != reg_value) {
+	if ((pdata->family_id != reg_value) && (!pdata->ignore_id_check)) {
 		dev_err(&client->dev, "%s:Unsupported controller\n", __func__);
 		goto free_reset_gpio;
 	}

@@ -63,7 +63,6 @@
 #define ADRENO_DEFAULT_PWRSCALE_POLICY  NULL
 #endif
 
-void adreno_debugfs_init(struct kgsl_device *device);
 
 #define ADRENO_ISTORE_START 0x5000 /* Istore offset */
 
@@ -658,9 +657,7 @@ static inline int adreno_add_idle_cmds(struct adreno_device *adreno_dev,
 	*cmds++ = cp_type3_packet(CP_WAIT_FOR_IDLE, 1);
 	*cmds++ = 0;
 
-	if ((adreno_dev->gpurev == ADRENO_REV_A305) ||
-		(adreno_dev->gpurev == ADRENO_REV_A305C) ||
-		(adreno_dev->gpurev == ADRENO_REV_A320)) {
+	if (adreno_is_a3xx(adreno_dev)) {
 		*cmds++ = cp_type3_packet(CP_WAIT_FOR_ME, 1);
 		*cmds++ = 0;
 	}
@@ -751,4 +748,11 @@ static inline unsigned int adreno_getreg(struct adreno_device *adreno_dev,
 		return ADRENO_REG_REGISTER_MAX;
 	return adreno_dev->gpudev->reg_offsets->offsets[offset_name];
 }
+
+#ifdef CONFIG_DEBUG_FS
+void adreno_debugfs_init(struct kgsl_device *device);
+#else
+static inline void adreno_debugfs_init(struct kgsl_device *device) { }
+#endif
+
 #endif /*__ADRENO_H */

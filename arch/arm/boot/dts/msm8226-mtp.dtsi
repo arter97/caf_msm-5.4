@@ -10,17 +10,11 @@
  * GNU General Public License for more details.
  */
 
-/include/ "dsi-panel-nt35590-720p-video.dtsi"
 /include/ "msm8226-camera-sensor-mtp.dtsi"
 
 &soc {
 	serial@f991f000 {
 		status = "ok";
-	};
-
-	qcom,mdss_dsi_nt35590_720p_video {
-		status = "ok";
-		qcom,cont-splash-enabled;
 	};
 
 	i2c@f9927000 { /* BLSP1 QUP5 */
@@ -35,6 +29,8 @@
 			synaptics,irq-gpio = <&msmgpio 17 0x2008>;
 			synaptics,button-map = <139 102 158>;
 			synaptics,i2c-pull-up;
+			synaptics,power-down;
+			synaptics,disable-gpios;
 		};
 	};
 
@@ -44,6 +40,8 @@
 			reg = <0x0e>;
 			qcom,irq-gpio = <&msmgpio 21 0x00>;
 			qcom,dis-gpio = <&msmgpio 20 0x00>;
+			qcom,clk-src = "BBCLK2";
+			qcom,clk-en-gpio = <&msmgpio 0 0x00>;
 			interrupt-parent = <&msmgpio>;
 			interrupts = <21 0>;
 			qcom,clk-gpio = <&pm8226_gpios 3 0>;
@@ -466,6 +464,16 @@
 	};
 };
 
+/ {
+	mtp_batterydata: qcom,battery-data {
+		qcom,rpull-up-kohm = <100>;
+		qcom,vref-batt-therm = <1800000>;
+
+		/include/ "batterydata-palladium.dtsi"
+		/include/ "batterydata-mtp-3000mah.dtsi"
+	};
+};
+
 &pm8226_bms {
 	status = "ok";
 	qcom,enable-fcc-learning;
@@ -473,14 +481,28 @@
 	qcom,min-fcc-ocv-pc = <30>;
 	qcom,min-fcc-learning-samples = <5>;
 	qcom,fcc-resolution = <10>;
+	qcom,battery-data = <&mtp_batterydata>;
 };
 
 &pm8226_chg {
 	qcom,charging-disabled;
+	qcom,battery-data = <&mtp_batterydata>;
 };
 
 &slim_msm {
 	tapan_codec {
 		qcom,cdc-micbias1-ext-cap;
 	};
+};
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_nt35590_720_vid>;
+};
+
+&dsi_nt35590_720_vid {
+	qcom,cont-splash-enabled;
 };

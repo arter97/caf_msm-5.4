@@ -10,7 +10,6 @@
  * GNU General Public License for more details.
  */
 
-/include/ "dsi-panel-nt35596-1080p-video.dtsi"
 /include/ "msm8226-camera-sensor-qrd.dtsi"
 
 &soc {
@@ -30,7 +29,10 @@
 			synaptics,irq-gpio = <&msmgpio 17 0x2008>;
 			synaptics,button-map = <139 102 158>;
 			synaptics,i2c-pull-up;
+			synaptics,power-down;
+			synaptics,disable-gpios;
 		};
+
 		focaltech@38 {
 			compatible = "focaltech,5x06";
 			reg = <0x38>;
@@ -38,6 +40,7 @@
 			interrupts = <17 0x2>;
 			vdd-supply = <&pm8226_l19>;
 			vcc_i2c-supply = <&pm8226_lvs1>;
+			focaltech,name = "ft5x06";
 			focaltech,family-id = <0x55>;
 			focaltech,reset-gpio = <&msmgpio 16 0x00>;
 			focaltech,irq-gpio = <&msmgpio 17 0x00>;
@@ -46,6 +49,17 @@
 			focaltech,button-map= <139 102 158>;
 			focaltech,no-force-update;
 			focaltech,i2c-pull-up;
+			focaltech,group-id = <1>;
+			focaltech,hard-reset-delay-ms = <20>;
+			focaltech,soft-reset-delay-ms = <150>;
+			focaltech,num-max-touches = <5>;
+			focaltech,fw-name = "ft_8226_qrd_1080p_fw.bin";
+			focaltech,fw-delay-aa-ms = <50>;
+			focaltech,fw-delay-55-ms = <30>;
+			focaltech,fw-upgrade-id1 = <0x79>;
+			focaltech,fw-upgrade-id2 = <0x03>;
+			focaltech,fw-delay-readid-ms = <10>;
+			focaltech,fw-delay-era-flsh-ms = <2000>;
 		};
 	};
 
@@ -115,10 +129,10 @@
 			"MIC BIAS1 External", "Handset Mic",
 			"AMIC2", "MIC BIAS2 External",
 			"MIC BIAS2 External", "Headset Mic",
-			"AMIC4", "MIC BIAS2 External",
-			"MIC BIAS2 External", "ANCRight Headset Mic",
-			"AMIC5", "MIC BIAS2 External",
-			"MIC BIAS2 External", "ANCLeft Headset Mic";
+			"AMIC3", "MIC BIAS1 External",
+			"MIC BIAS1 External", "Analog Mic3",
+			"AMIC4", "MIC BIAS3 External",
+			"MIC BIAS3 External", "Analog Mic4";
 
 		qcom,cdc-mclk-gpios = <&pm8226_gpios 1 0>;
 		qcom,cdc-vdd-spkr-gpios = <&pm8226_gpios 2 0>;
@@ -239,7 +253,7 @@
 	qcom,pad-drv-on = <0x4 0x4 0x4>; /* 10mA, 10mA, 10mA */
 	qcom,pad-drv-off = <0x0 0x0 0x0>; /* 2mA, 2mA, 2mA */
 
-	qcom,clk-rates = <400000 25000000 50000000 100000000 200000000>;
+	qcom,clk-rates = <400000 25000000 50000000>;
 
 	#address-cells = <0>;
 	interrupt-parent = <&sdhc_2>;
@@ -383,6 +397,7 @@
 	status = "okay";
 	qcom,battery-data = <&qrd_batterydata>;
 	qcom,tchg-mins = <240>;
+	qcom,ovp-monitor-en;
 };
 
 &pm8226_gpios {
@@ -455,6 +470,7 @@
 &slim_msm {
 	tapan_codec {
 		qcom,cdc-micbias1-ext-cap;
+		qcom,cdc-micbias3-ext-cap;
 	};
 };
 
@@ -473,4 +489,17 @@
 
 &android_usb {
 	qcom,android-usb-cdrom;
+	qcom,android-usb-internal-ums;
+};
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_nt35596_1080_vid>;
+};
+
+&dsi_nt35596_1080_vid {
+	qcom,cont-splash-enabled;
 };

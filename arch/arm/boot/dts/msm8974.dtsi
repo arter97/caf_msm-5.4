@@ -77,7 +77,7 @@
 
 		adsp_mem: adsp_region {
 			linux,contiguous-region;
-			reg = <0 0x2F00000>;
+			reg = <0 0x3F00000>;
 			label = "adsp_mem";
 		};
 
@@ -211,6 +211,7 @@
 		compatible = "qcom,msm-vidc";
 		reg = <0xfdc00000 0xff000>;
 		interrupts = <0 44 0>;
+		vdd-supply = <&gdsc_venus>;
 		qcom,hfi = "venus";
 		qcom,has-ocmem;
 		qcom,max-hw-load = <1224450>; /* 4k @ 30 + 1080p @ 30*/
@@ -219,7 +220,7 @@
 	qcom,vidc {
 		compatible = "qcom,msm-vidc";
 		qcom,hfi = "q6";
-		qcom,max-hw-load = <108000>; /* 720p @ 30 */
+		qcom,max-hw-load = <243000>; /* 1080p @ 30 */
 	};
 
 	qcom,wfd {
@@ -628,10 +629,10 @@
 			"MSM_TSIF1_PHYS",
 			"MSM_TSPP_PHYS",
 			"MSM_TSPP_BAM_PHYS";
-		interrupts = <0 153 0>, /* TSIF_TSPP_IRQ */
-			<0 151 0>, /* TSIF0_IRQ */
-			<0 152 0>, /* TSIF1_IRQ */
-			<0 154 0>; /* TSIF_BAM_IRQ */
+		interrupts = <0 121 0>, /* TSIF_TSPP_IRQ */
+			<0 119 0>, /* TSIF0_IRQ */
+			<0 120 0>, /* TSIF1_IRQ */
+			<0 122 0>; /* TSIF_BAM_IRQ */
 		interrupt-names = "TSIF_TSPP_IRQ",
 			"TSIF0_IRQ",
 			"TSIF1_IRQ",
@@ -658,7 +659,6 @@
 
 		qcom,msm-bus,name = "tsif";
 		qcom,msm-bus,num-cases = <2>;
-		qcom,msm-bus,active-only = <0>;
 		qcom,msm-bus,num-paths = <1>;
 		qcom,msm-bus,vectors-KBps =
 				<82 512 0 0>, /* No vote */
@@ -834,9 +834,11 @@
 		reg-names = "qup_phys_addr";
 		interrupts = <0 96 0>;
 		interrupt-names = "qup_err_intr";
-		qcom,i2c-bus-freq = <100000>;
-		qcom,i2c-src-freq = <50000000>;
+		qcom,i2c-bus-freq = <384000>;
+		qcom,i2c-src-freq = <19200000>;
 		qcom,master-id = <86>;
+		qcom,scl-gpio = <&msmgpio 7 0>;
+		qcom,sda-gpio = <&msmgpio 6 0>;
 	};
 
 	spi_0: spi@f9923000 { /* BLSP1 QUP1 */
@@ -911,6 +913,8 @@
 		qcom,dwc-hsphy-init = <0x00D191A4>;
 		qcom,misc-ref = <&pm8941_misc>;
 		dwc_usb3-adc_tm = <&pm8941_adc_tm>;
+		qcom,dwc-usb3-msm-tx-fifo-size = <29696>;
+		qcom,dwc-usb3-msm-qdss-tx-fifo-size = <8192>;
 
 		qcom,msm-bus,name = "usb3";
 		qcom,msm-bus,num-cases = <2>;
@@ -924,6 +928,7 @@
 			interrupt-parent = <&intc>;
 			interrupts = <0 131 0>, <0 179 0>;
 			interrupt-names = "irq", "otg_irq";
+			tx-fifo-resize;
 		};
 	};
 
@@ -1391,8 +1396,6 @@
 		compatible = "qcom,cache_dump";
 		qcom,l1-dump-size = <0x100000>;
 		qcom,l2-dump-size = <0x500000>;
-		qcom,memory-reservation-type = "EBI1";
-		qcom,memory-reservation-size = <0x600000>; /* 6M EBI1 buffer */
 	};
 
 	tsens: tsens@fc4a8000 {
@@ -1557,7 +1560,8 @@
 
         memory_hole: qcom,msm-mem-hole {
                 compatible = "qcom,msm-mem-hole";
-                qcom,memblock-remove = <0x5d00000 0xa200000>; /* Address and Size of Hole */
+                qcom,memblock-remove = <0x5d00000 0x7d00000
+					0xfa00000 0x500000>; /* Address and Size of Hole */
         };
 
 	uart7: uart@f995d000 { /*BLSP #2, UART #7 */

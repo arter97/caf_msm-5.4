@@ -159,6 +159,7 @@ static int mdp3_dma_callback_setup(struct mdp3_dma *dma)
 		.data = dma,
 	};
 
+
 	struct mdp3_intr_cb hist_cb = {
 		.cb = mdp3_hist_done_intr_handler,
 		.data = dma,
@@ -292,17 +293,13 @@ static int mdp3_dmap_config(struct mdp3_dma *dma,
 	MDP3_REG_WRITE(MDP3_REG_DMA_P_IBUF_Y_STRIDE, source_config->stride);
 	MDP3_REG_WRITE(MDP3_REG_DMA_P_OUT_XY, dma_p_out_xy);
 
-	/*
-	 * NOTE: MDP_DMA_P_FETCH_CFG: max_burst_size need to use value 4, not
-	 * the default 16 for MDP hang issue workaround
-	 */
-	MDP3_REG_WRITE(MDP3_REG_DMA_P_FETCH_CFG, 0x20);
-
+	MDP3_REG_WRITE(MDP3_REG_DMA_P_FETCH_CFG, 0x40);
 
 	dma->source_config = *source_config;
 	dma->output_config = *output_config;
 	mdp3_dma_sync_config(dma, source_config);
 
+	mdp3_irq_enable(MDP3_INTR_LCDC_UNDERFLOW);
 	mdp3_dma_callback_setup(dma);
 	return 0;
 }
@@ -829,8 +826,10 @@ static int mdp3_dma_stop(struct mdp3_dma *dma, struct mdp3_intf *intf)
 
 	mdp3_dma_callback_disable(dma, MDP3_DMA_CALLBACK_TYPE_VSYNC |
 					MDP3_DMA_CALLBACK_TYPE_DMA_DONE);
+	mdp3_irq_disable(MDP3_INTR_LCDC_UNDERFLOW);
 
 	init_completion(&dma->dma_comp);
+	dma->vsync_client.handler = NULL;
 	return ret;
 }
 

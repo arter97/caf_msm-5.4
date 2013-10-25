@@ -350,7 +350,8 @@ static int hdmi_cec_msg_send(struct hdmi_cec_ctrl *cec_ctrl,
 			(msg->operand[i] << 8) | frame_type);
 
 	while ((DSS_REG_R(io, HDMI_CEC_STATUS) & BIT(0)) &&
-		line_check_retry--) {
+		line_check_retry) {
+		line_check_retry--;
 		DEV_DBG("%s: CEC line is busy(%d)\n", __func__,
 			line_check_retry);
 		schedule();
@@ -756,7 +757,7 @@ static DEVICE_ATTR(enable, S_IRUGO | S_IWUSR, hdmi_rda_cec_enable,
 	hdmi_wta_cec_enable);
 static DEVICE_ATTR(enable_compliance, S_IRUGO | S_IWUSR,
 	hdmi_rda_cec_enable_compliance, hdmi_wta_cec_enable_compliance);
-static DEVICE_ATTR(logical_addr, S_IRUGO | S_IWUSR,
+static DEVICE_ATTR(logical_addr, S_IRUSR | S_IWUSR,
 	hdmi_rda_cec_logical_addr, hdmi_wta_cec_logical_addr);
 static DEVICE_ATTR(rd_msg, S_IRUGO, hdmi_rda_cec_msg,	NULL);
 static DEVICE_ATTR(wr_msg, S_IWUSR, NULL, hdmi_wta_cec_msg);

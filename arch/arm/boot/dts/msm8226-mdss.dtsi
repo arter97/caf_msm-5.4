@@ -11,7 +11,7 @@
  */
 
 &soc {
-	qcom,mdss_mdp@fd900000 {
+	mdss_mdp: qcom,mdss_mdp@fd900000 {
 		compatible = "qcom,mdss_mdp";
 		reg = <0xfd900000 0x22100>,
 			<0xfd924000 0x1000>;
@@ -37,6 +37,7 @@
 		qcom,mdss-intf-off = <0x00000000 0x00021300>;
 		qcom,mdss-rot-block-size = <64>;
 		qcom,mdss-smp-mb-per-pipe = <2>;
+		vdd-cx-supply = <&pm8226_s1_corner>;
 
 		qcom,vbif-settings = <0x004 0x00000001>,
 				     <0x0D8 0x00000707>,
@@ -49,6 +50,7 @@
 			compatible = "qcom,mdss-fb";
 			qcom,memory-reservation-type = "EBI1";
 			qcom,memory-reservation-size = <0x800000>;
+			qcom,memblock-reserve = <0x03200000 0xFA0000>;
 		};
 
 		mdss_fb1: qcom,mdss_fb_wfd {
@@ -63,10 +65,11 @@
 		cell-index = <0>;
 		reg = <0xfd922800 0x600>;
 		qcom,mdss-fb-map = <&mdss_fb0>;
+		qcom,mdss-mdp = <&mdss_mdp>;
 		vdd-supply = <&pm8226_l15>;
 		vddio-supply = <&pm8226_l8>;
 		vdda-supply = <&pm8226_l4>;
-		qcom,platform-reset-gpio = <&msmgpio 25 1>;
+		qcom,platform-reset-gpio = <&msmgpio 25 0>;
 		qcom,platform-te-gpio = <&msmgpio 24 0>;
 		qcom,platform-strength-ctrl = [ff 06];
 		qcom,platform-bist-ctrl = [00 00 b1 ff 00 00];
@@ -76,7 +79,6 @@
 			00 00 00 00 0a 00 00 01 97
 			00 00 00 00 0f 00 00 01 97
 			00 c0 00 00 00 00 00 01 bb];
-		qcom,platform-reset-sequence = <1 20 0 1 1 20>;
 		qcom,platform-supply-entry1 {
 			qcom,supply-name = "vdd";
 			qcom,supply-min-voltage = <2800000>;
@@ -119,3 +121,5 @@
 		qcom,mdss-fb-map = <&mdss_fb1>;
 	};
 };
+
+/include/ "msm8226-mdss-panels.dtsi"
