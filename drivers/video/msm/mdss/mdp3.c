@@ -57,6 +57,7 @@
 
 #define MDP_CORE_HW_VERSION	0x03040310
 struct mdp3_hw_resource *mdp3_res;
+int pf_cnt;
 
 #define MDP_BUS_VECTOR_ENTRY_DMA(ab_val, ib_val)		\
 	{						\
@@ -608,15 +609,17 @@ static int mdp3_iommu_fault_handler(struct iommu_domain *domain,
 	unsigned int addr, val;
 	int i, j;
 	pr_err("MDP IOMMU page fault: iova 0x%lx\n", iova);
-	for (i = 0; i < ARRAY_SIZE(ppp_reg); i++) {
-		for (j = 0; j < ppp_reg[i].num_reads; j++) {
-			addr = ppp_reg[i].start_addr + (j*4);
-			val = MDP3_REG_READ(addr);
-			pr_err("TMsg: Addr= 0x%08x, val= 0x%08x\n",
-				(unsigned int)addr, (unsigned int)val);
+	if (pf_cnt % 5 == 0) {
+		for (i = 0; i < ARRAY_SIZE(ppp_reg); i++) {
+			for (j = 0; j < ppp_reg[i].num_reads; j++) {
+				addr = ppp_reg[i].start_addr + (j*4);
+				val = MDP3_REG_READ(addr);
+				pr_err("TMsg: Addr= 0x%08x, val= 0x%08x\n",
+					(unsigned int)addr, (unsigned int)val);
+			}
 		}
 	}
-	panic("PPP pagefault, shutting down for easier debugging\n");
+	pf_cnt++;
 	return 0;
 }
 
