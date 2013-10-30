@@ -66,6 +66,9 @@ static ssize_t diag_dbgfs_read_status(struct file *file, char __user *ubuf,
 		"Modem CMD in_busy_1: %d\n"
 		"Modem CMD in_busy_2: %d\n"
 		"DCI CMD Modem in_busy_1: %d\n"
+		"Received Feature mask from Modem: %d\n"
+		"Received Feature mask from LPASS: %d\n"
+		"Received Feature mask from WCNSS: %d\n"
 		"logging_mode: %d\n",
 		(unsigned int)driver->smd_data[MODEM_DATA].ch,
 		(unsigned int)driver->smd_data[LPASS_DATA].ch,
@@ -96,6 +99,9 @@ static ssize_t diag_dbgfs_read_status(struct file *file, char __user *ubuf,
 		driver->smd_cmd[MODEM_DATA].in_busy_1,
 		driver->smd_cmd[MODEM_DATA].in_busy_2,
 		driver->smd_dci_cmd[MODEM_DATA].in_busy_1,
+		driver->rcvd_feature_mask[MODEM_DATA],
+		driver->rcvd_feature_mask[LPASS_DATA],
+		driver->rcvd_feature_mask[WCNSS_DATA],
 		driver->logging_mode);
 
 #ifdef CONFIG_DIAG_OVER_USB
