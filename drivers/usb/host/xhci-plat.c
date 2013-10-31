@@ -17,14 +17,10 @@
 #include <linux/slab.h>
 #include <linux/of.h>
 #include <linux/dma-mapping.h>
-#include <linux/usb/otg.h>
-#include <linux/usb/msm_hsusb.h>
 
 #include "xhci.h"
 
 #define SYNOPSIS_DWC3_VENDOR	0x5533
-
-static struct usb_phy *phy;
 
 static void xhci_plat_quirks(struct device *dev, struct xhci_hcd *xhci)
 {
@@ -159,6 +155,7 @@ static int xhci_plat_probe(struct platform_device *pdev)
 		goto release_mem_region;
 	}
 
+	pm_runtime_no_callbacks(&pdev->dev);
 	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
 	pm_runtime_get_sync(&pdev->dev);
@@ -188,19 +185,6 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	ret = usb_add_hcd(xhci->shared_hcd, irq, IRQF_SHARED);
 	if (ret)
 		goto put_usb3_hcd;
-
-	phy = devm_usb_get_phy(&pdev->dev, USB_PHY_TYPE_USB2);
-	if (phy && phy->otg && !(phy->flags & ENABLE_SECONDARY_PHY)) {
-		dev_dbg(&pdev->dev, "%s otg support available\n", __func__);
-		ret = otg_set_host(phy->otg, &hcd->self);
-		if (ret) {
-			dev_err(&pdev->dev, "%s otg_set_host failed\n",
-				__func__);
-			goto put_usb3_hcd;
-		}
-	} else {
-		pm_runtime_no_callbacks(&pdev->dev);
-	}
 
 	pm_runtime_put(&pdev->dev);
 
@@ -238,9 +222,6 @@ static int xhci_plat_remove(struct platform_device *dev)
 	usb_put_hcd(hcd);
 	kfree(xhci);
 
-	if (phy && phy->otg)
-		otg_set_host(phy->otg, NULL);
-
 	return 0;
 }
 
@@ -261,41 +242,8 @@ static int xhci_plat_resume(struct device *dev)
 	return xhci_resume(xhci, 0);
 }
 
-#ifdef CONFIG_PM_RUNTIME
-static int xhci_msm_runtime_idle(struct device *dev)
-{
-	dev_dbg(dev, "xhci msm runtime idle\n");
-	return 0;
-}
-
-static int xhci_msm_runtime_suspend(struct device *dev)
-{
-	dev_dbg(dev, "xhci msm runtime suspend\n");
-	/*
-	 * Notify OTG about suspend.  It takes care of
-	 * putting the hardware in LPM.
-	 */
-	if (phy)
-		return usb_phy_set_suspend(phy, 1);
-
-	return 0;
-}
-
-static int xhci_msm_runtime_resume(struct device *dev)
-{
-	dev_dbg(dev, "xhci msm runtime resume\n");
-
-	if (phy)
-		return usb_phy_set_suspend(phy, 0);
-
-	return 0;
-}
-#endif
-
 static const struct dev_pm_ops xhci_plat_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(xhci_plat_suspend, xhci_plat_resume)
-	SET_RUNTIME_PM_OPS(xhci_msm_runtime_suspend, xhci_msm_runtime_resume,
-				xhci_msm_runtime_idle)
 };
 #define DEV_PM_OPS	(&xhci_plat_pm_ops)
 #else
