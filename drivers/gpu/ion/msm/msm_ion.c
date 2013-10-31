@@ -190,12 +190,20 @@ static void msm_ion_allocate(struct ion_platform_heap *heap)
 			if (data->reusable) {
 				const struct fmem_data *fmem_info =
 					fmem_get_info();
+				if (!fmem_info) {
+					pr_err("fmem info pointer NULL\n");
+					return;
+				}
 				heap->base = fmem_info->phys;
 				data->virt_addr = fmem_info->virt;
 				pr_info("ION heap %s using FMEM\n", heap->name);
 			} else if (data->mem_is_fmem) {
 				const struct fmem_data *fmem_info =
 					fmem_get_info();
+				if (!fmem_info) {
+					pr_err("fmem info pointer NULL\n");
+					return;
+				}
 				heap->base = fmem_info->phys + fmem_info->size;
 			}
 			align = data->align;
