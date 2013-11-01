@@ -17,9 +17,13 @@
 #ifndef	__LINUX_USB_ANDROID_H
 #define	__LINUX_USB_ANDROID_H
 
+#define MAX_STREAMING_FUNCS 3
+#define FUNC_NAME_LEN 10
 struct android_usb_platform_data {
 	u32 swfi_latency;
 	u8 usb_core_id;
+	char streaming_func[MAX_STREAMING_FUNCS][FUNC_NAME_LEN];
+	int  streaming_func_count;
 };
 
 extern int gport_setup(struct usb_configuration *c);
