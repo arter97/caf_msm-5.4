@@ -1369,7 +1369,12 @@ static int adreno_of_get_pwrlevels(struct device_node *parent,
 		&pdata->init_level))
 		pdata->init_level = 1;
 
-	if (adreno_of_read_property(parent, "qcom,step-pwrlevel",
+	/*
+	 * qcom,step-pwrlevel isn't required so don't spam the kernel log
+	 * if it isn't found
+	 */
+
+	if (of_property_read_u32(parent, "qcom,step-pwrlevel",
 		&pdata->step_mul))
 		pdata->step_mul = 1;
 
@@ -2242,8 +2247,7 @@ int adreno_soft_reset(struct kgsl_device *device)
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	int ret;
 
-	/* If the jump table index is 0 soft reset is not supported */
-	if ((!adreno_dev->pm4_jt_idx) || (!adreno_dev->gpudev->soft_reset)) {
+	if (!adreno_dev->gpudev->soft_reset) {
 		dev_WARN_ONCE(device->dev, 1, "Soft reset not supported");
 		return -EINVAL;
 	}
@@ -2280,10 +2284,14 @@ int adreno_soft_reset(struct kgsl_device *device)
 	device->ftbl->irqctrl(device, adreno_dev->intr_mask);
 
 	/*
-	 * Restart the ringbuffer - we can go down the warm start path because
-	 * power was never yanked
+	 * If we have offsets for the jump tables we can try to do a warm start,
+	 * otherwise do a full ringbuffer restart
 	 */
-	ret = adreno_ringbuffer_warm_start(&adreno_dev->ringbuffer);
+	if (adreno_dev->pm4_jt_idx)
+		ret = adreno_ringbuffer_warm_start(&adreno_dev->ringbuffer);
+	else
+		ret = adreno_ringbuffer_start(&adreno_dev->ringbuffer);
+
 	if (ret)
 		return ret;
 
