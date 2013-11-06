@@ -178,4 +178,6 @@ source "drivers/soc/Kconfig"
 
 source "drivers/powercap/Kconfig"
 
+source "drivers/sensors/Kconfig"
+
 endmenu
