@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012, 2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,7 +15,12 @@
 
 #include "diagfwd.h"
 
-int chk_equip_id_and_mask(int equip_id, uint8_t *buf);
+struct diag_log_mask_t {
+	uint8_t equip_id;
+	uint32_t num_items;
+	uint8_t ptr[MAX_ITEMS_PER_EQUIP_ID];
+} __packed;
+
 void diag_send_event_mask_update(smd_channel_t *, int num_bytes);
 void diag_send_msg_mask_update(smd_channel_t *, int ssid_first,
 					 int ssid_last, int proc);
