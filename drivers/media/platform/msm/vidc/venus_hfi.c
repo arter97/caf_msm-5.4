@@ -2414,6 +2414,10 @@ static int venus_hfi_check_core_registered(
 
 	if (core.dev_count) {
 		list_for_each_safe(curr, next, &core.dev_head) {
+			if (!curr) {
+				dprintk(VIDC_ERR, "Invalid device");
+				return -EINVAL;
+			}
 			device = list_entry(curr,
 				struct venus_hfi_device, list);
 			if (device && device->hal_data->irq == irq &&

@@ -291,10 +291,11 @@ static int msm_vidc_load_bus_vector(struct platform_device *pdev,
 			GFP_KERNEL);
 		if (!bus_pdata->usecase[i].vectors) {
 			dprintk(VIDC_ERR,
-				"%s Failed to alloc bus_pdata usecase\n",
-				__func__);
+					"%s Failed to alloc usecase vectors\n", __func__);
+			rc = -ENOMEM;
 			break;
 		}
+
 		for (j = 0; j < num_ports; j++) {
 			bus_pdata->usecase[i].vectors[j].ab = (u64)values[i].ab
 									* 1000;
