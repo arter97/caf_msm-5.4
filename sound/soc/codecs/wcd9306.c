@@ -1488,8 +1488,13 @@ static const struct snd_kcontrol_new anc1_fb_mux =
 static const struct snd_kcontrol_new dac1_switch[] = {
 	SOC_DAPM_SINGLE("Switch", TAPAN_A_RX_EAR_EN, 5, 1, 0)
 };
+
 static const struct snd_kcontrol_new hphl_switch[] = {
 	SOC_DAPM_SINGLE("Switch", TAPAN_A_RX_HPH_L_DAC_CTL, 6, 1, 0)
+};
+
+static const struct snd_kcontrol_new hphr_switch[] = {
+	SOC_DAPM_SINGLE("Switch", TAPAN_A_RX_HPH_R_DAC_CTL, 6, 1, 0)
 };
 
 static const struct snd_kcontrol_new spk_dac_switch[] = {
@@ -2766,7 +2771,7 @@ static const struct snd_soc_dapm_route audio_map[] = {
 
 	{"DAC1", "Switch", "CLASS_H_DSM MUX"},
 	{"HPHL DAC", "Switch", "CLASS_H_DSM MUX"},
-	{"HPHR DAC", NULL, "RX2 CHAIN"},
+	{"HPHR DAC", "Switch", "RDAC3 MUX"},
 
 	{"LINEOUT1", NULL, "LINEOUT1 PA"},
 	{"LINEOUT2", NULL, "LINEOUT2 PA"},
@@ -2777,10 +2782,13 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"LINEOUT2 PA", NULL, "LINEOUT2_PA_MIXER"},
 	{"LINEOUT2_PA_MIXER", NULL, "LINEOUT2 DAC"},
 
-	{"LINEOUT1 DAC", NULL, "RX3 MIX1"},
 
 	{"RDAC5 MUX", "DEM3_INV", "RX3 MIX1"},
 	{"LINEOUT2 DAC", NULL, "RDAC5 MUX"},
+
+	{"RDAC4 MUX", "DEM3", "RX3 MIX1"},
+	{"RDAC4 MUX", "DEM2", "RX2 CHAIN"},
+	{"LINEOUT1 DAC", NULL, "RDAC4 MUX"},
 
 	{"SPK PA", NULL, "SPK DAC"},
 	{"SPK DAC", NULL, "VDD_SPKDRV"},
@@ -2794,7 +2802,7 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"LINEOUT1 DAC", NULL, "CDC_CP_VDD"},
 	{"LINEOUT2 DAC", NULL, "CDC_CP_VDD"},
 
-	{"RDAC3 MUX", "DEM2", "RX2 MIX1"},
+	{"RDAC3 MUX", "DEM2", "RX2 CHAIN"},
 	{"RDAC3 MUX", "DEM1", "RX1 CHAIN"},
 
 	{"RX1 MIX1", NULL, "RX1 MIX1 INP1"},
@@ -2929,9 +2937,6 @@ static const struct snd_soc_dapm_route audio_map[] = {
 static const struct snd_soc_dapm_route wcd9302_map[] = {
 	{"SPK DAC", "Switch", "RX3 MIX1"},
 
-	{"RDAC4 MUX", "DEM3", "RX3 MIX1"},
-	{"RDAC4 MUX", "DEM2", "RX2 CHAIN"},
-	{"LINEOUT1 DAC", NULL, "RDAC4 MUX"},
 
 	{"RDAC5 MUX", "DEM4", "RX3 MIX1"},
 	{"RDAC5 MUX", "DEM3_INV", "RDAC4 MUX"},
@@ -4250,8 +4255,8 @@ static const struct snd_soc_dapm_widget tapan_common_dapm_widgets[] = {
 		tapan_hph_pa_event, SND_SOC_DAPM_PRE_PMU |
 		SND_SOC_DAPM_POST_PMU |	SND_SOC_DAPM_POST_PMD),
 
-	SND_SOC_DAPM_DAC_E("HPHR DAC", NULL, TAPAN_A_RX_HPH_R_DAC_CTL, 7, 0,
-		tapan_hphr_dac_event,
+	SND_SOC_DAPM_MIXER_E("HPHR DAC", TAPAN_A_RX_HPH_R_DAC_CTL, 7, 0,
+		hphr_switch, ARRAY_SIZE(hphr_switch), tapan_hphr_dac_event,
 		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 
 	/* LINEOUT1*/
