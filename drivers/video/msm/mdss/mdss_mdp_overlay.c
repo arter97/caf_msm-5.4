@@ -23,6 +23,7 @@
 #include <linux/delay.h>
 #include <linux/msm_mdp.h>
 #include <linux/memblock.h>
+#include <linux/io.h>
 
 #include <mach/iommu_domains.h>
 #include <mach/event_timer.h>
@@ -43,6 +44,61 @@
 #define PP_CLK_CFG_ON 1
 
 #define MEM_PROTECT_SD_CTRL 0xF
+
+//fake vsync in continuous splash because hw vsync is not ready
+static struct timer_list sw_vsync_timer;
+static int sw_vsync_enable = 0;
+
+static void mdss_sw_vsync_timer_cb(unsigned long data)
+{
+	ktime_t vsync_time;
+	struct mdss_overlay_private *mdp5_data
+		= (struct mdss_overlay_private *)data;
+	if (!mdp5_data)
+		pr_err("mdp5_data = NULL\n");
+
+	vsync_time = ktime_get();
+	pr_debug("vsync_time = %d\n", (int)ktime_to_ms(vsync_time));
+
+	//send vsync timestamp
+	mdp5_data->vsync_time = vsync_time;
+	sysfs_notify_dirent(mdp5_data->vsync_event_sd);
+
+	sw_vsync_timer.expires = jiffies + (HZ/30);
+	add_timer(&sw_vsync_timer);
+}
+
+static int mdss_mdp_start_vsync_sw_timer(struct mdss_overlay_private *mdp5_data)
+{
+	pr_debug("start sw vsync\n");
+
+	init_timer(&sw_vsync_timer);
+	sw_vsync_timer.function = mdss_sw_vsync_timer_cb;
+	sw_vsync_timer.data = (unsigned long)mdp5_data;
+
+	sw_vsync_timer.expires = jiffies + (HZ/30);
+	add_timer(&sw_vsync_timer);
+
+	sw_vsync_enable = 1;
+
+	return 0;
+}
+
+static int mdss_mdp_stop_vsync_sw_timer(struct msm_fb_data_type *mfd)
+{
+	pr_debug("stop sw vsync\n");
+
+	if (sw_vsync_timer.function)
+		del_timer(&sw_vsync_timer);
+
+	sw_vsync_enable = 0;
+
+	//need enable h/w vsync to drive SF since s/w is disabled
+	//depends on sw_vsync_enable's value
+	mdss_mdp_overlay_vsync_ctrl(mfd, 1);
+
+	return 0;
+}
 
 struct sd_ctrl_req {
 	unsigned int enable;
@@ -859,6 +915,9 @@ static int mdss_mdp_overlay_start(struct msm_fb_data_type *mfd)
 
 		if (!is_mdss_iommu_attached())
 			mdss_iommu_attach(mdss_res);
+
+		//stop timer for vsync
+		mdss_mdp_stop_vsync_sw_timer(mfd);
 	}
 
 error:
@@ -1495,6 +1554,10 @@ int mdss_mdp_overlay_vsync_ctrl(struct msm_fb_data_type *mfd, int en)
 	struct mdss_mdp_ctl *ctl = mfd_to_ctl(mfd);
 	int rc;
 
+	//skip vsync ctrl in fake vsync
+	if (sw_vsync_enable)
+		return 0;
+
 	if (!ctl)
 		return -ENODEV;
 	if (!ctl->add_vsync_handler || !ctl->remove_vsync_handler)
@@ -1617,8 +1680,10 @@ static ssize_t mdss_mdp_vsync_show_event(struct device *dev,
 	u64 vsync_ticks;
 	int ret;
 
-	if (!mdp5_data->ctl || !mdp5_data->ctl->power_on)
-		return -EAGAIN;
+	//don't check power_on in fake vsync
+	if (!sw_vsync_enable)
+		if (!mdp5_data->ctl || !mdp5_data->ctl->power_on)
+			return -EAGAIN;
 
 	vsync_ticks = ktime_to_ns(mdp5_data->vsync_time);
 
@@ -2312,6 +2377,11 @@ static int mdss_mdp_overlay_on(struct msm_fb_data_type *mfd)
 			rc = mdss_mdp_overlay_kickoff(mfd, NULL);
 	} else {
 		rc = mdss_mdp_ctl_setup(mdp5_data->ctl);
+		if (rc)
+			return rc;
+
+		//start timer for vsync
+		rc = mdss_mdp_start_vsync_sw_timer(mdp5_data);
 		if (rc)
 			return rc;
 	}
