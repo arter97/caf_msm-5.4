@@ -743,6 +743,8 @@ int mdp3_iommu_init(void)
 
 	mutex_init(&mdp3_res->iommu_lock);
 
+	mutex_init(&mdp3_res->iommu_lock);
+
 	ret = mdp3_iommu_domain_init();
 	if (ret) {
 		pr_err("mdp3 iommu domain init fails\n");
