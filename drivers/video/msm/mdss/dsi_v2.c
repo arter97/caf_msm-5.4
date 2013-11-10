@@ -494,6 +494,24 @@ int dsi_ctrl_config_init(struct platform_device *pdev,
 
 	return 0;
 }
+
+int dsi_cmdlist_put(struct mdss_dsi_ctrl_pdata *ctrl,
+				struct dcs_cmd_req *cmdreq)
+{
+	int ret = 0;
+	struct mdss_panel_info *pinfo = &(ctrl->panel_data.panel_info);
+
+	if (pinfo->type == MIPI_VIDEO_PANEL) {
+		dsi_set_tx_power_mode(0);
+		dsi_cmds_tx_v2(&(ctrl->panel_data), &dsi_panel_tx_buf,
+				cmdreq->cmds, cmdreq->cmds_cnt);
+		dsi_set_tx_power_mode(1);
+	} else if (pinfo->type == MIPI_CMD_PANEL) {
+		pr_debug("dcs backlight not supported yet!\n");
+	}
+	return ret;
+}
+
 int dsi_panel_device_register_v2(struct platform_device *dev,
 				struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
@@ -556,6 +574,7 @@ int dsi_panel_device_register_v2(struct platform_device *dev,
 	}
 
 	ctrl_pdata->panel_data.event_handler = dsi_event_handler;
+	ctrl_pdata->dsi_cmdlist_put = dsi_cmdlist_put;
 
 	rc = dsi_buf_alloc(&dsi_panel_tx_buf,
 				ALIGN(DSI_BUF_SIZE,
