@@ -736,6 +736,11 @@ uint32_t pm8xxx_adc_read(enum pm8xxx_adc_channels channel,
 	adc_pmic->conv->decimation = adc_pmic->adc_channel[i].adc_decimation;
 	amux_prescaling = adc_pmic->adc_channel[i].chan_path_prescaling;
 
+	if (amux_prescaling >= CHAN_PATH_SCALING_NONE) {
+		rc = -EINVAL;
+		goto fail_unlock;
+	}
+
 	adc_pmic->conv->chan_prop->offset_gain_numerator =
 		pm8xxx_amux_scaling_ratio[amux_prescaling].num;
 	adc_pmic->conv->chan_prop->offset_gain_denominator =
