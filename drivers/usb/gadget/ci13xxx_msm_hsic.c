@@ -780,7 +780,8 @@ free_xo_handle:
 unmap:
 	iounmap(mhsic->regs);
 error:
-	destroy_workqueue(mhsic->wq);
+	if (mhsic->wq)
+		destroy_workqueue(mhsic->wq);
 	kfree(mhsic);
 	return ret;
 }
