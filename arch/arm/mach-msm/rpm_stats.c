@@ -96,6 +96,8 @@ static int msm_rpmstats_copy_stats(struct msm_rpmstats_private_data *pdata)
 	else
 		str = (char *) pdata->reg_base + offset;
 
+	if (!str)
+		return -ENOMEM;
 	msm_rpmstats_strcpy(record.name, str);
 
 	if (offset > pdata->platform_data->phys_size)
