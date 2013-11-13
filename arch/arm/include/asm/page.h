@@ -153,6 +153,8 @@ extern void copy_page(void *to, const void *from);
 
 typedef unsigned long pteval_t;
 
+#define __HAVE_ARCH_GATE_AREA 1
+
 #undef STRICT_MM_TYPECHECKS
 
 #ifdef STRICT_MM_TYPECHECKS
