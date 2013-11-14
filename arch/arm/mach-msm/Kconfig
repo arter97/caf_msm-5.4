@@ -1447,6 +1447,27 @@ config MSM_IPC_ROUTER_SMD_XPRT
 	help
 	  SMD Transport Layer for IPC Router
 
+config MSM_IPC_ROUTER_SECURITY
+	depends on MSM_IPC_ROUTER
+	bool "MSM IPC Router Security support"
+	help
+	  This feature of IPC Router will enforce security rules
+	  configured by a security script from the user-space. IPC Router
+	  once configured with the security rules will ensure that the
+	  sender of the message to a service belongs to the relevant
+	  Linux group as configured by the security script.
+
+config MSM_QMI_INTERFACE
+	depends on MSM_IPC_ROUTER
+	depends on QMI_ENCDEC
+	default n
+	bool "MSM QMI Interface Library"
+	help
+	  Library to send and receive QMI messages over IPC Router.
+	  This library provides interface functions to the kernel drivers
+	  to perform QMI message marshaling and transport them over IPC
+	  Router.
+
 config MSM_ONCRPCROUTER_DEBUG
 	depends on MSM_ONCRPCROUTER
 	default y
