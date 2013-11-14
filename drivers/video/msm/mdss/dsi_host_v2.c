@@ -77,7 +77,7 @@ void msm_dsi_ack_err_status(unsigned char *ctrl_base)
 
 	if (status) {
 		MIPI_OUTP(ctrl_base + DSI_ACK_ERR_STATUS, status);
-		pr_debug("%s: status=%x\n", __func__, status);
+		pr_err("%s: status=%x\n", __func__, status);
 	}
 }
 
@@ -88,7 +88,7 @@ void msm_dsi_timeout_status(unsigned char *ctrl_base)
 	status = MIPI_INP(ctrl_base + DSI_TIMEOUT_STATUS);
 	if (status & 0x0111) {
 		MIPI_OUTP(ctrl_base + DSI_TIMEOUT_STATUS, status);
-		pr_debug("%s: status=%x\n", __func__, status);
+		pr_err("%s: status=%x\n", __func__, status);
 	}
 }
 
@@ -100,7 +100,7 @@ void msm_dsi_dln0_phy_err(unsigned char *ctrl_base)
 
 	if (status & 0x011111) {
 		MIPI_OUTP(ctrl_base + DSI_DLN0_PHY_ERR, status);
-		pr_debug("%s: status=%x\n", __func__, status);
+		pr_err("%s: status=%x\n", __func__, status);
 	}
 }
 
@@ -112,7 +112,7 @@ void msm_dsi_fifo_status(unsigned char *ctrl_base)
 
 	if (status & 0x44444489) {
 		MIPI_OUTP(ctrl_base + DSI_FIFO_STATUS, status);
-		pr_debug("%s: status=%x\n", __func__, status);
+		pr_err("%s: status=%x\n", __func__, status);
 	}
 }
 
@@ -124,7 +124,7 @@ void msm_dsi_status(unsigned char *ctrl_base)
 
 	if (status & 0x80000000) {
 		MIPI_OUTP(ctrl_base + DSI_STATUS, status);
-		pr_debug("%s: status=%x\n", __func__, status);
+		pr_err("%s: status=%x\n", __func__, status);
 	}
 }
 
@@ -547,7 +547,6 @@ int msm_dsi_cmds_tx(struct mdss_panel_data *pdata,
 	for (i = 0; i < cnt; i++) {
 		dsi_buf_init(tp);
 		dsi_cmd_dma_add(tp, cm);
-		msm_dsi_cmd_dma_tx(tp);
 		rc = msm_dsi_cmd_dma_tx(tp);
 		if (IS_ERR_VALUE(rc)) {
 			pr_err("%s: failed to call cmd_dma_tx\n", __func__);
