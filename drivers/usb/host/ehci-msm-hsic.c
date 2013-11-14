@@ -1,6 +1,6 @@
 /* ehci-msm-hsic.c - HSUSB Host Controller Driver Implementation
  *
- * Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2013, Linux Foundation. All rights reserved.
  *
  * Partly derived from ehci-fsl.c and ehci-hcd.c
  * Copyright (c) 2000-2004 by David Brownell
@@ -74,7 +74,8 @@ struct msm_hsic_hcd {
 	struct clk		*phy_clk;
 	struct clk		*cal_clk;
 	struct regulator	*hsic_vddcx;
-	bool			async_int;
+	struct regulator	*hsic_gdsc;
+	atomic_t		     async_int;
 	atomic_t                in_lpm;
 	struct wake_lock	wlock;
 	int			peripheral_status_irq;
@@ -734,6 +735,13 @@ static int msm_hsic_resume(struct msm_hsic_hcd *mehci)
 		return 0;
 	}
 
+	/* Handles race with Async interrupt */
+	disable_irq(hcd->irq);
+
+	if (pdata && pdata->standalone_latency)
+		pm_qos_update_request(&mehci->pm_qos_req_dma,
+			pdata->standalone_latency + 1);
+
 	spin_lock_irqsave(&mehci->wakeup_lock, flags);
 	if (mehci->wakeup_irq_enabled) {
 		disable_irq_wake(mehci->wakeup_irq);
@@ -799,8 +807,8 @@ skip_phy_resume:
 
 	atomic_set(&mehci->in_lpm, 0);
 
-	if (mehci->async_int) {
-		mehci->async_int = false;
+	if (atomic_read(&mehci->async_int)) {
+		atomic_set(&mehci->async_int, 0);
 		pm_runtime_put_noidle(mehci->dev);
 		enable_irq(hcd->irq);
 	}
@@ -810,6 +818,7 @@ skip_phy_resume:
 		pm_runtime_put_noidle(mehci->dev);
 	}
 
+	enable_irq(hcd->irq);
 	dev_info(mehci->dev, "HSIC-USB exited from low power mode\n");
 
 	return 0;
@@ -823,12 +832,19 @@ static irqreturn_t msm_hsic_irq(struct usb_hcd *hcd)
 	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
 	struct msm_hsic_hcd *mehci = hcd_to_hsic(hcd);
 	u32			status;
+	int			ret;
 
 	if (atomic_read(&mehci->in_lpm)) {
-		disable_irq_nosync(hcd->irq);
 		dev_dbg(mehci->dev, "phy async intr\n");
-		mehci->async_int = true;
-		pm_runtime_get(mehci->dev);
+		dbg_log_event(NULL, "Async IRQ", 0);
+		ret = pm_runtime_get(mehci->dev);
+		if ((ret == 1) || (ret == -EINPROGRESS)) {
+			pm_runtime_put_noidle(mehci->dev);
+		} else {
+			disable_irq_nosync(hcd->irq);
+			atomic_set(&mehci->async_int, 1);
+		}
+
 		return IRQ_HANDLED;
 	}
 
@@ -1741,6 +1757,19 @@ static int msm_hsic_pm_suspend(struct device *dev)
 	return 0;
 }
 
+static int msm_hsic_pm_suspend_noirq(struct device *dev)
+{
+	struct usb_hcd *hcd = dev_get_drvdata(dev);
+	struct msm_hsic_hcd *mehci = hcd_to_hsic(hcd);
+
+	if (atomic_read(&mehci->async_int)) {
+		dev_dbg(dev, "suspend_noirq: Aborting due to pending interrupt\n");
+		return -EBUSY;
+	}
+
+	return 0;
+}
+
 static int msm_hsic_pm_resume(struct device *dev)
 {
 	int ret;
@@ -1758,7 +1787,9 @@ static int msm_hsic_pm_resume(struct device *dev)
 	 * when remote wakeup is received or interface driver
 	 * start I/O.
 	 */
-	if (!atomic_read(&mehci->pm_usage_cnt))
+	if (!atomic_read(&mehci->pm_usage_cnt) &&
+			!atomic_read(&mehci->async_int) &&
+			pm_runtime_suspended(dev))
 		return 0;
 
 	ret = msm_hsic_resume(mehci);
