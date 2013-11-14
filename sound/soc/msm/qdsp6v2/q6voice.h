@@ -1501,4 +1501,6 @@ int voice_get_idx_for_session(u32 session_id);
 int voc_client_reg_evt(struct voip_event_type event, bool state);
 int voc_get_voip_evt(struct voip_event *evt);
 
+int voc_update_amr_vocoder_rate(uint32_t session_id);
+
 #endif

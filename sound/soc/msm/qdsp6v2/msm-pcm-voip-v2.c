@@ -80,6 +80,14 @@ enum voip_state {
 	VOIP_STARTED,
 };
 
+/*
+ * AMR
+ * Bits 0-3: Frame type
+ * Bits 4-7: Frame rate
+ *
+ * EVRC
+ * Bits 0-3: Frame rate
+ */
 struct voip_frame_hdr {
 	uint32_t timestamp;
 	union {
@@ -567,7 +575,13 @@ static void voip_process_dl_pkt(uint8_t *voc_pkt, void *private_data)
 			 * Bits 4-7: Frame type
 			 */
 			*voc_pkt = ((buf_node->frame.frm_hdr.frame_type &
-					0x0F) << 4) | (prtd->rate_type & 0x0F);
+				   0x0F) << 4);
+			if (buf_node->frame.frm_hdr.packet_rate & 0xF0) {
+				*voc_pkt |= ((buf_node->frame.frm_hdr.packet_rate &
+					    0xF0) >> 4);
+			} else {
+				*voc_pkt |= prtd->rate_type & 0x0F;
+			}
 			voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
 			memcpy(voc_pkt,
 				&buf_node->frame.voc_pkt[0],
@@ -1274,8 +1288,26 @@ static int msm_voip_mode_rate_config_put(struct snd_kcontrol *kcontrol,
 		if (v != NULL) {
 			mutex_lock(&v->lock);
 			v->mode = mode;
-			v->rate = rate;
+
+			if (v->rate != rate) {
+				v->rate = rate;
+				if (v->state == VOIP_STARTED &&
+				   (v->mode == MODE_AMR ||
+				    v->mode == MODE_AMR_WB)) {
+					voip_config_vocoder(
+							v->capture_substream);
+
+					ret = voc_update_amr_vocoder_rate(
+							session_id);
+					if (ret) {
+						pr_err("%s:, Failed to update \
+							vocoder. %d\n",
+							__func__, ret);
+					}
+				}
+			}
 			mutex_unlock(&v->lock);
+
 		} else {
 			pr_err("%s: invalid session_id 0x%x\n", __func__,
 				session_id);
