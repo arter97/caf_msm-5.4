@@ -1754,6 +1754,14 @@ static int voice_send_cvs_register_cal_cmd(struct voice_data *v)
 
 	/* Get the column info corresponding to CVS cal from ACDB. */
 	get_voice_col_data(VOCSTRM_CAL, &cal_block);
+	if (cal_block.cal_size == 0 ||
+	    cal_block.cal_size >
+	    sizeof(cvs_reg_cal_cmd.cvs_cal_data.column_info)) {
+		pr_err("%s: Invalid VOCSTRM_CAL size %d\n",
+		       __func__, cal_block.cal_size);
+
+		goto fail;
+	}
 	memcpy(&cvs_reg_cal_cmd.cvs_cal_data.column_info[0],
 	       (void *) cal_block.cal_kvaddr,
 	       cal_block.cal_size);
@@ -2016,6 +2024,15 @@ static int voice_send_cvp_register_cal_cmd(struct voice_data *v)
 
 	/* Get the column info corresponding to CVP cal from ACDB. */
 	get_voice_col_data(VOCPROC_CAL, &cal_block);
+	if (cal_block.cal_size == 0 ||
+	    cal_block.cal_size >
+	    sizeof(cvp_reg_cal_cmd.cvp_cal_data.column_info)) {
+		pr_err("%s: Invalid VOCPROC_CAL size %d\n",
+		       __func__, cal_block.cal_size);
+
+		goto fail;
+	}
+
 	memcpy(&cvp_reg_cal_cmd.cvp_cal_data.column_info[0],
 	       (void *) cal_block.cal_kvaddr,
 	       cal_block.cal_size);
@@ -2149,6 +2166,15 @@ static int voice_send_cvp_register_vol_cal_cmd(struct voice_data *v)
 
 	/* Get the column info corresponding to CVP volume cal from ACDB. */
 	get_voice_col_data(VOCVOL_CAL, &cal_block);
+	if (cal_block.cal_size == 0 ||
+	    cal_block.cal_size >
+	    sizeof(cvp_reg_vol_cal_cmd.cvp_vol_cal_data.column_info)) {
+		pr_err("%s: Invalid VOCVOL_CAL size %d\n",
+		       __func__, cal_block.cal_size);
+
+		goto fail;
+	}
+
 	memcpy(&cvp_reg_vol_cal_cmd.cvp_vol_cal_data.column_info[0],
 	       (void *) cal_block.cal_kvaddr,
 	       cal_block.cal_size);
