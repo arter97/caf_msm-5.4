@@ -369,6 +369,7 @@ struct qpnp_chg_chip {
 	struct alarm			reduce_power_stage_alarm;
 	struct work_struct		reduce_power_stage_work;
 	bool				power_stage_workaround_running;
+	bool				power_stage_workaround_enable;
 };
 
 
@@ -868,7 +869,7 @@ qpnp_chg_vinmin_set(struct qpnp_chg_chip *chip, int voltage)
 	}
 	if (voltage >= QPNP_CHG_VINMIN_HIGH_MIN_MV) {
 		temp = QPNP_CHG_VINMIN_HIGH_MIN_VAL;
-		temp += (voltage - QPNP_CHG_VINMIN_MIN_MV)
+		temp += (voltage - QPNP_CHG_VINMIN_HIGH_MIN_MV)
 			/ QPNP_CHG_VINMIN_STEP_HIGH_MV;
 	} else {
 		temp = QPNP_CHG_VINMIN_MIN_VAL;
@@ -896,7 +897,7 @@ qpnp_chg_vinmin_get(struct qpnp_chg_chip *chip)
 
 	if (vin_min == 0)
 		vin_min_mv = QPNP_CHG_I_MAX_MIN_100;
-	else if (vin_min > QPNP_CHG_VINMIN_HIGH_MIN_VAL)
+	else if (vin_min >= QPNP_CHG_VINMIN_HIGH_MIN_VAL)
 		vin_min_mv = QPNP_CHG_VINMIN_HIGH_MIN_MV +
 			(vin_min - QPNP_CHG_VINMIN_HIGH_MIN_VAL)
 				* QPNP_CHG_VINMIN_STEP_HIGH_MV;
@@ -2128,6 +2129,8 @@ qpnp_batt_external_power_changed(struct power_supply *psy)
 		if (chip->prev_usb_max_ma == ret.intval)
 			goto skip_set_iusb_max;
 
+		chip->prev_usb_max_ma = ret.intval;
+
 		if (ret.intval <= 2 && !chip->use_default_batt_values &&
 						get_prop_batt_present(chip)) {
 			qpnp_chg_usb_suspend_enable(chip, 1);
@@ -2149,14 +2152,14 @@ qpnp_batt_external_power_changed(struct power_supply *psy)
 
 			if ((chip->flags & POWER_STAGE_WA)
 			&& ((ret.intval / 1000) > USB_WALL_THRESHOLD_MA)
-			&& !chip->power_stage_workaround_running) {
+			&& !chip->power_stage_workaround_running
+			&& chip->power_stage_workaround_enable) {
 				chip->power_stage_workaround_running = true;
 				pr_debug("usb wall chg inserted starting power stage workaround charger_monitor = %d\n",
 						charger_monitor);
 				schedule_work(&chip->reduce_power_stage_work);
 			}
 		}
-		chip->prev_usb_max_ma = ret.intval;
 	}
 
 skip_set_iusb_max:
@@ -4122,6 +4125,10 @@ qpnp_charger_read_dt_props(struct qpnp_chg_chip *chip)
 	/* Disable charging when faking battery values */
 	if (chip->use_default_batt_values)
 		chip->charging_disabled = true;
+
+	chip->power_stage_workaround_enable =
+			of_property_read_bool(chip->spmi->dev.of_node,
+					"qcom,power-stage-reduced");
 
 	of_get_property(chip->spmi->dev.of_node, "qcom,thermal-mitigation",
 		&(chip->thermal_levels));
