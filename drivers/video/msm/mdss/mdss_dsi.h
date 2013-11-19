@@ -319,6 +319,8 @@ struct mdss_dsi_ctrl_pdata {
 	int (*off) (struct mdss_panel_data *pdata);
 	int (*partial_update_fnc) (struct mdss_panel_data *pdata);
 	int (*check_status) (struct mdss_dsi_ctrl_pdata *pdata);
+	int (*dsi_cmdlist_put)(struct mdss_dsi_ctrl_pdata *ctrl,
+				struct dcs_cmd_req *cmdreq);
 	struct mdss_panel_data panel_data;
 	unsigned char *ctrl_base;
 	int reg_size;
