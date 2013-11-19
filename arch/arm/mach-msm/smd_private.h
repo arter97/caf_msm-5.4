@@ -260,6 +260,7 @@ extern irqreturn_t smsm_dsps_irq_handler(int irq, void *data);
 extern irqreturn_t smd_wcnss_irq_handler(int irq, void *data);
 extern irqreturn_t smsm_wcnss_irq_handler(int irq, void *data);
 extern irqreturn_t smd_rpm_irq_handler(int irq, void *data);
+extern irqreturn_t smd_modemfw_irq_handler(int irq, void *data);
 
 extern int msm_smd_driver_register(void);
 extern void smd_post_init(bool is_legacy, unsigned remote_pid);
@@ -270,6 +271,7 @@ extern int smd_edge_to_remote_pid(uint32_t edge);
 extern int smd_edge_to_local_pid(uint32_t edge);
 extern void smd_set_edge_subsys_name(uint32_t edge, const char *subsys_name);
 extern void smd_reset_all_edge_subsys_name(void);
+extern void smd_proc_set_skip_pil(unsigned pid, bool skip_pil);
 extern void smd_set_edge_initialized(uint32_t edge);
 extern void smd_cfg_smd_intr(uint32_t proc, uint32_t mask, void *ptr);
 extern void smd_cfg_smsm_intr(uint32_t proc, uint32_t mask, void *ptr);

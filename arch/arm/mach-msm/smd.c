@@ -127,6 +127,10 @@ static struct interrupt_config private_intr_config[NUM_SMD_SUBSYSTEMS] = {
 		.smd.irq_handler = smd_wcnss_irq_handler,
 		.smsm.irq_handler = smsm_wcnss_irq_handler,
 	},
+	[SMD_MODEM_Q6_FW] = {
+		.smd.irq_handler = smd_modemfw_irq_handler,
+		.smsm.irq_handler = NULL, /* does not support smsm */
+	},
 	[SMD_RPM] = {
 		.smd.irq_handler = smd_rpm_irq_handler,
 		.smsm.irq_handler = NULL, /* does not support smsm */
@@ -379,6 +383,19 @@ static inline void notify_wcnss_smd(struct smd_channel *ch)
 	log_notify(SMD_APPS_WCNSS, ch);
 	if (intr->out_base) {
 		++interrupt_stats[SMD_WCNSS].smd_out_count;
+		smd_write_intr(intr->out_bit_pos,
+		intr->out_base + intr->out_offset);
+	}
+}
+
+static inline void notify_modemfw_smd(smd_channel_t *ch)
+{
+	static const struct interrupt_config_item *intr
+		= &private_intr_config[SMD_MODEM_Q6_FW].smd;
+
+	log_notify(SMD_APPS_Q6FW, ch);
+	if (intr->out_base) {
+		++interrupt_stats[SMD_MODEM_Q6_FW].smd_out_count;
 		smd_write_intr(intr->out_bit_pos,
 		intr->out_base + intr->out_offset);
 	}
@@ -650,6 +667,7 @@ struct remote_proc_info {
 	struct list_head ch_list;
 	/* 2 total supported tables of channels */
 	unsigned char ch_allocated[SMEM_NUM_SMD_STREAM_CHANNELS * 2];
+	bool skip_pil;
 };
 
 static struct remote_proc_info remote_info[NUM_SMD_SUBSYSTEMS];
@@ -822,6 +840,29 @@ int smd_remote_ss_to_edge(const char *name)
 	return -EINVAL;
 }
 EXPORT_SYMBOL(smd_remote_ss_to_edge);
+
+/**
+ * smd_edge_to_pil_str - Returns the PIL string used to load the remote side of
+ *			 the indicated edge.
+ *
+ * @type -	Edge definition
+ * @returns -	The PIL string to load the remove side of @type or NULL if the
+ *		PIL string does not exist.
+ */
+const char *smd_edge_to_pil_str(uint32_t type)
+{
+	const char *pil_str = NULL;
+
+	if (type < ARRAY_SIZE(edge_to_pids)) {
+		if (!remote_info[smd_edge_to_remote_pid(type)].skip_pil) {
+			pil_str = edge_to_pids[type].subsys_name;
+			if (pil_str[0] == 0x0)
+				pil_str = NULL;
+		}
+	}
+	return pil_str;
+}
+EXPORT_SYMBOL(smd_edge_to_pil_str);
 
 /*
  * Returns a pointer to the subsystem name or NULL if no
@@ -1449,6 +1490,15 @@ irqreturn_t smd_wcnss_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+irqreturn_t smd_modemfw_irq_handler(int irq, void *data)
+{
+	log_irq(SMD_APPS_Q6FW);
+	++interrupt_stats[SMD_MODEM_Q6_FW].smd_in_count;
+	handle_smd_irq(&remote_info[SMD_MODEM_Q6_FW], notify_modemfw_smd);
+	handle_smd_irq_closing_list();
+	return IRQ_HANDLED;
+}
+
 irqreturn_t smd_rpm_irq_handler(int irq, void *data)
 {
 	log_irq(SMD_APPS_RPM);
@@ -1464,6 +1514,7 @@ static void smd_fake_irq_handler(unsigned long arg)
 	handle_smd_irq(&remote_info[SMD_Q6], notify_dsp_smd);
 	handle_smd_irq(&remote_info[SMD_DSPS], notify_dsps_smd);
 	handle_smd_irq(&remote_info[SMD_WCNSS], notify_wcnss_smd);
+	handle_smd_irq(&remote_info[SMD_MODEM_Q6_FW], notify_modemfw_smd);
 	handle_smd_irq(&remote_info[SMD_RPM], notify_rpm_smd);
 	handle_smd_irq_closing_list();
 }
@@ -1844,6 +1895,8 @@ static int smd_alloc_channel(struct smd_alloc_elm *alloc_elm, int table_id,
 		ch->notify_other_cpu = notify_dsps_smd;
 	else if (ch->type == SMD_APPS_WCNSS)
 		ch->notify_other_cpu = notify_wcnss_smd;
+	else if (ch->type == SMD_APPS_Q6FW)
+		ch->notify_other_cpu = notify_modemfw_smd;
 	else if (ch->type == SMD_APPS_RPM)
 		ch->notify_other_cpu = notify_rpm_smd;
 
@@ -2075,15 +2128,6 @@ int smd_named_open_on_edge(const char *name, uint32_t edge,
 	return 0;
 }
 EXPORT_SYMBOL(smd_named_open_on_edge);
-
-
-int smd_open(const char *name, smd_channel_t **_ch,
-	     void *priv, void (*notify)(void *, unsigned))
-{
-	return smd_named_open_on_edge(name, SMD_APPS_MODEM, _ch, priv,
-				      notify);
-}
-EXPORT_SYMBOL(smd_open);
 
 int smd_close(smd_channel_t *ch)
 {
@@ -3330,25 +3374,43 @@ int smd_edge_to_local_pid(uint32_t edge)
 }
 
 /**
+ * smd_proc_set_skip_pil() - Mark if the indicated processor is be loaded by PIL
+ * @pid:		the processor id to mark
+ * @skip_pil:		true if @pid cannot by loaded by PIL
+ */
+void smd_proc_set_skip_pil(unsigned pid, bool skip_pil)
+{
+	if (pid >= NUM_SMD_SUBSYSTEMS) {
+		pr_err("%s: invalid pid:%d\n", __func__, pid);
+		return;
+	}
+	remote_info[pid].skip_pil = skip_pil;
+}
+
+/**
  * smd_set_edge_subsys_name() - Set the subsystem name
  * @edge:		edge type identifies local and remote processor
- * @sussys_name:	pointer to subsystem name
+ * @subsys_name:	pointer to subsystem name
  *
  * This function is used to set the subsystem name for given edge type.
  */
 void smd_set_edge_subsys_name(uint32_t edge, const char *subsys_name)
 {
 	if (edge < ARRAY_SIZE(edge_to_pids))
-		strlcpy(edge_to_pids[edge].subsys_name,
-			subsys_name, SMD_MAX_CH_NAME_LEN);
+		if (subsys_name)
+			strlcpy(edge_to_pids[edge].subsys_name,
+				subsys_name, SMD_MAX_CH_NAME_LEN);
+		else
+			strlcpy(edge_to_pids[edge].subsys_name,
+				"", SMD_MAX_CH_NAME_LEN);
 	else
 		pr_err("%s: Invalid edge type[%d]\n", __func__, edge);
 }
 
 /**
- * smd_reset_all_edge_subsys_name() - Reset the PIL string
+ * smd_reset_all_edge_subsys_name() - Reset the subsystem name
  *
- * This function is used to reset the PIL string of all edges in
+ * This function is used to reset the subsystem name of all edges in
  * targets where configuration information is available through
  * device tree.
  */

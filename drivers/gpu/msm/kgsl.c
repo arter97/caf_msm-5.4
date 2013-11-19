@@ -1810,7 +1810,7 @@ static int kgsl_cmdbatch_add_sync(struct kgsl_device *device,
 	}
 
 	if (sync->size != psize) {
-		KGSL_DRV_ERR(device, "Invalid sync size %d\n", sync->size);
+		KGSL_DRV_ERR(device, "Invalid sync size %zd\n", sync->size);
 		return -EINVAL;
 	}
 
@@ -1896,7 +1896,7 @@ static bool _kgsl_cmdbatch_verify(struct kgsl_device_private *dev_priv,
 	for (i = 0; i < cmdbatch->ibcount; i++) {
 		if (cmdbatch->ibdesc[i].sizedwords == 0) {
 			KGSL_DRV_ERR(dev_priv->device,
-				"invalid size ctx %d ib(%d) %lX/%X\n",
+				"invalid size ctx %d ib(%d) %lX/%zX\n",
 				cmdbatch->context->id, i,
 				cmdbatch->ibdesc[i].gpuaddr,
 				cmdbatch->ibdesc[i].sizedwords);
@@ -1907,7 +1907,7 @@ static bool _kgsl_cmdbatch_verify(struct kgsl_device_private *dev_priv,
 		if (!kgsl_mmu_gpuaddr_in_range(private->pagetable,
 			cmdbatch->ibdesc[i].gpuaddr)) {
 			KGSL_DRV_ERR(dev_priv->device,
-				"Invalid address ctx %d ib(%d) %lX/%X\n",
+				"Invalid address ctx %d ib(%d) %lX/%zX\n",
 				cmdbatch->context->id, i,
 				cmdbatch->ibdesc[i].gpuaddr,
 				cmdbatch->ibdesc[i].sizedwords);
@@ -1959,11 +1959,9 @@ static struct kgsl_cmdbatch *_kgsl_cmdbatch_create_legacy(
  * Create a command batch from the standard issueibcmds format sent by the user.
  */
 static struct kgsl_cmdbatch *_kgsl_cmdbatch_create(struct kgsl_device *device,
-		struct kgsl_context *context,
-		unsigned int flags,
-		struct kgsl_ibdesc __user *cmdlist, unsigned int numcmds,
-		struct kgsl_cmd_syncpoint __user *synclist,
-		unsigned int numsyncs)
+		struct kgsl_context *context, unsigned int flags,
+		void __user *cmdlist, unsigned int numcmds,
+		void __user *synclist, unsigned int numsyncs)
 {
 	struct kgsl_cmdbatch *cmdbatch =
 		kgsl_cmdbatch_create(device, context, flags, numcmds);
@@ -1973,7 +1971,7 @@ static struct kgsl_cmdbatch *_kgsl_cmdbatch_create(struct kgsl_device *device,
 		return cmdbatch;
 
 	if (!(flags & KGSL_CONTEXT_SYNC)) {
-		if (copy_from_user(cmdbatch->ibdesc, (void __user *) cmdlist,
+		if (copy_from_user(cmdbatch->ibdesc, cmdlist,
 			sizeof(struct kgsl_ibdesc) * numcmds)) {
 			ret = -EFAULT;
 			goto done;
@@ -1982,7 +1980,7 @@ static struct kgsl_cmdbatch *_kgsl_cmdbatch_create(struct kgsl_device *device,
 
 	if (synclist && numsyncs) {
 		struct kgsl_cmd_syncpoint sync;
-		void  __user *uptr = (void __user *) synclist;
+		void  __user *uptr = synclist;
 		int i;
 
 		for (i = 0; i < numsyncs; i++) {
@@ -2039,7 +2037,7 @@ static long kgsl_ioctl_rb_issueibcmds(struct kgsl_device_private *dev_priv,
 			goto done;
 
 		cmdbatch = _kgsl_cmdbatch_create(device, context, param->flags,
-			(struct kgsl_ibdesc __user *)param->ibdesc_addr,
+			(void __user *)param->ibdesc_addr,
 			 param->numibs, 0, 0);
 	} else
 		cmdbatch = _kgsl_cmdbatch_create_legacy(device, context, param);
@@ -2384,8 +2382,7 @@ static int kgsl_get_phys_file(int fd, unsigned long *start, unsigned long *len,
 
 static int kgsl_setup_phys_file(struct kgsl_mem_entry *entry,
 				struct kgsl_pagetable *pagetable,
-				unsigned int fd, unsigned int offset,
-				size_t size)
+				unsigned int fd, size_t offset, size_t size)
 {
 	int ret;
 	unsigned long phys, virt, len;
@@ -2452,7 +2449,7 @@ static int kgsl_setup_phys_file(struct kgsl_mem_entry *entry,
 #endif
 
 static int memdesc_sg_virt(struct kgsl_memdesc *memdesc,
-	unsigned long paddr, int size)
+	unsigned long paddr, size_t size)
 {
 	int i;
 	int sglen = PAGE_ALIGN(size) / PAGE_SIZE;
@@ -2508,7 +2505,7 @@ err:
 
 static int kgsl_setup_useraddr(struct kgsl_mem_entry *entry,
 			      struct kgsl_pagetable *pagetable,
-			      unsigned long useraddr, unsigned int offset,
+			      unsigned long useraddr, size_t offset,
 			      size_t size)
 {
 	struct vm_area_struct *vma;
@@ -3014,7 +3011,7 @@ kgsl_ioctl_gpumem_sync_cache_bulk(struct kgsl_device_private *dev_priv,
 	if (full_flush) {
 		trace_kgsl_mem_sync_full_cache(actual_count, op_size,
 					       param->op);
-		__cpuc_flush_kern_all();
+		flush_cache_all();
 	}
 
 	for (i = 0; i < actual_count; i++) {
@@ -3058,7 +3055,7 @@ kgsl_ioctl_sharedmem_flush_cache(struct kgsl_device_private *dev_priv,
 int
 _gpumem_alloc(struct kgsl_device_private *dev_priv,
 		struct kgsl_mem_entry **ret_entry,
-		unsigned int size, unsigned int flags)
+		size_t size, unsigned int flags)
 {
 	int result;
 	struct kgsl_process_private *private = dev_priv->process_priv;
@@ -3460,7 +3457,7 @@ kgsl_mmap_memstore(struct kgsl_device *device, struct vm_area_struct *vma)
 		return -EPERM;
 
 	if (memdesc->size  !=  vma_size) {
-		KGSL_MEM_ERR(device, "memstore bad size: %d should be %d\n",
+		KGSL_MEM_ERR(device, "memstore bad size: %d should be %zd\n",
 			     vma_size, memdesc->size);
 		return -EINVAL;
 	}

@@ -17,7 +17,6 @@
 #include <linux/platform_device.h>
 #include <linux/types.h>
 #include <media/msm_vidc.h>
-#include <media/msm_smem.h>
 #include "msm_vidc_resources.h"
 
 #define CONTAINS(__a, __sz, __t) ({\
@@ -101,6 +100,8 @@ enum hal_extradata_id {
 	HAL_EXTRADATA_ASPECT_RATIO,
 	HAL_EXTRADATA_MPEG2_SEQDISP,
 	HAL_EXTRADATA_STREAM_USERDATA,
+	HAL_EXTRADATA_FRAME_QP,
+	HAL_EXTRADATA_FRAME_BITS_INFO,
 };
 
 enum hal_property {
@@ -1190,6 +1191,7 @@ struct hfi_device {
 		u32 *max_width, u32 *max_height);
 	int (*session_clean)(void *sess);
 	int (*get_core_capabilities)(void);
+	int (*power_enable)(void *dev);
 };
 
 typedef void (*hfi_cmd_response_callback) (enum command_response cmd,
