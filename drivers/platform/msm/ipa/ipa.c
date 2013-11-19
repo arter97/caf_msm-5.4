@@ -67,65 +67,6 @@ static struct clk *sys_noc_ipa_axi_clk;
 static struct clk *ipa_cnoc_clk;
 static struct clk *ipa_inactivity_clk;
 
-static struct msm_bus_vectors ipa_init_vectors[]  = {
-	{
-		.src = MSM_BUS_MASTER_IPA,
-		.dst = MSM_BUS_SLAVE_EBI_CH0,
-		.ab = 0,
-		.ib = 0,
-	},
-	{
-		.src = MSM_BUS_MASTER_BAM_DMA,
-		.dst = MSM_BUS_SLAVE_EBI_CH0,
-		.ab = 0,
-		.ib = 0,
-	},
-	{
-		.src = MSM_BUS_MASTER_BAM_DMA,
-		.dst = MSM_BUS_SLAVE_OCIMEM,
-		.ab = 0,
-		.ib = 0,
-	},
-};
-
-static struct msm_bus_vectors ipa_max_perf_vectors[]  = {
-	{
-		.src = MSM_BUS_MASTER_IPA,
-		.dst = MSM_BUS_SLAVE_EBI_CH0,
-		.ab = 50000000,
-		.ib = 960000000,
-	},
-	{
-		.src = MSM_BUS_MASTER_BAM_DMA,
-		.dst = MSM_BUS_SLAVE_EBI_CH0,
-		.ab = 50000000,
-		.ib = 960000000,
-	},
-	{
-		.src = MSM_BUS_MASTER_BAM_DMA,
-		.dst = MSM_BUS_SLAVE_OCIMEM,
-		.ab = 50000000,
-		.ib = 960000000,
-	},
-};
-
-static struct msm_bus_paths ipa_usecases[]  = {
-	{
-		ARRAY_SIZE(ipa_init_vectors),
-		ipa_init_vectors,
-	},
-	{
-		ARRAY_SIZE(ipa_max_perf_vectors),
-		ipa_max_perf_vectors,
-	},
-};
-
-static struct msm_bus_scale_pdata ipa_bus_client_pdata = {
-	ipa_usecases,
-	ARRAY_SIZE(ipa_usecases),
-	.name = "ipa",
-};
-
 struct ipa_context *ipa_ctx;
 
 static int ipa_load_pipe_connection(struct platform_device *pdev,
@@ -679,6 +620,39 @@ static long ipa_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			retval = ipa_get_ep_mapping(arg);
 			break;
 		}
+	case IPA_IOC_QUERY_RT_TBL_INDEX:
+		if (copy_from_user(header, (u8 *)arg,
+				sizeof(struct ipa_ioc_get_rt_tbl_indx))) {
+			retval = -EFAULT;
+			break;
+		}
+		if (ipa_query_rt_index(
+			 (struct ipa_ioc_get_rt_tbl_indx *)header)) {
+			retval = -EFAULT;
+			break;
+		}
+		if (copy_to_user((u8 *)arg, header,
+				sizeof(struct ipa_ioc_get_rt_tbl_indx))) {
+			retval = -EFAULT;
+			break;
+		}
+		break;
+	case IPA_IOC_WRITE_QMAPID:
+		if (copy_from_user(header, (u8 *)arg,
+					sizeof(struct ipa_ioc_write_qmapid))) {
+			retval = -EFAULT;
+			break;
+		}
+		if (ipa_write_qmap_id((struct ipa_ioc_write_qmapid *)header)) {
+			retval = -EFAULT;
+			break;
+		}
+		if (copy_to_user((u8 *)arg, header,
+					sizeof(struct ipa_ioc_write_qmapid))) {
+			retval = -EFAULT;
+			break;
+		}
+		break;
 
 	default:        /* redundant, as cmd was checked against MAXNR */
 		ipa_dec_client_disable_clks();
@@ -1216,11 +1190,13 @@ static int ipa_load_pipe_connection(struct platform_device *pdev,
 				    enum a2_mux_pipe_direction  pipe_dir,
 				    struct a2_mux_pipe_connection *pdata)
 {
-	struct device_node *node = pdev->dev.of_node;
+	struct device_node *node;
 	int rc = 0;
 
 	if (!pdata || !pdev)
 		goto err;
+
+	node = pdev->dev.of_node;
 
 	/* retrieve device tree parameters */
 	for_each_child_of_node(pdev->dev.of_node, node)
@@ -1261,8 +1237,8 @@ err:
 static int ipa_update_connections_info(struct device_node *node,
 		struct a2_mux_pipe_connection     *pipe_connection)
 {
-	u32      rc;
-	char     *key;
+	u32      rc = 0;
+	char     *key = NULL;
 	uint32_t val;
 	enum ipa_pipe_mem_type mem_type;
 
@@ -1326,7 +1302,8 @@ static int ipa_update_connections_info(struct device_node *node,
 
 	return 0;
 err:
-	IPAERR("%s: Error in name %s key %s\n", __func__, node->full_name, key);
+	IPAERR("%s: Error in name %s key %s\n", __func__,
+		node->full_name, (key != NULL) ? key : "Null");
 
 	return rc;
 }
@@ -1798,7 +1775,7 @@ static int ipa_init(const struct ipa_plat_drv_res *resource_p,
 
 	/* get BUS handle */
 	ipa_ctx->ipa_bus_hdl =
-		msm_bus_scale_register_client(&ipa_bus_client_pdata);
+		msm_bus_scale_register_client(ipa_ctx->ctrl->msm_bus_data_ptr);
 	if (!ipa_ctx->ipa_bus_hdl) {
 		IPAERR("fail to register with bus mgr!\n");
 		result = -ENODEV;

@@ -90,7 +90,7 @@
 
 #define WCD9XXX_HPHL_STATUS_READY_WAIT_US 1000
 #define WCD9XXX_MUX_SWITCH_READY_WAIT_MS 50
-#define WCD9XXX_MEAS_DELTA_MAX_MV 50
+#define WCD9XXX_MEAS_DELTA_MAX_MV 120
 #define WCD9XXX_MEAS_INVALD_RANGE_LOW_MV 20
 #define WCD9XXX_MEAS_INVALD_RANGE_HIGH_MV 80
 
@@ -227,7 +227,7 @@ static void wcd9xxx_start_hs_polling(struct wcd9xxx_mbhc *mbhc)
 	 * setup internal micbias if codec uses internal micbias for
 	 * headset detection
 	 */
-	if (mbhc->mbhc_cfg->use_int_rbias && !mbhc->int_rbias_on) {
+	if (mbhc->mbhc_cfg->use_int_rbias) {
 		if (mbhc->mbhc_cb && mbhc->mbhc_cb->setup_int_rbias)
 			mbhc->mbhc_cb->setup_int_rbias(codec, true);
 		else
@@ -973,7 +973,9 @@ static short __wcd9xxx_codec_sta_dce(struct wcd9xxx_mbhc *mbhc, int dce,
 	if (noreldetection)
 		wcd9xxx_turn_onoff_rel_detection(codec, false);
 
-	snd_soc_update_bits(codec, WCD9XXX_A_CDC_MBHC_CLK_CTL, 0x2, 0x0);
+	if (mbhc->mbhc_cfg->do_recalibration)
+		snd_soc_update_bits(codec, WCD9XXX_A_CDC_MBHC_CLK_CTL, 0x2,
+				    0x0);
 	/* Turn on the override */
 	if (!override_bypass)
 		snd_soc_update_bits(codec, WCD9XXX_A_CDC_MBHC_B1_CTL, 0x4, 0x4);
@@ -983,8 +985,9 @@ static short __wcd9xxx_codec_sta_dce(struct wcd9xxx_mbhc *mbhc, int dce,
 		snd_soc_write(codec, WCD9XXX_A_CDC_MBHC_EN_CTL, 0x4);
 		snd_soc_update_bits(codec, WCD9XXX_A_CDC_MBHC_CLK_CTL, 0x8,
 				    0x0);
-		snd_soc_update_bits(codec, WCD9XXX_A_CDC_MBHC_CLK_CTL, 0x2,
-				    0x2);
+		if (mbhc->mbhc_cfg->do_recalibration)
+			snd_soc_update_bits(codec, WCD9XXX_A_CDC_MBHC_CLK_CTL,
+					    0x2, 0x2);
 		usleep_range(mbhc->mbhc_data.t_sta_dce,
 			     mbhc->mbhc_data.t_sta_dce);
 		snd_soc_write(codec, WCD9XXX_A_CDC_MBHC_EN_CTL, 0x4);
@@ -996,8 +999,9 @@ static short __wcd9xxx_codec_sta_dce(struct wcd9xxx_mbhc *mbhc, int dce,
 		snd_soc_write(codec, WCD9XXX_A_CDC_MBHC_EN_CTL, 0x2);
 		snd_soc_update_bits(codec, WCD9XXX_A_CDC_MBHC_CLK_CTL, 0x8,
 				    0x0);
-		snd_soc_update_bits(codec, WCD9XXX_A_CDC_MBHC_CLK_CTL, 0x2,
-				    0x2);
+		if (mbhc->mbhc_cfg->do_recalibration)
+			snd_soc_update_bits(codec, WCD9XXX_A_CDC_MBHC_CLK_CTL,
+					    0x2, 0x2);
 		usleep_range(mbhc->mbhc_data.t_sta_dce,
 			     mbhc->mbhc_data.t_sta_dce);
 		snd_soc_write(codec, WCD9XXX_A_CDC_MBHC_EN_CTL, 0x2);
@@ -1104,7 +1108,7 @@ static short wcd9xxx_mbhc_setup_hs_polling(struct wcd9xxx_mbhc *mbhc,
 	 * setup internal micbias if codec uses internal micbias for
 	 * headset detection
 	 */
-	if (mbhc->mbhc_cfg->use_int_rbias && !mbhc->int_rbias_on) {
+	if (mbhc->mbhc_cfg->use_int_rbias) {
 		if (mbhc->mbhc_cb && mbhc->mbhc_cb->setup_int_rbias)
 			mbhc->mbhc_cb->setup_int_rbias(codec, true);
 	else
@@ -1141,48 +1145,59 @@ static short wcd9xxx_mbhc_setup_hs_polling(struct wcd9xxx_mbhc *mbhc,
 	snd_soc_update_bits(codec, WCD9XXX_A_CDC_MBHC_B1_CTL, 0x2, 0x2);
 	snd_soc_update_bits(codec, WCD9XXX_A_CDC_MBHC_CLK_CTL, 0x8, 0x8);
 
+	if (!mbhc->mbhc_cfg->do_recalibration) {
+		if (!is_cs_enable)
+			wcd9xxx_calibrate_hs_polling(mbhc);
+	}
+
 	/* don't flip override */
 	bias_value = __wcd9xxx_codec_sta_dce(mbhc, 1, true, true);
 	snd_soc_write(codec, mbhc->mbhc_bias_regs.cfilt_ctl, cfilt_mode);
 	snd_soc_update_bits(codec, WCD9XXX_A_MBHC_HPH, 0x13, 0x00);
 
-	/* recalibrate dce_z and sta_z */
-	reg = snd_soc_read(codec, WCD9XXX_A_CDC_MBHC_B1_CTL);
-	change = snd_soc_update_bits(codec, WCD9XXX_A_CDC_MBHC_B1_CTL, 0x78,
-				     btn_det->mbhc_nsc << 3);
-	wcd9xxx_get_z(mbhc, &dce_z, &sta_z);
-	if (change)
-		snd_soc_write(codec, WCD9XXX_A_CDC_MBHC_B1_CTL, reg);
-	if (dce_z && sta_z) {
-		pr_debug("%s: sta_z 0x%x -> 0x%x, dce_z 0x%x -> 0x%x\n",
-			 __func__,
-			 mbhc->mbhc_data.sta_z, sta_z & 0xffff,
-			 mbhc->mbhc_data.dce_z, dce_z & 0xffff);
-		mbhc->mbhc_data.dce_z = dce_z;
-		mbhc->mbhc_data.sta_z = sta_z;
-		wcd9xxx_mbhc_calc_thres(mbhc);
-		wcd9xxx_calibrate_hs_polling(mbhc);
-	} else {
-		pr_warn("%s: failed get new dce_z/sta_z 0x%x/0x%x\n", __func__,
-			dce_z, sta_z);
-	}
-
-	if (is_cs_enable) {
-		/* recalibrate dce_nsc_cs_z */
-		reg = snd_soc_read(mbhc->codec, WCD9XXX_A_CDC_MBHC_B1_CTL);
-		snd_soc_update_bits(mbhc->codec, WCD9XXX_A_CDC_MBHC_B1_CTL,
-				    0x78, WCD9XXX_MBHC_NSC_CS << 3);
-		wcd9xxx_get_z(mbhc, &dce_z, NULL);
-		snd_soc_write(mbhc->codec, WCD9XXX_A_CDC_MBHC_B1_CTL, reg);
-		if (dce_z) {
-			pr_debug("%s: dce_nsc_cs_z 0x%x -> 0x%x\n", __func__,
-				 mbhc->mbhc_data.dce_nsc_cs_z, dce_z & 0xffff);
-			mbhc->mbhc_data.dce_nsc_cs_z = dce_z;
+	if (mbhc->mbhc_cfg->do_recalibration) {
+		/* recalibrate dce_z and sta_z */
+		reg = snd_soc_read(codec, WCD9XXX_A_CDC_MBHC_B1_CTL);
+		change = snd_soc_update_bits(codec, WCD9XXX_A_CDC_MBHC_B1_CTL,
+					     0x78, btn_det->mbhc_nsc << 3);
+		wcd9xxx_get_z(mbhc, &dce_z, &sta_z);
+		if (change)
+			snd_soc_write(codec, WCD9XXX_A_CDC_MBHC_B1_CTL, reg);
+		if (dce_z && sta_z) {
+			pr_debug("%s: sta_z 0x%x -> 0x%x, dce_z 0x%x -> 0x%x\n",
+				 __func__,
+				 mbhc->mbhc_data.sta_z, sta_z & 0xffff,
+				 mbhc->mbhc_data.dce_z, dce_z & 0xffff);
+			mbhc->mbhc_data.dce_z = dce_z;
+			mbhc->mbhc_data.sta_z = sta_z;
+			wcd9xxx_mbhc_calc_thres(mbhc);
+			wcd9xxx_calibrate_hs_polling(mbhc);
 		} else {
-			pr_debug("%s: failed get new dce_nsc_cs_z\n", __func__);
+			pr_warn("%s: failed get new dce_z/sta_z 0x%x/0x%x\n",
+				__func__, dce_z, sta_z);
+		}
+
+		if (is_cs_enable) {
+			/* recalibrate dce_nsc_cs_z */
+			reg = snd_soc_read(mbhc->codec,
+					   WCD9XXX_A_CDC_MBHC_B1_CTL);
+			snd_soc_update_bits(mbhc->codec,
+					    WCD9XXX_A_CDC_MBHC_B1_CTL,
+					    0x78, WCD9XXX_MBHC_NSC_CS << 3);
+			wcd9xxx_get_z(mbhc, &dce_z, NULL);
+			snd_soc_write(mbhc->codec, WCD9XXX_A_CDC_MBHC_B1_CTL,
+				      reg);
+			if (dce_z) {
+				pr_debug("%s: dce_nsc_cs_z 0x%x -> 0x%x\n",
+					 __func__, mbhc->mbhc_data.dce_nsc_cs_z,
+					 dce_z & 0xffff);
+				mbhc->mbhc_data.dce_nsc_cs_z = dce_z;
+			} else {
+				pr_debug("%s: failed get new dce_nsc_cs_z\n",
+					 __func__);
+			}
 		}
 	}
-
 	return bias_value;
 }
 
@@ -2049,8 +2064,11 @@ static void wcd9xxx_mbhc_decide_swch_plug(struct wcd9xxx_mbhc *mbhc)
 	pr_debug("%s: enter\n", __func__);
 
 	WCD9XXX_BCL_ASSERT_LOCKED(mbhc->resmgr);
-	current_source_enable = ((mbhc->mbhc_cfg->cs_enable_flags &
-				  (1 << MBHC_CS_ENABLE_INSERTION)) != 0);
+
+	current_source_enable = (((mbhc->mbhc_cfg->cs_enable_flags &
+		      (1 << MBHC_CS_ENABLE_INSERTION)) != 0) &&
+		     (!(snd_soc_read(mbhc->codec,
+				     mbhc->mbhc_bias_regs.ctl_reg) & 0x80)));
 
 	if (current_source_enable) {
 		wcd9xxx_turn_onoff_current_source(mbhc, true, false);
@@ -2175,9 +2193,10 @@ static bool wcd9xxx_hs_remove_settle(struct wcd9xxx_mbhc *mbhc)
 	unsigned long retry = 0, timeout;
 	bool cs_enable;
 
-	cs_enable = ((mbhc->mbhc_cfg->cs_enable_flags &
-		      (1 << MBHC_CS_ENABLE_REMOVAL)) != 0);
-
+	cs_enable = (((mbhc->mbhc_cfg->cs_enable_flags &
+		      (1 << MBHC_CS_ENABLE_REMOVAL)) != 0) &&
+		     (!(snd_soc_read(mbhc->codec,
+				     mbhc->mbhc_bias_regs.ctl_reg) & 0x80)));
 	if (cs_enable)
 		wcd9xxx_turn_onoff_current_source(mbhc, true, false);
 
@@ -2689,8 +2708,11 @@ static void wcd9xxx_correct_swch_plug(struct work_struct *work)
 
 	mbhc = container_of(work, struct wcd9xxx_mbhc, correct_plug_swch);
 	codec = mbhc->codec;
-	current_source_enable = ((mbhc->mbhc_cfg->cs_enable_flags &
-				  (1 << MBHC_CS_ENABLE_POLLING)) != 0);
+
+	current_source_enable = (((mbhc->mbhc_cfg->cs_enable_flags &
+		      (1 << MBHC_CS_ENABLE_POLLING)) != 0) &&
+		     (!(snd_soc_read(codec,
+				     mbhc->mbhc_bias_regs.ctl_reg) & 0x80)));
 
 	wcd9xxx_onoff_ext_mclk(mbhc, true);
 
@@ -3189,7 +3211,7 @@ irqreturn_t wcd9xxx_dce_handler(int irq, void *data)
 	 * setup internal micbias if codec uses internal micbias for
 	 * headset detection
 	 */
-	if (mbhc->mbhc_cfg->use_int_rbias && !mbhc->int_rbias_on) {
+	if (mbhc->mbhc_cfg->use_int_rbias) {
 		if (mbhc->mbhc_cb && mbhc->mbhc_cb->setup_int_rbias)
 			mbhc->mbhc_cb->setup_int_rbias(codec, true);
 		else
@@ -4020,7 +4042,6 @@ int wcd9xxx_mbhc_start(struct wcd9xxx_mbhc *mbhc,
 	if (mbhc->mbhc_cfg->use_int_rbias) {
 		if (mbhc->mbhc_cb && mbhc->mbhc_cb->setup_int_rbias) {
 			mbhc->mbhc_cb->setup_int_rbias(codec, true);
-			mbhc->int_rbias_on = true;
 		} else {
 			pr_info("%s: internal bias requested but codec did not provide callback\n",
 				__func__);
@@ -4179,7 +4200,6 @@ static int wcd9xxx_event_notify(struct notifier_block *self, unsigned long val,
 	case WCD9XXX_EVENT_PRE_MICBIAS_2_ON:
 	case WCD9XXX_EVENT_PRE_MICBIAS_3_ON:
 	case WCD9XXX_EVENT_PRE_MICBIAS_4_ON:
-		mbhc->int_rbias_on = true;
 		if (mbhc->mbhc_cfg && mbhc->mbhc_cfg->micbias ==
 		    wcd9xxx_event_to_micbias(event)) {
 			wcd9xxx_switch_micbias(mbhc, 0);
@@ -4207,7 +4227,6 @@ static int wcd9xxx_event_notify(struct notifier_block *self, unsigned long val,
 	case WCD9XXX_EVENT_POST_MICBIAS_2_OFF:
 	case WCD9XXX_EVENT_POST_MICBIAS_3_OFF:
 	case WCD9XXX_EVENT_POST_MICBIAS_4_OFF:
-		mbhc->int_rbias_on = false;
 		if (mbhc->mbhc_cfg && mbhc->mbhc_cfg->micbias ==
 		    wcd9xxx_event_to_micbias(event)) {
 			if (mbhc->event_state &
@@ -4503,7 +4522,6 @@ int wcd9xxx_mbhc_init(struct wcd9xxx_mbhc *mbhc, struct wcd9xxx_resmgr *resmgr,
 	mbhc->mbhc_cb = mbhc_cb;
 	mbhc->intr_ids = mbhc_cdc_intr_ids;
 	mbhc->impedance_detect = impedance_det_en;
-	mbhc->int_rbias_on = false;
 
 	if (mbhc->intr_ids == NULL) {
 		pr_err("%s: Interrupt mapping not provided\n", __func__);

@@ -1,6 +1,4 @@
-/**
- *
- * Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -12,18 +10,24 @@
  * GNU General Public License for more details.
  */
 
-#ifndef __MACH_ION_H_
-#define __MACH_ION_H_
+/dts-v1/;
 
-enum ion_memory_types {
-	ION_EBI_TYPE,
-	ION_SMI_TYPE,
+#include "mpq8092.dtsi"
+#include "mpq8092-cdp.dtsi"
+
+/ {
+	model = "Qualcomm MPQ 8092 CDP";
+	compatible = "qcom,mpq8092-cdp", "qcom,mpq8092", "qcom,cdp";
+	qcom,board-id = <1 0>;
+	qcom,board-id = <1 1>;
+	qcom,board-id = <21 0>;
+	qcom,board-id = <21 1>;
+
+	aliases {
+		serial0 = &blsp1_uart5;
+	};
 };
 
-enum ion_permission_type {
-	IPT_TYPE_MM_CARVEOUT = 0,
-	IPT_TYPE_MFC_SHAREDMEM = 1,
-	IPT_TYPE_MDP_WRITEBACK = 2,
+&blsp1_uart5 {
+	status = "ok";
 };
-
-#endif

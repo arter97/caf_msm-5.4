@@ -277,10 +277,16 @@ struct pp_hist_col_info {
 	spinlock_t hist_lock;
 };
 
-struct mdss_ad_info {
+struct mdss_mdp_ad {
 	char __iomem *base;
 	u8 num;
+};
+
+struct mdss_ad_info {
+	u8 num;
+	u8 calc_hw_num;
 	u32 sts;
+	u32 reg_sts;
 	u32 state;
 	u32 ad_data;
 	u32 ad_data_mode;
@@ -294,6 +300,7 @@ struct mdss_ad_info {
 	struct completion comp;
 	u32 last_str;
 	u32 last_bl;
+	u32 bl_data;
 	u32 calc_itr;
 	uint32_t bl_bright_shift;
 	uint32_t bl_lin[AD_BL_LIN_LEN];
@@ -530,7 +537,7 @@ int mdss_mdp_ctl_start(struct mdss_mdp_ctl *ctl);
 int mdss_mdp_ctl_stop(struct mdss_mdp_ctl *ctl);
 int mdss_mdp_ctl_intf_event(struct mdss_mdp_ctl *ctl, int event, void *arg);
 int mdss_mdp_perf_calc_pipe(struct mdss_mdp_pipe *pipe,
-		struct mdss_mdp_perf_params *perf);
+	struct mdss_mdp_perf_params *perf, struct mdss_mdp_img_rect *roi);
 int mdss_mdp_ctl_notify(struct mdss_mdp_ctl *ctl, int event);
 void mdss_mdp_ctl_notifier_register(struct mdss_mdp_ctl *ctl,
 	struct notifier_block *notifier);
@@ -591,7 +598,7 @@ int mdss_mdp_ad_config(struct msm_fb_data_type *mfd,
 				struct mdss_ad_init_cfg *init_cfg);
 int mdss_mdp_ad_input(struct msm_fb_data_type *mfd,
 				struct mdss_ad_input *input, int wait);
-int mdss_mdp_ad_addr_setup(struct mdss_data_type *mdata, u32 *ad_off);
+int mdss_mdp_ad_addr_setup(struct mdss_data_type *mdata, u32 *ad_offsets);
 int mdss_mdp_calib_mode(struct msm_fb_data_type *mfd,
 				struct mdss_calib_cfg *cfg);
 
@@ -639,6 +646,10 @@ int mdss_mdp_calc_phase_step(u32 src, u32 dst, u32 *out_phase);
 void mdss_mdp_intersect_rect(struct mdss_mdp_img_rect *res_rect,
 	const struct mdss_mdp_img_rect *dst_rect,
 	const struct mdss_mdp_img_rect *sci_rect);
+void mdss_mdp_crop_rect(struct mdss_mdp_img_rect *src_rect,
+	struct mdss_mdp_img_rect *dst_rect,
+	const struct mdss_mdp_img_rect *sci_rect);
+
 
 int mdss_mdp_wb_kickoff(struct msm_fb_data_type *mfd);
 int mdss_mdp_wb_ioctl_handler(struct msm_fb_data_type *mfd, u32 cmd, void *arg);
