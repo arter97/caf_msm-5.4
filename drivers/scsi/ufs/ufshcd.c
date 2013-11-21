@@ -40,6 +40,9 @@
 #include "unipro.h"
 #include "debugfs.h"
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/ufs.h>
+
 #ifdef CONFIG_DEBUG_FS
 #define UFSHCD_UPDATE_TAG_STATS(hba, tag)			\
 	do {							\
@@ -3148,6 +3151,17 @@ static void ufshcd_update_uic_error(struct ufs_hba *hba)
 {
 	u32 reg;
 
+	/* PHY layer lane error */
+	reg = ufshcd_readl(hba, REG_UIC_ERROR_CODE_PHY_ADAPTER_LAYER);
+	/* Ignore LINERESET indication, as this is not an error */
+	if ((reg & UIC_PHY_ADAPTER_LAYER_ERROR) &&
+			(reg & UIC_PHY_ADAPTER_LAYER_LANE_ERR_MASK))
+		/*
+		 * To know whether this error is fatal or not, DB timeout
+		 * must be checked but this error is handled separately.
+		 */
+		dev_dbg(hba->dev, "%s: UIC Lane error reported\n", __func__);
+
 	/* PA_INIT_ERROR is fatal and needs UIC reset */
 	reg = ufshcd_readl(hba, REG_UIC_ERROR_CODE_DATA_LINK_LAYER);
 	if (reg & UIC_DATA_LINK_LAYER_ERROR_PA_INIT)
@@ -3841,6 +3855,7 @@ out:
 static int ufshcd_probe_hba(struct ufs_hba *hba)
 {
 	int ret;
+	ktime_t start = ktime_get();
 
 	ret = ufshcd_link_startup(hba);
 	if (ret)
@@ -3891,6 +3906,8 @@ out:
 		ufshcd_hba_exit(hba);
 	}
 
+	trace_ufshcd_init(dev_name(hba->dev), ret,
+			ktime_to_us(ktime_sub(ktime_get(), start)));
 	return ret;
 }
 
@@ -4833,6 +4850,7 @@ out:
 int ufshcd_system_suspend(struct ufs_hba *hba)
 {
 	int ret = 0;
+	ktime_t start = ktime_get();
 
 	if (!hba || !hba->is_powered)
 		goto out;
@@ -4862,6 +4880,8 @@ int ufshcd_system_suspend(struct ufs_hba *hba)
 
 	ret = ufshcd_suspend(hba, UFS_SYSTEM_PM);
 out:
+	trace_ufshcd_system_suspend(dev_name(hba->dev), ret,
+			ktime_to_us(ktime_sub(ktime_get(), start)));
 	return ret;
 }
 EXPORT_SYMBOL(ufshcd_system_suspend);
@@ -4875,14 +4895,21 @@ EXPORT_SYMBOL(ufshcd_system_suspend);
 
 int ufshcd_system_resume(struct ufs_hba *hba)
 {
+	int ret = 0;
+	ktime_t start = ktime_get();
+
 	if (!hba || !hba->is_powered || pm_runtime_suspended(hba->dev))
 		/*
 		 * Let the runtime resume take care of resuming
 		 * if runtime suspended.
 		 */
-		return 0;
+		goto out;
 	else
-		return ufshcd_resume(hba, UFS_SYSTEM_PM);
+		ret = ufshcd_resume(hba, UFS_SYSTEM_PM);
+out:
+	trace_ufshcd_system_resume(dev_name(hba->dev), ret,
+			ktime_to_us(ktime_sub(ktime_get(), start)));
+	return ret;
 }
 EXPORT_SYMBOL(ufshcd_system_resume);
 
@@ -4896,10 +4923,17 @@ EXPORT_SYMBOL(ufshcd_system_resume);
  */
 int ufshcd_runtime_suspend(struct ufs_hba *hba)
 {
+	int ret = 0;
+	ktime_t start = ktime_get();
+
 	if (!hba || !hba->is_powered)
-		return 0;
+		goto out;
 	else
-		return ufshcd_suspend(hba, UFS_RUNTIME_PM);
+		ret = ufshcd_suspend(hba, UFS_RUNTIME_PM);
+out:
+	trace_ufshcd_runtime_suspend(dev_name(hba->dev), ret,
+			ktime_to_us(ktime_sub(ktime_get(), start)));
+	return ret;
 }
 EXPORT_SYMBOL(ufshcd_runtime_suspend);
 
@@ -4926,10 +4960,17 @@ EXPORT_SYMBOL(ufshcd_runtime_suspend);
  */
 int ufshcd_runtime_resume(struct ufs_hba *hba)
 {
+	int ret = 0;
+	ktime_t start = ktime_get();
+
 	if (!hba || !hba->is_powered)
-		return 0;
+		goto out;
 	else
-		return ufshcd_resume(hba, UFS_RUNTIME_PM);
+		ret = ufshcd_resume(hba, UFS_RUNTIME_PM);
+out:
+	trace_ufshcd_runtime_resume(dev_name(hba->dev), ret,
+			ktime_to_us(ktime_sub(ktime_get(), start)));
+	return ret;
 }
 EXPORT_SYMBOL(ufshcd_runtime_resume);
 

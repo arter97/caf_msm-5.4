@@ -108,7 +108,7 @@ uint32_t get_voice_rx_topology(void)
 	return acdb_data.voice_rx_topology;
 }
 
-void store_voice_rx_topology(uint32_t topology)
+static void store_voice_rx_topology(uint32_t topology)
 {
 	acdb_data.voice_rx_topology = topology;
 }
@@ -118,7 +118,7 @@ uint32_t get_voice_tx_topology(void)
 	return acdb_data.voice_tx_topology;
 }
 
-void store_voice_tx_topology(uint32_t topology)
+static void store_voice_tx_topology(uint32_t topology)
 {
 	acdb_data.voice_tx_topology = topology;
 }
@@ -128,7 +128,7 @@ uint32_t get_adm_rx_topology(void)
 	return acdb_data.adm_topology[RX_CAL];
 }
 
-void store_adm_rx_topology(uint32_t topology)
+static void store_adm_rx_topology(uint32_t topology)
 {
 	acdb_data.adm_topology[RX_CAL] = topology;
 }
@@ -138,7 +138,7 @@ uint32_t get_adm_tx_topology(void)
 	return acdb_data.adm_topology[TX_CAL];
 }
 
-void store_adm_tx_topology(uint32_t topology)
+static void store_adm_tx_topology(uint32_t topology)
 {
 	acdb_data.adm_topology[TX_CAL] = topology;
 }
@@ -148,7 +148,7 @@ uint32_t get_asm_topology(void)
 	return acdb_data.asm_topology;
 }
 
-void store_asm_topology(uint32_t topology)
+static void store_asm_topology(uint32_t topology)
 {
 	acdb_data.asm_topology = topology;
 }
@@ -189,7 +189,7 @@ done:
 	return result;
 }
 
-int store_adm_custom_topology(struct cal_block *cal_block)
+static int store_adm_custom_topology(struct cal_block *cal_block)
 {
 	int result = 0;
 	pr_debug("%s,\n", __func__);
@@ -238,7 +238,7 @@ done:
 	return result;
 }
 
-int store_asm_custom_topology(struct cal_block *cal_block)
+static int store_asm_custom_topology(struct cal_block *cal_block)
 {
 	int result = 0;
 	pr_debug("%s,\n", __func__);
@@ -295,7 +295,7 @@ done:
 	return result;
 }
 
-int store_aanc_cal(struct cal_block *cal_block)
+static int store_aanc_cal(struct cal_block *cal_block)
 {
 	int result = 0;
 	pr_debug("%s,\n", __func__);
@@ -334,7 +334,7 @@ done:
 	return result;
 }
 
-int store_lsm_cal(struct cal_block *cal_block)
+static int store_lsm_cal(struct cal_block *cal_block)
 {
 	int result = 0;
 	pr_debug("%s,\n", __func__);
@@ -411,7 +411,7 @@ ret:
 	return result;
 }
 
-int store_hw_delay(int32_t path, void *arg)
+static int store_hw_delay(int32_t path, void *arg)
 {
 	int result = 0;
 	struct hw_delay delay;
@@ -487,7 +487,7 @@ done:
 	return result;
 }
 
-int store_anc_cal(struct cal_block *cal_block)
+static int store_anc_cal(struct cal_block *cal_block)
 {
 	int result = 0;
 	pr_debug("%s,\n", __func__);
@@ -508,7 +508,7 @@ done:
 	return result;
 }
 
-int store_afe_cal(int32_t path, struct cal_block *cal_block)
+static int store_afe_cal(int32_t path, struct cal_block *cal_block)
 {
 	int result = 0;
 	pr_debug("%s, path = %d\n", __func__, path);
@@ -559,7 +559,7 @@ done:
 	return result;
 }
 
-int store_audproc_cal(int32_t path, struct cal_block *cal_block)
+static int store_audproc_cal(int32_t path, struct cal_block *cal_block)
 {
 	int result = 0;
 	pr_debug("%s, path = %d\n", __func__, path);
@@ -610,7 +610,7 @@ done:
 	return result;
 }
 
-int store_audstrm_cal(int32_t path, struct cal_block *cal_block)
+static int store_audstrm_cal(int32_t path, struct cal_block *cal_block)
 {
 	int result = 0;
 	pr_debug("%s, path = %d\n", __func__, path);
@@ -661,7 +661,7 @@ done:
 	return result;
 }
 
-int store_audvol_cal(int32_t path, struct cal_block *cal_block)
+static int store_audvol_cal(int32_t path, struct cal_block *cal_block)
 {
 	int result = 0;
 	pr_debug("%s, path = %d\n", __func__, path);
@@ -712,14 +712,25 @@ done:
 	return result;
 }
 
-int store_voice_col_data(uint32_t vocproc_type, uint32_t cal_size,
+static int store_voice_col_data(uint32_t vocproc_type, uint32_t cal_size,
 			  uint32_t *cal_block)
 {
 	int result = 0;
 	pr_debug("%s,\n", __func__);
 
+	if (cal_block == NULL) {
+		pr_err("ACDB=> NULL pointer sent to %s\n", __func__);
+		result = -EINVAL;
+		goto done;
+	}
 	if (cal_size > MAX_COL_SIZE) {
 		pr_err("%s: col size is to big %d\n", __func__, cal_size);
+		result = -EINVAL;
+		goto done;
+	}
+	if (acdb_data.col_data[vocproc_type] == NULL) {
+		pr_err("%s: vocproc_type %d data not allocated!\n",
+			__func__, vocproc_type);
 		result = -EINVAL;
 		goto done;
 	}
@@ -746,6 +757,12 @@ int get_voice_col_data(uint32_t vocproc_type,
 		result = -EINVAL;
 		goto done;
 	}
+	if (acdb_data.col_data[vocproc_type] == NULL) {
+		pr_err("%s: vocproc_type %d data not allocated!\n",
+			__func__, vocproc_type);
+		result = -EINVAL;
+		goto done;
+	}
 
 	cal_block->cal_size = acdb_data.
 		vocproc_col_cal[vocproc_type].cal_size;
@@ -757,7 +774,7 @@ done:
 	return result;
 }
 
-int store_vocproc_dev_cfg_cal(struct cal_block *cal_block)
+static int store_vocproc_dev_cfg_cal(struct cal_block *cal_block)
 {
 	int result = 0;
 	pr_debug("%s,\n", __func__);
@@ -801,7 +818,7 @@ done:
 
 
 
-int store_vocproc_cal(struct cal_block *cal_block)
+static int store_vocproc_cal(struct cal_block *cal_block)
 {
 	int result = 0;
 	pr_debug("%s,\n", __func__);
@@ -842,7 +859,7 @@ done:
 	return result;
 }
 
-int store_vocstrm_cal(struct cal_block *cal_block)
+static int store_vocstrm_cal(struct cal_block *cal_block)
 {
 	int result = 0;
 	pr_debug("%s,\n", __func__);
@@ -883,7 +900,7 @@ done:
 	return result;
 }
 
-int store_vocvol_cal(struct cal_block *cal_block)
+static int store_vocvol_cal(struct cal_block *cal_block)
 {
 	int result = 0;
 	pr_debug("%s,\n", __func__);
@@ -923,7 +940,7 @@ done:
 	return result;
 }
 
-void store_sidetone_cal(struct sidetone_cal *cal_data)
+static void store_sidetone_cal(struct sidetone_cal *cal_data)
 {
 	pr_debug("%s,\n", __func__);
 
@@ -1042,8 +1059,19 @@ static int acdb_open(struct inode *inode, struct file *f)
 	return result;
 }
 
-static void allocate_hw_delay_entries(void)
+static void deallocate_hw_delay_entries(void)
 {
+	kfree(acdb_data.hw_delay_rx.delay_info);
+	kfree(acdb_data.hw_delay_tx.delay_info);
+
+	acdb_data.hw_delay_rx.delay_info = NULL;
+	acdb_data.hw_delay_tx.delay_info = NULL;
+}
+
+static int allocate_hw_delay_entries(void)
+{
+	int	result = 0;
+
 	/* Allocate memory for hw delay entries */
 	acdb_data.hw_delay_rx.num_entries = 0;
 	acdb_data.hw_delay_tx.num_entries = 0;
@@ -1054,6 +1082,8 @@ static void allocate_hw_delay_entries(void)
 	if (acdb_data.hw_delay_rx.delay_info == NULL) {
 		pr_err("%s : Failed to allocate av sync delay entries rx\n",
 			__func__);
+		result = -ENOMEM;
+		goto done;
 	}
 	acdb_data.hw_delay_tx.delay_info =
 				kmalloc(sizeof(struct hw_delay_entry)*
@@ -1062,7 +1092,44 @@ static void allocate_hw_delay_entries(void)
 	if (acdb_data.hw_delay_tx.delay_info == NULL) {
 		pr_err("%s : Failed to allocate av sync delay entries tx\n",
 			__func__);
+		deallocate_hw_delay_entries();
+		result = -ENOMEM;
+		goto done;
 	}
+done:
+	return result;
+}
+
+static void deallocate_col_data(void)
+{
+	int	i;
+
+	for (i = 0; i < MAX_VOCPROC_TYPES; i++) {
+		kfree(acdb_data.col_data[i]);
+		acdb_data.col_data[i] = NULL;
+	}
+}
+
+static int allocate_col_data(void)
+{
+	int	result = 0;
+	int	i;
+
+	for (i = 0; i < MAX_VOCPROC_TYPES; i++) {
+		acdb_data.col_data[i] = kmalloc(MAX_COL_SIZE, GFP_KERNEL);
+		if (acdb_data.col_data[i] == NULL) {
+			pr_err("%s: kmalloc column data failed, type = %d\n",
+				__func__, i);
+			deallocate_col_data();
+			result = -ENOMEM;
+			goto done;
+		}
+		acdb_data.vocproc_col_cal[i].cal_kvaddr =
+			(uint32_t)acdb_data.col_data[i];
+	}
+
+done:
+	return result;
 }
 
 static int unmap_cal_tables(void)
@@ -1111,7 +1178,6 @@ static int unmap_cal_tables(void)
 static int deregister_memory(void)
 {
 	int	result = 0;
-	int	i;
 	pr_debug("%s\n", __func__);
 
 	if (acdb_data.mem_len == 0)
@@ -1130,13 +1196,8 @@ static int deregister_memory(void)
 	acdb_data.ion_client = NULL;
 	acdb_data.ion_handle = NULL;
 
-	for (i = 0; i < MAX_VOCPROC_TYPES; i++) {
-		kfree(acdb_data.col_data[i]);
-		acdb_data.col_data[i] = NULL;
-	}
-
-	kfree(acdb_data.hw_delay_tx.delay_info);
-	kfree(acdb_data.hw_delay_rx.delay_info);
+	deallocate_col_data();
+	deallocate_hw_delay_entries();
 done:
 	return result;
 }
@@ -1144,12 +1205,25 @@ done:
 static int register_memory(void)
 {
 	int			result;
-	int			i;
 	ion_phys_addr_t		paddr;
 	void                    *kvptr;
 	unsigned long		kvaddr;
 	unsigned long		mem_len;
 	pr_debug("%s\n", __func__);
+
+	result = allocate_col_data();
+	if (result) {
+		pr_err("%s: allocate_hw_delay_entries failed, rc = %d\n",
+			__func__, result);
+		goto err_done;
+	}
+
+	result = allocate_hw_delay_entries();
+	if (result) {
+		pr_err("%s: allocate_hw_delay_entries failed, rc = %d\n",
+			__func__, result);
+		goto err_col;
+	}
 
 	result = msm_audio_ion_import("audio_acdb_client",
 				&acdb_data.ion_client,
@@ -1160,15 +1234,7 @@ static int register_memory(void)
 	if (result) {
 		pr_err("%s: audio ION alloc failed, rc = %d\n",
 			__func__, result);
-		goto err_ion_handle;
-	}
-
-	allocate_hw_delay_entries();
-
-	for (i = 0; i < MAX_VOCPROC_TYPES; i++) {
-		acdb_data.col_data[i] = kmalloc(MAX_COL_SIZE, GFP_KERNEL);
-		acdb_data.vocproc_col_cal[i].cal_kvaddr =
-			(uint32_t)acdb_data.col_data[i];
+		goto err_hw_delay;
 	}
 
 	kvaddr = (unsigned long)kvptr;
@@ -1181,7 +1247,11 @@ static int register_memory(void)
 		 acdb_data.mem_len);
 
 	return result;
-err_ion_handle:
+err_hw_delay:
+	deallocate_hw_delay_entries();
+err_col:
+	deallocate_col_data();
+err_done:
 	acdb_data.mem_len = 0;
 	return result;
 }
