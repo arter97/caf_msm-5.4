@@ -1740,6 +1740,7 @@ int regulator_force_disable(struct regulator *regulator)
 {
 	struct regulator_dev *rdev = regulator->rdev;
 	struct regulator_dev *supply_rdev = NULL;
+	struct regulator *supply_regulator;
 	int ret;
 
 	mutex_lock(&rdev->mutex);
@@ -1747,8 +1748,11 @@ int regulator_force_disable(struct regulator *regulator)
 	ret = _regulator_force_disable(rdev, &supply_rdev);
 	mutex_unlock(&rdev->mutex);
 
-	if (supply_rdev)
-		regulator_disable(get_device_regulator(rdev_get_dev(supply_rdev)));
+	if (supply_rdev && rdev_get_dev(supply_rdev)) {
+		supply_regulator = get_device_regulator(rdev_get_dev(supply_rdev));
+		if (supply_regulator)
+			regulator_disable(supply_regulator);
+	}
 
 	return ret;
 }
