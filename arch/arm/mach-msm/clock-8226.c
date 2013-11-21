@@ -694,6 +694,7 @@ static struct clk_freq_tbl ftbl_gcc_blsp1_uart1_6_apps_clk[] = {
 	F_GCC(  56000000,      gpll0,   1,    7,   75),
 	F_GCC(  58982400,      gpll0,   1, 1536, 15625),
 	F_GCC(  60000000,      gpll0,  10,    0,    0),
+	F_GCC(  63160000,      gpll0, 9.5,    0,    0),
 	F_END
 };
 
@@ -3088,7 +3089,7 @@ static struct clk_lookup msm_clocks_8226[] = {
 	CLK_LOOKUP("mem_clk",    gcc_boot_rom_ahb_clk.c, "fc880000.qcom,mss"),
 
 	/* NFC */
-	CLK_LOOKUP("ref_clk",            cxo_d1_a_pin.c, "2-000e"),
+	CLK_LOOKUP("ref_clk",            cxo_d1_pin.c, "2-000e"),
 	CLK_LOOKUP("bb_clk2",            cxo_d1.c, ""),
 
 	/* PIL-PRONTO */

@@ -526,6 +526,7 @@ static struct clk_freq_tbl ftbl_gcc_blsp1_uart1_6_apps_clk[] = {
 	F(  56000000,      gpll0,    1,    7,    75),
 	F(  58982400,      gpll0,    1, 1536, 15625),
 	F(  60000000,      gpll0,   10,    0,     0),
+	F(  63160000,      gpll0,  9.5,    0,     0),
 	F_END
 };
 
@@ -2147,8 +2148,10 @@ static struct clk_lookup msm_clocks_krypton[] = {
 	CLK_LOOKUP("pcie_0_aux_clk", gcc_pcie_sleep_clk.c, "msm_pcie"),
 	CLK_LOOKUP("iface_clk",	gcc_sys_noc_usb3_axi_clk.c,
 		   "f9200000.qcom,ssusb"),
-	CLK_LOOKUP("",	gcc_usb3_aux_clk.c,	""),
-	CLK_LOOKUP("",	gcc_usb3_pipe_clk.c,	""),
+	CLK_LOOKUP("aux_clk",	gcc_usb3_aux_clk.c,
+		   "f9b38000.ssphy"),
+	CLK_LOOKUP("pipe_clk",	gcc_usb3_pipe_clk.c,
+		   "f9b38000.ssphy"),
 	CLK_LOOKUP("core_clk",	gcc_usb30_master_clk.c,
 		   "f9200000.qcom,ssusb"),
 	CLK_LOOKUP("utmi_clk",	gcc_usb30_mock_utmi_clk.c,
@@ -2175,7 +2178,7 @@ static struct clk_lookup msm_clocks_krypton[] = {
 	CLK_LOOKUP("sleep_b_clk", gcc_usb2b_phy_sleep_clk.c,
 		   "f9200000.qcom,ssusb"),
 
-	CLK_LOOKUP("", qpic_clk.c, ""),
+	CLK_LOOKUP("core_clk", qpic_clk.c, "f9ac0000.qcom,nand"),
 	CLK_LOOKUP("", qpic_a_clk.c, ""),
 };
 

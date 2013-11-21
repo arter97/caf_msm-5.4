@@ -109,6 +109,7 @@
 #define IRQ_CFG_REG			0x07
 #define IRQ_BAT_HOT_COLD_HARD_BIT	BIT(7)
 #define IRQ_BAT_HOT_COLD_SOFT_BIT	BIT(6)
+#define IRQ_USBIN_UV_BIT		BIT(2)
 #define IRQ_INTERNAL_TEMPERATURE_BIT	BIT(0)
 
 #define IRQ2_CFG_REG			0x08
@@ -122,6 +123,7 @@
 
 #define IRQ3_CFG_REG			0x09
 #define IRQ3_SRC_DETECT_BIT		BIT(2)
+#define IRQ3_DCIN_UV_BIT		BIT(0)
 
 /* Command Registers */
 #define CMD_I2C_REG			0x40
@@ -206,6 +208,13 @@
 
 enum {
 	WRKARND_USB100_BIT = BIT(0),
+	WRKARND_APSD_FAIL = BIT(1),
+};
+
+enum {
+	REV_1 = 1,	/* Rev v1.0 */
+	REV_1_1,	/* Rev v1.1 */
+	REV_1_2,	/* Rev v1.2 */
 };
 
 static int chg_time[] = {
@@ -1281,6 +1290,13 @@ static int handle_usb_insertion(struct smb135x_chg *chip)
 	}
 	usb_type_name = get_usb_type_name(reg);
 	usb_supply_type = get_usb_supply_type(reg);
+	/*
+	 * Report the charger type as UNKNOWN if the
+	 * apsd-fail flag is set. This nofifies the USB driver
+	 * to initiate a s/w based charger type detection.
+	 */
+	if (chip->workaround_flags & WRKARND_APSD_FAIL)
+		usb_supply_type = POWER_SUPPLY_TYPE_UNKNOWN;
 	pr_debug("inserted %s, usb psy type = %d stat_5 = 0x%02x\n",
 			usb_type_name, usb_supply_type, reg);
 	if (chip->usb_psy) {
@@ -1293,8 +1309,27 @@ static int handle_usb_insertion(struct smb135x_chg *chip)
 }
 
 /**
+ * usbin_uv_handler() - this is called when USB charger is removed
+ * @chip: pointer to smb135x_chg chip
+ * @rt_stat: the status bit indicating chg insertion/removal
+ */
+static int usbin_uv_handler(struct smb135x_chg *chip, u8 rt_stat)
+{
+	bool usb_present = is_usb_present(chip);
+
+	pr_debug("chip->usb_present = %d usb_present = %d\n",
+			chip->usb_present, usb_present);
+	if (chip->usb_present && !usb_present) {
+		/* USB removed */
+		chip->usb_present = usb_present;
+		handle_usb_removal(chip);
+	}
+	return 0;
+}
+
+/**
  * src_detect_handler() - this is called when USB charger type is detected, use
- *			it for handling USB charger insertion and removal
+ *			it for handling USB charger insertion
  * @chip: pointer to smb135x_chg chip
  * @rt_stat: the status bit indicating chg insertion/removal
  */
@@ -1427,6 +1462,7 @@ static struct irq_handler_info handlers[] = {
 		{
 			{
 				.name		= "usbin_uv",
+				.smb_irq	= usbin_uv_handler,
 			},
 			{
 				.name		= "usbin_ov",
@@ -1905,6 +1941,22 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 		/* this ignores APSD results */
 		reg = USE_REGISTER_FOR_CURRENT;
 
+	rc = read_version(chip, &reg);
+	if (rc) {
+		dev_err(chip->dev, "Couldn't read chip revision\n");
+		return rc;
+	}
+	/*
+	 * Rev v1.0 and v1.1 of SMB135x fails charger type detection
+	 * (apsd) due to interference on the D+/- lines by the USB phy.
+	 * Set the workaround flag to disable charger type reporting
+	 * for this revision.
+	 */
+	if ((reg == REV_1) || (reg == REV_1_1))
+		chip->workaround_flags |= WRKARND_APSD_FAIL;
+
+	pr_debug("workaround_flags = %x\n", chip->workaround_flags);
+
 	rc = smb135x_masked_write(chip, CMD_INPUT_LIMIT, mask, reg);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't set input limit cmd rc=%d\n", rc);
@@ -2058,7 +2110,8 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 		rc = smb135x_write(chip, IRQ_CFG_REG,
 			IRQ_BAT_HOT_COLD_HARD_BIT
 			| IRQ_BAT_HOT_COLD_SOFT_BIT
-			| IRQ_INTERNAL_TEMPERATURE_BIT);
+			| IRQ_INTERNAL_TEMPERATURE_BIT
+			| IRQ_USBIN_UV_BIT);
 
 		rc |= smb135x_write(chip, IRQ2_CFG_REG,
 			IRQ2_SAFETY_TIMER_BIT
@@ -2068,7 +2121,8 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 			| IRQ2_BATT_MISSING_BIT
 			| IRQ2_VBAT_LOW_BIT);
 
-		rc |= smb135x_write(chip, IRQ3_CFG_REG, IRQ3_SRC_DETECT_BIT);
+		rc |= smb135x_write(chip, IRQ3_CFG_REG, IRQ3_SRC_DETECT_BIT
+				| IRQ3_DCIN_UV_BIT);
 		if (rc < 0) {
 			dev_err(chip->dev, "Couldn't set irq enable rc = %d\n",
 					rc);
@@ -2527,7 +2581,7 @@ static int smb135x_suspend(struct device *dev)
 	}
 
 	/* enable only important IRQs */
-	rc = smb135x_write(chip, IRQ_CFG_REG, 0);
+	rc = smb135x_write(chip, IRQ_CFG_REG, IRQ_USBIN_UV_BIT);
 	if (rc < 0)
 		dev_err(chip->dev, "Couldn't set irq_cfg rc = %d\n", rc);
 
@@ -2537,7 +2591,8 @@ static int smb135x_suspend(struct device *dev)
 	if (rc < 0)
 		dev_err(chip->dev, "Couldn't set irq2_cfg rc = %d\n", rc);
 
-	rc = smb135x_write(chip, IRQ3_CFG_REG, IRQ3_SRC_DETECT_BIT);
+	rc = smb135x_write(chip, IRQ3_CFG_REG, IRQ3_SRC_DETECT_BIT
+			| IRQ3_DCIN_UV_BIT);
 	if (rc < 0)
 		dev_err(chip->dev, "Couldn't set irq3_cfg rc = %d\n", rc);
 

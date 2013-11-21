@@ -373,7 +373,7 @@ static void pp_ad_vsync_handler(struct mdss_mdp_ctl *ctl, ktime_t t);
 static void pp_ad_cfg_write(struct mdss_mdp_ad *ad_hw,
 						struct mdss_ad_info *ad);
 static void pp_ad_init_write(struct mdss_mdp_ad *ad_hw,
-						struct mdss_ad_info *ad);
+			struct mdss_ad_info *ad, struct mdss_mdp_ctl *ctl);
 static void pp_ad_input_write(struct mdss_mdp_ad *ad_hw,
 						struct mdss_ad_info *ad);
 static void pp_ad_bypass_config(struct mdss_ad_info *ad, u32 *opmode);
@@ -1429,7 +1429,8 @@ static int pp_dspp_setup(u32 disp_num, struct mdss_mdp_mixer *mixer)
 		flags = 0;
 
 	mixer_cnt = mdss_mdp_get_ctl_mixers(disp_num, mixer_id);
-	if (dspp_num < mdata->nad_cfgs && (mixer_cnt != 2)) {
+	if (dspp_num < mdata->nad_cfgs &&
+				(mixer_cnt <= mdata->nmax_concurrent_ad_hw)) {
 		ad = &mdata->ad_cfgs[disp_num];
 		ad_flags = ad->reg_sts;
 		ad_hw = &mdata->ad_off[dspp_num];
@@ -1501,7 +1502,7 @@ static int pp_dspp_setup(u32 disp_num, struct mdss_mdp_mixer *mixer)
 		if (ad_flags & PP_AD_STS_DIRTY_DATA)
 			pp_ad_input_write(ad_hw, ad);
 		if (ad_flags & PP_AD_STS_DIRTY_INIT)
-			pp_ad_init_write(ad_hw, ad);
+			pp_ad_init_write(ad_hw, ad, ctl);
 		if (ad_flags & PP_AD_STS_DIRTY_CFG)
 			pp_ad_cfg_write(ad_hw, ad);
 		pp_ad_bypass_config(ad, &ad_bypass);
@@ -1572,7 +1573,7 @@ int mdss_mdp_pp_setup_locked(struct mdss_mdp_ctl *ctl)
 		if (mixer_id[i] > mdata->nad_cfgs)
 			valid_mixers = false;
 	}
-	if (valid_mixers && (mixer_cnt != 2)) {
+	if (valid_mixers && (mixer_cnt <= mdata->nmax_concurrent_ad_hw)) {
 		ret = mdss_mdp_ad_setup(ctl->mfd);
 		if (ret < 0)
 			pr_warn("ad_setup(disp%d) returns %d", disp_num, ret);
@@ -1620,7 +1621,7 @@ int mdss_mdp_pp_resume(struct mdss_mdp_ctl *ctl, u32 dspp_num)
 		if (PP_AD_STATE_CFG & ad->state)
 			pp_ad_cfg_write(&mdata->ad_off[dspp_num], ad);
 		if (PP_AD_STATE_INIT & ad->state)
-			pp_ad_init_write(&mdata->ad_off[dspp_num], ad);
+			pp_ad_init_write(&mdata->ad_off[dspp_num], ad, ctl);
 		if ((PP_AD_STATE_DATA & ad->state) &&
 			(ad->sts & PP_STS_ENABLE)) {
 			bl = ad->bl_mfd->bl_level;
@@ -2813,6 +2814,8 @@ static int pp_histogram_enable(struct pp_hist_col_info *hist_info,
 {
 	unsigned long flag;
 	int ret = 0;
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+
 	mutex_lock(&hist_info->hist_mutex);
 	/* check if it is idle */
 	if (hist_info->col_en) {
@@ -2832,7 +2835,7 @@ static int pp_histogram_enable(struct pp_hist_col_info *hist_info,
 	hist_info->col_en = true;
 	spin_unlock_irqrestore(&hist_info->hist_lock, flag);
 	hist_info->is_kick_ready = true;
-	mdss_mdp_hist_irq_enable(3 << shift_bit);
+	mdss_mdp_hist_intr_req(&mdata->hist_intr, 3 << shift_bit, true);
 	writel_relaxed(req->frame_cnt, ctl_base + 8);
 	/* Kick out reset start */
 	writel_relaxed(1, ctl_base + 4);
@@ -2841,7 +2844,7 @@ exit:
 	return ret;
 }
 
-int mdss_mdp_histogram_start(struct mdp_histogram_start_req *req)
+int mdss_mdp_hist_start(struct mdp_histogram_start_req *req)
 {
 	u32 done_shift_bit;
 	char __iomem *ctl_base;
@@ -2924,6 +2927,8 @@ static int pp_histogram_disable(struct pp_hist_col_info *hist_info,
 {
 	int ret = 0;
 	unsigned long flag;
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+
 	mutex_lock(&hist_info->hist_mutex);
 	if (hist_info->col_en == false) {
 		pr_debug("Histogram already disabled (%d)", (u32) ctl_base);
@@ -2936,7 +2941,7 @@ static int pp_histogram_disable(struct pp_hist_col_info *hist_info,
 	hist_info->col_state = HIST_UNKNOWN;
 	spin_unlock_irqrestore(&hist_info->hist_lock, flag);
 	hist_info->is_kick_ready = false;
-	mdss_mdp_hist_irq_disable(done_bit);
+	mdss_mdp_hist_intr_req(&mdata->hist_intr, done_bit, false);
 	writel_relaxed(BIT(1), ctl_base);/* cancel */
 	ret = 0;
 exit:
@@ -2944,7 +2949,7 @@ exit:
 	return ret;
 }
 
-int mdss_mdp_histogram_stop(u32 block)
+int mdss_mdp_hist_stop(u32 block)
 {
 	int i, ret = 0;
 	char __iomem *ctl_base;
@@ -3018,6 +3023,150 @@ int mdss_mdp_histogram_stop(u32 block)
 hist_stop_clk:
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 hist_stop_exit:
+	return ret;
+}
+
+/**
+ * mdss_mdp_hist_intr_req() - Request changes the histogram interupts
+ * @intr: structure containting state of interrupt register
+ * @bits: the bits on interrupt register that should be changed
+ * @en: true if bits should be set, false if bits should be cleared
+ *
+ * Adds or removes the bits from the interrupt request.
+ *
+ * Does not store reference count for each bit. I.e. a bit with multiple
+ * enable requests can be disabled with a single disable request.
+ *
+ * Return: 0 if uneventful, errno on invalid input
+ */
+int mdss_mdp_hist_intr_req(struct mdss_intr *intr, u32 bits, bool en)
+{
+	unsigned long flag;
+	int ret = 0;
+	if (!intr) {
+		pr_err("NULL addr passed, %p", intr);
+		return -EINVAL;
+	}
+
+	spin_lock_irqsave(&intr->lock, flag);
+	if (en)
+		intr->req |= bits;
+	else
+		intr->req &= ~bits;
+	spin_unlock_irqrestore(&intr->lock, flag);
+
+	mdss_mdp_hist_intr_setup(intr, MDSS_IRQ_REQ);
+
+	return ret;
+}
+
+
+#define MDSS_INTR_STATE_ACTIVE	1
+#define MDSS_INTR_STATE_NULL	0
+#define MDSS_INTR_STATE_SUSPEND	-1
+
+/**
+ * mdss_mdp_hist_intr_setup() - Manage intr and clk depending on requests.
+ * @intr: structure containting state of intr reg
+ * @state: MDSS_IRQ_SUSPEND if suspend is needed,
+ *         MDSS_IRQ_RESUME if resume is needed,
+ *         MDSS_IRQ_REQ if neither (i.e. requesting an interrupt)
+ *
+ * This function acts as a gatekeeper for the interrupt, making sure that the
+ * MDP clocks are enabled while the interrupts are enabled to prevent
+ * unclocked accesses.
+ *
+ * To reduce code repetition, 4 state transitions have been encoded here. Each
+ * transition updates the interrupt's state structure (mdss_intr) to reflect
+ * the which bits have been requested (intr->req), are currently enabled
+ * (intr->curr), as well as defines which interrupt bits need to be enabled or
+ * disabled ('en' and 'dis' respectively). The 4th state is not explicity
+ * coded in the if/else chain, but is for MDSS_IRQ_REQ's when the interrupt
+ * is in suspend, in which case, the only change required (intr->req being
+ * updated) has already occured in the calling function.
+ *
+ * To control the clock, which can't be requested while holding the spinlock,
+ * the inital state is compared with the exit state to detect when the
+ * interrupt needs a clock.
+ *
+ * The clock requests surrounding the majority of this function serve to
+ * enable the register writes to change the interrupt register, as well as to
+ * prevent a race condition that could keep the clocks on (due to mdp_clk_cnt
+ * never being decremented below 0) when a enable/disable occurs but the
+ * disable requests the clocks disabled before the enable is able to request
+ * the clocks enabled.
+ *
+ * Return: 0 if uneventful, errno on repeated action or invalid input
+ */
+int mdss_mdp_hist_intr_setup(struct mdss_intr *intr, int type)
+{
+	unsigned long flag;
+	int ret = 0, req_clk = 0;
+	u32 en = 0, dis = 0;
+	u32 diff, init_curr;
+	int init_state;
+	if (!intr) {
+		WARN(1, "NULL intr pointer");
+		return -EINVAL;
+	}
+
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+	spin_lock_irqsave(&intr->lock, flag);
+
+	init_state = intr->state;
+	init_curr = intr->curr;
+
+	if (type == MDSS_IRQ_RESUME) {
+		/* resume intrs */
+		if (intr->state == MDSS_INTR_STATE_ACTIVE) {
+			ret = -EPERM;
+			goto exit;
+		}
+		en = intr->req;
+		dis = 0;
+		intr->curr = intr->req;
+		intr->state = intr->curr ?
+				MDSS_INTR_STATE_ACTIVE : MDSS_INTR_STATE_NULL;
+	} else if (type == MDSS_IRQ_SUSPEND) {
+		/* suspend intrs */
+		if (intr->state == MDSS_INTR_STATE_SUSPEND) {
+			ret = -EPERM;
+			goto exit;
+		}
+		en = 0;
+		dis = intr->curr;
+		intr->curr = 0;
+		intr->state = MDSS_INTR_STATE_SUSPEND;
+	} else if (intr->state != MDSS_IRQ_SUSPEND) {
+		/* Not resuming/suspending or in suspend state */
+		diff = intr->req ^ intr->curr;
+		en = diff & ~intr->curr;
+		dis = diff & ~intr->req;
+		intr->curr = intr->req;
+		intr->state = intr->curr ?
+				MDSS_INTR_STATE_ACTIVE : MDSS_INTR_STATE_NULL;
+	}
+
+	if (en)
+		mdss_mdp_hist_irq_enable(en);
+	if (dis)
+		mdss_mdp_hist_irq_disable(dis);
+
+	if ((init_state != MDSS_INTR_STATE_ACTIVE) &&
+				(intr->state == MDSS_INTR_STATE_ACTIVE))
+		req_clk = 1;
+	else if ((init_state == MDSS_INTR_STATE_ACTIVE) &&
+				(intr->state != MDSS_INTR_STATE_ACTIVE))
+		req_clk = -1;
+
+exit:
+	spin_unlock_irqrestore(&intr->lock, flag);
+	if (req_clk < 0)
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
+	else if (req_clk > 0)
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 	return ret;
 }
 
@@ -3345,7 +3494,6 @@ static struct msm_fb_data_type *mdss_get_mfd_from_index(int index)
 	return out;
 }
 
-#define MDSS_AD_MAX_MIXERS 1
 static int mdss_ad_init_checks(struct msm_fb_data_type *mfd)
 {
 	u32 mixer_id[MDSS_MDP_INTF_MAX_LAYERMIXER];
@@ -3371,8 +3519,9 @@ static int mdss_ad_init_checks(struct msm_fb_data_type *mfd)
 		pr_debug("no mixers connected, %d", mixer_num);
 		return -EHOSTDOWN;
 	}
-	if (mixer_num > MDSS_AD_MAX_MIXERS) {
-		pr_debug("too many mixers, not supported, %d", mixer_num);
+	if (mixer_num > mdata->nmax_concurrent_ad_hw) {
+		pr_debug("too many mixers, not supported, %d > %d", mixer_num,
+						mdata->nmax_concurrent_ad_hw);
 		return ret;
 	}
 
@@ -3629,12 +3778,27 @@ static void pp_ad_input_write(struct mdss_mdp_ad *ad_hw,
 	}
 }
 
-static void pp_ad_init_write(struct mdss_mdp_ad *ad_hw, struct mdss_ad_info *ad)
+#define MDSS_AD_MERGED_WIDTH 4
+static void pp_ad_init_write(struct mdss_mdp_ad *ad_hw, struct mdss_ad_info *ad,
+						struct mdss_mdp_ctl *ctl)
 {
+	struct mdss_data_type *mdata = ctl->mdata;
 	u32 temp;
+	u32 frame_start, frame_end, procs_start, procs_end, tile_ctrl;
+	u32 num;
 	char __iomem *base;
+	bool is_calc, is_dual_pipe;
+	u32 mixer_id[MDSS_MDP_INTF_MAX_LAYERMIXER];
+	u32 mixer_num;
+	mixer_num = mdss_mdp_get_ctl_mixers(ctl->mfd->index, mixer_id);
+	if (mixer_num > 1)
+		is_dual_pipe = true;
+	else
+		is_dual_pipe = false;
 
 	base = ad_hw->base;
+	is_calc = ad->calc_hw_num == ad_hw->num;
+
 	writel_relaxed(ad->init.i_control[0] & 0x1F,
 				base + MDSS_MDP_REG_AD_CON_CTRL_0);
 	writel_relaxed(ad->init.i_control[1] << 8,
@@ -3669,6 +3833,41 @@ static void pp_ad_init_write(struct mdss_mdp_ad *ad_hw, struct mdss_ad_info *ad)
 
 	pp_ad_cfg_lut(base + MDSS_MDP_REG_AD_LUT_FI, ad->init.asym_lut);
 	pp_ad_cfg_lut(base + MDSS_MDP_REG_AD_LUT_CC, ad->init.color_corr_lut);
+
+	if (mdata->mdp_rev >= MDSS_MDP_HW_REV_103) {
+		if (is_dual_pipe) {
+			num = ad_hw->num;
+			tile_ctrl = 0x5;
+			if (is_calc) {
+				frame_start = 0;
+				procs_start = 0;
+				frame_end = mdata->mixer_intf[num].width +
+							MDSS_AD_MERGED_WIDTH;
+				procs_end = mdata->mixer_intf[num].width;
+			} else {
+				tile_ctrl |= 0x10;
+				procs_start = ad->init.frame_w -
+					(mdata->mixer_intf[num].width);
+				procs_end = ad->init.frame_w;
+				frame_start = procs_start -
+							MDSS_AD_MERGED_WIDTH;
+				frame_end = procs_end;
+			}
+			procs_end -= 1;
+			frame_end -= 1;
+		} else {
+			frame_start = 0x0;
+			frame_end = 0xFFFF;
+			procs_start = 0x0;
+			procs_end = 0xFFFF;
+			tile_ctrl = 0x1;
+		}
+		writel_relaxed(frame_start, base + MDSS_MDP_REG_AD_FRAME_START);
+		writel_relaxed(frame_end, base + MDSS_MDP_REG_AD_FRAME_END);
+		writel_relaxed(procs_start, base + MDSS_MDP_REG_AD_PROCS_START);
+		writel_relaxed(procs_end, base + MDSS_MDP_REG_AD_PROCS_END);
+		writel_relaxed(tile_ctrl, base + MDSS_MDP_REG_AD_TILE_CTRL);
+	}
 }
 
 #define MDSS_PP_AD_DEF_CALIB 0x6E

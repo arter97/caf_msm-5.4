@@ -492,7 +492,13 @@ static int ion_secure_cma_allocate(struct ion_heap *heap,
 	if (buf) {
 		int ret;
 
-		ret = msm_ion_secure_table(buf->table, 0, 0);
+		if (!msm_secure_v2_is_supported()) {
+			pr_debug("%s: securing buffers is not supported on this platform\n",
+				__func__);
+			ret = 1;
+		} else {
+			ret = msm_ion_secure_table(buf->table, 0, 0);
+		}
 		if (ret) {
 			/*
 			 * Don't treat the secure buffer failing here as an
@@ -516,7 +522,8 @@ static void ion_secure_cma_free(struct ion_buffer *buffer)
 	struct ion_secure_cma_buffer_info *info = buffer->priv_virt;
 
 	dev_dbg(sheap->dev, "Release buffer %p\n", buffer);
-	msm_ion_unsecure_table(info->table);
+	if (msm_secure_v2_is_supported())
+		msm_ion_unsecure_table(info->table);
 	atomic_sub(buffer->size, &sheap->total_allocated);
 	BUG_ON(atomic_read(&sheap->total_allocated) < 0);
 	/* release memory */
@@ -581,22 +588,20 @@ static void ion_secure_cma_unmap_kernel(struct ion_heap *heap,
 }
 
 static int ion_secure_cma_print_debug(struct ion_heap *heap, struct seq_file *s,
-			const struct rb_root *mem_map)
+			const struct list_head *mem_map)
 {
 	struct ion_cma_secure_heap *sheap =
 		container_of(heap, struct ion_cma_secure_heap, heap);
 
 	if (mem_map) {
-		struct rb_node *n;
+		struct mem_map_data *data;
 
 		seq_printf(s, "\nMemory Map\n");
 		seq_printf(s, "%16.s %14.s %14.s %14.s\n",
 			   "client", "start address", "end address",
 			   "size (hex)");
 
-		for (n = rb_first(mem_map); n; n = rb_next(n)) {
-			struct mem_map_data *data =
-					rb_entry(n, struct mem_map_data, node);
+		list_for_each_entry(data, mem_map, node) {
 			const char *client_name = "(null)";
 
 

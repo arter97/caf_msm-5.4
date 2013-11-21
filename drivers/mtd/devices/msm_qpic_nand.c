@@ -1748,6 +1748,75 @@ validate_mtd_params_failed:
 	return err;
 }
 
+/**
+ * msm_nand_read_partial_page() - read partial page
+ * @mtd: pointer to mtd info
+ * @from: start address of the page
+ * @ops: pointer to mtd_oob_ops
+ *
+ * Reads a page into a bounce buffer and copies the required
+ * number of bytes to actual buffer. The pages that are aligned
+ * do not use bounce buffer.
+ */
+static int msm_nand_read_partial_page(struct mtd_info *mtd,
+		loff_t from, struct mtd_oob_ops *ops)
+{
+	int err = 0;
+	unsigned char *actual_buf;
+	unsigned char *bounce_buf;
+	loff_t aligned_from;
+	loff_t offset;
+	size_t len;
+	size_t actual_len;
+
+	actual_len = ops->len;
+	actual_buf = ops->datbuf;
+
+	bounce_buf = kmalloc(mtd->writesize, GFP_KERNEL);
+	if (!bounce_buf) {
+		pr_err("%s: could not allocate memory\n", __func__);
+		err = -ENOMEM;
+		goto out;
+	}
+
+	/* Get start address of page to read from */
+	ops->len = mtd->writesize;
+	offset = from & (mtd->writesize - 1);
+	aligned_from = from - offset;
+
+	for (;;) {
+		bool no_copy = false;
+
+		len = mtd->writesize - offset;
+		if (len > actual_len)
+			len = actual_len;
+
+		if (offset == 0 && len == mtd->writesize)
+			no_copy = true;
+
+		ops->datbuf = no_copy ? actual_buf : bounce_buf;
+		err = msm_nand_read_oob(mtd, aligned_from, ops);
+		if (err < 0)
+			break;
+
+		if (!no_copy)
+			memcpy(actual_buf, bounce_buf + offset, len);
+
+		actual_len -= len;
+		ops->retlen += len;
+		if (actual_len == 0)
+			break;
+
+		actual_buf += len;
+		offset = 0;
+		aligned_from += mtd->writesize;
+	}
+
+	kfree(bounce_buf);
+out:
+	return err;
+}
+
 /*
  * Function that gets called from upper layers such as MTD/YAFFS2 to read a
  * page with only main data.
@@ -1764,7 +1833,13 @@ static int msm_nand_read(struct mtd_info *mtd, loff_t from, size_t len,
 	ops.ooblen = 0;
 	ops.datbuf = buf;
 	ops.oobbuf = NULL;
-	ret =  msm_nand_read_oob(mtd, from, &ops);
+
+	if (!(from & (mtd->writesize - 1)) && !(len % mtd->writesize))
+		/* read pages on page boundary */
+		ret = msm_nand_read_oob(mtd, from, &ops);
+	else
+		ret = msm_nand_read_partial_page(mtd, from, &ops);
+
 	*retlen = ops.retlen;
 	return ret;
 }
@@ -1954,13 +2029,47 @@ static int msm_nand_write(struct mtd_info *mtd, loff_t to, size_t len,
 	struct mtd_oob_ops ops;
 
 	ops.mode = MTD_OPS_AUTO_OOB;
-	ops.len = len;
 	ops.retlen = 0;
 	ops.ooblen = 0;
-	ops.datbuf = (uint8_t *)buf;
 	ops.oobbuf = NULL;
-	ret =  msm_nand_write_oob(mtd, to, &ops);
-	*retlen = ops.retlen;
+
+	/* partial page writes are not supported */
+	if ((to & (mtd->writesize - 1)) || (len % mtd->writesize)) {
+		ret = -EINVAL;
+		*retlen = ops.retlen;
+		pr_err("%s: partial page writes are not supported\n", __func__);
+		goto out;
+	}
+
+	/*
+	 * Handle writing of large size write buffer in vmalloc
+	 * address space that does not fit in an MMU page.
+	 */
+	if (!virt_addr_valid(buf) &&
+		((unsigned long) buf & ~PAGE_MASK) + len > PAGE_SIZE) {
+		ops.len = mtd->writesize;
+
+		for (;;) {
+			ops.datbuf = (uint8_t *) buf;
+			ret = msm_nand_write_oob(mtd, to, &ops);
+			if (ret < 0)
+				break;
+
+			len -= mtd->writesize;
+			*retlen += mtd->writesize;
+			if (len == 0)
+				break;
+
+			buf += mtd->writesize;
+			to += mtd->writesize;
+		}
+	} else {
+		ops.len = len;
+		ops.datbuf = (uint8_t *)buf;
+		ret =  msm_nand_write_oob(mtd, to, &ops);
+		*retlen = ops.retlen;
+	}
+out:
 	return ret;
 }
 
@@ -2391,6 +2500,7 @@ int msm_nand_scan(struct mtd_info *mtd)
 		mtd->writesize = supported_flash->pagesize;
 		mtd->oobsize   = supported_flash->oobsize;
 		mtd->erasesize = supported_flash->blksize;
+		mtd->writebufsize = mtd->writesize;
 		mtd_writesize = mtd->writesize;
 
 		/* Check whether NAND device support 8bit ECC*/
