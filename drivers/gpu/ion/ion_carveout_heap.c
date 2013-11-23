@@ -27,8 +27,8 @@
 #include <linux/seq_file.h>
 #include "ion_priv.h"
 
-#include <asm/mach/map.h>
 #include <asm/cacheflush.h>
+#include <linux/io.h>
 #include <linux/msm_ion.h>
 
 struct ion_carveout_heap {
@@ -139,7 +139,7 @@ void *ion_carveout_heap_map_kernel(struct ion_heap *heap,
 void ion_carveout_heap_unmap_kernel(struct ion_heap *heap,
 				    struct ion_buffer *buffer)
 {
-	__arm_iounmap(buffer->vaddr);
+	iounmap(buffer->vaddr);
 	buffer->vaddr = NULL;
 
 	return;

@@ -136,7 +136,7 @@ static int __get_pgprot(int prot, int len)
 	}
 
 	if (prot & IOMMU_CACHE)
-		tex = (pgprot_kernel >> 2) & 0x07;
+		tex = (pgprot_val(PAGE_KERNEL) >> 2) & 0x07;
 	else
 		tex = msm_iommu_tex_class[MSM_IOMMU_ATTR_NONCACHED];
 
@@ -259,7 +259,7 @@ int msm_iommu_pagetable_map(struct msm_iommu_pt *pt, unsigned long va,
 
 	if (len != SZ_16M && len != SZ_1M &&
 	    len != SZ_64K && len != SZ_4K) {
-		pr_debug("Bad size: %d\n", len);
+		pr_debug("Bad size: %zd\n", len);
 		ret = -EINVAL;
 		goto fail;
 	}

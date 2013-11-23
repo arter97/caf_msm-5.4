@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  */
 
-#include "msm8226-camera-sensor-cdp.dtsi"
+#include "msm8226-camera-sensor-mtp.dtsi"
 
 &soc {
 	serial@f991f000 {
@@ -27,6 +27,7 @@
 			vcc_i2c-supply = <&pm8226_lvs1>;
 			synaptics,reset-gpio = <&msmgpio 16 0x00>;
 			synaptics,irq-gpio = <&msmgpio 17 0x2008>;
+			synaptics,fw-image-name = "PR1468813.img";
 			synaptics,button-map = <139 102 158>;
 			synaptics,i2c-pull-up;
 			synaptics,power-down;
@@ -47,7 +48,6 @@
 			qcom,clk-gpio = <&pm8226_gpios 3 0>;
 		};
 	};
-
 	gpio_keys {
 		compatible = "gpio-keys";
 		input-name = "gpio-keys";
@@ -99,26 +99,17 @@
 			"LDO_H", "MCLK",
 			"SPK_OUT", "MCLK",
 			"SPK_OUT", "EXT_VDD_SPKR",
-			"AMIC1", "MIC BIAS1 Internal1",
-			"MIC BIAS1 Internal1", "Handset Mic",
+			"AMIC1", "MIC BIAS1 External",
+			"MIC BIAS1 External", "Handset Mic",
 			"AMIC2", "MIC BIAS2 External",
 			"MIC BIAS2 External", "Headset Mic",
 			"AMIC4", "MIC BIAS2 External",
 			"MIC BIAS2 External", "ANCRight Headset Mic",
 			"AMIC5", "MIC BIAS2 External",
-			"MIC BIAS2 External", "ANCLeft Headset Mic",
-			"DMIC1", "MIC BIAS1 External",
-			"MIC BIAS1 External", "Digital Mic1",
-			"DMIC2", "MIC BIAS1 External",
-			"MIC BIAS1 External", "Digital Mic2",
-			"DMIC3", "MIC BIAS3 External",
-			"MIC BIAS3 External", "Digital Mic3",
-			"DMIC4", "MIC BIAS3 External",
-			"MIC BIAS3 External", "Digital Mic4";
+			"MIC BIAS2 External", "ANCLeft Headset Mic";
 
 		qcom,cdc-mclk-gpios = <&pm8226_gpios 1 0>;
 		qcom,cdc-vdd-spkr-gpios = <&pm8226_gpios 2 0>;
-		qcom,headset-jack-type-NC;
 	};
 
 	sound-9302 {
@@ -127,8 +118,8 @@
 			"LDO_H", "MCLK",
 			"SPK_OUT", "MCLK",
 			"SPK_OUT", "EXT_VDD_SPKR",
-			"AMIC1", "MIC BIAS1 External",
-			"MIC BIAS1 External", "Handset Mic",
+			"AMIC1", "MIC BIAS1 Internal1",
+			"MIC BIAS1 Internal1", "Handset Mic",
 			"AMIC2", "MIC BIAS2 External",
 			"MIC BIAS2 External", "Headset Mic",
 			"AMIC3", "MIC BIAS1 External",
@@ -136,8 +127,22 @@
 
 		qcom,cdc-mclk-gpios = <&pm8226_gpios 1 0>;
 		qcom,cdc-vdd-spkr-gpios = <&pm8226_gpios 2 0>;
-		qcom,headset-jack-type-NC;
 	};
+};
+
+&usb_otg {
+	#address-cells = <0>;
+	interrupt-parent = <&usb_otg>;
+	interrupts = <0 1 2>;
+	#interrupt-cells = <1>;
+	interrupt-map-mask = <0xffffffff>;
+	interrupt-map = <0 &intc 0 134 0
+			1 &intc 0 140 0
+			2 &spmi_bus 0x0 0x0 0x9 0x0>;
+	interrupt-names = "core_irq", "async_irq", "pmic_id_irq";
+
+	qcom,hsusb-otg-mode = <3>;
+	vbus_otg-supply = <&pm8226_chg_otg>;
 };
 
 &sdcc1 {
@@ -205,10 +210,7 @@
 
 	qcom,xpc;
 	qcom,bus-speed-mode = "SDR12", "SDR25", "SDR50", "DDR50", "SDR104";
-	qcom,current-limit = <600>;
-
-	#address-cells = <0>;
-	interrupt-parent = <&sdcc2>;
+	qcom,current-limit = <600>; #address-cells = <0>; interrupt-parent = <&sdcc2>;
 	interrupts = <0 1 2>;
 	#interrupt-cells = <1>;
 	interrupt-map-mask = <0xffffffff>;
@@ -249,16 +251,6 @@
 	cd-gpios = <&msmgpio 38 0x1>;
 
 	status = "ok";
-};
-
-&sdcc3 {
-	qcom,sup-voltages = <1800 1800>;
-	status = "disabled";
-};
-
-&sdhc_3 {
-	qcom,sup-voltages = <1800 1800>;
-	status = "disabled";
 };
 
 &spmi_bus {
@@ -333,6 +325,10 @@
 	};
 
 	qcom,pm8226@1 {
+                qcom,leds@d300 {
+                        status = "okay";
+                };
+
 		qcom,leds@d800 {
 			status = "okay";
 			qcom,wled_0 {
@@ -445,15 +441,6 @@
 	};
 };
 
-&pm8226_chg {
-	qcom,charging-disabled;
-	qcom,use-default-batt-values;
-
-	qcom,bat-if@1200 {
-		status = "disabled";
-	};
-};
-
 &pm8226_vadc {
 	chan@14 {
 		label = "pa_therm0";
@@ -478,8 +465,40 @@
 	};
 };
 
+/ {
+	mtp_batterydata: qcom,battery-data {
+		qcom,rpull-up-kohm = <100>;
+		qcom,vref-batt-therm = <1800000>;
+
+		#include "batterydata-palladium.dtsi"
+		#include "batterydata-mtp-3000mah.dtsi"
+	};
+};
+
+&pm8226_bms {
+	status = "ok";
+	qcom,battery-data = <&mtp_batterydata>;
+	qcom,enable-fcc-learning;
+	qcom,min-fcc-learning-soc = <20>;
+	qcom,min-fcc-ocv-pc = <30>;
+	qcom,min-fcc-learning-samples = <5>;
+	qcom,fcc-resolution = <10>;
+};
+
+&pm8226_chg {
+	qcom,charging-disabled;
+	qcom,battery-data = <&mtp_batterydata>;
+};
+
+&slim_msm {
+	tapan_codec {
+		qcom,cdc-micbias1-ext-cap;
+	};
+};
+
 &mdss_mdp {
 	qcom,mdss-pref-prim-intf = "dsi";
+	batfet-supply = <&pm8226_chg_batif>;
 };
 
 &mdss_dsi0 {

@@ -157,11 +157,9 @@ enum {
 
 #ifdef CONFIG_MSM_SMD
 void *smem_get_entry(unsigned id, unsigned *size);
-void *smem_find(unsigned id, unsigned size);
-
 void *smem_alloc(unsigned id, unsigned size_in, unsigned to_proc,
 								unsigned flags);
-void *smem_find_to_proc(unsigned id, unsigned size_in, unsigned to_proc,
+void *smem_find(unsigned id, unsigned size_in, unsigned to_proc,
 								unsigned flags);
 void *smem_get_entry_to_proc(unsigned id, unsigned *size, unsigned to_proc,
 								unsigned flags);
@@ -171,13 +169,16 @@ void *smem_get_entry_to_proc(unsigned id, unsigned *size, unsigned to_proc,
  *
  * @id:       ID of SMEM item
  * @size_out: Pointer to size variable for storing the result
+ * @to_proc:  SMEM host that shares the item with apps
+ * @flags:    Item attribute flags
  * @returns:  Pointer to SMEM item or NULL if it doesn't exist
  *
  * This function does not lock the remote spinlock and should only be used in
  * failure-recover cases such as retrieving the subsystem failure reason during
  * subsystem restart.
  */
-void *smem_get_entry_no_rlock(unsigned id, unsigned *size_out);
+void *smem_get_entry_no_rlock(unsigned id, unsigned *size_out, unsigned to_proc,
+								unsigned flags);
 
 /**
  * smem_virt_to_phys() - Convert SMEM address to physical address.
@@ -202,16 +203,12 @@ static inline void *smem_get_entry(unsigned id, unsigned *size)
 {
 	return NULL;
 }
-static inline void *smem_find(unsigned id, unsigned size)
-{
-	return NULL;
-}
 void *smem_alloc(unsigned id, unsigned size_in, unsigned to_proc,
 								unsigned flags)
 {
 	return NULL;
 }
-static void *smem_find_to_proc(unsigned id, unsigned size_in, unsigned to_proc,
+static void *smem_find(unsigned id, unsigned size_in, unsigned to_proc,
 								unsigned flags)
 {
 	return NULL;
@@ -221,7 +218,8 @@ static void *smem_get_entry_to_proc(unsigned id, unsigned *size,
 {
 	return NULL;
 }
-void *smem_get_entry_no_rlock(unsigned id, unsigned *size_out)
+void *smem_get_entry_no_rlock(unsigned id, unsigned *size_out, unsigned to_proc,
+								unsigned flags)
 {
 	return NULL;
 }

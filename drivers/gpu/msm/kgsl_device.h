@@ -32,6 +32,13 @@
 
 #define FIRST_TIMEOUT (HZ / 2)
 
+#define KGSL_IOCTL_FUNC(_cmd, _func, _flags) \
+	[_IOC_NR((_cmd))] = \
+		{ .cmd = (_cmd), .func = (_func), .flags = (_flags) }
+
+#define KGSL_IOCTL_LOCK		BIT(0)
+#define KGSL_IOCTL_WAKE		BIT(1)
+
 
 /* KGSL device state is initialized to INIT when platform_probe		*
  * sucessfully initialized the device.  Once a device has been opened	*
@@ -94,7 +101,7 @@ struct kgsl_functable {
 	int (*start) (struct kgsl_device *device);
 	int (*stop) (struct kgsl_device *device);
 	int (*getproperty) (struct kgsl_device *device,
-		enum kgsl_property_type type, void *value,
+		enum kgsl_property_type type, void __user *value,
 		size_t sizebytes);
 	int (*waittimestamp) (struct kgsl_device *device,
 		struct kgsl_context *context, unsigned int timestamp,
@@ -128,7 +135,7 @@ struct kgsl_functable {
 	long (*ioctl) (struct kgsl_device_private *dev_priv,
 		unsigned int cmd, void *data);
 	int (*setproperty) (struct kgsl_device *device,
-		enum kgsl_property_type type, void *value,
+		enum kgsl_property_type type, void __user *value,
 		unsigned int sizebytes);
 	int (*postmortem_dump) (struct kgsl_device *device, int manual);
 	void (*drawctxt_sched)(struct kgsl_device *device,
@@ -144,6 +151,19 @@ struct kgsl_mh {
 	uint32_t         mpu_base;
 	int              mpu_range;
 };
+
+typedef long (*kgsl_ioctl_func_t)(struct kgsl_device_private *,
+	unsigned int, void *);
+
+struct kgsl_ioctl {
+	unsigned int cmd;
+	kgsl_ioctl_func_t func;
+	unsigned int flags;
+};
+
+long kgsl_ioctl_helper(struct file *filep, unsigned int cmd,
+			const struct kgsl_ioctl *ioctl_funcs,
+			unsigned int array_size, unsigned long arg);
 
 typedef void (*kgsl_event_func)(struct kgsl_device *, void *, u32, u32, u32);
 

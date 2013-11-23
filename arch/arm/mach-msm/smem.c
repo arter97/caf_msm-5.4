@@ -464,14 +464,8 @@ static void *__smem_find(unsigned id, unsigned size_in, bool skip_init_check)
 	return ptr;
 }
 
-void *smem_find(unsigned id, unsigned size_in)
-{
-	return __smem_find(id, size_in, false);
-}
-EXPORT_SYMBOL(smem_find);
-
 /**
- * smem_find_to_proc - Find existing item with security support
+ * smem_find - Find existing item with security support
  *
  * @id:       ID of SMEM item
  * @size_in:  Size of the SMEM item
@@ -479,8 +473,7 @@ EXPORT_SYMBOL(smem_find);
  * @flags:    Item attribute flags
  * @returns:  Pointer to SMEM item or NULL if it doesn't exist
  */
-void *smem_find_to_proc(unsigned id, unsigned size_in, unsigned to_proc,
-								unsigned flags)
+void *smem_find(unsigned id, unsigned size_in, unsigned to_proc, unsigned flags)
 {
 	unsigned size;
 	void *ptr;
@@ -494,14 +487,14 @@ void *smem_find_to_proc(unsigned id, unsigned size_in, unsigned to_proc,
 
 	size_in = ALIGN(size_in, 8);
 	if (size_in != size) {
-		SMEM_INFO("smem_find_to_proc(%u, %u, %u, %u): wrong size %u\n",
+		SMEM_INFO("smem_find(%u, %u, %u, %u): wrong size %u\n",
 			id, size_in, to_proc, flags, size);
 		return 0;
 	}
 
 	return ptr;
 }
-EXPORT_SYMBOL(smem_find_to_proc);
+EXPORT_SYMBOL(smem_find);
 
 /**
  * alloc_item_nonsecure - Allocate an SMEM item in the nonsecure partition
@@ -763,15 +756,19 @@ EXPORT_SYMBOL(smem_get_entry_to_proc);
  *
  * @id:       ID of SMEM item
  * @size_out: Pointer to size variable for storing the result
+ * @to_proc:  SMEM host that shares the item with apps
+ * @flags:    Item attribute flags
  * @returns:  Pointer to SMEM item or NULL if it doesn't exist
  *
  * This function does not lock the remote spinlock and should only be used in
  * failure-recover cases such as retrieving the subsystem failure reason during
  * subsystem restart.
  */
-void *smem_get_entry_no_rlock(unsigned id, unsigned *size_out)
+void *smem_get_entry_no_rlock(unsigned id, unsigned *size_out, unsigned to_proc,
+								unsigned flags)
 {
-	return __smem_get_entry(id, size_out, false, false);
+	return __smem_get_entry_to_proc(id, size_out, to_proc, flags, false,
+									false);
 }
 EXPORT_SYMBOL(smem_get_entry_no_rlock);
 
