@@ -1014,6 +1014,12 @@
                 interrupts = <0 1 0>;
         };
 
+	qti,usbnet_ipa {
+		cell-index = <0>;
+		compatible = "qti,usbnet_ipa";
+		qti,hub-reset = <&msmgpio 50 0>;
+	};
+
 };
 
 /include/ "msm-pm8019-rpm-regulator.dtsi"
