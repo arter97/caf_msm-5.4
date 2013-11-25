@@ -191,6 +191,11 @@ const struct file_operations ecm_ipa_debugfs_atomic_ops = {
 	.read = ecm_ipa_debugfs_atomic_read,
 };
 
+static void ecm_ipa_msg_free_cb(void *buff, u32 len, u32 type)
+{
+	kfree(buff);
+}
+
 /**
  * ecm_ipa_init() - create network device and initializes internal
  *  data structures
@@ -351,11 +356,20 @@ int ecm_ipa_connect(u32 usb_to_ipa_hdl, u32 ipa_to_usb_hdl,
 {
 	struct ecm_ipa_dev *ecm_ipa_ctx = priv;
 	int next_state;
+	struct ipa_ecm_msg *ecm_msg;
+	struct ipa_msg_meta msg_meta;
+	int retval;
 
 	ECM_IPA_LOG_ENTRY();
 	NULL_CHECK(priv);
 	pr_debug("usb_to_ipa_hdl = %d, ipa_to_usb_hdl = %d, priv=0x%p\n",
 					usb_to_ipa_hdl, ipa_to_usb_hdl, priv);
+
+	ecm_msg = kzalloc(sizeof(struct ipa_ecm_msg), GFP_KERNEL);
+	if (!ecm_msg) {
+		ECM_IPA_ERROR("can't alloc msg mem\n");
+		return -ENOMEM;
+	}
 
 	next_state = ecm_ipa_next_state(ecm_ipa_ctx->state, ECM_IPA_CONNECT);
 	if (next_state == ECM_IPA_INVALID) {
@@ -381,6 +395,20 @@ int ecm_ipa_connect(u32 usb_to_ipa_hdl, u32 ipa_to_usb_hdl,
 	pr_debug("end-point configured\n");
 
 	netif_carrier_on(ecm_ipa_ctx->net);
+
+	memset(&msg_meta, 0, sizeof(struct ipa_msg_meta));
+	msg_meta.msg_type = ECM_CONNECT;
+	msg_meta.msg_len = sizeof(struct ipa_ecm_msg);
+	strcpy(ecm_msg->name, ecm_ipa_ctx->net->name);
+	ecm_msg->ifindex = ecm_ipa_ctx->net->ifindex;
+
+	retval = ipa_send_msg(&msg_meta, ecm_msg, ecm_ipa_msg_free_cb);
+	if (retval) {
+		ECM_IPA_ERROR("fail to send ECM_CONNECT message\n");
+		kfree(ecm_msg);
+		return -EPERM;
+	}
+
 	if (!netif_carrier_ok(ecm_ipa_ctx->net)) {
 		ECM_IPA_ERROR("netif_carrier_ok error\n");
 		return -EBUSY;
@@ -611,10 +639,19 @@ int ecm_ipa_disconnect(void *priv)
 {
 	struct ecm_ipa_dev *ecm_ipa_ctx = priv;
 	int next_state;
+	struct ipa_ecm_msg *ecm_msg;
+	struct ipa_msg_meta msg_meta;
+	int retval;
 
 	ECM_IPA_LOG_ENTRY();
 	NULL_CHECK(ecm_ipa_ctx);
 	pr_debug("priv=0x%p\n", priv);
+
+	ecm_msg = kzalloc(sizeof(struct ipa_ecm_msg), GFP_KERNEL);
+	if (!ecm_msg) {
+		ECM_IPA_ERROR("can't alloc msg mem\n");
+		return -ENOMEM;
+	}
 
 	next_state = ecm_ipa_next_state(ecm_ipa_ctx->state, ECM_IPA_DISCONNECT);
 	if (next_state == ECM_IPA_INVALID) {
@@ -626,6 +663,19 @@ int ecm_ipa_disconnect(void *priv)
 
 	netif_carrier_off(ecm_ipa_ctx->net);
 	pr_debug("carrier_off notifcation was sent\n");
+
+	memset(&msg_meta, 0, sizeof(struct ipa_msg_meta));
+	msg_meta.msg_type = ECM_DISCONNECT;
+	msg_meta.msg_len = sizeof(struct ipa_ecm_msg);
+	strcpy(ecm_msg->name, ecm_ipa_ctx->net->name);
+	ecm_msg->ifindex = ecm_ipa_ctx->net->ifindex;
+
+	retval = ipa_send_msg(&msg_meta, ecm_msg, ecm_ipa_msg_free_cb);
+	if (retval) {
+		ECM_IPA_ERROR("fail to send ECM_DISCONNECT message\n");
+		kfree(ecm_msg);
+		return -EPERM;
+	}
 
 	netif_stop_queue(ecm_ipa_ctx->net);
 	pr_debug("queue stopped\n");
