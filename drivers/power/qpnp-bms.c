@@ -765,10 +765,22 @@ static bool is_battery_full(struct qpnp_bms_chip *chip)
 	return get_battery_status(chip) == POWER_SUPPLY_STATUS_FULL;
 }
 
+#define BAT_PRES_BIT		BIT(7)
 static bool is_battery_present(struct qpnp_bms_chip *chip)
 {
 	union power_supply_propval ret = {0,};
+	int rc;
+	u8 batt_pres;
 
+	/* first try to use the batt_pres register if given */
+	if (chip->batt_pres_addr) {
+		rc = qpnp_read_wrapper(chip, &batt_pres,
+				chip->batt_pres_addr, 1);
+		if (!rc && (batt_pres & BAT_PRES_BIT))
+			return true;
+		else
+			return false;
+	}
 	if (chip->batt_psy == NULL)
 		chip->batt_psy = power_supply_get_by_name("battery");
 	if (chip->batt_psy) {
@@ -2254,6 +2266,7 @@ static void configure_soc_wakeup(struct qpnp_bms_chip *chip,
 			(uint16_t)ocv_raw);
 }
 
+#define BAD_SOC_THRESH	-10
 static int calculate_raw_soc(struct qpnp_bms_chip *chip,
 					struct raw_soc_params *raw,
 					struct soc_params *params,
@@ -2270,7 +2283,7 @@ static int calculate_raw_soc(struct qpnp_bms_chip *chip,
 	soc = DIV_ROUND_CLOSEST((remaining_usable_charge_uah * 100),
 				(params->fcc_uah - params->uuc_uah));
 
-	if (chip->first_time_calc_soc && soc < 0) {
+	if (chip->first_time_calc_soc && soc > BAD_SOC_THRESH && soc < 0) {
 		/*
 		 * first time calcualtion and the pon ocv  is too low resulting
 		 * in a bad soc. Adjust ocv to get 0 soc
@@ -2295,7 +2308,7 @@ static int calculate_raw_soc(struct qpnp_bms_chip *chip,
 	if (soc > 100)
 		soc = 100;
 
-	if (soc < 0) {
+	if (soc > BAD_SOC_THRESH && soc < 0) {
 		pr_debug("bad rem_usb_chg = %d rem_chg %d, cc_uah %d, unusb_chg %d\n",
 				remaining_usable_charge_uah,
 				params->ocv_charge_uah,
@@ -3488,7 +3501,7 @@ static void load_shutdown_data(struct qpnp_bms_chip *chip)
 			|| shutdown_soc_out_of_limit) {
 		chip->battery_removed = true;
 		chip->shutdown_soc_invalid = true;
-		chip->shutdown_iavg_ma = 0;
+		chip->shutdown_iavg_ma = MIN_IAVG_MA;
 		pr_debug("Ignoring shutdown SoC: invalid = %d, offmode = %d, out_of_limit = %d\n",
 				invalid_stored_soc, offmode_battery_replaced,
 				shutdown_soc_out_of_limit);
