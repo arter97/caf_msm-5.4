@@ -888,6 +888,8 @@ static int __devinit mdss_dsi_ctrl_probe(struct platform_device *pdev)
 		platform_set_drvdata(pdev, ctrl_pdata);
 	}
 
+	ctrl_pdata->dsi_cmdlist_put = mdss_dsi_cmdlist_put;
+
 	ctrl_name = of_get_property(pdev->dev.of_node, "label", NULL);
 	if (!ctrl_name)
 		pr_info("%s:%d, DSI Ctrl name not specified\n",
