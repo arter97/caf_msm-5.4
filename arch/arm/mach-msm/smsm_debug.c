@@ -33,7 +33,9 @@ static void debug_read_smsm_state(struct seq_file *s)
 	int n;
 
 	smsm = smem_find(SMEM_SMSM_SHARED_STATE,
-			 SMSM_NUM_ENTRIES * sizeof(uint32_t));
+			 SMSM_NUM_ENTRIES * sizeof(uint32_t),
+			 0,
+			 SMEM_ANY_HOST_FLAG);
 
 	if (smsm)
 		for (n = 0; n < SMSM_NUM_ENTRIES; n++)
@@ -262,7 +264,9 @@ static void debug_read_intr_mask(struct seq_file *s)
 	int m, n;
 
 	smsm = smem_find(SMEM_SMSM_CPU_INTR_MASK,
-			  SMSM_NUM_ENTRIES * SMSM_NUM_HOSTS * sizeof(uint32_t));
+			  SMSM_NUM_ENTRIES * SMSM_NUM_HOSTS * sizeof(uint32_t),
+			  0,
+			  SMEM_ANY_HOST_FLAG);
 
 	if (smsm)
 		for (m = 0; m < SMSM_NUM_ENTRIES; m++) {
@@ -280,7 +284,9 @@ static void debug_read_intr_mux(struct seq_file *s)
 	int n;
 
 	smsm = smem_find(SMEM_SMD_SMSM_INTR_MUX,
-			  SMSM_NUM_INTR_MUX * sizeof(uint32_t));
+			  SMSM_NUM_INTR_MUX * sizeof(uint32_t),
+			  0,
+			  SMEM_ANY_HOST_FLAG);
 
 	if (smsm)
 		for (n = 0; n < SMSM_NUM_INTR_MUX; n++)

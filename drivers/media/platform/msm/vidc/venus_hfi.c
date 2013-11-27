@@ -3446,10 +3446,13 @@ static void venus_hfi_unload_fw(void *dev)
 		mutex_lock(&device->clk_pwr_lock);
 		subsystem_put(device->resources.fw.cookie);
 		venus_hfi_disable_regulators(device);
-		device->power_enabled = 0;
 		mutex_unlock(&device->clk_pwr_lock);
 		venus_hfi_interface_queues_release(dev);
 		venus_hfi_iommu_detach(device);
+
+		mutex_lock(&device->clk_pwr_lock);
+		device->power_enabled = 0;
+		mutex_unlock(&device->clk_pwr_lock);
 		device->resources.fw.cookie = NULL;
 	}
 }
@@ -3505,8 +3508,8 @@ int venus_hfi_get_core_capabilities(void)
 	u8 version_info[256];
 	const u32 smem_image_index_venus = 14 * 128;
 
-	smem_table_ptr = smem_get_entry(SMEM_IMAGE_VERSION_TABLE,
-			&smem_block_size);
+	smem_table_ptr = smem_get_entry_to_proc(SMEM_IMAGE_VERSION_TABLE,
+			&smem_block_size, 0, SMEM_ANY_HOST_FLAG);
 	if (smem_table_ptr &&
 			((smem_image_index_venus + 128) <= smem_block_size))
 		memcpy(version_info, smem_table_ptr + smem_image_index_venus,

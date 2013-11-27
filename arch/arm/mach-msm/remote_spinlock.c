@@ -535,7 +535,8 @@ remote_spinlock_dal_init(const char *chunk_name, _remote_spinlock_t *lock)
 	if (!chunk_name)
 		return -EINVAL;
 
-	dal_smem_start = smem_get_entry(SMEM_DAL_AREA, &dal_smem_size);
+	dal_smem_start = smem_get_entry_to_proc(SMEM_DAL_AREA, &dal_smem_size,
+							0, SMEM_ANY_HOST_FLAG);
 	if (!dal_smem_start)
 		return -ENXIO;
 
@@ -573,7 +574,9 @@ static int remote_spinlock_init_address_smem(int id, _remote_spinlock_t *lock)
 		return -EINVAL;
 
 	spinlock_start = smem_find(SMEM_SPINLOCK_ARRAY,
-				    SMEM_SPINLOCK_ARRAY_SIZE);
+				    SMEM_SPINLOCK_ARRAY_SIZE,
+				    0,
+				    SMEM_ANY_HOST_FLAG);
 	if (spinlock_start == NULL)
 		return -ENXIO;
 

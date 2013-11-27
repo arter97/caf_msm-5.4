@@ -1268,7 +1268,9 @@ static int rmt_storage_get_ramfs(struct rmt_storage_srv *srv)
 		return 0;
 
 	ramfs_table = smem_find(SMEM_SEFS_INFO,
-			sizeof(struct shared_ramfs_table));
+			sizeof(struct shared_ramfs_table),
+			0,
+			SMEM_ANY_HOST_FLAG);
 
 	if (!ramfs_table) {
 		pr_err("%s: No RAMFS table in SMEM\n", __func__);
@@ -1443,7 +1445,9 @@ static int rmt_storage_init_ramfs(struct rmt_storage_srv *srv)
 		return 0;
 
 	ramfs_table = smem_find(SMEM_SEFS_INFO,
-				 sizeof(struct shared_ramfs_table));
+				 sizeof(struct shared_ramfs_table),
+				 0,
+				 SMEM_ANY_HOST_FLAG);
 
 	if (!ramfs_table) {
 		pr_err("%s: No RAMFS table in SMEM\n", __func__);

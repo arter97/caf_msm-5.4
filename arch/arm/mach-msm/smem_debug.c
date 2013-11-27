@@ -40,7 +40,8 @@ static void debug_f3(struct seq_file *s)
 
 	seq_puts(s, "Printing to log\n");
 
-	x = smem_get_entry(SMEM_ERR_F3_TRACE_LOG, &size);
+	x = smem_get_entry_to_proc(SMEM_ERR_F3_TRACE_LOG, &size, 0,
+							SMEM_ANY_HOST_FLAG);
 	if (x != 0) {
 		pr_info("smem: F3 TRACE LOG\n");
 		while (size > 0) {
@@ -82,7 +83,8 @@ static void debug_modem_err_f3(struct seq_file *s)
 	unsigned cols = 0;
 	char str[4*sizeof(unsigned)+1] = {0};
 
-	x = smem_get_entry(SMEM_ERR_F3_TRACE_LOG, &size);
+	x = smem_get_entry_to_proc(SMEM_ERR_F3_TRACE_LOG, &size, 0,
+							SMEM_ANY_HOST_FLAG);
 	if (x != 0) {
 		pr_info("smem: F3 TRACE LOG\n");
 		while (size > 0) {
@@ -122,13 +124,14 @@ static void debug_modem_err(struct seq_file *s)
 	char *x;
 	int size;
 
-	x = smem_find(ID_DIAG_ERR_MSG, SZ_DIAG_ERR_MSG);
+	x = smem_find(ID_DIAG_ERR_MSG, SZ_DIAG_ERR_MSG, 0, SMEM_ANY_HOST_FLAG);
 	if (x != 0) {
 		x[SZ_DIAG_ERR_MSG - 1] = 0;
 		seq_printf(s, "smem: DIAG '%s'\n", x);
 	}
 
-	x = smem_get_entry(SMEM_ERR_CRASH_LOG, &size);
+	x = smem_get_entry_to_proc(SMEM_ERR_CRASH_LOG, &size, 0,
+							SMEM_ANY_HOST_FLAG);
 	if (x != 0) {
 		x[size - 1] = 0;
 		seq_printf(s, "smem: CRASH LOG\n'%s'\n", x);
@@ -140,7 +143,8 @@ static void debug_read_diag_msg(struct seq_file *s)
 {
 	char *msg;
 
-	msg = smem_find(ID_DIAG_ERR_MSG, SZ_DIAG_ERR_MSG);
+	msg = smem_find(ID_DIAG_ERR_MSG, SZ_DIAG_ERR_MSG, 0,
+							SMEM_ANY_HOST_FLAG);
 
 	if (msg) {
 		msg[SZ_DIAG_ERR_MSG - 1] = 0;
@@ -154,12 +158,15 @@ static void debug_read_mem(struct seq_file *s)
 	struct smem_heap_info *heap_info;
 	struct smem_heap_entry *toc;
 
-	heap_info = smem_find(SMEM_HEAP_INFO, sizeof(struct smem_heap_info));
+	heap_info = smem_find(SMEM_HEAP_INFO, sizeof(struct smem_heap_info),
+						0,
+						SMEM_ANY_HOST_FLAG);
 	if (!heap_info) {
 		seq_puts(s, "SMEM_HEAP_INFO is NULL\n");
 		return;
 	}
-	toc = smem_find(SMEM_ALLOCATION_TABLE, SZ_SMEM_ALLOCATION_TABLE);
+	toc = smem_find(SMEM_ALLOCATION_TABLE, SZ_SMEM_ALLOCATION_TABLE,
+							0, SMEM_ANY_HOST_FLAG);
 	if (!toc) {
 		seq_puts(s, "SMEM_ALLOCATION_TABLE is NULL\n");
 		return;
@@ -195,7 +202,8 @@ static void debug_read_build_id(struct seq_file *s)
 	unsigned size;
 	void *data;
 
-	data = smem_get_entry(SMEM_HW_SW_BUILD_ID, &size);
+	data = smem_get_entry_to_proc(SMEM_HW_SW_BUILD_ID, &size, 0,
+							SMEM_ANY_HOST_FLAG);
 	if (!data)
 		return;
 
@@ -295,7 +303,8 @@ void smsm_print_sleep_info(uint32_t sleep_delay, uint32_t sleep_limit,
 	pr_info("SMEM_SMSM_SLEEP_DELAY: %x\n", sleep_delay);
 	pr_info("SMEM_SMSM_LIMIT_SLEEP: %x\n", sleep_limit);
 
-	ptr = smem_find(SMEM_SLEEP_POWER_COLLAPSE_DISABLED, sizeof(*ptr));
+	ptr = smem_find(SMEM_SLEEP_POWER_COLLAPSE_DISABLED,
+					sizeof(*ptr), 0, SMEM_ANY_HOST_FLAG);
 	if (ptr)
 		pr_info("SMEM_SLEEP_POWER_COLLAPSE_DISABLED: %x\n", *ptr);
 	else
@@ -304,7 +313,8 @@ void smsm_print_sleep_info(uint32_t sleep_delay, uint32_t sleep_limit,
 	pr_info("SMEM_SMSM_INT_INFO %x %x %x\n",
 		irq_mask, pending_irqs, wakeup_reason);
 
-	gpio = smem_find(SMEM_GPIO_INT, sizeof(*gpio));
+	gpio = smem_find(SMEM_GPIO_INT, sizeof(*gpio), 0,
+							SMEM_ANY_HOST_FLAG);
 	if (gpio) {
 		int i;
 		for (i = 0; i < NUM_GPIO_INT_REGISTERS; i++)
