@@ -102,6 +102,10 @@
 		linux,default-trigger = "flashlight-trigger";
 	};
 
+	qcom,wdt@f9017000 {
+		qcom,bark-time = <13000>;
+	};
+
 	gpio_keys {
                 compatible = "gpio-keys";
                 input-name = "gpio-keys";
@@ -210,8 +214,9 @@
 			status = "okay";
 			qcom,led_mpp_2 {
 				label = "mpp";
-				linux,name = "wled-homerow";
-				linux-default-trigger = "hr-trigger";
+				linux,name = "button-backlight";
+				linux,default-trigger = "hr-trigger";
+				qcom,current-setting = <20>;
 				qcom,default-state = "off";
 				qcom,max-current = <40>;
 				qcom,id = <6>;
@@ -308,6 +313,7 @@
 
 	qcom,chgr@1000 {
 		status = "ok";
+		qcom,tchg-mins = <250>;
 	};
 
 	qcom,buck@1100 {

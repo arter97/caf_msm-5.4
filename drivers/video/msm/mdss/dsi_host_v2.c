@@ -77,7 +77,7 @@ void msm_dsi_ack_err_status(unsigned char *ctrl_base)
 
 	if (status) {
 		MIPI_OUTP(ctrl_base + DSI_ACK_ERR_STATUS, status);
-		pr_debug("%s: status=%x\n", __func__, status);
+		pr_err("%s: status=%x\n", __func__, status);
 	}
 }
 
@@ -88,7 +88,7 @@ void msm_dsi_timeout_status(unsigned char *ctrl_base)
 	status = MIPI_INP(ctrl_base + DSI_TIMEOUT_STATUS);
 	if (status & 0x0111) {
 		MIPI_OUTP(ctrl_base + DSI_TIMEOUT_STATUS, status);
-		pr_debug("%s: status=%x\n", __func__, status);
+		pr_err("%s: status=%x\n", __func__, status);
 	}
 }
 
@@ -100,7 +100,7 @@ void msm_dsi_dln0_phy_err(unsigned char *ctrl_base)
 
 	if (status & 0x011111) {
 		MIPI_OUTP(ctrl_base + DSI_DLN0_PHY_ERR, status);
-		pr_debug("%s: status=%x\n", __func__, status);
+		pr_err("%s: status=%x\n", __func__, status);
 	}
 }
 
@@ -112,7 +112,7 @@ void msm_dsi_fifo_status(unsigned char *ctrl_base)
 
 	if (status & 0x44444489) {
 		MIPI_OUTP(ctrl_base + DSI_FIFO_STATUS, status);
-		pr_debug("%s: status=%x\n", __func__, status);
+		pr_err("%s: status=%x\n", __func__, status);
 	}
 }
 
@@ -124,7 +124,7 @@ void msm_dsi_status(unsigned char *ctrl_base)
 
 	if (status & 0x80000000) {
 		MIPI_OUTP(ctrl_base + DSI_STATUS, status);
-		pr_debug("%s: status=%x\n", __func__, status);
+		pr_err("%s: status=%x\n", __func__, status);
 	}
 }
 
@@ -1070,6 +1070,27 @@ static struct device_node *dsi_find_panel_of_node(
 	return dsi_pan_node;
 }
 
+static int msm_dsi_clk_ctrl(struct mdss_panel_data *pdata, int enable)
+{
+	u32 bitclk_rate = 0, byteclk_rate = 0, pclk_rate = 0, dsiclk_rate = 0;
+
+	pr_debug("%s:\n", __func__);
+
+	if (enable) {
+		msm_dsi_ahb_ctrl(1);
+		msm_dsi_cal_clk_rate(pdata, &bitclk_rate, &dsiclk_rate,
+					&byteclk_rate, &pclk_rate);
+		msm_dsi_clk_set_rate(DSI_ESC_CLK_RATE, dsiclk_rate,
+					byteclk_rate, pclk_rate);
+		msm_dsi_clk_enable();
+	} else {
+		msm_dsi_clk_set_rate(DSI_ESC_CLK_RATE, 0, 0, 0);
+		msm_dsi_clk_disable();
+		msm_dsi_ahb_ctrl(0);
+	}
+	return 0;
+}
+
 static int __devinit msm_dsi_probe(struct platform_device *pdev)
 {
 	struct dsi_interface intf;
@@ -1188,6 +1209,7 @@ static int __devinit msm_dsi_probe(struct platform_device *pdev)
 	intf.on = msm_dsi_on;
 	intf.off = msm_dsi_off;
 	intf.cont_on = msm_dsi_cont_on;
+	intf.clk_ctrl = msm_dsi_clk_ctrl;
 	intf.op_mode_config = msm_dsi_op_mode_config;
 	intf.tx = msm_dsi_cmds_tx;
 	intf.rx = msm_dsi_cmds_rx;
