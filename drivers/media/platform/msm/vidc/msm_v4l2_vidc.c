@@ -48,6 +48,7 @@ struct buffer_info {
 	u32 uvaddr[VIDEO_MAX_PLANES];
 	u32 device_addr[VIDEO_MAX_PLANES];
 	struct msm_smem *handle[VIDEO_MAX_PLANES];
+	bool mapped[VIDEO_MAX_PLANES];
 };
 
 struct msm_v4l2_vid_inst {
@@ -293,7 +294,7 @@ static int msm_v4l2_release_buffers(struct msm_v4l2_vid_inst *v4l2_inst,
 					buffer_info.m.planes[0].length);
 			list_del(&bi->list);
 			for (i = 0; i < bi->num_planes; i++) {
-				if (bi->handle[i])
+				if (bi->handle[i] && bi->mapped[i])
 					msm_smem_free(v4l2_inst->mem_client,
 							bi->handle[i]);
 			}
@@ -466,7 +467,8 @@ int msm_v4l2_prepare_buf(struct file *file, void *fh,
 			binfo->uvaddr[i] = b->m.planes[i].m.userptr;
 			binfo->device_addr[i] =
 			temp->handle[plane]->device_addr + binfo->buff_off[i];
-			binfo->handle[i] = NULL;
+			binfo->handle[i] = temp->handle[i];
+			binfo->mapped[i] = false;
 		} else {
 			handle = msm_smem_user_to_kernel(v4l2_inst->mem_client,
 					b->m.planes[i].reserved[0],
@@ -486,6 +488,7 @@ int msm_v4l2_prepare_buf(struct file *file, void *fh,
 			binfo->device_addr[i] =
 				handle->device_addr + binfo->buff_off[i];
 			binfo->handle[i] = handle;
+			binfo->mapped[i] = true;
 			dprintk(VIDC_DBG, "Registering buffer: %d, %d, %d\n",
 					b->m.planes[i].reserved[0],
 					b->m.planes[i].reserved[1],
