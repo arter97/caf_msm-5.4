@@ -68,7 +68,6 @@
 #include "f_adb.c"
 #include "f_ccid.c"
 #include "f_mtp.c"
-#include "f_accessory.c"
 #ifdef CONFIG_USB_ANDROID_CDC_ECM
 #include "f_ecm.c"
 #else
@@ -1657,39 +1656,6 @@ static struct android_usb_function mass_storage_function = {
 	.attributes	= mass_storage_function_attributes,
 };
 
-
-static int accessory_function_init(struct android_usb_function *f,
-					struct usb_composite_dev *cdev)
-{
-	return acc_setup();
-}
-
-static void accessory_function_cleanup(struct android_usb_function *f)
-{
-	acc_cleanup();
-}
-
-static int accessory_function_bind_config(struct android_usb_function *f,
-						struct usb_configuration *c)
-{
-	return acc_bind_config(c);
-}
-
-static int accessory_function_ctrlrequest(struct android_usb_function *f,
-						struct usb_composite_dev *cdev,
-						const struct usb_ctrlrequest *c)
-{
-	return acc_ctrlrequest(cdev, c);
-}
-
-static struct android_usb_function accessory_function = {
-	.name		= "accessory",
-	.init		= accessory_function_init,
-	.cleanup	= accessory_function_cleanup,
-	.bind_config	= accessory_function_bind_config,
-	.ctrlrequest	= accessory_function_ctrlrequest,
-};
-
 static int audio_source_function_init(struct android_usb_function *f,
 			struct usb_composite_dev *cdev)
 {
@@ -1820,7 +1786,6 @@ static struct android_usb_function *supported_functions[] = {
 #endif
 	&rndis_qc_function,
 	&mass_storage_function,
-	&accessory_function,
 	&audio_source_function,
 	&uasp_function,
 	NULL
@@ -2428,9 +2393,6 @@ android_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *c)
 	 * It needs to handle control requests before it is enabled.
 	 */
 	if (value < 0)
-		value = acc_ctrlrequest(cdev, c);
-
-	if (value < 0)
 		value = composite_setup(gadget, c);
 
 	spin_lock_irqsave(&cdev->lock, flags);
@@ -2457,7 +2419,6 @@ static void android_disconnect(struct usb_gadget *gadget)
 	   accessory function is not actually enabled,
 	   so we need to inform it when we are disconnected.
 	 */
-	acc_disconnect();
 
 	spin_lock_irqsave(&cdev->lock, flags);
 	dev->connected = 0;
