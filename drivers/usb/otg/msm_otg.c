@@ -1412,6 +1412,7 @@ static void msm_otg_start_host(struct usb_otg *otg, int on)
 	struct msm_otg *motg = container_of(otg->phy, struct msm_otg, phy);
 	struct msm_otg_platform_data *pdata = motg->pdata;
 	struct usb_hcd *hcd;
+	int ret;
 
 	if (!otg->host)
 		return;
@@ -1433,6 +1434,16 @@ static void msm_otg_start_host(struct usb_otg *otg, int on)
 		if (pdata->setup_gpio)
 			pdata->setup_gpio(OTG_STATE_A_HOST);
 		usb_add_hcd(hcd, hcd->irq, IRQF_SHARED);
+
+		/* Configure BUS performance parameters for MAX bandwidth */
+		if (motg->bus_perf_client && debug_bus_voting_enabled) {
+			ret = msm_bus_scale_client_update_request(
+					motg->bus_perf_client, 1);
+			if (ret)
+				dev_err(motg->phy.dev, "%s: Failed to vote for "
+					   "bus bandwidth %d\n", __func__, ret);
+		}
+
 	} else {
 		dev_dbg(otg->phy->dev, "host off\n");
 
@@ -1446,6 +1457,15 @@ static void msm_otg_start_host(struct usb_otg *otg, int on)
 		if (pdata->otg_control == OTG_PHY_CONTROL)
 			ulpi_write(otg->phy, OTG_COMP_DISABLE,
 				ULPI_CLR(ULPI_PWR_CLK_MNG_REG));
+
+		/* Configure BUS performance parameters to default */
+		if (motg->bus_perf_client) {
+			ret = msm_bus_scale_client_update_request(
+					motg->bus_perf_client, 0);
+			if (ret)
+				dev_err(motg->phy.dev, "%s: Failed to devote "
+					   "for bus bw %d\n", __func__, ret);
+		}
 	}
 }
 
