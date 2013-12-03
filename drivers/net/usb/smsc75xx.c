@@ -80,6 +80,10 @@ static bool turbo_mode = true;
 module_param(turbo_mode, bool, 0644);
 MODULE_PARM_DESC(turbo_mode, "Enable multiple frames per Rx transaction");
 
+static const bool disable_rx_flow_control = true;
+static const bool disable_tx_flow_control = false;
+
+
 static int __must_check smsc75xx_read_reg(struct usbnet *dev, u32 index,
 					  u32 *data)
 {
@@ -476,14 +480,23 @@ static int smsc75xx_update_flowcontrol(struct usbnet *dev, u8 duplex,
 	if (duplex == DUPLEX_FULL) {
 		u8 cap = mii_resolve_flowctrl_fdx(lcladv, rmtadv);
 
+		if (disable_tx_flow_control)
+			cap &= ~FLOW_CTRL_TX;
+
+		if (disable_rx_flow_control)
+			cap &= ~FLOW_CTRL_RX;
+
 		if (cap & FLOW_CTRL_TX) {
+			netif_dbg(dev, link, dev->net, "enable TX flowcontrol");
 			flow = (FLOW_TX_FCEN | 0xFFFF);
 			/* set fct_flow thresholds to 20% and 80% */
 			fct_flow = (8 << 8) | 32;
 		}
 
-		if (cap & FLOW_CTRL_RX)
+		if (cap & FLOW_CTRL_RX) {
+			netif_dbg(dev, link, dev->net, "enable RX flowcontrol");
 			flow |= FLOW_RX_FCEN;
+		}
 
 		netif_dbg(dev, link, dev->net, "rx pause %s, tx pause %s",
 			(cap & FLOW_CTRL_RX ? "enabled" : "disabled"),
