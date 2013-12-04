@@ -144,37 +144,6 @@ union reg_rb_edram_info {
 #define RBBM_READ_ERROR_REQUESTER	(1<<30)
 #define RBBM_READ_ERROR_ERROR		(1<<31)
 
-#define CP_RB_CNTL_RB_BUFSZ_SIZE                           6
-#define CP_RB_CNTL_UNUSED0_SIZE                            2
-#define CP_RB_CNTL_RB_BLKSZ_SIZE                           6
-#define CP_RB_CNTL_UNUSED1_SIZE                            2
-#define CP_RB_CNTL_BUF_SWAP_SIZE                           2
-#define CP_RB_CNTL_UNUSED2_SIZE                            2
-#define CP_RB_CNTL_RB_POLL_EN_SIZE                         1
-#define CP_RB_CNTL_UNUSED3_SIZE                            6
-#define CP_RB_CNTL_RB_NO_UPDATE_SIZE                       1
-#define CP_RB_CNTL_UNUSED4_SIZE                            3
-#define CP_RB_CNTL_RB_RPTR_WR_ENA_SIZE                     1
-
-struct cp_rb_cntl_t {
-	unsigned int rb_bufsz:CP_RB_CNTL_RB_BUFSZ_SIZE;
-	unsigned int unused0:CP_RB_CNTL_UNUSED0_SIZE;
-	unsigned int rb_blksz:CP_RB_CNTL_RB_BLKSZ_SIZE;
-	unsigned int unused1:CP_RB_CNTL_UNUSED1_SIZE;
-	unsigned int buf_swap:CP_RB_CNTL_BUF_SWAP_SIZE;
-	unsigned int unused2:CP_RB_CNTL_UNUSED2_SIZE;
-	unsigned int rb_poll_en:CP_RB_CNTL_RB_POLL_EN_SIZE;
-	unsigned int unused3:CP_RB_CNTL_UNUSED3_SIZE;
-	unsigned int rb_no_update:CP_RB_CNTL_RB_NO_UPDATE_SIZE;
-	unsigned int unused4:CP_RB_CNTL_UNUSED4_SIZE;
-	unsigned int rb_rptr_wr_ena:CP_RB_CNTL_RB_RPTR_WR_ENA_SIZE;
-};
-
-union reg_cp_rb_cntl {
-	unsigned int val:32;
-	struct cp_rb_cntl_t f;
-};
-
 #define RB_COLOR_INFO__COLOR_FORMAT_MASK                   0x0000000fL
 #define RB_COPY_DEST_INFO__COPY_DEST_FORMAT__SHIFT         0x00000004
 
