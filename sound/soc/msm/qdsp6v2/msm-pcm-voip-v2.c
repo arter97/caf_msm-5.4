@@ -552,6 +552,8 @@ static void voip_process_dl_pkt(uint8_t *voc_pkt, void *private_data)
 	struct voip_buf_node *buf_node = NULL;
 	struct voip_drv_info *prtd = private_data;
 	unsigned long dsp_flags;
+	uint32_t rate_type;
+	uint32_t frame_rate;
 
 	if (prtd->playback_substream == NULL)
 		return;
@@ -576,12 +578,21 @@ static void voip_process_dl_pkt(uint8_t *voc_pkt, void *private_data)
 			 */
 			*voc_pkt = ((buf_node->frame.frm_hdr.frame_type &
 				   0x0F) << 4);
-			if (buf_node->frame.frm_hdr.packet_rate & 0xF0) {
-				*voc_pkt |= ((buf_node->frame.frm_hdr.packet_rate &
-					    0xF0) >> 4);
-			} else {
-				*voc_pkt |= prtd->rate_type & 0x0F;
+			frame_rate = (buf_node->frame.frm_hdr.frame_type &
+				     0xFFFF0000) >> 16;
+			if (frame_rate) {
+				if (voip_get_rate_type(prtd->mode, frame_rate,
+						       &rate_type)) {
+					pr_err("%s: voip_get_rate_type failed:",
+					       __func__);
+					frame_rate = 0;
+				} else
+					*voc_pkt |= rate_type & 0x0F;
 			}
+
+			if (!frame_rate)
+				*voc_pkt |= prtd->rate_type & 0x0F;
+
 			voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
 			memcpy(voc_pkt,
 				&buf_node->frame.voc_pkt[0],
