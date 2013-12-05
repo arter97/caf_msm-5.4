@@ -776,6 +776,8 @@ static int smsc75xx_reset(struct usbnet *dev)
 	u32 buf;
 	int ret = 0, timeout;
 
+	turbo_mode = false;
+
 	netif_dbg(dev, ifup, dev->net, "entering smsc75xx_reset");
 
 	ret = smsc75xx_read_reg(dev, HW_CFG, &buf);
@@ -998,7 +1000,7 @@ static int smsc75xx_reset(struct usbnet *dev)
 	ret = smsc75xx_read_reg(dev, MAC_RX, &buf);
 	check_warn_return(ret, "Failed to read MAC_RX: %d", ret);
 
-	buf |= MAC_RX_RXEN;
+	buf |= MAC_RX_RXEN | MAC_RX_FCS_STRIP;
 
 	ret = smsc75xx_write_reg(dev, MAC_RX, buf);
 	check_warn_return(ret, "Failed to write MAC_RX: %d", ret);
