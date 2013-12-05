@@ -1398,7 +1398,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		err = mmc_get_ext_csd(card, &ext_csd);
 		if (err)
 			goto free_card;
-		memcpy(&card->cached_ext_csd, ext_csd, sizeof(card->ext_csd));
+		card->cached_ext_csd = ext_csd;
 		err = mmc_read_ext_csd(card, ext_csd);
 		if (err)
 			goto free_card;
@@ -1598,7 +1598,6 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	}
 
 
-	mmc_free_ext_csd(ext_csd);
 	return 0;
 
 free_card:
@@ -1606,8 +1605,6 @@ free_card:
 	if (!oldcard)
 		mmc_remove_card(card);
 err:
-	mmc_free_ext_csd(ext_csd);
-
 	return err;
 }
 
