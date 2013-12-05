@@ -32,7 +32,6 @@
 #include "adreno_pm4types.h"
 #include "adreno.h"
 #include "kgsl_trace.h"
-#include "z180.h"
 #include "kgsl_cffdump.h"
 
 
@@ -669,7 +668,7 @@ static void kgsl_iommu_destroy_pagetable(struct kgsl_pagetable *pt)
  * domain which is the actual IOMMU pagetable
  * Return - void
  */
-void *kgsl_iommu_create_pagetable(void)
+static void *kgsl_iommu_create_pagetable(void)
 {
 	int domain_num;
 	struct kgsl_iommu_pt *iommu_pt;
@@ -943,17 +942,6 @@ static int kgsl_iommu_init_sync_lock(struct kgsl_mmu *mmu)
 		!kgsl_mmu_is_perprocess(mmu))
 		return status;
 
-	/*
-	 * For 2D devices cpu side sync lock is required. For 3D device,
-	 * since we only have a single 3D core and we always ensure that
-	 * 3D core is idle while writing to IOMMU register using CPU this
-	 * lock is not required
-	 */
-	if (KGSL_DEVICE_2D0 == mmu->device->id ||
-		KGSL_DEVICE_2D1 == mmu->device->id) {
-		return status;
-	}
-
 	/* Return if already initialized */
 	if (iommu->sync_lock_initialized)
 		return status;
@@ -1007,7 +995,7 @@ static int kgsl_iommu_init_sync_lock(struct kgsl_mmu *mmu)
  *
  * Return - int - number of commands.
  */
-inline unsigned int kgsl_iommu_sync_lock(struct kgsl_mmu *mmu,
+static unsigned int kgsl_iommu_sync_lock(struct kgsl_mmu *mmu,
 						unsigned int *cmds)
 {
 	struct kgsl_device *device = mmu->device;
@@ -1059,13 +1047,13 @@ inline unsigned int kgsl_iommu_sync_lock(struct kgsl_mmu *mmu,
 }
 
 /*
- * kgsl_iommu_sync_lock - Release Sync Lock between GPU and CPU
+ * kgsl_iommu_sync_unlock - Release Sync Lock between GPU and CPU
  * @mmu - Pointer to mmu device
  * @cmds - Pointer to array of commands
  *
  * Return - int - number of commands.
  */
-inline unsigned int kgsl_iommu_sync_unlock(struct kgsl_mmu *mmu,
+static unsigned int kgsl_iommu_sync_unlock(struct kgsl_mmu *mmu,
 					unsigned int *cmds)
 {
 	struct kgsl_device *device = mmu->device;
@@ -1805,7 +1793,7 @@ kgsl_iommu_map(struct kgsl_pagetable *pt,
 	return ret;
 }
 
-void kgsl_iommu_pagefault_resume(struct kgsl_mmu *mmu)
+static void kgsl_iommu_pagefault_resume(struct kgsl_mmu *mmu)
 {
 	struct kgsl_iommu *iommu = mmu->priv;
 	int i, j;

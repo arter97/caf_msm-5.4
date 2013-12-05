@@ -49,6 +49,12 @@
 			label = "fb_mem";
 		};
 
+		audio_mem: audio_region {
+			linux,contiguous-region;
+			linux,reserve-region;
+			reg = <0 0x314000>;
+			label = "audio_mem";
+		};
 	};
 
 	soc: soc { };
@@ -229,13 +235,6 @@
 		compatible = "qcom,msm-lsuart-v14";
 		reg = <0xf991f000 0x1000>;
 		interrupts = <0 109 0>;
-		status = "disabled";
-	};
-
-	serial@f995e000 {
-		compatible = "qcom,msm-lsuart-v14";
-		reg = <0xf995e000 0x1000>;
-		interrupts = <0 114 0>;
 		status = "disabled";
 	};
 
@@ -464,6 +463,10 @@
 
 	qcom,msm-compr-dsp {
 		compatible = "qcom,msm-compr-dsp";
+	};
+
+	qcom,msm-compress-dsp {
+		compatible = "qcom,msm-compress-dsp";
 	};
 
 	qcom,msm-voip-dsp {
@@ -1125,6 +1128,7 @@
 		interrupts = <0 24 1>;
 		vdd_cx-supply = <&pm8226_s1_corner>;
 		vdd_mx-supply = <&pm8226_l3>;
+		vdd_mx-uV = <1050000>;
 		vdd_pll-supply = <&pm8226_l8>;
 		qcom,vdd_pll = <1800000>;
 
@@ -1150,14 +1154,13 @@
 	};
 
 	tsens: tsens@fc4a8000 {
-		compatible = "qcom,msm-tsens";
+		compatible = "qti,msm8x26-tsens";
 		reg = <0xfc4a8000 0x2000>,
 		      <0xfc4bc000 0x1000>;
 		reg-names = "tsens_physical", "tsens_eeprom_physical";
 		interrupts = <0 184 0>;
-		qcom,sensors = <4>;
-		qcom,slope = <2901 2846 3038 2955>;
-		qcom,calib-mode = "fuse_map2";
+		qti,sensors = <4>;
+		qti,slope = <2901 2846 3038 2955>;
 	};
 
 	qcom,msm-thermal {

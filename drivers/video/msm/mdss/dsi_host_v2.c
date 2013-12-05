@@ -33,10 +33,6 @@
 #define DSI_DMA_CMD_TIMEOUT_MS 200
 
 struct dsi_host_v2_private {
-	struct completion dma_comp;
-	int irq_enabled;
-	spinlock_t irq_lock;
-
 	int irq_no;
 	unsigned char *dsi_base;
 	size_t dsi_reg_size;
@@ -58,8 +54,6 @@ int msm_dsi_init(void)
 		}
 	}
 
-	init_completion(&dsi_host_private->dma_comp);
-	spin_lock_init(&dsi_host_private->irq_lock);
 	return 0;
 }
 
@@ -137,61 +131,98 @@ void msm_dsi_error(unsigned char *ctrl_base)
 	msm_dsi_dln0_phy_err(ctrl_base);
 }
 
-void msm_dsi_enable_irq(void)
+void msm_dsi_set_irq_mask(struct mdss_dsi_ctrl_pdata *ctrl, u32 mask)
+{
+	u32 intr_ctrl;
+	intr_ctrl = MIPI_INP(dsi_host_private->dsi_base + DSI_INT_CTRL);
+	intr_ctrl |= mask;
+	MIPI_OUTP(dsi_host_private->dsi_base + DSI_INT_CTRL, intr_ctrl);
+}
+
+void msm_dsi_clear_irq_mask(struct mdss_dsi_ctrl_pdata *ctrl, u32 mask)
+{
+	u32 intr_ctrl;
+	intr_ctrl = MIPI_INP(dsi_host_private->dsi_base + DSI_INT_CTRL);
+	intr_ctrl &= ~mask;
+	MIPI_OUTP(dsi_host_private->dsi_base + DSI_INT_CTRL, intr_ctrl);
+}
+
+void msm_dsi_set_irq(struct mdss_dsi_ctrl_pdata *ctrl, u32 mask)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&dsi_host_private->irq_lock, flags);
-	dsi_host_private->irq_enabled++;
-	if (dsi_host_private->irq_enabled == 1)
+	spin_lock_irqsave(&ctrl->irq_lock, flags);
+	if (ctrl->dsi_irq_mask & mask) {
+		spin_unlock_irqrestore(&ctrl->irq_lock, flags);
+		return;
+	}
+	if (ctrl->dsi_irq_mask == 0) {
 		enable_irq(dsi_host_private->irq_no);
+		pr_debug("%s: IRQ Enable, mask=%x term=%x\n", __func__,
+			(int)ctrl->dsi_irq_mask, (int)mask);
+	}
 
-	spin_unlock_irqrestore(&dsi_host_private->irq_lock, flags);
+	msm_dsi_set_irq_mask(ctrl, mask);
+	ctrl->dsi_irq_mask |= mask;
+	spin_unlock_irqrestore(&ctrl->irq_lock, flags);
 }
 
-void msm_dsi_disable_irq(void)
+void msm_dsi_clear_irq(struct mdss_dsi_ctrl_pdata *ctrl, u32 mask)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&dsi_host_private->irq_lock, flags);
-	dsi_host_private->irq_enabled--;
-	if (dsi_host_private->irq_enabled == 0)
+	spin_lock_irqsave(&ctrl->irq_lock, flags);
+	if (!(ctrl->dsi_irq_mask & mask)) {
+		spin_unlock_irqrestore(&ctrl->irq_lock, flags);
+		return;
+	}
+	ctrl->dsi_irq_mask &= ~mask;
+	if (ctrl->dsi_irq_mask == 0) {
 		disable_irq(dsi_host_private->irq_no);
-
-	spin_unlock_irqrestore(&dsi_host_private->irq_lock, flags);
+		pr_debug("%s: IRQ Disable, mask=%x term=%x\n", __func__,
+			(int)ctrl->dsi_irq_mask, (int)mask);
+	}
+	msm_dsi_clear_irq_mask(ctrl, mask);
+	spin_unlock_irqrestore(&ctrl->irq_lock, flags);
 }
 
-void msm_dsi_disable_irq_nosync(void)
-{
-	spin_lock(&dsi_host_private->irq_lock);
-	dsi_host_private->irq_enabled--;
-	if (dsi_host_private->irq_enabled == 0)
-		disable_irq_nosync(dsi_host_private->irq_no);
-	spin_unlock(&dsi_host_private->irq_lock);
-}
-
-irqreturn_t msm_dsi_isr(int irq, void *ptr)
+irqreturn_t msm_dsi_isr_handler(int irq, void *ptr)
 {
 	u32 isr;
+
+	struct mdss_dsi_ctrl_pdata *ctrl =
+		(struct mdss_dsi_ctrl_pdata *)ptr;
 
 	isr = MIPI_INP(dsi_host_private->dsi_base + DSI_INT_CTRL);
 	MIPI_OUTP(dsi_host_private->dsi_base + DSI_INT_CTRL, isr);
 
-	if (isr & DSI_INTR_ERROR)
+	pr_debug("%s: isr=%x", __func__, isr);
+
+	if (isr & DSI_INTR_ERROR) {
+		pr_err("%s: isr=%x %x", __func__, isr, (int)DSI_INTR_ERROR);
 		msm_dsi_error(dsi_host_private->dsi_base);
+	}
+
+	spin_lock(&ctrl->mdp_lock);
+
+	if (isr & DSI_INTR_VIDEO_DONE)
+		complete(&ctrl->video_comp);
 
 	if (isr & DSI_INTR_CMD_DMA_DONE)
-		complete(&dsi_host_private->dma_comp);
+		complete(&ctrl->dma_comp);
+
+	spin_unlock(&ctrl->mdp_lock);
 
 	return IRQ_HANDLED;
 }
 
-int msm_dsi_irq_init(struct device *dev, int irq_no)
+int msm_dsi_irq_init(struct device *dev, int irq_no,
+			struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	int ret;
 
-	ret = devm_request_irq(dev, irq_no, msm_dsi_isr,
-				IRQF_DISABLED, "DSI", NULL);
+	ret = devm_request_irq(dev, irq_no, msm_dsi_isr_handler,
+				IRQF_DISABLED, "DSI", ctrl);
 	if (ret) {
 		pr_err("msm_dsi_irq_init request_irq() failed!\n");
 		return ret;
@@ -203,7 +234,7 @@ int msm_dsi_irq_init(struct device *dev, int irq_no)
 
 void msm_dsi_host_init(struct mipi_panel_info *pinfo)
 {
-	u32 dsi_ctrl, intr_ctrl, data;
+	u32 dsi_ctrl, data;
 	unsigned char *ctrl_base = dsi_host_private->dsi_base;
 
 	pr_debug("msm_dsi_host_init\n");
@@ -262,8 +293,6 @@ void msm_dsi_host_init(struct mipi_panel_info *pinfo)
 		pr_err("%s: Unknown DSI mode=%d\n", __func__, pinfo->mode);
 
 	dsi_ctrl = BIT(8) | BIT(2); /* clock enable & cmd mode */
-	intr_ctrl = 0;
-	intr_ctrl = (DSI_INTR_CMD_DMA_DONE_MASK | DSI_INTR_CMD_MDP_DONE_MASK);
 
 	if (pinfo->crc_check)
 		dsi_ctrl |= BIT(24);
@@ -311,9 +340,6 @@ void msm_dsi_host_init(struct mipi_panel_info *pinfo)
 	/* allow only ack-err-status  to generate interrupt */
 	/* DSI_ERR_INT_MASK0 */
 	MIPI_OUTP(ctrl_base + DSI_ERR_INT_MASK0, 0x13ff3fe0);
-
-	intr_ctrl |= DSI_INTR_ERROR_MASK;
-	MIPI_OUTP(ctrl_base + DSI_INT_CTRL, intr_ctrl);
 
 	/* turn esc, byte, dsi, pclk, sclk, hclk on */
 	MIPI_OUTP(ctrl_base + DSI_CLK_CTRL, 0x23f);
@@ -404,7 +430,7 @@ void msm_dsi_controller_cfg(int enable)
 
 void msm_dsi_op_mode_config(int mode, struct mdss_panel_data *pdata)
 {
-	u32 dsi_ctrl, intr_ctrl;
+	u32 dsi_ctrl;
 	unsigned char *ctrl_base = dsi_host_private->dsi_base;
 
 	pr_debug("msm_dsi_op_mode_config\n");
@@ -415,42 +441,19 @@ void msm_dsi_op_mode_config(int mode, struct mdss_panel_data *pdata)
 
 	dsi_ctrl &= ~0x06;
 
-	if (mode == DSI_VIDEO_MODE) {
+	if (mode == DSI_VIDEO_MODE)
 		dsi_ctrl |= 0x02;
-		intr_ctrl = DSI_INTR_CMD_DMA_DONE_MASK;
-	} else {		/* command mode */
+	else
 		dsi_ctrl |= 0x04;
 
-		intr_ctrl = DSI_INTR_CMD_DMA_DONE_MASK | DSI_INTR_ERROR_MASK |
-				DSI_INTR_CMD_MDP_DONE_MASK;
-	}
+	pr_debug("%s: dsi_ctrl=%x\n", __func__, dsi_ctrl);
 
-	pr_debug("%s: dsi_ctrl=%x intr=%x\n", __func__, dsi_ctrl, intr_ctrl);
-
-	MIPI_OUTP(ctrl_base + DSI_INT_CTRL, intr_ctrl);
 	MIPI_OUTP(ctrl_base + DSI_CTRL, dsi_ctrl);
 	wmb();
 }
 
-int msm_dsi_cmd_reg_tx(u32 data)
-{
-	unsigned char *ctrl_base = dsi_host_private->dsi_base;
-
-	MIPI_OUTP(ctrl_base + DSI_TRIG_CTRL, 0x04);/* sw trigger */
-	MIPI_OUTP(ctrl_base + DSI_CTRL, 0x135);
-	wmb();
-
-	MIPI_OUTP(ctrl_base + DSI_COMMAND_MODE_DMA_CTRL, data);
-	wmb();
-	MIPI_OUTP(ctrl_base + DSI_CMD_MODE_DMA_SW_TRIGGER, 0x01);
-	wmb();
-
-	udelay(300); /*per spec*/
-
-	return 0;
-}
-
-int msm_dsi_cmd_dma_tx(struct dsi_buf *tp)
+int msm_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
+				struct dsi_buf *tp)
 {
 	int len, rc;
 	unsigned long size, addr;
@@ -468,7 +471,7 @@ int msm_dsi_cmd_dma_tx(struct dsi_buf *tp)
 
 	addr = tp->dmap;
 
-	INIT_COMPLETION(dsi_host_private->dma_comp);
+	INIT_COMPLETION(ctrl->dma_comp);
 
 	MIPI_OUTP(ctrl_base + DSI_DMA_CMD_OFFSET, addr);
 	MIPI_OUTP(ctrl_base + DSI_DMA_CMD_LENGTH, len);
@@ -477,7 +480,7 @@ int msm_dsi_cmd_dma_tx(struct dsi_buf *tp)
 	MIPI_OUTP(ctrl_base + DSI_CMD_MODE_DMA_SW_TRIGGER, 0x01);
 	wmb();
 
-	rc = wait_for_completion_timeout(&dsi_host_private->dma_comp,
+	rc = wait_for_completion_timeout(&ctrl->dma_comp,
 				msecs_to_jiffies(DSI_DMA_CMD_TIMEOUT_MS));
 	if (rc == 0) {
 		pr_err("DSI command transaction time out\n");
@@ -521,11 +524,12 @@ int msm_dsi_cmd_dma_rx(struct dsi_buf *rp, int rlen)
 	return 0;
 }
 
-int msm_dsi_cmds_tx(struct mdss_panel_data *pdata,
-			struct dsi_buf *tp, struct dsi_cmd_desc *cmds, int cnt)
+int msm_dsi_cmds_tx(struct mdss_dsi_ctrl_pdata *ctrl,
+			struct dsi_cmd_desc *cmds, int cnt)
 {
+	struct dsi_buf *tp;
 	struct dsi_cmd_desc *cm;
-	u32 dsi_ctrl, ctrl;
+	u32 dsi_ctrl, data;
 	int i, video_mode, rc = 0;
 	unsigned char *ctrl_base = dsi_host_private->dsi_base;
 
@@ -537,22 +541,23 @@ int msm_dsi_cmds_tx(struct mdss_panel_data *pdata,
 	dsi_ctrl = MIPI_INP(ctrl_base + DSI_CTRL);
 	video_mode = dsi_ctrl & 0x02; /* VIDEO_MODE_EN */
 	if (video_mode) {
-		ctrl = dsi_ctrl | 0x04; /* CMD_MODE_EN */
-		MIPI_OUTP(ctrl_base + DSI_CTRL, ctrl);
+		data = dsi_ctrl | 0x04; /* CMD_MODE_EN */
+		MIPI_OUTP(ctrl_base + DSI_CTRL, data);
 	}
 
-	msm_dsi_enable_irq();
+	msm_dsi_set_irq(ctrl, DSI_INTR_CMD_DMA_DONE_MASK);
 
+	tp = &ctrl->tx_buf;
 	cm = cmds;
 	for (i = 0; i < cnt; i++) {
-		dsi_buf_init(tp);
-		rc = dsi_cmd_dma_add(tp, cm);
+		mdss_dsi_buf_init(tp);
+		rc = mdss_dsi_cmd_dma_add(tp, cm);
 		if (!rc) {
 			pr_err("%s: dsi_cmd_dma_add fail\n", __func__);
 			rc = -EINVAL;
 			break;
 		}
-		rc = msm_dsi_cmd_dma_tx(tp);
+		rc = msm_dsi_cmd_dma_tx(ctrl, tp);
 		if (IS_ERR_VALUE(rc)) {
 			pr_err("%s: failed to call cmd_dma_tx\n", __func__);
 			break;
@@ -562,7 +567,7 @@ int msm_dsi_cmds_tx(struct mdss_panel_data *pdata,
 		cm++;
 	}
 
-	msm_dsi_disable_irq();
+	msm_dsi_clear_irq(ctrl, DSI_INTR_CMD_DMA_DONE_MASK);
 
 	if (video_mode)
 		MIPI_OUTP(ctrl_base + DSI_CTRL, dsi_ctrl);
@@ -589,15 +594,16 @@ static struct dsi_cmd_desc pkt_size_cmd[] = {
  *
  * ov_mutex need to be acquired before call this function.
  */
-int msm_dsi_cmds_rx(struct mdss_panel_data *pdata,
-			struct dsi_buf *tp, struct dsi_buf *rp,
+int msm_dsi_cmds_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 			struct dsi_cmd_desc *cmds, int rlen)
 {
+	struct dsi_buf *tp, *rp;
 	int cnt, len, diff, pkt_size, rc = 0;
 	char cmd;
 	unsigned char *ctrl_base = dsi_host_private->dsi_base;
 	u32 dsi_ctrl, data;
 	int video_mode;
+	struct mdss_panel_data *pdata = &ctrl->panel_data;
 
 	/* turn on cmd mode for video mode */
 	dsi_ctrl = MIPI_INP(ctrl_base + DSI_CTRL);
@@ -632,20 +638,23 @@ int msm_dsi_cmds_rx(struct mdss_panel_data *pdata,
 		cnt = len + 6; /* 4 bytes header + 2 bytes crc */
 	}
 
-	msm_dsi_enable_irq();
+	msm_dsi_set_irq(ctrl, DSI_INTR_CMD_DMA_DONE_MASK);
+
+	tp = &ctrl->tx_buf;
+	rp = &ctrl->rx_buf;
 
 	if (!pdata->panel_info.mipi.no_max_pkt_size) {
 		/* packet size need to be set at every read */
 		pkt_size = len;
 		max_pktsize[0] = pkt_size;
-		dsi_buf_init(tp);
-		rc = dsi_cmd_dma_add(tp, pkt_size_cmd);
+		mdss_dsi_buf_init(tp);
+		rc = mdss_dsi_cmd_dma_add(tp, pkt_size_cmd);
 		if (!rc) {
 			pr_err("%s: dsi_cmd_dma_add failed\n", __func__);
 			rp->len = 0;
 			goto msm_dsi_cmds_rx_err;
 		}
-		rc = msm_dsi_cmd_dma_tx(tp);
+		rc = msm_dsi_cmd_dma_tx(ctrl, tp);
 		if (IS_ERR_VALUE(rc)) {
 			pr_err("%s: msm_dsi_cmd_dma_tx failed\n", __func__);
 			rp->len = 0;
@@ -654,8 +663,8 @@ int msm_dsi_cmds_rx(struct mdss_panel_data *pdata,
 		pr_debug("%s: Max packet size sent\n", __func__);
 	}
 
-	dsi_buf_init(tp);
-	rc = dsi_cmd_dma_add(tp, cmds);
+	mdss_dsi_buf_init(tp);
+	rc = mdss_dsi_cmd_dma_add(tp, cmds);
 	if (!rc) {
 		pr_err("%s: dsi_cmd_dma_add failed\n", __func__);
 		rp->len = 0;
@@ -663,7 +672,7 @@ int msm_dsi_cmds_rx(struct mdss_panel_data *pdata,
 	}
 
 	/* transmit read comamnd to client */
-	rc = msm_dsi_cmd_dma_tx(tp);
+	rc = msm_dsi_cmd_dma_tx(ctrl, tp);
 	if (IS_ERR_VALUE(rc)) {
 		pr_err("%s: msm_dsi_cmd_dma_tx failed\n", __func__);
 		rp->len = 0;
@@ -674,7 +683,7 @@ int msm_dsi_cmds_rx(struct mdss_panel_data *pdata,
 	 * return data from client is ready and stored
 	 * at RDBK_DATA register already
 	 */
-	dsi_buf_init(rp);
+	mdss_dsi_buf_init(rp);
 	if (pdata->panel_info.mipi.no_max_pkt_size) {
 		/*
 		 * expect rlen = n * 4
@@ -704,15 +713,15 @@ int msm_dsi_cmds_rx(struct mdss_panel_data *pdata,
 		break;
 	case DTYPE_GEN_READ1_RESP:
 	case DTYPE_DCS_READ1_RESP:
-		dsi_short_read1_resp(rp);
+		mdss_dsi_short_read1_resp(rp);
 		break;
 	case DTYPE_GEN_READ2_RESP:
 	case DTYPE_DCS_READ2_RESP:
-		dsi_short_read2_resp(rp);
+		mdss_dsi_short_read2_resp(rp);
 		break;
 	case DTYPE_GEN_LREAD_RESP:
 	case DTYPE_DCS_LREAD_RESP:
-		dsi_long_read_resp(rp);
+		mdss_dsi_long_read_resp(rp);
 		rp->len -= 2; /* extra 2 bytes added */
 		rp->len -= diff; /* align bytes */
 		break;
@@ -727,8 +736,56 @@ int msm_dsi_cmds_rx(struct mdss_panel_data *pdata,
 					dsi_ctrl); /* restore */
 
 msm_dsi_cmds_rx_err:
-	msm_dsi_disable_irq();
+	msm_dsi_clear_irq(ctrl, DSI_INTR_CMD_DMA_DONE_MASK);
 	return rp->len;
+}
+
+void msm_dsi_cmdlist_tx(struct mdss_dsi_ctrl_pdata *ctrl,
+				struct dcs_cmd_req *req)
+{
+	int ret;
+
+	ret = msm_dsi_cmds_tx(ctrl, req->cmds, req->cmds_cnt);
+
+	if (req->cb)
+		req->cb(ret);
+}
+
+void msm_dsi_cmdlist_rx(struct mdss_dsi_ctrl_pdata *ctrl,
+				struct dcs_cmd_req *req)
+{
+	struct dsi_buf *rp;
+	int len = 0;
+
+	if (req->rbuf) {
+		rp = &ctrl->rx_buf;
+		len = msm_dsi_cmds_rx(ctrl, req->cmds, req->rlen);
+		memcpy(req->rbuf, rp->data, rp->len);
+	} else {
+		pr_err("%s: No rx buffer provided\n", __func__);
+	}
+
+	if (req->cb)
+		req->cb(len);
+}
+void msm_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
+{
+	struct dcs_cmd_req *req;
+
+	mutex_lock(&ctrl->cmd_mutex);
+	req = mdss_dsi_cmdlist_get(ctrl);
+
+	if (!req) {
+		mutex_unlock(&ctrl->cmd_mutex);
+		return;
+	}
+
+	if (req->flags & CMD_REQ_RX)
+		msm_dsi_cmdlist_rx(ctrl, req);
+	else
+		msm_dsi_cmdlist_tx(ctrl, req);
+
+	mutex_unlock(&ctrl->cmd_mutex);
 }
 
 static int msm_dsi_cal_clk_rate(struct mdss_panel_data *pdata,
@@ -891,6 +948,8 @@ static int msm_dsi_on(struct mdss_panel_data *pdata)
 
 	msm_dsi_op_mode_config(mipi->mode, pdata);
 
+	msm_dsi_set_irq(ctrl_pdata, DSI_INTR_ERROR_MASK);
+
 	return ret;
 }
 
@@ -909,6 +968,7 @@ static int msm_dsi_off(struct mdss_panel_data *pdata)
 				panel_data);
 
 	pr_debug("msm_dsi_off\n");
+	msm_dsi_clear_irq(ctrl_pdata, ctrl_pdata->dsi_irq_mask);
 	msm_dsi_controller_cfg(0);
 	msm_dsi_clk_set_rate(DSI_ESC_CLK_RATE, 0, 0, 0);
 	msm_dsi_clk_disable();
@@ -957,6 +1017,7 @@ static int msm_dsi_cont_on(struct mdss_panel_data *pdata)
 	msm_dsi_ahb_ctrl(1);
 	msm_dsi_prepare_clocks();
 	msm_dsi_clk_enable();
+	msm_dsi_set_irq(ctrl_pdata, DSI_INTR_ERROR_MASK);
 	return 0;
 }
 
@@ -1106,6 +1167,22 @@ static int msm_dsi_clk_ctrl(struct mdss_panel_data *pdata, int enable)
 	return 0;
 }
 
+void msm_dsi_ctrl_init(struct mdss_dsi_ctrl_pdata *ctrl)
+{
+	init_completion(&ctrl->dma_comp);
+	init_completion(&ctrl->mdp_comp);
+	init_completion(&ctrl->video_comp);
+	spin_lock_init(&ctrl->irq_lock);
+	spin_lock_init(&ctrl->mdp_lock);
+	mutex_init(&ctrl->mutex);
+	mutex_init(&ctrl->cmd_mutex);
+	complete(&ctrl->mdp_comp);
+	dsi_buf_alloc(&ctrl->tx_buf, SZ_4K);
+	dsi_buf_alloc(&ctrl->rx_buf, SZ_4K);
+	ctrl->cmdlist_commit = msm_dsi_cmdlist_commit;
+	ctrl->panel_mode = ctrl->panel_data.panel_info.mipi.mode;
+}
+
 static int msm_dsi_probe(struct platform_device *pdev)
 {
 	struct dsi_interface intf;
@@ -1166,7 +1243,8 @@ static int msm_dsi_probe(struct platform_device *pdev)
 		rc = -ENODEV;
 		goto error_irq_resource;
 	} else {
-		rc = msm_dsi_irq_init(&pdev->dev, mdss_dsi_mres->start);
+		rc = msm_dsi_irq_init(&pdev->dev, mdss_dsi_mres->start,
+					ctrl_pdata);
 		if (rc) {
 			dev_err(&pdev->dev, "%s: failed to init irq, rc=%d\n",
 								__func__, rc);
@@ -1226,13 +1304,13 @@ static int msm_dsi_probe(struct platform_device *pdev)
 	intf.cont_on = msm_dsi_cont_on;
 	intf.clk_ctrl = msm_dsi_clk_ctrl;
 	intf.op_mode_config = msm_dsi_op_mode_config;
-	intf.tx = msm_dsi_cmds_tx;
-	intf.rx = msm_dsi_cmds_rx;
 	intf.index = 0;
 	intf.private = NULL;
 	dsi_register_interface(&intf);
 
 	msm_dsi_debug_init();
+
+	msm_dsi_ctrl_init(ctrl_pdata);
 
 	rc = dsi_panel_device_register_v2(pdev, ctrl_pdata);
 	if (rc) {
@@ -1248,7 +1326,7 @@ error_io_init:
 error_pan_node:
 	of_node_put(dsi_pan_node);
 error_platform_pop:
-	msm_dsi_disable_irq();
+	msm_dsi_clear_irq(ctrl_pdata, ctrl_pdata->dsi_irq_mask);
 error_irq_resource:
 	if (dsi_host_private->dsi_base) {
 		iounmap(dsi_host_private->dsi_base);
@@ -1270,7 +1348,7 @@ static int msm_dsi_remove(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	msm_dsi_disable_irq();
+	msm_dsi_clear_irq(ctrl_pdata, ctrl_pdata->dsi_irq_mask);
 	msm_dsi_io_deinit(pdev, &(ctrl_pdata->power_data));
 	dsi_ctrl_config_deinit(pdev, ctrl_pdata);
 	iounmap(dsi_host_private->dsi_base);

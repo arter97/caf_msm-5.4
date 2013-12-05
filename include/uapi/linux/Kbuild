@@ -90,7 +90,6 @@ header-y += connector.h
 header-y += const.h
 header-y += coresight-stm.h
 header-y += cramfs_fs.h
-header-y += csdio.h
 header-y += cuda.h
 header-y += cyclades.h
 header-y += cycx_cfm.h
@@ -224,6 +223,7 @@ header-y += kernelcapi.h
 header-y += kexec.h
 header-y += keyboard.h
 header-y += keyctl.h
+header-y += ensigma_uccp330.h
 
 ifneq ($(wildcard $(srctree)/arch/$(SRCARCH)/include/uapi/asm/kvm.h \
 		  $(srctree)/arch/$(SRCARCH)/include/asm/kvm.h),)
@@ -465,5 +465,7 @@ header-y += wireless.h
 header-y += x25.h
 header-y += xattr.h
 header-y += xfrm.h
+header-y += msm_thermal_ioctl.h
 header-y += hw_breakpoint.h
 header-y += android_pmem.h
+header-y += tsc.h

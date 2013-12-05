@@ -436,7 +436,7 @@ struct ion_handle *ion_alloc(struct ion_client *client, size_t len,
 	 */
 	flags |= ION_FLAG_CACHED_NEEDS_SYNC;
 
-	pr_debug("%s: len %d align %d heap_id_mask %u flags %x\n", __func__,
+	pr_debug("%s: len %zu align %zu heap_id_mask %u flags %x\n", __func__,
 		 len, align, heap_id_mask, flags);
 	/*
 	 * traverse the list of heaps available in this system in priority
@@ -497,8 +497,7 @@ struct ion_handle *ion_alloc(struct ion_client *client, size_t len,
 		trace_ion_alloc_buffer_fail(client->name, dbg_str, len,
 					    heap_id_mask, flags,
 					    PTR_ERR(buffer));
-		pr_debug("ION is unable to allocate 0x%x bytes (alignment: "
-			 "0x%x) from heap(s) %sfor client %s\n",
+		pr_debug("ION is unable to allocate 0x%zx bytes (alignment: 0x%zx) from heap(s) %sfor client %s\n",
 			len, align, dbg_str, client->name);
 		return ERR_PTR(PTR_ERR(buffer));
 	}
@@ -675,7 +674,7 @@ static int ion_debug_client_show(struct seq_file *s, void *unused)
 		struct ion_handle *handle = rb_entry(n, struct ion_handle,
 						     node);
 
-		seq_printf(s, "%16.16s: %16x : %16d : %12p",
+		seq_printf(s, "%16.16s: %16zx : %16d : %12p",
 				handle->buffer->heap->name,
 				handle->buffer->size,
 				atomic_read(&handle->ref.refcount),
@@ -737,16 +736,12 @@ struct ion_client *ion_client_create(struct ion_device *dev,
 	struct rb_node *parent = NULL;
 	struct ion_client *entry;
 	pid_t pid;
-	int name_len;
 	int client_serial;
 
 	if (!name) {
 		pr_err("%s: Name cannot be null\n", __func__);
 		return ERR_PTR(-EINVAL);
 	}
-	name_len = strnlen(name, 64);
-	/* add some space to accommodate the serial number suffix */
-	name_len = min(64, name_len + 11);
 
 	get_task_struct(current->group_leader);
 	task_lock(current->group_leader);
@@ -772,19 +767,18 @@ struct ion_client *ion_client_create(struct ion_device *dev,
 	client->handles = RB_ROOT;
 	mutex_init(&client->lock);
 
-	client->name = kzalloc(name_len+1, GFP_KERNEL);
-	if (!client->name) {
-		put_task_struct(current->group_leader);
-		kfree(client);
-		return ERR_PTR(-ENOMEM);
-	}
-
 	client->task = task;
 	client->pid = pid;
 
 	down_write(&dev->lock);
 	client_serial = ion_get_client_serial(&dev->clients, name);
-	snprintf(client->name, name_len, "%s-%d", name, client_serial);
+	client->name = kasprintf(GFP_KERNEL, "%s-%d", name, client_serial);
+	if (!client->name) {
+		up_write(&dev->lock);
+		put_task_struct(current->group_leader);
+		kfree(client);
+		return ERR_PTR(-ENOMEM);
+	}
 	p = &dev->clients.rb_node;
 	while (*p) {
 		parent = *p;
@@ -1545,10 +1539,10 @@ static int ion_debug_heap_show(struct seq_file *s, void *unused)
 			char task_comm[TASK_COMM_LEN];
 
 			get_task_comm(task_comm, client->task);
-			seq_printf(s, "%16.s %16u %16u\n", task_comm,
+			seq_printf(s, "%16.s %16u %16zu\n", task_comm,
 				   client->pid, size);
 		} else {
-			seq_printf(s, "%16.s %16u %16u\n", client->name,
+			seq_printf(s, "%16.s %16u %16zu\n", client->name,
 				   client->pid, size);
 		}
 	}
@@ -1564,17 +1558,18 @@ static int ion_debug_heap_show(struct seq_file *s, void *unused)
 			continue;
 		total_size += buffer->size;
 		if (!buffer->handle_count) {
-			seq_printf(s, "%16.s %16u %16u %d %d\n", buffer->task_comm,
-				   buffer->pid, buffer->size, buffer->kmap_cnt,
-				   atomic_read(&buffer->ref.refcount));
+			seq_printf(s, "%16.s %16u %16zu %d %d\n",
+				buffer->task_comm, buffer->pid, buffer->size,
+				buffer->kmap_cnt,
+				atomic_read(&buffer->ref.refcount));
 			total_orphaned_size += buffer->size;
 		}
 	}
 	mutex_unlock(&dev->buffer_lock);
 	seq_printf(s, "----------------------------------------------------\n");
-	seq_printf(s, "%16.s %16u\n", "total orphaned",
+	seq_printf(s, "%16.s %16zu\n", "total orphaned",
 		   total_orphaned_size);
-	seq_printf(s, "%16.s %16u\n", "total ", total_size);
+	seq_printf(s, "%16.s %16zu\n", "total ", total_size);
 	seq_printf(s, "----------------------------------------------------\n");
 
 	if (heap->debug_show)
@@ -1838,11 +1833,11 @@ void __init ion_reserve(struct ion_platform_data *data)
 			int ret = memblock_reserve(data->heaps[i].base,
 					       data->heaps[i].size);
 			if (ret)
-				pr_err("memblock reserve of %x@%pa failed\n",
+				pr_err("memblock reserve of %zx@%pa failed\n",
 				       data->heaps[i].size,
 				       &data->heaps[i].base);
 		}
-		pr_info("%s: %s reserved base %pa size %d\n", __func__,
+		pr_info("%s: %s reserved base %pa size %zu\n", __func__,
 			data->heaps[i].name,
 			&data->heaps[i].base,
 			data->heaps[i].size);

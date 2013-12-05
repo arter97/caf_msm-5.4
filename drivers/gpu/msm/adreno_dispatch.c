@@ -507,7 +507,7 @@ static int _adreno_dispatcher_issuecmds(struct adreno_device *adreno_dev)
  *
  * Lock the dispatcher and call _adreno_dispatcher_issueibcmds
  */
-int adreno_dispatcher_issuecmds(struct adreno_device *adreno_dev)
+static int adreno_dispatcher_issuecmds(struct adreno_device *adreno_dev)
 {
 	struct adreno_dispatcher *dispatcher = &adreno_dev->dispatcher;
 	int ret;
@@ -974,16 +974,12 @@ static int dispatcher_do_fault(struct kgsl_device *device)
 	adreno_readreg(adreno_dev, ADRENO_REG_CP_IB1_BASE, &base);
 
 	/*
-	 * Dump the postmortem and snapshot information if this is the first
+	 * Dump the snapshot information if this is the first
 	 * detected fault for the oldest active command batch
 	 */
 
 	if (!test_bit(KGSL_FT_SKIP_PMDUMP, &cmdbatch->fault_policy)) {
 		adreno_fault_header(device, cmdbatch);
-
-		if (device->pm_dump_enable)
-			kgsl_postmortem_dump(device, 0);
-
 		kgsl_device_snapshot(device, 1);
 	}
 
@@ -1465,7 +1461,7 @@ void adreno_dispatcher_queue_context(struct kgsl_device *device,
  * subsequent calls then the GPU may have faulted
  */
 
-void adreno_dispatcher_fault_timer(unsigned long data)
+static void adreno_dispatcher_fault_timer(unsigned long data)
 {
 	struct adreno_device *adreno_dev = (struct adreno_device *) data;
 	struct kgsl_device *device = &adreno_dev->dev;
@@ -1498,7 +1494,7 @@ void adreno_dispatcher_fault_timer(unsigned long data)
  * This is called when the timer expires - it either means the GPU is hung or
  * the IB is taking too long to execute
  */
-void adreno_dispatcher_timer(unsigned long data)
+static void adreno_dispatcher_timer(unsigned long data)
 {
 	struct adreno_device *adreno_dev = (struct adreno_device *) data;
 	struct kgsl_device *device = &adreno_dev->dev;

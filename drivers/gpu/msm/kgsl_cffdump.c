@@ -424,7 +424,7 @@ void kgsl_cffdump_syncmem(struct kgsl_device *device,
 
 	total_syncmem += sizebytes;
 
-	src = (uint *)kgsl_gpuaddr_to_vaddr(memdesc, gpuaddr);
+	src = kgsl_gpuaddr_to_vaddr(memdesc, gpuaddr);
 	if (memdesc->hostptr == NULL) {
 		KGSL_CORE_ERR(
 		"no kernel map for gpuaddr: 0x%08x, m->host: 0x%p, phys: %pa\n",
@@ -518,7 +518,7 @@ static int subbuf_start_handler(struct rchan_buf *buf,
 	void *subbuf, void *prev_subbuf, size_t prev_padding)
 {
 	pr_debug("kgsl: cffdump: subbuf_start_handler(subbuf=%p, prev_subbuf"
-		+"=%p, prev_padding=%08zx)\n", subbuf, prev_subbuf,
+		"=%p, prev_padding=%08zx)\n", subbuf, prev_subbuf,
 		 prev_padding);
 
 	if (relay_buf_full(buf)) {

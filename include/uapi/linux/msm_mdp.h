@@ -408,7 +408,7 @@ struct mdp_pa_mem_col_cfg {
 	uint32_t val_region;
 };
 
-#define MDP_SIX_ZONE_TABLE_NUM		384
+#define MDP_SIX_ZONE_LUT_SIZE		384
 
 struct mdp_pa_v2_data {
 	/* Mask bits for PA features */
@@ -417,6 +417,7 @@ struct mdp_pa_v2_data {
 	uint32_t global_sat_adj;
 	uint32_t global_val_adj;
 	uint32_t global_cont_adj;
+	uint32_t six_zone_len;
 	uint32_t *six_zone_curve_p0;
 	uint32_t *six_zone_curve_p1;
 	uint32_t six_zone_thresh;
@@ -536,6 +537,8 @@ struct mdp_scale_data {
  * @flags:	This is used to customize operation of overlay. See MDP flags
  *		for more information.
  * @user_data:	DEPRECATED* Used to store user application specific information.
+ * @bg_color:	Solid color used to fill the overlay surface when no source
+ *		buffer is provided.
  * @horz_deci:	Horizontal decimation value, this indicates the amount of pixels
  *		dropped for each pixel that is fetched from a line. The value
  *		given should be power of two of decimation amount.
@@ -566,7 +569,8 @@ struct mdp_overlay {
 	uint32_t transp_mask;
 	uint32_t flags;
 	uint32_t id;
-	uint32_t user_data[7];
+	uint32_t user_data[6];
+	uint32_t bg_color;
 	uint8_t horz_deci;
 	uint8_t vert_deci;
 	struct mdp_overlay_pp_params overlay_pp_cfg;

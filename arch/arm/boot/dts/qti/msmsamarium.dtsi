@@ -1232,15 +1232,14 @@
 	};
 
 	tsens: tsens@fc4a8000 {
-		compatible = "qcom,msm-tsens";
+		compatible = "qti,msm-tsens";
 		reg = <0xfc4a8000 0x2000>,
 		      <0xfc4bc000 0x1000>;
 		reg-names = "tsens_physical", "tsens_eeprom_physical";
 		interrupts = <0 184 0>;
-		qcom,sensors = <11>;
-		qcom,slope = <3200 3200 3200 3200 3200 3200 3200 3200 3200
+		qti,sensors = <11>;
+		qti,slope = <3200 3200 3200 3200 3200 3200 3200 3200 3200
 				3200 3200>;
-		qcom,calib-mode = "fuse_map1";
 	};
 
 	qcom,msm-rng@f9bff000 {
@@ -1267,6 +1266,7 @@
 		vdd_mss-supply = <&pma8084_s6>;
 		vdd_cx-supply = <&pma8084_s2_corner>;
 		vdd_mx-supply = <&pma8084_s1>;
+		vdd_mx-uV = <1050000>;
 		vdd_pll-supply = <&pma8084_l12>;
 		qcom,vdd_pll = <1800000>;
 		qcom,firmware-name = "mba";

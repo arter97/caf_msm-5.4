@@ -176,6 +176,31 @@ int mdss_mdp_smp_reserve(struct mdss_mdp_pipe *pipe)
 			pipe->src_fmt, &ps);
 		if (rc)
 			return rc;
+		/*
+		 * Override fetch strides with SMP buffer size for both the
+		 * planes
+		 */
+		if (pipe->src_fmt->fetch_planes == MDSS_MDP_PLANE_INTERLEAVED) {
+			/*
+			 * BWC line buffer needs to be divided into 16
+			 * segments and every segment is aligned to format
+			 * specific RAU size
+			 */
+			ps.ystride[0] = ALIGN(pipe->src.w / 16 , 32) * 16 *
+				ps.rau_h[0] * pipe->src_fmt->bpp;
+			ps.ystride[1] = 0;
+		} else {
+			u32 bwc_width = ALIGN(pipe->src.w / 16, 64) * 16;
+			ps.ystride[0] = bwc_width * ps.rau_h[0];
+			ps.ystride[1] = bwc_width * ps.rau_h[1];
+			/*
+			 * Since chroma for H1V2 is not subsampled it needs
+			 * to be accounted for with bpp factor
+			 */
+			if (pipe->src_fmt->chroma_sample ==
+				MDSS_MDP_CHROMA_H1V2)
+				ps.ystride[1] *= 2;
+		}
 		pr_debug("BWC SMP strides ystride0=%x ystride1=%x\n",
 			ps.ystride[0], ps.ystride[1]);
 	} else {
@@ -943,6 +968,8 @@ static int mdss_mdp_pipe_solidfill_setup(struct mdss_mdp_pipe *pipe)
 	secure = (pipe->flags & MDP_SECURE_OVERLAY_SESSION ? 0xF : 0x0);
 
 	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC_FORMAT, format);
+	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC_CONSTANT_COLOR,
+		pipe->bg_color);
 	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC_ADDR_SW_STATUS, secure);
 
 	return 0;
@@ -981,7 +1008,8 @@ int mdss_mdp_pipe_queue_data(struct mdss_mdp_pipe *pipe,
 			 (pipe->mixer->type == MDSS_MDP_MIXER_TYPE_WRITEBACK)
 			 && (ctl->mdata->mixer_switched)) ||
 			 ctl->roi_changed;
-	if (src_data == NULL) {
+	if (src_data == NULL || !pipe->has_buf) {
+		pipe->params_changed = 0;
 		mdss_mdp_pipe_solidfill_setup(pipe);
 		goto update_nobuf;
 	}

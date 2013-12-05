@@ -1135,7 +1135,7 @@ long diagchar_ioctl(struct file *filp,
 	return result;
 }
 
-static int diagchar_read(struct file *file, char __user *buf, size_t count,
+static ssize_t diagchar_read(struct file *file, char __user *buf, size_t count,
 			  loff_t *ppos)
 {
 	struct diag_dci_client_tbl *entry;
@@ -1144,6 +1144,7 @@ static int diagchar_read(struct file *file, char __user *buf, size_t count,
 	int remote_token;
 	int exit_stat;
 	int clear_read_wakelock;
+	unsigned long flags;
 
 	for (i = 0; i < driver->num_clients; i++)
 		if (driver->client_map[i].pid == current->tgid)
@@ -1228,7 +1229,10 @@ drop:
 					process_lock_on_copy(&data->nrt_lock);
 					clear_read_wakelock++;
 				}
+				spin_lock_irqsave(&data->in_busy_lock, flags);
 				data->in_busy_1 = 0;
+				spin_unlock_irqrestore(&data->in_busy_lock,
+						       flags);
 			}
 			if (data->in_busy_2 == 1) {
 				num_data++;
@@ -1243,7 +1247,10 @@ drop:
 					process_lock_on_copy(&data->nrt_lock);
 					clear_read_wakelock++;
 				}
+				spin_lock_irqsave(&data->in_busy_lock, flags);
 				data->in_busy_2 = 0;
+				spin_unlock_irqrestore(&data->in_busy_lock,
+						       flags);
 			}
 		}
 		if (driver->supports_separate_cmdrsp) {
@@ -1425,7 +1432,7 @@ exit:
 	return ret;
 }
 
-static int diagchar_write(struct file *file, const char __user *buf,
+static ssize_t diagchar_write(struct file *file, const char __user *buf,
 				size_t count, loff_t *ppos)
 {
 	int err, ret = 0, pkt_type, token_offset = 0;
@@ -1610,22 +1617,15 @@ static int diagchar_write(struct file *file, const char __user *buf,
 		goto fail_free_hdlc;
 	}
 	if (pkt_type == USER_SPACE_DATA_TYPE) {
-		user_space_data = diagmem_alloc(driver, payload_size,
-								POOL_TYPE_USER);
-		if (!user_space_data) {
-			driver->dropped_count++;
-			return -ENOMEM;
-		}
-		err = copy_from_user(user_space_data, buf + 4,
+		err = copy_from_user(driver->user_space_data_buf, buf + 4,
 							 payload_size);
 		if (err) {
 			pr_err("diag: copy failed for user space data\n");
-			diagmem_free(driver, user_space_data, POOL_TYPE_USER);
-			user_space_data = NULL;
 			return -EIO;
 		}
 		/* Check for proc_type */
-		remote_proc = diag_get_remote(*(int *)user_space_data);
+		remote_proc =
+			diag_get_remote(*(int *)driver->user_space_data_buf);
 
 		if (remote_proc) {
 			token_offset = 4;
@@ -1635,12 +1635,9 @@ static int diagchar_write(struct file *file, const char __user *buf,
 
 		/* Check masks for On-Device logging */
 		if (driver->mask_check) {
-			if (!mask_request_validate(user_space_data +
+			if (!mask_request_validate(driver->user_space_data_buf +
 							 token_offset)) {
 				pr_alert("diag: mask request Invalid\n");
-				diagmem_free(driver, user_space_data,
-							POOL_TYPE_USER);
-				user_space_data = NULL;
 				return -EFAULT;
 			}
 		}
@@ -1648,7 +1645,7 @@ static int diagchar_write(struct file *file, const char __user *buf,
 #ifdef DIAG_DEBUG
 		pr_debug("diag: user space data %d\n", payload_size);
 		for (i = 0; i < payload_size; i++)
-			pr_debug("\t %x", *((user_space_data
+			pr_debug("\t %x", *((driver->user_space_data_buf
 						+ token_offset)+i));
 #endif
 #ifdef CONFIG_DIAG_SDIO_PIPE
@@ -1659,7 +1656,7 @@ static int diagchar_write(struct file *file, const char __user *buf,
 					 payload_size));
 			if (driver->sdio_ch && (payload_size > 0)) {
 				sdio_write(driver->sdio_ch, (void *)
-				   (user_space_data + token_offset),
+				   (driver->user_space_data_buf + token_offset),
 				   payload_size);
 			}
 		}
@@ -1690,8 +1687,8 @@ static int diagchar_write(struct file *file, const char __user *buf,
 				diag_hsic[index].in_busy_hsic_read_on_device =
 									0;
 				err = diag_bridge_write(index,
-						user_space_data + token_offset,
-						payload_size);
+						driver->user_space_data_buf +
+						token_offset, payload_size);
 				if (err) {
 					pr_err("diag: err sending mask to MDM: %d\n",
 					       err);
@@ -1712,14 +1709,12 @@ static int diagchar_write(struct file *file, const char __user *buf,
 						&& driver->lcid) {
 			if (payload_size > 0) {
 				err = msm_smux_write(driver->lcid, NULL,
-					user_space_data + token_offset,
-					payload_size);
+					driver->user_space_data_buf +
+						token_offset,
+						payload_size);
 				if (err) {
 					pr_err("diag:send mask to MDM err %d",
 							err);
-					diagmem_free(driver, user_space_data,
-								POOL_TYPE_USER);
-					user_space_data = NULL;
 					return err;
 				}
 			}
@@ -1728,9 +1723,8 @@ static int diagchar_write(struct file *file, const char __user *buf,
 		/* send masks to 8k now */
 		if (!remote_proc)
 			diag_process_hdlc((void *)
-				(user_space_data + token_offset), payload_size);
-		diagmem_free(driver, user_space_data, POOL_TYPE_USER);
-		user_space_data = NULL;
+				(driver->user_space_data_buf + token_offset),
+					payload_size);
 		return 0;
 	}
 
@@ -1852,8 +1846,8 @@ static int diagchar_write(struct file *file, const char __user *buf,
 	/* This is to check if after HDLC encoding, we are still within the
 	 limits of aggregation buffer. If not, we write out the current buffer
 	and start aggregation in a newly allocated buffer */
-	if ((unsigned int) enc.dest >=
-		 (unsigned int)(buf_hdlc + HDLC_OUT_BUF_SIZE)) {
+	if ((uintptr_t)enc.dest >=
+		 (uintptr_t)(buf_hdlc + HDLC_OUT_BUF_SIZE)) {
 		err = diag_device_write(buf_hdlc, APPS_DATA, NULL);
 		if (err) {
 			ret = -EIO;
@@ -1873,7 +1867,10 @@ static int diagchar_write(struct file *file, const char __user *buf,
 		diag_hdlc_encode(&send, &enc);
 	}
 
-	driver->used = (uint32_t) enc.dest - (uint32_t) buf_hdlc;
+	driver->used = ((uintptr_t)enc.dest - (uintptr_t)buf_hdlc <
+						HDLC_OUT_BUF_SIZE) ?
+			((uintptr_t)enc.dest - (uintptr_t)buf_hdlc) :
+						HDLC_OUT_BUF_SIZE;
 	if (pkt_type == DATA_TYPE_RESPONSE) {
 		err = diag_device_write(buf_hdlc, APPS_DATA, NULL);
 		if (err) {

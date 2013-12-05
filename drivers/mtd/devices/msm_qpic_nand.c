@@ -2842,7 +2842,7 @@ static int msm_nand_parse_smem_ptable(int *nr_parts)
 	pr_info("Parsing partition table info from SMEM\n");
 	/* Read only the header portion of ptable */
 	ptable = *(struct flash_partition_table *)
-			(smem_get_entry_to_proc(SMEM_AARM_PARTITION_TABLE, &len,
+			(smem_get_entry(SMEM_AARM_PARTITION_TABLE, &len,
 							0, SMEM_ANY_HOST_FLAG));
 	/* Verify ptable magic */
 	if (ptable.magic1 != FLASH_PART_MAGIC1 ||
@@ -2869,7 +2869,7 @@ static int msm_nand_parse_smem_ptable(int *nr_parts)
 
 	*nr_parts = ptable.numparts;
 	ptable = *(struct flash_partition_table *)
-			(smem_get_entry_to_proc(SMEM_AARM_PARTITION_TABLE, &len,
+			(smem_get_entry(SMEM_AARM_PARTITION_TABLE, &len,
 							0, SMEM_ANY_HOST_FLAG));
 	for (i = 0; i < ptable.numparts; i++) {
 		pentry = &ptable.part_entry[i];
@@ -2994,6 +2994,7 @@ static int msm_nand_probe(struct platform_device *pdev)
 	err = msm_nand_setup_clocks_and_bus_bw(info, true);
 	if (err)
 		goto bus_unregister;
+	dev_set_drvdata(&pdev->dev, info);
 	err = pm_runtime_set_active(&pdev->dev);
 	if (err)
 		pr_err("pm_runtime_set_active() failed with error %d", err);
@@ -3031,7 +3032,6 @@ static int msm_nand_probe(struct platform_device *pdev)
 		pr_err("Unable to register MTD partitions %d\n", err);
 		goto free_bam;
 	}
-	dev_set_drvdata(&pdev->dev, info);
 
 	pr_info("NANDc phys addr 0x%lx, BAM phys addr 0x%lx, BAM IRQ %d\n",
 			info->nand_phys, info->bam_phys, info->bam_irq);

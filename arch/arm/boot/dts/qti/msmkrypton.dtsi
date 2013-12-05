@@ -15,12 +15,22 @@
 / {
 	model = "Qualcomm MSM KRYPTON";
 	compatible = "qcom,msmkrypton";
-	qcom,msm-id = <187 0x10000>;
+	qcom,msm-id = <187 0x10000>, <227 0x10000>, <228 0x10000>,
+		      <229 0x10000>, <230 0x10000>, <231 0x10000>;
 	interrupt-parent = <&intc>;
 
 	aliases {
 		spi2 = &spi_2;
 		sdhc2 = &sdhc_2; /* SDC2 SD card slot */
+	};
+
+	memory {
+		audio_mem: audio_region {
+			linux,contiguous-region;
+			linux,reserve-region;
+			reg = <0 0xAF000>;
+			label = "audio_mem";
+		};
 	};
 
 	soc: soc { };
@@ -30,6 +40,8 @@
 #include "msmkrypton-coresight.dtsi"
 #include "msm-gdsc.dtsi"
 #include "msmkrypton-pm.dtsi"
+#include "msmkrypton-bus.dtsi"
+#include "msmkrypton-ion.dtsi"
 
 &soc {
 	#address-cells = <1>;
@@ -51,7 +63,7 @@
 		interrupt-controller;
 		#interrupt-cells = <2>;
 		reg = <0xfd510000 0x4000>;
-		ngpio = <89>;
+		ngpio = <90>;
 		interrupts = <0 208 0>;
 		qcom,direct-connect-irqs = <8>;
 	};
@@ -377,6 +389,7 @@
 		vdd_mss-supply = <&pmd9635_s1>;
 		vdd_cx-supply = <&pmd9635_l3_corner>;
 		vdd_mx-supply = <&pmd9635_s3>;
+		vdd_mx-uV = <7>;
 		vdd_pll-supply = <&pmd9635_l7>;
 		qcom,vdd_pll = <1800000>;
 
@@ -393,16 +406,17 @@
 		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_1_out 0 0>;
 	};
 
-	ipa_hw: qcom,ipa@fd4c0000 {
-		compatible = "qcom,ipa";
+	ipa_hw: qti,ipa@fd4c0000 {
+		compatible = "qti,ipa";
 		reg = <0xfd4c0000 0x29000>,
 		      <0xfd4c4000 0x15820>;
 		reg-names = "ipa-base", "bam-base";
 		interrupts = <0 252 0>,
-		             <0 253 0>;
+		             <0 254 0>;
 		interrupt-names = "ipa-irq", "bam-irq";
-		qcom,ipa-hw-ver = <3>; /* IPA core version = IPAv2.0 */
-		qcom,ipa-hw-mode = <0>; /* IPA hw type = Normal */
+		qti,ipa-hw-ver = <3>; /* IPA core version = IPAv2.0 */
+		qti,ipa-hw-mode = <0>; /* IPA hw type = Normal */
+		qti,ee = <2>;
 	};
 
 	usb3: qcom,ssusb@f9200000 {
@@ -450,24 +464,25 @@
 	};
 
 	hsphy0: hsphy@f92f8800 {
-		compatible = "qcom,usb-hsphy";
+		compatible = "qti,usb-hsphy";
 		reg = <0xf92f8800 0x3ff>;
-		qcom,hsphy-init = <0x00D191A4>;
+		qti,hsphy-init = <0x00D191A4>;
 		vdd-supply = <&pmd9635_l3_corner>;
 		vdda18-supply = <&pmd9635_l8>;
 		vdda33-supply = <&pmd9635_l10>;
-		qcom,vdd-voltage-level = <1 5 7>;
-		qcom,ext-vbus-id;
-		qcom,vbus-valid-override;
+		qti,vdd-voltage-level = <1 5 7>;
+		qti,ext-vbus-id;
+		qti,vbus-valid-override;
+		qti,set-pllbtune;
 	};
 
 	ssphy0: ssphy@f9b38000 {
-		compatible = "qcom,usb-ssphy-qmp";
+		compatible = "qti,usb-ssphy-qmp";
 		reg = <0xf9b38000 0x16c>;
 		vdd-supply = <&pmd9635_l4>;
 		vdda18-supply = <&pmd9635_l8>;
-		qcom,vdd-voltage-level = <0 900000 1050000>;
-		qcom,vbus-valid-override;
+		qti,vdd-voltage-level = <0 900000 1050000>;
+		qti,vbus-valid-override;
 	};
 
 	qcom,usbbam@f9304000 {
@@ -603,16 +618,34 @@
 		};
 	};
 
+	qcom,nand@f9ac0000 {
+		compatible = "qcom,msm-nand";
+		reg = <0xf9ac0000 0x1000>,
+		      <0xf9ac4000 0x8000>;
+		reg-names = "nand_phys",
+			    "bam_phys";
+		interrupts = <0 247 0>;
+		interrupt-names = "bam_irq";
+
+		qcom,msm-bus,name = "qpic_nand";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+
+		qcom,msm-bus,vectors-KBps =
+			<91 512 0 0>,
+			/* Voting for max b/w on PNOC bus for now */
+			<91 512 400000 800000>;
+
+	};
+
 	tsens: tsens@fc4a8000 {
-		compatible = "qcom,msm-tsens";
+		compatible = "qti,msmkrypton-tsens";
 		reg = <0xfc4a8000 0x2000>,
 		      <0xfc4bc000 0x1000>;
 		reg-names = "tsens_physical", "tsens_eeprom_physical";
 		interrupts = <0 184 0>;
-		qcom,sensors = <5>;
-		qcom,calibration-less-mode;
-		qcom,slope = <2901 2846 3200 3200 3200>;
-		qcom,calib-mode = "fuse_map1";
+		qti,sensors = <5>;
+		qti,slope = <2901 2846 3200 3200 3200>;
 	};
 
 	qcom,clock-a7@f9010008 {
@@ -627,7 +660,7 @@
 			< 748800000 5>,
 			< 998400000 7>;
 
-		cpu-vdd-supply = <&pmd9635_l3_corner>;
+		cpu-vdd-supply = <&pmd9635_l3_corner_ao>;
 	};
 
 	qcom,msm-cpufreq@0 {

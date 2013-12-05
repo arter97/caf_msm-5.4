@@ -107,7 +107,7 @@ static void param_set_mask(struct snd_pcm_hw_params *p, int n, unsigned bit)
 	}
 }
 
-static const char *const auxpcm_rate_text[] = {"rate_8000", "rate_16000"};
+static const char *const auxpcm_rate_text[] = {"8000", "16000"};
 static const struct soc_enum apq8084_auxpcm_enum[] = {
 		SOC_ENUM_SINGLE_EXT(2, auxpcm_rate_text),
 };
@@ -132,6 +132,8 @@ static struct wcd9xxx_mbhc_config mbhc_cfg = {
 	.cs_enable_flags = (1 << MBHC_CS_ENABLE_POLLING |
 			    1 << MBHC_CS_ENABLE_INSERTION |
 			    1 << MBHC_CS_ENABLE_REMOVAL),
+	.do_recalibration = true,
+	.use_vddio_meas = true,
 };
 
 struct msm_auxpcm_gpio {
@@ -359,7 +361,8 @@ static int apq8084_liquid_init_docking(struct snd_soc_dapm_context *dapm)
 	int dock_plug_gpio = 0;
 
 	/* plug in docking speaker+plug in device OR unplug one of them */
-	u32 dock_plug_irq_flags = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING;
+	u32 dock_plug_irq_flags = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING |
+					IRQF_SHARED;
 	dock_plug_gpio = of_get_named_gpio(spdev->dev.of_node,
 					   "qcom,dock-plug-det-irq", 0);
 
@@ -866,13 +869,13 @@ static int msm_slim_1_rate_put(struct snd_kcontrol *kcontrol,
 			       struct snd_ctl_elem_value *ucontrol)
 {
 	switch (ucontrol->value.integer.value[0]) {
-	case 16000:
-		msm_slim_1_rate = SAMPLING_RATE_16KHZ;
-		break;
-	case 48000:
+	case 2:
 		msm_slim_1_rate = SAMPLING_RATE_48KHZ;
 		break;
-	case 8000:
+	case 1:
+		msm_slim_1_rate = SAMPLING_RATE_16KHZ;
+		break;
+	case 0:
 	default:
 		msm_slim_1_rate = SAMPLING_RATE_8KHZ;
 		break;
@@ -2294,7 +2297,7 @@ static struct snd_soc_dai_link apq8084_common_dai_links[] = {
 		.name = "APQ8084 Compr",
 		.stream_name = "COMPR",
 		.cpu_dai_name	= "MultiMedia4",
-		.platform_name  = "msm-compr-dsp",
+		.platform_name  = "msm-compress-dsp",
 		.dynamic = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 			 SND_SOC_DPCM_TRIGGER_POST},
@@ -2417,7 +2420,7 @@ static struct snd_soc_dai_link apq8084_common_dai_links[] = {
 		.name = "APQ8084 Compr2",
 		.stream_name = "COMPR2",
 		.cpu_dai_name	= "MultiMedia6",
-		.platform_name  = "msm-compr-dsp",
+		.platform_name  = "msm-compress-dsp",
 		.dynamic = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 			 SND_SOC_DPCM_TRIGGER_POST},
@@ -2432,7 +2435,7 @@ static struct snd_soc_dai_link apq8084_common_dai_links[] = {
 		.name = "APQ8084 Compr3",
 		.stream_name = "COMPR3",
 		.cpu_dai_name	= "MultiMedia7",
-		.platform_name  = "msm-compr-dsp",
+		.platform_name  = "msm-compress-dsp",
 		.dynamic = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 			 SND_SOC_DPCM_TRIGGER_POST},
@@ -2447,7 +2450,7 @@ static struct snd_soc_dai_link apq8084_common_dai_links[] = {
 		.name = "APQ8084 Compr4",
 		.stream_name = "COMPR4",
 		.cpu_dai_name	= "MultiMedia8",
-		.platform_name  = "msm-compr-dsp",
+		.platform_name  = "msm-compress-dsp",
 		.dynamic = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 			 SND_SOC_DPCM_TRIGGER_POST},

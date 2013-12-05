@@ -104,7 +104,7 @@ void kgsl_trace_regwrite(struct kgsl_device *device, unsigned int offset,
 }
 EXPORT_SYMBOL(kgsl_trace_regwrite);
 
-int kgsl_memfree_hist_init(void)
+static int kgsl_memfree_hist_init(void)
 {
 	void *base;
 
@@ -117,13 +117,13 @@ int kgsl_memfree_hist_init(void)
 	return 0;
 }
 
-void kgsl_memfree_hist_exit(void)
+static void kgsl_memfree_hist_exit(void)
 {
 	kfree(kgsl_driver.memfree_hist.base_hist_rb);
 	kgsl_driver.memfree_hist.base_hist_rb = NULL;
 }
 
-void kgsl_memfree_hist_set_event(unsigned int pid, unsigned int gpuaddr,
+static void kgsl_memfree_hist_set_event(unsigned int pid, unsigned int gpuaddr,
 			unsigned int size, int flags)
 {
 	struct kgsl_memfree_hist_elem *p;
@@ -904,7 +904,7 @@ error:
 	return NULL;
 }
 
-int kgsl_close_device(struct kgsl_device *device)
+static int kgsl_close_device(struct kgsl_device *device)
 {
 	int result = 0;
 	device->open_count--;
@@ -924,7 +924,6 @@ int kgsl_close_device(struct kgsl_device *device)
 	return result;
 
 }
-EXPORT_SYMBOL(kgsl_close_device);
 
 static int kgsl_release(struct inode *inodep, struct file *filep)
 {
@@ -1000,7 +999,7 @@ static int kgsl_release(struct inode *inodep, struct file *filep)
 	return result;
 }
 
-int kgsl_open_device(struct kgsl_device *device)
+static int kgsl_open_device(struct kgsl_device *device)
 {
 	int result = 0;
 	if (device->open_count == 0) {
@@ -1017,7 +1016,7 @@ int kgsl_open_device(struct kgsl_device *device)
 		if (result)
 			goto err;
 
-		result = device->ftbl->start(device);
+		result = device->ftbl->start(device, 0);
 		if (result)
 			goto err;
 		/*
@@ -1035,7 +1034,6 @@ err:
 
 	return result;
 }
-EXPORT_SYMBOL(kgsl_open_device);
 
 static int kgsl_open(struct inode *inodep, struct file *filep)
 {
@@ -1656,26 +1654,30 @@ static int kgsl_cmdbatch_add_sync_fence(struct kgsl_device *device,
 	event->context = NULL;
 
 	/*
-	 * Two krefs are required to support events. The first kref is for
-	 * the synclist which holds the event in the cmdbatch. The second
-	 * kref is for the callback which can be asynchronous and be called
-	 * after kgsl_cmdbatch_destroy. The kref should be put when the event
-	 * is removed from the synclist, if the callback is successfully
-	 * canceled or when the callback is signaled.
+	 * Initial kref is to ensure async callback does not free the
+	 * event before this function sets the event handle
 	 */
 	kref_init(&event->refcount);
-	kref_get(&event->refcount);
 
 	/*
 	 * Add it to the list first to account for the possiblity that the
 	 * callback will happen immediately after the call to
-	 * kgsl_sync_fence_async_wait
+	 * kgsl_sync_fence_async_wait. Decrement the event refcount when
+	 * removing from the synclist.
 	 */
 
 	spin_lock(&cmdbatch->lock);
+	kref_get(&event->refcount);
 	list_add(&event->node, &cmdbatch->synclist);
 	spin_unlock(&cmdbatch->lock);
 
+	/*
+	 * Increment the reference count for the async callback.
+	 * Decrement when the callback is successfully canceled, when
+	 * the callback is signaled or if the async wait fails.
+	 */
+
+	kref_get(&event->refcount);
 	event->handle = kgsl_sync_fence_async_wait(sync->fd,
 		kgsl_cmdbatch_sync_fence_func, event);
 
@@ -1683,15 +1685,26 @@ static int kgsl_cmdbatch_add_sync_fence(struct kgsl_device *device,
 	if (IS_ERR_OR_NULL(event->handle)) {
 		int ret = PTR_ERR(event->handle);
 
+		/* Failed to add the event to the async callback */
+		kgsl_cmdbatch_sync_event_put(event);
+
+		/* Remove event from the synclist */
 		spin_lock(&cmdbatch->lock);
 		list_del(&event->node);
+		kgsl_cmdbatch_sync_event_put(event);
 		spin_unlock(&cmdbatch->lock);
 
-		kgsl_cmdbatch_put(cmdbatch);
-		kfree(event);
+		/* Event no longer needed by this function */
+		kgsl_cmdbatch_sync_event_put(event);
 
 		return ret;
 	}
+
+	/*
+	 * Event was successfully added to the synclist, the async
+	 * callback and handle to cancel event has been set.
+	 */
+	kgsl_cmdbatch_sync_event_put(event);
 
 	return 0;
 }
@@ -2958,7 +2971,7 @@ long kgsl_ioctl_gpumem_sync_cache_bulk(struct kgsl_device_private *dev_priv,
 	bool full_flush = false;
 
 	if (param->id_list == NULL || param->count == 0
-			|| param->count > (UINT_MAX/sizeof(unsigned int)))
+			|| param->count > (PAGE_SIZE / sizeof(unsigned int)))
 		return -EINVAL;
 
 	id_list = kzalloc(param->count * sizeof(unsigned int), GFP_KERNEL);
@@ -3055,7 +3068,7 @@ long kgsl_ioctl_sharedmem_flush_cache(struct kgsl_device_private *dev_priv,
 /*
  * The common parts of kgsl_ioctl_gpumem_alloc and kgsl_ioctl_gpumem_alloc_id.
  */
-int
+static int
 _gpumem_alloc(struct kgsl_device_private *dev_priv,
 		struct kgsl_mem_entry **ret_entry,
 		size_t size, unsigned int flags)
@@ -4173,67 +4186,6 @@ error:
 	return status;
 }
 EXPORT_SYMBOL(kgsl_device_platform_probe);
-
-int kgsl_postmortem_dump(struct kgsl_device *device, int manual)
-{
-	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
-
-	BUG_ON(device == NULL);
-
-	kgsl_cffdump_hang(device);
-
-	/* For a manual dump, make sure that the system is idle */
-
-	if (manual) {
-		kgsl_active_count_wait(device, 0);
-
-		if (device->state == KGSL_STATE_ACTIVE)
-			kgsl_idle(device);
-	}
-
-	if (device->pm_dump_enable) {
-
-		KGSL_LOG_DUMP(device,
-			"POWER: START_STOP_SLEEP_WAKE = %d\n",
-			pwr->strtstp_sleepwake);
-
-		KGSL_LOG_DUMP(device,
-			"POWER: FLAGS = %08lX | ACTIVE POWERLEVEL = %08X",
-			pwr->power_flags, pwr->active_pwrlevel);
-
-		KGSL_LOG_DUMP(device, "POWER: INTERVAL TIMEOUT = %08X ",
-				pwr->interval_timeout);
-
-	}
-
-	/* Disable the idle timer so we don't get interrupted */
-	del_timer_sync(&device->idle_timer);
-
-	/* Force on the clocks */
-	kgsl_pwrctrl_wake(device);
-
-	/* Disable the irq */
-	kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_OFF);
-
-	/*Call the device specific postmortem dump function*/
-	device->ftbl->postmortem_dump(device, manual);
-
-	/* On a manual trigger, turn on the interrupts and put
-	   the clocks to sleep.  They will recover themselves
-	   on the next event.  For a hang, leave things as they
-	   are until fault tolerance kicks in. */
-
-	if (manual) {
-		kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_ON);
-
-		/* try to go into a sleep mode until the next event */
-		kgsl_pwrctrl_request_state(device, KGSL_STATE_SLEEP);
-		kgsl_pwrctrl_sleep(device);
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL(kgsl_postmortem_dump);
 
 void kgsl_device_platform_remove(struct kgsl_device *device)
 {

@@ -20,6 +20,7 @@
 #include <linux/delay.h>
 #include <linux/i2c.h>
 #include <linux/input.h>
+#include <linux/sensors.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/slab.h>
@@ -76,6 +77,21 @@
  * The following table lists the maximum appropriate poll interval for each
  * available output data rate.
  */
+
+static struct sensors_classdev sensors_cdev = {
+	.name = "kxtj9-accel",
+	.vendor = "Kionix",
+	.version = 1,
+	.handle = 0,
+	.type = 1,
+	.max_range = "19.6",
+	.resolution = "0.01",
+	.sensor_power = "0.2",
+	.min_delay = 2000,
+	.fifo_reserved_event_count = 0,
+	.fifo_max_event_count = 0,
+};
+
 static const struct {
 	unsigned int cutoff;
 	u8 mask;
@@ -418,19 +434,16 @@ static int kxtj9_enable(struct kxtj9_data *tj9)
 		}
 	}
 
-	tj9->enable = true;
 	return 0;
 
 fail:
 	kxtj9_device_power_off(tj9);
-	tj9->enable = false;
 	return err;
 }
 
 static void kxtj9_disable(struct kxtj9_data *tj9)
 {
 	kxtj9_device_power_off(tj9);
-	tj9->enable = false;
 }
 
 
@@ -499,18 +512,21 @@ static ssize_t kxtj9_enable_store(struct device *dev,
 	if (error)
 		return error;
 	mutex_lock(&input_dev->mutex);
-	disable_irq(client->irq);
 
-	if (data == 0)
+	if (data == 0) {
+		disable_irq(client->irq);
 		kxtj9_disable(tj9);
-	else if (data == 1)
-		kxtj9_enable(tj9);
-	else {
+		tj9->enable = false;
+	} else if (data == 1) {
+		if (!kxtj9_enable(tj9)) {
+			enable_irq(client->irq);
+			tj9->enable = true;
+		}
+	} else {
 		dev_err(&tj9->client->dev,
 			"Invalid value of input, input=%ld\n", data);
 	}
 
-	enable_irq(client->irq);
 	mutex_unlock(&input_dev->mutex);
 
 	return count;
@@ -558,7 +574,8 @@ static ssize_t kxtj9_set_poll_delay(struct device *dev,
 	/* Lock the device to prevent races with open/close (and itself) */
 	mutex_lock(&input_dev->mutex);
 
-	disable_irq(client->irq);
+	if (tj9->enable)
+		disable_irq(client->irq);
 
 	/*
 	 * Set current interval to the greater of the minimum interval or
@@ -566,9 +583,10 @@ static ssize_t kxtj9_set_poll_delay(struct device *dev,
 	 */
 	tj9->last_poll_interval = max(interval, tj9->pdata.min_interval);
 
-	kxtj9_update_odr(tj9, tj9->last_poll_interval);
-
-	enable_irq(client->irq);
+	if (tj9->enable) {
+		kxtj9_update_odr(tj9, tj9->last_poll_interval);
+		enable_irq(client->irq);
+	}
 	mutex_unlock(&input_dev->mutex);
 
 	return count;
@@ -860,6 +878,8 @@ static int kxtj9_probe(struct i2c_client *client,
 			goto err_destroy_input;
 		}
 
+		disable_irq(tj9->client->irq);
+
 		err = sysfs_create_group(&client->dev.kobj, &kxtj9_attribute_group);
 		if (err) {
 			dev_err(&client->dev, "sysfs create failed: %d\n", err);
@@ -870,6 +890,12 @@ static int kxtj9_probe(struct i2c_client *client,
 		err = kxtj9_setup_polled_device(tj9);
 		if (err)
 			goto err_power_off;
+	}
+
+	err = sensors_classdev_register(&client->dev, &sensors_cdev);
+	if (err) {
+		dev_err(&client->dev, "class device create failed: %d\n", err);
+		goto err_free_irq;
 	}
 
 	dev_dbg(&client->dev, "%s: kxtj9_probe OK.\n", __func__);
@@ -926,7 +952,7 @@ static int kxtj9_suspend(struct device *dev)
 
 	mutex_lock(&input_dev->mutex);
 
-	if (input_dev->users)
+	if (input_dev->users && tj9->enable)
 		kxtj9_disable(tj9);
 
 	mutex_unlock(&input_dev->mutex);
@@ -942,7 +968,7 @@ static int kxtj9_resume(struct device *dev)
 
 	mutex_lock(&input_dev->mutex);
 
-	if (input_dev->users)
+	if (input_dev->users && tj9->enable)
 		kxtj9_enable(tj9);
 
 	mutex_unlock(&input_dev->mutex);
