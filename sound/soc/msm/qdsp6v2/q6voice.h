@@ -1354,6 +1354,7 @@ struct common_data {
 	struct voice_data voice[MAX_VOC_SESSIONS];
 
 	bool srvcc_rec_flag;
+	bool is_low_mem_target;
 };
 
 struct voice_session_itr {
@@ -1462,5 +1463,6 @@ uint32_t voc_get_session_id(char *name);
 int voc_start_playback(uint32_t set, uint16_t port_id);
 int voc_start_record(uint32_t port_id, uint32_t set, uint32_t session_id);
 int voice_get_idx_for_session(u32 session_id);
+void voc_set_memory_constraint_flag(bool is_low_mem_target);
 
 #endif
