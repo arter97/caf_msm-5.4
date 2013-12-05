@@ -1630,7 +1630,6 @@ int kgsl_gem_prime_fd_to_handle(struct drm_device *dev,
 		drm_gem_object_release(obj);
 		kfree(priv);
 		kfree(obj);
-		kfree(obj);
 		return -ENOMEM;
 	}
 
