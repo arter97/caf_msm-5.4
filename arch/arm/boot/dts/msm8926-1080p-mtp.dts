@@ -10,10 +10,14 @@
  * GNU General Public License for more details.
  */
 
-/include/ "dsi-panel-hx8394a-720p-video.dtsi"
-/include/ "dsi-panel-nt35590-720p-video.dtsi"
-/include/ "dsi-panel-nt35521-720p-video.dtsi"
-/include/ "dsi-panel-nt35596-1080p-video.dtsi"
-/include/ "dsi-panel-nt35590-720p-cmd.dtsi"
-/include/ "dsi-panel-ssd2080m-720p-video.dtsi"
-/include/ "dsi-panel-jdi-1080p-video.dtsi"
+
+/dts-v1/;
+/include/ "msm8926.dtsi"
+/include/ "msm8226-1080p-mtp.dtsi"
+/include/ "msm8226-camera-sensor-mtp.dtsi"
+
+/ {
+	model = "Qualcomm MSM 8926 MTP";
+	compatible = "qcom,msm8926-mtp", "qcom,msm8926", "qcom,mtp";
+	qcom,board-id = <8 2>;
+};
