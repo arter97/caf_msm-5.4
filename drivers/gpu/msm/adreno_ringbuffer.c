@@ -210,7 +210,7 @@ err:
  *
  * Load the pm4 ucode from @start at @addr.
  */
-inline int adreno_ringbuffer_load_pm4_ucode(struct kgsl_device *device,
+static inline int adreno_ringbuffer_load_pm4_ucode(struct kgsl_device *device,
 			unsigned int start, unsigned int end, unsigned int addr)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
@@ -264,7 +264,7 @@ err:
  *
  * Load the pfp ucode from @start at @addr.
  */
-inline int adreno_ringbuffer_load_pfp_ucode(struct kgsl_device *device,
+static inline int adreno_ringbuffer_load_pfp_ucode(struct kgsl_device *device,
 			unsigned int start, unsigned int end, unsigned int addr)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
@@ -364,7 +364,7 @@ static int _ringbuffer_bootstrap_ucode(struct adreno_ringbuffer *rb,
  *
  * Setup ringbuffer for GPU.
  */
-void _ringbuffer_setup_common(struct adreno_ringbuffer *rb)
+static void _ringbuffer_setup_common(struct adreno_ringbuffer *rb)
 {
 	struct kgsl_device *device = rb->device;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
@@ -412,7 +412,7 @@ void _ringbuffer_setup_common(struct adreno_ringbuffer *rb)
  *
  * Start ringbuffer for GPU.
  */
-int _ringbuffer_start_common(struct adreno_ringbuffer *rb)
+static int _ringbuffer_start_common(struct adreno_ringbuffer *rb)
 {
 	int status;
 	struct kgsl_device *device = rb->device;
@@ -934,7 +934,7 @@ static bool _parse_ibs(struct kgsl_device_private *dev_priv,
 		return false;
 	}
 
-	hostaddr = (uint *)kgsl_gpuaddr_to_vaddr(&entry->memdesc, gpuaddr);
+	hostaddr = kgsl_gpuaddr_to_vaddr(&entry->memdesc, gpuaddr);
 	if (hostaddr == NULL) {
 		KGSL_CMD_ERR(dev_priv->device,
 			     "no mapping for gpuaddr: 0x%08x\n", gpuaddr);
@@ -1079,6 +1079,13 @@ adreno_ringbuffer_issueibcmds(struct kgsl_device_private *dev_priv,
 
 	/* wait for the suspend gate */
 	wait_for_completion(&device->cmdbatch_gate);
+
+	/*
+	 * Clear the wake on touch bit to indicate an IB has been submitted
+	 * since the last time we set it
+	 */
+
+	device->flags &= ~KGSL_FLAG_WAKE_ON_TOUCH;
 
 	/* Queue the command in the ringbuffer */
 	ret = adreno_dispatcher_queue_cmd(adreno_dev, drawctxt, cmdbatch,

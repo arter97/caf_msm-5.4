@@ -56,14 +56,6 @@
 #define KGSL_END_OF_PROFILE_IDENTIFIER	0x2DEFADE2
 #define KGSL_PWRON_FIXUP_IDENTIFIER	0x2AFAFAFA
 
-#ifdef CONFIG_MSM_SCM
-#define ADRENO_DEFAULT_PWRSCALE_POLICY  (&kgsl_pwrscale_policy_tz)
-#elif defined CONFIG_MSM_SLEEP_STATS_DEVICE
-#define ADRENO_DEFAULT_PWRSCALE_POLICY  (&kgsl_pwrscale_policy_idlestats)
-#else
-#define ADRENO_DEFAULT_PWRSCALE_POLICY  NULL
-#endif
-
 void adreno_debugfs_init(struct kgsl_device *device);
 
 #define ADRENO_ISTORE_START 0x5000 /* Istore offset */
@@ -144,6 +136,12 @@ enum adreno_dispatcher_flags {
 
 struct adreno_gpudev;
 
+struct adreno_busy_data {
+	unsigned int gpu_busy;
+	unsigned int vbif_ram_cycles;
+	unsigned int vbif_starved_ram;
+};
+
 struct adreno_device {
 	struct kgsl_device dev;    /* Must be first field in this struct */
 	unsigned long priv;
@@ -184,11 +182,14 @@ struct adreno_device {
 	unsigned int gpulist_index;
 	struct ocmem_buf *ocmem_hdl;
 	unsigned int ocmem_base;
-	unsigned int gpu_cycles;
 	struct adreno_profile profile;
 	struct adreno_dispatcher dispatcher;
 	struct kgsl_memdesc pwron_fixup;
 	unsigned int pwron_fixup_dwords;
+	struct work_struct start_work;
+	struct work_struct input_work;
+	struct adreno_busy_data busy_data;
+	unsigned int ram_cycles_lo;
 };
 
 /**
@@ -227,6 +228,7 @@ struct adreno_perfcount_register {
 	unsigned int kernelcount;
 	unsigned int usercount;
 	unsigned int offset;
+	unsigned int offset_hi;
 	int load_bit;
 	unsigned int select;
 	uint64_t value;
@@ -242,7 +244,18 @@ struct adreno_perfcount_group {
 	struct adreno_perfcount_register *regs;
 	unsigned int reg_count;
 	const char *name;
+	unsigned long flags;
 };
+
+/*
+ * ADRENO_PERFCOUNTER_GROUP_FIXED indicates that a perfcounter group is fixed -
+ * instead of having configurable countables like the other groups, registers in
+ * fixed groups have a hardwired countable.  So when the user requests a
+ * countable in one of these groups, that countable should be used as the
+ * register offset to return
+ */
+
+#define ADRENO_PERFCOUNTER_GROUP_FIXED BIT(0)
 
 /**
  * adreno_perfcounts: all available perfcounter groups
@@ -265,11 +278,15 @@ struct adreno_invalid_countables {
 };
 
 #define ADRENO_PERFCOUNTER_GROUP(core, name) { core##_perfcounters_##name, \
-	ARRAY_SIZE(core##_perfcounters_##name), __stringify(name) }
+	ARRAY_SIZE(core##_perfcounters_##name), __stringify(name), 0 }
+
+#define ADRENO_PERFCOUNTER_GROUP_FLAGS(core, name, flags) \
+	{ core##_perfcounters_##name, \
+	ARRAY_SIZE(core##_perfcounters_##name), __stringify(name), flags }
 
 #define ADRENO_PERFCOUNTER_GROUP_OFF(core, name, offset) \
 	[KGSL_PERFCOUNTER_GROUP_##offset] = { core##_perfcounters_##name, \
-	ARRAY_SIZE(core##_perfcounters_##name), __stringify(name) }
+	ARRAY_SIZE(core##_perfcounters_##name), __stringify(name), 0 }
 
 #define ADRENO_PERFCOUNTER_INVALID_COUNTABLE(name, off) \
 	[KGSL_PERFCOUNTER_GROUP_##off] = { name##_invalid_countables, \
@@ -493,7 +510,6 @@ struct adreno_gpudev {
 
 	struct adreno_irq *irq;
 	/* GPU specific function hooks */
-	int (*ctxt_create)(struct adreno_device *, struct adreno_context *);
 	irqreturn_t (*irq_handler)(struct adreno_device *);
 	void (*irq_control)(struct adreno_device *, int);
 	unsigned int (*irq_pending)(struct adreno_device *);
@@ -504,8 +520,10 @@ struct adreno_gpudev {
 	void (*perfcounter_close)(struct adreno_device *);
 	void (*perfcounter_save)(struct adreno_device *);
 	void (*perfcounter_restore)(struct adreno_device *);
+	void (*fault_detect_start)(struct adreno_device *);
+	void (*fault_detect_stop)(struct adreno_device *);
 	void (*start)(struct adreno_device *);
-	unsigned int (*busy_cycles)(struct adreno_device *);
+	void (*busy_cycles)(struct adreno_device *, struct adreno_busy_data *);
 	int (*perfcounter_enable)(struct adreno_device *, unsigned int group,
 		unsigned int counter, unsigned int countable);
 	uint64_t (*perfcounter_read)(struct adreno_device *adreno_dev,
@@ -513,7 +531,6 @@ struct adreno_gpudev {
 	void (*perfcounter_write)(struct adreno_device *adreno_dev,
 		unsigned int group, unsigned int counter);
 	void (*soft_reset)(struct adreno_device *device);
-	void (*postmortem_dump)(struct adreno_device *adreno_dev);
 };
 
 #define FT_DETECT_REGS_COUNT 14
@@ -586,22 +603,8 @@ void adreno_shadermem_regread(struct kgsl_device *device,
 						unsigned int offsetwords,
 						unsigned int *value);
 
-int adreno_dump(struct kgsl_device *device, int manual);
-void adreno_dump_fields(struct kgsl_device *device,
-			const char *start, const struct log_field *lines,
-			int num);
 unsigned int adreno_a3xx_rbbm_clock_ctl_default(struct adreno_device
 							*adreno_dev);
-
-struct kgsl_memdesc *adreno_find_region(struct kgsl_device *device,
-						phys_addr_t pt_base,
-						unsigned int gpuaddr,
-						unsigned int size,
-						struct kgsl_mem_entry **entry);
-
-uint8_t *adreno_convertaddr(struct kgsl_device *device,
-	phys_addr_t pt_base, unsigned int gpuaddr, unsigned int size,
-	struct kgsl_mem_entry **entry);
 
 void *adreno_snapshot(struct kgsl_device *device, void *snapshot, int *remain,
 		int hang);
@@ -624,9 +627,6 @@ void adreno_dispatcher_queue_context(struct kgsl_device *device,
 	struct adreno_context *drawctxt);
 int adreno_reset(struct kgsl_device *device);
 
-int adreno_ft_init_sysfs(struct kgsl_device *device);
-void adreno_ft_uninit_sysfs(struct kgsl_device *device);
-
 int adreno_perfcounter_get_groupid(struct adreno_device *adreno_dev,
 					const char *name);
 
@@ -635,12 +635,10 @@ const char *adreno_perfcounter_get_name(struct adreno_device
 
 int adreno_perfcounter_get(struct adreno_device *adreno_dev,
 	unsigned int groupid, unsigned int countable, unsigned int *offset,
-	unsigned int flags);
+	unsigned int *offset_hi, unsigned int flags);
 
 int adreno_perfcounter_put(struct adreno_device *adreno_dev,
 	unsigned int groupid, unsigned int countable, unsigned int flags);
-
-int adreno_soft_reset(struct kgsl_device *device);
 
 int adreno_a3xx_pwron_fixup_init(struct adreno_device *adreno_dev);
 

@@ -477,7 +477,9 @@ static struct mdss_mdp_mixer *mdss_mdp_mixer_alloc(
 		 * try to reserve first layer mixer for write back if
 		 * assertive display needs to be supported through wfd
 		 */
-		if (ctl->mdata->has_wb_ad && ctl->intf_num) {
+		if (ctl->mdata->has_wb_ad && ctl->intf_num &&
+			((ctl->panel_data->panel_info.type != MIPI_CMD_PANEL) ||
+			!mux)) {
 			alt_mixer = mixer_pool;
 			mixer_pool++;
 			nmixers--;
@@ -748,6 +750,10 @@ int mdss_mdp_ctl_setup(struct mdss_mdp_ctl *ctl)
 		if (!ctl->mixer_left) {
 			pr_err("unable to allocate layer mixer\n");
 			return -ENOMEM;
+		} else if (ctl->mixer_left->num >= 1 &&
+			(ctl->panel_data->panel_info.type == MIPI_CMD_PANEL)) {
+			pr_err("use only DSPP0 and DSPP1 with cmd split\n");
+			return -EPERM;
 		}
 	}
 
@@ -1805,6 +1811,11 @@ int mdss_mdp_display_wait4comp(struct mdss_mdp_ctl *ctl)
 	int ret;
 	u32 reg_data, flush_data;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+
+	if (!ctl) {
+		pr_err("invalid ctl\n");
+		return -ENODEV;
+	}
 
 	ret = mutex_lock_interruptible(&ctl->lock);
 	if (ret)

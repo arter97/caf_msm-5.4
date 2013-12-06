@@ -69,6 +69,8 @@
 #define KGSL_EVENT_TIMESTAMP_RETIRED 0
 #define KGSL_EVENT_CANCELLED 1
 
+#define KGSL_FLAG_WAKE_ON_TOUCH BIT(0)
+
 /*
  * "list" of event types for ftrace symbolic magic
  */
@@ -98,7 +100,7 @@ struct kgsl_functable {
 	bool (*isidle) (struct kgsl_device *device);
 	int (*suspend_context) (struct kgsl_device *device);
 	int (*init) (struct kgsl_device *device);
-	int (*start) (struct kgsl_device *device);
+	int (*start) (struct kgsl_device *device, int priority);
 	int (*stop) (struct kgsl_device *device);
 	int (*getproperty) (struct kgsl_device *device,
 		enum kgsl_property_type type, void __user *value,
@@ -117,7 +119,6 @@ struct kgsl_functable {
 		struct kgsl_pagetable *pagetable);
 	void (*power_stats)(struct kgsl_device *device,
 		struct kgsl_power_stats *stats);
-	void (*irqctrl)(struct kgsl_device *device, int state);
 	unsigned int (*gpuid)(struct kgsl_device *device, unsigned int *chipid);
 	void * (*snapshot)(struct kgsl_device *device, void *snapshot,
 		int *remain, int hang);
@@ -137,7 +138,6 @@ struct kgsl_functable {
 	int (*setproperty) (struct kgsl_device *device,
 		enum kgsl_property_type type, void __user *value,
 		unsigned int sizebytes);
-	int (*postmortem_dump) (struct kgsl_device *device, int manual);
 	void (*drawctxt_sched)(struct kgsl_device *device,
 		struct kgsl_context *context);
 	void (*resume)(struct kgsl_device *device);
@@ -311,17 +311,12 @@ struct kgsl_device {
 	int drv_log;
 	int mem_log;
 	int pwr_log;
-	int pm_dump_enable;
 	struct kgsl_pwrscale pwrscale;
 	struct kobject pwrscale_kobj;
 	struct work_struct ts_expired_ws;
 	struct list_head events;
 	struct list_head events_pending_list;
 	unsigned int events_last_timestamp;
-
-	/* Postmortem Control switches */
-	int pm_regs_enabled;
-	int pm_ib_enabled;
 
 	int reset_counter; /* Track how many GPU core resets have occured */
 	int cff_dump_enable;
@@ -747,6 +742,21 @@ static inline int kgsl_cmdbatch_sync_pending(struct kgsl_cmdbatch *cmdbatch)
 	spin_unlock(&cmdbatch->lock);
 
 	return ret;
+}
+
+/**
+ * kgsl_property_read_u32() - Read a u32 property from the device tree
+ * @device: Pointer to the KGSL device
+ * @prop: String name of the property to query
+ * @ptr: Pointer to the variable to store the property
+ */
+static inline int kgsl_property_read_u32(struct kgsl_device *device,
+	const char *prop, unsigned int *ptr)
+{
+	struct platform_device *pdev =
+		container_of(device->parentdev, struct platform_device, dev);
+
+	return of_property_read_u32(pdev->dev.of_node, prop, ptr);
 }
 
 #endif  /* __KGSL_DEVICE_H */

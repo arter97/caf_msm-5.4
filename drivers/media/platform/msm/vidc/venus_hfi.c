@@ -3017,9 +3017,10 @@ static void venus_hfi_ocmem_init(struct venus_hfi_device *device)
 	ocmem->vidc_ocmem_nb.notifier_call = venus_hfi_ocmem_notify_handler;
 	ocmem->handle =
 		ocmem_notifier_register(OCMEM_VIDEO, &ocmem->vidc_ocmem_nb);
-	if (!ocmem->handle) {
-		dprintk(VIDC_WARN, "Failed to register OCMEM notifier.");
-		dprintk(VIDC_INFO, " Performance will be impacted\n");
+	if (IS_ERR_OR_NULL(ocmem->handle)) {
+		dprintk(VIDC_WARN,
+				"Failed to register OCMEM notifier. Performance might be impacted\n");
+		ocmem->handle = NULL;
 	}
 }
 
@@ -3508,7 +3509,7 @@ int venus_hfi_get_core_capabilities(void)
 	u8 version_info[256];
 	const u32 smem_image_index_venus = 14 * 128;
 
-	smem_table_ptr = smem_get_entry_to_proc(SMEM_IMAGE_VERSION_TABLE,
+	smem_table_ptr = smem_get_entry(SMEM_IMAGE_VERSION_TABLE,
 			&smem_block_size, 0, SMEM_ANY_HOST_FLAG);
 	if (smem_table_ptr &&
 			((smem_image_index_venus + 128) <= smem_block_size))

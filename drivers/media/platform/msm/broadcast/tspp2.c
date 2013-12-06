@@ -2092,7 +2092,6 @@ int tspp2_device_open(u32 dev_id)
 	tspp2_reg_clock_stop(device);
 
 	/* Enable runtime power management */
-	pm_runtime_set_active(device->dev);
 	pm_runtime_set_autosuspend_delay(device->dev, MSEC_PER_SEC);
 	pm_runtime_use_autosuspend(device->dev);
 	pm_runtime_enable(device->dev);
@@ -7015,28 +7014,28 @@ msm_tspp2_dt_to_pdata(struct platform_device *pdev)
 	}
 
 	/* Get IOMMU information */
-	rc = of_property_read_string(node, "qcom,iommu-hlos-group",
+	rc = of_property_read_string(node, "qti,iommu-hlos-group",
 					&data->hlos_group);
 	if (rc) {
 		pr_err("%s: Could not find iommu-hlos-group property, err = %d\n",
 			__func__, rc);
 		return NULL;
 	}
-	rc = of_property_read_string(node, "qcom,iommu-cpz-group",
+	rc = of_property_read_string(node, "qti,iommu-cpz-group",
 					&data->cpz_group);
 	if (rc) {
 		pr_err("%s: Could not find iommu-cpz-group property, err = %d\n",
 			__func__, rc);
 		return NULL;
 	}
-	rc = of_property_read_u32(node, "qcom,iommu-hlos-partition",
+	rc = of_property_read_u32(node, "qti,iommu-hlos-partition",
 					&data->hlos_partition);
 	if (rc) {
 		pr_err("%s: Could not find iommu-hlos-partition property, err = %d\n",
 			__func__, rc);
 		return NULL;
 	}
-	rc = of_property_read_u32(node, "qcom,iommu-cpz-partition",
+	rc = of_property_read_u32(node, "qti,iommu-cpz-partition",
 					&data->cpz_partition);
 	if (rc) {
 		pr_err("%s: Could not find iommu-cpz-partition property, err = %d\n",

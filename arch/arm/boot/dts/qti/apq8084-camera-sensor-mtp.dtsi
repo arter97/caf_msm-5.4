@@ -13,13 +13,6 @@
 
 &cci {
 
-	actuator0: qcom,actuator@36 {
-		cell-index = <1>;
-		reg = <0x36>;
-		compatible = "qcom,actuator";
-		qcom,cci-master = <0>;
-	};
-
 	qcom,camera@20 {
 		compatible = "qcom,imx135";
 		reg = <0x20>;
@@ -28,7 +21,6 @@
 		qcom,csid-sd-index = <0>;
 		qcom,mount-angle = <90>;
 		qcom,sensor-name = "imx135";
-		qcom,actuator-src = <&actuator0>;
 		cam_vdig-supply = <&pma8084_l27>;
 		cam_vio-supply = <&pma8084_lvs4>;
 		cam_vana-supply = <&pma8084_l17>;
@@ -104,7 +96,6 @@
 		qcom,csiphy-sd-index = <0>;
 		qcom,csid-sd-index = <0>;
 		qcom,mount-angle = <90>;
-		qcom,actuator-src = <&actuator0>;
 		cam_vdig-supply = <&pma8084_l27>;
 		cam_vio-supply = <&pma8084_lvs4>;
 		cam_vana-supply = <&pma8084_l17>;
@@ -153,6 +144,34 @@
 		qcom,gpio-req-tbl-flags = <1 0>;
 		qcom,gpio-req-tbl-label = "CAMIF_MCLK2",
 					  "CAM_XSHUTDOWN";
+		qcom,cci-master = <0>;
+		status = "ok";
+	};
+
+	qcom,camera@2 {
+		cell-index = <2>;
+		compatible = "qcom,camera";
+		reg = <0x2>;
+		qcom,csiphy-sd-index = <2>;
+		qcom,csid-sd-index = <2>;
+		cam_vana-supply = <&pma8084_l17>;
+		cam_vdig-supply = <&pma8084_l15>;
+		cam_vio-supply = <&pma8084_lvs4>;
+		qcom,cam-vreg-name = "cam_vdig", "cam_vana", "cam_vio";
+		qcom,cam-vreg-type = <0 0 1>;
+		qcom,cam-vreg-min-voltage = <1225000 2850000 0>;
+		qcom,cam-vreg-max-voltage = <1225000 2850000 0>;
+		qcom,cam-vreg-op-mode = <105000 80000 0>;
+		qcom,gpio-no-mux = <0>;
+		gpios = <&msmgpio 17 0>,
+			<&msmgpio 18 0>,
+			<&msmgpio 28 0>;
+		qcom,gpio-reset = <1>;
+		qcom,gpio-req-tbl-num = <0 1 2>;
+		qcom,gpio-req-tbl-flags = <1 0 0>;
+		qcom,gpio-req-tbl-label = "CAMIF_MCLK2",
+					  "CAM_RESET2",
+					  "CAM_STANDBY2";
 		qcom,cci-master = <0>;
 		status = "ok";
 	};

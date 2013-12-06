@@ -100,6 +100,13 @@ static void __iomem *virt_bases[N_BASES];
 		[VDD_DIG_##l3] = (f3),		\
 	},					\
 	.num_fmax = VDD_DIG_NUM
+#define VDD_DIG_FMAX_MAP2_AO(l1, f1, l2, f2) \
+	.vdd_class = &vdd_dig_ao,		\
+	.fmax = (unsigned long[VDD_DIG_NUM]) {	\
+		[VDD_DIG_##l1] = (f1),		\
+		[VDD_DIG_##l2] = (f2),		\
+	},					\
+	.num_fmax = VDD_DIG_NUM
 
 enum vdd_dig_levels {
 	VDD_DIG_NONE,
@@ -1666,6 +1673,8 @@ static struct alpha_pll_vco_tbl alpha_pll_vco_20nm_p[] = {
 	VCO(0, 1500000000, 2000000000),
 };
 
+static DEFINE_VDD_REGULATORS(vdd_dig_ao, VDD_DIG_NUM, 1, vdd_corner, NULL);
+
 static struct alpha_pll_clk a7sspll = {
 	.masks = &alpha_pll_masks_20nm_p,
 	.base = &virt_bases[APCS_ACC_BASE],
@@ -1675,7 +1684,7 @@ static struct alpha_pll_clk a7sspll = {
 		.parent = &xo_a_clk.c,
 		.dbg_name = "a7sspll",
 		.ops = &clk_ops_alpha_pll,
-		VDD_DIG_FMAX_MAP2(LOW, 1000000000, NOMINAL, 2000000000),
+		VDD_DIG_FMAX_MAP2_AO(LOW, 1000000000, NOMINAL, 2000000000),
 		CLK_INIT(a7sspll.c),
 	},
 };
@@ -1968,11 +1977,11 @@ static struct clk_lookup msm_clocks_krypton[] = {
 	CLK_LOOKUP("core_clk", gcc_blsp1_uart1_apps_clk.c, "f991d000.uart"),
 
 	/* IPA */
-	CLK_LOOKUP("core_clk",        ipa_clk.c, "fd4c0000.qcom,ipa"),
-	CLK_DUMMY("core_src_clk", ipa_clk_src.c, "fd4c0000.qcom,ipa", OFF),
-	CLK_DUMMY("bus_clk",  gcc_sys_noc_ipa_axi_clk.c, "fd4c0000.qcom,ipa", OFF),
-	CLK_DUMMY("iface_clk",  gcc_ipa_cnoc_clk.c, "fd4c0000.qcom,ipa", OFF),
-	CLK_DUMMY("inactivity_clk",  gcc_ipa_sleep_clk.c, "fd4c0000.qcom,ipa", OFF),
+	CLK_LOOKUP("core_clk",        ipa_clk.c, "fd4c0000.qti,ipa"),
+	CLK_DUMMY("core_src_clk", ipa_clk_src.c, "fd4c0000.qti,ipa", OFF),
+	CLK_DUMMY("bus_clk",  gcc_sys_noc_ipa_axi_clk.c, "fd4c0000.qti,ipa", OFF),
+	CLK_DUMMY("iface_clk",  gcc_ipa_cnoc_clk.c, "fd4c0000.qti,ipa", OFF),
+	CLK_DUMMY("inactivity_clk",  gcc_ipa_sleep_clk.c, "fd4c0000.qti,ipa", OFF),
 
 	/* HSUSB-OTG Clocks */
 	CLK_LOOKUP("xo",                 cxo_otg_clk.c, "f9a55000.usb"),
@@ -2053,6 +2062,7 @@ static struct clk_lookup msm_clocks_krypton[] = {
 	CLK_LOOKUP("bus_a_clk",	pnoc_msmbus_a_clk.c,	"msm_periph_noc"),
 	CLK_LOOKUP("mem_clk",	bimc_msmbus_clk.c,	"msm_bimc"),
 	CLK_LOOKUP("mem_a_clk",	bimc_msmbus_a_clk.c,	"msm_bimc"),
+	CLK_LOOKUP("iface_clk", ipa_clk.c,              "msm_ipa"),
 
 	CLK_LOOKUP("a7_m_clk", a7_m_clk, ""),
 
@@ -2190,6 +2200,10 @@ static void __init reg_init(void)
 	regval = readl_relaxed(GCC_REG_BASE(APCS_GPLL_ENA_VOTE));
 	regval |= BIT(0);
 	writel_relaxed(regval, GCC_REG_BASE(APCS_GPLL_ENA_VOTE));
+
+	regval = readl_relaxed(GCC_REG_BASE(APCS_CLOCK_BRANCH_ENA_VOTE));
+	regval |= BIT(26);
+	writel_relaxed(regval, GCC_REG_BASE(APCS_CLOCK_BRANCH_ENA_VOTE));
 }
 
 static void __init msmkrypton_clock_post_init(void)
@@ -2247,6 +2261,10 @@ static void __init msmkrypton_clock_pre_init(void)
 	vdd_dig.regulator[0] = regulator_get(NULL, "vdd_dig");
 	if (IS_ERR(vdd_dig.regulator[0]))
 		panic("clock-krypton: Unable to get the vdd_dig regulator!");
+
+	vdd_dig_ao.regulator[0] = regulator_get(NULL, "vdd_dig_ao");
+	if (IS_ERR(vdd_dig_ao.regulator[0]))
+		panic("clock-krypton: Unable to get the vdd_dig_ao regulator!");
 
 	enable_rpm_scaling();
 

@@ -325,32 +325,6 @@ static void kgsl_snapshot_put_object(struct kgsl_device *device,
 	kfree(obj);
 }
 
-/*
- * ksgl_snapshot_find_object() - Return the snapshot object pointer
- * for given address range
- * @device: the device that is being snapshotted
- * @ptbase: the pagetable base of the object to search
- * @gpuaddr: The gpu address of the object to search
- * @size: the size of the object (may not always be the size of the region)
- *
- * Return the object pointer if found else NULL
- */
-struct kgsl_snapshot_object *kgsl_snapshot_find_object(
-			struct kgsl_device *device,
-			phys_addr_t ptbase, unsigned int gpuaddr,
-			unsigned int size)
-{
-	struct kgsl_snapshot_object *obj = NULL;
-	list_for_each_entry(obj, &device->snapshot_obj_list, node) {
-		if (obj->ptbase != ptbase)
-			continue;
-		if ((gpuaddr >= obj->gpuaddr) &&
-			((gpuaddr + size) <= (obj->gpuaddr + obj->size)))
-			return obj;
-	}
-	return NULL;
-}
-
 /* ksgl_snapshot_have_object - Return 1 if the object has been processed
  * @device - the device that is being snapshotted
  * @ptbase - the pagetable base of the object to freeze
@@ -918,9 +892,9 @@ struct kgsl_snapshot_attribute attr_##_name = { \
 	.store = _store, \
 }
 
-SNAPSHOT_ATTR(trigger, 0600, NULL, trigger_store);
-SNAPSHOT_ATTR(timestamp, 0444, timestamp_show, NULL);
-SNAPSHOT_ATTR(faultcount, 0644, faultcount_show, faultcount_store);
+static SNAPSHOT_ATTR(trigger, 0600, NULL, trigger_store);
+static SNAPSHOT_ATTR(timestamp, 0444, timestamp_show, NULL);
+static SNAPSHOT_ATTR(faultcount, 0644, faultcount_show, faultcount_store);
 
 static void snapshot_sysfs_release(struct kobject *kobj)
 {
@@ -977,14 +951,18 @@ static struct kobj_type ktype_snapshot = {
 int kgsl_device_snapshot_init(struct kgsl_device *device)
 {
 	int ret;
+	unsigned int size;
+
+	if (kgsl_property_read_u32(device, "qcom,snapshot-size", &size))
+		size = KGSL_SNAPSHOT_MEMSIZE;
 
 	if (device->snapshot == NULL)
-		device->snapshot = kzalloc(KGSL_SNAPSHOT_MEMSIZE, GFP_KERNEL);
+		device->snapshot = kzalloc(size, GFP_KERNEL);
 
 	if (device->snapshot == NULL)
 		return -ENOMEM;
 
-	device->snapshot_maxsize = KGSL_SNAPSHOT_MEMSIZE;
+	device->snapshot_maxsize = size;
 	device->snapshot_timestamp = 0;
 	device->snapshot_faultcount = 0;
 

@@ -266,7 +266,6 @@ int kgsl_cmdbatch_add_sync(struct kgsl_device *device,
 			struct kgsl_cmd_syncpoint *sync);
 
 void kgsl_mem_entry_destroy(struct kref *kref);
-int kgsl_postmortem_dump(struct kgsl_device *device, int manual);
 
 struct kgsl_mem_entry *kgsl_get_mem_entry(struct kgsl_device *device,
 		phys_addr_t ptbase, unsigned int gpuaddr, unsigned int size);
@@ -299,10 +298,6 @@ void kgsl_trace_issueibcmds(struct kgsl_device *device, int id,
 		struct kgsl_cmdbatch *cmdbatch,
 		unsigned int timestamp, unsigned int flags,
 		int result, unsigned int type);
-
-int kgsl_open_device(struct kgsl_device *device);
-
-int kgsl_close_device(struct kgsl_device *device);
 
 #ifdef CONFIG_MSM_KGSL_DRM
 extern int kgsl_drm_init(struct platform_device *dev);
@@ -350,7 +345,7 @@ static inline void kgsl_memdesc_unmap(struct kgsl_memdesc *memdesc)
 		memdesc->ops->unmap_kernel(memdesc);
 }
 
-static inline uint8_t *kgsl_gpuaddr_to_vaddr(struct kgsl_memdesc *memdesc,
+static inline void *kgsl_gpuaddr_to_vaddr(struct kgsl_memdesc *memdesc,
 					     unsigned int gpuaddr)
 {
 	void *hostptr = NULL;

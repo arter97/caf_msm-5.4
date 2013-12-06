@@ -174,6 +174,8 @@ static u32 igc_limited[IGC_LUT_ENTRIES] = {
 	GAMUT_T5_SIZE + GAMUT_T6_SIZE + GAMUT_T7_SIZE)
 
 #define MDSS_MDP_PA_SIZE		0xC
+#define MDSS_MDP_SIX_ZONE_SIZE		0xC
+#define MDSS_MDP_MEM_COL_SIZE		0x3C
 #define MDSS_MDP_GC_SIZE		0x28
 #define MDSS_MDP_PCC_SIZE		0xB8
 #define MDSS_MDP_GAMUT_SIZE		0x5C
@@ -289,8 +291,8 @@ struct mdss_pp_res_type {
 	u32 enhist_lut[MDSS_BLOCK_DISP_NUM][ENHIST_LUT_ENTRIES];
 	struct mdp_pa_cfg pa_disp_cfg[MDSS_BLOCK_DISP_NUM];
 	struct mdp_pa_v2_data pa_v2_disp_cfg[MDSS_BLOCK_DISP_NUM];
-	u32 six_zone_lut_curve_p0[MDSS_BLOCK_DISP_NUM][SIX_ZONE_LUT_ENTRIES];
-	u32 six_zone_lut_curve_p1[MDSS_BLOCK_DISP_NUM][SIX_ZONE_LUT_ENTRIES];
+	u32 six_zone_lut_curve_p0[MDSS_BLOCK_DISP_NUM][MDP_SIX_ZONE_LUT_SIZE];
+	u32 six_zone_lut_curve_p1[MDSS_BLOCK_DISP_NUM][MDP_SIX_ZONE_LUT_SIZE];
 	struct mdp_pcc_cfg_data pcc_disp_cfg[MDSS_BLOCK_DISP_NUM];
 	struct mdp_igc_lut_data igc_disp_cfg[MDSS_BLOCK_DISP_NUM];
 	struct mdp_pgc_lut_data argc_disp_cfg[MDSS_BLOCK_DISP_NUM];
@@ -641,7 +643,7 @@ static void pp_update_pa_v2_six_zone_regs(char __iomem *addr,
 				data, addr);
 
 		/* Remove Index Update */
-		for (i = 1; i < SIX_ZONE_LUT_ENTRIES; i++) {
+		for (i = 1; i < MDP_SIX_ZONE_LUT_SIZE; i++) {
 			addr += 4;
 			writel_relaxed(pa_v2_config->six_zone_curve_p1[i],
 					addr);
@@ -1436,7 +1438,7 @@ static int pp_dspp_setup(u32 disp_num, struct mdss_mdp_mixer *mixer)
 		flags = 0;
 
 	mixer_cnt = mdss_mdp_get_ctl_mixers(disp_num, mixer_id);
-	if (dspp_num < mdata->nad_cfgs &&
+	if (dspp_num < mdata->nad_cfgs && disp_num < mdata->nad_cfgs &&
 				(mixer_cnt <= mdata->nmax_concurrent_ad_hw)) {
 		ad = &mdata->ad_cfgs[disp_num];
 		ad_flags = ad->reg_sts;
@@ -1928,10 +1930,13 @@ static int pp_read_pa_v2_regs(char __iomem *addr,
 
 	/* Six zone LUT and thresh data */
 	if (pa_v2_config->flags & MDP_PP_PA_SIX_ZONE_ENABLE) {
+		if (pa_v2_config->six_zone_len != MDP_SIX_ZONE_LUT_SIZE)
+			return -EINVAL;
+
 		data = (3 << 25);
 		writel_relaxed(data, addr);
 
-		for (i = 0; i < SIX_ZONE_LUT_ENTRIES; i++) {
+		for (i = 0; i < MDP_SIX_ZONE_LUT_SIZE; i++) {
 			addr += 4;
 			mdss_pp_res->six_zone_lut_curve_p1[disp_num][i] =
 				readl_relaxed(addr);
@@ -1942,13 +1947,13 @@ static int pp_read_pa_v2_regs(char __iomem *addr,
 
 		if (copy_to_user(pa_v2_config->six_zone_curve_p0,
 			&mdss_pp_res->six_zone_lut_curve_p0[disp_num][0],
-			SIX_ZONE_LUT_ENTRIES * sizeof(u32))) {
+			pa_v2_config->six_zone_len * sizeof(u32))) {
 			return -EFAULT;
 		}
 
 		if (copy_to_user(pa_v2_config->six_zone_curve_p1,
 			&mdss_pp_res->six_zone_lut_curve_p1[disp_num][0],
-			SIX_ZONE_LUT_ENTRIES * sizeof(u32))) {
+			pa_v2_config->six_zone_len * sizeof(u32))) {
 			return -EFAULT;
 		}
 
@@ -1993,14 +1998,17 @@ static void pp_read_pa_mem_col_regs(char __iomem *addr,
 static int pp_copy_pa_six_zone_lut(struct mdp_pa_v2_cfg_data *pa_v2_config,
 				u32 disp_num)
 {
+	if (pa_v2_config->pa_v2_data.six_zone_len != MDP_SIX_ZONE_LUT_SIZE)
+		return -EINVAL;
+
 	if (copy_from_user(&mdss_pp_res->six_zone_lut_curve_p0[disp_num][0],
 			pa_v2_config->pa_v2_data.six_zone_curve_p0,
-			SIX_ZONE_LUT_ENTRIES * sizeof(u32))) {
+			pa_v2_config->pa_v2_data.six_zone_len * sizeof(u32))) {
 		return -EFAULT;
 	}
 	if (copy_from_user(&mdss_pp_res->six_zone_lut_curve_p1[disp_num][0],
 			pa_v2_config->pa_v2_data.six_zone_curve_p1,
-			SIX_ZONE_LUT_ENTRIES * sizeof(u32))) {
+			pa_v2_config->pa_v2_data.six_zone_len * sizeof(u32))) {
 		return -EFAULT;
 	}
 
@@ -2851,6 +2859,7 @@ exit:
 	return ret;
 }
 
+#define MDSS_MAX_HIST_BIN_SIZE 16777215
 int mdss_mdp_hist_start(struct mdp_histogram_start_req *req)
 {
 	u32 done_shift_bit;
@@ -2859,8 +2868,12 @@ int mdss_mdp_hist_start(struct mdp_histogram_start_req *req)
 	int i, ret = 0;
 	u32 disp_num, dspp_num = 0;
 	u32 mixer_cnt, mixer_id[MDSS_MDP_INTF_MAX_LAYERMIXER];
+	u32 frame_size;
 	struct mdss_mdp_pipe *pipe;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+
+	if (!mdss_is_ready())
+		return -EPROBE_DEFER;
 
 	if ((PP_BLOCK(req->block) < MDP_LOGICAL_BLOCK_DISP_0) ||
 		(PP_BLOCK(req->block) >= MDP_BLOCK_MAX))
@@ -2879,6 +2892,16 @@ int mdss_mdp_hist_start(struct mdp_histogram_start_req *req)
 		pr_err("%s, Too many dspp connects to disp %d",
 			__func__, mixer_cnt);
 		ret = -EPERM;
+		goto hist_exit;
+	}
+
+	frame_size = (mdata->ctl_off[mixer_id[0]].width *
+					mdata->ctl_off[mixer_id[0]].height);
+	if (!frame_size ||
+		((MDSS_MAX_HIST_BIN_SIZE / frame_size) < req->frame_cnt)) {
+		pr_err("%s, too many frames for given display size, %d",
+						__func__, req->frame_cnt);
+		ret = -EINVAL;
 		goto hist_exit;
 	}
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
@@ -3692,6 +3715,11 @@ int mdss_mdp_ad_input(struct msm_fb_data_type *mfd,
 			ret = -EINVAL;
 			goto error;
 		}
+		if (input->in.amb_light > MDSS_MDP_MAX_AD_AL) {
+			pr_warn("invalid input ambient light");
+			ret = -EINVAL;
+			goto error;
+		}
 		ad->ad_data_mode = MDSS_AD_INPUT_AMBIENT;
 		pr_debug("ambient = %d", input->in.amb_light);
 		ad->ad_data = input->in.amb_light;
@@ -3703,6 +3731,11 @@ int mdss_mdp_ad_input(struct msm_fb_data_type *mfd,
 	case MDSS_AD_MODE_MAN_STR:
 		if (!MDSS_AD_MODE_DATA_MATCH(ad->cfg.mode,
 				MDSS_AD_INPUT_STRENGTH)) {
+			ret = -EINVAL;
+			goto error;
+		}
+		if (input->in.strength > MDSS_MDP_MAX_AD_STR) {
+			pr_warn("invalid input strength");
 			ret = -EINVAL;
 			goto error;
 		}
@@ -4159,6 +4192,7 @@ static void pp_ad_calc_worker(struct work_struct *work)
 		return;
 	}
 
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
 	if (PP_AD_STATE_RUN & ad->state) {
 		/* Kick off calculation */
 		ad->calc_itr--;
@@ -4179,8 +4213,7 @@ static void pp_ad_calc_worker(struct work_struct *work)
 						MDSS_MDP_REG_AD_BL_OUT);
 				if (ad->state & PP_AD_STATE_BL_LIN) {
 					bl = bl >> ad->bl_bright_shift;
-					bl = min_t(u32, bl,
-						MDSS_MAX_BL_BRIGHTNESS);
+					bl = min_t(u32, bl, (AD_BL_LIN_LEN-1));
 					bl = ad->bl_lin_inv[bl];
 					bl = bl << ad->bl_bright_shift;
 				}
@@ -4198,6 +4231,7 @@ static void pp_ad_calc_worker(struct work_struct *work)
 			ad->last_str = 0xFFFFFFFF;
 		}
 	}
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 	complete(&ad->comp);
 
 	if (!ad->calc_itr) {
@@ -4342,6 +4376,14 @@ static int is_valid_calib_dspp_addr(char __iomem *ptr)
 		} else if ((ptr == base + MDSS_MDP_REG_DSPP_DITHER_DEPTH)) {
 			ret = MDP_PP_OPS_READ | MDP_PP_OPS_WRITE;
 			break;
+		/* Six zone and mem color */
+		} else if (mdss_res->mdp_rev >= MDSS_MDP_HW_REV_103 &&
+			(ptr >= base + MDSS_MDP_REG_DSPP_SIX_ZONE_BASE) &&
+			(ptr <= base + MDSS_MDP_REG_DSPP_SIX_ZONE_BASE +
+					MDSS_MDP_SIX_ZONE_SIZE +
+					MDSS_MDP_MEM_COL_SIZE)) {
+			ret = MDP_PP_OPS_READ | MDP_PP_OPS_WRITE;
+			break;
 		}
 	}
 
@@ -4374,6 +4416,13 @@ static int is_valid_calib_vig_addr(char __iomem *ptr)
 		} else if ((ptr >= base + MDSS_MDP_REG_VIG_PA_BASE) &&
 				(ptr <= base + MDSS_MDP_REG_VIG_PA_BASE +
 						MDSS_MDP_PA_SIZE)) {
+			ret = MDP_PP_OPS_READ | MDP_PP_OPS_WRITE;
+			break;
+		/* Mem color range */
+		} else if (mdss_res->mdp_rev >= MDSS_MDP_HW_REV_103 &&
+			(ptr >= base + MDSS_MDP_REG_VIG_MEM_COL_BASE) &&
+				(ptr <= base + MDSS_MDP_REG_VIG_MEM_COL_BASE +
+						MDSS_MDP_MEM_COL_SIZE)) {
 			ret = MDP_PP_OPS_READ | MDP_PP_OPS_WRITE;
 			break;
 		/* IGC range */
@@ -4586,8 +4635,8 @@ int mdss_mdp_calib_config_buffer(struct mdp_calib_config_buffer *cfg,
 		return ret;
 	}
 
-	if (cfg->size == 0) {
-		pr_err("Invalid buffer size\n");
+	if (cfg->size == 0 || cfg->size > PAGE_SIZE) {
+		pr_err("Invalid buffer size %d\n", cfg->size);
 		return ret;
 	}
 

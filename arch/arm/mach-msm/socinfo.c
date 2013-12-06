@@ -35,7 +35,6 @@
 #define SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE 128
 #define SMEM_IMAGE_VERSION_SIZE 4096
 #define SMEM_IMAGE_VERSION_NAME_SIZE 75
-#define SMEM_IMAGE_VERSION_NAME_OFFSET 3
 #define SMEM_IMAGE_VERSION_VARIANT_SIZE 20
 #define SMEM_IMAGE_VERSION_VARIANT_OFFSET 75
 #define SMEM_IMAGE_VERSION_OEM_SIZE 32
@@ -421,9 +420,19 @@ static enum msm_cpu cpu_of_id[] = {
 
 	/* krypton IDs */
 	[187] = MSM_CPU_KRYPTON,
+	[227] = MSM_CPU_KRYPTON,
+	[228] = MSM_CPU_KRYPTON,
+	[229] = MSM_CPU_KRYPTON,
+	[230] = MSM_CPU_KRYPTON,
+	[231] = MSM_CPU_KRYPTON,
 
 	/* FSM9900 ID */
 	[188] = FSM_CPU_9900,
+	[189] = FSM_CPU_9900,
+	[190] = FSM_CPU_9900,
+	[191] = FSM_CPU_9900,
+	[192] = FSM_CPU_9900,
+	[193] = FSM_CPU_9900,
 
 	/* Samarium IDs */
 	[195] = MSM_CPU_SAMARIUM,
@@ -665,8 +674,7 @@ msm_get_image_version(struct device *dev,
 		return snprintf(buf, SMEM_IMAGE_VERSION_NAME_SIZE, "Unknown");
 	}
 	string_address += current_image * SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
-	string_address += SMEM_IMAGE_VERSION_NAME_OFFSET;
-	return snprintf(buf, SMEM_IMAGE_VERSION_NAME_SIZE, "%-.72s\n",
+	return snprintf(buf, SMEM_IMAGE_VERSION_NAME_SIZE, "%-.75s\n",
 			string_address);
 }
 

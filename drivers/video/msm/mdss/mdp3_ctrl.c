@@ -178,7 +178,7 @@ static int mdp3_ctrl_vsync_enable(struct msm_fb_data_type *mfd, int enable)
 	 * active or when dsi clocks are currently off
 	 */
 	if (enable && mdp3_session->status == 1
-			&& !mdp3_session->intf->active) {
+			&& mdp3_session->vsync_before_commit) {
 		mod_timer(&mdp3_session->vsync_timer,
 			jiffies + msecs_to_jiffies(mdp3_session->vsync_period));
 	} else if (enable && !mdp3_session->clk_on) {
@@ -194,7 +194,7 @@ static int mdp3_ctrl_vsync_enable(struct msm_fb_data_type *mfd, int enable)
 void mdp3_vsync_timer_func(unsigned long arg)
 {
 	struct mdp3_session_data *session = (struct mdp3_session_data *)arg;
-	if (session->status == 1 && !session->intf->active) {
+	if (session->status == 1 && session->vsync_before_commit) {
 		pr_debug("mdp3_vsync_timer_func trigger\n");
 		vsync_notify_handler(session);
 		mod_timer(&session->vsync_timer,
@@ -526,6 +526,8 @@ static int mdp3_ctrl_on(struct msm_fb_data_type *mfd)
 		goto on_error;
 	}
 
+	mdp3_batfet_ctrl(true);
+
 	rc = mdp3_iommu_enable(MDP3_CLIENT_DMA_P);
 	if (rc) {
 		pr_err("fail to attach MDP DMA SMMU\n");
@@ -659,6 +661,7 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 	if (rc)
 		pr_err("fail to dettach MDP DMA SMMU\n");
 
+	mdp3_batfet_ctrl(false);
 	mdp3_session->vsync_enabled = 0;
 	atomic_set(&mdp3_session->vsync_countdown, 0);
 	mdp3_session->clk_on = 0;
@@ -761,7 +764,7 @@ static int mdp3_ctrl_reset(struct msm_fb_data_type *mfd)
 	if (rc)
 		pr_err("fail to turn off panel\n");
 
-	rc = mdp3_ctrl_res_req_clk(mfd, 0);
+	rc = mdp3_put_mdp_dsi_clk();
 	if (rc) {
 		pr_err("fail to release mdp clocks\n");
 		goto reset_error;
@@ -791,7 +794,7 @@ static int mdp3_ctrl_reset(struct msm_fb_data_type *mfd)
 		goto reset_error;
 	}
 
-	rc = mdp3_ctrl_res_req_clk(mfd, 1);
+	rc = mdp3_get_mdp_dsi_clk();
 	if (rc) {
 		pr_err("fail to turn on mdp clks\n");
 		goto reset_error;
@@ -974,6 +977,8 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 		msleep(1000 / panel_info->mipi.frame_rate);
 		mdp3_session->first_commit = false;
 	}
+
+	mdp3_session->vsync_before_commit = 0;
 	if (reset_done && (panel && panel->set_backlight))
 		panel->set_backlight(panel, panel->panel_info.bl_max);
 
@@ -1045,8 +1050,36 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 		mdp3_session->first_commit = false;
 	}
 
+	mdp3_session->vsync_before_commit = 0;
+
 pan_error:
 	mutex_unlock(&mdp3_session->lock);
+}
+
+static int mdp3_set_metadata(struct msm_fb_data_type *mfd,
+				struct msmfb_metadata *metadata_ptr)
+{
+	int ret = 0;
+	switch (metadata_ptr->op) {
+	case metadata_op_crc:
+		ret = mdp3_ctrl_res_req_clk(mfd, 1);
+		if (ret) {
+			pr_err("failed to turn on mdp clks\n");
+			return ret;
+		}
+		ret = mdp3_misr_set(&metadata_ptr->data.misr_request);
+		ret = mdp3_ctrl_res_req_clk(mfd, 0);
+		if (ret) {
+			pr_err("failed to release mdp clks\n");
+			return ret;
+		}
+		break;
+	default:
+		pr_warn("Unsupported request to MDP SET META IOCTL.\n");
+		ret = -EINVAL;
+		break;
+	}
+	return ret;
 }
 
 static int mdp3_get_metadata(struct msm_fb_data_type *mfd,
@@ -1064,8 +1097,21 @@ static int mdp3_get_metadata(struct msm_fb_data_type *mfd,
 		metadata->data.caps.vig_pipes = 0;
 		metadata->data.caps.dma_pipes = 1;
 		break;
+	case metadata_op_crc:
+		ret = mdp3_ctrl_res_req_clk(mfd, 1);
+		if (ret) {
+			pr_err("failed to turn on mdp clks\n");
+			return ret;
+		}
+		ret = mdp3_misr_get(&metadata->data.misr_request);
+		ret = mdp3_ctrl_res_req_clk(mfd, 0);
+		if (ret) {
+			pr_err("failed to release mdp clks\n");
+			return ret;
+		}
+		break;
 	default:
-		pr_warn("Unsupported request to MDP META IOCTL.\n");
+		pr_warn("Unsupported request to MDP GET  META IOCTL.\n");
 		ret = -EINVAL;
 		break;
 	}
@@ -1537,11 +1583,19 @@ static int mdp3_ctrl_ioctl_handler(struct msm_fb_data_type *mfd,
 		break;
 	case MSMFB_METADATA_GET:
 		rc = copy_from_user(&metadata, argp, sizeof(metadata));
-		if (rc)
-			return rc;
-		rc = mdp3_get_metadata(mfd, &metadata);
+		if (!rc)
+			rc = mdp3_get_metadata(mfd, &metadata);
 		if (!rc)
 			rc = copy_to_user(argp, &metadata, sizeof(metadata));
+		if (rc)
+			pr_err("mdp3_get_metadata failed (%d)\n", rc);
+		break;
+	case MSMFB_METADATA_SET:
+		rc = copy_from_user(&metadata, argp, sizeof(metadata));
+		if (!rc)
+			rc = mdp3_set_metadata(mfd, &metadata);
+		if (rc)
+			pr_err("mdp3_set_metadata failed (%d)\n", rc);
 		break;
 	case MSMFB_OVERLAY_GET:
 		rc = copy_from_user(req, argp, sizeof(*req));
@@ -1684,6 +1738,7 @@ int mdp3_ctrl_init(struct msm_fb_data_type *mfd)
 	if (mdp3_get_cont_spash_en())
 		mdp3_session->clk_on = 1;
 
+	mdp3_session->vsync_before_commit = true;
 init_done:
 	if (IS_ERR_VALUE(rc))
 		kfree(mdp3_session);

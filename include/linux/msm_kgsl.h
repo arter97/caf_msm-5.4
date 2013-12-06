@@ -17,10 +17,6 @@
 #define KGSL_3D0_REG_MEMORY	"kgsl_3d0_reg_memory"
 #define KGSL_3D0_SHADER_MEMORY	"kgsl_3d0_shader_memory"
 #define KGSL_3D0_IRQ		"kgsl_3d0_irq"
-#define KGSL_2D0_REG_MEMORY	"kgsl_2d0_reg_memory"
-#define KGSL_2D0_IRQ		"kgsl_2d0_irq"
-#define KGSL_2D1_REG_MEMORY	"kgsl_2d1_reg_memory"
-#define KGSL_2D1_IRQ		"kgsl_2d1_irq"
 
 enum kgsl_iommu_context_id {
 	KGSL_IOMMU_CONTEXT_USER = 0,
@@ -75,13 +71,13 @@ struct kgsl_pwrlevel {
  * @num_levels:		Number of pwrlevels for the specific device
  * @idle_timeout:	Timeout for GPU to turn its resources off
  * @strtstp_sleepwake:  Flag to decide b/w SLEEP and SLUMBER
+ * @bus_control:	Flag if independent bus voting is supported
  * @clk_map:		Clocks map per platform
  * @idle_needed:        Flag to specify if idle needed before clock change
- * @step_mul:           DCVS specific indexing into the bustable
  * @bus_scale_table:	Bus table with different b/w votes
  * @iommu_data:		Struct holding iommu context data
  * @iommu_count:	Number of IOMMU units for the GPU
- * @core_info:		Core specific info used by dcvs algorithm
+ * @csdev:		Pointer to the coresight device for this device
  * @coresight_pdata:	Coresight configuration for specific device
  * @chipid:		Chip ID for the device's GPU
  */
@@ -89,16 +85,15 @@ struct kgsl_device_platform_data {
 	struct kgsl_pwrlevel pwrlevel[KGSL_MAX_PWRLEVELS];
 	int init_level;
 	int num_levels;
-	int (*set_grp_async)(void);
 	unsigned int idle_timeout;
 	bool strtstp_sleepwake;
+	bool bus_control;
 	unsigned int clk_map;
 	unsigned int idle_needed;
 	unsigned int step_mul;
 	struct msm_bus_scale_pdata *bus_scale_table;
 	struct kgsl_device_iommu_data *iommu_data;
 	int iommu_count;
-	struct msm_dcvs_core_info *core_info;
 	struct coresight_device *csdev;
 	struct coresight_platform_data *coresight_pdata;
 	unsigned int chipid;

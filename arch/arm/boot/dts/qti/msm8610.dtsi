@@ -252,6 +252,7 @@
 		qcom,hsusb-otg-disable-reset;
 		qcom,dp-manual-pullup;
 		qcom,ahb-async-bridge-bypass;
+		qti,disable-retention-with-vdd-min;
 
 		qcom,msm-bus,name = "usb2";
 		qcom,msm-bus,num-cases = <2>;
@@ -683,6 +684,10 @@
 		compatible = "qcom,msm-compr-dsp";
 	};
 
+	qcom,msm-compress-dsp {
+		compatible = "qcom,msm-compress-dsp";
+	};
+
 	qcom,msm-voip-dsp {
 		compatible = "qcom,msm-voip-dsp";
 	};
@@ -822,6 +827,7 @@
 		interrupts = <0 24 1>;
 		vdd_cx-supply = <&pm8110_s1_corner>;
 		vdd_mx-supply = <&pm8110_l3>;
+		vdd_mx-uV = <1050000>;
 		vdd_pll-supply = <&pm8110_l10>;
 		qcom,vdd_pll = <1800000>;
 		qcom,is-loadable;
@@ -858,15 +864,14 @@
 	};
 
 	tsens: tsens@fc4a8000 {
-		compatible = "qcom,msm-tsens";
+		compatible = "qti,msm8x10-tsens";
 		reg = <0xfc4a8000 0x2000>,
 		      <0xfc4bc000 0x1000>;
 		reg-names = "tsens_physical", "tsens_eeprom_physical";
 		interrupts = <0 184 0>;
-		qcom,sensors = <2>;
-		qcom,slope = <2901 2846>;
-		qcom,calib-mode = "fuse_map3";
-		qcom,sensor-id = <0 5>;
+		qti,sensors = <2>;
+		qti,slope = <2901 2846>;
+		qti,sensor-id = <0 5>;
 	};
 
 	qcom,msm-thermal {
@@ -880,6 +885,10 @@
 		qcom,core-limit-temp = <80>;
 		qcom,core-temp-hysteresis = <10>;
 		qcom,core-control-mask = <0xe>;
+		qcom,hotplug-temp = <110>;
+		qcom,hotplug-temp-hysteresis = <20>;
+		qcom,cpu-sensors = "tsens_tz_sensor5", "tsens_tz_sensor5",
+				"tsens_tz_sensor5", "tsens_tz_sensor5";
 		qcom,vdd-restriction-temp = <5>;
 		qcom,vdd-restriction-temp-hysteresis = <10>;
 		vdd-dig-supply = <&pm8110_s1_floor_corner>;

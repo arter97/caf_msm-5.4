@@ -119,6 +119,20 @@
 			debounce-interval = <15>;
 		};
 	};
+
+	gnss_qca1530: qca,qca1530@0 {
+		compatible = "qca,qca1530";
+		qca,reset-gpio = <&msmgpio 128 0>;	/* Reset line */
+		qca,pwr-supply = <&qca1530_vreg>;	/* Power regulator */
+	};
+
+	liquid_dock {
+		compatible = "qti,apq8084-dock";
+		qti,dock-detect-gpio = <&msmgpio 103 0>;
+		qti,dock-hub-reset-gpio = <&msmgpio 65 0>;
+		qti,dock-enable-gpio = <&msmgpio 93 0>;
+		qti,dock-eth-reset-gpio = <&msmgpio 94 0>;
+	};
 };
 
 #include "dsi-panel-jdi-dualmipi0-video.dtsi"
@@ -220,6 +234,14 @@
 	qcom,setb-gpios-dir =  <2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2>;
 };
 
+&ufsphy1 {
+	status = "ok";
+};
+
+&ufs1 {
+	status = "ok";
+};
+
 &sdhc_1 {
 	vdd-supply = <&pma8084_l20>;
 	qcom,vdd-voltage-level = <2950000 2950000>;
@@ -298,6 +320,18 @@
 
 &usb3 {
 	qcom,charging-disabled;
+};
+
+&usb3_sec {
+	status = "ok";
+};
+
+&hsphy1 {
+	status = "ok";
+};
+
+&ssphy1 {
+	status = "ok";
 };
 
 &pma8084_gpios {
@@ -402,7 +436,7 @@
 		qcom,output-type = <0>;		/* CMOS logic */
 		qcom,invert = <0>;		/* Output low initially */
 		qcom,vin-sel = <2>;		/* VIN 2 */
-		qcom,src-sel = <2>;		/* Function 1 */
+		qcom,src-sel = <3>;		/* Function 2 */
 		qcom,out-strength = <2>;	/* Medium */
 		qcom,master-en = <1>;		/* Enable GPIO */
 	};
