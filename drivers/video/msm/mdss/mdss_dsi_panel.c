@@ -164,7 +164,7 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	cmdreq.rlen = 0;
 	cmdreq.cb = NULL;
 
-	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+	ctrl->dsi_cmdlist_put(ctrl, &cmdreq);
 }
 
 void mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
