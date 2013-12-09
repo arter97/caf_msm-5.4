@@ -974,6 +974,8 @@ int mdss_mdp_ctl_split_display_setup(struct mdss_mdp_ctl *ctl,
 
 	mixer->width = sctl->width;
 	mixer->height = sctl->height;
+	mixer->roi = (struct mdss_mdp_img_rect)
+				{0, 0, mixer->width, mixer->height};
 	sctl->mixer_left = mixer;
 
 	return mdss_mdp_set_split_ctl(ctl, sctl);
@@ -1781,6 +1783,11 @@ int mdss_mdp_display_wakeup_time(struct mdss_mdp_ctl *ctl,
 int mdss_mdp_display_wait4comp(struct mdss_mdp_ctl *ctl)
 {
 	int ret;
+
+	if (!ctl) {
+		pr_err("invalid ctl\n");
+		return -ENODEV;
+	}
 
 	ret = mutex_lock_interruptible(&ctl->lock);
 	if (ret)
