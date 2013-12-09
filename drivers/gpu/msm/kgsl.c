@@ -1019,13 +1019,8 @@ static int kgsl_release(struct inode *inodep, struct file *filep)
 
 		next = next + 1;
 	}
+	next = 0;
 	while (1) {
-		/*
-		 * Always start back at the beginning, to
-		 * ensure all entries are removed,
-		 * like list_for_each_entry_safe.
-		 */
-		next = 0;
 		spin_lock(&private->mem_lock);
 		entry = idr_get_next(&private->mem_idr, &next);
 		spin_unlock(&private->mem_lock);
@@ -1041,6 +1036,7 @@ static int kgsl_release(struct inode *inodep, struct file *filep)
 			entry->pending_free = 1;
 			kgsl_mem_entry_put(entry);
 		}
+		next = next + 1;
 	}
 	/*
 	 * Clean up any to-be-freed entries that belong to this
