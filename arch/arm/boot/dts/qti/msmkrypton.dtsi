@@ -68,14 +68,14 @@
 		qcom,direct-connect-irqs = <8>;
 	};
 
-	qcom,msm-imem@fe805000 {
-		compatible = "qcom,msm-imem";
+	qti,msm-imem@fe805000 {
+		compatible = "qti,msm-imem";
 		reg = <0xfe805000 0x1000>; /* Address and size of IMEM */
 	};
 
 	qcom,msm-mem-hole {
 		compatible = "qcom,msm-mem-hole";
-		qcom,memblock-remove = <0x01000000 0x05D00000>; /* Address and Size of Hole */
+		qti,memblock-remove = <0x01000000 0x05D00000>; /* Address and Size of Hole */
 	};
 
 	timer@f9020000 {
@@ -177,19 +177,20 @@
 		interrupts = <0 94 0>;
 	};
 
-	pcie0: qcom,pcie@fc520000 {
-		compatible = "qcom,msm_pcie";
+	pcie0: qti,pcie@fc520000 {
+		compatible = "qti,msm_pcie";
 		cell-index = <0>;
-		qcom,ctrl-amt = <1>;
+		qti,ctrl-amt = <1>;
 
 		reg = <0xfc520000 0x2000>,
 		      <0xfc526000 0x1000>,
 		      <0x80000000 0x1000>,
 		      <0x80001000 0x1000>,
 		      <0x80100000 0x1000>,
-		      <0x80200000 0xe00000>;
+		      <0x80200000 0x100000>,
+		      <0x80300000 0xd00000>;
 		reg-names = "parf", "phy", "dm_core", "elbi",
-				"conf", "bars";
+				"conf", "io", "bars";
 
 		#address-cells = <0>;
 		interrupt-parent = <&pcie0>;
@@ -223,8 +224,8 @@
 		vreg-1.8-supply = <&pmd9635_l8>;
 		vreg-0.9-supply = <&pmd9635_l4>;
 
-		qcom,vreg-1.8-voltage-level = <1800000 1800000 1000>;
-		qcom,vreg-0.9-voltage-level = <950000 950000 24000>;
+		qti,vreg-1.8-voltage-level = <1800000 1800000 1000>;
+		qti,vreg-0.9-voltage-level = <950000 950000 24000>;
 
 		clock-names = "pcie_0_pipe_clk", "pcie_0_ref_clk_src",
 				"pcie_0_aux_clk", "pcie_0_cfg_ahb_clk",
@@ -293,54 +294,54 @@
 		qcom,num-locks = <8>;
 	};
 
-	qcom,smem@1100000 {
-		compatible = "qcom,smem";
+	qti,smem@1100000 {
+		compatible = "qti,smem";
 		reg = <0x1100000 0x100000>,
 			<0xf9011000 0x1000>,
 			<0xfc428000 0x4000>;
 		reg-names = "smem", "irq-reg-base", "aux-mem1";
 
-		qcom,smd-modem {
-			compatible = "qcom,smd";
-			qcom,smd-edge = <0>;
-			qcom,smd-irq-offset = <0x8>;
-			qcom,smd-irq-bitmask = <0x1000>;
-			qcom,pil-string = "modem";
+		qti,smd-modem {
+			compatible = "qti,smd";
+			qti,smd-edge = <0>;
+			qti,smd-irq-offset = <0x8>;
+			qti,smd-irq-bitmask = <0x1000>;
+			qti,pil-string = "modem";
 			interrupts = <0 25 1>;
 		};
 
-		qcom,smsm-modem {
-			compatible = "qcom,smsm";
-			qcom,smsm-edge = <0>;
-			qcom,smsm-irq-offset = <0x8>;
-			qcom,smsm-irq-bitmask = <0x2000>;
+		qti,smsm-modem {
+			compatible = "qti,smsm";
+			qti,smsm-edge = <0>;
+			qti,smsm-irq-offset = <0x8>;
+			qti,smsm-irq-bitmask = <0x2000>;
 			interrupts = <0 26 1>;
 		};
 
-		qcom,smd-adsp {
-			compatible = "qcom,smd";
-			qcom,smd-edge = <1>;
-			qcom,smd-irq-offset = <0x8>;
-			qcom,smd-irq-bitmask = <0x100>;
-			qcom,pil-string = "adsp";
+		qti,smd-adsp {
+			compatible = "qti,smd";
+			qti,smd-edge = <1>;
+			qti,smd-irq-offset = <0x8>;
+			qti,smd-irq-bitmask = <0x100>;
+			qti,pil-string = "adsp";
 			interrupts = <0 156 1>;
 		};
 
-		qcom,smsm-adsp {
-			compatible = "qcom,smsm";
-			qcom,smsm-edge = <1>;
-			qcom,smsm-irq-offset = <0x8>;
-			qcom,smsm-irq-bitmask = <0x200>;
+		qti,smsm-adsp {
+			compatible = "qti,smsm";
+			qti,smsm-edge = <1>;
+			qti,smsm-irq-offset = <0x8>;
+			qti,smsm-irq-bitmask = <0x200>;
 			interrupts = <0 157 1>;
 		};
 
-		qcom,smd-rpm {
-			compatible = "qcom,smd";
-			qcom,smd-edge = <15>;
-			qcom,smd-irq-offset = <0x8>;
-			qcom,smd-irq-bitmask = <0x1>;
+		qti,smd-rpm {
+			compatible = "qti,smd";
+			qti,smd-edge = <15>;
+			qti,smd-irq-offset = <0x8>;
+			qti,smd-irq-bitmask = <0x1>;
 			interrupts = <0 168 1>;
-			qcom,irq-no-suspend;
+			qti,irq-no-suspend;
 		};
 	};
 

@@ -904,6 +904,7 @@ static int estimate_ocv(struct qpnp_bms_chip *chip)
 	return ocv_est_uv;
 }
 
+#define MIN_IAVG_MA 250
 static void reset_for_new_battery(struct qpnp_bms_chip *chip, int batt_temp)
 {
 	chip->last_ocv_uv = chip->insertion_ocv_uv;
@@ -914,7 +915,7 @@ static void reset_for_new_battery(struct qpnp_bms_chip *chip, int batt_temp)
 	chip->soc_at_cv = -EINVAL;
 	chip->shutdown_soc_invalid = true;
 	chip->shutdown_soc = 0;
-	chip->shutdown_iavg_ma = 0;
+	chip->shutdown_iavg_ma = MIN_IAVG_MA;
 	chip->prev_pc_unusable = -EINVAL;
 	reset_cc(chip, CLEAR_CC | CLEAR_SHDW_CC);
 	chip->software_cc_uah = 0;
@@ -1295,7 +1296,7 @@ static int adjust_uuc(struct qpnp_bms_chip *chip,
 	max_percent_change = max(params->delta_time_s
 				/ TIME_PER_PERCENT_UUC, 1);
 
-	if (chip->prev_pc_unusable == -EINVAL
+	if (chip->first_time_calc_uuc || chip->prev_pc_unusable == -EINVAL
 		|| abs(chip->prev_pc_unusable - new_pc_unusable)
 			<= max_percent_change) {
 		chip->prev_pc_unusable = new_pc_unusable;
@@ -1328,7 +1329,6 @@ static int adjust_uuc(struct qpnp_bms_chip *chip,
 	return new_uuc_uah;
 }
 
-#define MIN_IAVG_MA 250
 static int calculate_unusable_charge_uah(struct qpnp_bms_chip *chip,
 					struct soc_params *params,
 					int batt_temp)
@@ -2268,6 +2268,8 @@ static void configure_soc_wakeup(struct qpnp_bms_chip *chip,
 	qpnp_write_wrapper(chip, (u8 *)&ocv_raw,
 			chip->base + BMS1_OCV_THR0, 2);
 
+	enable_bms_irq(&chip->ocv_thr_irq);
+	enable_bms_irq(&chip->sw_cc_thr_irq);
 	pr_debug("current sw_cc_raw = 0x%llx, current ocv = 0x%hx\n",
 			current_shdw_cc_raw, (uint16_t)current_ocv_raw);
 	pr_debug("target_cc_uah = %lld, raw64 = 0x%llx, raw 36 = 0x%llx, ocv_raw = 0x%hx\n",
@@ -2399,9 +2401,13 @@ static int calculate_state_of_charge(struct qpnp_bms_chip *chip,
 	 * If the battery is full, configure the cc threshold so the system
 	 * wakes up after SoC changes
 	 */
-	if (is_battery_full(chip))
+	if (is_battery_full(chip)) {
 		configure_soc_wakeup(chip, &params,
 				batt_temp, bound_soc(new_calculated_soc - 1));
+	} else {
+		disable_bms_irq(&chip->ocv_thr_irq);
+		disable_bms_irq(&chip->sw_cc_thr_irq);
+	}
 done_calculating:
 	mutex_lock(&chip->last_soc_mutex);
 	previous_soc = chip->calculated_soc;
@@ -3243,8 +3249,6 @@ static void battery_status_check(struct qpnp_bms_chip *chip)
 
 		if (status == POWER_SUPPLY_STATUS_FULL) {
 			pr_debug("battery full\n");
-			enable_bms_irq(&chip->ocv_thr_irq);
-			enable_bms_irq(&chip->sw_cc_thr_irq);
 			recalculate_soc(chip);
 		} else if (chip->battery_status
 				== POWER_SUPPLY_STATUS_FULL) {
@@ -3492,6 +3496,7 @@ static void load_shutdown_data(struct qpnp_bms_chip *chip)
 	 * Do a quick run of SoC calculation to find whether the shutdown soc
 	 * is close enough.
 	 */
+	chip->shutdown_iavg_ma = MIN_IAVG_MA;
 	calculated_soc = recalculate_raw_soc(chip);
 	shutdown_soc_out_of_limit = (abs(shutdown_soc - calculated_soc)
 			> chip->shutdown_soc_valid_limit);
@@ -3543,6 +3548,7 @@ static irqreturn_t bms_sw_cc_thr_irq_handler(int irq, void *_chip)
 	struct qpnp_bms_chip *chip = _chip;
 
 	pr_debug("sw_cc_thr irq triggered\n");
+	disable_bms_irq(&chip->sw_cc_thr_irq);
 	bms_stay_awake(&chip->soc_wake_source);
 	schedule_work(&chip->recalc_work);
 	return IRQ_HANDLED;

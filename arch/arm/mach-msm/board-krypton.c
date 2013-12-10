@@ -33,7 +33,6 @@
 #include <mach/msm_smem.h>
 #include "board-dt.h"
 #include "clock.h"
-#include "modem_notifier.h"
 #include "spm.h"
 
 static struct memtype_reserve msmkrypton_reserve_table[] __initdata = {
@@ -54,7 +53,7 @@ static struct reserve_info msmkrypton_reserve_info __initdata = {
 
 static struct of_dev_auxdata msmkrypton_auxdata_lookup[] __initdata = {
 	OF_DEV_AUXDATA("qcom,sdhci-msm", 0xF98A4900, "msm_sdcc.2", NULL),
-	OF_DEV_AUXDATA("qcom,msm_pcie", 0xFC520000, "msm_pcie", NULL),
+	OF_DEV_AUXDATA("qti,msm_pcie", 0xFC520000, "msm_pcie", NULL),
 	{}
 };
 
@@ -66,7 +65,6 @@ static struct of_dev_auxdata msmkrypton_auxdata_lookup[] __initdata = {
  */
 void __init msmkrypton_add_drivers(void)
 {
-	msm_init_modem_notifier_list();
 	msm_smd_init();
 	msm_rpm_driver_init();
 	rpm_regulator_smd_driver_init();

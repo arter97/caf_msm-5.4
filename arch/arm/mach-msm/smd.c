@@ -41,6 +41,7 @@
 #include <mach/msm_smd.h>
 #include <mach/msm_iomap.h>
 #include <mach/subsystem_notif.h>
+#include <mach/subsystem_restart.h>
 #include <mach/socinfo.h>
 #include <mach/proc_comm.h>
 #include <mach/msm_ipc_logging.h>
@@ -52,7 +53,6 @@
 #include <asm/io.h>
 
 #include "smd_private.h"
-#include "modem_notifier.h"
 #include "smem_private.h"
 
 #define SMD_VERSION 0x00020000
@@ -1215,6 +1215,7 @@ static void update_packet_state(struct smd_channel *ch)
 {
 	unsigned hdr[5];
 	int r;
+	const char *peripheral = NULL;
 
 	/* can't do anything if we're in the middle of a packet */
 	while (ch->current_packet == 0) {
@@ -1228,6 +1229,17 @@ static void update_packet_state(struct smd_channel *ch)
 		BUG_ON(r != SMD_HEADER_SIZE);
 
 		ch->current_packet = hdr[0];
+		if (ch->current_packet > (uint32_t)INT_MAX) {
+			pr_err("%s: Invalid packet size of %d bytes detected. Edge: %d, Channel : %s, RPTR: %d, WPTR: %d",
+				__func__, ch->current_packet, ch->type,
+				ch->name, ch->half_ch->get_tail(ch->recv),
+				ch->half_ch->get_head(ch->recv));
+			peripheral = smd_edge_to_pil_str(ch->type);
+			if (peripheral) {
+				if (subsystem_restart(peripheral) < 0)
+					BUG();
+			}
+		}
 	}
 }
 
@@ -1705,6 +1717,12 @@ static int smd_packet_read(smd_channel_t *ch, void *data, int len, int user_buf)
 	if (len < 0)
 		return -EINVAL;
 
+	if (ch->current_packet > (uint32_t)INT_MAX) {
+		pr_err("%s: Invalid packet size for Edge %d and Channel %s",
+			__func__, ch->type, ch->name);
+		return -EFAULT;
+	}
+
 	if (len > ch->current_packet)
 		len = ch->current_packet;
 
@@ -1728,6 +1746,12 @@ static int smd_packet_read_from_cb(smd_channel_t *ch, void *data, int len,
 
 	if (len < 0)
 		return -EINVAL;
+
+	if (ch->current_packet > (uint32_t)INT_MAX) {
+		pr_err("%s: Invalid packet size for Edge %d and Channel %s",
+			__func__, ch->type, ch->name);
+		return -EFAULT;
+	}
 
 	if (len > ch->current_packet)
 		len = ch->current_packet;
@@ -2337,6 +2361,11 @@ int smd_read_avail(smd_channel_t *ch)
 		return -ENODEV;
 	}
 
+	if (ch->current_packet > (uint32_t)INT_MAX) {
+		pr_err("%s: Invalid packet size for Edge %d and Channel %s",
+			__func__, ch->type, ch->name);
+		return -EFAULT;
+	}
 	return ch->read_avail(ch);
 }
 EXPORT_SYMBOL(smd_read_avail);
@@ -2433,6 +2462,11 @@ int smd_cur_packet_size(smd_channel_t *ch)
 		return -ENODEV;
 	}
 
+	if (ch->current_packet > (uint32_t)INT_MAX) {
+		pr_err("%s: Invalid packet size for Edge %d and Channel %s",
+			__func__, ch->type, ch->name);
+		return -EFAULT;
+	}
 	return ch->current_packet;
 }
 EXPORT_SYMBOL(smd_cur_packet_size);
@@ -2801,10 +2835,6 @@ static irqreturn_t smsm_irq_handler(int irq, void *data)
 			 * smd state changes during reset
 			 */
 			smd_fake_irq_handler(0);
-
-			/* queue modem restart notify chain */
-			modem_queue_start_reset_notify();
-
 		} else if (modm & SMSM_RESET) {
 			pr_err("\nSMSM: Modem SMSM state changed to SMSM_RESET.");
 			if (!disable_smsm_reset_handshake) {
@@ -2812,14 +2842,9 @@ static irqreturn_t smsm_irq_handler(int irq, void *data)
 				flush_cache_all();
 				outer_flush_all();
 			}
-			modem_queue_start_reset_notify();
-
 		} else if (modm & SMSM_INIT) {
-			if (!(apps & SMSM_INIT)) {
+			if (!(apps & SMSM_INIT))
 				apps |= SMSM_INIT;
-				modem_queue_smsm_init_notify();
-			}
-
 			if (modm & SMSM_SMDINIT)
 				apps |= SMSM_SMDINIT;
 			if ((apps & (SMSM_INIT | SMSM_SMDINIT | SMSM_RPCINIT)) ==
@@ -2827,7 +2852,6 @@ static irqreturn_t smsm_irq_handler(int irq, void *data)
 				apps |= SMSM_RUN;
 		} else if (modm & SMSM_SYSTEM_DOWNLOAD) {
 			pr_err("\nSMSM: Modem SMSM state changed to SMSM_SYSTEM_DOWNLOAD.");
-			modem_queue_start_reset_notify();
 		}
 
 		if (old_apps != apps) {

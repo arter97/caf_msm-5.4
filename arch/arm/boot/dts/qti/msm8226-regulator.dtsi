@@ -20,6 +20,7 @@
 			reg = <0x1700 0x100>;
 			regulator-min-microvolt = <900000>;
 			regulator-max-microvolt = <1275000>;
+			qcom,mode = "auto";
 		};
 	};
 };
@@ -50,7 +51,7 @@
 					1275000 1275000>;
 		qti,pvs-corner-ceiling-slow = <1050000 1150000 1275000>;
 		qti,pvs-corner-ceiling-nom  = <1050000 1075000 1200000>;
-		qti,pvs-corner-ceiling-fast = <1050000 1050000 1140000>;
+		qti,pvs-corner-ceiling-fast = <1050000 1050000 1100000>;
 		vdd-apc-supply = <&pm8226_s2>;
 
 		vdd-mx-supply = <&pm8226_l3_ao>;
@@ -82,8 +83,8 @@
 		qti,cpr-fuse-redun-ro-sel = <46 36 39>;
 
 		qti,cpr-enable;
+		qti,cpr-fuse-cond-min-volt-sel = <54 42 6 7 1>;
 		qti,cpr-cond-min-voltage = <1140000>;
-		qti,cpr-cond-min-volt-fuse = <54 0xc100 0x0 1>;
 	};
 };
 
