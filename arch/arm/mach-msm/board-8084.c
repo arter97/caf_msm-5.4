@@ -36,7 +36,6 @@
 #include "board-dt.h"
 #include "clock.h"
 #include "platsmp.h"
-#include "modem_notifier.h"
 #include "pm.h"
 
 static struct memtype_reserve apq8084_reserve_table[] __initdata = {
@@ -66,8 +65,8 @@ static struct of_dev_auxdata apq8084_auxdata_lookup[] __initdata = {
 	OF_DEV_AUXDATA("qca,qca1530", 0x00000000, "qca1530.1", NULL),
 	OF_DEV_AUXDATA("qcom,ufshc", 0xFC594000, "msm_ufs.1", NULL),
 	OF_DEV_AUXDATA("qcom,xhci-msm-hsic", 0xf9c00000, "msm_hsic_host", NULL),
-	OF_DEV_AUXDATA("qcom,msm_pcie", 0xFC520000, "msm_pcie.1", NULL),
-	OF_DEV_AUXDATA("qcom,msm_pcie", 0xFC528000, "msm_pcie.2", NULL),
+	OF_DEV_AUXDATA("qti,msm_pcie", 0xFC520000, "msm_pcie.1", NULL),
+	OF_DEV_AUXDATA("qti,msm_pcie", 0xFC528000, "msm_pcie.2", NULL),
 	{}
 };
 
@@ -92,7 +91,6 @@ static void __init apq8084_early_memory(void)
  */
 void __init apq8084_add_drivers(void)
 {
-	msm_init_modem_notifier_list();
 	msm_smd_init();
 	msm_rpm_driver_init();
 	msm_pm_sleep_status_init();

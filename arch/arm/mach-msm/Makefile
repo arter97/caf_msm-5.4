@@ -5,7 +5,6 @@ ifndef CONFIG_ARM_ARCH_TIMER
 obj-y += timer.o
 endif
 obj-y += clock.o clock-voter.o clock-dummy.o clock-generic.o
-obj-y += modem_notifier.o
 obj-$(CONFIG_USE_OF) += board-dt.o
 obj-$(CONFIG_DEBUG_FS) += nohlt.o clock-debug.o
 
@@ -131,6 +130,9 @@ CFLAGS_msm_vibrator.o += -Idrivers/staging/android
 obj-$(CONFIG_MSM_RMT_STORAGE_CLIENT) += rmt_storage_client.o
 obj-$(CONFIG_MSM_LPM_TEST) += test-lpm.o
 obj-$(CONFIG_MSM_RPM_SMD) += rpm-smd.o lpm_levels.o
+ifdef CONFIG_DEBUG_FS
+obj-$(CONFIG_MSM_RPM_SMD) += rpm-smd-debug.o
+endif
 obj-$(CONFIG_MSM_MPM_OF) += mpm-of.o
 obj-$(CONFIG_MSM_RPM_STATS_LOG) += rpm_stats.o rpm_master_stat.o
 obj-$(CONFIG_MSM_RPM_RBCPR_STATS_V2_LOG) += rpm_rbcpr_stats_v2.o

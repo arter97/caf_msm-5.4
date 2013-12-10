@@ -1196,6 +1196,7 @@ static int mdss_fb_open(struct fb_info *info, int user)
 			pr_err("unable to start display thread %d\n",
 				mfd->index);
 			result = PTR_ERR(mfd->disp_thread);
+			mfd->disp_thread = NULL;
 			goto thread_error;
 		}
 
@@ -1215,6 +1216,7 @@ static int mdss_fb_open(struct fb_info *info, int user)
 
 blank_error:
 	kthread_stop(mfd->disp_thread);
+	mfd->disp_thread = NULL;
 
 thread_error:
 	if (pinfo && !pinfo->ref_cnt) {
@@ -1266,8 +1268,10 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
 			pm_runtime_put(info->dev);
 		} while (release_all && pinfo->ref_cnt);
 
-		if (release_all)
+		if (release_all && mfd->disp_thread) {
 			kthread_stop(mfd->disp_thread);
+			mfd->disp_thread = NULL;
+		}
 
 		if (pinfo->ref_cnt == 0) {
 			list_del(&pinfo->list);
@@ -1305,7 +1309,10 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
 	}
 
 	if (!mfd->ref_cnt) {
-		kthread_stop(mfd->disp_thread);
+		if (mfd->disp_thread) {
+			kthread_stop(mfd->disp_thread);
+			mfd->disp_thread = NULL;
+		}
 
 		ret = mdss_fb_blank_sub(FB_BLANK_POWERDOWN, info,
 			mfd->op_enable);
@@ -2223,6 +2230,7 @@ int mdss_register_panel(struct platform_device *pdev,
 	struct platform_device *fb_pdev, *mdss_pdev;
 	struct device_node *node;
 	int rc = 0;
+	bool master_panel = true;
 
 	if (!pdev || !pdev->dev.of_node) {
 		pr_err("Invalid device node\n");
@@ -2250,6 +2258,8 @@ int mdss_register_panel(struct platform_device *pdev,
 	fb_pdev = of_find_device_by_node(node);
 	if (fb_pdev) {
 		rc = mdss_fb_register_extra_panel(fb_pdev, pdata);
+		if (rc == 0)
+			master_panel = false;
 	} else {
 		pr_info("adding framebuffer device %s\n", dev_name(&pdev->dev));
 		fb_pdev = of_platform_device_create(node, NULL,
@@ -2257,7 +2267,7 @@ int mdss_register_panel(struct platform_device *pdev,
 		fb_pdev->dev.platform_data = pdata;
 	}
 
-	if (mdp_instance->panel_register_done)
+	if (master_panel && mdp_instance->panel_register_done)
 		mdp_instance->panel_register_done(pdata);
 
 mdss_notfound:

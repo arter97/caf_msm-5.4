@@ -180,6 +180,7 @@ static const struct msm_pcie_res_info_t msm_pcie_res_info[MSM_PCIE_MAX_RES] = {
 	{"dm_core",	0, 0},
 	{"elbi",	0, 0},
 	{"conf",	0, 0},
+	{"io",		0, 0},
 	{"bars",	0, 0}
 };
 
@@ -676,7 +677,9 @@ static void msm_pcie_config_l1ss(u32 rc_idx)
 		readl_relaxed(dev->dm_core + PCIE20_ACK_F_ASPM_CTRL_REG));
 
 	/* Enable the AUX Clock and the Core Clk to be synchronous for L1SS*/
-	msm_pcie_write_mask(dev->parf + PCIE20_PARF_SYS_CTRL, BIT(3), 0);
+	if (!dev->aux_clk_sync)
+		msm_pcie_write_mask(dev->parf +
+				PCIE20_PARF_SYS_CTRL, BIT(3), 0);
 
 	/* Enable L1SS on RC */
 	msm_pcie_write_mask(dev->dm_core + PCIE20_CAP_LINKCTRLSTATUS, 0,
@@ -762,7 +765,7 @@ static int msm_pcie_get_resources(u32 rc_idx, struct platform_device *pdev)
 		} else {
 			dev->vreg_n++;
 			snprintf(prop_name, MAX_PROP_SIZE,
-				"qcom,%s-voltage-level", vreg_info->name);
+				"qti,%s-voltage-level", vreg_info->name);
 			prop = of_get_property((&pdev->dev)->of_node,
 						prop_name, &len);
 			if (!prop || (len != (3 * sizeof(__be32)))) {
@@ -908,6 +911,8 @@ static int msm_pcie_get_resources(u32 rc_idx, struct platform_device *pdev)
 	dev->conf = dev->res[MSM_PCIE_RES_CONF].base;
 	dev->bars = dev->res[MSM_PCIE_RES_BARS].base;
 	dev->dev_mem_res = dev->res[MSM_PCIE_RES_BARS].resource;
+	dev->dev_io_res = dev->res[MSM_PCIE_RES_IO].resource;
+	dev->dev_io_res->flags = IORESOURCE_IO;
 
 	return ret;
 }
@@ -920,6 +925,7 @@ static void msm_pcie_release_resources(u32 rc_idx)
 	msm_pcie_dev[rc_idx].conf = NULL;
 	msm_pcie_dev[rc_idx].bars = NULL;
 	msm_pcie_dev[rc_idx].dev_mem_res = NULL;
+	msm_pcie_dev[rc_idx].dev_io_res = NULL;
 }
 
 static int msm_pcie_enable(u32 rc_idx, u32 options)
@@ -1040,7 +1046,7 @@ static int msm_pcie_enable(u32 rc_idx, u32 options)
 
 	msm_pcie_config_msi_controller(dev);
 
-	if (msm_pcie_dev[rc_idx].vreg_n == MSM_PCIE_MAX_VREG)
+	if (dev->l1ss_supported)
 		msm_pcie_config_l1ss(rc_idx);
 
 	if (options & PM_IRQ) {
@@ -1103,12 +1109,14 @@ static int msm_pcie_setup(int nr, struct pci_sys_data *sys)
 	 */
 	if (!init) {
 		sys->mem_offset = 0;
+		sys->io_offset = 0;
 		init = true;
 	}
 
 	pci_add_resource(&sys->resources,
+			msm_pcie_dev[pcie_drv.current_rc].dev_io_res);
+	pci_add_resource(&sys->resources,
 			msm_pcie_dev[pcie_drv.current_rc].dev_mem_res);
-
 	return 1;
 }
 
@@ -1171,7 +1179,7 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	mutex_lock(&pcie_drv.drv_lock);
 
 	ret = of_property_read_u32((&pdev->dev)->of_node,
-				"qcom,ctrl-amt", &pcie_drv.rc_expected);
+				"qti,ctrl-amt", &pcie_drv.rc_expected);
 	if (ret) {
 		pr_err("PCIe: does not find controller amount.\n");
 		goto out;
@@ -1200,6 +1208,17 @@ static int msm_pcie_probe(struct platform_device *pdev)
 		pcie_drv.rc_num++;
 		PCIE_DBG("RC index is %d.", rc_idx);
 	}
+
+	msm_pcie_dev[rc_idx].l1ss_supported =
+		of_property_read_bool((&pdev->dev)->of_node,
+				"qti,l1ss-supported");
+	PCIE_DBG("L1ss is %s supported.\n",
+		msm_pcie_dev[rc_idx].l1ss_supported ? "" : "not");
+	msm_pcie_dev[rc_idx].aux_clk_sync =
+		of_property_read_bool((&pdev->dev)->of_node,
+				"qti,aux-clk-sync");
+	PCIE_DBG("AUX clock is %s synchronous to Core clock.\n",
+		msm_pcie_dev[rc_idx].aux_clk_sync ? "" : "not");
 
 	msm_pcie_dev[rc_idx].pdev = pdev;
 	msm_pcie_dev[rc_idx].vreg_n = 0;
@@ -1299,7 +1318,7 @@ out:
 }
 
 static struct of_device_id msm_pcie_match[] = {
-	{	.compatible = "qcom,msm_pcie",
+	{	.compatible = "qti,msm_pcie",
 	},
 	{}
 };

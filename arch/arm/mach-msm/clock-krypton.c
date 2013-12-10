@@ -186,6 +186,7 @@ static DEFINE_VDD_REGULATORS(vdd_dig, VDD_DIG_NUM, 1, vdd_corner, NULL);
 #define USB_HS_AHB_CBCR                                    (0x0488)
 #define USB_HS_SYSTEM_CMD_RCGR                             (0x0490)
 #define USB2A_PHY_SLEEP_CBCR                               (0x04AC)
+#define USB2B_PHY_BCR                                      (0x04B0)
 #define USB2B_PHY_SLEEP_CBCR                               (0x04B4)
 #define SDCC2_APPS_CMD_RCGR                                (0x0510)
 #define SDCC2_APPS_CBCR                                    (0x0504)
@@ -250,6 +251,7 @@ static DEFINE_VDD_REGULATORS(vdd_dig, VDD_DIG_NUM, 1, vdd_corner, NULL);
 #define CLOCK_FRQ_MEASURE_CTL                              (0x1884)
 #define CLOCK_FRQ_MEASURE_STATUS                           (0x1888)
 #define PLLTEST_PAD_CFG                                    (0x188C)
+#define USB3PHY_PHY_BCR                                    (0x1B8C)
 #define PCIE_CFG_AHB_CBCR                                  (0x1C04)
 #define PCIE_PIPE_CBCR                                     (0x1C08)
 #define PCIE_AXI_CBCR                                      (0x1C0C)
@@ -1454,6 +1456,7 @@ static struct branch_clk gcc_usb2a_phy_sleep_clk = {
 
 static struct branch_clk gcc_usb2b_phy_sleep_clk = {
 	.cbcr_reg = USB2B_PHY_SLEEP_CBCR,
+	.bcr_reg = USB2B_PHY_BCR,
 	.has_sibling = 1,
 	.base = &virt_bases[GCC_BASE],
 	.c = {
@@ -1488,6 +1491,7 @@ static struct branch_clk gcc_usb3_aux_clk = {
 
 static struct branch_clk gcc_usb3_pipe_clk = {
 	.cbcr_reg = USB3_PIPE_CBCR,
+	.bcr_reg = USB3PHY_PHY_BCR,
 	.has_sibling = 0,
 	.base = &virt_bases[GCC_BASE],
 	.c = {
@@ -2175,17 +2179,16 @@ static struct clk_lookup msm_clocks_krypton[] = {
 	CLK_LOOKUP("mem_clk",   gcc_usb30_master_clk.c, "f9304000.qcom,usbbam"),
 
 	CLK_LOOKUP("",	ce1_clk_src.c,	""),
-	CLK_LOOKUP("",  gcc_usb3_phy_com_reset.c,       ""),
-	CLK_LOOKUP("",  gcc_usb3_phy_reset.c,   ""),
+	CLK_LOOKUP("phy_com_reset",  gcc_usb3_phy_com_reset.c,
+		   "f9b38000.ssphy"),
+	CLK_LOOKUP("phy_reset",  gcc_usb3_phy_reset.c,   "f9b38000.ssphy"),
 	CLK_LOOKUP("pcie_0_ldo",  gcc_pcie_gpio_ldo.c,   "msm_pcie"),
 	CLK_LOOKUP("",  gcc_usb_ss_ldo.c,   ""),
 
 	CLK_LOOKUP("ref_clk", lnbbclk_clk.c, "f9200000.qcom,ssusb"),
 	CLK_LOOKUP("", lnbbclk_a_clk.c, ""),
 	CLK_LOOKUP("xo", cxo_dwc3_clk.c, "f9200000.qcom,ssusb"),
-	CLK_LOOKUP("sleep_a_clk", gcc_usb2a_phy_sleep_clk.c,
-		   "f9200000.qcom,ssusb"),
-	CLK_LOOKUP("sleep_b_clk", gcc_usb2b_phy_sleep_clk.c,
+	CLK_LOOKUP("phy_sleep_clk", gcc_usb2b_phy_sleep_clk.c,
 		   "f9200000.qcom,ssusb"),
 
 	CLK_LOOKUP("core_clk", qpic_clk.c, "f9ac0000.qcom,nand"),

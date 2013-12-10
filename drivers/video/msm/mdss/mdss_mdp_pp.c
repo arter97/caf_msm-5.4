@@ -1578,6 +1578,8 @@ int mdss_mdp_pp_setup_locked(struct mdss_mdp_ctl *ctl)
 									ret);
 		goto exit;
 	}
+	if (mdata->nad_cfgs == 0)
+		valid_mixers = false;
 	for (i = 0; i < mixer_cnt && valid_mixers; i++) {
 		if (mixer_id[i] > mdata->nad_cfgs)
 			valid_mixers = false;
@@ -2817,7 +2819,7 @@ static void pp_hist_read(char __iomem *v_addr,
 	hist_info->data[i_start] = data & 0xFFFFFF;
 	for (i = i_start + 1; i < HIST_V_SIZE; i++)
 		hist_info->data[i] = readl_relaxed(v_addr) & 0xFFFFFF;
-	for (i = 0; i < i_start - 1; i++)
+	for (i = 0; i < i_start; i++)
 		hist_info->data[i] = readl_relaxed(v_addr) & 0xFFFFFF;
 	hist_info->hist_cnt_read++;
 }

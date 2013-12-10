@@ -70,6 +70,7 @@ config ARCH_APQ8084
 	select KRAIT_REGULATOR
 	select MSM_PIL
 	select ENABLE_VMALLOC_SAVINGS
+	select MSM_ULTRASOUND_B
 
 config ARCH_MPQ8092
 	bool "MPQ8092"
@@ -110,6 +111,8 @@ config ARCH_FSM9900
 	select MSM_RUN_QUEUE_STATS
 	select MSM_NOPM
 	select KRAIT_REGULATOR
+	select ARCH_SUPPORTS_MSI
+	select MIGHT_HAVE_PCI
 
 config ARCH_MSMKRYPTON
 	bool "MSMKRYPTON"
@@ -618,6 +621,7 @@ endchoice
 config MSM_PCIE
 	bool "MSM PCIe Controller driver"
 	depends on PCI && PCI_MSI
+	select PCI_DOMAINS
 	help
 	  Enables the PCIe functionality by configures PCIe core on
 	  MSM chipset and by enabling the ARM PCI framework extension.

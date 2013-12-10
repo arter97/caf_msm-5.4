@@ -294,8 +294,7 @@ static int xhci_reset_xfer_ring(struct xhci_hcd *xhci, int slot_id)
 			&& ep->ring->enqueue != ep->ring->dequeue) {
 			ep->stopped_td = NULL;
 			ep->stopped_trb = NULL;
-			xhci_reinit_cached_ring(xhci, ep->ring, 1,
-					ep->ring->type);
+			xhci_reinit_xfer_ring(ep->ring, 1);
 			memset(&deq_state, 0, sizeof(deq_state));
 			deq_state.new_deq_ptr = ep->ring->first_seg->trbs;
 			deq_state.new_deq_seg = ep->ring->first_seg;
