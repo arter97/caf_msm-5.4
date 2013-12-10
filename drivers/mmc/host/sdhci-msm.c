@@ -2897,11 +2897,13 @@ static void sdhci_set_default_hw_caps(struct sdhci_msm_host *msm_host,
 
 	/*
 	 * Starting with SDCC 5 controller (core major version = 1)
-	 * controller won't advertise 3.0v features except for
+	 * controller won't advertise 3.0v and 8-bit features except for
 	 * some targets.
 	 */
 	if (major >= 1 && minor != 0x11 && minor != 0x12) {
 		caps = CORE_3_0V_SUPPORT;
+		if (msm_host->pdata->mmc_bus_width == MMC_CAP_8_BIT_DATA)
+			caps |= CORE_8_BIT_SUPPORT;
 		writel_relaxed(
 			(readl_relaxed(host->ioaddr + SDHCI_CAPABILITIES) |
 			caps), host->ioaddr + CORE_VENDOR_SPEC_CAPABILITIES0);
@@ -3361,6 +3363,7 @@ static int sdhci_msm_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM_RUNTIME
 static int sdhci_msm_cfg_sdio_wakeup(struct sdhci_host *host, bool enable)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
@@ -3463,6 +3466,7 @@ skip_enable_host_irq:
 
 	return 0;
 }
+#endif
 
 #ifdef CONFIG_PM_SLEEP
 
@@ -3545,7 +3549,7 @@ static const struct dev_pm_ops sdhci_msm_pmops = {
 #define SDHCI_MSM_PMOPS (&sdhci_msm_pmops)
 
 #else
-#define SDHCI_PM_OPS NULL
+#define SDHCI_MSM_PMOPS NULL
 #endif
 static const struct of_device_id sdhci_msm_dt_match[] = {
 	{.compatible = "qcom,sdhci-msm"},
