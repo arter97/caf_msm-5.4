@@ -2473,11 +2473,14 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	clk_set_rate(mdwc->sleep_clk, 32000);
 	clk_prepare_enable(mdwc->sleep_clk);
 
-	mdwc->hsphy_sleep_clk = devm_clk_get(&pdev->dev, "sleep_a_clk");
+	mdwc->hsphy_sleep_clk = devm_clk_get(&pdev->dev, "phy_sleep_clk");
 	if (IS_ERR(mdwc->hsphy_sleep_clk)) {
-		dev_err(&pdev->dev, "failed to get sleep_a_clk\n");
-		ret = PTR_ERR(mdwc->hsphy_sleep_clk);
-		goto disable_sleep_clk;
+		mdwc->hsphy_sleep_clk = devm_clk_get(&pdev->dev, "sleep_a_clk");
+		if (IS_ERR(mdwc->hsphy_sleep_clk)) {
+			dev_err(&pdev->dev, "failed to get sleep_a_clk\n");
+			ret = PTR_ERR(mdwc->hsphy_sleep_clk);
+			goto disable_sleep_clk;
+		}
 	}
 	clk_prepare_enable(mdwc->hsphy_sleep_clk);
 
@@ -2485,7 +2488,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	if (IS_ERR(mdwc->utmi_clk)) {
 		dev_err(&pdev->dev, "failed to get utmi_clk\n");
 		ret = PTR_ERR(mdwc->utmi_clk);
-		goto disable_sleep_a_clk;
+		goto disable_hsphy_sleep_clk;
 	}
 	clk_set_rate(mdwc->utmi_clk, 19200000);
 	clk_prepare_enable(mdwc->utmi_clk);
@@ -2505,12 +2508,12 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 
 	mdwc->id_state = mdwc->ext_xceiv.id = DWC3_ID_FLOAT;
 	mdwc->ext_xceiv.otg_capability = of_property_read_bool(node,
-				"qcom,otg-capability");
+				"qti,otg-capability");
 	mdwc->charger.charging_disabled = of_property_read_bool(node,
-				"qcom,charging-disabled");
+				"qti,charging-disabled");
 
 	mdwc->charger.skip_chg_detect = of_property_read_bool(node,
-				"qcom,skip-charger-detection");
+				"qti,skip-charger-detection");
 	/*
 	 * DWC3 has separate IRQ line for OTG events (ID/BSV) and for
 	 * DP and DM linestate transitions during low power mode.
@@ -2611,7 +2614,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 
 	mdwc->io_res = res; /* used to calculate chg block offset */
 
-	if (of_property_read_u32(node, "qcom,dwc-usb3-msm-dbm-eps",
+	if (of_property_read_u32(node, "qti,dwc-usb3-msm-dbm-eps",
 				 &mdwc->dbm_num_eps)) {
 		dev_err(&pdev->dev,
 			"unable to read platform data num of dbm eps\n");
@@ -2627,12 +2630,12 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		goto disable_ref_clk;
 	}
 
-	if (of_property_read_u32(node, "qcom,dwc-usb3-msm-tx-fifo-size",
+	if (of_property_read_u32(node, "qti,dwc-usb3-msm-tx-fifo-size",
 				 &mdwc->tx_fifo_size))
 		dev_err(&pdev->dev,
 			"unable to read platform data tx fifo size\n");
 
-	if (of_property_read_u32(node, "qcom,dwc-usb3-msm-qdss-tx-fifo-size",
+	if (of_property_read_u32(node, "qti,dwc-usb3-msm-qdss-tx-fifo-size",
 				 &mdwc->qdss_tx_fifo_size))
 		dev_err(&pdev->dev,
 			"unable to read platform data qdss tx fifo size\n");
@@ -2773,7 +2776,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "Fail to setup dwc3 setup cdev\n");
 	}
 
-	ret = of_property_read_u32(node, "qcom,restore-sec-cfg-for-scm-dev-id",
+	ret = of_property_read_u32(node, "qti,restore-sec-cfg-for-scm-dev-id",
 					&mdwc->scm_dev_id);
 	if (ret && ret != -ENODATA)
 		dev_dbg(&pdev->dev, "unable to read scm device id\n");
@@ -2784,6 +2787,24 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 
 	pm_runtime_set_active(mdwc->dev);
 	pm_runtime_enable(mdwc->dev);
+
+	if (of_property_read_bool(node, "qti,reset_hsphy_sleep_clk_on_init")) {
+		ret = clk_reset(mdwc->hsphy_sleep_clk, CLK_RESET_ASSERT);
+		if (ret) {
+			dev_err(&pdev->dev,
+				"hsphy_sleep_clk assert failed\n");
+			return ret;
+		}
+
+		usleep_range(1000, 1200);
+
+		ret = clk_reset(mdwc->hsphy_sleep_clk, CLK_RESET_DEASSERT);
+		if (ret) {
+			dev_err(&pdev->dev,
+				"hsphy_sleep_clk reset deassert failed\n");
+			return ret;
+		}
+	}
 
 	return 0;
 
@@ -2796,7 +2817,7 @@ disable_ref_clk:
 	clk_disable_unprepare(mdwc->ref_clk);
 disable_utmi_clk:
 	clk_disable_unprepare(mdwc->utmi_clk);
-disable_sleep_a_clk:
+disable_hsphy_sleep_clk:
 	clk_disable_unprepare(mdwc->hsphy_sleep_clk);
 disable_sleep_clk:
 	clk_disable_unprepare(mdwc->sleep_clk);
@@ -2957,7 +2978,7 @@ static const struct dev_pm_ops dwc3_msm_dev_pm_ops = {
 
 static const struct of_device_id of_dwc3_matach[] = {
 	{
-		.compatible = "qcom,dwc-usb3-msm",
+		.compatible = "qti,dwc-usb3-msm",
 	},
 	{ },
 };
