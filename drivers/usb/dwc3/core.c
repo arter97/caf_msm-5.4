@@ -110,12 +110,53 @@ void dwc3_set_mode(struct dwc3 *dwc, u32 mode)
 }
 
 /**
+ * dwc3_core_soft_reset_after_phy_init - Issues core soft reset
+ * and PHY reset for HW versions which require core reset after
+ * PHY initialization and reset
+ * @dwc: pointer to our context structure
+ */
+static void dwc3_core_soft_reset_after_phy_init(struct dwc3 *dwc)
+{
+	u32		reg;
+
+	/* Reset PHYs */
+	usb_phy_reset(dwc->usb3_phy);
+	usb_phy_reset(dwc->usb2_phy);
+
+	msleep(100);
+
+	/* Bring up PHYs */
+	usb_phy_init(dwc->usb2_phy);
+	usb_phy_init(dwc->usb3_phy);
+	msleep(100);
+
+	/* Put Core in Reset */
+	reg = dwc3_readl(dwc->regs, DWC3_GCTL);
+	reg |= DWC3_GCTL_CORESOFTRESET;
+	dwc3_writel(dwc->regs, DWC3_GCTL, reg);
+
+	dwc3_notify_event(dwc, DWC3_CONTROLLER_RESET_EVENT);
+
+	msleep(100);
+
+	/* Take Core out of reset state */
+	reg = dwc3_readl(dwc->regs, DWC3_GCTL);
+	reg &= ~DWC3_GCTL_CORESOFTRESET;
+	dwc3_writel(dwc->regs, DWC3_GCTL, reg);
+
+	dwc3_notify_event(dwc, DWC3_CONTROLLER_POST_RESET_EVENT);
+}
+
+/**
  * dwc3_core_soft_reset - Issues core soft reset and PHY reset
  * @dwc: pointer to our context structure
  */
 static void dwc3_core_soft_reset(struct dwc3 *dwc)
 {
 	u32		reg;
+
+	if (dwc->core_reset_after_phy_init)
+		return dwc3_core_soft_reset_after_phy_init(dwc);
 
 	/* Before Resetting PHY, put Core in Reset */
 	reg = dwc3_readl(dwc->regs, DWC3_GCTL);
@@ -442,9 +483,11 @@ static int dwc3_core_init(struct dwc3 *dwc)
 	 * it results in high link errors and could cause SS mode transfer
 	 * failure.
 	 */
-	reg = dwc3_readl(dwc->regs, DWC3_GUSB3PIPECTL(0));
-	reg &= ~DWC3_GUSB3PIPECTL_ELASTIC_BUF_MODE;
-	dwc3_writel(dwc->regs, DWC3_GUSB3PIPECTL(0), reg);
+	if (!dwc->nominal_elastic_buffer) {
+		reg = dwc3_readl(dwc->regs, DWC3_GUSB3PIPECTL(0));
+		reg &= ~DWC3_GUSB3PIPECTL_ELASTIC_BUF_MODE;
+		dwc3_writel(dwc->regs, DWC3_GUSB3PIPECTL(0), reg);
+	}
 
 	return 0;
 
@@ -551,6 +594,9 @@ static int dwc3_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+	dwc->core_reset_after_phy_init =
+		of_property_read_bool(node, "core_reset_after_phy_init");
+
 	dwc->needs_fifo_resize = of_property_read_bool(node, "tx-fifo-resize");
 	host_only_mode = of_property_read_bool(node, "host-only-mode");
 	dwc->maximum_speed = of_usb_get_maximum_speed(node);
@@ -625,6 +671,9 @@ static int dwc3_probe(struct platform_device *pdev)
 			goto err0;
 		}
 	}
+
+	dwc->nominal_elastic_buffer = of_property_read_bool(node,
+			"nominal-elastic-buffer");
 
 	ret = dwc3_core_init(dwc);
 	if (ret) {
