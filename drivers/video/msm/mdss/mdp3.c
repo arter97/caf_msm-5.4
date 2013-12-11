@@ -47,6 +47,7 @@
 #include <mach/iommu.h>
 #include <mach/iommu_domains.h>
 #include <mach/msm_memtypes.h>
+#include <mach/rpm-regulator-smd.h>
 
 #include "mdp3.h"
 #include "mdss_fb.h"
@@ -1159,10 +1160,65 @@ static int mdp3_parse_dt(struct platform_device *pdev)
 	return 0;
 }
 
+static int msm_mdp3_cx_ctrl(int enable)
+{
+	int rc = 0;
+
+	if (!mdp3_res->vdd_cx)
+		return rc;
+
+	if (enable) {
+		rc = regulator_set_voltage(
+				mdp3_res->vdd_cx,
+				RPM_REGULATOR_CORNER_SVS_SOC,
+				RPM_REGULATOR_CORNER_SUPER_TURBO);
+		if (rc < 0)
+			goto vreg_set_voltage_fail;
+
+		rc = regulator_enable(mdp3_res->vdd_cx);
+		if (rc) {
+			pr_err("Failed to enable regulator vdd_cx.\n");
+			return rc;
+		}
+	} else {
+		rc = regulator_disable(mdp3_res->vdd_cx);
+		if (rc) {
+			pr_err("Failed to disable regulator vdd_cx.\n");
+			return rc;
+		}
+		rc = regulator_set_voltage(
+				mdp3_res->vdd_cx,
+				RPM_REGULATOR_CORNER_NONE,
+				RPM_REGULATOR_CORNER_SUPER_TURBO);
+		if (rc < 0)
+			goto vreg_set_voltage_fail;
+	}
+
+	return rc;
+
+vreg_set_voltage_fail:
+	pr_err("Set vltg failed\n");
+	return rc;
+}
+
 void mdp3_batfet_ctrl(int enable)
 {
 	if (!mdp3_res->batfet_required)
 		return;
+
+	if (!mdp3_res->vdd_cx) {
+		mdp3_res->vdd_cx = devm_regulator_get(&mdp3_res->pdev->dev,
+								"vdd-cx");
+		if (IS_ERR_OR_NULL(mdp3_res->vdd_cx)) {
+			pr_debug("unable to get CX reg. rc=%d\n",
+						PTR_RET(mdp3_res->vdd_cx));
+			mdp3_res->vdd_cx = NULL;
+		}
+	}
+	if (enable)
+		msm_mdp3_cx_ctrl(true);
+	else
+		msm_mdp3_cx_ctrl(false);
 
 	if (!mdp3_res->batfet) {
 		if (enable) {
