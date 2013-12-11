@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -196,8 +196,8 @@ static struct msm_sensor_output_info_t s5k4e1_dimensions[] = {
 		.y_output = 0x7A8,
 		.line_length_pclk = 0xAB2,
 		.frame_length_lines = 0x7B4,
-		.vt_pixel_clk = 81600000,
-		.op_pixel_clk = 81600000,
+		.vt_pixel_clk = 816000000,
+		.op_pixel_clk = 816000000,
 		.binning_factor = 0,
 	},
 	{
@@ -205,10 +205,23 @@ static struct msm_sensor_output_info_t s5k4e1_dimensions[] = {
 		.y_output = 0x3D4,
 		.line_length_pclk = 0xAB2,
 		.frame_length_lines = 0x3E0,
-		.vt_pixel_clk = 81600000,
-		.op_pixel_clk = 81600000,
+		.vt_pixel_clk = 816000000,
+		.op_pixel_clk = 816000000,
 		.binning_factor = 1,
 	},
+};
+
+static struct msm_camera_csi_params s5k4e1_csi_params = {
+	.data_format = CSI_10BIT,
+	.lane_cnt    = 1,
+	.lane_assign = 0xe4,
+	.dpcm_scheme = 0,
+	.settle_cnt  = 24,
+};
+
+static struct msm_camera_csi_params *s5k4e1_csi_params_array[] = {
+	&s5k4e1_csi_params,
+	&s5k4e1_csi_params,
 };
 
 static struct msm_sensor_output_reg_addr_t s5k4e1_reg_addr = {
@@ -235,7 +248,7 @@ static inline uint8_t s5k4e1_byte(uint16_t word, uint8_t offset)
 }
 
 static int32_t s5k4e1_write_prev_exp_gain(struct msm_sensor_ctrl_t *s_ctrl,
-	uint16_t gain, uint32_t line, int32_t luma_avg, uint16_t fgain)
+						uint16_t gain, uint32_t line)
 {
 	uint16_t max_legal_gain = 0x0200;
 	int32_t rc = 0;
@@ -321,7 +334,7 @@ static int32_t s5k4e1_write_prev_exp_gain(struct msm_sensor_ctrl_t *s_ctrl,
 }
 
 static int32_t s5k4e1_write_pict_exp_gain(struct msm_sensor_ctrl_t *s_ctrl,
-		uint16_t gain, uint32_t line, int32_t luma_avg, uint16_t fgain)
+		uint16_t gain, uint32_t line)
 {
 	uint16_t max_legal_gain = 0x0200;
 	uint16_t min_ll_pck = 0x0AB2;
@@ -336,6 +349,8 @@ static int32_t s5k4e1_write_pict_exp_gain(struct msm_sensor_ctrl_t *s_ctrl,
 		gain = max_legal_gain;
 	}
 
+	gain = 32;
+	line = 1465;
 	pr_info("s5k4e1_write_exp_gain : gain = %d line = %d\n", gain, line);
 	line = (uint32_t) (line * s_ctrl->fps_divider);
 	fl_lines = s_ctrl->curr_frame_length_lines * s_ctrl->fps_divider / Q10;
@@ -393,36 +408,6 @@ static int32_t s5k4e1_write_pict_exp_gain(struct msm_sensor_ctrl_t *s_ctrl,
 	return 0;
 }
 
-int32_t s5k4e1_sensor_i2c_probe(struct i2c_client *client,
-	const struct i2c_device_id *id)
-{
-	int rc = 0;
-	struct msm_camera_sensor_info *s_info;
-
-	rc = msm_sensor_i2c_probe(client, id);
-
-	s_info = client->dev.platform_data;
-	if (s_info == NULL) {
-		pr_err("%s %s NULL sensor data\n", __func__, client->name);
-		return -EFAULT;
-	}
-
-	if (s_info->actuator_info->vcm_enable) {
-		rc = gpio_request(s_info->actuator_info->vcm_pwd,
-				"msm_actuator");
-		if (rc < 0)
-			pr_err("%s: gpio_request:msm_actuator %d failed\n",
-				__func__, s_info->actuator_info->vcm_pwd);
-		rc = gpio_direction_output(s_info->actuator_info->vcm_pwd, 0);
-		if (rc < 0)
-			pr_err("%s: gpio:msm_actuator %d direction can't be set\n",
-				__func__, s_info->actuator_info->vcm_pwd);
-		gpio_free(s_info->actuator_info->vcm_pwd);
-	}
-
-	return rc;
-}
-
 static const struct i2c_device_id s5k4e1_i2c_id[] = {
 	{SENSOR_NAME, (kernel_ulong_t)&s5k4e1_s_ctrl},
 	{ }
@@ -430,7 +415,7 @@ static const struct i2c_device_id s5k4e1_i2c_id[] = {
 
 static struct i2c_driver s5k4e1_i2c_driver = {
 	.id_table = s5k4e1_i2c_id,
-	.probe  = s5k4e1_sensor_i2c_probe,
+	.probe  = msm_sensor_i2c_probe,
 	.driver = {
 		.name = SENSOR_NAME,
 	},
@@ -502,13 +487,13 @@ static struct msm_sensor_ctrl_t s5k4e1_s_ctrl = {
 	.sensor_id_info = &s5k4e1_id_info,
 	.sensor_exp_gain_info = &s5k4e1_exp_gain_info,
 	.cam_mode = MSM_SENSOR_MODE_INVALID,
+	.csic_params = &s5k4e1_csi_params_array[0],
 	.msm_sensor_mutex = &s5k4e1_mut,
 	.sensor_i2c_driver = &s5k4e1_i2c_driver,
 	.sensor_v4l2_subdev_info = s5k4e1_subdev_info,
 	.sensor_v4l2_subdev_info_size = ARRAY_SIZE(s5k4e1_subdev_info),
 	.sensor_v4l2_subdev_ops = &s5k4e1_subdev_ops,
 	.func_tbl = &s5k4e1_func_tbl,
-	.clk_rate = MSM_SENSOR_MCLK_24HZ,
 };
 
 module_init(msm_sensor_init_module);

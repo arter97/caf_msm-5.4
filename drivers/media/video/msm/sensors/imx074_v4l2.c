@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  */
-
+#include <linux/module.h>
 #include "msm_sensor.h"
 #define SENSOR_NAME "imx074"
 #define PLATFORM_DRIVER_NAME "msm_camera_imx074"
@@ -38,7 +38,7 @@ static struct msm_camera_i2c_reg_conf imx074_groupoff_settings[] = {
 static struct msm_camera_i2c_reg_conf imx074_prev_settings[] = {
 	{0x0307, 0x2D}, /*pll_multiplier*/
 	{0x0340, 0x06}, /*frame_length_lines_hi*/
-	{0x0341, 0x34}, /*frame_length_lines_lo*/
+	{0x0341, 0x2D}, /*frame_length_lines_lo*/
 	{0x0342, 0x11}, /*line_length_pclk_hi*/
 	{0x0343, 0x78}, /*line_length_pclk_lo*/
 	{0x0347, 0x00}, /*y_addr_start*/
@@ -161,11 +161,49 @@ static struct msm_sensor_output_info_t imx074_dimensions[] = {
 		.x_output = 0x838,
 		.y_output = 0x618,
 		.line_length_pclk = 0x1178,
-		.frame_length_lines = 0x634,
+		.frame_length_lines = 0x62D,
 		.vt_pixel_clk = 216000000,
-		.op_pixel_clk = 108000000,
+		.op_pixel_clk = 216000000,
 		.binning_factor = 2,
 	},
+};
+
+static struct msm_camera_csi_params imx074_csic_params = {
+	.data_format = CSI_10BIT,
+	.lane_cnt    = 4,
+	.lane_assign = 0xe4,
+	.dpcm_scheme = 0,
+	.settle_cnt  = 0x14,
+};
+
+static struct msm_camera_csi_params *imx074_csic_params_array[] = {
+	&imx074_csic_params,
+	&imx074_csic_params,
+};
+
+static struct msm_camera_csid_vc_cfg imx074_cid_cfg[] = {
+	{0, CSI_RAW10, CSI_DECODE_10BIT},
+	{1, CSI_EMBED_DATA, CSI_DECODE_8BIT},
+};
+
+static struct msm_camera_csi2_params imx074_csi_params = {
+	.csid_params = {
+		.lane_assign = 0xe4,
+		.lane_cnt = 4,
+		.lut_params = {
+			.num_cid = 2,
+			.vc_cfg = imx074_cid_cfg,
+		},
+	},
+	.csiphy_params = {
+		.lane_cnt = 4,
+		.settle_cnt = 0x1B,
+	},
+};
+
+static struct msm_camera_csi2_params *imx074_csi_params_array[] = {
+	&imx074_csi_params,
+	&imx074_csi_params,
 };
 
 static struct msm_sensor_output_reg_addr_t imx074_reg_addr = {
@@ -186,12 +224,7 @@ static struct msm_sensor_exp_gain_info_t imx074_exp_gain_info = {
 	.vert_offset = 3,
 };
 
-static enum msm_camera_vreg_name_t imx074_veg_seq[] = {
-	CAM_VDIG,
-	CAM_VIO,
-	CAM_VANA,
-	CAM_VAF,
-};
+static struct sensor_calib_data imx074_calib_data;
 
 static const struct i2c_device_id imx074_i2c_id[] = {
 	{SENSOR_NAME, (kernel_ulong_t)&imx074_s_ctrl},
@@ -208,6 +241,37 @@ static struct i2c_driver imx074_i2c_driver = {
 
 static struct msm_camera_i2c_client imx074_sensor_i2c_client = {
 	.addr_type = MSM_CAMERA_I2C_WORD_ADDR,
+};
+
+static struct msm_camera_i2c_client imx074_eeprom_i2c_client = {
+	.addr_type = MSM_CAMERA_I2C_BYTE_ADDR,
+};
+
+static struct msm_camera_eeprom_read_t imx074_eeprom_read_tbl[] = {
+	{0x10, &imx074_calib_data.r_over_g, 2, 1},
+	{0x12, &imx074_calib_data.b_over_g, 2, 1},
+	{0x14, &imx074_calib_data.gr_over_gb, 2, 1},
+};
+
+static struct msm_camera_eeprom_data_t imx074_eeprom_data_tbl[] = {
+	{&imx074_calib_data, sizeof(struct sensor_calib_data)},
+};
+
+static struct msm_camera_eeprom_client imx074_eeprom_client = {
+	.i2c_client = &imx074_eeprom_i2c_client,
+	.i2c_addr = 0xA4,
+
+	.func_tbl = {
+		.eeprom_set_dev_addr = NULL,
+		.eeprom_init = msm_camera_eeprom_init,
+		.eeprom_release = msm_camera_eeprom_release,
+		.eeprom_get_data = msm_camera_eeprom_get_data,
+	},
+
+	.read_tbl = imx074_eeprom_read_tbl,
+	.read_tbl_size = ARRAY_SIZE(imx074_eeprom_read_tbl),
+	.data_tbl = imx074_eeprom_data_tbl,
+	.data_tbl_size = ARRAY_SIZE(imx074_eeprom_data_tbl),
 };
 
 static int __init msm_sensor_init_module(void)
@@ -245,8 +309,7 @@ static struct msm_sensor_fn_t imx074_func_tbl = {
 	.sensor_config = msm_sensor_config,
 	.sensor_power_up = msm_sensor_power_up,
 	.sensor_power_down = msm_sensor_power_down,
-	.sensor_adjust_frame_lines = msm_sensor_adjust_frame_lines1,
-	.sensor_get_csi_params = msm_sensor_get_csi_params,
+	.sensor_adjust_frame_lines = msm_sensor_adjust_frame_lines,
 };
 
 static struct msm_sensor_reg_t imx074_regs = {
@@ -271,12 +334,13 @@ static struct msm_sensor_ctrl_t imx074_s_ctrl = {
 	.msm_sensor_reg = &imx074_regs,
 	.sensor_i2c_client = &imx074_sensor_i2c_client,
 	.sensor_i2c_addr = 0x34,
-	.vreg_seq = imx074_veg_seq,
-	.num_vreg_seq = ARRAY_SIZE(imx074_veg_seq),
+	.sensor_eeprom_client = &imx074_eeprom_client,
 	.sensor_output_reg_addr = &imx074_reg_addr,
 	.sensor_id_info = &imx074_id_info,
 	.sensor_exp_gain_info = &imx074_exp_gain_info,
 	.cam_mode = MSM_SENSOR_MODE_INVALID,
+	.csic_params = &imx074_csic_params_array[0],
+	.csi_params = &imx074_csi_params_array[0],
 	.msm_sensor_mutex = &imx074_mut,
 	.sensor_i2c_driver = &imx074_i2c_driver,
 	.sensor_v4l2_subdev_info = imx074_subdev_info,

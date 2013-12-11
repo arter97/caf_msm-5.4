@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2011, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -17,7 +17,6 @@
 #include <linux/uaccess.h>
 #include <linux/miscdevice.h>
 #include <linux/kernel.h>
-#include <linux/module.h>
 #include <media/msm_camera.h>
 #include <mach/gpio.h>
 #include <mach/camera.h>
@@ -1580,7 +1579,7 @@ init_done:
 	CDBG("init_done");
 	return rc;
 }
-static int __devinit sn12m0pz_init_client(struct i2c_client *client)
+static int __init sn12m0pz_init_client(struct i2c_client *client)
 {
 	/* Initialize the MSM_CAMI2C Chip */
 	init_waitqueue_head(&sn12m0pz_wait_queue);
@@ -1592,7 +1591,7 @@ static const struct i2c_device_id sn12m0pz_i2c_id[] = {
 	{ }
 };
 
-static int __devinit sn12m0pz_i2c_probe(struct i2c_client *client,
+static int sn12m0pz_i2c_probe(struct i2c_client *client,
 	const struct i2c_device_id *id)
 {
 	int rc = 0;

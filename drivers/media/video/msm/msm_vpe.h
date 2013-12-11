@@ -60,8 +60,7 @@
 #define VPE_SCALE_COEFF_LSP_0_OFFSET          0x50400
 #define VPE_SCALE_COEFF_MSP_0_OFFSET          0x50404
 
-#define VPE_AXI_ARB_1_OFFSET                  0x00408
-#define VPE_AXI_ARB_2_OFFSET                  0x0040C
+#define VPE_AXI_ARB_2_OFFSET                  0x004C
 
 #define VPE_SCALE_COEFF_LSBn(n)	(0x50400 + 8 * (n))
 #define VPE_SCALE_COEFF_MSBn(n)	(0x50404 + 8 * (n))
@@ -79,8 +78,8 @@
 #define VPE_DEFAULT_SCALE_CONFIG      0x3c
 
 #define VPE_NORMAL_MODE_CLOCK_RATE   150000000
-#define VPE_TURBO_MODE_CLOCK_RATE    200000000
-#define VPE_SUBDEV_MAX_EVENTS        30
+#define VPE_TURBO_MODE_CLOCK_RATE   200000000
+
 
 /**************************************************/
 /*********** End of command id ********************/
@@ -119,10 +118,8 @@ struct vpe_ctrl_type {
 	struct regulator *fs_vpe;
 	struct clk	*vpe_clk[2];
 	struct msm_mctl_pp_frame_info *pp_frame_info;
-	atomic_t active;
-	struct msm_device_queue eventData_q; /*V4L2 Event Payload Queue*/
-	struct device *iommu_ctx_src;
-	struct device *iommu_ctx_dst;
+        struct device *iommu_ctx_src;
+        struct device *iommu_ctx_dst;
 };
 
 /*
@@ -181,6 +178,7 @@ struct phase_val_t {
 	int32_t phase_step_x;
 	int32_t phase_step_y;
 };
+
 
 #endif /*_MSM_VPE_H_*/
 
