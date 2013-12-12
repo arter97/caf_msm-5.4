@@ -10,9 +10,15 @@
  * GNU General Public License for more details.
  */
 
+#include <linux/module.h>
 #include <linux/etherdevice.h>
 #include <linux/usb.h>
 #include <linux/usb/hbm.h>
+#include <mach/msm_xo.h>
+#include <linux/platform_device.h>
+#include <linux/of.h>
+#include <linux/of_gpio.h>
+#include <linux/debugfs.h>
 #include <mach/odu_ipa.h>
 #include <mach/usb_bam.h>
 #include <mach/ipa.h>
@@ -32,6 +38,11 @@
 
 #define USBNET_CORE "hsic"
 
+struct usbnet_ipa_platform_data {
+	struct platform_device *pdev;
+	int hub_reset_gpio;
+};
+
 struct usbnet_ipa_bam_info {
 	u32 src_pipe;
 	u32 dst_pipe;
@@ -41,9 +52,15 @@ struct usbnet_ipa_bam_info {
 	struct usb_bam_connect_ipa_params ipa_params;
 	struct odu_ipa_params		  params;
 	struct net_device *net;
+	struct usbnet_ipa_platform_data *pdata;
+#ifdef CONFIG_DEBUG_FS
+	struct dentry			*root;
+#endif
 };
 
 static struct usbnet_ipa_bam_info ctx;
+
+static int hub_reset(int gpio);
 
 /* Specific vendor header information to configure the IPA to remove/add */
 #ifdef CONFIG_USB_NET_SMSC75XX
@@ -349,4 +366,214 @@ void usbnet_ipa_cleanup(void)
 
 	USBNET_IPA_DBG_FUNC_EXIT();
 }
+
+#define RESET_DURATION_USEC 100
+static int time = RESET_DURATION_USEC;
+static int hub_reset(int gpio)
+{
+	int ret = 0;
+
+	USBNET_IPA_ERR("Setting GPIO to 0");
+	ret = gpio_direction_output(gpio, 0);
+	if (ret) {
+		USBNET_IPA_ERR("Error setting GPIO to 0 (ret=%d)", ret);
+		return ret;
+	}
+
+	usleep(time);
+
+	USBNET_IPA_ERR("Setting GPIO to 1");
+	ret = gpio_direction_output(gpio, 1);
+	if (ret)
+		USBNET_IPA_ERR("Error setting GPIO to 1 (ret=%d)", ret);
+
+	return ret;
+}
+
+static struct usbnet_ipa_platform_data *usbnet_ipa_dt_populate_pdata(
+	struct device *dev)
+{
+	struct usbnet_ipa_platform_data *pdata = NULL;
+	struct device_node *np = dev->of_node;
+	int gpio_no;
+
+	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
+
+	if (!pdata) {
+		USBNET_IPA_ERR("Could not allocate memory for pdata\n");
+		goto err;
+	}
+
+	gpio_no = of_get_named_gpio(np, "qti,hub-reset", 0);
+	if (gpio_no < 0) {
+		USBNET_IPA_ERR("Please specify the hub-reset GPIO in plat dt");
+		goto err;
+	}
+
+	USBNET_IPA_DBG("hub-reset = %d\n",  gpio_no);
+	pdata->hub_reset_gpio = gpio_no;
+
+	return pdata;
+
+err:
+	if (pdata != NULL)
+		devm_kfree(dev, pdata);
+	return NULL;
+}
+
+
+#ifdef CONFIG_DEBUG_FS
+static int hub_reset_write(void *ctx, u64 val)
+{
+	struct platform_device *pdev = ctx;
+	struct usbnet_ipa_platform_data *pdata = platform_get_drvdata(pdev);
+
+	time = val;
+	hub_reset(pdata->hub_reset_gpio);
+
+	return 0;
+}
+
+static int hub_reset_read(void *ctx, u64 *val)
+{
+	*val = time;
+
+	return 0;
+}
+
+
+DEFINE_SIMPLE_ATTRIBUTE(hub_reset_fops, hub_reset_read, hub_reset_write,
+			"%lldd\n");
+
+static void usbnet_ipa_debugfs_init(struct platform_device *pdev)
+{
+	struct dentry		*root;
+	struct dentry		*file;
+
+	root = debugfs_create_dir(dev_name(&pdev->dev), NULL);
+	if (!root) {
+		USBNET_IPA_ERR("Error creating debugfs dir");
+		return;
+	}
+
+	file = debugfs_create_file("hub_reset", S_IWUSR, root, pdev,
+			&hub_reset_fops);
+	if (!file) {
+		USBNET_IPA_ERR("Error creating debugfs node");
+		debugfs_remove_recursive(root);
+		return;
+	}
+
+	ctx.root = root;
+}
+
+static void usbnet_ipa_debugfs_exit(struct platform_device *pdev)
+{
+	debugfs_remove_recursive(ctx.root);
+
+}
+#else
+static void usbnet_ipa_debugfs_init(struct platform_device *pdev) {}
+static void usbnet_ipa_debugfs_exit(struct platform_device *pdev) {}
+#endif
+
+static int hub_on(struct usbnet_ipa_platform_data *pdata)
+{
+	int rc;
+	int gpio_num = pdata->hub_reset_gpio;
+
+	rc = gpio_request(gpio_num, "hub-reset");
+	if (rc) {
+		USBNET_IPA_ERR("gpio_request failed, gpio: %d, %s",
+			gpio_num, "hub-reset");
+		return rc;
+	}
+
+	USBNET_IPA_DBG("Setting GPIO %d to 1", gpio_num);
+	rc = gpio_direction_output(gpio_num, 1);
+	if (rc) {
+		gpio_free(gpio_num);
+		return rc;
+	}
+
+	return 0;
+}
+
+
+static int usbnet_ipa_platform_probe(struct platform_device *pdev)
+{
+	struct usbnet_ipa_platform_data *pdata = NULL;
+
+
+	if (pdev->dev.of_node)
+		pdata = usbnet_ipa_dt_populate_pdata(&pdev->dev);
+
+	if (!pdata)
+		return -EINVAL;
+
+	pdata->pdev = pdev;
+	platform_set_drvdata(pdev, pdata);
+	ctx.pdata = pdata;
+
+	hub_on(pdata);
+
+	usbnet_ipa_debugfs_init(pdev);
+
+	return 0;
+
+}
+
+static int usbnet_ipa_platform_remove(struct platform_device *pdev)
+{
+	struct usbnet_ipa_platform_data *pdata = platform_get_drvdata(pdev);
+
+	if (!pdata)
+		return -EINVAL;
+
+	usbnet_ipa_debugfs_exit(pdev);
+	gpio_free(pdata->hub_reset_gpio);
+
+	return 0;
+}
+
+static int usbnet_ipa_platform_suspend(struct platform_device *pdev,
+	pm_message_t state)
+{
+	return 0;
+}
+
+static int usbnet_ipa_platform_resume(struct platform_device *pdev)
+{
+	return 0;
+}
+
+static const struct of_device_id usbnet_ipa_dt_match[] = {
+	{.compatible = "qti,usbnet_ipa"},
+	{},
+};
+
+MODULE_DEVICE_TABLE(of, usbnet_ipa_dt_match);
+
+static struct platform_driver usbnet_ipa_driver = {
+	.probe		= usbnet_ipa_platform_probe,
+	.remove		= usbnet_ipa_platform_remove,
+	.suspend	= usbnet_ipa_platform_suspend,
+	.resume		= usbnet_ipa_platform_resume,
+	.driver		= { .name = "usbnet_ipa-platform",
+		.of_match_table = usbnet_ipa_dt_match,
+	},
+};
+
+static int __init usbnet_ipa_module_init(void)
+{
+	return platform_driver_register(&usbnet_ipa_driver);
+}
+
+static void __exit usbnet_ipa_moduile_exit(void)
+{
+	platform_driver_unregister(&usbnet_ipa_driver);
+}
+
+module_init(usbnet_ipa_module_init);
+module_exit(usbnet_ipa_moduile_exit);
 
