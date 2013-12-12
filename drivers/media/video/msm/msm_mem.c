@@ -180,7 +180,7 @@ static int msm_pmem_table_add(struct hlist_head *ptype,
 	return 0;
 out3:
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
-	ion_unmap_iommu(client, region->handle, CAMERA_DOMAIN, GEN_POOL);
+	ion_unmap_iommu(client, region->handle, domain_num, 0);
 #endif
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
 out2:
@@ -221,7 +221,7 @@ static int __msm_register_pmem(struct hlist_head *ptype,
 }
 
 static int __msm_pmem_table_del(struct hlist_head *ptype,
-			struct msm_pmem_info *pinfo, struct ion_client *client)
+			struct msm_pmem_info *pinfo, struct ion_client *client,int domain_num)
 {
 	int rc = 0;
 	struct msm_pmem_region *region;
@@ -245,7 +245,7 @@ static int __msm_pmem_table_del(struct hlist_head *ptype,
 				hlist_del(node);
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
 				ion_unmap_iommu(client, region->handle,
-					CAMERA_DOMAIN, GEN_POOL);
+					domain_num, 0);
 				ion_free(client, region->handle);
 #else
 				put_pmem_file(region->file);
@@ -401,7 +401,7 @@ int msm_register_pmem(struct hlist_head *ptype, void __user *arg,
 EXPORT_SYMBOL(msm_register_pmem);
 
 int msm_pmem_table_del(struct hlist_head *ptype, void __user *arg,
-					   struct ion_client *client)
+					   struct ion_client *client,int domain_num)
 {
 	struct msm_pmem_info info;
 
@@ -410,6 +410,6 @@ int msm_pmem_table_del(struct hlist_head *ptype, void __user *arg,
 		return -EFAULT;
 	}
 
-	return __msm_pmem_table_del(ptype, &info, client);
+	return __msm_pmem_table_del(ptype, &info, client,domain_num);
 }
 EXPORT_SYMBOL(msm_pmem_table_del);

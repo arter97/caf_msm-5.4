@@ -2160,7 +2160,7 @@ static long msm_ioctl_config(struct file *fp, unsigned int cmd,
 	case MSM_CAM_IOCTL_UNREGISTER_PMEM:
 		return msm_pmem_table_del(
 			&config_cam->p_mctl->sync.pmem_stats,
-			(void __user *)arg, config_cam->p_mctl->client);
+			(void __user *)arg, config_cam->p_mctl->client,config_cam->p_mctl->sync.domain_num);
 		break;
 	case VIDIOC_SUBSCRIBE_EVENT:
 		if (copy_from_user(&temp_sub,

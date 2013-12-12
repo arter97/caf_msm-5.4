@@ -448,7 +448,7 @@ int msm_mctl_release_free_buf(struct msm_cam_media_controller *pmctl,
 int msm_register_pmem(struct hlist_head *ptype, void __user *arg,
 				struct ion_client *client, int domain_num);
 int msm_pmem_table_del(struct hlist_head *ptype, void __user *arg,
-				struct ion_client *client);
+				struct ion_client *client, int domain_num);
 int msm_pmem_region_get_phy_addr(struct hlist_head *ptype,
 	struct msm_mem_map_info *mem_map, int32_t *phyaddr);
 uint8_t msm_pmem_region_lookup(struct hlist_head *ptype,
