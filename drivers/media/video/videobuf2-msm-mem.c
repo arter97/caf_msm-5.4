@@ -69,6 +69,7 @@ static unsigned long msm_mem_allocate(struct videobuf2_contig_pmem *mem)
 		pr_err("%s Could not get physical address\n", __func__);
 		goto phys_failed;
 	}
+	pr_debug("%s: p_addr = %x len = %x \n", __func__, (unsigned int) phyaddr, (unsigned int) len);
 #else
 	phyaddr = allocate_contiguous_ebi_nomap(mem->size, SZ_4K);
 #endif
@@ -195,6 +196,7 @@ int videobuf2_pmem_contig_user_get(struct videobuf2_contig_pmem *mem,
 		SZ_4K, 0, (unsigned long *)&mem->phyaddr, &len, 0, 0);
 	if (rc < 0)
 		ion_free(client, mem->ion_handle);
+	pr_debug("%s: p_addr = %x len = %x vaddr = %x \n", __func__, (unsigned int) mem->phyaddr, (unsigned int) len, (unsigned int) mem->vaddr);
 #elif CONFIG_ANDROID_PMEM
 	rc = get_pmem_file((int)mem->vaddr, (unsigned long *)&mem->phyaddr,
 					&kvstart, &len, &mem->file);

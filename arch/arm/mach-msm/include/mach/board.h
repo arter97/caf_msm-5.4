@@ -61,8 +61,24 @@ struct msm_camera_device_platform_data {
 	struct msm_camera_io_ext ioext;
 	struct msm_camera_io_clk ioclk;
 	uint8_t csid_core;
+	uint8_t is_csiphy;
+	uint8_t is_csic;
+	uint8_t is_csid;
+	uint8_t is_ispif;
 	uint8_t is_vpe;
 	struct msm_bus_scale_pdata *cam_bus_scale_table;
+};
+enum msm_camera_csi_data_format {
+	CSI_8BIT,
+	CSI_10BIT,
+	CSI_12BIT,
+};
+struct msm_camera_csi_params {
+	enum msm_camera_csi_data_format data_format;
+	uint8_t lane_cnt;
+	uint8_t lane_assign;
+	uint8_t settle_cnt;
+	uint8_t dpcm_scheme;
 };
 
 #ifdef CONFIG_SENSORS_MT9T013
@@ -117,7 +133,6 @@ enum msm_camera_ext_led_flash_id {
 struct msm_camera_sensor_flash_external {
 	uint32_t led_en;
 	uint32_t led_flash_en;
-	enum msm_camera_ext_led_flash_id flash_id;
 	struct msm_cam_expander_info *expander_info;
 };
 
@@ -163,21 +178,23 @@ enum msm_camera_type {
 	BACK_CAMERA_INT_3D,
 };
 
-enum msm_sensor_type {
-	BAYER_SENSOR,
-	YUV_SENSOR,
+enum camera_vreg_type {
+	REG_LDO,
+	REG_VS,
+};
+
+struct camera_vreg_t {
+	char *reg_name;
+	enum camera_vreg_type type;
+	int min_voltage;
+	int max_voltage;
+	int op_mode;
 };
 
 struct msm_gpio_set_tbl {
 	unsigned gpio;
 	unsigned long flags;
 	uint32_t delay;
-};
-
-struct msm_camera_csi_lane_params {
-	uint16_t csi_lane_assign;
-	uint16_t csi_lane_mask;
-	uint8_t csi_phy_sel;
 };
 
 struct msm_camera_gpio_conf {
@@ -189,30 +206,6 @@ struct msm_camera_gpio_conf {
 	uint8_t cam_gpio_req_tbl_size;
 	struct msm_gpio_set_tbl *cam_gpio_set_tbl;
 	uint8_t cam_gpio_set_tbl_size;
-	uint32_t gpio_no_mux;
-	uint32_t *camera_off_table;
-	uint8_t camera_off_table_size;
-	uint32_t *camera_on_table;
-	uint8_t camera_on_table_size;
-};
-
-enum msm_camera_i2c_mux_mode {
-	MODE_R,
-	MODE_L,
-	MODE_DUAL
-};
-
-struct msm_camera_i2c_conf {
-	uint8_t use_i2c_mux;
-	struct platform_device *mux_dev;
-	enum msm_camera_i2c_mux_mode i2c_mux_mode;
-};
-
-enum msm_camera_vreg_name_t {
-	CAM_VDIG,
-	CAM_VIO,
-	CAM_VANA,
-	CAM_VAF,
 };
 
 struct msm_camera_sensor_platform_info {
@@ -222,25 +215,10 @@ struct msm_camera_sensor_platform_info {
 	int num_vreg;
 	int32_t (*ext_power_ctrl) (int enable);
 	struct msm_camera_gpio_conf *gpio_conf;
-	struct msm_camera_i2c_conf *i2c_conf;
-	struct msm_camera_csi_lane_params *csi_lane_params;
-};
-
-enum msm_camera_actuator_name {
-	MSM_ACTUATOR_MAIN_CAM_0,
-	MSM_ACTUATOR_MAIN_CAM_1,
-	MSM_ACTUATOR_MAIN_CAM_2,
-	MSM_ACTUATOR_MAIN_CAM_3,
-	MSM_ACTUATOR_MAIN_CAM_4,
-	MSM_ACTUATOR_MAIN_CAM_5,
-	MSM_ACTUATOR_WEB_CAM_0,
-	MSM_ACTUATOR_WEB_CAM_1,
-	MSM_ACTUATOR_WEB_CAM_2,
 };
 
 struct msm_actuator_info {
 	struct i2c_board_info const *board_info;
-	enum msm_camera_actuator_name cam_name;
 	int bus_id;
 	int vcm_pwd;
 	int vcm_enable;
@@ -269,13 +247,11 @@ struct msm_camera_sensor_info {
 	uint8_t num_resources;
 	struct msm_camera_sensor_flash_data *flash_data;
 	int csi_if;
+	struct msm_camera_csi_params csi_params;
 	struct msm_camera_sensor_strobe_flash_data *strobe_flash_data;
 	char *eeprom_data;
 	enum msm_camera_type camera_type;
-	enum msm_sensor_type sensor_type;
 	struct msm_actuator_info *actuator_info;
-	int pmic_gpio_enable;
-	struct msm_eeprom_info *eeprom_info;
 };
 
 struct msm_camera_board_info {
