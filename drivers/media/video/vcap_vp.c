@@ -15,7 +15,6 @@
 #include <linux/sched.h>
 #include <linux/kthread.h>
 #include <linux/freezer.h>
-#include <linux/msm_ion.h>
 #include <mach/camera.h>
 #include <linux/io.h>
 #include <mach/clk.h>
