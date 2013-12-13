@@ -11,11 +11,11 @@
  *
  */
 
+#include <linux/module.h>
 #include "msm_actuator.h"
-#include "msm_logging.h"
 #include "msm_camera_i2c.h"
 
-#define	IMX074_TOTAL_STEPS_NEAR_TO_FAR			52
+#define	IMX074_TOTAL_STEPS_NEAR_TO_FAR			41
 DEFINE_MUTEX(imx074_act_mutex);
 static struct msm_actuator_ctrl_t imx074_act_t;
 
@@ -39,7 +39,7 @@ static struct damping_params_t g_damping[] = {
 	/* MOVE_NEAR Dir */
 	/* Scene 1 => Damping params */
 	{
-		.damping_step = 2,
+		.damping_step = 0xFF,
 		.damping_delay = 0,
 	},
 };
@@ -53,7 +53,7 @@ static struct damping_t g_damping_params[] = {
 };
 
 static int32_t imx074_wrapper_i2c_write(struct msm_actuator_ctrl_t *a_ctrl,
-	int16_t next_lens_position)
+	int16_t next_lens_position, void *params)
 {
 	msm_camera_i2c_write(&a_ctrl->i2c_client,
 			     0x00,
@@ -86,12 +86,65 @@ int32_t imx074_act_write_focus(
 	      __func__,
 	      dac_value);
 
-	rc = a_ctrl->func_tbl.actuator_i2c_write(a_ctrl, dac_value);
+	rc = a_ctrl->func_tbl.actuator_i2c_write(a_ctrl, dac_value, NULL);
 
 	return rc;
 }
 
-static int32_t imx074_act_set_default_focus(struct msm_actuator_ctrl_t *a_ctrl)
+int32_t imx074_act_move_focus(
+	struct msm_actuator_ctrl_t *a_ctrl,
+	int dir,
+	int32_t num_steps)
+{
+	int32_t step_direction, dest_step_position, bit_mask;
+	int32_t rc = 0;
+
+	if (num_steps == 0)
+		return rc;
+
+	if (dir == MOVE_NEAR) {
+		step_direction = 1;
+		bit_mask = 0x80;
+	} else if (dir == MOVE_FAR) {
+		step_direction = -1;
+		bit_mask = 0x00;
+	} else {
+		CDBG("imx074_move_focus: Illegal focus direction");
+		return -EINVAL;
+	}
+	dest_step_position = a_ctrl->curr_step_pos +
+		(step_direction * num_steps);
+	if (dest_step_position < 0)
+		dest_step_position = 0;
+	else if (dest_step_position > IMX074_TOTAL_STEPS_NEAR_TO_FAR)
+		dest_step_position = IMX074_TOTAL_STEPS_NEAR_TO_FAR;
+
+	msm_camera_i2c_write(&a_ctrl->i2c_client,
+		0x00,
+		((num_steps * g_regions[0].code_per_step) | bit_mask),
+		MSM_CAMERA_I2C_BYTE_DATA);
+	a_ctrl->curr_step_pos = dest_step_position;
+	return rc;
+}
+
+static int32_t imx074_set_default_focus(
+	struct msm_actuator_ctrl_t *a_ctrl)
+{
+	int32_t rc = 0;
+
+	if (!a_ctrl->step_position_table)
+		a_ctrl->func_tbl.actuator_init_table(a_ctrl);
+
+	if (a_ctrl->curr_step_pos != 0) {
+		rc = a_ctrl->func_tbl.actuator_i2c_write(a_ctrl, 0x7F, NULL);
+		rc = a_ctrl->func_tbl.actuator_i2c_write(a_ctrl, 0x7F, NULL);
+		a_ctrl->curr_step_pos = 0;
+	} else if (a_ctrl->func_tbl.actuator_init_focus)
+		rc = a_ctrl->func_tbl.actuator_init_focus(a_ctrl);
+	return rc;
+}
+
+static int32_t imx074_act_init_focus(struct msm_actuator_ctrl_t *a_ctrl)
 {
 	int32_t rc;
 	LINFO("%s called\n",
@@ -122,8 +175,8 @@ static int32_t imx074_act_set_default_focus(struct msm_actuator_ctrl_t *a_ctrl)
 		0x4F,
 		MSM_CAMERA_I2C_BYTE_DATA);
 
-	rc = a_ctrl->func_tbl.actuator_i2c_write(a_ctrl, 0x7F);
-	rc = a_ctrl->func_tbl.actuator_i2c_write(a_ctrl, 0x7F);
+	rc = a_ctrl->func_tbl.actuator_i2c_write(a_ctrl, 0x7F, NULL);
+	rc = a_ctrl->func_tbl.actuator_i2c_write(a_ctrl, 0x7F, NULL);
 	a_ctrl->curr_step_pos = 0;
 	return rc;
 }
@@ -170,14 +223,20 @@ static struct v4l2_subdev_ops imx074_act_subdev_ops = {
 };
 
 static int32_t imx074_act_create_subdevice(
-	void *board_info,
+	void *act_info,
 	void *sdev)
 {
+	struct msm_actuator_info *info = (struct msm_actuator_info *)act_info;
 	LINFO("%s called\n", __func__);
 
 	return (int) msm_actuator_create_subdevice(&imx074_act_t,
-		(struct i2c_board_info const *)board_info,
+		(struct i2c_board_info const *)info->board_info,
 		(struct v4l2_subdev *)sdev);
+}
+
+static int imx074_act_power_down(void *act_info)
+{
+	return (int) msm_actuator_af_power_down(&imx074_act_t);
 }
 
 static struct msm_actuator_ctrl_t imx074_act_t = {
@@ -188,6 +247,7 @@ static struct msm_actuator_ctrl_t imx074_act_t = {
 		.a_init_table = imx074_i2c_add_driver_table,
 		.a_create_subdevice = imx074_act_create_subdevice,
 		.a_config = imx074_act_config,
+		.a_power_down = imx074_act_power_down,
 	},
 
 	.i2c_client = {
@@ -205,10 +265,26 @@ static struct msm_actuator_ctrl_t imx074_act_t = {
 
 	.func_tbl = {
 		.actuator_init_table = msm_actuator_init_table,
-		.actuator_move_focus = msm_actuator_move_focus,
+		.actuator_move_focus = imx074_act_move_focus,
 		.actuator_write_focus = imx074_act_write_focus,
-		.actuator_set_default_focus = imx074_act_set_default_focus,
+		.actuator_set_default_focus = imx074_set_default_focus,
+		.actuator_init_focus = imx074_act_init_focus,
 		.actuator_i2c_write = imx074_wrapper_i2c_write,
+	},
+
+	.get_info = {
+		.focal_length_num = 46,
+		.focal_length_den = 10,
+		.f_number_num = 265,
+		.f_number_den = 100,
+		.f_pix_num = 14,
+		.f_pix_den = 10,
+		.total_f_dist_num = 197681,
+		.total_f_dist_den = 1000,
+		.hor_view_angle_num = 548,
+		.hor_view_angle_den = 10,
+		.ver_view_angle_num = 425,
+		.ver_view_angle_den = 10,
 	},
 
 	/* Initialize scenario */
