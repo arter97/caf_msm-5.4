@@ -119,7 +119,7 @@ static int mdp3_ctrl_vsync_enable(struct msm_fb_data_type *mfd, int enable)
 
 	mutex_lock(&mdp3_session->lock);
 	mdp3_session->dma->vsync_enable(mdp3_session->dma, arg);
-	if (enable && mdp3_session->status == 1 && !mdp3_session->intf->active)
+	if (enable && mdp3_session->status == 1)
 		mod_timer(&mdp3_session->vsync_timer,
 			jiffies + msecs_to_jiffies(mdp3_session->vsync_period));
 	 else if (!enable)
@@ -132,7 +132,7 @@ static int mdp3_ctrl_vsync_enable(struct msm_fb_data_type *mfd, int enable)
 void mdp3_vsync_timer_func(unsigned long arg)
 {
 	struct mdp3_session_data *session = (struct mdp3_session_data *)arg;
-	if (session->status == 1 && !session->intf->active) {
+	if (session->status == 1) {
 		pr_debug("mdp3_vsync_timer_func trigger\n");
 		vsync_notify_handler(session);
 		mod_timer(&session->vsync_timer,
