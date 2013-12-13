@@ -16,6 +16,7 @@
 #include <linux/of.h>
 #include <linux/module.h>
 #include <linux/irqreturn.h>
+#include <linux/ratelimit.h>
 #include <mach/vreg.h>
 #include "msm_csiphy.h"
 #include "msm_sd.h"
@@ -598,7 +599,7 @@ static long msm_csiphy_cmd(struct csiphy_device *csiphy_dev, void *arg)
 		rc = msm_csiphy_release(csiphy_dev, &csi_lane_params);
 		break;
 	default:
-		pr_err("%s: %d failed\n", __func__, __LINE__);
+		pr_err_ratelimited("%s: %d failed\n", __func__, __LINE__);
 		rc = -ENOIOCTLCMD;
 		break;
 	}
