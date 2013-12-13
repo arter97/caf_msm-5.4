@@ -21,10 +21,6 @@
 #include <media/v4l2-subdev.h>
 #include "msm_gemini_core.h"
 
-#define GEMINI_7X 0x1
-#define GEMINI_8X60 (0x1 << 1)
-#define GEMINI_8960 (0x1 << 2)
-
 struct msm_gemini_q {
 	char const	*name;
 	struct list_head  q;
@@ -43,9 +39,6 @@ struct msm_gemini_device {
 	struct resource        *mem;
 	int                     irq;
 	void                   *base;
-	struct clk *gemini_clk[3];
-	struct regulator *gemini_fs;
-	uint32_t hw_version;
 
 	struct device *device;
 	struct cdev   cdev;
@@ -74,17 +67,6 @@ struct msm_gemini_device {
 	struct msm_gemini_q input_buf_q;
 
 	struct v4l2_subdev subdev;
-	enum msm_gmn_out_mode out_mode;
-
-	/*single out mode parameters*/
-	struct msm_gemini_hw_buf out_buf;
-	int out_offset;
-	int out_buf_set;
-	int max_out_size;
-	int out_frag_cnt;
-
-	uint32_t bus_perf_client;
-	uint32_t core_reset;
 };
 
 int __msm_gemini_open(struct msm_gemini_device *pgmn_dev);

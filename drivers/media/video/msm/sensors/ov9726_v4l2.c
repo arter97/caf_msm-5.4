@@ -155,6 +155,18 @@ static struct msm_sensor_output_info_t ov9726_dimensions[] = {
 	},
 };
 
+static struct msm_camera_csi_params ov9726_csi_params = {
+	       .data_format = CSI_10BIT,
+	       .lane_cnt    = 1,
+	       .lane_assign = 0xe4,
+	       .dpcm_scheme = 0,
+	       .settle_cnt  = 7,
+};
+
+static struct msm_camera_csi_params *ov9726_csi_params_array[] = {
+	&ov9726_csi_params,
+};
+
 static struct msm_sensor_output_reg_addr_t ov9726_reg_addr = {
 	.x_output = 0x034c,
 	.y_output = 0x034e,
@@ -252,13 +264,13 @@ static struct msm_sensor_ctrl_t ov9726_s_ctrl = {
 	.sensor_id_info = &ov9726_id_info,
 	.sensor_exp_gain_info = &ov9726_exp_gain_info,
 	.cam_mode = MSM_SENSOR_MODE_INVALID,
+	.csic_params = &ov9726_csi_params_array[0],
 	.msm_sensor_mutex = &ov9726_mut,
 	.sensor_i2c_driver = &ov9726_i2c_driver,
 	.sensor_v4l2_subdev_info = ov9726_subdev_info,
 	.sensor_v4l2_subdev_info_size = ARRAY_SIZE(ov9726_subdev_info),
 	.sensor_v4l2_subdev_ops = &ov9726_subdev_ops,
 	.func_tbl = &ov9726_func_tbl,
-	.clk_rate = MSM_SENSOR_MCLK_24HZ,
 };
 
 module_init(msm_sensor_init_module);
