@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -63,6 +63,7 @@ struct hdmi_msm_state_type {
 	struct completion ddc_sw_done;
 
 	bool hdcp_enable;
+	bool is_splash_enabled;
 	boolean hdcp_activating;
 	boolean reauth ;
 	struct work_struct hdcp_reauth_work, hdcp_work;

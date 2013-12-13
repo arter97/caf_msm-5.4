@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -257,6 +257,11 @@ static struct msm_panel_common_pdata mdp_pdata = {
 #else
 	.mem_hid = MEMTYPE_EBI1,
 #endif
+	.cont_splash_enabled = 0x01,
+	.splash_screen_addr = 0x00,
+	.splash_screen_size = 0x00,
+	.ext_splash_screen_addr = 0x00,
+	.ext_splash_screen_size = 0x00,
 	.mdp_iommu_split_domain = 1,
 };
 
@@ -301,6 +306,8 @@ static int hdmi_core_power(int on, int show);
 static int hdmi_cec_power(int on);
 static int hdmi_gpio_config(int on);
 static int hdmi_panel_power(int on);
+static bool hdmi_splash_is_enabled(void);
+
 
 static struct msm_hdmi_platform_data hdmi_msm_data = {
 	.irq = HDMI_IRQ,
@@ -309,6 +316,7 @@ static struct msm_hdmi_platform_data hdmi_msm_data = {
 	.cec_power = hdmi_cec_power,
 	.panel_power = hdmi_panel_power,
 	.gpio_config = hdmi_gpio_config,
+	.splash_is_enabled = hdmi_splash_is_enabled,
 };
 
 static struct platform_device hdmi_msm_device = {
@@ -806,6 +814,11 @@ static int hdmi_panel_power(int on)
 
 	pr_debug("%s: HDMI Core: %s Success\n", __func__, (on ? "ON" : "OFF"));
 	return rc;
+}
+
+static bool hdmi_splash_is_enabled(void)
+{
+	return mdp_pdata.cont_splash_enabled;
 }
 
 static int hdmi_enable_5v(int on)

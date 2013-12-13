@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/include/mach/board.h
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -400,6 +400,8 @@ struct msm_panel_common_pdata {
 	char cont_splash_enabled;
 	u32 splash_screen_addr;
 	u32 splash_screen_size;
+	u32 ext_splash_screen_addr;
+	u32 ext_splash_screen_size;
 	char mdp_iommu_split_domain;
 };
 
@@ -493,6 +495,7 @@ struct msm_hdmi_platform_data {
 	int (*init_irq)(void);
 	bool (*check_hdcp_hw_support)(void);
 	bool (*source)(void);
+	bool (*splash_is_enabled)(void);
 	bool is_mhl_enabled;
 };
 
