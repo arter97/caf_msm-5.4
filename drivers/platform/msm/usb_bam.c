@@ -365,6 +365,7 @@ static int disconnect_pipe(u8 connection_idx, enum usb_bam_pipe_dir pipe_dir)
 
 	sps_disconnect(pipe);
 	sps_free_endpoint(pipe);
+	sps_pipes[connection_idx][pipe_dir] = NULL;
 
 	if (pipe_connection->mem_type == SYSTEM_MEM) {
 		pr_debug("%s: Freeing system memory used by PIPE\n", __func__);
