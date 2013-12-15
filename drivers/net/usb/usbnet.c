@@ -46,6 +46,7 @@
 #include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/pm_runtime.h>
+#include "usbnet_ipa.h"
 
 #define DRIVER_VERSION		"22-Aug-2005"
 
@@ -554,8 +555,10 @@ static void intr_complete (struct urb *urb)
 		break;
 	}
 
-	if (!netif_running (dev->net))
-		return;
+	if (!(dev->driver_info->flags & FLAG_IPA_DP)) {
+		if (!netif_running(dev->net))
+			return;
+	}
 
 	memset(urb->transfer_buffer, 0, urb->transfer_buffer_length);
 	status = usb_submit_urb (urb, GFP_ATOMIC);
@@ -695,12 +698,14 @@ int usbnet_stop (struct net_device *net)
 	int			retval;
 
 	clear_bit(EVENT_DEV_OPEN, &dev->flags);
-	netif_stop_queue (net);
+	if (!(dev->driver_info->flags & FLAG_IPA_DP)) {
+		netif_stop_queue(net);
 
-	netif_info(dev, ifdown, dev->net,
-		   "stop stats: rx/tx %lu/%lu, errs %lu/%lu\n",
-		   net->stats.rx_packets, net->stats.tx_packets,
-		   net->stats.rx_errors, net->stats.tx_errors);
+		netif_info(dev, ifdown, dev->net,
+			   "stop stats: rx/tx %lu/%lu, errs %lu/%lu\n",
+			   net->stats.rx_packets, net->stats.tx_packets,
+			   net->stats.rx_errors, net->stats.tx_errors);
+	}
 
 	/* allow minidriver to stop correctly (wireless devices to turn off
 	 * radio etc) */
@@ -787,7 +792,14 @@ int usbnet_open (struct net_device *net)
 	}
 
 	set_bit(EVENT_DEV_OPEN, &dev->flags);
-	netif_start_queue (net);
+	/*
+	* FLAG_IPA_DP turns the datapath to go via hardware (IPA) only
+	* therefore the network device is not needed and is handled
+	* by the IPA network device.
+	*/
+	if (!(dev->driver_info->flags & FLAG_IPA_DP))
+		netif_start_queue(net);
+
 	netif_info(dev, ifup, dev->net,
 		   "open: enable queueing (rx %d, tx %d) mtu %d %s framing\n",
 		   (int)RX_QLEN(dev), (int)TX_QLEN(dev),
@@ -799,8 +811,11 @@ int usbnet_open (struct net_device *net)
 		   (dev->driver_info->flags & FLAG_FRAMING_AX) ? "ASIX" :
 		   "simple");
 
-	// delay posting reads until we're fully open
-	queue_work(usbnet_wq, &dev->bh_w);
+	if (!(dev->driver_info->flags & FLAG_IPA_DP)) {
+		/* delay posting reads until we're fully open */
+		queue_work(usbnet_wq, &dev->bh_w);
+	}
+
 	if (info->manage_power) {
 		retval = info->manage_power(dev, 1);
 		if (retval < 0)
@@ -1002,6 +1017,8 @@ fail_lowmem:
 	if (test_bit (EVENT_LINK_RESET, &dev->flags)) {
 		struct driver_info	*info = dev->driver_info;
 		int			retval = 0;
+		int old_carrier = netif_carrier_ok(dev->net) ? 1 : 0;
+		int new_carrier;
 
 		clear_bit (EVENT_LINK_RESET, &dev->flags);
 		status = usb_autopm_get_interface(dev->intf);
@@ -1016,6 +1033,20 @@ skip_reset:
 				    dev->udev->devpath,
 				    info->description);
 		} else {
+			if ((dev->driver_info->flags & FLAG_IPA_DP)) {
+				new_carrier = netif_carrier_ok(dev->net) ?
+									1 : 0;
+				if (old_carrier != new_carrier) {
+					if (new_carrier) {
+						usbnet_ipa_connect(dev->intf,
+							dev->in, dev->out);
+					} else {
+						usbnet_ipa_disconnect(dev->intf,
+							dev->in,
+							dev->out);
+					}
+				}
+			}
 			usb_autopm_put_interface(dev->intf);
 		}
 	}
@@ -1312,7 +1343,15 @@ void usbnet_disconnect (struct usb_interface *intf)
 		   dev->driver_info->description);
 
 	net = dev->net;
-	unregister_netdev (net);
+
+	if ((dev->driver_info->flags & FLAG_IPA_DP)) {
+		usbnet_stop(net);
+		usbnet_ipa_disconnect(dev->intf, dev->in, dev->out);
+		usbnet_ipa_cleanup();
+	}
+
+	if (!(dev->driver_info->flags & FLAG_IPA_DP))
+		unregister_netdev(net);
 
 	cancel_work_sync(&dev->kevent);
 
@@ -1482,9 +1521,11 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	if ((dev->driver_info->flags & FLAG_WWAN) != 0)
 		SET_NETDEV_DEVTYPE(net, &wwan_type);
 
-	status = register_netdev (net);
-	if (status)
-		goto out4;
+	if (!(dev->driver_info->flags & FLAG_IPA_DP)) {
+		status = register_netdev(net);
+		if (status)
+			goto out4;
+	}
 	netif_info(dev, probe, dev->net,
 		   "register '%s' at usb-%s-%s, %s, %pM\n",
 		   udev->dev.driver->name,
@@ -1495,10 +1536,16 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	// ok, it's ready to go.
 	usb_set_intfdata (udev, dev);
 
-	netif_device_attach (net);
+	if (!(dev->driver_info->flags & FLAG_IPA_DP))
+		netif_device_attach(net);
+
 
 	if (dev->driver_info->flags & FLAG_LINK_INTR)
 		netif_carrier_off(net);
+	if ((dev->driver_info->flags & FLAG_IPA_DP)) {
+		usbnet_ipa_init(dev->net);
+		usbnet_open(dev->net);
+	}
 
 	return 0;
 
@@ -1622,6 +1669,13 @@ static void __exit usbnet_exit(void)
 	destroy_workqueue(usbnet_wq);
 }
 module_exit(usbnet_exit);
+
+#ifdef CONFIG_USB_USBNET_IPA_SUPPORT
+static bool usbnet_odu = 1;
+module_param(usbnet_odu, bool, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(usbnet_odu, "true if supports ODU feature");
+#endif /* CONFIG_USB_USBNET_IPA_SUPPORT */
+
 
 MODULE_AUTHOR("David Brownell");
 MODULE_DESCRIPTION("USB network driver framework");
