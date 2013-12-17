@@ -130,6 +130,18 @@ config USB_USBNET
 	  To compile this driver as a module, choose M here: the
 	  module will be called usbnet.
 
+config USB_USBNET_IPA_SUPPORT
+	boolean "Configures USBNET to use BAM2BAM datapath via IPA"
+	depends on USB_USBNET && ARCH_MSM
+	default n
+	help
+	  This option adds support for BAM2BAM datapath for USBNET
+	  devices.
+
+	  This option cancels the functionality of the ethX device and
+	  lets IPA to create the actual networking device. Thus all
+	  the datapath goes via IPA (software or hardware).
+
 config USB_NET_AX8817X
 	tristate "ASIX AX88xxx Based USB 2.0 Ethernet Adapters"
 	depends on USB_USBNET
