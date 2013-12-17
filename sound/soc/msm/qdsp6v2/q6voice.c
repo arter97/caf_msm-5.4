@@ -938,7 +938,7 @@ static int voice_destroy_mvm_cvs_session(struct voice_data *v)
 
 	if (is_voip_session(v->session_id) ||
 	    is_qchat_session(v->session_id) ||
-	    v->voc_state == VOC_ERROR) {
+	    v->voc_state == VOC_ERROR || common.is_low_mem_target) {
 		/* Destroy CVS. */
 		pr_debug("%s: CVS destroy session\n", __func__);
 
@@ -1346,6 +1346,12 @@ int voc_enable_dtmf_rx_detection(uint32_t session_id, uint32_t enable)
 	mutex_unlock(&v->lock);
 
 	return ret;
+}
+
+void voc_set_memory_constraint_flag(bool is_low_mem_target)
+{
+	pr_info("%s: %d\n", __func__, is_low_mem_target);
+	common.is_low_mem_target = is_low_mem_target;
 }
 
 int voc_alloc_cal_shared_memory(void)
@@ -5810,6 +5816,9 @@ static int __init voice_init(void)
 
 	/* Initialize MVS info. */
 	common.mvs_info.network_type = VSS_NETWORK_ID_DEFAULT;
+
+	/* Initialize is low memory flag */
+	common.is_low_mem_target = false;
 
 	mutex_init(&common.common_lock);
 
