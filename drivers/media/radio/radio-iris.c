@@ -84,7 +84,7 @@ struct iris_device {
 
 	struct radio_hci_dev *fm_hdev;
 
-	struct v4l2_capability *g_cap;
+	struct v4l2_capability g_cap;
 	struct v4l2_control *g_ctl;
 
 	struct hci_fm_mute_mode_req mute_mode;
@@ -1770,7 +1770,14 @@ static void hci_cc_feature_list_rsp(struct radio_hci_dev *hdev,
 {
 	struct hci_fm_feature_list_rsp  *rsp = (void *)skb->data;
 	struct iris_device *radio = video_get_drvdata(video_get_dev());
-	struct v4l2_capability *v4l_cap = radio->g_cap;
+	struct v4l2_capability *v4l_cap;
+
+	if (radio == NULL) {
+		FMDERR(":radio is null");
+		return;
+	}
+
+	v4l_cap = &radio->g_cap;
 
 	if (rsp->status)
 		return;
@@ -4122,8 +4129,12 @@ static int iris_vidioc_querycap(struct file *file, void *priv,
 	radio = video_get_drvdata(video_devdata(file));
 	strlcpy(capability->driver, DRIVER_NAME, sizeof(capability->driver));
 	strlcpy(capability->card, DRIVER_CARD, sizeof(capability->card));
-	capability->capabilities = V4L2_CAP_TUNER | V4L2_CAP_RADIO;
-	radio->g_cap = capability;
+
+	strlcpy(radio->g_cap.driver, DRIVER_NAME, sizeof(radio->g_cap.driver));
+	strlcpy(radio->g_cap.card, DRIVER_CARD, sizeof(radio->g_cap.card));
+
+	radio->g_cap.capabilities = V4L2_CAP_TUNER | V4L2_CAP_RADIO;
+	capability->capabilities = radio->g_cap.capabilities;
 	return 0;
 }
 
