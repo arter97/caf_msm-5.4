@@ -46,6 +46,29 @@
 	qti,msm-imem@fe805000 {
 		compatible = "qti,msm-imem";
 		reg = <0xfe805000 0x1000>; /* Address and size of IMEM */
+		ranges = <0x0 0xfe805000 0x1000>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		mem_dump_table@14 {
+			compatible = "qti,msm-imem-mem_dump_table";
+			reg = <0x14 4>;
+		};
+
+		imem_cache_erp: cache_erp@6a4 {
+			compatible = "qti,msm-imem-cache_erp";
+			reg = <0x6a4 4>;
+		};
+
+		boot_stats@6b0 {
+			compatible = "qti,msm-imem-boot_stats";
+			reg = <0x6b0 32>;
+		};
+
+		pil@94c {
+			compatible = "qti,msm-imem-pil";
+			reg = <0x94c 200>;
+		};
 	};
 
 	qcom,gcc@fc400000 {

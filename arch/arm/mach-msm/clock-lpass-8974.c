@@ -22,8 +22,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/platform_device.h>
 #include <linux/module.h>
-
-#include <mach/clock-generic.h>
+#include <linux/clk/msm-clock-generic.h>
 
 #include <dt-bindings/clock/msm-clocks-8974.h>
 
@@ -79,9 +78,9 @@ static struct branch_clk q6ss_ahbm_clk = {
 };
 
 static struct clk_lookup msm_clocks_lpass_8974[] = {
-	CLK_LOOKUP_OF("core_clk",         q6ss_xo_clk,  "fe200000.qcom,lpass"),
-	CLK_LOOKUP_OF("iface_clk", q6ss_ahb_lfabif_clk, "fe200000.qcom,lpass"),
-	CLK_LOOKUP_OF("reg_clk",        q6ss_ahbm_clk,  "fe200000.qcom,lpass"),
+	CLK_LOOKUP_OF("core_clk",         q6ss_xo_clk,  "fe200000.qti,lpass"),
+	CLK_LOOKUP_OF("iface_clk", q6ss_ahb_lfabif_clk, "fe200000.qti,lpass"),
+	CLK_LOOKUP_OF("reg_clk",        q6ss_ahbm_clk,  "fe200000.qti,lpass"),
 };
 
 static struct of_device_id msm_clock_lpasscc_match_table[] = {

@@ -20,11 +20,11 @@
 #include <linux/clk.h>
 #include <linux/iopoll.h>
 #include <linux/regulator/consumer.h>
+#include <linux/clk/msm-clock-generic.h>
 
 #include <mach/rpm-regulator-smd.h>
 #include <mach/socinfo.h>
 #include <mach/rpm-smd.h>
-#include <mach/clock-generic.h>
 
 #include "clock-local2.h"
 #include "clock-pll.h"
@@ -5777,7 +5777,7 @@ static struct clk_lookup apq_clocks_8084[] = {
 	CLK_DUMMY("core_clk",  gcc_lpass_mport_axi_clk.c, "fe064000.qti,iommu",
 									OFF),
 
-	CLK_LOOKUP("xo",  cxo_pil_lpass_clk.c,      "fe200000.qcom,lpass"),
+	CLK_LOOKUP("xo",  cxo_pil_lpass_clk.c,      "fe200000.qti,lpass"),
 	CLK_LOOKUP("xo",  cxo_dwc3_clk.c,           "f9200000.ssusb"),
 	CLK_LOOKUP("xo",  cxo_lpm_clk.c,            "fc4281d0.qcom,mpm"),
 
@@ -5934,10 +5934,10 @@ static struct clk_lookup apq_clocks_8084[] = {
 	CLK_LOOKUP("",	gcc_gp2_clk.c,	""),
 	CLK_LOOKUP("",	gcc_gp3_clk.c,	""),
 
-	CLK_LOOKUP("bus_clk",	gcc_lpass_q6_axi_clk.c,	"fe200000.qcom,lpass"),
-	CLK_LOOKUP("core_clk",	dummy_clk,	"fe200000.qcom,lpass"),
-	CLK_LOOKUP("iface_clk",	dummy_clk,	"fe200000.qcom,lpass"),
-	CLK_LOOKUP("reg_clk",	dummy_clk,	"fe200000.qcom,lpass"),
+	CLK_LOOKUP("bus_clk",	gcc_lpass_q6_axi_clk.c,	"fe200000.qti,lpass"),
+	CLK_LOOKUP("core_clk",	dummy_clk,	"fe200000.qti,lpass"),
+	CLK_LOOKUP("iface_clk",	dummy_clk,	"fe200000.qti,lpass"),
+	CLK_LOOKUP("reg_clk",	dummy_clk,	"fe200000.qti,lpass"),
 	CLK_LOOKUP("",	gcc_lpass_sway_clk.c,	""),
 
 	CLK_LOOKUP("",	gcc_pdm2_clk.c,	""),
@@ -5968,12 +5968,16 @@ static struct clk_lookup apq_clocks_8084[] = {
 	CLK_LOOKUP("core_clk_src", ce2_clk_src.c,     "fd440000.qcom,qcrypto"),
 
 	/* SATA clocks */
-	CLK_LOOKUP("",	gcc_sata_asic0_clk.c,	""),
-	CLK_LOOKUP("",	gcc_sata_axi_clk.c,	""),
-	CLK_LOOKUP("",	gcc_sata_cfg_ahb_clk.c,	""),
-	CLK_LOOKUP("",	gcc_sata_pmalive_clk.c,	""),
-	CLK_LOOKUP("",	gcc_sata_rx_clk.c,	""),
-	CLK_LOOKUP("",	gcc_sata_rx_oob_clk.c,	""),
+	CLK_LOOKUP("core_clk", gcc_sata_axi_clk.c,             "fc580000.sata"),
+	CLK_LOOKUP("iface_clk", gcc_sata_cfg_ahb_clk.c,        "fc580000.sata"),
+	CLK_LOOKUP("rxoob_clk", gcc_sata_rx_oob_clk.c,         "fc580000.sata"),
+	CLK_LOOKUP("pmalive_clk", gcc_sata_pmalive_clk.c,      "fc580000.sata"),
+	CLK_LOOKUP("asic0_clk", gcc_sata_asic0_clk.c,          "fc580000.sata"),
+	CLK_LOOKUP("rbc0_clk", gcc_sata_rx_clk.c,              "fc580000.sata"),
+	CLK_LOOKUP("ref_clk_src", rf_clk3.c,                "fc581000.sataphy"),
+	CLK_LOOKUP("ref_clk_parent", pcie_1_phy_ldo.c,      "fc581000.sataphy"),
+	CLK_LOOKUP("ref_clk", sata_phy_ldo.c,               "fc581000.sataphy"),
+	CLK_LOOKUP("rxoob_clk", gcc_sata_rx_oob_clk.c,      "fc581000.sataphy"),
 
 	/* SDCC clocks */
 	CLK_LOOKUP("iface_clk",	gcc_sdcc1_ahb_clk.c,	"msm_sdcc.1"),
@@ -5993,6 +5997,8 @@ static struct clk_lookup apq_clocks_8084[] = {
 
 	CLK_LOOKUP("",	gcc_tsif_ahb_clk.c,	""),
 	CLK_LOOKUP("",	gcc_tsif_ref_clk.c,	""),
+	CLK_LOOKUP("iface_clk", gcc_tsif_ahb_clk.c, "f99d8000.msm_tspp"),
+	CLK_LOOKUP("ref_clk", gcc_tsif_ref_clk.c, "f99d8000.msm_tspp"),
 
 	/* UFS clocks */
 	CLK_LOOKUP("ref_clk", rf_clk1.c,                 "msm_ufs.1"),
@@ -6026,6 +6032,9 @@ static struct clk_lookup apq_clocks_8084[] = {
 	CLK_LOOKUP("sleep_a_clk", gcc_usb2a_phy_sleep_clk.c, "f9200000.ssusb"),
 	CLK_LOOKUP("utmi_clk",   gcc_usb30_mock_utmi_clk.c, "f9200000.ssusb"),
 
+	CLK_LOOKUP("com_reset_clk", gcc_usb30_phy_com_clk.c, "f92f8800.ssphy"),
+	CLK_LOOKUP("reset_clk",	gcc_usb3_phy_clk.c, "f92f8800.ssphy"),
+
 	CLK_LOOKUP("ref_clk", diff_clk1.c, "f9400000.ssusb"),
 	CLK_LOOKUP("xo", cxo_dwc3_clk.c, "f9400000.ssusb"),
 	CLK_LOOKUP("core_clk", gcc_usb30_sec_master_clk.c, "f9400000.ssusb"),
@@ -6051,9 +6060,6 @@ static struct clk_lookup apq_clocks_8084[] = {
 			"msm_hsic_host"),
 	CLK_LOOKUP("utmi_clk", gcc_usb_hsic_mock_utmi_clk.c, "msm_hsic_host"),
 	CLK_LOOKUP("system_clk", gcc_usb_hsic_system_clk.c, "msm_hsic_host"),
-
-	CLK_LOOKUP("",	gcc_usb30_phy_com_clk.c,	""),
-	CLK_LOOKUP("",	gcc_usb3_phy_clk.c,	""),
 
 	/* PCIE clocks */
 	CLK_LOOKUP("pcie_0_aux_clk", gcc_pcie_0_aux_clk.c, "msm_pcie.1"),
@@ -6484,12 +6490,12 @@ static struct clk_lookup apq_clocks_8084[] = {
 	CLK_LOOKUP("",	venus0_core1_vcodec_clk.c,	""),
 	CLK_LOOKUP("",	venus0_ocmemnoc_clk.c,	""),
 	CLK_LOOKUP("",	venus0_vcodec0_clk.c,	""),
-	CLK_LOOKUP("iface_clk",	venus0_ahb_clk.c, "fdce0000.qcom,venus"),
-	CLK_LOOKUP("bus_clk",	venus0_axi_clk.c, "fdce0000.qcom,venus"),
+	CLK_LOOKUP("iface_clk",	venus0_ahb_clk.c, "fdce0000.qti,venus"),
+	CLK_LOOKUP("bus_clk",	venus0_axi_clk.c, "fdce0000.qti,venus"),
 	CLK_LOOKUP("mem_clk",	venus0_ocmemnoc_clk.c,
-						 "fdce0000.qcom,venus"),
+						 "fdce0000.qti,venus"),
 	CLK_LOOKUP("core_clk",	venus0_vcodec0_clk.c,
-						 "fdce0000.qcom,venus"),
+						 "fdce0000.qti,venus"),
 	CLK_LOOKUP("iface_clk",	venus0_ahb_clk.c, "fdc00000.qcom,vidc"),
 	CLK_LOOKUP("bus_clk",	venus0_axi_clk.c, "fdc00000.qcom,vidc"),
 	CLK_LOOKUP("mem_clk",	venus0_ocmemnoc_clk.c,
@@ -6512,15 +6518,15 @@ static struct clk_lookup apq_clocks_8084[] = {
 						"fde0b000.qti,vpu"),
 	CLK_LOOKUP("prng_clk", gcc_prng_ahb_clk.c, "fde0b000.qti,vpu"),
 
-	CLK_LOOKUP("iface_clk", vpu_ahb_clk.c, "fde0b000.qcom,pil-vpu"),
-	CLK_LOOKUP("bus_clk", vpu_axi_clk.c, "fde0b000.qcom,pil-vpu"),
-	CLK_LOOKUP("vdp_clk", vpu_vdp_clk.c, "fde0b000.qcom,pil-vpu"),
-	CLK_LOOKUP("vdp_bus_clk", vpu_bus_clk.c, "fde0b000.qcom,pil-vpu"),
-	CLK_LOOKUP("cxo_clk", vpu_cxo_clk.c, "fde0b000.qcom,pil-vpu"),
-	CLK_LOOKUP("core_clk", vpu_maple_clk.c, "fde0b000.qcom,pil-vpu"),
-	CLK_LOOKUP("sleep_clk", vpu_sleep_clk.c, "fde0b000.qcom,pil-vpu"),
+	CLK_LOOKUP("iface_clk", vpu_ahb_clk.c, "fde0b000.qti,pil-vpu"),
+	CLK_LOOKUP("bus_clk", vpu_axi_clk.c, "fde0b000.qti,pil-vpu"),
+	CLK_LOOKUP("vdp_clk", vpu_vdp_clk.c, "fde0b000.qti,pil-vpu"),
+	CLK_LOOKUP("vdp_bus_clk", vpu_bus_clk.c, "fde0b000.qti,pil-vpu"),
+	CLK_LOOKUP("cxo_clk", vpu_cxo_clk.c, "fde0b000.qti,pil-vpu"),
+	CLK_LOOKUP("core_clk", vpu_maple_clk.c, "fde0b000.qti,pil-vpu"),
+	CLK_LOOKUP("sleep_clk", vpu_sleep_clk.c, "fde0b000.qti,pil-vpu"),
 	CLK_LOOKUP("maple_bus_clk", gcc_mmss_vpu_maple_sys_noc_axi_clk.c,
-						"fde0b000.qcom,pil-vpu"),
+						"fde0b000.qti,pil-vpu"),
 
 	CLK_LOOKUP("",	vpu_ahb_clk.c,	""),
 	CLK_LOOKUP("",	vpu_axi_clk.c,	""),

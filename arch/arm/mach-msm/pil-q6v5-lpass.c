@@ -23,8 +23,8 @@
 #include <linux/delay.h>
 #include <linux/sysfs.h>
 #include <linux/of_gpio.h>
+#include <linux/clk/msm-clk.h>
 
-#include <mach/clk.h>
 #include <mach/subsystem_restart.h>
 #include <mach/subsystem_notif.h>
 #include <mach/scm.h>
@@ -520,8 +520,8 @@ static int pil_lpass_driver_exit(struct platform_device *pdev)
 }
 
 static struct of_device_id lpass_match_table[] = {
-	{ .compatible = "qcom,pil-q6v5-lpass" },
-	{ .compatible = "qcom,pil-q6v55-lpass" },
+	{ .compatible = "qti,pil-q6v5-lpass" },
+	{ .compatible = "qti,pil-q6v55-lpass" },
 	{}
 };
 

@@ -95,6 +95,7 @@ config ARCH_MPQ8092
 	select PINCTRL
 	select PINCTRL_MSM_TLMM_V3
 	select MSM_MULTIMEDIA_USE_ION
+	select USB_ARCH_HAS_XHCI
 
 config ARCH_FSM9900
 	bool "FSM9900"
@@ -704,24 +705,6 @@ config MSM_SMD_LOGGING
 	help
 	  This option exposes the shared memory logger at /dev/smem_log
 	  and a debugfs node named smem_log.
-
-	  If in doubt, say yes.
-
-config MSM_SMD_TTY
-	bool "SMD TTY Driver"
-	depends on MSM_SMD
-	default y
-	help
-	  Provides TTY interfaces to interact with the modem.
-
-	  If in doubt, say yes.
-
-config MSM_SMD_PKT
-	bool "SMD Packet Driver"
-	depends on MSM_SMD
-	default y
-	help
-	  Provides a binary SMD non-muxed packet port interface.
 
 	  If in doubt, say yes.
 

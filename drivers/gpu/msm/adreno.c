@@ -2020,31 +2020,6 @@ int adreno_reset(struct kgsl_device *device)
 }
 
 /**
- * _ft_sysfs_store() -  Common routine to write to FT sysfs files
- * @buf: value to write
- * @count: size of the value to write
- * @ptr: pointer to config to write
- *
- * This is a common routine to write to FT sysfs files.
- */
-static ssize_t _ft_sysfs_store(const char *buf, size_t count, unsigned int *ptr)
-{
-	char temp[20];
-	unsigned long val;
-	int rc;
-
-	snprintf(temp, sizeof(temp), "%.*s",
-			 (int)min(count, sizeof(temp) - 1), buf);
-	rc = kstrtoul(temp, 0, &val);
-	if (rc)
-		return rc;
-
-	*ptr = val;
-
-	return count;
-}
-
-/**
  * _get_adreno_dev() -  Routine to get a pointer to adreno dev
  * @dev: device ptr
  * @attr: Device attribute
@@ -2081,7 +2056,7 @@ static ssize_t _ft_policy_store(struct device *dev,
 		return 0;
 
 	mutex_lock(&adreno_dev->dev.mutex);
-	ret = _ft_sysfs_store(buf, count, &adreno_dev->ft_policy);
+	ret = kgsl_sysfs_store(buf, count, &adreno_dev->ft_policy);
 	mutex_unlock(&adreno_dev->dev.mutex);
 
 	return ret;
@@ -2132,7 +2107,7 @@ static ssize_t _ft_pagefault_policy_store(struct device *dev,
 		return 0;
 
 	mutex_lock(&adreno_dev->dev.mutex);
-	ret = _ft_sysfs_store(buf, count, &adreno_dev->ft_pf_policy);
+	ret = kgsl_sysfs_store(buf, count, &adreno_dev->ft_pf_policy);
 	mutex_unlock(&adreno_dev->dev.mutex);
 
 	return ret;
@@ -2182,7 +2157,7 @@ static ssize_t _ft_fast_hang_detect_store(struct device *dev,
 
 	tmp = adreno_dev->fast_hang_detect;
 
-	ret = _ft_sysfs_store(buf, count, &adreno_dev->fast_hang_detect);
+	ret = kgsl_sysfs_store(buf, count, &adreno_dev->fast_hang_detect);
 
 	if (tmp != adreno_dev->fast_hang_detect) {
 		if (adreno_dev->fast_hang_detect) {
@@ -2241,7 +2216,7 @@ static ssize_t _ft_long_ib_detect_store(struct device *dev,
 		return 0;
 
 	mutex_lock(&adreno_dev->dev.mutex);
-	ret = _ft_sysfs_store(buf, count, &adreno_dev->long_ib_detect);
+	ret = kgsl_sysfs_store(buf, count, &adreno_dev->long_ib_detect);
 	mutex_unlock(&adreno_dev->dev.mutex);
 
 	return ret;
@@ -2278,7 +2253,7 @@ static ssize_t _ft_hang_intr_status_store(struct device *dev,
 				struct device_attribute *attr,
 				const char *buf, size_t count)
 {
-	unsigned int new_setting, old_setting;
+	unsigned int new_setting = 0, old_setting;
 	struct kgsl_device *device = kgsl_device_from_dev(dev);
 	struct adreno_device *adreno_dev;
 	int ret;
@@ -2287,7 +2262,7 @@ static ssize_t _ft_hang_intr_status_store(struct device *dev,
 	adreno_dev = ADRENO_DEVICE(device);
 
 	mutex_lock(&device->mutex);
-	ret = _ft_sysfs_store(buf, count, &new_setting);
+	ret = kgsl_sysfs_store(buf, count, &new_setting);
 	if (ret != count)
 		goto done;
 	if (new_setting)
@@ -2369,7 +2344,7 @@ static ssize_t _wake_timeout_store(struct device *dev,
 				     struct device_attribute *attr,
 				     const char *buf, size_t count)
 {
-	return _ft_sysfs_store(buf, count, &_wake_timeout);
+	return kgsl_sysfs_store(buf, count, &_wake_timeout);
 }
 
 /**
@@ -2892,33 +2867,60 @@ static int adreno_waittimestamp(struct kgsl_device *device,
 	return ret;
 }
 
-static unsigned int adreno_readtimestamp(struct kgsl_device *device,
-		struct kgsl_context *context, enum kgsl_timestamp_type type)
+/**
+ * adreno_readtimestamp(): Return the value of given type of timestamp
+ * @device: GPU device whose timestamp values are being queried
+ * @context: The context for which timestamp is to be read
+ * @type: The type of timestamp (one of 3) to be read
+ * @timestamp: Pointer to where the read timestamp is to be written to
+ *
+ * CONSUMED and RETIRED type timestamps are sorted by id and are constantly
+ * updated by the GPU through shared memstore memory. QUEUED type timestamps
+ * are read directly from context struct.
+
+ * The function returns 0 on success and timestamp value at the *timestamp
+ * address and returns -EINVAL on any read error/invalid type and timestamp = 0.
+ */
+static int adreno_readtimestamp(struct kgsl_device *device,
+					struct kgsl_context *context,
+					enum kgsl_timestamp_type type,
+					unsigned int *timestamp)
 {
-	unsigned int timestamp = 0;
+	int status = 0;
 	unsigned int id = context ? context->id : KGSL_MEMSTORE_GLOBAL;
+
+	/*
+	 * If user passed in a NULL pointer for timestamp, return without
+	 * doing anything.
+	 */
+	if (!timestamp)
+		return status;
 
 	switch (type) {
 	case KGSL_TIMESTAMP_QUEUED: {
 		struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 
-		timestamp = adreno_context_timestamp(context,
+		*timestamp = adreno_context_timestamp(context,
 				&adreno_dev->ringbuffer);
 		break;
 	}
 	case KGSL_TIMESTAMP_CONSUMED:
-		kgsl_sharedmem_readl(&device->memstore, &timestamp,
+		kgsl_sharedmem_readl(&device->memstore, timestamp,
 			KGSL_MEMSTORE_OFFSET(id, soptimestamp));
 		break;
 	case KGSL_TIMESTAMP_RETIRED:
-		kgsl_sharedmem_readl(&device->memstore, &timestamp,
+		kgsl_sharedmem_readl(&device->memstore, timestamp,
 			KGSL_MEMSTORE_OFFSET(id, eoptimestamp));
+		break;
+	default:
+		status = -EINVAL;
+		*timestamp = 0;
 		break;
 	}
 
 	rmb();
 
-	return timestamp;
+	return status;
 }
 
 static long adreno_ioctl(struct kgsl_device_private *dev_priv,

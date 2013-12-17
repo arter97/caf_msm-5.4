@@ -259,6 +259,96 @@ static const struct adreno_vbif_platform a4xx_vbif_platforms[] = {
 	{ adreno_is_a420, a420_vbif },
 };
 
+/*
+ * a4xx_enable_hwcg() - Program the clock control registers
+ * @device: The adreno device pointer
+ */
+static void a4xx_enable_hwcg(struct kgsl_device *device)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_TP0, 0x02222202);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_TP1, 0x02222202);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_TP2, 0x02222202);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_TP3, 0x02222202);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL2_TP0, 0x00002222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL2_TP1, 0x00002222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL2_TP2, 0x00002222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL2_TP3, 0x00002222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_HYST_TP0, 0x0E739CE7);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_HYST_TP1, 0x0E739CE7);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_HYST_TP2, 0x0E739CE7);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_HYST_TP3, 0x0E739CE7);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_DELAY_TP0, 0x00111111);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_DELAY_TP1, 0x00111111);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_DELAY_TP2, 0x00111111);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_DELAY_TP3, 0x00111111);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_SP0, 0x22222222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_SP1, 0x22222222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_SP2, 0x22222222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_SP3, 0x22222222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL2_SP0, 0x00222222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL2_SP1, 0x00222222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL2_SP2, 0x00222222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL2_SP3, 0x00222222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_HYST_SP0, 0x00000104);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_HYST_SP1, 0x00000104);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_HYST_SP2, 0x00000104);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_HYST_SP3, 0x00000104);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_DELAY_SP0, 0x00000081);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_DELAY_SP1, 0x00000081);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_DELAY_SP2, 0x00000081);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_DELAY_SP3, 0x00000081);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_UCHE, 0x22222222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL2_UCHE, 0x02222222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL3_UCHE, 0x00000000);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL4_UCHE, 0x00000000);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_HYST_UCHE, 0x00004444);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_DELAY_UCHE, 0x00001112);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_RB0, 0x22222222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_RB1, 0x22222222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_RB2, 0x22222222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_RB3, 0x22222222);
+	/* Disable L1 clocking in A420 due to CCU issues with it */
+	if (adreno_is_a420(adreno_dev))
+		kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL2_RB0, 0x00002020);
+	else
+		kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL2_RB0, 0x00022020);
+
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL2_RB1, 0x00022020);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL2_RB2, 0x00022020);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL2_RB3, 0x00022020);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_MARB_CCU0, 0x00000922);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_MARB_CCU1, 0x00000922);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_MARB_CCU2, 0x00000922);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_MARB_CCU3, 0x00000922);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_HYST_RB_MARB_CCU0, 0x00000000);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_HYST_RB_MARB_CCU1, 0x00000000);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_HYST_RB_MARB_CCU2, 0x00000000);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_HYST_RB_MARB_CCU3, 0x00000000);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_DELAY_RB_MARB_CCU_L1_0,
+				0x00000001);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_DELAY_RB_MARB_CCU_L1_1,
+				0x00000001);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_DELAY_RB_MARB_CCU_L1_2,
+				0x00000001);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_DELAY_RB_MARB_CCU_L1_3,
+				0x00000001);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_MODE_GPC, 0x02222222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_HYST_GPC, 0x04100104);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_DELAY_GPC, 0x00022222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_COM_DCOM, 0x00000022);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_HYST_COM_DCOM, 0x0000010F);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_DELAY_COM_DCOM, 0x00000022);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_TSE_RAS_RBBM, 0x00222222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_HYST_TSE_RAS_RBBM, 0x00004104);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_DELAY_TSE_RAS_RBBM, 0x00000222);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL_HLSQ , 0x00000000);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_HYST_HLSQ, 0x00000000);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_DELAY_HLSQ, 0x00020000);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL, 0xAAAAAAAA);
+	kgsl_regwrite(device, A4XX_RBBM_CLOCK_CTL2, 0);
+}
+
 static void a4xx_start(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = &adreno_dev->dev;
@@ -305,6 +395,8 @@ static void a4xx_start(struct adreno_device *adreno_dev)
 	/* On A420 cores turn on SKIP_IB2_DISABLE in addition to the default */
 	kgsl_regwrite(device, A4XX_CP_DEBUG, A4XX_CP_DEBUG_DEFAULT |
 			(adreno_is_a420(adreno_dev) ? (1 << 29) : 0));
+
+	a4xx_enable_hwcg(device);
 	/*
 	 * For A420 set RBBM_CLOCK_DELAY_HLSQ.CGC_HLSQ_TP_EARLY_CYC >= 2
 	 * due to timing issue with HLSQ_TP_CLK_EN
@@ -759,25 +851,33 @@ static struct adreno_perfcount_register a4xx_perfcounters_vbif_pwr[] = {
 		A4XX_VBIF_PERF_PWR_CNT_HIGH3, -1, A4XX_VBIF_PERF_PWR_CNT_EN3 },
 };
 
+#define A4XX_PERFCOUNTER_GROUP(offset, name) \
+	ADRENO_PERFCOUNTER_GROUP(a4xx, offset, name)
+
+#define A4XX_PERFCOUNTER_GROUP_FLAGS(offset, name, flags) \
+	ADRENO_PERFCOUNTER_GROUP_FLAGS(a4xx, offset, name, flags)
+
 static struct adreno_perfcount_group a4xx_perfcounter_groups
 				[KGSL_PERFCOUNTER_GROUP_MAX] = {
-	ADRENO_PERFCOUNTER_GROUP_OFF(a4xx, cp, CP),
-	ADRENO_PERFCOUNTER_GROUP_OFF(a4xx, rbbm, RBBM),
-	ADRENO_PERFCOUNTER_GROUP_OFF(a4xx, pc, PC),
-	ADRENO_PERFCOUNTER_GROUP_OFF(a4xx, vfd, VFD),
-	ADRENO_PERFCOUNTER_GROUP_OFF(a4xx, hlsq, HLSQ),
-	ADRENO_PERFCOUNTER_GROUP_OFF(a4xx, vpc, VPC),
-	ADRENO_PERFCOUNTER_GROUP_OFF(a4xx, ccu, CCU),
-	ADRENO_PERFCOUNTER_GROUP_OFF(a4xx, tse, TSE),
-	ADRENO_PERFCOUNTER_GROUP_OFF(a4xx, ras, RAS),
-	ADRENO_PERFCOUNTER_GROUP_OFF(a4xx, uche, UCHE),
-	ADRENO_PERFCOUNTER_GROUP_OFF(a4xx, tp, TP),
-	ADRENO_PERFCOUNTER_GROUP_OFF(a4xx, sp, SP),
-	ADRENO_PERFCOUNTER_GROUP_OFF(a4xx, rb, RB),
-	ADRENO_PERFCOUNTER_GROUP_OFF(a4xx, vsc, VSC),
-	ADRENO_PERFCOUNTER_GROUP_OFF(a4xx, pwr, PWR),
-	ADRENO_PERFCOUNTER_GROUP_OFF(a4xx, vbif, VBIF),
-	ADRENO_PERFCOUNTER_GROUP_OFF(a4xx, vbif_pwr, VBIF_PWR),
+	A4XX_PERFCOUNTER_GROUP(CP, cp),
+	A4XX_PERFCOUNTER_GROUP(RBBM, rbbm),
+	A4XX_PERFCOUNTER_GROUP(PC, pc),
+	A4XX_PERFCOUNTER_GROUP(VFD, vfd),
+	A4XX_PERFCOUNTER_GROUP(HLSQ, hlsq),
+	A4XX_PERFCOUNTER_GROUP(VPC, vpc),
+	A4XX_PERFCOUNTER_GROUP(CCU, ccu),
+	A4XX_PERFCOUNTER_GROUP(TSE, tse),
+	A4XX_PERFCOUNTER_GROUP(RAS, ras),
+	A4XX_PERFCOUNTER_GROUP(UCHE, uche),
+	A4XX_PERFCOUNTER_GROUP(TP, tp),
+	A4XX_PERFCOUNTER_GROUP(SP, sp),
+	A4XX_PERFCOUNTER_GROUP(RB, rb),
+	A4XX_PERFCOUNTER_GROUP(VSC, vsc),
+	A4XX_PERFCOUNTER_GROUP_FLAGS(PWR, pwr,
+		ADRENO_PERFCOUNTER_GROUP_FIXED),
+	A4XX_PERFCOUNTER_GROUP(VBIF, vbif),
+	A4XX_PERFCOUNTER_GROUP_FLAGS(VBIF_PWR, vbif_pwr,
+		ADRENO_PERFCOUNTER_GROUP_FIXED),
 };
 
 static struct adreno_perfcounters a4xx_perfcounters = {

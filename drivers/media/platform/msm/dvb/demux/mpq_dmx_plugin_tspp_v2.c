@@ -373,6 +373,7 @@ static int mpq_dmx_tspp2_init_idx_table(enum dmx_video_codec codec,
 			__func__, table_id, ret);
 		return ret;
 	}
+	table->num_patterns = 0;
 
 	ret = tspp2_indexing_prefix_set(TSPP2_DEVICE_ID, table_id,
 		INDEX_TABLE_PREFIX_VALUE, INDEX_TABLE_PREFIX_MASK);
@@ -6456,6 +6457,9 @@ static int mpq_dmx_tsppv2_init(struct dvb_adapter *mpq_adapter,
 		mpq_tspp2_demux->feeds[i].mpq_feed = &mpq_demux->feeds[i];
 		mpq_demux->feeds[i].plugin_priv = &mpq_tspp2_demux->feeds[i];
 	}
+
+	/* Extend dvb-demux debugfs with TSPP statistics. */
+	mpq_dmx_init_debugfs_entries(mpq_demux);
 
 	return 0;
 
