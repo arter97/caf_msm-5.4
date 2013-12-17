@@ -244,6 +244,8 @@ static int diagchar_close(struct inode *inode, struct file *file)
 		pr_alert("diag: Invalid file pointer");
 		return -ENOMEM;
 	}
+	if (!driver)
+		return -ENOMEM;
 
 	/* clean up any DCI registrations for this client
 	* This will specially help in case of ungraceful exit of any DCI client
