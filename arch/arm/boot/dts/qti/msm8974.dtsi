@@ -70,31 +70,31 @@
 	};
 
 	memory {
-		secure_mem: secure_region {
+		secure_mem: secure_region@0 {
 			linux,contiguous-region;
 			reg = <0 0xFC00000>;
 			label = "secure_mem";
 		};
 
-		adsp_mem: adsp_region {
+		adsp_mem: adsp_region@0 {
 			linux,contiguous-region;
 			reg = <0 0x3F00000>;
 			label = "adsp_mem";
 		};
 
-		qsecom_mem: qsecom_region {
+		qsecom_mem: qsecom_region@0 {
 			linux,contiguous-region;
 			reg = <0 0x1100000>;
 			label = "qseecom_mem";
 		};
 
-		fb_mem: fb_region {
+		fb_mem: fb_region@0 {
 			linux,contiguous-region;
 			reg = <0 0x800000>;
 			label = "fb_mem";
 		};
 
-		audio_mem: audio_region {
+		audio_mem: audio_region@0 {
 			linux,contiguous-region;
 			linux,reserve-region;
 			reg = <0 0x614000>;
@@ -1777,6 +1777,10 @@
 		compatible = "qcom,msm-lsm-client";
 	};
 
+	qti,msm-pcm-loopback {
+		compatible = "qti,msm-pcm-loopback";
+	};
+
 	qcom,msm-dai-q6 {
 		compatible = "qcom,msm-dai-q6";
 		qcom,msm-dai-q6-sb-0-rx {
@@ -2070,8 +2074,8 @@
 		qcom,msm-bus,num-cases = <2>;
 		qcom,msm-bus,num-paths = <1>;
 		qcom,msm-bus,vectors-KBps =
-				<1 618 0 0>,
-				<1 618 0 800>;
+				<88 618 0 0>,
+				<88 618 0 800>;
         };
 
 	qseecom: qcom,qseecom@7b00000 {
