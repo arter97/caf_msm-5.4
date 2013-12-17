@@ -481,6 +481,71 @@ struct teth_bridge_connect_params {
 	enum ipa_client_type client_type;
 };
 
+/**
+ * typedef odu_bridge_send_dl_skb_cb - callback function for odu bridge
+ * for sending skb on downlink direction
+ * @skb: packet to be sent
+ * @priv: private data given in odu_bridge_init()
+ *
+ * skb is freed by the callback function after it has been sent
+*/
+typedef int (*odu_bridge_send_dl_skb_cb)(struct sk_buff *skb, void *priv);
+
+/*
+ * struct odu_ipa_tx_hw_hdr_info - data structure for TX hardware header
+ * information (IPA->HSIC)
+ *
+ * @raw_hdr: Raw header as byte array. header endianess should be as expected
+ * on the packet.
+ * @hdr_len: Header length in bytes.
+ * @hdr_additional_const_len: Constant length to be added by IPA to the
+ * payload length.
+ * @hdr_ofst_pkt_size: Offset within header in which payload length resides
+ * @hdr_ofst_pkt_size_valid: valid field for hdr_ofst_pkt_size.
+ * @is_little_endian: Defines if the hardware header endianess is little
+ * endian.
+ */
+struct odu_ipa_tx_hw_hdr_info {
+	u8 raw_hdr[IPA_HDR_MAX_SIZE];
+	u32 hdr_len;
+	u32 hdr_additional_const_len;
+	u32 hdr_ofst_pkt_size;
+	u32 hdr_ofst_pkt_size_valid;
+	bool is_little_endian;
+};
+
+/*
+ * struct odu_ipa_rx_hw_hdr_info - data structure for RX hardware header
+ * information (HSIC->IPA)
+ *
+ * @hdr_len: Header length to be removed in bytes.
+ * @hdr_ofst_metadata: Offset within header in which 4 bytes metadata resides.
+ * @hdr_ofst_metadata_valid: valid field for hdr_ofst_metadata.
+ * @hdr_ofst_pkt_size: Offset within header in which payload length resides
+ * @hdr_ofst_pkt_size_valid: valid field for hdr_ofst_pkt_size.
+ * @is_little_endian: Defines if the hardware header endianess is little
+ * endian.
+ */
+struct odu_ipa_rx_hw_hdr_info {
+	u32 hdr_len;
+	u32 hdr_ofst_metadata;
+	u32 hdr_ofst_metadata_valid;
+	u32 hdr_ofst_pkt_size;
+	u32 hdr_ofst_pkt_size_valid;
+	bool is_little_endian;
+};
+
+/*
+ * struct odu_ipa_hw_hdr_info - data structure for hardware header information
+ *
+ * @tx: TX hardware header information
+ * @rx: RX hardware header information
+ */
+struct odu_ipa_hw_hdr_info {
+	struct odu_ipa_tx_hw_hdr_info tx;
+	struct odu_ipa_rx_hw_hdr_info rx;
+};
+
 #ifdef CONFIG_IPA
 
 /*
@@ -687,6 +752,24 @@ int teth_bridge_connect(struct teth_bridge_connect_params *connect_params);
 
 int teth_bridge_set_mbim_aggr_params(struct teth_aggr_params *aggr_params,
 		enum ipa_client_type client);
+
+/*
+ * ODU bridge
+ */
+int odu_bridge_init(odu_bridge_send_dl_skb_cb send_dl_skb_cb,
+		    void *cb_priv,
+		    ipa_notify_cb handle_ul_skb_cb,
+		    ipa_notify_cb *ul_notify_cb_ptr);
+
+int odu_bridge_disconnect(void);
+
+int odu_bridge_connect(void);
+
+int odu_bridge_add_hw_hdr_info(struct odu_ipa_hw_hdr_info *hw_hdr_info);
+
+int odu_bridge_handle_mcast_skb(struct sk_buff *skb);
+
+int odu_bridge_cleanup(void);
 
 void ipa_bam_reg_dump(void);
 bool ipa_emb_ul_pipes_empty(void);
@@ -1126,6 +1209,42 @@ static inline int teth_bridge_connect(struct teth_bridge_connect_params
 static inline int teth_bridge_set_mbim_aggr_params(
 				struct teth_aggr_params *aggr_params,
 				enum ipa_client_type client)
+{
+	return -EPERM;
+}
+
+/*
+ * Tethering bridge (Rmnetm / MBIM)
+ */
+static inline int odu_bridge_init(odu_bridge_send_dl_skb_cb send_dl_skb_cb,
+				void *cb_priv,
+				ipa_notify_cb handle_ul_skb_cb,
+				ipa_notify_cb *ul_notify_cb_ptr)
+{
+	return -EPERM;
+}
+
+static inline int odu_bridge_disconnect(void)
+{
+	return -EPERM;
+}
+
+static inline int odu_bridge_connect(void)
+{
+	return -EPERM;
+}
+
+static inline int odu_bridge_add_hw_hdr_info(struct odu_ipa_hw_hdr_info *hw_hdr_info)
+{
+	return -EPERM;
+}
+
+static inline int odu_bridge_handle_mcast_skb(struct sk_buff *skb)
+{
+	return -EPERM;
+}
+
+static inline int odu_bridge_cleanup(void)
 {
 	return -EPERM;
 }

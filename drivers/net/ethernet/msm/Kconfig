@@ -66,3 +66,11 @@ config ECM_IPA
 	depends on IPA
 	help
 	  Allows LAN between Apps and tethered HOST on STD ECM
+
+config ODU_IPA
+	tristate "ODU IPA LAN Driver support"
+	depends on IPA
+	help
+	  Allows LAN between Apps and gateway
+	  connected via Ethernet-to-USB adapter as part
+	  of ODU (Out Door Unit)

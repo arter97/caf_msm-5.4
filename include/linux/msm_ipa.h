@@ -223,6 +223,8 @@ enum ipa_rm_resource_name {
 	IPA_RM_RESOURCE_WWAN_6_PROD,
 	IPA_RM_RESOURCE_WWAN_7_PROD,
 	IPA_RM_RESOURCE_WLAN_PROD,
+	IPA_RM_RESOURCE_ODU_PROD,
+	IPA_RM_RESOURCE_ODU_BRIDGE_PROD,
 	IPA_RM_RESOURCE_PROD_MAX,
 
 	IPA_RM_RESOURCE_A2_CONS = IPA_RM_RESOURCE_PROD_MAX,
@@ -959,5 +961,37 @@ struct teth_ioc_aggr_params {
 #define TETH_BRIDGE_IOC_GET_AGGR_CAPABILITIES _IOWR(TETH_BRIDGE_IOC_MAGIC, \
 				TETH_BRIDGE_IOCTL_GET_AGGR_CAPABILITIES, \
 				struct teth_aggr_capabilities *)
+
+/*
+ * unique magic number of the ODU bridge ioctls
+ */
+#define ODU_BRIDGE_IOC_MAGIC 0xCD
+
+/*
+ * Ioctls supported by ODU bridge driver
+ */
+#define ODU_BRIDGE_IOCTL_SET_MODE	0
+#define ODU_BRIDGE_IOCTL_SET_LLV6_ADDR	1
+#define ODU_BRIDGE_IOCTL_MAX		2
+
+/**
+ * enum odu_bridge_mode - bridge mode
+ *			(ROUTER MODE / BRIDGE MODE)
+ */
+enum odu_bridge_mode {
+	ODU_BRIDGE_MODE_ROUTER,
+	ODU_BRIDGE_MODE_BRIDGE,
+	ODU_BRIDGE_MODE_MAX,
+};
+
+#define ODU_BRIDGE_IOC_SET_MODE _IOW(ODU_BRIDGE_IOC_MAGIC, \
+				ODU_BRIDGE_IOCTL_SET_MODE, \
+				enum odu_bridge_mode)
+
+#define ODU_BRIDGE_IOC_SET_LLV6_ADDR _IOW(ODU_BRIDGE_IOC_MAGIC, \
+				ODU_BRIDGE_IOCTL_SET_LLV6_ADDR, \
+				struct in6_addr *)
+
+
 
 #endif /* _MSM_IPA_H_ */

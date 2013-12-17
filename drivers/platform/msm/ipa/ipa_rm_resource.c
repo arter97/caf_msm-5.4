@@ -42,6 +42,8 @@ int ipa_rm_prod_index(enum ipa_rm_resource_name resource_name)
 	case IPA_RM_RESOURCE_WWAN_6_PROD:
 	case IPA_RM_RESOURCE_WWAN_7_PROD:
 	case IPA_RM_RESOURCE_WLAN_PROD:
+	case IPA_RM_RESOURCE_ODU_PROD:
+	case IPA_RM_RESOURCE_ODU_BRIDGE_PROD:
 		break;
 	default:
 		result = IPA_RM_INDEX_INVALID;
