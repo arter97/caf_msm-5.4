@@ -131,6 +131,9 @@ static DEFINE_SPINLOCK(reg_spinlock);
 #define MSM_PRONTO_TXP_PHY_ABORT        0xfb080488
 #define MSM_PRONTO_BRDG_ERR_SRC         0xfb080fb0
 
+#define MSM_PRONTO_ALARMS_TXCTL         0xfb0120a8
+#define MSM_PRONTO_ALARMS_TACTL         0xfb012448
+
 #define WCNSS_DEF_WLAN_RX_BUFF_COUNT		1024
 
 #define WCNSS_CTRL_CHANNEL			"WCNSS_CTRL"
@@ -311,6 +314,8 @@ static struct {
 	void __iomem *pronto_pll_base;
 	void __iomem *wlan_tx_phy_aborts;
 	void __iomem *wlan_brdg_err_source;
+	void __iomem *alarms_txctl;
+	void __iomem *alarms_tactl;
 	void __iomem *fiq_reg;
 	int	ssr_boot;
 	int	nv_downloaded;
@@ -593,6 +598,11 @@ void wcnss_pronto_log_debug_regs(void)
 	reg = readl_relaxed(penv->wlan_brdg_err_source);
 	pr_info_ratelimited("%s: WLAN_BRDG_ERR_SOURCE %08x\n", __func__, reg);
 
+	reg = readl_relaxed(penv->alarms_txctl);
+	pr_err("ALARMS_TXCTL %08x\n", reg);
+
+	reg = readl_relaxed(penv->alarms_tactl);
+	pr_err("ALARMS_TACTL %08x\n", reg);
 }
 EXPORT_SYMBOL(wcnss_pronto_log_debug_regs);
 
@@ -1799,6 +1809,18 @@ wcnss_trigger_config(struct platform_device *pdev)
 			goto fail_ioremap8;
 		}
 
+		penv->alarms_txctl = ioremap(MSM_PRONTO_ALARMS_TXCTL, SZ_8);
+		if (!penv->alarms_txctl) {
+			ret = -ENOMEM;
+			pr_err("%s: ioremap alarms TXCTL failed\n", __func__);
+			goto fail_ioremap9;
+		}
+		penv->alarms_tactl = ioremap(MSM_PRONTO_ALARMS_TACTL, SZ_8);
+		if (!penv->alarms_tactl) {
+			ret = -ENOMEM;
+			pr_err("%s: ioremap alarms TACTL failed\n", __func__);
+			goto fail_ioremap10;
+		}
 	}
 
 	/* trigger initialization of the WCNSS */
@@ -1816,6 +1838,12 @@ wcnss_trigger_config(struct platform_device *pdev)
 fail_pil:
 	if (penv->riva_ccu_base)
 		iounmap(penv->riva_ccu_base);
+	if (penv->alarms_tactl)
+		iounmap(penv->alarms_tactl);
+fail_ioremap10:
+	if (penv->alarms_txctl)
+		iounmap(penv->alarms_txctl);
+fail_ioremap9:
 	if (penv->wlan_brdg_err_source)
 		iounmap(penv->wlan_brdg_err_source);
 fail_ioremap8:
