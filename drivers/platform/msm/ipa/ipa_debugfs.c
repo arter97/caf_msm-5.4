@@ -89,6 +89,7 @@ const char *ipa_event_name[] = {
 	__stringify(WLAN_AP_DISCONNECT),
 	__stringify(WLAN_STA_CONNECT),
 	__stringify(WLAN_STA_DISCONNECT),
+	__stringify(WAN_EMBMS_CONNECT),
 };
 
 static struct dentry *dent;

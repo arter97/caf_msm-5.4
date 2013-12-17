@@ -21,37 +21,38 @@
 /**
  *   the commands supported by IPA driver
  */
-#define IPA_IOCTL_ADD_HDR            0
-#define IPA_IOCTL_DEL_HDR            1
-#define IPA_IOCTL_ADD_RT_RULE        2
-#define IPA_IOCTL_DEL_RT_RULE        3
-#define IPA_IOCTL_ADD_FLT_RULE       4
-#define IPA_IOCTL_DEL_FLT_RULE       5
-#define IPA_IOCTL_COMMIT_HDR         6
-#define IPA_IOCTL_RESET_HDR          7
-#define IPA_IOCTL_COMMIT_RT          8
-#define IPA_IOCTL_RESET_RT           9
-#define IPA_IOCTL_COMMIT_FLT        10
-#define IPA_IOCTL_RESET_FLT         11
-#define IPA_IOCTL_DUMP              12
-#define IPA_IOCTL_GET_RT_TBL        13
-#define IPA_IOCTL_PUT_RT_TBL        14
-#define IPA_IOCTL_COPY_HDR          15
-#define IPA_IOCTL_QUERY_INTF        16
-#define IPA_IOCTL_QUERY_INTF_TX_PROPS 17
-#define IPA_IOCTL_QUERY_INTF_RX_PROPS 18
-#define IPA_IOCTL_GET_HDR           19
-#define IPA_IOCTL_PUT_HDR           20
-#define IPA_IOCTL_SET_FLT        21
-#define IPA_IOCTL_ALLOC_NAT_MEM  22
-#define IPA_IOCTL_V4_INIT_NAT    23
-#define IPA_IOCTL_NAT_DMA        24
-#define IPA_IOCTL_V4_DEL_NAT     26
-#define IPA_IOCTL_PULL_MSG       27
-#define IPA_IOCTL_GET_NAT_OFFSET 28
-#define IPA_IOCTL_RM_ADD_DEPENDENCY 29
-#define IPA_IOCTL_RM_DEL_DEPENDENCY 30
-#define IPA_IOCTL_MAX            31
+#define IPA_IOCTL_ADD_HDR			0
+#define IPA_IOCTL_DEL_HDR			1
+#define IPA_IOCTL_ADD_RT_RULE			2
+#define IPA_IOCTL_DEL_RT_RULE			3
+#define IPA_IOCTL_ADD_FLT_RULE			4
+#define IPA_IOCTL_DEL_FLT_RULE			5
+#define IPA_IOCTL_COMMIT_HDR			6
+#define IPA_IOCTL_RESET_HDR			7
+#define IPA_IOCTL_COMMIT_RT			8
+#define IPA_IOCTL_RESET_RT			9
+#define IPA_IOCTL_COMMIT_FLT			10
+#define IPA_IOCTL_RESET_FLT			11
+#define IPA_IOCTL_DUMP				12
+#define IPA_IOCTL_GET_RT_TBL			13
+#define IPA_IOCTL_PUT_RT_TBL			14
+#define IPA_IOCTL_COPY_HDR			15
+#define IPA_IOCTL_QUERY_INTF			16
+#define IPA_IOCTL_QUERY_INTF_TX_PROPS		17
+#define IPA_IOCTL_QUERY_INTF_RX_PROPS		18
+#define IPA_IOCTL_GET_HDR			19
+#define IPA_IOCTL_PUT_HDR			20
+#define IPA_IOCTL_SET_FLT			21
+#define IPA_IOCTL_ALLOC_NAT_MEM		22
+#define IPA_IOCTL_V4_INIT_NAT			23
+#define IPA_IOCTL_NAT_DMA			24
+#define IPA_IOCTL_V4_DEL_NAT			26
+#define IPA_IOCTL_PULL_MSG			27
+#define IPA_IOCTL_GET_NAT_OFFSET		28
+#define IPA_IOCTL_RM_ADD_DEPENDENCY		29
+#define IPA_IOCTL_RM_DEL_DEPENDENCY		30
+#define IPA_IOCTL_NOTIFY_WAN_EMBMS_CONNECTED	31
+#define IPA_IOCTL_MAX				32
 
 /**
  * max size of the header to be inserted
@@ -185,8 +186,20 @@ enum ipa_wlan_event {
 	WLAN_AP_DISCONNECT,
 	WLAN_STA_CONNECT,
 	WLAN_STA_DISCONNECT,
-	IPA_EVENT_MAX
+	IPA_WLAN_EVENT_MAX
 };
+
+/**
+ * enum ipa_wan_event - Events for wan client
+ *
+ * wan embms connect: New wan embms interface connected
+ */
+enum ipa_wan_event {
+	WAN_EMBMS_CONNECT = IPA_WLAN_EVENT_MAX,
+	IPA_WAN_EVENT_MAX
+};
+
+#define IPA_EVENT_MAX ((int)IPA_WAN_EVENT_MAX)
 
 /**
  * enum ipa_rm_resource_name - IPA RM clients identification names
@@ -729,6 +742,16 @@ struct ipa_wlan_msg {
 };
 
 /**
+ * struct ipa_wan_msg - To hold information about wan client
+ * @name: name of the wan interface
+ *
+ * netmgr need to pass the name of wan eMBMS iface when connected.
+ */
+struct ipa_wan_msg {
+	char name[IPA_RESOURCE_NAME_MAX];
+};
+
+/**
  * struct ipa_ioc_rm_dependency - parameters for add/delete dependency
  * @resource_name: name of dependent resource
  * @depends_on_name: name of its dependency
@@ -829,6 +852,10 @@ struct ipa_ioc_rm_dependency {
 #define IPA_IOC_RM_DEL_DEPENDENCY _IOWR(IPA_IOC_MAGIC, \
 				IPA_IOCTL_RM_DEL_DEPENDENCY, \
 				struct ipa_ioc_rm_dependency *)
+
+#define IPA_IOC_NOTIFY_WAN_EMBMS_CONNECTED _IOWR(IPA_IOC_MAGIC, \
+				IPA_IOCTL_NOTIFY_WAN_EMBMS_CONNECTED, \
+				struct ipa_wan_msg *)
 
 /*
  * unique magic number of the Tethering bridge ioctls
