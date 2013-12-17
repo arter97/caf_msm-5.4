@@ -20,7 +20,7 @@
 
 	aliases {
 		i2c2 = &i2c_2;
-		spi1 = &spi_1;
+		i2c11 = &i2c_11;
 		sdhc1 = &sdhc_1; /* SDC1 eMMC slot */
 		sdhc2 = &sdhc_2; /* SDC2 SD card slot */
 	};
@@ -134,33 +134,17 @@
                 qcom,rtb-size = <0x100000>;
         };
 
-
-	spi_1: spi@f9923000 { /* BLSP1 QUP1 */
-		compatible = "qcom,spi-qup-v2";
-		#address-cells = <1>;
-		#size-cells = <0>;
-		reg-names = "spi_physical", "spi_bam_physical";
-		reg = <0xf9923000 0x1000>,
-		      <0xf9904000 0xf000>;
-		interrupt-names = "spi_irq", "spi_bam_irq";
-		interrupts = <0 95 0>, <0 238 0>;
-		spi-max-frequency = <19200000>;
-		qcom,gpio-mosi = <&msmgpio 0 0>;
-		qcom,gpio-miso = <&msmgpio 1 0>;
-		qcom,gpio-clk  = <&msmgpio 3 0>;
-
-		qcom,infinite-mode = <0>;
-		qcom,use-bam;
-		qcom,ver-reg-exists;
-		qcom,bam-consumer-pipe-index = <12>;
-		qcom,bam-producer-pipe-index = <13>;
-		qcom,master-id = <86>;
-	};
-
 	blsp1_uart2: serial@f991f000 {
 		compatible = "qcom,msm-lsuart-v14";
 		reg = <0xf991f000 0x1000>;
 		interrupts = <0 109 0>;
+		status = "disabled";
+	};
+
+	blsp1_uart4: serial@f9921000 {
+		compatible = "qcom,msm-lsuart-v14";
+		reg = <0xf9921000 0x1000>;
+		interrupts = <0 111 0>;
 		status = "disabled";
 	};
 
@@ -172,8 +156,26 @@
 	};
 
 	qti,msm-imem@fe805000 {
-                compatible = "qti,msm-imem";
-                reg = <0xfe805000 0x1000>; /* Address and size of IMEM */
+		compatible = "qti,msm-imem";
+		reg = <0xfe805000 0x1000>; /* Address and size of IMEM */
+		ranges = <0x0 0xfe805000 0x1000>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		mem_dump_table@14 {
+			compatible = "qti,msm-imem-mem_dump_table";
+			reg = <0x14 4>;
+		};
+
+		boot_stats@6b0 {
+			compatible = "qti,msm-imem-boot_stats";
+			reg = <0x6b0 32>;
+		};
+
+		pil@94c {
+			compatible = "qti,msm-imem-pil";
+			reg = <0x94c 200>;
+		};
 	};
 
 	qcom,usbbam@f9a44000 {
@@ -387,6 +389,18 @@
 		};
 	};
 
+	slim_msm: slim@fe1af000 {
+		cell-index = <1>;
+		compatible = "qcom,slim-ngd";
+		reg = <0xfe1af000 0x35000>,
+		     <0xfe184000 0x20000>;
+		reg-names = "slimbus_physical", "slimbus_bam_physical";
+		interrupts = <0 163 0 0 164 0>;
+		interrupt-names = "slimbus_irq", "slimbus_bam_irq";
+		qcom,apps-ch-pipes = <0x60000000>;
+		qcom,ea-pc = <0xc0>;
+	};
+
 	i2c_2: i2c@f9924000 { /* BLSP1 QUP2 */
 		compatible = "qcom,i2c-msm-v2";
 		#address-cells = <1>;
@@ -405,6 +419,26 @@
 		qcom,bam-pipe-idx-cons = <14>;
 		qcom,bam-pipe-idx-prod = <15>;
 		qcom,master-id = <86>;
+	};
+
+	i2c_11: i2c@f9967000 { /* BLSP2 QUP5 */
+		compatible = "qcom,i2c-msm-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr", "bam_phys_addr";
+		reg = <0xf9967000 0x1000>,
+		      <0xf9944000 0x19000>;
+		interrupt-names = "qup_irq", "bam_irq";
+		interrupts = <0 105 0>, <0 239 0>;
+		qcom,clk-freq-out = <100000>;
+		qcom,clk-freq-in  = <19200000>;
+		qcom,gpio-sda = <&msmgpio 81 0>;
+		qcom,gpio-scl = <&msmgpio 82 0>;
+		qcom,noise-rjct-scl = <0>;
+		qcom,noise-rjct-sda = <0>;
+		qcom,bam-pipe-idx-cons = <20>;
+		qcom,bam-pipe-idx-prod = <21>;
+		qcom,master-id = <84>;
 	};
 
 	memory_hole: qcom,msm-mem-hole {
@@ -510,21 +544,20 @@
 			compatible = "qcom,rpm-smd";
 			rpm-channel-name = "rpm_requests";
 			rpm-channel-type = <15>; /* SMD_APPS_RPM */
-			rpm-standalone; /* TODO: remove this after bring up */
 	};
 
-	qcom,venus@fdce0000 {
-		compatible = "qcom,pil-venus";
+	qti,venus@fdce0000 {
+		compatible = "qti,pil-venus";
 		reg = <0xfdce0000 0x4000>,
 		      <0xfdc80000 0x400>;
 		reg-names = "wrapper_base", "vbif_base";
 		vdd-supply = <&gdsc_venus>;
 
-		qcom,firmware-name = "venus";
+		qti,firmware-name = "venus";
 	};
 
-	qcom,lpass@fe200000 {
-		compatible = "qcom,pil-q6v5-lpass";
+	qti,lpass@fe200000 {
+		compatible = "qti,pil-q6v5-lpass";
 		reg = <0xfe200000 0x00100>,
 		      <0xfd485100 0x00010>,
 		      <0xfc4016c0 0x00004>;
@@ -532,15 +565,16 @@
 		vdd_cx-supply = <&pma8084_s8_corner>;
 		interrupts = <0 162 1>;
 
-		qcom,firmware-name = "adsp";
+		qti,firmware-name = "adsp";
 
 		/* GPIO inputs from lpass */
-		qcom,gpio-err-fatal = <&smp2pgpio_ssr_smp2p_2_in 0 0>;
-		qcom,gpio-proxy-unvote = <&smp2pgpio_ssr_smp2p_2_in 2 0>;
-		qcom,gpio-err-ready = <&smp2pgpio_ssr_smp2p_2_in 1 0>;
+		qti,gpio-err-fatal = <&smp2pgpio_ssr_smp2p_2_in 0 0>;
+		qti,gpio-proxy-unvote = <&smp2pgpio_ssr_smp2p_2_in 2 0>;
+		qti,gpio-err-ready = <&smp2pgpio_ssr_smp2p_2_in 1 0>;
+		qti,gpio-stop-ack = <&smp2pgpio_ssr_smp2p_2_in 3 0>;
 
 		/* GPIO output to lpass */
-		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_2_out 0 0>;
+		qti,gpio-force-stop = <&smp2pgpio_ssr_smp2p_2_out 0 0>;
 	};
 
 	demod: msm-demod@fc600000 {
@@ -550,21 +584,21 @@
 		vdd-supply = <&gdsc_bcss>;
 	};
 
-	qcom,pil-vpu@fde0b000 {
-		compatible = "qcom,pil-vpu";
+	qti,pil-vpu@fde0b000 {
+		compatible = "qti,pil-vpu";
 		reg = <0xfde0b000 0x80>;
 		reg-names = "maple_csr_base";
 		vdd-supply = <&gdsc_vpu>;
 		clock-names = "core_clk", "iface_clk", "bus_clk", "vdp_clk",
 					"vdp_bus_clk", "sleep_clk";
 
-		qcom,firmware-name = "vpu";
+		qti,firmware-name = "vpu";
 	};
 
-	qcom,pil-bcss {
-		compatible = "qcom,pil-bcss";
+	qti,pil-bcss {
+		compatible = "qti,pil-bcss";
 
-		qcom,firmware-name = "bcss";
+		qti,firmware-name = "bcss";
 	};
 
 	msm_vidc: qcom,vidc@fdc00000 {
@@ -598,7 +632,9 @@
 			<0x800A8 0x00003FFF>,
 			<0xe0020 0x5555556>,
 			<0xe0024 0x5555556>,
-			<0x80124 0x3>;
+			<0x80124 0x3>,
+			<0x800E4 0x0>,
+			<0x800D8 0x707>;
 		qcom,enc-ocmem-ab-ib = <0 0>,
 			<138000 1034000>,
 			<414000 1034000>,
@@ -655,6 +691,7 @@
 		};
 	};
 
+
 	tsens: tsens@fc4a8000 {
 		compatible = "qti,msm-tsens";
 		reg = <0xfc4a8000 0x2000>,
@@ -664,6 +701,25 @@
 		qti,sensors = <11>;
 		qti,slope = <3200 3200 3200 3200 3200 3200 3200 3200 3200
 				3200 3200>;
+	};
+
+	tsc: msm_tsc@fc74a000 {
+		compatible = "qti,msm-tsc";
+		reg = <0xfc74a000 0x1110>;
+		reg-names = "tsc-base";
+		interrupts = <0 267 0>, /* cam-cmd */
+					 <0 268 0>; /* card-detect */
+		interrupt-names = "cam-cmd",
+						  "card-detect";
+		qti,iommu-group = <&bcast_domain_hlos>;
+		qti,iommu-partition = <1>;
+		vdd-supply = <&gdsc_bcss>;
+		qti,msm-bus,name = "tsc-bus";
+		qti,msm-bus,num-cases = <2>;
+		qti,msm-bus,num-paths = <1>;
+		qti,msm-bus,vectors-KBps = <96 512 0 0>, /* No vote */
+									<96 512 448 896>; /* Max. 7Mbps */
+		qti,tsc-reset-cam-gpio = <&msm_gpio 138 0>;	/* reset-pin controller */
 	};
 };
 
@@ -716,3 +772,22 @@
 #include "msm-pma8084-rpm-regulator.dtsi"
 #include "msm-pma8084.dtsi"
 #include "mpq8092-regulator.dtsi"
+
+&krait_regulator_pmic {
+	status = "ok";
+
+	qcom,ctl@2300 {
+		reg = <0x2300 0x100>;
+		status = "ok";
+	};
+
+	qcom,ps@2400 {
+		reg = <0x2400 0x100>;
+		status = "ok";
+	};
+
+	qcom,freq@2500 {
+		reg = <0x2500 0x100>;
+		status = "ok";
+	};
+};

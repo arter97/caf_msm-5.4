@@ -25,6 +25,7 @@
 #include <linux/of_irq.h>
 #include <linux/memory.h>
 #include <linux/msm_tsens.h>
+#include <linux/clk/msm-clk-provider.h>
 #include <asm/mach/map.h>
 #include <asm/mach/arch.h>
 #include <mach/board.h>
@@ -35,7 +36,6 @@
 #include <mach/msm_memtypes.h>
 #include <mach/socinfo.h>
 #include <mach/board.h>
-#include <mach/clk-provider.h>
 #include <mach/msm_smd.h>
 #include <mach/rpm-smd.h>
 #include <mach/rpm-regulator-smd.h>
@@ -46,20 +46,6 @@
 #include "platsmp.h"
 #include "spm.h"
 #include "pm.h"
-
-static struct memtype_reserve msm8610_reserve_table[] __initdata = {
-	[MEMTYPE_EBI0] = {
-		.flags	=	MEMTYPE_FLAGS_1M_ALIGN,
-	},
-	[MEMTYPE_EBI1] = {
-		.flags	=	MEMTYPE_FLAGS_1M_ALIGN,
-	},
-};
-
-static int msm8610_paddr_to_memtype(unsigned int paddr)
-{
-	return MEMTYPE_EBI1;
-}
 
 static struct of_dev_auxdata msm8610_auxdata_lookup[] __initdata = {
 	OF_DEV_AUXDATA("qcom,msm-sdcc", 0xF9824000, \
@@ -73,22 +59,14 @@ static struct of_dev_auxdata msm8610_auxdata_lookup[] __initdata = {
 	{}
 };
 
-static struct reserve_info msm8610_reserve_info __initdata = {
-	.memtype_reserve_table = msm8610_reserve_table,
-	.paddr_to_memtype = msm8610_paddr_to_memtype,
-};
-
 static void __init msm8610_early_memory(void)
 {
-	reserve_info = &msm8610_reserve_info;
-	of_scan_flat_dt(dt_scan_for_memory_hole, msm8610_reserve_table);
+	of_scan_flat_dt(dt_scan_for_memory_hole, NULL);
 }
 
 static void __init msm8610_reserve(void)
 {
-	reserve_info = &msm8610_reserve_info;
-	of_scan_flat_dt(dt_scan_for_memory_reserve, msm8610_reserve_table);
-	msm_reserve();
+	of_scan_flat_dt(dt_scan_for_memory_reserve, NULL);
 }
 
 void __init msm8610_add_drivers(void)

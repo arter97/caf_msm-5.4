@@ -27,8 +27,8 @@
 #include <linux/timer.h>
 #include <linux/kernel.h>
 #include <linux/workqueue.h>
-#include <mach/clk.h>
-#include <mach/iommu_domains.h>
+#include <linux/msm_iommu_domains.h>
+#include <linux/clk/msm-clk.h>
 #include <mach/iommu.h>
 #include <mach/vreg.h>
 #include <media/msm_isp.h>
@@ -140,7 +140,21 @@ static void msm_enqueue(struct msm_device_queue *queue,
 	spin_unlock_irqrestore(&queue->lock, flags);
 }
 
-
+#define msm_cpp_empty_list(queue, member) { \
+	unsigned long flags; \
+	struct msm_queue_cmd *qcmd = NULL; \
+	if (queue) { \
+		spin_lock_irqsave(&queue->lock, flags); \
+		while (!list_empty(&queue->list)) { \
+			queue->len--; \
+			qcmd = list_first_entry(&queue->list, \
+				struct msm_queue_cmd, member); \
+			list_del_init(&qcmd->member); \
+			kfree(qcmd); \
+		} \
+		spin_unlock_irqrestore(&queue->lock, flags); \
+	} \
+}
 
 static struct msm_cam_clk_info cpp_clk_info[CPP_CLK_INFO_MAX];
 
@@ -268,10 +282,8 @@ static unsigned long msm_cpp_queue_buffer_info(struct cpp_device *cpp_dev,
 	return buff->map_info.phy_addr;
 
 QUEUE_BUFF_ERROR2:
-	ion_unmap_iommu(cpp_dev->client, buff->map_info.ion_handle,
-		cpp_dev->domain_num, 0);
-QUEUE_BUFF_ERROR1:
 	ion_free(cpp_dev->client, buff->map_info.ion_handle);
+QUEUE_BUFF_ERROR1:
 	buff->map_info.ion_handle = NULL;
 	kzfree(buff);
 
@@ -925,8 +937,18 @@ static int cpp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 {
 	uint32_t i;
 	struct cpp_device *cpp_dev = v4l2_get_subdevdata(sd);
+	struct msm_device_queue *processing_q = NULL;
+	struct msm_device_queue *eventData_q = NULL;
+
+	if (!cpp_dev) {
+		pr_err("failed: cpp_dev %p\n", cpp_dev);
+		return -EINVAL;
+	}
 
 	mutex_lock(&cpp_dev->mutex);
+
+	processing_q = &cpp_dev->processing_q;
+	eventData_q = &cpp_dev->eventData_q;
 
 	if (cpp_dev->cpp_open_cnt == 0) {
 		mutex_unlock(&cpp_dev->mutex);
@@ -982,6 +1004,8 @@ static int cpp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 		cpp_deinit_mem(cpp_dev);
 		iommu_detach_device(cpp_dev->domain, cpp_dev->iommu_ctx);
 		cpp_release_hardware(cpp_dev);
+		msm_cpp_empty_list(processing_q, list_frame);
+		msm_cpp_empty_list(eventData_q, list_eventdata);
 		cpp_dev->state = CPP_STATE_OFF;
 	}
 
@@ -1009,15 +1033,15 @@ static int msm_cpp_buffer_ops(struct cpp_device *cpp_dev,
 static int msm_cpp_notify_frame_done(struct cpp_device *cpp_dev)
 {
 	struct v4l2_event v4l2_evt;
-	struct msm_queue_cmd *frame_qcmd;
-	struct msm_queue_cmd *event_qcmd;
-	struct msm_cpp_frame_info_t *processed_frame;
+	struct msm_queue_cmd *frame_qcmd = NULL;
+	struct msm_queue_cmd *event_qcmd = NULL;
+	struct msm_cpp_frame_info_t *processed_frame = NULL;
 	struct msm_device_queue *queue = &cpp_dev->processing_q;
 	struct msm_buf_mngr_info buff_mgr_info;
 	int rc = 0;
 
-	if (queue->len > 0) {
-		frame_qcmd = msm_dequeue(queue, list_frame);
+	frame_qcmd = msm_dequeue(queue, list_frame);
+	if (frame_qcmd) {
 		processed_frame = frame_qcmd->command;
 		do_gettimeofday(&(processed_frame->out_time));
 		kfree(frame_qcmd);
@@ -1225,7 +1249,7 @@ static int msm_cpp_cfg(struct cpp_device *cpp_dev,
 	uint32_t *cpp_frame_msg;
 	unsigned long in_phyaddr, out_phyaddr0, out_phyaddr1;
 	uint16_t num_stripes = 0;
-	struct msm_buf_mngr_info buff_mgr_info;
+	struct msm_buf_mngr_info buff_mgr_info, dup_buff_mgr_info;
 	struct msm_cpp_frame_info_t *u_frame_info =
 		(struct msm_cpp_frame_info_t *)ioctl_ptr->ioctl_ptr;
 	int32_t status = 0;
@@ -1317,19 +1341,20 @@ static int msm_cpp_cfg(struct cpp_device *cpp_dev,
 			new_frame->duplicate_identity);
 		memset(&new_frame->output_buffer_info[1], 0,
 			sizeof(struct msm_cpp_buffer_info_t));
-		memset(&buff_mgr_info, 0, sizeof(struct msm_buf_mngr_info));
-		buff_mgr_info.session_id =
+		memset(&dup_buff_mgr_info, 0, sizeof(struct msm_buf_mngr_info));
+		dup_buff_mgr_info.session_id =
 			((new_frame->duplicate_identity >> 16) & 0xFFFF);
-		buff_mgr_info.stream_id =
+		dup_buff_mgr_info.stream_id =
 			(new_frame->duplicate_identity & 0xFFFF);
 		rc = msm_cpp_buffer_ops(cpp_dev, VIDIOC_MSM_BUF_MNGR_GET_BUF,
-			&buff_mgr_info);
+			&dup_buff_mgr_info);
 		if (rc < 0) {
 			rc = -EAGAIN;
 			pr_debug("error getting buffer rc:%d\n", rc);
-			goto ERROR2;
+			goto ERROR3;
 		}
-		new_frame->output_buffer_info[1].index = buff_mgr_info.index;
+		new_frame->output_buffer_info[1].index =
+			dup_buff_mgr_info.index;
 		out_phyaddr1 = msm_cpp_fetch_buffer_info(cpp_dev,
 			&new_frame->output_buffer_info[1],
 			((new_frame->duplicate_identity >> 16) & 0xFFFF),
@@ -1338,6 +1363,8 @@ static int msm_cpp_cfg(struct cpp_device *cpp_dev,
 		if (!out_phyaddr1) {
 			pr_err("error gettting output physical address\n");
 			rc = -EINVAL;
+			msm_cpp_buffer_ops(cpp_dev, VIDIOC_MSM_BUF_MNGR_PUT_BUF,
+				&dup_buff_mgr_info);
 			goto ERROR3;
 		}
 		/* set duplicate enable bit */
@@ -1694,6 +1721,7 @@ long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 		mutex_unlock(&cpp_dev->mutex);
 		while (cpp_dev->cpp_open_cnt != 0)
 			cpp_close_node(sd, NULL);
+		mutex_lock(&cpp_dev->mutex);
 		rc = 0;
 		break;
 	case VIDIOC_MSM_CPP_QUEUE_BUF: {

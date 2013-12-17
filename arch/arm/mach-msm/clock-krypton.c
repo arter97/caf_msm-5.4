@@ -20,8 +20,8 @@
 #include <linux/clk.h>
 #include <linux/regulator/consumer.h>
 #include <linux/iopoll.h>
+#include <linux/clk/msm-clk.h>
 
-#include <mach/clk.h>
 #include <mach/rpm-regulator-smd.h>
 #include <mach/socinfo.h>
 
@@ -1944,17 +1944,17 @@ static struct clk_lookup msm_clocks_krypton[] = {
 	CLK_LOOKUP("clk-5", a7sspll.c, "f9010008.qcom,clock-a7"),
 
 	/* PIL-LPASS */
-	CLK_LOOKUP("xo",        dummy_clk, "fe200000.qcom,lpass"),
-	CLK_LOOKUP("bus_clk",   dummy_clk, "fe200000.qcom,lpass"),
-	CLK_LOOKUP("core_clk",  dummy_clk, "fe200000.qcom,lpass"),
-	CLK_LOOKUP("iface_clk", dummy_clk, "fe200000.qcom,lpass"),
-	CLK_LOOKUP("reg_clk",   dummy_clk, "fe200000.qcom,lpass"),
+	CLK_LOOKUP("xo",        dummy_clk, "fe200000.qti,lpass"),
+	CLK_LOOKUP("bus_clk",   dummy_clk, "fe200000.qti,lpass"),
+	CLK_LOOKUP("core_clk",  dummy_clk, "fe200000.qti,lpass"),
+	CLK_LOOKUP("iface_clk", dummy_clk, "fe200000.qti,lpass"),
+	CLK_LOOKUP("reg_clk",   dummy_clk, "fe200000.qti,lpass"),
 
 	/* PIL-MODEM */
-	CLK_LOOKUP("xo",              cxo_pil_mss_clk.c, "fc880000.qcom,mss"),
-	CLK_LOOKUP("bus_clk", gcc_mss_q6_bimc_axi_clk.c, "fc880000.qcom,mss"),
-	CLK_LOOKUP("iface_clk",   gcc_mss_cfg_ahb_clk.c, "fc880000.qcom,mss"),
-	CLK_LOOKUP("mem_clk",    gcc_boot_rom_ahb_clk.c, "fc880000.qcom,mss"),
+	CLK_LOOKUP("xo",              cxo_pil_mss_clk.c, "fc880000.qti,mss"),
+	CLK_LOOKUP("bus_clk", gcc_mss_q6_bimc_axi_clk.c, "fc880000.qti,mss"),
+	CLK_LOOKUP("iface_clk",   gcc_mss_cfg_ahb_clk.c, "fc880000.qti,mss"),
+	CLK_LOOKUP("mem_clk",    gcc_boot_rom_ahb_clk.c, "fc880000.qti,mss"),
 
 	/* SPS */
 	CLK_LOOKUP("dma_bam_pclk", gcc_bam_dma_ahb_clk.c, "msm_sps"),
@@ -2161,6 +2161,7 @@ static struct clk_lookup msm_clocks_krypton[] = {
 	CLK_LOOKUP("pcie_0_pipe_clk", gcc_pcie_pipe_clk.c, "msm_pcie"),
 	CLK_LOOKUP("pcie_0_aux_clk", gcc_pcie_sleep_clk.c, "msm_pcie"),
 	CLK_LOOKUP("iface_clk",	gcc_sys_noc_usb3_axi_clk.c, "f9200000.ssusb"),
+	CLK_LOOKUP("iface_clk",	gcc_sys_noc_usb3_axi_clk.c, "msm_usb3"),
 	CLK_LOOKUP("aux_clk",	gcc_usb3_aux_clk.c,
 		   "f9b38000.ssphy"),
 	CLK_LOOKUP("pipe_clk",	gcc_usb3_pipe_clk.c,

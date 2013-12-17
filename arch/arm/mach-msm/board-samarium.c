@@ -18,6 +18,7 @@
 #include <linux/memory.h>
 #include <linux/msm_tsens.h>
 #include <linux/msm_thermal.h>
+#include <linux/clk/msm-clk-provider.h>
 #include <asm/mach/map.h>
 #include <asm/mach/arch.h>
 #include <mach/board.h>
@@ -26,7 +27,6 @@
 #include <mach/msm_memtypes.h>
 #include <mach/restart.h>
 #include <mach/socinfo.h>
-#include <mach/clk-provider.h>
 #include <mach/msm_smem.h>
 #include <mach/msm_smd.h>
 #include <mach/rpm-smd.h>
@@ -53,36 +53,14 @@ static struct of_dev_auxdata msmsamarium_auxdata_lookup[] __initdata = {
 	{},
 };
 
-static struct memtype_reserve msmsamarium_reserve_table[] __initdata = {
-	[MEMTYPE_EBI0] = {
-		.flags	=	MEMTYPE_FLAGS_1M_ALIGN,
-	},
-	[MEMTYPE_EBI1] = {
-		.flags	=	MEMTYPE_FLAGS_1M_ALIGN,
-	},
-};
-
-static int msmsamarium_paddr_to_memtype(phys_addr_t paddr)
-{
-	return MEMTYPE_EBI1;
-}
-
-static struct reserve_info msmsamarium_reserve_info __initdata = {
-	.memtype_reserve_table = msmsamarium_reserve_table,
-	.paddr_to_memtype = msmsamarium_paddr_to_memtype,
-};
-
 void __init msmsamarium_reserve(void)
 {
-	reserve_info = &msmsamarium_reserve_info;
-	of_scan_flat_dt(dt_scan_for_memory_reserve, msmsamarium_reserve_table);
-	msm_reserve();
+	of_scan_flat_dt(dt_scan_for_memory_reserve, NULL);
 }
 
 static void __init msmsamarium_early_memory(void)
 {
-	reserve_info = &msmsamarium_reserve_info;
-	of_scan_flat_dt(dt_scan_for_memory_hole, msmsamarium_reserve_table);
+	of_scan_flat_dt(dt_scan_for_memory_hole, NULL);
 }
 
 /*

@@ -13,7 +13,6 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/iommu.h>
-#include <linux/memory_alloc.h>
 #include <linux/platform_device.h>
 #include <linux/rbtree.h>
 #include <linux/slab.h>
@@ -25,7 +24,7 @@
 #include <asm/sizes.h>
 #include <asm/page.h>
 #include <mach/iommu.h>
-#include <mach/iommu_domains.h>
+#include <linux/msm_iommu_domains.h>
 #include <mach/msm_iommu_priv.h>
 #include <mach/socinfo.h>
 

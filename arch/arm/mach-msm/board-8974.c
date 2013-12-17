@@ -43,37 +43,14 @@
 #include "pm.h"
 #include "platsmp.h"
 
-
-static struct memtype_reserve msm8974_reserve_table[] __initdata = {
-	[MEMTYPE_EBI0] = {
-		.flags	=	MEMTYPE_FLAGS_1M_ALIGN,
-	},
-	[MEMTYPE_EBI1] = {
-		.flags	=	MEMTYPE_FLAGS_1M_ALIGN,
-	},
-};
-
-static int msm8974_paddr_to_memtype(phys_addr_t paddr)
-{
-	return MEMTYPE_EBI1;
-}
-
-static struct reserve_info msm8974_reserve_info __initdata = {
-	.memtype_reserve_table = msm8974_reserve_table,
-	.paddr_to_memtype = msm8974_paddr_to_memtype,
-};
-
 void __init msm_8974_reserve(void)
 {
-	reserve_info = &msm8974_reserve_info;
-	of_scan_flat_dt(dt_scan_for_memory_reserve, msm8974_reserve_table);
-	msm_reserve();
+	of_scan_flat_dt(dt_scan_for_memory_reserve, NULL);
 }
 
 static void __init msm8974_early_memory(void)
 {
-	reserve_info = &msm8974_reserve_info;
-	of_scan_flat_dt(dt_scan_for_memory_hole, msm8974_reserve_table);
+	of_scan_flat_dt(dt_scan_for_memory_hole, NULL);
 }
 
 /*
@@ -100,10 +77,8 @@ static struct of_dev_auxdata msm_hsic_host_adata[] = {
 };
 
 static struct of_dev_auxdata msm8974_auxdata_lookup[] __initdata = {
-	OF_DEV_AUXDATA("qcom,hsusb-otg", 0xF9A55000, \
-			"msm_otg", NULL),
-	OF_DEV_AUXDATA("qcom,ehci-host", 0xF9A55000, \
-			"msm_ehci_host", NULL),
+	OF_DEV_AUXDATA("qcom,hsusb-otg", 0xF9A55000, "msm_otg", NULL),
+	OF_DEV_AUXDATA("qti,ehci-host", 0xF9A55000, "msm_ehci_host", NULL),
 	OF_DEV_AUXDATA("qti,dwc-usb3-msm", 0xF9200000, "msm_dwc3", NULL),
 	OF_DEV_AUXDATA("qcom,usb-bam-msm", 0xF9304000, \
 			"usb_bam", NULL),

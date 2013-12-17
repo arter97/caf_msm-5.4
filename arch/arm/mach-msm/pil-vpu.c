@@ -20,12 +20,12 @@
 #include <linux/of.h>
 #include <linux/clk.h>
 #include <linux/regulator/consumer.h>
+#include <linux/clk/msm-clk-provider.h>
 
 #include <mach/subsystem_restart.h>
 #include <mach/msm_bus_board.h>
 #include <mach/msm_bus.h>
 #include <mach/ramdump.h>
-#include <mach/clk-provider.h>
 
 #include "peripheral-loader.h"
 #include "scm-pas.h"
@@ -267,7 +267,7 @@ static int pil_vpu_probe(struct platform_device *pdev)
 	}
 
 	desc = &drv->desc;
-	rc = of_property_read_string(pdev->dev.of_node, "qcom,firmware-name",
+	rc = of_property_read_string(pdev->dev.of_node, "qti,firmware-name",
 					&desc->name);
 	if (rc) {
 		dev_err(&pdev->dev, "Failed to read the firmware name\n");
@@ -329,7 +329,7 @@ static int pil_vpu_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id msm_pil_vpu_match[] = {
-	{.compatible = "qcom,pil-vpu"},
+	{.compatible = "qti,pil-vpu"},
 	{}
 };
 

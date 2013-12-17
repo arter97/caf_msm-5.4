@@ -108,8 +108,9 @@ struct kgsl_functable {
 	int (*waittimestamp) (struct kgsl_device *device,
 		struct kgsl_context *context, unsigned int timestamp,
 		unsigned int msecs);
-	unsigned int (*readtimestamp) (struct kgsl_device *device,
-		struct kgsl_context *context, enum kgsl_timestamp_type type);
+	int (*readtimestamp) (struct kgsl_device *device,
+		struct kgsl_context *context, enum kgsl_timestamp_type type,
+		unsigned int *timestamp);
 	int (*issueibcmds) (struct kgsl_device_private *dev_priv,
 		struct kgsl_context *context, struct kgsl_cmdbatch *cmdbatch,
 		uint32_t *timestamps);
@@ -483,11 +484,12 @@ static inline unsigned int kgsl_gpuid(struct kgsl_device *device,
 	return device->ftbl->gpuid(device, chipid);
 }
 
-static inline unsigned int kgsl_readtimestamp(struct kgsl_device *device,
+static inline int kgsl_readtimestamp(struct kgsl_device *device,
 					      struct kgsl_context *context,
-					      enum kgsl_timestamp_type type)
+					      enum kgsl_timestamp_type type,
+					      unsigned int *timestamp)
 {
-	return device->ftbl->readtimestamp(device, context, type);
+	return device->ftbl->readtimestamp(device, context, type, timestamp);
 }
 
 static inline int kgsl_create_device_sysfs_files(struct device *root,
@@ -760,4 +762,25 @@ static inline int kgsl_property_read_u32(struct kgsl_device *device,
 	return of_property_read_u32(pdev->dev.of_node, prop, ptr);
 }
 
+/**
+ * kgsl_sysfs_store() - parse a string from a sysfs store function
+ * @buf: Incoming string to parse
+ * @count: Size of the incoming string
+ * @ptr: Pointer to an unsigned int to store the value
+ */
+static inline ssize_t kgsl_sysfs_store(const char *buf, size_t count,
+		unsigned int *ptr)
+{
+	unsigned int val;
+	int rc;
+
+	rc = kstrtou32(buf, 0, &val);
+	if (rc)
+		return rc;
+
+	if (ptr)
+		*ptr = val;
+
+	return count;
+}
 #endif  /* __KGSL_DEVICE_H */

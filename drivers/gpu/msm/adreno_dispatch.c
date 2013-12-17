@@ -60,8 +60,8 @@ static void fault_detect_read(struct kgsl_device *device)
 {
 	int i;
 
-	fault_detect_ts = kgsl_readtimestamp(device, NULL,
-		KGSL_TIMESTAMP_RETIRED);
+	kgsl_readtimestamp(device, NULL, KGSL_TIMESTAMP_RETIRED,
+		&fault_detect_ts);
 
 	for (i = 0; i < FT_DETECT_REGS_COUNT; i++) {
 		if (ft_detect_regs[i] == 0)
@@ -80,7 +80,7 @@ static inline bool _isidle(struct kgsl_device *device)
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	unsigned int ts;
 
-	ts = kgsl_readtimestamp(device, NULL, KGSL_TIMESTAMP_RETIRED);
+	kgsl_readtimestamp(device, NULL, KGSL_TIMESTAMP_RETIRED, &ts);
 
 	if (adreno_isidle(device) == true &&
 		(ts >= adreno_dev->ringbuffer.global_ts))
@@ -117,7 +117,7 @@ static int fault_detect_read_compare(struct kgsl_device *device)
 		fault_detect_regs[i] = val;
 	}
 
-	ts = kgsl_readtimestamp(device, NULL, KGSL_TIMESTAMP_RETIRED);
+	kgsl_readtimestamp(device, NULL, KGSL_TIMESTAMP_RETIRED, &ts);
 	if (ts != fault_detect_ts)
 		ret = 1;
 
@@ -1276,8 +1276,8 @@ static void adreno_dispatcher_work(struct work_struct *work)
 		 * pointers and continue processing the queue
 		 */
 
-		retired = kgsl_readtimestamp(device, cmdbatch->context,
-				KGSL_TIMESTAMP_RETIRED);
+		kgsl_readtimestamp(device, cmdbatch->context,
+			KGSL_TIMESTAMP_RETIRED, &retired);
 
 		if ((timestamp_cmp(cmdbatch->timestamp, retired) <= 0)) {
 
@@ -1335,8 +1335,8 @@ static void adreno_dispatcher_work(struct work_struct *work)
 		fault_handled = 1;
 
 		/* Get the last consumed timestamp */
-		consumed = kgsl_readtimestamp(device, cmdbatch->context,
-			KGSL_TIMESTAMP_CONSUMED);
+		kgsl_readtimestamp(device, cmdbatch->context,
+			KGSL_TIMESTAMP_CONSUMED, &consumed);
 
 		/*
 		 * Break here if fault detection is disabled for the context or
@@ -1594,10 +1594,11 @@ static ssize_t _store_uint(struct adreno_dispatcher *dispatcher,
 		struct dispatcher_attribute *attr,
 		const char *buf, size_t size)
 {
-	unsigned long val;
-	int ret = kstrtoul(buf, 0, &val);
+	unsigned int val = 0;
+	int ret;
 
-	if (ret)
+	ret = kgsl_sysfs_store(buf, size, &val);
+	if (ret != size)
 		return ret;
 
 	if (!val || (attr->max && (val > attr->max)))
@@ -1611,7 +1612,7 @@ static ssize_t _show_uint(struct adreno_dispatcher *dispatcher,
 		struct dispatcher_attribute *attr,
 		char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%d\n",
+	return snprintf(buf, PAGE_SIZE, "%u\n",
 		*((unsigned int *) attr->value));
 }
 
