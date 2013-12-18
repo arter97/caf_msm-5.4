@@ -324,6 +324,19 @@
 		interrupt-names = "core_irq";
 
 		qcom,bus-width = <8>;
+		qcom,msm-bus,name = "sdcc1";
+		qcom,msm-bus,num-cases = <8>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps = <78 512 0 0>, /* No vote */
+				<78 512 1600 3200>,    /* 400 KB/s*/
+				<78 512 80000 160000>, /* 20 MB/s */
+				<78 512 100000 200000>, /* 25 MB/s */
+				<78 512 200000 400000>, /* 50 MB/s */
+				<78 512 400000 800000>, /* 100 MB/s */
+				<78 512 400000 800000>, /* 200 MB/s */
+				<78 512 2048000 4096000>; /* Max. bandwidth */
+		qcom,bus-bw-vectors-bps = <0 400000 20000000 25000000 50000000
+						100000000 200000000 4294967295>;
 		status = "disabled";
 	};
 
@@ -366,7 +379,7 @@
 		qcom,bus-width = <4>;
 		qcom,cpu-dma-latency-us = <200>;
 
-		qcom,msm-bus,name = "sdhc2";
+		qcom,msm-bus,name = "sdcc2";
 		qcom,msm-bus,num-cases = <8>;
 		qcom,msm-bus,num-paths = <1>;
 		qcom,msm-bus,vectors-KBps = <81 512 0 0>, /* No vote */
@@ -392,6 +405,20 @@
 		interrupt-names = "hc_irq", "pwr_irq";
 
 		qcom,bus-width = <4>;
+
+		qcom,msm-bus,name = "sdhc2";
+		qcom,msm-bus,num-cases = <8>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps = <81 512 0 0>, /* No vote */
+				<81 512 1600 3200>,    /* 400 KB/s*/
+				<81 512 80000 160000>, /* 20 MB/s */
+				<81 512 100000 200000>, /* 25 MB/s */
+				<81 512 200000 400000>, /* 50 MB/s */
+				<81 512 400000 800000>, /* 100 MB/s */
+				<81 512 800000 800000>, /* 200 MB/s */
+				<81 512 2048000 4096000>; /* Max. bandwidth */
+		qcom,bus-bw-vectors-bps = <0 400000 20000000 25000000 50000000
+						100000000 200000000 4294967295>;
 		status = "disabled";
 	};
 
@@ -1761,7 +1788,7 @@
 
 	usb_otg: usb@f9a55000 {
 		status = "disabled";
-		compatible = "qcom,hsusb-otg";
+		compatible = "qti,hsusb-otg";
 
 		reg = <0xf9a55000 0x400>;
 		interrupts = <0 134 0 0 140 0>;
@@ -1769,50 +1796,50 @@
 		HSUSB_VDDCX-supply = <&pma8084_s1>;
 		HSUSB_1p8-supply = <&pma8084_l6>;
 		HSUSB_3p3-supply = <&pma8084_l24>;
-		qcom,vdd-voltage-level = <0 900000 1050000>;
+		qti,vdd-voltage-level = <0 900000 1050000>;
 
-		qcom,hsusb-otg-phy-type = <2>;
-		qcom,hsusb-otg-mode = <1>;
-		qcom,hsusb-otg-otg-control = <3>;
-		qcom,hsusb-otg-default-mode = <1>;
-		qcom,dp-manual-pullup;
+		qti,hsusb-otg-phy-type = <2>;
+		qti,hsusb-otg-mode = <1>;
+		qti,hsusb-otg-otg-control = <3>;
+		qti,hsusb-otg-default-mode = <1>;
+		qti,dp-manual-pullup;
 
-		qcom,msm-bus,name = "usb2";
-		qcom,msm-bus,num-cases = <2>;
-		qcom,msm-bus,num-paths = <1>;
-		qcom,msm-bus,vectors-KBps =
+		qti,msm-bus,name = "usb2";
+		qti,msm-bus,num-cases = <2>;
+		qti,msm-bus,num-paths = <1>;
+		qti,msm-bus,vectors-KBps =
 				<87 512 0 0>,
 				<87 512 60000 960000>;
 	};
 
-	qcom,usbbam@f9304000 {
-		compatible = "qcom,usb-bam-msm";
+	qti,usbbam@f9304000 {
+		compatible = "qti,usb-bam-msm";
 		reg = <0xf9304000 0x5000>,
 		      <0xf92f880c 0x4>;
 		reg-names = "ssusb", "qscratch_ram1_reg";
 		interrupts = <0 132 0>;
 		interrupt-names = "ssusb";
-		qcom,usb-bam-num-pipes = <16>;
-		qcom,usb-bam-fifo-baseaddr = <0xf9200000>;
-		qcom,ignore-core-reset-ack;
-		qcom,disable-clk-gating;
+		qti,usb-bam-num-pipes = <16>;
+		qti,usb-bam-fifo-baseaddr = <0xf9200000>;
+		qti,ignore-core-reset-ack;
+		qti,disable-clk-gating;
 
-		qcom,pipe0 {
+		qti,pipe0 {
 			label = "ssusb-qdss-in-0";
-			qcom,usb-bam-mem-type = <1>;
-			qcom,bam-type = <0>;
-			qcom,dir = <1>;
-			qcom,pipe-num = <0>;
-			qcom,peer-bam = <1>;
-			qcom,src-bam-physical-address = <0xfc37C000>;
-			qcom,src-bam-pipe-index = <0>;
-			qcom,dst-bam-physical-address = <0xf9304000>;
-			qcom,dst-bam-pipe-index = <2>;
-			qcom,data-fifo-offset = <0xf0000>;
-			qcom,data-fifo-size = <0x1800>;
-			qcom,descriptor-fifo-offset = <0xf4000>;
-			qcom,descriptor-fifo-size = <0x1400>;
-			qcom,reset-bam-on-connect;
+			qti,usb-bam-mem-type = <1>;
+			qti,bam-type = <0>;
+			qti,dir = <1>;
+			qti,pipe-num = <0>;
+			qti,peer-bam = <1>;
+			qti,src-bam-physical-address = <0xfc37C000>;
+			qti,src-bam-pipe-index = <0>;
+			qti,dst-bam-physical-address = <0xf9304000>;
+			qti,dst-bam-pipe-index = <2>;
+			qti,data-fifo-offset = <0xf0000>;
+			qti,data-fifo-size = <0x1800>;
+			qti,descriptor-fifo-offset = <0xf4000>;
+			qti,descriptor-fifo-size = <0x1400>;
+			qti,reset-bam-on-connect;
 		};
 	};
 
