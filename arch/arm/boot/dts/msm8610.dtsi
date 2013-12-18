@@ -450,7 +450,9 @@
 
 	qcom,msm-mem-hole {
 		compatible = "qcom,msm-mem-hole";
-		qcom,memblock-remove = <0x09000000 0x4e00000>; /* Address and Size of Hole */
+		qcom,memblock-remove = <0x0a400000 0x3100000
+					0x0d900000 0x100000
+					0x0db00000 0x200000>; /* Address and Size of Hole */
 	};
 
 	qcom,wdt@f9017000 {
@@ -847,9 +849,9 @@
 		interrupts = <0 29 1>;
 	};
 
-	qcom,qseecom@da00000 {
+	qcom,qseecom@d480000 {
 		compatible = "qcom,qseecom";
-		reg = <0xda00000 0x100000>;
+		reg = <0xd480000 0x80000>;
 		reg-names = "secapp-region";
 		qcom,disk-encrypt-pipe-pair = <2>;
 		qcom,hlos-ce-hw-instance = <0>;
