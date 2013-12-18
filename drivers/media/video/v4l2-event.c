@@ -117,8 +117,10 @@ static void __v4l2_event_queue_fh(struct v4l2_fh *fh, const struct v4l2_event *e
 
 	/* Are we subscribed? */
 	sev = v4l2_event_subscribed(fh, ev->type, ev->id);
-	if (sev == NULL)
+	if (sev == NULL) {
+                printk("%s: sev is Null %d = %d \n",__func__, ev->type, ev->id);
 		return;
+        }
 
 	/* Increase event sequence number on fh. */
 	fh->sequence++;
