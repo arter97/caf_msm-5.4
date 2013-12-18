@@ -259,6 +259,38 @@ static struct msm_gpiomux_config wlan_ath6kl_configs[] __initdata = {
 	},
 };
 
+#ifdef CONFIG_USB_USBNET_IPA_SUPPORT
+static struct gpiomux_setting usbnet_ipa_active_config = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_NONE,
+	.dir = GPIOMUX_OUT_LOW,
+};
+
+static struct gpiomux_setting usbnet_ipa_suspend_config = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+
+static struct msm_gpiomux_config usbnet_ipa_configs[] __initdata = {
+	{
+		.gpio      = 50,/* hub reset */
+		.settings = {
+			[GPIOMUX_ACTIVE] = &usbnet_ipa_active_config,
+			[GPIOMUX_SUSPENDED] = &usbnet_ipa_suspend_config,
+		},
+	},
+};
+static void msm9625_odu_init_gpiomux(void)
+{
+	msm_gpiomux_install(usbnet_ipa_configs, ARRAY_SIZE(usbnet_ipa_configs));
+}
+#else
+static void msm9625_odu_init_gpiomux(void)
+{
+}
+#endif
 static struct gpiomux_setting sdc2_card_det_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
@@ -353,6 +385,7 @@ void __init msm9625_init_gpiomux(void)
 	msm_gpiomux_install(sdc3_configs, ARRAY_SIZE(sdc3_configs));
 	msm_gpiomux_install(wlan_ath6kl_configs,
 		ARRAY_SIZE(wlan_ath6kl_configs));
+	msm9625_odu_init_gpiomux();
 	msm_gpiomux_install(mdm9625_mi2s_configs,
 			ARRAY_SIZE(mdm9625_mi2s_configs));
 	msm_gpiomux_install(mdm9625_cdc_reset_config,
