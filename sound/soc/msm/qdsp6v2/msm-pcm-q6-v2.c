@@ -25,6 +25,7 @@
 #include <sound/pcm.h>
 #include <sound/initval.h>
 #include <sound/control.h>
+#include <sound/q6audio-v2.h>
 #include <asm/dma.h>
 #include <linux/dma-mapping.h>
 #include <linux/msm_audio_ion.h>
@@ -918,11 +919,12 @@ static int msm_pcm_probe(struct platform_device *pdev)
 	int rc;
 	int id;
 	struct msm_plat_data *pdata;
+	const char *latency_level;
 
 	rc = of_property_read_u32(pdev->dev.of_node,
-				"qcom,msm-pcm-dsp-id", &id);
+				"qti,msm-pcm-dsp-id", &id);
 	if (rc) {
-		dev_err(&pdev->dev, "%s: qcom,msm-pcm-dsp-id missing in DT node\n",
+		dev_err(&pdev->dev, "%s: qti,msm-pcm-dsp-id missing in DT node\n",
 					__func__);
 		return rc;
 	}
@@ -934,10 +936,18 @@ static int msm_pcm_probe(struct platform_device *pdev)
 	}
 
 	if (of_property_read_bool(pdev->dev.of_node,
-				"qcom,msm-pcm-low-latency"))
-		pdata->perf_mode = 1;
+				"qti,msm-pcm-low-latency")) {
+
+		pdata->perf_mode = LOW_LATENCY_PCM_MODE;
+		rc = of_property_read_string(pdev->dev.of_node,
+			"qti,latency-level", &latency_level);
+		if (!rc) {
+			if (!strcmp(latency_level, "ultra"))
+				pdata->perf_mode = ULTRA_LOW_LATENCY_PCM_MODE;
+		}
+	}
 	else
-		pdata->perf_mode = 0;
+		pdata->perf_mode = LEGACY_PCM_MODE;
 
 	dev_set_drvdata(&pdev->dev, pdata);
 
@@ -959,7 +969,7 @@ static int msm_pcm_remove(struct platform_device *pdev)
 	return 0;
 }
 static const struct of_device_id msm_pcm_dt_match[] = {
-	{.compatible = "qcom,msm-pcm-dsp"},
+	{.compatible = "qti,msm-pcm-dsp"},
 	{}
 };
 MODULE_DEVICE_TABLE(of, msm_pcm_dt_match);

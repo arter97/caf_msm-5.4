@@ -395,7 +395,8 @@ static int wait_for_sess_signal_receipt(struct msm_vidc_inst *inst,
 		&inst->completions[SESSION_MSG_INDEX(cmd)],
 		msecs_to_jiffies(msm_vidc_hw_rsp_timeout));
 	if (!rc) {
-		dprintk(VIDC_ERR, "Wait interrupted or timeout: %d\n", rc);
+		dprintk(VIDC_ERR, "Wait interrupted or timeout: %d\n",
+				SESSION_MSG_INDEX(cmd));
 		msm_comm_recover_from_session_error(inst);
 		rc = -EIO;
 	} else {
@@ -523,6 +524,14 @@ static void handle_event_change(enum command_response cmd, void *data)
 					__func__, inst,
 					event_notify->packet_buffer,
 					event_notify->exra_data_buffer);
+
+				if (inst->state == MSM_VIDC_CORE_INVALID ||
+					inst->core->state ==
+						VIDC_CORE_INVALID) {
+					dprintk(VIDC_DBG,
+						"Event release buf ref received in invalid state - discard\n");
+					return;
+				}
 
 				/*
 				* Get the buffer_info entry for the
@@ -1467,7 +1476,8 @@ static int msm_comm_unset_ocmem(struct msm_vidc_core *core)
 		&core->completions[SYS_MSG_INDEX(RELEASE_RESOURCE_DONE)],
 		msecs_to_jiffies(msm_vidc_hw_rsp_timeout));
 	if (!rc) {
-		dprintk(VIDC_ERR, "Wait interrupted or timeout: %d\n", rc);
+		dprintk(VIDC_ERR, "Wait interrupted or timeout: %d\n",
+				SYS_MSG_INDEX(RELEASE_RESOURCE_DONE));
 		rc = -EIO;
 	}
 release_ocmem_failed:
@@ -1489,7 +1499,8 @@ static int msm_comm_init_core_done(struct msm_vidc_inst *inst)
 		&core->completions[SYS_MSG_INDEX(SYS_INIT_DONE)],
 		msecs_to_jiffies(msm_vidc_hw_rsp_timeout));
 	if (!rc) {
-		dprintk(VIDC_ERR, "Wait interrupted or timeout: %d\n", rc);
+		dprintk(VIDC_ERR, "Wait interrupted or timeout: %d\n",
+				SYS_MSG_INDEX(SYS_INIT_DONE));
 		rc = -EIO;
 		goto exit;
 	} else {
@@ -2448,7 +2459,13 @@ int msm_comm_qbuf(struct vb2_buffer *vb)
 				dprintk(VIDC_DBG,
 					"Received EOS on output capability\n");
 			}
-
+			if (vb->v4l2_buf.flags &
+				V4L2_MSM_BUF_FLAG_YUV_601_709_CLAMP) {
+				frame_data.flags |=
+					HAL_BUFFERFLAG_YUV_601_709_CSC_CLAMP;
+				dprintk(VIDC_DBG,
+					"Received buff with 601to709 clamp\n");
+			}
 			if (vb->v4l2_buf.flags &
 					V4L2_QCOM_BUF_FLAG_CODECCONFIG) {
 				frame_data.flags |= HAL_BUFFERFLAG_CODECCONFIG;
@@ -2641,7 +2658,8 @@ int msm_comm_try_get_prop(struct msm_vidc_inst *inst, enum hal_property ptype,
 		msecs_to_jiffies(msm_vidc_hw_rsp_timeout));
 	if (!rc) {
 		dprintk(VIDC_ERR,
-			"Wait interrupted or timeout: %d\n", rc);
+			"Wait interrupted or timeout: %d\n",
+			SESSION_MSG_INDEX(SESSION_PROPERTY_INFO));
 		inst->state = MSM_VIDC_CORE_INVALID;
 		msm_comm_recover_from_session_error(inst);
 		rc = -EIO;
@@ -3107,6 +3125,9 @@ int msm_comm_flush(struct msm_vidc_inst *inst, u32 flags)
 		dprintk(VIDC_INFO, "Input only flush not supported\n");
 		return 0;
 	}
+	mutex_lock(&inst->sync_lock);
+	msm_comm_flush_dynamic_buffers(inst);
+	mutex_unlock(&inst->sync_lock);
 	if (inst->state == MSM_VIDC_CORE_INVALID ||
 			core->state == VIDC_CORE_INVALID) {
 		dprintk(VIDC_ERR,
@@ -3117,7 +3138,6 @@ int msm_comm_flush(struct msm_vidc_inst *inst, u32 flags)
 	}
 
 	mutex_lock(&inst->sync_lock);
-	msm_comm_flush_dynamic_buffers(inst);
 	if (inst->in_reconfig && !ip_flush && op_flush) {
 		if (!list_empty(&inst->pendingq)) {
 			/*Execution can never reach here since port reconfig
@@ -3481,7 +3501,7 @@ int msm_comm_recover_from_session_error(struct msm_vidc_inst *inst)
 		msecs_to_jiffies(msm_vidc_hw_rsp_timeout));
 	if (!rc) {
 		dprintk(VIDC_ERR, "%s: Wait interrupted or timeout: %d\n",
-			__func__, rc);
+			__func__, SESSION_MSG_INDEX(SESSION_ABORT_DONE));
 		msm_comm_generate_sys_error(inst);
 	} else
 		change_inst_state(inst, MSM_VIDC_CLOSE_DONE);

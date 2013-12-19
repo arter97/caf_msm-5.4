@@ -238,6 +238,16 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 
+		download_mode@0 {
+			compatible = "qti,msm-imem-download_mode";
+			reg = <0x0 8>;
+		};
+
+		restart_reason@65c {
+			compatible = "qti,msm-imem-restart_reason";
+			reg = <0x65c 4>;
+		};
+
 		boot_stats@6b0 {
 			compatible = "qti,msm-imem-boot_stats";
 			reg = <0x6b0 32>;
@@ -246,6 +256,11 @@
 		pil@94c {
 			compatible = "qti,msm-imem-pil";
 			reg = <0x94c 200>;
+		};
+
+		emergency_download_mode@fe0 {
+			compatible = "qti,msm-imem-emergency_download_mode";
+			reg = <0xfe0 12>;
 		};
 	};
 
@@ -1527,19 +1542,20 @@
 		qcom,adsp-state = <0>;
 	};
 
-	qcom,msm-pcm {
-		compatible = "qcom,msm-pcm-dsp";
-		qcom,msm-pcm-dsp-id = <0>;
+	qti,msm-pcm {
+		compatible = "qti,msm-pcm-dsp";
+		qti,msm-pcm-dsp-id = <0>;
 	};
 
 	qcom,msm-pcm-routing {
 		compatible = "qcom,msm-pcm-routing";
 	};
 
-	qcom,msm-pcm-low-latency {
-		compatible = "qcom,msm-pcm-dsp";
-		qcom,msm-pcm-dsp-id = <1>;
-		qcom,msm-pcm-low-latency;
+	qti,msm-pcm-low-latency {
+		compatible = "qti,msm-pcm-dsp";
+		qti,msm-pcm-dsp-id = <1>;
+		qti,msm-pcm-low-latency;
+		qti,latency-level = "regular";
 	};
 
 	qcom,msm-pcm-lpa {
