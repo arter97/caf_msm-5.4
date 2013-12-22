@@ -247,7 +247,7 @@ int mdss_mdp_smp_reserve(struct mdss_mdp_pipe *pipe)
 			}
 		}
 		rc = mdss_mdp_get_plane_sizes(format, width, pipe->src.h,
-			&ps, 0);
+			&ps, 0, 0);
 		if (rc)
 			return rc;
 
@@ -803,7 +803,7 @@ static int mdss_mdp_image_setup(struct mdss_mdp_pipe *pipe,
 	u32 img_size, src_size, src_xy, dst_size, dst_xy, ystride0, ystride1;
 	u32 width, height;
 	u32 decimation, reg_data;
-	u32 tmp_src_xy, tmp_src_size;
+	u32 tmp_src_xy, tmp_src_size, alignment;
 	int ret = 0;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	struct mdss_mdp_img_rect sci, dst, src;
@@ -815,8 +815,13 @@ static int mdss_mdp_image_setup(struct mdss_mdp_pipe *pipe,
 
 	width = pipe->img_width;
 	height = pipe->img_height;
+	if ((pipe->type == MDSS_MDP_PIPE_TYPE_VIG) &&
+			(pipe->flags & MDP_VPU_PIPE))
+		alignment = 128;
+	else
+		alignment = 0;
 	mdss_mdp_get_plane_sizes(pipe->src_fmt->format, width, height,
-			&pipe->src_planes, pipe->bwc_mode);
+			&pipe->src_planes, pipe->bwc_mode, alignment);
 
 	if (data != NULL) {
 		ret = mdss_mdp_data_check(data, &pipe->src_planes);

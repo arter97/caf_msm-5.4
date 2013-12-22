@@ -132,7 +132,7 @@ static int mdss_mdp_writeback_format_setup(struct mdss_mdp_writeback_ctx *ctx,
 
 	mdss_mdp_get_plane_sizes(format, ctx->width, ctx->height,
 				 &ctx->dst_planes,
-				 ctx->opmode & MDSS_MDP_OP_BWC_EN);
+				 ctx->opmode & MDSS_MDP_OP_BWC_EN, 0);
 
 	fmt = mdss_mdp_get_format_params(format);
 	if (!fmt) {
