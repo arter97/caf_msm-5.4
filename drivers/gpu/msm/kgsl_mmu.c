@@ -94,6 +94,8 @@ static void kgsl_destroy_pagetable(struct kref *kref)
 	list_del(&pagetable->list);
 	spin_unlock_irqrestore(&kgsl_driver.ptlock, flags);
 
+	return;
+
 	pagetable_remove_sysfs_objects(pagetable);
 
 	kgsl_cleanup_pt(pagetable);
@@ -957,6 +959,9 @@ void kgsl_mmu_set_mmutype(char *mmutype)
 		kgsl_mmu_type = KGSL_MMU_TYPE_IOMMU;
 	if (mmutype && !strncmp(mmutype, "nommu", 5))
 		kgsl_mmu_type = KGSL_MMU_TYPE_NONE;
+
+	kgsl_mmu_type = KGSL_MMU_TYPE_GPU;
+
 }
 EXPORT_SYMBOL(kgsl_mmu_set_mmutype);
 
