@@ -34,6 +34,7 @@
 #include <mach/sps.h>
 #include <mach/clk.h>
 #include <mach/hardware.h>
+#include <mach/msm_bus.h>
 
 #include "mdss_fb.h"
 #include "mdss_qpic.h"
@@ -47,6 +48,7 @@ struct qpic_data_type *qpic_res;
 static u32 use_bam = true;
 static u32 use_irq;
 static u32 use_vsync;
+static u32 bus_handle;
 
 static const struct of_device_id mdss_qpic_dt_match[] = {
 	{ .compatible = "qcom,mdss_qpic",},
@@ -81,6 +83,20 @@ int qpic_off(struct msm_fb_data_type *mfd)
 	return ret;
 }
 
+static int msm_qpic_bus_set_vote(u32 vote)
+{
+	int ret;
+
+	if (!bus_handle)
+		return 0;
+	ret = msm_bus_scale_client_update_request(bus_handle,
+			vote);
+	if (ret)
+		pr_err("msm_bus_scale_client_update_request() failed, bus_handle=0x%x, vote=%d, err=%d\n",
+			bus_handle, vote, ret);
+	return ret;
+}
+
 static void mdss_qpic_pan_display(struct msm_fb_data_type *mfd)
 {
 
@@ -105,12 +121,13 @@ static void mdss_qpic_pan_display(struct msm_fb_data_type *mfd)
 		return;
 	}
 	fb_offset = (u32)fbi->fix.smem_start + offset;
-
+	msm_qpic_bus_set_vote(1);
 	mdss_qpic_panel_on(qpic_res->panel_data);
 	size = fbi->var.xres * fbi->var.yres * bpp;
 
 	qpic_send_frame(0, 0, fbi->var.xres, fbi->var.yres,
 		(u32 *)fb_offset, size);
+	msm_qpic_bus_set_vote(0);
 }
 
 int mdss_qpic_alloc_fb_mem(struct msm_fb_data_type *mfd)
@@ -522,6 +539,25 @@ int mdss_qpic_init(void)
 	return ret;
 }
 
+static int msm_qpic_bus_register(struct platform_device *pdev)
+{
+	int ret = 0;
+	struct msm_bus_scale_pdata *use_cases;
+
+	use_cases = msm_bus_cl_get_pdata(pdev);
+	if (!use_cases) {
+		pr_err("msm_bus_cl_get_pdata failed\n");
+		return -EINVAL;
+	}
+	bus_handle =
+		msm_bus_scale_register_client(use_cases);
+	if (!bus_handle) {
+		ret = -EINVAL;
+		pr_err("msm_bus_scale_register_client failed\n");
+	}
+	return ret;
+}
+
 static int mdss_qpic_probe(struct platform_device *pdev)
 {
 	struct resource *res;
@@ -589,13 +625,15 @@ static int mdss_qpic_probe(struct platform_device *pdev)
 	rc = mdss_fb_register_mdp_instance(&qpic_interface);
 	if (rc)
 		pr_err("unable to register QPIC instance\n");
-
+	msm_qpic_bus_register(pdev);
 probe_done:
 	return rc;
 }
 
 static int mdss_qpic_remove(struct platform_device *pdev)
 {
+	if (bus_handle)
+		msm_bus_scale_unregister_client(bus_handle);
 	return 0;
 }
 
