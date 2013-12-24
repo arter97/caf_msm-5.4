@@ -326,6 +326,7 @@ static void gsmd_tx_pull(struct work_struct *w)
 		req = list_entry(pool->next, struct usb_request, list);
 		list_del(&req->list);
 		req->length = smd_read(pi->ch, req->buf, avail);
+		req->zero = 1;
 
 		spin_unlock_irq(&port->port_lock);
 		ret = usb_ep_queue(in, req, GFP_KERNEL);
