@@ -44,7 +44,6 @@
 #define RESET_ID		2
 #define ALL_EQUIP_ID		100
 #define ALL_SSID		-1
-#define MAX_SSID_PER_RANGE	100
 
 int diag_debug_buf_idx;
 unsigned char diag_debug_buf[1024];
@@ -634,7 +633,7 @@ static void diag_update_msg_mask(int start, int end , uint8_t *buf)
 	uint8_t *ptr = driver->msg_masks;
 	uint8_t *ptr_buffer_start = &(*(driver->msg_masks));
 	uint8_t *ptr_buffer_end = &(*(driver->msg_masks)) + MSG_MASK_SIZE;
-
+	uint32_t copy_len = (end - start + 1) * sizeof(int);
 	mutex_lock(&driver->diagchar_mutex);
 
 	/* First SSID can be zero : So check that last is non-zero */
@@ -653,11 +652,19 @@ static void diag_update_msg_mask(int start, int end , uint8_t *buf)
 				actual_last = end;
 				*(uint32_t *)(actual_last_ptr) = end;
 			}
+			if (actual_last-first >= MAX_SSID_PER_RANGE) {
+				pr_err("diag: In %s, truncating ssid range, %d-%d to max allowed: %d",
+						__func__, first, actual_last,
+						MAX_SSID_PER_RANGE);
+				copy_len = MAX_SSID_PER_RANGE;
+				actual_last = first + MAX_SSID_PER_RANGE;
+				*(uint32_t *)actual_last_ptr = actual_last;
+			}
 			if (CHK_OVERFLOW(ptr_buffer_start, ptr, ptr_buffer_end,
-					  (((end - start)+1)*4))) {
+					  copy_len)) {
 				pr_debug("diag: update ssid start %d, end %d\n",
 								 start, end);
-				memcpy(ptr, buf , ((end - start)+1)*4);
+				memcpy(ptr, buf , copy_len);
 			} else
 				pr_alert("diag: Not enough space MSG_MASK\n");
 			found = 1;
@@ -989,6 +996,16 @@ void diag_send_msg_mask_update(smd_channel_t *ch, int updated_ssid_first,
 			driver->msg_mask->cmd_type = DIAG_CTRL_MSG_F3_MASK;
 			driver->msg_mask->msg_mask_size = actual_last -
 								 first + 1;
+			/* Limit the msg_mask_size to MAX_SSID_PER_RANGE */
+			if (driver->msg_mask->msg_mask_size >
+							MAX_SSID_PER_RANGE) {
+				pr_err("diag: in %s, Invalid msg mask size %d, max: %d",
+					__func__,
+				       driver->msg_mask->msg_mask_size,
+				       MAX_SSID_PER_RANGE);
+				driver->msg_mask->msg_mask_size =
+							MAX_SSID_PER_RANGE;
+			}
 			driver->msg_mask->data_len = 11 +
 					 4 * (driver->msg_mask->msg_mask_size);
 			driver->msg_mask->stream_id = 1; /* 2, if dual stream */
