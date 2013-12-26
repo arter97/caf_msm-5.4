@@ -30,6 +30,7 @@
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
+#include <linux/regulator/rpm-smd-regulator.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/sched.h>
@@ -47,7 +48,6 @@
 #include <linux/msm_iommu_domains.h>
 #include <mach/memory.h>
 #include <mach/msm_memtypes.h>
-#include <mach/rpm-regulator-smd.h>
 
 #include "mdss.h"
 #include "mdss_fb.h"
@@ -954,15 +954,6 @@ int mdss_hw_init(struct mdss_data_type *mdata)
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
 	mdata->mdp_rev = MDSS_MDP_REG_READ(MDSS_MDP_REG_HW_VERSION);
 	pr_info_once("MDP Rev=%x\n", mdata->mdp_rev);
-
-	/*
-	 * This smp workaround is temporary until under-run root cause
-	 * is identified and fix is implemented.
-	 */
-	if (mdata->mdp_rev == MDSS_MDP_HW_REV_103) {
-		set_bit(0x6, mdata->mmb_alloc_map);
-		set_bit(0x7, mdata->mmb_alloc_map);
-	}
 
 	/* disable hw underrun recovery */
 	writel_relaxed(0x0, mdata->mdp_base +

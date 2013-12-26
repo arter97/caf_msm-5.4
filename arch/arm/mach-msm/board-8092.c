@@ -19,17 +19,17 @@
 #include <linux/of_fdt.h>
 #include <linux/of_irq.h>
 #include <linux/msm_tsens.h>
+#include <linux/msm_thermal.h>
 #include <linux/clk/msm-clk-provider.h>
+#include <linux/regulator/rpm-smd-regulator.h>
 #include <asm/mach/arch.h>
 #include <mach/socinfo.h>
 #include <mach/board.h>
 #include <mach/msm_memtypes.h>
-#include <mach/qpnp-int.h>
 #include <soc/msm/smem.h>
 #include <mach/msm_smd.h>
 #include <mach/restart.h>
 #include <mach/rpm-smd.h>
-#include <mach/rpm-regulator-smd.h>
 
 #include <linux/io.h>
 #include <linux/gpio.h>
@@ -62,6 +62,7 @@ static struct of_dev_auxdata mpq8092_auxdata_lookup[] __initdata = {
 	OF_DEV_AUXDATA("qcom,msm-sdcc", 0xF98A4000, "msm_sdcc.2", NULL),
 	OF_DEV_AUXDATA("qcom,sdhci-msm", 0xF9824900, "msm_sdcc.1", NULL),
 	OF_DEV_AUXDATA("qcom,sdhci-msm", 0xF98A4900, "msm_sdcc.2", NULL),
+	OF_DEV_AUXDATA("qti,msm_pcie", 0xFC520000, "msm_pcie", NULL),
 	{}
 };
 
@@ -75,7 +76,7 @@ void __init mpq8092_add_drivers(void)
 {
 	msm_smd_init();
 	msm_rpm_driver_init();
-	rpm_regulator_smd_driver_init();
+	rpm_smd_regulator_driver_init();
 	qpnp_regulator_init();
 	krait_power_init();
 	if (of_board_is_rumi())
@@ -83,6 +84,7 @@ void __init mpq8092_add_drivers(void)
 	else
 		msm_clock_init(&mpq8092_clock_init_data);
 	tsens_tm_init_driver();
+	msm_thermal_device_init();
 }
 
 

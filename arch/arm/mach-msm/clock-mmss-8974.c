@@ -19,12 +19,11 @@
 #include <linux/clk.h>
 #include <linux/iopoll.h>
 #include <linux/regulator/consumer.h>
+#include <linux/regulator/rpm-smd-regulator.h>
 #include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/clk/msm-clock-generic.h>
-
-#include <mach/rpm-regulator-smd.h>
 
 #include <dt-bindings/clock/msm-clocks-8974.h>
 
@@ -2636,19 +2635,6 @@ static struct clk_lookup msm_clocks_mmss_8974[] = {
 	CLK_LOOKUP_OF("iface_clk",  venus0_ahb_clk, "fdc00000.qcom,vidc"),
 	CLK_LOOKUP_OF("bus_clk",  venus0_axi_clk, "fdc00000.qcom,vidc"),
 	CLK_LOOKUP_OF("mem_clk",  venus0_ocmemnoc_clk, "fdc00000.qcom,vidc"),
-
-	CLK_LOOKUP_OF("core_clk", venus0_vcodec0_clk, "fd8c1024.qcom,gdsc"),
-	CLK_LOOKUP_OF("core_clk", mdss_mdp_clk, "fd8c2304.qcom,gdsc"),
-	CLK_LOOKUP_OF("lut_clk", mdss_mdp_lut_clk, "fd8c2304.qcom,gdsc"),
-	CLK_LOOKUP_OF("core0_clk", camss_jpeg_jpeg0_clk, "fd8c35a4.qcom,gdsc"),
-	CLK_LOOKUP_OF("core1_clk", camss_jpeg_jpeg1_clk, "fd8c35a4.qcom,gdsc"),
-	CLK_LOOKUP_OF("core2_clk", camss_jpeg_jpeg2_clk, "fd8c35a4.qcom,gdsc"),
-	CLK_LOOKUP_OF("core0_clk", camss_vfe_vfe0_clk,	"fd8c36a4.qcom,gdsc"),
-	CLK_LOOKUP_OF("core1_clk", camss_vfe_vfe1_clk,	"fd8c36a4.qcom,gdsc"),
-	CLK_LOOKUP_OF("csi0_clk", camss_csi_vfe0_clk,	"fd8c36a4.qcom,gdsc"),
-	CLK_LOOKUP_OF("csi1_clk", camss_csi_vfe1_clk,	"fd8c36a4.qcom,gdsc"),
-	CLK_LOOKUP_OF("cpp_clk", camss_vfe_cpp_clk,	"fd8c36a4.qcom,gdsc"),
-	CLK_LOOKUP_OF("core_clk", oxili_gfx3d_clk, "fd8c4024.qcom,gdsc"),
 
 	CLK_LOOKUP_OF("core_mmss_clk", mmss_misc_ahb_clk, "fdf30018.hwevent"),
 

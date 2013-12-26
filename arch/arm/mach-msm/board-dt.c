@@ -10,17 +10,17 @@
  * GNU General Public License for more details.
  */
 
-#include <linux/gpio.h>
 #include <linux/kernel.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_fdt.h>
 #include <linux/mfd/wcd9xxx/core.h>
 #include <linux/irqchip.h>
+#include <linux/irqchip/qpnp-int.h>
+#include <linux/irqchip/msm-gpio-irq.h>
+#include <linux/irqchip/msm-mpm-irq.h>
 #include <asm/mach/map.h>
 #include <asm/hardware/cache-l2x0.h>
-#include <mach/mpm.h>
-#include <mach/qpnp-int.h>
 #include <mach/msm_iomap.h>
 #include <mach/scm.h>
 
@@ -50,22 +50,10 @@ static struct of_device_id irq_match[] __initdata  = {
 	{}
 };
 
-static struct of_device_id mpm_match[] __initdata = {
-	{.compatible = "qcom,mpm-v2", },
-	{}
-};
-
 void __init msm_dt_init_irq(void)
 {
-	struct device_node *node;
-
 	of_irq_init(irq_match);
-	node = of_find_matching_node(NULL, mpm_match);
-
-	WARN_ON(!node);
-
-	if (node)
-		of_mpm_init(node);
+	of_mpm_init();
 }
 
 void __init msm_dt_init_irq_nompm(void)

@@ -11,6 +11,8 @@ config ARCH_MSM8974
 	select MSM_SCM
 	select MSM_GPIOMUX
 	select MSM_MULTIMEDIA_USE_ION
+	select PM_DEVFREQ
+	select MSM_DEVFREQ_CPUBW
 	select MSM_PIL
 	select MSM_SPM_V2
 	select MSM_L2_SPM
@@ -21,8 +23,7 @@ config ARCH_MSM8974
 	select HAVE_ARM_ARCH_TIMER
 	select MSM_QDSP6_APRV2
 	select MSM_QDSP6V2_CODECS
-	select MSM_AUDIO_QDSP6V2 if SND_SOC
-	select MSM_RPM_REGULATOR_SMD
+	select REGULATOR_RPM_SMD
 	select ARM_HAS_SG_CHAIN
 	select MSM_RUN_QUEUE_STATS
 	select MEMORY_HOLE_CARVEOUT
@@ -48,9 +49,8 @@ config ARCH_APQ8084
 	select MSM_PM8X60 if PM
 	select REGULATOR
 	select MSM_QDSP6V2_CODECS
-	select MSM_AUDIO_QDSP6V2 if SND_SOC
-	select MSM_QDSP6_APRV2 if MSM_AUDIO_QDSP6V2
-	select MSM_RPM_REGULATOR_SMD
+	select MSM_QDSP6_APRV2 if SND_SOC
+	select REGULATOR_RPM_SMD
 	select MIGHT_HAVE_PCI
 	select ARCH_SUPPORTS_MSI
 	select ARM_HAS_SG_CHAIN
@@ -66,6 +66,8 @@ config ARCH_APQ8084
 	select MSM_RPM_LOG
 	select USB_ARCH_HAS_XHCI
 	select KRAIT_REGULATOR
+	select PM_DEVFREQ
+	select MSM_DEVFREQ_CPUBW
 	select MSM_PIL
 	select ENABLE_VMALLOC_SAVINGS
 	select MSM_ULTRASOUND_B
@@ -75,6 +77,8 @@ config ARCH_MPQ8092
 	bool "MPQ8092"
 	select REGULATOR
 	select ARCH_MSM_KRAITMP
+	select PM_DEVFREQ
+	select MSM_DEVFREQ_CPUBW
 	select GPIO_MSM_V3
 	select ARM_GIC
 	select HAVE_ARM_ARCH_TIMER
@@ -82,13 +86,17 @@ config ARCH_MPQ8092
 	select CPU_V7
 	select MSM_SCM
 	select MSM_GPIOMUX
+	select MSM_QDSP6V2_CODECS
+	select MSM_QDSP6_APRV2 if SND_SOC
 	select MSM_NOPM
 	select MEMORY_HOLE_CARVEOUT
 	select DONT_MAP_HOLE_AFTER_MEMBANK0
 	select QMI_ENCDEC
+	select MIGHT_HAVE_PCI
+	select ARCH_SUPPORTS_MSI
 	select ARM_HAS_SG_CHAIN
 	select MSM_RPM_SMD
-	select MSM_RPM_REGULATOR_SMD
+	select REGULATOR_RPM_SMD
 	select PINCTRL
 	select PINCTRL_MSM_TLMM_V3
 	select MSM_MULTIMEDIA_USE_ION
@@ -103,6 +111,8 @@ config ARCH_FSM9900
 	select MSM_SCM
 	select HAVE_ARM_ARCH_TIMER
 	select MSM_GPIOMUX
+	select PM_DEVFREQ
+	select MSM_DEVFREQ_CPUBW
 	select MSM_PIL
 	select MSM_NATIVE_RESTART
 	select REGULATOR
@@ -121,7 +131,7 @@ config ARCH_MSMKRYPTON
 	select MSM_GPIOMUX
 	select MSM_RPM_SMD
 	select REGULATOR
-	select MSM_RPM_REGULATOR_SMD
+	select REGULATOR_RPM_SMD
 	select HAVE_ARM_ARCH_TIMER
 	select MSM_NATIVE_RESTART
 	select MSM_SPM_V2
@@ -133,6 +143,8 @@ config ARCH_MSMKRYPTON
 	select QMI_ENCDEC
 	select MSM_JTAG_MM if CORESIGHT_ETM
 	select MSM_CORTEX_A7
+	select PM_DEVFREQ
+	select MSM_DEVFREQ_CPUBW
 
 config ARCH_MSM8610
 	bool "MSM8610"
@@ -148,7 +160,6 @@ config ARCH_MSM8610
 	select MSM_NATIVE_RESTART
 	select MSM_QDSP6_APRV2
 	select MSM_QDSP6V2_CODECS
-	select MSM_AUDIO_QDSP6V2 if SND_SOC
 	select QMI_ENCDEC
 	select MSM_RPM_SMD
 	select MSM_SPM_V2
@@ -159,11 +170,13 @@ config ARCH_MSM8610
 	select MSM_CORTEX_A7
 	select CPU_FREQ_MSM
 	select CPU_FREQ
+	select PM_DEVFREQ
+	select MSM_DEVFREQ_CPUBW
 	select MSM_PIL
 	select MSM_RUN_QUEUE_STATS
 	select ARM_HAS_SG_CHAIN
 	select REGULATOR
-	select MSM_RPM_REGULATOR_SMD
+	select REGULATOR_RPM_SMD
 	select MSM_SPM_REGULATOR
 	select MSM_JTAG_MM if CORESIGHT_ETM
 	select MSM_CPR_REGULATOR
@@ -172,7 +185,6 @@ config ARCH_MSM8610
 	select MSM_RPM_STATS_LOG
 	select PINCTRL
 	select PINCTRL_MSM_TLMM_V3
-	select ENABLE_VMALLOC_SAVINGS
 	select MSM_MULTIMEDIA_USE_ION
 
 config ARCH_MSM8226
@@ -189,7 +201,6 @@ config ARCH_MSM8226
 	select MSM_NATIVE_RESTART
 	select MSM_QDSP6_APRV2
 	select MSM_QDSP6V2_CODECS
-	select MSM_AUDIO_QDSP6V2 if SND_SOC
 	select QMI_ENCDEC
 	select MSM_RPM_SMD
 	select MSM_SPM_V2
@@ -200,11 +211,13 @@ config ARCH_MSM8226
 	select MSM_CORTEX_A7
 	select CPU_FREQ_MSM
 	select CPU_FREQ
+	select PM_DEVFREQ
+	select MSM_DEVFREQ_CPUBW
 	select MSM_PIL
 	select MSM_RUN_QUEUE_STATS
 	select ARM_HAS_SG_CHAIN
 	select REGULATOR
-	select MSM_RPM_REGULATOR_SMD
+	select REGULATOR_RPM_SMD
 	select MSM_SPM_REGULATOR
 	select MSM_JTAG_MM if CORESIGHT_ETM
 	select MSM_CPR_REGULATOR
@@ -224,6 +237,8 @@ config ARCH_MSMSAMARIUM
 	select CPU_V7
 	select HAVE_ARM_ARCH_TIMER
 	select MSM_SCM
+	select PM_DEVFREQ
+	select MSM_DEVFREQ_CPUBW
 	select MSM_PIL
 	select MSM_GPIOMUX
 	select MSM_SPM_V2
@@ -231,11 +246,10 @@ config ARCH_MSMSAMARIUM
 	select MSM_NATIVE_RESTART
 	select MSM_QDSP6_APRV2
 	select MSM_QDSP6V2_CODECS
-	select MSM_AUDIO_QDSP6V2 if SND_SOC
 	select MSM_PM8X60 if PM
 	select MSM_RPM_SMD
 	select REGULATOR
-	select MSM_RPM_REGULATOR_SMD
+	select REGULATOR_RPM_SMD
 	select MSM_SPM_REGULATOR
 	select ARM_HAS_SG_CHAIN
 	select MSM_RUN_QUEUE_STATS
@@ -599,20 +613,6 @@ config MSM_SMD
 	  used to communicate with various services on the baseband
 	  processor.
 
-choice
-	prompt "MSM Shared memory interface version"
-	depends on MSM_SMD
-	default MSM_SMD_PKG4
-
-	config MSM_SMD_PKG3
-	  bool
-	    prompt "Package 3"
-
-	config MSM_SMD_PKG4
-	  bool
-	    prompt "Package 4"
-endchoice
-
 config MSM_PCIE
 	bool "MSM PCIe Controller driver"
 	depends on PCI && PCI_MSI
@@ -638,22 +638,6 @@ config MSM_BAM_DMUX
 	  BAM has a limited number of pipes.  This driver
 	  provides a means to support more logical channels
 	  via muxing than BAM could without muxing.
-
-config MSM_N_WAY_SMD
-	depends on MSM_SMD
-	default y
-	bool "MSM N-WAY SMD support"
-	help
-	  Supports APPS-QDSP SMD communication along with
-	  normal APPS-MODEM SMD communication.
-
-config MSM_N_WAY_SMSM
-	depends on MSM_SMD
-	default y
-	bool "MSM N-WAY SMSM support"
-	help
-	  Supports APPS-QDSP SMSM communication along with
-	  normal APPS-MODEM SMSM communication.
 
 config MSM_SMP2P
 	bool "SMSM Point-to-Point (SMP2P)"
@@ -807,6 +791,20 @@ config MSM_CPU_FREQ_MIN
 
 endif # CPU_FREQ_MSM
 
+config MSM_DEVFREQ_CPUBW
+	bool "Devfreq device for CPU<->DDR IB/AB BW voting"
+	depends on PM_DEVFREQ
+	select DEVFREQ_GOV_PERFORMANCE
+	select DEVFREQ_GOV_POWERSAVE
+	select DEVFREQ_GOV_USERSPACE
+	select DEVFREQ_GOV_MSM_CPUFREQ
+	default n
+	help
+	  Different devfreq governors use this devfreq device to make CPU to
+	  DDR IB/AB bandwidth votes. This driver provides a SoC topology
+	  agnostic interface to so that some of the devfreq governors can be
+	  shared across SoCs.
+
 config MSM_AVS_HW
 	bool "Enable Adaptive Voltage Scaling (AVS)"
 	default n
@@ -930,18 +928,6 @@ config MSM_IDLE_WAIT_ON_MODEM
 	  If Modem is not ready to handle Application Processor's request
 	  for idle power collapse, wait the number of microseconds in case
 	  Modem becomes ready soon.
-
-config MSM_RPM_REGULATOR_SMD
-	bool "SMD RPM regulator driver"
-	depends on REGULATOR
-	depends on OF
-	depends on MSM_RPM_SMD
-	help
-	  Compile in support for the SMD RPM regulator driver which is used for
-	  setting voltages and other parameters of the various power rails
-	  supplied by some Qualcomm PMICs.  The SMD RPM regulator driver should
-	  be used on systems which contain an RPM which communicates with the
-	  application processor over SMD.
 
 config MSM_SPM_REGULATOR
 	bool "SPM regulator driver"
@@ -1220,54 +1206,6 @@ config MSM_SHOW_RESUME_IRQ
 		This option logs wake up interrupts that have triggered just before
 		the resume loop unrolls. Say Y if you want to debug why the system
 		resumed.
-
-config MSM_QDSP6_APRV2
-	bool "Audio QDSP6 APRv2 support"
-	depends on MSM_SMD
-	default n
-	help
-	  Enable APRv2 IPC protocol support between
-	  application processor and QDSP6. APR is
-	  used by audio driver to configure QDSP6's
-	  ASM, ADM and AFE.
-
-config MSM_QDSP6_APRV3
-	bool "Audio Modem DSP APRv3 support"
-	depends on MSM_SMD
-	help
-	  Enable APRv3 IPC protocol support between
-	  application processor and Modem DSP. APR is
-	  used by audio driver to configure MDSP's
-	  ASM, ADM and AFE.
-
-config MSM_QDSP6V2_CODECS
-	bool "Audio QDSP6V2 APR support"
-	depends on MSM_SMD
-	help
-	  Enable Audio codecs with APR IPC protocol support between
-	  application processor and QDSP6 for B-family. APR is
-	  used by audio driver to configure QDSP6's
-	  ASM, ADM and AFE.
-
-config MSM_AUDIO_QDSP6V2
-        bool "QDSP6V2 HW Audio support"
-        select SND_SOC_MSM_QDSP6V2_INTF
-        help
-          Enable HW audio support in QDSP6V2.
-          QDSP6V2 can support HW encoder & decoder and
-          audio processing. It will enable support for
-          AAC, AMRNB, AMRWB, EVRC, MP3, QCELP among
-          others.
-
-config MSM_ADSP_LOADER
-        tristate "ADSP loader support"
-        select SND_SOC_MSM_APRV2_INTF
-	depends on MSM_AUDIO_QDSP6V2
-        help
-          Enable ADSP image loader.
-	  The ADSP loader brings ADSP out of reset
-	  for the platforms that use APRv2.
-	  Say M if you want to enable this module.
 
 config MSM_ULTRASOUND_B
 	bool "QDSP6V2 HW Ultrasound support"

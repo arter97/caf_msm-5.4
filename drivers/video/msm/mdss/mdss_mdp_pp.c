@@ -1099,7 +1099,7 @@ static int mdss_mdp_scale_setup(struct mdss_mdp_pipe *pipe)
 
 		/*program pixel extn values for the SSPP*/
 		mdss_mdp_pipe_program_pixel_extn(pipe);
-	} else {
+	} else if (pipe->type == MDSS_MDP_PIPE_TYPE_VIG) {
 		writel_relaxed(phasex_step, pipe->base +
 		   MDSS_MDP_REG_SCALE_PHASE_STEP_X);
 		writel_relaxed(phasey_step, pipe->base +
@@ -1108,6 +1108,11 @@ static int mdss_mdp_scale_setup(struct mdss_mdp_pipe *pipe)
 			MDSS_MDP_REG_SCALE_INIT_PHASE_X);
 		writel_relaxed(init_phasey, pipe->base +
 			MDSS_MDP_REG_SCALE_INIT_PHASE_Y);
+	} else {
+		writel_relaxed(phasex_step, pipe->base +
+		   MDSS_MDP_REG_SCALE_PHASE_STEP_X);
+		writel_relaxed(phasey_step, pipe->base +
+		   MDSS_MDP_REG_SCALE_PHASE_STEP_Y);
 	}
 
 	writel_relaxed(scale_config, pipe->base +
@@ -1529,6 +1534,9 @@ static int pp_dspp_setup(u32 disp_num, struct mdss_mdp_mixer *mixer)
 		pp_sts_set_split_bits(&pp_sts->pgc_sts, pgc_config->flags);
 	}
 
+	pp_dspp_opmode_config(ctl, dspp_num, pp_sts, mdata->mdp_rev, &opmode);
+
+flush_exit:
 	if (ad_hw) {
 		mutex_lock(&ad->lock);
 		ad_flags = ad->reg_sts;
@@ -1543,8 +1551,6 @@ static int pp_dspp_setup(u32 disp_num, struct mdss_mdp_mixer *mixer)
 		mutex_unlock(&ad->lock);
 	}
 
-	pp_dspp_opmode_config(ctl, dspp_num, pp_sts, mdata->mdp_rev, &opmode);
-flush_exit:
 	writel_relaxed(opmode, base + MDSS_MDP_REG_DSPP_OP_MODE);
 
 	if (dspp_num == MDSS_MDP_DSPP3)
@@ -3899,7 +3905,7 @@ int mdss_mdp_ad_input(struct msm_fb_data_type *mfd,
 			mutex_unlock(&ad->lock);
 			mutex_lock(&mfd->bl_lock);
 			MDSS_BRIGHT_TO_BL(bl, bl, mfd->panel_info->bl_max,
-							MDSS_MAX_BL_BRIGHTNESS);
+					mfd->panel_info->brightness_max);
 			mdss_fb_set_backlight(mfd, bl);
 			mutex_unlock(&mfd->bl_lock);
 			mutex_lock(&ad->lock);
