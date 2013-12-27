@@ -25,6 +25,15 @@
 		sdhc2 = &sdhc_2; /* SDC2 SD card slot */
 	};
 
+	memory {
+		audio_mem: audio_region@0 {
+			linux,contiguous-region;
+			linux,reserve-region;
+			reg = <0 0x614000>;
+			label = "audio_mem";
+		};
+	};
+
 	soc: soc { };
 };
 
@@ -266,6 +275,74 @@
 		vin-supply = <&smb210_vreg>;
 	};
 
+	ehci: msm_ehci@f9a95000 {
+		compatible = "qti,ehci-host";
+		status = "disabled";
+		reg = <0xf9a95000 0x400>;
+		interrupts = <0 293 0>, <0 294 0>;
+		interrupt-names = "core_irq", "async_irq";
+		HSUSB_VDDCX-supply = <&pma8084_s8_corner>;
+		qti,vdd-voltage-level = <1 2 3 5 7>;
+		HSUSB_1p8-supply = <&pma8084_l22>;
+		HSUSB_3p3-supply = <&pma8084_l24>;
+		qti,usb2-power-budget = <500>;
+	};
+
+	usb3: ssusb@f9200000 {
+		compatible = "qti,dwc-usb3-msm";
+		reg = <0xf9200000 0xfc000>,
+			  <0xfd4ab000 0x4>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		interrupts = <0 133 0>;
+		interrupt-names = "hs_phy_irq";
+
+		vbus_dwc3-supply = <&usb3_otg>;
+		qti,charging-disabled;
+		qti,dwc-usb3-msm-dbm-eps = <4>;
+		qti,dwc-usb3-msm-tx-fifo-size = <29696>;
+		qti,dwc-usb3-msm-qdss-tx-fifo-size = <8192>;
+
+		qti,msm-bus,name = "usb3";
+		qti,msm-bus,num-cases = <2>;
+		qti,msm-bus,num-paths = <1>;
+		qti,msm-bus,vectors-KBps =
+				<61 512 0 0>,
+				<61 512 240000 960000>;
+		dwc3@f9200000 {
+			compatible = "synopsys,dwc3";
+			reg = <0xf9200000 0xfc000>;
+			interrupt-parent = <&intc>;
+			interrupts = <0 131 0>, <0 179 0>;
+			interrupt-names = "irq", "otg_irq";
+			usb-phy = <&hsphy>, <&ssphy>;
+			tx-fifo-resize;
+			host-only-mode;
+		};
+	};
+
+	hsphy: hsphy@f92f8800 {
+		compatible = "qti,usb-hsphy";
+		reg = <0xf92f8800 0x3ff>;
+		qti,hsphy-init = <0x00D191A4>;
+		vdd-supply = <&pma8084_s8_corner>;
+		vdda18-supply = <&pma8084_l22>;
+		vdda33-supply = <&pma8084_l24>;
+		qti,vdd-voltage-level = <1 5 7>;
+		qti,ext-vbus-id;
+	};
+
+	ssphy: ssphy@f92f8800 {
+		compatible = "qti,usb-ssphy";
+		reg = <0xf92f8800 0x3ff>;
+		vdd-supply = <&pma8084_s8_corner>;
+		vdda18-supply = <&pma8084_l22>;
+		vdda33-supply = <&pma8084_l24>;
+		qti,vdd-voltage-level = <1 5 7>;
+	};
+
 	spmi_bus: qcom,spmi@fc4c0000 {
 		cell-index = <0>;
 		compatible = "qcom,spmi-pmic-arb";
@@ -364,12 +441,6 @@
 		reg-names = "bam_mem", "core_mem";
 		interrupts = <0 94 0>;
 		qcom,pipe-attr-ee;
-	};
-
-	sata: sata@fc580000 {
-		compatible = "qcom,msm-ahci";
-		reg = <0xfc580000 0x17c>;
-		interrupts = <0 243 0>;
 	};
 
 	qcom,wdt@f9017000 {
@@ -477,6 +548,163 @@
 		compatible = "qcom,ipc-spinlock-sfpb";
 		reg = <0xfd484000 0x400>;
 		qcom,num-locks = <8>;
+	};
+
+	qcom,msm-adsp-loader {
+		compatible = "qcom,adsp-loader";
+		qcom,adsp-state = <0>;
+	};
+
+	wcd9xxx_intc: wcd9xxx-irq {
+		compatible = "qcom,wcd9xxx-irq";
+		interrupt-controller;
+		#interrupt-cells = <1>;
+		interrupt-parent = <&msmgpio>;
+		interrupts = <45 0>;
+		interrupt-names = "cdc-int";
+	};
+
+	slim_msm: slim@fe1af000 {
+		cell-index = <1>;
+		compatible = "qcom,slim-ngd";
+		reg = <0xfe1af000 0x35000>,
+		      <0xfe184000 0x20000>;
+		reg-names = "slimbus_physical", "slimbus_bam_physical";
+		interrupts = <0 163 0 0 164 0>;
+		interrupt-names = "slimbus_irq", "slimbus_bam_irq";
+		qcom,apps-ch-pipes = <0x60000000>;
+		qcom,ea-pc = <0xc0>;
+
+		tabla_codec {
+			compatible = "qcom,tabla2x-slim";
+			elemental-addr = [00 01 60 00 17 02];
+
+			interrupt-parent = <&wcd9xxx_intc>;
+			interrupts = <0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
+				      17 18 19 20 21>;
+
+			cdc-vdd-buck-supply = <&pma8084_s5>;
+			qcom,cdc-vdd-buck-voltage = <2150000 2150000>;
+			qcom,cdc-vdd-buck-current = <650000>;
+
+			cdc-vdd-tx-h-supply = <&pma8084_s4>;
+			qcom,cdc-vdd-tx-h-voltage = <1800000 1800000>;
+			qcom,cdc-vdd-tx-h-current = <25000>;
+
+			cdc-vdd-rx-h-supply = <&pma8084_s4>;
+			qcom,cdc-vdd-rx-h-voltage = <1800000 1800000>;
+			qcom,cdc-vdd-rx-h-current = <25000>;
+
+			cdc-vddpx-1-supply = <&pma8084_s4>;
+			qcom,cdc-vddpx-1-voltage = <1800000 1800000>;
+			qcom,cdc-vddpx-1-current = <10000>;
+
+			cdc-vdd-a-1p2v-supply = <&pma8084_l1>;
+			qcom,cdc-vdd-a-1p2v-voltage = <1225000 1225000>;
+			qcom,cdc-vdd-a-1p2v-current = <10000>;
+
+			cdc-vddcx-1-supply = <&pma8084_l1>;
+			qcom,cdc-vddcx-1-voltage = <1225000 1225000>;
+			qcom,cdc-vddcx-1-current = <10000>;
+
+			qcom,cdc-static-supplies = "cdc-vdd-buck",
+				"cdc-vdd-tx-h",
+				"cdc-vdd-rx-h",
+				"cdc-vddpx-1",
+				"cdc-vdd-a-1p2v",
+				"cdc-vddcx-1";
+
+			qcom,cdc-micbias-ldoh-v = <0x3>;
+			qcom,cdc-micbias-cfilt1-mv = <1800>;
+			qcom,cdc-micbias-cfilt2-mv = <1800>;
+			qcom,cdc-micbias-cfilt3-mv = <1800>;
+			qcom,cdc-micbias1-cfilt-sel = <0x0>;
+			qcom,cdc-micbias2-cfilt-sel = <0x1>;
+			qcom,cdc-micbias3-cfilt-sel = <0x2>;
+			qcom,cdc-micbias4-cfilt-sel = <0x2>;
+
+			qcom,cdc-reset-gpio = <&msmgpio 36 0>;
+
+			qcom,cdc-mclk-clk-rate = <12288000>;
+			qcom,cdc-slim-ifd = "tabla-slave";
+			qcom,cdc-slim-ifd-elemental-addr = [00 00 60 00 17 02];
+		};
+	};
+
+	sound {
+		compatible = "qti,mpq8092-audio-tabla";
+		qti,model = "mpq8092-tabla-snd-card";
+
+		qti,audio-routing =
+			"RX_BIAS", "MCLK",
+			"LDO_H", "MCLK",
+			"AMIC1", "MIC BIAS1 External",
+			"MIC BIAS1 External", "Handset Mic",
+			"AMIC2", "MIC BIAS2 External",
+			"MIC BIAS2 External", "Headset Mic",
+			"AMIC3", "MIC BIAS3 External",
+			"MIC BIAS3 Eternal", "ANCRight Headset Mic",
+			"AMIC4", "MIC BIAS1 External",
+			"MIC BIAS1 External", "ANCLeft Headset Mic",
+                        "HEADPHONE", "LDO_H";
+
+		qti,cdc-mclk-gpios = <&msmgpio 42 0>;
+		qti,tabla-mclk-clk-freq = <12288000>;
+		qti,hdmi-audio-rx;
+	};
+
+	qti,msm-pcm {
+		compatible = "qcom,msm-pcm-dsp";
+		qcom,msm-pcm-dsp-id = <0>;
+	};
+
+	qcom,msm-compr-dsp {
+		compatible = "qcom,msm-compr-dsp";
+	};
+
+	qcom,msm-pcm-afe {
+		compatible = "qcom,msm-pcm-afe";
+	};
+
+	qcom,msm-dai-fe {
+		compatible = "qcom,msm-dai-fe";
+	};
+
+	qcom,msm-stub-codec {
+		compatible = "qcom,msm-stub-codec";
+	};
+
+	qcom,msm-pcm-routing {
+		compatible = "qcom,msm-pcm-routing";
+	};
+
+	qcom,msm-dai-q6-hdmi {
+		compatible = "qcom,msm-dai-q6-hdmi";
+		qcom,msm-dai-q6-dev-id = <8>;
+	};
+
+	qcom,msm-dai-q6 {
+		compatible = "qcom,msm-dai-q6";
+
+		qcom,msm-dai-q6-sb-0-rx {
+			compatible = "qcom,msm-dai-q6-dev";
+			qcom,msm-dai-q6-dev-id = <16384>;
+		};
+
+		qcom,msm-dai-q6-sb-0-tx {
+			compatible = "qcom,msm-dai-q6-dev";
+			qcom,msm-dai-q6-dev-id = <16385>;
+		};
+
+		qcom,msm-dai-q6-afe-proxy-rx {
+			compatible = "qcom,msm-dai-q6-dev";
+			qcom,msm-dai-q6-dev-id = <241>;
+		};
+
+		qcom,msm-dai-q6-afe-proxy-tx {
+			compatible = "qcom,msm-dai-q6-dev";
+			qcom,msm-dai-q6-dev-id = <240>;
+		};
 	};
 
 	qti,smem@fa00000 {
@@ -748,6 +976,27 @@
 									<96 512 448 896>; /* Max. 7Mbps */
 		qti,tsc-reset-cam-gpio = <&msm_gpio 138 0>;	/* reset-pin controller */
 	};
+
+	qcom,msm-thermal {
+		compatible = "qcom,msm-thermal";
+		qcom,sensor-id = <3>;
+		qcom,poll-ms = <250>;
+		qcom,limit-temp = <60>;
+		qcom,temp-hysteresis = <10>;
+		qcom,freq-step = <2>;
+		qcom,freq-control-mask = <0xf>;
+		qcom,core-limit-temp = <80>;
+		qcom,core-temp-hysteresis = <10>;
+		qcom,core-control-mask = <0xe>;
+		qcom,hotplug-temp = <110>;
+		qcom,hotplug-temp-hysteresis = <20>;
+		qcom,cpu-sensors = "tsens_tz_sensor3", "tsens_tz_sensor4",
+				"tsens_tz_sensor5", "tsens_tz_sensor6";
+		qcom,freq-mitigation-temp = <110>;
+		qcom,freq-mitigation-temp-hysteresis = <20>;
+		qcom,freq-mitigation-value = <960000>;
+		qcom,freq-mitigation-control-mask = <0x01>;
+	};
 };
 
 &gdsc_venus {
@@ -793,6 +1042,10 @@
 };
 
 &gdsc_bcss {
+	status = "ok";
+};
+
+&gdsc_pcie {
 	status = "ok";
 };
 

@@ -20,9 +20,9 @@
 #include <linux/clk.h>
 #include <linux/iopoll.h>
 #include <linux/regulator/consumer.h>
+#include <linux/regulator/rpm-smd-regulator.h>
 #include <linux/clk/msm-clock-generic.h>
 
-#include <mach/rpm-regulator-smd.h>
 #include <mach/socinfo.h>
 #include <mach/rpm-smd.h>
 
@@ -4298,7 +4298,7 @@ static struct branch_clk vpu_vdp_clk = {
 
 static struct branch_clk vpu_vdp_xin_clk = {
 	.cbcr_reg = VPU_VDP_XIN_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_bases[MMSS_BASE],
 	.c = {
 		.dbg_name = "vpu_vdp_xin_clk",
@@ -5245,8 +5245,8 @@ static struct clk_div_ops tsc_par_clk_src_ops = {
 
 static struct div_clk tsc_par_clk_src = {
 	.data = {
-		.max_div = 48,
-		.min_div = 48,
+		.max_div = 40,
+		.min_div = 40,
 	},
 	.offset = TSC_MISC,
 	.ops = &tsc_par_clk_src_ops,
@@ -5286,8 +5286,8 @@ static struct clk_div_ops tsc_ser_clk_src_ops = {
 
 static struct div_clk tsc_ser_clk_src = {
 	.data = {
-		.max_div = 6,
-		.min_div = 6,
+		.max_div = 5,
+		.min_div = 5,
 	},
 	.offset = TSC_MISC,
 	.ops = &tsc_ser_clk_src_ops,
@@ -6680,11 +6680,12 @@ static struct clk_lookup mpq_clocks_8092[] = {
 	CLK_LOOKUP("",	gcc_mmss_a5ss_axi_clk.c,	""),
 
 	/* PCIE */
-	CLK_LOOKUP("",	gcc_pcie_axi_clk.c,	""),
-	CLK_LOOKUP("",	gcc_pcie_axi_mstr_clk.c,	""),
-	CLK_LOOKUP("",	gcc_pcie_cfg_ahb_clk.c,	""),
-	CLK_LOOKUP("",	gcc_pcie_pipe_clk.c,	""),
-	CLK_LOOKUP("",	gcc_pcie_sleep_clk.c,	""),
+	CLK_LOOKUP("pcie_0_ref_clk_src", rf_clk2.c, "msm_pcie"),
+	CLK_LOOKUP("pcie_0_slv_axi_clk", gcc_pcie_axi_clk.c, "msm_pcie"),
+	CLK_LOOKUP("pcie_0_mstr_axi_clk", gcc_pcie_axi_mstr_clk.c, "msm_pcie"),
+	CLK_LOOKUP("pcie_0_cfg_ahb_clk", gcc_pcie_cfg_ahb_clk.c, "msm_pcie"),
+	CLK_LOOKUP("pcie_0_pipe_clk",	gcc_pcie_pipe_clk.c,	"msm_pcie"),
+	CLK_LOOKUP("pcie_0_aux_clk",	gcc_pcie_sleep_clk.c,	"msm_pcie"),
 
 	CLK_LOOKUP("",	gcc_pdm2_clk.c,	""),
 	CLK_LOOKUP("",	gcc_pdm_ahb_clk.c,	""),
@@ -6694,12 +6695,16 @@ static struct clk_lookup mpq_clocks_8092[] = {
 	CLK_LOOKUP("",	gcc_spss_ahb_clk.c,	""),
 
 	/* SATA */
-	CLK_LOOKUP("",	gcc_sata_asic0_clk.c,	""),
-	CLK_LOOKUP("",	gcc_sata_axi_clk.c,	""),
-	CLK_LOOKUP("",	gcc_sata_cfg_ahb_clk.c,	""),
-	CLK_LOOKUP("",	gcc_sata_pmalive_clk.c,	""),
-	CLK_LOOKUP("",	gcc_sata_rx_clk.c,	""),
-	CLK_LOOKUP("",	gcc_sata_rx_oob_clk.c,	""),
+	CLK_LOOKUP("core_clk", gcc_sata_axi_clk.c,             "fc580000.sata"),
+	CLK_LOOKUP("iface_clk", gcc_sata_cfg_ahb_clk.c,        "fc580000.sata"),
+	CLK_LOOKUP("rxoob_clk", gcc_sata_rx_oob_clk.c,         "fc580000.sata"),
+	CLK_LOOKUP("pmalive_clk", gcc_sata_pmalive_clk.c,      "fc580000.sata"),
+	CLK_LOOKUP("asic0_clk", gcc_sata_asic0_clk.c,          "fc580000.sata"),
+	CLK_LOOKUP("rbc0_clk", gcc_sata_rx_clk.c,              "fc580000.sata"),
+	CLK_LOOKUP("ref_clk_src", rf_clk2.c,                "fc581000.sataphy"),
+	CLK_LOOKUP("ref_clk_parent", pcie_gpio_ldo.c,       "fc581000.sataphy"),
+	CLK_LOOKUP("ref_clk", sata_phy_ldo.c,               "fc581000.sataphy"),
+	CLK_LOOKUP("rxoob_clk", gcc_sata_rx_oob_clk.c,      "fc581000.sataphy"),
 
 	/* SDCC */
 	CLK_LOOKUP("iface_clk",	gcc_sdcc1_ahb_clk.c,	"msm_sdcc.1"),
@@ -6969,6 +6974,8 @@ static struct clk_lookup mpq_clocks_8092[] = {
 	CLK_LOOKUP("",	bcc_vbif_tspp2_clk.c,	""),
 	CLK_LOOKUP("bcc_vbif_tspp2_clk",	bcc_vbif_tspp2_clk.c,
 						"fc724000.msm_tspp2"),
+	CLK_LOOKUP("vbif_core_clk", bcc_vbif_axi_clk.c, "fc724000.msm_tspp2"),
+	CLK_LOOKUP("iface_vbif_clk", bcc_vbif_ahb_clk.c, "fc724000.msm_tspp2"),
 	CLK_LOOKUP("bcc_vbif_tspp2_clk", bcc_vbif_tspp2_clk.c,
 						"fc74a000.msm_tsc"),
 	CLK_LOOKUP("bcc_vbif_dem_core_clk", bcc_vbif_dem_core_clk.c,
@@ -7105,9 +7112,27 @@ static struct clk_lookup mpq_clocks_8092[] = {
 	CLK_LOOKUP("alt_core_clk", vcap_vp_clk_src.c, "fdfb6000.qti,iommu"),
 
 	/* LDO clocks */
-	CLK_LOOKUP("", pcie_gpio_ldo.c, ""),
+	CLK_LOOKUP("pcie_0_ldo", pcie_gpio_ldo.c, "msm_pcie"),
 	CLK_LOOKUP("", sata_phy_ldo.c, ""),
 	CLK_LOOKUP("", vby1_gpio_ldo.c, ""),
+
+	CLK_LOOKUP("core_clk", vpu_vdp_clk.c, "fd8c1404.qcom,gdsc"),
+	CLK_LOOKUP("maple_clk", vpu_maple_clk.c, "fd8c1404.qcom,gdsc"),
+	CLK_LOOKUP("bus_clk", vpu_axi_clk.c, "fd8c1404.qcom,gdsc"),
+	CLK_LOOKUP("frc_xin_clk", vpu_frc_xin_clk.c, "fd8c1404.qcom,gdsc"),
+	CLK_LOOKUP("hdmc_frcf_clk", vpu_hdmc_frcf_clk.c, "fd8c1404.qcom,gdsc"),
+	CLK_LOOKUP("sdmc_frcs_clk", vpu_sdmc_frcs_clk.c, "fd8c1404.qcom,gdsc"),
+	CLK_LOOKUP("sdme_frcf_clk", vpu_sdme_frcf_clk.c, "fd8c1404.qcom,gdsc"),
+	CLK_LOOKUP("vproc_clk", vpu_sdme_vproc_clk.c, "fd8c1404.qcom,gdsc"),
+	CLK_LOOKUP("vdp_xin_clk", vpu_vdp_xin_clk.c, "fd8c1404.qcom,gdsc"),
+
+	CLK_LOOKUP("bus_clk", vcap_axi_clk.c, "fd8c1804.qcom,gdsc"),
+	CLK_LOOKUP("vp_clk", vcap_vp_clk.c, "fd8c1804.qcom,gdsc"),
+
+	CLK_LOOKUP("core_clk", mdss_mdp_clk.c, "fd8c2304.qcom,gdsc"),
+	CLK_LOOKUP("lut_clk", mdss_mdp_lut_clk.c, "fd8c2304.qcom,gdsc"),
+
+	CLK_LOOKUP("core_clk", oxili_gfx3d_clk.c, "fd8c4024.qcom,gdsc"),
 };
 
 static void __init reg_init(void)

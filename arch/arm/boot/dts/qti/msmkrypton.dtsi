@@ -481,6 +481,7 @@
 						<61 512 0 0>,
 						<61 512 240000 960000>;
 		qti,no-suspend-resume;
+		qti,reset_hsphy_sleep_clk_on_init;
 
 		dwc3@f9200000 {
 				compatible = "synopsys,dwc3";
@@ -524,11 +525,10 @@
 
 	qti,usbbam@f9304000 {
 		compatible = "qti,usb-bam-msm";
-		reg = <0xf9304000 0x8814>,
-		      <0xf9a44000 0x11000>;
-		reg-names = "ssusb", "hsusb";
-		interrupts = <0 132 0>,<0 135 0>;
-		interrupt-names = "ssusb", "hsusb";
+		reg = <0xf9304000 0x8814>;
+		reg-names = "ssusb";
+		interrupts = <0 132 0>;
+		interrupt-names = "ssusb";
 		qti,usb-bam-num-pipes = <16>;
 		qti,ignore-core-reset-ack;
 		qti,disable-clk-gating;
@@ -700,15 +700,23 @@
 		cpu-vdd-supply = <&pmd9635_l3_corner_ao>;
 	};
 
+	qcom,cpubw {
+		compatible = "qcom,cpubw";
+		qcom,cpu-mem-ports = <1 512>;
+		qcom,bw-tbl =
+			< 1266 /* 166 MHz */ >,
+			< 2540 /* 333 MHz */ >,
+			< 3051 /* 400 MHz */ >;
+	};
+
 	qcom,msm-cpufreq@0 {
 		reg = <0 4>;
 		compatible = "qcom,msm-cpufreq";
-		qcom,cpu-mem-ports = <1 512>;
 		qcom,cpufreq-table =
-			<  300000 1332 /* 166.5 MHz */ >,
-			<  600000 1332 /* 166.5 MHz */ >,
-			<  748800 2664 /* 333 MHz */ >,
-			<  998400 3200 /* 400 MHz */ >;
+			<  300000 1266 >,
+			<  600000 1266 >,
+			<  748800 2540 >,
+			<  998400 3051 >;
 	};
 
 	qcom,msm-thermal {

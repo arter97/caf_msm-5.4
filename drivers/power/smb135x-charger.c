@@ -200,6 +200,11 @@
 #define IRQ_D_TIMEOUT_BIT		BIT(2)
 
 #define IRQ_E_REG			0x54
+#define IRQ_E_DC_OV_BIT			BIT(6)
+#define IRQ_E_DC_UV_BIT			BIT(4)
+#define IRQ_E_USB_OV_BIT		BIT(2)
+#define IRQ_E_USB_UV_BIT		BIT(0)
+
 #define IRQ_F_REG			0x55
 #define IRQ_F_POWER_OK_BIT		BIT(0)
 
@@ -237,6 +242,7 @@ struct smb135x_chg {
 
 	bool				usb_present;
 	bool				dc_present;
+	bool				dc_ov;
 
 	bool				bmd_algo_disabled;
 	bool				iterm_disabled;
@@ -375,34 +381,6 @@ static bool is_usb100_broken(struct smb135x_chg *chip)
 	return !!(reg & CHECK_USB100_GOOD_BIT);
 }
 
-static bool is_dc_present(struct smb135x_chg *chip)
-{
-	int rc;
-	u8 reg;
-
-	rc = smb135x_read(chip, STATUS_8_REG, &reg);
-	if (rc < 0) {
-		dev_err(chip->dev, "Couldn't read status 5 rc = %d\n", rc);
-		return false;
-	}
-
-	return !!(reg & (DCIN_9V | DCIN_UNREG | DCIN_LV));
-}
-
-static bool is_usb_present(struct smb135x_chg *chip)
-{
-	int rc;
-	u8 reg;
-
-	rc = smb135x_read(chip, STATUS_8_REG, &reg);
-	if (rc < 0) {
-		dev_err(chip->dev, "Couldn't read status 5 rc = %d\n", rc);
-		return false;
-	}
-
-	return !!(reg & (USBIN_9V | USBIN_UNREG | USBIN_LV));
-}
-
 static char *usb_type_str[] = {
 	"ACA_DOCK",	/* bit 0 */
 	"ACA_C",	/* bit 1 */
@@ -428,11 +406,11 @@ static enum power_supply_type usb_type_enum[] = {
 	POWER_SUPPLY_TYPE_USB_ACA,	/* bit 1 */
 	POWER_SUPPLY_TYPE_USB_ACA,	/* bit 2 */
 	POWER_SUPPLY_TYPE_USB_ACA,	/* bit 3 */
-	POWER_SUPPLY_TYPE_UNKNOWN,	/* bit 5 */
 	POWER_SUPPLY_TYPE_USB,		/* bit 4 */
+	POWER_SUPPLY_TYPE_UNKNOWN,	/* bit 5 */
 	POWER_SUPPLY_TYPE_USB_DCP,	/* bit 6 */
 	POWER_SUPPLY_TYPE_USB_CDP,	/* bit 7 */
-	POWER_SUPPLY_TYPE_USB,		/* bit 8 error case, report SDP */
+	POWER_SUPPLY_TYPE_UNKNOWN,	/* bit 8 error case, report UNKNWON */
 };
 
 /* helper to return enum power_supply_type of USB type */
@@ -503,18 +481,6 @@ static int smb135x_get_prop_batt_present(struct smb135x_chg *chip)
 		return 0;
 
 	return chip->batt_present;
-}
-
-static int smb135x_get_charging_status(struct smb135x_chg *chip)
-{
-	int rc;
-	u8 reg = 0;
-
-	rc = smb135x_read(chip, STATUS_4_REG, &reg);
-	if (rc < 0)
-		return 0;
-
-	return (reg & CHG_EN_BIT) ? 1 : 0;
 }
 
 static int smb135x_get_prop_charge_type(struct smb135x_chg *chip)
@@ -915,7 +881,7 @@ static int smb135x_battery_get_property(struct power_supply *psy,
 		val->intval = smb135x_get_prop_batt_present(chip);
 		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
-		val->intval = smb135x_get_charging_status(chip);
+		val->intval = chip->chg_enabled;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_TYPE:
 		val->intval = smb135x_get_prop_charge_type(chip);
@@ -937,6 +903,7 @@ static int smb135x_battery_get_property(struct power_supply *psy,
 
 static enum power_supply_property smb135x_dc_properties[] = {
 	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_HEALTH,
 };
 
 static int smb135x_dc_get_property(struct power_supply *psy,
@@ -948,8 +915,10 @@ static int smb135x_dc_get_property(struct power_supply *psy,
 
 	switch (prop) {
 	case POWER_SUPPLY_PROP_ONLINE:
-		/* return if dc is charging the battery */
-		val->intval = is_dc_present(chip);
+		val->intval = chip->dc_present;
+		break;
+	case POWER_SUPPLY_PROP_HEALTH:
+		val->intval = chip->dc_present;
 		break;
 	default:
 		return -EINVAL;
@@ -1222,15 +1191,42 @@ static int power_ok_handler(struct smb135x_chg *chip, u8 rt_stat)
 	return 0;
 }
 
+static int handle_dc_removal(struct smb135x_chg *chip)
+{
+	if (chip->dc_psy_type == POWER_SUPPLY_TYPE_WIRELESS) {
+		cancel_delayed_work_sync(&chip->wireless_insertion_work);
+		smb135x_dc_suspend(chip, true);
+	}
+
+	if (chip->dc_psy_type != -EINVAL)
+		power_supply_set_online(&chip->dc_psy, chip->dc_present);
+	return 0;
+}
+
+#define DCIN_UNSUSPEND_DELAY_MS		1000
+static int handle_dc_insertion(struct smb135x_chg *chip)
+{
+	if (chip->dc_psy_type == POWER_SUPPLY_TYPE_WIRELESS)
+		schedule_delayed_work(&chip->wireless_insertion_work,
+			msecs_to_jiffies(DCIN_UNSUSPEND_DELAY_MS));
+	if (chip->dc_psy_type != -EINVAL)
+		power_supply_set_online(&chip->dc_psy,
+						chip->dc_present);
+
+	return 0;
+}
 /**
  * dcin_uv_handler() - called when the dc voltage crosses the uv threshold
  * @chip: pointer to smb135x_chg chip
  * @rt_stat: the status bit indicating whether dc voltage is uv
  */
-#define DCIN_UNSUSPEND_DELAY_MS		1000
 static int dcin_uv_handler(struct smb135x_chg *chip, u8 rt_stat)
 {
-	bool dc_present = is_dc_present(chip);
+	/*
+	 * rt_stat indicates if dc is undervolted. If so dc_present
+	 * should be marked removed
+	 */
+	bool dc_present = !rt_stat;
 
 	pr_debug("chip->dc_present = %d dc_present = %d\n",
 			chip->dc_present, dc_present);
@@ -1238,27 +1234,42 @@ static int dcin_uv_handler(struct smb135x_chg *chip, u8 rt_stat)
 	if (chip->dc_present && !dc_present) {
 		/* dc removed */
 		chip->dc_present = dc_present;
-		if (chip->dc_psy_type == POWER_SUPPLY_TYPE_WIRELESS) {
-			cancel_delayed_work_sync(
-				&chip->wireless_insertion_work);
-			smb135x_dc_suspend(chip, true);
-		}
-		if (chip->dc_psy_type != -EINVAL)
-			power_supply_set_online(&chip->dc_psy,
-							chip->dc_present);
+		handle_dc_removal(chip);
 	}
 
 	if (!chip->dc_present && dc_present) {
 		/* dc inserted */
 		chip->dc_present = dc_present;
-		if (chip->dc_psy_type == POWER_SUPPLY_TYPE_WIRELESS)
-			schedule_delayed_work(&chip->wireless_insertion_work,
-				msecs_to_jiffies(DCIN_UNSUSPEND_DELAY_MS));
-		if (chip->dc_psy_type != -EINVAL)
-			power_supply_set_online(&chip->dc_psy,
-							chip->dc_present);
+		handle_dc_insertion(chip);
 	}
 
+	return 0;
+}
+
+static int dcin_ov_handler(struct smb135x_chg *chip, u8 rt_stat)
+{
+	/*
+	 * rt_stat indicates if dc is overvolted. If so dc_present
+	 * should be marked removed
+	 */
+	bool dc_present = !rt_stat;
+
+	pr_debug("chip->dc_present = %d dc_present = %d\n",
+			chip->dc_present, dc_present);
+
+	chip->dc_ov = !!rt_stat;
+
+	if (chip->dc_present && !dc_present) {
+		/* dc removed */
+		chip->dc_present = dc_present;
+		handle_dc_removal(chip);
+	}
+
+	if (!chip->dc_present && dc_present) {
+		/* dc inserted */
+		chip->dc_present = dc_present;
+		handle_dc_insertion(chip);
+	}
 	return 0;
 }
 
@@ -1288,15 +1299,16 @@ static int handle_usb_insertion(struct smb135x_chg *chip)
 		dev_err(chip->dev, "Couldn't read status 5 rc = %d\n", rc);
 		return rc;
 	}
-	usb_type_name = get_usb_type_name(reg);
-	usb_supply_type = get_usb_supply_type(reg);
 	/*
 	 * Report the charger type as UNKNOWN if the
 	 * apsd-fail flag is set. This nofifies the USB driver
 	 * to initiate a s/w based charger type detection.
 	 */
 	if (chip->workaround_flags & WRKARND_APSD_FAIL)
-		usb_supply_type = POWER_SUPPLY_TYPE_UNKNOWN;
+		reg = 0;
+
+	usb_type_name = get_usb_type_name(reg);
+	usb_supply_type = get_usb_supply_type(reg);
 	pr_debug("inserted %s, usb psy type = %d stat_5 = 0x%02x\n",
 			usb_type_name, usb_supply_type, reg);
 	if (chip->usb_psy) {
@@ -1315,7 +1327,11 @@ static int handle_usb_insertion(struct smb135x_chg *chip)
  */
 static int usbin_uv_handler(struct smb135x_chg *chip, u8 rt_stat)
 {
-	bool usb_present = is_usb_present(chip);
+	/*
+	 * rt_stat indicates if usb is undervolted. If so usb_present
+	 * should be marked removed
+	 */
+	bool usb_present = !rt_stat;
 
 	pr_debug("chip->usb_present = %d usb_present = %d\n",
 			chip->usb_present, usb_present);
@@ -1327,15 +1343,41 @@ static int usbin_uv_handler(struct smb135x_chg *chip, u8 rt_stat)
 	return 0;
 }
 
+static int usbin_ov_handler(struct smb135x_chg *chip, u8 rt_stat)
+{
+	/*
+	 * rt_stat indicates if usb is overvolted. If so usb_present
+	 * should be marked removed
+	 */
+	bool usb_present = !rt_stat;
+	int health;
+
+	pr_debug("chip->usb_present = %d usb_present = %d\n",
+			chip->usb_present, usb_present);
+	if (chip->usb_present && !usb_present) {
+		/* USB removed */
+		chip->usb_present = usb_present;
+		handle_usb_removal(chip);
+	}
+
+	if (chip->usb_psy) {
+		health = rt_stat ? POWER_SUPPLY_HEALTH_OVERVOLTAGE
+					: POWER_SUPPLY_HEALTH_GOOD;
+		power_supply_set_health_state(chip->usb_psy, health);
+	}
+
+	return 0;
+}
+
 /**
  * src_detect_handler() - this is called when USB charger type is detected, use
- *			it for handling USB charger insertion
+ *			it for handling USB charger insertion/removal
  * @chip: pointer to smb135x_chg chip
  * @rt_stat: the status bit indicating chg insertion/removal
  */
 static int src_detect_handler(struct smb135x_chg *chip, u8 rt_stat)
 {
-	bool usb_present = is_usb_present(chip);
+	bool usb_present = !!rt_stat;
 
 	pr_debug("chip->usb_present = %d usb_present = %d\n",
 			chip->usb_present, usb_present);
@@ -1466,6 +1508,7 @@ static struct irq_handler_info handlers[] = {
 			},
 			{
 				.name		= "usbin_ov",
+				.smb_irq	= usbin_ov_handler,
 			},
 			{
 				.name		= "dcin_uv",
@@ -1473,6 +1516,7 @@ static struct irq_handler_info handlers[] = {
 			},
 			{
 				.name		= "dcin_ov",
+				.smb_irq	= dcin_ov_handler,
 			},
 		},
 	},
@@ -1774,6 +1818,11 @@ static int force_rechg_set(void *data, u64 val)
 	int rc;
 	struct smb135x_chg *chip = data;
 
+	if (!chip->chg_enabled) {
+		pr_debug("Charging Disabled force recharge not allowed\n");
+		return -EINVAL;
+	}
+
 	rc = smb135x_masked_write(chip, CFG_14_REG, EN_CHG_INHIBIT_BIT, 0);
 	if (rc)
 		dev_err(chip->dev,
@@ -1883,8 +1932,14 @@ static int determine_initial_status(struct smb135x_chg *chip)
 	if (reg & IRQ_C_TERM_BIT)
 		chip->chg_done_batt_full = true;
 
-	chip->usb_present = is_usb_present(chip);
-	chip->dc_present = is_dc_present(chip);
+	rc = smb135x_read(chip, IRQ_E_REG, &reg);
+	if (rc < 0) {
+		dev_err(chip->dev, "Couldn't read irq E rc = %d\n", rc);
+		return rc;
+	}
+	chip->usb_present = !(reg & IRQ_E_USB_OV_BIT)
+				&& !(reg & IRQ_E_USB_UV_BIT);
+	chip->dc_present = !(reg & IRQ_E_DC_OV_BIT) && !(reg & IRQ_E_DC_UV_BIT);
 
 	if (chip->usb_present)
 		handle_usb_insertion(chip);
@@ -2510,7 +2565,8 @@ static int smb135x_charger_probe(struct i2c_client *client,
 				"Couldn't create count debug file rc = %d\n",
 				rc);
 
-		ent = debugfs_create_file("force_recharge", S_IFREG | S_IRUGO,
+		ent = debugfs_create_file("force_recharge",
+					  S_IFREG | S_IWUSR | S_IRUGO,
 					  chip->debug_root, chip,
 					  &force_rechg_ops);
 		if (!ent)

@@ -4,9 +4,9 @@ obj-y += io.o dma.o memory.o
 ifndef CONFIG_ARM_ARCH_TIMER
 obj-y += timer.o
 endif
-obj-y += clock.o clock-voter.o clock-dummy.o clock-generic.o
+obj-y += clock-voter.o
 obj-$(CONFIG_USE_OF) += board-dt.o
-obj-$(CONFIG_DEBUG_FS) += nohlt.o clock-debug.o
+obj-$(CONFIG_DEBUG_FS) += nohlt.o
 
 obj-y += acpuclock.o
 obj-$(CONFIG_ARCH_MSM_KRAIT) += clock-krait.o
@@ -31,7 +31,7 @@ target += smd_rpc_sym.c
 $(obj)/smd_rpc_sym.c: $(src)/smd_rpc_sym $(src)/mkrpcsym.pl
 	$(call if_changed,mkrpcsym)
 
-obj-$(CONFIG_MSM_SMD) += smd.o smd_debug.o smd_private.o smd_init_dt.o smd_init_plat.o smsm_debug.o
+obj-$(CONFIG_MSM_SMD) += smd.o smd_debug.o smd_private.o smd_init_dt.o smsm_debug.o
 obj-$(CONFIG_MSM_SMP2P) += smp2p.o smp2p_debug.o smp2p_gpio.o
 obj-$(CONFIG_MSM_SMP2P_TEST) += smp2p_loopback.o smp2p_test.o smp2p_gpio_test.o smp2p_spinlock_test.o
 obj-$(CONFIG_MSM_SCM) += scm.o scm-boot.o
@@ -56,7 +56,7 @@ obj-$(CONFIG_MSM_IPC_ROUTER_SECURITY)+= msm_ipc_router_security.o
 obj-$(CONFIG_MSM_QMI_INTERFACE) += msm_qmi_interface.o
 obj-$(CONFIG_MSM_TEST_QMI_CLIENT) += kernel_test_service_v01.o test_qmi_client.o
 obj-$(CONFIG_DEBUG_FS) += smd_rpc_sym.o
-obj-$(CONFIG_MSM_AUDIO_QDSP6V2) += qdsp6v2/
+obj-y += qdsp6v2/
 obj-$(CONFIG_PM) += pm-boot.o
 obj-$(CONFIG_MSM_IDLE_STATS) += pm-stats.o
 obj-$(CONFIG_MSM_NOPM) += no-pm.o
@@ -70,7 +70,6 @@ obj-$(CONFIG_SURF_FFA_GPIO_KEYPAD) += keypad-surf-ffa.o
 
 obj-$(CONFIG_MSM_BOOT_STATS) += boot_stats.o
 
-obj-$(CONFIG_MSM_RPM_REGULATOR_SMD) += rpm-regulator-smd.o
 obj-$(CONFIG_MSM_SPM_REGULATOR) += spm-regulator.o
 
 ifdef CONFIG_MSM_SUBSYSTEM_RESTART
@@ -173,6 +172,7 @@ obj-$(CONFIG_MSM_SMCMOD) += smcmod.o
 obj-$(CONFIG_ARCH_MSM8974) += msm_mpmctr.o
 obj-$(CONFIG_MSM_CPR_REGULATOR) += cpr-regulator.o
 obj-$(CONFIG_CPU_FREQ_MSM) += cpufreq.o
+obj-$(CONFIG_MSM_DEVFREQ_CPUBW) += devfreq_cpubw.o
 
 
 obj-$(CONFIG_ARCH_RANDOM) += early_random.o

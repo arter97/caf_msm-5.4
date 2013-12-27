@@ -19,7 +19,7 @@
 #include <linux/msm_audio_ion.h>
 
 #include <mach/socinfo.h>
-#include <mach/qdsp6v2/apr_tal.h>
+#include <linux/qdsp6v2/apr_tal.h>
 
 #include "sound/apr_audio-v2.h"
 #include "sound/q6afe-v2.h"
@@ -435,7 +435,7 @@ static void init_session_id(void)
 	common.voice[VOC_PATH_QCHAT_PASSIVE].session_id = QCHAT_SESSION_VSID;
 }
 
-static int voice_apr_register(void)
+static int voice_apr_register(uint32_t session_id)
 {
 	void *modem_mvm, *modem_cvs, *modem_cvp;
 
@@ -457,16 +457,19 @@ static int voice_apr_register(void)
 		}
 
 		/*
-		 * Register with modem for SSR callback. The APR handle
-		 * is not stored since it is used only to receive notifications
-		 * and not for communication
+		 * Register with modem for SSR callback for voice, volte and
+		 * modem based QCHAT calls. The APR handle is not stored since
+		 * it is used only to receive notifications and not for
+		 * communication
 		 */
-		modem_mvm = apr_register("MODEM", "MVM",
-						qdsp_mvm_callback,
-						0xFFFFFFFF, &common);
-		if (modem_mvm == NULL)
-			pr_err("%s: Unable to register MVM for MODEM\n",
+		if (!is_voip_session(session_id)) {
+			modem_mvm = apr_register("MODEM", "MVM",
+						 qdsp_mvm_callback,
+						 0xFFFFFFFF, &common);
+			if (modem_mvm == NULL)
+				pr_err("%s: Unable to register MVM for MODEM\n",
 					__func__);
+		}
 	}
 
 	if (common.apr_q6_cvs == NULL) {
@@ -482,17 +485,19 @@ static int voice_apr_register(void)
 		}
 		rtac_set_voice_handle(RTAC_CVS, common.apr_q6_cvs);
 		/*
-		 * Register with modem for SSR callback. The APR handle
-		 * is not stored since it is used only to receive notifications
-		 * and not for communication
+		 * Register with modem for SSR callback for voice, volte and
+		 * modem based QCHAT calls. The APR handle is not stored since
+		 * it is used only to receive notifications and not for
+		 * communication
 		 */
-		modem_cvs = apr_register("MODEM", "CVS",
-						qdsp_cvs_callback,
-						0xFFFFFFFF, &common);
-		 if (modem_cvs == NULL)
-			pr_err("%s: Unable to register CVS for MODEM\n",
+		if (!is_voip_session(session_id)) {
+			modem_cvs = apr_register("MODEM", "CVS",
+						 qdsp_cvs_callback,
+						 0xFFFFFFFF, &common);
+			 if (modem_cvs == NULL)
+				pr_err("%s: Unable to register CVS for MODEM\n",
 					__func__);
-
+		}
 	}
 
 	if (common.apr_q6_cvp == NULL) {
@@ -508,17 +513,19 @@ static int voice_apr_register(void)
 		}
 		rtac_set_voice_handle(RTAC_CVP, common.apr_q6_cvp);
 		/*
-		 * Register with modem for SSR callback. The APR handle
-		 * is not stored since it is used only to receive notifications
-		 * and not for communication
+		 * Register with modem for SSR callback for voice, volte and
+		 * modem based QCHAT calls. The APR handle is not stored since
+		 * it is used only to receive notifications and not for
+		 * communication
 		 */
-		modem_cvp = apr_register("MODEM", "CVP",
-						qdsp_cvp_callback,
-						0xFFFFFFFF, &common);
-		if (modem_cvp == NULL)
-			pr_err("%s: Unable to register CVP for MODEM\n",
+		if (!is_voip_session(session_id)) {
+			modem_cvp = apr_register("MODEM", "CVP",
+						 qdsp_cvp_callback,
+						 0xFFFFFFFF, &common);
+			if (modem_cvp == NULL)
+				pr_err("%s: Unable to register CVP for MODEM\n",
 					__func__);
-
+		}
 	}
 
 	mutex_unlock(&common.common_lock);
@@ -1364,7 +1371,7 @@ int voc_alloc_cal_shared_memory(void)
 	} else {
 		/* Allocate memory for calibration memory map table. */
 		rc = voice_alloc_cal_mem_map_table();
-		if (rc < 0) {
+		if ((rc < 0) && (rc != -EPROBE_DEFER)) {
 			pr_err("%s: Failed to allocate cal memory, err=%d",
 			       __func__, rc);
 		}
@@ -4905,7 +4912,7 @@ int voc_start_voice_call(uint32_t session_id)
 
 	if ((v->voc_state == VOC_INIT) ||
 		(v->voc_state == VOC_RELEASE)) {
-		ret = voice_apr_register();
+		ret = voice_apr_register(session_id);
 		if (ret < 0) {
 			pr_err("%s:  apr register failed\n", __func__);
 			goto fail;
@@ -5965,7 +5972,7 @@ static int voice_alloc_cal_mem_map_table(void)
 			      (ion_phys_addr_t *)&common.cal_mem_map_table.phys,
 				(size_t *) &len,
 				&(common.cal_mem_map_table.data));
-	if (ret < 0) {
+	if ((ret < 0) && (ret != -EPROBE_DEFER)) {
 		pr_err("%s: audio ION alloc failed, rc = %d\n",
 			__func__, ret);
 		goto done;
