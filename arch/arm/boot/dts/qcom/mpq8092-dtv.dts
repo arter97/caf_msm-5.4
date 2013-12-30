@@ -22,3 +22,27 @@
 			<14 1>,
 			<14 2>;
 };
+
+&blsp1_uart4 {
+	status = "ok";
+};
+
+&blsp2_uart0 {
+	status = "ok";
+};
+
+&blsp2_uart3 {
+	status = "ok";
+};
+
+&i2c_7 {
+	status = "ok";
+};
+
+&i2c_10 {
+	status = "ok";
+};
+
+&i2c_11 {
+	status = "ok";
+};
