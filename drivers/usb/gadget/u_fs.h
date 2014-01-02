@@ -228,6 +228,9 @@ struct ffs_data {
 	unsigned short			eps_count;
 	unsigned short			_pad1;
 
+	int				first_id;
+	int				old_strings_count;
+
 	/* filled by __ffs_data_got_strings() */
 	/* ids in stringtabs are set in functionfs_bind() */
 	const void			*raw_strings;
