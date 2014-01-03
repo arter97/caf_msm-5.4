@@ -1,1 +1,1 @@
-obj-$(CONFIG_MSM_QMI_INTERFACE)    += msm/
+obj-$(CONFIG_MEM_SHARE_QMI_SERVICE)    += msm/
