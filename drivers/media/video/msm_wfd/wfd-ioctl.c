@@ -161,7 +161,7 @@ static int wfd_allocate_ion_buffer(struct ion_client *client,
 	alloc_regions = ION_HEAP(ION_CP_MM_HEAP_ID);
 	alloc_regions |= secure ? 0 :
 				ION_HEAP(ION_IOMMU_HEAP_ID);
-	ion_flags |= secure ? ION_SECURE : 0;
+	ion_flags |= secure ? ION_SECURE : ION_FORCE_CONTIGUOUS;
 	handle = ion_alloc(client,
 			mregion->size, SZ_4K, alloc_regions, ion_flags);
 
