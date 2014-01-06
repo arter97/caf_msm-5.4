@@ -25,18 +25,18 @@
 #include "devices.h"
 #include "board-8064.h"
 
-#if defined(CONFIG_KS8851) || defined(CONFIG_KS8851_MODULE)
-static struct gpiomux_setting gpio_eth_config = {
-	.pull = GPIOMUX_PULL_NONE,
-	.drv = GPIOMUX_DRV_8MA,
-	.func = GPIOMUX_FUNC_GPIO,
-};
-
 /* The SPI configurations apply to GSBI 5*/
 static struct gpiomux_setting gpio_spi_config = {
 	.func = GPIOMUX_FUNC_2,
 	.drv = GPIOMUX_DRV_12MA,
 	.pull = GPIOMUX_PULL_NONE,
+};
+
+#if defined(CONFIG_KS8851) || defined(CONFIG_KS8851_MODULE)
+static struct gpiomux_setting gpio_eth_config = {
+	.pull = GPIOMUX_PULL_NONE,
+	.drv = GPIOMUX_DRV_8MA,
+	.func = GPIOMUX_FUNC_GPIO,
 };
 
 /* The SPI configurations apply to GSBI 5 chip select 2*/
@@ -718,6 +718,43 @@ static struct msm_gpiomux_config apq8064_gsbi_configs[] __initdata = {
 		.settings = {
 			[GPIOMUX_SUSPENDED] = &gpio_i2c_config_sus,
 			[GPIOMUX_ACTIVE] = &gpio_i2c_config,
+		},
+	},
+};
+
+static struct gpiomux_setting gpio_spi_config_sus = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv =  GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+
+static struct msm_gpiomux_config adp_spi_config[] __initdata = {
+	{
+		.gpio      = 51,		/* GSBI5 QUP SPI_DATA_MOSI */
+		.settings = {
+			[GPIOMUX_ACTIVE] = &gpio_spi_config,
+			[GPIOMUX_SUSPENDED] = &gpio_spi_config_sus,
+		},
+	},
+	{
+		.gpio      = 52,		/* GSBI5 QUP SPI_DATA_MISO */
+		.settings = {
+			[GPIOMUX_ACTIVE] = &gpio_spi_config,
+			[GPIOMUX_SUSPENDED] = &gpio_spi_config_sus,
+		},
+	},
+	{
+		.gpio      = 53,		/*GSBI QUP SPI_CS */
+		.settings = {
+			[GPIOMUX_ACTIVE] = &gpio_spi_config,
+			[GPIOMUX_SUSPENDED] = &gpio_spi_config_sus,
+		},
+	},
+	{
+		.gpio      = 54,		/* GSBI5 QUP SPI_CLK */
+		.settings = {
+			[GPIOMUX_ACTIVE] = &gpio_spi_config,
+			[GPIOMUX_SUSPENDED] = &gpio_spi_config_sus,
 		},
 	},
 };
@@ -1619,7 +1656,10 @@ void __init apq8064_init_gpiomux(void)
 	 if (machine_is_mpq8064_hrd() || machine_is_mpq8064_dtv())
 		msm_gpiomux_install(mpq8064_uartdm_configs,
 				ARRAY_SIZE(mpq8064_uartdm_configs));
-	if (machine_is_apq8064_adp_2())
+	if (machine_is_apq8064_adp_2()) {
 		msm_gpiomux_install(adp_i2c_config,
 				ARRAY_SIZE(adp_i2c_config));
+		msm_gpiomux_install(adp_spi_config,
+				ARRAY_SIZE(adp_spi_config));
+	}
 }
