@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2399,6 +2399,11 @@ static struct platform_device *common_not_mpq_devices[] __initdata = {
 	&apq8064_device_qup_i2c_gsbi3,
 };
 
+static struct platform_device *adp_mpq_devices[] __initdata = {
+	&apq8064_device_qup_adp_i2c_gsbi1,
+	&apq8064_device_qup_i2c_gsbi3,
+};
+
 static struct platform_device *early_common_devices[] __initdata = {
 	&apq8064_device_acpuclk,
 	&apq8064_device_dmov,
@@ -2710,6 +2715,10 @@ static struct msm_i2c_platform_data apq8064_i2c_qup_gsbi1_pdata = {
 	.src_clk_rate = 24000000,
 };
 
+static struct msm_i2c_platform_data apq8064_adp_i2c_qup_gsbi1_pdata = {
+	.clk_freq = 100000,
+	.src_clk_rate = 24000000,
+};
 static struct msm_i2c_platform_data apq8064_i2c_qup_gsbi3_pdata = {
 	.clk_freq = 384000,
 	.src_clk_rate = 24000000,
@@ -2731,8 +2740,6 @@ static void __init apq8064_i2c_init(void)
 {
 	void __iomem *gsbi_mem;
 
-	apq8064_device_qup_i2c_gsbi1.dev.platform_data =
-					&apq8064_i2c_qup_gsbi1_pdata;
 	gsbi_mem = ioremap_nocache(MSM_GSBI1_PHYS, 4);
 	writel_relaxed(GSBI_DUAL_MODE_CODE, gsbi_mem);
 	/* Ensure protocol code is written before proceeding */
@@ -2741,7 +2748,12 @@ static void __init apq8064_i2c_init(void)
 	apq8064_i2c_qup_gsbi1_pdata.use_gsbi_shared_mode = 1;
 	apq8064_device_qup_i2c_gsbi3.dev.platform_data =
 					&apq8064_i2c_qup_gsbi3_pdata;
-	apq8064_device_qup_i2c_gsbi1.dev.platform_data =
+	/* ADD GSBI1 I2C pdata for ADP */
+	if (machine_is_apq8064_adp_2())
+		apq8064_device_qup_adp_i2c_gsbi1.dev.platform_data =
+					&apq8064_adp_i2c_qup_gsbi1_pdata;
+	else
+		apq8064_device_qup_i2c_gsbi1.dev.platform_data =
 					&apq8064_i2c_qup_gsbi1_pdata;
 
 	/* Add GSBI4 I2C pdata for non-fusion3 SGLTE2 */
@@ -3307,8 +3319,12 @@ static void __init apq8064_common_init(void)
 	platform_add_devices(common_devices, ARRAY_SIZE(common_devices));
 	if (!(machine_is_mpq8064_cdp() || machine_is_mpq8064_hrd() ||
 			machine_is_mpq8064_dtv())) {
-		platform_add_devices(common_not_mpq_devices,
-			ARRAY_SIZE(common_not_mpq_devices));
+		if (machine_is_apq8064_adp_2())
+			platform_add_devices(adp_mpq_devices,
+				ARRAY_SIZE(adp_mpq_devices));
+		else
+			platform_add_devices(common_not_mpq_devices,
+				ARRAY_SIZE(common_not_mpq_devices));
 
 		/* Add GSBI4 I2C Device for non-fusion3 platform */
 		if (socinfo_get_platform_subtype() !=
@@ -3316,7 +3332,6 @@ static void __init apq8064_common_init(void)
 			platform_device_register(&apq8064_device_qup_i2c_gsbi4);
 		}
 	}
-
 	msm_hsic_pdata.swfi_latency =
 		msm_rpmrs_levels[0].latency_us;
 	if (machine_is_apq8064_mtp()) {
