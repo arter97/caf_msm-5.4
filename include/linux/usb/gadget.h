@@ -546,6 +546,7 @@ struct usb_gadget {
 	struct device			dev;
 	u8				usb_core_id;
 	bool				l1_supported;
+	bool                remote_wakeup;
 };
 
 static inline void set_gadget_data(struct usb_gadget *gadget, void *data)
