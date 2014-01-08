@@ -94,8 +94,6 @@ static void kgsl_destroy_pagetable(struct kref *kref)
 	list_del(&pagetable->list);
 	spin_unlock_irqrestore(&kgsl_driver.ptlock, flags);
 
-	return;
-
 	pagetable_remove_sysfs_objects(pagetable);
 
 	kgsl_cleanup_pt(pagetable);
