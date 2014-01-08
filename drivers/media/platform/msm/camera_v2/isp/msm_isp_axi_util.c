@@ -931,7 +931,7 @@ static void msm_isp_update_rdi_output_count(
 	  struct vfe_device *vfe_dev,
 	  struct msm_vfe_axi_stream_cfg_cmd *stream_cfg_cmd)
 {
-         int i;
+	int i;
 	struct msm_vfe_axi_stream *stream_info;
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
 
@@ -1276,7 +1276,7 @@ static int msm_isp_stop_axi_stream(struct vfe_device *vfe_dev,
 		if (camif_update == DISABLE_CAMIF_IMMEDIATELY) {
 			vfe_dev->hw_info->vfe_ops.axi_ops.halt(vfe_dev);
 		}
-		vfe_dev->hw_info->vfe_ops.core_ops.reset_hw(vfe_dev);
+		vfe_dev->hw_info->vfe_ops.core_ops.reset_hw(vfe_dev , ISP_RST_SOFT);
 		vfe_dev->hw_info->vfe_ops.core_ops.init_hw_reg(vfe_dev);
 	}
 
