@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -17,41 +17,75 @@
  * directional throughputs
  */
 #define IPA_A2_HOLB_TMR_EN 0x1
+#define IPA_A2_HOLB_TMR_DIS 0x0
 #define IPA_A2_HOLB_TMR_DEFAULT_VAL 0x1ff
 
 #define IPA_PKT_FLUSH_TO_US 100
 
-static void ipa_enable_data_path(u32 clnt_hdl)
-{
-	IPADBG("Enabling data path\n");
-
-	/* IPA_HW_MODE_VIRTUAL lacks support for TAG IC & EP suspend */
-	if (ipa_ctx->ipa_hw_mode == IPA_HW_MODE_VIRTUAL)
-		return;
-
-	ipa_write_reg(ipa_ctx->mmio,
-				IPA_ENDP_INIT_CTRL_N_OFST(clnt_hdl), 0);
-}
-
-static int ipa_disable_data_path(u32 clnt_hdl)
+int ipa_enable_data_path(u32 clnt_hdl)
 {
 	struct ipa_ep_context *ep = &ipa_ctx->ep[clnt_hdl];
+	struct ipa_ep_cfg_holb holb_cfg;
+	struct ipa_ep_cfg_ctrl ep_cfg_ctrl;
+	int res = 0;
 
-	IPADBG("Disabling data path\n");
-
+	IPADBG("Enabling data path\n");
 	/* IPA_HW_MODE_VIRTUAL lacks support for TAG IC & EP suspend */
 	if (ipa_ctx->ipa_hw_mode == IPA_HW_MODE_VIRTUAL)
 		return 0;
 
-	ipa_write_reg(ipa_ctx->mmio,
-			IPA_ENDP_INIT_CTRL_N_OFST(clnt_hdl), 1);
+	/* On IPA 2.0, disable HOLB */
+	if (ipa_ctx->ipa_hw_type == IPA_HW_v2_0 &&
+	    IPA_CLIENT_IS_CONS(ep->client)) {
+		memset(&holb_cfg, 0 , sizeof(holb_cfg));
+		holb_cfg.en = IPA_A2_HOLB_TMR_DIS;
+		holb_cfg.tmr_val = 0;
+		res = ipa_cfg_ep_holb(clnt_hdl, &holb_cfg);
+	}
+
+	/* Enable the pipe */
+	memset(&ep_cfg_ctrl, 0 , sizeof(ep_cfg_ctrl));
+	ep_cfg_ctrl.ipa_ep_suspend = false;
+
+	ipa_cfg_ep_ctrl(clnt_hdl, &ep_cfg_ctrl);
+
+	return res;
+}
+
+int ipa_disable_data_path(u32 clnt_hdl)
+{
+	struct ipa_ep_context *ep = &ipa_ctx->ep[clnt_hdl];
+	struct ipa_ep_cfg_holb holb_cfg;
+	struct ipa_ep_cfg_ctrl ep_cfg_ctrl;
+	int res = 0;
+
+	IPADBG("Disabling data path\n");
+	/* IPA_HW_MODE_VIRTUAL lacks support for TAG IC & EP suspend */
+	if (ipa_ctx->ipa_hw_mode == IPA_HW_MODE_VIRTUAL)
+		return 0;
+
+	/* On IPA 2.0, enable HOLB in order to prevent IPA from stalling */
+	if (ipa_ctx->ipa_hw_type == IPA_HW_v2_0 &&
+	    IPA_CLIENT_IS_CONS(ep->client)) {
+		memset(&holb_cfg, 0 , sizeof(holb_cfg));
+		holb_cfg.en = IPA_A2_HOLB_TMR_EN;
+		holb_cfg.tmr_val = 0;
+		res = ipa_cfg_ep_holb(clnt_hdl, &holb_cfg);
+	}
+
+	/* Suspend the pipe */
+	memset(&ep_cfg_ctrl, 0 , sizeof(struct ipa_ep_cfg_ctrl));
+	ep_cfg_ctrl.ipa_ep_suspend = true;
+
+	ipa_cfg_ep_ctrl(clnt_hdl, &ep_cfg_ctrl);
+
 	udelay(IPA_PKT_FLUSH_TO_US);
 	if (IPA_CLIENT_IS_CONS(ep->client) &&
 			ep->cfg.aggr.aggr_en == IPA_ENABLE_AGGR &&
 			ep->cfg.aggr.aggr_time_limit)
 		msleep(ep->cfg.aggr.aggr_time_limit);
 
-	return 0;
+	return res;
 }
 
 static int ipa_connect_configure_sps(const struct ipa_connect_params *in,
@@ -204,12 +238,18 @@ int ipa_connect(const struct ipa_connect_params *in, struct ipa_sps_params *sps,
 
 	memset(&ipa_ctx->ep[ipa_ep_idx], 0, sizeof(struct ipa_ep_context));
 	ipa_inc_client_enable_clks();
-	ipa_enable_data_path(ipa_ep_idx);
 
 	ep->valid = 1;
 	ep->client = in->client;
 	ep->client_notify = in->notify;
 	ep->priv = in->priv;
+
+	result = ipa_enable_data_path(ipa_ep_idx);
+	if (result) {
+		IPAERR("enable data path failed res=%d clnt=%d.\n", result,
+				ipa_ep_idx);
+		goto ipa_cfg_ep_fail;
+	}
 
 	if (ipa_ctx->ipa_hw_type != IPA_HW_v2_0 || ep->priv == NULL ||
 	    (enum ipa_config_this_ep)ep->priv != IPA_DO_NOT_CONFIGURE_THIS_EP) {
