@@ -185,8 +185,10 @@ enum ipa_wlan_event {
 	WLAN_AP_DISCONNECT,
 	WLAN_STA_CONNECT,
 	WLAN_STA_DISCONNECT,
-	IPA_EVENT_MAX
+	IPA_WLAN_EVENT_MAX
 };
+
+#define IPA_EVENT_MAX ((int)IPA_WLAN_EVENT_MAX)
 
 /**
  * enum ipa_rm_resource_name - IPA RM clients identification names
