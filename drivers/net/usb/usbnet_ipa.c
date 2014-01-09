@@ -367,13 +367,13 @@ void usbnet_ipa_cleanup(void)
 	USBNET_IPA_DBG_FUNC_EXIT();
 }
 
-#define RESET_DURATION_USEC 100
+#define RESET_DURATION_USEC 40000
 static int time = RESET_DURATION_USEC;
 static int hub_reset(int gpio)
 {
 	int ret = 0;
 
-	USBNET_IPA_ERR("Setting GPIO to 0");
+	USBNET_IPA_DBG("Setting GPIO to 0 for %d usecs", time);
 	ret = gpio_direction_output(gpio, 0);
 	if (ret) {
 		USBNET_IPA_ERR("Error setting GPIO to 0 (ret=%d)", ret);
@@ -382,7 +382,7 @@ static int hub_reset(int gpio)
 
 	usleep(time);
 
-	USBNET_IPA_ERR("Setting GPIO to 1");
+	USBNET_IPA_DBG("Setting GPIO to 1");
 	ret = gpio_direction_output(gpio, 1);
 	if (ret)
 		USBNET_IPA_ERR("Error setting GPIO to 1 (ret=%d)", ret);
@@ -477,7 +477,7 @@ static void usbnet_ipa_debugfs_init(struct platform_device *pdev) {}
 static void usbnet_ipa_debugfs_exit(struct platform_device *pdev) {}
 #endif
 
-static int hub_on(struct usbnet_ipa_platform_data *pdata)
+static int hub_gpio_request(struct usbnet_ipa_platform_data *pdata)
 {
 	int rc;
 	int gpio_num = pdata->hub_reset_gpio;
@@ -488,9 +488,16 @@ static int hub_on(struct usbnet_ipa_platform_data *pdata)
 			gpio_num, "hub-reset");
 		return rc;
 	}
+	return 0;
+}
 
-	USBNET_IPA_DBG("Setting GPIO %d to 1", gpio_num);
-	rc = gpio_direction_output(gpio_num, 1);
+static int hub_off(struct usbnet_ipa_platform_data *pdata)
+{
+	int rc;
+	int gpio_num = pdata->hub_reset_gpio;
+
+	USBNET_IPA_DBG("Setting GPIO %d to 0", gpio_num);
+	rc = gpio_direction_output(gpio_num, 0);
 	if (rc) {
 		gpio_free(gpio_num);
 		return rc;
@@ -498,7 +505,6 @@ static int hub_on(struct usbnet_ipa_platform_data *pdata)
 
 	return 0;
 }
-
 
 static int usbnet_ipa_platform_probe(struct platform_device *pdev)
 {
@@ -515,7 +521,8 @@ static int usbnet_ipa_platform_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, pdata);
 	ctx.pdata = pdata;
 
-	hub_on(pdata);
+	hub_gpio_request(pdata);
+	hub_reset(pdata->hub_reset_gpio);
 
 	usbnet_ipa_debugfs_init(pdev);
 
@@ -527,9 +534,11 @@ static int usbnet_ipa_platform_remove(struct platform_device *pdev)
 {
 	struct usbnet_ipa_platform_data *pdata = platform_get_drvdata(pdev);
 
+	USBNET_IPA_DBG_FUNC_ENTRY();
 	if (!pdata)
 		return -EINVAL;
 
+	hub_off(pdata);
 	usbnet_ipa_debugfs_exit(pdev);
 	gpio_free(pdata->hub_reset_gpio);
 
