@@ -1631,6 +1631,9 @@ error:
 static int qcedev_check_cipher_params(struct qcedev_cipher_op_req *req,
 						struct qcedev_control *podev)
 {
+	uint32_t total = 0;
+	uint32_t i;
+
 	if (req->use_pmem) {
 		pr_err("%s: Use of PMEM is not supported\n", __func__);
 		goto error;
@@ -1690,6 +1693,34 @@ static int qcedev_check_cipher_params(struct qcedev_cipher_op_req *req,
 		}
 	}
 
+	/* Check for sum of all dst length is equal to data_len  */
+	for (i = 0; (i < QCEDEV_MAX_BUFFERS) && (total < req->data_len); i++) {
+		if (req->vbuf.dst[i].len > ULONG_MAX - total) {
+			pr_err("%s: Integer overflow on total req dst vbuf length\n",
+				__func__);
+			goto error;
+		}
+		total += req->vbuf.dst[i].len;
+	}
+	if (total != req->data_len) {
+		pr_err("%s: Total (i=%d) dst(%d) buf size != data_len (%d)\n",
+			__func__, i, total, req->data_len);
+		goto error;
+	}
+	/* Check for sum of all src length is equal to data_len  */
+	for (i = 0, total = 0; i < req->entries; i++) {
+		if (req->vbuf.src[i].len > ULONG_MAX - total) {
+			pr_err("%s: Integer overflow on total req src vbuf length\n",
+				__func__);
+			goto error;
+		}
+		total += req->vbuf.src[i].len;
+	}
+	if (total != req->data_len) {
+		pr_err("%s: Total src(%d) buf size != data_len (%d)\n",
+			__func__, total, req->data_len);
+		goto error;
+	}
 	return 0;
 error:
 	return -EINVAL;
@@ -1699,6 +1730,9 @@ error:
 static int qcedev_check_sha_params(struct qcedev_sha_op_req *req,
 						struct qcedev_control *podev)
 {
+	uint32_t total = 0;
+	uint32_t i;
+
 	if ((req->alg == QCEDEV_ALG_AES_CMAC) &&
 				(!podev->ce_support.cmac)) {
 		pr_err("%s: CMAC not supported\n", __func__);
@@ -1736,6 +1770,21 @@ static int qcedev_check_sha_params(struct qcedev_sha_op_req *req,
 		}
 	}
 
+	/* Check for sum of all src length is equal to data_len  */
+	for (i = 0, total = 0; i < req->entries; i++) {
+		if (req->data[i].len > ULONG_MAX - total) {
+			pr_err("%s: Integer overflow on total req buf length\n",
+				__func__);
+			goto sha_error;
+		}
+		total += req->data[i].len;
+	}
+
+	if (total != req->data_len) {
+		pr_err("%s: Total src(%d) buf size != data_len (%d)\n",
+			__func__, total, req->data_len);
+		goto sha_error;
+	}
 	return 0;
 sha_error:
 	return -EINVAL;
