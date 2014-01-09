@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -70,6 +70,9 @@ module_param(tsc_iommu_bypass, int, S_IRUGO | S_IWUSR | S_IWGRP);
 /* Rates for TSC serial and parallel clocks */
 #define TSC_SER_CLK_RATE		192000000
 #define TSC_PAR_CLK_RATE		24000000
+
+/* CICAM address space according to CI specification */
+#define CICAM_MAX_ADDRESS		3
 
 /*
  * TSC register offsets
@@ -192,13 +195,15 @@ enum transaction_state {
 };
 
 /**
- * enum pcmcia_state - states for the pcmcia pinctrl states
- */
+* enum pcmcia_state - states for the pcmcia pinctrl states
+* Note: the numbers here corresponds to the numbers of enum tsc_cam_personality
+* in tsc.h file.
+*/
 enum pcmcia_state {
-	DISABLE,
-	PC_CARD,
-	CI_CARD,
-	CI_PLUS
+	PCMCIA_STATE_DISABLE = 0,
+	PCMCIA_STATE_CI_CARD = 1,
+	PCMCIA_STATE_CI_PLUS = 2,
+	PCMCIA_STATE_PC_CARD = 3
 };
 
 /**
@@ -209,6 +214,7 @@ enum pcmcia_state {
  * @domain_num:		TSC IOMMU domain number.
  * @partition_num:	TSC iommu partition number.
  * @ion_client:		TSC IOMMU client.
+ * @iommu_group_name	TSC IOMMU group name.
  */
 struct iommu_info {
 	struct iommu_group *group;
@@ -216,6 +222,7 @@ struct iommu_info {
 	int domain_num;
 	int partition_num;
 	struct ion_client *ion_client;
+	const char *iommu_group_name;
 };
 
 /**
@@ -405,21 +412,6 @@ struct tsc_device {
 	struct dentry *debugfs_entry;
 };
 
-/**
- * struct msm_tsc_platform_data - TSC platform data
- *
- * @iommu_group:	TSC IOMMU group name.
- * @iommu_partition:    TSC IOMMU partition number.
- * @ts0_config:		The TS0 configuration (1=A, 2=B).
- * @ts1_config:		The TS1 configuration (1=A, 2=B).
- */
-struct msm_tsc_platform_data {
-	const char *iommu_group;
-	u32 iommu_partition;
-	u32 ts0_config;
-	u32 ts1_config;
-};
-
 /* Global TSC device class */
 static struct class *tsc_class;
 
@@ -436,7 +428,7 @@ struct debugfs_entry {
 	int offset;
 };
 
-static const struct debugfs_entry tsc_regs[] = {
+static const struct debugfs_entry tsc_regs_32[] = {
 		{"tsc_hw_version", S_IRUGO, TSC_HW_VERSION},
 		{"tsc_mux", TSC_S_RW, TSC_MUX_CFG},
 		{"tsif_external_demods", TSC_S_RW, TSC_IN_IFC_EXT},
@@ -444,22 +436,28 @@ static const struct debugfs_entry tsc_regs[] = {
 		{"tsc_fsm_state", S_IRUGO, TSC_FSM_STATE},
 		{"tsc_fsm_state_mask", TSC_S_RW, TSC_FSM_STATE_MASK},
 		{"tsc_cam_cmd", TSC_S_RW, TSC_CAM_CMD},
+		{"tsc_rd_buff_addr", TSC_S_RW, TSC_RD_BUFF_ADDR},
+		{"tsc_wr_buff_addr", TSC_S_RW, TSC_WR_BUFF_ADDR},
+};
+
+static const struct debugfs_entry tsc_regs_16[] = {
+		{"tsc_false_cd_counter", S_IRUGO, TSC_FALSE_CD},
+		{"tsc_cicam_tsif", TSC_S_RW, TSC_CICAM_TSIF},
+};
+
+static const struct debugfs_entry tsc_regs_8[] = {
 		{"tsc_cam_rd_data", S_IRUGO, TSC_CAM_RD_DATA},
 		{"tsc_irq_stat", S_IRUGO, TSC_STAT},
 		{"tsc_irq_ena", TSC_S_RW, TSC_IRQ_ENA},
 		{"tsc_irq_clr", TSC_S_RW, TSC_IRQ_CLR},
 		{"tsc_ena_hw_poll", TSC_S_RW, TSC_CIP_CFG},
 		{"tsc_card_stat", TSC_S_RW, TSC_CD_STAT},
-		{"tsc_rd_buff_addr", TSC_S_RW, TSC_RD_BUFF_ADDR},
-		{"tsc_wr_buff_addr", TSC_S_RW, TSC_WR_BUFF_ADDR},
-		{"tsc_false_cd_counter", S_IRUGO, TSC_FALSE_CD},
 		{"tsc_false_cd_counter_clr", TSC_S_RW, TSC_FALSE_CD_CLR},
 		{"tsc_last_error_resp", S_IRUGO, TSC_RESP_ERR},
-		{"tsc_cicam_tsif", TSC_S_RW, TSC_CICAM_TSIF},
 };
 
 /* debugfs settings */
-static int debugfs_iomem_x32_set(void *data, u64 val)
+static int debugfs_iomem_set(void *data, u64 val)
 {
 	if (mutex_lock_interruptible(&tsc_device->mutex))
 		return -ERESTARTSYS;
@@ -477,7 +475,7 @@ static int debugfs_iomem_x32_set(void *data, u64 val)
 	return 0;
 }
 
-static int debugfs_iomem_x32_get(void *data, u64 *val)
+static int debugfs_iomem_get(void *data, u64 *val)
 {
 	if (mutex_lock_interruptible(&tsc_device->mutex))
 		return -ERESTARTSYS;
@@ -494,8 +492,12 @@ static int debugfs_iomem_x32_get(void *data, u64 *val)
 	return 0;
 }
 
-DEFINE_SIMPLE_ATTRIBUTE(fops_iomem_x32, debugfs_iomem_x32_get,
-			debugfs_iomem_x32_set, "0x%08llX");
+DEFINE_SIMPLE_ATTRIBUTE(fops_iomem_x32, debugfs_iomem_get,
+			debugfs_iomem_set, "0x%08llX");
+DEFINE_SIMPLE_ATTRIBUTE(fops_iomem_x16, debugfs_iomem_get,
+			debugfs_iomem_set, "0x%04llX");
+DEFINE_SIMPLE_ATTRIBUTE(fops_iomem_x8, debugfs_iomem_get,
+			debugfs_iomem_set, "0x%02llX");
 
 /**
  * tsc_debugfs_init() - TSC device debugfs initialization.
@@ -511,13 +513,29 @@ static void tsc_debugfs_init(void)
 			return;
 	dentry = debugfs_create_dir("regs", tsc_device->debugfs_entry);
 	if (dentry) {
-		for (i = 0; i < ARRAY_SIZE(tsc_regs); i++) {
+		for (i = 0; i < ARRAY_SIZE(tsc_regs_32); i++) {
 			debugfs_create_file(
-					tsc_regs[i].name,
-					tsc_regs[i].mode,
+					tsc_regs_32[i].name,
+					tsc_regs_32[i].mode,
 					dentry,
-					base + tsc_regs[i].offset,
+					base + tsc_regs_32[i].offset,
 					&fops_iomem_x32);
+		}
+		for (i = 0; i < ARRAY_SIZE(tsc_regs_16); i++) {
+			debugfs_create_file(
+					tsc_regs_16[i].name,
+					tsc_regs_16[i].mode,
+					dentry,
+					base + tsc_regs_16[i].offset,
+					&fops_iomem_x16);
+		}
+		for (i = 0; i < ARRAY_SIZE(tsc_regs_8); i++) {
+			debugfs_create_file(
+					tsc_regs_8[i].name,
+					tsc_regs_8[i].mode,
+					dentry,
+					base + tsc_regs_8[i].offset,
+					&fops_iomem_x8);
 		}
 	}
 }
@@ -824,16 +842,20 @@ static int tsc_suspend_ts_pins(enum tsc_source source)
 	struct pinctrl_info *ppinctrl = &tsc_device->pinctrl_info;
 	struct pinctrl_current_state *pcurr_state = &ppinctrl->curr_state;
 
+	if (mutex_lock_interruptible(&tsc_device->mutex))
+		return -ERESTARTSYS;
+
 	if (source == TSC_SOURCE_EXTERNAL0) {
 		if (!ppinctrl->is_ts0) {
 			pr_err("%s: No TS0-in pinctrl definitions were found in the TSC devicetree\n",
 					__func__);
+			mutex_unlock(&tsc_device->mutex);
 			return -EPERM;
 		}
 
 		/* Transition from current pinctrl state to curr + ts0 sleep */
 		switch (pcurr_state->pcmcia_state) {
-		case DISABLE:
+		case PCMCIA_STATE_DISABLE:
 			if (pcurr_state->ts1)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 						ppinctrl->ts1);
@@ -841,7 +863,7 @@ static int tsc_suspend_ts_pins(enum tsc_source source)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 						ppinctrl->disable);
 			break;
-		case PC_CARD:
+		case PCMCIA_STATE_PC_CARD:
 			if (pcurr_state->ts1)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->ts1_pc_card);
@@ -849,7 +871,7 @@ static int tsc_suspend_ts_pins(enum tsc_source source)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->pc_card);
 			break;
-		case CI_CARD:
+		case PCMCIA_STATE_CI_CARD:
 			if (pcurr_state->ts1)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->ts1_ci_card);
@@ -857,7 +879,7 @@ static int tsc_suspend_ts_pins(enum tsc_source source)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->ci_card);
 			break;
-		case CI_PLUS:
+		case PCMCIA_STATE_CI_PLUS:
 			if (pcurr_state->ts1)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->ts1_ci_plus);
@@ -870,12 +892,13 @@ static int tsc_suspend_ts_pins(enum tsc_source source)
 		if (!ppinctrl->is_ts1) {
 			pr_err("%s: No TS1-in pinctrl definitions were found in the TSC devicetree\n",
 					__func__);
+			mutex_unlock(&tsc_device->mutex);
 			return -EPERM;
 		}
 
 		/* Transition from current pinctrl state to curr + ts1 sleep */
 		switch (pcurr_state->pcmcia_state) {
-		case DISABLE:
+		case PCMCIA_STATE_DISABLE:
 			if (pcurr_state->ts0)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->ts0);
@@ -883,7 +906,7 @@ static int tsc_suspend_ts_pins(enum tsc_source source)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->disable);
 			break;
-		case PC_CARD:
+		case PCMCIA_STATE_PC_CARD:
 			if (pcurr_state->ts0)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->ts0_pc_card);
@@ -891,7 +914,7 @@ static int tsc_suspend_ts_pins(enum tsc_source source)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->pc_card);
 			break;
-		case CI_CARD:
+		case PCMCIA_STATE_CI_CARD:
 			if (pcurr_state->ts0)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->ts0_ci_card);
@@ -899,7 +922,7 @@ static int tsc_suspend_ts_pins(enum tsc_source source)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->ci_card);
 			break;
-		case CI_PLUS:
+		case PCMCIA_STATE_CI_PLUS:
 			if (pcurr_state->ts0)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->ts0_ci_plus);
@@ -913,6 +936,7 @@ static int tsc_suspend_ts_pins(enum tsc_source source)
 	if (ret != 0) {
 		pr_err("%s: error disabling TS-in pins. ret value = %d\n",
 			__func__, ret);
+		mutex_unlock(&tsc_device->mutex);
 		return -EINVAL;
 	}
 
@@ -921,6 +945,8 @@ static int tsc_suspend_ts_pins(enum tsc_source source)
 		pcurr_state->ts0 = false;
 	else
 		pcurr_state->ts1 = false;
+
+	mutex_unlock(&tsc_device->mutex);
 
 	return 0;
 }
@@ -941,16 +967,20 @@ static int tsc_activate_ts_pins(enum tsc_source source)
 	struct pinctrl_info *ppinctrl = &tsc_device->pinctrl_info;
 	struct pinctrl_current_state *pcurr_state = &ppinctrl->curr_state;
 
+	if (mutex_lock_interruptible(&tsc_device->mutex))
+		return -ERESTARTSYS;
+
 	if (source == TSC_SOURCE_EXTERNAL0) {
 		if (!ppinctrl->is_ts0) {
 			pr_err("%s: No TS0-in pinctrl definitions were found in the TSC devicetree\n",
 					__func__);
+			mutex_unlock(&tsc_device->mutex);
 			return -EPERM;
 		}
 
 		/* Transition from current pinctrl state to curr + ts0 active */
 		switch (pcurr_state->pcmcia_state) {
-		case DISABLE:
+		case PCMCIA_STATE_DISABLE:
 			if (pcurr_state->ts1)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 						ppinctrl->dual_ts);
@@ -958,7 +988,7 @@ static int tsc_activate_ts_pins(enum tsc_source source)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 						ppinctrl->ts0);
 			break;
-		case PC_CARD:
+		case PCMCIA_STATE_PC_CARD:
 			if (pcurr_state->ts1)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->dual_ts_pc_card);
@@ -966,7 +996,7 @@ static int tsc_activate_ts_pins(enum tsc_source source)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->ts0_pc_card);
 			break;
-		case CI_CARD:
+		case PCMCIA_STATE_CI_CARD:
 			if (pcurr_state->ts1)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->dual_ts_ci_card);
@@ -974,7 +1004,7 @@ static int tsc_activate_ts_pins(enum tsc_source source)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->ts0_ci_card);
 			break;
-		case CI_PLUS:
+		case PCMCIA_STATE_CI_PLUS:
 			if (pcurr_state->ts1)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->dual_ts_ci_plus);
@@ -987,12 +1017,13 @@ static int tsc_activate_ts_pins(enum tsc_source source)
 		if (!ppinctrl->is_ts1) {
 			pr_err("%s: No TS1-in pinctrl definitions were found in the TSC devicetree\n",
 					__func__);
+			mutex_unlock(&tsc_device->mutex);
 			return -EPERM;
 		}
 
 		/* Transition from current pinctrl state to curr + ts1 active */
 		switch (pcurr_state->pcmcia_state) {
-		case DISABLE:
+		case PCMCIA_STATE_DISABLE:
 			if (pcurr_state->ts0)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->dual_ts);
@@ -1000,7 +1031,7 @@ static int tsc_activate_ts_pins(enum tsc_source source)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->ts1);
 			break;
-		case PC_CARD:
+		case PCMCIA_STATE_PC_CARD:
 			if (pcurr_state->ts0)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->dual_ts_pc_card);
@@ -1008,7 +1039,7 @@ static int tsc_activate_ts_pins(enum tsc_source source)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->ts1_pc_card);
 			break;
-		case CI_CARD:
+		case PCMCIA_STATE_CI_CARD:
 			if (pcurr_state->ts0)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->dual_ts_ci_card);
@@ -1016,7 +1047,7 @@ static int tsc_activate_ts_pins(enum tsc_source source)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->ts1_ci_card);
 			break;
-		case CI_PLUS:
+		case PCMCIA_STATE_CI_PLUS:
 			if (pcurr_state->ts0)
 				ret = pinctrl_select_state(ppinctrl->pinctrl,
 					ppinctrl->dual_ts_ci_plus);
@@ -1030,6 +1061,7 @@ static int tsc_activate_ts_pins(enum tsc_source source)
 	if (ret != 0) {
 		pr_err("%s: error activating TS-in pins. ret value = %d\n",
 			__func__, ret);
+		mutex_unlock(&tsc_device->mutex);
 		return -EINVAL;
 	}
 
@@ -1038,6 +1070,8 @@ static int tsc_activate_ts_pins(enum tsc_source source)
 		pcurr_state->ts0 = true;
 	else
 		pcurr_state->ts1 = true;
+
+	mutex_unlock(&tsc_device->mutex);
 
 	return 0;
 }
@@ -1361,6 +1395,13 @@ static int tsc_data_transaction(struct tsc_ci_chdev *tsc_ci, uint io_mem,
 			goto err_copy_arg;
 		}
 		addr_size = arg_byte.address;
+		if (IO_TRANSACTION == io_mem &&
+				addr_size > CICAM_MAX_ADDRESS) {
+			pr_err("%s: wrong address parameter: %d\n", __func__,
+					addr_size);
+			ret = -EFAULT;
+			goto err_copy_arg;
+		}
 		wr_data = arg_byte.data;
 		timeout = arg_byte.timeout;
 	} else {
@@ -1370,6 +1411,11 @@ static int tsc_data_transaction(struct tsc_ci_chdev *tsc_ci, uint io_mem,
 			goto err_copy_arg;
 		}
 		addr_size = arg_buff.buffer_size;
+		if (!addr_size) {
+			pr_err("%s: size parameter is 0\n", __func__);
+			ret =  -EFAULT;
+			goto err_copy_arg;
+		}
 		wr_data = 0;
 		timeout = arg_buff.timeout;
 
@@ -1475,7 +1521,7 @@ static int tsc_data_transaction(struct tsc_ci_chdev *tsc_ci, uint io_mem,
 	 * to the arg data field
 	 */
 	if (buff_mode == SINGLE_BYTE_MODE && read_write == READ_TRANSACTION)
-		return put_user(readl_relaxed(tsc_device->base +
+		ret = put_user(readl_relaxed(tsc_device->base +
 				TSC_CAM_RD_DATA),
 				&((struct tsc_single_byte_mode *)arg)->data);
 
@@ -1495,6 +1541,96 @@ err_copy_arg:
 	tsc_ci->data_busy = false;
 	INIT_COMPLETION(tsc_ci->transaction_complete);
 	complete_all(&tsc_ci->transaction_finish);
+	return ret;
+}
+
+/**
+ * tsc_personality_change() - change the PCMCIA pins state.
+ *
+ * @pcmcia_state:	The new state of the PCMCIA pins.
+ *
+ * Configure the TLMM pins of the PCMCIA according to received state and
+ * the current pinctrl configuration of the other pins. This function assums the
+ * PCMCIA pinctrl definitions were successfully parsed from the devicetree (this
+ * check is done at open device).
+ *
+ * Return 0 on success, error value otherwise.
+ */
+static int tsc_personality_change(enum tsc_cam_personality pcmcia_state)
+{
+	int ret = 0;
+	struct pinctrl_info *ppinctrl = &tsc_device->pinctrl_info;
+	struct pinctrl_current_state *pcurr_state = &ppinctrl->curr_state;
+
+	if (mutex_lock_interruptible(&tsc_device->mutex))
+		return -ERESTARTSYS;
+
+	if (pcmcia_state == (enum tsc_cam_personality)pcurr_state->pcmcia_state)
+		goto exit;
+
+
+	/* Transition from current pinctrl state to curr + new pcmcia state */
+	switch (pcmcia_state) {
+	case TSC_CICAM_PERSONALITY_CI:
+		if (pcurr_state->ts0 && pcurr_state->ts1)
+			ret = pinctrl_select_state(ppinctrl->pinctrl,
+					ppinctrl->dual_ts_ci_card);
+		else if (pcurr_state->ts0 && !pcurr_state->ts1)
+			ret = pinctrl_select_state(ppinctrl->pinctrl,
+					ppinctrl->ts0_ci_card);
+		else if (!pcurr_state->ts0 && pcurr_state->ts1)
+			ret = pinctrl_select_state(ppinctrl->pinctrl,
+					ppinctrl->ts1_ci_card);
+		else
+			ret = pinctrl_select_state(ppinctrl->pinctrl,
+					ppinctrl->ci_card);
+		break;
+	case TSC_CICAM_PERSONALITY_CIPLUS:
+		if (pcurr_state->ts0 && pcurr_state->ts1)
+			ret = pinctrl_select_state(ppinctrl->pinctrl,
+					ppinctrl->dual_ts_ci_plus);
+		else if (pcurr_state->ts0 && !pcurr_state->ts1)
+			ret = pinctrl_select_state(ppinctrl->pinctrl,
+					ppinctrl->ts0_ci_plus);
+		else if (!pcurr_state->ts0 && pcurr_state->ts1)
+			ret = pinctrl_select_state(ppinctrl->pinctrl,
+					ppinctrl->ts1_ci_plus);
+		else
+			ret = pinctrl_select_state(ppinctrl->pinctrl,
+					ppinctrl->ci_plus);
+		break;
+	case TSC_CICAM_PERSONALITY_DISABLE:
+		if (pcurr_state->ts0 && pcurr_state->ts1)
+			ret = pinctrl_select_state(ppinctrl->pinctrl,
+					ppinctrl->dual_ts);
+		else if (pcurr_state->ts0 && !pcurr_state->ts1)
+			ret = pinctrl_select_state(ppinctrl->pinctrl,
+					ppinctrl->ts0);
+		else if (!pcurr_state->ts0 && pcurr_state->ts1)
+			ret = pinctrl_select_state(ppinctrl->pinctrl,
+					ppinctrl->ts1);
+		else
+			ret = pinctrl_select_state(ppinctrl->pinctrl,
+					ppinctrl->disable);
+		break;
+	default:
+		pr_err("%s: Wrong personality parameter\n", __func__);
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	if (ret != 0) {
+		pr_err("%s: error changing PCMCIA pins. ret value = %d\n",
+			__func__, ret);
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	/* Update the current pcmcia state in the internal struct */
+	pcurr_state->pcmcia_state = (enum pcmcia_state)pcmcia_state;
+
+exit:
+	mutex_unlock(&tsc_device->mutex);
 	return ret;
 }
 
@@ -1775,7 +1911,8 @@ static int tsc_device_power_up(void)
 	/* Update the current pinctrl state in the internal struct */
 	tsc_device->pinctrl_info.curr_state.ts0 = false;
 	tsc_device->pinctrl_info.curr_state.ts1 = false;
-	tsc_device->pinctrl_info.curr_state.pcmcia_state = DISABLE;
+	tsc_device->pinctrl_info.curr_state.pcmcia_state =
+			TSC_CICAM_PERSONALITY_DISABLE;
 
 	/* Reset TSC registers to a default known state */
 	tsc_reset_registers();
@@ -2184,8 +2321,10 @@ static long tsc_mux_ioctl(struct file *filp,
 	switch (cmd) {
 	case TSC_CONFIG_ROUTE:
 		if (!arg || copy_from_user(&tsc_route, (void *)arg,
-				sizeof(struct tsc_route)))
-			return -EFAULT;
+				sizeof(struct tsc_route))) {
+			ret = -EFAULT;
+			goto err;
+		}
 		ret = tsc_route_mux(tsc_mux, tsc_route.source, tsc_route.dest);
 		break;
 	case TSC_ENABLE_INPUT:
@@ -2196,8 +2335,10 @@ static long tsc_mux_ioctl(struct file *filp,
 		break;
 	case TSC_SET_TSIF_CONFIG:
 		if (!arg || copy_from_user(&tsif_params, (void *)arg,
-				sizeof(struct tsc_tsif_params)))
-			return -EFAULT;
+				sizeof(struct tsc_tsif_params))) {
+			ret = -EFAULT;
+			goto err;
+		}
 		ret = tsc_config_tsif(tsc_mux, &tsif_params);
 		break;
 	case TSC_CLEAR_RATE_MISMATCH_IRQ:
@@ -2211,6 +2352,7 @@ static long tsc_mux_ioctl(struct file *filp,
 		pr_err("%s: Unknown ioctl %i", __func__, cmd);
 	}
 
+err:
 	mutex_unlock(&tsc_mux->mutex);
 	return ret;
 }
@@ -2248,7 +2390,7 @@ static long tsc_ci_ioctl(struct file *filp,
 		ret = tsc_reset_cam();
 		break;
 	case TSC_CICAM_PERSONALITY_CHANGE:
-		/* TODO: set the pcmcia pins accordingly */
+		ret = tsc_personality_change(arg);
 		break;
 	case TSC_GET_CARD_STATUS:
 		spin_lock_irqsave(&tsc_ci->spinlock, flags);
@@ -2717,7 +2859,6 @@ static void tsc_free_iommu_info(void)
 static int tsc_get_iommu_info(struct platform_device *pdev)
 {
 	int ret = 0;
-	struct msm_tsc_platform_data *pdata = pdev->dev.platform_data;
 
 	/* Create a new ION client used by tsc ci to allocate memory */
 	tsc_device->iommu_info.ion_client = msm_ion_client_create(UINT_MAX,
@@ -2732,7 +2873,8 @@ static int tsc_get_iommu_info(struct platform_device *pdev)
 	}
 
 	/* Find the iommu group by the name obtained from the device tree */
-	tsc_device->iommu_info.group = iommu_group_find(pdata->iommu_group);
+	tsc_device->iommu_info.group =
+		iommu_group_find(tsc_device->iommu_info.iommu_group_name);
 	if (!tsc_device->iommu_info.group) {
 		pr_err("%s: error in iommu_group_find", __func__);
 		ret = -EINVAL;
@@ -2752,9 +2894,6 @@ static int tsc_get_iommu_info(struct platform_device *pdev)
 	tsc_device->iommu_info.domain_num =
 			msm_find_domain_no(tsc_device->iommu_info.domain);
 
-	/* Save the partition number */
-	tsc_device->iommu_info.partition_num = pdata->iommu_partition;
-
 	return ret;
 
 err_domain:
@@ -2768,78 +2907,60 @@ err_client:
 }
 
 /**
- * msm_tsc_dt_to_pdata() - Copy device-tree data to platfrom data structure.
+ * tsc_parse_dt() - Parse device-tree data and save it.
  *
  * @pdev:	A pointer to the TSC platform device.
  *
- * Return pointer to allocated platform data on success, NULL on failure.
+ * Return 0 on success, error value otherwise.
  */
-static struct msm_tsc_platform_data *msm_tsc_dt_to_pdata
-	(struct platform_device *pdev)
+static int tsc_parse_dt(struct platform_device *pdev)
 {
 	struct device_node *node = pdev->dev.of_node;
-	struct msm_tsc_platform_data *pdata;
 	struct device_node *iommu_pnode;
 	int ret;
-
-	/* Note: memory allocated by devm_kzalloc is freed automatically */
-	pdata = devm_kzalloc(&pdev->dev, sizeof(*pdata), GFP_KERNEL);
-	if (!pdata) {
-		dev_err(&pdev->dev, "%s: Unable to allocate platform data\n",
-				__func__);
-		return NULL;
-	}
 
 	/* Check that power regulator property exist  */
 	if (!of_get_property(node, "vdd-supply", NULL)) {
 		dev_err(&pdev->dev, "%s: Could not find vdd-supply property\n",
 				__func__);
-		return NULL;
+		return -EINVAL;
 	}
 
 	/* Reading IOMMU group label by obtaining the group's phandle */
-	iommu_pnode = of_parse_phandle(node, "qti,iommu-group", 0);
+	iommu_pnode = of_parse_phandle(node, "qcom,iommu-group", 0);
 	if (!iommu_pnode) {
 		dev_err(&pdev->dev, "%s: Couldn't find iommu-group property\n",
 				__func__);
-		return NULL;
+		return -EINVAL;
 	}
 	ret = of_property_read_string(iommu_pnode, "label",
-			&pdata->iommu_group);
+			&tsc_device->iommu_info.iommu_group_name);
 	of_node_put(iommu_pnode);
 	if (ret) {
 		dev_err(&pdev->dev, "%s: Couldn't find label property of the IOMMU group, err=%d\n",
 				__func__, ret);
-		return NULL;
+		return -EINVAL;
 	}
 
 	/* Reading IOMMU partition */
-	ret = of_property_read_u32(node, "qti,iommu-partition",
-			&pdata->iommu_partition);
+	ret = of_property_read_u32(node, "qcom,iommu-partition",
+			&tsc_device->iommu_info.partition_num);
 	if (ret) {
 		dev_err(&pdev->dev, "%s: Couldn't find iommu-partition property, err=%d\n",
 				__func__, ret);
-		return NULL;
+		return -EINVAL;
 	}
 
 	/* Reading reset cam gpio */
 	tsc_device->reset_cam_gpio = of_get_named_gpio(node,
-			"qti,tsc-reset-cam-gpio", 0);
+			"qcom,tsc-reset-cam-gpio", 0);
 	if (tsc_device->reset_cam_gpio < 0) {
-		dev_err(&pdev->dev, "%s: Couldn't find qti,tsc-reset-cam-gpio property\n",
+		dev_err(&pdev->dev, "%s: Couldn't find qcom,tsc-reset-cam-gpio property\n",
 				__func__);
-		return NULL;
+		return -EINVAL;
 	}
 
-	/* Reading the a/b configuration - if exist */
-	ret = of_property_read_u32(node, "qti,ts0-config", &pdata->ts0_config);
-	if (ret)
-		pdata->ts0_config = 0;
-	ret = of_property_read_u32(node, "qti,ts1-config", &pdata->ts1_config);
-	if (ret)
-		pdata->ts1_config = 0;
-
-	return pdata;
+	return 0;
 }
 
 /* TSC Mux file operations */
@@ -2865,7 +2986,6 @@ static const struct file_operations tsc_ci_fops = {
 static int msm_tsc_probe(struct platform_device *pdev)
 {
 	int ret;
-	struct msm_tsc_platform_data *pdata = NULL;
 
 	tsc_device = kzalloc(sizeof(struct tsc_device), GFP_KERNEL);
 	if (!tsc_device) {
@@ -2875,16 +2995,16 @@ static int msm_tsc_probe(struct platform_device *pdev)
 
 	/* get information from device tree */
 	if (pdev->dev.of_node) {
-		pdata = msm_tsc_dt_to_pdata(pdev);
-		pdev->dev.platform_data = pdata;
-	} else { /* else - must have platform data */
-		pdata = pdev->dev.platform_data;
-	}
-
-	if (!pdata) {
-		pr_err("%s: Platform data not available", __func__);
+		ret = tsc_parse_dt(pdev);
+		if (ret != 0) {
+			pr_err("%s: devicetree data not available", __func__);
+			ret =  -EINVAL;
+			goto err_dt;
+		}
+	} else { /* else - devicetree is not found */
+		pr_err("%s: devicetree data is missing", __func__);
 		ret =  -EINVAL;
-		goto err_pdata;
+		goto err_dt;
 	}
 
 	/* set up references */
@@ -2979,7 +3099,7 @@ err_map_io:
 	tsc_clocks_put();
 err_clocks_get:
 	tsc_free_iommu_info();
-err_pdata:
+err_dt:
 	kfree(tsc_device);
 
 	return ret;
@@ -3035,7 +3155,7 @@ static int msm_tsc_remove(struct platform_device *pdev)
 
 /*********************** Platform driver information ***********************/
 static struct of_device_id msm_match_table[] = {
-		{.compatible = "qti,msm-tsc"},
+		{.compatible = "qcom,msm-tsc"},
 		{}
 };
 

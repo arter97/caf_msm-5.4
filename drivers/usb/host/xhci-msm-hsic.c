@@ -554,7 +554,9 @@ static int mxhci_hsic_bus_suspend(struct usb_hcd *hcd)
 	/* don't miss connect bus state from peripheral for USB 2.0 root hub */
 	if (usb_hcd_is_primary_hcd(hcd) &&
 			!(readl_relaxed(MSM_HSIC_PORTSC) & PORT_PE)) {
-		dev_err(mxhci->dev, "%s: port is not enabled; skip suspend\n",
+		xhci_dbg_log_event(&dbg_hsic, NULL,
+				"port is not enabled; skip suspend", 0);
+		dev_dbg(mxhci->dev, "%s: port is not enabled; skip suspend\n",
 				__func__);
 		return -EAGAIN;
 	}
@@ -951,7 +953,7 @@ static int mxhci_hsic_probe(struct platform_device *pdev)
 	reg |= CTRLREG_PLL_CTRL_SLEEP | CTRLREG_PLL_CTRL_SUSP;
 	writel_relaxed(reg, MSM_HSIC_CTRL_REG);
 
-	if (of_property_read_bool(node, "qti,disable-hw-clk-gating")) {
+	if (of_property_read_bool(node, "qcom,disable-hw-clk-gating")) {
 		reg = readl_relaxed(MSM_HSIC_GCTL);
 		writel_relaxed((reg | GCTL_DSBLCLKGTNG), MSM_HSIC_GCTL);
 	}

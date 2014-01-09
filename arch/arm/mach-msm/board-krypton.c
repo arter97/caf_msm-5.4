@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,14 +30,14 @@
 #include <mach/rpm-smd.h>
 #include <mach/restart.h>
 #include <mach/socinfo.h>
-#include <soc/msm/smem.h>
+#include <soc/qcom/smem.h>
 #include "board-dt.h"
 #include "clock.h"
 #include "spm.h"
 
 static struct of_dev_auxdata msmkrypton_auxdata_lookup[] __initdata = {
 	OF_DEV_AUXDATA("qcom,sdhci-msm", 0xF98A4900, "msm_sdcc.2", NULL),
-	OF_DEV_AUXDATA("qti,msm_pcie", 0xFC520000, "msm_pcie", NULL),
+	OF_DEV_AUXDATA("qcom,msm_pcie", 0xFC520000, "msm_pcie", NULL),
 	{}
 };
 
@@ -95,11 +95,10 @@ static const char *msmkrypton_dt_match[] __initconst = {
 };
 
 DT_MACHINE_START(MSMKRYPTON_DT, "Qualcomm MSM Krypton (Flattened Device Tree)")
-	.map_io = msmkrypton_map_io,
-	.init_irq = msm_dt_init_irq,
-	.init_machine = msmkrypton_init,
-	.dt_compat = msmkrypton_dt_match,
-	.reserve = msmkrypton_reserve,
-	.init_very_early = msmkrypton_early_memory,
-	.restart = msm_restart,
+	.map_io			= msmkrypton_map_io,
+	.init_machine		= msmkrypton_init,
+	.dt_compat		= msmkrypton_dt_match,
+	.reserve		= msmkrypton_reserve,
+	.init_very_early	= msmkrypton_early_memory,
+	.restart		= msm_restart,
 MACHINE_END

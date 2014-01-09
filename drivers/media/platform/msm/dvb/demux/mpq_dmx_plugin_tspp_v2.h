@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -36,17 +36,17 @@
 
 #define TSPP2_DMX_PIPE_WORK_POOL_SIZE		500
 
-/* Max number of section filters */
-#define TSPP2_DMX_MAX_SECTION_FILTER_NUM	64
-
 /* Polling timer interval in milliseconds  */
 #define TSPP2_DMX_POLL_TIMER_INTERVAL_MSEC	50
+
+#define VPES_HEADER_DATA_SIZE			204
 
 /* Sizes of BAM descriptor */
 #define TSPP2_DMX_SPS_SECTION_DESC_SIZE		188	/* size of TS packet */
 #define TSPP2_DMX_SPS_PCR_DESC_SIZE		195	/* size of PCR packet */
 #define TSPP2_DMX_SPS_INDEXING_DESC_SIZE	28	/* index entry size */
-#define TSPP2_DMX_SPS_VPES_HEADER_DESC_SIZE	204	/* Video PES header */
+#define TSPP2_DMX_MIN_INDEXING_DESC_SIZE	24	/* partial index desc */
+#define TSPP2_DMX_SPS_VPES_HEADER_DESC_SIZE	(1 + 2*VPES_HEADER_DATA_SIZE)
 #define TSPP2_DMX_SPS_VPES_PAYLOAD_DESC_SIZE	2048	/* Video PES payload */
 #define TSPP2_DMX_SPS_NON_VID_PES_DESC_SIZE	256	/* Non-Video PES */
 
@@ -130,6 +130,13 @@
 #define PES_ASM_STATUS_DCI		0x02
 #define PES_ASM_STATUS_SIZE_MISMATCH	0x04
 #define PES_ASM_STATUS_TX_FAILED	0x08
+
+/*
+ * Indexing header pipe should contain no more headers than is possible
+ * to report.
+ */
+#define TSPP2_DMX_INDEX_PIPE_BUFFER_SIZE	\
+	(TSPP2_DMX_SPS_INDEXING_DESC_SIZE * DMX_EVENT_QUEUE_SIZE)
 
 #define INDEX_TABLE_PREFIX_LENGTH	3
 #define INDEX_TABLE_PREFIX_VALUE	0x00000001

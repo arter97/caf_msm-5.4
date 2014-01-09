@@ -32,7 +32,7 @@
 #include <mach/msm_bus_board.h>
 #include <mach/sysmon.h>
 
-#include <soc/msm/smem.h>
+#include <soc/qcom/smem.h>
 
 #include "peripheral-loader.h"
 #include "pil-q6v5.h"
@@ -521,8 +521,8 @@ static int pil_lpass_driver_exit(struct platform_device *pdev)
 }
 
 static struct of_device_id lpass_match_table[] = {
-	{ .compatible = "qti,pil-q6v5-lpass" },
-	{ .compatible = "qti,pil-q6v55-lpass" },
+	{ .compatible = "qcom,pil-q6v5-lpass" },
+	{ .compatible = "qcom,pil-q6v55-lpass" },
 	{}
 };
 

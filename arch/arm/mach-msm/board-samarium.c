@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -28,7 +28,7 @@
 #include <mach/msm_memtypes.h>
 #include <mach/restart.h>
 #include <mach/socinfo.h>
-#include <soc/msm/smem.h>
+#include <soc/qcom/smem.h>
 #include <mach/msm_smd.h>
 #include <mach/rpm-smd.h>
 #include "spm.h"
@@ -46,7 +46,7 @@ static struct of_dev_auxdata msmsamarium_auxdata_lookup[] __initdata = {
 			"msm_sdcc.2", NULL),
 	OF_DEV_AUXDATA("qcom,sdhci-msm", 0xF98A4900,
 			"msm_sdcc.2", NULL),
-	OF_DEV_AUXDATA("qti,hsusb-otg", 0xF9A55000, "msm_otg", NULL),
+	OF_DEV_AUXDATA("qcom,hsusb-otg", 0xF9A55000, "msm_otg", NULL),
 	OF_DEV_AUXDATA("qcom,spi-qup-v2", 0xF9923000, \
 			"spi_qsd.1", NULL),
 	{},
@@ -120,12 +120,11 @@ static const char *msmsamarium_dt_match[] __initconst = {
 };
 
 DT_MACHINE_START(MSMSAMARIUM_DT, "Qualcomm MSM Samarium(Flattened Device Tree)")
-	.map_io = msmsamarium_map_io,
-	.init_irq = msm_dt_init_irq,
-	.init_machine = msmsamarium_init,
-	.dt_compat = msmsamarium_dt_match,
-	.reserve = msmsamarium_reserve,
-	.init_very_early = msmsamarium_init_very_early,
-	.restart = msm_restart,
-	.smp = &msm8962_smp_ops,
+	.map_io			= msmsamarium_map_io,
+	.init_machine		= msmsamarium_init,
+	.dt_compat		= msmsamarium_dt_match,
+	.reserve		= msmsamarium_reserve,
+	.init_very_early	= msmsamarium_init_very_early,
+	.restart		= msm_restart,
+	.smp			= &msm8962_smp_ops,
 MACHINE_END
