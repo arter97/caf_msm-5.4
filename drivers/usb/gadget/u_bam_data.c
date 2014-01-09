@@ -197,6 +197,8 @@ static void bam2bam_data_disconnect_work(struct work_struct *w)
 			teth_bridge_disconnect(d->ipa_params.src_client);
 
 	}
+
+	port->is_connected = false;
 }
 
 static void bam2bam_data_connect_work(struct work_struct *w)
@@ -343,6 +345,7 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 		}
 	}
 
+	port->is_connected = true;
 	pr_debug("%s: Connect workqueue done", __func__);
 }
 
