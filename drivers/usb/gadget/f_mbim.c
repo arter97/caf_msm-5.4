@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -89,6 +89,9 @@ struct f_mbim {
 
 	struct mbim_ep_descs		fs;
 	struct mbim_ep_descs		hs;
+
+	const struct usb_endpoint_descriptor *in_ep_desc_backup;
+	const struct usb_endpoint_descriptor *out_ep_desc_backup;
 
 	u8				ctrl_id, data_id;
 	u8				data_alt_int;
@@ -720,9 +723,7 @@ static int mbim_bam_connect(struct f_mbim *dev)
 
 static int mbim_bam_disconnect(struct f_mbim *dev)
 {
-	pr_info("dev:%p port:%d. Do nothing.\n",
-			dev, dev->port_num);
-
+	pr_info("%s - dev:%p port:%d\n", __func__, dev, dev->port_num);
 	bam_data_disconnect(&dev->bam_port, dev->port_num);
 
 	return 0;
@@ -1323,6 +1324,16 @@ static int mbim_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 				pr_info("Set mbim port out_desc = 0x%p",
 					mbim->bam_port.out->desc);
 
+				if (mbim->xport == USB_GADGET_XPORT_BAM2BAM_IPA
+					&& gadget_is_dwc3(cdev->gadget)) {
+					if (msm_ep_config(mbim->bam_port.in) ||
+					   msm_ep_config(mbim->bam_port.out)) {
+						pr_err("%s: ep_config failed\n",
+							__func__);
+						goto fail;
+					}
+				}
+
 				pr_debug("Activate mbim\n");
 				mbim_bam_connect(mbim);
 
@@ -1369,6 +1380,7 @@ static int mbim_get_alt(struct usb_function *f, unsigned intf)
 static void mbim_disable(struct usb_function *f)
 {
 	struct f_mbim	*mbim = func_to_mbim(f);
+	struct usb_composite_dev *cdev = mbim->cdev;
 
 	pr_info("SET DEVICE OFFLINE");
 	atomic_set(&mbim->online, 0);
@@ -1377,6 +1389,12 @@ static void mbim_disable(struct usb_function *f)
 
 	mbim_clear_queues(mbim);
 	mbim_reset_function_queue(mbim);
+
+	if (mbim->xport == USB_GADGET_XPORT_BAM2BAM_IPA &&
+			gadget_is_dwc3(cdev->gadget)) {
+		msm_ep_unconfig(mbim->bam_port.out);
+		msm_ep_unconfig(mbim->bam_port.in);
+	}
 
 	mbim_bam_disconnect(mbim);
 
@@ -1394,14 +1412,40 @@ static void mbim_disable(struct usb_function *f)
 
 static void mbim_suspend(struct usb_function *f)
 {
+	struct f_mbim	*mbim = func_to_mbim(f);
+
 	pr_info("mbim suspended\n");
-	bam_data_suspend(MBIM_ACTIVE_PORT);
+
+	if (mbim->cdev->gadget->remote_wakeup) {
+		bam_data_suspend(MBIM_ACTIVE_PORT);
+	} else {
+		/*
+		 * When remote wakeup is disabled, IPA BAM is disconnected
+		 * because it cannot send new data until the USB bus is resumed.
+		 * Endpoint descriptors info is saved before it gets reset by
+		 * the BAM disconnect API. This lets us restore this info when
+		 * the USB bus is resumed.
+		 */
+		mbim->in_ep_desc_backup  = mbim->bam_port.in->desc;
+		mbim->out_ep_desc_backup = mbim->bam_port.out->desc;
+		mbim_bam_disconnect(mbim);
+	}
 }
 
 static void mbim_resume(struct usb_function *f)
 {
+	struct f_mbim	*mbim = func_to_mbim(f);
+
 	pr_info("mbim resumed\n");
-	bam_data_resume(MBIM_ACTIVE_PORT);
+
+	if (mbim->cdev->gadget->remote_wakeup) {
+		bam_data_resume(MBIM_ACTIVE_PORT);
+	} else {
+		/* Restore endpoint descriptors info. */
+		mbim->bam_port.in->desc  = mbim->in_ep_desc_backup;
+		mbim->bam_port.out->desc = mbim->out_ep_desc_backup;
+		mbim_bam_connect(mbim);
+	}
 }
 
 /*---------------------- function driver setup/binding ---------------------*/

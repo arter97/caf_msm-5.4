@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -36,7 +36,7 @@
 #include <mach/restart.h>
 #include <mach/rpm-smd.h>
 #include <mach/socinfo.h>
-#include <soc/msm/smem.h>
+#include <soc/qcom/smem.h>
 #include "board-dt.h"
 #include "clock.h"
 #include "spm.h"
@@ -77,10 +77,10 @@ static struct of_dev_auxdata msm_hsic_host_adata[] = {
 };
 
 static struct of_dev_auxdata msm8974_auxdata_lookup[] __initdata = {
-	OF_DEV_AUXDATA("qti,hsusb-otg", 0xF9A55000, "msm_otg", NULL),
-	OF_DEV_AUXDATA("qti,ehci-host", 0xF9A55000, "msm_ehci_host", NULL),
-	OF_DEV_AUXDATA("qti,dwc-usb3-msm", 0xF9200000, "msm_dwc3", NULL),
-	OF_DEV_AUXDATA("qti,usb-bam-msm", 0xF9304000, "usb_bam", NULL),
+	OF_DEV_AUXDATA("qcom,hsusb-otg", 0xF9A55000, "msm_otg", NULL),
+	OF_DEV_AUXDATA("qcom,ehci-host", 0xF9A55000, "msm_ehci_host", NULL),
+	OF_DEV_AUXDATA("qcom,dwc-usb3-msm", 0xF9200000, "msm_dwc3", NULL),
+	OF_DEV_AUXDATA("qcom,usb-bam-msm", 0xF9304000, "usb_bam", NULL),
 	OF_DEV_AUXDATA("qcom,spi-qup-v2", 0xF9924000, \
 			"spi_qsd.1", NULL),
 	OF_DEV_AUXDATA("qcom,msm-sdcc", 0xF9824000, \
@@ -156,12 +156,11 @@ static const char *msm8974_dt_match[] __initconst = {
 };
 
 DT_MACHINE_START(MSM8974_DT, "Qualcomm MSM 8974 (Flattened Device Tree)")
-	.map_io = msm8974_map_io,
-	.init_irq = msm_dt_init_irq,
-	.init_machine = msm8974_init,
-	.dt_compat = msm8974_dt_match,
-	.reserve = msm_8974_reserve,
-	.init_very_early = msm8974_init_very_early,
-	.restart = msm_restart,
-	.smp = &msm8974_smp_ops,
+	.map_io			= msm8974_map_io,
+	.init_machine		= msm8974_init,
+	.dt_compat		= msm8974_dt_match,
+	.reserve		= msm_8974_reserve,
+	.init_very_early	= msm8974_init_very_early,
+	.restart		= msm_restart,
+	.smp			= &msm8974_smp_ops,
 MACHINE_END

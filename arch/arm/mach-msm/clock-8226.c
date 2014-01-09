@@ -3076,31 +3076,31 @@ static struct clk_lookup msm_clocks_8226[] = {
 	CLK_LOOKUP("xo",          cxo_lpm_clk.c, "fc4281d0.qcom,mpm"),
 
 	/* PIL-LPASS */
-	CLK_LOOKUP("xo",          cxo_pil_lpass_clk.c, "fe200000.qti,lpass"),
-	CLK_LOOKUP("core_clk",          q6ss_xo_clk.c, "fe200000.qti,lpass"),
-	CLK_LOOKUP("bus_clk",  gcc_lpass_q6_axi_clk.c, "fe200000.qti,lpass"),
-	CLK_LOOKUP("iface_clk", q6ss_ahb_lfabif_clk.c, "fe200000.qti,lpass"),
-	CLK_LOOKUP("reg_clk",         q6ss_ahbm_clk.c, "fe200000.qti,lpass"),
+	CLK_LOOKUP("xo",          cxo_pil_lpass_clk.c, "fe200000.qcom,lpass"),
+	CLK_LOOKUP("core_clk",          q6ss_xo_clk.c, "fe200000.qcom,lpass"),
+	CLK_LOOKUP("bus_clk",  gcc_lpass_q6_axi_clk.c, "fe200000.qcom,lpass"),
+	CLK_LOOKUP("iface_clk", q6ss_ahb_lfabif_clk.c, "fe200000.qcom,lpass"),
+	CLK_LOOKUP("reg_clk",         q6ss_ahbm_clk.c, "fe200000.qcom,lpass"),
 
 	/* PIL-MODEM */
-	CLK_LOOKUP("xo",              cxo_pil_mss_clk.c, "fc880000.qti,mss"),
-	CLK_LOOKUP("bus_clk", gcc_mss_q6_bimc_axi_clk.c, "fc880000.qti,mss"),
-	CLK_LOOKUP("iface_clk",   gcc_mss_cfg_ahb_clk.c, "fc880000.qti,mss"),
-	CLK_LOOKUP("mem_clk",    gcc_boot_rom_ahb_clk.c, "fc880000.qti,mss"),
+	CLK_LOOKUP("xo",              cxo_pil_mss_clk.c, "fc880000.qcom,mss"),
+	CLK_LOOKUP("bus_clk", gcc_mss_q6_bimc_axi_clk.c, "fc880000.qcom,mss"),
+	CLK_LOOKUP("iface_clk",   gcc_mss_cfg_ahb_clk.c, "fc880000.qcom,mss"),
+	CLK_LOOKUP("mem_clk",    gcc_boot_rom_ahb_clk.c, "fc880000.qcom,mss"),
 
 	/* NFC */
 	CLK_LOOKUP("ref_clk",            cxo_d1_pin.c, "2-000e"),
 	CLK_LOOKUP("bb_clk2",            cxo_d1.c, ""),
 
 	/* PIL-PRONTO */
-	CLK_LOOKUP("xo", cxo_pil_pronto_clk.c, "fb21b000.qti,pronto"),
+	CLK_LOOKUP("xo", cxo_pil_pronto_clk.c, "fb21b000.qcom,pronto"),
 
 	/* PIL-VENUS */
-	CLK_LOOKUP("src_clk",     vcodec0_clk_src.c, "fdce0000.qti,venus"),
-	CLK_LOOKUP("core_clk", venus0_vcodec0_clk.c, "fdce0000.qti,venus"),
-	CLK_LOOKUP("iface_clk",    venus0_ahb_clk.c, "fdce0000.qti,venus"),
-	CLK_LOOKUP("bus_clk",      venus0_axi_clk.c, "fdce0000.qti,venus"),
-	CLK_LOOKUP("mem_clk",      venus0_ahb_clk.c, "fdce0000.qti,venus"),
+	CLK_LOOKUP("src_clk",     vcodec0_clk_src.c, "fdce0000.qcom,venus"),
+	CLK_LOOKUP("core_clk", venus0_vcodec0_clk.c, "fdce0000.qcom,venus"),
+	CLK_LOOKUP("iface_clk",    venus0_ahb_clk.c, "fdce0000.qcom,venus"),
+	CLK_LOOKUP("bus_clk",      venus0_axi_clk.c, "fdce0000.qcom,venus"),
+	CLK_LOOKUP("mem_clk",      venus0_ahb_clk.c, "fdce0000.qcom,venus"),
 
 	/* ACPUCLOCK */
 	CLK_LOOKUP("xo",     xo_a_clk.c, "f9011050.qcom,acpuclk"),
@@ -3335,8 +3335,8 @@ static struct clk_lookup msm_clocks_8226[] = {
 	CLK_LOOKUP("iface_clk", mdss_ahb_clk.c, "fd900000.qcom,mdss_mdp"),
 	CLK_LOOKUP("bus_clk", mdss_axi_clk.c, "fd900000.qcom,mdss_mdp"),
 
-	CLK_LOOKUP("iface_clk", mdss_ahb_clk.c, "fd928000.qti,iommu"),
-	CLK_LOOKUP("core_clk", mdss_axi_clk.c, "fd928000.qti,iommu"),
+	CLK_LOOKUP("iface_clk", mdss_ahb_clk.c, "fd928000.qcom,iommu"),
+	CLK_LOOKUP("core_clk", mdss_axi_clk.c, "fd928000.qcom,iommu"),
 
 	CLK_LOOKUP("core_clk", venus0_vcodec0_clk.c, "fd8c1024.qcom,gdsc"),
 	CLK_LOOKUP("core_clk", mdss_mdp_clk.c, "fd8c2304.qcom,gdsc"),
@@ -3455,9 +3455,9 @@ static struct clk_lookup msm_clocks_8226[] = {
 	CLK_LOOKUP("bus_clk", camss_vfe_vfe_axi_clk.c,	 "fda10000.qcom,vfe"),
 
 	CLK_LOOKUP("iface_clk", camss_vfe_vfe_ahb_clk.c,
-	"fda44000.qti,iommu"),
-	CLK_LOOKUP("core_clk", camss_vfe_vfe_axi_clk.c, "fda44000.qti,iommu"),
-	CLK_LOOKUP("alt_core_clk", camss_top_ahb_clk.c, "fda44000.qti,iommu"),
+	"fda44000.qcom,iommu"),
+	CLK_LOOKUP("core_clk", camss_vfe_vfe_axi_clk.c, "fda44000.qcom,iommu"),
+	CLK_LOOKUP("alt_core_clk", camss_top_ahb_clk.c, "fda44000.qcom,iommu"),
 
 	/* Jpeg Clocks */
 	CLK_LOOKUP("core_clk", camss_jpeg_jpeg0_clk.c, "fda1c000.qcom,jpeg"),
@@ -3468,11 +3468,11 @@ static struct clk_lookup msm_clocks_8226[] = {
 	CLK_LOOKUP("camss_top_ahb_clk", camss_top_ahb_clk.c,
 						"fda1c000.qcom,jpeg"),
 
-	CLK_LOOKUP("alt_core_clk", camss_top_ahb_clk.c, "fda64000.qti,iommu"),
+	CLK_LOOKUP("alt_core_clk", camss_top_ahb_clk.c, "fda64000.qcom,iommu"),
 	CLK_LOOKUP("iface_clk", camss_jpeg_jpeg_ahb_clk.c,
-						"fda64000.qti,iommu"),
+						"fda64000.qcom,iommu"),
 	CLK_LOOKUP("core_clk", camss_jpeg_jpeg_axi_clk.c,
-						"fda64000.qti,iommu"),
+						"fda64000.qcom,iommu"),
 
 	CLK_LOOKUP("micro_iface_clk", camss_micro_ahb_clk.c,
 		"fda04000.qcom,cpp"),
@@ -3493,9 +3493,9 @@ static struct clk_lookup msm_clocks_8226[] = {
 	CLK_LOOKUP("mem_iface_clk", oxilicx_axi_clk.c,
 		"fdb00000.qcom,kgsl-3d0"),
 
-	CLK_LOOKUP("alt_core_clk", oxili_gfx3d_clk.c, "fdb10000.qti,iommu"),
-	CLK_LOOKUP("iface_clk", oxilicx_ahb_clk.c, "fdb10000.qti,iommu"),
-	CLK_LOOKUP("core_clk", oxilicx_axi_clk.c, "fdb10000.qti,iommu"),
+	CLK_LOOKUP("alt_core_clk", oxili_gfx3d_clk.c, "fdb10000.qcom,iommu"),
+	CLK_LOOKUP("iface_clk", oxilicx_ahb_clk.c, "fdb10000.qcom,iommu"),
+	CLK_LOOKUP("core_clk", oxilicx_axi_clk.c, "fdb10000.qcom,iommu"),
 
 	CLK_LOOKUP("core_clk", ocmemgx_core_clk.c, "fdd00000.qcom,ocmem"),
 
@@ -3505,9 +3505,9 @@ static struct clk_lookup msm_clocks_8226[] = {
 	CLK_LOOKUP("bus_clk",  venus0_axi_clk.c, "fdc00000.qcom,vidc"),
 
 	CLK_LOOKUP("alt_core_clk", venus0_vcodec0_clk.c,
-	"fdc84000.qti,iommu"),
-	CLK_LOOKUP("iface_clk", venus0_ahb_clk.c, "fdc84000.qti,iommu"),
-	CLK_LOOKUP("core_clk", venus0_axi_clk.c, "fdc84000.qti,iommu"),
+	"fdc84000.qcom,iommu"),
+	CLK_LOOKUP("iface_clk", venus0_ahb_clk.c, "fdc84000.qcom,iommu"),
+	CLK_LOOKUP("core_clk", venus0_axi_clk.c, "fdc84000.qcom,iommu"),
 	CLK_LOOKUP("iface_clk", gcc_prng_ahb_clk.c, "f9bff000.qcom,msm-rng"),
 	CLK_LOOKUP("cam_gp0_clk", camss_gp0_clk.c, ""),
 	CLK_LOOKUP("cam_gp1_clk", camss_gp1_clk.c, ""),

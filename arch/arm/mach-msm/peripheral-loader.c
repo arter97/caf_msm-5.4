@@ -40,6 +40,7 @@
 
 #include <mach/msm_iomap.h>
 #include <mach/ramdump.h>
+#include <mach/subsystem_restart.h>
 
 #include "peripheral-loader.h"
 
@@ -195,6 +196,7 @@ static void __pil_proxy_unvote(struct pil_priv *priv)
 	struct pil_desc *desc = priv->desc;
 
 	desc->ops->proxy_unvote(desc);
+	notify_proxy_unvote(desc->dev);
 	wake_unlock(&priv->wlock);
 	module_put(desc->owner);
 
@@ -221,6 +223,7 @@ static int pil_proxy_vote(struct pil_desc *desc)
 
 	if (desc->proxy_unvote_irq)
 		enable_irq(desc->proxy_unvote_irq);
+	notify_proxy_vote(desc->dev);
 
 	return ret;
 }
@@ -602,10 +605,10 @@ static void pil_parse_devicetree(struct pil_desc *desc)
 
 	if (desc->ops->proxy_unvote &&
 		of_find_property(desc->dev->of_node,
-				"qti,gpio-proxy-unvote",
+				"qcom,gpio-proxy-unvote",
 				NULL)) {
 		clk_ready = of_get_named_gpio(desc->dev->of_node,
-				"qti,gpio-proxy-unvote", 0);
+				"qcom,gpio-proxy-unvote", 0);
 
 		if (clk_ready < 0) {
 			dev_err(desc->dev,
@@ -883,13 +886,13 @@ static int __init msm_pil_init(void)
 {
 	struct device_node *np;
 
-	np = of_find_compatible_node(NULL, NULL, "qti,msm-imem-pil");
+	np = of_find_compatible_node(NULL, NULL, "qcom,msm-imem-pil");
 	if (np) {
 		pil_info_base = of_iomap(np, 0);
 		if (!pil_info_base)
 			pr_warn("pil: could not map imem region\n");
 	} else {
-		pr_warn("pil: failed to find qti,msm-imem-pil node\n");
+		pr_warn("pil: failed to find qcom,msm-imem-pil node\n");
 	}
 
 	ion = msm_ion_client_create(UINT_MAX, "pil");

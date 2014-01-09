@@ -190,6 +190,7 @@ static void event_handler(uint32_t opcode,
 		} else {
 			pr_debug("%s: reclaim flushed buf in_count %x\n",
 				__func__, atomic_read(&prtd->in_count));
+			prtd->pcm_irq_pos += prtd->pcm_count;
 			atomic_inc(&prtd->in_count);
 			if (atomic_read(&prtd->in_count) == prtd->periods) {
 				pr_info("%s: reclaimed all bufs\n", __func__);
@@ -922,9 +923,9 @@ static int msm_pcm_probe(struct platform_device *pdev)
 	const char *latency_level;
 
 	rc = of_property_read_u32(pdev->dev.of_node,
-				"qti,msm-pcm-dsp-id", &id);
+				"qcom,msm-pcm-dsp-id", &id);
 	if (rc) {
-		dev_err(&pdev->dev, "%s: qti,msm-pcm-dsp-id missing in DT node\n",
+		dev_err(&pdev->dev, "%s: qcom,msm-pcm-dsp-id missing in DT node\n",
 					__func__);
 		return rc;
 	}
@@ -936,11 +937,11 @@ static int msm_pcm_probe(struct platform_device *pdev)
 	}
 
 	if (of_property_read_bool(pdev->dev.of_node,
-				"qti,msm-pcm-low-latency")) {
+				"qcom,msm-pcm-low-latency")) {
 
 		pdata->perf_mode = LOW_LATENCY_PCM_MODE;
 		rc = of_property_read_string(pdev->dev.of_node,
-			"qti,latency-level", &latency_level);
+			"qcom,latency-level", &latency_level);
 		if (!rc) {
 			if (!strcmp(latency_level, "ultra"))
 				pdata->perf_mode = ULTRA_LOW_LATENCY_PCM_MODE;
@@ -969,7 +970,7 @@ static int msm_pcm_remove(struct platform_device *pdev)
 	return 0;
 }
 static const struct of_device_id msm_pcm_dt_match[] = {
-	{.compatible = "qti,msm-pcm-dsp"},
+	{.compatible = "qcom,msm-pcm-dsp"},
 	{}
 };
 MODULE_DEVICE_TABLE(of, msm_pcm_dt_match);

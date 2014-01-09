@@ -32,7 +32,7 @@
 #define FAST 2
 
 #define UFS_MSM_LIMIT_NUM_LANES_RX	2
-#define UFS_MSM_LIMIT_NUM_LANES_TX	1
+#define UFS_MSM_LIMIT_NUM_LANES_TX	2
 #define UFS_MSM_LIMIT_HSGEAR_RX	UFS_HS_G2
 #define UFS_MSM_LIMIT_HSGEAR_TX	UFS_HS_G2
 #define UFS_MSM_LIMIT_PWMGEAR_RX	UFS_PWM_G4
@@ -1116,14 +1116,8 @@ static int msm_ufs_phy_power_on(struct msm_ufs_phy *phy)
 	if (err)
 		goto out_disable_pll;
 
-	err = msm_ufs_enable_phy_iface_clk(phy);
-	if (err)
-		goto out_disable_ref;
-
 	goto out;
 
-out_disable_ref:
-	msm_ufs_disable_phy_ref_clk(phy);
 out_disable_pll:
 	msm_ufs_phy_disable_vreg(phy, &phy->vdda_pll);
 out_disable_phy:
@@ -1137,7 +1131,6 @@ static int msm_ufs_phy_power_off(struct msm_ufs_phy *phy)
 	writel_relaxed(0x0, phy->mmio + UFS_PHY_POWER_DOWN_CONTROL);
 	mb();
 
-	msm_ufs_disable_phy_iface_clk(phy);
 	msm_ufs_disable_phy_ref_clk(phy);
 
 	msm_ufs_phy_disable_vreg(phy, &phy->vdda_pll);
@@ -1212,6 +1205,108 @@ static int msm_ufs_hce_enable_notify(struct ufs_hba *hba, bool status)
 	return err;
 }
 
+/**
+ * Returns non-zero for success (which rate of core_clk) and 0
+ * in case of a failure
+ */
+static unsigned long
+msm_ufs_cfg_timers(struct ufs_hba *hba, u32 gear, u32 hs, u32 rate)
+{
+	struct ufs_clk_info *clki;
+	u32 core_clk_period_in_ns;
+	u32 tx_clk_cycles_per_us = 0;
+	unsigned long core_clk_rate = 0;
+
+	static u32 pwm_fr_table[][2] = {
+		{UFS_PWM_G1, 0x1},
+		{UFS_PWM_G2, 0x1},
+		{UFS_PWM_G3, 0x1},
+		{UFS_PWM_G4, 0x1},
+	};
+
+	static u32 hs_fr_table_rA[][2] = {
+		{UFS_HS_G1, 0x1F},
+		{UFS_HS_G2, 0x3e},
+	};
+
+	static u32 hs_fr_table_rB[][2] = {
+		{UFS_HS_G1, 0x24},
+		{UFS_HS_G2, 0x49},
+	};
+
+	if (gear == 0) {
+		dev_err(hba->dev, "%s: invalid gear = %d\n", __func__, gear);
+		goto out_error;
+	}
+
+	list_for_each_entry(clki, &hba->clk_list_head, list) {
+		if (!strcmp(clki->name, "core_clk"))
+			core_clk_rate = clk_get_rate(clki->clk);
+	}
+
+	/* If frequency is smaller than 1MHz, set to 1MHz */
+	if (core_clk_rate < DEFAULT_CLK_RATE_HZ)
+		core_clk_rate = DEFAULT_CLK_RATE_HZ;
+
+	core_clk_period_in_ns = NSEC_PER_SEC / core_clk_rate;
+	core_clk_period_in_ns <<= OFFSET_CLK_NS_REG;
+	core_clk_period_in_ns &= MASK_CLK_NS_REG;
+
+	switch (hs) {
+	case FASTAUTO_MODE:
+	case FAST_MODE:
+		if (rate == PA_HS_MODE_A) {
+			if (gear >= ARRAY_SIZE(hs_fr_table_rA)) {
+				dev_err(hba->dev,
+					"%s: index %d exceeds table size %d\n",
+					__func__, gear,
+					ARRAY_SIZE(hs_fr_table_rA));
+				goto out_error;
+			}
+			tx_clk_cycles_per_us = hs_fr_table_rA[gear-1][1];
+		} else if (rate == PA_HS_MODE_B) {
+			if (gear >= ARRAY_SIZE(hs_fr_table_rB)) {
+				dev_err(hba->dev,
+					"%s: index %d exceeds table size %d\n",
+					__func__, gear,
+					ARRAY_SIZE(hs_fr_table_rB));
+				goto out_error;
+			}
+			tx_clk_cycles_per_us = hs_fr_table_rB[gear-1][1];
+		} else {
+			dev_err(hba->dev, "%s: invalid rate = %d\n",
+				__func__, rate);
+			goto out_error;
+		}
+		break;
+	case SLOWAUTO_MODE:
+	case SLOW_MODE:
+		if (gear >= ARRAY_SIZE(pwm_fr_table)) {
+			dev_err(hba->dev,
+					"%s: index %d exceeds table size %d\n",
+					__func__, gear,
+					ARRAY_SIZE(pwm_fr_table));
+			goto out_error;
+		}
+		tx_clk_cycles_per_us = pwm_fr_table[gear-1][1];
+		break;
+	case UNCHANGED:
+	default:
+		dev_err(hba->dev, "%s: invalid mode = %d\n", __func__, hs);
+		goto out_error;
+	}
+
+	/* this register 2 fields shall be written at once */
+	ufshcd_writel(hba, core_clk_period_in_ns | tx_clk_cycles_per_us,
+						REG_UFS_TX_SYMBOL_CLK_NS_US);
+	goto out;
+
+out_error:
+	core_clk_rate = 0;
+out:
+	return core_clk_rate;
+}
+
 static int msm_ufs_link_startup_notify(struct ufs_hba *hba, bool status)
 {
 	unsigned long core_clk_rate = 0;
@@ -1219,7 +1314,13 @@ static int msm_ufs_link_startup_notify(struct ufs_hba *hba, bool status)
 
 	switch (status) {
 	case PRE_CHANGE:
-		core_clk_rate = msm_ufs_cfg_timers(hba, 0, 0);
+		core_clk_rate = msm_ufs_cfg_timers(hba, UFS_PWM_G1,
+						   SLOWAUTO_MODE, 0);
+		if (!core_clk_rate) {
+			dev_err(hba->dev, "%s: msm_ufs_cfg_timers() failed\n",
+				__func__);
+			return -EINVAL;
+		}
 		core_clk_cycles_per_100ms =
 			(core_clk_rate / MSEC_PER_SEC) * 100;
 		ufshcd_writel(hba, core_clk_cycles_per_100ms,
@@ -1254,9 +1355,6 @@ static int msm_ufs_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 		msm_ufs_phy_power_off(phy);
 		goto out;
 	}
-
-	/* M-PHY RMMI interface clocks can be turned off */
-	msm_ufs_disable_phy_iface_clk(phy);
 
 	/*
 	 * If UniPro link is not active, PHY ref_clk, main PHY analog power
@@ -1452,65 +1550,6 @@ static int get_pwr_dev_param(struct ufs_msm_dev_params *msm_param,
 	return 0;
 }
 
-static unsigned long
-msm_ufs_cfg_timers(struct ufs_hba *hba, u32 gear, u32 hs)
-{
-	struct ufs_clk_info *clki;
-	u32 core_clk_period_in_ns;
-	u32 tx_clk_cycles_per_us = 0;
-	unsigned long core_clk_rate = 0;
-
-	static u32 pwm_fr_table[][2] = {
-		{UFS_PWM_G1, 0x1},
-		{UFS_PWM_G2, 0x1},
-		{UFS_PWM_G3, 0x1},
-		{UFS_PWM_G4, 0x1},
-	};
-
-	static u32 hs_fr_table_rA[][2] = {
-		{UFS_HS_G1, 0x1F},
-		{UFS_HS_G2, 0x3e},
-	};
-
-	if (gear == 0 && hs == 0) {
-		gear = UFS_PWM_G1;
-		hs = SLOWAUTO_MODE;
-	}
-
-	list_for_each_entry(clki, &hba->clk_list_head, list) {
-		if (!strcmp(clki->name, "core_clk"))
-			core_clk_rate = clk_get_rate(clki->clk);
-	}
-
-	/* If frequency is smaller than 1MHz, set to 1MHz */
-	if (core_clk_rate < DEFAULT_CLK_RATE_HZ)
-		core_clk_rate = DEFAULT_CLK_RATE_HZ;
-
-	core_clk_period_in_ns = NSEC_PER_SEC / core_clk_rate;
-	core_clk_period_in_ns <<= OFFSET_CLK_NS_REG;
-	core_clk_period_in_ns &= MASK_CLK_NS_REG;
-
-	switch (hs) {
-	case FASTAUTO_MODE:
-	case FAST_MODE:
-		tx_clk_cycles_per_us = hs_fr_table_rA[gear-1][1];
-		break;
-	case SLOWAUTO_MODE:
-	case SLOW_MODE:
-		tx_clk_cycles_per_us = pwm_fr_table[gear-1][1];
-		break;
-	case UNCHANGED:
-	default:
-		pr_err("%s: power parameter not valid\n", __func__);
-		return core_clk_rate;
-	}
-
-	/* this register 2 fields shall be written at once */
-	ufshcd_writel(hba, core_clk_period_in_ns | tx_clk_cycles_per_us,
-						REG_UFS_TX_SYMBOL_CLK_NS_US);
-	return core_clk_rate;
-}
-
 static int msm_ufs_pwr_change_notify(struct ufs_hba *hba,
 				     bool status,
 				     struct ufs_pa_layer_attr *dev_max_params,
@@ -1530,8 +1569,12 @@ static int msm_ufs_pwr_change_notify(struct ufs_hba *hba,
 
 	switch (status) {
 	case PRE_CHANGE:
+		if (hba->quirks & UFSHCD_QUIRK_BROKEN_2_TX_LANES)
+			ufs_msm_cap.tx_lanes = 1;
+		else
+			ufs_msm_cap.tx_lanes = UFS_MSM_LIMIT_NUM_LANES_TX;
+
 		ufs_msm_cap.rx_lanes = UFS_MSM_LIMIT_NUM_LANES_RX;
-		ufs_msm_cap.tx_lanes = UFS_MSM_LIMIT_NUM_LANES_TX;
 		ufs_msm_cap.hs_rx_gear = UFS_MSM_LIMIT_HSGEAR_RX;
 		ufs_msm_cap.hs_tx_gear = UFS_MSM_LIMIT_HSGEAR_TX;
 		ufs_msm_cap.pwm_rx_gear = UFS_MSM_LIMIT_PWMGEAR_RX;
@@ -1554,8 +1597,18 @@ static int msm_ufs_pwr_change_notify(struct ufs_hba *hba,
 
 		break;
 	case POST_CHANGE:
-		msm_ufs_cfg_timers(hba, dev_req_params->gear_rx,
-							dev_req_params->pwr_rx);
+		if (!msm_ufs_cfg_timers(hba, dev_req_params->gear_rx,
+					dev_req_params->pwr_rx,
+					dev_req_params->hs_rate)) {
+			dev_err(hba->dev, "%s: msm_ufs_cfg_timers() failed\n",
+				__func__);
+			/*
+			 * we return error code at the end of the routine,
+			 * but continue to configure UFS_PHY_TX_LANE_ENABLE
+			 * and bus voting as usual
+			 */
+			ret = -EINVAL;
+		}
 
 		val = ~(MAX_U32 << dev_req_params->lane_tx);
 		writel_relaxed(val, phy->mmio + UFS_PHY_TX_LANE_ENABLE);
@@ -1610,6 +1663,7 @@ static void msm_ufs_advertise_quirks(struct ufs_hba *hba)
 			      | UFSHCD_QUIRK_BROKEN_VER_REG_1_1
 			      | UFSHCD_QUIRK_BROKEN_CAP_64_BIT_0
 			      | UFSHCD_QUIRK_DELAY_BEFORE_DME_CMDS
+			      | UFSHCD_QUIRK_BROKEN_2_TX_LANES
 			      | UFSHCD_QUIRK_BROKEN_SUSPEND);
 }
 
@@ -1724,11 +1778,26 @@ static int msm_ufs_setup_clocks(struct ufs_hba *hba, bool on)
 	int err;
 	int vote;
 
+	/*
+	 * In case msm_ufs_init() is not yet done, simply ignore.
+	 * This msm_ufs_setup_clocks() shall be called from
+	 * msm_ufs_init() after init is done.
+	 */
+	if (!host)
+		return 0;
+
 	if (on) {
+		err = msm_ufs_enable_phy_iface_clk(host->phy);
+		if (err)
+			goto out;
+
 		vote = host->bus_vote.saved_vote;
 		if (vote == host->bus_vote.min_bw_vote)
 			msm_ufs_update_bus_bw_vote(host);
 	} else {
+		/* M-PHY RMMI interface clocks can be turned off */
+		msm_ufs_disable_phy_iface_clk(host->phy);
+
 		vote = host->bus_vote.min_bw_vote;
 	}
 
@@ -1737,6 +1806,7 @@ static int msm_ufs_setup_clocks(struct ufs_hba *hba, bool on)
 		dev_err(hba->dev, "%s: set bus vote failed %d\n",
 				__func__, err);
 
+out:
 	return err;
 }
 
@@ -1882,6 +1952,9 @@ static int msm_ufs_init(struct ufs_hba *hba)
 		hba->spm_lvl = UFS_PM_LVL_3;
 	}
 
+	hba->caps |= UFSHCD_CAP_CLK_GATING |
+			UFSHCD_CAP_HIBERN8_WITH_CLK_GATING;
+	msm_ufs_setup_clocks(hba, true);
 	goto out;
 
 out_disable_phy:

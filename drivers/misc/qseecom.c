@@ -103,7 +103,7 @@ static DEFINE_MUTEX(clk_access_lock);
 struct qseecom_registered_listener_list {
 	struct list_head                 list;
 	struct qseecom_register_listener_req svc;
-	u8  *sb_reg_req;
+	uint32_t user_virt_sb_base;
 	u8 *sb_virt;
 	s32 sb_phys;
 	size_t sb_length;
@@ -321,6 +321,10 @@ static int qseecom_register_listener(struct qseecom_dev_handle *data,
 		pr_err("copy_from_user failed\n");
 		return ret;
 	}
+	if (!access_ok(VERIFY_WRITE, (void __user *)rcvd_lstnr.virt_sb_base,
+			rcvd_lstnr.sb_size))
+		return -EFAULT;
+
 	data->listener.id = 0;
 	data->type = QSEECOM_LISTENER_SERVICE;
 	if (!__qseecom_is_svc_unique(data, &rcvd_lstnr)) {
@@ -339,6 +343,7 @@ static int qseecom_register_listener(struct qseecom_dev_handle *data,
 
 	new_entry->svc.listener_id = rcvd_lstnr.listener_id;
 	new_entry->sb_length = rcvd_lstnr.sb_size;
+	new_entry->user_virt_sb_base = rcvd_lstnr.virt_sb_base;
 	if (__qseecom_set_sb_memory(new_entry, data, &rcvd_lstnr)) {
 		pr_err("qseecom_set_sb_memoryfailed\n");
 		kzfree(new_entry);
@@ -600,6 +605,10 @@ static int qseecom_set_client_mem_param(struct qseecom_dev_handle *data,
 			req.ifd_data_fd, req.sb_len, req.virt_sb_base);
 		return -EFAULT;
 	}
+	if (!access_ok(VERIFY_WRITE, (void __user *)req.virt_sb_base,
+			req.sb_len))
+		return -EFAULT;
+
 	/* Get the handle of the shared fd */
 	data->client.ihandle = ion_import_dma_buf(qseecom.ion_clnt,
 						req.ifd_data_fd);
@@ -1020,6 +1029,13 @@ static uint32_t __qseecom_uvirt_to_kphys(struct qseecom_dev_handle *data,
 	return data->client.sb_phys + (virt - data->client.user_virt_sb_base);
 }
 
+static uint32_t __qseecom_uvirt_to_kvirt(struct qseecom_dev_handle *data,
+						uint32_t virt)
+{
+	return (uint32_t)data->client.sb_virt +
+				(virt - data->client.user_virt_sb_base);
+}
+
 int __qseecom_process_rpmb_svc_cmd(struct qseecom_dev_handle *data_ptr,
 		struct qseecom_send_svc_cmd_req *req_ptr,
 		struct qseecom_client_send_service_ireq *send_svc_ireq_ptr)
@@ -1410,6 +1426,24 @@ static int qseecom_send_modfd_cmd(struct qseecom_dev_handle *data,
 		pr_err("copy_from_user failed\n");
 		return ret;
 	}
+
+	if (req.cmd_req_buf == NULL || req.resp_buf == NULL) {
+		pr_err("cmd buffer or response buffer is null\n");
+		return -EINVAL;
+	}
+	if (((uint32_t)req.cmd_req_buf < data->client.user_virt_sb_base) ||
+		((uint32_t)req.cmd_req_buf >= (data->client.user_virt_sb_base +
+					data->client.sb_length))) {
+		pr_err("cmd buffer address not within shared bufffer\n");
+		return -EINVAL;
+	}
+
+	if (((uint32_t)req.resp_buf < data->client.user_virt_sb_base)  ||
+		((uint32_t)req.resp_buf >= (data->client.user_virt_sb_base +
+					data->client.sb_length))){
+		pr_err("response buffer address not within shared bufffer\n");
+		return -EINVAL;
+	}
 	send_cmd_req.cmd_req_buf = req.cmd_req_buf;
 	send_cmd_req.cmd_req_len = req.cmd_req_len;
 	send_cmd_req.resp_buf = req.resp_buf;
@@ -1423,6 +1457,11 @@ static int qseecom_send_modfd_cmd(struct qseecom_dev_handle *data,
 			return -EINVAL;
 		}
 	}
+	req.cmd_req_buf = (void *)__qseecom_uvirt_to_kvirt(data,
+						(uint32_t)req.cmd_req_buf);
+	req.resp_buf = (void *)__qseecom_uvirt_to_kvirt(data,
+						(uint32_t)req.resp_buf);
+
 	ret = __qseecom_update_cmd_buf(&req, false, data, false);
 	if (ret)
 		return ret;
@@ -1662,10 +1701,12 @@ static int __qseecom_load_fw(struct qseecom_dev_handle *data, char *appname)
 static int qseecom_load_commonlib_image(struct qseecom_dev_handle *data)
 {
 	int ret = 0;
+	int len = 0;
 	uint32_t fw_size = 0;
 	struct qseecom_load_app_ireq load_req = {0, 0, 0, 0};
 	struct qseecom_command_scm_resp resp;
 	u8 *img_data = NULL;
+	ion_phys_addr_t pa;
 
 	if (__qseecom_get_fw_size("cmnlib", &fw_size))
 		return -EIO;
@@ -1673,19 +1714,28 @@ static int qseecom_load_commonlib_image(struct qseecom_dev_handle *data)
 	qseecom.cmnlib_ion_handle = ion_alloc(qseecom.ion_clnt, fw_size,
 					SZ_4K, ION_HEAP(ION_QSECOM_HEAP_ID), 0);
 	if (IS_ERR_OR_NULL(qseecom.cmnlib_ion_handle)) {
-		pr_err("%s: ION alloc failed\n",  __func__);
+		pr_err("ION alloc failed\n");
 		return -ENOMEM;
 	}
 
 	img_data = (u8 *)ion_map_kernel(qseecom.ion_clnt,
 					qseecom.cmnlib_ion_handle);
 	if (IS_ERR_OR_NULL(img_data)) {
-		pr_err("%s: ION memory mapping for cmnlib failed\n", __func__);
+		pr_err("ION memory mapping for cmnlib failed\n");
 		ret = -ENOMEM;
 		goto exit_ion_free;
 	}
 	ret = __qseecom_get_fw_data("cmnlib", img_data, &load_req);
 	if (ret) {
+		ret = -EIO;
+		goto exit_ion_unmap_kernel;
+	}
+	/* Get the physical address of the ION BUF */
+	ret = ion_phys(qseecom.ion_clnt, qseecom.cmnlib_ion_handle,
+					&pa, &len);
+	load_req.phy_addr = (s32)pa;
+	if (ret) {
+		pr_err("physical memory retrieval failure\n");
 		ret = -EIO;
 		goto exit_ion_unmap_kernel;
 	}
@@ -2069,9 +2119,18 @@ static int qseecom_send_modfd_resp(struct qseecom_dev_handle *data,
 {
 	struct qseecom_send_modfd_listener_resp resp;
 	int i;
+	struct qseecom_registered_listener_list *this_lstnr = NULL;
 
 	if (copy_from_user(&resp, argp, sizeof(resp))) {
 		pr_err("copy_from_user failed");
+		return -EINVAL;
+	}
+	this_lstnr = __qseecom_find_svc(data->listener.id);
+	if (this_lstnr == NULL)
+		return -EINVAL;
+
+	if (resp.resp_buf_ptr == NULL) {
+		pr_err("Invalid resp_buf_ptr\n");
 		return -EINVAL;
 	}
 	/* validate offsets */
@@ -2082,6 +2141,17 @@ static int qseecom_send_modfd_resp(struct qseecom_dev_handle *data,
 			return -EINVAL;
 		}
 	}
+
+	if (((uint32_t)resp.resp_buf_ptr <
+			this_lstnr->user_virt_sb_base)
+			|| ((uint32_t)resp.resp_buf_ptr >=
+			(this_lstnr->user_virt_sb_base +
+			this_lstnr->sb_length))) {
+		pr_err("resp_buf_ptr address not within shared buffer\n");
+		return -EINVAL;
+	}
+	resp.resp_buf_ptr = (uint32_t)this_lstnr->sb_virt +
+		(resp.resp_buf_ptr - this_lstnr->user_virt_sb_base);
 	__qseecom_update_cmd_buf(&resp, false, data, true);
 	qseecom.send_resp_flag = 1;
 	wake_up_interruptible(&qseecom.send_resp_wq);
@@ -3950,6 +4020,83 @@ exit_irqrestore:
 	return ret;
 }
 
+static int qseecom_suspend(struct platform_device *pdev, pm_message_t state)
+{
+	int ret = 0;
+	struct qseecom_clk *qclk;
+	qclk = &qseecom.qsee;
+
+	if (qseecom.cumulative_mode != INACTIVE) {
+		ret = __qseecom_set_msm_bus_request(INACTIVE);
+		if (ret)
+			pr_err("Fail to scale down bus\n");
+	}
+	mutex_lock(&clk_access_lock);
+	if (qclk->clk_access_cnt) {
+		if (qclk->ce_clk != NULL)
+			clk_disable_unprepare(qclk->ce_clk);
+		if (qclk->ce_core_clk != NULL)
+			clk_disable_unprepare(qclk->ce_core_clk);
+		if (qclk->ce_bus_clk != NULL)
+			clk_disable_unprepare(qclk->ce_bus_clk);
+	}
+	mutex_unlock(&clk_access_lock);
+	return 0;
+}
+
+static int qseecom_resume(struct platform_device *pdev)
+{
+	int mode = 0;
+	int ret = 0;
+	struct qseecom_clk *qclk;
+	qclk = &qseecom.qsee;
+
+	if (qseecom.cumulative_mode >= HIGH)
+		mode = HIGH;
+	else
+		mode = qseecom.cumulative_mode;
+
+	if (qseecom.cumulative_mode != INACTIVE) {
+		ret = __qseecom_set_msm_bus_request(mode);
+		if (ret)
+			pr_err("Fail to scale down bus\n");
+	}
+
+	mutex_lock(&clk_access_lock);
+	if (qclk->clk_access_cnt) {
+
+		ret = clk_prepare_enable(qclk->ce_core_clk);
+		if (ret) {
+			pr_err("Unable to enable/prepare CE core clk\n");
+			qclk->clk_access_cnt = 0;
+			goto err;
+		}
+
+		ret = clk_prepare_enable(qclk->ce_clk);
+		if (ret) {
+			pr_err("Unable to enable/prepare CE iface clk\n");
+			qclk->clk_access_cnt = 0;
+			goto ce_clk_err;
+		}
+
+		ret = clk_prepare_enable(qclk->ce_bus_clk);
+		if (ret) {
+			pr_err("Unable to enable/prepare CE bus clk\n");
+			qclk->clk_access_cnt = 0;
+			goto ce_bus_clk_err;
+		}
+	}
+	mutex_unlock(&clk_access_lock);
+	return 0;
+
+ce_bus_clk_err:
+	clk_disable_unprepare(qclk->ce_clk);
+ce_clk_err:
+	clk_disable_unprepare(qclk->ce_core_clk);
+err:
+	mutex_unlock(&clk_access_lock);
+	return -EIO;
+}
 static struct of_device_id qseecom_match[] = {
 	{
 		.compatible = "qcom,qseecom",
@@ -3960,6 +4107,8 @@ static struct of_device_id qseecom_match[] = {
 static struct platform_driver qseecom_plat_driver = {
 	.probe = qseecom_probe,
 	.remove = qseecom_remove,
+	.suspend = qseecom_suspend,
+	.resume = qseecom_resume,
 	.driver = {
 		.name = "qseecom",
 		.owner = THIS_MODULE,

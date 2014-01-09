@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -111,6 +111,24 @@
 #define DIAG_STM_WCNSS	0x04
 #define DIAG_STM_APPS	0x08
 
+#define DIAG_CMD_VERSION	0
+#define DIAG_CMD_DOWNLOAD	0x3A
+#define DIAG_CMD_DIAG_SUBSYS	0x4B
+#define DIAG_CMD_LOG_ON_DMND	0x78
+#define DIAG_CMD_EXT_BUILD	0x7c
+
+#define DIAG_SS_DIAG		0x12
+#define DIAG_SS_PARAMS		0x32
+
+#define DIAG_DIAG_MAX_PKT_SZ	0x55
+#define DIAG_DIAG_STM		0x20E
+#define DIAG_DIAG_POLL		0x03
+#define DIAG_DEL_RSP_WRAP	0x04
+#define DIAG_DEL_RSP_WRAP_CNT	0x05
+
+#define MODE_CMD	41
+#define RESET_ID	2
+
 /*
  * The status bit masks when received in a signal handler are to be
  * used in conjunction with the peripheral list bit mask to determine the
@@ -171,6 +189,12 @@ enum remote_procs {
 	MDM4 = 4,
 	QSC = 5,
 };
+
+struct diag_pkt_header_t {
+	uint8_t cmd_code;
+	uint8_t subsys_id;
+	uint16_t subsys_cmd_code;
+} __packed;
 
 struct diag_master_table {
 	uint16_t cmd_code;
@@ -407,6 +431,9 @@ struct diagchar_dev {
 	struct diag_master_table *table;
 	uint8_t *pkt_buf;
 	int pkt_length;
+	uint8_t *dci_pkt_buf; /* For Apps DCI packets */
+	uint32_t dci_pkt_length;
+	int in_busy_dcipktdata;
 	struct diag_request *usb_read_ptr;
 	struct diag_request *write_ptr_svc;
 	int logging_mode;

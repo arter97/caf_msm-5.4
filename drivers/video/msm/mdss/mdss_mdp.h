@@ -273,11 +273,12 @@ struct pp_hist_col_info {
 	u32 hist_cnt_sent;
 	u32 hist_cnt_time;
 	u32 frame_cnt;
-	u32 is_kick_ready;
 	struct completion comp;
 	u32 data[HIST_V_SIZE];
 	struct mutex hist_mutex;
 	spinlock_t hist_lock;
+	char __iomem *base;
+	u32 intr_shift;
 };
 
 struct mdss_mdp_ad {

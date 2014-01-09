@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -505,8 +505,11 @@ static int subsys_start(struct subsys_device *subsys)
 
 	init_completion(&subsys->err_ready);
 	ret = subsys->desc->powerup(subsys->desc);
-	if (ret)
+	if (ret) {
+		notify_each_subsys_device(&subsys, 1, SUBSYS_POWERUP_FAILURE,
+									NULL);
 		return ret;
+	}
 	enable_all_irqs(subsys);
 
 	if (subsys->desc->is_not_loadable) {
@@ -519,6 +522,8 @@ static int subsys_start(struct subsys_device *subsys)
 		/* pil-boot succeeded but we need to shutdown
 		 * the device because error ready timed out.
 		 */
+		notify_each_subsys_device(&subsys, 1, SUBSYS_POWERUP_FAILURE,
+									NULL);
 		subsys->desc->shutdown(subsys->desc, false);
 		disable_all_irqs(subsys);
 		return ret;
@@ -844,6 +849,35 @@ bool subsys_get_crash_status(struct subsys_device *dev)
 {
 	return dev->crashed;
 }
+
+static struct subsys_device *desc_to_subsys(struct device *d)
+{
+	struct subsys_device *device, *subsys_dev = 0;
+
+	mutex_lock(&subsys_list_lock);
+	list_for_each_entry(device, &subsys_list, list)
+		if (device->desc->dev == d)
+			subsys_dev = device;
+	mutex_unlock(&subsys_list_lock);
+	return subsys_dev;
+}
+
+void notify_proxy_vote(struct device *device)
+{
+	struct subsys_device *dev = desc_to_subsys(device);
+
+	if (dev)
+		notify_each_subsys_device(&dev, 1, SUBSYS_PROXY_VOTE, NULL);
+}
+
+void notify_proxy_unvote(struct device *device)
+{
+	struct subsys_device *dev = desc_to_subsys(device);
+
+	if (dev)
+		notify_each_subsys_device(&dev, 1, SUBSYS_PROXY_UNVOTE, NULL);
+}
+
 #ifdef CONFIG_DEBUG_FS
 static ssize_t subsys_debugfs_read(struct file *filp, char __user *ubuf,
 		size_t cnt, loff_t *ppos)
@@ -1054,7 +1088,7 @@ static struct subsys_soc_restart_order *ssr_parse_restart_orders(struct
 	struct device_node *ssr_node;
 	uint32_t len;
 
-	if (!of_get_property(dev->of_node, "qti,restart-group", &len))
+	if (!of_get_property(dev->of_node, "qcom,restart-group", &len))
 		return NULL;
 
 	count = len/sizeof(uint32_t);
@@ -1077,7 +1111,7 @@ static struct subsys_soc_restart_order *ssr_parse_restart_orders(struct
 
 	for (i = 0; i < count; i++) {
 		ssr_node = of_parse_phandle(dev->of_node,
-						"qti,restart-group", i);
+						"qcom,restart-group", i);
 		if (!ssr_node)
 			return ERR_PTR(-ENXIO);
 		of_node_put(ssr_node);
@@ -1166,19 +1200,19 @@ static int subsys_parse_devicetree(struct subsys_desc *desc)
 	struct platform_device *pdev = container_of(desc->dev,
 					struct platform_device, dev);
 
-	ret = __get_irq(desc, "qti,gpio-err-fatal", &desc->err_fatal_irq);
+	ret = __get_irq(desc, "qcom,gpio-err-fatal", &desc->err_fatal_irq);
 	if (ret && ret != -ENOENT)
 		return ret;
 
-	ret = __get_irq(desc, "qti,gpio-err-ready", &desc->err_ready_irq);
+	ret = __get_irq(desc, "qcom,gpio-err-ready", &desc->err_ready_irq);
 	if (ret && ret != -ENOENT)
 		return ret;
 
-	ret = __get_irq(desc, "qti,gpio-stop-ack", &desc->stop_ack_irq);
+	ret = __get_irq(desc, "qcom,gpio-stop-ack", &desc->stop_ack_irq);
 	if (ret && ret != -ENOENT)
 		return ret;
 
-	ret = __get_gpio(desc, "qti,gpio-force-stop", &desc->force_stop_gpio);
+	ret = __get_gpio(desc, "qcom,gpio-force-stop", &desc->force_stop_gpio);
 	if (ret && ret != -ENOENT)
 		return ret;
 

@@ -33,7 +33,7 @@
 #include <linux/ctype.h>
 #include <mach/sps.h>
 #include <mach/msm_bus.h>
-#include <soc/msm/smem.h>
+#include <soc/qcom/smem.h>
 
 #define PAGE_SIZE_2K 2048
 #define PAGE_SIZE_4K 4096
@@ -1767,9 +1767,10 @@ static int msm_nand_read_partial_page(struct mtd_info *mtd,
 	loff_t aligned_from;
 	loff_t offset;
 	size_t len;
-	size_t actual_len;
+	size_t actual_len, ret_len;
 
 	actual_len = ops->len;
+	ret_len = 0;
 	actual_buf = ops->datbuf;
 
 	bounce_buf = kmalloc(mtd->writesize, GFP_KERNEL);
@@ -1796,14 +1797,17 @@ static int msm_nand_read_partial_page(struct mtd_info *mtd,
 
 		ops->datbuf = no_copy ? actual_buf : bounce_buf;
 		err = msm_nand_read_oob(mtd, aligned_from, ops);
-		if (err < 0)
+		if (err < 0) {
+			ret_len = ops->retlen;
 			break;
+		}
 
 		if (!no_copy)
 			memcpy(actual_buf, bounce_buf + offset, len);
 
 		actual_len -= len;
-		ops->retlen += len;
+		ret_len += len;
+
 		if (actual_len == 0)
 			break;
 
@@ -1812,6 +1816,7 @@ static int msm_nand_read_partial_page(struct mtd_info *mtd,
 		aligned_from += mtd->writesize;
 	}
 
+	ops->retlen = ret_len;
 	kfree(bounce_buf);
 out:
 	return err;
@@ -1828,19 +1833,54 @@ static int msm_nand_read(struct mtd_info *mtd, loff_t from, size_t len,
 	struct mtd_oob_ops ops;
 
 	ops.mode = MTD_OPS_AUTO_OOB;
-	ops.len = len;
 	ops.retlen = 0;
 	ops.ooblen = 0;
-	ops.datbuf = buf;
 	ops.oobbuf = NULL;
 
-	if (!(from & (mtd->writesize - 1)) && !(len % mtd->writesize))
-		/* read pages on page boundary */
-		ret = msm_nand_read_oob(mtd, from, &ops);
-	else
-		ret = msm_nand_read_partial_page(mtd, from, &ops);
+	if (!(from & (mtd->writesize - 1)) && !(len % mtd->writesize)) {
+		/*
+		 * Handle reading of large size read buffer in vmalloc
+		 * address space that does not fit in an MMU page.
+		 */
+		if (!virt_addr_valid(buf) &&
+		   ((unsigned long) buf & ~PAGE_MASK) + len > PAGE_SIZE) {
+			ops.len = mtd->writesize;
 
-	*retlen = ops.retlen;
+			for (;;) {
+				ops.datbuf = buf;
+				ret = msm_nand_read_oob(mtd, from, &ops);
+				if (ret < 0)
+					break;
+
+				len -= ops.retlen;
+				*retlen += ops.retlen;
+				if (len == 0)
+					break;
+				buf += ops.retlen;
+				from += ops.retlen;
+
+				if (len < mtd->writesize) {
+					ops.len = len;
+					ops.datbuf = buf;
+					ret = msm_nand_read_partial_page(
+						mtd, from, &ops);
+					*retlen += ops.retlen;
+					break;
+				}
+			}
+		} else {
+			ops.len = len;
+			ops.datbuf = buf;
+			ret =  msm_nand_read_oob(mtd, from, &ops);
+			*retlen = ops.retlen;
+		}
+	} else {
+		ops.len = len;
+		ops.datbuf = buf;
+		ret = msm_nand_read_partial_page(mtd, from, &ops);
+		*retlen = ops.retlen;
+	}
+
 	return ret;
 }
 

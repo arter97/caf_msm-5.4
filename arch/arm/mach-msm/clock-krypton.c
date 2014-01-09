@@ -1944,17 +1944,17 @@ static struct clk_lookup msm_clocks_krypton[] = {
 	CLK_LOOKUP("clk-5", a7sspll.c, "f9010008.qcom,clock-a7"),
 
 	/* PIL-LPASS */
-	CLK_LOOKUP("xo",        dummy_clk, "fe200000.qti,lpass"),
-	CLK_LOOKUP("bus_clk",   dummy_clk, "fe200000.qti,lpass"),
-	CLK_LOOKUP("core_clk",  dummy_clk, "fe200000.qti,lpass"),
-	CLK_LOOKUP("iface_clk", dummy_clk, "fe200000.qti,lpass"),
-	CLK_LOOKUP("reg_clk",   dummy_clk, "fe200000.qti,lpass"),
+	CLK_LOOKUP("xo",        dummy_clk, "fe200000.qcom,lpass"),
+	CLK_LOOKUP("bus_clk",   dummy_clk, "fe200000.qcom,lpass"),
+	CLK_LOOKUP("core_clk",  dummy_clk, "fe200000.qcom,lpass"),
+	CLK_LOOKUP("iface_clk", dummy_clk, "fe200000.qcom,lpass"),
+	CLK_LOOKUP("reg_clk",   dummy_clk, "fe200000.qcom,lpass"),
 
 	/* PIL-MODEM */
-	CLK_LOOKUP("xo",              cxo_pil_mss_clk.c, "fc880000.qti,mss"),
-	CLK_LOOKUP("bus_clk", gcc_mss_q6_bimc_axi_clk.c, "fc880000.qti,mss"),
-	CLK_LOOKUP("iface_clk",   gcc_mss_cfg_ahb_clk.c, "fc880000.qti,mss"),
-	CLK_LOOKUP("mem_clk",    gcc_boot_rom_ahb_clk.c, "fc880000.qti,mss"),
+	CLK_LOOKUP("xo",              cxo_pil_mss_clk.c, "fc880000.qcom,mss"),
+	CLK_LOOKUP("bus_clk", gcc_mss_q6_bimc_axi_clk.c, "fc880000.qcom,mss"),
+	CLK_LOOKUP("iface_clk",   gcc_mss_cfg_ahb_clk.c, "fc880000.qcom,mss"),
+	CLK_LOOKUP("mem_clk",    gcc_boot_rom_ahb_clk.c, "fc880000.qcom,mss"),
 
 	/* SPS */
 	CLK_LOOKUP("dma_bam_pclk", gcc_bam_dma_ahb_clk.c, "msm_sps"),
@@ -1981,11 +1981,11 @@ static struct clk_lookup msm_clocks_krypton[] = {
 	CLK_LOOKUP("core_clk", gcc_blsp1_uart1_apps_clk.c, "f991d000.uart"),
 
 	/* IPA */
-	CLK_LOOKUP("core_clk",        ipa_clk.c, "fd4c0000.qti,ipa"),
-	CLK_DUMMY("core_src_clk", ipa_clk_src.c, "fd4c0000.qti,ipa", OFF),
-	CLK_DUMMY("bus_clk",  gcc_sys_noc_ipa_axi_clk.c, "fd4c0000.qti,ipa", OFF),
-	CLK_DUMMY("iface_clk",  gcc_ipa_cnoc_clk.c, "fd4c0000.qti,ipa", OFF),
-	CLK_DUMMY("inactivity_clk",  gcc_ipa_sleep_clk.c, "fd4c0000.qti,ipa", OFF),
+	CLK_LOOKUP("core_clk",        ipa_clk.c, "fd4c0000.qcom,ipa"),
+	CLK_DUMMY("core_src_clk", ipa_clk_src.c, "fd4c0000.qcom,ipa", OFF),
+	CLK_DUMMY("bus_clk",  gcc_sys_noc_ipa_axi_clk.c, "fd4c0000.qcom,ipa", OFF),
+	CLK_DUMMY("iface_clk",  gcc_ipa_cnoc_clk.c, "fd4c0000.qcom,ipa", OFF),
+	CLK_DUMMY("inactivity_clk",  gcc_ipa_sleep_clk.c, "fd4c0000.qcom,ipa", OFF),
 
 	/* HSUSB-OTG Clocks */
 	CLK_LOOKUP("xo",                 cxo_otg_clk.c, "f9a55000.usb"),
@@ -2173,8 +2173,8 @@ static struct clk_lookup msm_clocks_krypton[] = {
 						"f9b38000.ssphy"),
 
 	CLK_LOOKUP("mem_iface_clk",   gcc_sys_noc_usb3_axi_clk.c,
-		   "f9304000.qti,usbbam"),
-	CLK_LOOKUP("mem_clk",   gcc_usb30_master_clk.c, "f9304000.qti,usbbam"),
+		   "f9304000.qcom,usbbam"),
+	CLK_LOOKUP("mem_clk",   gcc_usb30_master_clk.c, "f9304000.qcom,usbbam"),
 
 	CLK_LOOKUP("",	ce1_clk_src.c,	""),
 	CLK_LOOKUP("phy_com_reset",  gcc_usb3_phy_com_reset.c,

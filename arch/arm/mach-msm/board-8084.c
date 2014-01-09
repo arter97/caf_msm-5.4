@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -31,7 +31,7 @@
 #include <mach/restart.h>
 #include <mach/socinfo.h>
 #include <mach/rpm-smd.h>
-#include <soc/msm/smem.h>
+#include <soc/qcom/smem.h>
 #include "spm.h"
 #include "board-dt.h"
 #include "clock.h"
@@ -46,8 +46,8 @@ static struct of_dev_auxdata apq8084_auxdata_lookup[] __initdata = {
 	OF_DEV_AUXDATA("qca,qca1530", 0x00000000, "qca1530.1", NULL),
 	OF_DEV_AUXDATA("qcom,ufshc", 0xFC594000, "msm_ufs.1", NULL),
 	OF_DEV_AUXDATA("qcom,xhci-msm-hsic", 0xf9c00000, "msm_hsic_host", NULL),
-	OF_DEV_AUXDATA("qti,msm_pcie", 0xFC520000, "msm_pcie.1", NULL),
-	OF_DEV_AUXDATA("qti,msm_pcie", 0xFC528000, "msm_pcie.2", NULL),
+	OF_DEV_AUXDATA("qcom,msm_pcie", 0xFC520000, "msm_pcie.1", NULL),
+	OF_DEV_AUXDATA("qcom,msm_pcie", 0xFC528000, "msm_pcie.2", NULL),
 	{}
 };
 
@@ -120,12 +120,11 @@ static const char *apq8084_dt_match[] __initconst = {
 };
 
 DT_MACHINE_START(APQ8084_DT, "Qualcomm APQ 8084 (Flattened Device Tree)")
-	.map_io = apq8084_map_io,
-	.init_irq = msm_dt_init_irq,
-	.init_machine = apq8084_init,
-	.dt_compat = apq8084_dt_match,
-	.reserve = apq8084_reserve,
-	.init_very_early = apq8084_init_very_early,
-	.restart = msm_restart,
-	.smp = &msm8974_smp_ops,
+	.map_io			= apq8084_map_io,
+	.init_machine		= apq8084_init,
+	.dt_compat		= apq8084_dt_match,
+	.reserve		= apq8084_reserve,
+	.init_very_early	= apq8084_init_very_early,
+	.restart		= msm_restart,
+	.smp			= &msm8974_smp_ops,
 MACHINE_END

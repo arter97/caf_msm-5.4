@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,7 +26,7 @@
 #include <mach/socinfo.h>
 #include <mach/board.h>
 #include <mach/msm_memtypes.h>
-#include <soc/msm/smem.h>
+#include <soc/qcom/smem.h>
 #include <mach/msm_smd.h>
 #include <mach/restart.h>
 #include <mach/rpm-smd.h>
@@ -62,7 +62,7 @@ static struct of_dev_auxdata mpq8092_auxdata_lookup[] __initdata = {
 	OF_DEV_AUXDATA("qcom,msm-sdcc", 0xF98A4000, "msm_sdcc.2", NULL),
 	OF_DEV_AUXDATA("qcom,sdhci-msm", 0xF9824900, "msm_sdcc.1", NULL),
 	OF_DEV_AUXDATA("qcom,sdhci-msm", 0xF98A4900, "msm_sdcc.2", NULL),
-	OF_DEV_AUXDATA("qti,msm_pcie", 0xFC520000, "msm_pcie", NULL),
+	OF_DEV_AUXDATA("qcom,msm_pcie", 0xFC520000, "msm_pcie", NULL),
 	{}
 };
 
@@ -114,12 +114,11 @@ static const char *mpq8092_dt_match[] __initconst = {
 };
 
 DT_MACHINE_START(MSM8092_DT, "Qualcomm MSM 8092 (Flattened Device Tree)")
-	.map_io = mpq8092_map_io,
-	.init_irq = msm_dt_init_irq_nompm,
-	.init_machine = mpq8092_init,
-	.dt_compat = mpq8092_dt_match,
-	.reserve = mpq8092_dt_reserve,
-	.init_very_early = mpq8092_early_memory,
-	.restart = msm_restart,
-	.smp = &msm8974_smp_ops,
+	.map_io			= mpq8092_map_io,
+	.init_machine		= mpq8092_init,
+	.dt_compat		= mpq8092_dt_match,
+	.reserve		= mpq8092_dt_reserve,
+	.init_very_early	= mpq8092_early_memory,
+	.restart		= msm_restart,
+	.smp			= &msm8974_smp_ops,
 MACHINE_END
