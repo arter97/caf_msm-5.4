@@ -158,7 +158,9 @@ static int xhci_plat_probe(struct platform_device *pdev)
 		goto release_mem_region;
 	}
 
-	pm_runtime_no_callbacks(&pdev->dev);
+	if (pdev->dev.parent)
+		pm_runtime_resume(pdev->dev.parent);
+
 	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
 	pm_runtime_get_sync(&pdev->dev);
@@ -245,8 +247,32 @@ static int xhci_plat_resume(struct device *dev)
 	return xhci_resume(xhci, 0);
 }
 
+#ifdef CONFIG_PM_RUNTIME
+static int xhci_plat_runtime_suspend(struct device *dev)
+{
+	struct usb_hcd *hcd = dev_get_drvdata(dev);
+	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
+
+	dev_dbg(dev, "xhci-plat runtime suspend\n");
+
+	return xhci_suspend(xhci);
+}
+
+static int xhci_plat_runtime_resume(struct device *dev)
+{
+	struct usb_hcd *hcd = dev_get_drvdata(dev);
+	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
+
+	dev_dbg(dev, "xhci-plat runtime resume\n");
+
+	return xhci_resume(xhci, false);
+}
+#endif
+
 static const struct dev_pm_ops xhci_plat_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(xhci_plat_suspend, xhci_plat_resume)
+	SET_RUNTIME_PM_OPS(xhci_plat_runtime_suspend, xhci_plat_runtime_resume,
+			   NULL)
 };
 #define DEV_PM_OPS	(&xhci_plat_pm_ops)
 #else
