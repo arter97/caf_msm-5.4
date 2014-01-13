@@ -382,7 +382,7 @@ void __init apq8064_init_mmc(void)
 				apq8064_sdc3_pdata->status_irq = 0;
 			}
 		}
-		if (machine_is_apq8064_cdp()) {
+		if (machine_is_apq8064_cdp() || machine_is_apq8064_adp_2()) {
 			int i;
 
 			for (i = 0;

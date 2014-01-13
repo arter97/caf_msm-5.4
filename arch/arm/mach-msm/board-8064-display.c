@@ -110,7 +110,7 @@ static int msm_fb_detect_panel(const char *name)
 			strnlen(MIPI_VIDEO_TOSHIBA_WSVGA_PANEL_NAME,
 				PANEL_NAME_MAX_LEN)))
 			return 0;
-	} else if (machine_is_apq8064_cdp()) {
+	} else if (machine_is_apq8064_cdp() || machine_is_apq8064_adp_2()) {
 		if (!strncmp(name, LVDS_CHIMEI_PANEL_NAME,
 			strnlen(LVDS_CHIMEI_PANEL_NAME,
 				PANEL_NAME_MAX_LEN)))
@@ -641,7 +641,7 @@ static int lvds_pixel_remap(void)
 {
 	u32 ver = socinfo_get_version();
 
-	if (machine_is_apq8064_cdp() ||
+	if (machine_is_apq8064_cdp() || machine_is_apq8064_adp_2() ||
 	    machine_is_apq8064_liquid()) {
 		if ((SOCINFO_VERSION_MAJOR(ver) == 1) &&
 		    (SOCINFO_VERSION_MINOR(ver) == 0))

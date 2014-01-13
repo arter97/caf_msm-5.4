@@ -931,7 +931,8 @@ static struct msm_usb_host_platform_data msm_ehci_host_pdata4;
 static void __init apq8064_ehci_host_init(void)
 {
 	if (machine_is_apq8064_liquid() || machine_is_mpq8064_cdp() ||
-		machine_is_mpq8064_hrd() || machine_is_mpq8064_dtv()) {
+		machine_is_mpq8064_hrd() || machine_is_mpq8064_dtv() ||
+					machine_is_apq8064_adp_2()) {
 		if (machine_is_apq8064_liquid())
 			msm_ehci_host_pdata3.dock_connect_irq =
 					PM8921_MPP_IRQ(PM8921_IRQ_BASE, 9);
@@ -3160,7 +3161,7 @@ static void __init register_i2c_devices(void)
 	};
 #endif
 	/* Build the matching 'supported_machs' bitmask */
-	if (machine_is_apq8064_cdp())
+	if (machine_is_apq8064_cdp() || machine_is_apq8064_adp_2())
 		mach_mask = I2C_SURF;
 	else if (machine_is_apq8064_mtp())
 		mach_mask = I2C_FFA;
@@ -3417,7 +3418,8 @@ static void __init apq8064_cdp_init(void)
 		platform_device_register(&mpq8064_device_uartdm_gsbi6);
 	}
 
-	if (machine_is_apq8064_cdp() || machine_is_apq8064_liquid())
+	if (machine_is_apq8064_cdp() || machine_is_apq8064_liquid()
+			|| machine_is_apq8064_adp_2())
 		platform_device_register(&cdp_kp_pdev);
 
 	if (machine_is_apq8064_mtp())
@@ -3501,3 +3503,14 @@ MACHINE_START(MPQ8064_DTV, "QCT MPQ8064 DTV")
 	.restart = msm_restart,
 MACHINE_END
 
+MACHINE_START(APQ8064_ADP2, "QCT APQ8064 ADP2")
+        .map_io = apq8064_map_io,
+        .reserve = apq8064_reserve,
+        .init_irq = apq8064_init_irq,
+        .handle_irq = gic_handle_irq,
+        .timer = &msm_timer,
+        .init_machine = apq8064_cdp_init,
+        .init_early = apq8064_allocate_memory_regions,
+        .init_very_early = apq8064_early_reserve,
+        .restart = msm_restart,
+MACHINE_END
