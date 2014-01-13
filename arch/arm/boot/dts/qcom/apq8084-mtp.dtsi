@@ -26,10 +26,6 @@
 };
 
 &soc {
-	qcom,hdmi_tx@fd922100 {
-		status = "disabled";
-	};
-
 	sound {
 		qcom,model = "apq8084-taiko-mtp-snd-card";
 
@@ -111,6 +107,10 @@
 	};
 };
 
+&mdss_hdmi_tx {
+	qcom,conditional-power-on;
+};
+
 #include "dsi-panel-jdi-1080p-video.dtsi"
 &dsi_jdi_1080_vid {
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_pwm";
@@ -153,7 +153,6 @@
 	qcom,ap2mdm-wakeup-gpio = <&msmgpio 108 0x00>;
 	qcom,ap2mdm-vddmin-gpio = <&msmgpio 114 0x00>;
 	qcom,mdm2ap-vddmin-gpio = <&msmgpio 115 0x00>;
-	qcom,ap2mdm-chnlrdy-gpio = <&msmgpio 106 0x00>;
 	status = "ok";
 };
 

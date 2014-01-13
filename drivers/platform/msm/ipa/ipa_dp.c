@@ -203,7 +203,6 @@ static void ipa_tx_switch_to_intr_mode(struct ipa_sys_context *sys)
 	return;
 
 fail:
-	IPA_STATS_INC_CNT(ipa_ctx->stats.x_intr_repost_tx);
 	queue_delayed_work(sys->wq, &sys->switch_to_intr_work,
 			msecs_to_jiffies(1));
 	return;
@@ -610,7 +609,6 @@ int ipa_send_cmd(u16 num_desc, struct ipa_desc *descr)
 		wait_for_completion(&desc->xfer_done);
 	}
 
-	IPA_STATS_INC_IC_CNT(num_desc, descr, ipa_ctx->stats.imm_cmds);
 bail:
 	ipa_dec_client_disable_clks();
 	return result;
@@ -767,7 +765,6 @@ static void ipa_rx_switch_to_intr_mode(struct ipa_sys_context *sys)
 	return;
 
 fail:
-	IPA_STATS_INC_CNT(ipa_ctx->stats.x_intr_repost);
 	queue_delayed_work(sys->wq, &sys->switch_to_intr_work,
 			msecs_to_jiffies(1));
 }
@@ -1052,6 +1049,9 @@ int ipa_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 		ipa_allocate_wlan_rx_common_cache(IPA_WLAN_COMM_RX_POOL_LOW);
 	}
 
+	if (sys_in->client == IPA_CLIENT_WLAN1_PROD)
+		ipa_install_dflt_flt_rules(ipa_ep_idx);
+
 	IPADBG("client %d (ep: %d) connected sys=%p\n", sys_in->client,
 			ipa_ep_idx, ep->sys);
 
@@ -1103,6 +1103,7 @@ int ipa_teardown_sys_pipe(u32 clnt_hdl)
 	sps_free_endpoint(ep->ep_hdl);
 	destroy_workqueue(ep->sys->wq);
 	kfree(ep->sys);
+	ipa_delete_dflt_flt_rules(clnt_hdl);
 	memset(ep, 0, sizeof(struct ipa_ep_context));
 
 	IPADBG("client (ep: %d) disconnected\n", clnt_hdl);
@@ -1128,8 +1129,7 @@ static void ipa_tx_comp_usr_notify_release(void *user1, void *user2)
 
 	IPADBG("skb=%p ep=%d\n", skb, ep_idx);
 
-	IPA_STATS_INC_TX_CNT(ep_idx, ipa_ctx->stats.tx_sw_pkts,
-			ipa_ctx->stats.tx_hw_pkts);
+	IPA_STATS_INC_CNT(ipa_ctx->stats.tx_pkts_compl);
 
 	if (ipa_ctx->ep[ep_idx].client_notify)
 		ipa_ctx->ep[ep_idx].client_notify(ipa_ctx->ep[ep_idx].priv,
@@ -1232,7 +1232,7 @@ int ipa_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 			IPAERR("fail to send immediate command\n");
 			goto fail_send;
 		}
-		IPA_STATS_INC_CNT(ipa_ctx->stats.imm_cmds[IPA_IP_PACKET_INIT]);
+		IPA_STATS_INC_CNT(ipa_ctx->stats.tx_sw_pkts);
 	} else {
 		/* HW data path */
 		desc[0].pyld = skb->data;
@@ -1246,6 +1246,7 @@ int ipa_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 			IPAERR("fail to send skb\n");
 			goto fail_gen;
 		}
+		IPA_STATS_INC_CNT(ipa_ctx->stats.tx_hw_pkts);
 	}
 
 	return 0;
@@ -1575,12 +1576,13 @@ begin:
 		IPADBG("STATUS opcode=%d src=%d dst=%d len=%d\n",
 				status->status_opcode, status->endp_src_idx,
 				status->endp_dest_idx, status->pkt_len);
-
 		if (status->status_opcode != IPA_HW_STATUS_OPCODE_PACKET) {
 			IPAERR("unsupported opcode\n");
 			skb_pull(skb, IPA_PKT_STATUS_SIZE);
 			continue;
 		}
+		IPA_STATS_EXCP_CNT(status->exception,
+				ipa_ctx->stats.rx_excp_pkts);
 		if (status->endp_dest_idx >= IPA_NUM_PIPES ||
 			status->endp_src_idx >= IPA_NUM_PIPES ||
 			status->pkt_len > IPA_GENERIC_AGGR_BYTE_LIMIT * 1024) {
@@ -1760,6 +1762,7 @@ static int ipa_wan_rx_pyld_hdlr(struct sk_buff *skb,
 			skb_pull(skb, IPA_PKT_STATUS_SIZE);
 			continue;
 		}
+		IPA_STATS_INC_CNT(ipa_ctx->stats.rx_pkts);
 		if (status->endp_dest_idx >= IPA_NUM_PIPES ||
 			status->endp_src_idx >= IPA_NUM_PIPES ||
 			status->pkt_len > IPA_GENERIC_AGGR_BYTE_LIMIT * 1024) {
