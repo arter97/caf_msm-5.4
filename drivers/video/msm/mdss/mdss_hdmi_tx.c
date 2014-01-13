@@ -99,6 +99,12 @@ enum msm_hdmi_supported_audio_sample_rates {
 	AUDIO_SAMPLE_RATE_MAX
 };
 
+enum hdmi_tx_hpd_states {
+	HPD_OFF,
+	HPD_ON,
+	HPD_ON_CONDITIONAL_MTP
+};
+
 /* parameters for clock regeneration */
 struct hdmi_tx_audio_acr {
 	u32 n;
@@ -450,6 +456,26 @@ static ssize_t hdmi_tx_sysfs_rda_connected(struct device *dev,
 	return ret;
 } /* hdmi_tx_sysfs_rda_connected */
 
+static ssize_t hdmi_tx_sysfs_rda_video_mode(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	ssize_t ret;
+	struct hdmi_tx_ctrl *hdmi_ctrl =
+		hdmi_tx_get_drvdata_from_sysfs_dev(dev);
+
+	if (!hdmi_ctrl) {
+		DEV_ERR("%s: invalid input\n", __func__);
+		return -EINVAL;
+	}
+
+	mutex_lock(&hdmi_ctrl->mutex);
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", hdmi_ctrl->video_resolution);
+	DEV_DBG("%s: '%d'\n", __func__, hdmi_ctrl->video_resolution);
+	mutex_unlock(&hdmi_ctrl->mutex);
+
+	return ret;
+} /* hdmi_tx_sysfs_rda_video_mode */
+
 static ssize_t hdmi_tx_sysfs_rda_hpd(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -493,7 +519,13 @@ static ssize_t hdmi_tx_sysfs_wta_hpd(struct device *dev,
 	    (!hdmi_ctrl->mhl_hpd_on || hdmi_ctrl->hpd_feature_on))
 		return 0;
 
-	if (0 == hpd && hdmi_ctrl->hpd_feature_on) {
+	switch (hpd) {
+	case HPD_OFF:
+		if (!hdmi_ctrl->hpd_feature_on) {
+			DEV_DBG("%s: HPD is already off\n", __func__);
+			return ret;
+		}
+
 		rc = hdmi_tx_sysfs_enable_hpd(hdmi_ctrl, false);
 
 		if (hdmi_ctrl->panel_power_on && hdmi_ctrl->hpd_state) {
@@ -504,11 +536,37 @@ static ssize_t hdmi_tx_sysfs_wta_hpd(struct device *dev,
 		hdmi_tx_send_cable_notification(hdmi_ctrl, 0);
 		DEV_DBG("%s: Hdmi state switch to %d\n", __func__,
 			hdmi_ctrl->sdev.state);
-	} else if (1 == hpd && !hdmi_ctrl->hpd_feature_on) {
+		break;
+	case HPD_ON:
+		if (hdmi_ctrl->pdata.cond_power_on) {
+			DEV_ERR("%s: hpd state %d not allowed w/ cond. hpd\n",
+				__func__, hpd);
+			return ret;
+		}
+
+		if (hdmi_ctrl->hpd_feature_on) {
+			DEV_DBG("%s: HPD is already on\n", __func__);
+			return ret;
+		}
+
 		rc = hdmi_tx_sysfs_enable_hpd(hdmi_ctrl, true);
-	} else {
-		DEV_DBG("%s: hpd is already '%s'. return\n", __func__,
-			hdmi_ctrl->hpd_feature_on ? "enabled" : "disabled");
+		break;
+	case HPD_ON_CONDITIONAL_MTP:
+		if (!hdmi_ctrl->pdata.cond_power_on) {
+			DEV_ERR("%s: hpd state %d not allowed w/o cond. hpd\n",
+				__func__, hpd);
+			return ret;
+		}
+
+		if (hdmi_ctrl->hpd_feature_on) {
+			DEV_DBG("%s: HPD is already on\n", __func__);
+			return ret;
+		}
+
+		rc = hdmi_tx_sysfs_enable_hpd(hdmi_ctrl, true);
+		break;
+	default:
+		DEV_ERR("%s: Invalid HPD state requested\n", __func__);
 		return ret;
 	}
 
@@ -722,6 +780,7 @@ static ssize_t hdmi_tx_sysfs_wta_avi_cn_bits(struct device *dev,
 } /* hdmi_tx_sysfs_wta_cn_bits */
 
 static DEVICE_ATTR(connected, S_IRUGO, hdmi_tx_sysfs_rda_connected, NULL);
+static DEVICE_ATTR(video_mode, S_IRUGO, hdmi_tx_sysfs_rda_video_mode, NULL);
 static DEVICE_ATTR(hpd, S_IRUGO | S_IWUSR, hdmi_tx_sysfs_rda_hpd,
 	hdmi_tx_sysfs_wta_hpd);
 static DEVICE_ATTR(vendor_name, S_IRUGO | S_IWUSR,
@@ -734,6 +793,7 @@ static DEVICE_ATTR(avi_cn0_1, S_IWUSR, NULL, hdmi_tx_sysfs_wta_avi_cn_bits);
 
 static struct attribute *hdmi_tx_fs_attrs[] = {
 	&dev_attr_connected.attr,
+	&dev_attr_video_mode.attr,
 	&dev_attr_hpd.attr,
 	&dev_attr_vendor_name.attr,
 	&dev_attr_product_description.attr,
@@ -3659,6 +3719,9 @@ static int hdmi_tx_get_dt_data(struct platform_device *pdev,
 			&tmp);
 		pdata->primary = tmp ? true : false;
 	}
+
+	pdata->cond_power_on = of_property_read_bool(pdev->dev.of_node,
+		"qcom,conditional-power-on");
 
 	return rc;
 

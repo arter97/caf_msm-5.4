@@ -50,7 +50,6 @@
 #define WLAN4_CONS_RX_EP  18
 
 #define MAX_NUM_EXCP     8
-#define MAX_NUM_IMM_CMD 20
 
 #define IPA_STATS
 
@@ -66,17 +65,8 @@
 			for (i = 0; i < MAX_NUM_EXCP; i++)	\
 				if (flags & BIT(i))		\
 					++base[i];		\
-			} while (0)
-#define IPA_STATS_INC_TX_CNT(ep, sw, hw) do {		\
-			if (ep == WLAN_AMPDU_TX_EP)	\
-				++hw;			\
-			else				\
-				++sw;			\
-			} while (0)
-#define IPA_STATS_INC_IC_CNT(num, base, stat_base) do {			\
-			int i;						\
-			for (i = 0; i < num; i++)			\
-				++stat_base[base[i].opcode];		\
+			if (flags == 0)				\
+				++base[MAX_NUM_EXCP - 1];	\
 			} while (0)
 #define IPA_STATS_INC_BRIDGE_CNT(type, dir, base) do {		\
 			++base[type][dir];			\
@@ -85,14 +75,12 @@
 #define IPA_STATS_INC_CNT(x) do { } while (0)
 #define IPA_STATS_INC_CNT_SAFE(x) do { } while (0)
 #define IPA_STATS_EXCP_CNT(flags, base) do { } while (0)
-#define IPA_STATS_INC_TX_CNT(ep, sw, hw) do { } while (0)
-#define IPA_STATS_INC_IC_CNT(num, base, stat_base) do { } while (0)
 #define IPA_STATS_INC_BRIDGE_CNT(type, dir, base) do { } while (0)
 #endif
 
 
 #define IPA_TOS_EQ			BIT(0)
-#define IPA_PROTOCOL_EQ		BIT(1)
+#define IPA_PROTOCOL_EQ			BIT(1)
 #define IPA_OFFSET_MEQ32_0		BIT(2)
 #define IPA_OFFSET_MEQ32_1		BIT(3)
 #define IPA_IHL_OFFSET_RANGE16_0	BIT(4)
@@ -268,6 +256,7 @@ struct ipa_flt_tbl {
 	u32 sz;
 	struct ipa_mem_buffer curr_mem;
 	struct ipa_mem_buffer prev_mem;
+	bool sticky_rear;
 };
 
 /**
@@ -350,6 +339,8 @@ struct ipa_ep_context {
 	bool suspended;
 	struct ipa_sys_context *sys;
 	u32 avail_fifo_desc;
+	u32 dflt_flt4_rule_hdl;
+	u32 dflt_flt6_rule_hdl;
 };
 
 enum ipa_sys_pipe_policy {
@@ -551,15 +542,12 @@ enum ipa_config_this_ep {
 };
 
 struct ipa_stats {
-	u32 imm_cmds[MAX_NUM_IMM_CMD];
 	u32 tx_sw_pkts;
 	u32 tx_hw_pkts;
 	u32 rx_pkts;
 	u32 rx_excp_pkts[MAX_NUM_EXCP];
-	u32 bridged_pkts[IPA_BRIDGE_TYPE_MAX][IPA_BRIDGE_DIR_MAX];
 	u32 rx_repl_repost;
-	u32 x_intr_repost;
-	u32 x_intr_repost_tx;
+	u32 tx_pkts_compl;
 	u32 rx_q_len;
 	u32 msg_w[IPA_EVENT_MAX];
 	u32 msg_r[IPA_EVENT_MAX];
@@ -964,8 +952,9 @@ int __ipa_commit_hdr_v2(void);
 int ipa_generate_flt_eq(enum ipa_ip_type ip,
 		const struct ipa_rule_attrib *attrib,
 		struct ipa_ipfltri_rule_eq *eq_attrib);
-
 void ipa_skb_recycle(struct sk_buff *skb);
+void ipa_install_dflt_flt_rules(u32 ipa_ep_idx);
+void ipa_delete_dflt_flt_rules(u32 ipa_ep_idx);
 
 int ipa_enable_data_path(u32 clnt_hdl);
 int ipa_disable_data_path(u32 clnt_hdl);
