@@ -458,11 +458,12 @@ EXPORT_SYMBOL_GPL(usbnet_defer_kevent);
 
 /*-------------------------------------------------------------------------*/
 
+static void rx_complete(struct urb *urb);
+
 static int rx_submit (struct usbnet *dev, struct urb *urb, gfp_t flags)
 {
 	struct sk_buff		*skb;
 	struct skb_data		*entry;
-	usb_complete_t		complete_fn;
 	int			retval = 0;
 	unsigned long		lockflags;
 	size_t			size = dev->rx_urb_size;
@@ -486,13 +487,8 @@ static int rx_submit (struct usbnet *dev, struct urb *urb, gfp_t flags)
 	entry->dev = dev;
 	entry->length = 0;
 
-	if (dev->driver_info->rx_complete)
-		complete_fn = dev->driver_info->rx_complete;
-	else
-		complete_fn = rx_complete;
-
 	usb_fill_bulk_urb (urb, dev->udev, dev->in,
-		skb->data, size, complete_fn, skb);
+		skb->data, size, rx_complete, skb);
 
 	spin_lock_irqsave (&dev->rxq.lock, lockflags);
 
@@ -568,7 +564,7 @@ done:
 
 /*-------------------------------------------------------------------------*/
 
-void rx_complete(struct urb *urb)
+static void rx_complete(struct urb *urb)
 {
 	struct sk_buff		*skb = (struct sk_buff *) urb->context;
 	struct skb_data		*entry = (struct skb_data *) skb->cb;
