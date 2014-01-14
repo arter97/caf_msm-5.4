@@ -3,6 +3,7 @@
  *
  * This code is based on drivers/scsi/ufs/ufshcd.h
  * Copyright (C) 2011-2013 Samsung India Software Operations
+ * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * Authors:
  *	Santosh Yaraganavi <santosh.sy@samsung.com>
@@ -206,8 +207,9 @@ struct ufs_dev_cmd {
 
 #ifdef CONFIG_DEBUG_FS
 struct ufs_stats {
-	u64 *tag_stats;
 	bool enabled;
+	u64 **tag_stats;
+	int q_depth;
 };
 
 struct debugfs_files {
@@ -220,6 +222,17 @@ struct debugfs_files {
 	struct fault_attr fail_attr;
 #endif
 };
+
+/* tag stats statistics types */
+enum ts_types {
+	TS_NOT_SUPPORTED	= -1,
+	TS_TAG			= 0,
+	TS_READ			= 1,
+	TS_WRITE		= 2,
+	TS_URGENT		= 3,
+	TS_FLUSH		= 4,
+	TS_NUM_STATS		= 5,
+};
 #endif
 
 /**
@@ -228,6 +241,8 @@ struct debugfs_files {
  * @clk: clock node
  * @name: clock name
  * @max_freq: maximum frequency supported by the clock
+ * @min_freq: min frequency that can be used for clock scaling
+ * @curr_freq: indicates the current frequency that it is set to
  * @enabled: variable to check against multiple enable/disable
  */
 struct ufs_clk_info {
@@ -235,6 +250,8 @@ struct ufs_clk_info {
 	struct clk *clk;
 	const char *name;
 	u32 max_freq;
+	u32 min_freq;
+	u32 curr_freq;
 	bool enabled;
 };
 
@@ -256,6 +273,7 @@ struct ufs_pa_layer_attr {
  * @name: variant name
  * @init: called when the driver is initialized
  * @exit: called to cleanup everything done in init
+ * @clk_scale_notify: notifies that clks are scaled up/down
  * @setup_clocks: called before touching any of the controller registers
  * @setup_regulators: called before accessing the host controller
  * @hce_enable_notify: called before and after HCE enable bit is set to allow
@@ -272,6 +290,7 @@ struct ufs_hba_variant_ops {
 	const char *name;
 	int	(*init)(struct ufs_hba *);
 	void    (*exit)(struct ufs_hba *);
+	void    (*clk_scale_notify)(struct ufs_hba *);
 	int     (*setup_clocks)(struct ufs_hba *, bool);
 	int     (*setup_regulators)(struct ufs_hba *, bool);
 	int     (*hce_enable_notify)(struct ufs_hba *, bool);
@@ -313,6 +332,13 @@ struct ufs_clk_gating {
 	bool is_suspended;
 	struct device_attribute delay_attr;
 	int active_reqs;
+};
+
+struct ufs_clk_scaling {
+	ktime_t  busy_start_t;
+	bool is_busy_started;
+	unsigned long  tot_busy_t;
+	unsigned long window_start_t;
 };
 
 /**
@@ -486,7 +512,11 @@ struct ufs_hba {
 #define UFSHCD_CAP_CLK_GATING	(1 << 0)
 	/* Allow hiberb8 with clk gating */
 #define UFSHCD_CAP_HIBERN8_WITH_CLK_GATING (1 << 1)
+	/* Allow dynamic clk scaling */
+#define UFSHCD_CAP_CLK_SCALING	(1 << 2)
 
+	struct devfreq *devfreq;
+	struct ufs_clk_scaling clk_scaling;
 #ifdef CONFIG_DEBUG_FS
 	struct ufs_stats ufs_stats;
 	struct debugfs_files debugfs_files;
@@ -504,6 +534,10 @@ static inline bool ufshcd_can_hibern8_during_gating(struct ufs_hba *hba)
 		return hba->caps & UFSHCD_CAP_HIBERN8_WITH_CLK_GATING;
 	else
 		return false;
+}
+static inline int ufshcd_is_clkscaling_enabled(struct ufs_hba *hba)
+{
+	return hba->caps & UFSHCD_CAP_CLK_SCALING;
 }
 #define ufshcd_writel(hba, val, reg)	\
 	writel((val), (hba)->mmio_base + (reg))
