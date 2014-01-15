@@ -1586,8 +1586,9 @@ void __init apq8064_init_gpiomux(void)
 #endif
 
 #ifdef CONFIG_MMC_MSM_SDC4_SUPPORT
-	 msm_gpiomux_install(apq8064_sdc4_configs,
-			     ARRAY_SIZE(apq8064_sdc4_configs));
+	 if (machine_is_apq8064_adp_2())
+		 msm_gpiomux_install(apq8064_sdc4_configs,
+				 ARRAY_SIZE(apq8064_sdc4_configs));
 #endif
 
 	msm_gpiomux_install(apq8064_sdc3_configs,

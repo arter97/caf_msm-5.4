@@ -322,7 +322,7 @@ static unsigned int sdc4_sup_clk_rates[] = {
 };
 
 static struct mmc_platform_data sdc4_data = {
-	.ocr_mask       = MMC_VDD_27_28 | MMC_VDD_28_29,
+	.ocr_mask       = MMC_VDD_27_28 | MMC_VDD_28_29 | MMC_VDD_165_195,
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
 	.sup_clk_table	= sdc4_sup_clk_rates,
 	.sup_clk_cnt	= ARRAY_SIZE(sdc4_sup_clk_rates),
@@ -395,6 +395,6 @@ void __init apq8064_init_mmc(void)
 		apq8064_add_sdcc(3, apq8064_sdc3_pdata);
 	}
 
-	if (apq8064_sdc4_pdata)
+	if (apq8064_sdc4_pdata && machine_is_apq8064_adp_2())
 		apq8064_add_sdcc(4, apq8064_sdc4_pdata);
 }
