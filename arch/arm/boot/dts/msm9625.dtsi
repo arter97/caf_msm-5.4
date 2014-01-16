@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1015,10 +1015,10 @@
                 interrupts = <0 1 0>;
         };
 
-	qti,usbnet_ipa {
+	qcom,usbnet_ipa {
 		cell-index = <0>;
-		compatible = "qti,usbnet_ipa";
-		qti,hub-reset = <&msmgpio 50 0>;
+		compatible = "qcom,usbnet_ipa";
+		qcom,hub-reset = <&msmgpio 50 0>;
 	};
 
 };

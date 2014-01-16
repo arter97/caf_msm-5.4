@@ -420,7 +420,7 @@ static struct usbnet_ipa_platform_data *usbnet_ipa_dt_populate_pdata(
 		goto err;
 	}
 
-	gpio_no = of_get_named_gpio(np, "qti,hub-reset", 0);
+	gpio_no = of_get_named_gpio(np, "qcom,hub-reset", 0);
 	if (gpio_no < 0) {
 		USBNET_IPA_ERR("Please specify the hub-reset GPIO in plat dt");
 		goto err;
@@ -573,7 +573,7 @@ static int usbnet_ipa_platform_resume(struct platform_device *pdev)
 }
 
 static const struct of_device_id usbnet_ipa_dt_match[] = {
-	{.compatible = "qti,usbnet_ipa"},
+	{.compatible = "qcom,usbnet_ipa" },
 	{},
 };
 
