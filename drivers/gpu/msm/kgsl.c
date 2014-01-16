@@ -2281,6 +2281,7 @@ static long kgsl_ioctl_gpumem_free_id(struct kgsl_device_private *dev_priv,
 	return 0;
 }
 
+#ifdef CONFIG_ASHMEM
 static struct vm_area_struct *kgsl_get_vma_from_start_addr(unsigned int addr)
 {
 	struct vm_area_struct *vma;
@@ -2293,6 +2294,7 @@ static struct vm_area_struct *kgsl_get_vma_from_start_addr(unsigned int addr)
 
 	return vma;
 }
+#endif
 
 static inline int _check_region(unsigned long start, unsigned long size,
 				uint64_t len)
