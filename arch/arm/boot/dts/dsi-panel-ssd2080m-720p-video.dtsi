@@ -82,7 +82,7 @@
 			29 01 00 00 00 00 05 F6 00 00 00 00
 			29 01 00 00 00 00 05 F7 00 00 00 00
 			29 01 00 00 00 00 03 E1 90 00
-			29 01 00 00 00 00 03 DE 95 CF
+			29 01 00 00 00 00 07 DE 95 CF E2 CE 11 15
 			29 01 00 00 00 00 02 CF 46
 			29 01 00 00 00 00 02 C5 66
 			29 01 00 00 00 00 03 ED 00 20
@@ -108,7 +108,7 @@
 		qcom,mdss-dsi-lane-1-state;
 		qcom,mdss-dsi-lane-2-state;
 		qcom,mdss-dsi-lane-3-state;
-		qcom,mdss-dsi-panel-timings = [a8 1f 17 00 2f 2d 1c 21 29 03 04 00];
+		qcom,mdss-dsi-panel-timings = [68 1d 15 00 2e 2d 19 1f 24 03 04 00];
 		qcom,mdss-dsi-t-clk-post = <0x20>;
 		qcom,mdss-dsi-t-clk-pre = <0x2f>;
 		qcom,mdss-dsi-bl-min-level = <1>;
