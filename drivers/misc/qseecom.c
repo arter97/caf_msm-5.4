@@ -1215,6 +1215,11 @@ static int __qseecom_send_cmd(struct qseecom_dev_handle *data,
 		return -EINVAL;
 	}
 
+	if (req->cmd_req_len > UINT_MAX - req->resp_len) {
+		pr_err("Integer overflow detected in req_len & rsp_len, exiting now\n");
+		return -EINVAL;
+	}
+
 	reqd_len_sb_in = req->cmd_req_len + req->resp_len;
 	if (reqd_len_sb_in > data->client.sb_length) {
 		pr_debug("Not enough memory to fit cmd_buf and "
@@ -2086,6 +2091,14 @@ static int qseecom_send_modfd_resp(struct qseecom_dev_handle *data,
 	if (copy_from_user(&resp, argp, sizeof(resp))) {
 		pr_err("copy_from_user failed");
 		return -EINVAL;
+	}
+	/* validate offsets */
+	for (i = 0; i < MAX_ION_FD; i++) {
+		if (resp.ifd_data[i].cmd_buf_offset >= resp.resp_len) {
+			pr_err("Invalid offset %d = 0x%x\n",
+				i, resp.ifd_data[i].cmd_buf_offset);
+			return -EINVAL;
+		}
 	}
 	/* validate offsets */
 	for (i = 0; i < MAX_ION_FD; i++) {
