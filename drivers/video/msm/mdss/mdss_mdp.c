@@ -134,6 +134,7 @@ static int mdss_mdp_parse_dt_handler(struct platform_device *pdev,
 static int mdss_mdp_parse_dt_prop_len(struct platform_device *pdev,
 				       char *prop_name);
 static int mdss_mdp_parse_dt_smp(struct platform_device *pdev);
+static int mdss_mdp_parse_dt_prefill(struct platform_device *pdev);
 static int mdss_mdp_parse_dt_misc(struct platform_device *pdev);
 static int mdss_mdp_parse_dt_ad_cfg(struct platform_device *pdev);
 static int mdss_mdp_parse_dt_bus_scale(struct platform_device *pdev);
@@ -1571,6 +1572,12 @@ static int mdss_mdp_parse_dt(struct platform_device *pdev)
 		return rc;
 	}
 
+	rc = mdss_mdp_parse_dt_prefill(pdev);
+	if (rc) {
+		pr_err("Error in device tree : prefill\n");
+		return rc;
+	}
+
 	rc = mdss_mdp_parse_dt_misc(pdev);
 	if (rc) {
 		pr_err("Error in device tree : misc\n");
@@ -1681,11 +1688,6 @@ static int mdss_mdp_parse_dt_pipe(struct platform_device *pdev)
 		goto dma_alloc_fail;
 	}
 
-	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-sspp-len",
-		&mdata->size_sspp, 1);
-	if (rc)
-		goto parse_fail;
-
 	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-pipe-vig-fetch-id",
 		ftch_id, mdata->nvig_pipes);
 	if (rc)
@@ -1758,6 +1760,39 @@ static int mdss_mdp_parse_dt_pipe(struct platform_device *pdev)
 		goto parse_fail;
 
 	setup_cnt += len;
+
+	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-sspp-len",
+	     &mdata->size_sspp, 1);
+	if (rc) {
+		if (mdata->nvig_pipes == 1 || mdata->nrgb_pipes == 1 ||
+				mdata->ndma_pipes == 1) {
+			pr_err("Cannot calculate length w/ only one offset\n");
+			goto parse_fail;
+		}
+
+		if (mdata->nvig_pipes >= 2) {
+			u32 *vigOff = offsets;
+			mdata->size_sspp_vig = vigOff[1] - vigOff[0];
+		} else
+			mdata->size_sspp_vig = 0;
+
+		if (mdata->nrgb_pipes >= 2) {
+			u32 *rgbOff = offsets + mdata->nvig_pipes;
+			mdata->size_sspp_rgb = rgbOff[1] - rgbOff[0];
+		} else
+			mdata->size_sspp_rgb = 0;
+
+		if (mdata->ndma_pipes >= 2) {
+			u32 *dmaOff = offsets + mdata->nvig_pipes +
+				mdata->nrgb_pipes;
+			mdata->size_sspp_dma = dmaOff[1] - dmaOff[0];
+		} else
+			mdata->size_sspp_dma = 0;
+	} else {
+		mdata->size_sspp_vig = mdata->size_sspp;
+		mdata->size_sspp_rgb = mdata->size_sspp;
+		mdata->size_sspp_dma = mdata->size_sspp;
+	}
 
 	if (mdata->nvig_pipes > DEFAULT_TOTAL_VIG_PIPES) {
 		rc = mdss_mdp_pipe_addr_setup(mdata,
@@ -1861,8 +1896,13 @@ static int mdss_mdp_parse_dt_mixer(struct platform_device *pdev)
 
 	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-mixer-intf-len",
 		&mdata->size_mixer_intf, 1);
-	if (rc)
-		goto parse_done;
+	if (rc) {
+		if (mdata->nmixers_intf >= 2)
+			mdata->size_mixer_intf = mixer_offsets[1] -
+				mixer_offsets[0];
+		else
+			goto parse_done;
+	}
 
 	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-mixer-wb-off",
 		mixer_offsets + mdata->nmixers_intf, mdata->nmixers_wb);
@@ -1876,8 +1916,12 @@ static int mdss_mdp_parse_dt_mixer(struct platform_device *pdev)
 
 	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-dspp-len",
 		&mdata->size_dspp, 1);
-	if (rc)
-		goto parse_done;
+	if (rc) {
+		if (ndspp >= 2)
+			mdata->size_dspp = dspp_offsets[1] - dspp_offsets[0];
+		else
+			goto parse_done;
+	}
 
 	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-pingpong-off",
 		pingpong_offsets, npingpong);
@@ -1945,8 +1989,12 @@ static int mdss_mdp_parse_dt_ctl(struct platform_device *pdev)
 
 	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-ctl-len",
 		&mdata->size_ctl, 1);
-	if (rc)
-		goto parse_done;
+	if (rc) {
+		if (mdata->nctl >= 2)
+			mdata->size_ctl = ctl_offsets[1] - ctl_offsets[0];
+		else
+			goto parse_done;
+	}
 
 	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-wb-off",
 		wb_offsets, nwb);
@@ -2076,18 +2124,78 @@ static void mdss_mdp_parse_dt_fudge_factors(struct platform_device *pdev,
 	char *prop_name, struct mdss_fudge_factor *ff)
 {
 	int rc;
-	u32 data[2] = {0, 0};
-
-	ff->numer = 1;
-	ff->denom = 1;
+	u32 data[2] = {1, 1};
 
 	rc = mdss_mdp_parse_dt_handler(pdev, prop_name, data, 2);
 	if (rc) {
-		pr_debug("err reading %s\n", prop_name);
+		pr_err("err reading %s\n", prop_name);
 	} else {
 		ff->numer = data[0];
 		ff->denom = data[1];
 	}
+}
+
+static int mdss_mdp_parse_dt_prefill(struct platform_device *pdev)
+{
+	struct mdss_data_type *mdata = platform_get_drvdata(pdev);
+	struct mdss_prefill_data *prefill = &mdata->prefill_data;
+	int rc;
+
+	rc = of_property_read_u32(pdev->dev.of_node,
+		"qcom,mdss-prefill-outstanding-buffer-bytes",
+		&prefill->ot_bytes);
+	if (rc) {
+		pr_err("prefill outstanding buffer bytes not specified\n");
+		return rc;
+	}
+
+	rc = of_property_read_u32(pdev->dev.of_node,
+		"qcom,mdss-prefill-y-buffer-bytes", &prefill->y_buf_bytes);
+	if (rc) {
+		pr_err("prefill y buffer bytes not specified\n");
+		return rc;
+	}
+
+	rc = of_property_read_u32(pdev->dev.of_node,
+		"qcom,mdss-prefill-scaler-buffer-lines-bilinear",
+		&prefill->y_scaler_lines_bilinear);
+	if (rc) {
+		pr_err("prefill scaler lines for bilinear not specified\n");
+		return rc;
+	}
+
+	rc = of_property_read_u32(pdev->dev.of_node,
+		"qcom,mdss-prefill-scaler-buffer-lines-caf",
+		&prefill->y_scaler_lines_caf);
+	if (rc) {
+		pr_debug("prefill scaler lines for caf not specified\n");
+		return rc;
+	}
+
+	rc = of_property_read_u32(pdev->dev.of_node,
+		"qcom,mdss-prefill-post-scaler-buffer-pixels",
+		&prefill->post_scaler_pixels);
+	if (rc) {
+		pr_err("prefill post scaler buffer pixels not specified\n");
+		return rc;
+	}
+
+	rc = of_property_read_u32(pdev->dev.of_node,
+		"qcom,mdss-prefill-pingpong-buffer-pixels",
+		&prefill->pp_pixels);
+	if (rc) {
+		pr_err("prefill pingpong buffer lines not specified\n");
+		return rc;
+	}
+
+	rc = of_property_read_u32(pdev->dev.of_node,
+		"qcom,mdss-prefill-fbc-lines", &prefill->fbc_lines);
+	if (rc) {
+		pr_err("prefill FBC lines not specified\n");
+		return rc;
+	}
+
+	return 0;
 }
 
 static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
@@ -2114,12 +2222,27 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 	if (rc)
 		pr_debug("Could not read optional property: highest bank bit\n");
 
+	/*
+	 * 2x factor on AB because bus driver will divide by 2
+	 * due to 2x ports to BIMC
+	 */
+	mdata->ab_factor.numer = 2;
+	mdata->ab_factor.denom = 1;
 	mdss_mdp_parse_dt_fudge_factors(pdev, "qcom,mdss-ab-factor",
 		&mdata->ab_factor);
+
+	/*
+	 * 1.2 factor on ib as default value. This value is
+	 * experimentally determined and should be tuned in device
+	 * tree.
+	 */
+	mdata->ib_factor.numer = 6;
+	mdata->ib_factor.denom = 5;
 	mdss_mdp_parse_dt_fudge_factors(pdev, "qcom,mdss-ib-factor",
 		&mdata->ib_factor);
-	mdss_mdp_parse_dt_fudge_factors(pdev, "qcom,mdss-high-ib-factor",
-		&mdata->high_ib_factor);
+
+	mdata->clk_factor.numer = 1;
+	mdata->clk_factor.denom = 1;
 	mdss_mdp_parse_dt_fudge_factors(pdev, "qcom,mdss-clk-factor",
 		&mdata->clk_factor);
 
