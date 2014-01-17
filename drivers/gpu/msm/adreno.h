@@ -939,5 +939,4 @@ static inline void adreno_set_protected_registers(struct kgsl_device *device,
 	*index = *index + 1;
 }
 
-
 #endif /*__ADRENO_H */
