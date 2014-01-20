@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -125,6 +125,7 @@ struct ecm_ipa_dev {
 	u8 outstanding_high;
 	u8 outstanding_low;
 	enum ecm_ipa_state state;
+	void (*device_ready_notify)(void);
 };
 
 static int ecm_ipa_open(struct net_device *net);
@@ -133,6 +134,7 @@ static void ecm_ipa_packet_receive_notify(void *priv,
 static void ecm_ipa_tx_complete_notify(void *priv,
 		enum ipa_dp_evt_type evt, unsigned long data);
 static int ecm_ipa_stop(struct net_device *net);
+static void ecm_ipa_enable_data_path(struct ecm_ipa_dev *ecm_ipa_ctx);
 static int ecm_ipa_rules_cfg(struct ecm_ipa_dev *ecm_ipa_ctx,
 		const void *dst_mac, const void *src_mac);
 static void ecm_ipa_rules_destroy(struct ecm_ipa_dev *ecm_ipa_ctx);
@@ -218,7 +220,9 @@ int ecm_ipa_init(struct ecm_ipa_params *params)
 	struct ecm_ipa_dev *ecm_ipa_ctx;
 
 	ECM_IPA_LOG_ENTRY();
+
 	pr_debug("%s initializing\n", DRIVER_NAME);
+
 	NULL_CHECK(params);
 
 	pr_debug("host_ethaddr=%pM, device_ethaddr=%pM\n",
@@ -245,6 +249,10 @@ int ecm_ipa_init(struct ecm_ipa_params *params)
 	snprintf(net->name, sizeof(net->name), "%s%%d", "ecm");
 	net->netdev_ops = &ecm_ipa_netdev_ops;
 	pr_debug("internal data structures were intialized and defaults set\n");
+
+	if (!params->device_ready_notify)
+		pr_debug("device_ready_notify() was not supplied");
+	ecm_ipa_ctx->device_ready_notify = params->device_ready_notify;
 
 	result = ecm_ipa_debugfs_init(ecm_ipa_ctx);
 	if (result)
@@ -297,6 +305,8 @@ int ecm_ipa_init(struct ecm_ipa_params *params)
 	ecm_ipa_ctx->state = ECM_IPA_INITIALIZED;
 	ECM_IPA_STATE_DEBUG(ecm_ipa_ctx);
 
+	pr_info("ECM_IPA was initialized successfuly");
+
 	ECM_IPA_LOG_EXIT();
 
 	return 0;
@@ -327,6 +337,8 @@ EXPORT_SYMBOL(ecm_ipa_init);
  * Once USB driver finishes the pipe connection between IPA core
  * and USB core this method shall be called in order to
  * allow ecm_ipa complete the data path configurations.
+ * Caller should make sure that it is calling this function
+ * from a context that allows it to handle device_ready_notify().
  * Detailed description:
  *  - configure the IPA end-points register
  *  - notify the Linux kernel for "carrier_on"
@@ -375,10 +387,10 @@ int ecm_ipa_connect(u32 usb_to_ipa_hdl, u32 ipa_to_usb_hdl,
 	}
 	pr_debug("carrier_on notified, ecm_ipa is operational\n");
 
-	if (ecm_ipa_ctx->state == ECM_IPA_CONNECTED_AND_UP) {
-		netif_start_queue(ecm_ipa_ctx->net);
-		pr_debug("queue started\n");
-	}
+	if (ecm_ipa_ctx->state == ECM_IPA_CONNECTED_AND_UP)
+		ecm_ipa_enable_data_path(ecm_ipa_ctx);
+
+	pr_info("ECM_IPA was connected successfuly");
 
 	ECM_IPA_LOG_EXIT();
 
@@ -412,12 +424,12 @@ static int ecm_ipa_open(struct net_device *net)
 	ecm_ipa_ctx->state = next_state;
 	ECM_IPA_STATE_DEBUG(ecm_ipa_ctx);
 
-	if (ecm_ipa_ctx->state == ECM_IPA_CONNECTED_AND_UP) {
-		netif_start_queue(net);
-		pr_debug("queue started\n");
-	} else {
+	if (ecm_ipa_ctx->state == ECM_IPA_CONNECTED_AND_UP)
+		ecm_ipa_enable_data_path(ecm_ipa_ctx);
+	else
 		pr_debug("queue was not started due to meta-stabilie state\n");
-	}
+
+	pr_info("ECM_IPA was opened successfuly");
 
 	ECM_IPA_LOG_EXIT();
 
@@ -450,6 +462,10 @@ static netdev_tx_t ecm_ipa_start_xmit(struct sk_buff *skb,
 	int ret;
 	netdev_tx_t status = NETDEV_TX_BUSY;
 	struct ecm_ipa_dev *ecm_ipa_ctx = netdev_priv(net);
+
+
+	pr_debug("packet Tx, len=%d, skb->protocol=%d",
+		skb->len, skb->protocol);
 
 	if (unlikely(netif_queue_stopped(net))) {
 		ECM_IPA_ERROR("interface queue is stopped\n");
@@ -519,6 +535,9 @@ static void ecm_ipa_packet_receive_notify(void *priv,
 	struct sk_buff *skb = (struct sk_buff *)data;
 	struct ecm_ipa_dev *ecm_ipa_ctx = priv;
 	int result;
+
+	pr_debug("packet Rx, len=%d",
+		skb->len);
 
 	if (unlikely(ecm_ipa_ctx->state != ECM_IPA_CONNECTED_AND_UP)) {
 		ECM_IPA_ERROR("Missing pipe connected and/or iface up\n");
@@ -668,6 +687,17 @@ void ecm_ipa_cleanup(void *priv)
 	return ;
 }
 EXPORT_SYMBOL(ecm_ipa_cleanup);
+
+static void ecm_ipa_enable_data_path(struct ecm_ipa_dev *ecm_ipa_ctx)
+{
+	if (ecm_ipa_ctx->device_ready_notify) {
+		ecm_ipa_ctx->device_ready_notify();
+		pr_debug("USB was notified for device ready");
+	}
+
+	netif_start_queue(ecm_ipa_ctx->net);
+	pr_debug("queue started\n");
+}
 
 /**
  * ecm_ipa_rules_cfg() - set header insertion and register Tx/Rx properties
@@ -975,6 +1005,9 @@ static void ecm_ipa_tx_complete_notify(void *priv,
 {
 	struct sk_buff *skb = (struct sk_buff *)data;
 	struct ecm_ipa_dev *ecm_ipa_ctx = priv;
+
+	pr_debug("packet Tx-complete, len=%d, skb->protocol=%d",
+		skb->len, skb->protocol);
 
 	if (!ecm_ipa_ctx) {
 		ECM_IPA_ERROR("ecm_ipa_ctx is NULL pointer\n");
