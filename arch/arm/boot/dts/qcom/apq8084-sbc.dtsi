@@ -334,7 +334,13 @@
 
 	gpio@c600 { /* GPIO 7 */
 		/* BACKLIGHT_PWM */
-
+		qcom,mode = <1>;		/* Digital output */
+		qcom,output-type = <0>;		/* CMOS logic */
+		qcom,invert = <0>;		/* Do not invert the output */
+		qcom,vin-sel = <2>;		/* PMA8084 S4 = 1.8 V */
+		qcom,src-sel = <2>;		/* Special Function 1=LPG 3 */
+		qcom,out-strength = <3>;	/* High drive strength */
+		qcom,master-en = <1>;		/* Enable GPIO */
 	};
 
 	gpio@c700 { /* GPIO 8 */
@@ -350,9 +356,9 @@
 		qcom,mode = <1>;		/* Digital output */
 		qcom,output-type = <0>;		/* CMOS logic */
 		qcom,invert = <0>;		/* Do not invert the output */
-		qcom,vin-sel = <0>;		/* VPH_PWR */
-		qcom,src-sel = <0>;		/* GPIO */
-		qcom,out-strength = <1>;	/* High drive strength */
+		qcom,vin-sel = <2>;		/* PMA8084 S4 = 1.8 V */
+		qcom,src-sel = <2>;		/* Special Function 1=LPG 5 */
+		qcom,out-strength = <3>;	/* High drive strength */
 		qcom,master-en = <1>;		/* Enable GPIO */
 	};
 
@@ -494,4 +500,25 @@
 
 &pcie0 {
 	vreg-3.3-supply = <&vph_pwr_vreg>;
+};
+
+&spmi_bus {
+	qcom,pma8084@0 {
+		qcom,leds@c900 {
+			compatible = "qcom,leds-qpnp";
+			reg = <0xc900 0x100>;
+			status = "okay";
+			qcom,led_gpio_10 {
+				label = "mpp";
+				linux,name = "led:notification";
+				linux,default-trigger = "notification";
+				qcom,default-state = "on";
+				qcom,max-current = <40>;
+				qcom,id = <6>;
+				qcom,source-sel = <1>;
+				qcom,mode-ctrl = <0x60>;
+				qcom,mode = "manual";
+			};
+		};
+	};
 };
