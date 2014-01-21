@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -108,9 +108,9 @@ static int v4l2_sub_event[] = {
 #define V4L2_MPEG_VIDC_EXTRADATA_MULTISLICE_INFO_BIT 0x00000800
 #define V4L2_MPEG_VIDC_EXTRADATA_NUM_CONCEALED_MB_BIT 0x00001000
 #define V4L2_MPEG_VIDC_EXTRADATA_METADATA_FILLER_BIT 0x00002000
-#define V4L2_MPEG_VIDC_INDEX_EXTRADATA_INPUT_CROP_BIT 0x00004000
-#define V4L2_MPEG_VIDC_INDEX_EXTRADATA_DIGITAL_ZOOM_BIT	0x00008000
-#define V4L2_MPEG_VIDC_INDEX_EXTRADATA_ASPECT_RATIO_BIT	0x00010000
+#define V4L2_MPEG_VIDC_EXTRADATA_INPUT_CROP_BIT 0x00004000
+#define V4L2_MPEG_VIDC_EXTRADATA_DIGITAL_ZOOM_BIT	0x00008000
+#define V4L2_MPEG_VIDC_EXTRADATA_ASPECT_RATIO_BIT	0x00010000
 #define V4L2_MPEG_VIDC_EXTRADATA_MPEG2_SEQDISP_BIT 0x00020000
 
 struct v4l2_extradata_type {
@@ -179,16 +179,16 @@ V4L2_MPEG_VIDC_EXTRADATA_METADATA_FILLER,
 V4L2_MPEG_VIDC_EXTRADATA_METADATA_FILLER_BIT
 },
 {
-V4L2_MPEG_VIDC_INDEX_EXTRADATA_INPUT_CROP,
-V4L2_MPEG_VIDC_INDEX_EXTRADATA_INPUT_CROP_BIT
+V4L2_MPEG_VIDC_EXTRADATA_INPUT_CROP,
+V4L2_MPEG_VIDC_EXTRADATA_INPUT_CROP_BIT
 },
 {
-V4L2_MPEG_VIDC_INDEX_EXTRADATA_DIGITAL_ZOOM,
-V4L2_MPEG_VIDC_INDEX_EXTRADATA_DIGITAL_ZOOM_BIT
+V4L2_MPEG_VIDC_EXTRADATA_DIGITAL_ZOOM,
+V4L2_MPEG_VIDC_EXTRADATA_DIGITAL_ZOOM_BIT
 },
 {
-V4L2_MPEG_VIDC_INDEX_EXTRADATA_ASPECT_RATIO,
-V4L2_MPEG_VIDC_INDEX_EXTRADATA_ASPECT_RATIO_BIT
+V4L2_MPEG_VIDC_EXTRADATA_ASPECT_RATIO,
+V4L2_MPEG_VIDC_EXTRADATA_ASPECT_RATIO_BIT
 },
 {
 V4L2_MPEG_VIDC_EXTRADATA_MPEG2_SEQDISP,
@@ -1391,11 +1391,18 @@ static int mpq_dvb_free_output_buffers(
 	struct v4l2_instance *v4l2_inst)
 {
 	int rc = 0;
+	int i;
 	struct v4l2_requestbuffers v4l2_buffer_req;
+	struct buffer_info *pbuf;
 	DBG("ENTER mpq_dvb_free_output_buf\n");
 	if (!v4l2_inst) {
 		ERR("[%s]Input parameter is NULL or invalid\n", __func__);
 		return -EINVAL;
+	}
+	for (i = 0; i < v4l2_inst->num_output_buffers; i++) {
+		pbuf = &v4l2_inst->buf_info[CAPTURE_PORT][i];
+		if (pbuf->handle)
+			msm_vidc_smem_free(v4l2_inst->vidc_inst, pbuf->handle);
 	}
 	rc = msm_vidc_release_buffers(
 	   v4l2_inst->vidc_inst,

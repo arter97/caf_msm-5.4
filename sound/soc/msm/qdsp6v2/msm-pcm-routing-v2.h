@@ -33,6 +33,7 @@
 #define LPASS_BE_INCALL_RECORD_RX "INCALL_RECORD_TX"
 #define LPASS_BE_INCALL_RECORD_TX "INCALL_RECORD_RX"
 #define LPASS_BE_SEC_I2S_RX "SECONDARY_I2S_RX"
+#define LPASS_BE_SPDIF_RX "SPDIF_RX"
 
 #define LPASS_BE_MI2S_RX "MI2S_RX"
 #define LPASS_BE_MI2S_TX "MI2S_TX"
@@ -135,6 +136,7 @@ enum {
 	MSM_BACKEND_DAI_SEC_AUXPCM_TX,
 	MSM_BACKEND_DAI_SLIMBUS_6_RX,
 	MSM_BACKEND_DAI_SLIMBUS_6_TX,
+	MSM_BACKEND_DAI_SPDIF_RX,
 	MSM_BACKEND_DAI_MAX,
 };
 
@@ -158,6 +160,9 @@ struct msm_pcm_routing_evt {
 	void *priv_data;
 };
 
+void msm_pcm_routing_reg_phy_compr_stream(int fedai_id, bool perf_mode,
+				    int dspst_id, int stream_type,
+				    bool compr_passthr);
 void msm_pcm_routing_reg_phy_stream_v2(int fedai_id, bool perf_mode,
 				       int dspst_id, int stream_type,
 				       struct msm_pcm_routing_evt event_info);

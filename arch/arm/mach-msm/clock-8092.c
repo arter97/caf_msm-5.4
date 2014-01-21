@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1373,12 +1373,14 @@ static struct rcg_clk gmac_125m_clk_src = {
 static struct clk_freq_tbl ftbl_gcc_gmac_core_clk[] = {
 	F_EXT(   19200000,	      xo,   1,	  0,	0),
 	F_EXT(	125000000, gmac_125m_clk,   1,	  0,	0),
+	F_EXT(  25000000, gmac_125m_clk,    5,    0,    0),
+	F_EXT(  2500000, gmac_125m_clk,     1,    1,    0xFFFF0032),
 	F_END
 };
 
 static struct rcg_clk gmac_core_clk_src = {
 	.cmd_rcgr_reg = GMAC_CORE_CMD_RCGR,
-	.set_rate = set_rate_hid,
+	.set_rate = set_rate_mnd,
 	.freq_tbl = ftbl_gcc_gmac_core_clk,
 	.current_freq = &rcg_dummy_freq,
 	.base = &virt_bases[GCC_BASE],
@@ -1392,6 +1394,7 @@ static struct rcg_clk gmac_core_clk_src = {
 
 static struct clk_freq_tbl ftbl_gcc_gmac_sys_25m_clk[] = {
 	F_EXT(   19200000,	      xo,   1,	  0,	0),
+	F_EXT(   25000000, gmac_125m_clk,   5,    0,    0),
 	F_EXT(	125000000, gmac_125m_clk,   1,	  0,	0),
 	F_END
 };
@@ -6667,12 +6670,13 @@ static struct clk_lookup mpq_clocks_8092[] = {
 	CLK_LOOKUP("",	gcc_geni_ser_clk.c,	""),
 
 	/* GMAC */
-	CLK_LOOKUP("",	gcc_gmac_125m_clk.c,	""),
-	CLK_LOOKUP("",	gcc_gmac_axi_clk.c,	""),
-	CLK_LOOKUP("",	gcc_gmac_cfg_ahb_clk.c,	""),
-	CLK_LOOKUP("",	gcc_gmac_core_clk.c,	""),
-	CLK_LOOKUP("",	gcc_gmac_rx_clk.c,	""),
-	CLK_LOOKUP("",	gcc_gmac_sys_25m_clk.c,	""),
+	CLK_LOOKUP("125m_clk",  gcc_gmac_125m_clk.c,    "fc540000.qcom,emac"),
+	CLK_LOOKUP("axi_clk",   gcc_gmac_axi_clk.c,     "fc540000.qcom,emac"),
+	CLK_LOOKUP("cfg_ahb_clk", gcc_gmac_cfg_ahb_clk.c, "fc540000.qcom,emac"),
+	CLK_LOOKUP("tx_clk",    gcc_gmac_core_clk.c,    "fc540000.qcom,emac"),
+	CLK_LOOKUP("rx_clk",    gcc_gmac_rx_clk.c,      "fc540000.qcom,emac"),
+	CLK_LOOKUP("25m_clk",   gcc_gmac_sys_25m_clk.c, "fc540000.qcom,emac"),
+	CLK_LOOKUP("sys_clk",   gcc_gmac_sys_clk.c,     "fc540000.qcom,emac"),
 
 	/* GP */
 	CLK_LOOKUP("",	gcc_gp1_clk.c,	""),
@@ -7060,8 +7064,10 @@ static struct clk_lookup mpq_clocks_8092[] = {
 					"fc724000.msm_tspp2"),
 	CLK_LOOKUP("iface_vbif_clk", bcc_vbif_ahb_clk.c, "fc600000.msm-demod"),
 	CLK_LOOKUP("",	bcc_vbif_ahb_clk.c,	""),
+	CLK_LOOKUP("iface_vbif_clk", bcc_vbif_ahb_clk.c, "fc74a000.msm_tsc"),
 	CLK_LOOKUP("vbif_core_clk", bcc_vbif_axi_clk.c, "fc600000.msm-demod"),
 	CLK_LOOKUP("",	bcc_vbif_axi_clk.c,	""),
+	CLK_LOOKUP("vbif_core_clk", bcc_vbif_axi_clk.c, "fc74a000.msm_tsc"),
 	CLK_LOOKUP("",	bcc_lnb_ser_clk.c,	""),
 	CLK_LOOKUP("",	bcc_xo_clk.c,	""),
 

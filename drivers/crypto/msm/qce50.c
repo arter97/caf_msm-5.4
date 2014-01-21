@@ -1,6 +1,6 @@
 /* Qualcomm Crypto Engine driver.
  *
- * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -279,7 +279,7 @@ static int _ce_setup_hash(struct qce_device *pce_dev,
 	struct sps_command_element *pce = NULL;
 	bool use_hw_key = false;
 	bool use_pipe_key = false;
-	uint32_t authk_size_in_word = SHA_HMAC_KEY_SIZE/sizeof(uint32_t);
+	uint32_t authk_size_in_word = sreq->authklen/sizeof(uint32_t);
 	uint32_t auth_cfg;
 
 	if ((sreq->alg == QCE_HASH_SHA1_HMAC) ||
@@ -829,12 +829,15 @@ static int _ce_setup_cipher(struct qce_device *pce_dev, struct qce_req *creq,
 			case QCRYPTO_CTX_XTS_DU_SIZE_512B:
 				pce->data = min((unsigned int)QCE_SECTOR_SIZE,
 						creq->cryptlen);
+				break;
 			case QCRYPTO_CTX_XTS_DU_SIZE_1KB:
 				pce->data =
 					min((unsigned int)QCE_SECTOR_SIZE * 2,
 					creq->cryptlen);
+				break;
 			default:
 				pce->data = creq->cryptlen;
+				break;
 			}
 		}
 		if (creq->mode !=  QCE_MODE_ECB) {
@@ -1049,8 +1052,7 @@ static int _ce_setup_hash_direct(struct qce_device *pce_dev,
 	int i;
 	uint32_t mackey32[SHA_HMAC_KEY_SIZE/sizeof(uint32_t)] = {
 			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-	uint32_t authk_size_in_word =
-			SHA_HMAC_KEY_SIZE/sizeof(uint32_t);
+	uint32_t authk_size_in_word = sreq->authklen/sizeof(uint32_t);
 	bool sha1 = false;
 	uint32_t auth_cfg = 0;
 
@@ -1617,15 +1619,18 @@ static int _ce_setup_cipher_direct(struct qce_device *pce_dev,
 					min((uint32_t)QCE_SECTOR_SIZE,
 					creq->cryptlen), pce_dev->iobase +
 					CRYPTO_ENCR_XTS_DU_SIZE_REG);
+				break;
 			case QCRYPTO_CTX_XTS_DU_SIZE_1KB:
 				writel_relaxed(
 					min((uint32_t)(QCE_SECTOR_SIZE * 2),
 					creq->cryptlen), pce_dev->iobase +
 					CRYPTO_ENCR_XTS_DU_SIZE_REG);
+				break;
 			default:
 				writel_relaxed(creq->cryptlen,
 					pce_dev->iobase +
 					CRYPTO_ENCR_XTS_DU_SIZE_REG);
+				break;
 			}
 		}
 		if (creq->mode !=  QCE_MODE_ECB) {
