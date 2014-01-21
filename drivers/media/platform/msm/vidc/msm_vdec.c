@@ -331,8 +331,6 @@ static struct msm_vidc_ctrl msm_vdec_ctrls[] = {
 		.maximum = 0xffffff,
 		.default_value = DEFAULT_VIDEO_CONCEAL_COLOR_BLACK,
 		.step = 1,
-		.menu_skip_mask = 0,
-		.qmenu = NULL,
 		.cluster = 0,
 	},
 };
