@@ -16,9 +16,6 @@
 #ifndef _LINUX_ANDROID_ALARM_H
 #define _LINUX_ANDROID_ALARM_H
 
-#include <linux/ioctl.h>
-#include <linux/time.h>
-
 enum android_alarm_type {
 	/* return code bit numbers or set alarm arg */
 	ANDROID_ALARM_RTC_WAKEUP,
@@ -38,6 +35,8 @@ enum android_alarm_type {
 
 #include <linux/ktime.h>
 #include <linux/rbtree.h>
+#include <linux/ioctl.h>
+#include <linux/time.h>
 
 /*
  * The alarm interface is similar to the hrtimer interface but adds support
