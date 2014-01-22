@@ -522,7 +522,8 @@ static struct mipi_dsi_platform_data mipi_dsi_pdata = {
 static bool lvds_power_on;
 static int lvds_panel_power(int on)
 {
-	static struct regulator *reg_lvs7, *reg_l2, *reg_ext_3p3v;
+	static struct regulator *reg_lvs7, *reg_l2, *reg_ext_3p3v,
+		*reg_lvds_s4;
 	static int gpio36, gpio26, mpp3;
 	int rc;
 
@@ -580,6 +581,16 @@ static int lvds_panel_power(int on)
 			return -ENODEV;
 		}
 
+		if (machine_is_apq8064_adp_2()) {
+			reg_lvds_s4 = regulator_get(&msm_lvds_device.dev,
+				"lvds_s4");
+			if (IS_ERR_OR_NULL(reg_lvds_s4)) {
+				pr_err("could not get reg_lvds_s4, rc = %ld\n",
+					PTR_ERR(reg_lvds_s4));
+				reg_lvds_s4 = NULL;
+				return -ENODEV;
+			}
+		}
 		lvds_power_on = true;
 	}
 
@@ -607,6 +618,15 @@ static int lvds_panel_power(int on)
 			return -ENODEV;
 		}
 
+		if (machine_is_apq8064_adp_2()) {
+			rc = regulator_enable(reg_lvds_s4);
+			if (rc) {
+				pr_err("enable reg_lvds_s4 failed, rc=%d\n",
+					rc);
+				return -ENODEV;
+			}
+		}
+
 		gpio_set_value_cansleep(gpio36, 0);
 		gpio_set_value_cansleep(mpp3, 1);
 		if (socinfo_get_pmic_model() == PMIC_MODEL_PM8917)
@@ -616,6 +636,15 @@ static int lvds_panel_power(int on)
 			gpio_set_value_cansleep(gpio26, 0);
 		gpio_set_value_cansleep(mpp3, 0);
 		gpio_set_value_cansleep(gpio36, 1);
+
+		if (machine_is_apq8064_adp_2()) {
+			rc = regulator_disable(reg_lvds_s4);
+			if (rc) {
+				pr_err("disable reg_lvds_s4 failed, rc=%d\n",
+					rc);
+				return -ENODEV;
+			}
+		}
 
 		rc = regulator_disable(reg_lvs7);
 		if (rc) {
