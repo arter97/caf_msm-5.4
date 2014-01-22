@@ -145,6 +145,11 @@ static struct pm8xxx_gpio_init pm8921_mpq8064_hrd_gpios[] __initdata = {
 	PM8921_GPIO_OUTPUT(37, 0, LOW),	/* MUX1_SEL */
 };
 
+static struct pm8xxx_gpio_init pm8921_apq8064_apd_2_gpios[] __initdata = {
+	PM8921_GPIO_INIT(37, PM_GPIO_DIR_OUT, 0, 1, PM_GPIO_PULL_NO, 2,
+		PM_GPIO_STRENGTH_HIGH, PM_GPIO_FUNC_1, 0, 0),
+};
+
 /* Initial PM8917 GPIO configurations */
 static struct pm8xxx_gpio_init pm8917_gpios[] __initdata = {
 	PM8921_GPIO_OUTPUT(14, 1, HIGH),	/* HDMI Mux Selector */
@@ -228,6 +233,10 @@ void __init apq8064_pm8xxx_gpio_mpp_init(void)
 
 		apq8064_configure_gpios(pm8921_8917_cdp_ts_gpios,
 				ARRAY_SIZE(pm8921_8917_cdp_ts_gpios));
+
+		apq8064_configure_gpios(pm8921_apq8064_apd_2_gpios,
+				ARRAY_SIZE(pm8921_apq8064_apd_2_gpios));
+
 	}
 
 	if (machine_is_apq8064_mtp()) {

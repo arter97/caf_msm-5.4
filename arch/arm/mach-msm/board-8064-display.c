@@ -524,7 +524,7 @@ static int lvds_panel_power(int on)
 {
 	static struct regulator *reg_lvs7, *reg_l2, *reg_ext_3p3v,
 		*reg_lvds_s4;
-	static int gpio36, gpio26, mpp3;
+	static int gpio36, gpio26, mpp3, gpio37;
 	int rc;
 
 	pr_debug("%s: on=%d\n", __func__, on);
@@ -582,6 +582,13 @@ static int lvds_panel_power(int on)
 		}
 
 		if (machine_is_apq8064_adp_2()) {
+			gpio37 = PM8921_GPIO_PM_TO_SYS(37);
+			rc = gpio_request(gpio37, "fpdlink3_en");
+			if (rc) {
+				pr_err("request gpio37, rc=%d\n", rc);
+				return -ENODEV;
+			}
+
 			reg_lvds_s4 = regulator_get(&msm_lvds_device.dev,
 				"lvds_s4");
 			if (IS_ERR_OR_NULL(reg_lvds_s4)) {
@@ -625,6 +632,7 @@ static int lvds_panel_power(int on)
 					rc);
 				return -ENODEV;
 			}
+			gpio_set_value_cansleep(gpio37, 1);
 		}
 
 		gpio_set_value_cansleep(gpio36, 0);
@@ -638,6 +646,7 @@ static int lvds_panel_power(int on)
 		gpio_set_value_cansleep(gpio36, 1);
 
 		if (machine_is_apq8064_adp_2()) {
+			gpio_set_value_cansleep(gpio37, 0);
 			rc = regulator_disable(reg_lvds_s4);
 			if (rc) {
 				pr_err("disable reg_lvds_s4 failed, rc=%d\n",
