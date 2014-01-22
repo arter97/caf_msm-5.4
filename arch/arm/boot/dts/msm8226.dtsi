@@ -58,6 +58,7 @@
 /include/ "msm8226-coresight.dtsi"
 /include/ "msm8226-iommu-domains.dtsi"
 /include/ "msm-rdbg.dtsi"
+/include/ "msm8226-drm.dtsi"
 
 &soc {
 	#address-cells = <1>;
