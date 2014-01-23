@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013 - 2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -149,7 +149,6 @@ static int wwan_send_packet(struct sk_buff *skb, struct net_device *dev)
 	struct wwan_private *wwan_ptr = netdev_priv(dev);
 	int ret;
 
-	dev->trans_start = jiffies;
 	ret = a2_mux_write(a2_mux_lcid_by_ch_id[wwan_ptr->ch_id], skb);
 	if (ret != 0 && ret != -EAGAIN && ret != -EFAULT) {
 		pr_err("[%s] %s: write returned error %d",
@@ -496,6 +495,7 @@ static int wwan_xmit(struct sk_buff *skb, struct net_device *dev)
 		       dev->name);
 		return 0;
 	}
+	dev->trans_start = jiffies;
 	ret = ipa_rm_inactivity_timer_request_resource(
 		ipa_rm_resource_by_ch_id[wwan_ptr->ch_id]);
 	if (ret == -EINPROGRESS) {
