@@ -182,10 +182,9 @@ struct kgsl_event {
  * @ibcount: Number of IBs in the command list
  * @ibdesc: Pointer to the list of IBs
  * @expires: Point in time when the cmdbatch is considered to be hung
- * @invalid:  non-zero if the dispatcher determines the command and the owning
- * context should be invalidated
  * @refcount: kref structure to maintain the reference count
  * @synclist: List of context/timestamp tuples to wait for before issuing
+ * @timer: a timer used to track possible sync timeouts for this cmdbatch
  *
  * This struture defines an atomic batch of command buffers issued from
  * userspace.
@@ -202,9 +201,9 @@ struct kgsl_cmdbatch {
 	uint32_t ibcount;
 	struct kgsl_ibdesc *ibdesc;
 	unsigned long expires;
-	int invalid;
 	struct kref refcount;
 	struct list_head synclist;
+	struct timer_list timer;
 };
 
 /**
@@ -357,7 +356,6 @@ struct kgsl_process_private;
  * sync_pt timestamp expires
  * @events: list head of pending events for this context
  * @events_list: list node for the list of all contexts that have pending events
- * @pid: process that owns this context.
  * @tid: task that created this context.
  * @pagefault_ts: global timestamp of the pagefault, if KGSL_CONTEXT_PAGEFAULT
  * is set.
@@ -368,7 +366,6 @@ struct kgsl_context {
 	struct kref refcount;
 	uint32_t id;
 	uint32_t priority;
-	pid_t pid;
 	pid_t tid;
 	struct kgsl_device_private *dev_priv;
 	struct kgsl_process_private *proc_priv;
@@ -389,6 +386,7 @@ struct kgsl_context {
  * all devices)
  * @priv: Internal flags, use KGSL_PROCESS_* values
  * @pid: ID for the task owner of the process
+ * @comm: task name of the process
  * @mem_lock: Spinlock to protect the process memory lists
  * @refcount: kref object for reference counting the process
  * @process_private_mutex: Mutex to synchronize access to the process struct
@@ -402,6 +400,7 @@ struct kgsl_context {
 struct kgsl_process_private {
 	unsigned long priv;
 	pid_t pid;
+	char comm[TASK_COMM_LEN];
 	spinlock_t mem_lock;
 
 	/* General refcount for process private struct obj */
@@ -668,8 +667,8 @@ static inline struct kgsl_context *kgsl_context_get_owner(
 
 	context = kgsl_context_get(dev_priv->device, id);
 
-	/* Verify that the context belongs to current calling process. */
-	if (context != NULL && context->pid != dev_priv->process_priv->pid) {
+	/* Verify that the context belongs to current calling fd. */
+	if (context != NULL && context->dev_priv != dev_priv) {
 		kgsl_context_put(context);
 		return NULL;
 	}
@@ -716,27 +715,6 @@ static inline void kgsl_cmdbatch_put(struct kgsl_cmdbatch *cmdbatch)
 {
 	if (cmdbatch)
 		kref_put(&cmdbatch->refcount, kgsl_cmdbatch_destroy_object);
-}
-
-/**
- * kgsl_cmdbatch_sync_pending() - return true if the cmdbatch is waiting
- * @cmdbatch: Pointer to the command batch object to check
- *
- * Return non-zero if the specified command batch is still waiting for sync
- * point dependencies to be satisfied
- */
-static inline int kgsl_cmdbatch_sync_pending(struct kgsl_cmdbatch *cmdbatch)
-{
-	int ret;
-
-	if (cmdbatch == NULL)
-		return 0;
-
-	spin_lock(&cmdbatch->lock);
-	ret = list_empty(&cmdbatch->synclist) ? 0 : 1;
-	spin_unlock(&cmdbatch->lock);
-
-	return ret;
 }
 
 /**

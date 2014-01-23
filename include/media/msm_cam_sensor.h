@@ -52,6 +52,8 @@
 
 #define MAX_AF_ITERATIONS 3
 
+#define MAX_LED_TRIGGERS 3
+
 enum flash_type {
 	LED_FLASH = 1,
 	STROBE_FLASH,
@@ -489,9 +491,18 @@ enum msm_actuator_addr_type {
 	MSM_ACTUATOR_WORD_ADDR,
 };
 
+enum msm_actuator_i2c_operation {
+	MSM_ACT_WRITE = 0,
+	MSM_ACT_POLL,
+};
+
 struct reg_settings_t {
 	uint16_t reg_addr;
+	enum msm_actuator_addr_type addr_type;
 	uint16_t reg_data;
+	enum msm_actuator_data_type data_type;
+	enum msm_actuator_i2c_operation i2c_operation;
+	uint32_t delay;
 };
 
 struct region_params_t {
@@ -603,6 +614,8 @@ enum msm_camera_led_config_t {
 
 struct msm_camera_led_cfg_t {
 	enum msm_camera_led_config_t cfgtype;
+	uint32_t torch_current;
+	uint32_t flash_current[MAX_LED_TRIGGERS];
 };
 
 /* sensor init structures and enums */

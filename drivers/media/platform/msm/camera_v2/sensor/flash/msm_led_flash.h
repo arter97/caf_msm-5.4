@@ -21,7 +21,6 @@
 #include "msm_camera_i2c.h"
 #include "msm_sd.h"
 
-#define MAX_LED_TRIGGERS 3
 
 struct msm_led_flash_ctrl_t;
 
@@ -53,9 +52,11 @@ struct msm_led_flash_ctrl_t {
 	const char *flash_trigger_name[MAX_LED_TRIGGERS];
 	struct led_trigger *flash_trigger[MAX_LED_TRIGGERS];
 	uint32_t flash_op_current[MAX_LED_TRIGGERS];
+	uint32_t flash_max_current[MAX_LED_TRIGGERS];
 	const char *torch_trigger_name;
 	struct led_trigger *torch_trigger;
 	uint32_t torch_op_current;
+	uint32_t torch_max_current;
 	void *data;
 	uint32_t num_sources;
 	enum msm_camera_device_type_t flash_device_type;

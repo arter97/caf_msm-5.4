@@ -1129,6 +1129,12 @@ int msm_pcie_enumerate(u32 rc_idx)
 		if (!ret) {
 			struct pci_dev *pcidev = NULL;
 			bool found = false;
+			u32 ids = readl_relaxed(msm_pcie_dev[rc_idx].dm_core);
+			u32 vendor_id = ids & 0xffff;
+			u32 device_id = (ids & 0xffff0000) >> 16;
+
+			PCIE_DBG("vendor-id:0x%x device_id:0x%x\n",
+					vendor_id, device_id);
 
 			msm_pci[rc_idx].private_data = (void **)&dev;
 			pci_common_init(&msm_pci[rc_idx]);
@@ -1136,8 +1142,8 @@ int msm_pcie_enumerate(u32 rc_idx)
 			dev->enumerated = true;
 
 			do {
-				pcidev = pci_get_device(PCIE_VENDOR_ID_RCP,
-					PCIE_DEVICE_ID_RCP, pcidev);
+				pcidev = pci_get_device(vendor_id,
+					device_id, pcidev);
 				if (pcidev && (&msm_pcie_dev[rc_idx] ==
 					(struct msm_pcie_dev_t *)
 					PCIE_BUS_PRIV_DATA(pcidev))) {
@@ -1415,15 +1421,6 @@ static int msm_pcie_pm_suspend(struct pci_dev *dev,
 		return ret;
 	}
 
-	if (user) {
-		ret = pci_save_state((struct pci_dev *) user);
-		if (ret) {
-			pr_err("PCIe: fail to save state of EP 0x%p:%d.\n",
-					user, ret);
-			return ret;
-		}
-	}
-
 	spin_lock_irqsave(&pcie_dev->cfg_lock,
 				pcie_dev->irqsave_flags);
 	pcie_dev->cfg_access = false;
@@ -1492,9 +1489,6 @@ static int msm_pcie_pm_resume(struct pci_dev *dev,
 		pci_load_and_free_saved_state(dev, &pcie_dev->saved_state);
 
 		pci_restore_state(dev);
-
-		if (user)
-			pci_restore_state((struct pci_dev *) user);
 	}
 
 	return ret;
@@ -1549,12 +1543,25 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 {
 	int ret = 0;
 	struct pci_dev *dev;
-	u32 rc_idx;
+	u32 rc_idx = 0;
 
 	switch (busnr) {
 	case 1:
-		if (!options)
-			rc_idx = 0;
+		if (user) {
+			struct msm_pcie_dev_t *pcie_dev
+				= PCIE_BUS_PRIV_DATA(((struct pci_dev *)user));
+
+			if (pcie_dev) {
+				rc_idx = pcie_dev->rc_idx;
+				PCIE_DBG("RC %d\n", pcie_dev->rc_idx);
+			} else {
+				pr_err(
+					"PCIe: did not find RC for pci endpoint device 0x%x.\n",
+					(u32)user);
+				ret = -ENODEV;
+				goto out;
+			}
+		}
 		break;
 	default:
 		pr_err("PCIe: unsupported bus number.\n");

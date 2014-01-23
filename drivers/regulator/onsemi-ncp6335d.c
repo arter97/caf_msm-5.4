@@ -24,6 +24,7 @@
 #include <linux/of_gpio.h>
 #include <linux/regmap.h>
 #include <linux/regulator/onsemi-ncp6335d.h>
+#include <mach/gpiomux.h>
 
 /* registers */
 #define REG_NCP6335D_PID		0x03
@@ -36,6 +37,7 @@
 /* constraints */
 #define NCP6335D_MIN_VOLTAGE_UV		600000
 #define NCP6335D_STEP_VOLTAGE_UV	6250
+#define NCP6335D_VOLTAGE_STEPS		128
 #define NCP6335D_MIN_SLEW_NS		166
 #define NCP6335D_MAX_SLEW_NS		1333
 
@@ -169,6 +171,17 @@ static int ncp6335d_set_voltage(struct regulator_dev *rdev,
 	return rc;
 }
 
+static int ncp6335d_list_voltage(struct regulator_dev *rdev,
+					unsigned selector)
+{
+	struct ncp6335d_info *dd = rdev_get_drvdata(rdev);
+
+	if (selector >= NCP6335D_VOLTAGE_STEPS)
+		return 0;
+
+	return selector * dd->step_size + dd->min_voltage;
+}
+
 static int ncp6335d_set_mode(struct regulator_dev *rdev,
 					unsigned int mode)
 {
@@ -223,6 +236,7 @@ static unsigned int ncp6335d_get_mode(struct regulator_dev *rdev)
 static struct regulator_ops ncp6335d_ops = {
 	.set_voltage = ncp6335d_set_voltage,
 	.get_voltage = ncp6335d_get_voltage,
+	.list_voltage = ncp6335d_list_voltage,
 	.enable = ncp6335d_enable,
 	.disable = ncp6335d_disable,
 	.set_mode = ncp6335d_set_mode,
@@ -232,7 +246,7 @@ static struct regulator_ops ncp6335d_ops = {
 static struct regulator_desc rdesc = {
 	.name = "ncp6335d",
 	.owner = THIS_MODULE,
-	.n_voltages = 128,
+	.n_voltages = NCP6335D_VOLTAGE_STEPS,
 	.ops = &ncp6335d_ops,
 };
 
@@ -297,6 +311,31 @@ static int ncp6335d_parse_gpio(struct device_node *node,
 
 	return ret;
 }
+
+static int ncp6335d_parse_tlmm(struct device_node *node,
+				struct ncp6335d_info *dd)
+{
+	int val, ret = 0;
+	u32 tmp[2];
+
+	if (!of_find_property(node, "onnn,tlmm-config", NULL))
+		return ret;
+
+	ret = of_property_read_u32_array(node, "onnn,tlmm-config", tmp, 2);
+	if (ret) {
+		dev_err(dd->dev, "onnn,tlmm-config is misconfigured, ret = %d",
+			ret);
+		return ret;
+	}
+
+	val = msm_tlmm_misc_reg_read(TLMM_SPARE_REG);
+	val &= ~tmp[0];
+	val |= tmp[1] & tmp[0];
+	msm_tlmm_misc_reg_write(TLMM_SPARE_REG, val);
+
+	return ret;
+}
+
 static int ncp6335d_init(struct i2c_client *client, struct ncp6335d_info *dd,
 			const struct ncp6335d_platform_data *pdata)
 {
@@ -326,6 +365,10 @@ static int ncp6335d_init(struct i2c_client *client, struct ncp6335d_info *dd,
 	}
 
 	rc = ncp6335d_parse_gpio(client->dev.of_node, dd);
+	if (rc)
+		return rc;
+
+	rc = ncp6335d_parse_tlmm(client->dev.of_node, dd);
 	if (rc)
 		return rc;
 

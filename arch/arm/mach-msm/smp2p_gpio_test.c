@@ -18,7 +18,7 @@
 #include <linux/gpio.h>
 #include <linux/debugfs.h>
 #include <linux/completion.h>
-#include <linux/irq.h>
+#include <linux/interrupt.h>
 #include <linux/bitmap.h>
 #include "smp2p_private.h"
 #include "smp2p_test_common.h"
@@ -110,6 +110,8 @@ static int smp2p_gpio_test_probe(struct platform_device *pdev)
 		 * of the device tree nodes as well.
 		 */
 		id = of_get_gpio(node, 0);
+		if (id == -EPROBE_DEFER)
+			return id;
 		gpio_info_ptr->gpio_base_id = id;
 		gpio_info_ptr->irq_base_id = gpio_to_irq(id);
 	}
@@ -311,7 +313,7 @@ static void smp2p_ut_local_gpio_in(struct seq_file *s)
 		UT_ASSERT_INT(0, <, cb_info->irq_base_id);
 		for (id = 0; id < SMP2P_BITS_PER_ENTRY && !failed; ++id) {
 			virq = cb_info->irq_base_id + id;
-			UT_ASSERT_INT(0, >, (unsigned int)irq_to_desc(virq));
+			UT_ASSERT_PTR(NULL, !=, irq_to_desc(virq));
 			ret = request_irq(virq,
 					smp2p_gpio_irq,	IRQF_TRIGGER_RISING,
 					"smp2p_test", cb_info);
@@ -456,7 +458,7 @@ static void smp2p_ut_local_gpio_in_update_open(struct seq_file *s)
 		UT_ASSERT_INT(0, <, cb_info->irq_base_id);
 		for (id = 0; id < SMP2P_BITS_PER_ENTRY && !failed; ++id) {
 			virq = cb_info->irq_base_id + id;
-			UT_ASSERT_INT(0, >, (unsigned int)irq_to_desc(virq));
+			UT_ASSERT_PTR(NULL, !=, irq_to_desc(virq));
 			ret = request_irq(virq,
 					smp2p_gpio_irq,	IRQ_TYPE_EDGE_BOTH,
 					"smp2p_test", cb_info);
@@ -600,7 +602,7 @@ static void smp2p_ut_remote_inout_core(struct seq_file *s, int remote_pid,
 		UT_ASSERT_INT(0, <, cb_in->irq_base_id);
 		for (id = 0; id < SMP2P_BITS_PER_ENTRY && !failed; ++id) {
 			int virq = cb_in->irq_base_id + id;
-			UT_ASSERT_INT(0, >, (unsigned int)irq_to_desc(virq));
+			UT_ASSERT_PTR(NULL, !=, irq_to_desc(virq));
 			ret = request_irq(virq,
 				smp2p_gpio_irq,
 				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
