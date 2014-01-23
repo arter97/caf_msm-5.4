@@ -1737,8 +1737,8 @@ static int qseecom_load_commonlib_image(struct qseecom_dev_handle *data)
 	/* Vote for the SFPB clock */
 	ret = __qseecom_enable_clk_scale_up(data);
 	if (ret) {
-		kzfree(img_data);
-		return -EIO;
+		ret = -EIO;
+		goto exit_ion_unmap_kernel;
 	}
 
 	__cpuc_flush_dcache_area((void *)img_data, fw_size);
@@ -1771,7 +1771,6 @@ static int qseecom_load_commonlib_image(struct qseecom_dev_handle *data)
 		ret = -EINVAL;
 		goto exit_disable_clk_vote;
 	}
-	kzfree(img_data);
 	__qseecom_disable_clk_scale_down(data);
 	return ret;
 
