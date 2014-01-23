@@ -70,16 +70,17 @@ struct f_ecm_qc {
 	u8				ctrl_id, data_id;
 	enum transport_type		xport;
 	char				ethaddr[14];
-
 	struct usb_ep			*notify;
 	struct usb_request		*notify_req;
 	u8				notify_state;
 	bool				is_open;
 	struct data_port		bam_port;
-
+	bool				ecm_mdm_ready_trigger;
 	const struct usb_endpoint_descriptor *in_ep_desc_backup;
 	const struct usb_endpoint_descriptor *out_ep_desc_backup;
 };
+
+static struct f_ecm_qc	*__ecm;
 
 static struct ecm_ipa_params ipa_params;
 
@@ -320,16 +321,18 @@ static void ecm_qc_do_notify(struct f_ecm_qc *ecm)
 
 	case ECM_QC_NOTIFY_CONNECT:
 		event->bNotificationType = USB_CDC_NOTIFY_NETWORK_CONNECTION;
-		if (ecm->is_open)
+		if (ecm->is_open) {
 			event->wValue = cpu_to_le16(1);
-		else
+			ecm->notify_state = ECM_QC_NOTIFY_SPEED;
+		} else {
 			event->wValue = cpu_to_le16(0);
+			ecm->notify_state = ECM_QC_NOTIFY_NONE;
+		}
 		event->wLength = 0;
 		req->length = sizeof *event;
 
 		DBG(cdev, "notify connect %s\n",
 				ecm->is_open ? "true" : "false");
-		ecm->notify_state = ECM_QC_NOTIFY_SPEED;
 		break;
 
 	case ECM_QC_NOTIFY_SPEED:
@@ -411,11 +414,9 @@ static int ecm_qc_bam_connect(struct f_ecm_qc *dev)
 		pr_err("bam_data_connect failed: err:%d\n", ret);
 		return ret;
 	}
-
-
 	pr_debug("ecm bam connected\n");
 
-	dev->is_open = true;
+	dev->is_open = dev->ecm_mdm_ready_trigger ? true : false;
 	ecm_qc_notify(dev);
 
 	return 0;
@@ -570,6 +571,7 @@ static int ecm_qc_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 			 * path. Only after the BAM data path is disconnected,
 			 * we can disconnect the port from the network layer.
 			 */
+			__ecm->ecm_mdm_ready_trigger = false;
 			ecm_qc_bam_disconnect(ecm);
 			if (ecm->xport != USB_GADGET_XPORT_BAM2BAM_IPA)
 				gether_qc_disconnect_name(&ecm->port, "ecm0");
@@ -578,6 +580,7 @@ static int ecm_qc_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 		if (!ecm->port.in_ep->desc ||
 		    !ecm->port.out_ep->desc) {
 			DBG(cdev, "init ecm\n");
+			__ecm->ecm_mdm_ready_trigger = false;
 			if (config_ep_by_speed(cdev->gadget, f,
 					       ecm->port.in_ep) ||
 			    config_ep_by_speed(cdev->gadget, f,
@@ -721,7 +724,6 @@ static void ecm_qc_open(struct qc_gether *geth)
 {
 	struct f_ecm_qc		*ecm = func_to_ecm_qc(&geth->func);
 	DBG(ecm->port.func.config->cdev, "%s\n", __func__);
-
 	ecm->is_open = true;
 	ecm_qc_notify(ecm);
 }
@@ -734,6 +736,25 @@ static void ecm_qc_close(struct qc_gether *geth)
 
 	ecm->is_open = false;
 	ecm_qc_notify(ecm);
+}
+
+/* Callback let ECM_IPA trigger us when network interface is up */
+void ecm_mdm_ready(void)
+{
+	struct f_ecm_qc *ecm = __ecm;
+
+	if (!ecm) {
+		pr_err("can't set ecm_ready_trigger\n");
+		return;
+	}
+	if (ecm->ecm_mdm_ready_trigger)
+		return;
+	pr_debug("set ecm_ready_trigger\n");
+	ecm->ecm_mdm_ready_trigger = true;
+	ecm->is_open = true;
+	ecm_qc_notify(ecm);
+	bam_data_start_rx_tx(0);
+	return ;
 }
 
 /*-------------------------------------------------------------------------*/
@@ -887,6 +908,7 @@ ecm_qc_unbind(struct usb_configuration *c, struct usb_function *f)
 		ecm_ipa_cleanup(ipa_params.private);
 
 	kfree(ecm);
+	__ecm = NULL;
 }
 
 /**
@@ -950,6 +972,7 @@ ecm_qc_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
 	if (!ecm)
 		return -ENOMEM;
 
+	__ecm = ecm;
 	ecm->xport = str_to_xport(xport_name);
 	pr_debug("set xport = %d", ecm->xport);
 
@@ -962,6 +985,7 @@ ecm_qc_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
 		ipa_params.host_ethaddr[0], ipa_params.host_ethaddr[1],
 		ipa_params.host_ethaddr[2], ipa_params.host_ethaddr[3],
 		ipa_params.host_ethaddr[4], ipa_params.host_ethaddr[5]);
+		ipa_params.device_ready_notify = ecm_mdm_ready;
 	} else
 		snprintf(ecm->ethaddr, sizeof ecm->ethaddr,
 		"%02X%02X%02X%02X%02X%02X",
@@ -983,12 +1007,13 @@ ecm_qc_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
 	ecm->port.func.disable = ecm_qc_disable;
 	ecm->port.func.suspend = ecm_qc_suspend;
 	ecm->port.func.resume = ecm_qc_resume;
-
+	ecm->ecm_mdm_ready_trigger = false;
 	status = usb_add_function(c, &ecm->port.func);
 	if (status) {
 		pr_err("failed to add function");
 		ecm_qc_string_defs[1].s = NULL;
 		kfree(ecm);
+		__ecm = NULL;
 		return status;
 	}
 
@@ -1002,6 +1027,7 @@ ecm_qc_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
 		pr_err("failed to initialize ecm_ipa");
 		ecm_qc_string_defs[1].s = NULL;
 		kfree(ecm);
+		__ecm = NULL;
 	} else {
 		pr_debug("ecm_ipa successful created");
 	}

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -41,5 +41,6 @@ int bam_data_destroy(unsigned int no_bam2bam_port);
 void bam_data_suspend(u8 port_num);
 
 void bam_data_resume(u8 port_num);
+void bam_data_start_rx_tx(u8 port_num);
 
 #endif /* __U_BAM_DATA_H */
