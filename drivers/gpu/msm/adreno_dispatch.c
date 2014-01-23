@@ -136,6 +136,7 @@ static inline struct kgsl_cmdbatch *adreno_dispatcher_get_cmdbatch(
 		struct adreno_context *drawctxt)
 {
 	struct kgsl_cmdbatch *cmdbatch = NULL;
+	int pending;
 
 	mutex_lock(&drawctxt->mutex);
 	if (drawctxt->cmdqueue_head != drawctxt->cmdqueue_tail) {
@@ -145,7 +146,31 @@ static inline struct kgsl_cmdbatch *adreno_dispatcher_get_cmdbatch(
 		 * Don't dequeue a cmdbatch that is still waiting for other
 		 * events
 		 */
-		if (kgsl_cmdbatch_sync_pending(cmdbatch)) {
+
+		spin_lock(&cmdbatch->lock);
+		pending = list_empty(&cmdbatch->synclist) ? 0 : 1;
+
+		/*
+		 * If changes are pending and the canary timer hasn't been
+		 * started yet, start it
+		 */
+		if (pending) {
+			/*
+			 * If syncpoints are pending start the canary timer if
+			 * it hasn't already been started
+			 */
+			if (!timer_pending(&cmdbatch->timer))
+				mod_timer(&cmdbatch->timer, jiffies + (5 * HZ));
+		} else {
+			/*
+			 * Otherwise, delete the timer to make sure it is good
+			 * and dead before queuing the buffer
+			 */
+			del_timer_sync(&cmdbatch->timer);
+		}
+		spin_unlock(&cmdbatch->lock);
+
+		if (pending) {
 			cmdbatch = ERR_PTR(-EAGAIN);
 			goto done;
 		}
@@ -857,13 +882,8 @@ static char _pidname[TASK_COMM_LEN];
 
 static inline const char *_kgsl_context_comm(struct kgsl_context *context)
 {
-	struct task_struct *task = NULL;
-
-	if (context)
-		task = find_task_by_vpid(context->pid);
-
-	if (task)
-		get_task_comm(_pidname, task);
+	if (context && context->proc_priv)
+		strlcpy(_pidname, context->proc_priv->comm, sizeof(_pidname));
 	else
 		snprintf(_pidname, TASK_COMM_LEN, "unknown");
 
@@ -873,7 +893,7 @@ static inline const char *_kgsl_context_comm(struct kgsl_context *context)
 #define pr_fault(_d, _c, fmt, args...) \
 		dev_err((_d)->dev, "%s[%d]: " fmt, \
 		_kgsl_context_comm((_c)->context), \
-		(_c)->context->pid, ##args)
+		(_c)->context->proc_priv->pid, ##args)
 
 
 static void adreno_fault_header(struct kgsl_device *device,

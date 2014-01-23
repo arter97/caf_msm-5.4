@@ -1491,13 +1491,17 @@ static void mdss_mdp_ctl_split_display_enable(int enable,
 				lower |= BIT(8);
 		}
 	}
-	MDSS_MDP_REG_WRITE(MDSS_MDP_REG_SPLIT_DISPLAY_UPPER_PIPE_CTRL, upper);
-	MDSS_MDP_REG_WRITE(MDSS_MDP_REG_SPLIT_DISPLAY_LOWER_PIPE_CTRL, lower);
-	MDSS_MDP_REG_WRITE(MDSS_MDP_REG_SPLIT_DISPLAY_EN, enable);
+	writel_relaxed(upper, main_ctl->mdata->mdp_base +
+		MDSS_MDP_REG_SPLIT_DISPLAY_UPPER_PIPE_CTRL);
+	writel_relaxed(lower, main_ctl->mdata->mdp_base +
+		MDSS_MDP_REG_SPLIT_DISPLAY_LOWER_PIPE_CTRL);
+	writel_relaxed(enable, main_ctl->mdata->mdp_base +
+		MDSS_MDP_REG_SPLIT_DISPLAY_EN);
 
 	if (main_ctl->split_flush_en)
-		MDSS_MDP_REG_WRITE(MMSS_MDP_MDP_SSPP_SPARE_0,
-			enable ? 0x1 : 0x0);
+		writel_relaxed(enable ? 0x1 : 0x0,
+			main_ctl->mdata->mdp_base +
+			MMSS_MDP_MDP_SSPP_SPARE_0);
 }
 
 int mdss_mdp_ctl_destroy(struct mdss_mdp_ctl *ctl)
@@ -1588,9 +1592,11 @@ static int mdss_mdp_ctl_start_sub(struct mdss_mdp_ctl *ctl, bool handoff)
 	mdss_mdp_pp_resume(ctl, mixer->num);
 	mixer->params_changed++;
 
-	temp = MDSS_MDP_REG_READ(MDSS_MDP_REG_DISP_INTF_SEL);
+	temp = readl_relaxed(ctl->mdata->mdp_base +
+		MDSS_MDP_REG_DISP_INTF_SEL);
 	temp |= (ctl->intf_type << ((ctl->intf_num - MDSS_MDP_INTF0) * 8));
-	MDSS_MDP_REG_WRITE(MDSS_MDP_REG_DISP_INTF_SEL, temp);
+	writel_relaxed(temp, ctl->mdata->mdp_base +
+		MDSS_MDP_REG_DISP_INTF_SEL);
 
 	outsize = (mixer->height << 16) | mixer->width;
 	mdp_mixer_write(mixer, MDSS_MDP_REG_LM_OUT_SIZE, outsize);
@@ -1804,11 +1810,25 @@ void mdss_mdp_set_roi(struct mdss_mdp_ctl *ctl,
 			ctl->roi.x, ctl->roi.y, ctl->roi.w, ctl->roi.h);
 }
 
+static inline u32 mdss_mdp_mpq_pipe_num_map(u32 pipe_num)
+{
+	u32 mpq_num;
+	if (pipe_num == MDSS_MDP_SSPP_VIG3)
+		mpq_num = MDSS_MDP_SSPP_VIG2 + 1;
+	else if (pipe_num == MDSS_MDP_SSPP_RGB0)
+		mpq_num = MDSS_MDP_SSPP_VIG2 + 2;
+	else if (pipe_num == MDSS_MDP_SSPP_RGB1)
+		mpq_num = MDSS_MDP_SSPP_VIG2 + 3;
+	else
+		mpq_num = pipe_num;
+	return mpq_num;
+}
+
 static int mdss_mdp_mixer_setup(struct mdss_mdp_ctl *ctl,
 				struct mdss_mdp_mixer *mixer)
 {
 	struct mdss_mdp_pipe *pipe;
-	u32 off, blend_op, blend_stage;
+	u32 off, blend_op, blend_stage, mpq_num;
 	u32 mixercfg = 0, blend_color_out = 0, bg_alpha_enable = 0;
 	u32 fg_alpha = 0, bg_alpha = 0;
 	int stage, secure = 0;
@@ -1834,7 +1854,10 @@ static int mdss_mdp_mixer_setup(struct mdss_mdp_ctl *ctl,
 	if (pipe == NULL) {
 		mixercfg = MDSS_MDP_LM_BORDER_COLOR;
 	} else {
-		if (pipe->num == MDSS_MDP_SSPP_VIG3 ||
+		if (ctl->mdata->mdp_rev == MDSS_MDP_HW_REV_200) {
+			mpq_num = mdss_mdp_mpq_pipe_num_map(pipe->num);
+			mixercfg = 1 << (3 * mpq_num);
+		} else if (pipe->num == MDSS_MDP_SSPP_VIG3 ||
 			pipe->num == MDSS_MDP_SSPP_RGB3) {
 			/* Add 2 to account for Cursor & Border bits */
 			mixercfg = 1 << ((3 * pipe->num)+2);
@@ -1923,7 +1946,10 @@ static int mdss_mdp_mixer_setup(struct mdss_mdp_ctl *ctl,
 		if (!pipe->src_fmt->alpha_enable && bg_alpha_enable)
 			blend_color_out = 0;
 
-		if (pipe->num == MDSS_MDP_SSPP_VIG3 ||
+		if (ctl->mdata->mdp_rev == MDSS_MDP_HW_REV_200) {
+			mpq_num = mdss_mdp_mpq_pipe_num_map(pipe->num);
+			mixercfg |= stage << (3 * mpq_num);
+		} else if (pipe->num == MDSS_MDP_SSPP_VIG3 ||
 			pipe->num == MDSS_MDP_SSPP_RGB3) {
 			/* Add 2 to account for Cursor & Border bits */
 			mixercfg |= stage << ((3 * pipe->num)+2);
@@ -1983,12 +2009,12 @@ int mdss_mdp_mixer_addr_setup(struct mdss_data_type *mdata,
 
 	for (i = 0; i < len; i++) {
 		head[i].type = type;
-		head[i].base = mdata->mdp_base + mixer_offsets[i];
+		head[i].base = mdata->mdss_base + mixer_offsets[i];
 		head[i].ref_cnt = 0;
 		head[i].num = i;
 		if (type == MDSS_MDP_MIXER_TYPE_INTF) {
-			head[i].dspp_base = mdata->mdp_base + dspp_offsets[i];
-			head[i].pingpong_base = mdata->mdp_base +
+			head[i].dspp_base = mdata->mdss_base + dspp_offsets[i];
+			head[i].pingpong_base = mdata->mdss_base +
 				pingpong_offsets[i];
 		}
 	}
@@ -2049,8 +2075,8 @@ int mdss_mdp_ctl_addr_setup(struct mdss_data_type *mdata,
 
 	for (i = 0; i < len; i++) {
 		head[i].num = i;
-		head[i].base = (mdata->mdp_base) + ctl_offsets[i];
-		head[i].wb_base = (mdata->mdp_base) + wb_offsets[i];
+		head[i].base = (mdata->mdss_base) + ctl_offsets[i];
+		head[i].wb_base = (mdata->mdss_base) + wb_offsets[i];
 		head[i].ref_cnt = 0;
 	}
 
@@ -2119,6 +2145,7 @@ int mdss_mdp_mixer_pipe_update(struct mdss_mdp_pipe *pipe, int params_changed)
 	struct mdss_mdp_ctl *ctl;
 	struct mdss_mdp_mixer *mixer;
 	int i;
+	u32 mpq_num;
 
 	if (!pipe)
 		return -EINVAL;
@@ -2150,7 +2177,10 @@ int mdss_mdp_mixer_pipe_update(struct mdss_mdp_pipe *pipe, int params_changed)
 		}
 	}
 
-	if (pipe->type == MDSS_MDP_PIPE_TYPE_DMA)
+	if (ctl->mdata->mdp_rev == MDSS_MDP_HW_REV_200) {
+		mpq_num = mdss_mdp_mpq_pipe_num_map(pipe->num);
+		ctl->flush_bits |= BIT(mpq_num);
+	} else if (pipe->type == MDSS_MDP_PIPE_TYPE_DMA)
 		ctl->flush_bits |= BIT(pipe->num) << 5;
 	else if (pipe->num == MDSS_MDP_SSPP_VIG3 ||
 			pipe->num == MDSS_MDP_SSPP_RGB3)

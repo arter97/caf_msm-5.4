@@ -1064,8 +1064,11 @@ static int32_t q6asm_srvc_callback(struct apr_client_data *data, void *priv)
 {
 	uint32_t sid = 0;
 	uint32_t dir = 0;
+	uint32_t i = IN;
 	uint32_t *payload;
 	unsigned long dsp_flags;
+	struct asm_buffer_node *buf_node = NULL;
+	struct list_head *ptr, *next;
 
 	struct audio_client *ac = NULL;
 	struct audio_port_data *port;
@@ -1084,6 +1087,20 @@ static int32_t q6asm_srvc_callback(struct apr_client_data *data, void *priv)
 				data->reset_proc,
 				this_mmap.apr);
 		apr_reset(this_mmap.apr);
+		for (; i <= OUT; i++) {
+			list_for_each_safe(ptr, next,
+				&common_client.port[i].mem_map_handle) {
+				buf_node = list_entry(ptr,
+						struct asm_buffer_node,
+						list);
+				if (buf_node->buf_addr_lsw ==
+				common_client.port[i].buf->phys) {
+					list_del(&buf_node->list);
+					kfree(buf_node);
+				}
+			}
+			pr_debug("%s:Clearing custom topology\n", __func__);
+		}
 		this_mmap.apr = NULL;
 		reset_custom_topology_flags();
 		set_custom_topology = 1;
@@ -1217,6 +1234,8 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 	}
 
 	if (data->opcode == RESET_EVENTS) {
+		if (ac->apr == NULL)
+			ac->apr = ac->apr2;
 		pr_debug("q6asm_callback: Reset event is received: %d %d apr[%p]\n",
 				data->reset_event, data->reset_proc, ac->apr);
 			if (ac->cb)
@@ -1272,7 +1291,6 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 		case ASM_DATA_CMD_REMOVE_INITIAL_SILENCE:
 		case ASM_DATA_CMD_REMOVE_TRAILING_SILENCE:
 		case ASM_SESSION_CMD_REGISTER_FOR_RX_UNDERFLOW_EVENTS:
-		case ASM_STREAM_CMD_OPEN_WRITE_COMPRESSED:
 		pr_debug("%s:Payload = [0x%x]stat[0x%x]\n",
 				__func__, payload[0], payload[1]);
 			if (atomic_read(&ac->cmd_state) && wakeup_flag) {
@@ -1772,77 +1790,6 @@ int q6asm_open_read_v2(struct audio_client *ac, uint32_t format,
 {
 	return __q6asm_open_read(ac, format, bits_per_sample);
 }
-
-
-int q6asm_open_write_compressed(struct audio_client *ac, uint32_t format)
-{
-	int rc = 0x00;
-	struct asm_stream_cmd_open_write_compressed open;
-	if ((ac == NULL) || (ac->apr == NULL)) {
-		pr_err("%s: APR handle NULL\n", __func__);
-		return -EINVAL;
-	}
-	pr_debug("%s: session[%d] wr_format[0x%x]", __func__, ac->session,
-		format);
-
-	q6asm_add_hdr(ac, &open.hdr, sizeof(open), TRUE);
-
-	open.hdr.opcode = ASM_STREAM_CMD_OPEN_WRITE_COMPRESSED;
-
-	switch (format) {
-	case FORMAT_AC3:
-		open.fmt_id = AC3_DECODER;
-		break;
-	case FORMAT_EAC3:
-		open.fmt_id = EAC3_DECODER;
-		break;
-	case FORMAT_MP3:
-		open.fmt_id = MP3;
-		break;
-	case FORMAT_DTS:
-		open.fmt_id = DTS;
-		break;
-	case FORMAT_DTS_LBR:
-		open.fmt_id = DTS_LBR;
-		break;
-	case FORMAT_AAC:
-		open.fmt_id = MPEG4_AAC;
-		break;
-	case FORMAT_ATRAC:
-		open.fmt_id = ATRAC;
-		break;
-	case FORMAT_WMA_V10PRO:
-		open.fmt_id = WMA_V10PRO;
-		break;
-	case FORMAT_MAT:
-		open.fmt_id = MAT;
-		break;
-
-	default:
-		pr_err("%s: Invalid format[%d]\n", __func__, format);
-		goto fail_cmd;
-	}
-	/*Below flag indicates the DSP that Compressed audio input
-	stream is not IEC 61937 or IEC 60958 packetizied*/
-	open.flags = 0x00000000;
-	rc = apr_send_pkt(ac->apr, (uint32_t *) &open);
-	if (rc < 0) {
-		pr_err("%s: open failed op[0x%x]rc[%d]\n",
-					__func__, open.hdr.opcode, rc);
-		goto fail_cmd;
-	}
-	rc = wait_event_timeout(ac->cmd_wait,
-			(atomic_read(&ac->cmd_state) == 0), 5*HZ);
-	if (!rc) {
-		pr_err("%s: timeout. waited for OPEN_WRITE_COMPR rc[%d]\n",
-				__func__, rc);
-		goto fail_cmd;
-	}
-	return 0;
-fail_cmd:
-	return -EINVAL;
-}
-
 
 static int __q6asm_open_write(struct audio_client *ac, uint32_t format,
 				uint16_t bits_per_sample, uint32_t stream_id,
@@ -3183,6 +3130,9 @@ int q6asm_memory_unmap(struct audio_client *ac, uint32_t buf_add, int dir)
 		rc = -EINVAL;
 		goto fail_cmd;
 	}
+
+	rc = 0;
+fail_cmd:
 	list_for_each_safe(ptr, next, &ac->port[dir].mem_map_handle) {
 		buf_node = list_entry(ptr, struct asm_buffer_node,
 						list);
@@ -3192,9 +3142,6 @@ int q6asm_memory_unmap(struct audio_client *ac, uint32_t buf_add, int dir)
 			break;
 		}
 	}
-
-	rc = 0;
-fail_cmd:
 	return rc;
 }
 
@@ -3362,6 +3309,9 @@ static int q6asm_memory_unmap_regions(struct audio_client *ac, int dir)
 		pr_err("timeout. waited for memory_unmap\n");
 		goto fail_cmd;
 	}
+	rc = 0;
+
+fail_cmd:
 	list_for_each_safe(ptr, next, &ac->port[dir].mem_map_handle) {
 		buf_node = list_entry(ptr, struct asm_buffer_node,
 						list);
@@ -3371,9 +3321,6 @@ static int q6asm_memory_unmap_regions(struct audio_client *ac, int dir)
 			break;
 		}
 	}
-	rc = 0;
-
-fail_cmd:
 	return rc;
 }
 

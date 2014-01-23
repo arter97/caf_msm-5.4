@@ -31,6 +31,7 @@
 #include "clock-rpm.h"
 #include "clock-voter.h"
 #include "clock.h"
+#include "clock-mdss-8974.h"
 
 enum {
 	GCC_BASE,
@@ -467,7 +468,7 @@ static void __iomem *virt_bases[N_BASES];
 #define mmpll3_mm_source_val		3
 #define mmpll6_mm_source_val		2
 #define gpll0_mm_source_val		5
-#define hdmiphypll_mm_source_val	3
+#define hdmipll_mm_source_val		3
 #define lvdsphy0_pclk_mm_source_val	2
 #define vbyonepll_pclk_mm_source_val	3
 #define vbyonepll_sym_mm_source_val	4
@@ -660,17 +661,38 @@ DEFINE_CLK_RPM_SMD_XO_BUFFER_PINCTRL(rf_clk1_pin, rf_clk1_a_pin, RF_CLK1_ID);
 DEFINE_CLK_RPM_SMD_XO_BUFFER_PINCTRL(rf_clk2_pin, rf_clk2_a_pin, RF_CLK2_ID);
 DEFINE_CLK_RPM_SMD_XO_BUFFER_PINCTRL(rf_clk3_pin, rf_clk3_a_pin, RF_CLK3_ID);
 
+static unsigned int soft_vote_gpll0;
+
+static struct pll_vote_clk gpll0_ao_clk_src = {
+	.en_reg = (void __iomem *)APCS_GPLL_ENA_VOTE,
+	.en_mask = BIT(0),
+	.status_reg = (void __iomem *)GPLL0_STATUS,
+	.status_mask = BIT(17),
+	.soft_vote = &soft_vote_gpll0,
+	.soft_vote_mask = PLL_SOFT_VOTE_ACPU,
+	.base = &virt_bases[GCC_BASE],
+	.c = {
+		.parent = &xo_a_clk_src.c,
+		.rate = 600000000,
+		.dbg_name = "gpll0_ao_clk_src",
+		.ops = &clk_ops_pll_acpu_vote,
+		CLK_INIT(gpll0_ao_clk_src.c),
+	},
+};
+
 static struct pll_vote_clk gpll0_clk_src = {
 	.en_reg = (void __iomem *)APCS_GPLL_ENA_VOTE,
 	.en_mask = BIT(0),
 	.status_reg = (void __iomem *)GPLL0_STATUS,
 	.status_mask = BIT(17),
+	.soft_vote = &soft_vote_gpll0,
+	.soft_vote_mask = PLL_SOFT_VOTE_PRIMARY,
 	.base = &virt_bases[GCC_BASE],
 	.c = {
 		.parent = &xo_clk_src.c,
 		.rate = 600000000,
 		.dbg_name = "gpll0_clk_src",
-		.ops = &clk_ops_pll_vote,
+		.ops = &clk_ops_pll_acpu_vote,
 		CLK_INIT(gpll0_clk_src.c),
 	},
 };
@@ -3818,6 +3840,40 @@ static struct branch_clk mdss_hdmi_clk = {
 	},
 };
 
+
+static struct clk_freq_tbl ftbl_mdss_extpclk_clk[] = {
+	F_MMSS(340000000, hdmipll, 1, 0, 0),
+	F_END
+};
+
+static struct rcg_clk extpclk_clk_src = {
+	.cmd_rcgr_reg = EXTPCLK_CMD_RCGR,
+	.set_rate = set_rate_hid,
+	.freq_tbl = ftbl_mdss_extpclk_clk,
+	.current_freq = &rcg_dummy_freq,
+	.base = &virt_bases[MMSS_BASE],
+	.c = {
+		.dbg_name = "extpclk_clk_src",
+		.parent = &hdmipll_clk_src.c,
+		.ops = &clk_ops_rcg_hdmi,
+		VDD_DIG_FMAX_MAP2(LOW, 170000000, NOMINAL, 340000000),
+		CLK_INIT(extpclk_clk_src.c),
+	},
+};
+
+/* Allow set rate go through this branch clock */
+static struct branch_clk mdss_extpclk_clk = {
+	.cbcr_reg = MDSS_EXTPCLK_CBCR,
+	.has_sibling = 0,
+	.base = &virt_bases[MMSS_BASE],
+	.c = {
+		.parent = &extpclk_clk_src.c,
+		.dbg_name = "mdss_extpclk_clk",
+		.ops = &clk_ops_branch,
+		CLK_INIT(mdss_extpclk_clk.c),
+	},
+};
+
 static struct branch_clk mdss_mdp_clk = {
 	.cbcr_reg = MDSS_MDP_CBCR,
 	.has_sibling = 0,
@@ -5846,6 +5902,7 @@ struct measure_mux_entry measure_mux[] = {
 	{&venus0_ahb_clk.c,			MMSS_BASE,	0x000f},
 	{&mdss_mdp_clk.c,			MMSS_BASE,	0x0012},
 	{&mdss_mdp_lut_clk.c,			MMSS_BASE,	0x0013},
+	{&mdss_extpclk_clk.c,			MMSS_BASE,	0x0014},
 	{&mdss_hdmi_clk.c,			MMSS_BASE,	0x0019},
 	{&mdss_ahb_clk.c,			MMSS_BASE,	0x001a},
 	{&mdss_hdmi_ahb_clk.c,			MMSS_BASE,	0x001b},
@@ -6555,6 +6612,7 @@ static struct clk_lookup mpq_clocks_8092_rumi[] = {
 
 static struct clk_lookup mpq_clocks_8092[] = {
 	CLK_LOOKUP("xo",	cxo_pil_lpass_clk.c,	"fe200000.qcom,lpass"),
+	CLK_LOOKUP("xo", cxo_lpm_clk.c, "fc4281d0.qcom,mpm"),
 	/* RPM clocks */
 	CLK_LOOKUP("bus_clk", snoc_clk.c, ""),
 	CLK_LOOKUP("bus_clk", pnoc_clk.c, ""),
@@ -6572,6 +6630,10 @@ static struct clk_lookup mpq_clocks_8092[] = {
 	CLK_LOOKUP("core_clk", gfx3d_clk_src.c, ""),
 	CLK_LOOKUP("core_clk", gfx3d_a_clk_src.c, ""),
 	CLK_LOOKUP("core_clk", qdss_clk.c, ""),
+
+	/* PLL */
+	CLK_LOOKUP("gpll0", gpll0_clk_src.c, ""),
+	CLK_LOOKUP("gpll0_ao", gpll0_ao_clk_src.c, ""),
 
 	/* Voter clocks */
 	CLK_LOOKUP("bus_clk",	cnoc_msmbus_clk.c,	"msm_config_noc"),
@@ -6622,22 +6684,26 @@ static struct clk_lookup mpq_clocks_8092[] = {
 
 	/* BLSP2 */
 	CLK_LOOKUP("iface_clk",	gcc_blsp2_ahb_clk.c,	"f9967000.i2c"),
-	CLK_LOOKUP("",	gcc_blsp2_qup1_i2c_apps_clk.c,	""),
+	CLK_LOOKUP("iface_clk",	gcc_blsp2_ahb_clk.c,	"f9966000.i2c"),
+	CLK_LOOKUP("iface_clk",	gcc_blsp2_ahb_clk.c,	"f9963000.i2c"),
+	CLK_LOOKUP("iface_clk",	gcc_blsp2_ahb_clk.c,	"f995d000.serial"),
+	CLK_LOOKUP("iface_clk",	gcc_blsp2_ahb_clk.c,	"f9960000.serial"),
+	CLK_LOOKUP("core_clk",	gcc_blsp2_qup1_i2c_apps_clk.c, "f9963000.i2c"),
 	CLK_LOOKUP("",	gcc_blsp2_qup1_spi_apps_clk.c,	""),
 	CLK_LOOKUP("",	gcc_blsp2_qup2_i2c_apps_clk.c,	""),
 	CLK_LOOKUP("",	gcc_blsp2_qup2_spi_apps_clk.c,	""),
 	CLK_LOOKUP("",	gcc_blsp2_qup3_i2c_apps_clk.c,	""),
 	CLK_LOOKUP("",	gcc_blsp2_qup3_spi_apps_clk.c,	""),
-	CLK_LOOKUP("",	gcc_blsp2_qup4_i2c_apps_clk.c,	""),
+	CLK_LOOKUP("core_clk",	gcc_blsp2_qup4_i2c_apps_clk.c,	"f9966000.i2c"),
 	CLK_LOOKUP("",	gcc_blsp2_qup4_spi_apps_clk.c,	""),
 	CLK_LOOKUP("core_clk",	gcc_blsp2_qup5_i2c_apps_clk.c,	"f9967000.i2c"),
 	CLK_LOOKUP("",	gcc_blsp2_qup5_spi_apps_clk.c,	""),
 	CLK_LOOKUP("",	gcc_blsp2_qup6_i2c_apps_clk.c,	""),
 	CLK_LOOKUP("",	gcc_blsp2_qup6_spi_apps_clk.c,	""),
-	CLK_LOOKUP("",	gcc_blsp2_uart1_apps_clk.c,	""),
+	CLK_LOOKUP("core_clk", gcc_blsp2_uart1_apps_clk.c, "f995d000.serial"),
 	CLK_LOOKUP("",	gcc_blsp2_uart2_apps_clk.c,	""),
 	CLK_LOOKUP("",	gcc_blsp2_uart3_apps_clk.c,	""),
-	CLK_LOOKUP("",	gcc_blsp2_uart4_apps_clk.c,	""),
+	CLK_LOOKUP("core_clk", gcc_blsp2_uart4_apps_clk.c, "f9960000.serial"),
 	CLK_LOOKUP("",	gcc_blsp2_uart5_apps_clk.c,	""),
 	CLK_LOOKUP("",	gcc_blsp2_uart6_apps_clk.c,	""),
 
@@ -6853,6 +6919,29 @@ static struct clk_lookup mpq_clocks_8092[] = {
 	CLK_LOOKUP("",	vpu_sdme_vproc_clk.c,	""),
 	CLK_LOOKUP("",	vpu_vdp_clk.c,	""),
 	CLK_LOOKUP("",	vpu_vdp_xin_clk.c,	""),
+
+	CLK_LOOKUP("iface_clk", mdss_ahb_clk.c, "fd900000.qcom,mdss_mdp"),
+	CLK_LOOKUP("bus_clk", mdss_axi_clk.c, "fd900000.qcom,mdss_mdp"),
+	CLK_LOOKUP("core_clk_src", mdp_clk_src.c, "fd900000.qcom,mdss_mdp"),
+	CLK_LOOKUP("core_clk", mdss_mdp_clk.c, "fd900000.qcom,mdss_mdp"),
+	CLK_LOOKUP("lut_clk", mdss_mdp_lut_clk.c, "fd900000.qcom,mdss_mdp"),
+	CLK_LOOKUP("",	mdss_axi_clk.c, ""),
+	CLK_LOOKUP("iface_clk", mdss_ahb_clk.c, "fd924100.qcom,hdmi_tx"),
+	CLK_LOOKUP("alt_iface_clk", mdss_hdmi_ahb_clk.c,
+		"fd924100.qcom,hdmi_tx"),
+	CLK_LOOKUP("core_clk", mdss_hdmi_clk.c, "fd924100.qcom,hdmi_tx"),
+	CLK_LOOKUP("mdp_core_clk", mdss_mdp_clk.c, "fd924100.qcom,hdmi_tx"),
+	CLK_LOOKUP("extp_clk", mdss_extpclk_clk.c, "fd924100.qcom,hdmi_tx"),
+
+	CLK_LOOKUP("",	mdss_mdp_clk.c, ""),
+	CLK_LOOKUP("",	mdss_mdp_lut_clk.c, ""),
+
+	CLK_LOOKUP("",	hdmipll_clk_src.c,	""),
+	CLK_LOOKUP("",	hdmipll_mux_clk.c,	""),
+	CLK_LOOKUP("",	hdmipll_div1_clk.c, ""),
+	CLK_LOOKUP("",	hdmipll_div2_clk.c, ""),
+	CLK_LOOKUP("",	hdmipll_div4_clk.c, ""),
+	CLK_LOOKUP("",	hdmipll_div6_clk.c, ""),
 
 	/* RCGs */
 	CLK_LOOKUP("",	usb30_master_clk_src.c,	""),
@@ -7333,6 +7422,13 @@ static void __init mpq8092_clock_pre_init(void)
 	enable_rpm_scaling();
 
 	reg_init();
+
+	/*
+	 * MDSS needs the ahb clock and needs to init before we register the
+	 * lookup table.
+	 */
+	mdss_clk_update_hdmi_addr(0xFD924500, 0xFD924700);
+	mdss_clk_ctrl_pre_init(&mdss_ahb_clk.c);
 }
 
 static void __init mpq8092_rumi_clock_pre_init(void)

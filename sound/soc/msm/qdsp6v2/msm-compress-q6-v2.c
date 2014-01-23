@@ -92,14 +92,15 @@ struct msm_compr_audio {
 	struct audio_client *audio_client;
 
 	uint32_t codec;
-	uint32_t compr_passthr;
 	void    *buffer; /* virtual address */
 	uint32_t buffer_paddr; /* physical address */
 	uint32_t app_pointer;
 	uint32_t buffer_size;
 	uint32_t byte_offset;
-	uint32_t copied_total;
-	uint32_t bytes_received;
+	uint32_t copied_total; /* bytes consumed by DSP */
+	uint32_t bytes_received; /* from userspace */
+	uint32_t bytes_sent; /* to DSP */
+
 	int32_t first_buffer;
 	int32_t last_buffer;
 	int32_t partial_drain_delay;
@@ -112,6 +113,8 @@ struct msm_compr_audio {
 	uint32_t cmd_ack;
 	uint32_t cmd_interrupt;
 	uint32_t drain_ready;
+	uint32_t stream_available;
+	uint32_t next_stream;
 
 	struct msm_compr_gapless_state gapless_state;
 
@@ -127,6 +130,7 @@ struct msm_compr_audio {
 	wait_queue_head_t drain_wait;
 	wait_queue_head_t flush_wait;
 	wait_queue_head_t close_wait;
+	wait_queue_head_t wait_for_stream_avail;
 
 	spinlock_t lock;
 };
@@ -137,8 +141,6 @@ struct msm_compr_audio_effects {
 	struct reverb_params reverb;
 	struct eq_params equalizer;
 };
-
-u32 compr_codecs[] = {SND_AUDIOCODEC_AC3};
 
 struct msm_compr_dec_params {
 	struct snd_dec_ddp ddp_params;
@@ -241,6 +243,7 @@ static int msm_compr_send_buffer(struct msm_compr_audio *prtd)
 	if (q6asm_async_write(prtd->audio_client, &param) < 0) {
 		pr_err("%s:q6asm_async_write failed\n", __func__);
 	} else {
+		prtd->bytes_sent += buffer_length;
 		if (prtd->first_buffer)
 			prtd->first_buffer = 0;
 	}
@@ -332,6 +335,8 @@ static void compr_event_handler(uint32_t opcode,
 			prtd->gapless_state.stream_opened[stream_id] = 0;
 			prtd->gapless_state.set_next_stream_id = false;
 		}
+		if (prtd->gapless_state.gapless_transition)
+			prtd->gapless_state.gapless_transition = 0;
 		spin_unlock(&prtd->lock);
 		break;
 	case ASM_DATA_EVENT_SR_CM_CHANGE_NOTIFY:
@@ -353,7 +358,7 @@ static void compr_event_handler(uint32_t opcode,
 
 			/* FIXME: A state is a better way, dealing with this*/
 			spin_lock(&prtd->lock);
-			if (!prtd->copied_total) {
+			if (!prtd->bytes_sent) {
 				bytes_available = prtd->bytes_received - prtd->copied_total;
 				if (bytes_available < cstream->runtime->fragment_size) {
 					pr_debug("CMD_RUN_V2 Insufficient data to send. break out\n");
@@ -376,6 +381,17 @@ static void compr_event_handler(uint32_t opcode,
 			break;
 		case ASM_STREAM_CMD_CLOSE:
 			pr_debug("ASM_DATA_CMD_CLOSE\n");
+			/*
+			 * wakeup wait for stream avail on stream 3
+			 * after stream 1 ends.
+			 */
+			if (prtd->next_stream) {
+				pr_debug("%s:CLOSE:wakeup wait for stream\n",
+								   __func__);
+				prtd->stream_available = 1;
+				wake_up(&prtd->wait_for_stream_avail);
+				prtd->next_stream = 0;
+			}
 			if (atomic_read(&prtd->close) &&
 			    atomic_read(&prtd->wait_on_close)) {
 				prtd->cmd_ack = 1;
@@ -417,11 +433,15 @@ static void populate_codec_list(struct msm_compr_audio *prtd)
 			COMPR_PLAYBACK_MIN_NUM_FRAGMENTS;
 	prtd->compr_cap.max_fragments =
 			COMPR_PLAYBACK_MAX_NUM_FRAGMENTS;
-	prtd->compr_cap.num_codecs = 4;
+	prtd->compr_cap.num_codecs = 8;
 	prtd->compr_cap.codecs[0] = SND_AUDIOCODEC_MP3;
 	prtd->compr_cap.codecs[1] = SND_AUDIOCODEC_AAC;
 	prtd->compr_cap.codecs[2] = SND_AUDIOCODEC_AC3;
 	prtd->compr_cap.codecs[3] = SND_AUDIOCODEC_EAC3;
+	prtd->compr_cap.codecs[4] = SND_AUDIOCODEC_MP2;
+	prtd->compr_cap.codecs[5] = SND_AUDIOCODEC_PCM;
+	prtd->compr_cap.codecs[6] = SND_AUDIOCODEC_WMA;
+	prtd->compr_cap.codecs[7] = SND_AUDIOCODEC_WMA_PRO;
 }
 
 static int msm_compr_send_media_format_block(struct snd_compr_stream *cstream,
@@ -430,13 +450,31 @@ static int msm_compr_send_media_format_block(struct snd_compr_stream *cstream,
 	struct snd_compr_runtime *runtime = cstream->runtime;
 	struct msm_compr_audio *prtd = runtime->private_data;
 	struct asm_aac_cfg aac_cfg;
+	struct asm_wma_cfg wma_cfg;
+	struct asm_wmapro_cfg wma_pro_cfg;
 	int ret = 0;
+	uint16_t bit_width = 16;
 
 	switch (prtd->codec) {
+	case FORMAT_LINEAR_PCM:
+		pr_debug("SND_AUDIOCODEC_PCM\n");
+		if (prtd->codec_param.codec.format == SNDRV_PCM_FORMAT_S24_LE)
+			bit_width = 24;
+		ret = q6asm_media_format_block_pcm_format_support(
+							prtd->audio_client,
+							prtd->sample_rate,
+							prtd->num_channels,
+							bit_width);
+		if (ret < 0)
+			pr_err("%s: CMD Format block failed\n", __func__);
+
+		break;
 	case FORMAT_MP3:
+		pr_debug("SND_AUDIOCODEC_MP3\n");
 		/* no media format block needed */
 		break;
 	case FORMAT_MPEG4_AAC:
+		pr_debug("SND_AUDIOCODEC_AAC\n");
 		memset(&aac_cfg, 0x0, sizeof(struct asm_aac_cfg));
 		aac_cfg.aot = AAC_ENC_MODE_EAAC_P;
 		if (prtd->codec_param.codec.format ==
@@ -452,8 +490,60 @@ static int msm_compr_send_media_format_block(struct snd_compr_stream *cstream,
 			pr_err("%s: CMD Format block failed\n", __func__);
 		break;
 	case FORMAT_AC3:
+		pr_debug("SND_AUDIOCODEC_AC3\n");
 		break;
 	case FORMAT_EAC3:
+		pr_debug("SND_AUDIOCODEC_EAC3\n");
+		break;
+	case FORMAT_WMA_V9:
+		pr_debug("SND_AUDIOCODEC_WMA\n");
+		memset(&wma_cfg, 0x0, sizeof(struct asm_wma_cfg));
+		wma_cfg.format_tag = prtd->codec_param.codec.format;
+		wma_cfg.ch_cfg = prtd->codec_param.codec.ch_in;
+		wma_cfg.sample_rate = prtd->sample_rate;
+		wma_cfg.avg_bytes_per_sec =
+			prtd->codec_param.codec.bit_rate/8;
+		wma_cfg.block_align =
+			prtd->codec_param.codec.options.wma.super_block_align;
+		wma_cfg.valid_bits_per_sample =
+		prtd->codec_param.codec.options.wma.bits_per_sample;
+		wma_cfg.ch_mask =
+			prtd->codec_param.codec.options.wma.channelmask;
+		wma_cfg.encode_opt =
+			prtd->codec_param.codec.options.wma.encodeopt;
+		ret = q6asm_media_format_block_wma(prtd->audio_client,
+					&wma_cfg);
+		if (ret < 0)
+			pr_err("%s: CMD Format block failed\n", __func__);
+		break;
+	case FORMAT_WMA_V10PRO:
+		pr_debug("SND_AUDIOCODEC_WMA_PRO\n");
+		memset(&wma_pro_cfg, 0x0, sizeof(struct asm_wmapro_cfg));
+		wma_pro_cfg.format_tag = prtd->codec_param.codec.format;
+		wma_pro_cfg.ch_cfg = prtd->codec_param.codec.ch_in;
+		wma_pro_cfg.sample_rate =
+			prtd->sample_rate;
+		wma_pro_cfg.avg_bytes_per_sec =
+			prtd->codec_param.codec.bit_rate/8;
+		wma_cfg.block_align =
+			prtd->codec_param.codec.options.wma.super_block_align;
+		wma_pro_cfg.valid_bits_per_sample =
+			prtd->codec_param.codec.options.wma.bits_per_sample;
+		wma_pro_cfg.ch_mask =
+			prtd->codec_param.codec.options.wma.channelmask;
+		wma_pro_cfg.encode_opt =
+			prtd->codec_param.codec.options.wma.encodeopt;
+		wma_pro_cfg.adv_encode_opt =
+			prtd->codec_param.codec.options.wma.encodeopt1;
+		wma_pro_cfg.adv_encode_opt2 =
+			prtd->codec_param.codec.options.wma.encodeopt2;
+		ret = q6asm_media_format_block_wmapro(prtd->audio_client,
+				&wma_pro_cfg);
+		if (ret < 0)
+			pr_err("%s: CMD Format block failed\n", __func__);
+		break;
+	case FORMAT_MP2:
+		pr_debug("%s: SND_AUDIOCODEC_MP2\n", __func__);
 		break;
 	default:
 		pr_debug("%s, unsupported format, skip", __func__);
@@ -494,47 +584,24 @@ static int msm_compr_configure_dsp(struct snd_compr_stream *cstream)
 
 	prtd->gapless_state.stream_opened[ac->stream_id] = 1;
 	pr_debug("%s be_id %d\n", __func__, soc_prtd->dai_link->be_id);
-
-	if (prtd->compr_passthr == true) {
-		ret = q6asm_open_write_compressed(ac, prtd->codec);
-		if (ret < 0) {
-			pr_err("%s: Session out open failed\n", __func__);
-			return -ENOMEM;
-		}
-		msm_pcm_routing_reg_phy_compr_stream(
-				soc_prtd->dai_link->be_id,
-				ac->perf_mode,
-				prtd->session_id,
-				SNDRV_PCM_STREAM_PLAYBACK,
-				prtd->compr_passthr);
-	} else {
-		ret = q6asm_stream_open_write_v2(ac,
-				prtd->codec, bits_per_sample,
-				ac->stream_id, true/*gapless*/);
-		if (ret < 0) {
-			pr_err("%s: Session out open failed\n", __func__);
-			return -ENOMEM;
-		}
-
-		msm_pcm_routing_reg_phy_stream(soc_prtd->dai_link->be_id,
+	msm_pcm_routing_reg_phy_stream(soc_prtd->dai_link->be_id,
 				ac->perf_mode,
 				prtd->session_id,
 				SNDRV_PCM_STREAM_PLAYBACK);
 
-		ret = msm_compr_set_volume(cstream, 0, 0);
-		if (ret < 0)
-			pr_err("%s : Set Volume failed : %d", __func__, ret);
+	ret = msm_compr_set_volume(cstream, 0, 0);
+	if (ret < 0)
+		pr_err("%s : Set Volume failed : %d", __func__, ret);
 
-		ret = q6asm_set_softpause(ac, &softpause);
-		if (ret < 0)
-			pr_err("%s: Send SoftPause Param failed ret=%d\n",
-					__func__, ret);
+	ret = q6asm_set_softpause(ac, &softpause);
+	if (ret < 0)
+		pr_err("%s: Send SoftPause Param failed ret=%d\n",
+			__func__, ret);
 
-		ret = q6asm_set_softvolume(ac, &softvol);
-		if (ret < 0)
-			pr_err("%s: Send SoftVolume Param failed ret=%d\n",
-					__func__, ret);
-	}
+	ret = q6asm_set_softvolume(ac, &softvol);
+	if (ret < 0)
+		pr_err("%s: Send SoftVolume Param failed ret=%d\n",
+			__func__, ret);
 
 	ret = q6asm_set_io_mode(ac, (COMPRESSED_IO | ASYNC_IO_MODE));
 	if (ret < 0) {
@@ -559,6 +626,7 @@ static int msm_compr_configure_dsp(struct snd_compr_stream *cstream)
 	prtd->copied_total = 0;
 	prtd->app_pointer  = 0;
 	prtd->bytes_received = 0;
+	prtd->bytes_sent = 0;
 	prtd->buffer       = ac->port[dir].buf[0].data;
 	prtd->buffer_paddr = ac->port[dir].buf[0].phys;
 	prtd->buffer_size  = runtime->fragments * runtime->fragment_size;
@@ -618,6 +686,7 @@ static int msm_compr_open(struct snd_compr_stream *cstream)
 	prtd->session_id = prtd->audio_client->session;
 	prtd->codec = FORMAT_MP3;
 	prtd->bytes_received = 0;
+	prtd->bytes_sent = 0;
 	prtd->copied_total = 0;
 	prtd->byte_offset = 0;
 	prtd->sample_rate = 44100;
@@ -626,6 +695,7 @@ static int msm_compr_open(struct snd_compr_stream *cstream)
 	prtd->last_buffer = 0;
 	prtd->first_buffer = 1;
 	prtd->partial_drain_delay = 0;
+	prtd->next_stream = 0;
 	memset(&prtd->gapless_state, 0, sizeof(struct msm_compr_gapless_state));
 	/*
 	 * Update the use_dsp_gapless_mode from gapless struture with the value
@@ -649,6 +719,7 @@ static int msm_compr_open(struct snd_compr_stream *cstream)
 	init_waitqueue_head(&prtd->drain_wait);
 	init_waitqueue_head(&prtd->flush_wait);
 	init_waitqueue_head(&prtd->close_wait);
+	init_waitqueue_head(&prtd->wait_for_stream_avail);
 
 	runtime->private_data = prtd;
 	populate_codec_list(prtd);
@@ -679,19 +750,6 @@ static int msm_compr_free(struct snd_compr_stream *cstream)
 	unsigned long flags;
 
 	pr_debug("%s\n", __func__);
-	pdata->cstream[soc_prtd->dai_link->be_id] = NULL;
-	if (cstream->direction == SND_COMPRESS_PLAYBACK) {
-		if (atomic_read(&pdata->audio_ocmem_req) > 1)
-			atomic_dec(&pdata->audio_ocmem_req);
-		else if (atomic_cmpxchg(&pdata->audio_ocmem_req, 1, 0))
-			audio_ocmem_process_req(AUDIO, false);
-
-		msm_pcm_routing_dereg_phy_stream(soc_prtd->dai_link->be_id,
-						SNDRV_PCM_STREAM_PLAYBACK);
-	}
-
-	pr_debug("%s: ocmem_req: %d\n", __func__,
-		atomic_read(&pdata->audio_ocmem_req));
 
 	if (atomic_read(&prtd->eos)) {
 		ret = wait_event_timeout(prtd->eos_wait,
@@ -712,16 +770,30 @@ static int msm_compr_free(struct snd_compr_stream *cstream)
 	stream_id = ac->stream_id;
 	if (prtd->gapless_state.stream_opened[stream_id^1]) {
 		spin_unlock_irqrestore(&prtd->lock, flags);
+		pr_debug(" close stream %d", stream_id^1);
 		q6asm_stream_cmd(ac, CMD_CLOSE, stream_id^1);
 		spin_lock_irqsave(&prtd->lock, flags);
 	}
 	if (prtd->gapless_state.stream_opened[stream_id]) {
 		spin_unlock_irqrestore(&prtd->lock, flags);
+		pr_debug("close stream %d", stream_id);
 		q6asm_stream_cmd(ac, CMD_CLOSE, stream_id);
 		spin_lock_irqsave(&prtd->lock, flags);
 	}
 	spin_unlock_irqrestore(&prtd->lock, flags);
 
+	pdata->cstream[soc_prtd->dai_link->be_id] = NULL;
+	if (cstream->direction == SND_COMPRESS_PLAYBACK) {
+		if (atomic_read(&pdata->audio_ocmem_req) > 1)
+			atomic_dec(&pdata->audio_ocmem_req);
+		else if (atomic_cmpxchg(&pdata->audio_ocmem_req, 1, 0))
+			audio_ocmem_process_req(AUDIO, false);
+		msm_pcm_routing_dereg_phy_stream(soc_prtd->dai_link->be_id,
+						SNDRV_PCM_STREAM_PLAYBACK);
+	}
+
+	pr_debug("%s: ocmem_req: %d\n", __func__,
+		atomic_read(&pdata->audio_ocmem_req));
 	/* client buf alloc was with stream id 0, so free with the same */
 	ac->stream_id = 0;
 	q6asm_audio_client_buf_free_contiguous(dir, ac);
@@ -733,15 +805,6 @@ static int msm_compr_free(struct snd_compr_stream *cstream)
 	kfree(prtd);
 
 	return 0;
-}
-
-int validate_codec_compr(__u32 codec_id)
-{
-	int i;
-	for (i = 0; i < ARRAY_SIZE(compr_codecs); i++)
-		if (compr_codecs[i] == codec_id)
-			return 0;
-	return -EINVAL;
 }
 
 /* compress stream operations */
@@ -758,8 +821,6 @@ static int msm_compr_set_params(struct snd_compr_stream *cstream,
 
 	/* ToDo: remove duplicates */
 	prtd->num_channels = prtd->codec_param.codec.ch_in;
-
-	prtd->compr_passthr = params->compr_passthr;
 
 	switch (prtd->codec_param.codec.sample_rate) {
 	case SNDRV_PCM_RATE_8000:
@@ -785,13 +846,16 @@ static int msm_compr_set_params(struct snd_compr_stream *cstream,
 		prtd->sample_rate = 48000;
 		break;
 	}
-	if (prtd->compr_passthr && validate_codec_compr(params->codec.id)) {
-		pr_err("%s codec not supported in passthrough, id =%d\n",
-				__func__, params->codec.id);
-		return -EINVAL;
-	}
+
+	pr_debug("%s: sample_rate %d\n", __func__, prtd->sample_rate);
 
 	switch (params->codec.id) {
+	case SND_AUDIOCODEC_PCM: {
+		pr_debug("SND_AUDIOCODEC_PCM\n");
+		prtd->codec = FORMAT_LINEAR_PCM;
+		break;
+	}
+
 	case SND_AUDIOCODEC_MP3: {
 		pr_debug("SND_AUDIOCODEC_MP3\n");
 		prtd->codec = FORMAT_MP3;
@@ -807,14 +871,34 @@ static int msm_compr_set_params(struct snd_compr_stream *cstream,
 	}
 
 	case SND_AUDIOCODEC_AC3: {
+		pr_debug("SND_AUDIOCODEC_AC3\n");
 		prtd->codec = FORMAT_AC3;
 		frame_sz = AC3_OUTPUT_FRAME_SZ;
 		break;
 	}
 
 	case SND_AUDIOCODEC_EAC3: {
+		pr_debug("SND_AUDIOCODEC_EAC3\n");
 		prtd->codec = FORMAT_EAC3;
 		frame_sz = EAC3_OUTPUT_FRAME_SZ;
+		break;
+	}
+
+	case SND_AUDIOCODEC_MP2: {
+		pr_debug("SND_AUDIOCODEC_MP2\n");
+		prtd->codec = FORMAT_MP2;
+		break;
+	}
+
+	case SND_AUDIOCODEC_WMA: {
+		pr_debug("SND_AUDIOCODEC_WMA\n");
+		prtd->codec = FORMAT_WMA_V9;
+		break;
+	}
+
+	case SND_AUDIOCODEC_WMA_PRO: {
+		pr_debug("SND_AUDIOCODEC_WMA_PRO\n");
+		prtd->codec = FORMAT_WMA_V10PRO;
 		break;
 	}
 
@@ -854,6 +938,45 @@ static int msm_compr_drain_buffer(struct msm_compr_audio *prtd,
 		rc = -EINTR;
 		prtd->cmd_interrupt = 0;
 	}
+	return rc;
+}
+
+static int msm_compr_wait_for_stream_avail(struct msm_compr_audio *prtd,
+				    unsigned long *flags)
+{
+	int rc = 0;
+	pr_debug("next session is already in opened state\n");
+	prtd->next_stream = 1;
+	prtd->cmd_interrupt = 0;
+	spin_unlock_irqrestore(&prtd->lock, *flags);
+	/*
+	 * Wait for stream to be available, or the wait to be interrupted by
+	 * commands like flush or till a timeout of one second.
+	 */
+	rc = wait_event_timeout(prtd->wait_for_stream_avail,
+		prtd->stream_available || prtd->cmd_interrupt, 1 * HZ);
+	pr_err("%s:prtd->stream_available %d, prtd->cmd_interrupt %d rc %d\n",
+		   __func__, prtd->stream_available, prtd->cmd_interrupt, rc);
+
+	spin_lock_irqsave(&prtd->lock, *flags);
+	if (rc == 0) {
+		pr_err("%s: wait_for_stream_avail timed out\n",
+						__func__);
+		rc =  -ETIMEDOUT;
+	} else if (prtd->cmd_interrupt == 1) {
+		/*
+		 * This scenario might not happen as we do not allow
+		 * flush in transition state.
+		 */
+		pr_debug("%s: wait_for_stream_avail interrupted\n", __func__);
+		prtd->cmd_interrupt = 0;
+		prtd->stream_available = 0;
+		rc = -EINTR;
+	} else {
+		prtd->stream_available = 0;
+		rc = 0;
+	}
+	pr_debug("%s : rc = %d",  __func__, rc);
 	return rc;
 }
 
@@ -902,6 +1025,13 @@ static int msm_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 					prtd->gapless_state.gapless_transition);
 		stream_id = ac->stream_id;
 		atomic_set(&prtd->start, 0);
+		if (prtd->next_stream) {
+			pr_debug("%s: interrupt next track wait queues\n",
+								__func__);
+			prtd->cmd_interrupt = 1;
+			wake_up(&prtd->wait_for_stream_avail);
+			prtd->next_stream = 0;
+		}
 		if (atomic_read(&prtd->eos)) {
 			pr_debug("%s: interrupt eos wait queues", __func__);
 			prtd->cmd_interrupt = 1;
@@ -944,6 +1074,8 @@ static int msm_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 		prtd->copied_total = 0;
 		prtd->app_pointer  = 0;
 		prtd->bytes_received = 0;
+		prtd->bytes_sent = 0;
+
 		atomic_set(&prtd->xrun, 0);
 		spin_unlock_irqrestore(&prtd->lock, flags);
 		break;
@@ -1141,8 +1273,11 @@ static int msm_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 			in the next avail() ioctl
 			prtd->copied_total = 0;
 			prtd->bytes_received = 0;
+			do not reset prtd->bytes_sent as well as the same
+			session is used for gapless playback
 			*/
 			prtd->byte_offset = 0;
+
 			prtd->app_pointer  = 0;
 			prtd->first_buffer = 1;
 			prtd->last_buffer = 0;
@@ -1163,12 +1298,43 @@ static int msm_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 		spin_lock_irqsave(&prtd->lock, flags);
 		rc = 0;
 		stream_id = ac->stream_id^1; /*next stream in gapless*/
+		/*
+		 * Wait if stream 1 has not completed before honoring next
+		 * track for stream 3. Scenario happens if second clip is
+		 * small and fills in one buffer so next track will be
+		 * called immediately.
+		 */
 		if (prtd->gapless_state.stream_opened[stream_id]) {
-			pr_debug("next session is already in opened state\n");
-			spin_unlock_irqrestore(&prtd->lock, flags);
-			break;
+			if (prtd->gapless_state.gapless_transition) {
+				rc = msm_compr_wait_for_stream_avail(prtd,
+								    &flags);
+			} else {
+				/*
+				 * If session is already opened break out if
+				 * the state is not gapless transition. This
+				 * is when seek happens after the last buffer
+				 * is sent to the driver. Next track would be
+				 * called again after last buffer is sent.
+				 */
+				pr_debug("next session is in opened state\n");
+				spin_unlock_irqrestore(&prtd->lock, flags);
+				break;
+			}
 		}
 		spin_unlock_irqrestore(&prtd->lock, flags);
+		if (rc < 0) {
+			/*
+			 * if return type EINTR  then reset to zero. Tiny
+			 * compress treats EINTR as error and prevents PARTIAL
+			 * DRAIN. EINTR is not an error. wait for stream avail
+			 * is interrupted by some other command like FLUSH.
+			 */
+			if (rc == -EINTR) {
+				pr_debug("%s: EINTR reset rc to 0\n", __func__);
+				rc = 0;
+			}
+			break;
+		}
 		rc = q6asm_stream_open_write_v2(prtd->audio_client,
 				prtd->codec, 16,
 				stream_id,
@@ -1337,8 +1503,6 @@ static int msm_compr_copy(struct snd_compr_stream *cstream,
 	 * since the available bytes fits fragment_size, copy the data right away
 	 */
 	spin_lock_irqsave(&prtd->lock, flags);
-	if (prtd->gapless_state.gapless_transition)
-		prtd->gapless_state.gapless_transition = 0;
 	prtd->bytes_received += count;
 	if (atomic_read(&prtd->start)) {
 		if (atomic_read(&prtd->xrun)) {
