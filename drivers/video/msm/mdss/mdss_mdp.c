@@ -737,7 +737,7 @@ static int mdss_mdp_irq_clk_setup(struct mdss_data_type *mdata)
 	pr_debug("max mdp clk rate=%d\n", mdata->max_mdp_clk_rate);
 
 	ret = devm_request_irq(&mdata->pdev->dev, mdata->irq, mdss_irq_handler,
-			 IRQF_DISABLED,	"MDSS", mdata);
+			 IRQF_DISABLED | IRQF_SHARED, "MDSS", mdata);
 	if (ret) {
 		pr_err("mdp request_irq() failed!\n");
 		return ret;
