@@ -78,6 +78,7 @@
    (TYPE_IS_MEM(_t) && (_t & DRM_KGSL_GEM_CACHE_WCOMBINE)))
 
 /* MDP register information from mdss_mdp_hwio.h */
+#define MDSS_MDP_REG_DRM_INTR_STATUS    0x14
 #define MDSS_MDP_REG_INTR_EN			0x00110
 #define MDSS_MDP_REG_INTR_STATUS		0x00114
 #define MDSS_MDP_REG_INTR_CLEAR		0x00118
@@ -1578,21 +1579,12 @@ kgsl_drm_irq_handler(DRM_IRQ_ARGS)
 	struct drm_device *dev = (struct drm_device *)arg;
 	struct drm_kgsl_private *dev_priv =
 		(struct drm_kgsl_private *)dev->dev_private;
-	u32 isr, mask;
+	u32 isr;
 
-	isr = readl_relaxed(dev_priv->regs + MDSS_MDP_REG_INTR_STATUS);
+	isr = readl_relaxed(dev_priv->regs + MDSS_MDP_REG_DRM_INTR_STATUS);
 
 	DRM_DEBUG("%s:isr[0x%x]\n", __func__, isr);
 
-	if (isr == 0)
-		goto irq_done;
-
-	mask = readl_relaxed(dev_priv->regs + MDSS_MDP_REG_INTR_EN);
-	writel_relaxed(isr, dev_priv->regs + MDSS_MDP_REG_INTR_CLEAR);
-
-	DRM_DEBUG("%s:mask[0x%x]\n", __func__, mask);
-
-	isr &= mask;
 	if (isr == 0)
 		goto irq_done;
 
