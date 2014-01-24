@@ -77,6 +77,13 @@
    (_t == DRM_KGSL_GEM_TYPE_KMEM) || \
    (TYPE_IS_MEM(_t) && (_t & DRM_KGSL_GEM_CACHE_WCOMBINE)))
 
+/* MDP register information from mdss_mdp_hwio.h */
+#define MDSS_MDP_REG_INTR_EN			0x00110
+#define MDSS_MDP_REG_INTR_STATUS		0x00114
+#define MDSS_MDP_REG_INTR_CLEAR		0x00118
+
+#define MDSS_MDP_INTR_INTF_1_VSYNC		BIT(27)
+
 struct drm_kgsl_gem_object_wait_list_entry {
 	struct list_head list;
 	int pid;
@@ -1569,9 +1576,32 @@ static irqreturn_t
 kgsl_drm_irq_handler(DRM_IRQ_ARGS)
 {
 	struct drm_device *dev = (struct drm_device *)arg;
+	struct drm_kgsl_private *dev_priv =
+		(struct drm_kgsl_private *)dev->dev_private;
+	u32 isr, mask;
 
-	drm_handle_vblank(dev, 0);
+	isr = readl_relaxed(dev_priv->regs + MDSS_MDP_REG_INTR_STATUS);
 
+	DRM_DEBUG("%s:isr[0x%x]\n", __func__, isr);
+
+	if (isr == 0)
+		goto irq_done;
+
+	mask = readl_relaxed(dev_priv->regs + MDSS_MDP_REG_INTR_EN);
+	writel_relaxed(isr, dev_priv->regs + MDSS_MDP_REG_INTR_CLEAR);
+
+	DRM_DEBUG("%s:mask[0x%x]\n", __func__, mask);
+
+	isr &= mask;
+	if (isr == 0)
+		goto irq_done;
+
+	if (isr & MDSS_MDP_INTR_INTF_1_VSYNC) {
+		DRM_DEBUG("%s:regs[0x%x]\n", __func__, (int)dev_priv->regs);
+		drm_handle_vblank(dev, 0);
+	}
+
+irq_done:
 	return IRQ_HANDLED;
 }
 
