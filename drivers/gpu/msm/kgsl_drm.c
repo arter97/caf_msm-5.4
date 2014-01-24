@@ -84,6 +84,9 @@
 #define MDSS_MDP_REG_INTR_CLEAR		0x00118
 #define MDSS_MDP_VSYNC_IRQ		0x08000000
 #define MDSS_MDP_INTR_INTF_1_VSYNC		BIT(27)
+#define MDSS_MDP_INTR_INTF_3_VSYNC		BIT(31)
+#define MDSS_MDP_INTR_WB_0_DONE		BIT(0)
+#define MDSS_MDP_INTR_WB_2_DONE		BIT(4)
 
 struct drm_kgsl_gem_object_wait_list_entry {
 	struct list_head list;
@@ -1589,8 +1592,23 @@ kgsl_drm_irq_handler(DRM_IRQ_ARGS)
 		goto irq_done;
 
 	if (isr & MDSS_MDP_INTR_INTF_1_VSYNC) {
-		DRM_DEBUG("%s:regs[0x%x]\n", __func__, (int)dev_priv->regs);
+		DRM_DEBUG("%s:DSI0\n", __func__);
 		drm_handle_vblank(dev, 0);
+	}
+
+	if (isr & MDSS_MDP_INTR_INTF_3_VSYNC) {
+		DRM_DEBUG("%s:HDMI\n", __func__);
+		drm_handle_vblank(dev, 1);
+	}
+
+	if (isr & MDSS_MDP_INTR_WB_0_DONE) {
+		DRM_DEBUG("%s:Rotator\n", __func__);
+		drm_handle_vblank(dev, 2);
+	}
+
+	if (isr & MDSS_MDP_INTR_WB_2_DONE) {
+		DRM_DEBUG("%s:WFD\n", __func__);
+		drm_handle_vblank(dev, 3);
 	}
 
 irq_done:
@@ -1895,8 +1913,14 @@ static int kgsl_drm_load(struct drm_device *dev, unsigned long flags)
 		dev_priv->irq, (int)res->start, (int)dev_priv->regs,
 		(int)dev_priv->reg_size);
 
-	/* initialize variables related to vblank and waitqueue. */
-	ret = drm_vblank_init(dev, 1);
+	/*
+	 * initialize variables related to vblank and waitqueue.
+	 * 1 : primary device(LCD)
+	 * 2 : secondary device(HDMI)
+	 * 3 : writeback 0 device(Rotator)
+	 * 4 : writeback 2 device(WFD)
+	 */
+	ret = drm_vblank_init(dev, 4);
 	if (ret) {
 		DRM_ERROR("failed to init vblank.\n");
 		return ret;
