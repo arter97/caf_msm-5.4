@@ -145,6 +145,13 @@ struct drm_kgsl_gem_glockinfo)
 #define DRM_KGSL_GEM_TS_3D         0x00000430
 #define DRM_KGSL_GEM_TS_2D         0x00000180
 
+enum drm_kgsl_crtc_id {
+	DRM_KGSL_CRTC_PRIMARY,
+	DRM_KGSL_CRTC_HDMI,
+	DRM_KGSL_CRTC_ROTATOR,
+	DRM_KGSL_CRTC_WFD,
+	DRM_KGSL_CRTC_MAX,
+};
 
 struct drm_kgsl_gem_create {
 	uint32_t size;
