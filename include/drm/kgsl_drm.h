@@ -234,4 +234,6 @@ struct drm_kgsl_gem_create_from_ion {
 	uint32_t handle;
 };
 
+extern void mdss_mdp_clk_ctrl(int enable, int isr);
+
 #endif

@@ -703,6 +703,7 @@ void mdss_mdp_clk_ctrl(int enable, int isr)
 
 	mutex_unlock(&mdp_clk_lock);
 }
+EXPORT_SYMBOL(mdss_mdp_clk_ctrl);
 
 static inline int mdss_mdp_irq_clk_register(struct mdss_data_type *mdata,
 					    char *clk_name, int clk_idx)
