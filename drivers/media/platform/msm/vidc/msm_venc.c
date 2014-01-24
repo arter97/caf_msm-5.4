@@ -874,6 +874,11 @@ static inline int start_streaming(struct msm_vidc_inst *inst)
 	struct vb2_buf_entry *temp;
 	struct list_head *ptr, *next;
 
+	if (!inst || !inst->core || !inst->core->device) {
+		dprintk(VIDC_ERR, "%s invalid parameters\n", __func__);
+		return -EINVAL;
+	}
+
 	rc = msm_comm_try_get_bufreqs(inst);
 	if (rc) {
 		dprintk(VIDC_ERR,
