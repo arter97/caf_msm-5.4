@@ -248,20 +248,6 @@ int kgsl_open_device(struct kgsl_device *device);
 
 int kgsl_close_device(struct kgsl_device *device);
 
-#ifdef CONFIG_MSM_KGSL_DRM
-extern int kgsl_drm_init(struct platform_device *dev);
-extern void kgsl_drm_exit(void);
-#else
-static inline int kgsl_drm_init(struct platform_device *dev)
-{
-	return 0;
-}
-
-static inline void kgsl_drm_exit(void)
-{
-}
-#endif
-
 static inline int kgsl_gpuaddr_in_memdesc(const struct kgsl_memdesc *memdesc,
 				unsigned int gpuaddr, unsigned int size)
 {
