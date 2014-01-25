@@ -428,6 +428,7 @@ struct snd_codec {
 	__u32 ch_mode;
 	__u32 format;
 	__u32 align;
+	__u32 compr_passthr;
 	__u32 transcode_dts;
 	struct snd_dec_dts dts;
 	union snd_codec_options options;
