@@ -324,7 +324,7 @@ int mdss_mdp_get_rau_strides(u32 w, u32 h,
 }
 
 int mdss_mdp_get_plane_sizes(u32 format, u32 w, u32 h,
-			     struct mdss_mdp_plane_sizes *ps, u32 bwc_mode)
+		struct mdss_mdp_plane_sizes *ps, u32 bwc_mode, u32 align)
 {
 	struct mdss_mdp_format_params *fmt;
 	int i, rc;
@@ -363,10 +363,14 @@ int mdss_mdp_get_plane_sizes(u32 format, u32 w, u32 h,
 	} else {
 		if (fmt->fetch_planes == MDSS_MDP_PLANE_INTERLEAVED) {
 			ps->num_planes = 1;
+
 			if (format == MDP_YCBYCR_H2V1_10_BWC)
 				ps->ystride[0] = (w + 23) / 24 * 64;
 			else
 				ps->ystride[0] = w * bpp;
+
+			if (align)
+				ps->ystride[0] = ALIGN(ps->ystride[0], align);
 
 			ps->plane_size[0] = ps->ystride[0] * h;
 		} else if (format == MDP_Y_CBCR_H2V2_VENUS) {
