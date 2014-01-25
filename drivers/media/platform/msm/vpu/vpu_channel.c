@@ -1903,21 +1903,7 @@ err_deinit_vpu_channel:
 #define RPM_MISC_REQ_TYPE	0x6373696d
 #define RPM_MISC_REQUEST_VPU	0x757076
 
-static void inform_rpm_vpu_state(u32 on)
-{
-	int rc, value = on;
-
-	struct msm_rpm_kvp kvp = {
-		.key = RPM_MISC_REQUEST_VPU,
-		.data = (void *)&value,
-		.length = sizeof(value),
-	};
-
-	rc = msm_rpm_send_message(MSM_RPM_CTX_ACTIVE_SET,
-			RPM_MISC_REQ_TYPE, 0, &kvp, 1);
-	if (rc < 0)
-		pr_err("failed to inform RPM! (err = %d)\n", rc);
-}
+static void inform_rpm_vpu_state(u32 on) {}
 
 /*
  * power up VPU HW.
@@ -2110,6 +2096,7 @@ int vpu_hw_sys_start(channel_event_handler event_cb,
 
 			/* power up VPU */
 			queue_work(ch_hal->power_workq, &ch_hal->boot_work);
+			flush_workqueue(ch_hal->power_workq);
 			pr_debug("boot_work queued\n");
 		}
 	}
