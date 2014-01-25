@@ -1161,6 +1161,13 @@ int mdss_mdp_pipe_queue_data(struct mdss_mdp_pipe *pipe,
 			opmode);
 	}
 
+	if ((pipe->flags & MDP_VPU_PIPE) &&  (src_data == NULL ||
+				!pipe->has_buf)) {
+		pr_debug("%s src_data=%p has_buf=%d pipe num=%dx",
+				__func__, src_data, pipe->has_buf, pipe->num);
+		goto update_nobuf;
+	}
+
 	mdss_mdp_smp_alloc(pipe);
 	ret = mdss_mdp_src_addr_setup(pipe, src_data);
 	if (ret) {
