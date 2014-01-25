@@ -61,7 +61,7 @@
 	((d >> 16) & 0xff) + ((d >> 24) & 0xff))
 
 /* Enable HDCP by default */
-static bool hdcp_feature_on = true;
+static bool hdcp_feature_on = false;
 
 /* Supported HDMI Audio channels */
 #define MSM_HDMI_AUDIO_CHANNEL_2	2
