@@ -59,7 +59,7 @@
 #define AXI_HALT_TIMEOUT_US	0x4000
 
 struct mdss_data_type *mdss_res;
-
+static u32 max_performance = 1;
 static int mdss_fb_mem_get_iommu_domain(void)
 {
 	return mdss_get_iommu_domain(MDSS_IOMMU_DOMAIN_UNSECURE);
@@ -389,6 +389,10 @@ int mdss_mdp_bus_scale_set_quota(u64 ab_quota, u64 ib_quota)
 		pr_err("invalid bus handle %d\n", mdss_res->bus_hdl);
 		return -EINVAL;
 	}
+	if (max_performance) {
+		ab_quota = ab_quota * 8;
+		ib_quota = ib_quota * 8;
+	}
 
 	if ((ab_quota | ib_quota) == 0) {
 		new_uc_idx = 0;
@@ -631,6 +635,8 @@ void mdss_mdp_set_clk_rate(unsigned long rate)
 		if (min_clk_rate < mdata->max_mdp_clk_rate)
 			clk_rate = clk_round_rate(clk, min_clk_rate);
 		else
+			clk_rate = mdata->max_mdp_clk_rate;
+		if (max_performance)
 			clk_rate = mdata->max_mdp_clk_rate;
 		if (IS_ERR_VALUE(clk_rate)) {
 			pr_err("unable to round rate err=%ld\n", clk_rate);
