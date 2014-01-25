@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -363,8 +363,12 @@ int mdss_mdp_get_plane_sizes(u32 format, u32 w, u32 h,
 	} else {
 		if (fmt->fetch_planes == MDSS_MDP_PLANE_INTERLEAVED) {
 			ps->num_planes = 1;
-			ps->plane_size[0] = w * h * bpp;
-			ps->ystride[0] = w * bpp;
+			if (format == MDP_YCBYCR_H2V1_10_BWC)
+				ps->ystride[0] = (w + 23) / 24 * 64;
+			else
+				ps->ystride[0] = w * bpp;
+
+			ps->plane_size[0] = ps->ystride[0] * h;
 		} else if (format == MDP_Y_CBCR_H2V2_VENUS) {
 			int cf = COLOR_FMT_NV12;
 			ps->num_planes = 2;
