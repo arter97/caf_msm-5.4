@@ -473,6 +473,7 @@ void mdss_mdp_irq_disable(u32 intr_type, u32 intf_num)
 {
 	u32 irq;
 	unsigned long irq_flags;
+	u32 mask;
 
 	irq = mdss_mdp_irq_mask(intr_type, intf_num);
 
@@ -482,10 +483,13 @@ void mdss_mdp_irq_disable(u32 intr_type, u32 intf_num)
 				irq, mdss_res->mdp_irq_mask);
 	} else {
 		mdss_res->mdp_irq_mask &= ~irq;
+		mask = MDSS_MDP_REG_READ(MDSS_MDP_REG_INTR_EN);
+		mask |= MDSS_MDP_INTR_INTF_1_VSYNC;
 
 		MDSS_MDP_REG_WRITE(MDSS_MDP_REG_INTR_EN,
-				mdss_res->mdp_irq_mask);
+				mdss_res->mdp_irq_mask | mask);
 		if ((mdss_res->mdp_irq_mask == 0) &&
+			(mask == 0) &&
 			(mdss_res->mdp_hist_irq_mask == 0))
 			mdss_disable_irq(&mdss_mdp_hw);
 	}
