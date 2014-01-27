@@ -40,6 +40,9 @@ typedef void (*ecm_ipa_callback)(void *priv,
  * with ecm_ipa APIs
  * @host_ethaddr: host Ethernet address in network order
  * @device_ethaddr: device Ethernet address in network order
+ * @device_ready_notify: callback supplied by USB core driver.
+ *  This callback shall be called by the Netdev once the device
+ *  is ready to recieve data from tethered PC.
  */
 struct ecm_ipa_params {
 	ecm_ipa_callback ecm_ipa_rx_dp_notify;
@@ -47,6 +50,7 @@ struct ecm_ipa_params {
 	u8 host_ethaddr[ETH_ALEN];
 	u8 device_ethaddr[ETH_ALEN];
 	void *private;
+	void (*device_ready_notify)(void);
 };
 
 
