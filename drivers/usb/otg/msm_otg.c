@@ -864,6 +864,7 @@ static int msm_otg_suspend(struct msm_otg *motg)
 	struct msm_otg_platform_data *pdata = motg->pdata;
 	int cnt = 0;
 	bool host_bus_suspend, device_bus_suspend, dcp, prop_charger;
+	bool sm_work_busy;
 	u32 phy_ctrl_val = 0, cmd_val;
 	unsigned ret;
 	u32 portsc, config2;
@@ -882,15 +883,20 @@ static int msm_otg_suspend(struct msm_otg *motg)
 		motg->caps & ALLOW_LPM_ON_DEV_SUSPEND;
 	dcp = motg->chg_type == USB_DCP_CHARGER;
 	prop_charger = motg->chg_type == USB_PROPRIETARY_CHARGER;
+	/* !BSV, but its handling is in progress by otg sm_work */
+	sm_work_busy = !test_bit(B_SESS_VLD, &motg->inputs) &&
+			phy->state != OTG_STATE_B_IDLE;
 
 	/*
 	 * Abort suspend when,
 	 * 1. charging detection in progress due to cable plug-in
 	 * 2. host mode activation in progress due to Micro-A cable insertion
+	 * 3. !BSV, but its handling is in progress by otg sm_work
 	 */
 
 	if ((test_bit(B_SESS_VLD, &motg->inputs) && !device_bus_suspend &&
-		!dcp && !prop_charger) || test_bit(A_BUS_REQ, &motg->inputs)) {
+	     !dcp && !prop_charger) || test_bit(A_BUS_REQ, &motg->inputs) ||
+	     sm_work_busy) {
 		enable_irq(motg->irq);
 		return -EBUSY;
 	}
