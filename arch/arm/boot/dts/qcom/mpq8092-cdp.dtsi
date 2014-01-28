@@ -54,9 +54,9 @@
 
         i2c@f9966000 {
 		ioexp_gpios: io_exp@3e {
-			compatitble ="sx1509q";
 			#gpio-cells = <2>;
 			gpio-controller;
+                        compatible = "sx1509q";
 			reg = <0x3e>;
 			sx150x,pullup_ena = <0x00>;
 			sx150x,pulldn_ena = <0x00>;
