@@ -878,6 +878,12 @@ config MACH_APQ8064_CDP
 	help
 	  Support for the Qualcomm APQ8064 CDP device.
 
+config MACH_APQ8064_ADP2
+	depends on ARCH_APQ8064
+	bool "APQ8064 ADP2"
+	help
+	  Support for the Qualcomm APQ8064 CDP device.
+
 config MACH_APQ8064_MTP
 	depends on ARCH_APQ8064
 	bool "APQ8064 MTP"
