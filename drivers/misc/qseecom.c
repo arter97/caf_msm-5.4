@@ -2136,6 +2136,14 @@ static int qseecom_send_modfd_resp(struct qseecom_dev_handle *data,
 			return -EINVAL;
 		}
 	}
+	/* validate offsets */
+	for (i = 0; i < MAX_ION_FD; i++) {
+		if (resp.ifd_data[i].cmd_buf_offset >= resp.resp_len) {
+			pr_err("Invalid offset %d = 0x%x\n",
+				i, resp.ifd_data[i].cmd_buf_offset);
+			return -EINVAL;
+		}
+	}
 	__qseecom_update_cmd_buf(&resp, false, data, true);
 	qseecom.send_resp_flag = 1;
 	wake_up_interruptible(&qseecom.send_resp_wq);
