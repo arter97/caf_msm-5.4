@@ -5758,6 +5758,8 @@ static struct gate_clk vby1_gpio_ldo = {
 	},
 };
 
+static DEFINE_CLK_VOTER(scm_ce1_clk_src, &ce1_clk_src.c, 100000000);
+
 static DEFINE_CLK_MEASURE(l2_m_clk);
 static DEFINE_CLK_MEASURE(krait0_m_clk);
 static DEFINE_CLK_MEASURE(krait1_m_clk);
@@ -6625,7 +6627,7 @@ static struct clk_lookup mpq_clocks_8092[] = {
 	CLK_LOOKUP("mem_clk", bimc_a_clk.c, ""),
 	CLK_LOOKUP("mem_clk", ocmemgx_a_clk.c, ""),
 	CLK_LOOKUP("xo_clk", xo_clk_src.c, ""),
-	CLK_LOOKUP("xo_clk", xo_a_clk_src.c, ""),
+	CLK_LOOKUP("hfpll_src", xo_a_clk_src.c, "f9016000.qcom,clock-krait"),
 	CLK_LOOKUP("bus_clk", mmssnoc_ahb_clk.c, ""),
 	CLK_LOOKUP("core_clk", gfx3d_clk_src.c, ""),
 	CLK_LOOKUP("core_clk", gfx3d_a_clk_src.c, ""),
@@ -6633,7 +6635,7 @@ static struct clk_lookup mpq_clocks_8092[] = {
 
 	/* PLL */
 	CLK_LOOKUP("gpll0", gpll0_clk_src.c, ""),
-	CLK_LOOKUP("gpll0_ao", gpll0_ao_clk_src.c, ""),
+	CLK_LOOKUP("aux_clk", gpll0_ao_clk_src.c, "f9016000.qcom,clock-krait"),
 
 	/* Voter clocks */
 	CLK_LOOKUP("bus_clk",	cnoc_msmbus_clk.c,	"msm_config_noc"),
@@ -6689,6 +6691,7 @@ static struct clk_lookup mpq_clocks_8092[] = {
 	CLK_LOOKUP("iface_clk",	gcc_blsp2_ahb_clk.c,	"f995d000.serial"),
 	CLK_LOOKUP("iface_clk",	gcc_blsp2_ahb_clk.c,	"f9960000.serial"),
 	CLK_LOOKUP("core_clk",	gcc_blsp2_qup1_i2c_apps_clk.c, "f9963000.i2c"),
+	CLK_LOOKUP("iface_clk",	gcc_blsp2_ahb_clk.c,	"f9968000.spi"),
 	CLK_LOOKUP("",	gcc_blsp2_qup1_spi_apps_clk.c,	""),
 	CLK_LOOKUP("",	gcc_blsp2_qup2_i2c_apps_clk.c,	""),
 	CLK_LOOKUP("",	gcc_blsp2_qup2_spi_apps_clk.c,	""),
@@ -6699,7 +6702,7 @@ static struct clk_lookup mpq_clocks_8092[] = {
 	CLK_LOOKUP("core_clk",	gcc_blsp2_qup5_i2c_apps_clk.c,	"f9967000.i2c"),
 	CLK_LOOKUP("",	gcc_blsp2_qup5_spi_apps_clk.c,	""),
 	CLK_LOOKUP("",	gcc_blsp2_qup6_i2c_apps_clk.c,	""),
-	CLK_LOOKUP("",	gcc_blsp2_qup6_spi_apps_clk.c,	""),
+	CLK_LOOKUP("core_clk",	gcc_blsp2_qup6_spi_apps_clk.c,	"f9968000.spi"),
 	CLK_LOOKUP("core_clk", gcc_blsp2_uart1_apps_clk.c, "f995d000.serial"),
 	CLK_LOOKUP("",	gcc_blsp2_uart2_apps_clk.c,	""),
 	CLK_LOOKUP("",	gcc_blsp2_uart3_apps_clk.c,	""),
@@ -6710,9 +6713,11 @@ static struct clk_lookup mpq_clocks_8092[] = {
 	CLK_LOOKUP("",	gcc_boot_rom_ahb_clk.c,	""),
 
 	/* CE */
-	CLK_LOOKUP("",	gcc_ce1_ahb_clk.c,	""),
-	CLK_LOOKUP("",	gcc_ce1_axi_clk.c,	""),
-	CLK_LOOKUP("",	gcc_ce1_clk.c,	""),
+	CLK_LOOKUP("core_clk",     gcc_ce1_clk.c,         "scm"),
+	CLK_LOOKUP("iface_clk",    gcc_ce1_ahb_clk.c,     "scm"),
+	CLK_LOOKUP("bus_clk",      gcc_ce1_axi_clk.c,     "scm"),
+	CLK_LOOKUP("core_clk_src", scm_ce1_clk_src.c,     "scm"),
+
 	CLK_LOOKUP("",	gcc_ce2_ahb_clk.c,	""),
 	CLK_LOOKUP("",	gcc_ce2_axi_clk.c,	""),
 	CLK_LOOKUP("",	gcc_ce2_clk.c,	""),

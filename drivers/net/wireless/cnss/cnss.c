@@ -23,6 +23,8 @@
 #include <linux/of_gpio.h>
 #include <linux/pm.h>
 #include <linux/pm_wakeup.h>
+#include <linux/sched.h>
+#include <linux/pm_qos.h>
 #include <mach/gpiomux.h>
 #include <mach/msm_pcie.h>
 #include <mach/subsystem_restart.h>
@@ -84,6 +86,7 @@ static struct cnss_data {
 	struct pci_saved_state *saved_state;
 	u16 revision_id;
 	struct cnss_fw_files fw_files;
+	struct pm_qos_request qos_request;
 } *penv;
 
 static int cnss_wlan_vreg_set(struct cnss_wlan_vreg_info *vreg_info, bool state)
@@ -640,6 +643,12 @@ void cnss_device_crashed(void)
 }
 EXPORT_SYMBOL(cnss_device_crashed);
 
+int cnss_set_cpus_allowed_ptr(struct task_struct *task, ulong cpu)
+{
+	return set_cpus_allowed_ptr(task, cpumask_of(cpu));
+}
+EXPORT_SYMBOL(cnss_set_cpus_allowed_ptr);
+
 static int cnss_shutdown(const struct subsys_desc *subsys, bool force_stop)
 {
 	struct cnss_wlan_driver *wdrv;
@@ -899,6 +908,18 @@ static void __exit cnss_exit(void)
 	subsys_unregister(penv->subsys);
 	platform_driver_unregister(&cnss_driver);
 }
+
+void cnss_request_pm_qos(u32 qos_val)
+{
+	pm_qos_add_request(&penv->qos_request, PM_QOS_CPU_DMA_LATENCY, qos_val);
+}
+EXPORT_SYMBOL(cnss_request_pm_qos);
+
+void cnss_remove_pm_qos(void)
+{
+	pm_qos_remove_request(&penv->qos_request);
+}
+EXPORT_SYMBOL(cnss_remove_pm_qos);
 
 module_init(cnss_initialize);
 module_exit(cnss_exit);
