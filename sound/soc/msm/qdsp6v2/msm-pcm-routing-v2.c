@@ -111,6 +111,64 @@ static void msm_send_eq_values(int eq_idx);
 /* This array is indexed by back-end DAI ID defined in msm-pcm-routing.h
  * If new back-end is defined, add new back-end DAI ID at the end of enum
  */
+
+#define SRS_TRUMEDIA_INDEX 2
+union srs_trumedia_params_u {
+	struct srs_trumedia_params srs_params;
+	unsigned short int raw_params[1];
+};
+static union srs_trumedia_params_u msm_srs_trumedia_params[SRS_TRUMEDIA_INDEX];
+static int srs_port_id = -1;
+
+static void srs_send_params(int port_id, unsigned int techs,
+		int param_block_idx)
+{
+	/* only send commands to dsp if srs alsa ctrl was used
+	   at least one time */
+	if (!srs_alsa_ctrl_ever_called)
+		return;
+
+	pr_debug("SRS %s: called, port_id = %d, techs flags = %u, paramblockidx %d",
+		__func__, port_id, techs, param_block_idx);
+	/* force all if techs is set to 1 */
+	if (techs == 1)
+		techs = 0xFFFFFFFF;
+
+	if (techs & (1 << SRS_ID_WOWHD))
+		srs_trumedia_open(port_id, SRS_ID_WOWHD,
+	(void *)&msm_srs_trumedia_params[param_block_idx].srs_params.wowhd);
+	if (techs & (1 << SRS_ID_CSHP))
+		srs_trumedia_open(port_id, SRS_ID_CSHP,
+	(void *)&msm_srs_trumedia_params[param_block_idx].srs_params.cshp);
+	if (techs & (1 << SRS_ID_HPF))
+		srs_trumedia_open(port_id, SRS_ID_HPF,
+	(void *)&msm_srs_trumedia_params[param_block_idx].srs_params.hpf);
+	if (techs & (1 << SRS_ID_PEQ))
+		srs_trumedia_open(port_id, SRS_ID_PEQ,
+	(void *)&msm_srs_trumedia_params[param_block_idx].srs_params.peq);
+	if (techs & (1 << SRS_ID_HL))
+		srs_trumedia_open(port_id, SRS_ID_HL,
+	(void *)&msm_srs_trumedia_params[param_block_idx].srs_params.hl);
+	if (techs & (1 << SRS_ID_GLOBAL))
+		srs_trumedia_open(port_id, SRS_ID_GLOBAL,
+	(void *)&msm_srs_trumedia_params[param_block_idx].srs_params.global);
+}
+
+int get_topology(int path_type)
+{
+	int topology_id = 0;
+	if (path_type == ADM_PATH_PLAYBACK)
+		topology_id = get_adm_rx_topology();
+	else
+		topology_id = get_adm_tx_topology();
+
+	if (topology_id  == 0)
+		topology_id = NULL_COPP_TOPOLOGY;
+
+	return topology_id;
+}
+
+#define SLIMBUS_EXTPROC_RX AFE_PORT_INVALID
 static struct msm_pcm_routing_bdai_data msm_bedais[MSM_BACKEND_DAI_MAX] = {
 	{ PRIMARY_I2S_RX, 0, NULL, 0, 0},
 	{ PRIMARY_I2S_TX, 0, NULL, 0, 0},
@@ -607,9 +665,53 @@ static int msm_routing_get_compressed_vol_mixer(struct snd_kcontrol *kcontrol,
 static int msm_routing_set_compressed_vol_mixer(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
-	if (!compressed_set_volume(ucontrol->value.integer.value[0]))
-		msm_route_compressed_vol_control =
-			ucontrol->value.integer.value[0];
+	unsigned int techs = 0;
+	unsigned short offset, value, max, index;
+
+	srs_alsa_ctrl_ever_called = 1;
+
+	max = sizeof(msm_srs_trumedia_params) >> 1;
+	index = (unsigned short)((ucontrol->value.integer.value[0] &
+			SRS_PARAM_INDEX_MASK) >> 31);
+	if (SRS_CMD_UPLOAD ==
+		(ucontrol->value.integer.value[0] & SRS_CMD_UPLOAD)) {
+		techs = ucontrol->value.integer.value[0] & 0xFF;
+		pr_debug("SRS %s: send params request, flags = %u",
+			__func__, techs);
+		if (srs_port_id >= 0 && techs)
+			srs_send_params(srs_port_id, techs, index);
+		return 0;
+	}
+	offset = (unsigned short)((ucontrol->value.integer.value[0] &
+			SRS_PARAM_OFFSET_MASK) >> 16);
+	value = (unsigned short)(ucontrol->value.integer.value[0] &
+			SRS_PARAM_VALUE_MASK);
+	if ((offset < max) && (index < SRS_TRUMEDIA_INDEX)) {
+		msm_srs_trumedia_params[index].raw_params[offset] = value;
+		pr_debug("SRS %s: index set... (max %d, requested %d, val %d, paramblockidx %d)",
+			__func__, max, offset, value, index);
+	} else {
+		pr_err("SRS %s: index out of bounds! (max %d, requested %d)",
+				__func__, max, offset);
+	}
+	if (offset == 4) {
+		int i;
+		for (i = 0; i < max; i++) {
+			if (i == 0) {
+				pr_debug("SRS %s: global block start",
+						__func__);
+			}
+			if (i ==
+			(sizeof(struct srs_trumedia_params_GLOBAL) >> 1)) {
+				pr_debug("SRS %s: wowhd block start at offset %d word offset %d",
+					__func__, i, i>>1);
+				break;
+			}
+			pr_debug("SRS %s: param_index %d index %d val %d",
+				__func__, index, i,
+				msm_srs_trumedia_params[index].raw_params[i]);
+		}
+	}
 	return 0;
 }
 
