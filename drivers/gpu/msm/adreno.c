@@ -330,6 +330,12 @@ int adreno_perfcounter_read_group(struct adreno_device *adreno_dev,
 			goto done;
 		}
 
+		/* Verify that the group ID is within range */
+		if (list[j].groupid >= counters->group_count) {
+			ret = -EINVAL;
+			goto done;
+		}
+
 		group = &(counters->groups[list[j].groupid]);
 
 		/* group/counter iterator */
