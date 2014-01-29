@@ -26,31 +26,31 @@
 
 	memory {
 		secure_mem: secure_region@0 {
-			linux,contiguous-region;
+			linux,reserve-contiguous-region;
 			reg = <0 0x6D00000>;
 			label = "secure_mem";
 		};
 
 		adsp_mem: adsp_region@0 {
-			linux,contiguous-region;
+			linux,reserve-contiguous-region;
 			reg = <0 0x2a00000>;
 			label = "adsp_mem";
 		};
 
 		qsecom_mem: qsecom_region@0 {
-			linux,contiguous-region;
+			linux,reserve-contiguous-region;
 			reg = <0 0xd00000>;
 			label = "qsecom_mem";
 		};
 
 		fb_mem: fb_region@0 {
-			linux,contiguous-region;
+			linux,reserve-contiguous-region;
 			reg = <0 0x800000>;
 			label = "fb_mem";
 		};
 
 		audio_mem: audio_region@0 {
-			linux,contiguous-region;
+			linux,reserve-contiguous-region;
 			linux,reserve-region;
 			reg = <0 0x314000>;
 			label = "audio_mem";
@@ -1117,12 +1117,26 @@
 	};
 
 	qcom,venus@fdce0000 {
-		compatible = "qcom,pil-venus";
-		reg = <0xfdce0000 0x4000>,
-		      <0xfdc80000 0x400>;
-		reg-names = "wrapper_base", "vbif_base";
-		vdd-supply = <&gdsc_venus>;
+		compatible = "qcom,pil-tz-generic";
+		reg = <0xfdce0000 0x4000>;
 
+		vdd-supply = <&gdsc_venus>;
+		proxy-reg-names = "vdd";
+		clock-names = "core_clk", "iface_clk",
+				"bus_clk", "mem_clk";
+		proxy-clock-names = "core_clk", "iface_clk",
+					"bus_clk", "mem_clk";
+
+		qcom,msm-bus,name = "pil-venus";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,active-only = <0>;
+		qcom,msm-bus,vectors-KBps =
+				<63 512 0 0>,
+				<63 512 0 304000>;
+
+		qcom,pas-id = <9>;
+		qcom,proxy-timeout-ms = <2000>;
 		qcom,firmware-name = "venus";
 	};
 

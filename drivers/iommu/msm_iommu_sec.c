@@ -26,6 +26,7 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/kmemleak.h>
+#include <soc/qcom/scm.h>
 
 #include <asm/sizes.h>
 
@@ -33,7 +34,6 @@
 #include <mach/iommu_hw-v1.h>
 #include <mach/msm_iommu_priv.h>
 #include <mach/iommu.h>
-#include <mach/scm.h>
 #include <mach/memory.h>
 
 /* bitmap of the page sizes currently supported */
@@ -60,6 +60,12 @@
 
 
 static struct iommu_access_ops *iommu_access_ops;
+
+static const struct of_device_id msm_smmu_list[] = {
+	{ .compatible = "qcom,msm-smmu-v1", },
+	{ .compatible = "qcom,msm-smmu-v2", },
+	{ }
+};
 
 struct msm_scm_paddr_list {
 	unsigned int list;
@@ -296,8 +302,9 @@ static int msm_iommu_sec_ptbl_init(void)
 	int ret, ptbl_ret = 0;
 	int version;
 
-	for_each_compatible_node(np, NULL, "qcom,msm-smmu-v1")
-		if (of_find_property(np, "qcom,iommu-secure-id", NULL))
+	for_each_matching_node(np, msm_smmu_list)
+		if (of_find_property(np, "qcom,iommu-secure-id", NULL) &&
+				of_device_is_available(np))
 			break;
 
 	if (!np)

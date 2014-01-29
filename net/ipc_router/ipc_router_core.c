@@ -36,7 +36,6 @@
 #include <asm/byteorder.h>
 
 #include <mach/smem_log.h>
-#include <mach/subsystem_notif.h>
 
 #include "ipc_router_private.h"
 #include "ipc_router_security.h"
@@ -2056,7 +2055,7 @@ static int process_control_msg(struct msm_ipc_router_xprt_info *xprt_info,
 	struct rr_header_v1 *hdr;
 
 	if (pkt->length != sizeof(*msg)) {
-		pr_err("%s: r2r msg size %d != %d\n", __func__, pkt->length,
+		pr_err("%s: r2r msg size %d != %zu\n", __func__, pkt->length,
 			sizeof(*msg));
 		return -EINVAL;
 	}
