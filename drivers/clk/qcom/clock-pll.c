@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -17,9 +17,9 @@
 #include <linux/err.h>
 #include <linux/clk.h>
 #include <linux/io.h>
+#include <soc/qcom/clock-pll.h>
 
 #include "clock.h"
-#include "clock-pll.h"
 
 #define PLL_OUTCTRL BIT(0)
 #define PLL_BYPASSNL BIT(1)
@@ -40,13 +40,6 @@ static DEFINE_SPINLOCK(pll_reg_lock);
 
 #define ENABLE_WAIT_MAX_LOOPS 200
 #define PLL_LOCKED_BIT BIT(16)
-
-static int fixed_pll_clk_set_rate(struct clk *c, unsigned long rate)
-{
-	if (rate != c->rate)
-		return -EINVAL;
-	return 0;
-}
 
 static long fixed_pll_clk_round_rate(struct clk *c, unsigned long rate)
 {
@@ -132,7 +125,6 @@ struct clk_ops clk_ops_pll_vote = {
 	.disable = pll_vote_clk_disable,
 	.is_enabled = pll_vote_clk_is_enabled,
 	.round_rate = fixed_pll_clk_round_rate,
-	.set_rate = fixed_pll_clk_set_rate,
 	.handoff = pll_vote_clk_handoff,
 	.list_registers = pll_vote_clk_list_registers,
 };
@@ -520,7 +512,6 @@ struct clk_ops clk_ops_pll_acpu_vote = {
 	.enable = pll_acpu_vote_clk_enable,
 	.disable = pll_acpu_vote_clk_disable,
 	.round_rate = fixed_pll_clk_round_rate,
-	.set_rate = fixed_pll_clk_set_rate,
 	.is_enabled = pll_vote_clk_is_enabled,
 	.handoff = pll_acpu_vote_clk_handoff,
 	.list_registers = pll_vote_clk_list_registers,

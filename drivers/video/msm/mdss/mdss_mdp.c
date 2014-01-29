@@ -82,6 +82,7 @@ struct msm_mdp_interface mdp5 = {
 static DEFINE_SPINLOCK(mdp_lock);
 static DEFINE_MUTEX(mdp_clk_lock);
 static DEFINE_MUTEX(bus_bw_lock);
+static DEFINE_MUTEX(mdp_iommu_lock);
 
 static struct mdss_panel_intf pan_types[] = {
 	{"dsi", MDSS_PANEL_INTF_DSI},
@@ -701,6 +702,8 @@ void mdss_bus_bandwidth_ctrl(int enable)
 			pm_runtime_get_sync(&mdata->pdev->dev);
 			msm_bus_scale_client_update_request(
 				mdata->bus_hdl, mdata->curr_bw_uc_idx);
+			if (!mdata->handoff_pending)
+				mdss_iommu_attach(mdata);
 		}
 	}
 
@@ -833,8 +836,10 @@ int mdss_iommu_attach(struct mdss_data_type *mdata)
 	struct mdss_iommu_map_type *iomap;
 	int i;
 
+	mutex_lock(&mdp_iommu_lock);
 	if (mdata->iommu_attached) {
 		pr_debug("mdp iommu already attached\n");
+		mutex_unlock(&mdp_iommu_lock);
 		return 0;
 	}
 
@@ -851,6 +856,7 @@ int mdss_iommu_attach(struct mdss_data_type *mdata)
 	}
 
 	mdata->iommu_attached = true;
+	mutex_unlock(&mdp_iommu_lock);
 
 	return 0;
 }
@@ -861,8 +867,10 @@ int mdss_iommu_dettach(struct mdss_data_type *mdata)
 	struct mdss_iommu_map_type *iomap;
 	int i;
 
+	mutex_lock(&mdp_iommu_lock);
 	if (!mdata->iommu_attached) {
 		pr_debug("mdp iommu already dettached\n");
+		mutex_unlock(&mdp_iommu_lock);
 		return 0;
 	}
 
@@ -879,6 +887,7 @@ int mdss_iommu_dettach(struct mdss_data_type *mdata)
 	}
 
 	mdata->iommu_attached = false;
+	mutex_unlock(&mdp_iommu_lock);
 
 	return 0;
 }
@@ -1013,8 +1022,8 @@ int mdss_hw_init(struct mdss_data_type *mdata)
 	struct mdss_mdp_pipe *vig;
 
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
-	mdata->mdp_rev = readl_relaxed(mdata->mdp_base +
-		MDSS_MDP_REG_HW_VERSION);
+	mdata->mdp_rev = readl_relaxed(mdata->mdss_base + MDSS_REG_HW_VERSION);
+
 	pr_info_once("MDP Rev=%x\n", mdata->mdp_rev);
 
 	/* disable hw underrun recovery */
@@ -1104,6 +1113,7 @@ void mdss_mdp_footswitch_ctrl_splash(int on)
 	if (mdata != NULL) {
 		if (on) {
 			pr_debug("Enable MDP FS for splash.\n");
+			mdata->handoff_pending = true;
 			ret = regulator_enable(mdata->fs);
 			if (ret)
 				pr_err("Footswitch failed to enable\n");
@@ -1111,6 +1121,7 @@ void mdss_mdp_footswitch_ctrl_splash(int on)
 		} else {
 			pr_debug("Disable MDP FS for splash.\n");
 			regulator_disable(mdata->fs);
+			mdata->handoff_pending = false;
 		}
 	} else {
 		pr_warn("mdss mdata not initialized\n");
@@ -1793,39 +1804,6 @@ static int mdss_mdp_parse_dt_pipe(struct platform_device *pdev)
 		setup_cnt += len;
 	}
 
-	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-sspp-len",
-	     &mdata->size_sspp, 1);
-	if (rc) {
-		if (mdata->nvig_pipes == 1 || mdata->nrgb_pipes == 1 ||
-				mdata->ndma_pipes == 1) {
-			pr_err("Cannot calculate length w/ only one offset\n");
-			goto parse_fail;
-		}
-
-		if (mdata->nvig_pipes >= 2) {
-			u32 *vigOff = offsets;
-			mdata->size_sspp_vig = vigOff[1] - vigOff[0];
-		} else
-			mdata->size_sspp_vig = 0;
-
-		if (mdata->nrgb_pipes >= 2) {
-			u32 *rgbOff = offsets + mdata->nvig_pipes;
-			mdata->size_sspp_rgb = rgbOff[1] - rgbOff[0];
-		} else
-			mdata->size_sspp_rgb = 0;
-
-		if (mdata->ndma_pipes >= 2) {
-			u32 *dmaOff = offsets + mdata->nvig_pipes +
-				mdata->nrgb_pipes;
-			mdata->size_sspp_dma = dmaOff[1] - dmaOff[0];
-		} else
-			mdata->size_sspp_dma = 0;
-	} else {
-		mdata->size_sspp_vig = mdata->size_sspp;
-		mdata->size_sspp_rgb = mdata->size_sspp;
-		mdata->size_sspp_dma = mdata->size_sspp;
-	}
-
 	if (mdata->nvig_pipes > DEFAULT_TOTAL_VIG_PIPES) {
 		rc = mdss_mdp_pipe_addr_setup(mdata,
 			mdata->vig_pipes + DEFAULT_TOTAL_VIG_PIPES,
@@ -1926,16 +1904,6 @@ static int mdss_mdp_parse_dt_mixer(struct platform_device *pdev)
 	if (rc)
 		goto parse_done;
 
-	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-mixer-intf-len",
-		&mdata->size_mixer_intf, 1);
-	if (rc) {
-		if (mdata->nmixers_intf >= 2)
-			mdata->size_mixer_intf = mixer_offsets[1] -
-				mixer_offsets[0];
-		else
-			goto parse_done;
-	}
-
 	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-mixer-wb-off",
 		mixer_offsets + mdata->nmixers_intf, mdata->nmixers_wb);
 	if (rc)
@@ -1945,15 +1913,6 @@ static int mdss_mdp_parse_dt_mixer(struct platform_device *pdev)
 		dspp_offsets, ndspp);
 	if (rc)
 		goto parse_done;
-
-	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-dspp-len",
-		&mdata->size_dspp, 1);
-	if (rc) {
-		if (ndspp >= 2)
-			mdata->size_dspp = dspp_offsets[1] - dspp_offsets[0];
-		else
-			goto parse_done;
-	}
 
 	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-pingpong-off",
 		pingpong_offsets, npingpong);
@@ -2018,15 +1977,6 @@ static int mdss_mdp_parse_dt_ctl(struct platform_device *pdev)
 		ctl_offsets, mdata->nctl);
 	if (rc)
 		goto parse_done;
-
-	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-ctl-len",
-		&mdata->size_ctl, 1);
-	if (rc) {
-		if (mdata->nctl >= 2)
-			mdata->size_ctl = ctl_offsets[1] - ctl_offsets[0];
-		else
-			goto parse_done;
-	}
 
 	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-wb-off",
 		wb_offsets, nwb);

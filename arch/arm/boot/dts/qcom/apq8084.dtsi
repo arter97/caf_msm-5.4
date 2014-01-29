@@ -31,20 +31,20 @@
 		#size-cells = <2>;
 
 		qsecom_mem: qsecom_region@0 {
-			linux,contiguous-region;
+			linux,reserve-contiguous-region;
 			reg = <0 0 0 0x1100000>;
 			label = "qseecom_mem";
                 };
 
 		fb_mem: fb_region@0 {
-			linux,contiguous-region;
+			linux,reserve-contiguous-region;
 			reg = <0 0 0 0x1000000>;
 			label = "fb_mem";
 			linux,memory-limit = <0xffffffff>;
 		};
 
 		secure_mem: secure_region@0 {
-			linux,contiguous-region;
+			linux,reserve-contiguous-region;
 			reg = <0 0 0 0xfc00000>;
 			label = "secure_mem";
 		};
@@ -660,6 +660,9 @@
                 qcom,msm-bus,name = "qcrypto-noc";
 		qcom,msm-bus,num-cases = <2>;
 		qcom,msm-bus,num-paths = <1>;
+		qcom,use-sw-aes-cbc-ecb-ctr-algo;
+		qcom,use-sw-aes-xts-algo;
+		qcom,use-sw-ahash-algo;
 		qcom,msm-bus,vectors-KBps =
 				<56 512 0 0>,
 				<56 512 3936000 393600>;
@@ -2842,12 +2845,26 @@
 	};
 
 	qcom,venus@fdce0000 {
-		compatible = "qcom,pil-venus";
-		reg = <0xfdce0000 0x4000>,
-		      <0xfdc80000 0x400>;
-		reg-names = "wrapper_base", "vbif_base";
-		vdd-supply = <&gdsc_venus>;
+		compatible = "qcom,pil-tz-generic";
+		reg = <0xfdce0000 0x4000>;
 
+		vdd-supply = <&gdsc_venus>;
+		proxy-reg-names = "vdd";
+		clock-names = "core_clk", "iface_clk",
+				"bus_clk", "mem_clk";
+		proxy-clock-names = "core_clk", "iface_clk",
+					"bus_clk", "mem_clk";
+
+		qcom,msm-bus,name = "pil-venus";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,active-only = <0>;
+		qcom,msm-bus,vectors-KBps =
+				<63 512 0 0>,
+				<63 512 0 304000>;
+
+		qcom,pas-id = <9>;
+		qcom,proxy-timeout-ms = <2000>;
 		qcom,firmware-name = "venus";
 	};
 

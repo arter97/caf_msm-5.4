@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -17,19 +17,19 @@
 #include <linux/err.h>
 #include <linux/clk.h>
 #include <linux/io.h>
+#include <soc/qcom/clock-alpha-pll.h>
 
 #include "clock.h"
-#include "clock-alpha-pll.h"
 
 #define WAIT_MAX_LOOPS 100
 
-#define MODE_REG(pll) (*pll->base + 0x0)
-#define LOCK_REG(pll) (*pll->base + 0x0)
-#define UPDATE_REG(pll) (*pll->base + 0x0)
-#define L_REG(pll) (*pll->base + 0x4)
-#define A_REG(pll) (*pll->base + 0x8)
-#define VCO_REG(pll) (*pll->base + 0x10)
-#define ALPHA_EN_REG(pll) (*pll->base + 0x10)
+#define MODE_REG(pll) (*pll->base + pll->offset + 0x0)
+#define LOCK_REG(pll) (*pll->base + pll->offset + 0x0)
+#define UPDATE_REG(pll) (*pll->base + pll->offset + 0x0)
+#define L_REG(pll) (*pll->base + pll->offset + 0x4)
+#define A_REG(pll) (*pll->base + pll->offset + 0x8)
+#define VCO_REG(pll) (*pll->base + pll->offset + 0x10)
+#define ALPHA_EN_REG(pll) (*pll->base + pll->offset + 0x10)
 
 #define PLL_BYPASSNL 0x2
 #define PLL_RESET_N  0x4
