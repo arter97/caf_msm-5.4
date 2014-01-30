@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -122,30 +122,6 @@ struct ion_client *msm_ion_client_create(unsigned int heap_mask,
 	return ion_client_create(idev, name);
 }
 EXPORT_SYMBOL(msm_ion_client_create);
-
-int msm_ion_secure_heap(int heap_id)
-{
-	return ion_secure_heap(idev, heap_id, ION_CP_V1, NULL);
-}
-EXPORT_SYMBOL(msm_ion_secure_heap);
-
-int msm_ion_unsecure_heap(int heap_id)
-{
-	return ion_unsecure_heap(idev, heap_id, ION_CP_V1, NULL);
-}
-EXPORT_SYMBOL(msm_ion_unsecure_heap);
-
-int msm_ion_secure_heap_2_0(int heap_id, enum cp_mem_usage usage)
-{
-	return ion_secure_heap(idev, heap_id, ION_CP_V2, (void *)usage);
-}
-EXPORT_SYMBOL(msm_ion_secure_heap_2_0);
-
-int msm_ion_unsecure_heap_2_0(int heap_id, enum cp_mem_usage usage)
-{
-	return ion_unsecure_heap(idev, heap_id, ION_CP_V2, (void *)usage);
-}
-EXPORT_SYMBOL(msm_ion_unsecure_heap_2_0);
 
 int msm_ion_do_cache_op(struct ion_client *client, struct ion_handle *handle,
 			void *vaddr, unsigned long len, unsigned int cmd)
@@ -420,18 +396,6 @@ static int msm_init_extra_data(struct device_node *node,
 	int ret = 0;
 
 	switch ((int) heap->type) {
-	case ION_HEAP_TYPE_CP:
-	{
-		heap->extra_data = kzalloc(sizeof(struct ion_cp_heap_pdata),
-					   GFP_KERNEL);
-		if (!heap->extra_data) {
-			ret = -ENOMEM;
-		} else {
-			struct ion_cp_heap_pdata *extra = heap->extra_data;
-			extra->permission_type = heap_desc->permission_type;
-		}
-		break;
-	}
 	case ION_HEAP_TYPE_CARVEOUT:
 	{
 		heap->extra_data = kzalloc(sizeof(struct ion_co_heap_pdata),
@@ -481,7 +445,6 @@ static struct heap_types_info {
 	MAKE_HEAP_TYPE_MAPPING(CARVEOUT),
 	MAKE_HEAP_TYPE_MAPPING(CHUNK),
 	MAKE_HEAP_TYPE_MAPPING(DMA),
-	MAKE_HEAP_TYPE_MAPPING(CP),
 	MAKE_HEAP_TYPE_MAPPING(SECURE_DMA),
 	MAKE_HEAP_TYPE_MAPPING(REMOVED),
 };
@@ -548,13 +511,6 @@ static void msm_ion_get_heap_align(struct device_node *node,
 	int ret = of_property_read_u32(node, "qcom,heap-align", &val);
 	if (!ret) {
 		switch ((int) heap->type) {
-		case ION_HEAP_TYPE_CP:
-		{
-			struct ion_cp_heap_pdata *extra =
-						heap->extra_data;
-			extra->align = val;
-			break;
-		}
 		case ION_HEAP_TYPE_CARVEOUT:
 		{
 			struct ion_co_heap_pdata *extra =
@@ -771,49 +727,73 @@ out:
 
 int ion_heap_allow_secure_allocation(enum ion_heap_type type)
 {
-	return type == ((enum ion_heap_type) ION_HEAP_TYPE_CP) ||
-		type == ((enum ion_heap_type) ION_HEAP_TYPE_SECURE_DMA);
+	return type == ((enum ion_heap_type) ION_HEAP_TYPE_SECURE_DMA);
 }
 
 int ion_heap_allow_handle_secure(enum ion_heap_type type)
 {
-	return type == ((enum ion_heap_type) ION_HEAP_TYPE_CP) ||
-		type == ((enum ion_heap_type) ION_HEAP_TYPE_SECURE_DMA);
+	return type == ((enum ion_heap_type) ION_HEAP_TYPE_SECURE_DMA);
 }
 
 int ion_heap_allow_heap_secure(enum ion_heap_type type)
 {
-	return type == ((enum ion_heap_type) ION_HEAP_TYPE_CP);
+	return false;
+}
+
+/* fix up the cases where the ioctl direction bits are incorrect */
+static unsigned int msm_ion_ioctl_dir(unsigned int cmd)
+{
+	switch (cmd) {
+	case ION_IOC_CLEAN_CACHES:
+	case ION_IOC_INV_CACHES:
+	case ION_IOC_CLEAN_INV_CACHES:
+	case ION_IOC_PREFETCH:
+	case ION_IOC_DRAIN:
+		return _IOC_WRITE;
+	default:
+		return _IOC_DIR(cmd);
+	}
 }
 
 static long msm_ion_custom_ioctl(struct ion_client *client,
 				unsigned int cmd,
 				unsigned long arg)
 {
+	unsigned int dir;
+	union {
+		struct ion_flush_data flush_data;
+		struct ion_prefetch_data prefetch_data;
+	} data;
+
+	dir = msm_ion_ioctl_dir(cmd);
+
+	if (_IOC_SIZE(cmd) > sizeof(data))
+		return -EINVAL;
+
+	if (dir & _IOC_WRITE)
+		if (copy_from_user(&data, (void __user *)arg, _IOC_SIZE(cmd)))
+			return -EFAULT;
+
 	switch (cmd) {
 	case ION_IOC_CLEAN_CACHES:
 	case ION_IOC_INV_CACHES:
 	case ION_IOC_CLEAN_INV_CACHES:
 	{
-		struct ion_flush_data data;
 		unsigned long start, end;
 		struct ion_handle *handle = NULL;
 		int ret;
 		struct mm_struct *mm = current->active_mm;
 
-		if (copy_from_user(&data, (void __user *)arg,
-					sizeof(struct ion_flush_data)))
-			return -EFAULT;
-
-		if (data.handle > 0) {
-			handle = ion_handle_get_by_id(client, (int)data.handle);
+		if (data.flush_data.handle > 0) {
+			handle = ion_handle_get_by_id(client,
+						(int)data.flush_data.handle);
 			if (IS_ERR(handle)) {
 				pr_info("%s: Could not find handle: %d\n",
-					__func__, (int)data.handle);
+					__func__, (int)data.flush_data.handle);
 				return PTR_ERR(handle);
 			}
 		} else {
-			handle = ion_import_dma_buf(client, data.fd);
+			handle = ion_import_dma_buf(client, data.flush_data.fd);
 			if (IS_ERR(handle)) {
 				pr_info("%s: Could not import handle: %p\n",
 					__func__, handle);
@@ -823,16 +803,19 @@ static long msm_ion_custom_ioctl(struct ion_client *client,
 
 		down_read(&mm->mmap_sem);
 
-		start = (unsigned long) data.vaddr;
-		end = (unsigned long) data.vaddr + data.length;
+		start = (unsigned long) data.flush_data.vaddr;
+		end = (unsigned long) data.flush_data.vaddr
+			+ data.flush_data.length;
 
 		if (start && check_vaddr_bounds(start, end)) {
 			pr_err("%s: virtual address %p is out of bounds\n",
-				__func__, data.vaddr);
+				__func__, data.flush_data.vaddr);
 			ret = -EINVAL;
 		} else {
-			ret = ion_do_cache_op(client, handle, data.vaddr,
-					data.offset, data.length, cmd);
+			ret = ion_do_cache_op(
+				client, handle, data.flush_data.vaddr,
+				data.flush_data.offset,
+				data.flush_data.length, cmd);
 		}
 		up_read(&mm->mmap_sem);
 
@@ -844,26 +827,16 @@ static long msm_ion_custom_ioctl(struct ion_client *client,
 	}
 	case ION_IOC_PREFETCH:
 	{
-		struct ion_prefetch_data data;
-
-		if (copy_from_user(&data, (void __user *)arg,
-					sizeof(struct ion_prefetch_data)))
-			return -EFAULT;
-
-		ion_walk_heaps(client, data.heap_id, (void *)data.len,
-						ion_secure_cma_prefetch);
+		ion_walk_heaps(client, data.prefetch_data.heap_id,
+			(void *)data.prefetch_data.len,
+			ion_secure_cma_prefetch);
 		break;
 	}
 	case ION_IOC_DRAIN:
 	{
-		struct ion_prefetch_data data;
-
-		if (copy_from_user(&data, (void __user *)arg,
-					sizeof(struct ion_prefetch_data)))
-			return -EFAULT;
-
-		ion_walk_heaps(client, data.heap_id, (void *)data.len,
-						ion_secure_cma_drain_pool);
+		ion_walk_heaps(client, data.prefetch_data.heap_id,
+			(void *)data.prefetch_data.len,
+			ion_secure_cma_drain_pool);
 		break;
 	}
 
@@ -878,9 +851,6 @@ static struct ion_heap *msm_ion_heap_create(struct ion_platform_heap *heap_data)
 	struct ion_heap *heap = NULL;
 
 	switch ((int)heap_data->type) {
-	case ION_HEAP_TYPE_CP:
-		heap = ion_cp_heap_create(heap_data);
-		break;
 #ifdef CONFIG_CMA
 	case ION_HEAP_TYPE_DMA:
 		heap = ion_cma_heap_create(heap_data);
@@ -917,9 +887,6 @@ static void msm_ion_heap_destroy(struct ion_heap *heap)
 		return;
 
 	switch ((int)heap->type) {
-	case ION_HEAP_TYPE_CP:
-		ion_cp_heap_destroy(heap);
-		break;
 #ifdef CONFIG_CMA
 	case ION_HEAP_TYPE_DMA:
 		ion_cma_heap_destroy(heap);
