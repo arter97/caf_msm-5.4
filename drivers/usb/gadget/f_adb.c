@@ -344,8 +344,14 @@ static ssize_t adb_read(struct file *fp, char __user *buf,
 	}
 
 requeue_req:
-	/* queue a request */
 	req = dev->rx_req;
+	/* Check if we already have req queued from prev session before susp */
+	if (!dev->rx_done) {
+		pr_debug("adb_read: not queuing req again\n");
+		goto wait_rx_complete;
+	}
+
+	/* queue a request */
 	req->length = ADB_BULK_BUFFER_SIZE;
 	dev->rx_done = 0;
 	ret = usb_ep_queue(dev->ep_out, req, GFP_ATOMIC);
@@ -353,19 +359,27 @@ requeue_req:
 		pr_debug("adb_read: failed to queue req %p (%d)\n", req, ret);
 		r = -EIO;
 		atomic_set(&dev->error, 1);
+		dev->rx_done = 1;
 		goto done;
 	} else {
 		pr_debug("rx %p queue\n", req);
 	}
 
+wait_rx_complete:
 	/* wait for a request to complete */
 	ret = wait_event_interruptible(dev->read_wq, dev->rx_done ||
 				atomic_read(&dev->error));
 	if (ret < 0) {
-		if (ret != -ERESTARTSYS)
-		atomic_set(&dev->error, 1);
+		if (ret != -ERESTARTSYS) {
+			atomic_set(&dev->error, 1);
+			usb_ep_dequeue(dev->ep_out, req);
+			dev->rx_done = 1;
+		} else {
+			/* Don't dequeue request during suspend (rx_done = 0) */
+			pr_debug("adb_read: not dequeuing req in suspend\n");
+		}
+
 		r = ret;
-		usb_ep_dequeue(dev->ep_out, req);
 		goto done;
 	}
 	if (!atomic_read(&dev->error)) {
@@ -629,6 +643,8 @@ static int adb_function_set_alt(struct usb_function *f,
 		return ret;
 	}
 	atomic_set(&dev->online, 1);
+	/* indicate RX request not yet queued */
+	dev->rx_done = 1;
 
 	/* readers may be blocked waiting for us to go online */
 	wake_up(&dev->read_wq);
