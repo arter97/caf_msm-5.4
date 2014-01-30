@@ -268,7 +268,7 @@ int ipa_send_msg(struct ipa_msg_meta *meta, void *buff,
 		return -EINVAL;
 	}
 
-	if (meta->msg_type >= IPA_EVENT_MAX) {
+	if (meta->msg_type >= IPA_EVENT_MAX_NUM) {
 		IPAERR("unsupported message type %d\n", meta->msg_type);
 		return -EINVAL;
 	}
