@@ -28,6 +28,12 @@
 
 #define PIPE_HALT_TIMEOUT_US	0x4000
 
+/* following offsets are relative to ctrl register bit offset */
+#define CLK_FORCE_ON_OFFSET	0x0
+#define CLK_FORCE_OFF_OFFSET	0x1
+/* following offsets are relative to status register bit offset */
+#define CLK_STATUS_OFFSET	0x0
+
 static DEFINE_MUTEX(mdss_mdp_sspp_lock);
 static DEFINE_MUTEX(mdss_mdp_smp_lock);
 
@@ -36,6 +42,7 @@ static int mdss_mdp_smp_mmb_set(int client_id, unsigned long *smp);
 static void mdss_mdp_smp_mmb_free(unsigned long *smp, bool write);
 static struct mdss_mdp_pipe *mdss_mdp_pipe_search_by_client_id(
 	struct mdss_data_type *mdata, int client_id);
+static int mdss_mdp_pipe_fetch_halt(struct mdss_mdp_pipe *pipe);
 
 static inline void mdss_mdp_pipe_write(struct mdss_mdp_pipe *pipe,
 				       u32 reg, u32 val)
@@ -506,7 +513,7 @@ static struct mdss_mdp_pipe *mdss_mdp_pipe_init(struct mdss_mdp_mixer *mixer,
 	struct mdss_mdp_pipe *pipe_pool = NULL;
 	u32 npipes;
 	bool pipe_share = false;
-	u32 i;
+	u32 i, reg_val, force_off_mask;
 
 	if (!mixer || !mixer->ctl || !mixer->ctl->mdata)
 		return NULL;
@@ -548,10 +555,22 @@ static struct mdss_mdp_pipe *mdss_mdp_pipe_init(struct mdss_mdp_mixer *mixer,
 	}
 
 	if (pipe && mdss_mdp_pipe_fetch_halt(pipe)) {
-		pr_err("%d failed because vbif client is in bad state\n",
+		pr_err("%d failed because pipe is in bad state\n",
 			pipe->num);
 		atomic_dec(&pipe->ref_cnt);
 		return NULL;
+	}
+
+	if (mdss_mdp_pipe_is_sw_reset_available(mdata)) {
+		force_off_mask =
+			BIT(pipe->clk_ctrl.bit_off + CLK_FORCE_OFF_OFFSET);
+		reg_val = readl_relaxed(mdata->mdp_base +
+			pipe->clk_ctrl.reg_off);
+		if (reg_val & force_off_mask) {
+			reg_val &= ~force_off_mask;
+			writel_relaxed(reg_val,
+				mdata->mdp_base + pipe->clk_ctrl.reg_off);
+		}
 	}
 
 	if (pipe) {
@@ -680,17 +699,69 @@ static int mdss_mdp_pipe_free(struct mdss_mdp_pipe *pipe)
 	pr_debug("ndx=%x pnum=%d ref_cnt=%d\n", pipe->ndx, pipe->num,
 			atomic_read(&pipe->ref_cnt));
 
-	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
-	mdss_mdp_pipe_sspp_term(pipe);
-	mdss_mdp_smp_free(pipe);
+	if (pipe->play_cnt) {
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+		mdss_mdp_pipe_fetch_halt(pipe);
+		mdss_mdp_pipe_sspp_term(pipe);
+		mdss_mdp_smp_free(pipe);
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
+	} else {
+		mdss_mdp_smp_unreserve(pipe);
+	}
+
 	pipe->flags = 0;
 	pipe->bwc_mode = 0;
 	pipe->mfd = NULL;
 	memset(&pipe->scale, 0, sizeof(struct mdp_scale_data));
 
+	return 0;
+}
+
+static int mdss_mdp_is_pipe_idle(struct mdss_mdp_pipe *pipe,
+	bool ignore_force_on)
+{
+	u32 reg_val;
+	u32 vbif_idle_mask, forced_on_mask, clk_status_idle_mask;
+	bool is_idle = false, is_forced_on;
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+
+	forced_on_mask = BIT(pipe->clk_ctrl.bit_off + CLK_FORCE_ON_OFFSET);
+	reg_val = readl_relaxed(mdata->mdp_base + pipe->clk_ctrl.reg_off);
+	is_forced_on = (reg_val & forced_on_mask) ? true : false;
+
+	pr_debug("pipe#:%d clk_ctrl: 0x%x forced_on_mask: 0x%x\n", pipe->num,
+		reg_val, forced_on_mask);
+	/* if forced on then no need to check status */
+	if (!is_forced_on) {
+		clk_status_idle_mask =
+			BIT(pipe->clk_status.bit_off + CLK_STATUS_OFFSET);
+		reg_val = readl_relaxed(mdata->mdp_base +
+			pipe->clk_status.reg_off);
+
+		if (reg_val & clk_status_idle_mask)
+			is_idle = false;
+
+		pr_debug("pipe#:%d clk_status:0x%x clk_status_idle_mask:0x%x\n",
+			pipe->num, reg_val, clk_status_idle_mask);
+	}
+
+	if (!ignore_force_on && (is_forced_on || !is_idle))
+		goto exit;
+
+	vbif_idle_mask = BIT(pipe->xin_id + 16);
+	reg_val = readl_relaxed(mdata->vbif_base + MMSS_VBIF_XIN_HALT_CTRL1);
+
+	if (reg_val & vbif_idle_mask)
+		is_idle = true;
+
+	pr_debug("pipe#:%d XIN_HALT_CTRL1: 0x%x\n", pipe->num, reg_val);
+
+exit:
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 
-	return 0;
+	return is_idle;
 }
 
 /**
@@ -705,29 +776,39 @@ static int mdss_mdp_pipe_free(struct mdss_mdp_pipe *pipe)
  * and would not fetch any more data. This function cannot be called from
  * interrupt context.
  */
-int mdss_mdp_pipe_fetch_halt(struct mdss_mdp_pipe *pipe)
+static int mdss_mdp_pipe_fetch_halt(struct mdss_mdp_pipe *pipe)
 {
 	bool is_idle;
 	int rc = 0;
 	u32 reg_val, idle_mask, status;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+	bool sw_reset_avail = mdss_mdp_pipe_is_sw_reset_available(mdata);
+	u32 sw_reset_off = pipe->sw_reset.reg_off;
+	u32 clk_ctrl_off = pipe->clk_ctrl.reg_off;
 
-	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
-
-	idle_mask = BIT(pipe->xin_id + 16);
-	reg_val = readl_relaxed(mdata->vbif_base + MMSS_VBIF_XIN_HALT_CTRL1);
-
-	is_idle = (reg_val & idle_mask) ? true : false;
+	is_idle = mdss_mdp_is_pipe_idle(pipe, true);
 	if (!is_idle) {
-		pr_debug("%pS: pipe%d is not idle. xin_id=%d halt_ctrl1=0x%x\n",
-			__builtin_return_address(0), pipe->num, pipe->xin_id,
-			reg_val);
+		pr_err("%pS: pipe%d is not idle. xin_id=%d\n",
+			__builtin_return_address(0), pipe->num, pipe->xin_id);
 
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
 		mutex_lock(&mdata->reg_lock);
+		idle_mask = BIT(pipe->xin_id + 16);
+
 		reg_val = readl_relaxed(mdata->vbif_base +
 			MMSS_VBIF_XIN_HALT_CTRL0);
 		writel_relaxed(reg_val | BIT(pipe->xin_id),
 			mdata->vbif_base + MMSS_VBIF_XIN_HALT_CTRL0);
+
+		if (sw_reset_avail) {
+			reg_val = readl_relaxed(mdata->mdp_base + sw_reset_off);
+			writel_relaxed(reg_val | BIT(pipe->sw_reset.bit_off),
+				mdata->mdp_base + sw_reset_off);
+			wmb();
+			writel_relaxed(reg_val & ~BIT(pipe->sw_reset.bit_off),
+				mdata->mdp_base + sw_reset_off);
+			wmb();
+		}
 		mutex_unlock(&mdata->reg_lock);
 
 		rc = readl_poll_timeout(mdata->vbif_base +
@@ -744,9 +825,18 @@ int mdss_mdp_pipe_fetch_halt(struct mdss_mdp_pipe *pipe)
 			MMSS_VBIF_XIN_HALT_CTRL0);
 		writel_relaxed(reg_val & ~BIT(pipe->xin_id),
 			mdata->vbif_base + MMSS_VBIF_XIN_HALT_CTRL0);
+
+		if (sw_reset_avail) {
+			reg_val = readl_relaxed(mdata->mdp_base + clk_ctrl_off);
+			reg_val |= BIT(pipe->clk_ctrl.bit_off +
+				CLK_FORCE_OFF_OFFSET);
+			writel_relaxed(reg_val,
+				mdata->mdp_base + clk_ctrl_off);
+		}
+
 		mutex_unlock(&mdata->reg_lock);
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 	}
-	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 
 	return rc;
 }
@@ -823,6 +913,7 @@ int mdss_mdp_pipe_handoff(struct mdss_mdp_pipe *pipe)
 		pipe->src_fmt->bpp);
 
 	pipe->is_handed_off = true;
+	pipe->play_cnt = 1;
 	atomic_inc(&pipe->ref_cnt);
 
 error:
@@ -1074,6 +1165,11 @@ static int mdss_mdp_src_addr_setup(struct mdss_mdp_pipe *pipe,
 	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC1_ADDR, data.p[1].addr);
 	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC2_ADDR, data.p[2].addr);
 	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC3_ADDR, data.p[3].addr);
+
+	/* Flush Sel register only exists in mpq */
+	if ((mdata->mdp_rev == MDSS_MDP_HW_REV_200) &&
+		(pipe->flags & MDP_VPU_PIPE))
+		mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_VIG_FLUSH_SEL, 0);
 
 	return 0;
 }
