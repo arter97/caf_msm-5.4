@@ -91,17 +91,21 @@ static int test_task_flag(struct task_struct *p, int flag)
 
 	return 0;
 }
-
+static DEFINE_MUTEX(drop_slab_mutex);
 static void drop_slab1(void)
 {
 	int nr_objects;
 	struct shrink_control shrink = {
 		.gfp_mask = GFP_KERNEL,
 	};
+	if (!mutex_trylock(&drop_slab_mutex))
+		return;
 
 	do {
 		nr_objects = shrink_slab(&shrink, 1000, 1000);
 	} while (nr_objects > 10);
+
+	mutex_unlock(&drop_slab_mutex);
 }
 
 static DEFINE_MUTEX(scan_mutex);
