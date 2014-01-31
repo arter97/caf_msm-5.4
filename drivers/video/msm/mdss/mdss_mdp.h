@@ -370,6 +370,7 @@ struct mdss_mdp_pipe {
 	u8 blend_op;
 	u8 overfetch_disable;
 	u32 transp;
+	u8 has_buf;
 	u32 bg_color;
 	u32 hscl_en;
 
@@ -442,6 +443,15 @@ enum mdss_screen_state {
 	MDSS_SCREEN_DEFAULT,
 	MDSS_SCREEN_FORCE_BLANK,
 };
+
+static inline struct mdss_mdp_ctl *mdss_mdp_get_split_ctl(
+	struct mdss_mdp_ctl *ctl)
+{
+	if (ctl && ctl->mixer_right && (ctl->mixer_right->ctl != ctl))
+		return ctl->mixer_right->ctl;
+
+	return NULL;
+}
 
 static inline bool mdss_mdp_pipe_is_yuv(struct mdss_mdp_pipe *pipe)
 {
