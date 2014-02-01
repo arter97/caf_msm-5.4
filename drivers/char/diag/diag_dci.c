@@ -136,7 +136,11 @@ void extract_dci_pkt_rsp(struct diag_smd_info *smd_info, unsigned char *buf)
 	if (recv_pkt_cmd_code != DCI_PKT_RSP_CODE)
 		cmd_code_len = 4; /* delayed response */
 	write_len = (int)(*(uint16_t *)(buf+2)) - cmd_code_len;
-
+	if (write_len <= 0) {
+		pr_err("diag: Invalid length in %s, write_len: %d",
+					__func__, write_len);
+		return;
+	}
 	pr_debug("diag: len = %d\n", write_len);
 	/* look up DCI client with tag */
 	for (i = 0; i < dci_max_reg; i++) {
@@ -193,7 +197,7 @@ void extract_dci_events(unsigned char *buf)
 {
 	uint16_t event_id, event_id_packet, length, temp_len;
 	uint8_t *event_mask_ptr, byte_mask, payload_len, payload_len_field;
-	uint8_t timestamp[8], bit_index, timestamp_len;
+	uint8_t timestamp[8] = {0}, bit_index, timestamp_len;
 	uint8_t event_data[MAX_EVENT_SIZE];
 	unsigned int byte_index, total_event_len, i;
 	struct diag_dci_client_tbl *entry;
