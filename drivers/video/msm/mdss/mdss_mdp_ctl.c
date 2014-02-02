@@ -871,7 +871,7 @@ static struct mdss_mdp_ctl *mdss_mdp_ctl_alloc(struct mdss_data_type *mdata,
 	u32 nctl = mdata->nctl;
 
 	mutex_lock(&mdss_mdp_ctl_lock);
-	if (!mdata->has_wfd_blk)
+	if (mdata->wfd_mode == MDSS_MDP_WFD_SHARED)
 		nctl++;
 
 	for (cnum = off; cnum < nctl; cnum++) {
@@ -933,8 +933,21 @@ static int mdss_mdp_ctl_free(struct mdss_mdp_ctl *ctl)
 	return 0;
 }
 
+/**
+ * mdss_mdp_mixer_alloc() - allocate mdp mixer.
+ * @ctl: mdp controller.
+ * @type: specifying type of mixer requested. interface or writeback.
+ * @mux: specifies if mixer allocation is for split_fb cases.
+ * @rotator: specifies if the mixer requested for rotator operations.
+ *
+ * This function is called to request allocation of mdp mixer
+ * during mdp controller path setup.
+ *
+ * Return: mdp mixer structure that is allocated.
+ *	   NULL if mixer allocation fails.
+ */
 static struct mdss_mdp_mixer *mdss_mdp_mixer_alloc(
-		struct mdss_mdp_ctl *ctl, u32 type, int mux)
+		struct mdss_mdp_ctl *ctl, u32 type, int mux, int rotator)
 {
 	struct mdss_mdp_mixer *mixer = NULL, *alt_mixer = NULL;
 	u32 nmixers_intf;
@@ -971,6 +984,8 @@ static struct mdss_mdp_mixer *mdss_mdp_mixer_alloc(
 	case MDSS_MDP_MIXER_TYPE_WRITEBACK:
 		mixer_pool = ctl->mdata->mixer_wb;
 		nmixers = nmixers_wb;
+		if ((ctl->mdata->wfd_mode == MDSS_MDP_WFD_DEDICATED) && rotator)
+			mixer_pool = mixer_pool + nmixers;
 		break;
 
 	default:
@@ -989,7 +1004,8 @@ static struct mdss_mdp_mixer *mdss_mdp_mixer_alloc(
 		mixer_pool += MDSS_MDP_INTF_LAYERMIXER2;
 
 	/*Allocate virtual wb mixer if no dedicated wfd wb blk is present*/
-	if (!ctl->mdata->has_wfd_blk && (type == MDSS_MDP_MIXER_TYPE_WRITEBACK))
+	if ((ctl->mdata->wfd_mode == MDSS_MDP_WFD_SHARED) &&
+			(type == MDSS_MDP_MIXER_TYPE_WRITEBACK))
 		nmixers += 1;
 
 	for (i = 0; i < nmixers; i++) {
@@ -1042,7 +1058,8 @@ struct mdss_mdp_mixer *mdss_mdp_wb_mixer_alloc(int rotator)
 		return NULL;
 	}
 
-	mixer = mdss_mdp_mixer_alloc(ctl, MDSS_MDP_MIXER_TYPE_WRITEBACK, false);
+	mixer = mdss_mdp_mixer_alloc(ctl, MDSS_MDP_MIXER_TYPE_WRITEBACK,
+							false, rotator);
 	if (!mixer) {
 		pr_debug("unable to allocate wb mixer\n");
 		goto error;
@@ -1229,7 +1246,7 @@ int mdss_mdp_ctl_setup(struct mdss_mdp_ctl *ctl)
 	if (!ctl->mixer_left) {
 		ctl->mixer_left =
 			mdss_mdp_mixer_alloc(ctl, MDSS_MDP_MIXER_TYPE_INTF,
-			 ((width > MAX_MIXER_WIDTH) || split_fb));
+			 ((width > MAX_MIXER_WIDTH) || split_fb), 0);
 		if (!ctl->mixer_left) {
 			pr_err("unable to allocate layer mixer\n");
 			return -ENOMEM;
@@ -1260,7 +1277,7 @@ int mdss_mdp_ctl_setup(struct mdss_mdp_ctl *ctl)
 	if (width < ctl->width) {
 		if (ctl->mixer_right == NULL) {
 			ctl->mixer_right = mdss_mdp_mixer_alloc(ctl,
-					MDSS_MDP_MIXER_TYPE_INTF, true);
+					MDSS_MDP_MIXER_TYPE_INTF, true, 0);
 			if (!ctl->mixer_right) {
 				pr_err("unable to allocate right mixer\n");
 				if (ctl->mixer_left)
@@ -1295,22 +1312,23 @@ static int mdss_mdp_ctl_setup_wfd(struct mdss_mdp_ctl *ctl)
 	int mixer_type;
 
 	/* if WB2 is supported, try to allocate it first */
-	if (mdata->nmixers_intf >= MDSS_MDP_INTF_LAYERMIXER2)
+	if (mdata->wfd_mode == MDSS_MDP_WFD_INTERFACE)
 		mixer_type = MDSS_MDP_MIXER_TYPE_INTF;
 	else
 		mixer_type = MDSS_MDP_MIXER_TYPE_WRITEBACK;
 
-	mixer = mdss_mdp_mixer_alloc(ctl, mixer_type, false);
+	mixer = mdss_mdp_mixer_alloc(ctl, mixer_type, false, 0);
 	if (!mixer && mixer_type == MDSS_MDP_MIXER_TYPE_INTF)
 		mixer = mdss_mdp_mixer_alloc(ctl, MDSS_MDP_MIXER_TYPE_WRITEBACK,
-				false);
+				false, 0);
 
 	if (!mixer) {
 		pr_err("Unable to allocate writeback mixer\n");
 		return -ENOMEM;
 	}
 
-	if (mixer->type == MDSS_MDP_MIXER_TYPE_INTF) {
+	if (mixer->type == MDSS_MDP_MIXER_TYPE_INTF ||
+			(mdata->wfd_mode == MDSS_MDP_WFD_DEDICATED)) {
 		ctl->opmode = MDSS_MDP_CTL_OP_WFD_MODE;
 	} else {
 		switch (mixer->num) {
@@ -1462,14 +1480,14 @@ int mdss_mdp_ctl_split_display_setup(struct mdss_mdp_ctl *ctl,
 	sctl->height = pdata->panel_info.yres;
 
 	ctl->mixer_left = mdss_mdp_mixer_alloc(ctl, MDSS_MDP_MIXER_TYPE_INTF,
-			false);
+			false, 0);
 	if (!ctl->mixer_left) {
 		pr_err("unable to allocate layer mixer\n");
 		mdss_mdp_ctl_destroy(sctl);
 		return -ENOMEM;
 	}
 
-	mixer = mdss_mdp_mixer_alloc(sctl, MDSS_MDP_MIXER_TYPE_INTF, false);
+	mixer = mdss_mdp_mixer_alloc(sctl, MDSS_MDP_MIXER_TYPE_INTF, false, 0);
 	if (!mixer) {
 		pr_err("unable to allocate layer mixer\n");
 		mdss_mdp_ctl_destroy(sctl);
@@ -2014,7 +2032,8 @@ int mdss_mdp_mixer_addr_setup(struct mdss_data_type *mdata,
 	int rc = 0;
 	u32 size = len;
 
-	if ((type == MDSS_MDP_MIXER_TYPE_WRITEBACK) && !mdata->has_wfd_blk)
+	if ((type == MDSS_MDP_MIXER_TYPE_WRITEBACK) &&
+			(mdata->wfd_mode == MDSS_MDP_WFD_SHARED))
 		size++;
 
 	head = devm_kzalloc(&mdata->pdev->dev, sizeof(struct mdss_mdp_mixer) *
@@ -2042,7 +2061,8 @@ int mdss_mdp_mixer_addr_setup(struct mdss_data_type *mdata,
 	 * Duplicate the last writeback mixer for concurrent line and block mode
 	 * operations
 	*/
-	if ((type == MDSS_MDP_MIXER_TYPE_WRITEBACK) && !mdata->has_wfd_blk)
+	if ((type == MDSS_MDP_MIXER_TYPE_WRITEBACK) &&
+			(mdata->wfd_mode == MDSS_MDP_WFD_SHARED))
 		head[len] = head[len - 1];
 
 	switch (type) {
@@ -2072,7 +2092,7 @@ int mdss_mdp_ctl_addr_setup(struct mdss_data_type *mdata,
 	u32 i;
 	u32 size = len;
 
-	if (!mdata->has_wfd_blk) {
+	if (mdata->wfd_mode == MDSS_MDP_WFD_SHARED) {
 		size++;
 		shared_lock = devm_kzalloc(&mdata->pdev->dev,
 					   sizeof(struct mutex),
@@ -2099,7 +2119,7 @@ int mdss_mdp_ctl_addr_setup(struct mdss_data_type *mdata,
 		head[i].ref_cnt = 0;
 	}
 
-	if (!mdata->has_wfd_blk) {
+	if (mdata->wfd_mode == MDSS_MDP_WFD_SHARED) {
 		head[len - 1].shared_lock = shared_lock;
 		/*
 		 * Allocate a virtual ctl to be able to perform simultaneous
