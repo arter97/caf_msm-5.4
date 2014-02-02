@@ -201,6 +201,7 @@ static int mdss_mdp_hscl_filter[] = {
 #define MDSS_MDP_GAMUT_SIZE		0x5C
 #define MDSS_MDP_IGC_DSPP_SIZE		0x28
 #define MDSS_MDP_IGC_SSPP_SIZE		0x88
+#define MDSS_MDP_VIG_QSEED2_SHARP_SIZE	0x0C
 #define TOTAL_BLEND_STAGES		0x4
 
 #define PP_FLAGS_DIRTY_PA	0x1
@@ -815,18 +816,14 @@ static int pp_vig_pipe_setup(struct mdss_mdp_pipe *pipe, u32 *op)
 	unsigned long flags = 0;
 	char __iomem *offset;
 	struct mdss_data_type *mdata;
-	struct msm_fb_data_type *mfd = NULL;
 	u32 current_opmode;
 	u32 csc_reset;
+	u32 dcm_state = DCM_UNINIT;
 
 	pr_debug("pnum=%x\n", pipe->num);
 
-	if (!pipe->mixer || !pipe->mixer->ctl || !pipe->mixer->ctl->mfd) {
-		pr_err("Invalid input params for vig pipe setup\n");
-		return -EINVAL;
-	}
-
-	mfd = pipe->mixer->ctl->mfd;
+	if (!pipe->mixer && !pipe->mixer->ctl && !pipe->mixer->ctl->mfd)
+		dcm_state = pipe->mixer->ctl->mfd->dcm_state;
 
 	mdata = mdss_mdp_get_mdata();
 	if ((pipe->flags & MDP_OVERLAY_PP_CFG_EN) &&
@@ -860,7 +857,7 @@ static int pp_vig_pipe_setup(struct mdss_mdp_pipe *pipe, u32 *op)
 	}
 
 	/* Update CSC state only if tuning mode is enable */
-	if (mfd->dcm_state == DTM_ENTER) {
+	if (dcm_state == DTM_ENTER) {
 		/* Reset bit 16 to 19 for CSC_STATE in VIG_OP_MODE */
 		csc_reset = 0xFFF0FFFF;
 		current_opmode = readl_relaxed(pipe->base +
@@ -1009,10 +1006,14 @@ static int mdss_mdp_scale_setup(struct mdss_mdp_pipe *pipe)
 	u32 filter_mode;
 	struct mdss_data_type *mdata;
 	u32 src_w, src_h;
+	u32 dcm_state = DCM_UNINIT;
 
 	pr_debug("pipe=%d, change pxl ext=%d\n", pipe->num,
 			pipe->scale.enable_pxl_ext);
 	mdata = mdss_mdp_get_mdata();
+
+	if (!pipe->mixer && !pipe->mixer->ctl && !pipe->mixer->ctl->mfd)
+		dcm_state = pipe->mixer->ctl->mfd->dcm_state;
 
 	if ((mdata->mdp_rev == MDSS_MDP_HW_REV_200) &&
 		(pipe->type == MDSS_MDP_PIPE_TYPE_VIG))
@@ -1052,12 +1053,13 @@ static int mdss_mdp_scale_setup(struct mdss_mdp_pipe *pipe)
 		pipe->pp_cfg.sharp_cfg.noise_thr = SHARP_NOISE_THR_DEFAULT;
 	}
 
-	if ((pipe->src_fmt->is_yuv) &&
-		!((pipe->dst.w < src_w) || (pipe->dst.h < src_h))) {
-		pp_sharp_config(pipe->base +
-		   MDSS_MDP_REG_VIG_QSEED2_SHARP,
-		   &pipe->pp_res.pp_sts,
-		   &pipe->pp_cfg.sharp_cfg);
+	if (dcm_state != DTM_ENTER &&
+		((pipe->src_fmt->is_yuv) &&
+		!((pipe->dst.w < src_w) || (pipe->dst.h < src_h)))) {
+			pp_sharp_config(pipe->base +
+			   MDSS_MDP_REG_VIG_QSEED2_SHARP,
+			   &pipe->pp_res.pp_sts,
+			   &pipe->pp_cfg.sharp_cfg);
 	}
 
 	if ((src_h != pipe->dst.h) ||
@@ -1256,21 +1258,17 @@ int mdss_mdp_pipe_sspp_setup(struct mdss_mdp_pipe *pipe, u32 *op)
 	char __iomem *pipe_base;
 	u32 pipe_num;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
-	struct msm_fb_data_type *mfd = NULL;
 	u32 current_opmode;
+	u32 dcm_state = DCM_UNINIT;
 
 	if (pipe == NULL)
 		return -EINVAL;
 
-	if (!pipe->mixer || !pipe->mixer->ctl || !pipe->mixer->ctl->mfd) {
-		pr_err("Invalid input params for sspp pipe setup\n");
-		return -EINVAL;
-	}
-
-	mfd = pipe->mixer->ctl->mfd;
+	if (!pipe->mixer && !pipe->mixer->ctl && !pipe->mixer->ctl->mfd)
+		dcm_state = pipe->mixer->ctl->mfd->dcm_state;
 
 	/* Read IGC state and update the same if tuning mode is enable */
-	if (mfd->dcm_state == DTM_ENTER) {
+	if (dcm_state == DTM_ENTER) {
 		current_opmode = readl_relaxed(pipe->base +
 						MDSS_MDP_REG_SSPP_SRC_OP_MODE);
 		*op |= (current_opmode & BIT(16));
@@ -4727,7 +4725,8 @@ static int is_valid_calib_ctrl_addr(char __iomem *ptr)
 			break;
 		}
 
-		for (stage = 0; stage < mdss_res->nmixers_intf; stage++)
+		for (stage = 0; stage < (mdss_res->nmixers_intf +
+					 mdss_res->nmixers_wb); stage++)
 			if (ptr == base + MDSS_MDP_REG_CTL_LAYER(stage)) {
 				ret = MDP_PP_OPS_READ | MDP_PP_OPS_WRITE;
 				goto End;
@@ -4818,7 +4817,10 @@ static int is_valid_calib_vig_addr(char __iomem *ptr)
 		} else if (ptr == base + MDSS_MDP_REG_SSPP_SRC_OP_MODE) {
 			ret = MDP_PP_OPS_READ | MDP_PP_OPS_WRITE;
 			break;
-		} else if ((ptr == base + MDSS_MDP_REG_VIG_QSEED2_SHARP)) {
+		/* QSEED2 range */
+		} else if ((ptr >= base + MDSS_MDP_REG_VIG_QSEED2_SHARP) &&
+				(ptr <= base + MDSS_MDP_REG_VIG_QSEED2_SHARP +
+					MDSS_MDP_VIG_QSEED2_SHARP_SIZE)) {
 			ret = MDP_PP_OPS_READ | MDP_PP_OPS_WRITE;
 			break;
 		/* PA range */
@@ -4903,7 +4905,8 @@ static int is_valid_calib_mixer_addr(char __iomem *ptr)
 	int stage = 0;
 	struct mdss_mdp_mixer *mixer;
 
-	for (counter = 0; counter < mdss_res->nmixers_intf; counter++) {
+	for (counter = 0; counter < (mdss_res->nmixers_intf +
+					mdss_res->nmixers_wb); counter++) {
 		mixer = mdss_res->mixer_intf + counter;
 		base = mixer->base;
 
