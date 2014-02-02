@@ -18,7 +18,7 @@
 #include <linux/mutex.h>
 #include <linux/msm_audio_ion.h>
 
-#include <mach/socinfo.h>
+#include <soc/qcom/socinfo.h>
 #include <linux/qdsp6v2/apr_tal.h>
 
 #include "sound/apr_audio-v2.h"
@@ -950,6 +950,7 @@ static int voice_destroy_mvm_cvs_session(struct voice_data *v)
 
 	if (is_voip_session(v->session_id) ||
 	    is_qchat_session(v->session_id) ||
+	    is_volte_session(v->session_id) ||
 	    v->voc_state == VOC_ERROR) {
 		/* Destroy CVS. */
 		pr_debug("%s: CVS destroy session\n", __func__);

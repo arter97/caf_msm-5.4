@@ -37,15 +37,6 @@
 	(__height >> 4) * (__width >> 4) * __fps; \
 })
 
-#define VIDC_BUS_LOAD(__height, __width, __fps, __br) ({\
-	__height * __width * __fps; \
-})
-
-#define GET_NUM_MBS(__h, __w) ({\
-	u32 __mbs = (__h >> 4) * (__w >> 4);\
-	__mbs;\
-})
-
 struct getprop_buf {
 	struct list_head list;
 	void *data;
@@ -473,6 +464,7 @@ static void handle_session_init_done(enum command_response cmd, void *data)
 				session_init_done->frame_rate;
 			inst->capability.scale_x = session_init_done->scale_x;
 			inst->capability.scale_y = session_init_done->scale_y;
+			inst->capability.hier_p = session_init_done->hier_p;
 			inst->capability.pixelprocess_capabilities =
 				call_hfi_op(hdev, get_core_capabilities);
 			inst->capability.capability_set = true;
