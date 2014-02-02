@@ -22,10 +22,6 @@
 / {
 	model = "Qualcomm MSM 8926";
 	compatible = "qcom,msm8926";
-	qcom,msm-id = <200 0>,
-		      <224 0>,
-		      <200 0x10001>,
-		      <224 0x10001>;
 };
 
 &i2c_0 {
@@ -83,27 +79,7 @@
 			< 384000000 2>,
 			< 787200000 4>,
 			<1190400000 7>;
-		qcom,speed6-bin-v1 =
-			<         0 0>,
-			< 384000000 2>,
-			< 787200000 4>,
-			<1190400000 7>;
 		qcom,speed2-bin-v1 =
-			<         0 0>,
-			< 384000000 2>,
-			< 787200000 4>,
-			<1401600000 10>;
-		qcom,speed5-bin-v1 =
-			<         0 0>,
-			< 384000000 2>,
-			< 787200000 4>,
-			<1401600000 10>;
-		qcom,speed4-bin-v1 =
-			<         0 0>,
-			< 384000000 2>,
-			< 787200000 4>,
-			<1401600000 10>;
-		qcom,speed7-bin-v1 =
 			<         0 0>,
 			< 384000000 2>,
 			< 787200000 4>,
@@ -224,7 +200,7 @@
 				<1 9 187>,
 				<1 10 150>,
 				<1 11 75>;
-	qcom,cpr-quotient-adjustment = <96>;
+	qcom,cpr-quotient-adjustment = <0 96 96>;
 	vdd-apc-optional-prim-supply = <&ncp6335d>;
 	vdd-apc-optional-sec-supply = <&fan53555>;
 };
