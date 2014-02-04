@@ -719,10 +719,6 @@ static int msm_hsic_suspend(struct msm_hsic_hcd *mehci)
 		enable_irq(mehci->wakeup_irq);
 	}
 
-	if (pdata && pdata->standalone_latency)
-		pm_qos_update_request(&mehci->pm_qos_req_dma,
-			PM_QOS_DEFAULT_VALUE);
-
 	wake_unlock(&mehci->wlock);
 
 	dev_info(mehci->dev, "HSIC-USB in low power mode\n");
@@ -745,10 +741,6 @@ static int msm_hsic_resume(struct msm_hsic_hcd *mehci)
 
 	/* Handles race with Async interrupt */
 	disable_irq(hcd->irq);
-
-	if (pdata && pdata->standalone_latency)
-		pm_qos_update_request(&mehci->pm_qos_req_dma,
-			pdata->standalone_latency + 1);
 
 	if (mehci->wakeup_irq) {
 		spin_lock_irqsave(&mehci->wakeup_lock, flags);
@@ -1753,13 +1745,6 @@ static int __devexit ehci_hsic_msm_remove(struct platform_device *pdev)
 		disable_irq_wake(mehci->async_irq);
 		free_irq(mehci->async_irq, mehci);
 	}
-	/*
-	 * If the update request is called after unregister, the request will
-	 * fail. Results are undefined if unregister is called in the middle of
-	 * update request.
-	 */
-	mehci->bus_vote = false;
-	cancel_work_sync(&mehci->bus_vote_w);
 
 	if (mehci->bus_perf_client)
 		msm_bus_scale_unregister_client(mehci->bus_perf_client);
@@ -1798,19 +1783,6 @@ static int msm_hsic_pm_suspend(struct device *dev)
 
 	if (device_may_wakeup(dev))
 		enable_irq_wake(hcd->irq);
-
-	return 0;
-}
-
-static int msm_hsic_pm_suspend_noirq(struct device *dev)
-{
-	struct usb_hcd *hcd = dev_get_drvdata(dev);
-	struct msm_hsic_hcd *mehci = hcd_to_hsic(hcd);
-
-	if (atomic_read(&mehci->async_int)) {
-		dev_dbg(dev, "suspend_noirq: Aborting due to pending interrupt\n");
-		return -EBUSY;
-	}
 
 	return 0;
 }
