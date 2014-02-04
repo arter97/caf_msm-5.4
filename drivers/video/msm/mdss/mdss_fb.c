@@ -123,18 +123,22 @@ static int mdss_fb_notify_update(struct msm_fb_data_type *mfd,
 
 	if (notify == NOTIFY_UPDATE_START) {
 		INIT_COMPLETION(mfd->update.comp);
-		ret = wait_for_completion_interruptible_timeout(
+		ret = wait_for_completion_timeout(
 						&mfd->update.comp, 4 * HZ);
 		to_user = (unsigned int)mfd->update.value;
+		if (mfd->update.type == NOTIFY_TYPE_SUSPEND) {
+			to_user = (unsigned int)mfd->update.type;
+			ret = 1;
+		}
 	} else if (notify == NOTIFY_UPDATE_STOP) {
 		INIT_COMPLETION(mfd->no_update.comp);
-		ret = wait_for_completion_interruptible_timeout(
+		ret = wait_for_completion_timeout(
 						&mfd->no_update.comp, 4 * HZ);
 		to_user = (unsigned int)mfd->no_update.value;
 	} else {
 		if (mfd->panel_power_on) {
 			INIT_COMPLETION(mfd->power_off_comp);
-			ret = wait_for_completion_interruptible_timeout(
+			ret = wait_for_completion_timeout(
 						&mfd->power_off_comp, 1 * HZ);
 		}
 	}
@@ -146,6 +150,47 @@ static int mdss_fb_notify_update(struct msm_fb_data_type *mfd,
 	return ret;
 }
 
+static int mdss_fb_splash_thread(void *data)
+{
+	struct msm_fb_data_type *mfd = data;
+	int ret = -EINVAL;
+	struct fb_info *fbi = NULL;
+	int ov_index[2];
+
+	if (!mfd || !mfd->fbi || !mfd->mdp.splash_fnc) {
+		pr_err("Invalid input parameter\n");
+		goto end;
+	}
+
+	fbi = mfd->fbi;
+
+	ret = mdss_fb_open(fbi, current->tgid);
+	if (ret) {
+		pr_err("fb_open failed\n");
+		goto end;
+	}
+
+	mfd->bl_updated = true;
+	mdss_fb_set_backlight(mfd, mfd->panel_info->bl_max >> 1);
+
+	ret = mfd->mdp.splash_fnc(mfd, ov_index, MDP_CREATE_SPLASH_OV);
+	if (ret) {
+		pr_err("Splash image failed\n");
+		goto splash_err;
+	}
+
+	do {
+		schedule_timeout_interruptible(SPLASH_THREAD_WAIT_TIMEOUT * HZ);
+	} while (!kthread_should_stop());
+
+	mfd->mdp.splash_fnc(mfd, ov_index, MDP_REMOVE_SPLASH_OV);
+
+splash_err:
+	mdss_fb_release(fbi, current->tgid);
+end:
+	return ret;
+}
+
 static int lcd_backlight_registered;
 
 static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
@@ -154,13 +199,13 @@ static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 	struct msm_fb_data_type *mfd = dev_get_drvdata(led_cdev->dev->parent);
 	int bl_lvl;
 
-	if (value > MDSS_MAX_BL_BRIGHTNESS)
-		value = MDSS_MAX_BL_BRIGHTNESS;
+	if (value > mfd->panel_info->brightness_max)
+		value = mfd->panel_info->brightness_max;
 
 	/* This maps android backlight level 0 to 255 into
 	   driver backlight level 0 to bl_max with rounding */
 	MDSS_BRIGHT_TO_BL(bl_lvl, value, mfd->panel_info->bl_max,
-						MDSS_MAX_BL_BRIGHTNESS);
+				mfd->panel_info->brightness_max);
 
 	if (!bl_lvl && value)
 		bl_lvl = 1;
@@ -374,6 +419,9 @@ static int mdss_fb_probe(struct platform_device *pdev)
 
 	/* android supports only one lcd-backlight/lcd for now */
 	if (!lcd_backlight_registered) {
+
+		backlight_led.brightness = mfd->panel_info->brightness_max;
+		backlight_led.max_brightness = mfd->panel_info->brightness_max;
 		if (led_classdev_register(&pdev->dev, &backlight_led))
 			pr_err("led_classdev_register failed\n");
 		else
@@ -402,6 +450,16 @@ static int mdss_fb_probe(struct platform_device *pdev)
 		mfd->mdp_sync_pt_data.threshold = 1;
 	else
 		mfd->mdp_sync_pt_data.threshold = 2;
+
+	if (mfd->index == 0) {
+		mfd->splash_thread = kthread_run(mdss_fb_splash_thread, mfd,
+				"mdss_fb_splash");
+		if (IS_ERR(mfd->splash_thread)) {
+			pr_err("unable to start splash thread %d\n",
+				mfd->index);
+			mfd->splash_thread = NULL;
+		}
+	}
 
 	return rc;
 }
@@ -1188,6 +1246,12 @@ static int mdss_fb_open(struct fb_info *info, int user)
 	pinfo->ref_cnt++;
 	mfd->ref_cnt++;
 
+	/* Stop the splash thread once userspace open the fb node */
+	if (mfd->splash_thread && mfd->ref_cnt > 1) {
+		kthread_stop(mfd->splash_thread);
+		mfd->splash_thread = NULL;
+	}
+
 	return 0;
 
 blank_error:
@@ -1565,7 +1629,7 @@ static int mdss_fb_pan_display_sub(struct fb_var_screeninfo *var,
 		(var->yoffset / info->fix.ypanstep) * info->fix.ypanstep;
 
 	if (mfd->mdp.dma_fnc)
-		mfd->mdp.dma_fnc(mfd);
+		mfd->mdp.dma_fnc(mfd, NULL, 0, NULL);
 	else
 		pr_warn("dma function not set for panel type=%d\n",
 				mfd->panel.type);
@@ -1836,11 +1900,11 @@ static int mdss_fb_set_par(struct fb_info *info)
 
 int mdss_fb_dcm(struct msm_fb_data_type *mfd, int req_state)
 {
-	int ret = -EINVAL;
+	int ret = 0;
 
 	if (req_state == mfd->dcm_state) {
-		pr_warn("Already in correct DCM state");
-		ret = 0;
+		pr_warn("Already in correct DCM/DTM state");
+		return ret;
 	}
 
 	switch (req_state) {
@@ -1856,11 +1920,12 @@ int mdss_fb_dcm(struct msm_fb_data_type *mfd, int req_state)
 		break;
 	case DCM_ENTER:
 		if (mfd->dcm_state == DCM_UNBLANK) {
-			/* Keep unblank path available for only
-			DCM operation */
+			/*
+			 * Keep unblank path available for only
+			 * DCM operation
+			 */
 			mfd->panel_power_on = false;
 			mfd->dcm_state = DCM_ENTER;
-			ret = 0;
 		}
 		break;
 	case DCM_EXIT:
@@ -1868,7 +1933,6 @@ int mdss_fb_dcm(struct msm_fb_data_type *mfd, int req_state)
 			/* Release the unblank path for exit */
 			mfd->panel_power_on = true;
 			mfd->dcm_state = DCM_EXIT;
-			ret = 0;
 		}
 		break;
 	case DCM_BLANK:
@@ -1882,7 +1946,16 @@ int mdss_fb_dcm(struct msm_fb_data_type *mfd, int req_state)
 			}
 		}
 		break;
+	case DTM_ENTER:
+		if (mfd->dcm_state == DCM_UNINIT)
+			mfd->dcm_state = DTM_ENTER;
+		break;
+	case DTM_EXIT:
+		if (mfd->dcm_state == DTM_ENTER)
+			mfd->dcm_state = DCM_UNINIT;
+		break;
 	}
+
 	return ret;
 }
 
@@ -2187,6 +2260,7 @@ int mdss_register_panel(struct platform_device *pdev,
 	struct platform_device *fb_pdev, *mdss_pdev;
 	struct device_node *node;
 	int rc = 0;
+	bool master_panel = true;
 
 	if (!pdev || !pdev->dev.of_node) {
 		pr_err("Invalid device node\n");
@@ -2214,6 +2288,8 @@ int mdss_register_panel(struct platform_device *pdev,
 	fb_pdev = of_find_device_by_node(node);
 	if (fb_pdev) {
 		rc = mdss_fb_register_extra_panel(fb_pdev, pdata);
+		if (rc == 0)
+			master_panel = false;
 	} else {
 		pr_info("adding framebuffer device %s\n", dev_name(&pdev->dev));
 		fb_pdev = of_platform_device_create(node, NULL,
@@ -2221,7 +2297,7 @@ int mdss_register_panel(struct platform_device *pdev,
 		fb_pdev->dev.platform_data = pdata;
 	}
 
-	if (mdp_instance->panel_register_done)
+	if (master_panel && mdp_instance->panel_register_done)
 		mdp_instance->panel_register_done(pdata);
 
 mdss_notfound:
