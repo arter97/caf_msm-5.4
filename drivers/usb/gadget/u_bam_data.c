@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -35,6 +35,11 @@ static int n_bam2bam_data_ports;
 #define SPS_PARAMS_TBE		        BIT(6)
 #define MSM_VENDOR_ID			BIT(16)
 
+enum ecm_mdm_state {
+	ECM_MDM_NOT_READY,
+	ECM_MDM_READY,
+};
+
 struct bam_data_ch_info {
 	unsigned long		flags;
 	unsigned		id;
@@ -53,6 +58,7 @@ struct bam_data_ch_info {
 	enum function_type			func_type;
 	enum transport_type			trans;
 	struct usb_bam_connect_ipa_params	ipa_params;
+	enum ecm_mdm_state			ecm_state;
 };
 
 struct bam_data_port {
@@ -330,9 +336,12 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 				 MSM_VENDOR_ID) & ~SPS_PARAMS_TBE;
 	d->tx_req->udc_priv = sps_params;
 
-	/* queue in & out requests */
-	bam_data_start_endless_rx(port);
-	bam_data_start_endless_tx(port);
+	if ((d->func_type == USB_FUNC_ECM && d->ecm_state == ECM_MDM_READY)
+		|| d->func_type != USB_FUNC_ECM) {
+		/* queue in & out requests */
+		bam_data_start_endless_rx(port);
+		bam_data_start_endless_tx(port);
+	}
 
 	/* Register for peer reset callback if USB_GADGET_XPORT_BAM2BAM */
 	if (d->trans != USB_GADGET_XPORT_BAM2BAM_IPA) {
@@ -349,6 +358,39 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 	port->is_connected = true;
 	pr_debug("%s: Connect workqueue done", __func__);
 }
+
+/* Called when IPA triggers us that the network interface is up.
+ * Start the Bulk end-pointes.
+ * (optimization reasons, the pipes and bam with IPA are already connected)
+ */
+void bam_data_start_rx_tx(u8 port_num)
+{
+	struct bam_data_port	*port;
+	struct bam_data_ch_info *d ;
+
+	pr_debug("Enter\n");
+	/* queue in & out requests */
+	port = bam2bam_data_ports[port_num];
+	if (port == NULL) {
+		pr_err("port is NULL, can't queue in&out requests");
+		return;
+	}
+
+	if (!port->port_usb || !port->port_usb->in->driver_data
+		|| !port->port_usb->out->driver_data) {
+		pr_err("Can't queue in&out requests- rx,tx was't enabbled\n");
+		return;
+	}
+	d = &port->data_ch;
+	d->ecm_state = ECM_MDM_READY;
+	if (!d->rx_req || !d->tx_req)
+		return;
+
+	pr_debug("Starting rx,tx endless\n");
+	bam_data_start_endless_rx(port);
+	bam_data_start_endless_tx(port);
+}
+
 
 static void bam2bam_data_port_free(int portno)
 {
@@ -402,7 +444,7 @@ void bam_data_disconnect(struct data_port *gr, u8 port_num)
 	struct bam_data_port	*port;
 	struct bam_data_ch_info	*d;
 
-	pr_debug("dev:%p port#%d\n", gr, port_num);
+	pr_debug("dev:%p port#:%d\n", gr, port_num);
 
 	if (port_num >= n_bam2bam_data_ports) {
 		pr_err("invalid bam2bam portno#%d\n", port_num);
@@ -451,7 +493,7 @@ int bam_data_connect(struct data_port *gr, u8 port_num,
 	struct bam_data_ch_info	*d;
 	int			ret;
 
-	pr_debug("dev:%p port#%d\n", gr, port_num);
+	pr_debug("dev:%p port number:%d\n", gr, port_num);
 
 	if (port_num >= n_bam2bam_data_ports) {
 		pr_err("invalid portno#%d\n", port_num);
@@ -495,6 +537,8 @@ int bam_data_connect(struct data_port *gr, u8 port_num,
 		d->ipa_params.src_idx = src_connection_idx;
 		d->ipa_params.dst_idx = dst_connection_idx;
 	}
+	if (func == USB_FUNC_ECM)
+		d->ecm_state = ECM_MDM_NOT_READY;
 
 	queue_work(bam_data_wq, &port->connect_w);
 	ret = 0;
