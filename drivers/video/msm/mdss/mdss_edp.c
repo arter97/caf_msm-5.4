@@ -23,7 +23,7 @@
 #include <linux/gpio.h>
 #include <linux/err.h>
 #include <linux/regulator/consumer.h>
-#include <linux/pwm.h>
+#include <linux/qpnp/pwm.h>
 #include <linux/clk.h>
 #include <linux/spinlock_types.h>
 #include <linux/kthread.h>
@@ -198,6 +198,7 @@ void mdss_edp_set_backlight(struct mdss_panel_data *pdata, u32 bl_level)
 	int ret = 0;
 	struct mdss_edp_drv_pdata *edp_drv = NULL;
 	int bl_max;
+	int period_ns;
 
 	edp_drv = container_of(pdata, struct mdss_edp_drv_pdata, panel_data);
 	if (!edp_drv) {
@@ -210,13 +211,29 @@ void mdss_edp_set_backlight(struct mdss_panel_data *pdata, u32 bl_level)
 		if (bl_level > bl_max)
 			bl_level = bl_max;
 
-		ret = pwm_config(edp_drv->bl_pwm,
-				bl_level * edp_drv->pwm_period / bl_max,
-				edp_drv->pwm_period);
-		if (ret) {
-			pr_err("%s: pwm_config() failed err=%d.\n", __func__,
-					ret);
-			return;
+		/* In order to avoid overflow, use the microsecond version
+		 * of pwm_config if the pwm_period is greater than or equal
+		 * to 1 second.
+		 */
+		if (edp_drv->pwm_period >= USEC_PER_SEC) {
+			ret = pwm_config_us(edp_drv->bl_pwm,
+					bl_level * edp_drv->pwm_period / bl_max,
+					edp_drv->pwm_period);
+			if (ret) {
+				pr_err("%s: pwm_config_us() failed err=%d.\n",
+						__func__, ret);
+				return;
+			}
+		} else {
+			period_ns = edp_drv->pwm_period * NSEC_PER_USEC;
+			ret = pwm_config(edp_drv->bl_pwm,
+					bl_level * period_ns / bl_max,
+					period_ns);
+			if (ret) {
+				pr_err("%s: pwm_config() failed err=%d.\n",
+						__func__, ret);
+				return;
+			}
 		}
 
 		ret = pwm_enable(edp_drv->bl_pwm);
@@ -697,10 +714,15 @@ static int __devexit mdss_edp_remove(struct platform_device *pdev)
 static int mdss_edp_device_register(struct mdss_edp_drv_pdata *edp_drv)
 {
 	int ret;
+	u32 tmp;
 
 	mdss_edp_edid2pinfo(edp_drv);
 	edp_drv->panel_data.panel_info.bl_min = 1;
 	edp_drv->panel_data.panel_info.bl_max = 255;
+	ret = of_property_read_u32(edp_drv->pdev->dev.of_node,
+		"qcom,mdss-brightness-max-level", &tmp);
+	edp_drv->panel_data.panel_info.brightness_max =
+		(!ret ? tmp : MDSS_MAX_BL_BRIGHTNESS);
 
 	edp_drv->panel_data.event_handler = mdss_edp_event_handler;
 	edp_drv->panel_data.set_backlight = mdss_edp_set_backlight;

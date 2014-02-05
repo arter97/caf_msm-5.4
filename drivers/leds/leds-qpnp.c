@@ -255,7 +255,7 @@ enum wled_ovp_threshold {
 	WLED_OVP_35V,
 	WLED_OVP_32V,
 	WLED_OVP_29V,
-	WLED_OVP_37V,
+	WLED_OVP_27V,
 };
 
 enum flash_headroom {
@@ -713,7 +713,7 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 			duty_us = (led->mpp_cfg->pwm_cfg->pwm_period_us *
 					led->cdev.brightness) / LED_FULL;
 			/*config pwm for brightness scaling*/
-			rc = pwm_config(led->mpp_cfg->pwm_cfg->pwm_dev,
+			rc = pwm_config_us(led->mpp_cfg->pwm_cfg->pwm_dev,
 					duty_us,
 					led->mpp_cfg->pwm_cfg->pwm_period_us);
 			if (rc < 0) {
@@ -1239,7 +1239,7 @@ static int qpnp_kpdbl_set(struct qpnp_led_data *led)
 		if (led->kpdbl_cfg->pwm_cfg->mode == PWM_MODE) {
 			duty_us = (led->kpdbl_cfg->pwm_cfg->pwm_period_us *
 				led->cdev.brightness) / KPDBL_MAX_LEVEL;
-			rc = pwm_config(led->kpdbl_cfg->pwm_cfg->pwm_dev,
+			rc = pwm_config_us(led->kpdbl_cfg->pwm_cfg->pwm_dev,
 					duty_us,
 					led->kpdbl_cfg->pwm_cfg->pwm_period_us);
 			if (rc < 0) {
@@ -1261,7 +1261,7 @@ static int qpnp_kpdbl_set(struct qpnp_led_data *led)
 			led->kpdbl_cfg->pwm_cfg->default_mode;
 
 		if (led->kpdbl_cfg->always_on) {
-			rc = pwm_config(led->kpdbl_cfg->pwm_cfg->pwm_dev, 0,
+			rc = pwm_config_us(led->kpdbl_cfg->pwm_cfg->pwm_dev, 0,
 					led->kpdbl_cfg->pwm_cfg->pwm_period_us);
 			if (rc < 0) {
 				dev_err(&led->spmi_dev->dev,
@@ -1310,7 +1310,8 @@ static int qpnp_rgb_set(struct qpnp_led_data *led)
 		if (led->rgb_cfg->pwm_cfg->mode == PWM_MODE) {
 			duty_us = (led->rgb_cfg->pwm_cfg->pwm_period_us *
 				led->cdev.brightness) / LED_FULL;
-			rc = pwm_config(led->rgb_cfg->pwm_cfg->pwm_dev, duty_us,
+			rc = pwm_config_us(led->rgb_cfg->pwm_cfg->pwm_dev,
+					duty_us,
 					led->rgb_cfg->pwm_cfg->pwm_period_us);
 			if (rc < 0) {
 				dev_err(&led->spmi_dev->dev,
@@ -1495,7 +1496,7 @@ static int __devinit qpnp_wled_init(struct qpnp_led_data *led)
 	num_wled_strings = led->wled_cfg->num_strings;
 
 	/* verify ranges */
-	if (led->wled_cfg->ovp_val > WLED_OVP_37V) {
+	if (led->wled_cfg->ovp_val > WLED_OVP_27V) {
 		dev_err(&led->spmi_dev->dev, "Invalid ovp value\n");
 		return -EINVAL;
 	}
@@ -3439,10 +3440,15 @@ static int __devexit qpnp_leds_remove(struct spmi_device *spmi)
 
 	return 0;
 }
+
+#ifdef CONFIG_OF
 static struct of_device_id spmi_match_table[] = {
-	{	.compatible = "qcom,leds-qpnp",
-	}
+	{ .compatible = "qcom,leds-qpnp",},
+	{ },
 };
+#else
+#define spmi_match_table NULL
+#endif
 
 static struct spmi_driver qpnp_leds_driver = {
 	.driver		= {

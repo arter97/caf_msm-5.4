@@ -579,17 +579,6 @@ static void __iomem *virt_bases[N_BASES];
 			| BVAL(10, 8, s##_mm_source_val), \
 	}
 
-#define F_HDMI(f, s, div, m, n) \
-	{ \
-		.freq_hz = (f), \
-		.src_clk = &s##_clk_src, \
-		.m_val = (m), \
-		.n_val = ~((n)-(m)) * !!(n), \
-		.d_val = ~(n),\
-		.div_src_val = BVAL(4, 0, (int)(2*(div) - 1)) \
-			| BVAL(10, 8, s##_mm_source_val), \
-	}
-
 #define F_EDP(f, s, div, m, n) \
 	{ \
 		.freq_hz = (f), \
@@ -3267,60 +3256,19 @@ static struct rcg_clk esc1_clk_src = {
 	},
 };
 
-static int hdmi_pll_clk_enable(struct clk *c)
-{
-	return hdmi_pll_enable();
-}
-
-static void hdmi_pll_clk_disable(struct clk *c)
-{
-	hdmi_pll_disable();
-}
-
-static int hdmi_pll_clk_set_rate(struct clk *c, unsigned long rate)
-{
-	return hdmi_pll_set_rate(rate);
-}
-
-static struct clk_ops clk_ops_hdmi_pll = {
-	.enable = hdmi_pll_clk_enable,
-	.disable = hdmi_pll_clk_disable,
-	.set_rate = hdmi_pll_clk_set_rate,
-};
-
-static struct clk hdmipll_clk_src = {
-	.parent = &cxo_clk_src.c,
-	.dbg_name = "hdmipll_clk_src",
-	.ops = &clk_ops_hdmi_pll,
-	CLK_INIT(hdmipll_clk_src),
-};
-
 static struct clk_freq_tbl ftbl_mdss_extpclk_clk[] = {
-	/*
-	 * The zero rate is required since suspend/resume wipes out the HDMI PHY
-	 * registers. This entry allows the HDMI driver to switch the cached
-	 * rate to zero before suspend and back to the real rate after resume.
-	 */
-	F_HDMI(        0, hdmipll, 1, 0, 0),
-	F_HDMI( 25200000, hdmipll, 1, 0, 0),
-	F_HDMI( 27000000, hdmipll, 1, 0, 0),
-	F_HDMI( 27030000, hdmipll, 1, 0, 0),
-	F_HDMI( 65000000, hdmipll, 1, 0, 0),
-	F_HDMI( 74250000, hdmipll, 1, 0, 0),
-	F_HDMI(108000000, hdmipll, 1, 0, 0),
-	F_HDMI(148500000, hdmipll, 1, 0, 0),
-	F_HDMI(268500000, hdmipll, 1, 0, 0),
-	F_HDMI(297000000, hdmipll, 1, 0, 0),
+	F_MM(148500000, hdmipll, 1, 0, 0),
 	F_END
 };
 
 static struct rcg_clk extpclk_clk_src = {
 	.cmd_rcgr_reg = EXTPCLK_CMD_RCGR,
 	.freq_tbl = ftbl_mdss_extpclk_clk,
-	.current_freq = &rcg_dummy_freq,
+	.current_freq = ftbl_mdss_extpclk_clk,
 	.base = &virt_bases[MMSS_BASE],
 	.c = {
 		.dbg_name = "extpclk_clk_src",
+		.parent = &hdmipll_clk_src.c,
 		.ops = &clk_ops_rcg_hdmi,
 		VDD_DIG_FMAX_MAP2(LOW, 148500000, NOMINAL, 297000000),
 		CLK_INIT(extpclk_clk_src.c),
@@ -4490,6 +4438,7 @@ static DEFINE_CLK_MEASURE(krait0_m_clk);
 static DEFINE_CLK_MEASURE(krait1_m_clk);
 static DEFINE_CLK_MEASURE(krait2_m_clk);
 static DEFINE_CLK_MEASURE(krait3_m_clk);
+static DEFINE_CLK_MEASURE(wcnss_m_clk);
 
 #ifdef CONFIG_DEBUG_FS
 
@@ -4590,6 +4539,7 @@ struct measure_mux_entry measure_mux[] = {
 	{&pnoc_clk.c,                           GCC_BASE, 0x0010},
 	{&snoc_clk.c,                           GCC_BASE, 0x0000},
 	{&bimc_clk.c,                           GCC_BASE, 0x0155},
+	{&wcnss_m_clk,                          GCC_BASE, 0x0198},
 	{&mmss_mmssnoc_axi_clk.c,		MMSS_BASE, 0x0004},
 	{&ocmemnoc_clk.c,			MMSS_BASE, 0x0007},
 	{&ocmemcx_ocmemnoc_clk.c,		MMSS_BASE, 0x0009},
@@ -5105,6 +5055,9 @@ static struct clk_lookup msm_clocks_8974_common[] __initdata = {
 	CLK_LOOKUP("core_clk", gcc_usb_hs_system_clk.c,   "msm_ehci_host"),
 	CLK_LOOKUP("sleep_clk", gcc_usb2b_phy_sleep_clk.c, "msm_ehci_host"),
 	CLK_LOOKUP("pwm_clk", div_clk2.c, "0-0048"),
+
+	CLK_LOOKUP("measure",   measure_clk.c, "fb000000.qcom,wcnss-wlan"),
+	CLK_LOOKUP("wcnss_debug", wcnss_m_clk, "fb000000.qcom,wcnss-wlan"),
 
 	/* Multimedia clocks */
 	CLK_LOOKUP("bus_clk_src", axi_clk_src.c, ""),
