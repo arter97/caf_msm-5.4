@@ -52,6 +52,8 @@ enum data_block_types {
 	USE_EXTENDED_TAG
 };
 
+#define BUFF_SIZE_3D 128
+
 struct hdmi_edid_sink_data {
 	u32 disp_mode_list[HDMI_VFRMT_MAX];
 	u32 disp_3d_mode_list[HDMI_VFRMT_MAX];
