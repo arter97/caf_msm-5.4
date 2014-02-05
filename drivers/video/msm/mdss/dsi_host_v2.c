@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1407,6 +1407,7 @@ static int msm_dsi_clk_ctrl(struct mdss_panel_data *pdata, int enable)
 						&byteclk_rate, &pclk_rate);
 			msm_dsi_clk_set_rate(DSI_ESC_CLK_RATE, dsiclk_rate,
 						byteclk_rate, pclk_rate);
+			msm_dsi_prepare_clocks();
 			msm_dsi_clk_enable();
 		}
 	} else {
@@ -1414,6 +1415,7 @@ static int msm_dsi_clk_ctrl(struct mdss_panel_data *pdata, int enable)
 		if (dsi_host_private->clk_count == 0) {
 			msm_dsi_clk_set_rate(DSI_ESC_CLK_RATE, 0, 0, 0);
 			msm_dsi_clk_disable();
+			msm_dsi_unprepare_clocks();
 			msm_dsi_ahb_ctrl(0);
 		}
 	}
