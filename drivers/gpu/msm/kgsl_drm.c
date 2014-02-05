@@ -80,6 +80,7 @@
 #define MDSS_MDP_INTR_WB_2_DONE		BIT(4)
 
 extern u32 mdp_drm_intr_status;
+extern u32 mdp_drm_intr_mask;
 
 /* Returns true if memory type is secure */
 
@@ -1440,12 +1441,14 @@ kgsl_drm_irq_preinstall(struct drm_device *dev)
 	struct drm_kgsl_private *dev_priv =
 		(struct drm_kgsl_private *)dev->dev_private;
 	int i;
+	mdp_drm_intr_mask = 0;
 
 	DRM_DEBUG("%s\n", __func__);
 
 	for (i = 0; i < DRM_KGSL_CRTC_MAX; i++)
 		atomic_set(&dev_priv->vbl_received[i], 0);
 
+	mdp_drm_intr_mask |= MDSS_MDP_INTR_INTF_1_VSYNC;
 	dev->irq_enabled = 0;
 }
 
@@ -1494,6 +1497,7 @@ kgsl_drm_irq_uninstall(struct drm_device *dev)
 	writel_relaxed(mask, dev_priv->regs + MDSS_MDP_REG_INTR_EN);
 
 	dev->irq_enabled = 0;
+	mdp_drm_intr_mask = 0;
 
 	mdss_mdp_clk_ctrl(0, false);
 }

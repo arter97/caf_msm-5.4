@@ -151,11 +151,11 @@ struct drm_kgsl_gem_cache_ops)
 
 enum drm_kgsl_crtc_id {
 	DRM_KGSL_CRTC_PRIMARY,
+	DRM_KGSL_CRTC_FAKE,
+	DRM_KGSL_CRTC_MAX,
 	DRM_KGSL_CRTC_HDMI,
 	DRM_KGSL_CRTC_ROTATOR,
 	DRM_KGSL_CRTC_WFD,
-	DRM_KGSL_CRTC_FAKE,
-	DRM_KGSL_CRTC_MAX,
 };
 
 
