@@ -1413,6 +1413,7 @@ static int msm_dsi_clk_ctrl(struct mdss_panel_data *pdata, int enable)
 	} else {
 		dsi_host_private->clk_count--;
 		if (dsi_host_private->clk_count == 0) {
+			msm_dsi_clear_irq(ctrl_pdata, ctrl_pdata->dsi_irq_mask);
 			msm_dsi_clk_set_rate(DSI_ESC_CLK_RATE, 0, 0, 0);
 			msm_dsi_clk_disable();
 			msm_dsi_unprepare_clocks();

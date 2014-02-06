@@ -74,6 +74,8 @@ struct mdp3_bus_handle_map {
 	struct msm_bus_paths *usecases;
 	struct msm_bus_scale_pdata *scale_pdata;
 	int current_bus_idx;
+	u64 restore_ab;
+	u64 restore_ib;
 	u32 handle;
 };
 
@@ -159,6 +161,7 @@ struct mdp3_hw_resource {
 
 	int clk_prepare_count;
 	int cont_splash_en;
+	bool power_save_state;
 
 	bool batfet_required;
 	struct regulator *batfet;
