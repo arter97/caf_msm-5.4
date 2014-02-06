@@ -1260,11 +1260,6 @@ static int qca199x_probe(struct i2c_client *client,
 	/* Put device in ULPM */
 	gpio_set_value(platform_data->dis_gpio, 0);
 	r = nfcc_hw_check(client, platform_data->reg);
-	if (r) {
-		/* We don't think there is hardware but just in case HPD */
-		gpio_set_value(platform_data->dis_gpio, 1);
-		goto err_dis_gpio;
-	}
 
 	if (gpio_is_valid(platform_data->irq_gpio)) {
 		r = gpio_request(platform_data->irq_gpio, "nfc_irq_gpio");
@@ -1403,11 +1398,6 @@ static int qca199x_probe(struct i2c_client *client,
 
 	/* Here we perform a second presence check. */
 	r = nfcc_hw_check(client, platform_data->reg);
-	if (r) {
-		/* We don't think there is hardware but just in case HPD */
-		gpio_set_value(platform_data->dis_gpio, 1);
-		goto err_nfcc_not_present;
-	}
 
 	logging_level = 0;
 	/* request irq.  The irq is set whenever the chip has data available
@@ -1460,7 +1450,6 @@ err_create_workq:
 	"nfc-nci probe: %s, work_queue creation failure\n",
 		 __func__);
 	free_irq(client->irq, qca199x_dev);
-err_nfcc_not_present:
 err_request_irq_failed:
 	misc_deregister(&qca199x_dev->qca199x_device);
 err_misc_register:
