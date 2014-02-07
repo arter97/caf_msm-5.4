@@ -117,7 +117,6 @@ config ARCH_FSM9900
 	select HAVE_ARM_ARCH_TIMER
 	select MSM_GPIOMUX
 	select PM_DEVFREQ
-	select MSM_DEVFREQ_CPUBW
 	select MSM_PIL
 	select MSM_NATIVE_RESTART
 	select REGULATOR
@@ -1222,14 +1221,6 @@ config MSM_OCMEM_POWER_DISABLE
 	  RPM assisted power management operations are skipped.
 	  Enable this configuration if OCMEM is being exclusively
 	  used as GMEM or OCIMEM.
-
-config SENSORS_ADSP
-	bool "Enable Sensors Driver Support for ADSP"
-	help
-	  Add support for sensors ADSP driver.
-	  This driver is used for exercising different sensors use cases,
-	  such as for lower-power OCMEM use cases, and for time syncing
-	  with ADSP clock.
 
 config USE_PINCTRL_IRQ
 	default n
