@@ -138,6 +138,8 @@ void panic(const char *fmt, ...)
 
 	kmsg_dump(KMSG_DUMP_PANIC);
 
+	trace_kernel_panic_late(0);
+
 	bust_spinlocks(0);
 
 	if (!panic_blink)
