@@ -113,8 +113,8 @@ struct clock_event_device {
 					    struct clock_event_device *);
 	void			(*suspend)(struct clock_event_device *);
 	void			(*resume)(struct clock_event_device *);
-	unsigned long		min_delta_ticks;
-	unsigned long		max_delta_ticks;
+	s64			min_delta_ticks;
+	s64			max_delta_ticks;
 
 	const char		*name;
 	int			rating;
