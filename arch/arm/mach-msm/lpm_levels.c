@@ -26,11 +26,11 @@
 #include <linux/suspend.h>
 #include <linux/pm_qos.h>
 #include <linux/of_platform.h>
+#include <soc/qcom/spm.h>
+#include <soc/qcom/pm.h>
+#include <soc/qcom/rpm-notifier.h>
+#include <soc/qcom/event_timer.h>
 #include <mach/cpuidle.h>
-#include <mach/event_timer.h>
-#include "pm.h"
-#include "rpm-notifier.h"
-#include "spm.h"
 
 #define SCLK_HZ (32768)
 
