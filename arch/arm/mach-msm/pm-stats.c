@@ -19,8 +19,8 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/debugfs.h>
-#include "pm.h"
-#include "spm.h"
+#include <soc/qcom/spm.h>
+#include <soc/qcom/pm.h>
 
 static struct dentry *msm_pm_dbg_root;
 static struct dentry *msm_pm_dentry[NR_CPUS];

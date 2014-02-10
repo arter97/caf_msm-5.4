@@ -25,6 +25,9 @@
 #include <linux/platform_device.h>
 #include <linux/of_platform.h>
 #include <linux/cpu_pm.h>
+#include <soc/qcom/avs.h>
+#include <soc/qcom/spm.h>
+#include <soc/qcom/pm.h>
 #include <soc/qcom/scm.h>
 #include <asm/suspend.h>
 #include <asm/cacheflush.h>
@@ -34,16 +37,13 @@
 #endif
 #include <mach/msm_bus.h>
 #include <mach/jtag.h>
-#include <mach/avs.h>
 #include "idle.h"
-#include "pm.h"
 #include "scm-boot.h"
-#include "spm.h"
 #include "clock.h"
 #include "pm-boot.h"
 
 #define CREATE_TRACE_POINTS
-#include <mach/trace_msm_low_power.h>
+#include <trace/events/trace_msm_low_power.h>
 
 #define SCM_CMD_TERMINATE_PC	(0x2)
 #define SCM_CMD_CORE_HOTPLUGGED (0x10)
