@@ -29,6 +29,8 @@
 #include <linux/regulator/consumer.h>
 #include <linux/ahci_platform.h>
 #include <mach/clk.h>
+#include <mach/msm_xo.h>
+#include <mach/msm_sata.h>
 
 /* PHY registers */
 #define UNIPHY_PLL_REFCLK_CFG		0x000
@@ -156,6 +158,7 @@
 #define AHCI_HOST_CAP_PMP	(1 << 17)
 
 struct msm_sata_hba {
+	struct msm_sata_platform_data *pdata;
 	struct platform_device *ahci_pdev;
 	struct clk *slave_iface_clk;
 	struct clk *bus_clk;
@@ -164,6 +167,7 @@ struct msm_sata_hba {
 	struct clk *rxoob_clk;
 	struct clk *pmalive_clk;
 	struct clk *cfg_clk;
+	struct msm_xo_voter *xo_sata_clk;
 	struct regulator *clk_pwr;
 	struct regulator *pmp_pwr;
 	void __iomem *phy_base;
@@ -423,6 +427,15 @@ static int msm_sata_vreg_init(struct device *dev)
 	int ret = 0;
 	struct msm_sata_hba *hba = dev_get_drvdata(dev);
 
+	if (hba->pdata && hba->pdata->xo_vote) {
+		ret = msm_xo_mode_vote(hba->xo_sata_clk, MSM_XO_MODE_ON);
+		if (ret < 0) {
+			dev_err(dev, "%s: Failed to vote for XO ON (%d)\n",
+					__func__, ret);
+			goto out;
+		}
+	}
+
 	/*
 	 * The SATA clock generator needs 3.3V supply and can consume
 	 * max. 850mA during functional mode.
@@ -430,7 +443,7 @@ static int msm_sata_vreg_init(struct device *dev)
 	ret = msm_sata_vreg_get_enable_set_vdd(dev, "sata_ext_3p3v",
 				&hba->clk_pwr, 3300000, 3300000, 850000);
 	if (ret)
-		goto out;
+		goto out_disable_xo;
 
 	/* Add 1ms regulator ramp-up delay */
 	msm_sata_delay_us(1000);
@@ -441,16 +454,21 @@ static int msm_sata_vreg_init(struct device *dev)
 		/* Power up port-multiplier */
 		ret = msm_sata_vreg_get_enable_set_vdd(dev, "sata_pmp_pwr",
 				&hba->pmp_pwr, 1800000, 1800000, 200000);
-		if (ret) {
-			msm_sata_vreg_put_disable(dev, hba->clk_pwr,
-					"sata_ext_3p3v", 3300000);
-			goto out;
-		}
+		if (ret)
+			goto out_disable_3p3v;
 
 		/* Add 1ms regulator ramp-up delay */
 		msm_sata_delay_us(1000);
 	}
 
+	goto out;
+
+out_disable_3p3v:
+	msm_sata_vreg_put_disable(dev, hba->clk_pwr,
+			"sata_ext_3p3v", 3300000);
+out_disable_xo:
+	if (hba->pdata && hba->pdata->xo_vote)
+		msm_xo_mode_vote(hba->xo_sata_clk, MSM_XO_MODE_OFF);
 out:
 	return ret;
 }
@@ -465,6 +483,9 @@ static void msm_sata_vreg_deinit(struct device *dev)
 	if (hba->pmp_pwr)
 		msm_sata_vreg_put_disable(dev, hba->pmp_pwr,
 				"sata_pmp_pwr", 1800000);
+
+	if (hba->pdata && hba->pdata->xo_vote)
+		msm_xo_mode_vote(hba->xo_sata_clk, MSM_XO_MODE_OFF);
 }
 
 static void msm_sata_phy_deinit(struct device *dev)
@@ -713,6 +734,19 @@ static int __devinit msm_sata_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "no memory\n");
 		ret = -ENOMEM;
 		goto err;
+	}
+
+	hba->pdata = (struct msm_sata_platform_data *)pdev->dev.platform_data;
+
+	if (hba->pdata && hba->pdata->xo_vote) {
+		enum msm_xo_ids id = hba->pdata->xo_vote_id;
+		hba->xo_sata_clk = msm_xo_get(id, "sata_power");
+		if (IS_ERR(hba->xo_sata_clk)) {
+			ret = PTR_ERR(hba->xo_sata_clk);
+			dev_err(&pdev->dev, "%s: failed to get xo id %d, ret %d",
+					__func__, id, ret);
+			goto err_free;
+		}
 	}
 
 	platform_set_drvdata(pdev, hba);
