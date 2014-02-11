@@ -77,6 +77,7 @@
 #include <mach/restart.h>
 #include <mach/msm_iomap.h>
 #include <mach/msm_serial_hs.h>
+#include <mach/msm_sata.h>
 
 #include "msm_watchdog.h"
 #include "board-8064.h"
@@ -2366,6 +2367,7 @@ static struct platform_device apq8064_device_ext_ts_sw_vreg __devinitdata = {
 	},
 };
 
+static struct msm_sata_platform_data apq8064_sata_pdata;
 static struct platform_device
 apq8064_device_ext_3p3v_mpp4_vreg __devinitdata = {
 	.name	= GPIO_REGULATOR_DEV_NAME,
@@ -3440,13 +3442,28 @@ static void __init apq8064_cdp_init(void)
 		platform_device_register(&mpq_keypad_device);
 	}
 
-	if (machine_is_apq8064_cdp() || machine_is_mpq8064_hrd()) {
+	if (machine_is_apq8064_cdp() || machine_is_mpq8064_hrd() ||
+			machine_is_apq8064_adp_2()) {
 		int ret;
+		struct gpio_regulator_platform_data *sata_pwr =
+			apq8064_device_ext_3p3v_mpp4_vreg.dev.platform_data;
 		struct pm8xxx_mpp_config_data sata_pwr_cfg = {
 			.type = PM8XXX_MPP_TYPE_D_OUTPUT,
 			.level = PM8921_MPP_DIG_LEVEL_VPH,
 			.control = PM8XXX_MPP_DOUT_CTRL_HIGH,
 		};
+
+		if (machine_is_apq8064_adp_2()) {
+			/* MPP control is active HIGH */
+			sata_pwr_cfg.control = PM8XXX_MPP_DOUT_CTRL_LOW;
+			sata_pwr->active_low = 0;
+
+			/* ADP uses XO_TCXO_A0 as ref clk source */
+			apq8064_sata_pdata.xo_vote = true;
+			apq8064_sata_pdata.xo_vote_id = MSM_XO_TCXO_A0;
+			apq8064_device_sata.dev.platform_data =
+				&apq8064_sata_pdata;
+		}
 
 		/* Apply MPP-4 init only when it is used to control SATA PWR */
 		ret = pm8xxx_mpp_config(PM8921_MPP_PM_TO_SYS(4), &sata_pwr_cfg);
