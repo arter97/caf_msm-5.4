@@ -96,18 +96,16 @@ dtb-$(CONFIG_ARCH_MPQ8092) += mpq8092-sim.dtb \
 	mpq8092-cdp.dtb \
 	mpq8092-dtv.dtb \
 	mpq8092-dma.dtb
-dtb-$(CONFIG_ARCH_APQ8084) += apq8084-sim.dtb \
-	apq8084-interposer-cdp.dtb \
-	apq8084-liquid.dtb \
+dtb-$(CONFIG_ARCH_APQ8084) += apq8084-liquid.dtb \
 	apq8084-smb1357-cdp.dtb \
 	apq8084-smb1357-mtp.dtb \
 	apq8084-smb1359-mdm9x35-alt-mtp.dtb \
 	apq8084-smb349-cdp.dtb \
 	apq8084-smb349-mtp.dtb \
-	apq8084-nocharger-cdp.dtb \
+	apq8084-smb1357-mdm9x35-alt-rcm.dtb \
 	apq8084-smb1357-mdm9x35-mtp.dtb \
 	apq8084-smb1357-mdm9x35-cdp.dtb \
-	apq8084-smb1357-mdm9x35-alt-cdp.dtb \
+	apq8084-mdm9x35-alt-cdp.dtb \
 	apq8084-sbc.dtb
 dtb-$(CONFIG_ARCH_MSM) += msmplutonium-sim.dtb
 

@@ -19,21 +19,12 @@ obj-$(CONFIG_HOTPLUG_CPU) += hotplug.o
 
 obj-$(CONFIG_MSM_AVS_HW) += avs.o
 obj-$(CONFIG_CPU_V7) += idle-v7.o
-obj-$(CONFIG_MSM_JTAG) += jtag-fuse.o jtag.o
-obj-$(CONFIG_MSM_JTAG_MM) +=  jtag-fuse.o jtag-mm.o
 
 obj-$(CONFIG_MSM_SMD) += smd.o smd_debug.o smd_private.o smd_init_dt.o smsm_debug.o
 obj-$(CONFIG_MSM_SMP2P) += smp2p.o smp2p_debug.o smp2p_gpio.o
 obj-$(CONFIG_MSM_SMP2P_TEST) += smp2p_loopback.o smp2p_test.o smp2p_gpio_test.o smp2p_spinlock_test.o
 obj-$(CONFIG_MSM_SCM) += scm-boot.o
 obj-$(CONFIG_MSM_XPU_ERR_FATAL) += scm-xpu.o
-obj-$(CONFIG_MSM_PIL) += peripheral-loader.o
-obj-$(CONFIG_MSM_PIL_SSR_GENERIC) += subsys-pil-tz.o
-obj-$(CONFIG_MSM_PIL) += scm-pas.o
-obj-$(CONFIG_MSM_PIL_LPASS_QDSP6V5) += pil-q6v5.o pil-q6v5-lpass.o
-obj-$(CONFIG_MSM_PIL_MSS_QDSP6V5) += pil-q6v5.o pil-msa.o pil-q6v5-mss.o
-obj-$(CONFIG_MSM_PIL_PRONTO) += pil-pronto.o
-obj-$(CONFIG_MSM_PIL_FEMTO) += pil-q6v5.o pil-msa.o pil-femto-modem.o
 obj-$(CONFIG_MSM_TEST_QMI_CLIENT) += kernel_test_service_v01.o test_qmi_client.o
 obj-y += qdsp6v2/
 obj-$(CONFIG_PM) += pm-boot.o
@@ -50,13 +41,6 @@ obj-$(CONFIG_SURF_FFA_GPIO_KEYPAD) += keypad-surf-ffa.o
 obj-$(CONFIG_MSM_BOOT_STATS) += boot_stats.o
 
 obj-$(CONFIG_MSM_SPM_REGULATOR) += spm-regulator.o
-
-ifdef CONFIG_MSM_SUBSYSTEM_RESTART
-	obj-y += subsystem_notif.o
-	obj-y += subsystem_restart.o
-	obj-y += ramdump.o
-endif
-obj-$(CONFIG_MSM_SYSMON_COMM) += sysmon.o
 
 obj-$(CONFIG_ARCH_FSM9900) += board-fsm9900.o board-fsm9900-gpiomux.o
 obj-$(CONFIG_ARCH_FSM9900) += clock-fsm9900.o
@@ -76,7 +60,6 @@ obj-$(CONFIG_ARCH_MSMSAMARIUM) += board-samarium.o board-samarium-gpiomux.o
 obj-$(CONFIG_ARCH_MSMSAMARIUM) += clock-samarium.o clock-krait-8974.o clock-mdss-8974.o
 obj-$(CONFIG_ARCH_MPQ8092) += board-8092.o board-8092-gpiomux.o
 obj-$(CONFIG_ARCH_MSM8916) += board-8916.o
-obj-$(CONFIG_ARCH_MSM8916) += clock-rpm-8916.o clock-gcc-8916.o
 obj-$(CONFIG_ARCH_MPQ8092) += clock-8092.o clock-vcap-8092.o clock-mdss-8974.o
 obj-$(CONFIG_ARCH_MPQ8092) += clock-krait-8974.o
 obj-$(CONFIG_ARCH_MSM8226) += board-8226.o board-8226-gpiomux.o
