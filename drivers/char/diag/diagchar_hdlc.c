@@ -1,4 +1,5 @@
-/* Copyright (c) 2008-2009, 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2009, 2012-2014, The Linux Foundation.
+ * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -175,8 +176,8 @@ int diag_hdlc_decode(struct diag_hdlc_decode_type *hdlc)
 	int msg_start;
 
 	if (hdlc && hdlc->src_ptr && hdlc->dest_ptr &&
-	    (hdlc->src_size - hdlc->src_idx > 0) &&
-	    (hdlc->dest_size - hdlc->dest_idx > 0)) {
+	    (hdlc->src_size > hdlc->src_idx) &&
+	    (hdlc->dest_size > hdlc->dest_idx)) {
 
 		msg_start = (hdlc->src_idx == 0) ? 1 : 0;
 
