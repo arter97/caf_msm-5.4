@@ -1,4 +1,4 @@
-/* arch/arm/mach-msm/smp2p.c
+/* drivers/soc/qcom/smp2p.c
  *
  * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
@@ -20,6 +20,7 @@
 #include <linux/platform_device.h>
 #include <linux/interrupt.h>
 #include <linux/ipc_logging.h>
+#include <linux/err.h>
 #include <soc/qcom/smem.h>
 #include "smp2p_private_api.h"
 #include "smp2p_private.h"
@@ -1781,13 +1782,15 @@ void msm_smp2p_interrupt_handler(int remote_pid)
 static int msm_smp2p_probe(struct platform_device *pdev)
 {
 	struct resource *r;
-	void *irq_out_ptr;
+	void *irq_out_ptr = NULL;
 	char *key;
 	uint32_t edge;
 	int ret;
 	struct device_node *node;
 	uint32_t irq_bitmask;
 	uint32_t irq_line;
+	void *temp_p;
+	unsigned temp_sz;
 
 	node = pdev->dev.of_node;
 
@@ -1795,6 +1798,7 @@ static int msm_smp2p_probe(struct platform_device *pdev)
 	ret = of_property_read_u32(node, key, &edge);
 	if (ret) {
 		SMP2P_ERR("%s: missing edge '%s'\n", __func__, key);
+		ret = -ENODEV;
 		goto fail;
 	}
 
@@ -1802,13 +1806,15 @@ static int msm_smp2p_probe(struct platform_device *pdev)
 	if (!r) {
 		SMP2P_ERR("%s: failed gathering irq-reg resource for edge %d\n"
 				, __func__, edge);
+		ret = -ENODEV;
 		goto fail;
 	}
 	irq_out_ptr = ioremap_nocache(r->start, resource_size(r));
 	if (!irq_out_ptr) {
 		SMP2P_ERR("%s: failed remap from phys to virt for edge %d\n",
 				__func__, edge);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto fail;
 	}
 
 	key = "qcom,irq-bitmask";
@@ -1821,11 +1827,29 @@ static int msm_smp2p_probe(struct platform_device *pdev)
 	if (irq_line == -ENXIO)
 		goto missing_key;
 
+	/*
+	 * We depend on the SMEM driver, so do a test access to see if SMEM is
+	 * ready.  We don't want any side effects at this time (so no alloc)
+	 * and the return doesn't matter, so long as it is not -EPROBE_DEFER.
+	 */
+	temp_p = smem_get_entry(
+		smp2p_get_smem_item_id(SMP2P_APPS_PROC, SMP2P_MODEM_PROC),
+		&temp_sz,
+		0,
+		SMEM_ANY_HOST_FLAG);
+	if (PTR_ERR(temp_p) == -EPROBE_DEFER) {
+		SMP2P_INFO("%s: edge:%d probe before smem ready\n", __func__,
+									edge);
+		ret = -EPROBE_DEFER;
+		goto fail;
+	}
+
 	ret = request_irq(irq_line, smp2p_interrupt_handler,
 			IRQF_TRIGGER_RISING, "smp2p", (void *)(uintptr_t)edge);
 	if (ret < 0) {
 		SMP2P_ERR("%s: request_irq() failed on %d (edge %d)\n",
 				__func__, irq_line, edge);
+		ret = -ENODEV;
 		goto fail;
 	}
 
@@ -1846,8 +1870,11 @@ static int msm_smp2p_probe(struct platform_device *pdev)
 
 missing_key:
 	SMP2P_ERR("%s: missing '%s' for edge %d\n", __func__, key, edge);
+	ret = -ENODEV;
 fail:
-	return -ENODEV;
+	if (irq_out_ptr)
+		iounmap(irq_out_ptr);
+	return ret;
 }
 
 static struct of_device_id msm_smp2p_match_table[] = {

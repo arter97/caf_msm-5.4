@@ -1,4 +1,4 @@
-/* arch/arm/mach-msm/smd.c
+/* drivers/soc/qcom/smd.c
  *
  * Copyright (C) 2007 Google, Inc.
  * Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
@@ -38,16 +38,15 @@
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/ipc_logging.h>
-#include <soc/qcom/subsystem_restart.h>
-#include <soc/qcom/subsystem_notif.h>
+
 #include <soc/qcom/ramdump.h>
-
-#include <mach/msm_smd.h>
-
+#include <soc/qcom/smd.h>
 #include <soc/qcom/smem.h>
+#include <soc/qcom/subsystem_notif.h>
+#include <soc/qcom/subsystem_restart.h>
 
 #include "smd_private.h"
-#include "../../../drivers/soc/qcom/smem_private.h"
+#include "smem_private.h"
 
 #define SMSM_SNAPSHOT_CNT 64
 #define SMSM_SNAPSHOT_SIZE ((SMSM_NUM_ENTRIES + 1) * 4 + sizeof(uint64_t))
@@ -127,6 +126,11 @@ static struct interrupt_config private_intr_config[NUM_SMD_SUBSYSTEMS] = {
 		.smd.irq_handler = smd_rpm_irq_handler,
 		.smsm.irq_handler = NULL, /* does not support smsm */
 	},
+};
+
+union fifo_mem {
+	uint64_t u64;
+	uint8_t u8;
 };
 
 struct interrupt_stat interrupt_stats[NUM_SMD_SUBSYSTEMS];
@@ -219,6 +223,93 @@ static inline void smd_write_intr(unsigned int val,
 {
 	wmb();
 	__raw_writel(val, addr);
+}
+
+/**
+ * smd_memcpy_to_fifo() - copy to SMD channel FIFO
+ * @dest: Destination address
+ * @src: Source address
+ * @num_bytes: Number of bytes to copy
+ *
+ * @return: Address of destination
+ *
+ * This function copies num_bytes from src to dest. This is used as the memcpy
+ * function to copy data to SMD FIFO in case the SMD FIFO is naturally aligned.
+ */
+static void *smd_memcpy_to_fifo(void *dest, const void *src, size_t num_bytes)
+{
+	union fifo_mem *temp_dst = (union fifo_mem *)dest;
+	union fifo_mem *temp_src = (union fifo_mem *)src;
+	uintptr_t mask = sizeof(union fifo_mem) - 1;
+
+	/* Do byte copies until we hit 8-byte (double word) alignment */
+	while ((uintptr_t)temp_dst & mask && num_bytes) {
+		__raw_writeb_no_log(temp_src->u8, temp_dst);
+		temp_src = (union fifo_mem *)((uintptr_t)temp_src + 1);
+		temp_dst = (union fifo_mem *)((uintptr_t)temp_dst + 1);
+		num_bytes--;
+	}
+
+	/* Do double word copies */
+	while (num_bytes >= sizeof(union fifo_mem)) {
+		__raw_writeq_no_log(temp_src->u64, temp_dst);
+		temp_dst++;
+		temp_src++;
+		num_bytes -= sizeof(union fifo_mem);
+	}
+
+	/* Copy remaining bytes */
+	while (num_bytes--) {
+		__raw_writeb_no_log(temp_src->u8, temp_dst);
+		temp_src = (union fifo_mem *)((uintptr_t)temp_src + 1);
+		temp_dst = (union fifo_mem *)((uintptr_t)temp_dst + 1);
+	}
+
+	return dest;
+}
+
+/**
+ * smd_memcpy_from_fifo() - copy from SMD channel FIFO
+ * @dest: Destination address
+ * @src: Source address
+ * @num_bytes: Number of bytes to copy
+ *
+ * @return: Address of destination
+ *
+ * This function copies num_bytes from src to dest. This is used as the memcpy
+ * function to copy data from SMD FIFO in case the SMD FIFO is naturally
+ * aligned.
+ */
+static void *smd_memcpy_from_fifo(void *dest, const void *src, size_t num_bytes)
+{
+	union fifo_mem *temp_dst = (union fifo_mem *)dest;
+	union fifo_mem *temp_src = (union fifo_mem *)src;
+	uintptr_t mask = sizeof(union fifo_mem) - 1;
+
+	/* Do byte copies until we hit 8-byte (double word) alignment */
+	while ((uintptr_t)temp_src & mask && num_bytes) {
+		temp_dst->u8 = __raw_readb_no_log(temp_src);
+		temp_src = (union fifo_mem *)((uintptr_t)temp_src + 1);
+		temp_dst = (union fifo_mem *)((uintptr_t)temp_dst + 1);
+		num_bytes--;
+	}
+
+	/* Do double word copies */
+	while (num_bytes >= sizeof(union fifo_mem)) {
+		temp_dst->u64 = __raw_readq_no_log(temp_src);
+		temp_dst++;
+		temp_src++;
+		num_bytes -= sizeof(union fifo_mem);
+	}
+
+	/* Copy remaining bytes */
+	while (num_bytes--) {
+		temp_dst->u8 = __raw_readb_no_log(temp_src);
+		temp_src = (union fifo_mem *)((uintptr_t)temp_src + 1);
+		temp_dst = (union fifo_mem *)((uintptr_t)temp_dst + 1);
+	}
+
+	return dest;
 }
 
 /**
@@ -1732,11 +1823,11 @@ static int smd_alloc_channel(struct smd_alloc_elm *alloc_elm, int table_id,
 		ch->read_from_fifo = smd_memcpy32_from_fifo;
 		ch->write_to_fifo = smd_memcpy32_to_fifo;
 	} else {
-		ch->read_from_fifo = memcpy;
-		ch->write_to_fifo = memcpy;
+		ch->read_from_fifo = smd_memcpy_from_fifo;
+		ch->write_to_fifo = smd_memcpy_to_fifo;
 	}
 
-	memcpy(ch->name, alloc_elm->name, SMD_MAX_CH_NAME_LEN);
+	smd_memcpy_from_fifo(ch->name, alloc_elm->name, SMD_MAX_CH_NAME_LEN);
 	ch->name[SMD_MAX_CH_NAME_LEN-1] = 0;
 
 	ch->pdev.name = ch->name;
