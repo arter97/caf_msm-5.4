@@ -2,7 +2,7 @@
  *
  * MSM MDP Interface (used by framebuffer core)
  *
- * Copyright (c) 2007-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2007-2014, The Linux Foundation. All rights reserved.
  * Copyright (C) 2007 Google Incorporated
  *
  * This software is licensed under the terms of the GNU General Public
@@ -2956,18 +2956,19 @@ static int mdp_probe(struct platform_device *pdev)
 				pr_err("DMA ALLOC FAILED for SPLASH\n");
 				return -ENOMEM;
 			}
+
 			cp = (char *)ioremap(
 					mdp_pdata->splash_screen_addr,
 					mdp_pdata->splash_screen_size);
-			if (!cp) {
-				pr_err("IOREMAP FAILED for SPLASH\n");
-				return -ENOMEM;
-			}
-			memcpy(mfd->copy_splash_buf, cp,
+			if (cp) {
+				memcpy(mfd->copy_splash_buf, cp,
 					mdp_pdata->splash_screen_size);
 
-			MDP_OUTP(MDP_BASE + 0x90008,
+				MDP_OUTP(MDP_BASE + 0x90008,
 					mfd->copy_splash_phys);
+			} else {
+				pr_err("IOREMAP FAILED for SPLASH\n");
+			}
 		}
 
 		mfd->cont_splash_done = (1 - mdp_pdata->cont_splash_enabled);
