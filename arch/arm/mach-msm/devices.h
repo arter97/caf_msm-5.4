@@ -1,7 +1,7 @@
 /* linux/arch/arm/mach-msm/devices.h
  *
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -92,6 +92,7 @@ extern struct platform_device apq8064_device_uart_gsbi4;
 extern struct platform_device apq8064_device_uartdm_gsbi4;
 extern struct platform_device apq8064_device_uart_gsbi7;
 extern struct platform_device apq8064_device_qup_i2c_gsbi1;
+extern struct platform_device apq8064_device_qup_adp_i2c_gsbi1;
 extern struct platform_device apq8064_device_qup_i2c_gsbi3;
 extern struct platform_device apq8064_device_qup_i2c_gsbi4;
 extern struct platform_device apq8064_device_qup_spi_gsbi5;

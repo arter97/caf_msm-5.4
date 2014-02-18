@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2014 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -766,6 +766,29 @@ static struct msm_gpiomux_config mpq8064_spkr_i2s_config[] __initdata = {
 		.gpio   = 50,           /* spkr_i2s_mclk */
 		.settings = {
 			[GPIOMUX_SUSPENDED] = &spkr_i2c,
+		},
+	},
+};
+
+static struct gpiomux_setting gpio_adp_i2c_config = {
+	.func = GPIOMUX_FUNC_4,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+
+static struct msm_gpiomux_config adp_i2c_config[] __initdata = {
+	{
+		.gpio      = 1,		/* GSBI1 QUP I2C_CLK */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gpio_i2c_config_sus,
+			[GPIOMUX_ACTIVE] = &gpio_adp_i2c_config,
+		},
+	},
+	{
+		.gpio      = 0,		/* GSBI1 QUP I2C_DATA */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gpio_i2c_config_sus,
+			[GPIOMUX_ACTIVE] = &gpio_adp_i2c_config,
 		},
 	},
 };
@@ -1596,4 +1619,7 @@ void __init apq8064_init_gpiomux(void)
 	 if (machine_is_mpq8064_hrd() || machine_is_mpq8064_dtv())
 		msm_gpiomux_install(mpq8064_uartdm_configs,
 				ARRAY_SIZE(mpq8064_uartdm_configs));
+	if (machine_is_apq8064_adp_2())
+		msm_gpiomux_install(adp_i2c_config,
+				ARRAY_SIZE(adp_i2c_config));
 }
