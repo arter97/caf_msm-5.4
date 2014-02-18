@@ -19,6 +19,7 @@
 #include <linux/msm_ion.h>
 #include <linux/mm.h>
 #include <linux/msm_audio_ion.h>
+#include <linux/compat.h>
 #include "audio_acdb.h"
 #include "q6voice.h"
 
@@ -334,6 +335,113 @@ done:
 	return result;
 }
 
+#ifdef CONFIG_COMPAT
+struct hw_delay_32 {
+	u32 num_entries;
+	void *delay_info;
+};
+
+struct hw_delay_entry_32 {
+	u32 sample_rate;
+	u32 delay_usec;
+};
+
+struct cal_block_32 {
+	u32	cal_size;	/* Size of Cal Data */
+	u32	cal_offset;	/* offset pointer to Cal Data */
+};
+
+struct sidetone_cal_32 {
+	u16	enable;
+	u16	gain;
+};
+
+static int store_lsm_cal_compat(struct cal_block_32 *cal_block_32)
+{
+	int result = 0;
+	pr_debug("%s,\n", __func__);
+
+	if (cal_block_32->cal_offset > acdb_data.mem_len) {
+		pr_err("%s: offset %d is > mem_len %llu\n",
+			__func__, cal_block_32->cal_offset, acdb_data.mem_len);
+		result = -EINVAL;
+		goto done;
+	}
+
+	acdb_data.lsm_cal.cal_size = cal_block_32->cal_size;
+	acdb_data.lsm_cal.cal_paddr =
+		cal_block_32->cal_offset + acdb_data.paddr;
+	acdb_data.lsm_cal.cal_kvaddr =
+		cal_block_32->cal_offset + (u8 *)acdb_data.kvaddr;
+done:
+	return result;
+}
+
+static int store_adm_custom_topology_compat(struct cal_block_32 *cal_block_32)
+{
+	int result = 0;
+	pr_debug("%s,\n", __func__);
+
+	if (cal_block_32->cal_offset > acdb_data.mem_len) {
+		pr_err("%s: offset %d is > mem_len %llu\n",
+			__func__, cal_block_32->cal_offset, acdb_data.mem_len);
+		result = -EINVAL;
+		goto done;
+	}
+
+	acdb_data.adm_custom_topology.cal_size = cal_block_32->cal_size;
+	acdb_data.adm_custom_topology.cal_paddr =
+		cal_block_32->cal_offset + acdb_data.paddr;
+	acdb_data.adm_custom_topology.cal_kvaddr =
+		cal_block_32->cal_offset + (u8 *)acdb_data.kvaddr;
+done:
+	return result;
+}
+
+static int store_asm_custom_topology_compat(struct cal_block_32 *cal_block_32)
+{
+	int result = 0;
+	pr_debug("%s,\n", __func__);
+
+	if (cal_block_32->cal_offset > acdb_data.mem_len) {
+		pr_err("%s: offset %d is > mem_len %llu\n",
+			__func__, cal_block_32->cal_offset, acdb_data.mem_len);
+		result = -EINVAL;
+		goto done;
+	}
+
+	acdb_data.asm_custom_topology.cal_size = cal_block_32->cal_size;
+	acdb_data.asm_custom_topology.cal_paddr =
+		cal_block_32->cal_offset + acdb_data.paddr;
+	acdb_data.asm_custom_topology.cal_kvaddr =
+		cal_block_32->cal_offset + (u8 *)acdb_data.kvaddr;
+done:
+	return result;
+}
+
+static int store_aanc_cal_compat(struct cal_block_32 *cal_block_32)
+{
+	int result = 0;
+	pr_debug("%s,\n", __func__);
+
+	if (cal_block_32->cal_offset > acdb_data.mem_len) {
+		pr_err("%s: offset %d is > mem_len %llu\n",
+		 __func__, cal_block_32->cal_offset, acdb_data.mem_len);
+		result = -EINVAL;
+		goto done;
+	}
+
+	acdb_data.aanc_cal.cal_size = cal_block_32->cal_size;
+	acdb_data.aanc_cal.cal_paddr =
+		cal_block_32->cal_offset + acdb_data.paddr;
+	acdb_data.aanc_cal.cal_kvaddr =
+		cal_block_32->cal_offset + (u8 *)acdb_data.kvaddr;
+done:
+	return result;
+}
+
+#endif
+
 static int store_lsm_cal(struct cal_block *cal_block)
 {
 	int result = 0;
@@ -411,6 +519,66 @@ ret:
 	return result;
 }
 
+#ifdef CONFIG_COMPAT
+static int store_hw_delay_compat(int32_t path, void *arg)
+{
+	int result = 0;
+	struct hw_delay *delay_dest = NULL;
+	struct hw_delay_32 delay_32;
+	pr_debug("%s,\n", __func__);
+
+	if ((path >= MAX_AUDPROC_TYPES) || (path < 0) || (arg == NULL)) {
+		pr_err("ACDB=> Bad path/ pointer sent to %s, path: %d\n",
+		      __func__, path);
+		result = -EINVAL;
+		goto done;
+	}
+	result = copy_from_user((void *)&delay_32, (void *)arg,
+				sizeof(struct hw_delay_32));
+	if (result) {
+		pr_err("ACDB=> %s failed to copy hw delay: result=%d path=%d\n",
+		       __func__, result, path);
+		result = -EFAULT;
+		goto done;
+	}
+	if ((delay_32.num_entries <= 0) ||
+		(delay_32.num_entries > MAX_HW_DELAY_ENTRIES)) {
+		pr_debug("ACDB=> %s incorrect no of hw delay entries: %d\n",
+		       __func__, delay_32.num_entries);
+		result = -EINVAL;
+		goto done;
+	}
+	if ((path >= MAX_AUDPROC_TYPES) || (path < 0)) {
+		pr_err("ACDB=> Bad path sent to %s, path: %d\n",
+		__func__, path);
+		result = -EINVAL;
+		goto done;
+	}
+
+	pr_debug("ACDB=> %s : Path = %d num_entries = %d\n",
+		 __func__, path, delay_32.num_entries);
+
+	if (path == RX_CAL)
+		delay_dest = &acdb_data.hw_delay_rx;
+	else if (path == TX_CAL)
+		delay_dest = &acdb_data.hw_delay_tx;
+
+	delay_dest->num_entries = delay_32.num_entries;
+
+	result = copy_from_user(delay_dest->delay_info,
+				delay_32.delay_info,
+				(sizeof(struct hw_delay_entry_32)*
+				delay_32.num_entries));
+	if (result) {
+		pr_err("ACDB=> %s failed to copy hw delay info res=%d path=%d",
+		       __func__, result, path);
+		result = -EFAULT;
+	}
+done:
+	return result;
+}
+#endif
+
 static int store_hw_delay(int32_t path, void *arg)
 {
 	int result = 0;
@@ -469,6 +637,29 @@ done:
 	return result;
 }
 
+#ifdef CONFIG_COMPAT
+static int store_anc_cal_compat(struct cal_block_32 *cal_block_32)
+{
+	int result = 0;
+	pr_debug("%s,\n", __func__);
+
+	if (cal_block_32->cal_offset > acdb_data.mem_len) {
+		pr_err("%s: offset %d is > mem_len %llu\n",
+			__func__, cal_block_32->cal_offset, acdb_data.mem_len);
+		result = -EINVAL;
+		goto done;
+	}
+
+	acdb_data.anc_cal.cal_size = cal_block_32->cal_size;
+	acdb_data.anc_cal.cal_paddr =
+		cal_block_32->cal_offset + acdb_data.paddr;
+	acdb_data.anc_cal.cal_kvaddr =
+		cal_block_32->cal_offset + (u8 *)acdb_data.kvaddr;
+done:
+	return result;
+}
+#endif
+
 int get_anc_cal(struct acdb_cal_block *cal_block)
 {
 	int result = 0;
@@ -507,6 +698,35 @@ static int store_anc_cal(struct cal_block *cal_block)
 done:
 	return result;
 }
+
+#ifdef CONFIG_COMPAT
+static int store_afe_cal_compat(int32_t path, struct cal_block_32 *cal_block_32)
+{
+	int result = 0;
+	pr_debug("%s, path = %d\n", __func__, path);
+
+	if (cal_block_32->cal_offset > acdb_data.mem_len) {
+		pr_err("%s: offset %d is > mem_len %llu\n",
+			__func__, cal_block_32->cal_offset, acdb_data.mem_len);
+		result = -EINVAL;
+		goto done;
+	}
+	if ((path >= MAX_AUDPROC_TYPES) || (path < 0)) {
+		pr_err("ACDB=> Bad path sent to %s, path: %d\n",
+			__func__, path);
+		result = -EINVAL;
+		goto done;
+	}
+
+	acdb_data.afe_cal[path].cal_size = cal_block_32->cal_size;
+	acdb_data.afe_cal[path].cal_paddr =
+		cal_block_32->cal_offset + acdb_data.paddr;
+	acdb_data.afe_cal[path].cal_kvaddr =
+		cal_block_32->cal_offset + (u8 *)acdb_data.kvaddr;
+done:
+	return result;
+}
+#endif
 
 static int store_afe_cal(int32_t path, struct cal_block *cal_block)
 {
@@ -558,6 +778,192 @@ int get_afe_cal(int32_t path, struct acdb_cal_block *cal_block)
 done:
 	return result;
 }
+
+#ifdef CONFIG_COMPAT
+static int store_audproc_cal_compat(int32_t path,
+				    struct cal_block_32 *cal_block_32)
+{
+	int result = 0;
+	pr_debug("%s, path = %d\n", __func__, path);
+
+	if (cal_block_32->cal_offset > acdb_data.mem_len) {
+		pr_err("%s: offset %d is > mem_len %llu\n",
+			__func__, cal_block_32->cal_offset, acdb_data.mem_len);
+		result = -EINVAL;
+		goto done;
+	}
+	if (path >= MAX_AUDPROC_TYPES) {
+		pr_err("ACDB=> Bad path sent to %s, path: %d\n",
+			__func__, path);
+		result = -EINVAL;
+		goto done;
+	}
+
+	acdb_data.audproc_cal[path].cal_size = cal_block_32->cal_size;
+	acdb_data.audproc_cal[path].cal_paddr =
+		cal_block_32->cal_offset + acdb_data.paddr;
+	acdb_data.audproc_cal[path].cal_kvaddr =
+		cal_block_32->cal_offset + (u8 *)acdb_data.kvaddr;
+done:
+	return result;
+}
+
+static int store_audstrm_cal_compat(int32_t path,
+				    struct cal_block_32 *cal_block_32)
+{
+	int result = 0;
+	pr_debug("%s, path = %d\n", __func__, path);
+
+	if (cal_block_32->cal_offset > acdb_data.mem_len) {
+		pr_err("%s: offset %d is > mem_len %llu\n",
+			__func__, cal_block_32->cal_offset, acdb_data.mem_len);
+		result = -EINVAL;
+		goto done;
+	}
+	if (path >= MAX_AUDPROC_TYPES) {
+		pr_err("ACDB=> Bad path sent to %s, path: %d\n",
+			__func__, path);
+		result = -EINVAL;
+		goto done;
+	}
+
+	acdb_data.audstrm_cal[path].cal_size = cal_block_32->cal_size;
+	acdb_data.audstrm_cal[path].cal_paddr =
+		cal_block_32->cal_offset + acdb_data.paddr;
+	acdb_data.audstrm_cal[path].cal_kvaddr =
+		cal_block_32->cal_offset + (u8 *)acdb_data.kvaddr;
+done:
+	return result;
+}
+
+static int store_audvol_cal_compat(int32_t path,
+				   struct cal_block_32 *cal_block_32)
+{
+	int result = 0;
+	pr_debug("%s, path = %d\n", __func__, path);
+
+	if (cal_block_32->cal_offset > acdb_data.mem_len) {
+		pr_err("%s: offset %d is > mem_len %llu\n",
+			__func__, cal_block_32->cal_offset, acdb_data.mem_len);
+		result = -EINVAL;
+		goto done;
+	}
+	if (path >= MAX_AUDPROC_TYPES) {
+		pr_err("ACDB=> Bad path sent to %s, path: %d\n",
+			__func__, path);
+		result = -EINVAL;
+		goto done;
+	}
+
+	acdb_data.audvol_cal[path].cal_size = cal_block_32->cal_size;
+	acdb_data.audvol_cal[path].cal_paddr =
+		cal_block_32->cal_offset + acdb_data.paddr;
+	acdb_data.audvol_cal[path].cal_kvaddr =
+		cal_block_32->cal_offset + (u8 *)acdb_data.kvaddr;
+done:
+	return result;
+}
+
+static int store_vocproc_dev_cfg_cal_compat(struct cal_block_32 *cal_block_32)
+{
+	int result = 0;
+	pr_debug("%s,\n", __func__);
+
+
+	if (cal_block_32->cal_offset >
+				acdb_data.mem_len) {
+		pr_err("%s: offset %d is > mem_len %llu\n",
+			__func__, cal_block_32->cal_offset, acdb_data.mem_len);
+		acdb_data.vocproc_dev_cal.cal_size = 0;
+		result = -EINVAL;
+		goto done;
+	}
+
+	acdb_data.vocproc_dev_cal.cal_size = cal_block_32->cal_size;
+	acdb_data.vocproc_dev_cal.cal_paddr =
+		cal_block_32->cal_offset + acdb_data.paddr;
+	acdb_data.vocproc_dev_cal.cal_kvaddr =
+		cal_block_32->cal_offset + (u8 *)acdb_data.kvaddr;
+done:
+	return result;
+}
+
+static int store_vocproc_cal_compat(struct cal_block_32 *cal_block_32)
+{
+	int result = 0;
+	pr_debug("%s,\n", __func__);
+
+	if (cal_block_32->cal_offset >
+				acdb_data.mem_len) {
+		pr_err("%s: offset %d is > mem_len %llu\n",
+			__func__, cal_block_32->cal_offset, acdb_data.mem_len);
+		acdb_data.vocproc_cal.cal_size = 0;
+		result = -EINVAL;
+		goto done;
+	}
+
+	acdb_data.vocproc_cal.cal_size = cal_block_32->cal_size;
+	acdb_data.vocproc_cal.cal_paddr =
+		cal_block_32->cal_offset + acdb_data.paddr;
+	acdb_data.vocproc_cal.cal_kvaddr =
+		cal_block_32->cal_offset + (u8 *)acdb_data.kvaddr;
+done:
+	return result;
+}
+
+static int store_vocstrm_cal_compat(struct cal_block_32 *cal_block_32)
+{
+	int result = 0;
+	pr_debug("%s,\n", __func__);
+
+	if (cal_block_32->cal_offset >
+			acdb_data.mem_len) {
+		pr_err("%s: offset %d is > mem_len %llu\n",
+			__func__, cal_block_32->cal_offset, acdb_data.mem_len);
+		acdb_data.vocstrm_cal.cal_size = 0;
+		result = -EINVAL;
+		goto done;
+	}
+
+	acdb_data.vocstrm_cal.cal_size = cal_block_32->cal_size;
+	acdb_data.vocstrm_cal.cal_paddr =
+		cal_block_32->cal_offset + acdb_data.paddr;
+	acdb_data.vocstrm_cal.cal_kvaddr =
+		cal_block_32->cal_offset + (u8 *)acdb_data.kvaddr;
+done:
+	return result;
+}
+
+static int store_vocvol_cal_compat(struct cal_block_32 *cal_block_32)
+{
+	int result = 0;
+	pr_debug("%s,\n", __func__);
+
+	if (cal_block_32->cal_offset > acdb_data.mem_len) {
+		pr_err("%s: offset %d is > mem_len %llu\n",
+			__func__, cal_block_32->cal_offset, acdb_data.mem_len);
+		acdb_data.vocvol_cal.cal_size = 0;
+		result = -EINVAL;
+		goto done;
+	}
+
+	acdb_data.vocvol_cal.cal_size = cal_block_32->cal_size;
+	acdb_data.vocvol_cal.cal_paddr =
+		cal_block_32->cal_offset + acdb_data.paddr;
+	acdb_data.vocvol_cal.cal_kvaddr =
+		cal_block_32->cal_offset + (u8 *)acdb_data.kvaddr;
+done:
+	return result;
+}
+
+static void store_sidetone_cal_compat(struct sidetone_cal_32 *cal_data_32)
+{
+	pr_debug("%s,\n", __func__);
+
+	acdb_data.sidetone_cal.enable = cal_data_32->enable;
+	acdb_data.sidetone_cal.gain = cal_data_32->gain;
+}
+#endif
 
 static int store_audproc_cal(int32_t path, struct cal_block *cal_block)
 {
@@ -815,8 +1221,6 @@ int get_vocproc_dev_cfg_cal(struct acdb_cal_block *cal_block)
 done:
 	return result;
 }
-
-
 
 static int store_vocproc_cal(struct cal_block *cal_block)
 {
@@ -1248,19 +1652,16 @@ err_done:
 	acdb_data.mem_len = 0;
 	return result;
 }
-static long acdb_ioctl(struct file *f,
-		unsigned int cmd, unsigned long arg)
+
+static long acdb_ioctl_shared(struct file *f,
+			      unsigned int cmd, unsigned long arg)
 {
 	int32_t			result = 0;
-	int32_t			size;
-	int32_t			map_fd;
 	uint32_t		topology;
-	uint32_t		data[MAX_IOCTL_DATA];
-	struct msm_spk_prot_status prot_status;
+	struct msm_spk_prot_status *prot_status;
 	struct msm_spk_prot_status acdb_spk_status;
 	pr_debug("%s\n", __func__);
 
-	mutex_lock(&acdb_data.acdb_mutex);
 	switch (cmd) {
 	case AUDIO_REGISTER_PMEM:
 		pr_debug("AUDIO_REGISTER_PMEM\n");
@@ -1269,17 +1670,95 @@ static long acdb_ioctl(struct file *f,
 			pr_err("%s: deregister_memory failed returned %d!\n",
 				__func__, result);
 
-		if (copy_from_user(&map_fd, (void *)arg, sizeof(map_fd))) {
-			pr_err("%s: fail to copy memory handle!\n", __func__);
-			result = -EFAULT;
-		} else {
-			acdb_data.map_handle = map_fd;
-			result = register_memory();
-		}
+		acdb_data.map_handle = (uint32_t)arg;
+		result = register_memory();
 		goto done;
 	case AUDIO_DEREGISTER_PMEM:
 		pr_debug("AUDIO_DEREGISTER_PMEM\n");
 		result = deregister_memory();
+		goto done;
+	case AUDIO_SET_VOICE_RX_TOPOLOGY:
+		topology = (uint32_t) arg;
+		store_voice_rx_topology(topology);
+		goto done;
+	case AUDIO_SET_VOICE_TX_TOPOLOGY:
+		topology = (uint32_t) arg;
+		store_voice_tx_topology(topology);
+		goto done;
+	case AUDIO_SET_ADM_RX_TOPOLOGY:
+		topology = (uint32_t) arg;
+		store_adm_rx_topology(topology);
+		goto done;
+	case AUDIO_SET_ADM_TX_TOPOLOGY:
+		topology = (uint32_t) arg;
+		store_adm_tx_topology(topology);
+		goto done;
+	case AUDIO_SET_ASM_TOPOLOGY:
+		topology = (uint32_t) arg;
+		store_asm_topology(topology);
+		goto done;
+	case AUDIO_GET_SPEAKER_PROT:
+		prot_status = (struct msm_spk_prot_status *) arg;
+		/*Indicates calibration was succesfull*/
+		if (acdb_data.spk_prot_cfg.mode == MSM_SPKR_PROT_CALIBRATED) {
+			prot_status->r0 = acdb_data.spk_prot_cfg.r0;
+			prot_status->status = 0;
+		} else if (acdb_data.spk_prot_cfg.mode ==
+				   MSM_SPKR_PROT_CALIBRATION_IN_PROGRESS) {
+			/*Call AFE to query the status*/
+			acdb_spk_status.status = -EINVAL;
+			acdb_spk_status.r0 = -1;
+			get_spk_protection_status(&acdb_spk_status);
+			prot_status->r0 = acdb_spk_status.r0;
+			prot_status->status = acdb_spk_status.status;
+			if (!acdb_spk_status.status) {
+				acdb_data.spk_prot_cfg.mode =
+					MSM_SPKR_PROT_CALIBRATED;
+				acdb_data.spk_prot_cfg.r0 = prot_status->r0;
+			}
+		} else {
+			/*Indicates calibration data is invalid*/
+			prot_status->status = -EINVAL;
+			prot_status->r0 = -1;
+		}
+		goto done;
+	case AUDIO_REGISTER_VOCPROC_VOL_TABLE:
+		result = register_vocvol_table();
+		goto done;
+	case AUDIO_DEREGISTER_VOCPROC_VOL_TABLE:
+		result = deregister_vocvol_table();
+		goto done;
+
+	}
+done:
+	return result;
+}
+
+#ifdef CONFIG_COMPAT
+static long acdb_compat_ioctl(struct file *file,
+		unsigned int cmd, unsigned long arg)
+{
+	int32_t			result = 0;
+	int32_t			size;
+	int32_t			map_fd;
+	uint32_t		topology;
+	uint32_t		data[MAX_IOCTL_DATA];
+	struct msm_spk_prot_status prot_status;
+	pr_debug("%s\n", __func__);
+
+	mutex_lock(&acdb_data.acdb_mutex);
+	switch (cmd) {
+	case AUDIO_REGISTER_PMEM:
+		pr_debug("AUDIO_REGISTER_PMEM\n");
+		if (copy_from_user(&map_fd, (void *)arg, sizeof(map_fd))) {
+			pr_err("%s: fail to copy memory handle!\n", __func__);
+			result = -EFAULT;
+			break;
+		}
+		result = acdb_ioctl_shared(file, cmd, (unsigned long) map_fd);
+		goto done;
+	case AUDIO_DEREGISTER_PMEM:
+		result = acdb_ioctl_shared(file, cmd, arg);
 		goto done;
 	case AUDIO_SET_VOICE_RX_TOPOLOGY:
 		if (copy_from_user(&topology, (void *)arg,
@@ -1287,7 +1766,8 @@ static long acdb_ioctl(struct file *f,
 			pr_err("%s: fail to copy topology!\n", __func__);
 			result = -EFAULT;
 		}
-		store_voice_rx_topology(topology);
+		result = acdb_ioctl_shared(file, cmd,
+					   (unsigned long) topology);
 		goto done;
 	case AUDIO_SET_VOICE_TX_TOPOLOGY:
 		if (copy_from_user(&topology, (void *)arg,
@@ -1295,7 +1775,8 @@ static long acdb_ioctl(struct file *f,
 			pr_err("%s: fail to copy topology!\n", __func__);
 			result = -EFAULT;
 		}
-		store_voice_tx_topology(topology);
+		result = acdb_ioctl_shared(file, cmd,
+					   (unsigned long) topology);
 		goto done;
 	case AUDIO_SET_ADM_RX_TOPOLOGY:
 		if (copy_from_user(&topology, (void *)arg,
@@ -1303,7 +1784,8 @@ static long acdb_ioctl(struct file *f,
 			pr_err("%s: fail to copy topology!\n", __func__);
 			result = -EFAULT;
 		}
-		store_adm_rx_topology(topology);
+		result = acdb_ioctl_shared(file, cmd,
+					   (unsigned long) topology);
 		goto done;
 	case AUDIO_SET_ADM_TX_TOPOLOGY:
 		if (copy_from_user(&topology, (void *)arg,
@@ -1311,7 +1793,8 @@ static long acdb_ioctl(struct file *f,
 			pr_err("%s: fail to copy topology!\n", __func__);
 			result = -EFAULT;
 		}
-		store_adm_tx_topology(topology);
+		result = acdb_ioctl_shared(file, cmd,
+					   (unsigned long) topology);
 		goto done;
 	case AUDIO_SET_ASM_TOPOLOGY:
 		if (copy_from_user(&topology, (void *)arg,
@@ -1319,7 +1802,8 @@ static long acdb_ioctl(struct file *f,
 			pr_err("%s: fail to copy topology!\n", __func__);
 			result = -EFAULT;
 		}
-		store_asm_topology(topology);
+		result = acdb_ioctl_shared(file, cmd,
+					   (unsigned long) topology);
 		goto done;
 	case AUDIO_SET_SPEAKER_PROT:
 		if (copy_from_user(&acdb_data.spk_prot_cfg, (void *)arg,
@@ -1329,38 +1813,235 @@ static long acdb_ioctl(struct file *f,
 		}
 		goto done;
 	case AUDIO_GET_SPEAKER_PROT:
-		/*Indicates calibration was succesfull*/
-		if (acdb_data.spk_prot_cfg.mode == MSM_SPKR_PROT_CALIBRATED) {
-			prot_status.r0 = acdb_data.spk_prot_cfg.r0;
-			prot_status.status = 0;
-		} else if (acdb_data.spk_prot_cfg.mode ==
-				   MSM_SPKR_PROT_CALIBRATION_IN_PROGRESS) {
-			/*Call AFE to query the status*/
-			acdb_spk_status.status = -EINVAL;
-			acdb_spk_status.r0 = -1;
-			get_spk_protection_status(&acdb_spk_status);
-			prot_status.r0 = acdb_spk_status.r0;
-			prot_status.status = acdb_spk_status.status;
-			if (!acdb_spk_status.status) {
-				acdb_data.spk_prot_cfg.mode =
-					MSM_SPKR_PROT_CALIBRATED;
-				acdb_data.spk_prot_cfg.r0 = prot_status.r0;
-			}
-		} else {
-			/*Indicates calibration data is invalid*/
-			prot_status.status = -EINVAL;
-			prot_status.r0 = -1;
-		}
+		result = acdb_ioctl_shared(file, cmd,
+					   (unsigned long) &prot_status);
 		if (copy_to_user((void *)arg, &prot_status,
 			sizeof(prot_status))) {
 			pr_err("%s: Failed to update prot_status\n", __func__);
 		}
 		goto done;
 	case AUDIO_REGISTER_VOCPROC_VOL_TABLE:
-		result = register_vocvol_table();
-		goto done;
 	case AUDIO_DEREGISTER_VOCPROC_VOL_TABLE:
-		result = deregister_vocvol_table();
+		result = acdb_ioctl_shared(file, cmd, arg);
+		goto done;
+	case AUDIO_SET_HW_DELAY_RX:
+		result = store_hw_delay_compat(RX_CAL, (void *)arg);
+		goto done;
+	case AUDIO_SET_HW_DELAY_TX:
+		result = store_hw_delay_compat(TX_CAL, (void *)arg);
+		goto done;
+	}
+
+	if (copy_from_user(&size, (void *) arg, sizeof(size))) {
+		result = -EFAULT;
+		goto done;
+	}
+
+	if ((size <= 0) || (size > sizeof(data))) {
+		pr_err("%s: Invalid size sent to driver: %d\n",
+			__func__, size);
+		result = -EFAULT;
+		goto done;
+	}
+
+	switch (cmd) {
+	case AUDIO_SET_VOCPROC_COL_CAL:
+		result = store_voice_col_data(VOCPROC_CAL,
+						size, (uint32_t *)arg);
+		goto done;
+	case AUDIO_SET_VOCSTRM_COL_CAL:
+		result = store_voice_col_data(VOCSTRM_CAL,
+						size, (uint32_t *)arg);
+		goto done;
+	case AUDIO_SET_VOCVOL_COL_CAL:
+		result = store_voice_col_data(VOCVOL_CAL,
+						size, (uint32_t *)arg);
+		goto done;
+	}
+
+	if (copy_from_user(data, (void *)(arg + sizeof(size)), size)) {
+
+		pr_err("%s: fail to copy table size %d\n", __func__, size);
+		result = -EFAULT;
+		goto done;
+	}
+
+	if (data == NULL) {
+		pr_err("%s: NULL pointer sent to driver!\n", __func__);
+		result = -EFAULT;
+		goto done;
+	}
+
+	if (size > sizeof(struct cal_block_32))
+		pr_err("%s: More cal data for ioctl 0x%x then expected, size received: %d\n",
+			__func__, cmd, size);
+
+	switch (cmd) {
+	case AUDIO_SET_AUDPROC_TX_CAL:
+		result = store_audproc_cal_compat(TX_CAL,
+						  (struct cal_block_32 *)data);
+		goto done;
+	case AUDIO_SET_AUDPROC_RX_CAL:
+		result = store_audproc_cal_compat(RX_CAL,
+						  (struct cal_block_32 *)data);
+		goto done;
+	case AUDIO_SET_AUDPROC_TX_STREAM_CAL:
+		result = store_audstrm_cal_compat(TX_CAL,
+						  (struct cal_block_32 *)data);
+		goto done;
+	case AUDIO_SET_AUDPROC_RX_STREAM_CAL:
+		result = store_audstrm_cal_compat(RX_CAL,
+						  (struct cal_block_32 *)data);
+		goto done;
+	case AUDIO_SET_AUDPROC_TX_VOL_CAL:
+		result = store_audvol_cal_compat(TX_CAL,
+						 (struct cal_block_32 *)data);
+		goto done;
+	case AUDIO_SET_AUDPROC_RX_VOL_CAL:
+		result = store_audvol_cal_compat(RX_CAL,
+						 (struct cal_block_32 *)data);
+		goto done;
+	case AUDIO_SET_AFE_TX_CAL:
+		result = store_afe_cal_compat(TX_CAL,
+					      (struct cal_block_32 *)data);
+		goto done;
+	case AUDIO_SET_AFE_RX_CAL:
+		result = store_afe_cal_compat(RX_CAL,
+					      (struct cal_block_32 *)data);
+		goto done;
+	case AUDIO_SET_VOCPROC_CAL:
+		result = store_vocproc_cal_compat((struct cal_block_32 *)data);
+		goto done;
+	case AUDIO_SET_VOCPROC_STREAM_CAL:
+		result = store_vocstrm_cal_compat((struct cal_block_32 *)data);
+		goto done;
+	case AUDIO_SET_VOCPROC_VOL_CAL:
+		result = store_vocvol_cal_compat((struct cal_block_32 *)data);
+		goto done;
+	case AUDIO_SET_VOCPROC_DEV_CFG_CAL:
+		result = store_vocproc_dev_cfg_cal_compat(
+						(struct cal_block_32 *)data);
+		goto done;
+	case AUDIO_SET_SIDETONE_CAL:
+		store_sidetone_cal_compat((struct sidetone_cal_32 *)data);
+		goto done;
+	case AUDIO_SET_ANC_CAL:
+		result = store_anc_cal_compat((struct cal_block_32 *)data);
+		goto done;
+	case AUDIO_SET_LSM_CAL:
+		result = store_lsm_cal_compat((struct cal_block_32 *)data);
+		goto done;
+	case AUDIO_SET_ADM_CUSTOM_TOPOLOGY:
+		result = store_adm_custom_topology_compat(
+						(struct cal_block_32 *)data);
+		goto done;
+	case AUDIO_SET_ASM_CUSTOM_TOPOLOGY:
+		result = store_asm_custom_topology_compat(
+						(struct cal_block_32 *)data);
+		goto done;
+	case AUDIO_SET_AANC_CAL:
+		result = store_aanc_cal_compat((struct cal_block_32 *)data);
+		goto done;
+	default:
+		pr_err("ACDB=> ACDB ioctl not found!\n");
+		result = -EFAULT;
+		goto done;
+	}
+
+done:
+	mutex_unlock(&acdb_data.acdb_mutex);
+	return result;
+}
+#endif
+
+static long acdb_ioctl(struct file *file,
+		unsigned int cmd, unsigned long arg)
+{
+	int32_t			result = 0;
+	int32_t			size;
+	int32_t			map_fd;
+	uint32_t		topology;
+	uint32_t		data[MAX_IOCTL_DATA];
+	struct msm_spk_prot_status prot_status;
+	pr_debug("%s\n", __func__);
+
+	mutex_lock(&acdb_data.acdb_mutex);
+	switch (cmd) {
+	case AUDIO_REGISTER_PMEM:
+		pr_debug("AUDIO_REGISTER_PMEM\n");
+		if (copy_from_user(&map_fd, (void *)arg, sizeof(map_fd))) {
+			pr_err("%s: fail to copy memory handle!\n", __func__);
+			result = -EFAULT;
+			break;
+		}
+		result = acdb_ioctl_shared(file, cmd, (unsigned long) map_fd);
+		goto done;
+	case AUDIO_DEREGISTER_PMEM:
+		result = acdb_ioctl_shared(file, cmd, arg);
+		goto done;
+	case AUDIO_SET_VOICE_RX_TOPOLOGY:
+		if (copy_from_user(&topology, (void *)arg,
+				sizeof(topology))) {
+			pr_err("%s: fail to copy topology!\n", __func__);
+			result = -EFAULT;
+		}
+		result = acdb_ioctl_shared(file, cmd,
+					   (unsigned long) topology);
+		goto done;
+	case AUDIO_SET_VOICE_TX_TOPOLOGY:
+		if (copy_from_user(&topology, (void *)arg,
+				sizeof(topology))) {
+			pr_err("%s: fail to copy topology!\n", __func__);
+			result = -EFAULT;
+		}
+		result = acdb_ioctl_shared(file, cmd,
+					   (unsigned long) topology);
+		goto done;
+	case AUDIO_SET_ADM_RX_TOPOLOGY:
+		if (copy_from_user(&topology, (void *)arg,
+				sizeof(topology))) {
+			pr_err("%s: fail to copy topology!\n", __func__);
+			result = -EFAULT;
+		}
+		result = acdb_ioctl_shared(file, cmd,
+					   (unsigned long) topology);
+		goto done;
+	case AUDIO_SET_ADM_TX_TOPOLOGY:
+		if (copy_from_user(&topology, (void *)arg,
+				sizeof(topology))) {
+			pr_err("%s: fail to copy topology!\n", __func__);
+			result = -EFAULT;
+		}
+		result = acdb_ioctl_shared(file, cmd,
+					   (unsigned long) topology);
+		goto done;
+	case AUDIO_SET_ASM_TOPOLOGY:
+		if (copy_from_user(&topology, (void *)arg,
+				sizeof(topology))) {
+			pr_err("%s: fail to copy topology!\n", __func__);
+			result = -EFAULT;
+		}
+		result = acdb_ioctl_shared(file, cmd,
+					   (unsigned long) topology);
+		goto done;
+	case AUDIO_SET_SPEAKER_PROT:
+		if (copy_from_user(&acdb_data.spk_prot_cfg, (void *)arg,
+				sizeof(acdb_data.spk_prot_cfg))) {
+			pr_err("%s fail to copy spk_prot_cfg\n", __func__);
+			result = -EFAULT;
+		}
+		goto done;
+	case AUDIO_GET_SPEAKER_PROT:
+		result = acdb_ioctl_shared(file, cmd,
+					   (unsigned long) &prot_status);
+		if (copy_to_user((void *)arg, &prot_status,
+			sizeof(prot_status))) {
+			pr_err("%s: Failed to update prot_status\n", __func__);
+		}
+		goto done;
+	case AUDIO_REGISTER_VOCPROC_VOL_TABLE:
+	case AUDIO_DEREGISTER_VOCPROC_VOL_TABLE:
+		result = acdb_ioctl_shared(file, cmd, arg);
 		goto done;
 	case AUDIO_SET_HW_DELAY_RX:
 		result = store_hw_delay(RX_CAL, (void *)arg);
@@ -1371,7 +2052,6 @@ static long acdb_ioctl(struct file *f,
 	}
 
 	if (copy_from_user(&size, (void *) arg, sizeof(size))) {
-
 		result = -EFAULT;
 		goto done;
 	}
@@ -1537,6 +2217,9 @@ static const struct file_operations acdb_fops = {
 	.open = acdb_open,
 	.release = acdb_release,
 	.unlocked_ioctl = acdb_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl = acdb_compat_ioctl,
+#endif
 	.mmap = acdb_mmap,
 };
 
