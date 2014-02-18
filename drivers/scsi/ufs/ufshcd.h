@@ -488,6 +488,13 @@ struct ufs_hba {
 	 */
 	#define UFSHCD_BROKEN_LCC			  (1 << 9)
 
+	/*
+	 * The attribute PA_RXHSUNTERMCAP specifies whether or not the
+	 * inbound Link supports unterminated line in HS mode. Setting this
+	 * attribute to 1 fixes moving to HS gear.
+	 */
+	#define UFSHCD_BROKEN_GEAR_CHANGE_INTO_HS        (1 << 10)
+
 	wait_queue_head_t tm_wq;
 	wait_queue_head_t tm_tag_wq;
 	unsigned long tm_condition;
@@ -534,6 +541,8 @@ struct ufs_hba {
 #define UFSHCD_CAP_HIBERN8_WITH_CLK_GATING (1 << 1)
 	/* Allow dynamic clk scaling */
 #define UFSHCD_CAP_CLK_SCALING	(1 << 2)
+	/* Allow auto bkops to enabled during runtime suspend */
+#define UFSHCD_CAP_AUTO_BKOPS_SUSPEND (1 << 3)
 
 	struct devfreq *devfreq;
 	struct ufs_clk_scaling clk_scaling;
@@ -541,6 +550,7 @@ struct ufs_hba {
 	struct ufs_stats ufs_stats;
 	struct debugfs_files debugfs_files;
 #endif
+	bool is_sys_suspended;
 };
 
 /* Returns true if clocks can be gated. Otherwise false */
@@ -559,6 +569,11 @@ static inline int ufshcd_is_clkscaling_enabled(struct ufs_hba *hba)
 {
 	return hba->caps & UFSHCD_CAP_CLK_SCALING;
 }
+static inline bool ufshcd_can_autobkops_during_suspend(struct ufs_hba *hba)
+{
+	return hba->caps & UFSHCD_CAP_AUTO_BKOPS_SUSPEND;
+}
+
 #define ufshcd_writel(hba, val, reg)	\
 	writel((val), (hba)->mmio_base + (reg))
 #define ufshcd_readl(hba, reg)	\

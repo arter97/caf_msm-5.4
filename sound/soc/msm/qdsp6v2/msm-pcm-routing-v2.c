@@ -59,6 +59,7 @@ struct msm_pcm_routing_fdai_data {
 #define INVALID_SESSION -1
 #define SESSION_TYPE_RX 0
 #define SESSION_TYPE_TX 1
+#define MAX_LSM_SESSIONS 8
 
 #define EC_PORT_ID_PRIMARY_MI2S_TX    1
 #define EC_PORT_ID_SECONDARY_MI2S_TX  2
@@ -80,7 +81,8 @@ enum {
 	MADNONE,
 	MADAUDIO,
 	MADBEACON,
-	MADULTRASOUND
+	MADULTRASOUND,
+	MADSWAUDIO,
 };
 
 #define SLIMBUS_0_TX_TEXT "SLIMBUS_0_TX"
@@ -152,12 +154,12 @@ static void msm_send_eq_values(int eq_idx);
  * If new back-end is defined, add new back-end DAI ID at the end of enum
  */
 
-
+#define SRS_TRUMEDIA_INDEX 2
 union srs_trumedia_params_u {
 	struct srs_trumedia_params srs_params;
 	unsigned short int raw_params[1];
 };
-static union srs_trumedia_params_u msm_srs_trumedia_params[2];
+static union srs_trumedia_params_u msm_srs_trumedia_params[SRS_TRUMEDIA_INDEX];
 static int srs_port_id = -1;
 static bool is_custom_stereo_on; /* set to false by default */
 
@@ -301,6 +303,7 @@ static int send_stereo_to_custom_stereo_cmd(int port_id,
 	int *update_params_value32, rc = 0;
 	int16_t *update_params_value16 = 0;
 	uint32_t params_length = CUSTOM_STEREO_PAYLOAD_SIZE * sizeof(uint32_t);
+	uint32_t avail_length = params_length;
 	pr_debug("%s\n", __func__);
 	params_value = kzalloc(params_length, GFP_KERNEL);
 	if (!params_value) {
@@ -308,10 +311,15 @@ static int send_stereo_to_custom_stereo_cmd(int port_id,
 		return -ENOMEM;
 	}
 	update_params_value32 = (int *)params_value;
+	if (avail_length < 2 * sizeof(uint32_t))
+		goto skip_send_cmd;
 	*update_params_value32++ = MTMX_MODULE_ID_DEFAULT_CHMIXER;
 	*update_params_value32++ = DEFAULT_CHMIXER_PARAM_ID_COEFF;
+	avail_length = avail_length - (2 * sizeof(uint32_t));
 
 	update_params_value16 = (int16_t *)update_params_value32;
+	if (avail_length < 10 * sizeof(uint16_t))
+		goto skip_send_cmd;
 	*update_params_value16++ = CUSTOM_STEREO_CMD_PARAM_SIZE;
 	/*for alignment only*/
 	*update_params_value16++ = 0;
@@ -330,14 +338,16 @@ static int send_stereo_to_custom_stereo_cmd(int port_id,
 	/* In ch map FL/FR*/
 	*update_params_value16++ = PCM_CHANNEL_FL;
 	*update_params_value16++ = PCM_CHANNEL_FR;
-
+	avail_length = avail_length - (10 * sizeof(uint16_t));
 	/* weighting coefficients as name suggests,
-	mixing will be done according to these coefficients*/
+	   mixing will be done according to these coefficients*/
+	if (avail_length < 4 * sizeof(uint16_t))
+		goto skip_send_cmd;
 	*update_params_value16++ = op_FL_ip_FL_weight;
 	*update_params_value16++ = op_FL_ip_FR_weight;
 	*update_params_value16++ = op_FR_ip_FL_weight;
 	*update_params_value16++ = op_FR_ip_FR_weight;
-
+	avail_length = avail_length - (4 * sizeof(uint16_t));
 	if (params_length) {
 		rc = adm_set_stereo_to_custom_stereo(port_id,
 						     session_id,
@@ -351,6 +361,11 @@ static int send_stereo_to_custom_stereo_cmd(int port_id,
 	}
 	kfree(params_value);
 	return 0;
+skip_send_cmd:
+		pr_err("%s: insufficient memory, send cmd failed\n",
+			__func__);
+		kfree(params_value);
+		return -ENOMEM;
 }
 
 /* Track performance mode of all front-end multimedia sessions.
@@ -393,14 +408,19 @@ static void msm_pcm_routing_build_matrix(int fedai_id, int dspst_id,
 		if ((path_type == ADM_PATH_PLAYBACK) &&
 		     (perf_mode == LEGACY_PCM_MODE) &&
 		     is_custom_stereo_on) {
-			for (itr = 0; itr < payload.num_copps; itr++)
-				send_stereo_to_custom_stereo_cmd(
+			for (itr = 0; itr < payload.num_copps; itr++) {
+				if ((payload.copp_ids[itr] == SLIMBUS_0_RX) ||
+				    (payload.copp_ids[itr] ==
+					RT_PROXY_PORT_001_RX)) {
+					send_stereo_to_custom_stereo_cmd(
 						payload.copp_ids[itr],
 						dspst_id,
 						Q14_GAIN_ZERO_POINT_FIVE,
 						Q14_GAIN_ZERO_POINT_FIVE,
 						Q14_GAIN_ZERO_POINT_FIVE,
 						Q14_GAIN_ZERO_POINT_FIVE);
+				}
+			}
 		}
 	}
 }
@@ -518,11 +538,17 @@ void msm_pcm_routing_reg_phy_stream(int fedai_id, int perf_mode,
 			port_id = srs_port_id = msm_bedais[i].port_id;
 			srs_send_params(srs_port_id, 1, 0);
 			if ((DOLBY_ADM_COPP_TOPOLOGY_ID == topology) &&
-			    (perf_mode == LEGACY_PCM_MODE))
+			    (perf_mode == LEGACY_PCM_MODE)) {
 				if (dolby_dap_init(port_id,
 						msm_bedais[i].channel) < 0)
 					pr_err("%s: Err init dolby dap\n",
 						__func__);
+				if (is_custom_stereo_on)
+					if (dolby_dap_set_custom_stereo_onoff(
+						port_id, true) < 0)
+						pr_err("%s: Err setting dap custom stereo\n",
+							__func__);
+			}
 		}
 	}
 	if (payload.num_copps) {
@@ -531,14 +557,19 @@ void msm_pcm_routing_reg_phy_stream(int fedai_id, int perf_mode,
 		if ((path_type == ADM_PATH_PLAYBACK) &&
 		    (perf_mode == LEGACY_PCM_MODE) &&
 		     is_custom_stereo_on) {
-			for (itr = 0; itr < payload.num_copps; itr++)
-				send_stereo_to_custom_stereo_cmd(
+			for (itr = 0; itr < payload.num_copps; itr++) {
+				if ((payload.copp_ids[itr] == SLIMBUS_0_RX) ||
+				    (payload.copp_ids[itr] ==
+						RT_PROXY_PORT_001_RX)) {
+					send_stereo_to_custom_stereo_cmd(
 						payload.copp_ids[itr],
 						dspst_id,
 						Q14_GAIN_ZERO_POINT_FIVE,
 						Q14_GAIN_ZERO_POINT_FIVE,
 						Q14_GAIN_ZERO_POINT_FIVE,
 						Q14_GAIN_ZERO_POINT_FIVE);
+				}
+			}
 		}
 	}
 	mutex_unlock(&routing_lock);
@@ -699,10 +730,16 @@ static void msm_pcm_routing_process_audio(u16 reg, u16 val, int set)
 			srs_send_params(srs_port_id, 1, 0);
 			if ((DOLBY_ADM_COPP_TOPOLOGY_ID == topology) &&
 			    (fe_dai_perf_mode[val][session_type] ==
-							LEGACY_PCM_MODE))
+							LEGACY_PCM_MODE)) {
 				if (dolby_dap_init(port_id, channels) < 0)
 					pr_err("%s: Err init dolby dap\n",
 						__func__);
+				if (is_custom_stereo_on)
+					if (dolby_dap_set_custom_stereo_onoff(
+						port_id, true) < 0)
+						pr_err("%s: Err setting dap custom stereo\n",
+							__func__);
+			}
 		}
 	} else {
 		if (test_bit(val, &msm_bedais[reg].fe_sessions) &&
@@ -1035,6 +1072,9 @@ static int msm_routing_lsm_func_get(struct snd_kcontrol *kcontrol,
 	case MAD_HW_ULTRASOUND:
 		ucontrol->value.integer.value[0] = MADULTRASOUND;
 		break;
+	case MAD_SW_AUDIO:
+		ucontrol->value.integer.value[0] = MADSWAUDIO;
+	break;
 	default:
 		WARN(1, "Unknown\n");
 		return -EINVAL;
@@ -1073,6 +1113,9 @@ static int msm_routing_lsm_func_put(struct snd_kcontrol *kcontrol,
 		break;
 	case MADULTRASOUND:
 		mad_type = MAD_HW_ULTRASOUND;
+		break;
+	case MADSWAUDIO:
+		mad_type = MAD_SW_AUDIO;
 		break;
 	default:
 		WARN(1, "Unknown\n");
@@ -1273,7 +1316,7 @@ static int msm_routing_set_srs_trumedia_control_(struct snd_kcontrol *kcontrol,
 			SRS_PARAM_OFFSET_MASK) >> 16);
 	value = (unsigned short)(ucontrol->value.integer.value[0] &
 			SRS_PARAM_VALUE_MASK);
-	if (offset < max) {
+	if ((offset < max) && (index < SRS_TRUMEDIA_INDEX)) {
 		msm_srs_trumedia_params[index].raw_params[offset] = value;
 		pr_debug("SRS %s: index set... (max %d, requested %d, val %d, paramblockidx %d)",
 			__func__, max, offset, value, index);
@@ -2859,13 +2902,47 @@ static const struct snd_kcontrol_new pcm_rx_switch_mixer_controls =
 
 static const struct soc_enum lsm_mux_enum =
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(mad_audio_mux_text), mad_audio_mux_text);
-static const struct snd_kcontrol_new lsm_mux =
+
+static const struct snd_kcontrol_new lsm1_mux =
 	SOC_DAPM_ENUM_EXT("LSM1 MUX", lsm_mux_enum,
 			  msm_routing_lsm_mux_get,
 			  msm_routing_lsm_mux_put);
 
+static const struct snd_kcontrol_new lsm2_mux =
+	SOC_DAPM_ENUM_EXT("LSM2 MUX", lsm_mux_enum,
+			  msm_routing_lsm_mux_get,
+			  msm_routing_lsm_mux_put);
+static const struct snd_kcontrol_new lsm3_mux =
+	SOC_DAPM_ENUM_EXT("LSM3 MUX", lsm_mux_enum,
+			  msm_routing_lsm_mux_get,
+			  msm_routing_lsm_mux_put);
+
+static const struct snd_kcontrol_new lsm4_mux =
+	SOC_DAPM_ENUM_EXT("LSM4 MUX", lsm_mux_enum,
+			  msm_routing_lsm_mux_get,
+			  msm_routing_lsm_mux_put);
+static const struct snd_kcontrol_new lsm5_mux =
+	SOC_DAPM_ENUM_EXT("LSM5 MUX", lsm_mux_enum,
+			  msm_routing_lsm_mux_get,
+			  msm_routing_lsm_mux_put);
+
+static const struct snd_kcontrol_new lsm6_mux =
+	SOC_DAPM_ENUM_EXT("LSM6 MUX", lsm_mux_enum,
+			  msm_routing_lsm_mux_get,
+			  msm_routing_lsm_mux_put);
+static const struct snd_kcontrol_new lsm7_mux =
+	SOC_DAPM_ENUM_EXT("LSM7 MUX", lsm_mux_enum,
+			  msm_routing_lsm_mux_get,
+			  msm_routing_lsm_mux_put);
+
+static const struct snd_kcontrol_new lsm8_mux =
+	SOC_DAPM_ENUM_EXT("LSM8 MUX", lsm_mux_enum,
+			  msm_routing_lsm_mux_get,
+			  msm_routing_lsm_mux_put);
+
+
 static const char * const lsm_func_text[] = {
-	"None", "AUDIO", "BEACON", "ULTRASOUND"
+	"None", "AUDIO", "BEACON", "ULTRASOUND", "SWAUDIO",
 };
 static const struct soc_enum lsm_func_enum =
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(lsm_func_text), lsm_func_text);
@@ -3079,9 +3156,14 @@ static int msm_routing_put_stereo_to_custom_stereo_control(
 						0,
 						Q14_GAIN_UNITY);
 				}
+				if (dolby_dap_set_custom_stereo_onoff(
+					msm_bedais[be_index].port_id,
+					is_custom_stereo_on) < 0)
+					pr_err("%s: Err setting custom stereo\n",
+						__func__);
 skip_send_custom_stereo:
 				if (rc)
-					pr_err("%s custom stero mixing set failed\n",
+					pr_err("%s: set MTMX param failed\n",
 						__func__);
 			}
 		}
@@ -3477,7 +3559,21 @@ static const struct snd_soc_dapm_widget msm_qdsp6_widgets[] = {
 	SND_SOC_DAPM_AIF_IN("DTMF_DL_HL", "DTMF_RX_HOSTLESS Playback",
 		0, 0, 0, 0),
 	/* LSM */
-	SND_SOC_DAPM_AIF_OUT("LSM_UL_HL", "Listen Audio Service Capture",
+	SND_SOC_DAPM_AIF_OUT("LSM1_UL_HL", "Listen 1 Audio Service Capture",
+			     0, 0, 0, 0),
+	SND_SOC_DAPM_AIF_OUT("LSM2_UL_HL", "Listen 2 Audio Service Capture",
+			     0, 0, 0, 0),
+	SND_SOC_DAPM_AIF_OUT("LSM3_UL_HL", "Listen 3 Audio Service Capture",
+				 0, 0, 0, 0),
+	SND_SOC_DAPM_AIF_OUT("LSM4_UL_HL", "Listen 4 Audio Service Capture",
+						 0, 0, 0, 0),
+	SND_SOC_DAPM_AIF_OUT("LSM5_UL_HL", "Listen 5 Audio Service Capture",
+				 0, 0, 0, 0),
+	SND_SOC_DAPM_AIF_OUT("LSM6_UL_HL", "Listen 6 Audio Service Capture",
+				 0, 0, 0, 0),
+	SND_SOC_DAPM_AIF_OUT("LSM7_UL_HL", "Listen 7 Audio Service Capture",
+				 0, 0, 0, 0),
+	SND_SOC_DAPM_AIF_OUT("LSM8_UL_HL", "Listen 8 Audio Service Capture",
 			     0, 0, 0, 0),
 	SND_SOC_DAPM_AIF_IN("QCHAT_DL", "QCHAT Playback", 0, 0, 0, 0),
 	SND_SOC_DAPM_AIF_OUT("QCHAT_UL", "QCHAT Capture", 0, 0, 0, 0),
@@ -3571,7 +3667,14 @@ static const struct snd_soc_dapm_widget msm_qdsp6_widgets[] = {
 				&pcm_rx_switch_mixer_controls),
 
 	/* Mux Definitions */
-	SND_SOC_DAPM_MUX("LSM1 MUX", SND_SOC_NOPM, 0, 0, &lsm_mux),
+	SND_SOC_DAPM_MUX("LSM1 MUX", SND_SOC_NOPM, 0, 0, &lsm1_mux),
+	SND_SOC_DAPM_MUX("LSM2 MUX", SND_SOC_NOPM, 0, 0, &lsm2_mux),
+	SND_SOC_DAPM_MUX("LSM3 MUX", SND_SOC_NOPM, 0, 0, &lsm3_mux),
+	SND_SOC_DAPM_MUX("LSM4 MUX", SND_SOC_NOPM, 0, 0, &lsm4_mux),
+	SND_SOC_DAPM_MUX("LSM5 MUX", SND_SOC_NOPM, 0, 0, &lsm5_mux),
+	SND_SOC_DAPM_MUX("LSM6 MUX", SND_SOC_NOPM, 0, 0, &lsm6_mux),
+	SND_SOC_DAPM_MUX("LSM7 MUX", SND_SOC_NOPM, 0, 0, &lsm7_mux),
+	SND_SOC_DAPM_MUX("LSM8 MUX", SND_SOC_NOPM, 0, 0, &lsm8_mux),
 	SND_SOC_DAPM_MUX("SLIM_0_RX AANC MUX", SND_SOC_NOPM, 0, 0,
 			aanc_slim_0_rx_mux),
 
@@ -4138,7 +4241,62 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"LSM1 MUX", "SLIMBUS_3_TX", "SLIMBUS_3_TX"},
 	{"LSM1 MUX", "SLIMBUS_4_TX", "SLIMBUS_4_TX"},
 	{"LSM1 MUX", "SLIMBUS_5_TX", "SLIMBUS_5_TX"},
-	{"LSM_UL_HL", NULL, "LSM1 MUX"},
+	{"LSM1_UL_HL", NULL, "LSM1 MUX"},
+
+	{"LSM2 MUX", "SLIMBUS_0_TX", "SLIMBUS_0_TX"},
+	{"LSM2 MUX", "SLIMBUS_1_TX", "SLIMBUS_1_TX"},
+	{"LSM2 MUX", "SLIMBUS_3_TX", "SLIMBUS_3_TX"},
+	{"LSM2 MUX", "SLIMBUS_4_TX", "SLIMBUS_4_TX"},
+	{"LSM2 MUX", "SLIMBUS_5_TX", "SLIMBUS_5_TX"},
+	{"LSM2_UL_HL", NULL, "LSM2 MUX"},
+
+
+	{"LSM3 MUX", "SLIMBUS_0_TX", "SLIMBUS_0_TX"},
+	{"LSM3 MUX", "SLIMBUS_1_TX", "SLIMBUS_1_TX"},
+	{"LSM3 MUX", "SLIMBUS_3_TX", "SLIMBUS_3_TX"},
+	{"LSM3 MUX", "SLIMBUS_4_TX", "SLIMBUS_4_TX"},
+	{"LSM3 MUX", "SLIMBUS_5_TX", "SLIMBUS_5_TX"},
+	{"LSM3_UL_HL", NULL, "LSM3 MUX"},
+
+
+	{"LSM4 MUX", "SLIMBUS_0_TX", "SLIMBUS_0_TX"},
+	{"LSM4 MUX", "SLIMBUS_1_TX", "SLIMBUS_1_TX"},
+	{"LSM4 MUX", "SLIMBUS_3_TX", "SLIMBUS_3_TX"},
+	{"LSM4 MUX", "SLIMBUS_4_TX", "SLIMBUS_4_TX"},
+	{"LSM4 MUX", "SLIMBUS_5_TX", "SLIMBUS_5_TX"},
+	{"LSM4_UL_HL", NULL, "LSM4 MUX"},
+
+	{"LSM5 MUX", "SLIMBUS_0_TX", "SLIMBUS_0_TX"},
+	{"LSM5 MUX", "SLIMBUS_1_TX", "SLIMBUS_1_TX"},
+	{"LSM5 MUX", "SLIMBUS_3_TX", "SLIMBUS_3_TX"},
+	{"LSM5 MUX", "SLIMBUS_4_TX", "SLIMBUS_4_TX"},
+	{"LSM5 MUX", "SLIMBUS_5_TX", "SLIMBUS_5_TX"},
+	{"LSM5_UL_HL", NULL, "LSM5 MUX"},
+
+	{"LSM6 MUX", "SLIMBUS_0_TX", "SLIMBUS_0_TX"},
+	{"LSM6 MUX", "SLIMBUS_1_TX", "SLIMBUS_1_TX"},
+	{"LSM6 MUX", "SLIMBUS_3_TX", "SLIMBUS_3_TX"},
+	{"LSM6 MUX", "SLIMBUS_4_TX", "SLIMBUS_4_TX"},
+	{"LSM6 MUX", "SLIMBUS_5_TX", "SLIMBUS_5_TX"},
+	{"LSM6_UL_HL", NULL, "LSM6 MUX"},
+
+
+	{"LSM7 MUX", "SLIMBUS_0_TX", "SLIMBUS_0_TX"},
+	{"LSM7 MUX", "SLIMBUS_1_TX", "SLIMBUS_1_TX"},
+	{"LSM7 MUX", "SLIMBUS_3_TX", "SLIMBUS_3_TX"},
+	{"LSM7 MUX", "SLIMBUS_4_TX", "SLIMBUS_4_TX"},
+	{"LSM7 MUX", "SLIMBUS_5_TX", "SLIMBUS_5_TX"},
+	{"LSM7_UL_HL", NULL, "LSM7 MUX"},
+
+
+	{"LSM8 MUX", "SLIMBUS_0_TX", "SLIMBUS_0_TX"},
+	{"LSM8 MUX", "SLIMBUS_1_TX", "SLIMBUS_1_TX"},
+	{"LSM8 MUX", "SLIMBUS_3_TX", "SLIMBUS_3_TX"},
+	{"LSM8 MUX", "SLIMBUS_4_TX", "SLIMBUS_4_TX"},
+	{"LSM8 MUX", "SLIMBUS_5_TX", "SLIMBUS_5_TX"},
+	{"LSM8_UL_HL", NULL, "LSM8 MUX"},
+
+
 
 	{"QCHAT_Tx Mixer", "PRI_TX_QCHAT", "PRI_I2S_TX"},
 	{"QCHAT_Tx Mixer", "SLIM_0_TX_QCHAT", "SLIMBUS_0_TX"},
@@ -4459,10 +4617,16 @@ static int msm_pcm_routing_prepare(struct snd_pcm_substream *substream)
 			srs_send_params(srs_port_id, 1, 0);
 			if ((DOLBY_ADM_COPP_TOPOLOGY_ID == topology) &&
 			    (fe_dai_perf_mode[i][session_type] ==
-							LEGACY_PCM_MODE))
+							LEGACY_PCM_MODE)) {
 				if (dolby_dap_init(port_id, channels) < 0)
 					pr_err("%s: Err init dolby dap\n",
 						__func__);
+				if (is_custom_stereo_on)
+					if (dolby_dap_set_custom_stereo_onoff(
+						port_id, true) < 0)
+						pr_err("%s: Err setting dap custom stereo\n",
+							__func__);
+			}
 		}
 	}
 

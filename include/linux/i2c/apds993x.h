@@ -95,12 +95,14 @@ struct apds993x_platform_data {
 	void (*exit)(void);
 	int (*power_on)(bool);
 
-	unsigned int prox_int_low_threshold;
-	unsigned int prox_int_high_threshold;
+	unsigned int prox_threshold;
+	unsigned int prox_hsyteresis_threshold;
+	unsigned int prox_pulse;
+	unsigned int prox_gain;
 	unsigned int als_threshold_hsyteresis;
-	unsigned int B;
-	unsigned int C;
-	unsigned int D;
+	unsigned int als_B;
+	unsigned int als_C;
+	unsigned int als_D;
 	unsigned int alsit;
 	unsigned int ga_value;
 	unsigned int df_value;

@@ -11,6 +11,14 @@ config MSM_BAM_DMUX
 	  provides a means to support more logical channels
 	  via muxing than BAM could without muxing.
 
+config MSM_EVENT_TIMER
+	bool "Event timer"
+	help
+	  This option enables a modules that manages a list of event timers that
+	  need to be monitored by the PM. The enables the PM code to monitor
+	  events that require the core to be awake and ready to handle the
+	  event.
+
 config MSM_IPC_ROUTER_SMD_XPRT
 	depends on MSM_SMD
 	depends on IPC_ROUTER
@@ -87,6 +95,58 @@ config MSM_SMD_DEBUG
 	  what channels caused interrupt activity, and when internal state
 	  change events occur.
 
+config MSM_MPM_OF
+	bool "Modem Power Manager"
+	depends on OF
+	help
+	  MPM is a dedicated hardware resource responsible for entering and
+	  waking up from a system wide low power mode. The MPM driver tracks
+	  the wakeup interrupts and configures the MPM to monitor the wakeup
+	  interrupts when going to a system wide sleep mode. This config option
+	  enables the MPM driver that supports initialization from a device
+	  tree
+
+config MSM_RPM_SMD
+	select MSM_MPM_OF
+	bool "RPM driver using SMD protocol"
+	help
+	  RPM is the dedicated hardware engine for managing shared SoC
+	  resources. This config adds driver support for using SMD as a
+	  transport layer communication with RPM hardware. It also selects
+	  the MSM_MPM config that programs the MPM module to monitor interrupts
+	  during sleep modes.
+
+config MSM_RPM_RBCPR_STATS_V2_LOG
+	tristate "MSM Resource Power Manager RPBCPR Stat Driver"
+	depends on DEBUG_FS
+	help
+	  This option enables v2 of the rpmrbcpr_stats driver which reads RPM
+	  memory for statistics pertaining to RPM's RBCPR(Rapid Bridge Core
+	  Power Reduction) driver. The drivers outputs the message via a
+	  debugfs node.
+
+config MSM_RPM_LOG
+	tristate "MSM Resource Power Manager Log Driver"
+	depends on DEBUG_FS
+	depends on MSM_RPM_SMD
+	default n
+	help
+          This option enables a driver which can read from a circular buffer
+          of messages produced by the RPM. These messages provide diagnostic
+          information about RPM operation. The driver outputs the messages
+          via a debugfs node.
+
+config MSM_RPM_STATS_LOG
+        tristate "MSM Resource Power Manager Stat Driver"
+        depends on DEBUG_FS
+        depends on MSM_RPM_SMD
+        default n
+          help
+          This option enables a driver which reads RPM messages from a shared
+          memory location. These messages provide statistical information about
+          the low power modes that RPM enters. The drivers outputs the message
+          via a debugfs node.
+
 config MSM_SMEM
 	depends on REMOTE_SPINLOCK_MSM
 	bool "MSM Shared Memory (SMEM)"
@@ -124,6 +184,23 @@ config MSM_SMP2P_TEST
 	  processors to do unit testing. Unit tests
 	  are used to verify the local and remote
 	  implementations.
+
+config MSM_SPM_V2
+	bool "Driver support for SPM Version 2"
+	help
+	  Enables the support for Version 2 of the SPM driver. SPM hardware is
+	  used to manage the processor power during sleep. The driver allows
+	  configuring SPM to allow different low power modes for both core and
+	  L2.
+
+config MSM_L2_SPM
+	bool "SPM support for L2 cache"
+	depends on MSM_SPM_V2
+	help
+	  Enable SPM driver support for L2 cache. Some MSM chipsets allow
+	  control of L2 cache low power mode with a Subsystem Power manager.
+	  Enabling this driver allows configuring L2 SPM for low power modes
+	  on supported chipsets.
 
 config MSM_QDSP6_APRV2
 	bool "Audio QDSP6 APRv2 support"
@@ -238,6 +315,14 @@ config MSM_PIL_FEMTO
 config MSM_SCM
 	bool "Secure Channel Manager (SCM) support"
 	default n
+
+config MAXIMUM_CURRENT_THROTTLING
+	tristate "CPU current throttling driver"
+	help
+	  Say Y to enable maximum current throttling.
+	  The maximum current throttling driver enables application to
+	  turn on/off CPU based current throttling by setting the
+	  credit/upper limit in the CPU registers.
 
 source "drivers/soc/qcom/memshare/Kconfig"
 

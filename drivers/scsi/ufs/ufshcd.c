@@ -109,7 +109,7 @@
 /* Query request retries */
 #define QUERY_REQ_RETRIES 10
 /* Query request timeout */
-#define QUERY_REQ_TIMEOUT 30 /* msec */
+#define QUERY_REQ_TIMEOUT 100 /* msec */
 
 /* Task management command timeout */
 #define TM_CMD_TIMEOUT	100 /* msecs */
@@ -251,6 +251,7 @@ static int __ufshcd_setup_clocks(struct ufs_hba *hba, bool on,
 static int ufshcd_setup_clocks(struct ufs_hba *hba, bool on);
 static int ufshcd_uic_hibern8_exit(struct ufs_hba *hba);
 static int ufshcd_uic_hibern8_enter(struct ufs_hba *hba);
+static int ufshcd_host_reset_and_restore(struct ufs_hba *hba);
 
 static inline void ufshcd_enable_irq(struct ufs_hba *hba)
 {
@@ -2464,12 +2465,24 @@ out:
 static int ufshcd_uic_change_pwr_mode(struct ufs_hba *hba, u8 mode)
 {
 	struct uic_command uic_cmd = {0};
+	int ret;
+
+	if (hba->quirks & UFSHCD_BROKEN_GEAR_CHANGE_INTO_HS) {
+		ret = ufshcd_dme_set(hba,
+				UIC_ARG_MIB_SEL(PA_RXHSUNTERMCAP, 0), 1);
+		if (ret) {
+			dev_err(hba->dev, "%s: failed to enable PA_RXHSUNTERMCAP ret %d\n",
+						__func__, ret);
+			goto out;
+		}
+	}
 
 	uic_cmd.command = UIC_CMD_DME_SET;
 	uic_cmd.argument1 = UIC_ARG_MIB(PA_PWRMODE);
 	uic_cmd.argument3 = mode;
-
-	return ufshcd_uic_pwr_ctrl(hba, &uic_cmd);
+	ret = ufshcd_uic_pwr_ctrl(hba, &uic_cmd);
+out:
+	return ret;
 }
 
 static int ufshcd_uic_hibern8_enter(struct ufs_hba *hba)
@@ -2484,10 +2497,16 @@ static int ufshcd_uic_hibern8_enter(struct ufs_hba *hba)
 static int ufshcd_uic_hibern8_exit(struct ufs_hba *hba)
 {
 	struct uic_command uic_cmd = {0};
+	int ret;
 
 	uic_cmd.command = UIC_CMD_DME_HIBER_EXIT;
+	ret = ufshcd_uic_pwr_ctrl(hba, &uic_cmd);
+	if (ret) {
+		ufshcd_set_link_off(hba);
+		ret = ufshcd_host_reset_and_restore(hba);
+	}
 
-	return ufshcd_uic_pwr_ctrl(hba, &uic_cmd);
+	return ret;
 }
 
  /**
@@ -5369,13 +5388,18 @@ static int ufshcd_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	}
 
 	if (ufshcd_is_runtime_pm(pm_op)) {
-		/*
-		 * The device is idle with no requests in the queue,
-		 * allow background operations if needed.
-		 */
-		ret = ufshcd_bkops_ctrl(hba, BKOPS_STATUS_NON_CRITICAL);
-		if (ret)
-			goto enable_gating;
+		if (ufshcd_can_autobkops_during_suspend(hba)) {
+			/*
+			 * The device is idle with no requests in the queue,
+			 * allow background operations if needed.
+			 */
+			ret = ufshcd_bkops_ctrl(hba, BKOPS_STATUS_NON_CRITICAL);
+			if (ret)
+				goto enable_gating;
+		} else {
+			/* make sure that auto bkops is disabled */
+			ufshcd_disable_auto_bkops(hba);
+		}
 	}
 
 	if ((req_dev_pwr_mode != hba->curr_dev_pwr_mode) &&
@@ -5584,6 +5608,8 @@ int ufshcd_system_suspend(struct ufs_hba *hba)
 out:
 	trace_ufshcd_system_suspend(dev_name(hba->dev), ret,
 			ktime_to_us(ktime_sub(ktime_get(), start)));
+	if (!ret)
+		hba->is_sys_suspended = true;
 	return ret;
 }
 EXPORT_SYMBOL(ufshcd_system_suspend);
