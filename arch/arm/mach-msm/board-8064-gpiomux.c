@@ -586,6 +586,12 @@ static struct gpiomux_setting mxt_int_act_cfg = {
 	.pull = GPIOMUX_PULL_UP,
 };
 
+static struct gpiomux_setting mxt_adp_int_sus_cfg = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_KEEPER,
+};
+
 static struct msm_gpiomux_config apq8064_hdmi_configs[] __initdata = {
 	{
 		.gpio = 69,
@@ -1124,6 +1130,7 @@ static struct msm_gpiomux_config mpq8064_mi2s_configs[] __initdata = {
 		},
 	},
 };
+
 static struct msm_gpiomux_config apq8064_mxt_configs[] __initdata = {
 	{	/* TS INTERRUPT */
 		.gpio = 6,
@@ -1137,6 +1144,16 @@ static struct msm_gpiomux_config apq8064_mxt_configs[] __initdata = {
 		.settings = {
 			[GPIOMUX_ACTIVE]    = &mxt_reset_act_cfg,
 			[GPIOMUX_SUSPENDED] = &mxt_reset_sus_cfg,
+		},
+	},
+};
+
+static struct msm_gpiomux_config apq8064_adp_mxt_configs[] __initdata = {
+	{	/* TS INTERRUPT */
+		.gpio = 83,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &mxt_int_act_cfg,
+			[GPIOMUX_SUSPENDED] = &mxt_adp_int_sus_cfg,
 		},
 	},
 };
@@ -1522,7 +1539,8 @@ void __init apq8064_init_gpiomux(void)
 				ARRAY_SIZE(apq8064_ethernet_configs));
 		#endif
 
-		msm_gpiomux_install(apq8064_gsbi_configs,
+		if (!machine_is_apq8064_adp_2())
+			msm_gpiomux_install(apq8064_gsbi_configs,
 				ARRAY_SIZE(apq8064_gsbi_configs));
 	}
 
@@ -1591,13 +1609,15 @@ void __init apq8064_init_gpiomux(void)
 				ARRAY_SIZE(apq8064_hsic_configs));
 #endif
 
-	if (machine_is_apq8064_cdp() || machine_is_apq8064_liquid() 
-				|| machine_is_apq8064_adp_2())
-		msm_gpiomux_install(apq8064_mxt_configs,
-			ARRAY_SIZE(apq8064_mxt_configs));
-
 	msm_gpiomux_install(apq8064_hdmi_configs,
 			ARRAY_SIZE(apq8064_hdmi_configs));
+
+	if (machine_is_apq8064_cdp() || machine_is_apq8064_liquid()) {
+		msm_gpiomux_install(apq8064_mxt_configs,
+			ARRAY_SIZE(apq8064_mxt_configs));
+	} else if (machine_is_apq8064_adp_2())
+		msm_gpiomux_install(apq8064_adp_mxt_configs,
+			ARRAY_SIZE(apq8064_adp_mxt_configs));
 
 	 if (machine_is_mpq8064_cdp())
 		msm_gpiomux_install(mpq8064_ir_configs,

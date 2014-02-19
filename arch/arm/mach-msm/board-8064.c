@@ -1356,6 +1356,7 @@ static const u8 mxt1386e_config_data_v2_1[] = {
 };
 
 #define MXT_TS_GPIO_IRQ			6
+#define MXT_ADP_TS_GPIO_IRQ		83
 #define MXT_TS_PWR_EN_GPIO		PM8921_GPIO_PM_TO_SYS(23)
 #define MXT_TS_RESET_GPIO		33
 
@@ -3185,9 +3186,10 @@ static void __init register_i2c_devices(void)
 	};
 #endif
 	/* Build the matching 'supported_machs' bitmask */
-	if (machine_is_apq8064_cdp() || machine_is_apq8064_adp_2())
+	if (machine_is_apq8064_cdp() || machine_is_apq8064_adp_2()) {
 		mach_mask = I2C_SURF;
-	else if (machine_is_apq8064_mtp())
+		apq8064_i2c_devices[1].bus = APQ_8064_GSBI1_QUP_I2C_BUS_ID;
+	} else if (machine_is_apq8064_mtp())
 		mach_mask = I2C_FFA;
 	else if (machine_is_apq8064_liquid())
 		mach_mask = I2C_LIQUID;
@@ -3316,6 +3318,12 @@ static void __init apq8064_common_init(void)
 	apq8064_device_otg.dev.platform_data = &msm_otg_pdata;
 	apq8064_ehci_host_init();
 	apq8064_init_buses();
+
+	if (machine_is_apq8064_adp_2()) {
+		mxt_platform_data.irq_gpio = MXT_ADP_TS_GPIO_IRQ;
+		mxt_platform_data.no_regulator_support = true;
+		mxt_platform_data.no_reset_gpio = true;
+	}
 
 	platform_add_devices(early_common_devices,
 				ARRAY_SIZE(early_common_devices));
