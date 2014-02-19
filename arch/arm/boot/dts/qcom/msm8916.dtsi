@@ -78,6 +78,14 @@
 		#address-cells = <2>;
 		#size-cells = <2>;
 
+		removed_regions: removed_regions@0 {
+                        linux,reserve-contiguous-region;
+			linux,reserve-region;
+			linux,remove-completely;
+			reg = <0x0 0x88800000 0x0 0x06e00000>;
+			label = "removed_regions";
+		};
+
 		secure_mem: secure_region@0 {
                         linux,reserve-contiguous-region;
 			reg = <0 0 0 0x6D00000>;
@@ -245,8 +253,51 @@
 		qcom,sensor-id = <0 1 2 4 5>;
 	};
 
+	qcom,clock-a7@0b011050 {
+		compatible = "qcom,clock-a53-8916";
+		reg = <0x0b011050 0x8>;
+		reg-names = "rcg-base";
+		qcom,safe-freq = < 400000000 >;
+		cpu-vdd-supply = <&apc_vreg_corner>;
+		clocks = <&clock_gcc clk_gpll0_ao_clk_src>,
+			 <&clock_gcc clk_a53sspll>;
+		clock-names = "clk-4", "clk-5";
+		qcom,speed0-bin-v0 =
+			<          0 0>,
+			<  400000000 1>,
+			<  800000000 2>,
+			< 1401600000 3>;
+	};
+
+	qcom,cpubw {
+		compatible = "qcom,cpubw";
+		qcom,cpu-mem-ports = <1 512>;
+		qcom,bw-tbl =
+			/*  73 9.60 MHz */
+			/* 381  50MHz */
+			<  762 /* 100 MHz */>,
+			< 1525 /* 200 MHz */>,
+			< 3051 /* 400 MHz */>,
+			< 4066 /* 533 MHz */>;
+	};
+
+	qcom,msm-cpufreq@0 {
+		reg = <0 4>;
+		compatible = "qcom,msm-cpufreq";
+		qcom,cpufreq-table =
+			 <  200000  762>,
+			 <  400000  762>,
+			 <  533330  1525>,
+			 <  800000  1525>,
+			 <  998400  1525>,
+			 < 1094400  3051>,
+			 < 1190400  3051>,
+			 < 1248000  4066>,
+			 < 1401600  4066>;
+	};
+
 	qcom,sps {
-		compatible = "qcom,msm_sps";
+		compatible = "qcom,msm_sps_4k";
 		qcom,device-type = <3>;
 		qcom,pipe-attr-ee;
 	};
@@ -278,10 +329,10 @@
 		interrupts = <0 134 0>,<0 140 0>;
 		interrupt-names = "core_irq", "async_irq";
 
-		HSUSB_VDDCX-supply = <&pm8916_s1>;
+		hsusb_vdd_dig-supply = <&pm8916_s1_corner>;
 		HSUSB_1p8-supply = <&pm8916_l7>;
 		HSUSB_3p3-supply = <&pm8916_l13>;
-		qcom,vdd-voltage-level = <0 1150000 1150000>;
+		qcom,vdd-voltage-level = <1 5 7>;
 
 		qcom,hsusb-otg-phy-type = <2>;
 		qcom,hsusb-otg-mode = <1>;
@@ -484,9 +535,9 @@
 		qcom,rtb-size = <0x100000>;
 	};
 
-	qcom,smem@8e380000 {
+	qcom,smem@8e200000 {
 		compatible = "qcom,smem";
-		reg = <0x8e380000 0x100000>,
+		reg = <0x8e200000 0x100000>,
 			<0x0b011008 0x4>,
 			<0x60000 0x8000>,
 			<0x193D000 0x8>;
@@ -543,11 +594,6 @@
                 rpm-channel-type = <15>; /* SMD_APPS_RPM */
 		rpm-standalone; /* TODO: remove this after bring up */
         };
-
-	memory_hole: qcom,msm-mem-hole {
-		compatible = "qcom,msm-mem-hole";
-		qcom,memblock-remove = <0x88800000 0x06e00000>;
-	};
 
 	qcom,bam_dmux@4044000 {
 		compatible = "qcom,bam_dmux";
@@ -1079,7 +1125,7 @@
 					"bus_clk";
 
 		qcom,pas-id = <9>;
-		qcom,proxy-timeout-ms = <2000>;
+		qcom,proxy-timeout-ms = <5000>;
 		qcom,firmware-name = "venus";
 	};
 
@@ -1106,6 +1152,41 @@
 
 	qcom,bcl {
 		compatible = "qcom,bcl";
+	};
+
+	qcom,mss@4080000 {
+		compatible = "qcom,pil-q6v56-mss";
+		reg = <0x04080000 0x100>,
+		      <0x0194F000 0x3000>,
+		      <0x04020000 0x040>,
+		      <0x01810000 0x004>;
+		reg-names = "qdsp6_base", "halt_base", "rmb_base",
+			    "restart_reg";
+
+		interrupts = <0 24 1>;
+		vdd_cx-supply = <&pm8916_s1_corner>;
+		vdd_mx-supply = <&pm8916_l2>;
+		vdd_mx-uV = <1050000>;
+		clocks = <&clock_rpm clk_xo_pil_mss_clk>,
+			 <&clock_gcc clk_gcc_mss_cfg_ahb_clk>,
+			 <&clock_gcc clk_gcc_mss_q6_bimc_axi_clk>,
+			 <&clock_gcc clk_gcc_boot_rom_ahb_clk>;
+		clock-names = "xo", "iface_clk", "bus_clk", "mem_clk";
+		proxy-clock-names = "xo";
+		active-clock-names = "iface_clk", "bus_clk", "mem_clk";
+
+		qcom,is-loadable;
+		qcom,firmware-name = "modem";
+		qcom,pil-self-auth;
+
+		/* GPIO inputs from mss */
+		qcom,gpio-err-fatal = <&smp2pgpio_ssr_smp2p_1_in 0 0>;
+		qcom,gpio-err-ready = <&smp2pgpio_ssr_smp2p_1_in 1 0>;
+		qcom,gpio-proxy-unvote = <&smp2pgpio_ssr_smp2p_1_in 2 0>;
+		qcom,gpio-stop-ack = <&smp2pgpio_ssr_smp2p_1_in 3 0>;
+
+		/* GPIO output to mss */
+		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_1_out 0 0>;
 	};
 };
 
@@ -1134,6 +1215,28 @@
 #include "msm8916-pm.dtsi"
 
 &pm8916_vadc {
+	chan@0 {
+		label = "usb_in";
+		reg = <0>;
+		qcom,decimation = <0>;
+		qcom,pre-div-channel-scaling = <7>;
+		qcom,calibration-type = "absolute";
+		qcom,scale-function = <0>;
+		qcom,hw-settle-time = <0>;
+		qcom,fast-avg-setup = <0>;
+	};
+
+	chan@2 {
+		label = "ireg_fb";
+		reg = <2>;
+		qcom,decimation = <0>;
+		qcom,pre-div-channel-scaling = <6>;
+		qcom,calibration-type = "absolute";
+		qcom,scale-function = <0>;
+		qcom,hw-settle-time = <0>;
+		qcom,fast-avg-setup = <0>;
+	};
+
 	chan@5 {
 		label = "vcoin";
 		reg = <5>;
@@ -1148,6 +1251,17 @@
 	chan@6 {
 		label = "vbat_sns";
 		reg = <6>;
+		qcom,decimation = <0>;
+		qcom,pre-div-channel-scaling = <1>;
+		qcom,calibration-type = "absolute";
+		qcom,scale-function = <0>;
+		qcom,hw-settle-time = <0>;
+		qcom,fast-avg-setup = <0>;
+	};
+
+	chan@7 {
+		label = "vph_pwr";
+		reg = <7>;
 		qcom,decimation = <0>;
 		qcom,pre-div-channel-scaling = <1>;
 		qcom,calibration-type = "absolute";

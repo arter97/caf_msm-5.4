@@ -125,7 +125,7 @@ static int msm_iommu_dump_fault_regs(int smmu_id, int cb_num,
 	struct msm_scm_fault_regs_dump_req {
 		uint32_t id;
 		uint32_t cb_num;
-		phys_addr_t buff;
+		uint32_t buff;
 		uint32_t len;
 	} req_info;
 	int resp;
@@ -143,33 +143,64 @@ static int msm_iommu_dump_fault_regs(int smmu_id, int cb_num,
 	return ret;
 }
 
-#define EXTRACT_DUMP_REG_KEY(addr, ctx) (addr & ((1 << CTX_SHIFT) - 1))
-
 static int msm_iommu_reg_dump_to_regs(
 	struct msm_iommu_context_reg ctx_regs[],
-	struct msm_scm_fault_regs_dump *dump, int cb_num)
+	struct msm_scm_fault_regs_dump *dump, struct msm_iommu_drvdata *drvdata,
+	struct msm_iommu_ctx_drvdata *ctx_drvdata)
 {
 	int i, j, ret = 0;
 	const uint32_t nvals = (dump->dump_size / sizeof(uint32_t));
 	uint32_t *it = (uint32_t *) dump->dump_data;
 	const uint32_t * const end = ((uint32_t *) dump) + nvals;
+	phys_addr_t phys_base = drvdata->phys_base;
+	int ctx = ctx_drvdata->num;
 
 	for (i = 1; it < end; it += 2, i += 2) {
+		unsigned int reg_offset;
 		uint32_t addr	= *it;
 		uint32_t val	= *(it + 1);
 		struct msm_iommu_context_reg *reg = NULL;
+		if (addr < phys_base) {
+			pr_err("Bogus-looking register (0x%x) for Iommu with base at %pa. Skipping.\n",
+				addr, &phys_base);
+			continue;
+		}
+		reg_offset = addr - phys_base;
 
 		for (j = 0; j < MAX_DUMP_REGS; ++j) {
-			if (dump_regs_tbl[j].key ==
-				EXTRACT_DUMP_REG_KEY(addr, cb_num)) {
+			struct dump_regs_tbl_entry dump_reg = dump_regs_tbl[j];
+			void *test_reg;
+			unsigned int test_offset;
+			switch (dump_reg.dump_reg_type) {
+			case DRT_CTX_REG:
+				test_reg = CTX_REG(dump_reg.reg_offset,
+					drvdata->cb_base, ctx);
+				break;
+			case DRT_GLOBAL_REG:
+				test_reg = GLB_REG(
+					dump_reg.reg_offset, drvdata->glb_base);
+				break;
+			case DRT_GLOBAL_REG_N:
+				test_reg = GLB_REG_N(
+					drvdata->glb_base, ctx,
+					dump_reg.reg_offset);
+				break;
+			default:
+				pr_err("Unknown dump_reg_type: 0x%x\n",
+					dump_reg.dump_reg_type);
+				BUG();
+				break;
+			}
+			test_offset = test_reg - drvdata->glb_base;
+			if (test_offset == reg_offset) {
 				reg = &ctx_regs[j];
 				break;
 			}
 		}
 
 		if (reg == NULL) {
-			pr_debug("Unknown register in secure CB dump: %x (%x)\n",
-				addr, EXTRACT_DUMP_REG_KEY(addr, cb_num));
+			pr_debug("Unknown register in secure CB dump: %x\n",
+				addr);
 			continue;
 		}
 
@@ -186,22 +217,23 @@ static int msm_iommu_reg_dump_to_regs(
 	if (i != nvals) {
 		pr_err("Invalid dump! %d != %d\n", i, nvals);
 		ret = 1;
-		goto out;
 	}
 
 	for (i = 0; i < MAX_DUMP_REGS; ++i) {
 		if (!ctx_regs[i].valid) {
 			if (dump_regs_tbl[i].must_be_present) {
-				pr_err("Register missing from dump: %s, %lx\n",
+				pr_err("Register missing from dump: %s, 0x%x (0x%lx)\n",
 					dump_regs_tbl[i].name,
-					dump_regs_tbl[i].key);
+					dump_regs_tbl[i].reg_offset,
+					(unsigned long)
+					(phys_base +
+						dump_regs_tbl[i].reg_offset));
 				ret = 1;
 			}
-			ctx_regs[i].val = 0;
+			ctx_regs[i].val = 0xd00dfeed;
 		}
 	}
 
-out:
 	return ret;
 }
 
@@ -253,9 +285,11 @@ irqreturn_t msm_iommu_secure_fault_handler_v2(int irq, void *dev_id)
 	} else {
 		struct msm_iommu_context_reg ctx_regs[MAX_DUMP_REGS];
 		memset(ctx_regs, 0, sizeof(ctx_regs));
-		tmp = msm_iommu_reg_dump_to_regs(ctx_regs, regs,
-						ctx_drvdata->num);
-		if (!tmp && ctx_regs[DUMP_REG_FSR].val) {
+		tmp = msm_iommu_reg_dump_to_regs(
+			ctx_regs, regs, drvdata, ctx_drvdata);
+		if (ctx_regs[DUMP_REG_FSR].val) {
+			if (tmp)
+				pr_err("Incomplete fault register dump. Printout will be incomplete.\n");
 			if (!ctx_drvdata->attached_domain) {
 				pr_err("Bad domain in interrupt handler\n");
 				tmp = -ENOSYS;

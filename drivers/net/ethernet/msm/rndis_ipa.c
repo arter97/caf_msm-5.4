@@ -528,7 +528,14 @@ int rndis_ipa_init(struct ipa_usb_init_params *params)
 	RNDIS_IPA_DEBUG("network device was successfully allocated\n");
 
 	rndis_ipa_ctx = netdev_priv(net);
+	if (!rndis_ipa_ctx) {
+		result = -ENOMEM;
+		RNDIS_IPA_ERROR("fail to extract netdev priv\n");
+		goto fail_netdev_priv;
+	}
 	memset(rndis_ipa_ctx, 0, sizeof(*rndis_ipa_ctx));
+	RNDIS_IPA_DEBUG("rndis_ipa_ctx (private) = %p", rndis_ipa_ctx);
+
 	rndis_ipa_ctx->net = net;
 	rndis_ipa_ctx->tx_filter = false;
 	rndis_ipa_ctx->rx_filter = false;
@@ -629,6 +636,7 @@ fail_hdrs_cfg:
 fail_create_rm:
 	rndis_ipa_debugfs_destroy(rndis_ipa_ctx);
 fail_debugfs:
+fail_netdev_priv:
 	free_netdev(net);
 fail_alloc_etherdev:
 	return result;
@@ -670,6 +678,7 @@ int rndis_ipa_pipe_connect_notify(u32 usb_to_ipa_hdl,
 {
 	struct rndis_ipa_dev *rndis_ipa_ctx = private;
 	int next_state;
+	int result;
 
 	RNDIS_IPA_LOG_ENTRY();
 
@@ -699,24 +708,31 @@ int rndis_ipa_pipe_connect_notify(u32 usb_to_ipa_hdl,
 	}
 	rndis_ipa_ctx->ipa_to_usb_hdl = ipa_to_usb_hdl;
 	rndis_ipa_ctx->usb_to_ipa_hdl = usb_to_ipa_hdl;
-	rndis_ipa_ep_registers_cfg(usb_to_ipa_hdl,
+	result = rndis_ipa_ep_registers_cfg(usb_to_ipa_hdl,
 			ipa_to_usb_hdl,
 			max_transfer_byte_size,
 			max_packet_number,
 			rndis_ipa_ctx->net->mtu,
 			rndis_ipa_ctx->deaggregation_enable);
+	if (result) {
+		RNDIS_IPA_ERROR("fail on ep cfg\n");
+		goto fail;
+	}
 	RNDIS_IPA_DEBUG("end-points configured\n");
 
 	netif_carrier_on(rndis_ipa_ctx->net);
 	if (!netif_carrier_ok(rndis_ipa_ctx->net)) {
 		RNDIS_IPA_ERROR("netif_carrier_ok error\n");
-		return -EBUSY;
+		result = -EBUSY;
+		goto fail;
 	}
 	RNDIS_IPA_DEBUG("carrier_on notified\n");
 
 	if (next_state == RNDIS_IPA_CONNECTED_AND_UP) {
 		netif_start_queue(rndis_ipa_ctx->net);
 		RNDIS_IPA_DEBUG("queue started, NETDEV is operational\n");
+	}  else {
+		RNDIS_IPA_DEBUG("queue shall be started after open()\n");
 	}
 	pr_info("RNDIS_IPA NetDev pipes were connected");
 
@@ -725,7 +741,8 @@ int rndis_ipa_pipe_connect_notify(u32 usb_to_ipa_hdl,
 
 	RNDIS_IPA_LOG_EXIT();
 
-	return 0;
+fail:
+	return result;
 }
 EXPORT_SYMBOL(rndis_ipa_pipe_connect_notify);
 
@@ -811,7 +828,7 @@ static netdev_tx_t rndis_ipa_start_xmit(struct sk_buff *skb,
 
 	net->trans_start = jiffies;
 
-	RNDIS_IPA_DEBUG("packet Tx, len=%d, skb->protocol=%d",
+	RNDIS_IPA_DEBUG("packet Tx, len=%d, skb->protocol=%d\n",
 		skb->len, skb->protocol);
 
 	if (unlikely(netif_queue_stopped(net))) {
@@ -868,6 +885,9 @@ fail_tx_packet:
 out:
 	resource_release(rndis_ipa_ctx);
 resource_busy:
+	RNDIS_IPA_DEBUG("packet Tx done - %s\n",
+		(status == NETDEV_TX_OK) ? "OK" : "FAIL");
+
 	return status;
 }
 

@@ -327,8 +327,8 @@
 		qcom,hsusb-otg-phy-type = <2>;
 		qcom,hsusb-otg-mode = <1>;
 		qcom,hsusb-otg-otg-control = <2>;
+		qcom,hsusb-otg-disable-reset;
 		qcom,dp-manual-pullup;
-		qcom,ahb-async-bridge-bypass;
 		qcom,usbin-vadc = <&pm8226_vadc>;
 
 		qcom,msm-bus,name = "usb";
@@ -531,6 +531,10 @@
 
 	qcom,msm-lsm-client {
 		compatible = "qcom,msm-lsm-client";
+	};
+
+	qcom,msm-pcm-loopback {
+		compatible = "qcom,msm-pcm-loopback";
 	};
 
 	qcom,msm-dai-q6 {
@@ -843,6 +847,10 @@
 		qcom,bus-bw-vectors-bps = <0 400000 20000000 25000000 50000000
 						100000000 200000000 4294967295>;
 
+		pinctrl-names = "active", "sleep";
+		pinctrl-0 = <&sdc1_clk_on &sdc1_cmd_on &sdc1_data_on>;
+		pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off>;
+
 		status = "disabled";
 	};
 
@@ -899,6 +907,10 @@
 				<81 512 2048000 4096000>; /* Max. bandwidth */
 		qcom,bus-bw-vectors-bps = <0 400000 20000000 25000000 50000000
 						100000000 200000000 4294967295>;
+
+		pinctrl-names = "active", "sleep";
+		pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on &sdhc2_cd_on>;
+		pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off &sdhc2_cd_off>;
 
 		status = "disabled";
 	};
@@ -1134,7 +1146,7 @@
 				<63 512 0 304000>;
 
 		qcom,pas-id = <9>;
-		qcom,proxy-timeout-ms = <2000>;
+		qcom,proxy-timeout-ms = <5000>;
 		qcom,firmware-name = "venus";
 	};
 
@@ -1205,7 +1217,7 @@
 		vdd_pll-supply = <&pm8226_l8>;
 		qcom,vdd_pll = <1800000>;
 
-		qcom,firmware-name = "mba";
+		qcom,firmware-name = "modem";
 		qcom,pil-self-auth;
 
 		/* GPIO inputs from mss */
@@ -1567,6 +1579,7 @@
 		qcom,hw-settle-time = <2>;
 		qcom,fast-avg-setup = <3>;
 		qcom,btm-channel-number = <0x48>;
+		qcom,meas-interval-timer-idx = <2>;
 	};
 
 	chan@8 {

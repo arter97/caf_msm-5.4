@@ -533,25 +533,13 @@ typedef void (*ipa_msg_free_fn)(void *buff, u32 len, u32 type);
 typedef int (*ipa_msg_pull_fn)(void *buff, u32 len, u32 type);
 
 /**
- * enum ipa_bridge_dir - direction of the bridge from air interface perspective
- *
- * IPA bridge direction
+ * enum ipa_voltage_level - IPA Voltage levels
  */
-enum ipa_bridge_dir {
-	IPA_BRIDGE_DIR_DL,
-	IPA_BRIDGE_DIR_UL,
-	IPA_BRIDGE_DIR_MAX
-};
-
-/**
- * enum ipa_bridge_type - type of SW bridge
- *
- * IPA bridge type
- */
-enum ipa_bridge_type {
-	IPA_BRIDGE_TYPE_TETHERED,
-	IPA_BRIDGE_TYPE_EMBEDDED,
-	IPA_BRIDGE_TYPE_MAX
+enum ipa_voltage_level {
+	IPA_VOLTAGE_UNSPECIFIED,
+	IPA_VOLTAGE_SVS = IPA_VOLTAGE_UNSPECIFIED,
+	IPA_VOLTAGE_NOMINAL,
+	IPA_VOLTAGE_MAX,
 };
 
 /**
@@ -589,6 +577,8 @@ struct ipa_rm_register_params {
  * struct ipa_rm_create_params - information needed to initialize
  *				the resource
  * @name: resource name
+ * @floor_voltage: floor voltage needed for client to operate in maximum
+ *		bandwidth.
  * @reg_params: register parameters, contains are ignored
  *		for consumer resource NULL should be provided
  *		for consumer resource
@@ -603,47 +593,24 @@ struct ipa_rm_register_params {
  */
 struct ipa_rm_create_params {
 	enum ipa_rm_resource_name name;
+	enum ipa_voltage_level floor_voltage;
 	struct ipa_rm_register_params reg_params;
 	int (*request_resource)(void);
 	int (*release_resource)(void);
 };
 
+/**
+ * struct ipa_rm_perf_profile - information regarding IPA RM client performance
+ * profile
+ *
+ * @max_bandwidth_mbps: maximum bandwidth need of the client in Mbps
+ */
+struct ipa_rm_perf_profile {
+	u32 max_supported_bandwidth_mbps;
+};
+
 #define A2_MUX_HDR_NAME_V4_PREF "dmux_hdr_v4_"
 #define A2_MUX_HDR_NAME_V6_PREF "dmux_hdr_v6_"
-
-enum a2_mux_event_type {
-	A2_MUX_RECEIVE,
-	A2_MUX_WRITE_DONE
-};
-
-enum a2_mux_logical_channel_id {
-	A2_MUX_WWAN_0,
-	A2_MUX_WWAN_1,
-	A2_MUX_WWAN_2,
-	A2_MUX_WWAN_3,
-	A2_MUX_WWAN_4,
-	A2_MUX_WWAN_5,
-	A2_MUX_WWAN_6,
-	A2_MUX_WWAN_7,
-	A2_MUX_TETHERED_0,
-	A2_MUX_RESERVED_9,
-	A2_MUX_MULTI_RMNET_10,
-	A2_MUX_MULTI_RMNET_11,
-	A2_MUX_MULTI_RMNET_12,
-	A2_MUX_MULTI_MBIM_13,
-	A2_MUX_MULTI_MBIM_14,
-	A2_MUX_MULTI_MBIM_15,
-	A2_MUX_MULTI_MBIM_16,
-	A2_MUX_MULTI_MBIM_17,
-	A2_MUX_MULTI_MBIM_18,
-	A2_MUX_MULTI_MBIM_19,
-	A2_MUX_MULTI_MBIM_20,
-	A2_MUX_NUM_CHANNELS
-};
-
-typedef void (*a2_mux_notify_cb)(void *user_data,
-		enum a2_mux_event_type event,
-		unsigned long data);
 
 /**
  * enum teth_tethering_mode - Tethering mode (Rmnet / MBIM)
@@ -889,15 +856,6 @@ int ipa_set_qcncm_ndp_sig(char sig[3]);
 int ipa_set_single_ndp_per_mbim(bool enable);
 
 /*
- * SW bridge (between IPA and A2)
- */
-int ipa_bridge_setup(enum ipa_bridge_dir dir, enum ipa_bridge_type type,
-		     struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl);
-int ipa_bridge_teardown(enum ipa_bridge_dir dir, enum ipa_bridge_type type,
-			u32 clnt_hdl);
-
-
-/*
  * Data path
  */
 int ipa_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
@@ -933,6 +891,9 @@ int ipa_rm_register(enum ipa_rm_resource_name resource_name,
 int ipa_rm_deregister(enum ipa_rm_resource_name resource_name,
 			struct ipa_rm_register_params *reg_params);
 
+int ipa_rm_set_perf_profile(enum ipa_rm_resource_name resource_name,
+			struct ipa_rm_perf_profile *profile);
+
 int ipa_rm_add_dependency(enum ipa_rm_resource_name resource_name,
 			enum ipa_rm_resource_name depends_on_name);
 
@@ -956,27 +917,6 @@ int ipa_rm_inactivity_timer_request_resource(
 
 int ipa_rm_inactivity_timer_release_resource(
 				enum ipa_rm_resource_name resource_name);
-
-/*
- * a2 service
- */
-int a2_mux_open_channel(enum a2_mux_logical_channel_id lcid,
-			void *user_data,
-			a2_mux_notify_cb notify_cb);
-
-int a2_mux_close_channel(enum a2_mux_logical_channel_id lcid);
-
-int a2_mux_write(enum a2_mux_logical_channel_id lcid, struct sk_buff *skb);
-
-int a2_mux_is_ch_empty(enum a2_mux_logical_channel_id lcid);
-
-int a2_mux_is_ch_low(enum a2_mux_logical_channel_id lcid);
-
-int a2_mux_is_ch_full(enum a2_mux_logical_channel_id lcid);
-
-int a2_mux_get_client_handles(enum a2_mux_logical_channel_id lcid,
-		unsigned int *clnt_cons_handle,
-		unsigned int *clnt_prod_handle);
 
 /*
  * Tethering bridge (Rmnet / MBIM)
@@ -1006,45 +946,6 @@ int ipa_remove_interrupt_handler(enum ipa_irq_type interrupt);
 int ipa_get_ep_mapping(enum ipa_client_type client);
 
 #else /* CONFIG_IPA */
-
-static inline int a2_mux_open_channel(enum a2_mux_logical_channel_id lcid,
-	void *user_data, a2_mux_notify_cb notify_cb)
-{
-	return -EPERM;
-}
-
-static inline int a2_mux_close_channel(enum a2_mux_logical_channel_id lcid)
-{
-	return -EPERM;
-}
-
-static inline int a2_mux_write(enum a2_mux_logical_channel_id lcid,
-			       struct sk_buff *skb)
-{
-	return -EPERM;
-}
-
-static inline int a2_mux_is_ch_empty(enum a2_mux_logical_channel_id lcid)
-{
-	return -EPERM;
-}
-
-static inline int a2_mux_is_ch_low(enum a2_mux_logical_channel_id lcid)
-{
-	return -EPERM;
-}
-
-static inline int a2_mux_is_ch_full(enum a2_mux_logical_channel_id lcid)
-{
-	return -EPERM;
-}
-
-static inline int a2_mux_get_client_handles(
-	enum a2_mux_logical_channel_id lcid, unsigned int *clnt_cons_handle,
-	unsigned int *clnt_prod_handle)
-{
-	return -EPERM;
-}
 
 /*
  * Connect / Disconnect
@@ -1335,24 +1236,6 @@ static inline int ipa_set_single_ndp_per_mbim(bool enable)
 }
 
 /*
- * SW bridge (between IPA and A2)
- */
-static inline int ipa_bridge_setup(enum ipa_bridge_dir dir,
-				    enum ipa_bridge_type type,
-				    struct ipa_sys_connect_params *sys_in,
-				    u32 *clnt_hdl)
-{
-	return -EPERM;
-}
-
-static inline int ipa_bridge_teardown(enum ipa_bridge_dir dir,
-				       enum ipa_bridge_type type,
-				      u32 clnt_hdl)
-{
-	return -EPERM;
-}
-
-/*
  * Data path
  */
 static inline int ipa_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
@@ -1408,6 +1291,13 @@ static inline int ipa_rm_delete_resource(
 
 static inline int ipa_rm_register(enum ipa_rm_resource_name resource_name,
 			struct ipa_rm_register_params *reg_params)
+{
+	return -EPERM;
+}
+
+static inline int ipa_rm_set_perf_profile(
+		enum ipa_rm_resource_name resource_name,
+		struct ipa_rm_perf_profile *profile)
 {
 	return -EPERM;
 }

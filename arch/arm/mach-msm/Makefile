@@ -3,7 +3,6 @@ ifndef CONFIG_ARM_ARCH_TIMER
 obj-y += timer.o
 endif
 obj-$(CONFIG_USE_OF) += board-dt.o
-obj-$(CONFIG_DEBUG_FS) += nohlt.o
 
 obj-y += acpuclock.o
 obj-$(CONFIG_ARCH_MSM_KRAIT) += clock-krait.o
@@ -17,20 +16,11 @@ obj-$(CONFIG_DEBUG_FS) += perf_debug.o
 obj-$(CONFIG_SMP) += headsmp.o platsmp.o
 obj-$(CONFIG_HOTPLUG_CPU) += hotplug.o
 
-obj-$(CONFIG_MSM_AVS_HW) += avs.o
-obj-$(CONFIG_CPU_V7) += idle-v7.o
-
-obj-$(CONFIG_MSM_SCM) += scm-boot.o
 obj-$(CONFIG_MSM_XPU_ERR_FATAL) += scm-xpu.o
 obj-$(CONFIG_MSM_TEST_QMI_CLIENT) += kernel_test_service_v01.o test_qmi_client.o
 obj-y += qdsp6v2/
-obj-$(CONFIG_PM) += pm-boot.o
-obj-$(CONFIG_MSM_IDLE_STATS) += pm-stats.o
-obj-$(CONFIG_MSM_NOPM) += no-pm.o
 
 obj-$(CONFIG_MSM_PCIE) += pcie.o pcie_irq.o pcie_phy.o
-
-obj-$(CONFIG_MSM_SPM_V2) += spm-v2.o spm_devices.o
 
 obj-$(CONFIG_MSM_DMA_TEST) += dma_test.o
 obj-$(CONFIG_SURF_FFA_GPIO_KEYPAD) += keypad-surf-ffa.o
@@ -65,26 +55,15 @@ obj-$(CONFIG_ARCH_MSM8610) += board-8610.o board-8610-gpiomux.o
 obj-$(CONFIG_ARCH_MSM8610) += clock-8610.o
 obj-$(CONFIG_ARCH_MSM8610) += clock-dsi-8610.o
 obj-$(CONFIG_ARCH_MDM9630) += clock-9630.o
-
-obj-$(CONFIG_MSM_PM) += msm-pm.o pm-data.o lpm_levels.o
+obj-$(CONFIG_MSM_PM) += ext-buck-control.o
 
 CFLAGS_msm_vibrator.o += -Idrivers/staging/android
 
 obj-$(CONFIG_MSM_RMT_STORAGE_CLIENT) += rmt_storage_client.o
 obj-$(CONFIG_MSM_LPM_TEST) += test-lpm.o
-obj-$(CONFIG_MSM_RPM_SMD) += rpm-smd.o
-ifdef CONFIG_DEBUG_FS
-obj-$(CONFIG_MSM_RPM_SMD) += rpm-smd-debug.o
-endif
-obj-$(CONFIG_MSM_MPM_OF) += mpm-of.o
-obj-$(CONFIG_MSM_RPM_STATS_LOG) += rpm_stats.o rpm_master_stat.o
-obj-$(CONFIG_MSM_RPM_RBCPR_STATS_V2_LOG) += rpm_rbcpr_stats_v2.o
-obj-$(CONFIG_MSM_RPM_LOG) += rpm_log.o
 obj-$(CONFIG_MSM_TZ_LOG) += tz_log.o
 obj-$(CONFIG_MSM_BUS_SCALING) += msm_bus/
 obj-$(CONFIG_MSM_BUSPM_DEV) += msm-buspm-dev.o
-
-obj-$(CONFIG_MSM_EVENT_TIMER)		+= event_timer.o
 
 obj-$(CONFIG_MSM_OCMEM) += ocmem.o ocmem_allocator.o ocmem_notifier.o
 obj-$(CONFIG_MSM_OCMEM) += ocmem_sched.o ocmem_api.o ocmem_rdm.o ocmem_core.o
@@ -107,7 +86,6 @@ obj-$(CONFIG_MSM_CACHE_DUMP) += msm_cache_dump.o
 obj-$(CONFIG_MSM_HSIC_SYSMON) += hsic_sysmon.o
 obj-$(CONFIG_MSM_HSIC_SYSMON_TEST) += hsic_sysmon_test.o
 
-obj-$(CONFIG_MSM_RPM_SMD) += rpm-smd.o
 obj-$(CONFIG_MSM_RPC_USB) += rpc_hsusb.o rpc_fsusb.o
 
 obj-$(CONFIG_MSM_ENABLE_WDOG_DEBUG_CONTROL) += wdog_debug.o

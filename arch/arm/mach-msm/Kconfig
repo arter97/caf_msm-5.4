@@ -70,6 +70,7 @@ config ARCH_APQ8084
 	select MSM_PIL
 	select ENABLE_VMALLOC_SAVINGS
 	select MSM_ULTRASOUND_B
+	select MAXIMUM_CURRENT_THROTTLING
 	select MSM_IRQ
 	select PINCTRL
 	select PINCTRL_MSM_TLMM_V3
@@ -344,28 +345,6 @@ config  MSM_KRAIT_WFE_FIXUP
 config  ARCH_MSM_CORTEX_A5
 	bool
 
-config MSM_RPM_SMD
-	depends on MSM_SMD
-	select MSM_MPM_OF
-	bool "RPM driver using SMD protocol"
-	help
-	  RPM is the dedicated hardware engine for managing shared SoC
-	  resources. This config adds driver support for using SMD as a
-	  transport layer communication with RPM hardware. It also selects
-	  the MSM_MPM config that programs the MPM module to monitor interrupts
-	  during sleep modes.
-
-config MSM_MPM_OF
-	bool "Modem Power Manager"
-	depends on OF
-	help
-	  MPM is a dedicated hardware resource responsible for entering and
-	  waking up from a system wide low power mode. The MPM driver tracks
-	  the wakeup interrupts and configures the MPM to monitor the wakeup
-	  interrupts when going to a system wide sleep mode. This config option
-	  enables the MPM driver that supports initialization from a device
-	  tree
-
 config MSM_LPM_TEST
 	bool "Low Power Mode test framework"
 	depends on MSM_RPM || MSM_RPM_SMD
@@ -403,7 +382,7 @@ config PHYS_OFFSET
 	default "0x00000000" if ARCH_MSM8226
 	default "0x00000000" if ARCH_MSM8610
 	default "0x00000000" if ARCH_MSMSAMARIUM
-	default "0x40000000" if ARCH_FSM9900
+	default "0x3AC00000" if ARCH_FSM9900
 	default "0x00000000" if ARCH_MDM9630
 	default "0x00200000" if !MSM_STACKED_MEMORY
 	default "0x10000000"
@@ -611,38 +590,6 @@ config MSM7X00A_IDLE_SPIN_TIME
 	  Spin time in nanoseconds before ramping down cpu clock and entering
 	  any low power state.
 
-menuconfig MSM_IDLE_STATS
-	bool "Collect idle statistics"
-	depends on MSM_PM
-	default y
-	help
-	  Collect idle statistics and export them in proc/msm_pm_stats.
-
-if MSM_IDLE_STATS
-
-config MSM_IDLE_STATS_FIRST_BUCKET
-	int "First bucket time"
-	default 62500
-	help
-	  Upper time limit in nanoseconds of first bucket.
-
-config MSM_IDLE_STATS_BUCKET_SHIFT
-	int "Bucket shift"
-	default 2
-
-config MSM_IDLE_STATS_BUCKET_COUNT
-	int "Bucket count"
-	default 10
-
-config MSM_SUSPEND_STATS_FIRST_BUCKET
-	int "First bucket time for suspend"
-	default 1000000000
-	help
-	  Upper time limit in nanoseconds of first bucket of the
-	  histogram.  This is for collecting statistics on suspend.
-
-endif # MSM_IDLE_STATS
-
 config CPU_HAS_L2_PMU
 	bool "L2CC PMU Support"
 	help
@@ -740,15 +687,6 @@ config MSM_DEVFREQ_CPUBW
 	  DDR IB/AB bandwidth votes. This driver provides a SoC topology
 	  agnostic interface to so that some of the devfreq governors can be
 	  shared across SoCs.
-
-config MSM_AVS_HW
-	bool "Enable Adaptive Voltage Scaling (AVS)"
-	default n
-	help
-	  Enable AVS hardware to fine tune voltage at each frequency. The
-	  AVS hardware blocks associated with each Qualcomm ARMv7 cores can
-	  fine tune the voltages based on the feedback from the ring
-	  oscillators.
 
 config RTAC
 	bool "MSM8K real-time audio calibration support"
@@ -903,37 +841,6 @@ config MSM_TZ_LOG
 	  produced by the Secure code (Trust zone). These messages provide
 	  diagnostic information about TZ operation.
 
-config MSM_RPM_LOG
-	tristate "MSM Resource Power Manager Log Driver"
-	depends on DEBUG_FS
-	depends on MSM_RPM || MSM_RPM_SMD
-	default n
-	help
-	  This option enables a driver which can read from a circular buffer
-	  of messages produced by the RPM. These messages provide diagnostic
-	  information about RPM operation. The driver outputs the messages
-	  via a debugfs node.
-
-config MSM_RPM_STATS_LOG
-	tristate "MSM Resource Power Manager Stat Driver"
-	depends on DEBUG_FS
-	depends on MSM_RPM || MSM_RPM_SMD
-	default n
-	  help
-	  This option enables a driver which reads RPM messages from a shared
-	  memory location. These messages provide statistical information about
-	  the low power modes that RPM enters. The drivers outputs the message
-	  via a debugfs node.
-
-config MSM_RPM_RBCPR_STATS_V2_LOG
-        tristate "MSM Resource Power Manager RPBCPR Stat Driver"
-        depends on DEBUG_FS
-          help
-          This option enables v2 of the rpmrbcpr_stats driver which reads RPM
-          memory for statistics pertaining to RPM's RBCPR(Rapid Bridge Core
-          Power Reduction) driver. The drivers outputs the message via a
-          debugfs node.
-
 config MSM_DIRECT_SCLK_ACCESS
 	bool "Direct access to the SCLK timer"
 	default n
@@ -945,22 +852,6 @@ config MSM_GPIOMUX
 	bool
 
 config MSM_NATIVE_RESTART
-	bool
-
-config MSM_PM
-	depends on PM
-	bool
-
-config MSM_EVENT_TIMER
-	bool "Event timer"
-	help
-		This option enables a modules that manages a list of event timers that
-		need to be monitored by the PM. The enables the PM code to monitor
-		events that require the core to be awake and ready to handle the
-		event.
-
-config MSM_NOPM
-	default y if !PM
 	bool
 
 config MSM_BUS_SCALING
@@ -1015,22 +906,6 @@ config PM8XXX_RPC_VIBRATOR
 	  Enable the vibrator support on MSM over RPC. The vibrator
 	  is connected on the PM8XXX PMIC. Say Y if you want to enable
 	  this feature.
-
-config MSM_SPM_V2
-	bool "Driver support for SPM Version 2"
-	help
-	  Enables the support for Version 2 of the SPM driver. SPM hardware is
-	  used to manage the processor power during sleep. The driver allows
-	  configuring SPM to allow different power modes.
-
-config MSM_L2_SPM
-	bool "SPM support for L2 cache"
-	depends on MSM_SPM_V2
-	help
-	  Enable SPM driver support for L2 cache. Some MSM chipsets allow
-	  control of L2 cache low power mode with a Subsystem Power manager.
-	  Enabling this driver allows configuring L2 SPM for low power modes
-	  on supported chipsets.
 
 config MSM_OCMEM
 	bool "MSM On-Chip memory driver (OCMEM)"

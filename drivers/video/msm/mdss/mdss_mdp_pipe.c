@@ -75,7 +75,7 @@ static u32 mdss_mdp_smp_mmb_reserve(struct mdss_mdp_pipe_smp_map *smp_map,
 	 * of smp blocks), so that fallback solution happens.
 	 */
 	if (i != 0 && n != i) {
-		pr_debug("Can't change mmb config, num_blks: %d alloc: %d\n",
+		pr_debug("Can't change mmb config, num_blks: %zu alloc: %d\n",
 			n, i);
 		return 0;
 	}
@@ -561,9 +561,11 @@ static struct mdss_mdp_pipe *mdss_mdp_pipe_init(struct mdss_mdp_mixer *mixer,
 		return NULL;
 	}
 
-	if (mdss_mdp_pipe_is_sw_reset_available(mdata)) {
+	if (pipe && mdss_mdp_pipe_is_sw_reset_available(mdata)) {
 		force_off_mask =
 			BIT(pipe->clk_ctrl.bit_off + CLK_FORCE_OFF_OFFSET);
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+		mutex_lock(&mdata->reg_lock);
 		reg_val = readl_relaxed(mdata->mdp_base +
 			pipe->clk_ctrl.reg_off);
 		if (reg_val & force_off_mask) {
@@ -571,6 +573,8 @@ static struct mdss_mdp_pipe *mdss_mdp_pipe_init(struct mdss_mdp_mixer *mixer,
 			writel_relaxed(reg_val,
 				mdata->mdp_base + pipe->clk_ctrl.reg_off);
 		}
+		mutex_unlock(&mdata->reg_lock);
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 	}
 
 	if (pipe) {

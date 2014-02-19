@@ -818,9 +818,11 @@ static int mdss_mdp_irq_clk_setup(struct mdss_data_type *mdata)
 	    mdss_mdp_irq_clk_register(mdata, "core_clk_src",
 				      MDSS_CLK_MDP_SRC) ||
 	    mdss_mdp_irq_clk_register(mdata, "core_clk",
-				      MDSS_CLK_MDP_CORE) ||
-	    mdss_mdp_irq_clk_register(mdata, "lut_clk", MDSS_CLK_MDP_LUT))
+				      MDSS_CLK_MDP_CORE))
 		return -EINVAL;
+
+	/* lut_clk is not present on all MDSS revisions */
+	mdss_mdp_irq_clk_register(mdata, "lut_clk", MDSS_CLK_MDP_LUT);
 
 	/* vsync_clk is optional for non-smart panels */
 	mdss_mdp_irq_clk_register(mdata, "vsync_clk", MDSS_CLK_MDP_VSYNC);
@@ -1292,6 +1294,7 @@ static ssize_t mdss_mdp_show_capabilities(struct device *dev,
 	SPRINT("dma_pipes=%d\n", mdata->ndma_pipes);
 	SPRINT("smp_count=%d\n", mdata->smp_mb_cnt);
 	SPRINT("smp_size=%d\n", mdata->smp_mb_size);
+	SPRINT("smp_mb_per_pipe=%d\n", mdata->smp_mb_per_pipe);
 	SPRINT("max_downscale_ratio=%d\n", MAX_DOWNSCALE_RATIO);
 	SPRINT("max_upscale_ratio=%d\n", MAX_UPSCALE_RATIO);
 	if (mdata->max_bw_low)
@@ -1609,13 +1612,13 @@ static void mdss_mdp_parse_dt_pipe_sw_reset(struct platform_device *pdev,
 	size_t len;
 	const u32 *arr;
 
-	arr = of_get_property(pdev->dev.of_node, prop_name, &len);
+	arr = of_get_property(pdev->dev.of_node, prop_name, (int *) &len);
 	if (arr) {
 		int i;
 
 		len /= sizeof(u32);
 		if (len != npipes) {
-			pr_err("%s: invalid sw_reset entries req:%d found:%d\n",
+			pr_err("%s: invalid sw_reset entries req:%zu found:%d\n",
 				prop_name, len, npipes);
 			return;
 		}
@@ -1637,7 +1640,7 @@ static int  mdss_mdp_parse_dt_pipe_clk_ctrl(struct platform_device *pdev,
 	size_t len;
 	const u32 *arr;
 
-	arr = of_get_property(pdev->dev.of_node, prop_name, &len);
+	arr = of_get_property(pdev->dev.of_node, prop_name, (int *) &len);
 	if (arr) {
 		int i, j;
 
