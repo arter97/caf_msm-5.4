@@ -71,8 +71,12 @@ struct msm_pcie_dev_t {
 
 	uint32_t                      wake_n;
 	uint32_t                      vreg_n;
+	bool                         cfg_access;
+	spinlock_t                   cfg_lock;
+	unsigned long                irqsave_flags;
 };
 
+extern void msm_pcie_config_msi_controller(struct msm_pcie_dev_t *dev);
 extern uint32_t msm_pcie_irq_init(struct msm_pcie_dev_t *dev);
 extern void msm_pcie_irq_deinit(struct msm_pcie_dev_t *dev);
 extern int msm_pcie_get_debug_mask(void);
