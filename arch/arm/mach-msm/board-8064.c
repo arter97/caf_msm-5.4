@@ -3438,7 +3438,7 @@ static void __init apq8064_cdp_init(void)
 			cyttsp_pdata.sleep_gpio = CYTTSP_TS_GPIO_SLEEP_ALT;
 	apq8064_common_init();
 	if (machine_is_mpq8064_cdp() || machine_is_mpq8064_hrd() ||
-		machine_is_mpq8064_dtv() || machine_is_apq8064_adp_2()) {
+		machine_is_mpq8064_dtv()) {
 		enable_avc_i2c_bus();
 		msm_rotator_set_split_iommu_domain();
 		platform_add_devices(mpq_devices, ARRAY_SIZE(mpq_devices));
