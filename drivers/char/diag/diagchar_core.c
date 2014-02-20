@@ -41,7 +41,6 @@ MODULE_DESCRIPTION("Diag Char Driver");
 MODULE_LICENSE("GPL v2");
 MODULE_VERSION("1.0");
 
-#define MIN_SIZ_ALLOW 4
 #define INIT	1
 #define EXIT	-1
 struct diagchar_dev *driver;
@@ -1110,8 +1109,7 @@ static int diagchar_write(struct file *file, const char __user *buf,
 		return 0;
 	}
 
-	if (payload_size > itemsize ||
-			payload_size <= MIN_SIZ_ALLOW) {
+	if (payload_size > itemsize) {
 		pr_err("diag: Dropping packet, invalid packet size. Current payload size %d\n",
 				payload_size);
 		driver->dropped_count++;
