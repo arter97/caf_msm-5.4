@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -4324,19 +4324,26 @@ static int hdmi_msm_hpd_on(void)
 		}
 		hdmi_msm_dump_regs("HDMI-INIT: ");
 
-		hdmi_msm_set_mode(FALSE);
-		if (!phy_reset_done) {
-			hdmi_phy_reset();
-			phy_reset_done = 1;
+		if (!hdmi_msm_state->is_splash_enabled) {
+			hdmi_msm_set_mode(FALSE);
+			if (!phy_reset_done) {
+				hdmi_phy_reset();
+				phy_reset_done = 1;
+			}
+			hdmi_msm_set_mode(TRUE);
 		}
-		hdmi_msm_set_mode(TRUE);
 
 		/* HDMI_USEC_REFTIMER[0x0208] */
 		HDMI_OUTP(0x0208, 0x0001001B);
 
 		/* Set up HPD state variables */
 		mutex_lock(&external_common_state_hpd_mutex);
-		external_common_state->hpd_state = 0;
+
+		if (hdmi_msm_state->is_splash_enabled)
+			external_common_state->hpd_state = 1;
+		else
+			external_common_state->hpd_state = 0;
+
 		mutex_unlock(&external_common_state_hpd_mutex);
 		mutex_lock(&hdmi_msm_state_mutex);
 		mutex_unlock(&hdmi_msm_state_mutex);
@@ -4676,6 +4683,9 @@ static int __devinit hdmi_msm_probe(struct platform_device *pdev)
 
 	hdmi_msm_state->is_mhl_enabled = hdmi_msm_state->pd->is_mhl_enabled;
 
+	hdmi_msm_state->is_splash_enabled =
+		hdmi_msm_state->pd->splash_is_enabled();
+
 	rc = check_hdmi_features();
 	if (rc) {
 		DEV_ERR("Init FAILED: check_hdmi_features rc=%d\n", rc);
@@ -4832,6 +4842,12 @@ static int hdmi_msm_hpd_feature(int on)
 	DEV_INFO("%s: %d\n", __func__, on);
 	if (on) {
 		rc = hdmi_msm_hpd_on();
+		/*
+		 * If spash is enabled, HPD interrupt not received,
+		 * send uevent directly
+		 */
+		if (hdmi_msm_state->is_splash_enabled)
+			hdmi_msm_send_event(HPD_EVENT_ONLINE);
 	} else {
 		if (external_common_state->hpd_state) {
 			/* Send offline event to switch OFF HDMI and HAL FD */
