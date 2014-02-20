@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2010 Samsung Electronics Co.Ltd
  * Author: Joonyoung Shim <jy0922.shim@samsung.com>
- * Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2012, 2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -67,6 +67,8 @@ struct mxt_platform_data {
 
 	unsigned long irqflags;
 	bool	i2c_pull_up;
+	bool no_regulator_support;
+	bool no_reset_gpio;
 	bool	digital_pwr_regulator;
 	int reset_gpio;
 	u32 reset_gpio_flags;
