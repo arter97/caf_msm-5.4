@@ -3036,7 +3036,7 @@ static void a3xx_err_callback(struct adreno_device *adreno_dev, int bit)
 		 * Return the word address of the erroring register so that it
 		 * matches the register specification
 		 */
-		if (!__ratelimit(&ratelimit_state))
+		if (__ratelimit(&ratelimit_state))
 			KGSL_DRV_CRIT(device,
 			"RBBM | AHB bus error | %s | addr=%x | ports=%x:%x\n",
 			reg & (1 << 28) ? "WRITE" : "READ",
@@ -3071,7 +3071,7 @@ static void a3xx_err_callback(struct adreno_device *adreno_dev, int bit)
 	 * Limit error interrupt reporting to prevent
 	 * kernel logs causing watchdog timeout
 	 */
-	if (!__ratelimit(&ratelimit_state))
+	if (__ratelimit(&ratelimit_state))
 		KGSL_DRV_CRIT(device, "%s\n", err);
 }
 
