@@ -510,6 +510,9 @@ static void kgsl_iommu_clk_disable_event(struct kgsl_device *device, void *data,
 	else
 		/* something went wrong with the event handling mechanism */
 		BUG_ON(1);
+
+	/* Free param we are done using it */
+	kfree(param);
 }
 
 /*
@@ -1756,7 +1759,7 @@ kgsl_iommu_map(struct kgsl_pagetable *pt,
 	int ret;
 	unsigned int iommu_virt_addr;
 	struct kgsl_iommu_pt *iommu_pt = pt->priv;
-	int size = memdesc->size;
+	size_t size = memdesc->size;
 
 	BUG_ON(NULL == iommu_pt);
 
@@ -1765,7 +1768,7 @@ kgsl_iommu_map(struct kgsl_pagetable *pt,
 	ret = iommu_map_range(iommu_pt->domain, iommu_virt_addr, memdesc->sg,
 				size, protflags);
 	if (ret) {
-		KGSL_CORE_ERR("iommu_map_range(%p, %x, %p, %d, %x) err: %d\n",
+		KGSL_CORE_ERR("iommu_map_range(%p, %x, %p, %zd, %x) err: %d\n",
 			iommu_pt->domain, iommu_virt_addr, memdesc->sg, size,
 			protflags, ret);
 		return ret;
