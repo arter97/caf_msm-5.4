@@ -487,7 +487,7 @@ static void bam_mux_process_data(struct sk_buff *rx_skb)
 	rx_hdr = (struct bam_mux_hdr *)rx_skb->data;
 
 	rx_skb->data = (unsigned char *)(rx_hdr + 1);
-	rx_skb->tail = rx_skb->data + rx_hdr->pkt_len;
+	skb_set_tail_pointer(rx_skb, rx_hdr->pkt_len);
 	rx_skb->len = rx_hdr->pkt_len;
 	rx_skb->truesize = rx_hdr->pkt_len + sizeof(struct sk_buff);
 
@@ -822,7 +822,7 @@ int msm_bam_dmux_write(uint32_t id, struct sk_buff *skb)
 	hdr->pad_len = skb->len - (sizeof(struct bam_mux_hdr) + hdr->pkt_len);
 
 	DBG("%s: data %p, tail %p skb len %d pkt len %d pad len %d\n",
-	    __func__, skb->data, skb->tail, skb->len,
+	    __func__, skb->data, skb_tail_pointer(skb), skb->len,
 	    hdr->pkt_len, hdr->pad_len);
 
 	pkt = kmalloc(sizeof(struct tx_pkt_info), GFP_ATOMIC);
@@ -1101,7 +1101,7 @@ static void rx_switch_to_interrupt_mode(void)
 		mutex_lock(&bam_rx_pool_mutexlock);
 		if (unlikely(list_empty(&bam_rx_pool))) {
 			DMUX_LOG_KERR("%s: have iovec %p but rx pool empty\n",
-				__func__, (void *)iov.addr);
+				__func__, (void *)(uintptr_t)iov.addr);
 			mutex_unlock(&bam_rx_pool_mutexlock);
 			continue;
 		}
@@ -1110,11 +1110,11 @@ static void rx_switch_to_interrupt_mode(void)
 		if (info->dma_address != iov.addr) {
 			DMUX_LOG_KERR("%s: iovec %p != dma %p\n",
 				__func__,
-				(void *)iov.addr,
-				(void *)info->dma_address);
+				(void *)(uintptr_t)iov.addr,
+				(void *)(uintptr_t)info->dma_address);
 			list_for_each_entry(info, &bam_rx_pool, list_node) {
 				DMUX_LOG_KERR("%s: dma %p\n", __func__,
-					(void *)info->dma_address);
+					(void *)(uintptr_t)info->dma_address);
 				if (iov.addr == info->dma_address)
 					break;
 			}
@@ -1188,7 +1188,7 @@ static void rx_timer_work_func(struct work_struct *work)
 			if (unlikely(list_empty(&bam_rx_pool))) {
 				DMUX_LOG_KERR(
 					"%s: have iovec %p but rx pool empty\n",
-					__func__, (void *)iov.addr);
+					__func__, (void *)(uintptr_t)iov.addr);
 				mutex_unlock(&bam_rx_pool_mutexlock);
 				continue;
 			}
@@ -1197,12 +1197,13 @@ static void rx_timer_work_func(struct work_struct *work)
 			if (info->dma_address != iov.addr) {
 				DMUX_LOG_KERR("%s: iovec %p != dma %p\n",
 					__func__,
-					(void *)iov.addr,
-					(void *)info->dma_address);
+					(void *)(uintptr_t)iov.addr,
+					(void *)(uintptr_t)info->dma_address);
 				list_for_each_entry(info, &bam_rx_pool,
 						list_node) {
 					DMUX_LOG_KERR("%s: dma %p\n", __func__,
-						(void *)info->dma_address);
+						(void *)(uintptr_t)
+							info->dma_address);
 					if (iov.addr == info->dma_address)
 						break;
 				}
@@ -1767,8 +1768,8 @@ static void reconnect_to_bam(void)
 		/* delayed to here to prevent bus stall */
 		bam_ops->sps_disconnect_ptr(bam_tx_pipe);
 		bam_ops->sps_disconnect_ptr(bam_rx_pipe);
-		__memzero(rx_desc_mem_buf.base, rx_desc_mem_buf.size);
-		__memzero(tx_desc_mem_buf.base, tx_desc_mem_buf.size);
+		memset(rx_desc_mem_buf.base, 0, rx_desc_mem_buf.size);
+		memset(tx_desc_mem_buf.base, 0, tx_desc_mem_buf.size);
 	}
 	ssr_skipped_disconnect = 0;
 	i = bam_ops->sps_device_reset_ptr(a2_device_handle);
@@ -1842,8 +1843,8 @@ static void disconnect_to_bam(void)
 		bam_ops->sps_disconnect_ptr(bam_tx_pipe);
 		BAM_DMUX_LOG("%s: disconnect rx\n", __func__);
 		bam_ops->sps_disconnect_ptr(bam_rx_pipe);
-		__memzero(rx_desc_mem_buf.base, rx_desc_mem_buf.size);
-		__memzero(tx_desc_mem_buf.base, tx_desc_mem_buf.size);
+		memset(rx_desc_mem_buf.base, 0, rx_desc_mem_buf.size);
+		memset(tx_desc_mem_buf.base, 0, tx_desc_mem_buf.size);
 		BAM_DMUX_LOG("%s: device reset\n", __func__);
 		sps_device_reset(a2_device_handle);
 	} else {

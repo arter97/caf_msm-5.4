@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -94,7 +94,7 @@ struct bam_ops_if {
 		struct sps_register_event *reg);
 
 	int (*sps_transfer_one_ptr)(struct sps_pipe *h,
-		u32 addr, u32 size,
+		phys_addr_t addr, u32 size,
 		void *user, u32 flags);
 
 	int (*sps_get_iovec_ptr)(struct sps_pipe *h,
