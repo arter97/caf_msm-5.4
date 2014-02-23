@@ -25,7 +25,7 @@
 #include "mdp3.h"
 #include "mdp3_ppp.h"
 
-#define VSYNC_EXPIRE_TICK	4
+#define VSYNC_EXPIRE_TICK	15
 
 static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd);
 static int mdp3_overlay_unset(struct msm_fb_data_type *mfd, int ndx);
@@ -48,6 +48,10 @@ static void mdp3_bufq_deinit(struct mdp3_buffer_queue *bufq)
 
 	if (!count)
 		return;
+
+	if ((mdp3_res->power_save_state) &&
+			!mdp3_iommu_is_attached(MDP3_CLIENT_DMA_P))
+		mdp3_iommu_enable(MDP3_CLIENT_DMA_P);
 
 	while (count--) {
 		struct mdp3_img_data *data = &bufq->img_data[bufq->pop_idx];
@@ -947,6 +951,10 @@ static int mdp3_overlay_queue_buffer(struct msm_fb_data_type *mfd,
 	struct mdp3_session_data *mdp3_session = mfd->mdp.private1;
 	struct msmfb_data *img = &req->data;
 	struct mdp3_img_data data;
+
+	if ((mdp3_res->power_save_state) &&
+			!mdp3_iommu_is_attached(MDP3_CLIENT_DMA_P))
+		mdp3_iommu_enable(MDP3_CLIENT_DMA_P);
 
 	rc = mdp3_get_img(img, &data, MDP3_CLIENT_DMA_P);
 	if (rc) {

@@ -343,6 +343,32 @@ static void mdp3_bus_scale_unregister(void)
 	}
 }
 
+int mdp3_bus_scale_get_last_quota(int client, u64 *ab_quota, u64 *ib_quota)
+{
+	struct mdp3_bus_handle_map *bus_handle;
+	int client_idx;
+
+	if (client == MDP3_CLIENT_DMA_P) {
+		client_idx  = MDP3_BUS_HANDLE_DMA;
+	} else if (client == MDP3_CLIENT_PPP) {
+		client_idx  = MDP3_BUS_HANDLE_PPP;
+	} else {
+		pr_err("invalid client %d\n", client);
+		return -EINVAL;
+	}
+
+	bus_handle = &mdp3_res->bus_handle[client_idx];
+	if (bus_handle->handle < 1) {
+		pr_err("invalid bus handle %d\n", bus_handle->handle);
+		return -EINVAL;
+	}
+
+	*ab_quota = bus_handle->restore_ab;
+	*ib_quota = bus_handle->restore_ib;
+
+	return 0;
+}
+
 int mdp3_bus_scale_set_quota(int client, u64 ab_quota, u64 ib_quota)
 {
 	struct mdp3_bus_handle_map *bus_handle;
@@ -395,7 +421,31 @@ int mdp3_bus_scale_set_quota(int client, u64 ab_quota, u64 ib_quota)
 	}
 	bus_handle->current_bus_idx = bus_idx;
 	rc = msm_bus_scale_client_update_request(bus_handle->handle, bus_idx);
+
+	if (!rc && ab_quota != 0 && ib_quota != 0) {
+		bus_handle->restore_ab = ab_quota;
+		bus_handle->restore_ib = ib_quota;
+	}
+
 	return rc;
+}
+
+static void mdp3_bus_bw_iommu_enable(u32 enable)
+{
+	u64 ab, ib;
+
+	if (enable && mdp3_res->power_save_state) {
+		mdp3_bus_scale_get_last_quota(MDP3_CLIENT_DMA_P, &ab, &ib);
+		mdp3_bus_scale_set_quota(MDP3_CLIENT_DMA_P, ab, ib);
+		if (!mdp3_iommu_is_attached(MDP3_CLIENT_DMA_P))
+			mdp3_iommu_enable(MDP3_CLIENT_DMA_P);
+		mdp3_res->power_save_state = false;
+	} else if (!enable && !(mdp3_res->power_save_state) &&
+				mdp3_iommu_is_attached(MDP3_CLIENT_DMA_P)) {
+		mdp3_res->power_save_state = true;
+		mdp3_iommu_disable(MDP3_CLIENT_DMA_P);
+		mdp3_bus_scale_set_quota(MDP3_CLIENT_DMA_P, 0, 0);
+	}
 }
 
 static int mdp3_clk_update(u32 clk_idx, u32 enable)
@@ -428,6 +478,7 @@ static int mdp3_clk_update(u32 clk_idx, u32 enable)
 		if ((mdp3_res->clock_ref_count[MDP3_CLK_CORE] > 0 && clk_idx ==
 				MDP3_CLK_AHB) || (clk_idx == MDP3_CLK_CORE &&
 				mdp3_res->clock_ref_count[MDP3_CLK_AHB] > 0)) {
+			mdp3_bus_bw_iommu_enable(enable);
 			mdp3_irq_register();
 			mdp3_irq_enable(MDP3_INTR_DMA_P_HISTO);
 			mdp3_irq_enable(MDP3_INTR_SYNC_PRIMARY_LINE);
@@ -439,6 +490,7 @@ static int mdp3_clk_update(u32 clk_idx, u32 enable)
 				MDP3_CLK_AHB) || (clk_idx == MDP3_CLK_CORE &&
 				mdp3_res->clock_ref_count[MDP3_CLK_AHB] > 0)) {
 			mdp3_irq_deregister();
+			mdp3_bus_bw_iommu_enable(enable);
 		}
 		clk_disable(clk);
 		clk_unprepare(clk);
@@ -818,6 +870,7 @@ static int mdp3_hw_init(void)
 	}
 	mdp3_res->intf[MDP3_DMA_OUTPUT_SEL_AHB].available = 0;
 	mdp3_res->intf[MDP3_DMA_OUTPUT_SEL_LCDC].available = 0;
+	mdp3_res->power_save_state = false;
 
 	return 0;
 }
