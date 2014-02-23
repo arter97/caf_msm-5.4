@@ -362,24 +362,15 @@ static int mdp3_ctrl_res_req_clk(struct msm_fb_data_type *mfd, int status)
 		mdp3_clk_set_rate(MDP3_CLK_VSYNC, MDP_VSYNC_CLK_RATE,
 				MDP3_CLIENT_DMA_P);
 
-		rc = mdp3_clk_prepare();
-		if (rc) {
-			pr_err("mdp3 clk prepare fail\n");
-			return rc;
-		}
-
 		rc = mdp3_clk_enable(1, 1);
 		if (rc) {
 			pr_err("mdp3 clk enable fail\n");
-			mdp3_clk_unprepare();
 			return rc;
 		}
 	} else {
 		rc = mdp3_clk_enable(0, 1);
 		if (rc)
 			pr_err("mdp3 clk disable fail\n");
-		else
-			mdp3_clk_unprepare();
 	}
 	return rc;
 }
@@ -694,7 +685,6 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 		if (rc)
 			pr_err("fail to turn off the panel\n");
 	}
-	mdp3_clk_unprepare();
 
 	pr_debug("mdp3_ctrl_off release bus\n");
 	rc = mdp3_ctrl_res_req_bus(mfd, 0);
