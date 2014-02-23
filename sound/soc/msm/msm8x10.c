@@ -1,4 +1,4 @@
- /* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+ /* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,11 +26,13 @@
 #include <sound/jack.h>
 #include <asm/mach-types.h>
 #include <mach/socinfo.h>
+#include <mach/subsystem_notif.h>
 #include <qdsp6v2/msm-pcm-routing-v2.h>
 #include <sound/q6afe-v2.h>
 #include <linux/module.h>
 #include <mach/gpiomux.h>
 #include "../codecs/msm8x10-wcd.h"
+#include "qdsp6v2/q6core.h"
 #define DRV_NAME "msm8x10-asoc-wcd"
 #define BTSCO_RATE_8KHZ 8000
 #define BTSCO_RATE_16KHZ 16000
@@ -44,10 +46,13 @@
 #define WCD9XXX_MBHC_DEF_BUTTONS 8
 #define WCD9XXX_MBHC_DEF_RLOADS 5
 
+#define ADSP_STATE_READY_TIMEOUT_MS 2000
+
 static int msm_btsco_rate = BTSCO_RATE_8KHZ;
 static int msm_btsco_ch = 1;
 
-static int msm_sec_mi2s_rx2_group;
+static int msm_sec_mi2s_rx2_group = 1;
+static void *adsp_state_notifier;
 
 static int msm_proxy_rx_ch = 2;
 static struct platform_device *spdev;
@@ -64,6 +69,8 @@ static int msm_pri_mi2s_tx_ch = 1;
 static void *def_msm8x10_wcd_mbhc_cal(void);
 static int msm8x10_enable_codec_ext_clk(struct snd_soc_codec *codec, int enable,
 					bool dapm);
+
+static int msm_mi2s_rx2_init(void);
 static struct wcd9xxx_mbhc_config mbhc_cfg = {
 	.read_fw_bin = false,
 	.calibration = NULL,
@@ -281,6 +288,25 @@ static int msm_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	return 0;
 }
 
+static int msm_sec_mi2s_rx2_group_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: msm_sec_mi2s_rx2_group  = %d\n", __func__,
+		msm_sec_mi2s_rx2_group);
+	ucontrol->value.integer.value[0] = msm_sec_mi2s_rx2_group;
+	return 0;
+}
+
+static int msm_sec_mi2s_rx2_group_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	msm_sec_mi2s_rx2_group = ucontrol->value.integer.value[0];
+
+	pr_debug("%s: msm_sec_mi2s_rx2_group = %d\n", __func__,
+		msm_sec_mi2s_rx2_group);
+	msm_mi2s_rx2_init();
+	return 1;
+}
 
 static const char *const btsco_rate_text[] = {"8000", "16000"};
 static const struct soc_enum msm_btsco_enum[] = {
@@ -288,6 +314,7 @@ static const struct soc_enum msm_btsco_enum[] = {
 };
 static const char *const sec_mi2s_rx_ch_text[] = {"One", "Two"};
 static const char *const pri_mi2s_tx_ch_text[] = {"One", "Two"};
+static const char *const sec_mi2s_rx2_group_text[] = {"ZERO", "SD0_SD1"};
 
 static int msm_btsco_rate_get(struct snd_kcontrol *kcontrol,
 			      struct snd_ctl_elem_value *ucontrol)
@@ -596,6 +623,7 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 static const struct soc_enum msm_snd_enum[] = {
 	SOC_ENUM_SINGLE_EXT(2, sec_mi2s_rx_ch_text),
 	SOC_ENUM_SINGLE_EXT(2, pri_mi2s_tx_ch_text),
+	SOC_ENUM_SINGLE_EXT(2, sec_mi2s_rx2_group_text),
 };
 
 static const struct snd_kcontrol_new msm_snd_controls[] = {
@@ -607,6 +635,8 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 			msm_pri_mi2s_tx_ch_get, msm_pri_mi2s_tx_ch_put),
 	SOC_ENUM_EXT("MI2S_RX_VIBRA Channels", msm_snd_enum[0],
 			msm_sec_mi2s_rx2_ch_get, msm_sec_mi2s_rx2_ch_put),
+	SOC_ENUM_EXT("MI2S_SD0_SD1 Group", msm_snd_enum[2],
+			msm_sec_mi2s_rx2_group_get, msm_sec_mi2s_rx2_group_put),
 };
 
 static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
@@ -1171,6 +1201,36 @@ struct snd_soc_card snd_soc_card_msm8x10 = {
 	.num_links	= ARRAY_SIZE(msm8x10_dai),
 };
 
+static int adsp_state_callback(struct notifier_block *nb, unsigned long value,
+			       void *priv)
+{
+	bool timedout;
+	unsigned long timeout;
+
+	if (value == SUBSYS_AFTER_POWERUP) {
+		pr_debug("%s: ADSP is about to power up. bring up codec\n",
+			 __func__);
+
+		timeout = jiffies +
+			  msecs_to_jiffies(ADSP_STATE_READY_TIMEOUT_MS);
+		while (!(timedout = time_after(jiffies, timeout))) {
+			if (!q6core_is_adsp_ready()) {
+				pr_debug("%s: ADSP isn't ready\n", __func__);
+			} else {
+				pr_debug("%s: ADSP is ready\n", __func__);
+				msm_mi2s_rx2_init();
+				break;
+			}
+		}
+	}
+	return NOTIFY_OK;
+}
+
+static struct notifier_block adsp_state_notifier_block = {
+	.notifier_call = adsp_state_callback,
+	.priority = -INT_MAX,
+};
+
 
 static __devinit int msm8x10_asoc_machine_probe(struct platform_device *pdev)
 {
@@ -1221,6 +1281,13 @@ static __devinit int msm8x10_asoc_machine_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "snd_soc_register_card failed (%d)\n",
 			ret);
 		goto err1;
+	}
+	adsp_state_notifier =
+	    subsys_notif_register_notifier("adsp",
+					   &adsp_state_notifier_block);
+	if (!adsp_state_notifier) {
+		pr_err("%s: Failed to register adsp state notifier\n",
+		       __func__);
 	}
 	if (msm_sec_mi2s_rx2_group)
 		msm_mi2s_rx2_init();
