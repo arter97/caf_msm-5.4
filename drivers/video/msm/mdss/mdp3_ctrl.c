@@ -58,6 +58,11 @@ static void mdp3_bufq_deinit(struct mdp3_buffer_queue *bufq)
 		bufq->pop_idx = (bufq->pop_idx + 1) % MDP3_MAX_BUF_QUEUE;
 		mdp3_put_img(data, MDP3_CLIENT_DMA_P);
 	}
+
+	if ((mdp3_res->power_save_state) &&
+			mdp3_iommu_is_attached(MDP3_CLIENT_DMA_P))
+		mdp3_iommu_disable(MDP3_CLIENT_DMA_P);
+
 	bufq->count = 0;
 	bufq->push_idx = 0;
 	bufq->pop_idx = 0;
@@ -695,9 +700,11 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 	if (rc)
 		pr_err("mdp bus resource release failed\n");
 
-	rc = mdp3_iommu_disable(MDP3_CLIENT_DMA_P);
-	if (rc)
-		pr_err("fail to dettach MDP DMA SMMU\n");
+	if (mdp3_iommu_is_attached(MDP3_CLIENT_DMA_P)) {
+		rc = mdp3_iommu_disable(MDP3_CLIENT_DMA_P);
+		if (rc)
+			pr_err("fail to dettach MDP DMA SMMU\n");
+	}
 
 	mdp3_ctrl_notifier_unregister(mdp3_session,
 		&mdp3_session->mfd->mdp_sync_pt_data.notifier);
