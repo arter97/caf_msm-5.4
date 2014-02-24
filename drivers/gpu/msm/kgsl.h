@@ -14,6 +14,8 @@
 #define __KGSL_H
 
 #include <linux/types.h>
+#include <linux/slab.h>
+#include <linux/vmalloc.h>
 #include <linux/msm_kgsl.h>
 #include <linux/platform_device.h>
 #include <linux/clk.h>
@@ -22,8 +24,6 @@
 #include <linux/cdev.h>
 #include <linux/regulator/consumer.h>
 #include <linux/mm.h>
-
-#define KGSL_NAME "kgsl"
 
 /* The number of memstore arrays limits the number of contexts allowed.
  * If more contexts are needed, update multiple for MEMSTORE_SIZE
@@ -40,34 +40,8 @@
 #define DRM_KGSL_GEM_CACHE_OP_TO_DEV	0x0001
 #define DRM_KGSL_GEM_CACHE_OP_FROM_DEV	0x0002
 
-/* The size of each entry in a page table */
-#define KGSL_PAGETABLE_ENTRY_SIZE  4
-
 /* The SVM upper bound is the same as the TASK_SIZE in arm32 */
 #define KGSL_SVM_UPPER_BOUND (0xC0000000 - SZ_16M)
-
-/* Pagetable Virtual Address base */
-#ifndef CONFIG_MSM_KGSL_CFF_DUMP
-#define KGSL_PAGETABLE_BASE	0x10000000
-#else
-#define KGSL_PAGETABLE_BASE	SZ_4M
-#endif
-
-/* Extra accounting entries needed in the pagetable */
-#define KGSL_PT_EXTRA_ENTRIES      16
-
-#define KGSL_PAGETABLE_ENTRIES(_sz) (((_sz) >> PAGE_SHIFT) + \
-				     KGSL_PT_EXTRA_ENTRIES)
-
-#ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
-#define KGSL_PAGETABLE_COUNT (CONFIG_MSM_KGSL_PAGE_TABLE_COUNT)
-#else
-#define KGSL_PAGETABLE_COUNT 1
-#endif
-
-/* Casting using container_of() for structures that kgsl owns. */
-#define KGSL_CONTAINER_OF(ptr, type, member) \
-		container_of(ptr, type, member)
 
 /* A macro for memory statistics - add the new size to the stat and if
    the statisic is greater then _max, set _max
@@ -174,7 +148,6 @@ struct kgsl_memdesc {
 	unsigned int priv; /* Internal flags and settings */
 	struct scatterlist *sg;
 	unsigned int sglen; /* Active entries in the sglist */
-	unsigned int sglen_alloc;  /* Allocated entries in the sglist */
 	struct kgsl_memdesc_ops *ops;
 	unsigned int flags; /* Flags set from userspace */
 	struct device *dev;
@@ -205,17 +178,9 @@ struct kgsl_mem_entry {
 	struct kgsl_device_private *dev_priv;
 };
 
-#ifdef CONFIG_MSM_KGSL_MMU_PAGE_FAULT
-#define MMU_CONFIG 2
-#else
-#define MMU_CONFIG 1
-#endif
-
 long kgsl_ioctl_device_getproperty(struct kgsl_device_private *dev_priv,
 					  unsigned int cmd, void *data);
 long kgsl_ioctl_device_setproperty(struct kgsl_device_private *dev_priv,
-					unsigned int cmd, void *data);
-long kgsl_ioctl_device_waittimestamp(struct kgsl_device_private *dev_priv,
 					unsigned int cmd, void *data);
 long kgsl_ioctl_device_waittimestamp_ctxtid(struct kgsl_device_private
 				*dev_priv, unsigned int cmd, void *data);
@@ -223,12 +188,7 @@ long kgsl_ioctl_rb_issueibcmds(struct kgsl_device_private *dev_priv,
 				      unsigned int cmd, void *data);
 long kgsl_ioctl_submit_commands(struct kgsl_device_private *dev_priv,
 				unsigned int cmd, void *data);
-long kgsl_ioctl_cmdstream_readtimestamp(struct kgsl_device_private *dev_priv,
-					unsigned int cmd, void *data);
 long kgsl_ioctl_cmdstream_readtimestamp_ctxtid(struct kgsl_device_private
-					*dev_priv, unsigned int cmd,
-					void *data);
-long kgsl_ioctl_cmdstream_freememontimestamp(struct kgsl_device_private
 					*dev_priv, unsigned int cmd,
 					void *data);
 long kgsl_ioctl_cmdstream_freememontimestamp_ctxtid(
@@ -278,16 +238,6 @@ struct kgsl_mem_entry *kgsl_sharedmem_find_region(
 	size_t size);
 
 void kgsl_get_memory_usage(char *str, size_t len, unsigned int memflags);
-
-void kgsl_signal_event(struct kgsl_device *device,
-		struct kgsl_context *context, unsigned int timestamp,
-		unsigned int type);
-
-void kgsl_signal_events(struct kgsl_device *device,
-		struct kgsl_context *context, unsigned int type);
-
-void kgsl_cancel_events(struct kgsl_device *device,
-	void *owner);
 
 extern const struct dev_pm_ops kgsl_pm_ops;
 
@@ -402,6 +352,35 @@ static inline bool kgsl_addr_range_overlap(unsigned int gpuaddr1,
 		return false;
 	return !(((gpuaddr1 + size1) <= gpuaddr2) ||
 		(gpuaddr1 >= (gpuaddr2 + size2)));
+}
+
+/**
+ * kgsl_malloc() - Use either kzalloc or vmalloc to allocate memory
+ * @size: Size of the desired allocation
+ *
+ * Allocate a block of memory for the driver - if it is small try to allocate it
+ * from kmalloc (fast!) otherwise we need to go with vmalloc (safe!)
+ */
+static inline void *kgsl_malloc(size_t size)
+{
+	if (size <= PAGE_SIZE)
+		return kzalloc(size, GFP_KERNEL);
+
+	return vmalloc(size);
+}
+
+/**
+ * kgsl_free() - Free memory allocated by kgsl_malloc()
+ * @ptr: Pointer to the memory to free
+ *
+ * Free the memory be it in vmalloc or kmalloc space
+ */
+static inline void kgsl_free(void *ptr)
+{
+	if (is_vmalloc_addr(ptr))
+		return vfree(ptr);
+
+	kfree(ptr);
 }
 
 #endif /* __KGSL_H */

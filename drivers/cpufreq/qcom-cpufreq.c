@@ -31,8 +31,8 @@
 #include <linux/err.h>
 #include <linux/platform_device.h>
 #include <linux/of.h>
+#include <soc/qcom/cpufreq.h>
 #include <trace/events/power.h>
-#include <mach/cpufreq.h>
 
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
@@ -601,4 +601,4 @@ static int __init msm_cpufreq_register(void)
 	return cpufreq_register_driver(&msm_cpufreq_driver);
 }
 
-device_initcall(msm_cpufreq_register);
+subsys_initcall(msm_cpufreq_register);

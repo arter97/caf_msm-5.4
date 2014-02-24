@@ -26,15 +26,18 @@
 #define DEVICE_3D0_NAME "kgsl-3d0"
 
 #define ADRENO_DEVICE(device) \
-		KGSL_CONTAINER_OF(device, struct adreno_device, dev)
+		container_of(device, struct adreno_device, dev)
 
 #define ADRENO_CONTEXT(device) \
-		KGSL_CONTAINER_OF(device, struct adreno_context, base)
+		container_of(device, struct adreno_context, base)
 
 #define ADRENO_CHIPID_CORE(_id) (((_id) >> 24) & 0xFF)
 #define ADRENO_CHIPID_MAJOR(_id) (((_id) >> 16) & 0xFF)
 #define ADRENO_CHIPID_MINOR(_id) (((_id) >> 8) & 0xFF)
 #define ADRENO_CHIPID_PATCH(_id) ((_id) & 0xFF)
+
+/* Adreno core features */
+#define ADRENO_USES_OCMEM BIT(0)
 
 /* Flags to control command packet settings */
 #define KGSL_CMD_FLAGS_NONE             0
@@ -159,6 +162,7 @@ struct adreno_device {
 	unsigned int pm4_fw_version;
 	struct adreno_ringbuffer ringbuffer;
 	struct adreno_gpudev *gpudev;
+	unsigned long features;
 	unsigned int wait_timeout;
 	unsigned int pm4_jt_idx;
 	unsigned int pm4_jt_addr;
@@ -167,9 +171,6 @@ struct adreno_device {
 	unsigned int pfp_jt_addr;
 	unsigned int pfp_bstrp_size;
 	unsigned int pfp_bstrp_ver;
-	unsigned int istore_size;
-	unsigned int pix_shader_start;
-	unsigned int instruction_size;
 	unsigned int ib_check_level;
 	unsigned int fast_hang_detect;
 	unsigned int ft_policy;
@@ -179,7 +180,6 @@ struct adreno_device {
 	unsigned int ft_pf_policy;
 	unsigned int gpulist_index;
 	struct ocmem_buf *ocmem_hdl;
-	unsigned int ocmem_base;
 	struct adreno_profile profile;
 	struct adreno_dispatcher dispatcher;
 	struct kgsl_memdesc pwron_fixup;
@@ -321,6 +321,7 @@ enum adreno_regs {
 	ADRENO_REG_CP_MERCIU_DATA2,
 	ADRENO_REG_CP_MEQ_ADDR,
 	ADRENO_REG_CP_MEQ_DATA,
+	ADRENO_REG_CP_HW_FAULT,
 	ADRENO_REG_SCRATCH_ADDR,
 	ADRENO_REG_SCRATCH_UMSK,
 	ADRENO_REG_SCRATCH_REG2,
@@ -356,6 +357,7 @@ enum adreno_regs {
 	ADRENO_REG_SQ_INST_STORE_MANAGMENT,
 	ADRENO_REG_TP0_CHICKEN,
 	ADRENO_REG_RBBM_RBBM_CTL,
+	ADRENO_REG_UCHE_INVALIDATE0,
 	ADRENO_REG_REGISTER_MAX,
 };
 
@@ -494,8 +496,6 @@ struct adreno_gpudev {
 	 * so define them in the structure and use them as variables.
 	 */
 	const struct adreno_reg_offsets *reg_offsets;
-	/* keeps track of when we need to execute the draw workaround code */
-	int ctx_switches_since_last_draw;
 
 	struct adreno_perfcounters *perfcounters;
 	const struct adreno_invalid_countables
@@ -594,6 +594,10 @@ int adreno_perfcounter_query_group(struct adreno_device *adreno_dev,
 
 int adreno_perfcounter_read_group(struct adreno_device *adreno_dev,
 	struct kgsl_perfcounter_read_group __user *reads, unsigned int count);
+
+int adreno_set_constraint(struct kgsl_device *device,
+				struct kgsl_context *context,
+				struct kgsl_device_constraint *constraint);
 
 void adreno_shadermem_regread(struct kgsl_device *device,
 						unsigned int offsetwords,
