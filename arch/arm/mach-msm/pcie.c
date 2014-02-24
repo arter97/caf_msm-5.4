@@ -141,7 +141,7 @@ static struct msm_pcie_vreg_info_t msm_pcie_vreg_info[MSM_PCIE_MAX_VREG] = {
 
 /* GPIOs */
 static struct msm_pcie_gpio_info_t msm_pcie_gpio_info[MSM_PCIE_MAX_GPIO] = {
-	{"perst-gpio",      0, 1, 0, 1},
+	{"perst-gpio",      0, 1, 0, 0},
 	{"wake-gpio",       0, 0, 0, 0},
 	{"clkreq-gpio",     0, 0, 0, 0}
 };
@@ -904,6 +904,7 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev, u32 options)
 
 	/* assert PCIe reset link to keep EP in reset */
 
+	pr_info("PCIe: Assert the reset of endpoint\n");
 	gpio_set_value(dev->gpio[MSM_PCIE_GPIO_PERST].num,
 				dev->gpio[MSM_PCIE_GPIO_PERST].on);
 	usleep_range(PERST_PROPAGATION_DELAY_US_MIN,
@@ -962,8 +963,12 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev, u32 options)
 		goto link_fail;
 	}
 
+	if (dev->ep_latency)
+		msleep(dev->ep_latency);
+
 	/* de-assert PCIe reset link to bring EP out of reset */
 
+	pr_info("PCIe: Release the reset of endpoint\n");
 	gpio_set_value(dev->gpio[MSM_PCIE_GPIO_PERST].num,
 				1 - dev->gpio[MSM_PCIE_GPIO_PERST].on);
 	usleep_range(PERST_PROPAGATION_DELAY_US_MIN,
@@ -998,6 +1003,7 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev, u32 options)
 	if (val & XMLH_LINK_UP) {
 		pr_info("PCIe link initialized\n");
 	} else {
+		pr_info("PCIe: Assert the reset of endpoint\n");
 		gpio_set_value(dev->gpio[MSM_PCIE_GPIO_PERST].num,
 			dev->gpio[MSM_PCIE_GPIO_PERST].on);
 		pr_err("PCIe link initialization failed\n");
@@ -1032,6 +1038,7 @@ void msm_pcie_disable(struct msm_pcie_dev_t *dev, u32 options)
 {
 	PCIE_DBG("\n");
 
+	pr_info("PCIe: Assert the reset of endpoint\n");
 	gpio_set_value(dev->gpio[MSM_PCIE_GPIO_PERST].num,
 				dev->gpio[MSM_PCIE_GPIO_PERST].on);
 
@@ -1236,6 +1243,22 @@ static int msm_pcie_probe(struct platform_device *pdev)
 				"qcom,aux-clk-sync");
 	PCIE_DBG("AUX clock is %s synchronous to Core clock.\n",
 		msm_pcie_dev[rc_idx].aux_clk_sync ? "" : "not");
+
+	msm_pcie_dev[rc_idx].ext_ref_clk =
+		of_property_read_bool((&pdev->dev)->of_node,
+				"qcom,ext-ref-clk");
+	PCIE_DBG("ref clk is %s.\n",
+		msm_pcie_dev[rc_idx].ext_ref_clk ? "external" : "internal");
+
+	msm_pcie_dev[rc_idx].ep_latency = 0;
+	ret = of_property_read_u32((&pdev->dev)->of_node,
+				"qcom,ep-latency",
+				&msm_pcie_dev[rc_idx].ep_latency);
+	if (ret)
+		PCIE_DBG("ep-latency does not exist.\n");
+	else
+		PCIE_DBG("ep-latency: 0x%x.\n",
+				msm_pcie_dev[rc_idx].ep_latency);
 
 	msm_pcie_dev[rc_idx].msi_gicm_addr = 0;
 	msm_pcie_dev[rc_idx].msi_gicm_base = 0;

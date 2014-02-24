@@ -1913,17 +1913,6 @@ static struct branch_clk mmss_misc_ahb_clk = {
 	},
 };
 
-static struct branch_clk mmss_mmssnoc_bto_ahb_clk = {
-	.cbcr_reg = MMSS_MMSSNOC_BTO_AHB_CBCR,
-	.has_sibling = 1,
-	.base = &virt_bases[MMSS_BASE],
-	.c = {
-		.dbg_name = "mmss_mmssnoc_bto_ahb_clk",
-		.ops = &clk_ops_branch,
-		CLK_INIT(mmss_mmssnoc_bto_ahb_clk.c),
-	},
-};
-
 static struct branch_clk mmss_mmssnoc_axi_clk = {
 	.cbcr_reg = MMSS_MMSSNOC_AXI_CBCR,
 	.has_sibling = 1,
@@ -2842,7 +2831,7 @@ static int msm_mmsscc_8974_probe(struct platform_device *pdev)
 static struct platform_driver msm_clock_mmsscc_driver = {
 	.probe = msm_mmsscc_8974_probe,
 	.driver = {
-		.name = "mmsscc",
+		.name = "qcom,mmsscc-8974",
 		.of_match_table = msm_clock_mmsscc_match_table,
 		.owner = THIS_MODULE,
 	},

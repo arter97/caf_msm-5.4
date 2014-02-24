@@ -15,14 +15,17 @@
 
 #include <mach/iommu.h>
 
+/* Pagetable virtual base */
+#define KGSL_PAGETABLE_BASE     0x10000000
+
 #define KGSL_IOMMU_CTX_OFFSET_V0	0
 #define KGSL_IOMMU_CTX_OFFSET_V1	0x8000
-#define KGSL_IOMMU_CTX_OFFSET_V2	0x8000
+#define KGSL_IOMMU_CTX_OFFSET_V2	0x9000
 #define KGSL_IOMMU_CTX_SHIFT		12
 
 /* IOMMU V2 AHB base is fixed */
 #define KGSL_IOMMU_V2_AHB_BASE		0xA000
-/* IOMMU_V2 AHB base points to ContextBank0 */
+/* IOMMU_V2 AHB base points to ContextBank1 */
 #define KGSL_IOMMU_CTX_AHB_OFFSET_V2   0
 
 /* TLBLKCR fields */
