@@ -1022,7 +1022,7 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 	}
 
 	panel = mdp3_session->panel;
-	if (!mdp3_iommu_is_attached(MDP3_CLIENT_DMA_P)) {
+	if (mdp3_res->splash_mem_addr != 0) {
 		pr_debug("continuous splash screen, IOMMU not attached\n");
 		mdp3_ctrl_reset(mfd);
 		reset_done = true;
