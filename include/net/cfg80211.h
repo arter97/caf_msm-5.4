@@ -4711,6 +4711,15 @@ unsigned int ieee80211_get_num_supported_channels(struct wiphy *wiphy);
  * @gfp: context flags
  */
 void cfg80211_ap_stopped(struct net_device *netdev, gfp_t gfp);
+/**
+ * cfg80211_is_gratuitous_arp_unsolicited_na - packet is grat. ARP/unsol. NA
+ * @skb: the input packet, must be an ethernet frame already
+ *
+ * Return: %true if the packet is a gratuitous ARP or unsolicited NA packet.
+ * This is used to drop packets that shouldn't occur because the AP implements
+ * a proxy service.
+ */
+bool cfg80211_is_gratuitous_arp_unsolicited_na(struct sk_buff *skb);
 
 /* Logging, debugging and troubleshooting/diagnostic helpers. */
 
