@@ -701,6 +701,7 @@ struct dwc3_scratchpad_array {
  * @hwparams: copy of hwparams registers
  * @root: debugfs root folder pointer
  * @tx_fifo_size: Available RAM size for TX fifo allocation
+ * @err_evt_seen: previous event in queue was erratic error
  */
 struct dwc3 {
 	struct usb_ctrlrequest	*ctrl_req;
@@ -809,6 +810,7 @@ struct dwc3 {
 
 	bool			nominal_elastic_buffer;
 	bool			core_reset_after_phy_init;
+	bool			err_evt_seen;
 };
 
 /* -------------------------------------------------------------------------- */
