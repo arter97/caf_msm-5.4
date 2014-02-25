@@ -57,6 +57,7 @@
 #include "mdss_debug.h"
 
 #define AXI_HALT_TIMEOUT_US	0x4000
+bool bus_scale_supported = false;
 
 struct mdss_data_type *mdss_res;
 
@@ -363,6 +364,8 @@ EXPORT_SYMBOL(mdss_disable_irq_nosync);
 
 static int mdss_mdp_bus_scale_register(struct mdss_data_type *mdata)
 {
+	if(!bus_scale_supported)
+		return 0;
 	if (!mdata->bus_hdl) {
 		mdata->bus_hdl =
 			msm_bus_scale_register_client(mdata->bus_scale_table);
@@ -389,6 +392,8 @@ int mdss_mdp_bus_scale_set_quota(u64 ab_quota, u64 ib_quota)
 {
 	int new_uc_idx;
 
+	if(!bus_scale_supported)
+		return 0;
 	if (mdss_res->bus_hdl < 1) {
 		pr_err("invalid bus handle %d\n", mdss_res->bus_hdl);
 		return -EINVAL;
@@ -2417,6 +2422,8 @@ static int mdss_mdp_parse_dt_bus_scale(struct platform_device *pdev)
 	int rc;
 	struct mdss_data_type *mdata = platform_get_drvdata(pdev);
 
+	if(!bus_scale_supported)
+		return 0;
 	rc = of_property_read_u32(pdev->dev.of_node, "qcom,msm-bus,num-paths",
 		&mdata->axi_port_cnt);
 	if (rc) {
