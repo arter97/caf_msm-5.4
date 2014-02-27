@@ -17,13 +17,14 @@
 #include <linux/string.h>
 #include <linux/clk.h>
 #include <linux/dma-mapping.h>
+#include <linux/msm-bus.h>
+#include <linux/msm-bus-board.h>
+
 #include <soc/qcom/scm.h>
 #include <soc/qcom/socinfo.h>
 
 #include <asm/cacheflush.h>
 
-#include <mach/msm_bus.h>
-#include <mach/msm_bus_board.h>
 #include "scm-pas.h"
 
 #define PAS_INIT_IMAGE_CMD	1
@@ -238,13 +239,6 @@ int pas_supported(enum pas_id id)
 
 	if (!secure_pil)
 		return 0;
-
-	/*
-	 * 8660 SCM doesn't support querying secure PIL support so just return
-	 * true if not overridden on the command line.
-	 */
-	if (cpu_is_msm8x60())
-		return 1;
 
 	if (scm_is_call_available(SCM_SVC_PIL, PAS_IS_SUPPORTED_CMD) <= 0)
 		return 0;

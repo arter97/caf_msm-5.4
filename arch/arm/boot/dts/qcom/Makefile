@@ -33,7 +33,8 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
 	msm8916-cdp.dtb \
 	msm8916-cdp-smb1360.dtb \
 	msm8916-mtp.dtb \
-	msm8916-mtp-smb1360.dtb
+	msm8916-mtp-smb1360.dtb \
+	msm8916-qrd.dtb
 dtb-$(CONFIG_ARCH_MSM8226) += msm8226-sim.dtb \
 	msm8226-fluid.dtb \
 	msm8226-v1-cdp.dtb \
@@ -137,9 +138,10 @@ DTB_LIST := $(dtb-y)
 endif
 
 targets += dtbs
+targets += $(addprefix ../, $(DTB_LIST))
 endif
 
-$(obj)/../%.dtb: $(src)/%.dts
+$(obj)/../%.dtb: $(src)/%.dts FORCE
 	$(call if_changed_dep,dtc)
 
 dtbs: $(addprefix $(obj)/../,$(DTB_LIST))
