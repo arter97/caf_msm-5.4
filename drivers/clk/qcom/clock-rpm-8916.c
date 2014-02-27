@@ -197,6 +197,14 @@ static int msm_rpmcc_8916_probe(struct platform_device *pdev)
 
 	clk_prepare_enable(&xo_a_clk_src.c);
 
+        /* Bus driver votes */
+        clk_prepare_enable(&bimc_msmbus_a_clk.c);
+        clk_prepare_enable(&bimc_msmbus_clk.c);
+        clk_prepare_enable(&snoc_msmbus_clk.c);
+        clk_prepare_enable(&snoc_msmbus_a_clk.c);
+        clk_prepare_enable(&pcnoc_msmbus_clk.c);
+        clk_prepare_enable(&pcnoc_msmbus_a_clk.c);
+
 	dev_info(&pdev->dev, "Registered RPM clocks.\n");
 
 	return 0;
