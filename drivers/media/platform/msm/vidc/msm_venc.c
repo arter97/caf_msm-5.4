@@ -879,6 +879,10 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.id = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_TIMESTAMP_MODE,
 		.name = "Encoder Timestamp Mode",
 		.type = V4L2_CTRL_TYPE_MENU,
+		.minimum =
+			V4L2_MPEG_VIDC_VIDEO_RATE_CONTROL_TIMESTAMP_MODE_HONOR,
+		.maximum =
+			V4L2_MPEG_VIDC_VIDEO_RATE_CONTROL_TIMESTAMP_MODE_IGNORE,
 		.default_value =
 			V4L2_MPEG_VIDC_VIDEO_RATE_CONTROL_TIMESTAMP_MODE_HONOR,
 		.menu_skip_mask = ~(
@@ -2782,8 +2786,16 @@ int msm_venc_g_fmt(struct msm_vidc_inst *inst, struct v4l2_format *f)
 				buff_req_buffer->buffer_size : 0;
 		}
 		for (i = 0; i < fmt->num_planes; ++i) {
-			inst->bufq[CAPTURE_PORT].vb2_bufq.plane_sizes[i] =
+			if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+				inst->bufq[OUTPUT_PORT].vb2_bufq.
+				plane_sizes[i] =
 				f->fmt.pix_mp.plane_fmt[i].sizeimage;
+			} else if (f->type ==
+				V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+				inst->bufq[CAPTURE_PORT].vb2_bufq.
+				plane_sizes[i] =
+				f->fmt.pix_mp.plane_fmt[i].sizeimage;
+			}
 		}
 	} else {
 		dprintk(VIDC_ERR,
