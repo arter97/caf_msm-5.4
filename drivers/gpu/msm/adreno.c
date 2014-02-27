@@ -1493,8 +1493,8 @@ static int adreno_of_get_pdata(struct platform_device *pdev)
 	if (ret)
 		goto err;
 
-	/* get pm_qos from target, set it to default if not found */
-	if (adreno_of_read_property(pdev->dev.of_node, "qcom,pm_qos_latency",
+	/* get pm-qos-latency from target, set it to default if not found */
+	if (adreno_of_read_property(pdev->dev.of_node, "qcom,pm-qos-latency",
 		&pdata->pm_qos_latency))
 		pdata->pm_qos_latency = 501;
 
@@ -1755,8 +1755,8 @@ static int adreno_init(struct kgsl_device *device)
 	for (i = 6; i < FT_DETECT_REGS_COUNT; i++)
 		ft_detect_regs[i] = 0;
 
-	/* turn on hang interrupt for A4XX by default */
-	if (adreno_is_a4xx(adreno_dev))
+	/* turn on hang interrupt for A4XX and a330v2 by default */
+	if ((adreno_is_a4xx(adreno_dev)) || (adreno_is_a330v2(adreno_dev)))
 		set_bit(ADRENO_DEVICE_HANG_INTR, &adreno_dev->priv);
 
 	if (adreno_dev->gpudev->irq_setup)
