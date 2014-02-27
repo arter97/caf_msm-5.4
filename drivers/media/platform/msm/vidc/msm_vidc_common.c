@@ -1778,6 +1778,8 @@ static int msm_vidc_load_resources(int flipped_state,
 			num_mbs_per_sec, inst->core->resources.max_load);
 		msm_vidc_print_running_insts(inst->core);
 		inst->state = MSM_VIDC_CORE_INVALID;
+		msm_vidc_queue_v4l2_event(inst,
+					V4L2_EVENT_MSM_VIDC_HW_OVERLOAD);
 		msm_comm_recover_from_session_error(inst);
 		return -ENOMEM;
 	}
@@ -3421,10 +3423,24 @@ int msm_vidc_check_session_supported(struct msm_vidc_inst *inst)
 	hdev = inst->core->device;
 	rc = msm_vidc_load_supported(inst);
 	if (!rc && inst->capability.capability_set) {
-		rc = call_hfi_op(hdev, capability_check,
-			inst->fmts[OUTPUT_PORT]->fourcc,
-			inst->prop.width[CAPTURE_PORT], &capability->width.max,
-			&capability->height.max);
+		if (inst->prop.width[CAPTURE_PORT] < capability->width.min ||
+			inst->prop.height[CAPTURE_PORT] <
+			capability->height.min) {
+			dprintk(VIDC_ERR,
+				"Unsupported WxH = (%u)x(%u), min supported is - (%u)x(%u)\n",
+				inst->prop.width[CAPTURE_PORT],
+				inst->prop.height[CAPTURE_PORT],
+				capability->width.min,
+				capability->height.min);
+			rc = -ENOTSUPP;
+		}
+		if (!rc) {
+			rc = call_hfi_op(hdev, capability_check,
+				inst->fmts[OUTPUT_PORT]->fourcc,
+				inst->prop.width[CAPTURE_PORT],
+				&capability->width.max,
+				&capability->height.max);
+		}
 
 		if (!rc && (inst->prop.height[CAPTURE_PORT]
 			* inst->prop.width[CAPTURE_PORT] >
@@ -3445,7 +3461,6 @@ int msm_vidc_check_session_supported(struct msm_vidc_inst *inst)
 					V4L2_EVENT_MSM_VIDC_HW_OVERLOAD);
 		dprintk(VIDC_WARN,
 			"%s: Hardware is overloaded\n", __func__);
-		wake_up(&inst->kernel_event_queue);
 	}
 	return rc;
 }
