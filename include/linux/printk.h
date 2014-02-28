@@ -329,4 +329,12 @@ static inline void print_hex_dump_bytes(const char *prefix_str, int prefix_type,
 
 #endif
 
+#if defined(CONFIG_OOPS_LOG_BUFFER)
+extern void oops_printk_start(void);
+#else
+static inline void oops_printk_start(void)
+{
+}
+#endif
+
 #endif
