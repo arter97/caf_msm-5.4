@@ -581,7 +581,7 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 			pil_err(desc, "Failed to map memory\n");
 			return -ENOMEM;
 		}
-		memset(buf, 0, size);
+		__memset_io(buf, 0, size);
 		iounmap(buf);
 
 		count -= size;
