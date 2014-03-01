@@ -85,6 +85,7 @@ static int secondary_pen_release(unsigned int cpu)
 	return secondary_holding_pen_release != INVALID_HWID ? -ENOSYS : 0;
 }
 
+/*
 static int unclamp_secondary_sim(unsigned int cpu)
 {
 	int ret = 0;
@@ -119,6 +120,7 @@ out_acc:
 
 	return ret;
 }
+*/
 
 static int unclamp_secondary_cpu(unsigned int cpu)
 {
@@ -204,16 +206,13 @@ static int msm_cpu_boot(unsigned int cpu)
 	int ret = 0;
 
 	if (per_cpu(cold_boot_done, cpu) == false) {
-		if (of_board_is_sim()) {
-			ret = unclamp_secondary_sim(cpu);
-			if (ret)
-				return ret;
-		} else {
-			ret = unclamp_secondary_cpu(cpu);
-			if (ret)
-				return ret;
+	
+		ret = unclamp_secondary_cpu(cpu);
+			if (ret) {
+			return ret;
 		}
-		per_cpu(cold_boot_done, cpu) = true;
+
+	per_cpu(cold_boot_done, cpu) = true;
 	}
 	return secondary_pen_release(cpu);
 }
