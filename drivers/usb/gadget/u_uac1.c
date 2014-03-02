@@ -528,7 +528,7 @@ try_again:
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
 
-	pr_debug("frames = %d, count = %d", (int)frames, count);
+	pr_debug("frames = %d, count = %zd", (int)frames, count);
 
 	result = snd_pcm_lib_read(substream, buf, frames);
 	if (result != frames) {

@@ -2208,7 +2208,8 @@ static int msm_dai_q6_mi2s_hw_params(struct snd_pcm_substream *substream,
 		dai_data->bitwidth = 24;
 		break;
 	default:
-		return -EINVAL;
+		dai_data->port_config.i2s.bit_width = 16;
+		dai_data->bitwidth = 16;
 	}
 
 	dai_data->port_config.i2s.i2s_cfg_minor_version =
