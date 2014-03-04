@@ -889,7 +889,7 @@ static int __init msm_pil_init(void)
 {
 	struct device_node *np;
 
-	np = of_find_compatible_node(NULL, NULL, "qcom,msm-imem-pil");
+	np = 0;
 	if (np) {
 		pil_info_base = of_iomap(np, 0);
 		if (!pil_info_base)
