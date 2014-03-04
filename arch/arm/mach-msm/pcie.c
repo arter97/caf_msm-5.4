@@ -70,6 +70,7 @@
 #define PCIE20_DEVICE_CONTROL2_STATUS2 0x98
 
 #define PCIE20_ACK_F_ASPM_CTRL_REG     0x70C
+#define PCIE20_ACK_N_FTS               0xff00
 
 #define PCIE20_PLR_IATU_VIEWPORT       0x900
 #define PCIE20_PLR_IATU_CTRL1          0x904
@@ -98,8 +99,9 @@
 #define REFCLK_STABILIZATION_DELAY_US_MAX     1500
 #define LINK_RETRY_TIMEOUT_US_MIN             20000
 #define LINK_RETRY_TIMEOUT_US_MAX             25000
-#define LINK_UP_TIMEOUT_US_MIN                100000
-#define LINK_UP_TIMEOUT_US_MAX                105000
+#define LINK_UP_TIMEOUT_US_MIN                5000
+#define LINK_UP_TIMEOUT_US_MAX                5100
+#define LINK_UP_CHECK_MAX_COUNT               20
 
 #define PHY_READY_TIMEOUT_COUNT               10
 #define XMLH_LINK_UP                          0x400
@@ -276,6 +278,15 @@ static inline int msm_pcie_oper_conf(struct pci_bus *bus, u32 devfn, int oper,
 
 	if (!dev->cfg_access) {
 		PCIE_DBG("Access denied for RC%d %d:0x%02x + 0x%04x[%d]\n",
+			rc_idx, bus->number, devfn, where, size);
+		*val = ~0;
+		rv = PCIBIOS_DEVICE_NOT_FOUND;
+		goto unlock;
+	}
+
+	if (dev->link_status != MSM_PCIE_LINK_ENABLED) {
+		PCIE_DBG(
+			"Access to RC%d %d:0x%02x + 0x%04x[%d] is denied because link is down\n",
 			rc_idx, bus->number, devfn, where, size);
 		*val = ~0;
 		rv = PCIBIOS_DEVICE_NOT_FOUND;
@@ -621,17 +632,23 @@ static void msm_pcie_config_controller(struct msm_pcie_dev_t *dev)
 		readl_relaxed(dev->dm_core + PCIE20_PLR_IATU_UTAR));
 	PCIE_DBG("PCIE20_PLR_IATU_CTRL2:0x%x\n",
 		readl_relaxed(dev->dm_core + PCIE20_PLR_IATU_CTRL2));
+
+	/* configure N_FTS */
+	PCIE_DBG("Original PCIE20_ACK_F_ASPM_CTRL_REG:0x%x\n",
+		readl_relaxed(dev->dm_core + PCIE20_ACK_F_ASPM_CTRL_REG));
+	if (!dev->n_fts)
+		msm_pcie_write_mask(dev->dm_core + PCIE20_ACK_F_ASPM_CTRL_REG,
+					0, BIT(15));
+	else
+		msm_pcie_write_mask(dev->dm_core + PCIE20_ACK_F_ASPM_CTRL_REG,
+					PCIE20_ACK_N_FTS,
+					dev->n_fts << 8);
+	PCIE_DBG("Updated PCIE20_ACK_F_ASPM_CTRL_REG:0x%x\n",
+		readl_relaxed(dev->dm_core + PCIE20_ACK_F_ASPM_CTRL_REG));
 }
 
 static void msm_pcie_config_l1ss(struct msm_pcie_dev_t *dev)
 {
-	PCIE_DBG("Original PCIE20_ACK_F_ASPM_CTRL_REG:0x%x\n",
-		readl_relaxed(dev->dm_core + PCIE20_ACK_F_ASPM_CTRL_REG));
-	msm_pcie_write_mask(dev->dm_core + PCIE20_ACK_F_ASPM_CTRL_REG, 0,
-						BIT(15));
-	PCIE_DBG("Updated PCIE20_ACK_F_ASPM_CTRL_REG:0x%x\n",
-		readl_relaxed(dev->dm_core + PCIE20_ACK_F_ASPM_CTRL_REG));
-
 	/* Enable the AUX Clock and the Core Clk to be synchronous for L1SS*/
 	if (!dev->aux_clk_sync)
 		msm_pcie_write_mask(dev->parf +
@@ -897,6 +914,7 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev, u32 options)
 	int ret;
 	uint32_t val;
 	long int retries = 0;
+	int link_check_count = 0;
 
 	PCIE_DBG("\n");
 
@@ -979,11 +997,20 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev, u32 options)
 
 	PCIE_DBG("check if link is up\n");
 
-	/* Wait for 100ms for the link to come up */
-	usleep_range(LINK_UP_TIMEOUT_US_MIN, LINK_UP_TIMEOUT_US_MAX);
+	/* Wait for up to 100ms for the link to come up */
+	do {
+		usleep_range(LINK_UP_TIMEOUT_US_MIN, LINK_UP_TIMEOUT_US_MAX);
+		val =  readl_relaxed(dev->elbi + PCIE20_ELBI_SYS_STTS);
+	} while (!(val & XMLH_LINK_UP) &&
+		(link_check_count++ < LINK_UP_CHECK_MAX_COUNT));
+
+	if (val & XMLH_LINK_UP)
+		PCIE_DBG("Link is up after %d checkings\n", link_check_count);
+	else
+		PCIE_DBG("Initial link training failed\n");
 
 	retries = 0;
-	val =  readl_relaxed(dev->elbi + PCIE20_ELBI_SYS_STTS);
+
 	while (!(val & XMLH_LINK_UP) && (retries < MAX_LINK_RETRIES)) {
 		PCIE_DBG("LTSSM_STATE:0x%x\n", (val >> 0xC) & 0x1f);
 		gpio_set_value(dev->gpio[MSM_PCIE_GPIO_PERST].num,
@@ -1243,6 +1270,17 @@ static int msm_pcie_probe(struct platform_device *pdev)
 				"qcom,aux-clk-sync");
 	PCIE_DBG("AUX clock is %s synchronous to Core clock.\n",
 		msm_pcie_dev[rc_idx].aux_clk_sync ? "" : "not");
+
+	msm_pcie_dev[rc_idx].n_fts = 0;
+	ret = of_property_read_u32((&pdev->dev)->of_node,
+				"qcom,n-fts",
+				&msm_pcie_dev[rc_idx].n_fts);
+
+	if (ret)
+		PCIE_DBG("n-fts does not exist.\n");
+	else
+		PCIE_DBG("n-fts: 0x%x.\n",
+				msm_pcie_dev[rc_idx].n_fts);
 
 	msm_pcie_dev[rc_idx].ext_ref_clk =
 		of_property_read_bool((&pdev->dev)->of_node,
