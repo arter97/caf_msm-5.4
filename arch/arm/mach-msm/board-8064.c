@@ -3652,6 +3652,14 @@ static void __init apq8064_common_init(void)
 
 	apq8064_device_qup_spi_gsbi5.dev.platform_data =
 						&apq8064_qup_spi_gsbi5_pdata;
+	if (machine_is_apq8064_adp_2()) {
+		apq8064_uartdm_gsbi4_pdata.wakeup_irq = gpio_to_irq(11);
+	        apq8064_device_uartdm_gsbi4.dev.platform_data =
+	                &apq8064_uartdm_gsbi4_pdata;
+	        apq8064_device_uartdm_gsbi4.id = 0;
+		platform_device_register(&apq8064_device_uartdm_gsbi4);
+	}
+
 	apq8064_init_pmic();
 	if (machine_is_apq8064_liquid())
 		msm_otg_pdata.mhl_enable = true;
@@ -3704,7 +3712,9 @@ static void __init apq8064_common_init(void)
 		/* Add GSBI4 I2C Device for non-fusion3 platform */
 		if (socinfo_get_platform_subtype() !=
 					PLATFORM_SUBTYPE_SGLTE2) {
-			platform_device_register(&apq8064_device_qup_i2c_gsbi4);
+			if (!machine_is_apq8064_adp_2()) {
+				platform_device_register(&apq8064_device_qup_i2c_gsbi4);
+			}
 		}
 	}
 	msm_hsic_pdata.swfi_latency =
