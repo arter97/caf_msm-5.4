@@ -703,11 +703,8 @@ int a3xx_rb_init(struct adreno_device *adreno_dev,
 	GSL_RB_WRITE(rb->device, cmds, cmds_gpu, 0x00000000);
 	GSL_RB_WRITE(rb->device, cmds, cmds_gpu, 0x00000000);
 
-	/* Enable protected mode registers for A3XX */
-	if (adreno_is_a3xx(adreno_dev))
-		GSL_RB_WRITE(rb->device, cmds, cmds_gpu, 0x20000000);
-	else
-		GSL_RB_WRITE(rb->device, cmds, cmds_gpu, 0x00000000);
+	/* Enable protected mode registers for A3XX/A4XX */
+	GSL_RB_WRITE(rb->device, cmds, cmds_gpu, 0x20000000);
 
 	GSL_RB_WRITE(rb->device, cmds, cmds_gpu, 0x00000000);
 	GSL_RB_WRITE(rb->device, cmds, cmds_gpu, 0x00000000);
@@ -726,11 +723,10 @@ int a3xx_rb_init(struct adreno_device *adreno_dev,
 void a3xx_a4xx_err_callback(struct adreno_device *adreno_dev, int bit)
 {
 	struct kgsl_device *device = &adreno_dev->dev;
+	unsigned int reg;
 
 	switch (bit) {
 	case A3XX_INT_RBBM_AHB_ERROR: {
-		unsigned int reg;
-
 		adreno_readreg(adreno_dev, ADRENO_REG_RBBM_AHB_ERROR_STATUS,
 				&reg);
 
@@ -758,12 +754,16 @@ void a3xx_a4xx_err_callback(struct adreno_device *adreno_dev, int bit)
 		KGSL_DRV_CRIT_RATELIMIT(device, "RBBM: AHB register timeout\n");
 		break;
 	case A3XX_INT_RBBM_ME_MS_TIMEOUT:
+		adreno_readreg(adreno_dev, ADRENO_REG_RBBM_AHB_ME_SPLIT_STATUS,
+				&reg);
 		KGSL_DRV_CRIT_RATELIMIT(device,
-			"RBBM: ME master split timeout\n");
+			"RBBM | ME master split timeout | status=%x\n", reg);
 		break;
 	case A3XX_INT_RBBM_PFP_MS_TIMEOUT:
+		adreno_readreg(adreno_dev, ADRENO_REG_RBBM_AHB_PFP_SPLIT_STATUS,
+				&reg);
 		KGSL_DRV_CRIT_RATELIMIT(device,
-			"RBBM: PFP master split timeout\n");
+			"RBBM | PFP master split timeout | status=%x\n", reg);
 		break;
 	case A3XX_INT_UCHE_OOB_ACCESS:
 		KGSL_DRV_CRIT_RATELIMIT(device,
@@ -773,23 +773,19 @@ void a3xx_a4xx_err_callback(struct adreno_device *adreno_dev, int bit)
 		KGSL_DRV_CRIT_RATELIMIT(device,
 				"ringbuffer reserved bit error interrupt\n");
 		break;
-	case A3XX_INT_CP_HW_FAULT: {
-		unsigned int reg;
+	case A3XX_INT_CP_HW_FAULT:
 		adreno_readreg(adreno_dev, ADRENO_REG_CP_HW_FAULT, &reg);
 		KGSL_DRV_CRIT_RATELIMIT(device,
 			"CP | Ringbuffer HW fault | status=%x\n", reg);
 		break;
-	}
-	case A3XX_INT_CP_REG_PROTECT_FAULT: {
-		unsigned int reg;
-		kgsl_regread(device, A3XX_CP_PROTECT_STATUS, &reg);
+	case A3XX_INT_CP_REG_PROTECT_FAULT:
+		adreno_readreg(adreno_dev, ADRENO_REG_CP_PROTECT_STATUS, &reg);
 
 		KGSL_DRV_CRIT(device,
 			"CP | Protected mode error| %s | addr=%x\n",
 			reg & (1 << 24) ? "WRITE" : "READ",
-			(reg & 0x1FFFF) >> 2);
+			(reg & 0xFFFFF) >> 2);
 		break;
-	}
 	case A3XX_INT_CP_AHB_ERROR_HALT:
 		KGSL_DRV_CRIT(device, "ringbuffer AHB error interrupt\n");
 		break;
@@ -2220,6 +2216,7 @@ static unsigned int a3xx_register_offsets[ADRENO_REG_REGISTER_MAX] = {
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_MEQ_ADDR, A3XX_CP_MEQ_ADDR),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_MEQ_DATA, A3XX_CP_MEQ_DATA),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_HW_FAULT, A3XX_CP_HW_FAULT),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_PROTECT_STATUS, A3XX_CP_PROTECT_STATUS),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_STATUS, A3XX_RBBM_STATUS),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_PERFCTR_CTL, A3XX_RBBM_PERFCTR_CTL),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_PERFCTR_LOAD_CMD0,
