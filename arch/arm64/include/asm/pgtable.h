@@ -189,6 +189,18 @@ static inline pte_t pte_mkspecial(pte_t pte)
 	return pte;
 }
 
+static inline pte_t pte_mkexec(pte_t pte)
+{
+	pte_val(pte) &= ~PTE_PXN;
+	return pte;
+}
+
+static inline pte_t pte_mknexec(pte_t pte)
+{
+	pte_val(pte) |= PTE_PXN;
+	return pte;
+}
+
 static inline void set_pte(pte_t *ptep, pte_t pte)
 {
 	*ptep = pte;
