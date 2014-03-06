@@ -106,6 +106,7 @@ static int ipa_rm_resource_consumer_request(
 			result = driver_result;
 			goto bail;
 		}
+		INIT_COMPLETION(consumer->request_consumer_in_progress);
 		result = driver_result;
 		break;
 	}
@@ -163,6 +164,7 @@ static int ipa_rm_resource_consumer_release(
 			else if (driver_result != -EINPROGRESS)
 				consumer->resource.state = save_state;
 			result = driver_result;
+			complete_all(&consumer->request_consumer_in_progress);
 		}
 		break;
 	case IPA_RM_RELEASE_IN_PROGRESS:
@@ -306,6 +308,7 @@ static int ipa_rm_resource_consumer_create(struct ipa_rm_resource **resource,
 	(*resource) = (struct ipa_rm_resource *) (*consumer);
 	(*resource)->type = IPA_RM_CONSUMER;
 	*max_peers = IPA_RM_RESOURCE_PROD_MAX;
+	init_completion(&((*consumer)->request_consumer_in_progress));
 bail:
 	return result;
 }
@@ -665,13 +668,11 @@ int ipa_rm_resource_delete_dependency(struct ipa_rm_resource *resource,
 		goto bail;
 	}
 	if (state_changed &&
-		ipa_rm_peers_list_has_last_peer(resource->peers_list)) {
-		(void) ipa_rm_wq_send_cmd(IPA_RM_WQ_NOTIFY_PROD,
+		ipa_rm_peers_list_has_last_peer(resource->peers_list))
+			(void) ipa_rm_wq_send_cmd(IPA_RM_WQ_NOTIFY_PROD,
 				resource->name,
 				resource->state,
 				false);
-		result = -EINPROGRESS;
-	}
 	IPA_RM_DBG("%s new state: %d\n", ipa_rm_resource_str(resource->name),
 					resource->state);
 	spin_unlock_irqrestore(&resource->state_lock, flags);
@@ -952,6 +953,7 @@ void ipa_rm_resource_consumer_handle_cb(struct ipa_rm_resource_cons *consumer,
 		if (event == IPA_RM_RESOURCE_RELEASED)
 			goto bail;
 		consumer->resource.state = IPA_RM_GRANTED;
+		complete_all(&consumer->request_consumer_in_progress);
 		break;
 	case IPA_RM_RELEASE_IN_PROGRESS:
 		if (event == IPA_RM_RESOURCE_GRANTED)

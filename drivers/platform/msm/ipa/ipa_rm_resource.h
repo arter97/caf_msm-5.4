@@ -77,6 +77,7 @@ struct ipa_rm_resource {
 struct ipa_rm_resource_cons {
 	struct ipa_rm_resource resource;
 	int usage_count;
+	struct completion request_consumer_in_progress;
 	int (*request_resource)(void);
 	int (*release_resource)(void);
 };

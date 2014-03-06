@@ -633,8 +633,9 @@ static long ipa_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			retval = -EFAULT;
 			break;
 		}
-		retval = ipa_rm_add_dependency(rm_depend.resource_name,
-						rm_depend.depends_on_name);
+		retval = ipa_rm_add_dependency_sync(
+				rm_depend.resource_name,
+				rm_depend.depends_on_name);
 		break;
 	case IPA_IOC_RM_DEL_DEPENDENCY:
 		if (copy_from_user((u8 *)&rm_depend, (u8 *)arg,
