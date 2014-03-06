@@ -692,7 +692,7 @@ static int mdp3_ctrl_reset_cmd(struct msm_fb_data_type *mfd)
 
 	rc = mdp3_dma->stop(mdp3_dma, mdp3_session->intf);
 	if (rc) {
-		rc = mdp3_dma->stop(mdp3_dma, mdp3_session->intf);
+		pr_err("fail to stop the MDP3 dma %d\n", rc);
 		goto reset_error;
 	}
 
@@ -749,7 +749,7 @@ static int mdp3_ctrl_reset(struct msm_fb_data_type *mfd)
 
 	rc = mdp3_dma->stop(mdp3_dma, mdp3_session->intf);
 	if (rc) {
-		rc = mdp3_dma->stop(mdp3_dma, mdp3_session->intf);
+		pr_err("fail to stop the MDP3 dma %d\n", rc);
 		goto reset_error;
 	}
 
