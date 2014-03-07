@@ -107,11 +107,18 @@ static int of_get_fmax_vdd_class(struct platform_device *pdev, struct clk *c,
 	return 0;
 }
 
+#define BIN_OFF			0
+#define VALID_OFF		1
+#define VERSION_OFF		2
+#define REDUN_SEL_OFF		3
+
 static void get_speed_bin(struct platform_device *pdev, int *bin, int *version)
 {
 	struct resource *res;
+	struct device_node *of = pdev->dev.of_node;
 	void __iomem *base;
-	u32 pte_efuse, redundant_sel, valid;
+	u32 pte_efuse, redundant_sel, valid, prop_len;
+	u32 *array;
 
 	*bin = 0;
 	*version = 0;
@@ -130,16 +137,36 @@ static void get_speed_bin(struct platform_device *pdev, int *bin, int *version)
 		return;
 	}
 
+	if (!of_find_property(of, "efuse-bits", &prop_len)) {
+		dev_err(&pdev->dev, "missing efuse-bits\n");
+		return;
+	}
+
+	array = devm_kzalloc(&pdev->dev, prop_len,  GFP_KERNEL);
+	if (!array) {
+		dev_err(&pdev->dev, "cannot allocate\n");
+		return;
+	}
+
 	pte_efuse = readl_relaxed(base);
 	devm_iounmap(&pdev->dev, base);
 
-	redundant_sel = (pte_efuse >> 24) & 0x7;
-	*bin = pte_efuse & 0x7;
-	valid = (pte_efuse >> 3) & 0x1;
-	*version = (pte_efuse >> 4) & 0x3;
+	prop_len /= sizeof(u32);
+	of_property_read_u32_array(of, "efuse-bits", array, prop_len);
 
-	if (redundant_sel == 1)
-		*bin = (pte_efuse >> 27) & 0x7;
+	*bin = (pte_efuse >> array[BIN_OFF]) & BM(2, 0);
+
+	if (array[REDUN_SEL_OFF]) {
+		redundant_sel = (pte_efuse >> array[REDUN_SEL_OFF]) & BM(2, 0);
+		if (redundant_sel == 1)
+			*bin = (pte_efuse >> 27) & BM(2, 0);
+	}
+
+	if (array[VALID_OFF])
+		valid = (pte_efuse >> array[VALID_OFF]) & BM(1, 0);
+
+	if (array[VERSION_OFF])
+		*version = (pte_efuse >> array[VERSION_OFF]) & BM(1, 0);
 
 	if (!valid) {
 		dev_info(&pdev->dev, "Speed bin not set. Defaulting to 0!\n");

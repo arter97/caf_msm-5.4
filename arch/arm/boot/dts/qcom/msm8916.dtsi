@@ -295,8 +295,10 @@
 
 	qcom,clock-a7@0b011050 {
 		compatible = "qcom,clock-a53-8916";
-		reg = <0x0b011050 0x8>;
-		reg-names = "rcg-base";
+		reg = <0x0b011050 0x8>,
+		      <0x0005C00C 0x4>;
+		reg-names = "rcg-base", "efuse";
+		efuse-bits = < 2 0 0 0 >;
 		qcom,safe-freq = < 400000000 >;
 		cpu-vdd-supply = <&apc_vreg_corner>;
 		clocks = <&clock_gcc clk_gpll0_ao_clk_src>,
@@ -306,7 +308,12 @@
 			<          0 0>,
 			<  400000000 1>,
 			<  800000000 2>,
-			< 1190400000 3>;
+			< 1248000000 3>;
+		qcom,speed2-bin-v0 =
+			<          0 0>,
+			<  400000000 1>,
+			<  800000000 2>,
+			< 1401600000 3>;
 	};
 
 	qcom,cpubw {

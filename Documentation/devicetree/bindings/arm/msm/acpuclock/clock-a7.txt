@@ -25,6 +25,13 @@ Optional properties:
 - reg-names: "efuse"
 - qcom,safe-freq: Frequency in HZ
 	     When switching rates from A to B, the mux div clock will
+- efuse-bits: array of efuse bits if efuse is valid, below are the bits placement defined.
+		0: speed bin bit position in the efuse register
+		1: valid bit position in the efuse register
+		2: version bit position in the efuse register
+		3: redundant selection bit position in the efuse register
+
+		In case the bits are not present it should be '0'.
              instead switch from A -> safe_freq -> B.
 
 Example:
