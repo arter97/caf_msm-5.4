@@ -1917,7 +1917,7 @@ int ufshcd_query_attr_retry(struct ufs_hba *hba, enum query_opcode opcode,
  * received on the response.
  */
 int ufshcd_query_descriptor(struct ufs_hba *hba,
-			enum query_opcode opcode, enum attr_idn idn, u8 index,
+			enum query_opcode opcode, enum desc_idn idn, u8 index,
 			u8 selector, u8 *desc_buf, int *buf_len)
 {
 	struct ufs_query_req *request = NULL;
@@ -4578,7 +4578,7 @@ static int ufshcd_query_ioctl(struct ufs_hba *hba, u8 lun, void __user *buffer)
 
 	ioctl_data = kmalloc(sizeof(struct ufs_ioctl_query_data), GFP_KERNEL);
 	if (!ioctl_data) {
-		dev_err(hba->dev, "%s: Failed allocating %d bytes\n", __func__,
+		dev_err(hba->dev, "%s: Failed allocating %zu bytes\n", __func__,
 				sizeof(struct ufs_ioctl_query_data));
 		err = -ENOMEM;
 		goto out;
@@ -5292,7 +5292,7 @@ static void ufshcd_vreg_set_lpm(struct ufs_hba *hba)
 	 * Ignore the error returned by ufshcd_toggle_vreg() as device is anyway
 	 * in low power state which would save some power.
 	 */
-	if (ufshcd_is_ufs_dev_poweroff(hba) &&
+	if (ufshcd_is_ufs_dev_poweroff(hba) && ufshcd_is_link_off(hba) &&
 	    !hba->dev_info.is_lu_power_on_wp) {
 		ufshcd_setup_vreg(hba, false);
 	} else if (!ufshcd_is_ufs_dev_active(hba)) {
@@ -5308,7 +5308,7 @@ static int ufshcd_vreg_set_hpm(struct ufs_hba *hba)
 {
 	int ret = 0;
 
-	if (ufshcd_is_ufs_dev_poweroff(hba) &&
+	if (ufshcd_is_ufs_dev_poweroff(hba) && ufshcd_is_link_off(hba) &&
 	    !hba->dev_info.is_lu_power_on_wp) {
 		ret = ufshcd_setup_vreg(hba, true);
 	} else if (!ufshcd_is_ufs_dev_active(hba)) {

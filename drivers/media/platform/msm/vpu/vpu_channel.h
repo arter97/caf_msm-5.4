@@ -275,6 +275,7 @@ int vpu_hw_session_cmd_ext(u32 sid, u32 cmd, void *data, u32 data_size);
  *		CH_COMMIT_AT_ONCE : applied immediately
  *		CH_COMMIT_IN_ORDER: applied in the order in the queue
  * @load:	VPU load in bits per second
+ * @pwr_mode:	eligible power frequency mode
  *
  * Return: 0 on success, -ve value on failure
  */
@@ -282,7 +283,8 @@ enum commit_type {
 	CH_COMMIT_AT_ONCE,
 	CH_COMMIT_IN_ORDER,
 };
-int vpu_hw_session_commit(u32 sid, enum commit_type type, u32 load);
+int vpu_hw_session_commit(u32 sid, enum commit_type type, u32 load,
+				u32 pwr_mode);
 
 /* register session buffers
  * pass a list of buffers to session for use in tunnel case
@@ -351,6 +353,15 @@ void vpu_hw_debug_off(void);
  * Return:	the number of bytes read
  */
 size_t vpu_hw_print_queues(char *buf, size_t buf_size);
+
+/**
+ * vpu_hw_write_csr_reg() - write a value to a CSR register
+ * @off:	offset (from base) to write
+ * @val:	value to write
+ *
+ * Return: 0 on success, -ve on failure
+ */
+int vpu_hw_write_csr_reg(u32 off, u32 val);
 
 /**
  * vpu_hw_dump_csr_regs() - dump the contents of the VPU CSR registers into buf
