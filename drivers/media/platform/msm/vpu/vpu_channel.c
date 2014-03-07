@@ -1551,7 +1551,7 @@ int vpu_hw_session_empty_buffer(u32 sid, struct vpu_buffer *vb)
 	return rc;
 }
 
-int vpu_hw_session_commit(u32 sid, enum commit_type ct, u32 load)
+int vpu_hw_session_commit(u32 sid, enum commit_type ct, u32 load, u32 pwr_mode)
 {
 	int rc;
 	u32 ipc_ct;
@@ -1574,10 +1574,10 @@ int vpu_hw_session_commit(u32 sid, enum commit_type ct, u32 load)
 	}
 
 	mutex_lock(&hal->pw_lock);
-	rc = vpu_clock_scale(hal->clk_handle, load);
+	rc = vpu_clock_scale(hal->clk_handle, pwr_mode);
 	mutex_unlock(&hal->pw_lock);
 	if (rc)
-		pr_err("clock scale failed\n");
+		pr_err("clock scale failed: %d\n", rc);
 
 	/* send the configuration commit through IPC */
 	rc = ipc_cmd_config_session_commit(sid, ipc_ct);
@@ -2438,6 +2438,19 @@ void vpu_hw_debug_off(void)
 size_t vpu_hw_print_queues(char *buf, size_t buf_size)
 {
 	return vpu_hfi_print_queues(buf, buf_size);
+}
+
+int vpu_hw_write_csr_reg(u32 off, u32 val)
+{
+	int rc;
+	struct vpu_channel_hal *ch_hal = &g_vpu_ch_hal;
+
+	if (VPU_IS_UP(ch_hal->mode))
+		rc = vpu_hfi_write_csr_reg(off, val);
+	else
+		rc = -EIO; /* firmware down */
+
+	return rc;
 }
 
 int vpu_hw_dump_csr_regs(char *buf, size_t buf_size)
