@@ -379,6 +379,7 @@ static int mdss_mdp_bus_scale_register(struct mdss_data_type *mdata)
 static void mdss_mdp_bus_scale_unregister(struct mdss_data_type *mdata)
 {
 	pr_debug("unregister bus_hdl=%x\n", mdata->bus_hdl);
+	return;
 
 	if (mdata->bus_hdl)
 		msm_bus_scale_unregister_client(mdata->bus_hdl);
@@ -834,7 +835,7 @@ static int mdss_mdp_irq_clk_setup(struct mdss_data_type *mdata)
 		return -EINVAL;
 
 	/* lut_clk is not present on all MDSS revisions */
-	mdss_mdp_irq_clk_register(mdata, "lut_clk", MDSS_CLK_MDP_LUT);
+	//mdss_mdp_irq_clk_register(mdata, "lut_clk", MDSS_CLK_MDP_LUT);
 
 	/* vsync_clk is optional for non-smart panels */
 	mdss_mdp_irq_clk_register(mdata, "vsync_clk", MDSS_CLK_MDP_VSYNC);
@@ -1651,13 +1652,14 @@ static int  mdss_mdp_parse_dt_pipe_clk_ctrl(struct platform_device *pdev,
 	char *prop_name, struct mdss_mdp_pipe *pipe_list, u32 npipes)
 {
 	int rc = 0;
+	int temp_len;
 	size_t len;
 	const u32 *arr;
 
-	arr = of_get_property(pdev->dev.of_node, prop_name, (int *) &len);
+	arr = of_get_property(pdev->dev.of_node, prop_name, (int *) &temp_len);
 	if (arr) {
 		int i, j;
-
+		len = (size_t)temp_len;
 		len /= sizeof(u32);
 		for (i = 0, j = 0; i < len; j++) {
 			struct mdss_mdp_pipe *pipe = NULL;
@@ -2743,6 +2745,9 @@ static int mdss_mdp_runtime_resume(struct device *dev)
 {
 	struct mdss_data_type *mdata = dev_get_drvdata(dev);
 	bool device_on = true;
+
+	return 0;
+
 	if (!mdata)
 		return -ENODEV;
 
@@ -2756,6 +2761,9 @@ static int mdss_mdp_runtime_resume(struct device *dev)
 static int mdss_mdp_runtime_idle(struct device *dev)
 {
 	struct mdss_data_type *mdata = dev_get_drvdata(dev);
+
+	return 0;
+
 	if (!mdata)
 		return -ENODEV;
 
@@ -2768,6 +2776,9 @@ static int mdss_mdp_runtime_suspend(struct device *dev)
 {
 	struct mdss_data_type *mdata = dev_get_drvdata(dev);
 	bool device_on = false;
+
+	return 0;
+
 	if (!mdata)
 		return -ENODEV;
 	dev_dbg(dev, "pm_runtime: suspending...\n");

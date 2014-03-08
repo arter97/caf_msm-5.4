@@ -1771,6 +1771,8 @@ int mdss_mdp_pp_resume(struct mdss_mdp_ctl *ctl, u32 dspp_num)
 	struct mdss_ad_info *ad;
 	struct mdss_data_type *mdata = ctl->mdata;
 
+	return 0;
+
 	if (!mdata)
 		return -EPERM;
 
@@ -1883,6 +1885,8 @@ int mdss_mdp_pp_init(struct device *dev)
 	struct msm_bus_scale_pdata *pp_bus_pdata;
 	struct pp_hist_col_info *hist;
 
+	return 0;
+
 	if (!mdata)
 		return -EPERM;
 
@@ -1954,6 +1958,8 @@ int mdss_mdp_pp_init(struct device *dev)
 void mdss_mdp_pp_term(struct device *dev)
 {
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+
+	return;
 
 	if (!mdata)
 		return;
@@ -2918,6 +2924,8 @@ int mdss_mdp_dither_config(struct mdp_dither_cfg_data *config,
 					u32 *copyback)
 {
 	u32 disp_num;
+
+	return 0;
 
 	if ((config->block < MDP_LOGICAL_BLOCK_DISP_0) ||
 		(config->block >= MDP_BLOCK_MAX))

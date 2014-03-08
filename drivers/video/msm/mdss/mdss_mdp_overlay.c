@@ -3123,10 +3123,11 @@ static int mdss_mdp_overlay_off(struct msm_fb_data_type *mfd)
 
 		if (atomic_dec_return(&ov_active_panels) == 0)
 			mdss_mdp_rotator_release_all();
-
+#if 0
 		rc = pm_runtime_put(&mfd->pdev->dev);
 		if (rc)
 			pr_err("unable to suspend w/pm_runtime_put (%d)\n", rc);
+#endif
 	}
 
 	return rc;
