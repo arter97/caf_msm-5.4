@@ -49,6 +49,9 @@ config ARM64
 config 64BIT
 	def_bool y
 
+config ARM64_HAS_SG_CHAIN
+	def_bool y
+
 config ARCH_PHYS_ADDR_T_64BIT
 	def_bool y
 
