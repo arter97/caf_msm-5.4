@@ -361,8 +361,15 @@ struct mdp_overlay32 {
 	uint32_t bg_color;
 	uint8_t horz_deci;
 	uint8_t vert_deci;
-	struct mdp_overlay_pp_params32 overlay_pp_cfg;
 	struct mdp_scale_data scale;
+	struct mdp_overlay_pp_params32 overlay_pp_cfg;
+};
+
+struct mdp_overlay_list32 {
+	uint32_t num_overlays;
+	compat_caddr_t overlay_list;
+	uint32_t flags;
+	uint32_t processed_overlays;
 };
 
 #endif
