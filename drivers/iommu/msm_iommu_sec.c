@@ -835,7 +835,8 @@ static phys_addr_t msm_iommu_get_pt_base_addr(struct iommu_domain *domain)
 
 void msm_iommu_check_scm_call_avail(void)
 {
-	is_secure = scm_is_call_available(SCM_SVC_MP, IOMMU_SECURE_CFG);
+	//is_secure = scm_is_call_available(SCM_SVC_MP, IOMMU_SECURE_CFG);
+	is_secure = 1;
 }
 
 int msm_iommu_get_scm_call_avail(void)
