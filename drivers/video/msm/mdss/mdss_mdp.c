@@ -41,14 +41,10 @@
 #include <linux/uaccess.h>
 #include <linux/clk/msm-clk.h>
 
-#include <mach/board.h>
-#include <mach/hardware.h>
-#include <linux/msm-bus.h>
-#include <linux/msm-bus-board.h>
 #include <linux/qcom_iommu.h>
 #include <linux/msm_iommu_domains.h>
-#include <mach/memory.h>
-#include <mach/msm_memtypes.h>
+#include <linux/msm-bus.h>
+#include <linux/msm-bus-board.h>
 
 #include "mdss.h"
 #include "mdss_fb.h"

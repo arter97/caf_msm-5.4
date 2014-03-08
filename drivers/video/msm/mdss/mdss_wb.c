@@ -90,18 +90,12 @@ static int mdss_wb_parse_dt(struct platform_device *pdev,
 
 static int mdss_wb_dev_init(struct mdss_wb_ctrl *wb_ctrl)
 {
-	int rc = 0;
 	if (!wb_ctrl) {
 		pr_err("%s: no driver data\n", __func__);
 		return -ENODEV;
 	}
 
 	wb_ctrl->sdev.name = "wfd";
-	rc = switch_dev_register(&wb_ctrl->sdev);
-	if (rc) {
-		pr_err("Failed to setup switch dev for writeback panel");
-		return rc;
-	}
 
 	return 0;
 }
@@ -113,7 +107,6 @@ static int mdss_wb_dev_uninit(struct mdss_wb_ctrl *wb_ctrl)
 		return -ENODEV;
 	}
 
-	switch_dev_unregister(&wb_ctrl->sdev);
 	return 0;
 }
 

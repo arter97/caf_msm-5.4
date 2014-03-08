@@ -146,7 +146,7 @@ do {									\
 	default:							\
 		BUILD_BUG();						\
 	}								\
-	(x) = (__typeof__(*(ptr)))__gu_val;				\
+	(x) = (__typeof__(x))(unsigned long)(__typeof__(*(ptr)))__gu_val;\
 } while (0)
 
 #define __get_user(x, ptr)						\

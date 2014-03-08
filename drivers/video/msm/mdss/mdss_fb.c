@@ -34,6 +34,7 @@
 #include <linux/msm_mdp.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/of_platform.h>
 #include <linux/proc_fs.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
@@ -46,11 +47,8 @@
 #include <linux/file.h>
 #include <linux/kthread.h>
 
-#include <mach/board.h>
-#include <mach/memory.h>
 #include <linux/qcom_iommu.h>
 #include <linux/msm_iommu_domains.h>
-#include <mach/msm_memtypes.h>
 
 #include "mdss_fb.h"
 
@@ -751,7 +749,6 @@ static const struct of_device_id mdss_fb_dt_match[] = {
 	{ .compatible = "qcom,mdss-fb",},
 	{}
 };
-EXPORT_COMPAT("qcom,mdss-fb");
 
 static struct platform_driver mdss_fb_driver = {
 	.probe = mdss_fb_probe,
@@ -982,21 +979,6 @@ static int mdss_fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
 	vma->vm_pgoff = off >> PAGE_SHIFT;
 	/* This is an IO map - tell maydump to skip this VMA */
 	vma->vm_flags |= VM_IO;
-
-	/* Set VM page protection */
-	if (mfd->mdp_fb_page_protection == MDP_FB_PAGE_PROTECTION_WRITECOMBINE)
-		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
-	else if (mfd->mdp_fb_page_protection ==
-		 MDP_FB_PAGE_PROTECTION_WRITETHROUGHCACHE)
-		vma->vm_page_prot = pgprot_writethroughcache(vma->vm_page_prot);
-	else if (mfd->mdp_fb_page_protection ==
-		 MDP_FB_PAGE_PROTECTION_WRITEBACKCACHE)
-		vma->vm_page_prot = pgprot_writebackcache(vma->vm_page_prot);
-	else if (mfd->mdp_fb_page_protection ==
-		 MDP_FB_PAGE_PROTECTION_WRITEBACKWACACHE)
-		vma->vm_page_prot = pgprot_writebackwacache(vma->vm_page_prot);
-	else
-		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 
 	/* Remap the frame buffer I/O range */
 	if (io_remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,

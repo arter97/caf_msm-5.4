@@ -675,7 +675,6 @@ int mdss_mdp_wb_set_mirr_hint(struct msm_fb_data_type *mfd, int hint)
 	case MDP_WRITEBACK_MIRROR_RESUME:
 	case MDP_WRITEBACK_MIRROR_OFF:
 		pr_info("wfd state switched to %d\n", hint);
-		switch_set_state(&wb_ctrl->sdev, hint);
 		return 0;
 	default:
 		return -EINVAL;
