@@ -111,8 +111,8 @@ void mdss_dsi_ctrl_init(struct mdss_dsi_ctrl_pdata *ctrl)
 	spin_lock_init(&ctrl->mdp_lock);
 	mutex_init(&ctrl->mutex);
 	mutex_init(&ctrl->cmd_mutex);
-	mdss_dsi_buf_alloc(&ctrl->tx_buf, SZ_4K);
-	mdss_dsi_buf_alloc(&ctrl->rx_buf, SZ_4K);
+	mdss_dsi_buf_alloc(ctrl, &ctrl->tx_buf, SZ_4K);
+	mdss_dsi_buf_alloc(ctrl, &ctrl->rx_buf, SZ_4K);
 	ctrl->cmdlist_commit = mdss_dsi_cmdlist_commit;
 
 
@@ -691,7 +691,7 @@ int mdss_dsi_cmd_reg_tx(u32 data,
 
 static int mdss_dsi_wait4video_eng_busy(struct mdss_dsi_ctrl_pdata *ctrl);
 
-static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
+int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 					struct dsi_buf *tp);
 
 static int mdss_dsi_cmd_dma_rx(struct mdss_dsi_ctrl_pdata *ctrl,
@@ -1016,7 +1016,7 @@ end:
 
 #define DMA_TX_TIMEOUT 200
 
-static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
+int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 					struct dsi_buf *tp)
 {
 	int len, ret = 0;
@@ -1024,6 +1024,7 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 	char *bp;
 	unsigned long size;
 	dma_addr_t addr;
+	unsigned long buf_size;
 
 	bp = tp->data;
 
@@ -1032,7 +1033,7 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 
 
 	if (is_mdss_iommu_attached()) {
-		int ret = msm_iommu_map_contig_buffer(tp->dmap,
+		ret = msm_iommu_map_contig_buffer(tp->dmap,
 					mdss_get_iommu_domain(domain), 0,
 					size, SZ_4K, 0, &(addr));
 		if (IS_ERR_VALUE(ret)) {
@@ -1040,7 +1041,9 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 			return -ENOMEM;
 		}
 	} else {
-		addr = tp->dmap;
+		/* addr = tp->dmap; */
+		ret = ion_phys(dsi_iclient, ctrl->ion_handle, &addr,
+                                           &buf_size);
 	}
 
 	INIT_COMPLETION(ctrl->dma_comp);

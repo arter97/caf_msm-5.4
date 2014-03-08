@@ -300,6 +300,7 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_buf rx_buf;
 
 	struct dsi_pinctrl_res pin_res;
+	struct ion_handle *ion_handle;
 };
 
 int dsi_panel_device_register(struct device_node *pan_node,
@@ -363,4 +364,6 @@ bool __mdss_dsi_clk_enabled(struct mdss_dsi_ctrl_pdata *ctrl);
 int mdss_dsi_panel_init(struct device_node *node,
 		struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 		bool cmd_cfg_cont_splash);
+
+extern struct ion_client *dsi_iclient;
 #endif /* MDSS_DSI_H */

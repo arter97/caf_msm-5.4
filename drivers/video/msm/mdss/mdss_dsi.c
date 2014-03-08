@@ -26,6 +26,7 @@
 #include "mdss_panel.h"
 #include "mdss_dsi.h"
 #include "mdss_debug.h"
+struct ion_client *dsi_iclient;
 
 static int mdss_dsi_regulator_init(struct platform_device *pdev)
 {

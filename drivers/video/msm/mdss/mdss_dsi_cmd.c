@@ -22,7 +22,7 @@
 #include <linux/kthread.h>
 
 #include <linux/msm_iommu_domains.h>
-
+#include <linux/dma-mapping.h>
 #include "mdss_dsi_cmd.h"
 #include "mdss_dsi.h"
 
@@ -69,15 +69,43 @@ char *mdss_dsi_buf_init(struct dsi_buf *dp)
 	return dp->data;
 }
 
-int mdss_dsi_buf_alloc(struct dsi_buf *dp, int size)
+int mdss_dsi_buf_alloc( struct mdss_dsi_ctrl_pdata *ctrl, struct dsi_buf *dp, int size)
 {
 
-	dp->start = dma_alloc_writecombine(NULL, size, &dp->dmap, GFP_KERNEL);
+#if 0
+	void *vaddr;
+	size_t len;
+
+	if (!ctrl->ion_handle) {
+		ctrl->ion_handle = ion_alloc(dsi_iclient, size, SZ_4K,
+				ION_HEAP(ION_SYSTEM_CONTIG_HEAP_ID), 0);
+		if (IS_ERR_OR_NULL(ctrl->ion_handle)) {
+			pr_err("unable to alloc fbmem from ion (%p)\n",
+					ctrl->ion_handle);
+			return -EINVAL;
+		}
+	}
+
+	vaddr = ion_map_kernel(dsi_iclient, ctrl->ion_handle);
+	dp->start = (char *)vaddr;
+	pr_err("%s:%u vaddr = %p\n", __func__, __LINE__, vaddr);
+	pr_err("%s:%u Calling ion_phys\n", __func__, __LINE__);
+	ion_phys(dsi_iclient, ctrl->ion_handle, &dp->dmap, &len);
+	pr_err("%s:%u ion_phys done\n", __func__, __LINE__);
+
+#else
+	/* Use a dummy device for dma_alloc_coherent allocation */
+	struct device dev = { 0 };
+	DEFINE_DMA_ATTRS(attrs);
+	dma_set_attr(DMA_ATTR_NO_KERNEL_MAPPING, &attrs);
+	dev.coherent_dma_mask = DMA_BIT_MASK(sizeof(dma_addr_t) * 8);
+	dp->start = dma_alloc_writecombine(&dev, size, &dp->dmap, GFP_KERNEL);
 	if (dp->start == NULL) {
 		pr_err("%s:%u\n", __func__, __LINE__);
 		return -ENOMEM;
 	}
 
+#endif
 	dp->end = dp->start + size;
 	dp->size = size;
 

@@ -42,6 +42,8 @@ static void mdss_dsi_panel_bklt_pwm(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	int ret;
 	u32 duty;
 
+	return;
+
 	if (ctrl->pwm_bl == NULL) {
 		pr_err("%s: no PWM\n", __func__);
 		return;
