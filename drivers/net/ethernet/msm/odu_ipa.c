@@ -110,6 +110,7 @@ enum odu_ipa_operation {
  * @net: network interface struct implemented by this driver
  * @hw_hdr_info: hardware header information
  * @set_hw_rx_flags: HW specific callback for setting RX flags.
+ * @hw_nway_reset: HW specific callback for restart auto-negotiation
  * @tx_enable: flag that enable/disable Tx path to continue to IPA
  * @rx_enable: flag that enable/disable Rx path to continue to network stack
  * @rm_enable: flag that enable/disable Resource manager request prior to Tx
@@ -131,6 +132,7 @@ struct odu_ipa_dev {
 	struct net_device *net;
 	struct odu_ipa_hw_hdr_info hw_hdr_info;
 	void (*set_hw_rx_flags)(int flags);
+	void (*hw_nway_reset)(void);
 	u32 tx_enable;
 	u32 rx_enable;
 	u32  rm_enable;
@@ -289,6 +291,7 @@ int odu_ipa_init(struct odu_ipa_params *params)
 	params->odu_ipa_tx_dp_notify = odu_ipa_tx_complete_notify;
 	params->priv = (void *)odu_ipa_ctx;
 	odu_ipa_ctx->set_hw_rx_flags = params->set_hw_rx_flags;
+	odu_ipa_ctx->hw_nway_reset = params->hw_nway_reset;
 	odu_ipa_ctx->state = ODU_IPA_INITIALIZED;
 	ODU_IPA_STATE_DEBUG(odu_ipa_ctx);
 
@@ -718,6 +721,11 @@ static int odu_ipa_stop(struct net_device *net)
 
 	netif_stop_queue(net);
 	ODU_IPA_DBG("network device stopped\n");
+
+	if (odu_ipa_ctx->hw_nway_reset) {
+		odu_ipa_ctx->hw_nway_reset();
+		ODU_IPA_DBG("restarted auto-negotiation on HW\n");
+	}
 
 	ODU_IPA_LOG_EXIT();
 	return 0;
