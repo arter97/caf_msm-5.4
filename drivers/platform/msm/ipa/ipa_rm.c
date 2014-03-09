@@ -172,6 +172,64 @@ EXPORT_SYMBOL(ipa_rm_add_dependency);
 
 
 /**
+ * ipa_rm_add_dependency_sync()
+ * create dependency between 2 resources
+ * in a synchronic fashion.
+ * @resource_name: name of dependent resource
+ * @depends_on_name: name of its dependency
+ *
+ * Returns: 0 on success, negative on failure
+ *
+ * Side effects: IPA_RM_RESORCE_GRANTED could be generated
+ * in case client registered with IPA RM
+ */
+
+int ipa_rm_add_dependency_sync(
+		enum ipa_rm_resource_name resource_name,
+			enum ipa_rm_resource_name depends_on_name)
+{
+	int result;
+	struct ipa_rm_resource *consumer;
+	unsigned long time;
+
+	IPA_RM_DBG("%s -> %s\n", ipa_rm_resource_str(resource_name),
+				 ipa_rm_resource_str(depends_on_name));
+	write_lock(&ipa_rm_ctx->lock);
+	result = ipa_rm_dep_graph_add_dependency(
+						ipa_rm_ctx->dep_graph,
+						resource_name,
+						depends_on_name);
+	write_unlock(&ipa_rm_ctx->lock);
+	if (result == -EINPROGRESS) {
+		ipa_rm_dep_graph_get_resource(
+					ipa_rm_ctx->dep_graph,
+					depends_on_name,
+					&consumer);
+		IPA_RM_DBG("%s goes out to wait for %s\n",
+				ipa_rm_resource_str(resource_name),
+				ipa_rm_resource_str(depends_on_name));
+		time = wait_for_completion_timeout(
+				&((struct ipa_rm_resource_cons *)consumer)->
+					request_consumer_in_progress,
+				HZ);
+		result = 0;
+		IPA_RM_DBG("%s returned from waiting to %s with %lu time\n",
+				ipa_rm_resource_str(resource_name),
+				ipa_rm_resource_str(depends_on_name),
+				time);
+		if (!time) {
+			IPA_RM_DBG(
+					"%s: completion time expired before event"
+					, __func__);
+			result = -ETIME;
+		}
+	}
+	IPA_RM_DBG("EXIT with %d\n", result);
+	return result;
+}
+EXPORT_SYMBOL(ipa_rm_add_dependency_sync);
+
+/**
  * ipa_rm_delete_dependency() - create dependency
  *					between 2 resources
  * @resource_name: name of dependent resource
