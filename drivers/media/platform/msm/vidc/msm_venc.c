@@ -1091,6 +1091,12 @@ static inline int start_streaming(struct msm_vidc_inst *inst)
 	int rc = 0;
 	struct vb2_buf_entry *temp;
 	struct list_head *ptr, *next;
+
+	if (!inst || !inst->core || !inst->core->device) {
+		dprintk(VIDC_ERR, "%s invalid parameters\n", __func__);
+		return -EINVAL;
+	}
+
 	if (inst->capability.pixelprocess_capabilities &
 		HAL_VIDEO_ENCODER_SCALING_CAPABILITY)
 		rc = msm_vidc_check_scaling_supported(inst);
@@ -2510,7 +2516,7 @@ int msm_venc_enum_fmt(struct msm_vidc_inst *inst, struct v4l2_fmtdesc *f)
 				sizeof(f->description));
 		f->pixelformat = fmt->fourcc;
 	} else {
-		dprintk(VIDC_ERR, "No more formats found\n");
+		dprintk(VIDC_DBG, "No more formats found\n");
 		rc = -EINVAL;
 	}
 	return rc;

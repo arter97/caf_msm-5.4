@@ -2021,12 +2021,12 @@ int usb_bam_connect_ipa(struct usb_bam_connect_ipa_params *ipa_params)
 			info[cur_bam].pipes_suspended = 0;
 			info[cur_bam].pipes_to_suspend = 0;
 			info[cur_bam].pipes_resumed = 0;
-			pipe_connect->cons_stopped = 0;
-			pipe_connect->prod_stopped = 0;
 			spin_unlock(&usb_bam_ipa_handshake_info_lock);
 			usb_bam_resume_core(cur_bam, USB_BAM_DEVICE);
 		} else
 			spin_unlock(&usb_bam_lock);
+		pipe_connect->cons_stopped = 0;
+		pipe_connect->prod_stopped = 0;
 	}
 
 	 /* Check if BAM requires RESET before connect and reset first pipe */
@@ -3194,6 +3194,16 @@ int usb_bam_get_qdss_idx(u8 num)
 		PEER_PERIPHERAL_TO_USB, USB_BAM_DEVICE, num);
 }
 EXPORT_SYMBOL(usb_bam_get_qdss_idx);
+
+bool usb_bam_get_prod_granted(u8 idx)
+{
+	struct usb_bam_pipe_connect *pipe_connect = &usb_bam_connections[idx];
+	enum usb_bam cur_bam = pipe_connect->bam_type;
+
+	return (info[cur_bam].cur_prod_state == IPA_RM_RESOURCE_GRANTED);
+}
+EXPORT_SYMBOL(usb_bam_get_prod_granted);
+
 
 void usb_bam_set_qdss_core(const char *qdss_core)
 {

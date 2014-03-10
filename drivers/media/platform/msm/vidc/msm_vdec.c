@@ -1289,7 +1289,7 @@ int msm_vdec_enum_fmt(struct msm_vidc_inst *inst, struct v4l2_fmtdesc *f)
 				sizeof(f->description));
 		f->pixelformat = fmt->fourcc;
 	} else {
-		dprintk(VIDC_INFO, "No more formats found\n");
+		dprintk(VIDC_DBG, "No more formats found\n");
 		rc = -EINVAL;
 	}
 	return rc;
@@ -1412,6 +1412,12 @@ static int msm_vdec_queue_output_buffers(struct msm_vidc_inst *inst)
 	struct vidc_frame_data frame_data = {0};
 	struct hal_buffer_requirements *output_buf, *extradata_buf;
 	int rc = 0;
+
+	if (!inst || !inst->core || !inst->core->device) {
+		dprintk(VIDC_ERR, "%s invalid parameters\n", __func__);
+		return -EINVAL;
+	}
+
 	hdev = inst->core->device;
 
 	output_buf = get_buff_req_buffer(inst, HAL_BUFFER_OUTPUT);
