@@ -17,7 +17,7 @@
 / {
 	model = "Qualcomm MSM 8916 QRD";
 	compatible = "qcom,msm8916-qrd", "qcom,msm8916", "qcom,qrd";
-	qcom,board-id = <11 0>;
+	qcom,board-id = <11 0> , <11 4>;
 };
 
 &tlmm_pinmux {
@@ -49,6 +49,6 @@
 		vdd-supply = <&pm8916_l17>;
 		vio-supply = <&pm8916_l6>;
 		akm,layout = <0x0>;
-		akm,gpio_rstn = <&msmgpio 36 0x0>;
+		akm,gpio_rstn = <&msm_gpio 36 0x0>;
 	};
 };
