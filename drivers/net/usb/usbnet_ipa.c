@@ -19,6 +19,8 @@
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 #include <linux/debugfs.h>
+#include <linux/mii.h>
+#include <linux/usb/usbnet.h>
 #include <mach/odu_ipa.h>
 #include <mach/usb_bam.h>
 #include <mach/ipa.h>
@@ -34,7 +36,6 @@
 	pr_debug(USBNET_IPA_DRV_NAME " %s:%d end\n", __func__, __LINE__)
 #define USBNET_IPA_ERR(fmt, args...) \
 	pr_err(USBNET_IPA_DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
-
 
 #define USBNET_CORE "hsic"
 
@@ -90,6 +91,19 @@ void usbnet_config_header(void)
 #error no header information to configure IPA header removal/addition
 #endif
 
+void usbnet_ipa_nway_reset(void)
+{
+	USBNET_IPA_DBG_FUNC_ENTRY();
+
+	if (!ctx.net) {
+		USBNET_IPA_ERR("No net device set");
+		return;
+	}
+	usbnet_nway_reset(ctx.net);
+
+	USBNET_IPA_DBG_FUNC_EXIT();
+}
+
 
 static void usbnet_ipa_set_hw_rx_flags(int flags)
 {
@@ -124,6 +138,7 @@ int usbnet_ipa_init(struct net_device *net)
 
 	memcpy(ctx.params.device_ethaddr, net->dev_addr, ETH_ALEN);
 	ctx.params.set_hw_rx_flags = usbnet_ipa_set_hw_rx_flags;
+	ctx.params.hw_nway_reset = usbnet_ipa_nway_reset;
 
 	ret = odu_ipa_init(&ctx.params);
 	if (ret)
