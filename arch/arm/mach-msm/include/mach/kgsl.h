@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -91,6 +91,7 @@ struct kgsl_device_platform_data {
 	struct coresight_device *csdev;
 	struct coresight_platform_data *coresight_pdata;
 	unsigned int chipid;
+	unsigned int pm_qos_latency;
 };
 
 #endif
