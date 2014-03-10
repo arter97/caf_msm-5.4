@@ -437,8 +437,8 @@ static void f_audio_buffer_free(struct f_audio_buf *audio_buf)
 {
 	if (audio_buf) {
 		kfree(audio_buf->buf);
-		kfree(audio_buf);
 		audio_buf->buf = NULL;
+		kfree(audio_buf);
 		audio_buf = NULL;
 	}
 }
