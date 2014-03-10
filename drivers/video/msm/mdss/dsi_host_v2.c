@@ -458,6 +458,7 @@ void msm_dsi_host_init(struct mipi_panel_info *pinfo)
 	data = 0;
 	if (pinfo->rx_eot_ignore)
 		data |= BIT(4);
+	pinfo->tx_eot_append = 1;
 	if (pinfo->tx_eot_append)
 		data |= BIT(0);
 	MIPI_OUTP(ctrl_base + DSI_EOT_PACKET_CTRL, data);
