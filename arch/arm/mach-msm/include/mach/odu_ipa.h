@@ -33,6 +33,7 @@
  * with odu_ipa APIs. Also it shall be given to ipa_connect upon pipe
  * connection as private data.
  * @set_hw_flags: HW specific callback for setting rx flags.
+ * @hw_nway_reset: HW specific callback for restart auto-negotiation.
  * Shall be provided by USB driver.
  */
 struct odu_ipa_params {
@@ -41,6 +42,7 @@ struct odu_ipa_params {
 	u8 device_ethaddr[ETH_ALEN];
 	void *priv;
 	void (*set_hw_rx_flags)(int flags);
+	void (*hw_nway_reset)(void);
 };
 
 #ifdef CONFIG_ODU_IPA
