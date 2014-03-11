@@ -749,7 +749,7 @@ static int mdp3_ctrl_reset(struct msm_fb_data_type *mfd)
 
 	rc = mdp3_dma->stop(mdp3_dma, mdp3_session->intf);
 	if (rc) {
-		pr_err("fail to stop the MDP3 dma\n");
+		pr_err("fail to stop the MDP3 dma %d\n", rc);
 		goto reset_error;
 	}
 
@@ -850,11 +850,7 @@ static int mdp3_overlay_set(struct msm_fb_data_type *mfd,
 	mdp3_session->overlay = *req;
 	if (req->id == MSMFB_NEW_REQUEST) {
 		if (dma->source_config.stride != stride ||
-				dma->source_config.width != req->src.width ||
-				dma->source_config.height != req->src.height ||
-				dma->source_config.format != format) {
-			dma->source_config.width = req->src.width;
-			dma->source_config.height = req->src.height,
+			dma->source_config.format != format) {
 			dma->source_config.format = format;
 			dma->source_config.stride = stride;
 			mdp3_clk_enable(1, 0);
@@ -876,7 +872,6 @@ static int mdp3_overlay_unset(struct msm_fb_data_type *mfd, int ndx)
 	struct mdp3_session_data *mdp3_session = mfd->mdp.private1;
 	struct fb_info *fbi = mfd->fbi;
 	struct fb_fix_screeninfo *fix;
-	struct mdss_panel_info *panel_info = mfd->panel_info;
 	int format;
 
 	fix = &fbi->fix;
@@ -885,8 +880,6 @@ static int mdp3_overlay_unset(struct msm_fb_data_type *mfd, int ndx)
 
 	if (mdp3_session->overlay.id == ndx && ndx == 1) {
 		struct mdp3_dma *dma = mdp3_session->dma;
-		dma->source_config.width = panel_info->xres,
-		dma->source_config.height = panel_info->yres,
 		dma->source_config.format = format;
 		dma->source_config.stride = fix->line_length;
 		mdp3_clk_enable(1, 0);
@@ -972,7 +965,11 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 	panel = mdp3_session->panel;
 	if (!mdp3_iommu_is_attached(MDP3_CLIENT_DMA_P)) {
 		pr_debug("continuous splash screen, IOMMU not attached\n");
-		mdp3_ctrl_reset(mfd);
+		rc = mdp3_ctrl_reset(mfd);
+		if (rc) {
+			pr_err("fail to reset display\n");
+			return -EINVAL;
+		}
 		reset_done = true;
 	}
 	mdp3_release_splash_memory();
@@ -1023,6 +1020,7 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 	struct mdp3_session_data *mdp3_session;
 	u32 offset;
 	int bpp;
+	int rc = 0;
 	struct mdss_panel_info *panel_info = mfd->panel_info;
 
 	pr_debug("mdp3_ctrl_pan_display\n");
@@ -1035,7 +1033,11 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 
 	if (!mdp3_iommu_is_attached(MDP3_CLIENT_DMA_P)) {
 		pr_debug("continuous splash screen, IOMMU not attached\n");
-		mdp3_ctrl_reset(mfd);
+		rc = mdp3_ctrl_reset(mfd);
+		if (rc) {
+			pr_err("fail to reset display\n");
+			return;
+		}
 	}
 	mdp3_release_splash_memory();
 
