@@ -787,8 +787,6 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata)
 		}
 		ctrl_pdata->ctrl_state &= ~CTRL_STATE_PANEL_INIT;
 	}
-	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
-		pr_debug("dsi blank: pinctrl not enabled\n");
 
 	pr_debug("%s-:End\n", __func__);
 	return ret;
@@ -1183,6 +1181,10 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 	rc = mdss_dsi_pinctrl_init(pdev);
 	if (rc)
 		pr_warn("%s: failed to get pin resources\n", __func__);
+	else {
+		pr_err("%s: SETTING PINTRL STATE\n", __func__);
+		mdss_dsi_pinctrl_set_state(ctrl_pdata, true);
+	}
 
 	/* Parse the regulator information */
 	rc = mdss_dsi_get_dt_vreg_data(&pdev->dev,
