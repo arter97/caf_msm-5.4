@@ -642,9 +642,12 @@ static int adb_function_set_alt(struct usb_function *f,
 		usb_ep_disable(dev->ep_in);
 		return ret;
 	}
+
+	/* indicate RX request not yet queued, only if not already connected */
+	if (!atomic_read(&dev->online))
+		dev->rx_done = 1;
+
 	atomic_set(&dev->online, 1);
-	/* indicate RX request not yet queued */
-	dev->rx_done = 1;
 
 	/* readers may be blocked waiting for us to go online */
 	wake_up(&dev->read_wq);
