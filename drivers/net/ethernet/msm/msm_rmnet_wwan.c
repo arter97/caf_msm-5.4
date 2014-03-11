@@ -89,6 +89,8 @@ struct wwan_private {
 
 static struct net_device *netdevs[WWAN_DEVICE_COUNT];
 
+static unsigned long rmnet_jiffies;
+
 static __be16 wwan_ip_type_trans(struct sk_buff *skb)
 {
 	__be16 protocol = 0;
@@ -489,13 +491,17 @@ static int wwan_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct wwan_private *wwan_ptr = netdev_priv(dev);
 	unsigned long flags;
 	int ret = 0;
+	int i;
 
 	if (netif_queue_stopped(dev)) {
 		pr_err("[%s]fatal: wwan_xmit called when netif_queue stopped\n",
 		       dev->name);
 		return 0;
 	}
-	dev->trans_start = jiffies;
+	rmnet_jiffies = jiffies;
+	for (i = 0; i < dev->num_tx_queues; i++)
+		netdev_get_tx_queue(dev, i)->trans_start = rmnet_jiffies;
+	dev->trans_start = rmnet_jiffies;
 	ret = ipa_rm_inactivity_timer_request_resource(
 		ipa_rm_resource_by_ch_id[wwan_ptr->ch_id]);
 	if (ret == -EINPROGRESS) {
