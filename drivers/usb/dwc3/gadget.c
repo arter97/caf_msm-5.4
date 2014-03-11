@@ -2422,6 +2422,13 @@ static int dwc3_cleanup_done_reqs(struct dwc3 *dwc, struct dwc3_ep *dep,
 			return 0;
 		}
 
+		/* EP possibly disabled during giveback? */
+		if (!(dep->flags & DWC3_EP_ENABLED)) {
+			dev_dbg(dwc->dev, "%s disabled while handling ep event\n",
+					dep->name);
+			return 0;
+		}
+
 		if (ret)
 			break;
 	} while (1);
