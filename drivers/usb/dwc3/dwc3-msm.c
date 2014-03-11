@@ -36,17 +36,14 @@
 #include <linux/usb/msm_hsusb.h>
 #include <linux/usb/msm_ext_chg.h>
 #include <linux/regulator/consumer.h>
-#include <linux/regulator/rpm-smd-regulator.h>
 #include <linux/pm_wakeup.h>
 #include <linux/power_supply.h>
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/cdev.h>
 #include <linux/completion.h>
 #include <linux/clk/msm-clk.h>
+#include <linux/msm-bus.h>
 #include <soc/qcom/scm.h>
-
-#include <mach/rpm-regulator.h>
-#include <mach/msm_bus.h>
 
 #include "dwc3_otg.h"
 #include "core.h"
@@ -2770,6 +2767,7 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM_SLEEP
 static int dwc3_msm_pm_suspend(struct device *dev)
 {
 	int ret = 0;
@@ -2820,7 +2818,9 @@ static int dwc3_msm_pm_resume(struct device *dev)
 
 	return ret;
 }
+#endif
 
+#ifdef CONFIG_PM_RUNTIME
 static int dwc3_msm_runtime_idle(struct device *dev)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
@@ -2864,6 +2864,7 @@ static int dwc3_msm_runtime_resume(struct device *dev)
 
 	return dwc3_msm_resume(mdwc);
 }
+#endif
 
 static const struct dev_pm_ops dwc3_msm_dev_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(dwc3_msm_pm_suspend, dwc3_msm_pm_resume)
