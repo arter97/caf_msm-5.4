@@ -31,6 +31,8 @@
 #include "msm_fb.h"
 #include "hdmi_msm.h"
 
+#define HDMI_RESOLUTION_DEFAULT HDMI_VFRMT_1280x800p60_16_9;
+
 /* Supported HDMI Audio channels */
 #define MSM_HDMI_AUDIO_CHANNEL_2		0
 #define MSM_HDMI_AUDIO_CHANNEL_4		1
@@ -638,9 +640,9 @@ static void hdmi_msm_setup_video_mode_lut(void)
 	MSM_HDMI_MODES_SET_SUPP_TIMINGS(
 		hdmi_common_supported_video_mode_lut, MSM_HDMI_MODES_CEA);
 
-	/* Add any other supported timings (DVI modes, etc.) */
-	MSM_HDMI_MODES_SET_TIMING(hdmi_common_supported_video_mode_lut,
-		HDMI_VFRMT_1280x1024p60_5_4);
+	/* Add all supported DVI modes to the lut */
+	MSM_HDMI_MODES_SET_SUPP_TIMINGS(
+		hdmi_common_supported_video_mode_lut, MSM_HDMI_MODES_DVI);
 }
 
 #ifdef PORT_DEBUG
@@ -4180,6 +4182,8 @@ static void hdmi_msm_turn_on(void)
 	if (!hdmi_msm_is_dvi_mode()) {
 		hdmi_msm_audio_setup();
 
+		hdmi_msm_avi_info_frame();
+
 		/*
 		 * Send the audio switch device notification if HDCP is
 		 * not enabled. Otherwise, the notification would be
@@ -4188,7 +4192,6 @@ static void hdmi_msm_turn_on(void)
 		if (!hdmi_msm_state->hdcp_enable)
 			SWITCH_SET_HDMI_AUDIO(1, 0);
 	}
-	hdmi_msm_avi_info_frame();
 #ifdef CONFIG_FB_MSM_HDMI_3D
 	hdmi_msm_vendor_infoframe_packetsetup();
 #endif
@@ -4562,6 +4565,11 @@ static int hdmi_msm_power_off(struct platform_device *pdev)
 	hdmi_msm_state->panel_power_on = FALSE;
 	DEV_INFO("power: OFF (audio off)\n");
 
+	external_common_state->video_resolution =
+		HDMI_RESOLUTION_DEFAULT;
+
+	external_common_state->hdmi_sink = 0;
+
 	if (!completion_done(&hdmi_msm_state->hpd_event_processed))
 		complete(&hdmi_msm_state->hpd_event_processed);
 error:
@@ -4913,10 +4921,10 @@ static int __init hdmi_msm_init(void)
 
 	if (hdmi_prim_display && hdmi_prim_resolution)
 		external_common_state->video_resolution =
-			hdmi_prim_resolution - 1;
+			hdmi_prim_resolution;
 	else
 		external_common_state->video_resolution =
-			HDMI_VFRMT_1920x1080p60_16_9;
+			HDMI_RESOLUTION_DEFAULT;
 
 #ifdef CONFIG_FB_MSM_HDMI_3D
 	external_common_state->switch_3d = hdmi_msm_switch_3d;
