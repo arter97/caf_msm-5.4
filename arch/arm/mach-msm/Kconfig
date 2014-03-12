@@ -387,7 +387,7 @@ config PHYS_OFFSET
 	default "0x00000000" if ARCH_MSM8226
 	default "0x00000000" if ARCH_MSM8610
 	default "0x00000000" if ARCH_MSMSAMARIUM
-	default "0x3AC00000" if ARCH_FSM9900
+	default "0x11400000" if ARCH_FSM9900
 	default "0x00000000" if ARCH_MDM9630
 	default "0x00200000" if !MSM_STACKED_MEMORY
 	default "0x10000000"
@@ -848,19 +848,6 @@ config MSM_GPIOMUX
 
 config MSM_NATIVE_RESTART
 	bool
-
-config MSM_BUS_SCALING
-	bool "Bus scaling driver"
-	default n
-
-config BUS_TOPOLOGY_ADHOC
-	bool "ad-hoc bus scaling topology"
-	default n
-	help
-		This option enables a driver that can handle adhoc bus topologies.
-		Adhoc bus topology driver allows one to many connections and maintains
-		directionality of connections by explicitly listing device connections
-		thus avoiding illegal routes.
 
 config MSM_BUS_RPM_MULTI_TIER_ENABLED
 	bool "RPM Multi-tiering Configuration"

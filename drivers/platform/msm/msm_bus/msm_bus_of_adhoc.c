@@ -20,8 +20,8 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
-#include <mach/msm_bus.h>
-#include <mach/msm_bus_board.h>
+#include <linux/msm-bus.h>
+#include <linux/msm-bus-board.h>
 #include "msm_bus_core.h"
 #include "msm_bus_adhoc.h"
 
@@ -363,8 +363,9 @@ struct msm_bus_device_node_registration
 					connections[j]);
 		}
 		if (pdata->info[i].fabdev)
-			dev_dbg(&pdev->dev, "base_addr %d\nbus_type %d\n",
-					pdata->info[i].fabdev->pqos_base,
+			dev_dbg(&pdev->dev, "base_addr %zu\nbus_type %d\n",
+					(size_t)pdata->info[i].
+						fabdev->pqos_base,
 					pdata->info[i].fabdev->bus_type);
 	}
 	return pdata;

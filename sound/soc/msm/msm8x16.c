@@ -36,6 +36,8 @@
 #define BTSCO_RATE_16KHZ 16000
 #define MAX_SND_CARDS 1
 
+#define LPASS_CSR_GP_IO_MUX_MIC_CTL 0x07702000
+#define LPASS_CSR_GP_IO_MUX_SPKR_CTL 0x07702004
 
 static int msm_btsco_rate = BTSCO_RATE_8KHZ;
 static int msm_btsco_ch = 1;
@@ -71,6 +73,10 @@ static struct afe_clk_cfg mi2s_tx_clk = {
 	0,
 };
 
+struct msm8916_asoc_mach_data {
+	int codec_type;
+};
+
 static struct afe_digital_clk_cfg digital_cdc_clk = {
 	AFE_API_VERSION_I2S_CONFIG,
 	9600000,
@@ -101,15 +107,6 @@ static const struct snd_soc_dapm_widget msm8x16_dapm_widgets[] = {
 	SND_SOC_DAPM_MIC("Secondary Mic", NULL),
 
 };
-
-static int msm_config_mclk(u16 port_id, struct afe_digital_clk_cfg *cfg)
-{
-	iowrite32(0x1, ioremap(MSM8X16_TOMBAK_LPASS_DIGCODEC_CBCR, 4));
-	/* Set the update bit to make the settings go through */
-	iowrite32(0x1, ioremap(MSM8X16_TOMBAK_LPASS_DIGCODEC_CMD_RCGR, 4));
-
-	return 0;
-}
 
 static int msm_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 				struct snd_pcm_hw_params *params)
@@ -182,7 +179,6 @@ static int mi2s_clk_ctl(struct snd_pcm_substream *substream, bool enable)
 {
 	int ret = 0;
 	if (enable) {
-		digital_cdc_clk.clk_val = 9600000;
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 			mi2s_rx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
 			ret = afe_set_lpass_clock(AFE_PORT_ID_PRIMARY_MI2S_RX,
@@ -198,7 +194,6 @@ static int mi2s_clk_ctl(struct snd_pcm_substream *substream, bool enable)
 			pr_err("%s:afe_set_lpass_clock failed\n", __func__);
 
 	} else {
-		digital_cdc_clk.clk_val = 0;
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 			mi2s_rx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_DISABLE;
 			ret = afe_set_lpass_clock(AFE_PORT_ID_PRIMARY_MI2S_RX,
@@ -230,7 +225,8 @@ static int msm8x16_enable_codec_ext_clk(struct snd_soc_codec *codec,
 	if (enable) {
 		if (atomic_inc_return(&mclk_rsc_ref) == 1) {
 			digital_cdc_clk.clk_val = 9600000;
-			msm_config_mclk(AFE_PORT_ID_SECONDARY_MI2S_RX,
+			afe_set_digital_codec_core_clock(
+					AFE_PORT_ID_PRIMARY_MI2S_RX,
 					&digital_cdc_clk);
 			msm8x16_wcd_mclk_enable(codec, 1, dapm);
 		}
@@ -238,7 +234,8 @@ static int msm8x16_enable_codec_ext_clk(struct snd_soc_codec *codec,
 		if (atomic_dec_return(&mclk_rsc_ref) == 0) {
 			digital_cdc_clk.clk_val = 0;
 			msm8x16_wcd_mclk_enable(codec, 0, dapm);
-			msm_config_mclk(AFE_PORT_ID_SECONDARY_MI2S_RX,
+			afe_set_digital_codec_core_clock(
+					AFE_PORT_ID_PRIMARY_MI2S_RX,
 					&digital_cdc_clk);
 		}
 	}
@@ -277,11 +274,27 @@ static void msm_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_card *card = rtd->card;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	struct msm8916_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
 	int ret = 0;
+	int val = 0;
 
 	pr_debug("%s(): substream = %s  stream = %d\n", __func__,
 		 substream->name, substream->stream);
+
+	if (!pdata->codec_type) {
+		/* configure the Primary, Sec and Tert mux for Mi2S interface
+		 * slave select to invalid state, for machine mode this
+		 * should move to HW, I do not like to do it here
+		 */
+		val = ioread32(ioremap(LPASS_CSR_GP_IO_MUX_SPKR_CTL , 4));
+		val = val | 0x00030300;
+		iowrite32(val, ioremap(LPASS_CSR_GP_IO_MUX_SPKR_CTL , 4));
+		val = ioread32(ioremap(LPASS_CSR_GP_IO_MUX_MIC_CTL , 4));
+		val = val | 0x00200000;
+		iowrite32(val, ioremap(LPASS_CSR_GP_IO_MUX_MIC_CTL , 4));
+	}
 
 	ret = pinctrl_select_state(pinctrl_info.pinctrl,
 					pinctrl_info.cdc_pdm_act);
@@ -403,9 +416,9 @@ static struct snd_soc_dai_link msm8x16_dai[] = {
 	},
 	/* Hostless PCM purpose */
 	{/* hw:x,5 */
-		.name = "Secondary MI2S RX Hostless",
-		.stream_name = "Secondary MI2S_RX Hostless Playback",
-		.cpu_dai_name = "SEC_MI2S_RX_HOSTLESS",
+		.name = "Primary MI2S RX Hostless",
+		.stream_name = "Primary MI2S_RX Hostless Playback",
+		.cpu_dai_name = "PRI_MI2S_RX_HOSTLESS",
 		.platform_name	= "msm-pcm-hostless",
 		.dynamic = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
@@ -483,9 +496,9 @@ static struct snd_soc_dai_link msm8x16_dai[] = {
 		.codec_name = "snd-soc-dummy",
 	},
 	{/* hw:x,11 */
-		.name = "Primary MI2S TX Hostless",
-		.stream_name = "Primary MI2S_TX Hostless Capture",
-		.cpu_dai_name = "PRI_MI2S_TX_HOSTLESS",
+		.name = "Tertiary MI2S TX Hostless",
+		.stream_name = "Tertiary MI2S_TX Hostless Capture",
+		.cpu_dai_name = "TERT_MI2S_TX_HOSTLESS",
 		.platform_name  = "msm-pcm-hostless",
 		.dynamic = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
@@ -760,14 +773,25 @@ static int cdc_pdm_get_pinctrl(struct platform_device *pdev)
 static int msm8x16_asoc_machine_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card;
+	struct msm8916_asoc_mach_data *pdata = NULL;
 	const char *card_dev_id = "qcom,msm-snd-card-id";
+	const char *codec_type = "qcom,msm-codec-type";
+	const char *ptr = NULL;
 	int ret, id;
+
+	pdata = devm_kzalloc(&pdev->dev,
+			sizeof(struct msm8916_asoc_mach_data), GFP_KERNEL);
+	if (!pdata) {
+		dev_err(&pdev->dev, "Can't allocate msm8226_asoc_mach_data\n");
+		ret = -ENOMEM;
+		goto err;
+	}
 
 	ret = of_property_read_u32(pdev->dev.of_node, card_dev_id, &id);
 	if (ret) {
 		dev_err(&pdev->dev,
 			"%s: missing %s in dt node\n", __func__, card_dev_id);
-		return ret;
+		goto err;
 	}
 
 	pdev->id = id;
@@ -779,22 +803,38 @@ static int msm8x16_asoc_machine_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "%s-card:%d\n", __func__, pdev->id);
 	if (!pdev->dev.of_node) {
 		dev_err(&pdev->dev, "No platform supplied from device tree\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err;
 	}
+	ret = of_property_read_string(pdev->dev.of_node, codec_type, &ptr);
+	if (ret) {
+		dev_err(&pdev->dev,
+			"%s: missing %s in dt node\n", __func__, codec_type);
+		goto err;
+	}
+	if (!strcmp(ptr, "external")) {
+		dev_info(&pdev->dev, "external codec is configured\n");
+		pdata->codec_type = 1;
+	} else {
+		dev_info(&pdev->dev, "default codec configured\n");
+		pdata->codec_type = 0;
+	}
+
 	ret = cdc_pdm_get_pinctrl(pdev);
 	if (ret < 0) {
 		pr_err("failed to get the pdm gpios\n");
-		return ret;
+		goto err;
 	}
 	if (pdev->id >= MAX_SND_CARDS) {
 		dev_err(&pdev->dev, "Sound Card parsed is wrong\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err;
 	}
 	card = &bear_cards[pdev->id];
 
 	card->dev = &pdev->dev;
 	platform_set_drvdata(pdev, card);
-
+	snd_soc_card_set_drvdata(card, pdata);
 	ret = snd_soc_of_parse_card_name(card, "qcom,model");
 	if (ret)
 		goto err;
@@ -814,6 +854,7 @@ static int msm8x16_asoc_machine_probe(struct platform_device *pdev)
 	atomic_set(&mclk_rsc_ref, 0);
 	return 0;
 err:
+	devm_kfree(&pdev->dev, pdata);
 	return ret;
 }
 

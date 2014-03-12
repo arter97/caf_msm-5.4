@@ -24,7 +24,6 @@
 #include "kgsl_pwrscale.h"
 #include "kgsl_device.h"
 #include "kgsl_trace.h"
-#include "kgsl_sharedmem.h"
 
 #define KGSL_PWRFLAGS_POWER_ON 0
 #define KGSL_PWRFLAGS_CLK_ON   1
@@ -1283,8 +1282,6 @@ EXPORT_SYMBOL(kgsl_pre_hwaccess);
 static int
 _nap(struct kgsl_device *device)
 {
-	struct kgsl_power_stats stats;
-
 	switch (device->state) {
 	case KGSL_STATE_ACTIVE:
 		if (!device->ftbl->isidle(device)) {
@@ -1299,8 +1296,7 @@ _nap(struct kgsl_device *device)
 		 * the simple-on-demand governor will get the latest
 		 * busy_time data even if the gpu isn't active.
 		*/
-		device->ftbl->power_stats(device, &stats);
-		device->pwrscale.accum_stats.busy_time += stats.busy_time;
+		kgsl_pwrscale_update_stats(device);
 
 		kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_OFF);
 		kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_OFF, KGSL_STATE_NAP);
@@ -1417,6 +1413,43 @@ int kgsl_pwrctrl_sleep(struct kgsl_device *device)
 }
 EXPORT_SYMBOL(kgsl_pwrctrl_sleep);
 
+/*
+ * kgsl_pwrctrl_slumber() - Put device into slumber if it is not in suspend
+ * @device: Device pointer
+ *
+ * Return 0 on success else error code
+ */
+int kgsl_pwrctrl_slumber(struct kgsl_device *device)
+{
+	int ret = 0;
+
+	if (KGSL_STATE_SLUMBER == device->state ||
+		KGSL_STATE_SUSPEND == device->state)
+		return ret;
+	if (KGSL_STATE_SUSPEND == device->requested_state)
+		return ret;
+	/* drain to prevent from more commands being submitted */
+	device->ftbl->drain(device);
+	/* wait for active count so device can be put in slumber */
+	ret = kgsl_active_count_wait(device, 0);
+	if (ret) {
+		device->ftbl->resume(device);
+		return ret;
+	}
+
+	ret = device->ftbl->idle(device);
+	if (ret) {
+		device->ftbl->resume(device);
+		return ret;
+	}
+	/* resume since we drained earlier */
+	device->ftbl->resume(device);
+	kgsl_pwrctrl_request_state(device, KGSL_STATE_SLUMBER);
+	ret = kgsl_pwrctrl_sleep(device);
+	return ret;
+}
+EXPORT_SYMBOL(kgsl_pwrctrl_slumber);
+
 /**
  * kgsl_pwrctrl_wake() - Power up the GPU from a slumber/sleep state
  * @device - Pointer to the kgsl_device struct
@@ -1429,10 +1462,6 @@ EXPORT_SYMBOL(kgsl_pwrctrl_sleep);
 int kgsl_pwrctrl_wake(struct kgsl_device *device, int priority)
 {
 	int status = 0;
-	unsigned int context_id;
-	unsigned int state = device->state;
-	unsigned int ts_processed = 0xdeaddead;
-	struct kgsl_context *context;
 
 	kgsl_pwrctrl_request_state(device, KGSL_STATE_ACTIVE);
 	switch (device->state) {
@@ -1448,19 +1477,6 @@ int kgsl_pwrctrl_wake(struct kgsl_device *device, int priority)
 	case KGSL_STATE_SLEEP:
 		kgsl_pwrctrl_axi(device, KGSL_PWRFLAGS_ON);
 		kgsl_pwrscale_wake(device);
-		kgsl_sharedmem_readl(&device->memstore,
-			(unsigned int *) &context_id,
-			KGSL_MEMSTORE_OFFSET(KGSL_MEMSTORE_GLOBAL,
-				current_context));
-		context = kgsl_context_get(device, context_id);
-		if (context)
-			kgsl_readtimestamp(device, context,
-				KGSL_TIMESTAMP_RETIRED,
-				&ts_processed);
-		KGSL_PWR_INFO(device, "Wake from %s state. CTXT: %d RTRD TS: %08X\n",
-			kgsl_pwrstate_to_str(state),
-			context ? context->id : -1, ts_processed);
-		kgsl_context_put(context);
 		/* fall through */
 	case KGSL_STATE_NAP:
 		/* Turn on the core clocks */
