@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -19,8 +19,8 @@
 #include <linux/mutex.h>
 #include <linux/radix-tree.h>
 #include <linux/clk.h>
-#include <mach/msm_bus_board.h>
-#include <mach/msm_bus.h>
+#include <linux/msm-bus-board.h>
+#include <linux/msm-bus.h>
 #include "msm_bus_core.h"
 
 static atomic_t num_fab = ATOMIC_INIT(0);
@@ -30,7 +30,7 @@ int msm_bus_get_num_fab(void)
 	return atomic_read(&num_fab);
 }
 
-int msm_bus_device_match(struct device *dev, void* id)
+int msm_bus_device_match(struct device *dev, void *id)
 {
 	struct msm_bus_fabric_device *fabdev = to_msm_bus_fabric_device(dev);
 
@@ -38,7 +38,7 @@ int msm_bus_device_match(struct device *dev, void* id)
 		MSM_BUS_WARN("Fabric %p returning 0\n", fabdev);
 		return 0;
 	}
-	return (fabdev->id == (int)id);
+	return fabdev->id == *(int *)id;
 }
 
 struct bus_type msm_bus_type = {
@@ -56,7 +56,7 @@ struct msm_bus_fabric_device *msm_bus_get_fabric_device(int fabid)
 {
 	struct device *dev;
 	struct msm_bus_fabric_device *fabric;
-	dev = bus_find_device(&msm_bus_type, NULL, (void *)fabid,
+	dev = bus_find_device(&msm_bus_type, NULL, (void *)&fabid,
 		msm_bus_device_match);
 	if (!dev)
 		return NULL;

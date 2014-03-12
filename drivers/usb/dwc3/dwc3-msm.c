@@ -549,6 +549,8 @@ static int __dwc3_msm_ep_queue(struct dwc3_ep *dep, struct dwc3_request *req)
 		return ret;
 	}
 	dep->flags |= DWC3_EP_BUSY;
+	dep->resource_index = dwc3_gadget_ep_get_transfer_index(dep->dwc,
+		dep->number);
 
 	return ret;
 }
@@ -628,6 +630,12 @@ static int dwc3_msm_ep_queue(struct usb_ep *ep,
 		dep->free_slot = 0;
 	}
 
+	/* HW restriction regarding TRB size (8KB) */
+	if (req->request.length < 0x2000) {
+		dev_err(mdwc->dev, "%s: Min TRB size is 8KB\n", __func__);
+		return -EINVAL;
+	}
+
 	/*
 	 * Override req->complete function, but before doing that,
 	 * store it's original pointer in the req_complete_list.
@@ -661,6 +669,11 @@ static int dwc3_msm_ep_queue(struct usb_ep *ep,
 
 	dev_vdbg(dwc->dev, "%s: queing request %p to ep %s length %d\n",
 			__func__, request, ep->name, request->length);
+
+	dbm_event_buffer_config(mdwc->dbm,
+		dwc3_msm_read_reg(mdwc->base, DWC3_GEVNTADRLO(0)),
+		dwc3_msm_read_reg(mdwc->base, DWC3_GEVNTADRHI(0)),
+		dwc3_msm_read_reg(mdwc->base, DWC3_GEVNTSIZ(0)));
 
 	/*
 	 * We must obtain the lock of the dwc3 core driver,
@@ -1112,13 +1125,19 @@ static void dwc3_block_reset_usb_work(struct work_struct *w)
 			DWC3_DEVTEN_CMDCMPLTEN |
 			DWC3_DEVTEN_ERRTICERREN |
 			DWC3_DEVTEN_WKUPEVTEN |
-			DWC3_DEVTEN_ULSTCNGEN |
 			DWC3_DEVTEN_CONNECTDONEEN |
 			DWC3_DEVTEN_USBRSTEN |
 			DWC3_DEVTEN_DISCONNEVTEN);
+	/*
+	 * Enable SUSPENDEVENT(BIT:6) for version 230A and above
+	 * else enable USB Link change event (BIT:3) for older version
+	 */
+	if (dwc3_msm_read_reg(mdwc->base, DWC3_GSNPSID) < DWC3_REVISION_230A)
+		reg |= DWC3_DEVTEN_ULSTCNGEN;
+	else
+		reg |= DWC3_DEVTEN_SUSPEND;
+
 	dwc3_msm_write_reg(mdwc->base, DWC3_DEVTEN, reg);
-
-
 }
 
 static void dwc3_chg_enable_secondary_det(struct dwc3_msm *mdwc)
@@ -1351,7 +1370,7 @@ static void dwc3_start_chg_det(struct dwc3_charger *charger, bool start)
 
 static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 {
-	int ret;
+	int ret, i;
 	bool dcp;
 	bool host_bus_suspend;
 	bool host_ss_active;
@@ -1359,6 +1378,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 
 	dev_dbg(mdwc->dev, "%s: entering lpm. usb_lpm_override:%d\n",
 					 __func__, usb_lpm_override);
+	dbg_event(0xFF, "Controller Suspend", 0);
 
 	if (!usb_lpm_override && mdwc->suspend_resume_no_support) {
 		dev_dbg(mdwc->dev, "%s no support for suspend\n", __func__);
@@ -1368,6 +1388,21 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 	if (atomic_read(&mdwc->in_lpm)) {
 		dev_dbg(mdwc->dev, "%s: Already suspended\n", __func__);
 		return 0;
+	}
+
+	/* pending device events need to be handled by dwc3_thread_interrupt */
+	if (mdwc->dwc3) {
+		struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+		for (i = 0; i < dwc->num_event_buffers; i++) {
+			struct dwc3_event_buffer *evt = dwc->ev_buffs[i];
+			if ((evt->flags & DWC3_EVENT_PENDING)) {
+				dev_warn(mdwc->dev, "%s: %d device events pending, abort suspend\n",
+					__func__, evt->count / 4);
+				dbg_print_reg("PENDING DEVICE EVENT",
+						*(u32 *)(evt->buf + evt->lpos));
+				return -EBUSY;
+			}
+		}
 	}
 
 	host_ss_active = dwc3_msm_read_reg(mdwc->base, USB3_PORTSC) & PORT_PE;
@@ -1462,6 +1497,7 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 	bool resume_from_core_clk_off = false;
 
 	dev_dbg(mdwc->dev, "%s: exiting lpm\n", __func__);
+	dbg_event(0xFF, "Controller Resume", 0);
 
 	if (!atomic_read(&mdwc->in_lpm)) {
 		dev_dbg(mdwc->dev, "%s: Already resumed\n", __func__);
