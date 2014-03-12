@@ -2798,6 +2798,7 @@ static int msm_gcc_probe(struct platform_device *pdev)
 		return PTR_ERR(xo_a_clk_src.c.parent);
 	}
 
+	clk_prepare_enable(&gpll2_clk_src.c);
 	dev_info(&pdev->dev, "Registered GCC clocks\n");
 
 	return 0;
