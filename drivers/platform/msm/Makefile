@@ -13,3 +13,4 @@ obj-$(CONFIG_QPNP_USB_DETECT) += qpnp-usbdetect.o
 obj-$(CONFIG_QCA1530) += qca1530.o
 
 obj-$(CONFIG_QMP_CORE) += qmp_core/
+obj-$(CONFIG_QPNP_HAPTIC) += qpnp-haptic.o
