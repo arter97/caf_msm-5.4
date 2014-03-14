@@ -1069,7 +1069,12 @@ static int ngd_notify_slaves(void *data)
 	int ret, i = 0;
 	while (!kthread_should_stop()) {
 		set_current_state(TASK_INTERRUPTIBLE);
-		wait_for_completion(&dev->qmi.slave_notify);
+		ret = wait_for_completion_timeout(&dev->qmi.slave_notify,
+								HZ);
+		if (!ret) {
+			dev_dbg(dev->dev, "slave thread wait err:%d", ret);
+			continue;
+		}
 		/* Probe devices for first notification */
 		if (!i) {
 			dev->err = 0;
