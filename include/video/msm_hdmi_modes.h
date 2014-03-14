@@ -109,6 +109,7 @@ struct msm_hdmi_mode_timing_info {
 #define HDMI_VFRMT_1280x720p30_16_9	62
 #define HDMI_VFRMT_1920x1080p120_16_9	63
 #define HDMI_VFRMT_1920x1080p100_16_9	64
+#define HDMI_VFRMT_1280x800p60_16_9	65
 /* Video Identification Codes from 65-127 are reserved for the future */
 #define HDMI_VFRMT_END			127
 
@@ -199,6 +200,9 @@ struct msm_hdmi_mode_timing_info {
 #define HDMI_VFRMT_4096x2160p24_16_9_TIMING				\
 	{HDMI_VFRMT_4096x2160p24_16_9, 4096, 1020, 88, 296, false,	\
 	 2160, 8, 10, 72, false, 297000, 24000, false, true}
+#define HDMI_VFRMT_1280x800p60_16_9_TIMING				\
+	{HDMI_VFRMT_1280x800p60_16_9, 1280, 48, 32, 80, false,		\
+	 800, 3, 6, 14, false, 69300, 60000, false, true}
 
 #define MSM_HDMI_MODES_SET_TIMING(LUT, MODE) do {		\
 	struct msm_hdmi_mode_timing_info mode = MODE##_TIMING;	\
@@ -249,6 +253,7 @@ static inline void MSM_HDMI_MODES_SET_SUPP_TIMINGS(
 	if (type & MSM_HDMI_MODES_DVI) {
 		MSM_HDMI_MODES_SET_TIMING(lut, HDMI_VFRMT_1280x1024p60_5_4);
 		MSM_HDMI_MODES_SET_TIMING(lut, HDMI_VFRMT_2560x1600p60_16_9);
+		MSM_HDMI_MODES_SET_TIMING(lut, HDMI_VFRMT_1280x800p60_16_9);
 	}
 }
 
@@ -326,6 +331,7 @@ static inline const char *msm_hdmi_mode_2string(uint32_t mode)
 	case HDMI_VFRMT_4096x2160p24_16_9:	return "4096x2160 p24 16/9";
 	case HDMI_VFRMT_2560x1600p60_16_9:	return "2560x1600 p60 16/9";
 	case HDMI_VFRMT_1280x1024p60_5_4:	return "1280x1042 p60 5/4";
+	case HDMI_VFRMT_1280x800p60_16_9:	return "1280x800 p60 16/9";
 	default:				return "???";
 	}
 }
