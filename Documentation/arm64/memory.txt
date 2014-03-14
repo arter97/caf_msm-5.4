@@ -39,8 +39,9 @@ ffffffbffa000000	ffffffbffaffffff	  16MB		PCI I/O space
 
 ffffffbffb000000	ffffffbffbbfffff	  12MB		[guard]
 
-ffffffbffbc00000	ffffffbffbdfffff	   2MB		fixed mappings
+ffffffbffbc00000	ffffffbffbdfffff	   2MB		earlyprintk device
 
+>>>>>>> arm64: Extend the PCI I/O space to 16MB
 ffffffbffbe00000	ffffffbffbffffff	   2MB		[guard]
 
 ffffffbffc000000	ffffffbfffffffff	  64MB		modules
@@ -66,7 +67,7 @@ fffffdfffa000000	fffffdfffaffffff	  16MB		PCI I/O space
 
 fffffdfffb000000	fffffdfffbbfffff	  12MB		[guard]
 
-fffffdfffbc00000	fffffdfffbdfffff	   2MB		fixed mappings
+fffffdfffbc00000	fffffdfffbdfffff	   2MB		earlyprintk device
 
 fffffdfffbe00000	fffffdfffbffffff	   2MB		[guard]
 
