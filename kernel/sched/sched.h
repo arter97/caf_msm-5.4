@@ -23,6 +23,7 @@ extern atomic_long_t calc_load_tasks;
 extern long calc_load_fold_active(struct rq *this_rq);
 extern void update_cpu_load_active(struct rq *this_rq);
 
+extern unsigned int sysctl_sched_ravg_window;
 /*
  * Convert user-nice values [ -20 ... 0 ... 19 ]
  * to static priority [ MAX_RT_PRIO..MAX_PRIO-1 ],
