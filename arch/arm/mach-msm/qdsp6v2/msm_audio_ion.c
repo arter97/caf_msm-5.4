@@ -333,8 +333,8 @@ int msm_audio_ion_import_legacy(const char *name, struct ion_client *client,
 	if (IS_ERR_OR_NULL((void *)(*handle))) {
 		pr_err("%s: ion import dma buffer failed\n",
 			__func__);
-		goto err_ion_handle;
-		}
+		goto err;
+	}
 
 	if (ionflag != NULL) {
 		rc = ion_handle_get_flags(client, *handle, ionflag);
@@ -366,8 +366,8 @@ int msm_audio_ion_import_legacy(const char *name, struct ion_client *client,
 
 err_ion_handle:
 	ion_free(client, *handle);
+err:
 	return -EINVAL;
-
 }
 
 int msm_audio_ion_free_legacy(struct ion_client *client,
