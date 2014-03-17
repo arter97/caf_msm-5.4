@@ -10,16 +10,8 @@
  * GNU General Public License for more details.
  */
 
-/dts-v1/;
-
 #include "msm8916-qrd.dtsi"
 #include "dsi-panel-innolux-720p-video.dtsi"
-
-/ {
-	model = "Qualcomm MSM 8916 QRD";
-	compatible = "qcom,msm8916-qrd", "qcom,msm8916", "qcom,qrd";
-	qcom,board-id = <11 0> , <11 4>;
-};
 
 &tlmm_pinmux {
 	akm_reset_pin {
@@ -51,8 +43,6 @@
 
 &i2c_0 { /* BLSP1 QUP2 */
 	akm@c {
-		#address-cells = <1>;
-		#size-cells = <0>;
 		compatible = "ak,ak09911";
 		reg = <0x0c>;
 		pinctrl-names = "default","reset";

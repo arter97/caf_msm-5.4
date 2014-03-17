@@ -664,13 +664,22 @@ static int msm_mpm_dev_probe(struct platform_device *pdev)
 	struct resource *res = NULL;
 	int offset, ret;
 	struct msm_mpm_device_data *dev = &msm_mpm_dev_data;
+	const char *clk_name;
+	char *key;
 
 	if (msm_mpm_initialized & MSM_MPM_DEVICE_PROBED) {
 		pr_warn("MPM device probed multiple times\n");
 		return 0;
 	}
 
-	xo_clk = devm_clk_get(&pdev->dev, "xo");
+	key = "clock-names";
+	ret = of_property_read_string(pdev->dev.of_node, key, &clk_name);
+	if (ret) {
+		pr_err("%s(): Cannot read clock name%s\n", __func__, key);
+		return -EINVAL;
+	}
+
+	xo_clk = devm_clk_get(&pdev->dev, clk_name);
 
 	if (IS_ERR(xo_clk)) {
 		pr_err("%s(): Cannot get clk resource for XO\n", __func__);
@@ -718,7 +727,8 @@ static int msm_mpm_dev_probe(struct platform_device *pdev)
 		return -ENXIO;
 	}
 	ret = devm_request_irq(&pdev->dev, dev->mpm_ipc_irq, msm_mpm_irq,
-			IRQF_TRIGGER_RISING, pdev->name, msm_mpm_irq);
+			IRQF_TRIGGER_RISING | IRQF_NO_SUSPEND, pdev->name,
+			msm_mpm_irq);
 
 	if (ret) {
 		pr_info("%s(): request_irq failed errno: %d\n", __func__, ret);

@@ -31,6 +31,22 @@
 			reg = <0 0xAF000>;
 			label = "audio_mem";
 		};
+
+		peripheral_mem: peripheral_region@0x100000 {
+			linux,reserve-contiguous-region;
+			linux,reserve-region;
+			linux,remove-completely;
+			reg = <0x1000000 0x5e00000>;
+			label = "peripheral_mem";
+		};
+
+		sbl_mem: sbl_region@0x7f00000 {
+			linux,reserve-contiguous-region;
+			linux,reserve-region;
+			linux,remove-completely;
+			reg = <0x7f00000 0x100000>;
+			label = "sbl_mem";
+		};
 	};
 
 	soc: soc { };
@@ -105,12 +121,6 @@
 			compatible = "qcom,msm-imem-emergency_download_mode";
 			reg = <0xfe0 12>;
 		};
-	};
-
-	qcom,msm-mem-hole {
-		compatible = "qcom,msm-mem-hole";
-		qcom,memblock-remove = <0x01000000 0x05E00000
-					0x07F00000 0x00100000>; /* Address and Size of Hole */
 	};
 
 	timer@f9020000 {
@@ -467,7 +477,6 @@
 		qcom,msm-bus,vectors-KBps =
 						<61 512 0 0>,
 						<61 512 240000 960000>;
-		qcom,no-suspend-resume;
 		qcom,reset_hsphy_sleep_clk_on_init;
 
 		dwc3@f9200000 {
@@ -750,15 +759,20 @@
 	};
 
 	qcom,lpass@fe200000 {
-		compatible = "qcom,pil-q6v5-lpass";
-		reg = <0xfe200000 0x00100>,
-		      <0xfd485100 0x00010>,
-		      <0xfc4016c0 0x00004>;
-		reg-names = "qdsp6_base", "halt_base", "restart_reg";
-
-		vdd_cx-supply = <&pmd9635_l3_corner>;
+		compatible = "qcom,pil-tz-generic";
+		reg = <0xfe200000 0x00100>;
 		interrupts = <0 162 1>;
 
+		vdd_cx-supply = <&pmd9635_l3_corner>;
+		proxy-reg-names = "vdd_cx";
+		vdd_cx-uV-uA = <7 100000>;
+		clock-names = "bus_clk", "xo";
+		active-clock-names = "bus_clk";
+		proxy-clock-names = "xo";
+
+		qcom,pas-id = <1>;
+		qcom,proxy-timeout-ms = <10000>;
+		qcom,smem-id = <423>;
 		qcom,firmware-name = "adsp";
 
 		/* GPIO inputs from lpass */

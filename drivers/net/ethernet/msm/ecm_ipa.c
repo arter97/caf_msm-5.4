@@ -652,6 +652,7 @@ int ecm_ipa_disconnect(void *priv)
 	struct ipa_ecm_msg *ecm_msg;
 	struct ipa_msg_meta msg_meta;
 	int retval;
+	int outstanding_dropped_pkts;
 
 	ECM_IPA_LOG_ENTRY();
 	NULL_CHECK(ecm_ipa_ctx);
@@ -690,6 +691,11 @@ int ecm_ipa_disconnect(void *priv)
 
 	netif_stop_queue(ecm_ipa_ctx->net);
 	ECM_IPA_DEBUG("queue stopped\n");
+
+	outstanding_dropped_pkts =
+		atomic_read(&ecm_ipa_ctx->outstanding_pkts);
+	ecm_ipa_ctx->net->stats.tx_errors += outstanding_dropped_pkts;
+	atomic_set(&ecm_ipa_ctx->outstanding_pkts, 0);
 
 	ECM_IPA_LOG_EXIT();
 
@@ -951,6 +957,7 @@ static void ecm_ipa_rm_notify(void *user_data, enum ipa_rm_event event,
 static int ecm_ipa_create_rm_resource(struct ecm_ipa_dev *ecm_ipa_ctx)
 {
 	struct ipa_rm_create_params create_params = {0};
+	struct ipa_rm_perf_profile profile;
 	int result;
 	ECM_IPA_LOG_ENTRY();
 	create_params.name = IPA_RM_RESOURCE_STD_ECM_PROD;
@@ -963,6 +970,9 @@ static int ecm_ipa_create_rm_resource(struct ecm_ipa_dev *ecm_ipa_ctx)
 	}
 	ECM_IPA_DEBUG("rm client was created");
 
+	profile.max_supported_bandwidth_mbps = IPA_APPS_MAX_BW_IN_MBPS;
+	ipa_rm_set_perf_profile(IPA_RM_RESOURCE_STD_ECM_PROD, &profile);
+
 	result = ipa_rm_inactivity_timer_init(IPA_RM_RESOURCE_STD_ECM_PROD,
 			INACTIVITY_MSEC_DELAY);
 	if (result) {
@@ -974,7 +984,14 @@ static int ecm_ipa_create_rm_resource(struct ecm_ipa_dev *ecm_ipa_ctx)
 	result = ipa_rm_add_dependency(IPA_RM_RESOURCE_STD_ECM_PROD,
 				IPA_RM_RESOURCE_USB_CONS);
 	if (result)
-		ECM_IPA_ERROR("unable to add dependency (%d)\n", result);
+		ECM_IPA_ERROR("unable to add ECM/USB dependency (%d)\n",
+				result);
+
+	result = ipa_rm_add_dependency(IPA_RM_RESOURCE_USB_PROD,
+					IPA_RM_RESOURCE_APPS_CONS);
+	if (result)
+		ECM_IPA_ERROR("unable to add USB/APPS dependency (%d)\n",
+				result);
 
 	ECM_IPA_DEBUG("rm dependency was set\n");
 
@@ -994,6 +1011,8 @@ static void ecm_ipa_destory_rm_resource(struct ecm_ipa_dev *ecm_ipa_ctx)
 
 	ipa_rm_delete_dependency(IPA_RM_RESOURCE_STD_ECM_PROD,
 			IPA_RM_RESOURCE_USB_CONS);
+	ipa_rm_delete_dependency(IPA_RM_RESOURCE_USB_PROD,
+				IPA_RM_RESOURCE_APPS_CONS);
 	ipa_rm_inactivity_timer_destroy(IPA_RM_RESOURCE_STD_ECM_PROD);
 	result = ipa_rm_delete_resource(IPA_RM_RESOURCE_STD_ECM_PROD);
 	if (result)
@@ -1065,6 +1084,13 @@ static void ecm_ipa_tx_complete_notify(void *priv,
 		ECM_IPA_ERROR("unsupported event on Tx callback\n");
 		return;
 	}
+
+	if (unlikely(ecm_ipa_ctx->state != ECM_IPA_CONNECTED_AND_UP)) {
+		ECM_IPA_DEBUG("dropping Tx-complete pkt, state=%s",
+			ecm_ipa_state_string(ecm_ipa_ctx->state));
+		goto out;
+	}
+
 	atomic_dec(&ecm_ipa_ctx->outstanding_pkts);
 	if (netif_queue_stopped(ecm_ipa_ctx->net) &&
 		atomic_read(&ecm_ipa_ctx->outstanding_pkts) <
@@ -1074,6 +1100,7 @@ static void ecm_ipa_tx_complete_notify(void *priv,
 		netif_wake_queue(ecm_ipa_ctx->net);
 	}
 
+out:
 	dev_kfree_skb_any(skb);
 	return;
 }
