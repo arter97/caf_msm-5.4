@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -73,8 +73,9 @@
 #define MDSS_MDP_REG_INTR_EN			0x00110
 #define MDSS_MDP_REG_INTR_STATUS		0x00114
 #define MDSS_MDP_REG_INTR_CLEAR		0x00118
-#define MDSS_MDP_VSYNC_IRQ		0x08000000
-#define MDSS_MDP_INTR_INTF_1_VSYNC		BIT(27)
+#define MDSS_MDP_VSYNC_IRQ			0x08000000
+#define MDSS_MDP_INTR_INTF_1_VSYNC_VID		BIT(27)
+#define MDSS_MDP_INTR_INTF_1_VSYNC_CMD		BIT(8)
 #define MDSS_MDP_INTR_INTF_3_VSYNC		BIT(31)
 #define MDSS_MDP_INTR_WB_0_DONE		BIT(0)
 #define MDSS_MDP_INTR_WB_2_DONE		BIT(4)
@@ -1392,7 +1393,8 @@ kgsl_drm_irq_handler(DRM_IRQ_ARGS)
 	if (isr == 0)
 		goto irq_done;
 
-	if (isr & MDSS_MDP_INTR_INTF_1_VSYNC) {
+	if ((isr & MDSS_MDP_INTR_INTF_1_VSYNC_VID) ||
+			(isr & MDSS_MDP_INTR_INTF_1_VSYNC_CMD)) {
 		DRM_DEBUG("%s:DSI0\n", __func__);
 		drm_handle_vblank(dev, DRM_KGSL_CRTC_PRIMARY);
 	}
@@ -1448,7 +1450,8 @@ kgsl_drm_irq_preinstall(struct drm_device *dev)
 	for (i = 0; i < DRM_KGSL_CRTC_MAX; i++)
 		atomic_set(&dev_priv->vbl_received[i], 0);
 
-	mdp_drm_intr_mask |= MDSS_MDP_INTR_INTF_1_VSYNC;
+	mdp_drm_intr_mask |= MDSS_MDP_INTR_INTF_1_VSYNC_VID;
+	mdp_drm_intr_mask |= MDSS_MDP_INTR_INTF_1_VSYNC_CMD;
 	dev->irq_enabled = 0;
 }
 
