@@ -551,7 +551,7 @@ static int dwc3_probe(struct platform_device *pdev)
 		dwc->needs_fifo_resize = of_property_read_bool(node, "tx-fifo-resize");
 		dwc->dr_mode = of_usb_get_dr_mode(node);
 		dwc->core_reset_after_phy_init =
-			of_property_read_bool(node, "core_reset_after_phy_init");
+			of_property_read_bool(node, "snps,core_reset_after_phy_init");
 	} else if (pdata) {
 		dwc->maximum_speed = pdata->maximum_speed;
 
@@ -642,7 +642,7 @@ static int dwc3_probe(struct platform_device *pdev)
 	}
 
 	dwc->nominal_elastic_buffer = of_property_read_bool(node,
-			"nominal-elastic-buffer");
+			"snps,nominal-elastic-buffer");
 
 	ret = dwc3_core_init(dwc);
 	if (ret) {
