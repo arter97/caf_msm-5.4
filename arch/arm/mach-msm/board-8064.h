@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -109,6 +109,8 @@ void __init apq8064_set_display_params(char *prim_panel, char *ext_panel,
 void apq8064_init_gpu(void);
 void apq8064_pm8xxx_gpio_mpp_init(void);
 void __init configure_apq8064_pm8917_power_grid(void);
+
+#define QCA6174_BT_RST_N     17
 
 #define PLATFORM_IS_MPQ8064() \
 	(machine_is_mpq8064_hrd() || \

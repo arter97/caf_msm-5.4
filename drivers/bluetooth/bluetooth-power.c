@@ -169,6 +169,9 @@ static int bt_configure_gpios(int on)
 			return rc;
 		}
 
+		/* Hardware settling time */
+		msleep(100);
+
 		rc = gpio_direction_output(bt_reset_gpio, 1);
 		if (rc) {
 			BT_PWR_ERR("Unable to set direction\n");
@@ -194,6 +197,7 @@ static int bluetooth_power(int on)
 	BT_PWR_DBG("on: %d", on);
 
 	if (on) {
+		pr_debug("%s: TURNING BT ON", __func__);
 		if (bt_power_pdata->bt_vdd_io) {
 			rc = bt_configure_vreg(bt_power_pdata->bt_vdd_io);
 			if (rc < 0) {
@@ -230,7 +234,9 @@ static int bluetooth_power(int on)
 			}
 		}
 	} else {
-		bt_configure_gpios(on);
+		pr_debug("%s: TURNING BT OFF", __func__);
+		if (bt_power_pdata->bt_gpio_sys_rst)
+			bt_configure_gpios(on);
 gpio_fail:
 		if (bt_power_pdata->bt_gpio_sys_rst)
 			gpio_free(bt_power_pdata->bt_gpio_sys_rst);
@@ -427,14 +433,16 @@ static int bt_power_probe(struct platform_device *pdev)
 		pdev->dev.platform_data = bt_power_pdata;
 	} else if (pdev->dev.platform_data) {
 		/* Optional data set to default if not provided */
-		if (!((struct bluetooth_power_platform_data *)
-			(pdev->dev.platform_data))->bt_power_setup)
-			((struct bluetooth_power_platform_data *)
-				(pdev->dev.platform_data))->bt_power_setup =
-						bluetooth_power;
 
 		memcpy(bt_power_pdata, pdev->dev.platform_data,
 			sizeof(struct bluetooth_power_platform_data));
+
+		if (!((struct bluetooth_power_platform_data *)
+			(pdev->dev.platform_data))->bt_power_setup) {
+			((struct bluetooth_power_platform_data *)
+				(pdev->dev.platform_data))->bt_power_setup =
+						bluetooth_power;
+		}
 	} else {
 		BT_PWR_ERR("Failed to get platform data");
 		goto free_pdata;
