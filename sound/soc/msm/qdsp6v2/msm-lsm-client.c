@@ -170,18 +170,18 @@ static int msm_lsm_ioctl(struct snd_pcm_substream *substream,
 				 */
 				rc = -EFAULT;
 			} else {
-				if (!access_ok(VERIFY_READ, user,
-					sizeof(struct snd_lsm_event_status)))
-					rc = -EFAULT;
-				if (user->payload_size <
+				if (!access_ok(VERIFY_WRITE, arg,
+					       size)) {
+					pr_err("%s: User space pointer invalid\n",
+					       __func__);
+					kfree(event_status);
+					return -EFAULT;
+				} else if (user->payload_size <
 				    event_status->payload_size) {
 					pr_debug("%s: provided %dbytes isn't enough, needs %dbytes\n",
 						 __func__, user->payload_size,
 						 size);
 					rc = -ENOMEM;
-				} else if (!access_ok(VERIFY_WRITE, arg,
-						      size)) {
-					rc = -EFAULT;
 				} else {
 					rc = copy_to_user(arg, event_status,
 							  size);
