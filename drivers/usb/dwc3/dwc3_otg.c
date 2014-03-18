@@ -555,8 +555,8 @@ static int dwc3_otg_set_power(struct usb_phy *phy, unsigned mA)
 		/* Disable charging */
 		if (power_supply_set_online(dotg->psy, false))
 			goto psy_error;
-		/* Set max current limit */
-		if (power_supply_set_current_limit(dotg->psy, 0))
+		/* Set max current limit in uA */
+		if (power_supply_set_current_limit(dotg->psy, 1000*mA))
 			goto psy_error;
 	}
 
@@ -859,9 +859,14 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 				pm_runtime_put_sync(phy->dev);
 				return;
 			} else {
-				/* xHCI increments PM child count as needed */
-				dev_dbg(phy->dev, "a_host state entered. Allow runtime suspend.\n");
-				pm_runtime_put_sync(phy->dev);
+				/*
+				 * delay 1s to allow for xHCI to detect
+				 * just-attached devices before allowing
+				 * runtime suspend
+				 */
+				dev_dbg(phy->dev, "a_host state entered\n");
+				delay = VBUS_REG_CHECK_DELAY;
+				work = 1;
 			}
 		}
 		break;

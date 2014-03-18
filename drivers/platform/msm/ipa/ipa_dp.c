@@ -86,9 +86,10 @@ static void ipa_wq_write_done_common(struct ipa_sys_context *sys, u32 cnt)
 		spin_lock_bh(&sys->spinlock);
 		if (tx_pkt_expected->cnt > 1 &&
 				tx_pkt_expected->cnt != IPA_LAST_DESC_CNT)
-			dma_pool_free(ipa_ctx->dma_pool,
-					tx_pkt_expected->mult.base,
-					tx_pkt_expected->mult.phys_base);
+			dma_free_coherent(ipa_ctx->pdev,
+				tx_pkt_expected->mult.size,
+				tx_pkt_expected->mult.base,
+				tx_pkt_expected->mult.phys_base);
 		kmem_cache_free(ipa_ctx->tx_pkt_wrapper_cache, tx_pkt_expected);
 	}
 	spin_unlock_bh(&sys->spinlock);
@@ -406,7 +407,8 @@ int ipa_send(struct ipa_sys_context *sys, u32 num_desc, struct ipa_desc *desc,
 	if (unlikely(!in_atomic))
 		mem_flag = GFP_KERNEL;
 
-	transfer.iovec = dma_pool_alloc(ipa_ctx->dma_pool, mem_flag, &dma_addr);
+	transfer.iovec = dma_alloc_coherent(ipa_ctx->pdev, size, &dma_addr,
+			mem_flag);
 	transfer.iovec_phys = dma_addr;
 	transfer.iovec_count = num_desc;
 	spin_lock_bh(&sys->spinlock);
@@ -548,8 +550,8 @@ failure:
 		if (fail_dma_wrap)
 			kmem_cache_free(ipa_ctx->tx_pkt_wrapper_cache, tx_pkt);
 	if (transfer.iovec_phys)
-		dma_pool_free(ipa_ctx->dma_pool, transfer.iovec,
-				  transfer.iovec_phys);
+		dma_free_coherent(ipa_ctx->pdev, size, transfer.iovec,
+				transfer.iovec_phys);
 failure_coherent:
 	spin_unlock_bh(&sys->spinlock);
 	return -EFAULT;
@@ -922,26 +924,33 @@ int ipa_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 
 	ep = &ipa_ctx->ep[ipa_ep_idx];
 
+	ipa_inc_client_enable_clks();
+
 	if (ep->valid == 1) {
 		if (sys_in->client != IPA_CLIENT_APPS_LAN_WAN_PROD) {
 			IPAERR("EP already allocated.\n");
-			goto fail_gen;
+			goto fail_and_disable_clocks;
 		} else {
 			if (ipa_cfg_ep_hdr(ipa_ep_idx,
 						&sys_in->ipa_ep_cfg.hdr)) {
 				IPAERR("fail to configure hdr prop of EP.\n");
-				return -EFAULT;
+				result = -EFAULT;
+				goto fail_and_disable_clocks;
 			}
 			if (ipa_cfg_ep_cfg(ipa_ep_idx,
 						&sys_in->ipa_ep_cfg.cfg)) {
 				IPAERR("fail to configure cfg prop of EP.\n");
-				return -EFAULT;
+				result = -EFAULT;
+				goto fail_and_disable_clocks;
 			}
 			IPADBG("client %d (ep: %d) overlay ok sys=%p\n",
 					sys_in->client, ipa_ep_idx, ep->sys);
 			ep->client_notify = sys_in->notify;
 			ep->priv = sys_in->priv;
 			*clnt_hdl = ipa_ep_idx;
+			if (!ep->keep_ipa_awake)
+				ipa_dec_client_disable_clks();
+
 			return 0;
 		}
 	}
@@ -952,7 +961,7 @@ int ipa_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 	if (!ep->sys) {
 		IPAERR("failed to sys ctx for client %d\n", sys_in->client);
 		result = -ENOMEM;
-		goto fail_gen;
+		goto fail_and_disable_clocks;
 	}
 
 	snprintf(buff, IPA_RESOURCE_NAME_MAX, "ipawq%d", sys_in->client);
@@ -975,6 +984,7 @@ int ipa_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 	ep->client = sys_in->client;
 	ep->client_notify = sys_in->notify;
 	ep->priv = sys_in->priv;
+	ep->keep_ipa_awake = sys_in->keep_ipa_awake;
 	ep->avail_fifo_desc =
 		((sys_in->desc_fifo_sz/sizeof(struct sps_iovec))-1);
 	INIT_LIST_HEAD(&ep->sys->head_desc_list);
@@ -1081,6 +1091,9 @@ int ipa_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 	if (!ep->skip_ep_cfg && IPA_CLIENT_IS_PROD(sys_in->client))
 		ipa_install_dflt_flt_rules(ipa_ep_idx);
 
+	if (!ep->keep_ipa_awake)
+		ipa_dec_client_disable_clks();
+
 	ipa_ctx->skip_ep_cfg_shadow[ipa_ep_idx] = ep->skip_ep_cfg;
 	IPADBG("client %d (ep: %d) connected sys=%p\n", sys_in->client,
 			ipa_ep_idx, ep->sys);
@@ -1100,6 +1113,8 @@ fail_gen2:
 fail_wq:
 	kfree(ep->sys);
 	memset(&ipa_ctx->ep[ipa_ep_idx], 0, sizeof(struct ipa_ep_context));
+fail_and_disable_clocks:
+	ipa_dec_client_disable_clks();
 fail_gen:
 	return result;
 }
@@ -1120,6 +1135,8 @@ int ipa_teardown_sys_pipe(u32 clnt_hdl)
 		return -EINVAL;
 	}
 
+	ipa_inc_client_enable_clks();
+
 	ep = &ipa_ctx->ep[clnt_hdl];
 
 	if (IPA_CLIENT_IS_CONS(ep->client))
@@ -1135,6 +1152,8 @@ int ipa_teardown_sys_pipe(u32 clnt_hdl)
 	kfree(ep->sys);
 	ipa_delete_dflt_flt_rules(clnt_hdl);
 	memset(ep, 0, sizeof(struct ipa_ep_context));
+
+	ipa_dec_client_disable_clks();
 
 	IPADBG("client (ep: %d) disconnected\n", clnt_hdl);
 
@@ -1624,6 +1643,25 @@ begin:
 		}
 		IPA_STATS_EXCP_CNT(status->exception,
 				ipa_ctx->stats.rx_excp_pkts);
+		if (status->status_mask & IPA_HW_PKT_STATUS_MASK_TAG_VALID) {
+			struct completion *comp;
+			IPADBG("TAG packet arrived\n");
+			if (status->tag_f_2 != IPA_COOKIE) {
+				IPAERR("TAG arrived with wrong cookie\n");
+				skb_pull(skb, IPA_PKT_STATUS_SIZE);
+				continue;
+			}
+			skb_pull(skb, IPA_PKT_STATUS_SIZE);
+			if (skb->len < sizeof(comp)) {
+				IPAERR("TAG arrived without packet\n");
+				return rc;
+			}
+
+			memcpy(&comp, skb->data, sizeof(comp));
+			skb_pull(skb, sizeof(comp));
+			complete(comp);
+			continue;
+		}
 		if (status->endp_dest_idx >= IPA_NUM_PIPES ||
 			status->endp_src_idx >= IPA_NUM_PIPES ||
 			status->pkt_len > IPA_GENERIC_AGGR_BYTE_LIMIT * 1024) {

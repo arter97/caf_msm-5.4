@@ -544,20 +544,20 @@ static void pp_gamut_config(struct mdp_gamut_cfg_data *gamut_cfg,
 		addr = base + MDSS_MDP_REG_DSPP_GAMUT_BASE;
 		for (i = 0; i < MDP_GAMUT_TABLE_NUM; i++) {
 			for (j = 0; j < gamut_cfg->tbl_size[i]; j++)
-				writel_relaxed((u32)gamut_cfg->r_tbl[i][j],
-						addr);
+				writel_relaxed((u32)gamut_cfg->r_tbl[i][j]
+						& 0x1FFF, addr);
 			addr += 4;
 		}
 		for (i = 0; i < MDP_GAMUT_TABLE_NUM; i++) {
 			for (j = 0; j < gamut_cfg->tbl_size[i]; j++)
-				writel_relaxed((u32)gamut_cfg->g_tbl[i][j],
-						addr);
+				writel_relaxed((u32)gamut_cfg->g_tbl[i][j]
+						& 0x1FFF, addr);
 			addr += 4;
 		}
 		for (i = 0; i < MDP_GAMUT_TABLE_NUM; i++) {
 			for (j = 0; j < gamut_cfg->tbl_size[i]; j++)
-				writel_relaxed((u32)gamut_cfg->b_tbl[i][j],
-						addr);
+				writel_relaxed((u32)gamut_cfg->b_tbl[i][j]
+						& 0x1FFF, addr);
 			addr += 4;
 		}
 		if (gamut_cfg->gamut_first)
@@ -1728,7 +1728,8 @@ int mdss_mdp_pp_setup_locked(struct mdss_mdp_ctl *ctl)
 		if (mixer_id[i] >= mdata->nad_cfgs)
 			valid_mixers = false;
 	}
-	if (valid_mixers && (mixer_cnt <= mdata->nmax_concurrent_ad_hw)) {
+	if (valid_mixers && (mixer_cnt <= mdata->nmax_concurrent_ad_hw) &&
+		(ctl->mfd->panel_info->type != DTV_PANEL)) {
 		ret = mdss_mdp_ad_setup(ctl->mfd);
 		if (ret < 0)
 			pr_warn("ad_setup(disp%d) returns %d", disp_num, ret);
@@ -2954,6 +2955,7 @@ int mdss_mdp_gamut_config(struct mdp_gamut_cfg_data *config,
 	uint16_t *g_tbl[MDP_GAMUT_TABLE_NUM];
 	uint16_t *b_tbl[MDP_GAMUT_TABLE_NUM];
 	char __iomem *addr;
+	u32 data = (3 << 20);
 
 	if ((config->block < MDP_LOGICAL_BLOCK_DISP_0) ||
 		(config->block >= MDP_BLOCK_MAX))
@@ -2989,9 +2991,10 @@ int mdss_mdp_gamut_config(struct mdp_gamut_cfg_data *config,
 				pr_err("%s: alloc failed\n", __func__);
 				goto gamut_config_exit;
 			}
+			/* Reset gamut LUT index to 0 */
+			writel_relaxed(data, addr);
 			for (j = 0; j < config->tbl_size[i]; j++)
-				r_tbl[i][j] =
-					(u16)readl_relaxed(addr);
+				r_tbl[i][j] = readl_relaxed(addr) & 0x1FFF;
 			addr += 4;
 			ret = copy_to_user(config->r_tbl[i], r_tbl[i],
 				     sizeof(uint16_t) * config->tbl_size[i]);
@@ -3010,9 +3013,10 @@ int mdss_mdp_gamut_config(struct mdp_gamut_cfg_data *config,
 				pr_err("%s: alloc failed\n", __func__);
 				goto gamut_config_exit;
 			}
+			/* Reset gamut LUT index to 0 */
+			writel_relaxed(data, addr);
 			for (j = 0; j < config->tbl_size[i]; j++)
-				g_tbl[i][j] =
-					(u16)readl_relaxed(addr);
+				g_tbl[i][j] = readl_relaxed(addr) & 0x1FFF;
 			addr += 4;
 			ret = copy_to_user(config->g_tbl[i], g_tbl[i],
 				     sizeof(uint16_t) * config->tbl_size[i]);
@@ -3031,9 +3035,10 @@ int mdss_mdp_gamut_config(struct mdp_gamut_cfg_data *config,
 				pr_err("%s: alloc failed\n", __func__);
 				goto gamut_config_exit;
 			}
+			/* Reset gamut LUT index to 0 */
+			writel_relaxed(data, addr);
 			for (j = 0; j < config->tbl_size[i]; j++)
-				b_tbl[i][j] =
-					(u16)readl_relaxed(addr);
+				b_tbl[i][j] = readl_relaxed(addr) & 0x1FFF;
 			addr += 4;
 			ret = copy_to_user(config->b_tbl[i], b_tbl[i],
 				     sizeof(uint16_t) * config->tbl_size[i]);
@@ -3161,6 +3166,7 @@ int mdss_mdp_hist_start(struct mdp_histogram_start_req *req)
 	u32 mixer_cnt, mixer_id[MDSS_MDP_INTF_MAX_LAYERMIXER];
 	u32 frame_size;
 	struct mdss_mdp_pipe *pipe;
+	struct mdss_mdp_ctl *ctl;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	bool is_hist_v2 = mdata->mdp_rev >= MDSS_MDP_HW_REV_103;
 
@@ -3187,8 +3193,9 @@ int mdss_mdp_hist_start(struct mdp_histogram_start_req *req)
 		goto hist_exit;
 	}
 
-	frame_size = (mdata->ctl_off[mixer_id[0]].width *
-					mdata->ctl_off[mixer_id[0]].height);
+	ctl = mdata->mixer_intf[mixer_id[0]].ctl;
+	frame_size = (ctl->width * ctl->height);
+
 	if (!frame_size ||
 		((MDSS_MAX_HIST_BIN_SIZE / frame_size) < req->frame_cnt)) {
 		pr_err("%s, too many frames for given display size, %d",

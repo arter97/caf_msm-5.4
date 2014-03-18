@@ -164,9 +164,9 @@ struct msm8x16_wcd_spmi {
 
 static const struct wcd_mbhc_intr intr_ids = {
 	.mbhc_sw_intr =  MSM8X16_WCD_IRQ_MBHC_HS_DET,
-	.mbhc_btn_press_intr = MSM8X16_WCD_IRQ_MBHC_INSREM_DET,
-	.mbhc_btn_release_intr = MSM8X16_WCD_IRQ_MBHC_PRESS,
-	.mbhc_hs_ins_rem_intr = MSM8X16_WCD_IRQ_MBHC_RELEASE,
+	.mbhc_btn_press_intr = MSM8X16_WCD_IRQ_MBHC_PRESS,
+	.mbhc_btn_release_intr = MSM8X16_WCD_IRQ_MBHC_RELEASE,
+	.mbhc_hs_ins_rem_intr = MSM8X16_WCD_IRQ_MBHC_INSREM_DET,
 	.hph_left_ocp = MSM8X16_WCD_IRQ_HPHL_OCP,
 	.hph_right_ocp = MSM8X16_WCD_IRQ_HPHR_OCP,
 };
@@ -1407,6 +1407,7 @@ static int msm8x16_wcd_codec_enable_spk_pa(struct snd_soc_dapm_widget *w,
 			MSM8X16_WCD_A_ANALOG_SPKR_DAC_CTL, 0x10, 0x00);
 		snd_soc_update_bits(codec,
 			MSM8X16_WCD_A_CDC_RX3_B6_CTL, 0x01, 0x00);
+		snd_soc_update_bits(codec, w->reg, 0x80, 0x80);
 		break;
 	case SND_SOC_DAPM_PRE_PMD:
 		snd_soc_update_bits(codec,
@@ -1416,6 +1417,7 @@ static int msm8x16_wcd_codec_enable_spk_pa(struct snd_soc_dapm_widget *w,
 		msleep(20);
 		snd_soc_update_bits(codec,
 			MSM8X16_WCD_A_CDC_RX3_B6_CTL, 0x01, 0x01);
+		snd_soc_update_bits(codec, w->reg, 0x80, 0x00);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		snd_soc_update_bits(codec,
@@ -1440,12 +1442,12 @@ static int msm8x16_wcd_codec_enable_dig_clk(struct snd_soc_dapm_widget *w,
 	dev_err(w->codec->dev, "%s %d %s\n", __func__, event, w->name);
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-			snd_soc_update_bits(codec, w->reg,
-					1<<w->shift, 1<<w->shift);
+		if (w->shift == 2)
+			snd_soc_update_bits(codec, w->reg, 0x80, 0x80);
+		snd_soc_update_bits(codec, w->reg, 1<<w->shift, 1<<w->shift);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
-			snd_soc_update_bits(codec, w->reg,
-					1<<w->shift, 0x00);
+		snd_soc_update_bits(codec, w->reg, 1<<w->shift, 0x00);
 		break;
 	}
 	return 0;
@@ -1927,7 +1929,7 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"HPHL DAC", NULL, "RX1 CHAIN"},
 
 	{"SPK_OUT", NULL, "SPK PA"},
-	{"SPK PA", NULL, "RX_BIAS"},
+	{"SPK PA", NULL, "SPK_RX_BIAS"},
 	{"SPK PA", NULL, "SPK DAC"},
 	{"SPK DAC", "Switch", "RX3 CHAIN"},
 
@@ -2379,7 +2381,7 @@ static const struct snd_soc_dapm_widget msm8x16_wcd_dapm_widgets[] = {
 	SND_SOC_DAPM_OUTPUT("SPK_OUT"),
 
 	SND_SOC_DAPM_PGA_E("SPK PA", MSM8X16_WCD_A_ANALOG_SPKR_DRV_CTL,
-			7, 0 , NULL, 0, msm8x16_wcd_codec_enable_spk_pa,
+			6, 0 , NULL, 0, msm8x16_wcd_codec_enable_spk_pa,
 			SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 			SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
 
@@ -2471,6 +2473,11 @@ static const struct snd_soc_dapm_widget msm8x16_wcd_dapm_widgets[] = {
 
 	SND_SOC_DAPM_SUPPLY("RX_BIAS", MSM8X16_WCD_A_ANALOG_RX_COM_BIAS_DAC,
 		0, 0,
+		msm8x16_wcd_codec_enable_rx_bias, SND_SOC_DAPM_PRE_PMU |
+		SND_SOC_DAPM_POST_PMD),
+
+	SND_SOC_DAPM_SUPPLY("SPK_RX_BIAS", MSM8X16_WCD_A_ANALOG_RX_COM_BIAS_DAC,
+		7, 0,
 		msm8x16_wcd_codec_enable_rx_bias, SND_SOC_DAPM_PRE_PMU |
 		SND_SOC_DAPM_POST_PMD),
 
@@ -2979,9 +2986,17 @@ static int msm8x16_wcd_spmi_probe(struct spmi_device *spmi)
 	struct msm8x16_wcd *msm8x16 = NULL;
 	struct msm8x16_wcd_pdata *pdata;
 	struct resource *wcd_resource;
+	int modem_state;
 
 	dev_dbg(&spmi->dev, "%s(%d):slave ID = 0x%x\n",
 		__func__, __LINE__,  spmi->sid);
+
+	modem_state = apr_get_modem_state();
+	if (modem_state != APR_SUBSYS_LOADED) {
+		dev_dbg(&spmi->dev, "Modem is not loaded yet %d\n",
+				modem_state);
+		return -EPROBE_DEFER;
+	}
 
 	wcd_resource = spmi_get_resource(spmi, NULL, IORESOURCE_MEM, 0);
 	if (!wcd_resource) {
