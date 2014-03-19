@@ -1555,6 +1555,10 @@ long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 		    (ioctl_ptr->len > sizeof(uint32_t)))
 			return -EINVAL;
 
+		if ((ioctl_ptr->len == 0) ||
+		    (ioctl_ptr->len > sizeof(uint32_t)))
+			return -EINVAL;
+
 		rc = (copy_from_user(&identity,
 				(void __user *)ioctl_ptr->ioctl_ptr,
 				ioctl_ptr->len) ? -EFAULT : 0);
