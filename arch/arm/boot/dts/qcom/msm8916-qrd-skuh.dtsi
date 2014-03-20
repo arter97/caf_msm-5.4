@@ -23,7 +23,7 @@
 			  drive-strength = <16>;
 			  bias-pull-up;
 		};
-		akm_reset: akm_reset {
+		akm_sleep: akm_sleep {
 			   drive-strength = <16>;
 			   bias-pull-down;
 		};
@@ -39,19 +39,30 @@
 			bias-pull-up;
 		};
 	};
+
+	lis3dh_int1_pin {
+		qcom,pins = <&gp 115>;
+		qcom,num-grp-pins = <1>;
+		label = "lis3dh_int_pin";
+		lis3dh_int1_default: int1_default {
+			  drive-strength = <6>;
+			  bias-pull-up;
+		};
+	};
 };
 
 &i2c_0 { /* BLSP1 QUP2 */
 	akm@c {
 		compatible = "ak,ak09911";
 		reg = <0x0c>;
-		pinctrl-names = "default","reset";
+		pinctrl-names = "default","sleep";
 		pinctrl-0 = <&akm_default>;
-		pinctrl-1 = <&akm_reset>;
+		pinctrl-1 = <&akm_sleep>;
 		vdd-supply = <&pm8916_l17>;
 		vio-supply = <&pm8916_l6>;
 		akm,layout = <0x0>;
 		akm,gpio_rstn = <&msm_gpio 36 0x0>;
+		akm,auto-report;
 	};
 
 	avago@39 {
@@ -72,6 +83,26 @@
 		avago,als_C = <70>;
 		avago,als_D = <142>;
 		avago,ga_value = <48>;
+	};
+
+	st@18 {
+		compatible = "st,lis3dh";
+		reg = <0x18>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&lis3dh_int1_default>;
+		interrupt-parent = <&msm_gpio>;
+		vdd-supply = <&pm8916_l17>;
+		vddio-supply = <&pm8916_l6>;
+		st,min-interval = <5>;
+		st,init-interval = <200>;
+		st,axis-map-x = <1>;
+		st,axis-map-y = <0>;
+		st,axis-map-z = <2>;
+		st,g-range = <2>;
+		st,gpio-int1 = <&msm_gpio 115 0x2002>;
+		st,negate-x;
+		st,negate-y;
+		st,negate-z;
 	};
 };
 
