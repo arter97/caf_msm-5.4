@@ -645,6 +645,7 @@ int mdp3_clk_enable(int enable, int dsi_clk)
 	mutex_unlock(&mdp3_res->res_mutex);
 	return rc;
 }
+EXPORT_SYMBOL(mdp3_clk_enable);
 
 int mdp3_get_mdp_dsi_clk(void)
 {
