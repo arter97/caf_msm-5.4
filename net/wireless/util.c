@@ -1297,7 +1297,9 @@ int cfg80211_can_use_iftype_chan(struct cfg80211_registered_device *rdev,
 				radar_required = true;
 			break;
 		}
-		radar_required = !!(chan->flags & IEEE80211_CHAN_RADAR);
+		radar_required = !!((chan->flags & IEEE80211_CHAN_RADAR) &&
+				    !(rdev->wiphy.flags &
+				      WIPHY_FLAG_DFS_OFFLOAD));
 		break;
 	case NL80211_IFTYPE_P2P_CLIENT:
 	case NL80211_IFTYPE_STATION:
