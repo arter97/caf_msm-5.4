@@ -146,8 +146,8 @@ static void __init msm_cpuidle_set_states(void)
 			pm_mode = &msm_pm_sleep_modes[
 				MSM_PM_MODE(cpu, cstate->mode_nr)];
 
-			snprintf(state->name, CPUIDLE_NAME_LEN, cstate->name);
-			snprintf(state->desc, CPUIDLE_DESC_LEN, cstate->desc);
+			snprintf(state->name, CPUIDLE_NAME_LEN, "%s", cstate->name);
+			snprintf(state->desc, CPUIDLE_DESC_LEN, "%s", cstate->desc);
 			state->driver_data = (void *) cstate->mode_nr;
 			state->flags = CPUIDLE_FLAG_TIME_VALID;
 			state->exit_latency = pm_mode->latency;
