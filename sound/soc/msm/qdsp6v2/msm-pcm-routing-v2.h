@@ -228,10 +228,6 @@ int msm_routing_check_backend_enabled(int fedai_id);
 
 int multi_ch_pcm_set_volume(unsigned volume);
 
-uint32_t get_adm_rx_topology(void);
-
-uint32_t get_adm_tx_topology(void);
-
 void msm_pcm_routing_get_bedai_info(int be_idx,
 				    struct msm_pcm_routing_bdai_data *bedai);
 void msm_pcm_routing_get_fedai_info(int fe_idx, int sess_type,
