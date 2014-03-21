@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -553,8 +553,12 @@ static int get_impedance_index(u32 imped)
 		goto ret;
 	}
 	for (i = 0; i < ARRAY_SIZE(imped_index); i++) {
-		if (imped >= imped_index[i].imped_val &&
-			imped < imped_index[i + 1].imped_val)
+		if ((i < ARRAY_SIZE(imped_index) - 1) &&
+				(imped >= imped_index[i].imped_val) &&
+				(imped < imped_index[i + 1].imped_val))
+			break;
+		else if ((i == ARRAY_SIZE(imped_index) - 1) &&
+					(imped >= imped_index[i].imped_val))
 			break;
 	}
 ret:
@@ -569,7 +573,7 @@ void wcd9xxx_clsh_imped_config(struct snd_soc_codec *codec,
 	int i  = 0;
 	int index = 0;
 	index = get_impedance_index(imped);
-	if (index > ARRAY_SIZE(imped_index)) {
+	if (index >= ARRAY_SIZE(imped_index)) {
 		pr_err("%s, invalid imped = %d\n", __func__, imped);
 		return;
 	}
