@@ -154,10 +154,13 @@ static void msm_rpm_notify_sleep_chain(struct rpm_message_header *hdr,
 static int msm_rpm_add_kvp_data_common(struct msm_rpm_request *handle,
 		uint32_t key, const uint8_t *data, int size, bool noirq)
 {
-	int i;
-	int data_size, msg_size;
+	uint32_t i;
+	uint32_t data_size, msg_size;
 
 	if (!handle)
+		return -EINVAL;
+
+	if (size < 0)
 		return -EINVAL;
 
 	data_size = ALIGN(size, SZ_4);
@@ -496,10 +499,11 @@ static int msm_rpm_send_data(struct msm_rpm_request *cdata,
 		int msg_type, bool noirq)
 {
 	uint8_t *tmpbuff;
-	int i, ret, msg_size;
+	int i, ret;
+	uint32_t msg_size;
 	unsigned long flags;
 
-	int req_hdr_sz, msg_hdr_sz;
+	uint32_t req_hdr_sz, msg_hdr_sz;
 
 	if (!cdata->msg_hdr.data_len)
 		return 0;
