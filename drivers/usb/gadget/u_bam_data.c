@@ -364,9 +364,9 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 		d->tx_req->udc_priv = sps_params;
 	}
 
-	if ((d->func_type == USB_FUNC_ECM && d->ecm_state == ECM_MDM_READY)
-		|| d->func_type != USB_FUNC_ECM) {
-		/* queue in & out requests */
+	/* queue in & out requests for non ECM functions */
+	if (d->func_type != USB_FUNC_ECM) {
+		/* For ECM, ecm_ipa triggers rx_tx when ready */
 		bam_data_start_endless_rx(port);
 		bam_data_start_endless_tx(port);
 	}
