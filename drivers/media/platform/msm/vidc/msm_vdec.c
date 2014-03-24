@@ -21,7 +21,7 @@
 
 #define MSM_VDEC_DVC_NAME "msm_vdec_8974"
 #define MIN_NUM_OUTPUT_BUFFERS 4
-#define MAX_NUM_OUTPUT_BUFFERS 6
+#define MAX_NUM_OUTPUT_BUFFERS VIDEO_MAX_FRAME
 #define DEFAULT_VIDEO_CONCEAL_COLOR_BLACK 0x8080
 
 #define TZ_DYNAMIC_BUFFER_FEATURE_ID 12
@@ -574,15 +574,7 @@ int msm_vdec_release_buf(struct msm_vidc_inst *inst,
 				core);
 		goto exit;
 	}
-	if (!inst->in_reconfig) {
-		rc = msm_comm_try_state(inst, MSM_VIDC_RELEASE_RESOURCES_DONE);
-		if (rc) {
-			dprintk(VIDC_ERR,
-				"Failed to move inst: %p to relase res done\n",
-				inst);
-			goto exit;
-		}
-	}
+
 	switch (b->type) {
 	case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
 		break;
