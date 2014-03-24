@@ -12,6 +12,7 @@
 
 #include "msm8916-qrd.dtsi"
 #include "dsi-panel-innolux-720p-video.dtsi"
+#include "msm8916-camera-sensor-qrd.dtsi"
 
 &tlmm_pinmux {
 	akm_reset_pin {
@@ -49,6 +50,23 @@
 			  bias-pull-up;
 		};
 	};
+
+	pmx_tps_gpio_pin {
+		qcom,num-grp-pins = <2>;
+		qcom,pins = <&gp 32>, <&gp 97>;
+		qcom,pin-func = <0>;
+		label = "pmx_tps_operation";
+
+		tps_active: tps_active {
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+
+		tps_suspend: tps_suspend {
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+	};
 };
 
 &i2c_0 { /* BLSP1 QUP2 */
@@ -83,6 +101,16 @@
 		avago,als_C = <70>;
 		avago,als_D = <142>;
 		avago,ga_value = <48>;
+	};
+
+	tps@3e {
+		compatible = "ti,tps65132";
+		reg = <0x3e>;
+		pinctrl-names = "pmx_tps_active","pmx_tps_suspend";
+		pinctrl-0 = <&tps_active>;
+		pinctrl-1 = <&tps_suspend>;
+		ti,enn-gpio = <&msm_gpio 32 0x00>;
+		ti,enp-gpio = <&msm_gpio 97 0x00>;
 	};
 
 	st@18 {
@@ -156,4 +184,50 @@
 			default-state = "off";
 		};
 	};
+
+	sound {
+			compatible = "qcom,msm8x16-audio-codec";
+			qcom,model = "msm8x16-skuh-snd-card";
+			qcom,msm-snd-card-id = <0>;
+			qcom,msm-codec-type = "internal";
+			qcom,msm-mbhc-hphl-swh = <1>;
+			qcom,msm-mbhc-gnd-swh = <0>;
+			qcom,audio-routing =
+				"RX_BIAS", "MCLK",
+				"SPK_RX_BIAS", "MCLK",
+				"INT_LDO_H", "MCLK",
+				"MIC BIAS External", "Handset Mic",
+				"MIC BIAS External2", "Headset Mic",
+				"MIC BIAS External", "Secondary Mic",
+				"AMIC1", "MIC BIAS External",
+				"AMIC2", "MIC BIAS External2",
+				"AMIC3", "MIC BIAS External";
+			pinctrl-names = "cdc_pdm_lines_act",
+					"cdc_pdm_lines_sus";
+			pinctrl-0 = <&cdc_pdm_lines_act>;
+			pinctrl-1 = <&cdc_pdm_lines_sus>;
+	};
+};
+
+&pm8916_chg {
+	qcom,vddmax-mv = <4350>;
+	qcom,vddsafe-mv = <4380>;
+	qcom,batt-hot-percentage = <35>;
+	qcom,batt-cold-percentage = <70>;
+	qcom,tchg-mins = <360>;
+	status = "okay";
+};
+
+/ {
+	qrd_batterydata: qcom,battery-data {
+		qcom,rpull-up-kohm = <68>;
+		qcom,vref-batt-therm = <1800000>;
+
+		#include "batterydata-qrd-skuh-4v35-2000mah.dtsi"
+	};
+};
+
+&pm8916_bms {
+	status = "ok";
+	qcom,battery-data = <&qrd_batterydata>;
 };

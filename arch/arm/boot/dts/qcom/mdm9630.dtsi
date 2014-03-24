@@ -123,6 +123,11 @@
 		};
 	};
 
+	restart@fc4ab000 {
+		compatible = "qcom,pshold";
+		reg = <0xfc4ab000 0x4>;
+	};
+
 	timer@f9020000 {
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -492,6 +497,7 @@
 				usb-phy = <&hsphy0>, <&ssphy0>;
 				nominal-elastic-buffer;
 				core_reset_after_phy_init;
+				snps,hsphy-auto-suspend-disable;
 		};
         };
 

@@ -62,8 +62,8 @@ static void ipa_wq_write_done_common(struct ipa_sys_context *sys, u32 cnt)
 	struct ipa_tx_pkt_wrapper *tx_pkt_expected;
 	int i;
 
-	spin_lock_bh(&sys->spinlock);
 	for (i = 0; i < cnt; i++) {
+		spin_lock_bh(&sys->spinlock);
 		if (unlikely(list_empty(&sys->head_desc_list))) {
 			WARN_ON(1);
 			spin_unlock_bh(&sys->spinlock);
@@ -74,16 +74,15 @@ static void ipa_wq_write_done_common(struct ipa_sys_context *sys, u32 cnt)
 						   link);
 		list_del(&tx_pkt_expected->link);
 		sys->len--;
+		spin_unlock_bh(&sys->spinlock);
 		if (!tx_pkt_expected->no_unmap_dma)
 			dma_unmap_single(ipa_ctx->pdev,
 					tx_pkt_expected->mem.phys_base,
 					tx_pkt_expected->mem.size,
 					DMA_TO_DEVICE);
-		spin_unlock_bh(&sys->spinlock);
 		if (tx_pkt_expected->callback)
 			tx_pkt_expected->callback(tx_pkt_expected->user1,
 					tx_pkt_expected->user2);
-		spin_lock_bh(&sys->spinlock);
 		if (tx_pkt_expected->cnt > 1 &&
 				tx_pkt_expected->cnt != IPA_LAST_DESC_CNT)
 			dma_free_coherent(ipa_ctx->pdev,
@@ -92,7 +91,6 @@ static void ipa_wq_write_done_common(struct ipa_sys_context *sys, u32 cnt)
 				tx_pkt_expected->mult.phys_base);
 		kmem_cache_free(ipa_ctx->tx_pkt_wrapper_cache, tx_pkt_expected);
 	}
-	spin_unlock_bh(&sys->spinlock);
 }
 
 static void ipa_wq_write_done_status(int src_pipe)
@@ -1636,38 +1634,39 @@ begin:
 		IPADBG("STATUS opcode=%d src=%d dst=%d len=%d\n",
 				status->status_opcode, status->endp_src_idx,
 				status->endp_dest_idx, status->pkt_len);
-		if (status->status_opcode != IPA_HW_STATUS_OPCODE_PACKET) {
+		if (status->status_opcode !=
+			IPA_HW_STATUS_OPCODE_DROPPED_PACKET &&
+			status->status_opcode !=
+			IPA_HW_STATUS_OPCODE_PACKET) {
 			IPAERR("unsupported opcode\n");
 			skb_pull(skb, IPA_PKT_STATUS_SIZE);
 			continue;
 		}
 		IPA_STATS_EXCP_CNT(status->exception,
 				ipa_ctx->stats.rx_excp_pkts);
-		if (status->status_mask & IPA_HW_PKT_STATUS_MASK_TAG_VALID) {
-			struct completion *comp;
-			IPADBG("TAG packet arrived\n");
-			if (status->tag_f_2 != IPA_COOKIE) {
-				IPAERR("TAG arrived with wrong cookie\n");
-				skb_pull(skb, IPA_PKT_STATUS_SIZE);
-				continue;
-			}
-			skb_pull(skb, IPA_PKT_STATUS_SIZE);
-			if (skb->len < sizeof(comp)) {
-				IPAERR("TAG arrived without packet\n");
-				return rc;
-			}
-
-			memcpy(&comp, skb->data, sizeof(comp));
-			skb_pull(skb, sizeof(comp));
-			complete(comp);
-			continue;
-		}
 		if (status->endp_dest_idx >= IPA_NUM_PIPES ||
 			status->endp_src_idx >= IPA_NUM_PIPES ||
 			status->pkt_len > IPA_GENERIC_AGGR_BYTE_LIMIT * 1024) {
 			IPAERR("status fields invalid\n");
 			WARN_ON(1);
 			BUG();
+		}
+		if (status->status_mask & IPA_HW_PKT_STATUS_MASK_TAG_VALID) {
+			struct completion *comp;
+			IPADBG("TAG packet arrived\n");
+			if (status->tag_f_2 == IPA_COOKIE) {
+				skb_pull(skb, IPA_PKT_STATUS_SIZE);
+				if (skb->len < sizeof(comp)) {
+					IPAERR("TAG arrived without packet\n");
+					return rc;
+				}
+				memcpy(&comp, skb->data, sizeof(comp));
+				skb_pull(skb, sizeof(comp));
+				complete(comp);
+				continue;
+			} else {
+				IPADBG("ignoring TAG with wrong cookie\n");
+			}
 		}
 		if (status->pkt_len == 0) {
 			IPADBG("Skip aggr close status\n");
@@ -1842,7 +1841,10 @@ static int ipa_wan_rx_pyld_hdlr(struct sk_buff *skb,
 		IPADBG("STATUS opcode=%d src=%d dst=%d len=%d\n",
 				status->status_opcode, status->endp_src_idx,
 				status->endp_dest_idx, status->pkt_len);
-		if (status->status_opcode != IPA_HW_STATUS_OPCODE_PACKET) {
+		if (status->status_opcode !=
+			IPA_HW_STATUS_OPCODE_DROPPED_PACKET &&
+			status->status_opcode !=
+			IPA_HW_STATUS_OPCODE_PACKET) {
 			IPAERR("unsupported opcode\n");
 			skb_pull(skb, IPA_PKT_STATUS_SIZE);
 			continue;
@@ -2237,7 +2239,10 @@ static int ipa_assign_policy(struct ipa_sys_connect_params *in,
 					replenish_rx_work_func);
 				atomic_set(&sys->curr_polling_state, 0);
 				sys->rx_buff_sz = IPA_WLAN_RX_BUFF_SZ;
-				sys->rx_pool_sz = IPA_WLAN_RX_POOL_SZ;
+				sys->rx_pool_sz = in->desc_fifo_sz/
+					sizeof(struct sps_iovec) - 1;
+				if (sys->rx_pool_sz > IPA_WLAN_RX_POOL_SZ)
+					sys->rx_pool_sz = IPA_WLAN_RX_POOL_SZ;
 				sys->pyld_hdlr = NULL;
 				sys->get_skb = ipa_get_skb_ipa_rx;
 				sys->free_skb = ipa_free_skb_rx;
