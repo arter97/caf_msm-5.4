@@ -157,6 +157,7 @@ void dma_done_notify_handler(void *arg)
 {
 	struct mdp3_session_data *session = (struct mdp3_session_data *)arg;
 	schedule_work(&session->dma_done_work);
+	complete(&session->dma_completion);
 }
 
 void vsync_count_down(void *arg)
@@ -897,9 +898,7 @@ static int mdp3_overlay_set(struct msm_fb_data_type *mfd,
 			dma->source_config.stride = stride;
 			dma->output_config.pack_pattern =
 				mdp3_ctrl_get_pack_pattern(req->src.format);
-			mdp3_clk_enable(1, 0);
-			mdp3_session->dma->dma_config_source(dma);
-			mdp3_clk_enable(0, 0);
+			dma->update_src_cfg = true;
 		}
 		mdp3_session->overlay.id = 1;
 		req->id = 1;
@@ -923,14 +922,6 @@ static int mdp3_overlay_unset(struct msm_fb_data_type *mfd, int ndx)
 	mutex_lock(&mdp3_session->lock);
 
 	if (mdp3_session->overlay.id == ndx && ndx == 1) {
-		struct mdp3_dma *dma = mdp3_session->dma;
-		dma->source_config.format = format;
-		dma->source_config.stride = fix->line_length;
-		dma->output_config.pack_pattern =
-			mdp3_ctrl_get_pack_pattern(mfd->fb_imgType);
-		mdp3_clk_enable(1, 0);
-		mdp3_session->dma->dma_config_source(dma);
-		mdp3_clk_enable(0, 0);
 		mdp3_session->overlay.id = MSMFB_NEW_REQUEST;
 		mdp3_bufq_deinit(&mdp3_session->bufq_in);
 	} else {
@@ -1042,7 +1033,8 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 					MDP_NOTIFY_FRAME_DONE);
 			}
 		}
-
+		mdp3_session->dma_active = 1;
+		init_completion(&mdp3_session->dma_completion);
 		mdp3_ctrl_notify(mdp3_session, MDP_NOTIFY_FRAME_FLUSHED);
 		mdp3_bufq_push(&mdp3_session->bufq_out, data);
 	}
@@ -1132,6 +1124,8 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd,
 					MDP_NOTIFY_FRAME_DONE);
 			}
 		}
+		mdp3_session->dma_active = 1;
+		init_completion(&mdp3_session->dma_completion);
 		mdp3_ctrl_notify(mdp3_session, MDP_NOTIFY_FRAME_FLUSHED);
 	} else {
 		pr_debug("mdp3_ctrl_pan_display no memory, stop interface");
@@ -1753,6 +1747,23 @@ static int mdp3_ctrl_ioctl_handler(struct msm_fb_data_type *mfd,
 	return rc;
 }
 
+int mdp3_wait_for_dma_done(struct mdp3_session_data *session)
+{
+	int rc = 0;
+
+	if (session->dma_active) {
+		rc = wait_for_completion_timeout(&session->dma_completion,
+			KOFF_TIMEOUT);
+		if (rc > 0) {
+			session->dma_active = 0;
+			rc = 0;
+		} else if (rc == 0) {
+			rc = -ETIME;
+		}
+	}
+	return rc;
+}
+
 int mdp3_ctrl_init(struct msm_fb_data_type *mfd)
 {
 	struct device *dev = mfd->fbi->dev;
@@ -1827,6 +1838,9 @@ int mdp3_ctrl_init(struct msm_fb_data_type *mfd)
 	mdp3_session->vsync_timer.data = (u32)mdp3_session;
 	mdp3_session->vsync_period = 1000 / mfd->panel_info->mipi.frame_rate;
 	mfd->mdp.private1 = mdp3_session;
+	init_completion(&mdp3_session->dma_completion);
+	if (intf_type != MDP3_DMA_OUTPUT_SEL_DSI_VIDEO)
+		mdp3_session->wait_for_dma_done = mdp3_wait_for_dma_done;
 
 	rc = sysfs_create_group(&dev->kobj, &vsync_fs_attr_group);
 	if (rc) {
