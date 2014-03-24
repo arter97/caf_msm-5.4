@@ -267,7 +267,9 @@
 
 	clock_debug: qcom,cc-debug@1874000 {
 		compatible = "qcom,cc-debug-8916";
-		reg = <0x1874000 0x4>;
+		reg = <0x1874000 0x4>,
+		      <0xb01101c 0x8>;
+		reg-names = "cc_base", "meas";
 		clocks = <&clock_rpm clk_rpm_debug_mux>;
 		clock-names = "rpm_debug_mux";
 		#clock-cells = <1>;
@@ -414,9 +416,9 @@
 				"xo";
 	};
 
-	android_usb@08600000 {
+	android_usb@086000c8 {
 		compatible = "qcom,android-usb";
-		reg = <0x08600000 0xc8>;
+		reg = <0x086000c8 0xc8>;
 		qcom,android-usb-swfi-latency = <1>;
 	};
 
@@ -689,29 +691,6 @@
 		clocks = <&clock_gcc clk_gcc_prng_ahb_clk>;
 		clock-names = "iface_clk";
 		status = "disabled";
-	};
-
-	sound {
-		compatible = "qcom,msm8x16-audio-codec";
-		qcom,model = "msm8x16-snd-card";
-		qcom,msm-snd-card-id = <0>;
-		qcom,msm-codec-type = "internal";
-		qcom,msm-mbhc-hphl-swh = <0>;
-		qcom,msm-mbhc-gnd-swh = <0>;
-		qcom,audio-routing =
-			"RX_BIAS", "MCLK",
-			"SPK_RX_BIAS", "MCLK",
-			"INT_LDO_H", "MCLK",
-			"MIC BIAS Internal1", "Handset Mic",
-			"MIC BIAS Internal2", "Headset Mic",
-			"MIC BIAS External", "Secondary Mic",
-			"AMIC1", "MIC BIAS Internal1",
-			"AMIC2", "MIC BIAS Internal2",
-			"AMIC3", "MIC BIAS External";
-		pinctrl-names = "cdc_pdm_lines_act",
-				"cdc_pdm_lines_sus";
-		pinctrl-0 = <&cdc_pdm_lines_act>;
-		pinctrl-1 = <&cdc_pdm_lines_sus>;
 	};
 
 	qcom,msm-pcm {
@@ -1323,6 +1302,16 @@
 			reg = <0x10 8>;
 		};
 
+		restart_reason@65c {
+			compatible = "qcom,msm-imem-restart_reason";
+			reg = <0x65c 4>;
+		};
+
+		boot_stats@6b0 {
+			compatible = "qcom,msm-imem-boot_stats";
+			reg = <0x6b0 32>;
+		};
+
 		pil@94c {
 			compatible = "qcom,msm-imem-pil";
 			reg = <0x94c 200>;
@@ -1500,6 +1489,7 @@
 
 		qcom,pas-id = <6>;
 		qcom,proxy-timeout-ms = <10000>;
+		qcom,smem-id = <422>;
 		qcom,firmware-name = "wcnss";
 
 		/* GPIO inputs from wcnss */

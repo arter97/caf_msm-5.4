@@ -593,6 +593,12 @@ struct ipa_wlan_stats {
 	u32 tx_pkts_dropped;
 };
 
+struct ipa_active_clients {
+	struct mutex mutex;
+	spinlock_t spinlock;
+	bool mutex_locked;
+	int cnt;
+};
 
 struct ipa_controller;
 
@@ -641,9 +647,11 @@ struct ipa_controller;
  * @ip6_flt_tbl_lcl: where ip6 flt tables reside 1-local; 0-system
  * @empty_rt_tbl_mem: empty routing tables memory
  * @power_mgmt_wq: workqueue for power management
- * @start_tag_process_again: indicates whether to start tag process again
+ * @tag_process_before_gating: indicates whether to start tag process before
+ *  gating IPA clocks
  * @pipe_mem_pool: pipe memory pool
  * @dma_pool: special purpose DMA pool
+ * @ipa_active_clients: structure for reference counting connected IPA clients
  * @ipa_hw_type: type of IPA HW type (e.g. IPA 1.0, IPA 1.1 etc')
  * @ipa_hw_mode: mode of IPA HW mode (e.g. Normal, Virtual or over PCIe)
  * @use_ipa_teth_bridge: use tethering bridge driver
@@ -698,10 +706,9 @@ struct ipa_context {
 	struct ipa_mem_buffer empty_rt_tbl_mem;
 	struct gen_pool *pipe_mem_pool;
 	struct dma_pool *dma_pool;
-	struct mutex ipa_active_clients_lock;
-	int ipa_active_clients;
+	struct ipa_active_clients ipa_active_clients;
 	struct workqueue_struct *power_mgmt_wq;
-	bool start_tag_process_again;
+	bool tag_process_before_gating;
 	u32 clnt_hdl_cmd;
 	u32 clnt_hdl_data_in;
 	u32 clnt_hdl_data_out;
@@ -948,6 +955,8 @@ int ipa_resume_resource(enum ipa_rm_resource_name name);
 bool ipa_should_pipe_be_suspended(enum ipa_client_type client);
 int ipa_tag_aggr_force_close(int pipe_num);
 
-
+void ipa_active_clients_lock(void);
+int ipa_active_clients_trylock(void);
+void ipa_active_clients_unlock(void);
 
 #endif /* _IPA_I_H_ */

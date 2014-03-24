@@ -230,6 +230,37 @@ static struct msm_bus_scale_pdata ipa_bus_client_pdata_v2_0 = {
 	.name = "ipa",
 };
 
+void ipa_active_clients_lock(void)
+{
+	mutex_lock(&ipa_ctx->ipa_active_clients.mutex);
+	spin_lock(&ipa_ctx->ipa_active_clients.spinlock);
+	ipa_ctx->ipa_active_clients.mutex_locked = true;
+	spin_unlock(&ipa_ctx->ipa_active_clients.spinlock);
+}
+
+int ipa_active_clients_trylock(void)
+{
+	spin_lock(&ipa_ctx->ipa_active_clients.spinlock);
+	if (ipa_ctx->ipa_active_clients.mutex_locked) {
+		spin_unlock(&ipa_ctx->ipa_active_clients.spinlock);
+		return 0;
+	}
+
+	return 1;
+}
+
+void ipa_active_clients_unlock(void)
+{
+	if (ipa_ctx->ipa_active_clients.mutex_locked) {
+		spin_lock(&ipa_ctx->ipa_active_clients.spinlock);
+		ipa_ctx->ipa_active_clients.mutex_locked = false;
+		spin_unlock(&ipa_ctx->ipa_active_clients.spinlock);
+		mutex_unlock(&ipa_ctx->ipa_active_clients.mutex);
+		return;
+	}
+	spin_unlock(&ipa_ctx->ipa_active_clients.spinlock);
+}
+
 /**
  * ipa_get_clients_from_rm_resource() - get IPA clients which are related to an
  * IPA_RM resource
@@ -358,6 +389,8 @@ int ipa_suspend_resource_sync(enum ipa_rm_resource_name resource)
 	if (pipe_suspended)
 		usleep_range(1000, 2000);
 
+	/* before gating IPA clocks do TAG process */
+	ipa_ctx->tag_process_before_gating = true;
 	ipa_dec_client_disable_clks();
 
 	return 0;
@@ -381,9 +414,9 @@ int ipa_suspend_resource_no_block(enum ipa_rm_resource_name resource)
 	struct ipa_ep_cfg_ctrl suspend;
 	int ipa_ep_idx;
 
-	if (mutex_trylock(&ipa_ctx->ipa_active_clients_lock) == 0)
+	if (ipa_active_clients_trylock() == 0)
 		return -EPERM;
-	if (ipa_ctx->ipa_active_clients == 1) {
+	if (ipa_ctx->ipa_active_clients.cnt == 1) {
 		res = -EPERM;
 		goto bail;
 	}
@@ -414,11 +447,12 @@ int ipa_suspend_resource_no_block(enum ipa_rm_resource_name resource)
 	}
 
 	if (res == 0) {
-		ipa_ctx->ipa_active_clients--;
-		IPADBG("active clients = %d\n", ipa_ctx->ipa_active_clients);
+		ipa_ctx->ipa_active_clients.cnt--;
+		IPADBG("active clients = %d\n",
+		       ipa_ctx->ipa_active_clients.cnt);
 	}
 bail:
-	mutex_unlock(&ipa_ctx->ipa_active_clients_lock);
+	ipa_active_clients_unlock();
 
 	return res;
 }
@@ -3606,3 +3640,15 @@ fail_alloc_pkt_init:
 fail_alloc_desc:
 	return res;
 }
+
+/**
+ * ipa_is_ready() - check if IPA module was initialized
+ * successfully
+ *
+ * Return value: true for yes; false for no
+ */
+bool ipa_is_ready(void)
+{
+	return (ipa_ctx != NULL) ? true : false;
+}
+EXPORT_SYMBOL(ipa_is_ready);

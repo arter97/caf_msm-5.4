@@ -393,7 +393,7 @@ void msm_pcm_routing_reg_phy_stream(int fedai_id, int perf_mode,
 
 			if (msm_bedais[i].port_id == VOICE_RECORD_RX ||
 			    msm_bedais[i].port_id == VOICE_RECORD_TX)
-				topology = DEFAULT_COPP_TOPOLOGY;
+				topology = NULL_COPP_TOPOLOGY;
 			if ((stream_type == SNDRV_PCM_STREAM_PLAYBACK) &&
 				(channels > 0))
 				adm_multi_ch_copp_open(msm_bedais[i].port_id,
@@ -553,7 +553,7 @@ static void msm_pcm_routing_process_audio(u16 reg, u16 val, int set)
 
 			if (msm_bedais[reg].port_id == VOICE_RECORD_RX ||
 			    msm_bedais[reg].port_id == VOICE_RECORD_TX)
-				topology = DEFAULT_COPP_TOPOLOGY;
+				topology = NULL_COPP_TOPOLOGY;
 			if ((session_type == SESSION_TYPE_RX) &&
 				(channels > 0)) {
 				adm_multi_ch_copp_open(msm_bedais[reg].port_id,
@@ -2598,6 +2598,12 @@ static const struct snd_kcontrol_new primary_mi2s_rx_port_mixer_controls[] = {
 	SOC_SINGLE_EXT("SEC_MI2S_TX", MSM_BACKEND_DAI_PRI_MI2S_RX,
 	MSM_BACKEND_DAI_SECONDARY_MI2S_TX, 1, 0, msm_routing_get_port_mixer,
 	msm_routing_put_port_mixer),
+	SOC_SINGLE_EXT("TERT_MI2S_TX", MSM_BACKEND_DAI_PRI_MI2S_RX,
+	MSM_BACKEND_DAI_TERTIARY_MI2S_TX, 1, 0, msm_routing_get_port_mixer,
+	msm_routing_put_port_mixer),
+	SOC_SINGLE_EXT("INTERNAL_FM_TX", MSM_BACKEND_DAI_PRI_MI2S_RX,
+	MSM_BACKEND_DAI_INT_FM_TX, 1, 0, msm_routing_get_port_mixer,
+	msm_routing_put_port_mixer),
 	SOC_SINGLE_EXT("QUAT_MI2S_TX", MSM_BACKEND_DAI_PRI_MI2S_RX,
 	MSM_BACKEND_DAI_QUATERNARY_MI2S_TX, 1, 0, msm_routing_get_port_mixer,
 	msm_routing_put_port_mixer),
@@ -2998,10 +3004,6 @@ static const struct snd_soc_dapm_widget msm_qdsp6_widgets[] = {
 	SND_SOC_DAPM_AIF_OUT("PRI_MI2S_UL_HL",
 		"Primary MI2S_TX Hostless Capture",
 		0, 0, 0, 0),
-	SND_SOC_DAPM_AIF_IN("PRI_MI2S_DL_HL",
-		"Primary MI2S_RX Hostless Playback",
-		0, 0, 0, 0),
-
 	SND_SOC_DAPM_AIF_OUT("MI2S_DL_HL", "MI2S_RX_HOSTLESS Playback",
 		0, 0, 0, 0),
 	SND_SOC_DAPM_AIF_IN("DTMF_DL_HL", "DTMF_RX_HOSTLESS Playback",
@@ -4143,7 +4145,7 @@ static int msm_pcm_routing_prepare(struct snd_pcm_substream *substream)
 
 			if (bedai->port_id == VOICE_RECORD_RX ||
 			    bedai->port_id == VOICE_RECORD_TX)
-				topology = DEFAULT_COPP_TOPOLOGY;
+				topology = NULL_COPP_TOPOLOGY;
 			if ((playback) && (channels > 0)) {
 				adm_multi_ch_copp_open(bedai->port_id,
 					path_type,
