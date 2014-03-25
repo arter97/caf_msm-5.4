@@ -1111,6 +1111,11 @@ int ipa_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 
 	if (dst_ep_idx != -1) {
 		/* SW data path */
+		if (unlikely(ipa_ctx->ep[dst_ep_idx].valid == 0)) {
+			IPAERR("dest EP not valid.\n");
+			goto fail_gen;
+		}
+
 		cmd = kzalloc(sizeof(struct ipa_ip_packet_init), GFP_ATOMIC);
 		if (!cmd) {
 			IPAERR("failed to alloc immediate command object\n");
