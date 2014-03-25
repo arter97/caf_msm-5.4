@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2012,2014 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1053,6 +1053,28 @@ static int __init get_speed_bin(u32 pte_efuse)
 	return speed_bin;
 }
 
+/* Support for 4 bit PVS bin */
+static int __init get_pvs_bin_b(u32 pte_efuse)
+{
+	uint32_t pvs_bin;
+
+	pvs_bin = (((pte_efuse >> 10) & 0x7) |
+				(((pte_efuse >> 22) & 0x1) << 3)) & 0xF;
+
+	if (pvs_bin == 0xF)
+		pvs_bin = (((pte_efuse >> 13) & 0x7) |
+				(((pte_efuse >> 23) & 0x1) << 3)) & 0xF;
+
+	if (pvs_bin == 0xF) {
+		pvs_bin = 0;
+		dev_warn(drv.dev, "ACPU PVS: Defaulting to %d\n", pvs_bin);
+	} else {
+		dev_info(drv.dev, "ACPU PVS: %d\n", pvs_bin);
+	}
+
+	return pvs_bin;
+}
+
 static int __init get_pvs_bin(u32 pte_efuse)
 {
 	uint32_t pvs_bin;
@@ -1088,7 +1110,10 @@ static struct pvs_table * __init select_freq_plan(u32 pte_efuse_phys,
 
 	/* Select frequency tables. */
 	bin_idx = get_speed_bin(pte_efuse_val);
-	tbl_idx = get_pvs_bin(pte_efuse_val);
+	if (cpu_is_apq8064au())
+		tbl_idx = get_pvs_bin_b(pte_efuse_val);
+	else
+		tbl_idx = get_pvs_bin(pte_efuse_val);
 
 	return &pvs_tables[bin_idx][tbl_idx];
 }
