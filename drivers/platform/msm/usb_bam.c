@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -144,6 +144,7 @@ struct usb_bam_ipa_handshake_info {
 	bool in_lpm;
 	bool pending_lpm;
 	u8 prod_pipes_enabled_per_bam;
+	bool pending_bam_reset;
 
 	int (*wake_cb)(void *);
 	void *wake_param;
@@ -1675,13 +1676,18 @@ int usb_bam_connect_ipa(struct usb_bam_connect_ipa_params *ipa_params)
 	     (ctx.pipes_enabled_per_bam[cur_bam] == 0)) {
 		spin_unlock(&usb_bam_lock);
 
-		if (cur_bam == HSUSB_BAM)
+		if (cur_bam == HSUSB_BAM) {
 			msm_hw_bam_disable(1);
 
-		sps_device_reset(ctx.h_bam[cur_bam]);
+			if (sps_device_reset(ctx.h_bam[cur_bam]))
+				pr_err("%s: BAM reset failed\n", __func__);
 
-		if (cur_bam == HSUSB_BAM)
 			msm_hw_bam_disable(0);
+		} else if (info[HSIC_BAM].pending_bam_reset &&
+			cur_bam == HSIC_BAM) {
+			if (sps_device_reset(ctx.h_bam[cur_bam]))
+				pr_err("%s: BAM reset failed\n", __func__);
+		}
 
 		/* On re-connect assume out from lpm for HSIC BAM */
 		if (cur_bam == HSIC_BAM && hsic_host_info.dev &&
@@ -2935,6 +2941,28 @@ void msm_bam_notify_lpm_resume()
 	info[HSUSB_BAM].pending_lpm = 0;
 }
 EXPORT_SYMBOL(msm_bam_notify_lpm_resume);
+
+
+void msm_bam_hsic_reset(void)
+{
+	struct msm_usb_bam_platform_data *pdata;
+
+	if (!ctx.usb_bam_pdev) {
+		pr_debug("%s: setting pending_bam_reset\n", __func__);
+		info[HSIC_BAM].pending_bam_reset = 1;
+		return;
+	}
+
+	pdata = ctx.usb_bam_pdev->dev.platform_data;
+
+	WARN_ON(ctx.pipes_enabled_per_bam[HSIC_BAM] != 0);
+	if (pdata->reset_on_connect[HSIC_BAM] == true) {
+		pr_debug("%s: reset the HSIC BAM", __func__);
+		if (sps_device_reset(ctx.h_bam[HSIC_BAM]))
+			pr_err("%s: HSIC BAM reset failed\n", __func__);
+	}
+}
+EXPORT_SYMBOL(msm_bam_hsic_reset);
 
 static int usb_bam_remove(struct platform_device *pdev)
 {

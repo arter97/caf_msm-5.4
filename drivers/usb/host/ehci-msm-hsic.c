@@ -1,6 +1,6 @@
 /* ehci-msm-hsic.c - HSUSB Host Controller Driver Implementation
  *
- * Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  *
  * Partly derived from ehci-fsl.c and ehci-hcd.c
  * Copyright (c) 2000-2004 by David Brownell
@@ -2152,8 +2152,10 @@ static int __devinit ehci_hsic_msm_probe(struct platform_device *pdev)
 	if (pdev->dev.parent)
 		pm_runtime_put_sync(pdev->dev.parent);
 
-	if (mehci->enable_hbm)
+	if (mehci->enable_hbm) {
 		hbm_init(hcd, pdata->disable_park_mode);
+		msm_bam_hsic_reset();
+	}
 
 	if (pdata && pdata->consider_ipa_handshake)
 		msm_bam_set_hsic_host_dev(&pdev->dev);
