@@ -2308,7 +2308,7 @@ module_param(charger_monitor, int, 0644);
 static int ext_ovp_present;
 module_param(ext_ovp_present, int, 0444);
 
-#define OVP_USB_WALL_TRSH_MA   200
+#define OVP_USB_WALL_TRSH_MA	200
 static int
 qpnp_power_get_property_mains(struct power_supply *psy,
 				  enum power_supply_property psp,
@@ -2690,19 +2690,12 @@ qpnp_batt_external_power_changed(struct power_supply *psy)
 					if (!qpnp_is_dc_higher_prio(chip))
 						qpnp_chg_idcmax_set(chip,
 							QPNP_CHG_I_MAX_MIN_100);
-					if (unlikely(ext_ovp_present)) {
-						qpnp_chg_iusbmax_set(chip,
-							OVP_USB_WALL_TRSH_MA);
-					} else if (unlikely(
-							ext_ovp_isns_present)) {
-						qpnp_chg_iusb_trim_set(chip, 0);
-						qpnp_chg_iusbmax_set(chip,
-							IOVP_USB_WALL_TRSH_MA);
-					} else {
+					if (!ext_ovp_present)
 						qpnp_chg_iusbmax_set(chip,
 							USB_WALL_THRESHOLD_MA);
-					}
-			} else {
+					else
+						qpnp_chg_iusbmax_set(chip,
+							OVP_USB_WALL_TRSH_MA);
 				qpnp_chg_iusbmax_set(chip, ret.intval / 1000);
 			}
 
