@@ -474,9 +474,16 @@ uint32 mdp4_overlay_panel_list(void)
 	return ctrl->panel_mode;
 }
 
-int mdp4_overlay_borderfill_supported(void)
+boolean mdp4_overlay_borderfill_supported(struct msm_fb_data_type *mfd)
 {
-	return (mdp_rev >= MDP_REV_42);
+	boolean ret = false;
+
+	if (mfd->panel_info.pdest == DISPLAY_4)
+		ret = false;
+	else if (mdp_rev >= MDP_REV_42)
+		ret = true;
+
+	return ret;
 }
 
 void mdp4_overlay_dmae_cfg(struct msm_fb_data_type *mfd, int atv)
@@ -2526,10 +2533,8 @@ struct mdp4_overlay_pipe *mdp4_overlay_pipe_alloc(int ptype, int mixer)
 		return (pipe->pipe_used) ? NULL : pipe;
 	}
 
-	if (ptype == OVERLAY_TYPE_BF) {
-		if (!mdp4_overlay_borderfill_supported())
+	if (ptype == OVERLAY_TYPE_BF && mixer == MDP4_MIXER_NONE)
 			return NULL;
-	}
 
 	for (i = 0; i < OVERLAY_PIPE_MAX; i++) {
 		pipe = &ctrl->plist[i];
@@ -3628,6 +3633,7 @@ int mdp4_overlay_blt(struct fb_info *info, struct msmfb_overlay_blt *req)
 int mdp4_overlay_get(struct fb_info *info, struct mdp_overlay *req)
 {
 	struct mdp4_overlay_pipe *pipe;
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 
 	pipe = mdp4_overlay_ndx2pipe(req->id);
 	if (pipe == NULL)
@@ -3635,7 +3641,7 @@ int mdp4_overlay_get(struct fb_info *info, struct mdp_overlay *req)
 
 	*req = pipe->req_data;
 
-	if (mdp4_overlay_borderfill_supported())
+	if (mdp4_overlay_borderfill_supported(mfd))
 		req->flags |= MDP_BORDERFILL_SUPPORTED;
 
 	return 0;
@@ -3650,6 +3656,11 @@ int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
 	if (mfd == NULL) {
 		pr_err("%s: mfd == NULL, -ENODEV\n", __func__);
 		return -ENODEV;
+	}
+
+	if (!mfd->bf_supported && req->src.format == MDP_RGB_BORDERFILL) {
+		pr_err("boardfill not supported!\n");
+		return -EPERM;
 	}
 
 	if (info->node != 0 || mfd->cont_splash_done)	/* primary */
