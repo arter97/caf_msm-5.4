@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -146,19 +146,22 @@ enum {
 	OVERLAY_PIPE_RGB3,
 	OVERLAY_PIPE_VG3,
 	OVERLAY_PIPE_VG4,
+	OVERLAY_PIPE_DMAS,
 	OVERLAY_PIPE_MAX
 };
 
 enum {
 	OVERLAY_TYPE_RGB,
 	OVERLAY_TYPE_VIDEO,
-	OVERLAY_TYPE_BF
+	OVERLAY_TYPE_BF,
+	OVERLAY_TYPE_DMAS
 };
 
 enum {
 	MDP4_MIXER0,
 	MDP4_MIXER1,
 	MDP4_MIXER2,
+	MDP4_MIXER_NONE,
 	MDP4_MIXER_MAX
 };
 
@@ -169,12 +172,13 @@ enum {
 };
 
 enum {
-	MDP4_MIXER_STAGE_UNUNSED,	/* pipe not used */
+	MDP4_MIXER_STAGE_UNUSED,	/* pipe not used */
 	MDP4_MIXER_STAGE_BASE,
 	MDP4_MIXER_STAGE0,	/* zorder 0 */
 	MDP4_MIXER_STAGE1,	/* zorder 1 */
 	MDP4_MIXER_STAGE2,	/* zorder 2 */
 	MDP4_MIXER_STAGE3,	/* zorder 3 */
+	MDP4_MIXER_STAGE_NONE,	/* no stage */
 	MDP4_MIXER_STAGE_MAX
 };
 
