@@ -62,6 +62,7 @@ static struct vsycn_ctrl {
 	spinlock_t spin_lock;
 	struct msm_fb_data_type *mfd;
 	struct mdp4_overlay_pipe *base_pipe;
+	int base_ref_cnt;
 	struct vsync_update vlist[2];
 	int vsync_irq_enabled;
 	ktime_t vsync_time;
@@ -493,25 +494,124 @@ void mdp4_lcdc_vsync_init(int cndx)
 	init_waitqueue_head(&vctrl->wait_queue);
 }
 
+static struct mdp4_overlay_pipe *mdp4_lcdc_alloc_base_p(struct msm_fb_data_type
+	*mfd)
+{
+	struct mdp4_overlay_pipe *pipe = NULL;
+	int ret, ptype;
+
+	ptype = mdp4_overlay_format2type(mfd->fb_imgType);
+	if (ptype < 0) {
+		pr_err("%s: format2type failed\n", __func__);
+		goto p_err;
+	}
+
+	pipe = mdp4_overlay_pipe_alloc(ptype, MDP4_MIXER0);
+	if (!pipe) {
+		pr_err("%s: pipe_alloc failed\n", __func__);
+		goto p_err;
+	}
+
+	pipe->pipe_used++;
+	pipe->mixer_stage  = MDP4_MIXER_STAGE_BASE;
+	pipe->mixer_num  = MDP4_MIXER0;
+	pipe->src_format = mfd->fb_imgType;
+
+	pr_debug("pipe used=%d mixer_num=%d stage=%d fmt=%d\n",
+		pipe->pipe_used, pipe->mixer_stage, pipe->mixer_num,
+		pipe->src_format);
+
+	ret = mdp4_overlay_format2pipe(pipe);
+	if (ret < 0)
+		pr_err("%s: format2pipe failed\n", __func__);
+
+	mdp4_init_writeback_buf(mfd, MDP4_MIXER0);
+	pipe->ov_blt_addr = 0;
+	pipe->dma_blt_addr = 0;
+
+p_err:
+	return pipe;
+}
+
+static struct mdp4_overlay_pipe *mdp4_lcdc_alloc_base_s(struct msm_fb_data_type
+	*mfd)
+{
+	struct mdp4_overlay_pipe *pipe ;
+
+	pipe = mdp4_overlay_pipe_alloc(OVERLAY_TYPE_DMAS, MDP4_MIXER_NONE);
+
+	if (!pipe) {
+		pr_err("%s: dmas pipe_alloc failed\n", __func__);
+		goto s_err;
+	}
+
+	pipe->pipe_used++;
+	pipe->mixer_stage  = MDP4_MIXER_STAGE_NONE;
+	pipe->mixer_num  = MDP4_MIXER_NONE;
+	pipe->src_format = mfd->fb_imgType;
+
+	pr_debug("dma_s used=%d ndx=%d mixer_num=%d stage=%d fmt=%d\n",
+		pipe->pipe_used, pipe->pipe_ndx, pipe->mixer_num,
+		pipe->mixer_stage, pipe->src_format);
+s_err:
+	return pipe;
+}
+
+struct mdp4_overlay_pipe *mdp4_lcdc_alloc_base_pipe(void)
+{
+	struct vsycn_ctrl *vctrl = &vsync_ctrl_db[0];
+	struct mdp4_overlay_pipe *pipe = NULL;
+
+	if (!vctrl->mfd) {
+		pr_err("%s: mfd is null\n", __func__);
+		goto alloc_err;
+	}
+
+	if (!vctrl->base_ref_cnt && !vctrl->base_pipe) {
+		if (vctrl->mfd->panel_info.pdest == DISPLAY_1) {
+			vctrl->base_pipe = mdp4_lcdc_alloc_base_p(vctrl->mfd);
+		} else if (vctrl->mfd->panel_info.pdest == DISPLAY_4) {
+			vctrl->base_pipe = mdp4_lcdc_alloc_base_s(vctrl->mfd);
+		} else {
+			pr_err("wrong pdest=%d for base pipe\n",
+			       vctrl->mfd->panel_info.pdest);
+			goto alloc_err;
+		}
+	}
+
+	pipe = vctrl->base_pipe;
+	vctrl->base_ref_cnt++;
+
+alloc_err:
+	return pipe;
+}
+
 void mdp4_lcdc_free_base_pipe(struct msm_fb_data_type *mfd)
 {
 	struct vsycn_ctrl *vctrl;
 	struct mdp4_overlay_pipe *pipe;
 
 	vctrl = &vsync_ctrl_db[0];
-	pipe = vctrl->base_pipe;
 
-	if (pipe == NULL)
-		return ;
-	/* adb stop */
-	if (pipe->pipe_type == OVERLAY_TYPE_BF)
-		mdp4_overlay_borderfill_stage_down(pipe);
+	if (!vctrl->base_ref_cnt) {
+		pr_err("%s: no more base_pipe\n", __func__);
+		return;
+	}
 
-	/* base pipe may change after borderfill_stage_down */
-	pipe = vctrl->base_pipe;
-	mdp4_mixer_stage_down(pipe, 1);
-	mdp4_overlay_pipe_free(pipe, 1);
-	vctrl->base_pipe = NULL;
+	vctrl->base_ref_cnt--;
+
+	if (!vctrl->base_ref_cnt && vctrl->base_pipe) {
+		/* adb stop */
+		pipe = vctrl->base_pipe;
+		if (pipe->pipe_type == OVERLAY_TYPE_BF)
+			mdp4_overlay_borderfill_stage_down(pipe);
+
+		/* base pipe may change after borderfill_stage_down */
+		pipe = vctrl->base_pipe;
+		mdp4_mixer_stage_down(pipe, 1);
+		mdp4_overlay_pipe_free(pipe, 1);
+		vctrl->base_pipe = NULL;
+	}
 }
 
 void mdp4_lcdc_base_swap(int cndx, struct mdp4_overlay_pipe *pipe)
@@ -561,7 +661,7 @@ int mdp4_lcdc_on(struct platform_device *pdev)
 	int hsync_end_x;
 	uint8 *buf;
 	unsigned int buf_offset;
-	int bpp, ptype;
+	int bpp;
 	struct fb_info *fbi;
 	struct fb_var_screeninfo *var;
 	struct msm_fb_data_type *mfd;
@@ -591,35 +691,15 @@ int mdp4_lcdc_on(struct platform_device *pdev)
 	fbi = mfd->fbi;
 	var = &fbi->var;
 
+	pipe = mdp4_lcdc_alloc_base_pipe();
+	if (IS_ERR_OR_NULL(pipe))
+		return -EPERM;
+
+	mdp4_overlay_panel_mode(pipe->mixer_num, MDP4_PANEL_LCDC);
+
 	bpp = fbi->var.bits_per_pixel / 8;
 	buf = (uint8 *) fbi->fix.smem_start;
 	buf_offset = calc_fb_offset(mfd, fbi, bpp);
-
-	if (vctrl->base_pipe == NULL) {
-		ptype = mdp4_overlay_format2type(mfd->fb_imgType);
-		if (ptype < 0)
-			printk(KERN_INFO "%s: format2type failed\n", __func__);
-		pipe = mdp4_overlay_pipe_alloc(ptype, MDP4_MIXER0);
-		if (pipe == NULL)
-			printk(KERN_INFO "%s: pipe_alloc failed\n", __func__);
-		pipe->pipe_used++;
-		pipe->mixer_stage  = MDP4_MIXER_STAGE_BASE;
-		pipe->mixer_num  = MDP4_MIXER0;
-		pipe->src_format = mfd->fb_imgType;
-		mdp4_overlay_panel_mode(pipe->mixer_num, MDP4_PANEL_LCDC);
-		ret = mdp4_overlay_format2pipe(pipe);
-		if (ret < 0)
-			printk(KERN_INFO "%s: format2pipe failed\n", __func__);
-
-		mdp4_init_writeback_buf(mfd, MDP4_MIXER0);
-		pipe->ov_blt_addr = 0;
-		pipe->dma_blt_addr = 0;
-
-		vctrl->base_pipe = pipe; /* keep it */
-	} else {
-		pipe = vctrl->base_pipe;
-	}
-
 
 	pipe->src_height = fbi->var.yres;
 	pipe->src_width = fbi->var.xres;
