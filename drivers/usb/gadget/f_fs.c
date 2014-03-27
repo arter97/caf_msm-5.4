@@ -604,6 +604,12 @@ static ssize_t ffs_epfile_io(struct file *file,
 			goto error;
 		}
 
+		/* Don't wait on write if device is offline */
+		if (!read) {
+			ret = -EINTR;
+			goto error;
+		}
+
 		ret = wait_event_interruptible(epfile->wait, (ep = epfile->ep));
 		if (ret) {
 			ret = -EINTR;
