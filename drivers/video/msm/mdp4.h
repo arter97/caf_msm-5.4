@@ -783,8 +783,8 @@ void mdp4_lcdc_overlay_blt_start(struct msm_fb_data_type *mfd);
 void mdp4_lcdc_overlay_blt_stop(struct msm_fb_data_type *mfd);
 void mdp4_dtv_overlay_blt_start(struct msm_fb_data_type *mfd);
 void mdp4_dtv_overlay_blt_stop(struct msm_fb_data_type *mfd);
-void mdp4_overlay_panel_mode(int mixer_num, uint32 mode);
-void mdp4_overlay_panel_mode_unset(int mixer_num, uint32 mode);
+void mdp4_overlay_panel_mode(uint32 mode);
+void mdp4_overlay_panel_mode_unset(uint32 mode);
 int mdp4_overlay_mixer_play(int mixer_num);
 uint32 mdp4_overlay_panel_list(void);
 void mdp4_lcdc_overlay_kickoff(struct msm_fb_data_type *mfd,
@@ -886,7 +886,7 @@ void mdp4_dsi_cmd_kickoff_video(struct msm_fb_data_type *mfd,
 				struct mdp4_overlay_pipe *pipe);
 void mdp4_dsi_cmd_overlay_kickoff(struct msm_fb_data_type *mfd,
 				struct mdp4_overlay_pipe *pipe);
-void mdp4_overlay_panel_3d(int mixer_num, uint32 panel_3d);
+void mdp4_overlay_panel_3d(uint32 panel_3d);
 int mdp4_overlay_3d_sbys(struct fb_info *info, struct msmfb_overlay_3d *req);
 void mdp4_dsi_cmd_3d_sbys(struct msm_fb_data_type *mfd,
 			 struct msmfb_overlay_3d *r3d);

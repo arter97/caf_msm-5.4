@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1314,6 +1314,9 @@ void mdp4_mixer_blend_init(mixer_num)
 	unsigned char *overlay_base;
 	int off;
 
+	if (mixer_num >= MDP4_MIXER_NONE)
+		return;
+
 	if (mixer_num) 	/* mixer number, /dev/fb0, /dev/fb1 */
 		overlay_base = MDP_BASE + MDP4_OVERLAYPROC1_BASE;/* 0x18000 */
 	else
@@ -1962,6 +1965,9 @@ void mdp4_mixer_gc_lut_setup(int mixer_num)
 	uint32 data;
 	char val;
 	int i, off;
+
+	if (mixer_num >= MDP4_MIXER_NONE)
+		return;
 
 	if (mixer_num) 	/* mixer number, /dev/fb0, /dev/fb1 */
 		base = MDP_BASE + MDP4_OVERLAYPROC1_BASE;/* 0x18000 */
