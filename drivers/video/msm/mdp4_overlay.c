@@ -807,6 +807,30 @@ void mdp4_overlay_solidfill_init(struct mdp4_overlay_pipe *pipe)
 	mdp_clk_ctrl(0);
 }
 
+
+void mdp4_overlay_dmas_setup(struct mdp4_overlay_pipe *pipe)
+{
+	u32 src_size;
+
+	src_size = ((pipe->src_h << 16) | pipe->src_w);
+
+	mdp_clk_ctrl(1);
+
+	outpdw(MDP_BASE + 0xA0004, src_size);
+	outpdw(MDP_BASE + 0xA0008, pipe->srcp0_addr);
+	outpdw(MDP_BASE + 0xA000C, pipe->srcp0_ystride);
+	outpdw(MDP_BASE + 0xA0010, 0);
+
+	pr_debug("dmas addr=%x ystride=%d\n", pipe->srcp0_addr,
+		pipe->srcp0_ystride);
+
+	outpdw(MDP_BASE + 0xA0000, DMA_BUF_FORMAT_XRGB8888 + DMA_DITHER_EN +
+		DMA_PACK_PATTERN_BGR + DMA_PACK_ALIGN_LSB + DMA_DSTC2R_8BITS +
+		DMA_DSTC0G_8BITS + DMA_DSTC1B_8BITS);
+
+	mdp_clk_ctrl(0);
+}
+
 void mdp4_overlay_rgb_setup(struct mdp4_overlay_pipe *pipe)
 {
 	char *rgb_base;
@@ -815,6 +839,11 @@ void mdp4_overlay_rgb_setup(struct mdp4_overlay_pipe *pipe)
 	uint32 curr, mask;
 	uint32 offset = 0;
 	int pnum;
+
+	if (pipe->pipe_type == OVERLAY_TYPE_DMAS) {
+		mdp4_overlay_dmas_setup(pipe);
+		return;
+	}
 
 	pnum = pipe->pipe_num - OVERLAY_PIPE_RGB1; /* start from 0 */
 	rgb_base = MDP_BASE + MDP4_RGB_BASE;
