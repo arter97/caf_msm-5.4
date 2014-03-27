@@ -167,4 +167,10 @@ config QPNP_HAPTIC
 	  on the Qualcomm Technologies' QPNP PMICs. It uses the android
 	  timed-output framework.
 
+config MSM_UIM_HSL
+	tristate "User Indentification Module (UIM) on UART High Speed"
+	help
+	  If you say yes to this option, support will be included for the
+	  built-in UIM interface on Qualcomm MSM family processors.
+
 endmenu
