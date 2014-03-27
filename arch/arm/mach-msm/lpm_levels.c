@@ -737,20 +737,41 @@ static void lpm_enter_low_power(struct lpm_system_state *system_state,
 	lpm_cpu_unprepare(system_state, cpu_index, from_idle);
 }
 
+DEFINE_PER_CPU(unsigned long long, enter_mode_time_stamp);
+DEFINE_PER_CPU(unsigned long long, exit_mode_time_stamp);
+DEFINE_PER_CPU(uint32_t, mode_index);
+
 static int lpm_cpuidle_enter(struct cpuidle_device *dev,
 		struct cpuidle_driver *drv, int index)
 {
 	int64_t time = ktime_to_ns(ktime_get());
 	int idx;
 
+	/*
+	 * Set to a known pattern
+	 */
+	per_cpu(enter_mode_time_stamp, dev->cpu) = 0xDEADBEEF;
+	per_cpu(exit_mode_time_stamp, dev->cpu) = 0xDEADBEEF;
+	per_cpu(mode_index, dev->cpu) = 0xDEADBEEF;
+
+	/* Enter time stamp */
+	per_cpu(enter_mode_time_stamp, dev->cpu) = sched_clock();
+
 	idx = menu_select ? lpm_cpu_menu_select(dev, &index) :
 			lpm_cpu_power_select(dev, &index);
+
+	/* Log the index it is trying to enter */
+	per_cpu(mode_index, dev->cpu) = idx;
+
 	if (idx < 0) {
 		local_irq_enable();
 		return -EPERM;
 	}
 
 	lpm_enter_low_power(&sys_state, idx, true);
+
+	/* Exit timer stamp */
+	per_cpu(exit_mode_time_stamp, dev->cpu) = sched_clock();
 
 	time = ktime_to_ns(ktime_get()) - time;
 	do_div(time, 1000);
