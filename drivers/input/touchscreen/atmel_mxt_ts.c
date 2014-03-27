@@ -1021,6 +1021,34 @@ static int mxt_read_byte(struct i2c_client *client,
 	return -EIO;
 }
 
+static int mxt_config_bit(struct i2c_client *client,
+				u8 reg, u8 mask, bool set)
+{
+	int error;
+	u8 val;
+
+	error = mxt_read_byte(client, reg, &val);
+	if (error) {
+		dev_err(&client->dev, "Failed to read from regiser 0x%2X\n",
+									reg);
+		return error;
+	}
+
+	if (set)
+		val |= mask;
+	else
+		val &= ~mask;
+
+	error = mxt_write_byte(client, reg, val);
+	if (error) {
+		dev_err(&client->dev, "Failed to write to register 0x%2X\n",
+									reg);
+		return error;
+	}
+
+	return 0;
+}
+
 static void mxt_clear_irq_s1509(struct i2c_client *client)
 {
 	client->addr = SX1509_SLAVE_ADDR;
@@ -1502,6 +1530,168 @@ static int mxt_save_objects(struct mxt_data *data)
 	return 0;
 }
 
+static int mxt_reset_sx1509(struct mxt_data *data)
+{
+	int error;
+
+	/*
+	 * Reset IO Expander requries writing 0x12 and 0x34 consecutively
+	 * into reset register 0x7D.
+	 */
+	error = mxt_write_byte(data->client, 0x7D, 0x12);
+	if (error) {
+		dev_err(&data->client->dev, "failed to write 0x12 to 0x7D");
+		return error;
+	}
+
+	error = mxt_write_byte(data->client, 0x7D, 0x34);
+	if (error) {
+		dev_err(&data->client->dev, "failed to write 0x12 to 0x34");
+		return error;
+	}
+
+	return 0;
+}
+
+static int mxt_config_sx1509(struct mxt_data *data)
+{
+	int error;
+	u8 addr_rw, val;
+
+	data->client->addr = SX1509_SLAVE_ADDR;
+
+	error = mxt_reset_sx1509(data);
+	if (error) {
+		dev_err(&data->client->dev,
+				"mxt reset iox failed\n");
+		return error;
+	}
+	msleep(1);
+
+	addr_rw = 0x0F;
+	error = mxt_write_byte(data->client, addr_rw, 0xA5);
+	dev_dbg(&data->client->dev, "config iox 0x%2X = 0x%2X\n", addr_rw, val);
+	if (error) {
+		dev_err(&data->client->dev,
+				"mxt reconfig configing 0x%2X failed\n", addr_rw);
+		return error;
+	}
+
+	error = mxt_read_byte(data->client, addr_rw, &val);
+	dev_dbg(&data->client->dev, "config iox 0x%2X = 0x%2X\n", addr_rw, val);
+	if (error) {
+		dev_err(&data->client->dev,
+				"mxt read 0x%2X failed\n", addr_rw);
+		return error;
+	}
+
+	error = mxt_reset_sx1509(data);
+	if (error) {
+		dev_err(&data->client->dev,
+				"failed to reset sx1509");
+		return error;
+	}
+	msleep(1);
+
+	addr_rw = 0x0E;
+	error = mxt_config_bit(data->client, addr_rw, 0x01, false);
+	dev_dbg(&data->client->dev, "config iox 0x%2X = 0x%2X\n", addr_rw, val);
+	if (error) {
+		dev_err(&data->client->dev,
+				"mxt reconfig configing 0x%2X failed\n", addr_rw);
+		return error;
+	}
+
+	addr_rw = 0x10;
+	error = mxt_config_bit(data->client, addr_rw, 0x01, true);
+	dev_dbg(&data->client->dev, "config iox 0x%2X = 0x%2X\n", addr_rw, val);
+	if (error) {
+		dev_err(&data->client->dev,
+				"mxt reconfig configing 0x%2X failed\n", addr_rw);
+		return error;
+	}
+
+	addr_rw = 0x0F;
+	error = mxt_config_bit(data->client, addr_rw, 0x80, true);
+	dev_dbg(&data->client->dev, "config iox 0x%2X = 0x%2X\n", addr_rw, val);
+	if (error) {
+		dev_err(&data->client->dev,
+				"mxt reconfig configing 0x%2X failed\n", addr_rw);
+		return error;
+	}
+
+	addr_rw = 0x07;
+	error = mxt_config_bit(data->client, addr_rw, 0x80, true);
+	dev_dbg(&data->client->dev, "config iox 0x%2X = 0x%2X\n", addr_rw, val);
+	if (error) {
+		dev_err(&data->client->dev,
+				"mxt reconfig configing 0x%2X failed\n", addr_rw);
+		return error;
+	}
+
+	addr_rw = 0x13;
+	error = mxt_config_bit(data->client, addr_rw, 0x80, false);
+	dev_dbg(&data->client->dev, "config iox 0x%2X = 0x%2X\n", addr_rw, val);
+	if (error) {
+		dev_err(&data->client->dev,
+				"mxt reconfig configing 0x%2X failed\n", addr_rw);
+		return error;
+	}
+
+	addr_rw = 0x16;
+	val = 0x80;
+	error = mxt_write_byte(data->client, addr_rw, val);
+	dev_dbg(&data->client->dev, "write iox 0x%2X = 0x%2X\n", addr_rw, val);
+	if (error) {
+		dev_err(&data->client->dev,
+				"mxt reconfig writing 0x%2X failed\n", addr_rw);
+		return error;
+	}
+
+	addr_rw = 0x1F;
+	val = 0x10;
+	error = mxt_write_byte(data->client, addr_rw, val);
+	dev_dbg(&data->client->dev, "write iox 0x%2X = 0x%2X\n", addr_rw, val);
+	if (error) {
+		dev_err(&data->client->dev,
+				"mxt reconfig writing 0x%2X failed\n", addr_rw);
+		return error;
+	}
+
+	data->client->addr = MXT_SLAVE_ADDR;
+
+	return 0;
+}
+
+static int mxt_reset_atmel(struct mxt_data *data)
+{
+	int error = 0;
+	u8 addr_rw;
+
+	data->client->addr = UH928_SLAVE_ADDR;
+
+	addr_rw = 0x1F;
+	error = mxt_write_byte(data->client, addr_rw, 0x01);
+	dev_dbg(&data->client->dev, "write 928 0x%2X\n", addr_rw);
+	if (error) {
+		dev_err(&data->client->dev,
+				"mxt reconfig writing 0x%2X failed\n", addr_rw);
+		return error;
+	}
+
+	udelay(100);
+	error = mxt_write_byte(data->client, addr_rw, 0x09);
+	dev_dbg(&data->client->dev, "write 928 0x%2X\n", addr_rw);
+	if (error) {
+		dev_err(&data->client->dev,
+				"mxt reconfig writing 0x%2X failed\n", addr_rw);
+		return error;
+	}
+
+	data->client->addr = MXT_SLAVE_ADDR;
+	return 0;
+}
+
 static int mxt_reconfig_fpdlink(struct mxt_data *data)
 {
 	int error = 0, i;
@@ -1565,11 +1755,20 @@ static int mxt_reconfig_fpdlink(struct mxt_data *data)
 		return error;
 	}
 
+	data->client->addr = MXT_SLAVE_ADDR;
+	return error;
+}
+
+static int mxt_uh928_config(struct mxt_data *data)
+{
+	int error;
+	u8 addr_rw;
+
 	data->client->addr = UH928_SLAVE_ADDR;
 
 	addr_rw = 0x1D;
 	error = mxt_write_byte(data->client, addr_rw, 0x29);
-	dev_dbg(&data->client->dev, "write 928 0x%2X = 0x%2X\n", addr_rw, val);
+	dev_dbg(&data->client->dev, "write 928 0x%2X\n", addr_rw);
 	if (error) {
 		dev_err(&data->client->dev,
 				"mxt reconfig writing 0x%2X failed\n", addr_rw);
@@ -1578,28 +1777,13 @@ static int mxt_reconfig_fpdlink(struct mxt_data *data)
 
 	addr_rw = 0x1E;
 	error = mxt_write_byte(data->client, addr_rw, 0x13);
-	dev_dbg(&data->client->dev, "write 928 0x%2X = 0x%2X\n", addr_rw, val);
+	dev_dbg(&data->client->dev, "write 928 0x%2X\n", addr_rw);
 	if (error) {
 		dev_err(&data->client->dev,
 				"mxt reconfig writing 0x%2X failed\n", addr_rw);
 		return error;
 	}
-	addr_rw = 0x1F;
-	error = mxt_write_byte(data->client, addr_rw, 0x01);
-	dev_dbg(&data->client->dev, "write 928 0x%2X = 0x%2X\n", addr_rw, val);
-	if (error) {
-		dev_err(&data->client->dev,
-				"mxt reconfig writing 0x%2X failed\n", addr_rw);
-		return error;
-	}
-	addr_rw = 0x1F;
-	error = mxt_write_byte(data->client, addr_rw, 0x09);
-	dev_dbg(&data->client->dev, "write 928 0x%2X = 0x%2X\n", addr_rw, val);
-	if (error) {
-		dev_err(&data->client->dev,
-				"mxt reconfig writing 0x%2X failed\n", addr_rw);
-		return error;
-	}
+
 	data->client->addr = MXT_SLAVE_ADDR;
 	return error;
 }
@@ -2924,8 +3108,27 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	}
 
 	if (data->pdata->no_regulator_support) {
-		mxt_clear_irq_s1509(data->client);
-		mxt_clear_irq_uh927(data->client);
+		error = mxt_reconfig_fpdlink(data);
+		if (error) {
+			dev_err(&client->dev, "Failed to reconfigu fpdlink\n");
+			goto err_free_object;
+		}
+
+		error = mxt_config_sx1509(data);
+		if (error) {
+			dev_err(&data->client->dev, "failed to configure sx1509\n");
+			return error;
+		}
+
+		msleep(1);
+
+		error = mxt_uh928_config(data);
+
+		error = mxt_reset_atmel(data);
+		if (error) {
+			dev_err(&client->dev, "Failed to reset atmel\n");
+			goto err_free_object;
+		}
 	}
 
 	mxt_reset_delay(data);
@@ -2941,6 +3144,8 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	}
 
 	if (data->state == APPMODE) {
+		mxt_clear_irq_s1509(data->client);
+		mxt_clear_irq_uh927(data->client);
 		error = mxt_make_highchg(data);
 		if (error) {
 			dev_err(&client->dev, "Failed to make high CHG\n");
