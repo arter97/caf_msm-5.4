@@ -131,17 +131,25 @@ struct mdp4_overlay_perf {
 struct mdp4_overlay_perf perf_request;
 struct mdp4_overlay_perf perf_current;
 
-void  mdp4_overlay_free_base_pipe(struct msm_fb_data_type *mfd)
+void mdp4_overlay_free_base_pipe(struct msm_fb_data_type *mfd)
 {
-	if (!hdmi_prim_display && mfd->index == 0) {
-		if (ctrl->panel_mode & MDP4_PANEL_DSI_VIDEO)
-			mdp4_dsi_video_free_base_pipe(mfd);
-		else if (ctrl->panel_mode & MDP4_PANEL_DSI_CMD)
-			mdp4_dsi_cmd_free_base_pipe(mfd);
-		else if (ctrl->panel_mode & MDP4_PANEL_LCDC)
-			mdp4_lcdc_free_base_pipe(mfd);
-	} else if (hdmi_prim_display || mfd->index == 1) {
+	switch (mfd->panel.type) {
+	case MIPI_CMD_PANEL:
+		mdp4_dsi_cmd_free_base_pipe(mfd);
+		break;
+	case MIPI_VIDEO_PANEL:
+		mdp4_dsi_video_free_base_pipe(mfd);
+		break;
+	case LVDS_PANEL:
+	case LCDC_PANEL:
+		mdp4_lcdc_free_base_pipe(mfd);
+		break;
+	case DTV_PANEL:
 		mdp4_dtv_free_base_pipe(mfd);
+		break;
+	default:
+		pr_err("No free base pipe!\n");
+		break;
 	}
 }
 
@@ -2475,6 +2483,11 @@ struct mdp4_overlay_pipe *mdp4_overlay_pipe_alloc(int ptype, int mixer)
 	int i;
 	struct mdp4_overlay_pipe *pipe;
 
+	if (ptype == OVERLAY_TYPE_DMAS) {
+		pipe = &ctrl->plist[OVERLAY_PIPE_DMAS];
+		return (pipe->pipe_used) ? NULL : pipe;
+	}
+
 	if (ptype == OVERLAY_TYPE_BF) {
 		if (!mdp4_overlay_borderfill_supported())
 			return NULL;
@@ -2535,218 +2548,99 @@ void mdp4_overlay_pipe_free(struct mdp4_overlay_pipe *pipe, int all)
 
 }
 
-static int mdp4_overlay_req2pipe(struct mdp_overlay *req, int mixer,
-			struct mdp4_overlay_pipe **ppipe,
-			struct msm_fb_data_type *mfd)
+static struct mdp4_overlay_pipe *mdp4_overlay_alloc_base_pipe(
+	struct msm_fb_data_type *mfd)
 {
-	struct mdp4_overlay_pipe *pipe;
-	int ret, ptype;
+	struct mdp4_overlay_pipe *pipe = NULL;
 
-	u32 upscale_max;
-	upscale_max = (mdp_rev >= MDP_REV_41) ?
-		MDP4_REV41_OR_LATER_UP_SCALING_MAX :
-		MDP4_REV40_UP_SCALING_MAX;
+	switch (mfd->panel.type) {
+	case LVDS_PANEL:
+	case LCDC_PANEL:
+		pipe = mdp4_lcdc_alloc_base_pipe();
+		break;
+	default:
+		pr_err("No base pipe alloc\n");
+	}
+
+	return pipe;
+}
+
+
+static struct mdp4_overlay_pipe *mdp4_overlay_alloc_pipe(
+	struct mdp_overlay *req, struct msm_fb_data_type *mfd)
+{
+
+	struct mdp4_overlay_pipe *pipe = NULL;
+	int ret, ptype, mixer;
 
 	if (mfd == NULL) {
 		pr_err("%s: mfd == NULL, -ENODEV\n", __func__);
-		return -ENODEV;
+		goto alloc_err;
 	}
 
+	if (mfd->panel_info.pdest == DISPLAY_4) {
+		pipe = mdp4_overlay_alloc_base_pipe(mfd);
+		goto alloc_err;
+	}
+
+	mixer = mfd->panel_info.pdest;	/* DISPLAY_1 or DISPLAY_2 */
 	if (mixer >= MDP4_MIXER_MAX) {
 		pr_err("%s: mixer out of range!\n", __func__);
 		mdp4_stat.err_mixer++;
-		return -ERANGE;
-	}
-
-	if (req->z_order < 0 || req->z_order > 3) {
-		pr_err("%s: z_order=%d out of range!\n", __func__,
-				req->z_order);
-		mdp4_stat.err_zorder++;
-		return -ERANGE;
-	}
-
-	if (req->src_rect.h > 0xFFF || req->src_rect.h < 2) {
-		pr_err("%s: src_h is out of range: 0X%x!\n",
-		       __func__, req->src_rect.h);
-		mdp4_stat.err_size++;
-		return -EINVAL;
-	}
-
-	if (req->src_rect.w > 0xFFF || req->src_rect.w < 2) {
-		pr_err("%s: src_w is out of range: 0X%x!\n",
-		       __func__, req->src_rect.w);
-		mdp4_stat.err_size++;
-		return -EINVAL;
-	}
-
-	if (req->src_rect.x > 0xFFF) {
-		pr_err("%s: src_x is out of range: 0X%x!\n",
-		       __func__, req->src_rect.x);
-		mdp4_stat.err_size++;
-		return -EINVAL;
-	}
-
-	if (req->src_rect.y > 0xFFF) {
-		pr_err("%s: src_y is out of range: 0X%x!\n",
-		       __func__, req->src_rect.y);
-		mdp4_stat.err_size++;
-		return -EINVAL;
-	}
-
-	if (req->dst_rect.h > 0xFFF || req->dst_rect.h < 2) {
-		pr_err("%s: dst_h is out of range: 0X%x!\n",
-		       __func__, req->dst_rect.h);
-		mdp4_stat.err_size++;
-		return -EINVAL;
-	}
-
-	if (req->dst_rect.w > 0xFFF || req->dst_rect.w < 2) {
-		pr_err("%s: dst_w is out of range: 0X%x!\n",
-		       __func__, req->dst_rect.w);
-		mdp4_stat.err_size++;
-		return -EINVAL;
-	}
-
-	if (req->dst_rect.x > 0xFFF) {
-		pr_err("%s: dst_x is out of range: 0X%x!\n",
-		       __func__, req->dst_rect.x);
-		mdp4_stat.err_size++;
-		return -EINVAL;
-	}
-
-	if (req->dst_rect.y > 0xFFF) {
-		pr_err("%s: dst_y is out of range: 0X%x!\n",
-		       __func__, req->dst_rect.y);
-		mdp4_stat.err_size++;
-		return -EINVAL;
-	}
-
-	if (req->src_rect.h == 0 || req->src_rect.w == 0) {
-		pr_err("%s: src img of zero size!\n", __func__);
-		mdp4_stat.err_size++;
-		return -EINVAL;
-	}
-
-	if (req->dst_rect.h > (req->src_rect.h * upscale_max)) {
-		mdp4_stat.err_scale++;
-		pr_err("%s: scale up, too much (h)!\n", __func__);
-		return -ERANGE;
-	}
-
-	if (req->src_rect.h > (req->dst_rect.h * 8)) {	/* too little */
-		mdp4_stat.err_scale++;
-		pr_err("%s: scale down, too little (h)!\n", __func__);
-		return -ERANGE;
-	}
-
-	if (req->dst_rect.w > (req->src_rect.w * upscale_max)) {
-		mdp4_stat.err_scale++;
-		pr_err("%s: scale up, too much (w)!\n", __func__);
-		return -ERANGE;
-	}
-
-	if (req->src_rect.w > (req->dst_rect.w * 8)) {	/* too little */
-		mdp4_stat.err_scale++;
-		pr_err("%s: scale down, too little (w)!\n", __func__);
-		return -ERANGE;
-	}
-
-	if (mdp_hw_revision == MDP4_REVISION_V1) {
-		/*  non integer down saceling ratio  smaller than 1/4
-		 *  is not supportted
-		 */
-		if (req->src_rect.h > (req->dst_rect.h * 4)) {
-			if (req->src_rect.h % req->dst_rect.h) {
-				mdp4_stat.err_scale++;
-				pr_err("%s: need integer (h)!\n", __func__);
-				return -ERANGE;
-			}
-		}
-
-		if (req->src_rect.w > (req->dst_rect.w * 4)) {
-			if (req->src_rect.w % req->dst_rect.w) {
-				mdp4_stat.err_scale++;
-				pr_err("%s: need integer (w)!\n", __func__);
-				return -ERANGE;
-			}
-		}
-	}
-
-	if (((req->src_rect.x + req->src_rect.w) > req->src.width) ||
-		((req->src_rect.y + req->src_rect.h) > req->src.height)) {
-		mdp4_stat.err_size++;
-		pr_err("%s invalid src rectangle\n", __func__);
-		return -ERANGE;
-	}
-
-	if (ctrl->panel_3d != MDP4_3D_SIDE_BY_SIDE) {
-		int xres;
-		int yres;
-
-		xres = mfd->var_xres;
-		yres = mfd->var_yres;
-
-		if (((req->dst_rect.x + req->dst_rect.w) > xres) ||
-			((req->dst_rect.y + req->dst_rect.h) > yres)) {
-			mdp4_stat.err_size++;
-			pr_err("%s invalid dst rectangle\n", __func__);
-			return -ERANGE;
-		}
+		ret = -ERANGE;
+		goto alloc_err;
 	}
 
 	ptype = mdp4_overlay_format2type(req->src.format);
 	if (ptype < 0) {
 		pr_err("%s: mdp4_overlay_format2type!\n", __func__);
-		return ptype;
+		goto alloc_err;
 	}
 
 	if (req->flags & MDP_OV_PIPE_SHARE)
 		ptype = OVERLAY_TYPE_VIDEO; /* VG pipe supports both RGB+YUV */
 
-	if (req->id == MSMFB_NEW_REQUEST)  /* new request */
+	if (req->id == MSMFB_NEW_REQUEST) /* new request */
 		pipe = mdp4_overlay_pipe_alloc(ptype, mixer);
 	else
 		pipe = mdp4_overlay_ndx2pipe(req->id);
 
-	if (pipe == NULL) {
-		pr_err("%s: pipe == NULL!\n", __func__);
-		return -ENOMEM;
+	if (IS_ERR_OR_NULL(pipe)) {
+		pr_err("%s: pipe == NULL! ptype=%d\n", __func__, ptype);
+		goto alloc_err;
 	}
 
-	if (!display_iclient && !IS_ERR_OR_NULL(mfd->iclient)) {
-		display_iclient = mfd->iclient;
-		pr_debug("%s(): display_iclient %p\n", __func__,
-			display_iclient);
+	if (req->id == MSMFB_NEW_REQUEST) {
+		if (mdp4_overlay_pipe_staged(pipe)) {
+			pr_err("%s: ndx=%d still staged\n", __func__,
+				pipe->pipe_ndx);
+			pipe = NULL;
+		} else {
+			pipe->pipe_used++;
+			pipe->mixer_num = mixer;
+			pipe->mixer_stage = req->z_order + MDP4_MIXER_STAGE0;
+		}
 	}
 
-	pipe->src_format = req->src.format;
-	ret = mdp4_overlay_format2pipe(pipe);
+alloc_err:
+	return pipe;
+}
 
-	if (ret < 0) {
-		pr_err("%s: mdp4_overlay_format2pipe!\n", __func__);
-		return ret;
-	}
-
+static void mdp4_overlay_setup_pipe(struct mdp_overlay *req,
+	struct mdp4_overlay_pipe *pipe)
+{
+	int ret;
 	/*
 	 * base layer == 1, reserved for frame buffer
 	 * zorder 0 == stage 0 == 2
 	 * zorder 1 == stage 1 == 3
 	 * zorder 2 == stage 2 == 4
 	 */
-	if (req->id == MSMFB_NEW_REQUEST) {  /* new request */
-		if (mdp4_overlay_pipe_staged(pipe)) {
-			pr_err("%s: ndx=%d still staged\n", __func__,
-						pipe->pipe_ndx);
-			return -EPERM;
-		}
-		pipe->pipe_used++;
-		pipe->mixer_num = mixer;
-		pr_debug("%s: zorder=%d pipe ndx=%d num=%d\n", __func__,
-			req->z_order, pipe->pipe_ndx, pipe->pipe_num);
+	pipe->src_format = req->src.format;
+	ret = mdp4_overlay_format2pipe(pipe);
+	if (ret < 0)
+		pr_err("%s: mdp4_overlay_format2pipe!\n", __func__);
 
-	}
-
-	pipe->mixer_stage = req->z_order + MDP4_MIXER_STAGE0;
 	pipe->src_width = req->src.width & 0x1fff;	/* source img width */
 	pipe->src_height = req->src.height & 0x1fff;	/* source img height */
 	pipe->src_h = req->src_rect.h & 0x07ff;
@@ -2783,10 +2677,180 @@ static int mdp4_overlay_req2pipe(struct mdp_overlay *req, int mixer,
 	pipe->transp = req->transp_mask;
 
 	pipe->flags = req->flags;
+}
 
-	*ppipe = pipe;
+static int mdp4_overlay_req_check(struct mdp_overlay *req,
+	struct msm_fb_data_type *mfd)
+{
+	int ret = 0;
+	u32 upscale_max;
 
-	return 0;
+	upscale_max = (mdp_rev >= MDP_REV_41) ?
+		MDP4_REV41_OR_LATER_UP_SCALING_MAX :
+		MDP4_REV40_UP_SCALING_MAX;
+
+	if (!display_iclient && !IS_ERR_OR_NULL(mfd->iclient)) {
+		display_iclient = mfd->iclient;
+		pr_debug("%s(): display_iclient %p\n", __func__,
+			display_iclient);
+	}
+
+	if (req->z_order < 0 || req->z_order > 3) {
+		pr_err("%s: z_order=%d out of range!\n", __func__,
+				req->z_order);
+		mdp4_stat.err_zorder++;
+		ret = -ERANGE;
+		goto req_err;
+	}
+
+	if (req->src_rect.h > 0xFFF || req->src_rect.h < 2) {
+		pr_err("%s: src_h is out of range: 0X%x!\n",
+		       __func__, req->src_rect.h);
+		mdp4_stat.err_size++;
+		ret = -EINVAL;
+		goto req_err;
+	}
+
+	if (req->src_rect.w > 0xFFF || req->src_rect.w < 2) {
+		pr_err("%s: src_w is out of range: 0X%x!\n",
+		       __func__, req->src_rect.w);
+		mdp4_stat.err_size++;
+		ret = -EINVAL;
+		goto req_err;
+	}
+
+	if (req->src_rect.x > 0xFFF) {
+		pr_err("%s: src_x is out of range: 0X%x!\n",
+		       __func__, req->src_rect.x);
+		mdp4_stat.err_size++;
+		ret = -EINVAL;
+		goto req_err;
+	}
+
+	if (req->src_rect.y > 0xFFF) {
+		pr_err("%s: src_y is out of range: 0X%x!\n",
+		       __func__, req->src_rect.y);
+		mdp4_stat.err_size++;
+		ret = -EINVAL;
+		goto req_err;
+	}
+
+	if (req->dst_rect.h > 0xFFF || req->dst_rect.h < 2) {
+		pr_err("%s: dst_h is out of range: 0X%x!\n",
+		       __func__, req->dst_rect.h);
+		mdp4_stat.err_size++;
+		ret = -EINVAL;
+		goto req_err;
+	}
+
+	if (req->dst_rect.w > 0xFFF || req->dst_rect.w < 2) {
+		pr_err("%s: dst_w is out of range: 0X%x!\n",
+		       __func__, req->dst_rect.w);
+		mdp4_stat.err_size++;
+		ret = -EINVAL;
+		goto req_err;
+	}
+
+	if (req->dst_rect.x > 0xFFF) {
+		pr_err("%s: dst_x is out of range: 0X%x!\n",
+		       __func__, req->dst_rect.x);
+		mdp4_stat.err_size++;
+		ret = -EINVAL;
+		goto req_err;
+	}
+
+	if (req->dst_rect.y > 0xFFF) {
+		pr_err("%s: dst_y is out of range: 0X%x!\n",
+		       __func__, req->dst_rect.y);
+		mdp4_stat.err_size++;
+		ret = -EINVAL;
+		goto req_err;
+	}
+
+	if (req->src_rect.h == 0 || req->src_rect.w == 0) {
+		pr_err("%s: src img of zero size!\n", __func__);
+		mdp4_stat.err_size++;
+		ret = -EINVAL;
+		goto req_err;
+	}
+
+	if (req->dst_rect.h > (req->src_rect.h * upscale_max)) {
+		mdp4_stat.err_scale++;
+		pr_err("%s: scale up, too much (h)!\n", __func__);
+		ret = -ERANGE;
+		goto req_err;
+	}
+
+	if (req->src_rect.h > (req->dst_rect.h * 8)) {	/* too little */
+		mdp4_stat.err_scale++;
+		pr_err("%s: scale down, too little (h)!\n", __func__);
+		ret = -ERANGE;
+		goto req_err;
+	}
+
+	if (req->dst_rect.w > (req->src_rect.w * upscale_max)) {
+		mdp4_stat.err_scale++;
+		pr_err("%s: scale up, too much (w)!\n", __func__);
+		ret = -ERANGE;
+		goto req_err;
+	}
+
+	if (req->src_rect.w > (req->dst_rect.w * 8)) {	/* too little */
+		mdp4_stat.err_scale++;
+		pr_err("%s: scale down, too little (w)!\n", __func__);
+		ret = -ERANGE;
+		goto req_err;
+	}
+
+	if (mdp_hw_revision == MDP4_REVISION_V1) {
+		/*  non integer down saceling ratio  smaller than 1/4
+		 *  is not supportted
+		 */
+		if (req->src_rect.h > (req->dst_rect.h * 4)) {
+			if (req->src_rect.h % req->dst_rect.h) {
+				mdp4_stat.err_scale++;
+				pr_err("%s: need integer (h)!\n", __func__);
+				ret = -ERANGE;
+				goto req_err;
+			}
+		}
+
+		if (req->src_rect.w > (req->dst_rect.w * 4)) {
+			if (req->src_rect.w % req->dst_rect.w) {
+				mdp4_stat.err_scale++;
+				pr_err("%s: need integer (w)!\n", __func__);
+				ret = -ERANGE;
+				goto req_err;
+			}
+		}
+	}
+
+	if (((req->src_rect.x + req->src_rect.w) > req->src.width) ||
+		((req->src_rect.y + req->src_rect.h) > req->src.height)) {
+		mdp4_stat.err_size++;
+		pr_err("%s invalid src rectangle\n", __func__);
+		ret = -ERANGE;
+		goto req_err;
+	}
+
+	if (ctrl->panel_3d != MDP4_3D_SIDE_BY_SIDE) {
+		int xres;
+		int yres;
+
+		xres = mfd->var_xres;
+		yres = mfd->var_yres;
+
+		if (((req->dst_rect.x + req->dst_rect.w) > xres) ||
+			((req->dst_rect.y + req->dst_rect.h) > yres)) {
+			mdp4_stat.err_size++;
+			pr_err("%s invalid dst rectangle\n", __func__);
+			ret = -ERANGE;
+			goto req_err;
+		}
+	}
+
+req_err:
+	return ret;
 }
 
 static int mdp4_calc_req_mdp_clk(struct msm_fb_data_type *mfd,
@@ -3542,7 +3606,7 @@ int mdp4_overlay_get(struct fb_info *info, struct mdp_overlay *req)
 int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
-	int ret, mixer;
+	int ret;
 	struct mdp4_overlay_pipe *pipe;
 
 	if (mfd == NULL) {
@@ -3562,8 +3626,6 @@ int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
 		return -EINTR;
 	}
 
-	mixer = mfd->panel_info.pdest;	/* DISPLAY_1 or DISPLAY_2 */
-
 	ret = mdp4_calc_req_blt(mfd, req);
 
 	if (ret < 0) {
@@ -3572,13 +3634,19 @@ int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
 		return ret;
 	}
 
-	ret = mdp4_overlay_req2pipe(req, mixer, &pipe, mfd);
-
+	ret = mdp4_overlay_req_check(req, mfd);
 	if (ret < 0) {
 		mutex_unlock(&mfd->dma->ov_mutex);
-		pr_err("%s: mdp4_overlay_req2pipe, ret=%d\n", __func__, ret);
 		return ret;
 	}
+
+	pipe = mdp4_overlay_alloc_pipe(req, mfd);
+	if (IS_ERR_OR_NULL(pipe)) {
+		mutex_unlock(&mfd->dma->ov_mutex);
+		return -ENODEV;
+	}
+
+	mdp4_overlay_setup_pipe(req, pipe);
 
 	if (pipe->flags & MDP_SECURE_OVERLAY_SESSION) {
 		mdp4_map_sec_resource(mfd);
@@ -4139,17 +4207,26 @@ int mdp4_v4l2_overlay_set(struct fb_info *info, struct mdp_overlay *req,
 {
 	struct mdp4_overlay_pipe *pipe;
 	int err;
-	struct msm_fb_data_type *mfb = info->par;
+	struct msm_fb_data_type *mfd = info->par;
 
 	req->z_order = 0;
 	req->id = MSMFB_NEW_REQUEST;
 	req->is_fg = false;
 	req->alpha = 0xff;
-	err = mdp4_overlay_req2pipe(req, MDP4_MIXER0, &pipe, mfb);
+	err = mdp4_overlay_req_check(req, mfd);
 	if (err < 0) {
-		pr_err("%s:Could not allocate MDP overlay pipe\n", __func__);
+		pr_err("%s: req param error\n", __func__);
 		return err;
 	}
+
+	pipe = mdp4_overlay_alloc_pipe(req, mfd);
+	if (IS_ERR_OR_NULL(pipe)) {
+		pr_err("%s:Could not allocate MDP overlay pipe\n", __func__);
+		err = -ENODEV;
+		return err;
+	}
+
+	mdp4_overlay_setup_pipe(req, pipe);
 
 	mdp4_mixer_blend_setup(pipe->mixer_num);
 	*ppipe = pipe;
