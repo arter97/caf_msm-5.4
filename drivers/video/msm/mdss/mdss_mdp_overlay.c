@@ -966,6 +966,11 @@ int mdss_mdp_overlay_kickoff(struct msm_fb_data_type *mfd,
 	int ret = 0;
 	int sd_in_pipe = 0;
 
+	if (!ctl) {
+		pr_warn("kickoff on fb=%d without a ctl attched\n", mfd->index);
+		return ret;
+	}
+
 	if (ctl->shared_lock)
 		mutex_lock(ctl->shared_lock);
 
@@ -1761,7 +1766,7 @@ static ssize_t mdss_mdp_vsync_show_event(struct device *dev,
 	vsync_ticks = ktime_to_ns(mdp5_data->vsync_time);
 
 	pr_debug("fb%d vsync=%llu", mfd->index, vsync_ticks);
-	ret = scnprintf(buf, PAGE_SIZE, "VSYNC=%llu", vsync_ticks);
+	ret = scnprintf(buf, PAGE_SIZE, "VSYNC=%llu\n", vsync_ticks);
 
 	return ret;
 }
