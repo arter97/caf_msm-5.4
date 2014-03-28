@@ -107,7 +107,6 @@ struct kgsl_driver {
 		unsigned int coherent_max;
 		unsigned int mapped;
 		unsigned int mapped_max;
-		unsigned int histogram[16];
 	} stats;
 	unsigned int full_cache_threshold;
 };
@@ -119,7 +118,7 @@ struct kgsl_memdesc;
 struct kgsl_cmdbatch;
 
 struct kgsl_memdesc_ops {
-	int (*vmflags)(struct kgsl_memdesc *);
+	unsigned int vmflags;
 	int (*vmfault)(struct kgsl_memdesc *, struct vm_area_struct *,
 		       struct vm_fault *);
 	void (*free)(struct kgsl_memdesc *memdesc);

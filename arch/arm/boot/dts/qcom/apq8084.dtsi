@@ -14,7 +14,7 @@
 #include <dt-bindings/clock/msm-clocks-krait.h>
 
 / {
-	model = "Qualcomm APQ 8084";
+	model = "Qualcomm Technologies, Inc. APQ 8084";
 	compatible = "qcom,apq8084";
 	qcom,msm-id = <178 0x10000>;
 	interrupt-parent = <&intc>;
@@ -70,7 +70,7 @@
 			linux,reserve-contiguous-region;
 			linux,reserve-region;
 			linux,remove-completely;
-			reg = <0x0 0x0f800000 0x0 0x600000>;
+			reg = <0x0 0x0f800000 0x0 0x800000>;
 			label = "external_image_mem";
 		};
         };
@@ -596,6 +596,8 @@
 
 		qcom,n-fts = <0x50>;
 
+		qcom,l1ss-supported;
+
 		qcom,msi-gicm-addr = <0xF9041040>;
 		qcom,msi-gicm-base = <0x180>;
 
@@ -728,7 +730,7 @@
 		interrupt-names = "slimbus_irq", "slimbus_bam_irq";
 		qcom,apps-ch-pipes = <0x60000000>;
 		qcom,ea-pc = <0xb0>;
-		qcom,slim-mdm;
+		qcom,slim-mdm = "esoc0";
 
 		audio_slimslave {
 			compatible = "qcom,audio-slimslave";
@@ -871,6 +873,7 @@
 		qcom,sda-gpio = <&msmgpio 10 0>;
 		qcom,scl-gpio = <&msmgpio 11 0>;
 		qcom,master-id = <86>;
+		qcom,clk-ctl-xfer;
 	};
 
 	i2c@f9926000 { /* BLSP-1 QUP-4 */
@@ -887,6 +890,7 @@
 		qcom,sda-gpio = <&msmgpio 29 0>;
 		qcom,scl-gpio = <&msmgpio 30 0>;
 		qcom,master-id = <86>;
+		qcom,clk-ctl-xfer;
 	};
 
 	i2c_2: i2c@f9927000 { /* BLSP1 QUP5 */
@@ -3098,6 +3102,17 @@
 
 	qcom,bcl {
 		compatible = "qcom,bcl";
+		qcom,ibat-vadc = <&pma8084_vadc>;
+		qcom,ibat-threshold-adc_tm = <&pma8084_adc_tm>;
+		qcom,ibat-monitor {
+			high-threshold-uamp = <3000000>;
+			low-threshold-uamp = <1000000>;
+			mitigation-freq-khz = <1958400>;
+			ibat-channel = <0x15>;
+			adc-interval-usec = <3900>;
+			uv-to-ua-numerator = <2>;
+			uv-to-ua-denominator = <1>;
+		};
 	};
 
 	qcom,msm-mct {
@@ -3863,6 +3878,18 @@
 		qcom,fast-avg-setup = <3>;
 		qcom,btm-channel-number = <0x70>;
 		qcom,thermal-node;
+	};
+
+	chan@15 {
+		label = "mpp6_div1";
+		reg = <0x15>;
+		qcom,decimation = <0>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "absolute";
+		qcom,scale-function = <0>;
+		qcom,hw-settle-time = <0>;
+		qcom,fast-avg-setup = <0>;
+		qcom,btm-channel-number = <0x78>;
 	};
 };
 

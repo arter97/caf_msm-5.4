@@ -35,6 +35,7 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
 	msm8916-mtp.dtb \
 	msm8916-mtp-smb1360.dtb \
 	msm8916-qrd-skuh.dtb \
+	msm8916-qrd-skui.dtb \
 	msm8936-sim.dtb \
 	msm8936-rumi.dtb
 dtb-$(CONFIG_ARCH_MSM8226) += msm8226-sim.dtb \
@@ -103,6 +104,7 @@ dtb-$(CONFIG_ARCH_FSM9900) += fsm9900-rumi.dtb \
 dtb-$(CONFIG_ARCH_MDM9630) += mdm9630-sim.dtb \
 	mdm9630-cdp.dtb \
 	mdm9630-mtp.dtb
+dtb-$(CONFIG_ARCH_MSMZIRC) += msmzirc-sim.dtb
 dtb-$(CONFIG_ARCH_MSMSAMARIUM) += msmsamarium-sim.dtb \
 	msmsamarium-rumi.dtb \
 	msmsamarium-cdp-interposer.dtb \

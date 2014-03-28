@@ -191,7 +191,9 @@ struct dwc3_msm {
 	bool ext_chg_active;
 	struct completion ext_chg_wait;
 	unsigned int scm_dev_id;
+	bool reset_hsphy_sleep_clk;
 	bool suspend_resume_no_support;
+	bool disable_power_collapse;
 };
 
 #define USB_HSPHY_3P3_VOL_MIN		3050000 /* uV */
@@ -1365,6 +1367,28 @@ static void dwc3_start_chg_det(struct dwc3_charger *charger, bool start)
 	queue_delayed_work(system_nrt_wq, &mdwc->chg_work, 0);
 }
 
+static int dwc3_hsphy_reset(struct dwc3_msm *mdwc)
+{
+	int ret;
+
+	/* Reset hsusb phy */
+	ret = clk_reset(mdwc->hsphy_sleep_clk, CLK_RESET_ASSERT);
+	if (ret) {
+		dev_err(mdwc->dev, "hsphy_sleep_clk assert failed\n");
+		goto reset_hsphy_exit;
+	}
+
+	usleep_range(1000, 1200);
+	ret = clk_reset(mdwc->hsphy_sleep_clk, CLK_RESET_DEASSERT);
+	if (ret) {
+		dev_err(mdwc->dev, "hsphy_sleep_clk reset deassert failed\n");
+		goto reset_hsphy_exit;
+	}
+
+reset_hsphy_exit:
+	return ret;
+}
+
 static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 {
 	int ret, i;
@@ -1400,6 +1424,13 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 				return -EBUSY;
 			}
 		}
+	}
+
+	if (!msm_bam_usb_lpm_ok(DWC3_CTRL)) {
+		dev_dbg(mdwc->dev,
+			"%s: IPA handshake not finished, will suspend when done\n",
+			__func__);
+		return -EBUSY;
 	}
 
 	host_ss_active = dwc3_msm_read_reg(mdwc->base, USB3_PORTSC) & PORT_PE;
@@ -1450,7 +1481,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 	wmb();
 
 	/* remove vote for controller power collapse */
-	if (!host_bus_suspend)
+	if (!host_bus_suspend && !mdwc->disable_power_collapse)
 		dwc3_msm_config_gdsc(mdwc, 0);
 
 	clk_disable_unprepare(mdwc->iface_clk);
@@ -1533,7 +1564,7 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 	}
 
 	/* add vote for controller power collapse */
-	if (!host_bus_suspend)
+	if (!host_bus_suspend && !mdwc->disable_power_collapse)
 		dwc3_msm_config_gdsc(mdwc, 1);
 
 	clk_prepare_enable(mdwc->utmi_clk);
@@ -1559,6 +1590,14 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 		dwc3_msm_write_reg(mdwc->base, DWC3_GUSB2PHYCFG(0),
 		      dwc3_msm_read_reg(mdwc->base, DWC3_GUSB2PHYCFG(0)) &
 								0x7FFFFFFF);
+		/* Reset HSPHY */
+		if (mdwc->reset_hsphy_sleep_clk) {
+			ret = dwc3_hsphy_reset(mdwc);
+			if (ret) {
+				dev_err(mdwc->dev, "hsphy reset failed\n");
+				return ret;
+			}
+		}
 
 		ret = dwc3_msm_restore_sec_config(mdwc->scm_dev_id);
 		if (ret)
@@ -1568,6 +1607,8 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 	if (resume_from_core_clk_off)
 		usb_phy_set_suspend(mdwc->ss_phy, 0);
 	atomic_set(&mdwc->in_lpm, 0);
+
+	msm_bam_notify_lpm_resume(DWC3_CTRL);
 
 	/* match disable_irq call from isr */
 	if (mdwc->lpm_irq_seen && mdwc->hs_phy_irq) {
@@ -2427,6 +2468,9 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 
 	mdwc->suspend_resume_no_support = of_property_read_bool(node,
 				"qcom,no-suspend-resume");
+
+	mdwc->disable_power_collapse = of_property_read_bool(node,
+				"qcom,no-power-collapse");
 	/*
 	 * DWC3 has separate IRQ line for OTG events (ID/BSV) and for
 	 * DP and DM linestate transitions during low power mode.
@@ -2700,21 +2744,13 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		enable_irq_wake(mdwc->pmic_id_irq);
 	}
 
-	if (of_property_read_bool(node, "qcom,reset_hsphy_sleep_clk_on_init")) {
-		ret = clk_reset(mdwc->hsphy_sleep_clk, CLK_RESET_ASSERT);
+	mdwc->reset_hsphy_sleep_clk = of_property_read_bool(node,
+					"qcom,reset_hsphy_sleep_clk_on_init");
+	if (mdwc->reset_hsphy_sleep_clk) {
+		ret = dwc3_hsphy_reset(mdwc);
 		if (ret) {
-			dev_err(&pdev->dev,
-				"hsphy_sleep_clk assert failed\n");
-			return ret;
-		}
-
-		usleep_range(1000, 1200);
-
-		ret = clk_reset(mdwc->hsphy_sleep_clk, CLK_RESET_DEASSERT);
-		if (ret) {
-			dev_err(&pdev->dev,
-				"hsphy_sleep_clk reset deassert failed\n");
-			return ret;
+			dev_err(&pdev->dev, "hsphy_sleep_clk reset failed\n");
+			goto put_dwc3;
 		}
 	}
 

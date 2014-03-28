@@ -239,6 +239,8 @@ static struct sk_buff *gbam_alloc_skb_from_pool(struct gbam_port *port)
 		skb = alloc_skb(bam_mux_rx_req_size + BAM_MUX_HDR, GFP_ATOMIC);
 		if (!skb)
 			pr_err("%s: alloc skb failed\n", __func__);
+		else
+			skb_reserve(skb, BAM_MUX_HDR);
 	} else {
 		pr_debug("%s: pull skb from pool\n", __func__);
 		skb = __skb_dequeue(&d->rx_skb_idle);
@@ -459,7 +461,8 @@ static void gbam_data_write_tobam(struct work_struct *w)
 	}
 
 	while (d->pending_with_bam < bam_pending_limit &&
-	       usb_bam_get_prod_granted(d->dst_connection_idx)) {
+			(d->trans != USB_GADGET_XPORT_BAM2BAM_IPA ||
+			usb_bam_get_prod_granted(d->dst_connection_idx))) {
 		skb =  __skb_dequeue(&d->rx_skb_q);
 		if (!skb)
 			break;
@@ -575,7 +578,8 @@ gbam_epout_complete(struct usb_ep *ep, struct usb_request *req)
 
 	if (queue) {
 		__skb_queue_tail(&d->rx_skb_q, skb);
-		if (!usb_bam_get_prod_granted(d->dst_connection_idx)) {
+		if ((d->trans == USB_GADGET_XPORT_BAM2BAM_IPA) &&
+			!usb_bam_get_prod_granted(d->dst_connection_idx)) {
 			list_add_tail(&req->list, &d->rx_idle);
 			spin_unlock(&port->port_lock_ul);
 			return;
@@ -605,8 +609,6 @@ gbam_epout_complete(struct usb_ep *ep, struct usb_request *req)
 		spin_unlock(&port->port_lock_ul);
 		return;
 	}
-	skb_reserve(skb, BAM_MUX_HDR);
-
 	req->buf = skb->data;
 	req->length = bam_mux_rx_req_size;
 	req->context = skb;
@@ -670,8 +672,6 @@ static void gbam_start_rx(struct gbam_port *port)
 		spin_lock_irqsave(&port->port_lock_ul, flags);
 		if (!skb)
 			break;
-		skb_reserve(skb, BAM_MUX_HDR);
-
 		list_del(&req->list);
 		req->buf = skb->data;
 		req->length = bam_mux_rx_req_size;

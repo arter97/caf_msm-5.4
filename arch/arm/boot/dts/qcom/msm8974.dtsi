@@ -14,7 +14,7 @@
 #include <dt-bindings/clock/msm-clocks-8974.h>
 
 / {
-	model = "Qualcomm MSM 8974";
+	model = "Qualcomm Technologies, Inc. MSM 8974";
 	compatible = "qcom,msm8974";
 	interrupt-parent = <&intc>;
 
@@ -1765,6 +1765,11 @@
 		qcom,msm-dai-q6-incall-music-rx {
 			compatible = "qcom,msm-dai-q6-dev";
 			qcom,msm-dai-q6-dev-id = <32773>;
+		};
+
+		qcom,msm-dai-q6-incall-music-2-rx {
+			compatible = "qcom,msm-dai-q6-dev";
+			qcom,msm-dai-q6-dev-id = <32770>;
 		};
 	};
 

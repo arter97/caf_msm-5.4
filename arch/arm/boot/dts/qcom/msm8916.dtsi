@@ -14,7 +14,7 @@
 #include <dt-bindings/clock/msm-clocks-8916.h>
 
 / {
-	model = "Qualcomm MSM8916";
+	model = "Qualcomm Technologies, Inc. MSM8916";
 	compatible = "qcom,msm8916";
 	qcom,msm-id = <206 0>;
 
@@ -167,6 +167,12 @@
 		reg = <0x4ab000 0x4>;
 	};
 
+	qcom,mpm2-sleep-counter@4a3000 {
+		compatible = "qcom,mpm2-sleep-counter";
+		reg = <0x4a3000 0x1000>;
+		clock-frequency = <32768>;
+	};
+
 	timer {
 		compatible = "arm,armv7-timer";
 		interrupts = <1 2 0xf08>,
@@ -299,7 +305,7 @@
 			<          0 0>,
 			<  400000000 1>,
 			<  800000000 2>,
-			< 1248000000 3>;
+			< 1190400000 3>;
 	};
 
 	qcom,cpubw {
@@ -324,8 +330,7 @@
 			 <  800000  1525>,
 			 <  998400  1525>,
 			 < 1094400  3051>,
-			 < 1190400  3051>,
-			 < 1248000  4066>;
+			 < 1190400  4066>;
 	};
 
 	qcom,sps {
@@ -722,7 +727,7 @@
 
 	qcom,msm-pcm-voice {
 		compatible = "qcom,msm-pcm-voice";
-		qcom,memory-constraint;
+		qcom,destroy-cvd;
 	};
 
 	qcom,msm-stub-codec {
@@ -1146,6 +1151,7 @@
 		clock-names = "xo", "rf_clk";
 
 		qcom,has-autodetect-xo;
+		qcom,wlan-rx-buff-count = <512>;
 		qcom,is-pronto-vt;
 		qcom,has-pronto-hw;
 		qcom,wcnss-adc_tm = <&pm8916_adc_tm>;
@@ -1176,10 +1182,33 @@
                 qcom,bam-consumer-pipe-index = <8>;
                 qcom,bam-producer-pipe-index = <9>;
                 qcom,master-id = <86>;
+
+		lattice,spi-usb@0 {
+			compatible = "lattice,ice40-spi-usb";
+			reg = <0>;
+			spi-max-frequency = <50000000>;
+			spi-cpol = <1>;
+			spi-cpha = <1>;
+			core-vcc-supply = <&pm8916_l2>;
+			spi-vcc-supply = <&pm8916_l5>;
+			lattice,reset-gpio = <&msm_gpio 3 0>;
+			lattice,slave-select-gpio = <&msm_gpio 10 0>;
+			lattice,config-done-gpio = <&msm_gpio 1 0>;
+			lattice,vcc-en-gpio = <&msm_gpio 114 0>;
+			lattice,clk-en-gpio = <&msm_gpio 0 0>;
+
+			clocks = <&clock_rpm clk_bb_clk2_pin>;
+			clock-names = "xo";
+			pinctrl-names = "default", "sleep";
+			pinctrl-0 = <&ice40_default>;
+			pinctrl-1 = <&ice40_sleep>;
+		};
         };
 
 	i2c_0: i2c@78b6000 { /* BLSP1 QUP2 */
 		compatible = "qcom,i2c-msm-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
 		reg-names = "qup_phys_addr", "bam_phys_addr";
 		reg = <0x78b6000 0x600>,
 		      <0x7884000 0x23000>;
@@ -1202,6 +1231,8 @@
 
 	i2c_5: i2c@78b9000 { /* BLSP1 QUP5 */
 		compatible = "qcom,i2c-msm-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
 		reg-names = "qup_phys_addr", "bam_phys_addr";
 		reg = <0x78b9000 0x600>,
 		      <0x7884000 0x23000>;
@@ -1225,7 +1256,7 @@
 	i2c_6: i2c@78ba000 { /* BLSP1 QUP6 */
 		compatible = "qcom,i2c-msm-v2";
 		#address-cells=<1>;
-		#sice-cells=<0>;
+		#size-cells=<0>;
 		cell-index = <6>;
 		reg-names = "qup_phys_addr", "bam_phys_addr";
 		reg = <0x78ba000 0x1000>,

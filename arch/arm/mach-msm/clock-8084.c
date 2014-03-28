@@ -2722,6 +2722,7 @@ static struct branch_clk gcc_pcie_0_pipe_clk = {
 	.cbcr_reg = PCIE_0_PIPE_CBCR,
 	.has_sibling = 0,
 	.base = &virt_bases[GCC_BASE],
+	.halt_check = DELAY,
 	.c = {
 		.parent = &pcie_0_pipe_clk_src.c,
 		.dbg_name = "gcc_pcie_0_pipe_clk",
@@ -2779,6 +2780,7 @@ static struct branch_clk gcc_pcie_1_pipe_clk = {
 	.cbcr_reg = PCIE_1_PIPE_CBCR,
 	.has_sibling = 0,
 	.base = &virt_bases[GCC_BASE],
+	.halt_check = DELAY,
 	.c = {
 		.parent = &pcie_1_pipe_clk_src.c,
 		.dbg_name = "gcc_pcie_1_pipe_clk",
@@ -3139,6 +3141,7 @@ static struct branch_clk gcc_ufs_rx_cfg_clk = {
 static struct branch_clk gcc_ufs_rx_symbol_0_clk = {
 	.cbcr_reg = UFS_RX_SYMBOL_0_CBCR,
 	.base = &virt_bases[GCC_BASE],
+	.halt_check = DELAY,
 	.c = {
 		.dbg_name = "gcc_ufs_rx_symbol_0_clk",
 		.ops = &clk_ops_branch,
@@ -3149,6 +3152,7 @@ static struct branch_clk gcc_ufs_rx_symbol_0_clk = {
 static struct branch_clk gcc_ufs_rx_symbol_1_clk = {
 	.cbcr_reg = UFS_RX_SYMBOL_1_CBCR,
 	.base = &virt_bases[GCC_BASE],
+	.halt_check = DELAY,
 	.c = {
 		.dbg_name = "gcc_ufs_rx_symbol_1_clk",
 		.ops = &clk_ops_branch,
@@ -3173,6 +3177,7 @@ static struct branch_clk gcc_ufs_tx_cfg_clk = {
 static struct branch_clk gcc_ufs_tx_symbol_0_clk = {
 	.cbcr_reg = UFS_TX_SYMBOL_0_CBCR,
 	.base = &virt_bases[GCC_BASE],
+	.halt_check = DELAY,
 	.c = {
 		.dbg_name = "gcc_ufs_tx_symbol_0_clk",
 		.ops = &clk_ops_branch,
@@ -3183,6 +3188,7 @@ static struct branch_clk gcc_ufs_tx_symbol_0_clk = {
 static struct branch_clk gcc_ufs_tx_symbol_1_clk = {
 	.cbcr_reg = UFS_TX_SYMBOL_1_CBCR,
 	.base = &virt_bases[GCC_BASE],
+	.halt_check = DELAY,
 	.c = {
 		.dbg_name = "gcc_ufs_tx_symbol_1_clk",
 		.ops = &clk_ops_branch,
@@ -6476,16 +6482,12 @@ static struct clk_lookup apq_clocks_8084[] = {
 	CLK_LOOKUP("iface_clk", camss_vfe_vfe_ahb_clk.c,
 						"fda04000.qcom,cpp"),
 	/* Camera Sensor Clocks */
-	CLK_LOOKUP("cam_src_clk", mclk0_clk_src.c, "20.qcom,camera"),
 	CLK_LOOKUP("cam_src_clk", mclk0_clk_src.c, "0.qcom,camera"),
 	CLK_LOOKUP("",	mclk1_clk_src.c,	""),
-	CLK_LOOKUP("cam_src_clk",	mclk2_clk_src.c, "6d.qcom,camera"),
 	CLK_LOOKUP("cam_src_clk",	mclk2_clk_src.c, "1.qcom,camera"),
 	CLK_LOOKUP("",	mclk3_clk_src.c,	""),
-	CLK_LOOKUP("cam_clk", camss_mclk0_clk.c, "20.qcom,camera"),
 	CLK_LOOKUP("cam_clk", camss_mclk0_clk.c, "0.qcom,camera"),
 	CLK_LOOKUP("",	camss_mclk1_clk.c,	""),
-	CLK_LOOKUP("cam_clk", camss_mclk2_clk.c, "6d.qcom,camera"),
 	CLK_LOOKUP("cam_clk", camss_mclk2_clk.c, "1.qcom,camera"),
 	CLK_LOOKUP("",	camss_mclk3_clk.c,	""),
 
@@ -6542,7 +6544,8 @@ static struct clk_lookup apq_clocks_8084[] = {
 						"fdd00000.qcom,ocmem"),
 	CLK_LOOKUP("core_clk",	oxili_gfx3d_clk.c, "fdb00000.qcom,kgsl-3d0"),
 	CLK_LOOKUP("iface_clk",	oxilicx_ahb_clk.c, "fdb00000.qcom,kgsl-3d0"),
-	CLK_LOOKUP("",	oxili_rbbmtimer_clk.c, ""),
+	CLK_LOOKUP("rbbmtimer_clk", oxili_rbbmtimer_clk.c,
+						"fdb00000.qcom,kgsl-3d0"),
 
 	CLK_LOOKUP("",	venus0_ahb_clk.c,	""),
 	CLK_LOOKUP("",	venus0_axi_clk.c,	""),
