@@ -31,6 +31,8 @@
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
 
+#include <mach/socinfo.h>
+#include "../../../arch/arm/mach-msm/devices.h"
 #include "msm_fb.h"
 #include "mdp4.h"
 
@@ -73,7 +75,10 @@ static void lvds_init(struct msm_fb_data_type *mfd)
 		MDP_OUTP(MDP_BASE + 0xc3000, 0x08);
 		MDP_OUTP(MDP_BASE + 0xc3004, 0x4c);
 		MDP_OUTP(MDP_BASE + 0xc3008, 0x30);
-		MDP_OUTP(MDP_BASE + 0xc300c, 0xc3);
+		if (machine_is_apq8064_mplatform())
+			MDP_OUTP(MDP_BASE + 0xc300c, 0xc7);
+		else
+			MDP_OUTP(MDP_BASE + 0xc300c, 0xc3);
 		MDP_OUTP(MDP_BASE + 0xc3014, 0x10);
 		MDP_OUTP(MDP_BASE + 0xc3018, 0x04);
 		MDP_OUTP(MDP_BASE + 0xc301c, 0x62);

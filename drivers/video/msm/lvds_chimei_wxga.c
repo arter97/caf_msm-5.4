@@ -13,6 +13,8 @@
 #include "msm_fb.h"
 #include <linux/pwm.h>
 #include <linux/mfd/pm8xxx/pm8921.h>
+#include <mach/socinfo.h>
+#include "../../../arch/arm/mach-msm/devices.h"
 
 #define LVDS_CHIMEI_PWM_FREQ_HZ 300
 #define LVDS_CHIMEI_PWM_PERIOD_USEC (USEC_PER_SEC / LVDS_CHIMEI_PWM_FREQ_HZ)
@@ -126,37 +128,75 @@ static int __init lvds_chimei_wxga_init(void)
 		return ret;
 
 	pinfo = &lvds_chimei_panel_data.panel_info;
-	pinfo->xres = 1366;
-	pinfo->yres = 768;
-	MSM_FB_SINGLE_MODE_PANEL(pinfo);
-	pinfo->type = LVDS_PANEL;
-	pinfo->pdest = DISPLAY_1;
-	pinfo->wait_cycle = 0;
-	pinfo->bpp = 24;
-	pinfo->fb_num = 2;
-	pinfo->clk_rate = 79400000;
-	pinfo->bl_max = 255;
-	pinfo->bl_min = 1;
+	if (machine_is_apq8064_mplatform()) {
+		pinfo->xres = 800;
+		pinfo->yres = 480;
+		MSM_FB_SINGLE_MODE_PANEL(pinfo);
+		pinfo->type = LVDS_PANEL;
+		pinfo->pdest = DISPLAY_1;
+		pinfo->wait_cycle = 0;
+		pinfo->bpp = 24;
+		pinfo->fb_num = 2;
+		pinfo->clk_rate = 74250000;
+		pinfo->bl_max = 255;
+		pinfo->bl_min = 1;
+		pinfo->lcdc.h_back_porch = 35;
+		pinfo->lcdc.h_front_porch = 10;
+		pinfo->lcdc.h_pulse_width = 128;
+		pinfo->lcdc.v_back_porch = 5;
+		pinfo->lcdc.v_front_porch = 10;
 
-	/*
-	 * this panel is operated by de,
-	 * vsycn and hsync are ignored
-	 */
-	pinfo->lcdc.h_back_porch = 0;
-	pinfo->lcdc.h_front_porch = 194;
-	pinfo->lcdc.h_pulse_width = 40;
-	pinfo->lcdc.v_back_porch = 0;
-	pinfo->lcdc.v_front_porch = 38;
-	pinfo->lcdc.v_pulse_width = 20;
-	pinfo->lcdc.underflow_clr = 0xff;
-	pinfo->lcdc.hsync_skew = 0;
-	pinfo->lvds.channel_mode = LVDS_SINGLE_CHANNEL_MODE;
+		pinfo->lcdc.v_pulse_width = 2;
+		pinfo->lcdc.underflow_clr = 0xff;
+		pinfo->lcdc.hsync_skew = 0;
+		pinfo->lvds.channel_mode =
+			LVDS_SINGLE_CHANNEL_MODE;
 
-	/* Set border color, padding only for reducing active display region */
-	pinfo->lcdc.border_clr = 0x0;
-	pinfo->lcdc.xres_pad = 0;
-	pinfo->lcdc.yres_pad = 0;
+		/* Set border color,
+		 * padding only for reducing active
+		 * display region
+		 */
+		pinfo->lcdc.border_clr = 0x0;
+		pinfo->lcdc.xres_pad = 0;
+		pinfo->lcdc.yres_pad = 0;
 
+	} else {
+		pinfo->xres = 1366;
+		pinfo->yres = 768;
+		MSM_FB_SINGLE_MODE_PANEL(pinfo);
+		pinfo->type = LVDS_PANEL;
+		pinfo->pdest = DISPLAY_1;
+		pinfo->wait_cycle = 0;
+		pinfo->bpp = 24;
+		pinfo->fb_num = 2;
+		pinfo->clk_rate = 79400000;
+		pinfo->bl_max = 255;
+		pinfo->bl_min = 1;
+
+		/*
+		 * this panel is operated by de,
+		 * vsycn and hsync are ignored
+		 */
+		pinfo->lcdc.h_back_porch = 0;
+		pinfo->lcdc.h_front_porch = 194;
+		pinfo->lcdc.h_pulse_width = 40;
+		pinfo->lcdc.v_back_porch = 0;
+		pinfo->lcdc.v_front_porch = 38;
+		pinfo->lcdc.v_pulse_width = 20;
+		pinfo->lcdc.underflow_clr = 0xff;
+		pinfo->lcdc.hsync_skew = 0;
+		pinfo->lvds.channel_mode =
+			LVDS_SINGLE_CHANNEL_MODE;
+
+		/*
+		 * Set border color,
+		 * padding only for reducing active
+		 * display region
+		 */
+		pinfo->lcdc.border_clr = 0x0;
+		pinfo->lcdc.xres_pad = 0;
+		pinfo->lcdc.yres_pad = 0;
+	}
 	ret = platform_device_register(&this_device);
 	if (ret)
 		platform_driver_unregister(&this_driver);
