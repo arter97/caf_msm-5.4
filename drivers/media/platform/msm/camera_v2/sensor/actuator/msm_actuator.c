@@ -19,7 +19,7 @@
 
 DEFINE_MSM_MUTEX(msm_actuator_mutex);
 
-/*#define MSM_ACUTUATOR_DEBUG*/
+#define MSM_ACUTUATOR_DEBUG
 #undef CDBG
 #ifdef MSM_ACUTUATOR_DEBUG
 #define CDBG(fmt, args...) pr_err(fmt, ##args)
@@ -29,11 +29,12 @@ DEFINE_MSM_MUTEX(msm_actuator_mutex);
 
 static struct msm_actuator msm_vcm_actuator_table;
 static struct msm_actuator msm_piezo_actuator_table;
-
+static struct msm_actuator msm_ois_actuator_table;
 static struct i2c_driver msm_actuator_i2c_driver;
 static struct msm_actuator *actuators[] = {
 	&msm_vcm_actuator_table,
 	&msm_piezo_actuator_table,
+	&msm_ois_actuator_table,
 };
 
 static int32_t msm_actuator_piezo_set_default_focus(
@@ -127,31 +128,70 @@ static void msm_actuator_parse_i2c_params(struct msm_actuator_ctrl_t *a_ctrl,
 }
 
 static int32_t msm_actuator_init_focus(struct msm_actuator_ctrl_t *a_ctrl,
-	uint16_t size, enum msm_actuator_data_type type,
-	struct reg_settings_t *settings)
+	uint16_t size, struct reg_settings_t *settings)
 {
 	int32_t rc = -EFAULT;
 	int32_t i = 0;
-	CDBG("Enter\n");
+	CDBG("Enter Size is %d \n", size);
 
 	for (i = 0; i < size; i++) {
-		switch (type) {
-		case MSM_ACTUATOR_BYTE_DATA:
-			rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_write(
-				&a_ctrl->i2c_client,
-				settings[i].reg_addr,
-				settings[i].reg_data, MSM_CAMERA_I2C_BYTE_DATA);
-			break;
-		case MSM_ACTUATOR_WORD_DATA:
-			rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_write(
-				&a_ctrl->i2c_client,
-				settings[i].reg_addr,
-				settings[i].reg_data, MSM_CAMERA_I2C_WORD_DATA);
-			break;
-		default:
-			pr_err("Unsupport data type: %d\n", type);
+		CDBG("For the %dth operation i2c_operation %d data_type %d reg_addr %x reg_data %x\n",
+				i, settings[i].i2c_operation, settings[i].data_type,
+				settings[i].reg_addr, settings[i].reg_data);
+		switch (settings[i].i2c_operation) {
+		case MSM_ACT_WRITE: {
+			switch (settings[i].data_type) {
+			case MSM_ACTUATOR_BYTE_DATA:
+				CDBG("WORD_DATA\n");
+				rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_write(
+					&a_ctrl->i2c_client,
+					settings[i].reg_addr,
+					settings[i].reg_data,
+					MSM_CAMERA_I2C_BYTE_DATA);
+				break;
+			case MSM_ACTUATOR_WORD_DATA:
+				CDBG("BYTE_DATA\n");
+				rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_write(
+					&a_ctrl->i2c_client,
+					settings[i].reg_addr,
+					settings[i].reg_data,
+					MSM_CAMERA_I2C_WORD_DATA);
+				break;
+			default:
+				pr_err("Unsupport data type: %d\n",
+					settings[i].data_type);
+				break;
+			}
 			break;
 		}
+		case MSM_ACT_POLL: {
+			switch (settings[i].data_type) {
+			case MSM_ACTUATOR_BYTE_DATA:
+				rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_poll(
+					&a_ctrl->i2c_client,
+					settings[i].reg_addr,
+					settings[i].reg_data,
+					MSM_CAMERA_I2C_BYTE_DATA);
+				break;
+			case MSM_ACTUATOR_WORD_DATA:
+				rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_poll(
+					&a_ctrl->i2c_client,
+					settings[i].reg_addr,
+					settings[i].reg_data,
+					MSM_CAMERA_I2C_WORD_DATA);
+				break;
+			default:
+				pr_err("Unsupport data type: %d\n",
+					settings[i].i2c_operation);
+				break;
+			}
+			break;
+		}
+		}
+
+		if (0 != settings[i].delay)
+			msleep(settings[i].delay);
+
 		if (rc < 0)
 			break;
 	}
@@ -602,7 +642,6 @@ static int32_t msm_actuator_init(struct msm_actuator_ctrl_t *a_ctrl,
 			}
 			rc = a_ctrl->func_tbl->actuator_init_focus(a_ctrl,
 				set_info->actuator_params.init_setting_size,
-				a_ctrl->i2c_data_type,
 				init_settings);
 			kfree(init_settings);
 			if (rc < 0) {
@@ -710,6 +749,7 @@ static struct msm_camera_i2c_fn_t msm_sensor_cci_func_tbl = {
 	.i2c_write_table_w_microdelay =
 		msm_camera_cci_i2c_write_table_w_microdelay,
 	.i2c_util = msm_sensor_cci_i2c_util,
+	.i2c_poll =  msm_camera_cci_i2c_poll,
 };
 
 static struct msm_camera_i2c_fn_t msm_sensor_qup_func_tbl = {
@@ -720,6 +760,7 @@ static struct msm_camera_i2c_fn_t msm_sensor_qup_func_tbl = {
 	.i2c_write_seq_table = msm_camera_qup_i2c_write_seq_table,
 	.i2c_write_table_w_microdelay =
 		msm_camera_qup_i2c_write_table_w_microdelay,
+	.i2c_poll = msm_camera_qup_i2c_poll,
 };
 
 static int msm_actuator_open(struct v4l2_subdev *sd,
@@ -1048,6 +1089,18 @@ static struct msm_actuator msm_piezo_actuator_table = {
 	},
 };
 
+static struct msm_actuator msm_ois_actuator_table = {
+    .act_type = ACTUATOR_OIS,
+    .func_tbl = {
+        .actuator_init_step_table = msm_actuator_init_step_table,
+        .actuator_move_focus = msm_actuator_move_focus,
+        .actuator_write_focus = msm_actuator_write_focus,
+        .actuator_set_default_focus = msm_actuator_set_default_focus,
+        .actuator_init_focus = msm_actuator_init_focus,
+	.actuator_set_position = msm_actuator_set_position,
+        .actuator_parse_i2c_params = msm_actuator_parse_i2c_params,
+    },
+};
 module_init(msm_actuator_init_module);
 MODULE_DESCRIPTION("MSM ACTUATOR");
 MODULE_LICENSE("GPL v2");

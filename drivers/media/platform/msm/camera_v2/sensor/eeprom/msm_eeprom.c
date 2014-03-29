@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -172,6 +172,15 @@ int32_t read_eeprom_memory(struct msm_eeprom_ctrl_t *e_ctrl)
 	emap = eb_info->eeprom_map;
 
 	for (j = 0; j < eb_info->num_blocks; j++) {
+
+		if (emap[j].saddr.addr) {
+			eb_info->i2c_slaveaddr = emap[j].saddr.addr;
+			e_ctrl->i2c_client.cci_client->sid =
+					eb_info->i2c_slaveaddr >> 1;
+			pr_err("qcom,slave-addr = 0x%X\n",
+				eb_info->i2c_slaveaddr);
+		}
+
 		if (emap[j].page.valid_size) {
 			e_ctrl->i2c_client.addr_type = emap[j].page.addr_t;
 			rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write(
@@ -344,6 +353,14 @@ static int msm_eeprom_alloc_memory_map(struct msm_eeprom_ctrl_t *e_ctrl,
 			pr_err("%s: failed %d\n", __func__, __LINE__);
 			goto out;
 		}
+		pr_err("EEPROM Page%x\n", eb->eeprom_map[i].page.valid_size);
+		pr_err("%x\n", eb->eeprom_map[i].page.addr);
+		pr_err("%x\n", eb->eeprom_map[i].page.addr_t);
+		pr_err("%x\n", eb->eeprom_map[i].page.data);
+		pr_err("%x\n", eb->eeprom_map[i].page.data_t);
+		pr_err("%x\n", eb->eeprom_map[i].page.delay);
+		
+		 
 
 		snprintf(property, 14, "qcom,pageen%d", i);
 		rc = of_property_read_u32_array(of, property,
@@ -358,6 +375,18 @@ static int msm_eeprom_alloc_memory_map(struct msm_eeprom_ctrl_t *e_ctrl,
 			pr_err("%s failed %d\n", __func__, __LINE__);
 			goto out;
 		}
+		pr_err("EEPROM Poll%x\n", eb->eeprom_map[i].poll.valid_size);
+		pr_err("%x\n", eb->eeprom_map[i].poll.addr);
+		pr_err("%x\n", eb->eeprom_map[i].poll.addr_t);
+		pr_err("%x\n", eb->eeprom_map[i].poll.data);
+		pr_err("%x\n", eb->eeprom_map[i].poll.data_t);
+		pr_err("%x\n", eb->eeprom_map[i].poll.delay);
+		
+		snprintf(property, 12, "qcom,saddr%d", i);
+		rc = of_property_read_u32(of, property,
+			(uint32_t *) &eb->eeprom_map[i].saddr.addr);
+		if (rc < 0)
+			CDBG("%s: saddr not needed - block %d\n", __func__, i);
 
 		snprintf(property, 12, "qcom,mem%d", i);
 		rc = of_property_read_u32_array(of, property,
@@ -366,6 +395,13 @@ static int msm_eeprom_alloc_memory_map(struct msm_eeprom_ctrl_t *e_ctrl,
 			pr_err("%s failed %d\n", __func__, __LINE__);
 			goto out;
 		}
+		pr_err("EEPROM Map%x\n", eb->eeprom_map[i].mem.valid_size);
+		pr_err("%x\n", eb->eeprom_map[i].mem.addr);
+		pr_err("%x\n", eb->eeprom_map[i].mem.addr_t);
+		pr_err("%x\n", eb->eeprom_map[i].mem.data);
+		pr_err("%x\n", eb->eeprom_map[i].mem.data_t);
+		pr_err("%x\n", eb->eeprom_map[i].mem.delay);
+		
 		e_ctrl->num_bytes += eb->eeprom_map[i].mem.valid_size;
 	}
 
