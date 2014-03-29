@@ -248,9 +248,11 @@
 #define clk_gcc_usb_hs_ahb_clk 0x72ce8032
 #define clk_gcc_usb_hs_system_clk 0xa11972e5
 #define clk_gcc_usb_phy_cfg_ahb2phy_clk 0xd1231a0e
-#define clk_gcc_debug_mux 0x8121ac15
 
 /* clock_mmss controlled clocks */
+#define clk_mmsscc_xo 0x05e63704
+#define clk_mmsscc_gpll0 0xe900c515
+#define clk_mmsscc_mmssnoc_ahb 0x7b4bd6f7
 #define clk_mmpll0 0xdd83b751
 #define clk_mmpll0_out_main 0x2f996a31
 #define clk_mmpll4 0x22c063c1
@@ -367,5 +369,8 @@
 #define clk_venus0_core1_vcodec_clk 0x6324869c
 #define clk_venus0_core2_vcodec_clk 0x24fa20a3
 #define clk_mmss_debug_mux 0xe646ffda
+
+/* clock_debug controlled clocks */
+#define clk_gcc_debug_mux 0x8121ac15
 
 #endif

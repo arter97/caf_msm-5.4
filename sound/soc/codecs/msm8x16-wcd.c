@@ -206,7 +206,7 @@ static int get_spmi_msm8x16_wcd_device_info(u16 *reg,
 static int msm8x16_wcd_ahb_write_device(u16 reg, u8 *value, u32 bytes)
 {
 	u32 temp = ((u32)(*value)) & 0x000000FF;
-	u32 offset = (((u32)(reg)) ^ 0x00000400) & 0x00000FFF;
+	u32 offset = (((u32)(reg)) ^ 0x00000200) & 0x00000FFF;
 	bool q6_state = false;
 
 	q6_state = q6core_is_adsp_ready();
@@ -224,7 +224,7 @@ static int msm8x16_wcd_ahb_write_device(u16 reg, u8 *value, u32 bytes)
 static int msm8x16_wcd_ahb_read_device(u16 reg, u32 bytes, u8 *value)
 {
 	u32 temp;
-	u32 offset = (((u32)(reg)) ^ 0x00000400) & 0x00000FFF;
+	u32 offset = (((u32)(reg)) ^ 0x00000200) & 0x00000FFF;
 	bool q6_state = false;
 
 	q6_state = q6core_is_adsp_ready();
@@ -505,7 +505,7 @@ static struct msm8x16_wcd_pdata *msm8x16_wcd_populate_dt_pdata(
 
 	BUG_ON(static_cnt <= 0 || ond_cnt < 0);
 	if ((static_cnt + ond_cnt) > ARRAY_SIZE(pdata->regulator)) {
-		dev_err(dev, "%s: Num of supplies %u > max supported %u\n",
+		dev_err(dev, "%s: Num of supplies %u > max supported %zd\n",
 			__func__, static_cnt, ARRAY_SIZE(pdata->regulator));
 		ret = -EINVAL;
 		goto err;
@@ -1394,8 +1394,6 @@ static int msm8x16_wcd_codec_enable_spk_pa(struct snd_soc_dapm_widget *w,
 		snd_soc_update_bits(codec,
 			MSM8X16_WCD_A_ANALOG_SPKR_PWRSTG_CTL, 0x01, 0x01);
 		snd_soc_update_bits(codec,
-			MSM8X16_WCD_A_ANALOG_RX_COM_BIAS_DAC, 0x80, 0x80);
-		snd_soc_update_bits(codec,
 			MSM8X16_WCD_A_ANALOG_SPKR_DAC_CTL, 0x10, 0x10);
 		usleep_range(CODEC_DELAY_1_MS, CODEC_DELAY_1_1_MS);
 		snd_soc_update_bits(codec,
@@ -1425,8 +1423,6 @@ static int msm8x16_wcd_codec_enable_spk_pa(struct snd_soc_dapm_widget *w,
 		usleep_range(CODEC_DELAY_1_MS, CODEC_DELAY_1_1_MS);
 		snd_soc_update_bits(codec,
 			MSM8X16_WCD_A_ANALOG_SPKR_PWRSTG_CTL, 0x01, 0x00);
-		snd_soc_update_bits(codec,
-			MSM8X16_WCD_A_ANALOG_RX_COM_BIAS_DAC, 0x80, 0x00);
 		snd_soc_update_bits(codec,
 			MSM8X16_WCD_A_DIGITAL_CDC_ANA_CLK_CTL, 0x10, 0x00);
 		break;
@@ -1755,19 +1751,28 @@ static int msm8x16_wcd_codec_enable_rx_bias(struct snd_soc_dapm_widget *w,
 	struct snd_kcontrol *kcontrol, int event)
 {
 	struct snd_soc_codec *codec = w->codec;
+	struct msm8x16_wcd_priv *msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
 
 	dev_dbg(codec->dev, "%s %d\n", __func__, event);
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		snd_soc_update_bits(codec, MSM8X16_WCD_A_ANALOG_RX_COM_BIAS_DAC,
-			    0x80, 0x80);
+		msm8x16_wcd->rx_bias_count++;
+		if (msm8x16_wcd->rx_bias_count == 1)
+			snd_soc_update_bits(codec,
+					MSM8X16_WCD_A_ANALOG_RX_COM_BIAS_DAC,
+					0x81, 0x81);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
-		snd_soc_update_bits(codec, MSM8X16_WCD_A_ANALOG_RX_COM_BIAS_DAC,
-			    0x80, 0x00);
+		msm8x16_wcd->rx_bias_count--;
+		if (msm8x16_wcd->rx_bias_count == 0)
+			snd_soc_update_bits(codec,
+					MSM8X16_WCD_A_ANALOG_RX_COM_BIAS_DAC,
+					0x81, 0x00);
 		break;
 	}
+	dev_dbg(codec->dev, "%s bias_count = %d\n", __func__,
+			msm8x16_wcd->rx_bias_count);
 	return 0;
 }
 
@@ -2473,13 +2478,13 @@ static const struct snd_soc_dapm_widget msm8x16_wcd_dapm_widgets[] = {
 		msm8x16_wcd_codec_enable_charge_pump, SND_SOC_DAPM_PRE_PMU |
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
 
-	SND_SOC_DAPM_SUPPLY("RX_BIAS", MSM8X16_WCD_A_ANALOG_RX_COM_BIAS_DAC,
+	SND_SOC_DAPM_SUPPLY("RX_BIAS", MSM8X16_WCD_A_ANALOG_RX_HPHL_REG_VIRT,
 		0, 0,
 		msm8x16_wcd_codec_enable_rx_bias, SND_SOC_DAPM_PRE_PMU |
 		SND_SOC_DAPM_POST_PMD),
 
-	SND_SOC_DAPM_SUPPLY("SPK_RX_BIAS", MSM8X16_WCD_A_ANALOG_RX_COM_BIAS_DAC,
-		7, 0,
+	SND_SOC_DAPM_SUPPLY("SPK_RX_BIAS",
+		MSM8X16_WCD_A_ANALOG_RX_HPHL_REG_VIRT, 0, 0,
 		msm8x16_wcd_codec_enable_rx_bias, SND_SOC_DAPM_PRE_PMU |
 		SND_SOC_DAPM_POST_PMD),
 
@@ -3035,8 +3040,8 @@ static int msm8x16_wcd_spmi_probe(struct spmi_device *spmi)
 	}
 
 
-	dev_dbg(&spmi->dev, "%s(%d):start addr = 0x%x\n",
-		__func__, __LINE__,  wcd_resource->start);
+	dev_dbg(&spmi->dev, "%s(%d):start addr = 0x%pa\n",
+		__func__, __LINE__,  &wcd_resource->start);
 
 	if (wcd_resource->start != TOMBAK_CORE_0_SPMI_ADDR)
 		goto rtn;

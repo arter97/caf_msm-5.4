@@ -167,6 +167,7 @@ Required properties:
                             FM Rx and TX port ID values from 12292 to 12293
                             incall record Rx and TX port ID values from 32771 to 32772
                             inCall Music Delivery port ID is 32773
+			    incall Music 2 Delivery port ID is 32770
 
 * msm-auxpcm
 
@@ -431,6 +432,11 @@ Example:
 		qcom,msm-dai-q6-incall-music-rx {
 			compatible = "qcom,msm-dai-q6-dev";
 			qcom,msm-dai-q6-dev-id = <32773>;
+		};
+
+		qcom,msm-dai-q6-incall-music-2-rx {
+			compatible = "qcom,msm-dai-q6-dev";
+			qcom,msm-dai-q6-dev-id = <32770>;
 		};
 	};
 
@@ -1091,3 +1097,16 @@ sound {
 	pinctrl-2 = <&pmx_pri_mi2s_sleep &pmx_quad_mi2s_active>;
 	pinctrl-3 = <&pmx_pri_mi2s_sleep &pmx_quad_mi2s_sleep>;
 };
+
+* MSMPLUTONIUM ASoC Machine driver
+
+Required properties:
+- compatible : "qcom,msmplutonium-audio-tomtom"
+- qcom,model : The user-visible name of this sound card.
+
+Example:
+
+	sound {
+		compatible = "qcom,msmplutonium-asoc-snd";
+		qcom,model = "msmplutonium-tomtom-snd-card";
+	};

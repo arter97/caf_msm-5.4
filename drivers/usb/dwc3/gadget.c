@@ -59,6 +59,7 @@
 
 static void dwc3_gadget_usb2_phy_suspend(struct dwc3 *dwc, int suspend);
 static void dwc3_gadget_usb3_phy_suspend(struct dwc3 *dwc, int suspend);
+static void dwc3_gadget_wakeup_interrupt(struct dwc3 *dwc);
 
 /**
  * dwc3_gadget_set_test_mode - Enables USB2 Test Modes
@@ -198,14 +199,10 @@ int dwc3_gadget_resize_tx_fifos(struct dwc3 *dwc)
 	 * FIFO space. Also consider the case where TxFIFO RAM space
 	 * may change dynamically based on the USB configuration.
 	 */
-	for (num = 0; num < DWC3_ENDPOINTS_NUM; num++) {
-		struct dwc3_ep	*dep = dwc->eps[num];
-		int		fifo_number = dep->number >> 1;
+	for (num = 0; num < dwc->num_in_eps; num++) {
+		struct dwc3_ep	*dep = dwc->eps[(num << 1) | 1];
 		int		mult = 1;
 		int		tmp;
-
-		if (!(dep->number & 1))
-			continue;
 
 		if (!(dep->flags & DWC3_EP_ENABLED))
 			continue;
@@ -265,8 +262,7 @@ int dwc3_gadget_resize_tx_fifos(struct dwc3 *dwc)
 			return -ENOMEM;
 		}
 
-		dwc3_writel(dwc->regs, DWC3_GTXFIFOSIZ(fifo_number),
-				fifo_size);
+		dwc3_writel(dwc->regs, DWC3_GTXFIFOSIZ(num), fifo_size);
 
 	}
 
@@ -1586,6 +1582,14 @@ static int dwc3_gadget_wakeup(struct usb_gadget *g)
 		ret = -EINVAL;
 	}
 
+	/*
+	 * According to DWC3 databook, the controller does not
+	 * trigger a wakeup event when remote-wakeup is used.
+	 * Hence, after remote-wakeup sequence is complete, and
+	 * the device is back at U0 state, it is required that
+	 * the resume sequence is initiated by SW.
+	 */
+	dwc3_gadget_wakeup_interrupt(dwc);
 out:
 	spin_unlock_irqrestore(&dwc->lock, flags);
 
@@ -2739,7 +2743,13 @@ static void dwc3_gadget_wakeup_interrupt(struct dwc3 *dwc)
 	 */
 
 	dbg_event(0xFF, "WAKEUP", 0);
+	/*
+	 * gadget_driver resume function might require some dwc3-gadget
+	 * operations, such as ep_enable. Hence, dwc->lock must be released.
+	 */
+	spin_unlock(&dwc->lock);
 	dwc->gadget_driver->resume(&dwc->gadget);
+	spin_lock(&dwc->lock);
 }
 
 static void dwc3_gadget_linksts_change_interrupt(struct dwc3 *dwc,
@@ -2833,7 +2843,14 @@ static void dwc3_gadget_suspend_interrupt(struct dwc3 *dwc,
 
 	if (next == DWC3_LINK_STATE_U3) {
 		dbg_event(0xFF, "SUSPEND", 0);
+		/*
+		 * gadget_driver suspend function might require some dwc3-gadget
+		 * operations, such as ep_disable. Hence, dwc->lock must be
+		 * released.
+		 */
+		spin_unlock(&dwc->lock);
 		dwc->gadget_driver->suspend(&dwc->gadget);
+		spin_lock(&dwc->lock);
 	}
 
 	dwc->link_state = next;

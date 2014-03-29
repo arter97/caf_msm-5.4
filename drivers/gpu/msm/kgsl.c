@@ -436,6 +436,7 @@ int kgsl_context_init(struct kgsl_device_private *dev_priv,
 {
 	int ret = 0, id;
 	struct kgsl_device *device = dev_priv->device;
+	char name[64];
 
 	idr_preload(GFP_KERNEL);
 	write_lock(&device->context_lock);
@@ -474,7 +475,8 @@ int kgsl_context_init(struct kgsl_device_private *dev_priv,
 	if (ret)
 		goto fail_free_id;
 
-	kgsl_add_event_group(&context->events, context);
+	snprintf(name, sizeof(name), "context-%d", id);
+	kgsl_add_event_group(&context->events, context, name);
 
 	return 0;
 fail_free_id:
@@ -3619,7 +3621,8 @@ err_put:
 static inline bool
 mmap_range_valid(unsigned long addr, unsigned long len)
 {
-	return ((ULONG_MAX - addr) > len) && ((addr + len) < TASK_SIZE);
+	return ((ULONG_MAX - addr) > len) && ((addr + len) <
+		KGSL_SVM_UPPER_BOUND);
 }
 
 /**
@@ -3696,7 +3699,15 @@ static int kgsl_check_gpu_addr_collision(
 			if (flag_top_down) {
 				addr = collision_entry->memdesc.gpuaddr - len;
 				if (addr > collision_entry->memdesc.gpuaddr) {
-					ret = -EOVERFLOW;
+					KGSL_CORE_ERR_ONCE(
+					"Underflow err ent:%x/%zx, addr:%lx/%lx align:%u",
+					collision_entry->memdesc.gpuaddr,
+					kgsl_memdesc_mmapsize(
+						&collision_entry->memdesc),
+					addr, len, align);
+					*gpumap_free_addr =
+						KGSL_SVM_UPPER_BOUND;
+					ret = -EAGAIN;
 					break;
 				}
 			} else {
@@ -3704,8 +3715,17 @@ static int kgsl_check_gpu_addr_collision(
 					kgsl_memdesc_mmapsize(
 						&collision_entry->memdesc);
 				/* overflow check */
-				if (addr < collision_entry->memdesc.gpuaddr) {
-					ret = -EOVERFLOW;
+				if (addr < collision_entry->memdesc.gpuaddr ||
+					!mmap_range_valid(addr, len)) {
+					KGSL_CORE_ERR_ONCE(
+					"Overflow err ent:%x/%zx, addr:%lx/%lx align:%u",
+					collision_entry->memdesc.gpuaddr,
+					kgsl_memdesc_mmapsize(
+						&collision_entry->memdesc),
+					addr, len, align);
+					*gpumap_free_addr =
+						KGSL_SVM_UPPER_BOUND;
+					ret = -EAGAIN;
 					break;
 				}
 			}
@@ -3951,7 +3971,7 @@ static int kgsl_mmap(struct file *file, struct vm_area_struct *vma)
 	if (ret)
 		return ret;
 
-	vma->vm_flags |= entry->memdesc.ops->vmflags(&entry->memdesc);
+	vma->vm_flags |= entry->memdesc.ops->vmflags;
 
 	vma->vm_private_data = entry;
 
@@ -4240,8 +4260,8 @@ int kgsl_device_platform_probe(struct kgsl_device *device)
 
 	device->events_wq = create_workqueue("kgsl-events");
 
-	kgsl_add_event_group(&device->global_events, NULL);
-	kgsl_add_event_group(&device->iommu_events, NULL);
+	kgsl_add_event_group(&device->global_events, NULL, "global");
+	kgsl_add_event_group(&device->iommu_events, NULL, "iommu");
 
 	/* Initalize the snapshot engine */
 	kgsl_device_snapshot_init(device);

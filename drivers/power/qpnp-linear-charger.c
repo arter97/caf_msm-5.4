@@ -31,6 +31,7 @@
 /* Interrupt offsets */
 #define INT_RT_STS_REG				0x10
 #define FAST_CHG_ON_IRQ                         BIT(5)
+#define OVERTEMP_ON_IRQ				BIT(4)
 #define BAT_TEMP_OK_IRQ                         BIT(1)
 #define BATT_PRES_IRQ                           BIT(0)
 
@@ -50,7 +51,8 @@
 #define CHG_VIN_MIN_REG				0x47
 #define CHG_CTRL_REG				0x49
 #define CHG_ENABLE				BIT(7)
-#define CHG_EN_MASK				BIT(7)
+#define CHG_FORCE_BATT_ON			BIT(0)
+#define CHG_EN_MASK				(BIT(7) | BIT(0))
 #define CHG_FAILED_REG				0x4A
 #define CHG_FAILED_BIT				BIT(7)
 #define CHG_VBAT_WEAK_REG			0x52
@@ -442,17 +444,14 @@ static int qpnp_lbc_charger_enable(struct qpnp_lbc_chip *chip, int reason,
 	if (!!chip->charger_disabled == !!disabled)
 		goto skip;
 
-	reg_val = !!disabled ? 0 : CHG_ENABLE;
+	reg_val = !!disabled ? CHG_FORCE_BATT_ON : CHG_ENABLE;
 	rc = qpnp_lbc_masked_write(chip, chip->chgr_base + CHG_CTRL_REG,
 				CHG_EN_MASK, reg_val);
 	if (rc) {
 		pr_err("Failed to %s charger rc=%d\n",
 				reg_val ? "enable" : "disable", rc);
 		return rc;
-	} else {
-		power_supply_set_online(chip->usb_psy, !disabled);
 	}
-
 skip:
 	chip->charger_disabled = disabled;
 	return rc;
@@ -1790,6 +1789,33 @@ static irqreturn_t qpnp_lbc_vbatdet_lo_irq_handler(int irq, void *_chip)
 	return IRQ_HANDLED;
 }
 
+static int qpnp_lbc_is_overtemp(struct qpnp_lbc_chip *chip)
+{
+	u8 reg_val;
+	int rc;
+
+	rc = qpnp_lbc_read(chip, chip->usb_chgpth_base + INT_RT_STS_REG,
+				&reg_val, 1);
+	if (rc) {
+		pr_err("Failed to read interrupt status rc=%d\n", rc);
+		return rc;
+	}
+
+	pr_debug("OVERTEMP rt status %x\n", reg_val);
+	return (reg_val & OVERTEMP_ON_IRQ) ? 1 : 0;
+}
+
+static irqreturn_t qpnp_lbc_usb_overtemp_irq_handler(int irq, void *_chip)
+{
+	struct qpnp_lbc_chip *chip = _chip;
+	int overtemp = qpnp_lbc_is_overtemp(chip);
+
+	pr_warn_ratelimited("charger %s temperature limit !!!\n",
+					overtemp ? "exceeds" : "within");
+
+	return IRQ_HANDLED;
+}
+
 #define SPMI_REQUEST_IRQ(chip, idx, rc, irq_name, threaded, flags, wake)\
 do {									\
 	if (rc)								\
@@ -1856,6 +1882,9 @@ static int qpnp_lbc_request_irqs(struct qpnp_lbc_chip *chip)
 	SPMI_REQUEST_IRQ(chip, USBIN_VALID, rc, usbin_valid, 0,
 			IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, 1);
 
+	SPMI_REQUEST_IRQ(chip, USB_OVER_TEMP, rc, usb_overtemp, 0,
+			IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, 0);
+
 	return 0;
 }
 
@@ -1893,10 +1922,17 @@ static int qpnp_lbc_get_irqs(struct qpnp_lbc_chip *chip, u8 subtype,
 	return 0;
 }
 
-/* Get initial state of charger */
+/* Get/Set initial state of charger */
 static void determine_initial_status(struct qpnp_lbc_chip *chip)
 {
-	qpnp_lbc_usbin_valid_irq_handler(chip->irqs[USBIN_VALID].irq, chip);
+	chip->usb_present = qpnp_lbc_is_usb_chg_plugged_in(chip);
+	power_supply_set_present(chip->usb_psy, chip->usb_present);
+	/*
+	 * Set USB psy online to avoid userspace from shutting down if battery
+	 * capacity is at zero and no chargers online.
+	 */
+	if (chip->usb_present)
+		power_supply_set_online(chip->usb_psy, 1);
 }
 
 static int qpnp_lbc_probe(struct spmi_device *spmi)
@@ -2099,7 +2135,7 @@ static int qpnp_lbc_probe(struct spmi_device *spmi)
 		goto unregister_batt;
 	}
 
-	/* Get charger's initial status */
+	/* Get/Set charger's initial status */
 	determine_initial_status(chip);
 
 	rc = qpnp_lbc_request_irqs(chip);

@@ -25,22 +25,20 @@
 
 #define KGSL_PWR_ON	0xFFFF
 
-#define KGSL_MAX_CLKS 6
+#define KGSL_MAX_CLKS 7
 
 /* Only two supported levels, min & max */
 #define KGSL_CONSTRAINT_PWR_MAXLEVELS 2
 
+#define KGSL_RBBMTIMER_CLK_FREQ	19200000
+
 struct platform_device;
 
 struct kgsl_clk_stats {
-	unsigned int old_clock_time[KGSL_MAX_PWRLEVELS];
-	unsigned int clock_time[KGSL_MAX_PWRLEVELS];
-	unsigned int on_time_old;
-	ktime_t start;
-	ktime_t stop;
-	unsigned int no_nap_cnt;
-	unsigned int elapsed;
-	unsigned int elapsed_old;
+	unsigned int busy;
+	unsigned int total;
+	unsigned int busy_old;
+	unsigned int total_old;
 };
 
 struct kgsl_pwr_constraint {
@@ -158,5 +156,6 @@ int kgsl_active_count_wait(struct kgsl_device *device, int count);
 void kgsl_pwrctrl_clk(struct kgsl_device *device, int state,
 				int requested_state);
 int kgsl_pwrctrl_slumber(struct kgsl_device *device);
+void kgsl_pwrctrl_busy_time(struct kgsl_device *device, u64 time, u64 busy);
 
 #endif /* __KGSL_PWRCTRL_H */
