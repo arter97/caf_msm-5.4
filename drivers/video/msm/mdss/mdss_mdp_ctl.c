@@ -79,8 +79,10 @@ static u32 __mdss_mdp_ctrl_perf_ovrd_helper(struct mdss_mdp_mixer *mixer,
 		if (pipe && pinfo) {
 			*npipe = *npipe + 1;
 			if ((pipe->src.w >= pipe->src.h) &&
-					(pipe->src.w >= pinfo->xres))
+					(pipe->src.w > pinfo->xres)) {
 				ovrd = 1;
+				break;
+			}
 		}
 	}
 
