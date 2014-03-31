@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1520,7 +1520,7 @@ static int __init msm_audio_init(void)
 	int ret;
 
 	if (socinfo_get_id() != 130) {
-		pr_err("%s: Not the right machine type\n", __func__);
+		pr_err("%s: Not mpq8064 machine type\n", __func__);
 		return -ENODEV;
 	}
 
