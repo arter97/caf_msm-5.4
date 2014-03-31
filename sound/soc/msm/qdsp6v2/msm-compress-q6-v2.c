@@ -271,13 +271,20 @@ static void compr_event_handler(uint32_t opcode,
 		uint32_t token, uint32_t *payload, void *priv)
 {
 	struct msm_compr_audio *prtd = priv;
-	struct snd_compr_stream *cstream = prtd->cstream;
-	struct audio_client *ac = prtd->audio_client;
+	struct snd_compr_stream *cstream;
+	struct audio_client *ac;
 	uint32_t chan_mode = 0;
 	uint32_t sample_rate = 0;
 	int bytes_available, stream_id;
 	uint32_t stream_index;
 	unsigned long flags;
+
+	if (!prtd) {
+		pr_err("%s: prtd is NULL\n", __func__);
+		return;
+	}
+	cstream = prtd->cstream;
+	ac = prtd->audio_client;
 
 	pr_debug("%s opcode =%08x\n", __func__, opcode);
 	switch (opcode) {
@@ -633,10 +640,14 @@ static int msm_compr_configure_dsp(struct snd_compr_stream *cstream)
 
 	prtd->gapless_state.stream_opened[stream_index] = 1;
 	pr_debug("%s be_id %d\n", __func__, soc_prtd->dai_link->be_id);
-	msm_pcm_routing_reg_phy_stream(soc_prtd->dai_link->be_id,
+	ret = msm_pcm_routing_reg_phy_stream(soc_prtd->dai_link->be_id,
 				ac->perf_mode,
 				prtd->session_id,
 				SNDRV_PCM_STREAM_PLAYBACK);
+	if (ret) {
+		pr_err("%s: stream reg failed:%d\n", __func__, ret);
+		return ret;
+	}
 
 	ret = msm_compr_set_volume(cstream, 0, 0);
 	if (ret < 0)
@@ -1663,8 +1674,10 @@ static int msm_compr_set_metadata(struct snd_compr_stream *cstream,
 		return -EINVAL;
 
 	prtd = cstream->runtime->private_data;
-	if (!prtd && !prtd->audio_client)
+	if (!prtd || !prtd->audio_client) {
+		pr_err("%s: prtd or audio client is NULL\n", __func__);
 		return -EINVAL;
+	}
 	ac = prtd->audio_client;
 	if (metadata->key == SNDRV_COMPRESS_ENCODER_PADDING) {
 		pr_debug("%s, got encoder padding %u", __func__, metadata->value[0]);
@@ -1866,6 +1879,35 @@ static int msm_compr_dec_params_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int msm_compr_app_type_cfg_put(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	u64 fe_id = kcontrol->private_value;
+	int app_type;
+	int acdb_dev_id;
+
+	pr_debug("%s: fe_id- %llu\n", __func__, fe_id);
+	if (fe_id >= MSM_FRONTEND_DAI_MAX) {
+		pr_err("%s Received out of bounds fe_id %llu\n",
+			__func__, fe_id);
+		return -EINVAL;
+	}
+
+	app_type = ucontrol->value.integer.value[0];
+	acdb_dev_id = ucontrol->value.integer.value[1];
+	pr_debug("%s: app_type- %d\n", __func__, app_type);
+	pr_debug("%s: acdb_dev_id- %d\n", __func__, acdb_dev_id);
+	msm_pcm_routing_reg_stream_app_type_cfg(fe_id, app_type, acdb_dev_id);
+
+	return 0;
+}
+
+static int msm_compr_app_type_cfg_get(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	return 0;
+}
+
 static int msm_compr_probe(struct snd_soc_platform *platform)
 {
 	struct msm_compr_pdata *pdata;
@@ -1924,6 +1966,16 @@ static int msm_compr_dec_params_info(struct snd_kcontrol *kcontrol,
 {
 	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
 	uinfo->count = 128;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = 0xFFFFFFFF;
+	return 0;
+}
+
+static int msm_compr_app_type_cfg_info(struct snd_kcontrol *kcontrol,
+				       struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 4;
 	uinfo->value.integer.min = 0;
 	uinfo->value.integer.max = 0xFFFFFFFF;
 	return 0;
@@ -2106,6 +2158,55 @@ static int msm_compr_add_dec_runtime_params_control(
 	return 0;
 }
 
+static int msm_compr_add_app_type_cfg_control(struct snd_soc_pcm_runtime *rtd)
+{
+	const char *mixer_ctl_name	= "Audio Stream";
+	const char *deviceNo		= "NN";
+	const char *suffix		= "App Type Cfg";
+	char *mixer_str = NULL;
+	int ctl_len;
+	struct snd_kcontrol_new fe_app_type_cfg_control[1] = {
+		{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name = "?",
+		.access = SNDRV_CTL_ELEM_ACCESS_READWRITE,
+		.info = msm_compr_app_type_cfg_info,
+		.put = msm_compr_app_type_cfg_put,
+		.get = msm_compr_app_type_cfg_get,
+		.private_value = 0,
+		}
+	};
+
+	if (!rtd) {
+		pr_err("%s NULL rtd\n", __func__);
+		return 0;
+	}
+
+	pr_debug("%s: added new compr FE ctl with name %s, id %d, cpu dai %s, device no %d\n",
+		 __func__, rtd->dai_link->name, rtd->dai_link->be_id,
+		 rtd->dai_link->cpu_dai_name, rtd->pcm->device);
+
+	ctl_len = strlen(mixer_ctl_name) + 1 + strlen(deviceNo) + 1 +
+		  strlen(suffix) + 1;
+	mixer_str = kzalloc(ctl_len, GFP_KERNEL);
+
+	if (!mixer_str) {
+		pr_err("failed to allocate mixer ctrl str of len %d", ctl_len);
+		return 0;
+	}
+
+	snprintf(mixer_str, ctl_len, "%s %d %s", mixer_ctl_name,
+		 rtd->pcm->device, suffix);
+	fe_app_type_cfg_control[0].name = mixer_str;
+	fe_app_type_cfg_control[0].private_value = rtd->dai_link->be_id;
+	pr_debug("Registering new mixer ctl %s", mixer_str);
+	snd_soc_add_platform_controls(rtd->platform,
+				      fe_app_type_cfg_control,
+				      ARRAY_SIZE(fe_app_type_cfg_control));
+	kfree(mixer_str);
+	return 0;
+}
+
 static int msm_compr_new(struct snd_soc_pcm_runtime *rtd)
 {
 	int rc;
@@ -2118,6 +2219,10 @@ static int msm_compr_new(struct snd_soc_pcm_runtime *rtd)
 		pr_err("%s: Could not add Compr Audio Effects Control\n",
 			__func__);
 	rc = msm_compr_add_dec_runtime_params_control(rtd);
+	if (rc)
+		pr_err("%s: Could not add Compr Dec runtime params Control\n",
+			__func__);
+	rc = msm_compr_add_app_type_cfg_control(rtd);
 	if (rc)
 		pr_err("%s: Could not add Compr Dec runtime params Control\n",
 			__func__);

@@ -81,12 +81,28 @@
 		#address-cells = <2>;
 		#size-cells = <2>;
 
-		removed_regions: removed_regions@0 {
-                        linux,reserve-contiguous-region;
+		external_image_mem: external_image__region@0 {
+			linux,reserve-contiguous-region;
 			linux,reserve-region;
 			linux,remove-completely;
-			reg = <0x0 0x88800000 0x0 0x06e00000>;
-			label = "removed_regions";
+			reg = <0x0 0x8e200000 0x0 0x0900000>;
+			label = "external_image_mem";
+		};
+
+		modem_adsp_mem: modem_adsp_region@0 {
+			linux,reserve-contiguous-region;
+			linux,reserve-region;
+			linux,remove-completely;
+			reg = <0x0 0x88800000 0x0 0x05a00000>;
+			label = "modem_adsp_mem";
+		};
+
+		peripheral_mem: pheripheral_region@0 {
+			linux,reserve-contiguous-region;
+			linux,reserve-region;
+			linux,remove-completely;
+			reg = <0x0 0x8eb00000 0x0 0x0b00000>;
+			label = "peripheral_mem";
 		};
 
 		secure_mem: secure_region@0 {
@@ -455,6 +471,7 @@
 
 		qcom,bus-width = <8>;
 
+		qcom,cpu-dma-latency-us = <701>;
 		qcom,msm-bus,name = "sdhc1";
 		qcom,msm-bus,num-cases = <8>;
 		qcom,msm-bus,num-paths = <1>;
@@ -488,6 +505,7 @@
 
 		qcom,bus-width = <4>;
 
+		qcom,cpu-dma-latency-us = <701>;
 		qcom,msm-bus,name = "sdhc2";
 		qcom,msm-bus,num-cases = <8>;
 		qcom,msm-bus,num-paths = <1>;
@@ -1531,6 +1549,11 @@
 
 		/* GPIO output to wcnss */
 		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_4_out 0 0>;
+	};
+
+	cpu-pmu {
+		compatible = "arm,armv8-pmuv3";
+		interrupts = <1 7 0xf00>;
 	};
 };
 
