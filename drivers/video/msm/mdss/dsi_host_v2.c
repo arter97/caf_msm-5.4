@@ -49,6 +49,7 @@ struct dsi_host_v2_private {
 
 static struct dsi_host_v2_private *dsi_host_private;
 static int msm_dsi_clk_ctrl(struct mdss_panel_data *pdata, int enable);
+int mdp3_clk_enable(int enable, int dsi_clk);
 
 int msm_dsi_init(void)
 {
@@ -957,6 +958,7 @@ void msm_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 		return;
 	}
 
+	mdp3_clk_enable(1, 1);
 	msm_dsi_clk_ctrl(&ctrl->panel_data, 1);
 
 	if (0 == (req->flags & CMD_REQ_LP_MODE))
@@ -971,6 +973,7 @@ void msm_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 		dsi_set_tx_power_mode(1);
 
 	msm_dsi_clk_ctrl(&ctrl->panel_data, 0);
+	mdp3_clk_enable(0, 1);
 
 	mutex_unlock(&ctrl->cmd_mutex);
 }
