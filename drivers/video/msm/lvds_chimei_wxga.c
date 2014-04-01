@@ -129,24 +129,24 @@ static int __init lvds_chimei_wxga_init(void)
 
 	pinfo = &lvds_chimei_panel_data.panel_info;
 	if (machine_is_apq8064_mplatform()) {
-		pinfo->xres = 800;
-		pinfo->yres = 480;
+		pinfo->xres = 1280;
+		pinfo->yres = 720;
 		MSM_FB_SINGLE_MODE_PANEL(pinfo);
 		pinfo->type = LVDS_PANEL;
 		pinfo->pdest = DISPLAY_1;
 		pinfo->wait_cycle = 0;
 		pinfo->bpp = 24;
 		pinfo->fb_num = 2;
-		pinfo->clk_rate = 74250000;
+		pinfo->clk_rate = 79400000;
 		pinfo->bl_max = 255;
 		pinfo->bl_min = 1;
-		pinfo->lcdc.h_back_porch = 35;
-		pinfo->lcdc.h_front_porch = 10;
-		pinfo->lcdc.h_pulse_width = 128;
-		pinfo->lcdc.v_back_porch = 5;
-		pinfo->lcdc.v_front_porch = 10;
+		pinfo->lcdc.h_back_porch = 43;
+		pinfo->lcdc.h_front_porch = 43;
+		pinfo->lcdc.h_pulse_width = 32;
+		pinfo->lcdc.v_back_porch = 8;
+		pinfo->lcdc.v_front_porch = 3;
 
-		pinfo->lcdc.v_pulse_width = 2;
+		pinfo->lcdc.v_pulse_width = 5;
 		pinfo->lcdc.underflow_clr = 0xff;
 		pinfo->lcdc.hsync_skew = 0;
 		pinfo->lvds.channel_mode =

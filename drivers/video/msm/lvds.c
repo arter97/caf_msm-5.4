@@ -100,7 +100,7 @@ static void lvds_init(struct msm_fb_data_type *mfd)
 	} else {
 		MDP_OUTP(MDP_BASE + 0xc3004, 0x8f);
 		MDP_OUTP(MDP_BASE + 0xc3008, 0x30);
-		MDP_OUTP(MDP_BASE + 0xc300c, 0xc6);
+		MDP_OUTP(MDP_BASE + 0xc300c, 0xc8);
 		MDP_OUTP(MDP_BASE + 0xc3014, 0x10);
 		MDP_OUTP(MDP_BASE + 0xc3018, 0x07);
 		MDP_OUTP(MDP_BASE + 0xc301c, 0x62);
