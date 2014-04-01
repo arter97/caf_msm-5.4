@@ -36,7 +36,7 @@
 		qcom,num-grp-pins = <1>;
 		label = "apds9930-irq";
 		apds9930_default: apds9930_default {
-			drive-strenghth = <6>;
+			drive-strength = <6>;
 			bias-pull-up;
 		};
 	};
@@ -48,23 +48,6 @@
 		lis3dh_int1_default: int1_default {
 			  drive-strength = <6>;
 			  bias-pull-up;
-		};
-	};
-
-	pmx_tps_gpio_pin {
-		qcom,num-grp-pins = <2>;
-		qcom,pins = <&gp 32>, <&gp 97>;
-		qcom,pin-func = <0>;
-		label = "pmx_tps_operation";
-
-		tps_active: tps_active {
-			drive-strength = <2>;
-			bias-pull-up;
-		};
-
-		tps_suspend: tps_suspend {
-			drive-strength = <2>;
-			bias-pull-down;
 		};
 	};
 };
@@ -103,16 +86,6 @@
 		avago,ga_value = <48>;
 	};
 
-	tps@3e {
-		compatible = "ti,tps65132";
-		reg = <0x3e>;
-		pinctrl-names = "pmx_tps_active","pmx_tps_suspend";
-		pinctrl-0 = <&tps_active>;
-		pinctrl-1 = <&tps_suspend>;
-		ti,enn-gpio = <&msm_gpio 32 0x00>;
-		ti,enp-gpio = <&msm_gpio 97 0x00>;
-	};
-
 	st@18 {
 		compatible = "st,lis3dh";
 		reg = <0x18>;
@@ -144,6 +117,8 @@
 };
 
 &mdss_dsi0 {
+	qcom,regulator-ldo-mode;
+	qcom,platform-regulator-settings = [02 09 03 00 20 00 01];
 	qcom,dsi-pref-prim-pan = <&dsi_innolux_720p_video>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
 	pinctrl-0 = <&mdss_dsi_active>;
