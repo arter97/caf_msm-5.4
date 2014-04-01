@@ -12,8 +12,9 @@
  */
 
 #include <linux/regulator/pm8xxx-regulator.h>
-
 #include "board-8064.h"
+#include <mach/socinfo.h>
+#include "devices.h"
 
 #define VREG_CONSUMERS(_id) \
 	static struct regulator_consumer_supply vreg_consumers_##_id[]
@@ -698,6 +699,62 @@ apq8064_rpm_regulator_init_data[] __devinitdata = {
 };
 
 static struct rpm_regulator_init_data
+apq8064_mplatform_rpm_regulator_init_data[] __devinitdata = {
+	/*	ID a_on pd ss min_uV   max_uV  supply sys_uA  freq  fm  ss_fm */
+	RPM_SMPS(S1, 1, 1, 0, 1225000, 1225000, NULL, 100000, 3p20, NONE, NONE),
+	RPM_SMPS(S2, 0, 1, 0, 1300000, 1300000, NULL,      0, 1p60, NONE, NONE),
+	RPM_SMPS(S3, 0, 1, 1,  500000, 1150000, NULL, 100000, 4p80, NONE, NONE),
+	RPM_SMPS(S4, 1, 1, 0, 1800000, 1800000, NULL, 100000, 1p60, AUTO, AUTO),
+	RPM_SMPS(S7, 0, 0, 0, 1300000, 1300000, NULL, 100000, 3p20, NONE, NONE),
+	RPM_SMPS(S8, 0, 1, 0, 2200000, 2200000, NULL,      0, 1p60, NONE, NONE),
+
+	/*	ID a_on pd ss min_uV   max_uV   supply    sys_uA init_ip */
+	RPM_LDO(L1,  1, 1, 0, 1100000, 1100000, "8921_s4",     0,  1000),
+	RPM_LDO(L2,  0, 1, 0, 1200000, 1200000, "8921_s4",     0,     0),
+	RPM_LDO(L3,  0, 1, 0, 3075000, 3300000, NULL,          0,     0),
+	RPM_LDO(L4,  1, 1, 0, 1800000, 1800000, NULL,          0, 10000),
+	RPM_LDO(L5,  0, 1, 0, 2950000, 2950000, NULL,          0,     0),
+	RPM_LDO(L6,  0, 1, 0, 2950000, 2950000, NULL,          0,     0),
+	RPM_LDO(L7,  0, 1, 0, 1850000, 2950000, NULL,          0,     0),
+	RPM_LDO(L8,  0, 1, 0, 2800000, 2800000, NULL,          0,     0),
+	RPM_LDO(L9,  0, 1, 0, 3000000, 3000000, NULL,          0,     0),
+	RPM_LDO(L10, 0, 1, 0, 2900000, 2900000, NULL,          0,     0),
+	RPM_LDO(L11, 0, 1, 0, 3000000, 3000000, NULL,          0,     0),
+	RPM_LDO(L12, 0, 1, 0, 1200000, 1200000, "8921_s4",     0,     0),
+	RPM_LDO(L13, 0, 0, 0, 2220000, 2220000, NULL,          0,     0),
+	RPM_LDO(L14, 0, 1, 0, 1800000, 1800000, NULL,          0,     0),
+	RPM_LDO(L15, 0, 1, 0, 1800000, 2950000, NULL,          0,     0),
+	RPM_LDO(L16, 0, 1, 0, 2800000, 2800000, NULL,          0,     0),
+	RPM_INIT(L17, 3300000, 3300000, REGULATOR_MODE_NORMAL
+			| REGULATOR_MODE_IDLE, REGULATOR_CHANGE_VOLTAGE
+			| REGULATOR_CHANGE_STATUS | REGULATOR_CHANGE_MODE
+			| REGULATOR_CHANGE_DRMS, 1, 3300000, 10000, 0, 1,
+			RPM_VREG_PIN_CTRL_NONE, NONE,
+			RPM_VREG_PIN_FN_8960_NONE,
+			RPM_VREG_FORCE_MODE_8960_NONE,
+			RPM_VREG_FORCE_MODE_8960_NONE,
+			RPM_VREG_POWER_MODE_8960_PWM,
+			RPM_VREG_STATE_OFF, 0, 1, 0, 10000),
+	RPM_LDO(L18, 0, 1, 0, 1300000, 1800000, "8921_s4",     0,     0),
+	RPM_LDO(L21, 0, 1, 0, 1050000, 1050000, NULL,          0,     0),
+	RPM_LDO(L22, 0, 1, 0, 2600000, 2600000, NULL,          0,     0),
+	RPM_LDO(L23, 0, 1, 0, 1800000, 1800000, NULL,          0,     0),
+	RPM_LDO(L24, 0, 1, 1,  750000, 1150000, "8921_s1", 10000, 10000),
+	RPM_LDO(L25, 1, 1, 0, 1250000, 1250000, "8921_s1", 10000, 10000),
+	RPM_LDO(L27, 0, 0, 0, 1100000, 1100000, "8921_s7",     0,     0),
+	RPM_LDO(L28, 0, 1, 0, 1050000, 1050000, "8921_s7",     0,     0),
+	RPM_LDO(L29, 0, 1, 0, 2000000, 2000000, NULL,          0,     0),
+
+	/*     ID  a_on pd ss                   supply */
+	RPM_VS(LVS1, 0, 1, 0,                   "8921_s4"),
+	RPM_VS(LVS3, 0, 1, 0,                   "8921_s4"),
+	RPM_VS(LVS4, 0, 1, 0,                   "8921_s4"),
+	RPM_VS(LVS5, 0, 1, 0,                   "8921_s4"),
+	RPM_VS(LVS6, 0, 1, 0,                   "8921_s4"),
+	RPM_VS(LVS7, 0, 1, 1,                   "8921_s4"),
+};
+
+static struct rpm_regulator_init_data
 apq8064_rpm_regulator_pm8921_init_data[] __devinitdata = {
 	/*     ID  a_on pd ss                   supply */
 	RPM_VS(LVS2, 0, 1, 0,                   "8921_s1"),
@@ -747,6 +804,19 @@ struct rpm_regulator_platform_data apq8064_rpm_regulator_pdata __devinitdata = {
 	.consumer_map_len = ARRAY_SIZE(msm_rpm_regulator_consumer_mapping),
 };
 
+struct rpm_regulator_platform_data
+apq8064_mplatform_rpm_regulator_pdata __devinitdata = {
+	.init_data		  = apq8064_mplatform_rpm_regulator_init_data,
+	.num_regulators		  =
+			ARRAY_SIZE(apq8064_mplatform_rpm_regulator_init_data),
+	.version		  = RPM_VREG_VERSION_8960,
+	.vreg_id_vdd_mem	  = RPM_VREG_ID_PM8921_L24,
+	.vreg_id_vdd_dig	  = RPM_VREG_ID_PM8921_S3,
+	.requires_tcxo_workaround = true,
+	.consumer_map		  = msm_rpm_regulator_consumer_mapping,
+	.consumer_map_len = ARRAY_SIZE(msm_rpm_regulator_consumer_mapping),
+};
+
 /* Regulators that are only present when using PM8921 */
 struct rpm_regulator_platform_data
 apq8064_rpm_regulator_pm8921_pdata __devinitdata = {
@@ -766,15 +836,19 @@ void __init configure_apq8064_pm8917_power_grid(void)
 {
 	static struct rpm_regulator_init_data *rpm_data;
 	int i;
-
-	for (i = 0; i < ARRAY_SIZE(apq8064_rpm_regulator_init_data); i++) {
-		rpm_data = &apq8064_rpm_regulator_init_data[i];
-		if (rpm_data->id == RPM_VREG_ID_PM8921_S1) {
-			rpm_data->init_data.consumer_supplies
-				= vreg_consumers_8917_S1;
-			rpm_data->init_data.num_consumer_supplies
-				= ARRAY_SIZE(vreg_consumers_8917_S1);
-		}
+	/* TODO mplatfrom. Double check this if this logic works. */
+	if (machine_is_apq8064_mplatform()) {
+		for (i = 0;
+		i < ARRAY_SIZE(apq8064_mplatform_rpm_regulator_init_data);
+		i++) {
+			rpm_data =
+				&apq8064_mplatform_rpm_regulator_init_data[i];
+			if (rpm_data->id == RPM_VREG_ID_PM8921_S1) {
+				rpm_data->init_data.consumer_supplies
+					= vreg_consumers_8917_S1;
+				rpm_data->init_data.num_consumer_supplies
+					= ARRAY_SIZE(vreg_consumers_8917_S1);
+			}
 
 		/*
 		 * Currently min/max voltage level for LD03 was set to 3.075V.
@@ -788,11 +862,41 @@ void __init configure_apq8064_pm8917_power_grid(void)
 		 if (rpm_data->id == RPM_VREG_ID_PM8921_L3)
 			rpm_data->init_data.constraints.max_uV = 3075000;
 
-	}
+		}
+	/*
+	 * Switch to 8960_PM8917 rpm-regulator version so that TCXO workaround
+	 * is applied to PM8917 regulators L25, L26, L27, and L28.
+	 */
+		apq8064_mplatform_rpm_regulator_pdata.version =
+			RPM_VREG_VERSION_8960_PM8917;
+	} else {
+		for (i = 0; i < ARRAY_SIZE(apq8064_rpm_regulator_init_data);
+				i++) {
+			rpm_data = &apq8064_rpm_regulator_init_data[i];
+			if (rpm_data->id == RPM_VREG_ID_PM8921_S1) {
+				rpm_data->init_data.consumer_supplies
+					= vreg_consumers_8917_S1;
+				rpm_data->init_data.num_consumer_supplies
+					= ARRAY_SIZE(vreg_consumers_8917_S1);
+			}
 
+		/*
+		 * Currently min/max voltage level for LD03 was set to 3.075V.
+		 * But some Full speed USB headsets requires higher cross over
+		 * voltage. The cross over voltage is directly proportional
+		 * to the phy 3.3V rail voltage. So modified the max voltage
+		 * level of LD03 to 3.3V. But apq8064_rpm_regulator_init_data
+		 * is shared between PM8921 and PM8917, so set max_uV back to
+		 * 3.075V for PM8917.
+		 */
+		 if (rpm_data->id == RPM_VREG_ID_PM8921_L3)
+			rpm_data->init_data.constraints.max_uV = 3075000;
+
+		}
 	/*
 	 * Switch to 8960_PM8917 rpm-regulator version so that TCXO workaround
 	 * is applied to PM8917 regulators L25, L26, L27, and L28.
 	 */
 	apq8064_rpm_regulator_pdata.version = RPM_VREG_VERSION_8960_PM8917;
+	}
 }

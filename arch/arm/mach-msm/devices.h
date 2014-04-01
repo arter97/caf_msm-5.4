@@ -21,6 +21,10 @@
 #include <linux/platform_device.h>
 #include "clock.h"
 
+#ifdef CONFIG_MACH_APQ8064_CDP
+#define machine_is_apq8064_mplatform machine_is_apq8064_cdp
+#endif
+
 void __init msm9615_device_init(void);
 void __init msm9615_map_io(void);
 void __init msm_map_msm9615_io(void);
@@ -93,6 +97,7 @@ extern struct platform_device apq8064_device_uartdm_gsbi4;
 extern struct platform_device apq8064_device_uart_gsbi7;
 extern struct platform_device apq8064_device_qup_i2c_gsbi1;
 extern struct platform_device apq8064_device_qup_adp_i2c_gsbi1;
+extern struct platform_device apq8064_device_qup_i2c_gsbi2;
 extern struct platform_device apq8064_device_qup_i2c_gsbi3;
 extern struct platform_device apq8064_device_qup_i2c_gsbi4;
 extern struct platform_device apq8064_device_qup_spi_gsbi5;
@@ -284,6 +289,11 @@ extern struct platform_device apq_cpudai_fm_tx;
 extern struct platform_device apq_cpudai_auxpcm_rx;
 extern struct platform_device apq_cpudai_auxpcm_tx;
 extern struct platform_device apq_cpu_fe;
+
+extern struct platform_device apq_cpudai_mi2s;
+extern struct platform_device apq_cpudai_sec_i2s;
+extern struct platform_device apq_cpudai_pri_mic;
+
 extern struct platform_device apq_stub_codec;
 extern struct platform_device apq_voice;
 extern struct platform_device apq_voip;
@@ -297,6 +307,9 @@ extern struct platform_device apq_cpudai_afe_01_tx;
 extern struct platform_device apq_cpudai_afe_02_rx;
 extern struct platform_device apq_cpudai_afe_02_tx;
 extern struct platform_device apq_pcm_afe;
+
+extern struct platform_device apq_pcm_lpa;
+
 extern struct platform_device apq_cpudai_stub;
 extern struct platform_device apq_cpudai_slimbus_1_rx;
 extern struct platform_device apq_cpudai_slimbus_1_tx;

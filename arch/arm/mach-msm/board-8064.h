@@ -22,6 +22,7 @@
 #include <mach/msm_rtb.h>
 #include <mach/msm_cache_dump.h>
 
+
 /* Macros assume PMIC GPIOs and MPPs start at 1 */
 #define PM8921_GPIO_BASE		NR_GPIO_IRQS
 #define PM8921_GPIO_PM_TO_SYS(pm_gpio)	(pm_gpio - 1 + PM8921_GPIO_BASE)
@@ -69,6 +70,9 @@ extern struct rpm_regulator_platform_data
 	apq8064_rpm_regulator_pdata __devinitdata;
 
 extern struct rpm_regulator_platform_data
+	apq8064_mplatform_rpm_regulator_pdata __devinitdata;
+
+extern struct rpm_regulator_platform_data
 	apq8064_rpm_regulator_pm8921_pdata __devinitdata;
 
 extern struct regulator_init_data msm8064_saw_regulator_pdata_8921_s5;
@@ -89,6 +93,7 @@ extern struct msm_camera_board_info apq8064_camera_board_info;
 void apq8064_init_cam(void);
 
 #define APQ_8064_GSBI1_QUP_I2C_BUS_ID 0
+#define APQ_8064_GSBI2_QUP_I2C_BUS_ID 2
 #define APQ_8064_GSBI3_QUP_I2C_BUS_ID 3
 #define APQ_8064_GSBI4_QUP_I2C_BUS_ID 4
 #define APQ_8064_GSBI5_QUP_I2C_BUS_ID 5

@@ -53,6 +53,7 @@
 /* Address of GSBI blocks */
 #define MSM_GSBI1_PHYS		0x12440000
 #define MSM_GSBI2_PHYS		0x13440000
+#define MSM_MPLATFORM_GSBI2_PHYS 0x12480000
 #define MSM_GSBI3_PHYS		0x16200000
 #define MSM_GSBI4_PHYS		0x16300000
 #define MSM_GSBI5_PHYS		0x1A200000
@@ -69,6 +70,7 @@
 /* GSBI QUP devices */
 #define MSM_GSBI1_QUP_PHYS	(MSM_GSBI1_PHYS + 0x20000)
 #define MSM_GSBI2_QUP_PHYS	(MSM_GSBI2_PHYS + 0x20000)
+#define MSM_MPLATFORM_GSBI2_QUP_PHYS	(MSM_MPLATFORM_GSBI2_PHYS + 0x20000)
 #define MSM_GSBI3_QUP_PHYS	(MSM_GSBI3_PHYS + 0x80000)
 #define MSM_GSBI4_QUP_PHYS	(MSM_GSBI4_PHYS + 0x80000)
 #define MSM_GSBI5_QUP_PHYS	(MSM_GSBI5_PHYS + 0x80000)
@@ -309,6 +311,39 @@ static struct resource resources_qup_i2c_gsbi1[] = {
 	},
 };
 
+static struct resource resources_qup_i2c_gsbi2[] = {
+	{
+		.name	= "gsbi_qup_i2c_addr",
+		.start	= MSM_MPLATFORM_GSBI2_PHYS,
+		.end	= MSM_MPLATFORM_GSBI2_PHYS + 4 - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "qup_phys_addr",
+		.start	= MSM_MPLATFORM_GSBI2_QUP_PHYS,
+		.end	= MSM_MPLATFORM_GSBI2_QUP_PHYS + MSM_QUP_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "qup_err_intr",
+		.start	= APQ8064_GSBI2_QUP_IRQ,
+		.end	= APQ8064_GSBI2_QUP_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.name	= "i2c_clk",
+		.start	= 25,
+		.end	= 25,
+		.flags	= IORESOURCE_IO,
+	},
+	{
+		.name	= "i2c_sda",
+		.start	= 24,
+		.end	= 24,
+		.flags	= IORESOURCE_IO,
+	},
+};
+
 static struct resource resources_qup_adp_i2c_gsbi1[] = {
 	{
 		.name	= "gsbi_qup_i2c_addr",
@@ -354,6 +389,13 @@ struct platform_device apq8064_device_qup_adp_i2c_gsbi1 = {
 	.id		= 0,
 	.num_resources	= ARRAY_SIZE(resources_qup_adp_i2c_gsbi1),
 	.resource	= resources_qup_adp_i2c_gsbi1,
+};
+
+struct platform_device apq8064_device_qup_i2c_gsbi2 = {
+	.name		= "qup_i2c",
+	.id		= 2,
+	.num_resources	= ARRAY_SIZE(resources_qup_i2c_gsbi2),
+	.resource	= resources_qup_i2c_gsbi2,
 };
 
 struct platform_device apq8064_device_qup_i2c_gsbi3 = {
@@ -942,6 +984,21 @@ struct platform_device mpq_cpudai_mi2s_tx = {
 	},
 };
 
+struct platform_device apq_cpudai_mi2s = {
+	.name	= "apq8064_cpudai_lpa",
+	.id	= 0,
+};
+
+struct platform_device apq_cpudai_sec_i2s = {
+	.name	= "apq8064_cpudai_lpa",
+	.id	= 3,
+};
+
+struct platform_device apq_cpudai_pri_mic = {
+	.name	= "apq8064_cpudai_lpa",
+	.id	= 5,
+};
+
 struct platform_device apq_cpu_fe = {
 	.name	= "msm-dai-fe",
 	.id	= -1,
@@ -1009,6 +1066,11 @@ struct platform_device apq_cpudai_afe_02_tx = {
 
 struct platform_device apq_pcm_afe = {
 	.name	= "msm-pcm-afe",
+	.id	= -1,
+};
+
+struct platform_device apq_pcm_lpa = {
+	.name	= "apq8064_pcm_lpa",
 	.id	= -1,
 };
 
