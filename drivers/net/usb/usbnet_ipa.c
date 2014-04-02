@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -336,6 +336,19 @@ int usbnet_ipa_disconnect(struct usb_interface *intf,
 
 	USBNET_IPA_DBG_FUNC_ENTRY();
 
+	/*Stop the BAM2BAM transfer */
+	if (ctx.tx_urb == NULL) {
+		USBNET_IPA_ERR("tx URB is NULL, can not kill!\n");
+		return -ENODEV;
+	} else
+		usb_kill_urb(ctx.tx_urb);
+
+	if (ctx.rx_urb == NULL) {
+		USBNET_IPA_ERR("tx URB is NULL, can not kill!\n");
+		return -ENODEV;
+	} else
+		usb_kill_urb(ctx.rx_urb);
+
 	/* Disconnect pipes */
 	ret = usb_bam_disconnect_ipa(&ctx.ipa_params);
 	if (ret) {
@@ -350,18 +363,6 @@ int usbnet_ipa_disconnect(struct usb_interface *intf,
 		return ret;
 	}
 
-	/*Stop the BAM2BAM transfer */
-	if (ctx.tx_urb == NULL) {
-		USBNET_IPA_ERR("tx URB is NULL, can not kill!\n");
-		return -ENODEV;
-	} else
-		usb_kill_urb(ctx.tx_urb);
-
-	if (ctx.rx_urb == NULL) {
-		USBNET_IPA_ERR("tx URB is NULL, can not kill!\n");
-		return -ENODEV;
-	} else
-		usb_kill_urb(ctx.rx_urb);
 
 	/* Free URBs */
 	usbnet_ipa_free_urb(ctx.tx_urb);
