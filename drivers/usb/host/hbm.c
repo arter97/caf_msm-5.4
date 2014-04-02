@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -165,6 +165,16 @@ int hbm_pipe_init(u32 QH_addr, u32 pipe_num, bool is_consumer)
 		return -EINVAL;
 	}
 
+	/* Disable HBM pipe */
+	hbm_msm_write_reg_field(hbm_ctx->base, USB_OTG_HS_HBM_PIPE_EN,
+		1 << pipe_num, 0);
+
+	/* Reset HBM SideBand */
+	hbm_msm_write_reg_field(hbm_ctx->base, USB_OTG_HS_HBM_SB_SW_RST, 1 << 0,
+			1);
+	hbm_msm_write_reg_field(hbm_ctx->base, USB_OTG_HS_HBM_SB_SW_RST, 1 << 0,
+			0);
+
 	/* map QH(ep) <> pipe */
 	hbm_msm_write_reg(hbm_ctx->base,
 		USB_OTG_HS_HBM_QH_MAP_PIPE(pipe_num), QH_addr);
@@ -224,6 +234,7 @@ static int hbm_submit_async(struct ehci_hcd *ehci, struct urb *urb,
 	int rc;
 	struct usb_host_bam_type *bam =
 		(struct usb_host_bam_type *)urb->priv_data;
+	int		cmd;
 
 	epnum = urb->ep->desc.bEndpointAddress;
 
@@ -243,10 +254,26 @@ static int hbm_submit_async(struct ehci_hcd *ehci, struct urb *urb,
 		goto done;
 	}
 
+	/* Stop Async Scheduler */
+	cmd = ehci_readl(ehci, &ehci->regs->command);
+	if (ehci->rh_state != EHCI_RH_HALTED && !ehci->reclaim) {
+		ehci_writel(ehci, cmd & ~CMD_ASE, &ehci->regs->command);
+		wmb();
+	}
+
 	hbm_pipe_init(qh->qh_dma, bam->pipe_num, bam->dir);
 
 	if (likely(qh->qh_state == QH_STATE_IDLE))
 		qh_link_async(ehci, qh);
+
+	/* Start Async Scheduler */
+	cmd = ehci_readl(ehci, &ehci->regs->command);
+	if (!(cmd & CMD_ASE)) {
+		/* in case a clear of CMD_ASE didn't take yet */
+		(void)handshake(ehci, &ehci->regs->status, STS_ASS, 0, 150);
+		cmd |= CMD_ASE;
+		ehci_writel(ehci, cmd, &ehci->regs->command);
+	}
 
 done:
 	spin_unlock_irqrestore(&ehci->lock, flags);
