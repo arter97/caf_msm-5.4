@@ -41,6 +41,8 @@
 #include <soc/qcom/subsystem_notif.h>
 #include <soc/qcom/smd.h>
 
+#include <mach/board.h>
+#include <mach/msm_iomap.h>
 
 #ifdef CONFIG_WCNSS_MEM_PRE_ALLOC
 #include "wcnss_prealloc.h"
@@ -847,6 +849,8 @@ void wcnss_reset_intr(void)
 		__raw_writel(1 << 16, penv->fiq_reg);
 	} else {
 		wcnss_riva_log_debug_regs();
+		wmb();
+		__raw_writel(1 << 24, MSM_APCS_GCC_BASE + 0x8);
 	}
 }
 EXPORT_SYMBOL(wcnss_reset_intr);
