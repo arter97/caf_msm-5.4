@@ -213,7 +213,7 @@ static void scm_pas_disable_bw(void)
 	mutex_unlock(&scm_pas_bw_mutex);
 }
 
-static void scm_pas_init(enum msm_bus_fabric_master_type id)
+static void scm_pas_init(int id)
 {
 	int i, rate;
 	static int is_inited;
@@ -861,10 +861,6 @@ static int pil_tz_driver_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	platform_set_drvdata(pdev, d);
 
-	rc = piltz_resc_init(pdev, d);
-	if (rc)
-		return -ENOENT;
-
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,pil-no-auth"))
 		d->subsys_desc.no_auth = true;
 
@@ -897,6 +893,10 @@ static int pil_tz_driver_probe(struct platform_device *pdev)
 		d->desc.proxy_timeout = proxy_timeout;
 
 	if (!d->subsys_desc.no_auth) {
+		rc = piltz_resc_init(pdev, d);
+		if (rc)
+			return -ENOENT;
+
 		rc = of_property_read_u32(pdev->dev.of_node, "qcom,pas-id",
 								&d->pas_id);
 		if (rc) {
