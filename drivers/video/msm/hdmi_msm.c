@@ -4922,10 +4922,14 @@ static int __init hdmi_msm_init(void)
 	if (hdmi_prim_display && hdmi_prim_resolution)
 		external_common_state->video_resolution =
 			hdmi_prim_resolution;
-	else
-		external_common_state->video_resolution =
-			HDMI_RESOLUTION_DEFAULT;
-
+	else {
+		if (machine_is_apq8064_mplatform())
+			external_common_state->video_resolution =
+				HDMI_VFRMT_1280x720p60_16_9;
+		else
+			external_common_state->video_resolution =
+				HDMI_RESOLUTION_DEFAULT;
+	}
 #ifdef CONFIG_FB_MSM_HDMI_3D
 	external_common_state->switch_3d = hdmi_msm_switch_3d;
 #endif

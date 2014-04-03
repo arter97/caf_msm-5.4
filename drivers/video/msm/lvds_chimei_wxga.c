@@ -1,4 +1,5 @@
 /* Copyright (c) 2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,7 +15,6 @@
 #include <linux/pwm.h>
 #include <linux/mfd/pm8xxx/pm8921.h>
 #include <mach/socinfo.h>
-#include "../../../arch/arm/mach-msm/devices.h"
 
 #define LVDS_CHIMEI_PWM_FREQ_HZ 300
 #define LVDS_CHIMEI_PWM_PERIOD_USEC (USEC_PER_SEC / LVDS_CHIMEI_PWM_FREQ_HZ)
