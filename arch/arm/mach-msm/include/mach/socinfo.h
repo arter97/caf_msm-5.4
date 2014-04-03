@@ -1,4 +1,5 @@
 /* Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -68,6 +69,10 @@
 #define machine_is_msm8226_sim()	0
 
 #endif
+#define APQ8064_MPLATFROM_VERSION 3
+#define machine_is_apq8064_mplatform() ((machine_is_apq8064_adp_2())\
+		&& (SOCINFO_VERSION_MAJOR(socinfo_get_platform_version()) \
+			== APQ8064_MPLATFROM_VERSION))
 
 #define PLATFORM_SUBTYPE_SGLTE	6
 #define PLATFORM_SUBTYPE_DSDA2	8

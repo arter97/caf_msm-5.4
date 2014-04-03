@@ -21,11 +21,6 @@
 #include <linux/platform_device.h>
 #include "clock.h"
 
-#define APQ8064_MPLATFROM_VERSION 3
-#define machine_is_apq8064_mplatform() ((machine_is_apq8064_adp_2())\
-		&& (SOCINFO_VERSION_MAJOR(socinfo_get_platform_version()) \
-			== APQ8064_MPLATFROM_VERSION)) 
-
 void __init msm9615_device_init(void);
 void __init msm9615_map_io(void);
 void __init msm_map_msm9615_io(void);
