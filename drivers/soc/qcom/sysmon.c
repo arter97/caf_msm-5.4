@@ -70,7 +70,7 @@ static struct enum_name_map map[SYSMON_NUM_SS] = {
 	{SYSMON_SS_MODEM, "modem"},
 	{SYSMON_SS_LPASS, "adsp"},
 	{SYSMON_SS_Q6FW, "modem_fw"},
-	{SYSMON_SS_EXT_MODEM, "external_modem"},
+	{SYSMON_SS_EXT_MODEM, "esoc0"},
 	{SYSMON_SS_DSPS, "dsps"},
 };
 
@@ -133,7 +133,7 @@ static int sysmon_send_msg(struct sysmon_subsys *ss, const char *tx_buf,
 
 /**
  * sysmon_send_event() - Notify a subsystem of another's state change
- * @dest_ss:	ID of subsystem the notification should be sent to
+ * @dest_ss:	String name of the subsystem the notification should be sent to
  * @event_ss:	String name of the subsystem that generated the notification
  * @notif:	ID of the notification type (ex. SUBSYS_BEFORE_SHUTDOWN)
  *
