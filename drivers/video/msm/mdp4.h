@@ -94,6 +94,7 @@ enum {
 #define MDP4_PANEL_DSI_VIDEO	BIT(4)
 #define MDP4_PANEL_DSI_CMD	BIT(5)
 #define MDP4_PANEL_WRITEBACK		BIT(6)
+#define MDP4_PANEL_DSI_VIDEO_DMA_S	BIT(7)
 
 enum {
 	OVERLAY_BLT_SWITCH_TG_ON,
@@ -714,6 +715,7 @@ void mdp4_dsi_cmd_overlay_blt(struct msm_fb_data_type *mfd,
 void mdp4_dsi_video_overlay_blt(struct msm_fb_data_type *mfd,
 					struct msmfb_overlay_blt *req);
 void mdp4_dsi_video_base_swap(int cndx, struct mdp4_overlay_pipe *pipe);
+struct mdp4_overlay_pipe *mdp4_dsi_video_alloc_base_pipe(void);
 void mdp4_dsi_video_free_base_pipe(struct msm_fb_data_type *mfd);
 void mdp4_dsi_cmd_free_base_pipe(struct msm_fb_data_type *mfd);
 struct mdp4_overlay_pipe *mdp4_lcdc_alloc_base_pipe(void);
