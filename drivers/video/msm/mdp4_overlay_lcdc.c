@@ -119,7 +119,9 @@ static void mdp4_overlay_lcdc_start(struct vsycn_ctrl *vctrl)
 		 * until the underrun instance is over and restore
 		 * underrun color.
 		 */
-		mdp4_lcdc_wait4dmap_done(0);
+		if (vctrl->base_pipe &&
+			(vctrl->base_pipe->mixer_num == MDP4_MIXER0))
+			mdp4_lcdc_wait4dmap_done(0);
 		if (vctrl->mfd) {
 			vctrl->mfd->panel_info.lcdc.underflow_clr |= 0x80000000;
 			MDP_OUTP(MDP_BASE + LCDC_BASE + 0x2c,
@@ -305,7 +307,8 @@ int mdp4_lcdc_pipe_commit(int cndx, int wait)
 		/* kickoff overlay engine */
 		mdp4_stat.kickoff_ov0++;
 		outpdw(MDP_BASE + 0x0004, 0);
-	} else {
+	} else if (vctrl->base_pipe &&
+		(vctrl->base_pipe->mixer_num == MDP4_MIXER0)) {
 		/* schedule second phase update  at dmap */
 		INIT_COMPLETION(vctrl->dmap_comp);
 		vsync_irq_enable(INTR_DMA_P_DONE, MDP_DMAP_TERM);
@@ -317,8 +320,12 @@ int mdp4_lcdc_pipe_commit(int cndx, int wait)
 	if (wait) {
 		if (pipe->ov_blt_addr)
 			mdp4_lcdc_wait4ov(0);
-		else
+		else if (vctrl->base_pipe &&
+			(vctrl->base_pipe->mixer_num == MDP4_MIXER0))
 			mdp4_lcdc_wait4dmap(0);
+		else if (vctrl->base_pipe &&
+			(vctrl->base_pipe->mixer_num == MDP4_MIXER_NONE))
+			mdp4_lcdc_wait4vsync(0);
 	}
 
 	return cnt;
@@ -1165,12 +1172,6 @@ void mdp4_lcdc_overlay(struct msm_fb_data_type *mfd)
 	mdp4_overlay_mdp_perf_upd(mfd, 1);
 
 	cnt = mdp4_lcdc_pipe_commit(cndx, 0);
-	if (cnt >= 0) {
-		if (pipe->ov_blt_addr)
-			mdp4_lcdc_wait4ov(cndx);
-		else
-			mdp4_lcdc_wait4dmap(cndx);
-	}
 
 	mdp4_overlay_mdp_perf_upd(mfd, 0);
 	mutex_unlock(&mfd->dma->ov_mutex);
