@@ -14,6 +14,7 @@
 #include <linux/diagchar.h>
 #include <linux/platform_device.h>
 #include <linux/kmemleak.h>
+#include <linux/sched.h>
 #include "diagchar.h"
 #include "diagfwd.h"
 #include "diagfwd_cntl.h"
@@ -122,7 +123,7 @@ void diag_smd_wcnss_cntl_notify(void *ctxt, unsigned event)
 
 static void diag_smd_cntl_send_req(int proc_num)
 {
-	int data_len = 0, type = -1, count_bytes = 0, j, r, flag = 0;
+	int data_len = 0, type = -1, count_bytes = 0, j, r = 0, flag = 0;
 	struct bindpkt_params_per_process *pkt_params =
 		 kzalloc(sizeof(struct bindpkt_params_per_process), GFP_KERNEL);
 	struct diag_ctrl_msg *msg;
@@ -133,6 +134,9 @@ static void diag_smd_cntl_send_req(int proc_num)
 	/* tracks which peripheral is sending registration */
 	uint16_t reg_mask = 0;
 
+	void *temp_buf = NULL;
+	int total_recd = 0, total_recd_partial = 0, pkt_len;
+	int loop_count = 0;
 	if (pkt_params == NULL) {
 		pr_alert("diag: Memory allocation failure\n");
 		return;
@@ -157,20 +161,68 @@ static void diag_smd_cntl_send_req(int proc_num)
 		return;
 	}
 
-	r = smd_read_avail(smd_ch);
-	if (r > IN_BUF_SIZE) {
-		if (r < MAX_IN_BUF_SIZE) {
-			pr_err("diag: SMD CNTL sending pkt upto %d bytes", r);
-			buf = krealloc(buf, r, GFP_KERNEL);
-		} else {
-			pr_err("diag: CNTL pkt > %d bytes", MAX_IN_BUF_SIZE);
-			kfree(pkt_params);
-			return;
+	if (smd_ch && buf) {
+	/*read all SMD data into a local buffer*/
+		while((pkt_len = smd_cur_packet_size(smd_ch)) !=0){
+			pr_debug("diag: In %s, proc=%d, get cur pkt size (pkt_len=%d)\n",
+				__func__, proc_num, pkt_len);
+			total_recd_partial = 0;
+
+			if (pkt_len > IN_BUF_SIZE) {
+				if (pkt_len < MAX_IN_BUF_SIZE) {
+					pr_err("diag: In %s, proc=%d, SMD CNTL sending pkt upto %d bytes\n",
+						__func__, proc_num, pkt_len);
+					buf = krealloc(buf, pkt_len, GFP_KERNEL);
+				} else {
+					pr_err("diag: In %s, proc=%d, CNTL pkt > %d bytes\n",
+						__func__, proc_num, MAX_IN_BUF_SIZE);
+					kfree(pkt_params);
+					return;
+				}
+			}
+			temp_buf = ((unsigned char *)buf) + total_recd;
+			while (pkt_len && (pkt_len != total_recd_partial)) {
+				loop_count++;
+				r = smd_read_avail(smd_ch);
+				pr_debug("diag: In %s, proc=%d, received pkt (r=%d, total_recd_partial=%d)\n",
+					__func__, proc_num, r, total_recd_partial);
+				if (!r) {
+					/* Nothing to read from SMD */
+					pr_err("diag: In %s, proc=%d, Nothing to read from SMD\n",
+						__func__, proc_num);
+					wait_event(driver->smd_wait_q,
+						((smd_ch == 0) || smd_read_avail(smd_ch)));
+					/* If the smd channel is open */
+					if (smd_ch) {
+						pr_debug("diag: In %s, return from wait_queue\n",
+							__func__);
+						continue;
+					} else {
+						pr_debug("diag: In %s, return from wait_queue, channel is closed\n",
+							__func__);
+						return;
+					}
+				}
+				if (pkt_len < r) {
+					pr_err("diag: In %s, proc=%d, sending incorrect pkt (r=%d, total_recd_partial=%d, pkt_len=%d)\n",
+						__func__, proc_num, r, total_recd_partial, pkt_len);
+					break;
+				}
+				total_recd += r;
+				total_recd_partial += r;
+				if (pkt_len > r){
+					pr_debug("diag: In %s, proc=%d, SMD sending partial pkt (r=%d, total_recd_partial=%d, pkt_len=%d, loop_count=%d)\n",
+						__func__, proc_num, r, total_recd_partial, pkt_len, loop_count);
+				}
+				/* Keep reading for complete packet */
+				smd_read(smd_ch, temp_buf, r);
+				temp_buf += r;
+			}
 		}
 	}
-	if (buf && r > 0) {
-		smd_read(smd_ch, buf, r);
-		while (count_bytes + HDR_SIZ <= r) {
+
+	if (buf && total_recd > 0) {
+		while (count_bytes + HDR_SIZ <= total_recd) {
 			type = *(uint32_t *)(buf);
 			data_len = *(uint32_t *)(buf + 4);
 			if (type < DIAG_CTRL_MSG_REG ||
@@ -179,13 +231,13 @@ static void diag_smd_cntl_send_req(int proc_num)
 					 type, proc_num);
 				break;
 			}
-			if (data_len < 0 || data_len > r) {
+			if (data_len < 0 || data_len > total_recd) {
 				pr_alert("diag: Invalid data len %d proc %d",
 					 data_len, proc_num);
 				break;
 			}
 			count_bytes = count_bytes+HDR_SIZ+data_len;
-			if (type == DIAG_CTRL_MSG_REG && r >= count_bytes) {
+			if (type == DIAG_CTRL_MSG_REG && total_recd >= count_bytes) {
 				msg = buf+HDR_SIZ;
 				range = buf+HDR_SIZ+
 						sizeof(struct diag_ctrl_msg);
