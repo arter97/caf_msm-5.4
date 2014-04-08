@@ -41,6 +41,7 @@
 #include "scm-boot.h"
 #include "spm.h"
 #include "pm-boot.h"
+#include "clock.h"
 
 #define CREATE_TRACE_POINTS
 #include <mach/trace_msm_low_power.h>
@@ -676,6 +677,14 @@ static enum msm_pm_time_stats_id msm_pm_power_collapse(bool from_idle)
 	if (MSM_PM_DEBUG_POWER_COLLAPSE & msm_pm_debug_mask)
 		pr_info("CPU%u: %s: pre power down\n", cpu, __func__);
 
+	/* This spews a lot of messages when a core is hotplugged. This
+	 * information is most useful from last core going down during
+	 * power collapse
+	 */
+	if ((!from_idle && cpu_online(cpu))
+			|| (MSM_PM_DEBUG_IDLE_CLK & msm_pm_debug_mask))
+		clock_debug_print_enabled();
+
 	avsdscr = avs_get_avsdscr();
 	avscsr = avs_get_avscsr();
 	avs_set_avscsr(0); /* Disable AVS */
@@ -790,17 +799,19 @@ int msm_cpu_pm_enter_sleep(enum msm_pm_sleep_mode mode, bool from_idle)
 		pr_info("CPU%u: %s mode:%d\n",
 			smp_processor_id(), __func__, mode);
 
-	time = sched_clock();
+	if (from_idle)
+		time = sched_clock();
+
 	if (execute[mode])
 		exit_stat = execute[mode](from_idle);
-	time = sched_clock() - time;
-	if (from_idle)
+
+	if (from_idle) {
+		time = sched_clock() - time;
 		msm_pm_ftrace_lpm_exit(smp_processor_id(), mode, collapsed);
-	else
-		exit_stat = MSM_PM_STAT_SUSPEND;
-	if (exit_stat >= 0)
-		msm_pm_add_stat(exit_stat, time);
-	do_div(time, 1000);
+		if (exit_stat >= 0)
+			msm_pm_add_stat(exit_stat, time);
+	}
+
 	return collapsed;
 }
 
