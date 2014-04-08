@@ -111,7 +111,7 @@
 		interrupt-controller;
 		#interrupt-cells = <2>;
 		reg = <0xfd510000 0x4000>;
-		ngpio = <146>;
+		ngpio = <147>;
 		interrupts = <0 208 0>;
 		qcom,direct-connect-irqs = <8>;
 		qcom,subsys-id = <3>;
@@ -533,6 +533,7 @@
 
 		qcom,l1ss-supported;
 		qcom,n-fts = <0x50>;
+		qcom,ep-latency = <10>;
 
 		qcom,msi-gicm-addr = <0xf9040040>;
 		qcom,msi-gicm-base = <0x160>;
@@ -653,6 +654,7 @@
 		qcom,bam-pipe-pair = <2>;
 		qcom,ce-hw-instance = <1>;
 		qcom,ce-device = <0>;
+		qcom,clk-mgmt-sus-res;
                 qcom,msm-bus,name = "qcrypto-noc";
 		qcom,msm-bus,num-cases = <2>;
 		qcom,msm-bus,num-paths = <1>;
@@ -868,6 +870,8 @@
 		reg = <0xf9925000 0x1000>;
 		interrupt-names = "qup_err_intr";
 		interrupts = <0 97 0>;
+		qcom,noise-rjct-scl = <1>;
+		qcom,noise-rjct-sda = <1>;
 		qcom,i2c-bus-freq = <100000>;
 		qcom,i2c-src-freq = <50000000>;
 		qcom,sda-gpio = <&msmgpio 10 0>;
@@ -884,6 +888,8 @@
 		#size-cells = <0>;
 		reg-names = "qup_phys_addr";
 		interrupts = <0 98 0>;
+		qcom,noise-rjct-scl = <0>;
+		qcom,noise-rjct-sda = <0>;
 		interrupt-names = "qup_err_intr";
 		qcom,i2c-bus-freq = <400000>;
 		qcom,i2c-src-freq = <19200000>;
@@ -902,6 +908,8 @@
 		reg = <0xf9927000 0x1000>;
 		interrupt-names = "qup_err_intr";
 		interrupts = <0 99 0>;
+		qcom,noise-rjct-scl = <0>;
+		qcom,noise-rjct-sda = <0>;
 		qcom,i2c-bus-freq = <100000>;
 		qcom,i2c-src-freq = <19200000>;
 		qcom,sda-gpio = <&msmgpio 41 0>;
@@ -918,6 +926,8 @@
 		reg = <0xf9966000 0x1000>;
 		interrupt-names = "qup_err_intr";
 		interrupts = <0 104 0>;
+		qcom,noise-rjct-scl = <0>;
+		qcom,noise-rjct-sda = <0>;
 		qcom,i2c-bus-freq = <100000>;
 		qcom,i2c-src-freq = <50000000>;
 		qcom,sda-gpio = <&msmgpio 61 0>;
@@ -2726,7 +2736,7 @@
 				interrupts = <0 258 4>, <0 262 4>;
 				interrupt-names = "irq", "otg_irq";
 				usb-phy = <&hsphy1>, <&ssphy1>;
-				host-only-mode;
+				snps,host-only-mode;
 			};
 		};
 	};
@@ -3279,13 +3289,13 @@
 				qcom,msm-bus,num-paths = <1>;
 				qcom,msm-bus,vectors-KBps =
 					<63 512 0 0>,
-					<63 512 208000 303000>,
-					<63 512 536000 1600000>,
-					<63 512 1012000 1600000>,
-					<63 512 2024000 1600000>,
-					<63 512 3240000 1600000>,
-					<63 512 4048000 1600000>,
-					<63 512 4264000 1600000>;
+					<63 512 228800 333300>,
+					<63 512 589600 1760000>,
+					<63 512 1113200 1760000>,
+					<63 512 2226400 1760000>,
+					<63 512 3564000 1760000>,
+					<63 512 4452800 1760000>,
+					<63 512 4690400 1760000>;
 				qcom,bus-configs = <0x30fcfff>;
 			};
 
@@ -3318,7 +3328,6 @@
 					<68 604 4149000 2491500>,
 					<68 604 5184000 3114000>,
 					<68 604 5493000 3297000>;
-
 				qcom,bus-configs = <0xc000000>;
 			};
 
@@ -3328,13 +3337,13 @@
 				qcom,msm-bus,num-paths = <1>;
 				qcom,msm-bus,vectors-KBps =
 					<68 604 0 0>,
-					<68 604 176000 519000>,
-					<68 604 456000 519000>,
-					<68 604 864000 833500>,
-					<68 604 1728000 1038000>,
-					<68 604 2766000 1661000>,
-					<68 604 3456000 2076000>,
-					<68 604 3662000 2198000>;
+					<68 604 193600 570900>,
+					<68 604 501600 570900>,
+					<68 604 950400 916850>,
+					<68 604 1900800 1141800>,
+					<68 604 3042600 1827100>,
+					<68 604 3801600 2283600>,
+					<68 604 4028200 2417800>;
 				qcom,bus-configs = <0x30fcfff>;
 			};
 		};

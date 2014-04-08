@@ -244,6 +244,8 @@ static struct sk_buff *gbam_alloc_skb_from_pool(struct gbam_port *port)
 	} else {
 		pr_debug("%s: pull skb from pool\n", __func__);
 		skb = __skb_dequeue(&d->rx_skb_idle);
+		if (skb_headroom(skb) < BAM_MUX_HDR)
+			skb_reserve(skb, BAM_MUX_HDR);
 	}
 
 	spin_unlock_irqrestore(&port->port_lock_ul, flags);
@@ -1079,6 +1081,11 @@ static void gbam2bam_connect_work(struct work_struct *w)
 	if (dev && dev->cdev)
 		gadget = dev->cdev->gadget;
 
+	if (!gadget) {
+		pr_err("%s: NULL gadget\n", __func__);
+		return;
+	}
+
 	spin_lock_irqsave(&port->port_lock_ul, flags);
 	spin_lock(&port->port_lock_dl);
 	if (!port->port_usb) {
@@ -1128,6 +1135,9 @@ static void gbam2bam_connect_work(struct work_struct *w)
 			return;
 		}
 	} else if (d->trans == USB_GADGET_XPORT_BAM2BAM_IPA) {
+
+		d->ipa_params.usb_connection_speed = gadget->speed;
+
 		if (usb_bam_get_pipe_type(d->ipa_params.src_idx,
 				&d->src_pipe_type) ||
 			usb_bam_get_pipe_type(d->ipa_params.dst_idx,

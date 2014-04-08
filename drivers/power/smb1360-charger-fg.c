@@ -42,7 +42,8 @@
 #define RECHG_MV_SHIFT			5
 
 #define CFG_BATT_CHG_ICL_REG		0x05
-#define	AC_INPUT_ICL_PIN		BIT(7)
+#define AC_INPUT_ICL_PIN_BIT		BIT(7)
+#define AC_INPUT_PIN_HIGH_BIT		BIT(6)
 #define INPUT_CURR_LIM_MASK		SMB1360_MASK(3, 0)
 
 #define CFG_GLITCH_FLT_REG		0x06
@@ -108,9 +109,9 @@
 
 #define CMD_IL_REG			0x41
 #define USB_CTRL_MASK			SMB1360_MASK(1 , 0)
-#define USB_100_BIT			0x00
-#define USB_500_BIT			0x01
-#define USB_AC_BIT			0x11
+#define USB_100_BIT			0x01
+#define USB_500_BIT			0x00
+#define USB_AC_BIT			0x02
 
 #define CMD_CHG_REG			0x42
 #define CMD_CHG_EN			BIT(1)
@@ -177,6 +178,7 @@
 
 enum {
 	WRKRND_FG_CONFIG_FAIL = BIT(0),
+	WRKRND_BATT_DET_FAIL = BIT(1),
 };
 
 enum {
@@ -1067,6 +1069,14 @@ static int chg_inhibit_handler(struct smb1360_chip *chip, u8 rt_stat)
 
 static int min_soc_handler(struct smb1360_chip *chip, u8 rt_stat)
 {
+	/*
+	 * Avoid holding a wake_source if there is no battery
+	 * or if the SMB rev. has a battery detection issue
+	 */
+	if (!chip->batt_present ||
+			(chip->workaround_flags & WRKRND_BATT_DET_FAIL))
+		return 0;
+
 	if (rt_stat) {
 		pr_debug("Below minimum SOC, holding wake_source\n");
 		pm_stay_awake(chip->dev);
@@ -1796,7 +1806,9 @@ static int smb1360_hw_init(struct smb1360_chip *chip)
 
 	/* USB/AC pin settings */
 	rc = smb1360_masked_write(chip, CFG_BATT_CHG_ICL_REG,
-					AC_INPUT_ICL_PIN, 0);
+					AC_INPUT_ICL_PIN_BIT
+					| AC_INPUT_PIN_HIGH_BIT,
+					AC_INPUT_PIN_HIGH_BIT);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't set CFG_BATT_CHG_ICL_REG rc=%d\n",
 				rc);
@@ -1807,7 +1819,7 @@ static int smb1360_hw_init(struct smb1360_chip *chip)
 	rc = smb1360_masked_write(chip, CFG_GLITCH_FLT_REG,
 			AICL_ENABLED_BIT, AICL_ENABLED_BIT);
 	if (rc < 0) {
-		dev_err(chip->dev, "Couldn't set CFG_BATT_CHG_ICL_REG rc=%d\n",
+		dev_err(chip->dev, "Couldn't set CFG_GLITCH_FLT_REG rc=%d\n",
 				rc);
 		return rc;
 	}
@@ -2006,10 +2018,13 @@ static int smb1360_hw_init(struct smb1360_chip *chip)
 	 *
 	 * The REV_1 of the chip does not allow access to
 	 * FG config registers (20-2FH). Set the workaround flag.
+	 * Also, the battery detection does not work when the DCIN is absent,
+	 * add a workaround flag for it.
 	*/
 
 	if (chip->revision == SMB1360_REV_1)
-		chip->workaround_flags |= WRKRND_FG_CONFIG_FAIL;
+		chip->workaround_flags |=
+			WRKRND_FG_CONFIG_FAIL | WRKRND_BATT_DET_FAIL;
 
 	smb1360_fg_config(chip);
 
@@ -2150,6 +2165,10 @@ static int smb1360_probe(struct i2c_client *client,
 		pr_err("Failed to detect SMB1360, device may be absent\n");
 		return -ENODEV;
 	}
+
+	rc = read_revision(chip, &chip->revision);
+	if (rc)
+		dev_err(chip->dev, "Couldn't read revision rc = %d\n", rc);
 
 	rc = smb_parse_dt(chip);
 	if (rc < 0) {
@@ -2297,10 +2316,6 @@ static int smb1360_probe(struct i2c_client *client,
 				"Couldn't create count debug file rc = %d\n",
 				rc);
 	}
-
-	rc = read_revision(chip, &chip->revision);
-	if (rc)
-		dev_err(chip->dev, "Couldn't read revision rc = %d\n", rc);
 
 	dev_info(chip->dev, "SMB1360 revision=0x%x probe success! batt=%d usb=%d soc=%d\n",
 			chip->revision,

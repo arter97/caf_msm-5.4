@@ -13,6 +13,7 @@
 /dts-v1/;
 
 #include "msm8939.dtsi"
+#include "msm8939-pinctrl.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. MSM8939 RUMI";
@@ -24,8 +25,14 @@
 	timer {
 		clock-frequency = <5000000>;
 	};
+
+	timer@b120000 {
+		clock-frequency = <5000000>;
+	};
 };
 
 &blsp1_uart2 {
 	status = "ok";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart_console_sleep>;
 };

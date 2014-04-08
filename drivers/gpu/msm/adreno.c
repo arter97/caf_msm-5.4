@@ -132,7 +132,7 @@ static void adreno_input_work(struct work_struct *work)
 			struct adreno_device, input_work);
 	struct kgsl_device *device = &adreno_dev->dev;
 
-	mutex_lock(&device->mutex);
+	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 
 	device->flags |= KGSL_FLAG_WAKE_ON_TOUCH;
 
@@ -150,7 +150,7 @@ static void adreno_input_work(struct work_struct *work)
 	 */
 	mod_timer(&device->idle_timer,
 		jiffies + msecs_to_jiffies(_wake_timeout));
-	mutex_unlock(&device->mutex);
+	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 }
 
 /*
@@ -1296,15 +1296,15 @@ adreno_identify_gpu(struct adreno_device *adreno_dev)
 	}
 }
 
-static struct platform_device_id adreno_id_table[] = {
-	{ DEVICE_3D0_NAME, (kernel_ulong_t)&device_3d0.dev, },
+static const struct platform_device_id adreno_id_table[] = {
+	{ DEVICE_3D0_NAME, (unsigned long) &device_3d0, },
 	{},
 };
 
 MODULE_DEVICE_TABLE(platform, adreno_id_table);
 
-static struct of_device_id adreno_match_table[] = {
-	{ .compatible = "qcom,kgsl-3d0", },
+static const struct of_device_id adreno_match_table[] = {
+	{ .compatible = "qcom,kgsl-3d0", .data = &device_3d0 },
 	{}
 };
 
@@ -1475,14 +1475,7 @@ err:
 static int adreno_of_get_pdata(struct platform_device *pdev)
 {
 	struct kgsl_device_platform_data *pdata = NULL;
-	struct kgsl_device *device;
 	int ret = -EINVAL;
-
-	pdev->id_entry = adreno_id_table;
-
-	pdata = pdev->dev.platform_data;
-	if (pdata)
-		return 0;
 
 	if (of_property_read_string(pdev->dev.of_node, "label", &pdev->name)) {
 		KGSL_CORE_ERR("Unable to read 'label'\n");
@@ -1507,11 +1500,6 @@ static int adreno_of_get_pdata(struct platform_device *pdev)
 	if (ret)
 		goto err;
 
-	/* get pm-qos-latency from target, set it to default if not found */
-	if (of_property_read_u32(pdev->dev.of_node, "qcom,pm-qos-latency",
-		&pdata->pm_qos_latency))
-		pdata->pm_qos_latency = 501;
-
 	if (of_property_read_u32(pdev->dev.of_node, "qcom,idle-timeout",
 		&pdata->idle_timeout))
 		pdata->idle_timeout = HZ/12;
@@ -1524,11 +1512,6 @@ static int adreno_of_get_pdata(struct platform_device *pdev)
 
 	if (adreno_of_read_property(pdev->dev.of_node, "qcom,clk-map",
 		&pdata->clk_map))
-		goto err;
-
-	device = (struct kgsl_device *)pdev->id_entry->driver_data;
-
-	if (device->id != KGSL_DEVICE_3D0)
 		goto err;
 
 	/* Bus Scale Data */
@@ -1607,25 +1590,35 @@ adreno_ocmem_free(struct adreno_device *adreno_dev)
 }
 #endif
 
-static int 
-adreno_probe(struct platform_device *pdev)
+static inline struct adreno_device *adreno_get_dev(struct platform_device *pdev)
+{
+	const struct of_device_id *of_id =
+		of_match_device(adreno_match_table, &pdev->dev);
+
+	return of_id ? (struct adreno_device *) of_id->data : NULL;
+}
+
+int adreno_probe(struct platform_device *pdev)
 {
 	struct kgsl_device *device;
 	struct adreno_device *adreno_dev;
-	int status = -EINVAL;
-	bool is_dt;
+	int status;
 
-	is_dt = of_match_device(adreno_match_table, &pdev->dev);
+	adreno_dev = adreno_get_dev(pdev);
 
-	if (is_dt && pdev->dev.of_node) {
-		status = adreno_of_get_pdata(pdev);
-		if (status)
-			return status;
+	if (adreno_dev == NULL) {
+		pr_err("adreno: qcom,kgsl-3d0 does not exist in the device tree");
+		return -ENODEV;
 	}
 
-	device = (struct kgsl_device *)pdev->id_entry->driver_data;
-	adreno_dev = ADRENO_DEVICE(device);
+	device = &adreno_dev->dev;
 	device->parentdev = &pdev->dev;
+
+	status = adreno_of_get_pdata(pdev);
+	if (status) {
+		device->parentdev = NULL;
+		return status;
+	}
 
 	status = kgsl_device_platform_probe(device);
 	if (status) {
@@ -1670,11 +1663,14 @@ out:
 
 static int adreno_remove(struct platform_device *pdev)
 {
+	struct adreno_device *adreno_dev = adreno_get_dev(pdev);
 	struct kgsl_device *device;
-	struct adreno_device *adreno_dev;
 
-	device = (struct kgsl_device *)pdev->id_entry->driver_data;
-	adreno_dev = ADRENO_DEVICE(device);
+	if (adreno_dev == NULL)
+		return 0;
+
+	device = &adreno_dev->dev;
+
 #ifdef CONFIG_INPUT
 	input_unregister_handler(&adreno_input_handler);
 #endif
@@ -1914,7 +1910,7 @@ static void adreno_start_work(struct work_struct *work)
 	/* Nice ourselves to be higher priority but not too high priority */
 	set_user_nice(current, _wake_nice);
 
-	mutex_lock(&device->mutex);
+	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 	/*
 	 *  If adreno start is already called, no need to call it again
 	 *  it can lead to unpredictable behavior if we try to start
@@ -1934,7 +1930,7 @@ static void adreno_start_work(struct work_struct *work)
 		_status = _adreno_start(adreno_dev);
 	else
 		_status = 0;
-	mutex_unlock(&device->mutex);
+	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 }
 
 /**
@@ -1959,9 +1955,9 @@ static int adreno_start(struct kgsl_device *device, int priority)
 	 * higher priority work queue and wait for it to finish
 	 */
 	queue_work(adreno_wq, &adreno_dev->start_work);
-	mutex_unlock(&device->mutex);
+	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 	flush_work(&adreno_dev->start_work);
-	mutex_lock(&device->mutex);
+	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 
 	return _status;
 }
@@ -2315,7 +2311,7 @@ static ssize_t _ft_hang_intr_status_store(struct device *dev,
 		return 0;
 	adreno_dev = ADRENO_DEVICE(device);
 
-	mutex_lock(&device->mutex);
+	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 	ret = kgsl_sysfs_store(buf, &new_setting);
 	if (ret)
 		goto done;
@@ -2363,7 +2359,7 @@ static ssize_t _ft_hang_intr_status_store(struct device *dev,
 		}
 	}
 done:
-	mutex_unlock(&device->mutex);
+	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 	return ret < 0 ? ret : count;
 }
 
