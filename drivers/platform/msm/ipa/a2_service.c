@@ -965,7 +965,7 @@ int a2_mux_write(enum a2_mux_logical_channel_id id, struct sk_buff *skb)
 	int rc = 0;
 	struct bam_mux_hdr *hdr;
 	unsigned long flags;
-	struct sk_buff *new_skb = NULL;
+	struct sk_buff *old_skb = NULL;
 	struct tx_pkt_info *pkt;
 	bool is_connected;
 
@@ -1003,16 +1003,15 @@ int a2_mux_write(enum a2_mux_logical_channel_id id, struct sk_buff *skb)
 		 */
 		if ((skb->len & 0x3) &&
 		    (skb_tailroom(skb) < A2_MUX_PADDING_LENGTH(skb->len))) {
-			new_skb = skb_copy_expand(skb, skb_headroom(skb),
-					A2_MUX_PADDING_LENGTH(skb->len),
+			old_skb = skb;
+			skb = skb_copy_expand(old_skb, skb_headroom(old_skb),
+					A2_MUX_PADDING_LENGTH(old_skb->len),
 					GFP_ATOMIC);
-			if (new_skb == NULL) {
+			if (skb == NULL) {
 				IPAERR("%s: cannot allocate skb\n", __func__);
 				rc = -ENOMEM;
 				goto write_fail;
 			}
-			dev_kfree_skb_any(skb);
-			skb = new_skb;
 		}
 		hdr = (struct bam_mux_hdr *)skb_push(
 					skb, sizeof(struct bam_mux_hdr));
@@ -1058,6 +1057,8 @@ int a2_mux_write(enum a2_mux_logical_channel_id id, struct sk_buff *skb)
 		list_del(&pkt->list_node);
 		spin_unlock_irqrestore(&a2_mux_ctx->bam_tx_pool_spinlock,
 				       flags);
+		if (id != A2_MUX_TETHERED_0)
+			skb_pull(skb, sizeof(struct bam_mux_hdr));
 		goto write_fail3;
 	} else {
 		spin_unlock_irqrestore(&a2_mux_ctx->bam_tx_pool_spinlock,
@@ -1066,13 +1067,16 @@ int a2_mux_write(enum a2_mux_logical_channel_id id, struct sk_buff *skb)
 		a2_mux_ctx->bam_ch[id].num_tx_pkts++;
 		spin_unlock_irqrestore(&a2_mux_ctx->bam_ch[id].lock, flags);
 	}
+
+	if (old_skb)
+		dev_kfree_skb_any(old_skb);
 	return 0;
 
 write_fail3:
 	kfree(pkt);
 write_fail2:
-	if (new_skb)
-		dev_kfree_skb_any(new_skb);
+	if (old_skb)
+		dev_kfree_skb_any(skb);
 write_fail:
 	return rc;
 }

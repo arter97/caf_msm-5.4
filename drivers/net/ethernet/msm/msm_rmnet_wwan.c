@@ -514,30 +514,7 @@ static int wwan_xmit(struct sk_buff *skb, struct net_device *dev)
 		return -EFAULT;
 	}
 	ret = wwan_send_packet(skb, dev);
-	if (ret == -EPERM) {
-		ret = NETDEV_TX_BUSY;
-		goto exit;
-	}
-	/*
-	 * detected SSR a bit early.  shut some things down now, and leave
-	 * the rest to the main ssr handling code when that happens later
-	 */
-	if (ret == -EFAULT) {
-		netif_carrier_off(dev);
-		dev_kfree_skb_any(skb);
-		ret = 0;
-		goto exit;
-	}
-	if (ret == -EAGAIN) {
-		/*
-		 * This should not happen
-		 * EAGAIN means we attempted to overflow the high watermark
-		 * Clearly the queue is not stopped like it should be, so
-		 * stop it and return BUSY to the TCP/IP framework.  It will
-		 * retry this packet with the queue is restarted which happens
-		 * in the write_done callback when the low watermark is hit.
-		 */
-		netif_stop_queue(dev);
+	if (ret) {
 		ret = NETDEV_TX_BUSY;
 		goto exit;
 	}
