@@ -57,7 +57,8 @@
 #define IPA_IOCTL_QUERY_EP_MAPPING 33
 #define IPA_IOCTL_QUERY_RT_TBL_INDEX 34
 #define IPA_IOCTL_WRITE_QMAPID 35
-#define IPA_IOCTL_MAX            36
+#define IPA_IOCTL_MDFY_FLT_RULE 36
+#define IPA_IOCTL_MAX            37
 
 /**
  * max size of the header to be inserted
@@ -473,6 +474,8 @@ struct ipa_rt_rule {
  * @status:	out paramerer, status of header add operation,
  *		0 for success,
  *		-1 for failure
+ * @is_eth2_ofst_valid: is eth2_ofst field valid?
+ * @eth2_ofst: offset to start of Ethernet-II/802.3 header
  */
 struct ipa_hdr_add {
 	char name[IPA_RESOURCE_NAME_MAX];
@@ -481,6 +484,8 @@ struct ipa_hdr_add {
 	uint8_t is_partial;
 	uint32_t hdr_hdl;
 	int status;
+	uint8_t is_eth2_ofst_valid;
+	uint16_t eth2_ofst;
 };
 
 /**
@@ -507,12 +512,16 @@ struct ipa_ioc_add_hdr {
  *	valid only when ioctl return val is non-negative
  * @is_partial:	out parameter, indicates whether specified header is partial
  *		valid only when ioctl return val is non-negative
+ * @is_eth2_ofst_valid: is eth2_ofst field valid?
+ * @eth2_ofst: offset to start of Ethernet-II/802.3 header
  */
 struct ipa_ioc_copy_hdr {
 	char name[IPA_RESOURCE_NAME_MAX];
 	uint8_t hdr[IPA_HDR_MAX_SIZE];
 	uint8_t hdr_len;
 	uint8_t is_partial;
+	uint8_t is_eth2_ofst_valid;
+	uint16_t eth2_ofst;
 };
 
 /**
@@ -669,6 +678,37 @@ struct ipa_ioc_add_flt_rule {
 	uint8_t global;
 	uint8_t num_rules;
 	struct ipa_flt_rule_add rules[0];
+};
+
+/**
+ * struct ipa_flt_rule_mdfy - filtering rule descriptor includes
+ * in and out parameters
+ * @rule: actual rule to be added
+ * @flt_rule_hdl: handle to rule
+ * @status:	output parameter, status of filtering rule modify  operation,
+ *		0 for success,
+ *		-1 for failure
+ *
+ */
+struct ipa_flt_rule_mdfy {
+	struct ipa_flt_rule rule;
+	uint32_t rule_hdl;
+	int status;
+};
+
+/**
+ * struct ipa_ioc_mdfy_flt_rule - filtering rule modify parameters (supports
+ * multiple rules and commit)
+ * @commit: should rules be written to IPA HW also?
+ * @ip: IP family of rule
+ * @num_rules: number of filtering rules that follow
+ * @rules: all rules need to go back to back here, no pointers
+ */
+struct ipa_ioc_mdfy_flt_rule {
+	uint8_t commit;
+	enum ipa_ip_type ip;
+	uint8_t num_rules;
+	struct ipa_flt_rule_mdfy rules[0];
 };
 
 /**
@@ -1112,6 +1152,9 @@ struct ipa_ioc_write_qmapid {
 #define IPA_IOC_WRITE_QMAPID  _IOWR(IPA_IOC_MAGIC, \
 				IPA_IOCTL_WRITE_QMAPID, \
 				struct ipa_ioc_write_qmapid *)
+#define IPA_IOC_MDFY_FLT_RULE _IOWR(IPA_IOC_MAGIC, \
+					IPA_IOCTL_MDFY_FLT_RULE, \
+					struct ipa_ioc_mdfy_flt_rule *)
 
 /*
  * unique magic number of the Tethering bridge ioctls

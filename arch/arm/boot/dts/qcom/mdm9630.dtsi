@@ -498,8 +498,8 @@
 				interrupts = <0 131 0>, <0 179 0>;
 				interrupt-names = "irq", "otg_irq";
 				usb-phy = <&hsphy0>, <&ssphy0>;
-				nominal-elastic-buffer;
-				core_reset_after_phy_init;
+				snps,nominal-elastic-buffer;
+				snps,core-reset-after-phy-init;
 				snps,hsphy-auto-suspend-disable;
 		};
         };
@@ -549,6 +549,8 @@
 		qcom,ignore-core-reset-ack;
 		qcom,disable-clk-gating;
 		qcom,usb-bam-override-threshold = <0x4001>;
+		qcom,usb-bam-max-mbps-highspeed = <400>;
+		qcom,usb-bam-max-mbps-superspeed = <3600>;
 
 		qcom,pipe0 {
 			label = "ssusb-ipa-out-0";

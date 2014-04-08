@@ -239,6 +239,7 @@
 };
 
 #include "dsi-panel-jdi-1080p-video.dtsi"
+#include "dsi-panel-nt35590-720p-video.dtsi"
 
 &mdss_mdp {
 	qcom,mdss-pref-prim-intf = "dsi";
@@ -268,6 +269,14 @@
 	qcom,platform-bklight-en-gpio = <&msm_gpio 98 0>;
 };
 
+&dsi_jdi_1080_vid {
+       qcom,cont-splash-enabled;
+};
+
+&dsi_nt35590_720_vid {
+       qcom,cont-splash-enabled;
+};
+
 /* CoreSight */
 &tpiu {
 	pinctrl-names = "seta-pctrl", "setb-pctrl";
@@ -281,6 +290,11 @@
 
 &pm8916_chg {
 	status = "ok";
+};
+
+&pm8916_bms {
+	status = "ok";
+	qcom,disable-bms;
 };
 
 &spmi_bus {

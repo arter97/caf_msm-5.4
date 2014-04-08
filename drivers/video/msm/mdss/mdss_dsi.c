@@ -1024,6 +1024,8 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 				panel_data);
 	pr_debug("%s+:event=%d\n", __func__, event);
 
+	MDSS_XLOG(event, arg, ctrl_pdata->ndx, 0x3333);
+
 	switch (event) {
 	case MDSS_EVENT_UNBLANK:
 		rc = mdss_dsi_on(pdata);
@@ -1188,6 +1190,7 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 	char panel_cfg[MDSS_MAX_PANEL_LEN];
 	const char *ctrl_name;
 	bool cmd_cfg_cont_splash = true;
+	struct mdss_panel_cfg *pan_cfg = NULL;
 
 	if (!mdss_is_ready()) {
 		pr_err("%s: MDP not probed yet!\n", __func__);
@@ -1197,6 +1200,14 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 	if (!pdev->dev.of_node) {
 		pr_err("DSI driver only supports device tree probe\n");
 		return -ENOTSUPP;
+	}
+
+	pan_cfg = mdss_panel_intf_type(MDSS_PANEL_INTF_HDMI);
+	if (IS_ERR(pan_cfg)) {
+		return PTR_ERR(pan_cfg);
+	} else if (pan_cfg) {
+		pr_debug("%s: HDMI is primary\n", __func__);
+		return -ENODEV;
 	}
 
 	ctrl_pdata = platform_get_drvdata(pdev);
