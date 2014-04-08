@@ -44,7 +44,6 @@
 
 #define QFP_FUSE_BUF_SIZE           64
 
-
 struct qfp_priv_t {
 	uint32_t base;
 	uint32_t end;
