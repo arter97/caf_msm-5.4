@@ -682,8 +682,11 @@ static ssize_t ffs_epfile_io(struct file *file,
 		if (unlikely(ret < 0)) {
 			/* nop */
 		} else if (unlikely(wait_for_completion_interruptible(&done))) {
+			spin_lock_irq(&epfile->ffs->eps_lock);
+			if (ep->ep)
+				usb_ep_dequeue(ep->ep, req);
+			spin_unlock_irq(&epfile->ffs->eps_lock);
 			ret = -EINTR;
-			usb_ep_dequeue(ep->ep, req);
 		} else {
 			/*
 			 * XXX We may end up silently droping data here.
@@ -692,7 +695,12 @@ static ssize_t ffs_epfile_io(struct file *file,
 			 * we may end up with more data then user space has
 			 * space for.
 			 */
-			ret = ep->status;
+			spin_lock_irq(&epfile->ffs->eps_lock);
+			if (ep->ep)
+				ret = ep->status;
+			else
+				ret = -ENODEV;
+			spin_unlock_irq(&epfile->ffs->eps_lock);
 			if (read && ret > 0 &&
 			    unlikely(copy_to_user(buf, data,
 						  min_t(size_t, ret, len))))
