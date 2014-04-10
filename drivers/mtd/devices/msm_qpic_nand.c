@@ -1836,6 +1836,7 @@ static int msm_nand_read(struct mtd_info *mtd, loff_t from, size_t len,
 	ops.retlen = 0;
 	ops.ooblen = 0;
 	ops.oobbuf = NULL;
+	*retlen = 0;
 
 	if (!(from & (mtd->writesize - 1)) && !(len % mtd->writesize)) {
 		/*
@@ -1847,7 +1848,7 @@ static int msm_nand_read(struct mtd_info *mtd, loff_t from, size_t len,
 			ops.len = mtd->writesize;
 
 			for (;;) {
-				ops.datbuf = buf;
+				ops.datbuf = (uint8_t *)buf;
 				ret = msm_nand_read_oob(mtd, from, &ops);
 				if (ret < 0)
 					break;
@@ -1870,13 +1871,13 @@ static int msm_nand_read(struct mtd_info *mtd, loff_t from, size_t len,
 			}
 		} else {
 			ops.len = len;
-			ops.datbuf = buf;
+			ops.datbuf = (uint8_t *)buf;
 			ret =  msm_nand_read_oob(mtd, from, &ops);
 			*retlen = ops.retlen;
 		}
 	} else {
 		ops.len = len;
-		ops.datbuf = buf;
+		ops.datbuf = (uint8_t *)buf;
 		ret = msm_nand_read_partial_page(mtd, from, &ops);
 		*retlen = ops.retlen;
 	}
