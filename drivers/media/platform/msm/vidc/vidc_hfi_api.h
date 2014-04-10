@@ -178,6 +178,8 @@ enum hal_property {
 	HAL_PARAM_BUFFER_ALLOC_MODE,
 	HAL_PARAM_VDEC_FRAME_ASSEMBLY,
 	HAL_PARAM_VDEC_CONCEAL_COLOR,
+        HAL_PARAM_VENC_LTRMODE,
+	HAL_PARAM_VENC_ENABLE_INITIAL_QP
 };
 
 enum hal_domain {
@@ -623,6 +625,14 @@ struct hal_quantization {
 	u32 layer_id;
 };
 
+struct hal_initial_quantization {
+        u32 qpi;
+        u32 qpp;
+        u32 qpb;
+        u32 init_qp_enable;
+};
+
+
 struct hal_quantization_range {
 	u32 min_qp;
 	u32 max_qp;
@@ -896,6 +906,19 @@ struct hal_buffer_alloc_mode {
 	enum hal_buffer buffer_type;
 	enum buffer_mode_type buffer_mode;
 };
+
+enum ltr_mode {
+        HAL_LTR_MODE_DISABLE,
+        HAL_LTR_MODE_MANUAL,
+        HAL_LTR_MODE_PERIODIC,
+};
+
+struct hal_ltrmode {
+        enum ltr_mode ltrmode;
+        u32 ltrcount;
+        u32 trustmode;
+};
+
 
 /* HAL Response */
 
