@@ -30,7 +30,7 @@ inline int usbnet_ipa_connect(struct usb_interface *intf,
 }
 inline int usbnet_ipa_disconnect(struct usb_interface *intf,
 	unsigned int rx_usb_pipe_handle, unsigned int tx_usb_pipe_handle)
-(
+{
 	return 0;
 }
 
