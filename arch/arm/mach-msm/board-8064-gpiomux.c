@@ -564,6 +564,18 @@ static struct gpiomux_setting gsbi1_uart_config = {
 	.pull = GPIOMUX_PULL_NONE,
 };
 
+static struct gpiomux_setting mplatform_gsbi2_uart_config = {
+	.func = GPIOMUX_FUNC_1,
+	.drv = GPIOMUX_DRV_16MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+
+static struct gpiomux_setting mplatform_gsbi6_uart_config = {
+	.func = GPIOMUX_FUNC_2,
+	.drv = GPIOMUX_DRV_16MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+
 static struct gpiomux_setting ext_regulator_config = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_8MA,
@@ -903,6 +915,32 @@ static struct msm_gpiomux_config apq8064_mplatform_gsbi_configs[] __initdata = {
 		.settings = {
 			[GPIOMUX_SUSPENDED] = &gpio_i2c_config_sus,
 			[GPIOMUX_ACTIVE] = &gpio_i2c_config,
+		},
+	},
+	{
+		.gpio      = 22,		/* GSBI2 UART TX */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &mplatform_gsbi2_uart_config,
+		},
+	},
+	{
+		.gpio      = 23,		/* GSBI2 UART RX */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &mplatform_gsbi2_uart_config,
+		},
+	},
+	{
+		.gpio      = 14,     /* GSBI6 UART TX */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &mplatform_gsbi6_uart_config,
+			[GPIOMUX_ACTIVE] = &mplatform_gsbi6_uart_config,
+		},
+	},
+	{
+		.gpio      = 15,     /* GSBI6 UART RX */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &mplatform_gsbi6_uart_config,
+			[GPIOMUX_ACTIVE] = &mplatform_gsbi6_uart_config,
 		},
 	},
 };

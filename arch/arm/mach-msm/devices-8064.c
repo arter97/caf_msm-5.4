@@ -62,6 +62,7 @@
 
 /* GSBI UART devices */
 #define MSM_UART1DM_PHYS	(MSM_GSBI1_PHYS + 0x10000)
+#define MSM_UART2DM_PHYS	(MSM_MPLATFORM_GSBI2_PHYS + 0x10000)
 #define MSM_UART3DM_PHYS	(MSM_GSBI3_PHYS + 0x40000)
 #define MSM_UART4DM_PHYS	(MSM_GSBI4_PHYS + 0x40000)
 #define MSM_UART6DM_PHYS	(MSM_GSBI6_PHYS + 0x40000)
@@ -216,6 +217,33 @@ struct platform_device apq8064_device_uart_gsbi1 = {
 	.id	= 1,
 	.num_resources	= ARRAY_SIZE(resources_uart_gsbi1),
 	.resource	= resources_uart_gsbi1,
+};
+
+static struct resource resources_mplatform_uart_gsbi2[] = {
+	{
+		.start  = APQ8064_GSBI2_UARTDM_IRQ,
+		.end    = APQ8064_GSBI2_UARTDM_IRQ,
+		.flags  = IORESOURCE_IRQ,
+	},
+	{
+		.start  = MSM_UART2DM_PHYS,
+		.end    = MSM_UART2DM_PHYS + PAGE_SIZE - 1,
+		.name   = "uartdm_resource",
+		.flags  = IORESOURCE_MEM,
+	},
+	{
+		.start  = MSM_MPLATFORM_GSBI2_PHYS,
+		.end    = MSM_MPLATFORM_GSBI2_PHYS + PAGE_SIZE - 1,
+		.name   = "gsbi_resource",
+		.flags  = IORESOURCE_MEM,
+	},
+};
+
+struct platform_device apq8064_mplatform_device_uart_gsbi2 = {
+	.name   = "msm_serial_hsl",
+	.id     = 2,
+	.num_resources  = ARRAY_SIZE(resources_mplatform_uart_gsbi2),
+	.resource       = resources_mplatform_uart_gsbi2,
 };
 
 static struct resource resources_uart_gsbi3[] = {

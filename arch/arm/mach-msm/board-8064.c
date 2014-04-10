@@ -2724,6 +2724,11 @@ static struct platform_device *mplatform_common_devices[] __initdata = {
 	&apq8064_msm_mpd_device,
 };
 
+static struct platform_device *mplatform_devices[] __initdata = {
+	&apq8064_mplatform_device_uart_gsbi2,
+	&apq8064_mplatform_device_uart_gsbi6,
+};
+
 static struct platform_device *cdp_devices[] __initdata = {
 	&apq8064_device_uart_gsbi1,
 	&apq8064_device_uart_gsbi7,
@@ -2892,7 +2897,7 @@ static struct msm_i2c_platform_data apq8064_i2c_qup_gsbi1_pdata = {
 	.src_clk_rate = 24000000,
 };
 
-static struct msm_i2c_platform_data apq8064_mplatfrom_i2c_qup_gsbi1_pdata = {
+static struct msm_i2c_platform_data apq8064_mplatform_i2c_qup_gsbi1_pdata = {
 	.clk_freq = 50000,
 	.src_clk_rate = 24000000,
 };
@@ -2935,8 +2940,12 @@ static void __init apq8064_i2c_init(void)
 
 	if (machine_is_apq8064_mplatform()) {
 		apq8064_device_qup_i2c_gsbi1.dev.platform_data =
-			&apq8064_mplatfrom_i2c_qup_gsbi1_pdata;
-		apq8064_mplatfrom_i2c_qup_gsbi1_pdata.use_gsbi_shared_mode = 1;
+			&apq8064_mplatform_i2c_qup_gsbi1_pdata;
+		apq8064_mplatform_i2c_qup_gsbi1_pdata.use_gsbi_shared_mode = 1;
+
+		apq8064_device_qup_i2c_gsbi2.dev.platform_data =
+			&apq8064_mplatform_i2c_qup_gsbi2_pdata;
+		apq8064_mplatform_i2c_qup_gsbi2_pdata.use_gsbi_shared_mode = 1;
 	} else
 		apq8064_i2c_qup_gsbi1_pdata.use_gsbi_shared_mode = 1;
 
@@ -2945,7 +2954,7 @@ static void __init apq8064_i2c_init(void)
 	/* ADD GSBI1 I2C pdata for ADP */
 	if (machine_is_apq8064_mplatform()) {
 		apq8064_device_qup_i2c_gsbi1.dev.platform_data =
-			&apq8064_mplatfrom_i2c_qup_gsbi1_pdata;
+			&apq8064_mplatform_i2c_qup_gsbi1_pdata;
 		apq8064_device_qup_i2c_gsbi2.dev.platform_data =
 			&apq8064_mplatform_i2c_qup_gsbi2_pdata;
 	} else if (machine_is_apq8064_adp_2()) {
@@ -3777,10 +3786,13 @@ static void __init apq8064_cdp_init(void)
 	} else {
 		ethernet_init();
 		msm_rotator_set_split_iommu_domain();
+		if (machine_is_apq8064_mplatform())
+			platform_add_devices(mplatform_devices, ARRAY_SIZE(mplatform_devices));
 		platform_add_devices(cdp_devices, ARRAY_SIZE(cdp_devices));
 		spi_register_board_info(spi_board_info,
 						ARRAY_SIZE(spi_board_info));
 	}
+
 	apq8064_init_fb();
 	apq8064_init_gpu();
 	platform_add_devices(apq8064_footswitch, apq8064_num_footswitch);
