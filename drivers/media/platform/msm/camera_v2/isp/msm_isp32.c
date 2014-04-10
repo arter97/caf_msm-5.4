@@ -372,7 +372,7 @@ static long msm_vfe32_reset_hardware(struct vfe_device *vfe_dev)
 {
 	init_completion(&vfe_dev->reset_complete);
 	msm_camera_io_w_mb(0x3FF, vfe_dev->vfe_base + 0x4);
-	return wait_for_completion_interruptible_timeout(
+	return wait_for_completion_timeout(
 	   &vfe_dev->reset_complete, msecs_to_jiffies(50));
 }
 
@@ -850,7 +850,7 @@ static void msm_vfe32_cfg_axi_ub_equal_slicing(struct vfe_device *vfe_dev)
 static void msm_vfe32_cfg_axi_ub(struct vfe_device *vfe_dev)
 {
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
-	axi_data->wm_ub_cfg_policy = MSM_WM_UB_EQUAL_SLICING;
+	axi_data->wm_ub_cfg_policy = MSM_WM_UB_CFG_DEFAULT;
 	if (axi_data->wm_ub_cfg_policy == MSM_WM_UB_EQUAL_SLICING)
 		msm_vfe32_cfg_axi_ub_equal_slicing(vfe_dev);
 	else
