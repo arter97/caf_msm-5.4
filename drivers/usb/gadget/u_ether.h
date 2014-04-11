@@ -76,7 +76,8 @@ struct gether {
 	u32				fixed_in_len;
 
 	unsigned			ul_max_pkts_per_xfer;
-	unsigned			dl_max_pkts_per_xfer;
+	uint32_t			dl_max_pkts_per_xfer;
+	uint32_t			dl_max_xfer_size;
 	bool				multi_pkt_xfer;
 	struct sk_buff			*(*wrap)(struct gether *port,
 						struct sk_buff *skb);
@@ -135,6 +136,8 @@ struct net_device *gether_setup_name_default(const char *netname);
  *
  */
 int gether_register_netdev(struct net_device *net);
+void gether_update_dl_max_pkts_per_xfer(struct gether *link, uint32_t n);
+void gether_update_dl_max_xfer_size(struct gether *link, uint32_t s);
 
 /* gether_setup_default - initialize one ethernet-over-usb link
  * Context: may sleep
