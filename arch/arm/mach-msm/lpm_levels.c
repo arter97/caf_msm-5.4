@@ -251,6 +251,9 @@ int msm_lpm_enter_sleep(uint32_t sclk_count, void *limits,
 	if (debug_mask)
 		pr_info("%s(): l2:%d", __func__, l2);
 
+	if (l2 == MSM_SPM_L2_MODE_GDHS)
+		notify_rpm = false;
+
 	ret = msm_lpm_set_l2_mode(l2);
 
 	if (ret) {
