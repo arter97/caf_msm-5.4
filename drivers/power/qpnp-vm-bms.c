@@ -66,6 +66,8 @@
 #define ACC_DATA_SD_CLR_BIT		BIT(1)
 #define ACC_CNT_SD_CLR_BIT		BIT(0)
 
+#define S3_OCV_TOL_CTL_REG		0x44
+
 #define EN_CTL_REG			0x46
 #define BMS_EN_BIT			BIT(7)
 
@@ -96,6 +98,8 @@
 #define QPNP_CHARGER_PRESENT		BIT(7)
 
 /* Constants */
+#define OCV_TOL_LSB_UV			300
+#define MAX_OCV_TOL_THRESHOLD		(OCV_TOL_LSB_UV * 0xFF)
 #define MAX_SAMPLE_COUNT		256
 #define MAX_SAMPLE_INTERVAL		2550
 #define BMS_READ_TIMEOUT		3000
@@ -150,6 +154,7 @@ struct bms_dt_cfg {
 	int				cfg_s1_fifo_length;
 	int				cfg_s2_fifo_length;
 	int				cfg_disable_bms;
+	int				cfg_s3_ocv_tol_uv;
 };
 
 struct qpnp_bms_chip {
@@ -193,6 +198,7 @@ struct qpnp_bms_chip {
 	u8				shutdown_soc;
 	u16				last_ocv_raw;
 	u32				shutdown_ocv;
+	bool				suspend_data_valid;
 
 	struct bms_battery_data		*batt_data;
 	struct bms_dt_cfg		dt;
@@ -207,6 +213,7 @@ struct qpnp_bms_chip {
 	struct mutex			bms_data_mutex;
 	struct mutex			bms_device_mutex;
 	struct mutex			last_soc_mutex;
+	struct mutex			state_change_mutex;
 	struct class			*bms_class;
 	struct device			*bms_device;
 	struct cdev			bms_cdev;
@@ -479,6 +486,8 @@ static int force_fsm_state(struct qpnp_bms_chip *chip, u8 state)
 		pr_err("Unable to write reg=%x rc=%d\n", MODE_CTL_REG, rc);
 		return rc;
 	}
+	/* delay for the FSM state to take affect in hardware */
+	usleep_range(100, 110);
 
 	pr_debug("force_mode=%d  mode_cntl_reg=%x\n", state, mode_ctl);
 
@@ -497,6 +506,8 @@ static int set_auto_fsm_state(struct qpnp_bms_chip *chip)
 					MODE_CTL_REG, rc);
 		return rc;
 	}
+	/* delay for the FSM state to take affect in hardware */
+	usleep_range(100, 110);
 
 	pr_debug("mode_cntl_reg=%x\n", mode_ctl);
 
@@ -610,16 +621,16 @@ static int get_fifo_length(struct qpnp_bms_chip *chip,
 	return 0;
 }
 
-static int update_fsm_state(struct qpnp_bms_chip *chip)
+static int get_fsm_state(struct qpnp_bms_chip *chip, u8 *state)
 {
-	u8 val = 0;
 	int rc;
 
 	/*
 	 * To read the STATUS1 register, write a value(any) to this register,
 	 * wait for 10ms and then read the register.
 	 */
-	rc = qpnp_write_wrapper(chip, &val, chip->base + STATUS1_REG, 1);
+	*state = 0;
+	rc = qpnp_write_wrapper(chip, state, chip->base + STATUS1_REG, 1);
 	if (rc) {
 		pr_err("Unable to write STATUS1_REG rc=%d\n", rc);
 		return rc;
@@ -627,16 +638,33 @@ static int update_fsm_state(struct qpnp_bms_chip *chip)
 	usleep_range(10000, 11000);
 
 	/* read the current FSM state */
-	rc = qpnp_read_wrapper(chip, &val, chip->base + STATUS1_REG, 1);
+	rc = qpnp_read_wrapper(chip, state, chip->base + STATUS1_REG, 1);
 	if (rc) {
 		pr_err("Unable to read STATUS1_REG rc=%d\n", rc);
 		return rc;
 	}
-	val = (val & FSM_STATE_MASK) >> FSM_STATE_SHIFT;
+	*state = (*state & FSM_STATE_MASK) >> FSM_STATE_SHIFT;
 
-	chip->current_fsm_state = val;
+	return rc;
+}
 
-	return 0;
+static int update_fsm_state(struct qpnp_bms_chip *chip)
+{
+	u8 state = 0;
+	int rc;
+
+	mutex_lock(&chip->state_change_mutex);
+	rc = get_fsm_state(chip, &state);
+	if (rc) {
+		pr_err("Unable to get fsm_state rc=%d\n", rc);
+		goto fail_fsm;
+	}
+
+	chip->current_fsm_state = state;
+
+fail_fsm:
+	mutex_unlock(&chip->state_change_mutex);
+	return rc;
 }
 
 static int lookup_soc_ocv(struct qpnp_bms_chip *chip, int ocv_uv, int batt_temp)
@@ -880,9 +908,17 @@ static void charging_began(struct qpnp_bms_chip *chip)
 
 	mutex_unlock(&chip->last_soc_mutex);
 
+	/*
+	 * Enable the state change irq to handle state
+	 * changes while charging
+	 */
+	enable_bms_irq(&chip->fsm_state_change_irq);
+
 	if (chip->dt.cfg_force_s2_in_charging) {
 		pr_debug("Forcing S2 state\n");
+		mutex_lock(&chip->state_change_mutex);
 		force_fsm_state(chip, S2_STATE);
+		mutex_unlock(&chip->state_change_mutex);
 	}
 }
 
@@ -902,8 +938,16 @@ static void charging_ended(struct qpnp_bms_chip *chip)
 
 	if (chip->dt.cfg_force_s2_in_charging) {
 		pr_debug("Unforcing S2 state, setting AUTO\n");
+		mutex_lock(&chip->state_change_mutex);
 		set_auto_fsm_state(chip);
+		mutex_unlock(&chip->state_change_mutex);
 	}
+
+	/*
+	 * Disable the state change IRQ to ignore state
+	 * changes while we are not charging
+	 */
+	disable_bms_irq(&chip->fsm_state_change_irq);
 }
 
 static int estimate_ocv(struct qpnp_bms_chip *chip)
@@ -990,6 +1034,9 @@ static int report_vm_bms_soc(struct qpnp_bms_chip *chip)
 	calculate_delta_time(&last_change_sec, &time_since_last_change_sec);
 
 	charging = is_battery_charging(chip);
+
+	pr_debug("charging=%d last_soc=%d last_soc_unbound=%d\n",
+		charging, chip->last_soc, chip->last_soc_unbound);
 	/*
 	 * account for charge time - limit it to SOC_CATCHUP_SEC to
 	 * avoid overflows when charging continues for extended periods
@@ -1061,11 +1108,11 @@ static int report_vm_bms_soc(struct qpnp_bms_chip *chip)
 	if (chip->last_soc != soc && !chip->last_soc_unbound)
 		chip->last_soc_change_sec = last_change_sec;
 
+	chip->last_soc = bound_soc(soc);
+
 	pr_debug("last_soc=%d calculated_soc=%d soc=%d time_since_last_change=%d\n",
 			chip->last_soc, chip->calculated_soc,
 			soc, time_since_last_change_sec);
-
-	chip->last_soc = bound_soc(soc);
 
 	/*
 	 * Backup the actual ocv (last_ocv_uv) and not the
@@ -1158,12 +1205,12 @@ static int report_eoc(struct qpnp_bms_chip *chip)
 	return rc;
 }
 
-#define OCV_EOC_MARGIN		25000
 static void check_eoc_condition(struct qpnp_bms_chip *chip)
 {
 	/*
-	 * Store the OCV value at 100. If the new ocv is with in
-	 * the OCV_EOC_MARGIN of ocv_at_100 report 100% SOC.
+	 * Store the OCV value at 100. If the new ocv is greater than
+	 * ocv_at_100 (battery settles), update ocv_at_100. Else
+	 * if the SOC drops, reset ocv_at_100.
 	 */
 	if (chip->ocv_at_100 == -EINVAL) {
 		if (chip->calculated_soc == 100) {
@@ -1173,13 +1220,14 @@ static void check_eoc_condition(struct qpnp_bms_chip *chip)
 				report_eoc(chip);
 		}
 	} else {
-		pr_debug("last_ocv_uv=%d ocv_at_100=%d\n",
-			chip->last_ocv_uv, chip->ocv_at_100);
-		if ((chip->last_ocv_uv + OCV_EOC_MARGIN) >= chip->ocv_at_100) {
+		if (chip->last_ocv_uv >= chip->ocv_at_100) {
+			pr_debug("new_ocv(%d) > ocv_at_100(%d) maintaining SOC to 100\n",
+					chip->last_ocv_uv, chip->ocv_at_100);
+			chip->ocv_at_100 = chip->last_ocv_uv;
 			chip->calculated_soc = 100;
-			pr_debug("last_ocv_uv within ocv_at_100 margin\n");
-		} else {
-			pr_debug("last_ocv_uv dropped below ocv_at_100 margin\n");
+		} else if (chip->calculated_soc != 100) {
+			pr_debug("SOC dropped (%d) discarding ocv_at_100\n",
+							chip->calculated_soc);
 			chip->ocv_at_100 = -EINVAL;
 		}
 	}
@@ -1289,6 +1337,7 @@ static void monitor_soc_work(struct work_struct *work)
 				if (chip->calculated_soc == 100)
 					/* update last_soc immediately */
 					report_vm_bms_soc(chip);
+
 				check_eoc_condition(chip);
 				pr_debug("update bms_psy\n");
 				power_supply_changed(&chip->bms_psy);
@@ -1666,6 +1715,11 @@ static irqreturn_t bms_fifo_update_done_irq_handler(int irq, void *_chip)
 
 	mutex_lock(&chip->bms_data_mutex);
 
+	if (chip->suspend_data_valid) {
+		pr_debug("Suspend data not processed yet\n");
+		goto fail_fifo;
+	}
+
 	rc = calib_vadc(chip);
 	if (rc)
 		pr_err("Unable to calibrate vadc rc=%d\n", rc);
@@ -1719,6 +1773,11 @@ static irqreturn_t bms_fsm_state_change_irq_handler(int irq, void *_chip)
 	pr_debug("fsm_state_changed triggered\n");
 
 	mutex_lock(&chip->bms_data_mutex);
+
+	if (chip->suspend_data_valid) {
+		pr_debug("Suspend data not processed yet\n");
+		goto fail_state;
+	}
 
 	rc = calib_vadc(chip);
 	if (rc)
@@ -1896,6 +1955,19 @@ static int bms_load_hw_defaults(struct qpnp_bms_chip *chip)
 	u8 val, interval[2], count[2];
 	int rc;
 
+	/* S3 OCV tolerence threshold */
+	if (chip->dt.cfg_s3_ocv_tol_uv >= 0 &&
+		chip->dt.cfg_s3_ocv_tol_uv <= MAX_OCV_TOL_THRESHOLD) {
+		val = chip->dt.cfg_s3_ocv_tol_uv / OCV_TOL_LSB_UV;
+		rc = qpnp_masked_write_base(chip,
+			chip->base + S3_OCV_TOL_CTL_REG, 0xFF, val);
+		if (rc) {
+			pr_err("Unable to write s3_ocv_tol_threshold rc=%d\n",
+									rc);
+			return rc;
+		}
+	}
+
 	/* S1 accumulator threshold */
 	if (chip->dt.cfg_s1_sample_count >= 1 &&
 		chip->dt.cfg_s1_sample_count <= MAX_SAMPLE_COUNT) {
@@ -1904,8 +1976,10 @@ static int bms_load_hw_defaults(struct qpnp_bms_chip *chip)
 		rc = qpnp_masked_write_base(chip,
 			chip->base + S1_ACC_CNT_REG,
 				ACC_CNT_MASK, val);
-		pr_err("Unable to write s1 sample count rc=%d\n", rc);
-		return rc;
+		if (rc) {
+			pr_err("Unable to write s1 sample count rc=%d\n", rc);
+			return rc;
+		}
 	}
 
 	/* S2 accumulator threshold */
@@ -1916,8 +1990,10 @@ static int bms_load_hw_defaults(struct qpnp_bms_chip *chip)
 		rc = qpnp_masked_write_base(chip,
 			chip->base + S2_ACC_CNT_REG,
 				ACC_CNT_MASK, val);
-		pr_err("Unable to write s2 sample count rc=%d\n", rc);
-		return rc;
+		if (rc) {
+			pr_err("Unable to write s2 sample count rc=%d\n", rc);
+			return rc;
+		}
 	}
 
 	if (chip->dt.cfg_s1_sample_interval_ms >= 0 &&
@@ -1925,8 +2001,10 @@ static int bms_load_hw_defaults(struct qpnp_bms_chip *chip)
 		val = chip->dt.cfg_s1_sample_interval_ms / 10;
 		rc = qpnp_write_wrapper(chip, &val,
 				chip->base + S1_SAMPLE_INTVL_REG, 1);
-		pr_err("Unable to write s1 sample inteval rc=%d\n", rc);
-		return rc;
+		if (rc) {
+			pr_err("Unable to write s1 sample inteval rc=%d\n", rc);
+			return rc;
+		}
 	}
 
 	if (chip->dt.cfg_s2_sample_interval_ms >= 0 &&
@@ -1934,8 +2012,10 @@ static int bms_load_hw_defaults(struct qpnp_bms_chip *chip)
 		val = chip->dt.cfg_s2_sample_interval_ms / 10;
 		rc = qpnp_write_wrapper(chip, &val,
 				chip->base + S2_SAMPLE_INTVL_REG, 1);
-		pr_err("Unable to write s2 sample inteval rc=%d\n", rc);
-		return rc;
+		if (rc) {
+			pr_err("Unable to write s2 sample inteval rc=%d\n", rc);
+			return rc;
+		}
 	}
 
 	if (chip->dt.cfg_s1_fifo_length >= 0 &&
@@ -1943,8 +2023,10 @@ static int bms_load_hw_defaults(struct qpnp_bms_chip *chip)
 		rc = qpnp_masked_write_base(chip, chip->base + FIFO_LENGTH_REG,
 					S1_FIFO_LENGTH_MASK,
 					chip->dt.cfg_s1_fifo_length);
-		pr_err("Unable to write s1 fifo length rc=%d\n", rc);
-		return rc;
+		if (rc) {
+			pr_err("Unable to write s1 fifo length rc=%d\n", rc);
+			return rc;
+		}
 	}
 
 	if (chip->dt.cfg_s2_fifo_length >= 0 &&
@@ -1953,8 +2035,10 @@ static int bms_load_hw_defaults(struct qpnp_bms_chip *chip)
 			FIFO_LENGTH_REG, S2_FIFO_LENGTH_MASK,
 			chip->dt.cfg_s2_fifo_length
 				<< S2_FIFO_LENGTH_SHIFT);
-		pr_err("Unable to write s2 fifo length rc=%d\n", rc);
-		return rc;
+		if (rc) {
+			pr_err("Unable to write s2 fifo length rc=%d\n", rc);
+			return rc;
+		}
 	}
 
 	/* read S1/S2 sample interval */
@@ -2121,12 +2205,16 @@ static int bms_request_irqs(struct qpnp_bms_chip *chip)
 	SPMI_REQUEST_IRQ(chip, rc, fifo_update_done);
 	if (rc < 0)
 		return rc;
+
 	SPMI_REQUEST_IRQ(chip, rc, fsm_state_change);
 	if (rc < 0)
 		return rc;
-
+	/*
+	 * Disable the state change IRQ here, it will
+	 * be enabled based on the charging status
+	 */
+	disable_bms_irq(&chip->fsm_state_change_irq);
 	enable_irq_wake(chip->fifo_update_done_irq.irq);
-	enable_irq_wake(chip->fsm_state_change_irq.irq);
 
 	return 0;
 }
@@ -2514,6 +2602,7 @@ static int parse_bms_dt_properties(struct qpnp_bms_chip *chip)
 	SPMI_PROP_READ_OPTIONAL(cfg_s2_sample_count, "s2-sample-count", rc);
 	SPMI_PROP_READ_OPTIONAL(cfg_s1_fifo_length, "s1-fifo-length", rc);
 	SPMI_PROP_READ_OPTIONAL(cfg_s2_fifo_length, "s2-fifo-length", rc);
+	SPMI_PROP_READ_OPTIONAL(cfg_s3_ocv_tol_uv, "s3-ocv-tolerence-uv", rc);
 
 	chip->dt.cfg_ignore_shutdown_soc = of_property_read_bool(
 			chip->spmi->dev.of_node, "qcom,ignore-shutdown-soc");
@@ -2662,6 +2751,7 @@ static int qpnp_vm_bms_probe(struct spmi_device *spmi)
 	mutex_init(&chip->bms_data_mutex);
 	mutex_init(&chip->bms_device_mutex);
 	mutex_init(&chip->last_soc_mutex);
+	mutex_init(&chip->state_change_mutex);
 	init_waitqueue_head(&chip->bms_wait_q);
 
 	/* read battery-id and select the battery profile */
@@ -2687,6 +2777,14 @@ static int qpnp_vm_bms_probe(struct spmi_device *spmi)
 
 	bms_init_defaults(chip);
 	bms_load_hw_defaults(chip);
+
+	rc = bms_request_irqs(chip);
+	if (rc) {
+		pr_err("error requesting bms irqs, rc = %d\n", rc);
+		return rc;
+	}
+
+	battery_insertion_check(chip);
 	battery_status_check(chip);
 
 	/* character device to pass data to the userspace */
@@ -2722,12 +2820,6 @@ static int qpnp_vm_bms_probe(struct spmi_device *spmi)
 	if (rc) {
 		pr_err("error reading vbat_sns adc channel=%d, rc=%d\n",
 							VBAT_SNS, rc);
-		goto fail_get_vtg;
-	}
-
-	rc = bms_request_irqs(chip);
-	if (rc) {
-		pr_err("error requesting bms irqs, rc = %d\n", rc);
 		goto fail_get_vtg;
 	}
 
@@ -2805,45 +2897,16 @@ static int qpnp_vm_bms_remove(struct spmi_device *spmi)
 	return 0;
 }
 
-static void process_suspended_data(struct qpnp_bms_chip *chip)
+static void process_suspend_data(struct qpnp_bms_chip *chip)
 {
-	int rc, batt_temp = 0;
-	int old_ocv = 0;
-	bool update_data = false;
-
-	rc = get_batt_therm(chip, &batt_temp);
-	if (rc < 0) {
-		pr_err("Unable to read batt temp, using default=%d\n",
-						BMS_DEFAULT_TEMP);
-		batt_temp = BMS_DEFAULT_TEMP;
-	}
+	int rc;
 
 	mutex_lock(&chip->bms_data_mutex);
-	/*
-	 * We can only get a h/w OCV update when the sleep_b
-	 * is low, which is possible only when APPS is suspended.
-	 * So check for an OCV update only in bms_resume
-	 */
-	old_ocv = chip->last_ocv_uv;
-	rc = read_and_update_ocv(chip, batt_temp, false);
-	if (rc)
-		pr_err("Unable to read/upadate OCV rc=%d\n", rc);
 
-	if (old_ocv != chip->last_ocv_uv) {
-		update_data = true;
-		chip->calculated_soc = lookup_soc_ocv(chip,
-				chip->last_ocv_uv, batt_temp);
-		pr_debug("New OCV in sleep - sleep_new_soc=%d\n",
-					chip->calculated_soc);
-		chip->last_soc_unbound = true;
-		chip->voltage_soc_uv = chip->last_ocv_uv;
-		pr_debug("update bms_psy\n");
-		power_supply_changed(&chip->bms_psy);
-	}
+	chip->suspend_data_valid = false;
 
 	memset(&chip->bms_data, 0, sizeof(chip->bms_data));
 
-	/* Check if there is data to be sent */
 	rc = read_and_populate_fifo_data(chip);
 	if (rc)
 		pr_err("Unable to read FIFO data rc=%d\n", rc);
@@ -2856,15 +2919,56 @@ static void process_suspended_data(struct qpnp_bms_chip *chip)
 	if (rc)
 		pr_err("Unable to clear FIFO/ACC data rc=%d\n", rc);
 
-	rc = update_fsm_state(chip);
+	if (chip->bms_data.num_fifo || chip->bms_data.acc_count) {
+		pr_debug("suspend data valid\n");
+		chip->suspend_data_valid = true;
+	}
+
+	mutex_unlock(&chip->bms_data_mutex);
+}
+
+static void process_resume_data(struct qpnp_bms_chip *chip)
+{
+	int rc, batt_temp = 0;
+	int old_ocv = 0;
+	bool ocv_updated = false;
+
+	rc = get_batt_therm(chip, &batt_temp);
+	if (rc < 0) {
+		pr_err("Unable to read batt temp, using default=%d\n",
+						BMS_DEFAULT_TEMP);
+		batt_temp = BMS_DEFAULT_TEMP;
+	}
+
+	mutex_lock(&chip->bms_data_mutex);
+	/*
+	 * We can get a h/w OCV update when the sleep_b
+	 * is low, which is possible when APPS is suspended.
+	 * So check for an OCV update only in bms_resume
+	 */
+	old_ocv = chip->last_ocv_uv;
+	rc = read_and_update_ocv(chip, batt_temp, false);
 	if (rc)
-		pr_err("Unable to read FSM state rc=%d\n", rc);
+		pr_err("Unable to read/upadate OCV rc=%d\n", rc);
 
-	if (chip->bms_data.num_fifo || chip->bms_data.acc_count)
-		update_data = true;
+	if (old_ocv != chip->last_ocv_uv) {
+		ocv_updated = true;
+		/* new OCV, clear suspended data */
+		chip->suspend_data_valid = false;
+		memset(&chip->bms_data, 0, sizeof(chip->bms_data));
+		chip->calculated_soc = lookup_soc_ocv(chip,
+				chip->last_ocv_uv, batt_temp);
+		pr_debug("OCV in sleep SOC=%d\n", chip->calculated_soc);
+		chip->last_soc_unbound = true;
+		chip->voltage_soc_uv = chip->last_ocv_uv;
+		pr_debug("update bms_psy\n");
+		power_supply_changed(&chip->bms_psy);
+	}
 
-	if (update_data) {
+	if (ocv_updated || chip->suspend_data_valid) {
 		/* there is data to be sent */
+		pr_debug("ocv_updated=%d suspend_data_valid=%d\n",
+				ocv_updated, chip->suspend_data_valid);
 		chip->bms_data.seq_num = chip->seq_num++;
 		dump_bms_data(__func__, chip);
 
@@ -2874,6 +2978,7 @@ static void process_suspended_data(struct qpnp_bms_chip *chip)
 			pm_stay_awake(chip->dev);
 
 	}
+	chip->suspend_data_valid = false;
 	mutex_unlock(&chip->bms_data_mutex);
 }
 
@@ -2884,16 +2989,13 @@ static int bms_suspend(struct device *dev)
 	chip->charging_while_suspended = is_battery_charging(chip);
 
 	if (!chip->charging_while_suspended) {
-		/*
-		 * if we are not charging disable state
-		 * change IRQ to avoid S1->S3 oscillations
-		 */
-		disable_irq_wake(chip->fsm_state_change_irq.irq);
-		disable_bms_irq(&chip->fsm_state_change_irq);
-
 		if (chip->dt.cfg_force_s3_on_suspend) {
 			pr_debug("Forcing S3 state\n");
+			mutex_lock(&chip->state_change_mutex);
 			force_fsm_state(chip, S3_STATE);
+			mutex_unlock(&chip->state_change_mutex);
+			/* Store accumulated data if any */
+			process_suspend_data(chip);
 		}
 	}
 
@@ -2904,27 +3006,47 @@ static int bms_suspend(struct device *dev)
 
 static int bms_resume(struct device *dev)
 {
+	u8 state = 0;
+	int rc, monitor_soc_delay = 0;
+	unsigned long tm_now_sec;
 	struct qpnp_bms_chip *chip = dev_get_drvdata(dev);
 
 	if (!chip->charging_while_suspended) {
 		if (chip->dt.cfg_force_s3_on_suspend) {
-			pr_debug("Unforcing S3 state, setting AUTO state\n");
-			set_auto_fsm_state(chip);
+			/*
+			 * Update the state only if it is in S3. There is
+			 * a possibility of being in S2 if we resumed on
+			 * a charger insertion
+			 */
+			mutex_lock(&chip->state_change_mutex);
+			get_fsm_state(chip, &state);
+			if (state == S3_STATE) {
+				pr_debug("Unforcing S3 state, setting AUTO state\n");
+				set_auto_fsm_state(chip);
+			}
+			mutex_unlock(&chip->state_change_mutex);
+			/*
+			 * if we were charging while suspended, we will
+			 * be woken up by the fifo done interrupt and no
+			 * additional processing is needed.
+			 */
+			process_resume_data(chip);
 		}
-		/*
-		 * if we were charging while suspended, we will
-		 * be woken up by the fifo done interrupt and no
-		 * additional processing is needed
-		 */
-		process_suspended_data(chip);
-
-		enable_bms_irq(&chip->fsm_state_change_irq);
-		enable_irq_wake(chip->fsm_state_change_irq.irq);
 	}
 
-	/* start the soc_monitor */
-	bms_stay_awake(&chip->vbms_soc_wake_source);
-	schedule_delayed_work(&chip->monitor_soc_work, 0);
+	/* Start monitor_soc_work based on when it last executed */
+	rc = get_current_time(&tm_now_sec);
+	if (rc) {
+		pr_err("Could not read current time: %d\n", rc);
+	} else {
+		monitor_soc_delay = get_calculation_delay_ms(chip) -
+			((tm_now_sec - chip->tm_sec) * 1000);
+		monitor_soc_delay = max(0, monitor_soc_delay);
+	}
+	pr_debug("monitor_soc_delay_sec=%d tm_now_sec=%ld chip->tm_sec=%ld\n",
+			monitor_soc_delay / 1000, tm_now_sec, chip->tm_sec);
+	schedule_delayed_work(&chip->monitor_soc_work,
+				msecs_to_jiffies(monitor_soc_delay));
 
 	return 0;
 }

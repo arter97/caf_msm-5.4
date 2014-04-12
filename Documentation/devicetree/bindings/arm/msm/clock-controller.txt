@@ -10,8 +10,9 @@ the compatible string to indicate the revision.
 
 Required properties:
 - compatible:		Must be one of "qcom,gcc-<target>",
-			"qcom,mmsscc-<target>", "qcom,cc-debug-<target>" or
-			"qcom,lpasscc-<target>" or qcom,gcc-mdss-<target>.
+			"qcom,mmsscc-<target>", "qcom,debugcc-<target>",
+			"qcom,lpasscc-<target>", "qcom,gcc-mdss-<target>"
+			or "qcom,mmsscc-mdss-<target>".
 			<target> is the name of the Qualcomm SoC.
 - reg:			Pairs of physical base addresses and region sizes of
 			memory mapped registers.
@@ -21,6 +22,12 @@ Required properties:
 
 Optional properties:
 - vdd_dig-supply:	The digital logic rail supply.
+- <pll>_dig-supply:	Some PLLs might have separate digital supply on some
+			targets. These properties will be provided on those
+			targets for specific PLLs.
+- <pll>_analog-supply:	Some PLLs might have separate analog supply on some
+			targets. These properties will be provided on those
+			targets for specific PLLs.
 - #clock_cells:		If this device will also be providing controllable
 			clocks, the clock_cells property needs to be specified.
 			This will allow the common clock device tree framework

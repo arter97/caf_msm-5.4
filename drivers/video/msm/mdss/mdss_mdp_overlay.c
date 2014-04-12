@@ -1770,7 +1770,7 @@ static void mdss_mdp_overlay_pan_display(struct msm_fb_data_type *mfd,
 		return;
 
 	if (!fbi->fix.smem_start || fbi->fix.smem_len == 0 ||
-	     mdp5_data->borderfill_enable) {
+			mdp5_data->borderfill_enable) {
 		mfd->mdp.kickoff_fnc(mfd, NULL);
 		return;
 	}
@@ -1783,6 +1783,7 @@ static void mdss_mdp_overlay_pan_display(struct msm_fb_data_type *mfd,
 		return;
 	}
 
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
 	bpp = fbi->var.bits_per_pixel / 8;
 	offset = fbi->var.xoffset * bpp +
 		 fbi->var.yoffset * fbi->fix.line_length;
@@ -1857,6 +1858,7 @@ static void mdss_mdp_overlay_pan_display(struct msm_fb_data_type *mfd,
 	    (fbi->var.activate & FB_ACTIVATE_FORCE))
 		mfd->mdp.kickoff_fnc(mfd, NULL);
 
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 	return;
 
 attach_err:
@@ -1864,8 +1866,10 @@ attach_err:
 	mdss_mdp_overlay_unset(mfd, pipe->ndx);
 	if (pipe_ndx)
 		pipe_ndx[0] = INVALID_PIPE_INDEX;
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 	return;
 pan_display_error:
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 	mutex_unlock(&mdp5_data->ov_lock);
 }
 
@@ -3305,9 +3309,20 @@ static int mdss_mdp_overlay_splash_image(struct msm_fb_data_type *mfd,
 	struct fb_info *fbi = NULL;
 	int image_len = 0;
 
-	if (!mfd || !mfd->fbi || !mfd->fbi->screen_base || !pipe_ndx) {
+	if (!mfd || !mfd->fbi || !pipe_ndx) {
 		pr_err("Invalid input parameter\n");
 		return -EINVAL;
+	}
+	/*
+	 * Allocate fb memory here for splash screen to display.
+	 * It gets removed once the splash screen thread stops.
+	 */
+	if (!mfd->fbi->screen_base) {
+		rc = mdss_fb_alloc_fb_ion_memory(mfd);
+		if (rc < 0) {
+			pr_err("Invalid input parameter\n");
+			return -EINVAL;
+		}
 	}
 
 	fbi = mfd->fbi;
