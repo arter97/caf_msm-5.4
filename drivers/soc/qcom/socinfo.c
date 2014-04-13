@@ -178,6 +178,13 @@ struct socinfo_v8 {
 	uint32_t pmic_die_revision_2;
 };
 
+struct socinfo_v9 {
+	struct socinfo_v8 v8;
+
+	/* only valid when format==9*/
+	uint32_t foundry_id;
+};
+
 static union {
 	struct socinfo_v1 v1;
 	struct socinfo_v2 v2;
@@ -187,6 +194,7 @@ static union {
 	struct socinfo_v6 v6;
 	struct socinfo_v7 v7;
 	struct socinfo_v8 v8;
+	struct socinfo_v9 v9;
 } *socinfo;
 
 static enum msm_cpu cpu_of_id[] = {
@@ -455,8 +463,8 @@ static enum msm_cpu cpu_of_id[] = {
 	[237] = MSM_CPU_ZIRC,
 	[238] = MSM_CPU_ZIRC,
 
-	/* PLUTONIUM ID */
-	[207] = MSM_CPU_PLUTONIUM,
+	/* 8994 ID */
+	[207] = MSM_CPU_8994,
 
 	/* Uninitialized IDs are not known to run Linux.
 	   MSM_CPU_UNKNOWN is set to 0 to ensure these IDs are
@@ -529,6 +537,13 @@ uint32_t socinfo_get_platform_subtype(void)
 {
 	return socinfo ?
 		(socinfo->v1.format >= 6 ? socinfo->v6.hw_platform_subtype : 0)
+		: 0;
+}
+
+static uint32_t socinfo_get_foundry_id(void)
+{
+	return socinfo ?
+		(socinfo->v1.format >= 9 ? socinfo->v9.foundry_id : 0)
 		: 0;
 }
 
@@ -659,6 +674,15 @@ msm_get_platform_subtype_id(struct device *dev,
 	hw_subtype = socinfo_get_platform_subtype();
 	return snprintf(buf, PAGE_SIZE, "%u\n",
 		hw_subtype);
+}
+
+static ssize_t
+msm_get_foundry_id(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%u\n",
+		socinfo_get_foundry_id());
 }
 
 static ssize_t
@@ -862,6 +886,10 @@ static struct device_attribute msm_soc_attr_platform_subtype_id =
 	__ATTR(platform_subtype_id, S_IRUGO,
 			msm_get_platform_subtype_id, NULL);
 
+static struct device_attribute msm_soc_attr_foundry_id =
+	__ATTR(foundry_id, S_IRUGO,
+			msm_get_foundry_id, NULL);
+
 static struct device_attribute msm_soc_attr_pmic_model =
 	__ATTR(pmic_model, S_IRUGO,
 			msm_get_pmic_model, NULL);
@@ -916,9 +944,9 @@ static void * __init setup_dummy_socinfo(void)
 		dummy_socinfo.id = 238;
 		strlcpy(dummy_socinfo.build_id, "msmzirc - ",
 			sizeof(dummy_socinfo.build_id));
-	} else if (early_machine_is_msmplutonium()) {
+	} else if (early_machine_is_msm8994()) {
 		dummy_socinfo.id = 207;
-		strlcpy(dummy_socinfo.build_id, "msmplutonium - ",
+		strlcpy(dummy_socinfo.build_id, "msm8994 - ",
 			sizeof(dummy_socinfo.build_id));
 	}
 
@@ -938,6 +966,9 @@ static void __init populate_soc_sysfs_files(struct device *msm_soc_device)
 	device_create_file(msm_soc_device, &select_image);
 
 	switch (legacy_format) {
+	case 9:
+		 device_create_file(msm_soc_device,
+					&msm_soc_attr_foundry_id);
 	case 8:
 	case 7:
 		device_create_file(msm_soc_device,
@@ -1095,6 +1126,22 @@ static void socinfo_print(void)
 			socinfo->v7.pmic_model,
 			socinfo->v7.pmic_die_revision);
 		break;
+	case 9:
+		pr_info("%s: v%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u, hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, hw_plat_subtype=%u, pmic_model=%u, pmic_die_revision=%u foundry_id=%u\n",
+			__func__,
+			socinfo->v1.format,
+			socinfo->v1.id,
+			SOCINFO_VERSION_MAJOR(socinfo->v1.version),
+			SOCINFO_VERSION_MINOR(socinfo->v1.version),
+			socinfo->v2.raw_id, socinfo->v2.raw_version,
+			socinfo->v3.hw_platform, socinfo->v4.platform_version,
+			socinfo->v5.accessory_chip,
+			socinfo->v6.hw_platform_subtype,
+			socinfo->v7.pmic_model,
+			socinfo->v7.pmic_die_revision,
+			socinfo->v9.foundry_id);
+		break;
+
 	default:
 		pr_err("%s: Unknown format found\n", __func__);
 		break;
@@ -1109,6 +1156,12 @@ int __init socinfo_init(void)
 		return 0;
 
 	socinfo = smem_find(SMEM_HW_SW_BUILD_ID,
+				sizeof(struct socinfo_v9),
+				0,
+				SMEM_ANY_HOST_FLAG);
+
+	if (IS_ERR_OR_NULL(socinfo))
+		socinfo = smem_find(SMEM_HW_SW_BUILD_ID,
 				sizeof(struct socinfo_v8),
 				0,
 				SMEM_ANY_HOST_FLAG);
