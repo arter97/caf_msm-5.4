@@ -25,7 +25,7 @@
 #include "mdp3.h"
 #include "mdp3_ppp.h"
 
-#define VSYNC_EXPIRE_TICK	15
+#define VSYNC_EXPIRE_TICK	4
 
 static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd);
 static int mdp3_overlay_unset(struct msm_fb_data_type *mfd, int ndx);
