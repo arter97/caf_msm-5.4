@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -101,6 +101,13 @@ struct mdp4_overlay_ctrl {
 			.pipe_ndx = 7,
 			.mixer_num = MDP4_MIXER2,
 		},
+		{
+			.pipe_type = OVERLAY_TYPE_DMAS,
+			.pipe_num = OVERLAY_PIPE_DMAS,
+			.pipe_ndx = 8,
+			.mixer_num = MDP4_MIXER_NONE,
+		},
+
 	},
 };
 
