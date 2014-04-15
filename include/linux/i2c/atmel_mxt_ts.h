@@ -69,6 +69,7 @@ struct mxt_platform_data {
 	bool	i2c_pull_up;
 	bool no_regulator_support;
 	bool no_reset_gpio;
+	bool use_abs_reportid;
 	bool	digital_pwr_regulator;
 	int reset_gpio;
 	u32 reset_gpio_flags;

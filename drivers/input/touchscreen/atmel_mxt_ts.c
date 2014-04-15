@@ -1079,7 +1079,7 @@ static irqreturn_t mxt_interrupt(int irq, void *dev_id)
 		return IRQ_HANDLED;
 	}
 
-	if (data->pdata->no_regulator_support) {
+	if (data->pdata->no_regulator_support && data->pdata->no_reset_gpio) {
 		mxt_write_object(data, MXT_SPT_COMMSCONFIG_T18, 1, 0x03);
 		mxt_clear_irq_s1509(data->client);
 		mxt_clear_irq_uh927(data->client);
@@ -1091,17 +1091,18 @@ static irqreturn_t mxt_interrupt(int irq, void *dev_id)
 			goto end;
 		}
 		reportid = message.reportid;
-
 		if (!reportid) {
 			dev_dbg(dev, "Report id 0 is reserved\n");
 			continue;
 		}
+		/* Use the id as reported by hardware.*/
+		if (data->pdata->use_abs_reportid)
+			data->t9_min_reportid = 0;
 
 		/* check whether report id is part of T9 or T15 */
 		id = reportid - data->t9_min_reportid;
-
 		if (reportid >= data->t9_min_reportid &&
-					reportid <= data->t9_max_reportid)
+				reportid <= data->t9_max_reportid)
 			mxt_input_touchevent(data, &message, id);
 		else if (reportid >= data->t15_min_reportid &&
 					reportid <= data->t15_max_reportid)
@@ -1114,7 +1115,7 @@ static irqreturn_t mxt_interrupt(int irq, void *dev_id)
 	} while (reportid != 0xff);
 
 end:
-	if (data->pdata->no_regulator_support)
+	if (data->pdata->no_regulator_support && data->pdata->no_reset_gpio)
 		mxt_write_object(data, MXT_SPT_COMMSCONFIG_T18, 1, 0x01);
 	return IRQ_HANDLED;
 }
@@ -2609,19 +2610,21 @@ static int mxt_resume(struct device *dev)
 	}
 
 	if (data->pdata->no_regulator_support) {
-		disable_irq(data->irq);
-		/* reconfig fpdlink as it may be reset during
-		 * suspend
-		 */
-		error = mxt_reconfig_fpdlink(data);
-		if (error) {
-			dev_err(&data->client->dev,
-					"failed to configure fpdlink\n");
+		if (data->pdata->no_reset_gpio) {
+			disable_irq(data->irq);
+			/* reconfig fpdlink as it may be reset during
+			 * suspend
+			 */
+			error = mxt_reconfig_fpdlink(data);
+			if (error) {
+				dev_err(&data->client->dev,
+						"failed to configure fpdlink\n");
+				enable_irq(data->irq);
+				return error;
+			}
+			mxt_reset_delay(data);
 			enable_irq(data->irq);
-			return error;
 		}
-		mxt_reset_delay(data);
-		enable_irq(data->irq);
 
 		return error;
 	}
@@ -3089,7 +3092,7 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	}
 
 	if (gpio_is_valid(pdata->reset_gpio) &&
-			!data->pdata->no_reset_gpio) {
+			!pdata->no_reset_gpio) {
 		/* configure touchscreen reset out gpio */
 		error = gpio_request(pdata->reset_gpio, "mxt_reset_gpio");
 		if (error) {
@@ -3107,7 +3110,7 @@ static int __devinit mxt_probe(struct i2c_client *client,
 		}
 	}
 
-	if (data->pdata->no_regulator_support) {
+	if (data->pdata->no_regulator_support && data->pdata->no_reset_gpio) {
 		error = mxt_reconfig_fpdlink(data);
 		if (error) {
 			dev_err(&client->dev, "Failed to reconfigu fpdlink\n");
@@ -3123,7 +3126,6 @@ static int __devinit mxt_probe(struct i2c_client *client,
 		msleep(1);
 
 		error = mxt_uh928_config(data);
-
 		error = mxt_reset_atmel(data);
 		if (error) {
 			dev_err(&client->dev, "Failed to reset atmel\n");
@@ -3144,8 +3146,12 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	}
 
 	if (data->state == APPMODE) {
-		mxt_clear_irq_s1509(data->client);
-		mxt_clear_irq_uh927(data->client);
+		if (data->pdata->no_regulator_support &&
+			data->pdata->no_reset_gpio) {
+			mxt_clear_irq_s1509(data->client);
+			mxt_clear_irq_uh927(data->client);
+		}
+
 		error = mxt_make_highchg(data);
 		if (error) {
 			dev_err(&client->dev, "Failed to make high CHG\n");
