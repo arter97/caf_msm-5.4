@@ -939,7 +939,8 @@ static void __init apq8064_ehci_host_init(void)
 		|| machine_is_mpq8064_cdp()
 		|| machine_is_mpq8064_hrd()
 		|| machine_is_mpq8064_dtv()
-		|| machine_is_apq8064_adp_2()) {
+		|| machine_is_apq8064_adp_2()
+		|| machine_is_apq8064_mplatform()) {
 
 		if (machine_is_apq8064_liquid())
 			msm_ehci_host_pdata3.dock_connect_irq =
@@ -2445,6 +2446,7 @@ static struct platform_device gpio_ir_recv_pdev = {
 
 static struct platform_device *common_not_mpq_devices[] __initdata = {
 	&apq8064_device_qup_i2c_gsbi1,
+	&apq8064_device_qup_i2c_gsbi2,
 	&apq8064_device_qup_i2c_gsbi3,
 };
 
@@ -2941,17 +2943,18 @@ static void __init apq8064_i2c_init(void)
 	apq8064_device_qup_i2c_gsbi3.dev.platform_data =
 					&apq8064_i2c_qup_gsbi3_pdata;
 	/* ADD GSBI1 I2C pdata for ADP */
-	if (machine_is_apq8064_adp_2())
-		apq8064_device_qup_adp_i2c_gsbi1.dev.platform_data =
-					&apq8064_adp_i2c_qup_gsbi1_pdata;
-	else if (machine_is_apq8064_mplatform()) {
+	if (machine_is_apq8064_mplatform()) {
 		apq8064_device_qup_i2c_gsbi1.dev.platform_data =
-					&apq8064_i2c_qup_gsbi1_pdata;
+			&apq8064_mplatfrom_i2c_qup_gsbi1_pdata;
 		apq8064_device_qup_i2c_gsbi2.dev.platform_data =
-				&apq8064_mplatform_i2c_qup_gsbi2_pdata;
-	} else
-	apq8064_device_qup_i2c_gsbi1.dev.platform_data =
-					&apq8064_i2c_qup_gsbi1_pdata;
+			&apq8064_mplatform_i2c_qup_gsbi2_pdata;
+	} else if (machine_is_apq8064_adp_2()) {
+		apq8064_device_qup_adp_i2c_gsbi1.dev.platform_data =
+			&apq8064_adp_i2c_qup_gsbi1_pdata;
+	 } else {
+		 apq8064_device_qup_i2c_gsbi1.dev.platform_data =
+			 &apq8064_i2c_qup_gsbi1_pdata;
+	 }
 	/* Add GSBI4 I2C pdata for non-fusion3 SGLTE2 */
 	if (socinfo_get_platform_subtype() !=
 				PLATFORM_SUBTYPE_SGLTE2) {
@@ -3333,22 +3336,23 @@ static struct mxt_platform_data mxt540e_platform_data = {
 	.config_array		= mxt_config_array,
 	.config_array_size	= ARRAY_SIZE(mxt_config_array),
 	.panel_minx		= 0,
-	.panel_maxx		= 1365,
+	.panel_maxx		= 720,
 	.panel_miny		= 0,
-	.panel_maxy		= 767,
+	.panel_maxy		= 1280,
 	.disp_minx		= 0,
-	.disp_maxx		= 1365,
+	.disp_maxx		= 720,
 	.disp_miny		= 0,
-	.disp_maxy		= 767,
+	.disp_maxy		= 1280,
 	.irqflags		= IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 	.i2c_pull_up		= true,
 	.reset_gpio		= MXT540E_TS_RESET_GPIO,
 	.irq_gpio		= MXT540E_TS_GPIO_IRQ,
+	.use_abs_reportid	= true,
 };
 
 static struct i2c_board_info mxt540e_device_info[] __initdata = {
 	{
-		I2C_BOARD_INFO("atmel_mxt540e_ts", 0x4c),
+		I2C_BOARD_INFO("atmel_mxt_ts", 0x4c),
 		.platform_data = &mxt540e_platform_data,
 		.irq = MSM_GPIO_TO_INT(MXT540E_TS_GPIO_IRQ),
 	},
@@ -3363,7 +3367,7 @@ static struct i2c_registry apq8064_mplatform_i2c_devices[] __initdata = {
 	},
 	{
 		I2C_SURF | I2C_LIQUID,
-		APQ_8064_GSBI3_QUP_I2C_BUS_ID,
+		APQ_8064_GSBI2_QUP_I2C_BUS_ID,
 		mxt540e_device_info,
 		ARRAY_SIZE(mxt540e_device_info),
 	},
@@ -3666,22 +3670,28 @@ static void __init apq8064_common_init(void)
 	if (!machine_is_apq8064_mtp())
 		platform_device_register(&apq8064_device_ext_ts_sw_vreg);
 
-	if (machine_is_apq8064_mplatform())
+	if (machine_is_apq8064_mplatform()) {
 		platform_add_devices(mplatform_common_devices,
 			ARRAY_SIZE(mplatform_common_devices));
-	else
+		mxt540e_platform_data.no_regulator_support = true;
+		mxt540e_platform_data.no_reset_gpio = false;
+	} else {
 		platform_add_devices(common_devices,
 				ARRAY_SIZE(common_devices));
+	}
 
 	if (!(machine_is_mpq8064_cdp() || machine_is_mpq8064_hrd() ||
-			machine_is_mpq8064_dtv())) {
-		if (machine_is_apq8064_adp_2())
-			platform_add_devices(adp_mpq_devices,
-				ARRAY_SIZE(adp_mpq_devices));
-		else
+				machine_is_mpq8064_dtv())) {
+		if (machine_is_apq8064_mplatform()) {
 			platform_add_devices(common_not_mpq_devices,
-				ARRAY_SIZE(common_not_mpq_devices));
-
+					ARRAY_SIZE(common_not_mpq_devices));
+		} else if (machine_is_apq8064_adp_2()) {
+			platform_add_devices(adp_mpq_devices,
+					ARRAY_SIZE(adp_mpq_devices));
+		} else {
+			platform_add_devices(common_not_mpq_devices,
+					ARRAY_SIZE(common_not_mpq_devices));
+		}
 		/* Add GSBI4 I2C Device for non-fusion3 platform */
 		if (socinfo_get_platform_subtype() !=
 					PLATFORM_SUBTYPE_SGLTE2) {
@@ -3799,8 +3809,10 @@ static void __init apq8064_cdp_init(void)
 		platform_device_register(&mpq_gpio_keys_pdev);
 		platform_device_register(&mpq_keypad_device);
 	}
-	if (machine_is_apq8064_cdp() || machine_is_mpq8064_hrd() ||
-			machine_is_apq8064_adp_2()) {
+	if (machine_is_apq8064_cdp()
+			|| machine_is_mpq8064_hrd()
+			|| machine_is_apq8064_mplatform()
+			|| machine_is_apq8064_adp_2()) {
 		int ret;
 		struct gpio_regulator_platform_data *sata_pwr =
 			apq8064_device_ext_3p3v_mpp4_vreg.dev.platform_data;
