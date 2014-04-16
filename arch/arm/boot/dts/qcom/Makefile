@@ -53,6 +53,7 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
 	msm8939-cdp-smb1360.dtb \
 	msm8939-mtp.dtb \
 	msm8939-mtp-smb1360.dtb
+dtb-$(CONFIG_ARCH_MSMTHULIUM) += msmthulium-sim.dtb
 
 targets += dtbs
 targets += $(addprefix ../, $(dtb-y))

@@ -1,0 +1,70 @@
+/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "skeleton64.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. MSM THULIUM";
+	compatible = "qcom,msmthulium";
+	interrupt-parent = <&intc>;
+
+	cpus {
+		#address-cells = <2>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,armv8";
+			reg = <0x0 0x0>;
+			enable-method = "spin-table";
+			cpu-release-addr = <0x0 0x86000000>;
+		};
+	};
+
+	soc: soc { };
+};
+
+&soc {
+	#address-cells = <1>;
+	#size-cells = <1>;
+	ranges = <0 0 0 0xffffffff>;
+	compatible = "simple-bus";
+
+	intc: interrupt-controller@09bc0000 {
+		compatible = "arm,gic-v3";
+		#interrupt-cells = <3>;
+		interrupt-controller;
+		#redistributor-regions = <4>;
+		reg = <0x09bc0000 0x10000>,       /* GICD */
+		      <0x09c00000 0x40000>,       /* GICR R0 */
+		      <0x09c40000 0x40000>,       /* GICR R1 */
+		      <0x09c80000 0x40000>,       /* GICR R2 */
+		      <0x09cc0000 0x40000>;       /* GICR R3 */
+		interrupts = <1 9 4>;
+	};
+
+	timer {
+		compatible = "arm,armv8-timer";
+		interrupts = <1 2 0xf08>,
+			     <1 3 0xf08>,
+			     <1 4 0xf08>,
+			     <1 1 0xf08>;
+		clock-frequency = <19200000>;
+	};
+
+	uartblsp0dm1: serial@0756f000 {
+		compatible = "qcom,msm-lsuart-v14";
+		reg = <0x0756f000 0x1000>;
+		interrupts = <0 107 0>;
+		status = "disabled";
+	};
+};
