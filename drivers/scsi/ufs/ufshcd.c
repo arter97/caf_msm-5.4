@@ -50,6 +50,13 @@
 #include <trace/events/ufs.h>
 
 #ifdef CONFIG_DEBUG_FS
+
+#define UFSHCD_UPDATE_ERROR_STATS(hba, type)	\
+	do {					\
+		if (type < UFS_ERR_MAX)	\
+			hba->ufs_stats.err_stats[type]++;	\
+	} while (0)
+
 #define UFSHCD_UPDATE_TAG_STATS(hba, tag)			\
 	do {							\
 		struct request *rq = hba->lrb[task_tag].cmd ?	\
@@ -93,6 +100,7 @@
 #define UFSHCD_UPDATE_TAG_STATS_COMPLETION(hba, cmd)
 #define UFSDBG_ADD_DEBUGFS(hba)
 #define UFSDBG_REMOVE_DEBUGFS(hba)
+#define UFSHCD_UPDATE_ERROR_STATS(hba, type)
 
 #endif
 
@@ -943,6 +951,41 @@ static ssize_t ufshcd_clkgate_delay_store(struct device *dev,
 	return count;
 }
 
+static ssize_t ufshcd_clkgate_enable_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", hba->clk_gating.is_enabled);
+}
+
+static ssize_t ufshcd_clkgate_enable_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	unsigned long flags;
+	u32 value;
+
+	if (kstrtou32(buf, 0, &value))
+		return -EINVAL;
+
+	value = !!value;
+	if (value == hba->clk_gating.is_enabled)
+		goto out;
+
+	if (value) {
+		ufshcd_release(hba);
+	} else {
+		spin_lock_irqsave(hba->host->host_lock, flags);
+		hba->clk_gating.active_reqs++;
+		spin_unlock_irqrestore(hba->host->host_lock, flags);
+	}
+
+	hba->clk_gating.is_enabled = value;
+out:
+	return count;
+}
+
 static void ufshcd_init_clk_gating(struct ufs_hba *hba)
 {
 	if (!ufshcd_is_clkgating_allowed(hba))
@@ -952,6 +995,8 @@ static void ufshcd_init_clk_gating(struct ufs_hba *hba)
 	INIT_DELAYED_WORK(&hba->clk_gating.gate_work, ufshcd_gate_work);
 	INIT_WORK(&hba->clk_gating.ungate_work, ufshcd_ungate_work);
 
+	hba->clk_gating.is_enabled = true;
+
 	hba->clk_gating.delay_attr.show = ufshcd_clkgate_delay_show;
 	hba->clk_gating.delay_attr.store = ufshcd_clkgate_delay_store;
 	sysfs_attr_init(&hba->clk_gating.delay_attr.attr);
@@ -959,6 +1004,14 @@ static void ufshcd_init_clk_gating(struct ufs_hba *hba)
 	hba->clk_gating.delay_attr.attr.mode = S_IRUGO | S_IWUSR;
 	if (device_create_file(hba->dev, &hba->clk_gating.delay_attr))
 		dev_err(hba->dev, "Failed to create sysfs for clkgate_delay\n");
+
+	hba->clk_gating.enable_attr.show = ufshcd_clkgate_enable_show;
+	hba->clk_gating.enable_attr.store = ufshcd_clkgate_enable_store;
+	sysfs_attr_init(&hba->clk_gating.enable_attr.attr);
+	hba->clk_gating.enable_attr.attr.name = "clkgate_enable";
+	hba->clk_gating.enable_attr.attr.mode = S_IRUGO | S_IWUSR;
+	if (device_create_file(hba->dev, &hba->clk_gating.enable_attr))
+		dev_err(hba->dev, "Failed to create sysfs for clkgate_enable\n");
 }
 
 static void ufshcd_exit_clk_gating(struct ufs_hba *hba)
@@ -966,6 +1019,7 @@ static void ufshcd_exit_clk_gating(struct ufs_hba *hba)
 	if (!ufshcd_is_clkgating_allowed(hba))
 		return;
 	device_remove_file(hba->dev, &hba->clk_gating.delay_attr);
+	device_remove_file(hba->dev, &hba->clk_gating.enable_attr);
 }
 
 /* Must be called with host lock acquired */
@@ -2612,11 +2666,20 @@ out:
 
 static int ufshcd_uic_hibern8_enter(struct ufs_hba *hba)
 {
+	int ret;
 	struct uic_command uic_cmd = {0};
 
 	uic_cmd.command = UIC_CMD_DME_HIBER_ENTER;
 
-	return ufshcd_uic_pwr_ctrl(hba, &uic_cmd);
+	ret = ufshcd_uic_pwr_ctrl(hba, &uic_cmd);
+
+	if (ret) {
+		UFSHCD_UPDATE_ERROR_STATS(hba, UFS_ERR_HIBERN8_ENTER);
+		dev_err(hba->dev, "%s: hibern8 enter failed. ret = %d",
+			__func__, ret);
+	}
+
+	return ret;
 }
 
 static int ufshcd_uic_hibern8_exit(struct ufs_hba *hba)
@@ -2628,6 +2691,9 @@ static int ufshcd_uic_hibern8_exit(struct ufs_hba *hba)
 	ret = ufshcd_uic_pwr_ctrl(hba, &uic_cmd);
 	if (ret) {
 		ufshcd_set_link_off(hba);
+		UFSHCD_UPDATE_ERROR_STATS(hba, UFS_ERR_HIBERN8_EXIT);
+		dev_err(hba->dev, "%s: hibern8 exit failed. ret = %d",
+			__func__, ret);
 		ret = ufshcd_host_reset_and_restore(hba);
 	}
 
@@ -2783,6 +2849,7 @@ static int ufshcd_config_max_pwr_mode(struct ufs_hba *hba)
 
 	ret = ufshcd_uic_change_pwr_mode(hba, pwr[RX] << 4 | pwr[TX]);
 	if (ret) {
+		UFSHCD_UPDATE_ERROR_STATS(hba, UFS_ERR_POWER_MODE_CHANGE);
 		dev_err(hba->dev,
 			"pwr_mode: power mode change failed %d\n", ret);
 	} else {
@@ -3029,9 +3096,12 @@ static int ufshcd_link_startup(struct ufs_hba *hba)
 			hba->vops->link_startup_notify(hba, PRE_CHANGE);
 
 		ret = ufshcd_dme_link_startup(hba);
+		if (ret)
+			UFSHCD_UPDATE_ERROR_STATS(hba, UFS_ERR_LINKSTARTUP);
 
 		/* check if device is detected by inter-connect layer */
 		if (!ret && !ufshcd_is_device_present(hba)) {
+			UFSHCD_UPDATE_ERROR_STATS(hba, UFS_ERR_LINKSTARTUP);
 			dev_err(hba->dev, "%s: Device not present\n", __func__);
 			ret = -ENXIO;
 			goto out;
@@ -3859,6 +3929,19 @@ static void ufshcd_err_handler(struct work_struct *work)
 	if (err_xfer || err_tm || (hba->saved_err & INT_FATAL_ERRORS) ||
 			((hba->saved_err & UIC_ERROR) &&
 			 (hba->saved_uic_err & UFSHCD_UIC_DL_PA_INIT_ERROR))) {
+
+		if (hba->saved_err & INT_FATAL_ERRORS)
+			UFSHCD_UPDATE_ERROR_STATS(hba,
+						  UFS_ERR_INT_FATAL_ERRORS);
+
+		if (hba->saved_err & UIC_ERROR)
+			UFSHCD_UPDATE_ERROR_STATS(hba,
+						  UFS_ERR_INT_UIC_ERROR);
+
+		if (err_xfer || err_tm)
+			UFSHCD_UPDATE_ERROR_STATS(hba,
+						  UFS_ERR_CLEAR_PEND_XFER_TM);
+
 		err = ufshcd_reset_and_restore(hba);
 		if (err) {
 			dev_err(hba->dev, "%s: reset and restore failed\n",
@@ -4224,6 +4307,8 @@ static int ufshcd_abort(struct scsi_cmnd *cmd)
 	tag = cmd->request->tag;
 	lrbp = &hba->lrb[tag];
 
+	UFSHCD_UPDATE_ERROR_STATS(hba, UFS_ERR_TASK_ABORT);
+
 	/*
 	 * Task abort to the device W-LUN is illegal. When this command
 	 * will fail, due to spec violation, scsi err handling next step
@@ -4423,6 +4508,7 @@ static int ufshcd_eh_host_reset_handler(struct scsi_cmnd *cmd)
 	ufshcd_set_eh_in_progress(hba);
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
 
+	UFSHCD_UPDATE_ERROR_STATS(hba, UFS_ERR_EH);
 	err = ufshcd_reset_and_restore(hba);
 
 	spin_lock_irqsave(hba->host->host_lock, flags);
@@ -5646,10 +5732,12 @@ vops_resume:
 		hba->vops->resume(hba, pm_op);
 set_link_active:
 	ufshcd_vreg_set_hpm(hba);
-	if (ufshcd_is_link_hibern8(hba) && !ufshcd_uic_hibern8_exit(hba))
+	if (ufshcd_is_link_hibern8(hba) && !ufshcd_uic_hibern8_exit(hba)) {
 		ufshcd_set_link_active(hba);
-	else if (ufshcd_is_link_off(hba))
+	} else if (ufshcd_is_link_off(hba)) {
+		UFSHCD_UPDATE_ERROR_STATS(hba, UFS_ERR_VOPS_SUSPEND);
 		ufshcd_host_reset_and_restore(hba);
+	}
 set_dev_active:
 	if (!ufshcd_set_dev_pwr_mode(hba, UFS_ACTIVE_PWR_MODE))
 		ufshcd_disable_auto_bkops(hba);
@@ -5658,6 +5746,10 @@ enable_gating:
 	ufshcd_release(hba);
 out:
 	hba->pm_op_in_progress = 0;
+
+	if (ret)
+		UFSHCD_UPDATE_ERROR_STATS(hba, UFS_ERR_SUSPEND);
+
 	return ret;
 }
 
@@ -5745,6 +5837,10 @@ disable_irq_and_vops_clks:
 	ufshcd_setup_clocks(hba, false);
 out:
 	hba->pm_op_in_progress = 0;
+
+	if (ret)
+		UFSHCD_UPDATE_ERROR_STATS(hba, UFS_ERR_RESUME);
+
 	return ret;
 }
 
