@@ -169,6 +169,9 @@ struct msm_fb_data_type {
 	u32 dest;
 	struct fb_info *fbi;
 
+	int idle_time;
+	struct delayed_work idle_notify_work;
+
 	int op_enable;
 	u32 fb_imgType;
 	int panel_reconfig;
@@ -216,6 +219,9 @@ struct msm_fb_data_type {
 
 	struct task_struct *splash_thread;
 	bool splash_logo_enabled;
+
+	wait_queue_head_t ioctl_q;
+	atomic_t ioctl_ref_cnt;
 
 	struct msm_fb_backup_type msm_fb_backup;
 	struct completion power_set_comp;
