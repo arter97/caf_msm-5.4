@@ -73,7 +73,7 @@
 		pinctrl-1 = <&akm_sleep>;
 		vdd-supply = <&pm8916_l17>;
 		vio-supply = <&pm8916_l6>;
-		akm,layout = <0x0>;
+		akm,layout = <0x3>;
 		akm,gpio_rstn = <&msm_gpio 36 0x0>;
 		akm,auto-report;
 	};
@@ -192,6 +192,10 @@
 		qcom,supply-pre-off-sleep = <0>;
 		qcom,supply-post-off-sleep = <0>;
 	};
+};
+
+&dsi_innolux_720p_video {
+	qcom,cont-splash-enabled;
 };
 
 &soc {

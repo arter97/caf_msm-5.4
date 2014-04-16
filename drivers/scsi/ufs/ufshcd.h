@@ -129,6 +129,25 @@ enum uic_link_state {
 #define ufshcd_set_link_hibern8(hba) ((hba)->uic_link_state = \
 				    UIC_LINK_HIBERN8_STATE)
 
+enum {
+	/* errors which require the host controller reset for recovery */
+	UFS_ERR_HIBERN8_EXIT,
+	UFS_ERR_VOPS_SUSPEND,
+	UFS_ERR_EH,
+	UFS_ERR_CLEAR_PEND_XFER_TM,
+	UFS_ERR_INT_FATAL_ERRORS,
+	UFS_ERR_INT_UIC_ERROR,
+
+	/* other errors */
+	UFS_ERR_HIBERN8_ENTER,
+	UFS_ERR_RESUME,
+	UFS_ERR_SUSPEND,
+	UFS_ERR_LINKSTARTUP,
+	UFS_ERR_POWER_MODE_CHANGE,
+	UFS_ERR_TASK_ABORT,
+	UFS_ERR_MAX,
+};
+
 /*
  * UFS Power management levels.
  * Each level is in increasing order of power savings.
@@ -212,11 +231,13 @@ struct ufs_stats {
 	bool enabled;
 	u64 **tag_stats;
 	int q_depth;
+	int err_stats[UFS_ERR_MAX];
 };
 
 struct debugfs_files {
 	struct dentry *debugfs_root;
 	struct dentry *tag_stats;
+	struct dentry *err_stats;
 	struct dentry *show_hba;
 	struct dentry *host_regs;
 	struct dentry *dump_dev_desc;
@@ -323,6 +344,8 @@ enum clk_gating_state {
  * @is_suspended: clk gating is suspended when set to 1 which can be used
  * during suspend/resume
  * @delay_attr: sysfs attribute to control delay_attr
+ * @enable_attr: sysfs attribute to enable/disable clock gating
+ * @is_enabled: Indicates the current status of clock gating
  * @active_reqs: number of requests that are pending and should be waited for
  * completion before gating clocks.
  */
@@ -333,6 +356,8 @@ struct ufs_clk_gating {
 	unsigned long delay_ms;
 	bool is_suspended;
 	struct device_attribute delay_attr;
+	struct device_attribute enable_attr;
+	bool is_enabled;
 	int active_reqs;
 };
 
