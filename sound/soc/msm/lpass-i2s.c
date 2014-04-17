@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2011, 2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -22,6 +22,10 @@
 #include <sound/initval.h>
 #include <sound/soc.h>
 #include <sound/dai.h>
+
+#define MSM_MI2S_RX		0
+#define SECONDARY_I2S_RX	3
+#define PRIMARY_I2S_TX		5
 
 static int msm_cpu_dai_startup(struct snd_pcm_substream *substream,
 				struct snd_soc_dai *dai)
@@ -77,12 +81,12 @@ static struct snd_soc_dai_ops msm_cpu_dai_ops = {
 
 };
 
-
 #define MSM_DAI_SPEAKER_BUILDER(link_id)			\
 {								\
 	.name = "msm-speaker-dai-"#link_id,			\
 	.id = (link_id),					\
 	.playback = {						\
+		.stream_name = "auto-playback-"#link_id,	\
 		.rates = SNDRV_PCM_RATE_8000_96000,		\
 		.formats = SNDRV_PCM_FMTBIT_S16_LE,		\
 		.channels_min = 1,				\
@@ -93,12 +97,28 @@ static struct snd_soc_dai_ops msm_cpu_dai_ops = {
 	.ops = &msm_cpu_dai_ops,				\
 }
 
+#define MSM_DAI_SEC_SPEAKER_BUILDER(link_id)			\
+{								\
+	.name = "msm-sec-speaker-dai-"#link_id,			\
+	.id = (link_id),					\
+	.playback = {						\
+		.stream_name = "auto-sec-playback-"#link_id,	\
+		.rates = SNDRV_PCM_RATE_8000_96000,		\
+		.formats = SNDRV_PCM_FMTBIT_S16_LE,		\
+		.channels_min = 1,				\
+		.channels_max = 2,				\
+		.rate_max =	96000,				\
+		.rate_min =	8000,				\
+	},							\
+	.ops = &msm_cpu_dai_ops,				\
+}
 
 #define MSM_DAI_MIC_BUILDER(link_id)				\
 {								\
 	.name = "msm-mic-dai-"#link_id,				\
 	.id = (link_id),					\
 	.capture = {						\
+		.stream_name = "auto-capture-"#link_id,		\
 		.rates = SNDRV_PCM_RATE_8000_96000,		\
 		.formats = SNDRV_PCM_FMTBIT_S16_LE,		\
 		.rate_min =	8000,				\
@@ -109,28 +129,59 @@ static struct snd_soc_dai_ops msm_cpu_dai_ops = {
 	.ops = &msm_cpu_dai_ops,				\
 }
 
+static struct snd_soc_dai_driver msm_cpu_mi2s_dai =
+	MSM_DAI_SPEAKER_BUILDER(0);
+static struct snd_soc_dai_driver msm_cpu_sec_i2s_dai =
+	MSM_DAI_SEC_SPEAKER_BUILDER(3);
+static struct snd_soc_dai_driver msm_cpu_pri_mic_dai =
+	MSM_DAI_MIC_BUILDER(5);
 
-struct snd_soc_dai msm_cpu_dai[] = {
-	MSM_DAI_SPEAKER_BUILDER(0),
-	MSM_DAI_SPEAKER_BUILDER(1),
-	MSM_DAI_SPEAKER_BUILDER(2),
-	MSM_DAI_SPEAKER_BUILDER(3),
-	MSM_DAI_SPEAKER_BUILDER(4),
-	MSM_DAI_MIC_BUILDER(5),
-	MSM_DAI_MIC_BUILDER(6),
-	MSM_DAI_MIC_BUILDER(7),
+static __devinit int msm_cpu_dai_dev_probe(struct platform_device *pdev)
+{
+	int rc = 0;
+	dev_dbg(&pdev->dev, "%s: dev name %s\n", __func__,
+			dev_name(&pdev->dev));
+	switch (pdev->id) {
+	case MSM_MI2S_RX:
+		snd_soc_register_dai(&pdev->dev, &msm_cpu_mi2s_dai);
+		break;
+	case SECONDARY_I2S_RX:
+		snd_soc_register_dai(&pdev->dev, &msm_cpu_sec_i2s_dai);
+		break;
+	case PRIMARY_I2S_TX:
+		snd_soc_register_dai(&pdev->dev, &msm_cpu_pri_mic_dai);
+		break;
+	default:
+		rc = -ENODEV;
+		break;
+	}
+	return rc;
+}
+
+static __devexit int msm_cpu_dai_dev_remove(struct platform_device *pdev)
+{
+	snd_soc_unregister_dai(&pdev->dev);
+	return 0;
+}
+
+static struct platform_driver msm_cpu_dai_driver = {
+		.probe	= msm_cpu_dai_dev_probe,
+		.remove	= msm_cpu_dai_dev_remove,
+		.driver	= {
+			.name = "apq8064_cpudai_lpa",
+			.owner = THIS_MODULE,
+		}
 };
-EXPORT_SYMBOL_GPL(msm_cpu_dai);
 
 static int __init msm_cpu_dai_init(void)
 {
-	return snd_soc_register_dais(msm_cpu_dai, ARRAY_SIZE(msm_cpu_dai));
+	return platform_driver_register(&msm_cpu_dai_driver);
 }
 module_init(msm_cpu_dai_init);
 
 static void __exit msm_cpu_dai_exit(void)
 {
-	snd_soc_unregister_dais(msm_cpu_dai, ARRAY_SIZE(msm_cpu_dai));
+	return;
 }
 module_exit(msm_cpu_dai_exit);
 
