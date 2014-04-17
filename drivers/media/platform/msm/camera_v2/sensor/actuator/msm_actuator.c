@@ -278,6 +278,13 @@ static int32_t msm_actuator_piezo_move_focus(
 	return rc;
 }
 
+static int32_t msm_actuator_set_ois_strength(
+	struct msm_actuator_ctrl_t *a_ctrl,
+	int ois_strength)
+{
+	pr_err("ois_strength received = %d\n", ois_strength);
+	return 0;
+}
 static int32_t msm_actuator_move_focus(
 	struct msm_actuator_ctrl_t *a_ctrl,
 	struct msm_actuator_move_params_t *move_params)
@@ -712,6 +719,15 @@ static int32_t msm_actuator_config(struct msm_actuator_ctrl_t *a_ctrl,
 		if (rc < 0)
 			pr_err("msm_actuator_power_down failed %d\n", rc);
 		break;
+	case CFG_SET_OIS_STRENGTH:
+		if (a_ctrl && a_ctrl->func_tbl &&
+			a_ctrl->func_tbl->actuator_set_ois_strength) {
+			rc = a_ctrl->func_tbl->actuator_set_ois_strength(a_ctrl,
+				cdata->cfg.ois_strength);
+			if (rc < 0)
+				pr_err("Set OIS strength failed\n");
+		}
+		break;
 	default:
 		break;
 	}
@@ -1073,6 +1089,7 @@ static struct msm_actuator msm_vcm_actuator_table = {
 		.actuator_init_focus = msm_actuator_init_focus,
 		.actuator_parse_i2c_params = msm_actuator_parse_i2c_params,
 		.actuator_set_position = msm_actuator_set_position,
+		.actuator_set_ois_strength = msm_actuator_set_ois_strength,
 	},
 };
 
@@ -1086,6 +1103,7 @@ static struct msm_actuator msm_piezo_actuator_table = {
 			msm_actuator_piezo_set_default_focus,
 		.actuator_init_focus = msm_actuator_init_focus,
 		.actuator_parse_i2c_params = msm_actuator_parse_i2c_params,
+		.actuator_set_ois_strength = NULL,
 	},
 };
 
@@ -1099,6 +1117,7 @@ static struct msm_actuator msm_ois_actuator_table = {
         .actuator_init_focus = msm_actuator_init_focus,
 	.actuator_set_position = msm_actuator_set_position,
         .actuator_parse_i2c_params = msm_actuator_parse_i2c_params,
+        .actuator_set_ois_strength = msm_actuator_set_ois_strength,
     },
 };
 module_init(msm_actuator_init_module);

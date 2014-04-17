@@ -466,6 +466,7 @@ enum msm_actuator_cfg_type_t {
 	CFG_SET_POSITION,
 	CFG_MOVE_FOCUS,
 	CFG_ACTUATOR_POWERDOWN,
+	CFG_SET_OIS_STRENGTH,
 };
 
 enum actuator_type {
@@ -589,6 +590,7 @@ struct msm_actuator_cfg_data {
 		struct msm_actuator_get_info_t get_info;
 		struct msm_actuator_set_position_t setpos;
 		enum af_camera_name cam_name;
+		int ois_strength;
 	} cfg;
 };
 
