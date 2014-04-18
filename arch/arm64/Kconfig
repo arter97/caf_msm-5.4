@@ -177,6 +177,13 @@ config ARCH_MSM8994_V1_TLBI_WA
 	  [39:38] bits of VA are tied to zero and due to which TLBI
 	  operations with VA or ASID will not work.
 
+config ARCH_MSMTHULIUM
+	bool "Enable Support for Qualcomm MSMTHULIUM"
+	depends on ARCH_MSM
+	help
+	  This enables support for the MSMTHULIUM chipset. If you don't
+	  know what to do here, say N
+
 endmenu
 
 menu "Bus support"
