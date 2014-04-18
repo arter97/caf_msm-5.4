@@ -110,6 +110,9 @@
 /* UIC command timeout, unit: ms */
 #define UIC_CMD_TIMEOUT	500
 
+/* Retries waiting for doorbells to clear */
+#define POWER_MODE_RETRIES	10
+
 /* NOP OUT retries waiting for NOP IN response */
 #define NOP_OUT_RETRIES    10
 /* Timeout after 30 msecs if NOP OUT hangs without response */
@@ -1213,15 +1216,12 @@ ufshcd_wait_for_uic_cmd(struct ufs_hba *hba, struct uic_command *uic_cmd)
  * @uic_cmd: UIC command
  *
  * Identical to ufshcd_send_uic_cmd() expect mutex. Must be called
- * with mutex held.
+ * with mutex held and host_lock locked.
  * Returns 0 only if success.
  */
 static int
 __ufshcd_send_uic_cmd(struct ufs_hba *hba, struct uic_command *uic_cmd)
 {
-	int ret;
-	unsigned long flags;
-
 	if (!ufshcd_ready_for_uic_cmd(hba)) {
 		dev_err(hba->dev,
 			"Controller not ready to accept UIC commands\n");
@@ -1230,13 +1230,9 @@ __ufshcd_send_uic_cmd(struct ufs_hba *hba, struct uic_command *uic_cmd)
 
 	init_completion(&uic_cmd->done);
 
-	spin_lock_irqsave(hba->host->host_lock, flags);
 	ufshcd_dispatch_uic_cmd(hba, uic_cmd);
-	spin_unlock_irqrestore(hba->host->host_lock, flags);
 
-	ret = ufshcd_wait_for_uic_cmd(hba, uic_cmd);
-
-	return ret;
+	return 0;
 }
 
 /**
@@ -1250,12 +1246,19 @@ static int
 ufshcd_send_uic_cmd(struct ufs_hba *hba, struct uic_command *uic_cmd)
 {
 	int ret;
+	unsigned long flags;
 
 	ufshcd_hold(hba, false);
+	pm_runtime_get_sync(hba->dev);
 	mutex_lock(&hba->uic_cmd_mutex);
+	spin_lock_irqsave(hba->host->host_lock, flags);
 	ret = __ufshcd_send_uic_cmd(hba, uic_cmd);
-	mutex_unlock(&hba->uic_cmd_mutex);
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
+	if (!ret)
+		ret = ufshcd_wait_for_uic_cmd(hba, uic_cmd);
 
+	mutex_unlock(&hba->uic_cmd_mutex);
+	pm_runtime_put_sync(hba->dev);
 	ufshcd_release(hba);
 	return ret;
 }
@@ -2590,16 +2593,53 @@ int ufshcd_uic_pwr_ctrl(struct ufs_hba *hba, struct uic_command *cmd)
 	unsigned long flags;
 	u8 status;
 	int ret;
+	u32 tm_doorbell;
+	u32 tr_doorbell;
+	bool uic_ready;
+	int retries = POWER_MODE_RETRIES;
 
 	ufshcd_hold(hba, false);
+	pm_runtime_get_sync(hba->dev);
 	mutex_lock(&hba->uic_cmd_mutex);
 	init_completion(&uic_async_done);
 
-	spin_lock_irqsave(hba->host->host_lock, flags);
+	/*
+	 * Before changing the power mode there should be no outstanding
+	 * tasks/transfer requests. Verify by checking the doorbell registers
+	 * are clear.
+	 */
+	do {
+		spin_lock_irqsave(hba->host->host_lock, flags);
+		uic_ready = ufshcd_ready_for_uic_cmd(hba);
+		tm_doorbell = ufshcd_readl(hba, REG_UTP_TASK_REQ_DOOR_BELL);
+		tr_doorbell = ufshcd_readl(hba, REG_UTP_TRANSFER_REQ_DOOR_BELL);
+		if (!tm_doorbell && !tr_doorbell && uic_ready)
+			break;
+
+		spin_unlock_irqrestore(hba->host->host_lock, flags);
+		schedule();
+		retries--;
+	} while (retries && (tm_doorbell || tr_doorbell || !uic_ready));
+
+	if (!retries) {
+		dev_err(hba->dev,
+			"%s: too many retries waiting for doorbell to clear (tm=0x%x, tr=0x%x, uicrdy=%d)\n",
+			__func__, tm_doorbell, tr_doorbell, uic_ready);
+		ret = -EBUSY;
+		goto out;
+	}
+
 	hba->uic_async_done = &uic_async_done;
-	spin_unlock_irqrestore(hba->host->host_lock, flags);
 
 	ret = __ufshcd_send_uic_cmd(hba, cmd);
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
+	if (ret) {
+		dev_err(hba->dev,
+			"pwr ctrl cmd 0x%x with mode 0x%x uic error %d\n",
+			cmd->command, cmd->argument3, ret);
+		goto out;
+	}
+	ret = ufshcd_wait_for_uic_cmd(hba, cmd);
 	if (ret) {
 		dev_err(hba->dev,
 			"pwr ctrl cmd 0x%x with mode 0x%x uic error %d\n",
@@ -2628,7 +2668,7 @@ out:
 	hba->uic_async_done = NULL;
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
 	mutex_unlock(&hba->uic_cmd_mutex);
-
+	pm_runtime_put_sync(hba->dev);
 	ufshcd_release(hba);
 	return ret;
 }
@@ -2743,30 +2783,31 @@ static void ufshcd_init_pwr_info(struct ufs_hba *hba)
 }
 
 /**
- * ufshcd_config_max_pwr_mode - Set & Change power mode with
- *	maximum capability attribute information.
- * @hba: per adapter instance
- *
- * Returns 0 on success, non-zero value on failure
+ * ufshcd_get_max_pwr_mode - reads the max power mode negotiated with device
+ * @hba: per-adapter instance
  */
-static int ufshcd_config_max_pwr_mode(struct ufs_hba *hba)
+static int ufshcd_get_max_pwr_mode(struct ufs_hba *hba)
 {
-	enum {RX = 0, TX = 1};
-	u32 lanes[] = {1, 1};
-	u32 gear[] = {1, 1};
-	u8 pwr[] = {FASTAUTO_MODE, FASTAUTO_MODE};
-	struct ufs_pa_layer_attr dev_max_params = { 0 };
-	struct ufs_pa_layer_attr dev_required_params = { 0 };
-	u32 hs_rate = PA_HS_MODE_B;
-	int ret;
+	struct ufs_pa_layer_attr *pwr_info = &hba->max_pwr_info.info;
+
+	if (hba->max_pwr_info.is_valid)
+		return 0;
+
+	pwr_info->pwr_tx = FASTAUTO_MODE;
+	pwr_info->pwr_rx = FASTAUTO_MODE;
+	pwr_info->hs_rate = PA_HS_MODE_B;
 
 	/* Get the connected lane count */
-	ufshcd_dme_get(hba, UIC_ARG_MIB(PA_CONNECTEDRXDATALANES), &lanes[RX]);
-	ufshcd_dme_get(hba, UIC_ARG_MIB(PA_CONNECTEDTXDATALANES), &lanes[TX]);
+	ufshcd_dme_get(hba, UIC_ARG_MIB(PA_CONNECTEDRXDATALANES),
+			&pwr_info->lane_rx);
+	ufshcd_dme_get(hba, UIC_ARG_MIB(PA_CONNECTEDTXDATALANES),
+			&pwr_info->lane_tx);
 
-	if (!lanes[RX] || !lanes[TX]) {
+	if (!pwr_info->lane_rx || !pwr_info->lane_tx) {
 		dev_err(hba->dev, "%s: invalid connected lanes value. rx=%d, tx=%d\n",
-				__func__, lanes[RX], lanes[TX]);
+				__func__,
+				pwr_info->lane_rx,
+				pwr_info->lane_tx);
 		return -EINVAL;
 	}
 
@@ -2775,52 +2816,51 @@ static int ufshcd_config_max_pwr_mode(struct ufs_hba *hba)
 	 * If a zero value, it means there is no HSGEAR capability.
 	 * Then, get the maximum gears of PWM speed.
 	 */
-	ufshcd_dme_get(hba, UIC_ARG_MIB(PA_MAXRXHSGEAR), &gear[RX]);
-	if (!gear[RX]) {
-		ufshcd_dme_get(hba, UIC_ARG_MIB(PA_MAXRXPWMGEAR), &gear[RX]);
-		if (!gear[RX]) {
-			dev_err(hba->dev, "%s: invalid rx gear read = %d\n",
-				__func__, gear[RX]);
+	ufshcd_dme_get(hba, UIC_ARG_MIB(PA_MAXRXHSGEAR), &pwr_info->gear_rx);
+	if (!pwr_info->gear_rx) {
+		ufshcd_dme_get(hba, UIC_ARG_MIB(PA_MAXRXPWMGEAR),
+				&pwr_info->gear_rx);
+		if (!pwr_info->gear_rx) {
+			dev_err(hba->dev, "%s: invalid max pwm rx gear read = %d\n",
+				__func__, pwr_info->gear_rx);
 			return -EINVAL;
 		}
-		pwr[RX] = SLOWAUTO_MODE;
+		pwr_info->pwr_rx = SLOWAUTO_MODE;
 	}
 
-	ufshcd_dme_peer_get(hba, UIC_ARG_MIB(PA_MAXRXHSGEAR), &gear[TX]);
-	if (!gear[TX]) {
+	ufshcd_dme_peer_get(hba, UIC_ARG_MIB(PA_MAXRXHSGEAR),
+			&pwr_info->gear_tx);
+	if (!pwr_info->gear_tx) {
 		ufshcd_dme_peer_get(hba, UIC_ARG_MIB(PA_MAXRXPWMGEAR),
-				    &gear[TX]);
-		if (!gear[TX]) {
-			dev_err(hba->dev, "%s: invalid tx gear read = %d\n",
-				__func__, gear[TX]);
+				&pwr_info->gear_tx);
+		if (!pwr_info->gear_tx) {
+			dev_err(hba->dev, "%s: invalid max pwm tx gear read = %d\n",
+				__func__, pwr_info->gear_tx);
 			return -EINVAL;
 		}
-		pwr[TX] = SLOWAUTO_MODE;
+		pwr_info->pwr_tx = SLOWAUTO_MODE;
 	}
 
-	if (hba->vops->pwr_change_notify) {
+	hba->max_pwr_info.is_valid = true;
+	return 0;
+}
 
-		/* storing the device max capabilities */
-		dev_max_params.gear_rx = gear[RX];
-		dev_max_params.gear_tx = gear[TX];
-		dev_max_params.lane_rx = lanes[RX];
-		dev_max_params.lane_tx = lanes[TX];
-		dev_max_params.pwr_rx = pwr[RX];
-		dev_max_params.pwr_tx = pwr[TX];
-		dev_max_params.hs_rate = hs_rate;
+/**
+ * ufshcd_config_pwr_mode - configure a new power mode
+ * @hba: per-adapter instance
+ * @desired_pwr_mode: desired power configuration
+ */
+int ufshcd_config_pwr_mode(struct ufs_hba *hba,
+		struct ufs_pa_layer_attr *desired_pwr_mode)
+{
+	struct ufs_pa_layer_attr final_params = { 0 };
+	int ret;
 
+	if (hba->vops->pwr_change_notify)
 		hba->vops->pwr_change_notify(hba,
-		     PRE_CHANGE, &dev_max_params, &dev_required_params);
-
-		/* restoring the min-max preferences to configure the device */
-		gear[RX] = dev_required_params.gear_rx;
-		gear[TX] = dev_required_params.gear_tx;
-		lanes[RX] = dev_required_params.lane_rx;
-		lanes[TX] = dev_required_params.lane_tx;
-		pwr[RX] = dev_required_params.pwr_rx;
-		pwr[TX] = dev_required_params.pwr_tx;
-		hs_rate = dev_required_params.hs_rate;
-	}
+		     PRE_CHANGE, desired_pwr_mode, &final_params);
+	else
+		memcpy(&final_params, desired_pwr_mode, sizeof(final_params));
 
 	/*
 	 * Configure attributes for power mode change with below.
@@ -2828,26 +2868,34 @@ static int ufshcd_config_max_pwr_mode(struct ufs_hba *hba)
 	 * - PA_TXGEAR, PA_ACTIVETXDATALANES, PA_TXTERMINATION,
 	 * - PA_HSSERIES
 	 */
-	ufshcd_dme_set(hba, UIC_ARG_MIB(PA_RXGEAR), gear[RX]);
-	ufshcd_dme_set(hba, UIC_ARG_MIB(PA_ACTIVERXDATALANES), lanes[RX]);
-	if (pwr[RX] == FASTAUTO_MODE || pwr[RX] == FAST_MODE)
+	ufshcd_dme_set(hba, UIC_ARG_MIB(PA_RXGEAR), final_params.gear_rx);
+	ufshcd_dme_set(hba, UIC_ARG_MIB(PA_ACTIVERXDATALANES),
+			final_params.lane_rx);
+	if (final_params.pwr_rx == FASTAUTO_MODE ||
+			final_params.pwr_rx == FAST_MODE)
 		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_RXTERMINATION), TRUE);
 	else
 		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_RXTERMINATION), FALSE);
 
-	ufshcd_dme_set(hba, UIC_ARG_MIB(PA_TXGEAR), gear[TX]);
-	ufshcd_dme_set(hba, UIC_ARG_MIB(PA_ACTIVETXDATALANES), lanes[TX]);
-	if (pwr[TX] == FASTAUTO_MODE || pwr[TX] == FAST_MODE)
+	ufshcd_dme_set(hba, UIC_ARG_MIB(PA_TXGEAR), final_params.gear_tx);
+	ufshcd_dme_set(hba, UIC_ARG_MIB(PA_ACTIVETXDATALANES),
+			final_params.lane_tx);
+	if (final_params.pwr_tx == FASTAUTO_MODE ||
+			final_params.pwr_tx == FAST_MODE)
 		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_TXTERMINATION), TRUE);
 	else
 		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_TXTERMINATION), FALSE);
 
-	if ((pwr[RX] == FASTAUTO_MODE || pwr[TX] == FASTAUTO_MODE ||
-	     pwr[RX] == FAST_MODE || pwr[TX] == FAST_MODE) &&
-	     hs_rate == PA_HS_MODE_B)
-		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_HSSERIES), hs_rate);
+	if ((final_params.pwr_rx == FASTAUTO_MODE ||
+			final_params.pwr_tx == FASTAUTO_MODE ||
+			final_params.pwr_rx == FAST_MODE ||
+			final_params.pwr_tx == FAST_MODE) &&
+			final_params.hs_rate == PA_HS_MODE_B)
+		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_HSSERIES),
+				final_params.hs_rate);
 
-	ret = ufshcd_uic_change_pwr_mode(hba, pwr[RX] << 4 | pwr[TX]);
+	ret = ufshcd_uic_change_pwr_mode(hba, final_params.pwr_rx << 4
+			| final_params.pwr_tx);
 	if (ret) {
 		UFSHCD_UPDATE_ERROR_STATS(hba, UFS_ERR_POWER_MODE_CHANGE);
 		dev_err(hba->dev,
@@ -2855,15 +2903,9 @@ static int ufshcd_config_max_pwr_mode(struct ufs_hba *hba)
 	} else {
 		if (hba->vops->pwr_change_notify)
 			hba->vops->pwr_change_notify(hba,
-				POST_CHANGE, NULL, &dev_required_params);
+				POST_CHANGE, NULL, &final_params);
 
-		hba->pwr_info.gear_rx = gear[RX];
-		hba->pwr_info.gear_tx = gear[TX];
-		hba->pwr_info.lane_rx = lanes[RX];
-		hba->pwr_info.lane_tx = lanes[TX];
-		hba->pwr_info.pwr_rx = pwr[RX];
-		hba->pwr_info.pwr_tx = pwr[TX];
-		hba->pwr_info.hs_rate = hs_rate;
+		memcpy(&hba->pwr_info, &final_params, sizeof(final_params));
 	}
 
 	ufshcd_print_pwr_info(hba);
@@ -4720,10 +4762,16 @@ static int ufshcd_probe_hba(struct ufs_hba *hba)
 	hba->ufshcd_state = UFSHCD_STATE_OPERATIONAL;
 	hba->wlun_dev_clr_ua = true;
 
-	if (ufshcd_config_max_pwr_mode(hba))
+	if (ufshcd_get_max_pwr_mode(hba)) {
 		dev_err(hba->dev,
-			"%s: Failed configuring max supported power mode\n",
+			"%s: Failed getting max supported power mode\n",
 			__func__);
+	} else {
+		ret = ufshcd_config_pwr_mode(hba, &hba->max_pwr_info.info);
+		if (ret)
+			dev_err(hba->dev, "%s: Failed setting power mode, err = %d\n",
+					__func__, ret);
+	}
 
 	/*
 	 * If we are in error handling context or in power management callbacks
@@ -6305,6 +6353,8 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	host->unique_id = host->host_no;
 	host->max_cmd_len = MAX_CDB_SIZE;
 	host->report_wlus = 1;
+
+	hba->max_pwr_info.is_valid = false;
 
 	/* Initailize wait queue for task management */
 	init_waitqueue_head(&hba->tm_wq);

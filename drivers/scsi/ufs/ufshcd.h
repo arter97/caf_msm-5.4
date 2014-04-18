@@ -241,6 +241,7 @@ struct debugfs_files {
 	struct dentry *show_hba;
 	struct dentry *host_regs;
 	struct dentry *dump_dev_desc;
+	struct dentry *power_mode;
 #ifdef CONFIG_UFS_FAULT_INJECTION
 	struct fault_attr fail_attr;
 #endif
@@ -289,6 +290,11 @@ struct ufs_pa_layer_attr {
 	u32 pwr_rx;
 	u32 pwr_tx;
 	u32 hs_rate;
+};
+
+struct ufs_pwr_mode_info {
+	bool is_valid;
+	struct ufs_pa_layer_attr info;
 };
 
 /**
@@ -423,6 +429,8 @@ struct ufs_init_prefetch {
  * @auto_bkops_enabled: to track whether bkops is enabled in device
  * @vreg_info: UFS device voltage regulator information
  * @clk_list_head: UFS host controller clocks list node head
+ * @pwr_info: holds current power mode
+ * @max_pwr_info: keeps the device max valid pwm
  * @ufs_stats: ufshcd statistics to be used via debugfs
  * @debugfs_files: debugfs files associated with the ufs stats
  */
@@ -536,6 +544,8 @@ struct ufs_hba {
 	struct list_head clk_list_head;
 
 	struct ufs_pa_layer_attr pwr_info;
+	struct ufs_pwr_mode_info max_pwr_info;
+
 	struct ufs_clk_gating clk_gating;
 	/* Control to enable/disable host capabilities */
 	u32 caps;
@@ -643,6 +653,8 @@ extern int ufshcd_dme_set_attr(struct ufs_hba *hba, u32 attr_sel,
 			       u8 attr_set, u32 mib_val, u8 peer);
 extern int ufshcd_dme_get_attr(struct ufs_hba *hba, u32 attr_sel,
 			       u32 *mib_val, u8 peer);
+extern int ufshcd_config_pwr_mode(struct ufs_hba *hba,
+		struct ufs_pa_layer_attr *desired_pwr_mode);
 
 /* UIC command interfaces for DME primitives */
 #define DME_LOCAL	0
