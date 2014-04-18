@@ -41,8 +41,17 @@ obj-$(CONFIG_SND_MVS_SOC) += snd-soc-msm-mvs.o
 snd-soc-lpass-objs := lpass-i2s.o lpass-dma.o
 obj-$(CONFIG_SND_SOC_MSM8660_LPAIF) += snd-soc-lpass.o
 
+snd-soc-lpass-objs := lpass-i2s.o lpass-dma.o
+obj-$(CONFIG_SND_SOC_LPASS) += snd-soc-lpass.o
+
 snd-soc-lpass-pcm-objs := lpass-pcm.o
 obj-$(CONFIG_SND_SOC_LPASS_PCM) += snd-soc-lpass-pcm.o
+
+snd-soc-lpass-auto-objs := lpass-auto.o
+obj-$(CONFIG_SND_SOC_LPASS_AUTO) += snd-soc-lpass-auto.o
+
+snd-soc-lpass-play-objs := lpass-play.o
+obj-$(CONFIG_SND_SOC_LPASS_PLAY) += snd-soc-lpass-play.o
 
 #8660 VOIP Driver Support
 

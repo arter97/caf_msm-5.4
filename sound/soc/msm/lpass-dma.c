@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2011, 2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -162,13 +162,21 @@ static void dai_enable_codec(uint32_t dma_ch, int codec)
 	intrVal = readl(dai_info.base + LPAIF_IRQ_EN(0));
 	intrVal = intrVal | (7 << (dma_ch * 3));
 	writel(intrVal, dai_info.base + LPAIF_IRQ_EN(0));
-	if (codec == DAI_SPKR) {
-		writel(0x0813, dai_info.base + LPAIF_DMA_CTL(dma_ch));
+	pr_debug("%s dma_ch=%d codec=%d intrVal=%08x\n",
+			__func__, dma_ch, codec, intrVal);
+	if (codec == DAI_MI2S) {
+		writel(0x084F, dai_info.base + LPAIF_DMA_CTL(dma_ch));
+		i2sctl = 0x4800;
+		i2sctl |= (dai[dma_ch]->master_mode ? WS_SRC_INT : WS_SRC_EXT);
+		writel(i2sctl, dai_info.base + LPAIF_I2S_CTL_OFFSET(DAI_MI2S));
+	} else if (codec == DAI_SEC_SPKR) {
+		writel(0x083F, dai_info.base + LPAIF_DMA_CTL(dma_ch));
 		i2sctl = 0x4400;
 		i2sctl |= (dai[dma_ch]->master_mode ? WS_SRC_INT : WS_SRC_EXT);
-		writel(i2sctl, dai_info.base + LPAIF_I2S_CTL_OFFSET(DAI_SPKR));
+		writel(i2sctl,
+			dai_info.base + LPAIF_I2S_CTL_OFFSET(DAI_SEC_SPKR));
 	} else if (codec == DAI_MIC) {
-		writel(0x81b, dai_info.base + LPAIF_DMA_CTL(dma_ch));
+		writel(0x081b, dai_info.base + LPAIF_DMA_CTL(dma_ch));
 		i2sctl = 0x0110;
 		i2sctl |= (dai[dma_ch]->master_mode ? WS_SRC_INT : WS_SRC_EXT);
 		writel(i2sctl, dai_info.base + LPAIF_I2S_CTL_OFFSET(DAI_MIC));
@@ -181,12 +189,11 @@ static void dai_disable_codec(uint32_t dma_ch, int codec)
 	uint32_t intrVal1 = 0;
 	unsigned long flag = 0x0;
 
-	pr_debug("%s\n", __func__);
 	spin_lock_irqsave(&dai_lock, flag);
 
 	intrVal1 = readl(dai_info.base + LPAIF_I2S_CTL_OFFSET(codec));
 
-	if (codec == DAI_SPKR)
+	if (codec == DAI_SEC_SPKR || codec == DAI_MI2S)
 		intrVal1 = intrVal1 & ~(1 << 14);
 	else if (codec == DAI_MIC)
 		intrVal1 = intrVal1 & ~(1 << 8);
@@ -216,8 +223,10 @@ int dai_open(uint32_t dma_ch)
 void dai_close(uint32_t dma_ch)
 {
 	pr_debug("%s\n", __func__);
-	if ((dma_ch >= 0) && (dma_ch < 5))
-		dai_disable_codec(dma_ch, DAI_SPKR);
+	if ((dma_ch >= 0) && (dma_ch < 3))
+		dai_disable_codec(dma_ch, DAI_MI2S);
+	else if ((dma_ch >= 3) && (dma_ch < 5))
+		dai_disable_codec(dma_ch, DAI_SEC_SPKR);
 	else
 		dai_disable_codec(dma_ch, DAI_MIC);
 	free_irq(LPASS_SCSS_AUDIO_IF_OUT0_IRQ, (void *) (dma_ch + 1));
@@ -250,10 +259,13 @@ int dai_start(uint32_t dma_ch)
 
 	spin_lock_irqsave(&dai_lock, flag);
 	dai_enable_irq(dma_ch);
-	if ((dma_ch >= 0) && (dma_ch < 5))
-		dai_enable_codec(dma_ch, DAI_SPKR);
+	if ((dma_ch >= 0) && (dma_ch < 3))
+		dai_enable_codec(dma_ch, DAI_MI2S);
+	else if ((dma_ch >= 3) && (dma_ch < 5))
+		dai_enable_codec(dma_ch, DAI_SEC_SPKR);
 	else
 		dai_enable_codec(dma_ch, DAI_MIC);
+
 	spin_unlock_irqrestore(&dai_lock, flag);
 	dai_print_state(dma_ch);
 	return 0;

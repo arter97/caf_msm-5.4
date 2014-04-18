@@ -209,4 +209,32 @@ config SND_SOC_DUAL_AMIC
 	help
 	 To add support for dual analog mic.
 
+config SND_SOC_LPASS
+	tristate "SoC Machine driver for lpass dsp"
+	depends on ARCH_APQ8064
+	default n
+	help
+	 To add support for early audio on APQ8064 board
+
+config SND_SOC_LPASS_PCM
+	tristate "SoC lpass driver for pcm"
+	depends on ARCH_APQ8064
+	default n
+	help
+	 To add support for early audio on APQ8064 board
+
+config SND_SOC_LPASS_AUTO
+	tristate "SoC lpass driver for configuring mi2s and i2s"
+	depends on ARCH_APQ8064
+	default n
+	help
+	 To add support for early audio on APQ8064 board
+
+config SND_SOC_LPASS_PLAY
+	tristate "SoC lpass driver for playing pcm stream"
+	depends on ARCH_APQ8064
+	default n
+	help
+	 To add support for early audio on APQ8064 board
+
 endmenu
