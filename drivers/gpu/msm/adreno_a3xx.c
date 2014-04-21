@@ -3195,6 +3195,9 @@ static void a3xx_protect_init(struct kgsl_device *device)
 
 	/* VBIF registers */
 	kgsl_regwrite(device, A3XX_CP_PROTECT_REG_C, 0x6B00C000);
+
+	/* CP_STATE_DEBUG_INDEX */
+	kgsl_regwrite(device, A3XX_CP_PROTECT_REG_D, 0x610007B0);
 }
 
 static void a3xx_start(struct adreno_device *adreno_dev)
