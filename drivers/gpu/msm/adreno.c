@@ -272,9 +272,9 @@ static void adreno_iommu_setstate(struct kgsl_device *device,
 					uint32_t flags)
 {
 	unsigned int pt_val, reg_pt_val;
+	unsigned int *link = NULL, *cmds;
 	unsigned int link[240];
 	unsigned int *cmds = &link[0];
-	int sizedwords = 0;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct kgsl_memdesc **reg_map_desc;
 	void *reg_map_array;
@@ -289,6 +289,12 @@ static void adreno_iommu_setstate(struct kgsl_device *device,
 
 	context = idr_find(&device->context_idr, context_id);
 	adreno_ctx = context->devctxt;
+
+	link = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	if (link == NULL)
+		goto done;
+
+	cmds = link;
 
 	reg_map_desc = reg_map_array;
 
@@ -409,35 +415,35 @@ static void adreno_iommu_setstate(struct kgsl_device *device,
 
 	cmds += adreno_add_idle_cmds(adreno_dev, cmds);
 
-	sizedwords += (cmds - &link[0]);
-	if (sizedwords) {
+	if ((unsigned int) (cmds - link)) {
 		/* invalidate all base pointers */
 		*cmds++ = cp_type3_packet(CP_INVALIDATE_STATE, 1);
 		*cmds++ = 0x7fff;
-		sizedwords += 2;
 		/*
 		 * add an interrupt at the end of commands so that the smmu
 		 * disable clock off function will get called
 		 */
 		*cmds++ = cp_type3_packet(CP_INTERRUPT, 1);
 		*cmds++ = CP_INT_CNTL__RB_INT_MASK;
-		sizedwords += 2;
 		/* This returns the per context timestamp but we need to
 		 * use the global timestamp for iommu clock disablement */
 		adreno_ringbuffer_issuecmds(device, adreno_ctx,
 			KGSL_CMD_FLAGS_PMODE,
-			&link[0], sizedwords);
+			&link[0], (unsigned int)(cmds - link));
 		kgsl_mmu_disable_clk_on_ts(&device->mmu,
 		adreno_dev->ringbuffer.timestamp[KGSL_MEMSTORE_GLOBAL], true);
 	}
+
+	if ((unsigned int)(cmds - link) > (PAGE_SIZE/sizeof(unsigned int))) {
+		KGSL_DRV_ERR(device, "Temp command buffer overflow\n");
+		BUG();
+	}
+
 done:
 	if (num_iommu_units)
 		kfree(reg_map_array);
 
-	if (sizedwords > (sizeof(link)/sizeof(unsigned int))) {
-		KGSL_DRV_ERR(device, "Temp command buffer overflow\n");
-		BUG();
-	}
+	kfree(link);
 }
 
 static void adreno_gpummu_setstate(struct kgsl_device *device,
