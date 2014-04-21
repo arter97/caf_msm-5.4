@@ -27,6 +27,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/string.h>
 #include <linux/of_gpio.h>
+#include <linux/workqueue.h>
 #if defined(CONFIG_FB)
 #include <linux/notifier.h>
 #include <linux/fb.h>
@@ -353,6 +354,7 @@ struct mxt_data {
 	struct regulator *vcc_ana;
 	struct regulator *vcc_dig;
 	struct regulator *vcc_i2c;
+	struct delayed_work mxt_init_work;
 #if defined(CONFIG_FB)
 	struct notifier_block fb_notif;
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
@@ -2975,6 +2977,83 @@ static int mxt_parse_dt(struct device *dev, struct mxt_platform_data *pdata)
 }
 #endif
 
+static void mxt_init_delay_work(struct work_struct *work)
+{
+	struct mxt_data *data = container_of(work,
+				struct mxt_data, mxt_init_work.work);
+	int error;
+
+	error = mxt_initialize(data);
+	if (error) {
+		dev_err(&data->client->dev,
+				"Failed to initialize touchscreen\n");
+		goto error_mxt_init;
+	}
+
+	error = request_threaded_irq(data->client->irq, NULL, mxt_interrupt,
+			data->pdata->irqflags, data->client->dev.driver->name,
+			data);
+	if (error) {
+		dev_err(&data->client->dev, "Failed to register interrupt\n");
+		goto error_request_irq;
+	}
+
+	if (data->state == APPMODE) {
+		mxt_clear_irq_s1509(data->client);
+		mxt_clear_irq_uh927(data->client);
+		error = mxt_make_highchg(data);
+		if (error) {
+			dev_err(&data->client->dev,
+						"Failed to make high CHG\n");
+			goto error_request_irq;
+		}
+	}
+
+	error = input_register_device(data->input_dev);
+	if (error) {
+		dev_err(&data->client->dev,
+			"Failed to register touchscreen as input device\n");
+		goto error_register_input_dev;
+	}
+
+	error = sysfs_create_group(&data->client->dev.kobj, &mxt_attr_group);
+	if (error)
+		goto error_create_sysfs;
+
+	mxt_debugfs_init(data);
+
+	return;
+
+error_create_sysfs:
+	sysfs_remove_group(&data->client->dev.kobj, &mxt_attr_group);
+error_register_input_dev:
+	input_unregister_device(data->input_dev);
+error_request_irq:
+	free_irq(data->irq, data);
+error_mxt_init:
+	if (data->pdata->power_on)
+		data->pdata->power_on(false);
+	else if (data->pdata->no_regulator_support)
+		mxt_power_on(data, false);
+
+	if (data->pdata->init_hw)
+		data->pdata->init_hw(false);
+	else if (!data->pdata->no_regulator_support)
+		mxt_regulator_configure(data, false);
+
+	if (gpio_is_valid(data->pdata->reset_gpio)
+			&& !data->pdata->no_reset_gpio)
+		gpio_free(data->pdata->reset_gpio);
+
+	if (gpio_is_valid(data->pdata->irq_gpio))
+		gpio_free(data->pdata->irq_gpio);
+
+	kfree(data->object_table);
+	kfree(data);
+
+	return;
+}
+
 static int __devinit mxt_probe(struct i2c_client *client,
 		const struct i2c_device_id *id)
 {
@@ -3007,6 +3086,8 @@ static int __devinit mxt_probe(struct i2c_client *client,
 		error = -ENOMEM;
 		goto err_free_mem;
 	}
+
+	INIT_DELAYED_WORK(&data->mxt_init_work, mxt_init_delay_work);
 
 	data->state = INIT;
 	input_dev->name = "atmel_mxt_ts";
@@ -3118,13 +3199,13 @@ static int __devinit mxt_probe(struct i2c_client *client,
 		error = mxt_reconfig_fpdlink(data);
 		if (error) {
 			dev_err(&client->dev, "Failed to reconfigu fpdlink\n");
-			goto err_free_object;
+			goto err_irq_gpio_req;
 		}
 
 		error = mxt_config_sx1509(data);
 		if (error) {
 			dev_err(&data->client->dev, "failed to configure sx1509\n");
-			return error;
+			goto err_irq_gpio_req;
 		}
 
 		msleep(1);
@@ -3133,73 +3214,32 @@ static int __devinit mxt_probe(struct i2c_client *client,
 		error = mxt_reset_atmel(data);
 		if (error) {
 			dev_err(&client->dev, "Failed to reset atmel\n");
-			goto err_free_object;
+			goto err_irq_gpio_req;
 		}
 	}
-
-	mxt_reset_delay(data);
-
-	error = mxt_initialize(data);
-	if (error)
-		goto err_reset_gpio_req;
-	error = request_threaded_irq(client->irq, NULL, mxt_interrupt,
-			pdata->irqflags, client->dev.driver->name, data);
-	if (error) {
-		dev_err(&client->dev, "Failed to register interrupt\n");
-		goto err_free_object;
-	}
-
-	if (data->state == APPMODE) {
-		if (data->pdata->no_regulator_support &&
-			data->pdata->no_reset_gpio) {
-			mxt_clear_irq_s1509(data->client);
-			mxt_clear_irq_uh927(data->client);
-		}
-
-		error = mxt_make_highchg(data);
-		if (error) {
-			dev_err(&client->dev, "Failed to make high CHG\n");
-			goto err_free_irq;
-		}
-	}
-
-	error = input_register_device(input_dev);
-	if (error)
-		goto err_free_irq;
-
-	error = sysfs_create_group(&client->dev.kobj, &mxt_attr_group);
-	if (error)
-		goto err_unregister_device;
 
 #if defined(CONFIG_FB)
 	data->fb_notif.notifier_call = fb_notifier_callback;
-
 	error = fb_register_client(&data->fb_notif);
-
-	if (error)
-		dev_err(&client->dev, "Unable to register fb_notifier: %d\n",
-			error);
+	if (error) {
+		dev_err(&data->client->dev,
+			"Unable to register fb_notifier: %d\n", error);
+		goto err_irq_gpio_req;
+	}
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	data->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN +
-						MXT_SUSPEND_LEVEL;
+							MXT_SUSPEND_LEVEL;
 	data->early_suspend.suspend = mxt_early_suspend;
 	data->early_suspend.resume = mxt_late_resume;
 	register_early_suspend(&data->early_suspend);
 #endif
 
-	mxt_debugfs_init(data);
+	schedule_delayed_work(&data->mxt_init_work, HZ/4);
 
 	data->dev_on = true;
 
 	return 0;
 
-err_unregister_device:
-	input_unregister_device(input_dev);
-	input_dev = NULL;
-err_free_irq:
-	free_irq(client->irq, data);
-err_free_object:
-	kfree(data->object_table);
 err_reset_gpio_req:
 	if (gpio_is_valid(pdata->reset_gpio) &&
 				!data->pdata->no_reset_gpio)
