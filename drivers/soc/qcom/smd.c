@@ -1300,7 +1300,7 @@ static unsigned ch_write_buffer(struct smd_channel *ch, void **ptr)
 	BUG_ON(head >= fifo_size);
 	BUG_ON(tail >= fifo_size);
 	BUG_ON(OVERFLOW_ADD_UNSIGNED(uintptr_t, (uintptr_t)ch->send_data,
-								tail));
+								head));
 
 	*ptr = (void *) (ch->send_data + head);
 	if (head < tail) {
