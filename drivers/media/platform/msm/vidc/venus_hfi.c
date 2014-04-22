@@ -804,7 +804,13 @@ static int venus_hfi_vote_buses(void *dev, struct vidc_bus_vote_data *data,
 			continue;
 		}
 
-		bus_vector = venus_hfi_get_bus_vector(device, bus, load);
+		/* Annoying little hack here: if the bus vector is 0, it
+		 * actually means "unvote".  However if the client is calling
+		 * vote_bus, it's probably not very nice to unvote the buses.
+		 * So pick up the lowest bandwidth table and use that instead.
+		 * If client wants to unvote, it'll call venus_hfi_unvote\
+		 * _buses */
+		bus_vector = venus_hfi_get_bus_vector(device, bus, load) ?: 1;
 		rc = msm_bus_scale_client_update_request(bus->priv, bus_vector);
 		if (rc) {
 			dprintk(VIDC_ERR, "Failed voting for bus %s @ %d: %d\n",
@@ -1325,6 +1331,12 @@ static inline int venus_hfi_power_on(struct venus_hfi_device *device)
 		goto err_enable_clk;
 	}
 
+	/* Reboot the firmware */
+	rc = venus_hfi_tzbsp_set_video_state(TZBSP_VIDEO_STATE_RESUME);
+	if (rc) {
+		dprintk(VIDC_ERR, "Failed to resume video core %d\n", rc);
+		goto err_set_video_state;
+	}
 
 	/*
 	 * Re-program all of the registers that get reset as a result of
@@ -1344,13 +1356,6 @@ static inline int venus_hfi_power_on(struct venus_hfi_device *device)
 	if (device->qdss.align_device_addr)
 		venus_hfi_write_register(device, VIDC_MMAP_ADDR,
 				(u32)device->qdss.align_device_addr);
-
-	/* Reboot the firmware */
-	rc = venus_hfi_tzbsp_set_video_state(TZBSP_VIDEO_STATE_RESUME);
-	if (rc) {
-		dprintk(VIDC_ERR, "Failed to resume video core %d\n", rc);
-		goto err_set_video_state;
-	}
 
 	/* Wait for boot completion */
 	rc = venus_hfi_reset_core(device);

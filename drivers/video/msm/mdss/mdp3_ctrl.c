@@ -305,7 +305,7 @@ static ssize_t mdp3_vsync_show_event(struct device *dev,
 	vsync_ticks = ktime_to_ns(mdp3_session->vsync_time);
 
 	pr_debug("fb%d vsync=%llu", mfd->index, vsync_ticks);
-	rc = scnprintf(buf, PAGE_SIZE, "VSYNC=%llu", vsync_ticks);
+	rc = scnprintf(buf, PAGE_SIZE, "VSYNC=%llu\n", vsync_ticks);
 	return rc;
 }
 
@@ -645,6 +645,9 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 
 	panel = mdp3_session->panel;
 	mutex_lock(&mdp3_session->lock);
+
+	if (panel && panel->set_backlight)
+		panel->set_backlight(panel, 0);
 
 	if (!mdp3_session->status) {
 		pr_debug("fb%d is off already", mfd->index);

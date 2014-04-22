@@ -450,6 +450,8 @@
 		HSUSB_3p3-supply = <&pm8916_l13>;
 		qcom,vdd-voltage-level = <1 5 7>;
 
+		qcom,hsusb-otg-phy-init-seq =
+			<0x44 0x80 0x68 0x81 0x24 0x82 0x13 0x83 0xffffffff>;
 		qcom,hsusb-otg-phy-type = <2>;
 		qcom,hsusb-otg-mode = <1>;
 		qcom,hsusb-otg-otg-control = <2>;
@@ -723,8 +725,8 @@
 			qcom,smd-edge = <0>;
 			qcom,smd-irq-offset = <0x0>;
 			qcom,smd-irq-bitmask = <0x1000>;
-			qcom,pil-string = "modem";
 			interrupts = <0 25 1>;
+			label = "modem";
 		};
 
 		qcom,smsm-modem {
@@ -740,8 +742,8 @@
 			qcom,smd-edge = <6>;
 			qcom,smd-irq-offset = <0x0>;
 			qcom,smd-irq-bitmask = <0x20000>;
-			qcom,pil-string = "wcnss";
 			interrupts = <0 142 1>;
+			label = "wcnss";
 		};
 
 		qcom,smsm-wcnss {
@@ -758,7 +760,9 @@
 			qcom,smd-irq-offset = <0x0>;
 			qcom,smd-irq-bitmask = <0x1>;
 			interrupts = <0 168 1>;
+			label = "rpm";
 			qcom,irq-no-suspend;
+			qcom,not-loadable;
 		};
 	};
 
@@ -1299,7 +1303,6 @@
 			core-vcc-supply = <&pm8916_l2>;
 			spi-vcc-supply = <&pm8916_l5>;
 			lattice,reset-gpio = <&msm_gpio 3 0>;
-			lattice,slave-select-gpio = <&msm_gpio 10 0>;
 			lattice,config-done-gpio = <&msm_gpio 1 0>;
 			lattice,vcc-en-gpio = <&msm_gpio 114 0>;
 			lattice,clk-en-gpio = <&msm_gpio 0 0>;
