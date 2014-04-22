@@ -12,16 +12,12 @@
 
 
 /dts-v1/;
-#include "msm8926-v1.dtsi"
-#include "msm8226-720p-mtp.dtsi"
-#include "msm8226-camera-sensor-mtp.dtsi"
+
+#include "msm8974pro-pm8994.dtsi"
+#include "msm8994-cdp.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. MSM 8926 MTP";
-	compatible = "qcom,msm8926-mtp", "qcom,msm8926", "qcom,mtp";
-	qcom,board-id = <8 0>;
-};
-
-&sdc2_clk_on {
-	drive-strength = <16>; /* 16 MA */
+	model = "Qualcomm Technologies, Inc. MSM 8974Pro-AC MSM8994 Interposer CDP";
+	compatible = "qcom,msm8974-cdp", "qcom,msm8974", "qcom,cdp";
+	qcom,board-id = <1 3>;
 };
