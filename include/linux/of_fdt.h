@@ -89,6 +89,7 @@ extern const void *of_get_flat_dt_prop(unsigned long node, const char *name,
 extern int of_flat_dt_is_compatible(unsigned long node, const char *name);
 extern int of_flat_dt_match(unsigned long node, const char *const *matches);
 extern unsigned long of_get_flat_dt_root(void);
+extern int of_get_flat_dt_size(void);
 extern int of_scan_flat_dt_by_path(const char *path,
 	int (*it)(unsigned long node, const char *name, int depth, void *data),
 	void *data);
