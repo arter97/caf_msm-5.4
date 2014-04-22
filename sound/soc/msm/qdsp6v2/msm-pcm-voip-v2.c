@@ -48,7 +48,7 @@
 #define MODE_PCM		0xC
 #define MODE_G711		0xA
 #define MODE_G711A		0xF
-
+#define MODE_4GV_NW		0xE
 enum msm_audio_g711a_frame_type {
 	MVS_G711A_SPEECH_GOOD,
 	MVS_G711A_SID,
@@ -356,20 +356,20 @@ static void voip_process_ul_pkt(uint8_t *voc_pkt,
 			 * Bits 2-3: Frame rate
 			 */
 			if (prtd->mode == MODE_G711A)
-				buf_node->frame.header.frame_type =
+				buf_node->frame.frm_hdr.frame_type =
 							(*voc_pkt) & 0x03;
 			voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
 
 			/* There are two frames in the buffer. Length of the
 			 * first frame:
 			 */
-			buf_node->frame.len = (pkt_len -
+			buf_node->frame.pktlen = (pkt_len -
 					       2 * DSP_FRAME_HDR_LEN) / 2;
 
 			memcpy(&buf_node->frame.voc_pkt[0],
 			       voc_pkt,
-			       buf_node->frame.len);
-			voc_pkt = voc_pkt + buf_node->frame.len;
+			       buf_node->frame.pktlen);
+			voc_pkt = voc_pkt + buf_node->frame.pktlen;
 
 			list_add_tail(&buf_node->list, &prtd->out_queue);
 
@@ -390,19 +390,19 @@ static void voip_process_ul_pkt(uint8_t *voc_pkt,
 				 */
 
 				if (prtd->mode == MODE_G711A)
-					buf_node->frame.header.frame_type =
+					buf_node->frame.frm_hdr.frame_type =
 							(*voc_pkt) & 0x03;
 				voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
 
 				/* There are two frames in the buffer. Length
 				 * of the second frame:
 				 */
-				buf_node->frame.len = (pkt_len -
+				buf_node->frame.pktlen = (pkt_len -
 					2 * DSP_FRAME_HDR_LEN) / 2;
 
 				memcpy(&buf_node->frame.voc_pkt[0],
 				       voc_pkt,
-				       buf_node->frame.len);
+				       buf_node->frame.pktlen);
 
 				list_add_tail(&buf_node->list,
 					      &prtd->out_queue);
@@ -476,7 +476,8 @@ static void voip_process_dl_pkt(uint8_t *voc_pkt, void *private_data)
 		}
 		case MODE_IS127:
 		case MODE_4GV_NB:
-		case MODE_4GV_WB: {
+		case MODE_4GV_WB:
+		case MODE_4GV_NW: {
 			*((uint32_t *)voc_pkt) = buf_node->frame.pktlen +
 							 DSP_FRAME_HDR_LEN;
 			/* Advance to the header of voip packet */
@@ -508,15 +509,15 @@ static void voip_process_dl_pkt(uint8_t *voc_pkt, void *private_data)
 			voc_pkt = voc_pkt + sizeof(uint32_t);
 
 			*voc_pkt = ((prtd->rate_type  & 0x0F) << 2) |
-				    (buf_node->frame.header.frame_type & 0x03);
+				    (buf_node->frame.frm_hdr.frame_type & 0x03);
 			voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
 
-			*pkt_len = buf_node->frame.len + DSP_FRAME_HDR_LEN;
+			*pkt_len = buf_node->frame.pktlen + DSP_FRAME_HDR_LEN;
 
 			memcpy(voc_pkt,
 			       &buf_node->frame.voc_pkt[0],
-			       buf_node->frame.len);
-			voc_pkt = voc_pkt + buf_node->frame.len;
+			       buf_node->frame.pktlen);
+			voc_pkt = voc_pkt + buf_node->frame.pktlen;
 
 			list_add_tail(&buf_node->list, &prtd->free_in_queue);
 
@@ -533,15 +534,15 @@ static void voip_process_dl_pkt(uint8_t *voc_pkt, void *private_data)
 				 * Bits 2-3: Frame rate
 				 */
 				*voc_pkt = ((prtd->rate_type & 0x0F) << 2) |
-				(buf_node->frame.header.frame_type & 0x03);
+				(buf_node->frame.frm_hdr.frame_type & 0x03);
 				voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
 
 				*pkt_len = *pkt_len +
-					buf_node->frame.len + DSP_FRAME_HDR_LEN;
+					buf_node->frame.pktlen + DSP_FRAME_HDR_LEN;
 
 				memcpy(voc_pkt,
 				       &buf_node->frame.voc_pkt[0],
-				       buf_node->frame.len);
+				       buf_node->frame.pktlen);
 
 				list_add_tail(&buf_node->list,
 					      &prtd->free_in_queue);
