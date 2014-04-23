@@ -408,6 +408,9 @@ static int mdss_mdp_cmd_remove_vsync_handler(struct mdss_mdp_ctl *ctl,
 	if (handle->enabled) {
 		handle->enabled = false;
 		list_del_init(&handle->list);
+	} else {
+		spin_unlock_irqrestore(&ctx->clk_lock, flags);
+		return 0;
 	}
 	list_for_each_entry(tmp, &ctx->vsync_handlers, list) {
 		if (!tmp->cmd_post_flush)
@@ -551,7 +554,7 @@ int mdss_mdp_cmd_stop(struct mdss_mdp_ctl *ctl)
 		mdss_mdp_cmd_remove_vsync_handler(ctl, handle);
 
 	spin_lock_irqsave(&ctx->clk_lock, flags);
-	if (ctx->rdptr_enabled) {
+	if (ctx->rdptr_enabled && ctx->clk_enabled) {
 		INIT_COMPLETION(ctx->stop_comp);
 		need_wait = 1;
 	}
