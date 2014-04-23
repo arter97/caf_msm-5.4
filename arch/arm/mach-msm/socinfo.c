@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -302,6 +302,9 @@ static enum msm_cpu cpu_of_id[] = {
 
 	/* 8064AA IDs */
 	[172] = MSM_CPU_8064AA,
+
+	/* 8064AU IDs */
+	[244] = MSM_CPU_8064AU,
 
 	/* Uninitialized IDs are not known to run Linux.
 	   MSM_CPU_UNKNOWN is set to 0 to ensure these IDs are
