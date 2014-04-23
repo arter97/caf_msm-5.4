@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -125,6 +125,7 @@ int chk_config_get_id(void)
 		case MSM_CPU_8064:
 		case MSM_CPU_8064AB:
 		case MSM_CPU_8064AA:
+		case MSM_CPU_8064AU:
 			return APQ8064_TOOLS_ID;
 		case MSM_CPU_8930:
 		case MSM_CPU_8930AA:
@@ -155,6 +156,7 @@ int chk_apps_only(void)
 	case MSM_CPU_8064:
 	case MSM_CPU_8064AB:
 	case MSM_CPU_8064AA:
+	case MSM_CPU_8064AU:
 	case MSM_CPU_8930:
 	case MSM_CPU_8930AA:
 	case MSM_CPU_8930AB:
