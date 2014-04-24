@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2012,2014 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -12,7 +12,7 @@
  */
 #ifndef __MACH_QDSP6_V2_SNDDEV_H
 #define __MACH_QDSP6_V2_SNDDEV_H
-#include <mach/qdsp5v2/audio_def.h>
+#include <mach/qdsp6v2/audio_def.h>
 #include <sound/q6afe.h>
 
 #define AUDIO_DEV_CTL_MAX_DEV 64
