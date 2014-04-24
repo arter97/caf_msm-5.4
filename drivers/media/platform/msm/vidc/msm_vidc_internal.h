@@ -68,6 +68,7 @@ enum vidc_ports {
 
 enum vidc_core_state {
 	VIDC_CORE_UNINIT = 0,
+	VIDC_CORE_LOADED,
 	VIDC_CORE_INIT,
 	VIDC_CORE_INIT_DONE,
 	VIDC_CORE_INVALID
@@ -250,6 +251,7 @@ struct msm_vidc_inst {
 	enum buffer_mode_type buffer_mode_set[MAX_PORT_NUM];
 	struct list_head registered_bufs;
 	bool map_output_buffer;
+	struct v4l2_ctrl **ctrls;
 };
 
 extern struct msm_vidc_drv *vidc_driver;
@@ -269,7 +271,6 @@ struct msm_vidc_ctrl {
 	u32 step;
 	u32 menu_skip_mask;
 	const char * const *qmenu;
-	struct v4l2_ctrl *priv;
 };
 
 void handle_cmd_response(enum command_response cmd, void *data);
