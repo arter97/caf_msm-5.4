@@ -89,6 +89,7 @@
 #include "smd_private.h"
 #include "sysmon.h"
 #include <linux/i2c/atmel_mxt_ts.h>
+#include <linux/bluetooth-power.h>
 
 #define MSM_PMEM_ADSP_SIZE         0x7800000
 #define MSM_PMEM_AUDIO_SIZE        0x4CF000
@@ -3603,6 +3604,43 @@ static void __init apq8064ab_update_retention_spm(void)
 	}
 }
 
+struct bluetooth_power_platform_data *bt_power_pdata;
+
+static struct platform_device msm_bt_power_device = {
+	.name = "bt_power",
+	.id = -1,
+};
+
+static void __init apq8064_bt_power_init(void)
+{
+	struct device *dev;
+
+	bt_power_pdata =
+		kzalloc(sizeof(struct bluetooth_power_platform_data),
+			GFP_KERNEL);
+
+	if (!bt_power_pdata) {
+		pr_err("%s: Failed to allocate memory", __func__);
+		return;
+	}
+
+	bt_power_pdata->bt_gpio_sys_rst = QCA6174_BT_RST_N;
+	bt_power_pdata->bt_vdd_io = NULL;
+	bt_power_pdata->bt_vdd_pa = NULL;
+	bt_power_pdata->bt_vdd_ldo = NULL;
+	bt_power_pdata->bt_chip_pwd = NULL;
+	bt_power_pdata->bt_power_setup = NULL;
+
+	dev = &msm_bt_power_device.dev;
+	dev->platform_data = bt_power_pdata;
+
+	if (platform_device_register(&msm_bt_power_device) < 0)
+		pr_err("%s: Platform dev. registration failed\n", __func__);
+	else
+		pr_err("\n%s: ***** Platform dev. registration success *****\n", __func__);
+
+}
+
 static void __init apq8064_common_init(void)
 {
 	u32 platform_version = socinfo_get_platform_version();
@@ -3661,6 +3699,9 @@ static void __init apq8064_common_init(void)
 	}
 
 	apq8064_init_pmic();
+
+	apq8064_bt_power_init();
+
 	if (machine_is_apq8064_liquid())
 		msm_otg_pdata.mhl_enable = true;
 
