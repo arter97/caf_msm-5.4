@@ -22,7 +22,6 @@
 #include <linux/usb/serial.h>
 #include <asm/unaligned.h>
 
-
 /* output control lines*/
 #define CSVT_CTRL_DTR		0x01
 #define CSVT_CTRL_RTS		0x02
@@ -51,9 +50,10 @@ struct csvt_ctrl_dev {
 };
 
 static const struct usb_device_id id_table[] = {
-	{ USB_DEVICE_AND_INTERFACE_INFO(0x05c6 , 0x904c, 0xff, 0xfe, 0xff)},
-	{ USB_DEVICE_AND_INTERFACE_INFO(0x05c6 , 0x9075, 0xff, 0xfe, 0xff)},
-	{ USB_DEVICE_AND_INTERFACE_INFO(0x05c6 , 0x908A, 0xff, 0xfe, 0xff)},
+	{ USB_DEVICE_INTERFACE_NUMBER(0x05c6 , 0x904c, 4)},
+	{ USB_DEVICE_INTERFACE_NUMBER(0x05c6 , 0x9075, 4)},
+	{ USB_DEVICE_INTERFACE_NUMBER(0x05c6 , 0x908A, 4)},
+	{ USB_DEVICE_INTERFACE_NUMBER(0x1e2d , 0x0060, 2)},
 	{}, /* terminating entry */
 };
 MODULE_DEVICE_TABLE(usb, id_table);
@@ -68,17 +68,9 @@ static struct usb_driver csvt_driver = {
 	.supports_autosuspend	= true,
 };
 
-#define CSVT_IFC_NUM	4
-
 static int csvt_probe(struct usb_serial *serial, const struct usb_device_id *id)
 {
-	struct usb_host_interface	*intf =
-		serial->interface->cur_altsetting;
-
 	pr_debug("%s:\n", __func__);
-
-	if (intf->desc.bInterfaceNumber != CSVT_IFC_NUM)
-		return -ENODEV;
 
 	usb_enable_autosuspend(serial->dev);
 
