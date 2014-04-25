@@ -818,6 +818,23 @@ static struct msm_gpiomux_config apq8064_hdmi_configs[] __initdata = {
 	},
 };
 
+static struct msm_gpiomux_config apq8064_adp_2_gsbi_configs[] __initdata = {
+	{
+		.gpio = 8,			/* GSBI3 I2C QUP SDA */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gsbi3_suspended_cfg,
+			[GPIOMUX_ACTIVE] = &gsbi3_active_cfg,
+		},
+	},
+	{
+		.gpio = 9,			/* GSBI3 I2C QUP SCL */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gsbi3_suspended_cfg,
+			[GPIOMUX_ACTIVE] = &gsbi3_active_cfg,
+		},
+	},
+};
+
 static struct msm_gpiomux_config apq8064_mplatform_gsbi_configs[] __initdata = {
 	{
 		.gpio      = 8,			/* GSBI3 I2C QUP SDA */
@@ -2086,7 +2103,10 @@ void __init apq8064_init_gpiomux(void)
 			msm_gpiomux_install(apq8064_mplatform_gsbi_configs,
 				ARRAY_SIZE(apq8064_mplatform_gsbi_configs));
 		else {
-			if (!machine_is_apq8064_adp_2())
+			if (machine_is_apq8064_adp_2())
+				msm_gpiomux_install(apq8064_adp_2_gsbi_configs,
+					ARRAY_SIZE(apq8064_adp_2_gsbi_configs));
+			else
 				msm_gpiomux_install(apq8064_gsbi_configs,
 					ARRAY_SIZE(apq8064_gsbi_configs));
 		}
