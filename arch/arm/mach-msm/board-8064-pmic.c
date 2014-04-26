@@ -225,18 +225,15 @@ static struct pm8xxx_mpp_init mplatform_pm8xxx_mpps[] __initdata = {
 
 /* Initial PM8XXX MPP configurations */
 static struct pm8xxx_mpp_init pm8xxx_mpps[] __initdata = {
-	PM8921_MPP_INIT(3, D_INPUT, PM8921_MPP_DIG_LEVEL_S4, DIN_TO_INT),
+	/* MDM_STATUS */
+	PM8821_MPP_INIT(1, D_INPUT, PM8921_MPP_DIG_LEVEL_S4, DOUT_CTRL_LOW),
+	/* MDM_ON_OFF */
+	PM8821_MPP_INIT(2, D_OUTPUT, PM8921_MPP_DIG_LEVEL_S4, DOUT_CTRL_HIGH),
 	/* External 5V regulator enable; shared by HDMI and USB_OTG switches. */
 	PM8921_MPP_INIT(7, D_OUTPUT, PM8921_MPP_DIG_LEVEL_VPH, DOUT_CTRL_LOW),
 	PM8921_MPP_INIT(8, D_OUTPUT, PM8921_MPP_DIG_LEVEL_S4, DOUT_CTRL_LOW),
 	/*MPP9 is used to detect docking station connection/removal on Liquid*/
 	PM8921_MPP_INIT(9, D_INPUT, PM8921_MPP_DIG_LEVEL_S4, DIN_TO_INT),
-	/* MDM_STATUS */
-	PM8821_MPP_INIT(1, D_INPUT, PM8921_MPP_DIG_LEVEL_S4, DOUT_CTRL_LOW),
-	/* MDM_ON_OFF */
-	PM8821_MPP_INIT(2, D_OUTPUT, PM8921_MPP_DIG_LEVEL_S4, DOUT_CTRL_HIGH),
-	/* MDM_RESET */
-	PM8821_MPP_INIT(3, D_OUTPUT, PM8921_MPP_DIG_LEVEL_VPH, DOUT_CTRL_HIGH),
 };
 
 static struct pm8xxx_gpio_init pm8921_sglte2_gpios[] __initdata = {
