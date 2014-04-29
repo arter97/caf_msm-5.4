@@ -1236,7 +1236,7 @@ void set_task_cpu(struct task_struct *p, unsigned int new_cpu)
 		perf_sw_event(PERF_COUNT_SW_CPU_MIGRATIONS, 1, NULL, 0);
 
 		if (p->state == TASK_RUNNING)
-			update_task_ravg(p, task_rq(p), 1);
+			update_task_ravg(p, task_rq(p), 0);
 	}
 
 	__set_task_cpu(p, new_cpu);
@@ -2873,7 +2873,7 @@ pick_next_task(struct rq *rq)
 	if (likely(rq->nr_running == rq->cfs.h_nr_running)) {
 		p = fair_sched_class.pick_next_task(rq);
 		if (likely(p)) {
-			update_task_ravg(p, rq, 1);
+			update_task_ravg(p, rq, 0);
 			return p;
 		}
 	}
@@ -2881,7 +2881,7 @@ pick_next_task(struct rq *rq)
 	for_each_class(class) {
 		p = class->pick_next_task(rq);
 		if (p) {
-			update_task_ravg(p, rq, 1);
+			update_task_ravg(p, rq, 0);
 			return p;
 		}
 	}
