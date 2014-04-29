@@ -529,7 +529,7 @@ static netdev_tx_t ecm_ipa_start_xmit(struct sk_buff *skb,
 
 	ret = ipa_tx_dp(IPA_TO_USB_CLIENT, skb, NULL);
 	if (ret) {
-		ECM_IPA_ERROR("ipa transmit failed (%d)\n", ret);
+		pr_debug("ipa transmit failed (%d)\n", ret);
 		goto fail_tx_packet;
 	}
 

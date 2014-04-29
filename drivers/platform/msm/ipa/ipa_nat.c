@@ -16,6 +16,7 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/uaccess.h>
+#include <linux/delay.h>
 #include "ipa_i.h"
 
 #define IPA_NAT_PHYS_MEM_OFFSET  0
@@ -23,6 +24,9 @@
 
 #define IPA_NAT_SYSTEM_MEMORY  0
 #define IPA_NAT_SHARED_MEMORY  1
+
+#define IPA_NAT_RX_CMDQ_EMPTY_MIN_SLEEP 950
+#define IPA_NAT_RX_CMDQ_EMPTY_MAX_SLEEP 1050
 
 static int ipa_nat_vma_fault_remap(
 	 struct vm_area_struct *vma, struct vm_fault *vmf)
@@ -216,6 +220,116 @@ bail:
 	return result;
 }
 
+static void ipa_sps_irq_nat_init_cmd_ack(void *user1, void *user2)
+{
+	struct ipa_desc *desc = (struct ipa_desc *)user1;
+
+	if (!desc) {
+		WARN_ON(1);
+		return;
+	}
+	IPADBG("got ack for cmd=%d\n", desc->opcode);
+	complete(&desc->xfer_done);
+}
+
+/**
+ * ipa_send_cmd_nat() - send NAT INIT immediate command
+ * @cmd: command payload
+ *
+ * This function sends NAT INIT immediate command to IPA HW.
+ * In IPA 1.1 there is a limitation where IPA needs to be idle before sending
+ * NAT INIT. In order to ensure that IPA is idle:
+ *	1. BAM is halted in order to block traffic on BAM2BAM pipes.
+ *	2. disable_sys_dp flag is set in order to stop sending packets via
+ *	   SYS2BAM pipes.
+ * After NAT_INIT is processed by IPA HW all halted pipes are resumed and
+ * disable_sys_dp is set to false.
+ */
+static int ipa_send_cmd_nat(struct ipa_ip_v4_nat_init *cmd)
+{
+	int result = 0;
+	struct ipa_sys_context *sys;
+	int ep_idx;
+	struct ipa_desc nat_init = { 0 };
+	u32 ep_halt_btmp = 0;
+	u32 val;
+	BUILD_BUG_ON((sizeof(ep_halt_btmp) * 8) < IPA_NUM_PIPES);
+
+	mutex_lock(&ipa_ctx->lock);
+
+	ipa_inc_client_enable_clks();
+
+	IPADBG("Halting valid B2B pipes");
+	for (ep_idx = 0; ep_idx < IPA_NUM_PIPES; ep_idx++) {
+		if (ipa_ctx->ep[ep_idx].valid &&
+		    ipa_ctx->ep[ep_idx].sys == NULL &&
+		    IPA_CLIENT_IS_PROD(ipa_ctx->ep[ep_idx].client)) {
+			IPADBG("Halting pipe %d", ep_idx);
+			ep_halt_btmp |= (1 << ep_idx);
+			if (sps_flow_off(ipa_ctx->ep[ep_idx].ep_hdl,
+					 SPS_FLOWOFF_FORCED)) {
+				IPAERR("sps_flow_off() failed\n");
+				BUG();
+				result = -EFAULT;
+				goto bail;
+			}
+		}
+	}
+	IPADBG("setting disable_sys_dp to true");
+	ipa_ctx->disable_sys_dp = true;
+
+	IPADBG("wait until RX command queue is empty");
+	val = ipa_read_reg(ipa_ctx->mmio, IPA_RX_DEBUG_CMD_STATUS);
+	while (((val & IPA_RX_DEBUG_CMD_STATUS_FIFO_STATE_BMSK) >>
+				IPA_RX_DEBUG_CMD_STATUS_FIFO_STATE_SHFT) != 0) {
+		usleep_range(IPA_NAT_RX_CMDQ_EMPTY_MIN_SLEEP,
+				IPA_NAT_RX_CMDQ_EMPTY_MAX_SLEEP);
+		val = ipa_read_reg(ipa_ctx->mmio, IPA_RX_DEBUG_CMD_STATUS);
+	}
+	IPADBG("RX command queue is empty");
+
+	ep_idx = ipa_get_ep_mapping(ipa_ctx->mode, IPA_CLIENT_A5_CMD_PROD);
+	sys = ipa_ctx->ep[ep_idx].sys;
+
+	nat_init.opcode = IPA_IP_V4_NAT_INIT;
+	nat_init.type = IPA_IMM_CMD_DESC;
+	nat_init.callback = ipa_sps_irq_nat_init_cmd_ack;
+	nat_init.user1 = &nat_init;
+	nat_init.user2 = NULL;
+	nat_init.pyld = (void *)cmd;
+	nat_init.len = sizeof(struct ipa_ip_v4_nat_init);
+
+	IPADBG("sending NAT_INIT command");
+	init_completion(&nat_init.xfer_done);
+	if (ipa_send_one(sys, &nat_init, true)) {
+		IPAERR("ipa_send_one failed\n");
+		result = -EFAULT;
+		goto bail;
+	}
+
+	wait_for_completion(&nat_init.xfer_done);
+
+	IPADBG("resuming halted B2B pipes");
+	for (ep_idx = 0; ep_idx < IPA_NUM_PIPES; ep_idx++) {
+		if (ep_halt_btmp & (1 << ep_idx)) {
+			IPADBG("resuming pipe %d", ep_idx);
+			if (sps_flow_on(ipa_ctx->ep[ep_idx].ep_hdl)) {
+				IPAERR("sps_flow_on failed\n");
+				result = -EFAULT;
+				BUG();
+				goto bail;
+			}
+		}
+	}
+	IPADBG("setting disable_sys_dp to false");
+	ipa_ctx->disable_sys_dp = false;
+bail:
+	ipa_dec_client_disable_clks();
+	mutex_unlock(&ipa_ctx->lock);
+	IPADBG("EXIT with %d\n", result);
+	return result;
+}
+
 /* IOCTL function handlers */
 /**
  * ipa_nat_init_cmd() - Post IP_V4_NAT_INIT command to IPA HW
@@ -227,9 +341,7 @@ bail:
  */
 int ipa_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 {
-	struct ipa_desc desc = { 0 };
 	struct ipa_ip_v4_nat_init *cmd;
-	u16 size = sizeof(struct ipa_ip_v4_nat_init);
 	int result;
 	u32 offset = 0;
 
@@ -239,7 +351,7 @@ int ipa_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 		result = -EPERM;
 		goto bail;
 	}
-	cmd = kmalloc(size, GFP_KERNEL);
+	cmd = kmalloc(sizeof(struct ipa_ioc_v4_nat_init), GFP_KERNEL);
 	if (!cmd) {
 		IPAERR("Failed to alloc immediate command object\n");
 		result = -ENOMEM;
@@ -313,15 +425,8 @@ int ipa_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 	IPADBG("Expansion Table size:0x%x\n", cmd->size_expansion_tables);
 	cmd->public_ip_addr = init->ip_addr;
 	IPADBG("Public ip address:0x%x\n", cmd->public_ip_addr);
-	desc.opcode = IPA_IP_V4_NAT_INIT;
-	desc.type = IPA_IMM_CMD_DESC;
-	desc.callback = NULL;
-	desc.user1 = NULL;
-	desc.user2 = NULL;
-	desc.pyld = (void *)cmd;
-	desc.len = size;
 	IPADBG("posting v4 init command\n");
-	if (ipa_send_cmd(1, &desc)) {
+	if (ipa_send_cmd_nat(cmd)) {
 		IPAERR("Fail to send immediate command\n");
 		result = -EPERM;
 		goto free_cmd;
@@ -468,9 +573,7 @@ void ipa_nat_free_mem_and_device(struct ipa_nat_mem *nat_ctx)
  */
 int ipa_nat_del_cmd(struct ipa_ioc_v4_nat_del *del)
 {
-	struct ipa_desc desc = { 0 };
 	struct ipa_ip_v4_nat_init *cmd;
-	u16 size = sizeof(struct ipa_ip_v4_nat_init);
 	u8 mem_type = IPA_NAT_SHARED_MEMORY;
 	u32 base_addr = IPA_NAT_PHYS_MEM_OFFSET;
 	int result;
@@ -481,7 +584,7 @@ int ipa_nat_del_cmd(struct ipa_ioc_v4_nat_del *del)
 		result = -EPERM;
 		goto bail;
 	}
-	cmd = kmalloc(size, GFP_KERNEL);
+	cmd = kmalloc(sizeof(struct ipa_ioc_v4_nat_init), GFP_KERNEL);
 	if (cmd == NULL) {
 		IPAERR("Failed to alloc immediate command object\n");
 		result = -ENOMEM;
@@ -499,15 +602,7 @@ int ipa_nat_del_cmd(struct ipa_ioc_v4_nat_del *del)
 	cmd->size_base_tables = 0;
 	cmd->size_expansion_tables = 0;
 	cmd->public_ip_addr = del->public_ip_addr;
-
-	desc.opcode = IPA_IP_V4_NAT_INIT;
-	desc.type = IPA_IMM_CMD_DESC;
-	desc.callback = NULL;
-	desc.user1 = NULL;
-	desc.user2 = NULL;
-	desc.pyld = (void *)cmd;
-	desc.len = size;
-	if (ipa_send_cmd(1, &desc)) {
+	if (ipa_send_cmd_nat(cmd)) {
 		IPAERR("Fail to send immediate command\n");
 		result = -EPERM;
 		goto free_mem;

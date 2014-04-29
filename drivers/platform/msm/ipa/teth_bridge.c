@@ -1591,7 +1591,7 @@ static void teth_send_skb_work(struct work_struct *work)
 			client = get_cons_client(work_data->lcid);
 		res = ipa_tx_dp(client, work_data->skb, &work_data->metadata);
 		if (res) {
-			TETH_ERR("Packet send failure, dropping packet !\n");
+			TETH_DBG("Packet send failure, dropping packet !\n");
 			goto bail;
 		}
 		teth_ctx->stats.a2_to_usb_num_sw_tx_packets++;
@@ -1835,7 +1835,7 @@ static void a2_notify_cb(void *user_data,
 
 		res = ipa_tx_dp(client, skb, &metadata);
 		if (res) {
-			TETH_ERR("Packet send failure, dropping packet !\n");
+			TETH_DBG("Packet send failure, dropping packet !\n");
 			dev_kfree_skb(skb);
 			ipa_rm_inactivity_timer_release_resource(
 				IPA_RM_RESOURCE_BRIDGE_PROD);

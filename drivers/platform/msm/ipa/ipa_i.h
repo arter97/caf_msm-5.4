@@ -618,6 +618,7 @@ struct ipa_stats {
  * @dma_pool: special purpose DMA pool
  * @ipa_hw_type: type of IPA HW type (e.g. IPA 1.0, IPA 1.1 etc')
  * @ipa_hw_mode: mode of IPA HW mode (e.g. Normal, Virtual or over PCIe)
+ * @disable_sys_dp: Is SYS2BAM data path disabled ?
  *
  * IPA context - holds all relevant info about IPA driver and its state
  */
@@ -680,6 +681,7 @@ struct ipa_context {
 	wait_queue_head_t msg_waitq;
 	enum ipa_hw_type ipa_hw_type;
 	enum ipa_hw_mode ipa_hw_mode;
+	bool disable_sys_dp;
 	/* featurize if memory footprint becomes a concern */
 	struct ipa_stats stats;
 	void *smem_pipe_mem;
