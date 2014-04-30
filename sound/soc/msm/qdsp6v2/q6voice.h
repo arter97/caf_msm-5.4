@@ -33,6 +33,21 @@
 #define VOC_REC_DOWNLINK	0x01
 #define VOC_REC_BOTH		0x02
 
+enum {
+	CVP_VOC_RX_TOPOLOGY_CAL = 0,
+	CVP_VOC_TX_TOPOLOGY_CAL,
+	CVP_VOCPROC_CAL,
+	CVP_VOCVOL_CAL,
+	CVS_VOCSTRM_CAL,
+	CVP_VOCDEV_CFG_CAL,
+	CVP_VOCPROC_COL_CAL,
+	CVP_VOCVOL_COL_CAL,
+	CVS_VOCSTRM_COL_CAL,
+	VOICE_RTAC_INFO_CAL,
+	VOICE_RTAC_APR_CAL,
+	MAX_VOICE_CAL_TYPES
+};
+
 struct voice_header {
 	uint32_t id;
 	uint32_t data_len;
@@ -1454,6 +1469,8 @@ struct common_data {
 	/* APR to CVP in the Q6 */
 	void *apr_q6_cvp;
 
+	struct cal_type_data *cal_data[MAX_VOICE_CAL_TYPES];
+
 	struct mem_map_table cal_mem_map_table;
 	uint32_t cal_mem_handle;
 
@@ -1572,7 +1589,6 @@ int voc_set_route_flag(uint32_t session_id, uint8_t path_dir, uint8_t set);
 uint8_t voc_get_route_flag(uint32_t session_id, uint8_t path_dir);
 int voc_enable_dtmf_rx_detection(uint32_t session_id, uint32_t enable);
 void voc_disable_dtmf_det_on_active_sessions(void);
-int voc_alloc_cal_shared_memory(void);
 int voc_alloc_voip_shared_memory(void);
 int is_voc_initialized(void);
 int voc_register_vocproc_vol_table(void);
@@ -1591,7 +1607,6 @@ void voc_register_hpcm_evt_cb(hostpcm_cb_fn hostpcm_cb,
 			      void *private_data);
 void voc_deregister_hpcm_evt_cb(void);
 
-int voc_unmap_cal_blocks(void);
 int voc_map_rtac_block(struct rtac_cal_block_data *cal_block);
 int voc_unmap_rtac_block(uint32_t *mem_map_handle);
 
@@ -1607,4 +1622,6 @@ int voc_enable_device(uint32_t session_id);
 void voc_set_destroy_cvd_flag(bool is_destroy_cvd);
 int voc_disable_topology(uint32_t session_id, uint32_t disable);
 
+int voice_get_rx_topology(void);
+int voice_get_tx_topology(void);
 #endif

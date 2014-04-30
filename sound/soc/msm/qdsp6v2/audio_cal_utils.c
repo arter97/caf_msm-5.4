@@ -351,7 +351,7 @@ static void destroy_cal_type_data(struct cal_type_data *cal_type)
 		cal_block = list_entry(ptr,
 			struct cal_block_data, list);
 
-		if (cal_type->info.cal_util_callbacks.unmap_cal == NULL) {
+		if (cal_type->info.cal_util_callbacks.unmap_cal != NULL) {
 			ret = cal_type->info.cal_util_callbacks.
 				unmap_cal(cal_type->info.reg.cal_type,
 					cal_block);
@@ -581,8 +581,7 @@ void cal_utils_clear_cal_block_q6maps(int num_cal_types,
 			cal_block = list_entry(ptr,
 				struct cal_block_data, list);
 
-			if (cal_block->map_data.q6map_handle > 0)
-				cal_block->map_data.q6map_handle = 0;
+			cal_block->map_data.q6map_handle = 0;
 		}
 		mutex_unlock(&cal_type[i]->lock);
 	}

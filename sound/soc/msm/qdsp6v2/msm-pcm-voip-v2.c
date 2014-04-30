@@ -1565,17 +1565,6 @@ static int msm_pcm_probe(struct platform_device *pdev)
 		goto done;
 	}
 
-	rc = voc_alloc_cal_shared_memory();
-	if (rc == -EPROBE_DEFER) {
-		pr_debug("%s: memory allocation for calibration deferred %d\n",
-			 __func__, rc);
-
-		goto done;
-	} else if (rc < 0) {
-		pr_err("%s: memory allocation for calibration failed %d\n",
-		       __func__, rc);
-	}
-
 	rc = voc_alloc_voip_shared_memory();
 	if (rc < 0) {
 		pr_err("%s: error allocating shared mem err %d\n",
