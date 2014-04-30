@@ -621,6 +621,9 @@ int mdp4_overlay_play_wait(struct fb_info *info,
 	struct msmfb_overlay_data *req);
 int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req);
 struct mdp4_overlay_pipe *mdp4_overlay_pipe_alloc(int ptype, int mixer);
+struct mdp4_overlay_pipe *mdp4_alloc_base_primary(struct msm_fb_data_type *mfd);
+struct mdp4_overlay_pipe *mdp4_alloc_base_secondary(struct msm_fb_data_type
+	*mfd);
 void mdp4_overlay_dma_commit(int mixer);
 void mdp4_overlay_vsync_commit(struct mdp4_overlay_pipe *pipe);
 void mdp4_mixer_stage_commit(int mixer);
