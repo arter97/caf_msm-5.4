@@ -328,9 +328,13 @@
 		clock-names = "clk-4", "clk-5";
 		qcom,speed0-bin-v0 =
 			<          0 0>,
-			<  400000000 1>,
-			<  800000000 2>,
-			< 1190400000 3>;
+			<  200000000 1>,
+			<  400000000 2>,
+			<  533333000 3>,
+			<  800000000 4>,
+			<  998400000 5>,
+			< 1094400000 6>,
+			< 1190400000 7>;
 	};
 
 	qcom,cpubw {
@@ -571,7 +575,7 @@
 			 <&clock_gcc clk_gcc_sdcc1_apps_clk>;
 		clock-names = "iface_clk", "core_clk";
 
-		qcom,clk-rates = <400000 25000000 50000000 100000000 200000000>;
+		qcom,clk-rates = <400000 25000000 50000000 100000000 177770000>;
 		qcom,bus-speed-mode = "HS200_1p8v", "DDR_1p8v";
 
 		status = "disabled";
@@ -995,7 +999,8 @@
 		qcom,msm-cpudai-auxpcm-sync = <1>, <1>;
 		qcom,msm-cpudai-auxpcm-frame = <5>, <4>;
 		qcom,msm-cpudai-auxpcm-quant = <2>, <2>;
-		qcom,msm-cpudai-auxpcm-slot = <1>, <1>;
+		qcom,msm-cpudai-auxpcm-num-slots = <1>, <1>;
+		qcom,msm-cpudai-auxpcm-slot-mapping = <1>, <1>;
 		qcom,msm-cpudai-auxpcm-data = <0>, <0>;
 		qcom,msm-cpudai-auxpcm-pcm-clk-rate = <2048000>, <2048000>;
 		qcom,msm-auxpcm-interface = "primary";
@@ -1277,12 +1282,10 @@
                       <0x7884000 0x23000>;
                 interrupt-names = "spi_irq", "spi_bam_irq";
                 interrupts = <0 97 0>, <0 238 0>;
-                spi-max-frequency = <19200000>;
-                pinctrl-names = "default", "sleep", "cs0_active", "cs0_sleep";
-                pinctrl-0 = <&spi0_default>;
-		pinctrl-1 = <&spi0_sleep>;
-		pinctrl-2 = <&spi0_cs0_active>;
-		pinctrl-3 = <&spi0_cs0_sleep>;
+                spi-max-frequency = <50000000>;
+                pinctrl-names = "default", "sleep";
+                pinctrl-0 = <&spi0_default &spi0_cs0_active>;
+		pinctrl-1 = <&spi0_sleep &spi0_cs0_sleep>;
 		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
 			 <&clock_gcc clk_gcc_blsp1_qup3_spi_apps_clk>;
 		clock-names = "iface_clk", "core_clk";
@@ -1657,6 +1660,12 @@
 		compatible = "arm,armv8-pmuv3";
 		qcom,irq-is-percpu;
 		interrupts = <1 7 0xf00>;
+	};
+
+	bimc_sharedmem {
+		compatible = "qcom,sharedmem-uio";
+		reg = <0x400000 0x80000>;
+		reg-names = "bimc";
 	};
 };
 

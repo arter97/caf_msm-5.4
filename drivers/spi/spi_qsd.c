@@ -91,8 +91,6 @@ static inline void msm_spi_register_init(struct msm_spi *dd)
 
 static int msm_spi_pinctrl_init(struct msm_spi *dd)
 {
-	int i;
-
 	dd->pinctrl = devm_pinctrl_get(dd->dev);
 	if (IS_ERR_OR_NULL(dd->pinctrl)) {
 		dev_err(dd->dev, "Failed to get pin ctrl\n");
@@ -112,20 +110,6 @@ static int msm_spi_pinctrl_init(struct msm_spi *dd)
 		return PTR_ERR(dd->pins_sleep);
 	}
 
-	for (i = 0; i <= SPI_NUM_CHIPSELECTS-1; i++) {
-		dd->pins_cs_active[i] = pinctrl_lookup_state(dd->pinctrl,
-				pinctrl_cs_pin_name[i][0]);
-
-		if (IS_ERR_OR_NULL(dd->pins_cs_active[i]))
-			dev_info(dd->dev,
-			"Failed to lookup pinctrl cs[%d] default state\n", i);
-
-		dd->pins_cs_sleep[i] = pinctrl_lookup_state(dd->pinctrl,
-					pinctrl_cs_pin_name[i][1]);
-		if (IS_ERR_OR_NULL(dd->pins_cs_sleep[i]))
-			dev_info(dd->dev,
-			"Failed to lookup pinctrl cs[%d] sleep state\n", i);
-	}
 	return 0;
 }
 
@@ -213,16 +197,6 @@ static inline int msm_spi_request_cs_gpio(struct msm_spi *dd)
 				}
 				dd->cs_gpios[cs_num].valid = 1;
 			}
-		} else {
-			if (!IS_ERR_OR_NULL(dd->pins_cs_active[cs_num])) {
-				rc = pinctrl_select_state(dd->pinctrl,
-					dd->pins_cs_active[cs_num]);
-				if (rc) {
-					dev_err(dd->dev, "%s: Can not set %s pins\n",
-					__func__, PINCTRL_STATE_DEFAULT);
-					return rc;
-				}
-			}
 		}
 	}
 	return 0;
@@ -230,21 +204,13 @@ static inline int msm_spi_request_cs_gpio(struct msm_spi *dd)
 
 static inline void msm_spi_free_cs_gpio(struct msm_spi *dd)
 {
-	int cs_num, rc;
+	int cs_num;
 
 	cs_num = dd->cur_msg->spi->chip_select;
 	if (!dd->pdata->use_pinctrl) {
 		if (dd->cs_gpios[cs_num].valid) {
 			gpio_free(dd->cs_gpios[cs_num].gpio_num);
 			dd->cs_gpios[cs_num].valid = 0;
-		}
-	} else {
-		if (!IS_ERR_OR_NULL(dd->pins_cs_sleep[cs_num])) {
-			rc = pinctrl_select_state(dd->pinctrl,
-				dd->pins_cs_sleep[cs_num]);
-			if (rc)
-				dev_err(dd->dev, "%s: Can not set %s pins\n",
-					__func__, PINCTRL_STATE_DEFAULT);
 		}
 	}
 }
@@ -1703,7 +1669,7 @@ static inline int combine_transfers(struct msm_spi *dd)
 			return xfrs_grped;
 		if (t->delay_usecs) {
 			dd->xfrs_delay_usec = t->delay_usecs;
-			dev_info(dd->dev, "SPI slave requests delay per txn :%d usecs",
+			dev_dbg(dd->dev, "SPI slave requests delay per txn :%d usecs",
 					t->delay_usecs);
 			return xfrs_grped;
 		}
@@ -1828,7 +1794,9 @@ static int msm_spi_transfer_one_message(struct spi_master *master,
 				tr->speed_hz, tr->bits_per_word,
 				tr->tx_buf, tr->rx_buf);
 			status_error = -EINVAL;
-			goto out;
+			msg->status = status_error;
+			spi_finalize_current_message(master);
+			return 0;
 		}
 	}
 
@@ -1871,7 +1839,6 @@ static int msm_spi_transfer_one_message(struct spi_master *master,
 	if (dd->suspended)
 		wake_up_interruptible(&dd->continue_suspend);
 
-out:
 	dd->cur_msg->status = status_error;
 	spi_finalize_current_message(master);
 	return 0;

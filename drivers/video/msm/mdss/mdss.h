@@ -122,6 +122,7 @@ struct mdss_data_type {
 	u32 irq_buzy;
 	u32 has_bwc;
 	u32 has_decimation;
+	bool has_panic_ctrl;
 	u32 wfd_mode;
 	u32 has_no_lut_read;
 	u8 has_wb_ad;
@@ -153,6 +154,9 @@ struct mdss_data_type {
 	u32 max_bw_low;
 	u32 max_bw_high;
 	u32 max_bw_per_pipe;
+	u32 *vbif_rt_qos;
+	u32 *vbif_nrt_qos;
+	u32 npriority_lvl;
 
 	struct mdss_fudge_factor ab_factor;
 	struct mdss_fudge_factor ib_factor;
@@ -229,7 +233,7 @@ int mdss_register_irq(struct mdss_hw *hw);
 void mdss_enable_irq(struct mdss_hw *hw);
 void mdss_disable_irq(struct mdss_hw *hw);
 void mdss_disable_irq_nosync(struct mdss_hw *hw);
-void mdss_bus_bandwidth_ctrl(int enable);
+int mdss_bus_bandwidth_ctrl(int enable);
 
 static inline struct ion_client *mdss_get_ionclient(void)
 {

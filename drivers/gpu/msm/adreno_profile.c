@@ -940,7 +940,8 @@ static int profile_groups_print(struct seq_file *s, void *unused)
 {
 	struct kgsl_device *device = (struct kgsl_device *) s->private;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
-	struct adreno_perfcounters *counters = adreno_dev->gpudev->perfcounters;
+	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
+	struct adreno_perfcounters *counters = gpudev->perfcounters;
 	struct adreno_perfcount_group *group;
 	int i, j, used;
 
@@ -1008,11 +1009,12 @@ void adreno_profile_init(struct kgsl_device *device)
 
 	/* allocate shared_buffer, which includes pre_ib and post_ib */
 	profile->shared_size = ADRENO_PROFILE_SHARED_BUF_SIZE_DWORDS;
-	ret = kgsl_allocate_contiguous(device, &profile->shared_buffer,
-			profile->shared_size * sizeof(unsigned int));
+	ret = kgsl_allocate_global(device, &profile->shared_buffer,
+			profile->shared_size * sizeof(unsigned int), 0);
+
 	if (ret) {
-		profile->shared_buffer.hostptr = NULL;
 		profile->shared_size = 0;
+		return;
 	}
 
 	INIT_LIST_HEAD(&profile->assignments_list);
@@ -1045,8 +1047,7 @@ void adreno_profile_close(struct kgsl_device *device)
 	profile->log_tail = NULL;
 	profile->shared_head = 0;
 	profile->shared_tail = 0;
-	kgsl_sharedmem_free(&profile->shared_buffer);
-	profile->shared_buffer.hostptr = NULL;
+	kgsl_free_global(&profile->shared_buffer);
 	profile->shared_size = 0;
 
 	profile->assignment_count = 0;
@@ -1089,7 +1090,7 @@ int adreno_profile_process_results(struct kgsl_device *device)
 
 void adreno_profile_preib_processing(struct kgsl_device *device,
 		struct adreno_context *drawctxt, unsigned int *cmd_flags,
-		unsigned int **rbptr, unsigned int *cmds_gpu)
+		unsigned int **rbptr)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct adreno_profile *profile = &adreno_dev->profile;
@@ -1144,14 +1145,13 @@ void adreno_profile_preib_processing(struct kgsl_device *device,
 
 done:
 	/* write the ibdesc to the ringbuffer */
-	GSL_RB_WRITE(device, (*rbptr), (*cmds_gpu), rbcmds[0]);
-	GSL_RB_WRITE(device, (*rbptr), (*cmds_gpu), rbcmds[1]);
-	GSL_RB_WRITE(device, (*rbptr), (*cmds_gpu), rbcmds[2]);
+	*(*rbptr++) = rbcmds[0];
+	*(*rbptr++) = rbcmds[1];
+	*(*rbptr++) = rbcmds[2];
 }
 
 void adreno_profile_postib_processing(struct kgsl_device *device,
-		unsigned int *cmd_flags, unsigned int **rbptr,
-		unsigned int *cmds_gpu)
+		unsigned int *cmd_flags, unsigned int **rbptr)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct adreno_profile *profile = &adreno_dev->profile;
@@ -1172,9 +1172,9 @@ void adreno_profile_postib_processing(struct kgsl_device *device,
 
 done:
 	/* write the ibdesc to the ringbuffer */
-	GSL_RB_WRITE(device, (*rbptr), (*cmds_gpu), rbcmds[0]);
-	GSL_RB_WRITE(device, (*rbptr), (*cmds_gpu), rbcmds[1]);
-	GSL_RB_WRITE(device, (*rbptr), (*cmds_gpu), rbcmds[2]);
+	*(*rbptr++) = rbcmds[0];
+	*(*rbptr++) = rbcmds[1];
+	*(*rbptr++) = rbcmds[2];
 
 	/* reset the sync flag */
 	*cmd_flags &= ~KGSL_CMD_FLAGS_PROFILE;

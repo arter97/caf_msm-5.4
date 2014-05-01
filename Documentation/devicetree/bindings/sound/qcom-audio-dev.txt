@@ -197,10 +197,21 @@ Required properties:
                                           is for 16khz
                                           2 - Linear quantization
 
- - qcom,msm-cpudai-auxpcm-slot:           Slot number for multichannel scenario
-                                          The first value is for 8khz mode the
-                                          second is for 16khz
-                                          Value is 1
+ - qcom,msm-cpudai-auxpcm-num-slots:      Number of slots per mode in the
+                                          msm-cpudai-auxpcm-slot-mapping
+                                          array.
+                                          The first value is for 8khz mode, the
+                                          second is for 16khz. Max number of
+                                          slots supported by DSP is 4, anything
+                                          above 4 will be truncated to 4 when
+                                          sent to DSP.
+
+ - qcom,msm-cpudai-auxpcm-slot-mapping:   Array of slot numbers for multi
+                                          slot scenario. The first array
+                                          is for 8khz mode, the second is
+                                          for 16khz. The size of the array
+                                          is determined by the value in
+                                          qcom,msm-cpudai-auxpcm-num-slots
 
  - qcom,msm-cpudai-auxpcm-data:           Data field - 0. The first value is
                                           for 8khz mode, the second is for
@@ -266,6 +277,12 @@ Required properties:
  - compatible :                            "qcom,audio-slimslave"
 
  - elemental-addr:                         slimbus slave enumeration address.
+
+* msm-cpe-lsm
+
+Required properties:
+
+ - compatible : "qcom,msm-cpe-lsm"
 
 Example:
 
@@ -452,7 +469,8 @@ Example:
 		qcom,msm-cpudai-auxpcm-sync = <1>, <1>;
 		qcom,msm-cpudai-auxpcm-frame = <5>, <4>;
 		qcom,msm-cpudai-auxpcm-quant = <2>, <2>;
-		qcom,msm-cpudai-auxpcm-slot = <1>, <1>;
+		qcom,msm-cpudai-auxpcm-num-slots = <4>, <4>;
+		qcom,msm-cpudai-auxpcm-slot-mapping = <1 0 0 0>, <1 3 0 0>;
 		qcom,msm-cpudai-auxpcm-data = <0>, <0>;
 		qcom,msm-cpudai-auxpcm-pcm-clk-rate = <2048000>, <2048000>;
 		qcom,msm-auxpcm-interface = "primary";
@@ -860,93 +878,6 @@ sound {
 	qcom,cdc-vdd-spkr-gpios = <&pm8226_gpios 3 0>;
 };
 
-* MSMSAMARIUM ASoC Machine driver
-
-Required properties:
-- compatible : "qcom,msmsamarium-audio-tapan"
-
-Required properties:
-- compatible : "qcom,msmsamarium-audio-tapan"
-- qcom,model : The user-visible name of this sound card.
-- qcom,tapan-mclk-clk-freq : Tapan mclk Freq in Hz. currently only 9600000Hz
-				is supported.
-- qcom,audio-routing : A list of the connections between audio components.
-  Each entry is a pair of strings, the first being the connection's sink,
-  the second being the connection's source.
-- qcom,cdc-mclk-gpios : GPIO on which mclk signal is comming.
-
-Example:
-
-sound {
-	compatible = "qcom,msmsamarium-audio-tapan";
-	qcom,model = "msmsamarium-tapan-snd-card";
-	qcom,tapan-mclk-clk-freq = <9600000>;
-	audio-routing =
-		"RX_BIAS", "MCLK",
-		"LDO_H", "MCLK",
-		"SPK_OUT", "MCLK",
-		"AMIC1", "MIC BIAS1 Internal1",
-		"MIC BIAS1 Internal1", "Handset Mic",
-		"AMIC2", "MIC BIAS2 External",
-		"MIC BIAS2 External", "Headset Mic",
-		"AMIC3", "MIC BIAS2 External",
-		"MIC BIAS2 External", "ANCRight Headset Mic",
-		"AMIC4", "MIC BIAS2 External",
-		"MIC BIAS2 External", "ANCLeft Headset Mic",
-		"DMIC1", "MIC BIAS1 External",
-		"MIC BIAS1 External", "Digital Mic1",
-		"DMIC2", "MIC BIAS1 External",
-		"MIC BIAS1 External", "Digital Mic2",
-		"DMIC3", "MIC BIAS3 External",
-		"MIC BIAS3 External", "Digital Mic3",
-		"DMIC4", "MIC BIAS3 External",
-		"MIC BIAS3 External", "Digital Mic4",
-};
-
-* MPQ8092 ASoC Machine driver
-
-Required properties:
-- compatible : "qcom,mpq8092-audio-tabla"
-- qcom,model : The user-visible name of this sound card.
-- qcom,audio-routing : A list of the connections between audio components.
-  Each entry is a pair of strings, the first being the connection's sink,
-  the second being the connection's source.
-- qcom,cdc-mclk-gpios : GPIO on which mclk signal is comming.
-- qcom,tabla-mclk-clk-freq : Tabla mclk Freq in Hz.
-Optional properties:
-- qcom,hdmi-audio-rx: specifies if HDMI audio support is enabled or not.
-- qcom,spdif-audio-rx: specifies if SPDIF audio support is enabled or not.
-- qcom,spdif-opt-gpio: GPIO on which SPDIF optical output signal is coming.
-  If qcom,spdif-audio-rx property is present then this property must be present.
-- qcom,spdif-elec-gpio: GPIO on which SPDIF electrical output signal is coming.
-  If qcom,spdif-audio-rx property is present then this property must be present.
-
-Example:
-
-	sound {
-		compatible = "qcom,mpq8092-audio-tabla";
-		qcom,model = "mpq8092-tabla-snd-card";
-
-		qcom,audio-routing =
-			"RX_BIAS", "MCLK",
-			"LDO_H", "MCLK",
-			"AMIC1", "MIC BIAS1 External",
-			"MIC BIAS1 External", "Handset Mic",
-			"AMIC2", "MIC BIAS2 External",
-			"MIC BIAS2 External", "Headset Mic",
-			"AMIC3", "MIC BIAS3 External",
-			"MIC BIAS3 Eternal", "ANCRight Headset Mic",
-			"AMIC4", "MIC BIAS1 External",
-			"MIC BIAS1 External", "ANCLeft Headset Mic",
-                        "HEADPHONE", "LDO_H";
-
-		qcom,cdc-mclk-gpios = <&msmgpio 42 0>;
-		qcom,tabla-mclk-clk-freq = <12288000>;
-		qcom,spdif-opt-gpio = <&msmgpio 46 0>;
-		qcom,spdif-elec-gpio = <&msmgpio 41 0>;
-		qcom,hdmi-audio-rx;
-		qcom,spdif-audio-rx;
-	};
 
 * MDM9630 ASoC Machine driver
 

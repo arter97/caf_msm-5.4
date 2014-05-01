@@ -52,8 +52,12 @@
 #define QCA6174_FW_3_0	(0x30)
 
 #define WLAN_VREG_NAME		"vdd-wlan"
+#define WLAN_SWREG_NAME		"wlan-soc-swreg"
 #define WLAN_EN_GPIO_NAME	"wlan-en-gpio"
 #define PM_OPTIONS		0
+
+#define SOC_SWREG_VOLT_MAX	1150000
+#define SOC_SWREG_VOLT_MIN	1150000
 
 #define POWER_ON_DELAY		2000
 #define WLAN_ENABLE_DELAY	10000
@@ -68,6 +72,7 @@ struct cnss_wlan_gpio_info {
 
 struct cnss_wlan_vreg_info {
 	struct regulator *wlan_reg;
+	struct regulator *soc_swreg;
 	bool state;
 };
 
@@ -98,29 +103,91 @@ static struct cnss_data {
 	uint32_t bus_client;
 	void *subsys_handle;
 	struct esoc_desc *esoc_desc;
+	bool notify_modem_status;
+	struct cnss_platform_cap cap;
 } *penv;
 
-static int cnss_wlan_vreg_set(struct cnss_wlan_vreg_info *vreg_info, bool state)
+
+static int cnss_wlan_vreg_on(struct cnss_wlan_vreg_info *vreg_info)
 {
 	int ret;
 
+	ret = regulator_enable(vreg_info->wlan_reg);
+	if (ret) {
+		pr_err("%s: regulator enable failed for WLAN power\n",
+				__func__);
+		goto error_enable;
+	}
+
+	if (vreg_info->soc_swreg) {
+		ret = regulator_enable(vreg_info->soc_swreg);
+		if (ret) {
+			pr_err("%s: regulator enable failed for external soc-swreg\n",
+					__func__);
+			goto error_enable2;
+		}
+	}
+	return ret;
+
+error_enable2:
+	regulator_disable(vreg_info->wlan_reg);
+error_enable:
+	return ret;
+}
+
+static int cnss_wlan_vreg_off(struct cnss_wlan_vreg_info *vreg_info)
+{
+	int ret, ret2;
+
+	if (vreg_info->soc_swreg) {
+		ret = regulator_disable(vreg_info->soc_swreg);
+		if (ret) {
+			pr_err("%s: regulator disable failed for external soc-swreg\n",
+					__func__);
+			goto error_disable;
+		}
+	}
+	ret = regulator_disable(vreg_info->wlan_reg);
+	if (ret) {
+		pr_err("%s: regulator disable failed for WLAN power\n",
+				__func__);
+		goto error_disable2;
+	}
+	return ret;
+
+error_disable2:
+	if (vreg_info->soc_swreg) {
+		ret2 = regulator_enable(vreg_info->soc_swreg);
+		if (ret2)
+			ret = ret2;
+	}
+error_disable:
+	return ret;
+}
+
+static int cnss_wlan_vreg_set(struct cnss_wlan_vreg_info *vreg_info, bool state)
+{
+	int ret = 0;
+
 	if (vreg_info->state == state) {
 		pr_debug("Already wlan vreg state is %s\n",
-			 state ? "enabled" : "disabled");
-		return 0;
+				state ? "enabled" : "disabled");
+		goto out;
 	}
 
 	if (state)
-		ret = regulator_enable(vreg_info->wlan_reg);
+		ret = cnss_wlan_vreg_on(vreg_info);
 	else
-		ret = regulator_disable(vreg_info->wlan_reg);
+		ret = cnss_wlan_vreg_off(vreg_info);
 
-	if (!ret) {
-		vreg_info->state = state;
-		pr_debug("%s: wlan vreg is now %s\n", __func__,
+	if (ret)
+		goto out;
+
+	pr_debug("%s: wlan vreg is now %s\n", __func__,
 			state ? "enabled" : "disabled");
-	}
+	vreg_info->state = state;
 
+out:
 	return ret;
 }
 
@@ -194,6 +261,32 @@ static int cnss_wlan_get_resources(struct platform_device *pdev)
 		pr_err("%s: vreg initial vote failed\n", __func__);
 		goto err_reg_enable;
 	}
+
+	if (of_get_property(pdev->dev.of_node,
+		    WLAN_SWREG_NAME"-supply", NULL)) {
+
+		vreg_info->soc_swreg = regulator_get(&pdev->dev,
+			WLAN_SWREG_NAME);
+		if (IS_ERR(vreg_info->soc_swreg)) {
+			pr_err("%s: soc-swreg node not found\n",
+					__func__);
+			goto err_reg_get2;
+		}
+		ret = regulator_set_voltage(vreg_info->soc_swreg,
+				SOC_SWREG_VOLT_MIN, SOC_SWREG_VOLT_MAX);
+		if (ret) {
+			pr_err("%s: vreg initial voltage set failed on soc-swreg\n",
+					__func__);
+			goto err_reg_set;
+		}
+		ret = regulator_enable(vreg_info->soc_swreg);
+		if (ret) {
+			pr_err("%s: vreg initial vote failed\n", __func__);
+			goto err_reg_enable2;
+		}
+		penv->cap.cap_flag |= CNSS_HAS_EXTERNAL_SWREG;
+	}
+
 	vreg_info->state = VREG_ON;
 
 	if (!of_find_property((&pdev->dev)->of_node, gpio_info->name, NULL)) {
@@ -229,14 +322,21 @@ end:
 
 err_gpio_init:
 err_get_gpio:
-	regulator_disable(vreg_info->wlan_reg);
+	if (vreg_info->soc_swreg)
+		regulator_disable(vreg_info->soc_swreg);
 	vreg_info->state = VREG_OFF;
 
+err_reg_enable2:
+err_reg_set:
+	if (vreg_info->soc_swreg)
+		regulator_put(vreg_info->soc_swreg);
+
+err_reg_get2:
+	regulator_disable(vreg_info->wlan_reg);
 err_reg_enable:
 	regulator_put(vreg_info->wlan_reg);
 
 err_reg_get:
-
 	return ret;
 }
 
@@ -246,7 +346,10 @@ static void cnss_wlan_release_resources(void)
 	struct cnss_wlan_vreg_info *vreg_info = &penv->vreg_info;
 
 	gpio_free(gpio_info->num);
+	cnss_wlan_vreg_set(vreg_info, VREG_OFF);
 	regulator_put(vreg_info->wlan_reg);
+	if (vreg_info->soc_swreg)
+		regulator_put(vreg_info->soc_swreg);
 	gpio_info->state = WLAN_EN_LOW;
 	gpio_info->prop = false;
 	vreg_info->state = VREG_OFF;
@@ -523,7 +626,7 @@ again:
 		}
 	}
 
-	if (penv->esoc_desc && pdev && wdrv->modem_status)
+	if (penv->notify_modem_status && wdrv->modem_status)
 		wdrv->modem_status(pdev, penv->modem_current_status);
 
 	return ret;
@@ -831,6 +934,9 @@ static int cnss_powerup(const struct subsys_desc *subsys)
 			pr_err("%d: wdrv->reinit is invalid\n", __LINE__);
 			goto err_pcie_link_up;
 		}
+
+		if (penv->notify_modem_status && wdrv->modem_status)
+			wdrv->modem_status(pdev, penv->modem_current_status);
 	}
 
 	return ret;
@@ -951,21 +1057,27 @@ static int cnss_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	penv->pldev = pdev;
-
 	penv->esoc_desc = NULL;
-	ret = of_property_read_string_index(dev->of_node, "esoc-names", 0,
-					    &client_desc);
-	if (ret) {
-		pr_debug("%s: esoc-names is not defined in DT, SKIP\n",
-			 __func__);
-	} else {
-		desc = devm_register_esoc_client(dev, client_desc);
-		if (IS_ERR_OR_NULL(desc)) {
-			ret = PTR_RET(desc);
-			pr_err("%s: can't find esoc desc\n", __func__);
-			goto err_esoc_reg;
+
+	penv->notify_modem_status =
+		of_property_read_bool(dev->of_node,
+				      "qcom,notify-modem-status");
+
+	if (penv->notify_modem_status) {
+		ret = of_property_read_string_index(dev->of_node, "esoc-names",
+						    0, &client_desc);
+		if (ret) {
+			pr_debug("%s: esoc-names is not defined in DT, SKIP\n",
+				__func__);
+		} else {
+			desc = devm_register_esoc_client(dev, client_desc);
+			if (IS_ERR_OR_NULL(desc)) {
+				ret = PTR_RET(desc);
+				pr_err("%s: can't find esoc desc\n", __func__);
+				goto err_esoc_reg;
+			}
+			penv->esoc_desc = desc;
 		}
-		penv->esoc_desc = desc;
 	}
 
 	penv->subsysdesc.name = "AR6320";
@@ -983,12 +1095,14 @@ static int cnss_probe(struct platform_device *pdev)
 
 	penv->modem_current_status = 0;
 
-	if (penv->esoc_desc) {
+	if (penv->notify_modem_status) {
 		penv->modem_notify_handler =
-			subsys_notif_register_notifier(penv->esoc_desc->name,
-						       &mnb);
+			subsys_notif_register_notifier(penv->esoc_desc ?
+						       penv->esoc_desc->name :
+						       "modem", &mnb);
 		if (IS_ERR(penv->modem_notify_handler)) {
 			ret = PTR_ERR(penv->modem_notify_handler);
+			pr_err("%s: Register notifier Failed\n", __func__);
 			goto err_notif_modem;
 		}
 	}
@@ -1049,7 +1163,7 @@ err_get_wlan_res:
 
 err_ramdump_create:
 	subsystem_put(penv->subsys_handle);
-	if (penv->esoc_desc)
+	if (penv->notify_modem_status)
 		subsys_notif_unregister_notifier
 			(penv->modem_notify_handler, &mnb);
 
@@ -1112,12 +1226,12 @@ static void __exit cnss_exit(void)
 	struct platform_device *pdev = penv->pldev;
 	if (penv->ramdump_dev)
 		destroy_ramdump_device(penv->ramdump_dev);
-	if (penv->esoc_desc) {
+	if (penv->notify_modem_status)
 		subsys_notif_unregister_notifier(penv->modem_notify_handler,
 						 &mnb);
-		devm_unregister_esoc_client(&pdev->dev, penv->esoc_desc);
-	}
 	subsys_unregister(penv->subsys);
+	if (penv->esoc_desc)
+		devm_unregister_esoc_client(&pdev->dev, penv->esoc_desc);
 	platform_driver_unregister(&cnss_driver);
 }
 
@@ -1163,6 +1277,19 @@ int cnss_request_bus_bandwidth(int bandwidth)
 	return ret;
 }
 EXPORT_SYMBOL(cnss_request_bus_bandwidth);
+
+int cnss_get_platform_cap(struct cnss_platform_cap *cap)
+{
+	if (!penv)
+		return -ENODEV;
+
+	if (cap)
+		*cap = penv->cap;
+
+	return 0;
+
+}
+EXPORT_SYMBOL(cnss_get_platform_cap);
 
 module_init(cnss_initialize);
 module_exit(cnss_exit);

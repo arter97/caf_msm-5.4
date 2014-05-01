@@ -166,7 +166,8 @@ static struct msm_camera_i2c_reg_conf ov5645_full_settings[] = {
 	{0x3813, 0x06,},
 	{0x3814, 0x11,},
 	{0x3815, 0x11,},
-	{0x3820, 0x40,},
+	{0x3820, 0x47,},
+	{0x4514, 0x88,},
 	{0x3a02, 0x07,},
 	{0x3a03, 0xb0,},
 	{0x3a08, 0x01,},
@@ -215,7 +216,8 @@ static struct msm_camera_i2c_reg_conf ov5645_1080P_settings[] = {
 	{0x3813, 0x04,},
 	{0x3814, 0x11,},
 	{0x3815, 0x11,},
-	{0x3820, 0x40,},
+	{0x3820, 0x47,},
+	{0x4514, 0x88,},
 	{0x3a02, 0x04,},
 	{0x3a03, 0x60,},
 	{0x3a08, 0x01,},
@@ -567,7 +569,7 @@ int32_t ov5645_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
 {
 	struct sensorb_cfg_data *cdata = (struct sensorb_cfg_data *)argp;
 	long rc = 0;
-	int32_t i = 0, shp_lev = 0, con_lev = 0, sat_lev = 0;
+	int32_t i = 0;
 	mutex_lock(s_ctrl->msm_sensor_mutex);
 	CDBG("%s:%d %s cfgtype = %d\n", __func__, __LINE__,
 		s_ctrl->sensordata->sensor_name, cdata->cfgtype);
@@ -858,31 +860,10 @@ int32_t ov5645_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
 		break;
 		}
 	case CFG_SET_SATURATION:
-		if (copy_from_user(&sat_lev, (void *)cdata->cfg.setting,
-			sizeof(int32_t))) {
-			pr_err("%s:%d failed\n", __func__, __LINE__);
-			rc = -EFAULT;
-			break;
-		}
-		pr_debug("%s: Saturation Value is %d", __func__, sat_lev);
 		break;
 	case CFG_SET_CONTRAST:
-		if (copy_from_user(&con_lev, (void *)cdata->cfg.setting,
-			sizeof(int32_t))) {
-			pr_err("%s:%d failed\n", __func__, __LINE__);
-			rc = -EFAULT;
-			break;
-		}
-		pr_debug("%s: Contrast Value is %d", __func__, con_lev);
 		break;
 	case CFG_SET_SHARPNESS:
-		if (copy_from_user(&shp_lev, (void *)cdata->cfg.setting,
-			sizeof(int32_t))) {
-			pr_err("%s:%d failed\n", __func__, __LINE__);
-			rc = -EFAULT;
-			break;
-		}
-		pr_debug("%s: Sharpness Value is %d", __func__, shp_lev);
 		break;
 	case CFG_SET_AUTOFOCUS:
 		/* TO-DO: set the Auto Focus */
@@ -891,6 +872,18 @@ int32_t ov5645_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
 	case CFG_CANCEL_AUTOFOCUS:
 		/* TO-DO: Cancel the Auto Focus */
 		pr_debug("%s: Cancelling Auto Focus", __func__);
+		break;
+	case CFG_SET_ISO:
+		break;
+	case CFG_SET_EXPOSURE_COMPENSATION:
+		break;
+	case CFG_SET_EFFECT:
+		break;
+	case CFG_SET_ANTIBANDING:
+		break;
+	case CFG_SET_BESTSHOT_MODE:
+		break;
+	case CFG_SET_WHITE_BALANCE:
 		break;
 	default:
 		rc = -EFAULT;

@@ -17,6 +17,7 @@
 #define MAX_PLANES_PER_STREAM 3
 #define MAX_NUM_STREAM 7
 
+#define ISP_VERSION_46        46
 #define ISP_VERSION_44        44
 #define ISP_VERSION_40        40
 #define ISP_VERSION_32        32
@@ -61,6 +62,7 @@ enum msm_vfe_input_src {
 enum msm_vfe_axi_stream_src {
 	PIX_ENCODER,
 	PIX_VIEWFINDER,
+	PIX_VIDEO,
 	CAMIF_RAW,
 	IDEAL_RAW,
 	RDI_INTF_0,
@@ -191,6 +193,11 @@ enum msm_vfe_axi_stream_update_type {
 	UPDATE_STREAM_REQUEST_FRAMES,
 };
 
+enum msm_vfe_iommu_type {
+	IOMMU_ATTACH,
+	IOMMU_DETACH,
+};
+
 struct msm_vfe_axi_stream_cfg_update_info {
 	uint32_t stream_handle;
 	uint32_t output_format;
@@ -203,6 +210,11 @@ struct msm_vfe_axi_stream_update_cmd {
 	uint32_t num_streams;
 	enum msm_vfe_axi_stream_update_type update_type;
 	struct msm_vfe_axi_stream_cfg_update_info update_info[MAX_NUM_STREAM];
+};
+
+struct msm_vfe_smmu_attach_cmd {
+	uint32_t security_mode;
+	uint32_t iommu_attach_mode;
 };
 
 enum msm_isp_stats_type {
@@ -218,6 +230,8 @@ enum msm_isp_stats_type {
 	MSM_ISP_STATS_BE,    /* Bayer Exposure*/
 	MSM_ISP_STATS_BHIST, /* Bayer Hist */
 	MSM_ISP_STATS_BF_SCALE, /* Bayer Focus scale */
+	MSM_ISP_STATS_HDR_BE, /* HDR Bayer Exposure */
+	MSM_ISP_STATS_HDR_BHIST, /* HDR Bayer Hist */
 	MSM_ISP_STATS_MAX    /* MAX */
 };
 
@@ -462,5 +476,8 @@ struct msm_isp_event_data {
 
 #define VIDIOC_MSM_VFE_REG_LIST_CFG \
 	_IOWR('V', BASE_VIDIOC_PRIVATE+14, struct msm_vfe_cfg_cmd_list)
+
+#define VIDIOC_MSM_ISP_SMMU_ATTACH \
+	_IOWR('V', BASE_VIDIOC_PRIVATE+15, struct msm_vfe_smmu_attach_cmd)
 
 #endif /* __MSMB_ISP__ */

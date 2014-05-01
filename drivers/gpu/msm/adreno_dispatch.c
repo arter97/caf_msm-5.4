@@ -1093,7 +1093,7 @@ static int dispatcher_do_fault(struct kgsl_device *device)
 
 	if (!test_bit(KGSL_FT_SKIP_PMDUMP, &cmdbatch->fault_policy)) {
 		adreno_fault_header(device, cmdbatch);
-		kgsl_device_snapshot(device, 1);
+		kgsl_device_snapshot(device);
 	}
 
 	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
@@ -1419,7 +1419,6 @@ static void adreno_dispatcher_work(struct work_struct *work)
 	mutex_lock(&dispatcher->mutex);
 
 	while (dispatcher->head != dispatcher->tail) {
-		uint32_t consumed, retired = 0;
 		struct kgsl_cmdbatch *cmdbatch =
 			dispatcher->cmdqueue[dispatcher->head];
 		struct adreno_context *drawctxt;
@@ -1435,10 +1434,8 @@ static void adreno_dispatcher_work(struct work_struct *work)
 		 * pointers and continue processing the queue
 		 */
 
-		kgsl_readtimestamp(device, cmdbatch->context,
-			KGSL_TIMESTAMP_RETIRED, &retired);
-
-		if ((timestamp_cmp(cmdbatch->timestamp, retired) <= 0)) {
+		if (kgsl_check_timestamp(device, cmdbatch->context,
+			cmdbatch->timestamp)) {
 
 			/*
 			 * If the cmdbatch in question had faulted announce its
@@ -1492,10 +1489,6 @@ static void adreno_dispatcher_work(struct work_struct *work)
 		if (dispatcher_do_fault(device))
 			goto done;
 		fault_handled = 1;
-
-		/* Get the last consumed timestamp */
-		kgsl_readtimestamp(device, cmdbatch->context,
-			KGSL_TIMESTAMP_CONSUMED, &consumed);
 
 		/*
 		 * Break here if fault detection is disabled for the context or

@@ -3123,8 +3123,8 @@
 			uv-to-ua-numerator = <2>;
 			uv-to-ua-denominator = <1>;
 			vph-channel = <0x07>;
-			vph-high-threshold-uv = <3890000>;
-			vph-low-threshold-uv = <3690000>;
+			vph-high-threshold-uv = <3750000>;
+			vph-low-threshold-uv = <3500000>;
 			thermal-handle = <&msm_thermal_freq>;
 		};
 	};
@@ -3514,6 +3514,10 @@
 		compatible = "qcom,msm-pcm-loopback";
 	};
 
+	qcom,msm-cpe-lsm {
+		compatible = "qcom,msm-cpe-lsm";
+	};
+
 	qcom,msm-dai-stub {
 		compatible = "qcom,msm-dai-stub";
 		qcom,msm-dai-stub-rx {
@@ -3661,7 +3665,8 @@
 		qcom,msm-cpudai-auxpcm-sync = <1>, <1>;
 		qcom,msm-cpudai-auxpcm-frame = <5>, <4>;
 		qcom,msm-cpudai-auxpcm-quant = <2>, <2>;
-		qcom,msm-cpudai-auxpcm-slot = <1>, <1>;
+		qcom,msm-cpudai-auxpcm-num-slots = <1>, <1>;
+		qcom,msm-cpudai-auxpcm-slot-mapping = <1>, <1>;
 		qcom,msm-cpudai-auxpcm-data = <0>, <0>;
 		qcom,msm-cpudai-auxpcm-pcm-clk-rate = <2048000>, <2048000>;
 		qcom,msm-auxpcm-interface = "primary";
@@ -3673,7 +3678,8 @@
 		qcom,msm-cpudai-auxpcm-sync = <1>, <1>;
 		qcom,msm-cpudai-auxpcm-frame = <5>, <4>;
 		qcom,msm-cpudai-auxpcm-quant = <2>, <2>;
-		qcom,msm-cpudai-auxpcm-slot = <1>, <1>;
+		qcom,msm-cpudai-auxpcm-num-slots = <1>, <1>;
+		qcom,msm-cpudai-auxpcm-slot-mapping = <1>, <1>;
 		qcom,msm-cpudai-auxpcm-data = <0>, <0>;
 		qcom,msm-cpudai-auxpcm-pcm-clk-rate = <2048000>, <2048000>;
 		qcom,msm-auxpcm-interface = "secondary";
@@ -3740,6 +3746,7 @@
 		reg-names = "ramdump";
 		wlan-en-gpio = <&msmgpio 82 0>;
 		vdd-wlan-supply = <&wlan_vreg>;
+		qcom,notify-modem-status;
 
 		qcom,msm-bus,name = "msm-cnss";
 		qcom,msm-bus,num-cases = <4>;
@@ -3926,7 +3933,6 @@
 		qcom,scale-function = <0>;
 		qcom,hw-settle-time = <0>;
 		qcom,fast-avg-setup = <0>;
-		qcom,meas-interval-timer-idx = <0>;
 		qcom,btm-channel-number = <0x80>;
 	};
 };

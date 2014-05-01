@@ -228,6 +228,7 @@ static void hfi_process_session_error(
 	case HFI_ERR_SESSION_INVALID_SCALE_FACTOR:
 	case HFI_ERR_SESSION_UNSUPPORT_BUFFERTYPE:
 	case HFI_ERR_SESSION_UNSUPPORTED_SETTING:
+	case HFI_ERR_SESSION_UPSCALE_NOT_SUPPORTED:
 		dprintk(VIDC_INFO, "Non Fatal : HFI_EVENT_SESSION_ERROR\n");
 		break;
 	default:
@@ -582,6 +583,11 @@ enum vidc_status hfi_process_sess_init_done_prop_read(
 			dprintk(VIDC_DBG, "prop->profile_count: %d\n",
 				prop->profile_count);
 			prop_count = prop->profile_count;
+			if (prop_count > MAX_PROFILE_COUNT) {
+				prop_count = MAX_PROFILE_COUNT;
+				dprintk(VIDC_WARN,
+					"prop count exceeds max profile count\n");
+			}
 			while (prop_count) {
 				ptr++;
 				prop_level = (struct hfi_profile_level *) ptr;

@@ -134,7 +134,6 @@ struct bms_wakeup_source {
 struct bms_dt_cfg {
 	bool				cfg_report_charger_eoc;
 	bool				cfg_force_s3_on_suspend;
-	bool				cfg_force_s2_in_charging;
 	bool				cfg_ignore_shutdown_soc;
 	bool				cfg_use_voltage_soc;
 	int				cfg_v_cutoff_uv;
@@ -145,6 +144,7 @@ struct bms_dt_cfg {
 	int				cfg_low_soc_calculate_soc_ms;
 	int				cfg_low_voltage_threshold;
 	int				cfg_low_voltage_calculate_soc_ms;
+	int				cfg_low_soc_fifo_length;
 	int				cfg_calculate_soc_ms;
 	int				cfg_voltage_soc_timeout_ms;
 	int				cfg_s1_sample_interval_ms;
@@ -176,6 +176,7 @@ struct qpnp_bms_chip {
 	bool				data_ready;
 	bool				charging_while_suspended;
 	bool				in_cv_state;
+	bool				low_soc_fifo_set;
 	int				battery_status;
 	int				calculated_soc;
 	int				current_now;
@@ -191,6 +192,8 @@ struct qpnp_bms_chip {
 	int				delta_time_s;
 	int				ocv_at_100;
 	int				last_ocv_uv;
+	int				s2_fifo_length;
+	int				last_acc;
 	unsigned int			vadc_v0625;
 	unsigned int			vadc_v1250;
 	unsigned long			tm_sec;
@@ -226,14 +229,6 @@ struct qpnp_bms_chip {
 };
 
 static struct qpnp_bms_chip *the_chip;
-
-static void enable_bms_irq(struct bms_irq *irq)
-{
-	if (__test_and_clear_bit(0, &irq->disabled)) {
-		enable_irq(irq->irq);
-		pr_debug("enabled irq %d\n", irq->irq);
-	}
-}
 
 static void disable_bms_irq(struct bms_irq *irq)
 {
@@ -494,26 +489,6 @@ static int force_fsm_state(struct qpnp_bms_chip *chip, u8 state)
 	return 0;
 }
 
-static int set_auto_fsm_state(struct qpnp_bms_chip *chip)
-{
-	int rc;
-	u8 mode_ctl = 0xA;
-
-	rc = qpnp_secure_write_wrapper(chip, &mode_ctl,
-				chip->base + MODE_CTL_REG);
-	if (rc) {
-		pr_err("Unable to write reg=%x rc=%d\n",
-					MODE_CTL_REG, rc);
-		return rc;
-	}
-	/* delay for the FSM state to take affect in hardware */
-	usleep_range(100, 110);
-
-	pr_debug("mode_cntl_reg=%x\n", mode_ctl);
-
-	return 0;
-}
-
 static int get_sample_interval(struct qpnp_bms_chip *chip,
 				u8 fsm_state, u32 *interval)
 {
@@ -621,6 +596,42 @@ static int get_fifo_length(struct qpnp_bms_chip *chip,
 	return 0;
 }
 
+static int set_fifo_length(struct qpnp_bms_chip *chip,
+				u8 fsm_state, u32 fifo_length)
+{
+	int rc;
+	u8 reg, mask = 0, shift = 0;
+
+	/* fifo_length of 1 is not supported due to a hardware issue */
+	if ((fifo_length <= 1) || (fifo_length > MAX_FIFO_REGS)) {
+		pr_err("Invalid FIFO length = %d\n", fifo_length);
+		return -EINVAL;
+	}
+
+	switch (fsm_state) {
+	case S1_STATE:
+		reg = FIFO_LENGTH_REG;
+		mask = S1_FIFO_LENGTH_MASK;
+		shift = 0;
+		break;
+	case S2_STATE:
+		reg = FIFO_LENGTH_REG;
+		mask = S2_FIFO_LENGTH_MASK;
+		shift = S2_FIFO_LENGTH_SHIFT;
+		break;
+	default:
+		pr_err("Invalid state %d\n", fsm_state);
+		return -EINVAL;
+	}
+
+	rc = qpnp_masked_write_base(chip, chip->base + reg, mask,
+					fifo_length << shift);
+	if (rc)
+		pr_err("Unable to set fifo length rc=%d\n", rc);
+
+	return rc;
+}
+
 static int get_fsm_state(struct qpnp_bms_chip *chip, u8 *state)
 {
 	int rc;
@@ -670,6 +681,7 @@ fail_fsm:
 static int lookup_soc_ocv(struct qpnp_bms_chip *chip, int ocv_uv, int batt_temp)
 {
 	int soc_ocv = 0, soc_cutoff = 0, soc_final = 0;
+	int fcc, acc, soc_uuc = 0, soc_acc = 0;
 
 	soc_ocv = interpolate_pc(chip->batt_data->pc_temp_ocv_lut,
 					batt_temp, ocv_uv / 1000);
@@ -677,6 +689,32 @@ static int lookup_soc_ocv(struct qpnp_bms_chip *chip, int ocv_uv, int batt_temp)
 				batt_temp, chip->dt.cfg_v_cutoff_uv / 1000);
 
 	soc_final = (100 * (soc_ocv - soc_cutoff)) / (100 - soc_cutoff);
+
+	if (chip->batt_data->ibat_acc_lut) {
+		/* Apply  ACC logic only if we discharging */
+		if (!is_battery_charging(chip) && chip->current_now > 0) {
+			fcc = interpolate_fcc(chip->batt_data->fcc_temp_lut,
+								batt_temp);
+			acc = interpolate_acc(chip->batt_data->ibat_acc_lut,
+					batt_temp, chip->current_now / 1000);
+			if (acc <= 0) {
+				if (chip->last_acc)
+					acc = chip->last_acc;
+				else
+					acc = fcc;
+			}
+			soc_uuc = ((fcc - acc) * 100) / acc;
+			soc_acc = soc_final - soc_uuc;
+			pr_debug("fcc=%d acc=%d soc_final=%d soc_uuc=%d soc_acc=%d ibat_ma=%d\n",
+				fcc, acc, soc_final, soc_uuc,
+				soc_acc, chip->current_now / 1000);
+			soc_final = soc_acc;
+			chip->last_acc = acc;
+		} else {
+			/* charging */
+			chip->last_acc = 0;
+		}
+	}
 
 	soc_final = bound_soc(soc_final);
 
@@ -778,7 +816,8 @@ static int calib_vadc(struct qpnp_bms_chip *chip)
 static int convert_vbatt_raw_to_uv(struct qpnp_bms_chip *chip,
 				u16 reading, bool is_pon_ocv)
 {
-	int64_t uv;
+	int64_t uv, vbatt;
+	int rc;
 
 	uv = vadc_reading_to_uv(reading, true);
 	pr_debug("%u raw converted into %lld uv\n", reading, uv);
@@ -786,10 +825,15 @@ static int convert_vbatt_raw_to_uv(struct qpnp_bms_chip *chip,
 	uv = adjust_vbatt_reading(chip, uv);
 	pr_debug("adjusted into %lld uv\n", uv);
 
-	/*
-	 * TODO: add die-temp compensation once the ADC temp.
-	 * coeffs are available
-	 */
+	vbatt = uv;
+	rc = qpnp_vbat_sns_comp_result(chip->vadc_dev, &uv, is_pon_ocv);
+	if (rc) {
+		pr_debug("Vbatt compensation failed rc = %d\n", rc);
+		uv = vbatt;
+	} else {
+		pr_debug("temp-compensated %lld into %lld uv\n", vbatt, uv);
+	}
+
 	return uv;
 }
 
@@ -901,6 +945,9 @@ static int get_prop_bms_rbatt(struct qpnp_bms_chip *chip)
 
 static void charging_began(struct qpnp_bms_chip *chip)
 {
+	int rc;
+	u8 state;
+
 	mutex_lock(&chip->last_soc_mutex);
 
 	chip->charge_start_tm_sec = 0;
@@ -909,22 +956,27 @@ static void charging_began(struct qpnp_bms_chip *chip)
 	mutex_unlock(&chip->last_soc_mutex);
 
 	/*
-	 * Enable the state change irq to handle state
-	 * changes while charging
+	 * If the BMS state is not in S2, force it in S2. Such
+	 * a condition can only occur if we are coming out of
+	 * suspend.
 	 */
-	enable_bms_irq(&chip->fsm_state_change_irq);
-
-	if (chip->dt.cfg_force_s2_in_charging) {
+	mutex_lock(&chip->state_change_mutex);
+	rc = get_fsm_state(chip, &state);
+	if (rc)
+		pr_err("Unable to get FSM state rc=%d\n", rc);
+	if (rc || (state != S2_STATE)) {
 		pr_debug("Forcing S2 state\n");
-		mutex_lock(&chip->state_change_mutex);
-		force_fsm_state(chip, S2_STATE);
-		mutex_unlock(&chip->state_change_mutex);
+		rc = force_fsm_state(chip, S2_STATE);
+		if (rc)
+			pr_err("Unable to set FSM state rc=%d\n", rc);
 	}
+	mutex_unlock(&chip->state_change_mutex);
 }
 
 static void charging_ended(struct qpnp_bms_chip *chip)
 {
-	int status = get_battery_status(chip);
+	u8 state;
+	int rc, status = get_battery_status(chip);
 
 	mutex_lock(&chip->last_soc_mutex);
 
@@ -936,18 +988,22 @@ static void charging_ended(struct qpnp_bms_chip *chip)
 
 	mutex_unlock(&chip->last_soc_mutex);
 
-	if (chip->dt.cfg_force_s2_in_charging) {
-		pr_debug("Unforcing S2 state, setting AUTO\n");
-		mutex_lock(&chip->state_change_mutex);
-		set_auto_fsm_state(chip);
-		mutex_unlock(&chip->state_change_mutex);
-	}
-
 	/*
-	 * Disable the state change IRQ to ignore state
-	 * changes while we are not charging
+	 * If the BMS state is not in S2, force it in S2. Such
+	 * a condition can only occur if we are coming out of
+	 * suspend.
 	 */
-	disable_bms_irq(&chip->fsm_state_change_irq);
+	mutex_lock(&chip->state_change_mutex);
+	rc = get_fsm_state(chip, &state);
+	if (rc)
+		pr_err("Unable to get FSM state rc=%d\n", rc);
+	if (rc || (state != S2_STATE)) {
+		pr_debug("Forcing S2 state\n");
+		rc = force_fsm_state(chip, S2_STATE);
+		if (rc)
+			pr_err("Unable to set FSM state rc=%d\n", rc);
+	}
+	mutex_unlock(&chip->state_change_mutex);
 }
 
 static int estimate_ocv(struct qpnp_bms_chip *chip)
@@ -1180,6 +1236,48 @@ static void cv_voltage_check(struct qpnp_bms_chip *chip, int vbat_uv)
 	}
 }
 
+static void low_soc_check(struct qpnp_bms_chip *chip)
+{
+	int rc;
+
+	if (chip->dt.cfg_low_soc_fifo_length < 1)
+		return;
+
+	if (chip->calculated_soc <= chip->dt.cfg_low_soc_calc_threshold) {
+		if (!chip->low_soc_fifo_set) {
+			pr_debug("soc=%d (low-soc) setting fifo_length to %d\n",
+						chip->calculated_soc,
+					chip->dt.cfg_low_soc_fifo_length);
+			rc = get_fifo_length(chip, S2_STATE,
+						&chip->s2_fifo_length);
+			if (rc) {
+				pr_err("Unable to get_fifo_length rc=%d", rc);
+				return;
+			}
+			rc = set_fifo_length(chip, S2_STATE,
+					chip->dt.cfg_low_soc_fifo_length);
+			if (rc) {
+				pr_err("Unable to set_fifo_length rc=%d", rc);
+				return;
+			}
+			chip->low_soc_fifo_set = true;
+		}
+	} else {
+		if (chip->low_soc_fifo_set) {
+			pr_debug("soc=%d setting back fifo_length to %d\n",
+						chip->calculated_soc,
+						chip->s2_fifo_length);
+			rc = set_fifo_length(chip, S2_STATE,
+						chip->s2_fifo_length);
+			if (rc) {
+				pr_err("Unable to set_fifo_length rc=%d", rc);
+				return;
+			}
+			chip->low_soc_fifo_set = false;
+		}
+	}
+}
+
 static int report_eoc(struct qpnp_bms_chip *chip)
 {
 	int rc = 0;
@@ -1336,6 +1434,8 @@ static void monitor_soc_work(struct work_struct *work)
 					/* update last_soc immediately */
 					report_vm_bms_soc(chip);
 
+				/* low SOC configuration */
+				low_soc_check(chip);
 				check_eoc_condition(chip);
 				pr_debug("update bms_psy\n");
 				power_supply_changed(&chip->bms_psy);
@@ -1343,6 +1443,7 @@ static void monitor_soc_work(struct work_struct *work)
 				report_vm_bms_soc(chip);
 			}
 		}
+
 	}
 
 	mutex_unlock(&chip->last_soc_mutex);
@@ -1951,7 +2052,8 @@ static int calculate_initial_soc(struct qpnp_bms_chip *chip)
 
 static int bms_load_hw_defaults(struct qpnp_bms_chip *chip)
 {
-	u8 val, interval[2], count[2];
+	u8 val, state;
+	u32 interval[2], count[2], fifo[2];
 	int rc;
 
 	/* S3 OCV tolerence threshold */
@@ -2040,22 +2142,23 @@ static int bms_load_hw_defaults(struct qpnp_bms_chip *chip)
 		}
 	}
 
-	/* read S1/S2 sample interval */
-	rc = qpnp_read_wrapper(chip, interval,
-			chip->base + S1_SAMPLE_INTVL_REG, 2);
-	if (rc) {
-		pr_err("Unable to read S1_SAMPLE_INTVL_REG rc=%d\n", rc);
-		return rc;
-	}
+	get_sample_interval(chip, S1_STATE, &interval[0]);
+	get_sample_interval(chip, S2_STATE, &interval[1]);
+	get_sample_count(chip, S1_STATE, &count[0]);
+	get_sample_count(chip, S2_STATE, &count[1]);
+	get_fifo_length(chip, S1_STATE, &fifo[0]);
+	get_fifo_length(chip, S2_STATE, &fifo[1]);
 
-	/* read S1/S2 accumulator count threshold */
-	rc = qpnp_read_wrapper(chip, count, chip->base + S1_ACC_CNT_REG, 2);
-	if (rc) {
-		pr_err("Unable to read S1_ACC_CNT_REG rc=%d\n", rc);
-		return rc;
+	/* Force the BMS state to S2 at boot-up */
+	rc = get_fsm_state(chip, &state);
+	if (rc)
+		pr_err("Unable to get FSM state rc=%d\n", rc);
+	if (rc || (state != S2_STATE)) {
+		pr_debug("Forcing S2 state\n");
+		rc = force_fsm_state(chip, S2_STATE);
+		if (rc)
+			pr_err("Unable to set FSM state rc=%d\n", rc);
 	}
-	count[0] &= ACC_CNT_MASK;
-	count[1] &= ACC_CNT_MASK;
 
 	rc = update_fsm_state(chip);
 	if (rc) {
@@ -2063,11 +2166,10 @@ static int bms_load_hw_defaults(struct qpnp_bms_chip *chip)
 		return rc;
 	}
 
-	pr_info("s1_sample_interval=%d s2_sample_interval=%d s1_acc_threshold=%d s2_acc_threshold=%d initial_fsm_state=%d\n",
-			interval[0] * 10, interval[1] * 10,
-			count[0] ? (1 << count[0]) : 0,
-			count[1] ? (1 << count[1]) : 0,
-			chip->current_fsm_state);
+	pr_info("Sample_Interval-S1=[%d]S2=[%d]  Sample_Count-S1=[%d]S2=[%d] Fifo_Length-S1=[%d]S2=[%d] FSM_state=%d\n",
+				interval[0], interval[1], count[0],
+					count[1], fifo[0], fifo[1],
+					chip->current_fsm_state);
 
 	return 0;
 }
@@ -2208,10 +2310,8 @@ static int bms_request_irqs(struct qpnp_bms_chip *chip)
 	SPMI_REQUEST_IRQ(chip, rc, fsm_state_change);
 	if (rc < 0)
 		return rc;
-	/*
-	 * Disable the state change IRQ here, it will
-	 * be enabled based on the charging status
-	 */
+
+	/* Disable the state change IRQ */
 	disable_bms_irq(&chip->fsm_state_change_irq);
 	enable_irq_wake(chip->fifo_update_done_irq.irq);
 
@@ -2276,7 +2376,6 @@ static int show_bms_config(struct seq_file *m, void *data)
 			"ignore_shutdown_soc\t=\t%d\n"
 			"shutdown_soc_valid_limit\t=\t%d\n"
 			"force_s3_on_suspend\t=\t%d\n"
-			"force_s2_in_charging\t=\t%d\n"
 			"report_charger_eoc\t=\t%d\n"
 			"s1_sample_interval_ms\t=\t%d\n"
 			"s2_sample_interval_ms\t=\t%d\n"
@@ -2297,7 +2396,6 @@ static int show_bms_config(struct seq_file *m, void *data)
 			chip->dt.cfg_ignore_shutdown_soc,
 			chip->dt.cfg_shutdown_soc_valid_limit,
 			chip->dt.cfg_force_s3_on_suspend,
-			chip->dt.cfg_force_s2_in_charging,
 			chip->dt.cfg_report_charger_eoc,
 			s1_sample_interval,
 			s2_sample_interval,
@@ -2447,6 +2545,8 @@ static int set_battery_data(struct qpnp_bms_chip *chip)
 			sizeof(struct pc_temp_ocv_lut), GFP_KERNEL);
 	batt_data->rbatt_sf_lut = devm_kzalloc(chip->dev,
 				sizeof(struct sf_lut), GFP_KERNEL);
+	batt_data->ibat_acc_lut = devm_kzalloc(chip->dev,
+				sizeof(struct ibat_temp_acc_lut), GFP_KERNEL);
 
 	batt_data->max_voltage_uv = -1;
 	batt_data->cutoff_uv = -1;
@@ -2464,6 +2564,7 @@ static int set_battery_data(struct qpnp_bms_chip *chip)
 		devm_kfree(chip->dev, batt_data->fcc_temp_lut);
 		devm_kfree(chip->dev, batt_data->pc_temp_ocv_lut);
 		devm_kfree(chip->dev, batt_data->rbatt_sf_lut);
+		devm_kfree(chip->dev, batt_data->ibat_acc_lut);
 		devm_kfree(chip->dev, batt_data);
 		return rc;
 	}
@@ -2473,9 +2574,17 @@ static int set_battery_data(struct qpnp_bms_chip *chip)
 		devm_kfree(chip->dev, batt_data->fcc_temp_lut);
 		devm_kfree(chip->dev, batt_data->pc_temp_ocv_lut);
 		devm_kfree(chip->dev, batt_data->rbatt_sf_lut);
+		devm_kfree(chip->dev, batt_data->ibat_acc_lut);
 		devm_kfree(chip->dev, batt_data);
 
 		return -EINVAL;
+	}
+
+	/* check if ibat_acc_lut is valid */
+	if (!batt_data->ibat_acc_lut->rows) {
+		pr_info("ibat_acc_lut not present\n");
+		devm_kfree(chip->dev, batt_data->ibat_acc_lut);
+		batt_data->ibat_acc_lut = NULL;
 	}
 
 	/* Override battery properties if specified in the battery profile */
@@ -2602,6 +2711,8 @@ static int parse_bms_dt_properties(struct qpnp_bms_chip *chip)
 	SPMI_PROP_READ_OPTIONAL(cfg_s1_fifo_length, "s1-fifo-length", rc);
 	SPMI_PROP_READ_OPTIONAL(cfg_s2_fifo_length, "s2-fifo-length", rc);
 	SPMI_PROP_READ_OPTIONAL(cfg_s3_ocv_tol_uv, "s3-ocv-tolerence-uv", rc);
+	SPMI_PROP_READ_OPTIONAL(cfg_low_soc_fifo_length,
+						"low-soc-fifo-length", rc);
 
 	chip->dt.cfg_ignore_shutdown_soc = of_property_read_bool(
 			chip->spmi->dev.of_node, "qcom,ignore-shutdown-soc");
@@ -2611,8 +2722,6 @@ static int parse_bms_dt_properties(struct qpnp_bms_chip *chip)
 			chip->spmi->dev.of_node, "qcom,force-s3-on-suspend");
 	chip->dt.cfg_report_charger_eoc = of_property_read_bool(
 			chip->spmi->dev.of_node, "qcom,report-charger-eoc");
-	chip->dt.cfg_force_s2_in_charging = of_property_read_bool(
-			chip->spmi->dev.of_node, "qcom,force-s2-in-charging");
 	chip->dt.cfg_disable_bms = of_property_read_bool(
 			chip->spmi->dev.of_node, "qcom,disable-bms");
 
@@ -2621,13 +2730,13 @@ static int parse_bms_dt_properties(struct qpnp_bms_chip *chip)
 	pr_debug("r_conn=%d shutdown_soc_valid_limit=%d\n",
 					chip->dt.cfg_r_conn_mohm,
 			chip->dt.cfg_shutdown_soc_valid_limit);
-	pr_debug("ignore_shutdown_soc=%d, use_voltage_soc=%d\n",
+	pr_debug("ignore_shutdown_soc=%d, use_voltage_soc=%d low_soc_fifo_length=%d\n",
 				chip->dt.cfg_ignore_shutdown_soc,
-				chip->dt.cfg_use_voltage_soc);
-	pr_debug("force-s3-on-suspend=%d report-charger-eoc=%d force-s2-in-charging=%d disable-bms=%d\n",
+				chip->dt.cfg_use_voltage_soc,
+				chip->dt.cfg_low_soc_fifo_length);
+	pr_debug("force-s3-on-suspend=%d report-charger-eoc=%d disable-bms=%d\n",
 			chip->dt.cfg_force_s3_on_suspend,
 			chip->dt.cfg_report_charger_eoc,
-			chip->dt.cfg_force_s2_in_charging,
 			chip->dt.cfg_disable_bms);
 
 	return 0;
@@ -3013,15 +3122,17 @@ static int bms_resume(struct device *dev)
 	if (!chip->charging_while_suspended) {
 		if (chip->dt.cfg_force_s3_on_suspend) {
 			/*
-			 * Update the state only if it is in S3. There is
+			 * Update the state to S2 only if we are in S3. There is
 			 * a possibility of being in S2 if we resumed on
 			 * a charger insertion
 			 */
 			mutex_lock(&chip->state_change_mutex);
-			get_fsm_state(chip, &state);
-			if (state == S3_STATE) {
-				pr_debug("Unforcing S3 state, setting AUTO state\n");
-				set_auto_fsm_state(chip);
+			rc = get_fsm_state(chip, &state);
+			if (rc)
+				pr_err("Unable to get FSM state rc=%d\n", rc);
+			if (rc || (state == S3_STATE)) {
+				pr_debug("Unforcing S3 state, setting S2 state\n");
+				force_fsm_state(chip, S2_STATE);
 			}
 			mutex_unlock(&chip->state_change_mutex);
 			/*

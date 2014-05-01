@@ -40,6 +40,7 @@
 #include <sound/tlv.h>
 #include <soc/qcom/subsystem_notif.h>
 #include "msm8x16-wcd.h"
+#include "wcd-mbhc-v2.h"
 #include "msm8916-wcd-irq.h"
 #include "msm8x16_wcd_registers.h"
 #include "../msm/qdsp6v2/q6core.h"
@@ -1750,6 +1751,8 @@ static int msm8x16_wcd_codec_enable_micbias(struct snd_soc_dapm_widget *w,
 	struct snd_kcontrol *kcontrol, int event)
 {
 	struct snd_soc_codec *codec = w->codec;
+	struct msm8x16_wcd_priv *msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
+
 	u16 micb_int_reg;
 	char *internal1_text = "Internal1";
 	char *internal2_text = "Internal2";
@@ -1788,7 +1791,8 @@ static int msm8x16_wcd_codec_enable_micbias(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_POST_PMD:
 		if (strnstr(w->name, internal1_text, 30)) {
 			snd_soc_update_bits(codec, micb_int_reg, 0xC0, 0x40);
-		} else if (strnstr(w->name, internal2_text, 30)) {
+		} else if (strnstr(w->name, internal2_text, 30) &&
+			   (!msm8x16_wcd->mbhc.is_hs_inserted)) {
 			snd_soc_update_bits(codec, micb_int_reg, 0x18, 0x08);
 			snd_soc_update_bits(codec, w->reg, 0x20, 0x20);
 		} else if (strnstr(w->name, internal3_text, 30)) {
@@ -1958,11 +1962,6 @@ static int msm8x16_wcd_codec_enable_interpolator(struct snd_soc_dapm_widget *w,
 	dev_dbg(codec->dev, "%s %d %s\n", __func__, event, w->name);
 
 	switch (event) {
-	case SND_SOC_DAPM_PRE_PMU:
-		snd_soc_update_bits(codec,
-			MSM8X16_WCD_A_CDC_RX1_B6_CTL + (w->shift*0x20),
-			0x01, 0x01);
-		break;
 	case SND_SOC_DAPM_POST_PMU:
 		/* apply the digital gain after the interpolator is enabled*/
 		if ((w->shift) < ARRAY_SIZE(rx_digital_gain_reg))
@@ -2092,6 +2091,7 @@ static int msm8x16_wcd_hph_pa_event(struct snd_soc_dapm_widget *w,
 			      struct snd_kcontrol *kcontrol, int event)
 {
 	struct snd_soc_codec *codec = w->codec;
+	struct msm8x16_wcd_priv *msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
 
 	dev_dbg(codec->dev, "%s: %s event = %d\n", __func__, w->name, event);
 
@@ -2134,6 +2134,13 @@ static int msm8x16_wcd_hph_pa_event(struct snd_soc_dapm_widget *w,
 		}
 		break;
 	case SND_SOC_DAPM_POST_PMD:
+		if (w->shift == 5) {
+			clear_bit(WCD_MBHC_HPHL_PA_OFF_ACK,
+				&msm8x16_wcd->mbhc.hph_pa_dac_state);
+		} else if (w->shift == 4) {
+			clear_bit(WCD_MBHC_HPHR_PA_OFF_ACK,
+				&msm8x16_wcd->mbhc.hph_pa_dac_state);
+		}
 		snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_ANALOG_NCP_FBCTRL, 0x20, 0x00);
 		usleep_range(4000, 4100);
@@ -2651,25 +2658,25 @@ static const struct snd_soc_dapm_widget msm8x16_wcd_dapm_widgets[] = {
 	SND_SOC_DAPM_MIXER_E("RX1 MIX1",
 			MSM8X16_WCD_A_CDC_CLK_RX_B1_CTL, 0, 0, NULL, 0,
 			msm8x16_wcd_codec_enable_interpolator,
-			SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
+			SND_SOC_DAPM_POST_PMU |
 			SND_SOC_DAPM_POST_PMD),
 	SND_SOC_DAPM_MIXER_E("RX2 MIX1",
 			MSM8X16_WCD_A_CDC_CLK_RX_B1_CTL, 1, 0, NULL, 0,
 			msm8x16_wcd_codec_enable_interpolator,
-			SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
+			SND_SOC_DAPM_POST_PMU |
 			SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_MIXER_E("RX1 MIX2",
 		MSM8X16_WCD_A_CDC_CLK_RX_B1_CTL, 0, 0, NULL,
-		0, msm8x16_wcd_codec_enable_interpolator, SND_SOC_DAPM_PRE_PMU |
+		0, msm8x16_wcd_codec_enable_interpolator,
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
 	SND_SOC_DAPM_MIXER_E("RX2 MIX2",
 		MSM8X16_WCD_A_CDC_CLK_RX_B1_CTL, 1, 0, NULL,
-		0, msm8x16_wcd_codec_enable_interpolator, SND_SOC_DAPM_PRE_PMU |
+		0, msm8x16_wcd_codec_enable_interpolator,
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
 	SND_SOC_DAPM_MIXER_E("RX3 MIX1",
 		MSM8X16_WCD_A_CDC_CLK_RX_B1_CTL, 2, 0, NULL,
-		0, msm8x16_wcd_codec_enable_interpolator, SND_SOC_DAPM_PRE_PMU |
+		0, msm8x16_wcd_codec_enable_interpolator,
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_SUPPLY("RX1 CLK", MSM8X16_WCD_A_DIGITAL_CDC_DIG_CLK_CTL,

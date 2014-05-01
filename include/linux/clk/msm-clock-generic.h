@@ -15,6 +15,7 @@
 #define __MSM_CLOCK_GENERIC_H
 
 #include <linux/clk/msm-clk-provider.h>
+#include <linux/of.h>
 
 /**
  * struct fixed_clk - fixed rate clock
@@ -25,11 +26,6 @@ struct fixed_clk {
 };
 
 /* ==================== Mux clock ==================== */
-
-struct clk_src {
-	struct clk *src;
-	int sel;
-};
 
 struct mux_clk;
 
@@ -68,7 +64,6 @@ struct mux_clk {
 	void *const __iomem *base;
 	u32		offset;
 	u32		en_offset;
-	int		en_reg;
 	u32		mask;
 	u32		shift;
 	u32		en_mask;
@@ -81,8 +76,6 @@ static inline struct mux_clk *to_mux_clk(struct clk *c)
 {
 	return container_of(c, struct mux_clk, c);
 }
-
-int parent_to_src_sel(struct clk_src *parents, int num_parents, struct clk *p);
 
 extern struct clk_ops clk_ops_gen_mux;
 
@@ -139,10 +132,18 @@ extern struct clk_ops clk_ops_slave_div;
 
 struct ext_clk {
 	struct clk c;
+	struct device *dev;
+	char *clk_id;
 };
 
 long parent_round_rate(struct clk *c, unsigned long rate);
 unsigned long parent_get_rate(struct clk *c);
+
+static inline struct ext_clk *to_ext_clk(struct clk *c)
+{
+	return container_of(c, struct ext_clk, c);
+}
+
 extern struct clk_ops clk_ops_ext;
 
 #define DEFINE_FIXED_DIV_CLK(clk_name, _div, _parent) \
