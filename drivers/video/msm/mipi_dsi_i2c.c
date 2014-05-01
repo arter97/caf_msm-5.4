@@ -224,8 +224,44 @@ static struct msm_fb_panel_data mipi_dsi_i2c_panel_data = {
 	.set_backlight  = mipi_dsi_i2c_set_backlight,
 };
 
+static int mipi_dsi_i2c_config_480p(void)
+{
+	int i;
+	u32 offset = 0x40;
+	u32 ln_cfg = 0x300;
+
+	for (i = 0; i < 5; i++) { /* ln_cfg */
+		MIPI_OUTP(MIPI_DSI_BASE + ln_cfg + 0x00, 0xc0);
+		MIPI_OUTP(MIPI_DSI_BASE + ln_cfg + 0x04, 0x00);
+		MIPI_OUTP(MIPI_DSI_BASE + ln_cfg + 0x14, 0x00);
+		MIPI_OUTP(MIPI_DSI_BASE + ln_cfg + 0x18, 0x00);
+		ln_cfg += offset;
+	}
+
+	MIPI_OUTP(MIPI_DSI_BASE + 0x0a8, 0x10000000);
+	MIPI_OUTP(MIPI_DSI_BASE + 0x0c8, 0x01);
+	MIPI_OUTP(MIPI_DSI_BASE + 0x08c, 0x01);
+	MIPI_OUTP(MIPI_DSI_BASE + 0x108, 0x13FF3BE0);
+	MIPI_OUTP(MIPI_DSI_BASE + 0x10c, 0x00010002);
+	MIPI_OUTP(MIPI_DSI_BASE + 0x118, 0x3f);
+	MIPI_OUTP(MIPI_DSI_BASE + 0x11c, 0x3fd);
+
+	MIPI_OUTP(MIPI_DSI_BASE + 0x48c, 0x00);
+	MIPI_OUTP(MIPI_DSI_BASE + 0x490, 0x00);
+	MIPI_OUTP(MIPI_DSI_BASE + 0x4b0, 0x03);
+	MIPI_OUTP(MIPI_DSI_BASE + 0x510, 0x20);
+	MIPI_OUTP(MIPI_DSI_BASE + 0x518, 0x01);
+	MIPI_OUTP(MIPI_DSI_BASE + 0x51c, 0x00);
+
+	return 0;
+}
+
 static int __devinit mipi_dsi_i2c_lcd_probe(struct platform_device *pdev)
 {
+	struct mipi_dsi_i2c_configure *cfg = &dsi_i2c_cfg;
+
+	cfg->config_dsi = mipi_dsi_i2c_config_480p;
+
 	msm_fb_add_device(pdev);
 
 	return 0;
