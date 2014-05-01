@@ -170,6 +170,7 @@ struct mdss_data_type {
 	struct mdss_panel_cfg pan_cfg;
 
 	int handoff_pending;
+	bool ulps;
 };
 extern struct mdss_data_type *mdss_res;
 
