@@ -60,6 +60,7 @@ struct mdp4_overlay_ctrl {
 	uint32 mixer0_played;
 	uint32 mixer1_played;
 	uint32 mixer2_played;
+	uint32 mixer3_played;
 } mdp4_overlay_db = {
 	.cs_controller = CS_CONTROLLER_0,
 	.plist = {
@@ -443,7 +444,9 @@ void mdp4_iommu_unmap(struct mdp4_overlay_pipe *pipe)
 
 int mdp4_overlay_mixer_play(int mixer_num)
 {
-	if (mixer_num == MDP4_MIXER2)
+	if (mixer_num == MDP4_MIXER_NONE)
+		return ctrl->mixer3_played;
+	else if (mixer_num == MDP4_MIXER2)
 		return ctrl->mixer2_played;
 	else if (mixer_num == MDP4_MIXER1)
 		return ctrl->mixer1_played;
@@ -451,17 +454,17 @@ int mdp4_overlay_mixer_play(int mixer_num)
 		return ctrl->mixer0_played;
 }
 
-void mdp4_overlay_panel_3d(int mixer_num, uint32 panel_3d)
+void mdp4_overlay_panel_3d(uint32 panel_3d)
 {
 	ctrl->panel_3d = panel_3d;
 }
 
-void mdp4_overlay_panel_mode(int mixer_num, uint32 mode)
+void mdp4_overlay_panel_mode(uint32 mode)
 {
 	ctrl->panel_mode |= mode;
 }
 
-void mdp4_overlay_panel_mode_unset(int mixer_num, uint32 mode)
+void mdp4_overlay_panel_mode_unset(uint32 mode)
 {
 	ctrl->panel_mode &= ~mode;
 }
@@ -530,6 +533,9 @@ void fill_black_screen(bool on, uint8 pipe_num, uint8 mixer_num)
 	uint32 temp_src_format = 0x00000000;
 	uint8  bit             = pipe_num + 2;
 
+	if (mixer_num == MDP4_MIXER_NONE)
+		return;
+
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 
 	/* Fill constant color */
@@ -586,6 +592,9 @@ void mdp4_overlay_dmap_cfg(struct msm_fb_data_type *mfd, int lcdc)
 	uint32	dma2_cfg_reg;
 	uint32 mask, curr;
 
+	if (mfd->panel_info.pdest == DISPLAY_4)
+		return;
+
 	dma2_cfg_reg = DMA_DITHER_EN;
 #ifdef BLT_RGB565
 	/* RGB888 is 0 */
@@ -636,6 +645,9 @@ void mdp4_overlay_dmap_cfg(struct msm_fb_data_type *mfd, int lcdc)
 void mdp4_overlay_dmap_xy(struct mdp4_overlay_pipe *pipe)
 {
 	uint32 off, bpp;
+
+	if (pipe->mixer_num >= MDP4_MIXER_NONE)
+		return;
 
 	if (!in_interrupt())
 		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
@@ -1662,6 +1674,9 @@ void mdp4_overlayproc_cfg(struct mdp4_overlay_pipe *pipe)
 	char *overlay_base;
 	uint32 curr;
 
+	if (pipe->mixer_num >= MDP4_MIXER_NONE)
+		return;
+
 	intf = 0;
 	if (pipe->mixer_num == MDP4_MIXER2)
 		overlay_base = MDP_BASE + MDP4_OVERLAYPROC2_BASE;
@@ -1774,8 +1789,12 @@ void mdp4_overlayproc_cfg(struct mdp4_overlay_pipe *pipe)
 
 int mdp4_overlay_pipe_staged(struct mdp4_overlay_pipe *pipe)
 {
-	uint32 data, mask;
+	uint32 data = 0, mask;
 	int mixer;
+
+	/* dma_s path is never staged*/
+	if (pipe->mixer_num == MDP4_MIXER_NONE)
+		return data;
 
 	mixer = pipe->mixer_num;
 	data = ctrl->mixer_cfg[mixer];
@@ -1871,7 +1890,7 @@ void mdp4_mixer_stage_commit(int mixer)
 	unsigned long flags;
 
 	data = 0;
-	for (i = MDP4_MIXER_STAGE_BASE; i < MDP4_MIXER_STAGE_MAX; i++) {
+	for (i = MDP4_MIXER_STAGE_BASE; i < MDP4_MIXER_STAGE_NONE; i++) {
 		pipe = ctrl->stage[mixer][i];
 		if (pipe == NULL)
 			continue;
@@ -1933,6 +1952,9 @@ void mdp4_mixer_stage_up(struct mdp4_overlay_pipe *pipe, int commit)
 
 	mixer = pipe->mixer_num;
 
+	if (mixer >= MDP4_MIXER_NONE)
+		return;
+
 	for (i = MDP4_MIXER_STAGE_BASE; i < MDP4_MIXER_STAGE_MAX; i++) {
 		pp = ctrl->stage[mixer][i];
 		if (pp && pp->pipe_ndx == pipe->pipe_ndx) {
@@ -1953,6 +1975,9 @@ void mdp4_mixer_stage_down(struct mdp4_overlay_pipe *pipe, int commit)
 	int i, mixer;
 
 	mixer = pipe->mixer_num;
+
+	if (mixer >= MDP4_MIXER_NONE)
+		return;
 
 	for (i = MDP4_MIXER_STAGE_BASE; i < MDP4_MIXER_STAGE_MAX; i++) {
 		pp = ctrl->stage[mixer][i];
@@ -1979,6 +2004,8 @@ void mdp4_overlay_borderfill_stage_up(struct mdp4_overlay_pipe *pipe)
 		return;
 
 	mixer = pipe->mixer_num;
+	if (mixer >= MDP4_MIXER_NONE)
+		return;
 
 	if (ctrl->baselayer[mixer])
 		return;
@@ -2053,6 +2080,9 @@ void mdp4_overlay_borderfill_stage_down(struct mdp4_overlay_pipe *pipe)
 		return;
 
 	mixer = pipe->mixer_num;
+
+	if (mixer >= MDP4_MIXER_NONE)
+		return;
 
 	/* retrieve original base layer */
 	bspipe = ctrl->baselayer[mixer];
@@ -2431,6 +2461,10 @@ void mdp4_overlay_reg_flush(struct mdp4_overlay_pipe *pipe, int all)
 	uint32 *reg;
 
 	mixer = pipe->mixer_num;
+
+	if (mixer >= MDP4_MIXER_NONE)
+		return;
+
 	reg = &ctrl->flush[mixer];
 	*reg |= (1 << (2 + pipe->pipe_num));
 
@@ -2455,6 +2489,10 @@ void mdp4_overlay_reg_flush_reset(struct mdp4_overlay_pipe *pipe)
 	int mixer;
 
 	mixer = pipe->mixer_num;
+
+	if (mixer >= MDP4_MIXER_NONE)
+		return;
+
 	ctrl->flush[mixer] = 0;
 }
 
@@ -3734,11 +3772,16 @@ int mdp4_overlay_unset(struct fb_info *info, int ndx)
 		return 0;
 	}
 
-	if (pipe->mixer_num == MDP4_MIXER2)
+	if (pipe->mixer_num == MDP4_MIXER_NONE) {
+		ctrl->mixer3_played = 0;
+		mdp4_overlay_free_base_pipe(mfd);
+		mutex_unlock(&mfd->dma->ov_mutex);
+		return 0;
+	} else if (pipe->mixer_num == MDP4_MIXER2)
 		ctrl->mixer2_played = 0;
 	else if (pipe->mixer_num == MDP4_MIXER1)
 		ctrl->mixer1_played = 0;
-	else {
+	else if (pipe->mixer_num == MDP4_MIXER0) {
 		/* mixer 0 */
 		ctrl->mixer0_played = 0;
 		if (ctrl->panel_mode & MDP4_PANEL_MDDI) {
@@ -4050,6 +4093,10 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
 		ctrl->mixer2_played++;
 		if (ctrl->panel_mode & MDP4_PANEL_WRITEBACK)
 			mdp4_wfd_pipe_queue(0, pipe);/* cndx = 0 */
+	} else if (pipe->mixer_num == MDP4_MIXER_NONE) {
+		ctrl->mixer3_played++;
+		if (ctrl->panel_mode & MDP4_PANEL_LCDC)
+			mdp4_lcdc_pipe_queue(0, pipe);
 	}
 
 end:

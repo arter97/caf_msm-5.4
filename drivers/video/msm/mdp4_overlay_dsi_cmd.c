@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -906,7 +906,7 @@ static void mdp4_overlay_update_dsi_cmd(struct msm_fb_data_type *mfd)
 		pipe->mixer_stage  = MDP4_MIXER_STAGE_BASE;
 		pipe->mixer_num  = MDP4_MIXER0;
 		pipe->src_format = mfd->fb_imgType;
-		mdp4_overlay_panel_mode(pipe->mixer_num, MDP4_PANEL_DSI_CMD);
+		mdp4_overlay_panel_mode(MDP4_PANEL_DSI_CMD);
 		ret = mdp4_overlay_format2pipe(pipe);
 		if (ret < 0)
 			printk(KERN_INFO "%s: format2type failed\n", __func__);
@@ -980,9 +980,9 @@ void mdp4_dsi_cmd_3d_sbys(struct msm_fb_data_type *mfd,
 	pipe->src_width_3d = r3d->width;
 
 	if (pipe->is_3d)
-		mdp4_overlay_panel_3d(pipe->mixer_num, MDP4_3D_SIDE_BY_SIDE);
+		mdp4_overlay_panel_3d(MDP4_3D_SIDE_BY_SIDE);
 	else
-		mdp4_overlay_panel_3d(pipe->mixer_num, MDP4_3D_NONE);
+		mdp4_overlay_panel_3d(MDP4_3D_NONE);
 
 	fbi = mfd->fbi;
 	if (pipe->is_3d) {

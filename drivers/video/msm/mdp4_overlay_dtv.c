@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -621,7 +621,7 @@ int mdp4_dtv_on(struct platform_device *pdev)
 	/* Mdp clock enable */
 	mdp_clk_ctrl(1);
 
-	mdp4_overlay_panel_mode(MDP4_MIXER1, MDP4_PANEL_DTV);
+	mdp4_overlay_panel_mode(MDP4_PANEL_DTV);
 
 	/* Allocate dtv_pipe at dtv_on*/
 	if (vctrl->base_pipe == NULL) {
@@ -701,7 +701,7 @@ int mdp4_dtv_off(struct platform_device *pdev)
 
 	atomic_set(&vctrl->suspend, 1);
 
-	mdp4_overlay_panel_mode_unset(MDP4_MIXER1, MDP4_PANEL_DTV);
+	mdp4_overlay_panel_mode_unset(MDP4_PANEL_DTV);
 
 	undx =  vctrl->update_ndx;
 	vp = &vctrl->vlist[undx];

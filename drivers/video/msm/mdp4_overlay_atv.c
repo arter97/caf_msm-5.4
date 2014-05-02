@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, 2012 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010, 2012, 2014 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -69,7 +69,7 @@ int mdp4_atv_on(struct platform_device *pdev)
 		pipe->mixer_stage  = MDP4_MIXER_STAGE_BASE;
 		pipe->mixer_num  = MDP4_MIXER1;
 		pipe->src_format = mfd->fb_imgType;
-		mdp4_overlay_panel_mode(pipe->mixer_num, MDP4_PANEL_ATV);
+		mdp4_overlay_panel_mode(MDP4_PANEL_ATV);
 		mdp4_overlay_format2pipe(pipe);
 
 		atv_pipe = pipe; /* keep it */
