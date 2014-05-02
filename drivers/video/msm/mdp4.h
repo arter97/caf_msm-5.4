@@ -597,6 +597,7 @@ ssize_t mdp4_dtv_show_event(struct device *dev,
 	struct device_attribute *attr, char *buf);
 void mdp4_overlay_dsi_state_set(int state);
 int mdp4_overlay_dsi_state_get(void);
+void mdp4_overlay_dmas_setup(struct mdp4_overlay_pipe *pipe);
 void mdp4_overlay_rgb_setup(struct mdp4_overlay_pipe *pipe);
 void mdp4_overlay_reg_flush(struct mdp4_overlay_pipe *pipe, int all);
 void mdp4_mixer_blend_setup(int mixer);
