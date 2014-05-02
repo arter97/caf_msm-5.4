@@ -205,8 +205,8 @@ static inline void mdss_mdp_cmd_clk_on(struct mdss_mdp_cmd_ctx *ctx)
 		ctx->clk_enabled = 1;
 		if (cancel_delayed_work_sync(&ctx->ulps_work))
 			pr_debug("deleted pending ulps work\n");
-		mdss_mdp_ctl_intf_event
-			(ctx->ctl, MDSS_EVENT_PANEL_CLK_CTRL, (void *)1);
+
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
 
 		if (ctx->ulps) {
 			if (mdss_mdp_cmd_tearcheck_setup(ctx->ctl, 1))
@@ -216,7 +216,9 @@ static inline void mdss_mdp_cmd_clk_on(struct mdss_mdp_cmd_ctx *ctx)
 			ctx->ulps = false;
 		}
 
-		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+		mdss_mdp_ctl_intf_event
+			(ctx->ctl, MDSS_EVENT_PANEL_CLK_CTRL, (void *)1);
+
 		mdss_mdp_hist_intr_setup(&mdata->hist_intr, MDSS_IRQ_RESUME);
 	}
 	spin_lock_irqsave(&ctx->clk_lock, flags);
@@ -262,6 +264,8 @@ static void mdss_mdp_cmd_readptr_done(void *arg)
 		pr_err("invalid ctx\n");
 		return;
 	}
+
+	mdss_mdp_ctl_perf_taken(ctl);
 
 	vsync_time = ktime_get();
 	ctl->vsync_cnt++;
@@ -324,6 +328,8 @@ static void mdss_mdp_cmd_pingpong_done(void *arg)
 		return;
 	}
 
+	mdss_mdp_ctl_perf_done(ctl);
+
 	spin_lock(&ctx->clk_lock);
 	list_for_each_entry(tmp, &ctx->vsync_handlers, list) {
 		if (tmp->enabled && tmp->cmd_post_flush)
@@ -356,9 +362,12 @@ static void pingpong_done_work(struct work_struct *work)
 	struct mdss_mdp_cmd_ctx *ctx =
 		container_of(work, typeof(*ctx), pp_done_work);
 
-	if (ctx->ctl)
+	if (ctx->ctl) {
 		while (atomic_add_unless(&ctx->pp_done_cnt, -1, 0))
 			mdss_mdp_ctl_notify(ctx->ctl, MDP_NOTIFY_FRAME_DONE);
+
+		mdss_mdp_ctl_perf_release_bw(ctx->ctl);
+	}
 }
 
 static void clk_ctrl_work(struct work_struct *work)

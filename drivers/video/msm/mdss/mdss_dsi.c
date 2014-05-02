@@ -72,14 +72,25 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable)
 			goto error;
 		}
 
-		if (pdata->panel_info.panel_power_on == 0)
-			if (!pdata->panel_info.mipi.lp11_init) {
-				mdss_dsi_panel_reset(pdata, 1);
+		if (!pdata->panel_info.mipi.lp11_init) {
+			ret = mdss_dsi_panel_reset(pdata, 1);
+			if (ret) {
+				pr_err("%s: Panel reset failed. rc=%d\n",
+						__func__, ret);
+				if (msm_dss_enable_vreg(
+				ctrl_pdata->power_data.vreg_config,
+				ctrl_pdata->power_data.num_vreg, 0))
+					pr_err("Disable vregs failed\n");
+				goto error;
 			}
-
+		}
 	} else {
-		mdss_dsi_panel_reset(pdata, 0);
-
+		ret = mdss_dsi_panel_reset(pdata, 0);
+		if (ret) {
+			pr_err("%s: Panel reset failed. rc=%d\n",
+					__func__, ret);
+			goto error;
+		}
 		ret = msm_dss_enable_vreg(
 			ctrl_pdata->power_data.vreg_config,
 			ctrl_pdata->power_data.num_vreg, 0);
@@ -468,7 +479,13 @@ static int mdss_dsi_ulps_config_sub(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 			goto error;
 		}
 
-		mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 1);
+		ret = mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 1);
+		if (ret) {
+			pr_err("%s: Failed to enable clocks. rc=%d\n",
+				__func__, ret);
+			goto error;
+		}
+
 		/*
 		 * ULPS Entry Request.
 		 * Wait for a short duration to ensure that the lanes
@@ -506,10 +523,17 @@ static int mdss_dsi_ulps_config_sub(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 		/* disable DSI controller */
 		mdss_dsi_controller_cfg(0, pdata);
 
-		lane_status = MIPI_INP(ctrl_pdata->ctrl_base + 0xA8),
 		mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 0);
 		ctrl_pdata->ulps = true;
 	} else if (ctrl_pdata->ulps) {
+		ret = mdss_dsi_clk_ctrl(ctrl_pdata, DSI_BUS_CLKS, 1);
+		if (ret) {
+			pr_err("%s: Failed to enable bus clocks. rc=%d\n",
+				__func__, ret);
+			goto error;
+		}
+
+		MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + 0x108, 0x0);
 		mdss_dsi_phy_init(pdata);
 
 		__mdss_dsi_ctrl_setup(pdata);
@@ -518,8 +542,27 @@ static int mdss_dsi_ulps_config_sub(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 		mdss_dsi_op_mode_config(pdata->panel_info.mipi.mode,
 			pdata);
 
+		/*
+		 * ULPS Entry Request. This is needed because, after power
+		 * collapse and reset, the DSI controller resets back to
+		 * idle state and not ULPS.
+		 * Wait for a short duration to ensure that the lanes
+		 * enter ULP state.
+		 */
+		MIPI_OUTP(ctrl_pdata->ctrl_base + 0x0AC, 0x01F);
+		usleep(100);
+
 		/* Disable MMSS DSI Clamps */
+		MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + 0x14, 0x3FF);
 		MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + 0x14, 0x0);
+
+		ret = mdss_dsi_clk_ctrl(ctrl_pdata, DSI_LINK_CLKS, 1);
+		if (ret) {
+			pr_err("%s: Failed to enable link clocks. rc=%d\n",
+				__func__, ret);
+			mdss_dsi_clk_ctrl(ctrl_pdata, DSI_BUS_CLKS, 0);
+			goto error;
+		}
 
 		/*
 		 * ULPS Exit Request
@@ -535,7 +578,9 @@ static int mdss_dsi_ulps_config_sub(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 		 */
 		usleep(100);
 
-		lane_status = MIPI_INP(ctrl_pdata->ctrl_base + 0xA8),
+		lane_status = MIPI_INP(ctrl_pdata->ctrl_base + 0xA8);
+		mdss_dsi_clk_ctrl(ctrl_pdata, DSI_LINK_CLKS, 0);
+		mdss_dsi_clk_ctrl(ctrl_pdata, DSI_BUS_CLKS, 0);
 		ctrl_pdata->ulps = false;
 	}
 
@@ -1278,8 +1323,8 @@ int mdss_dsi_retrieve_ctrl_resources(struct platform_device *pdev, int mode,
 	rc = msm_dss_ioremap_byname(pdev, &ctrl->mmss_misc_io,
 		"mmss_misc_phys");
 	if (rc) {
-		pr_debug("%s:%d mmss_misc IO remap failed\n", 
-				__func__, __LINE__);
+		pr_debug("%s:%d mmss_misc IO remap failed\n",
+			__func__, __LINE__);
 	}
 
 	return 0;
@@ -1419,18 +1464,9 @@ int dsi_panel_device_register(struct device_node *pan_node,
 	ctrl_pdata->disp_en_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
 		"qcom,platform-enable-gpio", 0);
 
-	if (!gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
+	if (!gpio_is_valid(ctrl_pdata->disp_en_gpio))
 		pr_err("%s:%d, Disp_en gpio not specified\n",
 						__func__, __LINE__);
-	} else {
-		rc = gpio_request(ctrl_pdata->disp_en_gpio, "disp_enable");
-		if (rc) {
-			pr_err("request reset gpio failed, rc=%d\n",
-			       rc);
-			gpio_free(ctrl_pdata->disp_en_gpio);
-			return -ENODEV;
-		}
-	}
 
 	if (pinfo->type == MIPI_CMD_PANEL) {
 		ctrl_pdata->disp_te_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
@@ -1447,7 +1483,6 @@ int dsi_panel_device_register(struct device_node *pan_node,
 		if (rc) {
 			pr_err("request TE gpio failed, rc=%d\n",
 			       rc);
-			gpio_free(ctrl_pdata->disp_te_gpio);
 			return -ENODEV;
 		}
 		rc = gpio_tlmm_config(GPIO_CFG(
@@ -1477,44 +1512,18 @@ int dsi_panel_device_register(struct device_node *pan_node,
 
 	ctrl_pdata->rst_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
 			 "qcom,platform-reset-gpio", 0);
-	if (!gpio_is_valid(ctrl_pdata->rst_gpio)) {
+	if (!gpio_is_valid(ctrl_pdata->rst_gpio))
 		pr_err("%s:%d, reset gpio not specified\n",
 						__func__, __LINE__);
-	} else {
-		rc = gpio_request(ctrl_pdata->rst_gpio, "disp_rst_n");
-		if (rc) {
-			pr_err("request reset gpio failed, rc=%d\n",
-				rc);
-			gpio_free(ctrl_pdata->rst_gpio);
-			if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
-				gpio_free(ctrl_pdata->disp_en_gpio);
-			return -ENODEV;
-		}
-	}
 
 	if (pinfo->mode_gpio_state != MODE_GPIO_NOT_VALID) {
 
 		ctrl_pdata->mode_gpio = of_get_named_gpio(
 					ctrl_pdev->dev.of_node,
 					"qcom,platform-mode-gpio", 0);
-		if (!gpio_is_valid(ctrl_pdata->mode_gpio)) {
+		if (!gpio_is_valid(ctrl_pdata->mode_gpio))
 			pr_info("%s:%d, mode gpio not specified\n",
 							__func__, __LINE__);
-		} else {
-			rc = gpio_request(ctrl_pdata->mode_gpio, "panel_mode");
-			if (rc) {
-				pr_err("request panel mode gpio failed,rc=%d\n",
-									rc);
-				gpio_free(ctrl_pdata->mode_gpio);
-				if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
-					gpio_free(ctrl_pdata->disp_en_gpio);
-				if (gpio_is_valid(ctrl_pdata->rst_gpio))
-					gpio_free(ctrl_pdata->rst_gpio);
-				if (gpio_is_valid(ctrl_pdata->disp_te_gpio))
-					gpio_free(ctrl_pdata->disp_te_gpio);
-				return -ENODEV;
-			}
-		}
 	}
 
 	if (mdss_dsi_clk_init(ctrl_pdev, ctrl_pdata)) {
@@ -1565,10 +1574,6 @@ int dsi_panel_device_register(struct device_node *pan_node,
 	rc = mdss_register_panel(ctrl_pdev, &(ctrl_pdata->panel_data));
 	if (rc) {
 		pr_err("%s: unable to register MIPI DSI panel\n", __func__);
-		if (ctrl_pdata->rst_gpio)
-			gpio_free(ctrl_pdata->rst_gpio);
-		if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
-			gpio_free(ctrl_pdata->disp_en_gpio);
 		return rc;
 	}
 
