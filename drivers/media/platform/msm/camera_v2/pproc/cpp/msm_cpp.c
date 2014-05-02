@@ -969,7 +969,6 @@ static int cpp_open_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 			return rc;
 		}
 
-		iommu_attach_device(cpp_dev->domain, cpp_dev->iommu_ctx);
 		cpp_init_mem(cpp_dev);
 		cpp_dev->state = CPP_STATE_IDLE;
 	}
@@ -1047,7 +1046,11 @@ static int cpp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 		msm_camera_io_w(0x0, cpp_dev->base + MSM_CPP_MICRO_CLKEN_CTL);
 		msm_cpp_clear_timer(cpp_dev);
 		cpp_deinit_mem(cpp_dev);
-		iommu_detach_device(cpp_dev->domain, cpp_dev->iommu_ctx);
+		if (cpp_dev->iommu_state == CPP_IOMMU_STATE_ATTACHED) {
+			iommu_detach_device(cpp_dev->domain,
+				cpp_dev->iommu_ctx);
+			cpp_dev->iommu_state = CPP_IOMMU_STATE_DETACHED;
+		}
 		cpp_release_hardware(cpp_dev);
 		msm_cpp_empty_list(processing_q, list_frame);
 		msm_cpp_empty_list(eventData_q, list_eventdata);
@@ -1638,7 +1641,16 @@ long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 			pr_err("%s:%d: malloc error\n", __func__, __LINE__);
 			mutex_unlock(&cpp_dev->mutex);
 			return -EINVAL;
-		} else {
+		}
+#ifdef CONFIG_COMPAT
+		/* For compat task, source ptr is in kernel space
+		 * otherwise it is in user space*/
+		if (is_compat_task()) {
+			memcpy(u_stream_buff_info, ioctl_ptr->ioctl_ptr,
+					ioctl_ptr->len);
+		} else
+#else
+		{
 			rc = (copy_from_user(u_stream_buff_info,
 					(void __user *)ioctl_ptr->ioctl_ptr,
 					ioctl_ptr->len) ? -EFAULT : 0);
@@ -1649,7 +1661,7 @@ long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 				return -EINVAL;
 			}
 		}
-
+#endif
 		if (u_stream_buff_info->num_buffs == 0) {
 			pr_err("%s:%d: Invalid number of buffers\n", __func__,
 				__LINE__);
@@ -1719,10 +1731,11 @@ long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 		uint32_t identity;
 		struct msm_cpp_buff_queue_info_t *buff_queue_info;
 		CPP_DBG("VIDIOC_MSM_CPP_DEQUEUE_STREAM_BUFF_INFO\n");
-
 		if ((ioctl_ptr->len == 0) ||
-			(ioctl_ptr->len > sizeof(uint32_t)))
+		    (ioctl_ptr->len > sizeof(uint32_t))) {
+			mutex_unlock(&cpp_dev->mutex);
 			return -EINVAL;
+		}
 
 		rc = (copy_from_user(&identity,
 				(void __user *)ioctl_ptr->ioctl_ptr,
@@ -1909,6 +1922,34 @@ long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 	default:
 		pr_err_ratelimited("invalid value: cmd=0x%x\n", cmd);
 		break;
+	case VIDIOC_MSM_CPP_IOMMU_ATTACH: {
+		if (cpp_dev->iommu_state == CPP_IOMMU_STATE_DETACHED) {
+			rc = iommu_attach_device(cpp_dev->domain,
+				cpp_dev->iommu_ctx);
+			if (rc < 0) {
+				pr_err("%s:%dError iommu_attach_device failed\n",
+					__func__, __LINE__);
+				rc = -EINVAL;
+			}
+			cpp_dev->iommu_state = CPP_IOMMU_STATE_ATTACHED;
+		} else {
+			pr_err("%s:%d IOMMMU attach triggered in invalid state\n",
+				__func__, __LINE__);
+			rc = -EINVAL;
+		}
+		break;
+	}
+	case VIDIOC_MSM_CPP_IOMMU_DETACH: {
+		if (cpp_dev->iommu_state == CPP_IOMMU_STATE_ATTACHED) {
+			iommu_detach_device(cpp_dev->domain,
+				cpp_dev->iommu_ctx);
+			cpp_dev->iommu_state = CPP_IOMMU_STATE_DETACHED;
+		} else {
+			pr_err("%s:%d IOMMMU attach triggered in invalid state\n",
+				__func__, __LINE__);
+		}
+		break;
+	}
 	}
 	mutex_unlock(&cpp_dev->mutex);
 	CPP_DBG("X\n");
@@ -2212,8 +2253,11 @@ static long msm_cpp_subdev_fops_compat_ioctl(struct file *file,
 		kp_ioctl.ioctl_ptr = (void *)&k_cpp_buff_info;
 		if (is_compat_task()) {
 			if (kp_ioctl.len != sizeof(
-					struct msm_cpp_stream_buff_info32_t))
+				struct msm_cpp_stream_buff_info32_t))
 				return -EINVAL;
+			else
+				kp_ioctl.len =
+				  sizeof(struct msm_cpp_stream_buff_info_t);
 		}
 		cmd = VIDIOC_MSM_CPP_ENQUEUE_STREAM_BUFF_INFO;
 		break;
@@ -2335,7 +2379,7 @@ static int msm_cpp_get_clk_info(struct cpp_device *cpp_dev,
 	struct device_node *of_node;
 	of_node = pdev->dev.of_node;
 
-	count = of_property_count_strings(of_node, "qcom,clock-names");
+	count = of_property_count_strings(of_node, "clock-names");
 
 	CPP_DBG("count = %d\n", count);
 	if (count == 0) {
@@ -2350,7 +2394,7 @@ static int msm_cpp_get_clk_info(struct cpp_device *cpp_dev,
 	}
 
 	for (i = 0; i < count; i++) {
-		rc = of_property_read_string_index(of_node, "qcom,clock-names",
+		rc = of_property_read_string_index(of_node, "clock-names",
 				i, &(cpp_clk_info[i].clk_name));
 		CPP_DBG("clock-names[%d] = %s\n", i, cpp_clk_info[i].clk_name);
 		if (rc < 0) {
@@ -2530,6 +2574,7 @@ static int cpp_probe(struct platform_device *pdev)
 	INIT_WORK((struct work_struct *)cpp_dev->work, msm_cpp_do_timeout_work);
 	cpp_dev->cpp_open_cnt = 0;
 	cpp_dev->is_firmware_loaded = 0;
+	cpp_dev->iommu_state = CPP_IOMMU_STATE_DETACHED;
 	cpp_timer.data.cpp_dev = cpp_dev;
 	atomic_set(&cpp_timer.used, 0);
 	cpp_dev->fw_name_bin = NULL;

@@ -225,7 +225,6 @@ static int mdss_mdp_writeback_format_setup(struct mdss_mdp_writeback_ctx *ctx,
 	mdp_wb_write(ctx, MDSS_MDP_REG_WB_DST_YSTRIDE0, ystride0);
 	mdp_wb_write(ctx, MDSS_MDP_REG_WB_DST_YSTRIDE1, ystride1);
 	mdp_wb_write(ctx, MDSS_MDP_REG_WB_OUT_SIZE, outsize);
-	mdp_wb_write(ctx, MDSS_MDP_REG_WB_DST_WRITE_CONFIG, 0x58);
 
 	return 0;
 }
@@ -313,14 +312,11 @@ static int mdss_mdp_writeback_prepare_rot(struct mdss_mdp_ctl *ctl, void *arg)
 		return -EINVAL;
 	}
 
-	if (ctx->bwc_mode || (ctx->rot90 &&
-			((mdata->mdp_rev < MDSS_MDP_HW_REV_102)
-			|| !fmt->is_yuv)))
-		format = mdss_mdp_get_rotator_dst_format(rot->format, 1,
-			ctx->bwc_mode);
+	if (ctx->bwc_mode || ctx->rot90)
+		format = mdss_mdp_get_rotator_dst_format(rot->format,
+				ctx->rot90, ctx->bwc_mode);
 	else
-		format = mdss_mdp_get_rotator_dst_format(rot->format, 0,
-			ctx->bwc_mode);
+		format = rot->format;
 
 	if (ctx->rot90) {
 		ctx->opmode |= BIT(5); /* ROT 90 */

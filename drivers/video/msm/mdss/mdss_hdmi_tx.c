@@ -91,6 +91,7 @@ enum {
 	DATA_BYTE_13,
 };
 
+#define IFRAME_PACKET_OFFSET 0x80
 /*
  * InfoFrame Type Code:
  * 0x0 - Reserved
@@ -255,7 +256,7 @@ static u8 hdmi_tx_avi_iframe_lut[HDMI_EVFRMT_END + 1][AVI_MAX_DATA_BYTES] = {
 	[HDMI_VFRMT_1920x1080p30_16_9] = {
 		0x10, 0x28, 0x00, 0x22, 0x00, 0x00, 0x00,
 		0x39, 0x04, 0x00, 0x00, 0x81, 0x07},
-	[HDMI_VFRMT_1920x1080p30_16_9] = {
+	[HDMI_VFRMT_1920x1080p25_16_9] = {
 		0x10, 0x28, 0x00, 0x21, 0x00, 0x00, 0x00,
 		0x39, 0x04, 0x00, 0x00, 0x81, 0x07},
 	[HDMI_VFRMT_640x480p60_4_3] = {
@@ -1517,7 +1518,9 @@ static void hdmi_tx_set_avi_infoframe(struct hdmi_tx_ctrl *hdmi_ctrl)
 
 	avi_iframe_data[DATA_BYTE_1] |= scaninfo & (BIT(1) | BIT(0));
 
-	sum = AVI_IFRAME_TYPE + AVI_IFRAME_VERSION + AVI_MAX_DATA_BYTES;
+	sum = IFRAME_PACKET_OFFSET + AVI_IFRAME_TYPE +
+		AVI_IFRAME_VERSION + AVI_MAX_DATA_BYTES;
+
 	for (i = 0; i < AVI_MAX_DATA_BYTES; i++)
 		sum += avi_iframe_data[i];
 	sum &= 0xFF;
@@ -2646,11 +2649,6 @@ static void hdmi_tx_power_off_work(struct work_struct *work)
 		return;
 	}
 
-	if (hdmi_ctrl->hdcp_feature_on && hdmi_ctrl->present_hdcp) {
-		DEV_DBG("%s: Turning off HDCP\n", __func__);
-		hdmi_hdcp_off(hdmi_ctrl->feature_data[HDMI_TX_FEAT_HDCP]);
-	}
-
 	if (hdmi_tx_enable_power(hdmi_ctrl, HDMI_TX_DDC_PM, false))
 		DEV_WARN("%s: Failed to disable ddc power\n", __func__);
 
@@ -3242,18 +3240,23 @@ static int hdmi_tx_panel_event_handler(struct mdss_panel_data *panel_data,
 		break;
 
 	case MDSS_EVENT_BLANK:
+		if (hdmi_ctrl->hdcp_feature_on && hdmi_ctrl->present_hdcp) {
+			DEV_DBG("%s: Turning off HDCP\n", __func__);
+			hdmi_hdcp_off(
+				hdmi_ctrl->feature_data[HDMI_TX_FEAT_HDCP]);
+		}
+		break;
+
+	case MDSS_EVENT_PANEL_OFF:
 		if (hdmi_ctrl->panel_power_on) {
 			rc = hdmi_tx_power_off(panel_data);
 			if (rc)
 				DEV_ERR("%s: hdmi_tx_power_off failed.rc=%d\n",
 					__func__, rc);
-
 		} else {
 			DEV_DBG("%s: hdmi is already powered off\n", __func__);
 		}
-		break;
 
-	case MDSS_EVENT_PANEL_OFF:
 		hdmi_ctrl->timing_gen_on = false;
 		break;
 

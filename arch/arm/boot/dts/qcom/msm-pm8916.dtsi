@@ -132,6 +132,7 @@
 			qcom,adc-bit-resolution = <15>;
 			qcom,adc-vdd-reference = <1800>;
 			qcom,vadc-poll-eoc;
+			qcom,pmic-revid = <&pm8916_revid>;
 
 			chan@8 {
 				label = "die_temp";
@@ -207,12 +208,11 @@
 			qcom,cool-bat-decidegc = <100>;
 			qcom,warm-bat-decidegc = <450>;
 			qcom,cool-bat-mv = <4100>;
+			qcom,warm-bat-mv = <4100>;
 			qcom,ibatmax-warm-ma = <360>;
 			qcom,ibatmax-cool-ma = <360>;
-			qcom,warm-bat-degc = <45>;
-			qcom,warm-bat-mv = <4100>;
-			qcom,batt-hot-percentage = <25>;
-			qcom,batt-cold-percentage = <85>;
+			qcom,batt-hot-percentage = <35>;
+			qcom,batt-cold-percentage = <70>;
 			qcom,tchg-mins = <152>;
 			qcom,resume-soc = <99>;
 			qcom,chg-vadc = <&pm8916_vadc>;
@@ -273,6 +273,7 @@
 			qcom,volatge-soc-timeout-ms = <60000>;
 			qcom,low-voltage-threshold = <3420000>;
 			qcom,s3-ocv-tolerence-uv = <1200>;
+			qcom,low-soc-fifo-length = <2>;
 			qcom,bms-vadc = <&pm8916_vadc>;
 
 			qcom,force-s3-on-suspend;

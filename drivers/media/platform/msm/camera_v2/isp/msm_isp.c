@@ -29,6 +29,7 @@
 #include "msm_isp_axi_util.h"
 #include "msm_isp_stats_util.h"
 #include "msm_sd.h"
+#include "msm_isp46.h"
 #include "msm_isp44.h"
 #include "msm_isp40.h"
 #include "msm_isp32.h"
@@ -36,6 +37,10 @@
 static struct msm_sd_req_vb2_q vfe_vb2_ops;
 
 static const struct of_device_id msm_vfe_dt_match[] = {
+	{
+		.compatible = "qcom,vfe46",
+		.data = &vfe46_hw_info,
+	},
 	{
 		.compatible = "qcom,vfe44",
 		.data = &vfe44_hw_info,
@@ -254,8 +259,32 @@ static int vfe_probe(struct platform_device *pdev)
 		kfree(vfe_dev);
 		return -EINVAL;
 	}
+	/* create secure context banks*/
+	if (vfe_dev->hw_info->num_iommu_secure_ctx) {
+		/*secure vfe layout*/
+		struct msm_iova_layout vfe_secure_layout = {
+			.partitions = &vfe_partition,
+			.npartitions = 1,
+			.client_name = "vfe_secure",
+			.domain_flags = 0,
+			.is_secure = MSM_IOMMU_DOMAIN_SECURE,
+		};
+		rc = msm_isp_create_secure_domain(vfe_dev->buf_mgr,
+			&vfe_secure_layout);
+		if (rc < 0) {
+			pr_err("%s: fail to create secure domain\n", __func__);
+			msm_sd_unregister(&vfe_dev->subdev);
+			kfree(vfe_dev);
+			return -EINVAL;
+		}
+	}
+
 	vfe_dev->buf_mgr->ops->register_ctx(vfe_dev->buf_mgr,
-		&vfe_dev->iommu_ctx[0], vfe_dev->hw_info->num_iommu_ctx);
+		&vfe_dev->iommu_ctx[0], &vfe_dev->iommu_secure_ctx[0],
+		vfe_dev->hw_info->num_iommu_ctx,
+		vfe_dev->hw_info->num_iommu_secure_ctx);
+
+	vfe_dev->buf_mgr->init_done = 1;
 	vfe_dev->vfe_open_cnt = 0;
 end:
 	return rc;

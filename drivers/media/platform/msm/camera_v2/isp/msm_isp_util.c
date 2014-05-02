@@ -238,7 +238,7 @@ int msm_isp_get_clk_info(struct vfe_device *vfe_dev,
 	struct device_node *of_node;
 	of_node = pdev->dev.of_node;
 
-	count = of_property_count_strings(of_node, "qcom,clock-names");
+	count = of_property_count_strings(of_node, "clock-names");
 
 	ISP_DBG("count = %d\n", count);
 	if (count == 0) {
@@ -253,7 +253,7 @@ int msm_isp_get_clk_info(struct vfe_device *vfe_dev,
 	}
 
 	for (i = 0; i < count; i++) {
-		rc = of_property_read_string_index(of_node, "qcom,clock-names",
+		rc = of_property_read_string_index(of_node, "clock-names",
 				i, &(vfe_clk_info[i].clk_name));
 		ISP_DBG("clock-names[%d] = %s\n", i, vfe_clk_info[i].clk_name);
 		if (rc < 0) {
@@ -268,7 +268,8 @@ int msm_isp_get_clk_info(struct vfe_device *vfe_dev,
 		return rc;
 	}
 	for (i = 0; i < count; i++) {
-		vfe_clk_info[i].clk_rate = (rates[i] == 0) ? -1 : rates[i];
+		vfe_clk_info[i].clk_rate =
+			(rates[i] == 0) ? (long)-1 : rates[i];
 		ISP_DBG("clk_rate[%d] = %ld\n", i, vfe_clk_info[i].clk_rate);
 	}
 	vfe_dev->num_clk = count;
@@ -548,6 +549,11 @@ static long msm_isp_ioctl_unlocked(struct v4l2_subdev *sd,
 	case VIDIOC_MSM_ISP_UPDATE_STREAM:
 		mutex_lock(&vfe_dev->core_mutex);
 		rc = msm_isp_update_axi_stream(vfe_dev, arg);
+		mutex_unlock(&vfe_dev->core_mutex);
+		break;
+	case VIDIOC_MSM_ISP_SMMU_ATTACH:
+		mutex_lock(&vfe_dev->core_mutex);
+		rc = msm_isp_smmu_attach(vfe_dev->buf_mgr, arg);
 		mutex_unlock(&vfe_dev->core_mutex);
 		break;
 	case MSM_SD_SHUTDOWN:
@@ -894,19 +900,22 @@ static int msm_isp_send_hw_cmd(struct vfe_device *vfe_dev,
 	}
 	case GET_MAX_CLK_RATE: {
 		int rc = 0;
+		unsigned long rate;
 
-		if (cmd_len < sizeof(unsigned long)) {
+		if (cmd_len != sizeof(__u32)) {
 			pr_err("%s:%d failed: invalid cmd len %u exp %zu\n",
 				__func__, __LINE__, cmd_len,
-				sizeof(unsigned long));
+				sizeof(__u32));
 			return -EINVAL;
 		}
-		rc = msm_isp_get_max_clk_rate(vfe_dev,
-			(unsigned long *)cfg_data);
+		rc = msm_isp_get_max_clk_rate(vfe_dev, &rate);
 		if (rc < 0) {
 			pr_err("%s:%d failed: rc %d\n", __func__, __LINE__, rc);
 			return -EINVAL;
 		}
+
+		*(__u32 *)cfg_data = (__u32)rate;
+
 		break;
 	}
 	case GET_ISP_ID: {

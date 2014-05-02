@@ -66,8 +66,8 @@
 			label = "uart-console";
 
 		uart_console_sleep: uart-console {
-				drive-strength = <16>;
-				bias-disable;
+				drive-strength = <2>;
+				bias-pull-down;
 			};
 		};
 
@@ -238,7 +238,7 @@
 			/* suspended state */
 			spi0_sleep: sleep {
 				drive-strength = <2>; /* 2 MA */
-				bias-disable = <0>; /* No PULL */
+				bias-pull-down; /* pull down */
 			};
 		};
 		spi0_cs0_active {

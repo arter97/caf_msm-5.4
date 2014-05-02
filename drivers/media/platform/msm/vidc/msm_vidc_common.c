@@ -1152,7 +1152,8 @@ static struct vb2_buffer *get_vb_from_device_addr(struct buf_queue *bufq,
 	q = &bufq->vb2_bufq;
 	mutex_lock(&bufq->lock);
 	list_for_each_entry(vb, &q->queued_list, queued_entry) {
-		if (vb->v4l2_planes[0].m.userptr == dev_addr) {
+		if (vb->v4l2_planes[0].m.userptr == dev_addr &&
+			vb->state == VB2_BUF_STATE_ACTIVE) {
 			found = 1;
 			dprintk(VIDC_DBG, "Found v4l2_buf index : %d\n",
 					vb->v4l2_buf.index);
@@ -2185,7 +2186,7 @@ static int set_output_buffers(struct msm_vidc_inst *inst,
 	int rc = 0;
 	struct msm_smem *handle;
 	struct internal_buf *binfo;
-	struct vidc_buffer_addr_info buffer_info;
+	struct vidc_buffer_addr_info buffer_info = {0};
 	u32 smem_flags = 0, buffer_size;
 	struct hal_buffer_requirements *output_buf, *extradata_buf;
 	int i;
@@ -2205,19 +2206,21 @@ static int set_output_buffers(struct msm_vidc_inst *inst,
 		output_buf->buffer_count_actual,
 		output_buf->buffer_size);
 
+	buffer_size = output_buf->buffer_size;
+
 	extradata_buf = get_buff_req_buffer(inst, HAL_BUFFER_EXTRADATA_OUTPUT);
-	if (!extradata_buf) {
+	if (extradata_buf) {
+		dprintk(VIDC_DBG,
+			"extradata: num = %d, size = %d\n",
+			extradata_buf->buffer_count_actual,
+			extradata_buf->buffer_size);
+		buffer_size += extradata_buf->buffer_size;
+	} else {
 		dprintk(VIDC_DBG,
 			"This extradata buffer not required, buffer_type: %x\n",
 			buffer_type);
-		return 0;
 	}
-	dprintk(VIDC_DBG,
-		"extradata: num = %d, size = %d\n",
-		extradata_buf->buffer_count_actual,
-		extradata_buf->buffer_size);
 
-	buffer_size = output_buf->buffer_size + extradata_buf->buffer_size;
 	if (inst->flags & VIDC_SECURE)
 		smem_flags |= SMEM_SECURE;
 
@@ -2255,7 +2258,10 @@ static int set_output_buffers(struct msm_vidc_inst *inst,
 			buffer_info.align_device_addr = handle->device_addr;
 			buffer_info.extradata_addr = handle->device_addr +
 				output_buf->buffer_size;
-			buffer_info.extradata_size = extradata_buf->buffer_size;
+			if (extradata_buf) {
+				buffer_info.extradata_size =
+					extradata_buf->buffer_size;
+			}
 			dprintk(VIDC_DBG, "Output buffer address: 0x%pa\n",
 					&buffer_info.align_device_addr);
 			dprintk(VIDC_DBG, "Output extradata address: 0x%pa\n",
@@ -3636,12 +3642,13 @@ int msm_vidc_check_session_supported(struct msm_vidc_inst *inst)
 				capability->height.min);
 			rc = -ENOTSUPP;
 		}
-		if (!rc) {
-			rc = call_hfi_op(hdev, capability_check,
-				inst->fmts[OUTPUT_PORT]->fourcc,
+		if (!rc && (inst->prop.width[CAPTURE_PORT] >
+			capability->width.max)) {
+			dprintk(VIDC_ERR,
+				"Unsupported width = %u supported max width = %u",
 				inst->prop.width[CAPTURE_PORT],
-				&capability->width.max,
-				&capability->height.max);
+				capability->width.max);
+				rc = -ENOTSUPP;
 		}
 
 		if (!rc && (inst->prop.height[CAPTURE_PORT]

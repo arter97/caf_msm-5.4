@@ -1177,7 +1177,7 @@ static int msm_cci_get_clk_info(struct cci_device *cci_dev,
 	struct device_node *of_node;
 	of_node = pdev->dev.of_node;
 
-	count = of_property_count_strings(of_node, "qcom,clock-names");
+	count = of_property_count_strings(of_node, "clock-names");
 	cci_dev->num_clk = count;
 
 	CDBG("%s: count = %d\n", __func__, count);
@@ -1194,7 +1194,7 @@ static int msm_cci_get_clk_info(struct cci_device *cci_dev,
 	}
 
 	for (i = 0; i < count; i++) {
-		rc = of_property_read_string_index(of_node, "qcom,clock-names",
+		rc = of_property_read_string_index(of_node, "clock-names",
 				i, &(cci_clk_info[i].clk_name));
 		CDBG("%s: clock-names[%d] = %s\n", __func__,
 			i, cci_clk_info[i].clk_name);
@@ -1210,7 +1210,8 @@ static int msm_cci_get_clk_info(struct cci_device *cci_dev,
 		return rc;
 	}
 	for (i = 0; i < count; i++) {
-		cci_clk_info[i].clk_rate = (rates[i] == 0) ? -1 : rates[i];
+		cci_clk_info[i].clk_rate = (rates[i] == 0) ?
+			(long)-1 : rates[i];
 		CDBG("%s: clk_rate[%d] = %ld\n", __func__, i,
 			cci_clk_info[i].clk_rate);
 	}
@@ -1308,7 +1309,7 @@ cci_no_resource:
 	return 0;
 }
 
-static int __exit msm_cci_exit(struct platform_device *pdev)
+static int msm_cci_exit(struct platform_device *pdev)
 {
 	struct v4l2_subdev *subdev = platform_get_drvdata(pdev);
 	struct cci_device *cci_dev =

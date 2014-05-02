@@ -127,6 +127,10 @@
 	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
 };
 
+&dsi_otm8019a_fwvga_video {
+       qcom,cont-splash-enabled;
+};
+
 &tlmm_pinmux {
 	apds9930_int_pin {
 		qcom,pins = <&gp 113>;
@@ -134,6 +138,37 @@
 		qcom,num-grp-pins = <1>;
 		label = "apds9930-irq";
 		apds9930_default: apds9930_default {
+			drive-strength = <6>;
+			bias-pull-up;
+		};
+	};
+
+	bma2x2_int1_pin {
+		qcom,pins = <&gp 112>;
+		qcom,num-grp-pins = <1>;
+		label = "bma2x2_int1_pin";
+		bma2x2_int1_default: int1_default {
+			  drive-strength = <6>;
+			  bias-pull-up;
+		};
+	};
+
+	bma2x2_int2_pin {
+		qcom,pins = <&gp 114>;
+		qcom,num-grp-pins = <1>;
+		label = "bma2x2_int2_pin";
+		bma2x2_int2_default: int2_default {
+			  drive-strength = <6>;
+			  bias-pull-up;
+		};
+	};
+
+	mpu6050_int_pin {
+		qcom,pins = <&gp 115>;
+		qcom,pin-func = <0>;
+		qcom,num-grp-pins = <1>;
+		label = "mpu6050-irq";
+		mpu6050_default: mpu6050_default {
 			drive-strength = <6>;
 			bias-pull-up;
 		};
@@ -160,5 +195,58 @@
 		avago,als_D = <142>;
 		avago,ga_value = <48>;
 	};
+
+	bosch@18 { /* Accelerometer sensor */
+		compatible = "bosch,bma2x2";
+		reg = <0x18>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&bma2x2_int1_default &bma2x2_int2_default>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <112 0x2002>;
+		vdd-supply = <&pm8916_l17>;
+		vio-supply = <&pm8916_l6>;
+		bosch,init-interval = <200>;
+		bosch,place = <2>;
+		bosch,gpio-int1 = <&msm_gpio 112 0x2002>;
+		bosch,gpio-int2 = <&msm_gpio 114 0x2002>;
+	};
+
+	mmc@30 { /* Magnetic field sensor */
+		compatible = "mmc,mmc3416x";
+		reg = <0x30>;
+		vdd-supply = <&pm8916_l17>;
+		vio-supply = <&pm8916_l6>;
+		mmc,dir = <1>;
+		mmc,auto-report;
+	};
+
+	mpu6050@68 {
+		compatible = "invn,mpu6050";
+		reg = <0x68>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&mpu6050_default>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <115 0x2>;
+		vdd-supply = <&pm8916_l17>;
+		vlogic-supply = <&pm8916_l16>;
+		invn,gpio-int = <&msm_gpio 115 0x2>;
+	};
 };
 
+&sdhc_2 {
+	qcom,nonremovable;
+
+	interrupts = <0 1>;
+	interrupt-map = <0 &intc 0 125 0
+		1 &intc 0 221 0>;
+	interrupt-names = "hc_irq", "pwr_irq";
+	/delete-property/ cd-gpios;
+};
+
+&usb_otg {
+        qcom,hsusb-otg-mode = <3>;
+        qcom,usbid-gpio = <&msm_gpio 110 0>;
+        pinctrl-names = "default";
+        pinctrl-0 = <&usbid_default>;
+        vbus_otg-supply = <&smb1360_otg_supply>;
+};

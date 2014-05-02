@@ -53,6 +53,27 @@ static inline u32 mdss_mdp_pipe_read(struct mdss_mdp_pipe *pipe, u32 reg)
 	return readl_relaxed(pipe->base + reg);
 }
 
+int mdss_mdp_pipe_panic_signal_ctrl(struct mdss_mdp_pipe *pipe, bool enable)
+{
+	uint32_t panic_robust_ctrl;
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+
+	if (!mdata->has_panic_ctrl)
+		goto end;
+
+	panic_robust_ctrl = readl_relaxed(mdata->mdp_base +
+			MMSS_MDP_PANIC_ROBUST_CTRL);
+	if (enable)
+		panic_robust_ctrl |= BIT(pipe->panic_ctrl_ndx);
+	else
+		panic_robust_ctrl &= ~BIT(pipe->panic_ctrl_ndx);
+	writel_relaxed(panic_robust_ctrl,
+				mdata->mdp_base + MMSS_MDP_PANIC_ROBUST_CTRL);
+
+end:
+	return 0;
+}
+
 static u32 mdss_mdp_smp_mmb_reserve(struct mdss_mdp_pipe_smp_map *smp_map,
 	size_t n)
 {
@@ -515,6 +536,37 @@ int mdss_mdp_pipe_map(struct mdss_mdp_pipe *pipe)
 	return 0;
 }
 
+/**
+ * mdss_mdp_qos_vbif_remapper_setup - Program the VBIF QoS remapper
+ *		registers based on real or non real time clients
+ * @mdata:	Pointer to the global mdss data structure.
+ * @pipe:	Pointer to source pipe struct to get xin id's.
+ * @is_realtime:	To determine if pipe's client is real or
+ *			non real time.
+ */
+static void mdss_mdp_qos_vbif_remapper_setup(struct mdss_data_type *mdata,
+			struct mdss_mdp_pipe *pipe, bool is_realtime)
+{
+	u32 mask, reg_val, i, vbif_qos;
+
+	if (mdata->npriority_lvl == 0)
+		return;
+
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+	for (i = 0; i < mdata->npriority_lvl; i++) {
+		reg_val = readl_relaxed(mdata->vbif_base +
+				MDSS_VBIF_QOS_REMAP_BASE + i*4);
+		mask = 0x3 << (pipe->xin_id * 2);
+		reg_val &= ~(mask);
+		vbif_qos = is_realtime ?
+			mdata->vbif_rt_qos[i] : mdata->vbif_nrt_qos[i];
+		reg_val |= vbif_qos << (pipe->xin_id * 2);
+		writel_relaxed(reg_val, mdata->vbif_base +
+				MDSS_VBIF_QOS_REMAP_BASE + i*4);
+	}
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
+}
+
 static struct mdss_mdp_pipe *mdss_mdp_pipe_init(struct mdss_mdp_mixer *mixer,
 	u32 type, u32 off, struct mdss_mdp_pipe *left_blend_pipe)
 {
@@ -523,6 +575,7 @@ static struct mdss_mdp_pipe *mdss_mdp_pipe_init(struct mdss_mdp_mixer *mixer,
 	struct mdss_mdp_pipe *pipe_pool = NULL;
 	u32 npipes;
 	bool pipe_share = false;
+	bool is_realtime;
 	u32 i, reg_val, force_off_mask;
 
 	if (!mixer || !mixer->ctl || !mixer->ctl->mdata)
@@ -577,6 +630,9 @@ static struct mdss_mdp_pipe *mdss_mdp_pipe_init(struct mdss_mdp_mixer *mixer,
 		return NULL;
 	}
 
+	if (pipe && mdss_mdp_pipe_panic_signal_ctrl(pipe, false))
+		return NULL;
+
 	if (pipe && mdss_mdp_pipe_is_sw_reset_available(mdata)) {
 		force_off_mask =
 			BIT(pipe->clk_ctrl.bit_off + CLK_FORCE_OFF_OFFSET);
@@ -598,6 +654,9 @@ static struct mdss_mdp_pipe *mdss_mdp_pipe_init(struct mdss_mdp_mixer *mixer,
 		mutex_init(&pipe->pp_res.hist.hist_mutex);
 		spin_lock_init(&pipe->pp_res.hist.hist_lock);
 		kref_init(&pipe->kref);
+		is_realtime = !((mixer->ctl->intf_num == MDSS_MDP_NO_INTF)
+				|| mixer->rotator_mode);
+		mdss_mdp_qos_vbif_remapper_setup(mdata, pipe, is_realtime);
 	} else if (pipe_share) {
 		/*
 		 * when there is no dedicated wfd blk, DMA pipe can be
@@ -724,15 +783,17 @@ static void mdss_mdp_pipe_free(struct kref *kref)
 
 	pr_debug("ndx=%x pnum=%d\n", pipe->ndx, pipe->num);
 
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+	mdss_mdp_pipe_panic_signal_ctrl(pipe, false);
+
 	if (pipe->play_cnt) {
-		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
 		mdss_mdp_pipe_fetch_halt(pipe);
 		mdss_mdp_pipe_sspp_term(pipe);
 		mdss_mdp_smp_free(pipe);
-		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 	} else {
 		mdss_mdp_smp_unreserve(pipe);
 	}
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 
 	pipe->flags = 0;
 	pipe->is_right_blend = false;
@@ -1345,6 +1406,9 @@ int mdss_mdp_pipe_queue_data(struct mdss_mdp_pipe *pipe,
 		if (pipe->type == MDSS_MDP_PIPE_TYPE_VIG)
 			mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_VIG_OP_MODE,
 			opmode);
+
+		if (mdss_mdp_panic_signal_supported(mdata, pipe))
+			mdss_mdp_pipe_panic_signal_ctrl(pipe, true);
 	}
 
 	if ((pipe->flags & MDP_VPU_PIPE) && (src_data == NULL ||

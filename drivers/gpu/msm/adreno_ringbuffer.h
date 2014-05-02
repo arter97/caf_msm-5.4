@@ -32,6 +32,7 @@ struct kgsl_device_private;
  * @buffer_desc: Pointer to the ringbuffer memory descriptor
  * @wptr: Local copy of the wptr offset
  * @global_ts: Current global timestamp for the ringbuffer
+ * @last_wptr: offset of the last H/W committed wptr
  */
 struct adreno_ringbuffer {
 	struct kgsl_device *device;
@@ -40,17 +41,8 @@ struct adreno_ringbuffer {
 	unsigned int sizedwords;
 	unsigned int wptr;
 	unsigned int global_ts;
+	unsigned int last_wptr;
 };
-
-
-#define GSL_RB_WRITE(device, ring, gpuaddr, data) \
-	do { \
-		*ring = data; \
-		wmb(); \
-		kgsl_cffdump_setmem(device, gpuaddr, data, 4); \
-		ring++; \
-		gpuaddr += sizeof(uint); \
-	} while (0)
 
 /* enable timestamp (...scratch0) memory shadowing */
 #define GSL_RB_MEMPTRS_SCRATCH_MASK 0x1
@@ -94,9 +86,9 @@ unsigned int *adreno_ringbuffer_allocspace(struct adreno_ringbuffer *rb,
 						struct adreno_context *context,
 						unsigned int numcmds);
 
-int adreno_ringbuffer_read_pfp_ucode(struct kgsl_device *device);
+void adreno_ringbuffer_read_pfp_ucode(struct kgsl_device *device);
 
-int adreno_ringbuffer_read_pm4_ucode(struct kgsl_device *device);
+void adreno_ringbuffer_read_pm4_ucode(struct kgsl_device *device);
 
 static inline int adreno_ringbuffer_count(struct adreno_ringbuffer *rb,
 	unsigned int rptr)

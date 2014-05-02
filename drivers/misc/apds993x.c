@@ -73,6 +73,11 @@
 /*
  * Defines
  */
+#define	APDS9930_ID	0x30
+#define	APDS9931_ID	0x39
+#define	APDS9900_ID	0x29
+#define	APDS9901_ID	0x20
+
 #define APDS993X_ENABLE_REG	0x00
 #define APDS993X_ATIME_REG	0x01
 #define APDS993X_PTIME_REG	0x02
@@ -720,7 +725,7 @@ static void apds993x_change_ps_threshold(struct i2c_client *client)
 		data->ps_detection = 0;
 
 		/* NEAR-to-FAR detection */
-		input_report_abs(data->input_dev_ps, ABS_DISTANCE, 5);
+		input_report_abs(data->input_dev_ps, ABS_DISTANCE, 1);
 		input_sync(data->input_dev_ps);
 
 		i2c_smbus_write_word_data(client,
@@ -787,7 +792,7 @@ static void apds993x_change_als_threshold(struct i2c_client *client)
 		 * from the PS
 		 */
 		/* NEAR-to-FAR detection */
-		input_report_abs(data->input_dev_ps, ABS_DISTANCE, 5);
+		input_report_abs(data->input_dev_ps, ABS_DISTANCE, 1);
 		input_sync(data->input_dev_ps);
 
 		i2c_smbus_write_word_data(client,
@@ -937,7 +942,7 @@ static void apds993x_als_polling_work_handler(struct work_struct *work)
 		 * from the PS
 		 */
 		/* NEAR-to-FAR detection */
-		input_report_abs(data->input_dev_ps, ABS_DISTANCE, 5);
+		input_report_abs(data->input_dev_ps, ABS_DISTANCE, 1);
 		input_sync(data->input_dev_ps);
 
 		i2c_smbus_write_word_data(client,
@@ -1240,7 +1245,8 @@ static int apds993x_enable_ps_sensor(struct i2c_client *client, int val)
 			apds993x_set_enable(client,0);
 
 			/* init threshold for proximity */
-			apds993x_set_pilt(client, 0);
+			apds993x_set_pilt(client,
+					apds993x_ps_detection_threshold);
 			apds993x_set_piht(client,
 					apds993x_ps_detection_threshold);
 			/*calirbation*/
@@ -1831,12 +1837,24 @@ static int apds993x_init_client(struct i2c_client *client)
 		return err;
 
 	id = i2c_smbus_read_byte_data(client, CMD_BYTE|APDS993X_ID_REG);
-	if (id == 0x30) {
-		pr_info("%s: APDS9931\n", __func__);
-	} else if (id == 0x39) {
-		pr_info("%s: APDS9930\n", __func__);
-	} else {
-		pr_info("%s: Neither APDS9931 nor APDS9930\n", __func__);
+	switch (id) {
+	case APDS9931_ID:
+		dev_dbg(&client->dev, "APDS9931\n");
+		break;
+
+	case APDS9930_ID:
+		dev_dbg(&client->dev, "APDS9930\n");
+		break;
+
+	case APDS9900_ID:
+		dev_dbg(&client->dev, "APDS9900\n");
+		break;
+
+	case APDS9901_ID:
+		dev_dbg(&client->dev, "APDS9931\n");
+		break;
+	default:
+		dev_err(&client->dev, "Neither APDS993x nor APDS990x\n");
 		return -ENODEV;
 	}
 
@@ -2342,7 +2360,7 @@ static int apds993x_probe(struct i2c_client *client,
 	set_bit(EV_ABS, data->input_dev_ps->evbit);
 
 	input_set_abs_params(data->input_dev_als, ABS_MISC, 0, 30000, 0, 0);
-	input_set_abs_params(data->input_dev_ps, ABS_DISTANCE, 0, 5, 0, 0);
+	input_set_abs_params(data->input_dev_ps, ABS_DISTANCE, 0, 1, 0, 0);
 
 	data->input_dev_als->name = "light";
 	data->input_dev_ps->name = "proximity";
@@ -2474,7 +2492,7 @@ MODULE_DEVICE_TABLE(i2c, apds993x_id);
 
 static struct of_device_id apds993X_match_table[] = {
 	{ .compatible = "avago,apds9930",},
-	{ },
+	{ .compatible = "avago,apds9900",},
 };
 
 static const struct dev_pm_ops apds993x_pm_ops = {

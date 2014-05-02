@@ -282,6 +282,13 @@
 				"pcie_0_ldo";
 		max-clock-frequency-hz = <125000000>, <0>, <1000000>,
 						<0>, <0>, <0>, <0>;
+
+		qcom,msm-bus,name = "pcie0";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<45 512 0 0>,
+				<45 512 500 800>;
 	};
 
 	spi_2: spi@f9924000 { /* BLSP1 QUP2 */
@@ -491,7 +498,8 @@
 						<61 512 0 0>,
 						<61 512 240000 960000>;
 		qcom,reset_hsphy_sleep_clk_on_init;
-		qcom,no-power-collapse;
+		qcom,power-collapse-on-cable-disconnect;
+		qcom,por-after-power-collapse;
 
 		dwc3@f9200000 {
 				compatible = "synopsys,dwc3";
@@ -532,6 +540,7 @@
 		vdda18-supply = <&pmd9635_l8>;
 		qcom,vdd-voltage-level = <0 900000 1050000>;
 		qcom,vbus-valid-override;
+		qcom,ext-vbus-id;
 	};
 
 	dbm_1p5: dbm@f92f8000 {
@@ -1083,7 +1092,8 @@
 		qcom,msm-cpudai-auxpcm-sync = <1>, <1>;
 		qcom,msm-cpudai-auxpcm-frame = <5>, <4>;
 		qcom,msm-cpudai-auxpcm-quant = <2>, <2>;
-		qcom,msm-cpudai-auxpcm-slot = <1>, <1>;
+		qcom,msm-cpudai-auxpcm-num-slots = <1>, <1>;
+		qcom,msm-cpudai-auxpcm-slot-mapping = <1>, <1>;
 		qcom,msm-cpudai-auxpcm-data = <0>, <0>;
 		qcom,msm-cpudai-auxpcm-pcm-clk-rate = <2048000>, <2048000>;
 		qcom,msm-auxpcm-interface = "primary";
@@ -1109,6 +1119,7 @@
 		vdd-wlan-supply = <&wlan_vreg>;
 		reg = <0x06d00000 0x100000>;
 		reg-names = "ramdump";
+		qcom,notify-modem-status;
 	};
 };
 

@@ -881,7 +881,7 @@ int mdss_dsi_cmds_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 
 	ctrl_restore = __mdss_dsi_cmd_mode_config(ctrl, 1);
 
-	if (rlen == 0) {
+	if (rlen <= 2) {
 		short_response = 1;
 		rx_byte = 4;
 	} else {
@@ -1267,7 +1267,11 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 	 * also, axi bus bandwidth need since dsi controller will
 	 * fetch dcs commands from axi bus
 	 */
-	mdss_bus_bandwidth_ctrl(1);
+	ret = mdss_bus_bandwidth_ctrl(1);
+	if (ret) {
+		pr_err("bus bandwidth request failed ret=%d\n", ret);
+		goto need_lock;
+	}
 
 	pr_debug("%s:  from_mdp=%d pid=%d\n", __func__, from_mdp, current->pid);
 	mdss_dsi_clk_ctrl(ctrl, DSI_ALL_CLKS, 1);
@@ -1352,11 +1356,11 @@ static int dsi_event_thread(void *data)
 		}
 
 		if (todo & DSI_EV_MDP_BUSY_RELEASE) {
-			spin_lock(&ctrl->mdp_lock);
+			spin_lock_irqsave(&ctrl->mdp_lock, flag);
 			ctrl->mdp_busy = false;
 			mdss_dsi_disable_irq_nosync(ctrl, DSI_MDP_TERM);
 			complete(&ctrl->mdp_comp);
-			spin_unlock(&ctrl->mdp_lock);
+			spin_unlock_irqrestore(&ctrl->mdp_lock, flag);
 
 			/* enable dsi error interrupt */
 			mdss_dsi_err_intr_ctrl(ctrl, DSI_INTR_ERROR_MASK, 1);
@@ -1486,7 +1490,6 @@ irqreturn_t mdss_dsi_isr(int irq, void *ptr)
 	u32 isr;
 	struct mdss_dsi_ctrl_pdata *ctrl =
 			(struct mdss_dsi_ctrl_pdata *)ptr;
-	struct mdss_dsi_ctrl_pdata *mctrl = NULL;
 
 	if (!ctrl->ctrl_base) {
 		pr_err("%s:%d DSI base adr no Initialized",
@@ -1496,20 +1499,6 @@ irqreturn_t mdss_dsi_isr(int irq, void *ptr)
 
 	isr = MIPI_INP(ctrl->ctrl_base + 0x0110);/* DSI_INTR_CTRL */
 	MIPI_OUTP(ctrl->ctrl_base + 0x0110, isr);
-
-	if (mdss_dsi_is_slave_ctrl(ctrl)) {
-		mctrl = mdss_dsi_get_master_ctrl();
-		if (mctrl) {
-			u32 isr0;
-			isr0 = MIPI_INP(mctrl->ctrl_base + 0x0110);
-			if (isr0 & DSI_INTR_CMD_DMA_DONE)
-				MIPI_OUTP(mctrl->ctrl_base + 0x0110,
-					DSI_INTR_CMD_DMA_DONE);
-		} else {
-			pr_warn("%s: Unable to get master control\n",
-				__func__);
-		}
-	}
 
 	pr_debug("%s: ndx=%d isr=%x\n", __func__, ctrl->ndx, isr);
 
@@ -1528,10 +1517,13 @@ irqreturn_t mdss_dsi_isr(int irq, void *ptr)
 
 	if (isr & DSI_INTR_CMD_DMA_DONE) {
 		MDSS_XLOG(ctrl->ndx, ctrl->mdp_busy, isr, 0x98);
-		spin_lock(&ctrl->mdp_lock);
-		mdss_dsi_disable_irq_nosync(ctrl, DSI_CMD_TERM);
-		complete(&ctrl->dma_comp);
-		spin_unlock(&ctrl->mdp_lock);
+		/* at broadcast mode, only slave's irq enabled */
+		if (!mdss_dsi_is_master_ctrl(ctrl)) {
+			spin_lock(&ctrl->mdp_lock);
+			mdss_dsi_disable_irq_nosync(ctrl, DSI_CMD_TERM);
+			complete(&ctrl->dma_comp);
+			spin_unlock(&ctrl->mdp_lock);
+		}
 	}
 
 	if (isr & DSI_INTR_CMD_MDP_DONE) {
