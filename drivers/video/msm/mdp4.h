@@ -713,6 +713,7 @@ void mdp4_dsi_video_overlay_blt(struct msm_fb_data_type *mfd,
 void mdp4_dsi_video_base_swap(int cndx, struct mdp4_overlay_pipe *pipe);
 void mdp4_dsi_video_free_base_pipe(struct msm_fb_data_type *mfd);
 void mdp4_dsi_cmd_free_base_pipe(struct msm_fb_data_type *mfd);
+struct mdp4_overlay_pipe *mdp4_lcdc_alloc_base_pipe(void);
 void mdp4_lcdc_free_base_pipe(struct msm_fb_data_type *mfd);
 void mdp4_dtv_free_base_pipe(struct msm_fb_data_type *mfd);
 
