@@ -3501,7 +3501,9 @@ static void __init register_i2c_devices(void)
 	else if (machine_is_apq8064_cdp()
 		|| machine_is_apq8064_adp_2()) {
 		mach_mask = I2C_SURF;
-		apq8064_i2c_devices[1].bus = APQ_8064_GSBI1_QUP_I2C_BUS_ID;
+		if (machine_is_apq8064_adp_2())
+			apq8064_i2c_devices[1].bus =
+					APQ_8064_GSBI1_QUP_I2C_BUS_ID;
 	} else if (machine_is_apq8064_mtp())
 		mach_mask = I2C_FFA;
 	else if (machine_is_apq8064_liquid())
