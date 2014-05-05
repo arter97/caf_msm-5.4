@@ -171,6 +171,8 @@ struct list_head mdp_hist_lut_list;
 DEFINE_MUTEX(mdp_hist_lut_list_mutex);
 uint32_t last_lut[MDP_HIST_LUT_SIZE];
 
+static int mdp_on_init_cnt;
+
 uint32_t mdp_block2base(uint32_t block)
 {
 	uint32_t base = 0x0;
@@ -2363,19 +2365,29 @@ static int mdp_fps_level_change(struct platform_device *pdev, u32 fps_level)
 	ret = panel_next_fps_level_change(pdev, fps_level);
 	return ret;
 }
+
 static int mdp_off(struct platform_device *pdev)
 {
 	int ret = 0;
 	struct msm_fb_data_type *mfd = platform_get_drvdata(pdev);
 
 	pr_debug("%s:+\n", __func__);
-	mdp_histogram_ctrl_all(FALSE);
 	atomic_set(&vsync_cntrl.suspend, 1);
 	atomic_set(&vsync_cntrl.vsync_resume, 0);
 	complete_all(&vsync_cntrl.vsync_wait);
 
 	mdp_clk_ctrl(1);
-	mdp_lut_status_backup();
+
+	if (mdp_on_init_cnt) {
+		mdp_on_init_cnt--;
+		if (!mdp_on_init_cnt) {
+			mdp_histogram_ctrl_all(FALSE);
+			mdp_lut_status_backup();
+		}
+	} else {
+		pr_err("mdp was not initialized\n");
+	}
+
 	ret = panel_next_early_off(pdev);
 
 	if (mfd->panel.type == MIPI_CMD_PANEL)
@@ -2446,16 +2458,19 @@ static int mdp_on(struct platform_device *pdev)
 		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 		mdp_clk_ctrl(1);
 		mdp_bus_scale_restore_request();
-		mdp4_hw_init();
 
-		/* Initialize HistLUT to last LUT */
-		for (i = 0; i < MDP_HIST_LUT_SIZE; i++) {
-			MDP_OUTP(MDP_BASE + 0x94800 + i*4, last_lut[i]);
-			MDP_OUTP(MDP_BASE + 0x94C00 + i*4, last_lut[i]);
+		if (!mdp_on_init_cnt) {
+			mdp4_hw_init();
+			/* Initialize HistLUT to last LUT */
+			for (i = 0; i < MDP_HIST_LUT_SIZE; i++) {
+				MDP_OUTP(MDP_BASE + 0x94800 + i*4, last_lut[i]);
+				MDP_OUTP(MDP_BASE + 0x94C00 + i*4, last_lut[i]);
+			}
+			mdp_lut_status_restore();
+			outpdw(MDP_BASE + 0x0038, mdp4_display_intf);
+			mdp_on_init_cnt++;
 		}
 
-		mdp_lut_status_restore();
-		outpdw(MDP_BASE + 0x0038, mdp4_display_intf);
 		if (mfd->panel.type == MIPI_CMD_PANEL) {
 			mdp_vsync_cfg_regs(mfd, FALSE);
 			mdp4_dsi_cmd_on(pdev);
