@@ -3071,6 +3071,9 @@ static int mdp_probe(struct platform_device *pdev)
 		if (mfd->panel_info.pdest == DISPLAY_1) {
 			if_no = PRIMARY_INTF_SEL;
 			mfd->dma = &dma2_data;
+		} else if (mfd->panel_info.pdest == DISPLAY_4) {
+			if_no = SECONDARY_INTF_SEL;
+			mfd->dma = &dma2_data;
 		} else {
 			if_no = EXTERNAL_INTF_SEL;
 			mfd->dma = &dma_e_data;

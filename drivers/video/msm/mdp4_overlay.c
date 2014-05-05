@@ -2659,6 +2659,9 @@ static struct mdp4_overlay_pipe *mdp4_overlay_alloc_base_pipe(
 	struct mdp4_overlay_pipe *pipe = NULL;
 
 	switch (mfd->panel.type) {
+	case MIPI_VIDEO_PANEL:
+		pipe = mdp4_dsi_video_alloc_base_pipe();
+		break;
 	case LVDS_PANEL:
 	case LCDC_PANEL:
 		pipe = mdp4_lcdc_alloc_base_pipe();
@@ -4170,6 +4173,8 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
 		ctrl->mixer3_played++;
 		if (ctrl->panel_mode & MDP4_PANEL_LCDC)
 			mdp4_lcdc_pipe_queue(0, pipe);
+		else if (ctrl->panel_mode & MDP4_PANEL_DSI_VIDEO_DMA_S)
+			mdp4_dsi_video_pipe_queue(0, pipe);
 	}
 
 end:
