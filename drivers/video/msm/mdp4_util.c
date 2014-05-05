@@ -238,18 +238,15 @@ void mdp4_overlay_cfg(int overlayer, int blt_mode, int refresh, int direct_out)
 void mdp4_display_intf_sel(int output, ulong intf)
 {
 	ulong bits, mask, data;
-	/* MDP cmd block enable */
-	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+
+	mdp_clk_ctrl(1);
 
 	bits = inpdw(MDP_BASE + 0x0038);	/* MDP_DISP_INTF_SEL */
 
 	if (intf == DSI_VIDEO_INTF) {
 		data = 0x40;	/* bit 6 */
-		intf = MDDI_LCDC_INTF;
-		if (output == SECONDARY_INTF_SEL) {
-			MSM_FB_INFO("%s: Illegal INTF selected, output=%d \
-				intf=%d\n", __func__, output, (int)intf);
-		}
+		if (output == SECONDARY_INTF_SEL)
+			intf = 0x01;
 	} else if (intf == DSI_CMD_INTF) {
 		data = 0x80;	/* bit 7 */
 		intf = MDDI_INTF;
@@ -269,7 +266,7 @@ void mdp4_display_intf_sel(int output, ulong intf)
 		mask <<= 4;
 		break;
 	case SECONDARY_INTF_SEL:
-		intf &= 0x02;	/* only MDDI and EBI2 support */
+		intf &= 0x3;
 		intf <<= 2;
 		mask <<= 2;
 		break;
@@ -284,10 +281,11 @@ void mdp4_display_intf_sel(int output, ulong intf)
 	bits |= intf;
 
 	outpdw(MDP_BASE + 0x0038, bits);	/* MDP_DISP_INTF_SEL */
-	/* MDP cmd block disable */
-	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
-  MSM_FB_DEBUG("mdp4_display_intf_sel: 0x%x\n", (int)inpdw(MDP_BASE + 0x0038));
+	mdp_clk_ctrl(0);
+
+	pr_debug("mdp4_display_intf_sel: 0x%x\n",
+		(int)inpdw(MDP_BASE + 0x0038));
 }
 
 unsigned long mdp4_display_status(void)
