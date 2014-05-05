@@ -2557,6 +2557,68 @@ struct mdp4_overlay_pipe *mdp4_overlay_pipe_alloc(int ptype, int mixer)
 	return NULL;
 }
 
+struct mdp4_overlay_pipe *mdp4_alloc_base_primary(struct msm_fb_data_type
+	*mfd)
+{
+	struct mdp4_overlay_pipe *pipe = NULL;
+	int ret, ptype;
+
+	ptype = mdp4_overlay_format2type(mfd->fb_imgType);
+	if (ptype < 0) {
+		pr_err("%s: format2type failed\n", __func__);
+		goto p_err;
+	}
+
+	pipe = mdp4_overlay_pipe_alloc(ptype, MDP4_MIXER0);
+	if (!pipe) {
+		pr_err("%s: pipe_alloc failed\n", __func__);
+		goto p_err;
+	}
+
+	pipe->pipe_used++;
+	pipe->mixer_stage  = MDP4_MIXER_STAGE_BASE;
+	pipe->mixer_num  = MDP4_MIXER0;
+	pipe->src_format = mfd->fb_imgType;
+
+	pr_info("pipe used=%d mixer_num=%d stage=%d fmt=%d\n",
+		pipe->pipe_used, pipe->mixer_stage, pipe->mixer_num,
+		pipe->src_format);
+
+	ret = mdp4_overlay_format2pipe(pipe);
+	if (ret < 0)
+		pr_err("%s: format2pipe failed\n", __func__);
+
+	mdp4_init_writeback_buf(mfd, MDP4_MIXER0);
+	pipe->ov_blt_addr = 0;
+	pipe->dma_blt_addr = 0;
+
+p_err:
+	return pipe;
+}
+
+struct mdp4_overlay_pipe *mdp4_alloc_base_secondary(struct msm_fb_data_type
+	*mfd)
+{
+	struct mdp4_overlay_pipe *pipe ;
+
+	pipe = mdp4_overlay_pipe_alloc(OVERLAY_TYPE_DMAS, MDP4_MIXER_NONE);
+
+	if (!pipe) {
+		pr_err("%s: dmas pipe_alloc failed\n", __func__);
+		goto s_err;
+	}
+
+	pipe->pipe_used++;
+	pipe->mixer_stage  = MDP4_MIXER_STAGE_NONE;
+	pipe->mixer_num  = MDP4_MIXER_NONE;
+	pipe->src_format = mfd->fb_imgType;
+
+	pr_debug("dma_s used=%d ndx=%d mixer_num=%d stage=%d fmt=%d\n",
+		pipe->pipe_used, pipe->pipe_ndx, pipe->mixer_num,
+		pipe->mixer_stage, pipe->src_format);
+s_err:
+	return pipe;
+}
 
 void mdp4_overlay_pipe_free(struct mdp4_overlay_pipe *pipe, int all)
 {
