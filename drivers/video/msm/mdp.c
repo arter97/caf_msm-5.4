@@ -3191,7 +3191,12 @@ static int mdp_probe(struct platform_device *pdev)
 			mdp4_display_intf_sel(EXTERNAL_INTF_SEL, LCDC_RGB_INTF);
 		} else {
 			mfd->dma = &dma2_data;
-			mdp4_display_intf_sel(PRIMARY_INTF_SEL, LCDC_RGB_INTF);
+			if (mfd->panel_info.pdest == DISPLAY_4)
+				mdp4_display_intf_sel(SECONDARY_INTF_SEL,
+					LCDC_RGB_INTF);
+			else
+				mdp4_display_intf_sel(PRIMARY_INTF_SEL,
+					LCDC_RGB_INTF);
 		}
 		/*
 		 * There is just a single underrun when lcdc timing
