@@ -171,6 +171,9 @@ static struct pm8xxx_gpio_init pm8921_mpq8064_hrd_gpios[] __initdata = {
 static struct pm8xxx_gpio_init pm8921_apq8064_adp_2_gpios[] __initdata = {
 	PM8921_GPIO_INIT(37, PM_GPIO_DIR_OUT, 0, 1, PM_GPIO_PULL_NO, 2,
 		PM_GPIO_STRENGTH_HIGH, PM_GPIO_FUNC_1, 0, 0),
+	PM8921_GPIO_INIT(23, PM_GPIO_DIR_OUT, 0, 0, PM_GPIO_PULL_NO,
+		PM_GPIO_VIN_VPH, PM_GPIO_STRENGTH_HIGH, PM_GPIO_FUNC_NORMAL,
+		0, 0),
 };
 
 /* Initial PM8917 GPIO configurations */
