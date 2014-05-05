@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -167,7 +167,9 @@ static int mipi_dsi_on(struct platform_device *pdev)
 	if (mipi_dsi_pdata && mipi_dsi_pdata->dsi_power_save)
 		mipi_dsi_pdata->dsi_power_save(1);
 
-	cont_splash_clk_ctrl(0);
+	if (pinfo->pdest != DISPLAY_4)
+		cont_splash_clk_ctrl(0);
+
 	mipi_dsi_prepare_ahb_clocks();
 
 	mipi_dsi_ahb_ctrl(1);
@@ -605,8 +607,10 @@ static int mipi_dsi_probe(struct platform_device *pdev)
 
 	esc_byte_ratio = pinfo->mipi.esc_byte_ratio;
 
-	if (!mfd->cont_splash_done)
-		cont_splash_clk_ctrl(1);
+	if (pinfo->pdest != DISPLAY_4) {
+		if (!mfd->cont_splash_done)
+			cont_splash_clk_ctrl(1);
+	}
 
 return 0;
 
