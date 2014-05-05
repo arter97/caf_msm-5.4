@@ -906,12 +906,13 @@ uint32_t mdp4_ss_table_value(int8_t param, int8_t index);
 void mdp4_overlay_borderfill_stage_down(struct mdp4_overlay_pipe *pipe);
 
 #ifdef CONFIG_FB_MSM_MDP303
-static inline int mdp4_overlay_borderfill_supported(void)
+static inline boolean mdp4_overlay_borderfill_supported(struct msm_fb_data_type
+	*mfd)
 {
 	return 0;
 }
 #else
-int mdp4_overlay_borderfill_supported(void);
+boolean mdp4_overlay_borderfill_supported(struct msm_fb_data_type *mfd);
 #endif
 
 int mdp4_overlay_writeback_on(struct platform_device *pdev);

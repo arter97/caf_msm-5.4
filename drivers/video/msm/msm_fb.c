@@ -60,7 +60,6 @@
 static unsigned char *fbram;
 static unsigned char *fbram_phys;
 static int fbram_size;
-static boolean bf_supported;
 /* Set backlight on resume after 50 ms after first
  * pan display on the panel. This is to avoid panel specific
  * transients during resume.
@@ -458,7 +457,7 @@ static int msm_fb_probe(struct platform_device *pdev)
 	mfd->overlay_play_enable = 1;
 #endif
 
-	bf_supported = mdp4_overlay_borderfill_supported();
+	mfd->bf_supported = mdp4_overlay_borderfill_supported(mfd);
 
 	rc = msm_fb_register(mfd);
 	if (rc)
@@ -1433,7 +1432,7 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 	 * calculate smem_len based on max size of two supplied modes.
 	 * Only fb0 has mem. fb1 and fb2 don't have mem.
 	 */
-	if (!bf_supported || mfd->index == 0)
+	if (!mfd->bf_supported || mfd->index == 0)
 		fix->smem_len = MAX((msm_fb_line_length(mfd->index,
 							panel_info->xres,
 							bpp) *
@@ -1544,7 +1543,7 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 	} else
 		fbram_offset = 0;
 
-	if ((!bf_supported || mfd->index == 0) && fbram)
+	if ((!mfd->bf_supported || mfd->index == 0) && fbram)
 		if (fbram_size < fix->smem_len) {
 			pr_err("error: no more framebuffer memory!\n");
 			return -ENOMEM;
@@ -1579,7 +1578,7 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 					    &(mfd->rotator_iova));
 	}
 
-	if ((!bf_supported || mfd->index == 0) && fbi->screen_base)
+	if ((!mfd->bf_supported || mfd->index == 0) && fbi->screen_base)
 		memset(fbi->screen_base, 0x0, fix->smem_len);
 
 	mfd->op_enable = TRUE;
@@ -1640,7 +1639,7 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 
 #ifdef CONFIG_FB_MSM_LOGO
 	/* Flip buffer */
-	if (!load_565rle_image(INIT_IMAGE_FILE, bf_supported))
+	if (!load_565rle_image(INIT_IMAGE_FILE, mfd->bf_supported))
 		;
 #endif
 	ret = 0;
@@ -1812,7 +1811,7 @@ static int msm_fb_open(struct fb_info *info, int user)
 	}
 
 	if (!mfd->ref_cnt) {
-		if (!bf_supported ||
+		if (!mfd->bf_supported ||
 			(info->node != 1 && info->node != 2))
 			mdp_set_dma_pan_info(info, NULL, TRUE);
 		else
@@ -1987,7 +1986,7 @@ static int msm_fb_pan_display_ex(struct fb_info *info,
 		/*
 		 * If framebuffer is 2, io pan display is not allowed.
 		 */
-		if (bf_supported && info->node == 2) {
+		if (mfd->bf_supported && info->node == 2) {
 			pr_err("%s: no pan display for fb%d!",
 				   __func__, info->node);
 			return -EPERM;
@@ -2069,7 +2068,7 @@ static int msm_fb_pan_display_sub(struct fb_var_screeninfo *var,
 	/*
 	 * If framebuffer is 2, io pen display is not allowed.
 	 */
-	if (bf_supported && info->node == 2) {
+	if (mfd->bf_supported && info->node == 2) {
 		pr_err("%s: no pan display for fb%d!",
 		       __func__, info->node);
 		return -EPERM;
@@ -2278,7 +2277,7 @@ static int msm_fb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 	if ((var->xres_virtual <= 0) || (var->yres_virtual <= 0))
 		return -EINVAL;
 
-	if (!bf_supported ||
+	if (!mfd->bf_supported ||
 		(info->node != 1 && info->node != 2))
 		if (info->fix.smem_len <
 		    (var->xres_virtual*
@@ -3140,9 +3139,10 @@ static int msmfb_blit(struct fb_info *info, void __user *p)
 	const int MAX_LIST_WINDOW = 16;
 	struct mdp_blit_req req_list[MAX_LIST_WINDOW];
 	struct mdp_blit_req_list req_list_header;
-
 	int count, i, req_list_count;
-	if (bf_supported &&
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
+
+	if (mfd->bf_supported &&
 		(info->node == 1 || info->node == 2)) {
 		pr_err("%s: no pan display for fb%d.",
 		       __func__, info->node);
