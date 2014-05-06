@@ -1473,9 +1473,13 @@ irqreturn_t mdss_dsi_isr(int irq, void *ptr)
 		mctrl = mdss_dsi_get_master_ctrl();
 		if (mctrl) {
 			u32 isr0;
-			isr0 = MIPI_INP(mctrl->ctrl_base 
-						+ 0x0110);/* DSI_INTR_CTRL */
-			MIPI_OUTP(mctrl->ctrl_base + 0x0110, isr0);
+			isr0 = MIPI_INP(mctrl->ctrl_base + 0x0110);
+			if (isr0 & DSI_INTR_CMD_DMA_DONE)
+				MIPI_OUTP(mctrl->ctrl_base + 0x0110,
+					DSI_INTR_CMD_DMA_DONE);
+		} else {
+			pr_warn("%s: Unable to get master control\n",
+				__func__);
 		}
 	}
 

@@ -11,7 +11,7 @@ Required properties:
 - reg-names: 				A list of strings that map in order to the list of regs.
 					"dsi_ctrl" - MDSS DSI controller register region
 					"dsi_phy" - MDSS DSI PHY register region
-					"mmss_misc_phys" - Register region for MMSS DSI clamps	
+					"mmss_misc_phys" - Register region for MMSS DSI clamps
 - vdd-supply:				Phandle for vdd regulator device node.
 - vddio-supply:				Phandle for vdd-io regulator device node.
 - vdda-supply:				Phandle for vreg regulator device node.
