@@ -288,6 +288,7 @@ Optional properties:
 - qcom,mdss-tear-check-frame-rate:	Specify the value to be a real frame rate(fps) x 100 factor to tune the
 					timing of TE simulation with more precision.
 					The default value is 6000 with 60 fps.
+- qcom,esd-check-enabled:		Boolean used to enable ESD recovery feature.
 
 Note, if a given optional qcom,* binding is not present, then the driver will configure
 the default values specified.
@@ -392,5 +393,6 @@ Example:
 		qcom,mdss-tear-check-start-pos = <1280>;
 		qcom,mdss-tear-check-rd-ptr-trigger-intr = <1281>;
 		qcom,mdss-tear-check-frame-rate = <6000>;
+		qcom,esd-check-enabled;
 	};
 };
