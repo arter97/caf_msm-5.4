@@ -38,7 +38,7 @@
 	(__height / 16) * (__width  / 16) * __fps; \
 })
 
-#define IS_CMD_VALID(cmd) ((cmd - SESSION_MSG_START) <= SESSION_MSG_END)
+#define IS_SESSION_CMD_VALID(cmd) ((cmd - SESSION_MSG_START) <= SESSION_MSG_END)
 
 struct getprop_buf {
 	struct list_head list;
@@ -47,6 +47,7 @@ struct getprop_buf {
 
 static void msm_comm_generate_session_error(struct msm_vidc_inst *inst);
 static void msm_comm_generate_sys_error(struct msm_vidc_inst *inst);
+static void handle_session_error(enum command_response cmd, void *data);
 
 static inline bool is_turbo_session(struct msm_vidc_inst *inst)
 {
@@ -438,7 +439,7 @@ static void handle_session_release_buf_done(enum command_response cmd,
 
 	if (!buf_found)
 		dprintk(VIDC_ERR, "invalid buffer received from firmware");
-	if (IS_CMD_VALID(cmd)) {
+	if (IS_SESSION_CMD_VALID(cmd)) {
 		complete(&inst->completions[SESSION_MSG_INDEX(cmd)]);
 	} else {
 		dprintk(VIDC_ERR, "Invalid inst cmd response: %d\n", cmd);
@@ -461,12 +462,7 @@ static void handle_sys_release_res_done(
 		dprintk(VIDC_ERR, "Wrong device_id received\n");
 		return;
 	}
-	if (IS_CMD_VALID(cmd)) {
-		complete(&core->completions[SYS_MSG_INDEX(cmd)]);
-	} else {
-		dprintk(VIDC_ERR, "Invalid core cmd response: %d\n", cmd);
-		return;
-	}
+	complete(&core->completions[SYS_MSG_INDEX(RELEASE_RESOURCE_DONE)]);
 }
 
 static void change_inst_state(struct msm_vidc_inst *inst,
@@ -497,7 +493,7 @@ static int signal_session_msg_receipt(enum command_response cmd,
 		dprintk(VIDC_ERR, "Invalid(%p) instance id\n", inst);
 		return -EINVAL;
 	}
-	if (IS_CMD_VALID(cmd)) {
+	if (IS_SESSION_CMD_VALID(cmd)) {
 		complete(&inst->completions[SESSION_MSG_INDEX(cmd)]);
 	} else {
 		dprintk(VIDC_ERR, "Invalid inst cmd response: %d\n", cmd);
@@ -511,7 +507,7 @@ static int wait_for_sess_signal_receipt(struct msm_vidc_inst *inst,
 {
 	int rc = 0;
 
-	if (!IS_CMD_VALID(cmd)) {
+	if (!IS_SESSION_CMD_VALID(cmd)) {
 		dprintk(VIDC_ERR, "Invalid inst cmd response: %d\n", cmd);
 		return -EINVAL;
 	}
@@ -556,17 +552,17 @@ void msm_vidc_queue_v4l2_event(struct msm_vidc_inst *inst, int event_type)
 
 static void msm_comm_generate_max_clients_error(struct msm_vidc_inst *inst)
 {
+	enum command_response cmd = SESSION_ERROR;
+	struct msm_vidc_cb_cmd_done response = {0};
+
 	if (!inst) {
 		dprintk(VIDC_ERR, "%s: invalid input parameters\n", __func__);
 		return;
 	}
-	mutex_lock(&inst->sync_lock);
-	inst->session = NULL;
-	inst->state = MSM_VIDC_CORE_INVALID;
-	msm_vidc_queue_v4l2_event(inst, V4L2_EVENT_MSM_VIDC_MAX_CLIENTS);
-	dprintk(VIDC_ERR,
-			"%s: Too many clients\n", __func__);
-	mutex_unlock(&inst->sync_lock);
+	dprintk(VIDC_ERR, "%s: Too many clients\n", __func__);
+	response.session_id = inst;
+	response.status = VIDC_ERR_MAX_CLIENTS;
+	handle_session_error(cmd, (void *)&response);
 }
 
 static void handle_session_init_done(enum command_response cmd, void *data)
@@ -968,19 +964,30 @@ static void handle_session_error(enum command_response cmd, void *data)
 
 	hdev = inst->core->device;
 	dprintk(VIDC_WARN, "Session error received for session %p\n", inst);
+	change_inst_state(inst, MSM_VIDC_CORE_INVALID);
 
-	mutex_lock(&inst->sync_lock);
-	inst->state = MSM_VIDC_CORE_INVALID;
-
+	mutex_lock(&inst->lock);
 	dprintk(VIDC_DBG, "cleaning up inst: %p\n", inst);
 	rc = call_hfi_op(hdev, session_clean, inst->session);
 	if (rc)
 		dprintk(VIDC_ERR, "Session (%p) clean failed: %d\n", inst, rc);
 
 	inst->session = NULL;
-	mutex_unlock(&inst->sync_lock);
+	mutex_unlock(&inst->lock);
 
-	msm_vidc_queue_v4l2_event(inst, V4L2_EVENT_MSM_VIDC_SYS_ERROR);
+	if (response->status == VIDC_ERR_MAX_CLIENTS) {
+		dprintk(VIDC_WARN,
+			"send max clients reached error to client: %p\n",
+			inst);
+		msm_vidc_queue_v4l2_event(inst,
+			V4L2_EVENT_MSM_VIDC_MAX_CLIENTS);
+	} else {
+		dprintk(VIDC_ERR,
+			"send session error to client: %p\n",
+			inst);
+		msm_vidc_queue_v4l2_event(inst,
+			V4L2_EVENT_MSM_VIDC_SYS_ERROR);
+	}
 }
 
 struct sys_err_handler_data {
@@ -2991,9 +2998,8 @@ int msm_comm_release_scratch_buffers(struct msm_vidc_inst *inst)
 				rc = wait_for_sess_signal_receipt(inst,
 					SESSION_RELEASE_BUFFER_DONE);
 				if (rc) {
-					mutex_lock(&inst->sync_lock);
-					inst->state = MSM_VIDC_CORE_INVALID;
-					mutex_unlock(&inst->sync_lock);
+					change_inst_state(inst,
+						MSM_VIDC_CORE_INVALID);
 					msm_comm_kill_session(inst);
 				}
 				mutex_lock(&inst->lock);
@@ -3061,9 +3067,8 @@ int msm_comm_release_persist_buffers(struct msm_vidc_inst *inst)
 				rc = wait_for_sess_signal_receipt(inst,
 					SESSION_RELEASE_BUFFER_DONE);
 				if (rc) {
-					mutex_lock(&inst->sync_lock);
-					inst->state = MSM_VIDC_CORE_INVALID;
-					mutex_unlock(&inst->sync_lock);
+					change_inst_state(inst,
+						MSM_VIDC_CORE_INVALID);
 					msm_comm_kill_session(inst);
 				}
 				mutex_lock(&inst->lock);
@@ -3663,9 +3668,7 @@ int msm_vidc_check_session_supported(struct msm_vidc_inst *inst)
 		}
 	}
 	if (rc) {
-		mutex_lock(&inst->sync_lock);
-		inst->state = MSM_VIDC_CORE_INVALID;
-		mutex_unlock(&inst->sync_lock);
+		change_inst_state(inst, MSM_VIDC_CORE_INVALID);
 		msm_vidc_queue_v4l2_event(inst,
 					V4L2_EVENT_MSM_VIDC_HW_OVERLOAD);
 		dprintk(VIDC_WARN,
@@ -3679,12 +3682,14 @@ static void msm_comm_generate_session_error(struct msm_vidc_inst *inst)
 	enum command_response cmd = SESSION_ERROR;
 	struct msm_vidc_cb_cmd_done response = {0};
 
+	dprintk(VIDC_WARN, "msm_comm_generate_session_error\n");
 	if (!inst || !inst->core) {
 		dprintk(VIDC_ERR, "%s: invalid input parameters\n", __func__);
 		return;
 	}
 
 	response.session_id = inst;
+	response.status = VIDC_ERR_FAIL;
 	handle_session_error(cmd, (void *)&response);
 }
 
@@ -3720,7 +3725,7 @@ int msm_comm_kill_session(struct msm_vidc_inst *inst)
 	 * the session send session_abort to firmware to clean up and release
 	 * the session, else just kill the session inside the driver.
 	 */
-	if (inst->state >= MSM_VIDC_OPEN_DONE ||
+	if (inst->state >= MSM_VIDC_OPEN_DONE &&
 			inst->state < MSM_VIDC_CLOSE_DONE) {
 		struct hfi_device *hdev = inst->core->device;
 		int abort_completion = SESSION_MSG_INDEX(SESSION_ABORT_DONE);
