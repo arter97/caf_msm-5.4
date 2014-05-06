@@ -10,6 +10,8 @@
  * GNU General Public License for more details.
  */
 
+/memreserve/ 0x00000000 0x00001000;
+
 #include "skeleton64.dtsi"
 #include <dt-bindings/clock/msm-clocks-krait.h>
 
@@ -2993,6 +2995,7 @@
 		qcom,pas-id = <9>;
 		qcom,proxy-timeout-ms = <5000>;
 		qcom,firmware-name = "venus";
+		linux,contiguous-region = <&peripheral_mem>;
 	};
 
 	pil_lpass: qcom,lpass@fe200000 {
@@ -3020,6 +3023,7 @@
 
 		/* GPIO output to lpass */
 		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_2_out 0 0>;
+		linux,contiguous-region = <&peripheral_mem>;
 	};
 
 	ufsphy1: ufsphy@0xfc597000 {
@@ -3783,6 +3787,7 @@
 		qcom,pas-id = <10>;
 		qcom,proxy-timeout-ms = <10000>;
 		qcom,firmware-name = "vpu";
+		linux,contiguous-region = <&peripheral_mem>;
 	};
 
 	cpu-pmu {
