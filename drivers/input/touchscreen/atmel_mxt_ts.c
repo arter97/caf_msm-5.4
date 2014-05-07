@@ -3205,6 +3205,11 @@ static int __devinit mxt_probe(struct i2c_client *client,
 		}
 
 		error = mxt_uh928_config(data);
+		if (error) {
+			dev_err(&client->dev, "Failed to config uh928\n");
+			goto err_irq_gpio_req;
+		}
+
 		error = mxt_reset_atmel(data);
 		if (error) {
 			dev_err(&client->dev, "Failed to reset atmel\n");
