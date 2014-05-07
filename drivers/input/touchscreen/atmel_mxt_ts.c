@@ -1566,7 +1566,11 @@ static int mxt_config_sx1509(struct mxt_data *data)
 				"mxt reset iox failed\n");
 		return error;
 	}
-	msleep(1);
+
+	/*
+	 * Sleep 0.6ms to 2.5ms for reset per datasheet
+	 */
+	usleep_range(600, 2500);
 
 	addr_rw = 0x0F;
 	error = mxt_write_byte(data->client, addr_rw, 0xA5);
@@ -1584,14 +1588,6 @@ static int mxt_config_sx1509(struct mxt_data *data)
 				"mxt read 0x%2X failed\n", addr_rw);
 		return error;
 	}
-
-	error = mxt_reset_sx1509(data);
-	if (error) {
-		dev_err(&data->client->dev,
-				"failed to reset sx1509");
-		return error;
-	}
-	msleep(1);
 
 	addr_rw = 0x0E;
 	error = mxt_config_bit(data->client, addr_rw, 0x01, false);
@@ -3207,8 +3203,6 @@ static int __devinit mxt_probe(struct i2c_client *client,
 			dev_err(&data->client->dev, "failed to configure sx1509\n");
 			goto err_irq_gpio_req;
 		}
-
-		msleep(1);
 
 		error = mxt_uh928_config(data);
 		error = mxt_reset_atmel(data);
