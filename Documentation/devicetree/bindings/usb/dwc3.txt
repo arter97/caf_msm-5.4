@@ -20,6 +20,9 @@ Optional properties:
 	controls the UTMI sleep mechanism vs. the PHY. Default value is 12.
  - snps,bus-suspend-enable: If present then controller supports low power mode
 	during bus suspend.
+ - snps,ssphy-clear-auto-suspend-on-disconnect: If present, clear auto suspend feaure with ssusb phy
+   during cable disconnect.
+ - snps,usb3-u1u2-disable: If present, disable u1u2 low power modes for DWC3 core controller in SS mode.
 
 This is usually a subnode to DWC3 glue to which it is connected.
 
@@ -29,4 +32,7 @@ dwc3@4a030000 {
 	interrupts = <0 92 4>;
 	usb-phy = <&usb2_phy>, <&usb3,phy>;
 	tx-fifo-resize;
+	snps,hsphy-auto-suspend-disable;
+	snps,ssphy-clear-auto-suspend-on-disconnect;
+	snps,usb3-u1u2-disable;
 };

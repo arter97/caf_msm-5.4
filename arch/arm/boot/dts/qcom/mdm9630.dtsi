@@ -572,6 +572,7 @@
 				snps,hsphy-auto-suspend-disable;
 				snps,hird_thresh = <0x10>;
 				snps,bus-suspend-enable;
+				snps,usb3-u1u2-disable;
 				tx-fifo-resize;
 		};
         };

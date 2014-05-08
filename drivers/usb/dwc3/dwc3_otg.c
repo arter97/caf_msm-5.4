@@ -49,6 +49,22 @@ static void dwc3_otg_set_hsphy_auto_suspend(struct dwc3_otg *dotg, bool susp)
 	dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(0), reg);
 }
 
+static void dwc3_otg_set_ssphy_auto_suspend(struct dwc3_otg *dotg, bool susp)
+{
+	struct dwc3 *dwc = dotg->dwc;
+	u32 reg;
+
+	if (!dwc->ssphy_clear_auto_suspend_on_disconnect)
+		return;
+
+	reg = dwc3_readl(dwc->regs, DWC3_GUSB3PIPECTL(0));
+	if (susp)
+		reg |= DWC3_GUSB3PIPECTL_SUSPHY;
+	else
+		reg &= ~(DWC3_GUSB3PIPECTL_SUSPHY);
+	dwc3_writel(dwc->regs, DWC3_GUSB3PIPECTL(0), reg);
+}
+
 /**
  * dwc3_otg_start_host -  helper function for starting/stoping the host controller driver.
  *
@@ -97,6 +113,7 @@ static int dwc3_otg_start_host(struct usb_otg *otg, int on)
 		}
 
 		dwc3_otg_set_hsphy_auto_suspend(dotg, true);
+		dwc3_otg_set_ssphy_auto_suspend(dotg, true);
 		dwc3_set_mode(dwc, DWC3_GCTL_PRTCAP_HOST);
 
 		/*
@@ -152,6 +169,7 @@ static int dwc3_otg_start_host(struct usb_otg *otg, int on)
 			ext_xceiv->ext_block_reset(ext_xceiv, true);
 
 		dwc3_otg_set_hsphy_auto_suspend(dotg, false);
+		dwc3_otg_set_ssphy_auto_suspend(dotg, false);
 		dwc3_set_mode(dwc, DWC3_GCTL_PRTCAP_DEVICE);
 
 		/* re-init core and OTG registers as block reset clears these */
@@ -206,6 +224,7 @@ static int dwc3_otg_start_peripheral(struct usb_otg *otg, int on)
 		usb_phy_notify_disconnect(dotg->dwc->usb2_phy, USB_SPEED_HIGH);
 		usb_phy_notify_disconnect(dotg->dwc->usb3_phy, USB_SPEED_SUPER);
 		dwc3_otg_set_hsphy_auto_suspend(dotg, false);
+		dwc3_otg_set_ssphy_auto_suspend(dotg, false);
 	}
 
 	pm_runtime_put_sync(otg->phy->dev);

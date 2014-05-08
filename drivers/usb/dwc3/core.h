@@ -782,6 +782,9 @@ struct dwc3_scratchpad_array {
  * @err_evt_seen: previous event in queue was erratic error
  * @hird_thresh: value to configure in DCTL[HIRD_Thresh]
  * @wait_linkstate: waitqueue for waiting LINK to move into required state
+ * @ssphy_clear_auto_suspend_on_disconnect: if true, clear ssphy autosuspend bit
+ *	during disconnect and set it after device is configured.
+ * @usb3_u1u2_disable: if true, disable U1U2 low power modes in Superspeed mode.
  */
 struct dwc3 {
 	struct usb_ctrlrequest	*ctrl_req;
@@ -894,6 +897,8 @@ struct dwc3 {
 	bool			enable_bus_suspend;
 	u8			hird_thresh;
 	bool			b_suspend;
+	bool			ssphy_clear_auto_suspend_on_disconnect;
+	bool			usb3_u1u2_disable;
 	struct dwc3_gadget_events	dbg_gadget_events;
 
 	atomic_t		in_lpm;
