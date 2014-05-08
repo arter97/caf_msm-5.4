@@ -552,6 +552,8 @@ static int dwc3_probe(struct platform_device *pdev)
 		dwc->dr_mode = of_usb_get_dr_mode(node);
 		dwc->core_reset_after_phy_init =
 			of_property_read_bool(node, "snps,core_reset_after_phy_init");
+		dwc->usb3_u1u2_disable = of_property_read_bool(node,
+						"snps,usb3-u1u2-disable");
 	} else if (pdata) {
 		dwc->maximum_speed = pdata->maximum_speed;
 
