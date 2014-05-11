@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-13, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -532,8 +532,15 @@ static int __devinit qpnp_rtc_probe(struct spmi_device *spmi)
 		goto fail_rtc_enable;
 	}
 
+	rc = qpnp_read_wrapper(rtc_dd, &rtc_dd->alarm_ctrl_reg1,
+				rtc_dd->alarm_base + REG_OFFSET_ALARM_CTRL1, 1);
+	if (rc) {
+		dev_err(&spmi->dev,
+			"Read from  Alarm control reg failed\n");
+		goto fail_rtc_enable;
+	}
 	/* Enable abort enable feature */
-	rtc_dd->alarm_ctrl_reg1 = BIT_RTC_ABORT_ENABLE;
+	rtc_dd->alarm_ctrl_reg1 |= BIT_RTC_ABORT_ENABLE;
 	rc = qpnp_write_wrapper(rtc_dd, &rtc_dd->alarm_ctrl_reg1,
 			rtc_dd->alarm_base + REG_OFFSET_ALARM_CTRL1, 1);
 	if (rc) {
