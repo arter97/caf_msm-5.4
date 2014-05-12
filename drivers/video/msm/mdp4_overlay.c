@@ -2723,12 +2723,14 @@ static struct mdp4_overlay_pipe *mdp4_overlay_alloc_pipe(
 			pr_err("%s: ndx=%d still staged\n", __func__,
 				pipe->pipe_ndx);
 			pipe = NULL;
+			goto alloc_err;
 		} else {
 			pipe->pipe_used++;
 			pipe->mixer_num = mixer;
-			pipe->mixer_stage = req->z_order + MDP4_MIXER_STAGE0;
 		}
 	}
+
+	pipe->mixer_stage = req->z_order + MDP4_MIXER_STAGE0;
 
 alloc_err:
 	return pipe;
