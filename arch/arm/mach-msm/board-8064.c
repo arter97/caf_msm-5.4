@@ -32,6 +32,7 @@
 #include <linux/memory.h>
 #include <linux/memblock.h>
 #include <linux/msm_thermal.h>
+#include <linux/i2c/atmel_mxt_ts.h>
 #include <linux/cyttsp-qc.h>
 #include <linux/i2c/isa1200.h>
 #include <linux/gpio_keys.h>
@@ -90,6 +91,7 @@
 #include "sysmon.h"
 #include <linux/i2c/atmel_mxt_ts.h>
 #include <linux/bluetooth-power.h>
+#include <linux/reverse.h>
 
 #define MSM_PMEM_ADSP_SIZE         0x7800000
 #define MSM_PMEM_AUDIO_SIZE        0x4CF000
@@ -3630,6 +3632,26 @@ static void __init apq8064ab_update_retention_spm(void)
 	}
 }
 
+#define GPIO_KEY_REVERSE                29
+static struct reverse_switch_platform_data mplatform_reverse_data = {
+	.name = "reverse",
+	.gpio = GPIO_KEY_REVERSE,
+	.key_code = KEY_REVERSE,
+	.name_on = NULL,
+	.name_off = NULL,
+	.state_on = NULL,
+	.state_off = NULL,
+	.debounce_time = 200,
+};
+
+static struct platform_device mplatform_reverse_pdev = {
+	.name           = "switch-reverse",
+	.id             = -1,
+	.dev            = {
+		.platform_data  = &mplatform_reverse_data,
+	},
+};
+
 struct bluetooth_power_platform_data *bt_power_pdata;
 
 static struct platform_device msm_bt_power_device = {
@@ -3664,7 +3686,6 @@ static void __init apq8064_bt_power_init(void)
 		pr_err("%s: Platform dev. registration failed\n", __func__);
 	else
 		pr_err("\n%s: ***** Platform dev. registration success *****\n", __func__);
-
 }
 
 static void __init apq8064_common_init(void)
@@ -3723,6 +3744,7 @@ static void __init apq8064_common_init(void)
 	        apq8064_device_uartdm_gsbi4.id = 0;
 		platform_device_register(&apq8064_device_uartdm_gsbi4);
 	}
+
 
 	apq8064_init_pmic();
 
@@ -3898,8 +3920,10 @@ static void __init apq8064_cdp_init(void)
 		platform_device_register(&mpq8064_device_uartdm_gsbi6);
 	}
 
-	if (machine_is_apq8064_mplatform())
+	if (machine_is_apq8064_mplatform()) {
 		platform_device_register(&mplatform_kp_pdev);
+		platform_device_register(&mplatform_reverse_pdev);
+	}
 	else if (machine_is_apq8064_cdp() || machine_is_apq8064_liquid()
 			|| machine_is_apq8064_adp_2())
 		platform_device_register(&cdp_kp_pdev);

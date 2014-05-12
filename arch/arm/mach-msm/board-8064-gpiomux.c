@@ -1665,7 +1665,7 @@ static struct msm_gpiomux_config mxt540e_gpio_alt_config[] __initdata = {
 
 static struct msm_gpiomux_config mplatform_gpio_config[] __initdata = {
 	{	/* REVERSE */
-		.gpio = 34,
+		.gpio = 29,
 		.settings = {
 			[GPIOMUX_ACTIVE]    = &mplatform_int_act_cfg,
 			[GPIOMUX_SUSPENDED] = &mplatform_int_sus_cfg,
