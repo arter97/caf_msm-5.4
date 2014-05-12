@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2014 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -20,6 +20,7 @@
 #include "msm_csid_hwreg.h"
 #include "msm.h"
 #include "msm_cam_server.h"
+#include <mach/socinfo.h>
 
 #define V4L2_IDENT_CSID                            50002
 #define CSID_VERSION_V2                      0x02000011
@@ -29,6 +30,8 @@
 
 #define TRUE   1
 #define FALSE  0
+
+struct csid_device *lsh_csid_dev;
 
 static int msm_csid_cid_lut(
 	struct msm_camera_csid_lut_params *csid_lut_params,
@@ -83,7 +86,7 @@ static void msm_csid_set_debug_reg(void __iomem *csidbase,
 	struct msm_camera_csid_params *csid_params) {}
 #endif
 
-static int msm_csid_config(struct csid_device *csid_dev,
+int msm_csid_config(struct csid_device *csid_dev,
 	struct msm_camera_csid_params *csid_params)
 {
 	int rc = 0;
@@ -222,7 +225,7 @@ static struct camera_vreg_t csid_8974_vreg_info[] = {
 	{"mipi_csi_vdd", REG_LDO, 1800000, 1800000, 12000},
 };
 
-static int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
+int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 {
 	int rc = 0;
 	uint8_t core_id = 0;
@@ -232,14 +235,14 @@ static int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 		rc = -EINVAL;
 		return rc;
 	}
-
-	if (csid_dev->csid_state == CSID_POWER_UP) {
-		pr_err("%s: csid invalid state %d\n", __func__,
-			csid_dev->csid_state);
-		rc = -EINVAL;
-		return rc;
+	if (!machine_is_apq8064_mplatform()) {
+		if (csid_dev->csid_state == CSID_POWER_UP) {
+			pr_err("%s: csid invalid state %d\n", __func__,
+					csid_dev->csid_state);
+			rc = -EINVAL;
+			return rc;
+		}
 	}
-
 	csid_dev->base = ioremap(csid_dev->mem->start,
 		resource_size(csid_dev->mem));
 	if (!csid_dev->base) {
@@ -249,22 +252,26 @@ static int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 	}
 
 	if (CSID_VERSION <= CSID_VERSION_V2) {
-		rc = msm_camera_config_vreg(&csid_dev->pdev->dev,
-			csid_8960_vreg_info, ARRAY_SIZE(csid_8960_vreg_info),
-			NULL, 0, &csid_dev->csi_vdd, 1);
-		if (rc < 0) {
-			pr_err("%s: regulator on failed\n", __func__);
-			goto vreg_config_failed;
-		}
+		if (!machine_is_apq8064_mplatform()) {
+			rc = msm_camera_config_vreg(&csid_dev->pdev->dev,
+					csid_8960_vreg_info,
+					ARRAY_SIZE(csid_8960_vreg_info),
+					NULL, 0, &csid_dev->csi_vdd, 1);
+			if (rc < 0) {
+				pr_err("%s: regulator on failed\n", __func__);
+				goto vreg_config_failed;
+			}
 
-		rc = msm_camera_enable_vreg(&csid_dev->pdev->dev,
-			csid_8960_vreg_info, ARRAY_SIZE(csid_8960_vreg_info),
-			NULL, 0, &csid_dev->csi_vdd, 1);
-		if (rc < 0) {
-			pr_err("%s: regulator enable failed\n", __func__);
-			goto vreg_enable_failed;
+			rc = msm_camera_enable_vreg(&csid_dev->pdev->dev,
+					csid_8960_vreg_info,
+					ARRAY_SIZE(csid_8960_vreg_info),
+					NULL, 0, &csid_dev->csi_vdd, 1);
+			if (rc < 0) {
+				pr_err("%s: regulator enable failed\n",
+					__func__);
+				goto vreg_enable_failed;
+			}
 		}
-
 		rc = msm_cam_clk_enable(&csid_dev->pdev->dev,
 			csid_8960_clk_info, csid_dev->csid_clk,
 			ARRAY_SIZE(csid_8960_clk_info), 1);
@@ -273,22 +280,26 @@ static int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 			goto clk_enable_failed;
 		}
 	} else if (CSID_VERSION == CSID_VERSION_V3) {
-		rc = msm_camera_config_vreg(&csid_dev->pdev->dev,
-			csid_8974_vreg_info, ARRAY_SIZE(csid_8974_vreg_info),
-			NULL, 0, &csid_dev->csi_vdd, 1);
-		if (rc < 0) {
-			pr_err("%s: regulator on failed\n", __func__);
-			goto vreg_config_failed;
-		}
+		if (!machine_is_apq8064_mplatform()) {
+			rc = msm_camera_config_vreg(&csid_dev->pdev->dev,
+					csid_8974_vreg_info,
+					ARRAY_SIZE(csid_8974_vreg_info),
+					NULL, 0, &csid_dev->csi_vdd, 1);
+			if (rc < 0) {
+				pr_err("%s: regulator on failed\n", __func__);
+				goto vreg_config_failed;
+			}
 
-		rc = msm_camera_enable_vreg(&csid_dev->pdev->dev,
-			csid_8974_vreg_info, ARRAY_SIZE(csid_8974_vreg_info),
-			NULL, 0, &csid_dev->csi_vdd, 1);
-		if (rc < 0) {
-			pr_err("%s: regulator enable failed\n", __func__);
-			goto vreg_enable_failed;
+			rc = msm_camera_enable_vreg(&csid_dev->pdev->dev,
+					csid_8974_vreg_info,
+					ARRAY_SIZE(csid_8974_vreg_info),
+					NULL, 0, &csid_dev->csi_vdd, 1);
+			if (rc < 0) {
+				pr_err("%s: regulator enable failed\n",
+					__func__);
+				goto vreg_enable_failed;
+			}
 		}
-
 		rc = msm_cam_clk_enable(&csid_dev->pdev->dev,
 			csid_8974_clk_info[0].clk_info, csid_dev->csid0_clk,
 			csid_8974_clk_info[0].num_clk_info, 1);
@@ -354,7 +365,7 @@ vreg_config_failed:
 	return rc;
 }
 
-static int msm_csid_release(struct csid_device *csid_dev)
+int msm_csid_release(struct csid_device *csid_dev)
 {
 	uint32_t irq;
 	uint8_t core_id = 0;
@@ -374,14 +385,17 @@ static int msm_csid_release(struct csid_device *csid_dev)
 	if (csid_dev->hw_version <= CSID_VERSION_V2) {
 		msm_cam_clk_enable(&csid_dev->pdev->dev, csid_8960_clk_info,
 			csid_dev->csid_clk, ARRAY_SIZE(csid_8960_clk_info), 0);
+		if (!machine_is_apq8064_mplatform()) {
+			msm_camera_enable_vreg(&csid_dev->pdev->dev,
+					csid_8960_vreg_info,
+					ARRAY_SIZE(csid_8960_vreg_info),
+					NULL, 0, &csid_dev->csi_vdd, 0);
 
-		msm_camera_enable_vreg(&csid_dev->pdev->dev,
-			csid_8960_vreg_info, ARRAY_SIZE(csid_8960_vreg_info),
-			NULL, 0, &csid_dev->csi_vdd, 0);
-
-		msm_camera_config_vreg(&csid_dev->pdev->dev,
-			csid_8960_vreg_info, ARRAY_SIZE(csid_8960_vreg_info),
-			NULL, 0, &csid_dev->csi_vdd, 0);
+			msm_camera_config_vreg(&csid_dev->pdev->dev,
+					csid_8960_vreg_info,
+					ARRAY_SIZE(csid_8960_vreg_info),
+					NULL, 0, &csid_dev->csi_vdd, 0);
+		}
 	} else if (csid_dev->hw_version == CSID_VERSION_V3) {
 		core_id = csid_dev->pdev->id;
 		if (core_id)
@@ -393,14 +407,17 @@ static int msm_csid_release(struct csid_device *csid_dev)
 		msm_cam_clk_enable(&csid_dev->pdev->dev,
 			csid_8974_clk_info[0].clk_info, csid_dev->csid0_clk,
 			csid_8974_clk_info[0].num_clk_info, 0);
+		if (!machine_is_apq8064_mplatform()) {
+			msm_camera_enable_vreg(&csid_dev->pdev->dev,
+					csid_8974_vreg_info,
+					ARRAY_SIZE(csid_8974_vreg_info),
+					NULL, 0, &csid_dev->csi_vdd, 0);
 
-		msm_camera_enable_vreg(&csid_dev->pdev->dev,
-			csid_8974_vreg_info, ARRAY_SIZE(csid_8974_vreg_info),
-			NULL, 0, &csid_dev->csi_vdd, 0);
-
-		msm_camera_config_vreg(&csid_dev->pdev->dev,
-			csid_8974_vreg_info, ARRAY_SIZE(csid_8974_vreg_info),
-			NULL, 0, &csid_dev->csi_vdd, 0);
+			msm_camera_config_vreg(&csid_dev->pdev->dev,
+					csid_8974_vreg_info,
+					ARRAY_SIZE(csid_8974_vreg_info),
+					NULL, 0, &csid_dev->csi_vdd, 0);
+		}
 	}
 
 	iounmap(csid_dev->base);
@@ -616,6 +633,10 @@ static int __devinit csid_probe(struct platform_device *pdev)
 	}
 
 	new_csid_dev->csid_state = CSID_POWER_DOWN;
+
+	if (machine_is_apq8064_mplatform())
+		lsh_csid_dev = new_csid_dev;
+
 	return 0;
 
 csid_no_resource:
