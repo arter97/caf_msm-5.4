@@ -56,8 +56,8 @@
 #define WLAN_EN_GPIO_NAME	"wlan-en-gpio"
 #define PM_OPTIONS		0
 
-#define SOC_SWREG_VOLT_MAX	1150000
-#define SOC_SWREG_VOLT_MIN	1150000
+#define SOC_SWREG_VOLT_MAX	1200000
+#define SOC_SWREG_VOLT_MIN	1200000
 
 #define POWER_ON_DELAY		2000
 #define WLAN_ENABLE_DELAY	10000
@@ -791,6 +791,12 @@ void cnss_flush_delayed_work(void *dwork)
 	cancel_delayed_work_sync(cnss_dwork);
 }
 EXPORT_SYMBOL(cnss_flush_delayed_work);
+
+void cnss_get_monotonic_boottime(struct timespec *ts)
+{
+	get_monotonic_boottime(ts);
+}
+EXPORT_SYMBOL(cnss_get_monotonic_boottime);
 
 int cnss_get_ramdump_mem(unsigned long *address, unsigned long *size)
 {

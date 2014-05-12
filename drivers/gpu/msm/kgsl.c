@@ -87,6 +87,8 @@ static int kgsl_setup_dma_buf(struct kgsl_mem_entry *entry,
 				struct kgsl_device *device,
 				struct dma_buf *dmabuf);
 
+static const struct file_operations kgsl_fops;
+
 static int kgsl_memfree_hist_init(void)
 {
 	void *base;
@@ -552,6 +554,13 @@ kgsl_context_destroy(struct kref *kref)
 
 	write_lock(&device->context_lock);
 	if (context->id != KGSL_CONTEXT_INVALID) {
+
+		/* Clear the timestamps in the memstore during destroy */
+		kgsl_sharedmem_writel(device, &device->memstore,
+			KGSL_MEMSTORE_OFFSET(context->id, soptimestamp), 0);
+		kgsl_sharedmem_writel(device, &device->memstore,
+			KGSL_MEMSTORE_OFFSET(context->id, eoptimestamp), 0);
+
 		idr_remove(&device->context_idr, context->id);
 		context->id = KGSL_CONTEXT_INVALID;
 	}
@@ -2611,9 +2620,21 @@ static int kgsl_setup_useraddr(struct kgsl_mem_entry *entry,
 	 */
 	down_read(&current->mm->mmap_sem);
 	vma = find_vma(current->mm, param->hostptr);
+
 	if (vma && vma->vm_file) {
+		int fd;
+
+		/*
+		 * Check to see that this isn't our own memory that we have
+		 * already mapped
+		 */
+		if (vma->vm_file->f_op == &kgsl_fops) {
+			up_read(&current->mm->mmap_sem);
+			return -EFAULT;
+		}
+
 		/* Look for the fd that matches this the vma file */
-		int fd = iterate_fd(current->files, 0,
+		fd = iterate_fd(current->files, 0,
 				match_file, vma->vm_file);
 		if (fd != 0)
 			dmabuf = dma_buf_get(fd - 1);
@@ -2917,6 +2938,9 @@ error_attach:
 	}
 	kgsl_sharedmem_free(&entry->memdesc);
 error:
+	/* Clear gpuaddr here so userspace doesn't get any wrong ideas */
+	param->gpuaddr = 0;
+
 	kfree(entry);
 	return result;
 }

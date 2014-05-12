@@ -61,6 +61,9 @@
 #define S2_MODE_MASK			BMS_MASK(3, 2)
 #define S3_MODE_MASK			BMS_MASK(1, 0)
 
+#define DATA_CTL1_REG			0x42
+#define MASTER_HOLD_BIT			BIT(0)
+
 #define DATA_CTL2_REG			0x43
 #define FIFO_CNT_SD_CLR_BIT		BIT(2)
 #define ACC_DATA_SD_CLR_BIT		BIT(1)
@@ -109,6 +112,7 @@
 #define OCV_UNINITIALIZED		0xFFFF
 #define VBATT_ERROR_MARGIN		20000
 #define CV_DROP_MARGIN			10000
+#define MIN_OCV_UV			2000000
 
 #define QPNP_VM_BMS_DEV_NAME		"qcom,qpnp-vm-bms"
 
@@ -223,6 +227,8 @@ struct qpnp_bms_chip {
 	struct cdev			bms_cdev;
 	struct qpnp_vm_bms_data		bms_data;
 	struct qpnp_vadc_chip		*vadc_dev;
+	struct qpnp_adc_tm_chip		*adc_tm_dev;
+	struct qpnp_adc_tm_btm_param	vbat_monitor_params;
 	struct bms_irq			fifo_update_done_irq;
 	struct bms_irq			fsm_state_change_irq;
 	struct power_supply		bms_psy;
@@ -459,6 +465,21 @@ static bool is_battery_present(struct qpnp_bms_chip *chip)
 	return false;
 }
 
+static int master_hold_control(struct qpnp_bms_chip *chip, bool enable)
+{
+	u8 reg = 0;
+	int rc;
+
+	reg = enable ? MASTER_HOLD_BIT : 0;
+
+	rc = qpnp_secure_write_wrapper(chip, &reg,
+				chip->base + DATA_CTL1_REG);
+	if (rc)
+		pr_err("Unable to write reg=%x rc=%d\n", DATA_CTL1_REG, rc);
+
+	return rc;
+}
+
 static int force_fsm_state(struct qpnp_bms_chip *chip, u8 state)
 {
 	int rc;
@@ -483,7 +504,7 @@ static int force_fsm_state(struct qpnp_bms_chip *chip, u8 state)
 		return rc;
 	}
 	/* delay for the FSM state to take affect in hardware */
-	usleep_range(100, 110);
+	usleep_range(500, 600);
 
 	pr_debug("force_mode=%d  mode_cntl_reg=%x\n", state, mode_ctl);
 
@@ -625,10 +646,18 @@ static int set_fifo_length(struct qpnp_bms_chip *chip,
 		return -EINVAL;
 	}
 
+	rc = master_hold_control(chip, true);
+	if (rc)
+		pr_err("Unable to apply master_hold rc=%d\n", rc);
+
 	rc = qpnp_masked_write_base(chip, chip->base + reg, mask,
 					fifo_length << shift);
 	if (rc)
 		pr_err("Unable to set fifo length rc=%d\n", rc);
+
+	rc = master_hold_control(chip, false);
+	if (rc)
+		pr_err("Unable to apply master_hold rc=%d\n", rc);
 
 	return rc;
 }
@@ -856,7 +885,7 @@ static void convert_and_store_ocv(struct qpnp_bms_chip *chip,
 static int read_and_update_ocv(struct qpnp_bms_chip *chip, int batt_temp,
 							bool is_pon_ocv)
 {
-	int rc;
+	int rc, ocv_uv;
 	u16 ocv_data = 0;
 
 	/* read the BMS h/w OCV */
@@ -867,12 +896,15 @@ static int read_and_update_ocv(struct qpnp_bms_chip *chip, int batt_temp,
 		return -ENXIO;
 	}
 
-	if (chip->last_ocv_raw == OCV_UNINITIALIZED) {
-		/* first time */
-		chip->last_ocv_raw = ocv_data;
-		convert_and_store_ocv(chip, batt_temp, is_pon_ocv);
-	} else if (chip->last_ocv_raw != ocv_data) {
-		/* a new OCV generated */
+	/* check if OCV is within limits */
+	ocv_uv = convert_vbatt_raw_to_uv(chip, ocv_data, is_pon_ocv);
+	if (ocv_uv < MIN_OCV_UV) {
+		pr_err("OCV too low or invalid (%d)- rejecting it\n", ocv_uv);
+		return 0;
+	}
+
+	if ((chip->last_ocv_raw == OCV_UNINITIALIZED) ||
+			(chip->last_ocv_raw != ocv_data)) {
 		pr_debug("new OCV!\n");
 		chip->last_ocv_raw = ocv_data;
 		convert_and_store_ocv(chip, batt_temp, is_pon_ocv);
@@ -1201,6 +1233,105 @@ static int report_state_of_charge(struct qpnp_bms_chip *chip)
 	return soc;
 }
 
+static void btm_notify_vbat(enum qpnp_tm_state state, void *ctx)
+{
+	struct qpnp_bms_chip *chip = ctx;
+	int vbat_uv;
+	int rc;
+
+	rc = get_battery_voltage(chip, &vbat_uv);
+	if (rc) {
+		pr_err("error reading vbat_sns adc channel=%d, rc=%d\n",
+							VBAT_SNS, rc);
+		goto out;
+	}
+
+	pr_debug("vbat is at %d, state is at %d\n", vbat_uv, state);
+
+	if (state == ADC_TM_LOW_STATE) {
+		pr_debug("low voltage btm notification triggered\n");
+		if (vbat_uv <= (chip->vbat_monitor_params.low_thr
+					+ VBATT_ERROR_MARGIN)) {
+			if (!bms_wake_active(&chip->vbms_lv_wake_source))
+				bms_stay_awake(&chip->vbms_lv_wake_source);
+
+			chip->vbat_monitor_params.state_request =
+						ADC_TM_HIGH_THR_ENABLE;
+		} else {
+			pr_debug("faulty btm trigger, discarding\n");
+			goto out;
+		}
+	} else if (state == ADC_TM_HIGH_STATE) {
+		pr_debug("high voltage btm notification triggered\n");
+		if (vbat_uv > chip->vbat_monitor_params.high_thr) {
+			chip->vbat_monitor_params.state_request =
+						ADC_TM_LOW_THR_ENABLE;
+			if (bms_wake_active(&chip->vbms_lv_wake_source))
+				bms_relax(&chip->vbms_lv_wake_source);
+		} else {
+			pr_debug("faulty btm trigger, discarding\n");
+			goto out;
+		}
+	} else {
+		pr_debug("unknown voltage notification state: %d\n", state);
+		goto out;
+	}
+
+	if (chip->bms_psy_registered)
+		power_supply_changed(&chip->bms_psy);
+
+out:
+	qpnp_adc_tm_channel_measure(chip->adc_tm_dev,
+					&chip->vbat_monitor_params);
+}
+
+static int reset_vbat_monitoring(struct qpnp_bms_chip *chip)
+{
+	int rc;
+
+	chip->vbat_monitor_params.state_request = ADC_TM_HIGH_LOW_THR_DISABLE;
+	rc = qpnp_adc_tm_channel_measure(chip->adc_tm_dev,
+						&chip->vbat_monitor_params);
+	if (rc) {
+		pr_err("tm disable failed: %d\n", rc);
+		return rc;
+	}
+
+	if (bms_wake_active(&chip->vbms_lv_wake_source))
+		bms_relax(&chip->vbms_lv_wake_source);
+
+	return 0;
+}
+
+static int setup_vbat_monitoring(struct qpnp_bms_chip *chip)
+{
+	int rc;
+
+	chip->vbat_monitor_params.low_thr =
+					chip->dt.cfg_low_voltage_threshold;
+	chip->vbat_monitor_params.high_thr =
+					chip->dt.cfg_low_voltage_threshold
+					+ VBATT_ERROR_MARGIN;
+	chip->vbat_monitor_params.state_request = ADC_TM_LOW_THR_ENABLE;
+	chip->vbat_monitor_params.channel = VBAT_SNS;
+	chip->vbat_monitor_params.btm_ctx = chip;
+	chip->vbat_monitor_params.timer_interval = ADC_MEAS1_INTERVAL_1S;
+	chip->vbat_monitor_params.threshold_notification = &btm_notify_vbat;
+	pr_debug("set low thr to %d and high to %d\n",
+			chip->vbat_monitor_params.low_thr,
+			chip->vbat_monitor_params.high_thr);
+
+	rc = qpnp_adc_tm_channel_measure(chip->adc_tm_dev,
+						&chip->vbat_monitor_params);
+	if (rc) {
+		pr_err("adc-tm setup failed: %d\n", rc);
+		return rc;
+	}
+
+	pr_debug("vbat monitoring setup complete\n");
+	return 0;
+}
+
 static void very_low_voltage_check(struct qpnp_bms_chip *chip, int vbat_uv)
 {
 	if (!bms_wake_active(&chip->vbms_lv_wake_source)
@@ -1244,6 +1375,8 @@ static void low_soc_check(struct qpnp_bms_chip *chip)
 	if (chip->dt.cfg_low_soc_fifo_length < 1)
 		return;
 
+	mutex_lock(&chip->state_change_mutex);
+
 	if (chip->calculated_soc <= chip->dt.cfg_low_soc_calc_threshold) {
 		if (!chip->low_soc_fifo_set) {
 			pr_debug("soc=%d (low-soc) setting fifo_length to %d\n",
@@ -1253,13 +1386,13 @@ static void low_soc_check(struct qpnp_bms_chip *chip)
 						&chip->s2_fifo_length);
 			if (rc) {
 				pr_err("Unable to get_fifo_length rc=%d", rc);
-				return;
+				goto low_soc_exit;
 			}
 			rc = set_fifo_length(chip, S2_STATE,
 					chip->dt.cfg_low_soc_fifo_length);
 			if (rc) {
 				pr_err("Unable to set_fifo_length rc=%d", rc);
-				return;
+				goto low_soc_exit;
 			}
 			chip->low_soc_fifo_set = true;
 		}
@@ -1272,11 +1405,14 @@ static void low_soc_check(struct qpnp_bms_chip *chip)
 						chip->s2_fifo_length);
 			if (rc) {
 				pr_err("Unable to set_fifo_length rc=%d", rc);
-				return;
+				goto low_soc_exit;
 			}
 			chip->low_soc_fifo_set = false;
 		}
 	}
+
+low_soc_exit:
+	mutex_unlock(&chip->state_change_mutex);
 }
 
 static int report_eoc(struct qpnp_bms_chip *chip)
@@ -1373,7 +1509,6 @@ static int calculate_soc_from_voltage(struct qpnp_bms_chip *chip)
 	return 0;
 }
 
-#define SLEEP_RECALC_INTERVAL	3
 static void monitor_soc_work(struct work_struct *work)
 {
 	struct qpnp_bms_chip *chip = container_of(work,
@@ -1384,16 +1519,9 @@ static void monitor_soc_work(struct work_struct *work)
 	bms_stay_awake(&chip->vbms_soc_wake_source);
 
 	calculate_delta_time(&chip->tm_sec, &chip->delta_time_s);
+	pr_debug("elapsed_time=%d\n", chip->delta_time_s);
 
 	mutex_lock(&chip->last_soc_mutex);
-
-	pr_debug("elapsed_time=%d\n", chip->delta_time_s);
-	if (chip->delta_time_s * 1000 >
-		chip->dt.cfg_calculate_soc_ms * SLEEP_RECALC_INTERVAL) {
-		chip->last_soc_unbound = true;
-		pr_debug("last_soc unbound because elapsed time=%d\n",
-						chip->delta_time_s);
-	}
 
 	if (!is_battery_present(chip)) {
 		/* if battery is not preset report 100% SOC */
@@ -1446,11 +1574,16 @@ static void monitor_soc_work(struct work_struct *work)
 		}
 
 	}
+	/*
+	 * schedule the work only if last_soc has not caught up with
+	 * the calculated soc or if we are using voltage based soc
+	 */
+	if ((chip->last_soc != chip->calculated_soc) ||
+					chip->dt.cfg_use_voltage_soc)
+		schedule_delayed_work(&chip->monitor_soc_work,
+			msecs_to_jiffies(get_calculation_delay_ms(chip)));
 
 	mutex_unlock(&chip->last_soc_mutex);
-
-	schedule_delayed_work(&chip->monitor_soc_work,
-			msecs_to_jiffies(get_calculation_delay_ms(chip)));
 
 	bms_relax(&chip->vbms_soc_wake_source);
 }
@@ -1548,6 +1681,8 @@ static int qpnp_vm_bms_power_get_property(struct power_supply *psy,
 				struct qpnp_bms_chip, bms_psy);
 	int value = 0, rc;
 
+	val->intval = 0;
+
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CAPACITY:
 		val->intval = get_prop_bms_capacity(chip);
@@ -1608,7 +1743,7 @@ static int qpnp_vm_bms_power_set_property(struct power_supply *psy,
 		cancel_delayed_work_sync(&chip->monitor_soc_work);
 		chip->last_ocv_uv = val->intval;
 		pr_debug("OCV = %d\n", val->intval);
-		monitor_soc_work(&chip->monitor_soc_work.work);
+		schedule_delayed_work(&chip->monitor_soc_work, 0);
 		break;
 	case POWER_SUPPLY_PROP_HI_POWER:
 		rc = qpnp_vm_bms_config_power_state(chip, val->intval, true);
@@ -1642,7 +1777,7 @@ static void bms_new_battery_setup(struct qpnp_bms_chip *chip)
 	/* delay for the BMS hardware to reset its state */
 	msleep(200);
 	rc |= qpnp_masked_write_base(chip, chip->base + EN_CTL_REG,
-							BMS_EN_BIT, 1);
+						BMS_EN_BIT, BMS_EN_BIT);
 	/* delay for the BMS hardware to re-start */
 	msleep(200);
 	if (rc)
@@ -1677,9 +1812,11 @@ static void battery_insertion_check(struct qpnp_bms_chip *chip)
 			if (present) {
 				/* new battery inserted */
 				bms_new_battery_setup(chip);
+				setup_vbat_monitoring(chip);
 				pr_debug("New battery inserted!\n");
 			} else {
 				/* battery removed */
+				reset_vbat_monitoring(chip);
 				pr_debug("Battery removed\n");
 			}
 		}
@@ -1758,6 +1895,10 @@ static int read_and_populate_fifo_data(struct qpnp_bms_chip *chip)
 	pr_debug("fifo_count=%d\n", fifo_count);
 	if (!fifo_count) {
 		pr_debug("No data in FIFO\n");
+		return 0;
+	} else if (fifo_count > MAX_FIFO_REGS) {
+		pr_err("Invalid fifo-length %d rejecting data\n", fifo_count);
+		chip->bms_data.num_fifo = 0;
 		return 0;
 	}
 
@@ -2110,7 +2251,7 @@ static int calculate_initial_soc(struct qpnp_bms_chip *chip)
 
 static int bms_load_hw_defaults(struct qpnp_bms_chip *chip)
 {
-	u8 val, state;
+	u8 val, state, bms_en = 0;
 	u32 interval[2], count[2], fifo[2];
 	int rc;
 
@@ -2218,14 +2359,20 @@ static int bms_load_hw_defaults(struct qpnp_bms_chip *chip)
 			pr_err("Unable to set FSM state rc=%d\n", rc);
 	}
 
+	rc = qpnp_read_wrapper(chip, &bms_en, chip->base + BMS_EN_BIT, 1);
+	if (rc) {
+		pr_err("Unable to read BMS_EN state rc=%d\n", rc);
+		return rc;
+	}
+
 	rc = update_fsm_state(chip);
 	if (rc) {
 		pr_err("Unable to read FSM state rc=%d\n", rc);
 		return rc;
 	}
 
-	pr_info("Sample_Interval-S1=[%d]S2=[%d]  Sample_Count-S1=[%d]S2=[%d] Fifo_Length-S1=[%d]S2=[%d] FSM_state=%d\n",
-				interval[0], interval[1], count[0],
+	pr_info("BMS_EN=%d Sample_Interval-S1=[%d]S2=[%d]  Sample_Count-S1=[%d]S2=[%d] Fifo_Length-S1=[%d]S2=[%d] FSM_state=%d\n",
+				!!bms_en, interval[0], interval[1], count[0],
 					count[1], fifo[0], fifo[1],
 					chip->current_fsm_state);
 
@@ -2812,6 +2959,17 @@ static int bms_get_adc(struct qpnp_bms_chip *chip,
 			pr_err("vadc not found - defer probe rc=%d\n", rc);
 		else
 			pr_err("vadc property missing, rc=%d\n", rc);
+
+		return rc;
+	}
+
+	chip->adc_tm_dev = qpnp_get_adc_tm(&spmi->dev, "bms");
+	if (IS_ERR(chip->adc_tm_dev)) {
+		rc = PTR_ERR(chip->adc_tm_dev);
+		if (rc == -EPROBE_DEFER)
+			pr_err("adc-tm not found - defer probe rc=%d\n", rc);
+		else
+			pr_err("adc-tm property missing, rc=%d\n", rc);
 	}
 
 	return rc;
@@ -2924,14 +3082,14 @@ static int qpnp_vm_bms_probe(struct spmi_device *spmi)
 	rc = set_battery_data(chip);
 	if (rc) {
 		pr_err("Unable to read battery data %d\n", rc);
-		return rc;
+		goto fail_init;
 	}
 
 	/* set the battery profile */
 	rc = config_battery_data(chip->batt_data);
 	if (rc) {
 		pr_err("Unable to config battery data %d\n", rc);
-		return rc;
+		goto fail_init;
 	}
 
 	wakeup_source_init(&chip->vbms_lv_wake_source.source, "vbms_lv_wake");
@@ -2944,10 +3102,19 @@ static int qpnp_vm_bms_probe(struct spmi_device *spmi)
 	bms_init_defaults(chip);
 	bms_load_hw_defaults(chip);
 
+	if (is_battery_present(chip)) {
+		rc = setup_vbat_monitoring(chip);
+		if (rc) {
+			pr_err("fail to configure vbat monitoring rc=%d\n",
+					rc);
+			goto fail_setup;
+		}
+	}
+
 	rc = bms_request_irqs(chip);
 	if (rc) {
 		pr_err("error requesting bms irqs, rc = %d\n", rc);
-		return rc;
+		goto fail_irq;
 	}
 
 	battery_insertion_check(chip);
@@ -3040,7 +3207,19 @@ fail_psy:
 	unregister_chrdev_region(chip->dev_no, 1);
 fail_bms_device:
 	chip->bms_psy_registered = false;
+fail_irq:
+	reset_vbat_monitoring(chip);
+fail_setup:
+	wakeup_source_trash(&chip->vbms_lv_wake_source.source);
+	wakeup_source_trash(&chip->vbms_cv_wake_source.source);
+	wakeup_source_trash(&chip->vbms_soc_wake_source.source);
+fail_init:
+	mutex_destroy(&chip->bms_data_mutex);
+	mutex_destroy(&chip->last_soc_mutex);
+	mutex_destroy(&chip->state_change_mutex);
+	mutex_destroy(&chip->bms_device_mutex);
 	the_chip = NULL;
+
 	return rc;
 }
 
@@ -3053,8 +3232,13 @@ static int qpnp_vm_bms_remove(struct spmi_device *spmi)
 	device_destroy(chip->bms_class, chip->dev_no);
 	cdev_del(&chip->bms_cdev);
 	unregister_chrdev_region(chip->dev_no, 1);
+	reset_vbat_monitoring(chip);
+	wakeup_source_trash(&chip->vbms_lv_wake_source.source);
+	wakeup_source_trash(&chip->vbms_cv_wake_source.source);
+	wakeup_source_trash(&chip->vbms_soc_wake_source.source);
 	mutex_destroy(&chip->bms_data_mutex);
 	mutex_destroy(&chip->last_soc_mutex);
+	mutex_destroy(&chip->state_change_mutex);
 	mutex_destroy(&chip->bms_device_mutex);
 	power_supply_unregister(&chip->bms_psy);
 	dev_set_drvdata(&spmi->dev, NULL);

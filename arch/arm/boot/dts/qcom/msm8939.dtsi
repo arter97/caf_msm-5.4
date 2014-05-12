@@ -160,6 +160,7 @@
 #include "msm-gdsc-8916.dtsi"
 #include "msm8939-iommu.dtsi"
 #include "msm8939-coresight.dtsi"
+#include "msm8939-bus.dtsi"
 
 &soc {
 	#address-cells = <1>;
@@ -321,9 +322,9 @@
 		qcom,rtb-size = <0x100000>;
 	};
 
-	qcom,smem@8e200000 {
+	qcom,smem@86300000 {
 		compatible = "qcom,smem";
-		reg = <0x8e200000 0x100000>,
+		reg = <0x86300000 0x100000>,
 			<0x0b111008 0x4>,
 			<0x60000 0x8000>,
 			<0x193D000 0x8>;
@@ -907,22 +908,25 @@
 		qcom,not-wakeup; /* Needed until RPM is fully configured */
 	};
 
-	rmtfs_sharedmem {
+	qcom,rmtfs_sharedmem@8e580000 {
 		compatible = "qcom,sharedmem-uio";
 		reg = <0x8e580000 0x160000>;
 		reg-names = "rmtfs";
+		qcom,client-id = <0x00000001>;
 	};
 
-	dsp_sharedmem {
+	qcom,dsp_sharedmem@8e6e0000 {
 		compatible = "qcom,sharedmem-uio";
 		reg = <0x8e6e0000 0x20000>;
 		reg-names = "rfsa_dsp";
+		qcom,client-id = <0x011013ec>;
 	};
 
-	mdm_sharedmem {
+	qcom,mdm_sharedmem@8e6e0000 {
 		compatible = "qcom,sharedmem-uio";
 		reg = <0x8e6e0000 0x20000>;
 		reg-names = "rfsa_mdm";
+		qcom,client-id = <0x011013ed>;
 	};
 
 	sdhc_1: sdhci@7824000 {
@@ -977,6 +981,23 @@
 			compatible = "qcom,msm-imem-mem_dump_table";
 			reg = <0x10 8>;
 		};
+	};
+
+	qcom,venus@1de0000 {
+		compatible = "qcom,pil-tz-generic";
+		reg = <0x1de0000 0x4000>;
+
+		vdd-supply = <&gdsc_venus>;
+		proxy-reg-names = "vdd";
+		clocks = <&clock_gcc clk_gcc_venus0_vcodec0_clk>,
+			 <&clock_gcc clk_gcc_venus0_ahb_clk>,
+			 <&clock_gcc clk_gcc_venus0_axi_clk>;
+		clock-names = "core_clk", "iface_clk", "bus_clk";
+		proxy-clock-names = "core_clk", "iface_clk", "bus_clk";
+
+		qcom,pas-id = <9>;
+		qcom,proxy-timeout-ms = <5000>;
+		qcom,firmware-name = "venus";
 	};
 };
 

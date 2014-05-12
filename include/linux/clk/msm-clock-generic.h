@@ -58,6 +58,7 @@ struct mux_clk {
 	int		num_rec_parents;
 	struct clk	*safe_parent;
 	int		safe_sel;
+	unsigned long	safe_freq;
 	struct clk_mux_ops *ops;
 
 	/* Fields not used by helper function. */
@@ -104,10 +105,18 @@ struct div_data {
 	 * they are 2*N.
 	 */
 	bool is_half_divider;
+	unsigned int cached_div;
 };
 
 struct div_clk {
 	struct div_data data;
+
+	/*
+	 * Some implementations may require the divider to be set to a "safe"
+	 * value that allows reprogramming of upstream clocks without violating
+	 * voltage constraints.
+	 */
+	unsigned long safe_freq;
 
 	/* Optional */
 	struct clk_div_ops *ops;
