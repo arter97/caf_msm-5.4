@@ -1503,13 +1503,19 @@ static struct msm_gpiomux_config mdm_i2s_configs[] __initdata = {
 	},
 };
 
-static struct gpiomux_setting mi2s_act_cfg = {
+static struct gpiomux_setting i2s_act_cfg = {
 	.func = GPIOMUX_FUNC_1,
 	.drv = GPIOMUX_DRV_8MA,
 	.pull = GPIOMUX_PULL_NONE,
 };
 
-static struct gpiomux_setting mi2s_sus_cfg = {
+static struct gpiomux_setting i2s_func_2_act_cfg = {
+	.func = GPIOMUX_FUNC_2,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+
+static struct gpiomux_setting i2s_sus_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
 	.pull = GPIOMUX_PULL_DOWN,
@@ -1519,36 +1525,36 @@ static struct msm_gpiomux_config apq8064_mi2s_configs[] __initdata = {
 	{
 		.gpio	= 27,		/* mi2s ws */
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &mi2s_act_cfg,
-			[GPIOMUX_SUSPENDED] = &mi2s_sus_cfg,
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
 		},
 	},
 	{
 		.gpio	= 28,		/* mi2s sclk */
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &mi2s_act_cfg,
-			[GPIOMUX_SUSPENDED] = &mi2s_sus_cfg,
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
 		},
 	},
 	{
 		.gpio	= 29,		/* mi2s dout3 */
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &mi2s_act_cfg,
-			[GPIOMUX_SUSPENDED] = &mi2s_sus_cfg,
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
 		},
 	},
 	{
 		.gpio	= 31,		/* mi2s dout1 */
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &mi2s_act_cfg,
-			[GPIOMUX_SUSPENDED] = &mi2s_sus_cfg,
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
 		},
 	},
 	{
 		.gpio	= 32,		/* mi2s dout0 */
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &mi2s_act_cfg,
-			[GPIOMUX_SUSPENDED] = &mi2s_sus_cfg,
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
 		},
 	},
 };
@@ -1557,50 +1563,50 @@ static struct msm_gpiomux_config mpq8064_mi2s_configs[] __initdata = {
 	{
 		.gpio	= 27,		/* mi2s ws */
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &mi2s_act_cfg,
-			[GPIOMUX_SUSPENDED] = &mi2s_sus_cfg,
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
 		},
 	},
 	{
 		.gpio	= 28,		/* mi2s sclk */
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &mi2s_act_cfg,
-			[GPIOMUX_SUSPENDED] = &mi2s_sus_cfg,
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
 		},
 	},
 	{
 		.gpio	= 29,		/* mi2s dout3 */
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &mi2s_act_cfg,
-			[GPIOMUX_SUSPENDED] = &mi2s_sus_cfg,
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
 		},
 	},
 	{
 		.gpio	= 30,		/* mi2s dout2 */
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &mi2s_act_cfg,
-			[GPIOMUX_SUSPENDED] = &mi2s_sus_cfg,
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
 		},
 	},
 	{
 		.gpio	= 31,		/* mi2s dout1 */
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &mi2s_act_cfg,
-			[GPIOMUX_SUSPENDED] = &mi2s_sus_cfg,
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
 		},
 	},
 	{
 		.gpio	= 32,		/* mi2s dout0 */
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &mi2s_act_cfg,
-			[GPIOMUX_SUSPENDED] = &mi2s_sus_cfg,
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
 		},
 	},
 	{
 		.gpio	= 33,		/* mi2s mclk */
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &mi2s_act_cfg,
-			[GPIOMUX_SUSPENDED] = &mi2s_sus_cfg,
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
 		},
 	},
 };
@@ -1670,6 +1676,95 @@ static struct msm_gpiomux_config mplatform_gpio_config[] __initdata = {
 		},
 	},
 };
+
+static struct msm_gpiomux_config apq8064_adp_es2_mi2s_i2s_cfg[] __initdata = {
+	{
+		.gpio	= 27,		/* mi2s ws */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
+		},
+	},
+	{
+		.gpio	= 28,		/* mi2s sclk */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
+		},
+	},
+	{
+		.gpio	= 30,		/* mi2s dout2 */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
+		},
+	},
+
+	{
+		.gpio	= 31,		/* mi2s dout1 */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
+		},
+	},
+	{
+		.gpio	= 32,		/* mi2s dout0 */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
+		},
+	},
+	{
+		.gpio	= 35,		/* mic_i2s sclk */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
+		},
+	},
+	{
+		.gpio	= 36,		/* mic_i2s ws */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
+		},
+	},
+	{
+		.gpio	= 37,		/* mic_i2s din0 */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
+		},
+	},
+	{
+		.gpio	= 38,		/* mic_i2s din1 */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_sus_cfg,
+		},
+	},
+	{
+		.gpio	= 40,		/* spk_i2s sclk */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &i2s_func_2_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_func_2_act_cfg,
+		},
+	},
+	{
+		.gpio	= 41,		/* spk_i2s dout */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &i2s_func_2_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_func_2_act_cfg,
+		},
+	},
+	{
+		.gpio	= 42,		/* spk_i2s ws */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &i2s_act_cfg,
+			[GPIOMUX_SUSPENDED] = &i2s_act_cfg,
+		},
+	},
+};
+
 
 static struct msm_gpiomux_config apq8064_mxt_configs[] __initdata = {
 	{	/* TS INTERRUPT */
@@ -2092,11 +2187,16 @@ void __init apq8064_init_gpiomux(void)
 		}
 	}
 
-	msm_gpiomux_install(apq8064_slimbus_config,
-			ARRAY_SIZE(apq8064_slimbus_config));
+	if (!((machine_is_apq8064_adp_2()) &&
+		(SOCINFO_VERSION_MAJOR(socinfo_get_platform_version())
+							== 0x2))) {
+		pr_info("%s: install slimbus gpios", __func__);
+		msm_gpiomux_install(apq8064_slimbus_config,
+				ARRAY_SIZE(apq8064_slimbus_config));
 
-	msm_gpiomux_install(apq8064_audio_codec_configs,
-			ARRAY_SIZE(apq8064_audio_codec_configs));
+		msm_gpiomux_install(apq8064_audio_codec_configs,
+				ARRAY_SIZE(apq8064_audio_codec_configs));
+	}
 
 	if (machine_is_apq8064_mplatform()) {
 		/*
@@ -2142,6 +2242,17 @@ void __init apq8064_init_gpiomux(void)
 	if (!machine_is_apq8064_mplatform())
 		msm_gpiomux_install(apq8064_ext_regulator_configs,
 			ARRAY_SIZE(apq8064_ext_regulator_configs));
+
+	if ((machine_is_apq8064_adp_2()) &&
+		(SOCINFO_VERSION_MAJOR(socinfo_get_platform_version())
+							== 0x2)) {
+		pr_info("%s(): machine is adp(%d)platform_version(0x%x)MAJOR(%d)",
+			__func__, machine_is_apq8064_adp_2(),
+			socinfo_get_platform_version(),
+			SOCINFO_VERSION_MAJOR(socinfo_get_platform_version()));
+		msm_gpiomux_install(apq8064_adp_es2_mi2s_i2s_cfg,
+		ARRAY_SIZE(apq8064_adp_es2_mi2s_i2s_cfg));
+	}
 
 	if (machine_is_apq8064_mtp()) {
 		if (socinfo_get_platform_subtype() == PLATFORM_SUBTYPE_DSDA2) {

@@ -2532,8 +2532,9 @@ static struct platform_device *common_devices[] __initdata = {
 	&apq_pcm_routing,
 	&apq_cpudai0,
 	&apq_cpudai1,
+	&apq_cpudai_pri_i2s_rx,
+	&apq_cpudai_pri_i2s_tx,
 	&mpq_cpudai_sec_i2s_rx,
-	&mpq_cpudai_mi2s_tx,
 	&apq_cpudai_hdmi_rx,
 	&apq_cpudai_bt_rx,
 	&apq_cpudai_bt_tx,
@@ -2655,7 +2656,6 @@ static struct platform_device *mplatform_common_devices[] __initdata = {
 	&apq_cpudai0,
 	&apq_cpudai1,
 	&mpq_cpudai_sec_i2s_rx,
-	&mpq_cpudai_mi2s_tx,
 	&apq_cpudai_hdmi_rx,
 	&apq_cpudai_bt_rx,
 	&apq_cpudai_bt_tx,
@@ -3750,6 +3750,13 @@ static void __init apq8064_common_init(void)
 		platform_add_devices(common_devices,
 				ARRAY_SIZE(common_devices));
 	}
+
+	if ((machine_is_apq8064_adp_2()) &&
+		(SOCINFO_VERSION_MAJOR(socinfo_get_platform_version())
+							== 0x2))
+		platform_device_register(&apq_auto_cpudai_mi2s_rx);
+	else
+		platform_device_register(&mpq_cpudai_mi2s_tx);
 
 	if (!(machine_is_mpq8064_cdp() || machine_is_mpq8064_hrd() ||
 				machine_is_mpq8064_dtv())) {
