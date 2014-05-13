@@ -28,7 +28,8 @@ dtb-$(CONFIG_ARCH_MSM8974) += msm8974-v1-cdp.dtb \
 	msm8974pro-ac-pm8941-liquid.dtb \
 	msm8974pro-ac-pm8941-mtp.dtb \
 	msm8974pro-ac-pma8084-pm8941-mtp.dtb \
-	msm8994-cdp-interposer.dtb
+	msm8994-cdp-interposer.dtb \
+	msm8994-mtp-interposer.dtb
 dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
 	msm8916-rumi.dtb \
 	msm8916-cdp.dtb \
@@ -39,7 +40,11 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
 	msm8916-qrd-skui.dtb \
 	msm8939-sim.dtb \
 	msm8939-rumi.dtb \
-	msm8939-qrd-skuk.dtb
+	msm8939-qrd-skuk.dtb \
+	msm8939-cdp.dtb \
+	msm8939-cdp-smb1360.dtb \
+	msm8939-mtp.dtb \
+	msm8939-mtp-smb1360.dtb
 dtb-$(CONFIG_ARCH_MSM8226) += msm8226-sim.dtb \
 	msm8226-fluid.dtb \
 	msm8226-v1-cdp.dtb \
@@ -98,7 +103,8 @@ dtb-$(CONFIG_ARCH_MSM8610) += msm8610-rumi.dtb \
 dtb-$(CONFIG_ARCH_FSM9900) += fsm9900-rumi.dtb \
 	fsm9900-sim.dtb \
 	fsm9900-cdp.dtb \
-	fsm9900-mtp.dtb
+	fsm9900-mtp-v1.0.dtb \
+	fsm9900-mtp-v1.1.dtb
 dtb-$(CONFIG_ARCH_MDM9630) += mdm9630-sim.dtb \
 	mdm9630-v1-cdp.dtb \
 	mdm9630-v1-mtp.dtb \

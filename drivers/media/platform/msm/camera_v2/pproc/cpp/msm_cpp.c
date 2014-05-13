@@ -490,6 +490,28 @@ static void msm_cpp_poll(void __iomem *cpp_base, u32 val)
 		pr_err("Poll failed: expect: 0x%x\n", val);
 }
 
+static void msm_cpp_poll_rx_empty(void __iomem *cpp_base)
+{
+	uint32_t tmp, retry = 0;
+
+	tmp = msm_camera_io_r(cpp_base + MSM_CPP_MICRO_FIFO_RX_STAT);
+	while (((tmp & 0x2) != 0x0) && (retry++ < MSM_CPP_POLL_RETRIES)) {
+		/*
+		* Below usleep values are chosen based on experiments
+		* and this was the smallest number which works. This
+		* sleep is needed to leave enough time for Microcontroller
+		* to read rx fifo.
+		*/
+		usleep_range(200, 300);
+		tmp = msm_camera_io_r(cpp_base + MSM_CPP_MICRO_FIFO_RX_STAT);
+	}
+
+	if (retry < MSM_CPP_POLL_RETRIES)
+		CPP_LOW("Poll rx empty\n");
+	else
+		pr_err("Poll rx empty failed\n");
+}
+
 void cpp_release_ion_client(struct kref *ref)
 {
 	struct cpp_device *cpp_dev = container_of(ref,
@@ -885,8 +907,11 @@ static void cpp_load_fw(struct cpp_device *cpp_dev, char *fw_name_bin)
 		msm_cpp_write(MSM_CPP_START_ADDRESS, cpp_dev->base);
 
 		if (ptr_bin) {
+			msm_cpp_poll_rx_empty(cpp_dev->base);
 			for (i = 0; i < fw->size/4; i++) {
 				msm_cpp_write(*ptr_bin, cpp_dev->base);
+				if (i % MSM_CPP_RX_FIFO_LEVEL == 0)
+					msm_cpp_poll_rx_empty(cpp_dev->base);
 				ptr_bin++;
 			}
 		}
@@ -1045,13 +1070,13 @@ static int cpp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 			msm_camera_io_r(cpp_dev->cpp_hw_base + 0x8C));
 		msm_camera_io_w(0x0, cpp_dev->base + MSM_CPP_MICRO_CLKEN_CTL);
 		msm_cpp_clear_timer(cpp_dev);
-		cpp_deinit_mem(cpp_dev);
+		cpp_release_hardware(cpp_dev);
 		if (cpp_dev->iommu_state == CPP_IOMMU_STATE_ATTACHED) {
 			iommu_detach_device(cpp_dev->domain,
 				cpp_dev->iommu_ctx);
 			cpp_dev->iommu_state = CPP_IOMMU_STATE_DETACHED;
 		}
-		cpp_release_hardware(cpp_dev);
+		cpp_deinit_mem(cpp_dev);
 		msm_cpp_empty_list(processing_q, list_frame);
 		msm_cpp_empty_list(eventData_q, list_eventdata);
 		cpp_dev->state = CPP_STATE_OFF;
@@ -1271,7 +1296,10 @@ static int msm_cpp_send_frame_to_hardware(struct cpp_device *cpp_dev,
 
 		msm_cpp_write(0x6, cpp_dev->base);
 		msm_cpp_dump_frame_cmd(process_frame);
+		msm_cpp_poll_rx_empty(cpp_dev->base);
 		for (i = 0; i < process_frame->msg_len; i++) {
+			if (i % MSM_CPP_RX_FIFO_LEVEL == 0)
+				msm_cpp_poll_rx_empty(cpp_dev->base);
 			if ((induce_error) && (i == 1)) {
 				pr_err("Induce error\n");
 				msm_cpp_write(process_frame->cpp_cmd_msg[i]-1,
@@ -2313,11 +2341,18 @@ static long msm_cpp_subdev_fops_compat_ioctl(struct file *file,
 	case VIDIOC_MSM_CPP_POP_STREAM_BUFFER32:
 		cmd = VIDIOC_MSM_CPP_POP_STREAM_BUFFER;
 		break;
+	case VIDIOC_MSM_CPP_IOMMU_ATTACH32:
+		cmd = VIDIOC_MSM_CPP_IOMMU_ATTACH;
+		break;
+	case VIDIOC_MSM_CPP_IOMMU_DETACH32:
+		cmd = VIDIOC_MSM_CPP_IOMMU_DETACH;
+		break;
 	case MSM_SD_SHUTDOWN:
 		cmd = MSM_SD_SHUTDOWN;
 		break;
 	default:
-		pr_debug("%s: unsupported compat type :%d\n", __func__, cmd);
+		pr_err_ratelimited("%s: unsupported compat type :%d\n",
+				__func__, cmd);
 		break;
 	}
 
@@ -2330,6 +2365,8 @@ static long msm_cpp_subdev_fops_compat_ioctl(struct file *file,
 	case VIDIOC_MSM_CPP_SET_CLOCK:
 	case VIDIOC_MSM_CPP_QUEUE_BUF:
 	case VIDIOC_MSM_CPP_POP_STREAM_BUFFER:
+	case VIDIOC_MSM_CPP_IOMMU_ATTACH:
+	case VIDIOC_MSM_CPP_IOMMU_DETACH:
 	case MSM_SD_SHUTDOWN:
 		rc = v4l2_subdev_call(sd, core, ioctl, cmd, &kp_ioctl);
 		break;
@@ -2337,7 +2374,8 @@ static long msm_cpp_subdev_fops_compat_ioctl(struct file *file,
 	case VIDIOC_MSM_CPP_GET_EVENTPAYLOAD:
 		break;
 	default:
-		pr_debug("%s: unsupported compat type :%d\n", __func__, cmd);
+		pr_err_ratelimited("%s: unsupported compat type :%d\n",
+				__func__, cmd);
 		break;
 	}
 

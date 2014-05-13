@@ -456,6 +456,7 @@
 			qcom,data-fifo-size = <0x600>;
 			qcom,descriptor-fifo-offset = <0x600>;
 			qcom,descriptor-fifo-size = <0x200>;
+			qcom,reset-bam-on-connect;
 		};
 	};
 
@@ -502,22 +503,25 @@
 		qcom,streaming-func = "rmnet";
 	};
 
-	rmtfs_sharedmem {
+	qcom,rmtfs_sharedmem@8e580000 {
 		compatible = "qcom,sharedmem-uio";
 		reg = <0x8e580000 0x160000>;
 		reg-names = "rmtfs";
+		qcom,client-id = <0x00000001>;
 	};
 
-	dsp_sharedmem {
+	qcom,dsp_sharedmem@8e6e0000 {
 		compatible = "qcom,sharedmem-uio";
 		reg = <0x8e6e0000 0x20000>;
 		reg-names = "rfsa_dsp";
+		qcom,client-id = <0x011013ec>;
 	};
 
-	mdm_sharedmem {
+	qcom,mdm_sharedmem@8e6e0000 {
 		compatible = "qcom,sharedmem-uio";
 		reg = <0x8e6e0000 0x20000>;
 		reg-names = "rfsa_mdm";
+		qcom,client-id = <0x011013ed>;
 	};
 
 	jtag_mm0: jtagmm@85c000 {
@@ -732,9 +736,9 @@
 		qcom,rtb-size = <0x100000>;
 	};
 
-	qcom,smem@8e200000 {
+	qcom,smem@86300000 {
 		compatible = "qcom,smem";
-		reg = <0x8e200000 0x100000>,
+		reg = <0x86300000 0x100000>,
 			<0x0b011008 0x4>,
 			<0x60000 0x8000>,
 			<0x193D000 0x8>;
