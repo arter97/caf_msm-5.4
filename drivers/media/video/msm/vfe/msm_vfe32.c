@@ -7493,6 +7493,8 @@ static void msm_axi_process_irq(struct v4l2_subdev *sd, void *arg)
 					(axi_ctrl->share_ctrl->outpath.out3.ch0
 					+ VFE_WM_OFFSET))) {
 				CDBG("VFE32_OUTPUT_MODE_TERTIARY2\n");
+				vfe32_process_output_path_irq_rdi1_only(
+						axi_ctrl);
 			}
 		}
 	}
