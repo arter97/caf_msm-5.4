@@ -30,14 +30,11 @@ static inline u64 fudge_factor(u64 val, u32 numer, u32 denom)
 	return result;
 }
 
-#define AB_FUDGE_FACTOR(val)		fudge_factor((val),		\
-	(mdss_res->ab_factor.numer), (mdss_res->ab_factor.denom))
-
-#define IB_FUDGE_FACTOR(val)		fudge_factor((val),		\
-	(mdss_res->ib_factor.numer), (mdss_res->ib_factor.denom))
-
-#define CLK_FUDGE_FACTOR(val)		fudge_factor((val),		\
-	(mdss_res->clk_factor.numer), (mdss_res->clk_factor.denom))
+static inline u64 apply_fudge_factor(u64 val,
+	struct mdss_fudge_factor *factor)
+{
+		return fudge_factor(val, factor->numer, factor->denom);
+}
 
 static DEFINE_MUTEX(mdss_mdp_ctl_lock);
 
@@ -64,7 +61,7 @@ static inline u32 mdss_mdp_clk_fudge_factor(struct mdss_mdp_mixer *mixer,
 {
 	struct mdss_panel_info *pinfo = &mixer->ctl->panel_data->panel_info;
 
-	rate = CLK_FUDGE_FACTOR(rate);
+	rate = apply_fudge_factor(rate, &mdss_res->clk_factor);
 
 	/*
 	 * If the panel is video mode and its back porch period is
@@ -73,7 +70,7 @@ static inline u32 mdss_mdp_clk_fudge_factor(struct mdss_mdp_mixer *mixer,
 	 */
 	if (mixer->ctl->is_video_mode && pinfo &&
 		(pinfo->lcdc.v_back_porch < MDP_MIN_VBP))
-		rate = CLK_FUDGE_FACTOR(rate);
+		rate = apply_fudge_factor(rate, &mdss_res->clk_factor);
 
 	return rate;
 }
@@ -694,11 +691,16 @@ static void mdss_mdp_perf_calc_ctl(struct mdss_mdp_ctl *ctl,
 			left_plist, (left_plist ? MDSS_MDP_MAX_STAGE : 0),
 			right_plist, (right_plist ? MDSS_MDP_MAX_STAGE : 0));
 
-	if (ctl->is_video_mode)
-		perf->bw_ctl = IB_FUDGE_FACTOR(perf->bw_ctl);
-
+	if (ctl->is_video_mode) {
+		if (perf->bw_overlap > perf->bw_prefill)
+			perf->bw_ctl = apply_fudge_factor(perf->bw_ctl,
+				&mdss_res->ib_factor_overlap);
+		else
+			perf->bw_ctl = apply_fudge_factor(perf->bw_ctl,
+				&mdss_res->ib_factor);
+	}
 	pr_debug("ctl=%d clk_rate=%u\n", ctl->num, perf->mdp_clk_rate);
-	pr_debug("bw_overlap=%llu bw_prefill=%llu prefill_byptes=%d\n",
+	pr_debug("bw_overlap=%llu bw_prefill=%llu prefill_bytes=%d\n",
 		 perf->bw_overlap, perf->bw_prefill, perf->prefill_bytes);
 }
 
@@ -822,7 +824,8 @@ static inline void mdss_mdp_ctl_perf_update_bus(struct mdss_mdp_ctl *ctl)
 		}
 	}
 	bus_ib_quota = bw_sum_of_intfs;
-	bus_ab_quota = AB_FUDGE_FACTOR(bw_sum_of_intfs);
+	bus_ab_quota = apply_fudge_factor(bw_sum_of_intfs,
+		&mdss_res->ab_factor);
 	mdss_mdp_bus_scale_set_quota(bus_ab_quota, bus_ib_quota);
 	pr_debug("ab=%llu ib=%llu\n", bus_ab_quota, bus_ib_quota);
 }
@@ -2259,6 +2262,33 @@ int mdss_mdp_mixer_pipe_update(struct mdss_mdp_pipe *pipe, int params_changed)
 	return 0;
 }
 
+/**
+ * mdss_mdp_mixer_unstage_all() - Unstage all pipes from mixer
+ * @mixer:	Mixer from which to unstage all pipes
+ *
+ * Unstage any pipes that are currently attached to mixer.
+ *
+ * NOTE: this will not update the pipe structure, and thus a full
+ * deinitialization or reconfiguration of all pipes is expected after this call.
+ */
+void mdss_mdp_mixer_unstage_all(struct mdss_mdp_mixer *mixer)
+{
+	struct mdss_mdp_pipe *tmp;
+	int i;
+
+	if (!mixer)
+		return;
+
+	for (i = 0; i < MDSS_MDP_MAX_STAGE; i++) {
+		tmp = mixer->stage_pipe[i];
+		if (tmp) {
+			mixer->stage_pipe[i] = NULL;
+			mixer->params_changed++;
+			tmp->params_changed++;
+		}
+	}
+}
+
 int mdss_mdp_mixer_pipe_unstage(struct mdss_mdp_pipe *pipe)
 {
 	struct mdss_mdp_ctl *ctl;
@@ -2495,7 +2525,8 @@ int mdss_mdp_display_commit(struct mdss_mdp_ctl *ctl, void *arg)
 		}
 	}
 
-	mdss_mdp_ctl_notify(ctl, MDP_NOTIFY_FRAME_READY);
+	if (!ctl->shared_lock)
+		mdss_mdp_ctl_notify(ctl, MDP_NOTIFY_FRAME_READY);
 
 	if (ctl->wait_pingpong)
 		ctl->wait_pingpong(ctl, NULL);
