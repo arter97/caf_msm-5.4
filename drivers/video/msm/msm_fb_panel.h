@@ -230,5 +230,6 @@ int lcdc_device_register(struct msm_panel_info *pinfo);
 int mddi_toshiba_device_register(struct msm_panel_info *pinfo,
 					u32 channel, u32 panel);
 int mipi_dsi_i2c_video_wvga_device_register(u32 pdest);
+int mipi_dsi_i2c_video_xga_device_register(u32 pdest);
 
 #endif /* MSM_FB_PANEL_H */

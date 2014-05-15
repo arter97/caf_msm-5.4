@@ -177,6 +177,7 @@ obj-$(CONFIG_FB_MSM_EXT_INTERFACE_COMMON) += external_common.o
 obj-$(CONFIG_FB_MSM_LCDC_TRULY_HVGA_IPS3P2335) += lcdc_truly_ips3p2335.o
 
 obj-y += mipi_dsi_i2c_video_wvga.o
+obj-y += mipi_dsi_i2c_video_xga.o
 
 obj-$(CONFIG_FB_MSM_TVOUT) += tvout_msm.o
 
