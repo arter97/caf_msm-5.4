@@ -57,6 +57,8 @@ static struct resource msm_fb_resources[] = {
 	}
 };
 
+#define MIPI_DSI_I2C_VIDEO_WVGA_NAME "mipi_dsi_i2c_video_wvga"
+#define MIPI_DSI_I2C_VIDEO_XGA_NAME "mipi_dsi_i2c_video_xga"
 #define LVDS_CHIMEI_PANEL_NAME "lvds_chimei_wxga"
 #define LVDS_FRC_PANEL_NAME "lvds_frc_fhd"
 #define MIPI_VIDEO_TOSHIBA_WSVGA_PANEL_NAME "mipi_video_toshiba_wsvga"
@@ -110,10 +112,15 @@ static int msm_fb_detect_panel(const char *name)
 			strnlen(MIPI_VIDEO_TOSHIBA_WSVGA_PANEL_NAME,
 				PANEL_NAME_MAX_LEN)))
 			return 0;
-	} else if (machine_is_apq8064_cdp() || machine_is_apq8064_adp_2()) {
+	} else if (machine_is_apq8064_cdp()) {
 		if (!strncmp(name, LVDS_CHIMEI_PANEL_NAME,
 			strnlen(LVDS_CHIMEI_PANEL_NAME,
 				PANEL_NAME_MAX_LEN)))
+			return 0;
+	} else if (machine_is_apq8064_adp_2()) {
+		if (!strcmp(name, LVDS_CHIMEI_PANEL_NAME))
+			return 0;
+		else if (!strcmp(name, MIPI_DSI_I2C_VIDEO_WVGA_NAME))
 			return 0;
 	} else if (machine_is_mpq8064_dtv()) {
 		if (!strncmp(name, LVDS_FRC_PANEL_NAME,
