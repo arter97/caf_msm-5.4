@@ -129,6 +129,7 @@ struct eth_dev {
 
 	/* stats */
 	unsigned long		tx_throttle;
+	unsigned long		rx_throttle;
 	unsigned int		tx_aggr_cnt[DL_MAX_PKTS_PER_XFER];
 	unsigned int		tx_pkts_rcvd;
 	unsigned int		loop_brk_cnt;
@@ -181,6 +182,11 @@ static inline int qlen(struct usb_gadget *gadget, unsigned qmult)
 }
 
 /*-------------------------------------------------------------------------*/
+#define U_ETHER_RX_PENDING_TSHOLD 500
+
+static unsigned int u_ether_rx_pending_thld = U_ETHER_RX_PENDING_TSHOLD;
+module_param(u_ether_rx_pending_thld, uint, S_IRUGO | S_IWUSR);
+
 
 /* REVISIT there must be a better way than having two sets
  * of debug calls ...
@@ -438,9 +444,20 @@ quiesce:
 	}
 
 clean:
-	spin_lock(&dev->req_lock);
-	list_add(&req->list, &dev->rx_reqs);
-	spin_unlock(&dev->req_lock);
+	if (queue && dev->rx_frames.qlen <= u_ether_rx_pending_thld) {
+		if (rx_submit(dev, req, GFP_ATOMIC) < 0) {
+			spin_lock(&dev->req_lock);
+			list_add(&req->list, &dev->rx_reqs);
+			spin_unlock(&dev->req_lock);
+		}
+	} else {
+		/* rx buffers draining is delayed,defer further queuing to wq */
+		if (queue)
+			dev->rx_throttle++;
+		spin_lock(&dev->req_lock);
+		list_add(&req->list, &dev->rx_reqs);
+		spin_unlock(&dev->req_lock);
+	}
 
 	if (queue)
 		queue_work(uether_wq, &dev->rx_work);
@@ -2040,6 +2057,7 @@ void gether_disconnect(struct gether *link)
 					dev->tx_throttle);
 	/* reset tx_throttle count */
 	dev->tx_throttle = 0;
+	dev->rx_throttle = 0;
 
 	/* finish forgetting about this USB link episode */
 	dev->header_len = 0;
@@ -2060,6 +2078,8 @@ static int uether_stat_show(struct seq_file *s, void *unused)
 	int i;
 
 	if (dev) {
+		seq_printf(s, "rx_throttle = %lu\n",
+					dev->rx_throttle);
 		seq_printf(s, "tx_qlen=%u tx_throttle = %lu\n aggr count:",
 					dev->tx_skb_q.qlen,
 					dev->tx_throttle);
@@ -2089,6 +2109,7 @@ static ssize_t uether_stat_reset(struct file *file,
 	spin_lock_irqsave(&dev->lock, flags);
 	/* Reset tx_throttle */
 	dev->tx_throttle = 0;
+	dev->rx_throttle = 0;
 	spin_unlock_irqrestore(&dev->lock, flags);
 	return count;
 }
