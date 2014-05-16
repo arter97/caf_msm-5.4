@@ -129,7 +129,7 @@ static int msm_ispif_reset_hw(struct ispif_device *ispif)
 	}
 
 	if (ispif->hw_num_isps > 1) {
-		timeout = wait_for_completion_interruptible_timeout(
+		timeout = wait_for_completion_timeout(
 				&ispif->reset_complete[VFE1],
 				msecs_to_jiffies(500));
 		CDBG("%s: VFE1 done\n", __func__);
@@ -965,7 +965,11 @@ end:
 static void msm_ispif_release(struct ispif_device *ispif)
 {
 	BUG_ON(!ispif);
-	BUG_ON(!ispif->base);
+
+	if (!ispif->base) {
+		pr_err("%s: ispif base is NULL\n", __func__);
+		return;
+	}
 
 	if (ispif->ispif_state != ISPIF_POWER_UP) {
 		pr_err("%s: ispif invalid state %d\n", __func__,
