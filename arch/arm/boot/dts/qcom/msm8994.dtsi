@@ -35,64 +35,64 @@
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
 			reg = <0x0>;
-			enable-method = "spin-table";
-			cpu-release-addr = <0x0 0x06000000>;
+			enable-method = "qcom,arm-cortex-acc";
+			qcom,acc = <&acc0>;
 		};
 
 		cpu@1 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
 			reg = <0x1>;
-			enable-method = "spin-table";
-			cpu-release-addr = <0x0 0x06000000>;
+			enable-method = "qcom,arm-cortex-acc";
+			qcom,acc = <&acc1>;
 		};
 
 		cpu@2 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
 			reg = <0x2>;
-			enable-method = "spin-table";
-			cpu-release-addr = <0x0 0x06000000>;
+			enable-method = "qcom,arm-cortex-acc";
+			qcom,acc = <&acc2>;
 		};
 
 		cpu@3 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
 			reg = <0x3>;
-			enable-method = "spin-table";
-			cpu-release-addr = <0x0 0x06000000>;
+			enable-method = "qcom,arm-cortex-acc";
+			qcom,acc = <&acc3>;
 		};
 
 		cpu@100 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a57";
 			reg = <0x100>;
-			enable-method = "spin-table";
-			cpu-release-addr = <0x0 0x06000000>;
+			enable-method = "qcom,arm-cortex-acc";
+			qcom,acc = <&acc4>;
 		};
 
 		cpu@101 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a57";
 			reg = <0x101>;
-			enable-method = "spin-table";
-			cpu-release-addr = <0x0 0x06000000>;
+			enable-method = "qcom,arm-cortex-acc";
+			qcom,acc = <&acc5>;
 		};
 
 		cpu@102 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a57";
 			reg = <0x102>;
-			enable-method = "spin-table";
-			cpu-release-addr = <0x0 0x06000000>;
+			enable-method = "qcom,arm-cortex-acc";
+			qcom,acc = <&acc6>;
 		};
 
 		cpu@103 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a57";
 			reg = <0x103>;
-			enable-method = "spin-table";
-			cpu-release-addr = <0x0 0x06000000>;
+			enable-method = "qcom,arm-cortex-acc";
+			qcom,acc = <&acc7>;
 		};
 	};
 
@@ -151,12 +151,61 @@
 #include "msm8994-smp2p.dtsi"
 #include "msm8994-ipcrouter.dtsi"
 #include "msm8994-coresight.dtsi"
+#include "msm8994-mdss.dtsi"
 
 &soc {
 	#address-cells = <1>;
 	#size-cells = <1>;
 	ranges = <0 0 0 0xffffffff>;
 	compatible = "simple-bus";
+
+	acc0:clock-controller@f908b004 {
+		compatible = "qcom,arm-cortex-acc";
+		reg = <0xf908b000 0x1000>,
+		      <0xf900b000 0x1000>;
+	};
+
+	acc1:clock-controller@f909b004 {
+		compatible = "qcom,arm-cortex-acc";
+		reg = <0xf909b000 0x1000>,
+		      <0xf900b000 0x1000>;
+	};
+
+	acc2:clock-controller@f90ab004 {
+		compatible = "qcom,arm-cortex-acc";
+		reg = <0xf90ab000 0x1000>,
+		      <0xf900b000 0x1000>;
+	};
+
+	acc3:clock-controller@f90bb004 {
+		compatible = "qcom,arm-cortex-acc";
+		reg = <0xf90bb000 0x1000>,
+		      <0xf900b000 0x1000>;
+	};
+
+	acc4:clock-controller@f90cb004 {
+		compatible = "qcom,arm-cortex-acc";
+		reg = <0xf90cb000 0x1000>,
+		      <0xf900b000 0x1000>;
+	};
+
+	acc5:clock-controller@f90db004 {
+		compatible = "qcom,arm-cortex-acc";
+		reg = <0xf90db000 0x1000>,
+		      <0xf900b000 0x1000>;
+	};
+
+	acc6:clock-controller@f90eb004 {
+		compatible = "qcom,arm-cortex-acc";
+		reg = <0xf90eb000 0x1000>,
+		      <0xf900b000 0x1000>;
+	};
+
+	acc7:clock-controller@f90fb004 {
+		compatible = "qcom,arm-cortex-acc";
+		reg = <0xf90fb000 0x1000>,
+		      <0xf900b000 0x1000>;
+	};
 
 	intc: interrupt-controller@f9000000 {
 		compatible = "qcom,msm-qgic2";
@@ -336,6 +385,7 @@
 	qcom,wdt@f9017000 {
 		compatible = "qcom,msm-watchdog";
 		reg = <0xf9017000 0x1000>;
+		reg-names = "wdt-base";
 		interrupts = <0 3 0>, <0 4 0>;
 		qcom,bark-time = <11000>;
 		qcom,pet-time = <10000>;
@@ -725,16 +775,18 @@
 		reg = <0xfdce0000 0x4000>;
 
 		vdd-supply = <&gdsc_venus>;
-		proxy-reg-names = "vdd";
+		qcom,proxy-reg-names = "vdd";
 		clock-names = "core_clk", "iface_clk",
-			      "bus_clk", "mem_clk";
-		proxy-clock-names = "core_clk", "iface_clk",
-				    "bus_clk", "mem_clk";
+			      "bus_clk", "mem_clk", "scm_ce1_clk";
+		qcom,proxy-clock-names = "core_clk", "iface_clk",
+				    "bus_clk", "mem_clk", "scm_ce1_clk";
+		qcom,scm_ce1_clk-freq = <85710000>;
 
 		clocks = <&clock_mmss clk_venus0_vcodec0_clk>,
 			<&clock_mmss clk_venus0_ahb_clk>,
 			<&clock_mmss clk_venus0_axi_clk>,
-			<&clock_mmss clk_venus0_ocmemnoc_clk>;
+			<&clock_mmss clk_venus0_ocmemnoc_clk>,
+			<&clock_rpm clk_ce1_clk>;
 
 		qcom,msm-bus,name = "pil-venus";
 		qcom,msm-bus,num-cases = <2>;
@@ -784,13 +836,16 @@
 		interrupts = <0 162 1>;
 
 		vdd_cx-supply = <&pm8994_s1_corner>;
-		proxy-reg-names = "vdd_cx";
-		vdd_cx-uV-uA = <7 100000>;
+		qcom,proxy-reg-names = "vdd_cx";
+		qcom,vdd_cx-uV-uA = <7 100000>;
+
 		clocks = <&clock_gcc clk_gcc_lpass_q6_axi_clk>,
-			 <&clock_rpm clk_cxo_pil_lpass_clk>;
-		clock-names = "bus_clk", "xo";
-		active-clock-names = "bus_clk";
-		proxy-clock-names = "xo";
+			 <&clock_rpm clk_cxo_pil_lpass_clk>,
+			 <&clock_rpm clk_ce1_clk>;
+		clock-names = "bus_clk", "xo", "scm_ce1_clk";
+		qcom,active-clock-names = "bus_clk";
+		qcom,proxy-clock-names = "xo", "scm_ce1_clk";
+		qcom,scm_ce1_clk-freq = <85710000>;
 
 		qcom,pas-id = <1>;
 		qcom,proxy-timeout-ms = <10000>;
@@ -854,14 +909,14 @@
 		clock-names = "cpu0_clk", "cpu1_clk", "cpu2_clk",
 				"cpu3_clk", "cpu4_clk", "cpu5_clk",
 				"cpu6_clk", "cpu7_clk";
-		clocks = <&clock_gcc clk_a53_clk>,
-			 <&clock_gcc clk_a53_clk>,
-			 <&clock_gcc clk_a53_clk>,
-			 <&clock_gcc clk_a53_clk>,
-			 <&clock_gcc clk_a57_clk>,
-			 <&clock_gcc clk_a57_clk>,
-			 <&clock_gcc clk_a57_clk>,
-			 <&clock_gcc clk_a57_clk>;
+		clocks = <&clock_cpu clk_a53_clk>,
+			 <&clock_cpu clk_a53_clk>,
+			 <&clock_cpu clk_a53_clk>,
+			 <&clock_cpu clk_a53_clk>,
+			 <&clock_cpu clk_a57_clk>,
+			 <&clock_cpu clk_a57_clk>,
+			 <&clock_cpu clk_a57_clk>,
+			 <&clock_cpu clk_a57_clk>;
 
 		qcom,cpufreq-table =
 			<  249600 >,
@@ -870,6 +925,34 @@
 			<  652800 >,
 			<  729600 >,
 			<  883200 >;
+	};
+
+	clock_cpu: qcom,cpu-clock-8994@f9015000 {
+		compatible = "qcom,cpu-clock-8994";
+		reg = <0xf9015000 0x1000>,
+		      <0xf9016000 0x1000>,
+		      <0xf9011000 0x1000>,
+		      <0xf900d000 0x1000>,
+		      <0xf900f000 0x1000>,
+		      <0xf9112000 0x1000>;
+		reg-names = "c0_pll", "c1_pll", "cci_pll", "c0_mux", "c1_mux", "cci_mux";
+		vdd-a53-supply = <&apc0_vreg_corner>;
+		vdd-a57-supply = <&apc1_vreg_corner>;
+		vdd-dig-supply = <&pm8994_s1_corner_ao>;
+		qcom,a53-speedbin0-v0 =
+			<         0 0>,
+			< 249600000 1>,
+			< 499200000 2>,
+			< 940800000 3>;
+		qcom,a57-speedbin0-v0 =
+			<         0 0>,
+			< 249600000 1>,
+			< 499200000 2>,
+			< 921600000 3>;
+		clock-names = "xo_ao", "aux_clk";
+		clocks = <&clock_rpm clk_cxo_clk_src_ao>,
+			 <&clock_gcc clk_gpll0_ao>;
+		#clock-cells = <1>;
 	};
 
 	ocmem: qcom,ocmem@fdd00000 {
@@ -915,9 +998,21 @@
 			<0xe0024 0x5555556>,
 			<0x80124 0x3>;
 		qcom,max-hw-load = <1281600>; /* Full 4k @ 30 + 1080p @ 30 */
-		qcom,clock-names = "core_clk", "core0_clk", "core1_clk", "iface_clk", "bus_clk",
-			"mem_clk";
+		qcom,clock-names = "core_clk", "core0_clk", "core1_clk", "core2_clk",
+			"iface_clk", "bus_clk";
+		clock-names = "core_clk", "core0_clk", "core1_clk", "core2_clk",
+			"iface_clk", "bus_clk";
+		venus-supply = <&gdsc_venus>;
+		venus-core0-supply = <&gdsc_venus_core0>;
+		venus-core1-supply = <&gdsc_venus_core1>;
+		venus-core2-supply = <&gdsc_venus_core2>;
 		qcom,clock-configs = <0x3 0x0 0x0 0x0 0x0 0x0>;
+		clocks = <&clock_mmss clk_venus0_vcodec0_clk>,
+			<&clock_mmss clk_venus0_core0_vcodec_clk>,
+			<&clock_mmss clk_venus0_core1_vcodec_clk>,
+			<&clock_mmss clk_venus0_core2_vcodec_clk>,
+			<&clock_mmss clk_venus0_ahb_clk>,
+			<&clock_mmss clk_venus0_axi_clk>;
 		qcom,load-freq-tbl = <979200 465000000>,
 			<783360 465000000>,
 			<489600 266670000>,
@@ -1219,6 +1314,20 @@
 				<55 512 393600 3936000>;
 		clock-names = "core_clk";
 		clocks = <&clock_rpm clk_ce1_clk>;
+	};
+
+	qcom,msm-thermal {
+		compatible = "qcom,msm-thermal";
+		qcom,sensor-id = <7>;
+		qcom,poll-ms = <250>;
+		qcom,limit-temp = <1000>;
+		qcom,temp-hysteresis = <10>;
+		qcom,therm-reset-temp = <115>;
+		qcom,freq-step = <2>;
+	};
+
+	qcom,bcl {
+		compatible = "qcom,bcl";
 	};
 };
 

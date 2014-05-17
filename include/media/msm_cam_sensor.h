@@ -131,6 +131,13 @@ enum msm_sensor_resolution_t {
 	MSM_SENSOR_INVALID_RES,
 };
 
+enum msm_camera_stream_type_t {
+	MSM_CAMERA_STREAM_PREVIEW,
+	MSM_CAMERA_STREAM_SNAPSHOT,
+	MSM_CAMERA_STREAM_VIDEO,
+	MSM_CAMERA_STREAM_INVALID,
+};
+
 enum sensor_sub_module_t {
 	SUB_MODULE_SENSOR,
 	SUB_MODULE_CHROMATIX,
@@ -400,6 +407,7 @@ struct msm_camera_sensor_slave_info {
 	struct msm_sensor_power_setting_array power_setting_array;
 	uint8_t  is_init_params_valid;
 	struct msm_sensor_init_params sensor_init_params;
+	uint8_t is_flash_supported;
 };
 
 struct sensorb_cfg_data {
@@ -568,6 +576,7 @@ enum msm_sensor_cfg_type_t {
 	CFG_SET_WHITE_BALANCE,
 	CFG_SET_AUTOFOCUS,
 	CFG_CANCEL_AUTOFOCUS,
+	CFG_SET_STREAM_TYPE,
 };
 
 enum msm_actuator_cfg_type_t {
