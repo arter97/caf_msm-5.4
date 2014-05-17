@@ -200,6 +200,9 @@ enum a4xx_rb_perfctr_rb_sel {
 #define A4XX_RBBM_CFG_DEBBUS_CLRC		0x94
 #define A4XX_RBBM_CFG_DEBBUS_LOADIVT		0x95
 
+#define A4XX_RBBM_POWER_CNTL_IP			0x98
+#define A4XX_RBBM_SP_REGFILE_SLEEP_CNTL_0	0x99
+#define A4XX_RBBM_SP_REGFILE_SLEEP_CNTL_1	0x9a
 #define A4XX_RBBM_PERFCTR_CP_0_LO		0x9c
 #define A4XX_RBBM_PERFCTR_CP_0_HI		0x9d
 #define A4XX_RBBM_PERFCTR_CP_1_LO		0x9e
@@ -402,6 +405,7 @@ enum a4xx_rb_perfctr_rb_sel {
 #define A4XX_RBBM_CFG_DEBBUS_TRACE_BUF4		0x1ad
 #define A4XX_RBBM_CFG_DEBBUS_MISR0		0x1ae
 #define A4XX_RBBM_CFG_DEBBUS_MISR1		0x1af
+#define A4XX_RBBM_POWER_STATUS			0x1b0
 
 /* CP registers */
 #define A4XX_CP_RB_BASE			0x200
@@ -427,6 +431,7 @@ enum a4xx_rb_perfctr_rb_sel {
 #define A4XX_CP_ME_RAM_DATA		0x227
 
 #define A4XX_CP_DEBUG			0x22e
+#define A4XX_CP_POWER_COLLAPSE_CNTL	0x234
 /*
  * CP debug settings for A4xx cores
  * MIU_128BIT_WRITE_ENABLE [25] - Allow 128 bit writes to the VBIF
@@ -485,10 +490,6 @@ enum a4xx_rb_perfctr_rb_sel {
 #define A4XX_SP_PERFCTR_SP_SEL_9	0xecd
 #define A4XX_SP_PERFCTR_SP_SEL_10	0xece
 #define A4XX_SP_PERFCTR_SP_SEL_11	0xecf
-#define A4XX_SP_VS_PVT_MEM_ADDR		0x22e3
-#define A4XX_SP_FS_PVT_MEM_ADDR		0x22ed
-#define A4XX_SP_VS_OBJ_START		0x22e1
-#define A4XX_SP_FS_OBJ_START		0x22eb
 
 enum a4xx_sp_perfctr_sp_sel {
 	SP_FS_STAGE_BARY_INSTRUCTIONS = 0x10,
@@ -697,6 +698,7 @@ enum a4xx_pc_perfctr_pc_sel {
 
 /* HLSQ registers */
 #define A4XX_HLSQ_TIMEOUT_THRESHOLD     0xe00
+#define A4XX_HLSQ_STATE_RESTORE_TRIGGER	0xe01
 #define A4XX_HLSQ_PERFCTR_HLSQ_SEL_0	0xe06
 #define A4XX_HLSQ_PERFCTR_HLSQ_SEL_1	0xe07
 #define A4XX_HLSQ_PERFCTR_HLSQ_SEL_2	0xe08
