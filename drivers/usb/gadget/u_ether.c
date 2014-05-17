@@ -154,6 +154,18 @@ static unsigned qmult = 20;
 module_param(qmult, uint, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(qmult, "queue length multiplier at high/super speed");
 
+/*
+ * Usually downlink rates are higher than uplink rates and it
+ * deserve higher number of requests. For CAT-6 data rates of
+ * 300Mbps (~30 packets per milli-sec) 40 usb request may not
+ * be sufficient. At this rate and with interrupt moderation
+ * of interconnect, data can be very bursty. tx_qmult is the
+ * additional multipler on qmult.
+ */
+static unsigned tx_qmult = 1;
+module_param(tx_qmult, uint, S_IRUGO|S_IWUSR);
+MODULE_PARM_DESC(tx_qmult, "Additional queue length multiplier for tx");
+
 /* for dual-speed hardware, use deeper queues at high/super speed */
 static inline int qlen(struct usb_gadget *gadget)
 {
@@ -290,10 +302,11 @@ rx_submit(struct eth_dev *dev, struct usb_request *req, gfp_t gfp_flags)
 		out = dev->port_usb->out_ep;
 	else
 		out = NULL;
-	spin_unlock_irqrestore(&dev->lock, flags);
 
-	if (!out)
+	if (!out) {
+		spin_unlock_irqrestore(&dev->lock, flags);
 		return -ENOTCONN;
+	}
 
 
 	/* Padding up to RX_EXTRA handles minor disagreements with host.
@@ -318,6 +331,7 @@ rx_submit(struct eth_dev *dev, struct usb_request *req, gfp_t gfp_flags)
 
 	if (dev->port_usb->is_fixed)
 		size = max_t(size_t, size, dev->port_usb->fixed_out_len);
+	spin_unlock_irqrestore(&dev->lock, flags);
 
 	if (dev->rx_needed_headroom)
 		reserve_headroom = dev->rx_needed_headroom;
@@ -510,7 +524,7 @@ static int alloc_requests(struct eth_dev *dev, struct gether *link, unsigned n)
 	int	status;
 
 	spin_lock(&dev->req_lock);
-	status = prealloc(&dev->tx_reqs, link->in_ep, n,
+	status = prealloc(&dev->tx_reqs, link->in_ep, n * tx_qmult,
 				dev->gadget->sg_supported,
 				dev->header_len);
 	if (status < 0)
@@ -641,6 +655,7 @@ static void tx_complete(struct usb_ep *ep, struct usb_request *req)
 	struct net_device *net;
 	struct usb_request *new_req;
 	struct usb_ep *in;
+	int n = 1;
 	int length;
 	int retval;
 
@@ -666,34 +681,34 @@ static void tx_complete(struct usb_ep *ep, struct usb_request *req)
 	case -ESHUTDOWN:		/* disconnect etc */
 		break;
 	case 0:
-		if (req->num_sgs) {
-			struct sg_ctx *sg_ctx = req->context;
-			int n = skb_queue_len(&sg_ctx->skbs);
-
-			dev->net->stats.tx_bytes += req->length;
-			dev->net->stats.tx_packets += n;
-			dev->tx_aggr_cnt[n-1]++;
-
-			skb_queue_purge(&sg_ctx->skbs);
-
-			spin_lock(&dev->req_lock);
-			list_add_tail(&req->list, &dev->tx_reqs);
-			spin_unlock(&dev->req_lock);
-
-			queue_work(uether_tx_wq, &dev->tx_work);
-
-			return;
-		}
-
 		if (!req->zero)
 			dev->net->stats.tx_bytes += req->length-1;
 		else
 			dev->net->stats.tx_bytes += req->length;
 	}
-	dev->net->stats.tx_packets++;
+
+	if (req->num_sgs) {
+		struct sg_ctx *sg_ctx = req->context;
+
+		n = skb_queue_len(&sg_ctx->skbs);
+		dev->tx_aggr_cnt[n-1]++;
+
+		/* sg_ctx is only accessible here, can use lock-free version */
+		__skb_queue_purge(&sg_ctx->skbs);
+	}
+
+	dev->net->stats.tx_packets += n;
 
 	spin_lock(&dev->req_lock);
 	list_add_tail(&req->list, &dev->tx_reqs);
+
+	if (req->num_sgs) {
+		if (!req->status)
+			queue_work(uether_tx_wq, &dev->tx_work);
+
+		spin_unlock(&dev->req_lock);
+		return;
+	}
 
 	if (dev->port_usb->multi_pkt_xfer && !req->context) {
 		dev->no_tx_req_used--;

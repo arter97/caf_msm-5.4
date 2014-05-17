@@ -5347,6 +5347,7 @@ static int tomtom_codec_enable_slimrx(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
+		dai->bus_down_in_recovery = false;
 		tomtom_codec_enable_int_port(dai, codec);
 		(void) tomtom_codec_enable_slim_chmask(dai, true);
 		ret = wcd9xxx_cfg_slim_sch_rx(core, &dai->wcd9xxx_ch_list,
@@ -5356,7 +5357,8 @@ static int tomtom_codec_enable_slimrx(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_POST_PMD:
 		ret = wcd9xxx_close_slim_sch_rx(core, &dai->wcd9xxx_ch_list,
 						dai->grph);
-		ret = tomtom_codec_enable_slim_chmask(dai, false);
+		if (!dai->bus_down_in_recovery)
+			ret = tomtom_codec_enable_slim_chmask(dai, false);
 		if (ret < 0) {
 			ret = wcd9xxx_disconnect_port(core,
 						      &dai->wcd9xxx_ch_list,
@@ -5364,6 +5366,8 @@ static int tomtom_codec_enable_slimrx(struct snd_soc_dapm_widget *w,
 			pr_debug("%s: Disconnect RX port, ret = %d\n",
 				 __func__, ret);
 		}
+
+		dai->bus_down_in_recovery = false;
 		break;
 	}
 	return ret;
@@ -5412,6 +5416,7 @@ static int tomtom_codec_enable_slimvi_feedback(struct snd_soc_dapm_widget *w,
 		/*Enable spkr VI clocks*/
 		snd_soc_update_bits(codec,
 		TOMTOM_A_CDC_CLK_TX_CLK_EN_B2_CTL, 0xC, 0xC);
+		dai->bus_down_in_recovery = false;
 		tomtom_codec_enable_int_port(dai, codec);
 		(void) tomtom_codec_enable_slim_chmask(dai, true);
 		ret = wcd9xxx_cfg_slim_sch_tx(core, &dai->wcd9xxx_ch_list,
@@ -5429,6 +5434,8 @@ static int tomtom_codec_enable_slimvi_feedback(struct snd_soc_dapm_widget *w,
 		/*Disable V&I sensing*/
 		snd_soc_update_bits(codec, TOMTOM_A_SPKR1_PROT_EN,
 				0x88, 0x00);
+
+		dai->bus_down_in_recovery = false;
 		break;
 	}
 out_vi:
@@ -5460,6 +5467,7 @@ static int tomtom_codec_enable_slimtx(struct snd_soc_dapm_widget *w,
 	dai = &tomtom_p->dai[w->shift];
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
+		dai->bus_down_in_recovery = false;
 		tomtom_codec_enable_int_port(dai, codec);
 		(void) tomtom_codec_enable_slim_chmask(dai, true);
 		ret = wcd9xxx_cfg_slim_sch_tx(core, &dai->wcd9xxx_ch_list,
@@ -5469,7 +5477,8 @@ static int tomtom_codec_enable_slimtx(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_POST_PMD:
 		ret = wcd9xxx_close_slim_sch_tx(core, &dai->wcd9xxx_ch_list,
 						dai->grph);
-		ret = tomtom_codec_enable_slim_chmask(dai, false);
+		if (!dai->bus_down_in_recovery)
+			ret = tomtom_codec_enable_slim_chmask(dai, false);
 		if (ret < 0) {
 			ret = wcd9xxx_disconnect_port(core,
 						      &dai->wcd9xxx_ch_list,
@@ -5477,6 +5486,8 @@ static int tomtom_codec_enable_slimtx(struct snd_soc_dapm_widget *w,
 			pr_debug("%s: Disconnect RX port, ret = %d\n",
 				 __func__, ret);
 		}
+
+		dai->bus_down_in_recovery = false;
 		break;
 	}
 	return ret;
@@ -6459,14 +6470,14 @@ static const struct wcd9xxx_reg_mask_val tomtom_reg_defaults[] = {
 	TOMTOM_REG_VAL(TOMTOM_A_RX_EAR_CMBUFF, 0x05),
 
 	/* RX deafults */
-	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX1_B5_CTL, 0x78),
-	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX2_B5_CTL, 0x78),
-	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX3_B5_CTL, 0x78),
-	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX4_B5_CTL, 0x78),
-	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX5_B5_CTL, 0x78),
-	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX6_B5_CTL, 0x78),
-	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX7_B5_CTL, 0x78),
-	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX8_B5_CTL, 0x78),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX1_B5_CTL, 0x79),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX2_B5_CTL, 0x79),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX3_B5_CTL, 0x79),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX4_B5_CTL, 0x79),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX5_B5_CTL, 0x79),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX6_B5_CTL, 0x79),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX7_B5_CTL, 0x79),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX8_B5_CTL, 0x79),
 
 	/* RX1 and RX2 defaults */
 	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX1_B6_CTL, 0xA0),
@@ -6542,16 +6553,16 @@ static const struct wcd9xxx_reg_mask_val tomtom_1_0_reg_defaults[] = {
 	TOMTOM_REG_VAL(TOMTOM_A_SPKR_DRV1_IEC, 0x0),
 	TOMTOM_REG_VAL(TOMTOM_A_SPKR_DRV2_OCP_CTL, 0x97),
 	TOMTOM_REG_VAL(TOMTOM_A_SPKR_DRV2_CLIP_DET, 0x1),
-	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX1_MUX_CTL, 0x48),
-	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX2_MUX_CTL, 0x48),
-	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX3_MUX_CTL, 0x48),
-	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX4_MUX_CTL, 0x48),
-	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX5_MUX_CTL, 0x48),
-	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX6_MUX_CTL, 0x48),
-	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX7_MUX_CTL, 0x48),
-	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX8_MUX_CTL, 0x48),
-	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX9_MUX_CTL, 0x48),
-	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX10_MUX_CTL, 0x48),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX1_MUX_CTL, 0x4A),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX2_MUX_CTL, 0x4A),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX3_MUX_CTL, 0x4A),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX4_MUX_CTL, 0x4A),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX5_MUX_CTL, 0x4A),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX6_MUX_CTL, 0x4A),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX7_MUX_CTL, 0x4A),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX8_MUX_CTL, 0x4A),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX9_MUX_CTL, 0x4A),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX10_MUX_CTL, 0x4A),
 	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX1_B4_CTL, 0xB),
 	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX2_B4_CTL, 0xB),
 	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX3_B4_CTL, 0xB),
@@ -6572,9 +6583,18 @@ static const struct wcd9xxx_reg_mask_val tomtom_1_0_reg_defaults[] = {
 	TOMTOM_REG_VAL(TOMTOM_A_CDC_COMP0_B5_CTL, 0x7f),
 };
 
+static const struct wcd9xxx_reg_mask_val tomtom_2_0_reg_defaults[] = {
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_MAD_MAIN_CTL_2, 0x32),
+	TOMTOM_REG_VAL(TOMTOM_A_RCO_CTRL, 0x10),
+	TOMTOM_REG_VAL(TOMTOM_A_RX_HPH_L_TEST, 0x0A),
+	TOMTOM_REG_VAL(TOMTOM_A_RX_HPH_R_TEST, 0x0A),
+
+};
+
 static void tomtom_update_reg_defaults(struct snd_soc_codec *codec)
 {
 	u32 i;
+	struct wcd9xxx *tomtom_core = dev_get_drvdata(codec->dev->parent);
 
 	for (i = 0; i < ARRAY_SIZE(tomtom_reg_defaults); i++)
 		snd_soc_write(codec, tomtom_reg_defaults[i].reg,
@@ -6583,6 +6603,12 @@ static void tomtom_update_reg_defaults(struct snd_soc_codec *codec)
 	for (i = 0; i < ARRAY_SIZE(tomtom_1_0_reg_defaults); i++)
 		snd_soc_write(codec, tomtom_1_0_reg_defaults[i].reg,
 				tomtom_1_0_reg_defaults[i].val);
+
+	if (!TOMTOM_IS_1_0(tomtom_core->version)) {
+		for (i = 0; i < ARRAY_SIZE(tomtom_2_0_reg_defaults); i++)
+			snd_soc_write(codec, tomtom_2_0_reg_defaults[i].reg,
+				      tomtom_2_0_reg_defaults[i].val);
+	}
 }
 
 static const struct wcd9xxx_reg_mask_val tomtom_codec_reg_init_val[] = {
@@ -6657,14 +6683,31 @@ static const struct wcd9xxx_reg_mask_val tomtom_codec_reg_init_val[] = {
 	{TOMTOM_A_CDC_MAD_INP_SEL, 0x0F, 0x08},
 };
 
+static const struct wcd9xxx_reg_mask_val tomtom_codec_2_0_reg_init_val[] = {
+	{TOMTOM_A_RX_HPH_L_TEST, 0x08, 0x00},
+	{TOMTOM_A_RX_HPH_R_TEST, 0x08, 0x00},
+	{TOMTOM_A_CDC_CLIP_ADJ_SPKR_MIN_CLIP_THRESHOLD, 0xFF, 0x00},
+	{TOMTOM_A_CDC_CLIP_ADJ_SPKR2_MIN_CLIP_THRESHOLD, 0xFF, 0x00},
+};
+
 static void tomtom_codec_init_reg(struct snd_soc_codec *codec)
 {
 	u32 i;
+	struct wcd9xxx *tomtom_core = dev_get_drvdata(codec->dev->parent);
 
 	for (i = 0; i < ARRAY_SIZE(tomtom_codec_reg_init_val); i++)
 		snd_soc_update_bits(codec, tomtom_codec_reg_init_val[i].reg,
 				tomtom_codec_reg_init_val[i].mask,
 				tomtom_codec_reg_init_val[i].val);
+
+	if (!TOMTOM_IS_1_0(tomtom_core->version)) {
+		for (i = 0; i < ARRAY_SIZE(tomtom_codec_2_0_reg_init_val); i++)
+			snd_soc_update_bits(codec,
+				tomtom_codec_2_0_reg_init_val[i].reg,
+				tomtom_codec_2_0_reg_init_val[i].mask,
+				tomtom_codec_2_0_reg_init_val[i].val);
+	}
+
 }
 
 static void tomtom_slim_interface_init_reg(struct snd_soc_codec *codec)
@@ -7013,6 +7056,7 @@ static int tomtom_post_reset_cb(struct wcd9xxx *wcd9xxx)
 	struct snd_soc_codec *codec;
 	struct tomtom_priv *tomtom;
 	int rco_clk_rate;
+	int count;
 
 	codec = (struct snd_soc_codec *)(wcd9xxx->ssr_priv);
 	tomtom = snd_soc_codec_get_drvdata(codec);
@@ -7062,6 +7106,9 @@ static int tomtom_post_reset_cb(struct wcd9xxx *wcd9xxx)
 	ret = tomtom_setup_irqs(tomtom);
 	if (ret)
 		pr_err("%s: Failed to setup irq: %d\n", __func__, ret);
+
+	for (count = 0; count < NUM_CODEC_DAIS; count++)
+		tomtom->dai[count].bus_down_in_recovery = true;
 
 	mutex_unlock(&codec->mutex);
 	return ret;

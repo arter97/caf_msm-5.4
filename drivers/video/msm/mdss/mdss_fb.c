@@ -100,6 +100,7 @@ static int __mdss_fb_display_thread(void *data);
 static int mdss_fb_pan_idle(struct msm_fb_data_type *mfd);
 static int mdss_fb_send_panel_event(struct msm_fb_data_type *mfd,
 					int event, void *arg);
+static void mdss_fb_set_mdp_sync_pt_threshold(struct msm_fb_data_type *mfd);
 void mdss_fb_no_update_notify_timer_cb(unsigned long data)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)data;
@@ -439,6 +440,90 @@ static ssize_t mdss_fb_get_panel_info(struct device *dev,
 
 	return ret;
 }
+/*
+ * mdss_fb_lpm_enable() - Function to Control LowPowerMode
+ * @mfd:	Framebuffer data structure for display
+ * @mode:	Enabled/Disable LowPowerMode
+ *		1: Enter into LowPowerMode
+ *		0: Exit from LowPowerMode
+ *
+ * This Function dynamically switches to and from LowPowerMode
+ * based on the argument @mode.
+ */
+static int mdss_fb_lpm_enable(struct msm_fb_data_type *mfd, int mode)
+{
+	int ret = 0;
+	u32 bl_lvl = 0;
+	struct mdss_panel_info *pinfo = NULL;
+	struct mdss_panel_data *pdata;
+
+	if (!mfd || !mfd->panel_info)
+		return -EINVAL;
+
+	pinfo = mfd->panel_info;
+
+	if (!pinfo->mipi.dynamic_switch_enabled) {
+		pr_warn("Panel does not support dynamic switch!\n");
+		return 0;
+	}
+
+	if (mode == pinfo->mipi.mode) {
+		pr_debug("Already in requested mode!\n");
+		return 0;
+	}
+
+	pdata = dev_get_platdata(&mfd->pdev->dev);
+
+	pr_debug("Enter mode: %d\n", mode);
+	pdata->panel_info.dynamic_switch_pending = true;
+
+	mutex_lock(&mfd->bl_lock);
+	bl_lvl = mfd->bl_level;
+	mdss_fb_set_backlight(mfd, 0);
+
+	lock_fb_info(mfd->fbi);
+	ret = mdss_fb_blank_sub(FB_BLANK_POWERDOWN, mfd->fbi,
+						mfd->op_enable);
+	if (ret) {
+		pr_err("can't turn off display!\n");
+		unlock_fb_info(mfd->fbi);
+		mutex_unlock(&mfd->bl_lock);
+		return ret;
+	}
+
+	mfd->op_enable = false;
+
+	ret = mfd->mdp.configure_panel(mfd, mode);
+	mdss_fb_set_mdp_sync_pt_threshold(mfd);
+
+	mfd->op_enable = true;
+
+	ret = mdss_fb_blank_sub(FB_BLANK_UNBLANK, mfd->fbi,
+					mfd->op_enable);
+	if (ret) {
+		pr_err("can't turn on display!\n");
+		unlock_fb_info(mfd->fbi);
+		mutex_unlock(&mfd->bl_lock);
+		return ret;
+	}
+	unlock_fb_info(mfd->fbi);
+
+	mfd->bl_updated = true;
+	mdss_fb_set_backlight(mfd, bl_lvl);
+	mutex_unlock(&mfd->bl_lock);
+
+	pdata->panel_info.dynamic_switch_pending = false;
+	pdata->panel_info.is_lpm_mode = mode ? 1 : 0;
+
+	if (ret) {
+		pr_err("can't turn on display!\n");
+		return ret;
+	}
+
+	pr_debug("Exit mode: %d\n", mode);
+
+	return 0;
+}
 
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, mdss_fb_get_type, NULL);
 static DEVICE_ATTR(msm_fb_split, S_IRUGO | S_IWUSR, mdss_fb_show_split,
@@ -584,6 +669,21 @@ static int mdss_fb_probe(struct platform_device *pdev)
 			__mdss_fb_sync_buf_done_callback;
 	}
 
+	mdss_fb_set_mdp_sync_pt_threshold(mfd);
+
+	if (mfd->mdp.splash_init_fnc)
+		mfd->mdp.splash_init_fnc(mfd);
+
+	INIT_DELAYED_WORK(&mfd->idle_notify_work, __mdss_fb_idle_notify_work);
+
+	return rc;
+}
+
+static void mdss_fb_set_mdp_sync_pt_threshold(struct msm_fb_data_type *mfd)
+{
+	if (!mfd)
+		return;
+
 	switch (mfd->panel.type) {
 	case WRITEBACK_PANEL:
 		mfd->mdp_sync_pt_data.threshold = 1;
@@ -598,15 +698,7 @@ static int mdss_fb_probe(struct platform_device *pdev)
 		mfd->mdp_sync_pt_data.retire_threshold = 0;
 		break;
 	}
-
-	if (mfd->mdp.splash_init_fnc)
-		mfd->mdp.splash_init_fnc(mfd);
-
-	INIT_DELAYED_WORK(&mfd->idle_notify_work, __mdss_fb_idle_notify_work);
-
-	return rc;
 }
-
 static int mdss_fb_remove(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd;
@@ -967,6 +1059,7 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 
 static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 {
+	struct mdss_panel_data *pdata;
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 
 	mdss_fb_pan_idle(mfd);
@@ -977,6 +1070,18 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 			mfd->suspend.panel_power_on = false;
 		return 0;
 	}
+	pr_debug("mode: %d\n", blank_mode);
+
+	pdata = dev_get_platdata(&mfd->pdev->dev);
+
+	if (pdata->panel_info.is_lpm_mode &&
+			blank_mode == FB_BLANK_UNBLANK) {
+		pr_debug("panel is in lpm mode\n");
+		mfd->mdp.configure_panel(mfd, 0);
+		mdss_fb_set_mdp_sync_pt_threshold(mfd);
+		pdata->panel_info.is_lpm_mode = false;
+	}
+
 	return mdss_fb_blank_sub(blank_mode, info, mfd->op_enable);
 }
 
@@ -1437,10 +1542,73 @@ static int mdss_fb_register(struct msm_fb_data_type *mfd)
 	return 0;
 }
 
+/**
+ * mdss_fb_release_file_entry() - Releases file node entry from list
+ * @info:	Frame buffer info
+ * @pinfo:	Process list node in which file node entry is going to
+ *		be removed
+ * @release_all: Releases all file node entries from list if this parameter
+ *		is true
+ *
+ * This function is called to remove the file node entry/entries from main
+ * list. It also helps to find the process id if fb_open and fb_close
+ * callers are different.
+ */
+static struct mdss_fb_proc_info *mdss_fb_release_file_entry(
+		struct fb_info *info,
+		struct mdss_fb_proc_info *pinfo, bool release_all)
+{
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
+	struct mdss_fb_file_info *file_info = NULL, *temp_file_info = NULL;
+	struct mdss_fb_proc_info *proc_info = NULL, *temp_proc_info = NULL;
+	struct file *file = info->file;
+	bool node_found = false;
+
+	if (!pinfo && release_all) {
+		pr_err("process node not provided for release all case\n");
+		goto end;
+	}
+
+	if (pinfo) {
+		proc_info = pinfo;
+		list_for_each_entry_safe(file_info, temp_file_info,
+						&pinfo->file_list, list) {
+			if (!release_all && file_info->file != file)
+				continue;
+
+			list_del(&file_info->list);
+			kfree(file_info);
+
+			node_found = true;
+
+			if (!release_all)
+				break;
+		}
+	}
+
+	if (!node_found) {
+		list_for_each_entry_safe(proc_info, temp_proc_info,
+						&mfd->proc_list, list) {
+			list_for_each_entry_safe(file_info, temp_file_info,
+						&proc_info->file_list, list) {
+				if (file_info->file == file) {
+					list_del(&file_info->list);
+					kfree(file_info);
+					goto end;
+				}
+			}
+		}
+	}
+
+end:
+	return proc_info;
+}
+
 static int mdss_fb_open(struct fb_info *info, int user)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 	struct mdss_fb_proc_info *pinfo = NULL;
+	struct mdss_fb_file_info *file_info = NULL;
 	int result;
 	int pid = current->tgid;
 	struct task_struct *task = current->group_leader;
@@ -1449,6 +1617,12 @@ static int mdss_fb_open(struct fb_info *info, int user)
 		pr_err("Shutdown pending. Aborting operation. Request from pid:%d name=%s\n",
 				pid, task->comm);
 		return -EPERM;
+	}
+
+	file_info = kmalloc(sizeof(*file_info), GFP_KERNEL);
+	if (!file_info) {
+		pr_err("unable to alloc file info\n");
+		return -ENOMEM;
 	}
 
 	list_for_each_entry(pinfo, &mfd->proc_list, list) {
@@ -1460,13 +1634,18 @@ static int mdss_fb_open(struct fb_info *info, int user)
 		pinfo = kmalloc(sizeof(*pinfo), GFP_KERNEL);
 		if (!pinfo) {
 			pr_err("unable to alloc process info\n");
+			kfree(file_info);
 			return -ENOMEM;
 		}
 		pinfo->pid = pid;
 		pinfo->ref_cnt = 0;
 		list_add(&pinfo->list, &mfd->proc_list);
+		INIT_LIST_HEAD(&pinfo->file_list);
 		pr_debug("new process entry pid=%d\n", pinfo->pid);
 	}
+
+	file_info->file = info->file;
+	list_add(&file_info->list, &pinfo->file_list);
 
 	result = pm_runtime_get_sync(info->dev);
 
@@ -1506,13 +1685,15 @@ blank_error:
 	mfd->disp_thread = NULL;
 
 thread_error:
+	pm_runtime_put(info->dev);
+
+pm_error:
 	if (pinfo && !pinfo->ref_cnt) {
 		list_del(&pinfo->list);
 		kfree(pinfo);
 	}
-	pm_runtime_put(info->dev);
-
-pm_error:
+	list_del(&file_info->list);
+	kfree(file_info);
 	return result;
 }
 
@@ -1520,6 +1701,7 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 	struct mdss_fb_proc_info *pinfo = NULL, *temp_pinfo = NULL;
+	struct mdss_fb_proc_info *proc_info = NULL;
 	int ret = 0;
 	int pid = current->tgid;
 	bool unknown_pid = true, release_needed = false;
@@ -1550,6 +1732,18 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
 		pr_debug("found process %s pid=%d mfd->ref=%d pinfo->ref=%d\n",
 			task->comm, mfd->ref_cnt, pinfo->pid, pinfo->ref_cnt);
 
+		proc_info = mdss_fb_release_file_entry(info, pinfo,
+								release_all);
+		/*
+		 * if fb_release is called from different known process then
+		 * release the ref_count of original proc_info instead of
+		 * current process.
+		 */
+		if (!release_all && proc_info && proc_info != pinfo) {
+			pr_info("fb_release called from different process for current file node\n");
+			pinfo = proc_info;
+		}
+
 		do {
 			if (mfd->ref_cnt < pinfo->ref_cnt)
 				pr_warn("WARN:mfd->ref=%d < pinfo->ref=%d\n",
@@ -1576,6 +1770,23 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
 			break;
 	}
 
+	if (unknown_pid) {
+		pinfo = mdss_fb_release_file_entry(info, NULL, false);
+		if (pinfo) {
+			mfd->ref_cnt--;
+			pinfo->ref_cnt--;
+			pm_runtime_put(info->dev);
+			if (!pinfo->ref_cnt) {
+				list_del(&pinfo->list);
+				kfree(pinfo);
+				release_needed = true;
+			}
+		} else {
+			WARN("unknown caller:: process %s mfd->ref=%d\n",
+				task->comm, mfd->ref_cnt);
+		}
+	}
+
 	if (release_needed) {
 		pr_debug("known process %s pid=%d mfd->ref=%d\n",
 			task->comm, pid, mfd->ref_cnt);
@@ -1586,19 +1797,8 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
 				pr_err("error releasing fb%d pid=%d\n",
 					mfd->index, pid);
 		}
-	} else if (unknown_pid || release_all) {
-		pr_warn("unknown process %s pid=%d mfd->ref=%d\n",
-			task->comm, pid, mfd->ref_cnt);
-
-		if (mfd->ref_cnt)
-			mfd->ref_cnt--;
-
-		if (mfd->mdp.release_fnc) {
-			ret = mfd->mdp.release_fnc(mfd, true);
-			if (ret)
-				pr_err("error fb%d release process %s pid=%d\n",
-					mfd->index, task->comm, pid);
-		}
+	} else if (release_all && mfd->ref_cnt) {
+		pr_err("reference count mismatch with proc list entries\n");
 	}
 
 	if (!mfd->ref_cnt) {
@@ -2531,6 +2731,7 @@ int mdss_fb_do_ioctl(struct fb_info *info, unsigned int cmd,
 	int ret = -ENOSYS;
 	struct mdp_buf_sync buf_sync;
 	struct msm_sync_pt_data *sync_pt_data = NULL;
+	unsigned int dsi_mode = 0;
 
 	if (!info || !info->par)
 		return -EINVAL;
@@ -2595,6 +2796,16 @@ int mdss_fb_do_ioctl(struct fb_info *info, unsigned int cmd,
 
 	case MSMFB_DISPLAY_COMMIT:
 		ret = mdss_fb_display_commit(info, argp);
+		break;
+
+	case MSMFB_LPM_ENABLE:
+		ret = copy_from_user(&dsi_mode, argp, sizeof(dsi_mode));
+		if (ret) {
+			pr_err("%s: MSMFB_LPM_ENABLE ioctl failed\n", __func__);
+			goto exit;
+		}
+
+		ret = mdss_fb_lpm_enable(mfd, dsi_mode);
 		break;
 
 	default:

@@ -77,16 +77,16 @@
 #define SIZE_PIPE_ENTRY(cnt) (50 + (cnt) * 62)
 #define SIZE_LOG_ENTRY(cnt) (6 + (cnt) * 5)
 
-static struct adreno_context_type ctxt_type_table[] = {ADRENO_DRAWCTXT_TYPES};
+static struct adreno_context_type ctxt_type_table[] = {KGSL_CONTEXT_TYPES};
 
 static const char *get_api_type_str(unsigned int type)
 {
 	int i;
 	for (i = 0; i < ARRAY_SIZE(ctxt_type_table) - 1; i++) {
 		if (ctxt_type_table[i].type == type)
-			break;
+			return ctxt_type_table[i].str;
 	}
-	return ctxt_type_table[i].str;
+	return "UNKNOWN";
 }
 
 static inline void _create_ib_ref(struct kgsl_memdesc *memdesc,
@@ -824,6 +824,9 @@ static int _pipe_print_results(struct adreno_device *adreno_dev,
 		total_size += size;
 
 		for (i = 0; i < cnt; i++) {
+			unsigned int start_lo, start_hi;
+			unsigned int end_lo, end_hi;
+
 			grp_name = adreno_perfcounter_get_name(
 					adreno_dev, (*log_ptr >> 16) & 0xffff);
 
@@ -842,12 +845,17 @@ static int _pipe_print_results(struct adreno_device *adreno_dev,
 
 			cnt_reg = *log_ptr & 0xffff;
 			log_buf_wrapinc(profile->log_buffer, &log_ptr);
-			pc_start = *((unsigned long long *) log_ptr);
+			start_lo = *log_ptr;
 			log_buf_wrapinc(profile->log_buffer, &log_ptr);
+			start_hi = *log_ptr;
 			log_buf_wrapinc(profile->log_buffer, &log_ptr);
-			pc_end = *((unsigned long long *) log_ptr);
+			end_lo = *log_ptr;
 			log_buf_wrapinc(profile->log_buffer, &log_ptr);
+			end_hi = *log_ptr;
 			log_buf_wrapinc(profile->log_buffer, &log_ptr);
+
+			pc_start = (((uint64_t) start_hi) << 32) | start_lo;
+			pc_end = (((uint64_t) end_hi) << 32) | end_lo;
 
 			len = snprintf(pipe_cntr_buf,
 					sizeof(pipe_cntr_buf) - 1,

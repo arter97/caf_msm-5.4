@@ -44,6 +44,10 @@
 #define TAPAN_IS_1_0(ver) \
 	((ver == TAPAN_VERSION_1_0) ? 1 : 0)
 
+#define TOMTOM_VERSION_1_0	1
+#define TOMTOM_IS_1_0(ver) \
+	((ver == TOMTOM_VERSION_1_0) ? 1 : 0)
+
 enum wcd9xxx_slim_slave_addr_type {
 	WCD9XXX_SLIM_SLAVE_ADDR_TYPE_TABLA,
 	WCD9XXX_SLIM_SLAVE_ADDR_TYPE_TAIKO,
@@ -146,6 +150,7 @@ struct wcd9xxx_codec_dai_data {
 	u16 grph;				/* slimbus group handle */
 	unsigned long ch_mask;
 	wait_queue_head_t dai_wait;
+	bool bus_down_in_recovery;
 };
 
 #define WCD9XXX_CH(xport, xshift) \

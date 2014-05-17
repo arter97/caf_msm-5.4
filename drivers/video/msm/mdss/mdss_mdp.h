@@ -33,13 +33,11 @@
 
 #define MDP_CLK_DEFAULT_RATE	200000000
 #define PHASE_STEP_SHIFT	21
-#define MAX_MIXER_WIDTH		2048
 #define MAX_LINE_BUFFER_WIDTH	2048
 #define MAX_MIXER_HEIGHT	0xFFFF
 #define MAX_IMG_WIDTH		0x3FFF
 #define MAX_IMG_HEIGHT		0x3FFF
 #define AHB_CLK_OFFSET		0x2B4
-#define MAX_DST_W		MAX_MIXER_WIDTH
 #define MAX_DST_H		MAX_MIXER_HEIGHT
 #define MAX_DOWNSCALE_RATIO	4
 #define MAX_UPSCALE_RATIO	20
@@ -513,15 +511,15 @@ static inline u32 mdp_mixer_read(struct mdss_mdp_mixer *mixer, u32 reg)
 	return readl_relaxed(mixer->base + reg);
 }
 
-static inline void mdss_mdp_pingpong_write(struct mdss_mdp_mixer *mixer,
+static inline void mdss_mdp_pingpong_write(char __iomem *pingpong_base,
 				      u32 reg, u32 val)
 {
-	writel_relaxed(val, mixer->pingpong_base + reg);
+	writel_relaxed(val, pingpong_base + reg);
 }
 
-static inline u32 mdss_mdp_pingpong_read(struct mdss_mdp_mixer *mixer, u32 reg)
+static inline u32 mdss_mdp_pingpong_read(char __iomem *pingpong_base, u32 reg)
 {
-	return readl_relaxed(mixer->pingpong_base + reg);
+	return readl_relaxed(pingpong_base + reg);
 }
 
 static inline int mdss_mdp_pipe_is_sw_reset_available(
@@ -736,7 +734,7 @@ int mdss_mdp_vbif_axi_halt(struct mdss_data_type *mdata);
 int mdss_mdp_data_check(struct mdss_mdp_data *data,
 			struct mdss_mdp_plane_sizes *ps);
 int mdss_mdp_get_plane_sizes(u32 format, u32 w, u32 h,
-			     struct mdss_mdp_plane_sizes *ps, u32 bwc_mode);
+	     struct mdss_mdp_plane_sizes *ps, u32 bwc_mode, bool rotation);
 int mdss_mdp_get_rau_strides(u32 w, u32 h, struct mdss_mdp_format_params *fmt,
 			       struct mdss_mdp_plane_sizes *ps);
 void mdss_mdp_data_calc_offset(struct mdss_mdp_data *data, u16 x, u16 y,

@@ -289,8 +289,6 @@
 
 		qcom,tx-gpio = <&msmgpio 112 0>;
 		qcom,rx-gpio = <&msmgpio 113 0>;
-		qcom,inject-rx-on-wakeup = <1>;
-		qcom,rx-char-to-inject = <0x18>;
 
 		qcom,wakeup_irq = <2>;
 		qcom,bam-tx-ep-pipe-index = <8>;
@@ -384,13 +382,14 @@
 			"iface_clk", "bus_clk", "sleep_clk", "cxo_clk",
 			"maple_bus_clk", "prng_clk";
 		qcom,bus-load-vector-tbl = <0 0 0>,
-			<36000  208000  303000>,
-			<110400 536000  303000>,
-			<244800 1012000 303000>,
-			<489000 2024000 606000>,
-			<783360 3240000 970000>,
-			<979200 4048000 1212000>,
-			<9792000 4264000 1279000>;
+			<4000000   4000000  4000000>,
+			<8000000   8000000  8000000>,
+			<16000000 16000000 16000000>,
+			<20000000 20000000 20000000>,
+			<24000000 24000000 24000000>,
+			<28000000 28000000 28000000>,
+			<33600000 33600000 33600000>,
+			<48000000 48000000 48000000>;
 		qcom,vbif-reg-presets = <0x00b0 0x10101010>,
 			<0x00b4 0x00001010>,
 			<0x00b8 0x00000000>,
@@ -2981,11 +2980,14 @@
 		reg = <0xfdce0000 0x4000>;
 
 		vdd-supply = <&gdsc_venus>;
-		proxy-reg-names = "vdd";
-		clock-names = "core_clk", "iface_clk",
-				"bus_clk", "mem_clk";
-		proxy-clock-names = "core_clk", "iface_clk",
-					"bus_clk", "mem_clk";
+		qcom,proxy-reg-names = "vdd";
+		clock-names = "core_clk", "iface_clk", "bus_clk", "mem_clk",
+				"scm_core_clk", "scm_iface_clk", "scm_bus_clk",
+				"scm_core_clk_src";
+		qcom,proxy-clock-names = "core_clk", "iface_clk", "bus_clk",
+				"mem_clk", "scm_core_clk", "scm_iface_clk",
+				"scm_bus_clk", "scm_core_clk_src";
+		qcom,scm_core_clk_src-freq = <85710000>;
 
 		qcom,msm-bus,name = "pil-venus";
 		qcom,msm-bus,num-cases = <2>;
@@ -3006,11 +3008,14 @@
 		interrupts = <0 162 1>;
 
 		vdd_cx-supply = <&pma8084_s2_corner>;
-		proxy-reg-names = "vdd_cx";
-		vdd_cx-uV-uA = <7 100000>;
-		clock-names = "bus_clk", "xo";
-		active-clock-names = "bus_clk";
-		proxy-clock-names = "xo";
+		qcom,proxy-reg-names = "vdd_cx";
+		qcom,vdd_cx-uV-uA = <7 100000>;
+		clock-names = "bus_clk", "xo", "scm_core_clk", "scm_iface_clk",
+				"scm_bus_clk", "scm_core_clk_src";
+		qcom,active-clock-names = "bus_clk";
+		qcom,proxy-clock-names = "xo", "scm_core_clk", "scm_iface_clk",
+				"scm_bus_clk", "scm_core_clk_src";
+		qcom,scm_core_clk_src-freq = <85710000>;
 
 		qcom,pas-id = <1>;
 		qcom,proxy-timeout-ms = <10000>;
@@ -3130,6 +3135,7 @@
 	qcom,wdt@f9017000 {
 		compatible = "qcom,msm-watchdog";
 		reg = <0xf9017000 0x1000>;
+		reg-names = "wdt-base";
 		interrupts = <0 3 0>, <0 4 0>;
 		qcom,bark-time = <11000>;
 		qcom,pet-time = <10000>;
@@ -3339,13 +3345,13 @@
 				qcom,msm-bus,num-paths = <1>;
 				qcom,msm-bus,vectors-KBps =
 					<63 512 0 0>,
-					<63 512 312000 454500>,
-					<63 512 804000 2400000>,
-					<63 512 1518000 2400000>,
-					<63 512 3036000 2400000>,
-					<63 512 4860000 2400000>,
-					<63 512 6072000 2400000>,
-					<63 512 6396000 2400000>;
+					<63 512 208000 303000>,
+					<63 512 536000 303000>,
+					<63 512 1012000 303000>,
+					<63 512 2024000 606000>,
+					<63 512 3240000 970000>,
+					<63 512 4048000 1212000>,
+					<63 512 4264000 1279000>;
 				qcom,bus-configs = <0xc000000>;
 			};
 
@@ -3355,13 +3361,13 @@
 				qcom,msm-bus,num-paths = <1>;
 				qcom,msm-bus,vectors-KBps =
 					<63 512 0 0>,
-					<63 512 228800 333300>,
-					<63 512 589600 1760000>,
-					<63 512 1113200 1760000>,
-					<63 512 2226400 1760000>,
-					<63 512 3564000 1760000>,
-					<63 512 4452800 1760000>,
-					<63 512 4690400 1760000>;
+					<63 512 208000 303000>,
+					<63 512 536000 303000>,
+					<63 512 1012000 303000>,
+					<63 512 2024000 606000>,
+					<63 512 3240000 970000>,
+					<63 512 4048000 1212000>,
+					<63 512 4264000 1279000>;
 				qcom,bus-configs = <0x30fcfff>;
 			};
 
@@ -3387,13 +3393,13 @@
 				qcom,msm-bus,num-paths = <1>;
 				qcom,msm-bus,vectors-KBps =
 					<68 604 0 0>,
-					<68 604 264000 778500>,
-					<68 604 684000 778500>,
-					<68 604 1296000 943500>,
-					<68 604 2592000 1557000>,
-					<68 604 4149000 2491500>,
-					<68 604 5184000 3114000>,
-					<68 604 5493000 3297000>;
+					<68 604 176000 519000>,
+					<68 604 456000 519000>,
+					<68 604 864000 519000>,
+					<68 604 1728000 1038000>,
+					<68 604 2766000 1661000>,
+					<68 604 3456000 2076000>,
+					<68 604 3662000 2198000>;
 				qcom,bus-configs = <0xc000000>;
 			};
 
@@ -3403,13 +3409,13 @@
 				qcom,msm-bus,num-paths = <1>;
 				qcom,msm-bus,vectors-KBps =
 					<68 604 0 0>,
-					<68 604 193600 570900>,
-					<68 604 501600 570900>,
-					<68 604 950400 916850>,
-					<68 604 1900800 1141800>,
-					<68 604 3042600 1827100>,
-					<68 604 3801600 2283600>,
-					<68 604 4028200 2417800>;
+					<68 604 176000 519000>,
+					<68 604 456000 519000>,
+					<68 604 864000 519000>,
+					<68 604 1728000 1038000>,
+					<68 604 2766000 1661000>,
+					<68 604 3456000 2076000>,
+					<68 604 3662000 2198000>;
 				qcom,bus-configs = <0x30fcfff>;
 			};
 		};
@@ -3777,14 +3783,19 @@
 
 		vdd-proxy-supply = <&gdsc_vpu>;
 		vdd-supply = <&gdsc_vpu>;
-		proxy-reg-names = "vdd-proxy";
-		active-reg-names = "vdd";
+		qcom,proxy-reg-names = "vdd-proxy";
+		qcom,active-reg-names = "vdd";
 		clock-names = "core_clk", "iface_clk", "bus_clk",
 				"vdp_clk", "vdp_bus_clk", "cxo_clk",
-				"sleep_clk", "maple_bus_clk";
-		proxy-clock-names = "core_clk", "iface_clk", "bus_clk",
+				"sleep_clk", "maple_bus_clk", "scm_core_clk",
+				"scm_iface_clk", "scm_bus_clk",
+				"scm_core_clk_src";
+		qcom,proxy-clock-names = "core_clk", "iface_clk", "bus_clk",
 					"vdp_clk", "vdp_bus_clk", "cxo_clk",
-					"sleep_clk", "maple_bus_clk";
+					"sleep_clk", "maple_bus_clk",
+					"scm_core_clk", "scm_iface_clk",
+					"scm_bus_clk", "scm_core_clk_src";
+		qcom,scm_core_clk_src-freq = <85710000>;
 
 		qcom,pas-id = <10>;
 		qcom,proxy-timeout-ms = <10000>;

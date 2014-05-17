@@ -25,7 +25,7 @@
 /* wait for at most 2 vsync for lowest refresh rate (24hz) */
 #define KOFF_TIMEOUT msecs_to_jiffies(84)
 
-#define STOP_TIMEOUT msecs_to_jiffies(16 * (VSYNC_EXPIRE_TICK + 2))
+#define STOP_TIMEOUT(hz) msecs_to_jiffies((1000 / hz) * (VSYNC_EXPIRE_TICK + 2))
 #define ULPS_ENTER_TIME msecs_to_jiffies(100)
 
 struct mdss_mdp_cmd_ctx {
@@ -70,19 +70,18 @@ static inline u32 mdss_mdp_cmd_line_count(struct mdss_mdp_ctl *ctl)
 		}
 	}
 
-	init = mdss_mdp_pingpong_read
-		(mixer, MDSS_MDP_REG_PP_VSYNC_INIT_VAL) & 0xffff;
-
-	height = mdss_mdp_pingpong_read
-		(mixer, MDSS_MDP_REG_PP_SYNC_CONFIG_HEIGHT) & 0xffff;
+	init = mdss_mdp_pingpong_read(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_VSYNC_INIT_VAL) & 0xffff;
+	height = mdss_mdp_pingpong_read(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_SYNC_CONFIG_HEIGHT) & 0xffff;
 
 	if (height < init) {
 		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 		goto exit;
 	}
 
-	cnt = mdss_mdp_pingpong_read
-		(mixer, MDSS_MDP_REG_PP_INT_COUNT_VAL) & 0xffff;
+	cnt = mdss_mdp_pingpong_read(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_INT_COUNT_VAL) & 0xffff;
 
 	if (cnt < init)		/* wrap around happened at height */
 		cnt += (height - init);
@@ -144,20 +143,22 @@ static int mdss_mdp_cmd_tearcheck_cfg(struct mdss_mdp_ctl *ctl,
 	pr_debug("thrd_start =%d thrd_cont=%d\n",
 		te->sync_threshold_start, te->sync_threshold_continue);
 
-	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_SYNC_CONFIG_VSYNC, cfg);
-	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_SYNC_CONFIG_HEIGHT,
-				te->sync_cfg_height);
-	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_VSYNC_INIT_VAL,
-				te->vsync_init_val);
-	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_RD_PTR_IRQ,
-				te->rd_ptr_irq);
-	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_START_POS,
-				te->start_pos);
-	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_SYNC_THRESH,
-				((te->sync_threshold_continue << 16) |
-				 te->sync_threshold_start));
-	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_TEAR_CHECK_EN,
-				te->tear_check_en);
+	mdss_mdp_pingpong_write(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_SYNC_CONFIG_VSYNC, cfg);
+	mdss_mdp_pingpong_write(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_SYNC_CONFIG_HEIGHT, te->sync_cfg_height);
+	mdss_mdp_pingpong_write(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_VSYNC_INIT_VAL, te->vsync_init_val);
+	mdss_mdp_pingpong_write(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_RD_PTR_IRQ, te->rd_ptr_irq);
+	mdss_mdp_pingpong_write(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_START_POS, te->start_pos);
+	mdss_mdp_pingpong_write(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_SYNC_THRESH,
+		((te->sync_threshold_continue << 16) |
+		 te->sync_threshold_start));
+	mdss_mdp_pingpong_write(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_TEAR_CHECK_EN, te->tear_check_en);
 	return 0;
 }
 
@@ -621,6 +622,7 @@ int mdss_mdp_cmd_stop(struct mdss_mdp_ctl *ctl)
 	struct mdss_mdp_vsync_handler *tmp, *handle;
 	int need_wait = 0;
 	int ret = 0;
+	int hz;
 
 	ctx = (struct mdss_mdp_cmd_ctx *) ctl->priv_data;
 	if (!ctx) {
@@ -640,8 +642,11 @@ int mdss_mdp_cmd_stop(struct mdss_mdp_ctl *ctl)
 	}
 	spin_unlock_irqrestore(&ctx->clk_lock, flags);
 
+	hz = mdss_panel_get_framerate(&ctl->panel_data->panel_info);
+
 	if (need_wait)
-		if (wait_for_completion_timeout(&ctx->stop_comp, STOP_TIMEOUT)
+		if (wait_for_completion_timeout(&ctx->stop_comp,
+					STOP_TIMEOUT(hz))
 		    <= 0) {
 			WARN(1, "stop cmd time out\n");
 

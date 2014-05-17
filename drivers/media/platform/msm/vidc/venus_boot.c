@@ -65,7 +65,7 @@
 #define VENUS_WRAPPER_CLOCK_CONFIG			0x4
 #define VENUS_WRAPPER_CPU_CLOCK_CONFIG			0x2000
 
-#define VENUS_REGION_START				0x07500000
+#define VENUS_REGION_START				0x0F500000
 #define VENUS_REGION_SIZE				0x00500000
 
 static const char * const clk_names[] = {
@@ -336,7 +336,7 @@ static int venus_notifier_cb(struct notifier_block *this, unsigned long code,
 			return ret;
 
 		ret = of_property_read_string(data->pdev->dev.of_node,
-				"proxy-reg-names", &venus_data->reg_name);
+				"qcom,proxy-reg-names", &venus_data->reg_name);
 		if (ret)
 			return ret;
 

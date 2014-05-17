@@ -344,6 +344,7 @@ static struct pll_freq_tbl apcs_pll_freq[] = {
 	F_APCS_PLL(1190400000, 62, 0x0, 0x1, 0x0, 0x0, 0x0),
 	F_APCS_PLL(1248000000, 65, 0x0, 0x1, 0x0, 0x0, 0x0),
 	F_APCS_PLL(1401600000, 73, 0x0, 0x1, 0x0, 0x0, 0x0),
+	PLL_F_END
 };
 
 static struct pll_clk a53sspll = {
@@ -2713,14 +2714,12 @@ static struct clk_lookup msm_clocks_lookup[] = {
 	CLK_LIST(gcc_bimc_gfx_clk),
 	CLK_LIST(gcc_bimc_gpu_clk),
 	CLK_LIST(wcnss_m_clk),
-};
 
-static struct clk_lookup msm_clocks_gcc_8916_crypto[] = {
 	/* Crypto clocks */
-	CLK_LOOKUP_OF("core_clk",     gcc_crypto_clk,      "scm"),
-	CLK_LOOKUP_OF("iface_clk",    gcc_crypto_ahb_clk,  "scm"),
-	CLK_LOOKUP_OF("bus_clk",      gcc_crypto_axi_clk,  "scm"),
-	CLK_LOOKUP_OF("core_clk_src", crypto_clk_src,      "scm"),
+	CLK_LIST(gcc_crypto_clk),
+	CLK_LIST(gcc_crypto_ahb_clk),
+	CLK_LIST(gcc_crypto_axi_clk),
+	CLK_LIST(crypto_clk_src),
 };
 
 static int msm_gcc_probe(struct platform_device *pdev)
@@ -2797,12 +2796,6 @@ static int msm_gcc_probe(struct platform_device *pdev)
 	ret = of_msm_clock_register(pdev->dev.of_node,
 				msm_clocks_lookup,
 				ARRAY_SIZE(msm_clocks_lookup));
-	if (ret)
-		return ret;
-
-	ret = of_msm_clock_register(pdev->dev.of_node,
-				 msm_clocks_gcc_8916_crypto,
-				 ARRAY_SIZE(msm_clocks_gcc_8916_crypto));
 	if (ret)
 		return ret;
 

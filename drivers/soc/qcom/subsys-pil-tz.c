@@ -117,23 +117,6 @@ enum pas_id {
 	PAS_BCSS,
 };
 
-enum scm_clock_ids {
-	BUS_CLK = 0,
-	CORE_CLK,
-	IFACE_CLK,
-	CORE_CLK_SRC,
-	NUM_CLKS
-};
-
-static const char * const scm_clock_names[NUM_CLKS] = {
-	[BUS_CLK]      = "bus_clk",
-	[CORE_CLK]     = "core_clk",
-	[IFACE_CLK]    = "iface_clk",
-	[CORE_CLK_SRC] = "core_clk_src",
-};
-
-static struct clk *scm_clocks[NUM_CLKS];
-
 static struct msm_bus_paths scm_pas_bw_tbl[] = {
 	{
 		.vectors = (struct msm_bus_vectors[]){
@@ -169,7 +152,7 @@ static DEFINE_MUTEX(scm_pas_bw_mutex);
 
 static int scm_pas_enable_bw(void)
 {
-	int ret = 0, i;
+	int ret = 0;
 
 	if (!scm_perf_client)
 		return -EINVAL;
@@ -181,17 +164,9 @@ static int scm_pas_enable_bw(void)
 			goto err_bus;
 		scm_pas_bw_count++;
 	}
-	for (i = 0; i < NUM_CLKS; i++)
-		if (clk_prepare_enable(scm_clocks[i]))
-			goto err_clk;
 
 	mutex_unlock(&scm_pas_bw_mutex);
 	return ret;
-
-err_clk:
-	pr_err("scm-pas: clk prepare_enable failed (%s)\n", scm_clock_names[i]);
-	for (i--; i >= 0; i--)
-		clk_disable_unprepare(scm_clocks[i]);
 
 err_bus:
 	pr_err("scm-pas; Bandwidth request failed (%d)\n", ret);
@@ -203,38 +178,21 @@ err_bus:
 
 static void scm_pas_disable_bw(void)
 {
-	int i;
 	mutex_lock(&scm_pas_bw_mutex);
 	if (scm_pas_bw_count-- == 1)
 		msm_bus_scale_client_update_request(scm_perf_client, 0);
-
-	for (i = NUM_CLKS - 1; i >= 0; i--)
-		clk_disable_unprepare(scm_clocks[i]);
 	mutex_unlock(&scm_pas_bw_mutex);
 }
 
 static void scm_pas_init(int id)
 {
-	int i, rate;
 	static int is_inited;
 
 	if (is_inited)
 		return;
 
-	for (i = 0; i < NUM_CLKS; i++) {
-		scm_clocks[i] = clk_get_sys("scm", scm_clock_names[i]);
-		if (IS_ERR(scm_clocks[i]))
-			scm_clocks[i] = NULL;
-	}
-
-	/* Fail silently if this clock is not supported */
-	rate = clk_round_rate(scm_clocks[CORE_CLK_SRC], 1);
-	clk_set_rate(scm_clocks[CORE_CLK_SRC], rate);
-
 	scm_pas_bw_tbl[0].vectors[0].src = id;
 	scm_pas_bw_tbl[1].vectors[0].src = id;
-
-	clk_set_rate(scm_clocks[BUS_CLK], 64000000);
 
 	scm_perf_client = msm_bus_scale_register_client(&scm_pas_bus_pdata);
 	if (!scm_perf_client)
@@ -340,11 +298,11 @@ static int of_read_regs(struct device *dev, struct reg_info **regs_ref,
 
 		/*
 		 * Read the voltage and current values for the corresponding
-		 * regulator. The device tree property name is "regulator_name"
-		 * + "-uV-uA".
+		 * regulator. The device tree property name is "qcom," +
+		 *  "regulator_name" + "-uV-uA".
 		 */
 		rc = snprintf(reg_uV_uA_name, ARRAY_SIZE(reg_uV_uA_name),
-			 "%s-uV-uA", reg_name);
+			 "qcom,%s-uV-uA", reg_name);
 		if (rc < strlen(reg_name) + 6) {
 			dev_err(dev, "Failed to hold reg_uV_uA_name\n");
 			return -EINVAL;
@@ -397,28 +355,28 @@ static int piltz_resc_init(struct platform_device *pdev, struct pil_tz_data *d)
 	int len, count, rc;
 	struct device *dev = &pdev->dev;
 
-	count = of_read_clocks(dev, &d->clks, "active-clock-names");
+	count = of_read_clocks(dev, &d->clks, "qcom,active-clock-names");
 	if (count < 0) {
 		dev_err(dev, "Failed to setup clocks.\n");
 		return count;
 	}
 	d->clk_count = count;
 
-	count = of_read_clocks(dev, &d->proxy_clks, "proxy-clock-names");
+	count = of_read_clocks(dev, &d->proxy_clks, "qcom,proxy-clock-names");
 	if (count < 0) {
 		dev_err(dev, "Failed to setup proxy clocks.\n");
 		return count;
 	}
 	d->proxy_clk_count = count;
 
-	count = of_read_regs(dev, &d->regs, "active-reg-names");
+	count = of_read_regs(dev, &d->regs, "qcom,active-reg-names");
 	if (count < 0) {
 		dev_err(dev, "Failed to setup regulators.\n");
 		return count;
 	}
 	d->reg_count = count;
 
-	count = of_read_regs(dev, &d->proxy_regs, "proxy-reg-names");
+	count = of_read_regs(dev, &d->proxy_regs, "qcom,proxy-reg-names");
 	if (count < 0) {
 		dev_err(dev, "Failed to setup proxy regulators.\n");
 		return count;

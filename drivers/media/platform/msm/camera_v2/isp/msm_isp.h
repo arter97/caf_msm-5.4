@@ -27,6 +27,14 @@
 
 #include "msm_buf_mgr.h"
 
+#define VFE40_8974V1_VERSION 0x10000018
+#define VFE40_8974V2_VERSION 0x1001001A
+#define VFE40_8974V3_VERSION 0x1001001B
+#define VFE40_8x26_VERSION 0x20000013
+#define VFE40_8x26V2_VERSION 0x20010014
+#define VFE40_8916_VERSION 0x10030000
+
+#define MAX_IOMMU_CTX 2
 #define MAX_NUM_WM 7
 #define MAX_NUM_RDI 3
 #define MAX_NUM_RDI_MASTER 3
@@ -37,6 +45,8 @@
 
 #define AVTIMER_MSW_PHY_ADDR 0xFE05300C
 #define AVTIMER_LSW_PHY_ADDR 0xFE053008
+#define AVTIMER_MSW_PHY_ADDR_8916 0x7706010
+#define AVTIMER_LSW_PHY_ADDR_8916 0x770600C
 #define AVTIMER_ITERATION_CTR 16
 
 #define VFE_PING_FLAG 0xFFFFFFFF
@@ -272,8 +282,10 @@ struct msm_vfe_axi_stream {
 	uint32_t stream_id;
 	uint32_t bufq_handle;
 	uint32_t bufq_scratch_handle;
+	uint32_t controllable_output;
 	uint32_t stream_handle;
 	uint32_t request_frm_num;
+	uint32_t ping_pong_addr_set[2];
 	uint8_t buf_divert;
 	enum msm_vfe_axi_stream_type stream_type;
 	uint32_t vt_enable;

@@ -181,14 +181,15 @@ static inline struct kgsl_cmdbatch *adreno_dispatcher_get_cmdbatch(
 			 */
 			if (!timer_pending(&cmdbatch->timer))
 				mod_timer(&cmdbatch->timer, jiffies + (5 * HZ));
+			spin_unlock(&cmdbatch->lock);
 		} else {
 			/*
 			 * Otherwise, delete the timer to make sure it is good
 			 * and dead before queuing the buffer
 			 */
+			spin_unlock(&cmdbatch->lock);
 			del_timer_sync(&cmdbatch->timer);
 		}
-		spin_unlock(&cmdbatch->lock);
 
 		if (pending) {
 			cmdbatch = ERR_PTR(-EAGAIN);
@@ -224,7 +225,7 @@ static inline int adreno_dispatcher_requeue_cmdbatch(
 	mutex_lock(&drawctxt->mutex);
 
 	if (kgsl_context_detached(&drawctxt->base) ||
-		drawctxt->state == ADRENO_CONTEXT_STATE_INVALID) {
+		kgsl_context_invalid(&drawctxt->base)) {
 		mutex_unlock(&drawctxt->mutex);
 		/* get rid of this cmdbatch since the context is bad */
 		kgsl_cmdbatch_destroy(cmdbatch);
@@ -502,7 +503,7 @@ static int _adreno_dispatcher_issuecmds(struct adreno_device *adreno_dev)
 		spin_unlock(&dispatcher->plist_lock);
 
 		if (kgsl_context_detached(&drawctxt->base) ||
-			drawctxt->state == ADRENO_CONTEXT_STATE_INVALID) {
+			kgsl_context_invalid(&drawctxt->base)) {
 			kgsl_context_put(&drawctxt->base);
 			continue;
 		}
@@ -587,7 +588,7 @@ static int _check_context_queue(struct adreno_context *drawctxt)
 	 * invalidated while we were asleep
 	 */
 
-	if (drawctxt->state == ADRENO_CONTEXT_STATE_INVALID)
+	if (kgsl_context_invalid(&drawctxt->base))
 		ret = 1;
 	else
 		ret = drawctxt->queued < _context_cmdqueue_size ? 1 : 0;
@@ -659,7 +660,8 @@ int adreno_dispatcher_queue_cmd(struct adreno_device *adreno_dev,
 	 * requested by the dispatcher as part of fault recovery
 	 */
 
-	if (test_and_clear_bit(ADRENO_CONTEXT_FORCE_PREAMBLE, &drawctxt->priv))
+	if (test_and_clear_bit(ADRENO_CONTEXT_FORCE_PREAMBLE,
+				&drawctxt->base.priv))
 		set_bit(CMDBATCH_FLAG_FORCE_PREAMBLE, &cmdbatch->priv);
 
 	/*
@@ -681,7 +683,7 @@ int adreno_dispatcher_queue_cmd(struct adreno_device *adreno_dev,
 	 * through the pipeline but it won't actually send any commands
 	 */
 
-	if (test_bit(ADRENO_CONTEXT_SKIP_EOF, &drawctxt->priv)) {
+	if (test_bit(ADRENO_CONTEXT_SKIP_EOF, &drawctxt->base.priv)) {
 		set_bit(CMDBATCH_FLAG_SKIP, &cmdbatch->priv);
 
 		/*
@@ -690,13 +692,15 @@ int adreno_dispatcher_queue_cmd(struct adreno_device *adreno_dev,
 		 */
 
 		if (cmdbatch->flags & KGSL_CMDBATCH_END_OF_FRAME) {
-			clear_bit(ADRENO_CONTEXT_SKIP_EOF, &drawctxt->priv);
+			clear_bit(ADRENO_CONTEXT_SKIP_EOF,
+				  &drawctxt->base.priv);
 
 			/*
 			 * Force the preamble on the next command to ensure that
 			 * the state is correct
 			 */
-			set_bit(ADRENO_CONTEXT_FORCE_PREAMBLE, &drawctxt->priv);
+			set_bit(ADRENO_CONTEXT_FORCE_PREAMBLE,
+				&drawctxt->base.priv);
 		}
 	}
 
@@ -723,7 +727,7 @@ int adreno_dispatcher_queue_cmd(struct adreno_device *adreno_dev,
 	 * while we were sleeping
 	 */
 
-	if (drawctxt->state == ADRENO_CONTEXT_STATE_INVALID) {
+	if (kgsl_context_invalid(&drawctxt->base)) {
 		mutex_unlock(&drawctxt->mutex);
 		return -EDEADLK;
 	}
@@ -869,7 +873,7 @@ static void cmdbatch_skip_cmd(struct kgsl_cmdbatch *cmdbatch,
 	 *    next command issued in this context
 	 */
 	if ((i == count) && drawctxt) {
-		set_bit(ADRENO_CONTEXT_SKIP_CMD, &drawctxt->priv);
+		set_bit(ADRENO_CONTEXT_SKIP_CMD, &drawctxt->base.priv);
 		drawctxt->fault_policy = replay[0]->fault_policy;
 	}
 
@@ -918,7 +922,7 @@ static void cmdbatch_skip_frame(struct kgsl_cmdbatch *cmdbatch,
 	 */
 
 	if (skip && drawctxt)
-		set_bit(ADRENO_CONTEXT_SKIP_EOF, &drawctxt->priv);
+		set_bit(ADRENO_CONTEXT_SKIP_EOF, &drawctxt->base.priv);
 
 	/*
 	 * If we did see the EOF flag then force the preamble on for the
@@ -926,7 +930,7 @@ static void cmdbatch_skip_frame(struct kgsl_cmdbatch *cmdbatch,
 	 */
 
 	if (!skip && drawctxt)
-		set_bit(ADRENO_CONTEXT_FORCE_PREAMBLE, &drawctxt->priv);
+		set_bit(ADRENO_CONTEXT_FORCE_PREAMBLE, &drawctxt->base.priv);
 }
 
 static void remove_invalidated_cmdbatches(struct kgsl_device *device,
@@ -936,15 +940,11 @@ static void remove_invalidated_cmdbatches(struct kgsl_device *device,
 
 	for (i = 0; i < count; i++) {
 		struct kgsl_cmdbatch *cmd = replay[i];
-		struct adreno_context *drawctxt;
-
 		if (cmd == NULL)
 			continue;
 
-		drawctxt = ADRENO_CONTEXT(cmd->context);
-
 		if (kgsl_context_detached(cmd->context) ||
-			drawctxt->state == ADRENO_CONTEXT_STATE_INVALID) {
+			kgsl_context_invalid(cmd->context)) {
 			replay[i] = NULL;
 
 			kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
@@ -1019,11 +1019,11 @@ void adreno_fault_skipcmd_detached(struct kgsl_device *device,
 				 struct adreno_context *drawctxt,
 				 struct kgsl_cmdbatch *cmdbatch)
 {
-	if (test_bit(ADRENO_CONTEXT_SKIP_CMD, &drawctxt->priv) &&
+	if (test_bit(ADRENO_CONTEXT_SKIP_CMD, &drawctxt->base.priv) &&
 			kgsl_context_detached(&drawctxt->base)) {
 		pr_fault(device, cmdbatch, "gpu %s ctx %d\n",
 			 "detached", cmdbatch->context->id);
-		clear_bit(ADRENO_CONTEXT_SKIP_CMD, &drawctxt->priv);
+		clear_bit(ADRENO_CONTEXT_SKIP_CMD, &drawctxt->base.priv);
 	}
 }
 
@@ -1218,11 +1218,13 @@ static int dispatcher_do_fault(struct kgsl_device *device)
 	 * again if replayed
 	 */
 
-	if (test_bit(KGSL_CONTEXT_PAGEFAULT, &cmdbatch->context->priv)) {
+	if (test_bit(KGSL_CONTEXT_PRIV_PAGEFAULT,
+		     &cmdbatch->context->priv)) {
 		/* we'll need to resume the mmu later... */
 		pagefault = true;
 		clear_bit(KGSL_FT_REPLAY, &cmdbatch->fault_policy);
-		clear_bit(KGSL_CONTEXT_PAGEFAULT, &cmdbatch->context->priv);
+		clear_bit(KGSL_CONTEXT_PRIV_PAGEFAULT,
+			  &cmdbatch->context->priv);
 	}
 
 	/*
@@ -1445,11 +1447,9 @@ static void adreno_dispatcher_work(struct work_struct *work)
 			 */
 
 			if (cmdbatch->fault_recovery != 0) {
-				struct adreno_context *drawctxt =
-					ADRENO_CONTEXT(cmdbatch->context);
-
 				/* Mark the context as faulted and recovered */
-				set_bit(ADRENO_CONTEXT_FAULT, &drawctxt->priv);
+				set_bit(ADRENO_CONTEXT_FAULT,
+					&cmdbatch->context->priv);
 
 				_print_recovery(device, cmdbatch);
 			}

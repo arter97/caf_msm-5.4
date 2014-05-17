@@ -14,6 +14,7 @@ config ARM64
 	select COMMON_CLK if !ARCH_MSM
 	select CPU_PM if (SUSPEND || CPU_IDLE)
 	select DCACHE_WORD_ACCESS
+	select EDAC_SUPPORT
 	select GENERIC_CLOCKEVENTS
 	select GENERIC_CLOCKEVENTS_BROADCAST if SMP
 	select GENERIC_IOMAP
@@ -160,6 +161,15 @@ config ARCH_MSM8994
 	  This enables support for the MSM8994 chipset. If you dont
 	  know what do here, say N
 
+config ARCH_MSM8994_V1_TLBI_WA
+	bool "Enable MSM8994 v1 TLBI workaround"
+	depends on ARCH_MSM8994
+	help
+	  This enables support for the MSM8994 v1 TLBI workaround. This
+	  workaround is required for MSM8994 V1 revision where the
+	  [39:38] bits of VA are tied to zero and due to which TLBI
+	  operations with VA or ASID will not work.
+
 config ARCH_XGENE
 	bool "AppliedMicro X-Gene SOC Family"
 	help
@@ -201,6 +211,22 @@ config SMP
 	  here.
 
 	  If you don't know what to do here, say N.
+
+config SCHED_MC
+	bool "Multi-core scheduler support"
+	depends on SMP
+	help
+	  Multi-core scheduler support improves the CPU scheduler's decision
+	  making when dealing with multi-core CPU chips at a cost of slightly
+	  increased overhead in some places. If unsure say N here.
+
+config SCHED_SMT
+	bool "SMT scheduler support"
+	depends on SMP
+	help
+	  Improves the CPU scheduler's decision making when dealing with
+	  MultiThreading at a cost of slightly increased overhead in some
+	  places. If unsure say N here.
 
 config NR_CPUS
 	int "Maximum number of CPUs (2-32)"
