@@ -2995,8 +2995,12 @@ static void mxt_init_delay_work(struct work_struct *work)
 	}
 
 	if (data->state == APPMODE) {
-		mxt_clear_irq_s1509(data->client);
-		mxt_clear_irq_uh927(data->client);
+		if (data->pdata->no_regulator_support &&
+			data->pdata->no_reset_gpio) {
+				mxt_clear_irq_s1509(data->client);
+				mxt_clear_irq_uh927(data->client);
+		}
+
 		error = mxt_make_highchg(data);
 		if (error) {
 			dev_err(&data->client->dev,
@@ -3027,15 +3031,17 @@ error_register_input_dev:
 error_request_irq:
 	free_irq(data->irq, data);
 error_mxt_init:
-	if (data->pdata->power_on)
-		data->pdata->power_on(false);
-	else if (data->pdata->no_regulator_support)
-		mxt_power_on(data, false);
+	if (!data->pdata->no_regulator_support) {
+		if (data->pdata->power_on)
+			data->pdata->power_on(false);
+		else if (data->pdata->no_regulator_support)
+			mxt_power_on(data, false);
 
-	if (data->pdata->init_hw)
-		data->pdata->init_hw(false);
-	else if (!data->pdata->no_regulator_support)
-		mxt_regulator_configure(data, false);
+		if (data->pdata->init_hw)
+			data->pdata->init_hw(false);
+		else if (!data->pdata->no_regulator_support)
+			mxt_regulator_configure(data, false);
+	}
 
 	if (gpio_is_valid(data->pdata->reset_gpio)
 			&& !data->pdata->no_reset_gpio)
