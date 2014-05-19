@@ -72,6 +72,7 @@ static u32 mdss_fb_pseudo_palette[16] = {
 
 static struct msm_mdp_interface *mdp_instance;
 
+void mdss_mdp_footswitch_ctrl_ulps(int on, struct device *dev);
 static int mdss_fb_register(struct msm_fb_data_type *mfd);
 static int mdss_fb_open(struct fb_info *info, int user);
 static int mdss_fb_release(struct fb_info *info, int user);
@@ -819,6 +820,7 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 {
 	struct mdss_panel_data *pdata;
 
+	mdss_mdp_footswitch_ctrl_ulps(1, &mfd->pdev->dev);
 	if (mfd->unset_bl_level && !mfd->bl_updated) {
 		pdata = dev_get_platdata(&mfd->pdev->dev);
 		if ((pdata) && (pdata->set_backlight)) {
