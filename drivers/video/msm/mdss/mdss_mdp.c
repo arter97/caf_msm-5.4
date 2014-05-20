@@ -2458,13 +2458,14 @@ void mdss_mdp_footswitch_ctrl_ulps(int on, struct device *dev)
 {
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 
-	pr_debug("called on=%d\n", on);
-	if (on) {
+	if (on && mdata->ulps) {
+		pr_debug("called on=%d\n", on);
 		pm_runtime_get_sync(dev);
 		mdss_iommu_attach(mdata);
 		mdss_hw_init(mdata);
 		mdata->ulps = false;
-	} else {
+	} else if (!on && !mdata->ulps) {
+		pr_debug("called on=%d\n", on);
 		mdata->ulps = true;
 		pm_runtime_put_sync(dev);
 	}
