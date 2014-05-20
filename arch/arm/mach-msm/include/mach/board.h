@@ -473,6 +473,10 @@ struct msm_wfd_platform_data {
 	char (*wfd_check_mdp_iommu_split)(void);
 };
 
+struct mipi_dsi_i2c_platform_data {
+	int pd_gpio;
+};
+
 #define PANEL_NAME_MAX_LEN 50
 struct msm_fb_platform_data {
 	int (*detect_client)(const char *name);

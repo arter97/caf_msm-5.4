@@ -975,6 +975,17 @@ static struct i2c_board_info smb349_charger_i2c_info[] __initdata = {
 	},
 };
 
+static struct mipi_dsi_i2c_platform_data mipi_dsi_i2c_data = {
+	.pd_gpio = PM8921_GPIO_PM_TO_SYS(23),
+};
+
+static struct i2c_board_info mipi_dsi_i2c_device_info[] __initdata = {
+	{
+		I2C_BOARD_INFO("mipi_dsi_i2c", 0x3d),
+		.platform_data = &mipi_dsi_i2c_data,
+	},
+};
+
 struct sx150x_platform_data apq8064_sx150x_data[] = {
 	[SX150X_EPM] = {
 		.gpio_base	= GPIO_EPM_EXPANDER_BASE,
@@ -3343,6 +3354,12 @@ static struct i2c_registry apq8064_i2c_devices[] __initdata = {
 		APQ_8064_GSBI5_QUP_I2C_BUS_ID,
 		cs8427_device_info,
 		ARRAY_SIZE(cs8427_device_info),
+	},
+	{
+		I2C_SURF,
+		APQ_8064_GSBI3_QUP_I2C_BUS_ID,
+		mipi_dsi_i2c_device_info,
+		ARRAY_SIZE(mipi_dsi_i2c_device_info),
 	},
 };
 
