@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2742,7 +2742,7 @@ static int __init msm_audio_init(void)
 	u32	version = socinfo_get_platform_version();
 	if (!machine_is_apq8064_mtp() ||
 	(SOCINFO_VERSION_MINOR(version) != 1)) {
-		pr_info("%s: Not APQ8064 in I2S mode\n", __func__);
+		pr_info("%s: Not APQ8064-i2s machine type\n", __func__);
 		return -ENODEV;
 	}
 	pr_debug("%s: APQ8064 is in I2S mode\n", __func__);

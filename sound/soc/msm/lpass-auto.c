@@ -22,6 +22,7 @@
 #include <sound/pcm_params.h>
 #include <sound/pcm.h>
 #include <sound/dai.h>
+#include <mach/socinfo.h>
 
 /* MI2S Configuration */
 #define GPIO_MI2S_WS	27
@@ -467,6 +468,13 @@ static int __init msm_audio_init(void)
 {
 	int ret;
 
+	if (!machine_is_apq8064_mplatform()) {
+		pr_err("%s: Not lpass-auto machine type\n", __func__);
+		return -ENODEV;
+	}
+
+	pr_info("%s: lpass-auto machine type\n", __func__);
+
 	apq8064_snd_device = platform_device_alloc("soc-audio", 0);
 	if (!apq8064_snd_device) {
 		pr_err("Platform device allocation fialed\n");
@@ -486,7 +494,8 @@ module_init(msm_audio_init);
 
 static void __exit msm_audio_exit(void)
 {
-	platform_device_unregister(apq8064_snd_device);
+	if (machine_is_apq8064_mplatform())
+		platform_device_unregister(apq8064_snd_device);
 }
 module_exit(msm_audio_exit);
 
