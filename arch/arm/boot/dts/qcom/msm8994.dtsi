@@ -475,8 +475,9 @@
 
 	qcom,wdt@f9017000 {
 		compatible = "qcom,msm-watchdog";
-		reg = <0xf9017000 0x1000>;
-		reg-names = "wdt-base";
+		reg = <0xf9017000 0x1000>,
+		      <0xf9112118 0x4>;
+		reg-names = "wdt-base", "wdt-absent-base";
 		interrupts = <0 3 0>, <0 4 0>;
 		qcom,bark-time = <11000>;
 		qcom,pet-time = <10000>;
@@ -1207,6 +1208,71 @@
 				qcom,vidc-partition-buffer-types = <0x480>;
 			};
 		};
+		qcom,msm-bus-clients {
+			qcom,msm-bus-client@0 {
+				qcom,msm-bus,name = "venc-core0-ddr";
+				qcom,msm-bus,num-cases = <8>;
+				qcom,msm-bus,num-paths = <1>;
+				qcom,msm-bus,vectors-KBps =
+					<63 512 0 0>,
+					<63 512 133600 302000>,
+					<63 512 402200 302000>,
+					<63 512 916600 302000>,
+					<63 512 1778400 604000>,
+					<63 512 2812400 967000>,
+					<63 512 3501800 1404000>,
+					<63 512 5567600 1496000>;
+				qcom,bus-configs = <0x1000414>;
+			};
+
+			qcom,msm-bus-client@1 {
+				qcom,msm-bus,name = "vdec-core0-ddr";
+				qcom,msm-bus,num-cases = <8>;
+				qcom,msm-bus,num-paths = <1>;
+				qcom,msm-bus,vectors-KBps =
+					<63 512 0 0>,
+					<63 512 303200 454500>,
+					<63 512 787200 454500>,
+					<63 512 1498200 454500>,
+					<63 512 2921400 909000>,
+					<63 512 4629200 1455000>,
+					<63 512 5767800 1818000>,
+					<63 512 6299000 19185000>;
+				qcom,bus-configs = <0xc000000>;
+			};
+
+			qcom,msm-bus-client@2 {
+				qcom,msm-bus,name = "vdec-core1-ddr";
+				qcom,msm-bus,num-cases = <8>;
+				qcom,msm-bus,num-paths = <1>;
+				qcom,msm-bus,vectors-KBps =
+					<63 512 0 0>,
+					<63 512 227800 303000>,
+					<63 512 593400 303000>,
+					<63 512 1142800 303000>,
+					<63 512 2177000 606000>,
+					<63 512 3417800 970000>,
+					<63 512 4245000 1212000>,
+					<63 512 4773800 1279000>;
+				qcom,bus-configs = <0x30fcfff>;
+			};
+
+			qcom,msm-bus-client@3 {
+				qcom,msm-bus,name = "venc-core2-ddr";
+				qcom,msm-bus,num-cases = <8>;
+				qcom,msm-bus,num-paths = <1>;
+				qcom,msm-bus,vectors-KBps =
+					<63 512 0 0>,
+					<63 512 178000 453000>,
+					<63 512 540000 453000>,
+					<63 512 1518000 453000>,
+					<63 512 2100000 906000>,
+					<63 512 2798000 1450500>,
+					<63 512 3262000 2106000>,
+					<63 512 8114000 2244000>;
+				qcom,bus-configs = <0x04000000>;
+			};
+		};
 	};
 
 	i2c_2: i2c@f9924000 { /* BLSP1 QUP2 */
@@ -1517,41 +1583,77 @@
 };
 
 &gdsc_venus {
+	clock-names = "ocmem_clk", "bus_clk", "core_clk";
+	clocks = <&clock_mmss clk_venus0_ocmemnoc_clk>,
+		 <&clock_mmss clk_venus0_axi_clk>,
+		 <&clock_mmss clk_venus0_vcodec0_clk>;
 	status = "ok";
 };
 
 &gdsc_venus_core0 {
 	qcom,support-hw-trigger;
+	clock-names = "core0_clk";
+	clocks = <&clock_mmss clk_venus0_core0_vcodec_clk>;
 	status = "ok";
 };
 
 &gdsc_venus_core1 {
 	qcom,support-hw-trigger;
+	clock-names = "core1_clk";
+	clocks = <&clock_mmss clk_venus0_core1_vcodec_clk>;
 	status = "ok";
 };
 
 &gdsc_venus_core2 {
 	qcom,support-hw-trigger;
+	clock-names = "core2_clk";
+	clocks = <&clock_mmss clk_venus0_core2_vcodec_clk>;
 	status = "ok";
 };
 
 &gdsc_mdss {
+	clock-names = "bus_clk", "core_clk";
+	clocks = <&clock_mmss clk_mdss_axi_clk>,
+		 <&clock_mmss clk_mdss_mdp_clk>;
+	status = "ok";
+};
+
+&gdsc_camss_top {
+	clock-names = "csi0_clk", "csi1_clk", "bus_clk";
+	clocks = <&clock_mmss clk_camss_csi_vfe0_clk>,
+		 <&clock_mmss clk_camss_csi_vfe1_clk>,
+		 <&clock_mmss clk_camss_micro_ahb_clk>;
 	status = "ok";
 };
 
 &gdsc_jpeg {
+	clock-names = "bus_clk", "core0_clk", "core1_clk", "core2_clk";
+	clocks = <&clock_mmss clk_camss_jpeg_jpeg_axi_clk>,
+		 <&clock_mmss clk_camss_jpeg_jpeg0_clk>,
+		 <&clock_mmss clk_camss_jpeg_jpeg1_clk>,
+		 <&clock_mmss clk_camss_jpeg_jpeg2_clk>;
 	status = "ok";
 };
 
 &gdsc_vfe {
+	clock-names = "bus_clk", "core0_clk", "core1_clk";
+	clocks = <&clock_mmss clk_camss_vfe_vfe_axi_clk>,
+		 <&clock_mmss clk_camss_vfe_vfe0_clk>,
+		 <&clock_mmss clk_camss_vfe_vfe1_clk>;
 	status = "ok";
 };
 
 &gdsc_cpp {
+	clock-names = "bus_clk", "core_clk";
+	clocks = <&clock_mmss clk_camss_vfe_cpp_axi_clk>,
+		 <&clock_mmss clk_camss_vfe_cpp_clk>;
 	status = "ok";
 };
 
 &gdsc_fd {
+	clock-names = "bus_clk", "core_clk";
+	clocks = <&clock_mmss clk_fd_axi_clk>,
+		 <&clock_mmss clk_fd_core_clk>;
 	status = "ok";
 };
 
@@ -1560,6 +1662,8 @@
 };
 
 &gdsc_oxili_gx {
+	clock-names = "core_clk";
+	clocks = <&clock_mmss clk_oxili_gfx3d_clk>;
 	status = "ok";
 	parent-supply = <&pmi8994_s2_corner>;
 };

@@ -26,7 +26,6 @@
 #include <linux/regulator/consumer.h>
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
-#include <mach/gpiomux.h>
 #include <linux/pinctrl/consumer.h>
 #include "coresight-priv.h"
 #include "coresight-nidnt.h"
@@ -104,13 +103,20 @@ struct tpiu_drvdata {
 	enum tpiu_set		set;
 	struct pinctrl		*tpiu_pctrl;
 	bool			enable;
-	bool			nidnt;
+	bool			nidntsw;
 	bool			nidnthw;  /* Can support nidnt ps sequence */
+	bool			nidnt_swduart;
+	bool			nidnt_swdtrc;
+	bool			nidnt_jtag;
+	bool			nidnt_spmi;
 };
 
 static int nidnt_boot_hw_detect = 1;
 module_param_named(nidnt_boot_hw_detect,
 	nidnt_boot_hw_detect, int, S_IRUGO | S_IWUSR | S_IWGRP);
+
+static void __tpiu_disable(struct tpiu_drvdata *drvdata);
+static void __tpiu_disable_to_sdc(struct tpiu_drvdata *drvdata);
 
 static void tpiu_flush_and_stop(struct tpiu_drvdata *drvdata)
 {
@@ -250,6 +256,9 @@ static int __tpiu_enable_to_sdc(struct tpiu_drvdata *drvdata)
 {
 	int ret;
 
+	if (!drvdata->nidntsw && !drvdata->nidnthw)
+		return -EINVAL;
+
 	if (!drvdata->reg || !drvdata->reg_io)
 		return -EINVAL;
 
@@ -306,14 +315,17 @@ static int __tpiu_enable_to_sdc_trace(struct tpiu_drvdata *drvdata)
 
 	if (drvdata->nidnthw) {
 		ret = coresight_nidnt_config_swoverride(NIDNT_MODE_SDC_TRACE);
-	} else if (drvdata->nidnt) {
+		if (ret)
+			goto err;
+	} else {
 		coresight_nidnt_writel(0x16D, TLMM_SDC2_HDRV_PULL_CTL);
 		coresight_nidnt_writel(1, TLMM_ETM_MODE);
-	} else {
-		msm_tlmm_misc_reg_write(TLMM_SDC2_HDRV_PULL_CTL, 0x16D);
-		msm_tlmm_misc_reg_write(TLMM_ETM_MODE_REG, 1);
 	}
 	return 0;
+err:
+	__tpiu_disable(drvdata);
+	__tpiu_disable_to_sdc(drvdata);
+	return ret;
 }
 
 static int __tpiu_enable_to_sdc_swduart(struct tpiu_drvdata *drvdata)
@@ -330,7 +342,7 @@ static int __tpiu_enable_to_sdc_swduart(struct tpiu_drvdata *drvdata)
 
 	ret = __tpiu_enable_to_sdc(drvdata);
 	if (ret)
-		goto err;
+		goto err0;
 
 	/*
 	 * Required sequence to prevent SRST asserstion: set trace to
@@ -341,17 +353,20 @@ static int __tpiu_enable_to_sdc_swduart(struct tpiu_drvdata *drvdata)
 
 	if (drvdata->nidnthw) {
 		ret = coresight_nidnt_config_swoverride(NIDNT_MODE_SDC_SWDUART);
-	} else if (drvdata->nidnt) {
+		if (ret)
+			goto err1;
+	} else {
 		coresight_nidnt_writel(1, TLMM_ETM_MODE);
 		/* Pull down sdc cmd line */
 		coresight_nidnt_writel(0x96D, TLMM_SDC2_HDRV_PULL_CTL);
 		coresight_nidnt_writel(2, TLMM_ETM_MODE);
-	} else {
-		msm_tlmm_misc_reg_write(TLMM_ETM_MODE_REG, 1);
-		msm_tlmm_misc_reg_write(TLMM_SDC2_HDRV_PULL_CTL, 0x96D);
-		msm_tlmm_misc_reg_write(TLMM_ETM_MODE_REG, 2);
 	}
-err:
+	return 0;
+err1:
+	__tpiu_disable(drvdata);
+	__tpiu_disable_to_sdc(drvdata);
+err0:
+	clk_disable_unprepare(drvdata->clk);
 	return ret;
 }
 
@@ -369,7 +384,7 @@ static int __tpiu_enable_to_sdc_swdtrc(struct tpiu_drvdata *drvdata)
 
 	ret = __tpiu_enable_to_sdc(drvdata);
 	if (ret)
-		goto err;
+		goto err0;
 
 	/*
 	 * Required sequence to prevent SRST asserstion: set trace to
@@ -380,28 +395,33 @@ static int __tpiu_enable_to_sdc_swdtrc(struct tpiu_drvdata *drvdata)
 
 	if (drvdata->nidnthw) {
 		ret = coresight_nidnt_config_swoverride(NIDNT_MODE_SDC_SWDTRC);
-	} else if (drvdata->nidnt) {
+		if (ret)
+			goto err1;
+	} else {
 		coresight_nidnt_writel(1, TLMM_ETM_MODE);
 		/* Pull down sdc cmd line */
 		coresight_nidnt_writel(0x96D, TLMM_SDC2_HDRV_PULL_CTL);
 		coresight_nidnt_writel(3, TLMM_ETM_MODE);
-	} else {
-		msm_tlmm_misc_reg_write(TLMM_ETM_MODE_REG, 1);
-		msm_tlmm_misc_reg_write(TLMM_SDC2_HDRV_PULL_CTL, 0x96D);
-		msm_tlmm_misc_reg_write(TLMM_ETM_MODE_REG, 3);
 	}
-err:
+err1:
+	__tpiu_disable(drvdata);
+	__tpiu_disable_to_sdc(drvdata);
+err0:
+	clk_disable_unprepare(drvdata->clk);
 	return ret;
 }
 
 static int __tpiu_enable_to_sdc_jtag(struct tpiu_drvdata *drvdata)
 {
-	int ret = 0;
-
-	ret = coresight_nidnt_config_swoverride(NIDNT_MODE_SDC_JTAG);
+	int ret;
 
 	ret = __tpiu_enable_to_sdc(drvdata);
+	if (ret)
+		return ret;
 
+	ret = coresight_nidnt_config_swoverride(NIDNT_MODE_SDC_JTAG);
+	if (ret)
+		__tpiu_disable_to_sdc(drvdata);
 	return ret;
 }
 
@@ -409,10 +429,13 @@ static int __tpiu_enable_to_sdc_spmi(struct tpiu_drvdata *drvdata)
 {
 	int ret;
 
-	ret = coresight_nidnt_config_swoverride(NIDNT_MODE_SDC_SPMI);
-
 	ret = __tpiu_enable_to_sdc(drvdata);
+	if (ret)
+		return ret;
 
+	ret = coresight_nidnt_config_swoverride(NIDNT_MODE_SDC_SPMI);
+	if (ret)
+		__tpiu_disable_to_sdc(drvdata);
 	return ret;
 }
 
@@ -484,10 +507,8 @@ static void __tpiu_disable_to_mictor(struct tpiu_drvdata *drvdata)
 
 static void __tpiu_disable_to_sdc(struct tpiu_drvdata *drvdata)
 {
-	if (drvdata->nidnt)
+	if (drvdata->nidntsw)
 		coresight_nidnt_writel(0, TLMM_ETM_MODE);
-	else if (!drvdata->nidnthw)
-		msm_tlmm_misc_reg_write(TLMM_ETM_MODE_REG, 0);
 
 	clk_set_rate(drvdata->clk, CORESIGHT_CLK_RATE_TRACE);
 
@@ -694,7 +715,7 @@ static ssize_t tpiu_store_out_mode(struct device *dev,
 		}
 		drvdata->out_mode = TPIU_OUT_MODE_SDC_TRACE;
 	} else if (!strcmp(str, "swduart")) {
-		if (!drvdata->nidnt && !drvdata->nidnthw) {
+		if (!drvdata->nidnt_swduart) {
 			ret = -EINVAL;
 			goto err;
 		}
@@ -712,7 +733,7 @@ static ssize_t tpiu_store_out_mode(struct device *dev,
 		}
 		drvdata->out_mode = TPIU_OUT_MODE_SDC_SWDUART;
 	} else if (!strcmp(str, "swdtrc")) {
-		if (!drvdata->nidnt && !drvdata->nidnthw) {
+		if (!drvdata->nidnt_swdtrc) {
 			ret = -EINVAL;
 			goto err;
 		}
@@ -730,7 +751,7 @@ static ssize_t tpiu_store_out_mode(struct device *dev,
 		}
 		drvdata->out_mode = TPIU_OUT_MODE_SDC_SWDTRC;
 	} else if (!strcmp(str, "jtag")) {
-		if (!drvdata->nidnthw) {
+		if (!drvdata->nidnt_jtag) {
 			ret = -EINVAL;
 			goto err;
 		}
@@ -748,7 +769,7 @@ static ssize_t tpiu_store_out_mode(struct device *dev,
 		}
 		drvdata->out_mode = TPIU_OUT_MODE_SDC_JTAG;
 	} else if (!strcmp(str, "spmi")) {
-		if (!drvdata->nidnthw) {
+		if (!drvdata->nidnt_spmi) {
 			ret = -EINVAL;
 			goto err;
 		}
@@ -938,26 +959,43 @@ static int tpiu_parse_of_data(struct platform_device *pdev,
 	drvdata->out_mode = TPIU_OUT_MODE_MICTOR;
 	drvdata->set = TPIU_SET_B;
 
-	drvdata->nidnt = of_property_read_bool(pdev->dev.of_node,
-					       "qcom,nidnt");
+	drvdata->nidntsw = of_property_read_bool(pdev->dev.of_node,
+						 "qcom,nidntsw");
 
 	drvdata->nidnthw = of_property_read_bool(pdev->dev.of_node,
 						 "qcom,nidnthw");
 
-	if (drvdata->nidnt || drvdata->nidnthw) {
-		ret = coresight_nidnt_init(pdev);
+	if (!drvdata->nidntsw && !drvdata->nidnthw) {
+		dev_err(drvdata->dev,
+			"NIDnT hw or sw support not specified\n");
+	} else {
+		drvdata->nidnt_swduart = of_property_read_bool(
+							pdev->dev.of_node,
+							"qcom,nidnt-swduart");
+
+		drvdata->nidnt_swdtrc = of_property_read_bool(
+							pdev->dev.of_node,
+							"qcom,nidnt-swdtrc");
+
+		drvdata->nidnt_jtag = of_property_read_bool(pdev->dev.of_node,
+							    "qcom,nidnt-jtag");
+
+		drvdata->nidnt_spmi = of_property_read_bool(pdev->dev.of_node,
+							    "qcom,nidnt-spmi");
+	}
+
+	ret = coresight_nidnt_init(pdev);
+	if (ret)
+		return ret;
+
+	if (drvdata->nidnthw && nidnt_boot_hw_detect) {
+		ret = __tpiu_enable_to_sdc(drvdata);
 		if (ret)
 			return ret;
 
-		if (drvdata->nidnthw && nidnt_boot_hw_detect) {
-			ret = __tpiu_enable_to_sdc(drvdata);
-			if (ret)
-				return ret;
-
-			/* enable and configure nidnt hardware detect */
-			coresight_nidnt_set_hwdetect_param(true);
-			coresight_nidnt_enable_hwdetect();
-		}
+		/* enable and configure nidnt hardware detect */
+		coresight_nidnt_set_hwdetect_param(true);
+		coresight_nidnt_enable_hwdetect();
 	}
 	return 0;
 }
