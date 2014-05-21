@@ -10,13 +10,20 @@
  * GNU General Public License for more details.
  */
 
-#include "apq8084.dtsi"
+#ifndef MSM_CPU_SUBSYS_H_
+#define MSM_CPU_SUBSYS_H_
 
-/ {
-	qcom,msm-id = <178 0x10001>;
-};
-
-&pil_lpass {
-	clock-names = "xo";
-	/delete-property/ qcom,active-clock-names;
-};
+#ifdef CONFIG_MSM_CPU_PWR_CTL
+int msm_unclamp_secondary_arm_cpu_sim(unsigned int cpu);
+int msm_unclamp_secondary_arm_cpu(unsigned int cpu);
+#else
+static inline int msm_unclamp_secondary_arm_cpu_sim(unsigned int cpu)
+{
+	return 0;
+}
+static inline int msm_unclamp_secondary_arm_cpu(unsigned int cpu)
+{
+	return 0;
+}
+#endif
+#endif /*MSM_CPU_SUBSYS_H_*/
