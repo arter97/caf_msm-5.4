@@ -72,7 +72,9 @@
 /******************************************************************************
  * DEFINE
  *****************************************************************************/
-#define ATDTW_SET_DELAY		100 /* 100msec delay */
+
+#define USB_MAX_TIMEOUT		100 /* 100msec timeout */
+
 /* ctrl register bank access */
 static DEFINE_SPINLOCK(udc_lock);
 
@@ -171,7 +173,8 @@ static struct {
 
 /* maximum number of enpoints: valid only after hw_device_reset() */
 static unsigned hw_ep_max;
-
+static void dbg_usb_op_fail(u8 addr, const char *name,
+				const struct ci13xxx_ep *mep);
 /**
  * hw_ep_bit: calculates the bit number
  * @num: endpoint number
@@ -365,6 +368,27 @@ static int hw_device_state(u32 dma)
 	return 0;
 }
 
+static void debug_ept_flush_info(int ep_num, int dir)
+{
+	struct ci13xxx *udc = _udc;
+	struct ci13xxx_ep *mep;
+
+	if (dir)
+		mep = &udc->ci13xxx_ep[ep_num + hw_ep_max/2];
+	else
+		mep = &udc->ci13xxx_ep[ep_num];
+
+	pr_err_ratelimited("USB Registers\n");
+	pr_err_ratelimited("USBCMD:%x\n", hw_cread(CAP_USBCMD, ~0));
+	pr_err_ratelimited("USBSTS:%x\n", hw_cread(CAP_USBSTS, ~0));
+	pr_err_ratelimited("ENDPTLISTADDR:%x\n",
+			hw_cread(CAP_ENDPTLISTADDR, ~0));
+	pr_err_ratelimited("PORTSC:%x\n", hw_cread(CAP_PORTSC, ~0));
+	pr_err_ratelimited("USBMODE:%x\n", hw_cread(CAP_USBMODE, ~0));
+	pr_err_ratelimited("ENDPTSTAT:%x\n", hw_cread(CAP_ENDPTSTAT, ~0));
+
+	dbg_usb_op_fail(0xFF, "FLUSHF", mep);
+}
 /**
  * hw_ep_flush: flush endpoint fifo (execute without interruption)
  * @num: endpoint number
@@ -374,13 +398,25 @@ static int hw_device_state(u32 dma)
  */
 static int hw_ep_flush(int num, int dir)
 {
+	ktime_t start, diff;
 	int n = hw_ep_bit(num, dir);
 
+	start = ktime_get();
 	do {
 		/* flush any pending transfer */
 		hw_cwrite(CAP_ENDPTFLUSH, BIT(n), BIT(n));
-		while (hw_cread(CAP_ENDPTFLUSH, BIT(n)))
+		while (hw_cread(CAP_ENDPTFLUSH, BIT(n))) {
 			cpu_relax();
+			diff = ktime_sub(ktime_get(), start);
+			if (ktime_to_ms(diff) > USB_MAX_TIMEOUT) {
+				printk_ratelimited(KERN_ERR
+					"%s: Failed to flush ep#%d %s\n",
+					__func__, num,
+					dir ? "IN" : "OUT");
+				debug_ept_flush_info(num, dir);
+				return 0;
+			}
+		}
 	} while (hw_cread(CAP_ENDPTSTAT, BIT(n)));
 
 	return 0;
@@ -983,6 +1019,45 @@ static void dbg_setup(u8 addr, const struct usb_ctrlrequest *req)
 			  req->bRequest, le16_to_cpu(req->wValue),
 			  le16_to_cpu(req->wIndex), le16_to_cpu(req->wLength));
 		dbg_print(addr, "SETUP", 0, msg);
+	}
+}
+
+/**
+ * dbg_usb_op_fail: prints USB Operation FAIL event
+ * @addr: endpoint address
+ * @mEp:  endpoint structure
+ */
+static void dbg_usb_op_fail(u8 addr, const char *name,
+				const struct ci13xxx_ep *mep)
+{
+	char msg[DBG_DATA_MSG];
+	struct ci13xxx_req *req;
+	struct list_head *ptr = NULL;
+
+	if (mep != NULL) {
+		scnprintf(msg, sizeof(msg),
+			"%s Fail EP%d%s QH:%08X",
+			name, mep->num,
+			mep->dir ? "IN" : "OUT", mep->qh.ptr->cap);
+		dbg_print(addr, name, 0, msg);
+		scnprintf(msg, sizeof(msg),
+				"cap:%08X %08X %08X\n",
+				mep->qh.ptr->curr, mep->qh.ptr->td.next,
+				mep->qh.ptr->td.token);
+		dbg_print(addr, "QHEAD", 0, msg);
+
+		list_for_each(ptr, &mep->qh.queue) {
+			req = list_entry(ptr, struct ci13xxx_req, queue);
+			scnprintf(msg, sizeof(msg),
+					"%08X:%08X:%08X\n",
+					req->dma, req->ptr->next,
+					req->ptr->token);
+			dbg_print(addr, "REQ", 0, msg);
+			scnprintf(msg, sizeof(msg), "%08X:%d\n",
+					req->ptr->page[0],
+					req->req.status);
+			dbg_print(addr, "REQPAGE", 0, msg);
+		}
 	}
 }
 
@@ -1756,7 +1831,7 @@ static int _hardware_enqueue(struct ci13xxx_ep *mEp, struct ci13xxx_req *mReq)
 			tmp_stat = hw_cread(CAP_ENDPTSTAT, BIT(n));
 			diff = ktime_sub(ktime_get(), start);
 			/* poll for max. 100ms */
-			if (ktime_to_ms(diff) > ATDTW_SET_DELAY) {
+			if (ktime_to_ms(diff) > USB_MAX_TIMEOUT) {
 				if (hw_cread(CAP_USBCMD, USBCMD_ATDTW))
 					break;
 				printk_ratelimited(KERN_ERR
