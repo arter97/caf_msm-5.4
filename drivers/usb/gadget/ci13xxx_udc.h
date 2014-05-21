@@ -161,6 +161,9 @@ struct ci13xxx {
 	int                        softconnect; /* is pull-up enable allowed */
 	struct otg_transceiver    *transceiver; /* Transceiver struct */
 	unsigned long dTD_update_fail_count;
+	bool                      skip_flush; /* skip flushing remaining EP
+						upon flush timeout for the
+						first EP. */
 };
 
 struct ci13xxx_platform_data {
