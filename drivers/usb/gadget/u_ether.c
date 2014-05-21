@@ -66,6 +66,11 @@ module_param(tx_stop_threshold, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(tx_stop_threshold,
 	"Threashold to stop network queue");
 
+static unsigned int min_cpu_freq;
+module_param(min_cpu_freq, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(min_cpu_freq,
+	"to set minimum cpu frquency to when ethernet ifc is active");
+
 /* this refers to max number sgs per transfer
  * which includes headers/data packets
  */
@@ -153,6 +158,18 @@ static void uether_debugfs_exit(struct eth_dev *dev);
 static unsigned qmult = 20;
 module_param(qmult, uint, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(qmult, "queue length multiplier at high/super speed");
+
+/*
+ * Usually downlink rates are higher than uplink rates and it
+ * deserve higher number of requests. For CAT-6 data rates of
+ * 300Mbps (~30 packets per milli-sec) 40 usb request may not
+ * be sufficient. At this rate and with interrupt moderation
+ * of interconnect, data can be very bursty. tx_qmult is the
+ * additional multipler on qmult.
+ */
+static unsigned tx_qmult = 1;
+module_param(tx_qmult, uint, S_IRUGO|S_IWUSR);
+MODULE_PARM_DESC(tx_qmult, "Additional queue length multiplier for tx");
 
 /* for dual-speed hardware, use deeper queues at high/super speed */
 static inline int qlen(struct usb_gadget *gadget)
@@ -510,7 +527,7 @@ static int alloc_requests(struct eth_dev *dev, struct gether *link, unsigned n)
 	int	status;
 
 	spin_lock(&dev->req_lock);
-	status = prealloc(&dev->tx_reqs, link->in_ep, n,
+	status = prealloc(&dev->tx_reqs, link->in_ep, n * tx_qmult,
 				dev->gadget->sg_supported,
 				dev->header_len);
 	if (status < 0)
@@ -1483,16 +1500,16 @@ static int gether_cpufreq_notifier_cb(struct notifier_block *nfb,
 	struct eth_dev	*dev = container_of(nfb, struct eth_dev,
 					cpufreq_notifier);
 
+	if (!min_cpu_freq)
+		return NOTIFY_OK;
+
 	switch (event) {
 	case CPUFREQ_ADJUST:
 		pr_debug("%s: cpu:%u\n", __func__, cpu);
 
 		if (dev->state == ETH_START)
 			cpufreq_verify_within_limits(policy,
-					1000000, UINT_MAX);
-		else
-			cpufreq_verify_within_limits(policy,
-					policy->min, UINT_MAX);
+					min_cpu_freq, UINT_MAX);
 
 		break;
 	}
