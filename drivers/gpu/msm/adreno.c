@@ -1129,10 +1129,7 @@ static int adreno_iommu_setstate(struct kgsl_device *device,
 
 	cmds = link;
 
-	result = kgsl_mmu_enable_clk(&device->mmu, KGSL_IOMMU_CONTEXT_USER);
-
-	if (result)
-		goto done;
+	kgsl_mmu_enable_clk(&device->mmu, KGSL_IOMMU_MAX_UNITS);
 
 	pt_val = kgsl_mmu_get_pt_base_addr(&device->mmu,
 				device->mmu.hwpagetable);
@@ -1172,11 +1169,10 @@ static int adreno_iommu_setstate(struct kgsl_device *device,
 	 * after the command has been retired
 	 */
 	if (result)
-		kgsl_mmu_disable_clk(&device->mmu,
-						KGSL_IOMMU_CONTEXT_USER);
+		kgsl_mmu_disable_clk(&device->mmu, KGSL_IOMMU_MAX_UNITS);
 	else
 		kgsl_mmu_disable_clk_on_ts(&device->mmu, rb->global_ts,
-						KGSL_IOMMU_CONTEXT_USER);
+						KGSL_IOMMU_MAX_UNITS);
 
 done:
 	kfree(link);
@@ -1398,6 +1394,13 @@ static int adreno_of_get_iommu(struct device_node *parent,
 					ctxs[ctx_index].iommu_ctx_name)) {
 			ctxs[ctx_index].ctx_id = 1;
 		} else if (!strcmp("gfx3d_spare",
+					ctxs[ctx_index].iommu_ctx_name)) {
+			ctxs[ctx_index].ctx_id = 2;
+		/*
+		 * Context bank 2 is secure context bank if content protection
+		 * is supported
+		 */
+		} else if (!strcmp("gfx3d_secure",
 					ctxs[ctx_index].iommu_ctx_name)) {
 			ctxs[ctx_index].ctx_id = 2;
 		} else {

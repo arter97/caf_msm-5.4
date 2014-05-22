@@ -27,6 +27,14 @@
 #define KGSL_MMU_MAPPED_MEM_SIZE	(KGSL_MMU_GLOBAL_MEM_BASE -	\
 					KGSL_MMU_MAPPED_MEM_BASE -	\
 					SZ_1M)
+
+/*
+ * These defines control the address range for allocations that
+ * are mapped into secure pagetable.
+ */
+#define KGSL_IOMMU_SECURE_MEM_BASE     0xe8000000
+#define KGSL_IOMMU_SECURE_MEM_SIZE     SZ_256M
+
 /* defconfig option for disabling per process pagetables */
 #ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
 #define KGSL_MMU_USE_PER_PROCESS_PT true
@@ -37,15 +45,16 @@
 /* Identifier for the global page table */
 /* Per process page tables will probably pass in the thread group
    as an identifier */
-
 #define KGSL_MMU_GLOBAL_PT 0
-#define KGSL_MMU_PRIV_BANK_TABLE_NAME 0xFFFFFFFF
+#define KGSL_MMU_SECURE_PT 1
+#define KGSL_MMU_PRIV_PT   0xFFFFFFFF
 
 struct kgsl_device;
 
 /* MMU Flags */
 #define KGSL_MMUFLAGS_TLBFLUSH         0x10000000
 #define KGSL_MMUFLAGS_PTUPDATE         0x20000000
+#define KGSL_MMUFLAGS_TLBFLUSH_SECURE  0x40000000
 
 enum kgsl_mmutype {
 	KGSL_MMU_TYPE_IOMMU = 0,
@@ -90,11 +99,11 @@ struct kgsl_mmu_ops {
 			(struct kgsl_mmu *mmu);
 	void (*mmu_disable_clk_on_ts)
 		(struct kgsl_mmu *mmu,
-		uint32_t ts, int ctx_id);
-	int (*mmu_enable_clk)
-		(struct kgsl_mmu *mmu, int ctx_id);
+		uint32_t ts, int unit);
+	void (*mmu_enable_clk)
+		(struct kgsl_mmu *mmu, int unit);
 	void (*mmu_disable_clk)
-		(struct kgsl_mmu *mmu, int ctx_id);
+		(struct kgsl_mmu *mmu, int unit);
 	uint64_t (*mmu_get_default_ttbr0)(struct kgsl_mmu *mmu,
 				unsigned int unit_id,
 				enum kgsl_iommu_context_id ctx_id);
@@ -140,6 +149,8 @@ struct kgsl_mmu {
 	struct kgsl_memdesc    setstate_memory;
 	/* current page table object being used by device mmu */
 	struct kgsl_pagetable  *defaultpagetable;
+	/* secure global pagetable device mmu */
+	struct kgsl_pagetable  *securepagetable;
 	/* pagetable object used for priv bank of IOMMU */
 	struct kgsl_pagetable  *priv_bank_table;
 	struct kgsl_pagetable  *hwpagetable;
@@ -150,6 +161,7 @@ struct kgsl_mmu {
 	unsigned long pt_size;
 	bool pt_per_process;
 	bool use_cpu_map;
+	bool secured;
 };
 
 extern struct kgsl_mmu_ops iommu_ops;
@@ -261,27 +273,25 @@ static inline phys_addr_t kgsl_mmu_get_default_ttbr0(struct kgsl_mmu *mmu,
 		return 0;
 }
 
-static inline int kgsl_mmu_enable_clk(struct kgsl_mmu *mmu,
-					int ctx_id)
+static inline void kgsl_mmu_enable_clk(struct kgsl_mmu *mmu, int unit)
 {
 	if (mmu->mmu_ops && mmu->mmu_ops->mmu_enable_clk)
-		return mmu->mmu_ops->mmu_enable_clk(mmu, ctx_id);
+		mmu->mmu_ops->mmu_enable_clk(mmu, unit);
 	else
-		return 0;
+		return;
 }
 
-static inline void kgsl_mmu_disable_clk(struct kgsl_mmu *mmu, int ctx_id)
+static inline void kgsl_mmu_disable_clk(struct kgsl_mmu *mmu, int unit)
 {
 	if (mmu->mmu_ops && mmu->mmu_ops->mmu_disable_clk)
-		mmu->mmu_ops->mmu_disable_clk(mmu, ctx_id);
+		mmu->mmu_ops->mmu_disable_clk(mmu, unit);
 }
 
 static inline void kgsl_mmu_disable_clk_on_ts(struct kgsl_mmu *mmu,
-						unsigned int ts,
-						int ctx_id)
+						unsigned int ts, int unit)
 {
 	if (mmu->mmu_ops && mmu->mmu_ops->mmu_disable_clk_on_ts)
-		mmu->mmu_ops->mmu_disable_clk_on_ts(mmu, ts, ctx_id);
+		mmu->mmu_ops->mmu_disable_clk_on_ts(mmu, ts, unit);
 }
 
 static inline unsigned int kgsl_mmu_get_reg_gpuaddr(struct kgsl_mmu *mmu,
@@ -409,6 +419,11 @@ static inline struct kgsl_protected_registers *kgsl_mmu_get_prot_regs
 		return mmu->mmu_ops->mmu_get_prot_regs(mmu);
 	else
 		return NULL;
+}
+
+static inline int kgsl_mmu_is_secured(struct kgsl_mmu *mmu)
+{
+	return mmu && (mmu->secured) && (mmu->securepagetable);
 }
 
 #endif /* __KGSL_MMU_H */

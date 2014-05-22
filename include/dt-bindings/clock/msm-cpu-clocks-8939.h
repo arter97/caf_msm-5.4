@@ -1,3 +1,4 @@
+
 /* Copyright (c) 2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -10,13 +11,11 @@
  * GNU General Public License for more details.
  */
 
-#include "apq8084.dtsi"
+#ifndef __MSM_CLOCK_CPU_8939_H
+#define __MSM_CLOCK_CPU_8939_H
 
-/ {
-	qcom,msm-id = <178 0x10001>;
-};
+#define clk_a53ssmux_lc			0x71a9377b
+#define clk_a53ssmux_bc			0xb5983c42
+#define clk_a53ssmux_cci		0x15560bd5
 
-&pil_lpass {
-	clock-names = "xo";
-	/delete-property/ qcom,active-clock-names;
-};
+#endif
