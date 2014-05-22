@@ -17,4 +17,10 @@ config SWITCH_FSA8008
 	help
 	 Say Y here to enable FSA8008 driver
 
+config SWITCH_REVERSE
+	tristate "Reverse Switch support"
+	depends on GENERIC_GPIO
+	help
+	  Say Y here to enable Reverse switch support.
+
 endif # SWITCH
