@@ -2526,12 +2526,15 @@ static void msm_otg_wait_for_ext_chg_done(struct msm_otg *motg)
 
 	if (motg->ext_chg_active) {
 
+do_wait:
 		pr_debug("before msm_otg ext chg wait\n");
 
 		t = wait_for_completion_timeout(&motg->ext_chg_wait,
 				msecs_to_jiffies(3000));
 		if (!t)
 			pr_err("msm_otg ext chg wait timeout\n");
+		else if (motg->ext_chg_active)
+			goto do_wait;
 		else
 			pr_debug("msm_otg ext chg wait done\n");
 	}
@@ -2685,6 +2688,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 				/* Turn off VDP_SRC */
 				ulpi_write(otg->phy, 0x2, 0x86);
 			}
+			msm_chg_block_off(motg);
 			msm_otg_reset(otg->phy);
 			/*
 			 * There is a small window where ID interrupt
@@ -4033,6 +4037,7 @@ msm_otg_ext_chg_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		pr_debug("%s: LPM block request %d\n", __func__, val);
 		if (val) { /* block LPM */
 			if (motg->chg_type == USB_DCP_CHARGER) {
+				motg->ext_chg_active = true;
 				/*
 				 * If device is already suspended, resume it.
 				 * The PM usage counter is incremented in
@@ -4078,6 +4083,18 @@ msm_otg_ext_chg_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			pr_debug("%s:voltage request successful\n", __func__);
 		else
 			pr_debug("%s:voltage request failed\n", __func__);
+		break;
+	case MSM_USB_EXT_CHG_TYPE:
+		if (get_user(val, (int __user *)arg)) {
+			pr_err("%s: get_user failed\n\n", __func__);
+			ret = -EFAULT;
+			break;
+		}
+
+		if (val)
+			pr_debug("%s:charger is external charger\n", __func__);
+		else
+			pr_debug("%s:charger is not ext charger\n", __func__);
 		break;
 	default:
 		ret = -EINVAL;
