@@ -11,6 +11,7 @@
  */
 
 #include "skeleton64.dtsi"
+#include <dt-bindings/clock/msm-clocks-thulium.h>
 
 / {
 	model = "Qualcomm Technologies, Inc. MSM THULIUM";
@@ -66,5 +67,25 @@
 		reg = <0x0756f000 0x1000>;
 		interrupts = <0 107 0>;
 		status = "disabled";
+	};
+
+	clock_rpm: qcom,rpmcc@362000 {
+		compatible = "qcom,dummycc";
+		#clock-cells = <1>;
+	};
+
+	clock_gcc: qcom,gcc@300000 {
+		compatible = "qcom,dummycc";
+		#clock-cells = <1>;
+	};
+
+	clock_mmss: qcom,mmsscc@8c0000 {
+		compatible = "qcom,dummycc";
+		#clock-cells = <1>;
+	};
+
+	clock_mdss: qcom,mmsscc-mdss@8c0000 {
+		compatible = "qcom,dummycc";
+		#clock-cells = <1>;
 	};
 };
