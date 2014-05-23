@@ -2362,7 +2362,11 @@ void __init apq8064_init_gpiomux(void)
 				ARRAY_SIZE(adp_i2c_config));
 		msm_gpiomux_install(adp_spi_config,
 				ARRAY_SIZE(adp_spi_config));
-		msm_gpiomux_install(apq8064_uartdm_gsbi4_configs,
+		if (machine_is_apq8064_mplatform())
+			msm_gpiomux_install(mpq8064_uartdm_configs,
+					ARRAY_SIZE(mpq8064_uartdm_configs));
+		else
+			msm_gpiomux_install(apq8064_uartdm_gsbi4_configs,
 				ARRAY_SIZE(apq8064_uartdm_gsbi4_configs));
 	}
 }

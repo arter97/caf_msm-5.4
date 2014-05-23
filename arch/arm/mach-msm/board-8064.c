@@ -2850,8 +2850,6 @@ static struct msm_serial_hs_platform_data mpq8064_gsbi6_uartdm_pdata = {
 	.uart_rx_gpio		= 15,
 	.uart_cts_gpio		= 16,
 	.uart_rfr_gpio		= 17,
-	.inject_rx_on_wakeup	= 1,
-	.rx_to_inject		= 0xFD,
 };
 #else
 static struct msm_serial_hs_platform_data msm_uart_dm9_pdata;
@@ -3650,7 +3648,10 @@ static void __init apq8064_bt_power_init(void)
 		return;
 	}
 
-	bt_power_pdata->bt_gpio_sys_rst = QCA6174_BT_RST_N;
+	if (machine_is_apq8064_mplatform())
+		bt_power_pdata->bt_gpio_sys_rst = PM8921_GPIO_PM_TO_SYS(44);
+	else
+		bt_power_pdata->bt_gpio_sys_rst = QCA6174_BT_RST_N;
 	bt_power_pdata->bt_vdd_io = NULL;
 	bt_power_pdata->bt_vdd_pa = NULL;
 	bt_power_pdata->bt_vdd_ldo = NULL;
@@ -3716,7 +3717,12 @@ static void __init apq8064_common_init(void)
 
 	apq8064_device_qup_spi_gsbi5.dev.platform_data =
 						&apq8064_qup_spi_gsbi5_pdata;
-	if (machine_is_apq8064_adp_2()) {
+	if (machine_is_apq8064_mplatform()) {
+		mpq8064_gsbi6_uartdm_pdata.wakeup_irq = gpio_to_irq(15);
+		mpq8064_device_uartdm_gsbi6.dev.platform_data =
+					&mpq8064_gsbi6_uartdm_pdata;
+		platform_device_register(&mpq8064_device_uartdm_gsbi6);
+	} else if (machine_is_apq8064_adp_2()) {
 		apq8064_uartdm_gsbi4_pdata.wakeup_irq = gpio_to_irq(11);
 	        apq8064_device_uartdm_gsbi4.dev.platform_data =
 	                &apq8064_uartdm_gsbi4_pdata;
