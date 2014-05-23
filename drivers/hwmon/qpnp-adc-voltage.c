@@ -600,6 +600,7 @@ static int32_t qpnp_ocv_comp(int64_t *result,
 					QPNP_VBAT_COEFF_25;
 			break;
 		}
+		break;
 	case QPNP_REV_ID_8110_2_0:
 		switch (vadc->id) {
 		case COMP_ID_SMIC:
@@ -713,6 +714,7 @@ static int32_t qpnp_vbat_sns_comp(int64_t *result,
 			temp_var = 0;
 			break;
 		}
+		break;
 	case QPNP_REV_ID_8110_2_0:
 		switch (vadc->id) {
 		case COMP_ID_SMIC:
@@ -1173,6 +1175,8 @@ int32_t qpnp_vadc_conv_seq_request(struct qpnp_vadc_chip *vadc,
 		qpnp_vadc_amux_scaling_ratio[amux_prescaling].num;
 	vadc->adc->amux_prop->chan_prop->offset_gain_denominator =
 		 qpnp_vadc_amux_scaling_ratio[amux_prescaling].den;
+	vadc->adc->amux_prop->chan_prop->calib_type =
+		vadc->adc->adc_channels[dt_index].calib_type;
 
 	scale_type = vadc->adc->adc_channels[dt_index].adc_scale_fn;
 	if (scale_type >= SCALE_NONE) {

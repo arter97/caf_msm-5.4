@@ -2205,6 +2205,11 @@ static int clamp_soc_based_on_voltage(struct qpnp_bms_chip *chip, int soc)
 		pr_err("adc vbat failed err = %d\n", rc);
 		return soc;
 	}
+
+	/* only clamp when discharging */
+	if (is_battery_charging(chip))
+		return soc;
+
 	if (soc <= 0 && vbat_uv > chip->v_cutoff_uv) {
 		pr_debug("clamping soc to 1, vbat (%d) > cutoff (%d)\n",
 						vbat_uv, chip->v_cutoff_uv);
@@ -3901,8 +3906,10 @@ static int bms_request_irqs(struct qpnp_bms_chip *chip)
 	int rc;
 
 	SPMI_REQUEST_IRQ(chip, rc, sw_cc_thr);
+	disable_bms_irq(&chip->sw_cc_thr_irq);
 	enable_irq_wake(chip->sw_cc_thr_irq.irq);
 	SPMI_REQUEST_IRQ(chip, rc, ocv_thr);
+	disable_bms_irq(&chip->ocv_thr_irq);
 	enable_irq_wake(chip->ocv_thr_irq.irq);
 	return 0;
 }
