@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2014 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -21,10 +21,13 @@
 #include "msm_csiphy.h"
 #include "msm.h"
 #include "msm_csiphy_hwreg.h"
+#include <mach/socinfo.h>
 #define DBG_CSIPHY 0
 
 #define V4L2_IDENT_CSIPHY                        50003
 #define CSIPHY_VERSION_V3                        0x10
+
+struct csiphy_device *lsh_csiphy_dev;
 
 int msm_csiphy_lane_config(struct csiphy_device *csiphy_dev,
 	struct msm_camera_csiphy_params *csiphy_params)
@@ -154,7 +157,7 @@ static struct msm_cam_clk_info csiphy_8974_clk_info[] = {
 	{"csiphy_timer_clk", -1},
 };
 
-static int msm_csiphy_init(struct csiphy_device *csiphy_dev)
+int msm_csiphy_init(struct csiphy_device *csiphy_dev)
 {
 	int rc = 0;
 	if (csiphy_dev == NULL) {
@@ -214,7 +217,7 @@ static int msm_csiphy_init(struct csiphy_device *csiphy_dev)
 	return 0;
 }
 
-static int msm_csiphy_release(struct csiphy_device *csiphy_dev, void *arg)
+int msm_csiphy_release(struct csiphy_device *csiphy_dev, void *arg)
 {
 	int i = 0;
 	struct msm_camera_csi_lane_params *csi_lane_params;
@@ -426,6 +429,10 @@ static int __devinit csiphy_probe(struct platform_device *pdev)
 	new_csiphy_dev->subdev.entity.revision =
 		new_csiphy_dev->subdev.devnode->num;
 	new_csiphy_dev->csiphy_state = CSIPHY_POWER_DOWN;
+
+	if (machine_is_apq8064_mplatform())
+		lsh_csiphy_dev = new_csiphy_dev;
+
 	return 0;
 
 csiphy_no_resource:

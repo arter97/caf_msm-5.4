@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2014 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -20,7 +20,6 @@
 #include "msm_ispif.h"
 #include "msm.h"
 #include "msm_ispif_hwreg.h"
-
 #define V4L2_IDENT_ISPIF                     50001
 #define CSID_VERSION_V2                      0x02000011
 #define CSID_VERSION_V3                      0x30000000
@@ -30,6 +29,7 @@
 static atomic_t ispif_irq_cnt;
 static spinlock_t ispif_tasklet_lock;
 static struct list_head ispif_tasklet_q;
+struct ispif_device *lsh_ispif;
 
 static int msm_ispif_intf_reset(struct ispif_device *ispif,
 	uint16_t intfmask, uint8_t vfe_intf)
@@ -249,7 +249,7 @@ static int32_t msm_ispif_validate_intf_status(struct ispif_device *ispif,
 	return rc;
 }
 
-static int msm_ispif_config(struct ispif_device *ispif,
+int msm_ispif_config(struct ispif_device *ispif,
 	struct msm_ispif_params_list *params_list)
 {
 	uint32_t params_len;
@@ -531,6 +531,38 @@ static int msm_ispif_subdev_video_s_stream(struct v4l2_subdev *sd,
 	return rc;
 }
 
+int msm_ispif_subdev_video_s_stream_rdi_only(struct ispif_device *ispif,
+	int enable)
+{
+	uint32_t cmd = enable & ((1<<ISPIF_S_STREAM_SHIFT)-1);
+	uint16_t intf = enable >> ISPIF_S_STREAM_SHIFT;
+	uint8_t vfe_intf = enable >> ISPIF_VFE_INTF_SHIFT;
+	int rc = -EINVAL;
+	BUG_ON(!ispif);
+	if ((ispif->csid_version <= CSID_VERSION_V2 && vfe_intf > VFE0) ||
+		(ispif->csid_version == CSID_VERSION_V3 &&
+		vfe_intf >= VFE_MAX)) {
+		pr_err("%s invalid csid version %x && vfe intf %d\n", __func__,
+			ispif->csid_version, vfe_intf);
+		return rc;
+	}
+	switch (cmd) {
+	case ISPIF_ON_FRAME_BOUNDARY:
+		rc = msm_ispif_start_intf_transfer(ispif, intf, vfe_intf);
+		break;
+	case ISPIF_OFF_FRAME_BOUNDARY:
+		rc = msm_ispif_stop_intf_transfer(ispif, intf, vfe_intf);
+		break;
+	case ISPIF_OFF_IMMEDIATELY:
+		rc = msm_ispif_abort_intf_transfer(ispif, intf, vfe_intf);
+		break;
+	default:
+		break;
+	}
+/*	msm_camera_io_dump(ispif->base,	0x129); */
+	return rc;
+}
+
 static void send_rdi_sof(struct ispif_device *ispif,
 	enum msm_ispif_intftype interface, int count)
 {
@@ -698,7 +730,7 @@ static struct msm_cam_clk_info ispif_8960_clk_info[] = {
 	{"csi_rdi2_clk", 0},
 };
 
-static int msm_ispif_init(struct ispif_device *ispif,
+int msm_ispif_init(struct ispif_device *ispif,
 	const uint32_t *csid_version)
 {
 	int rc = 0;
@@ -738,7 +770,7 @@ static int msm_ispif_init(struct ispif_device *ispif,
 	return rc;
 }
 
-static void msm_ispif_release(struct ispif_device *ispif)
+void msm_ispif_release(struct ispif_device *ispif)
 {
 	if (ispif->ispif_state != ISPIF_POWER_UP) {
 		pr_err("%s: ispif invalid state %d\n", __func__,
@@ -900,6 +932,10 @@ static int __devinit ispif_probe(struct platform_device *pdev)
 	ispif->subdev.entity.name = pdev->name;
 	ispif->subdev.entity.revision = ispif->subdev.devnode->num;
 	ispif->ispif_state = ISPIF_POWER_DOWN;
+	if (machine_is_apq8064_mplatform()) {
+		lsh_ispif = ispif;
+		pr_debug("%s : ispif finished\n", __func__);
+	}
 	return 0;
 
 ispif_no_mem:
