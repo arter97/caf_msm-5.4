@@ -1867,7 +1867,7 @@ static int msm_fb_release_all(struct fb_info *info, boolean is_all)
 			ret = msm_fb_blank_sub(FB_BLANK_POWERDOWN, info,
 							mfd->op_enable);
 			if (ret != 0) {
-				printk(KERN_ERR "msm_fb_release: can't turn off display!\n");
+				pr_err(KERN_ERR "msm_fb_release: can't turn off display!\n");
 				return ret;
 			}
 		} else {
@@ -4488,5 +4488,158 @@ int msm_fb_v4l2_update(void *par,
 #endif
 }
 EXPORT_SYMBOL(msm_fb_v4l2_update);
+
+int mdpclient_msm_fb_open(void)
+{
+	struct fb_info *info;
+	int ret;
+
+	info = registered_fb[0];
+	if (!info) {
+		pr_err(KERN_WARNING "%s: Can not access framebuffer\n",
+			__func__);
+		return -ENODEV;
+	}
+
+	ret = msm_fb_open(info, false);
+	if (ret)
+		pr_err(KERN_ERR "%s: fb open failed for adp camera, rc=%d\n",
+			__func__, ret);
+
+	return ret;
+}
+EXPORT_SYMBOL(mdpclient_msm_fb_open);
+
+int mdpclient_msm_fb_close(void)
+{
+	struct fb_info *info;
+	int ret;
+
+	info = registered_fb[0];
+	if (!info) {
+		pr_err(KERN_WARNING "%s: Can not access framebuffer\n",
+			__func__);
+		return -ENODEV;
+	}
+
+	ret = msm_fb_release(info, false);
+	if (ret)
+		pr_err(KERN_ERR "%s: fb release failed for adp camera, rc=%d\n",
+			__func__, ret);
+
+	return ret;
+}
+EXPORT_SYMBOL(mdpclient_msm_fb_close);
+
+int mdpclient_msm_fb_blank(int blank_mode, bool op_enable)
+{
+	struct fb_info *info;
+	int ret;
+
+	info = registered_fb[0];
+	if (!info) {
+		pr_err(KERN_WARNING "%s: Can not access framebuffer\n",
+			__func__);
+		return -ENODEV;
+	}
+	lock_fb_info(info);
+	ret = msm_fb_blank_sub(blank_mode, info, op_enable);
+	unlock_fb_info(info);
+	if (ret)
+		pr_err(KERN_ERR "%s: fb blank failed for adp camera, rc=%d\n",
+			__func__, ret);
+
+	return ret;
+}
+EXPORT_SYMBOL(mdpclient_msm_fb_blank);
+
+int mdpclient_overlay_set(struct mdp_overlay *overlay)
+{
+	struct fb_info *info;
+	int ret;
+
+	info = registered_fb[0];
+	if (!info) {
+		pr_err(KERN_WARNING "%s: Can not access framebuffer\n",
+			__func__);
+		return -ENODEV;
+	}
+
+	ret = mdp4_overlay_set(info, overlay);
+	if (ret)
+		pr_err(KERN_ERR "%s: ioctl failed, rc=%d\n",
+			__func__, ret);
+
+	return ret;
+}
+EXPORT_SYMBOL(mdpclient_overlay_set);
+
+int mdpclient_overlay_unset(struct mdp_overlay *overlay)
+{
+	struct fb_info *info;
+	int ret;
+
+	info = registered_fb[0];
+	if (!info) {
+		pr_err(KERN_WARNING "%s: Can not access framebuffer\n",
+			__func__);
+		return -ENODEV;
+	}
+
+	ret = mdp4_overlay_unset(info, overlay->id);
+	if (ret)
+		pr_err(KERN_ERR "%s: ioctl failed, rc=%d\n",
+			__func__, ret);
+
+	return ret;
+}
+EXPORT_SYMBOL(mdpclient_overlay_unset);
+
+int mdpclient_overlay_play(struct msmfb_overlay_data *ovdata)
+{
+	struct fb_info *info;
+	int ret;
+
+	info = registered_fb[0];
+	if (!info) {
+		pr_err(KERN_WARNING "%s: Can not access framebuffer\n",
+			__func__);
+		return -ENODEV;
+	}
+
+	ret = mdp4_overlay_play(info, ovdata);
+	if (ret)
+		pr_err(KERN_ERR "%s: ioctl failed, rc=%d\n",
+			__func__, ret);
+
+	return ret;
+}
+EXPORT_SYMBOL(mdpclient_overlay_play);
+
+int mdpclient_display_commit(void)
+{
+	struct mdp_display_commit disp_commit;
+	struct fb_info *info;
+	int ret;
+
+	info = registered_fb[0];
+	if (!info) {
+		pr_err(KERN_WARNING "%s: Can not access framebuffer\n",
+			__func__);
+		return -ENODEV;
+	}
+
+	memset(&disp_commit, 0, sizeof(struct mdp_display_commit));
+	disp_commit.wait_for_finish = 1;
+	disp_commit.flags = MDP_DISPLAY_COMMIT_OVERLAY;
+
+	ret = msm_fb_pan_display_ex(info, &disp_commit);
+	if (ret)
+		pr_err(KERN_ERR "%s: commit ioctl failed, rc=%d\n",
+			__func__, ret);
+
+	return ret;
+}
+EXPORT_SYMBOL(mdpclient_display_commit);
 
 module_init(msm_fb_init);
