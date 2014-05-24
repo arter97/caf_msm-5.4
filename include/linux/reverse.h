@@ -44,4 +44,15 @@ struct reverse_struct {
 	int (*exit_handler) (struct reverse_struct *h);
 };
 
+extern int camera_preview_ready;
+extern int init_camera_kthread(void);
+extern int camera_preview_exit;
+extern void exit_camera_kthread(void);
+void show_pic(void);
+void shutdown_pic(void);
+void pic_update(unsigned char *pic, unsigned int pos_x, unsigned int pos_y,
+		unsigned int image_w, unsigned int image_h);
+int recovery_splash_logo(void);
+void pic_pan_display(void);
+
 #endif /* __LINUX_REVERSE_H__ */
