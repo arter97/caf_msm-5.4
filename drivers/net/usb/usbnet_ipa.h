@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -20,6 +20,7 @@ int usbnet_ipa_connect(struct usb_interface *intf,
 int usbnet_ipa_disconnect(struct usb_interface *intf,
 	unsigned int rx_usb_pipe_handle, unsigned int tx_usb_pipe_handle);
 void usbnet_ipa_cleanup(void);
+int usbnet_ipa_is_odu_enabled(void);
 
 #else /* CONFIG_USB_USBNET_IPA_SUPPORT */
 inline int usbnet_ipa_init(struct net_device *dev) {return 0; }
@@ -35,6 +36,7 @@ inline int usbnet_ipa_disconnect(struct usb_interface *intf,
 }
 
 inline void usbnet_ipa_cleanup(void) {}
+inline int usbnet_ipa_is_odu_enabled(void) {}
 
 #endif /* CONFIG_USB_USBNET_IPA_SUPPORT */
 

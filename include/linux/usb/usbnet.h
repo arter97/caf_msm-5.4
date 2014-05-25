@@ -57,6 +57,7 @@ struct usbnet {
 	struct urb		*interrupt;
 	struct usb_anchor	deferred;
 	struct work_struct	bh_w;
+	struct delayed_work     def_probe_w;
 
 	struct work_struct	kevent;
 	unsigned long		flags;

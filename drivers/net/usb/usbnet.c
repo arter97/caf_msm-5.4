@@ -1336,6 +1336,8 @@ void usbnet_disconnect (struct usb_interface *intf)
 		return;
 
 	xdev = interface_to_usbdev (intf);
+	/* Make sure probe finished, or wait for it to finish */
+	cancel_delayed_work_sync(&dev->def_probe_w);
 
 	netif_info(dev, probe, dev->net, "unregister '%s' usb-%s-%s, %s\n",
 		   intf->dev.driver->name,
@@ -1350,7 +1352,8 @@ void usbnet_disconnect (struct usb_interface *intf)
 		usbnet_ipa_cleanup();
 	}
 
-	if (!(dev->driver_info->flags & FLAG_IPA_DP))
+	if (!(dev->driver_info->flags & FLAG_IPA_DP) &&
+		net->reg_state == NETREG_REGISTERED)
 		unregister_netdev(net);
 
 	cancel_work_sync(&dev->kevent);
@@ -1379,6 +1382,79 @@ static const struct net_device_ops usbnet_netdev_ops = {
 };
 
 /*-------------------------------------------------------------------------*/
+
+inline void usbnet_mark_enabled(struct usbnet *dev, int enabled)
+{
+	if (!enabled) {
+		pr_debug("BAM2BAM datapath via IPA disabled");
+		dev->driver_info->flags &= ~FLAG_IPA_DP;
+	} else {
+		pr_debug("BAM2BAM datapath via IPA enabled");
+		dev->driver_info->flags |= FLAG_IPA_DP;
+	}
+}
+
+static void usbnet_deferred_probe(struct work_struct *work)
+{
+	struct usbnet *dev =
+		container_of(work, struct usbnet, def_probe_w.work);
+	static int retries = 20;
+	struct net_device *net;
+	int status = usbnet_ipa_is_odu_enabled();
+
+	if (!dev || !dev->net || !dev->intf)
+		return;
+
+	net = dev->net;
+
+	/* We're waiting for FS to come up */
+	if (status < 0 && retries--) {
+		status = usbnet_ipa_is_odu_enabled();
+		if (status < 0) {
+			queue_delayed_work(usbnet_wq, &dev->def_probe_w,
+				msecs_to_jiffies(1000));
+			return;
+		}
+	}
+	if (status < 0)
+		status = 0;
+
+	usbnet_mark_enabled(dev, status);
+
+	if (!(dev->driver_info->flags & FLAG_IPA_DP)) {
+		struct usb_device *xdev = interface_to_usbdev(dev->intf);
+
+		status = register_netdev(net);
+		if (status) {
+			usb_free_urb(dev->interrupt);
+			if (dev->driver_info->unbind)
+				dev->driver_info->unbind(dev, dev->intf);
+			free_netdev(net);
+			usb_put_dev(xdev);
+			return;
+		}
+	}
+
+	netif_info(dev, probe, net,
+		   "register '%s' at usb-%s-%s, %s, %pM\n",
+		   dev->intf->dev.driver->name,
+		   dev->udev->bus->bus_name, dev->udev->devpath,
+		   dev->driver_info->description,
+		   net->dev_addr);
+
+	if (!(dev->driver_info->flags & FLAG_IPA_DP))
+		netif_device_attach(net);
+
+	if (dev->driver_info->flags & FLAG_LINK_INTR)
+		netif_carrier_off(net);
+
+	if ((dev->driver_info->flags & FLAG_IPA_DP)) {
+		usbnet_ipa_init(net);
+		usbnet_open(net);
+	}
+
+	return;
+}
 
 // precondition: never called in_interrupt
 
@@ -1444,6 +1520,7 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	skb_queue_head_init (&dev->done);
 	skb_queue_head_init(&dev->rxq_pause);
 	INIT_WORK(&dev->bh_w, usbnet_bh_w);
+	INIT_DELAYED_WORK(&dev->def_probe_w, usbnet_deferred_probe);
 	INIT_WORK (&dev->kevent, kevent);
 	init_usb_anchor(&dev->deferred);
 	dev->delay.function = usbnet_bh;
@@ -1521,10 +1598,26 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	if ((dev->driver_info->flags & FLAG_WWAN) != 0)
 		SET_NETDEV_DEVTYPE(net, &wwan_type);
 
+	/* ok, it's ready to go. */
+	usb_set_intfdata(udev, dev);
+
+	if ((dev->driver_info->flags & FLAG_IPA_DP)) {
+		status = usbnet_ipa_is_odu_enabled();
+		if (status != 1)
+			usbnet_mark_enabled(dev, 0);
+		/* FS might not be up yet, let's try later */
+		if (status == -EINVAL) {
+			queue_delayed_work(usbnet_wq, &dev->def_probe_w,
+				msecs_to_jiffies(4000));
+			return 0;
+		}
+	}
+
 	if (!(dev->driver_info->flags & FLAG_IPA_DP)) {
 		status = register_netdev(net);
 		if (status)
 			goto out4;
+		netif_device_attach(net);
 	}
 	netif_info(dev, probe, dev->net,
 		   "register '%s' at usb-%s-%s, %s, %pM\n",
@@ -1532,12 +1625,6 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 		   xdev->bus->bus_name, xdev->devpath,
 		   dev->driver_info->description,
 		   net->dev_addr);
-
-	// ok, it's ready to go.
-	usb_set_intfdata (udev, dev);
-
-	if (!(dev->driver_info->flags & FLAG_IPA_DP))
-		netif_device_attach(net);
 
 
 	if (dev->driver_info->flags & FLAG_LINK_INTR)
