@@ -57,6 +57,7 @@ struct usbnet_ipa_bam_info {
 #ifdef CONFIG_DEBUG_FS
 	struct dentry			*root;
 #endif
+	int odu_enabled;
 };
 
 static struct usbnet_ipa_bam_info ctx;
@@ -382,6 +383,12 @@ void usbnet_ipa_cleanup(void)
 
 	USBNET_IPA_DBG_FUNC_EXIT();
 }
+int usbnet_ipa_is_odu_enabled(void)
+{
+	USBNET_IPA_DBG("ctx.odu_enabled =%d", ctx.odu_enabled);
+	return ctx.odu_enabled;
+}
+
 
 #define RESET_DURATION_USEC 40000
 static int time = RESET_DURATION_USEC;
@@ -457,7 +464,6 @@ static int hub_reset_read(void *ctx, u64 *val)
 	return 0;
 }
 
-
 DEFINE_SIMPLE_ATTRIBUTE(hub_reset_fops, hub_reset_read, hub_reset_write,
 			"%lldd\n");
 
@@ -522,10 +528,45 @@ static int hub_off(struct usbnet_ipa_platform_data *pdata)
 	return 0;
 }
 
+static ssize_t
+usb_bam_show_odu_enabled(struct device *dev, struct device_attribute *attr,
+		    char *buf)
+{
+	char *buff = buf;
+
+	buff += snprintf(buff, PAGE_SIZE, "%d", ctx.odu_enabled);
+
+	return buff - buf;
+}
+
+static ssize_t usb_bam_store_odu_enabled(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buff, size_t count)
+{
+	sscanf(buff, "%d", &ctx.odu_enabled);
+
+	if (ctx.odu_enabled != 1)
+		ctx.odu_enabled = 0;
+
+	return count;
+}
+
+static DEVICE_ATTR(odu_enabled, S_IWUSR | S_IRUSR,
+		   usb_bam_show_odu_enabled,
+		   usb_bam_store_odu_enabled);
+
 static int usbnet_ipa_platform_probe(struct platform_device *pdev)
 {
 	struct usbnet_ipa_platform_data *pdata = NULL;
+	int ret;
 
+	dev_dbg(&pdev->dev, "usbnet_ipa_platform_probe\n");
+
+	ret = device_create_file(&pdev->dev, &dev_attr_odu_enabled);
+	if (ret) {
+		dev_err(&pdev->dev, "failed to create fs node\n");
+		return ret;
+	}
 
 	if (pdev->dev.of_node)
 		pdata = usbnet_ipa_dt_populate_pdata(&pdev->dev);
@@ -584,13 +625,15 @@ static struct platform_driver usbnet_ipa_driver = {
 	.remove		= usbnet_ipa_platform_remove,
 	.suspend	= usbnet_ipa_platform_suspend,
 	.resume		= usbnet_ipa_platform_resume,
-	.driver		= { .name = "usbnet_ipa-platform",
+	.driver		= {
+		.name = "usbnet_ipa",
 		.of_match_table = usbnet_ipa_dt_match,
 	},
 };
 
 static int __init usbnet_ipa_module_init(void)
 {
+	ctx.odu_enabled = -EINVAL;
 	return platform_driver_register(&usbnet_ipa_driver);
 }
 
