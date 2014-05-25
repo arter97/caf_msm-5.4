@@ -739,6 +739,8 @@ struct dwc3_scratchpad_array {
  * @tx_fifo_size: Available RAM size for TX fifo allocation
  * @err_evt_seen: previous event in queue was erratic error
  * @usb3_u1u2_disable: if true, disable U1U2 low power modes in Superspeed mode.
+ * @hird_thresh: value to configure in DCTL[HIRD_Thresh]
+ * @in_lpm: if 1, indicates that the controller is in low power mode (no clocks)
  */
 struct dwc3 {
 	struct usb_ctrlrequest	*ctrl_req;
@@ -850,9 +852,9 @@ struct dwc3 {
 	bool			err_evt_seen;
 	bool			usb3_u1u2_disable;
 	bool			enable_suspend_event;
-	struct dwc3_gadget_events	dbg_gadget_events;
-
+	u8			hird_thresh;
 	atomic_t		in_lpm;
+	struct dwc3_gadget_events	dbg_gadget_events;
 };
 
 /* -------------------------------------------------------------------------- */

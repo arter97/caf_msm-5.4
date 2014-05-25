@@ -45,6 +45,8 @@
 
 #include "debug.h"
 
+#define DWC3_DCTL_HIRD_THRES_DEFAULT	12
+
 /* -------------------------------------------------------------------------- */
 
 void dwc3_set_mode(struct dwc3 *dwc, u32 mode)
@@ -582,6 +584,10 @@ static int dwc3_probe(struct platform_device *pdev)
 			of_property_read_bool(node, "snps,core_reset_after_phy_init");
 		dwc->usb3_u1u2_disable = of_property_read_bool(node,
 						"snps,usb3-u1u2-disable");
+		ret = of_property_read_u8(node, "snps,hird_thresh",
+						&dwc->hird_thresh);
+		if (ret)
+			dwc->hird_thresh = DWC3_DCTL_HIRD_THRES_DEFAULT;
 	} else if (pdata) {
 		dwc->maximum_speed = pdata->maximum_speed;
 
