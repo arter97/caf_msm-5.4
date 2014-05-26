@@ -759,6 +759,7 @@ struct dwc3_scratchpad_array {
  * @root: debugfs root folder pointer
  * @tx_fifo_size: Available RAM size for TX fifo allocation
  * @err_evt_seen: previous event in queue was erratic error
+ * @hird_thresh: value to configure in DCTL[HIRD_Thresh]
  */
 struct dwc3 {
 	struct usb_ctrlrequest	*ctrl_req;
@@ -867,6 +868,7 @@ struct dwc3 {
 	bool			err_evt_seen;
 	bool			hsphy_auto_suspend_disable;
 	bool			enable_suspend_event;
+	u8			hird_thresh;
 	struct dwc3_gadget_events	dbg_gadget_events;
 };
 
