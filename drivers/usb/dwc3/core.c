@@ -61,6 +61,8 @@
 
 #include "debug.h"
 
+#define DWC3_DCTL_HIRD_THRES_DEFAULT	12
+
 /* -------------------------------------------------------------------------- */
 
 void dwc3_set_mode(struct dwc3 *dwc, u32 mode)
@@ -599,6 +601,9 @@ static int dwc3_probe(struct platform_device *pdev)
 	dwc->hsphy_auto_suspend_disable = of_property_read_bool(node,
 						"snps,hsphy-auto-suspend-disable");
 	dwc->maximum_speed = of_usb_get_maximum_speed(node);
+	ret = of_property_read_u8(node, "snps,hird_thresh", &dwc->hird_thresh);
+	if (res)
+		dwc->hird_thresh = DWC3_DCTL_HIRD_THRES_DEFAULT;
 
 	if (node) {
 		dwc->usb2_phy = devm_usb_get_phy_by_phandle(dev, "usb-phy", 0);
