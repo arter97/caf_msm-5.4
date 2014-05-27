@@ -2950,7 +2950,7 @@ unsigned long nr_iowait_cpu(int cpu)
 	return atomic_read(&this->nr_iowait);
 }
 
-#ifdef CONFIG_SMP
+#if defined(CONFIG_SMP) && !defined(CONFIG_SCHED_HMP)
 
 /*
  * sched_exec - execve() is a valuable balancing opportunity, because at
