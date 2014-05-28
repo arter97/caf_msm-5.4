@@ -46,6 +46,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/mm.h>
 #include <linux/debugfs.h>
+#include <linux/hrtimer.h>
 
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
@@ -473,6 +474,7 @@ struct dwc3_ep_events {
 	unsigned int	epcmdcomplete;
 	unsigned int	cmdcmplt;
 	unsigned int	unknown_event;
+	unsigned int	total;
 };
 
 #define DWC3_EP_FLAG_STALLED	(1 << 0)
@@ -506,6 +508,9 @@ struct dwc3_ep_events {
  * @direction: true for TX, false for RX
  * @stream_capable: true when streams are enabled
  * @dbg_ep_events: different events counter for endpoint
+ * @dbg_ep_events_diff: differential events counter for endpoint
+ * @dbg_ep_events_ts: timestamp for previous event counters
+ * @xfer_timer: timer to manage transfer complete event timeout
  */
 struct dwc3_ep {
 	struct usb_ep		endpoint;
@@ -543,6 +548,9 @@ struct dwc3_ep {
 	unsigned		direction:1;
 	unsigned		stream_capable:1;
 	struct dwc3_ep_events	dbg_ep_events;
+	struct dwc3_ep_events	dbg_ep_events_diff;
+	struct timespec		dbg_ep_events_ts;
+	struct hrtimer		xfer_timer;
 };
 
 enum dwc3_phy {
@@ -762,6 +770,8 @@ struct dwc3_scratchpad_array {
  * @ssphy_clear_auto_suspend_on_disconnect: if true, clear ssphy autosuspend bit
  *	during disconnect and set it after device is configured.
  * @usb3_u1u2_disable: if true, disable U1U2 low power modes in Superspeed mode.
+ * @hird_thresh: value to configure in DCTL[HIRD_Thresh]
+ * @in_lpm: if 1, indicates that the controller is in low power mode (no clocks)
  */
 struct dwc3 {
 	struct usb_ctrlrequest	*ctrl_req;
@@ -872,9 +882,9 @@ struct dwc3 {
 	bool			ssphy_clear_auto_suspend_on_disconnect;
 	bool			usb3_u1u2_disable;
 	bool			enable_suspend_event;
-	struct dwc3_gadget_events	dbg_gadget_events;
-
+	u8			hird_thresh;
 	atomic_t		in_lpm;
+	struct dwc3_gadget_events	dbg_gadget_events;
 };
 
 /* -------------------------------------------------------------------------- */

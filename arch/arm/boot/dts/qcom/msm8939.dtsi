@@ -214,7 +214,7 @@
 #include "msm8939-coresight.dtsi"
 #include "msm8939-bus.dtsi"
 #include "msm8939-mdss.dtsi"
-
+#include "msm8939-iommu-domains.dtsi"
 &soc {
 	#address-cells = <1>;
 	#size-cells = <1>;
@@ -953,6 +953,36 @@
 		status = "disabled";
 	};
 
+	qcom,usbbam@78c4000 {
+		compatible = "qcom,usb-bam-msm";
+		reg = <0x78c4000 0x15000>;
+		reg-names = "hsusb";
+		interrupts = <0 135 0>;
+		interrupt-names = "hsusb";
+		qcom,usb-bam-num-pipes = <2>;
+		qcom,usb-bam-fifo-baseaddr = <0x08603800>;
+		qcom,ignore-core-reset-ack;
+		qcom,disable-clk-gating;
+
+		qcom,pipe0 {
+			label = "hsusb-qdss-in-0";
+			qcom,usb-bam-mem-type = <3>;
+			qcom,bam-type = <1>;
+			qcom,dir = <1>;
+			qcom,pipe-num = <0>;
+			qcom,peer-bam = <1>;
+			qcom,src-bam-physical-address = <0x884000>;
+			qcom,src-bam-pipe-index = <0>;
+			qcom,dst-bam-physical-address = <0x78c4000>;
+			qcom,dst-bam-pipe-index = <0>;
+			qcom,data-fifo-offset = <0x0>;
+			qcom,data-fifo-size = <0x600>;
+			qcom,descriptor-fifo-offset = <0x600>;
+			qcom,descriptor-fifo-size = <0x200>;
+			qcom,reset-bam-on-connect;
+		};
+	};
+
 	usb_otg: usb@78d9000 {
 		compatible = "qcom,hsusb-otg";
 
@@ -965,10 +995,13 @@
 		HSUSB_3p3-supply = <&pm8916_l13>;
 		qcom,vdd-voltage-level = <1 5 7>;
 
+		qcom,hsusb-otg-phy-init-seq =
+			<0x44 0x80 0x68 0x81 0x24 0x82 0x13 0x83 0xffffffff>;
 		qcom,hsusb-otg-phy-type = <2>;
 		qcom,hsusb-otg-mode = <1>;
-		qcom,hsusb-otg-otg-control = <1>;
-		qcom,hsusb-otg-disable-reset;
+		qcom,hsusb-otg-otg-control = <3>;
+		qcom,ahb-async-bridge-bypass;
+		qcom,dp-manual-pullup;
 
 		qcom,msm-bus,name = "usb2";
 		qcom,msm-bus,num-cases = <3>;
@@ -985,8 +1018,9 @@
 				"xo";
 	};
 
-	android_usb {
+	android_usb: android_usb@086000c8 {
 		compatible = "qcom,android-usb";
+		reg = <0x086000c8 0xc8>;
 		qcom,android-usb-swfi-latency = <1>;
 	};
 
@@ -1478,6 +1512,87 @@
 	qcom,msm-pcm-hostless {
 		compatible = "qcom,msm-pcm-hostless";
 	};
+	qcom,vidc@1d00000 {
+		compatible = "qcom,msm-vidc";
+		reg = <0x01d00000 0xff000>;
+		interrupts = <0 44 0>;
+		venus-supply = <&gdsc_venus>;
+		venus-core0-supply = <&gdsc_venus_core0>;
+		venus-core1-supply = <&gdsc_venus_core1>;
+		clocks = <&clock_gcc clk_gcc_venus0_vcodec0_clk>,
+			<&clock_gcc clk_gcc_venus0_core0_vcodec0_clk>,
+			<&clock_gcc clk_gcc_venus0_core1_vcodec0_clk>,
+			<&clock_gcc clk_gcc_venus0_ahb_clk>,
+			<&clock_gcc clk_gcc_venus0_axi_clk>;
+		clock-names = "core_clk", "core0_clk", "core1_clk", "iface_clk", "bus_clk";
+		qcom,clock-names = "core_clk", "core0_clk", "core1_clk", "iface_clk", "bus_clk";
+		qcom,clock-configs = <0x3 0x0 0x0 0x0 0x0>;
+		qcom,load-freq-tbl = <352800 228570000>,
+			<244800 160000000>,
+			<108000 100000000>;
+		qcom,hfi = "venus";
+		qcom,reg-presets = <0xE0020 0x0aaaaaaa>,
+			<0xE0024 0x0aaaaaaa>,
+			<0x80124 0x00000003>;
+		qcom,buffer-type-tz-usage-table = <0x241 0x1>,
+			<0x106 0x2>,
+			<0x480 0x3>;
+		qcom,max-hw-load = <352800>; /* 720p @ 30 + 1080p @ 30 */
+		qcom,vidc-iommu-domains {
+			qcom,domain-ns {
+				qcom,vidc-domain-phandle = <&venus_domain_ns>;
+				qcom,vidc-partition-buffer-types = <0x7ff>,
+					<0x800>;
+			};
+			qcom,domain-sec-bs {
+				qcom,vidc-domain-phandle = <&venus_domain_sec_bitstream>;
+				qcom,vidc-partition-buffer-types = <0x241>;
+			};
+			qcom,domain-sec-px {
+				qcom,vidc-domain-phandle = <&venus_domain_sec_pixel>;
+				qcom,vidc-partition-buffer-types = <0x106>;
+			};
+			qcom,domain-sec-np {
+				qcom,vidc-domain-phandle = <&venus_domain_sec_non_pixel>;
+				qcom,vidc-partition-buffer-types = <0x480>;
+			};
+		};
+		qcom,msm-bus-clients {
+			qcom,msm-bus-client@0 {
+				qcom,msm-bus,name = "venc-ddr";
+				qcom,msm-bus,num-cases = <4>;
+				qcom,msm-bus,num-paths = <1>;
+				qcom,msm-bus,vectors-KBps =
+					<63 512 0 0>,
+					<63 512 133600 674400>,
+					<63 512 400900 1079000>,
+					<63 512 908600 1537600>;
+				qcom,bus-configs = <0x01000414>;
+			};
+			qcom,msm-bus-client@1 {
+				qcom,msm-bus,name = "vdec-core0-ddr";
+				qcom,msm-bus,num-cases = <4>;
+				qcom,msm-bus,num-paths = <1>;
+				qcom,msm-bus,vectors-KBps =
+					<63 512 0 0>,
+					<63 512 99600 831900>,
+					<63 512 298900 831900>,
+					<63 512 677600 1331000>;
+				qcom,bus-configs = <0x030fcfff>;
+			};
+			qcom,msm-bus-client@2 {
+				qcom,msm-bus,name = "vdec-core1-ddr";
+				qcom,msm-bus,num-cases = <4>;
+				qcom,msm-bus,num-paths = <1>;
+				qcom,msm-bus,vectors-KBps =
+					<63 512 0 0>,
+					<63 512 99600 831900>,
+					<63 512 298900 831900>,
+					<63 512 677600 1331000>;
+				qcom,bus-configs = <0x030fcfff>;
+			};
+		};
+	};
 };
 
 &gdsc_venus {
@@ -1638,3 +1753,5 @@
 		qcom,btm-channel-number = <0x68>;
 	};
 };
+
+#include "msm8939-gpu.dtsi"

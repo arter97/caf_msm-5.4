@@ -59,7 +59,7 @@ static const enum ipa_client_type usb_cons[BAM2BAM_N_PORTS] = {
 
 #define BAM_MUX_HDR				8
 
-#define BAM_MUX_RX_Q_SIZE			16
+#define BAM_MUX_RX_Q_SIZE			128
 #define BAM_MUX_TX_Q_SIZE			200
 #define BAM_MUX_RX_REQ_SIZE			2048   /* Must be 1KB aligned */
 
@@ -1506,8 +1506,6 @@ static int gbam_peer_reset_cb(void *param)
 	gadget = dev->cdev->gadget;
 
 	pr_debug("%s: reset by peer\n", __func__);
-	/* Disable BAM */
-	msm_hw_bam_disable(1);
 
 	/* Reset BAM */
 	ret = usb_bam_a2_reset(0);
@@ -1515,9 +1513,6 @@ static int gbam_peer_reset_cb(void *param)
 		pr_err("%s: BAM reset failed %d\n", __func__, ret);
 		return ret;
 	}
-
-	/* Enable BAM */
-	msm_hw_bam_disable(0);
 
 	/* Unregister the peer reset callback */
 	if (d->trans == USB_GADGET_XPORT_BAM2BAM && port->port_num == 0)

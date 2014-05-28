@@ -206,14 +206,13 @@ static struct sync_timeline_ops oneshot_timeline_ops = {
 	.pt_value_str = oneshot_pt_value_str,
 };
 
-static int oneshot_open(struct inode *inode, struct file *file)
+struct oneshot_sync_timeline *oneshot_timeline_create(const char *name)
 {
 	struct oneshot_sync_timeline *timeline = NULL;
-	char name[32];
-	char task_comm[TASK_COMM_LEN];
+	static const char *default_name = "oneshot-timeline";
 
-	get_task_comm(task_comm, current);
-	snprintf(name, sizeof(name), "%s-oneshot", task_comm);
+	if (name == NULL)
+		name = default_name;
 
 	timeline = (struct oneshot_sync_timeline *)
 			sync_timeline_create(&oneshot_timeline_ops,
@@ -221,88 +220,53 @@ static int oneshot_open(struct inode *inode, struct file *file)
 					     name);
 
 	if (timeline == NULL)
-		return -ENOMEM;
+		return NULL;
 
 	INIT_LIST_HEAD(&timeline->state_list);
 	spin_lock_init(&timeline->lock);
 
-	file->private_data = timeline;
-	return 0;
+	return timeline;
 }
+EXPORT_SYMBOL(oneshot_timeline_create);
 
-static int oneshot_release(struct inode *inode, struct file *file)
+void oneshot_timeline_destroy(struct oneshot_sync_timeline *timeline)
 {
-	struct oneshot_sync_timeline *timeline = file->private_data;
-	sync_timeline_destroy(&timeline->obj);
-	return 0;
+	if (timeline)
+		sync_timeline_destroy(&timeline->obj);
 }
+EXPORT_SYMBOL(oneshot_timeline_destroy);
 
-static long oneshot_fence_create(struct oneshot_sync_timeline *timeline,
-				 unsigned long arg)
+struct sync_fence *oneshot_fence_create(struct oneshot_sync_timeline *timeline,
+					const char *name)
 {
-	struct oneshot_sync_create_fence param;
-	int ret = -ENOMEM;
 	struct sync_fence *fence = NULL;
 	struct oneshot_sync_pt *pt = NULL;
-	int fd = get_unused_fd();
-
-	if (fd < 0)
-		return fd;
-
-	if (copy_from_user(&param, (void __user *)arg, sizeof(param))) {
-		ret = -EFAULT;
-		goto out;
-	}
 
 	pt = oneshot_pt_create(timeline);
 	if (pt == NULL)
-		goto out;
+		return NULL;
 
-	fence = sync_fence_create(param.name, &pt->sync_pt);
-	if (fence == NULL)
-		goto out;
+	fence = sync_fence_create(name, &pt->sync_pt);
+	if (fence == NULL) {
+		sync_pt_free(&pt->sync_pt);
+		return NULL;
+	}
 
 	pt->state->orig_fence = fence;
 
-	param.fence_fd = fd;
-
-	if (copy_to_user((void __user *)arg, &param, sizeof(param))) {
-		ret = -EFAULT;
-		goto out;
-	}
-
-	sync_fence_install(fence, fd);
-	ret = 0;
-out:
-	if (ret) {
-		if (fence)
-			sync_fence_put(fence);
-		else if (pt)
-			sync_pt_free(&pt->sync_pt);
-		put_unused_fd(fd);
-	}
-	return ret;
+	return fence;
 }
+EXPORT_SYMBOL(oneshot_fence_create);
 
-static long oneshot_fence_signal(struct oneshot_sync_timeline *timeline,
-				 unsigned long arg)
+int oneshot_fence_signal(struct oneshot_sync_timeline *timeline,
+			struct sync_fence *fence)
 {
 	int ret = -EINVAL;
-	int fd = -1;
-	struct sync_fence *fence = NULL;
 	struct oneshot_sync_state *state = NULL;
 	bool signaled = false;
 
-	if (get_user(fd, (unsigned int __user *)arg)) {
-		ret = -EFAULT;
-		goto out;
-	}
-
-	fence = sync_fence_fdget(fd);
-	if (fence == NULL) {
-		ret = -EBADF;
-		goto out;
-	}
+	if (timeline == NULL || fence == NULL)
+		return -EINVAL;
 
 	spin_lock(&timeline->lock);
 	list_for_each_entry(state, &timeline->state_list, node) {
@@ -322,13 +286,101 @@ static long oneshot_fence_signal(struct oneshot_sync_timeline *timeline,
 	}
 	spin_unlock(&timeline->lock);
 	if (ret == -EINVAL)
-		pr_debug("fence fd: %d not from this timeline\n", fd);
+		pr_debug("fence: %p not from this timeline\n", fence);
 
 	if (signaled)
 		sync_timeline_signal(&timeline->obj);
+	return ret;
+}
+EXPORT_SYMBOL(oneshot_fence_signal);
+
+#ifdef CONFIG_ONESHOT_SYNC_USER
+
+static int oneshot_open(struct inode *inode, struct file *file)
+{
+	struct oneshot_sync_timeline *timeline = NULL;
+	char name[32];
+	char task_comm[TASK_COMM_LEN];
+
+	get_task_comm(task_comm, current);
+	snprintf(name, sizeof(name), "%s-oneshot", task_comm);
+
+	timeline = oneshot_timeline_create(name);
+	if (timeline == NULL)
+		return -ENOMEM;
+
+	file->private_data = timeline;
+	return 0;
+}
+
+static int oneshot_release(struct inode *inode, struct file *file)
+{
+	struct oneshot_sync_timeline *timeline = file->private_data;
+
+	oneshot_timeline_destroy(timeline);
+
+	return 0;
+}
+
+static long oneshot_ioctl_fence_create(struct oneshot_sync_timeline *timeline,
+				 unsigned long arg)
+{
+	struct oneshot_sync_create_fence param;
+	int ret = -ENOMEM;
+	struct sync_fence *fence = NULL;
+	int fd = get_unused_fd();
+
+	if (fd < 0)
+		return fd;
+
+	if (copy_from_user(&param, (void __user *)arg, sizeof(param))) {
+		ret = -EFAULT;
+		goto out;
+	}
+
+	fence = oneshot_fence_create(timeline, param.name);
+	if (fence == NULL) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	param.fence_fd = fd;
+
+	if (copy_to_user((void __user *)arg, &param, sizeof(param))) {
+		ret = -EFAULT;
+		goto out;
+	}
+
+	sync_fence_install(fence, fd);
+	ret = 0;
 out:
-	if (fence)
-		sync_fence_put(fence);
+	if (ret) {
+		if (fence)
+			sync_fence_put(fence);
+		put_unused_fd(fd);
+	}
+	return ret;
+}
+
+
+
+static long oneshot_ioctl_fence_signal(struct oneshot_sync_timeline *timeline,
+				 unsigned long arg)
+{
+	int ret = -EINVAL;
+	int fd = -1;
+	struct sync_fence *fence = NULL;
+
+	if (get_user(fd, (int __user *)arg))
+		return -EFAULT;
+
+	fence = sync_fence_fdget(fd);
+	if (fence == NULL)
+		return -EBADF;
+
+	ret = oneshot_fence_signal(timeline, fence);
+	sync_fence_put(fence);
+
 	return ret;
 }
 
@@ -339,10 +391,10 @@ static long oneshot_ioctl(struct file *file, unsigned int cmd,
 
 	switch (cmd) {
 	case ONESHOT_SYNC_IOC_CREATE_FENCE:
-		return oneshot_fence_create(timeline, arg);
+		return oneshot_ioctl_fence_create(timeline, arg);
 
 	case ONESHOT_SYNC_IOC_SIGNAL_FENCE:
-		return oneshot_fence_signal(timeline, arg);
+		return oneshot_ioctl_fence_signal(timeline, arg);
 
 	default:
 		return -ENOTTY;
@@ -374,5 +426,7 @@ static void __exit oneshot_remove(void)
 
 module_init(oneshot_init);
 module_exit(oneshot_remove);
+
+#endif /* CONFIG_ONESHOT_SYNC_USER */
 MODULE_LICENSE("GPL v2");
 

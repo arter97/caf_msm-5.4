@@ -27,7 +27,7 @@
 #include "u_bam_data.h"
 
 #define BAM2BAM_DATA_N_PORTS	1
-#define BAM_DATA_RX_Q_SIZE	16
+#define BAM_DATA_RX_Q_SIZE	128
 #define BAM_DATA_MUX_RX_REQ_SIZE  2048   /* Must be 1KB aligned */
 #define BAM_DATA_PENDING_LIMIT	220
 
@@ -234,7 +234,6 @@ static void bam_data_free_skb_to_pool(
 	struct sk_buff *skb)
 {
 	struct bam_data_ch_info *d;
-	unsigned long flags;
 
 	if (!port) {
 		dev_kfree_skb_any(skb);
@@ -246,11 +245,9 @@ static void bam_data_free_skb_to_pool(
 		return;
 	}
 
-	spin_lock_irqsave(&port->port_lock_ul, flags);
 	skb->len = 0;
 	skb_reset_tail_pointer(skb);
 	__skb_queue_tail(&d->rx_skb_idle, skb);
-	spin_unlock_irqrestore(&port->port_lock_ul, flags);
 }
 
 static void bam_data_write_done(void *p, struct sk_buff *skb)
@@ -262,9 +259,9 @@ static void bam_data_write_done(void *p, struct sk_buff *skb)
 	if (!skb)
 		return;
 
+	spin_lock_irqsave(&port->port_lock_ul, flags);
 	bam_data_free_skb_to_pool(port, skb);
 
-	spin_lock_irqsave(&port->port_lock_ul, flags);
 	d->pending_with_bam--;
 
 	pr_debug("%s: port:%p d:%p pbam:%u, pno:%d\n", __func__,
@@ -347,10 +344,7 @@ static void bam_data_start_rx(struct bam_data_port *port)
 		ret = usb_ep_queue(ep, req, GFP_ATOMIC);
 		spin_lock_irqsave(&port->port_lock_ul, flags);
 		if (ret) {
-			spin_unlock_irqrestore(&port->port_lock_ul, flags);
 			bam_data_free_skb_to_pool(port, skb);
-			spin_lock_irqsave(&port->port_lock_ul, flags);
-
 
 			pr_err("%s: rx queue failed %d\n", __func__, ret);
 
@@ -372,6 +366,7 @@ static void bam_data_epout_complete(struct usb_ep *ep, struct usb_request *req)
 	struct sk_buff		*skb = req->context;
 	int			status = req->status;
 	int			queue = 0;
+	unsigned long		flags;
 
 	switch (status) {
 	case 0:
@@ -381,14 +376,18 @@ static void bam_data_epout_complete(struct usb_ep *ep, struct usb_request *req)
 	case -ECONNRESET:
 	case -ESHUTDOWN:
 		/* cable disconnection */
+		spin_lock_irqsave(&port->port_lock_ul, flags);
 		bam_data_free_skb_to_pool(port, skb);
+		spin_unlock_irqrestore(&port->port_lock_ul, flags);
 		req->buf = 0;
 		usb_ep_free_request(ep, req);
 		return;
 	default:
 		pr_err("%s: %s response error %d, %d/%d\n", __func__,
 			ep->name, status, req->actual, req->length);
+		spin_lock_irqsave(&port->port_lock_ul, flags);
 		bam_data_free_skb_to_pool(port, skb);
+		spin_unlock_irqrestore(&port->port_lock_ul, flags);
 		break;
 	}
 
@@ -630,18 +629,12 @@ static int bam_data_peer_reset_cb(void *param)
 
 	pr_debug("%s: reset by peer\n", __func__);
 
-	/* Disable BAM */
-	msm_hw_bam_disable(1);
-
 	/* Reset BAM */
 	ret = usb_bam_a2_reset(0);
 	if (ret) {
 		pr_err("%s: BAM reset failed %d\n", __func__, ret);
 		return ret;
 	}
-
-	/* Enable BAM */
-	msm_hw_bam_disable(0);
 
 	/* Unregister the peer reset callback */
 	usb_bam_register_peer_reset_cb(NULL, NULL);
