@@ -56,6 +56,7 @@
 #define TOMTOM_CPE_MAJOR_VER 1
 #define TOMTOM_CPE_MINOR_VER 0
 #define TOMTOM_CPE_CDC_ID 1
+#define RX8_PATH 8
 
 static int cpe_debug_mode;
 module_param(cpe_debug_mode, int,
@@ -63,6 +64,11 @@ module_param(cpe_debug_mode, int,
 MODULE_PARM_DESC(cpe_debug_mode, "boot cpe in debug mode");
 
 static atomic_t kp_tomtom_priv;
+
+static int high_perf_mode;
+module_param(high_perf_mode, int,
+			S_IRUGO | S_IWUSR | S_IWGRP);
+MODULE_PARM_DESC(high_perf_mode, "enable/disable class AB config for hph");
 
 static struct afe_param_slimbus_slave_port_cfg tomtom_slimbus_slave_port_cfg = {
 	.minor_version = 1,
@@ -435,6 +441,7 @@ struct tomtom_priv {
 
 	bool spkr_pa_widget_on;
 	struct regulator *spkdrv_reg;
+	struct regulator *spkdrv2_reg;
 
 	bool mbhc_started;
 
@@ -461,6 +468,9 @@ struct tomtom_priv {
 
 	/* handle to cpe core */
 	struct wcd_cpe_core *cpe_core;
+
+	/* UHQA (class AB) mode */
+	u8 uhqa_mode;
 };
 
 static const u32 comp_shift[] = {
@@ -544,6 +554,47 @@ static unsigned short tx_digital_gain_reg[] = {
 	TOMTOM_A_CDC_TX9_VOL_CTL_GAIN,
 	TOMTOM_A_CDC_TX10_VOL_CTL_GAIN,
 };
+
+static int tomtom_get_sample_rate(struct snd_soc_codec *codec, int path)
+{
+	if (path == RX8_PATH)
+		return snd_soc_read(codec, TOMTOM_A_CDC_RX8_B5_CTL);
+	else
+		return snd_soc_read(codec,
+			(TOMTOM_A_CDC_RX1_B5_CTL + 8 * (path - 1)));
+}
+
+static int tomtom_compare_bit_format(struct snd_soc_codec *codec,
+				int bit_format)
+{
+	int i = 0;
+	int ret = 0;
+	struct tomtom_priv *tomtom_p = snd_soc_codec_get_drvdata(codec);
+
+	for (i = 0; i < NUM_CODEC_DAIS; i++) {
+		if (tomtom_p->dai[i].bit_width == bit_format) {
+			ret = 1;
+			break;
+		}
+	}
+	return ret;
+}
+
+static int tomtom_update_uhqa_mode(struct snd_soc_codec *codec, int path)
+{
+	int ret = 0;
+	struct tomtom_priv *tomtom_p = snd_soc_codec_get_drvdata(codec);
+
+	/* UHQA path has fs=192KHz & bit=24 bit */
+	if (((tomtom_get_sample_rate(codec, path) & 0xE0) == 0xA0) &&
+		(tomtom_compare_bit_format(codec, 24))) {
+		tomtom_p->uhqa_mode = 1;
+	} else {
+		tomtom_p->uhqa_mode = 0;
+	}
+	dev_dbg(codec->dev, "%s: uhqa_mode=%d", __func__, tomtom_p->uhqa_mode);
+	return ret;
+}
 
 static int tomtom_get_anc_slot(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
@@ -2797,7 +2848,7 @@ static int tomtom_codec_config_mad(struct snd_soc_codec *codec)
 	}
 
 	if (fw->size < sizeof(struct mad_audio_cal)) {
-		pr_err("%s: incorrect firmware size %u\n", __func__, fw->size);
+		pr_err("%s: incorrect firmware size %zu\n", __func__, fw->size);
 		release_firmware(fw);
 		return -ENOMEM;
 	}
@@ -3231,6 +3282,54 @@ static int tomtom_codec_enable_vdd_spkr(struct snd_soc_dapm_widget *w,
 	return ret;
 }
 
+static int tomtom_codec_enable_vdd_spkr2(struct snd_soc_dapm_widget *w,
+				       struct snd_kcontrol *kcontrol, int event)
+{
+	int ret = 0;
+	struct snd_soc_codec *codec = w->codec;
+	struct tomtom_priv *priv = snd_soc_codec_get_drvdata(codec);
+
+	pr_debug("%s: %d %s\n", __func__, event, w->name);
+
+	/*
+	 * If on-demand voltage regulators of spkr1 and spkr2 has been derived
+	 * from same power rail then same on-demand voltage regulator can be
+	 * used by both spkr1 and spkr2, if a separate device tree entry has
+	 * not been defined for on-demand voltage regulator for spkr2.
+	 */
+	if (!priv->spkdrv2_reg) {
+		if (priv->spkdrv_reg) {
+			priv->spkdrv2_reg = priv->spkdrv_reg;
+		} else {
+			WARN_ONCE(!priv->spkdrv2_reg,
+					"SPKDRV2 supply %s isn't defined\n",
+					WCD9XXX_VDD_SPKDRV2_NAME);
+			return 0;
+		}
+	}
+
+	switch (event) {
+	case SND_SOC_DAPM_PRE_PMU:
+		if (priv->spkdrv2_reg) {
+			ret = regulator_enable(priv->spkdrv2_reg);
+			if (ret)
+				pr_err("%s: Failed to enable spkdrv2_reg %s ret:%d\n",
+				       __func__, WCD9XXX_VDD_SPKDRV2_NAME, ret);
+		}
+		break;
+	case SND_SOC_DAPM_POST_PMD:
+		if (priv->spkdrv2_reg) {
+			ret = regulator_disable(priv->spkdrv2_reg);
+			if (ret)
+				pr_err("%s: Failed to disable spkdrv2_reg %s ret:%d\n",
+				       __func__, WCD9XXX_VDD_SPKDRV2_NAME, ret);
+		}
+		break;
+	}
+
+	return ret;
+}
+
 static int tomtom_codec_enable_interpolator(struct snd_soc_dapm_widget *w,
 	struct snd_kcontrol *kcontrol, int event)
 {
@@ -3253,6 +3352,10 @@ static int tomtom_codec_enable_interpolator(struct snd_soc_dapm_widget *w,
 				  snd_soc_read(codec,
 				  rx_digital_gain_reg[w->shift])
 				  );
+		/* Check for Rx1 and Rx2 paths for uhqa mode update */
+		if (w->shift == 0 || w->shift == 1)
+			tomtom_update_uhqa_mode(codec, (1 << w->shift));
+
 		break;
 	}
 	return 0;
@@ -3347,10 +3450,16 @@ static int tomtom_hphl_dac_event(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		wcd9xxx_clsh_fsm(codec, &tomtom_p->clsh_d,
+		if (!high_perf_mode && !tomtom_p->uhqa_mode) {
+			wcd9xxx_clsh_fsm(codec, &tomtom_p->clsh_d,
 						 WCD9XXX_CLSH_STATE_HPHL,
 						 WCD9XXX_CLSH_REQ_ENABLE,
 						 WCD9XXX_CLSH_EVENT_PRE_DAC);
+		} else {
+			wcd9xxx_enable_high_perf_mode(codec, &tomtom_p->clsh_d,
+						WCD9XXX_CLSAB_STATE_HPHL,
+						WCD9XXX_CLSAB_REQ_ENABLE);
+		}
 		ret = wcd9xxx_mbhc_get_impedance(&tomtom_p->mbhc,
 					&impedl, &impedr);
 		if (!ret)
@@ -3376,10 +3485,16 @@ static int tomtom_hphr_dac_event(struct snd_soc_dapm_widget *w,
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		snd_soc_update_bits(codec, w->reg, 0x40, 0x40);
-		wcd9xxx_clsh_fsm(codec, &tomtom_p->clsh_d,
+		if (!high_perf_mode && !tomtom_p->uhqa_mode) {
+			wcd9xxx_clsh_fsm(codec, &tomtom_p->clsh_d,
 						 WCD9XXX_CLSH_STATE_HPHR,
 						 WCD9XXX_CLSH_REQ_ENABLE,
 						 WCD9XXX_CLSH_EVENT_PRE_DAC);
+		} else {
+			wcd9xxx_enable_high_perf_mode(codec, &tomtom_p->clsh_d,
+						WCD9XXX_CLSAB_STATE_HPHR,
+						WCD9XXX_CLSAB_REQ_ENABLE);
+		}
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		snd_soc_update_bits(codec, w->reg, 0x40, 0x00);
@@ -3428,7 +3543,7 @@ static int tomtom_codec_enable_anc(struct snd_soc_dapm_widget *w,
 
 		/* First number is the number of register writes */
 		anc_head = (struct wcd9xxx_anc_header *)(fw->data);
-		anc_ptr = (u32 *)((u32)fw->data +
+		anc_ptr = (u32 *)(fw->data +
 				  sizeof(struct wcd9xxx_anc_header));
 		anc_size_remaining = fw->size -
 				     sizeof(struct wcd9xxx_anc_header);
@@ -3499,6 +3614,7 @@ static int tomtom_hph_pa_event(struct snd_soc_dapm_widget *w,
 	struct tomtom_priv *tomtom = snd_soc_codec_get_drvdata(codec);
 	enum wcd9xxx_notify_event e_pre_on, e_post_off;
 	u8 req_clsh_state;
+	u8 req_clsab_state;
 	u32 pa_settle_time = TOMTOM_HPH_PA_SETTLE_COMP_OFF;
 
 	pr_debug("%s: %s event = %d\n", __func__, w->name, event);
@@ -3506,10 +3622,12 @@ static int tomtom_hph_pa_event(struct snd_soc_dapm_widget *w,
 		e_pre_on = WCD9XXX_EVENT_PRE_HPHL_PA_ON;
 		e_post_off = WCD9XXX_EVENT_POST_HPHL_PA_OFF;
 		req_clsh_state = WCD9XXX_CLSH_STATE_HPHL;
+		req_clsab_state = WCD9XXX_CLSAB_STATE_HPHL;
 	} else if (w->shift == 4) {
 		e_pre_on = WCD9XXX_EVENT_PRE_HPHR_PA_ON;
 		e_post_off = WCD9XXX_EVENT_POST_HPHR_PA_OFF;
 		req_clsh_state = WCD9XXX_CLSH_STATE_HPHR;
+		req_clsab_state = WCD9XXX_CLSAB_STATE_HPHR;
 	} else {
 		pr_err("%s: Invalid w->shift %d\n", __func__, w->shift);
 		return -EINVAL;
@@ -3528,11 +3646,12 @@ static int tomtom_hph_pa_event(struct snd_soc_dapm_widget *w,
 		usleep_range(pa_settle_time, pa_settle_time + 1000);
 		pr_debug("%s: sleep %d us after %s PA enable\n", __func__,
 				pa_settle_time, w->name);
-		wcd9xxx_clsh_fsm(codec, &tomtom->clsh_d,
+		if (!high_perf_mode && !tomtom->uhqa_mode) {
+			wcd9xxx_clsh_fsm(codec, &tomtom->clsh_d,
 						 req_clsh_state,
 						 WCD9XXX_CLSH_REQ_ENABLE,
 						 WCD9XXX_CLSH_EVENT_POST_PA);
-
+		}
 		break;
 
 	case SND_SOC_DAPM_POST_PMD:
@@ -3543,10 +3662,16 @@ static int tomtom_hph_pa_event(struct snd_soc_dapm_widget *w,
 		/* Let MBHC module know PA turned off */
 		wcd9xxx_resmgr_notifier_call(&tomtom->resmgr, e_post_off);
 
-		wcd9xxx_clsh_fsm(codec, &tomtom->clsh_d,
+		if (!high_perf_mode && !tomtom->uhqa_mode) {
+			wcd9xxx_clsh_fsm(codec, &tomtom->clsh_d,
 						 req_clsh_state,
 						 WCD9XXX_CLSH_REQ_DISABLE,
 						 WCD9XXX_CLSH_EVENT_POST_PA);
+		} else {
+			wcd9xxx_enable_high_perf_mode(codec, &tomtom->clsh_d,
+						req_clsab_state,
+						WCD9XXX_CLSAB_REQ_DISABLE);
+		}
 
 		break;
 	}
@@ -3903,7 +4028,7 @@ static const struct snd_soc_dapm_route audio_map[] = {
 
 	{"SPK2 PA", NULL, "SPK2 DAC"},
 	{"SPK2 DAC", NULL, "RX8 MIX1"},
-	{"SPK2 DAC", NULL, "VDD_SPKDRV"},
+	{"SPK2 DAC", NULL, "VDD_SPKDRV2"},
 
 	{"CLASS_H_DSM MUX", "DSM_HPHL_RX1", "RX1 CHAIN"},
 
@@ -4665,8 +4790,8 @@ static int tomtom_get_channel_map(struct snd_soc_dai *dai,
 	case AIF2_PB:
 	case AIF3_PB:
 		if (!rx_slot || !rx_num) {
-			pr_err("%s: Invalid rx_slot %d or rx_num %d\n",
-				 __func__, (u32) rx_slot, (u32) rx_num);
+			pr_err("%s: Invalid rx_slot %p or rx_num %p\n",
+				 __func__, rx_slot, rx_num);
 			return -EINVAL;
 		}
 		list_for_each_entry(ch, &tomtom_p->dai[dai->id].wcd9xxx_ch_list,
@@ -4684,8 +4809,8 @@ static int tomtom_get_channel_map(struct snd_soc_dai *dai,
 	case AIF4_VIFEED:
 	case AIF4_MAD_TX:
 		if (!tx_slot || !tx_num) {
-			pr_err("%s: Invalid tx_slot %d or tx_num %d\n",
-				 __func__, (u32) tx_slot, (u32) tx_num);
+			pr_err("%s: Invalid tx_slot %p or tx_num %p\n",
+				 __func__, tx_slot, tx_num);
 			return -EINVAL;
 		}
 		list_for_each_entry(ch, &tomtom_p->dai[dai->id].wcd9xxx_ch_list,
@@ -5736,6 +5861,10 @@ static const struct snd_soc_dapm_widget tomtom_dapm_widgets[] = {
 
 	SND_SOC_DAPM_SUPPLY("VDD_SPKDRV", SND_SOC_NOPM, 0, 0,
 			    tomtom_codec_enable_vdd_spkr,
+			    SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+
+	SND_SOC_DAPM_SUPPLY("VDD_SPKDRV2", SND_SOC_NOPM, 0, 0,
+			    tomtom_codec_enable_vdd_spkr2,
 			    SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_MIXER("RX1 MIX1", SND_SOC_NOPM, 0, 0, NULL, 0),
@@ -7349,7 +7478,9 @@ static int tomtom_codec_probe(struct snd_soc_codec *codec)
 	}
 
 	tomtom->spkdrv_reg = tomtom_codec_find_regulator(codec,
-						       WCD9XXX_VDD_SPKDRV_NAME);
+					       WCD9XXX_VDD_SPKDRV_NAME);
+	tomtom->spkdrv2_reg = tomtom_codec_find_regulator(codec,
+					       WCD9XXX_VDD_SPKDRV2_NAME);
 
 	ptr = kmalloc((sizeof(tomtom_rx_chs) +
 		       sizeof(tomtom_tx_chs)), GFP_KERNEL);
@@ -7441,6 +7572,7 @@ static int tomtom_codec_remove(struct snd_soc_codec *codec)
 	wcd9xxx_resmgr_deinit(&tomtom->resmgr);
 
 	tomtom->spkdrv_reg = NULL;
+	tomtom->spkdrv2_reg = NULL;
 
 	devm_kfree(codec->dev, tomtom);
 	return 0;

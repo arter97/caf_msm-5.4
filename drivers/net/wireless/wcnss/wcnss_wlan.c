@@ -39,6 +39,7 @@
 
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/subsystem_notif.h>
+
 #include <soc/qcom/smd.h>
 
 #define DEVICE "wcnss_wlan"
@@ -185,6 +186,7 @@ static DEFINE_SPINLOCK(reg_spinlock);
 #define	WCNSS_VBATT_LEVEL_IND         (WCNSS_CTRL_MSG_START + 8)
 #define	WCNSS_BUILD_VER_REQ           (WCNSS_CTRL_MSG_START + 9)
 #define	WCNSS_BUILD_VER_RSP           (WCNSS_CTRL_MSG_START + 10)
+#define	WCNSS_PM_CONFIG_REQ           (WCNSS_CTRL_MSG_START + 11)
 
 /* max 20mhz channel count */
 #define WCNSS_MAX_CH_NUM			45
@@ -350,6 +352,7 @@ static struct {
 	struct delayed_work wcnss_work;
 	struct delayed_work vbatt_work;
 	struct work_struct wcnssctrl_version_work;
+	struct work_struct wcnss_pm_config_work;
 	struct work_struct wcnssctrl_nvbin_dnld_work;
 	struct work_struct wcnssctrl_rx_work;
 	struct wake_lock wcnss_wake_lock;
@@ -795,22 +798,6 @@ void wcnss_pronto_log_debug_regs(void)
 EXPORT_SYMBOL(wcnss_pronto_log_debug_regs);
 
 #ifdef CONFIG_WCNSS_REGISTER_DUMP_ON_BITE
-static void wcnss_log_iris_regs(void)
-{
-	int i;
-	u32 reg_val;
-	u32 regs_array[] = {
-		0x04, 0x05, 0x11, 0x1e, 0x40, 0x48,
-		0x49, 0x4b, 0x00, 0x01, 0x4d};
-
-	pr_info("IRIS Registers [address] : value\n");
-
-	for (i = 0; i < ARRAY_SIZE(regs_array); i++) {
-		reg_val = wcnss_rf_read_reg(regs_array[i]);
-		pr_info("[0x%08x] : 0x%08x\n", regs_array[i], reg_val);
-	}
-}
-
 void wcnss_log_debug_regs_on_bite(void)
 {
 	struct platform_device *pdev = wcnss_get_platform_device();
@@ -831,12 +818,10 @@ void wcnss_log_debug_regs_on_bite(void)
 		clk_rate = clk_get_rate(measure);
 		pr_debug("wcnss: clock frequency is: %luHz\n", clk_rate);
 
-		if (clk_rate) {
+		if (clk_rate)
 			wcnss_pronto_log_debug_regs();
-		} else {
+		else
 			pr_err("clock frequency is zero, cannot access PMU or other registers\n");
-			wcnss_log_iris_regs();
-		}
 	}
 }
 #endif
@@ -920,6 +905,7 @@ static void wcnss_smd_notify_event(void *data, unsigned int event)
 		pr_debug("wcnss: opening WCNSS SMD channel :%s",
 				WCNSS_CTRL_CHANNEL);
 		schedule_work(&penv->wcnssctrl_version_work);
+		schedule_work(&penv->wcnss_pm_config_work);
 
 		break;
 
@@ -1831,6 +1817,53 @@ static void wcnss_send_version_req(struct work_struct *worker)
 	return;
 }
 
+static void wcnss_send_pm_config(struct work_struct *worker)
+{
+	struct smd_msg_hdr *hdr;
+	unsigned char *msg = NULL;
+	int rc, prop_len;
+	u32 *payload;
+
+	if (!of_find_property(penv->pdev->dev.of_node,
+			"qcom,wcnss-pm", &prop_len))
+		return;
+
+	msg = kmalloc((sizeof(struct smd_msg_hdr) + prop_len), GFP_KERNEL);
+
+	if (NULL == msg) {
+		pr_err("wcnss: %s: failed to allocate memory\n", __func__);
+		return;
+	}
+
+	payload = (u32 *)(msg + sizeof(struct smd_msg_hdr));
+
+	prop_len /= sizeof(int);
+
+	rc = of_property_read_u32_array(penv->pdev->dev.of_node,
+			"qcom,wcnss-pm", payload, prop_len);
+	if (rc < 0) {
+		pr_err("wcnss: property read failed\n");
+		kfree(msg);
+		return;
+	}
+
+	pr_debug("%s:size=%d: <%d, %d, %d, %d, %d>\n", __func__,
+			prop_len, *payload, *(payload+1), *(payload+2),
+			*(payload+3), *(payload+4));
+
+	hdr = (struct smd_msg_hdr *)msg;
+	hdr->msg_type = WCNSS_PM_CONFIG_REQ;
+	hdr->msg_len = sizeof(struct smd_msg_hdr) + prop_len;
+
+	rc = wcnss_smd_tx(msg, hdr->msg_len);
+	if (rc < 0)
+		pr_err("wcnss: smd tx failed\n");
+
+	kfree(msg);
+	return;
+}
+
+
 static DECLARE_RWSEM(wcnss_pm_sem);
 
 static void wcnss_nvbin_dnld(void)
@@ -2258,6 +2291,7 @@ wcnss_trigger_config(struct platform_device *pdev)
 	}
 	INIT_WORK(&penv->wcnssctrl_rx_work, wcnssctrl_rx_handler);
 	INIT_WORK(&penv->wcnssctrl_version_work, wcnss_send_version_req);
+	INIT_WORK(&penv->wcnss_pm_config_work, wcnss_send_pm_config);
 	INIT_WORK(&penv->wcnssctrl_nvbin_dnld_work, wcnss_nvbin_dnld_main);
 
 	wake_lock_init(&penv->wcnss_wake_lock, WAKE_LOCK_SUSPEND, "wcnss");

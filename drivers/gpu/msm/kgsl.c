@@ -788,6 +788,7 @@ static void kgsl_destroy_process_private(struct kref *kref)
 		debugfs_remove_recursive(private->debug_root);
 
 	idr_destroy(&private->mem_idr);
+	idr_destroy(&private->syncsource_idr);
 	kgsl_mmu_putpagetable(private->pagetable);
 
 	kfree(private);
@@ -893,6 +894,8 @@ kgsl_get_process_private(struct kgsl_device *device)
 	private->mem_rb = RB_ROOT;
 	idr_init(&private->mem_idr);
 
+	idr_init(&private->syncsource_idr);
+
 	if ((!private->pagetable) && kgsl_mmu_enabled()) {
 		unsigned long pt_name;
 
@@ -948,13 +951,24 @@ static int kgsl_release(struct inode *inodep, struct file *filep)
 	struct kgsl_process_private *private = dev_priv->process_priv;
 	struct kgsl_device *device = dev_priv->device;
 	struct kgsl_context *context;
+	struct kgsl_syncsource *syncsource;
 	struct kgsl_mem_entry *entry;
 	int next = 0;
 
 	filep->private_data = NULL;
 
+	next = 0;
+	while (1) {
+		syncsource = idr_get_next(&private->syncsource_idr, &next);
+
+		if (syncsource == NULL)
+			break;
+		kgsl_syncsource_put(syncsource);
+		next = next + 1;
+	}
 	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 
+	next = 0;
 	while (1) {
 		read_lock(&device->context_lock);
 		context = idr_get_next(&device->context_idr, &next);
@@ -1484,9 +1498,12 @@ static void _kgsl_cmdbatch_timer(unsigned long data)
 			break;
 		}
 		case KGSL_CMD_SYNCPOINT_TYPE_FENCE:
-			pr_err("  fence: [%p] %s\n", event->handle,
-				(event->handle && event->handle->fence)
-					? event->handle->fence->name : "NULL");
+			if (event->handle && event->handle->fence)
+				pr_err("  fence: [%p] %s\n",
+					event->handle->fence,
+					event->handle->fence->name);
+			else
+				pr_err("  fence: invalid\n");
 			break;
 		}
 	}
@@ -2110,7 +2127,7 @@ static struct kgsl_cmdbatch *_kgsl_cmdbatch_create(struct kgsl_device *device,
 		goto done;
 	}
 
-	if (!(flags & KGSL_CMDBATCH_SYNC)) {
+	if (!(flags & (KGSL_CMDBATCH_SYNC | KGSL_CMDBATCH_MARKER))) {
 		struct kgsl_ibdesc ibdesc;
 		void  __user *uptr = cmdlist;
 
@@ -2169,7 +2186,7 @@ long kgsl_ioctl_rb_issueibcmds(struct kgsl_device_private *dev_priv,
 	long result = -EINVAL;
 
 	/* The legacy functions don't support synchronization commands */
-	if (param->flags & KGSL_CMDBATCH_SYNC)
+	if ((param->flags & (KGSL_CMDBATCH_SYNC | KGSL_CMDBATCH_MARKER)))
 		return -EINVAL;
 
 	/* Get the context */
@@ -2227,14 +2244,21 @@ long kgsl_ioctl_submit_commands(struct kgsl_device_private *dev_priv,
 
 	long result = -EINVAL;
 
-	/* The number of IBs are completely ignored for sync commands */
-	if (!(param->flags & KGSL_CMDBATCH_SYNC)) {
-		if (param->numcmds == 0 || param->numcmds > KGSL_MAX_NUMIBS)
-			return -EINVAL;
-	} else if (param->numcmds != 0) {
+	/*
+	 * The SYNC bit is supposed to identify a dummy sync object so warn the
+	 * user if they specified any IBs with it.  A MARKER command can either
+	 * have IBs or not but if the command has 0 IBs it is automatically
+	 * assumed to be a marker.  If none of the above make sure that the user
+	 * specified a sane number of IBs
+	 */
+
+	if ((param->flags & KGSL_CMDBATCH_SYNC) && param->numcmds)
 		KGSL_DEV_ERR_ONCE(device,
 			"Commands specified with the SYNC flag.  They will be ignored\n");
-	}
+	else if (param->numcmds > KGSL_MAX_NUMIBS)
+		return -EINVAL;
+	else if (!(param->flags & KGSL_CMDBATCH_SYNC) && param->numcmds == 0)
+		param->flags |= KGSL_CMDBATCH_MARKER;
 
 	context = kgsl_context_get_owner(dev_priv, param->context_id);
 	if (context == NULL)
@@ -3241,6 +3265,9 @@ static int kgsl_filter_cachemode(unsigned int flags)
 }
 #endif
 
+/* The largest allowable alignment for a GPU object is 32MB */
+#define KGSL_MAX_ALIGN (32 * SZ_1M)
+
 /*
  * The common parts of kgsl_ioctl_gpumem_alloc and kgsl_ioctl_gpumem_alloc_id.
  */
@@ -3276,11 +3303,13 @@ _gpumem_alloc(struct kgsl_device_private *dev_priv,
 	/* Cap the alignment bits to the highest number we can handle */
 
 	align = (flags & KGSL_MEMALIGN_MASK) >> KGSL_MEMALIGN_SHIFT;
-	if (align >= 32) {
-		KGSL_CORE_ERR("Alignment too big, restricting to 2^31\n");
+	if (align >= ilog2(KGSL_MAX_ALIGN)) {
+		KGSL_CORE_ERR("Alignment too large; restricting to %dK\n",
+			KGSL_MAX_ALIGN >> 10);
 
 		flags &= ~KGSL_MEMALIGN_MASK;
-		flags |= (31 << KGSL_MEMALIGN_SHIFT) & KGSL_MEMALIGN_MASK;
+		flags |= (ilog2(KGSL_MAX_ALIGN) << KGSL_MEMALIGN_SHIFT) &
+			KGSL_MEMALIGN_MASK;
 	}
 
 	flags = kgsl_filter_cachemode(flags);
@@ -3527,6 +3556,14 @@ static const struct kgsl_ioctl kgsl_ioctl_funcs[] = {
 			kgsl_ioctl_gpumem_sync_cache, 0),
 	KGSL_IOCTL_FUNC(IOCTL_KGSL_GPUMEM_SYNC_CACHE_BULK,
 			kgsl_ioctl_gpumem_sync_cache_bulk, 0),
+	KGSL_IOCTL_FUNC(IOCTL_KGSL_SYNCSOURCE_CREATE,
+			kgsl_ioctl_syncsource_create, 0),
+	KGSL_IOCTL_FUNC(IOCTL_KGSL_SYNCSOURCE_DESTROY,
+			kgsl_ioctl_syncsource_destroy, 0),
+	KGSL_IOCTL_FUNC(IOCTL_KGSL_SYNCSOURCE_CREATE_FENCE,
+			kgsl_ioctl_syncsource_create_fence, 0),
+	KGSL_IOCTL_FUNC(IOCTL_KGSL_SYNCSOURCE_SIGNAL_FENCE,
+			kgsl_ioctl_syncsource_signal_fence, 0),
 };
 
 long kgsl_ioctl_helper(struct file *filep, unsigned int cmd,

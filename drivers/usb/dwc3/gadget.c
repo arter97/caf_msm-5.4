@@ -48,6 +48,7 @@
 #include <linux/list.h>
 #include <linux/dma-mapping.h>
 #include <linux/vmalloc.h>
+#include <linux/module.h>
 
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
@@ -57,6 +58,11 @@
 #include "gadget.h"
 #include "debug.h"
 #include "io.h"
+
+#define BULK_EP_XFER_TIMEOUT	(8)	/* milliseconds */
+
+static int bulk_ep_xfer_timeout_ms = BULK_EP_XFER_TIMEOUT;
+module_param(bulk_ep_xfer_timeout_ms, int, S_IRUGO | S_IWUSR);
 
 static void dwc3_gadget_usb2_phy_suspend(struct dwc3 *dwc, int suspend);
 static void dwc3_gadget_usb3_phy_suspend(struct dwc3 *dwc, int suspend);
@@ -69,6 +75,8 @@ struct dwc3_usb_gadget {
 	struct dwc3 *dwc;
 };
 
+static void dwc3_endpoint_transfer_complete(struct dwc3 *, struct dwc3_ep *,
+	const struct dwc3_event_depevt *, int);
 /**
  * dwc3_gadget_set_test_mode - Enables USB2 Test Modes
  * @dwc: pointer to our context structure
@@ -904,6 +912,17 @@ update_trb:
 		break;
 
 	case USB_ENDPOINT_XFER_BULK:
+		trb->ctrl = DWC3_TRBCTL_NORMAL;
+		/*
+		 * bulk endpoint optimization: setting the CSP bit (continue on
+		 * short packet) will prevent the core from generating an
+		 * XferComplete event for each TRB with a short packet
+		 * (except for the last TRB).
+		 */
+		if (!last)
+			trb->ctrl |= DWC3_TRB_CTRL_CSP;
+		break;
+
 	case USB_ENDPOINT_XFER_INT:
 		trb->ctrl = DWC3_TRBCTL_NORMAL;
 		break;
@@ -1186,6 +1205,12 @@ static int __dwc3_gadget_kick_transfer(struct dwc3_ep *dep, u16 cmd_param,
 		dep->resource_index = dwc3_gadget_ep_get_transfer_index(dwc,
 				dep->number);
 		WARN_ON_ONCE(!dep->resource_index);
+
+		if (usb_endpoint_xfer_bulk(dep->endpoint.desc)) {
+			hrtimer_start(&dep->xfer_timer, ktime_set(0,
+				bulk_ep_xfer_timeout_ms * NSEC_PER_MSEC),
+				HRTIMER_MODE_REL);
+		}
 	}
 
 	return 0;
@@ -2035,6 +2060,40 @@ static const struct usb_gadget_ops dwc3_gadget_ops = {
 
 /* -------------------------------------------------------------------------- */
 
+static enum hrtimer_restart dwc3_gadget_ep_timer(struct hrtimer *hrtimer)
+{
+	struct dwc3_ep *dep = container_of(hrtimer, struct dwc3_ep, xfer_timer);
+	struct dwc3_event_depevt event;
+	struct dwc3 *dwc;
+
+	if (!dep) {
+		pr_err("%s: NULL endpoint!\n", __func__);
+		goto out;
+	}
+	if (!(dep->flags & DWC3_EP_ENABLED)) {
+		pr_debug("%s: disabled endpoint!\n", __func__);
+		goto out;
+	}
+	if (!dep->endpoint.desc) {
+		pr_err("%s: NULL endpoint desc!\n", __func__);
+		goto out;
+	}
+	if (!dep->dwc) {
+		pr_err("%s: NULL dwc3 ptr!\n", __func__);
+		goto out;
+	}
+	dwc = dep->dwc;
+
+	event.status = 0;
+
+	spin_lock(&dwc->lock);
+	dwc3_endpoint_transfer_complete(dep->dwc, dep, &event, 1);
+	spin_unlock(&dwc->lock);
+
+out:
+	return HRTIMER_NORESTART;
+}
+
 static int dwc3_gadget_init_hw_endpoints(struct dwc3 *dwc,
 		u8 num, u32 direction)
 {
@@ -2083,6 +2142,10 @@ static int dwc3_gadget_init_hw_endpoints(struct dwc3 *dwc,
 
 		INIT_LIST_HEAD(&dep->request_list);
 		INIT_LIST_HEAD(&dep->req_queued);
+
+		hrtimer_init(&dep->xfer_timer, CLOCK_MONOTONIC,
+			HRTIMER_MODE_REL);
+		dep->xfer_timer.function = dwc3_gadget_ep_timer;
 	}
 
 	return 0;
@@ -2191,7 +2254,8 @@ static int __dwc3_cleanup_done_trbs(struct dwc3 *dwc, struct dwc3_ep *dep,
 			dep->flags &= ~DWC3_EP_MISSED_ISOC;
 		}
 	} else {
-		if (count && (event->status & DEPEVT_STATUS_SHORT))
+		if (count && (event->status & DEPEVT_STATUS_SHORT) &&
+			!(trb->ctrl & DWC3_TRB_CTRL_CSP))
 			s_pkt = 1;
 	}
 
@@ -2227,9 +2291,19 @@ static int dwc3_cleanup_done_reqs(struct dwc3 *dwc, struct dwc3_ep *dep,
 	do {
 		req = next_request(&dep->req_queued);
 		if (!req) {
-			WARN_ON_ONCE(1);
+			if (event->status)
+				WARN_ON_ONCE(1);
 			return 1;
 		}
+
+		/*
+		 * For bulk endpoints, HWO bit may be set when the transfer
+		 * complete timeout expires.
+		 */
+		if (usb_endpoint_xfer_bulk(dep->endpoint.desc) &&
+			(req->trb->ctrl & DWC3_TRB_CTRL_HWO))
+			return 0;
+
 		i = 0;
 		do {
 			slot = req->start_slot + i;
@@ -2305,6 +2379,16 @@ static void dwc3_endpoint_transfer_complete(struct dwc3 *dwc,
 	if (clean_busy)
 		dep->flags &= ~DWC3_EP_BUSY;
 
+	if (usb_endpoint_xfer_bulk(dep->endpoint.desc)) {
+		/* Cancel transfer complete timer when hitting the last TRB */
+		if (!(event->status & DEPEVT_STATUS_LST))
+			hrtimer_start(&dep->xfer_timer, ktime_set(0,
+				bulk_ep_xfer_timeout_ms * NSEC_PER_MSEC),
+				HRTIMER_MODE_REL);
+		else
+			hrtimer_cancel(&dep->xfer_timer);
+	}
+
 	/*
 	 * WORKAROUND: This is the 2nd half of U1/U2 -> U0 workaround.
 	 * See dwc3_gadget_linksts_change_interrupt() for 1st half.
@@ -2350,6 +2434,8 @@ static void dwc3_endpoint_interrupt(struct dwc3 *dwc,
 		return;
 	}
 
+	dep->dbg_ep_events.total++;
+
 	switch (event->endpoint_event) {
 	case DWC3_DEPEVT_XFERCOMPLETE:
 		dep->resource_index = 0;
@@ -2361,7 +2447,6 @@ static void dwc3_endpoint_interrupt(struct dwc3 *dwc,
 			return;
 		}
 
-		dbg_event(dep->number, "XFRCOMP", 0);
 		dwc3_endpoint_transfer_complete(dwc, dep, event, 1);
 		break;
 	case DWC3_DEPEVT_XFERINPROGRESS:
@@ -2372,11 +2457,9 @@ static void dwc3_endpoint_interrupt(struct dwc3 *dwc,
 			return;
 		}
 
-		dbg_event(dep->number, "XFRPROG", 0);
 		dwc3_endpoint_transfer_complete(dwc, dep, event, 0);
 		break;
 	case DWC3_DEPEVT_XFERNOTREADY:
-		dbg_event(dep->number, "XFRNRDY", 0);
 		dep->dbg_ep_events.xfernotready++;
 		if (usb_endpoint_xfer_isoc(dep->endpoint.desc)) {
 			dwc3_gadget_start_isoc(dwc, dep, event);
@@ -2392,8 +2475,6 @@ static void dwc3_endpoint_interrupt(struct dwc3 *dwc,
 			ret = __dwc3_gadget_kick_transfer(dep, 0, 1);
 			if (!ret || ret == -EBUSY)
 				return;
-			else
-				dbg_event(dep->number, "QUEUE", ret);
 
 			dev_dbg(dwc->dev, "%s: failed to kick transfers\n",
 					dep->name);
@@ -2754,13 +2835,7 @@ static void dwc3_gadget_conndone_interrupt(struct dwc3 *dwc)
 
 		reg = dwc3_readl(dwc->regs, DWC3_DCTL);
 		reg &= ~(DWC3_DCTL_HIRD_THRES_MASK | DWC3_DCTL_L1_HIBER_EN);
-
-		/*
-		 * TODO: This should be configurable. For now using
-		 * maximum allowed HIRD threshold value of 0b1100
-		 */
-		reg |= DWC3_DCTL_HIRD_THRES(12);
-
+		reg |= DWC3_DCTL_HIRD_THRES(dwc->hird_thresh);
 		dwc3_writel(dwc->regs, DWC3_DCTL, reg);
 	}
 

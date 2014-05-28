@@ -19,6 +19,7 @@
 #include "kgsl.h"
 #include "kgsl_compat.h"
 #include "kgsl_device.h"
+#include "kgsl_sync.h"
 
 #include "adreno.h"
 
@@ -343,6 +344,14 @@ static const struct kgsl_ioctl kgsl_compat_ioctl_funcs[] = {
 			kgsl_ioctl_gpumem_sync_cache_compat, 0),
 	KGSL_IOCTL_FUNC(IOCTL_KGSL_GPUMEM_SYNC_CACHE_BULK_COMPAT,
 			kgsl_ioctl_gpumem_sync_cache_bulk_compat, 0),
+	KGSL_IOCTL_FUNC(IOCTL_KGSL_SYNCSOURCE_CREATE,
+			kgsl_ioctl_syncsource_create, 0),
+	KGSL_IOCTL_FUNC(IOCTL_KGSL_SYNCSOURCE_DESTROY,
+			kgsl_ioctl_syncsource_destroy, 0),
+	KGSL_IOCTL_FUNC(IOCTL_KGSL_SYNCSOURCE_CREATE_FENCE,
+			kgsl_ioctl_syncsource_create_fence, 0),
+	KGSL_IOCTL_FUNC(IOCTL_KGSL_SYNCSOURCE_SIGNAL_FENCE,
+			kgsl_ioctl_syncsource_signal_fence, 0),
 };
 
 long kgsl_compat_ioctl(struct file *filep, unsigned int cmd,
@@ -375,7 +384,7 @@ int kgsl_cmdbatch_create_compat(struct kgsl_device *device, unsigned int flags,
 {
 	int ret = 0, i;
 
-	if (!(flags & KGSL_CMDBATCH_SYNC)) {
+	if (!(flags & (KGSL_CMDBATCH_SYNC | KGSL_CMDBATCH_MARKER))) {
 		struct kgsl_ibdesc_compat ibdesc32;
 		struct kgsl_ibdesc ibdesc;
 		void __user *uptr = cmdlist;
