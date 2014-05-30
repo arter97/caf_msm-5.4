@@ -31,8 +31,10 @@ struct kgsl_device_private;
  * @flags: Internal control flags for the ringbuffer
  * @buffer_desc: Pointer to the ringbuffer memory descriptor
  * @wptr: Local copy of the wptr offset
+ * @rptr: Read pointer offset in dwords from baseaddr
  * @global_ts: Current global timestamp for the ringbuffer
  * @last_wptr: offset of the last H/W committed wptr
+ * @event: Event list for this ringbuffer
  */
 struct adreno_ringbuffer {
 	struct kgsl_device *device;
@@ -40,8 +42,10 @@ struct adreno_ringbuffer {
 	struct kgsl_memdesc buffer_desc;
 	unsigned int sizedwords;
 	unsigned int wptr;
+	unsigned int rptr;
 	unsigned int global_ts;
 	unsigned int last_wptr;
+	struct kgsl_event_group event;
 };
 
 /* enable timestamp (...scratch0) memory shadowing */
@@ -54,6 +58,9 @@ struct adreno_ringbuffer {
  */
 #define GSL_RB_PROTECTED_MODE_CONTROL		0x200001F2
 
+/* Returns the current ringbuffer */
+#define ADRENO_CURRENT_RINGBUFFER(a)	((a)->cur_rb)
+
 int adreno_ringbuffer_issueibcmds(struct kgsl_device_private *dev_priv,
 				struct kgsl_context *context,
 				struct kgsl_cmdbatch *cmdbatch,
@@ -64,13 +71,11 @@ int adreno_ringbuffer_submitcmd(struct adreno_device *adreno_dev,
 
 int adreno_ringbuffer_init(struct kgsl_device *device);
 
-int adreno_ringbuffer_warm_start(struct adreno_ringbuffer *rb);
+int adreno_ringbuffer_warm_start(struct adreno_device *adreno_dev);
 
-int adreno_ringbuffer_cold_start(struct adreno_ringbuffer *rb);
+int adreno_ringbuffer_cold_start(struct adreno_device *adreno_dev);
 
-void adreno_ringbuffer_stop(struct adreno_ringbuffer *rb);
-
-void adreno_ringbuffer_close(struct adreno_ringbuffer *rb);
+void adreno_ringbuffer_close(struct adreno_device *adreno_dev);
 
 unsigned int adreno_ringbuffer_issuecmds(struct kgsl_device *device,
 					struct adreno_context *drawctxt,

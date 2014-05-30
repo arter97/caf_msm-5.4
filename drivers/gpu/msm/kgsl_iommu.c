@@ -534,6 +534,7 @@ kgsl_iommu_disable_clk_on_ts(struct kgsl_mmu *mmu,
 				unsigned int ts, int unit)
 {
 	struct kgsl_iommu_disable_clk_param *param;
+	struct kgsl_iommu *iommu = mmu->priv;
 
 	param = kzalloc(sizeof(*param), GFP_KERNEL);
 	if (!param)
@@ -543,7 +544,7 @@ kgsl_iommu_disable_clk_on_ts(struct kgsl_mmu *mmu,
 	param->unit = unit;
 	param->ts = ts;
 
-	if (kgsl_add_event(mmu->device, &mmu->device->iommu_events,
+	if (kgsl_add_event(mmu->device, &iommu->events,
 			ts, kgsl_iommu_clk_disable_event, param)) {
 		KGSL_DRV_ERR(mmu->device,
 			"Failed to add IOMMU disable clk event\n");
@@ -1283,19 +1284,17 @@ static int kgsl_iommu_setstate(struct kgsl_mmu *mmu,
 {
 	int ret = 0;
 
-	if (mmu->flags & KGSL_FLAGS_STARTED) {
-		/* page table not current, then setup mmu to use new
-		 *  specified page table
-		 */
-		if (mmu->hwpagetable != pagetable) {
-			unsigned int flags = 0;
-			mmu->hwpagetable = pagetable;
-			flags |= kgsl_mmu_pt_get_flags(mmu->hwpagetable,
-							mmu->device->id) |
-							KGSL_MMUFLAGS_TLBFLUSH;
-			ret = kgsl_setstate(mmu, context_id,
-				KGSL_MMUFLAGS_PTUPDATE | flags);
-		}
+	/* page table not current, then setup mmu to use new
+	 *  specified page table
+	 */
+	if (mmu->hwpagetable != pagetable) {
+		unsigned int flags = 0;
+		mmu->hwpagetable = pagetable;
+		flags |= kgsl_mmu_pt_get_flags(mmu->hwpagetable,
+						mmu->device->id) |
+						KGSL_MMUFLAGS_TLBFLUSH;
+		ret = kgsl_setstate(mmu, context_id,
+			KGSL_MMUFLAGS_PTUPDATE | flags);
 	}
 
 	return ret;
@@ -1343,6 +1342,8 @@ static int kgsl_iommu_init(struct kgsl_mmu *mmu)
 	iommu = kzalloc(sizeof(struct kgsl_iommu), GFP_KERNEL);
 	if (!iommu)
 		return -ENOMEM;
+
+	kgsl_add_event_group(&iommu->events, NULL, "iommu");
 
 	mmu->priv = iommu;
 	status = kgsl_get_iommu_ctxt(mmu);
@@ -1414,6 +1415,8 @@ static int kgsl_iommu_init(struct kgsl_mmu *mmu)
 
 done:
 	if (status) {
+		if (iommu)
+			kgsl_del_event_group(&iommu->events);
 		kfree(iommu);
 		mmu->priv = NULL;
 	}
@@ -1497,7 +1500,7 @@ static void kgsl_iommu_lock_rb_in_tlb(struct kgsl_mmu *mmu)
 	if (!iommu->sync_lock_initialized)
 		return;
 
-	rb = &adreno_dev->ringbuffer;
+	rb = ADRENO_CURRENT_RINGBUFFER(adreno_dev);
 	num_tlb_entries = rb->buffer_desc.size / PAGE_SIZE;
 
 	for (i = 0; i < iommu->unit_count; i++) {
@@ -1580,9 +1583,6 @@ static int kgsl_iommu_start(struct kgsl_mmu *mmu)
 	int sctlr_val = 0;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(mmu->device);
 
-	if (mmu->flags & KGSL_FLAGS_STARTED)
-		return 0;
-
 	if (mmu->defaultpagetable == NULL) {
 		status = kgsl_iommu_setup_defaultpagetable(mmu);
 		if (status)
@@ -1645,7 +1645,6 @@ static int kgsl_iommu_start(struct kgsl_mmu *mmu)
 				cp_nop_packet(1));
 
 	kgsl_iommu_disable_clk(mmu, KGSL_IOMMU_MAX_UNITS);
-	mmu->flags |= KGSL_FLAGS_STARTED;
 
 done:
 	return status;
@@ -1824,22 +1823,18 @@ static void kgsl_iommu_pagefault_resume(struct kgsl_mmu *mmu)
 
 static void kgsl_iommu_stop(struct kgsl_mmu *mmu)
 {
+	struct kgsl_iommu *iommu = mmu->priv;
 	/*
 	 *  stop device mmu
 	 *
 	 *  call this with the global lock held
+	 *  detach iommu attachment
 	 */
-	if (mmu->flags & KGSL_FLAGS_STARTED) {
-		/* detach iommu attachment */
-		kgsl_detach_pagetable_iommu_domain(mmu);
-		mmu->hwpagetable = NULL;
+	kgsl_detach_pagetable_iommu_domain(mmu);
+	mmu->hwpagetable = NULL;
 
-		mmu->flags &= ~KGSL_FLAGS_STARTED;
-
-		kgsl_iommu_pagefault_resume(mmu);
-	}
-	/* switch off MMU clocks and cancel any events it has queued */
-	kgsl_cancel_events(mmu->device, &mmu->device->iommu_events);
+	kgsl_iommu_pagefault_resume(mmu);
+	kgsl_cancel_events(mmu->device, &iommu->events);
 }
 
 static int kgsl_iommu_close(struct kgsl_mmu *mmu)
@@ -1870,6 +1865,8 @@ static int kgsl_iommu_close(struct kgsl_mmu *mmu)
 	kgsl_free(iommu->sync_lock_desc.sg);
 	memset(&iommu->sync_lock_desc, 0, sizeof(iommu->sync_lock_desc));
 	iommu->sync_lock_vars = NULL;
+
+	kgsl_del_event_group(&iommu->events);
 
 	kfree(iommu);
 

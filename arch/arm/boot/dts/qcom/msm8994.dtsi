@@ -208,6 +208,22 @@
 	ranges = <0 0 0 0xffffffff>;
 	compatible = "simple-bus";
 
+	arm64-cpu-erp@f9100000 {
+		compatible = "arm,arm64-cpu-erp";
+		reg = <0xf9100000 0x1000>;
+		reg-names = "cci";
+		interrupts = <0 328 0>,
+			     <0 329 0>,
+			     <0 330 0>,
+			     <0 331 0>,
+			     <0 22 0>;
+		interrupt-names = "pri-dbe-irq",
+				  "sec-dbe-irq",
+				  "pri-ext-irq",
+				  "sec-ext-irq",
+				  "cci-irq";
+	};
+
 	acc0:clock-controller@f908b004 {
 		compatible = "qcom,arm-cortex-acc";
 		reg = <0xf9070000 0x1000>,
@@ -351,7 +367,7 @@
 	};
 
 
-	uartblsp1dm2: serial@f991f000 {
+	blsp1_uart3: serial@f991f000 {
 		compatible = "qcom,msm-lsuart-v14";
 		reg = <0xf991f000 0x1000>;
 		interrupts = <0 109 0>;
@@ -361,13 +377,13 @@
 			<&clock_gcc clk_gcc_blsp1_ahb_clk>;
 	};
 
-	uartblsp1dm1: serial@f991e000 {
+	blsp1_uart2: serial@f991e000 {
 		compatible = "qcom,msm-lsuart-v14";
 		reg = <0xf991e000 0x1000>;
 		interrupts = <0 108 0>;
 		status = "disabled";
 		clock-names = "core_clk", "iface_clk";
-		clocks = <&clock_gcc clk_gcc_blsp1_uart3_apps_clk>,
+		clocks = <&clock_gcc clk_gcc_blsp1_uart2_apps_clk>,
 			<&clock_gcc clk_gcc_blsp1_ahb_clk>;
 	};
 
@@ -2130,3 +2146,4 @@
 #include "msm8994-iommu-domains.dtsi"
 #include "msm8994-camera.dtsi"
 #include "msm8994-gpu.dtsi"
+#include "msm8994-pm.dtsi"
