@@ -28,7 +28,7 @@
 #define ODU_IPA_IPV6_HDR_NAME "odu_hsic_ipv6"
 #define HSIC_TO_IPA_CLIENT		IPA_CLIENT_HSIC1_PROD
 #define IPA_TO_HSIC_CLIENT		IPA_CLIENT_HSIC1_CONS
-#define ENDIANESS_SWAP_SYS_CLIENT	IPA_CLIENT_HSIC2_CONS
+#define IPA_TO_SYS_CLIENT		IPA_CLIENT_HSIC2_CONS
 
 #define INACTIVITY_MSEC_DELAY 1000
 #define DEFAULT_OUTSTANDING_HIGH 64
@@ -131,6 +131,7 @@ enum odu_ipa_operation {
 struct odu_ipa_dev {
 	struct net_device *net;
 	struct odu_ipa_hw_hdr_info hw_hdr_info;
+	int (*tx_fixup)(struct sk_buff *skb);
 	void (*set_hw_rx_flags)(int flags);
 	void (*hw_nway_reset)(void);
 	u32 tx_enable;
@@ -290,6 +291,7 @@ int odu_ipa_init(struct odu_ipa_params *params)
 
 	params->odu_ipa_tx_dp_notify = odu_ipa_tx_complete_notify;
 	params->priv = (void *)odu_ipa_ctx;
+	odu_ipa_ctx->tx_fixup = params->tx_fixup;
 	odu_ipa_ctx->set_hw_rx_flags = params->set_hw_rx_flags;
 	odu_ipa_ctx->hw_nway_reset = params->hw_nway_reset;
 	odu_ipa_ctx->state = ODU_IPA_INITIALIZED;
@@ -393,8 +395,8 @@ int odu_ipa_add_hw_hdr_info(struct odu_ipa_hw_hdr_info *hw_hdr_info,
 	ODU_IPA_DBG("Ethernet header insertion set\n");
 
 	/* setup SYS2BAM pipe for endianess swap */
-	if (hw_hdr_info->tx.is_little_endian) {
-		ODU_IPA_DBG("hdr is little-endian, configure SYS pipe\n");
+	if (odu_ipa_ctx->tx_fixup || hw_hdr_info->tx.is_little_endian) {
+		ODU_IPA_DBG("configure SYS pipe\n");
 		result = odu_ipa_setup_sys_pipe(odu_ipa_ctx);
 		if (result) {
 			ODU_IPA_ERR("fail on setup sys pipe\n");
@@ -424,7 +426,7 @@ int odu_ipa_add_hw_hdr_info(struct odu_ipa_hw_hdr_info *hw_hdr_info,
 fail_register_tx:
 	unregister_netdev(odu_ipa_ctx->net);
 fail_register_netdev:
-	if (hw_hdr_info->tx.is_little_endian)
+	if (odu_ipa_ctx->tx_fixup || hw_hdr_info->tx.is_little_endian)
 		odu_ipa_teardown_sys_pipe(odu_ipa_ctx);
 fail_setup_sys_pipe:
 	odu_ipa_rules_destroy(odu_ipa_ctx);
@@ -821,7 +823,8 @@ void odu_ipa_cleanup(void *priv)
 
 	odu_ipa_deregister_properties(odu_ipa_ctx);
 
-	if (odu_ipa_ctx->hw_hdr_info.tx.is_little_endian)
+	if (odu_ipa_ctx->tx_fixup ||
+	    odu_ipa_ctx->hw_hdr_info.tx.is_little_endian)
 		odu_ipa_teardown_sys_pipe(odu_ipa_ctx);
 
 	odu_ipa_destory_rm_resource(odu_ipa_ctx);
@@ -928,7 +931,7 @@ static int odu_ipa_setup_sys_pipe(struct odu_ipa_dev *odu_ipa_ctx)
 
 	memset(&sys_connect_params, 0, sizeof(sys_connect_params));
 	sys_connect_params.desc_fifo_sz = IPA_ODU_SYS_DESC_FIFO_SZ;
-	sys_connect_params.client = ENDIANESS_SWAP_SYS_CLIENT;
+	sys_connect_params.client = IPA_TO_SYS_CLIENT;
 	sys_connect_params.notify = odu_ipa_sys_pipe_rx_cb;
 	sys_connect_params.priv = odu_ipa_ctx;
 	sys_connect_params.ipa_ep_cfg.aggr.aggr_en = IPA_BYPASS_AGGR;
@@ -1016,18 +1019,27 @@ static int odu_ipa_send_dl_skb(struct sk_buff *skb, void *priv)
 	struct odu_ipa_dev *odu_ipa_ctx = priv;
 	int ret;
 
-	/* add hw header to skb */
-	memcpy(skb_push(skb, odu_ipa_ctx->hw_hdr_info.tx.hdr_len),
-		odu_ipa_ctx->hw_hdr_info.tx.raw_hdr,
-		odu_ipa_ctx->hw_hdr_info.tx.hdr_len);
+	if (odu_ipa_ctx->tx_fixup) {
+		ret = odu_ipa_ctx->tx_fixup(skb);
+		if (ret) {
+			ODU_IPA_ERR("tx_fixup failed (%d)\n", ret);
+			return ret;
+		}
+	} else {
+		/* add hw header to skb */
+		memcpy(skb_push(skb, odu_ipa_ctx->hw_hdr_info.tx.hdr_len),
+			odu_ipa_ctx->hw_hdr_info.tx.raw_hdr,
+			odu_ipa_ctx->hw_hdr_info.tx.hdr_len);
 
-	/* add the packet length to the header */
-	if (odu_ipa_ctx->hw_hdr_info.tx.hdr_ofst_pkt_size_valid) {
-		u16 *pkt_len_ptr = (u16 *)(skb->data +
-			odu_ipa_ctx->hw_hdr_info.tx.hdr_ofst_pkt_size);
-		*pkt_len_ptr = skb->len - odu_ipa_ctx->hw_hdr_info.tx.hdr_len;
-		if (!odu_ipa_ctx->hw_hdr_info.tx.is_little_endian)
-			*pkt_len_ptr = htons(*pkt_len_ptr);
+		/* add the packet length to the header */
+		if (odu_ipa_ctx->hw_hdr_info.tx.hdr_ofst_pkt_size_valid) {
+			u16 *pkt_len_ptr = (u16 *)(skb->data +
+				odu_ipa_ctx->hw_hdr_info.tx.hdr_ofst_pkt_size);
+			*pkt_len_ptr = skb->len -
+				odu_ipa_ctx->hw_hdr_info.tx.hdr_len;
+			if (!odu_ipa_ctx->hw_hdr_info.tx.is_little_endian)
+				*pkt_len_ptr = htons(*pkt_len_ptr);
+		}
 	}
 
 	ret = ipa_tx_dp(IPA_TO_HSIC_CLIENT, skb, NULL);
@@ -1070,8 +1082,9 @@ static int odu_ipa_register_properties(struct odu_ipa_dev *odu_ipa_ctx)
 
 	ODU_IPA_LOG_ENTRY();
 
-	dst_pipe = odu_ipa_ctx->hw_hdr_info.tx.is_little_endian ?
-		ENDIANESS_SWAP_SYS_CLIENT :
+	dst_pipe = (odu_ipa_ctx->tx_fixup ||
+		odu_ipa_ctx->hw_hdr_info.tx.is_little_endian) ?
+		IPA_TO_SYS_CLIENT :
 		IPA_TO_HSIC_CLIENT;
 
 	tx_properties.prop = properties;
@@ -1292,10 +1305,23 @@ static void odu_ipa_sys_pipe_rx_cb(void *priv,
 		return;
 	}
 
-	pkt_len_ptr = (u16 *)(skb->data +
-		odu_ipa_ctx->hw_hdr_info.tx.hdr_ofst_pkt_size);
-	*pkt_len_ptr = (((*pkt_len_ptr) & 0xFF00) >> 8) |
+	if (odu_ipa_ctx->hw_hdr_info.tx.hdr_ofst_pkt_size_valid) {
+		pkt_len_ptr = (u16 *)(skb->data +
+			odu_ipa_ctx->hw_hdr_info.tx.hdr_ofst_pkt_size);
+		*pkt_len_ptr = (((*pkt_len_ptr) & 0xFF00) >> 8) |
 			(((*pkt_len_ptr) & 0x00FF) << 8);
+	}
+
+	if (odu_ipa_ctx->tx_fixup) {
+		/* first remove header added by IPA */
+		skb_pull(skb, odu_ipa_ctx->hw_hdr_info.tx.hdr_len);
+		result = odu_ipa_ctx->tx_fixup(skb);
+		if (result) {
+			ODU_IPA_ERR("tx_fixup failed (%d)\n", result);
+			dev_kfree_skb_any(skb);
+			return;
+		}
+	}
 
 	result = ipa_tx_dp(IPA_TO_HSIC_CLIENT, skb, NULL);
 	if (result) {
@@ -1448,7 +1474,8 @@ static int odu_ipa_ep_registers_cfg(struct odu_ipa_dev *odu_ipa_ctx)
 	}
 	/* configure TX (IPA->HSIC) EP */
 	memset(&ipa_to_hsic_ep_cfg, 0, sizeof(struct ipa_ep_cfg));
-	if (!odu_ipa_ctx->hw_hdr_info.tx.is_little_endian) {
+	if (!odu_ipa_ctx->tx_fixup &&
+	    !odu_ipa_ctx->hw_hdr_info.tx.is_little_endian) {
 		ipa_to_hsic_ep_cfg.aggr.aggr_en = IPA_BYPASS_AGGR;
 		ipa_to_hsic_ep_cfg.hdr.hdr_len =
 			odu_ipa_ctx->hw_hdr_info.tx.hdr_len + ETH_HLEN;
