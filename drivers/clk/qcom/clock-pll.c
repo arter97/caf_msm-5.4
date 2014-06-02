@@ -166,8 +166,12 @@ static int sr2_pll_clk_enable(struct clk *c)
 	struct pll_clk *pll = to_pll_clk(c);
 	int ret = 0, count;
 	u32 mode = readl_relaxed(PLL_MODE_REG(pll));
+	u32 lockmask = pll->masks.lock_mask ?: PLL_LOCKED_BIT;
 
 	spin_lock_irqsave(&pll_reg_lock, flags);
+
+	if (pll->masks.apc_pdn_mask)
+		mode &= ~pll->masks.apc_pdn_mask;
 
 	/* Disable PLL bypass mode. */
 	mode |= PLL_BYPASSNL;
@@ -186,12 +190,12 @@ static int sr2_pll_clk_enable(struct clk *c)
 
 	/* Wait for pll to lock. */
 	for (count = ENABLE_WAIT_MAX_LOOPS; count > 0; count--) {
-		if (readl_relaxed(PLL_STATUS_REG(pll)) & PLL_LOCKED_BIT)
+		if (readl_relaxed(PLL_STATUS_REG(pll)) & lockmask)
 			break;
 		udelay(1);
 	}
 
-	if (!(readl_relaxed(PLL_STATUS_REG(pll)) & PLL_LOCKED_BIT))
+	if (!(readl_relaxed(PLL_STATUS_REG(pll)) & lockmask))
 		pr_err("PLL %s didn't lock after enabling it!\n", c->dbg_name);
 
 	/* Enable PLL output. */
@@ -221,6 +225,12 @@ static void __variable_rate_pll_init(struct clk *c)
 		regval &= ~pll->masks.pre_div_mask;
 		regval |= pll->vals.pre_div_masked;
 	}
+
+	if (pll->masks.main_output_mask)
+		regval |= pll->masks.main_output_mask;
+
+	if (pll->masks.early_output_mask)
+		regval |= pll->masks.early_output_mask;
 
 	if (pll->vals.enable_mn)
 		regval |= pll->masks.mn_en_mask;
@@ -284,10 +294,11 @@ static int local_pll_clk_enable(struct clk *c)
 	return 0;
 }
 
-static void __pll_clk_disable_reg(void __iomem *mode_reg)
+static void __pll_clk_disable_reg(void __iomem *mode_reg, u32 apc_pdn_mask)
 {
 	u32 mode = readl_relaxed(mode_reg);
 	mode &= ~PLL_MODE_MASK;
+	mode |= apc_pdn_mask;
 	writel_relaxed(mode, mode_reg);
 }
 
@@ -301,7 +312,7 @@ static void local_pll_clk_disable(struct clk *c)
 	 * the bypass mode, and assert the reset.
 	 */
 	spin_lock_irqsave(&pll_reg_lock, flags);
-	__pll_clk_disable_reg(PLL_MODE_REG(pll));
+	__pll_clk_disable_reg(PLL_MODE_REG(pll), pll->masks.apc_pdn_mask);
 	spin_unlock_irqrestore(&pll_reg_lock, flags);
 }
 

@@ -43,7 +43,7 @@
 
 #define WCD9XXX_MBHC_DEF_BUTTONS 8
 #define WCD9XXX_MBHC_DEF_RLOADS 5
-#define TAIKO_EXT_CLK_RATE 9600000
+#define DEFAULT_MCLK_RATE 9600000
 
 static int msm_btsco_rate = BTSCO_RATE_8KHZ;
 static int msm_btsco_ch = 1;
@@ -72,7 +72,7 @@ static struct wcd9xxx_mbhc_config wcd9xxx_mbhc_cfg = {
 	.calibration = NULL,
 	.micbias = MBHC_MICBIAS2,
 	.anc_micbias = MBHC_MICBIAS2,
-	.mclk_rate = TAIKO_EXT_CLK_RATE,
+	.mclk_rate = DEFAULT_MCLK_RATE,
 	.gpio = 0,
 	.gpio_irq = 0,
 	.gpio_level_insert = 0,
@@ -193,6 +193,8 @@ struct cdc_pdm_pinctrl_info {
 	struct pinctrl_state *cdc_pdm_act;
 	struct pinctrl_state *cross_conn_det_sus;
 	struct pinctrl_state *cross_conn_det_act;
+	struct pinctrl_state *ext_pa_sus;
+	struct pinctrl_state *ext_pa_act;
 };
 
 struct ext_cdc_tlmm_pinctrl_info {
@@ -567,7 +569,8 @@ static int msm8x16_enable_codec_ext_clk(struct snd_soc_codec *codec,
 				cancel_delayed_work_sync(
 					&pdata->enable_mclk_work);
 			} else {
-				pdata->digital_cdc_clk.clk_val = 9600000;
+				pdata->digital_cdc_clk.clk_val =
+							pdata->mclk_freq;
 				afe_set_digital_codec_core_clock(
 						AFE_PORT_ID_PRIMARY_MI2S_RX,
 						&pdata->digital_cdc_clk);
@@ -577,6 +580,7 @@ static int msm8x16_enable_codec_ext_clk(struct snd_soc_codec *codec,
 			msm8x16_wcd_mclk_enable(codec, 1, dapm);
 		}
 	} else {
+		msm8x16_wcd_mclk_enable(codec, 0, dapm);
 		mutex_lock(&pdata->cdc_mclk_mutex);
 		atomic_set(&pdata->mclk_rsc_ref, 0);
 		cancel_delayed_work_sync(&pdata->enable_mclk_work);
@@ -586,7 +590,6 @@ static int msm8x16_enable_codec_ext_clk(struct snd_soc_codec *codec,
 				&pdata->digital_cdc_clk);
 		atomic_set(&pdata->dis_work_mclk, false);
 		mutex_unlock(&pdata->cdc_mclk_mutex);
-		msm8x16_wcd_mclk_enable(codec, 0, dapm);
 	}
 	return ret;
 }
@@ -655,15 +658,27 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 static int msm8x16_mclk_event(struct snd_soc_dapm_widget *w,
 			      struct snd_kcontrol *kcontrol, int event)
 {
+	struct msm8916_asoc_mach_data *pdata = NULL;
+
+	pdata = snd_soc_card_get_drvdata(w->codec->card);
 	pr_debug("%s: event = %d\n", __func__, event);
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMD:
-		return msm8x16_enable_codec_ext_clk(w->codec, 0, true);
+		pr_debug("%s: mclk_res_ref = %d\n",
+			__func__, atomic_read(&pdata->mclk_rsc_ref));
+		if (!pdata->codec_type) {
+			if (atomic_read(&pdata->mclk_rsc_ref) == 0) {
+				pr_debug("%s: disabling MCLK\n", __func__);
+				msm8x16_enable_codec_ext_clk(w->codec, 0, true);
+				pinctrl_select_state(pinctrl_info.pinctrl,
+						pinctrl_info.cdc_pdm_sus);
+			}
+		}
+		break;
 	default:
 		pr_err("%s: invalid DAPM event %d\n", __func__, event);
 		return -EINVAL;
 	}
-
 	return 0;
 }
 
@@ -683,12 +698,12 @@ static void msm_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 		if (ret < 0)
 			pr_err("%s:clock disable failed; ret=%d\n", __func__,
 					ret);
-		pinctrl_select_state(pinctrl_info.pinctrl,
-					pinctrl_info.cdc_pdm_sus);
-		ret = msm8x16_enable_codec_ext_clk(codec, 0, true);
-		if (ret < 0)
-			pr_err("%s: failed to disable the mclk; ret=%d\n",
-					__func__, ret);
+		if (atomic_read(&pdata->mclk_rsc_ref) > 0) {
+			atomic_dec(&pdata->mclk_rsc_ref);
+			pr_debug("%s: decrementing mclk_res_ref %d\n",
+					__func__,
+					atomic_read(&pdata->mclk_rsc_ref));
+		}
 	} else {
 		ret = pinctrl_select_state(ext_cdc_pinctrl_info.pinctrl,
 					ext_cdc_pinctrl_info.tlmm_act);
@@ -707,6 +722,54 @@ static void msm_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 	}
 }
 
+static int conf_int_codec_mux(struct msm8916_asoc_mach_data *pdata)
+{
+	int ret = 0;
+	int val = 0;
+	void __iomem *vaddr = NULL;
+
+	/*
+	 *configure the Primary, Sec and Tert mux for Mi2S interface
+	 * slave select to invalid state, for machine mode this
+	 * should move to HW, I do not like to do it here
+	 */
+	vaddr = ioremap(LPASS_CSR_GP_IO_MUX_SPKR_CTL , 4);
+	if (!vaddr) {
+		pr_err("%s ioremap failure for addr %x",
+				__func__, LPASS_CSR_GP_IO_MUX_SPKR_CTL);
+		return -ENOMEM;
+	}
+	val = ioread32(vaddr);
+	val = val | 0x00030300;
+	if (pdata->ext_pa) {
+		/* enable sec MI2S interface to TLMM GPIO */
+		val = val | 0x0004007E;
+		pr_debug("%s: mux configuration = %x\n", __func__, val);
+		ret = pinctrl_select_state(pinctrl_info.pinctrl,
+					pinctrl_info.ext_pa_act);
+		if (ret < 0) {
+			pr_err("%s: Failed to configure the ext pa gpio's\n",
+						__func__);
+			iounmap(vaddr);
+			return ret;
+		}
+	}
+	iowrite32(val, vaddr);
+	iounmap(vaddr);
+	vaddr = ioremap(LPASS_CSR_GP_IO_MUX_MIC_CTL , 4);
+	if (!vaddr) {
+		pr_err("%s ioremap failure for addr %x",
+				__func__, LPASS_CSR_GP_IO_MUX_MIC_CTL);
+		return -ENOMEM;
+	}
+	val = ioread32(vaddr);
+	val = val | 0x00200000;
+	iowrite32(val, vaddr);
+	iounmap(vaddr);
+	return ret;
+}
+
+
 static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
@@ -722,47 +785,21 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 		 substream->name, substream->stream);
 
 	if (!pdata->codec_type) {
-		/* configure the Primary, Sec and Tert mux for Mi2S interface
-		 * slave select to invalid state, for machine mode this
-		 * should move to HW, I do not like to do it here
-		 */
-		vaddr = ioremap(LPASS_CSR_GP_IO_MUX_SPKR_CTL , 4);
-		if (!vaddr) {
-			pr_err("%s ioremap failure for addr %x",
-					__func__, LPASS_CSR_GP_IO_MUX_SPKR_CTL);
-			return -ENOMEM;
-		}
-		val = ioread32(vaddr);
-		val = val | 0x00030300;
-		iowrite32(val, vaddr);
-		iounmap(vaddr);
-		vaddr = ioremap(LPASS_CSR_GP_IO_MUX_MIC_CTL , 4);
-		if (!vaddr) {
-			pr_err("%s ioremap failure for addr %x",
-					__func__, LPASS_CSR_GP_IO_MUX_MIC_CTL);
-			return -ENOMEM;
-		}
-		val = ioread32(vaddr);
-		iounmap(vaddr);
-		val = val | 0x00200000;
-		vaddr = ioremap(LPASS_CSR_GP_IO_MUX_MIC_CTL , 4);
-		if (!vaddr) {
-			pr_err("%s: ioremap failure for addr %x",
-					__func__, LPASS_CSR_GP_IO_MUX_MIC_CTL);
-			return -ENOMEM;
-		}
-		iowrite32(val, vaddr);
-		iounmap(vaddr);
-		ret =  msm8x16_enable_codec_ext_clk(codec, 1, true);
+		ret = conf_int_codec_mux(pdata);
 		if (ret < 0) {
-			pr_err("%s: failed to enable mclk; ret=%d\n",
-					__func__, ret);
+			pr_err("%s: failed to conf internal codec mux\n",
+					__func__);
 			return ret;
 		}
 		ret = mi2s_clk_ctl(substream, true);
 		if (ret < 0) {
 			pr_err("%s: failed to enable sclk %d\n",
 					__func__, ret);
+			return ret;
+		}
+		ret =  msm8x16_enable_codec_ext_clk(codec, 1, true);
+		if (ret < 0) {
+			pr_err("failed to enable mclk\n");
 			return ret;
 		}
 		/* Reset the CDC PDM TLMM pins to a default state */
@@ -788,7 +825,6 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 		val = val | 0x00000002;
 		iowrite32(val, vaddr);
 		iounmap(vaddr);
-
 		vaddr = ioremap(LPASS_CSR_GP_IO_MUX_MIC_CTL , 4);
 		if (!vaddr) {
 			pr_err("%s: ioremap failure for addr %x",
@@ -1774,9 +1810,12 @@ static int msm8x16_asoc_machine_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card;
 	struct msm8916_asoc_mach_data *pdata = NULL;
+	struct pinctrl *pinctrl;
 	const char *card_dev_id = "qcom,msm-snd-card-id";
 	const char *codec_type = "qcom,msm-codec-type";
 	const char *hs_micbias_type = "qcom,msm-hs-micbias-type";
+	const char *ext_pa = "qcom,msm-ext-pa";
+	const char *mclk = "qcom,msm-mclk-freq";
 	const char *ptr = NULL;
 	const char *type = NULL;
 	int ret, id;
@@ -1808,6 +1847,15 @@ static int msm8x16_asoc_machine_probe(struct platform_device *pdev)
 		ret = -EINVAL;
 		goto err;
 	}
+
+	ret = of_property_read_u32(pdev->dev.of_node, mclk, &id);
+	if (ret) {
+		dev_err(&pdev->dev,
+			"%s: missing %s in dt node\n", __func__, card_dev_id);
+		id = DEFAULT_MCLK_RATE;
+	}
+	pdata->mclk_freq = id;
+
 	ret = of_property_read_string(pdev->dev.of_node, codec_type, &ptr);
 	if (ret) {
 		dev_err(&pdev->dev,
@@ -1843,6 +1891,39 @@ static int msm8x16_asoc_machine_probe(struct platform_device *pdev)
 		card = &bear_cards[pdev->id];
 		dev_info(&pdev->dev, "default codec configured\n");
 		pdata->codec_type = 0;
+		ret = of_property_read_u32(pdev->dev.of_node, ext_pa, &id);
+		if (ret) {
+			dev_err(&pdev->dev,
+				"%s: missing %s in dt node\n",
+				__func__, ext_pa);
+			goto err;
+		}
+		pdata->ext_pa = id;
+		if (pdata->ext_pa) {
+			pinctrl = devm_pinctrl_get(&pdev->dev);
+			if (IS_ERR(pinctrl)) {
+				pr_err("%s: Unable to get pinctrl handle\n",
+					__func__);
+				return -EINVAL;
+			}
+			pinctrl_info.pinctrl = pinctrl;
+			/* get pinctrl handle for ext_pa */
+			pinctrl_info.ext_pa_sus = pinctrl_lookup_state(pinctrl,
+							"cdc_ext_pa_sus");
+			if (IS_ERR(pinctrl_info.ext_pa_sus)) {
+				pr_err("%s: Unable to get pinctrl disable handle\n",
+								  __func__);
+				return -EINVAL;
+			}
+			/* get pinctrl handle for ext_pa */
+			pinctrl_info.ext_pa_act = pinctrl_lookup_state(pinctrl,
+							"cdc_ext_pa_act");
+			if (IS_ERR(pinctrl_info.ext_pa_act)) {
+				pr_err("%s: Unable to get pinctrl disable handle\n",
+								  __func__);
+				return -EINVAL;
+			}
+		}
 	}
 
 	ret = of_property_read_string(pdev->dev.of_node,
@@ -1863,7 +1944,7 @@ static int msm8x16_asoc_machine_probe(struct platform_device *pdev)
 	/* initialize the mclk */
 	pdata->digital_cdc_clk.i2s_cfg_minor_version =
 					AFE_API_VERSION_I2S_CONFIG;
-	pdata->digital_cdc_clk.clk_val = 9600000;
+	pdata->digital_cdc_clk.clk_val = pdata->mclk_freq;
 	pdata->digital_cdc_clk.clk_root = 5;
 	pdata->digital_cdc_clk.reserved = 0;
 	ret = cdc_pdm_get_pinctrl(pdev);

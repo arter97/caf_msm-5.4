@@ -63,7 +63,12 @@
 #define CODEC_DT_MAX_PROP_SIZE			40
 #define MSM8X16_DIGITAL_CODEC_REG_SIZE		0x400
 #define MAX_ON_DEMAND_SUPPLY_NAME_LENGTH	64
-#define TOMBAK_MCLK_CLK_9P6MHZ			9600000
+
+/*
+ *50 Milliseconds sufficient for DSP bring up in the modem
+ * after Sub System Restart
+ */
+#define ADSP_STATE_READY_TIMEOUT_MS 50
 
 enum {
 	AIF1_PB = 0,
@@ -187,7 +192,6 @@ struct msm8x16_wcd_spmi msm8x16_wcd_modules[MAX_MSM8X16_WCD_DEVICE];
 static void *modem_state_notifier;
 
 static struct snd_soc_codec *registered_codec;
-#define ADSP_STATE_READY_TIMEOUT_MS 2000
 
 static int get_spmi_msm8x16_wcd_device_info(u16 *reg,
 			struct msm8x16_wcd_spmi **msm8x16_wcd)
@@ -332,7 +336,7 @@ static int __msm8x16_wcd_reg_read(struct snd_soc_codec *codec,
 	else if (MSM8X16_WCD_IS_DIGITAL_REG(reg)) {
 		mutex_lock(&pdata->cdc_mclk_mutex);
 		if (atomic_read(&pdata->dis_work_mclk) == false) {
-			pdata->digital_cdc_clk.clk_val = 9600000;
+			pdata->digital_cdc_clk.clk_val = pdata->mclk_freq;
 			ret = afe_set_digital_codec_core_clock(
 					AFE_PORT_ID_PRIMARY_MI2S_RX,
 					&pdata->digital_cdc_clk);
@@ -383,7 +387,7 @@ static int __msm8x16_wcd_reg_write(struct snd_soc_codec *codec,
 		mutex_lock(&pdata->cdc_mclk_mutex);
 		if (atomic_read(&pdata->dis_work_mclk) == false) {
 			pr_debug("MCLK not enabled %s:\n", __func__);
-			pdata->digital_cdc_clk.clk_val = 9600000;
+			pdata->digital_cdc_clk.clk_val = pdata->mclk_freq;
 			ret = afe_set_digital_codec_core_clock(
 					AFE_PORT_ID_PRIMARY_MI2S_RX,
 					&pdata->digital_cdc_clk);
@@ -671,6 +675,7 @@ static int msm8x16_wcd_codec_enable_charge_pump(struct snd_soc_dapm_widget *w,
 		struct snd_kcontrol *kcontrol, int event)
 {
 	struct snd_soc_codec *codec = w->codec;
+	struct msm8x16_wcd_priv *msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
 
 	dev_dbg(codec->dev, "%s: event = %d\n", __func__, event);
 	switch (event) {
@@ -693,10 +698,17 @@ static int msm8x16_wcd_codec_enable_charge_pump(struct snd_soc_dapm_widget *w,
 			snd_soc_update_bits(codec,
 					MSM8X16_WCD_A_DIGITAL_CDC_DIG_CLK_CTL,
 					0x80, 0x00);
-		else
+		else {
 			snd_soc_update_bits(codec,
 					MSM8X16_WCD_A_DIGITAL_CDC_DIG_CLK_CTL,
-					0xC0, 0x00);
+					0x40, 0x00);
+			if (msm8x16_wcd->rx_bias_count == 0)
+				snd_soc_update_bits(codec,
+					MSM8X16_WCD_A_DIGITAL_CDC_DIG_CLK_CTL,
+					0x80, 0x00);
+			dev_dbg(codec->dev, "%s: rx_bias_count = %d\n",
+					__func__, msm8x16_wcd->rx_bias_count);
+		}
 		break;
 	}
 	return 0;
@@ -2008,35 +2020,21 @@ static int msm8x16_wcd_codec_enable_rx_bias(struct snd_soc_dapm_widget *w,
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		msm8x16_wcd->rx_bias_count++;
-		if (msm8x16_wcd->rx_bias_count == 1) {
-			if (!(strcmp(w->name, "SPK_RX_BIAS"))) {
-				snd_soc_update_bits(codec,
-					MSM8X16_WCD_A_ANALOG_RX_COM_BIAS_DAC,
-					0x81, 0x80);
-			} else {
-				snd_soc_update_bits(codec,
+		if (msm8x16_wcd->rx_bias_count == 1)
+			snd_soc_update_bits(codec,
 					MSM8X16_WCD_A_ANALOG_RX_COM_BIAS_DAC,
 					0x81, 0x81);
-			}
-		}
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		msm8x16_wcd->rx_bias_count--;
-		if (msm8x16_wcd->rx_bias_count == 0) {
-			if (!(strcmp(w->name, "SPK_RX_BIAS"))) {
-				snd_soc_update_bits(codec,
+		if (msm8x16_wcd->rx_bias_count == 0)
+			snd_soc_update_bits(codec,
 					MSM8X16_WCD_A_ANALOG_RX_COM_BIAS_DAC,
 					0x81, 0x00);
-			} else {
-				snd_soc_update_bits(codec,
-					MSM8X16_WCD_A_ANALOG_RX_COM_BIAS_DAC,
-					0x81, 0x00);
-			}
-		}
 		break;
 	}
-	dev_dbg(codec->dev, "%s bias_count = %d\n", __func__,
-			msm8x16_wcd->rx_bias_count);
+	dev_dbg(codec->dev, "%s rx_bias_count = %d\n",
+			__func__, msm8x16_wcd->rx_bias_count);
 	return 0;
 }
 
@@ -2325,6 +2323,9 @@ static void msm8x16_wcd_shutdown(struct snd_pcm_substream *substream,
 static int msm8x16_wcd_codec_enable_clock_block(struct snd_soc_codec *codec,
 						int enable)
 {
+	struct msm8916_asoc_mach_data *pdata = NULL;
+
+	pdata = snd_soc_card_get_drvdata(codec->card);
 	if (enable) {
 		snd_soc_update_bits(codec,
 			MSM8X16_WCD_A_CDC_CLK_MCLK_CTL, 0x01, 0x01);
@@ -2336,6 +2337,12 @@ static int msm8x16_wcd_codec_enable_clock_block(struct snd_soc_codec *codec,
 			MSM8X16_WCD_A_DIGITAL_CDC_RST_CTL, 0x80, 0x80);
 		snd_soc_update_bits(codec,
 			MSM8X16_WCD_A_DIGITAL_CDC_TOP_CLK_CTL, 0x0C, 0x0C);
+		if (pdata->mclk_freq == 12288000)
+			snd_soc_update_bits(codec,
+				MSM8X16_WCD_A_CDC_TOP_CTL, 0x01, 0x00);
+		else if (pdata->mclk_freq == 9600000)
+			snd_soc_update_bits(codec,
+				MSM8X16_WCD_A_CDC_TOP_CTL, 0x01, 0x01);
 	} else {
 		snd_soc_update_bits(codec,
 			MSM8X16_WCD_A_DIGITAL_CDC_TOP_CLK_CTL, 0x0C, 0x00);
@@ -2919,6 +2926,18 @@ static struct regulator *wcd8x16_wcd_codec_find_regulator(
 static int msm8x16_wcd_device_down(struct snd_soc_codec *codec)
 {
 	dev_dbg(codec->dev, "%s: device down!\n", __func__);
+	msm8x16_wcd_write(codec,
+		MSM8X16_WCD_A_ANALOG_TX_1_EN, 0x3);
+	msm8x16_wcd_write(codec,
+		MSM8X16_WCD_A_ANALOG_TX_2_EN, 0x3);
+	msm8x16_wcd_write(codec,
+		MSM8X16_WCD_A_ANALOG_RX_HPH_L_PA_DAC_CTL, 0x20);
+	msm8x16_wcd_write(codec,
+		MSM8X16_WCD_A_ANALOG_RX_HPH_R_PA_DAC_CTL, 0x20);
+	msm8x16_wcd_write(codec,
+		MSM8X16_WCD_A_ANALOG_RX_EAR_CTL, 0x12);
+	msm8x16_wcd_write(codec,
+		MSM8X16_WCD_A_ANALOG_SPKR_DAC_CTL, 0x93);
 
 	msm8x16_wcd_write(codec, MSM8X16_WCD_A_DIGITAL_PERPH_RESET_CTL4, 0x1);
 	msm8x16_wcd_write(codec, MSM8X16_WCD_A_ANALOG_PERPH_RESET_CTL4, 0x1);
@@ -2982,21 +3001,28 @@ static int modem_state_callback(struct notifier_block *nb, unsigned long value,
 		dev_dbg(registered_codec->dev,
 			"ADSP is about to power up. bring up codec\n");
 
-		timeout = jiffies +
-			  msecs_to_jiffies(ADSP_STATE_READY_TIMEOUT_MS);
-		while (!(timedout = time_after(jiffies, timeout))) {
-			if (!q6core_is_adsp_ready()) {
-				dev_dbg(registered_codec->dev,
-					"ADSP isn't ready\n");
-			} else {
-				dev_dbg(registered_codec->dev,
-					"ADSP is ready\n");
-				msm8x16_wcd_device_up(registered_codec);
-				break;
+		if (!q6core_is_adsp_ready()) {
+			dev_dbg(registered_codec->dev,
+				"ADSP isn't ready\n");
+			timeout = jiffies +
+				  msecs_to_jiffies(ADSP_STATE_READY_TIMEOUT_MS);
+			while (!(timedout = time_after(jiffies, timeout))) {
+				if (!q6core_is_adsp_ready()) {
+					dev_dbg(registered_codec->dev,
+						"ADSP isn't ready\n");
+				} else {
+					dev_dbg(registered_codec->dev,
+						"ADSP is ready\n");
+					break;
+				}
 			}
+		} else {
+			dev_dbg(registered_codec->dev,
+				"%s: DSP is ready\n", __func__);
 		}
-	}
 
+		msm8x16_wcd_device_up(registered_codec);
+	}
 	return NOTIFY_OK;
 }
 
@@ -3105,12 +3131,150 @@ static int msm8x16_wcd_codec_remove(struct snd_soc_codec *codec)
 	return 0;
 }
 
+static int msm8x16_wcd_enable_static_supplies_to_optimum(
+				struct msm8x16_wcd *msm8x16,
+				struct msm8x16_wcd_pdata *pdata)
+{
+	int i;
+	int ret = 0;
+
+	for (i = 0; i < msm8x16->num_of_supplies; i++) {
+		if (pdata->regulator[i].ondemand)
+			continue;
+		if (regulator_count_voltages(msm8x16->supplies[i].consumer) <=
+			0)
+			continue;
+
+		ret = regulator_set_voltage(msm8x16->supplies[i].consumer,
+			pdata->regulator[i].min_uv,
+			pdata->regulator[i].max_uv);
+		if (ret) {
+			dev_err(msm8x16->dev,
+				"Setting volt failed for regulator %s err %d\n",
+				msm8x16->supplies[i].supply, ret);
+		}
+
+		ret = regulator_set_optimum_mode(msm8x16->supplies[i].consumer,
+			pdata->regulator[i].optimum_ua);
+		dev_dbg(msm8x16->dev, "Regulator %s set optimum mode\n",
+			 msm8x16->supplies[i].supply);
+	}
+
+	return ret;
+}
+
+static int msm8x16_wcd_disable_static_supplies_to_optimum(
+			struct msm8x16_wcd *msm8x16,
+			struct msm8x16_wcd_pdata *pdata)
+{
+	int i;
+	int ret = 0;
+
+	for (i = 0; i < msm8x16->num_of_supplies; i++) {
+		if (pdata->regulator[i].ondemand)
+			continue;
+		if (regulator_count_voltages(msm8x16->supplies[i].consumer) <=
+			0)
+			continue;
+		regulator_set_voltage(msm8x16->supplies[i].consumer, 0,
+			pdata->regulator[i].max_uv);
+		regulator_set_optimum_mode(msm8x16->supplies[i].consumer, 0);
+		dev_dbg(msm8x16->dev, "Regulator %s set optimum mode\n",
+				 msm8x16->supplies[i].supply);
+	}
+
+	return ret;
+}
+
+int msm8x16_wcd_suspend(struct snd_soc_codec *codec)
+{
+	struct msm8916_asoc_mach_data *pdata = NULL;
+	struct msm8x16_wcd *msm8x16 = codec->control_data;
+	struct msm8x16_wcd_pdata *msm8x16_pdata = msm8x16->dev->platform_data;
+
+	pdata = snd_soc_card_get_drvdata(codec->card);
+	pr_debug("%s: mclk cnt = %d, dis_work_mclk = %d\n",
+			__func__, atomic_read(&pdata->mclk_rsc_ref),
+			atomic_read(&pdata->dis_work_mclk));
+	pr_debug("%s: mclk_act  = %d\n", __func__,
+			atomic_read(&pdata->mclk_act));
+	mutex_lock(&pdata->cdc_mclk_mutex);
+	if ((atomic_read(&pdata->dis_work_mclk) == true) ||
+		(atomic_read(&pdata->mclk_rsc_ref) > 0)) {
+		pdata->digital_cdc_clk.clk_val = 0;
+		afe_set_digital_codec_core_clock(
+					AFE_PORT_ID_PRIMARY_MI2S_RX,
+					&pdata->digital_cdc_clk);
+		/*
+		 * set mclk activity to resource as
+		 * it will get updated accordingly going further in this
+		 * function.
+		 */
+		atomic_set(&pdata->mclk_act, MCLK_SUS_RSC);
+		if (atomic_read(&pdata->dis_work_mclk) == true) {
+			cancel_delayed_work_sync(
+					&pdata->enable_mclk_work);
+			atomic_set(&pdata->mclk_act, MCLK_SUS_DIS);
+			atomic_set(&pdata->dis_work_mclk, false);
+		}
+	} else
+		/*
+		 * mark no activity on mclk in this suspend
+		 */
+		atomic_set(&pdata->mclk_act, MCLK_SUS_NO_ACT);
+	msm8x16_wcd_disable_static_supplies_to_optimum(msm8x16, msm8x16_pdata);
+	mutex_unlock(&pdata->cdc_mclk_mutex);
+	return 0;
+}
+
+int msm8x16_wcd_resume(struct snd_soc_codec *codec)
+{
+	struct msm8916_asoc_mach_data *pdata = NULL;
+	struct msm8x16_wcd *msm8x16 = codec->control_data;
+	struct msm8x16_wcd_pdata *msm8x16_pdata = msm8x16->dev->platform_data;
+
+	pdata = snd_soc_card_get_drvdata(codec->card);
+	msm8x16_wcd_enable_static_supplies_to_optimum(msm8x16, msm8x16_pdata);
+	pr_debug("%s: mclk cnt = %d, dis_work_mclk = %d\n",
+			__func__, atomic_read(&pdata->mclk_rsc_ref),
+			atomic_read(&pdata->dis_work_mclk));
+	pr_debug("%s: mclk_act = %d\n", __func__,
+			atomic_read(&pdata->mclk_act));
+	if (atomic_read(&pdata->mclk_act) == MCLK_SUS_NO_ACT)
+		/*
+		 * no activity in suspend just return
+		 */
+		return 0;
+	mutex_lock(&pdata->cdc_mclk_mutex);
+	if ((atomic_read(&pdata->dis_work_mclk) == false) ||
+		(atomic_read(&pdata->mclk_rsc_ref) > 0)) {
+		pdata->digital_cdc_clk.clk_val = pdata->mclk_freq;
+		afe_set_digital_codec_core_clock(
+					AFE_PORT_ID_PRIMARY_MI2S_RX,
+					&pdata->digital_cdc_clk);
+		if (atomic_read(&pdata->mclk_act) == MCLK_SUS_DIS) {
+			/*
+			 * MCLK activity marked as the disabled during suspend
+			 * this indicated MCLK was enabled to read and write the
+			 * AHB bus.
+			 */
+			atomic_set(&pdata->dis_work_mclk, true);
+			schedule_delayed_work(&pdata->enable_mclk_work, 50);
+		}
+	}
+	mutex_unlock(&pdata->cdc_mclk_mutex);
+	return 0;
+}
+
 static struct snd_soc_codec_driver soc_codec_dev_msm8x16_wcd = {
 	.probe	= msm8x16_wcd_codec_probe,
 	.remove	= msm8x16_wcd_codec_remove,
 
 	.read = msm8x16_wcd_read,
 	.write = msm8x16_wcd_write,
+
+	.suspend = msm8x16_wcd_suspend,
+	.resume = msm8x16_wcd_resume,
 
 	.readable_register = msm8x16_wcd_readable,
 	.volatile_register = msm8x16_wcd_volatile,

@@ -72,6 +72,7 @@ static void _dwc3_gadget_wakeup(struct dwc3 *dwc);
 
 struct dwc3_usb_gadget {
 	struct work_struct wakeup_work;
+	bool disable_during_lpm;
 	struct dwc3 *dwc;
 };
 
@@ -1385,8 +1386,23 @@ static int dwc3_gadget_ep_queue(struct usb_ep *ep, struct usb_request *request,
 	struct dwc3			*dwc = dep->dwc;
 
 	unsigned long			flags;
-
+	enum dwc3_link_state		link_state;
 	int				ret;
+	bool wakeup = false;
+
+	if (atomic_read(&dwc->in_lpm)) {
+		wakeup = true;
+	} else {
+		link_state = dwc3_get_link_state(dwc);
+		if (link_state == DWC3_LINK_STATE_RX_DET ||
+			link_state == DWC3_LINK_STATE_U3)
+			wakeup = true;
+	}
+
+	if (wakeup) {
+		dwc3_gadget_wakeup(&dwc->gadget);
+		return -EAGAIN;
+	}
 
 	spin_lock_irqsave(&dwc->lock, flags);
 
@@ -1420,6 +1436,11 @@ static int dwc3_gadget_ep_dequeue(struct usb_ep *ep,
 
 	unsigned long			flags;
 	int				ret = 0;
+
+	if (atomic_read(&dwc->in_lpm)) {
+		dev_err(dwc->dev, "Unable to dequeue while in LPM\n");
+		return -EAGAIN;
+	}
 
 	spin_lock_irqsave(&dwc->lock, flags);
 
@@ -1769,6 +1790,7 @@ static int dwc3_gadget_vbus_draw(struct usb_gadget *g, unsigned mA)
 static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 {
 	struct dwc3		*dwc = gadget_to_dwc(g);
+	struct dwc3_usb_gadget *dwc3_gadget = g->private;
 	unsigned long		flags;
 	int			ret;
 
@@ -1789,6 +1811,24 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 		 */
 		return 0;
 	}
+
+	/*
+	 * This insures that the core is not in LPM during the pullup
+	 * on/off toggling.
+	 */
+	spin_unlock_irqrestore(&dwc->lock, flags);
+	if (atomic_read(&dwc->in_lpm) && !is_on) {
+		pm_runtime_get_sync(dwc->dev);
+		if (dwc3_gadget)
+			dwc3_gadget->disable_during_lpm = true;
+	}
+
+	if (is_on && dwc3_gadget && dwc3_gadget->disable_during_lpm) {
+		pm_runtime_put_sync(dwc->dev);
+		if (dwc3_gadget)
+			dwc3_gadget->disable_during_lpm = false;
+	}
+	spin_lock_irqsave(&dwc->lock, flags);
 
 	ret = dwc3_gadget_run_stop(dwc, is_on);
 
@@ -2859,6 +2899,8 @@ static void dwc3_gadget_conndone_interrupt(struct dwc3 *dwc)
 		return;
 	}
 
+	dwc3_notify_event(dwc, DWC3_CONTROLLER_CONNDONE_EVENT);
+
 	/*
 	 * Configure PHY via GUSB3PIPECTLn if required.
 	 *
@@ -2994,6 +3036,7 @@ static void dwc3_gadget_suspend_interrupt(struct dwc3 *dwc,
 		spin_unlock(&dwc->lock);
 		dwc->gadget_driver->suspend(&dwc->gadget);
 		spin_lock(&dwc->lock);
+		pm_runtime_put(dwc->dev);
 	}
 
 	dwc->link_state = next;
@@ -3250,6 +3293,7 @@ int dwc3_gadget_init(struct dwc3 *dwc)
 		return -ENOMEM;
 	}
 	dwc3_gadget->dwc = dwc;
+	dwc3_gadget->disable_during_lpm = false;
 	INIT_WORK(&dwc3_gadget->wakeup_work, dwc3_gadget_wakeup_work);
 
 	dwc->ctrl_req = dma_alloc_coherent(dwc->dev, sizeof(*dwc->ctrl_req),

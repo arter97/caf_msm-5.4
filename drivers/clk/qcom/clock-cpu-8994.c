@@ -148,13 +148,15 @@ static struct pll_clk a57_pll0 = {
 	.alpha_reg = (void __iomem *)C1_PLL_ALPHA,
 	.config_reg = (void __iomem *)C1_PLL_USER_CTL,
 	.config_ctl_reg = (void __iomem *)C1_PLL_CONFIG_CTL,
-	.status_reg = (void __iomem *)C1_PLL_STATUS,
+	.status_reg = (void __iomem *)C1_PLL_MODE,
 	.masks = {
 		.pre_div_mask = BIT(12),
 		.post_div_mask = BM(9, 8),
 		.mn_en_mask = BIT(24),
 		.main_output_mask = BIT(0),
 		.early_output_mask = BIT(3),
+		.apc_pdn_mask = BIT(24),
+		.lock_mask = BIT(31),
 	},
 	.vals = {
 		.post_div_masked = 0x100,
@@ -179,13 +181,15 @@ static struct pll_clk a57_pll1 = {
 	.alpha_reg = (void __iomem *)C1_PLLA_ALPHA,
 	.config_reg = (void __iomem *)C1_PLLA_USER_CTL,
 	.config_ctl_reg = (void __iomem *)C1_PLLA_CONFIG_CTL,
-	.status_reg = (void __iomem *)C1_PLLA_STATUS,
+	.status_reg = (void __iomem *)C1_PLLA_MODE,
 	.masks = {
 		.pre_div_mask = BIT(12),
 		.post_div_mask = BM(9, 8),
 		.mn_en_mask = BIT(24),
 		.main_output_mask = BIT(0),
 		.early_output_mask = BIT(3),
+		.apc_pdn_mask = BIT(24),
+		.lock_mask = BIT(31),
 	},
 	.vals = {
 		.post_div_masked = 0x300,
@@ -212,13 +216,15 @@ static struct pll_clk a53_pll0 = {
 	.alpha_reg = (void __iomem *)C0_PLL_ALPHA,
 	.config_reg = (void __iomem *)C0_PLL_USER_CTL,
 	.config_ctl_reg = (void __iomem *)C0_PLL_CONFIG_CTL,
-	.status_reg = (void __iomem *)C0_PLL_STATUS,
+	.status_reg = (void __iomem *)C0_PLL_MODE,
 	.masks = {
 		.pre_div_mask = BIT(12),
 		.post_div_mask = BM(9, 8),
 		.mn_en_mask = BIT(24),
 		.main_output_mask = BIT(0),
 		.early_output_mask = BIT(3),
+		.apc_pdn_mask = BIT(24),
+		.lock_mask = BIT(31),
 	},
 	.vals = {
 		.post_div_masked = 0x100,
@@ -243,13 +249,15 @@ static struct pll_clk a53_pll1 = {
 	.alpha_reg = (void __iomem *)C0_PLLA_ALPHA,
 	.config_reg = (void __iomem *)C0_PLLA_USER_CTL,
 	.config_ctl_reg = (void __iomem *)C0_PLLA_CONFIG_CTL,
-	.status_reg = (void __iomem *)C0_PLLA_STATUS,
+	.status_reg = (void __iomem *)C0_PLLA_MODE,
 	.masks = {
 		.pre_div_mask = BIT(12),
 		.post_div_mask = BM(9, 8),
 		.mn_en_mask = BIT(24),
 		.main_output_mask = BIT(0),
 		.early_output_mask = BIT(3),
+		.apc_pdn_mask = BIT(24),
+		.lock_mask = BIT(31),
 	},
 	.vals = {
 		.post_div_masked = 0x300,
@@ -863,31 +871,21 @@ static void perform_v1_fixup(void)
 	 * 3. Configure the PLL to generate 1.5936 GHz.
 	 */
 	a53_pll1.c.ops->disable(&a53_pll1.c);
-	a57_pll1.c.ops->disable(&a57_pll1.c);
 
 	/* Set the divider on the PLL1 input to the A53 LF MUX (div 2) */
 	regval = readl_relaxed(vbases[ALIAS0_GLB_BASE] + MUX_OFFSET);
 	regval |= BIT(6);
 	writel_relaxed(regval, vbases[ALIAS0_GLB_BASE] + MUX_OFFSET);
 
-	/* Set the divider on the PLL1 input to the A57 LF MUX (div 2) */
-	regval = readl_relaxed(vbases[ALIAS1_GLB_BASE] + MUX_OFFSET);
-	regval |= BIT(6);
-	writel_relaxed(regval, vbases[ALIAS1_GLB_BASE] + MUX_OFFSET);
-
 	a53_pll1.c.ops->set_rate(&a53_pll1.c, 1593600000);
-	a57_pll1.c.ops->set_rate(&a57_pll1.c, 1593600000);
 
 	a53_pll1.c.rate = 1593600000;
-	a57_pll1.c.rate = 1593600000;
 
-	/* Enable the A53 and A57 secondary PLLs */
+	/* Enable the A53 secondary PLL */
 	a53_pll1.c.ops->enable(&a53_pll1.c);
-	a57_pll1.c.ops->enable(&a57_pll1.c);
 
-	/* Select the "safe" parent on the secondary muxes */
+	/* Select the "safe" parent on the secondary mux */
 	__cpu_mux_set_sel(&a53_lf_mux, 1);
-	__cpu_mux_set_sel(&a57_lf_mux, 1);
 }
 
 static int cpu_clock_8994_driver_probe(struct platform_device *pdev)
@@ -1072,6 +1070,10 @@ int __init cpu_clock_8994_init_a57(void)
 	a57_pll1.c.ops->enable(&a57_pll1.c);
 
 	__cpu_mux_set_sel(&a57_lf_mux, safe_sel);
+
+	/* Set the cached mux selections to match what was programmed above. */
+	a57_lf_mux.en_mask = safe_sel;
+	a57_hf_mux.en_mask = lfmux_sel;
 
 	iounmap(vbases[ALIAS1_GLB_BASE]);
 	iounmap(vbases[C1_PLL_BASE]);
