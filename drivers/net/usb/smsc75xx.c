@@ -82,7 +82,7 @@ MODULE_PARM_DESC(turbo_mode, "Enable multiple frames per Rx transaction");
 
 static const bool disable_rx_flow_control = true;
 static const bool disable_tx_flow_control = false;
-
+static const bool enable_fcs_stripping = true;
 
 static int __must_check smsc75xx_read_reg(struct usbnet *dev, u32 index,
 					  u32 *data)
@@ -1000,7 +1000,9 @@ static int smsc75xx_reset(struct usbnet *dev)
 	ret = smsc75xx_read_reg(dev, MAC_RX, &buf);
 	check_warn_return(ret, "Failed to read MAC_RX: %d", ret);
 
-	buf |= MAC_RX_RXEN | MAC_RX_FCS_STRIP;
+	buf |= MAC_RX_RXEN;
+	if (enable_fcs_stripping)
+		buf |= MAC_RX_FCS_STRIP;
 
 	ret = smsc75xx_write_reg(dev, MAC_RX, buf);
 	check_warn_return(ret, "Failed to write MAC_RX: %d", ret);
@@ -1149,8 +1151,8 @@ static int smsc75xx_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 			if (skb->len == size) {
 				smsc75xx_rx_csum_offload(dev, skb, rx_cmd_a,
 					rx_cmd_b);
-
-				skb_trim(skb, skb->len - 4); /* remove fcs */
+				if (!enable_fcs_stripping) /* remove fcs */
+					skb_trim(skb, skb->len - 4);
 				skb->truesize = size + sizeof(struct sk_buff);
 
 				return 1;
@@ -1169,7 +1171,8 @@ static int smsc75xx_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 			smsc75xx_rx_csum_offload(dev, ax_skb, rx_cmd_a,
 				rx_cmd_b);
 
-			skb_trim(ax_skb, ax_skb->len - 4); /* remove fcs */
+			if (!enable_fcs_stripping)/* remove fcs */
+				skb_trim(ax_skb, ax_skb->len - 4);
 			ax_skb->truesize = size + sizeof(struct sk_buff);
 
 			usbnet_skb_return(dev, ax_skb);
