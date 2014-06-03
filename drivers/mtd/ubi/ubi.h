@@ -675,6 +675,7 @@ struct ubi_ainf_volume {
  * @mean_ec: mean erase counter value
  * @ec_sum: a temporary variable used when calculating @mean_ec
  * @ec_count: a temporary variable used when calculating @mean_ec
+ * @failed_fm: set to true if fm faound invalid during attach
  * @aeb_slab_cache: slab cache for &struct ubi_ainf_peb objects
  *
  * This data structure contains the result of attaching an MTD device and may
@@ -701,6 +702,7 @@ struct ubi_attach_info {
 	int mean_ec;
 	uint64_t ec_sum;
 	int ec_count;
+	int failed_fm;
 	struct kmem_cache *aeb_slab_cache;
 };
 
