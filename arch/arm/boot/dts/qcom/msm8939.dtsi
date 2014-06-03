@@ -216,6 +216,7 @@
 #include "msm8939-mdss.dtsi"
 #include "msm8939-iommu-domains.dtsi"
 #include "msm8939-camera.dtsi"
+#include "msm8939-mdss-pll.dtsi"
 
 &soc {
 	#address-cells = <1>;
@@ -768,14 +769,25 @@
 			<0xb1d0000 0x00040>;
 		reg-names = "cc_base", "apcs_c0_base",
 				"apcs_c1_base", "apcs_cci_base";
-		vdd_dig-supply = <&pm8916_s1_corner>;
-		vdd_sr2_dig-supply = <&pm8916_s1_corner_ao>;
+		vdd_dig-supply = <&pm8916_s2_corner>;
+		vdd_sr2_dig-supply = <&pm8916_s2_corner_ao>;
 		vdd_sr2_pll-supply = <&pm8916_l7_ao>;
-		vdd_hf_dig-supply = <&pm8916_s1_corner_ao>;
+		vdd_hf_dig-supply = <&pm8916_s2_corner_ao>;
 		vdd_hf_pll-supply = <&pm8916_l7_ao>;
 		clocks = <&clock_rpm clk_xo_clk_src>,
                          <&clock_rpm clk_xo_a_clk_src>;
 		clock-names = "xo", "xo_a";
+		#clock-cells = <1>;
+	};
+
+	clock_gcc_mdss: qcom,gcc-mdss@1a98300 {
+		compatible = "qcom,gcc-mdss-8936";
+		clocks = <&mdss_dsi0_pll clk_pixel_clk_src>,
+			 <&mdss_dsi0_pll clk_byte_clk_src>,
+			 <&mdss_dsi0_pll clk_pixel_clk_src>,
+			 <&mdss_dsi0_pll clk_byte_clk_src>;
+		clock-names = "pclk0_src", "byte0_src", "pclk1_src",
+				 "byte1_src";
 		#clock-cells = <1>;
 	};
 
@@ -1228,6 +1240,11 @@
 			compatible = "qcom,msm-imem-mem_dump_table";
 			reg = <0x10 8>;
 		};
+
+		pil@94c {
+			compatible = "qcom,msm-imem-pil";
+			reg = <0x94c 200>;
+		};
 	};
 
 	blsp1_uart1: serial@78af000 {
@@ -1642,6 +1659,9 @@
 };
 
 &gdsc_oxili_gx {
+	clock-names = "core_clk";
+	clocks = <&clock_gcc clk_gfx3d_clk_src>;
+	qcom,enable-root-clk;
 	status = "okay";
 };
 
@@ -1653,6 +1673,7 @@
 	status = "okay";
 };
 
+#include "msm-pm8916-rpm-regulator.dtsi"
 #include "msm-pm8916.dtsi"
 #include "msm8939-regulator.dtsi"
 

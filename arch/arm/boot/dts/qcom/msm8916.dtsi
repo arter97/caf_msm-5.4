@@ -97,7 +97,7 @@
 			linux,reserve-contiguous-region;
 			linux,reserve-region;
 			linux,remove-completely;
-			reg = <0x0 0x8e200000 0x0 0x0900000>;
+			reg = <0x0 0x86000000 0x0 0x0800000>;
 			label = "external_image_mem";
 		};
 
@@ -105,7 +105,7 @@
 			linux,reserve-contiguous-region;
 			linux,reserve-region;
 			linux,remove-completely;
-			reg = <0x0 0x88800000 0x0 0x05a00000>;
+			reg = <0x0 0x86800000 0x0 0x04e00000>;
 			label = "modem_adsp_mem";
 		};
 
@@ -113,14 +113,8 @@
 			linux,reserve-contiguous-region;
 			linux,reserve-region;
 			linux,remove-completely;
-			reg = <0x0 0x8eb00000 0x0 0x0600000>;
+			reg = <0x0 0x8b600000 0x0 0x0600000>;
 			label = "peripheral_mem";
-		};
-
-		venus_mem: venus_region@0 {
-			linux,reserve-contiguous-region;
-			reg = <0 0x8f100000 0 0x0500000>;
-			label = "venus_mem";
 		};
 
 		secure_mem: secure_region@0 {
@@ -129,10 +123,11 @@
 			label = "secure_mem";
 		};
 
-		qseecom_mem: qseecom_region@0 {
+		venus_qseecom_mem: venus_qseecom_region@0 {
                         linux,reserve-contiguous-region;
-			reg = <0 0 0 0xd00000>;
-			label = "qseecom_mem";
+			linux,memory-limit = <0x90000000>;
+			reg = <0 0 0 0x1200000>;
+			label = "venus_qseecom_mem";
 		};
 
 		audio_mem: audio_region@0 {
@@ -503,7 +498,6 @@
 		qcom,hsusb-otg-phy-type = <2>;
 		qcom,hsusb-otg-mode = <1>;
 		qcom,hsusb-otg-otg-control = <2>;
-		qcom,ahb-async-bridge-bypass;
 		qcom,dp-manual-pullup;
 
 		qcom,msm-bus,name = "usb2";
@@ -526,26 +520,25 @@
 		reg = <0x086000c8 0xc8>;
 		qcom,android-usb-swfi-latency = <1>;
 		qcom,android-usb-uicc-nluns = /bits/ 8 <1>;
-		qcom,streaming-func = "rmnet";
 	};
 
 	qcom,rmtfs_sharedmem@8e580000 {
 		compatible = "qcom,sharedmem-uio";
-		reg = <0x8e580000 0x160000>;
+		reg = <0x86700000 0xe0000>;
 		reg-names = "rmtfs";
 		qcom,client-id = <0x00000001>;
 	};
 
 	qcom,dsp_sharedmem@8e6e0000 {
 		compatible = "qcom,sharedmem-uio";
-		reg = <0x8e6e0000 0x20000>;
+		reg = <0x867e0000 0x20000>;
 		reg-names = "rfsa_dsp";
 		qcom,client-id = <0x011013ec>;
 	};
 
 	qcom,mdm_sharedmem@8e6e0000 {
 		compatible = "qcom,sharedmem-uio";
-		reg = <0x8e6e0000 0x20000>;
+		reg = <0x867e0000 0x20000>;
 		reg-names = "rfsa_mdm";
 		qcom,client-id = <0x011013ed>;
 	};
@@ -723,9 +716,9 @@
 		status = "disabled";
 	};
 
-	qcom_seecom: qseecom@8e700000 {
+	qcom_seecom: qseecom@86000000 {
 		compatible = "qcom,qseecom";
-		reg = <0x8e700000 0x300000>;
+		reg = <0x86000000 0x300000>;
 		reg-names = "secapp-region";
 		qcom,disk-encrypt-pipe-pair = <2>;
 		qcom,hlos-ce-hw-instance = <0>;
@@ -1556,7 +1549,7 @@
 		qcom,pas-id = <9>;
 		qcom,proxy-timeout-ms = <5000>;
 		qcom,firmware-name = "venus";
-		linux,contiguous-region = <&venus_mem>;
+		linux,contiguous-region = <&venus_qseecom_mem>;
 	};
 
 	qcom,msm-thermal {
