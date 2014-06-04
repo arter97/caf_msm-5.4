@@ -163,7 +163,6 @@ struct gbam_port {
 	spinlock_t		port_lock;
 
 	struct grmnet		*port_usb;
-	struct grmnet		*gr;
 
 	struct bam_ch_info	data_ch;
 
@@ -899,7 +898,7 @@ static void gbam_start(void *param, enum usb_bam_pipe_dir dir)
 	struct bam_ch_info *d;
 
 	if (port) {
-		dev = port_to_rmnet(port->gr);
+		dev = port_to_rmnet(port->port_usb);
 		d = &port->data_ch;
 	} else {
 		pr_err("%s: port is NULL\n", __func__);
@@ -1207,7 +1206,7 @@ static void gbam2bam_connect_work(struct work_struct *w)
 
 	port->is_connected = true;
 	d = &port->data_ch;
-	dev = port_to_rmnet(port->gr);
+	dev = port_to_rmnet(port->port_usb);
 
 	if (dev && dev->cdev)
 		gadget = dev->cdev->gadget;
@@ -1490,7 +1489,7 @@ static int gbam_wake_cb(void *param)
 	struct bam_ch_info *d;
 	struct f_rmnet		*dev;
 
-	dev = port_to_rmnet(port->gr);
+	dev = port_to_rmnet(port->port_usb);
 	d = &port->data_ch;
 
 	pr_debug("%s: woken up by peer\n", __func__);
@@ -1564,7 +1563,7 @@ static void gbam2bam_resume_work(struct work_struct *w)
 	}
 
 	d = &port->data_ch;
-	dev = port_to_rmnet(port->gr);
+	dev = port_to_rmnet(port->port_usb);
 	gadget = dev->cdev->gadget;
 
 	ret = usb_bam_register_wake_cb(d->dst_connection_idx, NULL, NULL);
@@ -1602,7 +1601,7 @@ static int gbam_peer_reset_cb(void *param)
 	struct usb_gadget *gadget;
 	int ret;
 
-	dev = port_to_rmnet(port->gr);
+	dev = port_to_rmnet(port->port_usb);
 	d = &port->data_ch;
 
 	gadget = dev->cdev->gadget;
@@ -1981,7 +1980,7 @@ void gbam_disconnect(struct grmnet *gr, u8 port_num, enum transport_type trans)
 	spin_lock_irqsave(&port->port_lock, flags);
 
 	d = &port->data_ch;
-	port->gr = gr;
+	port->port_usb = gr;
 
 	if (trans == USB_GADGET_XPORT_BAM)
 		gbam_free_buffers(port);
@@ -2097,11 +2096,9 @@ int gbam_connect(struct grmnet *gr, u8 port_num,
 	spin_unlock_irqrestore(&port->port_lock_ul, flags_ul);
 
 	if (d->trans == USB_GADGET_XPORT_BAM2BAM) {
-		port->gr = gr;
 		d->src_connection_idx = src_connection_idx;
 		d->dst_connection_idx = dst_connection_idx;
 	} else if (d->trans == USB_GADGET_XPORT_BAM2BAM_IPA) {
-		port->gr = gr;
 		d->src_connection_idx = src_connection_idx;
 		d->dst_connection_idx = dst_connection_idx;
 		d->ipa_params.src_pipe = &(d->src_pipe_idx);
