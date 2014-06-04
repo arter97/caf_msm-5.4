@@ -182,8 +182,8 @@ enum {
 struct swap_info_struct {
 	unsigned long	flags;		/* SWP_USED etc: see above */
 	signed short	prio;		/* swap priority of this type */
+	struct list_head list;		/* entry in swap list */
 	signed char	type;		/* strange name for an index */
-	signed char	next;		/* next type on the swap list */
 	unsigned int	max;		/* extent of the swap_map */
 	unsigned char *swap_map;	/* vmalloc'ed array of usage counts */
 	unsigned int lowest_bit;	/* index of first free in swap_map */
@@ -215,11 +215,6 @@ struct swap_info_struct {
 					 * swap_lock. If both locks need hold,
 					 * hold swap_lock first.
 					 */
-};
-
-struct swap_list_t {
-	int head;	/* head of priority-ordered swapfile list */
-	int next;	/* swapfile to be used next */
 };
 
 /* linux/mm/page_alloc.c */
