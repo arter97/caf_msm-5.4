@@ -1470,6 +1470,14 @@ static void handle_fbd(enum command_response cmd, void *data)
 				fill_buf_done->timestamp_lo;
 			vb->v4l2_buf.timestamp =
 				ns_to_timeval(time_usec * NSEC_PER_USEC);
+		} else {
+			vb->v4l2_buf.timestamp = ns_to_timeval(0);
+			dprintk(VIDC_INFO,
+					"Set zero timestamp for buffer 0x%pa, filled: %d, (hi:%d, lo:%d)\n",
+					&fill_buf_done->packet_buffer1,
+					fill_buf_done->filled_len1,
+					fill_buf_done->timestamp_hi,
+					fill_buf_done->timestamp_lo);
 		}
 		vb->v4l2_buf.flags = 0;
 		extra_idx =
@@ -1545,7 +1553,8 @@ static void handle_fbd(enum command_response cmd, void *data)
 		dprintk(VIDC_DBG,
 		"Got fbd from hal: device_addr: 0x%pa, alloc: %d, filled: %d, offset: %d, ts: %lld, flags: 0x%x, crop: %d %d %d %d, pic_type: 0x%x\n",
 		&fill_buf_done->packet_buffer1, fill_buf_done->alloc_len1,
-		fill_buf_done->filled_len1, fill_buf_done->offset1, time_usec,
+		fill_buf_done->filled_len1, fill_buf_done->offset1,
+		timeval_to_ns(&vb->v4l2_buf.timestamp) / NSEC_PER_USEC,
 		fill_buf_done->flags1, fill_buf_done->start_x_coord,
 		fill_buf_done->start_y_coord, fill_buf_done->frame_width,
 		fill_buf_done->frame_height, fill_buf_done->picture_type);
