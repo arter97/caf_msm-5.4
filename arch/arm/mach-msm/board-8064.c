@@ -2747,7 +2747,7 @@ static struct platform_device *mplatform_common_devices[] __initdata = {
 
 static struct platform_device *mplatform_devices[] __initdata = {
 	&apq8064_mplatform_device_uart_gsbi2,
-	&apq8064_mplatform_device_uart_gsbi6,
+	&apq8064_mplatform_device_uart_gsbi3,
 };
 
 static struct platform_device *cdp_devices[] __initdata = {

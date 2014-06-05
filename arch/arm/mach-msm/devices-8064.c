@@ -273,6 +273,13 @@ struct platform_device apq8064_device_uart_gsbi3 = {
 	.resource	= resources_uart_gsbi3,
 };
 
+struct platform_device apq8064_mplatform_device_uart_gsbi3 = {
+	.name	= "msm_serial_hsl",
+	.id	= 3,
+	.num_resources	= ARRAY_SIZE(resources_uart_gsbi3),
+	.resource	= resources_uart_gsbi3,
+};
+
 static struct resource resources_qup_i2c_gsbi3[] = {
 	{
 		.name	= "gsbi_qup_i2c_addr",

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1894,33 +1894,6 @@ struct platform_device msm8960_device_qup_i2c_gsbi3 = {
 	.id		= 3,
 	.num_resources	= ARRAY_SIZE(resources_qup_i2c_gsbi3),
 	.resource	= resources_qup_i2c_gsbi3,
-};
-
-static struct resource resources_mplatform_uart_gsbi6[] = {
-	{
-		.start  = GSBI6_UARTDM_IRQ,
-		.end    = GSBI6_UARTDM_IRQ,
-		.flags  = IORESOURCE_IRQ,
-	},
-	{
-		.start  = MSM_UART6DM_PHYS,
-		.end    = MSM_UART6DM_PHYS + PAGE_SIZE - 1,
-		.name   = "uartdm_resource",
-		.flags  = IORESOURCE_MEM,
-	},
-	{
-		.start  = MSM_GSBI6_PHYS,
-		.end    = MSM_GSBI6_PHYS + PAGE_SIZE - 1,
-		.name   = "gsbi_resource",
-		.flags  = IORESOURCE_MEM,
-	},
-};
-
-struct platform_device apq8064_mplatform_device_uart_gsbi6 = {
-   .name   = "msm_serial_hsl",
-   .id = 3,
-   .num_resources  = ARRAY_SIZE(resources_mplatform_uart_gsbi6),
-   .resource   = resources_mplatform_uart_gsbi6,
 };
 
 static struct resource resources_qup_i2c_gsbi9[] = {
