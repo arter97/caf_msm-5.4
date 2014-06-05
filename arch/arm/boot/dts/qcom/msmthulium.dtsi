@@ -194,3 +194,5 @@
 		reg = <0x8c3b64 0x4>;
 	};
 };
+
+/include/ "msmthulium-regulator.dtsi"

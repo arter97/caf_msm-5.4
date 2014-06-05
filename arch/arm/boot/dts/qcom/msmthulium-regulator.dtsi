@@ -1,0 +1,379 @@
+/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/* Stub regulators */
+
+/ {
+	/* PMthulium S1 + S6 = 2 phase VDD_CX supply */
+	pmthulium_s1_corner: regulator-pmthulium-s1-corner {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium_s1_corner";
+		qcom,hpm-min-load = <100000>;
+		regulator-min-microvolt = <1>;
+		regulator-max-microvolt = <7>;
+	};
+
+	pmthulium_s1_floor_corner: regulator-pmthulium-s1-floor-corner {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium_s1_floor_corner";
+		qcom,hpm-min-load = <100000>;
+		regulator-min-microvolt = <1>;
+		regulator-max-microvolt = <7>;
+	};
+
+	pmthulium_s1_corner_ao: regulator-pmthulium-s1-corner-ao {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium_s1_corner_ao";
+		qcom,hpm-min-load = <100000>;
+		regulator-min-microvolt = <1>;
+		regulator-max-microvolt = <7>;
+	};
+
+	/* PMthulium S2 + S12 = 2 phase VDD_MX supply */
+	pmthulium_s2_corner: regulator-pmthulium-s2-corner {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium_s2_corner";
+		qcom,hpm-min-load = <100000>;
+		regulator-min-microvolt = <1>;
+		regulator-max-microvolt = <7>;
+	};
+
+	pmthulium_s2_corner_ao: regulator-pmthulium-s2-corner-ao {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium_s2_corner_ao";
+		qcom,hpm-min-load = <100000>;
+		regulator-min-microvolt = <1>;
+		regulator-max-microvolt = <7>;
+	};
+
+	pmthulium_s3: regulator-pmthulium-s3 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-s3";
+		qcom,hpm-min-load = <100000>;
+		regulator-min-microvolt = <1300000>;
+		regulator-max-microvolt = <1300000>;
+	};
+
+	pmthulium_s4: regulator-pmthulium-s4 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-s4";
+		qcom,hpm-min-load = <100000>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+	};
+
+	pmthulium_s5: regulator-pmthulium-s5 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-s5";
+		qcom,hpm-min-load = <100000>;
+		regulator-min-microvolt = <2150000>;
+		regulator-max-microvolt = <2150000>;
+	};
+
+	pmthulium_s7: regulator-pmthulium-s7 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-s7";
+		qcom,hpm-min-load = <100000>;
+		regulator-min-microvolt = <800000>;
+		regulator-max-microvolt = <800000>;
+	};
+
+	/* PMthulium S8 + S9 + S10 + S11 = 4 phase VDD_APC supply */
+	pmthulium_s8: regulator-pmthulium-s8 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-s8";
+		qcom,hpm-min-load = <100000>;
+		regulator-min-microvolt = <800000>;
+		regulator-max-microvolt = <800000>;
+	};
+
+	pmthulium_l1: regulator-pmthulium-l1 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l1";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <1000000>;
+		regulator-max-microvolt = <1000000>;
+	};
+
+	pmthulium_l2: regulator-pmthulium-l2 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l2";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <1250000>;
+		regulator-max-microvolt = <1250000>;
+	};
+
+	pmthulium_l3: regulator-pmthulium-l3 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l3";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <875000>;
+		regulator-max-microvolt = <875000>;
+	};
+
+	pmthulium_l4: regulator-pmthulium-l4 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l4";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <1225000>;
+		regulator-max-microvolt = <1225000>;
+	};
+
+	pmthulium_l6: regulator-pmthulium-l6 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l6";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
+	};
+
+	pmthulium_l8: regulator-pmthulium-l8 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l8";
+		qcom,hpm-min-load = <5000>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+	};
+
+	pmthulium_l9: regulator-pmthulium-l9 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l9";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+	};
+
+	pmthulium_l10: regulator-pmthulium-l10 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l10";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+	};
+
+	pmthulium_l11: regulator-pmthulium-l11 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l11";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
+	};
+
+	pmthulium_l12: regulator-pmthulium-l12 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l12";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+	};
+
+	pmthulium_l13: regulator-pmthulium-l13 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l13";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <2950000>;
+	};
+
+	pmthulium_l14: regulator-pmthulium-l14 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l14";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+	};
+
+	pmthulium_l15: regulator-pmthulium-l15 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l15";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+	};
+
+	pmthulium_l16: regulator-pmthulium-l16 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l16";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <2700000>;
+		regulator-max-microvolt = <2700000>;
+	};
+
+	pmthulium_l17: regulator-pmthulium-l17 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l17";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <2700000>;
+		regulator-max-microvolt = <2700000>;
+	};
+
+	pmthulium_l18: regulator-pmthulium-l18 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l18";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <2850000>;
+		regulator-max-microvolt = <2850000>;
+	};
+
+	pmthulium_l19: regulator-pmthulium-l19 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l19";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
+	};
+
+	pmthulium_l20: regulator-pmthulium-l20 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l20";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <2950000>;
+		regulator-max-microvolt = <2950000>;
+	};
+
+	pmthulium_l21: regulator-pmthulium-l21 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l21";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <2950000>;
+		regulator-max-microvolt = <2950000>;
+	};
+
+	pmthulium_l22: regulator-pmthulium-l22 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l22";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <3000000>;
+		regulator-max-microvolt = <3000000>;
+	};
+
+	pmthulium_l23: regulator-pmthulium-l23 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l23";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
+	};
+
+	pmthulium_l24: regulator-pmthulium-l24 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l24";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <3075000>;
+		regulator-max-microvolt = <3075000>;
+	};
+
+	pmthulium_l25: regulator-pmthulium-l25 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l25";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
+	};
+
+	pmthulium_l26: regulator-pmthulium-l26 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l26";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <800000>;
+		regulator-max-microvolt = <800000>;
+	};
+
+	pmthulium_l27: regulator-pmthulium-l27 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l27";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
+	};
+
+	pmthulium_l28: regulator-pmthulium-l28 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l28";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <925000>;
+		regulator-max-microvolt = <925000>;
+	};
+
+	pmthulium_l29: regulator-pmthulium-l29 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l29";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
+	};
+
+	pmthulium_l30: regulator-pmthulium-l30 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l30";
+		qcom,hpm-min-load = <5000>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+	};
+
+	pmthulium_l31: regulator-pmthulium-l31 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l31";
+		qcom,hpm-min-load = <10000>;
+		regulator-min-microvolt = <875000>;
+		regulator-max-microvolt = <875000>;
+	};
+
+	pmthulium_l32: regulator-pmthulium-l32 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-l32";
+		qcom,hpm-min-load = <5000>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+	};
+
+	pmthulium_lvs1: regulator-pmthulium-lvs1 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-lvs1";
+	};
+
+	pmthulium_lvs2: regulator-pmthulium-lvs2 {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmthulium-lvs2";
+	};
+
+	pmithulium_s1: regulator-pmithulium-s1{
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmithulium-s1";
+		qcom,hpm-min-load = <100000>;
+		regulator-min-microvolt = <1025000>;
+		regulator-max-microvolt = <1025000>;
+	};
+
+	/* PMIthulium S2 + S3 = 2 phase VDD_GFX supply */
+	pmithulium_s2_corner: regulator-pmithulium-s2-corner {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmithulium_s2_corner";
+		qcom,hpm-min-load = <100000>;
+		regulator-min-microvolt = <1>;
+		regulator-max-microvolt = <7>;
+	};
+
+	pmithulium_s2_floor_corner: regulator-pmithulium-s2-floor-corner {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmithulium_s2_floor_corner";
+		regulator-min-microvolt = <1>;
+		regulator-max-microvolt = <7>;
+	};
+
+	pmithulium_boost: regulator-pmithulium-boost {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmithulium-boost";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+	};
+};
