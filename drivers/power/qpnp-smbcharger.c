@@ -101,6 +101,7 @@ struct smbchg_chip {
 	int				chg_term_irq;
 	int				taper_irq;
 	int				recharge_irq;
+	int				fastchg_irq;
 	int				safety_timeout_irq;
 	int				power_ok_irq;
 	int				dcin_uv_irq;
@@ -203,12 +204,11 @@ static int smbchg_masked_write_raw(struct smbchg_chip *chip, u16 base, u8 mask,
 				base, rc);
 		return rc;
 	}
-	pr_debug("addr = 0x%x read 0x%x\n", base, reg);
 
 	reg &= ~mask;
 	reg |= val & mask;
 
-	pr_debug("Writing 0x%x\n", reg);
+	pr_debug("addr = 0x%x writing 0x%x\n", base, reg);
 
 	rc = smbchg_write(chip, &reg, base, 1);
 	if (rc) {
@@ -251,7 +251,7 @@ static int smbchg_masked_write(struct smbchg_chip *chip, u16 base, u8 mask,
  */
 #define SEC_ACCESS_OFFSET	0xD0
 #define SEC_ACCESS_VALUE	0xA5
-#define PERIPHERAL_MASK		0x3
+#define PERIPHERAL_MASK		0xFF
 static int smbchg_sec_masked_write(struct smbchg_chip *chip, u16 base, u8 mask,
 									u8 val)
 {
@@ -670,8 +670,6 @@ static void smbchg_usb_update_online_work(struct work_struct *work)
 	mutex_unlock(&chip->usb_set_online_lock);
 }
 
-#define CHGR_CFG2		0xFC
-#define CHG_EN_CMD_BIT		BIT(6)
 static int smbchg_usb_en(struct smbchg_chip *chip, bool enable,
 		enum enable_reason reason)
 {
@@ -761,7 +759,7 @@ static int smbchg_set_high_usb_chg_current(struct smbchg_chip *chip,
 	int i, rc;
 	u8 usb_cur_val;
 
-	for (i = ARRAY_SIZE(usb_current_table); i >= 0; i--) {
+	for (i = ARRAY_SIZE(usb_current_table) - 1; i >= 0; i--) {
 		if (current_ma >= usb_current_table[i])
 			break;
 	}
@@ -811,8 +809,6 @@ static int smbchg_set_usb_current_max(struct smbchg_chip *chip,
 							int current_ma)
 {
 	int rc;
-
-	current_ma = calc_thermal_limited_current(chip, current_ma);
 
 	if (!chip->batt_present) {
 		pr_info_ratelimited("Ignoring usb current->%d, battery is absent\n",
@@ -874,8 +870,7 @@ static int smbchg_set_usb_current_max(struct smbchg_chip *chip,
 
 	rc = smbchg_set_high_usb_chg_current(chip, current_ma);
 out:
-	dev_dbg(chip->dev, "usb current set to %d mA\n",
-			chip->usb_max_current_ma);
+	pr_debug("usb current set to %d mA\n", chip->usb_max_current_ma);
 	if (rc < 0)
 		dev_err(chip->dev,
 			"Couldn't set %dmA rc = %d\n", current_ma, rc);
@@ -1211,7 +1206,7 @@ static int smbchg_float_voltage_set(struct smbchg_chip *chip, int vfloat_mv)
 				/ VHIGH_RANGE_FLOAT_STEP_MV;
 	}
 
-	return smbchg_sec_masked_write(chip, chip->bat_if_base + VFLOAT_CFG_REG,
+	return smbchg_sec_masked_write(chip, chip->chgr_base + VFLOAT_CFG_REG,
 			VFLOAT_MASK, temp);
 }
 
@@ -1385,7 +1380,7 @@ static irqreturn_t batt_pres_handler(int irq, void *_chip)
 	u8 reg = 0;
 
 	smbchg_read(chip, &reg, chip->bat_if_base + RT_STS, 1);
-	chip->batt_present = !!(reg & BAT_MISSING_BIT);
+	chip->batt_present = !(reg & BAT_MISSING_BIT);
 	pr_debug("triggered: 0x%02x\n", reg);
 	if (chip->psy_registered)
 		power_supply_changed(&chip->batt_psy);
@@ -1395,6 +1390,17 @@ static irqreturn_t batt_pres_handler(int irq, void *_chip)
 static irqreturn_t vbat_low_handler(int irq, void *_chip)
 {
 	pr_warn_ratelimited("vbat low\n");
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t fastchg_handler(int irq, void *_chip)
+{
+	struct smbchg_chip *chip = _chip;
+
+	pr_debug("p2f triggered\n");
+	if (chip->psy_registered)
+		power_supply_changed(&chip->batt_psy);
+
 	return IRQ_HANDLED;
 }
 
@@ -1657,6 +1663,10 @@ static int chg_time[] = {
 	1536,
 };
 
+#define CHGR_CFG1			0xFB
+#define RECHG_THRESHOLD_SRC_BIT		BIT(1)
+#define TERM_I_SRC_BIT			BIT(2)
+#define CHGR_CFG2			0xFC
 #define CHG_INHIB_CFG_REG		0xF7
 #define CHG_INHIBIT_50MV_VAL		0x00
 #define CHG_INHIBIT_100MV_VAL		0x01
@@ -1724,8 +1734,19 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
 	rc = smbchg_sec_masked_write(chip, chip->chgr_base + CHGR_CFG2,
 			CHG_EN_SRC_BIT | CHG_EN_COMMAND_BIT | P2F_CHG_TRAN
 			| I_TERM_BIT | AUTO_RECHG_BIT | CHARGER_INHIBIT_BIT,
-			CHARGER_INHIBIT_BIT
+			CHARGER_INHIBIT_BIT | CHG_EN_COMMAND_BIT
 			| (chip->iterm_disabled ? I_TERM_BIT : 0));
+	if (rc < 0) {
+		dev_err(chip->dev, "Couldn't set chgr_cfg2 rc=%d\n", rc);
+		return rc;
+	}
+
+	/*
+	 * use the analog sensors instead of the fuelgauge adcs so that
+	 * tcc detection works without trimmed parts
+	 */
+	rc = smbchg_sec_masked_write(chip, chip->chgr_base + CHGR_CFG1,
+			TERM_I_SRC_BIT | RECHG_THRESHOLD_SRC_BIT, 0);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't set chgr_cfg2 rc=%d\n", rc);
 		return rc;
@@ -1751,6 +1772,7 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
 				"Couldn't set float voltage rc = %d\n", rc);
 			return rc;
 		}
+		pr_debug("set vfloat to %d\n", chip->vfloat_mv);
 	}
 
 	/* set iterm */
@@ -1777,13 +1799,15 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
 				reg = CHG_ITERM_600MA;
 
 			rc = smbchg_sec_masked_write(chip,
-					chip->usb_chgpth_base + CFG_TCC_REG,
+					chip->chgr_base + CFG_TCC_REG,
 					CHG_ITERM_MASK, reg);
 			if (rc) {
 				dev_err(chip->dev,
 					"Couldn't set iterm rc = %d\n", rc);
 				return rc;
 			}
+			pr_debug("set tcc (%d) to 0x%02x\n", chip->iterm_ma,
+					reg);
 		}
 	}
 
@@ -2135,6 +2159,10 @@ static int smbchg_request_irqs(struct smbchg_chip *chip)
 					"chg-inhibit", chg_inhibit_handler, rc);
 			REQUEST_IRQ(chip, spmi_resource, chip->recharge_irq,
 					"chg-rechg-thr", recharge_handler, rc);
+			REQUEST_IRQ(chip, spmi_resource, chip->fastchg_irq,
+					"chg-p2f-thr", fastchg_handler, rc);
+			enable_irq_wake(chip->chg_term_irq);
+			enable_irq_wake(chip->fastchg_irq);
 			break;
 		case SMBCHG_BAT_IF_SUBTYPE:
 			REQUEST_IRQ(chip, spmi_resource, chip->batt_hot_irq,
@@ -2149,6 +2177,12 @@ static int smbchg_request_irqs(struct smbchg_chip *chip)
 					"batt-missing", batt_pres_handler, rc);
 			REQUEST_IRQ(chip, spmi_resource, chip->vbat_low_irq,
 					"batt-low", vbat_low_handler, rc);
+			enable_irq_wake(chip->batt_hot_irq);
+			enable_irq_wake(chip->batt_warm_irq);
+			enable_irq_wake(chip->batt_cool_irq);
+			enable_irq_wake(chip->batt_cold_irq);
+			enable_irq_wake(chip->batt_missing_irq);
+			enable_irq_wake(chip->vbat_low_irq);
 			break;
 		case SMBCHG_USB_CHGPTH_SUBTYPE:
 			REQUEST_IRQ(chip, spmi_resource, chip->usbin_uv_irq,
@@ -2156,10 +2190,13 @@ static int smbchg_request_irqs(struct smbchg_chip *chip)
 			REQUEST_IRQ(chip, spmi_resource, chip->src_detect_irq,
 					"usbin-src-det",
 					src_detect_handler, rc);
+			enable_irq_wake(chip->usbin_uv_irq);
+			enable_irq_wake(chip->src_detect_irq);
 			break;
 		case SMBCHG_DC_CHGPTH_SUBTYPE:
 			REQUEST_IRQ(chip, spmi_resource, chip->dcin_uv_irq,
 					"dcin-uv", dcin_uv_handler, rc);
+			enable_irq_wake(chip->dcin_uv_irq);
 			break;
 		case SMBCHG_MISC_SUBTYPE:
 			REQUEST_IRQ(chip, spmi_resource, chip->power_ok_irq,
@@ -2170,6 +2207,8 @@ static int smbchg_request_irqs(struct smbchg_chip *chip)
 					chip->safety_timeout_irq,
 					"safety-timeout",
 					safety_timeout_handler, rc);
+			enable_irq_wake(chip->chg_hot_irq);
+			enable_irq_wake(chip->safety_timeout_irq);
 			break;
 		case SMBCHG_OTG_SUBTYPE:
 			break;
@@ -2269,7 +2308,7 @@ static void dump_regs(struct smbchg_chip *chip)
 		dump_reg(chip, chip->chgr_base + addr, "CHGR Config");
 	/* battery interface peripheral */
 	dump_reg(chip, chip->bat_if_base + RT_STS, "BAT_IF Status");
-	dump_reg(chip, chip->bat_if_base + CMD_IL, "BAT_IF Command");
+	dump_reg(chip, chip->bat_if_base + CMD_CHG_REG, "BAT_IF Command");
 	for (addr = 0xF0; addr <= 0xFB; addr++)
 		dump_reg(chip, chip->bat_if_base + addr, "BAT_IF Config");
 	/* usb charge path peripheral */

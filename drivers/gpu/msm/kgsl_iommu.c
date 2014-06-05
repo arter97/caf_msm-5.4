@@ -279,39 +279,20 @@ static void _print_entry(struct kgsl_device *device, struct _mem_entry *entry)
 static void _check_if_freed(struct kgsl_iommu_device *iommu_dev,
 	unsigned long addr, unsigned int pid)
 {
-	void *base = kgsl_driver.memfree_hist.base_hist_rb;
-	struct kgsl_memfree_hist_elem *wptr;
-	struct kgsl_memfree_hist_elem *p;
+	unsigned long gpuaddr = addr;
+	unsigned long size = 0;
+	unsigned int flags = 0;
+
 	char name[32];
 	memset(name, 0, sizeof(name));
 
-	mutex_lock(&kgsl_driver.memfree_hist_mutex);
-	wptr = kgsl_driver.memfree_hist.wptr;
-	p = wptr;
-	for (;;) {
-		if (p->size && p->pid == pid)
-			if (addr >= p->gpuaddr &&
-				addr < (p->gpuaddr + p->size)) {
-
-				kgsl_get_memory_usage(name, sizeof(name) - 1,
-					p->flags);
-				KGSL_LOG_DUMP(iommu_dev->kgsldev,
-					"---- premature free ----\n");
-				KGSL_LOG_DUMP(iommu_dev->kgsldev,
-					"[%8.8X-%8.8X] (%s) was already freed by pid %d\n",
-					p->gpuaddr,
-					p->gpuaddr + p->size,
-					name,
-					p->pid);
-			}
-		p++;
-		if ((void *)p >= base + kgsl_driver.memfree_hist.size)
-			p = (struct kgsl_memfree_hist_elem *) base;
-
-		if (p == kgsl_driver.memfree_hist.wptr)
-			break;
+	if (kgsl_memfree_find_entry(pid, &gpuaddr, &size, &flags)) {
+		kgsl_get_memory_usage(name, sizeof(name) - 1, flags);
+		KGSL_LOG_DUMP(iommu_dev->kgsldev, "---- premature free ----\n");
+		KGSL_LOG_DUMP(iommu_dev->kgsldev,
+			"[%8.8lX-%8.8lX] (%s) was already freed by pid %d\n",
+			gpuaddr, gpuaddr + size, name, pid);
 	}
-	mutex_unlock(&kgsl_driver.memfree_hist_mutex);
 }
 
 static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
@@ -513,6 +494,8 @@ static void kgsl_iommu_clk_disable_event(struct kgsl_device *device,
 	/* Free param we are done using it */
 	kfree(param);
 }
+
+
 
 /*
  * kgsl_iommu_disable_clk_on_ts - Sets up event to disable IOMMU clocks
@@ -1325,6 +1308,12 @@ static unsigned int kgsl_iommu_get_reg_ahbaddr(struct kgsl_mmu *mmu,
 			iommu->iommu_reg_list[reg].reg_offset;
 }
 
+static int iommu_readtimestamp(struct kgsl_device *device, void *priv,
+		enum kgsl_timestamp_type type, unsigned int *timestamp)
+{
+	return kgsl_readtimestamp(device, NULL, type, timestamp);
+}
+
 static int kgsl_iommu_init(struct kgsl_mmu *mmu)
 {
 	/*
@@ -1343,7 +1332,8 @@ static int kgsl_iommu_init(struct kgsl_mmu *mmu)
 	if (!iommu)
 		return -ENOMEM;
 
-	kgsl_add_event_group(&iommu->events, NULL, "iommu");
+	kgsl_add_event_group(&iommu->events, NULL, "iommu",
+		iommu_readtimestamp, iommu);
 
 	mmu->priv = iommu;
 	status = kgsl_get_iommu_ctxt(mmu);

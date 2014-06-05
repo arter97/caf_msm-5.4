@@ -50,24 +50,7 @@
 #define KGSL_STATS_ADD(_size, _stat, _max) \
 	do { _stat += (_size); if (_stat > _max) _max = _stat; } while (0)
 
-
-#define KGSL_MEMFREE_HIST_SIZE	((int)(PAGE_SIZE * 2))
-
 #define KGSL_MAX_NUMIBS 100000
-
-struct kgsl_memfree_hist_elem {
-	unsigned int pid;
-	unsigned int gpuaddr;
-	unsigned int size;
-	unsigned int flags;
-};
-
-struct kgsl_memfree_hist {
-	void *base_hist_rb;
-	unsigned int size;
-	struct kgsl_memfree_hist_elem *wptr;
-};
-
 
 struct kgsl_device;
 struct kgsl_context;
@@ -94,9 +77,6 @@ struct kgsl_driver {
 
 	/* Mutex for protecting the device list */
 	struct mutex devlock;
-
-	struct mutex memfree_hist_mutex;
-	struct kgsl_memfree_hist memfree_hist;
 
 	struct {
 		unsigned int vmalloc;
@@ -230,6 +210,9 @@ struct kgsl_event {
 	int result;
 };
 
+typedef int (*readtimestamp_func)(struct kgsl_device *, void *,
+	enum kgsl_timestamp_type, unsigned int *);
+
 /**
  * struct event_group - A list of GPU events
  * @context: Pointer to the active context for the events
@@ -238,6 +221,8 @@ struct kgsl_event {
  * @group: Node for the master group list
  * @processed: Last processed timestamp
  * @name: String name for the group (for the debugfs file)
+ * @readtimestamp: Function pointer to read a timestamp
+ * @priv: Priv member to pass to the readtimestamp function
  */
 struct kgsl_event_group {
 	struct kgsl_context *context;
@@ -246,6 +231,8 @@ struct kgsl_event_group {
 	struct list_head group;
 	unsigned int processed;
 	char name[64];
+	readtimestamp_func readtimestamp;
+	void *priv;
 };
 
 long kgsl_ioctl_device_getproperty(struct kgsl_device_private *dev_priv,

@@ -34,13 +34,9 @@
 
 #define FIRST_TIMEOUT (HZ / 2)
 
-#define KGSL_IOCTL_FUNC(_cmd, _func, _flags) \
+#define KGSL_IOCTL_FUNC(_cmd, _func) \
 	[_IOC_NR((_cmd))] = \
-		{ .cmd = (_cmd), .func = (_func), .flags = (_flags) }
-
-#define KGSL_IOCTL_LOCK		BIT(0)
-#define KGSL_IOCTL_WAKE		BIT(1)
-
+		{ .cmd = (_cmd), .func = (_func) }
 
 /* KGSL device state is initialized to INIT when platform_probe		*
  * sucessfully initialized the device.  Once a device has been opened	*
@@ -150,9 +146,8 @@ struct kgsl_functable {
 	int (*waittimestamp) (struct kgsl_device *device,
 		struct kgsl_context *context, unsigned int timestamp,
 		unsigned int msecs);
-	int (*readtimestamp) (struct kgsl_device *device,
-		struct kgsl_context *context, enum kgsl_timestamp_type type,
-		unsigned int *timestamp);
+	int (*readtimestamp) (struct kgsl_device *device, void *priv,
+		enum kgsl_timestamp_type type, unsigned int *timestamp);
 	int (*issueibcmds) (struct kgsl_device_private *dev_priv,
 		struct kgsl_context *context, struct kgsl_cmdbatch *cmdbatch,
 		uint32_t *timestamps);
@@ -196,7 +191,6 @@ typedef long (*kgsl_ioctl_func_t)(struct kgsl_device_private *,
 struct kgsl_ioctl {
 	unsigned int cmd;
 	kgsl_ioctl_func_t func;
-	unsigned int flags;
 };
 
 long kgsl_ioctl_helper(struct file *filep, unsigned int cmd,
@@ -590,14 +584,6 @@ static inline unsigned int kgsl_gpuid(struct kgsl_device *device,
 	return device->ftbl->gpuid(device, chipid);
 }
 
-static inline int kgsl_readtimestamp(struct kgsl_device *device,
-					      struct kgsl_context *context,
-					      enum kgsl_timestamp_type type,
-					      unsigned int *timestamp)
-{
-	return device->ftbl->readtimestamp(device, context, type, timestamp);
-}
-
 static inline int kgsl_create_device_sysfs_files(struct device *root,
 	const struct device_attribute **list)
 {
@@ -645,6 +631,9 @@ static inline int kgsl_create_device_workqueue(struct kgsl_device *device)
 	return 0;
 }
 
+int kgsl_readtimestamp(struct kgsl_device *device, void *priv,
+		enum kgsl_timestamp_type type, unsigned int *timestamp);
+
 int kgsl_check_timestamp(struct kgsl_device *device,
 		struct kgsl_context *context, unsigned int timestamp);
 
@@ -663,8 +652,10 @@ void kgsl_events_init(void);
 void kgsl_events_exit(void);
 
 void kgsl_del_event_group(struct kgsl_event_group *group);
+
 void kgsl_add_event_group(struct kgsl_event_group *group,
-		struct kgsl_context *context, const char *name);
+		struct kgsl_context *context, const char *name,
+		readtimestamp_func readtimestamp, void *priv);
 
 void kgsl_cancel_events_timestamp(struct kgsl_device *device,
 		struct kgsl_event_group *group, unsigned int timestamp);
@@ -685,6 +676,9 @@ void kgsl_context_destroy(struct kref *kref);
 int kgsl_context_init(struct kgsl_device_private *, struct kgsl_context
 		*context);
 int kgsl_context_detach(struct kgsl_context *context);
+
+int kgsl_memfree_find_entry(pid_t pid, unsigned long *gpuaddr,
+	unsigned long *size, unsigned int *flags);
 
 /**
  * kgsl_context_put() - Release context reference count
