@@ -121,6 +121,21 @@ static struct clkctl_acpu_speed acpu_freq_tbl_8610[] = {
 	{ 0 }
 };
 
+static struct clkctl_acpu_speed acpu_freq_tbl_8610_1p1[] = {
+	{ 1,  300000, PLL0,    4, 2,   CPR_CORNER_SVS,    0, 3 },
+	{ 1,  384000, ACPUPLL, 5, 2,   CPR_CORNER_SVS,    0, 3 },
+	{ 1,  600000, PLL0,    4, 0,   CPR_CORNER_NORMAL, 0, 4 },
+	{ 1,  787200, ACPUPLL, 5, 0,   CPR_CORNER_NORMAL, 0, 4 },
+	{ 1,  998400, ACPUPLL, 5, 0,   CPR_CORNER_TURBO,  0, 5 },
+	{ 1, 1190400, ACPUPLL, 5, 0,   CPR_CORNER_TURBO,  0, 5 },
+	{ 0 }
+};
+
+static struct clkctl_acpu_speed *pvs_tables_8610[NUM_SPEED_BIN] = {
+	[0] = acpu_freq_tbl_8610,
+	[1] = acpu_freq_tbl_8610_1p1,
+};
+
 static struct clkctl_acpu_speed *pvs_tables_8226[NUM_SPEED_BIN] = {
 	[0] = acpu_freq_tbl_8226_1p2,
 	[6] = acpu_freq_tbl_8226_1p2,
@@ -218,6 +233,7 @@ void msm8610_acpu_init(void)
 	drv_data.bus_scale->usecase = bw_level_tbl_8610;
 	drv_data.bus_scale->num_usecases = ARRAY_SIZE(bw_level_tbl_8610);
 	drv_data.freq_tbl = acpu_freq_tbl_8610;
+	drv_data.pvs_tables = pvs_tables_8610;
 }
 
 static int __init acpuclk_a7_init(void)
