@@ -469,8 +469,9 @@
 
 	qcom,acpuclk@f9011050 {
 		compatible = "qcom,acpuclk-a7";
-		reg = <0xf9011050 0x8>;
-		reg-names = "rcg_base";
+		reg = <0xf9011050 0x8>,
+		      <0xfc4b80b8 0x8>;
+		reg-names = "rcg_base", "pte_efuse";
 		a7_cpu-supply = <&apc_vreg_corner>;
 	};
 
