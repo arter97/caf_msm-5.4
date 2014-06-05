@@ -294,9 +294,10 @@ static void __iomem *virt_dbgbase;
 
 /* Mux source select values */
 #define gcc_xo_source_val		0
+#define xo_a_clk_source_val		0
 #define gpll0_out_main_source_val	1
 #define gpll0_out_aux_source_val	5
-#define gpll0_usbfs_source_val		2
+#define gpll0_misc_source_val		2
 #define gpll1_out_main_source_val	1
 #define gpll2_out_main_source_val	2
 #define gpll2_out_aux_source_val	3
@@ -581,7 +582,7 @@ static struct pll_vote_clk gpll0_ao = {
 
 DEFINE_EXT_CLK(gpll0_out_main, &gpll0.c);
 DEFINE_EXT_CLK(gpll0_out_aux, &gpll0.c);
-DEFINE_EXT_CLK(gpll0_usbfs, &gpll0.c);
+DEFINE_EXT_CLK(gpll0_misc, &gpll0.c);
 
 static struct pll_vote_clk gpll1 = {
 	.en_reg = (void __iomem *)APCS_GPLL_ENA_VOTE,
@@ -673,7 +674,7 @@ static struct pll_vote_clk gpll4 = {
 DEFINE_EXT_CLK(gpll4_out_main, &gpll4.c);
 
 static struct clk_freq_tbl ftbl_apss_ahb_clk[] = {
-	F(  19200000,	      gcc_xo,   1,	  0,	0),
+	F(  19200000,	      xo_a_clk,   1,	  0,	0),
 	F(  50000000,	   gpll0_out_main,  16,	  0,	0),
 	F(  100000000,	   gpll0_out_main,   8,	  0,	0),
 	F(  133330000,	   gpll0_out_main,   6,	  0,	0),
@@ -689,8 +690,6 @@ static struct rcg_clk apss_ahb_clk_src = {
 	.c = {
 		.dbg_name = "apss_ahb_clk_src",
 		.ops = &clk_ops_rcg,
-		VDD_DIG_FMAX_MAP3(LOW, 50000000, NOMINAL, 100000000, HIGH,
-				133330000),
 		CLK_INIT(apss_ahb_clk_src.c),
 	},
 };
@@ -1057,7 +1056,7 @@ static struct rcg_clk blsp1_uart2_apps_clk_src = {
 
 static struct clk_freq_tbl ftbl_gcc_camss_cci_clk[] = {
 	F(  19200000,	      gcc_xo,   1,	  0,	0),
-	F(  37500000,         gcc_xo,   1,    3,    64),
+	F(  37500000,         gpll0_misc,   1,    3,    64),
 	F_END
 };
 
@@ -1165,10 +1164,15 @@ static struct rcg_clk mclk1_clk_src = {
 	},
 };
 
+static struct clk_freq_tbl ftbl_gcc_camss_mclk2_clk[] = {
+	F(  66670000,	   gpll0_out_main,  12,	  0,	0),
+	F_END
+};
+
 static struct rcg_clk mclk2_clk_src = {
 	.cmd_rcgr_reg = MCLK2_CMD_RCGR,
 	.set_rate = set_rate_mnd,
-	.freq_tbl = ftbl_gcc_camss_mclk0_1_2_clk,
+	.freq_tbl = ftbl_gcc_camss_mclk2_clk,
 	.current_freq = &rcg_dummy_freq,
 	.base = &virt_bases[GCC_BASE],
 	.c = {
@@ -1539,7 +1543,7 @@ static struct rcg_clk usb_fs_ic_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_gcc_usb_fs_system_clk[] = {
-	F(  64000000,	   gpll0_usbfs,  12.5,	  0,	0),
+	F(  64000000,	   gpll0_misc,  12.5,	  0,	0),
 	F_END
 };
 
@@ -2098,6 +2102,7 @@ static struct branch_clk gcc_camss_mclk2_clk = {
 
 static struct branch_clk gcc_camss_micro_ahb_clk = {
 	.cbcr_reg = CAMSS_MICRO_AHB_CBCR,
+	.bcr_reg =  CAMSS_MICRO_BCR,
 	.has_sibling = 1,
 	.base = &virt_bases[GCC_BASE],
 	.c = {
@@ -2194,7 +2199,6 @@ static struct branch_clk gcc_camss_vfe0_clk = {
 
 static struct branch_clk gcc_camss_vfe_ahb_clk = {
 	.cbcr_reg = CAMSS_VFE_AHB_CBCR,
-	.bcr_reg =  CAMSS_MICRO_BCR,
 	.has_sibling = 0,
 	.base = &virt_bases[GCC_BASE],
 	.c = {
@@ -3019,7 +3023,7 @@ static struct mux_clk gcc_debug_mux = {
 		{&gcc_mdss_byte1_clk.c,			0x01bb},
 		{&gcc_mdss_esc0_clk.c,			0x01fd},
 		{&gcc_mdss_esc1_clk.c,			0x01bc},
-		{&gcc_bimc_gpu_clk.c,			0x015c},
+		{&gcc_bimc_gpu_clk.c,			0x0157},
 		{&wcnss_m_clk.c,			0x0198},
 	),
 	.c = {
@@ -3039,7 +3043,7 @@ static struct clk_lookup msm_clocks_lookup[] = {
 	CLK_LIST(gpll0_ao),
 	CLK_LIST(gpll0_out_main),
 	CLK_LIST(gpll0_out_aux),
-	CLK_LIST(gpll0_usbfs),
+	CLK_LIST(gpll0_misc),
 	CLK_LIST(gpll1),
 	CLK_LIST(gpll1_out_main),
 	CLK_LIST(gpll2),

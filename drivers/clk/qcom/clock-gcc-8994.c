@@ -232,6 +232,7 @@ DEFINE_EXT_CLK(gcc_xo, NULL);
 DEFINE_EXT_CLK(gcc_xo_a_clk, NULL);
 DEFINE_EXT_CLK(debug_mmss_clk, NULL);
 DEFINE_EXT_CLK(debug_rpm_clk, NULL);
+DEFINE_EXT_CLK(debug_cpu_clk, NULL);
 
 static unsigned int soft_vote_gpll0;
 
@@ -1393,6 +1394,19 @@ static struct gate_clk gpll0_out_mmsscc = {
 	},
 };
 
+static struct gate_clk gpll0_out_msscc = {
+	.en_reg = APCS_CLOCK_BRANCH_ENA_VOTE,
+	.en_mask = BIT(27),
+	.delay_us = 1,
+	.base = &virt_base,
+	.c = {
+		.parent = &gpll0_out_main.c,
+		.dbg_name = "gpll0_out_msscc",
+		.ops = &clk_ops_gate,
+		CLK_INIT(gpll0_out_msscc.c),
+	},
+};
+
 static struct gate_clk pcie_0_phy_ldo = {
 	.en_reg = PCIE_0_PHY_LDO_EN,
 	.en_mask = BIT(0),
@@ -2518,8 +2532,10 @@ static struct mux_clk gcc_debug_mux = {
 	MUX_REC_SRC_LIST(
 		&debug_mmss_clk.c,
 		&debug_rpm_clk.c,
+		&debug_cpu_clk.c,
 	),
 	MUX_SRC_LIST(
+		{ &debug_cpu_clk.c, 0x016A },
 		{ &debug_mmss_clk.c, 0x002b },
 		{ &debug_rpm_clk.c, 0xffff },
 		{ &gcc_sys_noc_usb3_axi_clk.c, 0x0006 },
@@ -2683,6 +2699,7 @@ static struct clk_lookup msm_clocks_gcc_8994[] = {
 	CLK_LIST(gcc_qusb2_phy_reset),
 	CLK_LIST(gcc_usb3_phy_reset),
 	CLK_LIST(gpll0_out_mmsscc),
+	CLK_LIST(gpll0_out_msscc),
 	CLK_LIST(pcie_0_phy_ldo),
 	CLK_LIST(pcie_1_phy_ldo),
 	CLK_LIST(ufs_phy_ldo),
@@ -2886,6 +2903,12 @@ static int msm_clock_debug_8994_probe(struct platform_device *pdev)
 	if (IS_ERR(debug_rpm_clk.c.parent)) {
 		dev_err(&pdev->dev, "Failed to get RPM debug mux\n");
 		return PTR_ERR(debug_rpm_clk.c.parent);
+	}
+
+	debug_cpu_clk.c.parent = clk_get(&pdev->dev, "debug_cpu_clk");
+	if (IS_ERR(debug_cpu_clk.c.parent)) {
+		dev_err(&pdev->dev, "Failed to get CPU debug mux\n");
+		return PTR_ERR(debug_cpu_clk.c.parent);
 	}
 
 	ret = of_msm_clock_register(pdev->dev.of_node,

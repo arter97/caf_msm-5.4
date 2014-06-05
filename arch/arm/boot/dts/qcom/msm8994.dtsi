@@ -201,6 +201,7 @@
 #include "msm8994-ipcrouter.dtsi"
 #include "msm8994-coresight.dtsi"
 #include "msm8994-mdss.dtsi"
+#include "msm8994-bus.dtsi"
 
 &soc {
 	#address-cells = <1>;
@@ -366,6 +367,10 @@
 		};
 	};
 
+	restart@fc4ab000 {
+		compatible = "qcom,pshold";
+		reg = <0xfc4ab000 0x4>;
+	};
 
 	blsp1_uart3: serial@f991f000 {
 		compatible = "qcom,msm-lsuart-v14";
@@ -530,9 +535,8 @@
 
 	qcom,wdt@f9017000 {
 		compatible = "qcom,msm-watchdog";
-		reg = <0xf9017000 0x1000>,
-		      <0xf9112118 0x4>;
-		reg-names = "wdt-base", "wdt-absent-base";
+		reg = <0xf9017000 0x1000>;
+		reg-names = "wdt-base";
 		interrupts = <0 3 0>, <0 4 0>;
 		qcom,bark-time = <11000>;
 		qcom,pet-time = <10000>;
@@ -1269,9 +1273,11 @@
 		compatible = "qcom,cc-debug-8994";
 		reg = <0xfc401880 0x4>;
 		reg-names = "cc_base";
-		clock-names = "debug_mmss_clk", "debug_rpm_clk";
+		clock-names = "debug_mmss_clk", "debug_rpm_clk",
+			      "debug_cpu_clk";
 		clocks = <&clock_mmss clk_mmss_debug_mux>,
-		         <&clock_rpm clk_rpm_debug_mux>;
+		         <&clock_rpm clk_rpm_debug_mux>,
+			 <&clock_cpu clk_cpu_debug_mux>;
 		#clock-cells = <1>;
 	};
 
