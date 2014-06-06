@@ -3773,7 +3773,8 @@ static void __init apq8064_common_init(void)
 	platform_add_devices(early_common_devices,
 				ARRAY_SIZE(early_common_devices));
 	if (socinfo_get_pmic_model() != PMIC_MODEL_PM8917)
-		if (machine_is_apq8064_adp_2())
+		if (machine_is_apq8064_adp_2() &&
+				!machine_is_apq8064_mplatform())
 			platform_add_devices(pm8921_adp_2_devices,
 				ARRAY_SIZE(pm8921_adp_2_devices));
 		else
