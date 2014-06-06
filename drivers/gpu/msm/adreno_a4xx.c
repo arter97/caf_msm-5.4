@@ -316,7 +316,7 @@ static bool a4xx_is_sptp_idle(struct adreno_device *adreno_dev)
 {
 	unsigned int reg;
 	struct kgsl_device *device = &adreno_dev->dev;
-	if (adreno_is_a420(adreno_dev))
+	if (!adreno_is_a430(adreno_dev))
 		return true;
 
 	/* If SP/TP pc isn't enabled, don't worry about power */
@@ -340,7 +340,7 @@ static void a4xx_regulator_enable(struct adreno_device *adreno_dev)
 {
 	unsigned int reg;
 	struct kgsl_device *device = &adreno_dev->dev;
-	if (adreno_is_a420(adreno_dev))
+	if (!adreno_is_a430(adreno_dev))
 		return;
 
 	/* Set the default register values; set SW_COLLAPSE to 0 */
@@ -360,7 +360,7 @@ static void a4xx_enable_pc(struct adreno_device *adreno_dev)
 {
 	unsigned int reg;
 	struct kgsl_device *device = &adreno_dev->dev;
-	if (adreno_is_a420(adreno_dev))
+	if (!adreno_is_a430(adreno_dev))
 		return;
 
 	kgsl_regread(device, A4XX_RBBM_POWER_CNTL_IP, &reg);
@@ -378,7 +378,7 @@ static void a4xx_disable_pc(struct adreno_device *adreno_dev)
 {
 	unsigned int reg;
 	struct kgsl_device *device = &adreno_dev->dev;
-	if (adreno_is_a420(adreno_dev))
+	if (!adreno_is_a430(adreno_dev))
 		return;
 
 	/* remove hw control and use the sw override */
