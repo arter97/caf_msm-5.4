@@ -28,6 +28,7 @@
 #include <mach/rpm-regulator.h>
 #include <mach/msm_iomap.h>
 #include <linux/debugfs.h>
+#include <asm/unaligned.h>
 
 #include "xhci.h"
 
@@ -114,6 +115,7 @@ struct mxhci_hsic_hcd {
 	bool			xhci_remove_flag;
 	bool			phy_in_lpm_flag;
 	bool			xhci_shutdown_flag;
+	bool			port_connect;
 	int			strobe;
 	int			data;
 	int			host_ready;
@@ -724,6 +726,7 @@ static int mxhci_hsic_bus_suspend(struct usb_hcd *hcd)
 {
 	struct mxhci_hsic_hcd *mxhci = hcd_to_hsic(hcd->primary_hcd);
 	int ret;
+	u32 stat = 0;
 
 	if (!usb_hcd_is_primary_hcd(hcd))
 		return 0;
@@ -753,14 +756,23 @@ static int mxhci_hsic_bus_suspend(struct usb_hcd *hcd)
 			msecs_to_jiffies(PHY_LPM_WAIT_TIMEOUT_MS));
 
 	if (!ret) {
+		stat = readl_relaxed(MSM_HSIC_PWR_EVENT_IRQ_STAT);
 		dev_dbg(mxhci->dev, "IN_L2_IRQ timeout\n");
 		xhci_dbg_log_event(&dbg_hsic, NULL, "IN_L2_IRQ timeout",
-			readl_relaxed(MSM_HSIC_PWR_EVENT_IRQ_STAT));
+			stat);
 		xhci_dbg_log_event(&dbg_hsic, NULL, "PORTSC",
 				readl_relaxed(MSM_HSIC_PORTSC));
 		xhci_dbg_log_event(&dbg_hsic, NULL, "PORTLI",
 				readl_relaxed(MSM_HSIC_PORTLI));
-		panic("IN_L2 power event irq timedout");
+		if (stat & LPM_IN_L2_IRQ_STAT) {
+			xhci_dbg_log_event(&dbg_hsic, NULL,
+				"MISSING IN_L2_IRQ_EVENT", stat);
+			/*clear STAT bit*/
+			writel_relaxed(stat, MSM_HSIC_PWR_EVENT_IRQ_STAT);
+			mb();
+		} else {
+			panic("IN_L2 power event irq timedout");
+		}
 	}
 
 	xhci_dbg_log_event(&dbg_hsic, NULL, "Suspend RH",
@@ -952,6 +964,47 @@ void mxhci_hsic_shutdown(struct usb_hcd *hcd)
 	wake_up(&mxhci->phy_in_lpm_wq);
 	if (!mxhci->in_lpm)
 		xhci_shutdown(hcd);
+
+}
+
+int mxhci_hsic_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
+		u16 wIndex, char *buf, u16 wLength)
+{
+	struct mxhci_hsic_hcd *mxhci = hcd_to_hsic(hcd->primary_hcd);
+	int ret = 0;
+	u32 status;
+
+	ret = xhci_hub_control(hcd, typeReq, wValue, wIndex, buf, wLength);
+
+	status = get_unaligned_le32(buf);
+
+	if (typeReq == GetPortStatus) {
+		if (mxhci->port_connect) {
+			if (status & ((USB_PORT_STAT_C_CONNECTION << 16) |
+					(USB_PORT_STAT_C_ENABLE << 16))) {
+				xhci_dbg_log_event(&dbg_hsic, NULL,
+						"spurious port change", status);
+				return -ENODEV;
+			}
+		} else if (status & (USB_PORT_STAT_C_CONNECTION << 16)) {
+			xhci_dbg_log_event(&dbg_hsic, NULL,  "port connect",
+					status);
+			mxhci->port_connect = true;
+		}
+	}
+	return ret;
+}
+
+void mxhci_hsic_udev_enum_done(struct usb_hcd *hcd)
+{
+	struct mxhci_hsic_hcd *mxhci = hcd_to_hsic(hcd->primary_hcd);
+
+	if (mxhci->host_ready) {
+		/* after device enum lower host ready gpio */
+		gpio_direction_output(mxhci->host_ready, 0);
+		xhci_dbg_log_event(&dbg_hsic, NULL,  "host ready set low",
+					gpio_get_value(mxhci->host_ready));
+	}
 }
 
 static struct hc_driver mxhci_hsic_hc_driver = {
@@ -996,7 +1049,7 @@ static struct hc_driver mxhci_hsic_hc_driver = {
 	.get_frame_number =	xhci_get_frame,
 
 	/* Root hub support */
-	.hub_control =		xhci_hub_control,
+	.hub_control =		mxhci_hsic_hub_control,
 	.hub_status_data =	xhci_hub_status_data,
 	.bus_suspend =		mxhci_hsic_bus_suspend,
 	.bus_resume =		mxhci_hsic_bus_resume,
@@ -1005,6 +1058,7 @@ static struct hc_driver mxhci_hsic_hc_driver = {
 	.log_urb =		xhci_hsic_log_urb,
 
 	.set_autosuspend_delay = mxhci_hsic_set_autosuspend_delay,
+	.udev_enum_done =	mxhci_hsic_udev_enum_done,
 };
 
 static ssize_t config_imod_store(struct device *pdev,
@@ -1275,6 +1329,7 @@ static int mxhci_hsic_probe(struct platform_device *pdev)
 		}
 	}
 
+	irq_set_status_flags(irq, IRQ_NOAUTOEN);
 	ret = usb_add_hcd(hcd, irq, IRQF_SHARED);
 	if (ret)
 		goto deinit_vddcx;
@@ -1359,6 +1414,7 @@ static int mxhci_hsic_probe(struct platform_device *pdev)
 		dev_dbg(&pdev->dev, "%s: unable to create imod sysfs entry\n",
 					__func__);
 
+	enable_irq(irq);
 	/* Enable HSIC PHY */
 	mxhci_hsic_ulpi_write(mxhci, 0x01, MSM_HSIC_CFG_SET);
 
