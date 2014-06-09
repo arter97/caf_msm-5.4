@@ -641,7 +641,7 @@ static netdev_tx_t odu_ipa_start_xmit(struct sk_buff *skb,
 
 	ret = odu_ipa_send_dl_skb(skb, odu_ipa_ctx);
 	if (ret) {
-		ODU_IPA_ERR("send dl skb failed (%d)\n", ret);
+		ODU_IPA_DBG("send dl skb failed (%d)\n", ret);
 		goto fail_tx_packet;
 	}
 
@@ -1032,7 +1032,7 @@ static int odu_ipa_send_dl_skb(struct sk_buff *skb, void *priv)
 
 	ret = ipa_tx_dp(IPA_TO_HSIC_CLIENT, skb, NULL);
 	if (ret) {
-		ODU_IPA_ERR("ipa transmit failed (%d)\n", ret);
+		ODU_IPA_DBG("ipa transmit failed (%d)\n", ret);
 		skb_pull(skb, odu_ipa_ctx->hw_hdr_info.tx.hdr_len);
 		return ret;
 	}
@@ -1299,7 +1299,7 @@ static void odu_ipa_sys_pipe_rx_cb(void *priv,
 
 	result = ipa_tx_dp(IPA_TO_HSIC_CLIENT, skb, NULL);
 	if (result) {
-		ODU_IPA_ERR("ipa_tx_dp failed %d\n", result);
+		ODU_IPA_DBG("ipa_tx_dp failed %d\n", result);
 		dev_kfree_skb_any(skb);
 		return;
 	}

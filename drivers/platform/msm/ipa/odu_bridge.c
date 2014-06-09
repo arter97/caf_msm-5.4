@@ -809,7 +809,7 @@ static void odu_send_skb_work(struct work_struct *work)
 	case ODU_DIR_UL:
 		res = a2_mux_write(A2_MUX_TETHERED_0, work_data->skb);
 		if (res) {
-			ODU_BRIDGE_ERR("Packet send fail, dropping packet\n");
+			ODU_BRIDGE_DBG("Packet send fail, dropping packet\n");
 			goto bail;
 		}
 		odu_bridge_ctx->stats.num_ul_packets++;
@@ -819,7 +819,7 @@ static void odu_send_skb_work(struct work_struct *work)
 		res = odu_bridge_ctx->send_dl_skb_cb(work_data->skb,
 			odu_bridge_ctx->cb_priv);
 		if (res) {
-			ODU_BRIDGE_ERR("Packet send fail, dropping packet\n");
+			ODU_BRIDGE_DBG("Packet send fail, dropping packet\n");
 			goto bail;
 		}
 		odu_bridge_ctx->stats.num_dl_packets++;
@@ -896,7 +896,7 @@ static int send_skb_to_a2(struct sk_buff *skb)
 	}
 	res = a2_mux_write(A2_MUX_TETHERED_0, skb);
 	if (res) {
-		ODU_BRIDGE_ERR("Packet send failure\n");
+		ODU_BRIDGE_DBG("Packet send failure\n");
 		odu_bridge_release_resource();
 		return res;
 	}
@@ -1062,7 +1062,7 @@ static void a2_notify_cb(void *user_data,
 		res = odu_bridge_ctx->send_dl_skb_cb(skb,
 						odu_bridge_ctx->cb_priv);
 		if (res) {
-			ODU_BRIDGE_ERR("Packet send fail, dropping packet\n");
+			ODU_BRIDGE_DBG("Packet send fail, dropping packet\n");
 			dev_kfree_skb(skb);
 			odu_bridge_release_resource();
 			return;

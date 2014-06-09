@@ -1052,7 +1052,7 @@ int a2_mux_write(enum a2_mux_logical_channel_id id, struct sk_buff *skb)
 	else
 		rc = ipa_tx_dp(IPA_CLIENT_A2_EMBEDDED_CONS, skb, NULL);
 	if (rc) {
-		IPAERR("%s ipa_tx_dp failed rc=%d\n",
+		IPADBG("%s ipa_tx_dp failed rc=%d\n",
 			__func__, rc);
 		list_del(&pkt->list_node);
 		spin_unlock_irqrestore(&a2_mux_ctx->bam_tx_pool_spinlock,

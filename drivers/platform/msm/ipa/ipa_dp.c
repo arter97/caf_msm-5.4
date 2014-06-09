@@ -1086,6 +1086,11 @@ int ipa_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 	struct ipa_sys_context *sys;
 	int src_ep_idx;
 
+	if (unlikely(ipa_ctx->disable_sys_dp)) {
+		IPADBG("SYS2BAM data path is disabled\n");
+		return -EAGAIN;
+	}
+
 	/*
 	 * USB_CONS: PKT_INIT ep_idx = dst pipe
 	 * Q6_CONS: PKT_INIT ep_idx = sender pipe
