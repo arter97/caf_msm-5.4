@@ -29,6 +29,7 @@
 #include "msm.h"
 #include "vfe/msm_vfe32.h"
 #include "../../../video/msm/msm_fb.h"
+
 #define PREVIEW_BUFFER_COUNT 3
 int PREVIEW_HEIGHT = 507;
 int PREVIEW_WIDTH = 720;
@@ -88,49 +89,49 @@ struct output_ch {
 	int32_t   inst_handle:32;
 } __packed;
 
-struct VFE_PixelIfCfg {
-	uint32_t inputSelect:2;
-	uint32_t rdiEnable:1;
+struct vfe_pixel_if_cfg {
+	uint32_t input_select:2;
+	uint32_t rdi_enable:1;
 	uint32_t /* reserved */ : 1;
-	uint32_t rdiM0Select:4;
-	uint32_t rdiM1Select:4;
-	uint32_t rdiM2Select:4;
-	uint32_t rdiM0FrameBasedEnable:1;
-	uint32_t rdiM1FrameBasedEnable:1;
-	uint32_t rdiM2FrameBasedEnable:1;
+	uint32_t rdi_m0_select:4;
+	uint32_t rdi_m1_select:4;
+	uint32_t rdi_m2_select:4;
+	uint32_t rdi_m0_frame_based_enable:1;
+	uint32_t rdi_m1_frame_based_enable:1;
+	uint32_t rdi_m2_frame_based_enable:1;
 	uint32_t /* reserved */ : 1;
-	uint32_t rdiFrameSkip:4;
-	uint32_t rdiFrameSkipEnable:1;
+	uint32_t rdi_frame_skip:4;
+	uint32_t rdi_frame_skip_enable:1;
 	uint32_t /* reserved */ : 3;
-	uint32_t rdiStreamSelect:4;
+	uint32_t rdi_stream_select:4;
 } __packed;
 
-struct VFE_RdiCfg0 {
+struct vfe_rdi_cfg0 {
 	uint32_t /*reserved*/ : 2;
-	uint32_t rdiEnable:1;
+	uint32_t rdi_enable:1;
 	uint32_t /* reserved */ : 1;
-	uint32_t rdiM3Select:4;
-	uint32_t rdiM4Select:4;
-	uint32_t rdiM5Select:4;
+	uint32_t rdi_m3_select:4;
+	uint32_t rdi_m4_select:4;
+	uint32_t rdi_m5_select:4;
 	uint32_t /* reserved */ : 4;
-	uint32_t rdiFrameSkip:4;
-	uint32_t rdiFrameSkipEnable:1;
+	uint32_t rdi_frame_skip:4;
+	uint32_t rdi_frame_skip_enable:1;
 	uint32_t /*reserved*/ : 3;
-	uint32_t rdiStreamSelect1:4;
+	uint32_t rdi_stream_select1:4;
 } __packed;
 
-struct VFE_RdiCfg1 {
+struct vfe_rdi_cfg1 {
 	uint32_t /*reserved*/ : 2;
-	uint32_t rdiEnable:1;
+	uint32_t rdi_enable:1;
 	uint32_t /* reserved */ : 1;
-	uint32_t rdiM6Select:4;
-	uint32_t rdiM7Select:4;
-	uint32_t rdiM8Select:4;
+	uint32_t rdi_m6_select:4;
+	uint32_t rdi_m7_select:4;
+	uint32_t rdi_m8_select:4;
 	uint32_t /* reserved */ : 4;
-	uint32_t rdiFrameSkip:4;
-	uint32_t rdiFrameSkipEnable:1;
+	uint32_t rdi_frame_skip:4;
+	uint32_t rdi_frame_skip_enable:1;
 	uint32_t /*reserved*/ : 3;
-	uint32_t rdiStreamSelect2:4;
+	uint32_t rdi_stream_select2:4;
 } __packed;
 
 
@@ -143,42 +144,42 @@ struct output_path {
 } __packed;
 
 struct vfe_wm_config {
-	uint32_t wmEnable:1;
+	uint32_t wm_enable:1;
 	uint32_t /* reserved */ : 31;
-	uint32_t busPingAddr:32;
-	uint32_t busPongAddr:32;
-	uint32_t busUbDepth:10;
+	uint32_t bus_ping_addr:32;
+	uint32_t bus_pong_addr:32;
+	uint32_t bus_ub_depth:10;
 	uint32_t /* reserved */ : 6;
-	uint32_t busUbOffset:10;
+	uint32_t bus_ub_offset:10;
 	uint32_t /* reserved */ : 6;
-	uint32_t buslinesPerImage:12;
+	uint32_t buslines_per_image:12;
 	uint32_t /* reserved */ : 4;
-	uint32_t busdwordsPerLine:10;
+	uint32_t busdwords_per_line:10;
 	uint32_t /* reserved */ : 6;
-	uint32_t busburstLength:2;
+	uint32_t busburst_length:2;
 	uint32_t /* reserved */ : 2;
-	uint32_t busbufferNumRows:12;
-	uint32_t busrowIncrement:13;
+	uint32_t busbuffer_num_rows:12;
+	uint32_t busrow_increment:13;
 	uint32_t /* reserved */ : 3;
 } __packed;
 
-struct VFE_AXIOutputConfigCmdType {
-	uint32_t busioFormat:32;
-	uint32_t busCmd:32;
-	/* busCfg's 31st bit config is as following
+struct vfe_axi_output_config_cmd_type {
+	uint32_t busio_format:32;
+	uint32_t bus_cmd:32;
+	/* bus_cfg's 31st bit config is as following
 	* 7x30: OOO_WRITE_ENABLE  ---  Not Used
 	* 8x60: Reserved          ---  Not Used
 	* 8960: IMEM Mode disable (For Inline-JPEG only)
 	*/
-	uint32_t busCfg:32;
-	uint32_t xbarCfg0:32;
-	uint32_t xbarCfg1:32;
-	uint32_t busWrSkipCfg:32;
+	uint32_t bus_cfg:32;
+	uint32_t xbar_cfg0:32;
+	uint32_t xbar_cfg1:32;
+	uint32_t bus_wr_skip_cfg:32;
 	struct vfe_wm_config wm[AXI_MAX_WM_NUM];
 	struct output_path outpath;
-	struct VFE_PixelIfCfg pixelIfCfg;
-	struct VFE_RdiCfg0 rdiCfg0;
-	struct VFE_RdiCfg1 rdiCfg1;
+	struct vfe_pixel_if_cfg pixel_if_cfg;
+	struct vfe_rdi_cfg0 rdi_cfg0;
+	struct vfe_rdi_cfg1 rdi_cfg1;
 } __packed;
 /* Guidance Lane data structure */
 struct guidance_lane_mem {

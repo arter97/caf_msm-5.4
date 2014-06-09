@@ -14,15 +14,15 @@
 #include <linux/msm_ion.h>
 #include <linux/mutex.h>
 #include <linux/io.h>
-#include <asm/mach-types.h>
 #include <linux/mutex.h>
 #include <linux/workqueue.h>
 #include <linux/delay.h>
 #include <linux/swab.h>
+#include <asm/mach-types.h>
 #include "adp_camera.h"
-#include "../../../switch/background.h"
-#include "../../../switch/left_lane.h"
-#include "../../../switch/right_lane.h"
+#include "background.h"
+#include "left_lane.h"
+#include "right_lane.h"
 
 static void *k_addr[OVERLAY_COUNT];
 static int alloc_overlay_pipe_flag[OVERLAY_COUNT];
@@ -37,7 +37,7 @@ struct sensor_init_cfg *init_info;
 static uint32_t csid_version;
 static int rdi1_irq_count;
 struct mdp4_overlay_pipe *pipe[OVERLAY_COUNT];
-static struct VFE_AXIOutputConfigCmdType vfe_axi_cmd_para;
+static struct vfe_axi_output_config_cmd_type vfe_axi_cmd_para;
 static struct msm_camera_vfe_params_t vfe_para;
 static struct work_struct wq_mdp_queue_overlay_buffers;
 static int adp_rear_camera_enable(void);
@@ -48,7 +48,7 @@ struct msm_camera_csiphy_params csiphy_params = {
 	.lane_mask = 0x1,
 };
 struct msm_camera_csi_lane_params csi_lane_params = {
-	.csi_lane_assign = 0xE4,
+	.csi_lane_assign = 0xe4,
 	.csi_lane_mask = 0x1,
 	.csi_phy_sel = 0,
 };
@@ -58,7 +58,7 @@ struct msm_camera_csid_vc_cfg mt9m114_cid_cfg1[] = {
 };
 struct msm_camera_csid_params csid_params = {
 	.lane_cnt = 1,
-	.lane_assign = 0xE4,
+	.lane_assign = 0xe4,
 	.lut_params = {
 		.num_cid = ARRAY_SIZE(mt9m114_cid_cfg1),
 		.vc_cfg = mt9m114_cid_cfg1,
@@ -69,41 +69,41 @@ static struct msm_camera_preview_data preview_data;
 /* -------------------- Guidance Lane Data Structures ----------------------- */
 static struct msm_guidance_lane_data guidance_lane_data;
 
-int axi_vfe_config_cmd_para(struct VFE_AXIOutputConfigCmdType *cmd)
+int axi_vfe_config_cmd_para(struct vfe_axi_output_config_cmd_type *cmd)
 {
 	/* configure the axi bus parameters here */
 	int config;
 	int ch_wm;
-	int axiOutputPpw;
+	int axi_output_ppw;
 	int ch0_wm;
-	int imageWidth;
-	int imageHeight;
-	int burstLength;
-	imageWidth = PREVIEW_WIDTH*2;
-	imageHeight = PREVIEW_HEIGHT;
-	cmd->busioFormat = 0;
-	cmd->busCmd = 0;
-	cmd->busCfg = 0x2aaa771;
-	cmd->busWrSkipCfg  = 0;
-	cmd->rdiCfg0.rdiEnable = 0x1;
-	cmd->rdiCfg0.rdiStreamSelect1 = 0x3;
-	cmd->rdiCfg0.rdiM3Select = 0x0;
+	int image_width;
+	int image_height;
+	int burst_length;
+	image_width = PREVIEW_WIDTH*2;
+	image_height = PREVIEW_HEIGHT;
+	cmd->busio_format = 0;
+	cmd->bus_cmd = 0;
+	cmd->bus_cfg = 0x2aaa771;
+	cmd->bus_wr_skip_cfg  = 0;
+	cmd->rdi_cfg0.rdi_enable = 0x1;
+	cmd->rdi_cfg0.rdi_stream_select1 = 0x3;
+	cmd->rdi_cfg0.rdi_m3_select = 0x0;
 	config = 0x01 | (0x06 << 5);
 	ch_wm = 3;
-	cmd->xbarCfg0 = 0;
-	cmd->xbarCfg0 = (cmd->xbarCfg0) & ~(0x000000FF << (8 * (ch_wm % 4)));
-	cmd->xbarCfg0 = (cmd->xbarCfg0) | (config << (8 * (ch_wm % 4)));
+	cmd->xbar_cfg0 = 0;
+	cmd->xbar_cfg0 = (cmd->xbar_cfg0) & ~(0x000000FF << (8 * (ch_wm % 4)));
+	cmd->xbar_cfg0 = (cmd->xbar_cfg0) | (config << (8 * (ch_wm % 4)));
 	ch0_wm = 3;
-	axiOutputPpw = 8;
-	burstLength = 3;
-	cmd->wm[ch0_wm].busdwordsPerLine = 89;
-	cmd->wm[ch0_wm].busrowIncrement =
-		(imageWidth+(axiOutputPpw-1))/(axiOutputPpw);
-	cmd->wm[ch0_wm].buslinesPerImage = imageHeight - 1;
-	cmd->wm[ch0_wm].busbufferNumRows = imageHeight - 1;
-	cmd->wm[ch0_wm].busburstLength = burstLength;
-	cmd->wm[ch0_wm].busUbOffset = 0;
-	cmd->wm[ch0_wm].busUbDepth = 0x3F0;
+	axi_output_ppw = 8;
+	burst_length = 3;
+	cmd->wm[ch0_wm].busdwords_per_line = 89;
+	cmd->wm[ch0_wm].busrow_increment =
+		(image_width+(axi_output_ppw-1))/(axi_output_ppw);
+	cmd->wm[ch0_wm].buslines_per_image = image_height - 1;
+	cmd->wm[ch0_wm].busbuffer_num_rows = image_height - 1;
+	cmd->wm[ch0_wm].busburst_length = burst_length;
+	cmd->wm[ch0_wm].bus_ub_offset = 0;
+	cmd->wm[ch0_wm].bus_ub_depth = 0x3f0;
 
 	return 0;
 }
@@ -343,15 +343,10 @@ static void preview_configure_bufs()
 
 static void preview_set_overlay_init(struct mdp_overlay *overlay)
 {
-	/*
-	set_overlay;
-	TODO: re-check and change below values based on Auto Platform # 1
-	board's display
-	 */
 	overlay->id = MSMFB_NEW_REQUEST;
 	overlay->src.width  = PREVIEW_WIDTH;
 	overlay->src.height = PREVIEW_HEIGHT;
-	overlay->src.format = MDP_YCBYCR_H2V1;
+	overlay->src.format = MDP_YCRYCB_H2V1;
 	overlay->src_rect.x = 0;
 	overlay->src_rect.y = 6;
 	overlay->src_rect.w = PREVIEW_WIDTH;
@@ -420,7 +415,6 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 			 */
 			buffer_index =
 				preview_find_buffer_index_by_paddr(ch0_paddr);
-			format_convert(buffer_index);
 
 			/* configure overlay data for guidance lane */
 			overlay_data[OVERLAY_CAMERA_PREVIEW].id =
@@ -447,9 +441,10 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 					axi_ctrl->share_ctrl->outpath.out3.ch0,
 					free_buf->cam_preview.ch_paddr[0]);
 				/* shall add function to change the buffer state
-				to be queued to ping pong
-				preview_buffer_update_status_to_pingpong
-				preview_free_buf() is needed? */
+				 * to be queued to ping pong
+				 * preview_buffer_update_status_to_pingpong
+				 * preview_free_buf() is needed?
+				 */
 				free_buf->state =
 				CAMERA_PREVIEW_BUFFER_STATE_QUEUED_TO_PINGPONG;
 			}
@@ -466,7 +461,7 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 	}
 }
 
-/* ----------------------- Guidance Bitmap Implememtation ------------------ */
+/* Guidance Bitmap Implememtation */
 
 void guidance_lane_buffer_alloc(void)
 {
@@ -475,7 +470,6 @@ void guidance_lane_buffer_alloc(void)
 	int mem_len;
 	unsigned long paddr;
 	memset(&guidance_lane_data, 0, sizeof(struct msm_guidance_lane_data));
-	pr_err("%s\n", __func__);
 	guidance_lane_data.ion_client = msm_ion_client_create(-1, "camera");
 	if (IS_ERR_OR_NULL((void *)guidance_lane_data.ion_client)) {
 		pr_err("%s: ION create client failed\n", __func__);
@@ -521,7 +515,6 @@ void guidance_lane_buffer_alloc(void)
 		offset += GUIDANCE_LANE_BUFFER_LENGTH;
 		/* this offset from start address ion_handle, as align to 8 */
 	}
-
 	return;
 err_ion_handle:
 	ion_free(guidance_lane_data.ion_client, guidance_lane_data.ion_handle);
@@ -581,11 +574,6 @@ static void guidance_lane_configure_bufs()
 
 static void guidance_lane_set_overlay_init(struct mdp_overlay *overlay)
 {
-	/*
-	set_overlay;
-	TODO: re-check and change below values based on Auto Platform # 1
-	board's display
-	*/
 	overlay->id = MSMFB_NEW_REQUEST;
 	overlay->src.width  = GUIDANCE_LANE_WIDTH;
 	overlay->src.height = GUIDANCE_LANE_HEIGHT;
@@ -607,11 +595,8 @@ static void guidance_lane_set_overlay_init(struct mdp_overlay *overlay)
 }
 
 static void guidance_lane_pic_update(const unsigned char *pic,
-		unsigned int pos_x,
-		unsigned int pos_y,
-		unsigned int image_w,
-		unsigned int image_h,
-		unsigned int buffer_index)
+		unsigned int pos_x, unsigned int pos_y, unsigned int image_w,
+		unsigned int image_h, unsigned int buffer_index)
 {
 	int i;
 	unsigned int bpp = 3;
@@ -660,6 +645,7 @@ static int adp_rear_camera_enable(void)
 	my_axi_ctrl->share_ctrl->current_mode = 4096;
 	vfe_para.operation_mode = VFE_OUTPUTS_RDI1;
 	/* Detect NTSC or PAL, get the preview width and height */
+
 	PREVIEW_BUFFER_LENGTH =  PREVIEW_WIDTH * PREVIEW_HEIGHT*2;
 	PREVIEW_BUFFER_SIZE  =  PREVIEW_BUFFER_COUNT * PREVIEW_BUFFER_LENGTH;
 	preview_configure_bufs();
@@ -703,7 +689,6 @@ static int adp_rear_camera_enable(void)
 	guidance_lane_set_data_pipeline();
 	my_axi_ctrl->share_ctrl->current_mode = 4096; /* BIT(12) */
 	my_axi_ctrl->share_ctrl->operation_mode = 4096;
-	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);
 	return 0;
 }
 
@@ -719,25 +704,35 @@ int  init_camera_kthread(void)
 void  exit_camera_kthread(void)
 {
 	pr_debug("Exiting  camera\n");
-	axi_stop_rdi1_only(my_axi_ctrl);
-	msm_csid_release(lsh_csid_dev);
-	msm_csiphy_release(lsh_csiphy_dev, &csi_lane_params);
-	msm_ispif_release(lsh_ispif);
-	pr_debug("%s: begin axi release\n", __func__);
-	msm_axi_subdev_release_rdi_only(lsh_axi_ctrl, s_ctrl);
-	cancel_work_sync(&wq_mdp_queue_overlay_buffers);
+	mdpclient_display_commit();
+	guidance_lane_buffer_free();
+	mdpclient_msm_fb_close();
 	if (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] == 0) {
 		mdpclient_overlay_unset(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
 		pr_debug("%s: overlay_unset camera preview free pipe !\n",
 			__func__);
 	}
 	preview_buffer_free();
+	pr_debug("%s: begin axi release\n", __func__);
+	msm_axi_subdev_release_rdi_only(lsh_axi_ctrl, s_ctrl);
+	msm_csid_release(lsh_csid_dev);
+	msm_csiphy_release(lsh_csiphy_dev, &csi_lane_params);
+	msm_ispif_release(lsh_ispif);
+	cancel_work_sync(&wq_mdp_queue_overlay_buffers);
+}
+
+void disable_camera_preview(void)
+{
+	axi_stop_rdi1_only(my_axi_ctrl);
 	if (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] == 0) {
 		mdpclient_overlay_unset(&overlay_req[OVERLAY_GUIDANCE_LANE]);
 		pr_debug("%s: overlay_unset guidance lane free pipe !\n",
 			__func__);
 	}
-	mdpclient_display_commit();
-	guidance_lane_buffer_free();
-	mdpclient_msm_fb_close();
+
+}
+void enable_camera_preview(void)
+{
+	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);
+
 }
