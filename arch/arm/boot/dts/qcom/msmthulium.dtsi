@@ -91,6 +91,9 @@
 		reg = <0x0756f000 0x1000>;
 		interrupts = <0 107 0>;
 		status = "disabled";
+		clocks = <&clock_gcc clk_gcc_blsp1_uart1_apps_clk>,
+			 <&clock_gcc clk_gcc_blsp1_ahb_clk>;
+		clock-names = "core_clk", "iface_clk";
 	};
 
 	clock_rpm: qcom,rpmcc@362000 {
