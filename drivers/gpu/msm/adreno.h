@@ -941,10 +941,4 @@ static inline void adreno_set_protected_registers(struct kgsl_device *device,
 	*index = *index + 1;
 }
 
-#ifdef CONFIG_DEBUG_FS
-void adreno_debugfs_init(struct kgsl_device *device);
-#else
-static inline void adreno_debugfs_init(struct kgsl_device *device) { }
-#endif
-
 #endif /*__ADRENO_H */
