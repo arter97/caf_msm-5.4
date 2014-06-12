@@ -28,6 +28,26 @@
 #define CDBG(fmt, args...) do { } while (0)
 #endif
 
+static void msm_sensor_adjust_mclk(struct msm_camera_power_ctrl_t *ctrl)
+{
+	int idx;
+	struct msm_sensor_power_setting *power_setting;
+
+	for (idx = 0; idx < ctrl->power_setting_size; idx++) {
+		power_setting = &ctrl->power_setting[idx];
+		if (power_setting->seq_type == SENSOR_CLK &&
+			power_setting->seq_val ==  SENSOR_CAM_MCLK) {
+			if (power_setting->config_val == 24000000) {
+				power_setting->config_val = 23880000;
+				CDBG("%s MCLK request adjusted to 23.88MHz\n", __func__);
+			}
+			break;
+		}
+	}
+
+	return;
+}
+
 static int32_t msm_camera_get_power_settimgs_from_sensor_lib(
 	struct msm_camera_power_ctrl_t *power_info,
 	struct msm_sensor_power_setting_array *power_setting_array)
@@ -173,6 +193,15 @@ static int32_t msm_sensor_get_dt_data(struct device_node *of_node,
 	}
 	CDBG("%s qcom,sensor-mode %d\n", __func__,
 		sensordata->sensor_info->modes_supported);
+
+	rc = of_property_read_u32(of_node, "qcom,mclk-23880000",
+		&s_ctrl->set_mclk_23880000);
+	if (rc < 0) {
+		s_ctrl->set_mclk_23880000 = 0;
+		rc = 0;
+	}
+	CDBG("%s qcom,mclk-23880000 %d, rc %d\n", __func__,
+		s_ctrl->set_mclk_23880000, rc);
 
 	rc = msm_sensor_get_dt_csi_data(of_node, &sensordata->csi_lane_params);
 	if (rc < 0) {
@@ -440,6 +469,10 @@ int msm_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 			__func__, __LINE__, power_info,
 			sensor_i2c_client, slave_info, sensor_name);
 		return -EINVAL;
+	}
+
+	if (s_ctrl->set_mclk_23880000) {
+		msm_sensor_adjust_mclk (power_info);
 	}
 
 	for (retry = 0; retry < 3; retry++) {
