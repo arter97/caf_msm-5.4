@@ -25,7 +25,10 @@
 #include "mipi_dsi_i2c.h"
 
 struct mipi_dsi_i2c_resource dsi_i2c_rsc;
+EXPORT_SYMBOL(dsi_i2c_rsc);
+
 struct mipi_dsi_i2c_configure dsi_i2c_cfg;
+EXPORT_SYMBOL(dsi_i2c_cfg);
 
 /*
  * If i2c read or write fails, wait for 100ms to try again, and try
@@ -77,8 +80,9 @@ int mipi_dsi_i2c_read_byte(u8 addr, u8 reg, u8 *buf)
 {
 	return mipi_dsi_i2c_read(addr, reg, buf, 1);
 }
+EXPORT_SYMBOL(mipi_dsi_i2c_read_byte);
 
-static int mipi_dsi_i2c_write_byte(u8 addr, u8 reg, u8 val)
+int mipi_dsi_i2c_write_byte(u8 addr, u8 reg, u8 val)
 {
 	int ret = 0, i = 0;
 	u8 buf[2] = {reg, val};
@@ -112,25 +116,7 @@ static int mipi_dsi_i2c_write_byte(u8 addr, u8 reg, u8 val)
 w_err:
 	return ret;
 }
-
-int mipi_dsi_i2c_write_regs(struct mipi_dsi_i2c_reg_cfg *cfg, int size)
-{
-	int ret = 0;
-	int i;
-
-	for (i = 0; i < size; i++) {
-		ret = mipi_dsi_i2c_write_byte(cfg[i].i2c_addr, cfg[i].reg,
-			cfg[i].val);
-		if (ret) {
-			pr_err("mipi_dsi reg writes failed\n");
-			goto w_regs_fail;
-		}
-		msleep(50);
-	}
-
-w_regs_fail:
-	return ret;
-}
+EXPORT_SYMBOL(mipi_dsi_i2c_write_byte);
 
 static struct i2c_device_id mipi_dsi_i2c_id[] = {
 	{ "mipi_dsi_i2c", 0 },

@@ -14,11 +14,7 @@
 #ifndef __MIPI_DSI_I2C_H__
 #define __MIPI_DSI_I2C_H__
 
-struct mipi_dsi_i2c_reg_cfg {
-	u8 i2c_addr;
-	u8 reg;
-	u8 val;
-};
+#include "msm_fb_panel.h"
 
 /*
  * client may use this info to implement its own i2c read and write
@@ -40,7 +36,8 @@ extern struct mipi_dsi_i2c_resource dsi_i2c_rsc;
 extern struct mipi_dsi_i2c_configure dsi_i2c_cfg;
 
 int mipi_dsi_i2c_read_byte(u8 addr, u8 reg, u8 *buf);
-int mipi_dsi_i2c_write_regs(struct mipi_dsi_i2c_reg_cfg *cfg, int size);
+int mipi_dsi_i2c_write_byte(u8 addr, u8 reg, u8 val);
+
 int mipi_dsi_i2c_device_register(struct msm_panel_info *pinfo);
 
 #endif /* __MIPI_DSI_I2C_H__ */

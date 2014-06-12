@@ -270,6 +270,7 @@ int msm_fb_detect_client(const char *name)
 
 	return ret;
 }
+EXPORT_SYMBOL(msm_fb_detect_client);
 
 static ssize_t msm_fb_fps_level_change(struct device *dev,
 				struct device_attribute *attr,
