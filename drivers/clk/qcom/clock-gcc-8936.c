@@ -1778,7 +1778,7 @@ static struct local_vote_clk gcc_boot_rom_ahb_clk = {
 
 static struct branch_clk gcc_camss_cci_ahb_clk = {
 	.cbcr_reg = CAMSS_CCI_AHB_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_bases[GCC_BASE],
 	.c = {
 		.dbg_name = "gcc_camss_cci_ahb_clk",
@@ -2019,7 +2019,7 @@ static struct branch_clk gcc_camss_gp1_clk = {
 
 static struct branch_clk gcc_camss_ispif_ahb_clk = {
 	.cbcr_reg = CAMSS_ISPIF_AHB_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_bases[GCC_BASE],
 	.c = {
 		.dbg_name = "gcc_camss_ispif_ahb_clk",
@@ -2044,7 +2044,7 @@ static struct branch_clk gcc_camss_jpeg0_clk = {
 
 static struct branch_clk gcc_camss_jpeg_ahb_clk = {
 	.cbcr_reg = CAMSS_JPEG_AHB_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_bases[GCC_BASE],
 	.c = {
 		.dbg_name = "gcc_camss_jpeg_ahb_clk",
@@ -2140,7 +2140,7 @@ static struct branch_clk gcc_camss_csi1phytimer_clk = {
 
 static struct branch_clk gcc_camss_top_ahb_clk = {
 	.cbcr_reg = CAMSS_TOP_AHB_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_bases[GCC_BASE],
 	.c = {
 		.dbg_name = "gcc_camss_top_ahb_clk",
