@@ -636,12 +636,13 @@ static int kgsl_iommu_pt_equal(struct kgsl_mmu *mmu,
 static void kgsl_iommu_destroy_pagetable(struct kgsl_pagetable *pt)
 {
 	struct kgsl_iommu_pt *iommu_pt = pt->priv;
-	phys_addr_t domain_ptbase = iommu_get_pt_base_addr(iommu_pt->domain);
 
-	if (iommu_pt->domain)
+	if (iommu_pt->domain) {
+		phys_addr_t domain_ptbase =
+			iommu_get_pt_base_addr(iommu_pt->domain);
+		trace_kgsl_pagetable_destroy(domain_ptbase, pt->name);
 		msm_unregister_domain(iommu_pt->domain);
-
-	trace_kgsl_pagetable_destroy(domain_ptbase, pt->name);
+	}
 
 	kfree(iommu_pt);
 	iommu_pt = NULL;
@@ -659,13 +660,10 @@ static void *kgsl_iommu_create_pagetable(void)
 	int domain_num;
 	struct kgsl_iommu_pt *iommu_pt;
 
-	struct msm_iova_partition kgsl_partition = {
-		.start = 0,
-		.size = 0xFFFFFFFF,
-	};
 	struct msm_iova_layout kgsl_layout = {
-		.partitions = &kgsl_partition,
-		.npartitions = 1,
+		/* we manage VA space ourselves, so partitions aren't needed */
+		.partitions = NULL,
+		.npartitions = 0,
 		.client_name = "kgsl",
 		.domain_flags = 0,
 	};

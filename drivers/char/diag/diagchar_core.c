@@ -162,7 +162,7 @@ void check_drain_timer(void)
 
 	if (!timer_in_progress) {
 		timer_in_progress = 1;
-		ret = mod_timer(&drain_timer, jiffies + msecs_to_jiffies(500));
+		ret = mod_timer(&drain_timer, jiffies + msecs_to_jiffies(200));
 	}
 }
 
@@ -1096,7 +1096,6 @@ static int diag_ioctl_vote_real_time(unsigned long ioarg)
 static int diag_ioctl_get_real_time(unsigned long ioarg)
 {
 	int result = -EINVAL;
-	int real_time = 0;
 	int retry_count = 0;
 	int timer = 0;
 	struct real_time_query_t rt_query;
@@ -1121,7 +1120,8 @@ static int diag_ioctl_get_real_time(unsigned long ioarg)
 				       rt_query.proc, __func__);
 				return -EINVAL;
 			}
-			real_time = driver->real_time_mode[rt_query.proc];
+			rt_query.real_time =
+				driver->real_time_mode[rt_query.proc];
 			if (copy_to_user((void __user *)ioarg, &rt_query,
 				sizeof(struct real_time_query_t)))
 				return -EFAULT;

@@ -26,14 +26,12 @@
 #include <linux/spinlock.h>
 #include <linux/delay.h>
 #include <linux/crypto.h>
-#include <linux/qcedev.h>
 #include <linux/bitops.h>
 #include <linux/clk/msm-clk.h>
+#include <linux/qcrypto.h>
 #include <crypto/hash.h>
 #include <crypto/sha.h>
-#include <mach/dma.h>
 #include <soc/qcom/socinfo.h>
-#include <mach/qcrypto.h>
 
 #include "qce.h"
 #include "qce50.h"
@@ -2944,8 +2942,10 @@ static void qce_add_cmd_element(struct qce_device *pdev,
 			u32 data, struct sps_command_element **populate)
 {
 	(*cmd_ptr)->addr = (uint32_t)(addr + pdev->phy_iobase);
+	(*cmd_ptr)->command = 0;
 	(*cmd_ptr)->data = data;
 	(*cmd_ptr)->mask = 0xFFFFFFFF;
+	(*cmd_ptr)->reserved = 0;
 	if (populate != NULL)
 		*populate = *cmd_ptr;
 	(*cmd_ptr)++;

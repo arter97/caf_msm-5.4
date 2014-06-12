@@ -1635,8 +1635,9 @@ static void kgsl_cmdbatch_sync_expire(struct kgsl_device *device,
 	struct kgsl_cmdbatch_sync_event *e, *tmp;
 	int sched = 0;
 	int removed = 0;
+	unsigned long flags;
 
-	spin_lock(&event->cmdbatch->lock);
+	spin_lock_irqsave(&event->cmdbatch->lock, flags);
 
 	/*
 	 * sync events that are contained by a cmdbatch which has been
@@ -1652,7 +1653,7 @@ static void kgsl_cmdbatch_sync_expire(struct kgsl_device *device,
 	}
 
 	sched = list_empty(&event->cmdbatch->synclist) ? 1 : 0;
-	spin_unlock(&event->cmdbatch->lock);
+	spin_unlock_irqrestore(&event->cmdbatch->lock, flags);
 
 	/* If the list is empty delete the canary timer */
 	if (sched)
@@ -1793,6 +1794,7 @@ static int kgsl_cmdbatch_add_sync_fence(struct kgsl_device *device,
 {
 	struct kgsl_cmd_syncpoint_fence *sync = priv;
 	struct kgsl_cmdbatch_sync_event *event;
+	unsigned long flags;
 
 	event = kzalloc(sizeof(*event), GFP_KERNEL);
 
@@ -1819,10 +1821,10 @@ static int kgsl_cmdbatch_add_sync_fence(struct kgsl_device *device,
 	 * removing from the synclist.
 	 */
 
-	spin_lock(&cmdbatch->lock);
 	kref_get(&event->refcount);
+	spin_lock_irqsave(&cmdbatch->lock, flags);
 	list_add(&event->node, &cmdbatch->synclist);
-	spin_unlock(&cmdbatch->lock);
+	spin_unlock_irqrestore(&cmdbatch->lock, flags);
 
 	/*
 	 * Increment the reference count for the async callback.
@@ -1842,10 +1844,10 @@ static int kgsl_cmdbatch_add_sync_fence(struct kgsl_device *device,
 		kgsl_cmdbatch_sync_event_put(event);
 
 		/* Remove event from the synclist */
-		spin_lock(&cmdbatch->lock);
+		spin_lock_irqsave(&cmdbatch->lock, flags);
 		list_del(&event->node);
+		spin_unlock_irqrestore(&cmdbatch->lock, flags);
 		kgsl_cmdbatch_sync_event_put(event);
-		spin_unlock(&cmdbatch->lock);
 
 		/* Event no longer needed by this function */
 		kgsl_cmdbatch_sync_event_put(event);
@@ -2154,7 +2156,7 @@ static struct kgsl_cmdbatch *_kgsl_cmdbatch_create_legacy(
 	mem = kmem_cache_alloc(memobjs_cache, GFP_KERNEL);
 	if (mem == NULL) {
 		kgsl_cmdbatch_destroy(cmdbatch);
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 	}
 
 	mem->gpuaddr = param->ibdesc_addr;
@@ -2719,7 +2721,7 @@ static int memdesc_sg_virt(struct kgsl_memdesc *memdesc, struct file *vmfile)
 	if (ret)
 		goto out;
 
-	if (npages != sglen) {
+	if ((unsigned long) npages != sglen) {
 		ret = -EINVAL;
 		goto out;
 	}
@@ -2995,7 +2997,7 @@ long kgsl_ioctl_map_user_mem(struct kgsl_device_private *dev_priv,
 			(param->flags & KGSL_MEMFLAGS_SECURE)) {
 		dev_WARN_ONCE(dev_priv->device->dev, 1,
 				"Secure buffer not supported");
-		return -EINVAL;
+		goto error;
 	}
 
 	if (param->flags & KGSL_MEMFLAGS_SECURE) {
@@ -3004,7 +3006,7 @@ long kgsl_ioctl_map_user_mem(struct kgsl_device_private *dev_priv,
 			KGSL_DRV_ERR(dev_priv->device,
 				 "Secure buffer size %zx must be %x aligned",
 				 entry->memdesc.size, SZ_1M);
-			return -EINVAL;
+			goto error;
 		}
 	}
 

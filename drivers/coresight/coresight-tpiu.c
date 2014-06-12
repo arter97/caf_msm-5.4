@@ -111,7 +111,7 @@ struct tpiu_drvdata {
 	bool			nidnt_spmi;
 };
 
-static int nidnt_boot_hw_detect = 1;
+static int nidnt_boot_hw_detect;
 module_param_named(nidnt_boot_hw_detect,
 	nidnt_boot_hw_detect, int, S_IRUGO | S_IWUSR | S_IWGRP);
 
@@ -403,6 +403,7 @@ static int __tpiu_enable_to_sdc_swdtrc(struct tpiu_drvdata *drvdata)
 		coresight_nidnt_writel(0x96D, TLMM_SDC2_HDRV_PULL_CTL);
 		coresight_nidnt_writel(3, TLMM_ETM_MODE);
 	}
+	return 0;
 err1:
 	__tpiu_disable(drvdata);
 	__tpiu_disable_to_sdc(drvdata);

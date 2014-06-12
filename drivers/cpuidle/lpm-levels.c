@@ -731,8 +731,12 @@ static int cluster_cpuidle_register(struct lpm_cluster *cl)
 			continue;
 		p = per_cpu(cpu_cluster, cpu);
 		while (p) {
+			int j;
 			spin_lock(&p->sync_lock);
 			cpumask_set_cpu(cpu, &p->num_childs_in_sync);
+			for (j = 0; j < p->nlevels; j++)
+				cpumask_copy(&p->levels[j].num_cpu_votes,
+						&p->num_childs_in_sync);
 			spin_unlock(&p->sync_lock);
 			p = p->parent;
 		}
@@ -808,6 +812,7 @@ static int lpm_suspend_prepare(void)
 
 static void lpm_suspend_wake(void)
 {
+	suspend_in_progress = false;
 	msm_mpm_suspend_wake();
 	lpm_stats_suspend_exit();
 }

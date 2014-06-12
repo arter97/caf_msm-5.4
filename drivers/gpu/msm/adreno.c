@@ -532,6 +532,44 @@ static inline void refcount_group(struct adreno_perfcount_group *group,
 		*hi = group->regs[reg].offset_hi;
 }
 
+
+/**
+ * adreno_idle_unsafe() - wait for the GPU hardware to go idle
+ *
+ * This doesn't check for dispatcher mutex owner. Hence this function
+ * should be called only if we are sure that we dont own dispatcher mutex
+ * in this thread.
+ *
+ * @device: Pointer to the KGSL device structure for the GPU
+ *
+ * Wait up to ADRENO_IDLE_TIMEOUT milliseconds for the GPU hardware to go quiet.
+ */
+
+static int adreno_idle_unsafe(struct kgsl_device *device)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	int ret;
+
+	/*
+	 * Make sure the device mutex is held so the dispatcher can't send any
+	 * more commands to the hardware
+	 */
+
+	BUG_ON(!mutex_is_locked(&device->mutex));
+
+	/* Check if we are already idle before idling dispatcher */
+	if (adreno_isidle(device))
+		return 0;
+	/*
+	 * Wait for dispatcher to finish completing commands
+	 * already submitted
+	 */
+	ret = adreno_dispatcher_idle_unsafe(adreno_dev);
+	if (ret)
+		return ret;
+
+	return adreno_spin_idle(device);
+}
 /**
  * adreno_perfcounter_get: Try to put a countable in an available counter
  * @adreno_dev: Adreno device to configure
@@ -614,7 +652,8 @@ int adreno_perfcounter_get(struct adreno_device *adreno_dev,
 	if (empty == -1)
 		return -EBUSY;
 
-	ret = adreno_idle(&adreno_dev->dev);
+	ret = adreno_idle_unsafe(&adreno_dev->dev);
+
 	if (ret)
 		return ret;
 
@@ -3234,13 +3273,17 @@ static void adreno_power_stats(struct kgsl_device *device,
 	struct adreno_busy_data busy_data;
 
 	memset(stats, 0, sizeof(*stats));
+
 	/*
-	 * Get the busy cycles counted since the counter was last reset.
 	 * If we're not currently active, there shouldn't have been
 	 * any cycles since the last time this function was called.
 	 */
-	if (device->state == KGSL_STATE_ACTIVE)
-		gpudev->busy_cycles(adreno_dev, &busy_data);
+
+	if (device->state != KGSL_STATE_ACTIVE)
+		return;
+
+	/* Get the busy cycles counted since the counter was last reset */
+	gpudev->busy_cycles(adreno_dev, &busy_data);
 
 	stats->busy_time = adreno_ticks_to_us(busy_data.gpu_busy,
 					      kgsl_pwrctrl_active_freq(pwr));

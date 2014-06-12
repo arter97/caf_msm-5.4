@@ -479,6 +479,19 @@ struct adreno_vbif_platform {
 	const struct adreno_vbif_data *vbif;
 };
 
+/*
+ * struct adreno_vbif_snapshot_registers - Holds an array of vbif registers
+ * listed for snapshot dump for a particular core
+ * @vbif_version: vbif version
+ * @vbif_snapshot_registers: vbif registers listed for snapshot dump
+ * @vbif_snapshot_registers_count: count of vbif registers listed for snapshot
+ */
+struct adreno_vbif_snapshot_registers {
+	const unsigned int vbif_version;
+	const unsigned int *vbif_snapshot_registers;
+	const int vbif_snapshot_registers_count;
+};
+
 /**
  * struct adreno_coresight_register - Definition for a coresight (tracebus)
  * debug register
@@ -679,6 +692,13 @@ extern const unsigned int a4xx_registers_count;
 extern const unsigned int a4xx_sp_tp_registers[];
 extern const unsigned int a4xx_sp_tp_registers_count;
 
+extern const unsigned int a4xx_xpu_registers[];
+extern const unsigned int a4xx_xpu_reg_cnt;
+
+extern const struct adreno_vbif_snapshot_registers
+				a4xx_vbif_snapshot_registers[];
+extern const unsigned int a4xx_vbif_snapshot_reg_cnt;
+
 extern unsigned int ft_detect_regs[];
 
 int adreno_spin_idle(struct kgsl_device *device);
@@ -710,6 +730,7 @@ void adreno_dispatcher_start(struct kgsl_device *device);
 int adreno_dispatcher_init(struct adreno_device *adreno_dev);
 void adreno_dispatcher_close(struct adreno_device *adreno_dev);
 int adreno_dispatcher_idle(struct adreno_device *adreno_dev);
+int adreno_dispatcher_idle_unsafe(struct adreno_device *adreno_dev);
 void adreno_dispatcher_irq_fault(struct kgsl_device *device);
 void adreno_dispatcher_stop(struct adreno_device *adreno_dev);
 

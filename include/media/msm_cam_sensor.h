@@ -592,6 +592,7 @@ enum msm_actuator_cfg_type_t {
 enum actuator_type {
 	ACTUATOR_VCM,
 	ACTUATOR_PIEZO,
+	ACTUATOR_OIS,
 };
 
 enum msm_actuator_data_type {
@@ -649,6 +650,13 @@ struct msm_actuator_tuning_params_t {
 	struct region_params_t *region_params;
 };
 
+struct park_lens_data_t {
+	uint32_t damping_step;
+	uint32_t damping_delay;
+	uint32_t hw_params;
+	uint32_t max_step;
+};
+
 struct msm_actuator_params_t {
 	enum actuator_type act_type;
 	uint8_t reg_tbl_size;
@@ -659,6 +667,7 @@ struct msm_actuator_params_t {
 	enum msm_actuator_data_type i2c_data_type;
 	struct msm_actuator_reg_params_t *reg_tbl_params;
 	struct reg_settings_t *init_settings;
+	struct park_lens_data_t park_lens;
 };
 
 struct msm_actuator_set_info_t {
@@ -823,6 +832,7 @@ struct msm_actuator_params_t32 {
 	enum msm_actuator_data_type i2c_data_type;
 	compat_uptr_t reg_tbl_params;
 	compat_uptr_t init_settings;
+	struct park_lens_data_t park_lens;
 };
 
 struct msm_actuator_set_info_t32 {

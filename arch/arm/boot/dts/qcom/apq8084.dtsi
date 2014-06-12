@@ -4866,6 +4866,7 @@
 		venus-core1-supply = <&gdsc_venus_core1>;
 		qcom,clock-names= "core_clk", "core0_clk", "core1_clk", "iface_clk", "bus_clk", "mem_clk";
 		qcom,clock-configs = <0x3 0x0 0x0 0x0 0x0 0x0>;
+		qcom,sw-power-collapse;
 		qcom,load-freq-tbl = <979200 465000000>,
 			<783360 465000000>,
 			<489600 266670000>,
@@ -5406,6 +5407,8 @@
 		wlan-en-gpio = <&msmgpio 82 0>;
 		vdd-wlan-supply = <&wlan_vreg>;
 		qcom,notify-modem-status;
+		pinctrl-names = "default";
+		pinctrl-0 = <&cnss_default>;
 
 		qcom,msm-bus,name = "msm-cnss";
 		qcom,msm-bus,num-cases = <4>;

@@ -138,7 +138,7 @@
 			qcom,iterm-ma = <100>;
 			qcom,float-voltage-mv = <4200>;
 			qcom,resume-delta-mv = <200>;
-			qcom,bmd-pin-src = "bpd_thm_id";
+			qcom,bmd-pin-src = "bpd_thm";
 			qcom,dc-psy-type = "Mains";
 			qcom,dc-psy-ma = <1500>;
 			qcom,bms-psy-name = "bms";
@@ -346,10 +346,9 @@
 			qcom,dim-method = "linear";
 			qcom,hyb-thres = <625>;
 			qcom,sync-dly-us = <800>;
-			qcom,fs-curr-ua = <30000>;
+			qcom,fs-curr-ua = <16000>;
 			qcom,en-phase-stag;
 			qcom,ibb-bias-active;
-			qcom,lab-fast-precharge;
 			qcom,led-strings-list = [00 01 02 03];
 		};
 

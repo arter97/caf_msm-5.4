@@ -969,9 +969,9 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 			mutex_unlock(&mfd->bl_lock);
 			/* Will trigger ad_setup which will grab bl_lock */
 			update_ad_input(mfd);
-			mdss_fb_bl_update_notify(mfd);
 			mutex_lock(&mfd->bl_lock);
 		}
+		mdss_fb_bl_update_notify(mfd);
 	}
 }
 
@@ -1128,6 +1128,7 @@ void mdss_fb_free_fb_ion_memory(struct msm_fb_data_type *mfd)
 	}
 
 	mfd->fbi->screen_base = NULL;
+	mfd->fbi->fix.smem_start = 0;
 	mfd->fbi->fix.smem_len = 0;
 
 	ion_unmap_kernel(mfd->fb_ion_client, mfd->fb_ion_handle);
@@ -1198,6 +1199,7 @@ int mdss_fb_alloc_fb_ion_memory(struct msm_fb_data_type *mfd, size_t fb_size)
 			vaddr, &mfd->iova, mfd->index);
 
 	mfd->fbi->screen_base = (char *) vaddr;
+	mfd->fbi->fix.smem_start = (unsigned int) mfd->iova;
 	mfd->fbi->fix.smem_len = fb_size;
 
 	return rc;
@@ -1283,6 +1285,11 @@ static int mdss_fb_fbmem_ion_mmap(struct fb_info *info,
 			}
 			len = min(len, remainder);
 
+			if (mfd->mdp_fb_page_protection ==
+					MDP_FB_PAGE_PROTECTION_WRITECOMBINE)
+				vma->vm_page_prot =
+					pgprot_writecombine(vma->vm_page_prot);
+
 			pr_debug("vma=%p, addr=%x len=%ld",
 					vma, (unsigned int)addr, len);
 			pr_cont("vm_start=%x vm_end=%x vm_page_prot=%ld\n",
@@ -1324,6 +1331,7 @@ static int mdss_fb_physical_mmap(struct fb_info *info,
 	unsigned long start = info->fix.smem_start;
 	u32 len = PAGE_ALIGN((start & ~PAGE_MASK) + info->fix.smem_len);
 	unsigned long off = vma->vm_pgoff << PAGE_SHIFT;
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 
 	if (!start) {
 		pr_warn("No framebuffer memory is allocated\n");
@@ -1333,8 +1341,8 @@ static int mdss_fb_physical_mmap(struct fb_info *info,
 	/* Set VM flags. */
 	start &= PAGE_MASK;
 	if ((vma->vm_end <= vma->vm_start) ||
-	    (off >= len) ||
-	    ((vma->vm_end - vma->vm_start) > (len - off)))
+			(off >= len) ||
+			((vma->vm_end - vma->vm_start) > (len - off)))
 		return -EINVAL;
 	off += start;
 	if (off < start)
@@ -1343,10 +1351,13 @@ static int mdss_fb_physical_mmap(struct fb_info *info,
 	/* This is an IO map - tell maydump to skip this VMA */
 	vma->vm_flags |= VM_IO;
 
+	if (mfd->mdp_fb_page_protection == MDP_FB_PAGE_PROTECTION_WRITECOMBINE)
+		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
+
 	/* Remap the frame buffer I/O range */
 	if (io_remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
-			       vma->vm_end - vma->vm_start,
-			       vma->vm_page_prot))
+				vma->vm_end - vma->vm_start,
+				vma->vm_page_prot))
 		return -EAGAIN;
 
 	return 0;
@@ -2428,10 +2439,6 @@ static int mdss_fb_check_var(struct fb_var_screeninfo *var,
 			(var->blue.offset == 0) &&
 			(var->green.offset == 8) &&
 			(var->red.offset == 16)) &&
-		    !((var->transp.offset == 0) &&
-			(var->blue.offset == 24) &&
-			(var->green.offset == 16) &&
-			(var->red.offset == 8)) &&
 		    !((var->transp.offset == 24) &&
 			(var->blue.offset == 16) &&
 			(var->green.offset == 8) &&
@@ -2752,9 +2759,9 @@ static int mdss_fb_handle_buf_sync_ioctl(struct msm_sync_pt_data *sync_pt_data,
 	/* create fd */
 	rel_fen_fd = get_unused_fd_flags(0);
 	if (rel_fen_fd < 0) {
-		pr_err("%s: get_unused_fd_flags failed\n",
-				sync_pt_data->fence_name);
-		ret = -EIO;
+		pr_err("%s: get_unused_fd_flags failed error:0x%x\n",
+				sync_pt_data->fence_name, rel_fen_fd);
+		ret = rel_fen_fd;
 		goto buf_sync_err_2;
 	}
 
@@ -2789,9 +2796,9 @@ static int mdss_fb_handle_buf_sync_ioctl(struct msm_sync_pt_data *sync_pt_data,
 	retire_fen_fd = get_unused_fd_flags(0);
 
 	if (retire_fen_fd < 0) {
-		pr_err("%s: get_unused_fd_flags failed for retire fence\n",
-				sync_pt_data->fence_name);
-		ret = -EIO;
+		pr_err("%s: get_unused_fd_flags failed for retire fence error:0x%x\n",
+				sync_pt_data->fence_name, retire_fen_fd);
+		ret = retire_fen_fd;
 		sync_fence_put(retire_fence);
 		goto buf_sync_err_3;
 	}
