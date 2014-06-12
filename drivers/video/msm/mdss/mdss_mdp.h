@@ -292,6 +292,7 @@ struct pp_hist_col_info {
 	u32 hist_cnt_time;
 	u32 frame_cnt;
 	struct completion comp;
+	struct completion first_kick;
 	u32 data[HIST_V_SIZE];
 	struct mutex hist_mutex;
 	spinlock_t hist_lock;
@@ -688,6 +689,8 @@ int mdss_mdp_wb_get_format(struct msm_fb_data_type *mfd,
 
 int mdss_mdp_wb_set_secure(struct msm_fb_data_type *mfd, int enable);
 int mdss_mdp_wb_get_secure(struct msm_fb_data_type *mfd, uint8_t *enable);
+void mdss_mdp_ctl_restore(struct mdss_mdp_ctl *ctl);
+void mdss_mdp_footswitch_ctrl_ulps(int on, struct device *dev);
 
 int mdss_mdp_pipe_program_pixel_extn(struct mdss_mdp_pipe *pipe);
 #define mfd_to_mdp5_data(mfd) (mfd->mdp.private1)
