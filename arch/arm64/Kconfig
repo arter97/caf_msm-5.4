@@ -139,6 +139,7 @@ config ARCH_MSM
 	select MSM_IRQ
 	select PINCTRL
 	select SOC_BUS
+	select PCI
 	select ARCH_HAS_CPUFREQ
 	select CPU_FREQ_MSM
 	select PM_DEVFREQ
@@ -182,6 +183,23 @@ menu "Bus support"
 config ARM_AMBA
 	bool
 
+config PCI
+       bool "PCI support"
+       help
+         Find out whether you have a PCI motherboard. PCI is the name of a
+         bus system, i.e. the way the CPU talks to the other stuff inside
+         your box. Other bus systems are ISA, EISA, MicroChannel (MCA) or
+         VESA. If you have PCI, say Y, otherwise N.
+
+config PCI_DOMAINS
+       bool
+       depends on PCI
+
+config PCI_SYSCALL
+       def_bool PCI
+
+source "drivers/pci/Kconfig"
+source "drivers/pci/pcie/Kconfig"
 endmenu
 
 menu "Kernel Features"
