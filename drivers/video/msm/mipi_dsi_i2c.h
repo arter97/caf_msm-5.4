@@ -30,6 +30,7 @@ struct mipi_dsi_i2c_resource {
 struct mipi_dsi_i2c_configure {
 	int (*config_dsi)(void);
 	int (*config_i2c)(void);
+	void (*config_reset_dev)(void);
 };
 
 extern struct mipi_dsi_i2c_resource dsi_i2c_rsc;
