@@ -985,9 +985,9 @@
 		status = "disabled";
 	};
 
-	qcom_seecom: qseecom@8e700000 {
+	qcom_seecom: qseecom@86000000 {
 		compatible = "qcom,qseecom";
-		reg = <0x8e700000 0x300000>;
+		reg = <0x86000000 0x300000>;
 		reg-names = "secapp-region";
 		qcom,disk-encrypt-pipe-pair = <2>;
 		qcom,hlos-ce-hw-instance = <0>;
@@ -1079,6 +1079,7 @@
 		compatible = "qcom,android-usb";
 		reg = <0x086000c8 0xc8>;
 		qcom,android-usb-swfi-latency = <1>;
+		qcom,android-usb-uicc-nluns = /bits/ 8 <1>;
 	};
 
 	uicc: qcom,ehci-host@79c0000 {
