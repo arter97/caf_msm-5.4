@@ -70,12 +70,10 @@
 		compatible = "arm,gic-v3";
 		#interrupt-cells = <3>;
 		interrupt-controller;
-		#redistributor-regions = <4>;
+		#redistributor-regions = <1>;
+		redistributor-stride = <0x0 0x40000>;
 		reg = <0x09bc0000 0x10000>,       /* GICD */
-		      <0x09c00000 0x40000>,       /* GICR R0 */
-		      <0x09c40000 0x40000>,       /* GICR R1 */
-		      <0x09c80000 0x40000>,       /* GICR R2 */
-		      <0x09cc0000 0x40000>;       /* GICR R3 */
+		      <0x09c00000 0x100000>;      /* GICR * 4 */
 		interrupts = <1 9 4>;
 	};
 
