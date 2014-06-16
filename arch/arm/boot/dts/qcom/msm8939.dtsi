@@ -23,6 +23,7 @@
 		sdhc1 = &sdhc_1; /* SDC1 eMMC slot */
 		sdhc2 = &sdhc_2; /* SDC2 SD card slot */
 		/* smdtty devices */
+		smd0 = &smdtty_ds;
 		smd1 = &smdtty_apps_fm;
 		smd2 = &smdtty_apps_riva_bt_acl;
 		smd3 = &smdtty_apps_riva_bt_cmd;
@@ -457,6 +458,7 @@
 		reg = <0x4044000 0x19000>;
 		interrupts = <0 29 1>;
 		qcom,rx-ring-size = <32>;
+		qcom,max-rx-mtu = <4096>;
 	};
 
 	qcom,smdtty {
@@ -511,6 +513,11 @@
 			qcom,smdtty-remote = "modem";
 			qcom,smdtty-port-name = "LOOPBACK";
 			qcom,smdtty-dev-name = "LOOPBACK_TTY";
+		};
+
+		smdtty_ds: qcom,smdtty-ds {
+			qcom,smdtty-remote = "modem";
+			qcom,smdtty-port-name = "DS";
 		};
 	};
 
@@ -775,6 +782,7 @@
 		interrupts = <0 163 0>, <0 165 0>;
 		interrupt-names = "slimbus_irq", "slimbus_bam_irq";
 		qcom,ea-pc = <0x140>;
+		status = "disabled";
 	};
 
 	clock_rpm: qcom,rpmcc@1874000 {
@@ -893,8 +901,11 @@
 			 < 1536000 >;
 		qcom,cpufreq-table-4 =
 			 <  200000 >,
-			 <  400000 >,
-			 <  800000 >;
+			 <  249600 >,
+                         <  400000 >,
+                         <  499200 >,
+                         <  800000 >,
+                         <  998400 >;
 	};
 
 	qcom_tzlog: tz-log@8600720 {
@@ -1243,26 +1254,25 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		cell-index = <0>;
-		qcom,not-wakeup; /* Needed until RPM is fully configured */
 	};
 
 	qcom,rmtfs_sharedmem@8e580000 {
 		compatible = "qcom,sharedmem-uio";
-		reg = <0x8e580000 0x160000>;
+		reg = <0x86700000 0x160000>;
 		reg-names = "rmtfs";
 		qcom,client-id = <0x00000001>;
 	};
 
 	qcom,dsp_sharedmem@8e6e0000 {
 		compatible = "qcom,sharedmem-uio";
-		reg = <0x8e6e0000 0x20000>;
+		reg = <0x867e0000 0x20000>;
 		reg-names = "rfsa_dsp";
 		qcom,client-id = <0x011013ec>;
 	};
 
 	qcom,mdm_sharedmem@8e6e0000 {
 		compatible = "qcom,sharedmem-uio";
-		reg = <0x8e6e0000 0x20000>;
+		reg = <0x867e0000 0x20000>;
 		reg-names = "rfsa_mdm";
 		qcom,client-id = <0x011013ed>;
 	};
@@ -1443,8 +1453,8 @@
 			 <&clock_gcc clk_gcc_mss_q6_bimc_axi_clk>,
 			 <&clock_gcc clk_gcc_boot_rom_ahb_clk>;
 		clock-names = "xo", "iface_clk", "bus_clk", "mem_clk";
-		proxy-clock-names = "xo";
-		active-clock-names = "iface_clk", "bus_clk", "mem_clk";
+		qcom,proxy-clock-names = "xo";
+		qcom,active-clock-names = "iface_clk", "bus_clk", "mem_clk";
 
 		qcom,firmware-name = "modem";
 		qcom,pil-self-auth;
