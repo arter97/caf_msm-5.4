@@ -1947,12 +1947,14 @@ int ubi_wl_init(struct ubi_device *ubi, struct ubi_attach_info *ai)
 		e->ec = aeb->ec;
 		ubi_assert(e->ec >= 0);
 		ubi_assert(!ubi_is_fm_block(ubi, e->pnum));
-
-		wl_tree_add(e, &ubi->free);
-		ubi->free_count++;
-
 		ubi->lookuptbl[e->pnum] = e;
-
+		if (!ai->failed_fm) {
+			wl_tree_add(e, &ubi->free);
+			ubi->free_count++;
+		} else if (schedule_erase(ubi, e, aeb->vol_id, aeb->lnum, 0)) {
+			kmem_cache_free(ubi_wl_entry_slab, e);
+			goto out_free;
+		}
 		found_pebs++;
 	}
 
