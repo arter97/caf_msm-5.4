@@ -204,8 +204,9 @@ struct ubi_volume_desc *ubi_open_volume(int ubi_num, int vol_id, int mode)
 			return ERR_PTR(err);
 		}
 		if (err == 1) {
-			ubi_warn("volume %d on UBI device %d is corrupted",
-				 vol_id, ubi->ubi_num);
+			ubi_warn(ubi->ubi_num,
+				 "volume %d on UBI device is corrupted",
+				 vol_id);
 			vol->corrupted = 1;
 		}
 		vol->checked = 1;
@@ -221,8 +222,8 @@ out_free:
 	kfree(desc);
 out_put_ubi:
 	ubi_put_device(ubi);
-	ubi_err("cannot open device %d, volume %d, error %d",
-		ubi_num, vol_id, err);
+	ubi_err(ubi->ubi_num, "cannot open device, volume %d, error %d",
+		vol_id, err);
 	return ERR_PTR(err);
 }
 EXPORT_SYMBOL_GPL(ubi_open_volume);
@@ -411,7 +412,7 @@ int ubi_leb_read(struct ubi_volume_desc *desc, int lnum, char *buf, int offset,
 
 	err = ubi_eba_read_leb(ubi, vol, lnum, buf, offset, len, check);
 	if (err && mtd_is_eccerr(err) && vol->vol_type == UBI_STATIC_VOLUME) {
-		ubi_warn("mark volume %d as corrupted", vol_id);
+		ubi_warn(ubi->ubi_num, "mark volume %d as corrupted", vol_id);
 		vol->corrupted = 1;
 	}
 
