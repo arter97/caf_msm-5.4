@@ -12,11 +12,17 @@
 
 /dts-v1/;
 
-#include "msm8916-qrd-skuh.dtsi"
-#include "msm8916-memory.dtsi"
+#include "msmferrum.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. MSM 8916 QRD SKUH";
-	compatible = "qcom,msm8916-qrd-skuh", "qcom,msm8916-qrd", "qcom,msm8916", "qcom,qrd";
-	qcom,board-id = <0x1000b 0> , <0x1000b 4> , <0x1010b 0> , <0x1010b 4>;
+	model = "Qualcomm Technologies, Inc. MSMFERRUM RUMI";
+	compatible = "qcom,msmferrum-rumi", "qcom,msmferrum", "qcom,rumi";
+	qcom,board-id= <15 0>;
 };
+
+&soc {
+	timer {
+		clock-frequency = <5000000>;
+	};
+};
+

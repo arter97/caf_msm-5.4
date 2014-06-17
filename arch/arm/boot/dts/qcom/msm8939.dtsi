@@ -1057,7 +1057,6 @@
 		qcom,hsusb-otg-phy-type = <2>;
 		qcom,hsusb-otg-mode = <1>;
 		qcom,hsusb-otg-otg-control = <2>;
-		qcom,ahb-async-bridge-bypass;
 		qcom,dp-manual-pullup;
 
 		qcom,msm-bus,name = "usb2";
@@ -1679,9 +1678,9 @@
 		qcom,clock-names = "core_clk", "core0_clk", "core1_clk", "iface_clk", "bus_clk";
 		qcom,clock-configs = <0x3 0x0 0x0 0x0 0x0>;
 		qcom,sw-power-collapse;
-		qcom,load-freq-tbl = <352800 228570000>,
-			<244800 160000000>,
-			<108000 100000000>;
+		qcom,load-freq-tbl = <352800 266670000>,
+			<244800 200000000>,
+			<108000 133330000>;
 		qcom,hfi = "venus";
 		qcom,reg-presets = <0xE0020 0x0aaaaaaa>,
 			<0xE0024 0x0aaaaaaa>,
@@ -1689,7 +1688,7 @@
 		qcom,buffer-type-tz-usage-table = <0x241 0x1>,
 			<0x106 0x2>,
 			<0x480 0x3>;
-		qcom,max-hw-load = <352800>; /* 720p @ 30 + 1080p @ 30 */
+		qcom,max-hw-load = <489600>; /* 1080p @ 30 + 1080p @ 30 */
 		qcom,vidc-iommu-domains {
 			qcom,domain-ns {
 				qcom,vidc-domain-phandle = <&venus_domain_ns>;

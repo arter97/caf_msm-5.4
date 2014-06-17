@@ -72,6 +72,8 @@ static struct cnss_fw_files FW_FILES_DEFAULT = {
 
 
 #define WLAN_VREG_NAME		"vdd-wlan"
+#define WLAN_VREG_IO_NAME	"vdd-wlan-io"
+#define WLAN_VREG_XTAL_NAME	"vdd-wlan-xtal"
 #define WLAN_SWREG_NAME		"wlan-soc-swreg"
 #define WLAN_EN_GPIO_NAME	"wlan-en-gpio"
 #define PM_OPTIONS		0
@@ -82,10 +84,15 @@ static struct cnss_fw_files FW_FILES_DEFAULT = {
 
 #define SOC_SWREG_VOLT_MAX	1200000
 #define SOC_SWREG_VOLT_MIN	1200000
+#define WLAN_VREG_IO_MAX	1800000
+#define WLAN_VREG_IO_MIN	1800000
+#define WLAN_VREG_XTAL_MAX	1800000
+#define WLAN_VREG_XTAL_MIN	1800000
 
 #define POWER_ON_DELAY		2000
 #define WLAN_ENABLE_DELAY	10000
 #define WLAN_RECOVERY_DELAY	1000
+#define PCIE_ENABLE_DELAY	100000
 
 #define CNSS_PINCTRL_STATE_ACTIVE "default"
 
@@ -102,6 +109,8 @@ struct cnss_wlan_gpio_info {
 struct cnss_wlan_vreg_info {
 	struct regulator *wlan_reg;
 	struct regulator *soc_swreg;
+	struct regulator *wlan_reg_io;
+	struct regulator *wlan_reg_xtal;
 	bool state;
 };
 
@@ -322,6 +331,50 @@ static int cnss_wlan_get_resources(struct platform_device *pdev)
 		goto err_reg_enable;
 	}
 
+	if (of_get_property(pdev->dev.of_node,
+		WLAN_VREG_IO_NAME"-supply", NULL)) {
+		vreg_info->wlan_reg_io = regulator_get(&pdev->dev,
+			WLAN_VREG_IO_NAME);
+		if (!IS_ERR(vreg_info->wlan_reg_io)) {
+			ret = regulator_set_voltage(vreg_info->wlan_reg_io,
+				WLAN_VREG_IO_MIN, WLAN_VREG_IO_MAX);
+			if (ret) {
+				pr_err("%s: Set wlan_vreg_io failed!\n",
+					__func__);
+				goto err_reg_io_set;
+			}
+
+			ret = regulator_enable(vreg_info->wlan_reg_io);
+			if (ret) {
+				pr_err("%s: Enable wlan_vreg_io failed!\n",
+					__func__);
+				goto err_reg_io_enable;
+			}
+		}
+	}
+
+	if (of_get_property(pdev->dev.of_node,
+		WLAN_VREG_XTAL_NAME"-supply", NULL)) {
+		vreg_info->wlan_reg_xtal =
+			regulator_get(&pdev->dev, WLAN_VREG_XTAL_NAME);
+		if (!IS_ERR(vreg_info->wlan_reg_xtal)) {
+			ret = regulator_set_voltage(vreg_info->wlan_reg_xtal,
+				WLAN_VREG_XTAL_MIN, WLAN_VREG_XTAL_MAX);
+			if (ret) {
+				pr_err("%s: Set wlan_vreg_xtal failed!\n",
+					__func__);
+				goto err_reg_xtal_set;
+			}
+
+			ret = regulator_enable(vreg_info->wlan_reg_xtal);
+			if (ret) {
+				pr_err("%s: Enable wlan_vreg_xtal failed!\n",
+					__func__);
+				goto err_reg_xtal_enable;
+			}
+		}
+	}
+
 	if (of_find_property((&pdev->dev)->of_node,
 				"qcom,wlan-uart-access", NULL))
 		penv->cap.cap_flag |= CNSS_HAS_UART_ACCESS;
@@ -403,6 +456,22 @@ err_reg_set:
 		regulator_put(vreg_info->soc_swreg);
 
 err_reg_get2:
+	if (vreg_info->wlan_reg_xtal)
+		regulator_disable(vreg_info->wlan_reg_xtal);
+
+err_reg_xtal_enable:
+	if (vreg_info->wlan_reg_xtal)
+		regulator_put(vreg_info->wlan_reg_xtal);
+
+err_reg_xtal_set:
+	if (vreg_info->wlan_reg_io)
+		regulator_disable(vreg_info->wlan_reg_io);
+
+err_reg_io_enable:
+	if (vreg_info->wlan_reg_io)
+		regulator_put(vreg_info->wlan_reg_io);
+
+err_reg_io_set:
 	regulator_disable(vreg_info->wlan_reg);
 err_reg_enable:
 	regulator_put(vreg_info->wlan_reg);
@@ -1307,6 +1376,7 @@ static int cnss_probe(struct platform_device *pdev)
 	struct esoc_desc *desc;
 	const char *client_desc;
 	struct device *dev = &pdev->dev;
+	u32 rc_num;
 
 	if (penv)
 		return -ENODEV;
@@ -1321,7 +1391,7 @@ static int cnss_probe(struct platform_device *pdev)
 	penv->gpio_info.name = WLAN_EN_GPIO_NAME;
 	penv->gpio_info.num = 0;
 	penv->gpio_info.state = WLAN_EN_LOW;
-	penv->gpio_info.init = WLAN_EN_HIGH;
+	penv->gpio_info.init = WLAN_EN_LOW;
 	penv->gpio_info.prop = false;
 	penv->vreg_info.wlan_reg = NULL;
 	penv->vreg_info.state = VREG_OFF;
@@ -1330,6 +1400,21 @@ static int cnss_probe(struct platform_device *pdev)
 	ret = cnss_wlan_get_resources(pdev);
 	if (ret)
 		goto err_get_wlan_res;
+
+	cnss_wlan_gpio_set(&penv->gpio_info, WLAN_EN_HIGH);
+	usleep(WLAN_ENABLE_DELAY);
+
+	ret = of_property_read_u32(dev->of_node, "qcom,wlan-rc-num", &rc_num);
+	if (ret) {
+		pr_err("%s: Failed to find PCIe RC number!\n", __func__);
+		goto err_get_rc;
+	}
+
+	ret = msm_pcie_enumerate(rc_num);
+	if (ret) {
+		pr_err("%s: Failed to enable PCIe RC%x!\n", __func__, rc_num);
+		goto err_pcie_enumerate;
+	}
 
 	penv->pcie_link_state = PCIE_LINK_UP;
 
@@ -1442,6 +1527,9 @@ err_subsys_reg:
 		devm_unregister_esoc_client(&pdev->dev, penv->esoc_desc);
 
 err_esoc_reg:
+err_pcie_enumerate:
+err_get_rc:
+	cnss_wlan_gpio_set(&penv->gpio_info, WLAN_EN_LOW);
 	cnss_wlan_release_resources();
 
 err_get_wlan_res:

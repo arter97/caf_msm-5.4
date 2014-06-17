@@ -152,6 +152,12 @@
 		#address-cells = <2>;
 		#size-cells = <2>;
 
+		secure_mem: secure_region@0 {
+			linux,reserve-contiguous-region;
+			reg = <0 0 0 0xfc00000>;
+			label = "secure_mem";
+		};
+
 		adsp_mem: adsp_region@0 {
                         linux,reserve-contiguous-region;
 			reg = <0 0 0 0x3F00000>;
@@ -2415,9 +2421,12 @@
 		reg-names = "ramdump";
 		wlan-en-gpio = <&msm_gpio 113 0>;
 		vdd-wlan-supply = <&bt_vreg>;
+		vdd-wlan-io-supply = <&pm8994_s4>;
+		vdd-wlan-xtal-supply = <&pm8994_l30>;
 		qcom,notify-modem-status;
 		pinctrl-names = "default";
 		pinctrl-0 = <&cnss_default>;
+		qcom,wlan-rc-num = <1>;
 
 		qcom,msm-bus,name = "msm-cnss";
 		qcom,msm-bus,num-cases = <4>;
