@@ -46,18 +46,6 @@
 #define IS_RIGHT_MIXER_OV(flags, dst_x, left_lm_w)	\
 	((flags & MDSS_MDP_RIGHT_MIXER) || (dst_x >= left_lm_w))
 
-#define PP_CLK_CFG_OFF 0
-#define PP_CLK_CFG_ON 1
-
-#define MEM_PROTECT_SD_CTRL 0xF
-
-#define INVALID_PIPE_INDEX 0xFFFF
-
-struct sd_ctrl_req {
-	unsigned int enable;
-} __attribute__ ((__packed__));
-
-static atomic_t ov_active_panels = ATOMIC_INIT(0);
 static int mdss_mdp_overlay_free_fb_pipe(struct msm_fb_data_type *mfd);
 static int mdss_mdp_overlay_fb_parse_dt(struct msm_fb_data_type *mfd);
 static int mdss_mdp_overlay_off(struct msm_fb_data_type *mfd);
