@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -70,32 +70,28 @@ static void show_pic_exit(void)
 static void reverse_detection_work(struct work_struct *work)
 {
 	int state;
-	int rc = 0;
 	struct reverse_reverse_data *data;
+	int rc = 0;
 
 	data = container_of(work, struct reverse_reverse_data,
 			detect_delayed_work.work);
 	state = gpio_get_value(data->gpio);
-	switch_set_state(&data->sdev, !state);
 
-	input_report_key(data->idev, data->key_code, !state);
-	input_sync(data->idev);
-
+	if (camera_thread_enable == 0) {
+		pr_debug("init camera configuration %s\n", __func__);
+		camera_thread_enable = 1;
+		rc = init_camera_kthread();
+	}
 	if (!state) {
-		if (camera_thread_enable == 0) {
-			pr_debug("~~~ init_camera_kthread ~~~ %s\n", __func__);
-			camera_thread_enable = 1;
-			rc = init_camera_kthread();
-		}
+		enable_camera_preview();
 	} else {
-		if (camera_thread_enable == 1) {
-			camera_thread_enable = 0;
-			pr_debug(" ~~~exit_camera_kthread~~~ %s\n", __func__);
-			exit_camera_kthread();
-		}
+		if (camera_thread_enable == 1)
+			disable_camera_preview();
 		show_pic_exit();
 	}
-
+	switch_set_state(&data->sdev, !state);
+	input_report_key(data->idev, data->key_code, !state);
+	input_sync(data->idev);
 }
 
 static irqreturn_t gpio_irq_handler(int irq, void *dev_id)
@@ -124,15 +120,15 @@ static ssize_t switch_gpio_print_state(struct switch_dev *sdev, char *buf)
 }
 
 static ssize_t continues_show(struct device *dev,
-						  struct device_attribute *attr,
-						  char *buf)
+		struct device_attribute *attr,
+		char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n", reverse_continue);
 }
 
 static ssize_t continues_store(struct device *dev,
-						  struct device_attribute *attr,
-						  const char *buf, size_t count)
+		struct device_attribute *attr,
+		const char *buf, size_t count)
 {
 	unsigned long val;
 	int rc;
@@ -155,7 +151,7 @@ static ssize_t continues_store(struct device *dev,
 }
 
 static DEVICE_ATTR(continues, S_IRUGO | S_IWUSR,
-					continues_show, continues_store);
+		continues_show, continues_store);
 
 static int switch_reverse_probe(struct platform_device *pdev)
 {
@@ -232,11 +228,8 @@ static int switch_reverse_probe(struct platform_device *pdev)
 
 	INIT_DELAYED_WORK(&reverse_data->detect_delayed_work,
 						reverse_detection_work);
-
-	/* Perform initial detection */
-	reverse_detection_work(&reverse_data->detect_delayed_work.work);
-
 	enable_irq(reverse_data->irq);
+	camera_thread_enable = 0;
 
 	return 0;
 
@@ -258,6 +251,8 @@ static int __devexit switch_reverse_remove(struct platform_device *pdev)
 {
 	struct reverse_reverse_data *reverse_data = platform_get_drvdata(pdev);
 
+	exit_camera_kthread();
+	camera_thread_enable = 0;
 	cancel_delayed_work_sync(&reverse_data->detect_delayed_work);
 	gpio_free(reverse_data->gpio);
 	input_unregister_device(reverse_data->idev);
