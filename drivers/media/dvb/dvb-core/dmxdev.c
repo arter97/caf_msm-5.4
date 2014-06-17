@@ -3871,12 +3871,7 @@ dvb_demux_read(struct file *file, char __user *buf, size_t count,
 	if (ret > 0) {
 		dvb_dmxdev_notify_data_read(dmxdevfilter, ret);
 		spin_lock_irq(&dmxdevfilter->dev->lock);
-		/*
-		 * Updating the events in case of overflow might remove the
-		 * overflow event, so avoid that.
-		 */
-		if (dmxdevfilter->buffer.error != -EOVERFLOW)
-			dvb_dmxdev_update_events(&dmxdevfilter->events, ret);
+		dvb_dmxdev_update_events(&dmxdevfilter->events, ret);
 		spin_unlock_irq(&dmxdevfilter->dev->lock);
 
 		/*
