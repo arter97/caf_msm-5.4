@@ -640,7 +640,6 @@ static void guidance_lane_set_data_pipeline(void)
 
 static int adp_rear_camera_enable(void)
 {
-	u64 mdp_max_bw_test = 2000000000;
 	struct preview_mem *ping_buffer, *pong_buffer, *free_buffer;
 	my_axi_ctrl->share_ctrl->current_mode = 4096;
 	vfe_para.operation_mode = VFE_OUTPUTS_RDI1;
@@ -662,30 +661,8 @@ static int adp_rear_camera_enable(void)
 	/* step 2, configure the free buffer to ping pong buffer */
 	preview_configure_ping_pong_buffer(ping_buffer, pong_buffer,
 		free_buffer);
-	if (mdpclient_msm_fb_blank(FB_BLANK_UNBLANK, true))
-		pr_err("%s: can't turn on display!\n", __func__);
-	mdp_bus_scale_update_request(mdp_max_bw_test, mdp_max_bw_test,
-		mdp_max_bw_test, mdp_max_bw_test);
 
-	/* configure pipe for reverse camera preview */
-	preview_set_overlay_init(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
-	alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] =
-		mdpclient_overlay_set(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
-	if (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] != 0) {
-		pr_err("%s: mdpclient_overlay_set error!1\n",
-			__func__);
-		return 0;
-	}
-	/* configure pipe for guidance lane */
 	guidance_lane_configure_bufs();
-	guidance_lane_set_overlay_init(&overlay_req[OVERLAY_GUIDANCE_LANE]);
-	alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] =
-		mdpclient_overlay_set(&overlay_req[OVERLAY_GUIDANCE_LANE]);
-	if (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] != 0) {
-		pr_err("%s: mdpclient_overlay_set error!1\n",
-			__func__);
-		return 0;
-	}
 	guidance_lane_set_data_pipeline();
 	my_axi_ctrl->share_ctrl->current_mode = 4096; /* BIT(12) */
 	my_axi_ctrl->share_ctrl->operation_mode = 4096;
@@ -695,7 +672,6 @@ static int adp_rear_camera_enable(void)
 int  init_camera_kthread(void)
 {
 	int ret;
-	mdpclient_msm_fb_open();
 	INIT_WORK(&wq_mdp_queue_overlay_buffers, mdp_queue_overlay_buffers);
 	ret = adp_rear_camera_enable();
 	return 0;
@@ -704,14 +680,7 @@ int  init_camera_kthread(void)
 void  exit_camera_kthread(void)
 {
 	pr_debug("Exiting  camera\n");
-	mdpclient_display_commit();
 	guidance_lane_buffer_free();
-	mdpclient_msm_fb_close();
-	if (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] == 0) {
-		mdpclient_overlay_unset(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
-		pr_debug("%s: overlay_unset camera preview free pipe !\n",
-			__func__);
-	}
 	preview_buffer_free();
 	pr_debug("%s: begin axi release\n", __func__);
 	msm_axi_subdev_release_rdi_only(lsh_axi_ctrl, s_ctrl);
@@ -724,15 +693,45 @@ void  exit_camera_kthread(void)
 void disable_camera_preview(void)
 {
 	axi_stop_rdi1_only(my_axi_ctrl);
+	mdpclient_display_commit();
+	mdpclient_msm_fb_close();
 	if (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] == 0) {
 		mdpclient_overlay_unset(&overlay_req[OVERLAY_GUIDANCE_LANE]);
 		pr_debug("%s: overlay_unset guidance lane free pipe !\n",
 			__func__);
 	}
-
+	if (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] == 0) {
+		mdpclient_overlay_unset(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
+		pr_debug("%s: overlay_unset camera preview free pipe !\n",
+			__func__);
+	}
 }
 void enable_camera_preview(void)
 {
-	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);
+	u64 mdp_max_bw_test = 2000000000;
+	mdpclient_msm_fb_open();
+	if (mdpclient_msm_fb_blank(FB_BLANK_UNBLANK, true))
+		pr_err("%s: can't turn on display!\n", __func__);
+	mdp_bus_scale_update_request(mdp_max_bw_test, mdp_max_bw_test,
+		mdp_max_bw_test, mdp_max_bw_test);
 
+	/* configure pipe for reverse camera preview */
+	preview_set_overlay_init(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
+	alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] =
+		mdpclient_overlay_set(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
+	if (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] != 0) {
+		pr_err("%s: mdpclient_overlay_set error!1\n",
+			__func__);
+		return;
+	}
+	/* configure pipe for guidance lane */
+	guidance_lane_set_overlay_init(&overlay_req[OVERLAY_GUIDANCE_LANE]);
+	alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] =
+		mdpclient_overlay_set(&overlay_req[OVERLAY_GUIDANCE_LANE]);
+	if (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] != 0) {
+		pr_err("%s: mdpclient_overlay_set error!1\n",
+			__func__);
+		return;
+	}
+	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);
 }
