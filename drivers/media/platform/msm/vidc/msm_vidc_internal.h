@@ -227,6 +227,7 @@ struct msm_vidc_inst {
 	struct buf_count count;
 	enum msm_vidc_modes flags;
 	struct msm_vidc_core_capability capability;
+	struct v4l2_ctrl **ctrls;
 };
 
 extern struct msm_vidc_drv *vidc_driver;
@@ -246,7 +247,6 @@ struct msm_vidc_ctrl {
 	u32 step;
 	u32 menu_skip_mask;
 	const char * const *qmenu;
-	struct v4l2_ctrl *priv;
 };
 
 void handle_cmd_response(enum command_response cmd, void *data);
