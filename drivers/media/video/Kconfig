@@ -647,6 +647,14 @@ config MSM_VCAP
 		Enables VCAP driver. This device allows for video capture and
 		video processing using the v4l2 api
 
+config VIDEO_ADP
+	tristate "AV Chips for ADP Board'"
+	depends on VIDEO_V4L2 && I2C
+	select VIDEO_ADV7180 if VIDEO_HELPER_CHIPS_AUTO
+	---help---
+		Enables the AV Bridge chips video4linux drivers for the
+		'ADP Platform'.
+
 #
 # USB Multimedia device configuration
 #
