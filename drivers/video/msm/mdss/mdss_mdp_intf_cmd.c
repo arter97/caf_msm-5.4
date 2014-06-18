@@ -15,6 +15,7 @@
 
 #include "mdss_mdp.h"
 #include "mdss_panel.h"
+#include "mdss_mdp_trace.h"
 
 #define VSYNC_EXPIRE_TICK 4
 
@@ -348,6 +349,7 @@ static void mdss_mdp_cmd_pingpong_done(void *arg)
 	} else
 		pr_err("%s: should not have pingpong interrupt!\n", __func__);
 
+	trace_mdp_cmd_pingpong_done(ctl, ctx->pp_num, ctx->koff_cnt);
 	pr_debug("%s: ctl_num=%d intf_num=%d ctx=%d kcnt=%d\n", __func__,
 		ctl->num, ctl->intf_num, ctx->pp_num, ctx->koff_cnt);
 
@@ -511,6 +513,8 @@ static int mdss_mdp_cmd_wait4pingpong(struct mdss_mdp_ctl *ctl, void *arg)
 		rc = wait_for_completion_timeout(
 				&ctx->pp_comp, KOFF_TIMEOUT);
 
+		trace_mdp_cmd_wait_pingpong(ctl->num, ctx->koff_cnt);
+
 		if (rc <= 0) {
 			WARN(1, "cmd kickoff timed out (%d) ctl=%d\n",
 						rc, ctl->num);
@@ -566,9 +570,9 @@ int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 	}
 
 	mdss_mdp_cmd_set_partial_roi(ctl);
+	trace_mdp_cmd_kickoff(ctl->num, ctx->koff_cnt);
 
 	mdss_mdp_cmd_clk_on(ctx);
-
 	/*
 	 * tx dcs command if had any
 	 */
