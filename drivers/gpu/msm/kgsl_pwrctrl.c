@@ -1310,8 +1310,6 @@ _nap(struct kgsl_device *device)
 		*/
 		kgsl_pwrscale_update_stats(device);
 
-		kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_OFF);
-		kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_OFF, KGSL_STATE_NAP);
 		kgsl_pwrctrl_set_state(device, KGSL_STATE_NAP);
 	case KGSL_STATE_NAP:
 	case KGSL_STATE_SLEEP:
