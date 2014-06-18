@@ -801,6 +801,7 @@ frmnet_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 				dev->port.out->desc = NULL;
 				return -EINVAL;
 		}
+		dev->port.gadget = dev->cdev->gadget;
 		ret = gport_rmnet_connect(dev, intf);
 	}
 
