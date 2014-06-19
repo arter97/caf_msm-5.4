@@ -24,8 +24,8 @@
 	compatible = "qcom,msmthulium-sim", "qcom,msmthulium", "qcom,sim";
 };
 
-&uartblsp0dm1 {
+&uartblsp2dm1 {
 	status = "ok";
 	pinctrl-names = "default";
-	pinctrl-0 = <&uart_console_sleep>;
+	pinctrl-0 = <&uart_console_active>;
 };

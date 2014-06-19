@@ -38,8 +38,8 @@
 			qcom,pin-func = <2>;
 			label = "uart-console";
 
-		uart_console_sleep: uart-console {
-				drive-strength = <8>;
+			uart_console_active: uart-console {
+				drive-strength = <2>;
 				bias-disable;
 			};
 		};
