@@ -4542,7 +4542,8 @@ static void vfe32_process_output_path_irq_0(
 			ping_pong, axi_ctrl->share_ctrl->vfebase,
 			axi_ctrl->share_ctrl->outpath.out0.ch2);
 
-		if (machine_is_apq8064_mplatform()) {
+		if (machine_is_apq8064_adp_2()
+				|| machine_is_apq8064_mplatform()) {
 			pr_debug(" %s: irq0, output path 0, ch0 = 0x%x\n",
 					__func__, ch0_paddr);
 			pr_debug(" %s: ch1 = 0x%x, ch2 = 0x%x\n",
@@ -4631,7 +4632,8 @@ static void vfe32_process_output_path_irq_1(
 		ch2_paddr = vfe32_get_ch_addr(ping_pong,
 			axi_ctrl->share_ctrl->vfebase,
 			axi_ctrl->share_ctrl->outpath.out1.ch2);
-		if (machine_is_apq8064_mplatform()) {
+		if (machine_is_apq8064_adp_2()
+				|| machine_is_apq8064_mplatform()) {
 			pr_debug("%s ch0 = 0x%x, ch1 = 0x%x, ch2 = 0x%x\n",
 				__func__, ch0_paddr, ch1_paddr, ch2_paddr);
 		} else {
@@ -6133,7 +6135,6 @@ int msm_axi_subdev_init_rdi_only(struct v4l2_subdev *sd,
 #ifdef CONFIG_MSM_IOMMU
 	struct iommu_domain *camera_domain;
 #endif /* CONFIG_MSM_IOMMU */
-
 	axi_ctrl->share_ctrl->axi_ref_cnt++;
 	if (axi_ctrl->share_ctrl->axi_ref_cnt > 1)
 		return rc;
@@ -7485,7 +7486,7 @@ static void msm_axi_process_irq(struct v4l2_subdev *sd, void *arg)
 			vfe32_process_output_path_irq_rdi0(axi_ctrl);
 		}
 	}
-	if (!machine_is_apq8064_mplatform()) {
+	if (!machine_is_apq8064_adp_2() && !machine_is_apq8064_mplatform()) {
 		if (axi_ctrl->share_ctrl->comp_output_mode &
 		VFE32_OUTPUT_MODE_TERTIARY2 &&
 		(axi_ctrl->share_ctrl->rdi_comp == VFE_RDI_NON_COMPOSITE)) {
@@ -7873,7 +7874,7 @@ static int __devinit vfe32_probe(struct platform_device *pdev)
 	vfe32_ctrl->pdev = pdev;
 	/*disable bayer stats by default*/
 	vfe32_ctrl->ver_num.main = VFE_STATS_TYPE_LEGACY;
-	if (machine_is_apq8064_mplatform()) {
+	if (machine_is_apq8064_adp_2() || machine_is_apq8064_mplatform()) {
 		lsh_axi_ctrl = &axi_ctrl->subdev;
 		my_axi_ctrl = axi_ctrl;
 		pr_debug("%s: msm_vfe32 finished\n", __func__);
