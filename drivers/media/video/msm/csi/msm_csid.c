@@ -235,7 +235,7 @@ int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 		rc = -EINVAL;
 		return rc;
 	}
-	if (!machine_is_apq8064_mplatform()) {
+	if (!machine_is_apq8064_adp_2() && !machine_is_apq8064_mplatform()) {
 		if (csid_dev->csid_state == CSID_POWER_UP) {
 			pr_err("%s: csid invalid state %d\n", __func__,
 					csid_dev->csid_state);
@@ -252,7 +252,8 @@ int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 	}
 
 	if (CSID_VERSION <= CSID_VERSION_V2) {
-		if (!machine_is_apq8064_mplatform()) {
+		if (!machine_is_apq8064_adp_2()
+				&& !machine_is_apq8064_mplatform()) {
 			rc = msm_camera_config_vreg(&csid_dev->pdev->dev,
 					csid_8960_vreg_info,
 					ARRAY_SIZE(csid_8960_vreg_info),
@@ -280,7 +281,8 @@ int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 			goto clk_enable_failed;
 		}
 	} else if (CSID_VERSION == CSID_VERSION_V3) {
-		if (!machine_is_apq8064_mplatform()) {
+		if (!machine_is_apq8064_adp_2()
+				&& !machine_is_apq8064_mplatform()) {
 			rc = msm_camera_config_vreg(&csid_dev->pdev->dev,
 					csid_8974_vreg_info,
 					ARRAY_SIZE(csid_8974_vreg_info),
@@ -385,7 +387,8 @@ int msm_csid_release(struct csid_device *csid_dev)
 	if (csid_dev->hw_version <= CSID_VERSION_V2) {
 		msm_cam_clk_enable(&csid_dev->pdev->dev, csid_8960_clk_info,
 			csid_dev->csid_clk, ARRAY_SIZE(csid_8960_clk_info), 0);
-		if (!machine_is_apq8064_mplatform()) {
+		if (!machine_is_apq8064_adp_2() &&
+				!machine_is_apq8064_mplatform()) {
 			msm_camera_enable_vreg(&csid_dev->pdev->dev,
 					csid_8960_vreg_info,
 					ARRAY_SIZE(csid_8960_vreg_info),
@@ -407,7 +410,8 @@ int msm_csid_release(struct csid_device *csid_dev)
 		msm_cam_clk_enable(&csid_dev->pdev->dev,
 			csid_8974_clk_info[0].clk_info, csid_dev->csid0_clk,
 			csid_8974_clk_info[0].num_clk_info, 0);
-		if (!machine_is_apq8064_mplatform()) {
+		if (!machine_is_apq8064_adp_2() &&
+				!machine_is_apq8064_mplatform()) {
 			msm_camera_enable_vreg(&csid_dev->pdev->dev,
 					csid_8974_vreg_info,
 					ARRAY_SIZE(csid_8974_vreg_info),
@@ -634,7 +638,7 @@ static int __devinit csid_probe(struct platform_device *pdev)
 
 	new_csid_dev->csid_state = CSID_POWER_DOWN;
 
-	if (machine_is_apq8064_mplatform())
+	if (machine_is_apq8064_adp_2() || machine_is_apq8064_mplatform())
 		lsh_csid_dev = new_csid_dev;
 
 	return 0;
