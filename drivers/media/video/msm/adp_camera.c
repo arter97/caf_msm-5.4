@@ -125,7 +125,7 @@ void preview_set_data_pipeline()
 	rc = msm_csiphy_init(lsh_csiphy_dev); /* CSIPHY_INIT */
 	rc = msm_ispif_init(lsh_ispif, &csid_version); /* ISPIF_INIT */
 	params_list.params[0].intftype =  RDI1; /* RDI1 */
-	params_list.params[0].csid = 1;
+	params_list.params[0].csid = 0;
 	params_list.params[0].vfe_intf =  VFE0;
 	params_list.params[0].cid_mask = (1 << 0);
 	params_list.len = 1;
