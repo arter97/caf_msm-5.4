@@ -58,5 +58,5 @@ struct danipc_name {
 	danipc_addr_t		addr;
 };
 
-
+#define DANIPC_MAX_BUF 1600
 #endif /* __UAPI_LINUX_DANIPC_IOCTL_H__ */
