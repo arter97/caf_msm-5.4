@@ -13,6 +13,10 @@
 #define KGSL_CLK_ALT_MEM_IFACE 0x00000040
 #define KGSL_CLK_RBBMTIMER	0x00000080
 
+/* Clock flags for iommuv2 cores */
+#define KGSL_CLK_GFX_GTCU   0x00000100
+#define KGSL_CLK_GFX_GTBU   0x00000200
+
 #define KGSL_MAX_PWRLEVELS 10
 
 #define KGSL_3D0_REG_MEMORY	"kgsl_3d0_reg_memory"
