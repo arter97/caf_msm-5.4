@@ -9,14 +9,19 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-#ifndef __LEDS_QPNP_WLED_H
 
-#ifdef CONFIG_LEDS_QPNP_WLED
-int qpnp_ibb_enable(bool state);
+#ifndef __MSM_CTI_PMU_IRQ_H
+#define __MSM_CTI_PMU_IRQ_H
+
+#include <linux/workqueue.h>
+
+#ifdef CONFIG_MSM8994_V1_PMUIRQ_WA
+void msm_enable_cti_pmu_workaround(struct work_struct *work);
+struct coresight_cti *msm_get_cpu_cti(int cpu);
+void msm_cti_pmu_irq_ack(int cpu);
 #else
-int qpnp_ibb_enable(bool state)
-{
-	return 0;
-}
+static inline void msm_enable_cti_pmu_workaround(struct work_struct *work) { }
+static inline struct coresight_cti *msm_get_cpu_cti(int cpu) { return NULL; }
+static inline void msm_cti_pmu_irq_ack(int cpu) { }
 #endif
 #endif

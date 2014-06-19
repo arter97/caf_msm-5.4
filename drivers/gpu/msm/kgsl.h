@@ -43,6 +43,8 @@
 /* The SVM upper bound is the same as the TASK_SIZE in arm32 */
 #define KGSL_SVM_UPPER_BOUND (0xC0000000 - SZ_16M)
 
+#define KGSL_SVM_LOWER_BOUND PAGE_SIZE
+
 /* A macro for memory statistics - add the new size to the stat and if
    the statisic is greater then _max, set _max
 */
@@ -120,6 +122,8 @@ struct kgsl_memdesc_ops {
 #define KGSL_MEMDESC_GENPOOL_ALLOC BIT(4)
 /* The memdesc is secured for content protection */
 #define KGSL_MEMDESC_SECURE BIT(5)
+/* Indicates gpuaddr is assigned via bimap */
+#define KGSL_MEMDESC_BITMAP_ALLOC BIT(6)
 
 /* shared memory allocation */
 struct kgsl_memdesc {

@@ -29,7 +29,7 @@ int diag_event_num_bytes;
 #define ALL_EQUIP_ID		100
 #define ALL_SSID		-1
 
-#define FEATURE_MASK_LEN_BYTES		2
+#define DIAG_SET_FEATURE_MASK(x) (feature_bytes[(x)/8] |= (1 << (x & 0x7)))
 
 struct mask_info {
 	int equip_id;
@@ -345,8 +345,8 @@ void diag_send_log_mask_update(struct diag_smd_info *smd_info, int equip_id)
 	struct diag_log_mask_t *log_item = NULL;
 	struct diag_ctrl_log_mask ctrl_pkt;
 	uint32_t log_mask_size = 0;
-	int wr_size = -ENOMEM, retry_count = 0;
 	int i, header_size, send_once = 0;
+	int err = 0;
 
 	if (!smd_info) {
 		pr_err("diag: In %s, null smd info pointer\n",
@@ -396,26 +396,13 @@ void diag_send_log_mask_update(struct diag_smd_info *smd_info, int equip_id)
 			       log_mask_size);
 		}
 
-		if (smd_info->ch) {
-			while (retry_count < 3) {
-				mutex_lock(&smd_info->smd_ch_mutex);
-				wr_size = smd_write(smd_info->ch, buf,
-						header_size + log_mask_size);
-				mutex_unlock(&smd_info->smd_ch_mutex);
-				if (wr_size == -ENOMEM) {
-					retry_count++;
-					usleep_range(10000, 10100);
-				} else
-				break;
-			}
-			if (wr_size != header_size + log_mask_size)
-				pr_err("diag: log mask update failed %d, tried %d",
-					wr_size, header_size + log_mask_size);
-			else
-				pr_debug("diag: updated log equip ID %d,len %d\n",
-					 i, log_mask_size);
-		} else
-			pr_err("diag: ch not valid for log update\n");
+		err = diag_smd_write(smd_info, buf,
+				     header_size + log_mask_size);
+		if (err) {
+			pr_err("diag: In %s, unable to write to smd, peripheral: %d, type: %d, len: %d, err: %d\n",
+			       __func__, smd_info->peripheral, smd_info->type,
+			       header_size + log_mask_size, err);
+		}
 		if (send_once)
 			break;
 	}
@@ -427,7 +414,7 @@ void diag_send_event_mask_update(struct diag_smd_info *smd_info, int num_bytes)
 {
 	void *buf = driver->buf_event_mask_update;
 	int header_size = sizeof(struct diag_ctrl_event_mask);
-	int wr_size = -ENOMEM, retry_count = 0;
+	int err = 0;
 
 	if (!smd_info) {
 		pr_err("diag: In %s, null smd info pointer\n",
@@ -473,23 +460,13 @@ void diag_send_event_mask_update(struct diag_smd_info *smd_info, int num_bytes)
 		return;
 	}
 	memcpy(buf, driver->event_mask, header_size);
-	if (smd_info->ch) {
-		while (retry_count < 3) {
-			mutex_lock(&smd_info->smd_ch_mutex);
-			wr_size = smd_write(smd_info->ch, buf,
-						header_size + num_bytes);
-			mutex_unlock(&smd_info->smd_ch_mutex);
-			if (wr_size == -ENOMEM) {
-				retry_count++;
-				usleep_range(10000, 10100);
-			} else
-				break;
-		}
-		if (wr_size != header_size + num_bytes)
-			pr_err("diag: error writing event mask %d, tried %d\n",
-					 wr_size, header_size + num_bytes);
-	} else
-		pr_err("diag: ch not valid for event update\n");
+
+	err = diag_smd_write(smd_info, buf, header_size + num_bytes);
+	if (err) {
+		pr_err("diag: In %s, unable to write to smd, peripheral: %d, type: %d, len: %d, err: %d\n",
+		       __func__, smd_info->peripheral, smd_info->type,
+		       header_size + num_bytes, err);
+	}
 	mutex_unlock(&driver->diag_cntl_mutex);
 }
 
@@ -498,9 +475,11 @@ void diag_send_msg_mask_update(struct diag_smd_info *smd_info,
 				int proc)
 {
 	void *buf = driver->buf_msg_mask_update;
-	int first, last, actual_last, size = -ENOMEM, retry_count = 0;
+	int first, last, actual_last;
 	int header_size = sizeof(struct diag_ctrl_msg_mask);
 	uint8_t *ptr = driver->msg_masks;
+	int err = 0;
+	int write_len = 0;
 
 	if (!smd_info) {
 		pr_err("diag: In %s, null smd info pointer\n",
@@ -566,29 +545,13 @@ void diag_send_msg_mask_update(struct diag_smd_info *smd_info,
 		driver->msg_mask->ssid_first = first;
 		driver->msg_mask->ssid_last = actual_last;
 		memcpy(buf, driver->msg_mask, header_size);
-		if (smd_info->ch) {
-			while (retry_count < 3) {
-				mutex_lock(&smd_info->smd_ch_mutex);
-				size = smd_write(smd_info->ch, buf, header_size
-					+ 4*(driver->msg_mask->msg_mask_size));
-				mutex_unlock(&smd_info->smd_ch_mutex);
-				if (size == -ENOMEM) {
-					retry_count++;
-					usleep_range(10000, 10100);
-				} else
-					break;
-			}
-			if (size != header_size +
-				 4*(driver->msg_mask->msg_mask_size))
-				pr_err("diag: proc %d, msg mask update fail %d, tried %d\n",
-					proc, size, (header_size +
-				4*(driver->msg_mask->msg_mask_size)));
-			else
-				pr_debug("diag: sending mask update for ssid first %d, last %d on PROC %d\n",
-					first, actual_last, proc);
-		} else
-			pr_err("diag: proc %d, ch invalid msg mask update\n",
-								proc);
+		write_len = header_size + 4 * driver->msg_mask->msg_mask_size;
+		err = diag_smd_write(smd_info, buf, write_len);
+		if (err) {
+			pr_err("diag: In %s, unable to write to smd, peripheral: %d, type: %d, len: %d, err: %d\n",
+			       __func__, smd_info->peripheral, smd_info->type,
+			       write_len, err);
+		}
 		ptr += MAX_SSID_PER_RANGE*4;
 	}
 	mutex_unlock(&driver->diag_cntl_mutex);
@@ -598,9 +561,10 @@ void diag_send_feature_mask_update(struct diag_smd_info *smd_info)
 {
 	void *buf = driver->buf_feature_mask_update;
 	int header_size = sizeof(struct diag_ctrl_feature_mask);
-	int wr_size = -ENOMEM, retry_count = 0;
-	uint8_t feature_bytes[FEATURE_MASK_LEN_BYTES] = {0, 0};
+	uint8_t feature_bytes[FEATURE_MASK_LEN] = {0, 0};
+	struct diag_ctrl_feature_mask feature_mask;
 	int total_len = 0;
+	int err = 0;
 
 	if (!smd_info) {
 		pr_err("diag: In %s, null smd info pointer\n",
@@ -616,41 +580,26 @@ void diag_send_feature_mask_update(struct diag_smd_info *smd_info)
 
 	mutex_lock(&driver->diag_cntl_mutex);
 	/* send feature mask update */
-	driver->feature_mask->ctrl_pkt_id = DIAG_CTRL_MSG_FEATURE;
-	driver->feature_mask->ctrl_pkt_data_len = 4 + FEATURE_MASK_LEN_BYTES;
-	driver->feature_mask->feature_mask_len = FEATURE_MASK_LEN_BYTES;
-	memcpy(buf, driver->feature_mask, header_size);
-	feature_bytes[0] |= F_DIAG_INT_FEATURE_MASK;
-	feature_bytes[0] |= F_DIAG_LOG_ON_DEMAND_RSP_ON_MASTER;
-	feature_bytes[0] |= driver->supports_separate_cmdrsp ?
-				F_DIAG_REQ_RSP_CHANNEL : 0;
-	feature_bytes[0] |= driver->supports_apps_hdlc_encoding ?
-				F_DIAG_HDLC_ENCODE_IN_APPS_MASK : 0;
-	feature_bytes[1] |= F_DIAG_OVER_STM;
-	memcpy(buf+header_size, &feature_bytes, FEATURE_MASK_LEN_BYTES);
-	total_len = header_size + FEATURE_MASK_LEN_BYTES;
+	feature_mask.ctrl_pkt_id = DIAG_CTRL_MSG_FEATURE;
+	feature_mask.ctrl_pkt_data_len = sizeof(uint32_t) + FEATURE_MASK_LEN;
+	feature_mask.feature_mask_len = FEATURE_MASK_LEN;
+	memcpy(buf, &feature_mask, header_size);
+	DIAG_SET_FEATURE_MASK(F_DIAG_FEATURE_MASK_SUPPORT);
+	DIAG_SET_FEATURE_MASK(F_DIAG_LOG_ON_DEMAND_APPS);
+	DIAG_SET_FEATURE_MASK(F_DIAG_STM);
+	if (driver->supports_separate_cmdrsp)
+		DIAG_SET_FEATURE_MASK(F_DIAG_REQ_RSP_SUPPORT);
+	if (driver->supports_apps_hdlc_encoding)
+		DIAG_SET_FEATURE_MASK(F_DIAG_APPS_HDLC_ENCODE);
+	memcpy(buf + header_size, &feature_bytes, FEATURE_MASK_LEN);
+	total_len = header_size + FEATURE_MASK_LEN;
 
-	while (retry_count < 3) {
-		mutex_lock(&smd_info->smd_ch_mutex);
-		wr_size = smd_write(smd_info->ch, buf, total_len);
-		mutex_unlock(&smd_info->smd_ch_mutex);
-		if (wr_size == -ENOMEM) {
-			retry_count++;
-			/*
-			 * The smd channel is full. Delay while
-			 * smd processes existing data and smd
-			 * has memory become available. The delay
-			 * of 10000 was determined empirically as
-			 * best value to use.
-			 */
-			usleep_range(10000, 10100);
-		} else
-			break;
+	err = diag_smd_write(smd_info, buf, total_len);
+	if (err) {
+		pr_err("diag: In %s, unable to write to smd, peripheral: %d, type: %d, len: %d, err: %d\n",
+		       __func__, smd_info->peripheral, smd_info->type,
+		       total_len, err);
 	}
-	if (wr_size != total_len)
-		pr_err("diag: In %s, peripheral %d fail feature update, size: %d, tried: %d",
-			__func__, smd_info->peripheral, wr_size, total_len);
-
 	mutex_unlock(&driver->diag_cntl_mutex);
 }
 
@@ -963,17 +912,10 @@ int diag_masks_init(void)
 	if (driver->buf_feature_mask_update == NULL) {
 		driver->buf_feature_mask_update = kzalloc(sizeof(
 					struct diag_ctrl_feature_mask) +
-					FEATURE_MASK_LEN_BYTES, GFP_KERNEL);
+					FEATURE_MASK_LEN, GFP_KERNEL);
 		if (driver->buf_feature_mask_update == NULL)
 			goto err;
 		kmemleak_not_leak(driver->buf_feature_mask_update);
-	}
-	if (driver->feature_mask == NULL) {
-		driver->feature_mask = kzalloc(sizeof(
-			struct diag_ctrl_feature_mask), GFP_KERNEL);
-		if (driver->feature_mask == NULL)
-			goto err;
-		kmemleak_not_leak(driver->feature_mask);
 	}
 	diag_create_msg_mask_table();
 	diag_event_num_bytes = 0;
@@ -999,7 +941,6 @@ err:
 	kfree(driver->msg_masks);
 	kfree(driver->log_masks);
 	kfree(driver->event_masks);
-	kfree(driver->feature_mask);
 	kfree(driver->buf_feature_mask_update);
 	return -ENOMEM;
 }
@@ -1012,6 +953,5 @@ void diag_masks_exit(void)
 	kfree(driver->msg_masks);
 	kfree(driver->log_masks);
 	kfree(driver->event_masks);
-	kfree(driver->feature_mask);
 	kfree(driver->buf_feature_mask_update);
 }

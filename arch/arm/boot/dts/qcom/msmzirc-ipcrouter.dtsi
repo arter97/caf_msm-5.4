@@ -9,14 +9,19 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-#ifndef __LEDS_QPNP_WLED_H
 
-#ifdef CONFIG_LEDS_QPNP_WLED
-int qpnp_ibb_enable(bool state);
-#else
-int qpnp_ibb_enable(bool state)
-{
-	return 0;
-}
-#endif
-#endif
+&soc {
+	qcom,ipc_router {
+		compatible = "qcom,ipc_router";
+		qcom,node-id = <1>;
+	};
+
+	qcom,ipc_router_modem_xprt {
+		compatible = "qcom,ipc_router_smd_xprt";
+		qcom,ch-name = "IPCRTR";
+		qcom,xprt-remote = "modem";
+		qcom,xprt-linkid = <1>;
+		qcom,xprt-version = <1>;
+		qcom,fragmented-data;
+	};
+};
