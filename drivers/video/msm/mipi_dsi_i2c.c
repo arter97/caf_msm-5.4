@@ -175,6 +175,9 @@ static int mipi_dsi_i2c_lcd_on(struct platform_device *pdev)
 		if (cfg->config_dsi())
 			pr_err("mipi dsi i2c config dsi fails!\n");
 
+	if (cfg->config_reset_dev)
+		cfg->config_reset_dev();
+
 	if (cfg->config_i2c)
 		if (cfg->config_i2c())
 			pr_err("mipi dsi i2c config i2c fails!\n");
@@ -242,11 +245,19 @@ static int mipi_dsi_i2c_config_480p(void)
 	return 0;
 }
 
+static void mipi_dsi_i2c_reset_dev(void)
+{
+	gpio_set_value_cansleep(dsi_i2c_rsc.gpio, 0);
+	msleep(100);
+	gpio_set_value_cansleep(dsi_i2c_rsc.gpio, 1);
+}
+
 static int __devinit mipi_dsi_i2c_lcd_probe(struct platform_device *pdev)
 {
 	struct mipi_dsi_i2c_configure *cfg = &dsi_i2c_cfg;
 
 	cfg->config_dsi = mipi_dsi_i2c_config_480p;
+	cfg->config_reset_dev = mipi_dsi_i2c_reset_dev;
 
 	msm_fb_add_device(pdev);
 
