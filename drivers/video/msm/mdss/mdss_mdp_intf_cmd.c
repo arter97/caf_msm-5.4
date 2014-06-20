@@ -15,6 +15,7 @@
 
 #include "mdss_mdp.h"
 #include "mdss_panel.h"
+#include "mdss_mdp_trace.h"
 
 #define VSYNC_EXPIRE_TICK 4
 
@@ -205,8 +206,8 @@ static inline void mdss_mdp_cmd_clk_on(struct mdss_mdp_cmd_ctx *ctx)
 		ctx->clk_enabled = 1;
 		if (cancel_delayed_work_sync(&ctx->ulps_work))
 			pr_debug("deleted pending ulps work\n");
-		mdss_mdp_ctl_intf_event
-			(ctx->ctl, MDSS_EVENT_PANEL_CLK_CTRL, (void *)1);
+
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
 
 		if (ctx->ulps) {
 			if (mdss_mdp_cmd_tearcheck_setup(ctx->ctl, 1))
@@ -216,7 +217,9 @@ static inline void mdss_mdp_cmd_clk_on(struct mdss_mdp_cmd_ctx *ctx)
 			ctx->ulps = false;
 		}
 
-		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+		mdss_mdp_ctl_intf_event
+			(ctx->ctl, MDSS_EVENT_PANEL_CLK_CTRL, (void *)1);
+
 		mdss_mdp_hist_intr_setup(&mdata->hist_intr, MDSS_IRQ_RESUME);
 	}
 	spin_lock_irqsave(&ctx->clk_lock, flags);
@@ -348,6 +351,7 @@ static void mdss_mdp_cmd_pingpong_done(void *arg)
 	} else
 		pr_err("%s: should not have pingpong interrupt!\n", __func__);
 
+	trace_mdp_cmd_pingpong_done(ctl, ctx->pp_num, ctx->koff_cnt);
 	pr_debug("%s: ctl_num=%d intf_num=%d ctx=%d kcnt=%d\n", __func__,
 		ctl->num, ctl->intf_num, ctx->pp_num, ctx->koff_cnt);
 
@@ -511,6 +515,8 @@ static int mdss_mdp_cmd_wait4pingpong(struct mdss_mdp_ctl *ctl, void *arg)
 		rc = wait_for_completion_timeout(
 				&ctx->pp_comp, KOFF_TIMEOUT);
 
+		trace_mdp_cmd_wait_pingpong(ctl->num, ctx->koff_cnt);
+
 		if (rc <= 0) {
 			WARN(1, "cmd kickoff timed out (%d) ctl=%d\n",
 						rc, ctl->num);
@@ -566,9 +572,9 @@ int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 	}
 
 	mdss_mdp_cmd_set_partial_roi(ctl);
+	trace_mdp_cmd_kickoff(ctl->num, ctx->koff_cnt);
 
 	mdss_mdp_cmd_clk_on(ctx);
-
 	/*
 	 * tx dcs command if had any
 	 */
