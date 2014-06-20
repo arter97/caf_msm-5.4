@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
 
 * This program is free software; you can redistribute it and/or modify
 * it under the terms of the GNU General Public License version 2 and
@@ -68,6 +68,11 @@ static const struct snd_pcm_hardware dummy_pcm_hardware = {
 	.periods_max            = 128,
 };
 
+enum {
+	BITS_PER_SAMPLE_8 = 8,
+	BITS_PER_SAMPLE_16 = 16
+};
+
 static void msm_pcm_route_event_handler(enum msm_pcm_routing_event event,
 					void *priv_data)
 {
@@ -108,11 +113,11 @@ static void msm_pcm_loopback_event_handler(uint32_t opcode,
 
 static int pcm_loopback_set_volume(struct msm_pcm_loopback *prtd, int volume)
 {
-	int rc = 0;
+	int rc = -EINVAL;
 
 	pr_debug("%s Setting volume 0x%x\n", __func__, volume);
 
-	if (prtd) {
+	if (prtd && prtd->audio_client) {
 		rc = q6asm_set_volume(prtd->audio_client, volume);
 		if (rc < 0) {
 			pr_err("%s: Send Volume command failed rc = %d\n",
@@ -130,6 +135,7 @@ static int msm_pcm_open(struct snd_pcm_substream *substream)
 	struct snd_soc_pcm_runtime *rtd = snd_pcm_substream_chip(substream);
 	struct msm_pcm_loopback *pcm;
 	int ret = 0;
+	uint16_t bits_per_sample = BITS_PER_SAMPLE_16;
 	struct msm_pcm_routing_evt event;
 
 	pcm = dev_get_drvdata(rtd->platform->dev);
@@ -164,7 +170,8 @@ static int msm_pcm_open(struct snd_pcm_substream *substream)
 		}
 		pcm->session_id = pcm->audio_client->session;
 		pcm->audio_client->perf_mode = false;
-		ret = q6asm_open_loopack(pcm->audio_client);
+		ret = q6asm_open_loopback_v2(pcm->audio_client,
+					     bits_per_sample);
 		if (ret < 0) {
 			dev_err(rtd->platform->dev,
 				"%s: pcm out open failed\n", __func__);
@@ -200,19 +207,23 @@ static int msm_pcm_open(struct snd_pcm_substream *substream)
 
 static void stop_pcm(struct msm_pcm_loopback *pcm)
 {
-	struct snd_soc_pcm_runtime *soc_pcm_rx =
-		pcm->playback_substream->private_data;
-	struct snd_soc_pcm_runtime *soc_pcm_tx =
-		pcm->capture_substream->private_data;
+	struct snd_soc_pcm_runtime *soc_pcm_rx;
+	struct snd_soc_pcm_runtime *soc_pcm_tx;
 
 	if (pcm->audio_client == NULL)
 		return;
 	q6asm_cmd(pcm->audio_client, CMD_CLOSE);
 
-	msm_pcm_routing_dereg_phy_stream(soc_pcm_rx->dai_link->be_id,
-			SNDRV_PCM_STREAM_PLAYBACK);
-	msm_pcm_routing_dereg_phy_stream(soc_pcm_tx->dai_link->be_id,
-			SNDRV_PCM_STREAM_CAPTURE);
+	if (pcm->playback_substream != NULL) {
+		soc_pcm_rx = pcm->playback_substream->private_data;
+		msm_pcm_routing_dereg_phy_stream(soc_pcm_rx->dai_link->be_id,
+				SNDRV_PCM_STREAM_PLAYBACK);
+	}
+	if (pcm->capture_substream != NULL) {
+		soc_pcm_tx = pcm->capture_substream->private_data;
+		msm_pcm_routing_dereg_phy_stream(soc_pcm_tx->dai_link->be_id,
+				SNDRV_PCM_STREAM_CAPTURE);
+	}
 	q6asm_audio_client_free(pcm->audio_client);
 	pcm->audio_client = NULL;
 }
@@ -401,6 +412,7 @@ static int msm_pcm_remove(struct platform_device *pdev)
 
 	pcm = dev_get_drvdata(&pdev->dev);
 	mutex_destroy(&pcm->lock);
+	kfree(pcm);
 
 	snd_soc_unregister_platform(&pdev->dev);
 	return 0;

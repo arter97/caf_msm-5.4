@@ -1,6 +1,6 @@
 /*
  *
- * Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1242,6 +1242,30 @@ struct asm_stream_cmd_open_loopback {
 /* Postprocessor topology ID. Specifies the topology of
  * postprocessing algorithms.
  */
+} __packed;
+
+#define ASM_STREAM_CMD_OPEN_LOOPBACK_V2 0x00010D8E
+struct asm_stream_cmd_open_loopback_v2 {
+	struct apr_hdr         hdr;
+	u32                    mode_flags;
+/* Mode flags.
+ * Bit 0-31: reserved; client should set these bits to 0
+ */
+	u16                    src_endpointype;
+	/* Endpoint type. 0 = Tx Matrix */
+	u16                    sink_endpointype;
+	/* Endpoint type. 0 = Rx Matrix */
+	u32                    postprocopo_id;
+/* Postprocessor topology ID. Specifies the topology of
+ * postprocessing algorithms.
+ */
+
+	u16                    bits_per_sample;
+/* The number of bits per sample processed by ASM modules
+ * Supported values: 16 and 24 bits per sample
+ */
+	u16                    reserved;
+/* Reserved for future use. This field must be set to zero. */
 } __packed;
 
 #define ADM_CMD_CONNECT_AFE_PORT 0x00010320
