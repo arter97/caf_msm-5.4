@@ -2556,6 +2556,7 @@ static struct platform_device *common_devices[] __initdata = {
 	&apq_cpudai_fm_rx,
 	&apq_cpudai_fm_tx,
 	&apq_cpu_fe,
+	&apq_pcm_loopback,
 	&apq_stub_codec,
 	&apq_voice,
 	&apq_voip,

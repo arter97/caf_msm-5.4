@@ -1168,6 +1168,11 @@ struct platform_device apq_cpudai_slimbus_3_tx = {
 	.id = 0x4007,
 };
 
+struct platform_device apq_pcm_loopback = {
+	.name	= "msm-pcm-loopback",
+	.id	= -1,
+};
+
 static struct resource resources_ssbi_pmic1[] = {
 	{
 		.start  = MSM_PMIC1_SSBI_CMD_PHYS,

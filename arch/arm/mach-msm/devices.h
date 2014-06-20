@@ -290,6 +290,7 @@ extern struct platform_device apq_cpudai_fm_tx;
 extern struct platform_device apq_cpudai_auxpcm_rx;
 extern struct platform_device apq_cpudai_auxpcm_tx;
 extern struct platform_device apq_cpu_fe;
+extern struct platform_device apq_pcm_loopback;
 
 extern struct platform_device apq_cpudai_mi2s;
 extern struct platform_device apq_cpudai_sec_i2s;
