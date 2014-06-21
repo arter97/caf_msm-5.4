@@ -132,7 +132,7 @@ static struct pm8xxx_gpio_init pm8921_gpios[] __initdata = {
 	PM8921_GPIO_INPUT(38, PM_GPIO_PULL_UP_30),
 	/* TABLA CODEC RESET */
 	PM8921_GPIO_OUTPUT(34, 0, MED),
-	PM8921_GPIO_OUTPUT(22, 0, LOW),                /* PCIE_CLKEN */
+	PM8921_GPIO_OUTPUT_VIN(22, 0, PM_GPIO_VIN_VPH), /* PCIE_CLKEN */
 	PM8921_GPIO_OUTPUT(13, 0, HIGH),               /* PCIE_CLK_PWR_EN */
 	PM8921_GPIO_INPUT(12, PM_GPIO_PULL_UP_30),     /* PCIE_WAKE_N */
 };
@@ -229,7 +229,7 @@ static struct pm8xxx_mpp_init mplatform_pm8xxx_mpps[] __initdata = {
 /* Initial PM8XXX MPP configurations */
 static struct pm8xxx_mpp_init pm8xxx_mpps[] __initdata = {
 	/* MDM_STATUS */
-	PM8821_MPP_INIT(1, D_INPUT, PM8921_MPP_DIG_LEVEL_S4, DOUT_CTRL_LOW),
+	PM8921_MPP_INIT(1, D_OUTPUT, PM8921_MPP_DIG_LEVEL_VPH, DOUT_CTRL_HIGH),
 	/* MDM_ON_OFF */
 	PM8821_MPP_INIT(2, D_OUTPUT, PM8921_MPP_DIG_LEVEL_S4, DOUT_CTRL_HIGH),
 	/* External 5V regulator enable; shared by HDMI and USB_OTG switches. */
