@@ -14,7 +14,7 @@
 #define _USBNET_IPA_H_
 
 #ifdef CONFIG_USB_USBNET_IPA_SUPPORT
-int usbnet_ipa_init(struct net_device *dev);
+int usbnet_ipa_init(struct usbnet *dev);
 int usbnet_ipa_connect(struct usb_interface *intf,
 	unsigned int rx_usb_pipe_handle, unsigned int tx_usb_pipe_handle);
 int usbnet_ipa_disconnect(struct usb_interface *intf,
@@ -23,7 +23,7 @@ void usbnet_ipa_cleanup(void);
 int usbnet_ipa_is_odu_enabled(void);
 
 #else /* CONFIG_USB_USBNET_IPA_SUPPORT */
-inline int usbnet_ipa_init(struct net_device *dev) {return 0; }
+inline int usbnet_ipa_init(struct usbnet *dev) {return 0; }
 inline int usbnet_ipa_connect(struct usb_interface *intf,
 	unsigned int rx_usb_pipe_handle, unsigned int tx_usb_pipe_handle)
 {

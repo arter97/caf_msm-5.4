@@ -484,6 +484,9 @@ static int smsc95xx_link_reset(struct usbnet *dev)
 		pdata->mac_cr &= ~MAC_CR_RCVOWN_;
 		pdata->mac_cr |= MAC_CR_FDPX_;
 	}
+
+	pdata->mac_cr |= MAC_CR_PADSTR_;
+
 	spin_unlock_irqrestore(&pdata->mac_cr_lock, flags);
 
 	smsc95xx_write_reg(dev, MAC_CR, pdata->mac_cr);
@@ -1192,7 +1195,8 @@ static const struct driver_info smsc95xx_info = {
 	.rx_fixup	= smsc95xx_rx_fixup,
 	.tx_fixup	= smsc95xx_tx_fixup,
 	.status		= smsc95xx_status,
-	.flags		= FLAG_ETHER | FLAG_SEND_ZLP | FLAG_LINK_INTR,
+	.flags		= FLAG_ETHER | FLAG_SEND_ZLP | FLAG_LINK_INTR
+				| FLAG_IPA_DP,
 };
 
 static const struct usb_device_id products[] = {

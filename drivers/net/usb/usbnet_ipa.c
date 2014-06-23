@@ -44,6 +44,12 @@ struct usbnet_ipa_platform_data {
 	int hub_reset_gpio;
 };
 
+enum adapter_type {
+	SMSC75XX = 0,
+	SMSC95XX = 1,
+	ADAPTER_NUM
+} ;
+
 struct usbnet_ipa_bam_info {
 	u32 src_pipe;
 	u32 dst_pipe;
@@ -53,11 +59,21 @@ struct usbnet_ipa_bam_info {
 	struct usb_bam_connect_ipa_params ipa_params;
 	struct odu_ipa_params		  params;
 	struct net_device *net;
+	struct usbnet *dev;
 	struct usbnet_ipa_platform_data *pdata;
 #ifdef CONFIG_DEBUG_FS
 	struct dentry			*root;
 #endif
 	int odu_enabled;
+	enum adapter_type adapter_type;
+};
+
+#define ADAPTER_NAME_SZ 8
+
+const char *adapters_strings[] = {
+	[SMSC75XX] = "smsc75xx",
+	[SMSC95XX] = "smsc95xx",
+	NULL
 };
 
 static struct usbnet_ipa_bam_info ctx;
@@ -66,7 +82,7 @@ static int hub_reset(int gpio);
 
 /* Specific vendor header information to configure the IPA to remove/add */
 #ifdef CONFIG_USB_NET_SMSC75XX
-void usbnet_config_header(void)
+static void SMSC75XX_usbnet_config_header(void)
 {
 	u8 tx_smsc_header[] = {0x00, 0x00, 0x40, 0x00,
 				0x00, 0x00, 0x00, 0x00};
@@ -88,9 +104,43 @@ void usbnet_config_header(void)
 	ctx.hdr_cfg.tx.hdr_ofst_pkt_size_valid = 1;
 	ctx.hdr_cfg.tx.is_little_endian = 1;
 }
-#else
+#endif
+
+#ifdef CONFIG_USB_NET_SMSC95XX
+static void SMSC95XX_usbnet_config_header(void)
+{
+	/* We use here TX_A+TX_B */
+	u8 tx_smsc_header[] = {0x00, 0x00, 0x00, 0x00,
+				0x00, 0x00, 0x00, 0x00};
+
+	u8 rx_smsc_header[] = {0x00, 0x00, 0x00, 0x00 };
+
+	memset(&ctx.hdr_cfg.rx, 0, sizeof(ctx.hdr_cfg.rx));
+	memset(&ctx.hdr_cfg.tx, 0, sizeof(ctx.hdr_cfg.tx));
+
+	ctx.hdr_cfg.rx.hdr_len = sizeof(rx_smsc_header) + NET_IP_ALIGN;
+	ctx.hdr_cfg.rx.is_little_endian = 1;
+
+	memcpy(ctx.hdr_cfg.tx.raw_hdr, tx_smsc_header, sizeof(tx_smsc_header));
+	ctx.hdr_cfg.tx.hdr_len = sizeof(tx_smsc_header) ;
+	ctx.hdr_cfg.tx.hdr_ofst_pkt_size = 0;
+	ctx.hdr_cfg.tx.hdr_ofst_pkt_size_valid = 0;
+	ctx.hdr_cfg.tx.is_little_endian = 1;
+}
+#endif
+#if !defined(CONFIG_USB_NET_SMSC75XX) && !defined(CONFIG_USB_NET_SMSC95XX)
 #error no header information to configure IPA header removal/addition
 #endif
+
+
+static void (*usbnet_config_header[]) (void) = {
+#ifdef CONFIG_USB_NET_SMSC75XX
+	[SMSC75XX] = SMSC75XX_usbnet_config_header,
+#endif
+#ifdef CONFIG_USB_NET_SMSC95XX
+	[SMSC95XX] = SMSC95XX_usbnet_config_header,
+#endif
+};
 
 void usbnet_ipa_nway_reset(void)
 {
@@ -104,7 +154,6 @@ void usbnet_ipa_nway_reset(void)
 
 	USBNET_IPA_DBG_FUNC_EXIT();
 }
-
 
 static void usbnet_ipa_set_hw_rx_flags(int flags)
 {
@@ -125,21 +174,59 @@ static void usbnet_ipa_set_hw_rx_flags(int flags)
 	USBNET_IPA_DBG_FUNC_EXIT();
 }
 
-int usbnet_ipa_init(struct net_device *net)
+static inline int config_adapter_type(struct usbnet *dev)
+{
+	int i;
+
+	for (i = 0; adapters_strings[i] != NULL; i++) {
+		if (!memcmp(dev->driver_name, adapters_strings[i],
+			ADAPTER_NAME_SZ)) {
+
+			USBNET_IPA_DBG("Match found %s(%d)",
+				adapters_strings[i], i);
+			ctx.adapter_type = i;
+			return 0;
+		}
+	}
+
+	USBNET_IPA_DBG("No match found for %s", dev->driver_name);
+
+	return -ENXIO;
+}
+
+int usbnet_ipa_tx_fixup(struct sk_buff *skb)
+{
+	if (!ctx.net || !ctx.dev) {
+		USBNET_IPA_ERR("No device set");
+		return -ENODEV;
+	}
+
+	return !(int)ctx.dev->driver_info->tx_fixup(ctx.dev, skb, GFP_ATOMIC);
+}
+
+int usbnet_ipa_init(struct usbnet *dev)
 {
 	int ret;
+	struct net_device *net = dev->net;
 
 	USBNET_IPA_DBG_FUNC_ENTRY();
 
 	USBNET_IPA_DBG("device_ethaddr=%pM\n", net->dev_addr);
 
+	ret = config_adapter_type(dev);
+	if (ret)
+		return ret;
+
 	/* Called from usbnet_probe, shouldn't be a concurency problem
 	 * with disconnect/cleanup */
 	ctx.net = net;
+	ctx.dev = dev;
 
 	memcpy(ctx.params.device_ethaddr, net->dev_addr, ETH_ALEN);
 	ctx.params.set_hw_rx_flags = usbnet_ipa_set_hw_rx_flags;
 	ctx.params.hw_nway_reset = usbnet_ipa_nway_reset;
+	if (ctx.adapter_type == SMSC95XX)
+		ctx.params.tx_fixup = usbnet_ipa_tx_fixup;
 
 	ret = odu_ipa_init(&ctx.params);
 	if (ret)
@@ -147,7 +234,7 @@ int usbnet_ipa_init(struct net_device *net)
 	else
 		USBNET_IPA_DBG("odu_ipa successful created");
 
-	usbnet_config_header();
+	usbnet_config_header[ctx.adapter_type]();
 	USBNET_IPA_DBG("Configuring header");
 
 	odu_ipa_add_hw_hdr_info(&ctx.hdr_cfg, ctx.params.priv);
