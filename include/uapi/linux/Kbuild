@@ -21,6 +21,7 @@ header-y += netfilter_ipv6/
 header-y += usb/
 header-y += wimax/
 header-y += mfd/
+header-y += ../../../drivers/staging/android/uapi/
 
 genhdr-y += version.h
 
@@ -399,6 +400,7 @@ header-y += signalfd.h
 header-y += snmp.h
 header-y += sock_diag.h
 header-y += socket.h
+header-y += sockev.h
 header-y += sockios.h
 header-y += som.h
 header-y += sonet.h
@@ -475,3 +477,4 @@ header-y += msm_thermal_ioctl.h
 header-y += hw_breakpoint.h
 header-y += android_pmem.h
 header-y += tsc.h
+header-y += danipc_ioctl.h

@@ -65,6 +65,31 @@
 		qcom,key-codes = <139 172 158>;
 		qcom,y-offset = <0>;
 	};
+
+	sound {
+		compatible = "qcom,msm8x16-audio-codec";
+		qcom,model = "msm8939-snd-card-skuk";
+		qcom,msm-snd-card-id = <0>;
+		qcom,msm-codec-type = "internal";
+		qcom,msm-ext-pa = "primary";
+		qcom,msm-mbhc-hphl-swh = <1>;
+		qcom,msm-mbhc-gnd-swh = <0>;
+		qcom,msm-hs-micbias-type = "internal";
+		qcom,audio-routing =
+			"RX_BIAS", "MCLK",
+			"SPK_RX_BIAS", "MCLK",
+			"INT_LDO_H", "MCLK",
+			"MIC BIAS External", "Handset Mic",
+			"MIC BIAS Internal2", "Headset Mic",
+			"MIC BIAS External", "Secondary Mic",
+			"AMIC1", "MIC BIAS External",
+			"AMIC2", "MIC BIAS Internal2",
+			"AMIC3", "MIC BIAS External";
+		pinctrl-names = "cdc_lines_act",
+				"cdc_lines_sus";
+		pinctrl-0 = <&cdc_pdm_lines_act>;
+		pinctrl-1 = <&cdc_pdm_lines_sus>;
+	};
 };
 
 
@@ -105,7 +130,7 @@
 
 		tps65132_en_default: en-default {
 			drive-strength = <2>;
-			bias-disable;
+			bias-pull-down;
 		};
 	};
 };
@@ -114,7 +139,7 @@
 	avago@39 { /* Ambient light and proximity sensor */
 		compatible = "avago,apds9930";
 		reg = <0x39>;
-		pinctrl-names = "apds_default","apds_sleep";
+		pinctrl-names = "default","sleep";
 		pinctrl-0 = <&apds99xx_default>;
 		pinctrl-1 = <&apds99xx_sleep>;
 		interrupt-parent = <&msm_gpio>;
@@ -176,6 +201,7 @@
 		compatible = "ti,tps65132";
 		reg = <0x3e>;
 		i2c-pwr-supply = <&pm8916_l6>;
+		ti,en-gpio-lpm;
 		pinctrl-names = "default";
 		pinctrl-0 = <&tps65132_en_default>;
 

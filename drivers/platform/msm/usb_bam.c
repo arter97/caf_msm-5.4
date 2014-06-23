@@ -3364,7 +3364,8 @@ void usb_bam_set_qdss_core(const char *qdss_core)
 
 int get_bam2bam_connection_info(u8 idx, unsigned long *usb_bam_handle,
 	u32 *usb_bam_pipe_idx, u32 *peer_pipe_idx,
-	struct sps_mem_buffer *desc_fifo, struct sps_mem_buffer *data_fifo)
+	struct sps_mem_buffer *desc_fifo, struct sps_mem_buffer *data_fifo,
+	enum usb_pipe_mem_type *mem_type)
 {
 	struct usb_bam_pipe_connect *pipe_connect = &usb_bam_connections[idx];
 	enum usb_bam_pipe_dir dir = pipe_connect->dir;
@@ -3386,6 +3387,9 @@ int get_bam2bam_connection_info(u8 idx, unsigned long *usb_bam_handle,
 	if (desc_fifo)
 		memcpy(desc_fifo, &pipe_connect->desc_mem_buf,
 		sizeof(struct sps_mem_buffer));
+	if (mem_type)
+		*mem_type = pipe_connect->mem_type;
+
 	return 0;
 }
 EXPORT_SYMBOL(get_bam2bam_connection_info);
@@ -3439,6 +3443,24 @@ bool msm_bam_device_lpm_ok(enum usb_ctrl bam_type)
 		pr_err("%s: Scheduling LPM for later\n", __func__);
 		return 0;
 	} else {
+		int idx = usb_bam_get_qdss_idx(0);
+		struct usb_bam_pipe_connect *pipe_connect;
+
+		/*
+		 * Disconnecting bam pipes happens in work queue context during
+		 * cable disconnect in qdss composition and will access USB bam
+		 * registers. There is a chance that USB might have entered low
+		 * power mode by the time this work is scheduled and could cause
+		 * crash. Hence don't allow low power mode while bam pipes are
+		 * still connected.
+		 */
+		if (idx >= 0) {
+			pipe_connect = &usb_bam_connections[idx];
+			if (pipe_connect->enabled) {
+				spin_unlock(&usb_bam_ipa_handshake_info_lock);
+				return 0;
+			}
+		}
 		info[bam_type].pending_lpm = 0;
 		info[bam_type].in_lpm = true;
 		spin_unlock(&usb_bam_ipa_handshake_info_lock);

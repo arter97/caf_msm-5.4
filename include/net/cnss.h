@@ -56,6 +56,7 @@ struct cnss_wlan_driver {
 /* platform capabilities */
 enum cnss_platform_cap_flag {
 	CNSS_HAS_EXTERNAL_SWREG = 0x01,
+	CNSS_HAS_UART_ACCESS = 0x02,
 };
 
 struct cnss_platform_cap {
@@ -104,4 +105,5 @@ extern void *wcnss_prealloc_get(unsigned int size);
 extern int wcnss_prealloc_put(void *ptr);
 #endif
 
+extern int msm_pcie_enumerate(u32 rc_idx);
 #endif /* _NET_CNSS_H_ */

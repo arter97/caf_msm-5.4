@@ -482,6 +482,7 @@ static int mdss_fb_lpm_enable(struct msm_fb_data_type *mfd, int mode)
 	mutex_lock(&mfd->bl_lock);
 	bl_lvl = mfd->bl_level;
 	mdss_fb_set_backlight(mfd, 0);
+	mutex_unlock(&mfd->bl_lock);
 
 	lock_fb_info(mfd->fbi);
 	ret = mdss_fb_blank_sub(FB_BLANK_POWERDOWN, mfd->fbi,
@@ -489,7 +490,6 @@ static int mdss_fb_lpm_enable(struct msm_fb_data_type *mfd, int mode)
 	if (ret) {
 		pr_err("can't turn off display!\n");
 		unlock_fb_info(mfd->fbi);
-		mutex_unlock(&mfd->bl_lock);
 		return ret;
 	}
 
@@ -505,11 +505,11 @@ static int mdss_fb_lpm_enable(struct msm_fb_data_type *mfd, int mode)
 	if (ret) {
 		pr_err("can't turn on display!\n");
 		unlock_fb_info(mfd->fbi);
-		mutex_unlock(&mfd->bl_lock);
 		return ret;
 	}
 	unlock_fb_info(mfd->fbi);
 
+	mutex_lock(&mfd->bl_lock);
 	mfd->bl_updated = true;
 	mdss_fb_set_backlight(mfd, bl_lvl);
 	mutex_unlock(&mfd->bl_lock);
@@ -527,6 +527,21 @@ static int mdss_fb_lpm_enable(struct msm_fb_data_type *mfd, int mode)
 	return 0;
 }
 
+static ssize_t mdss_fb_get_src_split_info(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = fbi->par;
+	int ret = 0;
+
+	if ((mfd->split_mode == MDP_SPLIT_MODE_LM) &&
+	    (fbi->var.yres > 2048) && (fbi->var.yres > fbi->var.xres))
+		ret = scnprintf(buf, PAGE_SIZE,
+			"src_split_always\n");
+
+	return ret;
+}
+
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, mdss_fb_get_type, NULL);
 static DEVICE_ATTR(msm_fb_split, S_IRUGO | S_IWUSR, mdss_fb_show_split,
 					mdss_fb_store_split);
@@ -535,6 +550,8 @@ static DEVICE_ATTR(idle_time, S_IRUGO | S_IWUSR | S_IWGRP,
 	mdss_fb_get_idle_time, mdss_fb_set_idle_time);
 static DEVICE_ATTR(idle_notify, S_IRUGO, mdss_fb_get_idle_notify, NULL);
 static DEVICE_ATTR(msm_fb_panel_info, S_IRUGO, mdss_fb_get_panel_info, NULL);
+static DEVICE_ATTR(msm_fb_src_split_info, S_IRUGO, mdss_fb_get_src_split_info,
+	NULL);
 
 static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_type.attr,
@@ -543,6 +560,7 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_idle_time.attr,
 	&dev_attr_idle_notify.attr,
 	&dev_attr_msm_fb_panel_info.attr,
+	&dev_attr_msm_fb_src_split_info.attr,
 	NULL,
 };
 
@@ -1129,7 +1147,6 @@ void mdss_fb_free_fb_ion_memory(struct msm_fb_data_type *mfd)
 
 	mfd->fbi->screen_base = NULL;
 	mfd->fbi->fix.smem_start = 0;
-	mfd->fbi->fix.smem_len = 0;
 
 	ion_unmap_kernel(mfd->fb_ion_client, mfd->fb_ion_handle);
 
@@ -1646,8 +1663,14 @@ static int mdss_fb_register(struct msm_fb_data_type *mfd)
 	var->hsync_len = panel_info->lcdc.h_pulse_width;
 	var->pixclock = panel_info->clk_rate / 1000;
 
-	/* id field for fb app  */
+	/*
+	 * Populate smem length here for uspace to get the
+	 * Franebuffer size when FBIO_FSCREENINFO ioctl is
+	 * called.
+	 */
+	fix->smem_len = fix->line_length * var->yres_virtual;
 
+	/* id field for fb app  */
 	id = (int *)&mfd->panel;
 
 	snprintf(fix->id, sizeof(fix->id), "mdssfb_%x", (u32) *id);
@@ -2113,6 +2136,14 @@ static void mdss_fb_release_fences(struct msm_fb_data_type *mfd)
 	mutex_unlock(&sync_pt_data->sync_mutex);
 }
 
+static void mdss_fb_release_kickoff(struct msm_fb_data_type *mfd)
+{
+	if (mfd->wait_for_kickoff) {
+		atomic_set(&mfd->kickoff_pending, 0);
+		wake_up_all(&mfd->kickoff_wait_q);
+	}
+}
+
 /**
  * __mdss_fb_sync_buf_done_callback() - process async display events
  * @p:		Notifier block registered for async events.
@@ -2152,6 +2183,9 @@ static int __mdss_fb_sync_buf_done_callback(struct notifier_block *p,
 	case MDP_NOTIFY_FRAME_DONE:
 		pr_debug("%s: frame done\n", sync_pt_data->fence_name);
 		mdss_fb_signal_timeline(sync_pt_data);
+		break;
+	case MDP_NOTIFY_FRAME_START:
+		mdss_fb_release_kickoff(mfd);
 		break;
 	}
 
@@ -2215,7 +2249,11 @@ static int mdss_fb_pan_display_ex(struct fb_info *info,
 	u32 wait_for_finish = disp_commit->wait_for_finish;
 	int ret = 0;
 
-	if (!mfd || (!mfd->op_enable) || (!mfd->panel_power_on))
+	if (!mfd || (!mfd->op_enable))
+		return -EPERM;
+
+	if ((!mfd->panel_power_on) && !((mfd->dcm_state == DCM_ENTER) &&
+				(mfd->panel.type == MIPI_CMD_PANEL)))
 		return -EPERM;
 
 	if (var->xoffset > (info->var.xres_virtual - info->var.xres))
@@ -2267,7 +2305,11 @@ static int mdss_fb_pan_display_sub(struct fb_var_screeninfo *var,
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 
-	if ((!mfd->op_enable) || (!mfd->panel_power_on))
+	if (!mfd->op_enable)
+		return -EPERM;
+
+	if ((!mfd->panel_power_on) && !((mfd->dcm_state == DCM_ENTER) &&
+				(mfd->panel.type == MIPI_CMD_PANEL)))
 		return -EPERM;
 
 	if (var->xoffset > (info->var.xres_virtual - info->var.xres))
@@ -2337,15 +2379,14 @@ static int __mdss_fb_perform_commit(struct msm_fb_data_type *mfd)
 		if (ret)
 			pr_err("pan display failed %x on fb%d\n", ret,
 					mfd->index);
-		atomic_set(&mfd->kickoff_pending, 0);
-		wake_up_all(&mfd->kickoff_wait_q);
 	}
 	if (!ret)
 		mdss_fb_update_backlight(mfd);
 
-	if (IS_ERR_VALUE(ret) || !sync_pt_data->flushed)
+	if (IS_ERR_VALUE(ret) || !sync_pt_data->flushed) {
+		mdss_fb_release_kickoff(mfd);
 		mdss_fb_signal_timeline(sync_pt_data);
-
+	}
 	return ret;
 }
 
@@ -2379,8 +2420,8 @@ static int __mdss_fb_display_thread(void *data)
 		wake_up_all(&mfd->idle_wait_q);
 	}
 
+	mdss_fb_release_kickoff(mfd);
 	atomic_set(&mfd->commits_pending, 0);
-	atomic_set(&mfd->kickoff_pending, 0);
 	wake_up_all(&mfd->idle_wait_q);
 
 	return ret;
@@ -2439,10 +2480,6 @@ static int mdss_fb_check_var(struct fb_var_screeninfo *var,
 			(var->blue.offset == 0) &&
 			(var->green.offset == 8) &&
 			(var->red.offset == 16)) &&
-		    !((var->transp.offset == 0) &&
-			(var->blue.offset == 24) &&
-			(var->green.offset == 16) &&
-			(var->red.offset == 8)) &&
 		    !((var->transp.offset == 24) &&
 			(var->blue.offset == 16) &&
 			(var->green.offset == 8) &&

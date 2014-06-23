@@ -67,8 +67,10 @@ static int msm_bus_agg_fab_clks(struct device *bus_dev, void *data)
 	int ret = 0;
 	int ctx = *(int *)data;
 
-	if (ctx >= NUM_CTX)
+	if (ctx >= NUM_CTX) {
 		MSM_BUS_ERR("%s: Invalid Context %d", __func__, ctx);
+		goto exit_agg_fab_clks;
+	}
 
 	node = bus_dev->platform_data;
 	if (!node) {
@@ -86,6 +88,31 @@ static int msm_bus_agg_fab_clks(struct device *bus_dev, void *data)
 	}
 
 exit_agg_fab_clks:
+	return ret;
+}
+
+static int msm_bus_reset_fab_clks(struct device *bus_dev, void *data)
+{
+	struct msm_bus_node_device_type *node = NULL;
+	int ret = 0;
+	int ctx = *(int *)data;
+
+	if (ctx >= NUM_CTX) {
+		MSM_BUS_ERR("%s: Invalid Context %d", __func__, ctx);
+		goto exit_reset_fab_clks;
+	}
+
+	node = bus_dev->platform_data;
+	if (!node) {
+		MSM_BUS_ERR("%s: Can't get device info", __func__);
+		goto exit_reset_fab_clks;
+	}
+
+	if (node->node_info->is_fab_dev) {
+		node->cur_clk_hz[ctx] = 0;
+		MSM_BUS_DBG("Resetting for node %d", node->node_info->id);
+	}
+exit_reset_fab_clks:
 	return ret;
 }
 
@@ -278,6 +305,9 @@ int msm_bus_commit_data(int *dirty_nodes, int ctx, int num_dirty)
 					__func__, dirty_nodes[i]);
 	}
 	kfree(dirty_nodes);
+	/* Aggregate the bus clocks */
+	bus_for_each_dev(&msm_bus_type, NULL, (void *)&ctx,
+				msm_bus_reset_fab_clks);
 	return ret;
 }
 
@@ -422,7 +452,7 @@ int msm_bus_update_clks(struct msm_bus_node_device_type *nodedev,
 	req_clk = nodedev->cur_clk_hz[ctx];
 	nodeclk = &nodedev->clk[ctx];
 
-	if (!nodeclk->clk)
+	if (IS_ERR_OR_NULL(nodeclk))
 		goto exit_set_clks;
 
 	if (!nodeclk->dirty || (nodeclk->dirty && (nodeclk->rate < req_clk))) {
@@ -540,15 +570,15 @@ static int msm_bus_qos_enable_clk(struct msm_bus_node_device_type *node)
 		rounded_rate = clk_round_rate(node->qos_clk.clk, 1);
 		ret = setrate_nodeclk(&node->qos_clk, rounded_rate);
 		if (ret) {
-			MSM_BUS_ERR("%s: Failed to enable mas qos clk, node %d",
-				__func__, node->node_info->id);
+			MSM_BUS_ERR("Failed to set bus clk, node %d",
+			 node->node_info->id);
 			goto exit_enable_qos_clk;
 		}
 
 		ret = enable_nodeclk(&node->qos_clk);
 		if (ret) {
-			MSM_BUS_ERR("%s: Failed to enable mas qos clk, node %d",
-				__func__, node->node_info->id);
+			MSM_BUS_ERR("Err enable mas qos clk, node %d ret %d",
+				node->node_info->id, ret);
 			goto exit_enable_qos_clk;
 		}
 	}
@@ -594,14 +624,18 @@ static int msm_bus_dev_init_qos(struct device *dev, void *data)
 				if (bus_node_info->fabdev->bypass_qos_prg)
 					goto exit_init_qos;
 
-				msm_bus_qos_enable_clk(node_dev);
+				if (msm_bus_qos_enable_clk(node_dev))
+					goto exit_init_qos;
+
 				bus_node_info->fabdev->noc_ops.qos_init(
 					node_dev,
 					bus_node_info->fabdev->qos_base,
 					bus_node_info->fabdev->base_offset,
 					bus_node_info->fabdev->qos_off,
 					bus_node_info->fabdev->qos_freq);
-				msm_bus_qos_disable_clk(node_dev);
+
+				if (msm_bus_qos_disable_clk(node_dev))
+					goto exit_init_qos;
 			}
 		} else
 			MSM_BUS_ERR("%s: Skipping QOS init for %d",
@@ -646,6 +680,8 @@ static int msm_bus_fabric_init(struct device *dev,
 	fabdev->qos_off = pdata->fabdev->qos_off;
 	fabdev->bus_type = pdata->fabdev->bus_type;
 	fabdev->bypass_qos_prg = pdata->fabdev->bypass_qos_prg;
+	fabdev->util_fact = pdata->fabdev->util_fact;
+	fabdev->vrail_comp = pdata->fabdev->vrail_comp;
 	msm_bus_fab_init_noc_ops(node_dev);
 
 	fabdev->qos_base = devm_ioremap(dev,

@@ -23,6 +23,7 @@ int msm_fw_low_power_mode = 0x1;
 int msm_vidc_hw_rsp_timeout = 1000;
 u32 msm_fw_coverage = 0x0;
 int msm_vidc_vpe_csc_601_to_709 = 0x0;
+int msm_vidc_dcvs_mode = 0x0;
 
 struct debug_buffer {
 	char ptr[MAX_DBG_BUF_SIZE];
@@ -156,6 +157,11 @@ struct dentry *msm_vidc_debugfs_init_drv(void)
 		dprintk(VIDC_WARN, "debugfs_create_file fw_coverage: fail\n");
 		goto failed_create_dir;
 	}
+	if (!debugfs_create_u32("dcvs_mode", S_IRUGO | S_IWUSR,
+			dir, &msm_vidc_dcvs_mode)) {
+		dprintk(VIDC_WARN, "debugfs_create_file dcvs_mode: fail\n");
+		goto failed_create_dir;
+	}
 	if (!debugfs_create_u32("fw_low_power_mode", S_IRUGO | S_IWUSR,
 			dir, &msm_fw_low_power_mode)) {
 		dprintk(VIDC_ERR, "debugfs_create_file: fail\n");
@@ -234,6 +240,7 @@ static int publish_unreleased_reference(struct msm_vidc_inst *inst)
 	list = &inst->registered_bufs;
 	mutex_lock(&inst->lock);
 	if (inst->buffer_mode_set[CAPTURE_PORT] == HAL_BUFFER_MODE_DYNAMIC) {
+		write_str(&dbg_buf, "Pending buffer references:\n");
 		list_for_each_entry_safe(temp, dummy, list, list) {
 			if (temp && temp->type ==
 			V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE &&
@@ -293,9 +300,16 @@ static ssize_t inst_info_read(struct file *file, char __user *buf,
 		default:
 			write_str(&dbg_buf, "buffer mode : unsupported\n");
 		}
+
+		write_str(&dbg_buf, "count: %u\n",
+				inst->bufq[i].vb2_bufq.num_buffers);
+
 		for (j = 0; j < inst->fmts[i]->num_planes; j++)
 			write_str(&dbg_buf, "size for plane %d: %u\n", j,
 			inst->bufq[i].vb2_bufq.plane_sizes[j]);
+
+		if (i < MAX_PORT_NUM - 1)
+			write_str(&dbg_buf, "\n");
 	}
 	write_str(&dbg_buf, "-------------------------------\n");
 	for (i = SESSION_MSG_START; i < SESSION_MSG_END; i++) {
@@ -307,6 +321,7 @@ static ssize_t inst_info_read(struct file *file, char __user *buf,
 	write_str(&dbg_buf, "EBD Count: %d\n", inst->count.ebd);
 	write_str(&dbg_buf, "FTB Count: %d\n", inst->count.ftb);
 	write_str(&dbg_buf, "FBD Count: %d\n", inst->count.fbd);
+
 	publish_unreleased_reference(inst);
 
 	return simple_read_from_buffer(buf, count, ppos,

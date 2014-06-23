@@ -224,8 +224,8 @@ static struct input_handler adreno_input_handler = {
 	.id_table = adreno_input_ids,
 };
 
-static int adreno_ft_init_sysfs(struct kgsl_device *device);
-static void adreno_ft_uninit_sysfs(struct kgsl_device *device);
+static int adreno_init_sysfs(struct kgsl_device *device);
+static void adreno_uninit_sysfs(struct kgsl_device *device);
 static int adreno_soft_reset(struct kgsl_device *device);
 
 static inline void adreno_irqctrl(struct adreno_device *adreno_dev, int state)
@@ -1485,10 +1485,6 @@ static int adreno_of_get_pwrlevels(struct device_node *parent,
 		if (adreno_of_read_property(child, "qcom,bus-freq",
 			&level->bus_freq))
 			goto done;
-
-		if (of_property_read_u32(child, "qcom,io-fraction",
-			&level->io_fraction))
-			level->io_fraction = 0;
 	}
 
 	if (of_property_read_u32(parent, "qcom,initial-pwrlevel",
@@ -1758,7 +1754,7 @@ int adreno_probe(struct platform_device *pdev)
 	adreno_debugfs_init(device);
 	adreno_profile_init(device);
 
-	adreno_ft_init_sysfs(device);
+	adreno_init_sysfs(device);
 
 	kgsl_pwrscale_init(&pdev->dev, CONFIG_MSM_ADRENO_DEFAULT_GOVERNOR);
 
@@ -1795,7 +1791,7 @@ static int adreno_remove(struct platform_device *pdev)
 #ifdef CONFIG_INPUT
 	input_unregister_handler(&adreno_input_handler);
 #endif
-	adreno_ft_uninit_sysfs(device);
+	adreno_uninit_sysfs(device);
 
 	adreno_coresight_remove(device);
 	adreno_profile_close(device);
@@ -1971,6 +1967,10 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 	adreno_irqctrl(adreno_dev, 1);
 
 	adreno_perfcounter_start(adreno_dev);
+
+	/* Enable h/w power collapse feature */
+	if (gpudev->enable_pc)
+		gpudev->enable_pc(adreno_dev);
 
 	status = adreno_ringbuffer_cold_start(adreno_dev);
 	if (status)
@@ -2524,19 +2524,73 @@ static ssize_t _wake_timeout_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%u\n", _wake_timeout);
 }
 
-#define FT_DEVICE_ATTR(name) \
+/**
+ * _sptp_pc_store() - Enable or disable SP/TP power collapse
+ * @dev: device ptr
+ * @attr: Device attribute
+ * @buf: value to write
+ * @count: size of the value to write
+ *
+ */
+static ssize_t _sptp_pc_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct adreno_device *adreno_dev = _get_adreno_dev(dev);
+	struct kgsl_device *device = kgsl_device_from_dev(dev);
+	struct adreno_gpudev *gpudev;
+	int ret, t = 0;
+
+	if ((adreno_dev == NULL) || (device == NULL))
+		return -ENODEV;
+
+	gpudev = ADRENO_GPU_DEVICE(adreno_dev);
+	ret = kgsl_sysfs_store(buf, &t);
+	if (ret < 0)
+		return ret;
+
+	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
+
+	kgsl_pwrctrl_change_state(device, KGSL_STATE_SUSPEND);
+	if (t)
+		set_bit(ADRENO_SPTP_PC_CTRL, &adreno_dev->pwrctrl_flag);
+	else
+		clear_bit(ADRENO_SPTP_PC_CTRL, &adreno_dev->pwrctrl_flag);
+	kgsl_pwrctrl_change_state(device, KGSL_STATE_SLUMBER);
+
+	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
+	return count;
+}
+
+/**
+ * _sptp_pc_show() -  Show whether SP/TP power collapse is enabled
+ * @dev: device ptr
+ * @attr: Device attribute
+ * @buf: value read
+ */
+static ssize_t _sptp_pc_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct adreno_device *adreno_dev = _get_adreno_dev(dev);
+	return snprintf(buf, PAGE_SIZE, "%u\n", test_bit(ADRENO_SPTP_PC_CTRL,
+					&adreno_dev->pwrctrl_flag));
+}
+
+#define ADRENO_DEVICE_ATTR(name) \
 	DEVICE_ATTR(name, 0644,	_ ## name ## _show, _ ## name ## _store);
 
-static FT_DEVICE_ATTR(ft_policy);
-static FT_DEVICE_ATTR(ft_pagefault_policy);
-static FT_DEVICE_ATTR(ft_fast_hang_detect);
-static FT_DEVICE_ATTR(ft_long_ib_detect);
-static FT_DEVICE_ATTR(ft_hang_intr_status);
+static ADRENO_DEVICE_ATTR(ft_policy);
+static ADRENO_DEVICE_ATTR(ft_pagefault_policy);
+static ADRENO_DEVICE_ATTR(ft_fast_hang_detect);
+static ADRENO_DEVICE_ATTR(ft_long_ib_detect);
+static ADRENO_DEVICE_ATTR(ft_hang_intr_status);
 
 static DEVICE_INT_ATTR(wake_nice, 0644, _wake_nice);
-static FT_DEVICE_ATTR(wake_timeout);
+static ADRENO_DEVICE_ATTR(wake_timeout);
+static ADRENO_DEVICE_ATTR(sptp_pc);
 
-static const struct device_attribute *ft_attr_list[] = {
+static const struct device_attribute *_attr_list[] = {
 	&dev_attr_ft_policy,
 	&dev_attr_ft_pagefault_policy,
 	&dev_attr_ft_fast_hang_detect,
@@ -2544,17 +2598,18 @@ static const struct device_attribute *ft_attr_list[] = {
 	&dev_attr_ft_hang_intr_status,
 	&dev_attr_wake_nice.attr,
 	&dev_attr_wake_timeout,
+	&dev_attr_sptp_pc,
 	NULL,
 };
 
-static int adreno_ft_init_sysfs(struct kgsl_device *device)
+static int adreno_init_sysfs(struct kgsl_device *device)
 {
-	return kgsl_create_device_sysfs_files(device->dev, ft_attr_list);
+	return kgsl_create_device_sysfs_files(device->dev, _attr_list);
 }
 
-static void adreno_ft_uninit_sysfs(struct kgsl_device *device)
+static void adreno_uninit_sysfs(struct kgsl_device *device)
 {
-	kgsl_remove_device_sysfs_files(device->dev, ft_attr_list);
+	kgsl_remove_device_sysfs_files(device->dev, _attr_list);
 }
 
 static int adreno_getproperty(struct kgsl_device *device,
@@ -2796,10 +2851,6 @@ bool adreno_hw_isidle(struct kgsl_device *device)
 	unsigned int reg_rbbm_status;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
-
-	if (gpudev->is_sptp_idle)
-		if (!gpudev->is_sptp_idle(adreno_dev))
-			return false;
 
 	adreno_readreg(adreno_dev, ADRENO_REG_RBBM_STATUS,
 		&reg_rbbm_status);
@@ -3273,13 +3324,17 @@ static void adreno_power_stats(struct kgsl_device *device,
 	struct adreno_busy_data busy_data;
 
 	memset(stats, 0, sizeof(*stats));
+
 	/*
-	 * Get the busy cycles counted since the counter was last reset.
 	 * If we're not currently active, there shouldn't have been
 	 * any cycles since the last time this function was called.
 	 */
-	if (device->state == KGSL_STATE_ACTIVE)
-		gpudev->busy_cycles(adreno_dev, &busy_data);
+
+	if (device->state != KGSL_STATE_ACTIVE)
+		return;
+
+	/* Get the busy cycles counted since the counter was last reset */
+	gpudev->busy_cycles(adreno_dev, &busy_data);
 
 	stats->busy_time = adreno_ticks_to_us(busy_data.gpu_busy,
 					      kgsl_pwrctrl_active_freq(pwr));
@@ -3306,28 +3361,29 @@ static unsigned int adreno_gpuid(struct kgsl_device *device,
 	return (0x0003 << 16) | ADRENO_GPUREV(adreno_dev);
 }
 
-static void adreno_enable_pc(struct kgsl_device *device)
-{
-	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
-	struct adreno_gpudev *gpudev  = ADRENO_GPU_DEVICE(adreno_dev);
-	if (gpudev->enable_pc)
-		gpudev->enable_pc(adreno_dev);
-}
-
-static void adreno_disable_pc(struct kgsl_device *device)
-{
-	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
-	struct adreno_gpudev *gpudev  = ADRENO_GPU_DEVICE(adreno_dev);
-	if (gpudev->disable_pc)
-		gpudev->disable_pc(adreno_dev);
-}
-
 static void adreno_regulator_enable(struct kgsl_device *device)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct adreno_gpudev *gpudev  = ADRENO_GPU_DEVICE(adreno_dev);
 	if (gpudev->regulator_enable)
 		gpudev->regulator_enable(adreno_dev);
+}
+
+static bool adreno_is_hw_collapsible(struct kgsl_device *device)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct adreno_gpudev *gpudev  = ADRENO_GPU_DEVICE(adreno_dev);
+
+	return adreno_isidle(device) && (gpudev->is_sptp_idle ?
+				gpudev->is_sptp_idle(adreno_dev) : true);
+}
+
+static void adreno_regulator_disable(struct kgsl_device *device)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct adreno_gpudev *gpudev  = ADRENO_GPU_DEVICE(adreno_dev);
+	if (gpudev->regulator_disable)
+		gpudev->regulator_disable(adreno_dev);
 }
 
 static const struct kgsl_functable adreno_functable = {
@@ -3361,9 +3417,9 @@ static const struct kgsl_functable adreno_functable = {
 	.setproperty_compat = adreno_setproperty_compat,
 	.drawctxt_sched = adreno_drawctxt_sched,
 	.resume = adreno_dispatcher_start,
-	.enable_pc = adreno_enable_pc,
-	.disable_pc = adreno_disable_pc,
 	.regulator_enable = adreno_regulator_enable,
+	.is_hw_collapsible = adreno_is_hw_collapsible,
+	.regulator_disable = adreno_regulator_disable,
 
 };
 

@@ -35,7 +35,6 @@ config ARM64
 	select HAVE_DMA_CONTIGUOUS
 	select HAVE_EFFICIENT_UNALIGNED_ACCESS
 	select HAVE_GENERIC_DMA_COHERENT
-	select HAVE_HW_BREAKPOINT if PERF_EVENTS
 	select HAVE_MEMBLOCK
 	select HAVE_PATA_PLATFORM
 	select HAVE_PERF_EVENTS
@@ -140,6 +139,7 @@ config ARCH_MSM
 	select MSM_IRQ
 	select PINCTRL
 	select SOC_BUS
+	select PCI
 	select ARCH_HAS_CPUFREQ
 	select CPU_FREQ_MSM
 	select PM_DEVFREQ
@@ -171,6 +171,15 @@ config ARCH_MSM8994_V1_TLBI_WA
 	  [39:38] bits of VA are tied to zero and due to which TLBI
 	  operations with VA or ASID will not work.
 
+config MSM8994_V1_PMUIRQ_WA
+	bool "Enable MSM8994 v1 PMU-CTI IRQ workaround"
+	depends on ARCH_MSM8994 && CORESIGHT_CTI
+	help
+	  This enables support for the MSM8994 v1 PMU-CTI IRQ workaround.
+	  This workaround is required for MSM8994 V1 revision where the
+	  percpu PMU interrupt is incorrectly connected to the corresponding
+	  CPUs in the other cluster.
+
 config ARCH_XGENE
 	bool "AppliedMicro X-Gene SOC Family"
 	help
@@ -183,9 +192,45 @@ menu "Bus support"
 config ARM_AMBA
 	bool
 
+config PCI
+       bool "PCI support"
+       help
+         Find out whether you have a PCI motherboard. PCI is the name of a
+         bus system, i.e. the way the CPU talks to the other stuff inside
+         your box. Other bus systems are ISA, EISA, MicroChannel (MCA) or
+         VESA. If you have PCI, say Y, otherwise N.
+
+config PCI_DOMAINS
+       bool
+       depends on PCI
+
+config PCI_SYSCALL
+       def_bool PCI
+
+source "drivers/pci/Kconfig"
+source "drivers/pci/pcie/Kconfig"
 endmenu
 
 menu "Kernel Features"
+
+config ARM64_DCACHE_DISABLE
+	bool "Disable CPU Data Caches"
+	help
+	  Disable CPU data cache usage by setting the SCTLR[C] bit during
+	  kernel initialization. This will result in a considerable
+	  performance impact, but may be useful in certain situations.
+
+	  If you are not sure what to do, select 'N' here.
+
+config ARM64_ICACHE_DISABLE
+	bool "Disable CPU Instruction Caches"
+	help
+	  Disable CPU instruction cache usage by setting the SCTLR[I]
+	  bit during kernel initialization. This will result in a
+	  considerable performance impact, but may be useful in certain
+	  situations.
+
+	  If you are not sure what to do, select 'N' here.
 
 config ARM64_64K_PAGES
 	bool "Enable 64KB pages support"

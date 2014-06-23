@@ -136,9 +136,6 @@ static ssize_t synaptics_rmi4_0dbutton_show(struct device *dev,
 static ssize_t synaptics_rmi4_0dbutton_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count);
 
-static ssize_t synaptics_rmi4_suspend_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count);
-
 static irqreturn_t synaptics_rmi4_irq(int irq, void *data);
 
 #if defined(CONFIG_SECURE_TOUCH)
@@ -359,11 +356,11 @@ struct synaptics_rmi4_exp_fn_data {
 static struct synaptics_rmi4_exp_fn_data exp_data;
 
 static struct device_attribute attrs[] = {
-	__ATTR(full_pm_cycle, (S_IRUGO | S_IWUGO),
+	__ATTR(full_pm_cycle, (S_IRUGO | S_IWUSR | S_IWGRP),
 			synaptics_rmi4_full_pm_cycle_show,
 			synaptics_rmi4_full_pm_cycle_store),
-	__ATTR(reset, S_IWUGO,
-			synaptics_rmi4_show_error,
+	__ATTR(reset, (S_IWUSR | S_IWGRP),
+			NULL,
 			synaptics_rmi4_f01_reset_store),
 	__ATTR(productinfo, S_IRUGO,
 			synaptics_rmi4_f01_productinfo_show,
@@ -374,12 +371,9 @@ static struct device_attribute attrs[] = {
 	__ATTR(flashprog, S_IRUGO,
 			synaptics_rmi4_f01_flashprog_show,
 			synaptics_rmi4_store_error),
-	__ATTR(0dbutton, (S_IRUGO | S_IWUGO),
+	__ATTR(0dbutton, (S_IRUGO | S_IWUSR | S_IWGRP),
 			synaptics_rmi4_0dbutton_show,
 			synaptics_rmi4_0dbutton_store),
-	__ATTR(suspend, S_IWUGO,
-			synaptics_rmi4_show_error,
-			synaptics_rmi4_suspend_store),
 #if defined(CONFIG_SECURE_TOUCH)
 	__ATTR(secure_touch_enable, (S_IRUGO | S_IWUGO),
 			synaptics_secure_touch_enable_show,
@@ -729,24 +723,6 @@ static ssize_t synaptics_rmi4_0dbutton_store(struct device *dev,
 	}
 
 	rmi4_data->button_0d_enabled = input;
-
-	return count;
-}
-
-static ssize_t synaptics_rmi4_suspend_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	unsigned int input;
-
-	if (sscanf(buf, "%u", &input) != 1)
-		return -EINVAL;
-
-	if (input == 1)
-		synaptics_rmi4_suspend(dev);
-	else if (input == 0)
-		synaptics_rmi4_resume(dev);
-	else
-		return -EINVAL;
 
 	return count;
 }
@@ -2333,12 +2309,18 @@ static void synaptics_rmi4_set_params(struct synaptics_rmi4_data *rmi4_data)
 
 	rmi = &(rmi4_data->rmi4_mod_info);
 
-	input_set_abs_params(rmi4_data->input_dev,
-			ABS_MT_POSITION_X, 0,
-			bdata->disp_maxx, 0, 0);
-	input_set_abs_params(rmi4_data->input_dev,
-			ABS_MT_POSITION_Y, 0,
-			bdata->disp_maxy, 0, 0);
+	if (bdata->disp_maxx && bdata->disp_maxy) {
+		input_set_abs_params(rmi4_data->input_dev, ABS_MT_POSITION_X,
+				0, bdata->disp_maxx, 0, 0);
+		input_set_abs_params(rmi4_data->input_dev, ABS_MT_POSITION_Y,
+				0, bdata->disp_maxy, 0, 0);
+	} else {
+		input_set_abs_params(rmi4_data->input_dev, ABS_MT_POSITION_X,
+				0, rmi4_data->sensor_max_x, 0, 0);
+		input_set_abs_params(rmi4_data->input_dev, ABS_MT_POSITION_Y,
+				0, rmi4_data->sensor_max_y, 0, 0);
+	}
+
 #ifdef REPORT_2D_W
 	input_set_abs_params(rmi4_data->input_dev,
 			ABS_MT_TOUCH_MAJOR, 0,
@@ -3026,6 +3008,7 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 	rmi4_data->touch_stopped = false;
 	rmi4_data->sensor_sleep = false;
 	rmi4_data->irq_enabled = false;
+	rmi4_data->fw_updating = false;
 	rmi4_data->fingers_on_2d = false;
 
 	rmi4_data->irq_enable = synaptics_rmi4_irq_enable;
@@ -3531,47 +3514,84 @@ static int synaptics_rmi4_suspend(struct device *dev)
 			rmi4_data->hw_if->board_data;
 	int retval;
 
-	if (rmi4_data->staying_awake)
+	if (rmi4_data->stay_awake) {
+		rmi4_data->staying_awake = true;
 		return 0;
+	} else {
+		rmi4_data->staying_awake = false;
+	}
 
-	if (rmi4_data->suspended)
+	if (rmi4_data->suspended) {
+		dev_info(dev, "Already in suspend state\n");
 		return 0;
+	}
 
 	synaptics_secure_touch_stop(rmi4_data, 1);
 
-	if (!rmi4_data->sensor_sleep) {
-		rmi4_data->touch_stopped = true;
-		synaptics_rmi4_irq_enable(rmi4_data, false);
-		synaptics_rmi4_sensor_sleep(rmi4_data);
-		synaptics_rmi4_free_fingers(rmi4_data);
-	}
+	if (!rmi4_data->fw_updating) {
+		if (!rmi4_data->sensor_sleep) {
+			rmi4_data->touch_stopped = true;
+			synaptics_rmi4_irq_enable(rmi4_data, false);
+			synaptics_rmi4_sensor_sleep(rmi4_data);
+			synaptics_rmi4_free_fingers(rmi4_data);
+		}
 
-	mutex_lock(&exp_data.mutex);
-	if (!list_empty(&exp_data.list)) {
-		list_for_each_entry(exp_fhandler, &exp_data.list, link)
+		mutex_lock(&exp_data.mutex);
+		if (!list_empty(&exp_data.list)) {
+			list_for_each_entry(exp_fhandler, &exp_data.list, link)
 			if (exp_fhandler->exp_fn->suspend != NULL)
 				exp_fhandler->exp_fn->suspend(rmi4_data);
-	}
-	mutex_unlock(&exp_data.mutex);
+		}
+		mutex_unlock(&exp_data.mutex);
 
-	synaptics_dsx_regulator_enable(rmi4_data, false);
+		retval = synaptics_dsx_regulator_enable(rmi4_data, false);
+		if (retval < 0) {
+			dev_err(dev, "failed to enter low power mode\n");
+			goto err_lpm_regulator;
+		}
+	} else {
+		dev_err(dev,
+			"Firmware updating, cannot go into suspend mode\n");
+		return 0;
+	}
 
 	if (bdata->disable_gpios) {
 		if (rmi4_data->ts_pinctrl) {
 			retval = synpatics_dsx_pinctrl_select(rmi4_data,
-								 false);
-			if (retval < 0)
+								false);
+			if (retval < 0) {
 				dev_err(dev, "Cannot get idle pinctrl state\n");
+				goto err_pinctrl_select_suspend;
+			}
 		}
 
 		retval = synaptics_dsx_gpio_configure(rmi4_data, false);
-		if (retval < 0)
+		if (retval < 0) {
 			dev_err(dev, "failed to put gpios in suspend state\n");
+			goto err_gpio_configure;
+		}
 	}
 
 	rmi4_data->suspended = true;
 
 	return 0;
+
+err_gpio_configure:
+	if (rmi4_data->ts_pinctrl) {
+		retval = synpatics_dsx_pinctrl_select(rmi4_data, true);
+		if (retval < 0)
+			dev_err(dev, "Cannot get default pinctrl state\n");
+	}
+err_pinctrl_select_suspend:
+	synaptics_dsx_regulator_enable(rmi4_data, true);
+err_lpm_regulator:
+	if (rmi4_data->sensor_sleep) {
+		synaptics_rmi4_sensor_wake(rmi4_data);
+		synaptics_rmi4_irq_enable(rmi4_data, true);
+		rmi4_data->touch_stopped = false;
+	}
+
+	return retval;
 }
 
  /**

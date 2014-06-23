@@ -238,6 +238,57 @@
 			};
 		};
 
+		pmx_i2c_6 {
+			qcom,pins = <&gp 28>, <&gp 27>; /* SDA, SCL */
+			qcom,num-grp-pins = <2>;
+			qcom,pin-func = <3>;
+			label = "pmx_i2c_6";
+
+			i2c_6_active: i2c_6_active {
+				drive-strength = <2>;
+				bias-disable;
+			};
+
+			i2c_6_sleep: i2c_6_sleep {
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+
+		pmx_rd_nfc_int{
+			qcom,pins = <&gp 29>;
+			qcom,pin-func = <0>;
+			qcom,num-grp-pins = <1>;
+			label = "pmx_nfc_int";
+
+			nfc_int_active: active {
+				drive-strength = <6>;
+				bias-pull-up;
+			};
+
+			nfc_int_suspend: suspend {
+				drive-strength = <6>;
+				bias-pull-up;
+			};
+		};
+
+		pmx_nfc_reset{
+			qcom,pins = <&gp 30>;
+			qcom,pin-func = <0>;
+			qcom,num-grp-pins = <1>;
+			label = "pmx_nfc_disable";
+
+			nfc_disable_active: active {
+				drive-strength = <6>;
+				bias-pull-up;
+			};
+
+			nfc_disable_suspend: suspend {
+				drive-strength = <6>;
+				bias-disable;
+			};
+		};
+
 		pmx_ts {
 			qcom,pins = <&gp 60>, <&gp 61>;
 			qcom,pin-func = <0>;
@@ -851,6 +902,147 @@
 			cam_sensor_front_suspend: cam_sensor_front_suspend {
 				drive-strength = <2>; /* 2 MA */
 				bias-disable; /* No PULL */
+			};
+		};
+
+		cnss_pmux: cnss_pmux {
+			qcom,pins = <&gp 113>;
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <0>;
+			label = "cnss_pins";
+			cnss_default: default {
+				drive-strength = <16>;
+				bias-pull-down;
+			};
+		};
+
+		pcie0_clkreq {
+			qcom,pins = <&gp 54>;
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <2>;
+			label = "pcie0-clkreq";
+			/* default state */
+			pcie0_clkreq_default: pcie0_clkreq_default {
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+
+		pcie0_perst {
+			qcom,pins = <&gp 53>;
+			qcom,num-grp-pins = <1>;
+			label = "pcie0-perst";
+			/* default state */
+			pcie0_perst_default: pcie0_perst_default {
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+
+		pcie0_wake {
+			qcom,pins = <&gp 55>;
+			qcom,num-grp-pins = <1>;
+			label = "pcie0-wake";
+			/* default state */
+			pcie0_wake_default: pcie0_wake_default {
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+
+		pcie1_clkreq {
+			qcom,pins = <&gp 36>;
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <2>;
+			label = "pcie1-clkreq";
+			/* default state */
+			pcie1_clkreq_default: pcie1_clkreq_default {
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+
+		pcie1_perst {
+			qcom,pins = <&gp 35>;
+			qcom,num-grp-pins = <1>;
+			label = "pcie1-perst";
+			/* default state */
+			pcie1_perst_default: pcie1_perst_default {
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+
+		pcie1_wake {
+			qcom,pins = <&gp 37>;
+			qcom,num-grp-pins = <1>;
+			label = "pcie1-wake";
+			/* default state */
+			pcie1_wake_default: pcie1_wake_default {
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+
+		pmx_sec_aux_pcm {
+			qcom,pins = <&gp 79>, <&gp 80>, <&gp 82>;
+			qcom,num-grp-pins = <3>;
+			qcom,pin-func = <1>;
+			label = "sec_aux_pcm";
+			sec_aux_pcm_sleep: sec_aux_pcm_sleep {
+				drive-strength = <2>;	/* 2 mA */
+				bias-pull-down;		/* PULL DOWN */
+			};
+			sec_aux_pcm_active: sec_aux_pcm_active {
+				drive-strength = <8>;	/* 8 mA */
+				bias-disable;		/* NO PULL */
+				output-high;
+			};
+		};
+
+		pmx_sec_aux_pcm_din {
+			qcom,pins = <&gp 81>;
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <1>;
+			label = "sec_aux_pcm_din";
+			sec_aux_pcm_din_sleep: sec_aux_pcm_din_sleep {
+				drive-strength = <2>;	/* 2 mA */
+				bias-pull-down;		/* PULL DOWN */
+			};
+			sec_aux_pcm_din_active: sec_aux_pcm_din_active {
+				drive-strength = <8>;	/* 8 mA */
+				bias-disable;		/* NO PULL */
+			};
+		};
+
+		pmx_pri_mi2s {
+			qcom,pins = <&gp 65>, <&gp 66>;
+			qcom,num-grp-pins = <2>;
+			qcom,pin-func = <1>;
+			label = "pri_mi2s";
+			pri_mi2s_sleep: pri_mi2s_sleep {
+				drive-strength = <2>;	/* 2 mA */
+				bias-pull-down;		/* PULL DOWN */
+			};
+			pri_mi2s_active: pri_mi2s_active {
+				drive-strength = <8>;	/* 8 mA */
+				bias-disable;		/* NO PULL */
+				output-high;
+			};
+		};
+
+		pmx_pri_mi2s_sd0 {
+			qcom,pins = <&gp 67>;
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <1>;
+			label = "pri_mi2s_sd0";
+			pri_mi2s_sd0_sleep: pri_mi2s_sd0_sleep {
+				drive-strength = <2>;	/* 2 mA */
+				bias-pull-down;		/* PULL DOWN */
+			};
+			pri_mi2s_sd0_active: pri_mi2s_sd0_active {
+				drive-strength = <8>;	/* 8 mA */
+				bias-disable;		/* NO PULL */
 			};
 		};
 	};

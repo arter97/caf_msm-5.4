@@ -23,6 +23,7 @@
 		sdhc1 = &sdhc_1; /* SDC1 eMMC slot */
 		sdhc2 = &sdhc_2; /* SDC2 SD card slot */
 		/* smdtty devices */
+		smd0 = &smdtty_ds;
 		smd1 = &smdtty_apps_fm;
 		smd2 = &smdtty_apps_riva_bt_acl;
 		smd3 = &smdtty_apps_riva_bt_cmd;
@@ -451,6 +452,7 @@
 		reg = <0x4044000 0x19000>;
 		interrupts = <0 29 1>;
 		qcom,rx-ring-size = <32>;
+		qcom,max-rx-mtu = <4096>;
 	};
 
 	qcom,smdtty {
@@ -505,6 +507,11 @@
 			qcom,smdtty-remote = "modem";
 			qcom,smdtty-port-name = "LOOPBACK";
 			qcom,smdtty-dev-name = "LOOPBACK_TTY";
+		};
+
+		smdtty_ds: qcom,smdtty-ds {
+			qcom,smdtty-remote = "modem";
+			qcom,smdtty-port-name = "DS";
 		};
 	};
 
@@ -722,13 +729,13 @@
 		reg-names = "tsens_physical", "tsens_eeprom_physical";
 		interrupts = <0 184 0>;
 		qcom,sensors = <9>;
-		qcom,slope = <3200 3200 3200 3200 3200 3200 3200 3200 3200>;
+		qcom,slope = <2911 2789 2906 2763 2922 2867 2833 2838 2840>;
 		qcom,sensor-id = <0 1 2 3 5 6 7 8 9>;
 	};
 
 	qcom,msm-thermal {
 		compatible = "qcom,msm-thermal";
-		qcom,sensor-id = <6>;
+		qcom,sensor-id = <5>;
 		qcom,poll-ms = <250>;
 		qcom,limit-temp = <60>;
 		qcom,temp-hysteresis = <10>;
@@ -739,15 +746,17 @@
 		qcom,core-control-mask = <0xfe>;
 		qcom,hotplug-temp = <110>;
 		qcom,hotplug-temp-hysteresis = <20>;
-		qcom,cpu-sensors = "tsens_tz_sensor6", "tsens_tz_sensor7",
-				"tsens_tz_sensor8", "tsens_tz_sensor9",
-				"tsens_tz_sensor5", "tsens_tz_sensor5",
-				"tsens_tz_sensor5", "tsens_tz_sensor5";
+		qcom,cpu-sensors = "tsens_tz_sensor5", "tsens_tz_sensor6",
+				"tsens_tz_sensor7", "tsens_tz_sensor8",
+				"tsens_tz_sensor9", "tsens_tz_sensor9",
+				"tsens_tz_sensor9", "tsens_tz_sensor9";
 		qcom,freq-mitigation-temp = <110>;
 		qcom,freq-mitigation-temp-hysteresis = <20>;
 		qcom,freq-mitigation-value = <960000>;
 		qcom,freq-mitigation-control-mask = <0x01>;
 		qcom,therm-reset-temp = <115>;
+		qcom,online-hotplug-core;
+		qcom,synchronous-cluster-id = <0 1>;
 	};
 
 	qcom,bcl {
@@ -767,6 +776,7 @@
 		interrupts = <0 163 0>, <0 165 0>;
 		interrupt-names = "slimbus_irq", "slimbus_bam_irq";
 		qcom,ea-pc = <0x140>;
+		status = "disabled";
 	};
 
 	clock_rpm: qcom,rpmcc@1874000 {
@@ -869,6 +879,8 @@
 			 <&clock_cpu clk_a53ssmux_lc>,
 			 <&clock_cpu clk_a53ssmux_lc>;
 
+		qcom,governor-per-policy;
+
 		qcom,cpufreq-table-0 =
 			 <  200000 >,
 			 <  345600 >,
@@ -885,8 +897,11 @@
 			 < 1536000 >;
 		qcom,cpufreq-table-4 =
 			 <  200000 >,
-			 <  400000 >,
-			 <  800000 >;
+			 <  249600 >,
+                         <  400000 >,
+                         <  499200 >,
+                         <  800000 >,
+                         <  998400 >;
 	};
 
 	qcom_tzlog: tz-log@8600720 {
@@ -1038,7 +1053,6 @@
 		qcom,hsusb-otg-phy-type = <2>;
 		qcom,hsusb-otg-mode = <1>;
 		qcom,hsusb-otg-otg-control = <2>;
-		qcom,ahb-async-bridge-bypass;
 		qcom,dp-manual-pullup;
 
 		qcom,msm-bus,name = "usb2";
@@ -1060,6 +1074,29 @@
 		compatible = "qcom,android-usb";
 		reg = <0x086000c8 0xc8>;
 		qcom,android-usb-swfi-latency = <1>;
+		qcom,android-usb-uicc-nluns = /bits/ 8 <1>;
+	};
+
+	uicc: qcom,ehci-host@79c0000 {
+		compatible = "qcom,ehci-uicc-host";
+		reg = <0x79c0000 0x400>;
+		interrupts = <0 132 0>;
+
+		clocks = <&clock_gcc clk_gcc_usb_fs_ahb_clk>,
+			 <&clock_gcc clk_gcc_usb_fs_system_clk>,
+			 <&clock_gcc clk_gcc_usb_fs_ic_clk>;
+		clock-names = "iface_clk", "core_clk", "alt_core_clk";
+
+                pinctrl-names = "uicc_active", "uicc_sleep";
+                pinctrl-0 = <&uicc_active>;
+                pinctrl-1 = <&uicc_sleep>;
+
+		qcom,msm-bus,name = "uicc";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<93 512 0 0>,
+				<93 512 12000 192000>;
 	};
 
 	blsp1_uart2: serial@78b0000 {
@@ -1213,7 +1250,6 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		cell-index = <0>;
-		qcom,not-wakeup; /* Needed until RPM is fully configured */
 	};
 
 	qcom,rmtfs_sharedmem@8e580000 {
@@ -1413,8 +1449,8 @@
 			 <&clock_gcc clk_gcc_mss_q6_bimc_axi_clk>,
 			 <&clock_gcc clk_gcc_boot_rom_ahb_clk>;
 		clock-names = "xo", "iface_clk", "bus_clk", "mem_clk";
-		proxy-clock-names = "xo";
-		active-clock-names = "iface_clk", "bus_clk", "mem_clk";
+		qcom,proxy-clock-names = "xo";
+		qcom,active-clock-names = "iface_clk", "bus_clk", "mem_clk";
 
 		qcom,firmware-name = "modem";
 		qcom,pil-self-auth;
@@ -1638,9 +1674,9 @@
 		qcom,clock-names = "core_clk", "core0_clk", "core1_clk", "iface_clk", "bus_clk";
 		qcom,clock-configs = <0x3 0x0 0x0 0x0 0x0>;
 		qcom,sw-power-collapse;
-		qcom,load-freq-tbl = <352800 228570000>,
-			<244800 160000000>,
-			<108000 100000000>;
+		qcom,load-freq-tbl = <352800 266670000>,
+			<244800 200000000>,
+			<108000 133330000>;
 		qcom,hfi = "venus";
 		qcom,reg-presets = <0xE0020 0x0aaaaaaa>,
 			<0xE0024 0x0aaaaaaa>,
@@ -1648,7 +1684,7 @@
 		qcom,buffer-type-tz-usage-table = <0x241 0x1>,
 			<0x106 0x2>,
 			<0x480 0x3>;
-		qcom,max-hw-load = <352800>; /* 720p @ 30 + 1080p @ 30 */
+		qcom,max-hw-load = <489600>; /* 1080p @ 30 + 1080p @ 30 */
 		qcom,vidc-iommu-domains {
 			qcom,domain-ns {
 				qcom,vidc-domain-phandle = <&venus_domain_ns>;

@@ -26,6 +26,7 @@
 #include <linux/of_platform.h>
 #include <linux/cpu_pm.h>
 #include <linux/msm-bus.h>
+#include <linux/uaccess.h>
 #include <soc/qcom/avs.h>
 #include <soc/qcom/spm.h>
 #include <soc/qcom/pm.h>
@@ -40,9 +41,6 @@
 #include "idle.h"
 #include "pm-boot.h"
 #include "../../../arch/arm/mach-msm/clock.h"
-
-#define CREATE_TRACE_POINTS
-#include <trace/events/trace_msm_low_power.h>
 
 #define SCM_CMD_TERMINATE_PC	(0x2)
 #define SCM_CMD_CORE_HOTPLUGGED (0x10)
@@ -383,51 +381,6 @@ void arch_idle(void)
 	return;
 }
 
-static inline void msm_pm_ftrace_lpm_enter(unsigned int cpu,
-		uint32_t latency, uint32_t sleep_us,
-		uint32_t wake_up,
-		enum msm_pm_sleep_mode mode)
-{
-	switch (mode) {
-	case MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT:
-		trace_msm_pm_enter_wfi(cpu, latency, sleep_us, wake_up);
-		break;
-	case MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE:
-		trace_msm_pm_enter_spc(cpu, latency, sleep_us, wake_up);
-		break;
-	case MSM_PM_SLEEP_MODE_POWER_COLLAPSE:
-		trace_msm_pm_enter_pc(cpu, latency, sleep_us, wake_up);
-		break;
-	case MSM_PM_SLEEP_MODE_RETENTION:
-		trace_msm_pm_enter_ret(cpu, latency, sleep_us, wake_up);
-		break;
-	default:
-		break;
-	}
-}
-
-static inline void msm_pm_ftrace_lpm_exit(unsigned int cpu,
-		enum msm_pm_sleep_mode mode,
-		bool success)
-{
-	switch (mode) {
-	case MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT:
-		trace_msm_pm_exit_wfi(cpu, success);
-		break;
-	case MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE:
-		trace_msm_pm_exit_spc(cpu, success);
-		break;
-	case MSM_PM_SLEEP_MODE_POWER_COLLAPSE:
-		trace_msm_pm_exit_pc(cpu, success);
-		break;
-	case MSM_PM_SLEEP_MODE_RETENTION:
-		trace_msm_pm_exit_ret(cpu, success);
-		break;
-	default:
-		break;
-	}
-}
-
 static bool (*execute[MSM_PM_SLEEP_MODE_NR])(bool idle) = {
 	[MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT] = msm_pm_swfi,
 	[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE] =
@@ -690,7 +643,7 @@ static inline u32 msm_pc_debug_counters_read_register(
 	return readl_relaxed(reg + (index * 4 + offset) * 4);
 }
 
-static char *counter_name[] = {
+char *counter_name[MSM_PC_NUM_COUNTERS] = {
 		"PC Entry Counter",
 		"Warmboot Entry Counter",
 		"PC Bailout Counter"
@@ -702,19 +655,24 @@ static int msm_pc_debug_counters_copy(
 	int j;
 	u32 stat;
 	unsigned int cpu;
+	unsigned int len;
 
 	for_each_possible_cpu(cpu) {
-		data->len += scnprintf(data->buf + data->len,
+		len = scnprintf(data->buf + data->len,
 				sizeof(data->buf)-data->len,
 				"CPU%d\n", cpu);
 
+		data->len += len;
+
 		for (j = 0; j < MSM_PC_NUM_COUNTERS; j++) {
 			stat = msm_pc_debug_counters_read_register(
-					data->reg, cpu, j);
-			data->len += scnprintf(data->buf + data->len,
-					sizeof(data->buf)-data->len,
-					"\t%s : %d\n", counter_name[j],
-					stat);
+				data->reg, cpu, j);
+			 len = scnprintf(data->buf + data->len,
+					 sizeof(data->buf) - data->len,
+					"\t%s: %d", counter_name[j], stat);
+
+			 data->len += len;
+
 		}
 
 	}

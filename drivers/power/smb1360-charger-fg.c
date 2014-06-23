@@ -44,10 +44,12 @@
 #define CFG_BATT_CHG_ICL_REG		0x05
 #define AC_INPUT_ICL_PIN_BIT		BIT(7)
 #define AC_INPUT_PIN_HIGH_BIT		BIT(6)
+#define RESET_STATE_USB_500		BIT(5)
 #define INPUT_CURR_LIM_MASK		SMB1360_MASK(3, 0)
 
 #define CFG_GLITCH_FLT_REG		0x06
 #define AICL_ENABLED_BIT		BIT(0)
+#define INPUT_UV_GLITCH_FLT_20MS_BIT	BIT(7)
 
 #define CFG_CHG_MISC_REG		0x7
 #define CHG_EN_BY_PIN_BIT		BIT(7)
@@ -157,18 +159,24 @@
 #define IRQ_I_REG			0x58
 
 /* FG registers - IRQ config register */
-#define SOC_DELTA_REG			0x20
-#define VTG_MIN_REG			0x23
 #define SOC_MAX_REG			0x24
 #define SOC_MIN_REG			0x25
 #define VTG_EMPTY_REG			0x26
+#define SOC_DELTA_REG			0x28
+#define VTG_MIN_REG			0x2B
 
 /* FG SHADOW registers */
+#define SHDW_FG_ESR_ACTUAL		0x20
 #define SHDW_FG_MSYS_SOC		0x61
 #define SHDW_FG_CAPACITY		0x62
 #define SHDW_FG_VTG_NOW			0x69
 #define SHDW_FG_CURR_NOW		0x6B
 #define SHDW_FG_BATT_TEMP		0x6D
+
+#define FG_I2C_CFG_MASK			SMB1360_MASK(2, 1)
+#define FG_CFG_I2C_ADDR			0x2
+#define FG_PROFILE_A_ADDR		0x4
+#define FG_PROFILE_B_ADDR		0x6
 
 /* Constants */
 #define CURRENT_100_MA			100
@@ -180,12 +188,19 @@
 enum {
 	WRKRND_FG_CONFIG_FAIL = BIT(0),
 	WRKRND_BATT_DET_FAIL = BIT(1),
+	WRKRND_USB100_FAIL = BIT(2),
 };
 
 enum {
 	USER	= BIT(0),
 	THERMAL = BIT(1),
 	CURRENT = BIT(2),
+};
+
+enum fg_i2c_access_type {
+	FG_ACCESS_CFG = 0x1,
+	FG_ACCESS_PROFILE_A = 0x2,
+	FG_ACCESS_PROFILE_B = 0x3
 };
 
 struct smb1360_otg_regulator {
@@ -197,6 +212,8 @@ struct smb1360_chip {
 	struct i2c_client		*client;
 	struct device			*dev;
 	u8				revision;
+	unsigned short			default_i2c_addr;
+	unsigned short			fg_i2c_addr;
 
 	/* configuration data - charger */
 	int				fake_battery_soc;
@@ -237,6 +254,8 @@ struct smb1360_chip {
 	int				charging_disabled_status;
 
 	u32				peek_poke_address;
+	u32				fg_access_type;
+	u32				fg_peek_poke_address;
 	int				skip_writes;
 	int				skip_reads;
 	struct dentry			*debug_root;
@@ -350,6 +369,42 @@ static int smb1360_write(struct smb1360_chip *chip, int reg,
 	return rc;
 }
 
+static int smb1360_fg_read(struct smb1360_chip *chip, int reg,
+				u8 *val)
+{
+	int rc;
+
+	if (chip->skip_reads) {
+		*val = 0;
+		return 0;
+	}
+
+	mutex_lock(&chip->read_write_lock);
+	chip->client->addr = chip->fg_i2c_addr;
+	rc = __smb1360_read(chip, reg, val);
+	chip->client->addr = chip->default_i2c_addr;
+	mutex_unlock(&chip->read_write_lock);
+
+	return rc;
+}
+
+static int smb1360_fg_write(struct smb1360_chip *chip, int reg,
+						u8 val)
+{
+	int rc;
+
+	if (chip->skip_writes)
+		return 0;
+
+	mutex_lock(&chip->read_write_lock);
+	chip->client->addr = chip->fg_i2c_addr;
+	rc = __smb1360_write(chip, reg, val);
+	chip->client->addr = chip->default_i2c_addr;
+	mutex_unlock(&chip->read_write_lock);
+
+	return rc;
+}
+
 static int smb1360_read_bytes(struct smb1360_chip *chip, int reg,
 						u8 *val, u8 bytes)
 {
@@ -409,6 +464,21 @@ static int smb1360_enable_volatile_writes(struct smb1360_chip *chip)
 			"Couldn't set VOLATILE_W_PERM_BIT rc=%d\n", rc);
 
 	return rc;
+}
+
+#define TRIM_1C_REG		0x1C
+#define CHECK_USB100_GOOD_BIT	BIT(6)
+static bool is_usb100_broken(struct smb1360_chip *chip)
+{
+	int rc;
+	u8 reg;
+
+	rc = smb1360_read(chip, TRIM_1C_REG, &reg);
+	if (rc < 0) {
+		dev_err(chip->dev, "Couldn't read trim 1C reg rc = %d\n", rc);
+		return rc;
+	}
+	return !!(reg & CHECK_USB100_GOOD_BIT);
 }
 
 static int read_revision(struct smb1360_chip *chip, u8 *revision)
@@ -472,6 +542,9 @@ static int __smb1360_charging_disable(struct smb1360_chip *chip, bool disable)
 	if (rc < 0)
 		pr_err("Couldn't set CHG_ENABLE_BIT disable=%d rc = %d\n",
 							disable, rc);
+	else
+		pr_debug("CHG_EN status=%d\n", !disable);
+
 	return rc;
 }
 
@@ -519,6 +592,7 @@ static enum power_supply_property smb1360_battery_properties[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_RESISTANCE,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL,
 };
@@ -701,6 +775,22 @@ static int smb1360_get_prop_voltage_now(struct smb1360_chip *chip)
 	return temp * 1000;
 }
 
+static int smb1360_get_prop_batt_resistance(struct smb1360_chip *chip)
+{
+	u8 reg = 0;
+	int rc;
+
+	rc = smb1360_read(chip, SHDW_FG_ESR_ACTUAL, &reg);
+	if (rc) {
+		pr_err("Failed to read FG_ESR_ACTUAL rc=%d\n", rc);
+		return rc;
+	}
+
+	pr_debug("reg=0x%02x resistance=%d\n", reg, reg * 2);
+
+	return reg * 2;
+}
+
 static int smb1360_get_prop_current_now(struct smb1360_chip *chip)
 {
 	u8 reg[2];
@@ -778,6 +868,12 @@ static int smb1360_set_appropriate_usb_current(struct smb1360_chip *chip)
 		pr_err("Couldn't set ICL mA rc=%d\n", rc);
 
 	pr_debug("ICL set to = %d\n", input_current_limit[i]);
+
+	if ((current_ma <= CURRENT_100_MA) &&
+		(chip->workaround_flags & WRKRND_USB100_FAIL)) {
+		pr_debug("usb100 not supported\n");
+		current_ma = CURRENT_500_MA;
+	}
 
 	if (current_ma <= CURRENT_100_MA) {
 		/* USB 100 */
@@ -894,6 +990,7 @@ static int smb1360_battery_set_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
 		chip->fake_battery_soc = val->intval;
+		pr_info("fake_soc set to %d\n", chip->fake_battery_soc);
 		power_supply_changed(&chip->batt_psy);
 		break;
 	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
@@ -958,6 +1055,9 @@ static int smb1360_battery_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		val->intval = smb1360_get_prop_current_now(chip);
+		break;
+	case POWER_SUPPLY_PROP_RESISTANCE:
+		val->intval = smb1360_get_prop_batt_resistance(chip);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = smb1360_get_prop_batt_temp(chip);
@@ -1053,13 +1153,14 @@ static int battery_missing_handler(struct smb1360_chip *chip, u8 rt_stat)
 
 static int vbat_low_handler(struct smb1360_chip *chip, u8 rt_stat)
 {
-	pr_warn("vbat low\n");
+	pr_debug("vbat low\n");
+
 	return 0;
 }
 
 static int chg_hot_handler(struct smb1360_chip *chip, u8 rt_stat)
 {
-	pr_warn("chg hot\n");
+	pr_warn_ratelimited("chg hot\n");
 	return 0;
 }
 
@@ -1112,21 +1213,7 @@ static int delta_soc_handler(struct smb1360_chip *chip, u8 rt_stat)
 
 static int min_soc_handler(struct smb1360_chip *chip, u8 rt_stat)
 {
-	/*
-	 * Avoid holding a wake_source if there is no battery
-	 * or if the SMB rev. has a battery detection issue
-	 */
-	if (!chip->batt_present ||
-			(chip->workaround_flags & WRKRND_BATT_DET_FAIL))
-		return 0;
-
-	if (rt_stat) {
-		pr_debug("Below minimum SOC, holding wake_source\n");
-		pm_stay_awake(chip->dev);
-	} else {
-		pr_debug("Above minimum SOC, releasing wake_source\n");
-		pm_relax(chip->dev);
-	}
+	pr_debug("SOC dropped below min SOC\n");
 
 	return 0;
 }
@@ -1134,10 +1221,12 @@ static int min_soc_handler(struct smb1360_chip *chip, u8 rt_stat)
 static int empty_soc_handler(struct smb1360_chip *chip, u8 rt_stat)
 {
 	if (rt_stat) {
-		pr_warn("SOC is 0\n");
+		pr_warn_ratelimited("SOC is 0\n");
 		chip->empty_soc = true;
+		pm_stay_awake(chip->dev);
 	} else {
 		chip->empty_soc = false;
+		pm_relax(chip->dev);
 	}
 
 	return 0;
@@ -1475,6 +1564,80 @@ static int set_reg(void *data, u64 val)
 }
 DEFINE_SIMPLE_ATTRIBUTE(poke_poke_debug_ops, get_reg, set_reg, "0x%02llx\n");
 
+static int smb1360_select_fg_i2c_address(struct smb1360_chip *chip)
+{
+	unsigned short addr = chip->default_i2c_addr << 0x1;
+
+	switch (chip->fg_access_type) {
+	case FG_ACCESS_CFG:
+		addr = (addr & ~FG_I2C_CFG_MASK) | FG_CFG_I2C_ADDR;
+		break;
+	case FG_ACCESS_PROFILE_A:
+		addr = (addr & ~FG_I2C_CFG_MASK) | FG_PROFILE_A_ADDR;
+		break;
+	case FG_ACCESS_PROFILE_B:
+		addr = (addr & ~FG_I2C_CFG_MASK) | FG_PROFILE_B_ADDR;
+		break;
+	default:
+		pr_err("Invalid FG access type=%d\n", chip->fg_access_type);
+		return -EINVAL;
+	}
+
+	chip->fg_i2c_addr = addr >> 0x1;
+	pr_debug("FG_access_type=%d fg_i2c_addr=%x\n", chip->fg_access_type,
+							chip->fg_i2c_addr);
+
+	return 0;
+}
+
+static int fg_get_reg(void *data, u64 *val)
+{
+	struct smb1360_chip *chip = data;
+	int rc;
+	u8 temp;
+
+	rc = smb1360_select_fg_i2c_address(chip);
+	if (rc) {
+		pr_err("Unable to set FG access I2C address\n");
+		return -EINVAL;
+	}
+
+	rc = smb1360_fg_read(chip, chip->fg_peek_poke_address, &temp);
+	if (rc < 0) {
+		dev_err(chip->dev,
+			"Couldn't read reg %x rc = %d\n",
+			chip->fg_peek_poke_address, rc);
+		return -EAGAIN;
+	}
+	*val = temp;
+	return 0;
+}
+
+static int fg_set_reg(void *data, u64 val)
+{
+	struct smb1360_chip *chip = data;
+	int rc;
+	u8 temp;
+
+	rc = smb1360_select_fg_i2c_address(chip);
+	if (rc) {
+		pr_err("Unable to set FG access I2C address\n");
+		return -EINVAL;
+	}
+
+	temp = (u8) val;
+	rc = smb1360_fg_write(chip, chip->fg_peek_poke_address, temp);
+	if (rc < 0) {
+		dev_err(chip->dev,
+			"Couldn't write 0x%02x to 0x%02x rc= %d\n",
+			chip->fg_peek_poke_address, temp, rc);
+		return -EAGAIN;
+	}
+	return 0;
+}
+DEFINE_SIMPLE_ATTRIBUTE(fg_poke_poke_debug_ops, fg_get_reg,
+				fg_set_reg, "0x%02llx\n");
+
 #define LAST_CNFG_REG	0x17
 static int show_cnfg_regs(struct seq_file *m, void *data)
 {
@@ -1601,6 +1764,39 @@ static int irq_stat_debugfs_open(struct inode *inode, struct file *file)
 static const struct file_operations irq_stat_debugfs_ops = {
 	.owner		= THIS_MODULE,
 	.open		= irq_stat_debugfs_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
+#define FIRST_FG_CFG_REG	0x24
+#define LAST_FG_CFG_REG		0x2F
+static int show_fg_cfg_regs(struct seq_file *m, void *data)
+{
+	struct smb1360_chip *chip = m->private;
+	int rc;
+	u8 reg;
+	u8 addr;
+
+	for (addr = FIRST_FG_CFG_REG; addr <= LAST_FG_CFG_REG; addr++) {
+		rc = smb1360_read(chip, addr, &reg);
+		if (!rc)
+			seq_printf(m, "0x%02x = 0x%02x\n", addr, reg);
+	}
+
+	return 0;
+}
+
+static int fg_cfg_debugfs_open(struct inode *inode, struct file *file)
+{
+	struct smb1360_chip *chip = inode->i_private;
+
+	return single_open(file, show_fg_cfg_regs, chip);
+}
+
+static const struct file_operations fg_cfg_debugfs_ops = {
+	.owner		= THIS_MODULE,
+	.open		= fg_cfg_debugfs_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
 	.release	= single_release,
@@ -1825,11 +2021,36 @@ static int smb1360_fg_config(struct smb1360_chip *chip)
 	return 0;
 }
 
+static void smb1360_check_feature_support(struct smb1360_chip *chip)
+{
+
+	if (is_usb100_broken(chip)) {
+		pr_debug("USB100 is not supported\n");
+		chip->workaround_flags |= WRKRND_USB100_FAIL;
+	}
+
+	/*
+	 * FG Configuration
+	 *
+	 * The REV_1 of the chip does not allow access to
+	 * FG config registers (20-2FH). Set the workaround flag.
+	 * Also, the battery detection does not work when the DCIN is absent,
+	 * add a workaround flag for it.
+	*/
+	if (chip->revision == SMB1360_REV_1) {
+		pr_debug("FG config and Battery detection is not supported\n");
+		chip->workaround_flags |=
+			WRKRND_FG_CONFIG_FAIL | WRKRND_BATT_DET_FAIL;
+	}
+}
+
 static int smb1360_hw_init(struct smb1360_chip *chip)
 {
 	int rc;
 	int i;
 	u8 reg, mask;
+
+	smb1360_check_feature_support(chip);
 
 	rc = smb1360_enable_volatile_writes(chip);
 	if (rc < 0) {
@@ -1837,7 +2058,6 @@ static int smb1360_hw_init(struct smb1360_chip *chip)
 				rc);
 		return rc;
 	}
-
 	/*
 	 * set chg en by cmd register, set chg en by writing bit 1,
 	 * enable auto pre to fast
@@ -1855,17 +2075,19 @@ static int smb1360_hw_init(struct smb1360_chip *chip)
 	/* USB/AC pin settings */
 	rc = smb1360_masked_write(chip, CFG_BATT_CHG_ICL_REG,
 					AC_INPUT_ICL_PIN_BIT
-					| AC_INPUT_PIN_HIGH_BIT,
-					AC_INPUT_PIN_HIGH_BIT);
+					| AC_INPUT_PIN_HIGH_BIT
+					| RESET_STATE_USB_500,
+					AC_INPUT_PIN_HIGH_BIT
+					| RESET_STATE_USB_500);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't set CFG_BATT_CHG_ICL_REG rc=%d\n",
 				rc);
 		return rc;
 	}
 
-	/* AICL setting */
-	rc = smb1360_masked_write(chip, CFG_GLITCH_FLT_REG,
-			AICL_ENABLED_BIT, AICL_ENABLED_BIT);
+	/* AICL enable and set input-uv glitch flt to 20ms*/
+	reg = AICL_ENABLED_BIT | INPUT_UV_GLITCH_FLT_20MS_BIT;
+	rc = smb1360_masked_write(chip, CFG_GLITCH_FLT_REG, reg, reg);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't set CFG_GLITCH_FLT_REG rc=%d\n",
 				rc);
@@ -2061,18 +2283,6 @@ static int smb1360_hw_init(struct smb1360_chip *chip)
 		}
 	}
 
-	/*
-	 * FG Configuration
-	 *
-	 * The REV_1 of the chip does not allow access to
-	 * FG config registers (20-2FH). Set the workaround flag.
-	 * Also, the battery detection does not work when the DCIN is absent,
-	 * add a workaround flag for it.
-	*/
-
-	if (chip->revision == SMB1360_REV_1)
-		chip->workaround_flags |=
-			WRKRND_FG_CONFIG_FAIL | WRKRND_BATT_DET_FAIL;
 
 	smb1360_fg_config(chip);
 
@@ -2230,6 +2440,9 @@ static int smb1360_probe(struct i2c_client *client,
 	mutex_init(&chip->irq_complete);
 	mutex_init(&chip->charging_disable_lock);
 	mutex_init(&chip->current_change_lock);
+	chip->default_i2c_addr = client->addr;
+
+	pr_debug("default_i2c_addr=%x\n", chip->default_i2c_addr);
 
 	rc = smb1360_regulator_init(chip);
 	if  (rc) {
@@ -2271,8 +2484,7 @@ static int smb1360_probe(struct i2c_client *client,
 	/* STAT irq configuration */
 	if (client->irq) {
 		rc = devm_request_threaded_irq(&client->dev, client->irq, NULL,
-				smb1360_stat_handler,
-				IRQF_TRIGGER_LOW | IRQF_ONESHOT,
+				smb1360_stat_handler, IRQF_ONESHOT,
 				"smb1360_stat_irq", chip);
 		if (rc < 0) {
 			dev_err(&client->dev,
@@ -2322,6 +2534,14 @@ static int smb1360_probe(struct i2c_client *client,
 				"Couldn't create cmd debug file rc = %d\n",
 				rc);
 
+		ent = debugfs_create_file("fg_config_registers",
+				S_IFREG | S_IRUGO, chip->debug_root, chip,
+						  &fg_cfg_debugfs_ops);
+		if (!ent)
+			dev_err(chip->dev,
+				"Couldn't create fg_config debug file rc = %d\n",
+				rc);
+
 		ent = debugfs_create_x32("address", S_IFREG | S_IWUSR | S_IRUGO,
 					  chip->debug_root,
 					  &(chip->peek_poke_address));
@@ -2333,6 +2553,33 @@ static int smb1360_probe(struct i2c_client *client,
 		ent = debugfs_create_file("data", S_IFREG | S_IWUSR | S_IRUGO,
 					  chip->debug_root, chip,
 					  &poke_poke_debug_ops);
+		if (!ent)
+			dev_err(chip->dev,
+				"Couldn't create data debug file rc = %d\n",
+				rc);
+
+		ent = debugfs_create_x32("fg_address",
+					S_IFREG | S_IWUSR | S_IRUGO,
+					chip->debug_root,
+					&(chip->fg_peek_poke_address));
+		if (!ent)
+			dev_err(chip->dev,
+				"Couldn't create address debug file rc = %d\n",
+				rc);
+
+		ent = debugfs_create_file("fg_data",
+					S_IFREG | S_IWUSR | S_IRUGO,
+					chip->debug_root, chip,
+					&fg_poke_poke_debug_ops);
+		if (!ent)
+			dev_err(chip->dev,
+				"Couldn't create data debug file rc = %d\n",
+				rc);
+
+		ent = debugfs_create_x32("fg_access_type",
+					S_IFREG | S_IWUSR | S_IRUGO,
+					chip->debug_root,
+					&(chip->fg_access_type));
 		if (!ent)
 			dev_err(chip->dev,
 				"Couldn't create data debug file rc = %d\n",

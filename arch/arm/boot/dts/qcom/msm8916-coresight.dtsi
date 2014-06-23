@@ -52,11 +52,11 @@
 		interrupt-names = "nidnt-irq";
 
 		vdd-supply = <&pm8916_l11>;
-		qcom,vdd-voltage-level = <2800000 2950000>;
+		qcom,vdd-voltage-level = <2950000 2950000>;
 		qcom,vdd-current-level = <15000 400000>;
 
 		vdd-io-supply = <&pm8916_l12>;
-		qcom,vdd-io-voltage-level = <1800000 2950000>;
+		qcom,vdd-io-voltage-level = <2950000 2950000>;
 		qcom,vdd-io-current-level = <200 50000>;
 		clocks = <&clock_rpm clk_qdss_clk>,
 			 <&clock_rpm clk_qdss_a_clk>;
@@ -424,6 +424,8 @@
 		coresight-id = <26>;
 		coresight-name = "coresight-cti-cpu0";
 		coresight-nr-inports = <0>;
+		coresight-cti-cpu = <&CPU0>;
+
 		clocks = <&clock_rpm clk_qdss_clk>,
 			 <&clock_rpm clk_qdss_a_clk>;
 		clock-names = "core_clk", "core_a_clk";
@@ -439,6 +441,8 @@
 		coresight-id = <27>;
 		coresight-name = "coresight-cti-cpu1";
 		coresight-nr-inports = <0>;
+		coresight-cti-cpu = <&CPU1>;
+
 		clocks = <&clock_rpm clk_qdss_clk>,
 			 <&clock_rpm clk_qdss_a_clk>;
 		clock-names = "core_clk", "core_a_clk";
@@ -454,6 +458,8 @@
 		coresight-id = <28>;
 		coresight-name = "coresight-cti-cpu2";
 		coresight-nr-inports = <0>;
+		coresight-cti-cpu = <&CPU2>;
+
 		clocks = <&clock_rpm clk_qdss_clk>,
 			 <&clock_rpm clk_qdss_a_clk>;
 		clock-names = "core_clk", "core_a_clk";
@@ -469,6 +475,8 @@
 		coresight-id = <29>;
 		coresight-name = "coresight-cti-cpu3";
 		coresight-nr-inports = <0>;
+		coresight-cti-cpu = <&CPU3>;
+
 		clocks = <&clock_rpm clk_qdss_clk>,
 			 <&clock_rpm clk_qdss_a_clk>;
 		clock-names = "core_clk", "core_a_clk";
@@ -560,7 +568,7 @@
 
 	qpdi: qpdi@1941000 {
 		compatible = "qcom,coresight-qpdi";
-		reg = <1941000 0x4>;
+		reg = <0x1941000 0x4>;
 		reg-names = "qpdi-base";
 
 		coresight-id = <36>;
@@ -568,11 +576,11 @@
 		coresight-nr-inports = <0>;
 
 		vdd-supply = <&pm8916_l11>;
-		qcom,vdd-voltage-level = <2800000 2950000>;
+		qcom,vdd-voltage-level = <2950000 2950000>;
 		qcom,vdd-current-level = <15000 400000>;
 
 		vdd-io-supply = <&pm8916_l12>;
-		qcom,vdd-io-voltage-level = <1800000 2950000>;
+		qcom,vdd-io-voltage-level = <2950000 2950000>;
 		qcom,vdd-io-current-level = <200 50000>;
 	};
 };

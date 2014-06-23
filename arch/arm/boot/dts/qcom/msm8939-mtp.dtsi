@@ -157,7 +157,7 @@
 		qcom,model = "msm8939-snd-card-mtp";
 		qcom,msm-snd-card-id = <0>;
 		qcom,msm-codec-type = "internal";
-		qcom,msm-ext-pa = <0>;
+		qcom,msm-ext-pa = "primary";
 		qcom,msm-mbhc-hphl-swh = <0>;
 		qcom,msm-mbhc-gnd-swh = <0>;
 		qcom,msm-hs-micbias-type = "internal";
@@ -171,8 +171,8 @@
 			"AMIC1", "MIC BIAS External",
 			"AMIC2", "MIC BIAS Internal2",
 			"AMIC3", "MIC BIAS External";
-		pinctrl-names = "cdc_pdm_lines_act",
-				"cdc_pdm_lines_sus",
+		pinctrl-names = "cdc_lines_act",
+				"cdc_lines_sus",
 				"cross_conn_det_act",
 				"cross_conn_det_sus";
 		pinctrl-0 = <&cdc_pdm_lines_act>;
@@ -310,6 +310,7 @@
 	qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
 	qcom,mdss-dsi-bl-pmic-bank-select = <0>;
 	qcom,mdss-dsi-pwm-gpio = <&pm8916_mpps 4 0>;
+	qcom,cont-splash-enabled;
 };
 
 &pmx_mdss {
@@ -378,4 +379,28 @@
 		/* External regulator control for APC */
 		status = "disabled";
 	};
+};
+
+/* CoreSight */
+&tpiu {
+	pinctrl-names = "sdcard", "trace", "swduart",
+			"swdtrc", "jtag", "spmi";
+	/* NIDnT */
+	pinctrl-0 = <&qdsd_clk_sdcard &qdsd_cmd_sdcard
+		     &qdsd_data0_sdcard &qdsd_data1_sdcard
+		     &qdsd_data2_sdcard &qdsd_data3_sdcard>;
+	pinctrl-1 = <&qdsd_clk_trace &qdsd_cmd_trace
+		     &qdsd_data0_trace &qdsd_data1_trace
+		     &qdsd_data2_trace &qdsd_data3_trace>;
+	pinctrl-2 = <&qdsd_cmd_swduart &qdsd_data0_swduart
+		     &qdsd_data1_swduart &qdsd_data2_swduart
+		     &qdsd_data3_swduart>;
+	pinctrl-3 = <&qdsd_clk_swdtrc &qdsd_cmd_swdtrc
+		     &qdsd_data0_swdtrc &qdsd_data1_swdtrc
+		     &qdsd_data2_swdtrc &qdsd_data3_swdtrc>;
+	pinctrl-4 = <&qdsd_cmd_jtag &qdsd_data0_jtag
+		     &qdsd_data1_jtag &qdsd_data2_jtag
+		     &qdsd_data3_jtag>;
+	pinctrl-5 = <&qdsd_clk_spmi &qdsd_cmd_spmi
+		     &qdsd_data0_spmi &qdsd_data3_spmi>;
 };

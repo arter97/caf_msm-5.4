@@ -27,7 +27,6 @@
 #include <linux/input/synaptics_dsx_v2.h>
 #include "synaptics_dsx_core.h"
 
-#define DO_STARTUP_FW_UPDATE
 #define STARTUP_FW_UPDATE_DELAY_MS 1000 /* ms */
 #define FORCE_UPDATE false
 #define DO_LOCKDOWN false
@@ -38,6 +37,7 @@
 #define LOCKDOWN_OFFSET 0xb0
 #define FW_IMAGE_OFFSET 0x100
 
+#define PACKAGE_ID_OFFSET 17
 #define BOOTLOADER_ID_OFFSET 0
 #define BLOCK_NUMBER_OFFSET 0
 
@@ -141,6 +141,9 @@ static ssize_t fwu_sysfs_disp_config_block_count_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 
 static ssize_t fwu_sysfs_config_id_show(struct device *dev,
+		struct device_attribute *attr, char *buf);
+
+static ssize_t fwu_sysfs_package_id_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 
 enum bl_version {
@@ -276,7 +279,6 @@ struct synaptics_rmi4_fwu_handle {
 	const unsigned char *firmware_data;
 	const unsigned char *config_data;
 	const unsigned char *lockdown_data;
-	struct workqueue_struct *fwu_workqueue;
 	struct delayed_work fwu_work;
 	struct synaptics_rmi4_fn_desc f34_fd;
 	struct synaptics_rmi4_data *rmi4_data;
@@ -300,20 +302,20 @@ static struct device_attribute attrs[] = {
 	__ATTR(update_fw, S_IWUSR | S_IWGRP,
 			NULL,
 			fwu_sysfs_do_reflash_store),
-	__ATTR(writeconfig, S_IWUGO,
-			synaptics_rmi4_show_error,
+	__ATTR(writeconfig, S_IWUSR | S_IWGRP,
+			NULL,
 			fwu_sysfs_write_config_store),
-	__ATTR(readconfig, S_IWUGO,
-			synaptics_rmi4_show_error,
+	__ATTR(readconfig, S_IWUSR | S_IWGRP,
+			NULL,
 			fwu_sysfs_read_config_store),
-	__ATTR(configarea, S_IWUGO,
-			synaptics_rmi4_show_error,
+	__ATTR(configarea, S_IWUSR | S_IWGRP,
+			NULL,
 			fwu_sysfs_config_area_store),
 	__ATTR(fw_name, S_IRUGO | S_IWUSR | S_IWGRP,
 			fwu_sysfs_image_name_show,
 			fwu_sysfs_image_name_store),
-	__ATTR(imagesize, S_IWUGO,
-			synaptics_rmi4_show_error,
+	__ATTR(imagesize, S_IWUSR | S_IWGRP,
+			NULL,
 			fwu_sysfs_image_size_store),
 	__ATTR(blocksize, S_IRUGO,
 			fwu_sysfs_block_size_show,
@@ -335,6 +337,9 @@ static struct device_attribute attrs[] = {
 			synaptics_rmi4_store_error),
 	__ATTR(config_id, S_IRUGO,
 			fwu_sysfs_config_id_show,
+			synaptics_rmi4_store_error),
+	__ATTR(package_id, S_IRUGO,
+			fwu_sysfs_package_id_show,
 			synaptics_rmi4_store_error),
 };
 
@@ -826,6 +831,27 @@ static int fwu_write_blocks(unsigned char *block_ptr, unsigned short block_cnt,
 	unsigned char block_offset[] = {0, 0};
 	unsigned short block_num;
 	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
+	unsigned int progress;
+	unsigned char command_str[10];
+
+	switch (command) {
+	case CMD_WRITE_CONFIG_BLOCK:
+		progress = 10;
+		strlcpy(command_str, "config", 10);
+		break;
+	case CMD_WRITE_FW_BLOCK:
+		progress = 100;
+		strlcpy(command_str, "firmware", 10);
+		break;
+	case CMD_WRITE_LOCKDOWN_BLOCK:
+		progress = 1;
+		strlcpy(command_str, "lockdown", 10);
+		break;
+	default:
+		progress = 1;
+		strlcpy(command_str, "unknown", 10);
+		break;
+	}
 
 	block_offset[1] |= (fwu->config_area << 5);
 
@@ -841,6 +867,11 @@ static int fwu_write_blocks(unsigned char *block_ptr, unsigned short block_cnt,
 	}
 
 	for (block_num = 0; block_num < block_cnt; block_num++) {
+		if (block_num % progress == 0)
+			dev_info(rmi4_data->pdev->dev.parent,
+				"%s: update %s %3d / %3d\n",
+				__func__, command_str, block_num, block_cnt);
+
 		retval = synaptics_rmi4_reg_write(rmi4_data,
 				fwu->f34_fd.data_base_addr + fwu->blk_data_off,
 				block_ptr,
@@ -869,9 +900,10 @@ static int fwu_write_blocks(unsigned char *block_ptr, unsigned short block_cnt,
 		}
 
 		block_ptr += fwu->block_size;
-		dev_info(rmi4_data->pdev->dev.parent,
-			"updated %d/%d blocks\n", block_num, block_cnt);
 	}
+
+	dev_info(rmi4_data->pdev->dev.parent,
+		"updated %d/%d blocks\n", block_num, block_cnt);
 
 	return 0;
 }
@@ -1443,21 +1475,24 @@ int synaptics_dsx_fw_updater(unsigned char *fw_data)
 	if (!fwu->initialized)
 		return -ENODEV;
 
+	fwu->rmi4_data->fw_updating = true;
+	if (fwu->rmi4_data->suspended == true) {
+		fwu->rmi4_data->fw_updating = false;
+		dev_err(fwu->rmi4_data->pdev->dev.parent,
+			"Cannot start fw upgrade: Device is in suspend\n");
+		return -EBUSY;
+	}
+
 	fwu->ext_data_source = fw_data;
 	fwu->config_area = UI_CONFIG_AREA;
 
 	retval = fwu_start_reflash();
 
+	fwu->rmi4_data->fw_updating = false;
+
 	return retval;
 }
 EXPORT_SYMBOL(synaptics_dsx_fw_updater);
-
-static void fwu_startup_fw_update_work(struct work_struct *work)
-{
-	synaptics_dsx_fw_updater(NULL);
-
-	return;
-}
 
 static ssize_t fwu_sysfs_show_image(struct file *data_file,
 		struct kobject *kobj, struct bin_attribute *attributes,
@@ -1747,6 +1782,31 @@ static ssize_t fwu_sysfs_config_id_show(struct device *dev,
 		config_id[0], config_id[1], config_id[2], config_id[3]);
 }
 
+static ssize_t fwu_sysfs_package_id_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	int retval;
+	unsigned char package_id[4];
+	struct synaptics_rmi4_data *rmi4_data = fwu->rmi4_data;
+
+	/* read device package id */
+	retval = synaptics_rmi4_reg_read(rmi4_data,
+			rmi4_data->f01_query_base_addr + PACKAGE_ID_OFFSET,
+			package_id,
+			sizeof(package_id));
+
+	if (retval < 0) {
+		dev_err(rmi4_data->pdev->dev.parent,
+				"%s: Failed to read device package ID\n",
+				__func__);
+		return retval;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%d rev %d\n",
+			(package_id[1] << 8) | package_id[0],
+			(package_id[3] << 8) | package_id[2]);
+}
+
 static void synaptics_rmi4_fwu_attn(struct synaptics_rmi4_data *rmi4_data,
 		unsigned char intr_mask)
 {
@@ -1839,14 +1899,6 @@ static int synaptics_rmi4_fwu_init(struct synaptics_rmi4_data *rmi4_data)
 			goto exit_remove_attrs;
 		}
 	}
-
-#ifdef DO_STARTUP_FW_UPDATE
-	fwu->fwu_workqueue = create_singlethread_workqueue("fwu_workqueue");
-	INIT_DELAYED_WORK(&fwu->fwu_work, fwu_startup_fw_update_work);
-	queue_delayed_work(fwu->fwu_workqueue,
-			&fwu->fwu_work,
-			msecs_to_jiffies(STARTUP_FW_UPDATE_DELAY_MS));
-#endif
 
 	return 0;
 

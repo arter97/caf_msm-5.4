@@ -68,9 +68,6 @@ Optional properties :
 	    Used for allowing USB to respond for remote wakup.
 - qcom,hsusb-otg-delay-lpm: If present then USB core will wait one second
 	after disconnect before entering low power mode.
-- qcom,hsusb-otg-delay-lpm-hndshk-on-disconnect: If present then USB core will
-	wait for the handshake with the IPA to complete before entering low
-	power mode.
 - <supply-name>-supply: handle to the regulator device tree node.
          Optional "supply-name" is "vbus_otg" to supply vbus in host mode.
 - qcom,dp-manual-pullup: If present, vbus is not routed to USB controller/phy
@@ -196,6 +193,7 @@ Optional properties :
   the USB host controller and its RESET_N signal is connected to this
   ext-hub-reset-gpio GPIO. It should be driven LOW to RESET the HUB.
 - qcom,usb2-enable-uicc: If present, usb2 port will be used for uicc card connection.
+- usb-phy: phandle for the PHY device, if described as a separate device tree node
 
 Example MSM HSUSB EHCI controller device node :
 	ehci: qcom,ehci-host@f9a55000 {

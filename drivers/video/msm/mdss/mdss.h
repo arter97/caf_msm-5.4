@@ -160,6 +160,8 @@ struct mdss_data_type {
 	u32 *vbif_nrt_qos;
 	u32 npriority_lvl;
 
+	u32 reg_bus_hdl;
+
 	struct mdss_fudge_factor ab_factor;
 	struct mdss_fudge_factor ib_factor;
 	struct mdss_fudge_factor ib_factor_overlap;
@@ -193,7 +195,6 @@ struct mdss_data_type {
 	void *video_intf;
 	u32 nintf;
 
-	u32 pp_bus_hdl;
 	struct mdss_mdp_ad *ad_off;
 	struct mdss_ad_info *ad_cfgs;
 	u32 nad_cfgs;
@@ -214,6 +215,8 @@ struct mdss_data_type {
 	int handoff_pending;
 	bool idle_pc;
 	struct mdss_perf_tune perf_tune;
+	bool traffic_shaper_en;
+	int iommu_ref_cnt;
 };
 extern struct mdss_data_type *mdss_res;
 
@@ -236,7 +239,8 @@ int mdss_register_irq(struct mdss_hw *hw);
 void mdss_enable_irq(struct mdss_hw *hw);
 void mdss_disable_irq(struct mdss_hw *hw);
 void mdss_disable_irq_nosync(struct mdss_hw *hw);
-int mdss_bus_bandwidth_ctrl(int enable);
+void mdss_bus_bandwidth_ctrl(int enable);
+int mdss_iommu_ctrl(int enable);
 
 static inline struct ion_client *mdss_get_ionclient(void)
 {

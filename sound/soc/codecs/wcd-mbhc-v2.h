@@ -61,9 +61,14 @@ struct wcd_mbhc_intr {
 	int hph_right_ocp;
 };
 
+struct wcd_mbhc_cb {
+	int (*enable_mb_source) (struct snd_soc_codec *, bool);
+};
+
 struct wcd_mbhc {
 	int buttons_pressed;
 	struct wcd_mbhc_config *mbhc_cfg;
+	const struct wcd_mbhc_cb *mbhc_cb;
 
 	u32 hph_status; /* track headhpone status */
 	u8 hphlocp_cnt; /* headphone left ocp retry */
@@ -76,11 +81,14 @@ struct wcd_mbhc {
 	bool in_swch_irq_handler;
 	bool hphl_swh; /*track HPHL switch NC / NO */
 	bool gnd_swh; /*track GND switch NC / NO */
+	bool hs_detect_work_stop;
+	bool micbias_enable;
 
 	struct snd_soc_codec *codec;
 
 	/* track PA/DAC state to sync with userspace */
 	unsigned long hph_pa_dac_state;
+	unsigned long jiffies_atreport;
 
 	/* impedance of hphl and hphr */
 	uint32_t zl, zr;
@@ -92,6 +100,9 @@ struct wcd_mbhc {
 
 	/* Holds codec specific interrupt mapping */
 	const struct wcd_mbhc_intr *intr_ids;
+
+	/* Work to correct accessory type */
+	struct work_struct correct_plug_swch;
 };
 
 #define WCD_MBHC_CAL_BTN_DET_PTR(cali) ( \
@@ -101,6 +112,7 @@ int wcd_mbhc_start(struct wcd_mbhc *mbhc,
 		       struct wcd_mbhc_config *mbhc_cfg);
 void wcd_mbhc_stop(struct wcd_mbhc *mbhc);
 int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
+		      const struct wcd_mbhc_cb *mbhc_cb,
 		      const struct wcd_mbhc_intr *mbhc_cdc_intr_ids,
 		      bool impedance_det_en);
 void wcd_mbhc_deinit(struct wcd_mbhc *mbhc);

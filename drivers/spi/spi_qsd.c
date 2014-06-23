@@ -1990,19 +1990,42 @@ err_setup_exit:
 }
 
 #ifdef CONFIG_DEBUG_FS
+
+
 static int debugfs_iomem_x32_set(void *data, u64 val)
 {
-	writel_relaxed(val, data);
+	struct msm_spi_regs *debugfs_spi_regs = (struct msm_spi_regs *)data;
+	struct msm_spi *dd = debugfs_spi_regs->dd;
+	int ret;
+
+	ret = pm_runtime_get_sync(dd->dev);
+	if (ret < 0)
+		return ret;
+
+	writel_relaxed(val, (dd->base + debugfs_spi_regs->offset));
 	/* Ensure the previous write completed. */
 	mb();
+
+	pm_runtime_mark_last_busy(dd->dev);
+	pm_runtime_put_autosuspend(dd->dev);
 	return 0;
 }
 
 static int debugfs_iomem_x32_get(void *data, u64 *val)
 {
-	*val = readl_relaxed(data);
+	struct msm_spi_regs *debugfs_spi_regs = (struct msm_spi_regs *)data;
+	struct msm_spi *dd = debugfs_spi_regs->dd;
+	int ret;
+
+	ret = pm_runtime_get_sync(dd->dev);
+	if (ret < 0)
+		return ret;
+	*val = readl_relaxed(dd->base + debugfs_spi_regs->offset);
 	/* Ensure the previous read completed. */
 	mb();
+
+	pm_runtime_mark_last_busy(dd->dev);
+	pm_runtime_put_autosuspend(dd->dev);
 	return 0;
 }
 
@@ -2016,12 +2039,13 @@ static void spi_debugfs_init(struct msm_spi *dd)
 		int i;
 
 		for (i = 0; i < ARRAY_SIZE(debugfs_spi_regs); i++) {
+			debugfs_spi_regs[i].dd = dd;
 			dd->debugfs_spi_regs[i] =
 			   debugfs_create_file(
 			       debugfs_spi_regs[i].name,
 			       debugfs_spi_regs[i].mode,
 			       dd->dent_spi,
-			       dd->base + debugfs_spi_regs[i].offset,
+			       debugfs_spi_regs+i,
 			       &fops_iomem_x32);
 		}
 	}
@@ -2503,7 +2527,6 @@ static int __init msm_spi_probe(struct platform_device *pdev)
 	for (i = 0; i < ARRAY_SIZE(spi_cs_rsrcs); ++i)
 		dd->cs_gpios[i].valid = 0;
 
-	master->rt = pdata->rt_priority;
 	dd->pdata = pdata;
 	resource = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!resource) {
@@ -2514,7 +2537,7 @@ static int __init msm_spi_probe(struct platform_device *pdev)
 	dd->mem_phys_addr = resource->start;
 	dd->mem_size = resource_size(resource);
 
-	if (dd->pdata->use_pinctrl) {
+	if (dd->pdata && dd->pdata->use_pinctrl) {
 		dd->dev = &pdev->dev;
 		rc = msm_spi_pinctrl_init(dd);
 		if (rc)
@@ -2522,6 +2545,7 @@ static int __init msm_spi_probe(struct platform_device *pdev)
 	}
 
 	if (pdata) {
+		master->rt = pdata->rt_priority;
 		if (pdata->dma_config) {
 			rc = pdata->dma_config();
 			if (rc) {
@@ -2673,7 +2697,6 @@ skip_dma_resources:
 		dev_err(&pdev->dev, "failed to create dev. attrs : %d\n", rc);
 		goto err_attrs;
 	}
-
 	spi_debugfs_init(dd);
 
 	return 0;

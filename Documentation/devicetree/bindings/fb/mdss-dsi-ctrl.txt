@@ -32,6 +32,7 @@ Required properties:
 Optional properties:
 - label:		        	A string used to describe the controller used.
 
+- vcca-supply:				Phandle for vcca regulator device node.
 - qcom,ctrl-supply-entries:		A node that lists the elements of the supply used by the
 					DSI controller and PHY. There can be more than one instance
 					of this binding, in which case the entry would be appended
@@ -70,6 +71,7 @@ Optional properties:
 					controller. These pin configurations are installed in the pinctrl
 					device node. Refer to pinctrl-bindings.txt
 - qcom,regulator-ldo-mode:		Boolean to enable ldo mode for the dsi phy regulator
+- qcom,dsi-panel-bias-vreg:		Boolean to enable control of panel bias regulator
 
 Example:
         mdss_dsi0: qcom,mdss_dsi@fd922800 {
@@ -83,6 +85,7 @@ Example:
 		vdd-supply = <&pm8226_l15>;
 		vddio-supply = <&pm8226_l8>;
 		vdda-supply = <&pm8226_l4>;
+		vcca-supply = <&pm8226_l28>;
 		qcom,dsi-pref-prim-pan = <&dsi_tosh_720_vid>;
 		qcom,platform-strength-ctrl = [ff 06];
 		qcom,platform-bist-ctrl = [00 00 b1 ff 00 00];
@@ -103,6 +106,7 @@ Example:
 		qcom,platform-enable-gpio = <&msmgpio 58 1>;
 		qcom,platform-bklight-en-gpio = <&msmgpio 86 0>;
 		qcom,platform-mode-gpio = <&msmgpio 7 0>;
+		qcom,dsi-panel-bias-vreg;
 
 		qcom,core-supply-entries {
 			#address-cells = <1>;

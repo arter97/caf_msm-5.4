@@ -7,7 +7,9 @@
 #include <linux/types.h>
 #include <linux/v4l2-mediabus.h>
 #include <linux/i2c.h>
+#ifdef CONFIG_COMPAT
 #include <linux/compat.h>
+#endif
 
 #define I2C_SEQ_REG_SETTING_MAX   5
 #define I2C_SEQ_REG_DATA_MAX      20
@@ -592,7 +594,7 @@ enum msm_actuator_cfg_type_t {
 enum actuator_type {
 	ACTUATOR_VCM,
 	ACTUATOR_PIEZO,
-	ACTUATOR_OIS,
+	ACTUATOR_HVCM,
 };
 
 enum msm_actuator_data_type {

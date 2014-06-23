@@ -68,6 +68,9 @@ EXPORT_SYMBOL(boot_reason);
 unsigned int cold_boot;
 EXPORT_SYMBOL(cold_boot);
 
+char* (*arch_read_hardware_id)(void);
+EXPORT_SYMBOL(arch_read_hardware_id);
+
 #ifdef CONFIG_COMPAT
 #define COMPAT_ELF_HWCAP_DEFAULT	\
 				(COMPAT_HWCAP_HALF|COMPAT_HWCAP_THUMB|\
@@ -265,6 +268,8 @@ static void __init setup_machine_fdt(phys_addr_t dt_phys)
 	}
 
 	machine_name = of_flat_dt_get_machine_name();
+	if (machine_name)
+		pr_info("Machine: %s\n", machine_name);
 }
 
 /*
@@ -404,7 +409,7 @@ static int c_show(struct seq_file *m, void *v)
 	seq_printf(m, "Processor\t: %s rev %d (%s)\n",
 		   cpu_name, read_cpuid_id() & 15, ELF_PLATFORM);
 
-	for_each_online_cpu(i) {
+	for_each_present_cpu(i) {
 		/*
 		 * glibc reads /proc/cpuinfo to determine the number of
 		 * online processors, looking for lines beginning with
@@ -435,7 +440,10 @@ static int c_show(struct seq_file *m, void *v)
 
 	seq_puts(m, "\n");
 
-	seq_printf(m, "Hardware\t: %s\n", machine_name);
+	if (!arch_read_hardware_id)
+		seq_printf(m, "Hardware\t: %s\n", machine_name);
+	else
+		seq_printf(m, "Hardware\t: %s\n", arch_read_hardware_id());
 
 	return 0;
 }

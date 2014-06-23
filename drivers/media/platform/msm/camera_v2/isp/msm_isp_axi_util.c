@@ -825,8 +825,11 @@ static void msm_isp_get_done_buf(struct vfe_device *vfe_dev,
 				__func__, pingpong_status);
 		}
 	}
+
+	if (stream_info->controllable_output)
+		stream_info->request_frm_num--;
+
 	*done_buf = stream_info->buf[pingpong_bit];
-	stream_info->buf[pingpong_bit] = NULL;
 }
 
 static int msm_isp_cfg_ping_pong_address(struct vfe_device *vfe_dev,
@@ -838,8 +841,10 @@ static int msm_isp_cfg_ping_pong_address(struct vfe_device *vfe_dev,
 	uint32_t bufq_handle = 0;
 	uint32_t stream_idx = HANDLE_TO_IDX(stream_info->stream_handle);
 
-	if (stream_info->controllable_output && !stream_info->request_frm_num)
+	if (stream_info->controllable_output && !stream_info->request_frm_num) {
+		stream_info->buf[pingpong_bit] = NULL;
 		return 0;
+	}
 
 	bufq_handle = stream_info->bufq_handle;
 
@@ -855,14 +860,6 @@ static int msm_isp_cfg_ping_pong_address(struct vfe_device *vfe_dev,
 		pr_err("%s: Invalid buffer\n", __func__);
 		rc = -EINVAL;
 		goto buf_error;
-	}
-
-	if (stream_info->controllable_output) {
-		if (!stream_info->request_frm_num) {
-			pr_err("%s: Frame is not required!\n", __func__);
-			rc = -EINVAL;
-		}
-		stream_info->request_frm_num--;
 	}
 
 	for (i = 0; i < stream_info->num_planes; i++)

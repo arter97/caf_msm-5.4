@@ -36,7 +36,7 @@
 			linux,reserve-contiguous-region;
 			linux,reserve-region;
 			linux,remove-completely;
-			reg = <0x1000000 0x5e00000>;
+			reg = <0x1000000 0x6100000>;
 			label = "peripheral_mem";
 		};
 
@@ -538,7 +538,8 @@
 
 	ssphy0: ssphy@f9b38000 {
 		compatible = "qcom,usb-ssphy-qmp";
-		reg = <0xf9b38000 0x16c>;
+		reg = <0xf9b38000 0x16c>,
+			<0xf9b3e000 0x3ff>;
 		vdd-supply = <&pmd9635_l4>;
 		vdda18-supply = <&pmd9635_l8>;
 		qcom,vdd-voltage-level = <0 900000 1050000>;
@@ -1133,11 +1134,11 @@
 		compatible = "qcom,msm-dai-q6";
 	};
 
-	qcom,cnss@6d00000 {
+	qcom,cnss@7000000 {
 		compatible = "qcom,cnss";
 		wlan-en-gpio = <&msmgpio 70 0>;
 		vdd-wlan-supply = <&wlan_vreg>;
-		reg = <0x06d00000 0x100000>;
+		reg = <0x07000000 0x100000>;
 		reg-names = "ramdump";
 		qcom,notify-modem-status;
 	};

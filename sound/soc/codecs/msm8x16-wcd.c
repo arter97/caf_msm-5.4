@@ -71,6 +71,11 @@
  */
 #define ADSP_STATE_READY_TIMEOUT_MS 50
 
+#define HPHL_PA_DISABLE (0x01 << 1)
+#define HPHR_PA_DISABLE (0x01 << 2)
+#define EAR_PA_DISABLE (0x01 << 3)
+#define SPKR_PA_DISABLE (0x01 << 4)
+
 enum {
 	AIF1_PB = 0,
 	AIF1_CAP,
@@ -142,11 +147,13 @@ struct msm8x16_wcd_priv {
 	u32 adc_count;
 	u32 rx_bias_count;
 	s32 dmic_1_2_clk_cnt;
+	u32 mute_mask;
 	bool mclk_enabled;
 	bool clock_active;
 	bool config_mode_active;
 	bool spk_boost_set;
 	bool ear_pa_boost_set;
+	bool dec_active[NUM_DECIMATORS];
 	struct on_demand_supply on_demand_list[ON_DEMAND_SUPPLIES_MAX];
 	/* mbhc module */
 	struct wcd_mbhc mbhc;
@@ -188,12 +195,19 @@ static int msm8x16_wcd_dt_parse_vreg_info(struct device *dev,
 	const char *vreg_name, bool ondemand);
 static struct msm8x16_wcd_pdata *msm8x16_wcd_populate_dt_pdata(
 	struct device *dev);
+static int msm8x16_wcd_enable_ext_mb_source(struct snd_soc_codec *codec,
+					    bool turn_on);
 
 struct msm8x16_wcd_spmi msm8x16_wcd_modules[MAX_MSM8X16_WCD_DEVICE];
 
 static void *modem_state_notifier;
 
 static struct snd_soc_codec *registered_codec;
+
+static const struct wcd_mbhc_cb mbhc_cb = {
+	.enable_mb_source = msm8x16_wcd_enable_ext_mb_source,
+};
+
 
 static int get_spmi_msm8x16_wcd_device_info(u16 *reg,
 			struct msm8x16_wcd_spmi **msm8x16_wcd)
@@ -1591,11 +1605,8 @@ static int msm8x16_wcd_codec_enable_spk_pa(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_PRE_PMD:
 		snd_soc_update_bits(codec,
 			MSM8X16_WCD_A_CDC_RX3_B6_CTL, 0x01, 0x01);
-		snd_soc_update_bits(codec,
-			MSM8X16_WCD_A_CDC_RX3_B6_CTL, 0x01, 0x00);
 		msleep(20);
-		snd_soc_update_bits(codec,
-			MSM8X16_WCD_A_CDC_RX3_B6_CTL, 0x01, 0x01);
+		msm8x16_wcd->mute_mask |= SPKR_PA_DISABLE;
 		snd_soc_update_bits(codec, w->reg, 0x80, 0x00);
 		if (msm8x16_wcd->spk_boost_set)
 			snd_soc_update_bits(codec,
@@ -1760,6 +1771,30 @@ static int msm8x16_wcd_codec_enable_dmic(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
+static int msm8x16_wcd_enable_ext_mb_source(struct snd_soc_codec *codec,
+					    bool turn_on)
+{
+	int ret = 0;
+
+	if (turn_on)
+		ret = snd_soc_dapm_force_enable_pin(&codec->dapm,
+				"MICBIAS_REGULATOR");
+	else
+		ret = snd_soc_dapm_disable_pin(&codec->dapm,
+				"MICBIAS_REGULATOR");
+
+	snd_soc_dapm_sync(&codec->dapm);
+
+	if (ret)
+		dev_err(codec->dev, "%s: Failed to %s external micbias source\n",
+			__func__, turn_on ? "enable" : "disabled");
+	else
+		dev_dbg(codec->dev, "%s: %s external micbias source\n",
+			 __func__, turn_on ? "Enabled" : "Disabled");
+
+	return ret;
+}
+
 static int msm8x16_wcd_codec_enable_micbias(struct snd_soc_dapm_widget *w,
 	struct snd_kcontrol *kcontrol, int event)
 {
@@ -1859,10 +1894,11 @@ static int msm8x16_wcd_codec_enable_dec(struct snd_soc_dapm_widget *w,
 {
 	struct snd_soc_codec *codec = w->codec;
 	unsigned int decimator;
+	struct msm8x16_wcd_priv *msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
 	char *dec_name = NULL;
 	char *widget_name = NULL;
 	char *temp;
-	int ret = 0;
+	int ret = 0, i;
 	u16 dec_reset_reg, tx_vol_ctl_reg, tx_mux_ctl_reg;
 	u8 dec_hpf_cut_of_freq;
 	int offset;
@@ -1913,6 +1949,10 @@ static int msm8x16_wcd_codec_enable_dec(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_PRE_PMU:
 		/* Enableable TX digital mute */
 		snd_soc_update_bits(codec, tx_vol_ctl_reg, 0x01, 0x01);
+		for (i = 0; i < NUM_DECIMATORS; i++) {
+			if (decimator == i + 1)
+				msm8x16_wcd->dec_active[i] = true;
+		}
 
 		dec_hpf_cut_of_freq = snd_soc_read(codec, tx_mux_ctl_reg);
 
@@ -1928,12 +1968,10 @@ static int msm8x16_wcd_codec_enable_dec(struct snd_soc_dapm_widget *w,
 					    CF_MIN_3DB_150HZ << 4);
 		}
 
-		/* enable HPF */
-		snd_soc_update_bits(codec, tx_mux_ctl_reg , 0x08, 0x00);
 		break;
 	case SND_SOC_DAPM_POST_PMU:
-		/* Disable TX digital mute */
-		snd_soc_update_bits(codec, tx_vol_ctl_reg, 0x01, 0x00);
+		/* enable HPF */
+		snd_soc_update_bits(codec, tx_mux_ctl_reg , 0x08, 0x00);
 
 		if (tx_hpf_work[decimator - 1].tx_hpf_cut_of_freq !=
 				CF_MIN_3DB_150HZ) {
@@ -1965,6 +2003,10 @@ static int msm8x16_wcd_codec_enable_dec(struct snd_soc_dapm_widget *w,
 		snd_soc_update_bits(codec, tx_mux_ctl_reg, 0x30,
 			(tx_hpf_work[decimator - 1].tx_hpf_cut_of_freq) << 4);
 		snd_soc_update_bits(codec, tx_vol_ctl_reg, 0x01, 0x00);
+		for (i = 0; i < NUM_DECIMATORS; i++) {
+			if (decimator == i + 1)
+				msm8x16_wcd->dec_active[i] = false;
+		}
 		break;
 	}
 out:
@@ -1977,6 +2019,7 @@ static int msm8x16_wcd_codec_enable_interpolator(struct snd_soc_dapm_widget *w,
 						 int event)
 {
 	struct snd_soc_codec *codec = w->codec;
+	struct msm8x16_wcd_priv *msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
 
 	dev_dbg(codec->dev, "%s %d %s\n", __func__, event, w->name);
 
@@ -1997,6 +2040,33 @@ static int msm8x16_wcd_codec_enable_interpolator(struct snd_soc_dapm_widget *w,
 		snd_soc_update_bits(codec,
 			MSM8X16_WCD_A_CDC_CLK_RX_RESET_CTL,
 			1 << w->shift, 0x0);
+		/*
+		 * disable the mute enabled during the PMD of this device
+		 */
+		if (msm8x16_wcd->mute_mask & HPHL_PA_DISABLE) {
+			pr_debug("disabling HPHL mute\n");
+			snd_soc_update_bits(codec,
+				MSM8X16_WCD_A_CDC_RX1_B6_CTL, 0x01, 0x00);
+			msm8x16_wcd->mute_mask &= ~(HPHL_PA_DISABLE);
+		}
+		if (msm8x16_wcd->mute_mask & HPHR_PA_DISABLE) {
+			pr_debug("disabling HPHR mute\n");
+			snd_soc_update_bits(codec,
+				MSM8X16_WCD_A_CDC_RX2_B6_CTL, 0x01, 0x00);
+			msm8x16_wcd->mute_mask &= ~(HPHR_PA_DISABLE);
+		}
+		if (msm8x16_wcd->mute_mask & SPKR_PA_DISABLE) {
+			pr_debug("disabling SPKR mute\n");
+			snd_soc_update_bits(codec,
+				MSM8X16_WCD_A_CDC_RX3_B6_CTL, 0x01, 0x00);
+			msm8x16_wcd->mute_mask &= ~(SPKR_PA_DISABLE);
+		}
+		if (msm8x16_wcd->mute_mask & EAR_PA_DISABLE) {
+			pr_debug("disabling EAR mute\n");
+			snd_soc_update_bits(codec,
+				MSM8X16_WCD_A_CDC_RX1_B6_CTL, 0x01, 0x00);
+			msm8x16_wcd->mute_mask &= ~(EAR_PA_DISABLE);
+		}
 	}
 	return 0;
 }
@@ -2123,19 +2193,13 @@ static int msm8x16_wcd_hph_pa_event(struct snd_soc_dapm_widget *w,
 		if (w->shift == 5) {
 			snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_CDC_RX1_B6_CTL, 0x01, 0x01);
-			snd_soc_update_bits(codec,
-				MSM8X16_WCD_A_CDC_RX1_B6_CTL, 0x01, 0x00);
 			msleep(20);
-			snd_soc_update_bits(codec,
-				MSM8X16_WCD_A_CDC_RX1_B6_CTL, 0x01, 0x01);
+			msm8x16_wcd->mute_mask |= HPHL_PA_DISABLE;
 		} else if (w->shift == 4) {
 			snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_CDC_RX2_B6_CTL, 0x01, 0x01);
-			snd_soc_update_bits(codec,
-				MSM8X16_WCD_A_CDC_RX2_B6_CTL, 0x01, 0x00);
 			msleep(20);
-			snd_soc_update_bits(codec,
-				MSM8X16_WCD_A_CDC_RX2_B6_CTL, 0x01, 0x01);
+			msm8x16_wcd->mute_mask |= HPHR_PA_DISABLE;
 		}
 		break;
 	case SND_SOC_DAPM_POST_PMD:
@@ -2500,6 +2564,53 @@ static int msm8x16_wcd_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
+int msm8x16_wcd_digital_mute(struct snd_soc_dai *dai, int mute)
+{
+	struct snd_soc_codec *codec = NULL;
+	u16 tx_vol_ctl_reg = 0;
+	u8 decimator = 0, i;
+	struct msm8x16_wcd_priv *msm8x16_wcd;
+
+	pr_debug("%s: Digital Mute val = %d\n", __func__, mute);
+
+	if (!dai || !dai->codec) {
+		pr_err("%s: Invalid params\n", __func__);
+		return -EINVAL;
+	}
+	codec = dai->codec;
+	msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
+
+	if (dai->id != AIF1_CAP) {
+		dev_dbg(codec->dev, "%s: Not capture use case skip\n",
+		__func__);
+		return 0;
+	}
+
+	mute = (mute) ? 1 : 0;
+	if (!mute && msm8x16_wcd->mbhc.current_plug == MBHC_PLUG_TYPE_HEADSET) {
+		/*
+		 * 23 ms is an emperical value for the mute time
+		 * that was arrived by checking the pop level
+		 * to be inaudible
+		 */
+		msleep(23);
+	}
+
+	for (i = 0; i < NUM_DECIMATORS; i++) {
+		if (msm8x16_wcd->dec_active[i])
+			decimator = i + 1;
+		if (decimator && decimator <= NUM_DECIMATORS) {
+			pr_debug("%s: Mute = %d Decimator = %d", __func__,
+					mute, decimator);
+			tx_vol_ctl_reg = MSM8X16_WCD_A_CDC_TX1_VOL_CTL_CFG +
+				32 * (decimator - 1);
+			snd_soc_update_bits(codec, tx_vol_ctl_reg, 0x01, mute);
+		}
+		decimator = 0;
+	}
+	return 0;
+}
+
 static struct snd_soc_dai_ops msm8x16_wcd_dai_ops = {
 	.startup = msm8x16_wcd_startup,
 	.shutdown = msm8x16_wcd_shutdown,
@@ -2508,6 +2619,7 @@ static struct snd_soc_dai_ops msm8x16_wcd_dai_ops = {
 	.set_fmt = msm8x16_wcd_set_dai_fmt,
 	.set_channel_map = msm8x16_wcd_set_channel_map,
 	.get_channel_map = msm8x16_wcd_get_channel_map,
+	.digital_mute = msm8x16_wcd_digital_mute,
 };
 
 static struct snd_soc_dai_driver msm8x16_wcd_i2s_dai[] = {
@@ -2568,6 +2680,7 @@ static int msm8x16_wcd_codec_enable_ear_pa(struct snd_soc_dapm_widget *w,
 	struct snd_kcontrol *kcontrol, int event)
 {
 	struct snd_soc_codec *codec = w->codec;
+	struct msm8x16_wcd_priv *msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
@@ -2590,11 +2703,8 @@ static int msm8x16_wcd_codec_enable_ear_pa(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_PRE_PMD:
 		snd_soc_update_bits(codec,
 			MSM8X16_WCD_A_CDC_RX1_B6_CTL, 0x01, 0x01);
-		snd_soc_update_bits(codec,
-			MSM8X16_WCD_A_CDC_RX1_B6_CTL, 0x01, 0x00);
 		msleep(20);
-		snd_soc_update_bits(codec,
-			MSM8X16_WCD_A_CDC_RX1_B6_CTL, 0x01, 0x01);
+		msm8x16_wcd->mute_mask |= EAR_PA_DISABLE;
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		dev_dbg(w->codec->dev,
@@ -3115,7 +3225,8 @@ static int msm8x16_wcd_codec_probe(struct snd_soc_codec *codec)
 				on_demand_supply_name[ON_DEMAND_MICBIAS]);
 	atomic_set(&msm8x16_wcd_priv->on_demand_list[ON_DEMAND_MICBIAS].ref, 0);
 
-	wcd_mbhc_init(&msm8x16_wcd_priv->mbhc, codec, &intr_ids, true);
+	wcd_mbhc_init(&msm8x16_wcd_priv->mbhc, codec, &mbhc_cb, &intr_ids,
+			false);
 
 	msm8x16_wcd_priv->mclk_enabled = false;
 	msm8x16_wcd_priv->clock_active = false;

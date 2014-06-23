@@ -29,6 +29,7 @@
 #define CSID_VERSION_V30                      0x30000000
 #define CSID_VERSION_V31                      0x30010000
 #define CSID_VERSION_V31_1                    0x30010001
+#define CSID_VERSION_V31_3                    0x30010003
 #define CSID_VERSION_V32                      0x30020000
 #define CSID_VERSION_V33                      0x30030000
 #define CSID_VERSION_V34                      0x30040000
@@ -39,8 +40,6 @@
 
 #define TRUE   1
 #define FALSE  0
-
-#define CSID_NUM_CLK_MAX  16
 
 #undef CDBG
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
@@ -124,7 +123,7 @@ static void msm_csid_reset(struct csid_device *csid_dev)
 	msm_camera_io_w(csid_dev->ctrl_reg->csid_reg.csid_rst_stb_all,
 		csid_dev->base +
 		csid_dev->ctrl_reg->csid_reg.csid_rst_cmd_addr);
-	wait_for_completion_interruptible(&csid_dev->reset_complete);
+	wait_for_completion(&csid_dev->reset_complete);
 	return;
 }
 
@@ -228,6 +227,8 @@ static int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 		return rc;
 	}
 
+	csid_dev->reg_ptr = NULL;
+
 	if (csid_dev->csid_state == CSID_POWER_UP) {
 		pr_err("%s: csid invalid state %d\n", __func__,
 			csid_dev->csid_state);
@@ -273,6 +274,20 @@ static int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 		goto vreg_enable_failed;
 	}
 
+	csid_dev->reg_ptr = regulator_get(&(csid_dev->pdev->dev),
+					 "qcom,gdscr-vdd");
+	if (IS_ERR_OR_NULL(csid_dev->reg_ptr)) {
+		pr_err(" %s: Failed in getting TOP gdscr regulator handle",
+			__func__);
+	} else {
+		rc = regulator_enable(csid_dev->reg_ptr);
+		if (rc) {
+			pr_err(" %s: regulator enable failed for GDSCR\n",
+				__func__);
+			goto gdscr_regulator_enable_failed;
+		}
+	}
+
 	if (csid_dev->ctrl_reg->csid_reg.csid_version == CSID_VERSION_V22)
 		msm_cam_clk_sel_src(&csid_dev->pdev->dev,
 			&csid_clk_info[3], csid_clk_src_info,
@@ -313,6 +328,13 @@ clk_enable_failed:
 			csid_vreg_info, ARRAY_SIZE(csid_vreg_info),
 			NULL, 0, &csid_dev->csi_vdd, 0);
 	}
+gdscr_regulator_enable_failed:
+	if (!IS_ERR_OR_NULL(csid_dev->reg_ptr)) {
+		regulator_disable(csid_dev->reg_ptr);
+		regulator_put(csid_dev->reg_ptr);
+		csid_dev->reg_ptr = NULL;
+	}
+
 vreg_enable_failed:
 	if (csid_dev->ctrl_reg->csid_reg.csid_version < CSID_VERSION_V22) {
 		msm_camera_config_vreg(&csid_dev->pdev->dev,
@@ -378,7 +400,8 @@ static int msm_csid_release(struct csid_device *csid_dev)
 	} else if ((csid_dev->hw_version >= CSID_VERSION_V30 &&
 		csid_dev->hw_version < CSID_VERSION_V31) ||
 		(csid_dev->hw_version == CSID_VERSION_V40) ||
-		(csid_dev->hw_version == CSID_VERSION_V31_1)) {
+		(csid_dev->hw_version == CSID_VERSION_V31_1) ||
+		(csid_dev->hw_version == CSID_VERSION_V31_3)) {
 		msm_cam_clk_enable(&csid_dev->pdev->dev, csid_clk_info,
 			csid_dev->csid_clk, csid_dev->num_clk, 0);
 		msm_camera_enable_vreg(&csid_dev->pdev->dev,
@@ -404,6 +427,11 @@ static int msm_csid_release(struct csid_device *csid_dev)
 		pr_err("%s:%d, invalid hw version : 0x%x", __func__, __LINE__,
 			csid_dev->hw_version);
 		return -EINVAL;
+	}
+
+	if (!IS_ERR_OR_NULL(csid_dev->reg_ptr)) {
+		regulator_disable(csid_dev->reg_ptr);
+		regulator_put(csid_dev->reg_ptr);
 	}
 
 	iounmap(csid_dev->base);

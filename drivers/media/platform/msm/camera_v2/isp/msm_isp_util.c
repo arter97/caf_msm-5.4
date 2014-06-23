@@ -795,9 +795,11 @@ static int msm_isp_send_hw_cmd(struct vfe_device *vfe_dev,
 		uint32_t hi_val, lo_val, lo_val1;
 		if (reg_cfg_cmd->cmd_type == VFE_WRITE_DMI_64BIT) {
 			if ((UINT_MAX - reg_cfg_cmd->u.dmi_info.hi_tbl_offset <
-						reg_cfg_cmd->u.dmi_info.len) ||
+						reg_cfg_cmd->u.dmi_info.len -
+						sizeof(uint32_t)) ||
 				(reg_cfg_cmd->u.dmi_info.hi_tbl_offset +
-				reg_cfg_cmd->u.dmi_info.len > cmd_len)) {
+				reg_cfg_cmd->u.dmi_info.len -
+					sizeof(uint32_t) > cmd_len)) {
 				pr_err("Invalid Hi Table out of bounds\n");
 				return -EINVAL;
 			}
@@ -843,7 +845,8 @@ static int msm_isp_send_hw_cmd(struct vfe_device *vfe_dev,
 		uint32_t hi_val, lo_val, lo_val1;
 		if (reg_cfg_cmd->cmd_type == VFE_READ_DMI_64BIT) {
 			if (reg_cfg_cmd->u.dmi_info.hi_tbl_offset +
-				reg_cfg_cmd->u.dmi_info.len > cmd_len) {
+				reg_cfg_cmd->u.dmi_info.len -
+					sizeof(uint32_t) > cmd_len) {
 				pr_err("Invalid Hi Table out of bounds\n");
 				return -EINVAL;
 			}
@@ -903,9 +906,9 @@ static int msm_isp_send_hw_cmd(struct vfe_device *vfe_dev,
 				*cfg_data);
 			pr_err("hw update across frame boundary,end id %u\n",
 				vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id);
-			vfe_dev->axi_data.src_info[VFE_PIX_0].last_updt_frm_id =
-			vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id;
 		}
+		vfe_dev->axi_data.src_info[VFE_PIX_0].last_updt_frm_id =
+			vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id;
 		break;
 	}
 	case VFE_READ: {
@@ -957,7 +960,10 @@ static int msm_isp_send_hw_cmd(struct vfe_device *vfe_dev,
 
 		isp_id = (uint32_t *)cfg_data;
 		*isp_id = vfe_dev->pdev->id;
+		break;
 	}
+	case SET_WM_UB_SIZE:
+		break;
 	}
 	return 0;
 }
@@ -1278,6 +1284,12 @@ irqreturn_t msm_isp_process_irq(int irq_num, void *data)
 
 	vfe_dev->hw_info->vfe_ops.irq_ops.
 		read_irq_status(vfe_dev, &irq_status0, &irq_status1);
+
+	if ((irq_status0 == 0) && (irq_status1 == 0)) {
+		pr_err_ratelimited("%s: irq_status0 & 1 are both 0\n",
+			__func__);
+		return IRQ_HANDLED;
+	}
 	vfe_dev->hw_info->vfe_ops.core_ops.
 		get_error_mask(&error_mask0, &error_mask1);
 	error_mask0 &= irq_status0;
@@ -1291,7 +1303,7 @@ irqreturn_t msm_isp_process_irq(int irq_num, void *data)
 	if ((irq_status0 == 0) && (irq_status1 == 0) &&
 		(!((error_mask0 != 0) || (error_mask1 != 0)) &&
 		 vfe_dev->error_info.error_count == 1)) {
-		ISP_DBG("%s: irq_status0 & 1 are both 0!\n", __func__);
+		ISP_DBG("%s: error_mask0/1 & error_count are set!\n", __func__);
 		return IRQ_HANDLED;
 	}
 

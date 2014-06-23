@@ -289,6 +289,11 @@ Optional properties:
 				total numbers of MMBs per pipe while values, if
 				any, following first one denotes indexes of MMBs
 				to that RGB pipe.
+- qcom,mdss-pipe-vig-fixed-mmb: Array of indexes describing fixed Memory Macro
+				Blocks (MMBs) for vig pipes. First value denotes
+				total numbers of MMBs per pipe while values, if
+				any, following first one denotes indexes of MMBs
+				to that VIG pipe.
 - qcom,mdss-pipe-sw-reset-off: Property to indicate offset to the register which
 			       holds sw_reset bitmap for different MDSS
 			       components.
@@ -320,6 +325,10 @@ Optional properties:
 				 priority for real time clients.
 - qcom,mdss-vbif-qos-nrt-setting: This array is used to program vbif qos remapper register
 				  priority for non real time clients.
+- qcom,mdss-traffic-shaper-enabled: This boolean property enables traffic shaper functionality
+				    for MDSS rotator which spread out rotator bandwidth request
+				    so that rotator don't compete with other real time read
+				    clients.
 
 Fudge Factors:			Fudge factors are used to boost demand for
 				resources like bus bandswidth, clk rate etc. to
@@ -472,6 +481,10 @@ Example:
 						<2 2 3>,
 						<2 4 5>,
 						<2 6 7>;
+		qcom,mdss-pipe-vig-fixed-mmb =	<1 8>,
+						<1 9>,
+						<1 10>,
+						<1 11>;
 		qcom,mdss-smp-data = <22 4096>;
 		qcom,mdss-rot-block-size = <64>;
 		qcom,mdss-rotator-ot-limit = <2>;
@@ -484,6 +497,7 @@ Example:
 		qcom,mdss-has-source-split;
 		qcom,mdss-wfd-mode = "intf";
 		qcom,mdss-no-lut-read;
+		qcom,mdss-traffic-shaper-enabled;
 
 		qcom,mdss-pipe-vig-xin-id = <0 4 8>;
 		qcom,mdss-pipe-rgb-xin-id = <1 5 9>;

@@ -43,6 +43,8 @@
 /* The SVM upper bound is the same as the TASK_SIZE in arm32 */
 #define KGSL_SVM_UPPER_BOUND (0xC0000000 - SZ_16M)
 
+#define KGSL_SVM_LOWER_BOUND PAGE_SIZE
+
 /* A macro for memory statistics - add the new size to the stat and if
    the statisic is greater then _max, set _max
 */
@@ -120,6 +122,8 @@ struct kgsl_memdesc_ops {
 #define KGSL_MEMDESC_GENPOOL_ALLOC BIT(4)
 /* The memdesc is secured for content protection */
 #define KGSL_MEMDESC_SECURE BIT(5)
+/* Indicates gpuaddr is assigned via bimap */
+#define KGSL_MEMDESC_BITMAP_ALLOC BIT(6)
 
 /* shared memory allocation */
 struct kgsl_memdesc {
@@ -289,9 +293,6 @@ int kgsl_cmdbatch_add_sync(struct kgsl_device *device,
 			struct kgsl_cmd_syncpoint *sync);
 
 void kgsl_mem_entry_destroy(struct kref *kref);
-
-struct kgsl_mem_entry *kgsl_get_mem_entry(struct kgsl_device *device,
-		phys_addr_t ptbase, unsigned int gpuaddr, unsigned int size);
 
 struct kgsl_mem_entry *kgsl_sharedmem_find_region(
 	struct kgsl_process_private *private, unsigned int gpuaddr,

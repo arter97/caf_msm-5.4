@@ -20,10 +20,16 @@
 #include <linux/spinlock.h>
 #include <linux/qcom_iommu.h>
 #include <linux/msm_ion.h>
+#include <linux/msm-bus.h>
+#include <linux/msm-bus-board.h>
 #include <media/videobuf2-core.h>
 
 #include "msm_fd_dev.h"
+#include "msm_fd_hw.h"
 #include "msm_fd_regs.h"
+
+/* Face detection processing timeout in ms */
+#define MSM_FD_PROCESSING_TIMEOUT_MS 500
 
 /* Fd iommu partition definition */
 static struct msm_iova_partition msm_fd_fw_partition = {
@@ -37,6 +43,29 @@ static struct msm_iova_layout msm_fd_fw_layout = {
 	.npartitions = 1,
 	.client_name = "fd_iommu",
 	.domain_flags = 0,
+};
+
+/* Face detection bus bandwidth definitions */
+static struct msm_bus_vectors msm_fd_bandwidth_vectors[] = {
+	{
+		.src = MSM_BUS_MASTER_VPU,
+		.dst = MSM_BUS_SLAVE_EBI_CH0,
+		.ab  = 450000000,
+		.ib  = 900000000,
+	},
+};
+
+static struct msm_bus_paths msm_fd_bus_client_config[] = {
+	{
+		ARRAY_SIZE(msm_fd_bandwidth_vectors),
+		msm_fd_bandwidth_vectors,
+	},
+};
+
+static struct msm_bus_scale_pdata msm_fd_bus_scale_data = {
+	msm_fd_bus_client_config,
+	ARRAY_SIZE(msm_fd_bus_client_config),
+	.name = "msm_face_detect",
 };
 
 /*
@@ -166,13 +195,18 @@ static inline void msm_fd_hw_set_direction_angle(struct msm_fd_device *fd,
 	u32 direction, u32 angle)
 {
 	u32 reg;
+	u32 value;
 
-	reg = direction | (angle ? 1 << (angle + 1) : 0);
-	if (reg > MSM_FD_CONDT_DIR_MAX)
-		reg = MSM_FD_CONDT_DIR_MAX;
+	value = direction | (angle ? 1 << (angle + 1) : 0);
+	if (value > MSM_FD_CONDT_DIR_MAX)
+		value = MSM_FD_CONDT_DIR_MAX;
 
-	msm_fd_hw_reg_set(fd, MSM_FD_IOMEM_CORE, MSM_FD_CONDT,
-		(reg << MSM_FD_CONDT_DIR_SHIFT));
+	reg = msm_fd_hw_read_reg(fd, MSM_FD_IOMEM_CORE, MSM_FD_CONDT);
+
+	reg &= ~MSM_FD_CONDT_DIR_MASK;
+	reg |= (value << MSM_FD_CONDT_DIR_SHIFT);
+
+	msm_fd_hw_write_reg(fd, MSM_FD_IOMEM_CORE, MSM_FD_CONDT, reg);
 }
 
 /*
@@ -182,8 +216,14 @@ static inline void msm_fd_hw_set_direction_angle(struct msm_fd_device *fd,
  */
 static inline void msm_fd_hw_set_min_face(struct msm_fd_device *fd, u32 size)
 {
-	msm_fd_hw_reg_set(fd, MSM_FD_IOMEM_CORE, MSM_FD_CONDT,
-		(size & MSM_FD_CONDT_MIN_MASK) << MSM_FD_CONDT_MIN_SHIFT);
+	u32 reg;
+
+	reg = msm_fd_hw_read_reg(fd, MSM_FD_IOMEM_CORE, MSM_FD_CONDT);
+
+	reg &= ~MSM_FD_CONDT_MIN_MASK;
+	reg |= (size << MSM_FD_CONDT_MIN_SHIFT);
+
+	msm_fd_hw_write_reg(fd, MSM_FD_IOMEM_CORE, MSM_FD_CONDT, reg);
 }
 
 /*
@@ -657,6 +697,41 @@ static void msm_fd_hw_disable_clocks(struct msm_fd_device *fd)
 }
 
 /*
+ * msm_fd_hw_bus_request - Request bus for memory access.
+ * @fd: Pointer to fd device.
+ */
+static int msm_fd_hw_bus_request(struct msm_fd_device *fd)
+{
+	int ret;
+
+	fd->bus_client = msm_bus_scale_register_client(&msm_fd_bus_scale_data);
+	if (!fd->bus_client) {
+		dev_err(fd->dev, "Fail to register bus client\n");
+		return -ENOENT;
+	}
+
+	ret = msm_bus_scale_client_update_request(fd->bus_client, 0);
+	if (ret < 0) {
+		dev_err(fd->dev, "Fail bus scale update %d\n", ret);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+/*
+ * msm_fd_hw_bus_release - Release memory access bus.
+ * @fd: Pointer to fd device.
+ */
+static void msm_fd_hw_bus_release(struct msm_fd_device *fd)
+{
+	if (fd->bus_client) {
+		msm_bus_scale_unregister_client(fd->bus_client);
+		fd->bus_client = 0;
+	}
+}
+
+/*
  * msm_fd_hw_get - Get fd hw for performing any hw operation.
  * @fd: Pointer to fd device.
  * @clock_rate_idx: Clock rate index.
@@ -688,6 +763,12 @@ int msm_fd_hw_get(struct msm_fd_device *fd, unsigned int clock_rate_idx)
 			dev_err(fd->dev, "Fail to enable clocks\n");
 			goto error_clocks;
 		}
+
+		ret = msm_fd_hw_bus_request(fd);
+		if (ret < 0) {
+			dev_err(fd->dev, "Fail bus request\n");
+			goto error_bus_request;
+		}
 		msm_fd_hw_vbif_register(fd);
 	}
 
@@ -696,6 +777,8 @@ int msm_fd_hw_get(struct msm_fd_device *fd, unsigned int clock_rate_idx)
 
 	return 0;
 
+error_bus_request:
+	msm_fd_hw_disable_clocks(fd);
 error_clocks:
 	regulator_disable(fd->vdd);
 error:
@@ -717,6 +800,7 @@ void msm_fd_hw_put(struct msm_fd_device *fd)
 
 	if (--fd->ref_count == 0) {
 		msm_fd_hw_vbif_unregister(fd);
+		msm_fd_hw_bus_release(fd);
 		msm_fd_hw_disable_clocks(fd);
 		regulator_disable(fd->vdd);
 	}
@@ -877,6 +961,7 @@ void msm_fd_hw_remove_buffers_from_queue(struct msm_fd_device *fd,
 	struct msm_fd_buffer *curr_buff;
 	struct msm_fd_buffer *temp;
 	struct msm_fd_buffer *active_buffer;
+	unsigned long time;
 
 	spin_lock(&fd->slock);
 
@@ -894,8 +979,16 @@ void msm_fd_hw_remove_buffers_from_queue(struct msm_fd_device *fd,
 	spin_unlock(&fd->slock);
 
 	/* We need to wait active buffer to finish */
-	if (active_buffer)
-		wait_for_completion(&active_buffer->completion);
+	if (active_buffer) {
+		time = wait_for_completion_timeout(&active_buffer->completion,
+			msecs_to_jiffies(MSM_FD_PROCESSING_TIMEOUT_MS));
+		if (!time) {
+			/* Remove active buffer */
+			msm_fd_hw_get_active_buffer(fd);
+			/* Schedule if other buffers are present in device */
+			msm_fd_hw_schedule_next_buffer(fd);
+		}
+	}
 
 	return;
 }

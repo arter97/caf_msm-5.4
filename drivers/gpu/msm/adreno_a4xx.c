@@ -18,8 +18,6 @@
 #include "adreno_cp_parser.h"
 #include "adreno_trace.h"
 
-#define SP_TP_PWR_COLLAPSE_MASK 0x6
-#define SP_TP_PWR_ON_MASK BIT(0)
 #define SP_TP_PWR_ON BIT(20)
 
 /*
@@ -353,45 +351,37 @@ static void a4xx_regulator_enable(struct adreno_device *adreno_dev)
 }
 
 /*
+ * a4xx_regulator_disable() - Disable any necessary HW regulators
+ * @adreno_dev: The adreno device pointer
+ *
+ * Some HW blocks may need their regulators explicitly disabled
+ * on a power down to prevent current spikes.  Clocks must be on
+ * during this call.
+ */
+static void a4xx_regulator_disable(struct adreno_device *adreno_dev)
+{
+	struct kgsl_device *device = &adreno_dev->dev;
+	if (!adreno_is_a430(adreno_dev))
+		return;
+
+	/* Set the default register values; set SW_COLLAPSE to 1 */
+	kgsl_regwrite(device, A4XX_RBBM_POWER_CNTL_IP, 0x778001);
+	trace_adreno_sp_tp((unsigned long) __builtin_return_address(0));
+}
+
+/*
  * a4xx_enable_pc() - Enable the SP/TP block power collapse
  * @adreno_dev: The adreno device pointer
  */
 static void a4xx_enable_pc(struct adreno_device *adreno_dev)
 {
-	unsigned int reg;
 	struct kgsl_device *device = &adreno_dev->dev;
 	if (!adreno_is_a430(adreno_dev))
 		return;
 
-	kgsl_regread(device, A4XX_RBBM_POWER_CNTL_IP, &reg);
-	reg = (reg & ~SP_TP_PWR_COLLAPSE_MASK);
-	kgsl_regwrite(device, A4XX_RBBM_POWER_CNTL_IP, reg);
 	kgsl_regwrite(device, A4XX_CP_POWER_COLLAPSE_CNTL, 0x00400010);
 	trace_adreno_sp_tp((unsigned long) __builtin_return_address(0));
 };
-
-/*
- * a4xx_disable_pc() - Disable the SP/TP block power collapse
- * @adreno_dev: The adreno device pointer
- */
-static void a4xx_disable_pc(struct adreno_device *adreno_dev)
-{
-	unsigned int reg;
-	struct kgsl_device *device = &adreno_dev->dev;
-	if (!adreno_is_a430(adreno_dev))
-		return;
-
-	/* remove hw control and use the sw override */
-	kgsl_regread(device, A4XX_RBBM_POWER_CNTL_IP, &reg);
-	reg = (reg & ~SP_TP_PWR_COLLAPSE_MASK) | 0x4;
-	kgsl_regwrite(device, A4XX_RBBM_POWER_CNTL_IP, reg);
-
-	/* turn the SP/TP on & restore it */
-	a4xx_regulator_enable(adreno_dev);
-	kgsl_regwrite(device, A4XX_HLSQ_STATE_RESTORE_TRIGGER, 0x1);
-	trace_adreno_sp_tp((unsigned long) __builtin_return_address(0));
-}
-
 
 /*
  * a4xx_enable_hwcg() - Program the clock control registers
@@ -612,7 +602,6 @@ static void a4xx_start(struct adreno_device *adreno_dev)
 	}
 
 	a4xx_enable_hwcg(device);
-	a4xx_enable_pc(adreno_dev);
 	/*
 	 * For A420 set RBBM_CLOCK_DELAY_HLSQ.CGC_HLSQ_TP_EARLY_CYC >= 2
 	 * due to timing issue with HLSQ_TP_CLK_EN
@@ -1425,6 +1414,6 @@ struct adreno_gpudev adreno_a4xx_gpudev = {
 	.snapshot = a4xx_snapshot,
 	.is_sptp_idle = a4xx_is_sptp_idle,
 	.enable_pc = a4xx_enable_pc,
-	.disable_pc = a4xx_disable_pc,
 	.regulator_enable = a4xx_regulator_enable,
+	.regulator_disable = a4xx_regulator_disable,
 };

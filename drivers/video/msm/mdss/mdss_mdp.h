@@ -115,6 +115,12 @@ enum mdp_wfd_blk_type {
 	MDSS_MDP_WFD_DEDICATED,
 };
 
+enum mdss_mdp_reg_bus_cfg {
+	REG_CLK_CFG_OFF,
+	REG_CLK_CFG_LOW,
+	REG_CLK_CFG_HIGH,
+};
+
 struct mdss_mdp_ctl;
 typedef void (*mdp_vsync_handler_t)(struct mdss_mdp_ctl *, ktime_t);
 
@@ -168,6 +174,10 @@ struct mdss_mdp_ctl {
 	struct mdss_mdp_perf_params cur_perf;
 	struct mdss_mdp_perf_params new_perf;
 	u32 perf_transaction_status;
+	bool perf_release_ctl_bw;
+
+	bool traffic_shaper_enabled;
+	u32  traffic_shaper_mdp_clk;
 
 	struct mdss_data_type *mdata;
 	struct msm_fb_data_type *mfd;
@@ -551,9 +561,19 @@ static inline int mdss_mdp_line_buffer_width(void)
 static inline int mdss_mdp_panic_signal_supported(
 	struct mdss_data_type *mdata, struct mdss_mdp_pipe *pipe)
 {
-	return (IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev, MDSS_MDP_HW_REV_105) &&
+	return ((IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev,
+					MDSS_MDP_HW_REV_105) ||
+		IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev,
+					MDSS_MDP_HW_REV_108)) &&
 		pipe->mixer_left &&
 		pipe->mixer_left->type == MDSS_MDP_MIXER_TYPE_INTF);
+}
+
+static inline struct clk *mdss_mdp_get_clk(u32 clk_idx)
+{
+	if (clk_idx < MDSS_MAX_CLK)
+		return mdss_res->mdp_clk[clk_idx];
+	return NULL;
 }
 
 irqreturn_t mdss_mdp_isr(int irq, void *ptr);
@@ -590,7 +610,7 @@ int mdss_mdp_overlay_get_buf(struct msm_fb_data_type *mfd,
 			     u32 flags);
 int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 	struct mdp_overlay *req, struct mdss_mdp_pipe **ppipe,
-	struct mdss_mdp_pipe *left_blend_pipe);
+	struct mdss_mdp_pipe *left_blend_pipe, bool is_single_layer);
 void mdss_mdp_handoff_cleanup_pipes(struct msm_fb_data_type *mfd,
 							u32 type);
 int mdss_mdp_overlay_release(struct msm_fb_data_type *mfd, int ndx);
@@ -626,7 +646,8 @@ int mdss_mdp_perf_bw_check_pipe(struct mdss_mdp_perf_params *perf,
 		struct mdss_mdp_pipe *pipe);
 int mdss_mdp_perf_calc_pipe(struct mdss_mdp_pipe *pipe,
 	struct mdss_mdp_perf_params *perf, struct mdss_rect *roi,
-	bool apply_fudge);
+	bool apply_fudge, bool is_single_layer);
+u32 mdss_mdp_get_mdp_clk_rate(struct mdss_data_type *mdata);
 int mdss_mdp_ctl_notify(struct mdss_mdp_ctl *ctl, int event);
 void mdss_mdp_ctl_notifier_register(struct mdss_mdp_ctl *ctl,
 	struct notifier_block *notifier);

@@ -1013,7 +1013,8 @@ int ipa_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 	ep->client = sys_in->client;
 	ep->client_notify = sys_in->notify;
 	ep->priv = sys_in->priv;
-	ep->keep_ipa_awake = sys_in->keep_ipa_awake;
+	/* keep sys_in->keep_ipa_awake */
+	ep->keep_ipa_awake = 1;
 	atomic_set(&ep->avail_fifo_desc,
 		((sys_in->desc_fifo_sz/sizeof(struct sps_iovec))-1));
 
@@ -1720,8 +1721,11 @@ begin:
 		if (status->status_opcode !=
 			IPA_HW_STATUS_OPCODE_DROPPED_PACKET &&
 			status->status_opcode !=
-			IPA_HW_STATUS_OPCODE_PACKET) {
-			IPAERR("unsupported opcode\n");
+			IPA_HW_STATUS_OPCODE_PACKET &&
+			status->status_opcode !=
+			IPA_HW_STATUS_OPCODE_SUSPENDED_PACKET) {
+			IPAERR("unsupported opcode(%d)\n",
+				status->status_opcode);
 			skb_pull(skb, IPA_PKT_STATUS_SIZE);
 			continue;
 		}

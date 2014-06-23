@@ -204,6 +204,7 @@ static struct kgsl_cmdbatch *_get_cmdbatch(struct adreno_context *drawctxt)
 {
 	struct kgsl_cmdbatch *cmdbatch = NULL;
 	bool pending = false;
+	unsigned long flags;
 
 	if (drawctxt->cmdqueue_head == drawctxt->cmdqueue_tail)
 		return NULL;
@@ -233,10 +234,10 @@ static struct kgsl_cmdbatch *_get_cmdbatch(struct adreno_context *drawctxt)
 			pending = true;
 	}
 
-	spin_lock(&cmdbatch->lock);
+	spin_lock_irqsave(&cmdbatch->lock, flags);
 	if (!list_empty(&cmdbatch->synclist))
 		pending = true;
-	spin_unlock(&cmdbatch->lock);
+	spin_unlock_irqrestore(&cmdbatch->lock, flags);
 
 	/*
 	 * If changes are pending and the canary timer hasn't been
@@ -1220,7 +1221,7 @@ static int dispatcher_do_fault(struct kgsl_device *device)
 
 	if (!test_bit(KGSL_FT_SKIP_PMDUMP, &cmdbatch->fault_policy)) {
 		adreno_fault_header(device, cmdbatch);
-		kgsl_device_snapshot(device);
+		kgsl_device_snapshot(device, cmdbatch->context);
 	}
 
 	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
