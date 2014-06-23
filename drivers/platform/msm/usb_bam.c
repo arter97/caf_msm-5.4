@@ -1687,6 +1687,7 @@ int usb_bam_connect_ipa(struct usb_bam_connect_ipa_params *ipa_params)
 			cur_bam == HSIC_BAM) {
 			if (sps_device_reset(ctx.h_bam[cur_bam]))
 				pr_err("%s: BAM reset failed\n", __func__);
+			info[HSIC_BAM].pending_bam_reset = false;
 		}
 
 		/* On re-connect assume out from lpm for HSIC BAM */
