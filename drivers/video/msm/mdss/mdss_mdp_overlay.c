@@ -685,12 +685,15 @@ int mdss_mdp_overlay_get_buf(struct msm_fb_data_type *mfd,
 					   int num_planes,
 					   u32 flags)
 {
-	int i, rc = 0;
+	int i, rc;
 
 	if ((num_planes <= 0) || (num_planes > MAX_PLANES))
 		return -EINVAL;
 
-	mdss_bus_bandwidth_ctrl(1);
+	rc = mdss_bus_bandwidth_ctrl(1);
+	if (rc)
+		goto end;
+
 	memset(data, 0, sizeof(*data));
 	for (i = 0; i < num_planes; i++) {
 		data->p[i].flags = flags;
@@ -708,21 +711,27 @@ int mdss_mdp_overlay_get_buf(struct msm_fb_data_type *mfd,
 
 	data->num_planes = i;
 
+end:
 	return rc;
 }
 
 int mdss_mdp_overlay_free_buf(struct mdss_mdp_data *data)
 {
 	int i;
+	int rc;
 
-	mdss_bus_bandwidth_ctrl(1);
+	rc = mdss_bus_bandwidth_ctrl(1);
+	if (rc)
+		goto end;
+
 	for (i = 0; i < data->num_planes && data->p[i].len; i++)
 		mdss_mdp_put_img(&data->p[i]);
 	mdss_bus_bandwidth_ctrl(0);
 
 	data->num_planes = 0;
 
-	return 0;
+end:
+	return rc;
 }
 
 /**
@@ -849,14 +858,25 @@ static int mdss_mdp_overlay_start(struct msm_fb_data_type *mfd)
 
 	if (ctl->power_on) {
 		if (mdp5_data->mdata->ulps) {
-			mdss_mdp_footswitch_ctrl_ulps(1, &mfd->pdev->dev);
+			rc = mdss_mdp_footswitch_ctrl_ulps(1, &mfd->pdev->dev);
+			if (rc) {
+				pr_err("footswtich control power on failed rc=%d\n",
+									rc);
+				goto end;
+			}
+
 			mdss_mdp_ctl_restore(ctl);
 		}
 
 		if (!mdp5_data->mdata->batfet)
 			mdss_mdp_batfet_ctrl(mdp5_data->mdata, true);
-		if (!mfd->panel_info->cont_splash_enabled)
-			mdss_iommu_attach(mdp5_data->mdata);
+		if (!mfd->panel_info->cont_splash_enabled) {
+			rc = mdss_iommu_attach(mdp5_data->mdata);
+			if (rc) {
+				pr_err("mdss iommu attach failed rc=%d\n", rc);
+				goto end;
+			}
+		}
 		return 0;
 	}
 
@@ -865,7 +885,7 @@ static int mdss_mdp_overlay_start(struct msm_fb_data_type *mfd)
 	rc = pm_runtime_get_sync(&mfd->pdev->dev);
 	if (IS_ERR_VALUE(rc)) {
 		pr_err("unable to resume with pm_runtime_get_sync rc=%d\n", rc);
-		return rc;
+		goto end;
 	}
 
 	/*
@@ -877,8 +897,13 @@ static int mdss_mdp_overlay_start(struct msm_fb_data_type *mfd)
 	 * we would have called in to TZ to restore security configs from LK.
 	 */
 	if (!is_mdss_iommu_attached()) {
-		if (!mfd->panel_info->cont_splash_enabled)
-			mdss_iommu_attach(mdss_res);
+		if (!mfd->panel_info->cont_splash_enabled) {
+			rc = mdss_iommu_attach(mdss_res);
+			if (rc) {
+				pr_err("mdss iommu attach failed rc=%d\n", rc);
+				goto pm_error;
+			}
+		}
 		mdss_hw_init(mdss_res);
 	}
 
@@ -890,7 +915,7 @@ static int mdss_mdp_overlay_start(struct msm_fb_data_type *mfd)
 				&mfd->mdp_sync_pt_data.notifier);
 	} else {
 		pr_err("mdp ctl start failed.\n");
-		goto error;
+		goto ctl_error;
 	}
 
 	if (mfd->panel_info->cont_splash_enabled) {
@@ -936,19 +961,24 @@ static int mdss_mdp_overlay_start(struct msm_fb_data_type *mfd)
 		 */
 		mdss_mdp_footswitch_ctrl_splash(0);
 		if (rc)
-			goto error;
+			goto ctl_error;
 
 		if (!is_mdss_iommu_attached())
-			mdss_iommu_attach(mdss_res);
+			rc = mdss_iommu_attach(mdss_res);
+			if (rc) {
+				pr_err("mdss iommu attach failed rc=%d\n", rc);
+				goto ctl_error;
+			}
 	}
+	if (!rc)
+		goto end;
 
-error:
-	if (rc) {
-		mdss_mdp_ctl_destroy(ctl);
-		mdp5_data->ctl = NULL;
-		pm_runtime_put(&mfd->pdev->dev);
-	}
-
+ctl_error:
+	mdss_mdp_ctl_destroy(ctl);
+	mdp5_data->ctl = NULL;
+pm_error:
+	pm_runtime_put(&mfd->pdev->dev);
+end:
 	return rc;
 }
 
@@ -1305,8 +1335,13 @@ static int mdss_mdp_overlay_queue(struct msm_fb_data_type *mfd,
 	flags = (pipe->flags & MDP_SECURE_OVERLAY_SESSION);
 	flags |= (pipe->flags & MDP_SECURE_DISPLAY_OVERLAY_SESSION);
 
-	if (!mfd->panel_info->cont_splash_enabled)
-		mdss_iommu_attach(mdata);
+	if (!mfd->panel_info->cont_splash_enabled) {
+		ret = mdss_iommu_attach(mdata);
+		if (ret) {
+			pr_err("mdss iommu attach failed ret=%d\n", ret);
+			goto end;
+		}
+	}
 
 	src_data = &pipe->back_buf;
 	if (src_data->num_planes) {
@@ -1319,6 +1354,8 @@ static int mdss_mdp_overlay_queue(struct msm_fb_data_type *mfd,
 	if (IS_ERR_VALUE(ret)) {
 		pr_err("src_data pmem error\n");
 	}
+
+end:
 	mdss_mdp_pipe_unmap(pipe);
 
 	return ret;
