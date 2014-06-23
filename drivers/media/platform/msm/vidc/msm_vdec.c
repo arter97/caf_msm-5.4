@@ -801,6 +801,26 @@ int msm_vdec_g_fmt(struct msm_vidc_inst *inst, struct v4l2_format *f)
 			f->fmt.pix_mp.plane_fmt[0].reserved[0] =
 				(__u16)inst->prop.height[CAPTURE_PORT];
 		}
+
+		if (msm_comm_get_stream_output_mode(inst) ==
+			HAL_VIDEO_DECODER_SECONDARY) {
+			if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+				f->fmt.pix_mp.height =
+					inst->prop.height[CAPTURE_PORT];
+				f->fmt.pix_mp.width =
+					inst->prop.width[CAPTURE_PORT];
+			} else if (f->type ==
+							V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+				f->fmt.pix_mp.height =
+					inst->prop.height[OUTPUT_PORT];
+				f->fmt.pix_mp.width =
+					inst->prop.width[OUTPUT_PORT];
+				f->fmt.pix_mp.plane_fmt[0].bytesperline =
+					(__u16)inst->prop.width[OUTPUT_PORT];
+				f->fmt.pix_mp.plane_fmt[0].reserved[0] =
+					(__u16)inst->prop.height[OUTPUT_PORT];
+			}
+		}
 	} else {
 		dprintk(VIDC_ERR,
 			"Buf type not recognized, type = %d\n",
@@ -1869,6 +1889,11 @@ int msm_vdec_ctrl_init(struct msm_vidc_inst *inst)
 
 int msm_vdec_ctrl_deinit(struct msm_vidc_inst *inst)
 {
+	if (!inst) {
+		dprintk(VIDC_ERR, "%s invalid parameters\n", __func__);
+		return -EINVAL;
+	}
+
 	kfree(inst->ctrls);
 	kfree(inst->cluster);
 	v4l2_ctrl_handler_free(&inst->ctrl_handler);

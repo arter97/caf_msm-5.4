@@ -607,10 +607,16 @@ static void handle_event_change(enum command_response cmd, void *data)
 		} else {
 			dprintk(VIDC_DBG,
 				"V4L2_EVENT_SEQ_CHANGED_SUFFICIENT\n");
-			inst->prop.height[CAPTURE_PORT] = event_notify->height;
-			inst->prop.width[CAPTURE_PORT] = event_notify->width;
-			if (!msm_comm_get_stream_output_mode(inst) ==
+			if (msm_comm_get_stream_output_mode(inst) !=
 				HAL_VIDEO_DECODER_SECONDARY) {
+				dprintk(VIDC_DBG,
+					"event_notify->height = %d event_notify->width = %d\n",
+					event_notify->height,
+					event_notify->width);
+				inst->prop.height[CAPTURE_PORT] =
+					event_notify->height;
+				inst->prop.width[CAPTURE_PORT] =
+					event_notify->width;
 				inst->prop.height[OUTPUT_PORT] =
 					event_notify->height;
 				inst->prop.width[OUTPUT_PORT] =
@@ -2127,7 +2133,7 @@ static int set_output_buffers(struct msm_vidc_inst *inst,
 	int rc = 0;
 	struct msm_smem *handle;
 	struct internal_buf *binfo;
-	struct vidc_buffer_addr_info buffer_info;
+	struct vidc_buffer_addr_info buffer_info = {0};
 	u32 smem_flags = 0, buffer_size;
 	struct hal_buffer_requirements *output_buf, *extradata_buf;
 	int i;
@@ -2147,19 +2153,21 @@ static int set_output_buffers(struct msm_vidc_inst *inst,
 		output_buf->buffer_count_actual,
 		output_buf->buffer_size);
 
+	buffer_size = output_buf->buffer_size;
+
 	extradata_buf = get_buff_req_buffer(inst, HAL_BUFFER_EXTRADATA_OUTPUT);
-	if (!extradata_buf) {
+	if (extradata_buf) {
+		dprintk(VIDC_DBG,
+			"extradata: num = %d, size = %d\n",
+			extradata_buf->buffer_count_actual,
+			extradata_buf->buffer_size);
+		buffer_size += extradata_buf->buffer_size;
+	} else {
 		dprintk(VIDC_DBG,
 			"This extradata buffer not required, buffer_type: %x\n",
 			buffer_type);
-		return 0;
 	}
-	dprintk(VIDC_DBG,
-		"extradata: num = %d, size = %d\n",
-		extradata_buf->buffer_count_actual,
-		extradata_buf->buffer_size);
 
-	buffer_size = output_buf->buffer_size + extradata_buf->buffer_size;
 	if (inst->flags & VIDC_SECURE)
 		smem_flags |= SMEM_SECURE;
 
@@ -2197,7 +2205,10 @@ static int set_output_buffers(struct msm_vidc_inst *inst,
 			buffer_info.align_device_addr = handle->device_addr;
 			buffer_info.extradata_addr = handle->device_addr +
 				output_buf->buffer_size;
-			buffer_info.extradata_size = extradata_buf->buffer_size;
+			if (extradata_buf) {
+				buffer_info.extradata_size =
+					extradata_buf->buffer_size;
+			}
 			dprintk(VIDC_DBG, "Output buffer address: %x",
 					buffer_info.align_device_addr);
 			dprintk(VIDC_DBG, "Output extradata address: %x",
