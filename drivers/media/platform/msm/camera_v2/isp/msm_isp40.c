@@ -49,6 +49,8 @@ static uint8_t stats_pingpong_offset_map[] = {
 	(~(ping_pong >> (stats_pingpong_offset_map[idx])) & 0x1))
 
 #define VFE40_VBIF_CLKON                    0x4
+#define VFE40_VBIF_FIXED_SORT_EN            0x30
+#define VFE40_VBIF_FIXED_SORT_SEL0          0x34
 #define VFE40_VBIF_IN_RD_LIM_CONF0          0xB0
 #define VFE40_VBIF_IN_RD_LIM_CONF1          0xB4
 #define VFE40_VBIF_IN_RD_LIM_CONF2          0xB8
@@ -109,7 +111,8 @@ static void msm_vfe40_init_qos_parms(struct vfe_device *vfe_dev)
 		msm_camera_io_w(0xAAA9AAA9, vfebase + VFE40_BUS_BDG_QOS_CFG_5);
 		msm_camera_io_w(0xAAA9AAA9, vfebase + VFE40_BUS_BDG_QOS_CFG_6);
 		msm_camera_io_w(0x0001AAA9, vfebase + VFE40_BUS_BDG_QOS_CFG_7);
-	} else if (vfe_dev->vfe_hw_version == VFE40_8916_VERSION) {
+	} else if (vfe_dev->vfe_hw_version == VFE40_8916_VERSION ||
+		vfe_dev->vfe_hw_version == VFE40_8939_VERSION) {
 		msm_camera_io_w(0xAAA5AAA5, vfebase + VFE40_BUS_BDG_QOS_CFG_0);
 		msm_camera_io_w(0xAAA5AAA5, vfebase + VFE40_BUS_BDG_QOS_CFG_1);
 		msm_camera_io_w(0xAAA5AAA5, vfebase + VFE40_BUS_BDG_QOS_CFG_2);
@@ -231,6 +234,16 @@ static void msm_vfe40_init_vbif_parms_8x26(struct vfe_device *vfe_dev)
 	return;
 }
 
+static void msm_vfe40_init_vbif_parms_8939(struct vfe_device *vfe_dev)
+{
+	void __iomem *vfe_vbif_base = vfe_dev->vfe_vbif_base;
+	msm_camera_io_w(0x00000fff,
+		vfe_vbif_base + VFE40_VBIF_FIXED_SORT_EN);
+	msm_camera_io_w(0x00555000,
+		vfe_vbif_base + VFE40_VBIF_FIXED_SORT_SEL0);
+	return;
+}
+
 static void msm_vfe40_init_vbif_parms(struct vfe_device *vfe_dev)
 {
 	switch (vfe_dev->vfe_hw_version) {
@@ -248,6 +261,9 @@ static void msm_vfe40_init_vbif_parms(struct vfe_device *vfe_dev)
 	case VFE40_8916_VERSION:
 		/*Reset hardware values are correct vbif values.
 		So no need to set*/
+		break;
+	case VFE40_8939_VERSION:
+		msm_vfe40_init_vbif_parms_8939(vfe_dev);
 		break;
 	default:
 		BUG();
@@ -1093,7 +1109,6 @@ static void msm_vfe40_axi_cfg_wm_reg(
 	struct msm_vfe_axi_shared_data *axi_data =
 		&vfe_dev->axi_data;
 	uint32_t burst_len = axi_data->burst_len;
-
 	uint32_t wm_base = VFE40_WM_BASE(stream_info->wm[plane_idx]);
 
 	if (!stream_info->frame_based) {

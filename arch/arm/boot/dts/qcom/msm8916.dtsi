@@ -50,33 +50,45 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		cpu@0 {
+		CPU0: cpu@0 {
 			device_type = "cpu";
 			compatible = "arm,armv8";
 			reg = <0x0>;
 			enable-method = "qcom,arm-cortex-acc";
 			qcom,acc = <&acc0>;
+			next-level-cache = <&L2_0>;
+			L2_0: l2-cache {
+			      compatible = "arm,arch-cache";
+			      cache-level = <2>;
+			      power-domain = <&l2ccc_0>;
+			};
 		};
-		cpu@1 {
+
+		CPU1: cpu@1 {
 			device_type = "cpu";
 			compatible = "arm,armv8";
 			reg = <0x1>;
 			enable-method = "qcom,arm-cortex-acc";
 			qcom,acc = <&acc1>;
+			next-level-cache = <&L2_0>;
 		};
-		cpu@2 {
+
+		CPU2: cpu@2 {
 			device_type = "cpu";
 			compatible = "arm,armv8";
 			reg = <0x2>;
 			enable-method = "qcom,arm-cortex-acc";
 			qcom,acc = <&acc2>;
+			next-level-cache = <&L2_0>;
 		};
-		cpu@3 {
+
+		CPU3: cpu@3 {
 			device_type = "cpu";
 			compatible = "arm,armv8";
 			reg = <0x3>;
 			enable-method = "qcom,arm-cortex-acc";
 			qcom,acc = <&acc3>;
+			next-level-cache = <&L2_0>;
 		};
 	};
 
@@ -100,6 +112,11 @@
 	#size-cells = <1>;
 	ranges = <0 0 0 0xffffffff>;
 	compatible = "simple-bus";
+
+	l2ccc_0: clock-controller@b011000 {
+		compatible = "qcom,8916-l2ccc";
+		reg = <0x0b011000 0x1000>;
+	};
 
 	acc0:clock-controller@b088000 {
 		compatible = "qcom,arm-cortex-acc";
@@ -283,7 +300,7 @@
 			< 1190400000 7>;
 	};
 
-	qcom,cpubw {
+	cpubw: qcom,cpubw {
 		compatible = "qcom,cpubw";
 		qcom,cpu-mem-ports = <1 512>;
 		qcom,bw-tbl =
@@ -295,17 +312,28 @@
 			< 4066 /* 533 MHz */>;
 	};
 
+	devfreq-cpufreq {
+		cpubw-cpufreq {
+			target-dev = <&cpubw>;
+			cpu-to-dev-map =
+				 <  400000  762>,
+				 <  998400  1525>,
+				 < 1094400  3051>,
+				 < 1190400  4066>;
+		};
+	};
+
 	qcom,msm-cpufreq@0 {
 		reg = <0 4>;
 		compatible = "qcom,msm-cpufreq";
 		qcom,cpufreq-table =
-			 <  200000  762>,
-			 <  400000  762>,
-			 <  533330  1525>,
-			 <  800000  1525>,
-			 <  998400  1525>,
-			 < 1094400  3051>,
-			 < 1190400  4066>;
+			 <  200000 >,
+			 <  400000 >,
+			 <  533330 >,
+			 <  800000 >,
+			 <  998400 >,
+			 < 1094400 >,
+			 < 1190400 >;
 	};
 
 	qcom,sps {

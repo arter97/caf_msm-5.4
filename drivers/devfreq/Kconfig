@@ -63,6 +63,14 @@ config DEVFREQ_GOV_USERSPACE
 	  Otherwise, the governor does not change the frequnecy
 	  given at the initialization.
 
+config DEVFREQ_GOV_CPUFREQ
+	tristate "CPUfreq"
+	depends on CPU_FREQ
+	help
+	  Chooses frequency based on the online CPUs' current frequency and a
+	  CPU frequency to device frequency mapping table(s). This governor
+	  can be useful for controlling devices such as DDR, cache, CCI, etc.
+
 config DEVFREQ_GOV_MSM_ADRENO_TZ
 	tristate "MSM Adreno Trustzone"
 	depends on MSM_KGSL && MSM_SCM
@@ -70,14 +78,6 @@ config DEVFREQ_GOV_MSM_ADRENO_TZ
 	  Trustzone based governor for the Adreno GPU.
 	  Sets the frequency using a "on-demand" algorithm.
 	  This governor is unlikely to be useful for other devices.
-
-config DEVFREQ_GOV_MSM_CPUFREQ
-	bool "MSM CPUfreq"
-	depends on CPU_FREQ_MSM
-	help
-	  MSM CPUfreq based governor for CPU bandwidth voting.  Sets the CPU
-	  to DDR BW vote based on the current CPU frequency.  This governor
-	  is unlikely to be useful for non-MSM devices.
 
 config DEVFREQ_GOV_MSM_CPUBW_HWMON
 	tristate "HW monitor based governor for CPUBW"
@@ -104,5 +104,29 @@ config ARM_EXYNOS4_BUS_DEVFREQ
 	  the operating frequencies and voltages with OPP support.
 	  To operate with optimal voltages, ASV support is required
 	  (CONFIG_EXYNOS_ASV).
+
+config DEVFREQ_SIMPLE_DEV
+	tristate "Device driver for simple clock device with no status info"
+	select DEVFREQ_GOV_PERFORMANCE
+	select DEVFREQ_GOV_POWERSAVE
+	select DEVFREQ_GOV_USERSPACE
+	select DEVFREQ_GOV_CPUFREQ
+	help
+	  Device driver for simple devices that control their frequency using
+	  clock APIs and don't have any form of status reporting.
+
+config MSM_DEVFREQ_CPUBW
+	bool "MSM DEVFREQ device for CPU<->DDR IB/AB BW voting"
+	depends on ARCH_MSM
+	select DEVFREQ_GOV_PERFORMANCE
+	select DEVFREQ_GOV_POWERSAVE
+	select DEVFREQ_GOV_USERSPACE
+	select DEVFREQ_GOV_CPUFREQ
+	default n
+	help
+	  Different devfreq governors use this devfreq device to make CPU to
+	  DDR IB/AB bandwidth votes. This driver provides a SoC topology
+	  agnostic interface to so that some of the devfreq governors can be
+	  shared across SoCs.
 
 endif # PM_DEVFREQ

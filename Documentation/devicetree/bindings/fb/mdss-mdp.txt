@@ -234,6 +234,11 @@ Optional properties:
 				pipes which have no scaling support.
 - qcom,mdss-has-decimation: Boolean property to indicate the presence of
 			    decimation feature in fetch.
+- qcom,mdss-has-fixed-qos-arbiter-enabled: Boolean property to indicate the
+			    presence of rt/nrt feature. This feature enables
+			    increased performance by prioritizing the real time
+			    (rt) traffic over non real time (nrt) traffic to
+			    access the memory.
 - qcom,mdss-has-source-split: Boolean property to indicate if source split
 			      feature is available or not.
 - qcom,mdss-ad-off:		Array of offset addresses for the available
@@ -342,6 +347,23 @@ Fudge Factors:			Fudge factors are used to boost demand for
 				command mode panels.
 - qcom,max-bandwidth-per-pipe-kbps: This value indicates the max bandwidth in KB
 				that a single pipe can support without underflow.
+- qcom,mdss-has-panic-ctrl: Boolean property to indicate if panic/robust signal
+				control feature is available or not.
+- qcom,mdss-pipe-vig-panic-ctrl-offsets: Array of panic/robust signal offsets
+				corresponding to the respective VIG pipes.
+				Number of signal offsets should match the
+				number of offsets defined in property:
+				qcom,mdss-pipe-vig-off
+- qcom,mdss-pipe-rgb-panic-ctrl-offsets: Array of panic/robust signal offsets
+				corresponding to the respective RGB pipes.
+				Number of signal offsets should match the
+				number of offsets defined in property:
+				qcom,mdss-pipe-rgb-off
+- qcom,mdss-pipe-dma-panic-ctrl-offsets: Array of panic/robust signal offsets
+				corresponding to the respective DMA pipes.
+				Number of signal offsets should match the
+				number of offsets defined in property:
+				qcom,mdss-pipe-dma-off
 
 Optional subnodes:
 Child nodes representing the frame buffer virtual devices.
@@ -449,6 +471,7 @@ Example:
 		qcom,mdss-has-non-scalar-rgb;
 		qcom,mdss-has-bwc;
 		qcom,mdss-has-decimation;
+		qcom,mdss-has-fixed-qos-arbiter-enabled;
 		qcom,mdss-has-source-split;
 		qcom,mdss-wfd-mode = "intf";
 		qcom,mdss-no-lut-read;
@@ -470,6 +493,11 @@ Example:
 
 		qcom,mdss-pipe-dma-clk-ctrl-offsets = <0x3AC 8 12>,
 						      <0x3B4 8 12>;
+
+		qcom,mdss-has-panic-ctrl;
+		qcom,mdss-pipe-vig-panic-ctrl-offsets = <0 1 2 3>;
+		qcom,mdss-pipe-rgb-panic-ctrl-offsets = <4 5 6 7>;
+		qcom,mdss-pipe-dma-panic-ctrl-offsets = <8 9>;
 
 		qcom,mdss-pipe-sw-reset-off = <0x0128>;
 		qcom,mdss-pipe-vig-sw-reset-map = <5 6 7 8>;
