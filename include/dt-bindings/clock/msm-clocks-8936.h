@@ -20,7 +20,7 @@
 #define clk_gpll0_ao				0x6b2fb034
 #define clk_gpll0_out_main			0x850fecec
 #define clk_gpll0_out_aux			0x64e55d63
-#define clk_gpll0_usbfs				0xed4d330a
+#define clk_gpll0_misc				0xe06ee816
 #define clk_gpll1				0x916f8847
 #define clk_gpll1_out_main                      0x8e313934
 #define clk_gpll2				0x7c34503b
@@ -33,7 +33,9 @@
 #define clk_gpll4_out_main                      0xdca8db2a
 #define clk_gpll6				0xa8c1bffa
 #define clk_gpll6_out_main			0x27b8b7be
-#define clk_a53sspll				0xf761da94
+#define clk_a53ss_c0_pll			0xf761da94
+#define clk_a53ss_c1_pll			0xfbc57bbd
+#define clk_a53ss_cci_pll			0x17d32f1e
 #define clk_apss_ahb_clk_src			0x36f8495f
 #define clk_blsp1_qup1_i2c_apps_clk_src		0x17f78f5e
 #define clk_blsp1_qup1_spi_apps_clk_src		0xf534c4fa
@@ -188,6 +190,9 @@
 #define clk_gcc_gtcu_ahb_bridge_clk		0x19d2c5fe
 #define clk_gcc_bimc_gpu_clk			0x19922503
 #define clk_gcc_bimc_gfx_clk			0x3edd69ad
+
+#define clk_pixel_clk_src                       0x8b6f83d8
+#define clk_byte_clk_src                        0x3a911c53
 
 /* clock_rpm controlled clocks */
 #define clk_pcnoc_clk				0xc1296d0f

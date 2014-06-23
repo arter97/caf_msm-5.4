@@ -20,6 +20,7 @@
 #include <linux/slab.h>
 #include <linux/mutex.h>
 #include <linux/clk.h>
+#include <linux/topology.h>
 #include <linux/of.h>
 #include <linux/of_coresight.h>
 #include <linux/coresight.h>
@@ -84,7 +85,11 @@ struct cti_drvdata {
 	spinlock_t			spinlock;
 	struct coresight_cti		cti;
 	int				refcnt;
+	int				cpu;
 	bool				cti_save;
+	bool				cti_hwclk;
+	bool				cti_ack_atomic;
+	bool				l2_off;
 	struct cti_state	*state;
 };
 
@@ -103,6 +108,14 @@ static int cti_verify_channel_bound(int ch)
 {
 	if (ch < 0 || ch >= CTI_MAX_CHANNELS)
 		return -EINVAL;
+
+	return 0;
+}
+
+static int cti_cpu_verify_access(struct cti_drvdata *drvdata)
+{
+	if (drvdata->cti_save && drvdata->l2_off)
+		return -EPERM;
 
 	return 0;
 }
@@ -141,6 +154,7 @@ int coresight_cti_map_trigin(struct coresight_cti *cti, int trig, int ch)
 {
 	struct cti_drvdata *drvdata;
 	int ret;
+	unsigned long flag;
 
 	if (IS_ERR_OR_NULL(cti))
 		return -EINVAL;
@@ -157,12 +171,18 @@ int coresight_cti_map_trigin(struct coresight_cti *cti, int trig, int ch)
 	if (ret)
 		return ret;
 
-	spin_lock(&drvdata->spinlock);
+	spin_lock_irqsave(&drvdata->spinlock, flag);
+
+	ret = cti_cpu_verify_access(drvdata);
+	if (ret)
+		goto err;
+
 	__cti_map_trigin(drvdata, trig, ch);
-	spin_unlock(&drvdata->spinlock);
+err:
+	spin_unlock_irqrestore(&drvdata->spinlock, flag);
 
 	clk_disable_unprepare(drvdata->clk);
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL(coresight_cti_map_trigin);
 
@@ -191,6 +211,7 @@ int coresight_cti_map_trigout(struct coresight_cti *cti, int trig, int ch)
 {
 	struct cti_drvdata *drvdata;
 	int ret;
+	unsigned long flag;
 
 	if (IS_ERR_OR_NULL(cti))
 		return -EINVAL;
@@ -207,12 +228,18 @@ int coresight_cti_map_trigout(struct coresight_cti *cti, int trig, int ch)
 	if (ret)
 		return ret;
 
-	spin_lock(&drvdata->spinlock);
+	spin_lock_irqsave(&drvdata->spinlock, flag);
+
+	ret = cti_cpu_verify_access(drvdata);
+	if (ret)
+		goto err;
+
 	__cti_map_trigout(drvdata, trig, ch);
-	spin_unlock(&drvdata->spinlock);
+err:
+	spin_unlock_irqrestore(&drvdata->spinlock, flag);
 
 	clk_disable_unprepare(drvdata->clk);
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL(coresight_cti_map_trigout);
 
@@ -254,6 +281,7 @@ out:
 void coresight_cti_unmap_trigin(struct coresight_cti *cti, int trig, int ch)
 {
 	struct cti_drvdata *drvdata;
+	unsigned long flag;
 
 	if (IS_ERR_OR_NULL(cti))
 		return;
@@ -267,9 +295,14 @@ void coresight_cti_unmap_trigin(struct coresight_cti *cti, int trig, int ch)
 	if (clk_prepare_enable(drvdata->clk))
 		return;
 
-	spin_lock(&drvdata->spinlock);
+	spin_lock_irqsave(&drvdata->spinlock, flag);
+
+	if (cti_cpu_verify_access(drvdata))
+		goto err;
+
 	__cti_unmap_trigin(drvdata, trig, ch);
-	spin_unlock(&drvdata->spinlock);
+err:
+	spin_unlock_irqrestore(&drvdata->spinlock, flag);
 
 	clk_disable_unprepare(drvdata->clk);
 }
@@ -300,6 +333,7 @@ out:
 void coresight_cti_unmap_trigout(struct coresight_cti *cti, int trig, int ch)
 {
 	struct cti_drvdata *drvdata;
+	unsigned long flag;
 
 	if (IS_ERR_OR_NULL(cti))
 		return;
@@ -313,9 +347,14 @@ void coresight_cti_unmap_trigout(struct coresight_cti *cti, int trig, int ch)
 	if (clk_prepare_enable(drvdata->clk))
 		return;
 
-	spin_lock(&drvdata->spinlock);
+	spin_lock_irqsave(&drvdata->spinlock, flag);
+
+	if (cti_cpu_verify_access(drvdata))
+		goto err;
+
 	__cti_unmap_trigout(drvdata, trig, ch);
-	spin_unlock(&drvdata->spinlock);
+err:
+	spin_unlock_irqrestore(&drvdata->spinlock, flag);
 
 	clk_disable_unprepare(drvdata->clk);
 }
@@ -344,6 +383,7 @@ static void __cti_reset(struct cti_drvdata *drvdata)
 void coresight_cti_reset(struct coresight_cti *cti)
 {
 	struct cti_drvdata *drvdata;
+	unsigned long flag;
 
 	if (IS_ERR_OR_NULL(cti))
 		return;
@@ -353,9 +393,14 @@ void coresight_cti_reset(struct coresight_cti *cti)
 	if (clk_prepare_enable(drvdata->clk))
 		return;
 
-	spin_lock(&drvdata->spinlock);
+	spin_lock_irqsave(&drvdata->spinlock, flag);
+
+	if (cti_cpu_verify_access(drvdata))
+		goto err;
+
 	__cti_reset(drvdata);
-	spin_unlock(&drvdata->spinlock);
+err:
+	spin_unlock_irqrestore(&drvdata->spinlock, flag);
 
 	clk_disable_unprepare(drvdata->clk);
 }
@@ -379,6 +424,7 @@ int coresight_cti_set_trig(struct coresight_cti *cti, int ch)
 {
 	struct cti_drvdata *drvdata;
 	int ret;
+	unsigned long flag;
 
 	if (IS_ERR_OR_NULL(cti))
 		return -EINVAL;
@@ -392,9 +438,15 @@ int coresight_cti_set_trig(struct coresight_cti *cti, int ch)
 	if (ret)
 		return ret;
 
-	spin_lock(&drvdata->spinlock);
+	spin_lock_irqsave(&drvdata->spinlock, flag);
+
+	ret = cti_cpu_verify_access(drvdata);
+	if (ret)
+		goto err;
+
 	ret = __cti_set_trig(drvdata, ch);
-	spin_unlock(&drvdata->spinlock);
+err:
+	spin_unlock_irqrestore(&drvdata->spinlock, flag);
 
 	clk_disable_unprepare(drvdata->clk);
 	return ret;
@@ -416,6 +468,7 @@ static void __cti_clear_trig(struct cti_drvdata *drvdata, int ch)
 void coresight_cti_clear_trig(struct coresight_cti *cti, int ch)
 {
 	struct cti_drvdata *drvdata;
+	unsigned long flag;
 
 	if (IS_ERR_OR_NULL(cti))
 		return;
@@ -427,9 +480,14 @@ void coresight_cti_clear_trig(struct coresight_cti *cti, int ch)
 	if (clk_prepare_enable(drvdata->clk))
 		return;
 
-	spin_lock(&drvdata->spinlock);
+	spin_lock_irqsave(&drvdata->spinlock, flag);
+
+	if (cti_cpu_verify_access(drvdata))
+		goto err;
+
 	__cti_clear_trig(drvdata, ch);
-	spin_unlock(&drvdata->spinlock);
+err:
+	spin_unlock_irqrestore(&drvdata->spinlock, flag);
 
 	clk_disable_unprepare(drvdata->clk);
 }
@@ -453,6 +511,7 @@ int coresight_cti_pulse_trig(struct coresight_cti *cti, int ch)
 {
 	struct cti_drvdata *drvdata;
 	int ret;
+	unsigned long flag;
 
 	if (IS_ERR_OR_NULL(cti))
 		return -EINVAL;
@@ -466,14 +525,70 @@ int coresight_cti_pulse_trig(struct coresight_cti *cti, int ch)
 	if (ret)
 		return ret;
 
-	spin_lock(&drvdata->spinlock);
+	spin_lock_irqsave(&drvdata->spinlock, flag);
+
+	ret = cti_cpu_verify_access(drvdata);
+	if (ret)
+		goto err;
+
 	ret = __cti_pulse_trig(drvdata, ch);
-	spin_unlock(&drvdata->spinlock);
+err:
+	spin_unlock_irqrestore(&drvdata->spinlock, flag);
 
 	clk_disable_unprepare(drvdata->clk);
 	return ret;
 }
 EXPORT_SYMBOL(coresight_cti_pulse_trig);
+
+static int __cti_ack_trig(struct cti_drvdata *drvdata, int trig)
+{
+	if (!drvdata->refcnt)
+		return -EINVAL;
+
+	CTI_UNLOCK(drvdata);
+
+	cti_writel(drvdata, (0x1 << trig), CTIINTACK);
+
+	CTI_LOCK(drvdata);
+
+	return 0;
+}
+
+int coresight_cti_ack_trig(struct coresight_cti *cti, int trig)
+{
+	struct cti_drvdata *drvdata;
+	int ret;
+	unsigned long flag;
+
+	if (IS_ERR_OR_NULL(cti))
+		return -EINVAL;
+	ret = cti_verify_trigger_bound(trig);
+	if (ret)
+		return ret;
+
+	drvdata = to_cti_drvdata(cti);
+
+	if (!drvdata->cti_ack_atomic) {
+		ret = clk_prepare_enable(drvdata->clk);
+		if (ret)
+			return ret;
+	}
+
+	spin_lock_irqsave(&drvdata->spinlock, flag);
+
+	ret = cti_cpu_verify_access(drvdata);
+	if (ret)
+		goto err;
+
+	ret = __cti_ack_trig(drvdata, trig);
+err:
+	spin_unlock_irqrestore(&drvdata->spinlock, flag);
+
+	if (!drvdata->cti_ack_atomic)
+		clk_disable_unprepare(drvdata->clk);
+	return ret;
+}
+EXPORT_SYMBOL(coresight_cti_ack_trig);
 
 static int __cti_enable_gate(struct cti_drvdata *drvdata, int ch)
 {
@@ -485,7 +600,7 @@ static int __cti_enable_gate(struct cti_drvdata *drvdata, int ch)
 	CTI_UNLOCK(drvdata);
 
 	ctigate = cti_readl(drvdata, CTIGATE);
-	cti_writel(drvdata, (ctigate | 1 << ch), CTIGATE);
+	cti_writel(drvdata, (ctigate & ~(1 << ch)), CTIGATE);
 
 	CTI_LOCK(drvdata);
 
@@ -496,6 +611,7 @@ int coresight_cti_enable_gate(struct coresight_cti *cti, int ch)
 {
 	struct cti_drvdata *drvdata;
 	int ret;
+	unsigned long flag;
 
 	if (IS_ERR_OR_NULL(cti))
 		return -EINVAL;
@@ -509,9 +625,15 @@ int coresight_cti_enable_gate(struct coresight_cti *cti, int ch)
 	if (ret)
 		return ret;
 
-	spin_lock(&drvdata->spinlock);
+	spin_lock_irqsave(&drvdata->spinlock, flag);
+
+	ret = cti_cpu_verify_access(drvdata);
+	if (ret)
+		goto err;
+
 	ret = __cti_enable_gate(drvdata, ch);
-	spin_unlock(&drvdata->spinlock);
+err:
+	spin_unlock_irqrestore(&drvdata->spinlock, flag);
 
 	clk_disable_unprepare(drvdata->clk);
 	return ret;
@@ -528,7 +650,7 @@ static void __cti_disable_gate(struct cti_drvdata *drvdata, int ch)
 	CTI_UNLOCK(drvdata);
 
 	ctigate = cti_readl(drvdata, CTIGATE);
-	cti_writel(drvdata, (ctigate & ~(1 << ch)), CTIGATE);
+	cti_writel(drvdata, (ctigate | (1 << ch)), CTIGATE);
 
 	CTI_LOCK(drvdata);
 }
@@ -536,6 +658,7 @@ static void __cti_disable_gate(struct cti_drvdata *drvdata, int ch)
 void coresight_cti_disable_gate(struct coresight_cti *cti, int ch)
 {
 	struct cti_drvdata *drvdata;
+	unsigned long flag;
 
 	if (IS_ERR_OR_NULL(cti))
 		return;
@@ -547,9 +670,14 @@ void coresight_cti_disable_gate(struct coresight_cti *cti, int ch)
 	if (clk_prepare_enable(drvdata->clk))
 		return;
 
-	spin_lock(&drvdata->spinlock);
+	spin_lock_irqsave(&drvdata->spinlock, flag);
+
+	if (cti_cpu_verify_access(drvdata))
+		goto err;
+
 	__cti_disable_gate(drvdata, ch);
-	spin_unlock(&drvdata->spinlock);
+err:
+	spin_unlock_irqrestore(&drvdata->spinlock, flag);
 
 	clk_disable_unprepare(drvdata->clk);
 }
@@ -581,7 +709,7 @@ static ssize_t cti_show_trigin(struct device *dev,
 			       struct device_attribute *attr, char *buf)
 {
 	struct cti_drvdata *drvdata = dev_get_drvdata(dev->parent);
-	unsigned long trig, ch;
+	unsigned long trig, ch, flag;
 	uint32_t ctien;
 	ssize_t size = 0;
 
@@ -593,7 +721,12 @@ static ssize_t cti_show_trigin(struct device *dev,
 		goto err0;
 
 	for (trig = 0; trig < CTI_MAX_TRIGGERS; trig++) {
-		ctien = cti_readl(drvdata, CTIINEN(trig));
+		spin_lock_irqsave(&drvdata->spinlock, flag);
+		if (!cti_cpu_verify_access(drvdata))
+			ctien = cti_readl(drvdata, CTIINEN(trig));
+		else
+			ctien = drvdata->state->ctiinen[trig];
+		spin_unlock_irqrestore(&drvdata->spinlock, flag);
 		for (ch = 0; ch < CTI_MAX_CHANNELS; ch++) {
 			if (ctien & (1 << ch)) {
 				/* Ensure we do not write more than PAGE_SIZE
@@ -623,7 +756,7 @@ static ssize_t cti_show_trigout(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	struct cti_drvdata *drvdata = dev_get_drvdata(dev->parent);
-	unsigned long trig, ch;
+	unsigned long trig, ch, flag;
 	uint32_t ctien;
 	ssize_t size = 0;
 
@@ -635,7 +768,12 @@ static ssize_t cti_show_trigout(struct device *dev,
 		goto err0;
 
 	for (trig = 0; trig < CTI_MAX_TRIGGERS; trig++) {
-		ctien = cti_readl(drvdata, CTIOUTEN(trig));
+		spin_lock_irqsave(&drvdata->spinlock, flag);
+		if (!cti_cpu_verify_access(drvdata))
+			ctien = cti_readl(drvdata, CTIOUTEN(trig));
+		else
+			ctien = drvdata->state->ctiouten[trig];
+		spin_unlock_irqrestore(&drvdata->spinlock, flag);
 		for (ch = 0; ch < CTI_MAX_CHANNELS; ch++) {
 			if (ctien & (1 << ch)) {
 				/* Ensure we do not write more than PAGE_SIZE
@@ -753,7 +891,7 @@ static ssize_t cti_show_trig(struct device *dev, struct device_attribute *attr,
 			     char *buf)
 {
 	struct cti_drvdata *drvdata = dev_get_drvdata(dev->parent);
-	unsigned long ch;
+	unsigned long ch, flag;
 	uint32_t ctiset;
 	ssize_t size = 0;
 
@@ -764,7 +902,12 @@ static ssize_t cti_show_trig(struct device *dev, struct device_attribute *attr,
 	if (clk_prepare_enable(drvdata->clk))
 		goto err0;
 
-	ctiset = cti_readl(drvdata, CTIAPPSET);
+	spin_lock_irqsave(&drvdata->spinlock, flag);
+	if (!cti_cpu_verify_access(drvdata))
+		ctiset = cti_readl(drvdata, CTIAPPSET);
+	else
+		ctiset = drvdata->state->ctiappset;
+	spin_unlock_irqrestore(&drvdata->spinlock, flag);
 	for (ch = 0; ch < CTI_MAX_CHANNELS; ch++) {
 		if (ctiset & (1 << ch)) {
 			/* Ensure we do not write more than PAGE_SIZE
@@ -843,11 +986,30 @@ static ssize_t cti_store_pulse_trig(struct device *dev,
 }
 static DEVICE_ATTR(pulse_trig, S_IWUSR, NULL, cti_store_pulse_trig);
 
+static ssize_t cti_store_ack_trig(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf, size_t size)
+{
+	struct cti_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val;
+	int ret;
+
+	if (sscanf(buf, "%lx", &val) != 1)
+		return -EINVAL;
+
+	ret = coresight_cti_ack_trig(&drvdata->cti, val);
+
+	if (ret)
+		return ret;
+	return size;
+}
+static DEVICE_ATTR(ack_trig, S_IWUSR, NULL, cti_store_ack_trig);
+
 static ssize_t cti_show_gate(struct device *dev, struct device_attribute *attr,
 			     char *buf)
 {
 	struct cti_drvdata *drvdata = dev_get_drvdata(dev->parent);
-	unsigned long ch;
+	unsigned long ch, flag;
 	uint32_t ctigate;
 	ssize_t size = 0;
 
@@ -858,7 +1020,12 @@ static ssize_t cti_show_gate(struct device *dev, struct device_attribute *attr,
 	if (clk_prepare_enable(drvdata->clk))
 		goto err0;
 
-	ctigate = cti_readl(drvdata, CTIGATE);
+	spin_lock_irqsave(&drvdata->spinlock, flag);
+	if (!cti_cpu_verify_access(drvdata))
+		ctigate = cti_readl(drvdata, CTIGATE);
+	else
+		ctigate = drvdata->state->ctigate;
+	spin_unlock_irqrestore(&drvdata->spinlock, flag);
 	for (ch = 0; ch < CTI_MAX_CHANNELS; ch++) {
 		if (ctigate & (1 << ch)) {
 			/* Ensure we do not write more than PAGE_SIZE
@@ -930,6 +1097,7 @@ static struct attribute *cti_attrs[] = {
 	&dev_attr_set_trig.attr,
 	&dev_attr_clear_trig.attr,
 	&dev_attr_pulse_trig.attr,
+	&dev_attr_ack_trig.attr,
 	&dev_attr_show_gate.attr,
 	&dev_attr_enable_gate.attr,
 	&dev_attr_disable_gate.attr,
@@ -947,12 +1115,13 @@ static const struct attribute_group *cti_attr_grps[] = {
 
 static int cti_probe(struct platform_device *pdev)
 {
-	int ret;
+	int ret, cpu;
 	struct device *dev = &pdev->dev;
 	struct coresight_platform_data *pdata;
 	struct cti_drvdata *drvdata;
 	struct resource *res;
 	struct coresight_desc *desc;
+	struct device_node *cpu_node;
 
 	if (coresight_fuse_access_disabled())
 		return -EPERM;
@@ -989,17 +1158,52 @@ static int cti_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	if (pdev->dev.of_node)
+	if (pdev->dev.of_node) {
+		drvdata->cti_ack_atomic =
+			 of_property_read_bool(pdev->dev.of_node,
+					       "qcom,cti-ack-atomic");
+
 		drvdata->cti_save = of_property_read_bool(pdev->dev.of_node,
 							  "qcom,cti-save");
-	if (drvdata->cti_save) {
+	}
+
+	if (drvdata->cti_save)
+		drvdata->cti_hwclk = of_property_read_bool(pdev->dev.of_node,
+							   "qcom,cti-hwclk");
+
+	if ((drvdata->cti_save && !drvdata->cti_hwclk) ||
+	    drvdata->cti_ack_atomic) {
 		ret = clk_prepare_enable(drvdata->clk);
 		if (ret)
 			return ret;
+	}
 
+	drvdata->cpu = -1;
+
+	if (drvdata->cti_save) {
+		cpu_node = of_parse_phandle(pdev->dev.of_node,
+					    "coresight-cti-cpu", 0);
+		if (!cpu_node) {
+			dev_err(drvdata->dev,
+				"CTI cpu phandle not specified\n");
+			ret = -ENODEV;
+			goto err;
+		}
+		for_each_possible_cpu(cpu) {
+			if (cpu_node == of_get_cpu_node(cpu, NULL)) {
+				drvdata->cpu = cpu;
+				break;
+			}
+		}
+		if (drvdata->cpu == -1) {
+			dev_err(drvdata->dev,
+				"invalid CTI cpu phandle\n");
+			ret = -EINVAL;
+			goto err;
+		}
 		drvdata->state = devm_kzalloc(dev,
-						sizeof(struct cti_state),
-						GFP_KERNEL);
+					      sizeof(struct cti_state),
+					      GFP_KERNEL);
 		if (!drvdata->state) {
 			ret = -ENOMEM;
 			goto err;
@@ -1031,7 +1235,8 @@ static int cti_probe(struct platform_device *pdev)
 	dev_info(dev, "CTI initialized\n");
 	return 0;
 err:
-	if (drvdata->cti_save)
+	if ((drvdata->cti_save && !drvdata->cti_hwclk) ||
+	    drvdata->cti_ack_atomic)
 		clk_disable_unprepare(drvdata->clk);
 	return ret;
 }
@@ -1040,7 +1245,8 @@ static int cti_remove(struct platform_device *pdev)
 {
 	struct cti_drvdata *drvdata = platform_get_drvdata(pdev);
 
-	if (drvdata->cti_save)
+	if ((drvdata->cti_save && !drvdata->cti_hwclk) ||
+	    drvdata->cti_ack_atomic)
 		clk_disable_unprepare(drvdata->clk);
 	coresight_unregister(drvdata->csdev);
 	return 0;
@@ -1050,31 +1256,34 @@ void coresight_cti_ctx_save(void)
 {
 	struct cti_drvdata *drvdata;
 	struct coresight_cti *cti;
-	int trig;
+	int trig, cpuid, cpu;
+	unsigned long flag;
+
+	cpu = raw_smp_processor_id();
 
 	list_for_each_entry(cti, &cti_list, link) {
 		drvdata = to_cti_drvdata(cti);
 		if (!drvdata->cti_save)
 			continue;
 
-		spin_lock(&drvdata->spinlock);
-		if (drvdata->cti_save) {
-			drvdata->state->cticontrol =
-				cti_readl(drvdata, CTICONTROL);
-			drvdata->state->ctiappset =
-				cti_readl(drvdata, CTIAPPSET);
-			drvdata->state->ctigate =
-				cti_readl(drvdata, CTIGATE);
-			for (trig = 0;
-			     trig < CTI_MAX_TRIGGERS;
-			     trig++) {
-				drvdata->state->ctiinen[trig] =
-					cti_readl(drvdata, CTIINEN(trig));
-				drvdata->state->ctiouten[trig] =
-					cti_readl(drvdata, CTIOUTEN(trig));
-			}
+		for_each_cpu_mask(cpuid, *topology_core_cpumask(cpu)) {
+			if (drvdata->cpu == cpuid)
+				goto out;
 		}
-		spin_unlock(&drvdata->spinlock);
+		continue;
+out:
+		spin_lock_irqsave(&drvdata->spinlock, flag);
+		drvdata->l2_off = true;
+		drvdata->state->cticontrol = cti_readl(drvdata, CTICONTROL);
+		drvdata->state->ctiappset = cti_readl(drvdata, CTIAPPSET);
+		drvdata->state->ctigate = cti_readl(drvdata, CTIGATE);
+		for (trig = 0; trig < CTI_MAX_TRIGGERS; trig++) {
+			drvdata->state->ctiinen[trig] =
+				cti_readl(drvdata, CTIINEN(trig));
+			drvdata->state->ctiouten[trig] =
+				cti_readl(drvdata, CTIOUTEN(trig));
+		}
+		spin_unlock_irqrestore(&drvdata->spinlock, flag);
 	}
 }
 EXPORT_SYMBOL(coresight_cti_ctx_save);
@@ -1083,38 +1292,36 @@ void coresight_cti_ctx_restore(void)
 {
 	struct cti_drvdata *drvdata;
 	struct coresight_cti *cti;
-	int trig;
+	int trig, cpuid, cpu;
+	unsigned long flag;
+
+	cpu = raw_smp_processor_id();
 
 	list_for_each_entry(cti, &cti_list, link) {
 		drvdata = to_cti_drvdata(cti);
 		if (!drvdata->cti_save)
 			continue;
 
-		spin_lock(&drvdata->spinlock);
-		if (drvdata->cti_save) {
-			CTI_UNLOCK(drvdata);
-			cti_writel(drvdata,
-				   drvdata->state->ctiappset,
-				   CTIAPPSET);
-			cti_writel(drvdata,
-				   drvdata->state->ctigate,
-				   CTIGATE);
-			for (trig = 0;
-			     trig < CTI_MAX_TRIGGERS;
-			     trig++) {
-				cti_writel(drvdata,
-					   drvdata->state->ctiinen[trig],
-				CTIINEN(trig));
-				cti_writel(drvdata,
-					   drvdata->state->ctiouten[trig],
-					   CTIOUTEN(trig));
-			}
-			cti_writel(drvdata,
-				   drvdata->state->cticontrol,
-				   CTICONTROL);
-			CTI_LOCK(drvdata);
+		for_each_cpu_mask(cpuid, *topology_core_cpumask(cpu)) {
+			if (drvdata->cpu == cpuid)
+				goto out;
 		}
-		spin_unlock(&drvdata->spinlock);
+		continue;
+out:
+		spin_lock_irqsave(&drvdata->spinlock, flag);
+		CTI_UNLOCK(drvdata);
+		cti_writel(drvdata, drvdata->state->ctiappset, CTIAPPSET);
+		cti_writel(drvdata, drvdata->state->ctigate, CTIGATE);
+		for (trig = 0; trig < CTI_MAX_TRIGGERS; trig++) {
+			cti_writel(drvdata, drvdata->state->ctiinen[trig],
+				   CTIINEN(trig));
+			cti_writel(drvdata, drvdata->state->ctiouten[trig],
+				   CTIOUTEN(trig));
+		}
+		cti_writel(drvdata, drvdata->state->cticontrol, CTICONTROL);
+		CTI_LOCK(drvdata);
+		drvdata->l2_off = false;
+		spin_unlock_irqrestore(&drvdata->spinlock, flag);
 	}
 }
 EXPORT_SYMBOL(coresight_cti_ctx_restore);

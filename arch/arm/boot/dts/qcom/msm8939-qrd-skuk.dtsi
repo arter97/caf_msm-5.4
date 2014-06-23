@@ -11,7 +11,8 @@
  */
 
 #include "msm8939-qrd.dtsi"
-
+#include "dsi-panel-nt35596-1080p-skuk-video.dtsi"
+#include "msm8939-camera-sensor-qrd.dtsi"
 / {
 	model = "Qualcomm Technologies, Inc. MSM8939 QRD SKUK";
 	compatible = "qcom,msm8939-qrd-skuk", "qcom,msm8939-qrd", "qcom,msm8939", "qcom,qrd";
@@ -54,7 +55,7 @@
 
 		tps65132_en_default: en-default {
 			drive-strength = <2>;
-			bias-disable;
+			bias-pull-down;
 		};
 	};
 };
@@ -63,7 +64,7 @@
 	avago@39 { /* Ambient light and proximity sensor */
 		compatible = "avago,apds9930";
 		reg = <0x39>;
-		pinctrl-names = "apds_default","apds_sleep";
+		pinctrl-names = "default","sleep";
 		pinctrl-0 = <&apds99xx_default>;
 		pinctrl-1 = <&apds99xx_sleep>;
 		interrupt-parent = <&msm_gpio>;
@@ -72,7 +73,7 @@
 		vio-supply = <&pm8916_l6>;
 		avago,irq-gpio = <&msm_gpio 113 0x2002>;
 		avago,ps-threshold = <600>;
-		avago,ps-hysteresis_threshold = <500>;
+		avago,ps-hysteresis-threshold = <500>;
 		avago,ps-pulse = <8>;
 		avago,ps-pgain = <0>;
 		avago,als-B = <223>;
@@ -116,6 +117,7 @@
 		interrupts = <115 0x2002>;
 		vdd-supply = <&pm8916_l17>;
 		vlogic-supply = <&pm8916_l16>;
+		vi2c-supply = <&pm8916_l6>;
 		invn,gpio-int = <&msm_gpio 115 0x2002>;
 		invn,place = "Portrait Down Back Side";
 	};
@@ -124,9 +126,9 @@
 		compatible = "ti,tps65132";
 		reg = <0x3e>;
 		i2c-pwr-supply = <&pm8916_l6>;
+		ti,en-gpio-lpm;
 		pinctrl-names = "default";
 		pinctrl-0 = <&tps65132_en_default>;
-		status = "disabled";
 
 		regulators {
 			tps65132_pos: pos-boost {
@@ -234,5 +236,61 @@
 		1 &intc 0 221 0>;
 	interrupt-names = "hc_irq", "pwr_irq";
 	/delete-property/ cd-gpios;
+};
+
+&usb_otg {
+       qcom,hsusb-otg-mode = <3>;
+       qcom,usbid-gpio = <&msm_gpio 110 0>;
+       pinctrl-names = "default";
+       pinctrl-0 = <&usbid_default>;
+       vbus_otg-supply = <&smb1360_otg_supply>;
+};
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&pmx_mdss {
+	qcom,num-grp-pins = <2>;
+	qcom,pins = <&gp 1>, <&gp 25>;
+};
+
+&mdss_dsi0 {
+	qcom,regulator-ldo-mode;
+	qcom,platform-regulator-settings = [02 09 03 00 20 00 01];
+	qcom,dsi-pref-prim-pan = <&dsi_nt35596_1080p_skuk_video>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active>;
+	pinctrl-1 = <&mdss_dsi_suspend>;
+
+	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
+	qcom,platform-bklight-en-gpio = <&msm_gpio 1 0>;
+
+	vsp-supply = <&tps65132_pos>;
+	vsn-supply = <&tps65132_neg>;
+
+	qcom,platform-supply-entry4 {
+		qcom,supply-name = "vsp";
+		qcom,supply-min-voltage = <5800000>;
+		qcom,supply-max-voltage = <5800000>;
+		qcom,supply-enable-load = <200>;
+		qcom,supply-disable-load = <0>;
+		qcom,supply-pre-on-sleep = <0>;
+		qcom,supply-post-on-sleep = <0>;
+		qcom,supply-pre-off-sleep = <0>;
+		qcom,supply-post-off-sleep = <0>;
+	};
+	qcom,platform-supply-entry5 {
+		qcom,supply-name = "vsn";
+		qcom,supply-min-voltage = <5800000>;
+		qcom,supply-max-voltage = <5800000>;
+		qcom,supply-enable-load = <40>;
+		qcom,supply-disable-load = <0>;
+		qcom,supply-pre-on-sleep = <0>;
+		qcom,supply-post-on-sleep = <0>;
+		qcom,supply-pre-off-sleep = <0>;
+		qcom,supply-post-off-sleep = <0>;
+	};
+
 };
 

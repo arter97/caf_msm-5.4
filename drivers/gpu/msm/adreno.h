@@ -89,6 +89,7 @@ enum adreno_gpurev {
 	ADRENO_REV_A320 = 320,
 	ADRENO_REV_A330 = 330,
 	ADRENO_REV_A305B = 335,
+	ADRENO_REV_A405 = 405,
 	ADRENO_REV_A420 = 420,
 };
 
@@ -410,6 +411,19 @@ struct adreno_vbif_platform {
 	const struct adreno_vbif_data *vbif;
 };
 
+/*
+ * struct adreno_vbif_snapshot_registers - Holds an array of vbif registers
+ * listed for snapshot dump for a particular core
+ * @vbif_version: vbif version
+ * @vbif_snapshot_registers: vbif registers listed for snapshot dump
+ * @vbif_snapshot_registers_count: count of vbif registers listed for snapshot
+ */
+struct adreno_vbif_snapshot_registers {
+	const unsigned int vbif_version;
+	const unsigned int *vbif_snapshot_registers;
+	const int vbif_snapshot_registers_count;
+};
+
 /**
  * struct adreno_coresight_register - Definition for a coresight (tracebus)
  * debug register
@@ -601,6 +615,13 @@ extern const unsigned int a4xx_registers_count;
 extern const unsigned int a4xx_sp_tp_registers[];
 extern const unsigned int a4xx_sp_tp_registers_count;
 
+extern const unsigned int a4xx_xpu_registers[];
+extern const unsigned int a4xx_xpu_reg_cnt;
+
+extern const struct adreno_vbif_snapshot_registers
+				a4xx_vbif_snapshot_registers[];
+extern const unsigned int a4xx_vbif_snapshot_reg_cnt;
+
 extern unsigned int ft_detect_regs[];
 
 int adreno_spin_idle(struct kgsl_device *device);
@@ -729,6 +750,11 @@ static inline int adreno_is_a330v21(struct adreno_device *adreno_dev)
 static inline int adreno_is_a4xx(struct adreno_device *adreno_dev)
 {
 	return (adreno_dev->gpurev >= 400);
+}
+
+static inline int adreno_is_a405(struct adreno_device *adreno_dev)
+{
+	return (adreno_dev->gpurev == ADRENO_REV_A405);
 }
 
 static inline int adreno_is_a420(struct adreno_device *adreno_dev)
