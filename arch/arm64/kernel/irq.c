@@ -87,8 +87,6 @@ static bool migrate_one_irq(struct irq_desc *desc)
 {
 	struct irq_data *d = irq_desc_get_irq_data(desc);
 	const struct cpumask *affinity = d->affinity;
-	struct irq_chip *c;
-	bool ret = false;
 
 	/*
 	 * If this is a per-CPU interrupt, or the affinity does not
@@ -98,21 +96,9 @@ static bool migrate_one_irq(struct irq_desc *desc)
 		return false;
 
 	if (cpumask_any_and(affinity, cpu_online_mask) >= nr_cpu_ids)
-		ret = true;
+		affinity = cpu_online_mask;
 
-	/*
-	 * when using forced irq_set_affinity we must ensure that the cpu
-	 * being offlined is not present in the affinity mask, it may be
-	 * selected as the target CPU otherwise
-	 */
-	affinity = cpu_online_mask;
-	c = irq_data_get_irq_chip(d);
-	if (!c->irq_set_affinity)
-		pr_debug("IRQ%u: unable to set affinity\n", d->irq);
-	else if (c->irq_set_affinity(d, affinity, true) == IRQ_SET_MASK_OK && ret)
-		cpumask_copy(d->affinity, affinity);
-
-	return ret;
+	return irq_set_affinity_locked(d, affinity, false) != 0;
 }
 
 /*
