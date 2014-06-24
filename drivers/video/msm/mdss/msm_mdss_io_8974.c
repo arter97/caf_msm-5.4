@@ -27,6 +27,7 @@
 #define PWRDN_B BIT(7)
 
 static struct dsi_clk_desc dsi_pclk;
+static struct mdss_dsi_ctrl_pdata *left_ctrl;
 
 int mdss_dsi_clk_init(struct platform_device *pdev,
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata)
@@ -99,6 +100,15 @@ int mdss_dsi_clk_init(struct platform_device *pdev,
 			__func__, rc);
 		ctrl_pdata->esc_clk = NULL;
 		goto mdss_dsi_clk_err;
+	}
+
+	if (ctrl_pdata->shared_pdata.broadcast_enable) {
+		if (ctrl_pdata->panel_data.panel_info.pdest
+					== DISPLAY_1) {
+			pr_debug("%s: Broadcast mode enabled.\n",
+				__func__);
+			left_ctrl = ctrl_pdata;
+		}
 	}
 
 mdss_dsi_clk_err:
