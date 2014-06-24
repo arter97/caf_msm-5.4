@@ -35,6 +35,7 @@
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/of_batterydata.h>
 #include <linux/batterydata-interface.h>
+#include <linux/qpnp-revid.h>
 #include <uapi/linux/vm_bms.h>
 
 #define _BMS_MASK(BITS, POS) \
@@ -113,6 +114,9 @@
 #define VBATT_ERROR_MARGIN		20000
 #define CV_DROP_MARGIN			10000
 #define MIN_OCV_UV			2000000
+#define TIME_PER_PERCENT_UUC		60
+#define IAVG_SAMPLES			16
+#define MIN_SOC_UUC			3
 
 #define QPNP_VM_BMS_DEV_NAME		"qcom,qpnp-vm-bms"
 
@@ -125,6 +129,10 @@ enum {
 	S7_STATE,
 };
 
+enum {
+	WRKARND_PON_OCV_COMP = BIT(0),
+};
+
 struct bms_irq {
 	int		irq;
 	unsigned long	disabled;
@@ -133,6 +141,11 @@ struct bms_irq {
 struct bms_wakeup_source {
 	struct wakeup_source	source;
 	unsigned long		disabled;
+};
+
+struct temp_curr_comp_map {
+	int temp_deg;
+	int current_ma;
 };
 
 struct bms_dt_cfg {
@@ -185,6 +198,7 @@ struct qpnp_bms_chip {
 	int				battery_status;
 	int				calculated_soc;
 	int				current_now;
+	int				prev_current_now;
 	int				prev_voltage_based_soc;
 	int				calculate_soc_ms;
 	int				voltage_soc_uv;
@@ -195,6 +209,7 @@ struct qpnp_bms_chip {
 	int				charge_start_tm_sec;
 	int				catch_up_time_sec;
 	int				delta_time_s;
+	int				uuc_delta_time_s;
 	int				ocv_at_100;
 	int				last_ocv_uv;
 	int				s2_fifo_length;
@@ -203,11 +218,18 @@ struct qpnp_bms_chip {
 	unsigned int			vadc_v0625;
 	unsigned int			vadc_v1250;
 	unsigned long			tm_sec;
+	unsigned long			workaround_flag;
+	unsigned long			uuc_tm_sec;
 	u32				seq_num;
 	u8				shutdown_soc;
 	u16				last_ocv_raw;
 	u32				shutdown_ocv;
 	bool				suspend_data_valid;
+	int				iavg_num_samples;
+	unsigned int			iavg_index;
+	int				iavg_samples_ma[IAVG_SAMPLES];
+	int				iavg_ma;
+	int				prev_soc_uuc;
 
 	struct bms_battery_data		*batt_data;
 	struct bms_dt_cfg		dt;
@@ -229,6 +251,7 @@ struct qpnp_bms_chip {
 	struct qpnp_vm_bms_data		bms_data;
 	struct qpnp_vadc_chip		*vadc_dev;
 	struct qpnp_adc_tm_chip		*adc_tm_dev;
+	struct pmic_revid_data		*revid_data;
 	struct qpnp_adc_tm_btm_param	vbat_monitor_params;
 	struct bms_irq			fifo_update_done_irq;
 	struct bms_irq			fsm_state_change_irq;
@@ -238,6 +261,16 @@ struct qpnp_bms_chip {
 };
 
 static struct qpnp_bms_chip *the_chip;
+
+/*
+ * TODO: Characterize current compensation at different temperature and
+ * update table.
+ */
+static struct temp_curr_comp_map temp_curr_comp_lut[] = {
+			{-200, 40},
+			{250, 40},
+			{600, 40},
+};
 
 static void disable_bms_irq(struct bms_irq *irq)
 {
@@ -725,10 +758,77 @@ fail_fsm:
 	return rc;
 }
 
+static int calculate_uuc_iavg(struct qpnp_bms_chip *chip)
+{
+	int i;
+	int iavg_ma = chip->current_now / 1000;
+
+	/* only continue if ibat has changed */
+	if (chip->current_now == chip->prev_current_now)
+		goto ibat_unchanged;
+	else
+		chip->prev_current_now = chip->current_now;
+
+	chip->iavg_samples_ma[chip->iavg_index] = iavg_ma;
+	chip->iavg_index = (chip->iavg_index + 1) % IAVG_SAMPLES;
+	chip->iavg_num_samples++;
+	if (chip->iavg_num_samples >= IAVG_SAMPLES)
+		chip->iavg_num_samples = IAVG_SAMPLES;
+
+	if (chip->iavg_num_samples) {
+		iavg_ma = 0;
+		/* maintain a 16 sample average of ibat */
+		for (i = 0; i < chip->iavg_num_samples; i++) {
+			pr_debug("iavg_samples_ma[%d] = %d\n", i,
+					chip->iavg_samples_ma[i]);
+			iavg_ma += chip->iavg_samples_ma[i];
+		}
+
+		chip->iavg_ma = DIV_ROUND_CLOSEST(iavg_ma,
+					chip->iavg_num_samples);
+	}
+
+ibat_unchanged:
+	pr_debug("current_now_ma=%d averaged_iavg_ma=%d\n",
+			chip->current_now / 1000, chip->iavg_ma);
+
+	return chip->iavg_ma;
+}
+
+static int adjust_uuc(struct qpnp_bms_chip *chip, int soc_uuc)
+{
+	int max_percent_change;
+
+	calculate_delta_time(&chip->uuc_tm_sec, &chip->uuc_delta_time_s);
+
+	/* make sure that the UUC changes 1% at a time */
+	max_percent_change = max(chip->uuc_delta_time_s
+				/ TIME_PER_PERCENT_UUC, 1);
+
+	if (chip->prev_soc_uuc == -EINVAL) {
+		/* start with a minimum UUC if the initial UUC is high */
+		if (soc_uuc > MIN_SOC_UUC)
+			chip->prev_soc_uuc = MIN_SOC_UUC;
+		else
+			chip->prev_soc_uuc = soc_uuc;
+	} else {
+		if (abs(chip->prev_soc_uuc - soc_uuc) <= max_percent_change)
+			chip->prev_soc_uuc = soc_uuc;
+		else if (soc_uuc > chip->prev_soc_uuc)
+			chip->prev_soc_uuc += max_percent_change;
+		else
+			chip->prev_soc_uuc -= max_percent_change;
+	}
+
+	pr_debug("soc_uuc=%d new_soc_uuc=%d\n", soc_uuc, chip->prev_soc_uuc);
+
+	return chip->prev_soc_uuc;
+}
+
 static int lookup_soc_ocv(struct qpnp_bms_chip *chip, int ocv_uv, int batt_temp)
 {
 	int soc_ocv = 0, soc_cutoff = 0, soc_final = 0;
-	int fcc, acc, soc_uuc = 0, soc_acc = 0;
+	int fcc, acc, soc_uuc = 0, soc_acc = 0, iavg_ma = 0;
 
 	soc_ocv = interpolate_pc(chip->batt_data->pc_temp_ocv_lut,
 					batt_temp, ocv_uv / 1000);
@@ -740,10 +840,13 @@ static int lookup_soc_ocv(struct qpnp_bms_chip *chip, int ocv_uv, int batt_temp)
 	if (chip->batt_data->ibat_acc_lut) {
 		/* Apply  ACC logic only if we discharging */
 		if (!is_battery_charging(chip) && chip->current_now > 0) {
+
+			iavg_ma = calculate_uuc_iavg(chip);
+
 			fcc = interpolate_fcc(chip->batt_data->fcc_temp_lut,
 								batt_temp);
 			acc = interpolate_acc(chip->batt_data->ibat_acc_lut,
-					batt_temp, chip->current_now / 1000);
+							batt_temp, iavg_ma);
 			if (acc <= 0) {
 				if (chip->last_acc)
 					acc = chip->last_acc;
@@ -751,15 +854,25 @@ static int lookup_soc_ocv(struct qpnp_bms_chip *chip, int ocv_uv, int batt_temp)
 					acc = fcc;
 			}
 			soc_uuc = ((fcc - acc) * 100) / acc;
+
+			soc_uuc = adjust_uuc(chip, soc_uuc);
+
 			soc_acc = soc_final - soc_uuc;
-			pr_debug("fcc=%d acc=%d soc_final=%d soc_uuc=%d soc_acc=%d ibat_ma=%d\n",
+
+			pr_debug("fcc=%d acc=%d soc_final=%d soc_uuc=%d soc_acc=%d current_now=%d iavg_ma=%d\n",
 				fcc, acc, soc_final, soc_uuc,
-				soc_acc, chip->current_now / 1000);
+				soc_acc, chip->current_now / 1000, iavg_ma);
+
 			soc_final = soc_acc;
 			chip->last_acc = acc;
 		} else {
-			/* charging */
+			/* charging - reset all the counters */
 			chip->last_acc = 0;
+			chip->iavg_num_samples = 0;
+			chip->iavg_index = 0;
+			chip->iavg_ma = 0;
+			chip->prev_current_now = 0;
+			chip->prev_soc_uuc = -EINVAL;
 		}
 	}
 
@@ -991,6 +1104,29 @@ static int get_batt_therm(struct qpnp_bms_chip *chip, int *batt_temp)
 static int get_prop_bms_rbatt(struct qpnp_bms_chip *chip)
 {
 	return chip->batt_data->default_rbatt_mohm;
+}
+
+static int get_rbatt(struct qpnp_bms_chip *chip, int soc, int batt_temp)
+{
+	int rbatt_mohm, scalefactor;
+
+	rbatt_mohm = chip->batt_data->default_rbatt_mohm;
+	if (chip->batt_data->rbatt_sf_lut == NULL)  {
+		pr_debug("RBATT = %d\n", rbatt_mohm);
+		return rbatt_mohm;
+	}
+
+	scalefactor = interpolate_scalingfactor(chip->batt_data->rbatt_sf_lut,
+						batt_temp, soc);
+	rbatt_mohm = (rbatt_mohm * scalefactor) / 100;
+
+	if (chip->dt.cfg_r_conn_mohm > 0)
+		rbatt_mohm += chip->dt.cfg_r_conn_mohm;
+
+	if (chip->batt_data->rbatt_capacitive_mohm > 0)
+		rbatt_mohm += chip->batt_data->rbatt_capacitive_mohm;
+
+	return rbatt_mohm;
 }
 
 static void charging_began(struct qpnp_bms_chip *chip)
@@ -2235,6 +2371,55 @@ static int read_shutdown_ocv_soc(struct qpnp_bms_chip *chip)
 	return 0;
 }
 
+static int interpolate_current_comp(int die_temp)
+{
+	int i;
+	int num_rows = ARRAY_SIZE(temp_curr_comp_lut);
+
+	if (die_temp <= (temp_curr_comp_lut[0].temp_deg))
+		return temp_curr_comp_lut[0].current_ma;
+
+	if (die_temp >= (temp_curr_comp_lut[num_rows - 1].temp_deg))
+		return temp_curr_comp_lut[num_rows - 1].current_ma;
+
+	for (i = 0; i < num_rows - 1; i++)
+		if (die_temp  <= (temp_curr_comp_lut[i].temp_deg))
+			break;
+
+	if (die_temp == (temp_curr_comp_lut[i].temp_deg))
+		return temp_curr_comp_lut[i].current_ma;
+
+	return linear_interpolate(
+				temp_curr_comp_lut[i - 1].current_ma,
+				temp_curr_comp_lut[i - 1].temp_deg,
+				temp_curr_comp_lut[i].current_ma,
+				temp_curr_comp_lut[i].temp_deg,
+				die_temp);
+}
+
+static void adjust_pon_ocv(struct qpnp_bms_chip *chip, int batt_temp)
+{
+	int rc, current_ma, rbatt_mohm, die_temp, delta_uv, soc;
+	struct qpnp_vadc_result result;
+
+	rc = qpnp_vadc_read(chip->vadc_dev, DIE_TEMP, &result);
+	if (rc) {
+		pr_err("error reading adc channel=%d, rc=%d\n", DIE_TEMP, rc);
+	} else {
+		soc = lookup_soc_ocv(chip, chip->last_ocv_uv, batt_temp);
+		rbatt_mohm = get_rbatt(chip, soc, batt_temp);
+		/* convert die_temp to DECIDEGC */
+		die_temp = (int)result.physical / 100;
+		current_ma = interpolate_current_comp(die_temp);
+		delta_uv = rbatt_mohm * current_ma;
+		pr_debug("PON OCV chaged from %d to %d soc=%d rbatt=%d current_ma=%d die_temp=%d batt_temp=%d delta_uv=%d\n",
+			chip->last_ocv_uv, chip->last_ocv_uv + delta_uv, soc,
+			rbatt_mohm, current_ma, die_temp, batt_temp, delta_uv);
+
+		chip->last_ocv_uv += delta_uv;
+	}
+}
+
 static int calculate_initial_soc(struct qpnp_bms_chip *chip)
 {
 	int rc, batt_temp = 0, est_ocv = 0, shutdown_soc = 0;
@@ -2282,6 +2467,14 @@ static int calculate_initial_soc(struct qpnp_bms_chip *chip)
 			pr_debug("Using shutdown SOC\n");
 		}
 	} else {
+		/*
+		 * In PM8916 2.0 PON OCV calculation is delayed due to
+		 * change in the ordering of power-on sequence of LDO6.
+		 * Adjust PON OCV to include current during PON.
+		 */
+		if (chip->workaround_flag & WRKARND_PON_OCV_COMP)
+			adjust_pon_ocv(chip, batt_temp);
+
 		 /* !warm_reset use PON OCV only if shutdown SOC is invalid */
 		chip->calculated_soc = lookup_soc_ocv(chip,
 					chip->last_ocv_uv, batt_temp);
@@ -2540,6 +2733,7 @@ static void bms_init_defaults(struct qpnp_bms_chip *chip)
 	chip->vbms_cv_wake_source.disabled = 1;
 	chip->vbms_soc_wake_source.disabled = 1;
 	chip->ocv_at_100 = -EINVAL;
+	chip->prev_soc_uuc = -EINVAL;
 }
 
 #define SPMI_REQUEST_IRQ(chip, rc, irq_name)				\
@@ -3080,6 +3274,7 @@ unregister_chrdev:
 static int qpnp_vm_bms_probe(struct spmi_device *spmi)
 {
 	struct qpnp_bms_chip *chip;
+	struct device_node *revid_dev_node;
 	int rc, vbatt = 0;
 
 	chip = devm_kzalloc(&spmi->dev, sizeof(*chip), GFP_KERNEL);
@@ -3093,6 +3288,22 @@ static int qpnp_vm_bms_probe(struct spmi_device *spmi)
 		pr_err("Failed to get adc rc=%d\n", rc);
 		return rc;
 	}
+
+	revid_dev_node = of_parse_phandle(spmi->dev.of_node,
+						"qcom,pmic-revid", 0);
+	if (!revid_dev_node) {
+		pr_err("Missing qcom,pmic-revid property\n");
+		return -EINVAL;
+	}
+
+	chip->revid_data = get_revid_data(revid_dev_node);
+	if (IS_ERR(chip->revid_data)) {
+		pr_err("revid error rc = %ld\n", PTR_ERR(chip->revid_data));
+		return -EINVAL;
+	}
+	if ((chip->revid_data->pmic_subtype == PM8916_V2P0_SUBTYPE) &&
+				chip->revid_data->rev4 == PM8916_V2P0_REV4)
+		chip->workaround_flag |= WRKARND_PON_OCV_COMP;
 
 	rc = qpnp_pon_is_warm_reset();
 	if (rc < 0) {

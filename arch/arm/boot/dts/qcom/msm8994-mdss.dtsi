@@ -144,7 +144,6 @@
 		mdss_fb0: qcom,mdss_fb_primary {
 			cell-index = <0>;
 			compatible = "qcom,mdss-fb";
-			qcom,memblock-reserve = <0x03200000 0x01E00000>;
 		};
 
 		mdss_fb2: qcom,mdss_fb_wfd {
@@ -185,6 +184,9 @@
 			02 00 00 40 20 00 00 00 00
 			02 00 00 40 00 00 00 00 00
 			00 00 00 80 00 00 00 00 00];
+
+		qcom,mmss-ulp-clamp-ctrl-offset = <0x14>;
+		qcom,mmss-phyreset-ctrl-offset = <0x108>;
 
 		qcom,core-supply-entries {
 			#address-cells = <1>;
@@ -281,6 +283,9 @@
 			02 00 00 40 20 00 00 00 00
 			02 00 00 40 00 00 00 00 00
 			00 00 00 80 00 00 00 00 00];
+
+		qcom,mmss-ulp-clamp-ctrl-offset = <0x14>;
+		qcom,mmss-phyreset-ctrl-offset = <0x108>;
 
 		qcom,core-supply-entries {
 			#address-cells = <1>;

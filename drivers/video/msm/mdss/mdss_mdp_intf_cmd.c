@@ -614,24 +614,10 @@ static void mdss_mdp_cmd_set_sync_ctx(
 
 static int mdss_mdp_cmd_set_partial_roi(struct mdss_mdp_ctl *ctl)
 {
-	struct mdss_mdp_ctl *sctl = NULL;
-	struct mdss_rect *roi;
 	int rc = 0;
 
 	if (!ctl->panel_data->panel_info.partial_update_enabled)
 		return rc;
-
-	sctl = mdss_mdp_get_split_ctl(ctl);
-
-	/* save roi to pinfo which used by dsi controller */
-	roi = &ctl->panel_data->panel_info.roi;
-	*roi = ctl->roi;
-
-	if (sctl) {
-		/* save roi to pinfo whcih used by dsi controller */
-		roi = &sctl->panel_data->panel_info.roi;
-		*roi = sctl->roi;
-	}
 
 	/* set panel col and page addr */
 	rc = mdss_mdp_ctl_intf_event(ctl,
@@ -706,6 +692,10 @@ int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 
 		rc = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_PANEL_ON, NULL);
 		WARN(rc, "intf %d panel on error (%d)\n", ctl->intf_num, rc);
+
+		mdss_mdp_ctl_intf_event(ctl,
+				MDSS_EVENT_REGISTER_RECOVERY_HANDLER,
+				(void *)&ctx->recovery);
 	}
 
 	MDSS_XLOG(ctl->num, ctl->roi.x, ctl->roi.y, ctl->roi.w,
@@ -729,8 +719,8 @@ int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 	/*
 	 * tx dcs command if had any
 	 */
-	mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_DSI_CMDLIST_KOFF,
-						(void *)&ctx->recovery);
+	mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_DSI_CMDLIST_KOFF, NULL);
+
 	mdss_mdp_cmd_set_stream_size(ctl);
 
 	mdss_mdp_cmd_set_sync_ctx(ctl, sctl);
@@ -810,6 +800,10 @@ int mdss_mdp_cmd_stop(struct mdss_mdp_ctl *ctl)
 
 	if (cancel_delayed_work_sync(&ctx->pc_work))
 		pr_debug("deleted pending power collapse work\n");
+
+	mdss_mdp_ctl_intf_event(ctl,
+			MDSS_EVENT_REGISTER_RECOVERY_HANDLER,
+			NULL);
 
 	ctx->panel_on = 0;
 	mdss_mdp_cmd_clk_off(ctx);

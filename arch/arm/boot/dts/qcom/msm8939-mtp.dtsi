@@ -10,7 +10,6 @@
  * GNU General Public License for more details.
  */
 
-#include "msm8939.dtsi"
 #include "msm8939-pinctrl.dtsi"
 #include "msm8939-camera-sensor-mtp.dtsi"
 
@@ -318,10 +317,15 @@
 	qcom,pins = <&gp 97>, <&gp 25>, <&gp 98>;
 };
 
+&pmx_mdss_te {
+	qcom,num-grp-pins = <1>;
+	qcom,pins = <&gp 24>;
+};
+
 &mdss_dsi0 {
 	pinctrl-names = "mdss_default", "mdss_sleep";
-	pinctrl-0 = <&mdss_dsi_active>;
-	pinctrl-1 = <&mdss_dsi_suspend>;
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
 	qcom,dsi-pref-prim-pan = <&dsi_jdi_1080_vid>;
 
 	qcom,platform-enable-gpio = <&msm_gpio 97 0>;
@@ -348,8 +352,8 @@
 	mpp@a300 { /* MPP 4 */
 		/* Backlight PWM */
 		qcom,mode = <1>;		/* Digital output */
-		qcom,invert = <1>;		/* Enable invert */
-		qcom,src-sel = <0>;		/* FUNC GPIO */
+		qcom,invert = <0>;		/* Disable invert */
+		qcom,src-sel = <4>;		/* DTEST1 */
 		qcom,vin-sel = <0>;		/* VPH_PWR */
 		qcom,master-en = <1>;		/* Enable MPP */
 	};

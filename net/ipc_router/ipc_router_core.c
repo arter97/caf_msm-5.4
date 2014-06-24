@@ -1349,7 +1349,7 @@ static void msm_ipc_router_destroy_server(struct msm_ipc_server *server,
 	return;
 }
 
-static int msm_ipc_router_send_control_msg(
+static int ipc_router_send_ctl_msg(
 		struct msm_ipc_router_xprt_info *xprt_info,
 		union rr_control_msg *msg,
 		uint32_t dst_node_id)
@@ -1359,46 +1359,26 @@ static int msm_ipc_router_send_control_msg(
 	struct rr_header_v1 *hdr;
 	int pkt_size;
 	void *data;
-	struct sk_buff_head *pkt_fragment_q;
-	int ret;
+	int ret = -EINVAL;
 
-	if (!xprt_info || ((msg->cmd != IPC_ROUTER_CTRL_CMD_HELLO) &&
-	    !xprt_info->initialized)) {
-		IPC_RTR_ERR("%s: xprt_info not initialized\n", __func__);
-		return -EINVAL;
-	}
-
-	if (xprt_info->remote_node_id == IPC_ROUTER_NID_LOCAL)
-		return 0;
-
-	pkt = kzalloc(sizeof(struct rr_packet), GFP_KERNEL);
+	pkt = create_pkt(NULL);
 	if (!pkt) {
 		IPC_RTR_ERR("%s: pkt alloc failed\n", __func__);
 		return -ENOMEM;
 	}
 
-	pkt_fragment_q = kmalloc(sizeof(struct sk_buff_head), GFP_KERNEL);
-	if (!pkt_fragment_q) {
-		IPC_RTR_ERR("%s: pkt_fragment_q alloc failed\n", __func__);
-		kfree(pkt);
-		return -ENOMEM;
-	}
-	skb_queue_head_init(pkt_fragment_q);
-
 	pkt_size = IPC_ROUTER_HDR_SIZE + sizeof(*msg);
 	ipc_rtr_pkt = alloc_skb(pkt_size, GFP_KERNEL);
 	if (!ipc_rtr_pkt) {
 		IPC_RTR_ERR("%s: ipc_rtr_pkt alloc failed\n", __func__);
-		kfree(pkt_fragment_q);
-		kfree(pkt);
+		release_pkt(pkt);
 		return -ENOMEM;
 	}
 
 	skb_reserve(ipc_rtr_pkt, IPC_ROUTER_HDR_SIZE);
 	data = skb_put(ipc_rtr_pkt, sizeof(*msg));
 	memcpy(data, msg, sizeof(*msg));
-	skb_queue_tail(pkt_fragment_q, ipc_rtr_pkt);
-	pkt->pkt_fragment_q = pkt_fragment_q;
+	skb_queue_tail(pkt->pkt_fragment_q, ipc_rtr_pkt);
 	pkt->length = sizeof(*msg);
 
 	hdr = &(pkt->hdr);
@@ -1408,23 +1388,30 @@ static int msm_ipc_router_send_control_msg(
 	hdr->src_port_id = IPC_ROUTER_ADDRESS;
 	hdr->control_flag = 0;
 	hdr->size = sizeof(*msg);
-	if (hdr->type == IPC_ROUTER_CTRL_CMD_RESUME_TX)
+	if (hdr->type == IPC_ROUTER_CTRL_CMD_RESUME_TX ||
+	    (!xprt_info && dst_node_id == IPC_ROUTER_NID_LOCAL))
 		hdr->dst_node_id = dst_node_id;
-	else
+	else if (xprt_info)
 		hdr->dst_node_id = xprt_info->remote_node_id;
 	hdr->dst_port_id = IPC_ROUTER_ADDRESS;
 
-	mutex_lock(&xprt_info->tx_lock_lhb2);
-	ret = prepend_header(pkt, xprt_info);
-	if (ret < 0) {
-		mutex_unlock(&xprt_info->tx_lock_lhb2);
-		IPC_RTR_ERR("%s: Prepend Header failed\n", __func__);
-		release_pkt(pkt);
-		return ret;
-	}
+	if (dst_node_id == IPC_ROUTER_NID_LOCAL &&
+	    msg->cmd != IPC_ROUTER_CTRL_CMD_RESUME_TX) {
+		ret = post_control_ports(pkt);
+	} else if (xprt_info && (msg->cmd == IPC_ROUTER_CTRL_CMD_HELLO ||
+		   xprt_info->initialized)) {
+		mutex_lock(&xprt_info->tx_lock_lhb2);
+		ret = prepend_header(pkt, xprt_info);
+		if (ret < 0) {
+			mutex_unlock(&xprt_info->tx_lock_lhb2);
+			IPC_RTR_ERR("%s: Prepend Header failed\n", __func__);
+			release_pkt(pkt);
+			return ret;
+		}
 
-	ret = xprt_info->xprt->write(pkt, pkt->length, xprt_info->xprt);
-	mutex_unlock(&xprt_info->tx_lock_lhb2);
+		ret = xprt_info->xprt->write(pkt, pkt->length, xprt_info->xprt);
+		mutex_unlock(&xprt_info->tx_lock_lhb2);
+	}
 
 	release_pkt(pkt);
 	return ret;
@@ -1460,7 +1447,7 @@ static int msm_ipc_router_send_server_list(uint32_t node_id,
 					server_port->server_addr.node_id;
 				ctl.srv.port_id =
 					server_port->server_addr.port_id;
-				msm_ipc_router_send_control_msg(xprt_info,
+				ipc_router_send_ctl_msg(xprt_info,
 					&ctl, IPC_ROUTER_DUMMY_DEST_NODE);
 			}
 		}
@@ -1495,55 +1482,7 @@ static char *type_to_str(int i)
 
 static int broadcast_ctl_msg_locally(union rr_control_msg *msg)
 {
-	struct rr_packet *pkt;
-	struct sk_buff *ipc_rtr_pkt;
-	struct rr_header_v1 *hdr;
-	int pkt_size;
-	void *data;
-	struct sk_buff_head *pkt_fragment_q;
-	int ret;
-
-	pkt = kzalloc(sizeof(struct rr_packet), GFP_KERNEL);
-	if (!pkt) {
-		IPC_RTR_ERR("%s: pkt alloc failed\n", __func__);
-		return -ENOMEM;
-	}
-
-	pkt_fragment_q = kmalloc(sizeof(struct sk_buff_head), GFP_KERNEL);
-	if (!pkt_fragment_q) {
-		IPC_RTR_ERR("%s: pkt_fragment_q alloc failed\n", __func__);
-		kfree(pkt);
-		return -ENOMEM;
-	}
-	skb_queue_head_init(pkt_fragment_q);
-
-	pkt_size = sizeof(*msg);
-	ipc_rtr_pkt = alloc_skb(pkt_size, GFP_KERNEL);
-	if (!ipc_rtr_pkt) {
-		IPC_RTR_ERR("%s: ipc_rtr_pkt alloc failed\n", __func__);
-		kfree(pkt_fragment_q);
-		kfree(pkt);
-		return -ENOMEM;
-	}
-
-	data = skb_put(ipc_rtr_pkt, sizeof(*msg));
-	memcpy(data, msg, sizeof(*msg));
-	hdr = &(pkt->hdr);
-	hdr->version = IPC_ROUTER_V1;
-	hdr->type = msg->cmd;
-	hdr->src_node_id = IPC_ROUTER_NID_LOCAL;
-	hdr->src_port_id = IPC_ROUTER_ADDRESS;
-	hdr->control_flag = 0;
-	hdr->size = sizeof(*msg);
-	hdr->dst_node_id = IPC_ROUTER_NID_LOCAL;
-	hdr->dst_port_id = IPC_ROUTER_ADDRESS;
-	skb_queue_tail(pkt_fragment_q, ipc_rtr_pkt);
-	pkt->pkt_fragment_q = pkt_fragment_q;
-	pkt->length = pkt_size;
-
-	ret = post_control_ports(pkt);
-	release_pkt(pkt);
-	return ret;
+	return ipc_router_send_ctl_msg(NULL, msg, IPC_ROUTER_NID_LOCAL);
 }
 
 static int broadcast_ctl_msg(union rr_control_msg *ctl)
@@ -1552,10 +1491,11 @@ static int broadcast_ctl_msg(union rr_control_msg *ctl)
 
 	down_read(&xprt_info_list_lock_lha5);
 	list_for_each_entry(xprt_info, &xprt_info_list, list) {
-		msm_ipc_router_send_control_msg(xprt_info, ctl,
+		ipc_router_send_ctl_msg(xprt_info, ctl,
 					IPC_ROUTER_DUMMY_DEST_NODE);
 	}
 	up_read(&xprt_info_list_lock_lha5);
+	broadcast_ctl_msg_locally(ctl);
 
 	return 0;
 }
@@ -1571,7 +1511,7 @@ static int relay_ctl_msg(struct msm_ipc_router_xprt_info *xprt_info,
 	down_read(&xprt_info_list_lock_lha5);
 	list_for_each_entry(fwd_xprt_info, &xprt_info_list, list) {
 		if (xprt_info->xprt->link_id != fwd_xprt_info->xprt->link_id)
-			msm_ipc_router_send_control_msg(fwd_xprt_info, ctl,
+			ipc_router_send_ctl_msg(fwd_xprt_info, ctl,
 						IPC_ROUTER_DUMMY_DEST_NODE);
 	}
 	up_read(&xprt_info_list_lock_lha5);
@@ -1664,7 +1604,7 @@ static int msm_ipc_router_send_remove_client(struct comm_mode_info *mode_info,
 		list_for_each_entry(tmp_xprt_info, &xprt_info_list, list) {
 			if (tmp_xprt_info != xprt_info)
 				continue;
-			msm_ipc_router_send_control_msg(tmp_xprt_info, &msg,
+			ipc_router_send_ctl_msg(tmp_xprt_info, &msg,
 						IPC_ROUTER_DUMMY_DEST_NODE);
 			break;
 		}
@@ -1673,7 +1613,6 @@ static int msm_ipc_router_send_remove_client(struct comm_mode_info *mode_info,
 		broadcast_ctl_msg_locally(&msg);
 	} else if (mode == MULTI_LINK_MODE) {
 		broadcast_ctl_msg(&msg);
-		broadcast_ctl_msg_locally(&msg);
 	} else if (mode != NULL_MODE) {
 		IPC_RTR_ERR(
 		"%s: Invalid mode(%d) + xprt_inf(%p) for %08x:%08x\n",
@@ -1916,8 +1855,8 @@ static int process_hello_msg(struct msm_ipc_router_xprt_info *xprt_info,
 	/* Send a reply HELLO message */
 	memset(&ctl, 0, sizeof(ctl));
 	ctl.hello.cmd = IPC_ROUTER_CTRL_CMD_HELLO;
-	rc = msm_ipc_router_send_control_msg(xprt_info, &ctl,
-						IPC_ROUTER_DUMMY_DEST_NODE);
+	rc = ipc_router_send_ctl_msg(xprt_info, &ctl,
+				     IPC_ROUTER_DUMMY_DEST_NODE);
 	if (rc < 0) {
 		IPC_RTR_ERR("%s: Error sending reply HELLO message\n",
 								__func__);
@@ -2184,12 +2123,12 @@ static void do_read_data(struct work_struct *work)
 		    pkt->length > MAX_IPC_PKT_SIZE) {
 			IPC_RTR_ERR("%s: Invalid pkt length %d\n",
 				__func__, pkt->length);
-			goto fail_data;
+			goto read_next_pkt1;
 		}
 
 		ret = extract_header(pkt);
 		if (ret < 0)
-			goto fail_data;
+			goto read_next_pkt1;
 		hdr = &(pkt->hdr);
 		RAW("ver=%d type=%d src=%d:%08x crx=%d siz=%d dst=%d:%08x\n",
 		     hdr->version, hdr->type, hdr->src_node_id,
@@ -2200,14 +2139,12 @@ static void do_read_data(struct work_struct *work)
 		    ((hdr->type == IPC_ROUTER_CTRL_CMD_RESUME_TX) ||
 		     (hdr->type == IPC_ROUTER_CTRL_CMD_DATA))) {
 			forward_msg(xprt_info, pkt);
-			release_pkt(pkt);
-			continue;
+			goto read_next_pkt1;
 		}
 
 		if (hdr->type != IPC_ROUTER_CTRL_CMD_DATA) {
 			process_control_msg(xprt_info, pkt);
-			release_pkt(pkt);
-			continue;
+			goto read_next_pkt1;
 		}
 
 		if (msm_ipc_router_debug_mask & SMEM_LOG) {
@@ -2227,9 +2164,7 @@ static void do_read_data(struct work_struct *work)
 		if (!port_ptr) {
 			IPC_RTR_ERR("%s: No local port id %08x\n", __func__,
 				hdr->dst_port_id);
-			up_read(&local_ports_lock_lha2);
-			release_pkt(pkt);
-			return;
+			goto read_next_pkt2;
 		}
 
 		down_read(&routing_table_lock_lha3);
@@ -2243,21 +2178,20 @@ static void do_read_data(struct work_struct *work)
 				IPC_RTR_ERR(
 				"%s: Rmt Prt %08x:%08x create failed\n",
 				__func__, hdr->src_node_id, hdr->src_port_id);
-				up_read(&routing_table_lock_lha3);
-				up_read(&local_ports_lock_lha2);
-				release_pkt(pkt);
-				return;
+				goto read_next_pkt3;
 			}
 		}
 		up_read(&routing_table_lock_lha3);
 		post_pkt_to_port(port_ptr, pkt, 0);
 		up_read(&local_ports_lock_lha2);
+		continue;
+read_next_pkt3:
+		up_read(&routing_table_lock_lha3);
+read_next_pkt2:
+		up_read(&local_ports_lock_lha2);
+read_next_pkt1:
+		release_pkt(pkt);
 	}
-	return;
-
-fail_data:
-	release_pkt(pkt);
-	IPC_RTR_ERR("%s: ipc_router has died\n", __func__);
 }
 
 int msm_ipc_router_register_server(struct msm_ipc_port *port_ptr,
@@ -2302,7 +2236,6 @@ int msm_ipc_router_register_server(struct msm_ipc_port *port_ptr,
 	ctl.srv.port_id = port_ptr->this_port.port_id;
 	up_write(&server_list_lock_lha2);
 	broadcast_ctl_msg(&ctl);
-	broadcast_ctl_msg_locally(&ctl);
 	mutex_lock(&port_ptr->port_lock_lhb1);
 	port_ptr->type = SERVER_PORT;
 	port_ptr->mode_info.mode = MULTI_LINK_MODE;
@@ -2354,7 +2287,6 @@ int msm_ipc_router_unregister_server(struct msm_ipc_port *port_ptr)
 				      port_ptr->this_port.port_id);
 	up_write(&server_list_lock_lha2);
 	broadcast_ctl_msg(&ctl);
-	broadcast_ctl_msg_locally(&ctl);
 	mutex_lock(&port_ptr->port_lock_lhb1);
 	port_ptr->type = CLIENT_PORT;
 	mutex_unlock(&port_ptr->port_lock_lhb1);
@@ -2667,8 +2599,8 @@ static int msm_ipc_router_send_resume_tx(void *data)
 	}
 	RR("x RESUME_TX id=%d:%08x\n",
 			msg.cli.node_id, msg.cli.port_id);
-	ret = msm_ipc_router_send_control_msg(rt_entry->xprt_info, &msg,
-						hdr->src_node_id);
+	ret = ipc_router_send_ctl_msg(rt_entry->xprt_info, &msg,
+				      hdr->src_node_id);
 	up_read(&routing_table_lock_lha3);
 	if (ret < 0)
 		IPC_RTR_ERR(
@@ -2898,7 +2830,6 @@ int msm_ipc_router_close_port(struct msm_ipc_port *port_ptr)
 			   msg.srv.service, msg.srv.instance,
 			   msg.srv.node_id, msg.srv.port_id);
 			broadcast_ctl_msg(&msg);
-			broadcast_ctl_msg_locally(&msg);
 		}
 
 		/* Server port could have been a client port earlier.

@@ -337,6 +337,8 @@ struct mdss_dsi_ctrl_pdata {
 	struct mutex cmd_mutex;
 
 	bool ulps;
+	u32 ulps_clamp_ctrl_off;
+	u32 ulps_phyrst_ctrl_off;
 
 	struct dsi_buf tx_buf;
 	struct dsi_buf rx_buf;
@@ -416,6 +418,9 @@ int mdss_dsi_panel_init(struct device_node *node,
 int mdss_panel_get_dst_fmt(u32 bpp, char mipi_mode, u32 pixel_packing,
 				char *dst_format);
 void mdss_dsi_20nm_phy_init(struct mdss_panel_data *pdata);
+
+int mdss_dsi_register_recovery_handler(struct mdss_dsi_ctrl_pdata *ctrl,
+		struct mdss_panel_recovery *recovery);
 
 static inline const char *__mdss_dsi_pm_name(enum dsi_pm_type module)
 {

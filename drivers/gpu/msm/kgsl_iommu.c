@@ -312,7 +312,6 @@ static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 	struct adreno_device *adreno_dev;
 	unsigned int no_page_fault_log = 0;
 	unsigned int curr_context_id = 0;
-	unsigned int curr_global_ts = 0;
 	struct kgsl_context *context;
 
 	ret = get_iommu_unit(dev, &mmu, &iommu_unit);
@@ -349,7 +348,10 @@ static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 	}
 	/*
 	 * set the fault bits and stuff before any printks so that if fault
-	 * handler runs then it will know it's dealing with a pagefault
+	 * handler runs then it will know it's dealing with a pagefault.
+	 * Read the global current timestamp because we could be in middle of
+	 * RB switch and hence the cur RB may not be reliable but global
+	 * one will always be reliable
 	 */
 	kgsl_sharedmem_readl(&device->memstore, &curr_context_id,
 		KGSL_MEMSTORE_OFFSET(KGSL_MEMSTORE_GLOBAL, current_context));
@@ -357,13 +359,8 @@ static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 	context = kgsl_context_get(device, curr_context_id);
 
 	if (context != NULL) {
-		kgsl_sharedmem_readl(&device->memstore, &curr_global_ts,
-			KGSL_MEMSTORE_OFFSET(KGSL_MEMSTORE_GLOBAL,
-			eoptimestamp));
-
 		/* save pagefault timestamp for GFT */
 		set_bit(KGSL_CONTEXT_PRIV_PAGEFAULT, &context->priv);
-		context->pagefault_ts = curr_global_ts;
 
 		kgsl_context_put(context);
 		context = NULL;
@@ -468,70 +465,6 @@ static void kgsl_iommu_disable_clk(struct kgsl_mmu *mmu, int unit)
 		for (j = (KGSL_IOMMU_MAX_CLKS - 1); j >= 0; j--)
 			if (iommu_unit->clks[j])
 				clk_disable_unprepare(iommu_unit->clks[j]);
-	}
-}
-
-/*
- * kgsl_iommu_disable_clk_event() - Disable IOMMU clocks after timestamp
- * @device: The kgsl device pointer
- * @context: Pointer to the context that fired the event
- * @data: Pointer to the private data for the event
- * @type: Result of the callback (retired or cancelled)
- *
- * An event function that is executed when
- * the required timestamp is reached. It disables the IOMMU clocks if
- * the timestamp on which the clocks can be disabled has expired.
- *
- * Return - void
- */
-static void kgsl_iommu_clk_disable_event(struct kgsl_device *device,
-		struct kgsl_context *context, void *data, int type)
-{
-	struct kgsl_iommu_disable_clk_param *param = data;
-
-	kgsl_iommu_disable_clk(param->mmu, param->unit);
-
-	/* Free param we are done using it */
-	kfree(param);
-}
-
-
-
-/*
- * kgsl_iommu_disable_clk_on_ts - Sets up event to disable IOMMU clocks
- * @mmu - The kgsl MMU pointer
- * @ts - Timestamp on which the clocks should be disabled
- * @ts_valid - Indicates whether ts parameter is valid, if this parameter
- * is false then it means that the calling function wants to disable the
- * IOMMU clocks immediately without waiting for any timestamp
- * @unit: IOMMU unit for which clocks are to be turned off
- *
- * Creates an event to disable the IOMMU clocks on timestamp and if event
- * already exists then updates the timestamp of disabling the IOMMU clocks
- * with the passed in ts if it is greater than the current value at which
- * the clocks will be disabled
- * Return - void
- */
-static void
-kgsl_iommu_disable_clk_on_ts(struct kgsl_mmu *mmu,
-				unsigned int ts, int unit)
-{
-	struct kgsl_iommu_disable_clk_param *param;
-	struct kgsl_iommu *iommu = mmu->priv;
-
-	param = kzalloc(sizeof(*param), GFP_KERNEL);
-	if (!param)
-		return;
-
-	param->mmu = mmu;
-	param->unit = unit;
-	param->ts = ts;
-
-	if (kgsl_add_event(mmu->device, &iommu->events,
-			ts, kgsl_iommu_clk_disable_event, param)) {
-		KGSL_DRV_ERR(mmu->device,
-			"Failed to add IOMMU disable clk event\n");
-		kfree(param);
 	}
 }
 
@@ -999,6 +932,7 @@ static int kgsl_iommu_init_sync_lock(struct kgsl_mmu *mmu)
 	}
 
 	/* Add the entry to the global PT list */
+	iommu->sync_lock_desc.priv |= KGSL_MEMDESC_PRIVATE;
 	status = kgsl_add_global_pt_entry(mmu->device, &iommu->sync_lock_desc);
 	if (status) {
 		kgsl_sg_free(iommu->sync_lock_desc.sg,
@@ -1189,6 +1123,7 @@ static int kgsl_set_register_map(struct kgsl_mmu *mmu)
 			ret = -EINVAL;
 			goto err;
 		}
+		/* this mapping is only for use during pagetable switch */
 		iommu_unit->reg_map.hostptr = ioremap(data.physstart,
 					data.physend - data.physstart + 1);
 		if (!iommu_unit->reg_map.hostptr) {
@@ -1206,9 +1141,22 @@ static int kgsl_set_register_map(struct kgsl_mmu *mmu)
 		if (ret)
 			goto err;
 
-		/* Add the register map to the global PT list */
-		kgsl_add_global_pt_entry(mmu->device, &iommu_unit->reg_map);
+		if (msm_soc_version_supports_iommu_v0()) {
+			/*
+			* Add the register map to the global PT list so that it
+			* gets a GPU virtual address. This is needed for v0
+			* only, on later hardware the registers are in the
+			* RBBM adress space.
+			*/
+			iommu_unit->reg_map.priv |= KGSL_MEMDESC_PRIVATE;
+			kgsl_add_global_pt_entry(mmu->device,
+					&iommu_unit->reg_map);
 
+		}
+
+		/* For v0, iommu_halt_enable is read from devtree
+		 * elsewhere, but force it on for v1 and later hardware.
+		 */
 		if (!msm_soc_version_supports_iommu_v0())
 			iommu_unit->iommu_halt_enable = 1;
 
@@ -1326,12 +1274,6 @@ static unsigned int kgsl_iommu_get_reg_ahbaddr(struct kgsl_mmu *mmu,
 			iommu->iommu_reg_list[reg].reg_offset;
 }
 
-static int iommu_readtimestamp(struct kgsl_device *device, void *priv,
-		enum kgsl_timestamp_type type, unsigned int *timestamp)
-{
-	return kgsl_readtimestamp(device, NULL, type, timestamp);
-}
-
 static int kgsl_iommu_init(struct kgsl_mmu *mmu)
 {
 	/*
@@ -1349,9 +1291,6 @@ static int kgsl_iommu_init(struct kgsl_mmu *mmu)
 	iommu = kzalloc(sizeof(struct kgsl_iommu), GFP_KERNEL);
 	if (!iommu)
 		return -ENOMEM;
-
-	kgsl_add_event_group(&iommu->events, NULL, "iommu",
-		iommu_readtimestamp, iommu);
 
 	mmu->priv = iommu;
 	status = kgsl_get_iommu_ctxt(mmu);
@@ -1423,8 +1362,6 @@ static int kgsl_iommu_init(struct kgsl_mmu *mmu)
 
 done:
 	if (status) {
-		if (iommu)
-			kgsl_del_event_group(&iommu->events);
 		kfree(iommu);
 		mmu->priv = NULL;
 	}
@@ -1831,7 +1768,6 @@ static void kgsl_iommu_pagefault_resume(struct kgsl_mmu *mmu)
 
 static void kgsl_iommu_stop(struct kgsl_mmu *mmu)
 {
-	struct kgsl_iommu *iommu = mmu->priv;
 	/*
 	 *  stop device mmu
 	 *
@@ -1842,7 +1778,6 @@ static void kgsl_iommu_stop(struct kgsl_mmu *mmu)
 	mmu->hwpagetable = NULL;
 
 	kgsl_iommu_pagefault_resume(mmu);
-	kgsl_cancel_events(mmu->device, &iommu->events);
 }
 
 static int kgsl_iommu_close(struct kgsl_mmu *mmu)
@@ -1865,7 +1800,6 @@ static int kgsl_iommu_close(struct kgsl_mmu *mmu)
 		if (reg_map->hostptr)
 			iounmap(reg_map->hostptr);
 		kgsl_free(reg_map->sg);
-		reg_map->priv &= ~KGSL_MEMDESC_GLOBAL;
 	}
 	/* clear IOMMU GPU CPU sync structures */
 
@@ -1873,8 +1807,6 @@ static int kgsl_iommu_close(struct kgsl_mmu *mmu)
 	kgsl_free(iommu->sync_lock_desc.sg);
 	memset(&iommu->sync_lock_desc, 0, sizeof(iommu->sync_lock_desc));
 	iommu->sync_lock_vars = NULL;
-
-	kgsl_del_event_group(&iommu->events);
 
 	kfree(iommu);
 
@@ -2188,7 +2120,6 @@ struct kgsl_mmu_ops iommu_ops = {
 	.mmu_get_current_ptbase = kgsl_iommu_get_current_ptbase,
 	.mmu_enable_clk = kgsl_iommu_enable_clk,
 	.mmu_disable_clk = kgsl_iommu_disable_clk,
-	.mmu_disable_clk_on_ts = kgsl_iommu_disable_clk_on_ts,
 	.mmu_get_default_ttbr0 = kgsl_iommu_get_default_ttbr0,
 	.mmu_get_reg_gpuaddr = kgsl_iommu_get_reg_gpuaddr,
 	.mmu_get_reg_ahbaddr = kgsl_iommu_get_reg_ahbaddr,

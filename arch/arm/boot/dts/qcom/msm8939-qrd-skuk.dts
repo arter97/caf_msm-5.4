@@ -12,6 +12,7 @@
 
 /dts-v1/;
 
+#include "msm8939.dtsi"
 #include "msm8939-qrd-skuk.dtsi"
 
 / {
@@ -26,6 +27,7 @@
 		interrupts = <62 2>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&smb_int_default>;
+		qcom,stat-pulsed-irq;
 		qcom,chg-inhibit-disabled;
 		qcom,float-voltage-mv = <4350>;
 		qcom,iterm-ma = <100>;

@@ -28,6 +28,8 @@ dtb-$(CONFIG_ARCH_MSM8974) += msm8974-v1-cdp.dtb \
 	msm8974pro-ac-pm8941-liquid.dtb \
 	msm8974pro-ac-pm8941-mtp.dtb \
 	msm8974pro-ac-pma8084-pm8941-mtp.dtb
+dtb-$(CONFIG_ARCH_MSMFERRUM) += msmferrum-sim.dtb \
+	msmferrum-rumi.dtb
 dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
 	msm8916-rumi.dtb \
 	msm8916-cdp.dtb \
@@ -48,7 +50,14 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
 	msm8939-cdp.dtb \
 	msm8939-cdp-smb1360.dtb \
 	msm8939-mtp.dtb \
-	msm8939-mtp-smb1360.dtb
+	msm8939-mtp-smb1360.dtb \
+	msm8939-mtp-wcd9306.dtb \
+	msm8936-qrd-skuk.dtb \
+	msm8936-cdp.dtb \
+	msm8936-cdp-smb1360.dtb \
+	msm8936-mtp.dtb \
+	msm8936-mtp-smb1360.dtb \
+	msm8936-mtp-wcd9306.dtb
 dtb-$(CONFIG_ARCH_MSM8226) += msm8226-sim.dtb \
 	msm8226-fluid.dtb \
 	msm8226-v1-cdp.dtb \
@@ -146,7 +155,8 @@ dtb-$(CONFIG_ARCH_APQ8084) += apq8084-v1.0-old-pwr-grid-liquid.dtb \
 dtb-$(CONFIG_ARCH_MSM8994) += msm8994-sim.dtb \
 	msm8994-rumi.dtb \
 	msm8994-cdp.dtb \
-	msm8994-mtp.dtb
+	msm8994-mtp.dtb \
+	msm8994-liquid.dtb
 
 DTB_NAMES := $(subst $\",,$(CONFIG_BUILD_ARM_APPENDED_DTB_IMAGE_NAMES))
 ifneq ($(DTB_NAMES),)

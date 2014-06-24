@@ -69,7 +69,7 @@ static struct msm_sensor_power_setting ov5645_power_setting[] = {
 	{
 		.seq_type = SENSOR_CLK,
 		.seq_val = SENSOR_CAM_MCLK,
-		.config_val = 23880000,
+		.config_val = 24000000,
 		.delay = 10,
 	},
 	{
@@ -533,7 +533,12 @@ static int32_t ov5645_platform_probe(struct platform_device *pdev)
 	int32_t rc;
 	const struct of_device_id *match;
 	match = of_match_device(ov5645_dt_match, &pdev->dev);
-	rc = msm_sensor_platform_probe(pdev, match->data);
+	if (match)
+		rc = msm_sensor_platform_probe(pdev, match->data);
+	else {
+		pr_err("%s:%d match is null\n", __func__, __LINE__);
+		rc = -EINVAL;
+	}
 	return rc;
 }
 

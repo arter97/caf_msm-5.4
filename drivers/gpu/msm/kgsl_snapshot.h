@@ -102,6 +102,8 @@ struct kgsl_snapshot_rb {
 	int wptr;   /* Current index of the CPU write pointer */
 	int rptr;   /* Current index of the GPU read pointer */
 	int count;  /* Number of dwords in the dump */
+	__u32 timestamp_queued; /* The last queued timestamp */
+	__u32 timestamp_retired; /* The last timestamp retired by HW */
 } __packed;
 
 /* Replay or Memory list section, both sections have same header */
@@ -172,6 +174,7 @@ struct kgsl_snapshot_debugbus {
 #define SNAPSHOT_GPU_OBJECT_IB      2
 #define SNAPSHOT_GPU_OBJECT_GENERIC 3
 #define SNAPSHOT_GPU_OBJECT_DRAW    4
+#define SNAPSHOT_GPU_OBJECT_GLOBAL  5
 
 struct kgsl_snapshot_gpu_object {
 	int type;      /* Type of GPU object */

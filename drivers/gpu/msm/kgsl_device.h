@@ -331,7 +331,6 @@ struct kgsl_device {
 	int open_count;
 
 	struct mutex mutex;
-	atomic64_t mutex_owner;
 	uint32_t state;
 	uint32_t requested_state;
 
@@ -404,12 +403,18 @@ enum kgsl_context_priv {
 };
 
 struct kgsl_process_private;
+
 /**
- * struct kgsl_context - Master structure for a KGSL context object
+ * struct kgsl_context - The context fields that are valid for a user defined
+ * context
  * @refcount: kref object for reference counting the context
  * @id: integer identifier for the context
- * @priv: in-kernel context flags, use KGSL_CONTEXT_* values
+ * @priority; The context's priority to submit commands to GPU
+ * @tid: task that created this context.
  * @dev_priv: pointer to the owning device instance
+ * @proc_priv: pointer to process private, the process that allocated the
+ * context
+ * @priv: in-kernel context flags, use KGSL_CONTEXT_* values
  * @reset_status: status indication whether a gpu reset occured and whether
  * this context was responsible for causing it
  * @wait_on_invalid_ts: flag indicating if this context has tried to wait on a
@@ -418,7 +423,6 @@ struct kgsl_process_private;
  * sync_pt timestamp expires
  * @events: A kgsl_event_group for this context - contains the list of GPU
  * events
- * @tid: task that created this context.
  * @pagefault_ts: global timestamp of the pagefault, if KGSL_CONTEXT_PAGEFAULT
  * is set.
  * @flags: flags from userspace controlling the behavior of this context
@@ -888,32 +892,6 @@ static inline int kgsl_sysfs_store(const char *buf, unsigned int *ptr)
 		*ptr = val;
 
 	return 0;
-}
-
-/**
- * kgsl_mutex_lock() -- mutex_lock() wrapper
- * @mutex: mutex to lock
- * @owner: current mutex owner
- *
- */
-static inline int kgsl_mutex_lock(struct mutex *mutex, atomic64_t *owner)
-{
-	/*
-	 * owner is no longer used, but the interface must remain the same
-	 * for now.
-	 */
-	mutex_lock(mutex);
-	return 1;
-}
-
-/**
- * kgsl_mutex_unlock() -- Clear the owner and unlock the mutex
- * @mutex: mutex to unlock
- * @owner: current mutex owner
- */
-static inline void kgsl_mutex_unlock(struct mutex *mutex, atomic64_t *owner)
-{
-	mutex_unlock(mutex);
 }
 
 /*

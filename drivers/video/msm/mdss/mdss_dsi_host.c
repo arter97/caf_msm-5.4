@@ -1319,7 +1319,10 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 	struct dcs_cmd_req *req;
 	int ret = -EINVAL;
 	int rc = 0;
-	mutex_lock(&ctrl->cmd_mutex);
+
+	if (from_mdp)	/* from mdp kickoff */
+		mutex_lock(&ctrl->cmd_mutex);
+
 	req = mdss_dsi_cmdlist_get(ctrl);
 
 	MDSS_XLOG(ctrl->ndx, from_mdp, ctrl->mdp_busy, current->pid,
@@ -1362,15 +1365,17 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 
 need_lock:
 
-	if (from_mdp) { /* from pipe_commit */
+	MDSS_XLOG(ctrl->ndx, from_mdp, ctrl->mdp_busy, current->pid,
+							XLOG_FUNC_EXIT);
+
+	if (from_mdp) { /* from mdp kickoff */
 		/* acquire lock only has new frame update */
 		if (ctrl->roi.w != 0 || ctrl->roi.h != 0)
 			mdss_dsi_cmd_mdp_start(ctrl);
+
+		mutex_unlock(&ctrl->cmd_mutex);
 	}
 
-	MDSS_XLOG(ctrl->ndx, from_mdp, ctrl->mdp_busy, current->pid,
-							XLOG_FUNC_EXIT);
-	mutex_unlock(&ctrl->cmd_mutex);
 	return ret;
 }
 
@@ -1428,12 +1433,14 @@ static int dsi_event_thread(void *data)
 			mdss_dsi_pll_relock(ctrl);
 
 		if (todo & DSI_EV_MDP_FIFO_UNDERFLOW) {
+			mutex_lock(&ctrl->mutex);
 			if (ctrl->recovery) {
 				mdss_dsi_clk_ctrl(ctrl, DSI_ALL_CLKS, 1);
 				mdss_dsi_sw_reset_restore(ctrl);
 				ctrl->recovery->fxn(ctrl->recovery->data);
 				mdss_dsi_clk_ctrl(ctrl, DSI_ALL_CLKS, 0);
 			}
+			mutex_unlock(&ctrl->mutex);
 		}
 
 		if (todo & DSI_EV_DSI_FIFO_EMPTY)

@@ -25,6 +25,7 @@
 		i2c6 = &i2c_6; /* I2C6 NFC qup6 device */
 		i2c4 = &i2c_4;
 		i2c2 = &i2c_2;
+		i2c5 = &i2c_5;
 		spi0 = &spi_0;
 	};
 
@@ -461,7 +462,7 @@
 		      <0xfc526000 0x1000>,
 		      <0xff000000 0xf1d>,
 		      <0xff000f20 0xa8>,
-		      <0xff100000 0x1000>,
+		      <0xff100000 0x100000>,
 		      <0xff200000 0x100000>,
 		      <0xff300000 0xd00000>;
 
@@ -528,7 +529,7 @@
 		    <0xfc52e000  0x1000>,
 		    <0xf8800000 0xf1d>,
 		    <0xf8800F20 0xa8>,
-		    <0xf8900000 0x1000>,
+		    <0xf8900000 0x100000>,
 		    <0xf8a00000 0x100000>,
 		    <0xf8b00000 0x4fffff>;
 
@@ -1144,6 +1145,7 @@
 		interrupt-names = "hs_phy_irq", "pwr_event_irq", "pmic_id_irq";
 
 		USB3_GDSC-supply = <&gdsc_usb30>;
+		vbus_dwc3-supply = <&pmi8994_otg_supply>;
 		qcom,dwc-usb3-msm-tx-fifo-size = <29696>;
 		qcom,dwc-usb3-msm-qdss-tx-fifo-size = <8192>;
 		qcom,otg-capability;
@@ -1157,6 +1159,8 @@
 				<61 512 240000 960000>;
 
 		qcom,reset_hsphy_sleep_clk_on_init;
+		qcom,power-collapse-on-cable-disconnect;
+		qcom,por-after-power-collapse;
 
 		clocks = <&clock_gcc clk_gcc_usb30_master_clk>,
 			 <&clock_gcc clk_gcc_sys_noc_usb3_axi_clk>,
@@ -1199,6 +1203,8 @@
 		status = "disabled";
 		reg = <0xf9b38000 0x800>,
 			<0xf9b3e000 0x3ff>;
+		reg-names = "qmp_phy_base",
+			"qmp_ahb2phy_base";
 		vdd-supply = <&pm8994_l28>;
 		vdda18-supply = <&pm8994_l6>;
 		qcom,vdd-voltage-level = <0 1000000 1000000>;
@@ -1365,7 +1371,7 @@
 			<&clock_mmss clk_venus0_ahb_clk>,
 			<&clock_mmss clk_venus0_axi_clk>,
 			<&clock_mmss clk_venus0_ocmemnoc_clk>,
-			<&clock_rpm clk_ce1_clk>;
+			<&clock_rpm clk_scm_ce1_clk>;
 
 		qcom,msm-bus,name = "pil-venus";
 		qcom,msm-bus,num-cases = <2>;
@@ -1433,7 +1439,7 @@
 
 		clocks = <&clock_gcc clk_gcc_lpass_q6_axi_clk>,
 			 <&clock_rpm clk_cxo_pil_lpass_clk>,
-			 <&clock_rpm clk_ce1_clk>;
+			 <&clock_rpm clk_scm_ce1_clk>;
 		clock-names = "bus_clk", "xo", "scm_ce1_clk";
 		qcom,active-clock-names = "bus_clk";
 		qcom,proxy-clock-names = "xo", "scm_ce1_clk";
@@ -1918,6 +1924,31 @@
 		qcom,master-id = <86>;
 	};
 
+	i2c_5: i2c@f9967000 { /* BLSP2 QUP5 */
+		compatible = "qcom,i2c-msm-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr", "bam_phys_addr";
+		reg = <0xf9967000 0x1000>,
+		      <0xf9944000 0x19000>;
+		interrupt-names = "qup_irq", "bam_irq";
+		interrupts = <0 105 0>, <0 239 0>;
+		qcom,clk-freq-out = <100000>;
+		qcom,clk-freq-in  = <19200000>;
+		clock-names = "iface_clk", "core_clk";
+		clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
+			 <&clock_gcc clk_gcc_blsp2_qup5_i2c_apps_clk>;
+
+		pinctrl-names = "i2c_active", "i2c_sleep";
+		pinctrl-0 = <&i2c_5_active>;
+		pinctrl-1 = <&i2c_5_sleep>;
+		qcom,noise-rjct-scl = <0>;
+		qcom,noise-rjct-sda = <0>;
+		qcom,bam-pipe-idx-cons = <20>;
+		qcom,bam-pipe-idx-prod = <21>;
+		qcom,master-id = <84>;
+	};
+
 	i2c_6: i2c@f9928000 { /* BLSP1 QUP6 */
 		compatible = "qcom,i2c-msm-v2";
 		#address-cells = <1>;
@@ -2238,6 +2269,54 @@
 		reg = <0xfe87f720 0x1000>;
 	};
 
+	qcom_crypto: qcrypto@fd440000 {
+		compatible = "qcom,qcrypto";
+		reg = <0xfd440000 0x20000>,
+		      <0xfd444000 0x9000>;
+		reg-names = "crypto-base","crypto-bam-base";
+		interrupts = <0 236 0>;
+		qcom,bam-pipe-pair = <2>;
+		qcom,ce-hw-instance = <0>;
+		qcom,ce-device = <0>;
+		qcom,msm-bus,name = "qcrypto-noc";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<55 512 0 0>,
+				<55 512 3936000 393600>;
+		clock-names = "core_clk", "iface_clk", "bus_clk";
+		clocks = <&clock_rpm clk_ce2_clk>,
+			 <&clock_rpm clk_gcc_ce2_ahb_m_clk>,
+			 <&clock_rpm clk_gcc_ce2_axi_m_clk>;
+		qcom,use-sw-aes-cbc-ecb-ctr-algo;
+		qcom,use-sw-aes-xts-algo;
+		qcom,use-sw-aes-ccm-algo;
+		qcom,use-sw-ahash-algo;
+		status = "disabled";
+	};
+
+	qcom_cedev: qcedev@fd440000 {
+		compatible = "qcom,qcedev";
+		reg = <0xfd440000 0x20000>,
+		      <0xfd444000 0x9000>;
+		reg-names = "crypto-base","crypto-bam-base";
+		interrupts = <0 236 0>;
+		qcom,bam-pipe-pair = <1>;
+		qcom,ce-hw-instance = <0>;
+		qcom,ce-device = <0>;
+		qcom,msm-bus,name = "qcedev-noc";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<55 512 0 0>,
+				<55 512 3936000 393600>;
+		clock-names = "core_clk", "iface_clk", "bus_clk";
+		clocks = <&clock_rpm clk_ce2_clk>,
+			 <&clock_rpm clk_gcc_ce2_ahb_m_clk>,
+			 <&clock_rpm clk_gcc_ce2_axi_m_clk>;
+		status = "disabled";
+	};
+
 	qcom,qseecom@6500000 {
 		compatible = "qcom,qseecom";
 		reg = <0x6500000 0x300000>;
@@ -2255,7 +2334,7 @@
 				<55 512 120000 1200000>,
 				<55 512 393600 3936000>;
 		clock-names = "core_clk";
-		clocks = <&clock_rpm clk_ce1_clk>;
+		clocks = <&clock_rpm clk_qseecom_ce1_clk>;
 	};
 
 	qcom,sensor-information {

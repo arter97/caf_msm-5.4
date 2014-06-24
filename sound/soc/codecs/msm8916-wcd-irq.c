@@ -98,9 +98,7 @@ struct wcd9xxx_spmi_map map;
 
 void wcd9xxx_spmi_enable_irq(int irq)
 {
-	map.mask[BIT_BYTE(irq)] &=
-		~(BYTE_BIT_MASK(irq));
-	enable_irq_wake(map.linuxirq[irq]);
+	pr_debug("%s: irqno =%d\n", __func__, irq);
 	if ((irq >= 0) && (irq <= 7))
 		snd_soc_update_bits(map.codec,
 				MSM8X16_WCD_A_DIGITAL_INT_EN_SET,
@@ -109,14 +107,20 @@ void wcd9xxx_spmi_enable_irq(int irq)
 		snd_soc_update_bits(map.codec,
 				MSM8X16_WCD_A_ANALOG_INT_EN_SET,
 				(0x01 << (irq - 8)), (0x01 << (irq - 8)));
+
+	if (!(map.mask[BIT_BYTE(irq)] & (BYTE_BIT_MASK(irq))))
+		return;
+
+	map.mask[BIT_BYTE(irq)] &=
+		~(BYTE_BIT_MASK(irq));
+
+	enable_irq(map.linuxirq[irq]);
+	enable_irq_wake(map.linuxirq[irq]);
 }
 
 void wcd9xxx_spmi_disable_irq(int irq)
 {
-	map.mask[BIT_BYTE(irq)] |=
-		(BYTE_BIT_MASK(irq));
-
-	disable_irq_nosync(map.linuxirq[irq]);
+	pr_debug("%s: irqno =%d\n", __func__, irq);
 	if ((irq >= 0) && (irq <= 7))
 		snd_soc_update_bits(map.codec,
 				MSM8X16_WCD_A_DIGITAL_INT_EN_SET,
@@ -125,6 +129,14 @@ void wcd9xxx_spmi_disable_irq(int irq)
 		snd_soc_update_bits(map.codec,
 				MSM8X16_WCD_A_ANALOG_INT_EN_SET,
 				(0x01 << (irq - 8)), 0x00);
+
+	if (map.mask[BIT_BYTE(irq)] & (BYTE_BIT_MASK(irq)))
+		return;
+
+	map.mask[BIT_BYTE(irq)] |=
+		(BYTE_BIT_MASK(irq));
+
+	disable_irq_nosync(map.linuxirq[irq]);
 }
 
 int wcd9xxx_spmi_request_irq(int irq, irq_handler_t handler,
@@ -201,7 +213,7 @@ static irqreturn_t wcd9xxx_spmi_irq_handler(int linux_irq, void *data)
 	for (i = 0; i < MAX_NUM_IRQS; i++) {
 		j = get_order_irq(i);
 		if ((status[BIT_BYTE(j)] & BYTE_BIT_MASK(j)) &&
-			((map.handled[j] &
+			((map.handled[BIT_BYTE(j)] &
 			BYTE_BIT_MASK(j)) == 0)) {
 			map.handler[j](irq, data);
 			map.handled[BIT_BYTE(j)] |=
@@ -324,6 +336,8 @@ bool wcd9xxx_spmi_lock_sleep()
 				      msm_cpuidle_get_deep_idle_latency());
 	}
 	mutex_unlock(&map.pm_lock);
+	pr_debug("%s: wake lock counter %d\n", __func__,
+			map.wlock_holders);
 
 	if (!wait_event_timeout(map.pm_wq,
 				((wcd9xxx_spmi_pm_cmpxchg(
@@ -364,6 +378,8 @@ void wcd9xxx_spmi_unlock_sleep()
 				PM_QOS_DEFAULT_VALUE);
 	}
 	mutex_unlock(&map.pm_lock);
+	pr_debug("%s: wake lock counter %d\n", __func__,
+			map.wlock_holders);
 	wake_up_all(&map.pm_wq);
 }
 EXPORT_SYMBOL(wcd9xxx_spmi_unlock_sleep);

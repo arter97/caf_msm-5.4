@@ -44,6 +44,7 @@ struct kgsl_context;
  * @fault_policy: GFT fault policy set in cmdbatch_skip_cmd();
  * @debug_root: debugfs entry for this context.
  * @inflight_timestamp: The last timestamp that was queued on this context
+ * @rb: The ringbuffer in which this context submits commands.
  */
 struct adreno_context {
 	struct kgsl_context base;
@@ -65,6 +66,7 @@ struct adreno_context {
 	unsigned int fault_policy;
 	struct dentry *debug_root;
 	unsigned int inflight_timestamp;
+	struct adreno_ringbuffer *rb;
 };
 
 /**
@@ -98,7 +100,9 @@ void adreno_drawctxt_destroy(struct kgsl_context *context);
 void adreno_drawctxt_sched(struct kgsl_device *device,
 		struct kgsl_context *context);
 
+struct adreno_ringbuffer;
 int adreno_drawctxt_switch(struct adreno_device *adreno_dev,
+				struct adreno_ringbuffer *rb,
 				struct adreno_context *drawctxt,
 				unsigned int flags);
 

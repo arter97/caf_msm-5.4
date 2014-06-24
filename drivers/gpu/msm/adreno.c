@@ -117,7 +117,7 @@ static void adreno_input_work(struct work_struct *work)
 			struct adreno_device, input_work);
 	struct kgsl_device *device = &adreno_dev->dev;
 
-	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
+	mutex_lock(&device->mutex);
 
 	device->flags |= KGSL_FLAG_WAKE_ON_TOUCH;
 
@@ -135,7 +135,7 @@ static void adreno_input_work(struct work_struct *work)
 	 */
 	mod_timer(&device->idle_timer,
 		jiffies + msecs_to_jiffies(_wake_timeout));
-	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
+	mutex_unlock(&device->mutex);
 }
 
 /*
@@ -360,10 +360,10 @@ int adreno_perfcounter_read_group(struct adreno_device *adreno_dev,
 		goto done;
 	}
 
-	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
+	mutex_lock(&device->mutex);
 	ret = kgsl_active_count_get(device);
 	if (ret) {
-		kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
+		mutex_unlock(&device->mutex);
 		goto done;
 	}
 
@@ -391,7 +391,7 @@ int adreno_perfcounter_read_group(struct adreno_device *adreno_dev,
 	}
 
 	kgsl_active_count_put(device);
-	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
+	mutex_unlock(&device->mutex);
 
 	/* write the data */
 	if (ret == 0)
@@ -483,7 +483,7 @@ int adreno_perfcounter_query_group(struct adreno_device *adreno_dev,
 	if (counters == NULL || groupid >= counters->group_count)
 		return -EINVAL;
 
-	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
+	mutex_lock(&device->mutex);
 
 	group = &(counters->groups[groupid]);
 	*max_counters = group->reg_count;
@@ -493,7 +493,7 @@ int adreno_perfcounter_query_group(struct adreno_device *adreno_dev,
 	 * *max_counters and return success
 	 */
 	if (countables == NULL || count == 0) {
-		kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
+		mutex_unlock(&device->mutex);
 		return 0;
 	}
 
@@ -501,14 +501,14 @@ int adreno_perfcounter_query_group(struct adreno_device *adreno_dev,
 
 	buf = kmalloc(t * sizeof(unsigned int), GFP_KERNEL);
 	if (buf == NULL) {
-		kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
+		mutex_unlock(&device->mutex);
 		return -ENOMEM;
 	}
 
 	for (i = 0; i < t; i++)
 		buf[i] = group->regs[i].countable;
 
-	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
+	mutex_unlock(&device->mutex);
 
 	ret = copy_to_user(countables, buf, sizeof(unsigned int) * t);
 	kfree(buf);
@@ -1339,7 +1339,7 @@ static int adreno_iommu_setstate(struct kgsl_device *device,
 	if (result)
 		kgsl_mmu_disable_clk(&device->mmu, KGSL_IOMMU_MAX_UNITS);
 	else
-		kgsl_mmu_disable_clk_on_ts(&device->mmu, rb->global_ts,
+		adreno_ringbuffer_mmu_disable_clk_on_ts(device, rb,
 						KGSL_IOMMU_MAX_UNITS);
 
 done:
@@ -1811,7 +1811,7 @@ static int adreno_remove(struct platform_device *pdev)
 static int adreno_init(struct kgsl_device *device)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
-	struct adreno_gpudev *gpudev;
+	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 	int i;
 	int ret;
 
@@ -1822,8 +1822,6 @@ static int adreno_init(struct kgsl_device *device)
 	 */
 	if (test_bit(ADRENO_DEVICE_INITIALIZED, &adreno_dev->priv))
 		return 0;
-
-	gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 
 	/* Power up the device */
 	ret = kgsl_pwrctrl_enable(device);
@@ -2020,7 +2018,7 @@ static void adreno_start_work(struct work_struct *work)
 	/* Nice ourselves to be higher priority but not too high priority */
 	set_user_nice(current, _wake_nice);
 
-	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
+	mutex_lock(&device->mutex);
 	/*
 	 *  If adreno start is already called, no need to call it again
 	 *  it can lead to unpredictable behavior if we try to start
@@ -2040,7 +2038,7 @@ static void adreno_start_work(struct work_struct *work)
 		_status = _adreno_start(adreno_dev);
 	else
 		_status = 0;
-	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
+	mutex_unlock(&device->mutex);
 }
 
 /**
@@ -2065,9 +2063,9 @@ static int adreno_start(struct kgsl_device *device, int priority)
 	 * higher priority work queue and wait for it to finish
 	 */
 	queue_work(adreno_wq, &adreno_dev->start_work);
-	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
+	mutex_unlock(&device->mutex);
 	flush_work(&adreno_dev->start_work);
-	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
+	mutex_lock(&device->mutex);
 
 	return _status;
 }
@@ -2082,6 +2080,8 @@ static int adreno_stop(struct kgsl_device *device)
 	adreno_dev->drawctxt_active = NULL;
 
 	adreno_dispatcher_stop(adreno_dev);
+
+	adreno_ringbuffer_stop(adreno_dev);
 
 	kgsl_mmu_stop(&device->mmu);
 
@@ -2426,7 +2426,7 @@ static ssize_t _ft_hang_intr_status_store(struct device *dev,
 		return 0;
 	adreno_dev = ADRENO_DEVICE(device);
 
-	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
+	mutex_lock(&device->mutex);
 	ret = kgsl_sysfs_store(buf, &new_setting);
 	if (ret)
 		goto done;
@@ -2470,7 +2470,7 @@ static ssize_t _ft_hang_intr_status_store(struct device *dev,
 		}
 	}
 done:
-	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
+	mutex_unlock(&device->mutex);
 	return ret < 0 ? ret : count;
 }
 
@@ -2549,7 +2549,7 @@ static ssize_t _sptp_pc_store(struct device *dev,
 	if (ret < 0)
 		return ret;
 
-	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
+	mutex_lock(&device->mutex);
 
 	kgsl_pwrctrl_change_state(device, KGSL_STATE_SUSPEND);
 	if (t)
@@ -2558,7 +2558,7 @@ static ssize_t _sptp_pc_store(struct device *dev,
 		clear_bit(ADRENO_SPTP_PC_CTRL, &adreno_dev->pwrctrl_flag);
 	kgsl_pwrctrl_change_state(device, KGSL_STATE_SLUMBER);
 
-	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
+	mutex_unlock(&device->mutex);
 	return count;
 }
 
@@ -2758,6 +2758,11 @@ int adreno_set_constraint(struct kgsl_device *device,
 		break;
 	}
 
+	/* If a new constraint has been set for a context, cancel the old one */
+	if ((status == 0) &&
+		(context->id == device->pwrctrl.constraint.owner_id))
+		device->pwrctrl.constraint.type = KGSL_CONSTRAINT_NONE;
+
 	return status;
 }
 
@@ -2783,7 +2788,7 @@ static int adreno_setproperty(struct kgsl_device_private *dev_priv,
 				break;
 			}
 
-			kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
+			mutex_lock(&device->mutex);
 
 			if (enable) {
 				device->pwrctrl.ctrl_flags = 0;
@@ -2803,7 +2808,7 @@ static int adreno_setproperty(struct kgsl_device_private *dev_priv,
 				kgsl_pwrscale_disable(device);
 			}
 
-			kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
+			mutex_unlock(&device->mutex);
 			status = 0;
 		}
 		break;
@@ -3071,7 +3076,7 @@ static int adreno_suspend_context(struct kgsl_device *device)
 
 	/* switch to NULL ctxt */
 	if (adreno_dev->drawctxt_active != NULL) {
-		adreno_drawctxt_switch(adreno_dev, NULL, 0);
+		adreno_drawctxt_switch(adreno_dev, adreno_dev->cur_rb, NULL, 0);
 		status = adreno_idle(device);
 	}
 
@@ -3199,6 +3204,74 @@ static int adreno_waittimestamp(struct kgsl_device *device,
 }
 
 /**
+ * __adreno_readtimestamp() - Reads the timestamp from memstore memory
+ * @device: Pointer to device whose memstore is read
+ * @index: Index into the memstore memory
+ * @type: Type of timestamp to read
+ * @timestamp: The out parameter where the timestamp is read
+ */
+int __adreno_readtimestamp(struct kgsl_device *device, int index, int type,
+		unsigned int *timestamp)
+{
+	int status = 0;
+
+	switch (type) {
+	case KGSL_TIMESTAMP_CONSUMED:
+		kgsl_sharedmem_readl(&device->memstore, timestamp,
+			KGSL_MEMSTORE_OFFSET(index, soptimestamp));
+		break;
+	case KGSL_TIMESTAMP_RETIRED:
+		kgsl_sharedmem_readl(&device->memstore, timestamp,
+			KGSL_MEMSTORE_OFFSET(index, eoptimestamp));
+		break;
+	default:
+		status = -EINVAL;
+		*timestamp = 0;
+		break;
+	}
+	return status;
+}
+
+/**
+ * adreno_rb_readtimestamp(): Return the value of given type of timestamp
+ * for a RB
+ * @device: GPU device whose timestamp values are being queried
+ * @priv: The object being queried for a timestamp (expected to be a rb pointer)
+ * @type: The type of timestamp (one of 3) to be read
+ * @timestamp: Pointer to where the read timestamp is to be written to
+ *
+ * CONSUMED and RETIRED type timestamps are sorted by id and are constantly
+ * updated by the GPU through shared memstore memory. QUEUED type timestamps
+ * are read directly from context struct.
+
+ * The function returns 0 on success and timestamp value at the *timestamp
+ * address and returns -EINVAL on any read error/invalid type and timestamp = 0.
+ */
+int adreno_rb_readtimestamp(struct kgsl_device *device,
+		void *priv, enum kgsl_timestamp_type type,
+		unsigned int *timestamp)
+{
+	int status = 0;
+	struct adreno_ringbuffer *rb = priv;
+
+	/*
+	 * If user passed in a NULL pointer for timestamp, return without
+	 * doing anything.
+	 */
+	if (!timestamp)
+		return status;
+
+	if (KGSL_TIMESTAMP_QUEUED == type)
+		*timestamp = rb->timestamp;
+	else
+		status = __adreno_readtimestamp(device,
+				rb->id + KGSL_MEMSTORE_MAX,
+				type, timestamp);
+
+	return status;
+}
+
+/**
  * adreno_readtimestamp(): Return the value of given type of timestamp
  * @device: GPU device whose timestamp values are being queried
  * @priv: The object being queried for a timestamp (expected to be a context)
@@ -3220,6 +3293,7 @@ static int adreno_readtimestamp(struct kgsl_device *device,
 	struct kgsl_context *context = priv;
 	unsigned int id = KGSL_CONTEXT_ID(context);
 
+	BUG_ON(NULL == context || id >= KGSL_MEMSTORE_MAX);
 	/*
 	 * If user passed in a NULL pointer for timestamp, return without
 	 * doing anything.
@@ -3227,27 +3301,11 @@ static int adreno_readtimestamp(struct kgsl_device *device,
 	if (!timestamp)
 		return status;
 
-	switch (type) {
-	case KGSL_TIMESTAMP_QUEUED: {
-		struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
-
-		*timestamp = adreno_context_timestamp(context,
-				ADRENO_CURRENT_RINGBUFFER(adreno_dev));
-		break;
-	}
-	case KGSL_TIMESTAMP_CONSUMED:
-		kgsl_sharedmem_readl(&device->memstore, timestamp,
-			KGSL_MEMSTORE_OFFSET(id, soptimestamp));
-		break;
-	case KGSL_TIMESTAMP_RETIRED:
-		kgsl_sharedmem_readl(&device->memstore, timestamp,
-			KGSL_MEMSTORE_OFFSET(id, eoptimestamp));
-		break;
-	default:
-		status = -EINVAL;
-		*timestamp = 0;
-		break;
-	}
+	if (KGSL_TIMESTAMP_QUEUED == type)
+		*timestamp = adreno_context_timestamp(context);
+	else
+		status = __adreno_readtimestamp(device,
+				context->id, type, timestamp);
 
 	return status;
 }
@@ -3262,7 +3320,7 @@ static long adreno_ioctl(struct kgsl_device_private *dev_priv,
 	switch (cmd) {
 	case IOCTL_KGSL_PERFCOUNTER_GET: {
 		struct kgsl_perfcounter_get *get = data;
-		kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
+		mutex_lock(&device->mutex);
 		/*
 		 * adreno_perfcounter_get() is called by kernel clients
 		 * during start(), so it is not safe to take an
@@ -3275,15 +3333,15 @@ static long adreno_ioctl(struct kgsl_device_private *dev_priv,
 				&get->offset_hi, PERFCOUNTER_FLAG_NONE);
 			kgsl_active_count_put(device);
 		}
-		kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
+		mutex_unlock(&device->mutex);
 		break;
 	}
 	case IOCTL_KGSL_PERFCOUNTER_PUT: {
 		struct kgsl_perfcounter_put *put = data;
-		kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
+		mutex_lock(&device->mutex);
 		result = adreno_perfcounter_put(adreno_dev, put->groupid,
 			put->countable, PERFCOUNTER_FLAG_NONE);
-		kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
+		mutex_unlock(&device->mutex);
 		break;
 	}
 	case IOCTL_KGSL_PERFCOUNTER_QUERY: {

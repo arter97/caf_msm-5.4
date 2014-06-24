@@ -396,6 +396,7 @@ static int mdss_dsi_off(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
+	mutex_lock(&ctrl_pdata->mutex);
 	panel_info = &ctrl_pdata->panel_data.panel_info;
 	pr_debug("%s+: ctrl=%p ndx=%d\n", __func__,
 				ctrl_pdata, ctrl_pdata->ndx);
@@ -413,6 +414,7 @@ static int mdss_dsi_off(struct mdss_panel_data *pdata)
 
 	ret = mdss_dsi_panel_power_on(pdata, 0);
 	if (ret) {
+		mutex_unlock(&ctrl_pdata->mutex);
 		pr_err("%s: Panel power off failed\n", __func__);
 		return ret;
 	}
@@ -422,6 +424,7 @@ static int mdss_dsi_off(struct mdss_panel_data *pdata)
 	    && (panel_info->new_fps != panel_info->mipi.frame_rate))
 		panel_info->mipi.frame_rate = panel_info->new_fps;
 
+	mutex_unlock(&ctrl_pdata->mutex);
 	pr_debug("%s-:\n", __func__);
 
 	return ret;
@@ -520,6 +523,7 @@ int mdss_dsi_ulps_config(struct mdss_dsi_ctrl_pdata *ctrl_pdata, int enable)
 	struct mipi_panel_info *mipi;
 	u32 lane_status = 0, regval;
 	u32 active_lanes = 0, clamp_reg;
+	u32 clamp_reg_off, phyrst_reg_off;
 
 	if (!ctrl_pdata) {
 		pr_err("%s: invalid input\n", __func__);
@@ -538,6 +542,8 @@ int mdss_dsi_ulps_config(struct mdss_dsi_ctrl_pdata *ctrl_pdata, int enable)
 	}
 	pinfo = &pdata->panel_info;
 	mipi = &pinfo->mipi;
+	clamp_reg_off = ctrl_pdata->ulps_clamp_ctrl_off;
+	phyrst_reg_off = ctrl_pdata->ulps_phyrst_ctrl_off;
 
 	if (!mdss_dsi_ulps_feature_enabled(pdata)) {
 		pr_debug("%s: ULPS feature not supported. enable=%d\n",
@@ -604,16 +610,18 @@ int mdss_dsi_ulps_config(struct mdss_dsi_ctrl_pdata *ctrl_pdata, int enable)
 
 		/* Enable MMSS DSI Clamps */
 		if (ctrl_pdata->ndx == DSI_CTRL_0) {
-			regval = MIPI_INP(ctrl_pdata->mmss_misc_io.base + 0x14);
-			MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + 0x14,
+			regval = MIPI_INP(ctrl_pdata->mmss_misc_io.base +
+				clamp_reg_off);
+			MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + clamp_reg_off,
 				regval | clamp_reg);
-			MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + 0x14,
+			MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + clamp_reg_off,
 				regval | (clamp_reg | BIT(15)));
 		} else if (ctrl_pdata->ndx == DSI_CTRL_1) {
-			regval = MIPI_INP(ctrl_pdata->mmss_misc_io.base + 0x14);
-			MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + 0x14,
+			regval = MIPI_INP(ctrl_pdata->mmss_misc_io.base +
+				clamp_reg_off);
+			MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + clamp_reg_off,
 				regval | (clamp_reg << 16));
-			MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + 0x14,
+			MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + clamp_reg_off,
 				regval | ((clamp_reg << 16) | BIT(31)));
 		}
 
@@ -624,10 +632,10 @@ int mdss_dsi_ulps_config(struct mdss_dsi_ctrl_pdata *ctrl_pdata, int enable)
 		 * reset when mdss ahb clock reset is asserted while coming
 		 * out of power collapse
 		 */
-		MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + 0x108, 0x1);
+		MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + phyrst_reg_off, 0x1);
 		ctrl_pdata->ulps = true;
 	} else if (ctrl_pdata->ulps) {
-		MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + 0x108, 0x0);
+		MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + phyrst_reg_off, 0x0);
 		if (ctrl_pdata->ctrl_rev == MDSS_DSI_HW_REV_103)
 			mdss_dsi_20nm_phy_init(pdata);
 		else
@@ -651,12 +659,14 @@ int mdss_dsi_ulps_config(struct mdss_dsi_ctrl_pdata *ctrl_pdata, int enable)
 
 		/* Disable MMSS DSI Clamps */
 		if (ctrl_pdata->ndx == DSI_CTRL_0) {
-			regval = MIPI_INP(ctrl_pdata->mmss_misc_io.base + 0x14);
-			MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + 0x14,
+			regval = MIPI_INP(ctrl_pdata->mmss_misc_io.base +
+				clamp_reg_off);
+			MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + clamp_reg_off,
 				regval & ~(clamp_reg | BIT(15)));
 		} else if (ctrl_pdata->ndx == DSI_CTRL_1) {
-			regval = MIPI_INP(ctrl_pdata->mmss_misc_io.base + 0x14);
-			MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + 0x14,
+			regval = MIPI_INP(ctrl_pdata->mmss_misc_io.base +
+				clamp_reg_off);
+			MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + clamp_reg_off,
 				regval & ~((clamp_reg << 16) | BIT(31)));
 		}
 
@@ -1222,6 +1232,15 @@ static int mdss_dsi_set_stream_size(struct mdss_panel_data *pdata)
 	return 0;
 }
 
+int mdss_dsi_register_recovery_handler(struct mdss_dsi_ctrl_pdata *ctrl,
+	struct mdss_panel_recovery *recovery)
+{
+	mutex_lock(&ctrl->mutex);
+	ctrl->recovery = recovery;
+	mutex_unlock(&ctrl->mutex);
+	return 0;
+}
+
 static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 				  int event, void *arg)
 {
@@ -1271,7 +1290,6 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		mdss_dsi_clk_req(ctrl_pdata, (int) (unsigned long) arg);
 		break;
 	case MDSS_EVENT_DSI_CMDLIST_KOFF:
-		ctrl_pdata->recovery = (struct mdss_panel_recovery *)arg;
 		mdss_dsi_cmdlist_commit(ctrl_pdata, 1);
 		break;
 	case MDSS_EVENT_PANEL_UPDATE_FPS:
@@ -1297,6 +1315,10 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 	case MDSS_EVENT_DSI_DYNAMIC_SWITCH:
 		rc = mdss_dsi_update_panel_config(ctrl_pdata,
 					(int)(unsigned long) arg);
+		break;
+	case MDSS_EVENT_REGISTER_RECOVERY_HANDLER:
+		rc = mdss_dsi_register_recovery_handler(ctrl_pdata,
+			(struct mdss_panel_recovery *)arg);
 		break;
 	default:
 		pr_debug("%s: unhandled event=%d\n", __func__, event);
@@ -1716,6 +1738,20 @@ int dsi_panel_device_register(struct device_node *pan_node,
 	for (i = 0; i < len; i++) {
 		pinfo->mipi.dsi_phy_db.lanecfg[i] =
 			data[i];
+	}
+
+	rc = of_property_read_u32(ctrl_pdev->dev.of_node,
+			"qcom,mmss-ulp-clamp-ctrl-offset",
+			&ctrl_pdata->ulps_clamp_ctrl_off);
+	if (!rc) {
+		rc = of_property_read_u32(ctrl_pdev->dev.of_node,
+				"qcom,mmss-phyreset-ctrl-offset",
+				&ctrl_pdata->ulps_phyrst_ctrl_off);
+	}
+	if (rc && pinfo->ulps_feature_enabled) {
+		pr_err("%s: dsi ulps clamp register settings missing\n",
+				__func__);
+		return -EINVAL;
 	}
 
 	ctrl_pdata->shared_pdata.broadcast_enable = of_property_read_bool(
