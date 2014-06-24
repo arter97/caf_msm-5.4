@@ -984,6 +984,10 @@ static void hfi_process_session_etb_done(msm_vidc_callback callback,
 		(ion_phys_addr_t)pkt->extra_data_buffer;
 	data_done.input_done.status =
 		hfi_map_err_status(pkt->error_type);
+
+	trace_msm_v4l2_vidc_buffer_event_end("ETB",
+		(u32)pkt->packet_buffer, -1, -1,
+		 pkt->filled_len, pkt->offset);
 	callback(SESSION_ETB_DONE, &data_done);
 }
 
@@ -1083,6 +1087,13 @@ static void hfi_process_session_ftb_done(msm_vidc_callback callback,
 		else if (pkt->stream_id == 1)
 			data_done.output_done.buffer_type = HAL_BUFFER_OUTPUT2;
 		}
+	trace_msm_v4l2_vidc_buffer_event_end("FTB",
+		(u32)data_done.output_done.packet_buffer1,
+		(((u64)data_done.output_done.timestamp_hi) << 32)
+		+ ((u64)data_done.output_done.timestamp_lo),
+		data_done.output_done.alloc_len1,
+		data_done.output_done.filled_len1,
+		data_done.output_done.offset1);
 	callback(SESSION_FTB_DONE, &data_done);
 }
 
@@ -1230,8 +1241,7 @@ static void hfi_process_session_abort_done(msm_vidc_callback callback,
 }
 
 static void hfi_process_sys_idle(msm_vidc_callback callback,
-		u32 device_id, struct hal_session *session,
-		struct hfi_msg_sys_idle_packet *pkt)
+		u32 device_id, struct hfi_msg_sys_idle_packet *pkt)
 {
 	struct msm_vidc_cb_cmd_done cmd_done = {0};
 	cmd_done.device_id = device_id;

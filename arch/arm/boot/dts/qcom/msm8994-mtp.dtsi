@@ -41,8 +41,8 @@
 
 	qcom,nonremovable;
 
-	qcom,clk-rates = <400000 20000000 25000000 50000000 100000000 192000000>;
-	qcom,bus-speed-mode = "HS200_1p8v", "DDR_1p8v";
+	qcom,clk-rates = <400000 20000000 25000000 50000000 100000000 192000000 384000000>;
+	qcom,bus-speed-mode = "HS400_1p8v", "HS200_1p8v", "DDR_1p8v";
 	status = "ok";
 };
 
@@ -54,6 +54,17 @@
 	vdd-io-supply = <&pm8994_l13>;
 	qcom,vdd-io-voltage-level = <1800000 2950000>;
 	qcom,vdd-io-current-level = <200 22000>;
+
+	#address-cells = <0>;
+	interrupt-parent = <&sdhc_2>;
+	interrupts = <0 1 2>;
+	#interrupt-cells = <1>;
+	interrupt-map-mask = <0xffffffff>;
+	interrupt-map = <0 &intc 0 125 0
+			1 &intc 0 221 0
+			2 &pm8994_gpios 8 0x3>;
+	interrupt-names = "hc_irq", "pwr_irq", "status_irq";
+	cd-gpios = <&pm8994_gpios 8 0x1>;
 
 	pinctrl-names = "active", "sleep";
 	pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on>;
@@ -397,6 +408,17 @@
 		qcom,master-en = <1>;
 	};
 
+	gpio@c700 { /* GPIO 8 */
+		qcom,mode = <0>;                /* Digital in */
+		qcom,pull = <0>;                /* PULL up 30uA */
+		qcom,output-type = <0>;         /* CMOS logic */
+		qcom,invert = <0>;              /* Output high */
+		qcom,vin-sel = <2>;             /* Logical 1 voltage value 1.8v */
+		qcom,src-sel = <0>;             /* Constant */
+		qcom,out-strength = <1>;        /* Low drive strength */
+		qcom,master-en = <1>;           /* Enable GPIO */
+	};
+
 	gpio@c800 { /* GPIO 9 */
 		qcom,mode = <1>;		/* Digital output */
 		qcom,output-type = <0>;		/* CMOS logic */
@@ -502,4 +524,12 @@
 
 &ssphy0 {
 	status = "ok";
+};
+
+&qcom_crypto {
+	status = "okay";
+};
+
+&qcom_cedev {
+	status = "okay";
 };

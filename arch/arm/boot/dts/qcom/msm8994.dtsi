@@ -461,7 +461,7 @@
 		      <0xfc526000 0x1000>,
 		      <0xff000000 0xf1d>,
 		      <0xff000f20 0xa8>,
-		      <0xff100000 0x1000>,
+		      <0xff100000 0x100000>,
 		      <0xff200000 0x100000>,
 		      <0xff300000 0xd00000>;
 
@@ -528,7 +528,7 @@
 		    <0xfc52e000  0x1000>,
 		    <0xf8800000 0xf1d>,
 		    <0xf8800F20 0xa8>,
-		    <0xf8900000 0x1000>,
+		    <0xf8900000 0x100000>,
 		    <0xf8a00000 0x100000>,
 		    <0xf8b00000 0x4fffff>;
 
@@ -852,10 +852,10 @@
 		interrupt-names = "hc_irq", "pwr_irq";
 
 		qcom,bus-width = <8>;
-		qcom,cpu-dma-latency-us = <200>;
+		qcom,cpu-dma-latency-us = <701>;
 
 		qcom,msm-bus,name = "sdhc1";
-		qcom,msm-bus,num-cases = <8>;
+		qcom,msm-bus,num-cases = <9>;
 		qcom,msm-bus,num-paths = <1>;
 		qcom,msm-bus,vectors-KBps = <78 512 0 0>, /* No vote */
 			<78 512 1600 3200>,       /* 400 KB/s*/
@@ -864,9 +864,10 @@
 			<78 512 200000 400000>,   /* 50 MB/s */
 			<78 512 400000 800000>,   /* 100 MB/s */
 			<78 512 400000 800000>,   /* 200 MB/s */
+			<78 512 400000 800000>,   /* 400 MB/s */
 			<78 512 2048000 4096000>; /* Max. bandwidth */
 		qcom,bus-bw-vectors-bps = <0 400000 20000000 25000000 50000000
-			100000000 200000000 4294967295>;
+			100000000 200000000 400000000 4294967295>;
 
 		clock-names = "iface_clk", "core_clk";
 		clocks = <&clock_gcc clk_gcc_sdcc1_ahb_clk>,
@@ -888,6 +889,22 @@
 			 <&clock_gcc clk_gcc_sdcc2_apps_clk>;
 
 		qcom,bus-width = <4>;
+		qcom,cpu-dma-latency-us = <701>;
+
+		qcom,msm-bus,name = "sdhc2";
+		qcom,msm-bus,num-cases = <8>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps = <81 512 0 0>, /* No vote */
+				<81 512 1600 3200>,    /* 400 KB/s*/
+				<81 512 80000 160000>, /* 20 MB/s */
+				<81 512 100000 200000>, /* 25 MB/s */
+				<81 512 200000 400000>, /* 50 MB/s */
+				<81 512 400000 800000>, /* 100 MB/s */
+				<81 512 800000 800000>, /* 200 MB/s */
+				<81 512 2048000 4096000>; /* Max. bandwidth */
+		qcom,bus-bw-vectors-bps = <0 400000 20000000 25000000 50000000
+						100000000 200000000 4294967295>;
+
 		status = "disabled";
 	};
 
@@ -1127,6 +1144,7 @@
 		interrupt-names = "hs_phy_irq", "pwr_event_irq", "pmic_id_irq";
 
 		USB3_GDSC-supply = <&gdsc_usb30>;
+		vbus_dwc3-supply = <&pmi8994_otg_supply>;
 		qcom,dwc-usb3-msm-tx-fifo-size = <29696>;
 		qcom,dwc-usb3-msm-qdss-tx-fifo-size = <8192>;
 		qcom,otg-capability;
@@ -1182,6 +1200,8 @@
 		status = "disabled";
 		reg = <0xf9b38000 0x800>,
 			<0xf9b3e000 0x3ff>;
+		reg-names = "qmp_phy_base",
+			"qmp_ahb2phy_base";
 		vdd-supply = <&pm8994_l28>;
 		vdda18-supply = <&pm8994_l6>;
 		qcom,vdd-voltage-level = <0 1000000 1000000>;
@@ -1348,7 +1368,7 @@
 			<&clock_mmss clk_venus0_ahb_clk>,
 			<&clock_mmss clk_venus0_axi_clk>,
 			<&clock_mmss clk_venus0_ocmemnoc_clk>,
-			<&clock_rpm clk_ce1_clk>;
+			<&clock_rpm clk_scm_ce1_clk>;
 
 		qcom,msm-bus,name = "pil-venus";
 		qcom,msm-bus,num-cases = <2>;
@@ -1416,7 +1436,7 @@
 
 		clocks = <&clock_gcc clk_gcc_lpass_q6_axi_clk>,
 			 <&clock_rpm clk_cxo_pil_lpass_clk>,
-			 <&clock_rpm clk_ce1_clk>;
+			 <&clock_rpm clk_scm_ce1_clk>;
 		clock-names = "bus_clk", "xo", "scm_ce1_clk";
 		qcom,active-clock-names = "bus_clk";
 		qcom,proxy-clock-names = "xo", "scm_ce1_clk";
@@ -2221,6 +2241,54 @@
 		reg = <0xfe87f720 0x1000>;
 	};
 
+	qcom_crypto: qcrypto@fd440000 {
+		compatible = "qcom,qcrypto";
+		reg = <0xfd440000 0x20000>,
+		      <0xfd444000 0x9000>;
+		reg-names = "crypto-base","crypto-bam-base";
+		interrupts = <0 236 0>;
+		qcom,bam-pipe-pair = <2>;
+		qcom,ce-hw-instance = <0>;
+		qcom,ce-device = <0>;
+		qcom,msm-bus,name = "qcrypto-noc";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<55 512 0 0>,
+				<55 512 3936000 393600>;
+		clock-names = "core_clk", "iface_clk", "bus_clk";
+		clocks = <&clock_rpm clk_ce2_clk>,
+			 <&clock_rpm clk_gcc_ce2_ahb_m_clk>,
+			 <&clock_rpm clk_gcc_ce2_axi_m_clk>;
+		qcom,use-sw-aes-cbc-ecb-ctr-algo;
+		qcom,use-sw-aes-xts-algo;
+		qcom,use-sw-aes-ccm-algo;
+		qcom,use-sw-ahash-algo;
+		status = "disabled";
+	};
+
+	qcom_cedev: qcedev@fd440000 {
+		compatible = "qcom,qcedev";
+		reg = <0xfd440000 0x20000>,
+		      <0xfd444000 0x9000>;
+		reg-names = "crypto-base","crypto-bam-base";
+		interrupts = <0 236 0>;
+		qcom,bam-pipe-pair = <1>;
+		qcom,ce-hw-instance = <0>;
+		qcom,ce-device = <0>;
+		qcom,msm-bus,name = "qcedev-noc";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<55 512 0 0>,
+				<55 512 3936000 393600>;
+		clock-names = "core_clk", "iface_clk", "bus_clk";
+		clocks = <&clock_rpm clk_ce2_clk>,
+			 <&clock_rpm clk_gcc_ce2_ahb_m_clk>,
+			 <&clock_rpm clk_gcc_ce2_axi_m_clk>;
+		status = "disabled";
+	};
+
 	qcom,qseecom@6500000 {
 		compatible = "qcom,qseecom";
 		reg = <0x6500000 0x300000>;
@@ -2238,7 +2306,7 @@
 				<55 512 120000 1200000>,
 				<55 512 393600 3936000>;
 		clock-names = "core_clk";
-		clocks = <&clock_rpm clk_ce1_clk>;
+		clocks = <&clock_rpm clk_qseecom_ce1_clk>;
 	};
 
 	qcom,sensor-information {

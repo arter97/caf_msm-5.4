@@ -63,6 +63,7 @@ Parent node required properties:
 - qcom,bms-vadc: Corresponding VADC device's phandle.
 - qcom,bms-adc_tm: Corresponding ADC_TM device's phandle to set recurring
                         measurements and receive notifications for vbatt.
+- qcom,pmic-revid : Phandle pointing to the revision peripheral node.
 
 Parent node Optional properties
 - qcom,s1-sample-interval-ms: The sampling rate in ms of the accumulator in state
@@ -85,6 +86,8 @@ Parent node Optional properties
 			the fifo_update_done interrupt. Possible values- 0 to 8
 - qcom,force-s3-on-suspend : Bool property to force the BMS into S3 (sleep) state
 			while entering into system suspend.
+- qcom,force-bms-active-on-charger: Bool property to keep BMS FSM active
+				if charger is present.
 - qcom,report-charger-eoc : Bool property to indicate if BMS needs to indicate
 			EOC to charger.
 - qcom,ignore-shutdown-soc: A boolean that controls whether BMS will
