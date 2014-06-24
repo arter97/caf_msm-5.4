@@ -56,6 +56,18 @@ void mdss_check_dsi_ctrl_status(struct work_struct *work, uint32_t interval)
 	mdp5_data = mfd_to_mdp5_data(pstatus_data->mfd);
 	ctl = mfd_to_ctl(pstatus_data->mfd);
 
+	if (!ctl) {
+		pr_err("%s: Display is off\n", __func__);
+		return;
+	}
+
+	if (!ctl->power_on) {
+		schedule_delayed_work(&pstatus_data->check_status,
+			msecs_to_jiffies(interval));
+		pr_err("%s: ctl not powered on\n", __func__);
+		return;
+	}
+
 	if (ctl->shared_lock)
 		mutex_lock(ctl->shared_lock);
 	mutex_lock(&mdp5_data->ov_lock);
