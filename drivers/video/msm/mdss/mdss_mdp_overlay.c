@@ -690,9 +690,11 @@ int mdss_mdp_overlay_get_buf(struct msm_fb_data_type *mfd,
 	if ((num_planes <= 0) || (num_planes > MAX_PLANES))
 		return -EINVAL;
 
-	rc = mdss_bus_bandwidth_ctrl(1);
-	if (rc)
+	rc = mdss_iommu_ctrl(1);
+	if (IS_ERR_VALUE(rc)) {
+		pr_err("Iommu attach failed");
 		goto end;
+	}
 
 	memset(data, 0, sizeof(*data));
 	for (i = 0; i < num_planes; i++) {
@@ -707,31 +709,29 @@ int mdss_mdp_overlay_get_buf(struct msm_fb_data_type *mfd,
 			break;
 		}
 	}
-	mdss_bus_bandwidth_ctrl(0);
 
+	mdss_iommu_ctrl(0);
 	data->num_planes = i;
-
 end:
 	return rc;
 }
 
 int mdss_mdp_overlay_free_buf(struct mdss_mdp_data *data)
 {
-	int i;
-	int rc;
+	int i, rc;
 
-	rc = mdss_bus_bandwidth_ctrl(1);
-	if (rc)
-		goto end;
+	rc = mdss_iommu_ctrl(1);
+	if (IS_ERR_VALUE(rc)) {
+		pr_err("Iommu attach failed");
+		return rc;
+	}
 
 	for (i = 0; i < data->num_planes && data->p[i].len; i++)
 		mdss_mdp_put_img(&data->p[i]);
-	mdss_bus_bandwidth_ctrl(0);
 
+	mdss_iommu_ctrl(0);
 	data->num_planes = 0;
-
-end:
-	return rc;
+	return 0;
 }
 
 /**
@@ -870,13 +870,6 @@ static int mdss_mdp_overlay_start(struct msm_fb_data_type *mfd)
 
 		if (!mdp5_data->mdata->batfet)
 			mdss_mdp_batfet_ctrl(mdp5_data->mdata, true);
-		if (!mfd->panel_info->cont_splash_enabled) {
-			rc = mdss_iommu_attach(mdp5_data->mdata);
-			if (rc) {
-				pr_err("mdss iommu attach failed rc=%d\n", rc);
-				goto end;
-			}
-		}
 		return 0;
 	}
 
@@ -898,13 +891,14 @@ static int mdss_mdp_overlay_start(struct msm_fb_data_type *mfd)
 	 */
 	if (!is_mdss_iommu_attached()) {
 		if (!mfd->panel_info->cont_splash_enabled) {
-			rc = mdss_iommu_attach(mdss_res);
-			if (rc) {
-				pr_err("mdss iommu attach failed rc=%d\n", rc);
+			rc = mdss_iommu_ctrl(1);
+			if (IS_ERR_VALUE(rc)) {
+				pr_err("iommu attach failed rc=%d\n", rc);
 				goto pm_error;
 			}
+			mdss_hw_init(mdss_res);
+			mdss_iommu_ctrl(0);
 		}
-		mdss_hw_init(mdss_res);
 	}
 
 	rc = mdss_mdp_ctl_start(ctl, false);
@@ -1335,14 +1329,6 @@ static int mdss_mdp_overlay_queue(struct msm_fb_data_type *mfd,
 	flags = (pipe->flags & MDP_SECURE_OVERLAY_SESSION);
 	flags |= (pipe->flags & MDP_SECURE_DISPLAY_OVERLAY_SESSION);
 
-	if (!mfd->panel_info->cont_splash_enabled) {
-		ret = mdss_iommu_attach(mdata);
-		if (ret) {
-			pr_err("mdss iommu attach failed ret=%d\n", ret);
-			goto end;
-		}
-	}
-
 	src_data = &pipe->back_buf;
 	if (src_data->num_planes) {
 		pr_warn("dropped buffer pnum=%d play=%d addr=0x%x\n",
@@ -1355,7 +1341,6 @@ static int mdss_mdp_overlay_queue(struct msm_fb_data_type *mfd,
 		pr_err("src_data pmem error\n");
 	}
 
-end:
 	mdss_mdp_pipe_unmap(pipe);
 
 	return ret;
@@ -1586,6 +1571,13 @@ static void mdss_mdp_overlay_pan_display(struct msm_fb_data_type *mfd,
 	}
 
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+
+	ret = mdss_iommu_ctrl(1);
+	if (IS_ERR_VALUE(ret)) {
+		pr_err("IOMMU attach failed\n");
+		goto pan_display_error;
+	}
+
 	bpp = fbi->var.bits_per_pixel / 8;
 	offset = fbi->var.xoffset * bpp +
 		 fbi->var.yoffset * fbi->fix.line_length;
@@ -1658,6 +1650,7 @@ static void mdss_mdp_overlay_pan_display(struct msm_fb_data_type *mfd,
 	    (fbi->var.activate & FB_ACTIVATE_FORCE))
 		mfd->mdp.kickoff_fnc(mfd, NULL);
 
+	mdss_iommu_ctrl(0);
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 	return;
 
@@ -1669,6 +1662,7 @@ attach_err:
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 	return;
 pan_display_error:
+	mdss_iommu_ctrl(0);
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 	mutex_unlock(&mdp5_data->ov_lock);
 }
