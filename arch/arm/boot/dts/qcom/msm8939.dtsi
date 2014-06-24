@@ -17,6 +17,8 @@
 #include "msm8939-coresight.dtsi"
 #include "msm8939-cpu.dtsi"
 #include "msm8939-pm.dtsi"
+#include "msm8939-smem.dtsi"
+#include "msm8939-smp2p.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. MSM8939";
