@@ -329,6 +329,36 @@ static struct mdss_dsi_ctrl_pdata *get_rctrl_data(struct mdss_panel_data *pdata)
 			panel_data);
 }
 
+static void mdss_dsi_panel_switch_mode(struct mdss_panel_data *pdata,
+							int mode)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+	struct mipi_panel_info *mipi;
+	struct dsi_panel_cmds *pcmds;
+
+	if (pdata == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return;
+	}
+
+	mipi  = &pdata->panel_info.mipi;
+
+	if (!mipi->dynamic_switch_enabled)
+		return;
+
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+	if (mode == DSI_CMD_MODE)
+		pcmds = &ctrl_pdata->video2cmd;
+	else
+		pcmds = &ctrl_pdata->cmd2video;
+
+	mdss_dsi_panel_cmds_send(ctrl_pdata, pcmds);
+
+	return;
+}
+
 static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 							u32 bl_level)
 {
@@ -536,11 +566,16 @@ static int mdss_dsi_parse_dcs_cmds(struct device_node *np,
 		len -= dchdr->dlen;
 	}
 
-	data = of_get_property(np, link_key, NULL);
-	if (data && !strcmp(data, "dsi_hs_mode"))
-		pcmds->link_state = DSI_HS_MODE;
-	else
-		pcmds->link_state = DSI_LP_MODE;
+	/*Set default link state to LP Mode*/
+	pcmds->link_state = DSI_LP_MODE;
+
+	if (link_key) {
+		data = of_get_property(np, link_key, NULL);
+		if (data && !strcmp(data, "dsi_hs_mode"))
+			pcmds->link_state = DSI_HS_MODE;
+		else
+			pcmds->link_state = DSI_LP_MODE;
+	}
 
 	pr_debug("%s: dcs_cmd=%x len=%d, cmd_cnt=%d link_state=%d\n", __func__,
 		pcmds->buf[0], pcmds->blen, pcmds->cmd_cnt, pcmds->link_state);
@@ -552,8 +587,7 @@ exit_free:
 	return -ENOMEM;
 }
 
-
-static int mdss_panel_dt_get_dst_fmt(u32 bpp, char mipi_mode, u32 pixel_packing,
+int mdss_panel_get_dst_fmt(u32 bpp, char mipi_mode, u32 pixel_packing,
 				char *dst_format)
 {
 	int rc = 0;
@@ -705,7 +739,6 @@ static int mdss_dsi_parse_reset_seq(struct device_node *np,
 	return 0;
 }
 
-
 static int mdss_panel_parse_dt(struct device_node *np,
 			struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
@@ -760,9 +793,11 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	tmp = 0;
 	data = of_get_property(np, "qcom,mdss-dsi-pixel-packing", NULL);
 	if (data && !strcmp(data, "loose"))
-		tmp = 1;
-	rc = mdss_panel_dt_get_dst_fmt(pinfo->bpp,
-		pinfo->mipi.mode, tmp,
+		pinfo->mipi.pixel_packing = 1;
+	else
+		pinfo->mipi.pixel_packing = 0;
+	rc = mdss_panel_get_dst_fmt(pinfo->bpp,
+		pinfo->mipi.mode, pinfo->mipi.pixel_packing,
 		&(pinfo->mipi.dst_format));
 	if (rc) {
 		pr_debug("%s: problem determining dst format. Set Default\n",
@@ -984,6 +1019,26 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->off_cmds,
 		"qcom,mdss-dsi-off-command", "qcom,mdss-dsi-off-command-state");
 
+	pinfo->mipi.dynamic_switch_enabled = of_property_read_bool(np,
+		"qcom,dynamic-mode-switch-enabled");
+
+	if (pinfo->mipi.dynamic_switch_enabled) {
+		mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->video2cmd,
+			"qcom,video-to-cmd-mode-switch-commands", NULL);
+
+		mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->cmd2video,
+			"qcom,cmd-to-video-mode-switch-commands", NULL);
+
+		if (!ctrl_pdata->video2cmd.cmd_cnt ||
+					!ctrl_pdata->cmd2video.cmd_cnt) {
+			pr_warn("No commands specified for dynamic switch\n");
+			pinfo->mipi.dynamic_switch_enabled = 0;
+		}
+	}
+
+	pr_info("%s: dynamic switch feature enabled: %d", __func__,
+		pinfo->mipi.dynamic_switch_enabled);
+
 	return 0;
 
 error:
@@ -998,11 +1053,18 @@ int mdss_dsi_panel_init(struct device_node *node,
 	static const char *panel_name;
 	bool cont_splash_enabled;
 	bool partial_update_enabled;
+	struct mdss_panel_info *pinfo;
 
 	if (!node) {
 		pr_err("%s: no panel node\n", __func__);
 		return -ENODEV;
 	}
+
+	if (!node || !ctrl_pdata) {
+		pr_err("%s: Invalid arguments\n", __func__);
+		return -ENODEV;
+	}
+	pinfo = &ctrl_pdata->panel_data.panel_info;
 
 	pr_debug("%s:%d\n", __func__, __LINE__);
 	panel_name = of_get_property(node, "qcom,mdss-dsi-panel-name", NULL);
@@ -1046,9 +1108,13 @@ int mdss_dsi_panel_init(struct device_node *node,
 		ctrl_pdata->partial_update_fnc = NULL;
 	}
 
+	pinfo->dynamic_switch_pending = false;
+	pinfo->is_lpm_mode = false;
+
 	ctrl_pdata->on = mdss_dsi_panel_on;
 	ctrl_pdata->off = mdss_dsi_panel_off;
 	ctrl_pdata->panel_data.set_backlight = mdss_dsi_panel_bl_ctrl;
+	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
 
 	return 0;
 }
