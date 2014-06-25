@@ -1522,6 +1522,21 @@ static struct gpiomux_setting i2s_sus_cfg = {
 	.pull = GPIOMUX_PULL_DOWN,
 };
 
+static struct gpiomux_setting audio_auxpcm[] = {
+	/* Suspended state */
+	{
+		.func = GPIOMUX_FUNC_GPIO,
+		.drv = GPIOMUX_DRV_2MA,
+		.pull = GPIOMUX_PULL_DOWN,
+	},
+	/* Active state */
+	{
+		.func = GPIOMUX_FUNC_1,
+		.drv = GPIOMUX_DRV_8MA,
+		.pull = GPIOMUX_PULL_NONE,
+	},
+};
+
 static struct msm_gpiomux_config apq8064_mi2s_configs[] __initdata = {
 	{
 		.gpio	= 27,		/* mi2s ws */
@@ -1766,6 +1781,36 @@ static struct msm_gpiomux_config apq8064_adp_es2_mi2s_i2s_cfg[] __initdata = {
 	},
 };
 
+static struct msm_gpiomux_config apq8064_adp_auxpcm_configs[] __initdata = {
+	{
+		.gpio = 43,
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &audio_auxpcm[0],
+			[GPIOMUX_ACTIVE] = &audio_auxpcm[1],
+		},
+	},
+	{
+		.gpio = 44,
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &audio_auxpcm[0],
+			[GPIOMUX_ACTIVE] = &audio_auxpcm[1],
+		},
+	},
+	{
+		.gpio = 45,
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &audio_auxpcm[0],
+			[GPIOMUX_ACTIVE] = &audio_auxpcm[1],
+		},
+	},
+	{
+		.gpio = 46,
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &audio_auxpcm[0],
+			[GPIOMUX_ACTIVE] = &audio_auxpcm[1],
+		},
+	},
+};
 
 static struct msm_gpiomux_config apq8064_mxt_configs[] __initdata = {
 	{	/* TS INTERRUPT */
@@ -2256,6 +2301,8 @@ void __init apq8064_init_gpiomux(void)
 			SOCINFO_VERSION_MAJOR(socinfo_get_platform_version()));
 		msm_gpiomux_install(apq8064_adp_es2_mi2s_i2s_cfg,
 		ARRAY_SIZE(apq8064_adp_es2_mi2s_i2s_cfg));
+		msm_gpiomux_install(apq8064_adp_auxpcm_configs,
+		ARRAY_SIZE(apq8064_adp_auxpcm_configs));
 	}
 
 	if (machine_is_apq8064_mtp()) {
