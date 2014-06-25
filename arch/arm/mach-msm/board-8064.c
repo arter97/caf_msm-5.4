@@ -3908,6 +3908,29 @@ static void __init apq8064_cdp_init(void)
 		platform_add_devices(cdp_devices, ARRAY_SIZE(cdp_devices));
 		spi_register_board_info(spi_board_info,
 						ARRAY_SIZE(spi_board_info));
+		if (machine_is_apq8064_adp_2()) {
+			static struct msm_xo_voter *xo_handle_a0;
+			int rc;
+			xo_handle_a0 = msm_xo_get(MSM_XO_TCXO_A0, "msm_pcie");
+			if (IS_ERR(xo_handle_a0)) {
+				rc = PTR_ERR(xo_handle_a0);
+				pr_err(
+					"%s: failed to get the handle for a0 for PCIe:%d\n",
+					__func__, rc);
+			} else {
+				rc = msm_xo_mode_vote(xo_handle_a0,
+					MSM_XO_MODE_ON);
+				if (rc < 0) {
+					pr_err(
+						"%s: failed to vote for TCXO a0 buffer for PCIe:%d\n",
+						__func__, rc);
+				} else {
+					pr_info("%s: Init PCIe on ADP\n",
+						__func__);
+					mpq8064_pcie_init();
+				}
+			}
+		}
 	}
 
 	apq8064_init_fb();
