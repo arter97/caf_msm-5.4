@@ -529,6 +529,7 @@ struct usb_gadget_ops {
  *	enabled HNP support.
  * @quirk_ep_out_aligned_size: epout requires buffer size to be aligned to
  *	MaxPacketSize.
+ * @xfer_isr_count: UI (transfer complete) interrupts count
  *
  * Gadgets have a mostly-portable "gadget driver" implementing device
  * functions, handling all usb configurations and interfaces.  Gadget
@@ -571,6 +572,7 @@ struct usb_gadget {
 	unsigned			quirk_ep_out_aligned_size:1;
 	bool				remote_wakeup;
 	void				*private;
+	u32				xfer_isr_count;
 };
 #define work_to_gadget(w)	(container_of((w), struct usb_gadget, work))
 
