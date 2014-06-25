@@ -31,6 +31,9 @@
 #include "msm-pcm-routing.h"
 #include "../codecs/wcd9310.h"
 
+#define SAMPLE_RATE_8KHZ 8000
+#define SAMPLE_RATE_16KHZ 16000
+#define SAMPLE_RATE_48KHZ 48000
 
 /* 8064 machine driver */
 #define PM8921_GPIO_BASE		NR_GPIO_IRQS
@@ -56,6 +59,13 @@
 #define GPIO_MI2S_SD2   30
 #define GPIO_MI2S_SD1   31
 #define GPIO_MI2S_SD0   32
+
+/* AUX PCM */
+#define GPIO_AUX_PCM_DOUT 43
+#define GPIO_AUX_PCM_DIN 44
+#define GPIO_AUX_PCM_SYNC 45
+#define GPIO_AUX_PCM_CLK 46
+
 
 struct request_gpio {
 	unsigned gpio_no;
@@ -138,12 +148,24 @@ static int msm_i2s_tx_ch = 1;
 static int msm_mi2s_rx_ch = 1;
 /* Only needed if MI2S used as both RX and TX */
 static atomic_t mi2s_rsc_ref;
-
+static int msm_btsco_rate = SAMPLE_RATE_8KHZ;
+static int msm_auxpcm_rate = SAMPLE_RATE_8KHZ;
+static atomic_t auxpcm_rsc_ref;
 
 static const char * const two_ch_text[] = {"One", "Two"};
 static const char * const four_ch_text[] = {"One", "Two", "Three", "Four"};
 static const char * const six_ch_text[] = {"One", "Two", "Three", "Four",
 					   "Five", "Six"};
+static const char * const btsco_rate_text[] = {"8000", "16000"};
+static const struct soc_enum msm_btsco_enum[] = {
+		SOC_ENUM_SINGLE_EXT(2, btsco_rate_text),
+};
+
+static const char * const auxpcm_rate_text[] = {"rate_8000", "rate_16000"};
+static const struct soc_enum msm_auxpcm_enum[] = {
+		SOC_ENUM_SINGLE_EXT(2, auxpcm_rate_text),
+};
+
 static const struct soc_enum msm_enum[] = {
 	SOC_ENUM_SINGLE_EXT(2, two_ch_text),
 	SOC_ENUM_SINGLE_EXT(4, four_ch_text),
@@ -191,6 +213,102 @@ static int msm_mi2s_rx_ch_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int msm_btsco_rate_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: msm_btsco_rate  = %d", __func__, msm_btsco_rate);
+	ucontrol->value.integer.value[0] = msm_btsco_rate;
+	return 0;
+}
+
+static int msm_btsco_rate_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	switch (ucontrol->value.integer.value[0]) {
+	case 0:
+		msm_btsco_rate = SAMPLE_RATE_8KHZ;
+		break;
+	case 1:
+		msm_btsco_rate = SAMPLE_RATE_16KHZ;
+		break;
+	default:
+		msm_btsco_rate = SAMPLE_RATE_8KHZ;
+		break;
+	}
+	pr_debug("%s: msm_btsco_rate = %d\n", __func__, msm_btsco_rate);
+	return 0;
+}
+
+static int msm_auxpcm_rate_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: msm_auxpcm_rate  = %d", __func__,
+		msm_auxpcm_rate);
+	ucontrol->value.integer.value[0] = msm_auxpcm_rate;
+	return 0;
+}
+
+static int msm_auxpcm_rate_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	switch (ucontrol->value.integer.value[0]) {
+	case 0:
+		msm_auxpcm_rate = SAMPLE_RATE_8KHZ;
+		break;
+	case 1:
+		msm_auxpcm_rate = SAMPLE_RATE_16KHZ;
+		break;
+	default:
+		msm_auxpcm_rate = SAMPLE_RATE_8KHZ;
+		break;
+	}
+	pr_debug("%s: msm_auxpcm_rate = %d, ucontrol->value.integer.value[0] = %d\n",
+		 __func__, msm_auxpcm_rate,
+		 (int)ucontrol->value.integer.value[0]);
+	return 0;
+}
+
+static int msm_proxy_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+			struct snd_pcm_hw_params *params)
+{
+	struct snd_interval *rate = hw_param_interval(params,
+	SNDRV_PCM_HW_PARAM_RATE);
+
+	rate->min = rate->max = SAMPLE_RATE_48KHZ;
+
+	return 0;
+}
+
+static int msm_auxpcm_be_params_fixup(struct snd_soc_pcm_runtime *rtd,
+					struct snd_pcm_hw_params *params)
+{
+	struct snd_interval *rate = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_RATE);
+
+	struct snd_interval *channels = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	rate->min = rate->max = msm_auxpcm_rate;
+	/* PCM only supports mono output */
+	channels->min = channels->max = 1;
+
+	return 0;
+}
+
+static int msm_btsco_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+					struct snd_pcm_hw_params *params)
+{
+	struct snd_interval *rate = hw_param_interval(params,
+						      SNDRV_PCM_HW_PARAM_RATE);
+
+	struct snd_interval *channels = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_CHANNELS);
+	rate->min = rate->max = msm_btsco_rate;
+	channels->min = channels->max = 1;
+
+	return 0;
+}
+
 static int msm_mi2s_rx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 			struct snd_pcm_hw_params *params)
 {
@@ -201,7 +319,7 @@ static int msm_mi2s_rx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 			SNDRV_PCM_HW_PARAM_CHANNELS);
 
 	pr_debug("%s()\n", __func__);
-	rate->min = rate->max = 48000;
+	rate->min = rate->max = SAMPLE_RATE_48KHZ;
 	channels->min = channels->max = msm_mi2s_rx_ch;
 
 	return 0;
@@ -236,7 +354,7 @@ static int msm_i2s_rx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 			SNDRV_PCM_HW_PARAM_CHANNELS);
 
 	pr_debug("%s()\n", __func__);
-	rate->min = rate->max = 48000;
+	rate->min = rate->max = SAMPLE_RATE_48KHZ;
 	channels->min = channels->max = msm_i2s_rx_ch;
 
 	return 0;
@@ -271,7 +389,7 @@ static int msm_i2s_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 			SNDRV_PCM_HW_PARAM_CHANNELS);
 
 	pr_debug("%s()\n", __func__);
-	rate->min = rate->max = 48000;
+	rate->min = rate->max = SAMPLE_RATE_48KHZ;
 
 	channels->min = channels->max = msm_i2s_tx_ch;
 
@@ -521,6 +639,83 @@ static int msm_i2s_startup(struct snd_pcm_substream *substream)
 	return ret;
 }
 
+static int msm_aux_pcm_get_gpios(void)
+{
+	int ret = 0;
+
+	ret = gpio_request(GPIO_AUX_PCM_DOUT, "AUX PCM DOUT");
+	if (ret < 0) {
+		pr_err("%s: Failed to request gpio(%d): AUX PCM DOUT",
+				__func__, GPIO_AUX_PCM_DOUT);
+		goto fail_dout;
+	}
+
+	ret = gpio_request(GPIO_AUX_PCM_DIN, "AUX PCM DIN");
+	if (ret < 0) {
+		pr_err("%s: Failed to request gpio(%d): AUX PCM DIN",
+				__func__, GPIO_AUX_PCM_DIN);
+		goto fail_din;
+	}
+
+	ret = gpio_request(GPIO_AUX_PCM_SYNC, "AUX PCM SYNC");
+	if (ret < 0) {
+		pr_err("%s: Failed to request gpio(%d): AUX PCM SYNC",
+				__func__, GPIO_AUX_PCM_SYNC);
+		goto fail_sync;
+	}
+	ret = gpio_request(GPIO_AUX_PCM_CLK, "AUX PCM CLK");
+	if (ret < 0) {
+		pr_err("%s: Failed to request gpio(%d): AUX PCM CLK",
+				__func__, GPIO_AUX_PCM_CLK);
+		goto fail_clk;
+	}
+
+	return 0;
+
+fail_clk:
+	gpio_free(GPIO_AUX_PCM_SYNC);
+fail_sync:
+	gpio_free(GPIO_AUX_PCM_DIN);
+fail_din:
+	gpio_free(GPIO_AUX_PCM_DOUT);
+fail_dout:
+
+	return ret;
+}
+
+static int msm_aux_pcm_free_gpios(void)
+{
+	gpio_free(GPIO_AUX_PCM_DIN);
+	gpio_free(GPIO_AUX_PCM_DOUT);
+	gpio_free(GPIO_AUX_PCM_SYNC);
+	gpio_free(GPIO_AUX_PCM_CLK);
+
+	return 0;
+}
+
+static int msm_auxpcm_startup(struct snd_pcm_substream *substream)
+{
+	int ret = 0;
+
+	pr_debug("%s(): substream = %s, auxpcm_rsc_ref counter = %d\n",
+		__func__, substream->name, atomic_read(&auxpcm_rsc_ref));
+	if (atomic_inc_return(&auxpcm_rsc_ref) == 1)
+		ret = msm_aux_pcm_get_gpios();
+
+	if (ret < 0) {
+		pr_err("%s: Aux PCM GPIO request failed\n", __func__);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static void msm_auxpcm_shutdown(struct snd_pcm_substream *substream)
+{
+	pr_debug("%s(): substream = %s, auxpcm_rsc_ref counter = %d\n",
+		__func__, substream->name, atomic_read(&auxpcm_rsc_ref));
+	if (atomic_dec_return(&auxpcm_rsc_ref) == 0)
+		msm_aux_pcm_free_gpios();
+}
 
 static struct snd_soc_ops msm_mi2s_be_ops = {
 	.startup = msm_mi2s_startup,
@@ -532,6 +727,11 @@ static struct snd_soc_ops msm_i2s_be_ops = {
 	.shutdown = msm_i2s_shutdown,
 };
 
+static struct snd_soc_ops msm_auxpcm_be_ops = {
+	.startup = msm_auxpcm_startup,
+	.shutdown = msm_auxpcm_shutdown,
+};
+
 static const struct snd_kcontrol_new msm_controls[] = {
 	SOC_ENUM_EXT("MI2S_RX Channels", msm_enum[2],
 		msm_mi2s_rx_ch_get, msm_mi2s_rx_ch_put),
@@ -539,6 +739,10 @@ static const struct snd_kcontrol_new msm_controls[] = {
 		msm_i2s_rx_ch_get, msm_i2s_rx_ch_put),
 	SOC_ENUM_EXT("I2S_TX Channels", msm_enum[1],
 			msm_i2s_tx_ch_get, msm_i2s_tx_ch_put),
+	SOC_ENUM_EXT("Internal BTSCO SampleRate", msm_btsco_enum[0],
+		msm_btsco_rate_get, msm_btsco_rate_put),
+	SOC_ENUM_EXT("AUX PCM SampleRate", msm_auxpcm_enum[0],
+		msm_auxpcm_rate_get, msm_auxpcm_rate_put),
 };
 
 /* Digital audio interface glue - connects codec <---> CPU */
@@ -546,7 +750,7 @@ static struct snd_soc_dai_link msm_dai[] = {
 	/* FrontEnd DAI Links */
 	{
 		.name = "Media1",
-		.stream_name = "MultiMedia1",
+		.stream_name = "MultiMedia1", /* hw:0,0 */
 		.cpu_dai_name	= "MultiMedia1",
 		.platform_name  = "msm-pcm-dsp",
 		.dynamic = 1,
@@ -560,7 +764,7 @@ static struct snd_soc_dai_link msm_dai[] = {
 	},
 	{
 		.name = "Media2",
-		.stream_name = "MultiMedia2",
+		.stream_name = "MultiMedia2", /* hw:0,1 */
 		.cpu_dai_name	= "MultiMedia2",
 		.platform_name  = "msm-multi-ch-pcm-dsp",
 		.dynamic = 1,
@@ -574,7 +778,7 @@ static struct snd_soc_dai_link msm_dai[] = {
 	},
 	{
 		.name = "Circuit-Switch Voice",
-		.stream_name = "CS-Voice",
+		.stream_name = "CS-Voice", /* hw:0,2 */
 		.cpu_dai_name   = "CS-VOICE",
 		.platform_name  = "msm-pcm-voice",
 		.dynamic = 1,
@@ -589,9 +793,23 @@ static struct snd_soc_dai_link msm_dai[] = {
 		.be_id = MSM_FRONTEND_DAI_CS_VOICE,
 	},
 	{
+		.name = "MSM VoIP",
+		.stream_name = "VoIP", /* hw:0,3 */
+		.cpu_dai_name	= "VoIP",
+		.platform_name	= "msm-voip-dsp",
+		.dynamic = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1, /* playback support */
+		.be_id = MSM_FRONTEND_DAI_VOIP,
+	},
+	{
 		.name = "LPA",
 		.stream_name = "LPA",
-		.cpu_dai_name	= "MultiMedia3",
+		.cpu_dai_name	= "MultiMedia3", /* hw:0,4 */
 		.platform_name  = "msm-pcm-lpa",
 		.dynamic = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
@@ -603,9 +821,29 @@ static struct snd_soc_dai_link msm_dai[] = {
 		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA3,
 	},
 	{
+		.name = "MSM AFE-PCM RX",
+		.stream_name = "AFE-PROXY RX", /* hw:0,5 */
+		.cpu_dai_name = "msm-dai-q6.241",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-rx",
+		.platform_name	= "msm-pcm-afe",
+		.ignore_suspend = 1,
+		/* this dainlink has playback support */
+		.ignore_pmdown_time = 1,
+	},
+	{
+		.name = "MSM AFE-PCM TX",
+		.stream_name = "AFE-PROXY TX",
+		.cpu_dai_name = "msm-dai-q6.240", /* hw:0,6 */
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-tx",
+		.platform_name	= "msm-pcm-afe",
+		.ignore_suspend = 1,
+	},
+	{
 		.name = "Compr",
 		.stream_name = "COMPR",
-		.cpu_dai_name	= "MultiMedia4",
+		.cpu_dai_name	= "MultiMedia4", /* hw:0,7 */
 		.platform_name  = "msm-compr-dsp",
 		.dynamic = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
@@ -618,7 +856,7 @@ static struct snd_soc_dai_link msm_dai[] = {
 	},
 	{
 		.name = "LowLatency",
-		.stream_name = "MultiMedia5",
+		.stream_name = "MultiMedia5", /* hw:0,8 */
 		.cpu_dai_name   = "MultiMedia5",
 		.platform_name  = "msm-lowlatency-pcm-dsp",
 		.dynamic = 1,
@@ -632,6 +870,80 @@ static struct snd_soc_dai_link msm_dai[] = {
 		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA5,
 	},
 	/* Backend DAI Links */
+	{
+		.name = LPASS_BE_INT_BT_SCO_RX,
+		.stream_name = "Internal BT-SCO Playback",
+		.cpu_dai_name = "msm-dai-q6.12288",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-rx",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_INT_BT_SCO_RX,
+		.be_hw_params_fixup = msm_btsco_be_hw_params_fixup,
+		.ignore_pmdown_time = 1, /* playback support */
+	},
+	{
+		.name = LPASS_BE_INT_BT_SCO_TX,
+		.stream_name = "Internal BT-SCO Capture",
+		.cpu_dai_name = "msm-dai-q6.12289",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-tx",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_INT_BT_SCO_TX,
+		.be_hw_params_fixup = msm_btsco_be_hw_params_fixup,
+	},
+	/* Backend AFE DAI Links */
+	{
+		.name = LPASS_BE_AFE_PCM_RX,
+		.stream_name = "AFE Playback",
+		.cpu_dai_name = "msm-dai-q6.224",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-rx",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_AFE_PCM_RX,
+		.be_hw_params_fixup = msm_proxy_be_hw_params_fixup,
+		/* this dainlink has playback support */
+		.ignore_pmdown_time = 1,
+	},
+	{
+		.name = LPASS_BE_AFE_PCM_TX,
+		.stream_name = "AFE Capture",
+		.cpu_dai_name = "msm-dai-q6.225",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-tx",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_AFE_PCM_TX,
+		.be_hw_params_fixup = msm_proxy_be_hw_params_fixup,
+	},
+	/* AUX PCM Backend DAI Links */
+	{
+		.name = LPASS_BE_AUXPCM_RX,
+		.stream_name = "AUX PCM Playback",
+		.cpu_dai_name = "msm-dai-q6.2",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-rx",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_AUXPCM_RX,
+		.be_hw_params_fixup = msm_auxpcm_be_params_fixup,
+		.ops = &msm_auxpcm_be_ops,
+		.ignore_pmdown_time = 1,
+	},
+	{
+		.name = LPASS_BE_AUXPCM_TX,
+		.stream_name = "AUX PCM Capture",
+		.cpu_dai_name = "msm-dai-q6.3",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-tx",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_AUXPCM_TX,
+		.be_hw_params_fixup = msm_auxpcm_be_params_fixup,
+		.ops = &msm_auxpcm_be_ops,
+	},
 	{
 		.name = LPASS_BE_MI2S_RX,
 		.stream_name = "MI2S Playback",
@@ -711,7 +1023,7 @@ static int __init msm_audio_init(void)
 		pr_err("%s: platform_device_add failed\n", __func__);
 		goto err;
 	}
-
+	atomic_set(&auxpcm_rsc_ref, 0);
 	atomic_set(&mi2s_rsc_ref, 0);
 err:
 	return ret;
