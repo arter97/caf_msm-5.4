@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -612,10 +612,10 @@ int msm_pcie_enable(u32 options)
 
 	val =  readl_relaxed(msm_pcie_dev.elbi + PCIE20_ELBI_SYS_STTS);
 
-	while (!(val & 0x400) && (retries < 15)) {
+	while (!(val & 0x400) && (retries < 3)) {
 		PCIE_DBG("LTSSM_STATE:0x%x\n", (val >> 0xC) & 0x1f);
 		retries++;
-		msleep(2000);
+		msleep(100);
 		val =  readl_relaxed(msm_pcie_dev.elbi + PCIE20_ELBI_SYS_STTS);
 	}
 
