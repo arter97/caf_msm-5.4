@@ -98,7 +98,6 @@ Optional properties:
  - qcom,vbus-valid-override: If present, indicates VBUS pin is not connected to
    the USB PHY and the controller must rely on external VBUS notification in
    order to manually relay the notification to the SSPHY.
- - qcom,ext-vbus-id: If present, indicates that the PHY does not handle VBUS and ID changes.
 
 Example:
 	ssphy0: ssphy@f9b38000 {
