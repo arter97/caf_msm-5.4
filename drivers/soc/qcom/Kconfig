@@ -380,4 +380,15 @@ config MSM_WATCHDOG_V2
 	  deadlocks. It does not run during the bootup process, so it will
 	  not catch any early lockups.
 
+config MSM_SYSTEM_HEALTH_MONITOR
+	bool "System Health Monitor"
+	depends on MSM_QMI_INTERFACE && MSM_SUBSYSTEM_RESTART
+	help
+	  System Health Monitor (SHM) passively monitors the health of the
+	  peripherals connected to the application processor. Software
+	  components in the application processor that experience
+	  communication failure can request the SHM to perform a system-wide
+	  health check. If any failures are detected during the health-check,
+	  then a subsystem restart will be triggered for the failed subsystem.
+
 endif # ARCH_MSM

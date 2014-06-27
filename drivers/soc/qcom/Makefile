@@ -45,3 +45,5 @@ obj-$(CONFIG_MSM_RPM_LOG) += rpm_log.o
 obj-$(CONFIG_MSM_JTAG) += jtag-fuse.o jtag.o
 obj-$(CONFIG_MSM_JTAG_MM) +=  jtag-fuse.o jtag-mm.o
 obj-$(CONFIG_MSM_JTAGV8) += jtag-fuse.o jtagv8.o jtagv8-mm.o
+obj-$(CONFIG_MSM_SYSTEM_HEALTH_MONITOR) += system_health_monitor_v01.o
+obj-$(CONFIG_MSM_SYSTEM_HEALTH_MONITOR) += system_health_monitor.o
