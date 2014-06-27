@@ -170,6 +170,8 @@ source "drivers/fmc/Kconfig"
 
 source "drivers/phy/Kconfig"
 
+source "drivers/soc/Kconfig"
+
 source "drivers/powercap/Kconfig"
 
 endmenu
