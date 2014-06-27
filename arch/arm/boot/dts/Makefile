@@ -336,6 +336,9 @@ dtb-$(CONFIG_ARCH_ZYNQ) += zynq-zc702.dtb \
 
 targets += dtbs
 targets += $(dtb-y)
+
+#used for cleaning - not building
+subdir- := qcom
 endif
 
 # *.dtb used to be generated in the directory above. Clean out the
