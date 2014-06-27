@@ -48,8 +48,8 @@ extern int camera_preview_ready;
 extern int init_camera_kthread(void);
 extern int camera_preview_exit;
 extern void exit_camera_kthread(void);
-void disable_camera_preview(void);
-void enable_camera_preview(void);
+int disable_camera_preview(void);
+int enable_camera_preview(void);
 void show_pic(void);
 void shutdown_pic(void);
 void pic_update(unsigned char *pic, unsigned int pos_x, unsigned int pos_y,

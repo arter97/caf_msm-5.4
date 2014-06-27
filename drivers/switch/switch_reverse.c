@@ -55,7 +55,15 @@ enum user_interface_status {
 
 enum user_interface_status ui_status = NOT_SHOWING;
 
-static int camera_thread_enable;
+enum camera_states {
+	CAMERA_POWERED_DOWN = 0,
+	CAMERA_POWERED_UP,
+	CAMERA_PREVIEW_ENABLED,
+	CAMERA_PREVIEW_DISABLED,
+	CAMERA_UNKNOWN
+};
+static enum camera_states camera_status = CAMERA_POWERED_DOWN;
+
 
 static void show_pic_exit(void)
 {
@@ -71,22 +79,20 @@ static void reverse_detection_work(struct work_struct *work)
 {
 	int state;
 	struct reverse_reverse_data *data;
-	int rc = 0;
 
 	data = container_of(work, struct reverse_reverse_data,
 			detect_delayed_work.work);
 	state = gpio_get_value(data->gpio);
 
-	if (camera_thread_enable == 0) {
-		pr_debug("init camera configuration %s\n", __func__);
-		camera_thread_enable = 1;
-		rc = init_camera_kthread();
-	}
-	if (!state) {
-		enable_camera_preview();
+	if (!state && (camera_status == CAMERA_POWERED_UP
+				|| camera_status == CAMERA_PREVIEW_DISABLED)) {
+		if (enable_camera_preview() == 0)
+			camera_status = CAMERA_PREVIEW_ENABLED;
 	} else {
-		if (camera_thread_enable == 1)
-			disable_camera_preview();
+		if (camera_status == CAMERA_PREVIEW_ENABLED) {
+			if (disable_camera_preview() == 0)
+				camera_status = CAMERA_PREVIEW_DISABLED;
+		}
 		show_pic_exit();
 	}
 	switch_set_state(&data->sdev, !state);
@@ -228,8 +234,18 @@ static int switch_reverse_probe(struct platform_device *pdev)
 
 	INIT_DELAYED_WORK(&reverse_data->detect_delayed_work,
 						reverse_detection_work);
+	camera_status = CAMERA_POWERED_DOWN;
+	if (camera_status == CAMERA_POWERED_DOWN) {
+		int rc = 0;
+		pr_debug("init camera configuration %s\n", __func__);
+		rc = init_camera_kthread();
+		if (rc < 0)
+			pr_err("%s: Failed to init the camera", __func__);
+		else
+			camera_status = CAMERA_POWERED_UP;
+	}
+	reverse_detection_work(&reverse_data->detect_delayed_work.work);
 	enable_irq(reverse_data->irq);
-	camera_thread_enable = 0;
 
 	return 0;
 
@@ -251,8 +267,12 @@ static int __devexit switch_reverse_remove(struct platform_device *pdev)
 {
 	struct reverse_reverse_data *reverse_data = platform_get_drvdata(pdev);
 
-	exit_camera_kthread();
-	camera_thread_enable = 0;
+	if ((camera_status == CAMERA_POWERED_UP
+				|| camera_status == CAMERA_PREVIEW_DISABLED)) {
+		exit_camera_kthread();
+		camera_status = CAMERA_POWERED_DOWN;
+	}
+
 	cancel_delayed_work_sync(&reverse_data->detect_delayed_work);
 	gpio_free(reverse_data->gpio);
 	input_unregister_device(reverse_data->idev);
