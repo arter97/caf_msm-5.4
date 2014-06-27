@@ -53,6 +53,7 @@
 	qcom,mdm2ap-pblrdy-gpio = <&msmgpio 113 0x00>;
 	qcom,ap2mdm-vddmin-gpio = <&msmgpio 114 0x00>;
 	qcom,mdm2ap-vddmin-gpio = <&msmgpio 115 0x00>;
+	qcom,mdm-link-detect-gpio = <&msmgpio 132 0x00>;
 	qcom,mdm-dual-link;
 	status = "ok";
 };
