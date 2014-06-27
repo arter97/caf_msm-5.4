@@ -2190,7 +2190,7 @@ static int arm_smmu_domain_set_attr(struct iommu_domain *domain,
 	}
 }
 
-static struct iommu_ops arm_smmu_ops = {
+static const struct iommu_ops arm_smmu_ops = {
 	.domain_init		= arm_smmu_domain_init,
 	.domain_destroy		= arm_smmu_domain_destroy,
 	.attach_dev		= arm_smmu_attach_dev,
