@@ -3908,7 +3908,8 @@ static void __init apq8064_cdp_init(void)
 		platform_add_devices(cdp_devices, ARRAY_SIZE(cdp_devices));
 		spi_register_board_info(spi_board_info,
 						ARRAY_SIZE(spi_board_info));
-		if (machine_is_apq8064_adp_2()) {
+		if (machine_is_apq8064_adp_2() &&
+				!machine_is_apq8064_mplatform()) {
 			static struct msm_xo_voter *xo_handle_a0;
 			int rc;
 			xo_handle_a0 = msm_xo_get(MSM_XO_TCXO_A0, "msm_pcie");
