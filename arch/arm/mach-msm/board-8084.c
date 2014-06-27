@@ -18,6 +18,7 @@
 #include <linux/regulator/rpm-smd-regulator.h>
 #include <asm/mach/map.h>
 #include <asm/mach/arch.h>
+#include <mach/board.h>
 #include <soc/qcom/socinfo.h>
 #include <soc/qcom/rpm-smd.h>
 #include <soc/qcom/smd.h>
@@ -47,6 +48,11 @@ void __init apq8084_add_drivers(void)
 	msm_gcc_8084_init();
 }
 
+static void __init apq8084_map_io(void)
+{
+	msm_map_8084_io();
+}
+
 void __init apq8084_init(void)
 {
 	struct of_dev_auxdata *adata = apq8084_auxdata_lookup;
@@ -74,6 +80,7 @@ static const char *apq8084_dt_match[] __initconst = {
 
 DT_MACHINE_START(APQ8084_DT,
 		"Qualcomm Technologies, Inc. APQ 8084 (Flattened Device Tree)")
+	.map_io			= apq8084_map_io,
 	.init_machine		= apq8084_init,
 	.dt_compat		= apq8084_dt_match,
 MACHINE_END

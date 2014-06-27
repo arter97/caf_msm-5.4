@@ -1,3 +1,4 @@
+obj-y += io.o
 obj-$(CONFIG_USE_OF) += board-dt.o
 
 obj-$(CONFIG_ARCH_MSM_KRAIT) += msm-krait-l2-accessors.o
