@@ -651,6 +651,7 @@ config ARCH_PXA
 config ARCH_MSM
 	bool "Qualcomm MSM (non-multiplatform)"
 	select ARCH_REQUIRE_GPIOLIB
+	select NEED_MACH_GPIO_H
 	select GENERIC_CLOCKEVENTS
 	select SOC_BUS
 	help
