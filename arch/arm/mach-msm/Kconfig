@@ -9,6 +9,7 @@ config ARCH_APQ8084
 	select MULTI_IRQ_HANDLER
 	select CPU_V7
 	select HAVE_ARM_ARCH_TIMER
+	select MSM_GPIOMUX
 	select MAY_HAVE_SPARSE_IRQ
 	select SPARSE_IRQ
 	select ARM_HAS_SG_CHAIN

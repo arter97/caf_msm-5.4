@@ -20,4 +20,6 @@
 
 void msm_map_8084_io(void);
 
+void apq8084_init_gpiomux(void);
+
 #endif

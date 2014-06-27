@@ -70,6 +70,7 @@ void __init apq8084_init(void)
 	if (socinfo_init() < 0)
 		pr_err("%s: socinfo_init() failed\n", __func__);
 
+	apq8084_init_gpiomux();
 	apq8084_add_drivers();
 }
 
