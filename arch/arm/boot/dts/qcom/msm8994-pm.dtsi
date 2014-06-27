@@ -29,8 +29,8 @@
 		qcom,saw2-pmic-data1 = <0x02030080>; /* VDD_APC0 on  */
 		qcom,pfm-port = <0x2>;
 		qcom,saw2-spm-cmd-ret = [00 07 00 0f];
-		qcom,saw2-spm-cmd-pc = [00 60 70 50 01 07 11 3f 3f 3f 3f 50 30
-			20 0b 10 00 60 70 0f];
+		qcom,saw2-spm-cmd-pc = [00 60 70 50 01 07 11 3f 3f 3f 3f 50 00
+			60 70 0f];
 	};
 
 	qcom,spm@f9012000 {
@@ -540,7 +540,7 @@
 		reg = <0xfe875664 0x40>;
 		clock-names = "cpu0_clk", "cpu1_clk", "cpu2_clk",
 				"cpu3_clk", "cpu4_clk", "cpu5_clk",
-				"cpu6_clk", "cpu7_clk";
+				"cpu6_clk", "cpu7_clk", "l2_clk";
 		clocks = <&clock_cpu clk_a53_clk>,
 			 <&clock_cpu clk_a53_clk>,
 			 <&clock_cpu clk_a53_clk>,
@@ -548,12 +548,13 @@
 			 <&clock_cpu clk_a57_clk>,
 			 <&clock_cpu clk_a57_clk>,
 			 <&clock_cpu clk_a57_clk>,
-			 <&clock_cpu clk_a57_clk>;
+			 <&clock_cpu clk_a57_clk>,
+			 <&clock_cpu clk_cci_clk>;
 	};
 
-	qcom,cpu-sleep-status@f9088008{
+	qcom,cpu-sleep-status@f908b008{
 		compatible = "qcom,cpu-sleep-status";
-		reg = <0xf9088008 0x100>;
+		reg = <0xf908b008 0x100>;
 		qcom,cpu-alias-addr = <0x10000>;
 		qcom,sleep-status-mask= <0x80000>;
 	};
