@@ -1,3 +1,4 @@
+
 obj-$(CONFIG_ARCH_MSM_KRAIT) += msm-krait-l2-accessors.o
 
 obj-$(CONFIG_MSM_TIMER) += timer.o
