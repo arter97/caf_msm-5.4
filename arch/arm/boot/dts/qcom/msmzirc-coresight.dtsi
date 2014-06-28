@@ -31,6 +31,42 @@
 		clock-names = "core_clk", "core_a_clk";
 	};
 
+	tpiu: tpiu@820000 {
+		compatible = "arm,coresight-tpiu";
+		reg = <0x820000 0x1000>,
+		      <0x1100000 0xb0000>;
+		reg-names = "tpiu-base", "nidnt-base";
+
+		coresight-id = <1>;
+		coresight-name = "coresight-tpiu";
+		coresight-nr-inports = <1>;
+
+		qcom,nidntsw;
+		qcom,nidnthw;
+		qcom,nidnt-swduart;
+		qcom,nidnt-swdtrc;
+		qcom,nidnt-jtag;
+		qcom,nidnt-spmi;
+
+		nidnt-gpio = <38>;
+		nidnt-gpio-polarity = <1>;
+
+		interrupts = <0 82 0>;
+		interrupt-names = "nidnt-irq";
+
+		vdd-supply = <&pmd9635_l11>;
+		qcom,vdd-voltage-level = <2950000 2950000>;
+		qcom,vdd-current-level = <15000 400000>;
+
+		vdd-io-supply = <&pmd9635_l12>;
+		qcom,vdd-io-voltage-level = <2950000 2950000>;
+		qcom,vdd-io-current-level = <200 50000>;
+
+		clocks = <&clock_rpm clk_qdss_clk>,
+			 <&clock_rpm clk_qdss_a_clk>;
+		clock-names = "core_clk", "core_a_clk";
+	};
+
 	replicator: replicator@824000 {
 		compatible = "qcom,coresight-replicator";
 		reg = <0x824000 0x1000>;
@@ -39,9 +75,9 @@
 		coresight-id = <2>;
 		coresight-name = "coresight-replicator";
 		coresight-nr-inports = <1>;
-		coresight-outports = <0>;
-		coresight-child-list = <&tmc_etr>;
-		coresight-child-ports = <0>;
+		coresight-outports = <0 1>;
+		coresight-child-list = <&tmc_etr &tpiu>;
+		coresight-child-ports = <0 0>;
 
 		clocks = <&clock_rpm clk_qdss_clk>,
 			 <&clock_rpm clk_qdss_a_clk>;
@@ -327,11 +363,50 @@
 
 	fuse: fuse@5e01c {
 		compatible = "arm,coresight-fuse-v2";
-		reg = <0x5e01c 0x8>;
-		reg-names = "fuse-base";
+		reg = <0x5e01c 0x8>,
+		      <0x58040 0x4>,
+		      <0x5e00c 0x4>;
+		reg-names = "fuse-base", "nidnt-fuse-base", "qpdi-fuse-base";
 
 		coresight-id = <22>;
 		coresight-name = "coresight-fuse-v2";
 		coresight-nr-inports = <0>;
+	};
+
+	hwevent: hwevent@86c000 {
+		compatible = "qcom,coresight-hwevent";
+		reg = <0x86c000 0x148>,
+		      <0x86cfb0 0x4>,
+		      <0x200c000 0xc>,
+		      <0x8B05010 0x4>,
+		      <0x7885010 0x4>,
+		      <0x801020 0x10>;
+		reg-names = "wrapper-mux", "wrapper-lockaccess", "spmi-mux",
+		            "usbbam-mux", "blsp-mux", "apb-mux";
+		coresight-id = <23>;
+		coresight-name = "coresight-hwevent";
+		coresight-nr-inports = <0>;
+
+		clocks = <&clock_rpm clk_qdss_clk>,
+			 <&clock_rpm clk_qdss_a_clk>;
+		clock-names = "core_clk", "core_a_clk";
+	};
+
+	qpdi: qpdi@1941000 {
+		compatible = "qcom,coresight-qpdi";
+		reg = <0x1941000 0x4>;
+		reg-names = "qpdi-base";
+
+		coresight-id = <24>;
+		coresight-name = "coresight-qpdi";
+		coresight-nr-inports = <0>;
+
+		vdd-supply = <&pmd9635_l11>;
+		qcom,vdd-voltage-level = <2800000 2950000>;
+		qcom,vdd-current-level = <15000 400000>;
+
+		vdd-io-supply = <&pmd9635_l12>;
+		qcom,vdd-io-voltage-level = <1800000 2950000>;
+		qcom,vdd-io-current-level = <200 50000>;
 	};
 };
