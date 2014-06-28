@@ -477,7 +477,8 @@
 		pinctrl-0 = <&wcnss_default>;
 		pinctrl-1 = <&wcnss_sleep>;
 		pinctrl-2 = <&wcnss_gpio_default>;
-		wcnss-gpio-base = <&msm_gpio 40 0>;
+		gpios = <&msm_gpio 40 0>, <&msm_gpio 41 0>, <&msm_gpio 42 0>,
+					<&msm_gpio 43 0>, <&msm_gpio 44 0>;
 
 		clocks = <&clock_rpm clk_xo_wlan_clk>,
 			 <&clock_rpm clk_rf_clk2>,
@@ -816,7 +817,7 @@
 		qcom,vdd-voltage-level = <1 5 7>;
 
 		qcom,hsusb-otg-phy-init-seq =
-			<0x44 0x80 0x68 0x81 0x24 0x82 0x13 0x83 0xffffffff>;
+			<0x44 0x80 0x6B 0x81 0x24 0x82 0x13 0x83 0xffffffff>;
 		qcom,hsusb-otg-phy-type = <2>;
 		qcom,hsusb-otg-mode = <1>;
 		qcom,hsusb-otg-otg-control = <2>;
