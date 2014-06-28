@@ -596,7 +596,8 @@ static int lvds_panel_power(int on)
 			return -ENODEV;
 		}
 
-		if (machine_is_apq8064_adp_2()) {
+		if (machine_is_apq8064_adp_2() ||
+			machine_is_apq8064_adp2_es2()) {
 			reg_lvds_s4 = regulator_get(&msm_lvds_device.dev,
 				"lvds_s4");
 			if (IS_ERR_OR_NULL(reg_lvds_s4)) {
@@ -633,7 +634,8 @@ static int lvds_panel_power(int on)
 			return -ENODEV;
 		}
 
-		if (machine_is_apq8064_adp_2()) {
+		if (machine_is_apq8064_adp_2() ||
+			machine_is_apq8064_adp2_es2()) {
 			rc = regulator_enable(reg_lvds_s4);
 			if (rc) {
 				pr_err("enable reg_lvds_s4 failed, rc=%d\n",
@@ -652,7 +654,8 @@ static int lvds_panel_power(int on)
 		gpio_set_value_cansleep(mpp3, 0);
 		gpio_set_value_cansleep(gpio36, 1);
 
-		if (machine_is_apq8064_adp_2()) {
+		if (machine_is_apq8064_adp_2() ||
+			machine_is_apq8064_adp2_es2()) {
 			rc = regulator_disable(reg_lvds_s4);
 			if (rc) {
 				pr_err("disable reg_lvds_s4 failed, rc=%d\n",
@@ -686,7 +689,7 @@ static int lvds_pixel_remap(void)
 	u32 ver = socinfo_get_version();
 
 	if (machine_is_apq8064_cdp() || machine_is_apq8064_adp_2() ||
-	    machine_is_apq8064_liquid()) {
+	    machine_is_apq8064_liquid() || machine_is_apq8064_adp2_es2()) {
 		if ((SOCINFO_VERSION_MAJOR(ver) == 1) &&
 		    (SOCINFO_VERSION_MINOR(ver) == 0))
 			return LVDS_PIXEL_MAP_PATTERN_1;

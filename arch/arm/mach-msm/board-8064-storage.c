@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2014 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -383,7 +383,8 @@ void __init apq8064_init_mmc(void)
 				apq8064_sdc3_pdata->status_irq = 0;
 			}
 		}
-		if (machine_is_apq8064_cdp() || machine_is_apq8064_adp_2()) {
+		if (machine_is_apq8064_cdp() || machine_is_apq8064_adp_2() ||
+						machine_is_apq8064_adp2_es2()) {
 			int i;
 
 			for (i = 0;
@@ -396,6 +397,7 @@ void __init apq8064_init_mmc(void)
 		apq8064_add_sdcc(3, apq8064_sdc3_pdata);
 	}
 
-	if (apq8064_sdc4_pdata && machine_is_apq8064_adp_2())
+	if (apq8064_sdc4_pdata && (machine_is_apq8064_adp_2() ||
+		machine_is_apq8064_adp2_es2()))
 		apq8064_add_sdcc(4, apq8064_sdc4_pdata);
 }

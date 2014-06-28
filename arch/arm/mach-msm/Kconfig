@@ -884,6 +884,16 @@ config MACH_APQ8064_ADP2
 	help
 	  Support for the Qualcomm APQ8064 CDP device.
 
+config MACH_APQ8064_ADP2_ES2
+	depends on ARCH_APQ8064
+	bool "APQ8064 ADP2 ES2"
+	help
+	 Support for Second revision of Qualcomm APQ8064
+	 based Automotive grade Development platform.
+	 Peripherals like WLAN card with QCA6574 ASIC,
+	 DiRaNa Audio Codec, USB based MDM9x15 modem are
+	 the major enhancements over the Previous version.
+
 config MACH_APQ8064_MTP
 	depends on ARCH_APQ8064
 	bool "APQ8064 MTP"

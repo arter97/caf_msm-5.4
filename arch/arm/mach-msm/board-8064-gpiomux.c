@@ -2227,7 +2227,8 @@ void __init apq8064_init_gpiomux(void)
 			msm_gpiomux_install(apq8064_mplatform_gsbi_configs,
 				ARRAY_SIZE(apq8064_mplatform_gsbi_configs));
 		else {
-			if (machine_is_apq8064_adp_2())
+			if (machine_is_apq8064_adp_2() ||
+				machine_is_apq8064_adp2_es2())
 				msm_gpiomux_install(apq8064_adp_2_gsbi_configs,
 					ARRAY_SIZE(apq8064_adp_2_gsbi_configs));
 			else
@@ -2355,7 +2356,7 @@ void __init apq8064_init_gpiomux(void)
 	else if (machine_is_apq8064_cdp() || machine_is_apq8064_liquid())
 		msm_gpiomux_install(apq8064_mxt_configs,
 			ARRAY_SIZE(apq8064_mxt_configs));
-	else if (machine_is_apq8064_adp_2())
+	else if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2())
 		msm_gpiomux_install(apq8064_adp_mxt_configs,
 			ARRAY_SIZE(apq8064_adp_mxt_configs));
 
@@ -2378,8 +2379,9 @@ void __init apq8064_init_gpiomux(void)
 #endif
 
 #ifdef CONFIG_MMC_MSM_SDC4_SUPPORT
-	 if (machine_is_apq8064_adp_2())
-		 msm_gpiomux_install(apq8064_sdc4_configs,
+	 if (machine_is_apq8064_adp_2() ||
+		machine_is_apq8064_adp2_es2())
+		msm_gpiomux_install(apq8064_sdc4_configs,
 				 ARRAY_SIZE(apq8064_sdc4_configs));
 #endif
 
@@ -2388,7 +2390,7 @@ void __init apq8064_init_gpiomux(void)
 	 if (machine_is_mpq8064_hrd() || machine_is_mpq8064_dtv())
 		msm_gpiomux_install(mpq8064_uartdm_configs,
 				ARRAY_SIZE(mpq8064_uartdm_configs));
-	if (machine_is_apq8064_adp_2()) {
+	if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2()) {
 		msm_gpiomux_install(adp_i2c_config,
 				ARRAY_SIZE(adp_i2c_config));
 		msm_gpiomux_install(adp_spi_config,

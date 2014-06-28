@@ -781,13 +781,15 @@ void __init apq8064_init_cam(void)
 		if (machine_is_apq8064_mplatform()) {
 			msm_gpiomux_install(apq8064_cam_adv7481_configs,
 				ARRAY_SIZE(apq8064_cam_adv7481_configs));
-		} else if (!machine_is_apq8064_adp_2()) {
+		} else if (!(machine_is_apq8064_adp_2() ||
+			machine_is_apq8064_adp2_es2())) {
 			msm_gpiomux_install(apq8064_cam_common_configs,
 					ARRAY_SIZE(apq8064_cam_common_configs));
 		}
 	}
 
-	if (machine_is_apq8064_cdp() || machine_is_apq8064_adp_2()) {
+	if (machine_is_apq8064_cdp() || machine_is_apq8064_adp_2() ||
+		machine_is_apq8064_adp2_es2()) {
 		sensor_board_info_imx074.mount_angle = 0;
 		sensor_board_info_mt9m114.mount_angle = 0;
 	} else if (machine_is_apq8064_liquid())
