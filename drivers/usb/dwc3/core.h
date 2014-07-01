@@ -857,7 +857,7 @@ struct dwc3 {
 	bool			core_reset_after_phy_init;
 	bool			err_evt_seen;
 	bool			usb3_u1u2_disable;
-	bool			enable_suspend_event;
+	bool			enable_bus_suspend;
 	u8			hird_thresh;
 	atomic_t		in_lpm;
 	struct dwc3_gadget_events	dbg_gadget_events;

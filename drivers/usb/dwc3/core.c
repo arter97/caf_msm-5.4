@@ -588,6 +588,8 @@ static int dwc3_probe(struct platform_device *pdev)
 						&dwc->hird_thresh);
 		if (ret)
 			dwc->hird_thresh = DWC3_DCTL_HIRD_THRES_DEFAULT;
+		dwc->enable_bus_suspend = of_property_read_bool(node,
+						"snps,bus-suspend-enable");
 	} else if (pdata) {
 		dwc->maximum_speed = pdata->maximum_speed;
 
