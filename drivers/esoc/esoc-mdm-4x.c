@@ -159,8 +159,6 @@ static void mdm_debug_gpio_show(struct mdm_ctrl *mdm)
 			 __func__, MDM_GPIO(mdm, AP2MDM_VDDMIN));
 	dev_dbg(dev, "%s: MDM2AP_VDDMIN gpio = %d\n",
 			 __func__, MDM_GPIO(mdm, MDM2AP_VDDMIN));
-	dev_dbg(dev, "%s: MDM_LINK_DETECT gpio = %d\n",
-			 __func__, MDM_GPIO(mdm, MDM_LINK_DETECT));
 }
 
 static void mdm_enable_irqs(struct mdm_ctrl *mdm)
