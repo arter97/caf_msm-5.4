@@ -1,7 +1,5 @@
-/* arch/arm/mach-msm/clock.h
- *
- * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007-2012, The Linux Foundation. All rights reserved.
+/*
+ * Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -17,27 +15,39 @@
 #ifndef __ARCH_ARM_MACH_MSM_CLOCK_H
 #define __ARCH_ARM_MACH_MSM_CLOCK_H
 
-#include <linux/clk-provider.h>
-#include <mach/clk.h>
+#include <linux/clkdev.h>
 
-#define CLK_FIRST_AVAILABLE_FLAG	0x00000100
-#define CLKFLAG_AUTO_OFF		0x00000200
-#define CLKFLAG_MIN			0x00000400
-#define CLKFLAG_MAX			0x00000800
-
-#define OFF CLKFLAG_AUTO_OFF
-#define CLK_MIN CLKFLAG_MIN
-#define CLK_MAX CLKFLAG_MAX
-#define CLK_MINMAX (CLK_MIN | CLK_MAX)
-
-struct msm_clk {
-	int (*reset)(struct clk_hw *hw, enum clk_reset_action action);
-	struct clk_hw hw;
+/**
+ * struct clock_init_data - SoC specific clock initialization data
+ * @table: table of lookups to add
+ * @size: size of @table
+ * @pre_init: called before initializing the clock driver.
+ * @post_init: called after registering @table. clock APIs can be called inside.
+ * @late_init: called during late init
+ */
+struct clock_init_data {
+	struct list_head list;
+	struct clk_lookup *table;
+	size_t size;
+	void (*pre_init)(void);
+	void (*post_init)(void);
+	int (*late_init)(void);
 };
 
-static inline struct msm_clk *to_msm_clk(struct clk_hw *hw)
+extern int __init msm_gcc_8084_init(void);
+
+int msm_clock_init(struct clock_init_data *data);
+int find_vdd_level(struct clk *clk, unsigned long rate);
+
+#ifdef CONFIG_DEBUG_FS
+int clock_debug_register(struct clk_lookup *t, size_t s);
+void clock_debug_print_enabled(void);
+#else
+static inline int clock_debug_register(struct clk_lookup *t, size_t s)
 {
-	return container_of(hw, struct msm_clk, hw);
+	return 0;
 }
+static inline void clock_debug_print_enabled(void) { return; }
+#endif
 
 #endif
