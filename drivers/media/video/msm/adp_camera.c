@@ -27,7 +27,7 @@
 static void *k_addr[OVERLAY_COUNT];
 static int alloc_overlay_pipe_flag[OVERLAY_COUNT];
 static struct mdp_overlay overlay_req[OVERLAY_COUNT];
-static int overlay_fd[OVERLAY_COUNT];
+static unsigned int overlay_fd[OVERLAY_COUNT];
 static struct msmfb_overlay_data overlay_data[OVERLAY_COUNT];
 static int rc = -ENOIOCTLCMD;
 static uint8_t dual_enabled;
@@ -41,6 +41,9 @@ static struct vfe_axi_output_config_cmd_type vfe_axi_cmd_para;
 static struct msm_camera_vfe_params_t vfe_para;
 static struct work_struct wq_mdp_queue_overlay_buffers;
 static int adp_rear_camera_enable(void);
+struct completion camera_enabled;
+struct completion preview_enabled;
+struct completion preview_disabled;
 
 struct msm_camera_csiphy_params csiphy_params = {
 	.lane_cnt = 1,
@@ -177,7 +180,7 @@ void preview_buffer_alloc(void)
 		pr_err("%s Could not get  address\n", __func__);
 		goto err_ion_handle;
 	}
-	overlay_fd[OVERLAY_CAMERA_PREVIEW] = ion_share_dma_buf_fd(
+	overlay_fd[OVERLAY_CAMERA_PREVIEW] = (unsigned int) ion_share_dma_buf(
 						preview_data.ion_client,
 						preview_data.ion_handle);
 	paddr = ((paddr + 7) & 0xFFFFFFF8); /* to align with 8 */
@@ -419,7 +422,8 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 			/* configure overlay data for guidance lane */
 			overlay_data[OVERLAY_CAMERA_PREVIEW].id =
 					overlay_req[OVERLAY_CAMERA_PREVIEW].id;
-			overlay_data[OVERLAY_CAMERA_PREVIEW].data.flags = 0;
+			overlay_data[OVERLAY_CAMERA_PREVIEW].data.flags =
+				MSMFB_DATA_FLAG_ION_NOT_FD;
 			overlay_data[OVERLAY_CAMERA_PREVIEW].data.offset =
 				(buffer_index * PREVIEW_BUFFER_LENGTH);
 			overlay_data[OVERLAY_CAMERA_PREVIEW].data.memory_id =
@@ -428,7 +432,8 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 			/*  configure overlay data for guidance lane */
 			overlay_data[OVERLAY_GUIDANCE_LANE].id =
 					overlay_req[OVERLAY_GUIDANCE_LANE].id;
-			overlay_data[OVERLAY_GUIDANCE_LANE].data.flags = 0;
+			overlay_data[OVERLAY_GUIDANCE_LANE].data.flags =
+				MSMFB_DATA_FLAG_ION_NOT_FD;
 			overlay_data[OVERLAY_GUIDANCE_LANE].data.offset =
 				(buffer_index * GUIDANCE_LANE_BUFFER_LENGTH);
 			overlay_data[OVERLAY_GUIDANCE_LANE].data.memory_id =
@@ -498,10 +503,9 @@ void guidance_lane_buffer_alloc(void)
 			pr_err("%s Could not get  address\n", __func__);
 			goto err_ion_handle;
 	}
-	overlay_fd[OVERLAY_GUIDANCE_LANE] =
-			ion_share_dma_buf_fd(guidance_lane_data.ion_client,
-					guidance_lane_data.ion_handle);
-
+	overlay_fd[OVERLAY_GUIDANCE_LANE] = (unsigned int)ion_share_dma_buf(
+			guidance_lane_data.ion_client,
+			guidance_lane_data.ion_handle);
 	paddr = ((paddr + 7) & 0xFFFFFFF8); /* to align with 8 */
 	/* Make all phys point to the correct address */
 	for (i = 0; i < GUIDANCE_LANE_BUFFER_COUNT; i++) {
@@ -672,14 +676,19 @@ static int adp_rear_camera_enable(void)
 int  init_camera_kthread(void)
 {
 	int ret;
+	init_completion(&camera_enabled);
+	init_completion(&preview_enabled);
+	init_completion(&preview_disabled);
 	INIT_WORK(&wq_mdp_queue_overlay_buffers, mdp_queue_overlay_buffers);
 	ret = adp_rear_camera_enable();
+	complete(&camera_enabled);
 	return 0;
 }
 
 void  exit_camera_kthread(void)
 {
 	pr_debug("Exiting  camera\n");
+	wait_for_completion(&preview_disabled);
 	guidance_lane_buffer_free();
 	preview_buffer_free();
 	pr_debug("%s: begin axi release\n", __func__);
@@ -690,8 +699,9 @@ void  exit_camera_kthread(void)
 	cancel_work_sync(&wq_mdp_queue_overlay_buffers);
 }
 
-void disable_camera_preview(void)
+int disable_camera_preview(void)
 {
+	wait_for_completion(&preview_enabled);
 	axi_stop_rdi1_only(my_axi_ctrl);
 	mdpclient_display_commit();
 	mdpclient_msm_fb_close();
@@ -705,10 +715,15 @@ void disable_camera_preview(void)
 		pr_debug("%s: overlay_unset camera preview free pipe !\n",
 			__func__);
 	}
+	complete(&preview_disabled);
+	return 0;
 }
-void enable_camera_preview(void)
+
+int enable_camera_preview(void)
 {
 	u64 mdp_max_bw_test = 2000000000;
+
+	wait_for_completion(&camera_enabled);
 	mdpclient_msm_fb_open();
 	if (mdpclient_msm_fb_blank(FB_BLANK_UNBLANK, true))
 		pr_err("%s: can't turn on display!\n", __func__);
@@ -722,7 +737,9 @@ void enable_camera_preview(void)
 	if (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] != 0) {
 		pr_err("%s: mdpclient_overlay_set error!1\n",
 			__func__);
-		return;
+		complete(&camera_enabled);
+		complete(&preview_enabled);
+		return -EBUSY;
 	}
 	/* configure pipe for guidance lane */
 	guidance_lane_set_overlay_init(&overlay_req[OVERLAY_GUIDANCE_LANE]);
@@ -731,7 +748,12 @@ void enable_camera_preview(void)
 	if (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] != 0) {
 		pr_err("%s: mdpclient_overlay_set error!1\n",
 			__func__);
-		return;
+		complete(&camera_enabled);
+		complete(&preview_enabled);
+		return -EBUSY;
 	}
 	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);
+	complete(&camera_enabled);
+	complete(&preview_enabled);
+	return 0;
 }
