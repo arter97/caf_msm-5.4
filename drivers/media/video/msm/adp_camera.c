@@ -177,7 +177,7 @@ void preview_buffer_alloc(void)
 		pr_err("%s Could not get  address\n", __func__);
 		goto err_ion_handle;
 	}
-	overlay_fd[OVERLAY_CAMERA_PREVIEW] = ion_share_dma_buf(
+	overlay_fd[OVERLAY_CAMERA_PREVIEW] = ion_share_dma_buf_fd(
 						preview_data.ion_client,
 						preview_data.ion_handle);
 	paddr = ((paddr + 7) & 0xFFFFFFF8); /* to align with 8 */
@@ -499,7 +499,7 @@ void guidance_lane_buffer_alloc(void)
 			goto err_ion_handle;
 	}
 	overlay_fd[OVERLAY_GUIDANCE_LANE] =
-			ion_share_dma_buf(guidance_lane_data.ion_client,
+			ion_share_dma_buf_fd(guidance_lane_data.ion_client,
 					guidance_lane_data.ion_handle);
 
 	paddr = ((paddr + 7) & 0xFFFFFFF8); /* to align with 8 */
