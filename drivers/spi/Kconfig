@@ -375,6 +375,27 @@ config SPI_PXA2XX
 config SPI_PXA2XX_PCI
 	def_tristate SPI_PXA2XX && PCI
 
+config SPI_QSD
+	tristate "Qualcomm MSM SPI support"
+	default n
+	depends on ARCH_MSM_SCORPION && !MSM_SMP
+	help
+	  Support for Serial Peripheral Interface for Qualcomm MSM
+
+	  This driver can also be built as a module.  If so, the module
+	  will be called spi_qsd.
+
+config SPI_QUP
+	tristate "Qualcomm MSM SPI QUPe Support"
+	depends on ARCH_MSM && !SPI_QSD
+	default n
+	help
+	  Support for Serial Peripheral Interface for Qualcomm Universal
+          Peripheral.
+
+	  This driver can also be built as a module.  If so, the module
+	  will be called spi_qsd.
+
 config SPI_RSPI
 	tristate "Renesas RSPI/QSPI controller"
 	depends on (SUPERH && SH_DMAE_BASE) || ARCH_SHMOBILE
