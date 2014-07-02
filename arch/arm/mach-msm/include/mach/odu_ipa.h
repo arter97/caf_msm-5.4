@@ -32,6 +32,8 @@
  * This pointer will hold the network device for later interaction
  * with odu_ipa APIs. Also it shall be given to ipa_connect upon pipe
  * connection as private data.
+ * @tx_fixup: callback for packet fixup before sending to IPA. In case HW
+ * header is set, it will be pulled from the skb prior calling to this callback.
  * @set_hw_flags: HW specific callback for setting rx flags.
  * @hw_nway_reset: HW specific callback for restart auto-negotiation.
  * Shall be provided by USB driver.
@@ -41,6 +43,7 @@ struct odu_ipa_params {
 	ipa_notify_cb odu_ipa_tx_dp_notify;
 	u8 device_ethaddr[ETH_ALEN];
 	void *priv;
+	int (*tx_fixup)(struct sk_buff *skb);
 	void (*set_hw_rx_flags)(int flags);
 	void (*hw_nway_reset)(void);
 };
