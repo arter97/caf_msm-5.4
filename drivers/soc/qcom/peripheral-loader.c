@@ -264,17 +264,6 @@ static irqreturn_t proxy_unvote_intr_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static int cma_region_is_removed(struct device *dev)
-{
-	struct device_node *np;
-
-	np = of_parse_phandle(dev->of_node, "linux,contiguous-region", 0);
-	if (np)
-		return of_property_read_bool(np, "linux,remove-completely");
-
-	return 0;
-}
-
 static bool segment_is_relocatable(const struct elf32_phdr *p)
 {
 	return !!(p->p_flags & BIT(27));
@@ -389,8 +378,7 @@ static int pil_alloc_region(struct pil_priv *priv, phys_addr_t min_addr,
 		aligned_size = ALIGN(size, SZ_1M);
 
 	dma_set_attr(DMA_ATTR_SKIP_ZEROING, &priv->desc->attrs);
-	if (cma_region_is_removed(priv->desc->dev))
-		dma_set_attr(DMA_ATTR_NO_KERNEL_MAPPING, &priv->desc->attrs);
+	dma_set_attr(DMA_ATTR_NO_KERNEL_MAPPING, &priv->desc->attrs);
 
 	region = dma_alloc_attrs(priv->desc->dev, aligned_size,
 				&priv->region_start, GFP_KERNEL,
@@ -536,8 +524,8 @@ static void pil_release_mmap(struct pil_desc *desc)
 #define IOMAP_SIZE SZ_1M
 
 struct pil_map_fw_info {
-	int relocated;
 	void *region;
+	struct dma_attrs attrs;
 	phys_addr_t base_addr;
 	struct device *dev;
 };
@@ -545,22 +533,16 @@ struct pil_map_fw_info {
 static void *map_fw_mem(phys_addr_t paddr, size_t size, void *data)
 {
 	struct pil_map_fw_info *info = data;
-	void *base;
 
-	if (cma_region_is_removed(info->dev))
-		base = ioremap(paddr, size);
-	else if (info && info->relocated && info->region)
-		base = info->region + (paddr - info->base_addr);
-
-	return base;
+	return dma_remap(info->dev, info->region, paddr, size,
+					&info->attrs);
 }
 
-static void unmap_fw_mem(void *vaddr, void *data)
+static void unmap_fw_mem(void *vaddr, size_t size, void *data)
 {
 	struct pil_map_fw_info *info = data;
 
-	if (cma_region_is_removed(info->dev))
-		iounmap(vaddr);
+	dma_unremap(info->dev, vaddr, size);
 }
 
 static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
@@ -570,7 +552,7 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 	char fw_name[30];
 	int num = seg->num;
 	struct pil_map_fw_info map_fw_info = {
-		.relocated = seg->relocated,
+		.attrs = desc->attrs,
 		.region = desc->priv->region,
 		.base_addr = desc->priv->region_start,
 		.dev = desc->dev,
@@ -628,7 +610,7 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 
 		memset(buf, 0, size);
 
-		desc->unmap_fw_mem(buf, map_data);
+		desc->unmap_fw_mem(buf, size, map_data);
 
 		count -= orig_size;
 		paddr += orig_size;
