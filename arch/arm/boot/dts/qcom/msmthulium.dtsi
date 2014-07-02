@@ -93,6 +93,7 @@
 };
 
 #include "msmthulium-ion.dtsi"
+#include "msmthulium-mdss.dtsi"
 
 &soc {
 	#address-cells = <1>;
