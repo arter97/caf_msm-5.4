@@ -24,6 +24,8 @@ Required properties:
 Optional properties:
 - mmagic-vdd-supply: phandle to GDSC regulator controlling mmagic.
 - camss-vdd-supply: phandle to GDSC regulator controlling camss.
+- qcom,bus-master: Flag for presence of CPP bus master. It has to be set only for
+  platforms that support such feature.
 
 Example:
 
@@ -60,4 +62,5 @@ Example:
 			"smmu_cpp_axi_clk", "cpp_vbif_ahb_clk";
 		qcom,clock-rates = <0 0 0 0 465000000 0 0 465000000 0 0 0 0>;
 		qcom,min-clock-rate = <320000000>;
+		qcom,bus-master = <1>;
 	};
