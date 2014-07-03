@@ -1449,7 +1449,7 @@ static void usbnet_deferred_probe(struct work_struct *work)
 		netif_carrier_off(net);
 
 	if ((dev->driver_info->flags & FLAG_IPA_DP)) {
-		usbnet_ipa_init(net);
+		usbnet_ipa_init(dev);
 		usbnet_open(net);
 	}
 
@@ -1630,7 +1630,7 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	if (dev->driver_info->flags & FLAG_LINK_INTR)
 		netif_carrier_off(net);
 	if ((dev->driver_info->flags & FLAG_IPA_DP)) {
-		usbnet_ipa_init(dev->net);
+		usbnet_ipa_init(dev);
 		usbnet_open(dev->net);
 	}
 
