@@ -18,6 +18,11 @@
 	compatible = "qcom,msmthulium";
 	interrupt-parent = <&intc>;
 
+	aliases {
+		sdhc1 = &sdhc_1; /* SDC1 eMMC slot */
+		sdhc2 = &sdhc_2; /* SDC2 SD card slot */
+	};
+
 	cpus {
 		#address-cells = <2>;
 		#size-cells = <0>;
@@ -192,6 +197,72 @@
 		compatible = "regulator-fixed";
 		regulator-name = "gdsc_fd";
 		reg = <0x8c3b64 0x4>;
+	};
+
+	sdhc_1: sdhci@7464900 {
+		compatible = "qcom,sdhci-msm";
+		reg = <0x7464900 0x314>, <0x7464000 0x800>, <0x7464E00 0x19C>;
+		reg-names = "hc_mem", "core_mem", "cmdq_mem";
+
+		interrupts = <0 141 0>, <0 134 0>;
+		interrupt-names = "hc_irq", "pwr_irq";
+
+		clock-names = "iface_clk", "core_clk";
+		clocks = <&clock_gcc clk_gcc_sdcc1_ahb_clk>,
+			 <&clock_gcc clk_gcc_sdcc1_apps_clk>;
+
+		qcom,bus-width = <8>;
+		qcom,cpu-dma-latency-us = <701>;
+
+		qcom,msm-bus,name = "sdhc1";
+		qcom,msm-bus,num-cases = <9>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps = <78 512 0 0>, /* No vote */
+			<78 512 1600 3200>,       /* 400 KB/s*/
+			<78 512 80000 160000>,    /* 20 MB/s */
+			<78 512 100000 200000>,   /* 25 MB/s */
+			<78 512 200000 400000>,   /* 50 MB/s */
+			<78 512 400000 800000>,   /* 100 MB/s */
+			<78 512 400000 800000>,   /* 200 MB/s */
+			<78 512 400000 800000>,   /* 400 MB/s */
+			<78 512 2048000 4096000>; /* Max. bandwidth */
+		qcom,bus-bw-vectors-bps = <0 400000 20000000 25000000 50000000
+						100000000 200000000 400000000
+						4294967295>;
+
+		status = "disabled";
+	};
+
+	sdhc_2: sdhci@74A4900 {
+		compatible = "qcom,sdhci-msm";
+		reg = <0x74A4900 0x314>, <0x74A4000 0x800>;
+		reg-names = "hc_mem", "core_mem";
+
+		interrupts = <0 125 0>, <0 221 0>;
+		interrupt-names = "hc_irq", "pwr_irq";
+
+		clock-names = "iface_clk", "core_clk";
+		clocks = <&clock_gcc clk_gcc_sdcc2_ahb_clk>,
+			 <&clock_gcc clk_gcc_sdcc2_apps_clk>;
+
+		qcom,bus-width = <4>;
+		qcom,cpu-dma-latency-us = <701>;
+
+		qcom,msm-bus,name = "sdhc2";
+		qcom,msm-bus,num-cases = <8>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps = <81 512 0 0>, /* No vote */
+				<81 512 1600 3200>,    /* 400 KB/s*/
+				<81 512 80000 160000>, /* 20 MB/s */
+				<81 512 100000 200000>, /* 25 MB/s */
+				<81 512 200000 400000>, /* 50 MB/s */
+				<81 512 400000 800000>, /* 100 MB/s */
+				<81 512 800000 800000>, /* 200 MB/s */
+				<81 512 2048000 4096000>; /* Max. bandwidth */
+		qcom,bus-bw-vectors-bps = <0 400000 20000000 25000000 50000000
+						100000000 200000000 4294967295>;
+
+		status = "disabled";
 	};
 };
 
