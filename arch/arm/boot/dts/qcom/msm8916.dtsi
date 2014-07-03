@@ -624,7 +624,6 @@
 		qcom,bam-pipe-pair = <2>;
 		qcom,ce-hw-instance = <0>;
 		qcom,ce-device = <0>;
-		qcom,ce-hw-shared;
 		qcom,msm-bus,name = "qcrypto-noc";
 		qcom,msm-bus,num-cases = <2>;
 		qcom,msm-bus,num-paths = <1>;
@@ -637,6 +636,9 @@
 			 <&clock_gcc clk_gcc_crypto_axi_clk>;
 		clock-names = "core_clk_src", "core_clk",
 				"iface_clk", "bus_clk";
+		qcom,use-sw-aes-cbc-ecb-ctr-algo;
+		qcom,use-sw-aes-xts-algo;
+		qcom,use-sw-ahash-algo;
 		status = "disabled";
 	};
 
@@ -1709,6 +1711,13 @@
 		reg = <0x400000 0x80000>;
 		reg-names = "bimc";
 	};
+
+	qcom,avtimer {
+		compatible = "qcom,avtimer";
+		reg = <0x0770600C 0x4>,
+			<0x07706010 0x4>;
+		reg-names = "avtimer_lsb_addr", "avtimer_msb_addr";
+	};
 };
 
 &gdsc_venus {
@@ -1835,6 +1844,28 @@
 		qcom,pre-div-channel-scaling = <0>;
 		qcom,calibration-type = "ratiometric";
 		qcom,scale-function = <2>;
+		qcom,hw-settle-time = <2>;
+		qcom,fast-avg-setup = <0>;
+	};
+
+	chan@32 {
+		label = "xo_therm";
+		reg = <0x32>;
+		qcom,decimation = <0>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <4>;
+		qcom,hw-settle-time = <2>;
+		qcom,fast-avg-setup = <0>;
+	};
+
+	chan@3c {
+		label = "xo_therm_buf";
+		reg = <0x3c>;
+		qcom,decimation = <0>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <4>;
 		qcom,hw-settle-time = <2>;
 		qcom,fast-avg-setup = <0>;
 	};

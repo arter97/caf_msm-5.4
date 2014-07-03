@@ -71,6 +71,7 @@ MODULE_ALIAS("mmc:block");
 #define PACKED_CMD_WR	0x02
 #define PACKED_TRIGGER_MAX_ELEMENTS	5000
 
+#define MMC_BLK_MAX_RETRIES 5 /* max # of retries before aborting a command */
 #define MMC_SANITIZE_REQ_TIMEOUT 240000 /* msec */
 #define MMC_EXTRACT_INDEX_FROM_ARG(x) ((x & 0x00FF0000) >> 16)
 #define MMC_BLK_UPDATE_STOP_REASON(stats, reason)			\
@@ -1441,7 +1442,8 @@ retry:
 	if (mmc_can_sanitize(card)) {
 		trace_mmc_blk_erase_start(EXT_CSD_SANITIZE_START, 0, 0);
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
-				 EXT_CSD_SANITIZE_START, 1, 30000);
+				 EXT_CSD_SANITIZE_START, 1,
+				 MMC_SANITIZE_REQ_TIMEOUT);
 		trace_mmc_blk_erase_end(EXT_CSD_SANITIZE_START, 0, 0);
 	}
 out_retry:
@@ -2659,12 +2661,13 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *rqc)
 			}
 			goto cmd_abort;
 		case MMC_BLK_RETRY:
-			if (retry++ < 5)
+			if (retry++ < MMC_BLK_MAX_RETRIES)
 				break;
 			/* Fall through */
 		case MMC_BLK_ABORT:
-			if (!mmc_blk_reset(md, card->host, type))
-				break;
+			if (!mmc_blk_reset(md, card->host, type) &&
+					(retry++ < (MMC_BLK_MAX_RETRIES + 1)))
+					break;
 			goto cmd_abort;
 		case MMC_BLK_DATA_ERR: {
 			int err;
@@ -2796,7 +2799,7 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 		/* complete ongoing async transfer before issuing discard */
 		if (card->host->areq)
 			mmc_blk_issue_rw_rq(mq, NULL);
-		if (req->cmd_flags & REQ_SECURE &&
+		if (cmd_flags & REQ_SECURE &&
 			!(card->quirks & MMC_QUIRK_SEC_ERASE_TRIM_BROKEN))
 			ret = mmc_blk_issue_secdiscard_rq(mq, req);
 		else
@@ -2824,8 +2827,7 @@ out:
 	 */
 	if ((!req && !(test_bit(MMC_QUEUE_NEW_REQUEST, &mq->flags))) ||
 			((test_bit(MMC_QUEUE_URGENT_REQUEST, &mq->flags)) &&
-			 !(mq->mqrq_cur->req->cmd_flags &
-				MMC_REQ_NOREINSERT_MASK))) {
+			 !(cmd_flags & MMC_REQ_NOREINSERT_MASK))) {
 		if (mmc_card_need_bkops(card))
 			mmc_start_bkops(card, false);
 		/*

@@ -1799,17 +1799,20 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 
 	clk_prepare_enable(mdwc->utmi_clk);
 
-	if (mdwc->lpm_flags & MDWC3_PHY_REF_CLK_OFF) {
+	if (mdwc->lpm_flags & MDWC3_PHY_REF_CLK_OFF)
 		clk_prepare_enable(mdwc->ref_clk);
-		usb_phy_set_suspend(mdwc->ss_phy, 0);
-		mdwc->lpm_flags &= ~MDWC3_PHY_REF_CLK_OFF;
-	}
+
 	usleep_range(1000, 1200);
 
 	clk_prepare_enable(mdwc->iface_clk);
 	if (mdwc->lpm_flags & MDWC3_CORECLK_OFF) {
 		clk_prepare_enable(mdwc->core_clk);
 		mdwc->lpm_flags &= ~MDWC3_CORECLK_OFF;
+	}
+
+	if (mdwc->lpm_flags & MDWC3_PHY_REF_CLK_OFF) {
+		usb_phy_set_suspend(mdwc->ss_phy, 0);
+		mdwc->lpm_flags &= ~MDWC3_PHY_REF_CLK_OFF;
 	}
 
 	usb_phy_set_suspend(mdwc->hs_phy, 0);
@@ -1964,9 +1967,13 @@ static void dwc3_pwr_event_handler(struct dwc3_msm *mdwc)
 static irqreturn_t msm_dwc3_pwr_irq_thread(int irq, void *_mdwc)
 {
 	struct dwc3_msm *mdwc = _mdwc;
+	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 
 	dev_dbg(mdwc->dev, "%s\n", __func__);
-	dwc3_pwr_event_handler(mdwc);
+	if (atomic_read(&dwc->in_lpm))
+		pm_runtime_get_sync(&mdwc->dwc3->dev);
+	else
+		dwc3_pwr_event_handler(mdwc);
 	return IRQ_HANDLED;
 }
 
@@ -2095,11 +2102,12 @@ static irqreturn_t msm_dwc3_pwr_irq(int irq, void *data)
 		 * msm_resume after the clocks are enabled.
 		 */
 		atomic_set(&mdwc->in_p3, 0);
-		/* bail out if system resume in process, else initiate RESUME */
-		if (atomic_read(&mdwc->pm_suspended))
-			mdwc->resume_pending = true;
-		else
-			pm_runtime_get(&mdwc->dwc3->dev);
+
+		/* Initate resume if system resume is not in process */
+		if (!atomic_read(&mdwc->pm_suspended))
+				return IRQ_WAKE_THREAD;
+
+		mdwc->resume_pending = true;
 
 		return IRQ_HANDLED;
 	}
@@ -3280,13 +3288,27 @@ static int dwc3_msm_remove_children(struct device *dev, void *data)
 static int dwc3_msm_remove(struct platform_device *pdev)
 {
 	struct dwc3_msm	*mdwc = platform_get_drvdata(pdev);
+	int ret_pm;
 
 	if (cpu_to_affin)
 		unregister_cpu_notifier(&mdwc->dwc3_cpu_notifier);
 
-	pm_runtime_disable(mdwc->dev);
-	pm_runtime_set_suspended(mdwc->dev);
-	device_wakeup_disable(mdwc->dev);
+	/*
+	 * In case of system suspend, pm_runtime_get_sync fails.
+	 * Hence turn ON the clocks manually.
+	 */
+	ret_pm = pm_runtime_get_sync(mdwc->dev);
+	if (ret_pm < 0) {
+		dev_err(mdwc->dev,
+			"pm_runtime_get_sync failed with %d\n", ret_pm);
+		clk_prepare_enable(mdwc->utmi_clk);
+		clk_prepare_enable(mdwc->core_clk);
+		clk_prepare_enable(mdwc->iface_clk);
+		clk_prepare_enable(mdwc->sleep_clk);
+		clk_prepare_enable(mdwc->hsphy_sleep_clk);
+		clk_prepare_enable(mdwc->ref_clk);
+		clk_prepare_enable(mdwc->xo_clk);
+	}
 
 	if (mdwc->ext_chg_device) {
 		device_destroy(mdwc->ext_chg_class, mdwc->ext_chg_dev);
@@ -3307,6 +3329,12 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 		mdwc->hs_phy->flags &= ~PHY_HOST_MODE;
 	platform_device_put(mdwc->dwc3);
 	device_for_each_child(&pdev->dev, NULL, dwc3_msm_remove_children);
+
+	pm_runtime_disable(mdwc->dev);
+	pm_runtime_barrier(mdwc->dev);
+	pm_runtime_put_sync(mdwc->dev);
+	pm_runtime_set_suspended(mdwc->dev);
+	device_wakeup_disable(mdwc->dev);
 
 	if (!IS_ERR_OR_NULL(mdwc->vbus_otg))
 		regulator_disable(mdwc->vbus_otg);

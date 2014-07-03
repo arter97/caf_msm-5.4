@@ -196,6 +196,7 @@
 
 #define RD 0
 #define WR 1
+#define MSM_PCIE_ERROR -1
 
 #define PERST_PROPAGATION_DELAY_US_MIN	  10000
 #define PERST_PROPAGATION_DELAY_US_MAX	  10005
@@ -406,6 +407,7 @@ struct msm_pcie_dev_t {
 
 	enum msm_pcie_link_status    link_status;
 	bool				 user_suspend;
+	bool                         disable_pc;
 	struct pci_saved_state	     *saved_state;
 
 	struct wakeup_source	     ws;
@@ -420,6 +422,7 @@ struct msm_pcie_dev_t {
 	bool				 ep_wakeirq;
 
 	uint32_t			   rc_idx;
+	bool				drv_ready;
 	bool				 enumerated;
 	struct work_struct	     handle_wake_work;
 	struct mutex		     recovery_lock;
@@ -1969,6 +1972,12 @@ int msm_pcie_enumerate(u32 rc_idx)
 
 	PCIE_DBG(dev, "Enumerate RC%d\n", rc_idx);
 
+	if (!dev->drv_ready) {
+		PCIE_DBG(dev, "RC%d has not been successfully probed yet\n",
+			rc_idx);
+		return -EPROBE_DEFER;
+	}
+
 	if (!dev->enumerated) {
 		ret = msm_pcie_enable(dev, PM_ALL);
 
@@ -2661,6 +2670,7 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	msm_pcie_dev[rc_idx].parf_swing = 0;
 	msm_pcie_dev[rc_idx].link_status = MSM_PCIE_LINK_DEINIT;
 	msm_pcie_dev[rc_idx].user_suspend = false;
+	msm_pcie_dev[rc_idx].disable_pc = false;
 	msm_pcie_dev[rc_idx].saved_state = NULL;
 	msm_pcie_dev[rc_idx].enumerated = false;
 	msm_pcie_dev[rc_idx].linkdown_counter = 0;
@@ -2705,6 +2715,8 @@ static int msm_pcie_probe(struct platform_device *pdev)
 		goto decrease_rc_num;
 	}
 
+	msm_pcie_dev[rc_idx].drv_ready = true;
+
 	if (msm_pcie_dev[rc_idx].ep_wakeirq) {
 		PCIE_DBG(&msm_pcie_dev[rc_idx],
 			"PCIe: RC%d will be enumerated upon WAKE signal from Endpoint.\n",
@@ -2725,6 +2737,7 @@ static int msm_pcie_probe(struct platform_device *pdev)
 
 	PCIE_DBG(&msm_pcie_dev[rc_idx], "PCIE probed %s\n",
 		dev_name(&(pdev->dev)));
+
 	mutex_unlock(&pcie_drv.drv_lock);
 	return 0;
 
@@ -2813,6 +2826,7 @@ int __init pcie_init(void)
 		mutex_init(&msm_pcie_dev[i].recovery_lock);
 		spin_lock_init(&msm_pcie_dev[i].linkdown_lock);
 		spin_lock_init(&msm_pcie_dev[i].wakeup_lock);
+		msm_pcie_dev[i].drv_ready = false;
 	}
 
 	ret = platform_driver_register(&msm_pcie_driver);
@@ -2913,6 +2927,19 @@ static void msm_pcie_fixup_suspend(struct pci_dev *dev)
 
 	if (pcie_dev->link_status != MSM_PCIE_LINK_ENABLED)
 		return;
+
+	spin_lock_irqsave(&pcie_dev->cfg_lock,
+				pcie_dev->irqsave_flags);
+	if (pcie_dev->disable_pc) {
+		PCIE_DBG(pcie_dev,
+			"RC%d: Skip suspend because of user request\n",
+			pcie_dev->rc_idx);
+		spin_unlock_irqrestore(&pcie_dev->cfg_lock,
+				pcie_dev->irqsave_flags);
+		return;
+	}
+	spin_unlock_irqrestore(&pcie_dev->cfg_lock,
+				pcie_dev->irqsave_flags);
 
 	mutex_lock(&pcie_dev->recovery_lock);
 
@@ -3046,6 +3073,13 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 
 	dev = msm_pcie_dev[rc_idx].dev;
 
+	if (!msm_pcie_dev[rc_idx].drv_ready) {
+		PCIE_ERR(&msm_pcie_dev[rc_idx],
+			"RC%d has not been successfully probed yet\n",
+			rc_idx);
+		return -EPROBE_DEFER;
+	}
+
 	switch (pm_opt) {
 	case MSM_PCIE_SUSPEND:
 		if (msm_pcie_dev[rc_idx].link_status != MSM_PCIE_LINK_ENABLED)
@@ -3101,6 +3135,33 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 
 		mutex_unlock(&msm_pcie_dev[rc_idx].recovery_lock);
 
+		break;
+	case MSM_PCIE_DISABLE_PC:
+		PCIE_DBG(&msm_pcie_dev[rc_idx],
+			"User of RC%d requests to keep the link always alive.\n",
+			rc_idx);
+		spin_lock_irqsave(&msm_pcie_dev[rc_idx].cfg_lock,
+				msm_pcie_dev[rc_idx].irqsave_flags);
+		if (msm_pcie_dev[rc_idx].suspending) {
+			PCIE_ERR(&msm_pcie_dev[rc_idx],
+				"PCIe: RC%d Link has been suspended before request\n",
+				rc_idx);
+			ret = MSM_PCIE_ERROR;
+		} else {
+			msm_pcie_dev[rc_idx].disable_pc = true;
+		}
+		spin_unlock_irqrestore(&msm_pcie_dev[rc_idx].cfg_lock,
+				msm_pcie_dev[rc_idx].irqsave_flags);
+		break;
+	case MSM_PCIE_ENABLE_PC:
+		PCIE_DBG(&msm_pcie_dev[rc_idx],
+			"User of RC%d cancels the request of alive link.\n",
+			rc_idx);
+		spin_lock_irqsave(&msm_pcie_dev[rc_idx].cfg_lock,
+				msm_pcie_dev[rc_idx].irqsave_flags);
+		msm_pcie_dev[rc_idx].disable_pc = false;
+		spin_unlock_irqrestore(&msm_pcie_dev[rc_idx].cfg_lock,
+				msm_pcie_dev[rc_idx].irqsave_flags);
 		break;
 	default:
 		PCIE_ERR(&msm_pcie_dev[rc_idx],

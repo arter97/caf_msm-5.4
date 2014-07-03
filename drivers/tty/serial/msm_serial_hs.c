@@ -349,6 +349,7 @@ static int msm_hs_clock_vote(struct msm_hs_port *msm_uport)
 					"%s: Could not turn on pclk [%d]\n",
 					__func__, rc);
 				mutex_unlock(&msm_uport->clk_mutex);
+				atomic_dec_return(&msm_uport->clk_count);
 				return rc;
 			}
 		}
@@ -360,6 +361,7 @@ static int msm_hs_clock_vote(struct msm_hs_port *msm_uport)
 				__func__, rc);
 			clk_disable_unprepare(msm_uport->pclk);
 			mutex_unlock(&msm_uport->clk_mutex);
+			atomic_dec_return(&msm_uport->clk_count);
 			return rc;
 		}
 		msm_uport->clk_state = MSM_HS_CLK_ON;
@@ -1505,6 +1507,7 @@ static void flip_insert_work(struct work_struct *work)
 	spin_lock_irqsave(&msm_uport->uport.lock, flags);
 	if (msm_uport->rx.buffer_pending == NONE_PENDING) {
 		MSM_HS_ERR("Error: No buffer pending in %s", __func__);
+		spin_unlock_irqrestore(&msm_uport->uport.lock, flags);
 		return;
 	}
 	if (msm_uport->rx.buffer_pending & FIFO_OVERRUN) {
@@ -2257,13 +2260,25 @@ void msm_hs_request_clock_on(struct uart_port *uport)
 	unsigned long flags;
 	unsigned int data;
 	int ret = 0;
+	int cur_clk_state;
 
+	/*
+	 * cancel the hrtimer first so that
+	 * clk_state can not change in flight
+	 */
+	hrtimer_cancel(&msm_uport->clk_off_timer);
+	flush_work(&msm_uport->clock_off_w);
+	cur_clk_state = msm_uport->clk_state;
+	msm_hs_clock_vote(msm_uport);
 	mutex_lock(&msm_uport->clk_mutex);
 	spin_lock_irqsave(&uport->lock, flags);
 
-	if (msm_uport->clk_state == MSM_HS_CLK_REQUEST_OFF)
+	if (cur_clk_state == MSM_HS_CLK_REQUEST_OFF) {
+		msm_uport->clk_state = MSM_HS_CLK_ON;
 		msm_hs_enable_flow_control(uport);
-	switch (msm_uport->clk_state) {
+	}
+
+	switch (cur_clk_state) {
 	case MSM_HS_CLK_OFF:
 		wake_lock(&msm_uport->dma_wake_lock);
 		if (use_low_power_wakeup(msm_uport)) {
@@ -2272,20 +2287,18 @@ void msm_hs_request_clock_on(struct uart_port *uport)
 			enable_irq(uport->irq);
 		}
 		spin_unlock_irqrestore(&uport->lock, flags);
-
 		mutex_unlock(&msm_uport->clk_mutex);
 		ret = msm_hs_clock_vote(msm_uport);
 		mutex_lock(&msm_uport->clk_mutex);
+		spin_lock_irqsave(&uport->lock, flags);
 		if (ret) {
 			MSM_HS_INFO("Clock ON Failure"
 			"For UART CLK Stalling HSUART\n");
 			break;
 		}
 
-		spin_lock_irqsave(&uport->lock, flags);
 		/* else fall-through */
 	case MSM_HS_CLK_REQUEST_OFF:
-		hrtimer_cancel(&msm_uport->clk_off_timer);
 		if (msm_uport->rx.flush == FLUSH_STOP) {
 			spin_unlock_irqrestore(&uport->lock, flags);
 			MSM_HS_DBG("%s:Calling wait forxcompletion\n",
@@ -2301,8 +2314,6 @@ void msm_hs_request_clock_on(struct uart_port *uport)
 		}
 		MSM_HS_DBG("%s:clock state %d\n\n", __func__,
 				msm_uport->clk_state);
-		if (msm_uport->clk_state == MSM_HS_CLK_REQUEST_OFF)
-				msm_uport->clk_state = MSM_HS_CLK_ON;
 		if (msm_uport->rx.flush == FLUSH_STOP ||
 		    msm_uport->rx.flush == FLUSH_SHUTDOWN) {
 			msm_hs_write(uport, UART_DM_CR, RESET_RX);
@@ -2335,6 +2346,7 @@ void msm_hs_request_clock_on(struct uart_port *uport)
 	dump_uart_hs_registers(msm_uport);
 	spin_unlock_irqrestore(&uport->lock, flags);
 	mutex_unlock(&msm_uport->clk_mutex);
+	msm_hs_clock_unvote(msm_uport);
 }
 EXPORT_SYMBOL(msm_hs_request_clock_on);
 
@@ -3365,6 +3377,7 @@ static void msm_hs_shutdown(struct uart_port *uport)
 	struct circ_buf *tx_buf = &uport->state->xmit;
 	struct msm_hs_tx *tx = &msm_uport->tx;
 	struct sps_pipe *sps_pipe_handle = tx->cons.pipe_handle;
+	unsigned long flags;
 
 	/*
 	 * cancel the hrtimer first so that
@@ -3373,6 +3386,8 @@ static void msm_hs_shutdown(struct uart_port *uport)
 	hrtimer_cancel(&msm_uport->clk_off_timer);
 	flush_work(&msm_uport->clock_off_w);
 
+	/* Stop remote side from sending data */
+	msm_hs_disable_flow_control(uport);
 	if (use_low_power_wakeup(msm_uport))
 		irq_set_irq_wake(msm_uport->wakeup.irq, 0);
 
@@ -3392,20 +3407,33 @@ static void msm_hs_shutdown(struct uart_port *uport)
 	if (!ret)
 		MSM_HS_WARN("Shutdown called when tx buff not empty");
 
+	msm_hs_clock_vote(msm_uport);
 	/* make sure rx tasklet finishes */
 	tasklet_kill(&msm_uport->rx.tlet);
-	wait_event(msm_uport->rx.wait, msm_uport->rx.flush == FLUSH_SHUTDOWN);
+	if (msm_uport->rx.flush == FLUSH_STOP)
+		ret = wait_event_timeout(msm_uport->rx.wait,
+			msm_uport->rx.flush == FLUSH_SHUTDOWN, 500);
+	else if (msm_uport->rx.flush != FLUSH_SHUTDOWN) {
+		spin_lock_irqsave(&uport->lock, flags);
+		msm_hs_stop_rx_locked(uport);
+		spin_unlock_irqrestore(&uport->lock, flags);
+		ret = wait_event_timeout(msm_uport->rx.wait,
+				msm_uport->rx.flush == FLUSH_SHUTDOWN, 500);
+	} else
+		ret = EINPROGRESS;
+
+	if (!ret && msm_uport->rx.flush != FLUSH_SHUTDOWN)
+		MSM_HS_WARN("%s(): rx disconnect not complete", __func__);
+
 	cancel_delayed_work_sync(&msm_uport->rx.flip_insert_work);
 	flush_workqueue(msm_uport->hsuart_wq);
 
-	msm_hs_clock_vote(msm_uport);
 	mutex_lock(&msm_uport->clk_mutex);
 	/* BAM Disconnect for TX */
 	ret = sps_disconnect(sps_pipe_handle);
 	if (ret)
 		MSM_HS_ERR("%s(): sps_disconnect failed\n",
 					__func__);
-	WARN_ON(msm_uport->rx.flush < FLUSH_STOP);
 	/* Disable the transmitter */
 	msm_hs_write(uport, UART_DM_CR, UARTDM_CR_TX_DISABLE_BMSK);
 	/* Disable the receiver */

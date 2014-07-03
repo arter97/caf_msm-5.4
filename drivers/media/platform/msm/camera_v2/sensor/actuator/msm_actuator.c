@@ -133,67 +133,60 @@ static int32_t msm_actuator_init_focus(struct msm_actuator_ctrl_t *a_ctrl,
 {
 	int32_t rc = -EFAULT;
 	int32_t i = 0;
+	enum msm_camera_i2c_reg_addr_type save_addr_type;
 	CDBG("Enter\n");
 
+	save_addr_type = a_ctrl->i2c_client.addr_type;
 	for (i = 0; i < size; i++) {
+
+		switch (settings[i].addr_type) {
+		case MSM_ACTUATOR_BYTE_ADDR:
+			a_ctrl->i2c_client.addr_type = MSM_CAMERA_I2C_BYTE_ADDR;
+			break;
+		case MSM_ACTUATOR_WORD_ADDR:
+			a_ctrl->i2c_client.addr_type = MSM_CAMERA_I2C_WORD_ADDR;
+			break;
+		default:
+			pr_err("Unsupport addr type: %d\n",
+				settings[i].addr_type);
+			break;
+		}
+
 		switch (settings[i].i2c_operation) {
-		case MSM_ACT_WRITE: {
-			switch (settings[i].data_type) {
-			case MSM_ACTUATOR_BYTE_DATA:
-				rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_write(
-					&a_ctrl->i2c_client,
-					settings[i].reg_addr,
-					settings[i].reg_data,
-					MSM_CAMERA_I2C_BYTE_DATA);
-				break;
-			case MSM_ACTUATOR_WORD_DATA:
-				rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_write(
-					&a_ctrl->i2c_client,
-					settings[i].reg_addr,
-					settings[i].reg_data,
-					MSM_CAMERA_I2C_WORD_DATA);
-				break;
-			default:
-				pr_err("Unsupport data type: %d\n",
-					settings[i].i2c_operation);
-				break;
-			}
+		case MSM_ACT_WRITE:
+			rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_write(
+				&a_ctrl->i2c_client,
+				settings[i].reg_addr,
+				settings[i].reg_data,
+				settings[i].data_type);
 			break;
-		}
-		case MSM_ACT_POLL: {
-			switch (settings[i].data_type) {
-			case MSM_ACTUATOR_BYTE_DATA:
-				rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_poll(
-					&a_ctrl->i2c_client,
-					settings[i].reg_addr,
-					settings[i].reg_data,
-					MSM_CAMERA_I2C_BYTE_DATA);
-				break;
-			case MSM_ACTUATOR_WORD_DATA:
-				rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_poll(
-					&a_ctrl->i2c_client,
-					settings[i].reg_addr,
-					settings[i].reg_data,
-					MSM_CAMERA_I2C_WORD_DATA);
-				break;
-			default:
-				pr_err("Unsupport data type: %d\n",
-					settings[i].i2c_operation);
-				break;
-			}
+		case MSM_ACT_POLL:
+			rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_poll(
+				&a_ctrl->i2c_client,
+				settings[i].reg_addr,
+				settings[i].reg_data,
+				settings[i].data_type);
 			break;
-		}
-		}
+		default:
+			pr_err("Unsupport i2c_operation: %d\n",
+				settings[i].i2c_operation);
+			break;
 
 		if (0 != settings[i].delay)
 			msleep(settings[i].delay);
 
 		if (rc < 0)
 			break;
+		}
 	}
 
 	a_ctrl->curr_step_pos = 0;
 	a_ctrl->valid_position = 0;
+	/*
+	 * Recover register addr_type after the init
+	 * settings are written.
+	 */
+	a_ctrl->i2c_client.addr_type = save_addr_type;
 	CDBG("Exit\n");
 	return rc;
 }
@@ -722,7 +715,6 @@ static int32_t msm_actuator_set_param(struct msm_actuator_ctrl_t *a_ctrl,
 
 	/* Park lens data */
 	a_ctrl->park_lens = set_info->actuator_params.park_lens;
-
 	a_ctrl->initial_code = set_info->af_tuning_params.initial_code;
 	if (a_ctrl->func_tbl->actuator_init_step_table)
 		rc = a_ctrl->func_tbl->
@@ -1237,7 +1229,7 @@ static int32_t msm_actuator_platform_probe(struct platform_device *pdev)
 	msm_actuator_t->msm_sd.sd.entity.group_id = MSM_CAMERA_SUBDEV_ACTUATOR;
 	msm_actuator_t->msm_sd.close_seq = MSM_SD_CLOSE_2ND_CATEGORY | 0x2;
 	msm_sd_register(&msm_actuator_t->msm_sd);
-
+	msm_actuator_t->actuator_state = ACTUATOR_POWER_DOWN;
 	msm_actuator_v4l2_subdev_fops = v4l2_subdev_fops;
 #ifdef CONFIG_COMPAT
 	msm_actuator_v4l2_subdev_fops.compat_ioctl32 =
@@ -1245,6 +1237,7 @@ static int32_t msm_actuator_platform_probe(struct platform_device *pdev)
 #endif
 	msm_actuator_t->msm_sd.sd.devnode->fops =
 		&msm_actuator_v4l2_subdev_fops;
+
 	CDBG("Exit\n");
 	return rc;
 }

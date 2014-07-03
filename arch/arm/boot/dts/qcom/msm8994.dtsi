@@ -505,6 +505,13 @@
 		qcom,msi-gicm-addr = <0xf9006040>;
 		qcom,msi-gicm-base = <0x180>;
 
+		qcom,msm-bus,name = "pcie0";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<45 512 0 0>,
+				<45 512 500 800>;
+
 		clocks = <&clock_gcc clk_gcc_pcie_0_pipe_clk>,
 			<&clock_rpm clk_ln_bb_clk>,
 			<&clock_gcc clk_gcc_pcie_0_aux_clk>,
@@ -531,7 +538,7 @@
 		    <0xf8800F20 0xa8>,
 		    <0xf8900000 0x100000>,
 		    <0xf8a00000 0x100000>,
-		    <0xf8b00000 0x4fffff>;
+		    <0xf8b00000 0x500000>;
 
 		reg-names = "parf", "phy", "dm_core", "elbi",
 				"conf", "io", "bars";
@@ -576,6 +583,13 @@
 		qcom,msi-gicm-base = <0x1a0>;
 
 		qcom,ep-wakeirq;
+
+		qcom,msm-bus,name = "pcie1";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<100 512 0 0>,
+				<100 512 500 800>;
 
 		clocks = <&clock_gcc clk_gcc_pcie_1_pipe_clk>,
 			<&clock_rpm clk_ln_bb_clk>,
@@ -1052,8 +1066,10 @@
 			"TSIF0_IRQ",
 			"TSIF1_IRQ",
 			"TSIF_BAM_IRQ";
-		qcom,tsif-pclk = "iface_clk";
-		qcom,tsif-ref-clk = "ref_clk";
+
+		clock-names = "iface_clk", "ref_clk";
+		clocks = <&clock_gcc clk_gcc_tsif_ahb_clk>,
+			<&clock_gcc clk_gcc_tsif_ref_clk>;
 
 		qcom,msm-bus,name = "tsif";
 		qcom,msm-bus,num-cases = <2>;
