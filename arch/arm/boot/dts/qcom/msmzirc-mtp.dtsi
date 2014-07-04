@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,19 +10,28 @@
  * GNU General Public License for more details.
  */
 
-/dts-v1/;
-
 #include "msmzirc.dtsi"
 #include "msmzirc-pinctrl.dtsi"
 
-/ {
-	model = "Qualcomm Technologies, Inc. MDM ZIRC SIM";
-	compatible = "qcom,msmzirc-sim", "qcom,msmzirc", "qcom,sim";
-	qcom,board-id = <16 0>;
+&soc {
 };
 
-&blsp1_uart2 {
+&blsp1_uart3 {
 	status = "ok";
 	pinctrl-names = "default";
-	pinctrl-0 = <&uart2_console_active>;
+	pinctrl-0 = <&uart3_console_active>;
+};
+
+&spi_1 {
+	status = "ok";
+	ethernet-switch@0 {
+		compatible = "micrel,ks8851";
+		interrupt-parent = <&msm_gpio>;
+		reg = <0>;
+		spi-max-frequency = <2400000>;
+		interrupts = <21 0>;
+		vdd-io-supply = <&spi_eth_vreg>;
+		vdd-phy-supply = <&spi_eth_vreg>;
+		rst-gpio = <&msm_gpio 20 0>;
+	};
 };
