@@ -860,11 +860,21 @@
 };
 
 &i2c_0 {
+	qcom,i2c-bus-freq = <100000>;
+
+	battery@b {
+		compatible = "ti,bq28400-battery";
+		reg = <0xb>;
+		ti,temp-cold-degc = <2>;
+		ti,temp-hot-degc = <43>;
+	};
+
 	smb350-charger@2b {
 		compatible = "summit,smb350-charger";
 		reg = <0x2b>; /* 0x56/0x57 */
 		interrupt-parent = <&spmi_bus>;
 		interrupts = <0x0 0xcd 0x0>;	/* PMA8084 GPIO 14 */
 		summit,term-current-ma = <300>;
+		summit,fuel-gauge-name = "bq28400_battery";
 	};
 };
