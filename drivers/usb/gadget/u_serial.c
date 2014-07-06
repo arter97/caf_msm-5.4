@@ -882,6 +882,11 @@ static int gs_open(struct tty_struct *tty, struct file *file)
 	if (port->port_usb) {
 		struct gserial	*gser = port->port_usb;
 
+		if (gser->flags & ASYNC_LOW_LATENCY) {
+			pr_debug("%s: Setting to low latency", __func__);
+			tty->port->low_latency = 1;
+		}
+
 		pr_debug("gs_open: start ttyGS%d\n", port->port_num);
 		gs_start_io(port);
 
@@ -1220,6 +1225,7 @@ gs_port_alloc(unsigned port_num, struct usb_cdc_line_coding *coding)
 	}
 
 	tty_port_init(&port->port);
+	tty_buffer_set_limit(&port->port, 131072);
 	spin_lock_init(&port->port_lock);
 	init_waitqueue_head(&port->drain_wait);
 
@@ -1507,6 +1513,10 @@ int gserial_connect(struct gserial *gser, u8 port_num)
 	 */
 	if (port->port.count) {
 		pr_debug("gserial_connect: start ttyGS%d\n", port->port_num);
+		if (gser->flags & ASYNC_LOW_LATENCY) {
+			pr_debug("%s: Setting to low latency", __func__);
+			gser->ioport->port.tty->port->low_latency = 1;
+		}
 		gs_start_io(port);
 		if (gser->connect)
 			gser->connect(gser);
