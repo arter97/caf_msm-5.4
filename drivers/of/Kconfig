@@ -87,4 +87,10 @@ config OF_RESERVED_MEM
 	help
 	  Helpers to allow for reservation of memory regions
 
+config OF_SLIMBUS
+	def_tristate SLIMBUS
+	depends on SLIMBUS
+	help
+	  OpenFirmware SLIMBUS accessors
+
 endmenu # OF
