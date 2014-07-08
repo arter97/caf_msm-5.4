@@ -174,10 +174,6 @@
 #define ADV7180_FLAG_MIPI_CSI2		BIT(1)
 #define ADV7180_FLAG_I2P		BIT(2)
 
-#define V4L2_CID_ADV_FREE_RUN_COLOR	(V4L2_CID_DV_CLASS_BASE + 0x1002)
-#define V4L2_CID_ADV_FREE_RUN_MODE	(V4L2_CID_DV_CLASS_BASE + 0x1003)
-#define V4L2_CID_ADV_FREE_RUN_PATTERN	(V4L2_CID_DV_CLASS_BASE + 0x1004)
-#define V4L2_CID_ADV_FAST_SWITCH	(V4L2_CID_DV_CLASS_BASE + 0x1010)
 
 #define ADV7180_INPUT_DISABLED (~0x00)
 
@@ -498,7 +494,6 @@ static int adv7180_s_ctrl(struct v4l2_ctrl *ctrl)
 	struct v4l2_subdev *sd = to_adv7180_sd(ctrl);
 	struct adv7180_state *state = to_state(sd);
 	int ret = mutex_lock_interruptible(&state->mutex);
-	int reg_val;
 	int val;
 
 	if (ret)
@@ -525,65 +520,7 @@ static int adv7180_s_ctrl(struct v4l2_ctrl *ctrl)
 			break;
 		ret = adv7180_write(state, ADV7180_REG_SD_SAT_CR, val);
 		break;
-	case V4L2_CID_ADV_FREE_RUN_MODE:
-		switch (ctrl->val) {
-		case 1: /* Enabled */
-			ret = state->chip_info->select_input(state,
-						ADV7180_INPUT_DISABLED);
-			state->force_free_run = true;
-			break;
-		case 0: /* Disabled */
-		case 2: /* Automatic */
-			ret = state->chip_info->select_input(state,
-							state->input);
-			state->force_free_run = false;
-			break;
-		default:
-			break;
-		}
-		reg_val = adv7180_read(state, ADV7180_REG_DEF_VAL_Y);
-		reg_val &= 0xfc;
-		reg_val |= ctrl->val;
-		adv7180_write(state, ADV7180_REG_DEF_VAL_Y, reg_val);
-		break;
-	case V4L2_CID_ADV_FREE_RUN_PATTERN:
-		reg_val = adv7180_read(state, 0x14);
-		reg_val &= 0xf8;
-		reg_val |= ctrl->val;
-		adv7180_write(state, 0x14, reg_val);
-		break;
-	case V4L2_CID_ADV_FREE_RUN_COLOR: {
-		int r = (ctrl->val & 0xff0000) >> 16;
-		int g = (ctrl->val & 0x00ff00) >> 8;
-		int b = (ctrl->val & 0x0000ff);
-		/* RGB -> YCbCr, numerical approximation */
-		int y = ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16;
-		int cb = ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128;
-		int cr = ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128;
 
-		/* Y is 6-bit, Cb and Cr 4-bit */
-		y >>= 2;
-		cb >>= 4;
-		cr >>= 4;
-
-		reg_val = adv7180_read(state, ADV7180_REG_DEF_VAL_Y);
-		adv7180_write(state, ADV7180_REG_DEF_VAL_Y,
-					(y << 2) | (reg_val & 0x03));
-		adv7180_write(state, ADV7180_REG_DEF_VAL_C, (cr << 4) | cb);
-		break;
-		}
-	case V4L2_CID_ADV_FAST_SWITCH:
-		if (ctrl->val) {
-			/* ADI required write */
-			adv7180_write(state, 0x80d9, 0x44);
-			adv7180_write(state, ADV7180_REG_FLCONTROL,
-				ADV7180_FLCONTROL_FL_ENABLE);
-		} else {
-			/* ADI required write */
-			adv7180_write(state, 0x80d9, 0xc4);
-			adv7180_write(state, ADV7180_REG_FLCONTROL, 0x00);
-		}
-		break;
 	default:
 		ret = -EINVAL;
 	}
@@ -611,47 +548,7 @@ static const char * const adv7180_free_run_mode_strings[] = {
 	"Automatic",
 };
 
-static const struct v4l2_ctrl_config adv7180_ctrl_free_run_color = {
-	.ops = &adv7180_ctrl_ops,
-	.id = V4L2_CID_ADV_FREE_RUN_COLOR,
-	.name = "Free Running Color",
-	.type = V4L2_CTRL_TYPE_INTEGER,
-	.min = 0,
-	.max = 0xffffff,
-	.step = 0x1,
-};
 
-static const struct v4l2_ctrl_config adv7180_ctrl_free_run_mode = {
-	.ops = &adv7180_ctrl_ops,
-	.id = V4L2_CID_ADV_FREE_RUN_MODE,
-	.name = "Free Running Mode",
-	.type = V4L2_CTRL_TYPE_MENU,
-	.min = 0,
-	.max = ARRAY_SIZE(adv7180_free_run_mode_strings) - 1,
-	.def = 2,
-	.qmenu = adv7180_free_run_mode_strings,
-};
-
-static const struct v4l2_ctrl_config adv7180_ctrl_free_run_pattern = {
-	.ops = &adv7180_ctrl_ops,
-	.id = V4L2_CID_ADV_FREE_RUN_PATTERN,
-	.name = "Free Running Pattern",
-	.type = V4L2_CTRL_TYPE_MENU,
-	.min = 0,
-	.max = ARRAY_SIZE(adv7180_free_run_pattern_strings) - 1,
-	.menu_skip_mask = 0x18, /* 0x3 and 0x4 are reserved */
-	.qmenu = adv7180_free_run_pattern_strings,
-};
-
-static const struct v4l2_ctrl_config adv7180_ctrl_fast_switch = {
-	.ops = &adv7180_ctrl_ops,
-	.id = V4L2_CID_ADV_FAST_SWITCH,
-	.name = "Fast switching",
-	.type = V4L2_CTRL_TYPE_BOOLEAN,
-	.min = 0,
-	.max = 1,
-	.step = 1,
-};
 
 static int adv7180_init_controls(struct adv7180_state *state)
 {
@@ -669,13 +566,6 @@ static int adv7180_init_controls(struct adv7180_state *state)
 	v4l2_ctrl_new_std(&state->ctrl_hdl, &adv7180_ctrl_ops,
 			  V4L2_CID_HUE, ADV7180_HUE_MIN,
 			  ADV7180_HUE_MAX, 1, ADV7180_HUE_DEF);
-	v4l2_ctrl_new_custom(&state->ctrl_hdl, &adv7180_ctrl_free_run_color,
-		NULL);
-	v4l2_ctrl_new_custom(&state->ctrl_hdl, &adv7180_ctrl_free_run_mode,
-		NULL);
-	v4l2_ctrl_new_custom(&state->ctrl_hdl, &adv7180_ctrl_free_run_pattern,
-		NULL);
-	v4l2_ctrl_new_custom(&state->ctrl_hdl, &adv7180_ctrl_fast_switch, NULL);
 
 	state->sd.ctrl_handler = &state->ctrl_hdl;
 	if (state->ctrl_hdl.error) {
@@ -1328,7 +1218,7 @@ static int adv7180_probe(struct i2c_client *client,
 		goto err_unregister_vpp_client;
 
 	state->pad.flags = MEDIA_PAD_FL_SOURCE;
-	state->sd.entity.flags |= MEDIA_ENT_T_V4L2_SUBDEV_DECODER;
+	state->sd.entity.flags |= MEDIA_ENT_T_V4L2_SUBDEV;
 	ret = media_entity_init(&state->sd.entity, 1, &state->pad, 0);
 	if (ret)
 		goto err_free_ctrl;
@@ -1345,7 +1235,6 @@ static int adv7180_probe(struct i2c_client *client,
 			goto err_free_ctrl;
 	}
 
-	ret = v4l2_async_register_subdev(sd);
 	if (ret)
 		goto err_free_irq;
 
@@ -1373,8 +1262,6 @@ static int adv7180_remove(struct i2c_client *client)
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct adv7180_state *state = to_state(sd);
-
-	v4l2_async_unregister_subdev(sd);
 
 	if (state->irq > 0)
 		free_irq(client->irq, state);
