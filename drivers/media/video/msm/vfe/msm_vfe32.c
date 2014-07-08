@@ -6182,21 +6182,25 @@ int msm_axi_subdev_init_rdi_only(struct v4l2_subdev *sd,
 	}
 #endif
 
-
-	msm_camio_bus_scale_cfg(
-			s_ctrl->sensordata->pdata->cam_bus_scale_table, S_INIT);
-
-	CDBG("%s: axi_ctrl->share_ctrl->dual_enabled ? = %d\n", __func__,
-			axi_ctrl->share_ctrl->dual_enabled);
-	if (axi_ctrl->share_ctrl->dual_enabled) {
-		pr_debug("%s: Scaling bus config for dual bus vectors\n",
-			__func__);
+	if (s_ctrl) {
 		msm_camio_bus_scale_cfg(
-			s_ctrl->sensordata->pdata->cam_bus_scale_table, S_DUAL);
+				s_ctrl->sensordata->pdata->cam_bus_scale_table,
+				S_INIT);
+
+		CDBG("%s: axi_ctrl->share_ctrl->dual_enabled ? = %d\n", __func__
+				, axi_ctrl->share_ctrl->dual_enabled);
+		if (axi_ctrl->share_ctrl->dual_enabled) {
+			pr_debug("%s: Scaling bus config for dual bus vectors\n"
+					, __func__);
+			msm_camio_bus_scale_cfg(
+				s_ctrl->sensordata->pdata->cam_bus_scale_table,
+				S_DUAL);
+		} else
+			msm_camio_bus_scale_cfg(
+				s_ctrl->sensordata->pdata->cam_bus_scale_table,
+				S_PREVIEW);
 	} else
-		msm_camio_bus_scale_cfg(
-			s_ctrl->sensordata->pdata->cam_bus_scale_table,
-			S_PREVIEW);
+		pr_err("%s: Null sensor control info\n", __func__);
 
 	if (msm_camera_io_r(
 		axi_ctrl->share_ctrl->vfebase + V32_GET_HW_VERSION_OFF) ==
@@ -6440,8 +6444,12 @@ void msm_axi_subdev_release_rdi_only(struct v4l2_subdev *sd,
 	if (atomic_read(&irq_cnt))
 		pr_warning("%s, Warning IRQ Count not ZERO\n", __func__);
 
-	msm_camio_bus_scale_cfg(
-		s_ctrl->sensordata->pdata->cam_bus_scale_table, S_EXIT);
+	if (s_ctrl)
+		msm_camio_bus_scale_cfg(
+				s_ctrl->sensordata->pdata->cam_bus_scale_table,
+				S_EXIT);
+	else
+		pr_err("%s: Null sensor control info\n", __func__);
 
 	pr_err("%s: axi release\n", __func__);
 
@@ -7069,10 +7077,12 @@ void axi_start_rdi1_only(struct axi_ctrl_t *axi_ctrl,
 
 	pr_debug("%s : axi start = %d\n", __func__ ,
 		axi_ctrl->share_ctrl->current_mode);
-
-	msm_camio_bus_scale_cfg(
+	if (s_ctrl)
+		msm_camio_bus_scale_cfg(
 				s_ctrl->sensordata->pdata->cam_bus_scale_table,
 				S_PREVIEW);
+	else
+		pr_err("%s: Null sensor control info\n", __func__);
 
 	axi_enable_wm_irq(axi_ctrl->share_ctrl);
 
