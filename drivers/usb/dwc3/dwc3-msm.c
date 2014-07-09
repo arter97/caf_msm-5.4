@@ -1574,6 +1574,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 	bool device_bus_suspend;
 	bool cable_connected = mdwc->vbus_active;
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+	enum usb_otg_state otg_state = mdwc->otg_xceiv->state;
 
 	dev_dbg(mdwc->dev, "%s: entering lpm. usb_lpm_override:%d\n",
 					 __func__, usb_lpm_override);
@@ -1607,6 +1608,22 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 	if (!msm_bam_usb_lpm_ok(DWC3_CTRL)) {
 		dev_dbg(mdwc->dev,
 			"%s: IPA handshake not finished, will suspend when done\n",
+			__func__);
+		return -EBUSY;
+	}
+
+	if (!cable_connected && otg_state == OTG_STATE_B_PERIPHERAL) {
+		/*
+		 * In some cases, the pm_runtime_suspend may be called by
+		 * usb_bam when there is pending lpm flag. However, if this is
+		 * done when cable was disconnected and otg state has not
+		 * yet changed to IDLE, then it means OTG state machine
+		 * is running and we race against it. So cancle LPM for now,
+		 * and OTG state machine will go for LPM later, after completing
+		 * transition to IDLE state.
+		*/
+		dev_dbg(mdwc->dev,
+			"%s: cable disconnected while not in idle otg state\n",
 			__func__);
 		return -EBUSY;
 	}
