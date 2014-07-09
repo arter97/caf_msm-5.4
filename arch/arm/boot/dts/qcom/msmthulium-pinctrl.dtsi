@@ -140,5 +140,22 @@
 				drive-strength = <2>;	/* 2 MA */
 			};
 		};
+
+		i2c_2 {
+			qcom,pins = <&gp 43>, <&gp 44>;
+			qcom,num-grp-pins = <2>;
+			qcom,pin-func = <3>;
+			label = "i2c_2";
+
+			i2c_2_active: i2c_2_active {
+				drive-strength = <2>;
+				bias-disable;
+			};
+
+			i2c_2_sleep: i2c_2_sleep {
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
 	};
 };
