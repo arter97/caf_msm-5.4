@@ -12,6 +12,7 @@ config ARCH_APQ8084
 	select MSM_GPIOMUX
 	select MAY_HAVE_SPARSE_IRQ
 	select SPARSE_IRQ
+	select KRAIT_REGULATOR
 	select ARM_HAS_SG_CHAIN
 	select CLKDEV_LOOKUP
 	select HAVE_CLK
