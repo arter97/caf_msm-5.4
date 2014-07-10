@@ -906,10 +906,20 @@ static void gbam_start(void *param, enum usb_bam_pipe_dir dir)
 		return;
 	}
 
+	if (port->port_usb == NULL) {
+		pr_err("%s: port_usb is NULL, disconnected\n", __func__);
+		return;
+	}
+
 	if (dev && dev->cdev)
 		gadget = dev->cdev->gadget;
 	 else {
 		pr_err("%s: dev or dev->cdev are NULL\n", __func__);
+		return;
+	}
+
+	if (gadget == NULL) {
+		pr_err("%s: gadget is NULL\n", __func__);
 		return;
 	}
 
