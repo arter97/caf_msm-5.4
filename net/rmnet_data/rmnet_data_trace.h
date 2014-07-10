@@ -71,6 +71,26 @@ DEFINE_EVENT(rmnet_handler_template, __rmnet_deliver_skb,
 	TP_ARGS(skb)
 );
 
+TRACE_EVENT(rmnet_map_checksum_downlink_packet,
+
+	TP_PROTO(struct sk_buff *skb, int ckresult),
+
+	TP_ARGS(skb, ckresult),
+
+	TP_STRUCT__entry(
+		__string(name, skb->dev->name)
+		__field(int, res)
+	),
+
+	TP_fast_assign(
+		__assign_str(name, skb->dev->name);
+		__entry->res = ckresult;
+	),
+
+	TP_printk("DL checksum on dev=%s, res: %d",
+		__get_str(name), __entry->res)
+)
+
 #endif /* _RMNET_DATA_TRACE_H_ */
 
 /* This part must be outside protection */
