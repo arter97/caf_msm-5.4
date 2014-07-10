@@ -1,0 +1,6 @@
+config MSM_NOPM
+	default y if !PM
+	bool
+	help
+	  This enables bare minimum support of power management at platform level.
+	  i.e WFI
