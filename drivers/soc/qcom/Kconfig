@@ -443,4 +443,10 @@ config MSM_SYSTEM_HEALTH_MONITOR
 	  health check. If any failures are detected during the health-check,
 	  then a subsystem restart will be triggered for the failed subsystem.
 
+config MSM_SHARED_HEAP_ACCESS
+	bool "Shared Heap access"
+	help
+	 Enable support to provide access to clients to certain HLOS regions
+	 which are protected by the secure environment.
+
 endif # ARCH_MSM
