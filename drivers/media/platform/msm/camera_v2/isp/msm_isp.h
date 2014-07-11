@@ -476,6 +476,12 @@ struct msm_vbif_cntrs {
 	int total_vbif_cnt_2;
 };
 
+struct msm_vfe_hw_init_parms {
+	const char *entries;
+	const char *regs;
+	const char *settings;
+};
+
 struct vfe_device {
 	struct platform_device *pdev;
 	struct msm_sd_subdev subdev;
@@ -490,7 +496,7 @@ struct vfe_device {
 	struct device *iommu_ctx[MAX_IOMMU_CTX];
 
 	struct regulator *fs_vfe;
-	struct clk *vfe_clk[7];
+	struct clk **vfe_clk;
 	uint32_t num_clk;
 
 	uint32_t bus_perf_client;

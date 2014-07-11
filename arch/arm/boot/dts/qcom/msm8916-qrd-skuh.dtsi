@@ -243,7 +243,7 @@
 		red {
 			gpios = <&msm_gpio 8 0>;
 			label = "red";
-			linux,default-trigger = "battery-charging";
+			linux,default-trigger = "none";
 			default-state = "off";
 			retain-state-suspended;
 		};
@@ -251,7 +251,7 @@
 		green {
 			gpios = <&msm_gpio 9 0>;
 			label = "green";
-			linux,default-trigger = "battery-full";
+			linux,default-trigger = "none";
 			default-state = "off";
 			retain-state-suspended;
 		};
@@ -305,6 +305,7 @@
 &pm8916_chg {
 	qcom,vddmax-mv = <4350>;
 	qcom,vddsafe-mv = <4380>;
+	qcom,vinmin-mv = <4470>;
 	qcom,batt-hot-percentage = <35>;
 	qcom,batt-cold-percentage = <70>;
 	qcom,tchg-mins = <360>;
