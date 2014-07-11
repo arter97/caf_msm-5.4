@@ -26,8 +26,13 @@ config ARCH_MSM_KRAIT
 	bool
 	select ARM_L1_CACHE_SHIFT_6
 
+config MSM_SMP
+	bool
+	select HAVE_SMP
+
 config  ARCH_MSM_KRAITMP
 	select ARCH_MSM_KRAIT
+	select MSM_SMP
 	bool
 
 config MSM_SOC_REV_A
