@@ -15,6 +15,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_platform.h>
+#include <linux/regulator/krait-regulator.h>
 #include <linux/regulator/rpm-smd-regulator.h>
 #include <asm/mach/map.h>
 #include <asm/mach/arch.h>
@@ -25,6 +26,7 @@
 #include <soc/qcom/smem.h>
 #include "board-dt.h"
 #include "clock.h"
+#include "platsmp.h"
 
 static struct of_dev_auxdata apq8084_auxdata_lookup[] __initdata = {
 	OF_DEV_AUXDATA("qca,qca1530", 0x00000000, "qca1530.1", NULL),
@@ -45,6 +47,7 @@ void __init apq8084_add_drivers(void)
 	msm_smd_init();
 	msm_rpm_driver_init();
 	rpm_smd_regulator_driver_init();
+	krait_power_init();
 	msm_gcc_8084_init();
 }
 
@@ -84,4 +87,5 @@ DT_MACHINE_START(APQ8084_DT,
 	.map_io			= apq8084_map_io,
 	.init_machine		= apq8084_init,
 	.dt_compat		= apq8084_dt_match,
+	.smp			= &msm8974_smp_ops,
 MACHINE_END
