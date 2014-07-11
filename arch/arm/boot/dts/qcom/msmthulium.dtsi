@@ -294,6 +294,12 @@
 
 		status = "disabled";
 	};
+
+        qcom,ipc-spinlock@740000 {
+                compatible = "qcom,ipc-spinlock-sfpb";
+                reg = <0x740000 0x8000>;
+                qcom,num-locks = <8>;
+        };
 };
 
 /include/ "msmthulium-regulator.dtsi"
