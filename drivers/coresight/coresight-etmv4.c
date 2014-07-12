@@ -2935,6 +2935,8 @@ static int etm_cpu_callback(struct notifier_block *nfb, unsigned long action,
 			etm_os_unlock(etmdrvdata[cpu]);
 			etmdrvdata[cpu]->os_unlock = true;
 		}
+		if (etmdrvdata[cpu]->enable)
+			__etm_enable(etmdrvdata[cpu]);
 		spin_unlock(&etmdrvdata[cpu]->spinlock);
 		break;
 
@@ -2958,6 +2960,10 @@ static int etm_cpu_callback(struct notifier_block *nfb, unsigned long action,
 		break;
 
 	case CPU_DYING:
+		spin_lock(&etmdrvdata[cpu]->spinlock);
+		if (etmdrvdata[cpu]->enable)
+			__etm_disable(etmdrvdata[cpu]);
+		spin_unlock(&etmdrvdata[cpu]->spinlock);
 		break;
 	}
 out:
