@@ -3806,12 +3806,15 @@ static void __init apq8064_common_init(void)
 				ARRAY_SIZE(common_devices));
 	}
 
-	if ((machine_is_apq8064_adp_2()) &&
-		(SOCINFO_VERSION_MAJOR(socinfo_get_platform_version())
+	if (machine_is_apq8064_adp_2()) {
+		if ((SOCINFO_VERSION_MAJOR(socinfo_get_platform_version())
 							== 0x2))
-		platform_device_register(&apq_auto_cpudai_mi2s_rx);
-	else
+			platform_device_register(&apq_adp_cpudai_mi2s_rx);
+		else
+			platform_device_register(&apq_mplatform_cpudai_mi2s_rx);
+	} else {
 		platform_device_register(&mpq_cpudai_mi2s_tx);
+	}
 
 	if (!(machine_is_mpq8064_cdp() || machine_is_mpq8064_hrd() ||
 				machine_is_mpq8064_dtv())) {

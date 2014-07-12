@@ -2302,9 +2302,11 @@ void __init apq8064_init_gpiomux(void)
 			SOCINFO_VERSION_MAJOR(socinfo_get_platform_version()));
 		msm_gpiomux_install(apq8064_adp_es2_mi2s_i2s_cfg,
 		ARRAY_SIZE(apq8064_adp_es2_mi2s_i2s_cfg));
+	}
+
+	if (machine_is_apq8064_adp_2())
 		msm_gpiomux_install(apq8064_adp_auxpcm_configs,
 		ARRAY_SIZE(apq8064_adp_auxpcm_configs));
-	}
 
 	if (machine_is_apq8064_mtp()) {
 		if (socinfo_get_platform_subtype() == PLATFORM_SUBTYPE_DSDA2) {
