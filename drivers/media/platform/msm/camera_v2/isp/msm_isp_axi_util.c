@@ -850,10 +850,12 @@ static void msm_isp_get_done_buf(struct vfe_device *vfe_dev,
 		}
 	}
 
-	if (stream_info->controllable_output)
-		stream_info->request_frm_num--;
-
 	*done_buf = stream_info->buf[pingpong_bit];
+
+	if (stream_info->controllable_output) {
+		stream_info->buf[pingpong_bit] = NULL;
+		stream_info->request_frm_num--;
+	}
 }
 
 static int msm_isp_cfg_ping_pong_address(struct vfe_device *vfe_dev,
@@ -869,15 +871,18 @@ static int msm_isp_cfg_ping_pong_address(struct vfe_device *vfe_dev,
 		pr_err("%s: Invalid stream_idx", __func__);
 		return rc;
 	}
-	if (stream_info->controllable_output && !stream_info->request_frm_num) {
-		stream_info->buf[pingpong_bit] = NULL;
+
+	if (stream_info->controllable_output && !stream_info->request_frm_num)
 		return 0;
-	}
 
 	bufq_handle = stream_info->bufq_handle;
-
-	rc = vfe_dev->buf_mgr->ops->get_buf(vfe_dev->buf_mgr,
-			vfe_dev->pdev->id, bufq_handle, &buf);
+	if (SRC_TO_INTF(stream_info->stream_src) < VFE_SRC_MAX)
+		rc = vfe_dev->buf_mgr->ops->get_buf(vfe_dev->buf_mgr,
+				vfe_dev->pdev->id, bufq_handle, &buf);
+	else {
+		pr_err("%s: Invalid stream index\n", __func__);
+		rc = -1;
+	}
 
 	if (rc < 0) {
 		vfe_dev->error_info.stream_framedrop_count[stream_idx]++;
@@ -913,10 +918,20 @@ static void msm_isp_process_done_buf(struct vfe_device *vfe_dev,
 	struct msm_isp_event_data buf_event;
 	struct timeval *time_stamp;
 	uint32_t stream_idx = HANDLE_TO_IDX(stream_info->stream_handle);
-	uint32_t frame_id = vfe_dev->axi_data.
-		src_info[SRC_TO_INTF(stream_info->stream_src)].frame_id;
+	uint32_t frame_id;
 	uint32_t buf_src;
 	memset(&buf_event, 0, sizeof(buf_event));
+
+	if (SRC_TO_INTF(stream_info->stream_src) < VFE_SRC_MAX)
+		frame_id = vfe_dev->axi_data.
+			src_info[SRC_TO_INTF(stream_info->stream_src)].frame_id;
+	else {
+		pr_err("%s: Invalid stream index, put buf back to vb2 queue\n",
+			__func__);
+		vfe_dev->buf_mgr->ops->put_buf(vfe_dev->buf_mgr,
+			buf->bufq_handle, buf->buf_idx);
+		return;
+	}
 
 	if (buf && ts) {
 		if (vfe_dev->vt_enable)
@@ -1216,8 +1231,14 @@ static int msm_isp_start_axi_stream(struct vfe_device *vfe_dev,
 		}
 		stream_info = &axi_data->stream_info[
 			HANDLE_TO_IDX(stream_cfg_cmd->stream_handle[i])];
-		src_state = axi_data->src_info[
-			SRC_TO_INTF(stream_info->stream_src)].active;
+
+		if (SRC_TO_INTF(stream_info->stream_src) < VFE_SRC_MAX)
+			src_state = axi_data->src_info[
+				SRC_TO_INTF(stream_info->stream_src)].active;
+		else {
+			pr_err("%s: invalid src info index\n", __func__);
+			return -EINVAL;
+		}
 
 		msm_isp_calculate_bandwidth(axi_data, stream_info);
 		msm_isp_reset_framedrop(vfe_dev, stream_info);

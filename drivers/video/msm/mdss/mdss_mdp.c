@@ -45,6 +45,7 @@
 #include <linux/msm_iommu_domains.h>
 #include <linux/msm-bus.h>
 #include <linux/msm-bus-board.h>
+#include <soc/qcom/scm.h>
 
 #include "mdss.h"
 #include "mdss_fb.h"
@@ -78,6 +79,8 @@ struct msm_mdp_interface mdp5 = {
 
 #define IB_QUOTA 800000000
 #define AB_QUOTA 800000000
+
+#define MEM_PROTECT_SD_CTRL 0xF
 
 static DEFINE_SPINLOCK(mdp_lock);
 static DEFINE_MUTEX(mdp_clk_lock);
@@ -1439,6 +1442,8 @@ static ssize_t mdss_mdp_show_capabilities(struct device *dev,
 		SPRINT(" non_scalar_rgb");
 	if (mdata->has_src_split)
 		SPRINT(" src_split");
+	if (mdata->max_mixer_width)
+		SPRINT(" max_mixer_width");
 	SPRINT("\n");
 
 	return cnt;
@@ -1490,6 +1495,7 @@ static int mdss_mdp_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, mdata);
 	mdss_res = mdata;
 	mutex_init(&mdata->reg_lock);
+	atomic_set(&mdata->sd_client_count, 0);
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "mdp_phys");
 	if (!res) {
@@ -2586,6 +2592,9 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 	if (rc)
 		pr_debug("Could not read optional property: highest bank bit\n");
 
+	mdata->has_dst_split = of_property_read_bool(pdev->dev.of_node,
+		 "qcom,mdss-has-dst-split");
+
 	/*
 	 * 2x factor on AB because bus driver will divide by 2
 	 * due to 2x ports to BIMC
@@ -2951,6 +2960,26 @@ int mdss_mdp_footswitch_ctrl_idle_pc(int on, struct device *dev)
 	}
 
 	return 0;
+}
+
+int mdss_mdp_secure_display_ctrl(unsigned int enable)
+{
+	struct sd_ctrl_req {
+		unsigned int enable;
+	} __attribute__ ((__packed__)) request;
+	unsigned int resp = -1;
+	int ret = 0;
+
+	request.enable = enable;
+
+	ret = scm_call(SCM_SVC_MP, MEM_PROTECT_SD_CTRL,
+		&request, sizeof(request), &resp, sizeof(resp));
+	pr_debug("scm_call MEM_PROTECT_SD_CTRL(%u): ret=%d, resp=%x",
+				enable, ret, resp);
+	if (ret)
+		return ret;
+
+	return resp;
 }
 
 static inline int mdss_mdp_suspend_sub(struct mdss_data_type *mdata)

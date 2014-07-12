@@ -3,6 +3,7 @@ CFLAGS_scm.o :=$(call as-instr,.arch_extension sec,-DREQUIRES_SEC=1)
 
 obj-y		+= qdsp6v2/
 
+obj-$(CONFIG_MSM_BOOT_STATS) += boot_stats.o
 obj-$(CONFIG_MSM_RUN_QUEUE_STATS) += msm_rq_stats.o
 obj-$(CONFIG_DEBUG_FS) += nohlt.o
 obj-$(CONFIG_ARM64) += idle-v8.o cpu_ops.o
@@ -28,6 +29,7 @@ obj-$(CONFIG_MSM_JTAG_MM) +=  jtag-fuse.o jtag-mm.o
 obj-$(CONFIG_MSM_JTAGV8) += jtag-fuse.o jtagv8.o jtagv8-mm.o
 obj-$(CONFIG_MSM_QMI_INTERFACE) += qmi_interface.o
 
+obj-$(CONFIG_MSM_CACHE_DUMP) += cache_dump.o
 obj-$(CONFIG_MSM_SCM) += scm.o scm-boot.o
 
 obj-$(CONFIG_MSM_SMD) += smd.o smd_debug.o smd_private.o smd_init_dt.o smsm_debug.o

@@ -911,6 +911,7 @@ static int mdss_dsi_dfps_config(struct mdss_panel_data *pdata, int new_fps)
 	int rc = 0;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	struct mdss_dsi_ctrl_pdata *sctrl_pdata = NULL;
+	struct mdss_panel_info *pinfo;
 
 	pr_debug("%s+:\n", __func__);
 
@@ -929,15 +930,19 @@ static int mdss_dsi_dfps_config(struct mdss_panel_data *pdata, int new_fps)
 	}
 
 	/*
-	 * DFPS registers were already programmed while programming
-	 * the first controller(DSI0). Ignore DSI1 reguest.
+	 * at split display case, DFPS registers were already programmed
+	 * while programming the left ctrl(DSI0). Ignore right ctrl (DSI1)
+	 * reguest.
 	 */
-	if (mdss_dsi_is_slave_ctrl(ctrl_pdata)) {
-		pr_debug("%s DFPS already updated.\n", __func__);
-		return rc;
+	pinfo = &pdata->panel_info;
+	if (pinfo->is_split_display) {
+		if (mdss_dsi_is_right_ctrl(ctrl_pdata)) {
+			pr_debug("%s DFPS already updated.\n", __func__);
+			return rc;
+		}
+		/* left ctrl to get right ctrl */
+		sctrl_pdata = mdss_dsi_get_other_ctrl(ctrl_pdata);
 	}
-
-	sctrl_pdata = mdss_dsi_get_slave_ctrl();
 
 	if (new_fps !=
 		ctrl_pdata->panel_data.panel_info.mipi.frame_rate) {
@@ -1568,8 +1573,15 @@ int dsi_panel_device_register(struct device_node *pan_node,
 		return -EINVAL;
 	}
 
-	ctrl_pdata->shared_pdata.broadcast_enable = of_property_read_bool(
-		pan_node, "qcom,mdss-dsi-panel-broadcast-mode");
+	ctrl_pdata->cmd_sync_wait_broadcast = of_property_read_bool(
+		pan_node, "qcom,cmd-sync-wait-broadcast");
+
+	ctrl_pdata->cmd_sync_wait_trigger = of_property_read_bool(
+		pan_node, "qcom,cmd-sync-wait-trigger");
+
+	pr_debug("%s: cmd_sync_wait_enable=%d trigger=%d\n", __func__,
+				ctrl_pdata->cmd_sync_wait_broadcast,
+				ctrl_pdata->cmd_sync_wait_trigger);
 
 	dynamic_fps = of_property_read_bool(pan_node,
 					  "qcom,mdss-dsi-pan-enable-dynamic-fps");
@@ -1694,7 +1706,6 @@ int dsi_panel_device_register(struct device_node *pan_node,
 		mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 1);
 		ctrl_pdata->ctrl_state |=
 			(CTRL_STATE_PANEL_INIT | CTRL_STATE_MDP_ACTIVE);
-		ctrl_pdata->ctrl_rev = MIPI_INP(ctrl_pdata->ctrl_base);
 	} else {
 		pinfo->panel_power_on = 0;
 	}

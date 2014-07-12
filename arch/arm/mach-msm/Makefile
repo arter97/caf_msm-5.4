@@ -20,8 +20,6 @@ obj-$(CONFIG_MSM_PCIE) += pcie.o pcie_irq.o pcie_phy.o
 obj-$(CONFIG_MSM_DMA_TEST) += dma_test.o
 obj-$(CONFIG_SURF_FFA_GPIO_KEYPAD) += keypad-surf-ffa.o
 
-obj-$(CONFIG_MSM_BOOT_STATS) += boot_stats.o
-
 obj-$(CONFIG_ARCH_FSM9900) += board-fsm9900.o board-fsm9900-gpiomux.o
 obj-$(CONFIG_ARCH_FSM9900) += clock-fsm9900.o
 obj-$(CONFIG_ARCH_FSM9900) += rfic-fsm9900.o bbif-fsm9900.o
@@ -59,7 +57,6 @@ obj-$(CONFIG_ARCH_APQ8084) += gpiomux-v2.o gpiomux.o
 obj-$(CONFIG_ARCH_FSM9900) += gpiomux-v2.o gpiomux.o
 
 obj-$(CONFIG_MSM_CACHE_ERP) += cache_erp.o
-obj-$(CONFIG_MSM_CACHE_DUMP) += msm_cache_dump.o
 
 obj-$(CONFIG_MSM_HSIC_SYSMON) += hsic_sysmon.o
 obj-$(CONFIG_MSM_HSIC_SYSMON_TEST) += hsic_sysmon_test.o

@@ -233,7 +233,6 @@ struct dsi_drv_cm_data {
 	struct regulator *vdd_vreg;
 	struct regulator *vdd_io_vreg;
 	struct regulator *vdda_vreg;
-	int broadcast_enable;
 };
 
 struct dsi_pinctrl_res {
@@ -257,10 +256,6 @@ enum {
 #define DSI_CTRL_LEFT		DSI_CTRL_0
 #define DSI_CTRL_RIGHT		DSI_CTRL_1
 
-/* DSI controller #0 is always treated as a master in broadcast mode */
-#define DSI_CTRL_MASTER		DSI_CTRL_0
-#define DSI_CTRL_SLAVE		DSI_CTRL_1
-
 #define DSI_BUS_CLKS	BIT(0)
 #define DSI_LINK_CLKS	BIT(1)
 #define DSI_ALL_CLKS	((DSI_BUS_CLKS) | (DSI_LINK_CLKS))
@@ -280,7 +275,6 @@ struct mdss_dsi_ctrl_pdata {
 	void (*switch_mode) (struct mdss_panel_data *pdata, int mode);
 	struct mdss_panel_data panel_data;
 	unsigned char *ctrl_base;
-	u32 ctrl_rev;
 	struct dss_io_data ctrl_io;
 	struct dss_io_data mmss_misc_io;
 	struct dss_io_data phy_io;
@@ -310,6 +304,10 @@ struct mdss_dsi_ctrl_pdata {
 	int new_fps;
 	int pwm_enabled;
 	bool panel_bias_vreg;
+
+	bool cmd_sync_wait_broadcast;
+	bool cmd_sync_wait_trigger;
+
 	struct mdss_rect roi;
 	struct pwm_device *pwm_bl;
 	struct dsi_drv_cm_data shared_pdata;
@@ -351,6 +349,11 @@ struct mdss_dsi_ctrl_pdata {
 	int status_mode;
 
 	struct dsi_pinctrl_res pin_res;
+
+	unsigned long dma_size;
+	dma_addr_t dma_addr;
+	bool cmd_cfg_restore;
+	bool do_unicast;
 
 	int horizontal_idle_cnt;
 	struct panel_horizontal_idle *line_idle;
@@ -400,7 +403,6 @@ int mdss_dsi_enable_bus_clocks(struct mdss_dsi_ctrl_pdata *ctrl_pdata);
 void mdss_dsi_disable_bus_clocks(struct mdss_dsi_ctrl_pdata *ctrl_pdata);
 int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable);
 void mdss_dsi_phy_disable(struct mdss_dsi_ctrl_pdata *ctrl);
-void mdss_dsi_phy_init(struct mdss_panel_data *pdata);
 void mdss_dsi_phy_sw_reset(unsigned char *ctrl_base);
 void mdss_dsi_cmd_test_pattern(struct mdss_dsi_ctrl_pdata *ctrl);
 void mdss_dsi_video_test_pattern(struct mdss_dsi_ctrl_pdata *ctrl);
@@ -423,7 +425,6 @@ int mdss_dsi_panel_init(struct device_node *node,
 		bool cmd_cfg_cont_splash);
 int mdss_panel_get_dst_fmt(u32 bpp, char mipi_mode, u32 pixel_packing,
 				char *dst_format);
-void mdss_dsi_20nm_phy_init(struct mdss_panel_data *pdata);
 
 int mdss_dsi_register_recovery_handler(struct mdss_dsi_ctrl_pdata *ctrl,
 		struct mdss_panel_recovery *recovery);
@@ -449,39 +450,34 @@ static inline const char *__mdss_dsi_pm_supply_node_name(
 	}
 }
 
-static inline bool mdss_dsi_broadcast_mode_enabled(void)
+static inline bool mdss_dsi_sync_wait_enable(struct mdss_dsi_ctrl_pdata *ctrl)
 {
-	return ctrl_list[DSI_CTRL_MASTER]->shared_pdata.broadcast_enable &&
-		ctrl_list[DSI_CTRL_SLAVE] &&
-		ctrl_list[DSI_CTRL_SLAVE]->shared_pdata.broadcast_enable;
+	return ctrl->cmd_sync_wait_broadcast;
 }
 
-static inline struct mdss_dsi_ctrl_pdata *mdss_dsi_get_master_ctrl(void)
+static inline bool mdss_dsi_sync_wait_trigger(struct mdss_dsi_ctrl_pdata *ctrl)
 {
-	if (mdss_dsi_broadcast_mode_enabled())
-		return ctrl_list[DSI_CTRL_MASTER];
-	else
-		return NULL;
+	return ctrl->cmd_sync_wait_broadcast &&
+				ctrl->cmd_sync_wait_trigger;
 }
 
-static inline struct mdss_dsi_ctrl_pdata *mdss_dsi_get_slave_ctrl(void)
+static inline bool mdss_dsi_is_left_ctrl(struct mdss_dsi_ctrl_pdata *ctrl)
 {
-	if (mdss_dsi_broadcast_mode_enabled())
-		return ctrl_list[DSI_CTRL_SLAVE];
-	else
-		return NULL;
+	return ctrl->ndx == DSI_CTRL_LEFT;
 }
 
-static inline bool mdss_dsi_is_master_ctrl(struct mdss_dsi_ctrl_pdata *ctrl)
+static inline bool mdss_dsi_is_right_ctrl(struct mdss_dsi_ctrl_pdata *ctrl)
 {
-	return mdss_dsi_broadcast_mode_enabled() &&
-		(ctrl->ndx == DSI_CTRL_MASTER);
+	return ctrl->ndx == DSI_CTRL_RIGHT;
 }
 
-static inline bool mdss_dsi_is_slave_ctrl(struct mdss_dsi_ctrl_pdata *ctrl)
+static inline struct mdss_dsi_ctrl_pdata *mdss_dsi_get_other_ctrl(
+					struct mdss_dsi_ctrl_pdata *ctrl)
 {
-	return mdss_dsi_broadcast_mode_enabled() &&
-		(ctrl->ndx == DSI_CTRL_SLAVE);
+	if (ctrl->ndx == DSI_CTRL_RIGHT)
+		return ctrl_list[DSI_CTRL_LEFT];
+
+	return ctrl_list[DSI_CTRL_RIGHT];
 }
 
 static inline struct mdss_dsi_ctrl_pdata *mdss_dsi_get_ctrl_by_index(int ndx)

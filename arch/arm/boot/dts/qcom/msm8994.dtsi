@@ -23,7 +23,6 @@
 		sdhc1 = &sdhc_1; /* SDC1 eMMC slot */
 		sdhc2 = &sdhc_2; /* SDC2 SD card slot */
 		i2c6 = &i2c_6; /* I2C6 NFC qup6 device */
-		i2c4 = &i2c_4;
 		i2c2 = &i2c_2;
 		i2c5 = &i2c_5;
 		spi0 = &spi_0;
@@ -625,6 +624,7 @@
 
 	qcom,rmnet-ipa {
 		compatible = "qcom,rmnet-ipa";
+		qcom,rmnet-ipa-ssr;
 	};
 
 	qcom,ipc-spinlock@fd484000 {
@@ -1261,6 +1261,9 @@
 		qcom,ext-vbus-id;
 		qcom,vbus-valid-override;
 		qcom,set-pllbtune;
+		qcom,sleep-clk-reset;
+		clocks = <&clock_gcc clk_gcc_usb2_hs_phy_sleep_clk>;
+		clock-names = "phy_sleep_clk";
 	};
 
 	ssphy0: ssphy@f9b38000 {
@@ -1554,7 +1557,7 @@
 		mmpll4_analog-supply = <&pm8994_l12>;
 		clock-names = "xo", "gpll0", "mmssnoc_ahb",
 			"oxili_gfx3d_clk", "pclk0_src", "pclk1_src",
-			"byte0_src", "byte1_src";
+			"byte0_src", "byte1_src", "extpclk_src";
 		clocks = <&clock_rpm clk_cxo_clk_src>,
 		         <&clock_gcc clk_gpll0_out_mmsscc>,
 			 <&clock_rpm clk_mmssnoc_ahb_clk>,
@@ -1562,7 +1565,8 @@
 			 <&mdss_dsi0_pll clk_pixel_clk_src>,
 			 <&mdss_dsi0_pll clk_pixel_clk_src>,
 			 <&mdss_dsi0_pll clk_byte_clk_src>,
-			 <&mdss_dsi0_pll clk_byte_clk_src>;
+			 <&mdss_dsi0_pll clk_byte_clk_src>,
+			 <&mdss_hdmi_pll clk_hdmi_20nm_vco_clk>;
 		#clock-cells = <1>;
 	};
 
@@ -1973,31 +1977,6 @@
 		qcom,noise-rjct-sda = <0>;
 		qcom,bam-pipe-idx-cons = <14>;
 		qcom,bam-pipe-idx-prod = <15>;
-		qcom,master-id = <86>;
-	};
-
-	i2c_4: i2c@f9926000 { /* BLSP1 QUP4 */
-		compatible = "qcom,i2c-msm-v2";
-		#address-cells = <1>;
-		#size-cells = <0>;
-		reg-names = "qup_phys_addr", "bam_phys_addr";
-		reg = <0xf9926000 0x1000>,
-		      <0xf9904000 0x19000>;
-		interrupt-names = "qup_irq", "bam_irq";
-		interrupts = <0 98 0>, <0 238 0>;
-		qcom,clk-freq-out = <100000>;
-		qcom,clk-freq-in  = <19200000>;
-		clock-names = "iface_clk", "core_clk";
-		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
-			 <&clock_gcc clk_gcc_blsp1_qup4_i2c_apps_clk>;
-
-		pinctrl-names = "i2c_active", "i2c_sleep";
-		pinctrl-0 = <&i2c_4_active>;
-		pinctrl-1 = <&i2c_4_sleep>;
-		qcom,noise-rjct-scl = <0>;
-		qcom,noise-rjct-sda = <0>;
-		qcom,bam-pipe-idx-cons = <18>;
-		qcom,bam-pipe-idx-prod = <19>;
 		qcom,master-id = <86>;
 	};
 

@@ -2471,7 +2471,7 @@ static ssize_t etm_store_resource_ctrl(struct device *dev,
 	/* For odd idx pair inversal bit is RES0 */
 	if (idx % 2 != 0)
 		val &= ~BIT(21);
-	drvdata->cntr_ctrl[idx] = val;
+	drvdata->resource_ctrl[idx] = val;
 	spin_unlock(&drvdata->spinlock);
 	return size;
 }
@@ -2826,6 +2826,20 @@ static ssize_t etm_store_vmid_masks(struct device *dev,
 static DEVICE_ATTR(vmid_masks, S_IRUGO | S_IWUSR, etm_show_vmid_masks,
 		   etm_store_vmid_masks);
 
+static ssize_t etm_show_cpu(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	struct etm_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	int cpu;
+
+	cpu = drvdata->cpu;
+	if (cpu < 0)
+		return -EINVAL;
+	return scnprintf(buf, PAGE_SIZE, "%#x\n", cpu);
+}
+static DEVICE_ATTR(cpu, S_IRUGO, etm_show_cpu, NULL);
+
 static struct attribute *etm_attrs[] = {
 	&dev_attr_nr_pe_cmp.attr,
 	&dev_attr_nr_addr_cmp.attr,
@@ -2880,6 +2894,7 @@ static struct attribute *etm_attrs[] = {
 	&dev_attr_vmid_idx.attr,
 	&dev_attr_vmid_val.attr,
 	&dev_attr_vmid_masks.attr,
+	&dev_attr_cpu.attr,
 	NULL,
 };
 

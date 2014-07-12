@@ -61,6 +61,7 @@ int mdss_mdp_pipe_panic_signal_ctrl(struct mdss_mdp_pipe *pipe, bool enable)
 	if (!mdata->has_panic_ctrl)
 		goto end;
 
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
 	panic_robust_ctrl = readl_relaxed(mdata->mdp_base +
 			MMSS_MDP_PANIC_ROBUST_CTRL);
 	if (enable)
@@ -69,6 +70,7 @@ int mdss_mdp_pipe_panic_signal_ctrl(struct mdss_mdp_pipe *pipe, bool enable)
 		panic_robust_ctrl &= ~BIT(pipe->panic_ctrl_ndx);
 	writel_relaxed(panic_robust_ctrl,
 				mdata->mdp_base + MMSS_MDP_PANIC_ROBUST_CTRL);
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
 
 end:
 	return 0;
@@ -601,10 +603,15 @@ static void mdss_mdp_fixed_qos_arbiter_setup(struct mdss_data_type *mdata,
 	writel_relaxed(reg_val, mdata->vbif_base + MDSS_VBIF_FIXED_SORT_EN);
 	reg_val = readl_relaxed(mdata->vbif_base + MDSS_VBIF_FIXED_SORT_SEL0);
 	mask = 0x1 << (pipe->xin_id * 2);
-	if (is_realtime)
+	if (is_realtime) {
 		reg_val &= ~mask;
-	else
+		pr_debug("Real time traffic on pipe type=%x  pnum=%d\n",
+				pipe->type, pipe->num);
+	} else {
 		reg_val |= mask;
+		pr_debug("Non real time traffic on pipe type=%x  pnum=%d\n",
+				pipe->type, pipe->num);
+	}
 	/* Set the fixed_sort regs as per RT/NRT client */
 	writel_relaxed(reg_val, mdata->vbif_base + MDSS_VBIF_FIXED_SORT_SEL0);
 	mutex_unlock(&mdata->reg_lock);
