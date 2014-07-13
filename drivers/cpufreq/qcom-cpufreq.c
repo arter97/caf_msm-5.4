@@ -248,13 +248,18 @@ static int msm_cpufreq_cpu_callback(struct notifier_block *nfb,
 		return NOTIFY_BAD;
 
 	switch (action & ~CPU_TASKS_FROZEN) {
+
+	case CPU_DYING:
+		clk_disable(cpu_clk[cpu]);
+		clk_disable(l2_clk);
+		break;
 	/*
 	 * Scale down clock/power of CPU that is dead and scale it back up
 	 * before the CPU is brought up.
 	 */
 	case CPU_DEAD:
-		clk_disable_unprepare(cpu_clk[cpu]);
-		clk_disable_unprepare(l2_clk);
+		clk_unprepare(cpu_clk[cpu]);
+		clk_unprepare(l2_clk);
 		break;
 	case CPU_UP_CANCELED:
 		clk_unprepare(cpu_clk[cpu]);
@@ -439,6 +444,10 @@ static int __init msm_cpufreq_probe(struct platform_device *pdev)
 	}
 	hotplug_ready = true;
 
+	/* Use per-policy governor tunable for some targets */
+	if (of_property_read_bool(dev->of_node, "qcom,governor-per-policy"))
+		msm_cpufreq_driver.flags |= CPUFREQ_HAVE_GOVERNOR_PER_POLICY;
+
 	/* Parse commong cpufreq table for all CPUs */
 	ftbl = cpufreq_parse_dt(dev, "qcom,cpufreq-table", 0);
 	if (!IS_ERR(ftbl)) {
@@ -483,10 +492,6 @@ static int __init msm_cpufreq_probe(struct platform_device *pdev)
 		}
 		per_cpu(freq_table, cpu) = ftbl;
 	}
-
-	/* Use per-policy governor tunable for some targets */
-	if (of_property_read_bool(dev->of_node, "qcom,governor-per-policy"))
-		msm_cpufreq_driver.flags |= CPUFREQ_HAVE_GOVERNOR_PER_POLICY;
 
 	return 0;
 }

@@ -436,6 +436,7 @@ static int mdss_fb_lpm_enable(struct msm_fb_data_type *mfd, int mode)
 	mutex_lock(&mfd->bl_lock);
 	bl_lvl = mfd->bl_level;
 	mdss_fb_set_backlight(mfd, 0);
+	mutex_unlock(&mfd->bl_lock);
 
 	lock_fb_info(mfd->fbi);
 	ret = mdss_fb_blank_sub(FB_BLANK_POWERDOWN, mfd->fbi,
@@ -443,7 +444,6 @@ static int mdss_fb_lpm_enable(struct msm_fb_data_type *mfd, int mode)
 	if (ret) {
 		pr_err("can't turn off display!\n");
 		unlock_fb_info(mfd->fbi);
-		mutex_unlock(&mfd->bl_lock);
 		return ret;
 	}
 
@@ -459,11 +459,11 @@ static int mdss_fb_lpm_enable(struct msm_fb_data_type *mfd, int mode)
 	if (ret) {
 		pr_err("can't turn on display!\n");
 		unlock_fb_info(mfd->fbi);
-		mutex_unlock(&mfd->bl_lock);
 		return ret;
 	}
 	unlock_fb_info(mfd->fbi);
 
+	mutex_lock(&mfd->bl_lock);
 	mfd->bl_updated = true;
 	mdss_fb_set_backlight(mfd, bl_lvl);
 	mutex_unlock(&mfd->bl_lock);
@@ -931,17 +931,19 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 {
 	struct mdss_panel_data *pdata;
 
-	mutex_lock(&mfd->bl_lock);
-	if (mfd->unset_bl_level && !mfd->bl_updated) {
-		pdata = dev_get_platdata(&mfd->pdev->dev);
-		if ((pdata) && (pdata->set_backlight)) {
-			mfd->bl_level = mfd->unset_bl_level;
-			pdata->set_backlight(pdata, mfd->bl_level);
-			mfd->bl_level_scaled = mfd->unset_bl_level;
-			mfd->bl_updated = 1;
+	if (mfd->unset_bl_level) {
+		mutex_lock(&mfd->bl_lock);
+		if (!mfd->bl_updated) {
+			pdata = dev_get_platdata(&mfd->pdev->dev);
+			if ((pdata) && (pdata->set_backlight)) {
+				mfd->bl_level = mfd->unset_bl_level;
+				pdata->set_backlight(pdata, mfd->bl_level);
+				mfd->bl_level_scaled = mfd->unset_bl_level;
+				mfd->bl_updated = 1;
+			}
 		}
+		mutex_unlock(&mfd->bl_lock);
 	}
-	mutex_unlock(&mfd->bl_lock);
 }
 
 static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
