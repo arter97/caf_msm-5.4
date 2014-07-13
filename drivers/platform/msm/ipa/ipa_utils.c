@@ -3492,8 +3492,7 @@ int ipa_tag_aggr_force_close(int pipe_num)
 	int res;
 	int start_pipe;
 	int end_pipe;
-	DECLARE_COMPLETION_ONSTACK(comp);
-	void *comp_ptr = &comp;
+	struct ipa_tag_completion *comp;
 
 	if (pipe_num < -1 || pipe_num >= IPA_NUM_PIPES) {
 		IPAERR("Invalid pipe number %d\n", pipe_num);
@@ -3583,16 +3582,26 @@ int ipa_tag_aggr_force_close(int pipe_num)
 	}
 	desc_idx += res;
 
-	/* dummy packet to send to IPA. packet payload is a completion object */
-	dummy_skb = alloc_skb(sizeof(comp), GFP_KERNEL);
-	if (!dummy_skb) {
+	comp = kzalloc(sizeof(*comp), GFP_KERNEL);
+	if (!comp) {
 		IPAERR("no mem\n");
 		res = -ENOMEM;
 		goto fail_free_desc;
 	}
+	init_completion(&comp->comp);
 
-	memcpy(skb_put(dummy_skb, sizeof(comp_ptr)), &comp_ptr,
-		sizeof(comp_ptr));
+	/* completion needs to be released from both here and rx handler */
+	atomic_set(&comp->cnt, 2);
+
+	/* dummy packet to send to IPA. packet payload is tag completion */
+	dummy_skb = alloc_skb(sizeof(comp), GFP_KERNEL);
+	if (!dummy_skb) {
+		IPAERR("no mem\n");
+		res = -ENOMEM;
+		goto fail_alloc_skb;
+	}
+
+	memcpy(skb_put(dummy_skb, sizeof(comp)), &comp, sizeof(comp));
 
 	desc[desc_idx].pyld = dummy_skb->data;
 	desc[desc_idx].len = dummy_skb->len;
@@ -3612,14 +3621,18 @@ int ipa_tag_aggr_force_close(int pipe_num)
 	desc = NULL;
 
 	IPADBG("waiting for TAG response\n");
-	res = wait_for_completion_timeout(&comp, IPA_TAG_TIMEOUT);
+	res = wait_for_completion_timeout(&comp->comp, IPA_TAG_TIMEOUT);
 	if (res == 0) {
 		IPAERR("timeout for waiting for TAG response\n");
 		WARN_ON(1);
+		if (atomic_dec_return(&comp->cnt) == 0)
+			kfree(comp);
 		return -ETIME;
 	}
 
 	IPADBG("TAG response arrived!\n");
+	if (atomic_dec_return(&comp->cnt) == 0)
+		kfree(comp);
 
 	/* sleep for short period to ensure IPA wrote all packets to BAM */
 	usleep_range(IPA_TAG_SLEEP_MIN_USEC, IPA_TAG_SLEEP_MAX_USEC);
@@ -3629,6 +3642,8 @@ int ipa_tag_aggr_force_close(int pipe_num)
 fail_send:
 	dev_kfree_skb_any(dummy_skb);
 	desc_idx--;
+fail_alloc_skb:
+	kfree(comp);
 fail_free_desc:
 	for (i = 0; i < desc_idx; i++)
 		kfree(desc[desc_idx].user1);
