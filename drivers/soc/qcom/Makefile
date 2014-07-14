@@ -22,3 +22,9 @@ obj-$(CONFIG_MSM_SMP2P_TEST) += smp2p_loopback.o smp2p_test.o smp2p_spinlock_tes
 obj-$(CONFIG_MSM_WATCHDOG_V2) += watchdog_v2.o
 obj-$(CONFIG_SOC_BUS)	+=	socinfo.o
 obj-y			+=	qdsp6v2/
+
+ifdef CONFIG_MSM_SUBSYSTEM_RESTART
+	obj-y += subsystem_notif.o
+	obj-y += subsystem_restart.o
+	obj-y += ramdump.o
+endif

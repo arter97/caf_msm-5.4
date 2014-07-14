@@ -192,6 +192,17 @@ config MSM_OCMEM_POWER_DISABLE
           Enable this configuration if OCMEM is being exclusively
           used as GMEM or OCIMEM.
 
+config MSM_SUBSYSTEM_RESTART
+	bool "MSM Subsystem Restart"
+	help
+	  This option enables the MSM subsystem restart framework.
+
+	  The MSM subsystem restart framework provides support to boot,
+	  shutdown, and restart subsystems with a reference counted API.
+	  It also notifies userspace of transitions between these states via
+	  sysfs.
+
+
 config MSM_PIL
 	bool "Peripheral image loading"
 	select FW_LOADER
