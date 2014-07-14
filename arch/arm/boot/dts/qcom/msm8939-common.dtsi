@@ -475,7 +475,8 @@
 		pinctrl-0 = <&wcnss_default>;
 		pinctrl-1 = <&wcnss_sleep>;
 		pinctrl-2 = <&wcnss_gpio_default>;
-		wcnss-gpio-base = <&msm_gpio 40 0>;
+		gpios = <&msm_gpio 40 0>, <&msm_gpio 41 0>, <&msm_gpio 42 0>,
+					<&msm_gpio 43 0>, <&msm_gpio 44 0>;
 
 		clocks = <&clock_rpm clk_xo_wlan_clk>,
 			 <&clock_rpm clk_rf_clk2>,
@@ -751,6 +752,7 @@
 		qcom,hsusb-otg-phy-type = <2>;
 		qcom,hsusb-otg-mode = <1>;
 		qcom,hsusb-otg-otg-control = <2>;
+		qcom,hsusb-otg-disable-reset;
 		qcom,dp-manual-pullup;
 
 		qcom,msm-bus,name = "usb2";
@@ -1226,6 +1228,13 @@
 			qcom,msm-dai-q6-mi2s-dev-id = <2>;
 			qcom,msm-mi2s-rx-lines = <0>;
 			qcom,msm-mi2s-tx-lines = <3>;
+		};
+
+		qcom,msm-dai-q6-mi2s-quat {
+			compatible = "qcom,msm-dai-q6-mi2s";
+			qcom,msm-dai-q6-mi2s-dev-id = <3>;
+			qcom,msm-mi2s-rx-lines = <1>;
+			qcom,msm-mi2s-tx-lines = <2>;
 		};
 	};
 
