@@ -430,7 +430,7 @@ static int __devinit csiphy_probe(struct platform_device *pdev)
 		new_csiphy_dev->subdev.devnode->num;
 	new_csiphy_dev->csiphy_state = CSIPHY_POWER_DOWN;
 
-	if (machine_is_apq8064_mplatform())
+	if (machine_is_apq8064_adp_2() || machine_is_apq8064_mplatform())
 		lsh_csiphy_dev = new_csiphy_dev;
 
 	return 0;
