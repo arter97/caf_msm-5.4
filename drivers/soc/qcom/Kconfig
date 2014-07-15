@@ -196,5 +196,12 @@ config MSM_SCM
 	bool "Secure Channel Manager (SCM) support"
 	default n
 
+config MSM_WATCHDOG_V2
+	bool "MSM Watchdog Support"
+	help
+	  This enables the watchdog module. It causes kernel panic if the
+	  watchdog times out. It allows for detection of cpu hangs and
+	  deadlocks. It does not run during the bootup process, so it will
+	  not catch any early lockups.
 
 endif # ARCH_MSM
