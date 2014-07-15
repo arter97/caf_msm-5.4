@@ -368,6 +368,39 @@ config CHARGER_SMB347
 	  Say Y to include support for Summit Microelectronics SMB347
 	  Battery Charger.
 
+config SMB349_USB_CHARGER
+	tristate "smb349 usb charger (with VBUS detection)"
+	depends on I2C
+	help
+	 Say Y to enable support for the SMB349 switching mode based charger.
+	 The driver supports charging control (enable/disable) and
+	 charge-current limiting. It also provides USB VBUS detection and
+	 notification support. The driver controls SMB349 via I2C and
+	 supports device-tree interface.
+
+config SMB350_CHARGER
+	tristate "smb350 charger"
+	depends on I2C
+	help
+	  Say Y to enable battery charging by SMB350 switching mode based
+	  external charger. The device supports stack-cell battery charging.
+	  The driver configures the device volatile parameters
+	  and the charger device works autonomously.
+	  The driver supports charger-enable and charger-suspend/resume.
+	  The driver reports the charger status via the power supply framework.
+	  A charger status change triggers an IRQ via the device STAT pin.
+
+config SMB135X_CHARGER
+	tristate "SMB135X Battery Charger"
+	depends on I2C
+	help
+	  Say Y to include support for SMB135X Battery Charger.
+	  SMB135X is a dual path switching mode charger capable of charging
+	  the battery with 3Amps of current.
+	  The driver supports charger enable/disable.
+	  The driver reports the charger status via the power supply framework.
+	  A charger status change triggers an IRQ via the device STAT pin.
+
 config CHARGER_TPS65090
 	tristate "TPS65090 battery charger driver"
 	depends on MFD_TPS65090
