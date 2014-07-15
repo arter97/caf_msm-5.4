@@ -62,4 +62,15 @@ config SPS_SUPPORT_NDP_BAM
 	default n
 	help
 	  No-Data-Path BAM is used to improve BAM performance.
+
+config QPNP_USB_DETECT
+	tristate "Qualcomm QPNP USB VBUS Detection"
+	depends on POWER_SUPPLY
+	help
+	  This driver supports external USB VBUS detection circuitry which
+	  can be connected to Qualcomm QPNP PMIC devices.  The driver will
+	  configure a GPIO from the detector's output line and in turn notify
+	  the USB driver of VBUS presence/disconnection using the power_supply
+	  framework.
+
 endmenu
