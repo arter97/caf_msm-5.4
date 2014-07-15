@@ -638,8 +638,12 @@ static int __devinit csid_probe(struct platform_device *pdev)
 
 	new_csid_dev->csid_state = CSID_POWER_DOWN;
 
-	if (machine_is_apq8064_adp_2() || machine_is_apq8064_mplatform())
-		lsh_csid_dev = new_csid_dev;
+	if (machine_is_apq8064_adp_2() || machine_is_apq8064_mplatform()) {
+		if (pdev->id == 0) {
+			pr_debug("keep track of 1st csid device\n");
+			lsh_csid_dev = new_csid_dev;
+		}
+	}
 
 	return 0;
 
