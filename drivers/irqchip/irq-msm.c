@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  */
 
-#include <linux/of.h>
+#include <linux/irqchip/qpnp-int.h>
 #include <linux/irqchip/msm-gpio-irq.h>
 #include <linux/irqchip/msm-mpm-irq.h>
 #include "irqchip.h"
@@ -45,3 +45,4 @@ IRQCHIP_DECLARE(tlmmv3_irq, "qcom,msm-tlmm-gp", irq_msm_gpio_init);
 #else
 IRQCHIP_DECLARE(tlmm_irq, "qcom,msm-gpio", irq_msm_gpio_init);
 #endif
+IRQCHIP_DECLARE(qpnp_irq, "qcom,spmi-pmic-arb", qpnpint_of_init);
