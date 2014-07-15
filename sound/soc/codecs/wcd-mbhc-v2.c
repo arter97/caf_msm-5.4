@@ -1142,16 +1142,9 @@ static void wcd_mbhc_swch_irq_handler(struct wcd_mbhc *mbhc)
 		snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_ANALOG_MBHC_FSM_CTL,
 				0x80, 0x80);
-		/*
-		 * Calculate the trim value for each device used
-		 * till is comes in production by hardware team.
-		 */
-		snd_soc_update_bits(codec,
-				MSM8X16_WCD_A_ANALOG_SEC_ACCESS,
-				0xA5, 0xA5);
-		snd_soc_update_bits(codec,
-				MSM8X16_WCD_A_ANALOG_TRIM_CTRL2,
-				0xFF, 0x30);
+		/* Apply trim if needed on the device */
+		if (mbhc->mbhc_cb && mbhc->mbhc_cb->trim_btn_reg)
+			mbhc->mbhc_cb->trim_btn_reg(codec);
 		/* Enable external voltage source to micbias if present */
 		if (mbhc->mbhc_cb && mbhc->mbhc_cb->enable_mb_source)
 			mbhc->mbhc_cb->enable_mb_source(codec, true);
