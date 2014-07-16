@@ -24,6 +24,8 @@
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
 #include <linux/i2c.h>
+#include <linux/i2c/adv7180.h>
+#include <linux/gpio.h>
 #include <linux/slab.h>
 #include <media/v4l2-ioctl.h>
 #include <linux/videodev2.h>
@@ -31,6 +33,7 @@
 #include <media/v4l2-ctrls.h>
 #include <linux/mutex.h>
 #include <linux/delay.h>
+#define DRIVER_NAME "adv7180"
 
 #define ADV7180_STD_AD_PAL_BG_NTSC_J_SECAM		0x0
 #define ADV7180_STD_AD_PAL_BG_NTSC_J_SECAM_PED		0x1
@@ -1166,12 +1169,19 @@ static int adv7180_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)
 {
 	struct adv7180_state *state;
+	struct adv7180_platform_data *pdata = NULL;
 	struct v4l2_subdev *sd;
 	int ret;
 
-	/* Check if the adapter supports the needed features */
+
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE_DATA))
 		return -EIO;
+
+	pdata = (struct adv7180_platform_data *) client->dev.platform_data;
+	if (!pdata) {
+		pr_err("%s : Getting Platform data : Failed\n", __func__);
+		return -EIO;
+	}
 
 	v4l_info(client, "chip found @ 0x%02x (%s)\n",
 		 client->addr, client->adapter->name);
@@ -1213,6 +1223,36 @@ static int adv7180_probe(struct i2c_client *client,
 	sd = &state->sd;
 	v4l2_i2c_subdev_init(sd, client, &adv7180_ops);
 
+	if (gpio_is_valid(pdata->pwdnb_gpio)
+				&& gpio_is_valid(pdata->rstb_gpio)) {
+		ret = gpio_request(pdata->pwdnb_gpio, "pwdnb_gpio");
+		if (ret)
+			goto err_unregister_vpp_client;
+
+		ret = gpio_request(pdata->rstb_gpio, "rstb_gpio");
+		if (ret)
+			goto err_unregister_vpp_client;
+
+		ret = gpio_direction_output(pdata->pwdnb_gpio, 1);
+		ret = gpio_direction_output(pdata->rstb_gpio, 1);
+		if (ret)
+			goto err_unregister_vpp_client;
+
+		/*Required Control sequence for Powerdown and Reset Pins*/
+		/*Delay required following Reset before I2C is accessible*/
+		usleep(5000);
+		ret = gpio_direction_output(pdata->pwdnb_gpio, 0);
+		usleep(5000);
+		ret = gpio_direction_output(pdata->rstb_gpio, 0);
+		usleep(5000);
+		ret = gpio_direction_output(pdata->pwdnb_gpio, 1);
+		usleep(5000);
+		ret = gpio_direction_output(pdata->rstb_gpio, 1);
+		usleep(10000);
+		if (ret)
+			goto err_unregister_vpp_client;
+	}
+
 	ret = adv7180_init_controls(state);
 	if (ret)
 		goto err_unregister_vpp_client;
@@ -1230,7 +1270,7 @@ static int adv7180_probe(struct i2c_client *client,
 	if (state->irq) {
 		ret = request_threaded_irq(client->irq, NULL, adv7180_irq,
 					   IRQF_ONESHOT | IRQF_TRIGGER_FALLING,
-					   KBUILD_MODNAME, state);
+					   DRIVER_NAME, state);
 		if (ret)
 			goto err_free_ctrl;
 	}
