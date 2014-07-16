@@ -91,6 +91,7 @@
 
 #define ADV7180_REG_STATUS1		0x0010
 #define ADV7180_STATUS1_IN_LOCK		0x01
+#define ADV7180_STATUS1_LOST_LOCK	0x02
 #define ADV7180_STATUS1_AUTOD_MASK	0x70
 #define ADV7180_STATUS1_AUTOD_NTSM_M_J	0x00
 #define ADV7180_STATUS1_AUTOD_NTSC_4_43 0x10
@@ -104,7 +105,7 @@
 #define ADV7180_REG_IDENT 0x0011
 #define ADV7180_ID_7180 0x18
 
-#define ADV7180_REG_ICONF1		0x0040
+#define ADV7180_REG_ICONF1		0x00140
 #define ADV7180_ICONF1_ACTIVE_LOW	0x01
 #define ADV7180_ICONF1_PSYNC_ONLY	0x10
 #define ADV7180_ICONF1_ACTIVE_TO_CLR	0xC0
@@ -117,15 +118,15 @@
 
 #define ADV7180_IRQ1_LOCK	0x01
 #define ADV7180_IRQ1_UNLOCK	0x02
-#define ADV7180_REG_ISR1	0x0042
-#define ADV7180_REG_ICR1	0x0043
-#define ADV7180_REG_IMR1	0x0044
-#define ADV7180_REG_IMR2	0x0048
+#define ADV7180_REG_ISR1	0x0142
+#define ADV7180_REG_ICR1	0x0143
+#define ADV7180_REG_IMR1	0x0144
+#define ADV7180_REG_IMR2	0x0148
 #define ADV7180_IRQ3_AD_CHANGE	0x08
-#define ADV7180_REG_ISR3	0x004A
-#define ADV7180_REG_ICR3	0x004B
-#define ADV7180_REG_IMR3	0x004C
-#define ADV7180_REG_IMR4	0x50
+#define ADV7180_REG_ISR3	0x014A
+#define ADV7180_REG_ICR3	0x014B
+#define ADV7180_REG_IMR3	0x014C
+#define ADV7180_REG_IMR4	0x0150
 
 #define ADV7180_REG_NTSC_V_BIT_END	0x00E6
 #define ADV7180_NTSC_V_BIT_END_MANUAL_NVEND	0x4F
@@ -260,10 +261,6 @@ static int adv7180_vpp_write(struct adv7180_state *state, unsigned int reg,
 
 static v4l2_std_id adv7180_std_to_v4l2(u8 status1)
 {
-	/* in case V4L2_IN_ST_NO_SIGNAL */
-	if (!(status1 & ADV7180_STATUS1_IN_LOCK))
-		return V4L2_STD_UNKNOWN;
-
 	switch (status1 & ADV7180_STATUS1_AUTOD_MASK) {
 	case ADV7180_STATUS1_AUTOD_NTSM_M_J:
 		return V4L2_STD_NTSC;
@@ -292,6 +289,8 @@ static int v4l2_std_to_adv7180(v4l2_std_id std)
 		return ADV7180_STD_PAL60;
 	if (std == V4L2_STD_NTSC_443)
 		return ADV7180_STD_NTSC_443;
+	if (std == V4L2_STD_NTSC)
+		return ADV7180_STD_NTSC_M;
 	if (std == V4L2_STD_PAL_N)
 		return ADV7180_STD_PAL_N;
 	if (std == V4L2_STD_PAL_M)
@@ -341,15 +340,20 @@ static inline struct adv7180_state *to_state(struct v4l2_subdev *sd)
 static int adv7180_querystd(struct v4l2_subdev *sd, v4l2_std_id *std)
 {
 	struct adv7180_state *state = to_state(sd);
-	int err = mutex_lock_interruptible(&state->mutex);
+	int err  = 0;
+	v4l2_std_id new_std = V4L2_STD_UNKNOWN ;
+
+	err = mutex_lock_interruptible(&state->mutex);
+
 	if (err)
 		return err;
 
 	/* when we are interrupt driven we know the state */
-	if (!state->autodetect || state->irq > 0)
-		*std = state->curr_norm;
+	if (state->irq > 0)
+		new_std = state->curr_norm;
 	else
-		err = __adv7180_status(state, NULL, std);
+		err = __adv7180_status(state, NULL, &new_std);
+	*std = new_std;
 
 	mutex_unlock(&state->mutex);
 	return err;
@@ -649,6 +653,25 @@ static int adv7180_set_field_mode(struct adv7180_state *state)
 	return 0;
 }
 
+static int adv7180_set_irq_config(struct adv7180_state *state)
+{
+	int ret = 0;
+
+	if (state->irq > 0) {
+
+		adv7180_write(state, ADV7180_REG_ICONF1,
+					ADV7180_ICONF1_ACTIVE_LOW |
+					ADV7180_ICONF1_PSYNC_ONLY);
+		adv7180_write(state, ADV7180_REG_IMR1, 0);
+		adv7180_write(state, ADV7180_REG_IMR2, 0);
+		adv7180_write(state, ADV7180_REG_IMR3,
+					ADV7180_IRQ3_AD_CHANGE);
+		adv7180_write(state, ADV7180_REG_IMR4, 0);
+	}
+
+	return ret;
+}
+
 static int adv7180_get_pad_format(struct v4l2_subdev *sd,
 				  struct v4l2_subdev_fh *fh,
 				  struct v4l2_subdev_format *format)
@@ -876,7 +899,7 @@ static enum adv7182_input_type adv7182_get_input_type(unsigned int input)
 	}
 }
 
-/* ADI recommanded writes to registers 0x52, 0x53, 0x54 */
+/* ADI recommended writes to registers 0x52, 0x53, 0x54 */
 static unsigned int adv7182_lbias_settings[][3] = {
 	[ADV7182_INPUT_TYPE_CVBS] = { 0xCB, 0x4E, 0x80 },
 	[ADV7182_INPUT_TYPE_DIFF_CVBS] = { 0xC0, 0x4E, 0x80 },
@@ -1131,33 +1154,7 @@ static int init_device(struct adv7180_state *state)
 
 	adv7180_set_field_mode(state);
 
-	/* register for interrupts */
-	if (state->irq > 0) {
-		/* config the Interrupt pin to be active low */
-		ret = adv7180_write(state, ADV7180_REG_ICONF1,
-						ADV7180_ICONF1_ACTIVE_LOW |
-						ADV7180_ICONF1_PSYNC_ONLY);
-		if (ret < 0)
-			goto out_unlock;
-
-		ret = adv7180_write(state, ADV7180_REG_IMR1, 0);
-		if (ret < 0)
-			goto out_unlock;
-
-		ret = adv7180_write(state, ADV7180_REG_IMR2, 0);
-		if (ret < 0)
-			goto out_unlock;
-
-		/* enable AD change interrupts interrupts */
-		ret = adv7180_write(state, ADV7180_REG_IMR3,
-						ADV7180_IRQ3_AD_CHANGE);
-		if (ret < 0)
-			goto out_unlock;
-
-		ret = adv7180_write(state, ADV7180_REG_IMR4, 0);
-		if (ret < 0)
-			goto out_unlock;
-	}
+	adv7180_set_irq_config(state);
 
 out_unlock:
 	mutex_unlock(&state->mutex);
