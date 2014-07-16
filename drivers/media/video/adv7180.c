@@ -857,16 +857,21 @@ static int adv7180_select_input(struct adv7180_state *state, unsigned int input)
 
 static int adv7182_init(struct adv7180_state *state)
 {
+	int ret = 0;
 	if (state->chip_info->flags & ADV7180_FLAG_MIPI_CSI2)
 		adv7180_write(state, ADV7180_REG_CSI_SLAVE_ADDR,
 			ADV7180_DEFAULT_CSI_I2C_ADDR << 1);
+	usleep(I2C_RW_DELAY);
 
 	if (state->chip_info->flags & ADV7180_FLAG_I2P)
 		adv7180_write(state, ADV7180_REG_VPP_SLAVE_ADDR,
 			ADV7180_DEFAULT_VPP_I2C_ADDR << 1);
+	usleep(I2C_RW_DELAY);
+
+	adv7180_write(state, 0x809c, 0x00);
+	adv7180_write(state, 0x809c, 0xff);
 
 	if (state->chip_info->flags & ADV7180_FLAG_V2) {
-		/* ADI recommanded writes for improved video quality */
 		adv7180_write(state, 0x0080, 0x51);
 		adv7180_write(state, 0x0081, 0x51);
 		adv7180_write(state, 0x0082, 0x68);
@@ -885,8 +890,9 @@ static int adv7182_init(struct adv7180_state *state)
 		adv7180_write(state, 0x001d, 0x40);
 	}
 
-	adv7180_write(state, 0x0013, 0x00);
-
+	if (state->field == V4L2_FIELD_NONE)
+		ret = adv7180_csi_write(state, 0x1D, 0x80);
+	usleep(I2C_RW_DELAY);
 	return 0;
 }
 
@@ -932,7 +938,6 @@ static enum adv7182_input_type adv7182_get_input_type(unsigned int input)
 	}
 }
 
-/* ADI recommended writes to registers 0x52, 0x53, 0x54 */
 static unsigned int adv7182_lbias_settings[][3] = {
 	[ADV7182_INPUT_TYPE_CVBS] = { 0xCB, 0x4E, 0x80 },
 	[ADV7182_INPUT_TYPE_DIFF_CVBS] = { 0xC0, 0x4E, 0x80 },
@@ -1170,12 +1175,14 @@ static const struct adv7180_chip_info adv7282_m_info = {
 
 static int init_device(struct adv7180_state *state)
 {
-	int ret;
+	int ret = 0;
 
 	mutex_lock(&state->mutex);
+	ret = adv7180_write(state, ADV7180_REG_PWR_MAN, ADV7180_PWR_MAN_RES);
+	if (ret)
+		goto out_unlock;
 
-	adv7180_write(state, ADV7180_REG_PWR_MAN, ADV7180_PWR_MAN_RES);
-	usleep_range(2000, 10000);
+	usleep(I2C_RW_DELAY);
 
 	ret = state->chip_info->init(state);
 	if (ret)
@@ -1223,8 +1230,11 @@ static int adv7180_probe(struct i2c_client *client,
 	}
 
 	state->client = client;
-	state->field = V4L2_FIELD_INTERLACED;
 	state->chip_info = (struct adv7180_chip_info *)id->driver_data;
+	if (state->chip_info->flags & ADV7180_FLAG_I2P)
+		state->field = V4L2_FIELD_NONE;
+	else
+		state->field = V4L2_FIELD_INTERLACED;
 
 	if (state->chip_info->flags & ADV7180_FLAG_MIPI_CSI2) {
 		state->csi_client = i2c_new_dummy(client->adapter,
