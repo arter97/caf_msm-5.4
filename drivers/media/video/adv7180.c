@@ -27,12 +27,15 @@
 #include <linux/i2c/adv7180.h>
 #include <linux/gpio.h>
 #include <linux/slab.h>
+#include <linux/media.h>
 #include <media/v4l2-ioctl.h>
 #include <linux/videodev2.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ctrls.h>
 #include <linux/mutex.h>
 #include <linux/delay.h>
+
+#include "msm/av_mgr.h"
 #define DRIVER_NAME "adv7180"
 
 #define ADV7180_STD_AD_PAL_BG_NTSC_J_SECAM		0x0
@@ -1272,6 +1275,7 @@ static int adv7180_probe(struct i2c_client *client,
 			goto err_free_ctrl;
 	}
 
+	ret = av_mgr_sd_register(sd);
 	if (ret)
 		goto err_free_irq;
 
@@ -1300,6 +1304,7 @@ static int adv7180_remove(struct i2c_client *client)
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct adv7180_state *state = to_state(sd);
 
+	av_mgr_sd_unregister(sd);
 	if (state->irq > 0)
 		free_irq(client->irq, state);
 
