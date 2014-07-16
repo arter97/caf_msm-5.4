@@ -19,4 +19,9 @@ config CAN_PEAK_USB
 	  This driver supports the PCAN-USB and PCAN-USB Pro adapters
 	  from PEAK-System Technik (http://www.peak-system.com).
 
+config CAN_SAM4E_USB
+	tristate "SAM4E USB interface"
+	---help---
+	  This driver supports the ADP Networks board's SAM4E CAN interface
+
 endmenu
