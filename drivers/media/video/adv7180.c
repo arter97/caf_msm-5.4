@@ -38,6 +38,7 @@
 #include "msm/av_mgr.h"
 #define DRIVER_NAME "adv7180"
 
+#define I2C_RW_DELAY 75000
 #define ADV7180_STD_AD_PAL_BG_NTSC_J_SECAM		0x0
 #define ADV7180_STD_AD_PAL_BG_NTSC_J_SECAM_PED		0x1
 #define ADV7180_STD_AD_PAL_N_NTSC_J_SECAM		0x2
@@ -452,7 +453,7 @@ out:
 
 static int adv7180_set_power(struct adv7180_state *state, bool on)
 {
-	u8 val;
+	int val;
 	int ret;
 
 	if (on)
@@ -471,14 +472,8 @@ static int adv7180_set_power(struct adv7180_state *state, bool on)
 			adv7180_csi_write(state, 0xD8, 0x65);
 			adv7180_csi_write(state, 0xE0, 0x09);
 			adv7180_csi_write(state, 0x2C, 0x00);
-			if (state->field == V4L2_FIELD_NONE)
-				adv7180_csi_write(state, 0x1D, 0x80);
-			adv7180_csi_write(state, 0x00, 0x00);
-		} else {
-			adv7180_csi_write(state, 0x00, 0x80);
 		}
 	}
-
 	return 0;
 }
 
@@ -494,6 +489,40 @@ static int adv7180_s_power(struct v4l2_subdev *sd, int on)
 	ret = adv7180_set_power(state, on);
 	if (ret == 0)
 		state->powered = on;
+
+	mutex_unlock(&state->mutex);
+	return ret;
+}
+
+static int adv7180_set_op_stream(struct adv7180_state *state, bool on)
+{
+	int ret = -1;
+
+	if (state->chip_info->flags & ADV7180_FLAG_MIPI_CSI2) {
+		if (on) {
+
+			ret = adv7180_csi_write(state, 0x00, 0x00);
+			usleep(I2C_RW_DELAY);
+
+		} else {
+			usleep(I2C_RW_DELAY);
+			ret = adv7180_csi_write(state, 0x00, 0x80);
+			usleep(I2C_RW_DELAY);
+		}
+	}
+
+	return ret;
+}
+
+static int adv7180_s_stream(struct v4l2_subdev *sd, int on)
+{
+	struct adv7180_state *state = to_state(sd);
+	int ret;
+	ret = mutex_lock_interruptible(&state->mutex);
+	if (ret)
+		return ret;
+
+	ret = adv7180_set_op_stream(state, on);
 
 	mutex_unlock(&state->mutex);
 	return ret;
@@ -751,6 +780,7 @@ static const struct v4l2_subdev_video_ops adv7180_video_ops = {
 	.g_input_status = adv7180_g_input_status,
 	.s_routing = adv7180_s_routing,
 	.g_mbus_config = adv7180_g_mbus_config,
+	.s_stream = adv7180_s_stream,
 };
 
 
