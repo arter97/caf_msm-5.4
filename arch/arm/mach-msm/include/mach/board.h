@@ -18,6 +18,7 @@
 #ifndef __ASM_ARCH_MSM_BOARD_H
 #define __ASM_ARCH_MSM_BOARD_H
 
+void msm_map_fsm9010_io(void);
 void msm_map_8084_io(void);
 
 void apq8084_init_gpiomux(void);
