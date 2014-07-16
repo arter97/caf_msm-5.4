@@ -154,6 +154,9 @@ static struct device_attribute dev_dt_threshold =
 static struct device_attribute dev_rd_threshold =
 	__ATTR(rd_threshold, S_IRUGO | S_IWUGO, dev_attribute_show,
 		   dev_attribute_store);
+static struct device_attribute dev_mtd_trigger_scan =
+	__ATTR(peb_scan, S_IRUGO | S_IWUGO,
+		dev_attribute_show, dev_attribute_store);
 
 /**
  * ubi_volume_notify - send a volume change notification.
@@ -395,6 +398,8 @@ static ssize_t dev_attribute_show(struct device *dev,
 		ret = sprintf(buf, "%d\n", ubi->dt_threshold);
 	else if (attr == &dev_rd_threshold)
 		ret = sprintf(buf, "%d\n", ubi->rd_threshold);
+	else if (attr == &dev_mtd_trigger_scan)
+		ret = sprintf(buf, "%d\n", ubi->scan_in_progress);
 	else
 		ret = -EINVAL;
 
@@ -406,7 +411,7 @@ static ssize_t dev_attribute_store(struct device *dev,
 			   struct device_attribute *attr,
 			   const char *buf, size_t count)
 {
-	int value;
+	int value, ret;
 	struct ubi_device *ubi;
 
 	ubi = container_of(dev, struct ubi_device, dev);
@@ -414,8 +419,11 @@ static ssize_t dev_attribute_store(struct device *dev,
 	if (!ubi)
 		return -ENODEV;
 
-	if (kstrtos32(buf, 10, &value))
-		return -EINVAL;
+	ret = count;
+	if (kstrtos32(buf, 10, &value)) {
+		ret = -EINVAL;
+		goto out;
+	}
 	/* Consider triggering full scan if threshods change */
 	else if (attr == &dev_dt_threshold) {
 		if (value < UBI_MAX_DT_THRESHOLD)
@@ -429,9 +437,21 @@ static ssize_t dev_attribute_store(struct device *dev,
 		else
 			pr_err("Max supported threshold value is %d",
 				   UBI_MAX_READCOUNTER);
+	} else if (attr == &dev_mtd_trigger_scan) {
+		if (value != 1) {
+			pr_err("Invalid input. Echo 1 to start trigger");
+			goto out;
+		}
+		if (!ubi->lookuptbl) {
+			pr_err("lookuptbl is null");
+			goto out;
+		}
+		ret = ubi_wl_scan_all(ubi);
 	}
 
-	return count;
+out:
+	ubi_put_device(ubi);
+	return ret;
 }
 
 static void dev_release(struct device *dev)
@@ -500,6 +520,9 @@ static int ubi_sysfs_init(struct ubi_device *ubi, int *ref)
 	if (err)
 		return err;
 	err = device_create_file(&ubi->dev, &dev_rd_threshold);
+	if (err)
+		return err;
+	err = device_create_file(&ubi->dev, &dev_mtd_trigger_scan);
 	return err;
 }
 
@@ -509,6 +532,7 @@ static int ubi_sysfs_init(struct ubi_device *ubi, int *ref)
  */
 static void ubi_sysfs_close(struct ubi_device *ubi)
 {
+	device_remove_file(&ubi->dev, &dev_mtd_trigger_scan);
 	device_remove_file(&ubi->dev, &dev_mtd_num);
 	device_remove_file(&ubi->dev, &dev_dt_threshold);
 	device_remove_file(&ubi->dev, &dev_rd_threshold);
