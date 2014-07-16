@@ -1423,9 +1423,12 @@ static int vdd_restriction_apply_all(int en)
 	int ret = 0;
 
 	for (i = 0; i < rails_cnt; i++) {
-		if (rails[i].freq_req == 1 && freq_table_get)
-			ret = vdd_restriction_apply_freq(&rails[i],
+		if (rails[i].freq_req == 1)
+			if (freq_table_get)
+				ret = vdd_restriction_apply_freq(&rails[i],
 					en ? 0 : -1);
+			else
+				continue;
 		else
 			ret = vdd_restriction_apply_voltage(&rails[i],
 					en ? 0 : -1);
@@ -1822,10 +1825,12 @@ static int __ref update_offline_cores(int val)
 {
 	uint32_t cpu = 0;
 	int ret = 0;
+	uint32_t previous_cpus_offlined = 0;
 
 	if (!core_control_enabled)
 		return 0;
 
+	previous_cpus_offlined = cpus_offlined;
 	cpus_offlined = msm_thermal_info.core_control_mask & val;
 
 	for_each_possible_cpu(cpu) {
@@ -1838,7 +1843,7 @@ static int __ref update_offline_cores(int val)
 					cpu, ret);
 			else
 				pr_debug("Offlined CPU%d\n", cpu);
-		} else if (online_core) {
+		} else if (online_core && (previous_cpus_offlined & BIT(cpu))) {
 			if (cpu_online(cpu))
 				continue;
 			ret = cpu_up(cpu);
