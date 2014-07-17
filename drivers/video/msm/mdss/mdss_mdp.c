@@ -52,6 +52,7 @@
 #include "mdss_mdp.h"
 #include "mdss_panel.h"
 #include "mdss_debug.h"
+#include "mdss_mdp_debug.h"
 
 #define CREATE_TRACE_POINTS
 #include "mdss_mdp_trace.h"
@@ -191,15 +192,15 @@ int mdss_mdp_vbif_axi_halt(struct mdss_data_type *mdata)
 		idle_mask |= BIT(5);
 
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
-	reg_val = readl_relaxed(mdata->vbif_base + MMSS_VBIF_AXI_HALT_CTRL1);
+	reg_val = MDSS_VBIF_READ(mdata, MMSS_VBIF_AXI_HALT_CTRL1);
 
 	is_idle = (reg_val & idle_mask) ? true : false;
 	if (!is_idle) {
 		pr_err("axi is not idle. halt_ctrl1=%d\n", reg_val);
 
-		writel_relaxed(1, mdata->vbif_base + MMSS_VBIF_AXI_HALT_CTRL0);
+		MDSS_VBIF_WRITE(mdata, MMSS_VBIF_AXI_HALT_CTRL0, 1);
 
-		rc = readl_poll_timeout(mdata->vbif_base +
+		rc = readl_poll_timeout(mdata->vbif_io.base +
 			MMSS_VBIF_AXI_HALT_CTRL1, status, (status & idle_mask),
 			1000, AXI_HALT_TIMEOUT_US);
 		if (rc == -ETIMEDOUT)
@@ -207,7 +208,7 @@ int mdss_mdp_vbif_axi_halt(struct mdss_data_type *mdata)
 		else
 			pr_debug("VBIF axi is halted\n");
 
-		writel_relaxed(0, mdata->vbif_base + MMSS_VBIF_AXI_HALT_CTRL0);
+		MDSS_VBIF_WRITE(mdata, MMSS_VBIF_AXI_HALT_CTRL0, 0);
 	}
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
 
@@ -245,7 +246,7 @@ static inline int mdss_irq_dispatch(u32 hw_ndx, int irq, void *ptr)
 static irqreturn_t mdss_irq_handler(int irq, void *ptr)
 {
 	struct mdss_data_type *mdata = ptr;
-	u32 intr = readl_relaxed(mdata->mdss_base + MDSS_REG_HW_INTR_STATUS);
+	u32 intr = MDSS_REG_READ(mdata, MDSS_REG_HW_INTR_STATUS);
 
 	if (!mdata)
 		return IRQ_NONE;
@@ -1057,61 +1058,6 @@ int mdss_iommu_init(struct mdss_data_type *mdata)
 	return 0;
 }
 
-static int mdss_debug_stat_ctl_dump(struct mdss_mdp_ctl *ctl,
-		char *bp, int len)
-{
-	int total = 0;
-
-	if (!ctl->ref_cnt)
-		return 0;
-
-	if (ctl->intf_num) {
-		total = scnprintf(bp, len,
-			"intf%d: play: %08u \tvsync: %08u \tunderrun: %08u\n",
-				ctl->intf_num, ctl->play_cnt,
-				ctl->vsync_cnt, ctl->underrun_cnt);
-	} else {
-		total = scnprintf(bp, len, "wb: \tmode=%x \tplay: %08u\n",
-				ctl->opmode, ctl->play_cnt);
-	}
-
-	return total;
-}
-
-static int mdss_debug_dump_stats(void *data, char *buf, int len)
-{
-	struct mdss_data_type *mdata = data;
-	struct mdss_mdp_pipe *pipe;
-	int i, total = 0;
-
-	for (i = 0; i < mdata->nctl; i++)
-		total += mdss_debug_stat_ctl_dump(mdata->ctl_off + i,
-			buf + total, len - total);
-
-	total += scnprintf(buf + total, len - total, "\n");
-
-	for (i = 0; i < mdata->nvig_pipes; i++) {
-		pipe = mdata->vig_pipes + i;
-		total += scnprintf(buf + total, len - total,
-			"VIG%d :   %08u\t", i, pipe->play_cnt);
-	}
-	total += scnprintf(buf + total, len - total, "\n");
-
-	for (i = 0; i < mdata->nrgb_pipes; i++) {
-		pipe = mdata->rgb_pipes + i;
-		total += scnprintf(buf + total, len - total,
-			"RGB%d :   %08u\t", i, pipe->play_cnt);
-	}
-	total += scnprintf(buf + total, len - total, "\n");
-
-	for (i = 0; i < mdata->ndma_pipes; i++) {
-		pipe = mdata->dma_pipes + i;
-		total += scnprintf(buf + total, len - total,
-			"DMA%d :   %08u\t", i, pipe->play_cnt);
-	}
-	return total;
-}
-
 static void mdss_debug_enable_clock(int on)
 {
 	if (on)
@@ -1124,14 +1070,20 @@ static int mdss_mdp_debug_init(struct mdss_data_type *mdata)
 {
 	int rc;
 
-	mdata->debug_inf.debug_dump_stats = mdss_debug_dump_stats;
 	mdata->debug_inf.debug_enable_clock = mdss_debug_enable_clock;
 
 	rc = mdss_debugfs_init(mdata);
 	if (rc)
 		return rc;
 
-	mdss_debug_register_base("mdp", mdata->mdss_base, mdata->mdp_reg_size);
+	rc = mdss_mdp_debugfs_init(mdata);
+	if (rc) {
+		mdss_debugfs_remove(mdata);
+		return rc;
+	}
+
+	mdss_debug_register_io("mdp", &mdata->mdss_io);
+	mdss_debug_register_io("vbif", &mdata->vbif_io);
 
 	return 0;
 }
@@ -1150,8 +1102,9 @@ static void mdss_hw_rev_init(struct mdss_data_type *mdata)
 {
 	if (mdata->mdp_rev)
 		return;
+
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
-	mdata->mdp_rev = readl_relaxed(mdata->mdss_base + MDSS_REG_HW_VERSION);
+	mdata->mdp_rev = MDSS_REG_READ(mdata, MDSS_REG_HW_VERSION);
 	pr_info_once("MDP Rev=%x\n", mdata->mdp_rev);
 	mdss_mdp_max_zorder_init(mdata);
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
@@ -1179,7 +1132,7 @@ int mdss_hw_init(struct mdss_data_type *mdata)
 		}
 	}
 
-	for (i = 0; i < mdata->nmixers_intf; i++) {
+	for (i = 0; i < mdata->ndspp; i++) {
 		offset = mdata->mixer_intf[i].dspp_base +
 				MDSS_MDP_REG_DSPP_HIST_LUT_BASE;
 		for (j = 0; j < ENHIST_LUT_ENTRIES; j++)
@@ -1497,42 +1450,23 @@ static int mdss_mdp_probe(struct platform_device *pdev)
 	mutex_init(&mdata->reg_lock);
 	atomic_set(&mdata->sd_client_count, 0);
 
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "mdp_phys");
-	if (!res) {
-		pr_err("unable to get MDP base address\n");
-		rc = -ENOMEM;
-		goto probe_done;
-	}
-
-	mdata->mdp_reg_size = resource_size(res);
-	mdata->mdss_base = devm_ioremap(&pdev->dev, res->start,
-				       mdata->mdp_reg_size);
-	if (unlikely(!mdata->mdss_base)) {
+	rc = msm_dss_ioremap_byname(pdev, &mdata->mdss_io, "mdp_phys");
+	if (rc) {
 		pr_err("unable to map MDP base\n");
-		rc = -ENOMEM;
 		goto probe_done;
 	}
-	pr_info("MDSS HW Base phy_Address=0x%x virt=0x%x\n",
-		(int) (unsigned long) res->start,
-		(int) (unsigned long) mdata->mdss_base);
+	pr_debug("MDSS HW Base addr=0x%x len=0x%x\n",
+		(int) (unsigned long) mdata->mdss_io.base,
+		mdata->mdss_io.len);
 
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "vbif_phys");
-	if (!res) {
-		pr_err("unable to get MDSS VBIF base address\n");
-		rc = -ENOMEM;
-		goto probe_done;
-	}
-
-	mdata->vbif_base = devm_ioremap(&pdev->dev, res->start,
-					resource_size(res));
-	if (unlikely(!mdata->vbif_base)) {
+	rc = msm_dss_ioremap_byname(pdev, &mdata->vbif_io, "vbif_phys");
+	if (rc) {
 		pr_err("unable to map MDSS VBIF base\n");
-		rc = -ENOMEM;
 		goto probe_done;
 	}
-	pr_info("MDSS VBIF HW Base phy_Address=0x%x virt=0x%x\n",
-		(int) (unsigned long) res->start,
-		(int) (unsigned long) mdata->vbif_base);
+	pr_debug("MDSS VBIF HW Base addr=0x%x len=0x%x\n",
+		(int) (unsigned long) mdata->vbif_io.base,
+		mdata->vbif_io.len);
 
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	if (!res) {
@@ -1606,7 +1540,7 @@ probe_done:
 	return rc;
 }
 
-static void mdss_mdp_parse_dt_regs_array(const u32 *arr, char __iomem *hw_base,
+static void mdss_mdp_parse_dt_regs_array(const u32 *arr, struct dss_io_data *io,
 	struct mdss_hw_settings *hws, int count)
 {
 	u32 len, reg;
@@ -1617,7 +1551,10 @@ static void mdss_mdp_parse_dt_regs_array(const u32 *arr, char __iomem *hw_base,
 
 	for (i = 0, len = count * 2; i < len; i += 2) {
 		reg = be32_to_cpu(arr[i]);
-		hws->reg = hw_base + reg;
+		if (reg >= io->len)
+			continue;
+
+		hws->reg = io->base + reg;
 		hws->val = be32_to_cpu(arr[i + 1]);
 		pr_debug("reg: 0x%04x=0x%08x\n", reg, hws->val);
 		hws++;
@@ -1655,8 +1592,9 @@ int mdss_mdp_parse_dt_hw_settings(struct platform_device *pdev)
 	if (!hws)
 		return -ENOMEM;
 
-	mdss_mdp_parse_dt_regs_array(vbif_arr, mdata->vbif_base, hws, vbif_len);
-	mdss_mdp_parse_dt_regs_array(mdp_arr, mdata->mdss_base,
+	mdss_mdp_parse_dt_regs_array(vbif_arr, &mdata->vbif_io,
+			hws, vbif_len);
+	mdss_mdp_parse_dt_regs_array(mdp_arr, &mdata->mdss_io,
 		hws + vbif_len, mdp_len);
 
 	mdata->hw_settings = hws;
@@ -1736,7 +1674,7 @@ static int mdss_mdp_parse_dt(struct platform_device *pdev)
 		pr_err("Error in device tree : mdp reg base\n");
 		return rc;
 	}
-	mdata->mdp_base = mdata->mdss_base + data;
+	mdata->mdp_base = mdata->mdss_io.base + data;
 	return 0;
 }
 
@@ -1874,6 +1812,9 @@ static int mdss_mdp_parse_dt_pipe(struct platform_device *pdev)
 
 	struct mdss_data_type *mdata = platform_get_drvdata(pdev);
 
+	mdata->has_pixel_ram = !mdss_mdp_parse_dt_prop_len(pdev,
+						"qcom,mdss-smp-data");
+
 	mdata->nvig_pipes = mdss_mdp_parse_dt_prop_len(pdev,
 				"qcom,mdss-pipe-vig-off");
 	mdata->nrgb_pipes = mdss_mdp_parse_dt_prop_len(pdev,
@@ -1883,22 +1824,24 @@ static int mdss_mdp_parse_dt_pipe(struct platform_device *pdev)
 
 	npipes = mdata->nvig_pipes + mdata->nrgb_pipes + mdata->ndma_pipes;
 
-	nfids  += mdss_mdp_parse_dt_prop_len(pdev,
-			"qcom,mdss-pipe-vig-fetch-id");
-	nfids  += mdss_mdp_parse_dt_prop_len(pdev,
-			"qcom,mdss-pipe-rgb-fetch-id");
-	nfids  += mdss_mdp_parse_dt_prop_len(pdev,
-			"qcom,mdss-pipe-dma-fetch-id");
-	if (npipes != nfids) {
-		pr_err("device tree err: unequal number of pipes and smp ids");
-		return -EINVAL;
+	if (!mdata->has_pixel_ram) {
+		nfids  += mdss_mdp_parse_dt_prop_len(pdev,
+				"qcom,mdss-pipe-vig-fetch-id");
+		nfids  += mdss_mdp_parse_dt_prop_len(pdev,
+				"qcom,mdss-pipe-rgb-fetch-id");
+		nfids  += mdss_mdp_parse_dt_prop_len(pdev,
+				"qcom,mdss-pipe-dma-fetch-id");
+		if (npipes != nfids) {
+			pr_err("device tree err: unequal number of pipes and smp ids");
+			return -EINVAL;
+		}
 	}
 
 	nxids += mdss_mdp_parse_dt_prop_len(pdev, "qcom,mdss-pipe-vig-xin-id");
 	nxids += mdss_mdp_parse_dt_prop_len(pdev, "qcom,mdss-pipe-rgb-xin-id");
 	nxids += mdss_mdp_parse_dt_prop_len(pdev, "qcom,mdss-pipe-dma-xin-id");
 	if (npipes != nxids) {
-		pr_err("device tree err: unequal number of pipes and xin ids");
+		pr_err("device tree err: unequal number of pipes and xin ids\n");
 		return -EINVAL;
 	}
 
@@ -1908,7 +1851,7 @@ static int mdss_mdp_parse_dt_pipe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-	ftch_id = kzalloc(sizeof(u32) * nfids, GFP_KERNEL);
+	ftch_id = kzalloc(sizeof(u32) * npipes, GFP_KERNEL);
 	if (!ftch_id) {
 		pr_err("no mem assigned for ftch_id: kzalloc fail\n");
 		rc = -ENOMEM;
@@ -1949,10 +1892,13 @@ static int mdss_mdp_parse_dt_pipe(struct platform_device *pdev)
 		}
 	}
 
-	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-pipe-vig-fetch-id",
-		ftch_id, mdata->nvig_pipes);
-	if (rc)
-		goto parse_fail;
+	if (nfids) {
+		rc = mdss_mdp_parse_dt_handler(pdev,
+			"qcom,mdss-pipe-vig-fetch-id", ftch_id,
+			mdata->nvig_pipes);
+		if (rc)
+			goto parse_fail;
+	}
 
 	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-pipe-vig-xin-id",
 		xin_id, mdata->nvig_pipes);
@@ -1972,10 +1918,13 @@ static int mdss_mdp_parse_dt_pipe(struct platform_device *pdev)
 
 	setup_cnt += len;
 
-	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-pipe-rgb-fetch-id",
-		ftch_id + mdata->nvig_pipes, mdata->nrgb_pipes);
-	if (rc)
-		goto parse_fail;
+	if (nfids) {
+		rc = mdss_mdp_parse_dt_handler(pdev,
+			"qcom,mdss-pipe-rgb-fetch-id",
+			ftch_id + mdata->nvig_pipes, mdata->nrgb_pipes);
+		if (rc)
+			goto parse_fail;
+	}
 
 	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-pipe-rgb-xin-id",
 		xin_id + mdata->nvig_pipes, mdata->nrgb_pipes);
@@ -2000,11 +1949,13 @@ static int mdss_mdp_parse_dt_pipe(struct platform_device *pdev)
 	if (mdata->ndma_pipes) {
 		dma_off = mdata->nvig_pipes + mdata->nrgb_pipes;
 
-		rc = mdss_mdp_parse_dt_handler(pdev,
-			"qcom,mdss-pipe-dma-fetch-id",
-			ftch_id + dma_off, mdata->ndma_pipes);
-		if (rc)
-			goto parse_fail;
+		if (nfids) {
+			rc = mdss_mdp_parse_dt_handler(pdev,
+				"qcom,mdss-pipe-dma-fetch-id",
+				ftch_id + dma_off, mdata->ndma_pipes);
+			if (rc)
+				goto parse_fail;
+		}
 
 		rc = mdss_mdp_parse_dt_handler(pdev,
 			"qcom,mdss-pipe-dma-xin-id",
@@ -2127,7 +2078,7 @@ ftch_alloc_fail:
 static int mdss_mdp_parse_dt_mixer(struct platform_device *pdev)
 {
 
-	u32 nmixers, ndspp, npingpong;
+	u32 nmixers, npingpong;
 	int rc = 0;
 	u32 *mixer_offsets = NULL, *dspp_offsets = NULL,
 	    *pingpong_offsets = NULL;
@@ -2138,7 +2089,7 @@ static int mdss_mdp_parse_dt_mixer(struct platform_device *pdev)
 				"qcom,mdss-mixer-intf-off");
 	mdata->nmixers_wb = mdss_mdp_parse_dt_prop_len(pdev,
 				"qcom,mdss-mixer-wb-off");
-	ndspp = mdss_mdp_parse_dt_prop_len(pdev,
+	mdata->ndspp = mdss_mdp_parse_dt_prop_len(pdev,
 				"qcom,mdss-dspp-off");
 	npingpong = mdss_mdp_parse_dt_prop_len(pdev,
 				"qcom,mdss-pingpong-off");
@@ -2151,8 +2102,8 @@ static int mdss_mdp_parse_dt_mixer(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	if (mdata->nmixers_intf != ndspp) {
-		pr_err("device tree err: unequal no of dspp and intf mixers\n");
+	if (mdata->nmixers_intf < mdata->ndspp) {
+		pr_err("device tree err: no of dspp are greater than intf mixers\n");
 		return -EINVAL;
 	}
 
@@ -2167,7 +2118,7 @@ static int mdss_mdp_parse_dt_mixer(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-	dspp_offsets = kzalloc(sizeof(u32) * ndspp, GFP_KERNEL);
+	dspp_offsets = kzalloc(sizeof(u32) * mdata->ndspp, GFP_KERNEL);
 	if (!dspp_offsets) {
 		pr_err("no mem assigned: kzalloc fail\n");
 		rc = -ENOMEM;
@@ -2191,7 +2142,7 @@ static int mdss_mdp_parse_dt_mixer(struct platform_device *pdev)
 		goto parse_done;
 
 	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-dspp-off",
-		dspp_offsets, ndspp);
+		dspp_offsets, mdata->ndspp);
 	if (rc)
 		goto parse_done;
 
@@ -2224,7 +2175,6 @@ dspp_alloc_fail:
 
 static int mdss_mdp_parse_dt_ctl(struct platform_device *pdev)
 {
-	u32 nwb;
 	int rc = 0;
 	u32 *ctl_offsets = NULL, *wb_offsets = NULL;
 
@@ -2232,11 +2182,11 @@ static int mdss_mdp_parse_dt_ctl(struct platform_device *pdev)
 
 	mdata->nctl = mdss_mdp_parse_dt_prop_len(pdev,
 			"qcom,mdss-ctl-off");
-	nwb =  mdss_mdp_parse_dt_prop_len(pdev,
+	mdata->nwb =  mdss_mdp_parse_dt_prop_len(pdev,
 			"qcom,mdss-wb-off");
 
-	if (mdata->nctl != nwb) {
-		pr_err("device tree err: unequal number of ctl and wb\n");
+	if (mdata->nctl < mdata->nwb) {
+		pr_err("device tree err: number of ctl greater than wb\n");
 		rc = -EINVAL;
 		goto parse_done;
 	}
@@ -2247,7 +2197,7 @@ static int mdss_mdp_parse_dt_ctl(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-	wb_offsets = kzalloc(sizeof(u32) * nwb, GFP_KERNEL);
+	wb_offsets = kzalloc(sizeof(u32) * mdata->nwb, GFP_KERNEL);
 	if (!wb_offsets) {
 		pr_err("no more mem for writeback offsets\n");
 		rc = -ENOMEM;
@@ -2260,7 +2210,7 @@ static int mdss_mdp_parse_dt_ctl(struct platform_device *pdev)
 		goto parse_done;
 
 	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-wb-off",
-		wb_offsets, nwb);
+		wb_offsets, mdata->nwb);
 	if (rc)
 		goto parse_done;
 
@@ -2363,8 +2313,13 @@ static int mdss_mdp_parse_dt_smp(struct platform_device *pdev)
 	const u32 *arr;
 
 	num = mdss_mdp_parse_dt_prop_len(pdev, "qcom,mdss-smp-data");
-
-	if (num != 2)
+	/*
+	 * This property is optional for targets with fix pixel ram. Rest
+	 * must provide no. of smp and size of each block.
+	 */
+	if (!num)
+		return 0;
+	else if (num != 2)
 		return -EINVAL;
 
 	rc = mdss_mdp_parse_dt_handler(pdev, "qcom,mdss-smp-data", data, num);

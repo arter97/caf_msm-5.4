@@ -28,10 +28,10 @@
 #include <sound/pcm.h>
 #include <sound/jack.h>
 #include <sound/q6afe-v2.h>
+#include <sound/q6core.h>
 #include <sound/pcm_params.h>
 #include <soc/qcom/socinfo.h>
 #include <qdsp6v2/msm-pcm-routing-v2.h>
-#include "qdsp6v2/q6core.h"
 #include "../codecs/wcd9xxx-common.h"
 #include "../codecs/wcd9306.h"
 #include "../codecs/wcd9330.h"
@@ -61,7 +61,7 @@
 
 #define WCD9XXX_MBHC_DEF_BUTTONS    8
 #define WCD9XXX_MBHC_DEF_RLOADS     5
-#define TOMTOM_EXT_CLK_RATE         9600000
+#define CODEC_EXT_CLK_RATE         9600000
 
 #define BTSCO_RATE_8KHZ 8000
 #define BTSCO_RATE_16KHZ 16000
@@ -70,6 +70,7 @@
 #define LPASS_CSR_GP_IO_MUX_SPKR_CTL 0x07702004
 
 #define ADSP_STATE_READY_TIMEOUT_MS    50
+#define HS_STARTWORK_TIMEOUT		4000
 
 static int slim0_rx_sample_rate = SAMPLING_RATE_48KHZ;
 static int slim0_rx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
@@ -91,17 +92,22 @@ struct msm8939_asoc_mach_data {
 	int us_euro_gpio;
 	struct mutex cdc_mclk_mutex;
 	struct afe_digital_clk_cfg digital_cdc_clk;
+	struct delayed_work hs_detect_dwork;
+	struct snd_soc_codec *codec;
 };
 
+static int msm_snd_enable_codec_ext_clk(struct snd_soc_codec *codec, int enable,
+					bool dapm);
 static struct wcd9xxx_mbhc_config wcd9xxx_mbhc_cfg = {
 	.read_fw_bin = false,
 	.calibration = NULL,
 	.micbias = MBHC_MICBIAS2,
 	.anc_micbias = MBHC_MICBIAS2,
-	.mclk_rate = TOMTOM_EXT_CLK_RATE,
+	.mclk_cb_fn = msm_snd_enable_codec_ext_clk,
+	.mclk_rate = CODEC_EXT_CLK_RATE,
 	.gpio = 0,
 	.gpio_irq = 0,
-	.gpio_level_insert = 1,
+	.gpio_level_insert = 0,
 	.detect_extn_cable = true,
 	.micbias_enable_flags = 1 << MBHC_MICBIAS_ENABLE_THRESHOLD_HEADSET,
 	.insert_detect = true,
@@ -893,6 +899,29 @@ out:
 	return err;
 }
 
+static void hs_detect_work(struct work_struct *work)
+{
+	struct delayed_work *dwork;
+	struct msm8939_asoc_mach_data *pdata;
+	int ret;
+
+	pr_debug("%s: enter\n", __func__);
+
+	dwork = to_delayed_work(work);
+	pdata = container_of(dwork, struct msm8939_asoc_mach_data,
+			hs_detect_dwork);
+	ret = tapan_hs_detect(pdata->codec, &wcd9xxx_mbhc_cfg);
+	if (ret < 0)
+		pr_err("%s: Failed to intialise mbhc %d\n", __func__, ret);
+
+	/*
+	 *  Set pdata->codec back to NULL, to ensure codec pointer
+	 *  is not referenced further from this structure.
+	 */
+	pdata->codec =  NULL;
+	pr_debug("%s: leave\n", __func__);
+}
+
 static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 {
 
@@ -900,6 +929,10 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct snd_soc_card *card = codec->card;
+	struct msm8939_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
+	void __iomem *vaddr = NULL;
+	int val = 0;
 	int ret = 0;
 
 	/*
@@ -947,13 +980,59 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 			__func__, ret);
 		return ret;
 	}
+	vaddr = ioremap(LPASS_CSR_GP_IO_MUX_MIC_CTL , 4);
+	if (!vaddr) {
+		pr_err("%s ioremap failure for addr %x\n",
+				__func__,
+				LPASS_CSR_GP_IO_MUX_MIC_CTL);
+		return -ENOMEM;
+	}
+	val = ioread32(vaddr);
+	val = val | 0x5000dff;
+	iowrite32(val, vaddr);
+	pr_debug("%s:val_mic_mux gpio %x\n", __func__, val);
+	iounmap(vaddr);
+	vaddr = ioremap(LPASS_CSR_GP_IO_MUX_SPKR_CTL , 4);
+	if (!vaddr) {
+		pr_err("%s ioremap failure for addr %x\n",
+				__func__,
+				LPASS_CSR_GP_IO_MUX_SPKR_CTL);
+		return -ENOMEM;
+	}
+	val = ioread32(vaddr);
+	val = val | 0x000800BF;
+	iowrite32(val, vaddr);
+	pr_debug("%s:val_spkr_mux gpio %x\n", __func__, val);
+	iounmap(vaddr);
 
-	/* start mbhc */
+	vaddr = ioremap(0x103f004 , 4);
+	if (!vaddr)
+		pr_err("%s ioremap failure for addr\n",
+					__func__);
+	val = ioread32(vaddr);
+	pr_debug("%s:val1 %x\n", __func__, val);
+	iounmap(vaddr);
+	vaddr = ioremap(0x103f000 , 4);
+	if (!vaddr)
+		pr_err("%s ioremap failure for addr2\n",
+					__func__);
+	val = ioread32(vaddr);
+	pr_debug("%s:val2 %x\n", __func__, val);
+	iounmap(vaddr);
+
 	wcd9xxx_mbhc_cfg.calibration = def_codec_mbhc_cal();
-	if (wcd9xxx_mbhc_cfg.calibration)
-		ret = tapan_hs_detect(codec, &wcd9xxx_mbhc_cfg);
-	else
+	if (wcd9xxx_mbhc_cfg.calibration) {
+		/*
+		 * mbhc inital calibration needs mclk to be enabled, so schedule
+		 * headset detection for 4sec so that modem gets loaded and
+		 * will be ready to accept mclk request command.
+		 */
+		pdata->codec = codec;
+		schedule_delayed_work(&pdata->hs_detect_dwork,
+				  msecs_to_jiffies(HS_STARTWORK_TIMEOUT));
+	} else {
 		ret = -ENOMEM;
+	}
 	return ret;
 }
 
@@ -2041,8 +2120,6 @@ static int msm8939_asoc_machine_probe(struct platform_device *pdev)
 	struct snd_soc_card *card = &snd_soc_card_msm;
 	struct msm8939_asoc_mach_data *pdata = NULL;
 	int ret;
-	void __iomem *vaddr = NULL;
-	int val = 0;
 
 	pdata = devm_kzalloc(&pdev->dev,
 			sizeof(struct msm8939_asoc_mach_data), GFP_KERNEL);
@@ -2056,6 +2133,8 @@ static int msm8939_asoc_machine_probe(struct platform_device *pdev)
 	spdev = pdev;
 	card->dev = &pdev->dev;
 
+	INIT_DELAYED_WORK(&pdata->hs_detect_dwork, hs_detect_work);
+	mutex_init(&pdata->cdc_mclk_mutex);
 	ret = snd_soc_of_parse_card_name(card, "qcom,model");
 	if (ret) {
 		dev_err(&pdev->dev, "parse card name failed, err:%d\n",
@@ -2089,62 +2168,26 @@ static int msm8939_asoc_machine_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, card);
 	snd_soc_card_set_drvdata(card, pdata);
 
+	wcd9xxx_mbhc_cfg.gpio_level_insert = of_property_read_bool(
+						pdev->dev.of_node,
+					"qcom,headset-jack-type-NC");
 	ret = snd_soc_of_parse_audio_routing(card,
 			"qcom,audio-routing");
 	if (ret)
 		goto err;
 
-	ret = snd_soc_register_card(card);
-	if (ret) {
-		dev_err(&pdev->dev, "snd_soc_register_card failed (%d)\n",
-			ret);
-		goto err;
-	}
 	/*Populate external codec TLMM configs*/
 	ret = cdc_slim_get_pinctrl(pdev);
 	if (ret < 0) {
 		pr_err("failed to get the pdm gpios\n");
 		goto err;
 	}
-	vaddr = ioremap(LPASS_CSR_GP_IO_MUX_MIC_CTL , 4);
-	if (!vaddr) {
-		pr_err("%s ioremap failure for addr %x\n",
-				__func__,
-				LPASS_CSR_GP_IO_MUX_MIC_CTL);
-		return -ENOMEM;
+	ret = snd_soc_register_card(card);
+	if (ret) {
+		dev_err(&pdev->dev, "snd_soc_register_card failed (%d)\n",
+			ret);
+		goto err;
 	}
-	val = ioread32(vaddr);
-	val = val | 0x5000dff;
-	iowrite32(val, vaddr);
-	pr_debug("%s:val_mic_mux gpio %x\n", __func__, val);
-	iounmap(vaddr);
-	vaddr = ioremap(LPASS_CSR_GP_IO_MUX_SPKR_CTL , 4);
-	if (!vaddr) {
-		pr_err("%s ioremap failure for addr %x\n",
-				__func__,
-				LPASS_CSR_GP_IO_MUX_SPKR_CTL);
-		return -ENOMEM;
-	}
-	val = ioread32(vaddr);
-	val = val | 0x000800BF;
-	iowrite32(val, vaddr);
-	pr_debug("%s:val_spkr_mux gpio %x\n", __func__, val);
-	iounmap(vaddr);
-
-	vaddr = ioremap(0x103f004 , 4);
-	if (!vaddr)
-		pr_err("%s ioremap failure for addr\n",
-					__func__);
-	val = ioread32(vaddr);
-	pr_debug("%s:val1 %x\n", __func__, val);
-	iounmap(vaddr);
-	vaddr = ioremap(0x103f000 , 4);
-	if (!vaddr)
-		pr_err("%s ioremap failure for addr2\n",
-					__func__);
-	val = ioread32(vaddr);
-	pr_debug("%s:val2 %x\n", __func__, val);
-	iounmap(vaddr);
 
 	/* Parse US-Euro gpio info from DT. Report no error if us-euro
 	 * entry is not found in DT file as some targets do not support
@@ -2175,10 +2218,9 @@ static int msm8939_asoc_machine_probe(struct platform_device *pdev)
 	pdata->digital_cdc_clk.clk_val = 9600000;
 	pdata->digital_cdc_clk.clk_root = 5;
 	pdata->digital_cdc_clk.reserved = 0;
-
-	mutex_init(&pdata->cdc_mclk_mutex);
 	return 0;
 err:
+	mutex_destroy(&pdata->cdc_mclk_mutex);
 	devm_kfree(&pdev->dev, pdata);
 	return ret;
 }

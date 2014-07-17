@@ -111,11 +111,8 @@ static void ipa_wq_write_done_status(int src_pipe)
 		return;
 
 	sys = ipa_ctx->ep[src_pipe].sys;
-	if (!sys) {
-		IPAERR("null sys pipe src %d\n", src_pipe);
-		WARN_ON(1);
+	if (!sys)
 		return;
-	}
 
 	spin_lock_bh(&sys->spinlock);
 	if (unlikely(list_empty(&sys->head_desc_list))) {
@@ -845,7 +842,7 @@ static void ipa_sps_irq_rx_notify(struct sps_event_notify *notify)
 				break;
 			}
 			atomic_set(&sys->curr_polling_state, 1);
-			queue_work(sys->wq, &sys->work);
+			queue_work_on(0, sys->wq, &sys->work);
 		}
 		break;
 	default:
@@ -988,7 +985,8 @@ int ipa_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 		ep->sys->ep = ep;
 		snprintf(buff, IPA_RESOURCE_NAME_MAX, "ipawq%d",
 				sys_in->client);
-		ep->sys->wq = create_singlethread_workqueue(buff);
+		ep->sys->wq = alloc_workqueue(buff,
+				WQ_MEM_RECLAIM | WQ_CPU_INTENSIVE, 1);
 		if (!ep->sys->wq) {
 			IPAERR("failed to create wq for client %d\n",
 					sys_in->client);
@@ -1741,7 +1739,7 @@ begin:
 			BUG();
 		}
 		if (status->status_mask & IPA_HW_PKT_STATUS_MASK_TAG_VALID) {
-			struct completion *comp;
+			struct ipa_tag_completion *comp;
 			IPADBG("TAG packet arrived\n");
 			if (status->tag_f_2 == IPA_COOKIE) {
 				skb_pull(skb, IPA_PKT_STATUS_SIZE);
@@ -1751,7 +1749,9 @@ begin:
 				}
 				memcpy(&comp, skb->data, sizeof(comp));
 				skb_pull(skb, sizeof(comp));
-				complete(comp);
+				complete(&comp->comp);
+				if (atomic_dec_return(&comp->cnt) == 0)
+					kfree(comp);
 				continue;
 			} else {
 				IPADBG("ignoring TAG with wrong cookie\n");
@@ -1784,13 +1784,10 @@ begin:
 				return rc;
 			}
 
-			if (!status->exception)
-				pad_len_byte = *(u8 *)(status+1);
-			else
-				pad_len_byte = ((status->pkt_len + 3) & ~3) -
+			pad_len_byte = ((status->pkt_len + 3) & ~3) -
 					status->pkt_len;
 
-			len = status->pkt_len + (pad_len_byte & 0x3f);
+			len = status->pkt_len + pad_len_byte;
 			IPADBG("pad %d pkt_len %d len %d\n", pad_len_byte,
 					status->pkt_len, len);
 
@@ -2274,7 +2271,8 @@ static int ipa_assign_policy(struct ipa_sys_connect_params *in,
 			WARN_ON(1);
 			return -EINVAL;
 		}
-	} else if (ipa_ctx->ipa_hw_type == IPA_HW_v2_0) {
+	} else if (ipa_ctx->ipa_hw_type == IPA_HW_v2_0 ||
+			ipa_ctx->ipa_hw_type == IPA_HW_v2_5) {
 		sys->ep->status.status_en = true;
 		if (IPA_CLIENT_IS_PROD(in->client)) {
 			if (!sys->ep->skip_ep_cfg) {

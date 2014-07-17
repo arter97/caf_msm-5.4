@@ -437,7 +437,7 @@ bool msm_cpu_pm_enter_sleep(enum msm_pm_sleep_mode mode, bool from_idle)
  */
 int msm_pm_wait_cpu_shutdown(unsigned int cpu)
 {
-	int timeout = 10;
+	int timeout = 0;
 
 	if (!msm_pm_slp_sts)
 		return 0;
@@ -455,7 +455,14 @@ int msm_pm_wait_cpu_shutdown(unsigned int cpu)
 			return 0;
 
 		udelay(100);
-		WARN(++timeout == 20, "CPU%u didn't collapse in 2ms\n", cpu);
+		/*
+		 * Dump spm registers for debugging
+		 */
+		if (++timeout == 20) {
+			msm_spm_dump_regs(cpu);
+			__WARN_printf("CPU%u didn't collapse in 2ms, sleep status: 0x%x\n",
+					cpu, acc_sts);
+		}
 	}
 
 	return -EBUSY;
@@ -639,7 +646,7 @@ static struct platform_driver msm_cpu_pm_snoc_client_driver = {
 };
 
 struct msm_pc_debug_counters_buffer {
-	int *reg;
+	long *reg;
 	u32 len;
 	char buf[MAX_BUF_SIZE];
 };
@@ -673,7 +680,7 @@ static int msm_pc_debug_counters_copy(
 
 		data->len += len;
 
-		for (j = 0; j < MSM_PC_NUM_COUNTERS; j++) {
+		for (j = 0; j < MSM_PC_NUM_COUNTERS - 1; j++) {
 			stat = data->reg[offset + j];
 			len = scnprintf(data->buf + data->len,
 					 sizeof(data->buf) - data->len,
@@ -681,7 +688,11 @@ static int msm_pc_debug_counters_copy(
 
 			data->len += len;
 		}
+		len = scnprintf(data->buf + data->len,
+			 sizeof(data->buf) - data->len,
+			"\n");
 
+		data->len += len;
 	}
 
 	return data->len;
@@ -730,7 +741,7 @@ static int msm_pc_debug_counters_file_open(struct inode *inode,
 	}
 
 	buf = file->private_data;
-	buf->reg = (int *)inode->i_private;
+	buf->reg = (long *)inode->i_private;
 
 	return 0;
 }

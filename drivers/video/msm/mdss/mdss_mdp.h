@@ -30,6 +30,7 @@
 #define MDSS_MDP_CURSOR_WIDTH 64
 #define MDSS_MDP_CURSOR_HEIGHT 64
 #define MDSS_MDP_CURSOR_SIZE (MDSS_MDP_CURSOR_WIDTH*MDSS_MDP_CURSOR_WIDTH*4)
+#define MDSS_MDP_PIXEL_RAM_SIZE (50 * 1024)
 
 #define MDP_CLK_DEFAULT_RATE	200000000
 #define PHASE_STEP_SHIFT	21
@@ -119,6 +120,19 @@ enum mdss_mdp_reg_bus_cfg {
 	REG_CLK_CFG_OFF,
 	REG_CLK_CFG_LOW,
 	REG_CLK_CFG_HIGH,
+};
+
+/**
+ * enum mdp_commit_stage_type - Indicate different commit stages
+ *
+ * @MDP_COMMIT_STATE_WAIT_FOR_PINGPONG:	At the stage of being ready to
+*			wait for pingpong buffer.
+ * @MDP_COMMIT_STATE_PINGPONG_DONE:		At the stage that pingpong
+ *			buffer is ready.
+ */
+enum mdp_commit_stage_type {
+	MDP_COMMIT_STAGE_WAIT_FOR_PINGPONG,
+	MDP_COMMIT_STAGE_PINGPONG_DONE,
 };
 
 struct mdss_mdp_ctl;
@@ -467,6 +481,12 @@ struct mdss_overlay_private {
 	int retire_cnt;
 };
 
+struct mdss_mdp_commit_cb {
+	void *data;
+	int (*commit_cb_fnc) (enum mdp_commit_stage_type commit_state,
+		void *data);
+};
+
 /**
  * enum mdss_screen_state - Screen states that MDP can be forced into
  *
@@ -585,6 +605,24 @@ static inline void mdss_update_sd_client(struct mdss_data_type *mdata,
 		atomic_add_unless(&mdss_res->sd_client_count, -1, 0);
 }
 
+static inline int mdss_mdp_get_wb_ctl_support(struct mdss_data_type *mdata,
+							bool rotator_session)
+{
+	/*
+	 * Initial control paths are used for primary and external
+	 * interfaces and remaining control paths are used for WB
+	 * interfaces.
+	 */
+	return rotator_session ? (mdata->nctl - mdata->nmixers_wb) :
+				(mdata->nctl - mdata->nwb);
+}
+
+static inline int mdss_mdp_get_pixel_ram_size(struct mdss_data_type *mdata)
+{
+	return (mdata->mdp_rev == MDSS_MDP_HW_REV_107) ?
+						MDSS_MDP_PIXEL_RAM_SIZE : 0;
+}
+
 irqreturn_t mdss_mdp_isr(int irq, void *ptr);
 int mdss_iommu_attach(struct mdss_data_type *mdata);
 int mdss_iommu_dettach(struct mdss_data_type *mdata);
@@ -683,7 +721,8 @@ int mdss_mdp_mixer_pipe_update(struct mdss_mdp_pipe *pipe,
 int mdss_mdp_mixer_pipe_unstage(struct mdss_mdp_pipe *pipe,
 	struct mdss_mdp_mixer *mixer);
 void mdss_mdp_mixer_unstage_all(struct mdss_mdp_mixer *mixer);
-int mdss_mdp_display_commit(struct mdss_mdp_ctl *ctl, void *arg);
+int mdss_mdp_display_commit(struct mdss_mdp_ctl *ctl, void *arg,
+	struct mdss_mdp_commit_cb *commit_cb);
 int mdss_mdp_display_wait4comp(struct mdss_mdp_ctl *ctl);
 int mdss_mdp_display_wait4pingpong(struct mdss_mdp_ctl *ctl);
 int mdss_mdp_display_wakeup_time(struct mdss_mdp_ctl *ctl,

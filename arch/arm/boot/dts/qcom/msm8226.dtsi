@@ -180,9 +180,9 @@
 		qcom,clock-names = "core_clk", "iface_clk", "bus_clk";
 		qcom,clock-configs = <0x3 0x0 0x0>;
 		qcom,sw-power-collapse;
-		qcom,load-freq-tbl = <352800 160000000>,
-			<244800 133330000>,
-			<108000  66700000>;
+		qcom,load-freq-tbl = <352800 160000000 0xffffffff>,
+			<244800 133330000 0xffffffff>,
+			<108000  66700000 0xffffffff>;
 		qcom,hfi = "venus";
 		qcom,reg-presets = <0xE0024 0x0>,
 			<0x80124 0x3>,
@@ -360,7 +360,7 @@
 	android_usb: android_usb@fe8050c8 {
 		compatible = "qcom,android-usb";
 		reg = <0xfe8050c8 0xc8>;
-		qcom,android-usb-swfi-latency = <1>;
+		qcom,pm-qos-latency = <2 1001 12701>;
 		qcom,streaming-func = "rndis";
 		qcom,android-usb-uicc-nluns = /bits/ 8 <1>;
 	};

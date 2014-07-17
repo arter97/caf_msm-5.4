@@ -70,6 +70,7 @@ enum wwan_device_status {
 
 struct ipa_rmnet_plat_drv_res {
 	bool ipa_rmnet_ssr;
+	bool ipa_loaduC;
 };
 
 /**
@@ -768,6 +769,8 @@ int wwan_update_mux_channel_prop(void)
 				i);
 			return -ENODEV;
 		}
+		IPAWANERR("dev(%s) has registered to IPA\n",
+		mux_channel[i].vchannel_name);
 		mux_channel[i].ul_flt_reg = true;
 	}
 	return ret;
@@ -910,6 +913,7 @@ static int ipa_wwan_xmit(struct sk_buff *skb, struct net_device *dev)
 	ret = ipa_tx_dp(IPA_CLIENT_APPS_LAN_WAN_PROD, skb, NULL);
 	if (ret) {
 		ret = NETDEV_TX_BUSY;
+		dev->stats.tx_dropped++;
 		goto out;
 	}
 
@@ -978,11 +982,12 @@ static void apps_ipa_packet_receive_notify(void *priv,
 		unsigned long data)
 {
 	struct sk_buff *skb = (struct sk_buff *)data;
+	struct net_device *dev = (struct net_device *)priv;
 	int result;
 
 	IPAWANDBG("Tx packet was received");
 	if (evt != IPA_RECEIVE) {
-		IPAWANERR("A none IPA_RECEIVE event in ecm_ipa_receive\n");
+		IPAWANERR("A none IPA_RECEIVE event in wan_ipa_receive\n");
 		return;
 	}
 
@@ -990,8 +995,12 @@ static void apps_ipa_packet_receive_notify(void *priv,
 	skb->protocol = 0xda1a;
 
 	result = netif_rx(skb);
-	if (result)
+	if (result)	{
 		IPAWANERR("fail on netif_rx\n");
+		dev->stats.rx_dropped++;
+	}
+	dev->stats.rx_packets++;
+	dev->stats.rx_bytes += skb->len;
 	return;
 }
 
@@ -1194,7 +1203,7 @@ static int ipa_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 				mux_channel[rmnet_index].mux_channel_set = true;
 				mux_channel[rmnet_index].ul_flt_reg = true;
 			} else {
-				IPAWANERR("dev(%s) not register to IPA\n",
+				IPAWANDBG("dev(%s) haven't registered to IPA\n",
 					extend_ioctl_data.u.
 					rmnet_mux_val.vchannel_name);
 				mux_channel[rmnet_index].mux_channel_set = true;
@@ -1286,6 +1295,7 @@ static int ipa_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 			ipa_to_apps_ep_cfg.notify =
 				apps_ipa_packet_receive_notify;
 			ipa_to_apps_ep_cfg.desc_fifo_sz = IPA_SYS_DESC_FIFO_SZ;
+			ipa_to_apps_ep_cfg.priv = dev;
 
 			rc = ipa_setup_sys_pipe(
 				&ipa_to_apps_ep_cfg, &ipa_to_apps_hdl);
@@ -1379,7 +1389,7 @@ static void q6_prod_rm_request_resource(struct work_struct *work)
 
 	ret = ipa_rm_request_resource(IPA_RM_RESOURCE_Q6_PROD);
 	if (ret < 0 && ret != -EINPROGRESS) {
-		IPAERR("%s: ipa_rm_request_resource failed %d\n", __func__,
+		IPAWANERR("%s: ipa_rm_request_resource failed %d\n", __func__,
 		       ret);
 		return;
 	}
@@ -1397,7 +1407,7 @@ static void q6_prod_rm_release_resource(struct work_struct *work)
 	int ret = 0;
 	ret = ipa_rm_release_resource(IPA_RM_RESOURCE_Q6_PROD);
 	if (ret < 0 && ret != -EINPROGRESS) {
-		IPAERR("%s: ipa_rm_release_resource failed %d\n", __func__,
+		IPAWANERR("%s: ipa_rm_release_resource failed %d\n", __func__,
 		      ret);
 		return;
 	}
@@ -1418,10 +1428,10 @@ static void q6_rm_notify_cb(void *user_data,
 {
 	switch (event) {
 	case IPA_RM_RESOURCE_GRANTED:
-		IPADBG("%s: Q6_PROD GRANTED CB\n", __func__);
+		IPAWANDBG("%s: Q6_PROD GRANTED CB\n", __func__);
 		break;
 	case IPA_RM_RESOURCE_RELEASED:
-		IPADBG("%s: Q6_PROD RELEASED CB\n", __func__);
+		IPAWANDBG("%s: Q6_PROD RELEASED CB\n", __func__);
 		break;
 	default:
 		return;
@@ -1579,8 +1589,13 @@ static int get_ipa_rmnet_dts_configuration(struct platform_device *pdev,
 	ipa_rmnet_drv_res->ipa_rmnet_ssr =
 			of_property_read_bool(pdev->dev.of_node,
 			"qcom,rmnet-ipa-ssr");
-	IPADBG(": IPA SSR support = %s",
+	IPAWANERR(": IPA SSR support = %s",
 		ipa_rmnet_drv_res->ipa_rmnet_ssr ? "True" : "False");
+	ipa_rmnet_drv_res->ipa_loaduC =
+			of_property_read_bool(pdev->dev.of_node,
+			"qcom,ipa-loaduC");
+	IPAWANERR(": IPA ipa-loaduC = %s",
+		ipa_rmnet_drv_res->ipa_loaduC ? "True" : "False");
 
 	return 0;
 }
@@ -1622,8 +1637,15 @@ static int ipa_wwan_probe(struct platform_device *pdev)
 	}
 
 	/* start A7 QMI service/client */
-	ipa_qmi_service_init(atomic_read(&is_ssr) ? false : true);
-
+	if (ipa_rmnet_res.ipa_loaduC) {
+		/* Android platform loads uC */
+		ipa_qmi_service_init(atomic_read(&is_ssr) ? false : true,
+			QMI_IPA_PLATFORM_TYPE_MSM_ANDROID_V01);
+	} else {
+		/* LE platform not loads uC */
+		ipa_qmi_service_init(atomic_read(&is_ssr) ? false : true,
+			QMI_IPA_PLATFORM_TYPE_LE_V01);
+	}
 	/* construct default WAN RT tbl for IPACM */
 	ret = ipa_setup_a7_qmap_hdr();
 	if (ret)
@@ -1673,7 +1695,7 @@ static int ipa_wwan_probe(struct platform_device *pdev)
 		/* IPA_RM configuration starts */
 		ret = q6_initialize_rm();
 		if (ret) {
-			IPAERR("%s: q6_initialize_rm failed, ret: %d\n",
+			IPAWANERR("%s: q6_initialize_rm failed, ret: %d\n",
 				__func__, ret);
 			goto q6_init_err;
 		}

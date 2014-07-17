@@ -15,6 +15,10 @@
 #define MDSS_DEBUG_H
 
 #include <stdarg.h>
+#include <linux/debugfs.h>
+#include <linux/list.h>
+#include <linux/mdss_io_util.h>
+
 #include "mdss.h"
 #include "mdss_mdp_trace.h"
 
@@ -65,6 +69,19 @@ struct mdss_debug_data {
 	struct debug_log logd;
 };
 
+#define DEFINE_MDSS_DEBUGFS_SEQ_FOPS(__prefix)				\
+static int __prefix ## _open(struct inode *inode, struct file *file)	\
+{									\
+	return single_open(file, __prefix ## _show, inode->i_private);	\
+}									\
+static const struct file_operations __prefix ## _fops = {		\
+	.owner = THIS_MODULE,						\
+	.open = __prefix ## _open,					\
+	.release = single_release,					\
+	.read = seq_read,						\
+	.llseek = seq_lseek,						\
+};
+
 int mdss_debugfs_init(struct mdss_data_type *mdata);
 int mdss_debugfs_remove(struct mdss_data_type *mdata);
 int mdss_debug_register_base(const char *name, void __iomem *base,
@@ -106,4 +123,11 @@ static inline void mdss_dump_reg(char __iomem *base, int len) { }
 static inline void mdss_dsi_debug_check_te(struct mdss_panel_data *pdata) { }
 static inline void mdss_xlog_tout_handler(const char *name, ...) { }
 #endif
+
+static inline int mdss_debug_register_io(const char *name,
+		struct dss_io_data *io_data)
+{
+	return mdss_debug_register_base(name, io_data->base, io_data->len);
+}
+
 #endif /* MDSS_DEBUG_H */

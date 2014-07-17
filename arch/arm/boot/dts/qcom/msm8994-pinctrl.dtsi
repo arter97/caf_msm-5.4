@@ -81,6 +81,45 @@
 			};
 		};
 
+		pmx_hdmi_cec: pmx_hdmi_cec {
+			qcom,pin-func = <1>;
+			label = "hdmi-cec-pins";
+			mdss_hdmi_cec_active: cec_active {
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+			mdss_hdmi_cec_suspend: cec_suspend {
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+
+		pmx_hdmi_ddc: pmx_hdmi_ddc {
+			qcom,pin-func = <1>;
+			label = "hdmi-ddc-pins";
+			mdss_hdmi_ddc_active: ddc_active {
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+			mdss_hdmi_ddc_suspend: ddc_suspend {
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+
+		pmx_hdmi_hpd: pmx_hdmi_hpd {
+			qcom,pin-func = <1>;
+			label = "hdmi-hpd-pin";
+			mdss_hdmi_hpd_active: hpd_active {
+				drive-strength = <16>;
+				bias-pull-down;
+			};
+			mdss_hdmi_hpd_suspend: hpd_suspend {
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+
 		spi_0 {
 			qcom,pins = <&gp 0>, <&gp 1>, <&gp 3>;
 			qcom,num-grp-pins = <3>;
@@ -1121,7 +1160,7 @@
 				<&gp 90>,	/* TSIF0 Enable */
 				<&gp 91>;	/* TSIF0 DATA */
 			qcom,num-grp-pins = <3>;
-			qcom,pins-func = <1>;
+			qcom,pin-func = <1>;
 			label = "tsif0-signals";
 			tsif0_signals_active: tsif0_signals_active {
 				drive_strength = <2>;	/* 2 mA */
@@ -1133,7 +1172,7 @@
 		tsif0_sync {
 			qcom,pins = <&gp 110>;	/* TSIF0 SYNC */
 			qcom,num-grp-pins = <1>;
-			qcom,pins-func = <1>;
+			qcom,pin-func = <1>;
 			label = "tsif0-sync";
 			tsif0_sync_active: tsif0_sync_active {
 				drive_strength = <2>;	/* 2 mA */
@@ -1146,7 +1185,7 @@
 				<&gp 94>,	/* TSIF1 Enable */
 				<&gp 95>;	/* TSIF1 DATA */
 			qcom,num-grp-pins = <3>;
-			qcom,pins-func = <1>;
+			qcom,pin-func = <1>;
 			label = "tsif1-signals";
 			tsif1_signals_active: tsif1_signals_active {
 				drive_strength = <2>;	/* 2 mA */
@@ -1158,7 +1197,7 @@
 		tsif1_sync {
 			qcom,pins = <&gp 96>;	/* TSIF1 SYNC */
 			qcom,num-grp-pins = <1>;
-			qcom,pins-func = <1>;
+			qcom,pin-func = <1>;
 			label = "tsif1-sync";
 			tsif1_sync_active: tsif1_sync_active {
 				drive_strength = <2>;	/* 2 mA */

@@ -84,6 +84,7 @@ struct wcd_mbhc {
 	bool hs_detect_work_stop;
 	bool micbias_enable;
 	bool btn_press_intr;
+	bool is_hs_recording;
 
 	struct snd_soc_codec *codec;
 
@@ -104,6 +105,7 @@ struct wcd_mbhc {
 
 	/* Work to correct accessory type */
 	struct work_struct correct_plug_swch;
+	struct notifier_block nblock;
 };
 
 #define WCD_MBHC_CAL_BTN_DET_PTR(cali) ( \

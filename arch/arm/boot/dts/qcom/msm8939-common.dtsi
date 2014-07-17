@@ -62,17 +62,23 @@
 			label = "peripheral_mem";
 		};
 
+		venus_mem: venus_region@0 {
+			linux,reserve-contiguous-region;
+			linux,memory-limit = <0x90000000>;
+			reg = <0 0 0 0x0500000>;
+			label = "venus_mem";
+		};
+
 		secure_mem: secure_region@0 {
 			linux,reserve-contiguous-region;
 			reg = <0 0 0 0x6D00000>;
 			label = "secure_mem";
 		};
 
-		venus_qseecom_mem: venus_qseecom_region@0 {
+		qseecom_mem: qseecom_region@0 {
 			linux,reserve-contiguous-region;
-			linux,memory-limit = <0x90000000>;
-			reg = <0 0 0 0x1200000>;
-			label = "venus_qseecom_mem";
+			reg = <0 0 0 0x1000000>;
+			label = "qseecom_mem";
 		};
 
 		audio_mem: audio_region@0 {
@@ -514,7 +520,7 @@
 		qcom,core-temp-hysteresis = <10>;
 		qcom,core-control-mask = <0xfe>;
 		qcom,hotplug-temp = <95>;
-		qcom,hotplug-temp-hysteresis = <10>;
+		qcom,hotplug-temp-hysteresis = <20>;
 		qcom,cpu-sensors = "tsens_tz_sensor5", "tsens_tz_sensor6",
 				"tsens_tz_sensor7", "tsens_tz_sensor8",
 				"tsens_tz_sensor9", "tsens_tz_sensor9",
@@ -526,6 +532,22 @@
 		qcom,therm-reset-temp = <115>;
 		qcom,online-hotplug-core;
 		qcom,synchronous-cluster-id = <0 1>;
+		qcom,synchronous-cluster-map = <1 0x0F>, <0 0xF0>;
+		qcom,vdd-restriction-temp = <5>;
+		qcom,vdd-restriction-temp-hysteresis = <10>;
+		vdd-dig-supply = <&pm8916_s2_floor_corner>;
+
+		qcom,vdd-dig-rstr{
+			qcom,vdd-rstr-reg = "vdd-dig";
+			qcom,levels = <5 7 7>; /* Nominal, Super Turbo, Super Turbo */
+			qcom,min-level = <1>; /* No Request */
+		};
+
+		qcom,vdd-apps-rstr{
+			qcom,vdd-rstr-reg = "vdd-apps";
+			qcom,levels = <533330 652800 800000>;
+			qcom,freq-req;
+		};
 	};
 
 	qcom,bcl {
@@ -774,7 +796,7 @@
 	android_usb: android_usb@086000c8 {
 		compatible = "qcom,android-usb";
 		reg = <0x086000c8 0xc8>;
-		qcom,android-usb-swfi-latency = <1>;
+		qcom,pm-qos-latency = <2 1001 12701>;
 		qcom,android-usb-uicc-nluns = /bits/ 8 <1>;
 	};
 
@@ -1124,7 +1146,7 @@
 		qcom,pas-id = <9>;
 		qcom,proxy-timeout-ms = <5000>;
 		qcom,firmware-name = "venus";
-		linux,contiguous-region = <&venus_qseecom_mem>;
+		linux,contiguous-region = <&venus_mem>;
 	};
 
 	qcom,mss@4080000 {
@@ -1382,9 +1404,24 @@
 		qcom,clock-names = "core_clk", "core0_clk", "core1_clk", "iface_clk", "bus_clk";
 		qcom,clock-configs = <0x1 0x0 0x0 0x0 0x0>;
 		qcom,sw-power-collapse;
-		qcom,load-freq-tbl = <352800 266670000>,
-			<244800 200000000>,
-			<108000 133330000>;
+		qcom,load-freq-tbl =
+			<489600 266670000 0x0c000000>, /* HEVC  decoder 1080p 60fps  */
+			<489600 266670000 0x030fcfff>, /* Legacy decoder 1080p 60fps  */
+			<489600 266670000 0x01000414>, /* Encoder turbo (wfd) */
+			<244800 133330000 0x0c000000>, /* HEVC decoder 1080p 30fps   */
+			<244800 133330000 0x030fcfff>, /* Legacy decoder 1080p 30fps   */
+			<244800 200000000 0x01000414>, /* Legacy encoder 1080p 30fps   */
+			<220800 133330000 0x0c000000>, /* HEVC  decoder 720p 60fps  */
+			<220800 133330000 0x030fcfff>, /* Legacy decoder 720p 60fps  */
+			<108000 133330000 0x0c000000>, /* HEVC decoder 720p 30fps   */
+			<108000 133330000 0x030fcfff>, /* Legacy decoder 720p 30fps   */
+			<108000 200000000 0x01000414>, /* Legacy encoder 720p 30fps   */
+			<72000 133330000 0x0c000000>, /* HEVC decoder VGA 60fps   */
+			<72000 133330000 0x030fcfff>, /* Legacy decoder VGA 60fps   */
+			<36000 133330000 0x0c000000>, /* HEVC VGA 30 fps  */
+			<36000 133330000 0x030fcfff> ,/* Legacy decoder VGA 30 fps  */
+			<36000 133330000 0x01000414>; /* Legacy encoder VGA 30 fps   */
+
 		qcom,hfi = "venus";
 		qcom,reg-presets = <0xE0020 0x0aaaaaaa>,
 			<0xE0024 0x0aaaaaaa>,
@@ -1420,31 +1457,37 @@
 				qcom,msm-bus,num-paths = <1>;
 				qcom,msm-bus,vectors-KBps =
 					<63 512 0 0>,
-					<63 512 133600 674400>,
-					<63 512 400900 1079000>,
-					<63 512 908600 1537600>;
+					<63 512 136806 1236684>,
+					<63 512 410521 1859686>,
+					<63 512 930406 1859686>;
 				qcom,bus-configs = <0x01000414>;
 			};
 			qcom,msm-bus-client@1 {
 				qcom,msm-bus,name = "vdec-core0-ddr";
-				qcom,msm-bus,num-cases = <4>;
+				qcom,msm-bus,num-cases = <7>;
 				qcom,msm-bus,num-paths = <1>;
 				qcom,msm-bus,vectors-KBps =
 					<63 512 0 0>,
-					<63 512 99600 831900>,
-					<63 512 298900 831900>,
-					<63 512 677600 1331000>;
+					<63 512 101991 644403>,
+					<63 512 204083 1288704>,
+					<63 512 306074 644403>,
+					<63 512 612250 1288704>,
+					<63 512 693863 644403>,
+					<63 512 1387725 2577408>;
 				qcom,bus-configs = <0x030fcfff>;
 			};
 			qcom,msm-bus-client@2 {
 				qcom,msm-bus,name = "vdec-core1-ddr";
-				qcom,msm-bus,num-cases = <4>;
+				qcom,msm-bus,num-cases = <7>;
 				qcom,msm-bus,num-paths = <1>;
 				qcom,msm-bus,vectors-KBps =
 					<63 512 0 0>,
-					<63 512 99600 831900>,
-					<63 512 298900 831900>,
-					<63 512 677600 1331000>;
+					<63 512 96051 572826>,
+					<63 512 192103 1145754>,
+					<63 512 288256 572826>,
+					<63 512 576410 1145754>,
+					<63 512 653312 572826>,
+					<63 512 1306624 2291405>;
 				qcom,bus-configs = <0x0c000000>;
 			};
 		};
@@ -1486,10 +1529,10 @@
 		linux,contiguous-region = <&peripheral_mem>;
 	};
 
-	qcom,avtimer {
+	qcom,avtimer@7706000 {
 		compatible = "qcom,avtimer";
-		reg = <0xfe053008 0x4>,
-			<0xfe05300c 0x4>;
+		reg = <0x0770600C 0x4>,
+			<0x07706010 0x4>;
 		reg-names = "avtimer_lsb_addr", "avtimer_msb_addr";
 	};
 };

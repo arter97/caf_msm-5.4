@@ -320,6 +320,12 @@
 		clock-frequency = <19200000>;
 	};
 
+	qcom,mpm2-sleep-counter@fc4a3000 {
+		compatible = "qcom,mpm2-sleep-counter";
+		reg = <0xfc4a3000 0x1000>;
+		clock-frequency = <32768>;
+	};
+
 	timer@f9020000 {
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -625,6 +631,7 @@
 	qcom,rmnet-ipa {
 		compatible = "qcom,rmnet-ipa";
 		qcom,rmnet-ipa-ssr;
+		qcom,ipa-loaduC;
 	};
 
 	qcom,ipc-spinlock@fd484000 {
@@ -707,6 +714,11 @@
 		restart_reason@65c {
 			compatible = "qcom,msm-imem-restart_reason";
 			reg = <0x65c 4>;
+		};
+
+		boot_stats@6b0 {
+			compatible = "qcom,msm-imem-boot_stats";
+			reg = <0x6b0 32>;
 		};
 
 		pil@94c {
@@ -1223,7 +1235,6 @@
 				<61 512 0 0>,
 				<61 512 240000 960000>;
 
-		qcom,reset_hsphy_sleep_clk_on_init;
 		qcom,power-collapse-on-cable-disconnect;
 		qcom,por-after-power-collapse;
 
@@ -1231,11 +1242,10 @@
 			 <&clock_gcc clk_gcc_sys_noc_usb3_axi_clk>,
 			 <&clock_gcc clk_gcc_usb30_mock_utmi_clk>,
 			 <&clock_gcc clk_gcc_usb30_sleep_clk>,
-			 <&clock_gcc clk_gcc_usb2_hs_phy_sleep_clk>,
 			 <&clock_rpm clk_ln_bb_clk>,
 			 <&clock_rpm clk_cxo_dwc3_clk>;
 		clock-names = "core_clk", "iface_clk", "utmi_clk", "sleep_clk",
-				"phy_sleep_clk", "ref_clk", "xo";
+				"ref_clk", "xo";
 
 		dwc3@f9200000 {
 			compatible = "synopsys,dwc3";
@@ -1800,10 +1810,10 @@
 			<&clock_mmss clk_venus0_ahb_clk>,
 			<&clock_mmss clk_venus0_axi_clk>,
 			<&clock_mmss clk_venus0_ocmemnoc_clk>;
-		qcom,load-freq-tbl = <979200 465000000>,
-			<783360 465000000>,
-			<489600 240000000>,
-			<244800 133330000>;
+		qcom,load-freq-tbl = <979200 465000000 0xffffffff>,
+			<783360 465000000 0xffffffff>,
+			<489600 240000000 0xffffffff>,
+			<244800 133330000 0xffffffff>;
 		qcom,buffer-type-tz-usage-table = <0x241 0x1>,
 			<0x106 0x2>,
 			<0x480 0x3>;
@@ -2580,6 +2590,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&cnss_default>;
 		qcom,wlan-rc-num = <1>;
+		qcom,wlan-uart-access;
 
 		qcom,msm-bus,name = "msm-cnss";
 		qcom,msm-bus,num-cases = <4>;

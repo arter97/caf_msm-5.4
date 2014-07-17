@@ -46,6 +46,7 @@ u32 evt_type_base[4] = {0xcc, 0xd0, 0xd4, 0xd8};
 #define VENUM_BASE_OFFSET 3
 
 #define KRAIT_MAX_L1_REG 3
+#define KRAIT_MAX_VENUM_REG 0
 
 /*
  * Every 4 bytes represents a prefix.
@@ -214,7 +215,7 @@ static unsigned int get_krait_evtinfo(unsigned int krait_evt_type,
 		return -EINVAL;
 
 	if (prefix == KRAIT_VENUMEVT_PREFIX) {
-		if (code & 0xe0)
+		if ((code & 0xe0) || (reg > KRAIT_MAX_VENUM_REG))
 			return -EINVAL;
 		else
 			reg += VENUM_BASE_OFFSET;
@@ -484,6 +485,26 @@ krait_out:
 	raw_spin_unlock_irqrestore(&events->pmu_lock, flags);
 }
 
+#ifdef CONFIG_PERF_EVENTS_USERMODE
+static void krait_init_usermode(void)
+{
+	u32 val;
+
+	/* Set PMACTLR[UEN] */
+	asm volatile("mrc p15, 0, %0, c9, c15, 5" : "=r" (val));
+	val |= 1;
+	asm volatile("mcr p15, 0, %0, c9, c15, 5" : : "r" (val));
+	/* Set PMUSERENR[UEN] */
+	asm volatile("mrc p15, 0, %0, c9, c14, 0" : "=r" (val));
+	val |= 1;
+	asm volatile("mcr p15, 0, %0, c9, c14, 0" : : "r" (val));
+}
+#else
+static inline void krait_init_usermode(void)
+{
+}
+#endif
+
 static void krait_pmu_reset(void *info)
 {
 	u32 idx, nb_cnt = cpu_pmu->num_events;
@@ -496,6 +517,8 @@ static void krait_pmu_reset(void *info)
 
 	/* Clear all pmresrs */
 	krait_clear_pmuregs();
+
+	krait_init_usermode();
 
 	/* Reset irq stat reg */
 	armv7_pmnc_getreset_flags();

@@ -501,7 +501,6 @@
 
 		USB3_GDSC-supply = <&gdsc_usb30>;
 		qcom,otg-capability;
-		qcom,suspend_event_enable;
 		qcom,usb-dbm = <&dbm_1p5>;
 
 		qcom,msm-bus,name = "usb3";
@@ -510,7 +509,6 @@
 		qcom,msm-bus,vectors-KBps =
 						<61 512 0 0>,
 						<61 512 240000 960000>;
-		qcom,reset_hsphy_sleep_clk_on_init;
 		qcom,power-collapse-on-cable-disconnect;
 		qcom,por-after-power-collapse;
 		qcom,lpm-to-suspend-delay-ms = <2000>;
@@ -527,6 +525,7 @@
 				snps,core-reset-after-phy-init;
 				snps,hsphy-auto-suspend-disable;
 				snps,hird_thresh = <0x10>;
+				snps,bus-suspend-enable;
 				tx-fifo-resize;
 		};
         };
@@ -534,7 +533,7 @@
 	android_usb@fe8050c8 {
 		reg = <0xfe8050c8 0xc8>;
 		compatible = "qcom,android-usb";
-		qcom,android-usb-swfi-latency = <100>;
+		qcom,pm-qos-latency = <101 2001 30001>;
 	};
 
 	hsphy0: hsphy@f92f8800 {
@@ -548,6 +547,7 @@
 		qcom,ext-vbus-id;
 		qcom,vbus-valid-override;
 		qcom,set-pllbtune;
+		qcom,sleep-clk-reset;
 	};
 
 	ssphy0: ssphy@f9b38000 {
