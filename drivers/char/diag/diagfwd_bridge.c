@@ -63,8 +63,8 @@ void connect_bridge(int process_cable, uint8_t index)
 	}
 
 	if (index == SMUX) {
-		if (driver->diag_smux_enabled) {
-			driver->in_busy_smux = 0;
+		if (diag_smux->enabled) {
+			diag_smux->in_busy = 0;
 			diagfwd_connect_smux();
 		}
 	} else {
@@ -138,11 +138,11 @@ int diagfwd_disconnect_bridge(int process_cable)
 			}
 
 			if (i == SMUX) {
-				if (driver->diag_smux_enabled &&
+				if (diag_smux->enabled &&
 					driver->logging_mode == USB_MODE) {
-					driver->in_busy_smux = 1;
-					driver->lcid = LCID_INVALID;
-					driver->smux_connected = 0;
+					diag_smux->in_busy = 1;
+					diag_smux->lcid = LCID_INVALID;
+					diag_smux->connected = 0;
 					/*
 					 * Turn off communication over usb
 					 * and smux
@@ -170,13 +170,13 @@ int diagfwd_disconnect_bridge(int process_cable)
 /* Called after the asychronous usb_diag_read() on mdm channel is complete */
 int diagfwd_read_complete_bridge(struct diag_request *diag_read_ptr)
 {
-	 int index = (int)(diag_read_ptr->context);
+	 int index = (int)(uintptr_t)(diag_read_ptr->context);
 
 	/* The read of the usb on the mdm (not HSIC/SMUX) has completed */
 	diag_bridge[index].read_len = diag_read_ptr->actual;
 
 	if (index == SMUX) {
-		if (driver->diag_smux_enabled) {
+		if (diag_smux->enabled) {
 			diagfwd_read_complete_smux();
 			return 0;
 		} else {
@@ -250,16 +250,18 @@ static void diagfwd_bridge_notifier(void *priv, unsigned event,
 			 &driver->diag_disconnect_work);
 		break;
 	case USB_DIAG_READ_DONE:
-		index = (int)(d_req->context);
+		index = (int)(uintptr_t)(d_req->context);
 		queue_work(diag_bridge[index].wq,
 		&diag_bridge[index].usb_read_complete_work);
 		break;
 	case USB_DIAG_WRITE_DONE:
-		index = (int)(d_req->context);
-		if (index == SMUX && driver->diag_smux_enabled)
+		index = (int)(uintptr_t)(d_req->context);
+		if (index == SMUX && diag_smux->enabled) {
 			diagfwd_write_complete_smux();
-		else if (diag_hsic[index].hsic_device_enabled)
+			diagmem_free(driver, d_req, POOL_TYPE_QSC_USB);
+		} else if (diag_hsic[index].hsic_device_enabled) {
 			diagfwd_write_complete_hsic(d_req, index);
+		}
 		break;
 	default:
 		pr_err("diag: in %s: Unknown event from USB diag:%u\n",
@@ -325,11 +327,13 @@ int diagfwd_bridge_init(int index)
 			diag_bridge[index].enabled = 1;
 #endif
 	} else if (index == SMUX) {
+		diag_smux->read_len = 0;
 		INIT_WORK(&(diag_bridge[index].usb_read_complete_work),
 					 diag_usb_read_complete_smux_fn);
 #ifdef CONFIG_DIAG_OVER_USB
 		INIT_WORK(&(diag_bridge[index].diag_read_work),
 					 diag_read_usb_smux_work_fn);
+		diagmem_init(driver, POOL_TYPE_QSC_USB);
 		diag_bridge[index].ch = usb_diag_open(DIAG_QSC, (void *)index,
 					     diagfwd_bridge_notifier);
 		if (IS_ERR(diag_bridge[index].ch)) {
@@ -348,7 +352,6 @@ err:
 	pr_err("diag: Could not initialize for bridge forwarding\n");
 	kfree(diag_bridge[index].usb_buf_out);
 	kfree(diag_hsic[index].hsic_buf_tbl);
-	kfree(driver->write_ptr_mdm);
 	kfree(diag_bridge[index].usb_read_ptr);
 	if (diag_bridge[index].wq)
 		destroy_workqueue(diag_bridge[index].wq);
@@ -370,10 +373,10 @@ void diagfwd_bridge_exit(void)
 		kfree(diag_hsic[i].hsic_buf_tbl);
 	}
 
-	if (driver->diag_smux_enabled) {
-		driver->lcid = LCID_INVALID;
-		kfree(driver->buf_in_smux);
-		driver->diag_smux_enabled = 0;
+	if (diag_smux->enabled) {
+		diag_smux->lcid = LCID_INVALID;
+		kfree(diag_smux->read_buf);
+		diag_smux->enabled = 0;
 		diag_bridge[SMUX].enabled = 0;
 	}
 	platform_driver_unregister(&msm_hsic_ch_driver);
@@ -392,7 +395,6 @@ void diagfwd_bridge_exit(void)
 			diagmem_exit(driver, POOL_TYPE_MDM_USB + i);
 		}
 	}
-	kfree(driver->write_ptr_mdm);
 }
 
 int diagfwd_bridge_dci_init(int index)
