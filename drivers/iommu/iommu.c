@@ -926,6 +926,54 @@ size_t iommu_unmap(struct iommu_domain *domain, unsigned long iova, size_t size)
 EXPORT_SYMBOL_GPL(iommu_unmap);
 
 
+int iommu_map_range(struct iommu_domain *domain, unsigned int iova,
+		    struct scatterlist *sg, unsigned int len, int opt)
+{
+	s32 ret = 0;
+	u32 offset = 0;
+	u32 start_iova = iova;
+
+	BUG_ON(iova & (~PAGE_MASK));
+
+	if (unlikely(domain->ops->map_range == NULL)) {
+		while (offset < len) {
+			phys_addr_t phys = page_to_phys(sg_page(sg));
+			u32 page_len = PAGE_ALIGN(sg->offset + sg->length);
+
+			ret = iommu_map(domain, iova, phys, page_len, opt);
+			if (ret)
+				goto fail;
+
+			iova += page_len;
+			offset += page_len;
+			if (offset < len)
+				sg = sg_next(sg);
+		}
+	} else {
+		ret = domain->ops->map_range(domain, iova, sg, len, opt);
+	}
+	goto out;
+
+fail:
+	/* undo mappings already done in case of error */
+	iommu_unmap(domain, start_iova, offset);
+out:
+	return ret;
+}
+EXPORT_SYMBOL(iommu_map_range);
+
+int iommu_unmap_range(struct iommu_domain *domain, unsigned int iova,
+		      unsigned int len)
+{
+	BUG_ON(iova & (~PAGE_MASK));
+
+	if (unlikely(domain->ops->unmap_range == NULL))
+		return iommu_unmap(domain, iova, len);
+	else
+		return domain->ops->unmap_range(domain, iova, len);
+}
+EXPORT_SYMBOL(iommu_unmap_range);
+
 int iommu_domain_window_enable(struct iommu_domain *domain, u32 wnd_nr,
 			       phys_addr_t paddr, u64 size, int prot)
 {
@@ -945,30 +993,6 @@ void iommu_domain_window_disable(struct iommu_domain *domain, u32 wnd_nr)
 	return domain->ops->domain_window_disable(domain, wnd_nr);
 }
 EXPORT_SYMBOL_GPL(iommu_domain_window_disable);
-
-int iommu_map_range(struct iommu_domain *domain, unsigned int iova,
-		    struct scatterlist *sg, unsigned int len, int prot)
-{
-	if (unlikely(domain->ops->map_range == NULL))
-		return -ENODEV;
-
-	BUG_ON(iova & (~PAGE_MASK));
-
-	return domain->ops->map_range(domain, iova, sg, len, prot);
-}
-EXPORT_SYMBOL_GPL(iommu_map_range);
-
-int iommu_unmap_range(struct iommu_domain *domain, unsigned int iova,
-		      unsigned int len)
-{
-	if (unlikely(domain->ops->unmap_range == NULL))
-		return -ENODEV;
-
-	BUG_ON(iova & (~PAGE_MASK));
-
-	return domain->ops->unmap_range(domain, iova, len);
-}
-EXPORT_SYMBOL_GPL(iommu_unmap_range);
 
 phys_addr_t iommu_get_pt_base_addr(struct iommu_domain *domain)
 {
