@@ -227,10 +227,18 @@ static int adv7180_set_video_standard(struct adv7180_state *state,
 
 static int adv7180_select_page(struct adv7180_state *state, unsigned int page)
 {
+	int rd_bk = 0x0;
+
 	if (state->register_page != page) {
+		usleep(I2C_RW_DELAY);
 		i2c_smbus_write_byte_data(state->client, ADV7180_REG_CTRL,
 			page);
+		usleep(I2C_RW_DELAY);
+		rd_bk = i2c_smbus_read_byte_data(state->client,
+							ADV7180_REG_CTRL);
+		usleep(I2C_RW_DELAY);
 		state->register_page = page;
+		usleep(I2C_RW_DELAY);
 	}
 
 	return 0;
@@ -239,28 +247,56 @@ static int adv7180_select_page(struct adv7180_state *state, unsigned int page)
 static int adv7180_write(struct adv7180_state *state, unsigned int reg,
 	unsigned int value)
 {
+	int ret = -1;
+
 	lockdep_assert_held(&state->mutex);
+
+	usleep(I2C_RW_DELAY);
 	adv7180_select_page(state, reg >> 8);
-	return i2c_smbus_write_byte_data(state->client, reg & 0xff, value);
+	usleep(I2C_RW_DELAY);
+	ret = i2c_smbus_write_byte_data(state->client,
+						reg & 0xff, value);
+	usleep(I2C_RW_DELAY);
+
+	return ret;
 }
 
 static int adv7180_read(struct adv7180_state *state, unsigned int reg)
 {
+	int ret = 0;
 	lockdep_assert_held(&state->mutex);
+
+	usleep(I2C_RW_DELAY);
 	adv7180_select_page(state, reg >> 8);
-	return i2c_smbus_read_byte_data(state->client, reg & 0xff);
+
+	usleep(I2C_RW_DELAY);
+	ret = i2c_smbus_read_byte_data(state->client, reg & 0xff);
+	usleep(I2C_RW_DELAY);
+	return ret;
 }
 
 static int adv7180_csi_write(struct adv7180_state *state, unsigned int reg,
 	unsigned int value)
 {
-	return i2c_smbus_write_byte_data(state->csi_client, reg, value);
+	int ret = -1;
+
+	usleep(I2C_RW_DELAY);
+	ret = i2c_smbus_write_byte_data(state->csi_client, reg, value);
+	usleep(I2C_RW_DELAY);
+
+	return ret;
 }
 
 static int adv7180_vpp_write(struct adv7180_state *state, unsigned int reg,
 	unsigned int value)
 {
-	return i2c_smbus_write_byte_data(state->vpp_client, reg, value);
+	int ret = -1;
+
+	usleep(I2C_RW_DELAY);
+	ret = i2c_smbus_write_byte_data(state->vpp_client, reg, value);
+	usleep(I2C_RW_DELAY);
+
+	return ret;
 }
 
 static v4l2_std_id adv7180_std_to_v4l2(u8 status1)
