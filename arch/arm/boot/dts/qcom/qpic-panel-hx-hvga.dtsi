@@ -10,16 +10,12 @@
  * GNU General Public License for more details.
  */
 
-
-/dts-v1/;
-
-#include "msm8994.dtsi"
-#include "msm8994-pinctrl.dtsi"
-#include "msm8994-liquid.dtsi"
-#include "msm8994-camera-sensor-liquid.dtsi"
-
-/ {
-	model = "Qualcomm Technologies, Inc. MSM8994 LiQUID";
-	compatible = "qcom,msm8994-liquid", "qcom,msm8994", "qcom,liquid";
-	qcom,board-id = <9 0>;
+&soc {
+	qcom,mdss_lcdc_hx_hvga {
+		compatible = "qcom,mdss-qpic-panel";
+		label = "hx8357 hvga lcdc panel";
+		qcom,mdss-pan-res = <320 480>;
+		qcom,mdss-pan-bpp = <18>;
+		qcom,refresh_rate = <60>;
+	};
 };
