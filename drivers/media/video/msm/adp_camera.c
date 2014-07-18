@@ -23,6 +23,7 @@
 #include "background.h"
 #include "left_lane.h"
 #include "right_lane.h"
+#include "av_mgr.h"
 
 static void *k_addr[OVERLAY_COUNT];
 static int alloc_overlay_pipe_flag[OVERLAY_COUNT];
@@ -98,7 +99,7 @@ int axi_vfe_config_cmd_para(struct vfe_axi_output_config_cmd_type *cmd)
 	cmd->xbar_cfg0 = (cmd->xbar_cfg0) | (config << (8 * (ch_wm % 4)));
 	ch0_wm = 3;
 	axi_output_ppw = 8;
-	burst_length = 3;
+	burst_length = 1;
 	cmd->wm[ch0_wm].busdwords_per_line = 89;
 	cmd->wm[ch0_wm].busrow_increment =
 		(image_width+(axi_output_ppw-1))/(axi_output_ppw);
@@ -119,6 +120,9 @@ void preview_set_data_pipeline()
 	dual_enabled = 0; /* set according to log */
 	/* power on and enable  clock for vfe and axi, before csi */
 	rc = msm_axi_subdev_init_rdi_only(lsh_axi_ctrl, dual_enabled, s_ctrl);
+	if (rc < 0)
+		return;
+
 	msm_axi_subdev_s_crystal_freq(lsh_axi_ctrl, freq,  flags);
 	csid_version = 1;
 	rc = msm_csid_init(lsh_csid_dev, &csid_version); /* CSID_INIT */
@@ -645,9 +649,21 @@ static void guidance_lane_set_data_pipeline(void)
 static int adp_rear_camera_enable(void)
 {
 	struct preview_mem *ping_buffer, *pong_buffer, *free_buffer;
+	struct av_rvc_status rvc_status;
+
 	my_axi_ctrl->share_ctrl->current_mode = 4096;
 	vfe_para.operation_mode = VFE_OUTPUTS_RDI1;
+
 	/* Detect NTSC or PAL, get the preview width and height */
+	av_mgr_rvc_enable(NTSC);
+	av_mgr_rvc_get_status(&rvc_status);
+	if (!rvc_status.signal_lock) {
+		pr_err("%s: can't lock to video signals!\n", __func__);
+		return -EAGAIN;
+	}
+
+	PREVIEW_HEIGHT = rvc_status.height;
+	PREVIEW_WIDTH = rvc_status.width;
 
 	PREVIEW_BUFFER_LENGTH =  PREVIEW_WIDTH * PREVIEW_HEIGHT*2;
 	PREVIEW_BUFFER_SIZE  =  PREVIEW_BUFFER_COUNT * PREVIEW_BUFFER_LENGTH;
@@ -703,6 +719,7 @@ int disable_camera_preview(void)
 {
 	wait_for_completion(&preview_enabled);
 	axi_stop_rdi1_only(my_axi_ctrl);
+	av_mgr_rvc_stream_enable(FALSE);
 	mdpclient_display_commit();
 	mdpclient_msm_fb_close();
 	if (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] == 0) {
@@ -752,6 +769,7 @@ int enable_camera_preview(void)
 		complete(&preview_enabled);
 		return -EBUSY;
 	}
+	av_mgr_rvc_stream_enable(TRUE);
 	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);
 	complete(&camera_enabled);
 	complete(&preview_enabled);
