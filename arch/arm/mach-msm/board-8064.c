@@ -19,6 +19,7 @@
 #include <linux/i2c.h>
 #include <linux/i2c/smb349.h>
 #include <linux/i2c/sx150x.h>
+#include <linux/i2c/adv7180.h>
 #include <linux/slimbus/slimbus.h>
 #include <linux/mfd/wcd9xxx/core.h>
 #include <linux/mfd/wcd9xxx/pdata.h>
@@ -1214,6 +1215,18 @@ static struct i2c_board_info cs8427_device_info[] __initdata = {
 	{
 		I2C_BOARD_INFO("cs8427", CS8427_ADDR4),
 		.platform_data = &cs8427_i2c_platform_data,
+	},
+};
+
+static struct adv7180_platform_data adv7180_i2c_data __initdata = {
+		.rstb_gpio		= PM8921_GPIO_PM_TO_SYS(05),
+		.pwdnb_gpio		= PM8921_GPIO_PM_TO_SYS(06),
+};
+
+static struct i2c_board_info adv7180_device_info[] __initdata = {
+	{
+		I2C_BOARD_INFO("adv7282-m", 0x21),
+		.platform_data = &adv7180_i2c_data,
 	},
 };
 
@@ -3367,6 +3380,12 @@ static struct i2c_registry apq8064_i2c_devices[] __initdata = {
 		APQ_8064_GSBI3_QUP_I2C_BUS_ID,
 		mipi_dsi_i2c_device_info,
 		ARRAY_SIZE(mipi_dsi_i2c_device_info),
+	},
+	{
+		I2C_SURF,
+		APQ_8064_GSBI3_QUP_I2C_BUS_ID,
+		adv7180_device_info,
+		ARRAY_SIZE(adv7180_device_info),
 	},
 };
 
