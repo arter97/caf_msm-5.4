@@ -831,7 +831,7 @@ static inline void mdss_mdp_ctl_perf_update_bus(struct mdss_mdp_ctl *ctl)
 	bus_ib_quota = bw_sum_of_intfs;
 	bus_ab_quota = apply_fudge_factor(bw_sum_of_intfs,
 		&mdss_res->ab_factor);
-	mdss_mdp_bus_scale_set_quota(bus_ab_quota, bus_ib_quota);
+	mdss_bus_scale_set_quota(MDSS_HW_MDP, bus_ab_quota, bus_ib_quota);
 	pr_debug("ab=%llu ib=%llu\n", bus_ab_quota, bus_ib_quota);
 }
 
