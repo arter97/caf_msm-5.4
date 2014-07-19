@@ -306,6 +306,7 @@ struct smb135x_chg {
 	int				version;
 
 	bool				chg_enabled;
+	bool				chg_disabled_permanently;
 
 	bool				usb_present;
 	bool				dc_present;
@@ -1095,6 +1096,9 @@ static int smb135x_set_appropriate_current(struct smb135x_chg *chip,
 	int (*func)(struct smb135x_chg *chip, int current_ma);
 	int rc = 0;
 
+	if (!chip->usb_psy && path == USB)
+		return 0;
+
 	/*
 	 * If battery is absent do not modify the current at all, these
 	 * would be some appropriate values set by the bootloader or default
@@ -1142,6 +1146,12 @@ static int __smb135x_charging(struct smb135x_chg *chip, int enable)
 	int rc = 0;
 
 	pr_debug("charging enable = %d\n", enable);
+
+	if (chip->chg_disabled_permanently) {
+		pr_debug("charging is disabled permanetly\n");
+		return -EINVAL;
+	}
+
 
 	rc = smb135x_masked_write(chip, CMD_CHG_REG,
 			CMD_CHG_EN, enable ? CMD_CHG_EN : 0);
@@ -1645,6 +1655,9 @@ static void smb135x_external_power_changed(struct power_supply *psy)
 				struct smb135x_chg, batt_psy);
 	union power_supply_propval prop = {0,};
 	int rc, current_limit = 0;
+
+	if (!chip->usb_psy)
+		return;
 
 	if (chip->bms_psy_name)
 		chip->bms_psy =
@@ -3254,8 +3267,9 @@ static int smb_parse_dt(struct smb135x_chg *chip)
 	chip->iterm_disabled = of_property_read_bool(node,
 						"qcom,iterm-disabled");
 
-	chip->chg_enabled = !(of_property_read_bool(node,
+	chip->chg_disabled_permanently = (of_property_read_bool(node,
 						"qcom,charging-disabled"));
+	chip->chg_enabled = !chip->chg_disabled_permanently;
 
 	rc = of_property_read_string(node, "qcom,bms-psy-name",
 						&chip->bms_psy_name);
@@ -3414,12 +3428,6 @@ static int smb135x_main_charger_probe(struct i2c_client *client,
 	struct power_supply *usb_psy;
 	u8 reg = 0;
 
-	usb_psy = power_supply_get_by_name("usb");
-	if (!usb_psy) {
-		dev_dbg(&client->dev, "USB supply not found; defer probe\n");
-		return -EPROBE_DEFER;
-	}
-
 	chip = devm_kzalloc(&client->dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip) {
 		dev_err(&client->dev, "Unable to allocate memory\n");
@@ -3428,7 +3436,20 @@ static int smb135x_main_charger_probe(struct i2c_client *client,
 
 	chip->client = client;
 	chip->dev = &client->dev;
+
+	rc = smb_parse_dt(chip);
+	if (rc < 0) {
+		dev_err(&client->dev, "Unable to parse DT nodes\n");
+		return rc;
+	}
+
+	usb_psy = power_supply_get_by_name("usb");
+	if (!usb_psy && chip->chg_enabled) {
+		dev_dbg(&client->dev, "USB supply not found; defer probe\n");
+		return -EPROBE_DEFER;
+	}
 	chip->usb_psy = usb_psy;
+
 	chip->fake_battery_soc = -EINVAL;
 
 	INIT_DELAYED_WORK(&chip->wireless_insertion_work,
@@ -3442,12 +3463,6 @@ static int smb135x_main_charger_probe(struct i2c_client *client,
 	if (rc) {
 		pr_err("Failed to detect SMB135x, device may be absent\n");
 		return -ENODEV;
-	}
-
-	rc = smb_parse_dt(chip);
-	if (rc < 0) {
-		dev_err(&client->dev, "Unable to parse DT nodes\n");
-		return rc;
 	}
 
 	i2c_set_clientdata(client, chip);
