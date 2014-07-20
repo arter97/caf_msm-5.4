@@ -534,8 +534,8 @@ static void _ringbuffer_setup_common(struct adreno_ringbuffer *rb)
 		(ilog2(KGSL_RB_DWORDS >> 1) & 0x3F) |
 		(1 << 27));
 
-	adreno_writereg(adreno_dev, ADRENO_REG_CP_RB_BASE,
-					(unsigned int) rb->buffer_desc.gpuaddr);
+	adreno_writereg64(adreno_dev, ADRENO_REG_CP_RB_BASE,
+			  ADRENO_REG_CP_RB_BASE_HI, rb->buffer_desc.gpuaddr);
 
 	/* CP ROQ queue sizes (bytes) - RB:16, ST:16, IB1:32, IB2:64 */
 	if (adreno_is_a305(adreno_dev) || adreno_is_a305c(adreno_dev) ||

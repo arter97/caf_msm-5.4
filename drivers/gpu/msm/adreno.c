@@ -119,6 +119,50 @@ static unsigned int _wake_nice = -7;
 /* Number of milliseconds to stay active active after a wake on touch */
 static unsigned int _wake_timeout = 100;
 
+/**
+ * adreno_readreg64() - Read a 64bit register by getting its offset from the
+ * offset array defined in gpudev node
+ * @adreno_dev:		Pointer to the the adreno device
+ * @lo:	lower 32bit register enum that is to be read
+ * @hi:	higher 32bit register enum that is to be read
+ * @val: 64 bit Register value read is placed here
+ */
+void adreno_readreg64(struct adreno_device *adreno_dev,
+		enum adreno_regs lo, enum adreno_regs hi, uint64_t *val)
+{
+	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
+	unsigned int val_lo = 0, val_hi = 0;
+	struct kgsl_device *device = &adreno_dev->dev;
+
+	if (adreno_checkreg_off(adreno_dev, lo))
+		kgsl_regread(device, gpudev->reg_offsets->offsets[lo], &val_lo);
+	if (adreno_checkreg_off(adreno_dev, hi))
+		kgsl_regread(device, gpudev->reg_offsets->offsets[hi], &val_hi);
+
+	*val = (val_lo | ((uint64_t)val_hi << 32));
+}
+
+/**
+ * adreno_writereg64() - Write a 64bit register by getting its offset from the
+ * offset array defined in gpudev node
+ * @adreno_dev:	Pointer to the the adreno device
+ * @lo:	lower 32bit register enum that is to be written
+ * @hi:	higher 32bit register enum that is to be written
+ * @val: 64 bit value to write
+ */
+void adreno_writereg64(struct adreno_device *adreno_dev,
+		enum adreno_regs lo, enum adreno_regs hi, uint64_t val)
+{
+	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
+	struct kgsl_device *device = &adreno_dev->dev;
+
+	if (adreno_checkreg_off(adreno_dev, lo))
+		kgsl_regwrite(device, gpudev->reg_offsets->offsets[lo],
+			((unsigned int)val));
+	if (adreno_checkreg_off(adreno_dev, hi))
+		kgsl_regwrite(device, gpudev->reg_offsets->offsets[hi],
+			((uint64_t)(val) >> 32));
+}
 
 static int _get_counter(struct adreno_device *adreno_dev,
 		int group, int countable, unsigned int *lo,

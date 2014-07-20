@@ -384,14 +384,17 @@ enum adreno_regs {
 	ADRENO_REG_CP_PFP_UCODE_ADDR,
 	ADRENO_REG_CP_WFI_PEND_CTR,
 	ADRENO_REG_CP_RB_BASE,
+	ADRENO_REG_CP_RB_BASE_HI,
 	ADRENO_REG_CP_RB_RPTR,
 	ADRENO_REG_CP_RB_WPTR,
 	ADRENO_REG_CP_CNTL,
 	ADRENO_REG_CP_ME_CNTL,
 	ADRENO_REG_CP_RB_CNTL,
 	ADRENO_REG_CP_IB1_BASE,
+	ADRENO_REG_CP_IB1_BASE_HI,
 	ADRENO_REG_CP_IB1_BUFSZ,
 	ADRENO_REG_CP_IB2_BASE,
+	ADRENO_REG_CP_IB2_BASE_HI,
 	ADRENO_REG_CP_IB2_BUFSZ,
 	ADRENO_REG_CP_TIMESTAMP,
 	ADRENO_REG_CP_SCRATCH_REG6,
@@ -461,6 +464,7 @@ struct adreno_reg_offsets {
 };
 
 #define ADRENO_REG_UNUSED	0xFFFFFFFF
+#define ADRENO_REG_SKIP	0xFFFFFFFE
 #define ADRENO_REG_DEFINE(_offset, _reg) [_offset] = _reg
 
 /*
@@ -1048,6 +1052,17 @@ static inline bool adreno_checkreg_off(struct adreno_device *adreno_dev,
 		ADRENO_REG_UNUSED == gpudev->reg_offsets->offsets[offset_name])
 			BUG();
 
+	/*
+	 * GPU register programming is kept common as much as possible
+	 * across the cores, Use ADRENO_REG_SKIP when certain register
+	 * programming needs to be skipped for certain GPU cores.
+	 * Example: Certain registers on a5xx like IB1_BASE are 64 bit.
+	 * Common programming programs 64bit register but upper 32 bits
+	 * are skipped in a4xx and a3xx using ADRENO_REG_SKIP.
+	 */
+	if (ADRENO_REG_SKIP == gpudev->reg_offsets->offsets[offset_name])
+		return false;
+
 	return true;
 }
 
@@ -1065,6 +1080,8 @@ static inline void adreno_readreg(struct adreno_device *adreno_dev,
 	if (adreno_checkreg_off(adreno_dev, offset_name))
 		kgsl_regread(&adreno_dev->dev,
 				gpudev->reg_offsets->offsets[offset_name], val);
+	else
+		*val = 0;
 }
 
 /*
@@ -1445,5 +1462,11 @@ static inline int adreno_compare_prio_level(int p1, int p2)
 {
 	return p2 - p1;
 }
+
+void adreno_readreg64(struct adreno_device *adreno_dev,
+		enum adreno_regs lo, enum adreno_regs hi, uint64_t *val);
+
+void adreno_writereg64(struct adreno_device *adreno_dev,
+		enum adreno_regs lo, enum adreno_regs hi, uint64_t val);
 
 #endif /*__ADRENO_H */
