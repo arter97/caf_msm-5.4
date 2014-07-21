@@ -1622,7 +1622,7 @@ unknown:
 			if (f->setup)
 				value = f->setup(f, ctrl);
 		}
-		if (value == USB_GADGET_DELAYED_STATUS) {
+		if (f && value == USB_GADGET_DELAYED_STATUS) {
 			DBG(cdev,
 			 "%s: interface %d (%s) requested delayed status\n",
 					__func__, intf, f->name);
