@@ -385,10 +385,6 @@ static void wcd_mbhc_detect_plug_type(struct wcd_mbhc *mbhc)
 			MSM8X16_WCD_A_ANALOG_MICB_2_EN,
 			0x80, 0x80);
 
-	/* Enable external voltage source to micbias if present */
-	if (mbhc->mbhc_cb && mbhc->mbhc_cb->enable_mb_source)
-		mbhc->mbhc_cb->enable_mb_source(codec, true);
-
 	/*
 	 * Wait for 20msec for FSM to complete its task.
 	 * wakeup if btn pres intr occurs
@@ -423,14 +419,9 @@ static void wcd_mbhc_detect_plug_type(struct wcd_mbhc *mbhc)
 			goto exit;
 		}
 	}
-
 	snd_soc_update_bits(codec,
 		MSM8X16_WCD_A_ANALOG_MICB_2_EN,
 		0x80, 0x00);
-	/* Disable external voltage source to micbias if present */
-	if (mbhc->mbhc_cb && mbhc->mbhc_cb->enable_mb_source)
-		mbhc->mbhc_cb->enable_mb_source(codec, false);
-
 	pr_debug("%s: Valid plug found, plug type is %d\n",
 			 __func__, plug_type);
 	wcd_mbhc_find_plug_and_report(mbhc, plug_type);
@@ -456,13 +447,22 @@ static void wcd_mbhc_swch_irq_handler(struct wcd_mbhc *mbhc)
 	snd_soc_update_bits(codec, MSM8X16_WCD_A_ANALOG_MBHC_DET_CTL_1,
 			0x20, (!detection_type << 5));
 
+	pr_debug("%s: mbhc->current_plug: %d detection_type: %d\n", __func__,
+			mbhc->current_plug, detection_type);
 	if ((mbhc->current_plug == PLUG_TYPE_NONE) && detection_type) {
 		/* Enable HW FSM */
 		snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_ANALOG_MBHC_FSM_CTL,
 				0x80, 0x80);
+		/* Enable external voltage source to micbias if present */
+		if (mbhc->mbhc_cb && mbhc->mbhc_cb->enable_mb_source)
+			mbhc->mbhc_cb->enable_mb_source(codec, true);
 		wcd_mbhc_detect_plug_type(mbhc);
-	} else if ((mbhc->current_plug != PLUG_TYPE_NONE) && !detection_type) {
+	} else if ((mbhc->current_plug != MBHC_PLUG_TYPE_NONE)
+			&& !detection_type) {
+		/* Disable external voltage source to micbias if present */
+		if (mbhc->mbhc_cb && mbhc->mbhc_cb->enable_mb_source)
+			mbhc->mbhc_cb->enable_mb_source(codec, false);
 		/* Disable HW FSM */
 		snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_ANALOG_MBHC_FSM_CTL,
@@ -487,8 +487,8 @@ static void wcd_mbhc_swch_irq_handler(struct wcd_mbhc *mbhc)
 					0x01, 0x00);
 			wcd9xxx_disable_irq(
 					mbhc->intr_ids->mbhc_hs_ins_rem_intr);
-		}
 
+		}
 	}
 	mbhc->in_swch_irq_handler = false;
 	WCD_MBHC_RSC_UNLOCK(mbhc);
