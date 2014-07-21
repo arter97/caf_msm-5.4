@@ -1002,6 +1002,36 @@ void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags)
 		rq->skip_clock_update = 1;
 }
 
+#ifdef CONFIG_SCHED_HMP
+
+static int __init set_sched_enable_hmp(char *str)
+{
+	int enable_hmp = 0;
+
+	get_option(&str, &enable_hmp);
+
+	sched_enable_hmp = !!enable_hmp;
+
+	return 0;
+}
+
+early_param("sched_enable_hmp", set_sched_enable_hmp);
+
+static int __init set_sched_enable_power_aware(char *str)
+{
+	int enable_power_aware = 0;
+
+	get_option(&str, &enable_power_aware);
+
+	sched_enable_power_aware = !!enable_power_aware;
+
+	return 0;
+}
+
+early_param("sched_enable_power_aware", set_sched_enable_power_aware);
+
+#endif	/* CONFIG_SCHED_HMP */
+
 #if defined(CONFIG_SCHED_FREQ_INPUT) || defined(CONFIG_SCHED_HMP)
 
 /* Window size (in ns) */
@@ -1062,7 +1092,7 @@ int rq_freq_margin(struct rq *rq)
 	int margin;
 	u64 demand;
 
-	if (!sysctl_sched_enable_hmp_task_placement)
+	if (!sched_enable_hmp)
 		return INT_MAX;
 
 	demand = scale_load_to_cpu(rq->prev_runnable_sum, rq->cpu);
@@ -1320,7 +1350,7 @@ static void init_cpu_efficiency(void)
 	int i, efficiency;
 	unsigned int max = 0, min = UINT_MAX;
 
-	if (!sysctl_sched_enable_hmp_task_placement)
+	if (!sched_enable_hmp)
 		return;
 
 	for_each_possible_cpu(i) {
@@ -1363,7 +1393,7 @@ static inline void set_window_start(struct rq *rq)
 	int cpu = cpu_of(rq);
 	struct rq *sync_rq = cpu_rq(sync_cpu);
 
-	if (rq->window_start || !sysctl_sched_enable_hmp_task_placement)
+	if (rq->window_start || !sched_enable_hmp)
 		return;
 
 	if (cpu == sync_cpu) {
@@ -1647,7 +1677,7 @@ static int register_sched_callback(void)
 {
 	int ret;
 
-	if (!sysctl_sched_enable_hmp_task_placement)
+	if (!sched_enable_hmp)
 		return 0;
 
 	ret = cpufreq_register_notifier(&notifier_policy_block,
@@ -1811,8 +1841,7 @@ void set_task_cpu(struct task_struct *p, unsigned int new_cpu)
 		p->se.nr_migrations++;
 		perf_sw_event(PERF_COUNT_SW_CPU_MIGRATIONS, 1, NULL, 0);
 
-		if (sysctl_sched_enable_hmp_task_placement &&
-		    (p->on_rq || p->state == TASK_WAKING))
+		if (sched_enable_hmp && (p->on_rq || p->state == TASK_WAKING))
 			fixup_busy_time(p, new_cpu);
 	}
 
@@ -3212,7 +3241,7 @@ void sched_exec(void)
 	unsigned long flags;
 	int dest_cpu;
 
-	if (sysctl_sched_enable_hmp_task_placement)
+	if (sched_enable_hmp)
 		return;
 
 	raw_spin_lock_irqsave(&p->pi_lock, flags);
