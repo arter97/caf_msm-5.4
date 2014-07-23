@@ -378,6 +378,11 @@ int q6asm_equalizer(struct audio_client *ac, void *eq);
 /* Send Volume Command */
 int q6asm_set_volume(struct audio_client *ac, int volume);
 
+int q6asm_dts_eagle_set(struct audio_client *ac, int param_id, int size,
+			void *data);
+int q6asm_dts_eagle_get(struct audio_client *ac, int param_id,
+			int size, void *data);
+
 /* Set SoftPause Params */
 int q6asm_set_softpause(struct audio_client *ac,
 			struct asm_softpause_params *param);
@@ -417,5 +422,10 @@ int q6asm_stream_send_meta_data(struct audio_client *ac, uint32_t stream_id,
 
 /* Get current ASM topology */
 int q6asm_get_asm_topology(void);
+
+int q6asm_send_mtmx_strtr_window(struct audio_client *ac,
+		struct asm_session_mtmx_strtr_param_window_v2_t *window_param,
+		uint32_t param_id);
+
 
 #endif /* __Q6_ASM_H__ */
