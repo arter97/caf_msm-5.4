@@ -85,7 +85,7 @@
 };
 
 &modem_pil {
-	/delete-property/ linux,contiguous-region;
+	linux-contiguous-region=<&modem_mem>;
 };
 
 &venus_pil {
