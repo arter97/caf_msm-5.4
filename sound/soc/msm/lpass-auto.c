@@ -153,6 +153,11 @@ static int msm_mi2s_rx_ch = 1;
 static int msm_auxpcm_rate = SAMPLE_RATE_8KHZ;
 static atomic_t auxpcm_rsc_ref;
 
+static const char * const auxpcm_rate_text[] = {"rate_8000", "rate_16000"};
+static const struct soc_enum msm_auxpcm_enum[] = {
+		SOC_ENUM_SINGLE_EXT(2, auxpcm_rate_text),
+};
+
 static int msm_auxpcm_be_params_fixup(struct snd_soc_pcm_runtime *rtd,
 					struct snd_pcm_hw_params *params)
 {
@@ -217,6 +222,36 @@ static int msm_i2s_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 
 	return 0;
 }
+
+static int msm_auxpcm_rate_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: msm_auxpcm_rate  = %d", __func__,
+		msm_auxpcm_rate);
+	ucontrol->value.integer.value[0] = msm_auxpcm_rate;
+	return 0;
+}
+
+static int msm_auxpcm_rate_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	switch (ucontrol->value.integer.value[0]) {
+	case 0:
+		msm_auxpcm_rate = SAMPLE_RATE_8KHZ;
+		break;
+	case 1:
+		msm_auxpcm_rate = SAMPLE_RATE_16KHZ;
+		break;
+	default:
+		msm_auxpcm_rate = SAMPLE_RATE_8KHZ;
+		break;
+	}
+	pr_info("%s: msm_auxpcm_rate = %d, ucontrol->value.integer.value[0] = %d\n",
+		 __func__, msm_auxpcm_rate,
+		 (int)ucontrol->value.integer.value[0]);
+	return 0;
+}
+
 
 static int codec_reset(void)
 {
@@ -822,6 +857,11 @@ static struct snd_soc_ops msm_auxpcm_be_ops = {
 	.shutdown = msm_auxpcm_shutdown,
 };
 
+static const struct snd_kcontrol_new msm_controls[] = {
+	SOC_ENUM_EXT("AUX PCM SampleRate", msm_auxpcm_enum[0],
+		msm_auxpcm_rate_get, msm_auxpcm_rate_put),
+};
+
 static struct snd_soc_dai_link apq8064_dai[] = {
 	{
 		.name		= "Audio MI2S Rx",
@@ -972,6 +1012,8 @@ static struct snd_soc_card snd_soc_card_apq8064 = {
 	.name		= "apq8064-tabla-snd-card",
 	.dai_link	= apq8064_dai,
 	.num_links	= ARRAY_SIZE(apq8064_dai),
+	.controls	= msm_controls,
+	.num_controls	= ARRAY_SIZE(msm_controls),
 };
 
 static struct platform_device *apq8064_snd_device;
