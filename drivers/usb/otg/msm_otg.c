@@ -106,6 +106,99 @@ static const int vdd_val[VDD_TYPE_MAX][VDD_VAL_MAX] = {
 		},
 };
 
+static ssize_t
+get_msm_otg_mode(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct msm_otg *motg = dev_get_drvdata(dev);
+	struct usb_phy *phy = &motg->phy;
+	char *mode = "host";
+
+	switch (phy->state) {
+	case OTG_STATE_A_WAIT_BCON:
+	case OTG_STATE_A_HOST:
+	case OTG_STATE_A_SUSPEND:
+		mode = "host";
+		break;
+	case OTG_STATE_B_IDLE:
+	case OTG_STATE_B_PERIPHERAL:
+		mode = "peripheral";
+		break;
+	default:
+		mode = "none";
+		break;
+	}
+	return snprintf(buf, PAGE_SIZE, "%s\n", mode);
+}
+
+static ssize_t
+set_msm_otg_mode(struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct msm_otg *motg = dev_get_drvdata(dev);
+	struct usb_phy *phy = &motg->phy;
+	int status = count;
+	enum usb_mode_type req_mode;
+
+	if (!strnicmp(buf, "host", 4)) {
+		req_mode = USB_HOST;
+	} else if (!strnicmp(buf, "peripheral", 10)) {
+		req_mode = USB_PERIPHERAL;
+	} else if (!strnicmp(buf, "none", 4)) {
+		req_mode = USB_NONE;
+	} else {
+		status = -EINVAL;
+		goto out;
+	}
+
+	switch (req_mode) {
+	case USB_NONE:
+		switch (phy->state) {
+		case OTG_STATE_A_WAIT_BCON:
+		case OTG_STATE_A_HOST:
+		case OTG_STATE_A_SUSPEND:
+		case OTG_STATE_B_PERIPHERAL:
+			set_bit(ID, &motg->inputs);
+			clear_bit(B_SESS_VLD, &motg->inputs);
+			break;
+		default:
+			goto out;
+		}
+		break;
+	case USB_PERIPHERAL:
+		switch (phy->state) {
+		case OTG_STATE_B_IDLE:
+		case OTG_STATE_A_WAIT_BCON:
+		case OTG_STATE_A_HOST:
+		case OTG_STATE_A_SUSPEND:
+			set_bit(ID, &motg->inputs);
+			set_bit(B_SESS_VLD, &motg->inputs);
+			break;
+		default:
+			goto out;
+		}
+		break;
+	case USB_HOST:
+		switch (phy->state) {
+		case OTG_STATE_B_IDLE:
+		case OTG_STATE_B_PERIPHERAL:
+			clear_bit(ID, &motg->inputs);
+			break;
+		default:
+			goto out;
+		}
+		break;
+	default:
+			goto out;
+	}
+
+	pm_runtime_resume(phy->dev);
+	queue_work(system_nrt_wq, &motg->sm_work);
+out:
+	return status;
+}
+
+static DEVICE_ATTR(mode, S_IRUGO | S_IWUSR, get_msm_otg_mode, set_msm_otg_mode);
+
 static int msm_hsusb_ldo_init(struct msm_otg *motg, int init)
 {
 	int rc = 0;
@@ -3110,117 +3203,6 @@ static irqreturn_t msm_pmic_id_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-static int msm_otg_mode_show(struct seq_file *s, void *unused)
-{
-	struct msm_otg *motg = s->private;
-	struct usb_phy *phy = &motg->phy;
-
-	switch (phy->state) {
-	case OTG_STATE_A_WAIT_BCON:
-	case OTG_STATE_A_HOST:
-	case OTG_STATE_A_SUSPEND:
-		seq_printf(s, "host\n");
-		break;
-	case OTG_STATE_B_IDLE:
-	case OTG_STATE_B_PERIPHERAL:
-		seq_printf(s, "peripheral\n");
-		break;
-	default:
-		seq_printf(s, "none\n");
-		break;
-	}
-
-	return 0;
-}
-
-static int msm_otg_mode_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, msm_otg_mode_show, inode->i_private);
-}
-
-static ssize_t msm_otg_mode_write(struct file *file, const char __user *ubuf,
-				size_t count, loff_t *ppos)
-{
-	struct seq_file *s = file->private_data;
-	struct msm_otg *motg = s->private;
-	char buf[16];
-	struct usb_phy *phy = &motg->phy;
-	int status = count;
-	enum usb_mode_type req_mode;
-
-	memset(buf, 0x00, sizeof(buf));
-
-	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count))) {
-		status = -EFAULT;
-		goto out;
-	}
-
-	if (!strncmp(buf, "host", 4)) {
-		req_mode = USB_HOST;
-	} else if (!strncmp(buf, "peripheral", 10)) {
-		req_mode = USB_PERIPHERAL;
-	} else if (!strncmp(buf, "none", 4)) {
-		req_mode = USB_NONE;
-	} else {
-		status = -EINVAL;
-		goto out;
-	}
-
-	switch (req_mode) {
-	case USB_NONE:
-		switch (phy->state) {
-		case OTG_STATE_A_WAIT_BCON:
-		case OTG_STATE_A_HOST:
-		case OTG_STATE_A_SUSPEND:
-		case OTG_STATE_B_PERIPHERAL:
-			set_bit(ID, &motg->inputs);
-			clear_bit(B_SESS_VLD, &motg->inputs);
-			break;
-		default:
-			goto out;
-		}
-		break;
-	case USB_PERIPHERAL:
-		switch (phy->state) {
-		case OTG_STATE_B_IDLE:
-		case OTG_STATE_A_WAIT_BCON:
-		case OTG_STATE_A_HOST:
-		case OTG_STATE_A_SUSPEND:
-			set_bit(ID, &motg->inputs);
-			set_bit(B_SESS_VLD, &motg->inputs);
-			break;
-		default:
-			goto out;
-		}
-		break;
-	case USB_HOST:
-		switch (phy->state) {
-		case OTG_STATE_B_IDLE:
-		case OTG_STATE_B_PERIPHERAL:
-			clear_bit(ID, &motg->inputs);
-			break;
-		default:
-			goto out;
-		}
-		break;
-	default:
-		goto out;
-	}
-
-	pm_runtime_resume(phy->dev);
-	queue_work(system_nrt_wq, &motg->sm_work);
-out:
-	return status;
-}
-
-const struct file_operations msm_otg_mode_fops = {
-	.open = msm_otg_mode_open,
-	.read = seq_read,
-	.write = msm_otg_mode_write,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-
 static int msm_otg_show_otg_state(struct seq_file *s, void *unused)
 {
 	struct msm_otg *motg = s->private;
@@ -3366,20 +3348,6 @@ static int msm_otg_debugfs_init(struct msm_otg *motg)
 
 	if (!msm_otg_dbg_root || IS_ERR(msm_otg_dbg_root))
 		return -ENODEV;
-
-	if (motg->pdata->mode == USB_OTG &&
-		motg->pdata->otg_control == OTG_USER_CONTROL) {
-
-		msm_otg_dentry = debugfs_create_file("mode", S_IRUGO |
-			S_IWUSR, msm_otg_dbg_root, motg,
-			&msm_otg_mode_fops);
-
-		if (!msm_otg_dentry) {
-			debugfs_remove(msm_otg_dbg_root);
-			msm_otg_dbg_root = NULL;
-			return -ENODEV;
-		}
-	}
 
 	msm_otg_dentry = debugfs_create_file("chg_type", S_IRUGO,
 		msm_otg_dbg_root, motg,
@@ -3808,6 +3776,11 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	device_init_wakeup(&pdev->dev, 1);
 	motg->mA_port = IUNIT;
 
+	if (motg->pdata->otg_control == OTG_USER_CONTROL) {
+		if (device_create_file(&pdev->dev, &dev_attr_mode))
+			dev_err(&pdev->dev, "could not create mode sysfs file\n");
+	}
+
 	ret = msm_otg_debugfs_init(motg);
 	if (ret)
 		dev_dbg(&pdev->dev, "mode debugfs file is"
@@ -3902,6 +3875,8 @@ static int __devexit msm_otg_remove(struct platform_device *pdev)
 	if (motg->pdata->otg_control == OTG_PMIC_CONTROL)
 		pm8921_charger_unregister_vbus_sn(0);
 	msm_otg_mhl_register_callback(motg, NULL);
+	if (motg->pdata->otg_control == OTG_USER_CONTROL)
+		device_remove_file(&pdev->dev, &dev_attr_mode);
 	msm_otg_debugfs_cleanup();
 	cancel_delayed_work_sync(&motg->chg_work);
 	cancel_delayed_work_sync(&motg->pmic_id_status_work);
