@@ -1020,7 +1020,7 @@ static struct platform_device *apq8064_snd_device;
 
 static int __init msm_audio_init(void)
 {
-	int ret;
+	int ret = -EPERM;
 
 	if (!machine_is_apq8064_mplatform()) {
 		pr_err("%s: Not lpass-auto machine type\n", __func__);
@@ -1028,6 +1028,11 @@ static int __init msm_audio_init(void)
 	}
 
 	pr_info("%s: lpass-auto machine type\n", __func__);
+	if (ret == -EPERM) {
+		pr_info("%s: lpass-auto is absolete and replace by apq8064-auto\n",
+			__func__);
+		return ret;
+	}
 
 	apq8064_snd_device = platform_device_alloc("soc-audio", 0);
 	if (!apq8064_snd_device) {

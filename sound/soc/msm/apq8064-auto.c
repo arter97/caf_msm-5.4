@@ -19,17 +19,15 @@
 #include <linux/mfd/pm8xxx/pm8921.h>
 #include <linux/slab.h>
 #include <linux/pm_runtime.h>
-#include <linux/slimbus/slimbus.h>
+#include <linux/module.h>
 #include <linux/input.h>
 #include <sound/core.h>
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 #include <sound/pcm.h>
-#include <sound/jack.h>
 #include <asm/mach-types.h>
 #include <mach/socinfo.h>
 #include "msm-pcm-routing.h"
-#include "../codecs/wcd9310.h"
 
 #define SAMPLE_RATE_8KHZ 8000
 #define SAMPLE_RATE_16KHZ 16000
@@ -60,12 +58,19 @@
 #define GPIO_MI2S_SD1   31
 #define GPIO_MI2S_SD0   32
 
+/* Secondary I2S Configuration */
+#define GPIO_SEC_I2S_RX_SCK  47
+#define GPIO_SEC_I2S_RX_WS   48
+#define GPIO_SEC_I2S_RX_DOUT 49
+#define GPIO_SEC_I2S_RX_MCLK 50
+#define I2S_MCLK_RATE 1536000
 /* AUX PCM */
 #define GPIO_AUX_PCM_DOUT 43
 #define GPIO_AUX_PCM_DIN 44
 #define GPIO_AUX_PCM_SYNC 45
 #define GPIO_AUX_PCM_CLK 46
 
+#define REPLACEMENT_FRONTEND_DAI_INDEX	11
 
 struct request_gpio {
 	unsigned gpio_no;
@@ -96,6 +101,25 @@ static struct request_gpio mi2s_gpio[] = {
 	},
 };
 
+static struct request_gpio mi2s_gpio_mplatform[] = {
+	{
+		.gpio_no = GPIO_MI2S_WS,
+		.gpio_name = "MI2S_WS",
+	},
+	{
+		.gpio_no = GPIO_MI2S_SCK,
+		.gpio_name = "MI2S_SCK",
+	},
+	{
+		.gpio_no = GPIO_MI2S_SD1,
+		.gpio_name = "MI2S_SD1",
+	},
+	{
+		.gpio_no = GPIO_MI2S_SD0,
+		.gpio_name = "MI2S_SD0",
+	}
+};
+
 /* I2S RX is slave so MCLK is not needed */
 static struct request_gpio spkr_i2s_gpio[] = {
 #ifdef NO_CONFLICT_WITH_SLIM_BUS
@@ -114,6 +138,24 @@ static struct request_gpio spkr_i2s_gpio[] = {
 #endif
 };
 
+static struct request_gpio sec_i2s_rx_gpio[] = {
+	{
+		.gpio_no = GPIO_SEC_I2S_RX_MCLK,
+		.gpio_name = "SEC_I2S_RX_MCLK",
+	},
+	{
+		.gpio_no = GPIO_SEC_I2S_RX_SCK,
+		.gpio_name = "SEC_I2S_RX_SCK",
+	},
+	{
+		.gpio_no = GPIO_SEC_I2S_RX_WS,
+		.gpio_name = "SEC_I2S_RX_WS",
+	},
+	{
+		.gpio_no = GPIO_SEC_I2S_RX_DOUT,
+		.gpio_name = "SEC_I2S_RX_DOUT",
+	},
+};
 
 /* I2S TX is slave so MCLK is not needed. DIN1 is not used */
 static struct request_gpio mic_i2s_gpio[] = {
@@ -136,6 +178,23 @@ static struct request_gpio mic_i2s_gpio[] = {
 };
 
 
+static struct request_gpio mic_i2s_gpio_mplatform[] = {
+	{
+		.gpio_no = GPIO_MIC_I2S_WS,
+		.gpio_name = "MIC_I2S_WS",
+	},
+	{
+		.gpio_no = GPIO_MIC_I2S_SCK,
+		.gpio_name = "MIC_I2S_SCk",
+	},
+	{
+		.gpio_no = GPIO_MIC_I2S_DIN0,
+		.gpio_name = "MIC_I2S_DIN0",
+	},
+};
+
+static struct clk *sec_i2s_rx_osr_clk;
+static struct clk *sec_i2s_rx_bit_clk;
 static struct clk *i2s_rx_bit_clk;
 static struct clk *i2s_tx_bit_clk;
 static struct clk *mi2s_osr_clk;
@@ -151,6 +210,7 @@ static atomic_t mi2s_rsc_ref;
 static int msm_btsco_rate = SAMPLE_RATE_8KHZ;
 static int msm_auxpcm_rate = SAMPLE_RATE_8KHZ;
 static atomic_t auxpcm_rsc_ref;
+static int is_mplatform;
 
 static const char * const two_ch_text[] = {"One", "Two"};
 static const char * const four_ch_text[] = {"One", "Two", "Three", "Four"};
@@ -406,8 +466,16 @@ static int msm_mi2s_audrx_init(struct snd_soc_pcm_runtime *rtd)
 static int msm_mi2s_free_gpios(void)
 {
 	int	i;
-	for (i = 0; i < ARRAY_SIZE(mi2s_gpio); i++)
-		gpio_free(mi2s_gpio[i].gpio_no);
+	struct request_gpio *gpio_list = mi2s_gpio;
+	int gpio_list_size = ARRAY_SIZE(mi2s_gpio);
+
+	if (is_mplatform) {
+		gpio_list = mi2s_gpio_mplatform;
+		gpio_list_size = ARRAY_SIZE(mi2s_gpio_mplatform);
+	}
+
+	for (i = 0; i < gpio_list_size; i++)
+		gpio_free(gpio_list[i].gpio_no);
 	return 0;
 }
 
@@ -434,20 +502,28 @@ static int msm_configure_mi2s_gpio(void)
 	int	rtn;
 	int	i;
 	int	j;
-	for (i = 0; i < ARRAY_SIZE(mi2s_gpio); i++) {
-		rtn = gpio_request(mi2s_gpio[i].gpio_no,
-						   mi2s_gpio[i].gpio_name);
+	struct request_gpio *gpio_list = mi2s_gpio;
+	int gpio_list_size = ARRAY_SIZE(mi2s_gpio);
+
+	if (is_mplatform) {
+		gpio_list = mi2s_gpio_mplatform;
+		gpio_list_size = ARRAY_SIZE(mi2s_gpio_mplatform);
+	}
+
+	for (i = 0; i < gpio_list_size; i++) {
+		rtn = gpio_request(gpio_list[i].gpio_no,
+				   gpio_list[i].gpio_name);
 		pr_debug("%s: gpio = %d, gpio name = %s, rtn = %d\n",
 				 __func__,
-				 mi2s_gpio[i].gpio_no,
-				 mi2s_gpio[i].gpio_name,
+				 gpio_list[i].gpio_no,
+				 gpio_list[i].gpio_name,
 				 rtn);
 		if (rtn) {
 			pr_err("%s: Failed to request gpio %d\n",
 				   __func__,
-				   mi2s_gpio[i].gpio_no);
+				   gpio_list[i].gpio_no);
 			for (j = i; j >= 0; j--)
-				gpio_free(mi2s_gpio[j].gpio_no);
+				gpio_free(gpio_list[j].gpio_no);
 			goto err;
 		}
 	}
@@ -469,8 +545,10 @@ static int msm_mi2s_startup(struct snd_pcm_substream *substream)
 
 		pr_debug("%s: APQ is MI2S master\n", __func__);
 		mi2s_osr_clk = clk_get(cpu_dai->dev, "osr_clk");
-		if (IS_ERR(mi2s_osr_clk))
+		if (IS_ERR(mi2s_osr_clk)) {
+			pr_err("Unable to get mi2s_osr_clk\n");
 			return PTR_ERR(mi2s_osr_clk);
+		}
 		clk_set_rate(mi2s_osr_clk, OSR_CLK_RATE);
 		ret = clk_prepare_enable(mi2s_osr_clk);
 		if (IS_ERR_VALUE(ret)) {
@@ -510,12 +588,19 @@ static int msm_i2s_rx_free_gpios(void)
 	return 0;
 }
 
-
 static int msm_i2s_tx_free_gpios(void)
 {
 	int	i;
-	for (i = 0; i < ARRAY_SIZE(mic_i2s_gpio); i++)
-		gpio_free(mic_i2s_gpio[i].gpio_no);
+	struct request_gpio *gpio_list = mic_i2s_gpio;
+	int gpio_list_size = ARRAY_SIZE(mic_i2s_gpio);
+
+	if (is_mplatform) {
+		gpio_list = mic_i2s_gpio_mplatform;
+		gpio_list_size = ARRAY_SIZE(mic_i2s_gpio_mplatform);
+	}
+
+	for (i = 0; i < gpio_list_size; i++)
+		gpio_free(gpio_list[i].gpio_no);
 	return 0;
 }
 
@@ -571,20 +656,28 @@ static int msm_configure_i2s_tx_gpio(void)
 	int	rtn;
 	int	i;
 	int	j;
-	for (i = 0; i < ARRAY_SIZE(mic_i2s_gpio); i++) {
-		rtn = gpio_request(mic_i2s_gpio[i].gpio_no,
-						   mic_i2s_gpio[i].gpio_name);
+	struct request_gpio *gpio_list = mic_i2s_gpio;
+	int gpio_list_size = ARRAY_SIZE(mic_i2s_gpio);
+
+	if (is_mplatform) {
+		gpio_list = mic_i2s_gpio_mplatform;
+		gpio_list_size = ARRAY_SIZE(mic_i2s_gpio_mplatform);
+	}
+
+	for (i = 0; i < gpio_list_size; i++) {
+		rtn = gpio_request(gpio_list[i].gpio_no,
+				   gpio_list[i].gpio_name);
 		pr_debug("%s: gpio = %d, gpio name = %s, rtn = %d\n",
 				 __func__,
-				 mic_i2s_gpio[i].gpio_no,
-				 mic_i2s_gpio[i].gpio_name,
+				 gpio_list[i].gpio_no,
+				 gpio_list[i].gpio_name,
 				 rtn);
 		if (rtn) {
 			pr_err("%s: Failed to request gpio %d\n",
 				   __func__,
-				   mic_i2s_gpio[i].gpio_no);
+				   gpio_list[i].gpio_no);
 			for (j = i; j >= 0; j--)
-				gpio_free(mic_i2s_gpio[j].gpio_no);
+				gpio_free(gpio_list[j].gpio_no);
 			goto err;
 		}
 	}
@@ -717,9 +810,108 @@ static void msm_auxpcm_shutdown(struct snd_pcm_substream *substream)
 		msm_aux_pcm_free_gpios();
 }
 
+static int apq8064_sec_i2s_rx_free_gpios(void)
+{
+	int	i;
+	for (i = 0; i < ARRAY_SIZE(sec_i2s_rx_gpio); i++)
+		gpio_free(sec_i2s_rx_gpio[i].gpio_no);
+	return 0;
+}
+
+static void apq8064_sec_i2s_rx_shutdown(struct snd_pcm_substream *substream)
+{
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+		if (sec_i2s_rx_bit_clk) {
+			clk_disable_unprepare(sec_i2s_rx_bit_clk);
+			clk_put(sec_i2s_rx_bit_clk);
+			sec_i2s_rx_bit_clk = NULL;
+		}
+		if (sec_i2s_rx_osr_clk) {
+			clk_disable_unprepare(sec_i2s_rx_osr_clk);
+			clk_put(sec_i2s_rx_osr_clk);
+			sec_i2s_rx_osr_clk = NULL;
+		}
+		apq8064_sec_i2s_rx_free_gpios();
+	}
+	pr_debug("%s(): substream = %s  stream = %d\n", __func__,
+		 substream->name, substream->stream);
+}
+
+static int configure_sec_i2s_rx_gpio(void)
+{
+	int rtn;
+	int i;
+	int j;
+	for (i = 0; i < ARRAY_SIZE(sec_i2s_rx_gpio); i++) {
+		rtn = gpio_request(sec_i2s_rx_gpio[i].gpio_no,
+				sec_i2s_rx_gpio[i].gpio_name);
+		pr_debug("%s: gpio = %d, gpio name = %s, rtn = %d\n",
+				__func__,
+				sec_i2s_rx_gpio[i].gpio_no,
+				sec_i2s_rx_gpio[i].gpio_name,
+					rtn);
+		if (rtn) {
+			pr_err("%s: Failed to request gpio %d\n",
+				__func__,
+			sec_i2s_rx_gpio[i].gpio_no);
+			for (j = i; j >= 0; j--)
+				gpio_free(sec_i2s_rx_gpio[j].gpio_no);
+
+			goto err;
+		}
+	}
+err:
+	return rtn;
+}
+
+static int apq8064_sec_i2s_rx_startup(struct snd_pcm_substream *substream)
+{
+	int ret = 0;
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+		configure_sec_i2s_rx_gpio();
+		sec_i2s_rx_osr_clk = clk_get(cpu_dai->dev, "osr_clk");
+		if (IS_ERR(sec_i2s_rx_osr_clk)) {
+			pr_err("Failed to get sec_i2s_rx_osr_clk\n");
+			return PTR_ERR(sec_i2s_rx_osr_clk);
+		}
+		clk_set_rate(sec_i2s_rx_osr_clk, I2S_MCLK_RATE);
+		clk_prepare_enable(sec_i2s_rx_osr_clk);
+		sec_i2s_rx_bit_clk = clk_get(cpu_dai->dev, "bit_clk");
+		if (IS_ERR(sec_i2s_rx_bit_clk)) {
+			pr_err("Failed to get sec i2s osr_clk\n");
+			clk_disable_unprepare(sec_i2s_rx_osr_clk);
+			clk_put(sec_i2s_rx_osr_clk);
+			return PTR_ERR(sec_i2s_rx_bit_clk);
+		}
+		clk_set_rate(sec_i2s_rx_bit_clk, 1);
+		ret = clk_prepare_enable(sec_i2s_rx_bit_clk);
+		if (ret != 0) {
+			pr_err("Unable to enable sec i2s rx_bit_clk\n");
+			clk_put(sec_i2s_rx_bit_clk);
+			clk_disable_unprepare(sec_i2s_rx_osr_clk);
+			clk_put(sec_i2s_rx_osr_clk);
+			return ret;
+		}
+		ret = snd_soc_dai_set_fmt(cpu_dai, SND_SOC_DAIFMT_CBS_CFS);
+		if (ret < 0)
+			pr_err("set format for codec dai failed\n");
+	}
+	pr_debug("%s: ret = %d\n", __func__, ret);
+	pr_debug("%s(): substream = %s  stream = %d\n", __func__,
+		 substream->name, substream->stream);
+	return ret;
+}
+
 static struct snd_soc_ops msm_mi2s_be_ops = {
 	.startup = msm_mi2s_startup,
 	.shutdown = msm_mi2s_shutdown,
+};
+
+static struct snd_soc_ops sec_i2s_rx_ops = {
+	.startup = apq8064_sec_i2s_rx_startup,
+	.shutdown = apq8064_sec_i2s_rx_shutdown,
 };
 
 static struct snd_soc_ops msm_i2s_be_ops = {
@@ -904,6 +1096,7 @@ static struct snd_soc_dai_link msm_dai[] = {
 	},
 	/* Primary I2S RX and TX Hybrid Hostless*/
 	{
+		/* hw:0,11, must match to REPLACEMENT_FRONTEND_DAI_INDEX */
 		.name = "I2S Hybrid Hostless", /* hw:0,11 */
 		.stream_name = "I2S Hybrid Hostless",
 		.cpu_dai_name	= "I2S_HYBRID_HOSTLESS",
@@ -918,6 +1111,17 @@ static struct snd_soc_dai_link msm_dai[] = {
 		.codec_name = "snd-soc-dummy",
 		/* .be_id = do not care */
 	},
+	{
+		.name		= "Audio MI2S Rx", /* hw:0,12 */
+		.stream_name	= "Audio MI2S Rx output",
+		.cpu_dai_name	= "apq8064_cpudai_lpa.0",
+		.platform_name	= "apq8064_pcm_lpa",
+		.codec_dai_name = "msm-stub-rx",
+		.codec_name	= "msm-stub-codec.1",
+		.ops		= &msm_mi2s_be_ops,
+		.ignore_pmdown_time	= 1,
+	},
+	/* Any new frondend DAIs have to be inserted after this point */
 	/* Backend DAI Links */
 	{
 		.name = LPASS_BE_INT_BT_SCO_RX,
@@ -1007,7 +1211,6 @@ static struct snd_soc_dai_link msm_dai[] = {
 		.ops = &msm_mi2s_be_ops,
 		.ignore_pmdown_time = 1, /* Playback support */
 	},
-
 	{
 		.name = LPASS_BE_PRI_I2S_RX,
 		.stream_name = "Primary I2S Playback",
@@ -1033,9 +1236,51 @@ static struct snd_soc_dai_link msm_dai[] = {
 		.be_hw_params_fixup = msm_i2s_tx_be_hw_params_fixup,
 		.ops = &msm_i2s_be_ops,
 	},
+	{
+		.name = LPASS_BE_SEC_I2S_RX,
+		.stream_name = "Secondary I2S Playback",
+		.cpu_dai_name = "msm-dai-q6.4",
+		.platform_name = "msm-pcm-routing",
+		.codec_name	= "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-rx",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_SEC_I2S_RX,
+		.be_hw_params_fixup = msm_i2s_rx_be_hw_params_fixup,
+		.ops = &sec_i2s_rx_ops,
+		.ignore_pmdown_time = 1, /* playback support */
+	},
 };
 
-static struct snd_soc_card snd_soc_card_msm = {
+/* It is the replacement for msm_dai[REPLACEMENT_FRONTEND_DAI_INDEX] */
+static struct snd_soc_dai_link msm_mplatform_dai[] = {
+/* MI2S RX and Primary I2S TX Hybrid Hostless*/
+	/* MI2S RX and Primary I2S TX Hybrid Hostless*/
+	{
+		.name = "MI2S_I2S Hybrid Hostless", /* hw:0,11 */
+		.stream_name = "MI2S_I2S Hostless",
+		.cpu_dai_name	= "MI2S_I2S_HYBRID_HOSTLESS",
+		.platform_name	= "msm-pcm-hostless",
+		.dynamic = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1, /* playback support */
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		/* .be_id = do not care */
+	},
+};
+
+static struct snd_soc_card snd_soc_card_msm_mplatform = {
+	.name		= "apq8064-mplatform-snd-card",
+	.dai_link	= msm_dai,
+	.num_links	= ARRAY_SIZE(msm_dai),
+	.controls = msm_controls,
+	.num_controls = ARRAY_SIZE(msm_controls),
+};
+
+static struct snd_soc_card snd_soc_card_msm_auto = {
 	.name		= "apq8064-auto-snd-card",
 	.dai_link	= msm_dai,
 	.num_links	= ARRAY_SIZE(msm_dai),
@@ -1048,15 +1293,18 @@ static struct platform_device *msm_snd_device;
 static int __init msm_audio_init(void)
 {
 	int ret;
-	u32	version = socinfo_get_platform_version();
-	if ((!machine_is_apq8064_adp_2() ||
-	    (SOCINFO_VERSION_MAJOR(version) != 2))) {
+	if (!machine_is_apq8064_adp_2()) {
 		pr_err("%s: Not APQ8064-auto machine type\n", __func__);
 		ret = -ENODEV;
 		goto err;
 	}
 
-	pr_info("%s: apq8064-auto platform\n", __func__);
+	if (machine_is_apq8064_mplatform()) {
+		is_mplatform = 1;
+		pr_info("%s: apq8064 mplatform\n", __func__);
+	} else {
+		pr_info("%s: apq8064-auto platform\n", __func__);
+	}
 
 	msm_snd_device = platform_device_alloc("soc-audio", 0);
 	if (!msm_snd_device) {
@@ -1065,13 +1313,22 @@ static int __init msm_audio_init(void)
 		goto err;
 	}
 
-	platform_set_drvdata(msm_snd_device, &snd_soc_card_msm);
+	if (!is_mplatform) {
+		platform_set_drvdata(msm_snd_device, &snd_soc_card_msm_auto);
+	} else {
+		memcpy(msm_dai + REPLACEMENT_FRONTEND_DAI_INDEX,
+		       msm_mplatform_dai, sizeof(msm_mplatform_dai));
+		platform_set_drvdata(msm_snd_device,
+				     &snd_soc_card_msm_mplatform);
+	}
+
 	ret = platform_device_add(msm_snd_device);
 	if (ret) {
 		platform_device_put(msm_snd_device);
-		pr_err("%s: platform_device_add failed\n", __func__);
+		pr_err("%s: platform_device_add device0 failed\n", __func__);
 		goto err;
 	}
+
 	atomic_set(&auxpcm_rsc_ref, 0);
 	atomic_set(&mi2s_rsc_ref, 0);
 err:
@@ -1082,15 +1339,12 @@ module_init(msm_audio_init);
 
 static void __exit msm_audio_exit(void)
 {
-	u32	version = socinfo_get_platform_version();
-
-	if ((!machine_is_apq8064_adp_2() ||
-	    (SOCINFO_VERSION_MAJOR(version) != 2))) {
+	if (!machine_is_apq8064_adp_2()) {
 		pr_err("%s: Not APQ8064-auto machine type\n", __func__);
 		return ;
 	}
 
-	pr_info("%s: apq8064-auto.c exit\n", __func__);
+	pr_info("%s: apq8064-auto exit\n", __func__);
 	platform_device_unregister(msm_snd_device);
 }
 module_exit(msm_audio_exit);
