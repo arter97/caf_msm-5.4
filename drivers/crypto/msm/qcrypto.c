@@ -510,7 +510,8 @@ static void qcrypto_bw_set_timeout(struct crypto_engine *pengine)
 			(unsigned long)(pengine);
 	pengine->bw_reaper_timer.expires = jiffies +
 			msecs_to_jiffies(QCRYPTO_HIGH_BANDWIDTH_TIMEOUT);
-	add_timer(&(pengine->bw_reaper_timer));
+	mod_timer(&(pengine->bw_reaper_timer),
+		pengine->bw_reaper_timer.expires);
 }
 
 static void qcrypto_ce_bw_allocate_req(struct crypto_engine *pengine)
