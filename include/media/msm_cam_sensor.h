@@ -53,6 +53,11 @@
 #define MAX_AF_ITERATIONS 3
 #define MAX_NUMBER_OF_STEPS 47
 
+typedef enum sensor_stats_type {
+        YRGB,
+        YYYY,
+} sensor_stats_type_t;
+
 enum flash_type {
 	LED_FLASH = 1,
 	STROBE_FLASH,
@@ -464,6 +469,11 @@ enum msm_actuator_data_type {
 enum msm_actuator_addr_type {
 	MSM_ACTUATOR_BYTE_ADDR = 1,
 	MSM_ACTUATOR_WORD_ADDR,
+};
+
+enum msm_actuator_i2c_operation {
+        MSM_ACT_WRITE = 0,
+        MSM_ACT_POLL,
 };
 
 struct reg_settings_t {
