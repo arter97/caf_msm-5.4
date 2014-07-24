@@ -2563,6 +2563,7 @@ static struct platform_device *common_devices[] __initdata = {
 	&apq_cpudai_fm_rx,
 	&apq_cpudai_fm_tx,
 	&apq_cpu_fe,
+	&apq_pcm_hostless,
 	&apq_pcm_loopback,
 	&apq_stub_codec,
 	&apq_voice,
@@ -2571,7 +2572,6 @@ static struct platform_device *common_devices[] __initdata = {
 	&apq_compr_dsp,
 	&apq_multi_ch_pcm,
 	&apq_lowlatency_pcm,
-	&apq_pcm_hostless,
 	&apq_cpudai_afe_01_rx,
 	&apq_cpudai_afe_01_tx,
 	&apq_cpudai_afe_02_rx,
@@ -3816,10 +3816,13 @@ static void __init apq8064_common_init(void)
 
 	if (machine_is_apq8064_adp_2()) {
 		if ((SOCINFO_VERSION_MAJOR(socinfo_get_platform_version())
-							== 0x2))
+							== 0x2)) {
 			platform_device_register(&apq_adp_cpudai_mi2s_rx);
-		else
+			platform_device_register(&apq_cpudai_mi2s);
+			platform_device_register(&apq_pcm_lpa);
+		} else {
 			platform_device_register(&apq_mplatform_cpudai_mi2s_rx);
+		}
 	} else {
 		platform_device_register(&mpq_cpudai_mi2s_tx);
 	}
