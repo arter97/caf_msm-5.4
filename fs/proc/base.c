@@ -87,6 +87,7 @@
 #include <linux/slab.h>
 #include <linux/flex_array.h>
 #include <linux/posix-timers.h>
+#include <linux/qmp_sphinx_instrumentation.h>
 #ifdef CONFIG_HARDWALL
 #include <asm/hardwall.h>
 #endif
@@ -961,6 +962,9 @@ static ssize_t oom_adj_write(struct file *file, const char __user *buf,
 		goto out;
 	}
 
+	qmp_sphinx_logk_oom_adjust_write(task->pid,
+			task->cred->uid, oom_adj);
+
 	task_lock(task);
 	if (!task->mm) {
 		err = -EINVAL;
@@ -1094,6 +1098,9 @@ static ssize_t oom_score_adj_write(struct file *file, const char __user *buf,
 		err = -ESRCH;
 		goto out;
 	}
+
+	qmp_sphinx_logk_oom_adjust_write(task->pid,
+			task->cred->uid, oom_score_adj);
 
 	task_lock(task);
 	if (!task->mm) {
