@@ -507,6 +507,8 @@
 		vreg-1.8-supply = <&pm8994_l12>;
 		vreg-0.9-supply = <&pm8994_l28>;
 
+		qcom,ep-latency = <10>;
+
 		qcom,msi-gicm-addr = <0xf9006040>;
 		qcom,msi-gicm-base = <0x180>;
 
@@ -584,6 +586,8 @@
 		qcom,l1-supported;
 		qcom,l1ss-supported;
 		qcom,aux-clk-sync;
+
+		qcom,ep-latency = <10>;
 
 		qcom,msi-gicm-addr = <0xf9007040>;
 		qcom,msi-gicm-base = <0x1a0>;
@@ -2071,6 +2075,7 @@
 			    "lpaif_quat_mode_muxsel";
 
 		qcom,audio-routing =
+			"AIF4 VI", "MCLK",
 			"RX_BIAS", "MCLK",
 			"LDO_H", "MCLK",
 			"AIF4 MAD", "MCLK",
@@ -2623,6 +2628,18 @@
 		compatible = "arm,armv8-pmuv3";
 		qcom,irq-is-percpu;
 		interrupts = <1 14 0xff00>;
+	};
+
+	audio_heap {
+		compatible = "qcom,msm-shared-memory";
+		qcom,proc-id = <1>;
+		linux,contiguous-region = <&audio_mem>;
+	};
+
+	adsp_heap {
+		compatible = "qcom,msm-shared-memory";
+		qcom,proc-id = <1>;
+		linux,contiguous-region = <&adsp_mem>;
 	};
 };
 

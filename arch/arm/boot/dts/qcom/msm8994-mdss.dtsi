@@ -50,6 +50,7 @@
 		qcom,mdss-pipe-rgb-off = <0x00015000 0x00017000
 					  0x00019000 0x0001B000>;
 		qcom,mdss-pipe-dma-off = <0x00025000 0x00027000>;
+		qcom,mdss-pipe-cursor-off = <0x00035000 0x00037000>;
 
 		qcom,mdss-pipe-vig-fetch-id = <1 4 7 19>;
 		qcom,mdss-pipe-rgb-fetch-id = <16 17 18 22>;
@@ -58,6 +59,7 @@
 		qcom,mdss-pipe-vig-xin-id = <0 4 8 12>;
 		qcom,mdss-pipe-rgb-xin-id = <1 5 9 13>;
 		qcom,mdss-pipe-dma-xin-id = <2 10>;
+		qcom,mdss-pipe-cursor-xin-id = <7 7>;
 
 		qcom,mdss-has-panic-ctrl;
 		qcom,mdss-pipe-vig-panic-ctrl-offsets = <0 1 2 3>;
@@ -106,6 +108,7 @@
 				      0x0006C800 0x0006D000>;
 		qcom,mdss-pingpong-off = <0x00071000 0x00071800 0x00072000
 					  0x00072800>;
+		qcom,mdss-ad-off = <0x0079000 0x00079800 0x0007A000>;
 		qcom,mdss-has-decimation;
 		qcom,mdss-wfd-mode = "intf";
 		qcom,mdss-ctl-len = <0x00000200>;
@@ -173,12 +176,14 @@
 		qcom,mdss-mdp = <&mdss_mdp>;
 		clocks = <&clock_mmss clk_mdss_mdp_clk>,
                          <&clock_mmss clk_mdss_ahb_clk>,
+                         <&clock_mmss clk_mmss_misc_ahb_clk>,
                          <&clock_mmss clk_mdss_axi_clk>,
                          <&clock_mmss clk_mdss_byte0_clk>,
                          <&clock_mmss clk_mdss_pclk0_clk>,
                          <&clock_mmss clk_mdss_esc0_clk>;
-                clock-names = "mdp_core_clk", "iface_clk", "bus_clk",
-                                "byte_clk", "pixel_clk", "core_clk";
+			clock-names = "mdp_core_clk", "iface_clk",
+				"core_mmss_clk", "bus_clk",
+				"byte_clk", "pixel_clk", "core_clk";
 
 		qcom,platform-strength-ctrl = [77 00];
 		qcom,platform-bist-ctrl = [00 00 b1 ff 00 00];
@@ -272,12 +277,14 @@
 		qcom,mdss-mdp = <&mdss_mdp>;
 		clocks = <&clock_mmss clk_mdss_mdp_clk>,
                          <&clock_mmss clk_mdss_ahb_clk>,
+                         <&clock_mmss clk_mmss_misc_ahb_clk>,
                          <&clock_mmss clk_mdss_axi_clk>,
                          <&clock_mmss clk_mdss_byte1_clk>,
                          <&clock_mmss clk_mdss_pclk1_clk>,
                          <&clock_mmss clk_mdss_esc1_clk>;
-                clock-names = "mdp_core_clk", "iface_clk", "bus_clk",
-                                "byte_clk", "pixel_clk", "core_clk";
+			clock-names = "mdp_core_clk", "iface_clk",
+				"core_mmss_clk", "bus_clk",
+				"byte_clk", "pixel_clk", "core_clk";
 
 		qcom,platform-strength-ctrl = [77 00];
 		qcom,platform-bist-ctrl = [00 00 b1 ff 00 00];

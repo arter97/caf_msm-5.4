@@ -1046,7 +1046,7 @@ void mdss_mdp_ctl_perf_release_bw(struct mdss_mdp_ctl *ctl)
 	pr_debug("transaction_status=0x%x\n", transaction_status);
 
 	/*Release the bandwidth only if there are no transactions pending*/
-	if (!transaction_status) {
+	if (!transaction_status && mdata->enable_bw_release) {
 		/*
 		 * for splitdisplay if release_bw is called using secondary
 		 * then find the main ctl and release BW for main ctl because
@@ -1148,7 +1148,8 @@ static void mdss_mdp_ctl_perf_update(struct mdss_mdp_ctl *ctl,
 	is_bw_released = !mdss_mdp_ctl_perf_get_transaction_status(ctl);
 
 	if (ctl->power_on) {
-		if (ctl->perf_release_ctl_bw)
+		if (ctl->perf_release_ctl_bw &&
+			mdata->enable_rotator_bw_release)
 			mdss_mdp_perf_release_ctl_bw(ctl, new);
 		else if (is_bw_released || params_changed)
 			mdss_mdp_perf_calc_ctl(ctl, new);
@@ -2115,7 +2116,8 @@ int mdss_mdp_ctl_start(struct mdss_mdp_ctl *ctl, bool handoff)
 
 	ret = mdss_mdp_ctl_start_sub(ctl, handoff);
 	if (ret == 0) {
-		if (is_split_lm(ctl->mfd)) { /* split display is available */
+		if (sctl && is_split_lm(ctl->mfd)) {
+			/*split display available */
 			ret = mdss_mdp_ctl_start_sub(sctl, handoff);
 			if (!ret)
 				mdss_mdp_ctl_split_display_enable(1, ctl, sctl);
@@ -2370,6 +2372,9 @@ static void mdss_mdp_mixer_setup(struct mdss_mdp_ctl *master_ctl,
 			pipe->num == MDSS_MDP_SSPP_RGB3) {
 			/* Add 2 to account for Cursor & Border bits */
 			mixercfg = 1 << ((3 * pipe->num)+2);
+		} else if (pipe->type == MDSS_MDP_PIPE_TYPE_CURSOR) {
+			mixercfg_extn = BIT(20 + (6 *
+					(pipe->num - MDSS_MDP_SSPP_CURSOR0)));
 		} else {
 			mixercfg = 1 << (3 * pipe->num);
 		}
@@ -2469,6 +2474,9 @@ static void mdss_mdp_mixer_setup(struct mdss_mdp_ctl *master_ctl,
 			pipe->num == MDSS_MDP_SSPP_RGB3) {
 			/* Add 2 to account for Cursor & Border bits */
 			mixercfg |= stage << ((3 * pipe->num)+2);
+		} else if (pipe->type == MDSS_MDP_PIPE_TYPE_CURSOR) {
+			mixercfg_extn |= stage << (20 + (6 *
+					(pipe->num - MDSS_MDP_SSPP_CURSOR0)));
 		} else if (stage < MDSS_MDP_STAGE_6) {
 			mixercfg |= stage << (3 * pipe->num);
 		} else {
@@ -2679,7 +2687,7 @@ struct mdss_mdp_pipe *mdss_mdp_get_staged_pipe(struct mdss_mdp_ctl *ctl,
 	BUG_ON(index > MAX_PIPES_PER_LM);
 
 	mixer = mdss_mdp_mixer_get(ctl, mux);
-	if (mixer)
+	if (mixer && (index < MAX_PIPES_PER_LM))
 		pipe = mixer->stage_pipe[index];
 
 	pr_debug("%pS index=%d pipe%d\n", __builtin_return_address(0),
@@ -2747,6 +2755,8 @@ int mdss_mdp_mixer_pipe_update(struct mdss_mdp_pipe *pipe,
 	else if (pipe->num == MDSS_MDP_SSPP_VIG3 ||
 			pipe->num == MDSS_MDP_SSPP_RGB3)
 		ctl->flush_bits |= BIT(pipe->num) << 10;
+	else if (pipe->type == MDSS_MDP_PIPE_TYPE_CURSOR)
+		ctl->flush_bits |= BIT(22 + pipe->num - MDSS_MDP_SSPP_CURSOR0);
 	else /* RGB/VIG 0-2 pipes */
 		ctl->flush_bits |= BIT(pipe->num);
 
@@ -3242,7 +3252,7 @@ static inline int __mdss_mdp_ctl_get_mixer_off(struct mdss_mdp_mixer *mixer)
 
 u32 mdss_mdp_get_mixercfg(struct mdss_mdp_mixer *mixer)
 {
-	if (!mixer && !mixer->ctl)
+	if (!mixer || !mixer->ctl)
 		return 0;
 
 	return mdss_mdp_ctl_read(mixer->ctl,

@@ -158,7 +158,7 @@ static int _spm_regulator_set_voltage(struct regulator_dev *rdev)
 		/* Set voltage control register via SPM. */
 		rc = msm_spm_set_vdd(vreg->cpu_num, vreg->vlevel);
 		if (rc) {
-			pr_err("%s: msm_spm_set_vdd failed, rc=%d; falling back on SPMI write\n",
+			pr_debug("%s: msm_spm_set_vdd failed, rc=%d; falling back on SPMI write\n",
 				vreg->rdesc.name, rc);
 			spm_failed = true;
 		}
@@ -490,6 +490,12 @@ static int qpnp_smps_init_step_rate(struct spm_vreg *vreg)
 	return rc;
 }
 
+static bool spm_regulator_using_range0(struct spm_vreg *vreg)
+{
+	return vreg->range == &fts2_range0 || vreg->range == &fts2p5_range0
+		|| vreg->range == &ult_hf_range0;
+}
+
 static int spm_regulator_probe(struct spmi_device *spmi)
 {
 	struct regulator_config reg_config = {};
@@ -606,7 +612,8 @@ static int spm_regulator_probe(struct spmi_device *spmi)
 	dev_set_drvdata(&spmi->dev, vreg);
 
 	pr_info("name=%s, range=%s, voltage=%d uV, mode=%s, step rate=%d uV/us\n",
-		vreg->rdesc.name, vreg->range == &fts2_range0 ? "LV" : "MV",
+		vreg->rdesc.name,
+		spm_regulator_using_range0(vreg) ? "LV" : "MV",
 		vreg->uV,
 		vreg->init_mode & QPNP_SMPS_MODE_PWM ? "PWM" :
 		    (vreg->init_mode & QPNP_FTS2_MODE_AUTO ? "AUTO" : "PFM"),

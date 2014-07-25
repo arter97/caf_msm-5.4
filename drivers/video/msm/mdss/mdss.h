@@ -182,15 +182,21 @@ struct mdss_data_type {
 	u32 *clock_levels;
 	u32 nclk_lvl;
 
+	u32 enable_bw_release;
+	u32 enable_rotator_bw_release;
+
 	struct mdss_hw_settings *hw_settings;
 
 	struct mdss_mdp_pipe *vig_pipes;
 	struct mdss_mdp_pipe *rgb_pipes;
 	struct mdss_mdp_pipe *dma_pipes;
+	struct mdss_mdp_pipe *cursor_pipes;
 	u32 nvig_pipes;
 	u32 nrgb_pipes;
 	u32 ndma_pipes;
 	u32 max_target_zorder;
+	u8  ncursor_pipes;
+	u32 max_cursor_size;
 
 	DECLARE_BITMAP(mmb_alloc_map, MAX_DRV_SUP_MMB_BLKS);
 
