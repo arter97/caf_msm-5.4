@@ -1193,6 +1193,14 @@ static int qpnp_hap_config(struct qpnp_hap *hap)
 					QPNP_HAP_LRA_AUTO_RES_REG(hap->base));
 		if (rc)
 			return rc;
+	} else {
+		/* disable auto resonance for ERM */
+		reg = 0x00;
+
+		rc = qpnp_hap_write_reg(hap, &reg,
+					QPNP_HAP_LRA_AUTO_RES_REG(hap->base));
+		if (rc)
+			return rc;
 	}
 
 	/* Configure the PLAY MODE register */
