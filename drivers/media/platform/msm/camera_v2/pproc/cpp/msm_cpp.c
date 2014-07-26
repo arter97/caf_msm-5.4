@@ -1343,8 +1343,6 @@ static int msm_cpp_cfg(struct cpp_device *cpp_dev,
 	unsigned long in_phyaddr, out_phyaddr0, out_phyaddr1;
 	uint16_t num_stripes = 0;
 	struct msm_buf_mngr_info buff_mgr_info, dup_buff_mgr_info;
-	struct msm_cpp_frame_info_t *u_frame_info =
-		(struct msm_cpp_frame_info_t *)ioctl_ptr->ioctl_ptr;
 	int32_t status = 0;
 	int32_t stripe_base = 0;
 
@@ -1390,6 +1388,16 @@ static int msm_cpp_cfg(struct cpp_device *cpp_dev,
 	}
 
 	new_frame->cpp_cmd_msg = cpp_frame_msg;
+	if (cpp_frame_msg == NULL ||
+		(new_frame->msg_len < MSM_CPP_MIN_FRAME_LENGTH)) {
+		pr_err("%s %d Length is not correct or frame message is missing\n",
+			__func__, __LINE__);
+		return -EINVAL;
+	}
+	if (cpp_frame_msg[new_frame->msg_len - 1] != MSM_CPP_MSG_ID_TRAILER) {
+		pr_err("%s %d Invalid frame message\n", __func__, __LINE__);
+		return -EINVAL;
+	}
 
 	in_phyaddr = msm_cpp_fetch_buffer_info(cpp_dev,
 		&new_frame->input_buffer_info,
@@ -1480,6 +1488,12 @@ static int msm_cpp_cfg(struct cpp_device *cpp_dev,
 		goto ERROR3;
 	}
 
+	if ((stripe_base + num_stripes*27 + 1) != new_frame->msg_len) {
+		pr_err("Invalid frame message\n");
+		rc = -EINVAL;
+		goto ERROR3;
+	}
+
 	for (i = 0; i < num_stripes; i++) {
 		cpp_frame_msg[stripe_base + 5 + i*27] +=
 			(uint32_t) in_phyaddr;
@@ -1511,7 +1525,7 @@ static int msm_cpp_cfg(struct cpp_device *cpp_dev,
 
 	ioctl_ptr->trans_code = rc;
 	status = rc;
-	rc = (copy_to_user((void __user *)u_frame_info->status, &status,
+	rc = (copy_to_user((void __user *)new_frame->status, &status,
 		sizeof(int32_t)) ? -EFAULT : 0);
 	if (rc) {
 		ERR_COPY_FROM_USER();
@@ -1528,12 +1542,12 @@ ERROR3:
 ERROR2:
 	kfree(cpp_frame_msg);
 ERROR1:
-	kfree(new_frame);
 	ioctl_ptr->trans_code = rc;
 	status = rc;
-	if (copy_to_user((void __user *)u_frame_info->status, &status,
+	if (copy_to_user((void __user *)new_frame->status, &status,
 		sizeof(int32_t)))
 		pr_err("error cannot copy error\n");
+	kfree(new_frame);
 	return rc;
 }
 
