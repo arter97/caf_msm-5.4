@@ -18,7 +18,7 @@
 / {
 	model = "Qualcomm Technologies, Inc. MSM 8916 512MB QRD SKUI";
 	compatible = "qcom,msm8916-qrd-skui", "qcom,msm8916-qrd", "qcom,msm8916", "qcom,qrd";
-	qcom,board-id = <0x1000b 0x105>;
+	qcom,board-id = <0x1000b 0x105> , <0x1010b 0x105> , <0x3010b 0x105>;
 };
 
 &soc {
@@ -48,4 +48,12 @@
 &pm8916_bms {
 	status = "ok";
 	qcom,disable-bms;
+};
+
+&usb_otg {
+	qcom,hsusb-otg-mode = <3>;
+	qcom,usbid-gpio = <&msm_gpio 110 0>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&usbid_default>;
+	vbus_otg-supply = <&smb1360_otg_supply>;
 };

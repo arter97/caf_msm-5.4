@@ -30,7 +30,9 @@
 #include <linux/remote_spinlock.h>
 #include <linux/msm_remote_spinlock.h>
 #include <linux/dma-mapping.h>
+#include <linux/coresight-cti.h>
 #include <linux/moduleparam.h>
+#include <linux/sched.h>
 #include <soc/qcom/spm.h>
 #include <soc/qcom/pm.h>
 #include <soc/qcom/rpm-notifier.h>
@@ -187,18 +189,27 @@ int set_l2_mode(struct low_power_ops *ops, int mode, bool notify_rpm)
 {
 	int lpm = mode;
 	int rc = 0;
+	static bool coresight_saved;
 
 	ops->tz_flag = MSM_SCM_L2_ON;
 
 	switch (mode) {
 	case MSM_SPM_MODE_POWER_COLLAPSE:
 		ops->tz_flag = MSM_SCM_L2_OFF;
+		coresight_cti_ctx_save();
+		coresight_saved = true;
 		break;
 	case MSM_SPM_MODE_GDHS:
 		ops->tz_flag = MSM_SCM_L2_GDHS;
+		coresight_cti_ctx_save();
+		coresight_saved = true;
 		break;
 	case MSM_SPM_MODE_RETENTION:
 	case MSM_SPM_MODE_DISABLED:
+		if (coresight_saved) {
+			coresight_cti_ctx_restore();
+			coresight_saved = false;
+		}
 		break;
 	default:
 		lpm = MSM_SPM_MODE_DISABLED;
@@ -438,13 +449,15 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 		return -EPERM;
 	}
 
-	update_debug_pc_event(CLUSTER_ENTER, idx,
+	if (idx != cluster->default_level) {
+		update_debug_pc_event(CLUSTER_ENTER, idx,
 			cluster->num_childs_in_sync.bits[0],
 			cluster->child_cpus.bits[0], from_idle);
-	trace_cluster_enter(cluster->cluster_name, idx,
+		trace_cluster_enter(cluster->cluster_name, idx,
 			cluster->num_childs_in_sync.bits[0],
 			cluster->child_cpus.bits[0], from_idle);
-
+		lpm_stats_cluster_enter(cluster->stats, idx);
+	}
 
 	for (i = 0; i < cluster->ndevices; i++) {
 		ret = cluster->lpm_dev[i].set_mode(&cluster->lpm_dev[i],
@@ -469,17 +482,17 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 		msm_mpm_enter_sleep((uint32_t)us, from_idle, &nextcpu);
 	}
 	cluster->last_level = idx;
-	lpm_stats_cluster_enter(cluster->stats, idx);
 	spin_unlock(&cluster->sync_lock);
 	return 0;
 
 failed_set_mode:
 	for (i = 0; i < cluster->ndevices; i++) {
+		int rc = 0;
 		level = &cluster->levels[cluster->default_level];
-		ret = cluster->lpm_dev[i].set_mode(&cluster->lpm_dev[i],
+		rc = cluster->lpm_dev[i].set_mode(&cluster->lpm_dev[i],
 				level->mode[i],
 				level->notify_rpm);
-		BUG_ON(ret);
+		BUG_ON(rc);
 	}
 	spin_unlock(&cluster->sync_lock);
 	return ret;
@@ -632,11 +645,17 @@ static int lpm_cpuidle_enter(struct cpuidle_device *dev,
 	bool success = true;
 	int idx = cpu_power_select(dev, cluster->cpu, &index);
 	const struct cpumask *cpumask = get_cpu_mask(dev->cpu);
+	struct power_params *pwr_params;
 
 	if (idx < 0) {
 		local_irq_enable();
 		return -EPERM;
 	}
+
+	pwr_params = &cluster->cpu->levels[idx].pwr;
+	sched_set_cpu_cstate(smp_processor_id(), idx,
+		pwr_params->energy_overhead, pwr_params->latency_us);
+
 	cpu_prepare(cluster, idx, true);
 
 	cluster_prepare(cluster, cpumask, idx, true);
@@ -647,6 +666,8 @@ static int lpm_cpuidle_enter(struct cpuidle_device *dev,
 	trace_cpu_idle_exit(idx, success);
 	cluster_unprepare(cluster, cpumask, idx, true);
 	cpu_unprepare(cluster, idx, true);
+
+	sched_set_cpu_cstate(smp_processor_id(), 0, 0, 0);
 
 	time = ktime_to_ns(ktime_get()) - time;
 	do_div(time, 1000);
@@ -1020,27 +1041,41 @@ void lpm_cpu_hotplug_enter(unsigned int cpu)
 	int i;
 	int idx = -1;
 
-	if (lpm_cpu_mode_allow(cpu, MSM_PM_SLEEP_MODE_POWER_COLLAPSE,
-				false))
-		mode = MSM_PM_SLEEP_MODE_POWER_COLLAPSE;
-	else if (lpm_cpu_mode_allow(cpu,
-			MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE, false))
-		mode = MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE;
-	else
-		__WARN_printf("Power collapse modes not enabled for hotpug\n");
+	/*
+	 * If lpm isn't probed yet, try to put cpu into the one of the modes
+	 * available
+	 */
+	if (!cluster) {
+		if (msm_spm_is_mode_avail(MSM_SPM_MODE_POWER_COLLAPSE)) {
+			mode = MSM_PM_SLEEP_MODE_POWER_COLLAPSE;
+		} else if (msm_spm_is_mode_avail(
+				MSM_SPM_MODE_RETENTION)) {
+			mode = MSM_PM_SLEEP_MODE_RETENTION;
+		} else {
+			pr_err("No mode avail for cpu%d hotplug\n", cpu);
+			BUG_ON(1);
+			return;
+		}
+	} else {
+		struct lpm_cpu *lpm_cpu;
+		uint32_t ss_pwr = ~0U;
 
-	if (mode == MSM_PM_SLEEP_MODE_NR)
-		return;
+		lpm_cpu = cluster->cpu;
+		for (i = 0; i < lpm_cpu->nlevels; i++) {
+			if (ss_pwr < lpm_cpu->levels[i].pwr.ss_power)
+				continue;
+			ss_pwr = lpm_cpu->levels[i].pwr.ss_power;
+			idx = i;
+			mode = lpm_cpu->levels[i].mode;
+		}
 
-	if (cluster) {
-		for (i = cluster->cpu->nlevels - 1; i > -1; i--)
-			if ((idx < 0) && cluster->cpu->levels[i].mode == mode)
-				idx = i;
+		if (mode == MSM_PM_SLEEP_MODE_NR)
+			return;
 
 		BUG_ON(idx < 0);
-
 		cluster_prepare(cluster, get_cpu_mask(cpu), idx, false);
 	}
+
 	msm_cpu_pm_enter_sleep(mode, false);
 }
 
