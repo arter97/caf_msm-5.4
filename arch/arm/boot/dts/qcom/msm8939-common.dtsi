@@ -62,17 +62,23 @@
 			label = "peripheral_mem";
 		};
 
+		venus_mem: venus_region@0 {
+			linux,reserve-contiguous-region;
+			linux,memory-limit = <0x90000000>;
+			reg = <0 0 0 0x0500000>;
+			label = "venus_mem";
+		};
+
 		secure_mem: secure_region@0 {
 			linux,reserve-contiguous-region;
 			reg = <0 0 0 0x6D00000>;
 			label = "secure_mem";
 		};
 
-		venus_qseecom_mem: venus_qseecom_region@0 {
+		qseecom_mem: qseecom_region@0 {
 			linux,reserve-contiguous-region;
-			linux,memory-limit = <0x90000000>;
-			reg = <0 0 0 0x1200000>;
-			label = "venus_qseecom_mem";
+			reg = <0 0 0 0x1000000>;
+			label = "qseecom_mem";
 		};
 
 		audio_mem: audio_region@0 {
@@ -526,6 +532,21 @@
 		qcom,online-hotplug-core;
 		qcom,synchronous-cluster-id = <0 1>;
 		qcom,synchronous-cluster-map = <1 0x0F>, <0 0xF0>;
+		qcom,vdd-restriction-temp = <5>;
+		qcom,vdd-restriction-temp-hysteresis = <10>;
+		vdd-dig-supply = <&pm8916_s2_floor_corner>;
+
+		qcom,vdd-dig-rstr{
+			qcom,vdd-rstr-reg = "vdd-dig";
+			qcom,levels = <5 7 7>; /* Nominal, Super Turbo, Super Turbo */
+			qcom,min-level = <1>; /* No Request */
+		};
+
+		qcom,vdd-apps-rstr{
+			qcom,vdd-rstr-reg = "vdd-apps";
+			qcom,levels = <533330 652800 800000>;
+			qcom,freq-req;
+		};
 	};
 
 	qcom,bcl {
@@ -774,7 +795,7 @@
 	android_usb: android_usb@086000c8 {
 		compatible = "qcom,android-usb";
 		reg = <0x086000c8 0xc8>;
-		qcom,android-usb-swfi-latency = <1>;
+		qcom,pm-qos-latency = <2 1001 12701>;
 		qcom,android-usb-uicc-nluns = /bits/ 8 <1>;
 	};
 
@@ -1112,7 +1133,7 @@
 		qcom,pas-id = <9>;
 		qcom,proxy-timeout-ms = <5000>;
 		qcom,firmware-name = "venus";
-		linux,contiguous-region = <&venus_qseecom_mem>;
+		linux,contiguous-region = <&venus_mem>;
 	};
 
 	qcom,mss@4080000 {
@@ -1491,6 +1512,7 @@
 		reg = <0x0770600C 0x4>,
 			<0x07706010 0x4>;
 		reg-names = "avtimer_lsb_addr", "avtimer_msb_addr";
+		qcom,clk_div = <27>;
 	};
 };
 
