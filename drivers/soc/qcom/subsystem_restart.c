@@ -385,7 +385,7 @@ static void send_sysmon_notif(struct subsys_device *dev)
 	mutex_lock(&subsys_list_lock);
 	list_for_each_entry(subsys, &subsys_list, list)
 		if ((subsys->notif_state > 0) && (subsys != dev))
-			sysmon_send_event(dev->desc->name, subsys->desc->name,
+			sysmon_send_event(dev->desc, subsys->desc,
 						subsys->notif_state);
 	mutex_unlock(&subsys_list_lock);
 }
@@ -422,9 +422,8 @@ static void notify_each_subsys_device(struct subsys_device **list,
 		mutex_lock(&subsys_list_lock);
 		list_for_each_entry(subsys, &subsys_list, list)
 			if (dev != subsys)
-				sysmon_send_event(subsys->desc->name,
-						dev->desc->name,
-						notif);
+				sysmon_send_event(subsys->desc, dev->desc,
+								notif);
 		mutex_unlock(&subsys_list_lock);
 
 		if (notif == SUBSYS_AFTER_POWERUP)
@@ -594,6 +593,12 @@ static int subsys_start(struct subsys_device *subsys)
 
 static void subsys_stop(struct subsys_device *subsys)
 {
+	const char *name = subsys->desc->name;
+
+	subsys->desc->sysmon_shutdown_ret = sysmon_send_shutdown(subsys->desc);
+	if (subsys->desc->sysmon_shutdown_ret)
+		pr_debug("Graceful shutdown failed for %s\n", name);
+
 	notify_each_subsys_device(&subsys, 1, SUBSYS_BEFORE_SHUTDOWN, NULL);
 	subsys->desc->shutdown(subsys->desc, false);
 	subsys_set_state(subsys, SUBSYS_OFFLINE);

@@ -293,13 +293,16 @@
 
 	l2ccc_0: clock-controller@f900d000 {
 		compatible = "qcom,8994-l2ccc";
-		reg = <0xf900d000 0x1000>;
+		reg = <0xf900d000 0x1000>,
+		      <0xf911210c 0x4>;
+		qcom,vctl-node = <&cluster0_spm>;
 	};
 
 	l2ccc_1: clock-controller@f900f000 {
 		compatible = "qcom,8994-l2ccc";
 		reg = <0xf900f000 0x1000>,
-		      <0xf901301c 4>;
+		      <0xf911210c 0x4>;
+		qcom,vctl-node = <&cluster1_spm>;
 		qcom,vctl-val = <0xb8>;
 	};
 
@@ -744,6 +747,12 @@
 	qcom,msm-rtb {
 		compatible = "qcom,msm-rtb";
 		qcom,rtb-size = <0x100000>;
+	};
+
+	jtag_fuse: jtagfuse@fc4be024 {
+		compatible = "qcom,jtag-fuse";
+		reg = <0xfc4be024 0x8>;
+		reg-names = "fuse-base";
 	};
 
 	jtag_mm0: jtagmm@fb840000 {
@@ -1501,6 +1510,7 @@
 		qcom,firmware-name = "modem";
 		qcom,pil-self-auth;
 		qcom,mba-image-is-not-elf;
+		qcom,sysmon-id = <0>;
 
 		/* GPIO inputs from mss */
 		qcom,gpio-err-fatal = <&smp2pgpio_ssr_smp2p_1_in 0 0>;
@@ -1534,6 +1544,7 @@
 		qcom,pas-id = <1>;
 		qcom,proxy-timeout-ms = <10000>;
 		qcom,smem-id = <423>;
+		qcom,sysmon-id = <1>;
 		qcom,firmware-name = "adsp";
 
 		/* GPIO inputs from lpass */
@@ -1718,7 +1729,12 @@
 		qcom,cpufreq-table-4 =
 			<  199200 >,
 			<  302400 >,
-			<  384000 >;
+			<  384000 >,
+			<  600000 >,
+			<  691200 >,
+			<  768000 >,
+			<  844800 >,
+			<  921600 >;
 	};
 
 	clock_cpu: qcom,cpu-clock-8994@f9015000 {
@@ -1831,10 +1847,24 @@
 			<&clock_mmss clk_venus0_ahb_clk>,
 			<&clock_mmss clk_venus0_axi_clk>,
 			<&clock_mmss clk_venus0_ocmemnoc_clk>;
-		qcom,load-freq-tbl = <979200 465000000 0xffffffff>,
-			<783360 465000000 0xffffffff>,
-			<489600 240000000 0xffffffff>,
-			<244800 133330000 0xffffffff>;
+		qcom,load-freq-tbl =
+			<979200 465000000 0x0c000000>,
+			<979200 465000000 0x01000414>,
+			<979200 465000000 0x030fcfff>,
+			<979200 465000000 0x04000000>,
+			<783360 465000000 0x0c000000>,
+			<783360 465000000 0x01000414>,
+			<783360 465000000 0x030fcfff>,
+			<783360 465000000 0x04000000>,
+			<489600 240000000 0x0c000000>,
+			<489600 240000000 0x01000414>,
+			<489600 240000000 0x030fcfff>,
+			<489600 240000000 0x04000000>,
+			<244800 133330000 0x0c000000>,
+			<244800 133330000 0x01000414>,
+			<244800 133330000 0x030fcfff>,
+			<244800 133330000 0x04000000>;
+
 		qcom,buffer-type-tz-usage-table = <0x241 0x1>,
 			<0x106 0x2>,
 			<0x480 0x3>;

@@ -31,7 +31,7 @@
 #include <sound/q6core.h>
 #include <sound/pcm_params.h>
 #include <soc/qcom/socinfo.h>
-#include <qdsp6v2/msm-pcm-routing-v2.h>
+#include "qdsp6v2/msm-pcm-routing-v2.h"
 #include "../codecs/wcd9xxx-common.h"
 #include "../codecs/wcd9306.h"
 #include "../codecs/wcd9330.h"
@@ -116,7 +116,7 @@ static struct wcd9xxx_mbhc_config wcd9xxx_mbhc_cfg = {
 			    1 << MBHC_CS_ENABLE_INSERTION |
 			    1 << MBHC_CS_ENABLE_REMOVAL |
 			    1 << MBHC_CS_ENABLE_DET_ANC),
-	.do_recalibration = true,
+	.do_recalibration = false,
 	.use_vddio_meas = true,
 	.enable_anc_mic_detect = false,
 	.hw_jack_type = FOUR_POLE_JACK,
@@ -2025,8 +2025,8 @@ static bool msm8939_swap_gnd_mic(struct snd_soc_codec *codec)
 		return false;
 	}
 	value = gpio_get_value_cansleep(pdata->us_euro_gpio);
+	gpio_direction_output(pdata->us_euro_gpio, !value);
 	pr_debug("%s: swap select switch %d to %d\n", __func__, value, !value);
-	gpio_set_value_cansleep(pdata->us_euro_gpio, !value);
 	ret = pinctrl_select_state(pinctrl_info.pinctrl,
 				pinctrl_info.cross_conn_det_sus);
 	if (ret < 0) {

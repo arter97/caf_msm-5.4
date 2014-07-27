@@ -1227,7 +1227,7 @@ static inline void decay_scaled_stat(struct sched_avg *sa, u64 periods);
 /* Initial task load. Newly created tasks are assigned this load. */
 unsigned int __read_mostly sched_init_task_load_pelt;
 unsigned int __read_mostly sched_init_task_load_windows;
-unsigned int __read_mostly sysctl_sched_init_task_load_pct = 100;
+unsigned int __read_mostly sysctl_sched_init_task_load_pct = 15;
 
 static inline unsigned int task_load(struct task_struct *p)
 {
@@ -1632,6 +1632,9 @@ static int best_small_task_cpu(struct task_struct *p)
 	struct cpumask search_cpus;
 
 	cpumask_and(&search_cpus,  tsk_cpus_allowed(p), cpu_online_mask);
+
+	if (cpumask_empty(&search_cpus))
+		return task_cpu(p);
 
 	/* Take a first pass to find the lowest power cost CPU. This
 	   will avoid a potential O(n^2) search */

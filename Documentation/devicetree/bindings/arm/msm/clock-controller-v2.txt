@@ -142,6 +142,13 @@ General Optional Properties available to any Clock Subnode
 			Some clocks may require other clocks other than their parent
 			clocks to be turned on to operate properly.
 
+- qcom,config-rate:	Integer.
+			Configure a clock to a specific rate(Hz) at boot.
+
+- qcom,always-on:	Boolean.
+			Enable a clock at boot, and leave it on all the time.
+			Requires qcom,config-rate to be set.
+
 mmssnoc_axi: mmssnoc_axi {
 	qcom,clk-flags = <0x1000>;
 	qcom,parent = <&xo>;
@@ -151,4 +158,15 @@ mmssnoc_axi: mmssnoc_axi {
 		<FMAX_NOM 333430000>,
 		<FMAX_TURBO 400000000>;
 	qcom,depends = <&mmss_mmssnoc_axi_clk>;
+};
+
+*****************************************************************************
+"qcom,dummy-clk"
+
+This clock serves as a placeholder for a clock which is yet to be implemented.
+It has no unique devicetree properties.
+
+clk_dummy {
+	compatible = "qcom,dummy-clk";
+	qcom,parent = <&xo_clk>;
 };

@@ -490,7 +490,7 @@ static void kgsl_cma_coherent_free(struct kgsl_memdesc *memdesc)
 /* Global - also used by kgsl_drm.c */
 static struct kgsl_memdesc_ops kgsl_page_alloc_ops = {
 	.free = kgsl_page_alloc_free,
-	.vmflags = VM_DONTDUMP | VM_DONTEXPAND,
+	.vmflags = VM_DONTDUMP | VM_DONTEXPAND | VM_DONTCOPY,
 	.vmfault = kgsl_page_alloc_vmfault,
 	.map_kernel = kgsl_page_alloc_map_kernel,
 	.unmap_kernel = kgsl_page_alloc_unmap_kernel,
@@ -499,7 +499,7 @@ static struct kgsl_memdesc_ops kgsl_page_alloc_ops = {
 /* CMA ops - used during NOMMU mode */
 static struct kgsl_memdesc_ops kgsl_cma_ops = {
 	.free = kgsl_cma_coherent_free,
-	.vmflags = VM_DONTDUMP | VM_PFNMAP | VM_DONTEXPAND,
+	.vmflags = VM_DONTDUMP | VM_PFNMAP | VM_DONTEXPAND | VM_DONTCOPY,
 	.vmfault = kgsl_contiguous_vmfault,
 };
 
@@ -522,6 +522,10 @@ int kgsl_cache_range_op(struct kgsl_memdesc *memdesc, size_t offset,
 	if ((offset + size) > memdesc->size)
 		return -ERANGE;
 
+	/* Return quietly if the buffer isn't mapped on the CPU */
+	if (addr == NULL)
+		return 0;
+
 	addr = addr + offset;
 
 	/*
@@ -529,18 +533,16 @@ int kgsl_cache_range_op(struct kgsl_memdesc *memdesc, size_t offset,
 	 * are not aligned to the cacheline size correctly.
 	 */
 
-	if (addr !=  NULL) {
-		switch (op) {
-		case KGSL_CACHE_OP_FLUSH:
-			dmac_flush_range(addr, addr + size);
-			break;
-		case KGSL_CACHE_OP_CLEAN:
-			dmac_clean_range(addr, addr + size);
-			break;
-		case KGSL_CACHE_OP_INV:
-			dmac_inv_range(addr, addr + size);
-			break;
-		}
+	switch (op) {
+	case KGSL_CACHE_OP_FLUSH:
+		dmac_flush_range(addr, addr + size);
+		break;
+	case KGSL_CACHE_OP_CLEAN:
+		dmac_clean_range(addr, addr + size);
+		break;
+	case KGSL_CACHE_OP_INV:
+		dmac_inv_range(addr, addr + size);
+		break;
 	}
 
 	return 0;
@@ -933,12 +935,11 @@ int kgsl_cma_alloc_secure(struct kgsl_device *device,
 		goto err;
 
 	/*
-	 * Flush the phys addr range before sending the memory to the
+	 * Flush the virt addr range before sending the memory to the
 	 * secure environment to ensure the data is actually present
 	 * in RAM
 	 */
-	dmac_flush_range((void *)memdesc->physaddr,
-			(void *)memdesc->physaddr + memdesc->size);
+	dmac_flush_range(memdesc->hostptr, memdesc->hostptr + memdesc->size);
 
 	request.chunks.chunk_list = memdesc->physaddr;
 	request.chunks.chunk_list_size = 1;

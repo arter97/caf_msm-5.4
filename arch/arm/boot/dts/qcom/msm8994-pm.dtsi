@@ -33,7 +33,7 @@
 			60 70 0f];
 	};
 
-	qcom,spm@f9012000 {
+	cluster0_spm: qcom,spm@f9012000 {
 		compatible = "qcom,spm-v2";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -50,7 +50,7 @@
 			30 50 08 0f];
 	};
 
-	qcom,spm@f9013000 {
+	cluster1_spm: qcom,spm@f9013000 {
 		compatible = "qcom,spm-v2";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -533,12 +533,12 @@
 
 	};
 
-	qcom,pm@fe875664 {
+	qcom,pm@fe87f664 {
 		compatible = "qcom,pm";
 		#address-cells = <1>;
 		#size-cells = <1>;
 		ranges;
-		reg = <0xfe875664 0x40>;
+		reg = <0xfe87f664 0x40>;
 		clock-names = "cpu0_clk", "cpu1_clk", "cpu2_clk",
 				"cpu3_clk", "cpu4_clk", "cpu5_clk",
 				"cpu6_clk", "cpu7_clk", "l2_clk";
