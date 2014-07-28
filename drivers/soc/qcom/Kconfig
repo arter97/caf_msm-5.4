@@ -22,6 +22,14 @@ config MSM_IPC_ROUTER_SMD_XPRT
 	  this layer registers a transport with IPC Router and enable
 	  message exchange.
 
+config MSM_EVENT_TIMER
+	bool "Event timer"
+	help
+	  This option enables a modules that manages a list of event timers that
+	  need to be monitored by the PM. The enables the PM code to monitor
+	  events that require the core to be awake and ready to handle the
+	  event.
+
 config MSM_IPC_ROUTER_HSIC_XPRT
 	depends on USB_QCOM_IPC_BRIDGE
 	depends on IPC_ROUTER
