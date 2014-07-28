@@ -49,4 +49,9 @@ config MSM_SMEM
 	  processors in the System on a Chip (SoC) which allows basic
 	  inter-processor communication.
 
+config MSM_SCM
+	bool "Secure Channel Manager (SCM) support"
+	default n
+
+
 endif # ARCH_MSM

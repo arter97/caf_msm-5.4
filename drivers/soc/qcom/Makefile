@@ -1,8 +1,12 @@
+# When adding new entries keep the list in alphabetical order
+CFLAGS_scm.o :=$(call as-instr,.arch_extension sec,-DREQUIRES_SEC=1)
+
 obj-$(CONFIG_QCOM_GSBI)	+=	qcom_gsbi.o
 obj-$(CONFIG_MSM_RPM_SMD) +=	rpm-smd.o
 ifdef CONFIG_DEBUG_FS
 obj-$(CONFIG_MSM_RPM_SMD) +=	rpm-smd-debug.o
 endif
+obj-$(CONFIG_MSM_SCM)	+=	scm.o scm-boot.o
 obj-$(CONFIG_MSM_SMD)	+=	smd.o smd_debug.o smd_private.o smd_init_dt.o smsm_debug.o
 obj-$(CONFIG_MSM_SMEM)	+=	smem.o smem_debug.o
 obj-$(CONFIG_SOC_BUS)	+=	socinfo.o
