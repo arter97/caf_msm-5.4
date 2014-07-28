@@ -29,3 +29,7 @@ ifdef CONFIG_MSM_SUBSYSTEM_RESTART
 	obj-y += subsystem_restart.o
 	obj-y += ramdump.o
 endif
+
+obj-$(CONFIG_MSM_JTAG) += jtag-fuse.o jtag.o
+obj-$(CONFIG_MSM_JTAG_MM) +=  jtag-fuse.o jtag-mm.o
+obj-$(CONFIG_MSM_JTAGV8) += jtag-fuse.o jtagv8.o jtagv8-mm.o
