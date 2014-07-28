@@ -61,5 +61,6 @@ obj-$(CONFIG_SMB350_CHARGER)   += smb350_charger.o
 obj-$(CONFIG_SMB135X_CHARGER)   += smb135x-charger.o
 obj-$(CONFIG_BATTERY_BQ28400)	+= bq28400_battery.o
 obj-$(CONFIG_CHARGER_TPS65090)	+= tps65090-charger.o
+obj-$(CONFIG_BATTERY_BCL)	+= battery_current_limit.o
 obj-$(CONFIG_POWER_RESET)	+= reset/
 obj-y				+= qcom/
