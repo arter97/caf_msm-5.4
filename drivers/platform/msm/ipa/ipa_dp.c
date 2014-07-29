@@ -1083,7 +1083,7 @@ int ipa_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 
 	ep->connect.event_thresh = IPA_EVENT_THRESHOLD;
 
-	result = sps_connect(ep->ep_hdl, &ep->connect);
+	result = ipa_sps_connect_safe(ep->ep_hdl, &ep->connect, ipa_ep_idx);
 	if (result) {
 		IPAERR("sps_connect fails.\n");
 		goto fail_sps_connect;
