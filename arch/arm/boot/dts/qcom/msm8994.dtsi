@@ -764,6 +764,8 @@
 		clocks = <&clock_rpm clk_qdss_clk>,
 			 <&clock_rpm clk_qdss_a_clk>;
 		clock-names = "core_clk", "core_a_clk";
+
+		qcom,coresight-jtagmm-cpu = <&CPU0>;
 	};
 
 	jtag_mm1: jtagmm@fb940000 {
@@ -775,6 +777,8 @@
 		clocks = <&clock_rpm clk_qdss_clk>,
 			 <&clock_rpm clk_qdss_a_clk>;
 		clock-names = "core_clk", "core_a_clk";
+
+		qcom,coresight-jtagmm-cpu = <&CPU1>;
 	};
 
 	jtag_mm2: jtagmm@fba40000 {
@@ -786,6 +790,8 @@
 		clocks = <&clock_rpm clk_qdss_clk>,
 			 <&clock_rpm clk_qdss_a_clk>;
 		clock-names = "core_clk", "core_a_clk";
+
+		qcom,coresight-jtagmm-cpu = <&CPU2>;
 	};
 
 	jtag_mm3: jtagmm@fbb40000 {
@@ -797,6 +803,8 @@
 		clocks = <&clock_rpm clk_qdss_clk>,
 			 <&clock_rpm clk_qdss_a_clk>;
 		clock-names = "core_clk", "core_a_clk";
+
+		qcom,coresight-jtagmm-cpu = <&CPU3>;
 	};
 
 	jtag_mm4: jtagmm@fbc40000 {
@@ -808,6 +816,8 @@
 		clocks = <&clock_rpm clk_qdss_clk>,
 			 <&clock_rpm clk_qdss_a_clk>;
 		clock-names = "core_clk", "core_a_clk";
+
+		qcom,coresight-jtagmm-cpu = <&CPU4>;
 	};
 
 	jtag_mm5: jtagmm@fbd40000 {
@@ -819,6 +829,8 @@
 		clocks = <&clock_rpm clk_qdss_clk>,
 			 <&clock_rpm clk_qdss_a_clk>;
 		clock-names = "core_clk", "core_a_clk";
+
+		qcom,coresight-jtagmm-cpu = <&CPU5>;
 	};
 
 	jtag_mm6: jtagmm@fbe40000 {
@@ -830,6 +842,8 @@
 		clocks = <&clock_rpm clk_qdss_clk>,
 			 <&clock_rpm clk_qdss_a_clk>;
 		clock-names = "core_clk", "core_a_clk";
+
+		qcom,coresight-jtagmm-cpu = <&CPU6>;
 	};
 
 	jtag_mm7: jtagmm@fbf40000 {
@@ -841,6 +855,8 @@
 		clocks = <&clock_rpm clk_qdss_clk>,
 			 <&clock_rpm clk_qdss_a_clk>;
 		clock-names = "core_clk", "core_a_clk";
+
+		qcom,coresight-jtagmm-cpu = <&CPU7>;
 	};
 
 	rpm_bus: qcom,rpm-smd {
@@ -2670,6 +2686,63 @@
 		compatible = "qcom,msm-shared-memory";
 		qcom,proc-id = <1>;
 		linux,contiguous-region = <&adsp_mem>;
+	};
+
+	qcom,msm-core {
+		compatible = "qcom,apss-core-ea";
+		qcom,low-hyst-temp = <10>;
+		qcom,high-hyst-temp = <5>;
+		qcom,polling-interval = <50>;
+
+		qcom,core-mapping {
+			qcom,cpu0-chars {
+				qcom,sensor = <&sensor_information7>;
+				qcom,cpu-name = <&CPU0>;
+				qcom,apc-rail = <&apc0_vreg_corner>;
+			};
+
+			qcom,cpu1-chars {
+				qcom,sensor = <&sensor_information8>;
+				qcom,cpu-name = <&CPU1>;
+				qcom,apc-rail = <&apc0_vreg_corner>;
+			};
+
+			qcom,cpu2-chars {
+				qcom,sensor = <&sensor_information9>;
+				qcom,cpu-name = <&CPU2>;
+				qcom,apc-rail = <&apc0_vreg_corner>;
+			};
+
+			qcom,cpu3-chars {
+				qcom,sensor = <&sensor_information10>;
+				qcom,cpu-name = <&CPU3>;
+				qcom,apc-rail = <&apc0_vreg_corner>;
+			};
+
+			qcom,cpu4-chars {
+				qcom,sensor = <&sensor_information13>;
+				qcom,cpu-name = <&CPU4>;
+				qcom,apc-rail = <&apc1_vreg_corner>;
+			};
+
+			qcom,cpu5-chars {
+				qcom,sensor = <&sensor_information14>;
+				qcom,cpu-name = <&CPU5>;
+				qcom,apc-rail = <&apc1_vreg_corner>;
+			};
+
+			qcom,cpu6-chars {
+				qcom,sensor = <&sensor_information15>;
+				qcom,cpu-name = <&CPU6>;
+				qcom,apc-rail = <&apc1_vreg_corner>;
+			};
+
+			qcom,cpu7-chars {
+				qcom,sensor = <&sensor_information6>;
+				qcom,cpu-name = <&CPU7>;
+				qcom,apc-rail = <&apc1_vreg_corner>;
+			};
+		};
 	};
 };
 
