@@ -241,6 +241,27 @@
 		reg = <0x8c3b64 0x4>;
 	};
 
+	qcom,rmtfs_sharedmem@00000000 {
+		compatible = "qcom,sharedmem-uio";
+		reg = <0x00000000 0x00180000>;
+		reg-names = "rmtfs";
+		qcom,client-id = <0x00000001>;
+	};
+
+	qcom,dsp_sharedmem@00000000 {
+		compatible = "qcom,sharedmem-uio";
+		reg = <0x00000000 0x00010000>;
+		reg-names = "rfsa_dsp";
+		qcom,client-id = <0x011013ec>;
+	};
+
+	qcom,mdm_sharedmem@00000000 {
+		compatible = "qcom,sharedmem-uio";
+		reg = <0x00000000 0x00010000>;
+		reg-names = "rfsa_mdm";
+		qcom,client-id = <0x011013ed>;
+	};
+
 	sdhc_1: sdhci@7464900 {
 		compatible = "qcom,sdhci-msm";
 		reg = <0x7464900 0x314>, <0x7464000 0x800>, <0x7464E00 0x19C>;
