@@ -29,6 +29,10 @@ Required properties:
  - avago,cross-talk                             : Calibrate the threshold of proximity sensor.
 					the cross-talk value is raw data of proximity.
 
+ - avago,default-cal				: Boolean to select calibration,if this property is defined
+						sensor will be use default calibration, otherwise the sensor
+						will be use factroy calibration.
+
  Example:
 
 	 avago@39 {
@@ -51,5 +55,6 @@ Required properties:
 		 avago,als_C = <70>;
 		 avago,als_D = <142>;
 		 avago,ga_value = <48>;
+		 avago,default-cal;
 	 };
 
