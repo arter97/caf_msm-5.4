@@ -135,6 +135,17 @@ config MSM_RPM_SMD
 	  the MSM_MPM config that programs the MPM module to monitor interrupts
 	  during sleep modes.
 
+config MSM_RPM_LOG
+	tristate "MSM Resource Power Manager Log Driver"
+	depends on DEBUG_FS
+	depends on MSM_RPM_SMD
+	default n
+	help
+          This option enables a driver which can read from a circular buffer
+          of messages produced by the RPM. These messages provide diagnostic
+          information about RPM operation. The driver outputs the messages
+          via a debugfs node.
+
 config MSM_SMEM
 	depends on REMOTE_SPINLOCK_MSM
 	bool "MSM Shared Memory (SMEM)"
