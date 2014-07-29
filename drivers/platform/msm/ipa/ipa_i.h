@@ -952,6 +952,15 @@ static inline void ipa_write_reg(void *base, u32 offset, u32 val)
 	iowrite32(val, base + offset);
 }
 
+static inline void ipa_write_reg_field(void *base, u32 offset, u32 val,
+	u32 mask, u32 shift)
+{
+	u32 read_val = ipa_read_reg(base, offset);
+	read_val = (read_val & ~mask);
+	read_val |= (val << shift) & mask;
+	iowrite32(read_val, base + offset);
+}
+
 int ipa_bridge_init(void);
 void ipa_bridge_cleanup(void);
 
@@ -1001,5 +1010,8 @@ int ipa_tag_aggr_force_close(int pipe_num);
 void ipa_active_clients_lock(void);
 int ipa_active_clients_trylock(void);
 void ipa_active_clients_unlock(void);
+
+int ipa_sps_connect_safe(struct sps_pipe *h, struct sps_connect *connect,
+	u32 pipe_number);
 
 #endif /* _IPA_I_H_ */

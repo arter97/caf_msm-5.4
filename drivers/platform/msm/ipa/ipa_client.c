@@ -296,7 +296,7 @@ int ipa_connect(const struct ipa_connect_params *in, struct ipa_sps_params *sps,
 		ep->connect.event_thresh = IPA_EVENT_THRESHOLD;
 	ep->connect.options = SPS_O_AUTO_ENABLE;    /* BAM-to-BAM */
 
-	result = sps_connect(ep->ep_hdl, &ep->connect);
+	result = ipa_sps_connect_safe(ep->ep_hdl, &ep->connect, ipa_ep_idx);
 	if (result) {
 		IPAERR("sps_connect fails.\n");
 		goto sps_connect_fail;
@@ -457,7 +457,7 @@ int ipa_reset_endpoint(u32 clnt_hdl)
 		IPAERR("sps_disconnect() failed, res=%d.\n", res);
 		goto bail;
 	} else {
-		res = sps_connect(ep->ep_hdl, &ep->connect);
+		res = ipa_sps_connect_safe(ep->ep_hdl, &ep->connect, clnt_hdl);
 		if (res) {
 			IPAERR("sps_connect() failed, res=%d.\n", res);
 			goto bail;
@@ -470,3 +470,86 @@ bail:
 	return res;
 }
 EXPORT_SYMBOL(ipa_reset_endpoint);
+
+
+/**
+ * ipa_sps_connect_safe() - connect endpoint from BAM prespective
+ * @h: [in] sps pipe handle
+ * @connect: [in] sps connect parameters
+ * @pipe_number: [in] pipe number to be connected
+ *
+ * This function connects a BAM pipe using SPS driver sps_connect() API
+ * and avoids an IPA HW limitation that does not allow reseting a BAM pipe
+ * during traffic in IPA TX command queue.
+ * The sequence of operations is:
+ *	- Block write of IPA TX command queue
+ *	- Wait until TX command queue is empty
+ *	- Wait until TX is idle
+ *	- Perform BAM pipe reset
+ *	- Unblock write of IPA TX command queue
+ *	- Call to sps_connect() to connect the BAM pipe
+ *
+ * Returns:	0 on success, negative on failure
+ */
+int ipa_sps_connect_safe(struct sps_pipe *h, struct sps_connect *connect,
+	u32 pipe_number)
+{
+	u32 reg_val;
+	int res;
+
+	/* Block write of IPA TX command queue */
+	ipa_write_reg_field(ipa_ctx->mmio, IPA_PROC_TX_CMDQ_CFG, 1,
+		IPA_PROC_TX_CMDQ_CFG_BLOCK_WR_BMSK,
+		IPA_PROC_TX_CMDQ_CFG_BLOCK_WR_SHFT);
+
+	/* Wait until TX command queue is empty */
+	do {
+		reg_val = ipa_read_reg_field(ipa_ctx->mmio,
+			IPA_PROC_TX_CMDQ_STATUS,
+			IPA_PROC_TX_CMDQ_STATUS_CMDQ_EMPTY_BMSK,
+			IPA_PROC_TX_CMDQ_STATUS_CMDQ_EMPTY_SHFT);
+	} while (reg_val != 1);
+
+	/* Wait until TX is idle */
+	do {
+		reg_val = ipa_read_reg_field(ipa_ctx->mmio,
+			IPA_STATE,
+			IPA_STATE_TX_IDLE_BMSK,
+			IPA_STATE_TX_IDLE_SHFT);
+	} while (reg_val != 1);
+
+	/* Configure debug bus to expose ctrl_fsm state1 */
+	ipa_write_reg_field(ipa_ctx->mmio, IPA_DEBUG_DATA_SEL, 1,
+		IPA_DEBUG_DATA_SEL_PIPE_SELECT_BMSK,
+		IPA_DEBUG_DATA_SEL_PIPE_SELECT_SHFT);
+	ipa_write_reg_field(ipa_ctx->mmio, IPA_DEBUG_DATA_SEL, 15,
+		IPA_DEBUG_DATA_SEL_INTERNAL_BLOCK_SELECT_BMSK,
+		IPA_DEBUG_DATA_SEL_INTERNAL_BLOCK_SELECT_SHFT);
+	ipa_write_reg_field(ipa_ctx->mmio, IPA_DEBUG_DATA_SEL, 1,
+		IPA_DEBUG_DATA_SEL_EXTERNAL_BLOCK_SELECT_BMSK,
+		IPA_DEBUG_DATA_SEL_EXTERNAL_BLOCK_SELECT_SHFT);
+
+	/* Wait until ctrl_fsm state1 is 0 */
+	do {
+		reg_val = ipa_read_reg(ipa_ctx->mmio, IPA_DEBUG_DATA);
+	} while (reg_val & IPA_DEBUG_CTRL_FSM_STATE1_BMSK);
+
+	res = sps_pipe_reset(ipa_ctx->bam_handle, pipe_number);
+	if (res) {
+		IPAERR("sps_pipe_reset failed %d\n", res);
+		goto fail_pipe_reset;
+	}
+
+	/* Unblock write of IPA TX command queue */
+	ipa_write_reg_field(ipa_ctx->mmio, IPA_PROC_TX_CMDQ_CFG, 0,
+		IPA_PROC_TX_CMDQ_CFG_BLOCK_WR_BMSK,
+		IPA_PROC_TX_CMDQ_CFG_BLOCK_WR_SHFT);
+
+	return sps_connect(h, connect);
+
+fail_pipe_reset:
+	ipa_write_reg_field(ipa_ctx->mmio, IPA_PROC_TX_CMDQ_CFG, 0,
+		IPA_PROC_TX_CMDQ_CFG_BLOCK_WR_BMSK,
+		IPA_PROC_TX_CMDQ_CFG_BLOCK_WR_SHFT);
+	return res;
+}
