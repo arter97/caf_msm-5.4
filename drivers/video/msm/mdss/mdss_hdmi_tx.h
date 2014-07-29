@@ -117,4 +117,6 @@ struct hdmi_tx_ctrl {
 	u32 s3d_mode;
 };
 
+#define IS_CEC_WAKEUP_EN(ctrl) \
+	is_hdmi_cec_wakeup_en((ctrl)->feature_data[HDMI_TX_FEAT_CEC])
 #endif /* __MDSS_HDMI_TX_H__ */
