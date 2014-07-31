@@ -6,6 +6,7 @@ obj-$(CONFIG_USB_BAM) += usb_bam.o
 obj-$(CONFIG_IPA) += ipa/
 obj-$(CONFIG_SPS) += sps/
 obj-$(CONFIG_QPNP_POWER_ON) += qpnp-power-on.o
+obj-$(CONFIG_QPNP_CLKDIV) += qpnp-clkdiv.o
 obj-$(CONFIG_QPNP_USB_DETECT) += qpnp-usbdetect.o
 obj-$(CONFIG_QCA1530) += qca1530.o
 
