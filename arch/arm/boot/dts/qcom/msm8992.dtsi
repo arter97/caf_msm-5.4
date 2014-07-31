@@ -229,9 +229,53 @@
 		};
 	};
 
+	arm64-cpu-erp@f9100000 {
+		compatible = "arm,arm64-cpu-erp";
+		reg = <0xf9100000 0x1000>;
+		reg-names = "cci";
+		interrupts = <0 328 0>,
+			     <0 329 0>,
+			     <0 330 0>,
+			     <0 331 0>,
+			     <0 22 0>;
+		interrupt-names = "pri-dbe-irq",
+				  "sec-dbe-irq",
+				  "pri-ext-irq",
+				  "sec-ext-irq",
+				  "cci-irq";
+	};
+
 	restart@fc4ab000 {
 		compatible = "qcom,pshold";
 		reg = <0xfc4ab000 0x4>;
+	};
+
+	qcom,msm-imem@fe80f000 {
+		compatible = "qcom,msm-imem";
+		reg = <0xfe80f000 0x1000>; /* Address and size of IMEM */
+		ranges = <0x0 0xfe80f000 0x1000>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		download_mode@0 {
+			compatible = "qcom,msm-imem-download_mode";
+			reg = <0x0 8>;
+		};
+
+		restart_reason@65c {
+			compatible = "qcom,msm-imem-restart_reason";
+			reg = <0x65c 4>;
+		};
+
+		boot_stats@6b0 {
+			compatible = "qcom,msm-imem-boot_stats";
+			reg = <0x6b0 32>;
+		};
+
+		pil@94c {
+			compatible = "qcom,msm-imem-pil";
+			reg = <0x94c 200>;
+		};
 	};
 
 	blsp1_uart5: serial@f9922000 {
@@ -276,8 +320,8 @@
 		interrupts = <0 95 0>;
 		spi-max-frequency = <50000000>;
 		pinctrl-names = "default", "sleep";
-		pinctrl-0 = <&spi1_default &spi1_cs2_active>;
-		pinctrl-1 = <&spi1_sleep &spi1_cs2_sleep>;
+		pinctrl-0 = <&spi0_default &spi0_cs2_active>;
+		pinctrl-1 = <&spi0_sleep &spi0_cs2_sleep>;
 		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
 			 <&clock_gcc clk_gcc_blsp1_qup2_spi_apps_clk>;
 		clock-names = "iface_clk", "core_clk";

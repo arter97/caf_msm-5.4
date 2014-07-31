@@ -1033,7 +1033,7 @@ static int ufs_msm_init(struct ufs_hba *hba)
 	}
 
 	host->hba = hba;
-	host->generic_phy = devm_phy_get_by_index(dev, 0);
+	host->generic_phy = devm_phy_get(dev, "ufs_msm_phy");
 
 	if (IS_ERR(host->generic_phy)) {
 		err = PTR_ERR(host->generic_phy);

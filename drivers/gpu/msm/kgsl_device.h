@@ -357,6 +357,8 @@ struct kgsl_device {
 	u32 snapshot_faultcount;	/* Total number of faults since boot */
 	struct kobject snapshot_kobj;
 
+	struct kobject ppd_kobj;
+
 	/* Logging levels */
 	int cmd_log;
 	int ctxt_log;
@@ -369,6 +371,8 @@ struct kgsl_device {
 	int reset_counter; /* Track how many GPU core resets have occured */
 	int cff_dump_enable;
 	struct workqueue_struct *events_wq;
+
+	struct device *busmondev; /* pseudo dev for GPU BW voting governor */
 };
 
 
