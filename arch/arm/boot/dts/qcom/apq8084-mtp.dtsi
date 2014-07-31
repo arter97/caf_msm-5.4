@@ -198,6 +198,8 @@
 };
 
 &sdhc_1 {
+	bus-width = <8>;
+	non-removable;
 	vdd-supply = <&pma8084_l20>;
 	qcom,vdd-voltage-level = <2950000 2950000>;
 	qcom,vdd-current-level = <200 500000>;
@@ -218,6 +220,7 @@
 };
 
 &sdhc_2 {
+	bus-width = <4>;
 	vdd-supply = <&pma8084_l21>;
 	qcom,vdd-voltage-level = <2950000 2950000>;
 	qcom,vdd-current-level = <200 800000>;
