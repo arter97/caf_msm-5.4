@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1806,8 +1806,9 @@ int afe_close(int port_id)
 				__func__, pcm_afe_instance[port_id & 0x1]);
 		port_id = VIRTUAL_ID_TO_PORTID(port_id);
 		pcm_afe_instance[port_id & 0x1]--;
-		if (!(pcm_afe_instance[port_id & 0x1] == 0 &&
-			proxy_afe_instance[port_id & 0x1] == 0))
+		if ((!(pcm_afe_instance[port_id & 0x1] == 0 &&
+			proxy_afe_instance[port_id & 0x1] == 0)) ||
+			afe_close_done[port_id & 0x1] == true)
 			return 0;
 		else
 			afe_close_done[port_id & 0x1] = true;
@@ -1819,8 +1820,9 @@ int afe_close(int port_id)
 				__func__, proxy_afe_instance[port_id & 0x1]);
 		port_id = VIRTUAL_ID_TO_PORTID(port_id);
 		proxy_afe_instance[port_id & 0x1]--;
-		if (!(pcm_afe_instance[port_id & 0x1] == 0 &&
-			proxy_afe_instance[port_id & 0x1] == 0))
+		if ((!(pcm_afe_instance[port_id & 0x1] == 0 &&
+			proxy_afe_instance[port_id & 0x1] == 0)) ||
+			afe_close_done[port_id & 0x1] == true)
 			return 0;
 		else
 			afe_close_done[port_id & 0x1] = true;
