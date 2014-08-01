@@ -1,43 +1,5 @@
 if ARCH_MSM
 
-choice
-	prompt "Qualcomm MSM SoC Type"
-	default ARCH_MSM7X00A
-	depends on ARCH_MSM
-
-config ARCH_MSM7X00A
-	bool "MSM7x00A / MSM7x01A"
-	select ARCH_MSM_ARM11
-	select CPU_V6
-	select GPIO_MSM_V1
-	select MACH_TROUT if !MACH_HALIBUT
-	select MSM_PROC_COMM
-	select CLKSRC_QCOM
-
-config ARCH_MSM7X30
-	bool "MSM7x30"
-	select ARCH_MSM_SCORPION
-	select CPU_V7
-	select GPIO_MSM_V1
-	select MACH_MSM7X30_SURF # if !
-	select MSM_GPIOMUX
-	select MSM_PROC_COMM
-	select CLKSRC_QCOM
-	select MSM_VIC
-
-config ARCH_QSD8X50
-	bool "QSD8X50"
-	select ARCH_MSM_SCORPION
-	select CPU_V7
-	select GPIO_MSM_V1
-	select MACH_QSD8X50_SURF if !MACH_QSD8X50A_ST1_5
-	select MSM_GPIOMUX
-	select MSM_PROC_COMM
-	select CLKSRC_QCOM
-	select MSM_VIC
-
-endchoice
-
 config MSM_SOC_REV_A
 	bool
 
@@ -49,44 +11,6 @@ config  ARCH_MSM_SCORPION
 
 config  MSM_VIC
 	bool
-
-menu "Qualcomm MSM Board Type"
-	depends on ARCH_MSM
-
-config MACH_HALIBUT
-	depends on ARCH_MSM
-	depends on ARCH_MSM7X00A
-	bool "Halibut Board (QCT SURF7201A)"
-	help
-	  Support for the Qualcomm SURF7201A eval board.
-
-config MACH_TROUT
-	depends on ARCH_MSM
-	depends on ARCH_MSM7X00A
-	bool "HTC Dream (aka trout)"
-	help
-	  Support for the HTC Dream, T-Mobile G1, Android ADP1 devices.
-
-config MACH_MSM7X30_SURF
-	depends on ARCH_MSM7X30
-	bool "MSM7x30 SURF"
-	help
-	  Support for the Qualcomm MSM7x30 SURF eval board.
-
-config MACH_QSD8X50_SURF
-	depends on ARCH_QSD8X50
-	bool "QSD8x50 SURF"
-	help
-	  Support for the Qualcomm QSD8x50 SURF eval board.
-
-config MACH_QSD8X50A_ST1_5
-	depends on ARCH_QSD8X50
-	bool "QSD8x50A ST1.5"
-	select MSM_SOC_REV_A
-	help
-	  Support for the Qualcomm ST1.5.
-
-endmenu
 
 config MSM_PROC_COMM
 	bool
