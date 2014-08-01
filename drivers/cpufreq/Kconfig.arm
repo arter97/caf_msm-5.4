@@ -250,3 +250,10 @@ config ARM_VEXPRESS_SPC_CPUFREQ
         help
           This add the CPUfreq driver support for Versatile Express
 	  big.LITTLE platforms using SPC for power management.
+
+config CPU_FREQ_MSM
+	bool
+	depends on CPU_FREQ && ARCH_MSM
+	default y
+	help
+	  This enables the CPUFreq driver for Qualcomm CPUs.
