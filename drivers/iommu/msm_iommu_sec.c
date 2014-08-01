@@ -111,7 +111,7 @@ struct msm_cp_pool_size {
 struct msm_scm_fault_regs_dump {
 	uint32_t dump_size;
 	uint32_t dump_data[SEC_DUMP_SIZE];
-} __aligned(cache_line_size());
+} __aligned(PAGE_SIZE);
 
 void msm_iommu_sec_set_access_ops(struct iommu_access_ops *access_ops)
 {
@@ -467,7 +467,11 @@ static int msm_iommu_sec_ptbl_map(struct msm_iommu_drvdata *iommu_drvdata,
 	map.info.ctx_id = ctx_drvdata->num;
 	map.info.va = va;
 	map.info.size = len;
+#ifdef CONFIG_MSM_IOMMU_TLBINVAL_ON_MAP
 	map.flags = IOMMU_TLBINVAL_FLAG;
+#else
+	map.flags = 0;
+#endif
 	flush_va = &pa;
 	flush_pa = virt_to_phys(&pa);
 
@@ -517,7 +521,11 @@ static int msm_iommu_sec_ptbl_map_range(struct msm_iommu_drvdata *iommu_drvdata,
 	map.info.ctx_id = ctx_drvdata->num;
 	map.info.va = va;
 	map.info.size = len;
+#ifdef CONFIG_MSM_IOMMU_TLBINVAL_ON_MAP
 	map.flags = IOMMU_TLBINVAL_FLAG;
+#else
+	map.flags = 0;
+#endif
 
 	if (sg->length == len) {
 		pa = get_phys_addr(sg);

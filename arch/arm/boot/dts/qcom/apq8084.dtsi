@@ -4644,6 +4644,7 @@
 		qcom,proxy-timeout-ms = <10000>;
 		qcom,smem-id = <423>;
 		qcom,sysmon-id = <1>;
+		qcom,ssctl-instance-id = <0x14>;
 		qcom,firmware-name = "adsp";
 
 		/* GPIO inputs from lpass */
@@ -5210,6 +5211,10 @@
 
 	qcom,msm-cpe-lsm {
 		compatible = "qcom,msm-cpe-lsm";
+	};
+
+	qcom,msm-voice-svc {
+		compatible = "qcom,msm-voice-svc";
 	};
 
 	qcom,msm-dai-stub {

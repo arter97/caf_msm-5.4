@@ -1050,6 +1050,12 @@
 			< 4066 /* 533 MHz */ >;
 	};
 
+	qcom,armbw-pm {
+		compatible = "qcom,armbw-pm";
+		interrupts = <1 7 0xF1>;
+		qcom,bytes-per-beat = <16>;
+	};
+
 	devfreq-cpufreq {
 		cpubw-cpufreq {
 			target-dev = <&cpubw>;
@@ -1148,6 +1154,7 @@
 		qcom,proxy-timeout-ms = <10000>;
 		qcom,smem-id = <422>;
 		qcom,sysmon-id = <6>;
+		qcom,ssctl-instance-id = <0x13>;
 		qcom,firmware-name = "wcnss";
 
 		/* GPIO inputs from wcnss */
@@ -1185,6 +1192,7 @@
 		qcom,proxy-timeout-ms = <10000>;
 		qcom,smem-id = <423>;
 		qcom,sysmon-id = <1>;
+		qcom,ssctl-instance-id = <0x14>;
 		qcom,firmware-name = "adsp";
 
 		/* GPIO inputs from lpass */
@@ -1219,6 +1227,7 @@
 		qcom,pil-self-auth;
 		qcom,mba-image-is-not-elf;
 		qcom,sysmon-id = <0>;
+		qcom,ssctl-instance-id = <0x12>;
 
 		/* GPIO inputs from mss */
 		qcom,gpio-err-fatal = <&smp2pgpio_ssr_smp2p_1_in 0 0>;
