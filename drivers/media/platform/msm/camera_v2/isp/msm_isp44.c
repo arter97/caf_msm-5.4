@@ -1069,7 +1069,7 @@ static void msm_vfe44_stats_cfg_comp_mask(
 	struct vfe_device *vfe_dev,
 	uint32_t stats_mask, uint8_t enable)
 {
-	uint32_t reg_mask, comp_stats_mask, mask_bf_scale;
+	uint32_t reg_mask = 0, comp_stats_mask, mask_bf_scale;
 	uint32_t i = 0;
 	atomic_t *stats_comp;
 	struct msm_vfe_stats_shared_data *stats_data = &vfe_dev->stats_data;
