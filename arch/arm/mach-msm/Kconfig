@@ -49,4 +49,12 @@ config MSM_GPIOMUX
 	help
 	  Support for MSM V1 TLMM GPIOMUX architecture.
 
+config KRAIT_REGULATOR
+	bool "Support Kraits powered via ganged regulators in the pmic"
+	help
+	 Certain MSMs have the Krait CPUs powered via a single supply
+	 line from the PMIC. This supply line is powered by multiple
+	 regulators running in ganged mode inside the PMIC. Enable
+	 this option to support such configurations.
+
 endif
