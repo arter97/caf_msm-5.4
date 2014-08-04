@@ -135,6 +135,120 @@ TRACE_EVENT(mdp_video_underrun_done,
 			__entry->ctl_num, __entry->underrun_cnt)
 );
 
+TRACE_EVENT(mdp_perf_update_bus,
+	TP_PROTO(unsigned long long ab_quota, unsigned long long ib_quota),
+	TP_ARGS(ab_quota, ib_quota),
+	TP_STRUCT__entry(
+			__field(u64, ab_quota)
+			__field(u64, ib_quota)
+	),
+	TP_fast_assign(
+			__entry->ab_quota = ab_quota;
+			__entry->ib_quota = ib_quota;
+	),
+	TP_printk("ab=%llu ib=%llu",
+			__entry->ab_quota,
+			__entry->ib_quota)
+);
+
+TRACE_EVENT(mdp_cmd_pingpong_done,
+	TP_PROTO(struct mdss_mdp_ctl *ctl, u32 pp_num, int koff_cnt),
+	TP_ARGS(ctl, pp_num, koff_cnt),
+	TP_STRUCT__entry(
+			__field(u32, ctl_num)
+			__field(u32, intf_num)
+			__field(u32, pp_num)
+			__field(int, koff_cnt)
+	),
+	TP_fast_assign(
+			__entry->ctl_num = ctl->num;
+			__entry->intf_num = ctl->intf_num;
+			__entry->pp_num = pp_num;
+			__entry->koff_cnt = koff_cnt;
+	),
+	TP_printk("ctl num:%d intf_num:%d ctx:%d kickoff:%d",
+			__entry->ctl_num, __entry->intf_num, __entry->pp_num,
+			__entry->koff_cnt)
+);
+
+TRACE_EVENT(mdp_cmd_release_bw,
+	TP_PROTO(u32 ctl_num),
+	TP_ARGS(ctl_num),
+	TP_STRUCT__entry(
+			__field(u32, ctl_num)
+	),
+	TP_fast_assign(
+			__entry->ctl_num = ctl_num;
+	),
+	TP_printk("ctl num:%d", __entry->ctl_num)
+);
+
+TRACE_EVENT(mdp_cmd_kickoff,
+	TP_PROTO(u32 ctl_num, int kickoff_cnt),
+	TP_ARGS(ctl_num, kickoff_cnt),
+	TP_STRUCT__entry(
+			__field(u32, ctl_num)
+			__field(int, kickoff_cnt)
+	),
+	TP_fast_assign(
+			__entry->ctl_num = ctl_num;
+			__entry->kickoff_cnt = kickoff_cnt;
+	),
+	TP_printk("kickoff ctl=%d cnt=%d",
+			__entry->ctl_num,
+			__entry->kickoff_cnt)
+);
+
+TRACE_EVENT(mdp_cmd_wait_pingpong,
+	TP_PROTO(u32 ctl_num, int kickoff_cnt),
+	TP_ARGS(ctl_num, kickoff_cnt),
+	TP_STRUCT__entry(
+			__field(u32, ctl_num)
+			__field(int, kickoff_cnt)
+	),
+	TP_fast_assign(
+			__entry->ctl_num = ctl_num;
+			__entry->kickoff_cnt = kickoff_cnt;
+	),
+	TP_printk("pingpong ctl=%d cnt=%d",
+			__entry->ctl_num,
+			__entry->kickoff_cnt)
+);
+
+TRACE_EVENT(tracing_mark_write,
+	TP_PROTO(int pid, const char *name, bool trace_begin),
+	TP_ARGS(pid, name, trace_begin),
+	TP_STRUCT__entry(
+			__field(int, pid)
+			__string(trace_name, name)
+			__field(bool, trace_begin)
+	),
+	TP_fast_assign(
+			__entry->pid = pid;
+			__assign_str(trace_name, name);
+			__entry->trace_begin = trace_begin;
+	),
+	TP_printk("%s|%d|%s", __entry->trace_begin ? "B" : "E",
+		__entry->pid, __get_str(trace_name))
+);
+
+TRACE_EVENT(mdp_trace_counter,
+	TP_PROTO(int pid, char *name, int value),
+	TP_ARGS(pid, name, value),
+	TP_STRUCT__entry(
+			__field(int, pid)
+			__string(counter_name, name)
+			__field(int, value)
+	),
+	TP_fast_assign(
+			__entry->pid = current->tgid;
+			__assign_str(counter_name, name);
+			__entry->value = value;
+	),
+	TP_printk("%d|%s|%d", __entry->pid,
+			__get_str(counter_name), __entry->value)
+);
+
 #endif /* if !defined(TRACE_MDSS_MDP_H) || defined(TRACE_HEADER_MULTI_READ) */
 
 /* This part must be outside protection */
