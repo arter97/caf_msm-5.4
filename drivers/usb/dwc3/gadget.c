@@ -1371,29 +1371,13 @@ static int __dwc3_gadget_ep_queue(struct dwc3_ep *dep, struct dwc3_request *req)
 
 static int dwc3_gadget_wakeup(struct usb_gadget *g)
 {
-	int ret = 0;
-
 	struct dwc3_usb_gadget *dwc3_gadget = g->private;
-	struct dwc3 *dwc = dwc3_gadget->dwc;
-	unsigned long		flags;
-	spin_lock_irqsave(&dwc->lock, flags);
+	pr_debug("%s: Entry\n", __func__);
 
-	if (atomic_read(&dwc->in_lpm)) {
-		schedule_work(&dwc3_gadget->wakeup_work);
-		pr_debug("Core is in low-power mode. Scheduling wakeup work.\n");
-		ret = -EBUSY;
-	} else {
-		pr_debug("Core is active. Initiating remote wakeup.\n");
-		ret = dwc3_gadget_wakeup_int(dwc);
-		if (ret)
-			pr_err("Remote wakeup failed. ret = %d\n", ret);
-		else
-			pr_debug("Remote wake up succeeded.\n");
-	}
+	schedule_work(&dwc3_gadget->wakeup_work);
 
-	spin_unlock_irqrestore(&dwc->lock, flags);
-
-	return ret;
+	pr_debug("%s: Exit\n", __func__);
+	return 0;
 }
 
 static inline enum dwc3_link_state dwc3_get_link_state(struct dwc3 *dwc)
@@ -1657,6 +1641,8 @@ static int dwc3_gadget_wakeup_int(struct dwc3 *dwc)
 	int			ret = 0;
 	u8			link_state;
 
+	pr_debug("%s: Entry\n", __func__);
+
 	/*
 	 * According to the Databook Remote wakeup request should
 	 * be issued only when the device is in early suspend state.
@@ -1725,6 +1711,7 @@ static int dwc3_gadget_wakeup_int(struct dwc3 *dwc)
 		dwc3_gadget_wakeup_interrupt(dwc);
 out:
 
+	pr_debug("%s: Exit\n", __func__);
 	return ret;
 }
 
@@ -1744,6 +1731,11 @@ static int dwc_gadget_func_wakeup(struct usb_gadget *g, int interface_id)
 
 	ret = dwc3_send_gadget_generic_command(dwc,
 		DWC3_DGCMD_XMIT_FUNCTION, interface_id);
+
+	if (ret)
+		pr_err("%s - Function wakeup HW command failed.\n", __func__);
+	else
+		pr_debug("Function wakeup HW command succeeded.\n");
 
 	return ret;
 }
