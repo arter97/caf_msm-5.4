@@ -138,6 +138,9 @@ gen_pool_alloc(struct gen_pool *pool, size_t size)
         return gen_pool_alloc_aligned(pool, size, 0);
 }
 
+bool addr_in_gen_pool(struct gen_pool *pool, unsigned long start,
+			size_t size);
+
 #ifdef CONFIG_OF
 extern struct gen_pool *of_get_named_gen_pool(struct device_node *np,
 	const char *propname, int index);
