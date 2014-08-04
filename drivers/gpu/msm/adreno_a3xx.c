@@ -13,6 +13,7 @@
 
 #include <linux/delay.h>
 #include <linux/sched.h>
+#include <linux/msm_kgsl.h>
 
 #include "kgsl.h"
 #include "adreno.h"
@@ -22,8 +23,8 @@
 #include "adreno_a3xx.h"
 #include "adreno_a4xx.h"
 #include "a4xx_reg.h"
-#include "adreno_a3xx_trace.h"
 #include "adreno_cp_parser.h"
+#include "adreno_trace.h"
 
 /*
  * Set of registers to dump for A3XX on snapshot.
@@ -247,7 +248,8 @@ int adreno_a3xx_pwron_fixup_init(struct adreno_device *adreno_dev)
 		return 0;
 
 	ret = kgsl_allocate_global(&adreno_dev->dev,
-		&adreno_dev->pwron_fixup, PAGE_SIZE, KGSL_MEMFLAGS_GPUREADONLY);
+		&adreno_dev->pwron_fixup, PAGE_SIZE,
+		KGSL_MEMFLAGS_GPUREADONLY, 0);
 
 	if (ret)
 		return ret;
@@ -714,20 +716,18 @@ int a3xx_rb_init(struct adreno_device *adreno_dev,
 }
 
 /*
- * a3xx_a4xx_err_callback() - Common interrupts shared between A4XX
- * and A3XX
+ * a3xx_err_callback() - Call back for a3xx error interrupts
  * @adreno_dev: Pointer to device
  * @bit: Interrupt bit
  */
-void a3xx_a4xx_err_callback(struct adreno_device *adreno_dev, int bit)
+void a3xx_err_callback(struct adreno_device *adreno_dev, int bit)
 {
 	struct kgsl_device *device = &adreno_dev->dev;
 	unsigned int reg;
 
 	switch (bit) {
 	case A3XX_INT_RBBM_AHB_ERROR: {
-		adreno_readreg(adreno_dev, ADRENO_REG_RBBM_AHB_ERROR_STATUS,
-				&reg);
+		kgsl_regread(device, A3XX_RBBM_AHB_ERROR_STATUS, &reg);
 
 		/*
 		 * Return the word address of the erroring register so that it
@@ -740,136 +740,48 @@ void a3xx_a4xx_err_callback(struct adreno_device *adreno_dev, int bit)
 			(reg >> 24) & 0xF);
 
 		/* Clear the error */
-		if (adreno_is_a4xx(adreno_dev))
-			adreno_writereg(adreno_dev, ADRENO_REG_RBBM_AHB_CMD,
-					(1 << 4));
-		else
-			adreno_writereg(adreno_dev, ADRENO_REG_RBBM_AHB_CMD,
-					(1 << 3));
+		kgsl_regwrite(device, A3XX_RBBM_AHB_CMD, (1 << 3));
 
-		break;
+		return;
 	}
-	case A3XX_INT_RBBM_REG_TIMEOUT:
-		KGSL_DRV_CRIT_RATELIMIT(device, "RBBM: AHB register timeout\n");
+	case A3XX_INT_RBBM_ATB_BUS_OVERFLOW:
+		KGSL_DRV_CRIT_RATELIMIT(device, "RBBM: ATB bus oveflow\n");
 		break;
-	case A3XX_INT_RBBM_ME_MS_TIMEOUT:
-		adreno_readreg(adreno_dev, ADRENO_REG_RBBM_AHB_ME_SPLIT_STATUS,
-				&reg);
+	case A3XX_INT_CP_T0_PACKET_IN_IB:
 		KGSL_DRV_CRIT_RATELIMIT(device,
-			"RBBM | ME master split timeout | status=%x\n", reg);
+			"ringbuffer TO packet in IB interrupt\n");
 		break;
-	case A3XX_INT_RBBM_PFP_MS_TIMEOUT:
-		adreno_readreg(adreno_dev, ADRENO_REG_RBBM_AHB_PFP_SPLIT_STATUS,
-				&reg);
+	case A3XX_INT_CP_OPCODE_ERROR:
 		KGSL_DRV_CRIT_RATELIMIT(device,
-			"RBBM | PFP master split timeout | status=%x\n", reg);
-		break;
-	case A3XX_INT_UCHE_OOB_ACCESS:
-		KGSL_DRV_CRIT_RATELIMIT(device,
-			"UCHE:  Out of bounds access\n");
+			"ringbuffer opcode error interrupt\n");
 		break;
 	case A3XX_INT_CP_RESERVED_BIT_ERROR:
 		KGSL_DRV_CRIT_RATELIMIT(device,
-				"ringbuffer reserved bit error interrupt\n");
+			"ringbuffer reserved bit error interrupt\n");
 		break;
 	case A3XX_INT_CP_HW_FAULT:
-		adreno_readreg(adreno_dev, ADRENO_REG_CP_HW_FAULT, &reg);
+		kgsl_regread(device, A3XX_CP_HW_FAULT, &reg);
 		KGSL_DRV_CRIT_RATELIMIT(device,
 			"CP | Ringbuffer HW fault | status=%x\n", reg);
 		break;
 	case A3XX_INT_CP_REG_PROTECT_FAULT:
-		adreno_readreg(adreno_dev, ADRENO_REG_CP_PROTECT_STATUS, &reg);
-
+		kgsl_regread(device, A3XX_CP_PROTECT_STATUS, &reg);
 		KGSL_DRV_CRIT(device,
 			"CP | Protected mode error| %s | addr=%x\n",
 			reg & (1 << 24) ? "WRITE" : "READ",
 			(reg & 0xFFFFF) >> 2);
-		break;
-	case A3XX_INT_CP_AHB_ERROR_HALT:
-		KGSL_DRV_CRIT(device, "ringbuffer AHB error interrupt\n");
-		break;
-	case A3XX_INT_MISC_HANG_DETECT:
-		KGSL_DRV_CRIT(device, "MISC: GPU hang detected\n");
-		break;
-	}
-}
-
-static void a3xx_err_callback(struct adreno_device *adreno_dev, int bit)
-{
-	struct kgsl_device *device = &adreno_dev->dev;
-	const char *err = "";
-	/* Limit to 10 messages every 5 seconds */
-	static DEFINE_RATELIMIT_STATE(ratelimit_state, 5 * HZ, 10);
-
-	switch (bit) {
-	case A3XX_INT_RBBM_ATB_BUS_OVERFLOW:
-		err = "RBBM: ATB bus oveflow";
-		break;
-	case A3XX_INT_VFD_ERROR:
-		err = "VFD: Out of bounds access";
-		break;
-	case A3XX_INT_CP_OPCODE_ERROR:
-		err = "ringbuffer opcode error interrupt";
-		break;
-	case A3XX_INT_CP_T0_PACKET_IN_IB:
-		err = "ringbuffer TO packet in IB interrupt";
-		break;
-	default:
 		return;
-	}
-
-	/*
-	* Limit error interrupt reporting to prevent
-	* kernel logs causing watchdog timeout
-	*/
-	if (__ratelimit(&ratelimit_state))
-		KGSL_DRV_CRIT(device, "%s\n", err);
-}
-
-/*
- * a3xx_fatal_err_callback() - Isr for fatal interrupts that hang GPU
- * @adreno_dev: Pointer to device
- * @bit: Interrupt bit
- *
- * Called for both A4XX and A3XX
- */
-void a3xx_fatal_err_callback(struct adreno_device *adreno_dev, int bit)
-{
-	struct kgsl_device *device = &adreno_dev->dev;
-
-	/* Call the other error routines to get the error print */
-	switch (bit) {
-	case A3XX_INT_RBBM_ATB_BUS_OVERFLOW:
-	case A3XX_INT_VFD_ERROR:
-	case A3XX_INT_CP_T0_PACKET_IN_IB:
-		a3xx_err_callback(adreno_dev, bit);
+	case A3XX_INT_CP_AHB_ERROR_HALT:
+		KGSL_DRV_CRIT_RATELIMIT(device,
+			"ringbuffer AHB error interrupt\n");
+		break;
+	case A3XX_INT_UCHE_OOB_ACCESS:
+		KGSL_DRV_CRIT_RATELIMIT(device, "UCHE: Out of bounds access\n");
 		break;
 	default:
-		a3xx_a4xx_err_callback(adreno_dev, bit);
+		KGSL_DRV_CRIT_RATELIMIT(device, "Unknown interrupt\n");
 	}
-
-	kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_OFF);
-
-	/* Trigger a fault in the dispatcher - this will effect a restart */
-	adreno_dispatcher_irq_fault(device);
 }
-
-/*
- * a3xx_cp_callback() - CP interrupt handler
- * @adreno_dev: Adreno device pointer
- * @irq: irq number
- *
- * Handle the cp interrupt generated by GPU, common function between a3xx and
- * a4xx devices
- */
-void a3xx_cp_callback(struct adreno_device *adreno_dev, int irq)
-{
-	struct kgsl_device *device = &adreno_dev->dev;
-
-	queue_work(device->work_queue, &device->event_work);
-	adreno_dispatcher_schedule(device);
-}
-
 
 static int a3xx_perfcounter_enable_pwr(struct adreno_device *adreno_dev,
 	unsigned int counter)
@@ -1345,156 +1257,6 @@ uint64_t a3xx_perfcounter_read(struct adreno_device *adreno_dev,
 	return (((uint64_t) hi) << 32) | lo;
 }
 
-/*
- * values cannot be loaded into physical performance
- * counters belonging to these groups.
- */
-static inline int loadable_perfcounter_group(unsigned int groupid)
-{
-	return ((groupid == KGSL_PERFCOUNTER_GROUP_VBIF_PWR) ||
-		(groupid == KGSL_PERFCOUNTER_GROUP_VBIF) ||
-		(groupid == KGSL_PERFCOUNTER_GROUP_PWR)) ? 0 : 1;
-}
-
-/*
- * Return true if the countable is used and not broken
- */
-static inline int active_countable(unsigned int countable)
-{
-	return ((countable != KGSL_PERFCOUNTER_NOT_USED) &&
-		(countable != KGSL_PERFCOUNTER_BROKEN));
-}
-
-/**
- * a3xx_perfcounter_save() - Save the physical performance counter values
- * @adreno_dev -  Adreno device whose registers need to be saved
- *
- * Read all the physical performance counter's values and save them
- * before GPU power collapse.
- */
-void a3xx_perfcounter_save(struct adreno_device *adreno_dev)
-{
-	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
-	struct adreno_perfcounters *counters = gpudev->perfcounters;
-	struct adreno_perfcount_group *group;
-	unsigned int regid, groupid;
-
-	if (counters == NULL)
-		return;
-
-	for (groupid = 0; groupid < counters->group_count; groupid++) {
-		group = &(counters->groups[groupid]);
-
-		/* group/counter iterator */
-		for (regid = 0; regid < group->reg_count; regid++) {
-			if (!active_countable(group->regs[regid].countable))
-				continue;
-
-			/* accumulate values for non-loadable counters */
-			if (loadable_perfcounter_group(groupid))
-				group->regs[regid].value = 0;
-
-			group->regs[regid].value = group->regs[regid].value +
-				gpudev->perfcounter_read(adreno_dev, groupid,
-					regid);
-		}
-	}
-}
-
-/**
- * a3xx_perfcounter_write() - Write the physical performance counter values.
- * @adreno_dev -  Adreno device whose registers are to be written to.
- * @group - group to which the physical counter belongs to.
- * @counter - register id of the physical counter to which the value is
- *		written to.
- *
- * This function loads the 64 bit saved value into the particular physical
- * counter by enabling the corresponding bit in A3XX_RBBM_PERFCTR_LOAD_CMD*
- * register.
- */
-static void a3xx_perfcounter_write(struct adreno_device *adreno_dev,
-				unsigned int group, unsigned int counter)
-{
-	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
-	struct adreno_perfcount_register *reg;
-	unsigned int val;
-
-	reg = &(gpudev->perfcounters->groups[group].regs[counter]);
-
-	/* Clear the load cmd registers */
-	adreno_writereg(adreno_dev, ADRENO_REG_RBBM_PERFCTR_LOAD_CMD0, 0);
-	adreno_writereg(adreno_dev, ADRENO_REG_RBBM_PERFCTR_LOAD_CMD1, 0);
-	if (adreno_is_a4xx(adreno_dev))
-		adreno_writereg(adreno_dev,
-			ADRENO_REG_RBBM_PERFCTR_LOAD_CMD2, 0);
-
-
-	/* Write the saved value to PERFCTR_LOAD_VALUE* registers. */
-	adreno_writereg(adreno_dev, ADRENO_REG_RBBM_PERFCTR_LOAD_VALUE_LO,
-			(uint32_t)reg->value);
-	adreno_writereg(adreno_dev, ADRENO_REG_RBBM_PERFCTR_LOAD_VALUE_HI,
-			(uint32_t)(reg->value >> 32));
-
-	/*
-	 * Set the load bit in PERFCTR_LOAD_CMD for the physical counter
-	 * we want to restore. The value in PERFCTR_LOAD_VALUE* is loaded
-	 * into the corresponding physical counter.
-	 */
-	if (reg->load_bit < 32)	{
-		val = 1 << reg->load_bit;
-		adreno_writereg(adreno_dev, ADRENO_REG_RBBM_PERFCTR_LOAD_CMD0,
-			val);
-	} else if (reg->load_bit < 64) {
-		val  = 1 << (reg->load_bit - 32);
-		adreno_writereg(adreno_dev, ADRENO_REG_RBBM_PERFCTR_LOAD_CMD1,
-			val);
-	} else if (reg->load_bit >= 64 && adreno_is_a4xx(adreno_dev)) {
-		val = 1 << (reg->load_bit - 64);
-		adreno_writereg(adreno_dev, ADRENO_REG_RBBM_PERFCTR_LOAD_CMD2,
-			val);
-	}
-}
-
-/**
- * a3xx_perfcounter_restore() - Restore the physical performance counter values.
- * @adreno_dev -  Adreno device whose registers are to be restored.
- *
- * This function together with a3xx_perfcounter_save make sure that performance
- * counters are coherent across GPU power collapse.
- */
-void a3xx_perfcounter_restore(struct adreno_device *adreno_dev)
-{
-	struct adreno_perfcounters *counters = ADRENO_PERFCOUNTERS(adreno_dev);
-	struct adreno_perfcount_group *group;
-	unsigned int regid, groupid;
-
-	if (counters == NULL)
-		return;
-
-	for (groupid = 0; groupid < counters->group_count; groupid++) {
-		if (!loadable_perfcounter_group(groupid))
-			continue;
-
-		group = &(counters->groups[groupid]);
-
-		/* group/counter iterator */
-		for (regid = 0; regid < group->reg_count; regid++) {
-			if (!active_countable(group->regs[regid].countable))
-				continue;
-
-			a3xx_perfcounter_write(adreno_dev, groupid, regid);
-		}
-	}
-
-	/* Clear the load cmd registers */
-	adreno_writereg(adreno_dev, ADRENO_REG_RBBM_PERFCTR_LOAD_CMD0, 0);
-	adreno_writereg(adreno_dev, ADRENO_REG_RBBM_PERFCTR_LOAD_CMD1, 0);
-	if (adreno_is_a4xx(adreno_dev))
-		adreno_writereg(adreno_dev,
-			ADRENO_REG_RBBM_PERFCTR_LOAD_CMD2, 0);
-
-}
-
 #define A3XX_INT_MASK \
 	((1 << A3XX_INT_RBBM_AHB_ERROR) |        \
 	 (1 << A3XX_INT_RBBM_ATB_BUS_OVERFLOW) | \
@@ -1511,37 +1273,35 @@ void a3xx_perfcounter_restore(struct adreno_device *adreno_dev)
 
 static struct adreno_irq_funcs a3xx_irq_funcs[] = {
 	ADRENO_IRQ_CALLBACK(NULL),                    /* 0 - RBBM_GPU_IDLE */
-	ADRENO_IRQ_CALLBACK(a3xx_a4xx_err_callback),  /* 1 - RBBM_AHB_ERROR */
-	ADRENO_IRQ_CALLBACK(a3xx_a4xx_err_callback),  /* 2 - RBBM_REG_TIMEOUT */
-	/* * 3 - RBBM_ME_MS_TIMEOUT */
-	ADRENO_IRQ_CALLBACK(a3xx_a4xx_err_callback),
-	/* 4 - RBBM_PFP_MS_TIMEOUT */
-	ADRENO_IRQ_CALLBACK(a3xx_a4xx_err_callback),
+	ADRENO_IRQ_CALLBACK(a3xx_err_callback),  /* 1 - RBBM_AHB_ERROR */
+	ADRENO_IRQ_CALLBACK(NULL),  /* 2 - RBBM_REG_TIMEOUT */
+	ADRENO_IRQ_CALLBACK(NULL),  /* 3 - RBBM_ME_MS_TIMEOUT */
+	ADRENO_IRQ_CALLBACK(NULL),  /* 4 - RBBM_PFP_MS_TIMEOUT */
 	ADRENO_IRQ_CALLBACK(a3xx_err_callback),  /* 5 - RBBM_ATB_BUS_OVERFLOW */
-	ADRENO_IRQ_CALLBACK(a3xx_err_callback),  /* 6 - RBBM_VFD_ERROR */
-	ADRENO_IRQ_CALLBACK(NULL),	       /* 7 - CP_SW */
-	/* 8 - CP_T0_PACKET_IN_IB */
-	ADRENO_IRQ_CALLBACK(a3xx_fatal_err_callback),
-	ADRENO_IRQ_CALLBACK(a3xx_fatal_err_callback),  /* 9 - CP_OPCODE_ERROR */
+	ADRENO_IRQ_CALLBACK(NULL),  /* 6 - RBBM_VFD_ERROR */
+	ADRENO_IRQ_CALLBACK(NULL),	/* 7 - CP_SW */
+	ADRENO_IRQ_CALLBACK(a3xx_err_callback),  /* 8 - CP_T0_PACKET_IN_IB */
+	ADRENO_IRQ_CALLBACK(a3xx_err_callback),  /* 9 - CP_OPCODE_ERROR */
 	/* 10 - CP_RESERVED_BIT_ERROR */
-	ADRENO_IRQ_CALLBACK(a3xx_fatal_err_callback),
-	ADRENO_IRQ_CALLBACK(a3xx_fatal_err_callback),  /* 11 - CP_HW_FAULT */
-	ADRENO_IRQ_CALLBACK(NULL),	       /* 12 - CP_DMA */
-	ADRENO_IRQ_CALLBACK(a3xx_cp_callback),   /* 13 - CP_IB2_INT */
-	ADRENO_IRQ_CALLBACK(a3xx_cp_callback),   /* 14 - CP_IB1_INT */
-	ADRENO_IRQ_CALLBACK(a3xx_cp_callback),   /* 15 - CP_RB_INT */
+	ADRENO_IRQ_CALLBACK(a3xx_err_callback),
+	ADRENO_IRQ_CALLBACK(a3xx_err_callback),  /* 11 - CP_HW_FAULT */
+	ADRENO_IRQ_CALLBACK(NULL),	             /* 12 - CP_DMA */
+	ADRENO_IRQ_CALLBACK(adreno_cp_callback),   /* 13 - CP_IB2_INT */
+	ADRENO_IRQ_CALLBACK(adreno_cp_callback),   /* 14 - CP_IB1_INT */
+	ADRENO_IRQ_CALLBACK(adreno_cp_callback),   /* 15 - CP_RB_INT */
 	/* 16 - CP_REG_PROTECT_FAULT */
-	ADRENO_IRQ_CALLBACK(a3xx_fatal_err_callback),
+	ADRENO_IRQ_CALLBACK(a3xx_err_callback),
 	ADRENO_IRQ_CALLBACK(NULL),	       /* 17 - CP_RB_DONE_TS */
 	ADRENO_IRQ_CALLBACK(NULL),	       /* 18 - CP_VS_DONE_TS */
 	ADRENO_IRQ_CALLBACK(NULL),	       /* 19 - CP_PS_DONE_TS */
 	ADRENO_IRQ_CALLBACK(NULL),	       /* 20 - CP_CACHE_FLUSH_TS */
 	/* 21 - CP_AHB_ERROR_FAULT */
-	ADRENO_IRQ_CALLBACK(a3xx_fatal_err_callback),
+	ADRENO_IRQ_CALLBACK(a3xx_err_callback),
 	ADRENO_IRQ_CALLBACK(NULL),	       /* 22 - Unused */
 	ADRENO_IRQ_CALLBACK(NULL),	       /* 23 - Unused */
-	ADRENO_IRQ_CALLBACK(a3xx_fatal_err_callback),/* 24 - MISC_HANG_DETECT */
-	ADRENO_IRQ_CALLBACK(a3xx_a4xx_err_callback),  /* 25 - UCHE_OOB_ACCESS */
+	/* 24 - MISC_HANG_DETECT */
+	ADRENO_IRQ_CALLBACK(adreno_hang_int_callback),
+	ADRENO_IRQ_CALLBACK(a3xx_err_callback),  /* 25 - UCHE_OOB_ACCESS */
 	/* 26 to 31 - Unused */
 };
 
@@ -1550,108 +1310,6 @@ static struct adreno_irq a3xx_irq = {
 	.funcs_count = ARRAY_SIZE(a3xx_irq_funcs),
 	.mask = A3XX_INT_MASK,
 };
-
-/*
- * a3xx_irq_func_setup() - Sets up callback functions and mask for interrupts
- * @adreno_dev: Adreno device pointer
- *
- * Called during initialization
- */
-static void a3xx_irq_setup(struct adreno_device *adreno_dev)
-{
-	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
-	struct adreno_irq *irq_params = gpudev->irq;
-	int i;
-	/* On a330v2 only the hang interrupt should be fatal */
-	if (adreno_is_a330v2(adreno_dev)) {
-		for (i = 0; i < irq_params->funcs_count; i++) {
-			if ((irq_params->funcs[i].func ==
-				a3xx_fatal_err_callback) &&
-				A3XX_INT_MISC_HANG_DETECT != i)
-				irq_params->funcs[i].func =
-						a3xx_err_callback;
-		}
-	}
-}
-
-/*
- * a3xx_irq_handler() - Interrupt handler function
- * @adreno_dev: Pointer to adreno device
- *
- * Interrupt handler for adreno device, this function is common between
- * a3xx and a4xx devices
- */
-irqreturn_t a3xx_irq_handler(struct adreno_device *adreno_dev)
-{
-	struct kgsl_device *device = &adreno_dev->dev;
-	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
-	struct adreno_irq *irq_params = gpudev->irq;
-	irqreturn_t ret = IRQ_NONE;
-	unsigned int status, tmp;
-	int i;
-
-	adreno_readreg(adreno_dev, ADRENO_REG_RBBM_INT_0_STATUS, &status);
-
-	for (tmp = status, i = 0; tmp &&
-			i < irq_params->funcs_count; i++) {
-		if (tmp & 1) {
-			if (irq_params->funcs[i].func != NULL) {
-				irq_params->funcs[i].func(adreno_dev, i);
-				ret = IRQ_HANDLED;
-			} else {
-				KGSL_DRV_CRIT(device,
-					"Unhandled interrupt bit %x\n", i);
-			}
-		}
-
-		tmp >>= 1;
-	}
-
-	trace_kgsl_a3xx_irq_status(device, status);
-
-	if (status)
-		adreno_writereg(adreno_dev, ADRENO_REG_RBBM_INT_CLEAR_CMD,
-				status);
-	return ret;
-}
-
-/*
- * a3xx_irq_control() - Function called to enable/disable interrupts
- * @adreno_dev: Pointer to device whose interrupts are enabled/disabled
- * @state: When set interrupts are enabled else disabled
- *
- * This function is common for a3xx and a4xx adreno devices
- */
-void a3xx_irq_control(struct adreno_device *adreno_dev, int state)
-{
-	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
-	unsigned int mask = gpudev->irq->mask;
-
-	if (test_bit(ADRENO_DEVICE_HANG_INTR, &adreno_dev->priv))
-		mask |= (1 << A3XX_INT_MISC_HANG_DETECT);
-
-	if (state)
-		adreno_writereg(adreno_dev, ADRENO_REG_RBBM_INT_0_MASK, mask);
-	else
-		adreno_writereg(adreno_dev, ADRENO_REG_RBBM_INT_0_MASK, 0);
-}
-
-/*
- * a3xx_irq_pending() - Checks if interrupt is generated by h/w
- * @adreno_dev: Pointer to device whose interrupts are checked
- *
- * Returns true if interrupts are pending from device else 0. This
- * function is shared by both a3xx and a4xx devices.
- */
-unsigned int a3xx_irq_pending(struct adreno_device *adreno_dev)
-{
-	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
-	unsigned int status;
-
-	adreno_readreg(adreno_dev, ADRENO_REG_RBBM_INT_0_STATUS, &status);
-
-	return (status & gpudev->irq->mask) ? 1 : 0;
-}
 
 static unsigned int counter_delta(struct adreno_device *adreno_dev,
 			unsigned int reg, unsigned int *counter)
@@ -2073,109 +1731,12 @@ static struct adreno_perfcounters a3xx_perfcounters = {
 	ARRAY_SIZE(a3xx_perfcounter_groups),
 };
 
-static inline int _get_counter(struct adreno_device *adreno_dev,
-		int group, int countable, unsigned int *lo,
-		unsigned int *hi)
-{
-	int ret = 0;
-
-	if (*lo == 0) {
-
-		ret = adreno_perfcounter_get(adreno_dev, group, countable,
-			lo, hi, PERFCOUNTER_FLAG_KERNEL);
-
-		if (ret) {
-			struct kgsl_device *device = &adreno_dev->dev;
-
-			KGSL_DRV_ERR(device,
-				"Unable to allocate fault detect performance counter %d/%d\n",
-				group, countable);
-			KGSL_DRV_ERR(device,
-				"GPU fault detect will be less reliable\n");
-		}
-	}
-
-	return ret;
-}
-
-static inline void _put_counter(struct adreno_device *adreno_dev,
-		int group, int countable, unsigned int *lo,
-		unsigned int *hi)
-{
-	if (*lo != 0) {
-		adreno_perfcounter_put(adreno_dev, group, countable,
-			PERFCOUNTER_FLAG_KERNEL);
-	}
-
-	*lo = 0;
-	*hi = 0;
-}
-
-/**
- * a3xx_fault_detect_start() - Allocate performance counters used for fast fault
- * detection
- * @adreno_dev: Pointer to an adreno_device structure
- *
- * Allocate the series of performance counters that should be periodically
- * checked to verify that the GPU is still moving
- */
-void a3xx_fault_detect_start(struct adreno_device *adreno_dev)
-{
-	_get_counter(adreno_dev, KGSL_PERFCOUNTER_GROUP_SP,
-		SP_ALU_ACTIVE_CYCLES,
-		&ft_detect_regs[6], &ft_detect_regs[7]);
-
-	_get_counter(adreno_dev, KGSL_PERFCOUNTER_GROUP_SP,
-		SP0_ICL1_MISSES,
-		&ft_detect_regs[8], &ft_detect_regs[9]);
-
-	_get_counter(adreno_dev, KGSL_PERFCOUNTER_GROUP_SP,
-		SP_FS_CFLOW_INSTRUCTIONS,
-		&ft_detect_regs[10], &ft_detect_regs[11]);
-
-	_get_counter(adreno_dev, KGSL_PERFCOUNTER_GROUP_TSE,
-		TSE_INPUT_PRIM_NUM,
-		&ft_detect_regs[12], &ft_detect_regs[13]);
-}
-/**
- * a3xx_fault_detect_stop() - Release performance counters used for fast fault
- * detection
- * @adreno_dev: Pointer to an adreno_device structure
- *
- * Release the counters allocated in a3xx_fault_detect_start
- */
-void a3xx_fault_detect_stop(struct adreno_device *adreno_dev)
-{
-	_put_counter(adreno_dev, KGSL_PERFCOUNTER_GROUP_SP,
-		SP_ALU_ACTIVE_CYCLES,
-		&ft_detect_regs[6], &ft_detect_regs[7]);
-
-	_put_counter(adreno_dev, KGSL_PERFCOUNTER_GROUP_SP,
-		SP0_ICL1_MISSES,
-		&ft_detect_regs[8], &ft_detect_regs[9]);
-
-	_put_counter(adreno_dev, KGSL_PERFCOUNTER_GROUP_SP,
-		SP_FS_CFLOW_INSTRUCTIONS,
-		&ft_detect_regs[10], &ft_detect_regs[11]);
-
-	_put_counter(adreno_dev, KGSL_PERFCOUNTER_GROUP_TSE,
-		TSE_INPUT_PRIM_NUM,
-		&ft_detect_regs[12], &ft_detect_regs[13]);
-}
-
-/**
- * a3xx_perfcounter_close() - Put counters that were initialized in
- * a3xx_perfcounter_init
- * @adreno_dev: Pointer to an adreno_device structure
- */
-void a3xx_perfcounter_close(struct adreno_device *adreno_dev)
-{
-	adreno_perfcounter_put(adreno_dev, KGSL_PERFCOUNTER_GROUP_PWR, 1,
-		PERFCOUNTER_FLAG_KERNEL);
-
-	if (adreno_dev->fast_hang_detect)
-		a3xx_fault_detect_stop(adreno_dev);
-}
+struct adreno_ft_perf_counters a3xx_ft_perf_counters[] = {
+	{KGSL_PERFCOUNTER_GROUP_SP, SP_ALU_ACTIVE_CYCLES},
+	{KGSL_PERFCOUNTER_GROUP_SP, SP0_ICL1_MISSES},
+	{KGSL_PERFCOUNTER_GROUP_SP, SP_FS_CFLOW_INSTRUCTIONS},
+	{KGSL_PERFCOUNTER_GROUP_TSE, TSE_INPUT_PRIM_NUM},
+};
 
 /**
  * a3xx_perfcounter_init() - Allocate performance counters for use in the kernel
@@ -2183,8 +1744,6 @@ void a3xx_perfcounter_close(struct adreno_device *adreno_dev)
  */
 int a3xx_perfcounter_init(struct adreno_device *adreno_dev)
 {
-	int ret;
-	struct kgsl_device *device = &adreno_dev->dev;
 	struct adreno_perfcounters *counters = ADRENO_PERFCOUNTERS(adreno_dev);
 
 	if (counters == NULL)
@@ -2201,32 +1760,7 @@ int a3xx_perfcounter_init(struct adreno_device *adreno_dev)
 			a306_perfcounters_vbif_pwr;
 	}
 
-	if (adreno_dev->fast_hang_detect)
-		a3xx_fault_detect_start(adreno_dev);
-
-	/* Turn on the GPU busy counter(s) and let them run free */
-	/* GPU busy counts */
-	ret = adreno_perfcounter_get(adreno_dev, KGSL_PERFCOUNTER_GROUP_PWR, 1,
-			NULL, NULL, PERFCOUNTER_FLAG_KERNEL);
-
-	if (device->pwrctrl.bus_control) {
-		/* VBIF waiting for RAM */
-		ret |= adreno_perfcounter_get(adreno_dev,
-				KGSL_PERFCOUNTER_GROUP_VBIF_PWR, 0,
-				&adreno_dev->starved_ram_lo, NULL,
-				PERFCOUNTER_FLAG_KERNEL);
-
-		/* VBIF DDR cycles */
-		ret |= adreno_perfcounter_get(adreno_dev,
-				KGSL_PERFCOUNTER_GROUP_VBIF,
-				VBIF_AXI_TOTAL_BEATS,
-				&adreno_dev->ram_cycles_lo, NULL,
-				PERFCOUNTER_FLAG_KERNEL);
-	}
-
-	/* Default performance counter profiling to false */
-	adreno_dev->profile.enabled = false;
-	return ret;
+	return 0;
 }
 
 /**
@@ -2277,6 +1811,7 @@ static void a3xx_protect_init(struct adreno_device *adreno_dev)
 static void a3xx_start(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = &adreno_dev->dev;
+	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 
 	adreno_vbif_start(adreno_dev, a3xx_vbif_platforms,
 			ARRAY_SIZE(a3xx_vbif_platforms));
@@ -2301,10 +1836,12 @@ static void a3xx_start(struct adreno_device *adreno_dev)
 
 	/* Turn on hang detection - this spews a lot of useful information
 	 * into the RBBM registers on a hang */
-	if (adreno_is_a330v2(adreno_dev))
+	if (adreno_is_a330v2(adreno_dev)) {
+		set_bit(ADRENO_DEVICE_HANG_INTR, &adreno_dev->priv);
+		gpudev->irq->mask |= (1 << A3XX_INT_MISC_HANG_DETECT);
 		kgsl_regwrite(device, A3XX_RBBM_INTERFACE_HANG_INT_CTL,
 				(1 << 31) | 0xFFFF);
-	else
+	} else
 		kgsl_regwrite(device, A3XX_RBBM_INTERFACE_HANG_INT_CTL,
 				(1 << 16) | 0xFFF);
 
@@ -2402,12 +1939,16 @@ static unsigned int a3xx_register_offsets[ADRENO_REG_REGISTER_MAX] = {
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_RB_BASE, A3XX_CP_RB_BASE),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_RB_RPTR, A3XX_CP_RB_RPTR),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_RB_WPTR, A3XX_CP_RB_WPTR),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_CNTL, A3XX_CP_CNTL),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_ME_CNTL, A3XX_CP_ME_CNTL),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_RB_CNTL, A3XX_CP_RB_CNTL),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_IB1_BASE, A3XX_CP_IB1_BASE),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_IB1_BUFSZ, A3XX_CP_IB1_BUFSZ),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_IB2_BASE, A3XX_CP_IB2_BASE),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_IB2_BUFSZ, A3XX_CP_IB2_BUFSZ),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_TIMESTAMP, A3XX_CP_SCRATCH_REG0),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG6, A3XX_CP_SCRATCH_REG6),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG7, A3XX_CP_SCRATCH_REG7),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_ME_RAM_RADDR, A3XX_CP_ME_RAM_RADDR),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_ROQ_ADDR, A4XX_CP_ROQ_ADDR),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_ROQ_DATA, A3XX_CP_ROQ_DATA),
@@ -2416,8 +1957,6 @@ static unsigned int a3xx_register_offsets[ADRENO_REG_REGISTER_MAX] = {
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_MERCIU_DATA2, A3XX_CP_MERCIU_DATA2),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_MEQ_ADDR, A3XX_CP_MEQ_ADDR),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_MEQ_DATA, A3XX_CP_MEQ_DATA),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_HW_FAULT, A3XX_CP_HW_FAULT),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_PROTECT_STATUS, A3XX_CP_PROTECT_STATUS),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_STATUS, A3XX_RBBM_STATUS),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_PERFCTR_CTL, A3XX_RBBM_PERFCTR_CTL),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_PERFCTR_LOAD_CMD0,
@@ -2428,9 +1967,6 @@ static unsigned int a3xx_register_offsets[ADRENO_REG_REGISTER_MAX] = {
 					A3XX_RBBM_PERFCTR_PWR_1_LO),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_INT_0_MASK, A3XX_RBBM_INT_0_MASK),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_INT_0_STATUS, A3XX_RBBM_INT_0_STATUS),
-	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_AHB_ERROR_STATUS,
-					A3XX_RBBM_AHB_ERROR_STATUS),
-	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_AHB_CMD, A3XX_RBBM_AHB_CMD),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_INT_CLEAR_CMD,
 				A3XX_RBBM_INT_CLEAR_CMD),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_CLOCK_CTL, A3XX_RBBM_CLOCK_CTL),
@@ -2440,7 +1976,6 @@ static unsigned int a3xx_register_offsets[ADRENO_REG_REGISTER_MAX] = {
 				A3XX_VPC_VPC_DEBUG_RAM_READ),
 	ADRENO_REG_DEFINE(ADRENO_REG_PA_SC_AA_CONFIG, A3XX_PA_SC_AA_CONFIG),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_PM_OVERRIDE2, A3XX_RBBM_PM_OVERRIDE2),
-	ADRENO_REG_DEFINE(ADRENO_REG_SCRATCH_REG2, A3XX_CP_SCRATCH_REG2),
 	ADRENO_REG_DEFINE(ADRENO_REG_SQ_GPR_MANAGEMENT, A3XX_SQ_GPR_MANAGEMENT),
 	ADRENO_REG_DEFINE(ADRENO_REG_SQ_INST_STORE_MANAGMENT,
 				A3XX_SQ_INST_STORE_MANAGMENT),
@@ -2479,27 +2014,20 @@ static struct adreno_snapshot_data a3xx_snapshot_data = {
 
 struct adreno_gpudev adreno_a3xx_gpudev = {
 	.reg_offsets = &a3xx_reg_offsets,
+	.ft_perf_counters = a3xx_ft_perf_counters,
+	.ft_perf_counters_count = ARRAY_SIZE(a3xx_ft_perf_counters),
 	.perfcounters = &a3xx_perfcounters,
 	.irq = &a3xx_irq,
+	.irq_trace = trace_kgsl_a3xx_irq_status,
 	.snapshot_data = &a3xx_snapshot_data,
 	.num_prio_levels = 1,
 
 	.rb_init = a3xx_rb_init,
 	.perfcounter_init = a3xx_perfcounter_init,
-	.perfcounter_close = a3xx_perfcounter_close,
-	.perfcounter_save = a3xx_perfcounter_save,
-	.perfcounter_restore = a3xx_perfcounter_restore,
-	.irq_control = a3xx_irq_control,
-	.irq_handler = a3xx_irq_handler,
-	.irq_pending = a3xx_irq_pending,
-	.irq_setup = a3xx_irq_setup,
 	.busy_cycles = a3xx_busy_cycles,
 	.start = a3xx_start,
 	.snapshot = a3xx_snapshot,
 	.perfcounter_enable = a3xx_perfcounter_enable,
 	.perfcounter_read = a3xx_perfcounter_read,
-	.perfcounter_write = a3xx_perfcounter_write,
-	.fault_detect_start = a3xx_fault_detect_start,
-	.fault_detect_stop = a3xx_fault_detect_stop,
 	.coresight = &a3xx_coresight,
 };

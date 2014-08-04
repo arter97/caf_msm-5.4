@@ -55,8 +55,8 @@
 
 &dsi_dual_jdi_4k_video_0 {
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_pwm";
-	qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
-	qcom,mdss-dsi-bl-pmic-bank-select = <0>;
+	qcom,mdss-dsi-bl-pmic-pwm-frequency = <50>;
+	qcom,mdss-dsi-bl-pmic-bank-select = <3>;
 	qcom,mdss-dsi-pwm-gpio = <&pmi8994_mpps 1 0>;
 };
 
@@ -451,13 +451,13 @@
 			"AMIC2", "MIC BIAS2 External",
 			"MIC BIAS2 External", "Headset Mic",
 			"AMIC3", "MIC BIAS3 External",
-			"MIC BIAS2 External", "Analog Mic 7",
+			"MIC BIAS2 External", "Analog Mic7",
 			"AMIC4", "MIC BIAS2 External",
 			"MIC BIAS2 External", "ANCRight Headset Mic",
 			"AMIC5", "MIC BIAS2 External",
 			"MIC BIAS3 External", "ANCLeft Headset Mic",
 			"AMIC6", "MIC BIAS3 External",
-			"MIC BIAS3 External", "Analog Mic 8",
+			"MIC BIAS3 External", "Analog Mic8",
 			"DMIC1", "MIC BIAS1 External",
 			"MIC BIAS1 External", "Digital Mic1",
 			"DMIC2", "MIC BIAS1 External",
@@ -470,7 +470,7 @@
 			"MIC BIAS3 External", "Digital Mic3",
 			"DMIC6", "MIC BIAS3 External",
 			"MIC BIAS3 External", "Digital Mic5";
-
+		qcom,hdmi-audio-rx;
 		qcom,cdc-micbias2-headset-only;
 		qcom,mbhc-audio-jack-type = "6-pole-jack";
 		qcom,dock-plug-det-irq = <&pm8994_gpios 13 0x1>;
@@ -530,6 +530,7 @@
 		atmel,irq-gpio = <&msm_gpio 61 0x2008>;
 		atmel,reset-gpio = <&msm_gpio 60 0x00>;
 		atmel,i2cmode-gpio = <&msm_gpio 59 0x00>;
+		atmel,ignore-crc;
 	};
 };
 
@@ -723,8 +724,8 @@
 	mpp@a000 { /* MPP 1 */
 		/* Backlight PWM */
 		qcom,mode = <1>;	/* Digital output */
-		qcom,invert = <1>;	/* Enable invert */
-		qcom,src-sel = <0>;	/* FUNC GPIO */
+		qcom,invert = <0>;	/* Disable invert */
+		qcom,src-sel = <4>;	/* DTEST1 */
 		qcom,vin-sel = <0>;	/* VPH_PWR */
 		qcom,master-en = <1>;	/* Enable MPP */
 	};

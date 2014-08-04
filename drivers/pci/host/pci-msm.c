@@ -3159,6 +3159,11 @@ void msm_pcie_destroy_irq(unsigned int irq, struct msm_pcie_dev_t *pcie_dev)
 	else
 		dev = irq_get_chip_data(irq);
 
+	if (!dev) {
+		PCIE_ERR(dev, "RC%d: could not get chip data\n", dev->rc_idx);
+		return;
+	}
+
 	if (dev->msi_gicm_addr) {
 		PCIE_DBG(dev, "destroy QGIC based irq %d\n", irq);
 		pos = irq - dev->msi_gicm_base;
@@ -3643,9 +3648,9 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	memcpy(msm_pcie_dev[rc_idx].gpio, msm_pcie_gpio_info,
 				sizeof(msm_pcie_gpio_info));
 	memcpy(msm_pcie_dev[rc_idx].clk, msm_pcie_clk_info[rc_idx],
-				sizeof(msm_pcie_clk_info));
+				sizeof(msm_pcie_clk_info[rc_idx]));
 	memcpy(msm_pcie_dev[rc_idx].pipeclk, msm_pcie_pipe_clk_info[rc_idx],
-				sizeof(msm_pcie_pipe_clk_info));
+				sizeof(msm_pcie_pipe_clk_info[rc_idx]));
 	memcpy(msm_pcie_dev[rc_idx].res, msm_pcie_res_info,
 				sizeof(msm_pcie_res_info));
 	memcpy(msm_pcie_dev[rc_idx].irq, msm_pcie_irq_info,
