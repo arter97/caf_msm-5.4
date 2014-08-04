@@ -13,52 +13,46 @@
 #include "msm8916-512mb-ion.dtsi"
 
 / {
-	memory {
+	reserved-memory {
 		#address-cells = <2>;
 		#size-cells = <2>;
+		ranges;
 
-		external_image_mem: external_image__region@0 {
-			linux,reserve-contiguous-region;
-			linux,reserve-region;
-			linux,remove-completely;
+		external_image_mem: external_image_region@86000000 {
+			compatible = "removed-dma-pool";
+			no-map;
 			reg = <0x0 0x86000000 0x0 0x0800000>;
-			label = "external_image_mem";
 		};
 
-		modem_adsp_mem: modem_adsp_region@0 {
-			linux,reserve-contiguous-region;
-			linux,reserve-region;
-			linux,remove-completely;
+		modem_adsp_mem: modem_adsp_region@86800000 {
+			compatible = "removed-dma-pool";
+			no-map;
 			reg = <0x0 0x86800000 0x0 0x04800000>;
-			label = "modem_adsp_mem";
 		};
 
-		peripheral_mem: pheripheral_region@0 {
-			linux,reserve-contiguous-region;
-			linux,reserve-region;
-			linux,remove-completely;
+		peripheral_mem: peripheral_region@8b000000 {
+			compatible = "removed-dma-pool";
+			no-map;
 			reg = <0x0 0x8b000000 0x0 0x0600000>;
-			label = "peripheral_mem";
 		};
 
 		venus_qseecom_mem: venus_qseecom_region@0 {
-			linux,reserve-contiguous-region;
-			linux,memory-limit = <0x90000000>;
-			reg = <0 0 0 0x600000>;
-			label = "venus_qseecom_mem";
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0 0x80000000 0 0x10000000>;
+			reusable;
+			alignment = <0 0x400000>;
+			size = <0 0x600000>;
 		};
 
 		audio_mem: audio_region@0 {
-			linux,reserve-contiguous-region;
-			reg = <0 0 0 0x314000>;
-			label = "audio_mem";
+			compatible = "shared-dma-pool";
+			reusable;
+			alignment = <0 0x400000>;
+			size = <0 0x400000>;
 		};
 
 		cont_splash_mem: splash_region@83000000 {
-			linux,reserve-contiguous-region;
-			linux,reserve-region;
 			reg = <0x0 0x83000000 0x0 0x1200000>;
-			label = "cont_splash_mem";
 		};
 	};
 };
