@@ -22,12 +22,6 @@
 #define KGSL_GLOBAL_PT_SIZE	SZ_4M
 #define KGSL_MMU_GLOBAL_MEM_BASE	0xf8000000
 
-/* Virtual memory range to map non-kgsl allocations */
-#define KGSL_MMU_MAPPED_MEM_BASE	KGSL_SVM_UPPER_BOUND
-#define KGSL_MMU_MAPPED_MEM_SIZE	(KGSL_MMU_GLOBAL_MEM_BASE -	\
-					KGSL_MMU_MAPPED_MEM_BASE -	\
-					SZ_1M)
-
 /*
  * These defines control the address range for allocations that
  * are mapped into secure pagetable.
@@ -59,7 +53,6 @@ enum kgsl_mmutype {
 struct kgsl_pagetable {
 	spinlock_t lock;
 	struct kref refcount;
-	struct gen_pool *pool;
 	struct list_head list;
 	unsigned int name;
 	struct kobject *kobj;
@@ -74,6 +67,7 @@ struct kgsl_pagetable {
 	void *priv;
 	struct kgsl_mmu *mmu;
 	unsigned long *mem_bitmap;
+	unsigned int bitmap_size;
 };
 
 struct kgsl_mmu;
@@ -135,8 +129,6 @@ struct kgsl_mmu {
 	const struct kgsl_mmu_ops *mmu_ops;
 	void *priv;
 	atomic_t fault;
-	unsigned long pt_base;
-	unsigned long pt_size;
 	bool secured;
 };
 

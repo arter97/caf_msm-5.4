@@ -962,7 +962,6 @@ static int kgsl_iommu_init(struct kgsl_mmu *mmu)
 	int status = 0;
 	struct kgsl_iommu *iommu;
 	struct platform_device *pdev = mmu->device->pdev;
-	size_t secured_pool_sz = 0;
 
 	atomic_set(&mmu->fault, 0);
 	iommu = kzalloc(sizeof(struct kgsl_iommu), GFP_KERNEL);
@@ -977,16 +976,10 @@ static int kgsl_iommu_init(struct kgsl_mmu *mmu)
 	if (status)
 		goto done;
 
-	if (mmu->secured)
-		secured_pool_sz = KGSL_IOMMU_SECURE_MEM_SIZE;
-
 	if (KGSL_MMU_USE_PER_PROCESS_PT &&
 		of_property_match_string(pdev->dev.of_node, "clock-names",
 						"gtcu_iface_clk") >= 0)
 		iommu->gtcu_iface_clk = clk_get(&pdev->dev, "gtcu_iface_clk");
-
-	mmu->pt_base = KGSL_MMU_MAPPED_MEM_BASE;
-	mmu->pt_size = (KGSL_MMU_MAPPED_MEM_SIZE - secured_pool_sz);
 
 	if (kgsl_msm_supports_iommu_v2()) {
 		iommu->iommu_reg_list = kgsl_iommuv1_reg;
