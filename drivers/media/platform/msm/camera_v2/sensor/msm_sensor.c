@@ -1875,6 +1875,7 @@ int32_t msm_sensor_platform_probe(struct platform_device *pdev, void *data)
 	s_ctrl->msm_sd.sd.entity.name =
 		s_ctrl->msm_sd.sd.name;
 	mount_pos = s_ctrl->sensordata->sensor_init_params->position;
+	mount_pos = mount_pos << 8;
 	mount_pos = mount_pos |
 	(s_ctrl->sensordata->sensor_init_params->sensor_mount_angle / 90);
 	s_ctrl->msm_sd.sd.entity.flags = mount_pos;
