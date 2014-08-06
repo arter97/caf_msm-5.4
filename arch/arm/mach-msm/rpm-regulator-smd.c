@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -893,6 +893,19 @@ static int rpm_vreg_enable_time(struct regulator_dev *rdev)
 	return reg->rpm_vreg->enable_time;
 }
 
+static int rpm_vreg_send_defaults(struct rpm_regulator *reg)
+{
+	int rc;
+
+	rpm_vreg_lock(reg->rpm_vreg);
+	rc = rpm_vreg_aggregate_requests(reg);
+	if (rc)
+		vreg_err(reg, "RPM request failed, rc=%d", rc);
+	rpm_vreg_unlock(reg->rpm_vreg);
+
+	return rc;
+}
+
 /**
  * rpm_regulator_get() - lookup and obtain a handle to an RPM regulator
  * @dev: device for regulator consumer
@@ -1502,6 +1515,14 @@ static int __devinit rpm_vreg_device_probe(struct platform_device *pdev)
 	rpm_vreg_lock(rpm_vreg);
 	list_add(&reg->list, &rpm_vreg->reg_list);
 	rpm_vreg_unlock(rpm_vreg);
+
+	if (of_property_read_bool(node, "qcom,send-defaults")) {
+		rc = rpm_vreg_send_defaults(reg);
+		if (rc) {
+			vreg_err(reg, "could not send defaults, rc=%d\n", rc);
+			goto fail_remove_from_list;
+		}
+	}
 
 	reg->rdev = regulator_register(&reg->rdesc, dev, init_data, reg, node);
 	if (IS_ERR(reg->rdev)) {
