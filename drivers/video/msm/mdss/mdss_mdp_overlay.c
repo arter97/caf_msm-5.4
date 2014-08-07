@@ -3047,13 +3047,7 @@ static int mdss_mdp_overlay_on(struct msm_fb_data_type *mfd)
 		}
 	}
 
-	if (mfd->panel_power_state == MDSS_PANEL_POWER_OFF) {
-		atomic_inc(&mdp5_data->mdata->ov_active_panels);
-	} else {
-		pr_debug("panel was not off. do not inc active panel ctn\n");
-		rc = mdss_mdp_ctl_start(mdp5_data->ctl, false);
-		goto panel_on;
-	}
+	atomic_inc(&mdp5_data->mdata->ov_active_panels);
 
 	if (!mfd->panel_info->cont_splash_enabled &&
 		(mfd->panel_info->type != DTV_PANEL)) {
@@ -3068,7 +3062,6 @@ static int mdss_mdp_overlay_on(struct msm_fb_data_type *mfd)
 			goto error_pm;
 	}
 
-panel_on:
 	if (IS_ERR_VALUE(rc)) {
 		pr_err("Failed to turn on fb%d\n", mfd->index);
 		mdss_mdp_overlay_off(mfd);
@@ -3113,11 +3106,6 @@ static int mdss_mdp_overlay_off(struct msm_fb_data_type *mfd)
 	 */
 	pm_runtime_get_sync(&mfd->pdev->dev);
 
-	if (mfd->panel_power_state != MDSS_PANEL_POWER_OFF) {
-		pr_debug("panel not turned off. keeping overlay on\n");
-		goto ctl_stop;
-	}
-
 	mutex_lock(&mdp5_data->ov_lock);
 
 	mdss_mdp_overlay_free_fb_pipe(mfd);
@@ -3154,27 +3142,24 @@ static int mdss_mdp_overlay_off(struct msm_fb_data_type *mfd)
 		__vsync_retire_signal(mfd, mdp5_data->retire_cnt);
 	}
 
-ctl_stop:
 	mutex_lock(&mdp5_data->ov_lock);
 	rc = mdss_mdp_ctl_stop(mdp5_data->ctl, mfd->panel_power_state);
 	if (rc == 0) {
-		if (mfd->panel_power_state == MDSS_PANEL_POWER_OFF) {
-			mutex_lock(&mdp5_data->list_lock);
-			__mdss_mdp_overlay_free_list_purge(mfd);
-			mutex_unlock(&mdp5_data->list_lock);
-			mdss_mdp_ctl_notifier_unregister(mdp5_data->ctl,
-					&mfd->mdp_sync_pt_data.notifier);
+		mutex_lock(&mdp5_data->list_lock);
+		__mdss_mdp_overlay_free_list_purge(mfd);
+		mutex_unlock(&mdp5_data->list_lock);
+		mdss_mdp_ctl_notifier_unregister(mdp5_data->ctl,
+				&mfd->mdp_sync_pt_data.notifier);
 
-			if (!mfd->ref_cnt) {
-				mdp5_data->borderfill_enable = false;
-				mdss_mdp_ctl_destroy(mdp5_data->ctl);
-				mdp5_data->ctl = NULL;
-			}
-
-			if (atomic_dec_return(
-				&mdp5_data->mdata->ov_active_panels) == 0)
-				mdss_mdp_rotator_release_all();
+		if (!mfd->ref_cnt) {
+			mdp5_data->borderfill_enable = false;
+			mdss_mdp_ctl_destroy(mdp5_data->ctl);
+			mdp5_data->ctl = NULL;
 		}
+
+		if (atomic_dec_return(
+			&mdp5_data->mdata->ov_active_panels) == 0)
+			mdss_mdp_rotator_release_all();
 
 		if (!mdp5_data->mdata->idle_pc_enabled) {
 			rc = pm_runtime_put(&mfd->pdev->dev);
