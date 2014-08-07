@@ -70,16 +70,7 @@ static inline bool is_turbo_session(struct msm_vidc_inst *inst)
 
 static inline bool is_thumbnail_session(struct msm_vidc_inst *inst)
 {
-	if (inst->session_type == MSM_VIDC_DECODER) {
-		int rc = 0;
-		struct v4l2_control ctrl = {
-			.id = V4L2_CID_MPEG_VIDC_VIDEO_SYNC_FRAME_DECODE
-		};
-		rc = v4l2_g_ctrl(&inst->ctrl_handler, &ctrl);
-		if (!rc && ctrl.value)
-			return true;
-	}
-	return false;
+	return !!(inst->flags & VIDC_THUMBNAIL);
 }
 
 enum multi_stream msm_comm_get_stream_output_mode(struct msm_vidc_inst *inst)
@@ -1587,7 +1578,8 @@ static void handle_fbd(enum command_response cmd, void *data)
 		default:
 			break;
 		}
-		if (msm_vidc_dcvs_mode && inst->dcvs_mode) {
+		if (msm_vidc_dcvs_mode && inst->dcvs_mode &&
+			fill_buf_done->filled_len1) {
 			msm_comm_monitor_ftb(inst);
 			rc = msm_comm_scale_clocks_dcvs(inst, true);
 			if (rc)
@@ -2003,10 +1995,10 @@ static int msm_comm_scale_clocks_dcvs(struct msm_vidc_inst *inst, bool fbd)
 		* more than high threshold
 		*/
 		if (!dcvs->change_initial_freq &&
-			buffers_outside_fw > dcvs->threshold_disp_buf_high)
+			buffers_outside_fw >= dcvs->threshold_disp_buf_high)
 			dcvs->change_initial_freq = true;
 
-		if (buffers_outside_fw > dcvs->threshold_disp_buf_high &&
+		if (buffers_outside_fw >= dcvs->threshold_disp_buf_high &&
 			!dcvs->prev_freq_increased) {
 			dcvs->load = dcvs->load_low;
 			dcvs->prev_freq_lowered = true;
