@@ -1887,7 +1887,8 @@ static inline int32_t qpnp_adc_tm_channel_measure(
 					struct qpnp_adc_tm_btm_param *param)
 { return -ENXIO; }
 static inline int32_t qpnp_adc_tm_disable_chan_meas(
-					struct qpnp_adc_tm_chip *chip)
+					struct qpnp_adc_tm_chip *chip,
+					struct qpnp_adc_tm_btm_param *param)
 { return -ENXIO; }
 static inline struct qpnp_adc_tm_chip *qpnp_get_adc_tm(struct device *dev,
 							const char *name)
