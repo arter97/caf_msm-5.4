@@ -86,7 +86,7 @@ static void check_dsi_ctrl_status(struct work_struct *work)
 
 	mutex_unlock(&mdp3_session->lock);
 
-	if (mdss_fb_is_panel_power_on(pdsi_status->mfd)) {
+	if ((pdsi_status->mfd->panel_power_on)) {
 		if (ret > 0) {
 			schedule_delayed_work(&pdsi_status->check_status,
 				msecs_to_jiffies(pdsi_status->check_interval));

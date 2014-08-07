@@ -382,8 +382,7 @@ exit:
 	return ret;
 }
 
-static int mdss_mdp_writeback_stop(struct mdss_mdp_ctl *ctl,
-	int panel_power_state)
+static int mdss_mdp_writeback_stop(struct mdss_mdp_ctl *ctl)
 {
 	struct mdss_mdp_writeback_ctx *ctx;
 	struct mdss_mdp_vsync_handler *t, *handle;
