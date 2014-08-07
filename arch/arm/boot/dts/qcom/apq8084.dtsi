@@ -59,44 +59,48 @@
 
 	soc: soc { };
 
-	memory {
+	reserved-memory {
 		#address-cells = <2>;
 		#size-cells = <2>;
+		ranges;
+
+		linux,cma {
+			compatible = "shared-dma-pool";
+			reusable;
+			size = <0 0x1000000>;
+			linux,cma-default;
+		};
 
 		qsecom_mem: qsecom_region@0 {
-			linux,reserve-contiguous-region;
-			reg = <0 0 0 0x1100000>;
-			label = "qseecom_mem";
+			compatible = "shared-dma-pool";
+			reusable;
+			alignment = <0 0x400000>;
+			size = <0 0x1400000>;
                 };
 
 		secure_mem: secure_region@0 {
-			linux,reserve-contiguous-region;
-			reg = <0 0 0 0xfc00000>;
-			label = "secure_mem";
+			compatible = "shared-dma-pool";
+			reusable;
+			alignment = <0 0x400000>;
+			size = <0 0xfc00000>;
 		};
 
 		tz_apps_and_debug_mem: tz_apps_and_debug_region@d400000 {
-			linux,reserve-contiguous-region;
-			linux,reserve-region;
-			linux,remove-completely;
+			compatible = "removed-dma-pool";
+			no-map;
 			reg = <0x0 0xd400000 0x0 0x700000>;
-			label = "tz_apps_and_debug_mem";
 		};
 
 		peripheral_mem: peripheral_region@0xdb00000 {
-			linux,reserve-contiguous-region;
-			linux,reserve-region;
-			linux,remove-completely;
+			compatible = "removed-dma-pool";
+			no-map;
 			reg = <0x0 0x0db00000 0x0 0x1d00000>;
-			label = "peripheral_mem";
 		};
 
 		external_image_mem: external_image_region@f800000 {
-			linux,reserve-contiguous-region;
-			linux,reserve-region;
-			linux,remove-completely;
+			compatible = "removed-dma-pool";
+			no-map;
 			reg = <0x0 0x0f800000 0x0 0x800000>;
-			label = "external_image_mem";
 		};
         };
 };
@@ -4625,7 +4629,7 @@
 		qcom,pas-id = <9>;
 		qcom,proxy-timeout-ms = <5000>;
 		qcom,firmware-name = "venus";
-		linux,contiguous-region = <&peripheral_mem>;
+		memory-region = <&peripheral_mem>;
 	};
 
 	pil_lpass: qcom,lpass@fe200000 {
@@ -4657,7 +4661,7 @@
 
 		/* GPIO output to lpass */
 		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_2_out 0 0>;
-		linux,contiguous-region = <&peripheral_mem>;
+		memory-region = <&peripheral_mem>;
 	};
 
 	ufsphy1: ufsphy@0xfc597000 {
@@ -5428,7 +5432,7 @@
 		qcom,pas-id = <10>;
 		qcom,proxy-timeout-ms = <10000>;
 		qcom,firmware-name = "vpu";
-		linux,contiguous-region = <&peripheral_mem>;
+		memory-region = <&peripheral_mem>;
 	};
 
 	cpu-pmu {
