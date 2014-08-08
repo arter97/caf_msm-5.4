@@ -68,7 +68,7 @@ module_param(bulk_ep_xfer_timeout_ms, int, S_IRUGO | S_IWUSR);
 static void dwc3_gadget_usb2_phy_suspend(struct dwc3 *dwc, int suspend);
 static void dwc3_gadget_usb3_phy_suspend(struct dwc3 *dwc, int suspend);
 static void dwc3_gadget_wakeup_interrupt(struct dwc3 *dwc);
-static void _dwc3_gadget_wakeup(struct dwc3 *dwc);
+static int dwc3_gadget_wakeup_int(struct dwc3 *dwc);
 
 
 struct dwc3_usb_gadget {
@@ -1371,22 +1371,29 @@ static int __dwc3_gadget_ep_queue(struct dwc3_ep *dep, struct dwc3_request *req)
 
 static int dwc3_gadget_wakeup(struct usb_gadget *g)
 {
+	int ret = 0;
+
 	struct dwc3_usb_gadget *dwc3_gadget = g->private;
 	struct dwc3 *dwc = dwc3_gadget->dwc;
 	unsigned long		flags;
 	spin_lock_irqsave(&dwc->lock, flags);
 
 	if (atomic_read(&dwc->in_lpm)) {
-		spin_unlock_irqrestore(&dwc->lock, flags);
 		schedule_work(&dwc3_gadget->wakeup_work);
-		return -EBUSY;
+		pr_debug("Core is in low-power mode. Scheduling wakeup work.\n");
+		ret = -EBUSY;
 	} else {
-		_dwc3_gadget_wakeup(dwc);
+		pr_debug("Core is active. Initiating remote wakeup.\n");
+		ret = dwc3_gadget_wakeup_int(dwc);
+		if (ret)
+			pr_err("Remote wakeup failed. ret = %d\n", ret);
+		else
+			pr_debug("Remote wake up succeeded.\n");
 	}
 
 	spin_unlock_irqrestore(&dwc->lock, flags);
 
-	return 0;
+	return ret;
 }
 
 static inline enum dwc3_link_state dwc3_get_link_state(struct dwc3 *dwc)
@@ -1617,6 +1624,7 @@ static void dwc3_gadget_wakeup_work(struct work_struct *w)
 	struct dwc3_usb_gadget *dwc3_gadget;
 	struct dwc3		*dwc;
 	unsigned long		flags;
+	int			ret;
 
 	dwc3_gadget = container_of(w, struct dwc3_usb_gadget, wakeup_work);
 	dwc = dwc3_gadget->dwc;
@@ -1630,11 +1638,17 @@ static void dwc3_gadget_wakeup_work(struct work_struct *w)
 		spin_lock_irqsave(&dwc->lock, flags);
 	}
 
-	_dwc3_gadget_wakeup(dwc);
+	ret = dwc3_gadget_wakeup_int(dwc);
+
+	if (ret)
+		pr_err("Remote wakeup failed. ret = %d.\n", ret);
+	else
+		pr_debug("Remote wakeup succeeded.\n");
+
 	spin_unlock_irqrestore(&dwc->lock, flags);
 }
 
-static void _dwc3_gadget_wakeup(struct dwc3 *dwc)
+static int dwc3_gadget_wakeup_int(struct dwc3 *dwc)
 {
 	u32			timeout = 0;
 	bool			link_recover_only = false;
@@ -1697,6 +1711,7 @@ static void _dwc3_gadget_wakeup(struct dwc3 *dwc)
 	if (DWC3_DSTS_USBLNKST(reg) != DWC3_LINK_STATE_U0) {
 		dev_err(dwc->dev, "failed to send remote wakeup\n");
 		ret = -EINVAL;
+		goto out;
 	}
 
 	/*
@@ -1710,7 +1725,7 @@ static void _dwc3_gadget_wakeup(struct dwc3 *dwc)
 		dwc3_gadget_wakeup_interrupt(dwc);
 out:
 
-	return;
+	return ret;
 }
 
 static int dwc_gadget_func_wakeup(struct usb_gadget *g, int interface_id)
@@ -2971,7 +2986,7 @@ static void dwc3_gadget_conndone_interrupt(struct dwc3 *dwc)
 
 static void dwc3_gadget_wakeup_interrupt(struct dwc3 *dwc)
 {
-	dev_vdbg(dwc->dev, "%s\n", __func__);
+	dev_dbg(dwc->dev, "%s\n", __func__);
 
 	/*
 	 * TODO take core out of low power mode when that's
