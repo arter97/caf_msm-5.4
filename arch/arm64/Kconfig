@@ -160,6 +160,13 @@ config ARCH_MSM8916
 	  This enables support for the MSM8916 chipset. If you dont
 	  know what do here, say N
 
+config ARCH_MSM8994
+	bool "Enable Support for Qualcomm MSM8994"
+	depends on ARCH_MSM
+	help
+	  This enables support for the MSM8994 chipset. If you dont
+	  know what do here, say N
+
 endmenu
 
 menu "Bus support"
