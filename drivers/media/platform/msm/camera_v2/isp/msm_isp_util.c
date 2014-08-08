@@ -1237,20 +1237,20 @@ static inline void msm_isp_reset_burst_count(
 	int i;
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
 	struct msm_vfe_axi_stream *stream_info;
-	struct msm_vfe_axi_stream_request_cmd framedrop_info;
+	uint32_t framedrop_period = 0;
 	for (i = 0; i < MAX_NUM_STREAM; i++) {
 		stream_info = &axi_data->stream_info[i];
 		if (stream_info->state != ACTIVE)
 			continue;
 		if (stream_info->stream_type == BURST_STREAM &&
 			stream_info->num_burst_capture != 0) {
-			framedrop_info.burst_count =
-				stream_info->num_burst_capture;
-			framedrop_info.frame_skip_pattern =
-				stream_info->frame_skip_pattern;
-			framedrop_info.init_frame_drop = 0;
-			msm_isp_calculate_framedrop(&vfe_dev->axi_data,
-				&framedrop_info);
+			framedrop_period = msm_isp_get_framedrop_period(
+			   stream_info->frame_skip_pattern);
+			stream_info->burst_frame_count =
+				stream_info->init_frame_drop +
+				(stream_info->num_burst_capture - 1) *
+				framedrop_period + 1;
+			msm_isp_reset_framedrop(vfe_dev, stream_info);
 		}
 	}
 }
