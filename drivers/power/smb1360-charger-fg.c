@@ -42,6 +42,8 @@
 #define CHG_ITERM_200MA			0x7
 #define RECHG_MV_MASK			SMB1360_MASK(6, 5)
 #define RECHG_MV_SHIFT			5
+#define OTG_CURRENT_MASK		SMB1360_MASK(4, 3)
+#define OTG_CURRENT_SHIFT		3
 
 #define CFG_BATT_CHG_ICL_REG		0x05
 #define AC_INPUT_ICL_PIN_BIT		BIT(7)
@@ -61,6 +63,9 @@
 #define CHG_CURR_TERM_DIS_BIT		BIT(3)
 #define CFG_AUTO_RECHG_DIS_BIT		BIT(2)
 #define CFG_CHG_INHIBIT_EN_BIT		BIT(0)
+
+#define CFG_CHG_FUNC_CTRL_REG		0x08
+#define CHG_RECHG_THRESH_FG_SRC_BIT	BIT(1)
 
 #define CFG_STAT_CTRL_REG		0x09
 #define CHG_STAT_IRQ_ONLY_BIT		BIT(4)
@@ -200,6 +205,7 @@
 #define CC_TO_SOC_COEFF			0xBA
 #define NOMINAL_CAPACITY_REG		0xBC
 #define ACTUAL_CAPACITY_REG		0xBE
+#define FG_AUTO_RECHARGE_SOC		0xD2
 #define FG_SYS_CUTOFF_V_REG		0xD3
 #define FG_CC_TO_CV_V_REG		0xD5
 #define FG_ITERM_REG			0xD9
@@ -240,6 +246,8 @@ enum {
 	BATTERY_PROFILE_MAX,
 };
 
+static int otg_curr_ma[] = {350, 550, 950, 1500};
+
 struct smb1360_otg_regulator {
 	struct regulator_desc	rdesc;
 	struct regulator_dev	*rdev;
@@ -269,6 +277,7 @@ struct smb1360_chip {
 	unsigned int			thermal_levels;
 	unsigned int			therm_lvl_sel;
 	unsigned int			*thermal_mitigation;
+	int				otg_batt_curr_limit;
 
 	/* configuration data - fg */
 	int				soc_max;
@@ -283,6 +292,7 @@ struct smb1360_chip {
 	int				fg_ibatt_standby_ma;
 	int				fg_thermistor_c1_coeff;
 	int				fg_cc_to_cv_mv;
+	int				fg_auto_recharge_soc;
 
 	/* status tracking */
 	bool				usb_present;
@@ -2528,7 +2538,8 @@ static int smb1360_fg_config(struct smb1360_chip *chip)
 		|| chip->fg_iterm_ma != -EINVAL
 		|| chip->fg_ibatt_standby_ma != -EINVAL
 		|| chip->fg_thermistor_c1_coeff != -EINVAL
-		|| chip->fg_cc_to_cv_mv != -EINVAL) {
+		|| chip->fg_cc_to_cv_mv != -EINVAL
+		|| chip->fg_auto_recharge_soc != -EINVAL) {
 
 		rc = smb1360_enable_fg_access(chip);
 		if (rc) {
@@ -2658,6 +2669,30 @@ static int smb1360_fg_config(struct smb1360_chip *chip)
 				goto disable_fg;
 			}
 		}
+
+		/* Update SoC based resume charging threshold */
+		if (chip->fg_auto_recharge_soc != -EINVAL) {
+			rc = smb1360_masked_write(chip, CFG_CHG_FUNC_CTRL_REG,
+						CHG_RECHG_THRESH_FG_SRC_BIT,
+						CHG_RECHG_THRESH_FG_SRC_BIT);
+			if (rc) {
+				dev_err(chip->dev, "Couldn't write to CFG_CHG_FUNC_CTRL_REG rc=%d\n",
+									rc);
+				goto disable_fg;
+			}
+
+			reg = DIV_ROUND_UP(chip->fg_auto_recharge_soc *
+							MAX_8_BITS, 100);
+			pr_debug("fg_auto_recharge_soc=%d reg=%x\n",
+					chip->fg_auto_recharge_soc, reg);
+			rc = smb1360_write(chip, FG_AUTO_RECHARGE_SOC, reg);
+			if (rc) {
+				dev_err(chip->dev, "Couldn't write to FG_AUTO_RECHARGE_SOC rc=%d\n",
+									rc);
+				goto disable_fg;
+			}
+		}
+
 disable_fg:
 		/* disable FG access */
 		smb1360_disable_fg_access(chip);
@@ -2988,6 +3023,22 @@ static int smb1360_hw_init(struct smb1360_chip *chip)
 		}
 	}
 
+	/* USB OTG current limit configuration */
+	if (chip->otg_batt_curr_limit != -EINVAL) {
+		for (i = 0; i < ARRAY_SIZE(otg_curr_ma); i++) {
+			if (otg_curr_ma[i] >= chip->otg_batt_curr_limit)
+				break;
+		}
+
+		if (i == ARRAY_SIZE(otg_curr_ma))
+			i = i - 1;
+
+		rc = smb1360_masked_write(chip, CFG_BATT_CHG_REG,
+						OTG_CURRENT_MASK,
+					i << OTG_CURRENT_SHIFT);
+		if (rc)
+			pr_err("Couldn't set OTG current limit, rc = %d\n", rc);
+	}
 
 	rc = smb1360_fg_config(chip);
 	if (rc < 0) {
@@ -3217,6 +3268,16 @@ static int smb_parse_dt(struct smb1360_chip *chip)
 					&chip->fg_cc_to_cv_mv);
 	if (rc < 0)
 		chip->fg_cc_to_cv_mv = -EINVAL;
+
+	rc = of_property_read_u32(node, "qcom,otg-batt-curr-limit",
+					&chip->otg_batt_curr_limit);
+	if (rc < 0)
+		chip->otg_batt_curr_limit = -EINVAL;
+
+	rc = of_property_read_u32(node, "qcom,fg-auto-recharge-soc",
+					&chip->fg_auto_recharge_soc);
+	if (rc < 0)
+		chip->fg_auto_recharge_soc = -EINVAL;
 
 	return 0;
 }
