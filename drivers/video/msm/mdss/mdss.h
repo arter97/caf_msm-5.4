@@ -204,6 +204,7 @@ struct mdss_data_type {
 	int handoff_pending;
 	bool idle_pc;
 	struct mdss_perf_tune perf_tune;
+	atomic_t active_intf_cnt;
 };
 extern struct mdss_data_type *mdss_res;
 
