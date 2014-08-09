@@ -10,14 +10,13 @@
  * GNU General Public License for more details.
  */
 
+#ifndef __FSM_CLOCKS_9010_H
+#define __FSM_CLOCKS_9010_H
 
-/dts-v1/;
-
-#include "apq8094.dtsi"
-#include "msm8994-mtp.dtsi"
-
-/ {
-	model = "Qualcomm Technologies, Inc. APQ 8094 MTP";
-	compatible = "qcom,apq8094-mtp", "qcom,apq8094", "qcom,mtp";
-	qcom,board-id = <8 0>;
-};
+/* clock_gcc controlled clocks */
+#define clk_gcc_blsp1_uart1_apps_clk		0xc7c62f90
+#define clk_gcc_blsp1_ahb_clk			0x8caa5b4f
+#define clk_gcc_sdcc1_ahb_clk			0x691e0caa
+#define clk_gcc_sdcc1_apps_clk			0x9ad6fb96
+#define clk_gcc_prng_ahb_clk			0x397e7eaa
+#endif
