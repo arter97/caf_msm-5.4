@@ -2518,7 +2518,8 @@ int mdss_mdp_display_commit(struct mdss_mdp_ctl *ctl, void *arg)
 	}
 
 	ATRACE_BEGIN("frame_ready");
-	mdss_mdp_ctl_notify(ctl, MDP_NOTIFY_FRAME_READY);
+	if (!ctl->shared_lock)
+		mdss_mdp_ctl_notify(ctl, MDP_NOTIFY_FRAME_READY);
 	ATRACE_END("frame_ready");
 
 	ATRACE_BEGIN("wait_pingpong");
