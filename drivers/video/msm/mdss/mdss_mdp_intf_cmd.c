@@ -12,6 +12,8 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/bootmem.h>
+#include <linux/memblock.h>
 
 #include "mdss_mdp.h"
 #include "mdss_panel.h"
@@ -476,6 +478,7 @@ int mdss_mdp_cmd_reconfigure_splash_done(struct mdss_mdp_ctl *ctl, bool handoff)
 {
 	struct mdss_panel_data *pdata;
 	int ret = 0;
+	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(ctl->mfd);
 
 	pdata = ctl->panel_data;
 
@@ -483,6 +486,12 @@ int mdss_mdp_cmd_reconfigure_splash_done(struct mdss_mdp_ctl *ctl, bool handoff)
 
 	mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_PANEL_CLK_CTRL, (void *)0);
 
+	if(mdp5_data->splash_mem_addr) {
+		memblock_free(mdp5_data->splash_mem_addr,
+				mdp5_data->splash_mem_size);
+		free_bootmem_late(mdp5_data->splash_mem_addr,
+				mdp5_data->splash_mem_size);
+	}
 	return ret;
 }
 
