@@ -249,7 +249,7 @@
 };
 
 &sdhc_2 {
-	status = "ok";
+	status = "nok";
 	vdd-supply = <&pma8084_l21>;
 	qcom,vdd-voltage-level = <2950000 2950000>;
 	qcom,vdd-current-level = <200 800000>;
