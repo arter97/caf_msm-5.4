@@ -15,6 +15,7 @@
 
 #include "skeleton64.dtsi"
 #include <dt-bindings/clock/msm-clocks-krait.h>
+#include <dt-bindings/clock/apq-clocks-8084.h>
 
 / {
 	model = "Qualcomm Technologies, Inc. APQ 8084";
