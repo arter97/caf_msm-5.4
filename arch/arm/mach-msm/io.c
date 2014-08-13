@@ -50,13 +50,11 @@
 static struct map_desc msm_8084_io_desc[] __initdata = {
 	MSM_CHIP_DEVICE(MPM2_PSHOLD, APQ8084),
 	MSM_CHIP_DEVICE(TLMM, APQ8084),
-#ifdef CONFIG_DEBUG_APQ8084_UART
-	MSM_DEVICE(DEBUG_UART),
-#endif
 };
 
 void __init msm_map_8084_io(void)
 {
+	debug_ll_io_init();
 	iotable_init(msm_8084_io_desc, ARRAY_SIZE(msm_8084_io_desc));
 }
 #endif /* CONFIG_ARCH_APQ8084 */
