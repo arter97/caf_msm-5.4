@@ -124,10 +124,10 @@ static struct pm8xxx_gpio_init pm8921_gpios[] __initdata = {
 	PM8921_GPIO_OUTPUT_BUFCONF(25, 0, LOW, CMOS), /* DISP_RESET_N */
 	PM8921_GPIO_INIT(5, PM_GPIO_DIR_OUT, PM_GPIO_OUT_BUF_CMOS, 0,
 			PM_GPIO_PULL_NO, 1, PM_GPIO_STRENGTH_HIGH,
-			PM_GPIO_FUNC_NORMAL, 0, 0),
+			PM_GPIO_FUNC_NORMAL, 0, 0), /*adv7282 */
 	PM8921_GPIO_INIT(6, PM_GPIO_DIR_OUT, PM_GPIO_OUT_BUF_CMOS, 0,
 			PM_GPIO_PULL_NO, 1, PM_GPIO_STRENGTH_HIGH,
-			PM_GPIO_FUNC_NORMAL, 0, 0),
+			PM_GPIO_FUNC_NORMAL, 0, 0), /*adv7282 */
 	PM8921_GPIO_OUTPUT_FUNC(26, 0, PM_GPIO_FUNC_2), /* Bl: Off, PWM mode */
 	PM8921_GPIO_OUTPUT_VIN(30, 1, PM_GPIO_VIN_VPH), /* SMB349 susp line */
 	PM8921_GPIO_OUTPUT_BUFCONF(36, 1, LOW, OPEN_DRAIN),
@@ -153,6 +153,7 @@ static struct pm8xxx_gpio_init mplatform_pm8921_gpios[] __initdata = {
 	PM8921_GPIO_OUTPUT(20, 0, HIGH),
 	PM8921_GPIO_INPUT(35, PM_GPIO_PULL_UP_30),/*SD_PWR_EN for Mplatform*/
 	PM8921_GPIO_INPUT(38, PM_GPIO_PULL_UP_30),
+	PM8921_GPIO_OUTPUT_VIN(27, 0, PM_GPIO_VIN_VPH), /* ADV_RESET */
 	/* TABLA CODEC RESET */
 	PM8921_GPIO_OUTPUT(34, 0, MED),
 	PM8921_GPIO_OUTPUT(13, 0, HIGH),               /* PCIE_CLK_PWR_EN */
@@ -165,7 +166,6 @@ static struct pm8xxx_gpio_init pm8921_mtp_kp_gpios[] __initdata = {
 };
 
 static struct pm8xxx_gpio_init pm8921_cdp_kp_gpios[] __initdata = {
-	PM8921_GPIO_INPUT(27, PM_GPIO_PULL_UP_30),
 	PM8921_GPIO_INPUT(42, PM_GPIO_PULL_UP_30),
 	PM8921_GPIO_INPUT(17, PM_GPIO_PULL_UP_1P5),	/* SD_WP */
 };

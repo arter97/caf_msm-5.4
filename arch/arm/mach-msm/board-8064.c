@@ -20,6 +20,7 @@
 #include <linux/i2c/smb349.h>
 #include <linux/i2c/sx150x.h>
 #include <linux/i2c/adv7180.h>
+#include <media/adv7481.h>
 #include <linux/slimbus/slimbus.h>
 #include <linux/mfd/wcd9xxx/core.h>
 #include <linux/mfd/wcd9xxx/pdata.h>
@@ -1230,6 +1231,18 @@ static struct i2c_board_info adv7180_device_info[] __initdata = {
 		.platform_data = &adv7180_i2c_data,
 	},
 };
+
+static struct adv7481_platform_data adv7481_i2c_data __initdata = {
+		.rstb_gpio		= PM8921_GPIO_PM_TO_SYS(27),
+};
+
+static struct i2c_board_info adv7481_device_info[] __initdata = {
+	{
+		I2C_BOARD_INFO("adv7481", 0x70),
+		.platform_data = &adv7481_i2c_data,
+	},
+};
+
 
 #define HAP_SHIFT_LVL_OE_GPIO		PM8921_MPP_PM_TO_SYS(8)
 #define ISA1200_HAP_EN_GPIO		PM8921_GPIO_PM_TO_SYS(33)
@@ -3442,6 +3455,12 @@ static struct i2c_registry apq8064_mplatform_i2c_devices[] __initdata = {
 		APQ_8064_GSBI5_QUP_I2C_BUS_ID,
 		cs8427_device_info,
 		ARRAY_SIZE(cs8427_device_info),
+	},
+	{
+		I2C_SURF,
+		APQ_8064_GSBI2_QUP_I2C_BUS_ID,
+		adv7481_device_info,
+		ARRAY_SIZE(adv7481_device_info),
 	},
 };
 
