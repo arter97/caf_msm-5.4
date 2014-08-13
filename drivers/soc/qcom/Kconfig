@@ -410,6 +410,15 @@ config MAXIMUM_CURRENT_THROTTLING
 	  turn on/off CPU based current throttling by setting the
 	  credit/upper limit in the CPU registers.
 
+config MSM_CPUSS_DUMP
+	bool "CPU Subsystem Dumping support"
+	help
+	 Add support to dump various hardware entities such as the instruction
+	 and data tlb's as well as the unified tlb, which are a part of the
+	 cpu subsystem to an allocated buffer. This allows for analysis of the
+	 the entities if corruption is suspected.
+	 If unsure, say N
+
 config MSM_WATCHDOG_V2
 	bool "MSM Watchdog Support"
 	help

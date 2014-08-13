@@ -19,6 +19,7 @@ obj-$(CONFIG_MSM_EVENT_TIMER) += event_timer.o
 ifdef CONFIG_DEBUG_FS
 obj-$(CONFIG_MSM_RPM_SMD) +=	rpm-smd-debug.o
 endif
+obj-$(CONFIG_MSM_CPUSS_DUMP) += cpuss_dump.o
 obj-$(CONFIG_MSM_SCM)	+=	scm.o scm-boot.o
 obj-$(CONFIG_MSM_SMD)	+=	smd.o smd_debug.o smd_private.o smd_init_dt.o smsm_debug.o
 obj-$(CONFIG_MSM_SMEM)	+=	smem.o smem_debug.o
