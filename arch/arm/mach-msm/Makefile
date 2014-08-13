@@ -18,6 +18,7 @@ obj-$(CONFIG_ARCH_MSM7X30) += dma.o io.o
 obj-$(CONFIG_ARCH_QSD8X50) += dma.o io.o
 
 obj-$(CONFIG_SMP) += headsmp.o platsmp.o
+obj-$(CONFIG_HOTPLUG_CPU) += hotplug.o
 
 obj-$(CONFIG_KRAIT_REGULATOR) += krait-regulator.o  krait-regulator-pmic.o
 
