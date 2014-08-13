@@ -31,15 +31,12 @@
 #define MDSS_MDP_CURSOR_HEIGHT 64
 #define MDSS_MDP_CURSOR_SIZE (MDSS_MDP_CURSOR_WIDTH*MDSS_MDP_CURSOR_WIDTH*4)
 
-#define MDP_CLK_DEFAULT_RATE	200000000
 #define PHASE_STEP_SHIFT	21
-#define MAX_MIXER_WIDTH		2048
 #define MAX_LINE_BUFFER_WIDTH	2048
 #define MAX_MIXER_HEIGHT	0xFFFF
 #define MAX_IMG_WIDTH		0x3FFF
 #define MAX_IMG_HEIGHT		0x3FFF
 #define AHB_CLK_OFFSET		0x2B4
-#define MAX_DST_W		MAX_MIXER_WIDTH
 #define MAX_DST_H		MAX_MIXER_HEIGHT
 #define MAX_DOWNSCALE_RATIO	4
 #define MAX_UPSCALE_RATIO	20
@@ -47,6 +44,7 @@
 #define HORSCALER_NUM_FILTER_TAPS	8
 #define HORSCALER_COEFF_NUM		17
 #define MDP_MIN_VBP		4
+#define MDP_MIN_FETCH		9
 #define MAX_FREE_LIST_SIZE	12
 
 #define C3_ALPHA	3	/* alpha */
@@ -64,6 +62,10 @@
 
 #define PERF_STATUS_DONE 0
 #define PERF_STATUS_BUSY 1
+
+#define PERF_CALC_PIPE_APPLY_CLK_FUDGE	BIT(0)
+#define PERF_CALC_PIPE_SINGLE_LAYER	BIT(1)
+#define PERF_CALC_PIPE_CALC_SMP_SIZE	BIT(2)
 
 enum mdss_mdp_perf_state_type {
 	PERF_SW_COMMIT_STATE = 0,
@@ -208,6 +210,7 @@ struct mdss_mdp_ctl {
 
 	void *priv_data;
 	u32 wb_type;
+	bool prg_fet;
 };
 
 struct mdss_mdp_mixer {
@@ -515,15 +518,15 @@ static inline u32 mdp_mixer_read(struct mdss_mdp_mixer *mixer, u32 reg)
 	return readl_relaxed(mixer->base + reg);
 }
 
-static inline void mdss_mdp_pingpong_write(struct mdss_mdp_mixer *mixer,
+static inline void mdss_mdp_pingpong_write(char __iomem *pingpong_base,
 				      u32 reg, u32 val)
 {
-	writel_relaxed(val, mixer->pingpong_base + reg);
+	writel_relaxed(val, pingpong_base + reg);
 }
 
-static inline u32 mdss_mdp_pingpong_read(struct mdss_mdp_mixer *mixer, u32 reg)
+static inline u32 mdss_mdp_pingpong_read(char __iomem *pingpong_base, u32 reg)
 {
-	return readl_relaxed(mixer->pingpong_base + reg);
+	return readl_relaxed(pingpong_base + reg);
 }
 
 static inline int mdss_mdp_pipe_is_sw_reset_available(
@@ -582,7 +585,8 @@ int mdss_mdp_set_intr_callback(u32 intr_type, u32 intf_num,
 
 void mdss_mdp_footswitch_ctrl_splash(int on);
 void mdss_mdp_batfet_ctrl(struct mdss_data_type *mdata, int enable);
-int mdss_mdp_bus_scale_set_quota(u64 ab_quota, u64 ib_quota);
+int mdss_mdp_bus_scale_set_quota(u64 ab_quota_rt, u64 ab_quota_nrt,
+				u64 ib_quota);
 void mdss_mdp_set_clk_rate(unsigned long min_clk_rate);
 unsigned long mdss_mdp_get_clk_rate(u32 clk_idx);
 int mdss_mdp_vsync_clk_enable(int enable);
@@ -637,7 +641,10 @@ int mdss_mdp_perf_bw_check_pipe(struct mdss_mdp_perf_params *perf,
 		struct mdss_mdp_pipe *pipe);
 int mdss_mdp_perf_calc_pipe(struct mdss_mdp_pipe *pipe,
 	struct mdss_mdp_perf_params *perf, struct mdss_rect *roi,
-	bool apply_fudge, bool is_single_layer);
+	u32 flags);
+u32 mdss_mdp_calc_latency_buf_bytes(bool is_yuv, bool is_bwc,
+	bool is_tile, u32 src_w, u32 bpp, bool use_latency_buf_percentage,
+	u32 smp_bytes);
 u32 mdss_mdp_get_mdp_clk_rate(struct mdss_data_type *mdata);
 int mdss_mdp_ctl_notify(struct mdss_mdp_ctl *ctl, int event);
 void mdss_mdp_ctl_notifier_register(struct mdss_mdp_ctl *ctl,
@@ -726,6 +733,7 @@ int mdss_mdp_pipe_map(struct mdss_mdp_pipe *pipe);
 void mdss_mdp_pipe_unmap(struct mdss_mdp_pipe *pipe);
 struct mdss_mdp_pipe *mdss_mdp_pipe_alloc_dma(struct mdss_mdp_mixer *mixer);
 
+u32 mdss_mdp_smp_calc_num_blocks(struct mdss_mdp_pipe *pipe);
 u32 mdss_mdp_smp_get_size(struct mdss_mdp_pipe *pipe);
 int mdss_mdp_smp_reserve(struct mdss_mdp_pipe *pipe);
 void mdss_mdp_smp_unreserve(struct mdss_mdp_pipe *pipe);

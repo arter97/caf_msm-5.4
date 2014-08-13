@@ -42,6 +42,8 @@
 #define CHG_ITERM_200MA			0x7
 #define RECHG_MV_MASK			SMB1360_MASK(6, 5)
 #define RECHG_MV_SHIFT			5
+#define OTG_CURRENT_MASK		SMB1360_MASK(4, 3)
+#define OTG_CURRENT_SHIFT		3
 
 #define CFG_BATT_CHG_ICL_REG		0x05
 #define AC_INPUT_ICL_PIN_BIT		BIT(7)
@@ -240,6 +242,8 @@ enum {
 	BATTERY_PROFILE_MAX,
 };
 
+static int otg_curr_ma[] = {350, 550, 950, 1500};
+
 struct smb1360_otg_regulator {
 	struct regulator_desc	rdesc;
 	struct regulator_dev	*rdev;
@@ -269,6 +273,7 @@ struct smb1360_chip {
 	unsigned int			thermal_levels;
 	unsigned int			therm_lvl_sel;
 	unsigned int			*thermal_mitigation;
+	int				otg_batt_curr_limit;
 
 	/* configuration data - fg */
 	int				soc_max;
@@ -1086,6 +1091,16 @@ static int smb1360_set_appropriate_usb_current(struct smb1360_chip *chip)
 			FASTCHG_CURR_MASK, i << FASTCHG_CURR_SHIFT);
 		if (rc)
 			pr_err("Couldn't set fastchg mA rc=%d\n", rc);
+
+		/*
+		 * To move to a new (higher) input-current setting,
+		 * first set USB500 and then USBAC. This makes sure
+		 * that the new ICL setting takes affect.
+		 */
+		rc = smb1360_masked_write(chip, CMD_IL_REG,
+				USB_CTRL_MASK, USB_500_BIT);
+		if (rc)
+			pr_err("Couldn't configure for USB500 rc=%d\n", rc);
 
 		rc = smb1360_masked_write(chip, CMD_IL_REG,
 				USB_CTRL_MASK, USB_AC_BIT);
@@ -2691,32 +2706,29 @@ static void smb1360_check_feature_support(struct smb1360_chip *chip)
 static int smb1360_enable(struct smb1360_chip *chip, bool enable)
 {
 	int rc = 0;
-	u8 val, shdn_status, shdn_cmd_en, shdn_cmd_polar;
+	u8 val = 0, shdn_cmd_polar;
 
 	rc = smb1360_read(chip, SHDN_CTRL_REG, &val);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't read 0x1A reg rc = %d\n", rc);
 		return rc;
 	}
-	shdn_cmd_en = val & SHDN_CMD_USE_BIT;
-	shdn_cmd_polar = !!(val & SHDN_CMD_POLARITY_BIT);
-	shdn_status = val & SHDN_CMD_BIT;
 
+	/* Ignore if a CMD based shutdown is not enabled */
+	if (!(val & SHDN_CMD_USE_BIT)) {
+		pr_debug("SMB not configured for CMD based shutdown\n");
+		return 0;
+	}
+
+	shdn_cmd_polar = !!(val & SHDN_CMD_POLARITY_BIT);
 	val = (shdn_cmd_polar ^ enable) ? SHDN_CMD_BIT : 0;
 
-	if (shdn_cmd_en) {
-		if (shdn_status != val) {
-			rc = smb1360_masked_write(chip, CMD_IL_REG,
-					SHDN_CMD_BIT, val);
-			if (rc < 0) {
-				dev_err(chip->dev, "Couldn't shutdown smb1360 rc = %d\n",
-									rc);
-				return rc;
-			}
-		}
-	} else {
-		dev_dbg(chip->dev, "SMB not configured for CMD based shutdown\n");
-	}
+	pr_debug("enable=%d shdn_polarity=%d value=%d\n", enable,
+						shdn_cmd_polar, val);
+
+	rc = smb1360_masked_write(chip, CMD_IL_REG, SHDN_CMD_BIT, val);
+	if (rc < 0)
+		pr_err("Couldn't shutdown smb1360 rc = %d\n", rc);
 
 	return rc;
 }
@@ -2748,12 +2760,11 @@ static int smb1360_hw_init(struct smb1360_chip *chip)
 		return rc;
 	}
 
-	if (chip->shdn_after_pwroff) {
-		rc = smb1360_poweron(chip);
-		if (rc < 0) {
-			pr_err("smb1360 power on failed\n");
-			return rc;
-		}
+	/* Bring SMB1360 out of shutdown, if it was enabled by default */
+	rc = smb1360_poweron(chip);
+	if (rc < 0) {
+		pr_err("smb1360 power on failed\n");
+		return rc;
 	}
 
 	rc = smb1360_check_batt_profile(chip);
@@ -2991,6 +3002,22 @@ static int smb1360_hw_init(struct smb1360_chip *chip)
 		}
 	}
 
+	/* USB OTG current limit configuration */
+	if (chip->otg_batt_curr_limit != -EINVAL) {
+		for (i = 0; i < ARRAY_SIZE(otg_curr_ma); i++) {
+			if (otg_curr_ma[i] >= chip->otg_batt_curr_limit)
+				break;
+		}
+
+		if (i == ARRAY_SIZE(otg_curr_ma))
+			i = i - 1;
+
+		rc = smb1360_masked_write(chip, CFG_BATT_CHG_REG,
+						OTG_CURRENT_MASK,
+					i << OTG_CURRENT_SHIFT);
+		if (rc)
+			pr_err("Couldn't set OTG current limit, rc = %d\n", rc);
+	}
 
 	rc = smb1360_fg_config(chip);
 	if (rc < 0) {
@@ -3220,6 +3247,11 @@ static int smb_parse_dt(struct smb1360_chip *chip)
 					&chip->fg_cc_to_cv_mv);
 	if (rc < 0)
 		chip->fg_cc_to_cv_mv = -EINVAL;
+
+	rc = of_property_read_u32(node, "qcom,otg-batt-curr-limit",
+					&chip->otg_batt_curr_limit);
+	if (rc < 0)
+		chip->otg_batt_curr_limit = -EINVAL;
 
 	return 0;
 }

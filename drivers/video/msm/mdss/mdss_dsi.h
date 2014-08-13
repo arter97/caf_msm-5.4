@@ -45,6 +45,10 @@
 #define MIPI_DSI_PANEL_720P_PT	8
 #define DSI_PANEL_MAX	8
 
+#define MDSS_DSI_HW_REV_100_1		0x10000001	/* 8x26    */
+#define MDSS_DSI_HW_REV_100_2		0x10000002	/* 8x26v2  */
+#define MDSS_DSI_HW_REV_103_1		0x10030001	/* 8916/8936 */
+
 enum {		/* mipi dsi panel */
 	DSI_VIDEO_MODE,
 	DSI_CMD_MODE,
@@ -85,6 +89,7 @@ enum dsi_panel_bl_ctrl {
 enum dsi_panel_status_mode {
 	ESD_BTA,
 	ESD_REG,
+	ESD_REG_NT35596,
 	ESD_MAX,
 };
 
@@ -257,6 +262,7 @@ struct mdss_dsi_ctrl_pdata {
 	int (*off) (struct mdss_panel_data *pdata);
 	int (*partial_update_fnc) (struct mdss_panel_data *pdata);
 	int (*check_status) (struct mdss_dsi_ctrl_pdata *pdata);
+	int (*check_read_status) (struct mdss_dsi_ctrl_pdata *pdata);
 	int (*cmdlist_commit)(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp);
 	void (*switch_mode) (struct mdss_panel_data *pdata, int mode);
 	struct mdss_panel_data panel_data;
@@ -301,7 +307,9 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_panel_cmds on_cmds;
 	struct dsi_panel_cmds off_cmds;
 	struct dsi_panel_cmds status_cmds;
+	u32 status_cmds_rlen;
 	u32 status_value;
+	u32 status_error_count;
 
 	struct dsi_panel_cmds video2cmd;
 	struct dsi_panel_cmds cmd2video;

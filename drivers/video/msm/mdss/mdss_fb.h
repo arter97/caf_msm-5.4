@@ -71,6 +71,20 @@ enum mdp_notify_event {
 	MDP_NOTIFY_FRAME_TIMEOUT,
 };
 
+/**
+ * enum mdp_split_mode - Lists the possible split modes in the device
+ *
+ * @MDP_SPLIT_MODE_NONE: Not a Dual display, no panel split.
+ * @MDP_SPLIT_MODE_LM:   Dual Display is true, Split across layer mixers
+ * @MDP_SPLIT_MODE_DST:  Dual Display is true, Split is in the Destination
+ *                      i.e ping pong split.
+ */
+enum mdp_split_mode {
+	MDP_SPLIT_MODE_NONE,
+	MDP_SPLIT_MODE_LM,
+	MDP_SPLIT_MODE_DST,
+};
+
 struct disp_info_type_suspend {
 	int op_enable;
 	int panel_power_on;
@@ -161,7 +175,7 @@ struct msm_fb_data_type {
 
 	struct panel_id panel;
 	struct mdss_panel_info *panel_info;
-	int split_display;
+	int split_mode;
 	int split_fb_left;
 	int split_fb_right;
 
@@ -174,6 +188,7 @@ struct msm_fb_data_type {
 	int op_enable;
 	u32 fb_imgType;
 	int panel_reconfig;
+	u32 panel_orientation;
 
 	u32 dst_format;
 	int panel_power_on;
@@ -194,7 +209,6 @@ struct msm_fb_data_type {
 	u32 unset_bl_level;
 	u32 bl_updated;
 	u32 bl_level_scaled;
-	u32 bl_level_prev_scaled;
 	struct mutex bl_lock;
 
 	struct platform_device *pdev;
@@ -232,6 +246,7 @@ struct msm_fb_data_type {
 	struct ion_client *fb_ion_client;
 	struct ion_handle *fb_ion_handle;
 	u32 wait_for_kickoff;
+	bool mdss_fb_split_stored;
 };
 
 static inline void mdss_fb_update_notify_update(struct msm_fb_data_type *mfd)
@@ -253,6 +268,21 @@ static inline void mdss_fb_update_notify_update(struct msm_fb_data_type *mfd)
 	}
 }
 
+/* Function returns true for either Layer Mixer split or Ping pong split */
+static inline bool is_panel_split(struct msm_fb_data_type *mfd)
+{
+	return (mfd && (!(mfd->split_mode == MDP_SPLIT_MODE_NONE)));
+}
+/* Function returns true, if Layer Mixer split is Set*/
+static inline bool is_split_lm(struct msm_fb_data_type *mfd)
+{
+	return (mfd && (mfd->split_mode == MDP_SPLIT_MODE_LM));
+}
+/* Function returns true, if Ping pong split is Set*/
+static inline bool is_split_dst(struct msm_fb_data_type *mfd)
+{
+	return (mfd && (mfd->split_mode == MDP_SPLIT_MODE_DST));
+}
 int mdss_fb_get_phys_info(dma_addr_t *start, unsigned long *len, int fb_num);
 void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl);
 void mdss_fb_update_backlight(struct msm_fb_data_type *mfd);
