@@ -98,6 +98,7 @@
 #include "msmthulium-mdss.dtsi"
 #include "msmthulium-smp2p.dtsi"
 #include "msmthulium-ipcrouter.dtsi"
+#include "msmthulium-iommu.dtsi"
 
 &soc {
 	#address-cells = <1>;
