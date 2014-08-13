@@ -214,6 +214,7 @@ enum task_event {
 	TASK_WAKE       = 2,
 	TASK_MIGRATE    = 3,
 	TASK_UPDATE     = 4,
+	IRQ_UPDATE	= 5,
 };
 
 #include <linux/spinlock.h>
@@ -984,7 +985,7 @@ struct sched_statistics {
 };
 #endif
 
-#define RAVG_HIST_SIZE  5
+#define RAVG_HIST_SIZE_MAX  5
 
 /* ravg represents frequency scaled cpu-demand of tasks */
 struct ravg {
@@ -1000,17 +1001,21 @@ struct ravg {
 	 * RAVG_HIST_SIZE windows. Windows where task was entirely sleeping are
 	 * ignored.
 	 *
-	 * 'demand' represents maximum sum seen over previous RAVG_HIST_SIZE
-	 * windows. 'demand' could drive frequency demand for tasks.
+	 * 'demand' represents maximum sum seen over previous
+	 * sysctl_sched_ravg_hist_size windows. 'demand' could drive frequency
+	 * demand for tasks.
 	 *
 	 * 'prev_window' is the history in the most recent window. This value
 	 * may be zero if there was no task activity in that window - that is
 	 * how this quantity differs from the most recent sample in
 	 * sum_history (empty windows are ignored in sum_history).
+	 *
+	 * 'flags' can have either or both of PREV_WINDOW_CONTRIB and
+	 * CURR_WINDOW_CONTRIB set.
 	 */
 	u64 mark_start;
-	u32 sum, demand, prev_window, partial_demand;
-	u32 sum_history[RAVG_HIST_SIZE];
+	u32 sum, demand, prev_window, partial_demand, flags;
+	u32 sum_history[RAVG_HIST_SIZE_MAX];
 };
 
 struct sched_entity {
@@ -1656,8 +1661,8 @@ extern void thread_group_cputime_adjusted(struct task_struct *p, cputime_t *ut, 
 extern int task_free_register(struct notifier_block *n);
 extern int task_free_unregister(struct notifier_block *n);
 extern int sched_set_window(u64 window_start, unsigned int window_size);
-static inline void sched_set_io_is_busy(int val) {};
 extern unsigned long sched_get_busy(int cpu);
+extern void sched_set_io_is_busy(int val);
 
 /*
  * Per process flags
