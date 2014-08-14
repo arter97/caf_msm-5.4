@@ -1787,7 +1787,6 @@ static int __qseecom_load_fw(struct qseecom_dev_handle *data, char *appname)
 
 	ret = __qseecom_enable_clk_scale_up(data);
 	if (ret) {
-		kzfree(img_data);
 		ret = -EIO;
 		goto loadfw_err;
 	}
