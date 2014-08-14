@@ -198,6 +198,7 @@ struct cpp_device {
 	struct msm_cpp_work_t *work;
 	uint32_t fw_version;
 	uint8_t stream_cnt;
+	uint8_t timeout_trial_cnt;
 
 	int domain_num;
 	struct iommu_domain *domain;
@@ -229,5 +230,8 @@ struct cpp_device {
 	struct msm_cpp_buff_queue_info_t *buff_queue;
 	uint32_t num_buffq;
 	struct v4l2_subdev *buf_mgr_subdev;
+	uint32_t bus_client;
+	uint32_t bus_idx;
+	uint32_t bus_master_flag;
 };
 #endif /* __MSM_CPP_H__ */
