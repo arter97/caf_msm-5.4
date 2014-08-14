@@ -495,12 +495,13 @@ struct rq {
 	int max_possible_capacity;
 	u64 window_start;
 
-	unsigned int curr_runnable_sum;
-	unsigned int prev_runnable_sum;
+	u64 curr_runnable_sum;
+	u64 prev_runnable_sum;
 #endif
 
 #ifdef CONFIG_SCHED_HMP
 	int nr_small_tasks, nr_big_tasks;
+	unsigned long hmp_flags;
 #endif
 
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
@@ -700,6 +701,8 @@ extern void fixup_nr_big_small_task(int cpu);
 
 u64 scale_load_to_cpu(u64 load, int cpu);
 unsigned int max_task_load(void);
+extern void sched_account_irqtime(int cpu, struct task_struct *curr,
+				 u64 delta, u64 wallclock);
 
 static inline void
 inc_cumulative_runnable_avg(struct rq *rq, struct task_struct *p)
@@ -746,9 +749,39 @@ static inline unsigned long capacity_scale_cpu_freq(int cpu)
 	return SCHED_LOAD_SCALE;
 }
 
+static inline void sched_account_irqtime(int cpu, struct task_struct *curr,
+				 u64 delta, u64 wallclock)
+{
+}
+
 #endif	/* CONFIG_SCHED_FREQ_INPUT || CONFIG_SCHED_HMP */
 
 #ifdef CONFIG_SCHED_HMP
+
+#define	BOOST_KICK	0
+#define	CPU_RESERVED	1
+
+static inline int is_reserved(int cpu)
+{
+	struct rq *rq = cpu_rq(cpu);
+
+	return test_bit(CPU_RESERVED, &rq->hmp_flags);
+}
+
+static inline int mark_reserved(int cpu)
+{
+	struct rq *rq = cpu_rq(cpu);
+
+	/* Name boost_flags as hmp_flags? */
+	return test_and_set_bit(CPU_RESERVED, &rq->hmp_flags);
+}
+
+static inline void clear_reserved(int cpu)
+{
+	struct rq *rq = cpu_rq(cpu);
+
+	clear_bit(CPU_RESERVED, &rq->hmp_flags);
+}
 
 extern unsigned int sched_enable_hmp;
 extern unsigned int sched_enable_power_aware;
@@ -761,6 +794,10 @@ extern void inc_nr_big_small_task(struct rq *rq, struct task_struct *p);
 extern void dec_nr_big_small_task(struct rq *rq, struct task_struct *p);
 extern void set_hmp_defaults(void);
 extern unsigned int power_cost_at_freq(int cpu, unsigned int freq);
+extern void reset_all_window_stats(u64 window_start, unsigned int window_size,
+				 int policy, int acct_wait_time,
+				 unsigned int ravg_hist_size);
+extern void boost_kick(int cpu);
 
 #else /* CONFIG_SCHED_HMP */
 
@@ -778,6 +815,8 @@ static inline void inc_nr_big_small_task(struct rq *rq, struct task_struct *p)
 static inline void dec_nr_big_small_task(struct rq *rq, struct task_struct *p)
 {
 }
+
+static inline void clear_reserved(int cpu) { }
 
 #define power_cost_at_freq(...) 0
 
