@@ -24,6 +24,8 @@
 #include <soc/qcom/rpm-smd.h>
 #include <soc/qcom/smd.h>
 #include <soc/qcom/smem.h>
+#include <soc/qcom/spm.h>
+#include <soc/qcom/pm.h>
 #include "board-dt.h"
 #include "clock.h"
 #include "platsmp.h"
@@ -46,7 +48,9 @@ void __init apq8084_add_drivers(void)
 {
 	msm_smd_init();
 	msm_rpm_driver_init();
+	msm_pm_sleep_status_init();
 	rpm_smd_regulator_driver_init();
+	msm_spm_device_init();
 	krait_power_init();
 	msm_gcc_8084_init();
 }
