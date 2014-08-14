@@ -769,11 +769,64 @@ static int msm8939_wcd93xx_codec_up(struct snd_soc_codec *codec)
 	return err;
 }
 
+static int msm8939_gpio_set_mux_ctl(void)
+{
+	void __iomem *vaddr = NULL;
+	int val = 0;
+
+	vaddr = ioremap(LPASS_CSR_GP_IO_MUX_MIC_CTL , 4);
+	if (!vaddr) {
+		pr_err("%s ioremap failure for addr %x\n",
+				__func__,
+				LPASS_CSR_GP_IO_MUX_MIC_CTL);
+		return -ENOMEM;
+	}
+	val = ioread32(vaddr);
+	val = val | 0x5000dff;
+	iowrite32(val, vaddr);
+	pr_debug("%s:val_mic_mux gpio %x\n", __func__, val);
+	iounmap(vaddr);
+	vaddr = ioremap(LPASS_CSR_GP_IO_MUX_SPKR_CTL , 4);
+	if (!vaddr) {
+		pr_err("%s ioremap failure for addr %x\n",
+				__func__,
+				LPASS_CSR_GP_IO_MUX_SPKR_CTL);
+		return -ENOMEM;
+	}
+	val = ioread32(vaddr);
+	val = val | 0x000800BF;
+	iowrite32(val, vaddr);
+	pr_debug("%s:val_spkr_mux gpio %x\n", __func__, val);
+	iounmap(vaddr);
+
+	vaddr = ioremap(0x103f004 , 4);
+	if (!vaddr)
+		pr_err("%s ioremap failure for addr\n",
+					__func__);
+	val = ioread32(vaddr);
+	pr_debug("%s:val1 %x\n", __func__, val);
+	iounmap(vaddr);
+	vaddr = ioremap(0x103f000 , 4);
+	if (!vaddr)
+		pr_err("%s ioremap failure for addr2\n",
+					__func__);
+	val = ioread32(vaddr);
+	pr_debug("%s:val2 %x\n", __func__, val);
+	iounmap(vaddr);
+	return 0;
+}
+
 static int msm8939_codec_event_cb(struct snd_soc_codec *codec,
 		enum wcd9xxx_codec_event codec_event)
 {
+	int ret = 0;
 	switch (codec_event) {
 	case WCD9XXX_CODEC_EVENT_CODEC_UP:
+		ret = msm8939_gpio_set_mux_ctl();
+		if (ret < 0) {
+			pr_err("%s: failed to set MUX ctl\n", __func__);
+			return ret;
+		}
 		return msm8939_wcd93xx_codec_up(codec);
 	default:
 		pr_err("%s: UnSupported codec event %d\n",
@@ -931,8 +984,6 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	struct snd_soc_card *card = codec->card;
 	struct msm8939_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
-	void __iomem *vaddr = NULL;
-	int val = 0;
 	int ret = 0;
 
 	/*
@@ -980,45 +1031,12 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 			__func__, ret);
 		return ret;
 	}
-	vaddr = ioremap(LPASS_CSR_GP_IO_MUX_MIC_CTL , 4);
-	if (!vaddr) {
-		pr_err("%s ioremap failure for addr %x\n",
-				__func__,
-				LPASS_CSR_GP_IO_MUX_MIC_CTL);
-		return -ENOMEM;
+	ret = msm8939_gpio_set_mux_ctl();
+	if (ret) {
+		pr_err("%s: Failed to set MUX CTL %d\n",
+			__func__, ret);
+		return ret;
 	}
-	val = ioread32(vaddr);
-	val = val | 0x5000dff;
-	iowrite32(val, vaddr);
-	pr_debug("%s:val_mic_mux gpio %x\n", __func__, val);
-	iounmap(vaddr);
-	vaddr = ioremap(LPASS_CSR_GP_IO_MUX_SPKR_CTL , 4);
-	if (!vaddr) {
-		pr_err("%s ioremap failure for addr %x\n",
-				__func__,
-				LPASS_CSR_GP_IO_MUX_SPKR_CTL);
-		return -ENOMEM;
-	}
-	val = ioread32(vaddr);
-	val = val | 0x000800BF;
-	iowrite32(val, vaddr);
-	pr_debug("%s:val_spkr_mux gpio %x\n", __func__, val);
-	iounmap(vaddr);
-
-	vaddr = ioremap(0x103f004 , 4);
-	if (!vaddr)
-		pr_err("%s ioremap failure for addr\n",
-					__func__);
-	val = ioread32(vaddr);
-	pr_debug("%s:val1 %x\n", __func__, val);
-	iounmap(vaddr);
-	vaddr = ioremap(0x103f000 , 4);
-	if (!vaddr)
-		pr_err("%s ioremap failure for addr2\n",
-					__func__);
-	val = ioread32(vaddr);
-	pr_debug("%s:val2 %x\n", __func__, val);
-	iounmap(vaddr);
 
 	wcd9xxx_mbhc_cfg.calibration = def_codec_mbhc_cal();
 	if (wcd9xxx_mbhc_cfg.calibration) {
@@ -1033,6 +1051,16 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	} else {
 		ret = -ENOMEM;
 	}
+	adsp_state_notifier =
+	    subsys_notif_register_notifier("modem",
+					   &adsp_state_notifier_block);
+	if (!adsp_state_notifier) {
+		pr_err("%s: Failed to register adsp state notifier\n",
+		       __func__);
+		ret = -EFAULT;
+	}
+	tapan_event_register(msm8939_codec_event_cb, rtd->codec);
+
 	return ret;
 }
 
@@ -1249,6 +1277,19 @@ static struct snd_soc_dai_link msm8x16_9306_dai[] = {
 		.ops = &slimbus_be_ops,
 		/* dai link has playback support */
 		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+	},
+	{
+		.name = LPASS_BE_SLIMBUS_5_TX,
+		.stream_name = "Slimbus5 Capture",
+		.cpu_dai_name = "msm-dai-q6-dev.16395",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "tapan_codec",
+		.codec_dai_name = "tapan_tx1",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_SLIMBUS_5_TX,
+		.be_hw_params_fixup = msm_slim_0_tx_be_hw_params_fixup,
+		.ops = &slimbus_be_ops,
 		.ignore_suspend = 1,
 	},
 };
@@ -2011,28 +2052,16 @@ static bool msm8939_swap_gnd_mic(struct snd_soc_codec *codec)
 {
 	struct snd_soc_card *card = codec->card;
 	struct msm8939_asoc_mach_data *pdata = NULL;
-	int value = 0, ret = 0;
+	int value = 0;
 
 	pdata = snd_soc_card_get_drvdata(card);
 	if (!gpio_is_valid(pdata->us_euro_gpio)) {
 		pr_err("%s: Invalid gpio: %d", __func__, pdata->us_euro_gpio);
 		return false;
 	}
-	ret = pinctrl_select_state(pinctrl_info.pinctrl,
-				pinctrl_info.cross_conn_det_act);
-	if (ret < 0) {
-		pr_err("failed to configure the gpio\n");
-		return false;
-	}
 	value = gpio_get_value_cansleep(pdata->us_euro_gpio);
 	pr_debug("%s: swap select switch %d to %d\n", __func__, value, !value);
 	gpio_set_value_cansleep(pdata->us_euro_gpio, !value);
-	ret = pinctrl_select_state(pinctrl_info.pinctrl,
-				pinctrl_info.cross_conn_det_sus);
-	if (ret < 0) {
-		pr_err("failed to configure the gpio\n");
-		return false;
-	}
 	return true;
 }
 
@@ -2085,7 +2114,7 @@ static int cdc_slim_get_pinctrl(struct platform_device *pdev)
 	}
 	/* Reset the CDC PDM TLMM pins to a default state */
 	ret = pinctrl_select_state(pinctrl_info.pinctrl,
-					pinctrl_info.cross_conn_det_sus);
+					pinctrl_info.cross_conn_det_act);
 	if (ret != 0) {
 		pr_err("%s: Failed to disable the us_euro pins\n", __func__);
 		return -EIO;

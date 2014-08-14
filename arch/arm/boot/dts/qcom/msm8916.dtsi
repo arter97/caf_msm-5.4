@@ -282,8 +282,9 @@
 
 	qcom,clock-a7@0b011050 {
 		compatible = "qcom,clock-a53-8916";
-		reg = <0x0b011050 0x8>;
-		reg-names = "rcg-base";
+		reg = <0x0b011050 0x8>,
+		      <0x0005c004 0x8>;
+		reg-names = "rcg-base", "efuse1";
 		qcom,safe-freq = < 400000000 >;
 		cpu-vdd-supply = <&apc_vreg_corner>;
 		clocks = <&clock_gcc clk_gpll0_ao_clk_src>,
@@ -297,7 +298,18 @@
 			<  800000000 4>,
 			<  998400000 5>,
 			< 1094400000 6>,
-			< 1190400000 7>;
+			< 1152000000 7>,
+			< 1209600000 8>;
+
+		qcom,speed1-bin-v0 =
+			<          0 0>,
+			<  200000000 1>,
+			<  400000000 2>,
+			<  533333000 3>,
+			<  800000000 4>,
+			<  998400000 5>,
+			< 1094400000 6>,
+			< 1152000000 7>;
 	};
 
 	cpubw: qcom,cpubw {
@@ -312,6 +324,11 @@
 			< 1525 /* 200 MHz */>,
 			< 3051 /* 400 MHz */>,
 			< 4066 /* 533 MHz */>;
+		qcom,ab-tbl =
+			<  191 >,
+			<  381 >,
+			<  763 >,
+			< 1017 >;
 	};
 
 	devfreq-cpufreq {
@@ -321,7 +338,7 @@
 				 <  400000  762>,
 				 <  998400  1525>,
 				 < 1094400  3051>,
-				 < 1190400  4066>;
+				 < 1152000  4066>;
 		};
 	};
 
@@ -335,7 +352,8 @@
 			 <  800000 >,
 			 <  998400 >,
 			 < 1094400 >,
-			 < 1190400 >;
+			 < 1152000 >,
+			 < 1209600 >;
 	};
 
 	qcom,sps {
@@ -460,6 +478,7 @@
 		compatible = "qcom,android-usb";
 		reg = <0x086000c8 0xc8>;
 		qcom,pm-qos-latency = <2 1001 12701>;
+		qcom,streaming-func = "mtp";
 		qcom,android-usb-uicc-nluns = /bits/ 8 <1>;
 	};
 
@@ -481,6 +500,12 @@
 		reg-names = "rfsa_mdm";
 	};
 
+	jtag_fuse: jtagfuse@5e01c {
+		compatible = "qcom,jtag-fuse";
+		reg = <0x5e01c 0x8>;
+		reg-names = "fuse-base";
+	};
+
 	jtag_mm0: jtagmm@85c000 {
 		compatible = "qcom,jtagv8-mm";
 		reg = <0x85c000 0x1000>,
@@ -490,6 +515,8 @@
 		clocks = <&clock_rpm clk_qdss_clk>,
 			 <&clock_rpm clk_qdss_a_clk>;
 		clock-names = "core_clk", "core_a_clk";
+
+		qcom,coresight-jtagmm-cpu = <&CPU0>;
 	};
 
 	jtag_mm1: jtagmm@85d000 {
@@ -501,6 +528,8 @@
 		clocks = <&clock_rpm clk_qdss_clk>,
 			 <&clock_rpm clk_qdss_a_clk>;
 		clock-names = "core_clk", "core_a_clk";
+
+		qcom,coresight-jtagmm-cpu = <&CPU1>;
 	};
 
 	jtag_mm2: jtagmm@85e000 {
@@ -512,6 +541,8 @@
 		clocks = <&clock_rpm clk_qdss_clk>,
 			 <&clock_rpm clk_qdss_a_clk>;
 		clock-names = "core_clk", "core_a_clk";
+
+		qcom,coresight-jtagmm-cpu = <&CPU2>;
 	};
 
 	jtag_mm3: jtagmm@85f000 {
@@ -523,6 +554,8 @@
 		clocks = <&clock_rpm clk_qdss_clk>,
 			 <&clock_rpm clk_qdss_a_clk>;
 		clock-names = "core_clk", "core_a_clk";
+
+		qcom,coresight-jtagmm-cpu = <&CPU3>;
 	};
 
 	sdhc_1: sdhci@07824000 {
@@ -1574,8 +1607,11 @@
 		qcom,clock-configs = <0x1 0x0 0x0>;
 		qcom,sw-power-collapse;
 		qcom,load-freq-tbl = <352800 228570000 0xffffffff>,
+			<352800 228570000 0x55555555>,
 			<244800 160000000 0xffffffff>,
-			<108000 100000000 0xffffffff>;
+			<244800 160000000 0x55555555>,
+			<108000 100000000 0xffffffff>,
+			<108000 100000000 0x55555555>;
 		qcom,hfi = "venus";
 		qcom,reg-presets = <0xE0020 0x05555556>,
 			<0xE0024 0x05555556>,
@@ -1606,25 +1642,29 @@
 		qcom,msm-bus-clients {
 			qcom,msm-bus-client@0 {
 				qcom,msm-bus,name = "venc-ddr";
-				qcom,msm-bus,num-cases = <4>;
+				qcom,msm-bus,num-cases = <6>;
 				qcom,msm-bus,num-paths = <1>;
 				qcom,msm-bus,vectors-KBps =
 					<63 512 0 0>,
-					<63 512 133600 674400>,
-					<63 512 400900 1079000>,
-					<63 512 908600 1537600>;
+					<63 512 133600 674400>, /* VGA 30 fps */
+					<63 512 400900 1079000>, /* VGA 60 fps */
+					<63 512 400900 1079000>, /* 720p 30 fps */
+					<63 512 908600 1537600>, /* 720p 60 fps */
+					<63 512 908600 1537600>; /* 1080p 30 fps */
 				qcom,bus-configs = <0x01000414>;
 			};
 
 			qcom,msm-bus-client@1 {
 				qcom,msm-bus,name = "vdec-ddr";
-				qcom,msm-bus,num-cases = <4>;
+				qcom,msm-bus,num-cases = <6>;
 				qcom,msm-bus,num-paths = <1>;
 				qcom,msm-bus,vectors-KBps =
 					<63 512 0 0>,
-					<63 512 99600 831900>,
-					<63 512 298900 831900>,
-					<63 512 677600 1331000>;
+					<63 512 99600 831900>, /* VGA 30 fps */
+					<63 512 298900 831900>, /* VGA 60 fps */
+					<63 512 298900 831900>, /* 720p 30 fps */
+					<63 512 677600 1331000>, /* 720p 60 fps */
+					<63 512 677600 1331000>; /* 1080p 30 fps */
 				qcom,bus-configs = <0x030fcfff>;
 			};
 		};
