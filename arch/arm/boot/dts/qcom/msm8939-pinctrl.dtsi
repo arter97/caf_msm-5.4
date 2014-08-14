@@ -323,7 +323,7 @@
                         /* suspended state */
                         spi0_sleep: sleep {
                                 drive-strength = <2>; /* 2 MA */
-                                bias-disable = <0>; /* No PULL */
+			        bias-pull-down; /* PULL Down */
                         };
                 };
 
@@ -433,8 +433,8 @@
 			label = "pmx_ts_int_suspend";
 
 			ts_int_suspend: ts_int_suspend {
-				drive-strength = <16>;
-				bias-disable;
+				drive-strength = <2>;
+				bias-pull-down;
 			};
 		};
 
@@ -457,7 +457,8 @@
 			label = "pmx_ts_reset_suspend";
 
 			ts_reset_suspend: ts_reset_suspend {
-				drive-strength = <16>;
+				drive-strength = <2>;
+				bias-pull-down;
 			};
 		};
 
@@ -500,7 +501,8 @@
 			label = "cross-conn-det-sw";
 			cross_conn_det_act: lines_on {
 				drive-strength = <8>;
-				bias-pull-none;
+				output-low;
+				bias-disable;
 			};
 			cross_conn_det_sus: lines_off {
 				drive-strength = <2>;

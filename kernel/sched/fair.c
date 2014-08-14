@@ -1443,6 +1443,16 @@ static int boost_refcount;
 static DEFINE_SPINLOCK(boost_lock);
 static DEFINE_MUTEX(boost_mutex);
 
+static void boost_kick_cpus(void)
+{
+	int i;
+
+	for_each_online_cpu(i) {
+		if (cpu_rq(i)->capacity != max_capacity)
+			boost_kick(i);
+	}
+}
+
 static inline int sched_boost(void)
 {
 	return boost_refcount > 0;
@@ -1452,11 +1462,14 @@ int sched_set_boost(int enable)
 {
 	unsigned long flags;
 	int ret = 0;
+	int old_refcount;
 
 	if (!sched_enable_hmp)
 		return -EINVAL;
 
 	spin_lock_irqsave(&boost_lock, flags);
+
+	old_refcount = boost_refcount;
 
 	if (enable == 1) {
 		boost_refcount++;
@@ -1469,6 +1482,10 @@ int sched_set_boost(int enable)
 		ret = -EINVAL;
 	}
 
+	if (!old_refcount && boost_refcount)
+		boost_kick_cpus();
+
+	trace_sched_set_boost(boost_refcount);
 	spin_unlock_irqrestore(&boost_lock, flags);
 
 	return ret;
@@ -1513,16 +1530,17 @@ static int task_will_fit(struct task_struct *p, int cpu)
 	int upmigrate = sched_upmigrate;
 	int nice = TASK_NICE(p);
 
-	/* Todo: Provide cgroup-based control as well? */
-	if (nice > sysctl_sched_upmigrate_min_nice ||
-			 rq->capacity == max_capacity)
+	if (rq->capacity == max_capacity)
 		return 1;
 
 	if (sched_boost()) {
 		if (rq->capacity > prev_rq->capacity)
 			return 1;
-
 	} else {
+		/* Todo: Provide cgroup-based control as well? */
+		if (nice > sysctl_sched_upmigrate_min_nice)
+			return 1;
+
 		load = scale_load_to_cpu(task_load(p), cpu);
 
 		if (prev_rq->capacity > rq->capacity)
@@ -1633,6 +1651,9 @@ static int best_small_task_cpu(struct task_struct *p)
 
 	cpumask_and(&search_cpus,  tsk_cpus_allowed(p), cpu_online_mask);
 
+	if (cpumask_empty(&search_cpus))
+		return task_cpu(p);
+
 	/* Take a first pass to find the lowest power cost CPU. This
 	   will avoid a potential O(n^2) search */
 	for_each_cpu(i, &search_cpus) {
@@ -1692,24 +1713,62 @@ static int best_small_task_cpu(struct task_struct *p)
 	return best_fallback_cpu;
 }
 
+#define MOVE_TO_BIG_CPU			1
+#define MOVE_TO_LITTLE_CPU		2
+#define MOVE_TO_POWER_EFFICIENT_CPU	3
+
+static inline int skip_cpu(struct task_struct *p, int cpu, int reason)
+{
+	struct rq *rq = cpu_rq(cpu);
+	struct rq *task_rq = task_rq(p);
+	int skip = 0;
+
+	if (!reason)
+		return 0;
+
+	if (is_reserved(cpu))
+		return 1;
+
+	switch (reason) {
+	case MOVE_TO_BIG_CPU:
+		skip = (rq->capacity <= task_rq->capacity);
+		break;
+
+	case MOVE_TO_LITTLE_CPU:
+		skip = (rq->capacity >= task_rq->capacity);
+		break;
+
+	default:
+		skip = (cpu == task_cpu(p));
+		break;
+	}
+
+	return skip;
+}
+
 /* return cheapest cpu that can fit this task */
-static int select_best_cpu(struct task_struct *p, int target)
+static int select_best_cpu(struct task_struct *p, int target, int reason)
 {
 	int i, best_cpu = -1, fallback_idle_cpu = -1;
 	int prev_cpu = task_cpu(p);
 	int cpu_cost, min_cost = INT_MAX;
 	u64 load, min_load = ULLONG_MAX, min_fallback_load = ULLONG_MAX;
 	int small_task = is_small_task(p);
+	int boost = sched_boost();
 
-	trace_sched_task_load(p);
+	trace_sched_task_load(p, boost, reason);
 
-	if (small_task) {
+	if (small_task && !boost) {
 		best_cpu = best_small_task_cpu(p);
 		goto done;
 	}
 
 	/* Todo : Optimize this loop */
 	for_each_cpu_and(i, tsk_cpus_allowed(p), cpu_online_mask) {
+
+		if (skip_cpu(p, i, reason))
+			continue;
+
 		trace_sched_cpu_load(cpu_rq(i), idle_cpu(i),
 				     mostly_idle_cpu(i), power_cost(p, i));
 
@@ -1825,6 +1884,110 @@ void post_big_small_task_count_change(void)
 		raw_spin_unlock(&cpu_rq(i)->lock);
 
 	local_irq_enable();
+}
+
+static DEFINE_MUTEX(policy_mutex);
+
+int sched_acct_wait_time_update_handler(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp,
+		loff_t *ppos)
+{
+	int ret;
+	unsigned int *data = (unsigned int *)table->data;
+	unsigned int old_val;
+	unsigned long flags;
+
+	if (!sched_enable_hmp)
+		return -EINVAL;
+
+	mutex_lock(&policy_mutex);
+
+	old_val = *data;
+
+	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	if (ret || !write || (write && old_val == *data))
+		goto done;
+
+	local_irq_save(flags);
+
+	reset_all_window_stats(0, 0, -1, sysctl_sched_account_wait_time, 0);
+
+	local_irq_restore(flags);
+
+done:
+	mutex_unlock(&policy_mutex);
+
+	return ret;
+}
+
+int sched_ravg_hist_size_update_handler(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp,
+		loff_t *ppos)
+{
+	int ret;
+	unsigned int *data = (unsigned int *)table->data;
+	unsigned int old_val;
+	unsigned long flags;
+
+	if (!sched_enable_hmp)
+		return -EINVAL;
+
+	mutex_lock(&policy_mutex);
+
+	old_val = *data;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+	if (ret || !write || (write && (old_val == *data)))
+		goto done;
+
+	if (*data > RAVG_HIST_SIZE_MAX || *data < 1) {
+		*data = old_val;
+		ret = -EINVAL;
+		goto done;
+	}
+
+	local_irq_save(flags);
+
+	reset_all_window_stats(0, 0, -1, -1, sysctl_sched_ravg_hist_size);
+
+	local_irq_restore(flags);
+
+done:
+	mutex_unlock(&policy_mutex);
+
+	return ret;
+}
+
+int sched_window_stats_policy_update_handler(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp,
+		loff_t *ppos)
+{
+	int ret;
+	unsigned int *data = (unsigned int *)table->data;
+	unsigned int old_val;
+	unsigned long flags;
+
+	if (!sched_enable_hmp)
+		return -EINVAL;
+
+	mutex_lock(&policy_mutex);
+
+	old_val = *data;
+
+	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	if (ret || !write || (write && old_val == *data))
+		goto done;
+
+	local_irq_save(flags);
+
+	reset_all_window_stats(0, 0, sysctl_sched_window_stats_policy, -1, 0);
+
+	local_irq_restore(flags);
+
+done:
+	mutex_unlock(&policy_mutex);
+
+	return ret;
 }
 
 /*
@@ -1953,51 +2116,51 @@ static int lower_power_cpu_available(struct task_struct *p, int cpu)
 	return (lowest_power_cpu != task_cpu(p));
 }
 
-
 /*
  * Check if a task is on the "wrong" cpu (i.e its current cpu is not the ideal
  * cpu as per its demand or priority)
+ *
+ * Returns reason why task needs to be migrated
  */
 static inline int migration_needed(struct rq *rq, struct task_struct *p)
 {
 	int nice = TASK_NICE(p);
 
-	if (is_small_task(p) || p->state != TASK_RUNNING ||
-			!sched_enable_hmp)
+	if (!sched_enable_hmp || p->state != TASK_RUNNING)
+		return 0;
+
+	if (sched_boost()) {
+		if (rq->capacity != max_capacity)
+			return MOVE_TO_BIG_CPU;
+
+		return 0;
+	}
+
+	if (is_small_task(p))
 		return 0;
 
 	/* Todo: cgroup-based control? */
 	if (nice > sysctl_sched_upmigrate_min_nice &&
 		rq->capacity > min_capacity)
-			return 1;
+			return MOVE_TO_LITTLE_CPU;
 
 	if (!task_will_fit(p, cpu_of(rq)))
-		return 1;
+		return MOVE_TO_BIG_CPU;
 
 	if (sched_enable_power_aware &&
 	    lower_power_cpu_available(p, cpu_of(rq)))
-		return 1;
+		return MOVE_TO_POWER_EFFICIENT_CPU;
 
 	return 0;
 }
 
-/*
- * cpu-bound tasks will not go through select_best_cpu() and hence can be stuck
- * on the wrong cpu. Check if any such tasks need to be "force-migrated"
- *
- * Todo: Effect this via changes to nohz_balancer_kick() and load balance?
- */
-void check_for_migration(struct rq *rq, struct task_struct *p)
+static DEFINE_RAW_SPINLOCK(migration_lock);
+
+static inline int
+kick_active_balance(struct rq *rq, struct task_struct *p, int new_cpu)
 {
-	int cpu = cpu_of(rq), new_cpu = cpu;
 	unsigned long flags;
-	int active_balance = 0;
-
-	if (migration_needed(rq, p))
-		new_cpu = select_best_cpu(p, cpu);
-
-	if (new_cpu == cpu)
-		return;
+	int rc = 0;
 
 	/* Invoke active balance to force migrate currently running task */
 	raw_spin_lock_irqsave(&rq->lock, flags);
@@ -2006,9 +2169,37 @@ void check_for_migration(struct rq *rq, struct task_struct *p)
 		rq->push_cpu = new_cpu;
 		get_task_struct(p);
 		rq->push_task = p;
-		active_balance = 1;
+		rc = 1;
 	}
 	raw_spin_unlock_irqrestore(&rq->lock, flags);
+
+	return rc;
+}
+
+/*
+ * Check if currently running task should be migrated to a better cpu.
+ *
+ * Todo: Effect this via changes to nohz_balancer_kick() and load balance?
+ */
+void check_for_migration(struct rq *rq, struct task_struct *p)
+{
+	int cpu = cpu_of(rq), new_cpu;
+	int active_balance = 0, reason;
+
+	reason = migration_needed(rq, p);
+	if (!reason)
+		return;
+
+	raw_spin_lock(&migration_lock);
+	new_cpu = select_best_cpu(p, cpu, reason);
+
+	if (new_cpu != cpu) {
+		active_balance = kick_active_balance(rq, p, new_cpu);
+		if (active_balance)
+			mark_reserved(new_cpu);
+	}
+
+	raw_spin_unlock(&migration_lock);
 
 	if (active_balance)
 		stop_one_cpu_nowait(cpu, active_load_balance_cpu_stop, rq,
@@ -2029,7 +2220,7 @@ static inline int nr_big_tasks(struct rq *rq)
 
 #define sched_enable_power_aware 0
 
-static inline int select_best_cpu(struct task_struct *p, int target)
+static inline int select_best_cpu(struct task_struct *p, int target, int reason)
 {
 	return 0;
 }
@@ -2085,8 +2276,9 @@ void init_new_task_load(struct task_struct *p)
 
 	p->se.avg.decay_count	= 0;
 	p->ravg.sum		= 0;
+	p->ravg.flags = 0;
 
-	for (i = 0; i < RAVG_HIST_SIZE; ++i)
+	for (i = 0; i < RAVG_HIST_SIZE_MAX; ++i)
 		p->ravg.sum_history[i] = sched_init_task_load_windows;
 	p->se.avg.runnable_avg_period =
 		sysctl_sched_init_task_load_pct ? LOAD_AVG_MAX : 0;
@@ -4365,7 +4557,7 @@ select_task_rq_fair(struct task_struct *p, int sd_flag, int wake_flags)
 		return prev_cpu;
 
 	if (sched_enable_hmp)
-		return select_best_cpu(p, prev_cpu);
+		return select_best_cpu(p, prev_cpu, 0);
 
 	if (sd_flag & SD_BALANCE_WAKE) {
 		if (cpumask_test_cpu(cpu, tsk_cpus_allowed(p)))
@@ -6202,6 +6394,7 @@ static int load_balance(int this_cpu, struct rq *this_rq,
 		.idle		= idle,
 		.loop_break	= sched_nr_migrate_break,
 		.cpus		= cpus,
+		.flags		= 0,
 	};
 
 	/*
@@ -6541,6 +6734,7 @@ static int active_load_balance_cpu_stop(void *data)
 		.src_cpu	= busiest_rq->cpu,
 		.src_rq		= busiest_rq,
 		.idle		= CPU_IDLE,
+		.flags		= 0,
 	};
 
 	raw_spin_lock_irq(&busiest_rq->lock);
@@ -6567,13 +6761,12 @@ static int active_load_balance_cpu_stop(void *data)
 	double_lock_balance(busiest_rq, target_rq);
 
 	push_task = busiest_rq->push_task;
+	target_cpu = busiest_rq->push_cpu;
 	if (push_task) {
 		if (push_task->on_rq && push_task->state == TASK_RUNNING &&
 		    task_cpu(push_task) == busiest_cpu &&
 		    cpu_online(target_cpu))
 			move_task(push_task, &env);
-		put_task_struct(push_task);
-		busiest_rq->push_task = NULL;
 		goto out_unlock_balance;
 	}
 
@@ -6599,6 +6792,13 @@ out_unlock_balance:
 	double_unlock_balance(busiest_rq, target_rq);
 out_unlock:
 	busiest_rq->active_balance = 0;
+	push_task = busiest_rq->push_task;
+	target_cpu = busiest_rq->push_cpu;
+	if (push_task) {
+		put_task_struct(push_task);
+		clear_reserved(target_cpu);
+		busiest_rq->push_task = NULL;
+	}
 	raw_spin_unlock_irq(&busiest_rq->lock);
 	if (per_cpu(dbs_boost_needed, target_cpu)) {
 		struct migration_notify_data mnd;
