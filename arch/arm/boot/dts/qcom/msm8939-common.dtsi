@@ -1036,7 +1036,7 @@
 		interrupt-names = "hc_irq", "pwr_irq";
 
 		qcom,bus-width = <4>;
-		qcom,cpu-dma-latency-us = <701>;
+		qcom,cpu-dma-latency-us = <401>;
 		qcom,msm-bus,name = "sdhc2";
 		qcom,msm-bus,num-cases = <8>;
 		qcom,msm-bus,num-paths = <1>;
@@ -1693,8 +1693,9 @@
 };
 
 &gdsc_oxili_gx {
-	clock-names = "core_clk", "gmem_clk";
+	clock-names = "core_root_clk", "core_clk", "gmem_clk";
 	clocks = <&clock_gcc clk_gfx3d_clk_src>,
+		 <&clock_gcc clk_gcc_oxili_gfx3d_clk>,
 		 <&clock_gcc clk_gcc_oxili_gmem_clk>;
 	qcom,enable-root-clk;
 	status = "okay";
