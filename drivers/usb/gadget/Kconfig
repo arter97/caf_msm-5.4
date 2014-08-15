@@ -1023,6 +1023,7 @@ config USB_G_ANDROID
 	boolean "Android Composite Gadget"
 	select USB_F_ACM
 	select USB_LIBCOMPOSITE
+	select USB_F_FS
 	select USB_U_SERIAL
 	select USB_F_MASS_STORAGE
 	select SND_PCM
