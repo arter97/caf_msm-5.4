@@ -27,7 +27,6 @@
 
 		qcom,idle-timeout = <8>; //<HZ/12>
 		qcom,strtstp-sleepwake;
-		qcom,nap-disable;
 
 		/* Clocks = KGSL_CLK_CORE | KGSL_CLK_IFACE | KGSL_CLK_MEM |
 		KGSL_CLK_MEM_IFACE | KGSL_CLK_ALT_MEM_IFACE */
@@ -71,7 +70,7 @@
 		coresight-child-ports = <4>;
 
 		/* CPU latency parameter */
-		qcom,pm-qos-latency = <701>;
+		qcom,pm-qos-latency = <401>;
 
 		/* Power levels */
 		qcom,gpu-pwrlevels {
