@@ -376,4 +376,11 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 	};
+
+	pmi8994_boostbypass: regulator-pmi8994-boostbypass {
+		compatible = "qcom,stub-regulator";
+		regulator-name = "pmi8994-boostbypass";
+		regulator-min-microvolt = <3150000>;
+		regulator-max-microvolt = <3600000>;
+	};
 };
