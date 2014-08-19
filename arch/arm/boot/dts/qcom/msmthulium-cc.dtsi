@@ -23,12 +23,12 @@
 		clock-names = "mmss_gcc_dbg_clk";
 		clocks = <&clock_mmss clk_mmss_gcc_dbg_clk>;
 
-		gcc_vdd_dig-supply = <&pmthulium_s1_corner>;
+		gcc_vdd_dig-supply = <&pm8994_s1_corner>;
 		qcom,regulator-names = "gcc_vdd_dig";
 
 		gcc_vdd_dig: gcc_vdd_dig {
 			compatible = "qcom,simple-vdd-class";
-			qcom,regulators = <&pmthulium_s1_corner>;
+			qcom,regulators = <&pm8994_s1_corner>;
 			qcom,uV-levels =
 				<RPM_REGULATOR_CORNER_NONE>,
 				<RPM_REGULATOR_CORNER_SVS_SOC>,
