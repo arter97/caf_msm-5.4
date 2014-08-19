@@ -754,4 +754,7 @@
 	qcom,fw-bias = <0xbf300000>;
 };
 
+/include/ "msm-pm8994-rpm-regulator.dtsi"
+/include/ "msm-pm8994.dtsi"
+/include/ "msm-pmi8994.dtsi"
 /include/ "msmthulium-regulator.dtsi"
