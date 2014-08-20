@@ -23,10 +23,10 @@
 / {
 	model = "Qualcomm Technologies, Inc. MSM8939";
 	compatible = "qcom,msm8939";
-	qcom,msm-id = <239 0>, <241 0>;
+	qcom,msm-id = <239 0>, <241 0>, <263 0>;
 
 	chosen {
-		bootargs = "boot_cpus=0,1,4,5,6,7";
+		bootargs = "boot_cpus=0,4,5,6,7";
 	};
 };
 
@@ -368,4 +368,8 @@
 		qcom,irq-is-percpu;
 		interrupts = <1 7 0xff00>;
 	};
+};
+
+&bam_dmux {
+	qcom,no-cpu-affinity;
 };
