@@ -272,6 +272,7 @@ static int soc_compr_free_fe(struct snd_compr_stream *cstream)
 		stream = SNDRV_PCM_STREAM_PLAYBACK;
 		cpu_dai->playback_active--;
 		codec_dai->playback_active--;
+		snd_soc_dai_digital_mute(codec_dai, 1, cstream->direction);
 	} else {
 		stream = SNDRV_PCM_STREAM_CAPTURE;
 		cpu_dai->capture_active--;
