@@ -21,6 +21,7 @@
 		onnn,step-size = <6250>;
 		onnn,min-slew-ns = <416>;
 		onnn,max-slew-ns = <3333>;
+		onnn,mode = "pwm";
 		regulator-min-microvolt = <1050000>;
 		regulator-max-microvolt = <1350000>;
 		onnn,min-setpoint = <600000>;
@@ -51,14 +52,15 @@
 &soc {
 	mem_acc_vreg_corner: regulator@1942130 {
 		compatible = "qcom,mem-acc-regulator";
-		reg = <0x1942130 0x4>;
-		reg-names = "acc-sel-l1";
+		reg = <0x1942130 0x4>, <0x58000 0x1000>;
+		reg-names = "acc-sel-l1", "efuse_addr";
 		regulator-name = "mem_acc_corner";
 		regulator-min-microvolt = <1>;
 		regulator-max-microvolt = <3>;
 
 		qcom,acc-sel-l1-bit-pos = <0>;
 		qcom,corner-acc-map = <0 1 1>;
+		qcom,l1-config-skip-fuse-sel = <0 52 1 1 0>;
 	};
 
 	apc_vreg_corner: regulator@b018000 {
@@ -89,7 +91,7 @@
 		qcom,cpr-irq-line = <0>;
 		qcom,cpr-step-quotient = <13>;
 		qcom,cpr-up-threshold = <0>;
-		qcom,cpr-down-threshold = <2>;
+		qcom,cpr-down-threshold = <3>;
 		qcom,cpr-idle-clocks = <15>;
 		qcom,cpr-gcnt-time = <1>;
 		qcom,vdd-apc-step-up-limit = <1>;
