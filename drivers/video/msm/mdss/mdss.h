@@ -139,6 +139,7 @@ struct mdss_data_type {
 	u8 has_non_scalar_rgb;
 	bool has_src_split;
 	bool idle_pc_enabled;
+	bool has_dst_split;
 
 	u32 rotator_ot_limit;
 	u32 mdp_irq_mask;
@@ -192,6 +193,7 @@ struct mdss_data_type {
 	struct mdss_mdp_mixer *mixer_wb;
 	u32 nmixers_intf;
 	u32 nmixers_wb;
+	u32 max_mixer_width;
 
 	struct mdss_mdp_ctl *ctl_off;
 	u32 nctl;
@@ -224,8 +226,10 @@ struct mdss_data_type {
 	struct mdss_perf_tune perf_tune;
 	bool traffic_shaper_en;
 	int iommu_ref_cnt;
+	u32 latency_buff_per;
 
-	u64 ab[MDSS_MAX_HW_BLK];
+	u64 ab_rt[MDSS_MAX_HW_BLK];
+	u64 ab_nrt[MDSS_MAX_HW_BLK];
 	u64 ib[MDSS_MAX_HW_BLK];
 };
 extern struct mdss_data_type *mdss_res;
@@ -242,7 +246,8 @@ void mdss_disable_irq(struct mdss_hw *hw);
 void mdss_disable_irq_nosync(struct mdss_hw *hw);
 void mdss_bus_bandwidth_ctrl(int enable);
 int mdss_iommu_ctrl(int enable);
-int mdss_bus_scale_set_quota(int client, u64 ab_quota, u64 ib_quota);
+int mdss_bus_scale_set_quota(int client, u64 ab_quota_rt, u64 ab_quota_nrt,
+		u64 ib_quota);
 
 static inline struct ion_client *mdss_get_ionclient(void)
 {
