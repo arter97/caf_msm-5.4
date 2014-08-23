@@ -116,9 +116,9 @@ TRACE_EVENT(sched_enq_deq_task,
 
 TRACE_EVENT(sched_task_load,
 
-	TP_PROTO(struct task_struct *p),
+	TP_PROTO(struct task_struct *p, int boost, int reason),
 
-	TP_ARGS(p),
+	TP_ARGS(p, boost, reason),
 
 	TP_STRUCT__entry(
 		__array(	char,	comm,	TASK_COMM_LEN	)
@@ -127,6 +127,8 @@ TRACE_EVENT(sched_task_load,
 		__field(unsigned int,	sum_scaled		)
 		__field(unsigned int,	period			)
 		__field(unsigned int,	demand			)
+		__field(	int,	boost			)
+		__field(	int,	reason			)
 	),
 
 	TP_fast_assign(
@@ -136,11 +138,14 @@ TRACE_EVENT(sched_task_load,
 		__entry->sum_scaled	= p->se.avg.runnable_avg_sum_scaled;
 		__entry->period		= p->se.avg.runnable_avg_period;
 		__entry->demand		= p->ravg.demand;
+		__entry->boost		= boost;
+		__entry->reason		= reason;
 	),
 
-	TP_printk("%d (%s): sum=%u, sum_scaled=%u, period=%u demand=%u",
+	TP_printk("%d (%s): sum=%u, sum_scaled=%u, period=%u demand=%u boost=%d reason=%d",
 		__entry->pid, __entry->comm, __entry->sum,
-		__entry->sum_scaled, __entry->period, __entry->demand)
+		__entry->sum_scaled, __entry->period, __entry->demand,
+		__entry->boost, __entry->reason)
 );
 
 TRACE_EVENT(sched_cpu_load,
@@ -186,6 +191,23 @@ TRACE_EVENT(sched_cpu_load,
 	__entry->load_scale_factor, __entry->capacity,
 	__entry->cumulative_runnable_avg, __entry->cur_freq, __entry->max_freq,
 	__entry->power_cost)
+);
+
+TRACE_EVENT(sched_set_boost,
+
+	TP_PROTO(int ref_count),
+
+	TP_ARGS(ref_count),
+
+	TP_STRUCT__entry(
+		__field(unsigned int, ref_count			)
+	),
+
+	TP_fast_assign(
+		__entry->ref_count = ref_count;
+	),
+
+	TP_printk("ref_count=%d", __entry->ref_count)
 );
 
 #endif	/* CONFIG_SCHED_HMP */
@@ -265,7 +287,7 @@ TRACE_EVENT(sched_update_history,
 		__field(enum task_event,	evt		)
 		__field(unsigned int,	partial_demand		)
 		__field(unsigned int,	demand			)
-		__array(         u32,	hist,   RAVG_HIST_SIZE	)
+		__array(         u32,	hist, RAVG_HIST_SIZE_MAX)
 		__field(unsigned int,	nr_big_tasks		)
 		__field(unsigned int,	nr_small_tasks		)
 		__field(	 int,	cpu			)
@@ -282,7 +304,7 @@ TRACE_EVENT(sched_update_history,
 		__entry->partial_demand = p->ravg.partial_demand;
 		__entry->demand         = p->ravg.demand;
 		memcpy(__entry->hist, p->ravg.sum_history,
-					RAVG_HIST_SIZE*sizeof(u32));
+					RAVG_HIST_SIZE_MAX * sizeof(u32));
 #ifdef CONFIG_SCHED_HMP
 		__entry->nr_big_tasks   = rq->nr_big_tasks;
 		__entry->nr_small_tasks = rq->nr_small_tasks;

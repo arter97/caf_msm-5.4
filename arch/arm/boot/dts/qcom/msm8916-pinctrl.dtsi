@@ -117,7 +117,8 @@
 			label = "cross-conn-det-sw";
 			cross_conn_det_act: lines_on {
 				drive-strength = <8>;
-				bias-pull-none;
+				output-low;
+				bias-pull-down;
 			};
 			cross_conn_det_sus: lines_off {
 				drive-strength = <2>;
@@ -1148,6 +1149,17 @@
 			};
 		};
 
+		pmx_ts_release {
+			qcom,pins = <&gp 13>, <&gp 12>;
+			qcom,num-grp-pins = <2>;
+			label = "pmx_ts_release";
+
+			ts_release: ts_release {
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+
 		cci0_pinmux {
 			/* CLK, DATA */
 			qcom,pins = <&gp 29>, <&gp 30>;
@@ -1260,7 +1272,7 @@
 			qcom,pins = <&gp 28>, <&gp 33>;
 			qcom,num-grp-pins = <2>;
 			qcom,pin-func = <0>;
-			label = "cam_sensor_front";
+			label = "cam_sensor_front_sleep";
 			/*suspended state */
 			cam_sensor_front_sleep: sleep {
 				drive-strength = <2>; /* 2 MA */
