@@ -220,7 +220,7 @@
                 rpm-channel-type = <15>; /* SMD_APPS_RPM */
         };
 
-	qcom,bam_dmux@4044000 {
+	bam_dmux: qcom,bam_dmux@4044000 {
 		compatible = "qcom,bam_dmux";
 		reg = <0x4044000 0x19000>;
 		interrupts = <0 29 1>;
@@ -544,7 +544,7 @@
 
 		qcom,vdd-apps-rstr{
 			qcom,vdd-rstr-reg = "vdd-apps";
-			qcom,levels = <533330 652800 800000>;
+			qcom,levels = <998400>;
 			qcom,freq-req;
 		};
 	};
