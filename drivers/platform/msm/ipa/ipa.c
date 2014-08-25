@@ -132,6 +132,9 @@
 #define IPA_IOC_MDFY_FLT_RULE32 _IOWR(IPA_IOC_MAGIC, \
 					IPA_IOCTL_MDFY_FLT_RULE, \
 					compat_uptr_t)
+#define IPA_IOC_NOTIFY_WAN_EMBMS_CONNECTED32 _IOWR(IPA_IOC_MAGIC, \
+					IPA_IOCTL_NOTIFY_WAN_EMBMS_CONNECTED, \
+					compat_uptr_t)
 
 /**
  * struct ipa_ioc_nat_alloc_mem32 - nat table memory allocation
@@ -185,6 +188,53 @@ static int ipa_open(struct inode *inode, struct file *filp)
 
 	return 0;
 }
+
+static void ipa_wan_msg_free_cb(void *buff, u32 len, u32 type)
+{
+	if (!buff) {
+		IPAERR("Null buffer\n");
+		return;
+	}
+
+	if (type != WAN_EMBMS_CONNECT) {
+		IPAERR("Wrong type given. buff %p type %d\n", buff, type);
+		return;
+	}
+
+	kfree(buff);
+}
+
+static int ipa_send_wan_msg(unsigned long usr_param, uint8_t msg_type)
+{
+	int retval;
+	struct ipa_wan_msg *wan_msg;
+	struct ipa_msg_meta msg_meta;
+
+	wan_msg = kzalloc(sizeof(struct ipa_wan_msg), GFP_KERNEL);
+	if (!wan_msg) {
+		IPAERR("no memory\n");
+		return -ENOMEM;
+	}
+
+	if (copy_from_user((u8 *)wan_msg, (u8 *)usr_param,
+		sizeof(struct ipa_wan_msg))) {
+		kfree(wan_msg);
+		return -EFAULT;
+	}
+
+	memset(&msg_meta, 0, sizeof(struct ipa_msg_meta));
+	msg_meta.msg_type = msg_type;
+	msg_meta.msg_len = sizeof(struct ipa_wan_msg);
+	retval = ipa_send_msg(&msg_meta, wan_msg, ipa_wan_msg_free_cb);
+	if (retval) {
+		IPAERR("ipa_send_msg failed: %d\n", retval);
+		kfree(wan_msg);
+		return retval;
+	}
+
+	return 0;
+}
+
 
 static long ipa_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
@@ -783,7 +833,13 @@ static long ipa_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			break;
 		}
 		break;
-
+	case IPA_IOC_NOTIFY_WAN_EMBMS_CONNECTED:
+		retval = ipa_send_wan_msg(arg, WAN_EMBMS_CONNECT);
+		if (retval) {
+			IPAERR("ipa_send_wan_msg failed: %d\n", retval);
+			break;
+		}
+		break;
 	default:        /* redundant, as cmd was checked against MAXNR */
 		ipa_dec_client_disable_clks();
 		return -ENOTTY;
@@ -1421,6 +1477,9 @@ ret:
 		break;
 	case IPA_IOC_MDFY_FLT_RULE32:
 		cmd = IPA_IOC_MDFY_FLT_RULE;
+		break;
+	case IPA_IOC_NOTIFY_WAN_EMBMS_CONNECTED32:
+		cmd = IPA_IOC_NOTIFY_WAN_EMBMS_CONNECTED;
 		break;
 	case IPA_IOC_COMMIT_HDR:
 	case IPA_IOC_RESET_HDR:

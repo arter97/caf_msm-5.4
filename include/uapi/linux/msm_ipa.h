@@ -58,7 +58,8 @@
 #define IPA_IOCTL_QUERY_RT_TBL_INDEX 34
 #define IPA_IOCTL_WRITE_QMAPID 35
 #define IPA_IOCTL_MDFY_FLT_RULE 36
-#define IPA_IOCTL_MAX            37
+#define IPA_IOCTL_NOTIFY_WAN_EMBMS_CONNECTED	37
+#define IPA_IOCTL_MAX            38
 
 /**
  * max size of the header to be inserted
@@ -223,8 +224,18 @@ enum ipa_wlan_event {
 	IPA_WLAN_EVENT_MAX
 };
 
+/**
+ * enum ipa_wan_event - Events for wan client
+ *
+ * wan embms connect: New wan embms interface connected
+ */
+enum ipa_wan_event {
+	WAN_EMBMS_CONNECT = IPA_WLAN_EVENT_MAX,
+	IPA_WAN_EVENT_MAX
+};
+
 enum ipa_ecm_event {
-	ECM_CONNECT = IPA_WLAN_EVENT_MAX,
+	ECM_CONNECT = IPA_WAN_EVENT_MAX,
 	ECM_DISCONNECT,
 	IPA_EVENT_MAX_NUM
 };
@@ -1028,6 +1039,19 @@ struct ipa_ecm_msg {
 };
 
 /**
+ * struct ipa_wan_msg - To hold information about wan client
+ * @name: name of the wan interface
+ *
+ * CnE need to pass the name of default wan iface when connected/disconnected.
+ * netmgr need to pass the name of wan eMBMS iface when connected.
+ */
+struct ipa_wan_msg {
+	char upstream_ifname[IPA_RESOURCE_NAME_MAX];
+	char tethered_ifname[IPA_RESOURCE_NAME_MAX];
+	enum ipa_ip_type ip;
+};
+
+/**
  * struct ipa_ioc_rm_dependency - parameters for add/delete dependency
  * @resource_name: name of dependent resource
  * @depends_on_name: name of its dependency
@@ -1161,6 +1185,10 @@ struct ipa_ioc_write_qmapid {
 #define IPA_IOC_MDFY_FLT_RULE _IOWR(IPA_IOC_MAGIC, \
 					IPA_IOCTL_MDFY_FLT_RULE, \
 					struct ipa_ioc_mdfy_flt_rule *)
+
+#define IPA_IOC_NOTIFY_WAN_EMBMS_CONNECTED _IOWR(IPA_IOC_MAGIC, \
+				IPA_IOCTL_NOTIFY_WAN_EMBMS_CONNECTED, \
+				struct ipa_wan_msg *)
 
 /*
  * unique magic number of the Tethering bridge ioctls
