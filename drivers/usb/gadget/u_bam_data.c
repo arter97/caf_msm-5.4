@@ -112,6 +112,7 @@ struct bam_data_ch_info {
 	unsigned int		rx_flow_control_disable;
 	unsigned int		rx_flow_control_enable;
 	unsigned int		rx_flow_control_triggered;
+	atomic_t		is_teth_bridge_connected;
 };
 
 static struct work_struct *rndis_conn_w;
@@ -1107,6 +1108,7 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 			}
 			is_ipa_rndis_net_on = true;
 		}
+		atomic_set(&d->is_teth_bridge_connected, 1);
 	} else { /* transport type is USB_GADGET_XPORT_BAM2BAM */
 		/* Upadate BAM specific attributes in usb_request */
 		usb_bam_reset_complete();
@@ -1410,21 +1412,31 @@ void bam_data_disconnect(struct data_port *gr, u8 port_num)
 		}
 	}
 
+	/*
+	 * Make sure to perform teth_bridge_disconnect() only if
+	 * teth_bridge_init() is performed for different USB functions.
+	 */
 	if (d->trans == USB_GADGET_XPORT_BAM2BAM_IPA) {
-		void *priv;
-		if (d->func_type == USB_FUNC_ECM) {
-			priv = ecm_qc_get_ipa_priv();
-			ecm_ipa_disconnect(priv);
-		} else if (d->func_type == USB_FUNC_RNDIS) {
-			priv = rndis_qc_get_ipa_priv();
-			rndis_ipa_pipe_disconnect_notify(priv);
-			is_ipa_rndis_net_on = false;
-		} else if (d->func_type == USB_FUNC_MBIM) {
-			teth_bridge_disconnect(d->ipa_params.src_client);
-		}
+		if (atomic_read(&d->is_teth_bridge_connected)) {
+			void *priv;
 
-		port->last_event = U_BAM_DATA_DISCONNECT_E;
-		queue_work(bam_data_wq, &port->disconnect_w);
+			if (d->func_type == USB_FUNC_ECM) {
+				priv = ecm_qc_get_ipa_priv();
+				ecm_ipa_disconnect(priv);
+			} else if (d->func_type == USB_FUNC_RNDIS) {
+				priv = rndis_qc_get_ipa_priv();
+				rndis_ipa_pipe_disconnect_notify(priv);
+				is_ipa_rndis_net_on = false;
+			} else if (d->func_type == USB_FUNC_MBIM) {
+				teth_bridge_disconnect(
+						d->ipa_params.src_client);
+			}
+			pr_debug("%s(): teth_bridge() disconnected\n",
+								__func__);
+			atomic_set(&d->is_teth_bridge_connected, 0);
+			port->last_event = U_BAM_DATA_DISCONNECT_E;
+			queue_work(bam_data_wq, &port->disconnect_w);
+		}
 	} else {
 		if (usb_bam_client_ready(false))
 			pr_err("%s: usb_bam_client_ready failed\n",
@@ -1536,6 +1548,7 @@ int bam_data_connect(struct data_port *gr, u8 port_num,
 			goto exit;
 	}
 
+	atomic_set(&d->is_teth_bridge_connected, 0);
 	port->last_event = U_BAM_DATA_CONNECT_E;
 	queue_work(bam_data_wq, &port->connect_w);
 	ret = 0;
