@@ -58,6 +58,8 @@ static unsigned int _adreno_mmu_set_pt_update_condition(
 		*cmds++ = rb->pagetable_desc.gpuaddr +
 			offsetof(struct adreno_ringbuffer_pagetable_info,
 				incoming_ptname);
+		*cmds++ = cp_type3_packet(CP_WAIT_FOR_ME, 1);
+		*cmds++ = 0;
 		/*
 		 * compare the incoming ptid to current ptid and make the
 		 * the pt switch commands optional based on condition
@@ -539,7 +541,7 @@ static unsigned int _adreno_iommu_set_pt_v2_a4xx(struct kgsl_device *device,
  * @cmds: The pointer where the commands are placed
  * @pt: The pagetable to switch to
  */
-static unsigned int adreno_iommu_set_pt_generate_cmds(
+unsigned int adreno_iommu_set_pt_generate_cmds(
 					struct adreno_ringbuffer *rb,
 					unsigned int *cmds,
 					struct kgsl_pagetable *pt)
@@ -583,7 +585,7 @@ static unsigned int adreno_iommu_set_pt_generate_cmds(
  * @cmds: Memory pointer where commands are generated
  * @pt: The pagetable to switch to
  */
-static unsigned int adreno_iommu_set_pt_ib(struct adreno_ringbuffer *rb,
+unsigned int adreno_iommu_set_pt_ib(struct adreno_ringbuffer *rb,
 				unsigned int *cmds,
 				struct kgsl_pagetable *pt)
 {
@@ -600,7 +602,6 @@ static unsigned int adreno_iommu_set_pt_ib(struct adreno_ringbuffer *rb,
 		offsetof(struct adreno_ringbuffer_pagetable_info,
 			incoming_ptname);
 	*cmds++ = pt->name;
-
 	/* Write the ttbr0 value to pagetable desc memory */
 	ttbr0_val = kgsl_mmu_get_default_ttbr0(&device->mmu,
 			KGSL_IOMMU_CONTEXT_USER);
@@ -623,7 +624,7 @@ static unsigned int adreno_iommu_set_pt_ib(struct adreno_ringbuffer *rb,
 		*cmds++ = rb->pagetable_desc.gpuaddr +
 			offsetof(struct adreno_ringbuffer_pagetable_info,
 			ttbr0) + sizeof(uint64_t);
-		*cmds = ttbr0_val & 0xFFFFFFFF;
+		*cmds++ = ttbr0_val & 0xFFFFFFFF;
 	}
 
 	*cmds++ = cp_type3_packet(CP_WAIT_MEM_WRITES, 1);
@@ -638,12 +639,71 @@ static unsigned int adreno_iommu_set_pt_ib(struct adreno_ringbuffer *rb,
 }
 
 /**
- * _set_pagetable_gpu() - Use GPU to switch the pagetable
+ * __add_curr_ctxt_cmds() - Add commands to set a context id in memstore
+ * @rb: The RB in which the commands will be added for execution
+ * @cmds: Pointer to memory where commands are added
+ * @drawctxt: The context whose id is being set in memstore
+ *
+ * Returns the number of dwords
+ */
+static unsigned int __add_curr_ctxt_cmds(struct adreno_ringbuffer *rb,
+			unsigned int *cmds,
+			struct adreno_context *drawctxt)
+{
+	unsigned int *cmds_orig = cmds;
+	struct kgsl_device *device = rb->device;
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	/* write the context identifier to memstore memory */
+	*cmds++ = cp_nop_packet(1);
+	*cmds++ = KGSL_CONTEXT_TO_MEM_IDENTIFIER;
+	*cmds++ = cp_type3_packet(CP_MEM_WRITE, 2);
+	*cmds++ = device->memstore.gpuaddr +
+		KGSL_MEMSTORE_RB_OFFSET(rb, current_context);
+	*cmds++ = (drawctxt ? drawctxt->base.id : 0);
+	*cmds++ = cp_type3_packet(CP_MEM_WRITE, 2);
+	*cmds++ = device->memstore.gpuaddr +
+			KGSL_MEMSTORE_OFFSET(KGSL_MEMSTORE_GLOBAL,
+						current_context);
+	*cmds++ = (drawctxt ? drawctxt->base.id : 0);
+	/* Flush the UCHE for new context */
+	*cmds++ = cp_type0_packet(adreno_getreg(adreno_dev,
+					ADRENO_REG_UCHE_INVALIDATE0), 2);
+	*cmds++ = 0;
+	if (adreno_is_a4xx(adreno_dev))
+		*cmds++ = 0x12;
+	else
+		*cmds++ = 0x90000000;
+	return cmds - cmds_orig;
+}
+
+/**
+ * _set_ctxt_gpu() - Add commands to set the current context in memstore
+ * @rb: The ringbuffer in which commands to set memstore are added
+ * @drawctxt: The context whose id is being set in memstore
+ */
+static int _set_ctxt_gpu(struct adreno_ringbuffer *rb,
+			struct adreno_context *drawctxt)
+{
+	unsigned int link[12], *cmds;
+	int result;
+
+	cmds = &link[0];
+	cmds += __add_curr_ctxt_cmds(rb, cmds, drawctxt);
+	result = adreno_ringbuffer_issuecmds(rb, 0, link,
+			(unsigned int)(cmds - link));
+	return result;
+}
+
+/**
+ * _set_pagetable_ctxt_gpu() - Use GPU to switch the pagetable and set
+ * current context
  * @rb: The ringbuffer in which commands to switch pagetable are to be submitted
  * @new_pt: The pagetable to switch to
+ * @drawctxt: The context whose pagetable is being switched to
  */
-int _set_pagetable_gpu(struct adreno_ringbuffer *rb,
-			struct kgsl_pagetable *new_pt)
+int _set_pagetable_ctxt_gpu(struct adreno_ringbuffer *rb,
+			struct kgsl_pagetable *new_pt,
+			struct adreno_context *drawctxt)
 {
 	unsigned int *link = NULL, *cmds;
 	struct kgsl_device *device = rb->device;
@@ -671,6 +731,8 @@ int _set_pagetable_gpu(struct adreno_ringbuffer *rb,
 
 	if (adreno_is_a4xx(adreno_dev))
 		cmds += adreno_set_apriv(adreno_dev, cmds, 0);
+
+	cmds += __add_curr_ctxt_cmds(rb, cmds, drawctxt);
 
 	if ((unsigned int) (cmds - link) > (PAGE_SIZE / sizeof(unsigned int))) {
 		KGSL_DRV_ERR(device, "Temp command buffer overflow\n");
@@ -700,17 +762,18 @@ done:
 }
 
 /**
- * adreno_mmu_set_pt() - Change the pagetable of the current RB
+ * adreno_mmu_set_pt_ctx() - Change the pagetable of the current RB
  * @device: Pointer to device to which the rb belongs
  * @rb: The RB pointer on which pagetable is to be changed
  * @new_pt: The new pt the device will change to
- * @adreno_ctx: The context whose pagetable the ringbuffer should switch to,
- * NULL means default
+ * @drawctxt: The context whose pagetable the ringbuffer is switching to,
+ * NULL means KGSL_CONTEXT_GLOBAL
  *
  * Returns 0 on success else error code.
  */
-int adreno_iommu_set_pt(struct adreno_ringbuffer *rb,
-			struct kgsl_pagetable *new_pt)
+int adreno_iommu_set_pt_ctx(struct adreno_ringbuffer *rb,
+			struct kgsl_pagetable *new_pt,
+			struct adreno_context *drawctxt)
 {
 	struct kgsl_device *device = rb->device;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
@@ -720,9 +783,6 @@ int adreno_iommu_set_pt(struct adreno_ringbuffer *rb,
 
 	if (rb->drawctxt_active)
 		cur_pt = rb->drawctxt_active->base.proc_priv->pagetable;
-
-	if (new_pt == cur_pt)
-		return 0;
 
 	/*
 	 * For current rb cpu path can be used if device state is null or
@@ -739,23 +799,37 @@ int adreno_iommu_set_pt(struct adreno_ringbuffer *rb,
 	}
 	if (cpu_path) {
 		if (rb == adreno_dev->cur_rb) {
-			result = kgsl_mmu_set_pt(&device->mmu, new_pt);
-			if (result)
-				return result;
-			/* write the new pt set to the memory variables */
-			kgsl_sharedmem_writel(device,
-			&adreno_dev->ringbuffers[0].pagetable_desc,
-				offsetof(
+			if (new_pt != cur_pt) {
+				result = kgsl_mmu_set_pt(&device->mmu, new_pt);
+				if (result)
+					return result;
+				/* write the new pt set to memory var */
+				kgsl_sharedmem_writel(device,
+				&adreno_dev->ringbuffers[0].pagetable_desc,
+					offsetof(
 					struct adreno_ringbuffer_pagetable_info,
 					current_global_ptname),
-				new_pt->name);
+					new_pt->name);
+			}
+			kgsl_sharedmem_writel(device, &device->memstore,
+				KGSL_MEMSTORE_OFFSET(KGSL_MEMSTORE_GLOBAL,
+							current_context),
+				drawctxt ? drawctxt->base.id : 0);
 		}
-		kgsl_sharedmem_writel(device, &rb->pagetable_desc,
+		if (new_pt != cur_pt)
+			kgsl_sharedmem_writel(device, &rb->pagetable_desc,
 			offsetof(struct adreno_ringbuffer_pagetable_info,
-				current_rb_ptname),
+			current_rb_ptname),
 			new_pt->name);
+
+		kgsl_sharedmem_writel(device, &device->memstore,
+				KGSL_MEMSTORE_RB_OFFSET(rb, current_context),
+				drawctxt ? drawctxt->base.id : 0);
 	} else {
-		result = _set_pagetable_gpu(rb, new_pt);
+		if (new_pt != cur_pt)
+			result = _set_pagetable_ctxt_gpu(rb, new_pt, drawctxt);
+		else
+			result = _set_ctxt_gpu(rb, drawctxt);
 	}
 	return result;
 }

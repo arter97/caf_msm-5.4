@@ -594,7 +594,7 @@ static void a4xx_protect_init(struct adreno_device *adreno_dev)
 	/* CP registers */
 	adreno_set_protected_registers(adreno_dev, &index, 0x200, 7);
 	adreno_set_protected_registers(adreno_dev, &index, 0x580, 4);
-
+	adreno_set_protected_registers(adreno_dev, &index, A4XX_CP_PREEMPT, 1);
 	/* RB registers */
 	adreno_set_protected_registers(adreno_dev, &index, 0xCC0, 0);
 
@@ -965,6 +965,22 @@ static unsigned int a4xx_register_offsets[ADRENO_REG_REGISTER_MAX] = {
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_PROTECT_STATUS, A4XX_CP_PROTECT_STATUS),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG6, A4XX_CP_SCRATCH_REG6),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG7, A4XX_CP_SCRATCH_REG7),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG8, A4XX_CP_SCRATCH_REG8),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG9, A4XX_CP_SCRATCH_REG9),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG10, A4XX_CP_SCRATCH_REG10),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG11, A4XX_CP_SCRATCH_REG11),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG12, A4XX_CP_SCRATCH_REG12),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG13, A4XX_CP_SCRATCH_REG13),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG14, A4XX_CP_SCRATCH_REG14),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG15, A4XX_CP_SCRATCH_REG15),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG16, A4XX_CP_SCRATCH_REG16),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG17, A4XX_CP_SCRATCH_REG17),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG18, A4XX_CP_SCRATCH_REG18),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG23, A4XX_CP_SCRATCH_REG23),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_PREEMPT, A4XX_CP_PREEMPT),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_PREEMPT_DEBUG, A4XX_CP_PREEMPT_DEBUG),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_PREEMPT_DISABLE,
+						A4XX_CP_PREEMPT_DISABLE),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_STATUS, A4XX_RBBM_STATUS),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_PERFCTR_CTL, A4XX_RBBM_PERFCTR_CTL),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_PERFCTR_LOAD_CMD0,
@@ -1630,6 +1646,60 @@ int adreno_a4xx_pwron_fixup_init(struct adreno_device *adreno_dev)
 	return 0;
 }
 
+/*
+ * a4xx_rb_init() - Initialize ringbuffer
+ * @adreno_dev: Pointer to adreno device
+ * @rb: Pointer to the ringbuffer of device
+ *
+ * Submit commands for ME initialization, common function shared between
+ * a4xx devices
+ */
+static int a4xx_rb_init(struct adreno_device *adreno_dev,
+			 struct adreno_ringbuffer *rb)
+{
+	unsigned int *cmds;
+	cmds = adreno_ringbuffer_allocspace(rb, 20);
+	if (IS_ERR(cmds))
+		return PTR_ERR(cmds);
+	if (cmds == NULL)
+		return -ENOSPC;
+
+	*cmds++ = cp_type3_packet(CP_ME_INIT, 17);
+
+	/*
+	 * Ordinal 2 of ME_INIT packet, the bits being set are:
+	 * Ordinal 3, 4, 5-12, 14, 15, 16, 17, 18 are present
+	 * Microcode Default Reset Control = 3
+	 */
+	*cmds++ = 0x000003f7;
+	*cmds++ = 0x00000000;
+	*cmds++ = 0x00000000;
+	*cmds++ = 0x00000000;
+	*cmds++ = 0x00000080;
+	*cmds++ = 0x00000100;
+	*cmds++ = 0x00000180;
+	*cmds++ = 0x00006600;
+	*cmds++ = 0x00000150;
+	*cmds++ = 0x0000014e;
+	*cmds++ = 0x00000154;
+	/* MAX Context */
+	*cmds++ = 0x00000001;
+	*cmds++ = 0x00000000;
+	*cmds++ = 0x00000000;
+
+	/* Enable protected mode registers for A3XX/A4XX */
+	*cmds++ = 0x20000000;
+
+	*cmds++ = 0x00000000;
+	*cmds++ = 0x00000000;
+
+	*cmds++ = cp_type3_packet(CP_PREEMPT_ENABLE, 1);
+	*cmds++ = 1;
+
+	adreno_ringbuffer_submit(rb, NULL);
+	return 0;
+}
+
 static ADRENO_CORESIGHT_ATTR(cfg_debbus_ctrlt, &a4xx_coresight_registers[0]);
 static ADRENO_CORESIGHT_ATTR(cfg_debbus_sela, &a4xx_coresight_registers[1]);
 static ADRENO_CORESIGHT_ATTR(cfg_debbus_selb, &a4xx_coresight_registers[2]);
@@ -1726,6 +1796,7 @@ static struct adreno_coresight a4xx_coresight = {
 	 (1 << A4XX_INT_RBBM_PFP_MS_TIMEOUT) |		\
 	 (1 << A4XX_INT_RBBM_ETS_MS_TIMEOUT) |		\
 	 (1 << A4XX_INT_RBBM_ASYNC_OVERFLOW) |		\
+	 (1 << A4XX_INT_CP_SW) |			\
 	 (1 << A4XX_INT_CP_OPCODE_ERROR) |		\
 	 (1 << A4XX_INT_CP_RESERVED_BIT_ERROR) |	\
 	 (1 << A4XX_INT_CP_HW_FAULT) |			\
@@ -1754,7 +1825,7 @@ static struct adreno_irq_funcs a4xx_irq_funcs[] = {
 	/* 6 - RBBM_ATB_ASYNC_OVERFLOW */
 	ADRENO_IRQ_CALLBACK(a4xx_err_callback),
 	ADRENO_IRQ_CALLBACK(NULL), /* 7 - RBBM_GPC_ERR */
-	ADRENO_IRQ_CALLBACK(NULL), /* 8 - CP_SW */
+	ADRENO_IRQ_CALLBACK(adreno_dispatcher_preempt_callback), /* 8 - CP_SW */
 	ADRENO_IRQ_CALLBACK(a4xx_err_callback), /* 9 - CP_OPCODE_ERROR */
 	/* 10 - CP_RESERVED_BIT_ERROR */
 	ADRENO_IRQ_CALLBACK(a4xx_err_callback),
@@ -1804,10 +1875,10 @@ struct adreno_gpudev adreno_a4xx_gpudev = {
 	.irq = &a4xx_irq,
 	.irq_trace = trace_kgsl_a4xx_irq_status,
 	.snapshot_data = &a4xx_snapshot_data,
-	.num_prio_levels = 1,
+	.num_prio_levels = ADRENO_PRIORITY_MAX_RB_LEVELS,
 
 	.perfcounter_init = a4xx_perfcounter_init,
-	.rb_init = a3xx_rb_init,
+	.rb_init = a4xx_rb_init,
 	.busy_cycles = a3xx_busy_cycles,
 	.coresight = &a4xx_coresight,
 	.start = a4xx_start,

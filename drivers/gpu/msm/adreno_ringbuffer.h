@@ -93,6 +93,14 @@ struct adreno_ringbuffer_pagetable_info {
  * pagetable
  * @dispatch_q: The dispatcher side queue for this ringbuffer
  * @ts_expire_waitq: Wait queue to wait for rb timestamp to expire
+ * @ts_expire_waitq: Wait q to wait for rb timestamp to expire
+ * @wptr_preempt_end: Used during preemption to check that preemption occurred
+ * at the right rptr
+ * @gpr11: The gpr11 value of this RB
+ * @preempted_midway: Indicates that the RB was preempted before rptr = wptr
+ * @sched_timer: Timer that tracks how long RB has been waiting to be scheduled
+ * or how long it has been scheduled for after preempting in
+ * @starve_timer_state: Indicates the state of the wait.
  */
 struct adreno_ringbuffer {
 	struct kgsl_device *device;
@@ -111,6 +119,11 @@ struct adreno_ringbuffer {
 	struct kgsl_memdesc pt_update_desc;
 	struct adreno_dispatcher_cmdqueue dispatch_q;
 	wait_queue_head_t ts_expire_waitq;
+	unsigned int wptr_preempt_end;
+	unsigned int gpr11;
+	int preempted_midway;
+	unsigned long sched_timer;
+	enum adreno_dispatcher_starve_timer_states starve_timer_state;
 };
 
 /* enable timestamp (...scratch0) memory shadowing */
@@ -175,6 +188,9 @@ int adreno_ringbuffer_waittimestamp(struct adreno_ringbuffer *rb,
 int adreno_rb_readtimestamp(struct kgsl_device *device,
 	void *priv, enum kgsl_timestamp_type type,
 	unsigned int *timestamp);
+
+int adreno_ringbuffer_submit_preempt_token(struct adreno_ringbuffer *rb,
+					struct adreno_ringbuffer *incoming_rb);
 
 static inline int adreno_ringbuffer_count(struct adreno_ringbuffer *rb,
 	unsigned int rptr)
