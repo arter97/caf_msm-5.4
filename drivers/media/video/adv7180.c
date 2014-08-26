@@ -38,7 +38,7 @@
 #include "msm/av_mgr.h"
 #define DRIVER_NAME "adv7180"
 
-#define I2C_RW_DELAY 75000
+#define I2C_RW_DELAY 50000
 #define ADV7180_STD_AD_PAL_BG_NTSC_J_SECAM		0x0
 #define ADV7180_STD_AD_PAL_BG_NTSC_J_SECAM_PED		0x1
 #define ADV7180_STD_AD_PAL_N_NTSC_J_SECAM		0x2
@@ -238,7 +238,6 @@ static int adv7180_select_page(struct adv7180_state *state, unsigned int page)
 							ADV7180_REG_CTRL);
 		usleep(I2C_RW_DELAY);
 		state->register_page = page;
-		usleep(I2C_RW_DELAY);
 	}
 
 	return 0;
@@ -251,11 +250,9 @@ static int adv7180_write(struct adv7180_state *state, unsigned int reg,
 
 	lockdep_assert_held(&state->mutex);
 
-	usleep(I2C_RW_DELAY);
 	adv7180_select_page(state, reg >> 8);
-	usleep(I2C_RW_DELAY);
 	ret = i2c_smbus_write_byte_data(state->client,
-						reg & 0xff, value);
+							reg & 0xff, value);
 	usleep(I2C_RW_DELAY);
 
 	return ret;
@@ -266,10 +263,7 @@ static int adv7180_read(struct adv7180_state *state, unsigned int reg)
 	int ret = 0;
 	lockdep_assert_held(&state->mutex);
 
-	usleep(I2C_RW_DELAY);
 	adv7180_select_page(state, reg >> 8);
-
-	usleep(I2C_RW_DELAY);
 	ret = i2c_smbus_read_byte_data(state->client, reg & 0xff);
 	usleep(I2C_RW_DELAY);
 	return ret;
@@ -280,7 +274,6 @@ static int adv7180_csi_write(struct adv7180_state *state, unsigned int reg,
 {
 	int ret = -1;
 
-	usleep(I2C_RW_DELAY);
 	ret = i2c_smbus_write_byte_data(state->csi_client, reg, value);
 	usleep(I2C_RW_DELAY);
 
@@ -292,7 +285,6 @@ static int adv7180_vpp_write(struct adv7180_state *state, unsigned int reg,
 {
 	int ret = -1;
 
-	usleep(I2C_RW_DELAY);
 	ret = i2c_smbus_write_byte_data(state->vpp_client, reg, value);
 	usleep(I2C_RW_DELAY);
 
@@ -536,14 +528,35 @@ static int adv7180_set_op_stream(struct adv7180_state *state, bool on)
 
 	if (state->chip_info->flags & ADV7180_FLAG_MIPI_CSI2) {
 		if (on) {
+			adv7180_write(state, ADV7180_REG_VPP_SLAVE_ADDR,
+				ADV7180_DEFAULT_VPP_I2C_ADDR << 1);
+			adv7180_vpp_write(state, 0xa3, 0x00);
+			adv7180_vpp_write(state, 0x5b, 0x00);
+			adv7180_vpp_write(state, 0x55, 0x80);
 
+			adv7180_write(state, ADV7180_REG_CSI_SLAVE_ADDR,
+				ADV7180_DEFAULT_CSI_I2C_ADDR << 1);
+			adv7180_csi_write(state, 0x01, 0x20);
+			adv7180_csi_write(state, 0x02, 0x28);
+			adv7180_csi_write(state, 0x03, 0x38);
+			adv7180_csi_write(state, 0x04, 0x30);
+			adv7180_csi_write(state, 0x05, 0x30);
+			adv7180_csi_write(state, 0x06, 0x80);
+			adv7180_csi_write(state, 0x07, 0x70);
+			adv7180_csi_write(state, 0x08, 0x50);
+
+			adv7180_csi_write(state, 0xDE, 0x02);
+			usleep(I2C_RW_DELAY);
+			adv7180_csi_write(state, 0xD2, 0xF7);
+			adv7180_csi_write(state, 0xD8, 0x65);
+			adv7180_csi_write(state, 0xE0, 0x09);
+			adv7180_csi_write(state, 0x2C, 0x00);
+			adv7180_csi_write(state, 0x1D, 0x80);
 			ret = adv7180_csi_write(state, 0x00, 0x00);
 			usleep(I2C_RW_DELAY);
-
 		} else {
 			usleep(I2C_RW_DELAY);
 			ret = adv7180_csi_write(state, 0x00, 0x80);
-			usleep(I2C_RW_DELAY);
 		}
 	}
 
