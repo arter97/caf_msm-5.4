@@ -55,4 +55,12 @@ config PINCTRL_MSMTHULIUM
 	  This is the pinctrl, pinmux, pinconf and gpiolib driver for the
 	  Qualcomm TLMM block found in the Qualcomm thulium platform.
 
+config PINCTRL_MSM8916
+	tristate "Qualcomm MSM8916 pin controller driver"
+	depends on GPIOLIB && OF && (ARCH_MSM8916 || COMPILE_TEST)
+	select PINCTRL_MSM
+	help
+	  This is the pinctrl, pinmux, pinconf and gpiolib driver for the
+	  Qualcomm TLMM block found in the Qualcomm MSM8916 platform.
+
 endif
