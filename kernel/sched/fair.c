@@ -6405,13 +6405,10 @@ bail_inter_cluster_balance(struct lb_env *env, struct sd_lb_stats *sds)
 {
 	int nr_cpus;
 
-	if (sds->local_stat.group_capacity <=
-			sds->busiest_stat.group_capacity)
+	if (group_rq_capacity(sds->local) <= group_rq_capacity(sds->busiest))
 		return 0;
 
-	if (sds->busiest_stat.sum_nr_big_tasks &&
-		 sds->local_stat.group_capacity >
-			 sds->busiest_stat.group_capacity)
+	if (sds->busiest_stat.sum_nr_big_tasks)
 		return 0;
 
 	nr_cpus = cpumask_weight(sched_group_cpus(sds->busiest));
@@ -6784,15 +6781,10 @@ static bool update_sd_pick_busiest(struct lb_env *env,
 				   struct sched_group *sg,
 				   struct sg_lb_stats *sgs)
 {
-	unsigned long capacity;
-
 	if (sgs->avg_load <= sds->busiest_stat.avg_load)
 		return false;
 
-	capacity = (env->idle == CPU_NOT_IDLE) ? sgs->group_capacity :
-				cpumask_weight(sched_group_cpus(sg));
-
-	if (sgs->sum_nr_running > capacity) {
+	if (sgs->sum_nr_running > sgs->group_capacity) {
 		env->flags &= ~LBF_PWR_ACTIVE_BALANCE;
 		return true;
 	}
