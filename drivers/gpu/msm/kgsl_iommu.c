@@ -962,6 +962,7 @@ static int kgsl_iommu_init(struct kgsl_mmu *mmu)
 	int status = 0;
 	struct kgsl_iommu *iommu;
 	struct platform_device *pdev = mmu->device->pdev;
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(mmu->device);
 
 	atomic_set(&mmu->fault, 0);
 	iommu = kzalloc(sizeof(struct kgsl_iommu), GFP_KERNEL);
@@ -995,7 +996,7 @@ static int kgsl_iommu_init(struct kgsl_mmu *mmu)
 	 * pagetables in-stream */
 	kgsl_sharedmem_writel(mmu->device, &mmu->setstate_memory,
 				KGSL_IOMMU_SETSTATE_NOP_OFFSET,
-				cp_nop_packet(1));
+				cp_packet(adreno_dev, CP_NOP, 1));
 
 	if (kgsl_guard_page == NULL) {
 		kgsl_guard_page = alloc_page(GFP_KERNEL | __GFP_ZERO |
@@ -1116,7 +1117,7 @@ static int kgsl_iommu_start(struct kgsl_mmu *mmu)
 	/* For complete CFF */
 	kgsl_cffdump_write(mmu->device, mmu->setstate_memory.gpuaddr +
 				KGSL_IOMMU_SETSTATE_NOP_OFFSET,
-				cp_nop_packet(1));
+				cp_packet(adreno_dev, CP_NOP, 1));
 
 	kgsl_iommu_disable_clk(mmu);
 

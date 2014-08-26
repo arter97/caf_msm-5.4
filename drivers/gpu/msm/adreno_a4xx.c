@@ -22,6 +22,7 @@
 #include "adreno_a4xx.h"
 #include "adreno_cp_parser.h"
 #include "adreno_trace.h"
+#include "adreno_pm4types.h"
 
 #define SP_TP_PWR_ON BIT(20)
 

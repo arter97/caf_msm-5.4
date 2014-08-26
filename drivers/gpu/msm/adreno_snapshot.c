@@ -36,6 +36,13 @@ static struct kgsl_snapshot_object objbuf[SNAPSHOT_OBJ_BUFSIZE];
 /* Pointer to the next open entry in the object list */
 static unsigned int objbufptr;
 
+static inline int adreno_rb_ctxtswitch(struct adreno_device *adreno_dev,
+				   unsigned int *cmd)
+{
+	return cmd[0] == cp_packet(adreno_dev, CP_NOP, 1) &&
+		cmd[1] == KGSL_CONTEXT_TO_MEM_IDENTIFIER;
+}
+
 /* Push a new buffer object onto the list */
 static void push_object(int type,
 	struct kgsl_process_private *process,
@@ -283,7 +290,7 @@ static size_t snapshot_rb(struct kgsl_device *device, u8 *buf,
 		}
 
 		/* Break if the current packet is a context switch identifier */
-		if ((rbptr[index] == cp_nop_packet(1)) &&
+		if ((rbptr[index] == cp_packet(adreno_dev, CP_NOP, 1)) &&
 			(rbptr[index + 1] == KGSL_CONTEXT_TO_MEM_IDENTIFIER))
 			break;
 	}
@@ -333,7 +340,8 @@ static size_t snapshot_rb(struct kgsl_device *device, u8 *buf,
 
 		if (parse_ibs == 0 && index == ib_parse_start)
 			parse_ibs = 1;
-		else if (index == rptr || adreno_rb_ctxtswitch(&rbptr[index]))
+		else if (index == rptr || adreno_rb_ctxtswitch(adreno_dev,
+							&rbptr[index]))
 			parse_ibs = 0;
 
 		if (parse_ibs && adreno_cmd_is_ib(rbptr[index])) {

@@ -903,12 +903,6 @@ static inline int adreno_is_a418(struct adreno_device *adreno_dev)
 	return (ADRENO_GPUREV(adreno_dev) == ADRENO_REV_A418);
 }
 
-static inline int adreno_rb_ctxtswitch(unsigned int *cmd)
-{
-	return (cmd[0] == cp_nop_packet(1) &&
-		cmd[1] == KGSL_CONTEXT_TO_MEM_IDENTIFIER);
-}
-
 /**
  * adreno_context_timestamp() - Return the last queued timestamp for the context
  * @k_ctxt: Pointer to the KGSL context to query
@@ -920,134 +914,6 @@ static inline int adreno_context_timestamp(struct kgsl_context *k_ctxt)
 {
 	struct adreno_context *drawctxt = ADRENO_CONTEXT(k_ctxt);
 	return drawctxt->timestamp;
-}
-
-static inline int __adreno_add_idle_indirect_cmds(unsigned int *cmds,
-		uint64_t nop_gpuaddr)
-{
-	/*
-	 * Adding an indirect buffer ensures that the prefetch stalls until
-	 * the commands in indirect buffer have completed. We need to stall
-	 * prefetch with a nop indirect buffer when updating pagetables
-	 * because it provides stabler synchronization */
-	*cmds++ = cp_type3_packet(CP_WAIT_FOR_ME, 1);
-	*cmds++ = 0;
-	*cmds++ = CP_HDR_INDIRECT_BUFFER_PFE;
-	*cmds++ = (unsigned int) nop_gpuaddr;
-	*cmds++ = 2;
-	*cmds++ = cp_type3_packet(CP_WAIT_FOR_IDLE, 1);
-	*cmds++ = 0x00000000;
-	return 5;
-}
-
-static inline int adreno_add_bank_change_cmds(unsigned int *cmds,
-					int cur_ctx_bank,
-					uint64_t nop_gpuaddr)
-{
-	unsigned int *start = cmds;
-
-	*cmds++ = cp_type0_packet(A3XX_CP_STATE_DEBUG_INDEX, 1);
-	*cmds++ = (cur_ctx_bank ? 0 : 0x20);
-	cmds += __adreno_add_idle_indirect_cmds(cmds, nop_gpuaddr);
-	return cmds - start;
-}
-
-/*
- * adreno_read_cmds - Add pm4 packets to perform read
- * @cmds - Pointer to memory where read commands need to be added
- * @addr - gpu address of the read
- * @val - The GPU will wait until the data at address addr becomes
- * @nop_gpuaddr - NOP GPU address
- * equal to value
- */
-static inline int adreno_add_read_cmds(unsigned int *cmds, uint64_t addr,
-				unsigned int val, uint64_t nop_gpuaddr)
-{
-	unsigned int *start = cmds;
-
-	*cmds++ = cp_type3_packet(CP_WAIT_REG_MEM, 5);
-	/* MEM SPACE = memory, FUNCTION = equals */
-	*cmds++ = 0x13;
-	*cmds++ = (unsigned int) addr;
-	*cmds++ = val;
-	*cmds++ = 0xFFFFFFFF;
-	*cmds++ = 0xFFFFFFFF;
-
-	/* WAIT_REG_MEM turns back on protected mode - push it off */
-	*cmds++ = cp_type3_packet(CP_SET_PROTECTED_MODE, 1);
-	*cmds++ = 0;
-
-	cmds += __adreno_add_idle_indirect_cmds(cmds, nop_gpuaddr);
-	return cmds - start;
-}
-
-/*
- * adreno_idle_cmds - Add pm4 packets for GPU idle
- * @adreno_dev - Pointer to device structure
- * @cmds - Pointer to memory where idle commands need to be added
- */
-static inline int adreno_add_idle_cmds(struct adreno_device *adreno_dev,
-							unsigned int *cmds)
-{
-	unsigned int *start = cmds;
-
-	*cmds++ = cp_type3_packet(CP_WAIT_FOR_IDLE, 1);
-	*cmds++ = 0;
-
-	if (adreno_is_a3xx(adreno_dev)) {
-		*cmds++ = cp_type3_packet(CP_WAIT_FOR_ME, 1);
-		*cmds++ = 0;
-	}
-
-	return cmds - start;
-}
-
-
-/*
- * adreno_wait_reg_mem() - Add a CP_WAIT_REG_MEM command
- * @cmds:	Pointer to memory where commands are to be added
- * @addr:	Regiater address to poll for
- * @val:	Value to poll for
- * @mask:	The value against which register value is masked
- * @interval:	wait interval
- */
-static inline int adreno_wait_reg_mem(unsigned int *cmds, unsigned int addr,
-				unsigned int val, unsigned int mask,
-				unsigned int interval)
-{
-	unsigned int *start = cmds;
-	*cmds++ = cp_type3_packet(CP_WAIT_REG_MEM, 5);
-	*cmds++ = 0x3; /* Function = Equals */
-	*cmds++ = addr; /* Poll address */
-	*cmds++ = val; /* ref val */
-	*cmds++ = mask;
-	*cmds++ = interval;
-
-	/* WAIT_REG_MEM turns back on protected mode - push it off */
-	*cmds++ = cp_type3_packet(CP_SET_PROTECTED_MODE, 1);
-	*cmds++ = 0;
-
-	return cmds - start;
-}
-/*
- * adreno_wait_reg_eq() - Add a CP_WAIT_REG_EQ command
- * @cmds:	Pointer to memory where commands are to be added
- * @addr:	Regiater address to poll for
- * @val:	Value to poll for
- * @mask:	The value against which register value is masked
- * @interval:	wait interval
- */
-static inline int adreno_wait_reg_eq(unsigned int *cmds, unsigned int addr,
-					unsigned int val, unsigned int mask,
-					unsigned int interval)
-{
-	unsigned int *start = cmds;
-	*cmds++ = cp_type3_packet(CP_WAIT_REG_EQ, 4);
-	*cmds++ = addr;
-	*cmds++ = val;
-	*cmds++ = mask;
-	*cmds++ = interval;
-	return cmds - start;
 }
 
 /*
@@ -1415,53 +1281,6 @@ static inline void adreno_set_active_ctxs_null(struct adreno_device *adreno_dev)
 	}
 }
 
-/**
- * adreno_use_cpu_path() - Use CPU instead of the GPU to manage the mmu?
- * @adreno_dev: the device
- *
- * In many cases it is preferable to poke the iommu directly rather
- * than using the GPU command stream. If we are idle or trying to go to a low
- * power state, using the command stream will be slower and asynchronous, which
- * needlessly complicates the power state transitions. Additionally,
- * the hardware simulators do not support command stream MMU operations so
- * the command stream can never be used if we are capturing CFF data.
- *
- */
-static inline bool adreno_use_cpu_path(struct adreno_device *adreno_dev)
-{
-	return (adreno_isidle(&adreno_dev->dev) ||
-		KGSL_STATE_ACTIVE != adreno_dev->dev.state ||
-		atomic_read(&adreno_dev->dev.active_cnt) == 0 ||
-		adreno_dev->dev.cff_dump_enable);
-}
-
-/**
- * adreno_set_apriv() - Generate commands to set/reset the APRIV
- * @adreno_dev: Device on which the commands will execute
- * @cmds: The memory pointer where commands are generated
- * @set: If set then APRIV is set else reset
- *
- * Returns the number of commands generated
- */
-static inline unsigned int adreno_set_apriv(struct adreno_device *adreno_dev,
-				unsigned int *cmds, int set)
-{
-	unsigned int *cmds_orig = cmds;
-
-	*cmds++ = cp_type3_packet(CP_WAIT_FOR_IDLE, 1);
-	*cmds++ = 0;
-	*cmds++ = cp_type3_packet(CP_WAIT_FOR_ME, 1);
-	*cmds++ = 0;
-	*cmds++ = cp_type0_packet(adreno_getreg(adreno_dev,
-				ADRENO_REG_CP_CNTL), 1);
-	if (set)
-		*cmds++ = 1;
-	else
-		*cmds++ = 0;
-
-	return cmds - cmds_orig;
-}
-
 /*
  * adreno_compare_prio_level() - Compares 2 priority levels based on enum values
  * @p1: First priority level
@@ -1480,5 +1299,8 @@ void adreno_readreg64(struct adreno_device *adreno_dev,
 
 void adreno_writereg64(struct adreno_device *adreno_dev,
 		enum adreno_regs lo, enum adreno_regs hi, uint64_t val);
+
+unsigned int adreno_iommu_set_apriv(struct adreno_device *adreno_dev,
+				unsigned int *cmds, int set);
 
 #endif /*__ADRENO_H */
