@@ -7719,10 +7719,7 @@ void idle_balance(int this_cpu, struct rq *this_rq)
 
 			/* If we've pulled tasks over stop searching: */
 			pulled_task = load_balance(balance_cpu, balance_rq,
-						   sd,
-						   (this_cpu == balance_cpu ?
-						    CPU_NEWLY_IDLE :
-						    CPU_IDLE),
+						   sd, CPU_NEWLY_IDLE,
 						   &continue_balancing);
 
 			domain_cost = sched_clock_cpu(balance_cpu) - t0;
