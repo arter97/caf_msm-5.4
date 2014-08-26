@@ -107,6 +107,8 @@ Parent node Optional properties
 			default lenght.
 - qcom,resume-soc:	Capacity in percent at which charging should resume
 			when a fully charged battery drops below this level.
+- qcom,batt-aging-comp : A boolean that defines if battery aging compensation
+			is enabled.
 
 qcom,batt-pres-status node required properties:
 - reg : offset and length of the PMIC LBC battery interface BATT_PRES_STATUS
