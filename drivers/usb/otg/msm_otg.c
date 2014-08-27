@@ -75,6 +75,7 @@ static struct msm_otg *the_msm_otg;
 static bool debug_aca_enabled;
 static bool debug_bus_voting_enabled;
 static bool mhl_det_in_progress;
+static bool keep_vbus;
 
 static struct regulator *hsusb_3p3;
 static struct regulator *hsusb_1p8;
@@ -197,7 +198,34 @@ out:
 	return status;
 }
 
+static ssize_t
+get_msm_otg_keep_vbus(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	if (keep_vbus)
+		return snprintf(buf, PAGE_SIZE, "enabled\n");
+	else
+		return snprintf(buf, PAGE_SIZE, "disabled\n");
+}
+
+static ssize_t
+set_msm_otg_keep_vbus(struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	if (!strnicmp(buf, "enable", 6))
+		keep_vbus = true;
+	else
+		keep_vbus = false;
+
+	if (keep_vbus)
+		the_msm_otg->phy.flags |= ENABLE_DP_MANUAL_PULLUP;
+
+	return count;
+}
+
 static DEVICE_ATTR(mode, S_IRUGO | S_IWUSR, get_msm_otg_mode, set_msm_otg_mode);
+static DEVICE_ATTR(keep_vbus, S_IRUGO | S_IWUSR,
+		get_msm_otg_keep_vbus, set_msm_otg_keep_vbus);
 
 static int msm_hsusb_ldo_init(struct msm_otg *motg, int init)
 {
@@ -619,6 +647,10 @@ static int msm_otg_reset(struct usb_phy *phy)
 			ULPI_SET(ULPI_PWR_CLK_MNG_REG));
 		/* Enable PMIC pull-up */
 		pm8xxx_usb_id_pullup(1);
+	} else if (pdata->otg_control == OTG_USER_CONTROL) {
+		val = readl_relaxed(USB_OTGSC);
+		val &= ~OTGSC_INTR_MASK;
+		writel_relaxed(val, USB_OTGSC);
 	}
 
 	return 0;
@@ -1408,6 +1440,9 @@ static void msm_hsusb_vbus_power(struct msm_otg *motg, bool on)
 	static bool vbus_is_on;
 
 	if (vbus_is_on == on)
+		return;
+
+	if (!on && keep_vbus)
 		return;
 
 	if (motg->pdata->vbus_power) {
@@ -3012,8 +3047,8 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 		 * (VBUS on/off).
 		 * But, handle BSV when charger is removed from ACA in ID_A
 		 */
-		if ((otg->phy->state >= OTG_STATE_A_IDLE) &&
-			!test_bit(ID_A, &motg->inputs))
+		if (keep_vbus || ((otg->phy->state >= OTG_STATE_A_IDLE) &&
+			!test_bit(ID_A, &motg->inputs)))
 			return IRQ_HANDLED;
 		if (otgsc & OTGSC_BSV) {
 			pr_debug("BSV set\n");
@@ -3779,6 +3814,8 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	if (motg->pdata->otg_control == OTG_USER_CONTROL) {
 		if (device_create_file(&pdev->dev, &dev_attr_mode))
 			dev_err(&pdev->dev, "could not create mode sysfs file\n");
+		if (device_create_file(&pdev->dev, &dev_attr_keep_vbus))
+			dev_err(&pdev->dev, "could not create keep_vbus sysfs file\n");
 	}
 
 	ret = msm_otg_debugfs_init(motg);
@@ -3875,8 +3912,10 @@ static int __devexit msm_otg_remove(struct platform_device *pdev)
 	if (motg->pdata->otg_control == OTG_PMIC_CONTROL)
 		pm8921_charger_unregister_vbus_sn(0);
 	msm_otg_mhl_register_callback(motg, NULL);
-	if (motg->pdata->otg_control == OTG_USER_CONTROL)
+	if (motg->pdata->otg_control == OTG_USER_CONTROL) {
 		device_remove_file(&pdev->dev, &dev_attr_mode);
+		device_remove_file(&pdev->dev, &dev_attr_keep_vbus);
+	}
 	msm_otg_debugfs_cleanup();
 	cancel_delayed_work_sync(&motg->chg_work);
 	cancel_delayed_work_sync(&motg->pmic_id_status_work);
