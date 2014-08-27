@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2008 Google, Inc.
  * Author: Brian Swetland <swetland@google.com>
- * Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2012, 2014 The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -218,6 +218,9 @@ struct msm_otg_platform_data {
 	struct msm_bus_scale_pdata *bus_scale_table;
 	const char *mhl_dev_name;
 };
+
+/* phy related flags */
+#define ENABLE_DP_MANUAL_PULLUP	BIT(0)
 
 /* Timeout (in msec) values (min - max) associated with OTG timers */
 
