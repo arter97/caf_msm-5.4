@@ -1,5 +1,33 @@
 if ARCH_MSM
 
+menu "MSM SoC Type"
+
+config ARCH_APQ8084
+	bool "APQ8084"
+	select ARCH_MSM_KRAITMP
+	select ARM_GIC
+	select MULTI_IRQ_HANDLER
+	select CPU_V7
+	select HAVE_ARM_ARCH_TIMER
+	select MAY_HAVE_SPARSE_IRQ
+	select SPARSE_IRQ
+	select ARM_HAS_SG_CHAIN
+	select CLKDEV_LOOKUP
+	select HAVE_CLK
+	select HAVE_CLK_PREPARE
+	select MSM_IRQ
+	select PINCTRL
+
+endmenu
+
+config ARCH_MSM_KRAIT
+	bool
+	select ARM_L1_CACHE_SHIFT_6
+
+config  ARCH_MSM_KRAITMP
+	select ARCH_MSM_KRAIT
+	bool
+
 config MSM_SOC_REV_A
 	bool
 
