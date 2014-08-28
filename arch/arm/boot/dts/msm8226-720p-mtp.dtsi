@@ -294,6 +294,7 @@
 						  00 00 00 00 00
 						  00];
 				qcom,use-blink;
+				qcom,in-order-command-processing;
 			};
 		};
 
@@ -320,6 +321,7 @@
 						  00 00 00 00 00
 						  00];
 				qcom,use-blink;
+				qcom,in-order-command-processing;
 			};
 		};
 	};
