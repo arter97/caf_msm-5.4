@@ -8,6 +8,7 @@ config ARCH_APQ8084
 	select ARM_GIC
 	select MULTI_IRQ_HANDLER
 	select CPU_V7
+	select MSM_SCM
 	select HAVE_ARM_ARCH_TIMER
 	select MSM_GPIOMUX
 	select MAY_HAVE_SPARSE_IRQ
@@ -22,6 +23,9 @@ config ARCH_APQ8084
 	select MSM_SPM_V2
 	select MSM_L2_SPM
 	select MSM_PM if PM
+	select ARCH_DMA_ADDR_T_64BIT if ARM_LPAE
+	select ARCH_WANT_KMAP_ATOMIC_FLUSH
+	select MAXIMUM_CURRENT_THROTTLING
 
 endmenu
 
