@@ -26,6 +26,8 @@
 #include <linux/input.h>
 #include <linux/time.h>
 
+#include <trace/events/power.h>
+
 struct cpu_sync {
 	struct task_struct *thread;
 	wait_queue_head_t sync_wq;
@@ -167,6 +169,12 @@ static int boost_mig_sync_thread(void *data)
 		if (ret)
 			continue;
 
+		if (cpumask_test_cpu(dest_cpu, src_policy.related_cpus))
+			continue;
+
+		if (src_policy.cpuinfo.max_freq > dest_policy.cpuinfo.max_freq)
+			continue;
+
 		req_freq = load_based_syncs ?
 			(dest_policy.cpuinfo.max_freq * s->task_load) / 100 :
 							src_policy.cur;
@@ -198,6 +206,7 @@ static int boost_mig_sync_thread(void *data)
 			cpufreq_update_policy(src_cpu);
 		if (cpu_online(dest_cpu)) {
 			cpufreq_update_policy(dest_cpu);
+			trace_cpufreq_freq_synced(src_cpu, dest_cpu, req_freq);
 			queue_delayed_work_on(dest_cpu, cpu_boost_wq,
 				&s->boost_rem, msecs_to_jiffies(boost_ms));
 		} else {
