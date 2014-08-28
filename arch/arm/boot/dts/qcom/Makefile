@@ -1,7 +1,9 @@
 ifeq ($(CONFIG_OF),y)
 
 dtb-$(CONFIG_ARCH_MSMFERRUM) += msmferrum-sim.dtb \
-	msmferrum-rumi.dtb
+	mdmferrum-rumi.dtb \
+	mdmferrum-cdp.dtb \
+	mdmferrum-mtp.dtb
 dtb-$(CONFIG_ARCH_MSM8226) += msm8226-sim.dtb \
 	msm8226-fluid.dtb \
 	msm8226-v1-cdp.dtb \
