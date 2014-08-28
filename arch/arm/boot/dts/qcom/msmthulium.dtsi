@@ -439,7 +439,7 @@
 			<0x4400000 0x800000>,
 			<0x4c00000 0x800000>,
 			<0x5800000 0x200000>,
-			<0x400a700 0x2100>;
+			<0x400a000 0x2100>; /* includes SPMI_CFG and GENI_CFG */
 		reg-names = "core", "chnls", "obsrvr", "intr", "cnfg";
 		interrupts = <0 326 0>;
 		qcom,pmic-arb-channel = <0>;
