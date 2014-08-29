@@ -5911,8 +5911,8 @@ static struct clk_lookup apq_clocks_8084[] = {
 	CLK_LOOKUP_OF("dma_bam_pclk", gcc_bam_dma_ahb_clk, "msm_sps"),
 
 	/* BLSP1 clocks */
-	CLK_LOOKUP_OF("iface",	gcc_blsp1_ahb_clk,  "f991e000.serial"),
-	CLK_LOOKUP_OF("iface",	gcc_blsp1_ahb_clk,  "f991f000.serial"),
+	CLK_LOOKUP_OF("iface_clk",	gcc_blsp1_ahb_clk,  "f991e000.serial"),
+	CLK_LOOKUP_OF("iface_clk",	gcc_blsp1_ahb_clk,  "f991f000.serial"),
 	CLK_LOOKUP_OF("iface_clk",	gcc_blsp1_ahb_clk,  "f9923000.spi"),
 	CLK_LOOKUP_OF("iface_clk",	gcc_blsp1_ahb_clk,  "f9925000.i2c"),
 	CLK_LOOKUP_OF("iface_clk", gcc_blsp1_ahb_clk,	"f9922000.uart"),
@@ -5937,14 +5937,14 @@ static struct clk_lookup apq_clocks_8084[] = {
 	CLK_LOOKUP_OF("",	gcc_blsp1_qup6_spi_apps_clk,	""),
 	CLK_LOOKUP_OF("",	gcc_blsp1_uart1_apps_clk,	""),
 	CLK_LOOKUP_OF("",	gcc_blsp1_uart2_apps_clk,	""),
-	CLK_LOOKUP_OF("core",	gcc_blsp1_uart3_apps_clk, "f991f000.serial"),
+	CLK_LOOKUP_OF("core_clk",	gcc_blsp1_uart3_apps_clk, "f991f000.serial"),
 	CLK_LOOKUP_OF("",	gcc_blsp1_uart4_apps_clk,	""),
 	CLK_LOOKUP_OF("",	gcc_blsp1_uart5_apps_clk,	""),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp1_uart6_apps_clk,  "f9922000.uart"),
 
 	/* BLSP2  clocks */
 	CLK_LOOKUP_OF("iface_clk", gcc_blsp2_ahb_clk,	"f995d000.uart"),
-	CLK_LOOKUP_OF("iface",	gcc_blsp2_ahb_clk, "f995e000.serial"),
+	CLK_LOOKUP_OF("iface_clk",	gcc_blsp2_ahb_clk, "f995e000.serial"),
 	CLK_LOOKUP_OF("iface_clk", gcc_blsp2_ahb_clk,	"f9966000.i2c"),
 	CLK_LOOKUP_OF("",	gcc_blsp2_qup1_i2c_apps_clk,	""),
 	CLK_LOOKUP_OF("",	gcc_blsp2_qup1_spi_apps_clk,	""),
@@ -5960,7 +5960,7 @@ static struct clk_lookup apq_clocks_8084[] = {
 	CLK_LOOKUP_OF("",	gcc_blsp2_qup6_spi_apps_clk,	""),
 	CLK_LOOKUP_OF("",	gcc_blsp2_uart1_apps_clk, ""),
 	CLK_LOOKUP_OF("core_clk", gcc_blsp2_uart1_apps_clk, "f995d000.uart"),
-	CLK_LOOKUP_OF("core", gcc_blsp2_uart2_apps_clk, "f995e000.serial"),
+	CLK_LOOKUP_OF("core_clk", gcc_blsp2_uart2_apps_clk, "f995e000.serial"),
 	CLK_LOOKUP_OF("",	gcc_blsp2_uart3_apps_clk,	""),
 	CLK_LOOKUP_OF("",	gcc_blsp2_uart4_apps_clk,	""),
 	CLK_LOOKUP_OF("iface_clk",	gcc_blsp2_ahb_clk, "f9961000.uart"),
