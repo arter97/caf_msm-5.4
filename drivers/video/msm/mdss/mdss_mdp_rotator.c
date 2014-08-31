@@ -640,7 +640,6 @@ int mdss_mdp_rotator_play(struct msm_fb_data_type *mfd,
 			    struct msmfb_overlay_data *req)
 {
 	struct mdss_mdp_rotator_session *rot;
-	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
 	int ret;
 	u32 flgs;
 
@@ -649,19 +648,22 @@ int mdss_mdp_rotator_play(struct msm_fb_data_type *mfd,
 	if (!rot) {
 		pr_err("invalid session id=%x\n", req->id);
 		ret = -ENOENT;
-		goto dst_buf_fail;
+		goto session_fail;
 	}
 
 	flgs = rot->flags & MDP_SECURE_OVERLAY_SESSION;
+
+	ret = mdss_bus_bandwidth_ctrl(1);
+	if (ret) {
+		pr_err("mdss iommu attach failed rc=%d", ret);
+		goto session_fail;
+	}
 
 	ret = mdss_mdp_rotator_busy_wait_ex(rot);
 	if (ret) {
 		pr_err("rotator busy wait error\n");
 		goto dst_buf_fail;
 	}
-
-	if (!mfd->panel_info->cont_splash_enabled)
-		mdss_iommu_attach(mdp5_data->mdata);
 
 	mdss_mdp_data_free(&rot->src_buf);
 	ret = mdss_mdp_data_get(&rot->src_buf, &req->data, 1, flgs);
@@ -694,11 +696,13 @@ int mdss_mdp_rotator_play(struct msm_fb_data_type *mfd,
 	}
 
 	ret = mdss_mdp_rotator_queue(rot);
-
 	if (ret)
 		pr_err("rotator queue error session id=%x\n", req->id);
 
 dst_buf_fail:
+	mdss_bus_bandwidth_ctrl(0);
+
+session_fail:
 	mutex_unlock(&rotator_lock);
 	return ret;
 }
