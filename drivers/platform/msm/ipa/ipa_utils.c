@@ -86,7 +86,7 @@ static const int ep_mapping[2][IPA_CLIENT_MAX] = {
 	[IPA_1_1][IPA_CLIENT_Q6_WAN_CONS]        = -1,
 
 
-	[IPA_2_0][IPA_CLIENT_HSIC1_PROD]         = -1,
+	[IPA_2_0][IPA_CLIENT_HSIC1_PROD]         = 12,
 	[IPA_2_0][IPA_CLIENT_WLAN1_PROD]         = 19,
 	[IPA_2_0][IPA_CLIENT_HSIC2_PROD]         = -1,
 	[IPA_2_0][IPA_CLIENT_USB2_PROD]          = 12,
@@ -105,7 +105,7 @@ static const int ep_mapping[2][IPA_CLIENT_MAX] = {
 	[IPA_2_0][IPA_CLIENT_Q6_LAN_PROD]        =  6,
 	[IPA_2_0][IPA_CLIENT_Q6_CMD_PROD]        =  7,
 
-	[IPA_2_0][IPA_CLIENT_HSIC1_CONS]         = -1,
+	[IPA_2_0][IPA_CLIENT_HSIC1_CONS]         = 13,
 	[IPA_2_0][IPA_CLIENT_WLAN1_CONS]         = 14,
 	[IPA_2_0][IPA_CLIENT_HSIC2_CONS]         = -1,
 	[IPA_2_0][IPA_CLIENT_USB2_CONS]          = -1,
@@ -293,18 +293,20 @@ int ipa_get_clients_from_rm_resource(
 	switch (resource) {
 	case IPA_RM_RESOURCE_USB_CONS:
 		clients->names[i++] = IPA_CLIENT_USB_CONS;
-		clients->length = i;
+		break;
+	case IPA_RM_RESOURCE_HSIC_CONS:
+		clients->names[i++] = IPA_CLIENT_HSIC1_CONS;
 		break;
 	case IPA_RM_RESOURCE_WLAN_CONS:
 		clients->names[i++] = IPA_CLIENT_WLAN1_CONS;
 		clients->names[i++] = IPA_CLIENT_WLAN2_CONS;
 		clients->names[i++] = IPA_CLIENT_WLAN3_CONS;
 		clients->names[i++] = IPA_CLIENT_WLAN4_CONS;
-		clients->length = i;
 		break;
 	default:
 		break;
 	}
+	clients->length = i;
 
 	return 0;
 }
@@ -333,6 +335,7 @@ bool ipa_should_pipe_be_suspended(enum ipa_client_type client)
 		return false;
 
 	if (client == IPA_CLIENT_USB_CONS   ||
+	    client == IPA_CLIENT_HSIC1_CONS ||
 	    client == IPA_CLIENT_WLAN1_CONS ||
 	    client == IPA_CLIENT_WLAN2_CONS ||
 	    client == IPA_CLIENT_WLAN3_CONS ||
@@ -2957,7 +2960,8 @@ int ipa_write_qmap_id(struct ipa_ioc_write_qmapid *param_in)
 	}
 
 	meta.qmap_id = param_in->qmap_id;
-	if (param_in->client == IPA_CLIENT_USB_PROD ||
+	if (param_in->client == IPA_CLIENT_USB_PROD   ||
+	    param_in->client == IPA_CLIENT_HSIC1_PROD ||
 	    param_in->client == IPA_CLIENT_ODU_PROD) {
 		result = ipa_cfg_ep_metadata(ipa_ep_idx, &meta);
 	} else if (param_in->client == IPA_CLIENT_WLAN1_PROD) {
