@@ -60,7 +60,7 @@ static void check_dsi_ctrl_status(struct work_struct *work)
 
 	pdsi_status = container_of(to_delayed_work(work),
 		struct dsi_status_data, check_status);
-	if (!pdsi_status) {
+	if (!pdsi_status || !(pdsi_status->mfd)) {
 		pr_err("%s: DSI status data not available\n", __func__);
 		return;
 	}
@@ -81,6 +81,10 @@ static void check_dsi_ctrl_status(struct work_struct *work)
 
 	mdp5_data = mfd_to_mdp5_data(pdsi_status->mfd);
 	ctl = mfd_to_ctl(pdsi_status->mfd);
+	if (!ctl) {
+		pr_err("%s: Display is Off\n", __func__);
+		return;
+	}
 
 	if (ctl->shared_lock)
 		mutex_lock(ctl->shared_lock);
@@ -161,7 +165,13 @@ static int fb_event_callback(struct notifier_block *self,
 				msecs_to_jiffies(pdata->check_interval));
 			break;
 		case FB_BLANK_POWERDOWN:
+		case FB_BLANK_HSYNC_SUSPEND:
+		case FB_BLANK_VSYNC_SUSPEND:
+		case FB_BLANK_NORMAL:
 			cancel_delayed_work(&pdata->check_status);
+			break;
+		default:
+			pr_err("Unknown case in FB_EVENT_BLANK event\n");
 			break;
 		}
 	}
