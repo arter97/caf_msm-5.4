@@ -1263,7 +1263,7 @@ struct platform_device apq8064_device_ssbi_pmic2 = {
 	.num_resources  = ARRAY_SIZE(resources_ssbi_pmic2),
 };
 
-static struct resource resources_otg[] = {
+static struct resource resources_usb1_otg[] = {
 	{
 		.start	= MSM_HSUSB1_PHYS,
 		.end	= MSM_HSUSB1_PHYS + MSM_HSUSB1_SIZE - 1,
@@ -1276,17 +1276,63 @@ static struct resource resources_otg[] = {
 	},
 };
 
-struct platform_device apq8064_device_otg = {
+struct platform_device apq8064_device_usb1_otg = {
 	.name		= "msm_otg",
-	.id		= -1,
-	.num_resources	= ARRAY_SIZE(resources_otg),
-	.resource	= resources_otg,
+	.id		= 1,
+	.num_resources	= ARRAY_SIZE(resources_usb1_otg),
+	.resource	= resources_usb1_otg,
 	.dev		= {
 		.coherent_dma_mask	= 0xffffffff,
 	},
 };
 
-static struct resource resources_hsusb[] = {
+static struct resource resources_usb3_otg[] = {
+	{
+		.start	= MSM_HSUSB3_PHYS,
+		.end	= MSM_HSUSB3_PHYS + MSM_HSUSB3_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= USB3_HS_IRQ,
+		.end	= USB3_HS_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+struct platform_device apq8064_device_usb3_otg = {
+	.name		= "msm_otg",
+	.id		= 3,
+	.num_resources	= ARRAY_SIZE(resources_usb3_otg),
+	.resource	= resources_usb3_otg,
+	.dev		= {
+		.coherent_dma_mask	= 0xffffffff,
+	},
+};
+
+static struct resource resources_usb4_otg[] = {
+	{
+		.start	= MSM_HSUSB4_PHYS,
+		.end	= MSM_HSUSB4_PHYS + MSM_HSUSB4_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= USB4_HS_IRQ,
+		.end	= USB4_HS_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+struct platform_device apq8064_device_usb4_otg = {
+	.name		= "msm_otg",
+	.id		= 4,
+	.num_resources	= ARRAY_SIZE(resources_usb4_otg),
+	.resource	= resources_usb4_otg,
+	.dev		= {
+		.coherent_dma_mask	= 0xffffffff,
+	},
+};
+
+static struct resource resources_usb1_hsusb[] = {
 	{
 		.start	= MSM_HSUSB1_PHYS,
 		.end	= MSM_HSUSB1_PHYS + MSM_HSUSB1_SIZE - 1,
@@ -1299,26 +1345,98 @@ static struct resource resources_hsusb[] = {
 	},
 };
 
-struct platform_device apq8064_device_gadget_peripheral = {
+struct platform_device apq8064_device_gadget_usb1_peripheral = {
 	.name		= "msm_hsusb",
-	.id		= -1,
-	.num_resources	= ARRAY_SIZE(resources_hsusb),
-	.resource	= resources_hsusb,
+	.id		= 1,
+	.num_resources	= ARRAY_SIZE(resources_usb1_hsusb),
+	.resource	= resources_usb1_hsusb,
 	.dev		= {
 		.coherent_dma_mask	= 0xffffffff,
 	},
 };
 
-static struct resource resources_hsusb_host[] = {
+static struct resource resources_usb3_hsusb[] = {
 	{
-		.start  = MSM_HSUSB1_PHYS,
-		.end    = MSM_HSUSB1_PHYS + MSM_HSUSB1_SIZE - 1,
-		.flags  = IORESOURCE_MEM,
+		.start	= MSM_HSUSB3_PHYS,
+		.end	= MSM_HSUSB3_PHYS + MSM_HSUSB3_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
 	},
 	{
-		.start  = USB1_HS_IRQ,
-		.end    = USB1_HS_IRQ,
-		.flags  = IORESOURCE_IRQ,
+		.start	= USB3_HS_IRQ,
+		.end	= USB3_HS_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+struct platform_device apq8064_device_gadget_usb3_peripheral = {
+	.name		= "msm_hsusb",
+	.id		= 3,
+	.num_resources	= ARRAY_SIZE(resources_usb3_hsusb),
+	.resource	= resources_usb3_hsusb,
+	.dev		= {
+		.coherent_dma_mask	= 0xffffffff,
+	},
+};
+
+static struct resource resources_usb4_hsusb[] = {
+	{
+		.start	= MSM_HSUSB4_PHYS,
+		.end	= MSM_HSUSB4_PHYS + MSM_HSUSB4_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= USB4_HS_IRQ,
+		.end	= USB4_HS_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+struct platform_device apq8064_device_gadget_usb4_peripheral = {
+	.name		= "msm_hsusb",
+	.id		= 4,
+	.num_resources	= ARRAY_SIZE(resources_usb4_hsusb),
+	.resource	= resources_usb4_hsusb,
+	.dev		= {
+		.coherent_dma_mask	= 0xffffffff,
+	},
+};
+
+static struct resource resources_hsusb_usb1_host[] = {
+	{
+		.start	= MSM_HSUSB1_PHYS,
+		.end	= MSM_HSUSB1_PHYS + MSM_HSUSB1_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= USB1_HS_IRQ,
+		.end	= USB1_HS_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+static struct resource resources_hsusb_usb3_host[] = {
+	{
+		.start	= MSM_HSUSB3_PHYS,
+		.end	= MSM_HSUSB3_PHYS + MSM_HSUSB3_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= USB3_HS_IRQ,
+		.end	= USB3_HS_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+static struct resource resources_hsusb_usb4_host[] = {
+	{
+		.start	= MSM_HSUSB4_PHYS,
+		.end	= MSM_HSUSB4_PHYS + MSM_HSUSB4_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= USB4_HS_IRQ,
+		.end	= USB4_HS_IRQ,
+		.flags	= IORESOURCE_IRQ,
 	},
 };
 
@@ -1348,14 +1466,36 @@ static struct resource resources_hsic_host[] = {
 };
 
 static u64 dma_mask = DMA_BIT_MASK(32);
-struct platform_device apq8064_device_hsusb_host = {
-	.name           = "msm_hsusb_host",
-	.id             = -1,
-	.num_resources  = ARRAY_SIZE(resources_hsusb_host),
-	.resource       = resources_hsusb_host,
-	.dev            = {
-		.dma_mask               = &dma_mask,
-		.coherent_dma_mask      = 0xffffffff,
+struct platform_device apq8064_device_hsusb_usb1_host = {
+	.name		= "msm_hsusb_host",
+	.id		= 1,
+	.num_resources	= ARRAY_SIZE(resources_hsusb_usb1_host),
+	.resource	= resources_hsusb_usb1_host,
+	.dev		= {
+		.dma_mask		= &dma_mask,
+		.coherent_dma_mask	= 0xffffffff,
+	},
+};
+
+struct platform_device apq8064_device_hsusb_usb3_host = {
+	.name		= "msm_hsusb_host",
+	.id		= 3,
+	.num_resources	= ARRAY_SIZE(resources_hsusb_usb3_host),
+	.resource	= resources_hsusb_usb3_host,
+	.dev		= {
+		.dma_mask		= &dma_mask,
+		.coherent_dma_mask	= 0xffffffff,
+	},
+};
+
+struct platform_device apq8064_device_hsusb_usb4_host = {
+	.name		= "msm_hsusb_host",
+	.id		= 4,
+	.num_resources	= ARRAY_SIZE(resources_hsusb_usb4_host),
+	.resource	= resources_hsusb_usb4_host,
+	.dev		= {
+		.dma_mask		= &dma_mask,
+		.coherent_dma_mask	= 0xffffffff,
 	},
 };
 
@@ -1367,54 +1507,6 @@ struct platform_device apq8064_device_hsic_host = {
 	.dev		= {
 		.dma_mask		= &dma_mask,
 		.coherent_dma_mask	= DMA_BIT_MASK(32),
-	},
-};
-
-static struct resource resources_ehci_host3[] = {
-{
-		.start  = MSM_HSUSB3_PHYS,
-		.end    = MSM_HSUSB3_PHYS + MSM_HSUSB3_SIZE - 1,
-		.flags  = IORESOURCE_MEM,
-	},
-	{
-		.start  = USB3_HS_IRQ,
-		.end    = USB3_HS_IRQ,
-		.flags  = IORESOURCE_IRQ,
-	},
-};
-
-struct platform_device apq8064_device_ehci_host3 = {
-	.name           = "msm_ehci_host",
-	.id             = 0,
-	.num_resources  = ARRAY_SIZE(resources_ehci_host3),
-	.resource       = resources_ehci_host3,
-	.dev            = {
-		.dma_mask               = &dma_mask,
-		.coherent_dma_mask      = 0xffffffff,
-	},
-};
-
-static struct resource resources_ehci_host4[] = {
-{
-		.start  = MSM_HSUSB4_PHYS,
-		.end    = MSM_HSUSB4_PHYS + MSM_HSUSB4_SIZE - 1,
-		.flags  = IORESOURCE_MEM,
-	},
-	{
-		.start  = USB4_HS_IRQ,
-		.end    = USB4_HS_IRQ,
-		.flags  = IORESOURCE_IRQ,
-	},
-};
-
-struct platform_device apq8064_device_ehci_host4 = {
-	.name           = "msm_ehci_host",
-	.id             = 1,
-	.num_resources  = ARRAY_SIZE(resources_ehci_host4),
-	.resource       = resources_ehci_host4,
-	.dev            = {
-		.dma_mask               = &dma_mask,
-		.coherent_dma_mask      = 0xffffffff,
 	},
 };
 

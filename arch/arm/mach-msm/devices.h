@@ -139,13 +139,17 @@ extern struct platform_device msm_device_hsic_peripheral;
 extern struct platform_device msm8960_device_otg;
 extern struct platform_device msm8960_device_gadget_peripheral;
 
-extern struct platform_device apq8064_device_otg;
+extern struct platform_device apq8064_device_usb1_otg;
+extern struct platform_device apq8064_device_usb3_otg;
+extern struct platform_device apq8064_device_usb4_otg;
 extern struct platform_device apq8064_usb_diag_device;
-extern struct platform_device apq8064_device_gadget_peripheral;
-extern struct platform_device apq8064_device_hsusb_host;
+extern struct platform_device apq8064_device_gadget_usb1_peripheral;
+extern struct platform_device apq8064_device_gadget_usb3_peripheral;
+extern struct platform_device apq8064_device_gadget_usb4_peripheral;
+extern struct platform_device apq8064_device_hsusb_usb1_host;
+extern struct platform_device apq8064_device_hsusb_usb3_host;
+extern struct platform_device apq8064_device_hsusb_usb4_host;
 extern struct platform_device apq8064_device_hsic_host;
-extern struct platform_device apq8064_device_ehci_host3;
-extern struct platform_device apq8064_device_ehci_host4;
 
 extern struct platform_device msm_device_i2c;
 
