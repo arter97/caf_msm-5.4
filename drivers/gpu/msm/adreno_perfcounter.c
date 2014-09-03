@@ -88,11 +88,6 @@ int adreno_perfcounter_init(struct adreno_device *adreno_dev)
 	if (adreno_dev->fast_hang_detect)
 		adreno_fault_detect_start(adreno_dev);
 
-	/* Turn on the GPU busy counter(s) and let them run free */
-	/* GPU busy counts */
-	ret = adreno_perfcounter_get(adreno_dev, KGSL_PERFCOUNTER_GROUP_PWR, 1,
-			NULL, NULL, PERFCOUNTER_FLAG_KERNEL);
-
 	/* Default performance counter profiling to false */
 	adreno_dev->profile.enabled = false;
 	return ret;
@@ -128,10 +123,8 @@ static void adreno_perfcounter_write(struct adreno_device *adreno_dev,
 
 
 	/* Write the saved value to PERFCTR_LOAD_VALUE* registers. */
-	adreno_writereg(adreno_dev, ADRENO_REG_RBBM_PERFCTR_LOAD_VALUE_LO,
-			(uint32_t)reg->value);
-	adreno_writereg(adreno_dev, ADRENO_REG_RBBM_PERFCTR_LOAD_VALUE_HI,
-			(uint32_t)(reg->value >> 32));
+	adreno_writereg64(adreno_dev, ADRENO_REG_RBBM_PERFCTR_LOAD_VALUE_LO,
+			  ADRENO_REG_RBBM_PERFCTR_LOAD_VALUE_HI, reg->value);
 
 	/*
 	 * Set the load bit in PERFCTR_LOAD_CMD for the physical counter

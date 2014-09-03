@@ -1325,6 +1325,7 @@ struct adreno_ft_perf_counters a3xx_ft_perf_counters[] = {
 int a3xx_perfcounter_init(struct adreno_device *adreno_dev)
 {
 	struct adreno_perfcounters *counters = ADRENO_PERFCOUNTERS(adreno_dev);
+	int ret;
 
 	if (counters == NULL)
 		return -EINVAL;
@@ -1340,6 +1341,15 @@ int a3xx_perfcounter_init(struct adreno_device *adreno_dev)
 		counters->groups[KGSL_PERFCOUNTER_GROUP_VBIF_PWR].regs =
 			a3xx_perfcounters_vbif2_pwr;
 	}
+
+	/*
+	 * Turn on the GPU busy counter(s) and let them run free
+	 * GPU busy counts
+	 */
+	ret = adreno_perfcounter_get(adreno_dev, KGSL_PERFCOUNTER_GROUP_PWR, 1,
+				 NULL, NULL, PERFCOUNTER_FLAG_KERNEL);
+	if (ret)
+		return ret;
 
 	return 0;
 }
@@ -1541,6 +1551,7 @@ static unsigned int a3xx_register_offsets[ADRENO_REG_REGISTER_MAX] = {
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_MERCIU_DATA2, A3XX_CP_MERCIU_DATA2),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_MEQ_ADDR, A3XX_CP_MEQ_ADDR),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_MEQ_DATA, A3XX_CP_MEQ_DATA),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_PROTECT_REG_0, A3XX_CP_PROTECT_REG_0),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_STATUS, A3XX_RBBM_STATUS),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_PERFCTR_CTL, A3XX_RBBM_PERFCTR_CTL),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_PERFCTR_LOAD_CMD0,

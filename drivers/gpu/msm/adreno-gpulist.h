@@ -90,6 +90,7 @@ static const struct adreno_gpu_core adreno_gpulist[] = {
 		.pfp_bstrp_ver = 0x4ff083,
 		.shader_offset = 0x20000,
 		.shader_size = 0x10000,
+		.num_protected_regs = 0x18,
 	},
 	{
 		.gpurev = ADRENO_REV_A418,
@@ -112,5 +113,16 @@ static const struct adreno_gpu_core adreno_gpulist[] = {
 		.pfp_bstrp_ver = 0x4ff083,
 		.shader_offset = 0x20000, /* SP and TP addresses */
 		.shader_size = 0x10000,
+	},
+	{
+		.gpurev = ADRENO_REV_A530,
+		.core = 5,
+		.major = 3,
+		.minor = 0,
+		.patchid = 1,
+		.pm4fw_name = "a530_pm4.fw",
+		.pfpfw_name = "a530_pfp.fw",
+		.gpudev = &adreno_a5xx_gpudev,
+		.num_protected_regs = 0x20,
 	},
 };

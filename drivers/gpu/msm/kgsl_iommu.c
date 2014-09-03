@@ -841,8 +841,6 @@ static int kgsl_set_register_map(struct kgsl_mmu *mmu)
 	struct kgsl_iommu *iommu = mmu->device->mmu.priv;
 	struct kgsl_iommu_unit *iommu_unit;
 	int ret = 0;
-	struct kgsl_device *device = mmu->device;
-	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 
 	struct kgsl_device_iommu_data data = *(pdata->iommu_data);
 	iommu_unit = &iommu->iommu_unit;
@@ -872,15 +870,7 @@ static int kgsl_set_register_map(struct kgsl_mmu *mmu)
 
 	iommu_unit->iommu_halt_enable = 1;
 
-	if (kgsl_msm_supports_iommu_v2())
-		if (adreno_is_a405(adreno_dev)) {
-			iommu_unit->ahb_base =
-				KGSL_IOMMU_V2_AHB_BASE_A405;
-		} else
-			iommu_unit->ahb_base = KGSL_IOMMU_V2_AHB_BASE;
-	else
-		iommu_unit->ahb_base =
-			data.physstart - mmu->device->reg_phys;
+	iommu_unit->ahb_base = data.physstart - mmu->device->reg_phys;
 	return ret;
 err:
 	/* Unmap any mapped IOMMU regions */
@@ -962,7 +952,6 @@ static int kgsl_iommu_init(struct kgsl_mmu *mmu)
 	int status = 0;
 	struct kgsl_iommu *iommu;
 	struct platform_device *pdev = mmu->device->pdev;
-	struct adreno_device *adreno_dev = ADRENO_DEVICE(mmu->device);
 
 	atomic_set(&mmu->fault, 0);
 	iommu = kzalloc(sizeof(struct kgsl_iommu), GFP_KERNEL);
@@ -991,12 +980,6 @@ static int kgsl_iommu_init(struct kgsl_mmu *mmu)
 		iommu->ctx_offset = KGSL_IOMMU_CTX_OFFSET_V1;
 		iommu->ctx_ahb_offset = KGSL_IOMMU_CTX_OFFSET_V1;
 	}
-
-	/* A nop is required in an indirect buffer when switching
-	 * pagetables in-stream */
-	kgsl_sharedmem_writel(mmu->device, &mmu->setstate_memory,
-				KGSL_IOMMU_SETSTATE_NOP_OFFSET,
-				cp_packet(adreno_dev, CP_NOP, 1));
 
 	if (kgsl_guard_page == NULL) {
 		kgsl_guard_page = alloc_page(GFP_KERNEL | __GFP_ZERO |
@@ -1114,21 +1097,7 @@ static int kgsl_iommu_start(struct kgsl_mmu *mmu)
 					iommu_unit->dev[j].ctx_id, TTBR0);
 	}
 
-	/* For complete CFF */
-	kgsl_cffdump_write(mmu->device, mmu->setstate_memory.gpuaddr +
-				KGSL_IOMMU_SETSTATE_NOP_OFFSET,
-				cp_packet(adreno_dev, CP_NOP, 1));
-
 	kgsl_iommu_disable_clk(mmu);
-
-	if (mmu->secured) {
-		kgsl_regwrite(mmu->device, A4XX_RBBM_SECVID_TRUST_CONFIG, 0x2);
-		kgsl_regwrite(mmu->device, A4XX_RBBM_SECVID_TSB_CONTROL, 0x0);
-		kgsl_regwrite(mmu->device, A4XX_RBBM_SECVID_TSB_TRUSTED_BASE,
-						KGSL_IOMMU_SECURE_MEM_BASE);
-		kgsl_regwrite(mmu->device, A4XX_RBBM_SECVID_TSB_TRUSTED_SIZE,
-						KGSL_IOMMU_SECURE_MEM_SIZE);
-	}
 
 done:
 	return status;
