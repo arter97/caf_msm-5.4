@@ -164,6 +164,7 @@ static int msm_hsic_phy_clk_reset(struct msm_hsic_per *mhsic)
 {
 	int ret;
 
+	clk_enable(mhsic->alt_core_clk);
 	ret = clk_reset(mhsic->core_clk, CLK_RESET_ASSERT);
 	if (ret) {
 		clk_disable(mhsic->alt_core_clk);
@@ -390,6 +391,11 @@ static int msm_hsic_suspend(struct msm_hsic_per *mhsic)
 	}
 	disable_irq(mhsic->irq);
 
+	/* Don't try to put PHY into suspend if it is not in CONNECT state.*/
+	if (!the_mhsic->connected) {
+		dev_dbg(mhsic->dev, "%s SKIP PHY suspend\n", __func__);
+		goto skip_phy_suspend;
+	}
 	/*
 	 * PHY may take some time or even fail to enter into low power
 	 * mode (LPM). Hence poll for 500 msec and reset the PHY and link
@@ -426,7 +432,9 @@ static int msm_hsic_suspend(struct msm_hsic_per *mhsic)
 	 */
 	mb();
 
-	if (!mhsic->pdata->core_clk_always_on_workaround || !mhsic->connected) {
+skip_phy_suspend:
+
+	if (!mhsic->connected) {
 		clk_disable_unprepare(mhsic->iface_clk);
 		clk_disable_unprepare(mhsic->core_clk);
 	}
@@ -469,7 +477,7 @@ static int msm_hsic_resume(struct msm_hsic_per *mhsic)
 		dev_err(mhsic->dev,
 			"unable to set nominal vddcx voltage (no VDD MIN)\n");
 
-	if (!mhsic->pdata->core_clk_always_on_workaround || !mhsic->connected) {
+	if (!mhsic->connected) {
 		clk_prepare_enable(mhsic->iface_clk);
 		clk_prepare_enable(mhsic->core_clk);
 	}
@@ -643,7 +651,9 @@ static void ci13xxx_msm_hsic_notify_event(struct ci13xxx *udc, unsigned event)
 		break;
 	case CI13XXX_CONTROLLER_CONNECT_EVENT:
 		dev_info(dev, "CI13XXX_CONTROLLER_CONNECT_EVENT received\n");
-		msm_hsic_wakeup();
+		/* bring HSIC core out of LPM */
+		pm_runtime_get_sync(the_mhsic->dev);
+		msm_hsic_start();
 		the_mhsic->connected = true;
 		break;
 	case CI13XXX_CONTROLLER_SUSPEND_EVENT:
@@ -656,16 +666,8 @@ static void ci13xxx_msm_hsic_notify_event(struct ci13xxx *udc, unsigned event)
 		break;
 	case CI13XXX_CONTROLLER_UDC_STARTED_EVENT:
 		dev_info(dev, "CI13XXX_CONTROLLER_UDC_STARTED_EVENT received\n");
-		/*
-		 * UDC started, suspend the hsic device until it will be
-		 * connected by a pullup (CI13XXX_CONTROLLER_CONNECT_EVENT)
-		 * Before suspend, finish required configurations.
-		 */
-		hw_device_state(udc->ep0out.qh.dma);
-		msm_hsic_start();
-		usleep(10000);
-
 		mhsic->connected = false;
+		/* put HSIC core into LPM */
 		pm_runtime_put_noidle(the_mhsic->dev);
 		pm_runtime_suspend(the_mhsic->dev);
 		break;
