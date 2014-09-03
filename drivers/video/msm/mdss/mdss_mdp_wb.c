@@ -443,11 +443,20 @@ static struct mdss_mdp_wb_data *get_user_node(struct msm_fb_data_type *mfd,
 		goto register_fail;
 	}
 
+	ret  = mdss_bus_bandwidth_ctrl(1);
+	if (ret) {
+		pr_err("mdss iommu attach failed rc=%d", ret);
+		goto register_fail;
+	}
+
 	ret = mdss_mdp_data_map(&node->buf_data);
 	if (IS_ERR_VALUE(ret)) {
 		pr_err("error mapping buffer\n");
+		mdss_bus_bandwidth_ctrl(0);
 		goto fail_freebuf;
 	}
+
+	mdss_bus_bandwidth_ctrl(0);
 
 	memcpy(&node->buf_info, data, sizeof(*data));
 
@@ -490,7 +499,6 @@ static int mdss_mdp_wb_queue(struct msm_fb_data_type *mfd,
 {
 	struct mdss_mdp_wb *wb = mfd_to_wb(mfd);
 	struct mdss_mdp_wb_data *node = NULL;
-	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
 	int ret = 0;
 
 	if (!wb) {
@@ -499,14 +507,6 @@ static int mdss_mdp_wb_queue(struct msm_fb_data_type *mfd,
 	}
 
 	pr_debug("fb%d queue\n", wb->fb_ndx);
-
-	if (!mfd->panel_info->cont_splash_enabled) {
-		ret  = mdss_iommu_attach(mdp5_data->mdata);
-		if (ret) {
-			pr_err("mdss iommu attach failed rc=%d", ret);
-			return ret;
-		}
-	}
 
 	mutex_lock(&wb->lock);
 	if (local)

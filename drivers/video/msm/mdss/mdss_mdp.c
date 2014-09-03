@@ -727,15 +727,15 @@ int mdss_bus_bandwidth_ctrl(int enable)
 
 	mutex_lock(&bus_bw_lock);
 	if (enable) {
-		if (bus_bw_cnt == 0) {
+		if (bus_bw_cnt == 0)
 			changed++;
-			if (!mdata->handoff_pending) {
-				rc = mdss_iommu_attach(mdata);
-				if (rc) {
-					pr_err("iommu attach failed rc=%d\n",
-									rc);
-					goto end;
-				}
+
+		if (!mdata->iommu_attached && !mdata->handoff_pending) {
+			rc = mdss_iommu_attach(mdata);
+			if (rc) {
+				pr_err("iommu attach failed rc=%d\n",
+						rc);
+				goto end;
 			}
 		}
 
