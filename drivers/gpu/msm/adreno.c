@@ -1014,8 +1014,7 @@ static int adreno_init(struct kgsl_device *device)
 	/* Initialize coresight for the target */
 	adreno_coresight_init(adreno_dev);
 
-	adreno_ringbuffer_read_pm4_ucode(device);
-	adreno_ringbuffer_read_pfp_ucode(device);
+	gpudev->microcode_read(adreno_dev);
 
 	kgsl_pwrctrl_change_state(device, KGSL_STATE_INIT);
 

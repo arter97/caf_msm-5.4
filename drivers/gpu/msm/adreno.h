@@ -145,6 +145,11 @@ enum adreno_gpurev {
 	ADRENO_REV_A430 = 430,
 };
 
+enum adreno_start_type {
+	ADRENO_START_WARM,
+	ADRENO_START_COLD,
+};
+
 #define ADRENO_SOFT_FAULT BIT(0)
 #define ADRENO_HARD_FAULT BIT(1)
 #define ADRENO_TIMEOUT_FAULT BIT(2)
@@ -616,6 +621,8 @@ struct adreno_gpudev {
 	void (*irq_trace)(struct adreno_device *, unsigned int status);
 	void (*snapshot)(struct adreno_device *, struct kgsl_snapshot *);
 	int (*rb_init)(struct adreno_device *, struct adreno_ringbuffer *);
+	void (*microcode_read)(struct adreno_device *);
+	int (*microcode_load)(struct adreno_device *, unsigned int start_type);
 	int (*perfcounter_init)(struct adreno_device *);
 	void (*start)(struct adreno_device *);
 	void (*busy_cycles)(struct adreno_device *, struct adreno_busy_data *);

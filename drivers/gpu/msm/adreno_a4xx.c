@@ -1882,6 +1882,8 @@ struct adreno_gpudev adreno_a4xx_gpudev = {
 
 	.perfcounter_init = a4xx_perfcounter_init,
 	.rb_init = a4xx_rb_init,
+	.microcode_read = a3xx_microcode_read,
+	.microcode_load = a3xx_microcode_load,
 	.busy_cycles = a3xx_busy_cycles,
 	.coresight = &a4xx_coresight,
 	.start = a4xx_start,
