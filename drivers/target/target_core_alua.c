@@ -393,7 +393,7 @@ target_emulate_set_target_port_groups(struct se_cmd *cmd)
 					continue;
 
 				atomic_inc(&tg_pt_gp->tg_pt_gp_ref_cnt);
-				smp_mb__after_atomic_inc();
+				smp_mb__after_atomic();
 
 				spin_unlock(&dev->t10_alua.tg_pt_gps_lock);
 
@@ -404,7 +404,7 @@ target_emulate_set_target_port_groups(struct se_cmd *cmd)
 
 				spin_lock(&dev->t10_alua.tg_pt_gps_lock);
 				atomic_dec(&tg_pt_gp->tg_pt_gp_ref_cnt);
-				smp_mb__after_atomic_dec();
+				smp_mb__after_atomic();
 				break;
 			}
 			spin_unlock(&dev->t10_alua.tg_pt_gps_lock);
@@ -1006,7 +1006,7 @@ static void core_alua_do_transition_tg_pt_work(struct work_struct *work)
 		 * TARGET PORT GROUPS command
 		 */
 		atomic_inc(&mem->tg_pt_gp_mem_ref_cnt);
-		smp_mb__after_atomic_inc();
+		smp_mb__after_atomic();
 		spin_unlock(&tg_pt_gp->tg_pt_gp_lock);
 
 		spin_lock_bh(&port->sep_alua_lock);
@@ -1036,7 +1036,7 @@ static void core_alua_do_transition_tg_pt_work(struct work_struct *work)
 
 		spin_lock(&tg_pt_gp->tg_pt_gp_lock);
 		atomic_dec(&mem->tg_pt_gp_mem_ref_cnt);
-		smp_mb__after_atomic_dec();
+		smp_mb__after_atomic();
 	}
 	spin_unlock(&tg_pt_gp->tg_pt_gp_lock);
 	/*
@@ -1070,7 +1070,7 @@ static void core_alua_do_transition_tg_pt_work(struct work_struct *work)
 		core_alua_dump_state(tg_pt_gp->tg_pt_gp_alua_pending_state));
 	spin_lock(&dev->t10_alua.tg_pt_gps_lock);
 	atomic_dec(&tg_pt_gp->tg_pt_gp_ref_cnt);
-	smp_mb__after_atomic_dec();
+	smp_mb__after_atomic();
 	spin_unlock(&dev->t10_alua.tg_pt_gps_lock);
 
 	if (tg_pt_gp->tg_pt_gp_transition_complete)
@@ -1132,7 +1132,7 @@ static int core_alua_do_transition_tg_pt(
 	 */
 	spin_lock(&dev->t10_alua.tg_pt_gps_lock);
 	atomic_inc(&tg_pt_gp->tg_pt_gp_ref_cnt);
-	smp_mb__after_atomic_inc();
+	smp_mb__after_atomic();
 	spin_unlock(&dev->t10_alua.tg_pt_gps_lock);
 
 	if (!explicit && tg_pt_gp->tg_pt_gp_implicit_trans_secs) {
@@ -1175,7 +1175,7 @@ int core_alua_do_port_transition(
 	spin_lock(&local_lu_gp_mem->lu_gp_mem_lock);
 	lu_gp = local_lu_gp_mem->lu_gp;
 	atomic_inc(&lu_gp->lu_gp_ref_cnt);
-	smp_mb__after_atomic_inc();
+	smp_mb__after_atomic();
 	spin_unlock(&local_lu_gp_mem->lu_gp_mem_lock);
 	/*
 	 * For storage objects that are members of the 'default_lu_gp',
@@ -1192,7 +1192,7 @@ int core_alua_do_port_transition(
 		rc = core_alua_do_transition_tg_pt(l_tg_pt_gp,
 						   new_state, explicit);
 		atomic_dec(&lu_gp->lu_gp_ref_cnt);
-		smp_mb__after_atomic_dec();
+		smp_mb__after_atomic();
 		return rc;
 	}
 	/*
@@ -1206,7 +1206,7 @@ int core_alua_do_port_transition(
 
 		dev = lu_gp_mem->lu_gp_mem_dev;
 		atomic_inc(&lu_gp_mem->lu_gp_mem_ref_cnt);
-		smp_mb__after_atomic_inc();
+		smp_mb__after_atomic();
 		spin_unlock(&lu_gp->lu_gp_lock);
 
 		spin_lock(&dev->t10_alua.tg_pt_gps_lock);
@@ -1235,7 +1235,7 @@ int core_alua_do_port_transition(
 				tg_pt_gp->tg_pt_gp_alua_nacl = NULL;
 			}
 			atomic_inc(&tg_pt_gp->tg_pt_gp_ref_cnt);
-			smp_mb__after_atomic_inc();
+			smp_mb__after_atomic();
 			spin_unlock(&dev->t10_alua.tg_pt_gps_lock);
 			/*
 			 * core_alua_do_transition_tg_pt() will always return
@@ -1246,7 +1246,7 @@ int core_alua_do_port_transition(
 
 			spin_lock(&dev->t10_alua.tg_pt_gps_lock);
 			atomic_dec(&tg_pt_gp->tg_pt_gp_ref_cnt);
-			smp_mb__after_atomic_dec();
+			smp_mb__after_atomic();
 			if (rc)
 				break;
 		}
@@ -1254,7 +1254,7 @@ int core_alua_do_port_transition(
 
 		spin_lock(&lu_gp->lu_gp_lock);
 		atomic_dec(&lu_gp_mem->lu_gp_mem_ref_cnt);
-		smp_mb__after_atomic_dec();
+		smp_mb__after_atomic();
 	}
 	spin_unlock(&lu_gp->lu_gp_lock);
 
@@ -1268,7 +1268,7 @@ int core_alua_do_port_transition(
 	}
 
 	atomic_dec(&lu_gp->lu_gp_ref_cnt);
-	smp_mb__after_atomic_dec();
+	smp_mb__after_atomic();
 	return rc;
 }
 
