@@ -482,11 +482,10 @@ EXPORT_SYMBOL(ipa_reset_endpoint);
  * and avoids an IPA HW limitation that does not allow reseting a BAM pipe
  * during traffic in IPA TX command queue.
  * The sequence of operations is:
- *	- Block write of IPA TX command queue
- *	- Wait until TX command queue is empty
+ *	- Put TX block into step mode
  *	- Wait until TX is idle
  *	- Perform BAM pipe reset
- *	- Unblock write of IPA TX command queue
+ *	- Unblock IPA TX
  *	- Call to sps_connect() to connect the BAM pipe
  *
  * Returns:	0 on success, negative on failure
@@ -497,42 +496,25 @@ int ipa_sps_connect_safe(struct sps_pipe *h, struct sps_connect *connect,
 	u32 reg_val;
 	int res;
 
-	/* Block write of IPA TX command queue */
-	ipa_write_reg_field(ipa_ctx->mmio, IPA_PROC_TX_CMDQ_CFG, 1,
-		IPA_PROC_TX_CMDQ_CFG_BLOCK_WR_BMSK,
-		IPA_PROC_TX_CMDQ_CFG_BLOCK_WR_SHFT);
+	/* Put TX block into step mode */
+	ipa_write_reg(ipa_ctx->mmio, IPA_STEP_MODE_BREAKPOINTS,
+		IPA_STEP_MODE_BREAKPOINTS_TX_START);
 
-	/* Wait until TX command queue is empty */
-	do {
-		reg_val = ipa_read_reg_field(ipa_ctx->mmio,
-			IPA_PROC_TX_CMDQ_STATUS,
-			IPA_PROC_TX_CMDQ_STATUS_CMDQ_EMPTY_BMSK,
-			IPA_PROC_TX_CMDQ_STATUS_CMDQ_EMPTY_SHFT);
-	} while (reg_val != 1);
-
-	/* Wait until TX is idle */
-	do {
-		reg_val = ipa_read_reg_field(ipa_ctx->mmio,
-			IPA_STATE,
-			IPA_STATE_TX_IDLE_BMSK,
-			IPA_STATE_TX_IDLE_SHFT);
-	} while (reg_val != 1);
-
-	/* Configure debug bus to expose ctrl_fsm state1 */
-	ipa_write_reg_field(ipa_ctx->mmio, IPA_DEBUG_DATA_SEL, 1,
+	/* Configure debug bus to expose TX state */
+	ipa_write_reg_field(ipa_ctx->mmio, IPA_DEBUG_DATA_SEL, 0,
 		IPA_DEBUG_DATA_SEL_PIPE_SELECT_BMSK,
 		IPA_DEBUG_DATA_SEL_PIPE_SELECT_SHFT);
-	ipa_write_reg_field(ipa_ctx->mmio, IPA_DEBUG_DATA_SEL, 15,
+	ipa_write_reg_field(ipa_ctx->mmio, IPA_DEBUG_DATA_SEL, 2,
 		IPA_DEBUG_DATA_SEL_INTERNAL_BLOCK_SELECT_BMSK,
 		IPA_DEBUG_DATA_SEL_INTERNAL_BLOCK_SELECT_SHFT);
 	ipa_write_reg_field(ipa_ctx->mmio, IPA_DEBUG_DATA_SEL, 1,
 		IPA_DEBUG_DATA_SEL_EXTERNAL_BLOCK_SELECT_BMSK,
 		IPA_DEBUG_DATA_SEL_EXTERNAL_BLOCK_SELECT_SHFT);
 
-	/* Wait until ctrl_fsm state1 is 0 */
+	/* Wait until TX is idle */
 	do {
 		reg_val = ipa_read_reg(ipa_ctx->mmio, IPA_DEBUG_DATA);
-	} while (reg_val & IPA_DEBUG_CTRL_FSM_STATE1_BMSK);
+	} while (reg_val & IPA_DEBUG_TX_IDLE_BMSK);
 
 	res = sps_pipe_reset(ipa_ctx->bam_handle, pipe_number);
 	if (res) {
@@ -540,16 +522,12 @@ int ipa_sps_connect_safe(struct sps_pipe *h, struct sps_connect *connect,
 		goto fail_pipe_reset;
 	}
 
-	/* Unblock write of IPA TX command queue */
-	ipa_write_reg_field(ipa_ctx->mmio, IPA_PROC_TX_CMDQ_CFG, 0,
-		IPA_PROC_TX_CMDQ_CFG_BLOCK_WR_BMSK,
-		IPA_PROC_TX_CMDQ_CFG_BLOCK_WR_SHFT);
+	/* Unblock IPA TX */
+	ipa_write_reg(ipa_ctx->mmio, IPA_STEP_MODE_BREAKPOINTS, 0);
 
 	return sps_connect(h, connect);
 
 fail_pipe_reset:
-	ipa_write_reg_field(ipa_ctx->mmio, IPA_PROC_TX_CMDQ_CFG, 0,
-		IPA_PROC_TX_CMDQ_CFG_BLOCK_WR_BMSK,
-		IPA_PROC_TX_CMDQ_CFG_BLOCK_WR_SHFT);
+	ipa_write_reg(ipa_ctx->mmio, IPA_STEP_MODE_BREAKPOINTS, 0);
 	return res;
 }
