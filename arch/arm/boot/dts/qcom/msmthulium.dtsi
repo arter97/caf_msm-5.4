@@ -451,6 +451,17 @@
 		cell-index = <0>;
 		qcom,not-wakeup; /* Required until RPM is fully configured. */
 	};
+
+	tsens: tsens@4a9000 {
+		compatible = "qcom,msmthulium-tsens";
+		reg = <0x4a9000 0x1000>,
+			<0x74230 0x1000>;
+		reg-names = "tsens_physical", "tsens_eeprom_physical";
+		interrupts = <0 184 0>, <0 430 0>;
+		interrupt-names = "tsens-upper-lower", "tsens-critical";
+		qcom,sensors = <16>;
+		qcom,slope = <2901 2846 3200 3200 3200 3200 3200 3200 3200 3200 3200 3200 3200 3200 3200 3200>;
+	};
 };
 
 /include/ "msmthulium-regulator.dtsi"
