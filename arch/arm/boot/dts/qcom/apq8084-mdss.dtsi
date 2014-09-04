@@ -74,11 +74,6 @@
 		qcom,mdss-pipe-rgb-sw-reset-map = <9 10 11 12>;
 		qcom,mdss-pipe-dma-sw-reset-map = <13 14>;
 
-		qcom,mdss-pipe-sw-reset-off = <0x0128>;
-		qcom,mdss-pipe-vig-sw-reset-map = <5 6 7 8>;
-		qcom,mdss-pipe-rgb-sw-reset-map = <9 10 11 12>;
-		qcom,mdss-pipe-dma-sw-reset-map = <13 14>;
-
 		qcom,mdss-smp-data = <44 8192>;
 
 		qcom,mdss-ctl-off = <0x00000600 0x00000700 0x00000800
@@ -130,15 +125,6 @@
 				    <0x00011948 0x00000058>,
 				    <0x00011D48 0x00000058>,
 				    <0x00012148 0x00000058>;
-
-		/* buffer parameters to calculate prefill bandwidth */
-		qcom,mdss-prefill-outstanding-buffer-bytes = <1024>;
-		qcom,mdss-prefill-y-buffer-bytes = <4096>;
-		qcom,mdss-prefill-scaler-buffer-lines-bilinear = <2>;
-		qcom,mdss-prefill-scaler-buffer-lines-caf = <4>;
-		qcom,mdss-prefill-post-scaler-buffer-pixels = <2048>;
-		qcom,mdss-prefill-pingpong-buffer-pixels = <5120>;
-		qcom,mdss-prefill-fbc-lines = <2>;
 
 		/* buffer parameters to calculate prefill bandwidth */
 		qcom,mdss-prefill-outstanding-buffer-bytes = <1024>;
