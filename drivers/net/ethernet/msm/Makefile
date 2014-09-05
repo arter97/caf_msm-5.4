@@ -3,3 +3,4 @@
 #
 
 obj-$(CONFIG_MSM_RMNET_BAM) += msm_rmnet_bam.o
+obj-$(CONFIG_RNDIS_IPA) += rndis_ipa.o
