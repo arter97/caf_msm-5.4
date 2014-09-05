@@ -62,6 +62,9 @@
 #define CFG_AUTO_RECHG_DIS_BIT		BIT(2)
 #define CFG_CHG_INHIBIT_EN_BIT		BIT(0)
 
+#define CFG_CHG_FUNC_CTRL_REG		0x08
+#define CHG_RECHG_THRESH_FG_SRC_BIT	BIT(1)
+
 #define CFG_STAT_CTRL_REG		0x09
 #define CHG_STAT_IRQ_ONLY_BIT		BIT(4)
 #define CHG_TEMP_CHG_ERR_BLINK_BIT	BIT(3)
@@ -199,6 +202,7 @@
 
 #define CC_TO_SOC_COEFF			0xBA
 #define NOMINAL_CAPACITY_REG		0xBC
+#define FG_AUTO_RECHARGE_SOC		0xD2
 
 #define FG_I2C_CFG_MASK			SMB1360_MASK(2, 1)
 #define FG_CFG_I2C_ADDR			0x2
@@ -272,6 +276,7 @@ struct smb1360_chip {
 	int				voltage_empty_mv;
 	int				batt_capacity_mah;
 	int				cc_soc_coeff;
+	int				fg_auto_recharge_soc;
 
 	/* status tracking */
 	bool				usb_present;
@@ -2465,7 +2470,8 @@ static int smb1360_fg_config(struct smb1360_chip *chip)
 	}
 
 	/* scratch-pad register config */
-	if (chip->batt_capacity_mah != -EINVAL) {
+	if (chip->batt_capacity_mah != -EINVAL
+		|| chip->fg_auto_recharge_soc != -EINVAL) {
 		rc = smb1360_enable_fg_access(chip);
 		if (rc) {
 			pr_err("Couldn't enable FG access rc=%d\n", rc);
@@ -2505,6 +2511,30 @@ static int smb1360_fg_config(struct smb1360_chip *chip)
 				goto disable_fg;
 			}
 		}
+
+		/* Update SoC based resume charging threshold */
+		if (chip->fg_auto_recharge_soc != -EINVAL) {
+			rc = smb1360_masked_write(chip, CFG_CHG_FUNC_CTRL_REG,
+						CHG_RECHG_THRESH_FG_SRC_BIT,
+						CHG_RECHG_THRESH_FG_SRC_BIT);
+			if (rc) {
+				dev_err(chip->dev, "Couldn't write to CFG_CHG_FUNC_CTRL_REG rc=%d\n",
+									rc);
+				goto disable_fg;
+			}
+
+			reg = DIV_ROUND_UP(chip->fg_auto_recharge_soc *
+							MAX_8_BITS, 100);
+			pr_debug("fg_auto_recharge_soc=%d reg=%x\n",
+					chip->fg_auto_recharge_soc, reg);
+			rc = smb1360_write(chip, FG_AUTO_RECHARGE_SOC, reg);
+			if (rc) {
+				dev_err(chip->dev, "Couldn't write to FG_AUTO_RECHARGE_SOC rc=%d\n",
+									rc);
+				goto disable_fg;
+			}
+		}
+
 disable_fg:
 		/* disable FG access */
 		smb1360_disable_fg_access(chip);
@@ -3043,6 +3073,11 @@ static int smb_parse_dt(struct smb1360_chip *chip)
 					&chip->cc_soc_coeff);
 	if (rc < 0)
 		chip->cc_soc_coeff = -EINVAL;
+
+	rc = of_property_read_u32(node, "qcom,fg-auto-recharge-soc",
+					&chip->fg_auto_recharge_soc);
+	if (rc < 0)
+		chip->fg_auto_recharge_soc = -EINVAL;
 
 	return 0;
 }
