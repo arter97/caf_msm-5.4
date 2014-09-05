@@ -79,6 +79,7 @@ Optional Properties:
 				is specified. This value is calculated from the
 				batt-capacity and then encoded as floating number.
 				cc_soc_coeff = HALF_ENCODING(8192 / batt-capacity)
+- qcom,fg-auto-recharge-soc	This property defines the auto recharging SOC threshold.
 
 Example:
 	i2c@f9967000 {
@@ -108,6 +109,7 @@ Example:
 			qcom,recharge-thresh-mv = <100>;
 			qcom,fg-soc-max = <85>;
 			qcom,fg-soc-min = <15>;
+			qcom,fg-auto-recharge-soc = <99>;
 			qcom,thermal-mitigation = <1500 700 300 0>;
 		};
 	};
