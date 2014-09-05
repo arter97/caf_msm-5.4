@@ -13,6 +13,9 @@ obj-$(CONFIG_ARCH_QSD8X50) += sirc.o
 
 obj-$(CONFIG_MSM_PROC_COMM) += proc_comm.o clock-pcom.o vreg.o
 
+obj-$(CONFIG_QPNP_BMS) += bms-batterydata.o bms-batterydata-desay.o
+obj-$(CONFIG_QPNP_BMS) += bms-batterydata-oem.o bms-batterydata-qrd-4v35-2000mah.o bms-batterydata-qrd-4v2-1300mah.o
+
 obj-$(CONFIG_ARCH_MSM7X00A) += dma.o io.o
 obj-$(CONFIG_ARCH_MSM7X30) += dma.o io.o
 obj-$(CONFIG_ARCH_QSD8X50) += dma.o io.o
