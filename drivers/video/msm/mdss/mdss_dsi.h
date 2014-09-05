@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -45,9 +45,14 @@
 #define MIPI_DSI_PANEL_720P_PT	8
 #define DSI_PANEL_MAX	8
 
-#define MDSS_DSI_HW_REV_100_1		0x10000001	/* 8x26    */
-#define MDSS_DSI_HW_REV_100_2		0x10000002	/* 8x26v2  */
-#define MDSS_DSI_HW_REV_103_1		0x10030001	/* 8916/8936 */
+#define MDSS_DSI_HW_REV_100		0x10000000      /* 8974    */
+#define MDSS_DSI_HW_REV_100_1		0x10000001      /* 8x26    */
+#define MDSS_DSI_HW_REV_100_2		0x10000002      /* 8x26v2  */
+#define MDSS_DSI_HW_REV_101		0x10010000      /* 8974v2  */
+#define MDSS_DSI_HW_REV_101_1		0x10010001      /* 8974Pro */
+#define MDSS_DSI_HW_REV_102		0x10020000      /* 8084    */
+#define MDSS_DSI_HW_REV_103		0x10030000      /* 8994    */
+#define MDSS_DSI_HW_REV_103_1		0x10030001      /* 8916/8936 */
 
 enum {		/* mipi dsi panel */
 	DSI_VIDEO_MODE,
