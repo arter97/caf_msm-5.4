@@ -739,7 +739,9 @@ int disable_camera_preview(void)
 int enable_camera_preview(void)
 {
 	u64 mdp_max_bw_test = 2000000000;
-
+	int waitcounter_camera = 0;
+	int waitcounter_guidance = 0;
+	int max_wait_count = 15;
 	wait_for_completion(&camera_enabled);
 	mdpclient_msm_fb_open();
 	if (mdpclient_msm_fb_blank(FB_BLANK_UNBLANK, true))
@@ -751,6 +753,19 @@ int enable_camera_preview(void)
 	preview_set_overlay_init(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
 	alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] =
 		mdpclient_overlay_set(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
+
+	while (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] != 0 &&
+				waitcounter_camera < max_wait_count) {
+		msleep(100);
+		waitcounter_camera++;
+		alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] =
+		mdpclient_overlay_set(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
+	}
+
+	if (waitcounter_camera > 1)
+		pr_err("%s: mdpclient_overlay_set camera wait counter value is: %d",
+			__func__, waitcounter_camera);
+
 	if (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] != 0) {
 		pr_err("%s: mdpclient_overlay_set error!1\n",
 			__func__);
@@ -762,6 +777,19 @@ int enable_camera_preview(void)
 	guidance_lane_set_overlay_init(&overlay_req[OVERLAY_GUIDANCE_LANE]);
 	alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] =
 		mdpclient_overlay_set(&overlay_req[OVERLAY_GUIDANCE_LANE]);
+
+	while (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] != 0 &&
+				waitcounter_guidance < max_wait_count) {
+		msleep(100);
+		waitcounter_guidance++;
+		alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] =
+		mdpclient_overlay_set(&overlay_req[OVERLAY_GUIDANCE_LANE]);
+	}
+
+	if (waitcounter_guidance > 1)
+		pr_err("%s: mdpclient_overlay_set guidance lane wait counter value is: %d",
+			__func__, waitcounter_guidance);
+
 	if (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] != 0) {
 		pr_err("%s: mdpclient_overlay_set error!1\n",
 			__func__);
