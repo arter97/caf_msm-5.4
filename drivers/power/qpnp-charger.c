@@ -378,6 +378,7 @@ struct qpnp_chg_chip {
 	struct delayed_work		aicl_check_work;
 	struct work_struct		insertion_ocv_work;
 	struct work_struct		ocp_clear_work;
+	struct qpnp_chg_regulator	flash_wa_vreg;
 	struct qpnp_chg_regulator	otg_vreg;
 	struct qpnp_chg_regulator	boost_vreg;
 	struct qpnp_chg_regulator	batfet_vreg;
@@ -393,9 +394,11 @@ struct qpnp_chg_chip {
 	struct work_struct		reduce_power_stage_work;
 	bool				power_stage_workaround_running;
 	bool				power_stage_workaround_enable;
+	bool				is_flash_wa_reg_enabled;
 	bool				ext_ovp_ic_gpio_enabled;
 	unsigned int			ext_ovp_isns_gpio;
 	unsigned int			usb_trim_default;
+	u8				chg_temp_thresh_default;
 };
 
 static void
@@ -1709,6 +1712,7 @@ qpnp_chg_usb_usbin_valid_irq_handler(int irq, void *_chip)
 		return IRQ_HANDLED;
 
 	if (chip->usb_present ^ usb_present) {
+		chip->aicl_settled = false;
 		chip->usb_present = usb_present;
 		if (!usb_present) {
 			/* when a valid charger inserted, and increase the
@@ -1744,7 +1748,6 @@ qpnp_chg_usb_usbin_valid_irq_handler(int irq, void *_chip)
 			qpnp_chg_iusbmax_set(chip, QPNP_CHG_I_MAX_MIN_100);
 			qpnp_chg_iusb_trim_set(chip, chip->usb_trim_default);
 			chip->prev_usb_max_ma = -EINVAL;
-			chip->aicl_settled = false;
 		} else {
 			/* when OVP clamped usbin, and then decrease
 			 * the charger voltage to lower than the OVP
@@ -3058,7 +3061,12 @@ qpnp_chg_input_current_settled(struct qpnp_chg_chip *chip)
 {
 	int rc, ibat_max_ma;
 	u8 reg, chgr_sts, ibat_trim, i;
+	bool usb_present = qpnp_chg_is_usb_chg_plugged_in(chip);
 
+	if (!usb_present) {
+		pr_debug("Ignoring AICL settled, since USB is removed\n");
+		return 0;
+	}
 	chip->aicl_settled = true;
 
 	/*
@@ -3210,6 +3218,75 @@ qpnp_batt_system_temp_level_set(struct qpnp_chg_chip *chip, int lvl_sel)
 	} else {
 		pr_err("Unsupported level selected %d\n", lvl_sel);
 	}
+}
+
+/*
+ * Increase the SMBB/SMBBP charger overtemp threshold to 150C while firing
+ * the flash (and/or torch for PM8x26) when the bharger is used as the
+ * power source.
+ */
+static int
+qpnp_chg_temp_threshold_set(struct qpnp_chg_chip *chip, u8 value)
+{
+	int rc;
+
+	rc = qpnp_chg_masked_write(chip, chip->chgr_base +
+			CHGR_CHG_TEMP_THRESH ,
+			0xFF, value, 1);
+	if (rc)
+		pr_err("set CHG_TEMP_THRESH_Flash failed, value = %d, rc = %d\n",
+				value, rc);
+
+	return rc;
+}
+
+#define CHG_TEMP_THRESH_FOR_FLASH		0xFD
+#define CHG_TEMP_THRESH_DEFAULT			0x94
+static int
+qpnp_chg_regulator_flash_wa_enable(struct regulator_dev *rdev)
+{
+	struct qpnp_chg_chip *chip = rdev_get_drvdata(rdev);
+	int rc = 0;
+
+	if (chip->flags & BOOST_FLASH_WA) {
+		rc = qpnp_chg_temp_threshold_set(chip,
+				CHG_TEMP_THRESH_FOR_FLASH);
+		if (rc) {
+			pr_err("set chg temp threshold failed rc = %d\n", rc);
+			return rc;
+		}
+	}
+	chip->is_flash_wa_reg_enabled = true;
+
+	return rc;
+}
+
+static int
+qpnp_chg_regulator_flash_wa_disable(struct regulator_dev *rdev)
+{
+	struct qpnp_chg_chip *chip = rdev_get_drvdata(rdev);
+	int rc = 0;
+
+	if (chip->flags & BOOST_FLASH_WA) {
+		rc = qpnp_chg_temp_threshold_set(chip,
+				chip->chg_temp_thresh_default);
+		if (rc) {
+			pr_err("set chg temp threshold failed rc = %d\n", rc);
+			return rc;
+		}
+
+	}
+	chip->is_flash_wa_reg_enabled = false;
+
+	return rc;
+}
+
+static int
+qpnp_chg_regulator_flash_wa_is_enabled(struct regulator_dev *rdev)
+{
+	struct qpnp_chg_chip *chip = rdev_get_drvdata(rdev);
+
+	return chip->is_flash_wa_reg_enabled;
 }
 
 /* OTG regulator operations */
@@ -3429,6 +3506,12 @@ qpnp_chg_regulator_boost_list_voltage(struct regulator_dev *rdev,
 
 	return BOOST_MIN_UV + (selector * BOOST_STEP_UV);
 }
+
+static struct regulator_ops qpnp_chg_flash_wa_reg_ops = {
+	.enable			= qpnp_chg_regulator_flash_wa_enable,
+	.disable		= qpnp_chg_regulator_flash_wa_disable,
+	.is_enabled		= qpnp_chg_regulator_flash_wa_is_enabled,
+};
 
 static struct regulator_ops qpnp_chg_otg_reg_ops = {
 	.enable			= qpnp_chg_regulator_otg_enable,
@@ -4604,6 +4687,42 @@ qpnp_chg_hwinit(struct qpnp_chg_chip *chip, u8 subtype,
 		rc = qpnp_chg_masked_write(chip, chip->chgr_base +
 			CHG_TRICKLE_CLAMP,
 			0xFF, 0x00, 1);
+
+		rc = qpnp_chg_read(chip, &chip->chg_temp_thresh_default,
+				chip->chgr_base + CHGR_CHG_TEMP_THRESH, 1);
+		if (rc) {
+			pr_debug("read CHG_TEMP_THRESH failed, rc = %d\n", rc);
+			chip->chg_temp_thresh_default =
+				CHG_TEMP_THRESH_DEFAULT;
+		}
+
+		init_data = of_get_regulator_init_data(chip->dev,
+						       spmi_resource->of_node);
+		if (!init_data) {
+			pr_err("unable to get regulator init data for flash_wa\n");
+			return -ENOMEM;
+		}
+
+		if (init_data->constraints.name) {
+			rdesc			= &(chip->flash_wa_vreg.rdesc);
+			rdesc->owner		= THIS_MODULE;
+			rdesc->type		= REGULATOR_VOLTAGE;
+			rdesc->ops		= &qpnp_chg_flash_wa_reg_ops;
+			rdesc->name		= init_data->constraints.name;
+
+			init_data->constraints.valid_ops_mask
+				|= REGULATOR_CHANGE_STATUS;
+
+			chip->flash_wa_vreg.rdev =
+				regulator_register(rdesc, chip->dev, init_data,
+						chip, spmi_resource->of_node);
+			if (IS_ERR(chip->flash_wa_vreg.rdev)) {
+				rc = PTR_ERR(chip->flash_wa_vreg.rdev);
+				chip->flash_wa_vreg.rdev = NULL;
+				pr_err("Flash wa failed, rc=%d\n", rc);
+				return rc;
+			}
+		}
 		break;
 	case SMBB_BUCK_SUBTYPE:
 	case SMBBP_BUCK_SUBTYPE:
