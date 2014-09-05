@@ -435,6 +435,17 @@ config BATTERY_BQ28400
 	  The device monitors the battery level (Relative-State-Of-Charge).
 	  The device is SBS compliant, providing battery info over I2C.
 
+config QPNP_CHARGER
+	tristate "QPNP Charger driver"
+	depends on SPMI
+	depends on OF_SPMI
+	depends on THERMAL_QPNP_ADC_TM
+	help
+	  Say Y here to enable the switch mode battery charger
+	  and boost device which supports USB detection and charging. The driver
+	  also offers relevant information to userspace via the power supply
+	  framework.
+
 config QPNP_SMBCHARGER
 	tristate "QPNP SMB Charger driver"
 	depends on SPMI
