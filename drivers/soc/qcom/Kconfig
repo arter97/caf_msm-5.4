@@ -258,6 +258,14 @@ config MSM_L2_SPM
 	  Enabling this driver allows configuring L2 SPM for low power modes
 	  on supported chipsets
 
+config MSM_SYSMON_COMM
+	bool "MSM System Monitor communication support"
+	depends on MSM_SMD && MSM_SUBSYSTEM_RESTART
+	help
+	  This option adds support for MSM System Monitor library, which
+	  provides an API that may be used for notifying subsystems within
+	  the SoC about other subsystems' power-up/down state-changes.
+
 config MSM_OCMEM
         bool "MSM On-Chip memory driver (OCMEM)"
         help
