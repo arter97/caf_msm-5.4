@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -69,6 +69,8 @@
 #define PERF_CALC_PIPE_CALC_SMP_SIZE	BIT(2)
 
 #define PERF_SINGLE_PIPE_BW_FLOOR 1200000000
+#define CURSOR_PIPE_LEFT 0
+#define CURSOR_PIPE_RIGHT 1
 
 /*
  * Recommendation is to have different ot depending on the fps
@@ -527,6 +529,7 @@ struct mdss_overlay_private {
 	struct work_struct retire_work;
 	int retire_cnt;
 	bool kickoff_released;
+	u32 cursor_ndx[2];
 };
 
 struct mdss_mdp_set_ot_params {
