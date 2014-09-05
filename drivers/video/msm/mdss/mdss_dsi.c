@@ -1701,12 +1701,16 @@ int dsi_panel_device_register(struct device_node *pan_node,
 	}
 
 	if (pinfo->pdest == DISPLAY_1) {
-		mdss_debug_register_base("dsi0",
-			ctrl_pdata->ctrl_base, ctrl_pdata->reg_size);
+		mdss_debug_register_base("dsi0_ctrl", ctrl_pdata->ctrl_io.base,
+				ctrl_pdata->ctrl_io.len);
+		mdss_debug_register_base("dsi0_phy", ctrl_pdata->phy_io.base,
+				ctrl_pdata->phy_io.len);
 		ctrl_pdata->ndx = 0;
 	} else {
-		mdss_debug_register_base("dsi1",
-			ctrl_pdata->ctrl_base, ctrl_pdata->reg_size);
+		mdss_debug_register_base("dsi1_ctrl", ctrl_pdata->ctrl_io.base,
+				ctrl_pdata->ctrl_io.len);
+		mdss_debug_register_base("dsi1_phy", ctrl_pdata->phy_io.base,
+				ctrl_pdata->phy_io.len);
 		ctrl_pdata->ndx = 1;
 	}
 
