@@ -47,6 +47,16 @@ dtb-$(CONFIG_ARCH_MSM8226) += msm8226-sim.dtb \
 	apq8026-v2-720p-mtp.dtb \
 	apq8026-v2-320p-w-mtp.dtb \
 	apq8026-v2-1080p-mtp.dtb
+dtb-$(CONFIG_ARCH_MSM8610) += msm8610-rumi.dtb \
+	msm8610-v1-cdp.dtb \
+	msm8610-v2-cdp.dtb \
+	msm8610-v1-mtp.dtb \
+	msm8610-v2-mtp.dtb \
+	msm8610-sim.dtb \
+	msm8610-v1-qrd-skuaa.dtb \
+	msm8610-v1-qrd-skuab.dtb \
+	msm8610-v2-qrd-skuaa.dtb \
+	msm8610-v2-qrd-skuab.dtb
 dtb-$(CONFIG_ARCH_APQ8084) += apq8084-v1.0-old-pwr-grid-liquid.dtb \
 	apq8084-v1.1-old-pwr-grid-liquid.dtb \
 	apq8084-v1.1-liquid.dtb \
