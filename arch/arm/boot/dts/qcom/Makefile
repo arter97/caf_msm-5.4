@@ -2,6 +2,51 @@ ifeq ($(CONFIG_OF),y)
 
 dtb-$(CONFIG_ARCH_MSMFERRUM) += msmferrum-sim.dtb \
 	msmferrum-rumi.dtb
+dtb-$(CONFIG_ARCH_MSM8226) += msm8226-sim.dtb \
+	msm8226-fluid.dtb \
+	msm8226-v1-cdp.dtb \
+	msm8226-v1-w-cdp.dtb \
+	msm8226-v1-mtp.dtb \
+	msm8226-v1-w-mtp.dtb \
+	msm8226-v1-qrd-evt.dtb \
+	msm8226-v1-qrd-dvt.dtb \
+	msm8226-v2-720p-cdp.dtb \
+	msm8226-v2-320p-w-cdp.dtb \
+	msm8226-v2-1080p-cdp.dtb \
+	msm8226-v2-720p-mtp.dtb \
+	msm8226-v2-320p-w-mtp.dtb \
+	msm8226-v2-1080p-mtp.dtb \
+	msm8226-v2-qrd-evt.dtb \
+	msm8226-v2-qrd-dvt.dtb \
+	msm8926-v1-720p-cdp.dtb \
+	msm8926-v1-1080p-cdp.dtb \
+	msm8926-v1-720p-mtp.dtb \
+	msm8926-v1-1080p-mtp.dtb \
+	msm8926-v1-qrd.dtb \
+	msm8926-v1-qrd-skug.dtb \
+	msm8926-v1-qrd-skug-pvt.dtb \
+	msm8926-v2-720p-cdp.dtb \
+	msm8926-v2-1080p-cdp.dtb \
+	msm8926-v2-1080p-ext-buck-cdp.dtb \
+	msm8926-v2-720p-mtp.dtb \
+	msm8926-v2-1080p-mtp.dtb \
+	msm8926-v2-1080p-ext-buck-mtp.dtb \
+	msm8926-v2-qrd.dtb \
+	msm8926-v2-qrd-skug.dtb \
+	msm8926-v2-qrd-skug-pvt.dtb \
+	msm8226-v1-qrd-skuf.dtb \
+	msm8226-v2-qrd-skuf.dtb \
+	apq8026-v1-xpm.dtb \
+	apq8026-v1-cdp.dtb \
+	apq8026-v1-mtp.dtb \
+	apq8026-v1-w-mtp.dtb \
+	apq8026-v2-xpm.dtb \
+	apq8026-v2-720p-cdp.dtb \
+	apq8026-v2-320p-w-cdp.dtb \
+	apq8026-v2-1080p-cdp.dtb \
+	apq8026-v2-720p-mtp.dtb \
+	apq8026-v2-320p-w-mtp.dtb \
+	apq8026-v2-1080p-mtp.dtb
 dtb-$(CONFIG_ARCH_APQ8084) += apq8084-v1.0-old-pwr-grid-liquid.dtb \
 	apq8084-v1.1-old-pwr-grid-liquid.dtb \
 	apq8084-v1.1-liquid.dtb \
