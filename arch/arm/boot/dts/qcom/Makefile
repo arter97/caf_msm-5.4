@@ -120,7 +120,13 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
 	msm8939-cdp.dtb \
 	msm8939-cdp-smb1360.dtb \
 	msm8939-mtp.dtb \
-	msm8939-mtp-smb1360.dtb
+	msm8939-mtp-smb1360.dtb \
+	msm8936-qrd-skuk.dtb \
+	msm8936-cdp.dtb \
+	msm8936-cdp-smb1360.dtb \
+	msm8936-mtp.dtb \
+	msm8936-mtp-smb1360.dtb \
+	msm8936-mtp-wcd9306.dtb
 dtb-$(CONFIG_ARCH_MSMTHULIUM) += msmthulium-sim.dtb \
 	msmthulium-rumi.dtb
 
