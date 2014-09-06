@@ -28,7 +28,7 @@
 #include <sound/info.h>
 #include <sound/asound.h>
 
-#define ALSA_HW_MINOR    4
+#define ALSA_HW_MINOR    2
 #define WAV_PLAY_FILE	 "notification.wav"
 
 struct alsa_play_data {
