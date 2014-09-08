@@ -64,9 +64,14 @@ int adreno_getproperty_compat(struct kgsl_device *device,
 				/*
 				 * NOTE: with mmu enabled, gpuaddr doesn't mean
 				 * anything to mmap().
+				 * NOTE: shadowprop.gpuaddr is uint32
+				 * (because legacy) and the memstore gpuaddr is
+				 * 64 bit. Cast the memstore gpuaddr to uint32.
 				 */
-				shadowprop.gpuaddr = device->memstore.gpuaddr;
-				shadowprop.size = device->memstore.size;
+				shadowprop.gpuaddr =
+					(unsigned int) device->memstore.gpuaddr;
+				shadowprop.size =
+					(unsigned int) device->memstore.size;
 				/*
 				 * GSL needs this to be set, even if it
 				 * appears to be meaningless

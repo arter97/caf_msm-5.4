@@ -118,8 +118,8 @@ static struct kgsl_iommu_device *get_iommu_device(struct kgsl_iommu_unit *unit,
  */
 
 struct _mem_entry {
-	unsigned int gpuaddr;
-	unsigned int size;
+	uint64_t gpuaddr;
+	uint64_t size;
 	unsigned int flags;
 	unsigned int priv;
 	int pending_free;
@@ -132,7 +132,7 @@ struct _mem_entry {
  */
 
 static void _prev_entry(struct kgsl_process_private *priv,
-	unsigned int faultaddr, struct _mem_entry *ret)
+	uint64_t faultaddr, struct _mem_entry *ret)
 {
 	struct rb_node *node;
 	struct kgsl_mem_entry *entry;
@@ -167,7 +167,7 @@ static void _prev_entry(struct kgsl_process_private *priv,
  */
 
 static void _next_entry(struct kgsl_process_private *priv,
-	unsigned int faultaddr, struct _mem_entry *ret)
+	uint64_t faultaddr, struct _mem_entry *ret)
 {
 	struct rb_node *node;
 	struct kgsl_mem_entry *entry;
@@ -196,8 +196,8 @@ static void _next_entry(struct kgsl_process_private *priv,
 	}
 }
 
-static void _find_mem_entries(struct kgsl_mmu *mmu, unsigned int faultaddr,
-	unsigned int ptbase, struct _mem_entry *preventry,
+static void _find_mem_entries(struct kgsl_mmu *mmu, uint64_t faultaddr,
+	phys_addr_t ptbase, struct _mem_entry *preventry,
 	struct _mem_entry *nextentry)
 {
 	struct kgsl_process_private *private;
@@ -207,7 +207,7 @@ static void _find_mem_entries(struct kgsl_mmu *mmu, unsigned int faultaddr,
 	memset(nextentry, 0, sizeof(*nextentry));
 
 	/* Set the maximum possible size as an initial value */
-	nextentry->gpuaddr = 0xFFFFFFFF;
+	nextentry->gpuaddr = (uint64_t) -1;
 
 	mutex_lock(&kgsl_driver.process_mutex);
 
@@ -233,7 +233,7 @@ static void _print_entry(struct kgsl_device *device, struct _mem_entry *entry)
 	kgsl_get_memory_usage(name, sizeof(name) - 1, entry->flags);
 
 	KGSL_LOG_DUMP(device,
-		"[%8.8X - %8.8X] %s %s (pid = %d) (%s)\n",
+		"[%016llX - %016llX] %s %s (pid = %d) (%s)\n",
 		entry->gpuaddr,
 		entry->gpuaddr + entry->size,
 		entry->priv & KGSL_MEMDESC_GUARD_PAGE ? "(+guard)" : "",
@@ -242,10 +242,10 @@ static void _print_entry(struct kgsl_device *device, struct _mem_entry *entry)
 }
 
 static void _check_if_freed(struct kgsl_iommu_device *iommu_dev,
-	unsigned long addr, unsigned int pid)
+	uint64_t addr, pid_t pid)
 {
-	unsigned long gpuaddr = addr;
-	unsigned long size = 0;
+	uint64_t gpuaddr = addr;
+	uint64_t size = 0;
 	unsigned int flags = 0;
 
 	char name[32];
@@ -255,7 +255,7 @@ static void _check_if_freed(struct kgsl_iommu_device *iommu_dev,
 		kgsl_get_memory_usage(name, sizeof(name) - 1, flags);
 		KGSL_LOG_DUMP(iommu_dev->kgsldev, "---- premature free ----\n");
 		KGSL_LOG_DUMP(iommu_dev->kgsldev,
-			"[%8.8lX-%8.8lX] (%s) was already freed by pid %d\n",
+			"[%8.8llX-%8.8llX] (%s) was already freed by pid %d\n",
 			gpuaddr, gpuaddr + size, name, pid);
 	}
 }
@@ -377,7 +377,7 @@ static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 
 		KGSL_LOG_DUMP(iommu_dev->kgsldev, " <- fault @ %8.8lX\n", addr);
 
-		if (next.gpuaddr != 0xFFFFFFFF)
+		if (next.gpuaddr != (uint64_t) -1)
 			_print_entry(iommu_dev->kgsldev, &next);
 		else
 			KGSL_LOG_DUMP(iommu_dev->kgsldev, "*EMPTY*\n");
@@ -1167,14 +1167,14 @@ kgsl_iommu_unmap(struct kgsl_pagetable *pt,
 {
 	struct kgsl_device *device = pt->mmu->device;
 	int ret = 0;
-	unsigned int range = memdesc->size;
+	uint64_t range = memdesc->size;
 	struct kgsl_iommu_pt *iommu_pt = pt->priv;
 
 	/* All GPU addresses as assigned are page aligned, but some
 	   functions purturb the gpuaddr with an offset, so apply the
 	   mask here to make sure we have the right address */
 
-	unsigned int gpuaddr = PAGE_ALIGN(memdesc->gpuaddr);
+	uint64_t gpuaddr = PAGE_ALIGN(memdesc->gpuaddr);
 
 	if (range == 0 || gpuaddr == 0)
 		return 0;
@@ -1194,7 +1194,7 @@ kgsl_iommu_unmap(struct kgsl_pagetable *pt,
 	} else
 		ret = iommu_unmap_range(iommu_pt->domain, gpuaddr, range);
 	if (ret) {
-		KGSL_CORE_ERR("iommu_unmap_range(%p, %x, %d) failed "
+		KGSL_CORE_ERR("iommu_unmap_range(%p, %llx, %lld) failed "
 			"with err: %d\n", iommu_pt->domain, gpuaddr,
 			range, ret);
 		return ret;
@@ -1218,14 +1218,17 @@ kgsl_iommu_map(struct kgsl_pagetable *pt,
 	int ret = 0;
 	unsigned int iommu_virt_addr;
 	struct kgsl_iommu_pt *iommu_pt = pt->priv;
-	size_t size = memdesc->size;
+	uint64_t size = memdesc->size;
 	unsigned int protflags;
 	struct kgsl_device *device = pt->mmu->device;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 
 	BUG_ON(NULL == iommu_pt);
 
-	iommu_virt_addr = memdesc->gpuaddr;
+	BUG_ON(memdesc->gpuaddr > UINT_MAX);
+
+	iommu_virt_addr = (unsigned int) memdesc->gpuaddr;
+
 
 	/* Set up the protection for the page(s) */
 	protflags = IOMMU_READ;
@@ -1248,7 +1251,7 @@ kgsl_iommu_map(struct kgsl_pagetable *pt,
 		ret = iommu_map_range(iommu_pt->domain, iommu_virt_addr,
 				memdesc->sg, size, protflags);
 	if (ret) {
-		KGSL_CORE_ERR("iommu_map_range(%p, %x, %p, %zd, %x) err: %d\n",
+		KGSL_CORE_ERR("iommu_map_range(%p, %x, %p, %lld, %x) err: %d\n",
 			iommu_pt->domain, iommu_virt_addr, memdesc->sg, size,
 			protflags, ret);
 		return ret;
@@ -1258,7 +1261,7 @@ kgsl_iommu_map(struct kgsl_pagetable *pt,
 				page_to_phys(kgsl_guard_page), PAGE_SIZE,
 				protflags & ~IOMMU_WRITE);
 		if (ret) {
-			KGSL_CORE_ERR("iommu_map(%p, %zx, guard, %x) err: %d\n",
+			KGSL_CORE_ERR("iommu_map(%p, %lld, guard, %x) err: %d\n",
 				iommu_pt->domain, iommu_virt_addr + size,
 				protflags & ~IOMMU_WRITE,
 				ret);
@@ -1484,7 +1487,7 @@ static int kgsl_iommu_set_pt(struct kgsl_mmu *mmu,
  *
  * Return - The gpu address of register which can be used in type3 packet
  */
-static unsigned int kgsl_iommu_get_reg_gpuaddr(struct kgsl_mmu *mmu,
+static uint64_t kgsl_iommu_get_reg_gpuaddr(struct kgsl_mmu *mmu,
 					int ctx_id, int reg)
 {
 	struct kgsl_iommu *iommu = mmu->priv;

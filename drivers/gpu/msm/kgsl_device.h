@@ -212,8 +212,8 @@ long kgsl_ioctl_helper(struct file *filep, unsigned int cmd,
  */
 struct kgsl_memobj_node {
 	struct list_head node;
-	unsigned long gpuaddr;
-	size_t sizedwords;
+	uint64_t gpuaddr;
+	uint64_t sizedwords;
 	unsigned long priv;
 };
 
@@ -504,8 +504,8 @@ struct kgsl_process_private {
 	struct dentry *debug_root;
 
 	struct {
-		unsigned int cur;
-		unsigned int max;
+		uint64_t cur;
+		uint64_t max;
 	} stats[KGSL_MEM_ENTRY_MAX];
 
 	struct idr syncsource_idr;
@@ -564,9 +564,9 @@ struct kgsl_snapshot {
  * @node: node for kgsl_snapshot.obj_list
  */
 struct kgsl_snapshot_object {
-	unsigned int gpuaddr;
-	unsigned int size;
-	unsigned int offset;
+	uint64_t gpuaddr;
+	uint64_t size;
+	uint64_t offset;
 	int type;
 	struct kgsl_mem_entry *entry;
 	struct list_head node;
@@ -716,8 +716,8 @@ int kgsl_context_detach(struct kgsl_context *context);
 
 void kgsl_context_dump(struct kgsl_context *context);
 
-int kgsl_memfree_find_entry(pid_t pid, unsigned long *gpuaddr,
-	unsigned long *size, unsigned int *flags);
+int kgsl_memfree_find_entry(pid_t pid, uint64_t *gpuaddr,
+	uint64_t *size, unsigned int *flags);
 
 /**
  * kgsl_context_put() - Release context reference count
@@ -973,12 +973,12 @@ void kgsl_snapshot_indexed_registers(struct kgsl_device *device,
 	unsigned int data, unsigned int start, unsigned int count);
 
 int kgsl_snapshot_get_object(struct kgsl_snapshot *snapshot,
-	struct kgsl_process_private *process, unsigned int gpuaddr,
-	unsigned int size, unsigned int type);
+	struct kgsl_process_private *process, uint64_t gpuaddr,
+	uint64_t size, unsigned int type);
 
 int kgsl_snapshot_have_object(struct kgsl_snapshot *snapshot,
 	struct kgsl_process_private *process,
-	unsigned int gpuaddr, unsigned int size);
+	uint64_t gpuaddr, uint64_t size);
 
 struct adreno_ib_object_list;
 
@@ -992,5 +992,16 @@ void kgsl_snapshot_add_section(struct kgsl_device *device, u16 id,
 	struct kgsl_snapshot *snapshot,
 	size_t (*func)(struct kgsl_device *, u8 *, size_t, void *),
 	void *priv);
+
+/**
+ * kgsl_device_max_memsize() - Return the maximum GPU address allowable on this
+ * device
+ * @device: Pointer to a kgsl_device struct
+ */
+static inline uint64_t kgsl_device_max_gpuaddr(struct kgsl_device *device)
+{
+	return (uint64_t) UINT_MAX;
+}
+
 
 #endif  /* __KGSL_DEVICE_H */

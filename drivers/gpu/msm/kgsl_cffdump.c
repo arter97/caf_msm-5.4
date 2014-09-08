@@ -408,7 +408,7 @@ void kgsl_cffdump_user_event(struct kgsl_device *device,
 
 
 void kgsl_cffdump_memcpy(struct kgsl_device *device,
-		unsigned int gpuaddr, unsigned int *ptr, size_t sizebytes)
+		uint64_t gpuaddr, unsigned int *ptr, uint64_t sizebytes)
 {
 	int i;
 
@@ -420,8 +420,8 @@ void kgsl_cffdump_memcpy(struct kgsl_device *device,
 }
 
 void kgsl_cffdump_syncmem(struct kgsl_device *device,
-			  struct kgsl_memdesc *memdesc, uint gpuaddr,
-			  size_t sizebytes, bool clean_cache)
+			  struct kgsl_memdesc *memdesc, uint64_t gpuaddr,
+			  uint64_t sizebytes, bool clean_cache)
 {
 	unsigned int *src;
 
@@ -436,7 +436,7 @@ void kgsl_cffdump_syncmem(struct kgsl_device *device,
 	src = kgsl_gpuaddr_to_vaddr(memdesc, gpuaddr);
 	if (memdesc->hostptr == NULL) {
 		KGSL_CORE_ERR(
-			"cffdump: no kernel mapping for GPU address 0x%08X\n",
+			"cffdump: no kernel mapping for GPU address 0x%llX\n",
 			gpuaddr);
 		return;
 	}
@@ -460,7 +460,7 @@ void kgsl_cffdump_syncmem(struct kgsl_device *device,
 }
 
 void kgsl_cffdump_memset(struct kgsl_device *device,
-		unsigned int gpuaddr, unsigned char ch, size_t sizebytes)
+		uint64_t gpuaddr, unsigned char ch, uint64_t sizebytes)
 {
 	int i;
 
@@ -674,7 +674,7 @@ EXPORT_SYMBOL(kgsl_cff_dump_enable_get);
  */
 static int kgsl_cffdump_capture_adreno_ib_cff(struct kgsl_device *device,
 				struct kgsl_process_private *process,
-				unsigned int gpuaddr, unsigned int dwords)
+				uint64_t gpuaddr, uint64_t dwords)
 {
 	int ret;
 	struct adreno_ib_object_list *ib_obj_list;
@@ -689,7 +689,7 @@ static int kgsl_cffdump_capture_adreno_ib_cff(struct kgsl_device *device,
 
 	if (ret) {
 		KGSL_DRV_ERR(device,
-		"Fail to create object list for IB %x, size(dwords) %x\n",
+		"Fail to create object list for IB 0x%016llX, size(dwords) 0x%llX\n",
 		gpuaddr, dwords);
 		return ret;
 	}
@@ -728,7 +728,7 @@ int kgsl_cffdump_capture_ib_desc(struct kgsl_device *device,
 			ib->sizedwords);
 		if (ret) {
 			KGSL_DRV_ERR(device,
-			"Fail cff capture, IB %lx, size %zx\n",
+			"Fail cff capture, IB 0x%016llX, size 0x%llX\n",
 			ib->gpuaddr,
 			ib->sizedwords << 2);
 			break;

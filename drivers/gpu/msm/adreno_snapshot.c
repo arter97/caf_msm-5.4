@@ -39,7 +39,7 @@ static unsigned int objbufptr;
 /* Push a new buffer object onto the list */
 static void push_object(int type,
 	struct kgsl_process_private *process,
-	uint32_t gpuaddr, int dwords)
+	uint64_t gpuaddr, uint64_t dwords)
 {
 	int index;
 	struct kgsl_mem_entry *entry;
@@ -58,7 +58,7 @@ static void push_object(int type,
 		if (objbuf[index].gpuaddr == gpuaddr &&
 			objbuf[index].entry->priv == process) {
 
-			objbuf[index].size = max_t(unsigned int,
+			objbuf[index].size = max_t(uint64_t,
 						objbuf[index].size,
 						dwords << 2);
 			return;
@@ -72,7 +72,8 @@ static void push_object(int type,
 
 	entry = kgsl_sharedmem_find_region(process, gpuaddr, dwords << 2);
 	if (entry == NULL) {
-		KGSL_CORE_ERR("snapshot: Can't find entry for %X\n", gpuaddr);
+		KGSL_CORE_ERR("snapshot: Can't find entry for 0x%016llX\n",
+			gpuaddr);
 		return;
 	}
 
@@ -88,7 +89,7 @@ static void push_object(int type,
  * to be dumped
  */
 
-static int find_object(int type, unsigned int gpuaddr,
+static int find_object(int type, uint64_t gpuaddr,
 		struct kgsl_process_private *process)
 {
 	int index;
@@ -115,7 +116,7 @@ static int find_object(int type, unsigned int gpuaddr,
 static int snapshot_freeze_obj_list(struct kgsl_snapshot *snapshot,
 		struct kgsl_process_private *process,
 		struct adreno_ib_object_list *ib_obj_list,
-		unsigned int ib2base)
+		uint64_t ib2base)
 {
 	int ret = 0;
 	struct adreno_ib_object *ib_objs;
@@ -170,7 +171,7 @@ static int snapshot_freeze_obj_list(struct kgsl_snapshot *snapshot,
 static inline int parse_ib(struct kgsl_device *device,
 		struct kgsl_snapshot *snapshot,
 		struct kgsl_process_private *process,
-		unsigned int gpuaddr, unsigned int dwords)
+		uint64_t gpuaddr, uint64_t dwords)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	unsigned int ib1base;
@@ -398,8 +399,8 @@ static size_t snapshot_capture_mem_list(struct kgsl_device *device,
 		entry = rb_entry(node, struct kgsl_mem_entry, node);
 		node = rb_next(&entry->node);
 
-		*data++ = entry->memdesc.gpuaddr;
-		*data++ = entry->memdesc.size;
+		*data++ = (unsigned int) entry->memdesc.gpuaddr;
+		*data++ = (unsigned int) entry->memdesc.size;
 		*data++ = (entry->memdesc.flags & KGSL_MEMTYPE_MASK) >>
 							KGSL_MEMTYPE_SHIFT;
 	}
@@ -435,10 +436,21 @@ static size_t snapshot_ib(struct kgsl_device *device, u8 *buf,
 	snapshot = meta->snapshot;
 	obj = meta->obj;
 
+	if (obj->size > SIZE_MAX) {
+		KGSL_CORE_ERR("snapshot: GPU memory object 0x%016llX is too large to snapshot\n",
+			obj->gpuaddr);
+		return 0;
+	}
+
+	if (remain < (obj->size + sizeof(*header))) {
+		KGSL_CORE_ERR("snapshot: Not enough memory for the ib\n");
+		return 0;
+	}
 
 	src = kgsl_gpuaddr_to_vaddr(&obj->entry->memdesc, obj->gpuaddr);
 	if (src == NULL) {
-		KGSL_CORE_ERR("snapshot: Unable to map object 0x%X\n",
+		KGSL_DRV_ERR(device,
+			"snapshot: Unable to map GPU memory object 0x%016llX into the kernel\n",
 			obj->gpuaddr);
 		return 0;
 	}
@@ -462,7 +474,7 @@ static size_t snapshot_ib(struct kgsl_device *device, u8 *buf,
 	}
 
 	/* Write the sub-header for the section */
-	header->gpuaddr = obj->gpuaddr;
+	header->gpuaddr = (unsigned int) obj->gpuaddr;
 	/*
 	 * This loses address bits, but we can't do better until the snapshot
 	 * binary format is updated.
@@ -472,7 +484,7 @@ static size_t snapshot_ib(struct kgsl_device *device, u8 *buf,
 	header->size = obj->size >> 2;
 
 	/* Write the contents of the ib */
-	memcpy((void *)dst, (void *)src, obj->size);
+	memcpy((void *)dst, (void *)src, (size_t) obj->size);
 	/* Write the contents of the ib */
 
 	return obj->size + sizeof(*header);
@@ -582,7 +594,7 @@ static size_t snapshot_global(struct kgsl_device *device, u8 *buf,
 	}
 
 	if (memdesc->hostptr == NULL) {
-		KGSL_CORE_ERR("snapshot: no kernel mapping for global %x\n",
+		KGSL_CORE_ERR("snapshot: no kernel mapping for global object 0x%016llX\n",
 				memdesc->gpuaddr);
 		return 0;
 	}
@@ -665,13 +677,13 @@ void adreno_snapshot(struct kgsl_device *device, struct kgsl_snapshot *snapshot,
 	 * figure how often this really happens.
 	 */
 
-	if (!find_object(SNAPSHOT_OBJ_TYPE_IB, ib1base, snapshot->process)
-			&& ib1size) {
+	if (!find_object(SNAPSHOT_OBJ_TYPE_IB, (uint64_t) ib1base,
+			snapshot->process) && ib1size) {
 		push_object(SNAPSHOT_OBJ_TYPE_IB, snapshot->process,
-			ib1base, ib1size);
+			(uint64_t) ib1base, ib1size);
 		KGSL_CORE_ERR(
-			"CP_IB1_BASE not found. Dumping %x dwords of the buffer.\n",
-			ib1size);
+		"CP_IB1_BASE not found in the ringbuffer.Dumping %x dwords of the buffer.\n",
+		ib1size);
 	}
 
 	/*
@@ -682,10 +694,10 @@ void adreno_snapshot(struct kgsl_device *device, struct kgsl_snapshot *snapshot,
 	 * correct size.
 	 */
 
-	if (!find_object(SNAPSHOT_OBJ_TYPE_IB, ib2base, snapshot->process)
-			&& ib2size) {
+	if (!find_object(SNAPSHOT_OBJ_TYPE_IB, (uint64_t) ib2base,
+		snapshot->process) && ib2size) {
 		push_object(SNAPSHOT_OBJ_TYPE_IB, snapshot->process,
-			ib2base, ib2size);
+			(uint64_t) ib2base, ib2size);
 	}
 
 	/*

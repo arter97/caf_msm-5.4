@@ -1228,7 +1228,7 @@ static void __adreno_dispatcher_preempt_complete_state(
 	adreno_readreg(adreno_dev, ADRENO_REG_CP_RB_BASE, &rbbase);
 	if (rbbase != adreno_dev->next_rb->buffer_desc.gpuaddr) {
 		KGSL_DRV_ERR(device,
-		"RBBASE incorrect after preemption, expected %08x got %08x\b",
+		"RBBASE incorrect after preemption, expected %08x got %08llx\b",
 		rbbase,
 		adreno_dev->next_rb->buffer_desc.gpuaddr);
 		adreno_set_gpu_fault(adreno_dev, ADRENO_PREEMPT_FAULT);
@@ -1599,8 +1599,7 @@ static void mark_guilty_context(struct kgsl_device *device, unsigned int id)
  * passed in then zero the size which effectively skips it when it is submitted
  * in the ringbuffer.
  */
-static void cmdbatch_skip_ib(struct kgsl_cmdbatch *cmdbatch,
-				unsigned int base)
+static void cmdbatch_skip_ib(struct kgsl_cmdbatch *cmdbatch, uint64_t base)
 {
 	struct kgsl_memobj_node *ib;
 

@@ -31,33 +31,33 @@ struct kgsl_process_private;
 
 int kgsl_sharedmem_page_alloc_user(struct kgsl_memdesc *memdesc,
 				struct kgsl_pagetable *pagetable,
-				size_t size);
+				uint64_t size);
 
 int kgsl_cma_alloc_coherent(struct kgsl_device *device,
 			struct kgsl_memdesc *memdesc,
-			struct kgsl_pagetable *pagetable, size_t size);
+			struct kgsl_pagetable *pagetable, uint64_t size);
 
 int kgsl_cma_alloc_secure(struct kgsl_device *device,
-			struct kgsl_memdesc *memdesc, size_t size);
+			struct kgsl_memdesc *memdesc, uint64_t size);
 
 void kgsl_sharedmem_free(struct kgsl_memdesc *memdesc);
 
 int kgsl_sharedmem_readl(const struct kgsl_memdesc *memdesc,
 			uint32_t *dst,
-			unsigned int offsetbytes);
+			uint64_t offsetbytes);
 
 int kgsl_sharedmem_writel(struct kgsl_device *device,
 			const struct kgsl_memdesc *memdesc,
-			unsigned int offsetbytes,
+			uint64_t offsetbytes,
 			uint32_t src);
 
 int kgsl_sharedmem_set(struct kgsl_device *device,
 			const struct kgsl_memdesc *memdesc,
-			unsigned int offsetbytes, unsigned int value,
-			unsigned int sizebytes);
+			uint64_t offsetbytes, unsigned int value,
+			uint64_t sizebytes);
 
 int kgsl_cache_range_op(struct kgsl_memdesc *memdesc,
-			size_t offset, size_t size,
+			uint64_t offset, uint64_t size,
 			unsigned int op);
 
 int kgsl_process_init_sysfs(struct kgsl_device *device,
@@ -193,10 +193,10 @@ kgsl_memdesc_use_cpu_map(const struct kgsl_memdesc *memdesc)
  * for the guard page to be mapped so that the address spaces
  * match up.
  */
-static inline size_t
+static inline uint64_t
 kgsl_memdesc_mmapsize(const struct kgsl_memdesc *memdesc)
 {
-	size_t size = memdesc->size;
+	uint64_t size = memdesc->size;
 	if (kgsl_memdesc_has_guard_page(memdesc))
 		size += SZ_4K;
 	return size;
@@ -206,7 +206,7 @@ static inline int
 kgsl_allocate_user(struct kgsl_device *device,
 		struct kgsl_memdesc *memdesc,
 		struct kgsl_pagetable *pagetable,
-		size_t size, unsigned int flags)
+		uint64_t size, unsigned int flags)
 {
 	int ret;
 
@@ -256,15 +256,17 @@ kgsl_allocate_contiguous(struct kgsl_device *device,
  * ringbuffers.
  */
 static inline int kgsl_allocate_global(struct kgsl_device *device,
-	struct kgsl_memdesc *memdesc, size_t size, unsigned int flags,
+	struct kgsl_memdesc *memdesc, uint64_t size, unsigned int flags,
 	unsigned int priv)
 {
 	int ret;
 
+	BUG_ON(size > SIZE_MAX);
+
 	memdesc->flags = flags;
 	memdesc->priv = priv;
 
-	ret = kgsl_allocate_contiguous(device, memdesc, size);
+	ret = kgsl_allocate_contiguous(device, memdesc, (size_t) size);
 
 	if (!ret) {
 		ret = kgsl_add_global_pt_entry(device, memdesc);
