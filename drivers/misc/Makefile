@@ -60,5 +60,6 @@ obj-$(CONFIG_QSEECOM) += qseecom.o
 ifdef CONFIG_COMPAT
 obj-$(CONFIG_QSEECOM) += compat_qseecom.o
 endif
+obj-$(CONFIG_QFP_FUSE) += qfp_fuse.o
 obj-$(CONFIG_QPNP_MISC) += qpnp-misc.o
 obj-y				+= qcom/
