@@ -3820,7 +3820,8 @@ static void __init apq8064_common_init(void)
 		platform_add_devices(pm8917_common_devices,
 					ARRAY_SIZE(pm8917_common_devices));
 
-	if (!machine_is_apq8064_mtp() && !machine_is_apq8064_adp_2())
+	if (!machine_is_apq8064_mtp() && !(machine_is_apq8064_adp_2() ||
+		machine_is_apq8064_adp2_es2()))
 		platform_device_register(&apq8064_device_ext_ts_sw_vreg);
 
 	if (machine_is_apq8064_mplatform()) {
@@ -3833,7 +3834,7 @@ static void __init apq8064_common_init(void)
 				ARRAY_SIZE(common_devices));
 	}
 
-	if (machine_is_apq8064_adp_2()) {
+	if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2()) {
 		if ((SOCINFO_VERSION_MAJOR(socinfo_get_platform_version())
 							== 0x2)) {
 			platform_device_register(&apq_adp_cpudai_mi2s_rx);
@@ -3952,7 +3953,8 @@ static void __init apq8064_cdp_init(void)
 		platform_add_devices(cdp_devices, ARRAY_SIZE(cdp_devices));
 		spi_register_board_info(spi_board_info,
 						ARRAY_SIZE(spi_board_info));
-		if (machine_is_apq8064_adp_2() &&
+		if ((machine_is_apq8064_adp_2() ||
+				machine_is_apq8064_adp2_es2()) &&
 				!machine_is_apq8064_mplatform()) {
 			static struct msm_xo_voter *xo_handle_a0;
 			int rc;
