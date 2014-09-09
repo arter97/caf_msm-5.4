@@ -878,6 +878,74 @@ TRACE_EVENT(kgsl_pagetable_destroy,
 	TP_printk("ptbase=%pa name=%u", &__entry->ptbase, __entry->name)
 );
 
+TRACE_EVENT(syncpoint_timestamp,
+	TP_PROTO(struct kgsl_cmdbatch *cmdbatch, struct kgsl_context *context,
+		unsigned int timestamp),
+	TP_ARGS(cmdbatch, context, timestamp),
+	TP_STRUCT__entry(
+		__field(unsigned int, cmdbatch_context_id)
+		__field(unsigned int, context_id)
+		__field(unsigned int, timestamp)
+	),
+	TP_fast_assign(
+		__entry->cmdbatch_context_id = cmdbatch->context->id;
+		__entry->context_id = context->id;
+		__entry->timestamp = timestamp;
+	),
+	TP_printk("ctxt=%d sync ctxt=%d ts=%d",
+		__entry->cmdbatch_context_id, __entry->context_id,
+		__entry->timestamp)
+);
+
+TRACE_EVENT(syncpoint_timestamp_expire,
+	TP_PROTO(struct kgsl_cmdbatch *cmdbatch, struct kgsl_context *context,
+		unsigned int timestamp),
+	TP_ARGS(cmdbatch, context, timestamp),
+	TP_STRUCT__entry(
+		__field(unsigned int, cmdbatch_context_id)
+		__field(unsigned int, context_id)
+		__field(unsigned int, timestamp)
+	),
+	TP_fast_assign(
+		__entry->cmdbatch_context_id = cmdbatch->context->id;
+		__entry->context_id = context->id;
+		__entry->timestamp = timestamp;
+	),
+	TP_printk("ctxt=%d sync ctxt=%d ts=%d",
+		__entry->cmdbatch_context_id, __entry->context_id,
+		__entry->timestamp)
+);
+
+TRACE_EVENT(syncpoint_fence,
+	TP_PROTO(struct kgsl_cmdbatch *cmdbatch, char *name),
+	TP_ARGS(cmdbatch, name),
+	TP_STRUCT__entry(
+		__string(fence_name, name)
+		__field(unsigned int, cmdbatch_context_id)
+	),
+	TP_fast_assign(
+		__entry->cmdbatch_context_id = cmdbatch->context->id;
+		__assign_str(fence_name, name);
+	),
+	TP_printk("ctxt=%d fence=%s",
+		__entry->cmdbatch_context_id, __get_str(fence_name))
+);
+
+TRACE_EVENT(syncpoint_fence_expire,
+	TP_PROTO(struct kgsl_cmdbatch *cmdbatch, char *name),
+	TP_ARGS(cmdbatch, name),
+	TP_STRUCT__entry(
+		__field(unsigned int, cmdbatch_context_id)
+		__string(fence_name, name)
+	),
+	TP_fast_assign(
+		__entry->cmdbatch_context_id = cmdbatch->context->id;
+		__assign_str(fence_name, name);
+	),
+	TP_printk("ctxt=%d fence=%s",
+		__entry->cmdbatch_context_id, __get_str(fence_name))
+);
+
 #endif /* _KGSL_TRACE_H */
 
 /* This part must be outside protection */
