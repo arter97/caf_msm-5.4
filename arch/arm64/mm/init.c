@@ -305,6 +305,11 @@ void __init mem_init(void)
 }
 
 #ifdef CONFIG_STRICT_MEMORY_RWX
+static inline void poison_init_mem(void *s, size_t count)
+{
+	memset(s, 0, count);
+}
+
 void free_initmem(void)
 {
 	poison_init_mem(__init_data_begin, __init_end - __init_data_begin);
