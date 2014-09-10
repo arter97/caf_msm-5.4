@@ -2985,6 +2985,7 @@ static struct msm_i2c_platform_data mpq8064_i2c_qup_gsbi5_pdata = {
 
 #define GSBI_DUAL_MODE_CODE 0x60
 #define MSM_GSBI1_PHYS		0x12440000
+#define MSM_GSBI3_PHYS		0x16200000
 static void __init apq8064_i2c_init(void)
 {
 	void __iomem *gsbi_mem;
@@ -3007,6 +3008,15 @@ static void __init apq8064_i2c_init(void)
 
 	apq8064_device_qup_i2c_gsbi3.dev.platform_data =
 					&apq8064_i2c_qup_gsbi3_pdata;
+
+	if (machine_is_apq8064_adp2_es2()) {
+		gsbi_mem = ioremap_nocache(MSM_GSBI3_PHYS, 4);
+		writel_relaxed(GSBI_DUAL_MODE_CODE, gsbi_mem);
+		/* Ensure protocol code is written before proceeding */
+		wmb();
+		iounmap(gsbi_mem);
+		apq8064_i2c_qup_gsbi3_pdata.use_gsbi_shared_mode = 1;
+	}
 	/* ADD GSBI1 I2C pdata for ADP */
 	if (machine_is_apq8064_mplatform()) {
 		apq8064_device_qup_i2c_gsbi1.dev.platform_data =
