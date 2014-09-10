@@ -227,7 +227,8 @@ int mdss_mdp_overlay_req_check(struct msm_fb_data_type *mfd,
 			}
 		}
 
-		if (req->flags & MDP_DEINTERLACE) {
+		if ((req->flags & MDP_DEINTERLACE) &&
+					!req->scale.enable_pxl_ext) {
 			if (req->flags & MDP_SOURCE_ROTATED_90) {
 				if ((req->src_rect.w % 4) != 0) {
 					pr_err("interlaced rect not h/4\n");
@@ -593,17 +594,14 @@ static int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 	 * When scaling is enabled src crop and image
 	 * width and height is modified by user
 	 */
-	if ((pipe->flags & MDP_DEINTERLACE)) {
+	if ((pipe->flags & MDP_DEINTERLACE) && !pipe->scale.enable_pxl_ext) {
 		if (pipe->flags & MDP_SOURCE_ROTATED_90) {
 			pipe->src.x = DIV_ROUND_UP(pipe->src.x, 2);
 			pipe->src.x &= ~1;
-			if (!pipe->scale.enable_pxl_ext) {
-				pipe->src.w /= 2;
-				pipe->img_width /= 2;
-			}
+			pipe->src.w /= 2;
+			pipe->img_width /= 2;
 		} else {
-			if (!pipe->scale.enable_pxl_ext)
-				pipe->src.h /= 2;
+			pipe->src.h /= 2;
 			pipe->src.y = DIV_ROUND_UP(pipe->src.y, 2);
 			pipe->src.y &= ~1;
 		}
@@ -1694,6 +1692,35 @@ pan_display_error:
 	mutex_unlock(&mdp5_data->ov_lock);
 }
 
+static void remove_underrun_vsync_handler(struct work_struct *work)
+{
+	int rc;
+	struct mdss_mdp_ctl *ctl =
+		container_of(work, typeof(*ctl), remove_underrun_handler);
+
+	if (!ctl || !ctl->remove_vsync_handler) {
+		pr_err("ctl or vsync handler is NULL\n");
+		return;
+	}
+
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+	rc = ctl->remove_vsync_handler(ctl,
+			&ctl->recover_underrun_handler);
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
+}
+
+static void mdss_mdp_recover_underrun_handler(struct mdss_mdp_ctl *ctl,
+						ktime_t t)
+{
+	if (!ctl) {
+		pr_err("ctl is NULL\n");
+		return;
+	}
+
+	mdss_mdp_ctl_reset(ctl);
+	schedule_work(&ctl->remove_underrun_handler);
+}
+
 /* function is called in irq context should have minimum processing */
 static void mdss_mdp_overlay_handle_vsync(struct mdss_mdp_ctl *ctl,
 						ktime_t t)
@@ -2653,6 +2680,13 @@ static struct mdss_mdp_ctl *__mdss_mdp_overlay_ctl_init(
 	ctl->vsync_handler.vsync_handler =
 					mdss_mdp_overlay_handle_vsync;
 	ctl->vsync_handler.cmd_post_flush = false;
+
+	ctl->recover_underrun_handler.vsync_handler =
+			mdss_mdp_recover_underrun_handler;
+	ctl->recover_underrun_handler.cmd_post_flush = false;
+
+	INIT_WORK(&ctl->remove_underrun_handler,
+				remove_underrun_vsync_handler);
 
 	if (mfd->split_display && pdata->next) {
 		/* enable split display */
