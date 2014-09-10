@@ -1672,6 +1672,7 @@ blsp_core_init:
 		sizeof(dev->adapter.name));
 	dev->adapter.nr = pdev->id;
 	dev->adapter.dev.parent = &pdev->dev;
+	dev->adapter.dev.of_node = pdev->dev.of_node;
 	if (pdata->msm_i2c_config_gpio)
 		pdata->msm_i2c_config_gpio(dev->adapter.nr, 1);
 
