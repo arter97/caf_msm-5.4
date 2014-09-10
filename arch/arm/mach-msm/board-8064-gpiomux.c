@@ -1238,6 +1238,21 @@ static struct msm_gpiomux_config adp_i2c_config[] __initdata = {
 	},
 };
 
+static struct msm_gpiomux_config apq8064_gsbi3_uart_config[] __initdata = {
+	{
+		.gpio      = 6,		/* GSBI3 UART TX */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gsbi1_uart_config,
+		},
+	},
+	{
+		.gpio      = 7,		/* GSBI3 UART RX */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gsbi1_uart_config,
+		},
+	},
+};
+
 static struct msm_gpiomux_config apq8064_audio_codec_configs[] __initdata = {
 	{
 		.gpio = 38,
@@ -2398,6 +2413,8 @@ void __init apq8064_init_gpiomux(void)
 				ARRAY_SIZE(adp_i2c_config));
 		msm_gpiomux_install(adp_spi_config,
 				ARRAY_SIZE(adp_spi_config));
+		msm_gpiomux_install(apq8064_gsbi3_uart_config,
+				ARRAY_SIZE(apq8064_gsbi3_uart_config));
 		if (machine_is_apq8064_mplatform())
 			msm_gpiomux_install(mpq8064_uartdm_configs,
 					ARRAY_SIZE(mpq8064_uartdm_configs));

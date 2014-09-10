@@ -2787,6 +2787,17 @@ static struct platform_device *cdp_devices[] __initdata = {
 	&msm8064_cpu_slp_status,
 };
 
+static struct platform_device *adp2_devices[] __initdata = {
+	&apq8064_device_uart_gsbi1,
+	&apq8064_device_uart_gsbi3,
+	&msm_device_sps_apq8064,
+#ifdef CONFIG_MSM_ROTATOR
+	&msm_rotator_device,
+#endif
+	&msm8064_pc_cntr,
+	&msm8064_cpu_slp_status,
+};
+
 static struct platform_device
 mpq8064_device_ext_1p2_buck_vreg __devinitdata = {
 	.name	= GPIO_REGULATOR_DEV_NAME,
@@ -3950,7 +3961,13 @@ static void __init apq8064_cdp_init(void)
 		msm_rotator_set_split_iommu_domain();
 		if (machine_is_apq8064_mplatform())
 			platform_add_devices(mplatform_devices, ARRAY_SIZE(mplatform_devices));
-		platform_add_devices(cdp_devices, ARRAY_SIZE(cdp_devices));
+		if (machine_is_apq8064_adp2_es2())
+			platform_add_devices(adp2_devices,
+						ARRAY_SIZE(adp2_devices));
+		else
+			platform_add_devices(cdp_devices,
+						ARRAY_SIZE(cdp_devices));
+
 		spi_register_board_info(spi_board_info,
 						ARRAY_SIZE(spi_board_info));
 		if ((machine_is_apq8064_adp_2() ||
