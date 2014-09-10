@@ -4435,7 +4435,7 @@
 			interrupts = <0 258 4>, <0 262 4>;
 			interrupt-names = "irq", "otg_irq";
 			usb-phy = <&hsphy1>, <&ssphy0>;
-			snps,host-only-mode;
+			dr_mode = "host";
 		};
 	};
 
