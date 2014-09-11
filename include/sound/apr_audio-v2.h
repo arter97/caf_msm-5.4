@@ -413,7 +413,65 @@ struct adm_cmd_rsp_get_pp_params_v5 {
 	/* Status message (error code).*/
 } __packed;
 
-/* Allows a client to control the gains on various session-to-COPP paths.
+/* Structure for holding soft stepping volume parameters. */
+
+/*
+ * Payload of the #ASM_PARAM_ID_SOFT_VOL_STEPPING_PARAMETERS
+ * parameters used by the Volume Control module.
+ */
+
+struct audproc_softvolume_params {
+	u32 period;
+	u32 step;
+	u32 rampingcurve;
+} __packed;
+
+struct audproc_volume_ctrl_master_gain {
+	struct adm_cmd_set_pp_params_v5 params;
+	struct adm_param_data_v5 data;
+	/* Linear gain in Q13 format. */
+	uint16_t                  master_gain;
+	/* Clients must set this field to zero. */
+	uint16_t                  reserved;
+} __packed;
+
+struct audproc_soft_step_volume_params {
+	struct adm_cmd_set_pp_params_v5 params;
+	struct adm_param_data_v5 data;
+/*
+ * Period in milliseconds.
+ * Supported values: 0 to 15000
+ */
+	uint32_t                  period;
+/*
+ * Step in microseconds.
+ * Supported values: 0 to 15000000
+ */
+	uint32_t                  step;
+/*
+ * Ramping curve type.
+ * Supported values:
+ * - #AUDPROC_PARAM_SVC_RAMPINGCURVE_LINEAR
+ * - #AUDPROC_PARAM_SVC_RAMPINGCURVE_EXP
+ * - #AUDPROC_PARAM_SVC_RAMPINGCURVE_LOG
+ */
+	uint32_t                  ramping_curve;
+} __packed;
+
+struct audproc_enable_param_t {
+	struct adm_cmd_set_pp_params_inband_v5 pp_params;
+	/*
+	 * Specifies whether the Audio processing module is enabled.
+	 * This parameter is generic/common parameter to configure or
+	 * determine the state of any audio processing module.
+
+	 * @values 0 : Disable 1: Enable
+	 */
+	uint32_t                  enable;
+};
+
+/*
+ * Allows a client to control the gains on various session-to-COPP paths.
  */
 #define ADM_CMD_MATRIX_RAMP_GAINS_V5                                 0x0001032C
 
@@ -4163,6 +4221,9 @@ struct asm_stream_cmd_open_write_v3 {
 /* Absolute timestamp is identified by this value.*/
 #define ASM_ABSOLUTEIMESTAMP      1
 
+/* Bit value for Low Latency Tx stream subfield */
+#define ASM_LOW_LATENCY_TX_STREAM_SESSION			1
+
 /* Bit shift for the stream_perf_mode subfield. */
 #define ASM_SHIFT_STREAM_PERF_MODE_FLAG_IN_OPEN_READ              29
 
@@ -5670,6 +5731,65 @@ struct adm_qensemble_param_set_new_angle {
  */
 } __packed;
 
+
+#define ADM_CMD_GET_PP_TOPO_MODULE_LIST				0x00010349
+#define ADM_CMDRSP_GET_PP_TOPO_MODULE_LIST			0x00010350
+#define AUDPROC_PARAM_ID_ENABLE					0x00010904
+ /*
+  * Payload of the ADM_CMD_GET_PP_TOPO_MODULE_LIST command.
+  */
+struct adm_cmd_get_pp_topo_module_list_t {
+	struct apr_hdr hdr;
+	/* Lower 32 bits of the 64-bit parameter data payload address. */
+	uint32_t                  data_payload_addr_lsw;
+	/*
+	 * Upper 32 bits of the 64-bit parameter data payload address.
+	 *
+	 *
+	 * The size of the shared memory, if specified, must be large enough to
+	 * contain the entire parameter data payload, including the module ID,
+	 * parameter ID, parameter size, and parameter values.
+	 */
+	uint32_t                  data_payload_addr_msw;
+	/*
+	 *  Unique identifier for an address.
+	 *
+	 * This memory map handle is returned by the aDSP through the
+	 * #ADM_CMD_SHARED_MEM_MAP_REGIONS command.
+	 *
+	 * @values
+	 * - Non-NULL -- On acknowledgment, the parameter data payloads begin at
+	 * the address specified (out-of-band)
+	 * - NULL -- The acknowledgment's payload contains the parameter data
+	 * (in-band) @tablebulletend
+	 */
+	uint32_t                  mem_map_handle;
+	/*
+	 * Maximum data size of the list of modules. This
+	 * field is a multiple of 4 bytes.
+	 */
+	uint16_t                  param_max_size;
+	/* This field must be set to zero. */
+	uint16_t                  reserved;
+} __packed;
+
+/*
+ * Payload of the ADM_CMDRSP_GET_PP_TOPO_MODULE_LIST message, which returns
+ * module ids in response to an ADM_CMD_GET_PP_TOPO_MODULE_LIST command.
+ * Immediately following this structure is the acknowledgement <b>module id
+ * data variable payload</b> containing the pre/postprocessing module id
+ * values. For an in-band scenario, the variable payload depends on the size
+ * of the parameter.
+ */
+struct adm_cmd_rsp_get_pp_topo_module_list_t {
+	/* Status message (error code). */
+	uint32_t                  status;
+} __packed;
+
+struct audproc_topology_module_id_info_t {
+	uint32_t	num_modules;
+} __packed;
+
 /* end_addtogroup audio_pp_module_ids */
 
 /* @ingroup audio_pp_module_ids
@@ -5684,6 +5804,8 @@ struct adm_qensemble_param_set_new_angle {
  * - #ASM_PARAM_ID_MULTICHANNEL_MUTE
  */
 #define ASM_MODULE_ID_VOL_CTRL   0x00010BFE
+#define ASM_MODULE_ID_VOL_CTRL2  0x00010910
+#define AUDPROC_MODULE_ID_VOL_CTRL ASM_MODULE_ID_VOL_CTRL
 
 /* @addtogroup audio_pp_param_ids */
 /* ID of the master gain parameter used by the #ASM_MODULE_ID_VOL_CTRL
@@ -5694,6 +5816,7 @@ struct adm_qensemble_param_set_new_angle {
  * @inputtable{Audio_Postproc_ASM_PARAM_ID_VOL_CTRL_MASTER_GAIN.tex}
  */
 #define ASM_PARAM_ID_VOL_CTRL_MASTER_GAIN    0x00010BFF
+#define AUDPROC_PARAM_ID_VOL_CTRL_MASTER_GAIN ASM_PARAM_ID_VOL_CTRL_MASTER_GAIN
 
 /* ID of the left/right channel gain parameter used by the
  * #ASM_MODULE_ID_VOL_CTRL module.
@@ -5722,6 +5845,8 @@ struct adm_qensemble_param_set_new_angle {
  * ERS.tex}
  */
 #define ASM_PARAM_ID_SOFT_VOL_STEPPING_PARAMETERS  0x00010C29
+#define AUDPROC_PARAM_ID_SOFT_VOL_STEPPING_PARAMETERS\
+			ASM_PARAM_ID_SOFT_VOL_STEPPING_PARAMETERS
 
 /* ID of the soft pause parameters used by the #ASM_MODULE_ID_VOL_CTRL
  * module.
@@ -6916,6 +7041,11 @@ struct srs_trumedia_params {
 } __packed;
 /* SRS TruMedia end */
 
+#define AUDPROC_PARAM_ID_ENABLE		0x00010904
+#define ASM_STREAM_POSTPROC_TOPO_ID_SA_PLUS 0x1000FFFF
+#define ASM_STREAM_POSTPROC_TOPO_ID_HPX_PLUS 0x11000000
+#define ASM_STREAM_POSTPROC_TOPO_ID_HPX_MASTER 0x11000001
+
 /* LSM Specific */
 #define VW_FEAT_DIM					(39)
 
@@ -6933,9 +7063,13 @@ struct srs_trumedia_params {
 #define LSM_SESSION_CMD_DEREGISTER_SOUND_MODEL		(0x00012A85)
 #define LSM_SESSION_CMD_START				(0x00012A86)
 #define LSM_SESSION_CMD_STOP				(0x00012A87)
+#define LSM_SESSION_CMD_EOB				(0x00012A89)
+#define LSM_SESSION_CMD_READ				(0x00012A8A)
 
 #define LSM_SESSION_EVENT_DETECTION_STATUS		(0x00012B00)
 #define LSM_SESSION_EVENT_DETECTION_STATUS_V2		(0x00012B01)
+#define LSM_DATA_EVENT_READ_DONE			(0x00012B02)
+#define LSM_DATA_EVENT_STATUS				(0x00012B03)
 
 #define LSM_MODULE_ID_VOICE_WAKEUP			(0x00012C00)
 #define LSM_PARAM_ID_ENDPOINT_DETECT_THRESHOLD		(0x00012C01)
@@ -6946,6 +7080,9 @@ struct srs_trumedia_params {
 #define LSM_PARAM_ID_USER_DETECT_SENSITIVITY		(0x00012C06)
 #define LSM_PARAM_ID_FEATURE_COMPENSATION_DATA		(0x00012C07)
 #define LSM_PARAM_ID_MIN_CONFIDENCE_LEVELS		(0x00012C07)
+#define LSM_MODULE_ID_LAB				(0x00012C08)
+#define LSM_PARAM_ID_LAB_ENABLE				(0x00012C09)
+#define LSM_PARAM_ID_LAB_CONFIG				(0x00012C0A)
 
 /* HW MAD specific */
 #define AFE_MODULE_HW_MAD				(0x00010230)
@@ -7387,6 +7524,7 @@ struct afe_port_cmd_set_aanc_acdb_table {
 
 /* Dolby DAP topology */
 #define DOLBY_ADM_COPP_TOPOLOGY_ID	0x0001033B
+#define DS2_ADM_COPP_TOPOLOGY_ID	0x1301033B
 
 /* RMS value from DSP */
 #define RMS_MODULEID_APPI_PASSTHRU  0x10009011
@@ -7551,4 +7689,5 @@ struct asm_mtmx_strtr_params {
 	u32 window_lsw;
 	u32 window_msw;
 } __packed;
+#define AUDPROC_MODULE_ID_RESAMPLER 0x00010719
 #endif /*_APR_AUDIO_V2_H_ */

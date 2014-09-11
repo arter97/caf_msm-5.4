@@ -201,9 +201,10 @@ int msm_audio_ion_free(struct ion_client *client, struct ion_handle *handle)
 		pr_debug("client=%p, domain=%p, domain_id=%d, group=%p",
 			client, msm_audio_ion_data.domain,
 			msm_audio_ion_data.domain_id, msm_audio_ion_data.group);
-
+#if 0 //Replace these depricated APIs
 		ion_unmap_iommu(client, handle,
 				msm_audio_ion_data.domain_id, 0);
+#endif
 	}
 
 	ion_unmap_kernel(client, handle);
@@ -395,8 +396,12 @@ int msm_audio_ion_free_legacy(struct ion_client *client,
 			      struct ion_handle *handle)
 {
 	if (msm_audio_ion_data.smmu_enabled)
+#if 0 //Replace these depricated APIs
 		ion_unmap_iommu(client, handle,
 		msm_audio_ion_data.domain_id, 0);
+#else
+	;
+#endif
 	ion_unmap_kernel(client, handle);
 
 	ion_free(client, handle);
@@ -449,10 +454,12 @@ static int msm_audio_ion_get_phys(struct ion_client *client,
 		msm_audio_ion_data.smmu_enabled);
 
 	if (msm_audio_ion_data.smmu_enabled) {
+#if 0 //Replace these depricated APIs
 		rc = ion_map_iommu(client, handle, msm_audio_ion_data.domain_id,
 			0 /*partition_num*/, SZ_4K /*align*/, 0/*iova_length*/,
 			addr, (unsigned long *)len,
 			0, 0);
+#endif
 		if (rc) {
 			pr_err("%s: ION map iommu failed %d\n", __func__, rc);
 			return rc;

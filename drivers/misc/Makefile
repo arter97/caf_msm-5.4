@@ -57,3 +57,4 @@ obj-$(CONFIG_SRAM)		+= sram.o
 obj-y				+= mic/
 obj-$(CONFIG_GENWQE)		+= genwqe/
 obj-$(CONFIG_QPNP_MISC) += qpnp-misc.o
+obj-y				+= qcom/

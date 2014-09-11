@@ -383,6 +383,20 @@ config SND_SOC_UDA134X
 config SND_SOC_UDA1380
         tristate
 
+config SND_SOC_WCD9320
+        tristate
+
+config SND_SOC_WCD9330
+        tristate
+
+config SND_SOC_WCD9XXX
+	tristate
+	default y if SND_SOC_WCD9320=y || SND_SOC_WCD9330=y
+
+config SND_SOC_WCD_CPE
+	tristate
+	default y if SND_SOC_WCD9330=y
+
 config SND_SOC_WL1273
 	tristate
 
@@ -554,3 +568,13 @@ config SND_SOC_ML26124
 
 config SND_SOC_TPA6130A2
 	tristate
+
+config SND_SOC_MSM_STUB
+	tristate
+
+config SND_SOC_MSM_HDMI_CODEC_RX
+	bool "HDMI Audio Playback"
+	depends on FB_MSM_MDSS_HDMI_PANEL && (SND_SOC_APQ8084 || SND_SOC_MSM8994)
+	help
+	HDMI audio drivers should be built only if the platform
+        supports hdmi panel.
