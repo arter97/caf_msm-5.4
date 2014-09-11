@@ -495,6 +495,17 @@ struct kgsl_cmdstream_freememontimestamp_ctxtid {
 	_IOW(KGSL_IOC_TYPE, 0x17, \
 	struct kgsl_cmdstream_freememontimestamp_ctxtid)
 
+/* add a block of pmem or fb into the GPU address space */
+struct kgsl_sharedmem_from_pmem {
+        int pmem_fd;
+        unsigned long gpuaddr;  /*output param */
+        unsigned int len;
+        unsigned int offset;
+};
+
+#define IOCTL_KGSL_SHAREDMEM_FROM_PMEM \
+        _IOWR(KGSL_IOC_TYPE, 0x20, struct kgsl_sharedmem_from_pmem)
+
 /* remove memory from the GPU's address space */
 struct kgsl_sharedmem_free {
 	unsigned long gpuaddr;
