@@ -963,7 +963,6 @@ int teth_bridge_connect(struct teth_bridge_connect_params *connect_params);
 /*
  * ODU bridge
  */
-
 int odu_bridge_init(struct odu_bridge_params *params);
 
 int odu_bridge_connect(void);
@@ -974,24 +973,31 @@ int odu_bridge_tx_dp(struct sk_buff *skb, struct ipa_tx_meta *metadata);
 
 int odu_bridge_cleanup(void);
 
-
 /*
- * Misc.
+ * mux id
  */
-void ipa_bam_reg_dump(void);
-bool ipa_emb_ul_pipes_empty(void);
-
-/* mux id*/
 int ipa_write_qmap_id(struct ipa_ioc_write_qmapid *param_in);
 
-/*interrupts*/
+/*
+ * interrupts
+ */
 int ipa_add_interrupt_handler(enum ipa_irq_type interrupt,
 		ipa_irq_handler_t handler,
 		bool deferred_flag,
 		void *private_data);
+
 int ipa_remove_interrupt_handler(enum ipa_irq_type interrupt);
 
+/*
+ * Miscellaneous
+ */
+void ipa_bam_reg_dump(void);
+
+bool ipa_emb_ul_pipes_empty(void);
+
 int ipa_get_ep_mapping(enum ipa_client_type client);
+
+enum ipa_hw_type ipa_get_hw_type(void);
 
 #else /* CONFIG_IPA */
 
@@ -1292,9 +1298,6 @@ static inline int ipa_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 	return -EPERM;
 }
 
-/*
- * To transfer multiple data packets
-*/
 static inline int ipa_tx_dp_mul(
 	enum ipa_client_type dst,
 	struct ipa_tx_data_desc *data_desc)
@@ -1306,7 +1309,6 @@ static inline void ipa_free_skb(struct ipa_rx_data *rx_in)
 {
 	return;
 }
-
 
 /*
  * System pipes
@@ -1414,7 +1416,7 @@ static inline int ipa_rm_inactivity_timer_release_resource(
 }
 
 /*
- * Tethering bridge (Rmnetm / MBIM)
+ * Tethering bridge (Rmnet / MBIM)
  */
 static inline int teth_bridge_init(struct teth_bridge_init_params *params)
 {
@@ -1461,24 +1463,17 @@ static inline int odu_bridge_cleanup(void)
 	return -EPERM;
 }
 
-
-static inline void ipa_bam_reg_dump(void)
-{
-	return;
-}
-
-static inline bool ipa_emb_ul_pipes_empty(void)
-{
-	return false;
-}
-
-/* mux id */
+/*
+ * mux id
+ */
 static inline int ipa_write_qmap_id(struct ipa_ioc_write_qmapid *param_in)
 {
 	return -EPERM;
 }
 
-/* interrupts */
+/*
+ * interrupts
+ */
 static inline int ipa_add_interrupt_handler(enum ipa_irq_type interrupt,
 		ipa_irq_handler_t handler,
 		bool deferred_flag,
@@ -1492,10 +1487,29 @@ static inline int ipa_remove_interrupt_handler(enum ipa_irq_type interrupt)
 	return -EPERM;
 }
 
+/*
+ * Miscellaneous
+ */
+static inline void ipa_bam_reg_dump(void)
+{
+	return;
+}
+
+static inline bool ipa_emb_ul_pipes_empty(void)
+{
+	return false;
+}
+
 static inline int ipa_get_ep_mapping(enum ipa_client_type client)
 {
 	return -EPERM;
 }
+
+static inline enum ipa_hw_type ipa_get_hw_type(void)
+{
+	return IPA_HW_None;
+}
+
 #endif /* CONFIG_IPA*/
 
 #endif /* _IPA_H_ */

@@ -3659,3 +3659,17 @@ fail_alloc_pkt_init:
 fail_alloc_desc:
 	return res;
 }
+
+/**
+ * ipa_get_hw_type() - Return IPA HW version
+ *
+ * Return value: enum ipa_hw_type
+ */
+enum ipa_hw_type ipa_get_hw_type(void)
+{
+	if (ipa_ctx)
+		return ipa_ctx->ipa_hw_type;
+	else
+		return IPA_HW_None;
+}
+EXPORT_SYMBOL(ipa_get_hw_type);
