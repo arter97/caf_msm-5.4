@@ -1655,6 +1655,19 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 				 (mdwc->charger.chg_type == DWC3_CDP_CHARGER));
 
 	if (host_bus_suspend || (dwc->softconnect && cable_connected)) {
+		/*
+		 * Check if device is not in CONFIGURED state
+		 * then check cotroller state of L2 and break
+		 * LPM sequeunce.
+		*/
+		if (!host_bus_suspend &&
+			(dwc->gadget.state != USB_STATE_CONFIGURED)) {
+			pr_err("%s(): Trying to go in LPM with state:%d\n",
+						__func__, dwc->gadget.state);
+			pr_err("%s(): LPM is not performed.\n", __func__);
+			return -EBUSY;
+		}
+
 		ret = dwc3_msm_prepare_suspend(mdwc);
 		if (ret)
 			return ret;
