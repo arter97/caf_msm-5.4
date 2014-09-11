@@ -407,6 +407,35 @@ int usb_func_wakeup(struct usb_function *func)
 	return 0;
 }
 
+int usb_func_ep_queue(struct usb_function *func, struct usb_ep *ep,
+			       struct usb_request *req, gfp_t gfp_flags)
+{
+	int ret;
+	struct usb_gadget *gadget;
+
+	if (!func || !ep || !req) {
+		pr_err("Invalid argument. func=%p, ep=%p, req=%p\n",
+			func, ep, req);
+		return -EINVAL;
+	}
+
+	pr_debug("Function %s queueing new data into ep %u\n",
+		func->name ? func->name : "", ep->address);
+
+	gadget = func->config->cdev->gadget;
+	if ((gadget->speed == USB_SPEED_SUPER) && func->func_is_suspended) {
+		ret = usb_func_wakeup(func);
+		if (ret) {
+			pr_err("Failed to send function wake up notification. func name:%s, ep:%u\n",
+				func->name ? func->name : "", ep->address);
+			return ret;
+		}
+	}
+
+	ret = usb_ep_queue(ep, req, gfp_flags);
+	return ret;
+}
+
 static u8 encode_bMaxPower(enum usb_device_speed speed,
 		struct usb_configuration *c)
 {
