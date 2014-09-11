@@ -6,6 +6,9 @@ Required properties:
  - compatible: must be "snps,dwc3"
  - reg : Address and length of the register set for the device
  - interrupts: Interrupts used by the dwc3 controller.
+ - interrupt-names : Required interrupt resource entries are:
+	"irq" : Interrupt for DWC3 core
+	"otg_irq" : Interrupt for DWC3 core's OTG Events
  - usb-phy : array of phandle for the PHY device.  The first element
    in the array is expected to be a handle to the USB2/HS PHY and
    the second element is expected to be a handle to the USB3/SS PHY
@@ -18,7 +21,8 @@ This is usually a subnode to DWC3 glue to which it is connected.
 dwc3@4a030000 {
 	compatible = "snps,dwc3";
 	reg = <0x4a030000 0xcfff>;
-	interrupts = <0 92 4>
+	interrupts = <0 92 4>, <0 179 0>;
+	interrupt-names = "irq", "otg_irq";
 	usb-phy = <&usb2_phy>, <&usb3,phy>;
 	tx-fifo-resize;
 };
