@@ -999,6 +999,12 @@ int ipa_get_ep_mapping(enum ipa_client_type client);
 
 enum ipa_hw_type ipa_get_hw_type(void);
 
+bool ipa_is_client_handle_valid(u32 clnt_hdl);
+
+enum ipa_client_type ipa_get_client_mapping(int pipe_idx);
+
+enum ipa_rm_resource_name ipa_get_rm_resource_from_ep(int pipe_idx);
+
 #else /* CONFIG_IPA */
 
 /*
@@ -1508,6 +1514,22 @@ static inline int ipa_get_ep_mapping(enum ipa_client_type client)
 static inline enum ipa_hw_type ipa_get_hw_type(void)
 {
 	return IPA_HW_None;
+}
+
+static inline bool ipa_is_client_handle_valid(u32 clnt_hdl)
+{
+	return -EINVAL;
+}
+
+static inline enum ipa_client_type ipa_get_client_mapping(int pipe_idx)
+{
+	return -EINVAL;
+}
+
+static inline enum ipa_rm_resource_name ipa_get_rm_resource_from_ep(
+	int pipe_idx)
+{
+	return -EFAULT;
 }
 
 #endif /* CONFIG_IPA*/

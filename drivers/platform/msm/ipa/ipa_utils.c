@@ -305,6 +305,12 @@ int ipa_get_clients_from_rm_resource(
 		clients->names[i++] = IPA_CLIENT_WLAN3_CONS;
 		clients->names[i++] = IPA_CLIENT_WLAN4_CONS;
 		break;
+	case IPA_RM_RESOURCE_USB_PROD:
+		clients->names[i++] = IPA_CLIENT_USB_PROD;
+		break;
+	case IPA_RM_RESOURCE_HSIC_PROD:
+		clients->names[i++] = IPA_CLIENT_HSIC1_PROD;
+		break;
 	default:
 		break;
 	}
@@ -2333,7 +2339,6 @@ int ipa_cfg_ep_ctrl(u32 clnt_hdl, const struct ipa_ep_cfg_ctrl *ep_ctrl)
 }
 EXPORT_SYMBOL(ipa_cfg_ep_ctrl);
 
-
 const char *ipa_get_mode_type_str(enum ipa_mode_type mode)
 {
 	switch (mode) {
@@ -3665,6 +3670,19 @@ fail_alloc_pkt_init:
 fail_alloc_desc:
 	return res;
 }
+
+/**
+ * ipa_is_client_handle_valid() - check if IPA client handle is valid handle
+ *
+ * Return value: true for yes; false for no
+ */
+bool ipa_is_client_handle_valid(u32 clnt_hdl)
+{
+	if (clnt_hdl >= 0 && clnt_hdl < IPA_NUM_PIPES)
+		return true;
+	return false;
+}
+EXPORT_SYMBOL(ipa_is_client_handle_valid);
 
 /**
  * ipa_get_hw_type() - Return IPA HW version
