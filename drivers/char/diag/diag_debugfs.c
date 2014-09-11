@@ -16,9 +16,11 @@
 #include <linux/debugfs.h>
 #include "diagchar.h"
 #include "diagfwd.h"
+#ifdef CONFIG_DIAGFWD_BRIDGE_CODE
 #include "diagfwd_bridge.h"
 #include "diagfwd_hsic.h"
 #include "diagfwd_smux.h"
+#endif
 #include "diagmem.h"
 #include "diag_dci.h"
 #include "diag_usb.h"
