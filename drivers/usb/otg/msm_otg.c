@@ -97,6 +97,21 @@ static const int vdd_val[VDD_TYPE_MAX][VDD_VAL_MAX] = {
 		},
 };
 
+struct usb_phy *msm_usb_get_transceiver(int id)
+{
+	if (!the_msm_otg[id])
+		return NULL;
+
+	if (id < 0 || id >= MAX_USB_CORE_NUM + 1)
+		return NULL;
+
+	if (&the_msm_otg[id]->phy)
+		get_device(the_msm_otg[id]->phy.dev);
+
+	return &the_msm_otg[id]->phy;
+}
+EXPORT_SYMBOL(msm_usb_get_transceiver);
+
 static ssize_t
 get_msm_otg_mode(struct device *dev, struct device_attribute *attr, char *buf)
 {

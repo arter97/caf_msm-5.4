@@ -28,6 +28,7 @@
 #include <linux/pm_runtime.h>
 
 #include <linux/usb/otg.h>
+#include <linux/usb/msm_hsusb.h>
 #include <linux/usb/msm_hsusb_hw.h>
 
 #define MSM_USB_BASE (hcd->regs)
@@ -146,7 +147,7 @@ static int ehci_msm_probe(struct platform_device *pdev)
 	 * powering up VBUS, mapping of registers address space and power
 	 * management.
 	 */
-	phy = usb_get_transceiver();
+	phy = msm_usb_get_transceiver(pdev->id);
 	if (!phy) {
 		dev_err(&pdev->dev, "unable to find transceiver\n");
 		ret = -ENODEV;
