@@ -2345,7 +2345,7 @@ static int __init msm_spi_dt_to_pdata_populate(struct platform_device *pdev,
 /**
  * msm_spi_dt_to_pdata: create pdata and read gpio config from device tree
  */
-struct msm_spi_platform_data * __init msm_spi_dt_to_pdata(
+struct msm_spi_platform_data * msm_spi_dt_to_pdata(
 			struct platform_device *pdev, struct msm_spi *dd)
 {
 	struct msm_spi_platform_data *pdata;
