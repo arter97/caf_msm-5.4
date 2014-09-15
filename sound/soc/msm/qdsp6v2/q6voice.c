@@ -1911,7 +1911,7 @@ static void voc_get_tx_rx_topology(struct voice_data *v,
 	uint32_t tx_id = 0;
 	uint32_t rx_id = 0;
 
-	if (v->lch_mode == VOICE_LCH_START) {
+	if (v->lch_mode == VOICE_LCH_START || v->disable_topology) {
 		pr_debug("%s: Setting TX and RX topology to NONE for LCH\n",
 			 __func__);
 
@@ -3481,6 +3481,9 @@ static void voc_update_session_params(struct voice_data *v)
 	/* reset LCH mode */
 	v->lch_mode = 0;
 
+	/* clear disable topology setting */
+	v->disable_topology = false;
+
 	/* clear mute setting */
 	v->dev_rx.dev_mute =  common.default_mute_val;
 	v->dev_tx.dev_mute =  common.default_mute_val;
@@ -4603,6 +4606,26 @@ fail:
 	return ret;
 }
 
+int voc_disable_topology(uint32_t session_id, uint32_t disable)
+{
+	struct voice_data *v = voice_get_session(session_id);
+	int ret = 0;
+
+	if (v == NULL) {
+		pr_err("%s: invalid session_id 0x%x\n", __func__, session_id);
+
+		return -EINVAL;
+	}
+
+	mutex_lock(&v->lock);
+
+	v->disable_topology = disable;
+
+	mutex_unlock(&v->lock);
+
+	return ret;
+}
+
 static int voice_set_packet_exchange_mode_and_config(uint32_t session_id,
 						 uint32_t mode)
 {
@@ -5322,10 +5345,12 @@ exit:
 
 void voc_register_mvs_cb(ul_cb_fn ul_cb,
 			   dl_cb_fn dl_cb,
+			   voip_ssr_cb ssr_cb,
 			   void *private_data)
 {
 	common.mvs_info.ul_cb = ul_cb;
 	common.mvs_info.dl_cb = dl_cb;
+	common.mvs_info.ssr_cb = ssr_cb;
 	common.mvs_info.private_data = private_data;
 }
 
@@ -5376,6 +5401,14 @@ static int32_t qdsp_mvm_callback(struct apr_client_data *data, void *priv)
 		} else {
 			pr_debug("%s: Reset event received in Voice service\n",
 				__func__);
+
+			if (common.mvs_info.ssr_cb) {
+				pr_debug("%s: Informing reset event to VoIP\n",
+					__func__);
+				common.mvs_info.ssr_cb(data->opcode,
+						common.mvs_info.private_data);
+			}
+
 			apr_reset(c->apr_q6_mvm);
 			c->apr_q6_mvm = NULL;
 
@@ -6432,6 +6465,7 @@ static int __init voice_init(void)
 		common.voice[i].sidetone_gain = 0x512;
 		common.voice[i].dtmf_rx_detect_en = 0;
 		common.voice[i].lch_mode = 0;
+		common.voice[i].disable_topology = false;
 
 		common.voice[i].voc_state = VOC_INIT;
 
