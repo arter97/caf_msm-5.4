@@ -21,6 +21,7 @@
 / {
 	model = "Qualcomm Technologies, Inc. MSM THULIUM SIM";
 	compatible = "qcom,msmthulium-sim", "qcom,msmthulium", "qcom,sim";
+	qcom,board-id = <16 0>;
 };
 
 &uartblsp2dm1 {

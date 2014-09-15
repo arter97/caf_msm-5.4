@@ -20,6 +20,7 @@
 / {
 	model = "Qualcomm Technologies, Inc. MSM THULIUM RUMI";
 	compatible = "qcom,msmthulium-rumi", "qcom,msmthulium", "qcom,rumi";
+	qcom,board-id = <15 0>;
 };
 
 &sdhc_1 {
