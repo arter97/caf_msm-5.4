@@ -162,6 +162,7 @@
 		qcom,msm-ext-pa = "primary";
 		qcom,msm-mbhc-hphl-swh = <0>;
 		qcom,msm-mbhc-gnd-swh = <0>;
+		qcom,msm-micbias1-ext-cap;
 		qcom,msm-hs-micbias-type = "internal";
 		qcom,audio-routing =
 			"RX_BIAS", "MCLK",
@@ -460,4 +461,9 @@
 		    &qdsd_data3_jtag>;
 	pinctrl-7 = <&qdsd_clk_spmi &qdsd_cmd_spmi
 		    &qdsd_data0_spmi &qdsd_data3_spmi>;
+};
+
+&apc_vreg_corner {
+		qcom,cpr-up-threshold = <0>;
+		qcom,cpr-down-threshold = <8>;
 };
