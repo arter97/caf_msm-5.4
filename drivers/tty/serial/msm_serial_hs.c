@@ -2031,7 +2031,8 @@ static int msm_hs_check_clock_off(struct uart_port *uport)
 			 * Enable flow control that
 			 * we disabled in request clock off
 			 */
-			msm_hs_enable_flow_control(uport);
+			if (use_low_power_wakeup(msm_uport))
+				msm_hs_enable_flow_control(uport);
 		}
 		spin_unlock_irqrestore(&uport->lock, flags);
 		mutex_unlock(&msm_uport->clk_mutex);
@@ -2062,7 +2063,8 @@ static int msm_hs_check_clock_off(struct uart_port *uport)
 	}
 
 	spin_unlock_irqrestore(&uport->lock, flags);
-	msm_hs_enable_flow_control(uport);
+	if (use_low_power_wakeup(msm_uport))
+		msm_hs_enable_flow_control(uport);
 
 	/* we really want to clock off */
 	mutex_unlock(&msm_uport->clk_mutex);
@@ -2241,7 +2243,8 @@ void msm_hs_request_clock_off(struct uart_port *uport) {
 	if (msm_uport->clk_state == MSM_HS_CLK_ON) {
 		msm_uport->clk_state = MSM_HS_CLK_REQUEST_OFF;
 
-		msm_hs_disable_flow_control(uport);
+		if (use_low_power_wakeup(msm_uport))
+			msm_hs_disable_flow_control(uport);
 		data = msm_hs_read(uport, UART_DM_SR);
 		MSM_HS_DBG("%s(): TXEMT, queuing clock off work\n",
 			__func__);
@@ -2272,10 +2275,9 @@ void msm_hs_request_clock_on(struct uart_port *uport)
 	mutex_lock(&msm_uport->clk_mutex);
 	spin_lock_irqsave(&uport->lock, flags);
 
-	if (cur_clk_state == MSM_HS_CLK_REQUEST_OFF) {
-		msm_uport->clk_state = MSM_HS_CLK_ON;
+	if (use_low_power_wakeup(msm_uport) &&
+		cur_clk_state == MSM_HS_CLK_REQUEST_OFF)
 		msm_hs_enable_flow_control(uport);
-	}
 
 	switch (cur_clk_state) {
 	case MSM_HS_CLK_OFF:
