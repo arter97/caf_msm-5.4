@@ -283,14 +283,16 @@ void __init apq8064_pm8xxx_gpio_mpp_init(void)
 
 	if (machine_is_apq8064_cdp() || machine_is_apq8064_liquid() ||
 					machine_is_apq8064_adp_2() ||
-					machine_is_apq8064_adp2_es2()) {
+					machine_is_apq8064_adp2_es2() ||
+					machine_is_apq8064_adp2_es2p5()) {
 		if (socinfo_get_pmic_model() != PMIC_MODEL_PM8917)
 			apq8064_configure_gpios(pm8921_cdp_kp_gpios,
 					ARRAY_SIZE(pm8921_cdp_kp_gpios));
 		else
 			apq8064_configure_gpios(pm8917_cdp_kp_gpios,
 					ARRAY_SIZE(pm8917_cdp_kp_gpios));
-		if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2())
+		if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2()
+			|| machine_is_apq8064_adp2_es2p5())
 			apq8064_configure_gpios(pm8921_apq8064_adp_2_gpios,
 					ARRAY_SIZE(pm8921_apq8064_adp_2_gpios));
 		else if (machine_is_apq8064_cdp())
@@ -631,7 +633,8 @@ void __init apq8064_init_pmic(void)
 	} else if (machine_is_apq8064_liquid()) {
 		apq8064_pm8921_bms_pdata.battery_type = BATT_DESAY;
 	} else if (machine_is_apq8064_cdp() || machine_is_apq8064_adp_2() ||
-						machine_is_apq8064_adp2_es2()) {
+			machine_is_apq8064_adp2_es2()
+			|| machine_is_apq8064_adp2_es2p5()) {
 		apq8064_pm8921_chg_pdata.has_dc_supply = true;
                 apq8064_pm8921_chg_pdata.disable_chg_rmvl_wrkarnd = 1;
 	}

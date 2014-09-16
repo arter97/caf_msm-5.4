@@ -729,14 +729,16 @@ void __init apq8064_init_cam(void)
 	if (socinfo_get_platform_subtype() != PLATFORM_SUBTYPE_SGLTE2) {
 		if (machine_is_apq8064_mplatform()) {
 		} else if (!(machine_is_apq8064_adp_2() ||
-			machine_is_apq8064_adp2_es2())) {
+			machine_is_apq8064_adp2_es2() ||
+			machine_is_apq8064_adp2_es2p5())) {
 			msm_gpiomux_install(apq8064_cam_common_configs,
 					ARRAY_SIZE(apq8064_cam_common_configs));
 		}
 	}
 
 	if (machine_is_apq8064_cdp() || machine_is_apq8064_adp_2() ||
-		machine_is_apq8064_adp2_es2()) {
+		machine_is_apq8064_adp2_es2()
+		|| machine_is_apq8064_adp2_es2p5()) {
 		sensor_board_info_imx074.mount_angle = 0;
 		sensor_board_info_mt9m114.mount_angle = 0;
 	} else if (machine_is_apq8064_liquid())

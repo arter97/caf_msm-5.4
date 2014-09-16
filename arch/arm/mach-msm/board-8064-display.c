@@ -118,7 +118,8 @@ static int msm_fb_detect_panel(const char *name)
 				PANEL_NAME_MAX_LEN)))
 			return 0;
 	} else if (machine_is_apq8064_adp_2() ||
-			machine_is_apq8064_adp2_es2()) {
+			machine_is_apq8064_adp2_es2() ||
+			machine_is_apq8064_adp2_es2p5()) {
 		if (!strcmp(name, LVDS_CHIMEI_PANEL_NAME))
 			return 0;
 		else if (!strcmp(name, MIPI_DSI_I2C_VIDEO_WVGA_NAME))
@@ -598,7 +599,8 @@ static int lvds_panel_power(int on)
 		}
 
 		if (machine_is_apq8064_adp_2() ||
-			machine_is_apq8064_adp2_es2()) {
+			machine_is_apq8064_adp2_es2() ||
+			machine_is_apq8064_adp2_es2p5()) {
 			reg_lvds_s4 = regulator_get(&msm_lvds_device.dev,
 				"lvds_s4");
 			if (IS_ERR_OR_NULL(reg_lvds_s4)) {
@@ -636,7 +638,8 @@ static int lvds_panel_power(int on)
 		}
 
 		if (machine_is_apq8064_adp_2() ||
-			machine_is_apq8064_adp2_es2()) {
+			machine_is_apq8064_adp2_es2() ||
+			machine_is_apq8064_adp2_es2p5()) {
 			rc = regulator_enable(reg_lvds_s4);
 			if (rc) {
 				pr_err("enable reg_lvds_s4 failed, rc=%d\n",
@@ -656,7 +659,8 @@ static int lvds_panel_power(int on)
 		gpio_set_value_cansleep(gpio36, 1);
 
 		if (machine_is_apq8064_adp_2() ||
-			machine_is_apq8064_adp2_es2()) {
+			machine_is_apq8064_adp2_es2() ||
+			machine_is_apq8064_adp2_es2p5()) {
 			rc = regulator_disable(reg_lvds_s4);
 			if (rc) {
 				pr_err("disable reg_lvds_s4 failed, rc=%d\n",
@@ -690,7 +694,8 @@ static int lvds_pixel_remap(void)
 	u32 ver = socinfo_get_version();
 
 	if (machine_is_apq8064_cdp() || machine_is_apq8064_adp_2() ||
-	    machine_is_apq8064_liquid() || machine_is_apq8064_adp2_es2()) {
+	    machine_is_apq8064_liquid() || machine_is_apq8064_adp2_es2()
+			|| machine_is_apq8064_adp2_es2p5()) {
 		if ((SOCINFO_VERSION_MAJOR(ver) == 1) &&
 		    (SOCINFO_VERSION_MINOR(ver) == 0))
 			return LVDS_PIXEL_MAP_PATTERN_1;
