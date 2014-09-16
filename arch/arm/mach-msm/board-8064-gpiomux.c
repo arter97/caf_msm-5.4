@@ -2237,7 +2237,7 @@ void __init apq8064_init_gpiomux(void)
 		}
 	}
 
-	if (!((machine_is_apq8064_adp_2()) &&
+	if (!((machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2()) &&
 		(SOCINFO_VERSION_MAJOR(socinfo_get_platform_version())
 							== 0x2))) {
 		pr_info("%s: install slimbus gpios", __func__);
@@ -2293,18 +2293,19 @@ void __init apq8064_init_gpiomux(void)
 		msm_gpiomux_install(apq8064_ext_regulator_configs,
 			ARRAY_SIZE(apq8064_ext_regulator_configs));
 
-	if ((machine_is_apq8064_adp_2()) &&
+	if ((machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2()) &&
 		(SOCINFO_VERSION_MAJOR(socinfo_get_platform_version())
 							== 0x2)) {
 		pr_info("%s(): machine is adp(%d)platform_version(0x%x)MAJOR(%d)",
-			__func__, machine_is_apq8064_adp_2(),
+			__func__, machine_is_apq8064_adp_2() ||
+			machine_is_apq8064_adp2_es2(),
 			socinfo_get_platform_version(),
 			SOCINFO_VERSION_MAJOR(socinfo_get_platform_version()));
 		msm_gpiomux_install(apq8064_adp_es2_mi2s_i2s_cfg,
 		ARRAY_SIZE(apq8064_adp_es2_mi2s_i2s_cfg));
 	}
 
-	if (machine_is_apq8064_adp_2())
+	if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2())
 		msm_gpiomux_install(apq8064_adp_auxpcm_configs,
 		ARRAY_SIZE(apq8064_adp_auxpcm_configs));
 

@@ -117,7 +117,8 @@ static int msm_fb_detect_panel(const char *name)
 			strnlen(LVDS_CHIMEI_PANEL_NAME,
 				PANEL_NAME_MAX_LEN)))
 			return 0;
-	} else if (machine_is_apq8064_adp_2()) {
+	} else if (machine_is_apq8064_adp_2() ||
+			machine_is_apq8064_adp2_es2()) {
 		if (!strcmp(name, LVDS_CHIMEI_PANEL_NAME))
 			return 0;
 		else if (!strcmp(name, MIPI_DSI_I2C_VIDEO_WVGA_NAME))
