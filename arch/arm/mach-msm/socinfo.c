@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -50,7 +50,7 @@ enum {
 	HW_PLATFORM_FFA     = 2,
 	HW_PLATFORM_FLUID   = 3,
 	HW_PLATFORM_SVLTE_FFA	= 4,
-	HW_PLATFORM_SVLTE_SURF	= 5,
+	HW_PLATFORM_QM8626 = 5,
 	HW_PLATFORM_MTP  = 8,
 	HW_PLATFORM_LIQUID  = 9,
 	/* Dragonboard platform id is assigned as 10 in CDT */
@@ -67,7 +67,7 @@ const char *hw_platform[] = {
 	[HW_PLATFORM_FFA] = "FFA",
 	[HW_PLATFORM_FLUID] = "Fluid",
 	[HW_PLATFORM_SVLTE_FFA] = "SVLTE_FFA",
-	[HW_PLATFORM_SVLTE_SURF] = "SLVTE_SURF",
+	[HW_PLATFORM_QM8626] = "QM8626",
 	[HW_PLATFORM_MTP] = "MTP",
 	[HW_PLATFORM_LIQUID] = "Liquid",
 	[HW_PLATFORM_DRAGON] = "Dragon",
@@ -101,17 +101,22 @@ const char *qrd_hw_platform_subtype[] = {
 
 enum {
 	PLATFORM_SUBTYPE_UNKNOWN = 0x0,
-	PLATFORM_SUBTYPE_CHARM = 0x1,
-	PLATFORM_SUBTYPE_STRANGE = 0x2,
-	PLATFORM_SUBTYPE_STRANGE_2A = 0x3,
-	PLATFORM_SUBTYPE_INVALID,
+	PLATFORM_SUBTYPE_1 = 0x1,
+	PLATFORM_SUBTYPE_2 = 0x2,
+	PLATFORM_SUBTYPE_3 = 0x3,
+	PLATFORM_SUBTYPE_4 = 0x4,
+	PLATFORM_SUBTYPE_5 = 0x5,
+	PLATFORM_SUBTYPE_INVALID
 };
 
 const char *hw_platform_subtype[] = {
-	[PLATFORM_SUBTYPE_UNKNOWN] = "Unknown",
-	[PLATFORM_SUBTYPE_CHARM] = "charm",
-	[PLATFORM_SUBTYPE_STRANGE] = "strange",
-	[PLATFORM_SUBTYPE_STRANGE_2A] = "strange_2a,"
+	[PLATFORM_SUBTYPE_UNKNOWN] = "QM8626 unknown subtype",
+	[PLATFORM_SUBTYPE_1] = "QM8626 subtype:1",
+	[PLATFORM_SUBTYPE_2] = "QM8626 subtype:2",
+	[PLATFORM_SUBTYPE_3] = "QM8626 subtype:3",
+	[PLATFORM_SUBTYPE_4] = "QM8626 subtype:4",
+	[PLATFORM_SUBTYPE_5] = "QM8626 subtype:5",
+	[PLATFORM_SUBTYPE_INVALID] = "QM8626 Invalid"
 };
 
 /* Used to parse shared memory.  Must match the modem. */
@@ -679,7 +684,6 @@ socinfo_show_platform_version(struct sys_device *dev,
 			 struct sysdev_attribute *attr,
 			 char *buf)
 {
-
 	if (!socinfo) {
 		pr_err("%s: No socinfo found!\n", __func__);
 		return 0;
@@ -717,6 +721,7 @@ socinfo_show_platform_subtype(struct sys_device *dev,
 			char *buf)
 {
 	uint32_t hw_subtype;
+
 	WARN_ONCE(1, "Deprecated, use platform_subtype_id instead\n");
 
 	if (!socinfo) {
@@ -866,6 +871,7 @@ msm_get_platform_subtype(struct device *dev,
 			char *buf)
 {
 	uint32_t hw_subtype;
+
 	hw_subtype = socinfo_get_platform_subtype();
 	if (HW_PLATFORM_QRD == socinfo_get_platform_type()) {
 		if (hw_subtype >= PLATFORM_SUBTYPE_QRD_INVALID) {
