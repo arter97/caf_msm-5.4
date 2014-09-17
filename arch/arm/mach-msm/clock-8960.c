@@ -5315,6 +5315,9 @@ static struct clk_lookup msm_clocks_8064[] = {
 #ifdef CONFIG_MACH_APQ8064_ADP2
 	CLK_LOOKUP("core_clk",		gsbi4_uart_clk.c, "msm_serial_hs.0"),
 #endif
+#ifdef CONFIG_MACH_APQ8064_ADP2_ES2
+	CLK_LOOKUP("core_clk",		gsbi3_uart_clk.c, "msm_serial_hsl.0"),
+#endif
 #ifndef CONFIG_MACH_APQ8064_ADP2
 #ifndef CONFIG_MACH_LGE
 	CLK_LOOKUP("core_clk",		gsbi4_uart_clk.c, "msm_serial_hs.1"),
@@ -5327,8 +5330,11 @@ static struct clk_lookup msm_clocks_8064[] = {
 #endif
 #ifdef CONFIG_MACH_LGE
 	CLK_LOOKUP("core_clk",		gsbi7_uart_clk.c,	""),
-#else
+#endif
+#ifndef CONFIG_MACH_APQ8064_ADP2_ES2
+#ifndef CONFIG_MACH_LGE
 	CLK_LOOKUP("core_clk",		gsbi7_uart_clk.c, "msm_serial_hsl.0"),
+#endif
 #endif
 	CLK_LOOKUP("core_clk",		gsbi1_qup_clk.c,	"qup_i2c.0"),
 	CLK_LOOKUP("core_clk",		gsbi2_qup_clk.c,	"qup_i2c.2"),
@@ -5386,6 +5392,9 @@ static struct clk_lookup msm_clocks_8064[] = {
 #ifdef CONFIG_MACH_APQ8064_ADP2
 	CLK_LOOKUP("iface_clk",		gsbi4_p_clk.c,	"msm_serial_hs.0"),
 #endif
+#ifdef CONFIG_MACH_APQ8064_ADP2_ES2
+	CLK_LOOKUP("iface_clk",		gsbi3_p_clk.c,	"msm_serial_hsl.0"),
+#endif
 #ifndef CONFIG_MACH_APQ8064_ADP2
 #ifndef CONFIG_MACH_LGE
 	CLK_LOOKUP("iface_clk",		gsbi4_p_clk.c,	"msm_serial_hs.1"),
@@ -5396,8 +5405,11 @@ static struct clk_lookup msm_clocks_8064[] = {
 	CLK_LOOKUP("iface_clk",		gsbi6_p_clk.c,	"msm_serial_hs.0"),
 #ifdef CONFIG_MACH_LGE
 	CLK_LOOKUP("iface_clk",		gsbi7_p_clk.c,		""),
-#else
+#endif
+#ifndef CONFIG_MACH_APQ8064_ADP2_ES2
+#ifndef CONFIG_MACH_LGE
 	CLK_LOOKUP("iface_clk",		gsbi7_p_clk.c,	"msm_serial_hsl.0"),
+#endif
 #endif
 	CLK_LOOKUP("ref_clk",	tsif_ref_clk.c,	"msm_tspp.0"),
 	CLK_LOOKUP("iface_clk",		tsif_p_clk.c,		"msm_tspp.0"),
