@@ -58,6 +58,207 @@
 #include "pm.h"
 #include "modem_notifier.h"
 #include "spm-regulator.h"
+#include <linux/leds-lp5523.h>
+#include <linux/i2c.h>
+#include <linux/regulator/consumer.h>
+#include <linux/leds-lp5521.h>
+
+
+
+
+static	struct regulator *reg_lvs1_5523;
+static	struct regulator *reg_lvs1_5521;
+
+static struct lp5523_led_config lp5523_led_config[] = {
+	{
+		.chan_nr = 0,
+		.led_current = 50,
+		.max_current = 130,
+	},
+	{
+		.chan_nr = 1,
+		.led_current = 50,
+		.max_current = 130,
+	},
+	{
+		.chan_nr = 2,
+		.led_current = 50,
+		.max_current = 130,
+	},
+	{
+		.chan_nr = 3,
+		.led_current = 50,
+		.max_current = 130,
+	},
+	{
+		.chan_nr = 4,
+		.led_current = 50,
+		.max_current = 130,
+	},
+	{
+		.chan_nr = 5,
+		.led_current = 50,
+		.max_current = 130,
+	},
+	{
+		.chan_nr = 6,
+		.led_current = 0,
+		.max_current = 130,
+	},
+	{
+		.chan_nr = 7,
+		.led_current = 50,
+		.max_current = 130,
+	},
+	{
+		.chan_nr = 8,
+		.led_current = 50,
+		.max_current = 130,
+	}
+};
+
+static struct lp5521_led_config lp5521_led_config[] = {
+	{
+		.name =	"red",
+		.chan_nr = 0,
+		.led_current = 50,
+		.max_current = 200,
+	},
+	{
+		.name = "green",
+		.chan_nr = 1,
+		.led_current = 50,
+		.max_current = 200,
+	},
+	{
+		.name = "blue",
+		.chan_nr = 2,
+		.led_current = 50,
+		.max_current = 150,
+	}
+};
+
+
+static int lp5523_setup(void)
+{
+	int rc;
+
+	reg_lvs1_5523 = regulator_get(NULL,"vdd_led");
+	rc = regulator_enable(reg_lvs1_5523);
+
+	if (rc) {
+		printk(" lp5523_enable- lvs1 fail\n");
+	}
+
+	return 0;
+}
+
+static void lp5523_release(void)
+{
+	int rc;
+
+	rc = regulator_disable(reg_lvs1_5523);
+
+	if (rc) {
+		printk(" lp5523_release- lvs1 fail\n");
+	}
+}
+
+static void lp5523_enable(bool state)
+{
+
+}
+
+static struct lp5523_platform_data lp5523_platform_data = {
+		.led_config     = lp5523_led_config,
+		.num_channels   = ARRAY_SIZE(lp5523_led_config),
+		.clock_mode     = LP5523_CLOCK_EXT,
+		.setup_resources   = lp5523_setup,
+		.release_resources = lp5523_release,
+		.enable            = lp5523_enable,
+};
+
+
+static struct i2c_board_info lp5523_i2c_boardinfo[] __initdata = {
+	{
+	I2C_BOARD_INFO("lp55231", 0x33),
+	.platform_data = &lp5523_platform_data,
+	},
+};
+
+static int lp5521_setup(void)
+{
+	int rc;
+
+	reg_lvs1_5521 = regulator_get(NULL,"vdd_led");
+	rc = regulator_enable(reg_lvs1_5521);
+
+	if (rc) {
+		printk(" lp5521_enable- lvs1 fail\n");
+	}
+
+	return 0;
+}
+
+static void lp5521_release(void)
+{
+	int rc;
+
+	rc = regulator_disable(reg_lvs1_5521);
+
+	if (rc) {
+		printk(" lp5521_release- lvs1 fail\n");
+	}
+}
+
+static void lp5521_enable(bool state)
+{
+
+}
+
+static u8 pattern_red[] = {
+		0x40, 0xFF, 0x5F, 0x00, 0x40, 0x00, 0x5F, 0x00, 0xE0, 0x04, 0xE2, 0x00, 0x00, 0x00, 0xC0, 0x00,
+		};
+static u8 pattern_green[] = {
+		0xE0, 0x80, 0x40, 0xFF, 0x5F, 0x00, 0x40, 0x00, 0x5F, 0x00, 0xE0, 0x08, 0x00, 0x00, 0xC0, 0x00,
+		};
+static u8 pattern_blue[] = {
+		0xE1, 0x00, 0x40, 0xFF, 0x5F, 0x00, 0x40, 0x00, 0x5F, 0x00, 0xE0, 0x02, 0x00, 0x00, 0xC0, 0x00,
+		};
+static struct lp5521_led_pattern board_led_patterns[] = {
+	{
+		.r = pattern_red,
+		.g = pattern_green,
+		.b = pattern_blue,
+		.size_r = ARRAY_SIZE(pattern_red),
+		.size_g = ARRAY_SIZE(pattern_green),
+		.size_b = ARRAY_SIZE(pattern_blue),
+	},
+};
+
+
+#define LP5521_CONFIGS	( LP5521_CLOCK_INT | LP5521_PWRSAVE_EN | \
+			LP5521_CP_MODE_AUTO | LP5521_R_TO_BATT )
+
+static struct lp5521_platform_data lp5521_platform_data = {
+		.led_config     = lp5521_led_config,
+		.num_channels   = ARRAY_SIZE(lp5521_led_config),
+		.clock_mode     = LP5521_CLOCK_INT,
+		.setup_resources   = lp5521_setup,
+		.release_resources = lp5521_release,
+		.enable            = lp5521_enable,
+		.update_config  = LP5521_CONFIGS,
+		.patterns = board_led_patterns,
+		.num_patterns = ARRAY_SIZE(board_led_patterns),
+};
+
+static struct i2c_board_info lp5521_i2c_boardinfo[] __initdata = {
+{
+	I2C_BOARD_INFO("lp5521", 0x32),
+	.platform_data = &lp5521_platform_data,
+	},
+};
+
 
 static struct memtype_reserve msm8226_reserve_table[] __initdata = {
 	[MEMTYPE_SMI] = {
@@ -152,12 +353,31 @@ void __init msm8226_init(void)
 {
 	struct of_dev_auxdata *adata = msm8226_auxdata_lookup;
 
+	struct regulator *reg_l8;
+	int rc;
+
 	if (socinfo_init() < 0)
 		pr_err("%s: socinfo_init() failed\n", __func__);
 
-	msm8226_init_gpiomux();
+	if (socinfo_get_platform_type() == 5)
+		qm8626_msm8226_init_gpiomux();
+	else
+		msm8226_init_gpiomux();
+
 	board_dt_populate(adata);
 	msm8226_add_drivers();
+
+	if (socinfo_get_platform_type() == 5) {
+		/* qm8626 need to keep L8 on */
+		reg_l8 = regulator_get(NULL,"l8_keep_alive");
+		rc = regulator_enable(reg_l8);
+		if (rc) {
+			printk(" msm8226_init - l8 fail\n");
+		}
+		/* qm8626 register the LED drivers LP5521/5523 with I2C */
+		i2c_register_board_info( 1,lp5523_i2c_boardinfo , ARRAY_SIZE(lp5523_i2c_boardinfo) );
+		i2c_register_board_info( 1,lp5521_i2c_boardinfo , ARRAY_SIZE(lp5521_i2c_boardinfo) );
+	}
 }
 
 static const char *msm8226_dt_match[] __initconst = {
