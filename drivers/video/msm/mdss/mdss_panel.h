@@ -333,6 +333,8 @@ struct mdss_panel_info {
 	bool esd_check_enabled;
 	char dfps_update;
 	int new_fps;
+	int panel_max_fps;
+	int panel_max_vtotal;
 	u32 mode_gpio_state;
 	u32 xstart_pix_align;
 	u32 width_pix_align;
@@ -491,7 +493,7 @@ static inline int mdss_mdp_max_fetch_lines(struct mdss_panel_info *pinfo)
 
 	v_total = mdss_panel_get_vtotal(pinfo);
 	vfp_start = (pinfo->lcdc.v_back_porch + pinfo->lcdc.v_pulse_width +
-			pinfo->yres + 1);
+			pinfo->yres);
 
 	fetch_lines = v_total - vfp_start;
 
