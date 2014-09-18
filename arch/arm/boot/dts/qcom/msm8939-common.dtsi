@@ -518,14 +518,14 @@
 		qcom,core-limit-temp = <80>;
 		qcom,core-temp-hysteresis = <10>;
 		qcom,core-control-mask = <0xfe>;
-		qcom,hotplug-temp = <95>;
-		qcom,hotplug-temp-hysteresis = <20>;
+		qcom,hotplug-temp = <105>;
+		qcom,hotplug-temp-hysteresis = <15>;
 		qcom,cpu-sensors = "tsens_tz_sensor5", "tsens_tz_sensor6",
 				"tsens_tz_sensor7", "tsens_tz_sensor8",
 				"tsens_tz_sensor9", "tsens_tz_sensor9",
 				"tsens_tz_sensor9", "tsens_tz_sensor9";
-		qcom,freq-mitigation-temp = <100>;
-		qcom,freq-mitigation-temp-hysteresis = <20>;
+		qcom,freq-mitigation-temp = <105>;
+		qcom,freq-mitigation-temp-hysteresis = <15>;
 		qcom,freq-mitigation-value = <400000>;
 		qcom,freq-mitigation-control-mask = <0x01>;
 		qcom,therm-reset-temp = <115>;
@@ -1604,7 +1604,7 @@
 		qcom,pre-div-channel-scaling = <0>;
 		qcom,calibration-type = "ratiometric";
 		qcom,scale-function = <1>;
-		qcom,hw-settle-time = <2>;
+		qcom,hw-settle-time = <0xb>;
 		qcom,fast-avg-setup = <0>;
 	};
 
@@ -1615,7 +1615,7 @@
 		qcom,pre-div-channel-scaling = <0>;
 		qcom,calibration-type = "ratiometric";
 		qcom,scale-function = <0>;
-		qcom,hw-settle-time = <2>;
+		qcom,hw-settle-time = <0xb>;
 		qcom,fast-avg-setup = <0>;
 	};
 
@@ -1640,7 +1640,7 @@
 		qcom,pre-div-channel-scaling = <0>;
 		qcom,calibration-type = "ratiometric";
 		qcom,scale-function = <1>;
-		qcom,hw-settle-time = <2>;
+		qcom,hw-settle-time = <0xb>;
 		qcom,fast-avg-setup = <3>;
 		qcom,btm-channel-number = <0x48>;
 	};
@@ -1652,7 +1652,7 @@
 		qcom,pre-div-channel-scaling = <1>;
 		qcom,calibration-type = "absolute";
 		qcom,scale-function = <0>;
-		qcom,hw-settle-time = <0>;
+		qcom,hw-settle-time = <0xb>;
 		qcom,fast-avg-setup = <3>;
 		qcom,btm-channel-number = <0x68>;
 	};
