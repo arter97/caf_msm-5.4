@@ -23,8 +23,7 @@
 		uart_console_active: uart_console_active {
 			pmx-uartconsole {
 				pins = "gpio4", "gpio5";
-				num-grp-pins = <2>;
-				pin-func = "blsp_uart8";
+				function = "blsp_uart8";
 				drive-strength = <2>;
 				bias-disable;
 			};
@@ -142,19 +141,22 @@
 		};
 
 		i2c_2 {
-			qcom,pins = <&gp 43>, <&gp 44>;
-			qcom,num-grp-pins = <2>;
-			qcom,pin-func = <3>;
-			label = "i2c_2";
-
 			i2c_2_active: i2c_2_active {
-				drive-strength = <2>;
-				bias-disable;
+				i2c_2 {
+					pins = "gpio43", "gpio44";
+					function = "blsp_i2c2";
+					drive-strength = <2>;
+					bias-disable;
+				};
 			};
 
 			i2c_2_sleep: i2c_2_sleep {
-				drive-strength = <2>;
-				bias-disable;
+				i2c_2 {
+					pins = "gpio43", "gpio44";
+					function = "blsp_i2c2";
+					drive-strength = <2>;
+					bias-disable;
+				};
 			};
 		};
 	};
