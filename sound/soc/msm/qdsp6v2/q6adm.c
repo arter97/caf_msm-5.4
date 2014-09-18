@@ -501,6 +501,12 @@ int adm_get_params(int port_id, uint32_t module_id, uint32_t param_id,
 		rc = -EINVAL;
 		goto adm_get_param_return;
 	}
+	if (adm_get_parameters[0] < 0) {
+		pr_err("%s: Size is invalid %d\n", __func__,
+			adm_get_parameters[0]);
+		rc = -EINVAL;
+		goto adm_get_param_return;
+	}
 	if (params_data) {
 		for (i = 0; i < adm_get_parameters[0]; i++)
 			params_data[i] = adm_get_parameters[1+i];
