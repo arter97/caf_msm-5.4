@@ -198,6 +198,9 @@
 #define DWC3_GUCTL_DTCT(n) ((n) << 9)
 #define DWC3_GUCTL_DTCT_MASK (2 << 9)
 
+/* Global Debug LTSSM Register */
+#define DWC3_GDBGLTSSM_LINKSTATE_MASK	(0xF << 22)
+
 /* Global USB2 PHY Configuration Register */
 #define DWC3_GUSB2PHYCFG_PHYSOFTRST	(1 << 31)
 #define DWC3_GUSB2PHYCFG_ENBLSLPM	(1 << 8)
