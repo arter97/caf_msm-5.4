@@ -1608,6 +1608,7 @@ static int arm_smmu_alloc_init_pmd(struct arm_smmu_domain *smmu_domain,
 		ret = arm_smmu_alloc_init_pte(smmu_domain, pmd, addr, next, pfn,
 					      prot, stage);
 		phys += next - addr;
+		pfn = __phys_to_pfn(phys);
 	} while (pmd++, addr = next, addr < end);
 
 	return ret;
