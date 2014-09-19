@@ -338,17 +338,13 @@ bool wcd9xxx_spmi_lock_sleep()
 	 * but btn0_lpress_fn is not wcd9xxx_spmi_irq_thread's subroutine and
 	 * It can race with wcd9xxx_spmi_irq_thread.
 	 * So need to embrace wlock_holders with mutex.
-	 *
-	 * If system didn't resume, we can simply return false so codec driver's
-	 * IRQ handler can return without handling IRQ.
-	 * As interrupt line is still active, codec will have another IRQ to
-	 * retry shortly.
 	 */
 	mutex_lock(&map.pm_lock);
 	if (map.wlock_holders++ == 0) {
 		pr_debug("%s: holding wake lock\n", __func__);
 		pm_qos_update_request(&map.pm_qos_req,
 				      msm_cpuidle_get_deep_idle_latency());
+		pm_stay_awake(&map.spmi[0]->dev);
 	}
 	mutex_unlock(&map.pm_lock);
 	pr_debug("%s: wake lock counter %d\n", __func__,
@@ -373,6 +369,7 @@ bool wcd9xxx_spmi_lock_sleep()
 		return false;
 	}
 	wake_up_all(&map.pm_wq);
+	pr_debug("%s: leaving pm_state = %d\n", __func__, map.pm_state);
 	return true;
 }
 EXPORT_SYMBOL(wcd9xxx_spmi_lock_sleep);
@@ -391,6 +388,7 @@ void wcd9xxx_spmi_unlock_sleep()
 			map.pm_state = WCD9XXX_PM_SLEEPABLE;
 		pm_qos_update_request(&map.pm_qos_req,
 				PM_QOS_DEFAULT_VALUE);
+		pm_relax(&map.spmi[0]->dev);
 	}
 	mutex_unlock(&map.pm_lock);
 	pr_debug("%s: wake lock counter %d\n", __func__,
