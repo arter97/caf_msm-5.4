@@ -484,14 +484,17 @@ static ssize_t mdss_fb_get_panel_info(struct device *dev,
 
 	ret = scnprintf(buf, PAGE_SIZE,
 			"pu_en=%d\nxstart=%d\nwalign=%d\nystart=%d\nhalign=%d\n"
-			"min_w=%d\nmin_h=%d\nroi_merge=%d",
+			"min_w=%d\nmin_h=%d\nroi_merge=%d\ndyn_fps_en=%d\n"
+			"min_fps=%d\nmax_fps=%d\n",
 			pinfo->partial_update_enabled, pinfo->xstart_pix_align,
 			pinfo->width_pix_align, pinfo->ystart_pix_align,
 			pinfo->height_pix_align, pinfo->min_width,
-			pinfo->min_height, pinfo->partial_update_roi_merge);
+			pinfo->min_height, pinfo->partial_update_roi_merge,
+			pinfo->dynamic_fps, pinfo->min_fps, pinfo->max_fps);
 
 	return ret;
 }
+
 /*
  * mdss_fb_lpm_enable() - Function to Control LowPowerMode
  * @mfd:	Framebuffer data structure for display
@@ -719,6 +722,7 @@ static int mdss_fb_probe(struct platform_device *pdev)
 	mfd->bl_level = 0;
 	mfd->bl_scale = 1024;
 	mfd->bl_min_lvl = 30;
+	mfd->ad_bl_level = 0;
 	mfd->fb_imgType = MDP_RGBA_8888;
 
 	mfd->pdev = pdev;
@@ -1053,10 +1057,9 @@ static void mdss_fb_scale_bl(struct msm_fb_data_type *mfd, u32 *bl_lvl)
 void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 {
 	struct mdss_panel_data *pdata;
-	int (*update_ad_input)(struct msm_fb_data_type *mfd);
-	u32 temp = bkl_lvl;
+	u32 temp = bkl_lvl, ad_bl;
 	int ret = -EINVAL;
-	bool is_bl_changed = (bkl_lvl != mfd->bl_level);
+	bool bl_notify_needed = false;
 
 	/* todo: temporary workaround to support doze mode */
 	if ((bkl_lvl == 0) && (mfd->doze_mode)) {
@@ -1076,12 +1079,18 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 	pdata = dev_get_platdata(&mfd->pdev->dev);
 
 	if ((pdata) && (pdata->set_backlight)) {
-		if (mfd->mdp.ad_attenuate_bl) {
-			ret = (*mfd->mdp.ad_attenuate_bl)(bkl_lvl, &temp, mfd);
-			if (ret)
-				pr_err("Failed to attenuate BL\n");
+		if (mfd->mdp.ad_calc_bl) {
+			if (mfd->ad_bl_level == 0)
+				mfd->ad_bl_level = temp;
+			ad_bl = mfd->ad_bl_level;
+			ret = (*mfd->mdp.ad_calc_bl)(mfd, temp, &temp, &ad_bl);
+			if ((!ret) && (mfd->ad_bl_level != ad_bl) &&
+				mfd->mdp.ad_invalidate_input) {
+				mfd->ad_bl_level = ad_bl;
+				(*mfd->mdp.ad_invalidate_input)(mfd);
+				bl_notify_needed = true;
+			}
 		}
-
 		if (!IS_CALIB_MODE_BL(mfd))
 			mdss_fb_scale_bl(mfd, &temp);
 		/*
@@ -1094,21 +1103,15 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 		 */
 		if (mfd->bl_level_scaled == temp) {
 			mfd->bl_level = bkl_lvl;
-			return;
+		} else {
+			pr_debug("backlight sent to panel :%d\n", temp);
+			pdata->set_backlight(pdata, temp);
+			mfd->bl_level = bkl_lvl;
+			mfd->bl_level_scaled = temp;
+			bl_notify_needed = true;
 		}
-		pr_debug("backlight sent to panel :%d\n", temp);
-		pdata->set_backlight(pdata, temp);
-		mfd->bl_level = bkl_lvl;
-		mfd->bl_level_scaled = temp;
-
-		if (mfd->mdp.update_ad_input && is_bl_changed) {
-			update_ad_input = mfd->mdp.update_ad_input;
-			mutex_unlock(&mfd->bl_lock);
-			/* Will trigger ad_setup which will grab bl_lock */
-			update_ad_input(mfd);
-			mutex_lock(&mfd->bl_lock);
-		}
-		mdss_fb_bl_update_notify(mfd);
+		if (bl_notify_needed)
+			mdss_fb_bl_update_notify(mfd);
 	}
 }
 
@@ -1117,6 +1120,7 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 	struct mdss_panel_data *pdata;
 	int ret = 0;
 	u32 temp;
+	u32 ad_bl;
 
 	if (!mfd->unset_bl_level)
 		return;
@@ -1126,16 +1130,22 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 		if ((pdata) && (pdata->set_backlight)) {
 			mfd->bl_level = mfd->unset_bl_level;
 			temp = mfd->bl_level;
-			if (mfd->mdp.ad_attenuate_bl) {
-				ret = (*mfd->mdp.ad_attenuate_bl)(temp,
-						&temp, mfd);
-				if (ret)
-					pr_err("Failed to attenuate BL\n");
+			if (mfd->mdp.ad_calc_bl) {
+				if (mfd->ad_bl_level == 0)
+					mfd->ad_bl_level = temp;
+				ad_bl = mfd->ad_bl_level;
+				ret = (*mfd->mdp.ad_calc_bl)(mfd, temp, &temp,
+					&ad_bl);
+				if ((!ret) && (mfd->ad_bl_level != ad_bl) &&
+						mfd->mdp.ad_invalidate_input) {
+					mfd->ad_bl_level = ad_bl;
+					(*mfd->mdp.ad_invalidate_input)(mfd);
+				}
 			}
-
 			pdata->set_backlight(pdata, temp);
 			mfd->bl_level_scaled = mfd->unset_bl_level;
 			mfd->bl_updated = 1;
+			mdss_fb_bl_update_notify(mfd);
 		}
 	}
 	mutex_unlock(&mfd->bl_lock);
@@ -2875,11 +2885,12 @@ int mdss_fb_dcm(struct msm_fb_data_type *mfd, int req_state)
 		if ((mfd->dcm_state == DCM_EXIT ||
 			mfd->dcm_state == DCM_UNBLANK) &&
 			mdss_fb_is_power_on(mfd) && mfd->mdp.off_fnc) {
+			mfd->panel_power_state = MDSS_PANEL_POWER_OFF;
 			ret = mfd->mdp.off_fnc(mfd);
-			if (ret == 0) {
-				mfd->panel_power_state = MDSS_PANEL_POWER_OFF;
+			if (ret == 0)
 				mfd->dcm_state = DCM_UNINIT;
-			}
+			else
+				pr_err("DCM_BLANK failed\n");
 		}
 		break;
 	case DTM_ENTER:

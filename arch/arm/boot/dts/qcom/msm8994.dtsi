@@ -22,6 +22,10 @@
 	qcom,pmic-id = <0x10009 0x1000A 0x0 0x0>;
 	interrupt-parent = <&intc>;
 
+	chosen {
+		bootargs = "sched_enable_hmp=1 sched_enable_power_aware=1";
+	};
+
 	aliases {
 		sdhc1 = &sdhc_1; /* SDC1 eMMC slot */
 		sdhc2 = &sdhc_2; /* SDC2 SD card slot */
@@ -1591,7 +1595,7 @@
 			    "restart_reg";
 
 		clocks = <&clock_rpm clk_cxo_clk_src>,
-			 <&clock_gcc clk_gcc_mss_cfg_ahb_clk>,
+			 <&clock_rpm clk_mss_cfg_ahb_clk>,
 			 <&clock_gcc clk_gcc_mss_q6_bimc_axi_clk>,
 			 <&clock_gcc clk_gcc_boot_rom_ahb_clk>,
 			 <&clock_gcc clk_gpll0_out_msscc>;
@@ -1636,11 +1640,9 @@
 		qcom,proxy-reg-names = "vdd_cx";
 		qcom,vdd_cx-uV-uA = <7 100000>;
 
-		clocks = <&clock_gcc clk_gcc_lpass_q6_axi_clk>,
-			 <&clock_rpm clk_cxo_pil_lpass_clk>,
+		clocks = <&clock_rpm clk_cxo_pil_lpass_clk>,
 			 <&clock_rpm clk_scm_ce1_clk>;
-		clock-names = "bus_clk", "xo", "scm_ce1_clk";
-		qcom,active-clock-names = "bus_clk";
+		clock-names = "xo", "scm_ce1_clk";
 		qcom,proxy-clock-names = "xo", "scm_ce1_clk";
 		qcom,scm_ce1_clk-freq = <85710000>;
 

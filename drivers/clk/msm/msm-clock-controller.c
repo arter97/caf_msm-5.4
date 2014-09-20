@@ -12,10 +12,6 @@
  */
 
 #define pr_fmt(fmt) "msmclock: %s: " fmt, __func__
-#define dt_err(np, fmt, ...) \
-	pr_err("%s: " fmt, np->name, ##__VA_ARGS__)
-#define dt_prop_err(np, str, fmt, ...) \
-	dt_err(np, "%s: " fmt, str, ##__VA_ARGS__)
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -205,7 +201,7 @@ static int generic_clk_parse_parents(struct device *dev, struct clk *c,
 	char *name = "qcom,parent";
 
 	/* This property is optional */
-	if (!of_property_read_bool(np, name))
+	if (!of_find_property(np, name, NULL))
 		return 0;
 
 	rc = of_property_read_phandle_index(np, name, 0, &p);
@@ -231,7 +227,7 @@ static int generic_clk_parse_vdd(struct device *dev, struct clk *c,
 	char *name = "qcom,supply-group";
 
 	/* This property is optional */
-	if (!of_property_read_bool(np, name))
+	if (!of_find_property(np, name, NULL))
 		return 0;
 
 	rc = of_property_read_phandle_index(np, name, 0, &p);
@@ -256,7 +252,7 @@ static int generic_clk_parse_flags(struct device *dev, struct clk *c,
 	char *name = "qcom,clk-flags";
 
 	/* This property is optional */
-	if (!of_property_read_bool(np, name))
+	if (!of_find_property(np, name, NULL))
 		return 0;
 
 	rc = of_property_read_u32(np, name, &c->flags);
@@ -352,7 +348,7 @@ static int generic_clk_parse_depends(struct device *dev, struct clk *c,
 	char *name = "qcom,depends";
 
 	/* This property is optional */
-	if (!of_property_read_bool(np, name))
+	if (!of_find_property(np, name, NULL))
 		return 0;
 
 	rc = of_property_read_phandle_index(np, name, 0, &p);
@@ -378,7 +374,7 @@ static int generic_clk_parse_init_config(struct device *dev, struct clk *c,
 	char *name = "qcom,config-rate";
 
 	/* This property is optional */
-	if (!of_property_read_bool(np, name))
+	if (!of_find_property(np, name, NULL))
 		return 0;
 
 	rc = of_property_read_u32(np, name, &temp);

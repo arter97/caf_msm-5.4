@@ -41,6 +41,7 @@
 
 #define IPA_ODU_RX_BUFF_SZ 2048
 #define IPA_ODU_RX_POOL_SZ 32
+#define IPA_SIZE_DL_CSUM_META_TRAILER 8
 
 static struct sk_buff *ipa_get_skb_ipa_rx(unsigned int len, gfp_t flags);
 static void ipa_replenish_wlan_rx_cache(struct ipa_sys_context *sys);
@@ -1654,6 +1655,7 @@ static int ipa_lan_rx_pyld_hdlr(struct sk_buff *skb,
 	int len;
 	unsigned char *buf;
 	bool drop_packet;
+	int src_pipe;
 
 	IPA_DUMP_BUFF(skb->data, 0, skb->len);
 
@@ -1764,7 +1766,8 @@ begin:
 					return rc;
 				}
 				memcpy(&comp, skb->data, sizeof(comp));
-				skb_pull(skb, sizeof(comp));
+				skb_pull(skb, sizeof(comp) +
+						IPA_SIZE_DL_CSUM_META_TRAILER);
 				complete(&comp->comp);
 				if (atomic_dec_return(&comp->cnt) == 0)
 					kfree(comp);
@@ -1783,6 +1786,7 @@ begin:
 		}
 		if (status->endp_dest_idx == (sys->ep - ipa_ctx->ep)) {
 			/* RX data */
+			src_pipe = status->endp_src_idx;
 
 			/*
 			 * A packet which is received back to the AP after
@@ -1803,7 +1807,8 @@ begin:
 			pad_len_byte = ((status->pkt_len + 3) & ~3) -
 					status->pkt_len;
 
-			len = status->pkt_len + pad_len_byte;
+			len = status->pkt_len + pad_len_byte +
+				IPA_SIZE_DL_CSUM_META_TRAILER;
 			IPADBG("pad %d pkt_len %d len %d\n", pad_len_byte,
 					status->pkt_len, len);
 
@@ -1854,8 +1859,8 @@ begin:
 				}
 			}
 			/* TX comp */
-			ipa_wq_write_done_status(status->endp_src_idx);
-			IPADBG("tx comp imp for %d\n", status->endp_src_idx);
+			ipa_wq_write_done_status(src_pipe);
+			IPADBG("tx comp imp for %d\n", src_pipe);
 		} else {
 			/* TX comp */
 			ipa_wq_write_done_status(status->endp_src_idx);

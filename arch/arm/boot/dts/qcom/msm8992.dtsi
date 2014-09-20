@@ -500,11 +500,11 @@
 				     "gpll0_mss_clk";
 
 		interrupts = <0 24 1>;
-		vdd_mss-supply = <&pm8992_s7>;
-		vdd_cx-supply = <&pm8992_s1_corner>;
-		vdd_mx-supply = <&pm8992_s2_corner>;
+		vdd_mss-supply = <&pm8994_s7>;
+		vdd_cx-supply = <&pm8994_s1_corner>;
+		vdd_mx-supply = <&pm8994_s2_corner>;
 		vdd_mx-uV = <7>;
-		vdd_pll-supply = <&pm8992_l12>;
+		vdd_pll-supply = <&pm8994_l12>;
 		qcom,vdd_pll = <1800000>;
 		qcom,firmware-name = "modem";
 		qcom,pil-self-auth;
@@ -521,7 +521,7 @@
 		reg = <0xfe200000 0x00100>;
 		interrupts = <0 162 1>;
 
-		vdd_cx-supply = <&pm8992_s1_corner>;
+		vdd_cx-supply = <&pm8994_s1_corner>;
 		qcom,proxy-reg-names = "vdd_cx";
 		qcom,vdd_cx-uV-uA = <7 100000>;
 
@@ -810,6 +810,49 @@
 		qcom,xprt-version = <1>;
 		qcom,fragmented-data;
 	};
+
+	tsens: tsens@fc4a8000 {
+		compatible = "qcom,msm8994-tsens";
+		reg = <0xfc4a8000 0x2000>,
+		      <0xfc4bc000 0x1000>;
+		reg-names = "tsens_physical", "tsens_eeprom_physical";
+		interrupts = <0 184 0>;
+		qcom,sensors = <13>;
+		qcom,slope = <2901 2846 3200 3200 3200 3200 3200 3200 3200 3200 3200 3200 3200>;
+		qcom,sensor-id = <0 1 2 3 5 6 7 8 9 10 11 12 13>;
+	};
+
+	ocmem: qcom,ocmem@fdd00000 {
+		compatible = "qcom,msm-ocmem";
+		reg = <0xfdd00000 0x2000>,
+			<0xfdd02000 0x2000>,
+			<0xfe070000 0x400>,
+			<0xfec00000 0x100000>;
+		reg-names = "ocmem_ctrl_physical", "dm_ctrl_physical", "br_ctrl_physical", "ocmem_physical";
+		interrupts = <0 76 0 0 77 0>;
+		interrupt-names = "ocmem_irq", "dm_irq";
+		qcom,ocmem-num-regions = <0x4>;
+		qcom,ocmem-num-macros = <0x10>;
+		qcom,resource-type = <0x706d636f>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges = <0x0 0xfec00000 0x100000>;
+		clocks = <&clock_rpm clk_ocmemgx_core_clk>,
+			<&clock_mmss clk_ocmemcx_ocmemnoc_clk>;
+		clock-names = "core_clk", "iface_clk";
+
+		partition@0 {
+			reg = <0x0 0x80000>;
+			qcom,ocmem-part-name = "graphics";
+			qcom,ocmem-part-min = <0x80000>;
+		};
+
+		partition@100000 {
+			reg = <0x80000 0x80000>;
+			qcom,ocmem-part-name = "video";
+			qcom,ocmem-part-min = <0x55000>;
+		};
+	};
 };
 
 &gdsc_usb30 {
@@ -891,10 +934,12 @@
 	clock-names = "core_clk";
 	clocks = <&clock_mmss clk_oxili_gfx3d_clk>;
 	status = "ok";
-	parent-supply = <&pmi8992_s2_corner>;
+	parent-supply = <&pmi8994_s2_corner>;
 };
 
 #include "msm8992-ion.dtsi"
+#include "msm-pm8994.dtsi"
+#include "msm-pmi8994.dtsi"
 #include "msm8992-regulator.dtsi"
 #include "msm8992-iommu.dtsi"
 #include "msm8992-iommu-domains.dtsi"

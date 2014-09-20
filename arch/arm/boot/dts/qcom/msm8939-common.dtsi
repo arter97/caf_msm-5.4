@@ -51,7 +51,7 @@
 			linux,reserve-contiguous-region;
 			linux,reserve-region;
 			linux,remove-completely;
-			reg = <0x0 0x86800000 0x0 0x04e00000>;
+			reg = <0x0 0x86800000 0x0 0x05500000>;
 			label = "modem_adsp_mem";
 		};
 
@@ -59,7 +59,7 @@
 			linux,reserve-contiguous-region;
 			linux,reserve-region;
 			linux,remove-completely;
-			reg = <0x0 0x8b600000 0x0 0x0600000>;
+			reg = <0x0 0x8bd00000 0x0 0x0600000>;
 			label = "peripheral_mem";
 		};
 
@@ -518,14 +518,14 @@
 		qcom,core-limit-temp = <80>;
 		qcom,core-temp-hysteresis = <10>;
 		qcom,core-control-mask = <0xfe>;
-		qcom,hotplug-temp = <95>;
-		qcom,hotplug-temp-hysteresis = <20>;
+		qcom,hotplug-temp = <105>;
+		qcom,hotplug-temp-hysteresis = <15>;
 		qcom,cpu-sensors = "tsens_tz_sensor5", "tsens_tz_sensor6",
 				"tsens_tz_sensor7", "tsens_tz_sensor8",
 				"tsens_tz_sensor9", "tsens_tz_sensor9",
 				"tsens_tz_sensor9", "tsens_tz_sensor9";
-		qcom,freq-mitigation-temp = <100>;
-		qcom,freq-mitigation-temp-hysteresis = <20>;
+		qcom,freq-mitigation-temp = <105>;
+		qcom,freq-mitigation-temp-hysteresis = <15>;
 		qcom,freq-mitigation-value = <400000>;
 		qcom,freq-mitigation-control-mask = <0x01>;
 		qcom,therm-reset-temp = <115>;
@@ -789,14 +789,19 @@
 		qcom,msm-bus,num-paths = <1>;
 		qcom,msm-bus,vectors-KBps =
 				<87 512 0 0>,
-				<87 512 60000 960000>,
+				<87 512 80000 0>,
 				<87 512 6000  6000>;
 		clocks = <&clock_gcc clk_gcc_usb_hs_ahb_clk>,
 			 <&clock_gcc clk_gcc_usb_hs_system_clk>,
 			 <&clock_gcc clk_gcc_usb2a_phy_sleep_clk>,
+			 <&clock_rpm clk_bimc_usb_a_clk>,
+			 <&clock_rpm clk_snoc_usb_a_clk>,
+			 <&clock_rpm clk_pcnoc_usb_a_clk>,
 			 <&clock_rpm clk_xo_otg_clk>;
 		clock-names = "iface_clk", "core_clk", "sleep_clk",
+				"bimc_clk", "snoc_clk", "pcnoc_clk",
 				"xo";
+		qcom,bus-clk-rate = <400000000 200000000 100000000>;
 	};
 
 	android_usb: android_usb@086000c8 {
@@ -1452,6 +1457,7 @@
 		qcom,clock-names = "core_clk", "core0_clk", "core1_clk", "iface_clk", "bus_clk";
 		qcom,clock-configs = <0x1 0x0 0x0 0x0 0x0>;
 		qcom,sw-power-collapse;
+		qcom,enable-minimum-voting;
 		qcom,load-freq-tbl =
 			<489600 266670000 0x0c000000>, /* HEVC  decoder 1080p 60fps  */
 			<489600 266670000 0x030fcfff>, /* Legacy decoder 1080p 60fps  */

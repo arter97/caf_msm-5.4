@@ -481,13 +481,13 @@
 			"AMIC2", "MIC BIAS2 External",
 			"MIC BIAS2 External", "Headset Mic",
 			"AMIC3", "MIC BIAS3 External",
-			"MIC BIAS2 External", "Analog Mic7",
+			"MIC BIAS3 External", "Analog Mic6",
 			"AMIC4", "MIC BIAS2 External",
 			"MIC BIAS2 External", "ANCRight Headset Mic",
 			"AMIC5", "MIC BIAS2 External",
 			"MIC BIAS3 External", "ANCLeft Headset Mic",
 			"AMIC6", "MIC BIAS3 External",
-			"MIC BIAS3 External", "Analog Mic8",
+			"MIC BIAS3 External", "Analog Mic7",
 			"DMIC1", "MIC BIAS1 External",
 			"MIC BIAS1 External", "Digital Mic1",
 			"DMIC2", "MIC BIAS1 External",
@@ -524,12 +524,19 @@
 	vreg-3.3-supply = <&bt_vreg>;
 };
 
+&pmi8994_fg {
+	qcom,use-otp-profile;
+};
+
 &pmi8994_charger {
 	qcom,charging-disabled;
 };
 
 &slim_msm {
 	tomtom_codec {
+		qcom,cdc-micbias1-ext-cap;
+		qcom,cdc-micbias3-ext-cap;
+		qcom,cdc-micbias4-ext-cap;
 		cdc-vdd-spkdrv-supply = <&pmi8994_boost_pin_ctrl>;
 		qcom,cdc-vdd-spkdrv-voltage = <5000000 5000000>;
 		qcom,cdc-vdd-spkdrv-current = <1300000>;
@@ -674,13 +681,7 @@
 		qcom,master-en = <1>;    /* Enable GPIO */
 	};
 
-	gpio@d300 { /* GPIO 20 - PMI_SPON */
-		qcom,mode = <1>;         /* Digital output */
-		qcom,pull = <4>;         /* Pulldown 10uA */
-		qcom,vin-sel = <2>;      /* VIN2 */
-		qcom,src-sel = <0>;      /* GPIO */
-		qcom,invert = <0>;       /* Invert */
-		qcom,master-en = <1>;    /* Enable GPIO */
+	gpio@d300 { /* GPIO 20 */
 	};
 };
 
@@ -746,12 +747,6 @@
 	};
 
 	mpp@a200 { /* MPP 3 */
-		/* PMI_SPON */
-		qcom,mode = <0>;	/* DIGITAL IN */
-		qcom,pull = <5>;	/* No Pull */
-		qcom,vin-sel = <2>;	/* 1.8 */
-		qcom,src-sel = <0>;	/* CONSTANT */
-		qcom,master-en = <1>;	/* ENABLE MPP */
 	};
 
 	mpp@a300 { /* MPP 4 */
@@ -831,5 +826,15 @@
 				qcom,s2-type = <7>;
 			};
 		};
+       };
+
+       qcom,pmi8994@3 {
+              qcom,leds@d000 {
+                     qcom,rgb_2 {
+                            status = "ok";
+                            qcom,default-state = "on";
+                            qcom,turn-off-delay-ms = <5000>;
+                     };
+              };
        };
 };

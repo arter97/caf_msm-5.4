@@ -1066,7 +1066,7 @@ int q6asm_audio_client_buf_alloc(unsigned int dir,
 	int cnt = 0;
 	int rc = 0;
 	struct audio_buffer *buf;
-	int len;
+	size_t len;
 
 	if (!(ac) || ((dir != IN) && (dir != OUT))) {
 		pr_err("%s: ac %p dir %d\n", __func__, ac, dir);
@@ -1088,6 +1088,11 @@ int q6asm_audio_client_buf_alloc(unsigned int dir,
 			return 0;
 		}
 		mutex_lock(&ac->cmd_lock);
+		if (bufcnt > (LONG_MAX/sizeof(struct audio_buffer))) {
+			pr_err("%s: Buffer size overflows", __func__);
+			mutex_unlock(&ac->cmd_lock);
+			goto fail;
+		}
 		buf = kzalloc(((sizeof(struct audio_buffer))*bufcnt),
 				GFP_KERNEL);
 
@@ -1101,11 +1106,11 @@ int q6asm_audio_client_buf_alloc(unsigned int dir,
 		while (cnt < bufcnt) {
 			if (bufsz > 0) {
 				if (!buf[cnt].data) {
-					msm_audio_ion_alloc("audio_client",
+					msm_audio_ion_alloc("asm_client",
 					&buf[cnt].client, &buf[cnt].handle,
 					      bufsz,
 					      (ion_phys_addr_t *)&buf[cnt].phys,
-					      (size_t *)&len,
+					      &len,
 					      &buf[cnt].data);
 					if (rc) {
 						pr_err("%s: ION Get Physical for AUDIO failed, rc = %d\n",
@@ -1150,7 +1155,7 @@ int q6asm_audio_client_buf_alloc_contiguous(unsigned int dir,
 	int cnt = 0;
 	int rc = 0;
 	struct audio_buffer *buf;
-	int len;
+	size_t len;
 	int bytes_to_alloc;
 
 	if (!(ac) || ((dir != IN) && (dir != OUT))) {
@@ -1189,9 +1194,9 @@ int q6asm_audio_client_buf_alloc_contiguous(unsigned int dir,
 	/* The size to allocate should be multiple of 4K bytes */
 	bytes_to_alloc = PAGE_ALIGN(bytes_to_alloc);
 
-	rc = msm_audio_ion_alloc("audio_client", &buf[0].client, &buf[0].handle,
+	rc = msm_audio_ion_alloc("asm_client", &buf[0].client, &buf[0].handle,
 		bytes_to_alloc,
-		(ion_phys_addr_t *)&buf[0].phys, (size_t *)&len,
+		(ion_phys_addr_t *)&buf[0].phys, &len,
 		&buf[0].data);
 	if (rc) {
 		pr_err("%s: Audio ION alloc is failed, rc = %d\n",

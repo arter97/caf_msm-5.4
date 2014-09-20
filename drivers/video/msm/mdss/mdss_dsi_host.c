@@ -618,7 +618,12 @@ int mdss_dsi_reg_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 	if (ctrl_pdata->status_cmds.link_state == DSI_HS_MODE)
 		mdss_dsi_set_tx_power_mode(1, &ctrl_pdata->panel_data);
 
-	if (ret == 0) {
+	/*
+	 * mdss_dsi_read_status returns the number of bytes returned
+	 * by the panel. Success value is greater than zero and failure
+	 * case returns zero.
+	 */
+	if (ret > 0) {
 		ret = ctrl_pdata->check_read_status(ctrl_pdata);
 	} else {
 		pr_err("%s: Read status register returned error\n", __func__);
@@ -836,7 +841,7 @@ static int mdss_dsi_cmds2buf_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 		if (!len) {
 			pr_err("%s: failed to add cmd = 0x%x\n",
 				__func__,  cm->payload[0]);
-			return -EINVAL;
+			return 0;
 		}
 		tot += len;
 		if (dchdr->last) {
@@ -850,7 +855,7 @@ static int mdss_dsi_cmds2buf_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 				mdss_dsi_disable_irq(ctrl, DSI_CMD_TERM);
 				pr_err("%s: failed to call cmd_dma_tx for cmd = 0x%x\n",
 					__func__,  cmds->payload[0]);
-				return -EINVAL;
+				return 0;
 			}
 
 			if (!wait || dchdr->wait > VSYNC_PERIOD)
@@ -905,7 +910,7 @@ static inline bool __mdss_dsi_cmd_mode_config(
 int mdss_dsi_cmds_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 		struct dsi_cmd_desc *cmds, int cnt)
 {
-	int ret = 0;
+	int len = 0;
 	struct mdss_dsi_ctrl_pdata *mctrl = NULL;
 
 	/*
@@ -938,11 +943,9 @@ int mdss_dsi_cmds_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 do_send:
 	ctrl->cmd_cfg_restore = __mdss_dsi_cmd_mode_config(ctrl, 1);
 
-	ret = mdss_dsi_cmds2buf_tx(ctrl, cmds, cnt);
-	if (IS_ERR_VALUE(ret)) {
+	len = mdss_dsi_cmds2buf_tx(ctrl, cmds, cnt);
+	if (!len)
 		pr_err("%s: failed to call\n", __func__);
-		cnt = -EINVAL;
-	}
 
 	if (!ctrl->do_unicast) {
 		if (mctrl && mctrl->cmd_cfg_restore) {
@@ -956,7 +959,7 @@ do_send:
 		}
 	}
 
-	return cnt;
+	return len;
 }
 
 /* MIPI_DSI_MRPS, Maximum Return Packet Size */
@@ -975,10 +978,9 @@ static struct dsi_cmd_desc pkt_size_cmd = {
  *
  * controller have 4 registers can hold 16 bytes of rxed data
  * dcs packet: 4 bytes header + payload + 2 bytes crc
- * 2 padding bytes add to payload to have payload length is mutipled by 4
- * 1st read: 4 bytes header + 8 bytes payload + 2 padding + 2 crc
- * 2nd read: 12 bytes payload + 2 padding + 2 crc
- * 3rd read: 12 bytes payload + 2 padding + 2 crc
+ * 1st read: 4 bytes header + 10 bytes payload + 2 crc
+ * 2nd read: 14 bytes payload + 2 crc
+ * 3rd read: 14 bytes payload + 2 crc
  *
  */
 int mdss_dsi_cmds_rx(struct mdss_dsi_ctrl_pdata *ctrl,
@@ -994,6 +996,11 @@ int mdss_dsi_cmds_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 	if (ctrl->panel_data.panel_info.panel_ack_disabled) {
 		pr_err("%s: ACK from Client not supported\n", __func__);
 		return rlen;
+	}
+
+	if (rlen == 0) {
+		pr_debug("%s: Minimum MRPS value should be 1\n", __func__);
+		return 0;
 	}
 
 	/*
@@ -1028,15 +1035,12 @@ do_send:
 		rx_byte = 4;
 	} else {
 		short_response = 0;
-		data_byte = 8;	/* first read */
-		/*
-		 * add extra 2 padding bytes to have overall
-		 * packet size is multipe by 4. This also make
-		 * sure 4 bytes dcs headerlocates within a
-		 * 32 bits register after shift in.
-		 */
-		pkt_size = data_byte + 2;
-		rx_byte = data_byte + 8; /* 4 header + 2 crc  + 2 padding*/
+		data_byte = 10;	/* first read */
+		if (rlen < data_byte)
+			pkt_size = rlen;
+		else
+			pkt_size = data_byte;
+		rx_byte = data_byte + 6; /* 4 header + 2 crc */
 	}
 
 
@@ -1055,6 +1059,7 @@ do_send:
 			pr_err("%s: failed to add max_pkt_size\n",
 				__func__);
 			rp->len = 0;
+			rp->read_cnt = 0;
 			goto end;
 		}
 
@@ -1067,6 +1072,7 @@ do_send:
 			pr_err("%s: failed to tx max_pkt_size\n",
 				__func__);
 			rp->len = 0;
+			rp->read_cnt = 0;
 			goto end;
 		}
 		pr_debug("%s: max_pkt_size=%d sent\n",
@@ -1078,6 +1084,7 @@ do_send:
 			pr_err("%s: failed to add cmd = 0x%x\n",
 				__func__,  cmds->payload[0]);
 			rp->len = 0;
+			rp->read_cnt = 0;
 			goto end;
 		}
 
@@ -1090,8 +1097,10 @@ do_send:
 			pr_err("%s: failed to tx cmd = 0x%x\n",
 				__func__,  cmds->payload[0]);
 			rp->len = 0;
+			rp->read_cnt = 0;
 			goto end;
 		}
+
 		/*
 		 * once cmd_dma_done interrupt received,
 		 * return data from client is ready and stored
@@ -1100,6 +1109,9 @@ do_send:
 		 * after that dcs header lost during shift into registers
 		 */
 		dlen = mdss_dsi_cmd_dma_rx(ctrl, rp, rx_byte);
+
+		if (!dlen)
+			goto end;
 
 		if (short_response)
 			break;
@@ -1112,24 +1124,38 @@ do_send:
 			rlen -= data_byte;
 		}
 
-		dlen -= 2; /* 2 padding bytes */
 		dlen -= 2; /* 2 crc */
 		dlen -= diff;
 		rp->data += dlen;	/* next start position */
 		rp->len += dlen;
-		data_byte = 12;	/* NOT first read */
-		pkt_size += data_byte;
+		if (!end) {
+			data_byte = 14; /* NOT first read */
+			if (rlen < data_byte)
+				pkt_size += rlen;
+			else
+				pkt_size += data_byte;
+		}
 		pr_debug("%s: rp data=%x len=%d dlen=%d diff=%d\n",
 			 __func__, (int) (unsigned long) rp->data,
 			 rp->len, dlen, diff);
 	}
 
-	rp->data = rp->start;	/* move back to start position */
+	/*
+	 * For single Long read, if the requested rlen < 10,
+	 * we need to shift the start position of rx
+	 * data buffer to skip the bytes which are not
+	 * updated.
+	 */
+	if (rp->read_cnt < 16 && !short_response)
+		rp->data = rp->start + (16 - rp->read_cnt);
+	else
+		rp->data = rp->start;
 	cmd = rp->data[0];
 	switch (cmd) {
 	case DTYPE_ACK_ERR_RESP:
 		pr_debug("%s: rx ACK_ERR_PACLAGE\n", __func__);
 		rp->len = 0;
+		rp->read_cnt = 0;
 	case DTYPE_GEN_READ1_RESP:
 	case DTYPE_DCS_READ1_RESP:
 		mdss_dsi_short_read1_resp(rp);
@@ -1145,6 +1171,7 @@ do_send:
 	default:
 		pr_warning("%s:Invalid response cmd\n", __func__);
 		rp->len = 0;
+		rp->read_cnt = 0;
 	}
 end:
 
@@ -1158,7 +1185,11 @@ end:
 		ctrl->cmd_cfg_restore = false;
 	}
 
-	return rp->len;
+	if (rp->len && (rp->len != rp->read_cnt))
+		pr_err("Bytes read: %d requested:%d mismatch\n",
+					rp->read_cnt, rp->len);
+
+	return rp->read_cnt;
 }
 
 #define DMA_TX_TIMEOUT 200
@@ -1248,29 +1279,99 @@ static int mdss_dsi_cmd_dma_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 			struct dsi_buf *rp, int rx_byte)
 
 {
-	u32 *lp, data;
-	int i, off, cnt;
+	u32 *lp, *temp, data, ctrl_rev;
+	int i, j = 0, off, cnt, ret = rx_byte;
+	bool ack_error = false;
+	char reg[16];
+	int repeated_bytes = 0;
 
 	lp = (u32 *)rp->data;
+	temp = (u32 *)reg;
 	cnt = rx_byte;
 	cnt += 3;
 	cnt >>= 2;
 
+	ctrl_rev = MIPI_INP(ctrl->ctrl_base);
+
 	if (cnt > 4)
 		cnt = 4; /* 4 x 32 bits registers only */
+
+	if (ctrl_rev >= MDSS_DSI_HW_REV_101) {
+		rp->read_cnt = (MIPI_INP((ctrl->ctrl_base) + 0x01d4) >> 16);
+		pr_debug("%s: bytes read:%d\n", __func__, rp->read_cnt);
+
+		ack_error = (rx_byte == 4) ? (rp->read_cnt == 8) :
+				((rp->read_cnt - 4) == (max_pktsize[0] + 6));
+
+		if (ack_error)
+			rp->read_cnt -= 4; /* 4 byte read err report */
+		if (!rp->read_cnt) {
+			pr_err("%s: Errors detected, no data rxed\n", __func__);
+			ret = 0;
+			goto exit;
+		}
+	} else if (rx_byte == 4) {
+		rp->read_cnt = 4;
+	} else {
+		rp->read_cnt = (max_pktsize[0] + 6);
+	}
+
+	/*
+	 * In case of multiple reads from the panel, after the first read, there
+	 * is possibility that there are some bytes in the payload repeating in
+	 * the RDBK_DATA registers. Since we read all the parameters from the
+	 * panel right from the first byte for every pass. We need to skip the
+	 * repeating bytes and then append the new parameters to the rx buffer.
+	 */
+	if (rp->read_cnt > 16) {
+		int bytes_shifted, data_lost = 0, rem_header_bytes = 0;
+		/* Any data more than 16 bytes will be shifted out */
+		bytes_shifted = rp->read_cnt - rx_byte;
+		if (bytes_shifted >= 4)
+			data_lost = bytes_shifted - 4; /* remove dcs header */
+		else
+			rem_header_bytes = 4 - bytes_shifted; /* rem header */
+		/*
+		 * (rp->len - 4) -> current rx buffer data length.
+		 * If data_lost > 0, then ((rp->len - 4) - data_lost) will be
+		 * the number of repeating bytes.
+		 * If data_lost == 0, then ((rp->len - 4) + rem_header_bytes)
+		 * will be the number of bytes repeating in between rx buffer
+		 * and the current RDBK_DATA registers. We need to skip the
+		 * repeating bytes.
+		 */
+		repeated_bytes = (rp->len - 4) - data_lost + rem_header_bytes;
+	}
 
 	off = 0x06c;	/* DSI_RDBK_DATA0 */
 	off += ((cnt - 1) * 4);
 
 	for (i = 0; i < cnt; i++) {
 		data = (u32)MIPI_INP((ctrl->ctrl_base) + off);
-		*lp++ = ntohl(data);	/* to network byte order */
+		/* to network byte order */
+		if (!repeated_bytes)
+			*lp++ = ntohl(data);
+		else
+			*temp++ = ntohl(data);
 		pr_debug("%s: data = 0x%x and ntohl(data) = 0x%x\n",
 					 __func__, data, ntohl(data));
 		off -= 4;
 	}
 
-	return rx_byte;
+	/* Skip duplicates and append other data to the rx buffer */
+	if (repeated_bytes) {
+		for (i = repeated_bytes; i < 16; i++)
+			rp->data[j++] = reg[i];
+	}
+
+exit:
+	if (ctrl_rev >= MDSS_DSI_HW_REV_101) {
+		/* clear the RDBK_DATA registers */
+		MIPI_OUTP(ctrl->ctrl_base + 0x01d4, 0x1);
+		MIPI_OUTP(ctrl->ctrl_base + 0x01d4, 0x0);
+	}
+
+	return ret;
 }
 
 void mdss_dsi_en_wait4dynamic_done(struct mdss_dsi_ctrl_pdata *ctrl)
@@ -1383,8 +1484,7 @@ void mdss_dsi_cmd_mdp_busy(struct mdss_dsi_ctrl_pdata *ctrl)
 int mdss_dsi_cmdlist_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 				struct dcs_cmd_req *req)
 {
-	int ret, ret_val = -EINVAL;
-
+	int len;
 
 	if (mdss_dsi_sync_wait_enable(ctrl)) {
 		ctrl->do_unicast = false;
@@ -1393,22 +1493,19 @@ int mdss_dsi_cmdlist_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 			ctrl->do_unicast = true;
 	}
 
-	ret = mdss_dsi_cmds_tx(ctrl, req->cmds, req->cmds_cnt);
-
-	if (!IS_ERR_VALUE(ret))
-		ret_val = 0;
+	len = mdss_dsi_cmds_tx(ctrl, req->cmds, req->cmds_cnt);
 
 	if (req->cb)
-		req->cb(ret);
+		req->cb(len);
 
-	return ret_val;
+	return len;
 }
 
 int mdss_dsi_cmdlist_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 				struct dcs_cmd_req *req)
 {
 	struct dsi_buf *rp;
-	int len = 0, ret = 0;
+	int len = 0;
 
 	if (req->rbuf) {
 		rp = &ctrl->rx_buf;
@@ -1421,7 +1518,7 @@ int mdss_dsi_cmdlist_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 	if (req->cb)
 		req->cb(len);
 
-	return ret;
+	return len;
 }
 
 int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
