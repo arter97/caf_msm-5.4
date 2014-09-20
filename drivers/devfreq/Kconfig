@@ -100,6 +100,15 @@ config DEVFREQ_GOV_MSM_BW_HWMON
 	  existing profiling tools.  This governor is unlikely to be useful
 	  for non-MSM devices.
 
+config DEVFREQ_GOV_MSM_GPUBW_MON
+	tristate "GPU BW voting governor"
+	depends on DEVFREQ_GOV_MSM_ADRENO_TZ
+	help
+	 MSM GPU governor for GPU bus bandwidth voting.
+	 This governor works together with MSM Adreno Trustzone governor,
+	 and select bus frequency votes using an "on-demand" alorithm..
+	 This governor is unlikely to be useful for non-MSM devices.
+
 config DEVFREQ_GOV_MSM_CACHE_HWMON
 	tristate "HW monitor based governor for cache frequency"
 	help
