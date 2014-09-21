@@ -1031,7 +1031,7 @@ config SERIAL_SGI_IOC3
 
 config SERIAL_MSM
 	bool "MSM on-chip serial port support"
-	depends on ARCH_QCOM
+	depends on ARCH_QCOM || ARCH_MSM
 	select SERIAL_CORE
 
 config SERIAL_MSM_CONSOLE
