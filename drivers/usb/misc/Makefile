@@ -28,5 +28,5 @@ obj-$(CONFIG_USB_HSIC_USB3503)		+= usb3503.o
 obj-$(CONFIG_USB_QCOM_DIAG_BRIDGE)	+= diag_bridge.o
 mdm_bridge-y				:= mdm_ctrl_bridge.o mdm_data_bridge.o
 obj-$(CONFIG_USB_QCOM_MDM_BRIDGE)	+= mdm_bridge.o
-
+obj-$(CONFIG_USB_QCOM_KS_BRIDGE)        += ks_bridge.o
 obj-$(CONFIG_USB_SISUSBVGA)		+= sisusbvga/
