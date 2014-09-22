@@ -461,6 +461,9 @@ enum usb_bam {
 	HSIC_BAM,
 };
 
+/* for usb host controller driver */
+extern struct usb_phy *msm_usb_get_transceiver(int);
+
 #ifdef CONFIG_USB_DWC3_MSM
 int msm_ep_config(struct usb_ep *ep);
 int msm_ep_unconfig(struct usb_ep *ep);
