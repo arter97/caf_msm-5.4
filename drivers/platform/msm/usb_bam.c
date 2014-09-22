@@ -195,11 +195,13 @@ void msm_bam_set_hsic_host_dev(struct device *dev)
 			(int)dev);
 		pm_runtime_get(dev);
 	} else if (hsic_host_info.dev) {
-		pr_debug("%s: Putting hsic device %x\n", __func__,
-			(int)hsic_host_info.dev);
-		/* Just free previous device*/
-		info[HSIC_BAM].in_lpm = true;
-		pm_runtime_put(hsic_host_info.dev);
+		pr_debug("%s: Try Putting hsic device %x, lpm:%d\n", __func__,
+			(int)hsic_host_info.dev, info[HSIC_BAM].in_lpm);
+		/* Just release previous device if not already done */
+		if (!info[HSIC_BAM].in_lpm) {
+			info[HSIC_BAM].in_lpm = true;
+			pm_runtime_put(hsic_host_info.dev);
+		}
 	}
 
 	hsic_host_info.dev = dev;
