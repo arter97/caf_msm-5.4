@@ -918,7 +918,7 @@ static int phy_init_seq[] = {
 #define PMIC_GPIO_DP_IRQ	PM8921_GPIO_IRQ(PM8921_IRQ_BASE, PMIC_GPIO_DP)
 #define MSM_MPM_PIN_USB1_OTGSESSVLD	40
 
-static struct msm_otg_platform_data msm_otg_pdata = {
+static struct msm_otg_platform_data msm_otg_usb1_pdata = {
 	.mode			= USB_OTG,
 	.default_mode           = USB_PERIPHERAL,
 	.otg_control		= OTG_USER_CONTROL,
@@ -930,42 +930,41 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.mpm_otgsessvld_int	= MSM_MPM_PIN_USB1_OTGSESSVLD,
 };
 
-static struct msm_usb_host_platform_data msm_ehci_host_pdata3 = {
-	.power_budget = 500,
+static struct msm_otg_platform_data msm_otg_usb3_pdata = {
+	.mode			= USB_HOST,
+	.phy_type		= SNPS_28NM_INTEGRATED_PHY,
+	.power_budget		= 750,
+	.phy_init_seq		= phy_init_seq,
 };
 
-#ifdef CONFIG_USB_EHCI_MSM_HOST4
-static struct msm_usb_host_platform_data msm_ehci_host_pdata4;
-#endif
+static struct msm_otg_platform_data msm_otg_usb4_pdata = {
+	.mode			= USB_HOST,
+	.phy_type		= SNPS_28NM_INTEGRATED_PHY,
+	.power_budget		= 750,
+	.phy_init_seq		= phy_init_seq,
+};
 
-static void __init apq8064_ehci_host_init(void)
+static struct platform_device *usb_common_devices[] __initdata = {
+	&apq8064_device_usb1_otg,
+	&apq8064_device_usb3_otg,
+	&apq8064_device_usb4_otg,
+	&apq8064_device_hsusb_usb1_host,
+	&apq8064_device_hsusb_usb3_host,
+	&apq8064_device_hsusb_usb4_host,
+	&apq8064_device_gadget_usb1_peripheral,
+	&android_usb_device
+};
+
+static void __init apq8064_usb_otg_init(void)
 {
-	if (machine_is_apq8064_cdp()
-		|| machine_is_apq8064_liquid()
-		|| machine_is_mpq8064_cdp()
-		|| machine_is_mpq8064_hrd()
-		|| machine_is_mpq8064_dtv()
-		|| machine_is_apq8064_adp_2()
-		|| machine_is_apq8064_adp2_es2()
-		|| machine_is_apq8064_mplatform()) {
+	apq8064_device_usb1_otg.dev.platform_data = &msm_otg_usb1_pdata;
+	apq8064_device_usb3_otg.dev.platform_data = &msm_otg_usb3_pdata;
+	apq8064_device_usb4_otg.dev.platform_data = &msm_otg_usb4_pdata;
 
-		if (machine_is_apq8064_liquid())
-			msm_ehci_host_pdata3.dock_connect_irq =
-					PM8921_MPP_IRQ(PM8921_IRQ_BASE, 9);
-		else
-			msm_ehci_host_pdata3.pmic_gpio_dp_irq =
-							PMIC_GPIO_DP_IRQ;
-
-		apq8064_device_ehci_host3.dev.platform_data =
-				&msm_ehci_host_pdata3;
-		platform_device_register(&apq8064_device_ehci_host3);
-
-#ifdef CONFIG_USB_EHCI_MSM_HOST4
-		apq8064_device_ehci_host4.dev.platform_data =
-				&msm_ehci_host_pdata4;
-		platform_device_register(&apq8064_device_ehci_host4);
-#endif
-	}
+	if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2() ||
+			machine_is_apq8064_mplatform())
+		platform_add_devices(usb_common_devices,
+				ARRAY_SIZE(usb_common_devices));
 }
 
 static struct smb349_platform_data smb349_data __initdata = {
@@ -1909,7 +1908,7 @@ static struct mdm_platform_data bmdm_platform_data = {
 	.sfr_query = 1,
 	.send_shdn = 1,
 	.vddmin_resource = &bmdm_vddmin_rscs,
-	.peripheral_platform_device = &apq8064_device_ehci_host3,
+	.peripheral_platform_device = &apq8064_device_hsusb_usb3_host,
 	.ramdump_timeout_ms = 120000,
 	.mdm2ap_status_gpio_run_cfg = &mdm2ap_status_gpio_run_cfg,
 	.sysmon_subsys_id_valid = 1,
@@ -2523,10 +2522,6 @@ static struct platform_device *pm8917_common_devices[] __initdata = {
 
 static struct platform_device *common_devices[] __initdata = {
 	&msm_device_smd_apq8064,
-	&apq8064_device_otg,
-	&apq8064_device_gadget_peripheral,
-	&apq8064_device_hsusb_host,
-	&android_usb_device,
 	&msm_device_wcnss_wlan,
 	&msm_device_iris_fm,
 	&apq8064_fmem_device,
@@ -2647,10 +2642,6 @@ static struct platform_device *common_devices[] __initdata = {
 
 static struct platform_device *mplatform_common_devices[] __initdata = {
 	&msm_device_smd_apq8064,
-	&apq8064_device_otg,
-	&apq8064_device_gadget_peripheral,
-	&apq8064_device_hsusb_host,
-	&android_usb_device,
 	&msm_device_wcnss_wlan,
 	&msm_device_iris_fm,
 	&apq8064_fmem_device,
@@ -3822,13 +3813,13 @@ static void __init apq8064_common_init(void)
 	apq8064_bt_power_init();
 
 	if (machine_is_apq8064_liquid())
-		msm_otg_pdata.mhl_enable = true;
+		msm_otg_usb1_pdata.mhl_enable = true;
 
 	android_usb_pdata.swfi_latency =
 		msm_rpmrs_levels[0].latency_us;
 
-	apq8064_device_otg.dev.platform_data = &msm_otg_pdata;
-	apq8064_ehci_host_init();
+	apq8064_usb_otg_init();
+
 	apq8064_init_buses();
 	if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2()) {
 		mxt_platform_data.irq_gpio = MXT_ADP_TS_GPIO_IRQ;
@@ -3900,9 +3891,9 @@ static void __init apq8064_common_init(void)
 		apq8064_device_hsic_host.dev.platform_data = &msm_hsic_pdata;
 		device_initialize(&apq8064_device_hsic_host.dev);
 		if (socinfo_get_platform_subtype() == PLATFORM_SUBTYPE_DSDA2) {
-			apq8064_device_ehci_host3.dev.platform_data =
-				&msm_ehci_host_pdata3;
-			device_initialize(&apq8064_device_ehci_host3.dev);
+			apq8064_device_hsusb_usb3_host.dev.platform_data =
+				&msm_otg_usb3_pdata;
+			device_initialize(&apq8064_device_hsusb_usb3_host.dev);
 		}
 	}
 	apq8064_pm8xxx_gpio_mpp_init();
