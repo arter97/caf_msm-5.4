@@ -40,3 +40,6 @@ obj-$(CONFIG_ARCH_QSD8X50) += gpiomux-8x50.o
 
 obj-$(CONFIG_MSM_CACHE_ERP) += cache_erp.o
 obj-$(CONFIG_MEMORY_HOLE_CARVEOUT) +=  msm_mem_hole.o
+
+obj-$(CONFIG_MSM_HSIC_SYSMON) += hsic_sysmon.o
+obj-$(CONFIG_MSM_HSIC_SYSMON_TEST) += hsic_sysmon_test.o
