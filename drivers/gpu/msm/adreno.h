@@ -453,6 +453,9 @@ enum adreno_regs {
 	ADRENO_REG_RBBM_PERFCTR_LOAD_VALUE_HI,
 	ADRENO_REG_RBBM_SECVID_TRUST_CONTROL,
 	ADRENO_REG_RBBM_ALWAYSON_COUNTER_LO,
+	ADRENO_REG_RBBM_ALWAYSON_COUNTER_HI,
+	ADRENO_RBBM_RBBM_CTL,
+	ADRENO_RBBM_PERFCTR_CTL,
 	ADRENO_REG_REGISTER_MAX,
 };
 
@@ -626,11 +629,6 @@ struct adreno_gpudev {
 	int (*perfcounter_init)(struct adreno_device *);
 	void (*start)(struct adreno_device *);
 	void (*busy_cycles)(struct adreno_device *, struct adreno_busy_data *);
-	int (*perfcounter_enable)(struct adreno_device *, unsigned int group,
-		unsigned int counter, unsigned int countable);
-	uint64_t (*perfcounter_read)(struct adreno_device *adreno_dev,
-		unsigned int group, unsigned int counter);
-	uint64_t (*alwayson_counter_read)(struct adreno_device *adreno_dev);
 	bool (*is_sptp_idle)(struct adreno_device *);
 	void (*enable_pc)(struct adreno_device *);
 	void (*enable_ppd)(struct adreno_device *);
@@ -766,6 +764,12 @@ int adreno_perfcounter_init(struct adreno_device *adreno_dev);
 int adreno_perfcounter_get_groupid(struct adreno_device *adreno_dev,
 					const char *name);
 
+uint64_t adreno_perfcounter_read(struct adreno_device *adreno_dev,
+	unsigned int group, unsigned int counter);
+
+int adreno_perfcounter_enable(struct adreno_device *adreno_dev,
+	unsigned int group, unsigned int counter, unsigned int countable);
+
 const char *adreno_perfcounter_get_name(struct adreno_device
 					*adreno_dev, unsigned int groupid);
 
@@ -800,6 +804,7 @@ void adreno_fault_detect_stop(struct adreno_device *adreno_dev);
 
 void adreno_hang_int_callback(struct adreno_device *adreno_dev, int bit);
 void adreno_cp_callback(struct adreno_device *adreno_dev, int bit);
+uint64_t perfcounter_read_alwayson(struct adreno_device *adreno_dev);
 
 unsigned int adreno_iommu_set_pt_ib(struct adreno_ringbuffer *rb,
 					unsigned int *cmds,

@@ -1084,7 +1084,7 @@ static int adreno_init(struct kgsl_device *device)
 	 * those targets that have the always on timer
 	 */
 
-	if (gpudev->alwayson_counter_read) {
+	if (!adreno_is_a3xx(adreno_dev)) {
 		int r = kgsl_allocate_global(&adreno_dev->dev,
 			&adreno_dev->cmdbatch_profile_buffer, PAGE_SIZE, 0, 0);
 
