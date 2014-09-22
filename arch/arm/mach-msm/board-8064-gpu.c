@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012, 2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -171,9 +171,30 @@ static struct msm_bus_paths grp3d_bus_scale_usecases[] = {
 	},
 };
 
+static struct msm_bus_paths grp3d_bus_scale_usecases_soc_3[] = {
+	{
+		ARRAY_SIZE(grp3d_init_vectors),
+		grp3d_init_vectors,
+	},
+	{
+		ARRAY_SIZE(grp3d_nominal_high_vectors),
+		grp3d_nominal_high_vectors,
+	},
+	{
+		ARRAY_SIZE(grp3d_max_vectors),
+		grp3d_max_vectors,
+	},
+};
+
 static struct msm_bus_scale_pdata grp3d_bus_scale_pdata = {
 	grp3d_bus_scale_usecases,
 	ARRAY_SIZE(grp3d_bus_scale_usecases),
+	.name = "grp3d",
+};
+
+static struct msm_bus_scale_pdata grp3d_bus_scale_pdata_soc_3 = {
+	grp3d_bus_scale_usecases_soc_3,
+	ARRAY_SIZE(grp3d_bus_scale_usecases_soc_3),
 	.name = "grp3d",
 };
 #endif
@@ -262,6 +283,39 @@ static struct kgsl_device_platform_data kgsl_3d0_pdata = {
 #endif
 };
 
+static struct kgsl_device_platform_data kgsl_3d0_pdata_soc_3 = {
+	.pwrlevel = {
+		{
+			.gpu_freq = 400000000,
+			.bus_freq = 2,
+			.io_fraction = 0,
+		},
+		{
+			.gpu_freq = 320000000,
+			.bus_freq = 1,
+			.io_fraction = 33,
+		},
+		{
+			.gpu_freq = 27000000,
+			.bus_freq = 0,
+		},
+	},
+	.init_level = 1,
+	.num_levels = 3,
+	.set_grp_async = NULL,
+	.idle_timeout = HZ/10,
+	.nap_allowed = true,
+	.strtstp_sleepwake = true,
+	.clk_map = KGSL_CLK_CORE | KGSL_CLK_IFACE | KGSL_CLK_MEM_IFACE,
+#ifdef CONFIG_MSM_BUS_SCALING
+	.bus_scale_table = &grp3d_bus_scale_pdata_soc_3,
+#endif
+	.iommu_data = kgsl_3d0_iommu_data,
+	.iommu_count = ARRAY_SIZE(kgsl_3d0_iommu_data),
+#ifdef CONFIG_MSM_DCVS
+	.core_info = &grp3d_core_info,
+#endif
+};
 struct platform_device device_kgsl_3d0 = {
 	.name = "kgsl-3d0",
 	.id = 0,
@@ -278,7 +332,11 @@ void __init apq8064_init_gpu(void)
 
 	if (cpu_is_apq8064ab())
 		kgsl_3d0_pdata.pwrlevel[0].gpu_freq = 450000000;
-	if (SOCINFO_VERSION_MAJOR(version) == 2) {
+
+	if (SOCINFO_VERSION_MAJOR(version) == 3) {
+		kgsl_3d0_pdata_soc_3.chipid = ADRENO_CHIPID(3, 2, 0, 2);
+		device_kgsl_3d0.dev.platform_data = &kgsl_3d0_pdata_soc_3;
+	} else if (SOCINFO_VERSION_MAJOR(version) == 2) {
 		kgsl_3d0_pdata.chipid = ADRENO_CHIPID(3, 2, 0, 2);
 	} else {
 		if ((SOCINFO_VERSION_MAJOR(version) == 1) &&
@@ -287,6 +345,5 @@ void __init apq8064_init_gpu(void)
 		else
 			kgsl_3d0_pdata.chipid = ADRENO_CHIPID(3, 2, 0, 0);
 	}
-
 	platform_device_register(&device_kgsl_3d0);
 }
