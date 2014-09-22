@@ -303,6 +303,12 @@ struct msm_otg {
 	struct clk *pclk;
 	struct clk *phy_reset_clk;
 	struct clk *core_clk;
+	/* usb Regulators */
+	struct regulator *hsusb_3p3;
+	struct regulator *hsusb_1p8;
+	struct regulator *hsusb_vddcx;
+	struct regulator *vbus_otg;
+	struct regulator *mhl_usb_hs_switch;
 	void __iomem *regs;
 #define ID		0
 #define B_SESS_VLD	1
@@ -372,6 +378,16 @@ struct msm_otg {
 	u8 active_tmout;
 	struct hrtimer timer;
 	enum usb_vdd_type vdd_type;
+	struct power_supply *psy;
+	struct dentry *msm_otg_dbg_root;
+	struct completion pmic_vbus_init;
+	bool debug_bus_voting_enabled;
+	bool mhl_det_in_progress;
+	bool keep_vbus;
+	bool vbus_is_on;
+	bool debug_aca_enabled;
+	bool aca_id_turned_on;
+
 };
 
 struct msm_hsic_host_platform_data {
