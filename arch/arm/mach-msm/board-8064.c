@@ -3863,8 +3863,8 @@ static void __init apq8064_common_init(void)
 		/* Add GSBI4 I2C Device for non-fusion3 platform */
 		if (socinfo_get_platform_subtype() !=
 					PLATFORM_SUBTYPE_SGLTE2) {
-			if (!machine_is_apq8064_adp_2() ||
-				machine_is_apq8064_adp2_es2()) {
+			if (!(machine_is_apq8064_adp_2() ||
+				machine_is_apq8064_adp2_es2())) {
 				platform_device_register(&apq8064_device_qup_i2c_gsbi4);
 			}
 		}
