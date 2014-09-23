@@ -173,6 +173,15 @@ config QMP_CORE
 	help
 		This option enables Qualcomm Malware Protection Sphinx component
 		to log on-device software API activity.
+config PFT
+	bool "Per-File-Tagger driver"
+	default n
+	help
+		This driver is used for tagging enterprise files.
+		It is part of the Per-File-Encryption (PFE) feature.
+		The driver is tagging files when created by
+		registered application.
+		Tagged files are encrypted using the dm-req-crypt driver.
 
 config QPNP_HAPTIC
 	tristate "Haptic support for QPNP PMIC"
