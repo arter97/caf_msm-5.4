@@ -2580,6 +2580,7 @@
 		clocks = <&clock_rpm clk_qcrypto_ce2_clk>,
 			 <&clock_rpm clk_gcc_ce2_ahb_m_clk>,
 			 <&clock_rpm clk_gcc_ce2_axi_m_clk>;
+		qcom,support-core-clk-only;
 		qcom,use-sw-aes-cbc-ecb-ctr-algo;
 		qcom,use-sw-aes-xts-algo;
 		qcom,use-sw-aes-ccm-algo;
@@ -2606,6 +2607,7 @@
 		clocks = <&clock_rpm clk_qcrypto_ce3_clk>,
 			 <&clock_rpm clk_gcc_ce3_ahb_m_clk>,
 			 <&clock_rpm clk_gcc_ce3_axi_m_clk>;
+		qcom,support-core-clk-only;
 		qcom,use-sw-aes-cbc-ecb-ctr-algo;
 		qcom,use-sw-aes-xts-algo;
 		qcom,use-sw-aes-ccm-algo;
@@ -2632,6 +2634,7 @@
 		clocks = <&clock_rpm clk_qcrypto_ce2_clk>,
 			 <&clock_rpm clk_gcc_ce2_ahb_m_clk>,
 			 <&clock_rpm clk_gcc_ce2_axi_m_clk>;
+		qcom,support-core-clk-only;
 		qcom,use-sw-aes-cbc-ecb-ctr-algo;
 		qcom,use-sw-aes-xts-algo;
 		qcom,use-sw-aes-ccm-algo;
@@ -2658,6 +2661,7 @@
 		clocks = <&clock_rpm clk_qcrypto_ce3_clk>,
 			 <&clock_rpm clk_gcc_ce3_ahb_m_clk>,
 			 <&clock_rpm clk_gcc_ce3_axi_m_clk>;
+		qcom,support-core-clk-only;
 		qcom,use-sw-aes-cbc-ecb-ctr-algo;
 		qcom,use-sw-aes-xts-algo;
 		qcom,use-sw-aes-ccm-algo;
@@ -2684,6 +2688,7 @@
 		clocks = <&clock_rpm clk_qcedev_ce2_clk>,
 			 <&clock_rpm clk_gcc_ce2_ahb_m_clk>,
 			 <&clock_rpm clk_gcc_ce2_axi_m_clk>;
+		qcom,support-core-clk-only;
 		status = "disabled";
 	};
 
