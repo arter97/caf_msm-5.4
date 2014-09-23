@@ -1755,6 +1755,7 @@ int usb_bam_connect_ipa(struct usb_bam_connect_ipa_params *ipa_params)
 			cur_bam == HSIC_BAM) {
 			if (sps_device_reset(ctx.h_bam[cur_bam]))
 				pr_err("%s: BAM reset failed\n", __func__);
+			info[HSIC_BAM].pending_bam_reset = 0;
 		}
 
 		/* On re-connect assume out from lpm for HSIC BAM */
@@ -3044,6 +3045,7 @@ void msm_bam_hsic_reset(void)
 		return;
 	}
 
+	info[HSIC_BAM].pending_bam_reset = 0;
 	pdata = ctx.usb_bam_pdev->dev.platform_data;
 
 	WARN_ON(ctx.pipes_enabled_per_bam[HSIC_BAM] != 0);
