@@ -159,5 +159,25 @@
 				};
 			};
 		};
+
+		spi_0 {
+			spi_0_active: spi_0_active {
+				spi_0 {
+					pins = "gpio0", "gpio1", "gpio3";
+					function = "blsp_spi1";
+					drive-strength = <6>;
+					bias-disable;
+				};
+			};
+
+			spi_0_sleep: spi_0_sleep {
+				spi_0 {
+					pins = "gpio0", "gpio1", "gpio3";
+					function = "blsp_spi1";
+					drive-strength = <6>;
+					bias-disable;
+				};
+			};
+		};
 	};
 };
