@@ -38,6 +38,9 @@
 #define I2C_SW_DELAY		10000
 #define GPIO_HW_DELAY_LOW	100000
 #define GPIO_HW_DELAY_HI	10000
+#define SDP_MIN_SLEEP		5000
+#define SDP_MAX_SLEEP		6000
+#define SDP_NUM_TRIES		30
 
 
 struct adv7481_state {
@@ -224,36 +227,40 @@ static int adv7481_s_ctrl(struct v4l2_ctrl *ctrl)
 	struct v4l2_subdev *sd = to_sd(ctrl);
 	struct adv7481_state *state = to_state(sd);
 	int temp = 0x0;
+	int ret = 0;
 
 	switch (ctrl->id) {
 	case V4L2_CID_BRIGHTNESS:
 		temp = adv7481_rd_byte(state->client, CP_REG_VID_ADJ);
 		temp |= CP_CTR_VID_ADJ_EN;
-		adv7481_wr_byte(state->client, CP_REG_VID_ADJ, temp);
-		adv7481_wr_byte(state->client, CP_REG_BRIGHTNESS, ctrl->val);
+		ret = adv7481_wr_byte(state->client, CP_REG_VID_ADJ, temp);
+		ret |= adv7481_wr_byte(state->client,
+				CP_REG_BRIGHTNESS, ctrl->val);
 		break;
 	case V4L2_CID_CONTRAST:
 		temp = adv7481_rd_byte(state->client, CP_REG_VID_ADJ);
 		temp |= CP_CTR_VID_ADJ_EN;
-		adv7481_wr_byte(state->client, CP_REG_VID_ADJ, temp);
-		adv7481_wr_byte(state->client, CP_REG_CONTRAST, ctrl->val);
+		ret = adv7481_wr_byte(state->client, CP_REG_VID_ADJ, temp);
+		ret |= adv7481_wr_byte(state->client,
+				CP_REG_CONTRAST, ctrl->val);
 		break;
 	case V4L2_CID_SATURATION:
 		temp = adv7481_rd_byte(state->client, CP_REG_VID_ADJ);
 		temp |= CP_CTR_VID_ADJ_EN;
-		adv7481_wr_byte(state->client, CP_REG_VID_ADJ, temp);
-		adv7481_wr_byte(state->client, CP_REG_SATURATION, ctrl->val);
+		ret = adv7481_wr_byte(state->client, CP_REG_VID_ADJ, temp);
+		ret |= adv7481_wr_byte(state->client,
+				CP_REG_SATURATION, ctrl->val);
 		break;
 	case V4L2_CID_HUE:
 		temp = adv7481_rd_byte(state->client, CP_REG_VID_ADJ);
 		temp |= CP_CTR_VID_ADJ_EN;
-		adv7481_wr_byte(state->client, CP_REG_VID_ADJ, temp);
-		adv7481_wr_byte(state->client, CP_REG_HUE, ctrl->val);
+		ret = adv7481_wr_byte(state->client, CP_REG_VID_ADJ, temp);
+		ret |= adv7481_wr_byte(state->client, CP_REG_HUE, ctrl->val);
 		break;
 	default:
-		return -EINVAL;
+		break;
 	}
-	return -EINVAL;
+	return ret;
 }
 
 static int adv7481_powerup(struct adv7481_state *state, bool powerup)
@@ -285,16 +292,33 @@ static int adv7481_s_power(struct v4l2_subdev *sd, int on)
 
 static int adv7481_get_sd_timings(struct adv7481_state *state, int *sd_standard)
 {
-	int ret;
-	int auto_det_res;
-	auto_det_res = adv7481_rd_byte(state->i2c_sdp, SDP_REG_STATUS1);
-	if (auto_det_res  & 0x01) {
+	int ret = 0;
+	int sdp_stat, sdp_stat2;
+	int timeout = 0;
+
+	if (sd_standard == NULL)
+		return -EINVAL;
+
+	do {
+		sdp_stat = adv7481_rd_byte(state->i2c_sdp, SDP_REG_STATUS1);
+		usleep_range(SDP_MIN_SLEEP, SDP_MAX_SLEEP);
+		timeout++;
+		sdp_stat2 = adv7481_rd_byte(state->i2c_sdp, SDP_REG_STATUS1);
+	} while ((sdp_stat != sdp_stat2) && (timeout < SDP_NUM_TRIES));
+
+	if (sdp_stat != sdp_stat2) {
+		pr_err("%s(%d), adv7481 SDP status unstable: 1 ",
+							__func__, __LINE__);
+		return -ETIMEDOUT;
+	}
+
+	if (!(sdp_stat & 0x01)) {
 		pr_err("%s(%d), adv7481 SD Input NOT Locked: 1 ",
 							__func__, __LINE__);
 		return -EBUSY;
 	}
 
-	switch ((auto_det_res &= SDP_CTRL_ADRESLT) >> 4) {
+	switch ((sdp_stat &= SDP_CTRL_ADRESLT) >> 4) {
 	case AD_NTSM_M_J:
 		*sd_standard = V4L2_STD_NTSC;
 		break;
@@ -320,7 +344,7 @@ static int adv7481_get_sd_timings(struct adv7481_state *state, int *sd_standard)
 		*sd_standard = V4L2_STD_SECAM;
 		break;
 	default:
-		return V4L2_STD_UNKNOWN;
+		*sd_standard = V4L2_STD_UNKNOWN;
 	}
 	return ret;
 }
