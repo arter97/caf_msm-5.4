@@ -482,4 +482,6 @@ config MSM_SHARED_HEAP_ACCESS
 	 Enable support to provide access to clients to certain HLOS regions
 	 which are protected by the secure environment.
 
+source "drivers/soc/qcom/memshare/Kconfig"
+
 endif # ARCH_MSM
