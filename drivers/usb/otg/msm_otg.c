@@ -226,9 +226,6 @@ set_msm_otg_keep_vbus(struct device *dev, struct device_attribute *attr,
 	else
 		motg->keep_vbus = false;
 
-	if (motg->keep_vbus)
-		motg->phy.flags |= ENABLE_DP_MANUAL_PULLUP;
-
 	return count;
 }
 
@@ -3060,7 +3057,8 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 		 * (VBUS on/off).
 		 * But, handle BSV when charger is removed from ACA in ID_A
 		 */
-		if (motg->keep_vbus || ((otg->phy->state >= OTG_STATE_A_IDLE) &&
+		if ((otg->phy->flags & ENABLE_DP_MANUAL_PULLUP) ||
+			((otg->phy->state >= OTG_STATE_A_IDLE) &&
 			!test_bit(ID_A, &motg->inputs)))
 			return IRQ_HANDLED;
 		if (otgsc & OTGSC_BSV) {
