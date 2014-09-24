@@ -269,6 +269,14 @@ config MSM_L2_SPM
 	  Enabling this driver allows configuring L2 SPM for low power modes
 	  on supported chipsets
 
+config MSM_DDR_HEALTH
+	bool "MSM DDR Health Driver"
+	default n
+	help
+	  This option enables a driver which allocates DDR buffer of requested
+	  size and sends it's locatoin to RPM sub system. RPM subsystem can
+	  make use of this buffer to monitor DDR health.
+
 config MSM_SYSMON_COMM
 	bool "MSM System Monitor communication support"
 	depends on MSM_SMD && MSM_SUBSYSTEM_RESTART
