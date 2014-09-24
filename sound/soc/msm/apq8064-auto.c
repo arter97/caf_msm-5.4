@@ -1293,7 +1293,7 @@ static struct platform_device *msm_snd_device;
 static int __init msm_audio_init(void)
 {
 	int ret;
-	if (!machine_is_apq8064_adp_2()) {
+	if (!(machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2())) {
 		pr_err("%s: Not APQ8064-auto machine type\n", __func__);
 		ret = -ENODEV;
 		goto err;
