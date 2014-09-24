@@ -170,6 +170,3 @@ static inline void integrity_audit_msg(int audit_msgno, struct inode *inode,
 {
 }
 #endif
-
-/* set during initialization */
-extern int iint_initialized;
