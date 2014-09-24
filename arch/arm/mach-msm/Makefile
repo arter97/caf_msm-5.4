@@ -39,3 +39,4 @@ obj-$(CONFIG_ARCH_APQ8084) += clock-8084.o clock-mdss-8974.o
 obj-$(CONFIG_ARCH_QSD8X50) += gpiomux-8x50.o
 
 obj-$(CONFIG_MSM_CACHE_ERP) += cache_erp.o
+obj-$(CONFIG_MEMORY_HOLE_CARVEOUT) +=  msm_mem_hole.o
