@@ -1467,7 +1467,6 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	} else
 		motg->pclk_src = ERR_PTR(-ENOENT);
 
-
 	motg->pclk = clk_get(&pdev->dev, "usb_hs_pclk");
 	if (IS_ERR(motg->pclk)) {
 		dev_err(&pdev->dev, "failed to get usb_hs_pclk\n");
@@ -1654,8 +1653,6 @@ static int msm_otg_remove(struct platform_device *pdev)
 	clk_put(motg->phy_reset_clk);
 	clk_put(motg->pclk);
 	clk_put(motg->clk);
-	if (motg->core_clk)
-		clk_put(motg->core_clk);
 
 	kfree(motg->phy.otg);
 	kfree(motg);

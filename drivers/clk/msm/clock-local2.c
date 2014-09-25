@@ -26,6 +26,7 @@
 #include <linux/clk/msm-clk.h>
 #include <linux/clk/msm-clock-generic.h>
 #include <soc/qcom/clock-local2.h>
+#include <soc/qcom/msm-clock-controller.h>
 
 /*
  * When enabling/disabling a clock, check the halt bit up to this number
@@ -1507,3 +1508,428 @@ struct mux_div_ops rcg_mux_div_ops = {
 	.is_enabled = rcg_is_enabled,
 	.list_registers = rcg_list_registers,
 };
+
+static void *cbc_dt_parser(struct device *dev, struct device_node *np)
+{
+	struct msmclk_data *drv;
+	struct branch_clk *branch_clk;
+	u32 rc;
+
+	branch_clk = devm_kzalloc(dev, sizeof(*branch_clk), GFP_KERNEL);
+	if (!branch_clk) {
+		dt_err(np, "memory alloc failure\n");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	drv = msmclk_parse_phandle(dev, np->parent->phandle);
+	if (IS_ERR_OR_NULL(drv))
+		return ERR_CAST(drv);
+	branch_clk->base = &drv->base;
+
+	rc = of_property_read_u32(np, "qcom,base-offset",
+						&branch_clk->cbcr_reg);
+	if (rc) {
+		dt_err(np, "missing/incorrect qcom,base-offset dt property\n");
+		return ERR_PTR(rc);
+	}
+
+	/* Optional property */
+	of_property_read_u32(np, "qcom,bcr-offset", &branch_clk->bcr_reg);
+
+	branch_clk->has_sibling = of_property_read_bool(np,
+							"qcom,has-sibling");
+
+	branch_clk->c.ops = &clk_ops_branch;
+
+	return msmclk_generic_clk_init(dev, np, &branch_clk->c);
+}
+MSMCLK_PARSER(cbc_dt_parser, "qcom,cbc", 0);
+
+static void *local_vote_clk_dt_parser(struct device *dev,
+						struct device_node *np)
+{
+	struct local_vote_clk *vote_clk;
+	struct msmclk_data *drv;
+	int rc, val;
+
+	vote_clk = devm_kzalloc(dev, sizeof(*vote_clk), GFP_KERNEL);
+	if (!vote_clk) {
+		dt_err(np, "failed to alloc memory\n");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	drv = msmclk_parse_phandle(dev, np->parent->phandle);
+	if (IS_ERR_OR_NULL(drv))
+		return ERR_CAST(drv);
+	vote_clk->base = &drv->base;
+
+	rc = of_property_read_u32(np, "qcom,base-offset",
+						&vote_clk->cbcr_reg);
+	if (rc) {
+		dt_err(np, "missing/incorrect qcom,base-offset dt property\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	rc = of_property_read_u32(np, "qcom,en-offset", &vote_clk->vote_reg);
+	if (rc) {
+		dt_err(np, "missing/incorrect qcom,en-offset dt property\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	rc = of_property_read_u32(np, "qcom,en-bit", &val);
+	if (rc) {
+		dt_err(np, "missing/incorrect qcom,en-bit dt property\n");
+		return ERR_PTR(-EINVAL);
+	}
+	vote_clk->en_mask = BIT(val);
+
+	vote_clk->c.ops = &clk_ops_vote;
+
+	/* Optional property */
+	of_property_read_u32(np, "qcom,bcr-offset", &vote_clk->bcr_reg);
+
+	return msmclk_generic_clk_init(dev, np, &vote_clk->c);
+}
+MSMCLK_PARSER(local_vote_clk_dt_parser, "qcom,local-vote-clk", 0);
+
+static void *gate_clk_dt_parser(struct device *dev, struct device_node *np)
+{
+	struct gate_clk *gate_clk;
+	struct msmclk_data *drv;
+	u32 en_bit, rc;
+
+	gate_clk = devm_kzalloc(dev, sizeof(*gate_clk), GFP_KERNEL);
+	if (!gate_clk) {
+		dt_err(np, "memory alloc failure\n");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	drv = msmclk_parse_phandle(dev, np->parent->phandle);
+	if (IS_ERR_OR_NULL(drv))
+		return ERR_CAST(drv);
+	gate_clk->base = &drv->base;
+
+	rc = of_property_read_u32(np, "qcom,en-offset", &gate_clk->en_reg);
+	if (rc) {
+		dt_err(np, "missing qcom,en-offset dt property\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	rc = of_property_read_u32(np, "qcom,en-bit", &en_bit);
+	if (rc) {
+		dt_err(np, "missing qcom,en-bit dt property\n");
+		return ERR_PTR(-EINVAL);
+	}
+	gate_clk->en_mask = BIT(en_bit);
+
+	/* Optional Property */
+	rc = of_property_read_u32(np, "qcom,delay", &gate_clk->delay_us);
+	if (rc)
+		gate_clk->delay_us = 0;
+
+	gate_clk->c.ops = &clk_ops_gate;
+	return msmclk_generic_clk_init(dev, np, &gate_clk->c);
+}
+MSMCLK_PARSER(gate_clk_dt_parser, "qcom,gate-clk", 0);
+
+
+static inline u32 rcg_calc_m(u32 m, u32 n)
+{
+	return m;
+}
+
+static inline u32 rcg_calc_n(u32 m, u32 n)
+{
+	n = n > 1 ? n : 0;
+	return ~((n)-(m)) * !!(n);
+}
+
+static inline u32 rcg_calc_duty_cycle(u32 m, u32 n)
+{
+	return ~n;
+}
+
+static inline u32 rcg_calc_div_src(u32 div_int, u32 div_frac, u32 src_sel)
+{
+	int div = 2 * div_int + (div_frac ? 1 : 0) - 1;
+	/* set bypass mode instead of a divider of 1 */
+	div = (div != 1) ? div : 0;
+	return BVAL(4, 0, max(div, 0))
+			| BVAL(10, 8, src_sel);
+}
+
+struct clk_src *msmclk_parse_clk_src(struct device *dev,
+				struct device_node *np, int *array_size)
+{
+	struct clk_src *clks;
+	const void *prop;
+	int num_parents, len, i, prop_len, rc;
+	char *name = "qcom,parents";
+
+	if (!array_size) {
+		dt_err(np, "array_size must be a valid pointer\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	prop = of_get_property(np, name, &prop_len);
+	if (!prop) {
+		dt_prop_err(np, name, "missing dt property\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	len = sizeof(phandle) + sizeof(u32);
+	if (prop_len % len) {
+		dt_prop_err(np, name, "invalid property length\n");
+		return ERR_PTR(-EINVAL);
+	}
+	num_parents = prop_len / len;
+
+	clks = devm_kzalloc(dev, sizeof(*clks) * num_parents, GFP_KERNEL);
+	if (!clks) {
+		dt_err(np, "memory alloc failure\n");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	/* Assume that u32 and phandle have the same size */
+	for (i = 0; i < num_parents; i++) {
+		phandle p;
+		struct clk_src *a = &clks[i];
+
+		rc = of_property_read_u32_index(np, name, 2 * i, &a->sel);
+		rc |= of_property_read_phandle_index(np, name, 2 * i + 1, &p);
+
+		if (rc) {
+			dt_prop_err(np, name,
+				"unable to read parent clock or mux index\n");
+			return ERR_PTR(-EINVAL);
+		}
+
+		a->src = msmclk_parse_phandle(dev, p);
+		if (IS_ERR(a->src)) {
+			dt_prop_err(np, name, "hashtable lookup failed\n");
+			return ERR_CAST(a->src);
+		}
+	}
+
+	*array_size = num_parents;
+
+	return clks;
+}
+
+static int rcg_parse_freq_tbl(struct device *dev,
+			struct device_node *np, struct rcg_clk *rcg)
+{
+	const void *prop;
+	u32 prop_len, num_rows, i, j = 0;
+	struct clk_freq_tbl *tbl;
+	int rc;
+	char *name = "qcom,freq-tbl";
+
+	prop = of_get_property(np, name, &prop_len);
+	if (!prop) {
+		dt_prop_err(np, name, "missing dt property\n");
+		return -EINVAL;
+	}
+
+	prop_len /= sizeof(u32);
+	if (prop_len % 6) {
+		dt_prop_err(np, name, "bad length\n");
+		return -EINVAL;
+	}
+
+	num_rows = prop_len / 6;
+	/* Array is null terminated. */
+	rcg->freq_tbl = devm_kzalloc(dev,
+				sizeof(*rcg->freq_tbl) * (num_rows + 1),
+				GFP_KERNEL);
+
+	if (!rcg->freq_tbl) {
+		dt_err(np, "memory alloc failure\n");
+		return -ENOMEM;
+	}
+
+	tbl = rcg->freq_tbl;
+	for (i = 0; i < num_rows; i++, tbl++) {
+		phandle p;
+		u32 div_int, div_frac, m, n, src_sel, freq_hz;
+
+		rc = of_property_read_u32_index(np, name, j++, &freq_hz);
+		rc |= of_property_read_u32_index(np, name, j++, &div_int);
+		rc |= of_property_read_u32_index(np, name, j++, &div_frac);
+		rc |= of_property_read_u32_index(np, name, j++, &m);
+		rc |= of_property_read_u32_index(np, name, j++, &n);
+		rc |= of_property_read_u32_index(np, name, j++, &p);
+
+		if (rc) {
+			dt_prop_err(np, name, "unable to read u32\n");
+			return -EINVAL;
+		}
+
+		tbl->freq_hz = (unsigned long)freq_hz;
+		tbl->src_clk = msmclk_parse_phandle(dev, p);
+		if (IS_ERR_OR_NULL(tbl->src_clk)) {
+			dt_prop_err(np, name, "hashtable lookup failure\n");
+			return PTR_ERR(tbl->src_clk);
+		}
+
+		tbl->m_val = rcg_calc_m(m, n);
+		tbl->n_val = rcg_calc_n(m, n);
+		tbl->d_val = rcg_calc_duty_cycle(m, n);
+
+		src_sel = parent_to_src_sel(rcg->c.parents,
+					rcg->c.num_parents, tbl->src_clk);
+		tbl->div_src_val = rcg_calc_div_src(div_int, div_frac,
+								src_sel);
+	}
+	/* End table with special value */
+	tbl->freq_hz = FREQ_END;
+	return 0;
+}
+
+static void *rcg_clk_dt_parser(struct device *dev, struct device_node *np)
+{
+	struct rcg_clk *rcg;
+	struct msmclk_data *drv;
+	int rc;
+
+	rcg = devm_kzalloc(dev, sizeof(*rcg), GFP_KERNEL);
+	if (!rcg) {
+		dt_err(np, "memory alloc failure\n");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	drv = msmclk_parse_phandle(dev, np->parent->phandle);
+	if (IS_ERR_OR_NULL(drv))
+		return drv;
+	rcg->base = &drv->base;
+
+	rcg->c.parents = msmclk_parse_clk_src(dev, np, &rcg->c.num_parents);
+	if (IS_ERR(rcg->c.parents)) {
+		dt_err(np, "unable to read parents\n");
+		return ERR_CAST(rcg->c.parents);
+	}
+
+	rc = of_property_read_u32(np, "qcom,base-offset", &rcg->cmd_rcgr_reg);
+	if (rc) {
+		dt_err(np, "missing qcom,base-offset dt property\n");
+		return ERR_PTR(rc);
+	}
+
+	rc = rcg_parse_freq_tbl(dev, np, rcg);
+	if (rc) {
+		dt_err(np, "unable to read freq_tbl\n");
+		return ERR_PTR(rc);
+	}
+	rcg->current_freq = &rcg_dummy_freq;
+
+	if (of_device_is_compatible(np, "qcom,rcg-hid")) {
+		rcg->c.ops = &clk_ops_rcg;
+		rcg->set_rate = set_rate_hid;
+	} else if (of_device_is_compatible(np, "qcom,rcg-mn")) {
+		rcg->c.ops = &clk_ops_rcg_mnd;
+		rcg->set_rate = set_rate_mnd;
+	} else {
+		dt_err(np, "unexpected compatible string\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	return msmclk_generic_clk_init(dev, np, &rcg->c);
+}
+MSMCLK_PARSER(rcg_clk_dt_parser, "qcom,rcg-hid", 0);
+MSMCLK_PARSER(rcg_clk_dt_parser, "qcom,rcg-mn", 1);
+
+static int parse_rec_parents(struct device *dev,
+			struct device_node *np, struct mux_clk *mux)
+{
+	int i, rc;
+	char *name = "qcom,recursive-parents";
+	phandle p;
+
+	mux->num_rec_parents = of_property_count_phandles(np, name);
+	if (mux->num_rec_parents <= 0)
+		return 0;
+
+	mux->rec_parents = devm_kzalloc(dev,
+			sizeof(*mux->rec_parents) * mux->num_rec_parents,
+			GFP_KERNEL);
+
+	if (!mux->rec_parents) {
+		dt_err(np, "memory alloc failure\n");
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < mux->num_rec_parents; i++) {
+		rc = of_property_read_phandle_index(np, name, i, &p);
+		if (rc) {
+			dt_prop_err(np, name, "unable to read u32\n");
+			return rc;
+		}
+
+		mux->rec_parents[i] = msmclk_parse_phandle(dev, p);
+		if (IS_ERR(mux->rec_parents[i])) {
+			dt_prop_err(np, name, "hashtable lookup failure\n");
+			return PTR_ERR(mux->rec_parents[i]);
+		}
+	}
+
+	return 0;
+}
+
+static void *mux_reg_clk_dt_parser(struct device *dev, struct device_node *np)
+{
+	struct mux_clk *mux;
+	struct msmclk_data *drv;
+	int rc;
+
+	mux = devm_kzalloc(dev, sizeof(*mux), GFP_KERNEL);
+	if (!mux) {
+		dt_err(np, "memory alloc failure\n");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	mux->parents = msmclk_parse_clk_src(dev, np, &mux->num_parents);
+	if (IS_ERR(mux->parents))
+		return mux->parents;
+
+	mux->c.parents = mux->parents;
+	mux->c.num_parents = mux->num_parents;
+
+	drv = msmclk_parse_phandle(dev, np->parent->phandle);
+	if (IS_ERR_OR_NULL(drv))
+		return drv;
+	mux->base = &drv->base;
+
+	rc = parse_rec_parents(dev, np, mux);
+	if (rc) {
+		dt_err(np, "Incorrect qcom,recursive-parents dt property\n");
+		return ERR_PTR(rc);
+	}
+
+	rc = of_property_read_u32(np, "qcom,offset", &mux->offset);
+	if (rc) {
+		dt_err(np, "missing qcom,offset dt property\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	rc = of_property_read_u32(np, "qcom,mask", &mux->mask);
+	if (rc) {
+		dt_err(np, "missing qcom,mask dt property\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	rc = of_property_read_u32(np, "qcom,shift", &mux->shift);
+	if (rc) {
+		dt_err(np, "missing qcom,shift dt property\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	mux->c.ops = &clk_ops_gen_mux;
+	mux->ops = &mux_reg_ops;
+
+	/* Optional Properties */
+	of_property_read_u32(np, "qcom,en-offset", &mux->en_offset);
+	of_property_read_u32(np, "qcom,en-mask", &mux->en_mask);
+
+	return msmclk_generic_clk_init(dev, np, &mux->c);
+};
+MSMCLK_PARSER(mux_reg_clk_dt_parser, "qcom,mux-reg", 0);

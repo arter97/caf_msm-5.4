@@ -15,7 +15,6 @@
 
 #include <linux/clk.h>
 #include <linux/debugfs.h>
-#include <linux/dma-buf.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
@@ -63,7 +62,7 @@
 #define MDP_CORE_HW_VERSION	0x03040310
 struct mdp3_hw_resource *mdp3_res;
 
-#define MDP_BUS_VECTOR_ENTRY_DMA(ab_val, ib_val)		\
+#define MDP_BUS_VECTOR_ENTRY(ab_val, ib_val)		\
 	{						\
 		.src = MSM_BUS_MASTER_MDP_PORT0,	\
 		.dst = MSM_BUS_SLAVE_EBI_CH0,		\
@@ -71,68 +70,38 @@ struct mdp3_hw_resource *mdp3_res;
 		.ib = (ib_val),				\
 	}
 
-static struct msm_bus_vectors mdp_bus_dma_vectors[] = {
-	MDP_BUS_VECTOR_ENTRY_DMA(0, 0),
-	MDP_BUS_VECTOR_ENTRY_DMA(SZ_128M, SZ_256M),
-	MDP_BUS_VECTOR_ENTRY_DMA(SZ_256M, SZ_512M),
+static struct msm_bus_vectors mdp_bus_vectors[] = {
+	MDP_BUS_VECTOR_ENTRY(0, 0),
+	MDP_BUS_VECTOR_ENTRY(SZ_128M, SZ_256M),
+	MDP_BUS_VECTOR_ENTRY(SZ_256M, SZ_512M),
 };
 static struct msm_bus_paths
-	mdp_bus_dma_usecases[ARRAY_SIZE(mdp_bus_dma_vectors)];
-static struct msm_bus_scale_pdata mdp_bus_dma_scale_table = {
-	.usecase = mdp_bus_dma_usecases,
-	.num_usecases = ARRAY_SIZE(mdp_bus_dma_usecases),
+	mdp_bus_usecases[ARRAY_SIZE(mdp_bus_vectors)];
+static struct msm_bus_scale_pdata mdp_bus_scale_table = {
+	.usecase = mdp_bus_usecases,
+	.num_usecases = ARRAY_SIZE(mdp_bus_usecases),
 	.name = "mdp3",
 };
 
-#define MDP_BUS_VECTOR_ENTRY_PPP(ab_val, ib_val)		\
-	{						\
-		.src = MSM_BUS_MASTER_MDPE,	\
-		.dst = MSM_BUS_SLAVE_EBI_CH0,		\
-		.ab = (ab_val),				\
-		.ib = (ib_val),				\
-	}
-
-static struct msm_bus_vectors mdp_bus_ppp_vectors[] = {
-	MDP_BUS_VECTOR_ENTRY_PPP(0, 0),
-	MDP_BUS_VECTOR_ENTRY_PPP(SZ_128M, SZ_256M),
-	MDP_BUS_VECTOR_ENTRY_PPP(SZ_256M, SZ_512M),
+struct mdp3_bus_handle_map mdp3_bus_handle[MDP3_BUS_HANDLE_MAX] = {
+	[MDP3_BUS_HANDLE] = {
+		.bus_vector = mdp_bus_vectors,
+		.usecases = mdp_bus_usecases,
+		.scale_pdata = &mdp_bus_scale_table,
+		.current_bus_idx = 0,
+		.handle = 0,
+	},
 };
-
-static struct msm_bus_paths
-	mdp_bus_ppp_usecases[ARRAY_SIZE(mdp_bus_ppp_vectors)];
 
 static struct mdss_panel_intf pan_types[] = {
 	{"dsi", MDSS_PANEL_INTF_DSI},
 };
 static char mdss_mdp3_panel[MDSS_MAX_PANEL_LEN];
 
-static struct msm_bus_scale_pdata mdp_bus_ppp_scale_table = {
-	.usecase = mdp_bus_ppp_usecases,
-	.num_usecases = ARRAY_SIZE(mdp_bus_ppp_usecases),
-	.name = "mdp3_ppp",
-};
-
-struct mdp3_bus_handle_map mdp3_bus_handle[MDP3_BUS_HANDLE_MAX] = {
-	[MDP3_BUS_HANDLE_DMA] = {
-		.bus_vector = mdp_bus_dma_vectors,
-		.usecases = mdp_bus_dma_usecases,
-		.scale_pdata = &mdp_bus_dma_scale_table,
-		.current_bus_idx = 0,
-		.handle = 0,
-	},
-	[MDP3_BUS_HANDLE_PPP] = {
-		.bus_vector = mdp_bus_ppp_vectors,
-		.usecases = mdp_bus_ppp_usecases,
-		.scale_pdata = &mdp_bus_ppp_scale_table,
-		.current_bus_idx = 0,
-		.handle = 0,
-	},
-};
-
 struct mdp3_iommu_domain_map mdp3_iommu_domains[MDP3_IOMMU_DOMAIN_MAX] = {
-	[MDP3_PPP_IOMMU_DOMAIN] = {
-		.domain_type = MDP3_PPP_IOMMU_DOMAIN,
-		.client_name = "mdp_ppp",
+	[MDP3_IOMMU_DOMAIN_UNSECURE] = {
+		.domain_type = MDP3_IOMMU_DOMAIN_UNSECURE,
+		.client_name = "mdp_ns",
 		.partitions = {
 			{
 				.start = SZ_128K,
@@ -141,13 +110,13 @@ struct mdp3_iommu_domain_map mdp3_iommu_domains[MDP3_IOMMU_DOMAIN_MAX] = {
 		},
 		.npartitions = 1,
 	},
-	[MDP3_DMA_IOMMU_DOMAIN] = {
-		.domain_type = MDP3_DMA_IOMMU_DOMAIN,
-		.client_name = "mdp_dma",
+	[MDP3_IOMMU_DOMAIN_SECURE] = {
+		.domain_type = MDP3_IOMMU_DOMAIN_SECURE,
+		.client_name = "mdp_secure",
 		.partitions = {
 			{
-				.start = SZ_128K,
-				.size = SZ_1G - SZ_128K,
+				.start = SZ_1G,
+				.size = SZ_1G,
 			},
 		},
 		.npartitions = 1,
@@ -155,30 +124,16 @@ struct mdp3_iommu_domain_map mdp3_iommu_domains[MDP3_IOMMU_DOMAIN_MAX] = {
 };
 
 struct mdp3_iommu_ctx_map mdp3_iommu_contexts[MDP3_IOMMU_CTX_MAX] = {
-	[MDP3_IOMMU_CTX_PPP_0] = {
-		.ctx_type = MDP3_IOMMU_CTX_PPP_0,
-		.domain = &mdp3_iommu_domains[MDP3_PPP_IOMMU_DOMAIN],
-		.ctx_name = "mdpe_0",
+	[MDP3_IOMMU_CTX_MDP_0] = {
+		.ctx_type = MDP3_IOMMU_CTX_MDP_0,
+		.domain = &mdp3_iommu_domains[MDP3_IOMMU_DOMAIN_UNSECURE],
+		.ctx_name = "mdp_0",
 		.attached = 0,
 	},
-	[MDP3_IOMMU_CTX_PPP_1] = {
-		.ctx_type = MDP3_IOMMU_CTX_PPP_1,
-		.domain = &mdp3_iommu_domains[MDP3_PPP_IOMMU_DOMAIN],
-		.ctx_name = "mdpe_1",
-		.attached = 0,
-	},
-
-	[MDP3_IOMMU_CTX_DMA_0] = {
-		.ctx_type = MDP3_IOMMU_CTX_DMA_0,
-		.domain = &mdp3_iommu_domains[MDP3_DMA_IOMMU_DOMAIN],
-		.ctx_name = "mdps_0",
-		.attached = 0,
-	},
-
-	[MDP3_IOMMU_CTX_DMA_1] = {
-		.ctx_type = MDP3_IOMMU_CTX_DMA_1,
-		.domain = &mdp3_iommu_domains[MDP3_DMA_IOMMU_DOMAIN],
-		.ctx_name = "mdps_1",
+	[MDP3_IOMMU_CTX_MDP_1] = {
+		.ctx_type = MDP3_IOMMU_CTX_MDP_1,
+		.domain = &mdp3_iommu_domains[MDP3_IOMMU_DOMAIN_SECURE],
+		.ctx_name = "mdp_1",
 		.attached = 0,
 	},
 };
@@ -275,13 +230,15 @@ int mdp3_set_intr_callback(u32 type, struct mdp3_intr_cb *cb)
 void mdp3_irq_register(void)
 {
 	unsigned long flag;
+	struct mdss_hw *mdp3_hw;
 
 	pr_debug("mdp3_irq_register\n");
+	mdp3_hw = &mdp3_res->mdp3_hw;
 	spin_lock_irqsave(&mdp3_res->irq_lock, flag);
 	mdp3_res->irq_ref_cnt++;
 	if (mdp3_res->irq_ref_cnt == 1) {
 		MDP3_REG_WRITE(MDP3_REG_INTR_ENABLE, mdp3_res->irq_mask);
-		enable_irq(mdp3_res->irq);
+		mdp3_res->mdss_util->enable_irq(&mdp3_res->mdp3_hw);
 	}
 	spin_unlock_irqrestore(&mdp3_res->irq_lock, flag);
 }
@@ -290,8 +247,10 @@ void mdp3_irq_deregister(void)
 {
 	unsigned long flag;
 	bool irq_enabled = true;
+	struct mdss_hw *mdp3_hw;
 
 	pr_debug("mdp3_irq_deregister\n");
+	mdp3_hw = &mdp3_res->mdp3_hw;
 	spin_lock_irqsave(&mdp3_res->irq_lock, flag);
 	memset(mdp3_res->irq_ref_count, 0, sizeof(u32) * MDP3_MAX_INTR);
 	mdp3_res->irq_mask = 0;
@@ -303,7 +262,7 @@ void mdp3_irq_deregister(void)
 		mdp3_res->irq_ref_cnt = 0;
 	}
 	if (mdp3_res->irq_ref_cnt == 0 && irq_enabled)
-		disable_irq_nosync(mdp3_res->irq);
+		mdp3_res->mdss_util->disable_irq_nosync(&mdp3_res->mdp3_hw);
 	spin_unlock_irqrestore(&mdp3_res->irq_lock, flag);
 }
 
@@ -311,8 +270,10 @@ void mdp3_irq_suspend(void)
 {
 	unsigned long flag;
 	bool irq_enabled = true;
+	struct mdss_hw *mdp3_hw;
 
 	pr_debug("%s\n", __func__);
+	mdp3_hw = &mdp3_res->mdp3_hw;
 	spin_lock_irqsave(&mdp3_res->irq_lock, flag);
 	mdp3_res->irq_ref_cnt--;
 	if (mdp3_res->irq_ref_cnt < 0) {
@@ -321,14 +282,14 @@ void mdp3_irq_suspend(void)
 	}
 	if (mdp3_res->irq_ref_cnt == 0 && irq_enabled) {
 		MDP3_REG_WRITE(MDP3_REG_INTR_ENABLE, 0);
-		disable_irq_nosync(mdp3_res->irq);
+		mdp3_res->mdss_util->disable_irq_nosync(&mdp3_res->mdp3_hw);
 	}
 	spin_unlock_irqrestore(&mdp3_res->irq_lock, flag);
 }
 
 static int mdp3_bus_scale_register(void)
 {
-	int i;
+	int i, j;
 
 	if (!mdp3_res->bus_handle) {
 		pr_err("No bus handle\n");
@@ -358,6 +319,11 @@ static int mdp3_bus_scale_register(void)
 			pr_debug("register bus_hdl=%x\n",
 				bus_handle->handle);
 		}
+
+		for (j = 0; j < MDP3_CLIENT_MAX; j++) {
+			bus_handle->ab[j] = 0;
+			bus_handle->ib[j] = 0;
+		}
 	}
 	return 0;
 }
@@ -386,16 +352,10 @@ int mdp3_bus_scale_set_quota(int client, u64 ab_quota, u64 ib_quota)
 	int cur_bus_idx;
 	int bus_idx;
 	int client_idx;
-	int rc;
+	u64 total_ib = 0, total_ab = 0;
+	int i, rc;
 
-	if (client == MDP3_CLIENT_DMA_P) {
-		client_idx  = MDP3_BUS_HANDLE_DMA;
-	} else if (client == MDP3_CLIENT_PPP) {
-		client_idx  = MDP3_BUS_HANDLE_PPP;
-	} else {
-		pr_err("invalid client %d\n", client);
-		return -EINVAL;
-	}
+	client_idx  = MDP3_BUS_HANDLE;
 
 	bus_handle = &mdp3_res->bus_handle[client_idx];
 	cur_bus_idx = bus_handle->current_bus_idx;
@@ -405,7 +365,15 @@ int mdp3_bus_scale_set_quota(int client, u64 ab_quota, u64 ib_quota)
 		return -EINVAL;
 	}
 
-	if ((ab_quota | ib_quota) == 0) {
+	bus_handle->ab[client] = ab_quota;
+	bus_handle->ib[client] = ib_quota;
+
+	for (i = 0; i < MDP3_CLIENT_MAX; i++) {
+		total_ab += bus_handle->ab[i];
+		total_ib += bus_handle->ab[i];
+	}
+
+	if ((total_ab | total_ib) == 0) {
 		bus_idx = 0;
 	} else {
 		int num_cases = bus_handle->scale_pdata->num_usecases;
@@ -414,18 +382,18 @@ int mdp3_bus_scale_set_quota(int client, u64 ab_quota, u64 ib_quota)
 		bus_idx = (cur_bus_idx % (num_cases - 1)) + 1;
 
 		/* aligning to avoid performing updates for small changes */
-		ab_quota = ALIGN(ab_quota, SZ_64M);
-		ib_quota = ALIGN(ib_quota, SZ_64M);
+		total_ab = ALIGN(total_ab, SZ_64M);
+		total_ib = ALIGN(total_ib, SZ_64M);
 
 		vect = bus_handle->scale_pdata->usecase[cur_bus_idx].vectors;
-		if ((ab_quota == vect->ab) && (ib_quota == vect->ib)) {
+		if ((total_ab == vect->ab) && (total_ib == vect->ib)) {
 			pr_debug("skip bus scaling, no change in vectors\n");
 			return 0;
 		}
 
 		vect = bus_handle->scale_pdata->usecase[bus_idx].vectors;
-		vect->ab = ab_quota;
-		vect->ib = ib_quota;
+		vect->ab = total_ab;
+		vect->ib = total_ib;
 
 		pr_debug("bus scale idx=%d ab=%llu ib=%llu\n", bus_idx,
 				vect->ab, vect->ib);
@@ -434,8 +402,8 @@ int mdp3_bus_scale_set_quota(int client, u64 ab_quota, u64 ib_quota)
 	rc = msm_bus_scale_client_update_request(bus_handle->handle, bus_idx);
 
 	if (!rc && ab_quota != 0 && ib_quota != 0) {
-		bus_handle->restore_ab = ab_quota;
-		bus_handle->restore_ib = ib_quota;
+		bus_handle->restore_ab[client] = ab_quota;
+		bus_handle->restore_ib[client] = ib_quota;
 	}
 
 	return rc;
@@ -627,17 +595,10 @@ void mdp3_bus_bw_iommu_enable(int enable, int client)
 {
 	struct mdp3_bus_handle_map *bus_handle;
 	int client_idx;
-	u64 ab, ib;
-	int ref_cnt;
+	u64 ab = 0, ib = 0;
+	int ref_cnt, i;
 
-	if (client == MDP3_CLIENT_DMA_P) {
-		client_idx  = MDP3_BUS_HANDLE_DMA;
-	} else if (client == MDP3_CLIENT_PPP) {
-		client_idx  = MDP3_BUS_HANDLE_PPP;
-	} else {
-		pr_err("invalid client %d\n", client);
-		return;
-	}
+	client_idx  = MDP3_BUS_HANDLE;
 
 	bus_handle = &mdp3_res->bus_handle[client_idx];
 	if (bus_handle->handle < 1) {
@@ -654,13 +615,15 @@ void mdp3_bus_bw_iommu_enable(int enable, int client)
 
 	if (enable && ref_cnt == 1) {
 		if (mdp3_res->allow_iommu_update)
-			mdp3_iommu_enable(client);
-		ab = bus_handle->restore_ab;
-		ib = bus_handle->restore_ib;
+			mdp3_iommu_enable();
+		for (i = 0; i < MDP3_CLIENT_MAX; i++) {
+			ab += bus_handle->restore_ab[i];
+			ib += bus_handle->restore_ib[i];
+		}
 		mdp3_bus_scale_set_quota(client, ab, ib);
 	} else if (!enable && ref_cnt == 0) {
 		mdp3_bus_scale_set_quota(client, 0, 0);
-		mdp3_iommu_disable(client);
+		mdp3_iommu_disable();
 	} else if (ref_cnt < 0) {
 		pr_err("Ref count < 0, bus client=%d, ref_cnt=%d",
 				client_idx, ref_cnt);
@@ -717,16 +680,18 @@ int mdp3_put_mdp_dsi_clk(void)
 static int mdp3_irq_setup(void)
 {
 	int ret;
+	struct mdss_hw *mdp3_hw;
 
+	mdp3_hw = &mdp3_res->mdp3_hw;
 	ret = devm_request_irq(&mdp3_res->pdev->dev,
-				mdp3_res->irq,
+				mdp3_hw->irq_info->irq,
 				mdp3_irq_handler,
 				IRQF_DISABLED, "MDP", mdp3_res);
 	if (ret) {
 		pr_err("mdp request_irq() failed!\n");
 		return ret;
 	}
-	disable_irq(mdp3_res->irq);
+	mdp3_res->mdss_util->disable_irq_nosync(&mdp3_res->mdp3_hw);
 	mdp3_res->irq_registered = true;
 	return 0;
 }
@@ -966,8 +931,11 @@ static int mdp3_res_init(void)
 
 static void mdp3_res_deinit(void)
 {
+	struct mdss_hw *mdp3_hw;
+
+	mdp3_hw = &mdp3_res->mdp3_hw;
 	mdp3_bus_scale_unregister();
-	mdp3_iommu_dettach(MDP3_IOMMU_CTX_DMA_0);
+	mdp3_iommu_dettach(MDP3_IOMMU_CTX_MDP_0);
 	mdp3_iommu_deinit();
 
 	if (!IS_ERR_OR_NULL(mdp3_res->ion_client))
@@ -976,7 +944,8 @@ static void mdp3_res_deinit(void)
 	mdp3_clk_remove();
 
 	if (mdp3_res->irq_registered)
-		devm_free_irq(&mdp3_res->pdev->dev, mdp3_res->irq, mdp3_res);
+		devm_free_irq(&mdp3_res->pdev->dev,
+				mdp3_hw->irq_info->irq, mdp3_res);
 }
 
 static int mdp3_get_pan_intf(const char *pan_intf)
@@ -1108,6 +1077,28 @@ static int mdp3_get_cmdline_config(struct platform_device *pdev)
 	return rc;
 }
 
+
+int mdp3_irq_init(u32 irq_start)
+{
+	struct mdss_hw *mdp3_hw;
+	mdp3_hw = &mdp3_res->mdp3_hw;
+
+	mdp3_hw->irq_info = kzalloc(sizeof(struct irq_info), GFP_KERNEL);
+	if (!mdp3_hw->irq_info) {
+		pr_err("no mem to save irq info: kzalloc fail\n");
+		return -ENOMEM;
+	}
+
+	mdp3_hw->hw_ndx = MDSS_HW_MDP;
+	mdp3_hw->irq_info->irq = irq_start;
+	mdp3_hw->irq_info->irq_mask = 0;
+	mdp3_hw->irq_info->irq_ena = false;
+	mdp3_hw->irq_info->irq_buzy = false;
+
+	mdp3_res->mdss_util->register_irq(&mdp3_res->mdp3_hw);
+	return 0;
+}
+
 static int mdp3_parse_dt(struct platform_device *pdev)
 {
 	struct resource *res;
@@ -1138,12 +1129,18 @@ static int mdp3_parse_dt(struct platform_device *pdev)
 		pr_err("unable to get MDSS irq\n");
 		return -EINVAL;
 	}
-	mdp3_res->irq = res->start;
+	rc = mdp3_irq_init(res->start);
+	if (rc) {
+		pr_err("%s: Error in irq initialization:rc=[%d]\n",
+		       __func__, rc);
+		return rc;
+	}
 
 	rc = mdp3_get_cmdline_config(pdev);
 	if (rc) {
 		pr_err("%s: Error in panel override:rc=[%d]\n",
 		       __func__, rc);
+		kfree(mdp3_res->mdp3_hw.irq_info);
 		return rc;
 	}
 
@@ -1243,338 +1240,17 @@ void mdp3_enable_regulator(int enable)
 	mdp3_batfet_ctrl(enable);
 }
 
-static void mdp3_iommu_heap_unmap_iommu(struct mdp3_iommu_meta *meta)
-{
-	unsigned int domain_num;
-	unsigned int partition_num = 0;
-	struct iommu_domain *domain;
-
-	domain_num = (mdp3_res->domains + MDP3_PPP_IOMMU_DOMAIN)->domain_idx;
-	domain = msm_get_iommu_domain(domain_num);
-
-	if (!domain) {
-		pr_err("Could not get domain %d. Corruption?\n", domain_num);
-		return;
-	}
-
-	iommu_unmap_range(domain, meta->iova_addr, meta->mapped_size);
-	msm_free_iova_address(meta->iova_addr, domain_num, partition_num,
-		meta->mapped_size);
-
-	return;
-}
-
-static void mdp3_iommu_meta_destroy(struct kref *kref)
-{
-	struct mdp3_iommu_meta *meta =
-			container_of(kref, struct mdp3_iommu_meta, ref);
-
-	rb_erase(&meta->node, &mdp3_res->iommu_root);
-	mdp3_iommu_heap_unmap_iommu(meta);
-	dma_buf_put(meta->dbuf);
-	kfree(meta);
-}
-
-
-static void mdp3_iommu_meta_put(struct mdp3_iommu_meta *meta)
-{
-	/* Need to lock here to prevent race against map/unmap */
-	mutex_lock(&mdp3_res->iommu_lock);
-	kref_put(&meta->ref, mdp3_iommu_meta_destroy);
-	mutex_unlock(&mdp3_res->iommu_lock);
-}
-
-static struct mdp3_iommu_meta *mdp3_iommu_meta_lookup(struct sg_table *table)
-{
-	struct rb_root *root = &mdp3_res->iommu_root;
-	struct rb_node **p = &root->rb_node;
-	struct rb_node *parent = NULL;
-	struct mdp3_iommu_meta *entry = NULL;
-
-	while (*p) {
-		parent = *p;
-		entry = rb_entry(parent, struct mdp3_iommu_meta, node);
-
-		if (table < entry->table)
-			p = &(*p)->rb_left;
-		else if (table > entry->table)
-			p = &(*p)->rb_right;
-		else
-			return entry;
-	}
-	return NULL;
-}
-
-void mdp3_unmap_iommu(struct ion_client *client, struct ion_handle *handle)
-{
-	struct mdp3_iommu_meta *meta;
-	struct sg_table *table;
-
-	table = ion_sg_table(client, handle);
-
-	mutex_lock(&mdp3_res->iommu_lock);
-	meta = mdp3_iommu_meta_lookup(table);
-	if (!meta) {
-		WARN(1, "%s: buffer was never mapped for %p\n", __func__,
-				handle);
-		mutex_unlock(&mdp3_res->iommu_lock);
-		goto out;
-	}
-	mutex_unlock(&mdp3_res->iommu_lock);
-
-	mdp3_iommu_meta_put(meta);
-out:
-	return;
-}
-
-static void mdp3_iommu_meta_add(struct mdp3_iommu_meta *meta)
-{
-	struct rb_root *root = &mdp3_res->iommu_root;
-	struct rb_node **p = &root->rb_node;
-	struct rb_node *parent = NULL;
-	struct mdp3_iommu_meta *entry;
-
-	while (*p) {
-		parent = *p;
-		entry = rb_entry(parent, struct mdp3_iommu_meta, node);
-
-		if (meta->table < entry->table) {
-			p = &(*p)->rb_left;
-		} else if (meta->table > entry->table) {
-			p = &(*p)->rb_right;
-		} else {
-			pr_err("%s: handle %p already exists\n", __func__,
-				entry->handle);
-			BUG();
-		}
-	}
-
-	rb_link_node(&meta->node, parent, p);
-	rb_insert_color(&meta->node, root);
-}
-
-static int mdp3_iommu_map_iommu(struct mdp3_iommu_meta *meta,
-	unsigned long align, unsigned long iova_length,
-	unsigned int padding, unsigned long flags)
-{
-	struct iommu_domain *domain;
-	int ret = 0;
-	unsigned long size;
-	unsigned long unmap_size;
-	struct sg_table *table;
-	int prot = IOMMU_WRITE | IOMMU_READ;
-	unsigned int domain_num = (mdp3_res->domains +
-			MDP3_PPP_IOMMU_DOMAIN)->domain_idx;
-	unsigned int partition_num = 0;
-
-	size = meta->size;
-	table = meta->table;
-
-	/* Use the biggest alignment to allow bigger IOMMU mappings.
-	 * Use the first entry since the first entry will always be the
-	 * biggest entry. To take advantage of bigger mapping sizes both the
-	 * VA and PA addresses have to be aligned to the biggest size.
-	 */
-	if (sg_dma_len(table->sgl) > align)
-		align = sg_dma_len(table->sgl);
-
-	ret = msm_allocate_iova_address(domain_num, partition_num,
-			meta->mapped_size, align,
-			(unsigned long *)&meta->iova_addr);
-
-	if (ret)
-		goto out;
-
-	domain = msm_get_iommu_domain(domain_num);
-
-	if (!domain) {
-		ret = -ENOMEM;
-		goto out1;
-	}
-
-	/* Adding padding to before buffer */
-	if (padding) {
-		unsigned long phys_addr = sg_phys(table->sgl);
-		ret = msm_iommu_map_extra(domain, meta->iova_addr, phys_addr,
-				padding, SZ_4K, prot);
-		if (ret)
-			goto out1;
-	}
-
-	/* Mapping actual buffer */
-	ret = iommu_map_range(domain, meta->iova_addr + padding,
-			table->sgl, size, prot);
-	if (ret) {
-		pr_err("%s: could not map %pa in domain %p\n",
-			__func__, &meta->iova_addr, domain);
-			unmap_size = padding;
-		goto out2;
-	}
-
-	/* Adding padding to end of buffer */
-	if (padding) {
-		unsigned long phys_addr = sg_phys(table->sgl);
-		unsigned long extra_iova_addr = meta->iova_addr +
-				padding + size;
-		ret = msm_iommu_map_extra(domain, extra_iova_addr, phys_addr,
-				padding, SZ_4K, prot);
-		if (ret) {
-			unmap_size = padding + size;
-			goto out2;
-		}
-	}
-	return ret;
-
-out2:
-	iommu_unmap_range(domain, meta->iova_addr, unmap_size);
-out1:
-	msm_free_iova_address(meta->iova_addr, domain_num, partition_num,
-				iova_length);
-
-out:
-	return ret;
-}
-
-static struct mdp3_iommu_meta *mdp3_iommu_meta_create(struct ion_client *client,
-	struct ion_handle *handle, struct sg_table *table, unsigned long size,
-	unsigned long align, unsigned long iova_length, unsigned int padding,
-	unsigned long flags, dma_addr_t *iova)
-{
-	struct mdp3_iommu_meta *meta;
-	int ret;
-
-	meta = kzalloc(sizeof(*meta), GFP_KERNEL);
-
-	if (!meta)
-		return ERR_PTR(-ENOMEM);
-
-	meta->handle = handle;
-	meta->table = table;
-	meta->size = size;
-	meta->mapped_size = iova_length;
-	meta->dbuf = ion_share_dma_buf(client, handle);
-	kref_init(&meta->ref);
-
-	ret = mdp3_iommu_map_iommu(meta,
-		align, iova_length, padding, flags);
-	if (ret < 0)	{
-		pr_err("%s: Unable to map buffer\n", __func__);
-		goto out;
-	}
-
-	*iova = meta->iova_addr;
-	mdp3_iommu_meta_add(meta);
-
-	return meta;
-out:
-	kfree(meta);
-	return ERR_PTR(ret);
-}
-
-/*
- * PPP hw reads in tiles of 16 which might be outside mapped region
- * need to map buffers ourseleve to add extra padding
- */
-int mdp3_self_map_iommu(struct ion_client *client, struct ion_handle *handle,
-	unsigned long align, unsigned long padding, dma_addr_t *iova,
-	unsigned long *buffer_size, unsigned long flags,
-	unsigned long iommu_flags)
-{
-	struct mdp3_iommu_meta *iommu_meta = NULL;
-	struct sg_table *table;
-	struct scatterlist *sg;
-	unsigned long size = 0, iova_length = 0;
-	int ret = 0;
-	int i;
-
-	table = ion_sg_table(client, handle);
-	if (IS_ERR_OR_NULL(table))
-		return PTR_ERR(table);
-
-	for_each_sg(table->sgl, sg, table->nents, i)
-		size += sg_dma_len(sg);
-
-	padding = PAGE_ALIGN(padding);
-
-	/* Adding 16 lines padding before and after buffer */
-	iova_length = size + 2 * padding;
-
-	if (size & ~PAGE_MASK) {
-		pr_debug("%s: buffer size %lx is not aligned to %lx", __func__,
-			size, PAGE_SIZE);
-		ret = -EINVAL;
-		goto out;
-	}
-
-	if (iova_length & ~PAGE_MASK) {
-		pr_debug("%s: iova_length %lx is not aligned to %lx", __func__,
-			iova_length, PAGE_SIZE);
-		ret = -EINVAL;
-		goto out;
-	}
-
-	mutex_lock(&mdp3_res->iommu_lock);
-	iommu_meta = mdp3_iommu_meta_lookup(table);
-
-	if (!iommu_meta) {
-		iommu_meta = mdp3_iommu_meta_create(client, handle, table, size,
-				align, iova_length, padding, flags, iova);
-		if (!IS_ERR_OR_NULL(iommu_meta)) {
-			iommu_meta->flags = iommu_flags;
-			ret = 0;
-		} else {
-			ret = PTR_ERR(iommu_meta);
-			mutex_unlock(&mdp3_res->iommu_lock);
-			pr_err("%s: meta_create failed err=%d", __func__, ret);
-			return ret;
-		}
-	} else {
-		if (iommu_meta->flags != iommu_flags) {
-			pr_err("%s: handle %p is already mapped with diff flag\n",
-				__func__, handle);
-			ret = -EINVAL;
-			goto out_unlock;
-		} else if (iommu_meta->mapped_size != iova_length) {
-			pr_err("%s: handle %p is already mapped with diff len\n",
-				__func__, handle);
-			ret = -EINVAL;
-			goto out_unlock;
-		} else {
-			kref_get(&iommu_meta->ref);
-			*iova = iommu_meta->iova_addr;
-		}
-	}
-	BUG_ON(iommu_meta->size != size);
-	mutex_unlock(&mdp3_res->iommu_lock);
-
-	*iova = *iova + padding;
-	*buffer_size = size;
-	return ret;
-
-out_unlock:
-	mutex_unlock(&mdp3_res->iommu_lock);
-out:
-	mdp3_iommu_meta_put(iommu_meta);
-	return ret;
-}
-
-int mdp3_put_img(struct mdp3_img_data *data, int client)
+int mdp3_put_img(struct mdp3_img_data *data)
 {
 	struct ion_client *iclient = mdp3_res->ion_client;
-	int dom;
+	int dom = (mdp3_res->domains + MDP3_IOMMU_DOMAIN_UNSECURE)->domain_idx;
 
 	 if (data->flags & MDP_MEMORY_ID_TYPE_FB) {
 		pr_info("mdp3_put_img fb mem buf=0x%pa\n", &data->addr);
 		fdput(data->srcp_f);
 		memset(&data->srcp_f, 0, sizeof(struct fd));
 	} else if (!IS_ERR_OR_NULL(data->srcp_ihdl)) {
-		if (client == MDP3_CLIENT_DMA_P) {
-			dom = (mdp3_res->domains +
-				MDP3_DMA_IOMMU_DOMAIN)->domain_idx;
-			ion_unmap_iommu(iclient, data->srcp_ihdl, dom, 0);
-		} else {
-			mdp3_unmap_iommu(iclient, data->srcp_ihdl);
-		}
+		ion_unmap_iommu(iclient, data->srcp_ihdl, dom, 0);
 		ion_free(iclient, data->srcp_ihdl);
 		data->srcp_ihdl = NULL;
 	} else {
@@ -1583,8 +1259,7 @@ int mdp3_put_img(struct mdp3_img_data *data, int client)
 	return 0;
 }
 
-int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data,
-		int client)
+int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data)
 {
 	struct fd f;
 	int ret = -EINVAL;
@@ -1592,7 +1267,7 @@ int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data,
 	unsigned long *len;
 	dma_addr_t *start;
 	struct ion_client *iclient = mdp3_res->ion_client;
-	int dom;
+	int dom = (mdp3_res->domains + MDP3_IOMMU_DOMAIN_UNSECURE)->domain_idx;
 
 	start = &data->addr;
 	len = (unsigned long *) &data->len;
@@ -1633,15 +1308,8 @@ int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data,
 			data->srcp_ihdl = NULL;
 			return ret;
 		}
-		if (client == MDP3_CLIENT_DMA_P) {
-			dom = (mdp3_res->domains +
-					MDP3_DMA_IOMMU_DOMAIN)->domain_idx;
-			ret = ion_map_iommu(iclient, data->srcp_ihdl, dom,
-					0, SZ_4K, 0, start, len, 0, 0);
-		} else {
-			ret = mdp3_self_map_iommu(iclient, data->srcp_ihdl,
-				SZ_4K, data->padding, start, len, 0, 0);
-		}
+		ret = ion_map_iommu(iclient, data->srcp_ihdl, dom,
+				0, SZ_4K, 0, start, len, 0, 0);
 		if (IS_ERR_VALUE(ret)) {
 			ion_free(iclient, data->srcp_ihdl);
 			pr_err("failed to map ion handle (%d)\n", ret);
@@ -1656,53 +1324,59 @@ done:
 		pr_debug("mem=%d ihdl=%p buf=0x%pa len=0x%x\n", img->memory_id,
 			 data->srcp_ihdl, &data->addr, data->len);
 	} else {
-		mdp3_put_img(data, client);
+		mdp3_put_img(data);
 		return -EINVAL;
 	}
 
 	return ret;
 }
 
-int mdp3_iommu_enable(int client)
+int mdp3_iommu_enable()
 {
-	int rc;
+	int i, rc = 0;
 
-	if (client == MDP3_CLIENT_DMA_P) {
-		rc = mdp3_iommu_attach(MDP3_IOMMU_CTX_DMA_0);
+	if (mdp3_res->iommu_ref_cnt == 0) {
+		for (i = 0; i < MDP3_IOMMU_CTX_MAX; i++) {
+			rc = mdp3_iommu_attach(i);
+			if (rc) {
+				WARN(1, "IOMMU attach failed for ctx: %d\n", i);
+				for (i--; i >= 0; i--)
+					mdp3_iommu_dettach(i);
+			}
+		}
+	}
+
+	if (!rc)
+		mdp3_res->iommu_ref_cnt++;
+
+	return rc;
+}
+
+int mdp3_iommu_disable()
+{
+	int i, rc = 0;
+
+	if (mdp3_res->iommu_ref_cnt) {
+		mdp3_res->iommu_ref_cnt--;
+		if (mdp3_res->iommu_ref_cnt == 0) {
+			for (i = 0; i < MDP3_IOMMU_CTX_MAX; i++)
+				rc = mdp3_iommu_dettach(i);
+		}
 	} else {
-		rc = mdp3_iommu_attach(MDP3_IOMMU_CTX_PPP_0);
-		rc |= mdp3_iommu_attach(MDP3_IOMMU_CTX_PPP_1);
+		pr_err("iommu ref count unbalanced\n");
 	}
 
 	return rc;
 }
 
-int mdp3_iommu_disable(int client)
-{
-	int rc;
-
-	if (client == MDP3_CLIENT_DMA_P) {
-		rc = mdp3_iommu_dettach(MDP3_IOMMU_CTX_DMA_0);
-	} else {
-		rc = mdp3_iommu_dettach(MDP3_IOMMU_CTX_PPP_0);
-		rc |= mdp3_iommu_dettach(MDP3_IOMMU_CTX_PPP_1);
-	}
-
-	return rc;
-}
-
-int mdp3_iommu_is_attached(int client)
+int mdp3_iommu_is_attached()
 {
 	struct mdp3_iommu_ctx_map *context_map;
-	int context = MDP3_IOMMU_CTX_DMA_0;
 
 	if (!mdp3_res->iommu_contexts)
 		return 0;
 
-	if (client == MDP3_CLIENT_PPP)
-		context = MDP3_IOMMU_CTX_PPP_0;
-
-	context_map = mdp3_res->iommu_contexts + context;
+	context_map = mdp3_res->iommu_contexts + MDP3_IOMMU_CTX_MDP_0;
 	return context_map->attached;
 }
 
@@ -1775,7 +1449,7 @@ static int mdp3_alloc(struct msm_fb_data_type *mfd)
 		return -ENOMEM;
 	}
 
-	dom = mdp3_res->domains[MDP3_DMA_IOMMU_DOMAIN].domain_idx;
+	dom = mdp3_res->domains[MDP3_IOMMU_DOMAIN_UNSECURE].domain_idx;
 	ret = msm_iommu_map_contig_buffer(phys, dom, 0, size, SZ_4K, 0,
 					&mfd->iova);
 
@@ -1804,7 +1478,7 @@ void mdp3_free(struct msm_fb_data_type *mfd)
 	}
 
 	size = mfd->fbi->fix.smem_len;
-	dom = mdp3_res->domains[MDP3_DMA_IOMMU_DOMAIN].domain_idx;
+	dom = mdp3_res->domains[MDP3_IOMMU_DOMAIN_UNSECURE].domain_idx;
 	msm_iommu_unmap_contig_buffer(mfd->iova, dom, 0, size);
 
 	mfd->fbi->screen_base = NULL;
@@ -1885,7 +1559,7 @@ static int mdp3_fb_mem_get_iommu_domain(void)
 {
 	if (!mdp3_res)
 		return -ENODEV;
-	return mdp3_res->domains[MDP3_DMA_IOMMU_DOMAIN].domain_idx;
+	return mdp3_res->domains[MDP3_IOMMU_DOMAIN_UNSECURE].domain_idx;
 }
 
 int mdp3_get_cont_spash_en(void)
@@ -1932,7 +1606,7 @@ static int mdp3_continuous_splash_on(struct mdss_panel_data *pdata)
 	mdp3_clk_set_rate(MDP3_CLK_CORE, MDP_CORE_CLK_RATE,
 			MDP3_CLIENT_DMA_P);
 
-	bus_handle = &mdp3_res->bus_handle[MDP3_BUS_HANDLE_DMA];
+	bus_handle = &mdp3_res->bus_handle[MDP3_BUS_HANDLE];
 	if (bus_handle->handle < 1) {
 		pr_err("invalid bus handle %d\n", bus_handle->handle);
 		return -EINVAL;
@@ -1942,8 +1616,8 @@ static int mdp3_continuous_splash_on(struct mdss_panel_data *pdata)
 	ab *= panel_info->mipi.frame_rate;
 	ib = (ab * 3) / 2;
 	rc = mdp3_bus_scale_set_quota(MDP3_CLIENT_DMA_P, ab, ib);
-	bus_handle->restore_ab = ab;
-	bus_handle->restore_ib = ib;
+	bus_handle->restore_ab[MDP3_CLIENT_DMA_P] = ab;
+	bus_handle->restore_ib[MDP3_CLIENT_DMA_P] = ib;
 
 	rc = mdp3_res_update(1, 1, MDP3_CLIENT_DMA_P);
 	if (rc) {
@@ -2257,6 +1931,13 @@ static int mdp3_probe(struct platform_device *pdev)
 	spin_lock_init(&mdp3_res->irq_lock);
 	platform_set_drvdata(pdev, mdp3_res);
 
+	mdp3_res->mdss_util = mdss_get_util_intf();
+	if (mdp3_res->mdss_util == NULL) {
+		pr_err("Failed to get mdss utility functions\n");
+		rc =  -ENODEV;
+		goto get_util_fail;
+	}
+
 	rc = mdp3_parse_dt(pdev);
 	if (rc)
 		goto probe_done;
@@ -2293,6 +1974,9 @@ static int mdp3_probe(struct platform_device *pdev)
 		pr_err("unable to configure interrupt callback\n");
 
 probe_done:
+	if (IS_ERR_VALUE(rc))
+		kfree(mdp3_res->mdp3_hw.irq_info);
+get_util_fail:
 	if (IS_ERR_VALUE(rc)) {
 		mdp3_res_deinit();
 

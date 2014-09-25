@@ -57,7 +57,7 @@ struct clk_freq_tbl {
  * @base: pointer to base address of ioremapped registers.
  */
 struct rcg_clk {
-	const u32 cmd_rcgr_reg;
+	u32 cmd_rcgr_reg;
 
 	void   (*set_rate)(struct rcg_clk *, struct clk_freq_tbl *);
 
@@ -90,8 +90,8 @@ extern struct clk_freq_tbl rcg_dummy_freq;
 struct branch_clk {
 	void   (*set_rate)(struct branch_clk *, struct clk_freq_tbl *);
 	struct clk c;
-	const u32 cbcr_reg;
-	const u32 bcr_reg;
+	u32 cbcr_reg;
+	u32 bcr_reg;
 	int has_sibling;
 	u32 cur_div;
 	u32 max_div;
@@ -116,12 +116,12 @@ static inline struct branch_clk *to_branch_clk(struct clk *clk)
  */
 struct local_vote_clk {
 	struct clk c;
-	const u32 cbcr_reg;
-	const u32 vote_reg;
-	const u32 bcr_reg;
-	const u32 en_mask;
+	u32 cbcr_reg;
+	u32 vote_reg;
+	u32 bcr_reg;
+	u32 en_mask;
 	const u32 halt_check;
-	void *const __iomem *base;
+	void * __iomem *base;
 };
 
 static inline struct local_vote_clk *to_local_vote_clk(struct clk *clk)
@@ -184,9 +184,9 @@ static inline struct measure_clk *to_measure_clk(struct clk *clk)
  */
 struct gate_clk {
 	struct clk c;
-	const u32 en_mask;
-	const u32 en_reg;
-	const unsigned int delay_us;
+	u32 en_mask;
+	u32 en_reg;
+	unsigned int delay_us;
 	void *const __iomem *base;
 };
 

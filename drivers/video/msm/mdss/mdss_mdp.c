@@ -352,6 +352,9 @@ int mdss_mdp_bus_scale_set_quota(u64 ab_quota_rt, u64 ab_quota_nrt,
 		new_uc_idx = (mdss_res->curr_bw_uc_idx %
 			(bw_table->num_usecases - 1)) + 1;
 
+		if (mdss_res->bus_channels > 0)
+			ib_quota = div_u64(ib_quota, mdss_res->bus_channels);
+
 		for (i = 0; i < mdss_res->axi_port_cnt; i++) {
 			vect = &bw_table->usecase[mdss_res->curr_bw_uc_idx].
 				vectors[i];
@@ -367,8 +370,9 @@ int mdss_mdp_bus_scale_set_quota(u64 ab_quota_rt, u64 ab_quota_nrt,
 			vect->ab = ab_quota[i];
 			vect->ib = ib_quota;
 
-			pr_debug("uc_idx=%d path_idx=%d ab=%llu ib=%llu\n",
-				new_uc_idx, i, vect->ab, vect->ib);
+			pr_debug("uc_idx=%d path_idx=%d ab=%llu ib=%llu ch=%d\n",
+				new_uc_idx, i, vect->ab, vect->ib,
+				mdss_res->bus_channels);
 		}
 	}
 	mdss_res->curr_bw_uc_idx = new_uc_idx;
@@ -811,6 +815,41 @@ static inline int mdss_mdp_irq_clk_register(struct mdss_data_type *mdata,
 	return 0;
 }
 
+#define SEC_DEVICE_MDSS		1
+
+static void __mdss_restore_sec_cfg(struct mdss_data_type *mdata)
+{
+	int ret, scm_ret = 0;
+
+	pr_debug("restoring mdss secure config\n");
+
+	mdss_mdp_clk_update(MDSS_CLK_AHB, 1);
+	mdss_mdp_clk_update(MDSS_CLK_AXI, 1);
+	mdss_mdp_clk_update(MDSS_CLK_MDP_CORE, 1);
+
+	ret = scm_restore_sec_cfg(SEC_DEVICE_MDSS, 0, &scm_ret);
+	if (ret || scm_ret)
+		pr_warn("scm_restore_sec_cfg failed %d %d\n",
+				ret, scm_ret);
+
+	mdss_mdp_clk_update(MDSS_CLK_AHB, 0);
+	mdss_mdp_clk_update(MDSS_CLK_AXI, 0);
+	mdss_mdp_clk_update(MDSS_CLK_MDP_CORE, 0);
+}
+
+static int mdss_mdp_gdsc_notifier_call(struct notifier_block *self,
+		unsigned long event, void *data)
+{
+	struct mdss_data_type *mdata;
+
+	mdata = container_of(self, struct mdss_data_type, gdsc_cb);
+
+	if (event & REGULATOR_EVENT_ENABLE)
+		__mdss_restore_sec_cfg(mdata);
+
+	return NOTIFY_OK;
+}
+
 static int mdss_mdp_irq_clk_setup(struct mdss_data_type *mdata)
 {
 	int ret;
@@ -839,6 +878,11 @@ static int mdss_mdp_irq_clk_setup(struct mdss_data_type *mdata)
 		return -EINVAL;
 	}
 	mdata->fs_ena = false;
+
+	mdata->gdsc_cb.notifier_call = mdss_mdp_gdsc_notifier_call;
+	mdata->gdsc_cb.priority = 5;
+	if (regulator_register_notifier(mdata->fs, &(mdata->gdsc_cb)))
+		pr_warn("GDSC notification registration failed!\n");
 
 	mdata->vdd_cx = devm_regulator_get(&mdata->pdev->dev,
 				"vdd-cx");
@@ -2620,6 +2664,12 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 		 "qcom,mdss-traffic-shaper-enabled");
 	mdata->has_rot_dwnscale = of_property_read_bool(pdev->dev.of_node,
 		"qcom,mdss-has-rotator-downscale");
+
+	rc = of_property_read_u32(pdev->dev.of_node,
+		"qcom,mdss-dram-channels", &mdata->bus_channels);
+	if (rc)
+		pr_debug("number of channels property not specified\n");
+
 	return 0;
 }
 

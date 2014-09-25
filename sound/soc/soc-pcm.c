@@ -47,7 +47,12 @@ static const struct snd_pcm_hardware no_host_hardware = {
 	.period_bytes_max	= PAGE_SIZE >> 1,
 	.periods_min		= 2,
 	.periods_max		= 4,
-	.buffer_bytes_max	= PAGE_SIZE,
+	/*
+	 * Increase the max buffer bytes as PAGE_SIZE bytes is
+	 * not enough to encompass all the scenarios sent by
+	 * userspapce.
+	 */
+	.buffer_bytes_max	= PAGE_SIZE * 4,
 };
 
 /**
@@ -638,6 +643,17 @@ static int soc_pcm_hw_params(struct snd_pcm_substream *substream,
 	ret = soc_pcm_params_symmetry(substream, params);
 	if (ret)
 		goto out;
+
+	/* perform any hw_params fixups */
+	if ((rtd->dai_link->no_host_mode == SND_SOC_DAI_LINK_NO_HOST) &&
+				rtd->dai_link->be_hw_params_fixup) {
+		ret = rtd->dai_link->be_hw_params_fixup(rtd,
+				params);
+		if (ret < 0) {
+			dev_err(rtd->card->dev, "ASoC: fixup failed for %s\n",
+			rtd->dai_link->name);
+		}
+	}
 
 	if (rtd->dai_link->ops && rtd->dai_link->ops->hw_params) {
 		ret = rtd->dai_link->ops->hw_params(substream, params);

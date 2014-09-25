@@ -100,7 +100,7 @@ struct mdss_prefill_data {
 
 enum mdss_hw_index {
 	MDSS_HW_MDP,
-	MDSS_HW_DSI0,
+	MDSS_HW_DSI0 = 1,
 	MDSS_HW_DSI1,
 	MDSS_HW_HDMI,
 	MDSS_HW_EDP,
@@ -149,6 +149,8 @@ struct mdss_data_type {
 	u8 fs_ena;
 	u8 vsync_ena;
 
+	struct notifier_block gdsc_cb;
+
 	u32 res_init;
 
 	u32 highest_bank_bit;
@@ -159,6 +161,7 @@ struct mdss_data_type {
 	u32 rot_block_size;
 
 	u32 axi_port_cnt;
+	u32 bus_channels;
 	u32 curr_bw_uc_idx;
 	u32 bus_hdl;
 	struct msm_bus_scale_pdata *bus_scale_table;

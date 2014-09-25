@@ -651,8 +651,9 @@
 				<100 512 0 0>,
 				<100 512 500 800>;
 	};
+
 	mhi: qcom,mhi {
-		compatible = "qcom,msm_pcie";
+		compatible = "qcom,mhi";
 	};
 
 	spmi_bus: qcom,spmi@fc4c0000 {
@@ -4492,6 +4493,7 @@
 		      <0xfc4bc000 0x1000>;
 		reg-names = "tsens_physical", "tsens_eeprom_physical";
 		interrupts = <0 184 0>;
+		interrupt-names = "tsens-upper-lower";
 		qcom,sensors = <11>;
 		qcom,slope = <3200 3200 3200 3200 3200 3200 3200 3200 3200
 				3200 3200>;
