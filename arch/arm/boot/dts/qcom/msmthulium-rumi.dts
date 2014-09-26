@@ -13,8 +13,6 @@
 
 /dts-v1/;
 
-/memreserve/ 0x85bff000 0x00001000;
-
 #include "msmthulium.dtsi"
 #include "msmthulium-pinctrl.dtsi"
 
