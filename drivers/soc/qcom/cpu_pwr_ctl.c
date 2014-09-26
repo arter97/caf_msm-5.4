@@ -31,19 +31,27 @@
 #include <asm/cacheflush.h>
 
 /* CPU power domain register offsets */
-#define CPU_PWR_CTL		0x4
-#define CPU_PWR_GATE_CTL	0x14
-#define LDO_BHS_PWR_CTL		0x28
+#define CPU_PWR_CTL			0x4
+#define CPU_PWR_GATE_CTL		0x14
+#define LDO_BHS_PWR_CTL			0x28
+
+#define MSMTHULIUM_CPU_PWR_CTL		0x0
+#define MSMTHULIUM_CPU_PGS_STS		0x38
+#define MSMTHULIUM_CPU_MAS_STS		0x40
 
 /* L2 power domain register offsets */
-#define L2_PWR_CTL_OVERRIDE	0xc
-#define L2_PWR_CTL		0x14
-#define L2_PWR_STATUS		0x18
-#define	L2_CORE_CBCR		0x58
-#define L1_RST_DIS		0x284
+#define L2_PWR_CTL_OVERRIDE		0xc
+#define L2_PWR_CTL			0x14
+#define L2_PWR_STATUS			0x18
+#define L2_CORE_CBCR			0x58
+#define L1_RST_DIS			0x284
 
-#define L2_SPM_STS		0xc
-#define L2_VREG_CTL		0x1c
+#define L2_SPM_STS			0xc
+#define L2_VREG_CTL			0x1c
+
+#define MSMTHULIUM_L2_PWR_CTL		0x0
+#define MSMTHULIUM_L2_PGS_STS		0x30
+#define MSMTHULIUM_L2_MAS_STS		0x38
 
 /*
  * struct msm_l2ccc_of_info: represents of data for l2 cache clock controller.
@@ -255,6 +263,70 @@ static int power_on_l2_msm8994(struct device_node *l2ccc_node, u32 pon_mask,
 	return 0;
 }
 
+static void msmthulium_poll_steady_active(void __iomem *base, long offset)
+{
+	int timeout = 10;
+
+	/* poll STEADY_ACTIVE */
+	while ((readl_relaxed(base + offset) & 0x4000) == 0) {
+
+		BUG_ON(!timeout--);
+		cpu_relax();
+		usleep_range(100, 110);
+	}
+}
+
+static int power_on_l2_msmthulium(struct device_node *l2ccc_node, u32 pon_mask,
+				int cpu)
+{
+	u32 pwr_ctl;
+	void __iomem *l2_base;
+
+	l2_base = of_iomap(l2ccc_node, 0);
+	if (!l2_base)
+		return -ENOMEM;
+
+	/* see if we're in a valid power state */
+	pwr_ctl = __raw_readl(l2_base + MSMTHULIUM_L2_PWR_CTL);
+
+	if (pwr_ctl == 0)
+		goto unmap;
+
+	/* assert POR reset, clamp, close L2 APM HS */
+	writel_relaxed(0x00000055 , l2_base + MSMTHULIUM_L2_PWR_CTL);
+
+	/* poll STEADY_ACTIVE */
+	msmthulium_poll_steady_active(l2_base, MSMTHULIUM_L2_MAS_STS);
+
+	/* close L2 Logic BHS */
+	writel_relaxed(0x00000045 , l2_base + MSMTHULIUM_L2_PWR_CTL);
+
+	/* poll STEADY_ACTIVE */
+	msmthulium_poll_steady_active(l2_base, MSMTHULIUM_L2_PGS_STS);
+
+	/* L2 reset requirement */
+	udelay(2);
+
+	/* de-assert clamp */
+	writel_relaxed(0x00000004 , l2_base + MSMTHULIUM_L2_PWR_CTL);
+
+	/* ensure write completes before delay */
+	wmb();
+
+	udelay(1);
+
+	/* de-assert reset */
+	writel_relaxed(0x00000000 , l2_base + MSMTHULIUM_L2_PWR_CTL);
+
+	/* ensure power-up before returning */
+	wmb();
+
+unmap:
+	iounmap(l2_base);
+
+	return 0;
+}
+
 static const struct msm_l2ccc_of_info l2ccc_info[] = {
 	{
 		.compat = "qcom,8994-l2ccc",
@@ -265,6 +337,10 @@ static const struct msm_l2ccc_of_info l2ccc_info[] = {
 		.compat = "qcom,8916-l2ccc",
 		.l2_power_on = power_on_l2_msm8916,
 		.l2_power_on_mask = BIT(9),
+	},
+	{
+		.compat = "qcom,msmthulium-l2ccc",
+		.l2_power_on = power_on_l2_msmthulium,
 	},
 };
 
@@ -385,6 +461,96 @@ out_bhs_reg:
 out_l2ccc:
 	of_node_put(l2_node);
 out_l2:
+	of_node_put(acc_node);
+out_acc:
+	of_node_put(cpu_node);
+
+	return ret;
+}
+
+int msmthulium_unclamp_secondary_arm_cpu(unsigned int cpu)
+{
+	int ret = 0;
+	struct device_node *cpu_node, *acc_node, *l2_node, *l2ccc_node;
+	void __iomem *apcc;
+
+	cpu_node = of_get_cpu_node(cpu, NULL);
+	if (!cpu_node)
+		return -ENODEV;
+
+	acc_node = of_parse_phandle(cpu_node, "qcom,acc", 0);
+	if (!acc_node) {
+		ret = -ENODEV;
+		goto out_acc;
+	}
+
+	apcc = of_iomap(acc_node, 0);
+	if (!apcc) {
+		ret = -ENOMEM;
+		goto out_apcc;
+	}
+
+	l2_node = of_parse_phandle(cpu_node, "next-level-cache", 0);
+	if (!l2_node) {
+		ret = -ENODEV;
+		goto out_l2;
+	}
+
+	l2ccc_node = of_parse_phandle(l2_node, "power-domain", 0);
+	if (!l2ccc_node) {
+		ret = -ENODEV;
+		goto out_l2ccc;
+	}
+
+	/*
+	 * Ensure L2-cache of the CPU is powered on before
+	 * unclamping cpu power rails.
+	 */
+	ret = power_on_l2_cache(l2ccc_node, cpu);
+	if (ret) {
+		pr_err("L2 cache power up failed for CPU%d\n", cpu);
+		goto out_pon_l2;
+	}
+
+	/* assert POR reset, clamp, close CPU APM HS */
+	writel_relaxed(0x00000055, apcc + MSMTHULIUM_CPU_PWR_CTL);
+
+	/* poll STEADY_ACTIVE */
+	msmthulium_poll_steady_active(apcc, MSMTHULIUM_CPU_MAS_STS);
+
+	/* close CPU logic BHS */
+	writel_relaxed(0x00000045, apcc + MSMTHULIUM_CPU_PWR_CTL);
+
+	/* poll STEADY_ACTIVE */
+	msmthulium_poll_steady_active(apcc, MSMTHULIUM_CPU_PGS_STS);
+
+	/* delay for CPU reset */
+	udelay(2);
+
+	/* de-assert clamp */
+	writel_relaxed(0x00000004, apcc + MSMTHULIUM_CPU_PWR_CTL);
+
+	/* ensure write completes before delay */
+	wmb();
+
+	udelay(1);
+
+	/* de-assert POR reset */
+	writel_relaxed(0x00000000, apcc + MSMTHULIUM_CPU_PWR_CTL);
+
+	/* assert powered up */
+	writel_relaxed(0x00000100, apcc + MSMTHULIUM_CPU_PWR_CTL);
+
+	/* ensure power-up before returning */
+	wmb();
+
+out_pon_l2:
+	of_node_put(l2ccc_node);
+out_l2ccc:
+	of_node_put(l2_node);
+out_l2:
+	iounmap(apcc);
+out_apcc:
 	of_node_put(acc_node);
 out_acc:
 	of_node_put(cpu_node);
