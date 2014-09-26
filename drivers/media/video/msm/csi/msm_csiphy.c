@@ -430,7 +430,9 @@ static int __devinit csiphy_probe(struct platform_device *pdev)
 		new_csiphy_dev->subdev.devnode->num;
 	new_csiphy_dev->csiphy_state = CSIPHY_POWER_DOWN;
 
-	if (machine_is_apq8064_adp_2() || machine_is_apq8064_mplatform()) {
+	if (machine_is_apq8064_adp_2()
+			|| machine_is_apq8064_mplatform()
+			|| machine_is_apq8064_adp2_es2()) {
 		if (pdev->id == 0) {
 			pr_debug("keep track of 1st csi phy device\n");
 			lsh_csiphy_dev = new_csiphy_dev;

@@ -939,7 +939,9 @@ static int __devinit ispif_probe(struct platform_device *pdev)
 	ispif->subdev.entity.name = pdev->name;
 	ispif->subdev.entity.revision = ispif->subdev.devnode->num;
 	ispif->ispif_state = ISPIF_POWER_DOWN;
-	if (machine_is_apq8064_adp_2() || machine_is_apq8064_mplatform()) {
+	if (machine_is_apq8064_adp_2()
+			|| machine_is_apq8064_mplatform()
+			|| machine_is_apq8064_adp2_es2()) {
 		lsh_ispif = ispif;
 		pr_debug("%s : ispif finished\n", __func__);
 	}
