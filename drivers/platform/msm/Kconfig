@@ -117,6 +117,16 @@ config QPNP_USB_DETECT
 	  the USB driver of VBUS presence/disconnection using the power_supply
 	  framework.
 
+config QPNP_COINCELL
+	tristate "Qualcomm QPNP coincell charger support"
+	depends on SPMI && OF_SPMI
+	help
+	  This driver supports the QPNP coincell peripheral found inside of
+	  Qualcomm QPNP PMIC devices.  The coincell charger provides a means to
+	  charge a coincell battery or backup capacitor which is used to
+	  maintain PMIC register state when the main battery is removed from the
+	  mobile device.
+
 config IPA
 	tristate "IPA support"
 	depends on SPS && NET
