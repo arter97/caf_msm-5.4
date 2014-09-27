@@ -218,6 +218,16 @@ config SENSORS_MPU6050
 	  To compile this driver as a module, choose M here: the
 	  module will be called mpu6050.
 
+config SENSORS_LIS3DH
+	tristate "ST LIS3DH 3-axis digital acceleromater"
+	depends on I2C
+	help
+	  Say Y here if you want to support STMicroelectronics LIS3DH
+	  accelerometer connected via an I2C bus.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called lis3dh_acc.
+
 config INPUT_APANEL
 	tristate "Fujitsu Lifebook Application Panel buttons"
 	depends on X86 && I2C && LEDS_CLASS
@@ -702,6 +712,16 @@ config INPUT_IDEAPAD_SLIDEBAR
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called ideapad_slidebar.
+
+config SENSORS_MMC3416X
+	tristate "MMC3416xPJ 3-axis magnetic sensor driver"
+	depends on I2C
+	help
+	  Say Y here if you want to enable the MMC3416xPJ magnetic sensor
+	  driver.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called mmc3416x.
 
 config SENSORS_AKM09911
 	tristate "AKM09911 3-axis electronic compass sensor driver"

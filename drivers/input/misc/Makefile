@@ -66,6 +66,7 @@ obj-$(CONFIG_INPUT_WM831X_ON)		+= wm831x-on.o
 obj-$(CONFIG_INPUT_XEN_KBDDEV_FRONTEND)	+= xen-kbdfront.o
 obj-$(CONFIG_INPUT_YEALINK)		+= yealink.o
 obj-$(CONFIG_INPUT_IDEAPAD_SLIDEBAR)	+= ideapad_slidebar.o
+obj-$(CONFIG_SENSORS_MMC3416X)		+= mmc3416x.o
 obj-$(CONFIG_SENSORS_MPU6050)		+= mpu6050.o
 obj-$(CONFIG_SENSORS_AKM8963)	+= akm8963.o
 obj-$(CONFIG_SENSORS_AKM09911)		+= akm09911.o
@@ -80,3 +81,4 @@ endif
 ifeq ($(CONFIG_BOSCH_BMA2X2_ENABLE_INT2),y)
 	EXTRA_CFLAGS += -DBMA2X2_ENABLE_INT2
 endif
+obj-$(CONFIG_SENSORS_LIS3DH)		+= lis3dh_acc.o
