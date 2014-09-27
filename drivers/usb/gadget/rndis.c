@@ -34,7 +34,7 @@
 #include <asm/io.h>
 #include <asm/byteorder.h>
 #include <asm/unaligned.h>
-
+#include "u_bam_data.h"
 
 #undef	VERBOSE_DEBUG
 
@@ -543,14 +543,24 @@ static int gen_ndis_set_resp(u8 configNr, u32 OID, u8 *buf, u32 buf_len,
 		 */
 		retval = 0;
 		if (*params->filter) {
+			if (!is_rndis_ipa_supported()) {
+				netif_carrier_on(params->dev);
+				if (netif_running(params->dev))
+					netif_wake_queue(params->dev);
+			} else {
+				if (params->state != RNDIS_DATA_INITIALIZED)
+					u_bam_data_start_rndis_ipa();
+			}
 			params->state = RNDIS_DATA_INITIALIZED;
-			netif_carrier_on(params->dev);
-			if (netif_running(params->dev))
-				netif_wake_queue(params->dev);
 		} else {
+			if (!is_rndis_ipa_supported()) {
+				netif_carrier_off(params->dev);
+				netif_stop_queue(params->dev);
+			} else {
+				if (params->state == RNDIS_DATA_INITIALIZED)
+					u_bam_data_stop_rndis_ipa();
+			}
 			params->state = RNDIS_INITIALIZED;
-			netif_carrier_off(params->dev);
-			netif_stop_queue(params->dev);
 		}
 		break;
 
@@ -594,13 +604,14 @@ static int rndis_init_response(int configNr, rndis_init_msg_type *buf)
 	resp->MinorVersion = cpu_to_le32(RNDIS_MINOR_VERSION);
 	resp->DeviceFlags = cpu_to_le32(RNDIS_DF_CONNECTIONLESS);
 	resp->Medium = cpu_to_le32(RNDIS_MEDIUM_802_3);
-	resp->MaxPacketsPerTransfer = cpu_to_le32(TX_SKB_HOLD_THRESHOLD);
-	resp->MaxTransferSize = cpu_to_le32(
-		  params->dev->mtu
+	resp->MaxPacketsPerTransfer = cpu_to_le32(params->max_pkt_per_xfer);
+	resp->MaxTransferSize = cpu_to_le32(params->max_pkt_per_xfer *
+		(params->dev->mtu
 		+ sizeof(struct ethhdr)
 		+ sizeof(struct rndis_packet_msg_type)
-		+ 22);
-	resp->PacketAlignmentFactor = cpu_to_le32(0);
+
+		+ 22));
+	resp->PacketAlignmentFactor = cpu_to_le32(params->pkt_alignment_factor);
 	resp->AFListOffset = cpu_to_le32(0);
 	resp->AFListSize = cpu_to_le32(0);
 
@@ -917,6 +928,8 @@ int rndis_register(void (*resp_avail)(void *v), void *v)
 			rndis_per_dev_params[i].used = 1;
 			rndis_per_dev_params[i].resp_avail = resp_avail;
 			rndis_per_dev_params[i].v = v;
+			rndis_per_dev_params[i].max_pkt_per_xfer = 1;
+			rndis_per_dev_params[i].pkt_alignment_factor = 0;
 			pr_debug("%s: configNr = %d\n", __func__, i);
 			return i;
 		}
@@ -989,6 +1002,21 @@ u32 rndis_get_ul_max_xfer_size(u8 configNr)
 {
 	pr_debug("%s:\n", __func__);
 	return rndis_per_dev_params[configNr].ul_max_xfer_size;
+}
+
+void rndis_set_max_pkt_xfer(u8 configNr, u8 max_pkt_per_xfer)
+{
+	pr_debug("%s:\n", __func__);
+
+	rndis_per_dev_params[configNr].max_pkt_per_xfer = max_pkt_per_xfer;
+}
+
+void rndis_set_pkt_alignment_factor(u8 configNr, u8 pkt_alignment_factor)
+{
+	pr_debug("%s:\n", __func__);
+
+	rndis_per_dev_params[configNr].pkt_alignment_factor =
+					pkt_alignment_factor;
 }
 
 void rndis_add_hdr(struct sk_buff *skb)
@@ -1152,7 +1180,8 @@ static int rndis_proc_show(struct seq_file *m, void *v)
 			 "vendor ID : 0x%08X\n"
 			 "vendor    : %s\n"
 			 "ul-max-xfer-size:%d max-xfer-size-rcvd: %d\n"
-			 "ul-max-pkts-per-xfer:%d max-pkts-per-xfer-rcvd:%d\n",
+			 "ul-max-pkts-per-xfer:%d max-pkts-per-xfer-rcvd:%d\n"
+			"pkt_alignment_factor:%d\n",
 			 param->confignr, (param->used) ? "y" : "n",
 			 ({ char *s = "?";
 			 switch (param->state) {
@@ -1172,7 +1201,8 @@ static int rndis_proc_show(struct seq_file *m, void *v)
 				  sizeof(struct rndis_packet_msg_type) + 22),
 			 rndis_ul_max_xfer_size_rcvd,
 			 param->max_pkt_per_xfer,
-			 rndis_ul_max_pkt_per_xfer_rcvd);
+			 rndis_ul_max_pkt_per_xfer_rcvd,
+			param->pkt_alignment_factor);
 	return 0;
 }
 
@@ -1267,6 +1297,7 @@ int rndis_init(void)
 		rndis_per_dev_params[i].confignr = i;
 		rndis_per_dev_params[i].used = 0;
 		rndis_per_dev_params[i].state = RNDIS_UNINITIALIZED;
+		rndis_per_dev_params[i].pkt_alignment_factor = 0;
 		rndis_per_dev_params[i].media_state
 				= RNDIS_MEDIA_STATE_DISCONNECTED;
 		INIT_LIST_HEAD(&(rndis_per_dev_params[i].resp_queue));
