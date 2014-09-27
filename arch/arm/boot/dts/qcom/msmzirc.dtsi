@@ -30,6 +30,7 @@
 		spi1 = &spi_1;
 		i2c2 = &i2c_2;
 		i2c3 = &i2c_3;
+		qpic_nand1 = &qnand_1;
 	};
 
 	memory {
@@ -37,7 +38,7 @@
 			linux,reserve-contiguous-region;
 			linux,reserve-region;
 			linux,remove-completely;
-			reg = <0x81c00000 0x6000000>;
+			reg = <0x81200000 0x6A00000>;
 			label = "peripheral1_mem";
 		};
 
@@ -47,6 +48,13 @@
 			linux,remove-completely;
 			reg = <0x87d00000 0x300000>;
 			label = "peripheral2_mem";
+		};
+
+		audio_mem: audio_region@0 {
+			linux,reserve-contiguous-region;
+			linux,reserve-region;
+			reg = <0 0xAF000>;
+			label = "audio_mem";
 		};
 	};
 
@@ -70,6 +78,7 @@
 #include "msmzirc-coresight.dtsi"
 #include "msm-gdsc.dtsi"
 #include "msmzirc-bus.dtsi"
+#include "msmzirc-ion.dtsi"
 
 &soc {
 	#address-cells = <1>;
@@ -538,6 +547,29 @@
 		clock-names = "core_clk", "core_a_clk";
 	};
 
+	qnand_1: nand@7980000 {
+		compatible = "qcom,msm-nand";
+		reg = <0x07980000 0x1000>,
+		      <0x07984000 0x16000>;
+		reg-names = "nand_phys",
+			    "bam_phys";
+		interrupts = <0 247 0>;
+		interrupt-names = "bam_irq";
+
+		qcom,msm-bus,name = "qpic_nand";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+
+		qcom,msm-bus,vectors-KBps =
+			<91 512 0 0>,
+			/* Voting for max b/w on PNOC bus for now */
+			<91 512 400000 800000>;
+
+		clock-names = "core_clk";
+		clocks = <&clock_rpm clk_qpic_clk>;
+		status = "disabled";
+	};
+
 	usb3: ssusb@8a00000{
 		compatible = "qcom,dwc-usb3-msm";
 		status = "disabled";
@@ -802,3 +834,15 @@
 #include "msm-pmd9635-rpm-regulator.dtsi"
 #include "msm-pmd9635.dtsi"
 #include "msmzirc-regulator.dtsi"
+
+&pmd9635_pon {
+	interrupts = <0x0 0x8 0x2>;
+	interrupt-names = "cblpwr";
+	qcom,system-reset;
+
+	qcom,pon_1 {
+		qcom,pon-type = <2>;
+		qcom,pull-up = <1>;
+		linux,code = <116>;
+	};
+};

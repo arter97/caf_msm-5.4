@@ -616,7 +616,7 @@ static inline int mdss_mdp_panic_signal_support_mode(
 	uint32_t signal_mode = MDSS_MDP_PANIC_NONE;
 
 	if (pipe && pipe->mixer_left &&
-		pipe->mixer_left->type != MDSS_MDP_MIXER_TYPE_INTF) {
+		pipe->mixer_left->type == MDSS_MDP_MIXER_TYPE_INTF) {
 		if (IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev,
 					MDSS_MDP_HW_REV_105) ||
 		    IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev,
@@ -690,6 +690,12 @@ static inline bool mdss_mdp_ctl_is_power_on(struct mdss_mdp_ctl *ctl)
 static inline bool mdss_mdp_ctl_is_power_on_lp(struct mdss_mdp_ctl *ctl)
 {
 	return mdss_panel_is_power_on_lp(ctl->power_state);
+}
+
+static inline u32 left_lm_w_from_mfd(struct msm_fb_data_type *mfd)
+{
+	struct mdss_mdp_ctl *ctl = mfd_to_ctl(mfd);
+	return (ctl && ctl->mixer_left) ? ctl->mixer_left->width : 0;
 }
 
 irqreturn_t mdss_mdp_isr(int irq, void *ptr);

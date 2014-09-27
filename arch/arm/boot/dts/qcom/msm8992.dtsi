@@ -291,6 +291,11 @@
 		};
 	};
 
+	qcom,sps {
+		compatible = "qcom,msm_sps";
+		qcom,pipe-attr-ee;
+	};
+
 	blsp1_uart5: serial@f9922000 {
 		compatible = "qcom,msm-lsuart-v14";
 		reg = <0xf9922000 0x1000>;
@@ -301,13 +306,52 @@
 			 <&clock_gcc clk_gcc_blsp1_ahb_clk>;
 	};
 
+	blsp2_uart2: uart@f995e000 { /* BLSP2 UART2 */
+		compatible = "qcom,msm-hsuart-v14";
+		reg = <0xf995e000 0x1000>,
+			<0xf9944000 0x19000>;
+		reg-names = "core_mem", "bam_mem";
+		interrupt-names = "core_irq", "bam_irq", "wakeup_irq";
+		#address-cells = <0>;
+		interrupt-parent = <&blsp2_uart2>;
+		interrupts = <0 1 2>;
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0xffffffff>;
+		interrupt-map = <0 &intc 0 114 0
+				1 &intc 0 239 0
+				2 &msm_gpio 46 0>;
+
+		qcom,inject-rx-on-wakeup;
+		qcom,rx-char-to-inject = <0xFD>;
+
+		qcom,bam-tx-ep-pipe-index = <2>;
+		qcom,bam-rx-ep-pipe-index = <3>;
+		qcom,master-id = <84>;
+		clock-names = "core_clk", "iface_clk";
+		clocks = <&clock_gcc clk_gcc_blsp2_uart2_apps_clk>,
+			<&clock_gcc clk_gcc_blsp2_ahb_clk>;
+		pinctrl-names = "sleep", "default";
+		pinctrl-0 = <&hsuart_sleep>;
+		pinctrl-1 = <&hsuart_active>;
+
+		qcom,msm-bus,name = "buart8";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<84 512 0 0>,
+				<84 512 500 800>;
+		status = "disabled";
+	};
+
 	clock_gcc: qcom,gcc@fc400000 {
 		compatible = "qcom,dummycc";
 		#clock-cells = <1>;
 	};
 
 	clock_rpm: qcom,rpmcc@fc401880 {
-		compatible = "qcom,dummycc";
+		compatible = "qcom,rpmcc-8992";
+		reg = <0xfc401880 0x4>;
+		reg-names = "cc_base";
 		#clock-cells = <1>;
 	};
 
@@ -338,6 +382,77 @@
 		#size-cells = <0>;
 		cell-index = <0>;
 		qcom,not-wakeup; /* Required until RPM is fully configured. */
+	};
+
+	pcie0: qcom,pcie@fc520000 {
+		compatible = "qcom,pci-msm";
+		cell-index = <0>;
+
+		reg = <0xfc520000 0x2000>,
+		      <0xfc526000 0x1000>,
+		      <0xff000000 0xf1d>,
+		      <0xff000f20 0xa8>,
+		      <0xff100000 0x100000>,
+		      <0xff200000 0x100000>,
+		      <0xff300000 0xd00000>;
+
+		reg-names = "parf", "phy", "dm_core", "elbi",
+				"conf", "io", "bars";
+
+		#address-cells = <0>;
+		interrupt-parent = <&pcie0>;
+		interrupts = <0 1 2 3 4 5 6 7 8 9 10 11>;
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0xffffffff>;
+		interrupt-map = <0 &intc 0 243 0
+				1 &intc 0 244 0
+				2 &intc 0 245 0
+				3 &intc 0 247 0
+				4 &intc 0 248 0
+				5 &intc 0 249 0
+				6 &intc 0 250 0
+				7 &intc 0 251 0
+				8 &intc 0 252 0
+				9 &intc 0 253 0
+				10 &intc 0 254 0
+				11 &intc 0 255 0>;
+
+		interrupt-names = "int_msi", "int_a", "int_b", "int_c", "int_d",
+				"int_pls_pme", "int_pme_legacy", "int_pls_err",
+				"int_aer_legacy", "int_pls_link_up",
+				"int_pls_link_down", "int_bridge_flush_n";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&pcie0_clkreq_default &pcie0_perst_default &pcie0_wake_default>;
+
+		perst-gpio = <&msm_gpio 35 0>;
+		wake-gpio = <&msm_gpio 37 0>;
+
+		gdsc-vdd-supply = <&gdsc_pcie_0>;
+		vreg-1.8-supply = <&pm8994_l12>;
+		vreg-0.9-supply = <&pm8994_l28>;
+
+		qcom,ep-latency = <10>;
+
+		qcom,msi-gicm-addr = <0xf9006040>;
+		qcom,msi-gicm-base = <0x180>;
+
+		qcom,scm-dev-id = <11>;
+
+		clocks = <&clock_gcc clk_gcc_pcie_0_pipe_clk>,
+			<&clock_rpm clk_ln_bb_clk>,
+			<&clock_gcc clk_gcc_pcie_0_aux_clk>,
+			<&clock_gcc clk_gcc_pcie_0_cfg_ahb_clk>,
+			<&clock_gcc clk_gcc_pcie_0_mstr_axi_clk>,
+			<&clock_gcc clk_gcc_pcie_0_slv_axi_clk>,
+			<&clock_gcc clk_pcie_0_phy_ldo>,
+			<&clock_gcc clk_gcc_pcie_phy_0_reset>;
+
+		clock-names =  "pcie_0_pipe_clk", "pcie_0_ref_clk_src", "pcie_0_aux_clk",
+			"pcie_0_cfg_ahb_clk", "pcie_0_mstr_axi_clk",
+			"pcie_0_slv_axi_clk", "pcie_0_ldo", "pcie_0_phy_reset";
+
+		max-clock-frequency-hz = <125000000>, <0>, <1011000>, <0>, <0>, <0>, <0>, <0>;
 	};
 
 	spi_0: spi@f9923000 {
@@ -525,10 +640,8 @@
 		qcom,proxy-reg-names = "vdd_cx";
 		qcom,vdd_cx-uV-uA = <7 100000>;
 
-		clocks = <&clock_gcc clk_gcc_lpass_q6_axi_clk>,
-			 <&clock_rpm clk_cxo_pil_lpass_clk>;
-		clock-names = "bus_clk", "xo";
-		qcom,active-clock-names = "bus_clk";
+		clocks = <&clock_rpm clk_cxo_pil_lpass_clk>;
+		clock-names = "xo";
 		qcom,proxy-clock-names = "xo";
 
 		qcom,pas-id = <1>;
@@ -853,6 +966,13 @@
 			qcom,ocmem-part-name = "video";
 			qcom,ocmem-part-min = <0x55000>;
 		};
+	};
+
+	rpm_bus: qcom,rpm-smd {
+		compatible = "qcom,rpm-smd";
+		rpm-channel-name = "rpm_requests";
+		rpm-channel-type = <15>; /* SMD_APPS_RPM */
+		rpm-standalone;
 	};
 };
 

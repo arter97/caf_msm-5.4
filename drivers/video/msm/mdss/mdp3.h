@@ -23,6 +23,7 @@
 
 #include "mdp3_dma.h"
 #include "mdss_fb.h"
+#include "mdss.h"
 
 #define MDP_VSYNC_CLK_RATE	19200000
 #define MDP_CORE_CLK_RATE	100000000
@@ -38,34 +39,29 @@ enum  {
 };
 
 enum {
-	MDP3_BUS_HANDLE_DMA,
-	MDP3_BUS_HANDLE_PPP,
+	MDP3_BUS_HANDLE,
 	MDP3_BUS_HANDLE_MAX,
 };
 
 enum {
-	MDP3_DMA_IOMMU_DOMAIN,
-	MDP3_PPP_IOMMU_DOMAIN,
+	MDP3_IOMMU_DOMAIN_UNSECURE,
+	MDP3_IOMMU_DOMAIN_SECURE,
 	MDP3_IOMMU_DOMAIN_MAX,
 };
 
 enum {
-	MDP3_IOMMU_CTX_PPP_0,
-	MDP3_IOMMU_CTX_PPP_1,
-	MDP3_IOMMU_CTX_DMA_0,
-	MDP3_IOMMU_CTX_DMA_1,
+	MDP3_IOMMU_CTX_MDP_0,
+	MDP3_IOMMU_CTX_MDP_1,
 	MDP3_IOMMU_CTX_MAX
 };
 
+/* Keep DSI entry in sync with mdss
+ which is being used by DSI 6G */
 enum {
 	MDP3_CLIENT_DMA_P,
+	MDP3_CLIENT_DSI = 1,
 	MDP3_CLIENT_PPP,
-};
-
-enum {
-	DI_PARTITION_NUM = 0,
-	DI_DOMAIN_NUM = 1,
-	DI_MAX,
+	MDP3_CLIENT_MAX,
 };
 
 struct mdp3_bus_handle_map {
@@ -74,8 +70,10 @@ struct mdp3_bus_handle_map {
 	struct msm_bus_scale_pdata *scale_pdata;
 	int current_bus_idx;
 	int ref_cnt;
-	u64 restore_ab;
-	u64 restore_ib;
+	u64 restore_ab[MDP3_CLIENT_MAX];
+	u64 restore_ib[MDP3_CLIENT_MAX];
+	u64 ab[MDP3_CLIENT_MAX];
+	u64 ib[MDP3_CLIENT_MAX];
 	u32 handle;
 };
 
@@ -96,19 +94,6 @@ struct mdp3_iommu_ctx_map {
 	int attached;
 };
 
-struct mdp3_iommu_meta {
-	struct rb_node node;
-	struct ion_handle *handle;
-	struct rb_root iommu_maps;
-	struct kref ref;
-	struct sg_table *table;
-	struct dma_buf *dbuf;
-	int mapped_size;
-	unsigned long size;
-	dma_addr_t iova_addr;
-	unsigned long flags;
-};
-
 #define MDP3_MAX_INTR 28
 
 struct mdp3_intr_cb {
@@ -126,20 +111,21 @@ struct mdp3_hw_resource {
 	int clock_ref_count[MDP3_MAX_CLK];
 	unsigned long dma_core_clk_request;
 	unsigned long ppp_core_clk_request;
+	struct mdss_hw mdp3_hw;
+	struct mdss_util_intf *mdss_util;
 
 	char __iomem *mdp_base;
 	size_t mdp_reg_size;
 
-	u32 irq;
 	struct mdp3_bus_handle_map *bus_handle;
 
 	struct ion_client *ion_client;
 	struct mdp3_iommu_domain_map *domains;
 	struct mdp3_iommu_ctx_map *iommu_contexts;
+	unsigned int iommu_ref_cnt;
 	bool allow_iommu_update;
 	struct ion_handle *ion_handle;
 	struct mutex iommu_lock;
-	struct rb_root iommu_root;
 
 	struct mdp3_dma dma[MDP3_DMA_MAX];
 	struct mdp3_intf intf[MDP3_DMA_OUTPUT_SEL_MAX];
@@ -168,7 +154,6 @@ struct mdp3_hw_resource {
 struct mdp3_img_data {
 	dma_addr_t addr;
 	u32 len;
-	u32 padding;
 	u32 flags;
 	int p_need;
 	struct file *srcp_file;
@@ -189,12 +174,11 @@ int mdp3_clk_set_rate(int clk_type, unsigned long clk_rate, int client);
 int mdp3_clk_enable(int enable, int dsi_clk);
 int mdp3_res_update(int enable, int dsi_clk, int client);
 int mdp3_bus_scale_set_quota(int client, u64 ab_quota, u64 ib_quota);
-int mdp3_put_img(struct mdp3_img_data *data, int client);
-int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data,
-		int client);
-int mdp3_iommu_enable(int client);
-int mdp3_iommu_disable(int client);
-int mdp3_iommu_is_attached(int client);
+int mdp3_put_img(struct mdp3_img_data *data);
+int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data);
+int mdp3_iommu_enable(void);
+int mdp3_iommu_disable(void);
+int mdp3_iommu_is_attached(void);
 void mdp3_free(struct msm_fb_data_type *mfd);
 int mdp3_parse_dt_splash(struct msm_fb_data_type *mfd);
 void mdp3_release_splash_memory(struct msm_fb_data_type *mfd);
