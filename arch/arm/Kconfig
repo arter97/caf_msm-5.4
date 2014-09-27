@@ -1393,6 +1393,12 @@ config ARM_ERRATA_773022
 	  loop buffer may deliver incorrect instructions. This
 	  workaround disables the loop buffer to avoid the erratum.
 
+config PERFMAP
+        tristate "Perfmap support (EXPERIMENTAL)"
+	depends on ARCH_MSM_KRAIT
+        help
+          Perfmap: memory mapped interface for performance monitors.
+
 endmenu
 
 source "arch/arm/common/Kconfig"
