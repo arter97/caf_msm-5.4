@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -852,11 +852,7 @@ int smd_pkt_open(struct inode *inode, struct file *file)
 
 	mutex_lock(&smd_pkt_devp->ch_lock);
 	if (smd_pkt_devp->ch == 0) {
-		wake_lock_init(&smd_pkt_devp->pa_wake_lock, WAKE_LOCK_SUSPEND,
-				smd_pkt_dev_name[smd_pkt_devp->i]);
-		INIT_WORK(&smd_pkt_devp->packet_arrival_work,
-				packet_arrival_worker);
-		init_completion(&smd_pkt_devp->ch_allocated);
+		INIT_COMPLETION(smd_pkt_devp->ch_allocated);
 		smd_pkt_devp->driver.probe = smd_pkt_dummy_probe;
 		scnprintf(smd_pkt_devp->pdriver_name, PDRIVER_NAME_MAX_SIZE,
 			  "%s", smd_ch_name[smd_pkt_devp->i]);
@@ -970,9 +966,6 @@ release_pd:
 		smd_pkt_devp->driver.probe = NULL;
 	}
 out:
-	if (!smd_pkt_devp->ch)
-		wake_lock_destroy(&smd_pkt_devp->pa_wake_lock);
-
 	mutex_unlock(&smd_pkt_devp->ch_lock);
 
 
@@ -1010,11 +1003,14 @@ int smd_pkt_release(struct inode *inode, struct file *file)
 		smd_pkt_devp->has_reset = 0;
 		smd_pkt_devp->do_reset_notification = 0;
 		smd_pkt_devp->wakelock_locked = 0;
-		wake_lock_destroy(&smd_pkt_devp->pa_wake_lock);
 	}
 	mutex_unlock(&smd_pkt_devp->tx_lock);
 	mutex_unlock(&smd_pkt_devp->rx_lock);
 	mutex_unlock(&smd_pkt_devp->ch_lock);
+
+	if (flush_work(&smd_pkt_devp->packet_arrival_work))
+		D_STATUS("%s: Flushed work for smd_pkt_dev id:%d\n", __func__,
+				smd_pkt_devp->i);
 
 	D_STATUS("Finished %s on smd_pkt_dev id:%d\n",
 		 __func__, smd_pkt_devp->i);
@@ -1084,6 +1080,11 @@ static int __init smd_pkt_init(void)
 		mutex_init(&smd_pkt_devp[i]->ch_lock);
 		mutex_init(&smd_pkt_devp[i]->rx_lock);
 		mutex_init(&smd_pkt_devp[i]->tx_lock);
+		wake_lock_init(&smd_pkt_devp[i]->pa_wake_lock,
+			WAKE_LOCK_SUSPEND, smd_pkt_dev_name[i]);
+		INIT_WORK(&smd_pkt_devp[i]->packet_arrival_work,
+				packet_arrival_worker);
+		init_completion(&smd_pkt_devp[i]->ch_allocated);
 
 		cdev_init(&smd_pkt_devp[i]->cdev, &smd_pkt_fops);
 		smd_pkt_devp[i]->cdev.owner = THIS_MODULE;
@@ -1111,6 +1112,7 @@ static int __init smd_pkt_init(void)
 			       " id:%d\n", __func__, i);
 			r = -ENOMEM;
 			cdev_del(&smd_pkt_devp[i]->cdev);
+			wake_lock_destroy(&smd_pkt_devp[i]->pa_wake_lock);
 			kfree(smd_pkt_devp[i]);
 			goto error2;
 		}
