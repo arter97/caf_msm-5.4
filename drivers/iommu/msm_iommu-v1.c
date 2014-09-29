@@ -897,6 +897,8 @@ static void msm_iommu_detach_dev(struct iommu_domain *domain,
 
 	SET_TLBIASID(iommu_drvdata->cb_base, ctx_drvdata->num,
 					ctx_drvdata->asid);
+	mb();
+	__sync_tlb(iommu_drvdata, ctx_drvdata->num);
 
 	ctx_drvdata->asid = -1;
 
