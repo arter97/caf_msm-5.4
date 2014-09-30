@@ -154,6 +154,14 @@
 		clock-names = "core_clk", "iface_clk";
 	};
 
+	msm_vidc: qcom,vidc@fdc00000 {
+		compatible = "qcom,msm-vidc";
+		reg = <0xC00000 0xff000>;
+		interrupts = <0 44 0>;
+		qcom,hfi = "venus";
+		qcom,max-hw-load = <1281600>; /* Full 4k @ 30 + 1080p @ 30 */
+	};
+
 	i2c_2: i2c@7576000 { /* BLSP1 QUP2 */
 		compatible = "qcom,i2c-msm-v2";
 		#address-cells = <1>;
