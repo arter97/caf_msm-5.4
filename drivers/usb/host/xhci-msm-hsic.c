@@ -838,8 +838,6 @@ static int mxhci_hsic_suspend(struct mxhci_hsic_hcd *mxhci)
 	}
 
 	disable_irq(hcd->irq);
-	disable_irq(mxhci->pwr_event_irq);
-
 	if (mxhci->bh.state) {
 		xhci_dbg_log_event(&dbg_hsic, NULL,
 			"skip SUSPEND tasklet state",
@@ -847,6 +845,7 @@ static int mxhci_hsic_suspend(struct mxhci_hsic_hcd *mxhci)
 		enable_irq(hcd->irq);
 		return -EBUSY;
 	}
+	disable_irq(mxhci->pwr_event_irq);
 
 	/* make sure we don't race against a remote wakeup */
 	if (test_bit(HCD_FLAG_WAKEUP_PENDING, &hcd->flags) ||
