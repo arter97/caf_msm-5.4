@@ -6744,30 +6744,6 @@ static void __init rmwreg(uint32_t val, void *reg, uint32_t mask)
 	writel_relaxed(regval, reg);
 }
 
-static struct pll_config_regs pll4_regs __initdata = {
-	.l_reg = LCC_PLL0_L_VAL_REG,
-	.m_reg = LCC_PLL0_M_VAL_REG,
-	.n_reg = LCC_PLL0_N_VAL_REG,
-	.config_reg = LCC_PLL0_CONFIG_REG,
-	.mode_reg = LCC_PLL0_MODE_REG,
-};
-
-static struct pll_config pll4_config_393 __initdata = {
-	.l = 0xE,
-	.m = 0x27A,
-	.n = 0x465,
-	.vco_val = 0x0,
-	.vco_mask = BM(17, 16),
-	.pre_div_val = 0x0,
-	.pre_div_mask = BIT(19),
-	.post_div_val = 0x0,
-	.post_div_mask = BM(21, 20),
-	.mn_ena_val = BIT(22),
-	.mn_ena_mask = BIT(22),
-	.main_output_val = BIT(23),
-	.main_output_mask = BIT(23),
-};
-
 static struct pll_config_regs pll15_regs __initdata = {
 	.l_reg = MM_PLL3_L_VAL_REG,
 	.m_reg = MM_PLL3_M_VAL_REG,
@@ -6987,15 +6963,6 @@ static void __init reg_init(void)
 
 		/* Program PLL15 to 975MHz with ref clk = 27MHz */
 		configure_sr_pll(&pll15_config, &pll15_regs, 0);
-
-		/* Check if PLL4 is active */
-		is_pll_enabled = readl_relaxed(LCC_PLL0_STATUS_REG) & BIT(16);
-		if (!is_pll_enabled)
-			/* Ref clk = 27MHz and program pll4 to 393.2160MHz */
-			configure_sr_pll(&pll4_config_393, &pll4_regs, 1);
-
-		/* Enable PLL4 source on the LPASS Primary PLL Mux */
-		writel_relaxed(0x1, LCC_PRI_PLL_CLK_CTL_REG);
 
 		/* Program prng_clk to 64MHz if it isn't configured */
 		if (!readl_relaxed(PRNG_CLK_NS_REG))
