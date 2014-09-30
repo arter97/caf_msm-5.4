@@ -36,7 +36,7 @@
 #include "adreno_trace.h"
 
 #include "a3xx_reg.h"
-#include "adreno_a3xx_snapshot.h"
+#include "adreno_snapshot.h"
 
 /* Include the master list of GPU cores that are supported */
 #include "adreno-gpulist.h"
@@ -1257,7 +1257,7 @@ static int adreno_init(struct kgsl_device *device)
 
 	/* Adjust snapshot section sizes according to core */
 	if ((adreno_is_a330(adreno_dev) || adreno_is_a305b(adreno_dev))) {
-		gpudev->snapshot_data->sect_sizes->cp_state_deb =
+		gpudev->snapshot_data->sect_sizes->cp_pfp =
 					A320_SNAPSHOT_CP_STATE_SECTION_SIZE;
 		gpudev->snapshot_data->sect_sizes->roq =
 					A320_SNAPSHOT_ROQ_SECTION_SIZE;
