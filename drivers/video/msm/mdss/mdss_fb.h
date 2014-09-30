@@ -86,6 +86,7 @@ struct disp_info_notify {
 	struct mutex lock;
 	int value;
 	int is_suspend;
+	int ref_count;
 };
 
 struct msm_sync_pt_data {
@@ -129,6 +130,8 @@ struct msm_mdp_interface {
 	int (*do_histogram)(struct msm_fb_data_type *mfd,
 				struct mdp_histogram *hist);
 	int (*update_ad_input)(struct msm_fb_data_type *mfd);
+	int (*ad_attenuate_bl)(u32 bl, u32 *bl_out,
+			struct msm_fb_data_type *mfd);
 	int (*panel_register_done)(struct mdss_panel_data *pdata);
 	u32 (*fb_stride)(u32 fb_index, u32 xres, int bpp);
 	int (*splash_fnc) (struct msm_fb_data_type *mfd, int *index, int req);
