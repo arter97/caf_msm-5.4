@@ -338,6 +338,7 @@ found:
 
 	udc->driver = driver;
 	udc->dev.driver = &driver->driver;
+	driver->pdev_id = udc->gadget->pdev_id;
 
 	if (udc_is_newstyle(udc)) {
 		ret = bind(udc->gadget);
