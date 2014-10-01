@@ -86,8 +86,6 @@ struct adreno_ringbuffer_pagetable_info {
  * @timestamp: The RB's global timestamp
  * @events: A kgsl_event_group for this context - contains the list of GPU
  * events
- * @mmu_events: A kgsl_event_group for this context - contains the list of mmu
- * events
  * @drawctxt_active: The last pagetable that this ringbuffer is set to
  * @pagetable_desc: Memory to hold information about the pagetables being used
  * and the commands to switch pagetable on the RB
@@ -108,7 +106,6 @@ struct adreno_ringbuffer {
 	unsigned int fault_detect_ts;
 	unsigned int timestamp;
 	struct kgsl_event_group events;
-	struct kgsl_event_group mmu_events;
 	struct adreno_context *drawctxt_active;
 	struct kgsl_memdesc pagetable_desc;
 	struct kgsl_memdesc pt_update_desc;

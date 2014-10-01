@@ -1533,7 +1533,7 @@ void
 adreno_ringbuffer_mmu_disable_clk_on_ts(struct kgsl_device *device,
 			struct adreno_ringbuffer *rb, unsigned int timestamp)
 {
-	if (kgsl_add_event(device, &(rb->mmu_events), timestamp,
+	if (kgsl_add_event(device, &(rb->events), timestamp,
 		adreno_ringbuffer_mmu_clk_disable_event, NULL)) {
 		KGSL_DRV_ERR(device,
 			"Failed to add IOMMU disable clk event\n");
