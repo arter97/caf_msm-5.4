@@ -19,8 +19,8 @@
 #include <linux/types.h>
 #include <linux/hrtimer.h>
 #include <linux/delay.h>
-#include <asm-generic/errno.h>
-#include <asm/io.h>
+#include <linux/errno.h>
+#include <linux/io.h>
 
 /**
  * readl_poll_timeout - Periodically poll an address until a condition is met or a timeout occurs
@@ -53,7 +53,7 @@
 })
 
 /**
- * readl_poll_timeout_noirq - Periodically poll an address until a condition is met or a timeout occurs
+ * readl_poll_timeout_atomic - Periodically poll an address until a condition is met or a timeout occurs
  * @addr: Address to poll
  * @val: Variable to read the value into
  * @cond: Break condition (usually involving @val)
@@ -62,7 +62,7 @@
  *
  * Returns 0 on success and -ETIMEDOUT upon a timeout.
  */
-#define readl_poll_timeout_noirq(addr, val, cond, max_reads, time_between_us) \
+#define readl_poll_timeout_atomic(addr, val, cond, max_reads, time_between_us) \
 ({ \
 	int count; \
 	for (count = (max_reads); count > 0; count--) { \
@@ -73,42 +73,5 @@
 	} \
 	(cond) ? 0 : -ETIMEDOUT; \
 })
-
-/**
- * readl_poll - Periodically poll an address until a condition is met
- * @addr: Address to poll
- * @val: Variable to read the value into
- * @cond: Break condition (usually involving @val)
- * @sleep_us: Maximum time to sleep between reads in us (0 tight-loops)
- *
- * Must not be called from atomic context if sleep_us is used.
- */
-#define readl_poll(addr, val, cond, sleep_us) \
-	readl_poll_timeout(addr, val, cond, sleep_us, 0)
-
-/**
- * readl_tight_poll_timeout - Tight-loop on an address until a condition is met or a timeout occurs
- * @addr: Address to poll
- * @val: Variable to read the value into
- * @cond: Break condition (usually involving @val)
- * @timeout_us: Timeout in us, 0 means never timeout
- *
- * Returns 0 on success and -ETIMEDOUT upon a timeout. In either
- * case, the last read value at @addr is stored in @val. Must not
- * be called from atomic context if timeout_us is used.
- */
-#define readl_tight_poll_timeout(addr, val, cond, timeout_us) \
-	readl_poll_timeout(addr, val, cond, 0, timeout_us)
-
-/**
- * readl_tight_poll - Tight-loop on an address until a condition is met
- * @addr: Address to poll
- * @val: Variable to read the value into
- * @cond: Break condition (usually involving @val)
- *
- * May be called from atomic context.
- */
-#define readl_tight_poll(addr, val, cond) \
-	readl_poll_timeout(addr, val, cond, 0, 0)
 
 #endif /* _LINUX_IOPOLL_H */

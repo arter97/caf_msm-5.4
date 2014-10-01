@@ -239,9 +239,9 @@ static void check_halt_state(struct msm_iommu_drvdata const *drvdata)
 
 	pr_err("Checking if IOMMU halt completed for %s\n", name);
 
-	res = readl_tight_poll_timeout(
-		GLB_REG(MICRO_MMU_CTRL, base), val,
-			(val & MMU_CTRL_IDLE) == MMU_CTRL_IDLE, 5000000);
+	res = readl_poll_timeout(GLB_REG(MICRO_MMU_CTRL, base), val,
+				 (val & MMU_CTRL_IDLE) == MMU_CTRL_IDLE, 0,
+				 5000000);
 
 	if (res) {
 		pr_err("Timed out (again) waiting for IOMMU halt to complete for %s\n",
@@ -267,8 +267,9 @@ static void check_tlb_sync_state(struct msm_iommu_drvdata const *drvdata,
 
 	pr_err("Checking if TLB sync completed for %s\n", name);
 
-	res = readl_tight_poll_timeout(CTX_REG(CB_TLBSTATUS, base, ctx), val,
-				(val & CB_TLBSTATUS_SACTIVE) == 0, 5000000);
+	res = readl_poll_timeout(CTX_REG(CB_TLBSTATUS, base, ctx), val,
+				 (val & CB_TLBSTATUS_SACTIVE) == 0, 0,
+				 5000000);
 	if (res) {
 		pr_err("Timed out (again) waiting for TLB SYNC to complete for %s\n",
 			name);
@@ -305,9 +306,9 @@ void iommu_halt(struct msm_iommu_drvdata const *iommu_drvdata)
 		int res;
 
 		SET_MICRO_MMU_CTRL_HALT_REQ(base, 1);
-		res = readl_tight_poll_timeout(
-			GLB_REG(MICRO_MMU_CTRL, base), val,
-			     (val & MMU_CTRL_IDLE) == MMU_CTRL_IDLE, 5000000);
+		res = readl_poll_timeout(GLB_REG(MICRO_MMU_CTRL, base), val,
+					 (val & MMU_CTRL_IDLE) == MMU_CTRL_IDLE,
+					 0, 5000000);
 
 		if (res)
 			check_halt_state(iommu_drvdata);
@@ -343,8 +344,9 @@ static void __sync_tlb(struct msm_iommu_drvdata *iommu_drvdata, int ctx)
 	SET_TLBSYNC(base, ctx, 0);
 	/* No barrier needed due to read dependency */
 
-	res = readl_tight_poll_timeout(CTX_REG(CB_TLBSTATUS, base, ctx), val,
-				(val & CB_TLBSTATUS_SACTIVE) == 0, 5000000);
+	res = readl_poll_timeout(CTX_REG(CB_TLBSTATUS, base, ctx), val,
+				 (val & CB_TLBSTATUS_SACTIVE) == 0, 0,
+				 5000000);
 	if (res)
 		check_tlb_sync_state(iommu_drvdata, ctx);
 }
