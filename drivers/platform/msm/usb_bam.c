@@ -1579,10 +1579,22 @@ bool msm_bam_hsic_lpm_ok(void)
 				    pipe_iter->enabled &&
 				    !pipe_iter->suspended) {
 					spin_unlock(&usb_bam_lock);
-					ipa_suspend(
-					   pipe_iter->ipa_clnt_hdl);
+					ipa_suspend(pipe_iter->ipa_clnt_hdl);
 					pipe_iter->suspended = true;
 					spin_lock(&usb_bam_lock);
+					/*
+					 * If Pipe resumed while we dropped lock
+					 * due to HSIC CONS request then
+					 * ipa_resume may not have been called.
+					 * Restore in_lpm to resume when
+					 * HSIC resumes next time. See --
+					 * msm_bam_wait_for_hsic_prod_granted()
+					 */
+					if (!info[HSIC_BAM].in_lpm) {
+						pr_err("%s:pipe resume miss!\n",
+							__func__);
+						info[HSIC_BAM].in_lpm = true;
+					}
 				}
 			}
 
