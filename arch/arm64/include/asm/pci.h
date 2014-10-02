@@ -49,3 +49,8 @@ extern unsigned long pci_ioremap_io(const struct resource *res, phys_addr_t phys
 
 #endif  /* __KERNEL__ */
 #endif  /* __ASM_PCI_H */
+
+#ifdef CONFIG_PCI_MSM
+#define arch_setup_msi_irqs arch_setup_msi_irqs
+#define arch_teardown_msi_irqs arch_teardown_msi_irqs
+#endif
