@@ -1764,6 +1764,11 @@ static int dwc_gadget_func_wakeup(struct usb_gadget *g, int interface_id)
 	else
 		pr_debug("Function wakeup HW command succeeded.\n");
 
+	if (ret)
+		pr_err("%s - Function wakeup HW command failed.\n", __func__);
+	else
+		pr_debug("Function wakeup HW command succeeded.\n");
+
 	return ret;
 }
 
