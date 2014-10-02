@@ -3089,15 +3089,6 @@ static struct gpio_keys_button cdp_keys_pm8921[] = {
 		.debounce_interval = 15,
 	},
 	{
-		.code           = KEY_VOLUMEDOWN,
-		.gpio           = GPIO_KEY_VOLUME_DOWN_PM8921,
-		.desc           = "volume_down_key",
-		.active_low     = 1,
-		.type		= EV_KEY,
-		.wakeup		= 1,
-		.debounce_interval = 15,
-	},
-	{
 		.code           = SW_ROTATE_LOCK,
 		.gpio           = GPIO_KEY_ROTATION_PM8921,
 		.desc           = "rotate_key",
@@ -3685,7 +3676,7 @@ static void __init apq8064ab_update_retention_spm(void)
 	}
 }
 
-#define GPIO_KEY_REVERSE                29
+#define GPIO_KEY_REVERSE                GPIO_KEY_VOLUME_DOWN_PM8921
 static struct reverse_switch_platform_data mplatform_reverse_data = {
 	.name = "reverse",
 	.gpio = GPIO_KEY_REVERSE,
@@ -4024,8 +4015,10 @@ static void __init apq8064_cdp_init(void)
 	}
 	else if (machine_is_apq8064_cdp() || machine_is_apq8064_liquid()
 			|| machine_is_apq8064_adp_2() ||
-			machine_is_apq8064_adp2_es2())
+			machine_is_apq8064_adp2_es2()) {
 		platform_device_register(&cdp_kp_pdev);
+		platform_device_register(&mplatform_reverse_pdev);
+	}
 	else if (machine_is_apq8064_mtp())
 		platform_device_register(&mtp_kp_pdev);
 	else if (machine_is_mpq8064_cdp()) {
