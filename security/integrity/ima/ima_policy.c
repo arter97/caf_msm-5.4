@@ -723,6 +723,12 @@ ssize_t ima_parse_add_rule(char *rule)
 		return -EACCES;
 	}
 
+	p = strsep(&rule, "\n");
+	len = strlen(p) + 1;
+
+	if (*p == '#')
+		return len;
+
 	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
 	if (!entry) {
 		integrity_audit_msg(AUDIT_INTEGRITY_STATUS, NULL,
@@ -731,14 +737,6 @@ ssize_t ima_parse_add_rule(char *rule)
 	}
 
 	INIT_LIST_HEAD(&entry->list);
-
-	p = strsep(&rule, "\n");
-	len = strlen(p) + 1;
-
-	if (*p == '#') {
-		kfree(entry);
-		return len;
-	}
 
 	result = ima_parse_rule(p, entry);
 	if (result) {
