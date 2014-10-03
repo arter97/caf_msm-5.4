@@ -227,6 +227,7 @@
 #define ARM_SMMU_CB(smmu, n)		((n) * (smmu)->pagesize)
 
 #define ARM_SMMU_CB_SCTLR		0x0
+#define ARM_SMMU_CB_ACTLR		0x4
 #define ARM_SMMU_CB_RESUME		0x8
 #define ARM_SMMU_CB_TTBCR2		0x10
 #define ARM_SMMU_CB_TTBR0_LO		0x20
@@ -329,6 +330,17 @@
 #define FSR_AFF				(1 << 2)
 #define FSR_TF				(1 << 1)
 
+/* Definitions for implementation-defined registers */
+#define ACTLR_QCOM_OSH_SHIFT		28
+#define ACTLR_QCOM_OSH			1
+
+#define ACTLR_QCOM_ISH_SHIFT		29
+#define ACTLR_QCOM_ISH			1
+
+#define ACTLR_QCOM_NSH_SHIFT		30
+#define ACTLR_QCOM_NSH			1
+
+
 #define FSR_IGN				(FSR_AFF | FSR_ASF | \
 					 FSR_TLBMCF | FSR_TLBLKF)
 #define FSR_FAULT			(FSR_MULTI | FSR_SS | FSR_UUT | \
@@ -354,8 +366,15 @@ struct arm_smmu_master {
 	struct arm_smmu_master_cfg	cfg;
 };
 
+enum smmu_model_id {
+	SMMU_MODEL_DEFAULT,
+	SMMU_MODEL_QCOM_V2,
+};
+
 struct arm_smmu_device {
 	struct device			*dev;
+
+	enum smmu_model_id		model;
 
 	void __iomem			*base;
 	unsigned long			size;
@@ -993,6 +1012,13 @@ static void arm_smmu_init_context_bank(struct arm_smmu_domain *smmu_domain)
 		reg |= (TTBCR_SL0_LVL_1 << TTBCR_SL0_SHIFT);
 
 	writel_relaxed(reg, cb_base + ARM_SMMU_CB_TTBCR);
+
+	if (smmu->model == SMMU_MODEL_QCOM_V2) {
+		reg = ACTLR_QCOM_ISH << ACTLR_QCOM_ISH_SHIFT |
+			ACTLR_QCOM_OSH << ACTLR_QCOM_OSH_SHIFT |
+			ACTLR_QCOM_NSH << ACTLR_QCOM_NSH_SHIFT;
+		writel_relaxed(reg, cb_base + ARM_SMMU_CB_ACTLR);
+	}
 
 	/* MAIR0 (stage-1 only) */
 	if (stage1) {
@@ -2278,6 +2304,9 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev)
 
 	parse_driver_options(smmu);
 
+	if (of_device_is_compatible(dev->of_node, "qcom,smmu-v2"))
+		smmu->model = SMMU_MODEL_QCOM_V2;
+
 	if (smmu->version > 1 &&
 	    smmu->num_context_banks != smmu->num_context_irqs) {
 		dev_err(dev,
@@ -2371,6 +2400,7 @@ static struct of_device_id arm_smmu_of_match[] = {
 	{ .compatible = "arm,smmu-v2", },
 	{ .compatible = "arm,mmu-400", },
 	{ .compatible = "arm,mmu-500", },
+	{ .compatible = "qcom,smmu-v2", },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, arm_smmu_of_match);
