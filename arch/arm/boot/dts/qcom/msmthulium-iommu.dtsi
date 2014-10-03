@@ -1,0 +1,225 @@
+/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include <dt-bindings/clock/msm-clocks-thulium.h>
+
+&soc {
+	jpeg_smmu: arm,smmu@d80000 {
+		compatible = "qcom,smmu-v2";
+		reg = <0xd80000 0x10000>;
+		#global-interrupts = <1>;
+
+		interrupts = <0 67 0>, <0 69 0>, <0 70 0>, <0 71 0>, <0 72 0>;
+
+		#iommu-cells = <1>;
+		vdd-supply = <&gdsc_jpeg>;
+		clocks = <&clock_mmss clk_smmu_jpeg_ahb_clk>,
+			<&clock_mmss clk_smmu_jpeg_axi_clk>,
+			<&clock_mmss clk_camss_ahb_clk>,
+			<&clock_mmss clk_camss_top_ahb_clk>;
+		clock-names = "dummy_clk", "dummy_clk", "dummy_clk", "dummy_clk";
+		#clock-cells = <1>;
+	};
+
+	kgsl_smmu: arm,smmu@b40000 {
+		compatible = "qcom,smmu-v2";
+		reg = <0xb40000 0x10000>;
+		#global-interrupts = <1>;
+
+		interrupts = <0 334 0>, <0 329 0>, <0 330 0>,
+			<0 331 0>, <0 332 0>;
+
+		#iommu-cells = <1>;
+	};
+
+	vfe_smmu: arm,smmu@da0000 {
+		compatible = "qcom,smmu-v2";
+		reg = <0xda0000 0x10000>;
+		#global-interrupts = <1>;
+
+		interrupts = <0 76 0>, <0 343 0>, <0 344 0>, <0 345 0>,
+                           <0 346 0>;
+
+		#iommu-cells = <1>;
+		vdd-supply = <&gdsc_jpeg>;
+		clocks = <&clock_mmss clk_smmu_jpeg_ahb_clk>,
+			<&clock_mmss clk_smmu_jpeg_axi_clk>,
+			<&clock_mmss clk_camss_ahb_clk>,
+			<&clock_mmss clk_camss_top_ahb_clk>;
+		clock-names = "dummy_clk", "dummy_clk", "dummy_clk", "dummy_clk";
+		#clock-cells = <1>;
+
+		attach-impl-defs = <0x124 0x3>;
+	};
+
+	venus_smmu: arm,smmu@d40000 {
+		compatible = "qcom,smmu-v2";
+		reg = <0xd40000 0x10000>;
+		#global-interrupts = <1>;
+
+		interrupts = <0 286 0>, <0 335 0>, <0 336 0>, <0 337 0>,
+                <0 338 0>, <0 339 0>, <0 340 0>, <0 341 0>, <0 342 0>,
+                <0 288 0>, <0 289 0>, <0 290 0>;
+
+		#iommu-cells = <1>;
+		vdd-supply = <&gdsc_jpeg>;
+		clocks = <&clock_mmss clk_smmu_jpeg_ahb_clk>,
+			<&clock_mmss clk_smmu_jpeg_axi_clk>,
+			<&clock_mmss clk_camss_ahb_clk>,
+			<&clock_mmss clk_camss_top_ahb_clk>;
+		clock-names = "dummy_clk", "dummy_clk", "dummy_clk", "dummy_clk";
+		#clock-cells = <1>;
+
+		attach-impl-defs = <0x124 0x3>;
+	};
+
+	mdp_smmu: arm,smmu@d00000 {
+		compatible = "qcom,smmu-v2";
+		reg = <0xd00000 0x10000>;
+		#global-interrupts = <1>;
+
+		interrupts = <0 353 0>, <0 348 0>, <0 349 0>, <0 350 0>,
+                           <0 351 0>;
+
+		#iommu-cells = <1>;
+		vdd-supply = <&gdsc_jpeg>;
+		clocks = <&clock_mmss clk_smmu_jpeg_ahb_clk>,
+			<&clock_mmss clk_smmu_jpeg_axi_clk>,
+			<&clock_mmss clk_camss_ahb_clk>,
+			<&clock_mmss clk_camss_top_ahb_clk>;
+		clock-names = "dummy_clk", "dummy_clk", "dummy_clk", "dummy_clk";
+		#clock-cells = <1>;
+
+		attach-impl-defs = <0x124 0x3>;
+	};
+
+	rot_smmu: arm,smmu@d20000 {
+		compatible = "qcom,smmu-v2";
+		reg = <0xd20000 0x10000>;
+		#global-interrupts = <1>;
+
+		interrupts = <0 73 0>, <0 320 0>, <0 321 0>, <0 322 0>, <0 323 0>;
+
+		#iommu-cells = <1>;
+		vdd-supply = <&gdsc_jpeg>;
+		clocks = <&clock_mmss clk_smmu_jpeg_ahb_clk>,
+			<&clock_mmss clk_smmu_jpeg_axi_clk>,
+			<&clock_mmss clk_camss_ahb_clk>,
+			<&clock_mmss clk_camss_top_ahb_clk>;
+		clock-names = "dummy_clk", "dummy_clk", "dummy_clk", "dummy_clk";
+		#clock-cells = <1>;
+
+		attach-impl-defs = <0x124 0x3>;
+	};
+
+	cpp_smmu: arm,smmu@d60000 {
+		compatible = "qcom,smmu-v2";
+		reg = <0xd60000 0x10000>;
+		#global-interrupts = <1>;
+
+		interrupts = <0 264 0>, <0 263 0>, <0 266 0>, <0 267 0>,
+                           <0 268 0>;
+
+		#iommu-cells = <1>;
+		vdd-supply = <&gdsc_jpeg>;
+		clocks = <&clock_mmss clk_smmu_jpeg_ahb_clk>,
+			<&clock_mmss clk_smmu_jpeg_axi_clk>,
+			<&clock_mmss clk_camss_ahb_clk>,
+			<&clock_mmss clk_camss_top_ahb_clk>;
+		clock-names = "dummy_clk", "dummy_clk", "dummy_clk", "dummy_clk";
+		#clock-cells = <1>;
+
+		attach-impl-defs = <0x124 0x3>;
+	};
+
+	lpass_q6_smmu: arm,smmu@1600000 {
+		compatible = "qcom,smmu-v2";
+		reg = <0x1600000 0x10000>;
+		#global-interrupts = <1>;
+
+		interrupts = <0 404 0>, <0 226 0>, <0 393 0>, <0 394 0>,
+                           <0 395 0>, <0 396 0>, <0 397 0>, <0 398 0>,
+                           <0 399 0>, <0 400 0>, <0 401 0>, <0 402 0>,
+                           <0 403 0>, <0 137 0>, <0 224 0>, <0 225 0>,
+                           <0 310 0>;
+
+		#iommu-cells = <1>;
+		vdd-supply = <&gdsc_jpeg>;
+		clocks = <&clock_mmss clk_smmu_jpeg_ahb_clk>,
+			<&clock_mmss clk_smmu_jpeg_axi_clk>,
+			<&clock_mmss clk_camss_ahb_clk>,
+			<&clock_mmss clk_camss_top_ahb_clk>;
+		clock-names = "dummy_clk", "dummy_clk", "dummy_clk", "dummy_clk";
+		#clock-cells = <1>;
+
+		attach-impl-defs = <0x124 0x3>;
+	};
+
+	lpass_core_smmu: arm,smmu@1620000 {
+		compatible = "qcom,smmu-v2";
+		reg = <0x1620000 0x10000>;
+		#global-interrupts = <1>;
+
+		interrupts = <0 234 0>, <0 271 0>, <0 269 0>, <0 259 0>, <0 235 0>;
+
+		#iommu-cells = <1>;
+		vdd-supply = <&gdsc_jpeg>;
+		clocks = <&clock_mmss clk_smmu_jpeg_ahb_clk>,
+			<&clock_mmss clk_smmu_jpeg_axi_clk>,
+			<&clock_mmss clk_camss_ahb_clk>,
+			<&clock_mmss clk_camss_top_ahb_clk>;
+		clock-names = "dummy_clk", "dummy_clk", "dummy_clk", "dummy_clk";
+		#clock-cells = <1>;
+
+		attach-impl-defs = <0x124 0x3>;
+	};
+
+	anoc1_smmu: arm,smmu@1660000 {
+		compatible = "qcom,smmu-v2";
+		reg = <0x1660000 0x10000>;
+		#global-interrupts = <1>;
+
+		interrupts = <0 371 0>, <0 364 0>, <0 365 0>, <0 366 0>,
+                           <0 367 0>, <0 368 0>, <0 369 0>, <0 370 0>;
+
+		#iommu-cells = <1>;
+		vdd-supply = <&gdsc_jpeg>;
+		clocks = <&clock_mmss clk_smmu_jpeg_ahb_clk>,
+			<&clock_mmss clk_smmu_jpeg_axi_clk>,
+			<&clock_mmss clk_camss_ahb_clk>,
+			<&clock_mmss clk_camss_top_ahb_clk>;
+		clock-names = "dummy_clk", "dummy_clk", "dummy_clk", "dummy_clk";
+		#clock-cells = <1>;
+
+		attach-impl-defs = <0x124 0x3>;
+	};
+
+	anoc2_smmu: arm,smmu@1680000 {
+		compatible = "qcom,smmu-v2";
+		reg = <0x1680000 0x10000>;
+		#global-interrupts = <1>;
+
+		interrupts = <0 381 0>, <0 373 0>, <0 374 0>, <0 375 0>,
+                           <0 376 0>, <0 377 0>, <0 378 0>;
+
+		#iommu-cells = <1>;
+		vdd-supply = <&gdsc_jpeg>;
+		clocks = <&clock_mmss clk_smmu_jpeg_ahb_clk>,
+			<&clock_mmss clk_smmu_jpeg_axi_clk>,
+			<&clock_mmss clk_camss_ahb_clk>,
+			<&clock_mmss clk_camss_top_ahb_clk>;
+		clock-names = "dummy_clk", "dummy_clk", "dummy_clk", "dummy_clk";
+		#clock-cells = <1>;
+
+		attach-impl-defs = <0x124 0x3>;
+	};
+};
