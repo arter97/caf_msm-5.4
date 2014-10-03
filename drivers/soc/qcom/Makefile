@@ -4,6 +4,7 @@ CFLAGS_scm.o :=$(call as-instr,.arch_extension sec,-DREQUIRES_SEC=1)
 obj-$(CONFIG_MSM_BOOT_STATS) += boot_stats.o
 obj-$(CONFIG_MSM_RUN_QUEUE_STATS) += msm_rq_stats.o
 obj-$(CONFIG_ARM64) += idle-v8.o cpu_ops.o
+obj-$(CONFIG_DEBUG_FS) += nohlt.o
 obj-$(CONFIG_CPU_V7) += idle-v7.o
 obj-$(CONFIG_QCOM_GSBI)	+=	qcom_gsbi.o
 obj-$(CONFIG_MSM_BAM_DMUX) += bam_dmux.o
