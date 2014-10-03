@@ -1560,7 +1560,7 @@ static int __init ubi_mtd_param_parse(const char *val, struct kernel_param *kp)
 		int err = kstrtoint(token, 10, &p->ubi_num);
 
 		if (err) {
-			ubi_err("bad value for ubi_num parameter: %s", token);
+			ubi_err(p->ubi_num, "bad value for ubi_num parameter: %s", token);
 			return -EINVAL;
 		}
 	} else
