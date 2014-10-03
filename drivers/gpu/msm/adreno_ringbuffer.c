@@ -83,12 +83,26 @@ void adreno_ringbuffer_submit(struct adreno_ringbuffer *rb,
 	 */
 
 	if (time != NULL) {
+		/*
+		 * Here we are attempting to create a mapping between the
+		 * GPU time domain (alwayson counter) and the CPU time domain
+		 * (local_clock) by sampling both values as close together as
+		 * possible. This is useful for many types of debugging and
+		 * profiling. In order to make this mapping as accurate as
+		 * possible, we must turn off interrupts to avoid running
+		 * interrupt handlers between the two samples.
+		 */
+		unsigned long flags;
+		local_irq_save(flags);
+
 		if (gpudev->alwayson_counter_read != NULL)
 			time->ticks = gpudev->alwayson_counter_read(adreno_dev);
 		else
 			time->ticks = 0;
 
 		time->clock = local_clock();
+
+		local_irq_restore(flags);
 	}
 
 	/* Memory barrier before informing the hardware of new commands */
@@ -1264,6 +1278,19 @@ void adreno_ringbuffer_set_constraint(struct kgsl_device *device,
 						context->id);
 }
 
+static inline int _get_alwayson_counter(struct adreno_device *adreno_dev,
+		unsigned int *cmds, unsigned int gpuaddr)
+{
+	unsigned int *p = cmds;
+
+	*p++ = cp_type3_packet(CP_REG_TO_MEM, 2);
+	*p++ = adreno_getreg(adreno_dev, ADRENO_REG_RBBM_ALWAYSON_COUNTER_LO) |
+		(1 << 30) | (2 << 18);
+	*p++ = gpuaddr;
+
+	return (unsigned int)(p - cmds);
+}
+
 /* adreno_rindbuffer_submitcmd - submit userspace IBs to the GPU */
 int adreno_ringbuffer_submitcmd(struct adreno_device *adreno_dev,
 		struct kgsl_cmdbatch *cmdbatch, struct adreno_submit_time *time)
@@ -1354,7 +1381,7 @@ int adreno_ringbuffer_submitcmd(struct adreno_device *adreno_dev,
 	if (cmdbatch->flags & KGSL_CMDBATCH_PROFILING &&
 		adreno_is_a4xx(adreno_dev) && profile_buffer) {
 		cmdbatch_user_profiling = true;
-		dwords += 4;
+		dwords += 6;
 
 		/*
 		 * we want to use an adreno_submit_time struct to get the
@@ -1369,7 +1396,7 @@ int adreno_ringbuffer_submitcmd(struct adreno_device *adreno_dev,
 
 	if (test_bit(CMDBATCH_FLAG_PROFILE, &cmdbatch->priv)) {
 		cmdbatch_kernel_profiling = true;
-		dwords += 4;
+		dwords += 6;
 	}
 
 	link = kzalloc(sizeof(unsigned int) *  dwords, GFP_KERNEL);
@@ -1384,10 +1411,10 @@ int adreno_ringbuffer_submitcmd(struct adreno_device *adreno_dev,
 	*cmds++ = KGSL_START_OF_IB_IDENTIFIER;
 
 	if (cmdbatch_kernel_profiling) {
-		*cmds++ = cp_type3_packet(CP_RECORD_PFP_TIMESTAMP, 1);
-		*cmds++ = adreno_dev->cmdbatch_profile_buffer.gpuaddr +
+		cmds += _get_alwayson_counter(adreno_dev, cmds,
+			adreno_dev->cmdbatch_profile_buffer.gpuaddr +
 			ADRENO_CMDBATCH_PROFILE_OFFSET(cmdbatch->profile_index,
-				started);
+				started));
 	}
 
 	/*
@@ -1395,10 +1422,10 @@ int adreno_ringbuffer_submitcmd(struct adreno_device *adreno_dev,
 	 * write it into the appropriate cmdbatch profiling buffer offset
 	 */
 	if (cmdbatch_user_profiling) {
-		*cmds++ = cp_type3_packet(CP_RECORD_PFP_TIMESTAMP, 1);
-		*cmds++ = cmdbatch->profiling_buffer_gpuaddr +
-				offsetof(struct kgsl_cmdbatch_profiling_buffer,
-				gpu_ticks_submitted);
+		cmds += _get_alwayson_counter(adreno_dev, cmds,
+			cmdbatch->profiling_buffer_gpuaddr +
+			offsetof(struct kgsl_cmdbatch_profiling_buffer,
+			gpu_ticks_submitted));
 	}
 
 	if (numibs) {
@@ -1423,10 +1450,10 @@ int adreno_ringbuffer_submitcmd(struct adreno_device *adreno_dev,
 	}
 
 	if (cmdbatch_kernel_profiling) {
-		*cmds++ = cp_type3_packet(CP_RECORD_PFP_TIMESTAMP, 1);
-		*cmds++ = adreno_dev->cmdbatch_profile_buffer.gpuaddr +
+		cmds += _get_alwayson_counter(adreno_dev, cmds,
+			adreno_dev->cmdbatch_profile_buffer.gpuaddr +
 			ADRENO_CMDBATCH_PROFILE_OFFSET(cmdbatch->profile_index,
-				retired);
+				retired));
 	}
 
 	/*
@@ -1434,10 +1461,10 @@ int adreno_ringbuffer_submitcmd(struct adreno_device *adreno_dev,
 	 * write it into the appropriate cmdbatch profiling buffer offset
 	 */
 	if (cmdbatch_user_profiling) {
-		*cmds++ = cp_type3_packet(CP_RECORD_PFP_TIMESTAMP, 1);
-		*cmds++ = cmdbatch->profiling_buffer_gpuaddr +
-				offsetof(struct kgsl_cmdbatch_profiling_buffer,
-				gpu_ticks_retired);
+		cmds += _get_alwayson_counter(adreno_dev, cmds,
+			cmdbatch->profiling_buffer_gpuaddr +
+			offsetof(struct kgsl_cmdbatch_profiling_buffer,
+			gpu_ticks_retired));
 	}
 
 	*cmds++ = cp_nop_packet(1);

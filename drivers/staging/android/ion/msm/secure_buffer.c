@@ -23,15 +23,7 @@
 #include <soc/qcom/scm.h>
 
 
-static struct rb_root secure_root;
 DEFINE_MUTEX(secure_buffer_mutex);
-
-struct secure_meta {
-	struct rb_node node;
-	struct sg_table *table;
-	struct kref ref;
-	enum cp_mem_usage usage;
-};
 
 struct cp2_mem_chunks {
 	u32 chunk_list;
@@ -50,60 +42,9 @@ struct cp2_lock_req {
 #define V2_CHUNK_SIZE		SZ_1M
 #define FEATURE_ID_CP 12
 
-static void secure_meta_add(struct secure_meta *meta)
-{
-	struct rb_root *root = &secure_root;
-	struct rb_node **p = &root->rb_node;
-	struct rb_node *parent = NULL;
-	struct secure_meta *entry;
-
-	while (*p) {
-		parent = *p;
-		entry = rb_entry(parent, struct secure_meta, node);
-
-		if (meta->table < entry->table) {
-			p = &(*p)->rb_left;
-		} else if (meta->table > entry->table) {
-			p = &(*p)->rb_right;
-		} else {
-			pr_err("%s: table %p already exists\n", __func__,
-				entry->table);
-			BUG();
-		}
-	}
-
-	rb_link_node(&meta->node, parent, p);
-	rb_insert_color(&meta->node, root);
-}
-
-
-static struct secure_meta *secure_meta_lookup(struct sg_table *table)
-{
-	struct rb_root *root = &secure_root;
-	struct rb_node **p = &root->rb_node;
-	struct rb_node *parent = NULL;
-	struct secure_meta *entry = NULL;
-
-	while (*p) {
-		parent = *p;
-		entry = rb_entry(parent, struct secure_meta, node);
-
-		if (table < entry->table)
-			p = &(*p)->rb_left;
-		else if (table > entry->table)
-			p = &(*p)->rb_right;
-		else
-			return entry;
-	}
-
-	return NULL;
-}
-
-
 static int secure_buffer_change_chunk(u32 chunks,
 				u32 nchunks,
 				u32 chunk_size,
-				enum cp_mem_usage usage,
 				int lock)
 {
 	struct cp2_lock_req request;
@@ -114,7 +55,8 @@ static int secure_buffer_change_chunk(u32 chunks,
 	desc.args[0] = request.chunks.chunk_list = chunks;
 	desc.args[1] = request.chunks.chunk_list_size = nchunks;
 	desc.args[2] = request.chunks.chunk_size = chunk_size;
-	desc.args[3] = request.mem_usage = usage;
+	/* Usage is now always 0 */
+	desc.args[3] = request.mem_usage = 0;
 	desc.args[4] = request.lock = lock;
 	desc.args[5] = 0;
 	desc.arginfo = SCM_ARGS(6, SCM_RW, SCM_VAL, SCM_VAL, SCM_VAL, SCM_VAL,
@@ -137,9 +79,7 @@ static int secure_buffer_change_chunk(u32 chunks,
 
 
 
-static int secure_buffer_change_table(struct sg_table *table,
-				enum cp_mem_usage usage,
-				int lock)
+static int secure_buffer_change_table(struct sg_table *table, int lock)
 {
 	int i, j;
 	int ret = -EINVAL;
@@ -190,7 +130,7 @@ static int secure_buffer_change_table(struct sg_table *table,
 		dmac_flush_range(chunk_list, chunk_list + chunk_list_len);
 
 		ret = secure_buffer_change_chunk(virt_to_phys(chunk_list),
-				nchunks, V2_CHUNK_SIZE, usage, lock);
+				nchunks, V2_CHUNK_SIZE, lock);
 
 		kfree(chunk_list);
 	}
@@ -198,114 +138,28 @@ static int secure_buffer_change_table(struct sg_table *table,
 	return ret;
 }
 
-int msm_ion_secure_table(struct sg_table *table, enum cp_mem_usage usage,
-			int flags)
+int msm_ion_secure_table(struct sg_table *table)
 {
-	struct secure_meta *meta;
 	int ret;
 
 	mutex_lock(&secure_buffer_mutex);
-	meta = secure_meta_lookup(table);
-
-	if (meta) {
-		kref_get(&meta->ref);
-		ret = 0;
-	} else {
-		meta = kzalloc(sizeof(*meta), GFP_KERNEL);
-
-		if (!meta) {
-			ret = -ENOMEM;
-			goto out;
-		}
-
-		meta->table = table;
-		meta->usage = usage;
-		kref_init(&meta->ref);
-
-		ret = secure_buffer_change_table(table, usage, 1);
-		if (!ret)
-			secure_meta_add(meta);
-		else
-			kfree(meta);
-	}
-out:
+	ret = secure_buffer_change_table(table, 1);
 	mutex_unlock(&secure_buffer_mutex);
 
 	return ret;
 
-}
-
-int msm_ion_secure_buffer(struct ion_client *client, struct ion_handle *handle,
-			enum cp_mem_usage usage, int flags)
-{
-	struct sg_table *table;
-	int ret;
-
-	table = ion_sg_table(client, handle);
-
-	if (IS_ERR_OR_NULL(table)) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	ret = msm_ion_secure_table(table, usage, flags);
-out:
-	return ret;
-}
-EXPORT_SYMBOL(msm_ion_secure_buffer);
-
-static void msm_secure_buffer_release(struct kref *kref)
-{
-	struct secure_meta *meta = container_of(kref, struct secure_meta,
-						ref);
-
-	rb_erase(&meta->node, &secure_root);
-	secure_buffer_change_table(meta->table, meta->usage, 0);
-	kfree(meta);
 }
 
 int msm_ion_unsecure_table(struct sg_table *table)
 {
-	struct secure_meta *meta;
-	int ret = 0;
+	int ret;
 
 	mutex_lock(&secure_buffer_mutex);
-	meta = secure_meta_lookup(table);
-
-	if (!meta) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	kref_put(&meta->ref, msm_secure_buffer_release);
-
-out:
+	ret = secure_buffer_change_table(table, 0);
 	mutex_unlock(&secure_buffer_mutex);
 	return ret;
 
 }
-
-int msm_ion_unsecure_buffer(struct ion_client *client,
-			    struct ion_handle *handle)
-{
-	struct sg_table *table;
-	int ret = 0;
-
-	table = ion_sg_table(client, handle);
-
-	if (IS_ERR_OR_NULL(table)) {
-		WARN(1, "Could not get table for handle %p to unsecure\n",
-			handle);
-		ret = -EINVAL;
-		goto out;
-	}
-
-	msm_ion_unsecure_table(table);
-
-out:
-	return ret;
-}
-EXPORT_SYMBOL(msm_ion_unsecure_buffer);
 
 #define MAKE_CP_VERSION(major, minor, patch) \
 	(((major & 0x3FF) << 22) | ((minor & 0x3FF) << 12) | (patch & 0xFFF))

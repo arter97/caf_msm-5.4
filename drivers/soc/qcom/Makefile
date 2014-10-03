@@ -40,6 +40,8 @@ obj-$(CONFIG_MSM_SPM_V2) += spm-v2.o spm_devices.o
 obj-$(CONFIG_SOC_BUS)	+=	socinfo.o
 obj-y			+=	qdsp6v2/
 
+obj-$(CONFIG_MSM_HVC) += hvc.o
+
 obj-$(CONFIG_MSM_PIL_MSS_QDSP6V5) += pil-q6v5.o pil-msa.o pil-q6v5-mss.o
 obj-$(CONFIG_MSM_PIL_FEMTO) += pil-q6v5.o pil-msa.o pil-femto-modem.o
 

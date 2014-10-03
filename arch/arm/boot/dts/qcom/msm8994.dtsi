@@ -261,6 +261,11 @@
 	ranges = <0 0 0 0xffffffff>;
 	compatible = "simple-bus";
 
+	cpuss@fd4a8000 {
+		compatible = "qcom,cpuss-8994";
+		reg = <0xfd4a8000 0x4>;
+	};
+
 	acc0:clock-controller@f908b004 {
 		compatible = "qcom,arm-cortex-acc";
 		reg = <0xf9070000 0x1000>,
@@ -1122,7 +1127,7 @@
 			status = "disabled";
 		};
 
-	spi_0: spi@f9923000 { /* BLSP1 QUP1 */
+	spi_0: spi_epm: spi@f9923000 { /* BLSP1 QUP1 */
 		compatible = "qcom,spi-qup-v2";
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -1141,8 +1146,8 @@
 		qcom,master-id = <86>;
 		qcom,use-pinctrl;
 		pinctrl-names = "default", "sleep";
-		pinctrl-0 = <&spi_0_active>;
-		pinctrl-1 = <&spi_0_sleep>;
+		pinctrl-0 = <&spi_0_active &spi_0_cs1_active>;
+		pinctrl-1 = <&spi_0_sleep &spi_0_cs1_sleep>;
 
 		clock-names = "iface_clk", "core_clk";
 
@@ -1524,7 +1529,7 @@
 		vdda18-supply = <&pm8994_l6>;
 		vdda33-supply = <&pm8994_l24>;
 		qcom,vdd-voltage-level = <1 5 7>;
-
+		phy_type = "ulpi";
 		clocks = <&clock_rpm clk_ln_bb_clk>,
 			 <&clock_gcc clk_gcc_usb_phy_cfg_ahb2phy_clk>,
 			 <&clock_gcc clk_gcc_qusb2_phy_reset>;
@@ -1736,7 +1741,7 @@
 		compatible = "qcom,bimc-bwmon";
 		reg = <0xfc388000 0x300>, <0xfc381000 0x200>;
 		reg-names = "base", "global_base";
-		interrupts = <0 183 1>;
+		interrupts = <0 183 4>;
 		qcom,mport = <0>;
 		qcom,target-dev = <&cpubw>;
 	};
@@ -1814,7 +1819,10 @@
 			<  768000 >,
 			<  844800 >,
 			<  921600 >,
-			<  940800 >;
+			<  940800 >,
+			< 1248000 >,
+			< 1344000 >,
+			< 1440000 >;
 
 		qcom,cpufreq-table-4 =
 			<  199200 >,
@@ -1834,8 +1842,9 @@
 		      <0xf9011000 0x1000>,
 		      <0xf900d000 0x1000>,
 		      <0xf900f000 0x1000>,
-		      <0xf9112000 0x1000>;
-		reg-names = "c0_pll", "c1_pll", "cci_pll", "c0_mux", "c1_mux", "cci_mux";
+		      <0xf9112000 0x1000>,
+		      <0xfc4b80b0 0x8>;
+		reg-names = "c0_pll", "c1_pll", "cci_pll", "c0_mux", "c1_mux", "cci_mux", "efuse";
 		vdd-a53-supply = <&apc0_vreg_corner>;
 		vdd-a57-supply = <&apc1_vreg_corner>;
 		vdd-cci-supply = <&apc0_vreg_corner>;
@@ -1954,10 +1963,6 @@
 			<244800 133330000 0x01000414>,
 			<244800 133330000 0x030fcfff>,
 			<244800 133330000 0x04000000>;
-
-		qcom,buffer-type-tz-usage-table = <0x241 0x1>,
-			<0x106 0x2>,
-			<0x480 0x3>;
 		qcom,vidc-iommu-domains {
 			qcom,domain-ns {
 				qcom,vidc-domain-phandle = <&venus_domain_ns>;
@@ -2174,7 +2179,7 @@
 		qcom,master-id = <86>;
 	};
 
-	i2c_5: i2c@f9967000 { /* BLSP2 QUP5 */
+	i2c_5: i2c_11: i2c@f9967000 { /* BLSP2 QUP5 */
 		compatible = "qcom,i2c-msm-v2";
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -2580,6 +2585,7 @@
 		clocks = <&clock_rpm clk_qcrypto_ce2_clk>,
 			 <&clock_rpm clk_gcc_ce2_ahb_m_clk>,
 			 <&clock_rpm clk_gcc_ce2_axi_m_clk>;
+		qcom,support-core-clk-only;
 		qcom,use-sw-aes-cbc-ecb-ctr-algo;
 		qcom,use-sw-aes-xts-algo;
 		qcom,use-sw-aes-ccm-algo;
@@ -2606,6 +2612,7 @@
 		clocks = <&clock_rpm clk_qcrypto_ce3_clk>,
 			 <&clock_rpm clk_gcc_ce3_ahb_m_clk>,
 			 <&clock_rpm clk_gcc_ce3_axi_m_clk>;
+		qcom,support-core-clk-only;
 		qcom,use-sw-aes-cbc-ecb-ctr-algo;
 		qcom,use-sw-aes-xts-algo;
 		qcom,use-sw-aes-ccm-algo;
@@ -2632,6 +2639,7 @@
 		clocks = <&clock_rpm clk_qcrypto_ce2_clk>,
 			 <&clock_rpm clk_gcc_ce2_ahb_m_clk>,
 			 <&clock_rpm clk_gcc_ce2_axi_m_clk>;
+		qcom,support-core-clk-only;
 		qcom,use-sw-aes-cbc-ecb-ctr-algo;
 		qcom,use-sw-aes-xts-algo;
 		qcom,use-sw-aes-ccm-algo;
@@ -2658,6 +2666,7 @@
 		clocks = <&clock_rpm clk_qcrypto_ce3_clk>,
 			 <&clock_rpm clk_gcc_ce3_ahb_m_clk>,
 			 <&clock_rpm clk_gcc_ce3_axi_m_clk>;
+		qcom,support-core-clk-only;
 		qcom,use-sw-aes-cbc-ecb-ctr-algo;
 		qcom,use-sw-aes-xts-algo;
 		qcom,use-sw-aes-ccm-algo;
@@ -2684,6 +2693,7 @@
 		clocks = <&clock_rpm clk_qcedev_ce2_clk>,
 			 <&clock_rpm clk_gcc_ce2_ahb_m_clk>,
 			 <&clock_rpm clk_gcc_ce2_axi_m_clk>;
+		qcom,support-core-clk-only;
 		status = "disabled";
 	};
 
@@ -2727,6 +2737,7 @@
 		sensor_information2: qcom,sensor-information@2 {
 			qcom,sensor-type =  "tsens";
 			qcom,sensor-name = "tsens_tz_sensor2";
+			qcom,alias-name = "pop_mem";
 		};
 
 		sensor_information3: qcom,sensor-information@3 {
@@ -2782,6 +2793,7 @@
 		sensor_information12: qcom,sensor-information@12 {
 			qcom,sensor-type = "tsens";
 			qcom,sensor-name = "tsens_tz_sensor12";
+			qcom,alias-name = "gpu";
 		};
 
 		sensor_information13: qcom,sensor-information@13 {
@@ -2927,12 +2939,6 @@
 					  <45 512 100000 200000>; /* 800 Mbps */
 	};
 
-	cpu-pmu {
-		compatible = "arm,armv8-pmuv3";
-		qcom,irq-is-percpu;
-		interrupts = <1 14 0xff00>;
-	};
-
 	audio_heap {
 		compatible = "qcom,msm-shared-memory";
 		qcom,proc-id = <1>;
@@ -3055,6 +3061,13 @@
 		};
 	};
 
+	qcom,avtimer@fe09c000 {
+		compatible = "qcom,avtimer";
+		reg = <0xFE09C00C 0x4>,
+		      <0xFE09C010 0x4>;
+		reg-names = "avtimer_lsb_addr", "avtimer_msb_addr";
+		qcom,clk_div = <27>;
+	};
 };
 
 &gdsc_usb30 {

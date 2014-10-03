@@ -135,20 +135,55 @@
 			};
 		};
 
-		spi_0 {
+		spi_0_active {
+			/* MOSI, MISO, CLK */
 			qcom,pins = <&gp 0>, <&gp 1>, <&gp 3>;
 			qcom,num-grp-pins = <3>;
 			qcom,pin-func = <1>;
-			label = "spi_0";
+			label = "spi_0-active";
 
-			spi_0_active: spi_0_active {
-					       drive-strength = <6>;
-					       bias-pull-up;
+			spi_0_active: spi_active {
+			       drive-strength = <12>;
+			       bias-disable = <0>;
 		        };
+		};
 
-			spi_0_sleep: spi_0_sleep {
-					       drive-strength = <6>;
-					       bias-pull-up;
+		spi_0_suspend {
+			/* MOSI, MISO, CLK */
+			qcom,pins = <&gp 0>, <&gp 1>, <&gp 3>;
+			qcom,num-grp-pins = <3>;
+			qcom,pin-func = <1>;
+			label = "spi_0-suspend";
+
+			spi_0_sleep: spi_sleep {
+			       drive-strength = <2>;
+			       bias-pull-down;
+		        };
+		};
+
+		spi_cs1_active {
+			/* CS1 */
+			qcom,pins = <&gp 8>;
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <4>;
+			label = "spi_0-cs1-active";
+
+			spi_0_cs1_active: cs1_active {
+			       drive-strength = <2>;
+			       bias-disable = <0>;
+		        };
+		};
+
+		spi_cs1_suspend {
+			/* CS1 */
+			qcom,pins = <&gp 8>;
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <4>;
+			label = "spi_0-cs1-suspend";
+
+			spi_0_cs1_sleep: cs1_sleep {
+			       drive-strength = <2>;
+			       bias-disable = <0>;
 		        };
 		};
 
@@ -1130,6 +1165,18 @@
 			cnss_default: default {
 				drive-strength = <16>;
 				bias-pull-down;
+			};
+		};
+
+		cnss_lpass: cnss_lpass {
+			qcom,pins = <&gp 111>;
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <2>;
+			label = "cnss-lpass";
+			/* default state */
+			cnss_lpass_default: cnss_lpass_default {
+				drive-strength = <2>;
+				bias-pull-up;
 			};
 		};
 

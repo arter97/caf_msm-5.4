@@ -23,9 +23,14 @@
 	model = "Qualcomm Technologies, Inc. MSM 8994v2";
 	compatible = "qcom,msm8994";
 	qcom,msm-id = <207 0x20000>;
+
+	chosen {
+		bootargs = "sched_enable_hmp=1 sched_enable_power_aware=1 maxcpus=4";
+	};
 };
 
 &soc {
+
 	arm64-cpu-erp@f9100000 {
 		compatible = "arm,arm64-cpu-erp";
 		reg = <0xf9100000 0x1000>;
@@ -43,6 +48,51 @@
 				  "cci-irq",
 				  "sbe-irq";
 	};
+
+	cpu-pmu {
+		compatible = "arm,armv8-pmuv3";
+		qcom,irq-is-percpu;
+		interrupts = <1 7 0xff00>;
+	};
+};
+
+/* Clock driver overrides */
+&clock_gcc {
+	compatible = "qcom,gcc-8994v2";
+};
+
+&clock_mmss {
+	compatible = "qcom,mmsscc-8994v2";
+};
+
+&clock_cpu {
+	compatible = "qcom,cpu-clock-8994-v2";
+	qcom,a53-speedbin0-v0 =
+			<	   0 0>,
+			<  300000000 2>,
+			<  384000000 3>,
+			<  460800000 4>,
+			<  600000000 5>,
+			<  672000000 6>,
+			<  768000000 7>,
+			<  864000000 8>,
+			<  960000000 9>,
+			< 1248000000 10>,
+			< 1344000000 11>,
+			< 1440000000 12>;
+	qcom,a57-speedbin0-v0 =
+			<	   0 0>,
+			<  300000000 2>,
+			<  384000000 3>,
+			<  480000000 4>;
+	qcom,cci-speedbin0-v0 =
+			<	   0 0>,
+			<  300000000 4>,
+			<  384000000 5>,
+			<  537600000 7>,
+			<  600000000 9>,
+			<  729600000 11>,
+			<  787200000 12>;
 };
 
 /* GPU overrides */
@@ -178,6 +228,22 @@
 	};
 };
 
+/* MDSS driver overrides */
+&mdss_mdp {
+	qcom,mdp-settings = <0x0117c 0x0000ffff>,
+			    <0x01184 0xC000ff00>,
+			    <0x011e0 0x000000a4>,
+			    <0x011e4 0x00000000>,
+			    <0x012ac 0xc0000ccc>,
+			    <0x012b4 0xc0000ccc>,
+			    <0x012bc 0x00cccccc>,
+			    <0x012c4 0x000000cc>,
+			    <0x013a8 0x0cccc0c0>,
+			    <0x013b0 0xccccc0c0>,
+			    <0x013b8 0xccccc0c0>,
+			    <0x013d0 0x00ccc000>;
+};
+
 /* Video driver overrides */
 &msm_vidc {
 	qcom,load-freq-tbl =
@@ -197,4 +263,9 @@
 		<244800 150000000 0x01000414>,
 		<244800 150000000 0x030fcfff>,
 		<244800 150000000 0x04000000>;
+};
+
+&cnss {
+	pinctrl-names = "default";
+	pinctrl-0 = <&cnss_default &cnss_lpass_default>;
 };

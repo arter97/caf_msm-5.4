@@ -231,11 +231,13 @@ void msm_bam_set_hsic_host_dev(struct device *dev)
 		pr_debug("%s: Getting hsic device %p\n", __func__, dev);
 		pm_runtime_get(dev);
 	} else if (host_info[HSIC_CTRL].dev) {
-		pr_debug("%s: Putting hsic device %p\n", __func__,
-			host_info[HSIC_CTRL].dev);
-		/* Just free previous device*/
-		info[HSIC_CTRL].in_lpm = true;
-		pm_runtime_put(host_info[HSIC_CTRL].dev);
+		pr_debug("%s: Try Putting hsic device %p, lpm:%d\n", __func__,
+			host_info[HSIC_CTRL].dev, info[HSIC_CTRL].in_lpm);
+		/* Just release previous device if not already done */
+		if (!info[HSIC_CTRL].in_lpm) {
+			info[HSIC_CTRL].in_lpm = true;
+			pm_runtime_put(host_info[HSIC_CTRL].dev);
+		}
 	}
 
 	host_info[HSIC_CTRL].dev = dev;
@@ -923,6 +925,18 @@ static bool usb_bam_resume_core(enum usb_ctrl bam_type,
 	}
 }
 
+/**
+ * usb_bam_disconnect_ipa_prod() - disconnects the USB consumer i.e. IPA producer.
+ * @ipa_params: USB IPA related parameters
+ * @cur_bam: USB controller used for BAM functionality
+ * @bam_mode: USB controller based BAM used in Device or Host Mode
+
+ * It performs disconnect with IPA driver for IPA producer pipe and
+ * with SPS driver for USB BAM consumer pipe. This API also takes care
+ * of SYS2BAM and BAM2BAM IPA disconnect functionality.
+ *
+ * Return: 0 in case of success, errno otherwise.
+ */
 static int usb_bam_disconnect_ipa_prod(
 		struct usb_bam_connect_ipa_params *ipa_params,
 		enum usb_ctrl cur_bam, enum usb_bam_mode bam_mode)
@@ -990,11 +1004,21 @@ static int usb_bam_disconnect_ipa_prod(
 			ctx.pipes_enabled_per_bam[pipe_connect->bam_type] -= 1;
 		spin_unlock(&usb_bam_lock);
 	}
-	info[cur_bam].prod_pipes_enabled_per_bam -= 1;
 
 	return 0;
 }
 
+/**
+ * usb_bam_disconnect_ipa_cons() - disconnects the USB producer i.e. IPA consumer.
+ * @ipa_params: USB IPA related parameters
+ * @cur_bam: USB controller used for BAM functionality
+ *
+ * It performs disconnect with IPA driver for IPA consumer pipe and
+ * with SPS driver for USB BAM producer pipe. This API also takes care
+ * of SYS2BAM and BAM2BAM IPA disconnect functionality.
+ *
+ * Return: 0 in case of success, errno otherwise.
+ */
 static int usb_bam_disconnect_ipa_cons(
 		struct usb_bam_connect_ipa_params *ipa_params,
 		enum usb_ctrl cur_bam)
@@ -1070,23 +1094,7 @@ static int usb_bam_disconnect_ipa_cons(
 	}
 
 	pipe_connect->ipa_clnt_hdl = -1;
-
-	/* Notify CONS release on the last cons pipe released */
-	if (ctx.pipes_enabled_per_bam[cur_bam] == 0) {
-		if (info[cur_bam].cur_cons_state ==
-				IPA_RM_RESOURCE_RELEASED) {
-			pr_debug("%s: Notify CONS_RELEASED\n",
-				 __func__);
-			ipa_rm_notify_completion(
-				IPA_RM_RESOURCE_RELEASED,
-				ipa_rm_resource_cons[cur_bam]);
-		}
-		if (pipe_connect->bam_mode == USB_BAM_DEVICE) {
-			pr_debug("%s Ended disconnect sequence\n", __func__);
-			usb_bam_suspend_core(cur_bam,
-				USB_BAM_DEVICE, 1);
-		}
-	}
+	info[cur_bam].prod_pipes_enabled_per_bam -= 1;
 
 	return 0;
 }
@@ -2718,6 +2726,18 @@ int usb_bam_disconnect_pipe(u8 idx)
 	return 0;
 }
 
+/**
+ * is_ipa_hanlde_valid: Check if ipa_handle is valid or not
+ * @ipa_handle: IPA Handle for producer or consumer
+ *
+ * Returns true is ipa handle is valid.
+ */
+static bool is_ipa_handle_valid(u32 ipa_handle)
+{
+
+	return (ipa_handle != -1);
+}
+
 int usb_bam_disconnect_ipa(struct usb_bam_connect_ipa_params *ipa_params)
 {
 	int ret;
@@ -2726,16 +2746,18 @@ int usb_bam_disconnect_ipa(struct usb_bam_connect_ipa_params *ipa_params)
 	enum usb_ctrl cur_bam;
 	enum usb_bam_mode bam_mode;
 
-	if (!ipa_params->prod_clnt_hdl && !ipa_params->cons_clnt_hdl) {
-		pr_err("%s: Both of the handles is missing\n", __func__);
+	if (!is_ipa_handle_valid(ipa_params->prod_clnt_hdl) &&
+			!is_ipa_handle_valid(ipa_params->cons_clnt_hdl)) {
+		pr_err("%s: Both IPA handles are invalid.\n", __func__);
 		return -EINVAL;
 	}
 
 	pr_debug("%s: Starting disconnect sequence\n", __func__);
-
-	if (ipa_params->prod_clnt_hdl)
+	pr_debug("%s(): prod_clnt_hdl:%d cons_clnt_hdl:%d\n", __func__,
+			ipa_params->prod_clnt_hdl, ipa_params->cons_clnt_hdl);
+	if (is_ipa_handle_valid(ipa_params->prod_clnt_hdl))
 		idx = ipa_params->dst_idx;
-	if (ipa_params->cons_clnt_hdl)
+	if (is_ipa_handle_valid(ipa_params->cons_clnt_hdl))
 		idx = ipa_params->src_idx;
 	pipe_connect = &usb_bam_connections[idx];
 	cur_bam = pipe_connect->bam_type;
@@ -2743,7 +2765,7 @@ int usb_bam_disconnect_ipa(struct usb_bam_connect_ipa_params *ipa_params)
 
 	mutex_lock(&info[cur_bam].suspend_resume_mutex);
 	/* Delay USB core to go into lpm before we finish our handshake */
-	if (ipa_params->prod_clnt_hdl) {
+	if (is_ipa_handle_valid(ipa_params->prod_clnt_hdl)) {
 		ret = usb_bam_disconnect_ipa_prod(ipa_params,
 				cur_bam, bam_mode);
 		if (ret) {
@@ -2752,11 +2774,27 @@ int usb_bam_disconnect_ipa(struct usb_bam_connect_ipa_params *ipa_params)
 		}
 	}
 
-	if (ipa_params->cons_clnt_hdl) {
+	if (is_ipa_handle_valid(ipa_params->cons_clnt_hdl)) {
 		ret = usb_bam_disconnect_ipa_cons(ipa_params, cur_bam);
 		if (ret) {
 			mutex_unlock(&info[cur_bam].suspend_resume_mutex);
 			return ret;
+		}
+	}
+
+	/* Notify CONS release on the last cons pipe released */
+	if (ctx.pipes_enabled_per_bam[cur_bam] == 0) {
+		if (info[cur_bam].cur_cons_state ==
+				IPA_RM_RESOURCE_RELEASED) {
+			pr_debug("%s: Notify CONS_RELEASED\n", __func__);
+			ipa_rm_notify_completion(
+				IPA_RM_RESOURCE_RELEASED,
+				ipa_rm_resource_cons[cur_bam]);
+		}
+
+		if (pipe_connect->bam_mode == USB_BAM_DEVICE) {
+			pr_debug("%s Ended disconnect sequence\n", __func__);
+			usb_bam_suspend_core(cur_bam, USB_BAM_DEVICE, 1);
 		}
 	}
 

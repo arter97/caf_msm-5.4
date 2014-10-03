@@ -216,6 +216,14 @@
 		#clock-cells = <1>;
 	};
 
+	clock_gcc_mdss: qcom,gcc-mdss@1ac8300 {
+		compatible = "qcom,gcc-mdss-8909";
+		clocks = <&mdss_dsi0_pll clk_pixel_clk_src>,
+			 <&mdss_dsi0_pll clk_byte_clk_src>;
+		clock-names = "pixel_src", "byte_src";
+		#clock-cells = <1>;
+	};
+
 	clock_debug: qcom,cc-debug@1874000 {
 		compatible = "qcom,cc-debug-ferrum";
 		reg = <0x1874000 0x4>,
@@ -225,6 +233,63 @@
 		clock-names = "rpm_debug_mux";
 		#clock-cells = <1>;
 	};
+
+	qcom,clock-a7@0b011050 {
+		compatible = "qcom,clock-a53-8916";
+		reg = <0x0b011050 0x8>;
+		reg-names = "rcg-base";
+		qcom,safe-freq = < 400000000 >;
+		cpu-vdd-supply = <&pmferrum_s1_corner>;
+		clocks = <&clock_gcc clk_gpll0_ao_clk_src>,
+			 <&clock_gcc clk_a7sspll>;
+		clock-names = "clk-4", "clk-5";
+		qcom,speed0-bin-v0 =
+			<          0 0>,
+			<  400000000 4>,
+			<  800000000 5>,
+			< 1248000000 7>;
+
+	};
+
+	cpubw: qcom,cpubw {
+		compatible = "qcom,devbw";
+		governor = "cpufreq";
+		qcom,src-dst-ports = <1 512>;
+		qcom,active-only;
+		qcom,bw-tbl =
+			/*  73 9.60 MHz */
+			/* 381  50MHz */
+			<  762 /* 100 MHz */>,
+			< 1525 /* 200 MHz */>,
+			< 3051 /* 400 MHz */>,
+			< 4066 /* 533 MHz */>;
+	};
+
+	devfreq-cpufreq {
+		cpubw-cpufreq {
+			target-dev = <&cpubw>;
+			cpu-to-dev-map =
+				 <  400000  762>,
+				 <  998400  1525>,
+				 < 1094400  3051>,
+				 < 1190400  4066>;
+		};
+	};
+
+	qcom,msm-cpufreq@0 {
+		reg = <0 4>;
+		compatible = "qcom,msm-cpufreq";
+		qcom,cpufreq-table =
+			 <  200000 >,
+			 <  400000 >,
+			 <  533330 >,
+			 <  800000 >,
+			 <  998400 >,
+			 < 1094400 >,
+			 < 1190400 >,
+			 < 1248000 >;
+	};
+
 
 	blsp1_uart1: serial@78af000 {
 		compatible = "qcom,msm-lsuart-v14";
@@ -622,6 +687,7 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		cell-index = <0>;
+		qcom,not-wakeup; /* Needed until MPM is fully configured. */
 	};
 
 	qcom,rmtfs_sharedmem@86700000 {
@@ -717,6 +783,17 @@
 		qcom,msm-bus,name = "sdhc1";
 		qcom,msm-bus,num-cases = <8>;
 		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps = <78 512 0 0>, /* No vote */
+				<78 512 1600 3200>,    /* 400 KB/s*/
+				<78 512 80000 160000>, /* 20 MB/s */
+				<78 512 100000 200000>, /* 25 MB/s */
+				<78 512 200000 400000>, /* 50 MB/s */
+				<78 512 400000 800000>, /* 100 MB/s */
+				<78 512 400000 800000>, /* 200 MB/s */
+				<78 512 2048000 4096000>; /* Max. bandwidth */
+		qcom,bus-bw-vectors-bps = <0 400000 20000000 25000000 50000000
+						100000000 200000000 4294967295>;
+
 
 		clocks = <&clock_gcc clk_gcc_sdcc1_ahb_clk>,
 			 <&clock_gcc clk_gcc_sdcc1_apps_clk>;
@@ -739,6 +816,16 @@
 		qcom,msm-bus,name = "sdhc2";
 		qcom,msm-bus,num-cases = <8>;
 		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps = <81 512 0 0>, /* No vote */
+				<81 512 1600 3200>,    /* 400 KB/s*/
+				<81 512 80000 160000>, /* 20 MB/s */
+				<81 512 100000 200000>, /* 25 MB/s */
+				<81 512 200000 400000>, /* 50 MB/s */
+				<81 512 400000 800000>, /* 100 MB/s */
+				<81 512 400000 800000>, /* 200 MB/s */
+				<81 512 2048000 4096000>; /* Max. bandwidth */
+		qcom,bus-bw-vectors-bps = <0 400000 20000000 25000000 50000000
+						100000000 200000000 4294967295>;
 
 		clocks = <&clock_gcc clk_gcc_sdcc2_ahb_clk>,
 			 <&clock_gcc clk_gcc_sdcc2_apps_clk>;

@@ -199,6 +199,7 @@ struct msm_ssphy_qmp {
 	struct clk		*pipe_clk;
 	struct clk		*phy_com_reset;
 	struct clk		*phy_reset;
+	struct clk		*phy_phy_reset;
 	bool			clk_enabled;
 	bool			cable_connected;
 	bool			in_suspend;
@@ -339,8 +340,10 @@ static int msm_ssphy_qmp_init_clocks(struct msm_ssphy_qmp *phy)
 	} /* otherwise pipe_clk must be enabled after initialization */
 
 	phy->phy_com_reset = devm_clk_get(phy->phy.dev, "phy_com_reset");
-	if (IS_ERR(phy->phy_com_reset))
+	if (IS_ERR(phy->phy_com_reset)) {
+		phy->phy_com_reset = NULL;
 		dev_dbg(phy->phy.dev, "failed to get phy_com_reset\n");
+	}
 
 	phy->phy_reset = devm_clk_get(phy->phy.dev, "phy_reset");
 	if (IS_ERR(phy->phy_reset)) {
@@ -348,6 +351,13 @@ static int msm_ssphy_qmp_init_clocks(struct msm_ssphy_qmp *phy)
 		ret = PTR_ERR(phy->phy_reset);
 		goto disable_pipe_clk;
 	}
+
+	phy->phy_phy_reset = devm_clk_get(phy->phy.dev, "phy_phy_reset");
+	if (IS_ERR(phy->phy_phy_reset)) {
+		phy->phy_phy_reset = NULL;
+		dev_dbg(phy->phy.dev, "phy_phy_reset unavailable\n");
+	}
+
 	phy->clk_enabled = true;
 	return ret;
 
@@ -473,45 +483,75 @@ static int msm_ssphy_qmp_reset(struct usb_phy *uphy)
 	}
 
 	/* Assert USB3 PHY reset */
-	ret = clk_reset(phy->phy_com_reset, CLK_RESET_ASSERT);
-	if (ret && ret != -EINVAL) {
-		dev_err(uphy->dev, "phy_com_reset clk assert failed\n");
-		return ret;
+	if (phy->phy_com_reset) {
+		ret = clk_reset(phy->phy_com_reset, CLK_RESET_ASSERT);
+		if (ret) {
+			dev_err(uphy->dev, "phy_com_reset clk assert failed\n");
+			return ret;
+		}
 	}
+
+	/* Assert USB3 PHY reset */
+	if (phy->phy_phy_reset) {
+		ret = clk_reset(phy->phy_phy_reset, CLK_RESET_ASSERT);
+		if (ret) {
+			dev_err(uphy->dev, "phy_phy reset assert failed\n");
+			goto deassert_phy_com_reset;
+		}
+	} else {
+		ret = clk_reset(phy->pipe_clk, CLK_RESET_ASSERT);
+		if (ret) {
+			dev_err(uphy->dev, "pipe_clk reset assert failed\n");
+			goto deassert_phy_com_reset;
+		}
+	}
+
+	/* Assert USB3 PHY CSR reset */
 	ret = clk_reset(phy->phy_reset, CLK_RESET_ASSERT);
 	if (ret) {
 		dev_err(uphy->dev, "phy_reset clk assert failed\n");
-		goto deassert_phy_com_reset;
-	}
-	ret = clk_reset(phy->pipe_clk, CLK_RESET_ASSERT);
-	if (ret && ret != -ENOSYS) {
-		dev_err(uphy->dev, "pipe_clk reset assert failed\n");
-		goto deassert_phy_reset;
+		goto deassert_phy_phy_reset;
 	}
 
-	/* Clear USB3 PHY reset */
-	ret = clk_reset(phy->pipe_clk, CLK_RESET_DEASSERT);
-	if (ret && ret != -ENOSYS) {
-		dev_err(uphy->dev, "pipe_clk reset assert failed\n");
-		goto deassert_phy_reset;
-	}
+	/* Deassert USB3 PHY CSR reset */
 	ret = clk_reset(phy->phy_reset, CLK_RESET_DEASSERT);
 	if (ret) {
 		dev_err(uphy->dev, "phy_reset clk deassert failed\n");
-		goto deassert_phy_com_reset;
-	}
-	ret = clk_reset(phy->phy_com_reset, CLK_RESET_DEASSERT);
-	if (ret && ret != -EINVAL) {
-		dev_err(uphy->dev, "phy_com_reset clk deassert failed\n");
-		return ret;
+		goto deassert_phy_phy_reset;
 	}
 
+	/* Deassert USB3 PHY reset */
+	if (phy->phy_phy_reset) {
+		ret = clk_reset(phy->phy_phy_reset, CLK_RESET_DEASSERT);
+		if (ret) {
+			dev_err(uphy->dev, "phy_phy reset deassert failed\n");
+			goto deassert_phy_com_reset;
+		}
+	} else {
+		ret = clk_reset(phy->pipe_clk, CLK_RESET_DEASSERT);
+		if (ret) {
+			dev_err(uphy->dev, "pipe_clk reset deassert failed\n");
+			goto deassert_phy_com_reset;
+		}
+	}
+
+	if (phy->phy_com_reset) {
+		ret = clk_reset(phy->phy_com_reset, CLK_RESET_DEASSERT);
+		if (ret) {
+			dev_err(uphy->dev, "phy_com_reset clk deassert failed\n");
+			return ret;
+		}
+	}
 	return 0;
 
-deassert_phy_reset:
-	clk_reset(phy->phy_reset, CLK_RESET_DEASSERT);
+deassert_phy_phy_reset:
+	if (phy->phy_phy_reset)
+		clk_reset(phy->phy_phy_reset, CLK_RESET_DEASSERT);
+	else
+		clk_reset(phy->pipe_clk, CLK_RESET_DEASSERT);
 deassert_phy_com_reset:
-	clk_reset(phy->phy_com_reset, CLK_RESET_DEASSERT);
+	if (phy->phy_com_reset)
+		clk_reset(phy->phy_com_reset, CLK_RESET_DEASSERT);
 
 	phy->in_suspend = false;
 
