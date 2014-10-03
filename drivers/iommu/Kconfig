@@ -33,6 +33,8 @@ config FSL_PAMU
 config MSM_IOMMU
 	select DMA_SHARED_BUFFER
 	bool
+	select ARM_DMA_USE_IOMMU
+	select ARM64_DMA_USE_IOMMU
 
 # MSM IOMMUv1 support
 config MSM_IOMMU_V1
