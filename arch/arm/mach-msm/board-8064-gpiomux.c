@@ -25,6 +25,8 @@
 #include "devices.h"
 #include "board-8064.h"
 
+#define GPIO_KEY_VOLUME_DOWN_PM8921     PM8921_GPIO_PM_TO_SYS(38)
+
 /* The SPI configurations apply to GSBI 5*/
 static struct gpiomux_setting gpio_spi_config = {
 	.func = GPIOMUX_FUNC_2,
@@ -1676,7 +1678,15 @@ static struct msm_gpiomux_config mxt540e_gpio_alt_config[] __initdata = {
 		},
 	},
 };
-
+static struct msm_gpiomux_config adp2_reverse_gpio_config[] __initdata = {
+	{      /* REVERSE */
+		.gpio = GPIO_KEY_VOLUME_DOWN_PM8921,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &mplatform_int_act_cfg,
+			[GPIOMUX_SUSPENDED] = &mplatform_int_sus_cfg,
+		},
+	},
+};
 static struct msm_gpiomux_config mplatform_gpio_config[] __initdata = {
 	{	/* REVERSE */
 		.gpio = 29,
@@ -2374,10 +2384,12 @@ void __init apq8064_init_gpiomux(void)
 	else if (machine_is_apq8064_cdp() || machine_is_apq8064_liquid())
 		msm_gpiomux_install(apq8064_mxt_configs,
 			ARRAY_SIZE(apq8064_mxt_configs));
-	else if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2())
+	else if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2()) {
 		msm_gpiomux_install(apq8064_adp_mxt_configs,
 			ARRAY_SIZE(apq8064_adp_mxt_configs));
-
+		msm_gpiomux_install(adp2_reverse_gpio_config,
+			ARRAY_SIZE(adp2_reverse_gpio_config));
+	}
 	if (machine_is_apq8064_mplatform()
 			|| machine_is_apq8064_cdp()
 			|| machine_is_apq8064_liquid())
