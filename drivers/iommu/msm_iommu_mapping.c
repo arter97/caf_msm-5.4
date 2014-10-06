@@ -14,7 +14,6 @@
 #include <linux/dma-buf.h>
 #include <linux/export.h>
 #include <linux/iommu.h>
-#include <linux/ion.h>
 #include <linux/kernel.h>
 #include <linux/kref.h>
 #include <linux/scatterlist.h>
@@ -515,48 +514,6 @@ int msm_map_dma_buf(struct dma_buf *dma_buf, struct sg_table *table,
 	return ret;
 }
 
-
-int ion_map_iommu(struct ion_client *client, struct ion_handle *handle,
-			int domain_num, int partition_num, unsigned long align,
-			unsigned long iova_length, ion_phys_addr_t *iova,
-			unsigned long *buffer_size,
-			unsigned long flags, unsigned long iommu_flags)
-{
-	struct sg_table *table;
-	struct dma_buf *dma_buf;
-	int ret = 0;
-
-	if (IS_ERR_OR_NULL(client)) {
-		pr_err("%s: client pointer is invalid\n", __func__);
-		return -EINVAL;
-	}
-	if (IS_ERR_OR_NULL(handle)) {
-		pr_err("%s: handle pointer is invalid\n", __func__);
-		return -EINVAL;
-	}
-
-	table = ion_sg_table(client, handle);
-
-	if (IS_ERR(table))
-		return PTR_ERR(table);
-
-
-	dma_buf = ion_share_dma_buf(client, handle);
-	if (IS_ERR(dma_buf))
-		return PTR_ERR(dma_buf);
-
-	ret = __msm_map_iommu_common(dma_buf, table, domain_num,
-			partition_num, align, iova_length, iova,
-			buffer_size, flags, iommu_flags);
-
-	if (ret)
-		dma_buf_put(dma_buf);
-
-	return ret;
-}
-EXPORT_SYMBOL(ion_map_iommu);
-
-
 static void msm_iommu_map_release(struct kref *kref)
 {
 	struct msm_iommu_map *map = container_of(kref, struct msm_iommu_map,
@@ -610,27 +567,3 @@ void msm_unmap_dma_buf(struct sg_table *table, int domain_num,
 {
 	return __msm_unmap_iommu_common(table, domain_num, partition_num);
 }
-
-void ion_unmap_iommu(struct ion_client *client, struct ion_handle *handle,
-			int domain_num, int partition_num)
-{
-	struct sg_table *table;
-
-	if (IS_ERR_OR_NULL(client)) {
-		pr_err("%s: client pointer is invalid\n", __func__);
-		return;
-	}
-	if (IS_ERR_OR_NULL(handle)) {
-		pr_err("%s: handle pointer is invalid\n", __func__);
-		return;
-	}
-
-	table = ion_sg_table(client, handle);
-
-	__msm_unmap_iommu_common(table, domain_num, partition_num);
-
-	return;
-}
-EXPORT_SYMBOL(ion_unmap_iommu);
-
-
