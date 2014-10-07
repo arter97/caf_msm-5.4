@@ -1038,6 +1038,10 @@ int mdss_mdp_overlay_start(struct msm_fb_data_type *mfd)
 	struct mdss_mdp_ctl *ctl = mdp5_data->ctl;
 
 	if (ctl->power_on) {
+		if (mdp5_data->mdata->ulps) {
+			mdss_mdp_footswitch_ctrl_ulps(1, &mfd->pdev->dev);
+			mdss_mdp_ctl_restore(ctl);
+		}
 
 		if (!mdp5_data->mdata->batfet)
 			mdss_mdp_batfet_ctrl(mdp5_data->mdata, true);
@@ -1156,11 +1160,13 @@ static int __overlay_queue_pipes(struct msm_fb_data_type *mfd)
 			pipe->mixer = mdss_mdp_mixer_get(tmp,
 					MDSS_MDP_MIXER_MUX_DEFAULT);
 		}
+
+		/* ensure pipes are always reconfigured after power off/on */
+		if (ctl->play_cnt == 0)
+			pipe->params_changed++;
+
 		if (pipe->back_buf.num_planes) {
 			buf = &pipe->back_buf;
-		} else if (ctl->play_cnt == 0 && pipe->front_buf.num_planes) {
-			pipe->params_changed++;
-			buf = &pipe->front_buf;
 		} else if (!pipe->params_changed) {
 			continue;
 		} else if (pipe->front_buf.num_planes) {
@@ -2096,6 +2102,8 @@ static int mdss_mdp_hw_cursor_update(struct msm_fb_data_type *mfd,
 
 	mixer = mdss_mdp_mixer_get(mdp5_data->ctl, MDSS_MDP_MIXER_MUX_DEFAULT);
 	off = MDSS_MDP_REG_LM_OFFSET(mixer->num);
+	if (!mixer)
+		return -ENODEV;
 
 	if ((img->width > MDSS_MDP_CURSOR_WIDTH) ||
 		(img->height > MDSS_MDP_CURSOR_HEIGHT) ||
