@@ -34,10 +34,13 @@ emmicro	EM Microelectronic
 epfl	Ecole Polytechnique Fédérale de Lausanne
 epson	Seiko Epson Corp.
 est	ESTeem Wireless Modems
+fairchild	Fairchild Semiconductor International, Inc.
+focaltech	Focaltech systems
 fsl	Freescale Semiconductor
 GEFanuc	GE Fanuc Intelligent Platforms Embedded Systems, Inc.
 gef	GE Fanuc Intelligent Platforms Embedded Systems, Inc.
 gmt	Global Mixed-mode Technology, Inc.
+goodix	Goodix. Ltd
 gumstix	Gumstix, Inc.
 haoyu	Haoyu Microelectronic Co. Ltd.
 hisilicon	Hisilicon Limited.
@@ -47,21 +50,27 @@ ibm	International Business Machines (IBM)
 idt	Integrated Device Technologies, Inc.
 img	Imagination Technologies Ltd.
 intercontrol	Inter Control Group
+invn	InvenSense Inc.
 isl	Intersil
 karo	Ka-Ro electronics GmbH
+kionix	Kionix Inc.
+lattice	Lattice Semiconductor.
 lg	LG Corporation
 linux	Linux-specific binding
 lsi	LSI Corp. (LSI Logic)
 marvell	Marvell Technology Group Ltd.
 maxim	Maxim Integrated Products
+memsic	MEMSIC, Inc
 microchip	Microchip Technology Inc.
 mosaixtech	Mosaix Technologies, Inc.
+mstar		MStar Semiconductor, Inc.
 national	National Semiconductor
 neonode		Neonode Inc.
 nintendo	Nintendo
 nvidia	NVIDIA
 nxp	NXP Semiconductors
 onnn	ON Semiconductor Corp.
+ovti	OmniVision Technologies, Inc.
 panasonic	Panasonic Corporation
 phytec	PHYTEC Messtechnik GmbH
 picochip	Picochip Ltd
@@ -76,10 +85,14 @@ rockchip	Fuzhou Rockchip Electronics Co., Ltd
 samsung	Samsung Semiconductor
 sbs	Smart Battery System
 schindler	Schindler
+smartv	SmartV Ltd
+stk	Sensortek Technology Corporation.(formerly Sitronix Technology Co., Ltd.)
+shinetech	Shine Tech Corporation, Ltd.
 sil	Silicon Image
 silabs	Silicon Laboratories
 simtek
 sirf	SiRF Technology, Inc.
+sne	Sony
 snps 	Synopsys, Inc.
 spansion	Spansion Inc.
 st	STMicroelectronics
