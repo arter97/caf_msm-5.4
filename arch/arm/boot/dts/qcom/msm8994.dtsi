@@ -1066,6 +1066,7 @@
 			reg = <0xfc594000 0x2500>;
 			interrupts = <0 265 0>;
 			phys = <&ufsphy1>;
+			phy-names = "ufsphy";
 			vdd-hba-supply = <&gdsc_ufs>;
 			vdd-hba-fixed-regulator;
 			vcc-supply = <&pm8994_l20>;
@@ -1482,6 +1483,7 @@
 		status = "disabled";
 
 		reg = <0xf9a55000 0x400>;
+		reg-names = "core";
 		interrupts = <0 134 0 0 140 0>;
 		interrupt-names = "core_irq", "async_irq";
 
@@ -1525,6 +1527,7 @@
 		compatible = "qcom,qusb2phy";
 		status = "disabled";
 		reg = <0xf9b39000 0x17f>;
+		reg-names = "qusb_phy_base";
 		vdd-supply = <&pm8994_s2_corner>;
 		vdda18-supply = <&pm8994_l6>;
 		vdda33-supply = <&pm8994_l24>;
