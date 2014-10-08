@@ -136,6 +136,7 @@ Required properties:
    Documentation/devicetree/bindings/clock/clock-bindings.txt
  - clock-names: Names of the clocks in 1-1 correspondence with the "clocks"
    property. Required clocks are "ref_clk", "cfg_ahb_clk" and "phy_reset".
+ - phy_type: Should be one of "ulpi" or "utmi". ChipIdea core uses "ulpi" mode.
 
 Example:
 	qusb_phy: qusb@f9b39000 {

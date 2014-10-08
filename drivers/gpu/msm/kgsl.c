@@ -941,8 +941,6 @@ static int kgsl_close_device(struct kgsl_device *device)
 		/* Fail if the wait times out */
 		BUG_ON(atomic_read(&device->active_cnt) > 0);
 
-		/* Force power on to do the stop */
-		kgsl_pwrctrl_enable(device);
 		result = device->ftbl->stop(device);
 		kgsl_pwrctrl_change_state(device, KGSL_STATE_INIT);
 	}
@@ -2035,6 +2033,7 @@ static struct kgsl_cmdbatch *kgsl_cmdbatch_create(struct kgsl_device *device,
 	cmdbatch->context = context;
 	/* sanitize our flags for cmdbatches */
 	cmdbatch->flags = flags & (KGSL_CMDBATCH_CTX_SWITCH
+				| KGSL_CMDBATCH_MARKER
 				| KGSL_CMDBATCH_END_OF_FRAME
 				| KGSL_CMDBATCH_SYNC
 				| KGSL_CMDBATCH_PWR_CONSTRAINT

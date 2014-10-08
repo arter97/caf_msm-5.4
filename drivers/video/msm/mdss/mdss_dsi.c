@@ -480,11 +480,13 @@ static int mdss_dsi_off(struct mdss_panel_data *pdata, int power_state)
 	if (pdata->panel_info.type == MIPI_CMD_PANEL)
 		mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 1);
 
-	/* disable DSI controller */
-	mdss_dsi_controller_cfg(0, pdata);
+	if (!pdata->panel_info.ulps_suspend_enabled) {
+		/* disable DSI controller */
+		mdss_dsi_controller_cfg(0, pdata);
 
-	/* disable DSI phy */
-	mdss_dsi_phy_disable(ctrl_pdata);
+		/* disable DSI phy */
+		mdss_dsi_phy_disable(ctrl_pdata);
+	}
 
 	mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 0);
 
@@ -1161,7 +1163,7 @@ static int mdss_dsi_set_stream_size(struct mdss_panel_data *pdata)
 }
 
 int mdss_dsi_register_recovery_handler(struct mdss_dsi_ctrl_pdata *ctrl,
-	struct mdss_panel_recovery *recovery)
+	struct mdss_intf_recovery *recovery)
 {
 	mutex_lock(&ctrl->mutex);
 	ctrl->recovery = recovery;
@@ -1249,7 +1251,7 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		break;
 	case MDSS_EVENT_REGISTER_RECOVERY_HANDLER:
 		rc = mdss_dsi_register_recovery_handler(ctrl_pdata,
-			(struct mdss_panel_recovery *)arg);
+			(struct mdss_intf_recovery *)arg);
 		break;
 	default:
 		pr_debug("%s: unhandled event=%d\n", __func__, event);
@@ -1729,12 +1731,20 @@ int dsi_panel_device_register(struct device_node *pan_node,
 
 	pinfo->panel_max_fps = mdss_panel_get_framerate(pinfo);
 	pinfo->panel_max_vtotal = mdss_panel_get_vtotal(pinfo);
-	ctrl_pdata->disp_en_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
-		"qcom,platform-enable-gpio", 0);
 
-	if (!gpio_is_valid(ctrl_pdata->disp_en_gpio))
-		pr_err("%s:%d, Disp_en gpio not specified\n",
-						__func__, __LINE__);
+	/*
+	 * If disp_en_gpio has been set previously (disp_en_gpio > 0)
+	 *  while parsing the panel node, then do not override it
+	 */
+	if (ctrl_pdata->disp_en_gpio <= 0) {
+		ctrl_pdata->disp_en_gpio = of_get_named_gpio(
+			ctrl_pdev->dev.of_node,
+			"qcom,platform-enable-gpio", 0);
+
+		if (!gpio_is_valid(ctrl_pdata->disp_en_gpio))
+			pr_err("%s:%d, Disp_en gpio not specified\n",
+					__func__, __LINE__);
+	}
 
 	ctrl_pdata->bklt_en_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
 		"qcom,platform-bklight-en-gpio", 0);
@@ -1825,6 +1835,23 @@ int dsi_panel_device_register(struct device_node *pan_node,
 			ctrl_pdata->pclk_rate, ctrl_pdata->byte_clk_rate);
 
 	ctrl_pdata->ctrl_state = CTRL_STATE_UNKNOWN;
+
+	/*
+	 * If ULPS during suspend is enabled, add an extra vote for the
+	 * DSI CTRL power module. This keeps the regulator always enabled.
+	 * This is needed for the DSI PHY to maintain ULPS state during
+	 * suspend also.
+	 */
+	if (pinfo->ulps_suspend_enabled) {
+		rc = msm_dss_enable_vreg(
+			ctrl_pdata->power_data[DSI_CTRL_PM].vreg_config,
+			ctrl_pdata->power_data[DSI_CTRL_PM].num_vreg, 1);
+		if (rc) {
+			pr_err("%s: failed to enable vregs for DSI_CTRL_PM\n",
+				__func__);
+			return rc;
+		}
+	}
 
 	if (pinfo->cont_splash_enabled) {
 		rc = mdss_dsi_panel_power_ctrl(&(ctrl_pdata->panel_data),

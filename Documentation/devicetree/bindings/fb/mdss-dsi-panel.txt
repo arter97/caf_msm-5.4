@@ -173,6 +173,7 @@ Optional properties:
 - qcom,mdss-dsi-panel-type:		Specifies the panel operating mode.
 					"dsi_video_mode" = enable video mode (default).
 					"dsi_cmd_mode" = enable command mode.
+- qcom,5v-boost-gpio:			Specifies the panel gpio for display 5v boost.
 - qcom,mdss-dsi-te-check-enable:	Boolean to enable Tear Check configuration.
 - qcom,mdss-dsi-te-using-te-pin:	Boolean to specify whether using hardware vsync.
 - qcom,mdss-dsi-te-pin-select:		Specifies TE operating mode.
@@ -319,6 +320,7 @@ Optional properties:
 - qcom,mdss-dsi-rx-eot-ignore:		Boolean used to enable ignoring end of transmission packets.
 - qcom,mdss-dsi-tx-eot-append:		Boolean used to enable appending end of transmission packets.
 - qcom,ulps-enabled:			Boolean to enable support for Ultra Low Power State (ULPS) mode.
+- qcom,suspend-ulps-enabled:		Boolean to enable support for ULPS mode for panels during suspend state.
 - qcom,panel-roi-alignment:		Specifies the panel ROI alignment restrictions on its
 					left, top, width, height alignments and minimum width and
 					height values
@@ -450,6 +452,7 @@ Example:
 		qcom,mdss-dsi-bl-pmic-bank-select = <0>;
 		qcom,mdss-dsi-bl-pmic-pwm-frequency = <0>;
 		qcom,mdss-dsi-pwm-gpio = <&pm8941_mpps 5 0>;
+		qcom,5v-boost-gpio = <&pm8994_gpios 14 0>;
 		qcom,mdss-pan-physical-width-dimension = <60>;
 		qcom,mdss-pan-physical-height-dimension = <140>;
 		qcom,mdss-dsi-panel-mode-gpio-state = "low";
@@ -468,6 +471,7 @@ Example:
 		mdss-dsi-rx-eot-ignore;
 		mdss-dsi-tx-eot-append;
 		qcom,ulps-enabled;
+		qcom,suspend-ulps-enabled;
 		qcom,panel-roi-alignment = <4 4 2 2 20 20>;
 		qcom,esd-check-enabled;
 		qcom,mdss-dsi-panel-status-command = [06 01 00 01 05 00 02 0A 08];

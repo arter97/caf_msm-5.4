@@ -171,6 +171,11 @@ module_param_named(
 	debug_mask, smbchg_debug_mask, int, S_IRUSR | S_IWUSR
 );
 
+static int smbchg_parallel_en;
+module_param_named(
+	parallel_en, smbchg_parallel_en, int, S_IRUSR | S_IWUSR
+);
+
 #define pr_smb(reason, fmt, ...)				\
 	do {							\
 		if (smbchg_debug_mask & (reason))		\
@@ -335,10 +340,27 @@ out:
 
 #define RID_STS				0xB
 #define RID_MASK			0xF
+#define RT_STS				0x10
+#define USBIN_UV_BIT			0x0
+#define USBIN_OV_BIT			0x1
 static bool is_otg_present(struct smbchg_chip *chip)
 {
 	int rc;
 	u8 reg;
+
+	/*
+	 * There is a problem with USBID conversions on PMI8994 revisions
+	 * 2.0.0. As a workaround, check that the UV status is set before
+	 * checking RID status.
+	 */
+	rc = smbchg_read(chip, &reg, chip->usb_chgpth_base + RT_STS, 1);
+	if (rc < 0) {
+		dev_err(chip->dev,
+			"Couldn't read usb rt status rc = %d\n", rc);
+		return false;
+	}
+	if ((reg & USBIN_UV_BIT) == 0)
+		return false;
 
 	rc = smbchg_read(chip, &reg, chip->usb_chgpth_base + RID_STS, 1);
 	if (rc < 0) {
@@ -373,9 +395,6 @@ static bool is_dc_present(struct smbchg_chip *chip)
 	return !!(reg & (DCIN_9V | DCIN_UNREG | DCIN_LV));
 }
 
-#define RT_STS			0x10
-#define USBIN_UV_BIT		0x0
-#define USBIN_OV_BIT		0x1
 static bool is_usb_present(struct smbchg_chip *chip)
 {
 	int rc;
@@ -399,36 +418,30 @@ static bool is_usb_present(struct smbchg_chip *chip)
 }
 
 static char *usb_type_str[] = {
-	"ACA_DOCK",	/* bit 0 */
-	"ACA_C",	/* bit 1 */
-	"ACA_B",	/* bit 2 */
-	"ACA_A",	/* bit 3 */
-	"SDP",		/* bit 4 */
-	"OTHER",	/* bit 5 */
-	"DCP",		/* bit 6 */
-	"CDP",		/* bit 7 */
-	"NONE",		/* bit 8 error case */
+	"SDP",		/* bit 0 */
+	"OTHER",	/* bit 1 */
+	"DCP",		/* bit 2 */
+	"CDP",		/* bit 3 */
+	"NONE",		/* bit 4 error case */
 };
 
-#define BITS_PER_REG	8
+#define N_TYPE_BITS		4
+#define TYPE_BITS_OFFSET	4
 /* helper to return the string of USB type */
 static char *get_usb_type_name(u8 type_reg)
 {
 	unsigned long type = type_reg;
 
-	return usb_type_str[find_first_bit(&type, BITS_PER_REG)];
+	type >>= TYPE_BITS_OFFSET;
+	return usb_type_str[find_first_bit(&type, N_TYPE_BITS)];
 }
 
 static enum power_supply_type usb_type_enum[] = {
-	POWER_SUPPLY_TYPE_USB_ACA,	/* bit 0 */
-	POWER_SUPPLY_TYPE_USB_ACA,	/* bit 1 */
-	POWER_SUPPLY_TYPE_USB_ACA,	/* bit 2 */
-	POWER_SUPPLY_TYPE_USB_ACA,	/* bit 3 */
-	POWER_SUPPLY_TYPE_USB,		/* bit 4 */
-	POWER_SUPPLY_TYPE_UNKNOWN,	/* bit 5 */
-	POWER_SUPPLY_TYPE_USB_DCP,	/* bit 6 */
-	POWER_SUPPLY_TYPE_USB_CDP,	/* bit 7 */
-	POWER_SUPPLY_TYPE_USB,		/* bit 8 error case, report SDP */
+	POWER_SUPPLY_TYPE_USB,		/* bit 0 */
+	POWER_SUPPLY_TYPE_UNKNOWN,	/* bit 1 */
+	POWER_SUPPLY_TYPE_USB_DCP,	/* bit 2 */
+	POWER_SUPPLY_TYPE_USB_CDP,	/* bit 3 */
+	POWER_SUPPLY_TYPE_USB,		/* bit 4 error case, report SDP */
 };
 
 /* helper to return enum power_supply_type of USB type */
@@ -436,7 +449,8 @@ static enum power_supply_type get_usb_supply_type(u8 type_reg)
 {
 	unsigned long type = type_reg;
 
-	return usb_type_enum[find_first_bit(&type, BITS_PER_REG)];
+	type >>= TYPE_BITS_OFFSET;
+	return usb_type_enum[find_first_bit(&type, N_TYPE_BITS)];
 }
 
 static enum power_supply_property smbchg_battery_properties[] = {
@@ -452,6 +466,7 @@ static enum power_supply_property smbchg_battery_properties[] = {
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 };
 
 #define CHGR_STS			0x0E
@@ -589,6 +604,23 @@ static int get_prop_batt_current_now(struct smbchg_chip *chip)
 	}
 
 	return DEFAULT_BATT_CURRENT_NOW;
+}
+
+#define DEFAULT_BATT_VOLTAGE_NOW	0
+static int get_prop_batt_voltage_now(struct smbchg_chip *chip)
+{
+	union power_supply_propval ret = {0, };
+
+	if (!chip->bms_psy && chip->bms_psy_name)
+		chip->bms_psy =
+			power_supply_get_by_name((char *)chip->bms_psy_name);
+	if (chip->bms_psy) {
+		chip->bms_psy->get_property(chip->bms_psy,
+				POWER_SUPPLY_PROP_VOLTAGE_NOW, &ret);
+		return ret.intval;
+	}
+
+	return DEFAULT_BATT_VOLTAGE_NOW;
 }
 
 static int get_prop_batt_health(struct smbchg_chip *chip)
@@ -1056,6 +1088,11 @@ static bool smbchg_is_parallel_usb_ok(struct smbchg_chip *chip)
 {
 	int min_current_thr_ma, rc;
 	u8 reg;
+
+	if (!smbchg_parallel_en) {
+		pr_smb(PR_STATUS, "Parallel charging not enabled\n");
+		return false;
+	}
 
 	if (get_prop_charge_type(chip) != POWER_SUPPLY_CHARGE_TYPE_FAST) {
 		pr_smb(PR_STATUS, "Not in fast charge, skipping\n");
@@ -1611,6 +1648,9 @@ static int smbchg_battery_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = get_prop_batt_temp(chip);
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		val->intval = get_prop_batt_voltage_now(chip);
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
 		val->intval = get_prop_batt_health(chip);

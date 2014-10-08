@@ -628,7 +628,7 @@
 		compatible = "qcom,bimc-bwmon";
 		reg = <0x408000 0x300>, <0x401000 0x200>;
 		reg-names = "base", "global_base";
-		interrupts = <0 183 1>;
+		interrupts = <0 183 4>;
 		qcom,mport = <0>;
 		qcom,target-dev = <&cpubw>;
 	};
@@ -802,7 +802,7 @@
 		clock-names = "iface_clk", "core_clk", "sleep_clk",
 				"bimc_clk", "snoc_clk", "pcnoc_clk",
 				"xo";
-		qcom,bus-clk-rate = <400000000 200000000 100000000>;
+		qcom,bus-clk-rate = <333600000 200000000 100000000>;
 	};
 
 	android_usb: android_usb@086000c8 {
@@ -979,7 +979,7 @@
 			<0x7884000 0x19000>;
 		interrupt-names = "spi_irq", "spi_bam_irq";
 		interrupts = <0 99 0>, <0 238 0>;
-		spi-max-frequency = <5000000>;
+		spi-max-frequency = <18000000>;
 		qcom,use-pinctrl;
 		pinctrl-names = "default", "sleep";
 		pinctrl-0 = <&spi5_default &spi5_cs0_active>;
@@ -1063,7 +1063,7 @@
 			 <&clock_gcc clk_gcc_sdcc1_apps_clk>;
 		clock-names = "iface_clk", "core_clk";
 
-		qcom,clk-rates = <400000 25000000 50000000 100000000 200000000>;
+		qcom,clk-rates = <400000 25000000 50000000 100000000 177770000>;
 		qcom,bus-speed-mode = "HS200_1p8v", "DDR_1p8v";
 
 		status = "disabled";
@@ -1204,7 +1204,7 @@
 		      <0x04020000 0x040>,
 		      <0x01810000 0x004>;
 		reg-names = "qdsp6_base", "halt_q6", "halt_modem", "halt_nc",
-				 "rmb_base", "restart_reg";
+				 "rmb_base", "restart_reg_sec";
 
 		interrupts = <0 24 1>;
 		vdd_cx-supply = <&pm8916_s1_corner>;
@@ -1482,9 +1482,6 @@
 		qcom,reg-presets = <0xE0020 0x0aaaaaaa>,
 			<0xE0024 0x0aaaaaaa>,
 			<0x80124 0x00000003>;
-		qcom,buffer-type-tz-usage-table = <0x241 0x1>,
-			<0x106 0x2>,
-			<0x480 0x3>;
 		qcom,max-hw-load = <489600>; /* 1080p @ 30 + 1080p @ 30 */
 		qcom,enable-idle-indicator;
 		qcom,vidc-iommu-domains {

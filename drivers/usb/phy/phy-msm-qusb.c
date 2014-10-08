@@ -29,6 +29,10 @@
 #define FREEZIO_N			BIT(1)
 #define POWER_DOWN			BIT(0)
 #define QUSB2PHY_PORT_UTMI_CTRL2	0xC4
+#define QUSB2PHY_PORT_TUNE1             0x80
+#define QUSB2PHY_PORT_TUNE2             0x84
+#define QUSB2PHY_PORT_TUNE3             0x88
+#define QUSB2PHY_PORT_TUNE4             0x8C
 
 struct qusb_phy {
 	struct usb_phy		phy;
@@ -46,6 +50,7 @@ struct qusb_phy {
 	bool			power_enabled;
 	bool			clocks_enabled;
 	bool			suspended;
+	bool			ulpi_mode;
 };
 
 static int qusb_phy_reset(struct usb_phy *phy)
@@ -123,8 +128,16 @@ static int qusb_phy_init(struct usb_phy *phy)
 	writel_relaxed(CLAMP_N_EN | FREEZIO_N | POWER_DOWN,
 			qphy->base + QUSB2PHY_PORT_POWERDOWN);
 
-	/* configure for ULPI mode */
-	writel_relaxed(0x0, qphy->base + QUSB2PHY_PORT_UTMI_CTRL2);
+	/* configure for ULPI mode if requested */
+	if (qphy->ulpi_mode)
+		writel_relaxed(0x0,
+				qphy->base + QUSB2PHY_PORT_UTMI_CTRL2);
+
+	/* Program tuning parameters for PHY */
+	writel_relaxed(0xA0, qphy->base + QUSB2PHY_PORT_TUNE1);
+	writel_relaxed(0xA5, qphy->base + QUSB2PHY_PORT_TUNE2);
+	writel_relaxed(0x81, qphy->base + QUSB2PHY_PORT_TUNE3);
+	writel_relaxed(0x85, qphy->base + QUSB2PHY_PORT_TUNE4);
 
 	/* ensure above writes are completed before re-enabling PHY */
 	wmb();
@@ -159,12 +172,62 @@ static void qusb_phy_shutdown(struct usb_phy *phy)
 	qphy->clocks_enabled = false;
 }
 
+/**
+ * Performs QUSB2 PHY suspend/resume functionality.
+ *
+ * @uphy - usb phy pointer.
+ * @suspend - to enable suspend or not. 1 - suspend, 0 - resume
+ *
+ */
+static int qusb_phy_set_suspend(struct usb_phy *phy, int suspend)
+{
+	struct qusb_phy *qphy = container_of(phy, struct qusb_phy, phy);
+
+	if (!qphy->clocks_enabled) {
+		dev_dbg(phy->dev, "clocks not enabled yet\n");
+		return -EAGAIN;
+	}
+
+	if (qphy->suspended && suspend) {
+		dev_dbg(phy->dev, "%s: USB PHY is already suspended\n",
+			__func__);
+		return 0;
+	}
+
+	if (suspend) {
+		/* Suspend case */
+		if (qphy->cable_connected) {
+			return -EAGAIN;
+		} else { /* Disconnect case */
+			/* Disable the PHY */
+			writel_relaxed(CLAMP_N_EN | FREEZIO_N | POWER_DOWN,
+				qphy->base + QUSB2PHY_PORT_POWERDOWN);
+			clk_disable_unprepare(qphy->cfg_ahb_clk);
+			clk_disable_unprepare(qphy->ref_clk);
+			qusb_phy_enable_power(qphy, false);
+		}
+		qphy->suspended = true;
+	} else {
+		qusb_phy_enable_power(qphy, true);
+		clk_prepare_enable(qphy->ref_clk);
+		clk_prepare_enable(qphy->cfg_ahb_clk);
+		/* Enable the PHY */
+		writel_relaxed(CLAMP_N_EN | FREEZIO_N,
+			qphy->base + QUSB2PHY_PORT_POWERDOWN);
+		/* Caller needs to call qusb_phy_init to apply tuning params */
+		qphy->suspended = false;
+	}
+
+	return 0;
+}
+
 static int qusb_phy_probe(struct platform_device *pdev)
 {
 	struct qusb_phy *qphy;
 	struct device *dev = &pdev->dev;
 	struct resource *res;
 	int ret = 0;
+	const char *phy_type;
 
 	qphy = devm_kzalloc(dev, sizeof(*qphy), GFP_KERNEL);
 	if (!qphy)
@@ -189,6 +252,17 @@ static int qusb_phy_probe(struct platform_device *pdev)
 	qphy->phy_reset = devm_clk_get(dev, "phy_reset");
 	if (IS_ERR(qphy->phy_reset))
 		return PTR_ERR(qphy->phy_reset);
+
+	qphy->ulpi_mode = false;
+	ret = of_property_read_string(dev->of_node, "phy_type", &phy_type);
+
+	if (!ret) {
+		if (!strcasecmp(phy_type, "ulpi"))
+			qphy->ulpi_mode = true;
+	} else {
+		dev_err(dev, "error reading phy_type property\n");
+		return ret;
+	}
 
 	ret = of_property_read_u32_array(dev->of_node, "qcom,vdd-voltage-level",
 					 (u32 *) qphy->vdd_levels,
@@ -228,6 +302,7 @@ static int qusb_phy_probe(struct platform_device *pdev)
 
 	qphy->phy.label			= "msm-qusb-phy";
 	qphy->phy.init			= qusb_phy_init;
+	qphy->phy.set_suspend           = qusb_phy_set_suspend;
 	qphy->phy.shutdown		= qusb_phy_shutdown;
 	qphy->phy.reset			= qusb_phy_reset;
 	qphy->phy.type			= USB_PHY_TYPE_USB2;
