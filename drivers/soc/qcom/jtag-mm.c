@@ -686,6 +686,8 @@ static int jtag_mm_etm_probe(struct platform_device *pdev,
 	etm.cpu_ctx[cpu] = etmdata;
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "etm-base");
+	if (!res)
+		return -ENODEV;
 
 	etmdata->base = devm_ioremap(dev, res->start, resource_size(res));
 	if (!etmdata->base)
@@ -754,6 +756,8 @@ static int jtag_mm_dbg_probe(struct platform_device *pdev,
 	dbg.cpu_ctx[cpu] = dbgdata;
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "debug-base");
+	if (!res)
+		return -ENODEV;
 
 	dbgdata->base = devm_ioremap(dev, res->start, resource_size(res));
 	if (!dbgdata->base)
