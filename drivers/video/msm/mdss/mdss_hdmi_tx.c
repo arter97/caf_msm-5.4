@@ -494,12 +494,13 @@ static inline u32 hdmi_tx_is_dvi_mode(struct hdmi_tx_ctrl *hdmi_ctrl)
 static inline void hdmi_tx_send_cable_notification(
 	struct hdmi_tx_ctrl *hdmi_ctrl, int val)
 {
-	int state = hdmi_ctrl->sdev.state;
+	int state = 0;
 
 	if (!hdmi_ctrl) {
 		DEV_ERR("%s: invalid input\n", __func__);
 		return;
 	}
+	state = hdmi_ctrl->sdev.state;
 
 	switch_set_state(&hdmi_ctrl->sdev, val);
 
@@ -515,12 +516,13 @@ static inline void hdmi_tx_send_cable_notification(
 static inline void hdmi_tx_set_audio_switch_node(
 	struct hdmi_tx_ctrl *hdmi_ctrl, int val)
 {
-	int state = hdmi_ctrl->audio_sdev.state;
+	int state = 0;
 
 	if (!hdmi_ctrl) {
 		DEV_ERR("%s: invalid input\n", __func__);
 		return;
 	}
+	state = hdmi_ctrl->audio_sdev.state;
 
 	if (!hdmi_tx_is_dvi_mode(hdmi_ctrl) &&
 	    hdmi_tx_is_cea_format(hdmi_ctrl->video_resolution)) {
@@ -2493,7 +2495,6 @@ static int hdmi_tx_audio_info_setup(struct platform_device *pdev,
 	}
 
 	if (!hdmi_tx_is_dvi_mode(hdmi_ctrl) && hdmi_ctrl->panel_power_on) {
-
 		/* Map given sample rate to Enum */
 		if (sample_rate == 32000)
 			sample_rate = AUDIO_SAMPLE_RATE_32KHZ;
@@ -2521,7 +2522,6 @@ static int hdmi_tx_audio_info_setup(struct platform_device *pdev,
 			DEV_ERR("%s: hdmi_tx_audio_iframe_setup failed.rc=%d\n",
 				__func__, rc);
 	} else {
-		DEV_ERR("%s: Error. panel is not on.\n", __func__);
 		rc = -EPERM;
 	}
 
@@ -2538,11 +2538,8 @@ static int hdmi_tx_get_audio_edid_blk(struct platform_device *pdev,
 		return -ENODEV;
 	}
 
-	if (!hdmi_ctrl->audio_sdev.state) {
-		DEV_ERR("%s: failed. HDMI is not connected/ready for audio\n",
-			__func__);
+	if (!hdmi_ctrl->audio_sdev.state)
 		return -EPERM;
-	}
 
 	return hdmi_edid_get_audio_blk(
 		hdmi_ctrl->feature_data[HDMI_TX_FEAT_EDID], blk);

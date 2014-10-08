@@ -29,6 +29,7 @@
 #include "vidc_hfi_api.h"
 #include "msm_vidc_resources.h"
 #include "msm_vidc_res_parse.h"
+#include "venus_boot.h"
 
 #define BASE_DEVICE_NUMBER 32
 
@@ -388,6 +389,49 @@ static ssize_t show_pwr_collapse_delay(struct device *dev,
 static DEVICE_ATTR(pwr_collapse_delay, 0644, show_pwr_collapse_delay,
 		store_pwr_collapse_delay);
 
+static ssize_t show_thermal_level(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", vidc_driver->thermal_level);
+}
+
+static ssize_t store_thermal_level(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	int rc = 0, val = 0;
+
+	rc = kstrtoint(buf, 0, &val);
+	if (rc || val < 0) {
+		dprintk(VIDC_WARN,
+			"Invalid thermal level value: %s\n", buf);
+		return -EINVAL;
+	}
+	dprintk(VIDC_DBG, "Thermal level old %d new %d\n",
+			vidc_driver->thermal_level, val);
+
+	if (val == vidc_driver->thermal_level)
+		return count;
+	vidc_driver->thermal_level = val;
+
+	msm_comm_handle_thermal_event();
+	return count;
+}
+
+static DEVICE_ATTR(thermal_level, S_IRUGO | S_IWUSR, show_thermal_level,
+		store_thermal_level);
+
+static struct attribute *msm_vidc_core_attrs[] = {
+		&dev_attr_pwr_collapse_delay.attr,
+		&dev_attr_thermal_level.attr,
+		NULL
+};
+
+static struct attribute_group msm_vidc_core_attr_group = {
+		.attrs = msm_vidc_core_attrs,
+};
+
 static int msm_vidc_probe(struct platform_device *pdev)
 {
 	int rc = 0;
@@ -407,10 +451,10 @@ static int msm_vidc_probe(struct platform_device *pdev)
 		dprintk(VIDC_ERR, "Failed to init core\n");
 		goto err_core_init;
 	}
-	rc = device_create_file(&pdev->dev, &dev_attr_pwr_collapse_delay);
+	rc = sysfs_create_group(&pdev->dev.kobj, &msm_vidc_core_attr_group);
 	if (rc) {
 		dprintk(VIDC_ERR,
-				"Failed to create pwr_collapse_delay sysfs node");
+				"Failed to create attributes\n");
 		goto err_core_init;
 	}
 	if (core->hfi_type == VIDC_HFI_Q6) {
@@ -492,6 +536,15 @@ static int msm_vidc_probe(struct platform_device *pdev)
 		goto err_cores_exceeded;
 	}
 
+	if (core->resources.use_non_secure_pil) {
+		rc = venus_boot_init(&core->resources);
+		if (rc) {
+			dprintk(VIDC_ERR,
+				"Failed to init non-secure PIL %d\n", rc);
+			goto err_non_sec_pil_init;
+		}
+	}
+
 	mutex_lock(&vidc_driver->lock);
 	list_add_tail(&core->list, &vidc_driver->cores);
 	mutex_unlock(&vidc_driver->lock);
@@ -499,7 +552,8 @@ static int msm_vidc_probe(struct platform_device *pdev)
 		core, vidc_driver->debugfs_root);
 	pdev->dev.platform_data = core;
 	return rc;
-
+err_non_sec_pil_init:
+	vidc_hfi_deinitialize(core->hfi_type, core->device);
 err_cores_exceeded:
 	device_remove_file(&core->vdev[MSM_VIDC_ENCODER].vdev.dev,
 			&dev_attr_link_name);
@@ -513,7 +567,7 @@ err_dec_attr_link_name:
 err_dec_register:
 	v4l2_device_unregister(&core->v4l2_dev);
 err_v4l2_register:
-	device_remove_file(&pdev->dev, &dev_attr_pwr_collapse_delay);
+	sysfs_remove_group(&pdev->dev.kobj, &msm_vidc_core_attr_group);
 err_core_init:
 	kfree(core);
 err_no_mem:
@@ -536,6 +590,9 @@ static int msm_vidc_remove(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	if (core->resources.use_non_secure_pil)
+		venus_boot_deinit();
+
 	vidc_hfi_deinitialize(core->hfi_type, core->device);
 	device_remove_file(&core->vdev[MSM_VIDC_ENCODER].vdev.dev,
 				&dev_attr_link_name);
@@ -546,6 +603,7 @@ static int msm_vidc_remove(struct platform_device *pdev)
 	v4l2_device_unregister(&core->v4l2_dev);
 
 	msm_vidc_free_platform_resources(&core->resources);
+	sysfs_remove_group(&pdev->dev.kobj, &msm_vidc_core_attr_group);
 	kfree(core);
 	return rc;
 }
