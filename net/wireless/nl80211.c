@@ -3264,37 +3264,33 @@ static int nl80211_start_ap(struct sk_buff *skb, struct genl_info *info)
 			return -EINVAL;
 	}
 
-	if (!info->attrs[NL80211_ATTR_ACS_OFFLOAD]) {
-		if (info->attrs[NL80211_ATTR_WIPHY_FREQ]) {
-			err = nl80211_parse_chandef(rdev,
-						info, &params.chandef);
-			if (err)
-				return err;
-		} else if (wdev->preset_chandef.chan) {
-			params.chandef = wdev->preset_chandef;
-		} else if (!nl80211_get_ap_channel(rdev, &params))
-			return -EINVAL;
-
-		if (!cfg80211_reg_can_beacon(&rdev->wiphy, &params.chandef))
-			return -EINVAL;
-
-		err = cfg80211_chandef_dfs_required(wdev->wiphy,
-						&params.chandef);
-		if (err < 0)
-			return err;
-		if (err) {
-			radar_detect_width = BIT(params.chandef.width);
-			params.radar_required = true;
-		}
-
-		err = cfg80211_can_use_iftype_chan(rdev, wdev, wdev->iftype,
-						   params.chandef.chan,
-						   CHAN_MODE_SHARED,
-						   radar_detect_width);
-
+	if (info->attrs[NL80211_ATTR_WIPHY_FREQ]) {
+		err = nl80211_parse_chandef(rdev, info, &params.chandef);
 		if (err)
 			return err;
+	} else if (wdev->preset_chandef.chan) {
+		params.chandef = wdev->preset_chandef;
+	} else if (!nl80211_get_ap_channel(rdev, &params))
+		return -EINVAL;
+
+	if (!cfg80211_reg_can_beacon(&rdev->wiphy, &params.chandef))
+		return -EINVAL;
+
+	err = cfg80211_chandef_dfs_required(wdev->wiphy, &params.chandef);
+	if (err < 0)
+		return err;
+	if (err) {
+		radar_detect_width = BIT(params.chandef.width);
+		params.radar_required = true;
 	}
+
+	err = cfg80211_can_use_iftype_chan(rdev, wdev, wdev->iftype,
+					   params.chandef.chan,
+					   CHAN_MODE_SHARED,
+					   radar_detect_width);
+
+	if (err)
+		return err;
 
 	if (info->attrs[NL80211_ATTR_ACL_POLICY]) {
 		params.acl = parse_acl_data(&rdev->wiphy, info);
