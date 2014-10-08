@@ -615,7 +615,7 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 	of_property_read_u32(node, key, &spm_data.pfm_port);
 
 	/* Q2S (QChannel-2-SPM) register */
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "q2s");
 	if (res) {
 		dev->q2s_reg = devm_ioremap(&pdev->dev, res->start,
 						resource_size(res));
