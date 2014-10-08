@@ -918,6 +918,15 @@ struct mdp_dither_cfg_data {
 #define MDP_GAMUT_TABLE_NUM		8
 #define MDP_GAMUT_TABLE_NUM_V1_7	4
 #define MDP_GAMUT_SCALE_OFF_TABLE_NUM	3
+#define MDP_GAMUT_TABLE_V1_7_SZ 1228
+#define MDP_GAMUT_SCALE_OFF_SZ 16
+#define MDP_GAMUT_TABLE_V1_7_COARSE_SZ 32
+
+enum {
+	mdp_gamut_v1_7 = 1,
+	mdp_gamut_vmax,
+};
+
 
 struct mdp_gamut_cfg_data {
 	uint32_t block;
@@ -933,13 +942,18 @@ struct mdp_gamut_cfg_data {
 	void *cfg_payload;
 };
 
+enum {
+	mdp_gamut_fine_mode = 0x1,
+	mdp_gamut_coarse_mode,
+};
+
 struct mdp_gamut_data_v1_7 {
 	uint32_t mode;
 	uint32_t tbl_size[MDP_GAMUT_TABLE_NUM_V1_7];
 	uint32_t *c0_data[MDP_GAMUT_TABLE_NUM_V1_7];
 	uint32_t *c1_c2_data[MDP_GAMUT_TABLE_NUM_V1_7];
-	uint32_t  c0_c1_c2_scale_off_size[MDP_GAMUT_SCALE_OFF_TABLE_NUM];
-	uint32_t  *c0_c1_c2_scale_off[MDP_GAMUT_SCALE_OFF_TABLE_NUM];
+	uint32_t  tbl_scale_off_sz[MDP_GAMUT_SCALE_OFF_TABLE_NUM];
+	uint32_t  *scale_off_data[MDP_GAMUT_SCALE_OFF_TABLE_NUM];
 };
 
 struct mdp_calib_config_data {
