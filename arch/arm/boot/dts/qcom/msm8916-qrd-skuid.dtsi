@@ -11,10 +11,24 @@
  */
 
 #include "msm8916-qrd-skui.dtsi"
+#include "dsi-panel-hx8379a-fwvga-video.dtsi"
 
 / {
        model = "Qualcomm Technologies, Inc. MSM 8916 QRD SKUID";
        compatible = "qcom,msm8916-qrd-skuid", "qcom,msm8916-qrd", "qcom,msm8916", "qcom,qrd";
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_hx8379a_fwvga_video>;
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active>;
+	pinctrl-1 = <&mdss_dsi_suspend>;
+
+	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
+};
+
+&dsi_hx8379a_fwvga_video {
+	qcom,cont-splash-enabled;
 };
 
 &soc {
@@ -42,3 +56,26 @@
 	};
 };
 
+&pm8916_chg {
+	qcom,vddmax-mv = <4350>;
+	qcom,vddsafe-mv = <4380>;
+	qcom,vinmin-mv = <4470>;
+	qcom,batt-hot-percentage = <35>;
+	qcom,batt-cold-percentage = <70>;
+	qcom,tchg-mins = <360>;
+	status = "okay";
+};
+
+/ {
+	qrd_batterydata: qcom,battery-data {
+	qcom,rpull-up-kohm = <100>;
+	qcom,vref-batt-therm = <1800000>;
+
+	#include "batterydata-qrd-skuic-4v35-1850mah.dtsi"
+	};
+};
+
+&pm8916_bms {
+	status = "okay";
+	qcom,battery-data = <&qrd_batterydata>;
+};
