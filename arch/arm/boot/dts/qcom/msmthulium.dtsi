@@ -207,6 +207,39 @@
 		interrupts = <0 44 0>;
 		qcom,hfi = "venus";
 		qcom,max-hw-load = <1281600>; /* Full 4k @ 30 + 1080p @ 30 */
+		venus-supply = <&gdsc_venus>;
+		non_secure_cb {
+			compatible = "qcom,msm-vidc,context-bank";
+			label = "venus_ns";
+			iommus = <&venus_smmu 0x00>,
+				<&venus_smmu 0x01>,
+				<&venus_smmu 0x0a>,
+				<&venus_smmu 0x07>,
+				<&venus_smmu 0x0e>,
+				<&venus_smmu 0x0f>,
+				<&venus_smmu 0x08>,
+				<&venus_smmu 0x09>,
+				<&venus_smmu 0x0b>,
+				<&venus_smmu 0x0c>,
+				<&venus_smmu 0x0d>,
+				<&venus_smmu 0x10>,
+				<&venus_smmu 0x11>,
+				<&venus_smmu 0x21>,
+				<&venus_smmu 0x28>,
+				<&venus_smmu 0x29>,
+				<&venus_smmu 0x2b>,
+				<&venus_smmu 0x2c>,
+				<&venus_smmu 0x2d>,
+				<&venus_smmu 0x31>;
+			buffer-types = <0xfff>;
+			virtual-addr-pool = <0x5dc00000 0x80000000>;
+		};
+		firmware_cb {
+			compatible = "qcom,msm-vidc,context-bank";
+			qcom,fw-context-bank;
+			iommus = <&venus_smmu 0x180>,
+				<&venus_smmu 0x186>;
+		};
 	};
 
 	i2c_2: i2c@7576000 { /* BLSP1 QUP2 */
