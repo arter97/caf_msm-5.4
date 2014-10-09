@@ -50,6 +50,7 @@ struct ipv6_devconf {
 	__s32		force_tllao;
 	__s32           ndisc_notify;
 	__s32		suppress_frag_ndisc;
+	__s32		accept_ra_prefix_route;
 	void		*sysctl;
 };
 
@@ -58,6 +59,7 @@ struct ipv6_params {
 	__s32 autoconf;
 };
 extern struct ipv6_params ipv6_defaults;
+
 #include <linux/icmpv6.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
