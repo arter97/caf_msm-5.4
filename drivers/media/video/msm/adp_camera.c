@@ -692,6 +692,7 @@ static int adp_rear_camera_enable(void)
 int  init_camera_kthread(void)
 {
 	int ret;
+	pr_debug("%s: entry\n", __func__);
 	init_completion(&camera_enabled);
 	init_completion(&preview_enabled);
 	init_completion(&preview_disabled);
@@ -732,6 +733,9 @@ int disable_camera_preview(void)
 		pr_debug("%s: overlay_unset camera preview free pipe !\n",
 			__func__);
 	}
+
+	mdpclient_display_commit();
+
 	complete(&preview_disabled);
 	return 0;
 }
@@ -797,6 +801,7 @@ int enable_camera_preview(void)
 		complete(&preview_enabled);
 		return -EBUSY;
 	}
+
 	av_mgr_rvc_stream_enable(TRUE);
 	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);
 	complete(&camera_enabled);

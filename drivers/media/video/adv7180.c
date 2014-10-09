@@ -38,7 +38,8 @@
 #include "msm/av_mgr.h"
 #define DRIVER_NAME "adv7180"
 
-#define I2C_RW_DELAY 50000
+#define I2C_RW_DELAY 100
+#define I2C_RETRY_DELAY 20000
 #define ADV7180_STD_AD_PAL_BG_NTSC_J_SECAM		0x0
 #define ADV7180_STD_AD_PAL_BG_NTSC_J_SECAM_PED		0x1
 #define ADV7180_STD_AD_PAL_N_NTSC_J_SECAM		0x2
@@ -185,6 +186,14 @@
 
 #define ADV7180_INPUT_DISABLED (~0x00)
 
+/*
+ * Local variable used to keep track
+ * of csi programming.  Will be set to
+ * true the first time streaming is started.
+ * Will be set false when adv is powered off.
+ */
+static int csi_configured_s;
+
 struct adv7180_state;
 
 struct adv7180_chip_info {
@@ -228,16 +237,40 @@ static int adv7180_set_video_standard(struct adv7180_state *state,
 static int adv7180_select_page(struct adv7180_state *state, unsigned int page)
 {
 	int rd_bk = 0x0;
+	int ret = 0;
+	int numTries = 0;
 
 	if (state->register_page != page) {
 		usleep(I2C_RW_DELAY);
-		i2c_smbus_write_byte_data(state->client, ADV7180_REG_CTRL,
+		ret = i2c_smbus_write_byte_data(state->client, ADV7180_REG_CTRL,
 			page);
+		while (ret < 0 && numTries < 3) {
+			pr_err("%s : write page failed numTries %d ret %d\n",
+				 __func__, numTries, ret);
+			usleep(I2C_RW_DELAY);
+			ret = i2c_smbus_write_byte_data(state->client,
+							ADV7180_REG_CTRL, page);
+			numTries++;
+		}
+
+		pr_debug("%s : write numTries %d ret %d\n",
+			__func__, numTries, ret);
+
 		usleep(I2C_RW_DELAY);
+
 		rd_bk = i2c_smbus_read_byte_data(state->client,
-							ADV7180_REG_CTRL);
-		usleep(I2C_RW_DELAY);
+						ADV7180_REG_CTRL);
+		numTries = 0;
+		while (rd_bk < 0 && numTries < 3) {
+			pr_err("%s : read failed numTries %d ret %d\n",
+				__func__, numTries, ret);
+			usleep(I2C_RW_DELAY);
+			numTries++;
+		}
+
 		state->register_page = page;
+
+		pr_debug("%s : rd_bk 0x%x\n", __func__, rd_bk);
 	}
 
 	return 0;
@@ -247,13 +280,31 @@ static int adv7180_write(struct adv7180_state *state, unsigned int reg,
 	unsigned int value)
 {
 	int ret = -1;
+	int numTries = 0;
+
+	pr_debug("%s : reg 0x%x state->client->addr 0x%x value 0x%x\n",
+		__func__, reg, state->client->addr, value);
 
 	lockdep_assert_held(&state->mutex);
 
+	usleep(I2C_RW_DELAY);
+
 	adv7180_select_page(state, reg >> 8);
 	ret = i2c_smbus_write_byte_data(state->client,
-							reg & 0xff, value);
-	usleep(I2C_RW_DELAY);
+					reg & 0xff, value);
+
+	/*Retry the write if it failed*/
+	while (ret < 0 && numTries < 3) {
+		usleep(I2C_RW_DELAY);
+		ret = i2c_smbus_write_byte_data(state->client,
+		reg & 0xff, value);
+		numTries++;
+		pr_err("%s : Retry addr 0x%x reg 0x%x value 0x%x ret 0x%x numTries %d\n",
+			__func__, state->client->addr,
+			reg, value, ret, numTries);
+	}
+
+	pr_debug("%s : write ret 0x%x numTries %d\n", __func__, ret, numTries);
 
 	return ret;
 }
@@ -261,11 +312,30 @@ static int adv7180_write(struct adv7180_state *state, unsigned int reg,
 static int adv7180_read(struct adv7180_state *state, unsigned int reg)
 {
 	int ret = 0;
+	int numTries = 0;
 	lockdep_assert_held(&state->mutex);
+
+	pr_debug("%s : reg 0x%x state->client->addr 0x%x\n",
+		__func__, reg, state->client->addr);
+
+	usleep(I2C_RW_DELAY);
 
 	adv7180_select_page(state, reg >> 8);
 	ret = i2c_smbus_read_byte_data(state->client, reg & 0xff);
-	usleep(I2C_RW_DELAY);
+
+	/*Retry the write if it failed*/
+	while (ret < 0 && numTries < 10) {
+		usleep(I2C_RW_DELAY);
+		ret = i2c_smbus_read_byte_data(state->client,
+			reg & 0xff);
+		numTries++;
+		pr_err("%s : Retry addr 0x%x reg 0x%x ret 0x%x numTries %d\n",
+			__func__, state->client->addr,
+			reg, ret, numTries);
+	}
+
+	pr_debug("%s : read ret 0x%x numTries %d\n", __func__, ret, numTries);
+
 	return ret;
 }
 
@@ -273,9 +343,27 @@ static int adv7180_csi_write(struct adv7180_state *state, unsigned int reg,
 	unsigned int value)
 {
 	int ret = -1;
+	int numTries = 0;
+
+	pr_debug("%s : reg 0x%x state->client->addr 0x%x\n",
+		__func__, reg, state->csi_client->addr);
+	usleep(I2C_RW_DELAY);
 
 	ret = i2c_smbus_write_byte_data(state->csi_client, reg, value);
-	usleep(I2C_RW_DELAY);
+
+	/*Retry the write if it failed*/
+	while (ret < 0 && numTries < 3) {
+		usleep(I2C_RW_DELAY);
+		ret = i2c_smbus_write_byte_data(state->csi_client,
+						reg, value);
+		numTries++;
+		pr_err("%s : Retry addr 0x%x reg 0x%x val 0x%x ret 0x%x numTries %d\n",
+			__func__, state->csi_client->addr,
+			reg, value, ret, numTries);
+	}
+
+	pr_debug("%s :csi write ret 0x%x numTries %d\n",
+		__func__, ret, numTries);
 
 	return ret;
 }
@@ -284,9 +372,26 @@ static int adv7180_vpp_write(struct adv7180_state *state, unsigned int reg,
 	unsigned int value)
 {
 	int ret = -1;
+	int numTries = 0;
+
+	pr_debug("%s : reg 0x%x state->client->addr 0x%x\n",
+		__func__, reg, state->vpp_client->addr);
+	usleep(I2C_RW_DELAY);
 
 	ret = i2c_smbus_write_byte_data(state->vpp_client, reg, value);
-	usleep(I2C_RW_DELAY);
+
+	/*Retry the write if it failed*/
+	while (ret < 0 && numTries < 3) {
+		usleep(I2C_RW_DELAY);
+		ret = i2c_smbus_write_byte_data(state->vpp_client,
+						reg, value);
+		numTries++;
+		pr_err("%s : Retry addr 0x%x reg 0x%x value 0x%x ret 0x%x numTries %d\n",
+			__func__, state->vpp_client->addr,
+			reg, value, ret, numTries);
+	}
+
+	pr_debug("%s :ret 0x%x numTries %d\n", __func__, ret, numTries);
 
 	return ret;
 }
@@ -353,6 +458,8 @@ static int __adv7180_status(struct adv7180_state *state, u32 *status,
 {
 	int status1 = adv7180_read(state, ADV7180_REG_STATUS1);
 
+	pr_debug("%s: status1 0x%x\n", __func__, status1);
+
 	if (status1 < 0)
 		return status1;
 
@@ -375,24 +482,32 @@ static int adv7180_querystd(struct v4l2_subdev *sd, v4l2_std_id *std)
 	int err  = 0;
 	v4l2_std_id new_std = V4L2_STD_UNKNOWN ;
 
+	pr_debug("%s: entry!\n", __func__);
+
 	err = mutex_lock_interruptible(&state->mutex);
 
 	if (err)
 		return err;
 
 	/* when we are interrupt driven we know the state */
-	if (state->irq > 0)
+	if (state->irq > 0) {
 		new_std = state->curr_norm;
-	else
+	} else {
+		usleep(10000);
 		err = __adv7180_status(state, NULL, &new_std);
+	}
+
 	*std = new_std;
 
 	mutex_unlock(&state->mutex);
+
+	pr_debug("%s: exit!\n", __func__);
+
 	return err;
 }
 
 static int adv7180_s_routing(struct v4l2_subdev *sd, u32 input,
-			     u32 output, u32 config)
+				u32 output, u32 config)
 {
 	struct adv7180_state *state = to_state(sd);
 	int ret = mutex_lock_interruptible(&state->mutex);
@@ -484,6 +599,8 @@ static int adv7180_set_power(struct adv7180_state *state, bool on)
 	int val;
 	int ret;
 
+	pr_debug("%s: entry!!!\n", __func__);
+
 	if (on)
 		val = ADV7180_PWR_MAN_ON;
 	else
@@ -500,8 +617,13 @@ static int adv7180_set_power(struct adv7180_state *state, bool on)
 			adv7180_csi_write(state, 0xD8, 0x65);
 			adv7180_csi_write(state, 0xE0, 0x09);
 			adv7180_csi_write(state, 0x2C, 0x00);
+		} else {
+			/*reset local variable*/
+			csi_configured_s = 0;
 		}
 	}
+
+	pr_debug("%s: exit!!!!\n", __func__);
 	return 0;
 }
 
@@ -525,40 +647,76 @@ static int adv7180_s_power(struct v4l2_subdev *sd, int on)
 static int adv7180_set_op_stream(struct adv7180_state *state, bool on)
 {
 	int ret = -1;
+	int status = 0;
+	int numTries = 0;
+
+	pr_debug("%s: entry!!!\n", __func__);
 
 	if (state->chip_info->flags & ADV7180_FLAG_MIPI_CSI2) {
 		if (on) {
-			adv7180_write(state, ADV7180_REG_VPP_SLAVE_ADDR,
-				ADV7180_DEFAULT_VPP_I2C_ADDR << 1);
-			adv7180_vpp_write(state, 0xa3, 0x00);
-			adv7180_vpp_write(state, 0x5b, 0x00);
-			adv7180_vpp_write(state, 0x55, 0x80);
+				if (!csi_configured_s) {
+					pr_debug("%s: config csi and vpp!!!\n",
+						__func__);
+					adv7180_vpp_write(state, 0xa3, 0x00);
+					adv7180_vpp_write(state, 0x5b, 0x00);
+					adv7180_vpp_write(state, 0x55, 0x80);
 
-			adv7180_write(state, ADV7180_REG_CSI_SLAVE_ADDR,
-				ADV7180_DEFAULT_CSI_I2C_ADDR << 1);
-			adv7180_csi_write(state, 0x01, 0x20);
-			adv7180_csi_write(state, 0x02, 0x28);
-			adv7180_csi_write(state, 0x03, 0x38);
-			adv7180_csi_write(state, 0x04, 0x30);
-			adv7180_csi_write(state, 0x05, 0x30);
-			adv7180_csi_write(state, 0x06, 0x80);
-			adv7180_csi_write(state, 0x07, 0x70);
-			adv7180_csi_write(state, 0x08, 0x50);
+					adv7180_csi_write(state, 0x01, 0x20);
+					adv7180_csi_write(state, 0x02, 0x28);
+					adv7180_csi_write(state, 0x03, 0x38);
+					adv7180_csi_write(state, 0x04, 0x30);
+					adv7180_csi_write(state, 0x05, 0x30);
+					adv7180_csi_write(state, 0x06, 0x80);
+					adv7180_csi_write(state, 0x07, 0x70);
+					adv7180_csi_write(state, 0x08, 0x50);
 
-			adv7180_csi_write(state, 0xDE, 0x02);
-			usleep(I2C_RW_DELAY);
-			adv7180_csi_write(state, 0xD2, 0xF7);
-			adv7180_csi_write(state, 0xD8, 0x65);
-			adv7180_csi_write(state, 0xE0, 0x09);
-			adv7180_csi_write(state, 0x2C, 0x00);
-			adv7180_csi_write(state, 0x1D, 0x80);
-			ret = adv7180_csi_write(state, 0x00, 0x00);
-			usleep(I2C_RW_DELAY);
+					adv7180_csi_write(state, 0xDE, 0x02);
+					usleep(I2C_RW_DELAY);
+					adv7180_csi_write(state, 0xD2, 0xF7);
+					adv7180_csi_write(state, 0xD8, 0x65);
+					adv7180_csi_write(state, 0xE0, 0x09);
+					adv7180_csi_write(state, 0x2C, 0x00);
+					adv7180_csi_write(state, 0x1D, 0x80);
+					csi_configured_s = 1;
+				} else {
+					pr_debug("%s: csi/vpp already configured!!!\n",
+						__func__);
+				}
+
+				/*
+				 * Ensure signal lock before starting the
+				 * csi transmitter
+				 */
+				do {
+					usleep(I2C_RW_DELAY);
+					ret = __adv7180_status(state, &status,
+								NULL);
+					numTries++;
+
+					if (status != 0 || ret != 0) {
+						pr_debug("%s: ret %d status 0x%x\n",
+							__func__, ret, status);
+						usleep(I2C_RW_DELAY);
+					}
+				} while (status != 0 && numTries < 5);
+
+				if (status == 0) {
+					/*Enable the csi*/
+					ret = adv7180_csi_write(state,
+								0x00, 0x00);
+				} else {
+					pr_err("%s: adv sd failed to lock ret %d status 0x%x\n",
+						__func__, ret, status);
+				}
+				usleep(I2C_RETRY_DELAY);
+				usleep(I2C_RW_DELAY);
 		} else {
 			usleep(I2C_RW_DELAY);
 			ret = adv7180_csi_write(state, 0x00, 0x80);
 		}
 	}
+
+	pr_debug("%s: exit!!!\n", __func__);
 
 	return ret;
 }
@@ -567,6 +725,7 @@ static int adv7180_s_stream(struct v4l2_subdev *sd, int on)
 {
 	struct adv7180_state *state = to_state(sd);
 	int ret;
+	pr_debug("%s: entry!!!\n", __func__);
 	ret = mutex_lock_interruptible(&state->mutex);
 	if (ret)
 		return ret;
@@ -574,6 +733,8 @@ static int adv7180_s_stream(struct v4l2_subdev *sd, int on)
 	ret = adv7180_set_op_stream(state, on);
 
 	mutex_unlock(&state->mutex);
+
+	pr_debug("%s: exit!!!\n", __func__);
 	return ret;
 }
 
@@ -583,6 +744,8 @@ static int adv7180_s_ctrl(struct v4l2_ctrl *ctrl)
 	struct adv7180_state *state = to_state(sd);
 	int ret = mutex_lock_interruptible(&state->mutex);
 	int val;
+
+	pr_debug("%s: entry!!!\n", __func__);
 
 	if (ret)
 		return ret;
@@ -614,6 +777,9 @@ static int adv7180_s_ctrl(struct v4l2_ctrl *ctrl)
 	}
 
 	mutex_unlock(&state->mutex);
+
+	pr_debug("%s: exit!!!\n", __func__);
+
 	return ret;
 }
 
@@ -640,6 +806,7 @@ static const char * const adv7180_free_run_mode_strings[] = {
 
 static int adv7180_init_controls(struct adv7180_state *state)
 {
+	pr_debug("%s: entry\n", __func__);
 	v4l2_ctrl_handler_init(&state->ctrl_hdl, 4);
 
 	v4l2_ctrl_new_std(&state->ctrl_hdl, &adv7180_ctrl_ops,
@@ -663,6 +830,8 @@ static int adv7180_init_controls(struct adv7180_state *state)
 		return err;
 	}
 	v4l2_ctrl_handler_setup(&state->ctrl_hdl);
+
+	pr_debug("%s: exit\n", __func__);
 
 	return 0;
 }
@@ -698,6 +867,8 @@ static int adv7180_mbus_fmt(struct v4l2_subdev *sd,
 
 static int adv7180_set_field_mode(struct adv7180_state *state)
 {
+	pr_debug("%s: entry!!!\n", __func__);
+
 	if (!(state->chip_info->flags & ADV7180_FLAG_I2P))
 		return 0;
 
@@ -730,6 +901,8 @@ static int adv7180_set_field_mode(struct adv7180_state *state)
 		adv7180_vpp_write(state, 0x5b, 0x80);
 		adv7180_vpp_write(state, 0x55, 0x00);
 	}
+
+	pr_debug("%s: exit!!!\n", __func__);
 
 	return 0;
 }
@@ -891,7 +1064,7 @@ static int adv7180_set_std(struct adv7180_state *state, unsigned int std)
 static int adv7180_select_input(struct adv7180_state *state, unsigned int input)
 {
 	int ret;
-
+	pr_debug("%s: entry\n", __func__);
 	if (input == ADV7180_INPUT_DISABLED)
 		input = 0x00;
 
@@ -901,24 +1074,14 @@ static int adv7180_select_input(struct adv7180_state *state, unsigned int input)
 
 	ret &= ~ADV7180_INPUT_CONTROL_INSEL_MASK;
 	ret |= input;
+	pr_debug("%s: exit\n", __func__);
 	return adv7180_write(state, ADV7180_REG_INPUT_CONTROL, ret);
 }
 
 static int adv7182_init(struct adv7180_state *state)
 {
 	int ret = 0;
-	if (state->chip_info->flags & ADV7180_FLAG_MIPI_CSI2)
-		adv7180_write(state, ADV7180_REG_CSI_SLAVE_ADDR,
-			ADV7180_DEFAULT_CSI_I2C_ADDR << 1);
-	usleep(I2C_RW_DELAY);
-
-	if (state->chip_info->flags & ADV7180_FLAG_I2P)
-		adv7180_write(state, ADV7180_REG_VPP_SLAVE_ADDR,
-			ADV7180_DEFAULT_VPP_I2C_ADDR << 1);
-	usleep(I2C_RW_DELAY);
-
-	adv7180_write(state, 0x809c, 0x00);
-	adv7180_write(state, 0x809c, 0xff);
+	pr_debug("%s: entry\n", __func__);
 
 	if (state->chip_info->flags & ADV7180_FLAG_V2) {
 		adv7180_write(state, 0x0080, 0x51);
@@ -942,6 +1105,9 @@ static int adv7182_init(struct adv7180_state *state)
 	if (state->field == V4L2_FIELD_NONE)
 		ret = adv7180_csi_write(state, 0x1D, 0x80);
 	usleep(I2C_RW_DELAY);
+
+	pr_debug("%s: exit\n", __func__);
+
 	return 0;
 }
 
@@ -1008,16 +1174,14 @@ static int adv7182_select_input(struct adv7180_state *state, unsigned int input)
 	unsigned int i;
 	int ret;
 
+	pr_debug("%s: entry\n", __func__);
+
 	if (input == ADV7180_INPUT_DISABLED)
 		return adv7180_write(state, ADV7180_REG_INPUT_CONTROL, 0xff);
 
 	ret = adv7180_write(state, ADV7180_REG_INPUT_CONTROL, input);
 	if (ret)
 		return ret;
-
-	/* Reset clamp circuitry - ADI recommended writes */
-	adv7180_write(state, 0x809c, 0x00);
-	adv7180_write(state, 0x809c, 0xff);
 
 	input_type = adv7182_get_input_type(input);
 
@@ -1051,9 +1215,9 @@ static int adv7182_select_input(struct adv7180_state *state, unsigned int input)
 		adv7180_write(state, 0x005f, 0xf0);
 		adv7180_write(state, 0x005a, 0xd0);
 		adv7180_write(state, 0x0060, 0x10);
-		adv7180_write(state, 0x80b6, 0x9c);
-		adv7180_write(state, 0x80c0, 0x00);
 	}
+
+	pr_debug("%s: exit\n", __func__);
 
 	return 0;
 }
@@ -1225,12 +1389,24 @@ static const struct adv7180_chip_info adv7282_m_info = {
 static int init_device(struct adv7180_state *state)
 {
 	int ret = 0;
+	pr_debug("%s : entry\n", __func__);
 
 	mutex_lock(&state->mutex);
-	ret = adv7180_write(state, ADV7180_REG_PWR_MAN, ADV7180_PWR_MAN_RES);
+
+	ret = adv7180_write(state, ADV7180_REG_PWR_MAN, 0);
 	if (ret)
 		goto out_unlock;
 
+	usleep(5000);
+
+	if (state->chip_info->flags & ADV7180_FLAG_MIPI_CSI2)
+		adv7180_write(state, ADV7180_REG_CSI_SLAVE_ADDR,
+			ADV7180_DEFAULT_CSI_I2C_ADDR << 1);
+	usleep(I2C_RW_DELAY);
+
+	if (state->chip_info->flags & ADV7180_FLAG_I2P)
+		adv7180_write(state, ADV7180_REG_VPP_SLAVE_ADDR,
+			ADV7180_DEFAULT_VPP_I2C_ADDR << 1);
 	usleep(I2C_RW_DELAY);
 
 	ret = state->chip_info->init(state);
@@ -1258,6 +1434,8 @@ static int adv7180_probe(struct i2c_client *client,
 	struct adv7180_platform_data *pdata = NULL;
 	struct v4l2_subdev *sd;
 	int ret;
+
+	pr_err("%s : entry\n", __func__);
 
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE_DATA))
@@ -1338,9 +1516,13 @@ static int adv7180_probe(struct i2c_client *client,
 		usleep(5000);
 		ret = gpio_direction_output(pdata->rstb_gpio, 1);
 		usleep(10000);
-		if (ret)
+
+	if (ret)
 			goto err_unregister_vpp_client;
 	}
+
+	/*Initialize csi configurion flag*/
+	csi_configured_s = 0;
 
 	ret = adv7180_init_controls(state);
 	if (ret)
@@ -1367,6 +1549,8 @@ static int adv7180_probe(struct i2c_client *client,
 	ret = av_mgr_sd_register(sd);
 	if (ret)
 		goto err_free_irq;
+
+	pr_debug("%s : exit\n", __func__);
 
 	return 0;
 

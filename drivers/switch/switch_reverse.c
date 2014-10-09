@@ -84,6 +84,8 @@ static void reverse_detection_work(struct work_struct *work)
 			detect_delayed_work.work);
 	state = gpio_get_value(data->gpio);
 
+	switch_set_state(&data->sdev, !state);
+
 	if (!state && (camera_status == CAMERA_POWERED_UP
 				|| camera_status == CAMERA_PREVIEW_DISABLED)) {
 		if (enable_camera_preview() == 0)
@@ -95,7 +97,7 @@ static void reverse_detection_work(struct work_struct *work)
 		}
 		show_pic_exit();
 	}
-	switch_set_state(&data->sdev, !state);
+
 	input_report_key(data->idev, data->key_code, !state);
 	input_sync(data->idev);
 }
@@ -166,6 +168,8 @@ static int switch_reverse_probe(struct platform_device *pdev)
 	unsigned long irq_flags;
 	int ret = 0;
 
+	pr_debug("%s: entry\n", __func__);
+
 	if (!pdata)
 		return -EBUSY;
 
@@ -235,6 +239,9 @@ static int switch_reverse_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&reverse_data->detect_delayed_work,
 						reverse_detection_work);
 	camera_status = CAMERA_POWERED_DOWN;
+
+	pr_debug("%s: init_camera_kthread\n", __func__);
+
 	if (camera_status == CAMERA_POWERED_DOWN) {
 		int rc = 0;
 		pr_debug("init camera configuration %s\n", __func__);
@@ -244,8 +251,14 @@ static int switch_reverse_probe(struct platform_device *pdev)
 		else
 			camera_status = CAMERA_POWERED_UP;
 	}
+
+	pr_debug("%s: reverse detection work\n", __func__);
+
 	reverse_detection_work(&reverse_data->detect_delayed_work.work);
 	enable_irq(reverse_data->irq);
+
+	pr_debug("%s: exit\n", __func__);
+
 
 	return 0;
 
