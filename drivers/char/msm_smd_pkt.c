@@ -1034,7 +1034,7 @@ int smd_pkt_open(struct inode *inode, struct file *file)
 
 	mutex_lock(&smd_pkt_devp->ch_lock);
 	if (smd_pkt_devp->ch == 0) {
-		INIT_COMPLETION(smd_pkt_devp->ch_allocated);
+		reinit_completion(&smd_pkt_devp->ch_allocated);
 
 		r = smd_pkt_add_driver(smd_pkt_devp);
 		if (r) {
