@@ -582,8 +582,8 @@ static int dwc3_probe(struct platform_device *pdev)
 
 		dwc->needs_fifo_resize = of_property_read_bool(node, "tx-fifo-resize");
 		dwc->dr_mode = of_usb_get_dr_mode(node);
-		dwc->core_reset_after_phy_init =
-			of_property_read_bool(node, "snps,core_reset_after_phy_init");
+		dwc->core_reset_after_phy_init = of_property_read_bool(node,
+					"snps,core-reset-after-phy-init");
 		dwc->usb3_u1u2_disable = of_property_read_bool(node,
 						"snps,usb3-u1u2-disable");
 		ret = of_property_read_u32(node, "snps,hird_thresh", &hird_thresh);
