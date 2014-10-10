@@ -260,7 +260,7 @@ static int hdmi_vco_enable(struct clk *c)
 	/* poll for PLL ready status */
 	max_reads = 20;
 	timeout_us = 100;
-	if (readl_poll_timeout_noirq((hdmi_phy_pll_base + HDMI_UNI_PLL_STATUS),
+	if (readl_poll_timeout_atomic((hdmi_phy_pll_base + HDMI_UNI_PLL_STATUS),
 		status, ((status & BIT(0)) == 1), max_reads, timeout_us)) {
 		pr_err("%s: hdmi phy pll status=%x failed to Lock\n",
 		       __func__, status);
@@ -274,7 +274,7 @@ static int hdmi_vco_enable(struct clk *c)
 	/* poll for PHY ready status */
 	max_reads = 20;
 	timeout_us = 100;
-	if (readl_poll_timeout_noirq((hdmi_phy_base + HDMI_PHY_STATUS),
+	if (readl_poll_timeout_atomic((hdmi_phy_base + HDMI_PHY_STATUS),
 		status, ((status & BIT(0)) == 1), max_reads, timeout_us)) {
 		pr_err("%s: hdmi phy status=%x failed to Lock\n",
 		       __func__, status);
@@ -1052,7 +1052,7 @@ static int dsi_pll_lock_status(void)
 	int pll_locked = 0;
 
 	/* poll for PLL ready status */
-	if (readl_poll_timeout_noirq((mdss_dsi_base +
+	if (readl_poll_timeout_atomic((mdss_dsi_base +
 			DSI_0_PHY_PLL_UNIPHY_PLL_STATUS),
 			status,
 			((status & BIT(0)) == 1),
@@ -1279,7 +1279,7 @@ static int dsi_pll_enable_seq_8974(void)
 		/* poll for PLL ready status */
 		max_reads = 5;
 		timeout_us = 100;
-		if (readl_poll_timeout_noirq((mdss_dsi_base +
+		if (readl_poll_timeout_atomic((mdss_dsi_base +
 				DSI_0_PHY_PLL_UNIPHY_PLL_STATUS),
 				status,
 				((status & 0x01) == 1),
@@ -2265,7 +2265,7 @@ static int edp_pll_lock_status(void)
 		return rc;
 	}
 	/* poll for PLL ready status */
-	if (readl_poll_timeout_noirq((mdss_edp_base + 0xc0),
+	if (readl_poll_timeout_atomic((mdss_edp_base + 0xc0),
 			status, ((status & BIT(0)) == 1),
 			PLL_POLL_MAX_READS, PLL_POLL_TIMEOUT_US)) {
 		pr_debug("%s: EDP PLL status=%x failed to Lock\n",
@@ -2505,7 +2505,7 @@ static int hdmi_pll_lock_status(void)
 		return 0;
 	}
 	/* poll for PLL ready status */
-	if (readl_poll_timeout_noirq((hdmi_phy_base + HDMI_PHY_STATUS),
+	if (readl_poll_timeout_atomic((hdmi_phy_base + HDMI_PHY_STATUS),
 			status, ((status & BIT(0)) == 1),
 			PLL_POLL_MAX_READS, PLL_POLL_TIMEOUT_US)) {
 		pr_debug("%s: HDMI PLL status=%x failed to Lock\n",
