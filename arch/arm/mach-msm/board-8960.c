@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -24,7 +24,6 @@
 #include <linux/mfd/pm8xxx/pm8xxx-adc.h>
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
-#include <linux/slimbus/slimbus.h>
 #include <linux/bootmem.h>
 #ifdef CONFIG_ANDROID_PMEM
 #include <linux/android_pmem.h>
@@ -1001,20 +1000,6 @@ static struct slim_device msm_slim_tabla20 = {
 	},
 };
 #endif
-
-static struct slim_boardinfo msm_slim_devices[] = {
-#ifdef CONFIG_WCD9310_CODEC
-	{
-		.bus_num = 1,
-		.slim_slave = &msm_slim_tabla,
-	},
-	{
-		.bus_num = 1,
-		.slim_slave = &msm_slim_tabla20,
-	},
-#endif
-	/* add more slimbus slaves as needed */
-};
 
 #define MSM_WCNSS_PHYS	0x03000000
 #define MSM_WCNSS_SIZE	0x280000
@@ -3465,8 +3450,7 @@ static void __init msm8960_cdp_init(void)
 		mxt_init_hw_liquid();
 	register_i2c_devices();
 	msm8960_init_fb();
-	slim_register_board_info(msm_slim_devices,
-		ARRAY_SIZE(msm_slim_devices));
+
 	msm8960_init_dsps();
 	BUG_ON(msm_pm_boot_init(&msm_pm_boot_pdata));
 	bt_power_init();
