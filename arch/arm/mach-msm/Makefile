@@ -279,6 +279,7 @@ obj-$(CONFIG_PM8921_BMS) += bms-batterydata.o bms-batterydata-desay.o batterydat
 obj-$(CONFIG_MACH_APQ8064_CDP) += board-8064-all.o board-8064-regulator.o
 obj-$(CONFIG_MACH_APQ8064_ADP2) += board-8064-all.o board-8064-regulator.o
 obj-$(CONFIG_MACH_APQ8064_ADP2_ES2) += board-8064-all.o board-8064-regulator.o
+obj-$(CONFIG_MACH_APQ8064_ADP2_ES2P5) += board-8064-all.o board-8064-regulator.o
 obj-$(CONFIG_MACH_APQ8064_MTP) += board-8064-all.o board-8064-regulator.o
 obj-$(CONFIG_MACH_APQ8064_LIQUID) += board-8064-all.o board-8064-regulator.o
 obj-$(CONFIG_MACH_MPQ8064_HRD) += board-8064-all.o board-8064-regulator.o

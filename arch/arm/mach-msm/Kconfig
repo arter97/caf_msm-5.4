@@ -894,6 +894,16 @@ config MACH_APQ8064_ADP2_ES2
 	 DiRaNa Audio Codec, USB based MDM9x15 modem are
 	 the major enhancements over the Previous version.
 
+config MACH_APQ8064_ADP2_ES2P5
+	depends on ARCH_APQ8064
+	bool "APQ8064 ADP2 ES2P5"
+	help
+	 Support for Third revision of Qualcomm APQ8064
+	 based Automotive grade Development platform.
+	 Peripherals like WLAN card with QCA6574 ASIC,
+	 DiRaNa Audio Codec, USB based MDM9x15 modem are
+	 included.
+
 config MACH_APQ8064_MTP
 	depends on ARCH_APQ8064
 	bool "APQ8064 MTP"

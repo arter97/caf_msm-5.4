@@ -2253,7 +2253,8 @@ void __init apq8064_init_gpiomux(void)
 				ARRAY_SIZE(apq8064_mplatform_gsbi_configs));
 		else {
 			if (machine_is_apq8064_adp_2() ||
-				machine_is_apq8064_adp2_es2())
+				machine_is_apq8064_adp2_es2() ||
+				machine_is_apq8064_adp2_es2p5())
 				msm_gpiomux_install(apq8064_adp_2_gsbi_configs,
 					ARRAY_SIZE(apq8064_adp_2_gsbi_configs));
 			else
@@ -2262,7 +2263,8 @@ void __init apq8064_init_gpiomux(void)
 		}
 	}
 
-	if (!((machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2()) &&
+	if (!((machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2()
+			|| machine_is_apq8064_adp2_es2p5()) &&
 		(SOCINFO_VERSION_MAJOR(socinfo_get_platform_version())
 							== 0x2))) {
 		pr_info("%s: install slimbus gpios", __func__);
@@ -2318,19 +2320,22 @@ void __init apq8064_init_gpiomux(void)
 		msm_gpiomux_install(apq8064_ext_regulator_configs,
 			ARRAY_SIZE(apq8064_ext_regulator_configs));
 
-	if ((machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2()) &&
+	if ((machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2()
+		|| machine_is_apq8064_adp2_es2p5()) &&
 		(SOCINFO_VERSION_MAJOR(socinfo_get_platform_version())
 							== 0x2)) {
 		pr_info("%s(): machine is adp(%d)platform_version(0x%x)MAJOR(%d)",
 			__func__, machine_is_apq8064_adp_2() ||
-			machine_is_apq8064_adp2_es2(),
+			machine_is_apq8064_adp2_es2() ||
+			machine_is_apq8064_adp2_es2p5(),
 			socinfo_get_platform_version(),
 			SOCINFO_VERSION_MAJOR(socinfo_get_platform_version()));
 		msm_gpiomux_install(apq8064_adp_es2_mi2s_i2s_cfg,
 		ARRAY_SIZE(apq8064_adp_es2_mi2s_i2s_cfg));
 	}
 
-	if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2())
+	if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2()
+		|| machine_is_apq8064_adp2_es2p5())
 		msm_gpiomux_install(apq8064_adp_auxpcm_configs,
 		ARRAY_SIZE(apq8064_adp_auxpcm_configs));
 
@@ -2384,7 +2389,8 @@ void __init apq8064_init_gpiomux(void)
 	else if (machine_is_apq8064_cdp() || machine_is_apq8064_liquid())
 		msm_gpiomux_install(apq8064_mxt_configs,
 			ARRAY_SIZE(apq8064_mxt_configs));
-	else if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2()) {
+	else if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2()
+			|| machine_is_apq8064_adp2_es2p5()) {
 		msm_gpiomux_install(apq8064_adp_mxt_configs,
 			ARRAY_SIZE(apq8064_adp_mxt_configs));
 		msm_gpiomux_install(adp2_reverse_gpio_config,
@@ -2410,7 +2416,8 @@ void __init apq8064_init_gpiomux(void)
 
 #ifdef CONFIG_MMC_MSM_SDC4_SUPPORT
 	 if (machine_is_apq8064_adp_2() ||
-		machine_is_apq8064_adp2_es2())
+		machine_is_apq8064_adp2_es2() ||
+		machine_is_apq8064_adp2_es2p5())
 		msm_gpiomux_install(apq8064_sdc4_configs,
 				 ARRAY_SIZE(apq8064_sdc4_configs));
 #endif
@@ -2420,7 +2427,8 @@ void __init apq8064_init_gpiomux(void)
 	 if (machine_is_mpq8064_hrd() || machine_is_mpq8064_dtv())
 		msm_gpiomux_install(mpq8064_uartdm_configs,
 				ARRAY_SIZE(mpq8064_uartdm_configs));
-	if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2()) {
+	if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2()
+			|| machine_is_apq8064_adp2_es2p5()) {
 		msm_gpiomux_install(adp_i2c_config,
 				ARRAY_SIZE(adp_i2c_config));
 		msm_gpiomux_install(adp_spi_config,

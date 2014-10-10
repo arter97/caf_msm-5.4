@@ -1148,6 +1148,7 @@ static int msm_mi2s_audrx_init(struct snd_soc_pcm_runtime *rtd)
 		    SOCINFO_VERSION_MINOR(revision) >= 1 &&
 		    (machine_is_apq8064_cdp() || machine_is_apq8064_adp_2() ||
 		     machine_is_apq8064_adp2_es2() ||
+			machine_is_apq8064_adp2_es2p5() ||
 			machine_is_apq8064_liquid())) ||
 		   SOCINFO_VERSION_MAJOR(revision) > 1) {
 		pr_debug("%s: MBHC mechanical switch available APQ8064 detected\n",
@@ -1866,6 +1867,7 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 		    SOCINFO_VERSION_MINOR(revision) >= 1 &&
 		    (machine_is_apq8064_cdp() || machine_is_apq8064_adp_2() ||
 			machine_is_apq8064_adp2_es2() ||
+			machine_is_apq8064_adp2_es2p5() ||
 			machine_is_apq8064_liquid())) ||
 		   SOCINFO_VERSION_MAJOR(revision) > 1) {
 		pr_debug("%s: MBHC mechanical switch available APQ8064 detected\n",
