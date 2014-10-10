@@ -541,9 +541,11 @@ int mdss_mdp_perf_calc_pipe(struct mdss_mdp_pipe *pipe,
 	else
 		perf->mdp_clk_rate = rate;
 
-	if (mixer->ctl->intf_num == MDSS_MDP_NO_INTF) {
+	if (mixer->ctl->intf_num == MDSS_MDP_NO_INTF ||
+		mdata->disable_prefill ||
+		(pipe->flags & MDP_SOLID_FILL)) {
 		perf->prefill_bytes = 0;
-		return 0;
+		goto exit;
 	}
 
 	calc_smp_size = (flags & PERF_CALC_PIPE_CALC_SMP_SIZE) ? true : false;
@@ -565,8 +567,6 @@ int mdss_mdp_perf_calc_pipe(struct mdss_mdp_pipe *pipe,
 	prefill_params.is_cmd = !mixer->ctl->is_video_mode;
 	prefill_params.pnum = pipe->num;
 
-	if (mdata->disable_prefill != 0)
-		perf->prefill_bytes = 0;
 	if (flags & PERF_CALC_PIPE_SINGLE_LAYER)
 		perf->prefill_bytes =
 			mdss_mdp_perf_calc_pipe_prefill_single(&prefill_params);
@@ -577,6 +577,7 @@ int mdss_mdp_perf_calc_pipe(struct mdss_mdp_pipe *pipe,
 		perf->prefill_bytes =
 			mdss_mdp_perf_calc_pipe_prefill_cmd(&prefill_params);
 
+exit:
 	pr_debug("mixer=%d pnum=%d clk_rate=%u bw_overlap=%llu prefill=%d %s\n",
 		 mixer->num, pipe->num, perf->mdp_clk_rate, perf->bw_overlap,
 		 perf->prefill_bytes, mdata->disable_prefill ?
@@ -2352,7 +2353,6 @@ int mdss_mdp_ctl_stop(struct mdss_mdp_ctl *ctl, int power_state)
 		if (ctl->panel_data->panel_info.fbc.enabled)
 			mdss_mdp_ctl_fbc_enable(0, sctl->mixer_left,
 				&sctl->panel_data->panel_info);
-		mdss_mdp_ctl_split_display_enable(0, ctl, sctl);
 	}
 	if (ret) {
 		pr_warn("error powering off intf ctl=%d\n", ctl->num);
@@ -2363,6 +2363,9 @@ int mdss_mdp_ctl_stop(struct mdss_mdp_ctl *ctl, int power_state)
 		pr_debug("panel is not off, leaving ctl power on\n");
 		goto end;
 	}
+
+	if (sctl)
+		mdss_mdp_ctl_split_display_enable(0, ctl, sctl);
 
 	mdss_mdp_ctl_write(ctl, MDSS_MDP_REG_CTL_TOP, 0);
 	if (sctl)
@@ -2812,7 +2815,8 @@ int mdss_mdp_ctl_addr_setup(struct mdss_data_type *mdata,
 		head[i].num = i;
 		head[i].base = (mdata->mdss_io.base) + ctl_offsets[i];
 		if (i >= offset && wb_offsets[i - offset])
-			head[i].wb_base = (mdata->mdss_io.base) + wb_offsets[i];
+			head[i].wb_base = (mdata->mdss_io.base) +
+				wb_offsets[i - offset];
 		head[i].ref_cnt = 0;
 	}
 
