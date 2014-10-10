@@ -97,3 +97,129 @@
 &lpass_q6_smmu {
 	status = "disable";
 };
+
+&clock_gcc {
+	compatible = "qcom,dummycc";
+	#clock-cells = <1>;
+};
+
+&clock_mmss {
+	compatible = "qcom,dummycc";
+	#clock-cells = <1>;
+};
+
+&clock_debug {
+	status = "disable";
+};
+
+&gdsc_venus {
+	status = "disable";
+};
+
+&gdsc_venus_core0 {
+	status = "disable";
+};
+
+&gdsc_venus_core1 {
+	status = "disable";
+};
+
+&gdsc_camss_top {
+	status = "disable";
+};
+
+&gdsc_vfe0 {
+	status = "disable";
+};
+
+&gdsc_vfe1 {
+	status = "disable";
+};
+
+&gdsc_jpeg {
+	status = "disable";
+};
+
+&gdsc_cpp {
+	status = "disable";
+};
+
+&gdsc_fd {
+	status = "disable";
+};
+
+&gdsc_mdss {
+	status = "disable";
+};
+
+&gdsc_pcie_0 {
+	status = "disable";
+};
+
+&gdsc_pcie_1 {
+	status = "disable";
+};
+
+&gdsc_pcie_2 {
+	status = "disable";
+};
+
+&gdsc_usb30 {
+	status = "disable";
+};
+
+&gdsc_ufs {
+	status = "disable";
+};
+
+&gdsc_gpu {
+	status = "disable";
+};
+
+&gdsc_gpu_gx {
+	status = "disable";
+};
+
+&gdsc_hlos1_vote_aggre0_noc {
+	status = "disable";
+};
+
+&gdsc_hlos1_vote_lpass_adsp {
+	status = "disable";
+};
+
+&gdsc_hlos1_vote_lpass_core {
+	status = "disable";
+};
+
+&gdsc_hlos2_vote_aggre0_noc {
+	status = "disable";
+};
+
+&gdsc_hlos2_vote_lpass_adsp {
+	status = "disable";
+};
+
+&gdsc_hlos2_vote_lpass_core {
+	status = "disable";
+};
+
+&gdsc_aggre0_noc {
+	status = "disable";
+};
+
+&gdsc_mmagic_bimc {
+	status = "disable";
+};
+
+&gdsc_mmagic_video {
+	status = "disable";
+};
+
+&gdsc_mmagic_mdss {
+	status = "disable";
+};
+
+&gdsc_mmagic_camss {
+	status = "disable";
+};
