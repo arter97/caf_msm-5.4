@@ -71,7 +71,7 @@ obj-$(CONFIG_SND_SOC_MSM_HOSTLESS_PCM) += snd-soc-hostless-pcm.o
 snd-soc-lpass-play-objs := lpass-play.o
 obj-$(CONFIG_SND_SOC_LPASS_PLAY) += snd-soc-lpass-play.o
 
-snd-soc-msm8960-objs := msm8960.o  apq8064.o msm8930.o mpq8064.o apq8064-i2s.o apq8064-auto.o
+snd-soc-msm8960-objs := apq8064-auto.o
 obj-$(CONFIG_SND_SOC_MSM8960) += snd-soc-msm8960.o
 
 snd-soc-msm8660-apq-objs := msm8660-apq-wm8903.o

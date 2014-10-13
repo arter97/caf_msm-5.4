@@ -21,7 +21,7 @@
 #include <linux/i2c/sx150x.h>
 #include <linux/i2c/adv7180.h>
 #include <media/adv7481.h>
-#include <linux/slimbus/slimbus.h>
+
 #include <linux/mfd/wcd9xxx/core.h>
 #include <linux/mfd/wcd9xxx/pdata.h>
 #include <linux/mfd/pm8xxx/misc.h>
