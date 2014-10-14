@@ -611,10 +611,12 @@ static void mpu6050_accel_work_fn(struct work_struct *work)
 {
 	struct mpu6050_sensor *sensor;
 	u32 shift;
+	ktime_t timestamp;
 
 	sensor = container_of((struct delayed_work *)work,
 				struct mpu6050_sensor, accel_poll_work);
 
+	timestamp = ktime_get();
 	mpu6050_read_accel_data(sensor, &sensor->axis);
 	mpu6050_remap_accel_data(&sensor->axis, sensor->pdata->place);
 
@@ -625,6 +627,12 @@ static void mpu6050_accel_work_fn(struct work_struct *work)
 		(sensor->axis.y >> shift));
 	input_report_abs(sensor->accel_dev, ABS_Z,
 		(sensor->axis.z >> shift));
+	input_event(sensor->accel_dev,
+			EV_SYN, SYN_TIME_SEC,
+			ktime_to_timespec(timestamp).tv_sec);
+	input_event(sensor->accel_dev, EV_SYN,
+		SYN_TIME_NSEC,
+		ktime_to_timespec(timestamp).tv_nsec);
 	input_sync(sensor->accel_dev);
 
 	if (sensor->use_poll)
@@ -643,10 +651,12 @@ static void mpu6050_gyro_work_fn(struct work_struct *work)
 {
 	struct mpu6050_sensor *sensor;
 	u32 shift;
+	ktime_t timestamp;
 
 	sensor = container_of((struct delayed_work *)work,
 				struct mpu6050_sensor, gyro_poll_work);
 
+	timestamp = ktime_get();
 	mpu6050_read_gyro_data(sensor, &sensor->axis);
 	mpu6050_remap_gyro_data(&sensor->axis, sensor->pdata->place);
 
@@ -657,6 +667,12 @@ static void mpu6050_gyro_work_fn(struct work_struct *work)
 		(sensor->axis.ry >> shift));
 	input_report_abs(sensor->gyro_dev, ABS_RZ,
 		(sensor->axis.rz >> shift));
+	input_event(sensor->gyro_dev,
+			EV_SYN, SYN_TIME_SEC,
+			ktime_to_timespec(timestamp).tv_sec);
+	input_event(sensor->gyro_dev, EV_SYN,
+		SYN_TIME_NSEC,
+		ktime_to_timespec(timestamp).tv_nsec);
 	input_sync(sensor->gyro_dev);
 
 	if (sensor->use_poll)
@@ -804,8 +820,8 @@ static int mpu6050_set_power_mode(struct mpu6050_sensor *sensor,
 	if (ret < 0) {
 		dev_err(&client->dev,
 				"Fail to write power mode, ret=%d\n", ret);
-	}
 		return ret;
+	}
 
 	return 0;
 }
@@ -965,9 +981,17 @@ static int mpu6050_restore_context(struct mpu6050_sensor *sensor)
 		ret = i2c_smbus_write_byte_data(client, reg->fifo_en,
 				data |= BIT_GYRO_FIFO);
 		if (ret < 0) {
-			dev_err(&client->dev, "write accel_fifo_enabled failed.\n");
+			dev_err(&client->dev, "write gyro_fifo_enabled failed.\n");
 			goto exit;
 		}
+	}
+
+	/* Accel and Gyro should set to standby by default */
+	ret = i2c_smbus_write_byte_data(client, reg->pwr_mgmt_2,
+			BITS_PWR_ALL_AXIS_STBY);
+	if (ret < 0) {
+		dev_err(&client->dev, "set pwr_mgmt_2 failed.\n");
+		goto exit;
 	}
 
 	ret = mpu6050_set_lpa_freq(sensor, sensor->cfg.lpa_freq);
@@ -993,7 +1017,7 @@ static int mpu6050_restore_context(struct mpu6050_sensor *sensor)
 	ret = i2c_smbus_write_byte_data(client, reg->pwr_mgmt_1,
 		pwr_ctrl);
 	if (ret < 0) {
-		dev_err(&client->dev, "Write saved power state failed.\n");
+		dev_err(&client->dev, "write saved power state failed.\n");
 		goto exit;
 	}
 
@@ -1047,7 +1071,7 @@ static int mpu6050_gyro_set_enable(struct mpu6050_sensor *sensor, bool enable)
 
 	mutex_lock(&sensor->op_lock);
 	if (enable) {
-		if (!sensor->cfg.enable) {
+		if (!sensor->power_enabled) {
 			ret = mpu6050_power_ctl(sensor, true);
 			if (ret < 0) {
 				dev_err(&sensor->client->dev,
@@ -1443,7 +1467,7 @@ static int mpu6050_accel_set_enable(struct mpu6050_sensor *sensor, bool enable)
 
 	mutex_lock(&sensor->op_lock);
 	if (enable) {
-		if (!sensor->cfg.enable) {
+		if (!sensor->power_enabled) {
 			ret = mpu6050_power_ctl(sensor, true);
 			if (ret < 0) {
 				dev_err(&sensor->client->dev,
@@ -2365,12 +2389,11 @@ static int mpu6050_suspend(struct device *dev)
 		goto exit;
 	}
 
-	dev_dbg(&client->dev, "suspended\n");
-
 exit:
 	mutex_unlock(&sensor->op_lock);
+	dev_dbg(&client->dev, "Suspend completed, ret=%d\n", ret);
 
-	return ret;
+	return 0;
 }
 
 /**
@@ -2401,18 +2424,21 @@ static int mpu6050_resume(struct device *dev)
 		dev_err(&client->dev, "Power on mpu6050 failed\n");
 		goto exit;
 	}
-	/* Reset sensor to recovery from unexpect state */
+	/* Reset sensor to recovery from unexpected state */
 	mpu6050_reset_chip(sensor);
 
-	if (sensor->cfg.enable) {
-		ret = mpu6050_restore_context(sensor);
-		if (ret < 0) {
-			dev_err(&client->dev, "Failed to restore context\n");
-			goto exit;
-		}
-		mpu6050_set_power_mode(sensor, true);
-	} else {
-		mpu6050_set_power_mode(sensor, false);
+	ret = mpu6050_restore_context(sensor);
+	if (ret < 0) {
+		dev_err(&client->dev, "Failed to restore context\n");
+		goto exit;
+	}
+
+	/* Enter sleep mode if both accel and gyro are not enabled */
+	ret = mpu6050_set_power_mode(sensor, sensor->cfg.enable);
+	if (ret < 0) {
+		dev_err(&client->dev, "Failed to set power mode enable=%d\n",
+					sensor->cfg.enable);
+		goto exit;
 	}
 
 	if (sensor->cfg.gyro_enable) {
@@ -2444,9 +2470,8 @@ static int mpu6050_resume(struct device *dev)
 	if (!sensor->use_poll)
 		enable_irq(client->irq);
 
-	dev_dbg(&client->dev, "resumed\n");
-
 exit:
+	dev_dbg(&client->dev, "Resume complete, ret = %d\n", ret);
 	return ret;
 }
 #endif

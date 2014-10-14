@@ -978,8 +978,8 @@ static int tomtom_set_compander(struct snd_kcontrol *kcontrol,
 	if (comp == COMPANDER_1 &&
 			tomtom->comp_enabled[comp] == 1) {
 		/* Wavegen to 5 msec */
-		snd_soc_write(codec, TOMTOM_A_RX_HPH_CNP_WG_CTL, 0xDA);
-		snd_soc_write(codec, TOMTOM_A_RX_HPH_CNP_WG_TIME, 0x15);
+		snd_soc_write(codec, TOMTOM_A_RX_HPH_CNP_WG_CTL, 0xDB);
+		snd_soc_write(codec, TOMTOM_A_RX_HPH_CNP_WG_TIME, 0x2A);
 		snd_soc_write(codec, TOMTOM_A_RX_HPH_BIAS_WG_OCP, 0x2A);
 
 		/* Enable Chopper */
@@ -7262,10 +7262,21 @@ static const struct wcd9xxx_reg_mask_val tomtom_2_0_reg_defaults[] = {
 	TOMTOM_REG_VAL(TOMTOM_A_CDC_JTRST_MODE, 0x04),
 };
 
+static const struct wcd9xxx_reg_mask_val tomtom_2_0_reg_i2c_defaults[] = {
+	TOMTOM_REG_VAL(TOMTOM_A_PIN_CTL_OE0, 0x00),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX_I2S_SCK_MODE, 0x0),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_TX_I2S_WS_MODE, 0x0),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX_I2S_SCK_MODE, 0x0),
+	TOMTOM_REG_VAL(TOMTOM_A_CDC_RX_I2S_WS_MODE, 0x0),
+	TOMTOM_REG_VAL(TOMTOM_A_PIN_CTL_OE1, 0x0),
+	TOMTOM_REG_VAL(TOMTOM_A_PIN_CTL_OE2, 0x0),
+};
+
 static void tomtom_update_reg_defaults(struct snd_soc_codec *codec)
 {
 	u32 i;
 	struct wcd9xxx *tomtom_core = dev_get_drvdata(codec->dev->parent);
+	struct tomtom_priv *tomtom = snd_soc_codec_get_drvdata(codec);
 
 	for (i = 0; i < ARRAY_SIZE(tomtom_reg_defaults); i++)
 		snd_soc_write(codec, tomtom_reg_defaults[i].reg,
@@ -7279,6 +7290,14 @@ static void tomtom_update_reg_defaults(struct snd_soc_codec *codec)
 		for (i = 0; i < ARRAY_SIZE(tomtom_2_0_reg_defaults); i++)
 			snd_soc_write(codec, tomtom_2_0_reg_defaults[i].reg,
 				      tomtom_2_0_reg_defaults[i].val);
+
+		if (tomtom->intf_type == WCD9XXX_INTERFACE_TYPE_I2C) {
+			for (i = 0; i < ARRAY_SIZE(tomtom_2_0_reg_i2c_defaults);
+			     i++)
+				snd_soc_write(codec,
+					tomtom_2_0_reg_i2c_defaults[i].reg,
+					tomtom_2_0_reg_i2c_defaults[i].val);
+		}
 	}
 }
 

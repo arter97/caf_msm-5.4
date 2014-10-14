@@ -76,7 +76,7 @@
 			linux,reserve-contiguous-region;
 			linux,reserve-region;
 			linux,remove-completely;
-			reg = <0x0 0x86000000 0x0 0x0800000>;
+			reg = <0x0 0x87900000 0x0 0x0700000>;
 			label = "external_image_mem";
 		};
 
@@ -84,7 +84,7 @@
 			linux,reserve-contiguous-region;
 			linux,reserve-region;
 			linux,remove-completely;
-			reg = <0x0 0x86800000 0x0 0x05a00000>;
+			reg = <0x0 0x88000000 0x0 0x05a00000>;
 			label = "modem_adsp_mem";
 		};
 
@@ -92,7 +92,7 @@
 			linux,reserve-contiguous-region;
 			linux,reserve-region;
 			linux,remove-completely;
-			reg = <0x0 0x8c200000 0x0 0x0600000>;
+			reg = <0x0 0x8da00000 0x0 0x0600000>;
 			label = "peripheral_mem";
 		};
 
@@ -449,6 +449,13 @@
 		};
 	};
 
+	rpm_bus: qcom,rpm-smd {
+		compatible = "qcom,rpm-smd";
+		rpm-channel-name = "rpm_requests";
+		rpm-channel-type = <15>; /* SMD_APPS_RPM */
+		rpm-standalone; /* TODO: remove this after bring up */
+	};
+
 	qcom,bam_dmux@4044000 {
 		compatible = "qcom,bam_dmux";
 		reg = <0x4044000 0x19000>;
@@ -690,23 +697,23 @@
 		qcom,not-wakeup; /* Needed until MPM is fully configured. */
 	};
 
-	qcom,rmtfs_sharedmem@86700000 {
+	qcom,rmtfs_sharedmem@87c00000 {
 		compatible = "qcom,sharedmem-uio";
-		reg = <0x86700000 0xe0000>;
+		reg = <0x87c00000 0xe0000>;
 		reg-names = "rmtfs";
 		qcom,client-id = <0x00000001>;
 	};
 
-	qcom,dsp_sharedmem@867f0000 {
+	qcom,dsp_sharedmem@87ce0000 {
 		compatible = "qcom,sharedmem-uio";
-		reg = <0x867f0000 0x10000>;
+		reg = <0x87ce0000 0x10000>;
 		reg-names = "rfsa_dsp";
 		qcom,client-id = <0x011013ec>;
 	};
 
-	qcom,mdm_sharedmem@867e0000 {
+	qcom,mdm_sharedmem@87cf0000 {
 		compatible = "qcom,sharedmem-uio";
-		reg = <0x867e0000 0x10000>;
+		reg = <0x87cf0000 0x10000>;
 		reg-names = "rfsa_mdm";
 		qcom,client-id = <0x011013ed>;
 	};
