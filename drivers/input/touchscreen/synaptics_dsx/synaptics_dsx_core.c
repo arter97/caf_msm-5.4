@@ -3828,10 +3828,9 @@ static int synaptics_rmi4_suspend(struct device *dev)
 	if (rmi4_data->suspended) {
 		dev_info(dev, "Already in suspend state\n");
 		return 0;
+	}
 
 	synaptics_secure_touch_stop(rmi4_data, 1);
-
-	}
 
 	if (!rmi4_data->fw_updating) {
 		if (!rmi4_data->sensor_sleep) {
