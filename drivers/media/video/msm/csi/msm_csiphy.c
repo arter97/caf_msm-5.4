@@ -432,7 +432,8 @@ static int __devinit csiphy_probe(struct platform_device *pdev)
 
 	if (machine_is_apq8064_adp_2()
 			|| machine_is_apq8064_mplatform()
-			|| machine_is_apq8064_adp2_es2()) {
+			|| machine_is_apq8064_adp2_es2()
+			|| machine_is_apq8064_adp2_es2p5()) {
 		if (pdev->id == 0) {
 			pr_debug("keep track of 1st csi phy device\n");
 			lsh_csiphy_dev = new_csiphy_dev;
