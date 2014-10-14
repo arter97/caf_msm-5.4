@@ -298,6 +298,14 @@ Optional properties:
 				[1]: => LSB bit position of the bits;
 				[2]: => the number of bits;
 				[3]: => fuse reading method, 0 for direct reading or 1 for SCM reading.
+- qcom,cpr-init-voltage-as-ceiling: Boolean which indicates that the ceiling voltage used for a given virtual
+				corner may be reduced to the per-fuse-corner initial voltage fuse value.
+- qcom,cpr-scaled-init-voltage-as-ceiling: Boolean which indicates that the ceiling voltage used for a given
+				virtual corner may be reduced to the interpolated, per-virtual-corner initial
+				voltage value.  Note that if both qcom,cpr-init-voltage-as-ceiling and
+				qcom,cpr-scaled-init-voltage-as-ceiling are specified, then
+				qcom,cpr-scaled-init-voltage-as-ceiling will take precedence since the interpolated
+				voltages are necessarily less than or equal to the fused initial voltage values.
 - qcom,cpr-voltage-scaling-factor-max: Array of values which define the maximum allowed scaling factor to apply
 				when calculating per-corner initial voltage values for each fuse corner.  The
 				array must be of length equal to the value of the qcom,cpr-fuse-corners property.
@@ -467,5 +475,6 @@ Example:
 				<27 0 6 0>;
 		qcom,cpr-init-voltage-ref = <1050000 1150000 1280000>;
 		qcom,cpr-init-voltage-step = <10000>;
+		qcom,cpr-scaled-init-voltage-as-ceiling;
 	};
 
