@@ -1198,6 +1198,7 @@ end:
 static void hdmi_tx_hdcp_cb(void *ptr, enum hdmi_hdcp_state status)
 {
 	int rc = 0;
+	bool enc_en;
 	struct hdmi_tx_ctrl *hdmi_ctrl = (struct hdmi_tx_ctrl *)ptr;
 
 	if (!hdmi_ctrl) {
@@ -1211,17 +1212,16 @@ static void hdmi_tx_hdcp_cb(void *ptr, enum hdmi_hdcp_state status)
 	switch (status) {
 	case HDCP_STATE_AUTHENTICATED:
 		if (hdmi_ctrl->hpd_state) {
-			rc = hdmi_tx_config_avmute(hdmi_ctrl, false);
+			hdmi_tx_config_avmute(hdmi_ctrl, false);
 			hdmi_tx_set_audio_switch_node(hdmi_ctrl, 1);
 		}
 		break;
 	case HDCP_STATE_AUTH_FAIL:
-		if (hdmi_tx_is_encryption_set(hdmi_ctrl)) {
-			hdmi_tx_set_audio_switch_node(hdmi_ctrl, 0);
-			rc = hdmi_tx_config_avmute(hdmi_ctrl, true);
-		}
-
 		if (hdmi_ctrl->hpd_state) {
+			enc_en = hdmi_tx_is_encryption_set(hdmi_ctrl);
+			hdmi_tx_set_audio_switch_node(hdmi_ctrl, !enc_en);
+			hdmi_tx_config_avmute(hdmi_ctrl, enc_en);
+
 			DEV_DBG("%s: Reauthenticating\n", __func__);
 			rc = hdmi_hdcp_reauthenticate(
 				hdmi_ctrl->feature_data[HDMI_TX_FEAT_HDCP]);
@@ -2744,13 +2744,15 @@ static int hdmi_tx_start(struct hdmi_tx_ctrl *hdmi_ctrl)
 	}
 
 	hdmi_tx_set_mode(hdmi_ctrl, false);
-
 	DSS_REG_W(io, HDMI_USEC_REFTIMER, 0x0001001B);
+
+	hdmi_tx_set_mode(hdmi_ctrl, true);
 
 	rc = hdmi_tx_video_setup(hdmi_ctrl, hdmi_ctrl->video_resolution);
 	if (rc) {
-		DEV_ERR("%s: video setup failed. rc=%d\n", __func__, rc);
-		hdmi_tx_set_mode(hdmi_ctrl, true);
+		DEV_ERR("%s: hdmi_tx_video_setup failed. rc=%d\n",
+			__func__, rc);
+		hdmi_tx_set_mode(hdmi_ctrl, false);
 		return rc;
 	}
 
@@ -2767,7 +2769,8 @@ static int hdmi_tx_start(struct hdmi_tx_ctrl *hdmi_ctrl)
 		hdmi_tx_set_spd_infoframe(hdmi_ctrl);
 	}
 
-	hdmi_tx_set_mode(hdmi_ctrl, true);
+	if (!hdmi_tx_is_encryption_set(hdmi_ctrl))
+		hdmi_tx_config_avmute(hdmi_ctrl, false);
 
 	DEV_INFO("%s: HDMI Core: Initialized\n", __func__);
 
@@ -2831,6 +2834,8 @@ static int hdmi_tx_power_off(struct mdss_panel_data *panel_data)
 		DEV_ERR("%s: Core io is not initialized\n", __func__);
 		return -EINVAL;
 	}
+
+	hdmi_tx_config_avmute(hdmi_ctrl, true);
 
 	if (!hdmi_tx_is_dvi_mode(hdmi_ctrl))
 		hdmi_tx_audio_off(hdmi_ctrl);
@@ -3483,7 +3488,6 @@ static int hdmi_tx_panel_event_handler(struct mdss_panel_data *panel_data,
 		mutex_lock(&hdmi_ctrl->power_mutex);
 		if (hdmi_ctrl->panel_power_on) {
 			mutex_unlock(&hdmi_ctrl->power_mutex);
-			hdmi_tx_config_avmute(hdmi_ctrl, 1);
 			rc = hdmi_tx_power_off(panel_data);
 			if (rc)
 				DEV_ERR("%s: hdmi_tx_power_off failed.rc=%d\n",
