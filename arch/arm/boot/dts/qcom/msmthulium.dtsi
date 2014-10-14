@@ -99,6 +99,7 @@
 #include "msmthulium-smp2p.dtsi"
 #include "msmthulium-ipcrouter.dtsi"
 #include "msmthulium-iommu.dtsi"
+#include "msm-gdsc-thulium.dtsi"
 
 &soc {
 	#address-cells = <1>;
@@ -195,84 +196,6 @@
 	clock_mdss: qcom,mmsscc-mdss@8c0000 {
 		compatible = "qcom,dummycc";
 		#clock-cells = <1>;
-	};
-
-	gdsc_venus: qcom,gdsc@8c1024 {
-		compatible = "regulator-fixed";
-		regulator-name = "gdsc_venus";
-		reg = <0x8c1024 0x4>;
-	};
-
-	gdsc_venus_core0: qcom,gdsc@8c1040 {
-		compatible = "regulator-fixed";
-		regulator-name = "gdsc_venus_core0";
-		reg = <0x8c1040 0x4>;
-	};
-
-	gdsc_venus_core1: qcom,gdsc@8c1044 {
-		compatible = "regulator-fixed";
-		regulator-name = "gdsc_venus_core1";
-		reg = <0x8c1044 0x4>;
-	};
-
-	gdsc_camss_top: qcom,gdsc@8c34a0 {
-		compatible = "regulator-fixed";
-		regulator-name = "gdsc_camss_top";
-		reg = <0x8c34a0 0x4>;
-	};
-
-	gdsc_mdss: qcom,gdsc@8c2304 {
-		compatible = "regulator-fixed";
-		regulator-name = "gdsc_mdss";
-		reg = <0x8c2304 0x4>;
-	};
-
-	gdsc_jpeg: qcom,gdsc@8c35a4 {
-		compatible = "regulator-fixed";
-		regulator-name = "gdsc_jpeg";
-		reg = <0x8c35a4 0x4>;
-	};
-
-	gdsc_cpp: qcom,gdsc@8c36d4 {
-		compatible = "regulator-fixed";
-		regulator-name = "gdsc_cpp";
-		reg = <0x8c36d4 0x4>;
-	};
-
-	gdsc_pcie_0: qcom,gdsc@36b004 {
-		compatible = "regulator-fixed";
-		regulator-name = "gdsc_pcie_0";
-		reg = <0x36b004 0x4>;
-	};
-
-	gdsc_pcie_1: qcom,gdsc@36d004 {
-		compatible = "regulator-fixed";
-		regulator-name = "gdsc_pcie_1";
-		reg = <0x36d004 0x4>;
-	};
-
-	gdsc_pcie_2: qcom,gdsc@36e004 {
-		compatible = "regulator-fixed";
-		regulator-name = "gdsc_pcie_2";
-		reg = <0x36e004 0x4>;
-	};
-
-	gdsc_usb30: qcom,gdsc@30f004 {
-		compatible = "regulator-fixed";
-		regulator-name = "gdsc_usb30";
-		reg = <0x30f004 0x4>;
-	};
-
-	gdsc_ufs: qcom,gdsc@375004 {
-		compatible = "regulator-fixed";
-		regulator-name = "gdsc_ufs";
-		reg = <0x375004 0x4>;
-	};
-
-	gdsc_fd: qcom,gdsc@8c3b64 {
-		compatible = "regulator-fixed";
-		regulator-name = "gdsc_fd";
-		reg = <0x8c3b64 0x4>;
 	};
 
 	qcom,rmtfs_sharedmem@00000000 {
@@ -566,4 +489,124 @@
 	};
 };
 
+&gdsc_venus {
+	status = "ok";
+};
+
+&gdsc_venus_core0 {
+	status = "ok";
+};
+
+&gdsc_venus_core1 {
+	status = "ok";
+};
+
+&gdsc_camss_top {
+	status = "ok";
+};
+
+&gdsc_vfe0 {
+	parent-supply = <&gdsc_camss_top>;
+	status = "ok";
+};
+
+&gdsc_vfe1 {
+	parent-supply = <&gdsc_camss_top>;
+	status = "ok";
+};
+
+&gdsc_jpeg {
+	parent-supply = <&gdsc_camss_top>;
+	status = "ok";
+};
+
+&gdsc_cpp {
+	parent-supply = <&gdsc_camss_top>;
+	status = "ok";
+};
+
+&gdsc_fd {
+	parent-supply = <&gdsc_camss_top>;
+	status = "ok";
+};
+
+&gdsc_mdss {
+	status = "ok";
+};
+
+&gdsc_pcie_0 {
+	status = "ok";
+};
+
+&gdsc_pcie_1 {
+	status = "ok";
+};
+
+&gdsc_pcie_2 {
+	status = "ok";
+};
+
+&gdsc_usb30 {
+	status = "ok";
+};
+
+&gdsc_ufs {
+	status = "ok";
+};
+
+&gdsc_gpu {
+	status = "ok";
+};
+
+&gdsc_gpu_gx {
+	parent-supply = <&pmithulium_s2_corner>;
+	status = "ok";
+};
+
+&gdsc_hlos1_vote_aggre0_noc {
+	status = "ok";
+};
+
+&gdsc_hlos1_vote_lpass_adsp {
+	status = "ok";
+};
+
+&gdsc_hlos1_vote_lpass_core {
+	status = "ok";
+};
+
+&gdsc_hlos2_vote_aggre0_noc {
+	status = "ok";
+};
+
+&gdsc_hlos2_vote_lpass_adsp {
+	status = "ok";
+};
+
+&gdsc_hlos2_vote_lpass_core {
+	status = "ok";
+};
+
+&gdsc_aggre0_noc {
+	status = "ok";
+};
+
+&gdsc_mmagic_bimc {
+	status = "ok";
+};
+
+&gdsc_mmagic_video {
+	parent-supply = <&gdsc_mmagic_bimc>;
+	status = "ok";
+};
+
+&gdsc_mmagic_mdss {
+	parent-supply = <&gdsc_mmagic_bimc>;
+	status = "ok";
+};
+
+&gdsc_mmagic_camss {
+	parent-supply = <&gdsc_mmagic_bimc>;
+	status = "ok";
+};
 /include/ "msmthulium-regulator.dtsi"
