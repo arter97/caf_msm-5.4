@@ -165,6 +165,9 @@ enum dsi_pm_type {
 #define DSI_BTA_TERM    BIT(1)
 #define DSI_CMD_TERM    BIT(0)
 
+#define DSI_DATA_LANES_STOP_STATE	0xF
+#define DSI_CLK_LANE_STOP_STATE		BIT(4)
+
 extern struct device dsi_dev;
 extern u32 dsi_irq;
 extern struct mdss_dsi_ctrl_pdata *ctrl_list[];
