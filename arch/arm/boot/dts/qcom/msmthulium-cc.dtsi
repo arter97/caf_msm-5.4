@@ -14,23 +14,14 @@
 #include <dt-bindings/clock/msm-clocks-hwio-thulium.h>
 
 &soc {
-	clock_rpm: qcom,rpmcc@362000 {
-		compatible = "qcom,msm-clock-controller";
-		reg = <0x362000 0xb008>;
-		reg-names = "cc-base";
-		#clock-cells = <1>;
-	};
-
 	clock_gcc: qcom,gcc@300000 {
 		compatible = "qcom,msm-clock-controller";
 		reg = <0x300000 0x8f010>;
 		reg-names = "cc-base";
 		#clock-cells = <1>;
 
-		clock-names = "xo", "xo_a_clk", "mmss_gcc_dbg_clk";
-		clocks = <&clock_rpm clk_cxo_clk_src>,
-			 <&clock_rpm clk_cxo_clk_src_ao>,
-			 <&clock_mmss clk_mmss_gcc_dbg_clk>;
+		clock-names = "mmss_gcc_dbg_clk";
+		clocks = <&clock_mmss clk_mmss_gcc_dbg_clk>;
 
 		gcc_vdd_dig-supply = <&pmthulium_s1_corner>;
 		qcom,regulator-names = "gcc_vdd_dig";
@@ -48,7 +39,13 @@
 	};
 };
 
-&clock_rpm {
+&clock_gcc {
+	gcc_mmss_gcc_dbg_clk: gcc_mmss_gcc_dbg_clk {
+		compatible = "qcom,ext-clk";
+		qcom,clock-names = "mmss_gcc_dbg_clk";
+		qcom,clk-flags = <0x4000>;
+	};
+
 	ce1_clk: ce1_clk {
 		compatible = "qcom,rpm-clk";
 		qcom,res-type = "ce";
@@ -559,24 +556,6 @@
 	gcc_mmss_bimc_gfx_m_clk: gcc_mmss_bimc_gfx_m_clk {
 		compatible = "qcom,dummy-clk";
 	};
-};
-
-&clock_gcc {
-	gcc_xo: gcc_xo {
-		compatible = "qcom,ext-clk";
-		qcom,clock-names = "xo";
-	};
-
-	gcc_xo_a_clk: gcc_xo_a_clk {
-		compatible = "qcom,ext-clk";
-		qcom,clock-names = "xo_a_clk";
-	};
-
-	gcc_mmss_gcc_dbg_clk: gcc_mmss_gcc_dbg_clk {
-		compatible = "qcom,ext-clk";
-		qcom,clock-names = "mmss_gcc_dbg_clk";
-		qcom,clk-flags = <0x4000>;
-	};
 
 	gpll0: gpll0 {
 		compatible = "qcom,sleep-active-pll";
@@ -586,7 +565,7 @@
 		qcom,status-bit = <30>;
 		qcom,peer = <&gpll0_ao>;
 		qcom,pll-config-rate = <600000000>;
-		qcom,parent = <&gcc_xo>;
+		qcom,parent = <&cxo_clk_src>;
 	};
 
 	gpll0_ao: gpll0_ao {
@@ -597,7 +576,7 @@
 		qcom,status-bit = <30>;
 		qcom,peer = <&gpll0>;
 		qcom,pll-config-rate = <600000000>;
-		qcom,parent = <&gcc_xo_a_clk>;
+		qcom,parent = <&cxo_clk_src_ao>;
 	};
 
 	gpll0_out_main: gpll0_out_main {
@@ -612,7 +591,7 @@
 		qcom,status-offset = <GCC_GPLL4_MODE>;
 		qcom,status-bit = <30>;
 		qcom,pll-config-rate = <1536000000>;
-		qcom,parent = <&gcc_xo>;
+		qcom,parent = <&cxo_clk_src>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
 			<FMAX_LOWER 400000000>,
@@ -637,7 +616,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_UFS_AXI_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -649,14 +628,14 @@
 
 	pcie_aux_clk_src {
 		qcom,freq-tbl =
-			<   1010526 19 0 0 0 &gcc_xo>;
+			<   1010526 19 0 0 0 &cxo_clk_src>;
 	};
 
 	pcie_aux_clk_src: pcie_aux_clk_src {
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_PCIE_AUX_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>;
+			<    0 &cxo_clk_src>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
 			<FMAX_LOWER 1011000>,
@@ -674,7 +653,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_USB30_MASTER_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -693,7 +672,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_USB20_MASTER_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -705,7 +684,7 @@
 
 	ufs_ice_core_clk_src {
 		qcom,freq-tbl =
-			< 19200000 1 0 0 0 &gcc_xo>,
+			< 19200000 1 0 0 0 &cxo_clk_src>,
 			< 150000000 4 0 0 0 &gpll0_out_main>,
 			< 300000000 2 0 0 0 &gpll0_out_main>;
 	};
@@ -714,7 +693,7 @@
 		compatible = "qcom,rcg-hid";
 		qcom,base-offset = <GCC_UFS_ICE_CORE_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -726,7 +705,7 @@
 
 	blsp1_qup1_i2c_apps_clk_src {
 		qcom,freq-tbl =
-			<  19200000 1 0 0 0 &gcc_xo>,
+			<  19200000 1 0 0 0 &cxo_clk_src>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
 	};
 
@@ -734,7 +713,7 @@
 		compatible = "qcom,rcg-hid";
 		qcom,base-offset = <GCC_BLSP1_QUP1_I2C_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -746,9 +725,9 @@
 
 	blsp1_qup1_spi_apps_clk_src {
 		qcom,freq-tbl =
-			<    960000 10 0 1 2 &gcc_xo>,
-			<   4800000 4 0 0 0 &gcc_xo>,
-			<   9600000 2 0 0 0 &gcc_xo>,
+			<    960000 10 0 1 2 &cxo_clk_src>,
+			<   4800000 4 0 0 0 &cxo_clk_src>,
+			<   9600000 2 0 0 0 &cxo_clk_src>,
 			<  15000000 10 0 1 4 &gpll0_out_main>,
 			<  25000000 12 0 1 2 &gpll0_out_main>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
@@ -758,7 +737,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP1_QUP1_SPI_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -770,7 +749,7 @@
 
 	blsp1_qup2_i2c_apps_clk_src {
 		qcom,freq-tbl =
-			<   19200000 1 0 0 0 &gcc_xo>,
+			<   19200000 1 0 0 0 &cxo_clk_src>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
 	};
 
@@ -778,7 +757,7 @@
 		compatible = "qcom,rcg-hid";
 		qcom,base-offset = <GCC_BLSP1_QUP2_I2C_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -790,9 +769,9 @@
 
 	blsp1_qup2_spi_apps_clk_src {
 		qcom,freq-tbl =
-			<    960000 10 0 1 2 &gcc_xo>,
-			<   4800000 4 0 0 0 &gcc_xo>,
-			<   9600000 2 0 0 0 &gcc_xo>,
+			<    960000 10 0 1 2 &cxo_clk_src>,
+			<   4800000 4 0 0 0 &cxo_clk_src>,
+			<   9600000 2 0 0 0 &cxo_clk_src>,
 			<  15000000 10 0 1 4 &gpll0_out_main>,
 			<  25000000 12 0 1 2 &gpll0_out_main>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
@@ -802,7 +781,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP1_QUP2_SPI_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -814,7 +793,7 @@
 
 	blsp1_qup3_i2c_apps_clk_src {
 		qcom,freq-tbl =
-			<   19200000 1 0 0 0 &gcc_xo>,
+			<   19200000 1 0 0 0 &cxo_clk_src>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
 	};
 
@@ -822,7 +801,7 @@
 		compatible = "qcom,rcg-hid";
 		qcom,base-offset = <GCC_BLSP1_QUP3_I2C_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -834,9 +813,9 @@
 
 	blsp1_qup3_spi_apps_clk_src {
 		qcom,freq-tbl =
-			<    960000 10 0 1 2 &gcc_xo>,
-			<   4800000 4 0 0 0 &gcc_xo>,
-			<   9600000 2 0 0 0 &gcc_xo>,
+			<    960000 10 0 1 2 &cxo_clk_src>,
+			<   4800000 4 0 0 0 &cxo_clk_src>,
+			<   9600000 2 0 0 0 &cxo_clk_src>,
 			<  15000000 10 0 1 4 &gpll0_out_main>,
 			<  25000000 12 0 1 2 &gpll0_out_main>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
@@ -846,7 +825,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP1_QUP3_SPI_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -858,7 +837,7 @@
 
 	blsp1_qup4_i2c_apps_clk_src {
 		qcom,freq-tbl =
-			<   19200000 1 0 0 0 &gcc_xo>,
+			<   19200000 1 0 0 0 &cxo_clk_src>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
 	};
 
@@ -866,7 +845,7 @@
 		compatible = "qcom,rcg-hid";
 		qcom,base-offset = <GCC_BLSP1_QUP4_I2C_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -878,9 +857,9 @@
 
 	blsp1_qup4_spi_apps_clk_src {
 		qcom,freq-tbl =
-			<    960000 10 0 1 2 &gcc_xo>,
-			<   4800000 4 0 0 0 &gcc_xo>,
-			<   9600000 2 0 0 0 &gcc_xo>,
+			<    960000 10 0 1 2 &cxo_clk_src>,
+			<   4800000 4 0 0 0 &cxo_clk_src>,
+			<   9600000 2 0 0 0 &cxo_clk_src>,
 			<  15000000 10 0 1 4 &gpll0_out_main>,
 			<  25000000 12 0 1 2 &gpll0_out_main>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
@@ -890,7 +869,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP1_QUP4_SPI_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -902,7 +881,7 @@
 
 	blsp1_qup5_i2c_apps_clk_src {
 		qcom,freq-tbl =
-			<   19200000 1 0 0 0 &gcc_xo>,
+			<   19200000 1 0 0 0 &cxo_clk_src>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
 	};
 
@@ -910,7 +889,7 @@
 		compatible = "qcom,rcg-hid";
 		qcom,base-offset = <GCC_BLSP1_QUP5_I2C_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -922,9 +901,9 @@
 
 	blsp1_qup5_spi_apps_clk_src {
 		qcom,freq-tbl =
-			<    960000 10 0 1 2 &gcc_xo>,
-			<   4800000 4 0 0 0 &gcc_xo>,
-			<   9600000 2 0 0 0 &gcc_xo>,
+			<    960000 10 0 1 2 &cxo_clk_src>,
+			<   4800000 4 0 0 0 &cxo_clk_src>,
+			<   9600000 2 0 0 0 &cxo_clk_src>,
 			<  15000000 10 0 1 4 &gpll0_out_main>,
 			<  25000000 12 0 1 2 &gpll0_out_main>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
@@ -934,7 +913,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP1_QUP5_SPI_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -946,7 +925,7 @@
 
 	blsp1_qup6_i2c_apps_clk_src {
 		qcom,freq-tbl =
-			<   19200000 1 0 0 0 &gcc_xo>,
+			<   19200000 1 0 0 0 &cxo_clk_src>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
 	};
 
@@ -954,7 +933,7 @@
 		compatible = "qcom,rcg-hid";
 		qcom,base-offset = <GCC_BLSP1_QUP6_I2C_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -966,9 +945,9 @@
 
 	blsp1_qup6_spi_apps_clk_src {
 		qcom,freq-tbl =
-			<    960000 10 0 1 2 &gcc_xo>,
-			<   4800000 4 0 0 0 &gcc_xo>,
-			<   9600000 2 0 0 0 &gcc_xo>,
+			<    960000 10 0 1 2 &cxo_clk_src>,
+			<   4800000 4 0 0 0 &cxo_clk_src>,
+			<   9600000 2 0 0 0 &cxo_clk_src>,
 			<  15000000 10 0 1 4 &gpll0_out_main>,
 			<  25000000 12 0 1 2 &gpll0_out_main>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
@@ -978,7 +957,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP1_QUP6_SPI_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1010,7 +989,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP1_UART1_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1042,7 +1021,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP1_UART2_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1074,7 +1053,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP1_UART3_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1106,7 +1085,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP1_UART4_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1138,7 +1117,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP1_UART5_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1170,7 +1149,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP1_UART6_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1182,7 +1161,7 @@
 
 	blsp2_qup1_i2c_apps_clk_src {
 		qcom,freq-tbl =
-			<   19200000 1 0 0 0 &gcc_xo>,
+			<   19200000 1 0 0 0 &cxo_clk_src>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
 	};
 
@@ -1190,7 +1169,7 @@
 		compatible = "qcom,rcg-hid";
 		qcom,base-offset = <GCC_BLSP2_QUP1_I2C_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1202,9 +1181,9 @@
 
 	blsp2_qup1_spi_apps_clk_src {
 		qcom,freq-tbl =
-			<    960000 10 0 1 2 &gcc_xo>,
-			<   4800000 4 0 0 0 &gcc_xo>,
-			<   9600000 2 0 0 0 &gcc_xo>,
+			<    960000 10 0 1 2 &cxo_clk_src>,
+			<   4800000 4 0 0 0 &cxo_clk_src>,
+			<   9600000 2 0 0 0 &cxo_clk_src>,
 			<  15000000 10 0 1 4 &gpll0_out_main>,
 			<  25000000 12 0 1 2 &gpll0_out_main>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
@@ -1214,7 +1193,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP2_QUP1_SPI_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1226,7 +1205,7 @@
 
 	blsp2_qup2_i2c_apps_clk_src {
 		qcom,freq-tbl =
-			<   19200000 1 0 0 0 &gcc_xo>,
+			<   19200000 1 0 0 0 &cxo_clk_src>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
 	};
 
@@ -1234,7 +1213,7 @@
 		compatible = "qcom,rcg-hid";
 		qcom,base-offset = <GCC_BLSP2_QUP2_I2C_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1246,9 +1225,9 @@
 
 	blsp2_qup2_spi_apps_clk_src {
 		qcom,freq-tbl =
-			<    960000 10 0 1 2 &gcc_xo>,
-			<   4800000 4 0 0 0 &gcc_xo>,
-			<   9600000 2 0 0 0 &gcc_xo>,
+			<    960000 10 0 1 2 &cxo_clk_src>,
+			<   4800000 4 0 0 0 &cxo_clk_src>,
+			<   9600000 2 0 0 0 &cxo_clk_src>,
 			<  15000000 10 0 1 4 &gpll0_out_main>,
 			<  25000000 12 0 1 2 &gpll0_out_main>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
@@ -1258,7 +1237,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP2_QUP2_SPI_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1270,7 +1249,7 @@
 
 	blsp2_qup3_i2c_apps_clk_src {
 		qcom,freq-tbl =
-			<   19200000 1 0 0 0 &gcc_xo>,
+			<   19200000 1 0 0 0 &cxo_clk_src>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
 	};
 
@@ -1278,7 +1257,7 @@
 		compatible = "qcom,rcg-hid";
 		qcom,base-offset = <GCC_BLSP2_QUP3_I2C_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1290,9 +1269,9 @@
 
 	blsp2_qup3_spi_apps_clk_src {
 		qcom,freq-tbl =
-			<    960000 10 0 1 2 &gcc_xo>,
-			<   4800000 4 0 0 0 &gcc_xo>,
-			<   9600000 2 0 0 0 &gcc_xo>,
+			<    960000 10 0 1 2 &cxo_clk_src>,
+			<   4800000 4 0 0 0 &cxo_clk_src>,
+			<   9600000 2 0 0 0 &cxo_clk_src>,
 			<  15000000 10 0 1 4 &gpll0_out_main>,
 			<  25000000 12 0 1 2 &gpll0_out_main>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
@@ -1302,7 +1281,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP2_QUP3_SPI_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1314,7 +1293,7 @@
 
 	blsp2_qup4_i2c_apps_clk_src {
 		qcom,freq-tbl =
-			<   19200000 1 0 0 0 &gcc_xo>,
+			<   19200000 1 0 0 0 &cxo_clk_src>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
 	};
 
@@ -1322,7 +1301,7 @@
 		compatible = "qcom,rcg-hid";
 		qcom,base-offset = <GCC_BLSP2_QUP4_I2C_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1334,9 +1313,9 @@
 
 	blsp2_qup4_spi_apps_clk_src {
 		qcom,freq-tbl =
-			<    960000 10 0 1 2 &gcc_xo>,
-			<   4800000 4 0 0 0 &gcc_xo>,
-			<   9600000 2 0 0 0 &gcc_xo>,
+			<    960000 10 0 1 2 &cxo_clk_src>,
+			<   4800000 4 0 0 0 &cxo_clk_src>,
+			<   9600000 2 0 0 0 &cxo_clk_src>,
 			<  15000000 10 0 1 4 &gpll0_out_main>,
 			<  25000000 12 0 1 2 &gpll0_out_main>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
@@ -1346,7 +1325,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP2_QUP4_SPI_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1358,7 +1337,7 @@
 
 	blsp2_qup5_i2c_apps_clk_src {
 		qcom,freq-tbl =
-			<   19200000 1 0 0 0 &gcc_xo>,
+			<   19200000 1 0 0 0 &cxo_clk_src>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
 	};
 
@@ -1366,7 +1345,7 @@
 		compatible = "qcom,rcg-hid";
 		qcom,base-offset = <GCC_BLSP2_QUP5_I2C_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1378,9 +1357,9 @@
 
 	blsp2_qup5_spi_apps_clk_src {
 		qcom,freq-tbl =
-			<    960000 10 0 1 2 &gcc_xo>,
-			<   4800000 4 0 0 0 &gcc_xo>,
-			<   9600000 2 0 0 0 &gcc_xo>,
+			<    960000 10 0 1 2 &cxo_clk_src>,
+			<   4800000 4 0 0 0 &cxo_clk_src>,
+			<   9600000 2 0 0 0 &cxo_clk_src>,
 			<  15000000 10 0 1 4 &gpll0_out_main>,
 			<  25000000 12 0 1 2 &gpll0_out_main>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
@@ -1390,7 +1369,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP2_QUP5_SPI_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1402,7 +1381,7 @@
 
 	blsp2_qup6_i2c_apps_clk_src {
 		qcom,freq-tbl =
-			<   19200000 1 0 0 0 &gcc_xo>,
+			<   19200000 1 0 0 0 &cxo_clk_src>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
 	};
 
@@ -1410,7 +1389,7 @@
 		compatible = "qcom,rcg-hid";
 		qcom,base-offset = <GCC_BLSP2_QUP6_I2C_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1422,9 +1401,9 @@
 
 	blsp2_qup6_spi_apps_clk_src {
 		qcom,freq-tbl =
-			<    960000 10 0 1 2 &gcc_xo>,
-			<   4800000 4 0 0 0 &gcc_xo>,
-			<   9600000 2 0 0 0 &gcc_xo>,
+			<    960000 10 0 1 2 &cxo_clk_src>,
+			<   4800000 4 0 0 0 &cxo_clk_src>,
+			<   9600000 2 0 0 0 &cxo_clk_src>,
 			<  15000000 10 0 1 4 &gpll0_out_main>,
 			<  25000000 12 0 1 2 &gpll0_out_main>,
 			<  50000000 12 0 0 0 &gpll0_out_main>;
@@ -1434,7 +1413,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP2_QUP6_SPI_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1466,7 +1445,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP2_UART1_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1498,7 +1477,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP2_UART2_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1530,7 +1509,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP2_UART3_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1562,7 +1541,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP2_UART4_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1594,7 +1573,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP2_UART5_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1626,7 +1605,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_BLSP2_UART6_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1638,7 +1617,7 @@
 
 	gp1_clk_src {
 		qcom,freq-tbl =
-			<  19200000 1 0 0 0 &gcc_xo>,
+			<  19200000 1 0 0 0 &cxo_clk_src>,
 			< 100000000 6 0 0 0 &gpll0_out_main>,
 			< 200000000 3 0 0 0 &gpll0_out_main>;
 	};
@@ -1647,7 +1626,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_GP1_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1659,7 +1638,7 @@
 
 	gp2_clk_src {
 		qcom,freq-tbl =
-			<  19200000 1 0 0 0 &gcc_xo>,
+			<  19200000 1 0 0 0 &cxo_clk_src>,
 			< 100000000 6 0 0 0 &gpll0_out_main>,
 			< 200000000 3 0 0 0 &gpll0_out_main>;
 	};
@@ -1668,7 +1647,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_GP2_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1680,7 +1659,7 @@
 
 	gp3_clk_src {
 		qcom,freq-tbl =
-			<  19200000 1 0 0 0 &gcc_xo>,
+			<  19200000 1 0 0 0 &cxo_clk_src>,
 			< 100000000 6 0 0 0 &gpll0_out_main>,
 			< 200000000 3 0 0 0 &gpll0_out_main>;
 	};
@@ -1689,7 +1668,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_GP3_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1708,7 +1687,7 @@
 		compatible = "qcom,rcg-hid";
 		qcom,base-offset = <GCC_PDM2_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1720,8 +1699,8 @@
 
 	sdcc1_apps_clk_src {
 		qcom,freq-tbl =
-			<    144000 16 0 3 25 &gcc_xo>,
-			<    400000 12 0 1 4 &gcc_xo>,
+			<    144000 16 0 3 25 &cxo_clk_src>,
+			<    400000 12 0 1 4 &cxo_clk_src>,
 			<  20000000 15 0 1 2 &gpll0_out_main>,
 			<  25000000 12 0 1 2 &gpll0_out_main>,
 			<  50000000 12 0 0 0 &gpll0_out_main>,
@@ -1734,7 +1713,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_SDCC1_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>,
 			<    5 &gpll4_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
@@ -1747,8 +1726,8 @@
 
 	sdcc2_apps_clk_src {
 		qcom,freq-tbl =
-			<    144000 16 0 3 25 &gcc_xo>,
-			<    400000 12 0 1 4 &gcc_xo>,
+			<    144000 16 0 3 25 &cxo_clk_src>,
+			<    400000 12 0 1 4 &cxo_clk_src>,
 			<  20000000 15 0 1 2 &gpll0_out_main>,
 			<  25000000 12 0 1 2 &gpll0_out_main>,
 			<  50000000 12 0 0 0 &gpll0_out_main>,
@@ -1760,7 +1739,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_SDCC2_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>,
 			<    5 &gpll4_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
@@ -1773,8 +1752,8 @@
 
 	sdcc3_apps_clk_src {
 		qcom,freq-tbl =
-			<    144000 16 0 3 25 &gcc_xo>,
-			<    400000 12 0 1 4 &gcc_xo>,
+			<    144000 16 0 3 25 &cxo_clk_src>,
+			<    400000 12 0 1 4 &cxo_clk_src>,
 			<  20000000 15 0 1 2 &gpll0_out_main>,
 			<  25000000 12 0 1 2 &gpll0_out_main>,
 			<  50000000 12 0 0 0 &gpll0_out_main>,
@@ -1786,7 +1765,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_SDCC3_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>,
 			<    5 &gpll4_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
@@ -1799,8 +1778,8 @@
 
 	sdcc4_apps_clk_src {
 		qcom,freq-tbl =
-			<    144000 16 0 3 25 &gcc_xo>,
-			<    400000 12 0 1 4 &gcc_xo>,
+			<    144000 16 0 3 25 &cxo_clk_src>,
+			<    400000 12 0 1 4 &cxo_clk_src>,
 			<  20000000 15 0 1 2 &gpll0_out_main>,
 			<  25000000 12 0 1 2 &gpll0_out_main>,
 			<  50000000 12 0 0 0 &gpll0_out_main>,
@@ -1811,7 +1790,7 @@
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_SDCC4_APPS_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1823,14 +1802,14 @@
 
 	tsif_ref_clk_src {
 		qcom,freq-tbl =
-			<    105495 1 0 1 182 &gcc_xo>;
+			<    105495 1 0 1 182 &cxo_clk_src>;
 	};
 
 	tsif_ref_clk_src: tsif_ref_clk_src {
 		compatible = "qcom,rcg-mn";
 		qcom,base-offset = <GCC_TSIF_REF_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1849,7 +1828,7 @@
 		compatible = "qcom,rcg-hid";
 		qcom,base-offset = <GCC_USB20_MOCK_UTMI_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1868,7 +1847,7 @@
 		compatible = "qcom,rcg-hid";
 		qcom,base-offset = <GCC_USB30_MOCK_UTMI_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>,
+			<    0 &cxo_clk_src>,
 			<    1 &gpll0_out_main>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
@@ -1880,14 +1859,14 @@
 
 	usb3_phy_aux_clk_src {
 		qcom,freq-tbl =
-			<   1200000 16 0 0 0 &gcc_xo>;
+			<   1200000 16 0 0 0 &cxo_clk_src>;
 	};
 
 	usb3_phy_aux_clk_src: usb3_phy_aux_clk_src {
 		compatible = "qcom,rcg-hid";
 		qcom,base-offset = <GCC_USB3_PHY_AUX_CMD_RCGR>;
 		qcom,parents =
-			<    0 &gcc_xo>;
+			<    0 &cxo_clk_src>;
 		qcom,supply-group = <&gcc_vdd_dig>;
 		qcom,clk-fmax =
 			<FMAX_LOWER 1200000>,
@@ -2551,6 +2530,14 @@
 		qcom,en-offset = <GCC_GCC_DEBUG_CLK_CTL>;
 		qcom,en-mask = <0x10000>;
 		qcom,parents =
+			<0x000e &cnoc_clk>,
+			<0x0011 &pnoc_clk>,
+			<0x0000 &snoc_clk>,
+			<0x00ad &bimc_clk>,
+			<0x001c &gcc_mmss_bimc_gfx_m_clk>,
+			<0x0099 &ce1_clk>,
+			<0x009a &gcc_ce1_axi_m_clk>,
+			<0x009b &gcc_ce1_ahb_m_clk>,
 			<0x0006 &gcc_sys_noc_usb3_axi_clk>,
 			<0x0007 &gcc_sys_noc_ufs_axi_clk>,
 			<0x000a &gcc_sys_noc_hs_axi_clk>,
@@ -2651,7 +2638,7 @@
 			<0x0117 &gcc_aggre0_cnoc_ahb_clk>,
 			<0x0118 &gcc_aggre0_noc_at_clk>;
 		qcom,recursive-parents = <&gcc_mmss_gcc_dbg_clk>;
-		qcom,cxo = <&gcc_xo>;
+		qcom,cxo = <&cxo_clk_src>;
 		qcom,xo-div4-cbcr = <GCC_GCC_XO_DIV4_CBCR>;
 		qcom,test-pad-config = <0x51A00>;
 		qcom,clk-flags = <0xC000>;

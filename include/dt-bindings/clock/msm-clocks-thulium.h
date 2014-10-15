@@ -13,7 +13,7 @@
 #ifndef __MSM_CLOCKS_THULIUM_H
 #define __MSM_CLOCKS_THULIUM_H
 
-/* clock_rpm controlled clocks */
+/* clock_gcc controlled clocks */
 #define clk_cxo_clk_src			&cxo_clk_src
 #define clk_pnoc_clk			&pnoc_clk
 #define clk_pnoc_a_clk			&pnoc_a_clk
@@ -83,7 +83,6 @@
 #define clk_aggre2_noc_a_clk		&aggre2_noc_a_clk
 #define clk_rpm_debug_mux		&rpm_debug_mux
 
-/* clock_gcc controlled clocks */
 #define clk_gcc_xo			&gcc_xo
 #define clk_gcc_xo_a_clk		&gcc_xo_a_clk
 #define clk_debug_mmss_clk		&debug_mmss_clk
