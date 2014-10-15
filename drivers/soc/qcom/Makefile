@@ -42,6 +42,7 @@ obj-$(CONFIG_SOC_BUS)	+=	socinfo.o
 obj-y			+=	qdsp6v2/
 
 obj-$(CONFIG_MSM_HVC) += hvc.o
+obj-$(CONFIG_MSM_HYP_DEBUG) += hyp-debug.o
 
 obj-$(CONFIG_MSM_PIL_MSS_QDSP6V5) += pil-q6v5.o pil-msa.o pil-q6v5-mss.o
 obj-$(CONFIG_MSM_PIL_FEMTO) += pil-q6v5.o pil-msa.o pil-femto-modem.o

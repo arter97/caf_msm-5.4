@@ -11,7 +11,6 @@
  * GNU General Public License for more details.
  *
  */
-
 #include <linux/slab.h>
 #include <linux/completion.h>
 #include <linux/pagemap.h>
@@ -31,10 +30,14 @@
 #include <linux/uaccess.h>
 #include <linux/device.h>
 #include <linux/of.h>
+#include <linux/of_address.h>
+#include <linux/of_platform.h>
+#include <linux/dma-contiguous.h>
 #include <linux/iommu.h>
 #include <linux/kref.h>
-#include "adsprpc_shared.h"
+#include <linux/sort.h>
 #include "adsprpc_compat.h"
+#include "adsprpc_shared.h"
 
 #ifndef ION_ADSPRPC_HEAP_ID
 #define ION_ADSPRPC_HEAP_ID ION_AUDIO_HEAP_ID
@@ -89,13 +92,13 @@ static inline uint32_t buf_page_size(uint32_t size)
 
 static inline int buf_get_pages(void *addr, ssize_t sz, int nr_pages,
 				int access, struct smq_phy_page *pages,
-				int nr_elems)
+				int nr_elems, struct smq_phy_page *range)
 {
 	struct vm_area_struct *vma, *vmaend;
 	uintptr_t start = buf_page_start(addr);
 	uintptr_t end = buf_page_start((void *)((uintptr_t)addr + sz - 1));
 	uint32_t len = nr_pages << PAGE_SHIFT;
-	unsigned long pfn, pfnend;
+	unsigned long pfn, pfnend, paddr;
 	int n = -1, err = 0;
 
 	VERIFY(err, 0 != access_ok(access ? VERIFY_WRITE : VERIFY_READ,
@@ -122,7 +125,12 @@ static inline int buf_get_pages(void *addr, ssize_t sz, int nr_pages,
 	VERIFY(err, __pfn_to_phys(pfnend) <= UINT_MAX);
 	if (err)
 		goto bail;
-	pages->addr = __pfn_to_phys(pfn);
+	paddr = __pfn_to_phys(pfn);
+	if (range->size && (paddr < range->addr))
+		goto bail;
+	if (range->size && ((paddr - range->addr + len) > range->size))
+		goto bail;
+	pages->addr = paddr;
 	pages->size = len;
 	n++;
  bail:
@@ -138,6 +146,16 @@ struct fastrpc_buf {
 };
 
 struct smq_context_list;
+
+struct overlap {
+	uintptr_t start;
+	uintptr_t end;
+	int raix;
+	uintptr_t mstart;
+	uintptr_t mend;
+	uintptr_t offset;
+};
+
 
 struct smq_invoke_ctx {
 	struct hlist_node hn;
@@ -157,6 +175,8 @@ struct smq_invoke_ctx {
 	int nbufs;
 	bool smmu;
 	uint32_t sc;
+	struct overlap *overs;
+	struct overlap **overps;
 };
 
 struct smq_context_list {
@@ -189,6 +209,7 @@ struct fastrpc_apps {
 	struct cdev cdev;
 	struct class *class;
 	struct mutex smd_mutex;
+	struct smq_phy_page range;
 	dev_t dev_no;
 	int compat;
 	spinlock_t wrlock;
@@ -412,6 +433,69 @@ static int context_restore_interrupted(struct fastrpc_apps *me,
 	return err;
 }
 
+#define CMP(aa, bb) ((aa) == (bb) ? 0 : (aa) < (bb) ? -1 : 1)
+static int overlap_ptr_cmp(const void *a, const void *b)
+{
+	struct overlap *pa = *((struct overlap **)a);
+	struct overlap *pb = *((struct overlap **)b);
+	/* sort with lowest starting buffer first */
+	int st = CMP(pa->start, pb->start);
+	/* sort with highest ending buffer first */
+	int ed = CMP(pb->end, pa->end);
+	return st == 0 ? ed : st;
+}
+
+static int context_build_overlap(struct smq_invoke_ctx *ctx)
+{
+	int err = 0, i;
+	remote_arg_t *pra = ctx->pra;
+	int inbufs = REMOTE_SCALARS_INBUFS(ctx->sc);
+	int outbufs = REMOTE_SCALARS_OUTBUFS(ctx->sc);
+	int nbufs = inbufs + outbufs;
+	struct overlap max;
+	ctx->overs = kzalloc(sizeof(*ctx->overs) * (nbufs), GFP_KERNEL);
+	VERIFY(err, !IS_ERR_OR_NULL(ctx->overs));
+	if (err)
+		goto bail;
+	ctx->overps = kzalloc(sizeof(*ctx->overps) * (nbufs), GFP_KERNEL);
+	VERIFY(err, !IS_ERR_OR_NULL(ctx->overps));
+	if (err)
+		goto bail;
+	for (i = 0; i < nbufs; ++i) {
+		ctx->overs[i].start = (uintptr_t)pra[i].buf.pv;
+		ctx->overs[i].end = ctx->overs[i].start + pra[i].buf.len;
+		ctx->overs[i].raix = i;
+		ctx->overps[i] = &ctx->overs[i];
+	}
+	sort(ctx->overps, nbufs, sizeof(*ctx->overps), overlap_ptr_cmp, 0);
+	max.start = 0;
+	max.end = 0;
+	for (i = 0; i < nbufs; ++i) {
+		if (ctx->overps[i]->start < max.end) {
+			ctx->overps[i]->mstart = max.end;
+			ctx->overps[i]->mend = ctx->overps[i]->end;
+			ctx->overps[i]->offset = max.end -
+				ctx->overps[i]->start;
+			if (ctx->overps[i]->end > max.end) {
+				max.end = ctx->overps[i]->end;
+			} else {
+				ctx->overps[i]->mend = 0;
+				ctx->overps[i]->mstart = 0;
+			}
+		} else  {
+			ctx->overps[i]->mend = ctx->overps[i]->end;
+			ctx->overps[i]->mstart = ctx->overps[i]->start;
+			ctx->overps[i]->offset = 0;
+			max = *ctx->overps[i];
+		}
+	}
+bail:
+	return err;
+}
+
+
+static void context_free(struct smq_invoke_ctx *ctx, int remove);
+
 static int context_alloc(struct fastrpc_apps *me, uint32_t kernel,
 				struct fastrpc_ioctl_invoke_fd *invokefd,
 				struct file_data *fdata,
@@ -436,6 +520,8 @@ static int context_alloc(struct fastrpc_apps *me, uint32_t kernel,
 		goto bail;
 
 	INIT_HLIST_NODE(&ctx->hn);
+	ctx->apps = me;
+	ctx->fdata = fdata;
 	ctx->pra = (remote_arg_t *)(&ctx[1]);
 	ctx->fds = invokefd->fds == 0 ? 0 : (int *)(&ctx->pra[bufs]);
 	ctx->handles = invokefd->fds == 0 ? 0 :
@@ -461,11 +547,14 @@ static int context_alloc(struct fastrpc_apps *me, uint32_t kernel,
 		}
 	}
 	ctx->sc = invoke->sc;
+	if (REMOTE_SCALARS_INBUFS(ctx->sc) + REMOTE_SCALARS_OUTBUFS(ctx->sc)) {
+		VERIFY(err, 0 == context_build_overlap(ctx));
+		if (err)
+			goto bail;
+	}
 	ctx->retval = -1;
-	ctx->fdata = fdata;
 	ctx->pid = current->pid;
 	ctx->tgid = current->tgid;
-	ctx->apps = me;
 	init_completion(&ctx->work);
 	spin_lock(&clst->hlock);
 	hlist_add_head(&ctx->hn, &clst->pending);
@@ -474,7 +563,7 @@ static int context_alloc(struct fastrpc_apps *me, uint32_t kernel,
 	*po = ctx;
 bail:
 	if (ctx && err)
-		kfree(ctx);
+		context_free(ctx, 1);
 	return err;
 }
 
@@ -529,6 +618,8 @@ static void context_free(struct smq_invoke_ctx *ctx, int remove)
 		hlist_del(&ctx->hn);
 		spin_unlock(&clst->hlock);
 	}
+	kfree(ctx->overps);
+	kfree(ctx->overs);
 	kfree(ctx);
 }
 
@@ -650,8 +741,8 @@ static int get_page_list(uint32_t kernel, struct smq_invoke_ctx *ctx)
 					list[i].num = 1;
 			} else {
 				list[i].num = buf_get_pages(buf, len, num,
-						i >= inbufs, pages,
-						rlen / sizeof(*pages));
+					i >= inbufs, pages,
+					rlen / sizeof(*pages), &me->range);
 			}
 		}
 		VERIFY(err, list[i].num >= 0);
@@ -696,12 +787,11 @@ static int get_args(uint32_t kernel, struct smq_invoke_ctx *ctx,
 	remote_arg_t *rpra = ctx->rpra;
 	ssize_t rlen, used, size;
 	uint32_t sc = ctx->sc, start;
-	int i, inh, bufs = 0, err = 0;
+	int i, inh, bufs = 0, err = 0, oix, copylen = 0;
 	int inbufs = REMOTE_SCALARS_INBUFS(sc);
 	int outbufs = REMOTE_SCALARS_OUTBUFS(sc);
 	int cid = ctx->fdata->cid;
 	int *fds = ctx->fds, idx, num;
-	unsigned long len;
 	ion_phys_addr_t iova;
 
 	list = smq_invoke_buf_start(rpra, sc);
@@ -709,13 +799,15 @@ static int get_args(uint32_t kernel, struct smq_invoke_ctx *ctx,
 	used = ALIGN(pbuf->used, BALIGN);
 	args = (void *)((char *)pbuf->virt + used);
 	rlen = pbuf->size - used;
-	for (i = 0; i < inbufs + outbufs; ++i) {
 
+	/* map ion buffers */
+	for (i = 0; i < inbufs + outbufs; ++i) {
 		rpra[i].buf.len = pra[i].buf.len;
-		if (!rpra[i].buf.len)
+		if (!pra[i].buf.len)
 			continue;
 		if (me->channel[cid].smmu.enabled &&
 					fds && (fds[i] >= 0)) {
+			unsigned long len;
 			start = buf_page_start(pra[i].buf.pv);
 			len = buf_page_size(pra[i].buf.len);
 			num = buf_num_pages(pra[i].buf.pv, pra[i].buf.len);
@@ -739,44 +831,81 @@ static int get_args(uint32_t kernel, struct smq_invoke_ctx *ctx,
 			rpra[i].buf.pv = pra[i].buf.pv;
 			continue;
 		}
-		if (rlen < pra[i].buf.len) {
-			struct fastrpc_buf *b;
-			pbuf->used = pbuf->size - rlen;
-			VERIFY(err, 0 != (b = krealloc(obufs,
-				 (bufs + 1) * sizeof(*obufs), GFP_KERNEL)));
-			if (err)
-				goto bail;
-			obufs = b;
-			pbuf = obufs + bufs;
-			pbuf->size = buf_num_pages(0, pra[i].buf.len) *
-								PAGE_SIZE;
-			VERIFY(err, 0 == alloc_mem(pbuf, ctx->fdata));
-			if (err)
-				goto bail;
-			bufs++;
-			args = pbuf->virt;
-			rlen = pbuf->size;
+	}
+
+	/* calculate len requreed for copying */
+	for (oix = 0; oix < inbufs + outbufs; ++oix) {
+		int i = ctx->overps[oix]->raix;
+		if (!pra[i].buf.len)
+			continue;
+		if (list[i].num)
+			continue;
+		if (ctx->overps[oix]->offset == 0)
+			copylen = ALIGN(copylen, BALIGN);
+		copylen += ctx->overps[oix]->mend - ctx->overps[oix]->mstart;
+	}
+
+	/* alocate new buffer */
+	if (copylen > rlen) {
+		struct fastrpc_buf *b;
+		pbuf->used = pbuf->size - rlen;
+		VERIFY(err, 0 != (b = krealloc(obufs,
+			 (bufs + 1) * sizeof(*obufs), GFP_KERNEL)));
+		if (err)
+			goto bail;
+		obufs = b;
+		pbuf = obufs + bufs;
+		pbuf->size = buf_num_pages(0, copylen) * PAGE_SIZE;
+		VERIFY(err, 0 == alloc_mem(pbuf, ctx->fdata));
+		if (err)
+			goto bail;
+		bufs++;
+		args = pbuf->virt;
+		rlen = pbuf->size;
+
+	}
+
+	/* copy non ion buffers */
+	for (oix = 0; oix < inbufs + outbufs; ++oix) {
+		int i = ctx->overps[oix]->raix;
+		int mlen = ctx->overps[oix]->mend - ctx->overps[oix]->mstart;
+		if (!pra[i].buf.len)
+			continue;
+		if (list[i].num)
+			continue;
+
+		if (ctx->overps[oix]->offset == 0) {
+			rlen -= ALIGN((uintptr_t)args, BALIGN) -
+				(uintptr_t)args;
+			args = (void *)ALIGN((uintptr_t)args, BALIGN);
 		}
+		VERIFY(err, rlen >= mlen);
+		if (err)
+			goto bail;
 		list[i].num = 1;
 		pages[list[i].pgidx].addr =
-			buf_page_start((void *)((uintptr_t)pbuf->phys +
+			buf_page_start((void *)((uintptr_t)pbuf->phys -
+						ctx->overps[oix]->offset +
 						 (pbuf->size - rlen)));
 		pages[list[i].pgidx].size =
 			buf_page_size(pra[i].buf.len);
-		if (i < inbufs) {
+		if (i < inbufs && mlen) {
 			if (!kernel) {
 				VERIFY(err, 0 == copy_from_user(args,
-						pra[i].buf.pv, pra[i].buf.len));
+					(void *)ctx->overps[oix]->mstart,
+					mlen));
 				if (err)
 					goto bail;
 			} else {
-				memmove(args, pra[i].buf.pv, pra[i].buf.len);
+				memmove(args, (void *)ctx->overps[oix]->mstart,
+					mlen);
 			}
 		}
-		rpra[i].buf.pv = args;
-		args = (void *)((char *)args + ALIGN(pra[i].buf.len, BALIGN));
-		rlen -= ALIGN(pra[i].buf.len, BALIGN);
+		rpra[i].buf.pv = args - ctx->overps[oix]->offset;
+		args = (void *)((uintptr_t)args + mlen);
+		rlen -= mlen;
 	}
+
 	for (i = 0; i < inbufs; ++i) {
 		if (rpra[i].buf.len)
 			dmac_flush_range(rpra[i].buf.pv,
@@ -1236,8 +1365,7 @@ static int fastrpc_init_process(struct file_data *fdata,
 		err = -ENOTTY;
 	}
 bail:
-	if (!IS_ERR_OR_NULL(pages))
-		kfree(pages);
+	kfree(pages);
 	if (err && map)
 		free_map(map, fdata);
 	return err;
@@ -1423,7 +1551,7 @@ static int map_buffer(struct fastrpc_apps *me, struct file_data *fdata,
 		num = 1;
 	} else {
 		VERIFY(err, 0 < (num = buf_get_pages(buf, len, num, 1,
-							pages, num)));
+						pages, num, &me->range)));
 		if (err)
 			goto bail;
 	}
@@ -1732,7 +1860,6 @@ static int fastrpc_restart_notifier_cb(struct notifier_block *nb,
 	return NOTIFY_DONE;
 }
 
-
 static const struct file_operations fops = {
 	.open = fastrpc_device_open,
 	.release = fastrpc_device_release,
@@ -1743,6 +1870,11 @@ static const struct file_operations fops = {
 static int __init fastrpc_device_init(void)
 {
 	struct fastrpc_apps *me = &gfa;
+	struct device_node *ion_node, *node, *pnode;
+	struct platform_device *pdev;
+	const u32 *addr;
+	uint64_t size;
+	uint32_t val;
 	int i, err = 0;
 
 	memset(me, 0, sizeof(*me));
@@ -1764,6 +1896,29 @@ static int __init fastrpc_device_init(void)
 	if (err)
 		goto class_create_bail;
 	me->compat = (NULL == fops.compat_ioctl) ? 0 : 1;
+	ion_node = of_find_compatible_node(NULL, NULL, "qcom,msm-ion");
+	if (ion_node) {
+		for_each_available_child_of_node(ion_node, node) {
+			if (of_property_read_u32(node, "reg", &val))
+				continue;
+			if (val != ION_ADSP_HEAP_ID)
+				continue;
+			pdev = of_find_device_by_node(node);
+			if (!pdev)
+				break;
+			pnode = of_parse_phandle(node,
+					"linux,contiguous-region", 0);
+			if (!pnode)
+				break;
+			addr = of_get_address(pnode, 0, &size, NULL);
+			of_node_put(pnode);
+			if (!addr)
+				break;
+			me->range.addr = cma_get_base(&pdev->dev);
+			me->range.size = (size_t)size;
+			break;
+		}
+	}
 	for (i = 0; i < NUM_CHANNELS; i++) {
 		me->channel[i].dev = device_create(me->class, NULL,
 					MKDEV(MAJOR(me->dev_no), i),

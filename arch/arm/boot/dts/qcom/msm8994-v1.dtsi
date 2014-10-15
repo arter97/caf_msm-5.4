@@ -18,6 +18,7 @@
 
 #include "msm8994.dtsi"
 #include "msm8994-coresight-v1.dtsi"
+#include "msm8994-v1-pm.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. MSM 8994";
@@ -44,6 +45,7 @@
 				  "cci-irq",
 				  "sbe-irq";
 		qcom,apply-cti-pmu-wa;
+		poll-delay-ms = <5000>;
 	};
 
 	cpu-pmu {
@@ -62,6 +64,11 @@
 &pm8994_s11 {
 	regulator-min-microvolt = <725000>;
 	regulator-max-microvolt = <1225000>;
+};
+
+&ufs1 {
+	freq-table-hz =
+	<100000000 171430000>, <0 0>, <0 0>, <0 0>, <0 0>, <0 0>, <0 0>, <0 0>, <0 0>;
 };
 
 &mem_acc0_vreg_corner {
@@ -113,7 +120,8 @@
 			<0xFFFFFFFF 0 725000 800000 840000 860000 860000
 				      900000 900000 940000 940000>;
 
-	qcom,cpr-quot-adjust-scaling-factor-max = <2000>;
+	qcom,cpr-voltage-scaling-factor-max = <0 2000 2000>;
+	qcom,cpr-quot-adjust-scaling-factor-max = <0 2000 2000>;
 	qcom,cpr-corner-frequency-map =
 			<1 199200000>,
 			<2 302400000>,
@@ -166,7 +174,8 @@
 			<0xFFFFFFFF 0 725000 790000 840000 840000 860000
 				      890000 920000 940000>;
 
-	qcom,cpr-quot-adjust-scaling-factor-max = <2000>;
+	qcom,cpr-voltage-scaling-factor-max = <0 2000 2000>;
+	qcom,cpr-quot-adjust-scaling-factor-max = <0 2000 2000>;
 	qcom,cpr-corner-frequency-map =
 			<1 199200000>,
 			<2 302400000>,
@@ -179,4 +188,12 @@
 	qcom,cpr-speed-bin-max-corners =
 			<0xFFFFFFFF 0 1 3 8>;
 	qcom,cpr-enable;
+};
+
+&soc {
+	qcom,usbbam@f9304000 {
+		qcom,pipe0 {
+			qcom,pipe-connection-type = <1>; /* USB_BAM_PIPE_SYS2BAM */
+		};
+	};
 };

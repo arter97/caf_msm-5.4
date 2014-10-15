@@ -619,21 +619,26 @@ static int adreno_of_get_iommu(struct platform_device *pdev,
 	struct kgsl_device_platform_data *pdata)
 {
 	struct device_node *parent = pdev->dev.of_node;
-	struct adreno_device *adreno_dev = adreno_get_dev(pdev);
+	struct adreno_device *adreno_dev;
 	int result = -EINVAL;
 	struct device_node *node, *child;
 	struct kgsl_device_iommu_data *data = NULL;
 	struct kgsl_iommu_ctx *ctxs = NULL;
 	u32 reg_val[2];
+	u32 secure_id;
 	int ctx_index = 0;
 
 	node = of_parse_phandle(parent, "iommu", 0);
 	if (node == NULL)
 		return -EINVAL;
 
-	if (adreno_dev)
-		adreno_dev->dev.mmu.secured =
-			of_property_read_bool(node, "qcom,iommu-secure-id");
+	adreno_dev = adreno_get_dev(pdev);
+	if (adreno_dev == NULL)
+		return -EINVAL;
+
+	adreno_dev->dev.mmu.secured =
+		(of_property_read_u32(node, "qcom,iommu-secure-id",
+			&secure_id) == 0) ?  true : false;
 
 	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (data == NULL) {
@@ -1132,6 +1137,11 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 
 	adreno_perfcounter_start(adreno_dev);
 
+	status = adreno_ringbuffer_cold_start(adreno_dev);
+
+	if (status)
+		goto error_irq_off;
+
 	/* Enable h/w power collapse feature */
 	if (gpudev->enable_pc)
 		gpudev->enable_pc(adreno_dev);
@@ -1139,10 +1149,6 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 	/* Enable peak power detect feature */
 	if (gpudev->enable_ppd)
 		gpudev->enable_ppd(adreno_dev);
-
-	status = adreno_ringbuffer_cold_start(adreno_dev);
-	if (status)
-		goto error_irq_off;
 
 	/* Start the dispatcher */
 	adreno_dispatcher_start(device);
@@ -1253,8 +1259,6 @@ static int adreno_stop(struct kgsl_device *device)
 
 	adreno_ringbuffer_stop(adreno_dev);
 
-	kgsl_mmu_stop(&device->mmu);
-
 	adreno_irqctrl(adreno_dev, 0);
 	kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_OFF);
 	del_timer_sync(&device->idle_timer);
@@ -1267,6 +1271,7 @@ static int adreno_stop(struct kgsl_device *device)
 	/* Save physical performance counter values before GPU power down*/
 	adreno_perfcounter_save(adreno_dev);
 
+	kgsl_mmu_stop(&device->mmu);
 	/* Power down the device */
 	kgsl_pwrctrl_disable(device);
 

@@ -354,7 +354,7 @@
 			target-dev = <&cpubw>;
 			cpu-to-dev-map =
 				 <  400000  762>,
-				 <  998400  1525>,
+				 <  800000  1525>,
 				 < 1094400  3051>,
 				 < 1152000  4066>;
 		};
@@ -687,6 +687,7 @@
 		qcom,use-sw-aes-xts-algo;
 		qcom,use-sw-ahash-algo;
 		status = "disabled";
+		qcom,ce-opp-freq = <100000000>;
 	};
 
 	qcom_cedev: qcedev@720000 {
@@ -712,6 +713,7 @@
 		clock-names = "core_clk_src", "core_clk",
 				"iface_clk", "bus_clk";
 		status = "disabled";
+		qcom,ce-opp-freq = <100000000>;
 	};
 
 	qcom_seecom: qseecom@86000000 {
@@ -738,6 +740,7 @@
 		clock-names = "core_clk_src", "core_clk",
 				"iface_clk", "bus_clk";
 		status = "disabled";
+		qcom,ce-opp-freq = <100000000>;
 	};
 
 	qcom,wdt@b017000 {
@@ -1564,13 +1567,13 @@
 		qcom,core-limit-temp = <80>;
 		qcom,core-temp-hysteresis = <10>;
 		qcom,core-control-mask = <0xe>;
-		qcom,hotplug-temp = <110>;
-		qcom,hotplug-temp-hysteresis = <20>;
+		qcom,hotplug-temp = <82>;
+		qcom,hotplug-temp-hysteresis = <15>;
 		qcom,cpu-sensors = "tsens_tz_sensor5", "tsens_tz_sensor5",
 				"tsens_tz_sensor4", "tsens_tz_sensor4";
-		qcom,freq-mitigation-temp = <110>;
-		qcom,freq-mitigation-temp-hysteresis = <20>;
-		qcom,freq-mitigation-value = <960000>;
+		qcom,freq-mitigation-temp = <82>;
+		qcom,freq-mitigation-temp-hysteresis = <10>;
+		qcom,freq-mitigation-value = <400000>;
 		qcom,freq-mitigation-control-mask = <0x01>;
 		qcom,vdd-restriction-temp = <5>;
 		qcom,vdd-restriction-temp-hysteresis = <10>;

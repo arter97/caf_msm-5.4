@@ -39,6 +39,7 @@ struct rmnet_mux_val {
 	bool mux_channel_set;
 	bool ul_flt_reg;
 	bool mux_hdr_set;
+	uint32_t  hdr_hdl;
 };
 
 int ipa_qmi_service_init(bool load_uc, uint32_t wan_platform_type);
@@ -72,6 +73,8 @@ extern struct elem_info ipa_install_fltr_rule_req_msg_data_v01_ei[];
 extern struct elem_info ipa_install_fltr_rule_resp_msg_data_v01_ei[];
 extern struct elem_info ipa_fltr_installed_notif_req_msg_data_v01_ei[];
 extern struct elem_info ipa_fltr_installed_notif_resp_msg_data_v01_ei[];
+extern struct elem_info ipa_config_req_msg_data_v01_ei[];
+extern struct elem_info ipa_config_resp_msg_data_v01_ei[];
 
 /**
  * struct ipa_rmnet_context - IPA rmnet context

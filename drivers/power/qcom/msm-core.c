@@ -29,6 +29,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_opp.h>
 #include <linux/slab.h>
+#include <linux/suspend.h>
 #include <linux/thermal.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
@@ -82,7 +83,6 @@ struct cpu_activity_info {
 	int sensor_id;
 	struct sensor_threshold hi_threshold;
 	struct sensor_threshold low_threshold;
-	struct device_node *apc_node;
 	struct cpu_static_info *sp;
 };
 
@@ -95,6 +95,7 @@ struct cpu_static_info {
 };
 
 static DEFINE_MUTEX(policy_update_mutex);
+static DEFINE_MUTEX(kthread_update_mutex);
 static struct delayed_work sampling_work;
 static struct completion sampling_completion;
 static struct task_struct *sampling_task;
@@ -113,7 +114,7 @@ module_param_named(polling_interval, poll_ms, int,
 static int disabled;
 module_param_named(disabled, disabled, int,
 		S_IRUGO | S_IWUSR | S_IWGRP);
-
+static bool in_suspend;
 static bool activate_power_table;
 /*
  * Cannot be called from an interrupt context
@@ -254,12 +255,17 @@ static __ref int do_sampling(void *data)
 	while (!kthread_should_stop()) {
 		wait_for_completion(&sampling_completion);
 		cancel_delayed_work(&sampling_work);
+
+		mutex_lock(&kthread_update_mutex);
+		if (in_suspend)
+			goto unlock;
+
 		trigger_cpu_pwr_stats_calc();
 
 		for_each_online_cpu(cpu) {
 			cpu_node = &activity[cpu];
 			if (prev_temp[cpu] == cpu_node->temp)
-				continue;
+				goto unlock;
 
 			prev_temp[cpu] = cpu_node->temp;
 			cpu_node->low_threshold.temp = cpu_node->temp
@@ -272,10 +278,12 @@ static __ref int do_sampling(void *data)
 				cpu_node->low_threshold.temp);
 		}
 		if (!poll_ms)
-			continue;
+			goto unlock;
 
 		schedule_delayed_work(&sampling_work,
 			msecs_to_jiffies(poll_ms));
+unlock:
+		mutex_unlock(&kthread_update_mutex);
 	}
 	return 0;
 }
@@ -553,14 +561,16 @@ static int msm_get_voltage_levels(struct device *dev, int cpu,
 	int i;
 	int corner;
 	struct opp *opp;
-	struct platform_device *pdev =
-		of_find_device_by_node(activity[cpu].apc_node);
+	struct device *cpu_dev = get_cpu_device(cpu);
 	/*
 	 * Convert cpr corner voltage to average voltage of both
 	 * a53 and a57 votlage value
 	 */
 	int average_voltage[NUM_OF_CORNERS] = {0, 746, 841, 843, 940, 953, 976,
 			1024, 1090, 1100};
+
+	if (!cpu_dev)
+		return -ENODEV;
 
 	voltage = devm_kzalloc(dev,
 			sizeof(*voltage) * sp->num_of_freqs, GFP_KERNEL);
@@ -570,11 +580,17 @@ static int msm_get_voltage_levels(struct device *dev, int cpu,
 
 	rcu_read_lock();
 	for (i = 0; i < sp->num_of_freqs; i++) {
-		opp = dev_pm_opp_find_freq_exact(&pdev->dev,
+		opp = dev_pm_opp_find_freq_exact(cpu_dev,
 				sp->table[i].frequency * 1000, true);
 		corner = dev_pm_opp_get_voltage(opp);
-		if (corner > 0 && corner < ARRAY_SIZE(average_voltage))
+
+		if (corner > 400000)
+			voltage[i] = corner / 1000;
+		else if (corner > 0 && corner < ARRAY_SIZE(average_voltage))
 			voltage[i] = average_voltage[corner];
+		else
+			voltage[i]
+			     = average_voltage[ARRAY_SIZE(average_voltage) - 1];
 	}
 	rcu_read_unlock();
 
@@ -717,6 +733,54 @@ struct notifier_block cpu_policy = {
 	.notifier_call = msm_core_cpu_policy_handler
 };
 
+static int system_suspend_handler(struct notifier_block *nb,
+				unsigned long val, void *data)
+{
+	int cpu;
+
+	mutex_lock(&kthread_update_mutex);
+	switch (val) {
+	case PM_POST_HIBERNATION:
+	case PM_POST_SUSPEND:
+	case PM_POST_RESTORE:
+		/*
+		 * Set completion event to read temperature and repopulate
+		 * stats
+		 */
+		in_suspend = 0;
+		complete(&sampling_completion);
+		break;
+	case PM_HIBERNATION_PREPARE:
+	case PM_SUSPEND_PREPARE:
+		/*
+		 * cancel delayed work to be able to restart immediately
+		 * after system resume
+		 */
+		in_suspend = 1;
+		cancel_delayed_work(&sampling_work);
+		/*
+		 * cancel TSENS interrupts as we do not want to wake up from
+		 * suspend to take care of repopulate stats while the system is
+		 * in suspend
+		 */
+		for_each_possible_cpu(cpu) {
+			if (activity[cpu].sensor_id < 0)
+				continue;
+
+			sensor_cancel_trip(activity[cpu].sensor_id,
+				&activity[cpu].hi_threshold);
+			sensor_cancel_trip(activity[cpu].sensor_id,
+				&activity[cpu].low_threshold);
+		}
+		break;
+	default:
+		break;
+	}
+	mutex_unlock(&kthread_update_mutex);
+
+	return NOTIFY_OK;
+}
+
 static int msm_core_freq_init(void)
 {
 	int cpu;
@@ -751,7 +815,6 @@ static int msm_core_params_init(struct platform_device *pdev)
 	struct device_node *node = NULL;
 	struct device_node *child_node = NULL;
 	int mpidr;
-	char *key = NULL;
 
 	node = of_find_node_by_name(pdev->dev.of_node,
 				"qcom,core-mapping");
@@ -773,15 +836,6 @@ static int msm_core_params_init(struct platform_device *pdev)
 			continue;
 
 		activity[cpu].mpidr = mpidr;
-
-		key = "qcom,apc-rail";
-
-		activity[cpu].apc_node = of_parse_phandle(child_node, key, 0);
-		if (!activity[cpu].apc_node) {
-			pr_err("%s: Couldn't find the opp apcrail\n",
-					__func__);
-			return -ENODEV;
-		}
 
 		ret = msm_core_tsens_init(child_node, cpu);
 		if (ret)
@@ -889,6 +943,7 @@ static int msm_core_dev_probe(struct platform_device *pdev)
 	INIT_DEFERRABLE_WORK(&sampling_work, samplequeue_handle);
 	schedule_delayed_work(&sampling_work, msecs_to_jiffies(0));
 	cpufreq_register_notifier(&cpu_policy, CPUFREQ_POLICY_NOTIFIER);
+	pm_notifier(system_suspend_handler, 0);
 	return 0;
 failed:
 	free_dyn_memory();

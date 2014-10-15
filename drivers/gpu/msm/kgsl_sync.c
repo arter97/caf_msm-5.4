@@ -58,12 +58,13 @@ static int kgsl_sync_pt_has_signaled(struct sync_pt *pt)
 	struct kgsl_sync_timeline *ktimeline =
 		 (struct kgsl_sync_timeline *) pt->parent;
 	unsigned int ts = kpt->timestamp;
-	unsigned int last_ts = ktimeline->last_timestamp;
-	if (timestamp_cmp(last_ts, ts) >= 0) {
-		/* signaled */
-		return 1;
-	}
-	return 0;
+	int ret = 0;
+
+	spin_lock(&ktimeline->lock);
+	ret = (timestamp_cmp(ktimeline->last_timestamp, ts) >= 0);
+	spin_unlock(&ktimeline->lock);
+
+	return ret;
 }
 
 static int kgsl_sync_pt_compare(struct sync_pt *a, struct sync_pt *b)
@@ -232,9 +233,12 @@ static void kgsl_sync_timeline_value_str(struct sync_timeline *sync_timeline,
 		KGSL_TIMESTAMP_RETIRED);
 	unsigned int timestamp_queued = kgsl_sync_get_timestamp(ktimeline,
 		KGSL_TIMESTAMP_QUEUED);
+
+	spin_lock(&ktimeline->lock);
 	snprintf(str, size, "%u queued:%u retired:%u",
 		ktimeline->last_timestamp,
 		timestamp_queued, timestamp_retired);
+	spin_unlock(&ktimeline->lock);
 }
 
 static void kgsl_sync_pt_value_str(struct sync_pt *sync_pt,
@@ -242,6 +246,18 @@ static void kgsl_sync_pt_value_str(struct sync_pt *sync_pt,
 {
 	struct kgsl_sync_pt *kpt = (struct kgsl_sync_pt *) sync_pt;
 	snprintf(str, size, "%u", kpt->timestamp);
+}
+
+static int kgsl_sync_fill_driver_data(struct sync_pt *sync_pt, void *data,
+					int size)
+{
+	struct kgsl_sync_pt *kpt = (struct kgsl_sync_pt *) sync_pt;
+
+	if (size < sizeof(kpt->timestamp))
+		return -ENOMEM;
+
+	memcpy(data, &kpt->timestamp, sizeof(kpt->timestamp));
+	return sizeof(kpt->timestamp);
 }
 
 static void kgsl_sync_timeline_release_obj(struct sync_timeline *sync_timeline)
@@ -260,6 +276,7 @@ static const struct sync_timeline_ops kgsl_sync_timeline_ops = {
 	.compare = kgsl_sync_pt_compare,
 	.timeline_value_str = kgsl_sync_timeline_value_str,
 	.pt_value_str = kgsl_sync_pt_value_str,
+	.fill_driver_data = kgsl_sync_fill_driver_data,
 	.release_obj = kgsl_sync_timeline_release_obj,
 };
 
@@ -287,6 +304,7 @@ int kgsl_sync_timeline_create(struct kgsl_context *context)
 	ktimeline->device = context->device;
 	ktimeline->context_id = context->id;
 
+	spin_lock_init(&ktimeline->lock);
 	return 0;
 }
 
@@ -296,8 +314,11 @@ static void kgsl_sync_timeline_signal(struct sync_timeline *timeline,
 	struct kgsl_sync_timeline *ktimeline =
 		(struct kgsl_sync_timeline *) timeline;
 
+	spin_lock(&ktimeline->lock);
 	if (timestamp_cmp(timestamp, ktimeline->last_timestamp) > 0)
 		ktimeline->last_timestamp = timestamp;
+	spin_unlock(&ktimeline->lock);
+
 	sync_timeline_signal(timeline);
 }
 

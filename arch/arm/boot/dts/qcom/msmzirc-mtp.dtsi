@@ -61,6 +61,8 @@
 		qcom,recharge-thresh-mv = <200>;
 		qcom,iterm-ma = <100>;
 		regulator-name = "smb1357_otg_supply";
+		pinctrl-names = "default";
+		pinctrl-0 = <&smb_stat_active>;
 	};
 };
 
@@ -245,4 +247,8 @@
 		qcom,btm-channel-number = <0x70>;
 		qcom,thermal-node;
 	};
+};
+
+&qnand_1 {
+	status = "ok";
 };
