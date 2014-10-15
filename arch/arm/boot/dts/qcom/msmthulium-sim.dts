@@ -31,6 +31,10 @@
 	pinctrl-0 = <&uart_console_active>;
 };
 
+&blsp2_uart2 {
+	status = "ok";
+};
+
 &sdhc_1 {
 	vdd-supply = <&pmthulium_l20>;
 	qcom,vdd-voltage-level = <2950000 2950000>;

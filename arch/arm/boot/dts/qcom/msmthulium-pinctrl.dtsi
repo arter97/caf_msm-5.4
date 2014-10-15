@@ -29,6 +29,25 @@
 			};
 		};
 
+		blsp2_uart2 {
+			function = "blsp_uart8";
+			bias-disable;
+
+			blsp2_uart2_active: blsp2_uart2_active {
+				blsp2_uart2 {
+					pins = "gpio4", "gpio5", "gpio6", "gpio7";
+					drive-strength = <2>;
+				};
+			};
+
+			blsp2_uart2_sleep: blsp2_uart2_sleep {
+				blsp2_uart2 {
+					pins = "gpio4", "gpio5", "gpio6", "gpio7";
+					drive-strength = <2>;
+				};
+			};
+		};
+
 		sdc1_clk_on: sdc1_clk_on {
 			pmx_sdc1_clk {
 				pins = "sdc1_clk";
