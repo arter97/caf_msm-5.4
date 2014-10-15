@@ -100,6 +100,7 @@
 #include "msmthulium-ipcrouter.dtsi"
 #include "msmthulium-iommu.dtsi"
 #include "msm-gdsc-thulium.dtsi"
+#include "msmthulium-cc.dtsi"
 
 &soc {
 	#address-cells = <1>;
@@ -176,16 +177,6 @@
 		qcom,bam-pipe-idx-cons = <14>;
 		qcom,bam-pipe-idx-prod = <15>;
 		qcom,master-id = <86>;
-	};
-
-	clock_rpm: qcom,rpmcc@362000 {
-		compatible = "qcom,dummycc";
-		#clock-cells = <1>;
-	};
-
-	clock_gcc: qcom,gcc@300000 {
-		compatible = "qcom,dummycc";
-		#clock-cells = <1>;
 	};
 
 	clock_mmss: qcom,mmsscc@8c0000 {
