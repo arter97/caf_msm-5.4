@@ -1366,11 +1366,6 @@ static int cpr_pvs_init(struct platform_device *pdev,
 		}
 	}
 
-	if (of_property_read_bool(of_node, "qcom,cpr-config-start-volt-as-ceiling")) {
-		for (i = CPR_FUSE_CORNER_SVS; i < CPR_FUSE_CORNER_MAX; i++)
-			cpr_vreg->ceiling_volt[i] = cpr_vreg->pvs_corner_v[i];
-	}
-
 	if (cpr_vreg->pvs_corner_v[CPR_FUSE_CORNER_TURBO] >
 		cpr_vreg->ceiling_volt[CPR_FUSE_CORNER_TURBO])
 		cpr_vreg->ceiling_volt[CPR_FUSE_CORNER_TURBO] =
