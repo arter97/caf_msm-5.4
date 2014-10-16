@@ -3768,6 +3768,8 @@ static void __init apq8064_common_init(void)
 	regulator_suppress_info_printing();
 	if (socinfo_get_pmic_model() == PMIC_MODEL_PM8917)
 		configure_apq8064_pm8917_power_grid();
+	if (machine_is_apq8064_adp2_es2() || machine_is_apq8064_adp2_es2p5())
+		configure_apq8064_adp_power_grid();
 	if (machine_is_apq8064_mplatform())
 		platform_device_register(
 				&apq8064_mplatform_device_rpm_regulator);
