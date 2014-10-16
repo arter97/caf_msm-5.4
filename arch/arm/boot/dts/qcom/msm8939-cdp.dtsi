@@ -464,6 +464,6 @@
 };
 
 &apc_vreg_corner {
-		qcom,cpr-up-threshold = <3>;
-		qcom,cpr-down-threshold = <6>;
+		qcom,cpr-up-threshold = <0>;
+		qcom,cpr-down-threshold = <8>;
 };
