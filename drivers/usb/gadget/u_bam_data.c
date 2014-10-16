@@ -898,21 +898,12 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 	 */
 	port->is_connected = true;
 
-	/*
-	 * Unlock the port here and not at the end of this work,
-	 * because we do not want to activate usb_bam, ipa and
-	 * tethe bridge logic in atomic context and wait uneeded time.
-	 * Either way other works will not fire until end of this work
-	 * and event functions (as bam_data_connect) will not influance
-	 * while lower layers connect pipes, etc.
-	*/
-	spin_unlock_irqrestore(&port->port_lock, flags);
-
 	if (d->trans == USB_GADGET_XPORT_BAM2BAM_IPA) {
 
 		d->ipa_params.usb_connection_speed = gadget->speed;
 
 		if (d->dst_pipe_type != USB_BAM_PIPE_BAM2BAM) {
+			spin_unlock_irqrestore(&port->port_lock, flags);
 			pr_err("%s: no software preparation for DL not using bam2bam\n",
 					__func__);
 			return;
@@ -922,6 +913,7 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 			teth_bridge_params.client = d->ipa_params.src_client;
 			ret = teth_bridge_init(&teth_bridge_params);
 			if (ret) {
+				spin_unlock_irqrestore(&port->port_lock, flags);
 				pr_err("%s:teth_bridge_init() failed\n",
 				      __func__);
 				return;
@@ -959,9 +951,10 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 		} else {
 			d->ipa_params.reset_pipe_after_lpm =
 				(gadget_is_dwc3(gadget) &&
-				 msm_dwc3_reset_ep_after_lpm(gadget));
+				msm_dwc3_reset_ep_after_lpm(gadget));
 		}
 
+		spin_unlock_irqrestore(&port->port_lock, flags);
 		ret = usb_bam_connect_ipa(&d->ipa_params);
 		if (ret) {
 			pr_err("%s: usb_bam_connect_ipa failed: err:%d\n",
@@ -969,8 +962,15 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 			return;
 		}
 
-		d_port->ipa_consumer_ep = d->ipa_params.ipa_cons_ep_idx;
+		spin_lock_irqsave(&port->port_lock, flags);
+		if (port->last_event ==  U_BAM_DATA_DISCONNECT_E) {
+			spin_unlock_irqrestore(&port->port_lock, flags);
+			pr_err("%s:%d: Port is being disconnected.\n",
+						__func__, __LINE__);
+			goto disconnect_ipa;
+		}
 
+		d_port->ipa_consumer_ep = d->ipa_params.ipa_cons_ep_idx;
 		if (gadget_is_dwc3(gadget)) {
 			d->src_bam_idx = usb_bam_get_connection_idx(
 					gadget->name,
@@ -986,7 +986,6 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 					port->port_usb->out,
 					d->src_pipe_type);
 		}
-
 
 		/* Remove support for UL using system-to-IPA towards DL */
 		if (d->src_pipe_type == USB_BAM_PIPE_SYS2BAM) {
@@ -1014,12 +1013,24 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 		} else {
 			d->ipa_params.reset_pipe_after_lpm = false;
 		}
-
+		spin_unlock_irqrestore(&port->port_lock, flags);
 		ret = usb_bam_connect_ipa(&d->ipa_params);
 		if (ret) {
 			pr_err("%s: usb_bam_connect_ipa failed: err:%d\n",
 				__func__, ret);
-			return;
+			goto disconnect_ipa;
+		}
+
+		/*
+		 * Cable might have been disconnected after releasing the
+		 * spinlock and re-enabling IRQs. Hence check again.
+		 */
+		spin_lock_irqsave(&port->port_lock, flags);
+		if (port->last_event ==  U_BAM_DATA_DISCONNECT_E) {
+			spin_unlock_irqrestore(&port->port_lock, flags);
+			pr_err("%s:%d: port is beind disconnected.\n",
+						__func__, __LINE__);
+			goto disconnect_ipa;
 		}
 
 		d_port->ipa_producer_ep = d->ipa_params.ipa_prod_ep_idx;
@@ -1063,6 +1074,7 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 				MSM_VENDOR_ID) & ~SPS_PARAMS_TBE;
 		}
 		d->tx_req->udc_priv = sps_params;
+		spin_unlock_irqrestore(&port->port_lock, flags);
 
 		if (d->func_type == USB_FUNC_MBIM) {
 			connect_params.ipa_usb_pipe_hdl =
@@ -1090,6 +1102,7 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 				return;
 			}
 		}
+
 		if (d->func_type == USB_FUNC_RNDIS) {
 			rndis_data.prod_clnt_hdl =
 				d->ipa_params.prod_clnt_hdl;
@@ -1168,6 +1181,10 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 	}
 
 	pr_debug("Connect workqueue done (port %p)", port);
+	return;
+
+disconnect_ipa:
+	usb_bam_disconnect_ipa(&d->ipa_params);
 }
 
 /*
@@ -1451,9 +1468,9 @@ void bam_data_disconnect(struct data_port *gr, u8 port_num)
 			pr_debug("%s(): teth_bridge() disconnected\n",
 								__func__);
 			atomic_set(&d->is_ipa_usb_connected, 0);
-			port->last_event = U_BAM_DATA_DISCONNECT_E;
-			queue_work(bam_data_wq, &port->disconnect_w);
 		}
+		port->last_event = U_BAM_DATA_DISCONNECT_E;
+		queue_work(bam_data_wq, &port->disconnect_w);
 	} else {
 		if (usb_bam_client_ready(false))
 			pr_err("%s: usb_bam_client_ready failed\n",
@@ -1779,6 +1796,12 @@ void bam_data_resume(u8 port_num)
 	} else {
 		pr_err("%s(): Port is NULL.\n", __func__);
 	}
+}
+
+void bam_data_flush_workqueue(void)
+{
+	pr_debug("%s(): Flushing workqueue\n", __func__);
+	flush_workqueue(bam_data_wq);
 }
 
 static void bam2bam_data_suspend_work(struct work_struct *w)
