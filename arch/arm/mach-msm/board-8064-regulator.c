@@ -899,3 +899,27 @@ void __init configure_apq8064_pm8917_power_grid(void)
 	apq8064_rpm_regulator_pdata.version = RPM_VREG_VERSION_8960_PM8917;
 	}
 }
+
+/*
+ * Function which sets the always_on flag for
+ * LVS 4 and LDO 9 which is only called for
+ * ADP platforms. It also sets LDO 9 to 2.85V.
+ */
+void __init configure_apq8064_adp_power_grid(void)
+{
+	static struct rpm_regulator_init_data *rpm_data;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(apq8064_rpm_regulator_init_data); i++) {
+		rpm_data = &apq8064_rpm_regulator_init_data[i];
+		if (rpm_data->id == RPM_VREG_ID_PM8921_L9) {
+			rpm_data->init_data.constraints.always_on = 1;
+			rpm_data->init_data.constraints.min_uV = 2850000;
+			rpm_data->init_data.constraints.max_uV = 2850000;
+			rpm_data->default_uV = 2850000;
+		}
+
+		if (rpm_data->id == RPM_VREG_ID_PM8921_LVS4)
+			rpm_data->init_data.constraints.always_on = 1;
+	}
+}

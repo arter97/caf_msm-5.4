@@ -109,6 +109,7 @@ void __init apq8064_set_display_params(char *prim_panel, char *ext_panel,
 void apq8064_init_gpu(void);
 void apq8064_pm8xxx_gpio_mpp_init(void);
 void __init configure_apq8064_pm8917_power_grid(void);
+void __init configure_apq8064_adp_power_grid(void);
 
 #define QCA6174_BT_RST_N     17
 
