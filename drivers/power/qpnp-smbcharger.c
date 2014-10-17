@@ -47,9 +47,11 @@ struct parallel_usb_cfg {
 	struct power_supply		*psy;
 	int				min_current_thr_ma;
 	int				min_9v_current_thr_ma;
+	int				allowed_lowering_ma;
 	int				current_max_ma;
 	bool				avail;
 	struct mutex			lock;
+	int				initial_aicl_ma;
 };
 
 struct smbchg_chip {
@@ -1074,28 +1076,23 @@ out:
 	return rc;
 }
 
-#define USBIN_INPUT_STS_MASK		SMB_MASK(5, 3)
-#define USBIN_INPUT_STS_OFFSET		3
-#define USBIN_INPUT_9V			0x4
-#define USBIN_INPUT_UNREG		0x2
-#define USBIN_INPUT_5V			0x1
+#define USBIN_HVDCP_STS			0x0C
+#define USBIN_HVDCP_SEL_BIT		BIT(4)
+#define USBIN_HVDCP_SEL_9V_BIT		BIT(1)
 static int smbchg_get_min_parallel_current_ma(struct smbchg_chip *chip)
 {
 	int rc;
-	u8 vbus_sel, reg;
+	u8 reg;
 
-	rc = smbchg_read(chip, &reg, chip->usb_chgpth_base + INPUT_STS, 1);
+	rc = smbchg_read(chip, &reg,
+			chip->usb_chgpth_base + USBIN_HVDCP_STS, 1);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't read usb status rc = %d\n", rc);
 		return 0;
 	}
-	vbus_sel = (reg & USBIN_INPUT_STS_MASK) >> USBIN_INPUT_STS_OFFSET;
-	if (vbus_sel == USBIN_INPUT_5V || vbus_sel == USBIN_INPUT_UNREG)
-		return chip->parallel.min_current_thr_ma;
-	else if (vbus_sel == USBIN_INPUT_9V)
+	if ((reg & USBIN_HVDCP_SEL_BIT) && (reg & USBIN_HVDCP_SEL_9V_BIT))
 		return chip->parallel.min_9v_current_thr_ma;
-	else
-		return 0;
+	return chip->parallel.min_current_thr_ma;
 }
 
 #define ICL_STS_1_REG			0x7
@@ -1159,7 +1156,7 @@ static bool smbchg_is_parallel_usb_ok(struct smbchg_chip *chip)
 		return false;
 	}
 	if (chip->usb_tl_current_ma < min_current_thr_ma) {
-		pr_smb(PR_STATUS, "Too little current to enable: %d < %d\n",
+		pr_smb(PR_STATUS, "Weak USB chg skip enable: %d < %d\n",
 			chip->usb_tl_current_ma, min_current_thr_ma);
 		return false;
 	}
@@ -1245,6 +1242,7 @@ static void smbchg_parallel_usb_disable(struct smbchg_chip *chip)
 		return;
 	pr_smb(PR_STATUS, "disabling parallel charger\n");
 	taper_irq_en(chip, false);
+	chip->parallel.initial_aicl_ma = 0;
 	chip->parallel.current_max_ma = 0;
 	power_supply_set_current_limit(parallel_psy,
 				SUSPEND_CURRENT_MA * 1000);
@@ -1355,6 +1353,15 @@ static void smbchg_parallel_usb_enable(struct smbchg_chip *chip)
 	if (current_limit_ma <= 0)
 		goto disable_parallel;
 
+	if (chip->parallel.initial_aicl_ma == 0) {
+		if (current_limit_ma < min_current_thr_ma) {
+			pr_smb(PR_STATUS, "Initial AICL very low: %d < %d\n",
+				current_limit_ma, min_current_thr_ma);
+			goto disable_parallel;
+		}
+		chip->parallel.initial_aicl_ma = current_limit_ma;
+	}
+
 	/*
 	 * Use the previous set current from the parallel charger.
 	 * Treat 2mA as 0 because that is the suspend current setting
@@ -1369,9 +1376,14 @@ static void smbchg_parallel_usb_enable(struct smbchg_chip *chip)
 	 */
 	total_current_ma = current_limit_ma + parallel_cl_ma;
 
-	if (total_current_ma < min_current_thr_ma) {
-		pr_smb(PR_STATUS, "Too little current to enable: %d < %d\n",
-				total_current_ma, min_current_thr_ma);
+	if (total_current_ma < chip->parallel.initial_aicl_ma
+			- chip->parallel.allowed_lowering_ma) {
+		pr_smb(PR_STATUS,
+			"Too little total current : %d (%d + %d) < %d - %d\n",
+			total_current_ma,
+			current_limit_ma, parallel_cl_ma,
+			chip->parallel.initial_aicl_ma,
+			chip->parallel.allowed_lowering_ma);
 		goto disable_parallel;
 	}
 
@@ -2932,6 +2944,8 @@ static int smb_parse_dt(struct smbchg_chip *chip)
 			"parallel-usb-min-current-ma", rc, 1);
 	OF_PROP_READ(chip, chip->parallel.min_9v_current_thr_ma,
 			"parallel-usb-9v-min-current-ma", rc, 1);
+	OF_PROP_READ(chip, chip->parallel.allowed_lowering_ma,
+			"parallel-allowed-lowering-ma", rc, 1);
 	if (chip->parallel.min_current_thr_ma != -EINVAL)
 		chip->parallel.avail = true;
 	pr_smb(PR_STATUS, "parallel usb thr: %d, 9v thr: %d\n",

@@ -951,7 +951,7 @@
 		interrupt-names = "hc_irq", "pwr_irq";
 
 		qcom,bus-width = <8>;
-		qcom,cpu-dma-latency-us = <701>;
+		qcom,cpu-dma-latency-us = <301>;
 
 		qcom,msm-bus,name = "sdhc1";
 		qcom,msm-bus,num-cases = <9>;
@@ -988,7 +988,7 @@
 			 <&clock_gcc clk_gcc_sdcc2_apps_clk>;
 
 		qcom,bus-width = <4>;
-		qcom,cpu-dma-latency-us = <701>;
+		qcom,cpu-dma-latency-us = <301>;
 
 		qcom,msm-bus,name = "sdhc2";
 		qcom,msm-bus,num-cases = <8>;
@@ -1020,7 +1020,7 @@
 			 <&clock_gcc clk_gcc_sdcc3_apps_clk>;
 
 		qcom,bus-width = <4>;
-		qcom,cpu-dma-latency-us = <701>;
+		qcom,cpu-dma-latency-us = <301>;
 
 		qcom,msm-bus,name = "sdhc3";
 		qcom,msm-bus,num-cases = <8>;
@@ -2717,7 +2717,7 @@
 
 	qcom,qseecom@6500000 {
 		compatible = "qcom,qseecom";
-		reg = <0x6500000 0x300000>;
+		reg = <0x6500000 0x500000>;
 		reg-names = "secapp-region";
 		qcom,disk-encrypt-pipe-pair = <2>;
 		qcom,file-encrypt-pipe-pair = <0>;
@@ -3219,3 +3219,6 @@
 #include "dsi-panel-sim-video.dtsi"
 #include "dsi-panel-sim-dualmipi0-video.dtsi"
 #include "dsi-panel-sim-dualmipi1-video.dtsi"
+#include "dsi-panel-sim-cmd.dtsi"
+#include "dsi-panel-sim-dualmipi0-cmd.dtsi"
+#include "dsi-panel-sim-dualmipi1-cmd.dtsi"

@@ -27,6 +27,7 @@
 #include <linux/bitops.h>
 #include <linux/types.h>
 #include <linux/module.h>
+#include <linux/ktime.h>
 #include <linux/power_supply.h>
 #include <linux/of_batterydata.h>
 #include <linux/string_helpers.h>
@@ -86,6 +87,7 @@ enum {
 	FG_MEM_DEBUG_WRITES		= BIT(3), /* Show SRAM writes */
 	FG_MEM_DEBUG_READS		= BIT(4), /* Show SRAM reads */
 	FG_POWER_SUPPLY			= BIT(5), /* Show POWER_SUPPLY */
+	FG_STATUS			= BIT(6), /* Show FG status changes */
 };
 
 struct fg_mem_setting {
@@ -161,6 +163,8 @@ module_param_named(
 	debug_mask, fg_debug_mask, int, S_IRUSR | S_IWUSR
 );
 
+static int fg_sense_type = -EINVAL;
+
 static int fg_est_dump;
 module_param_named(
 	first_est_dump, fg_est_dump, int, S_IRUSR | S_IWUSR
@@ -221,7 +225,6 @@ struct fg_chip {
 	struct work_struct	batt_profile_init;
 	struct work_struct	dump_sram;
 	struct power_supply	*batt_psy;
-	bool			wake_on_delta_soc;
 	bool			profile_loaded;
 	bool			use_otp_profile;
 	struct delayed_work	update_jeita_setting;
@@ -791,6 +794,25 @@ static int set_prop_jeita_temp(struct fg_chip *chip,
 	return rc;
 }
 
+#define EXTERNAL_SENSE_SELECT		0x4AC
+#define EXTERNAL_SENSE_OFFSET		0x2
+#define EXTERNAL_SENSE_BIT		BIT(2)
+static int set_prop_sense_type(struct fg_chip *chip, int ext_sense_type)
+{
+	int rc;
+
+	rc = fg_mem_masked_write(chip, EXTERNAL_SENSE_SELECT,
+			EXTERNAL_SENSE_BIT,
+			ext_sense_type ? EXTERNAL_SENSE_BIT : 0,
+			EXTERNAL_SENSE_OFFSET);
+	if (rc) {
+		pr_err("failed to write profile rc=%d\n", rc);
+		return rc;
+	}
+
+	return 0;
+}
+
 #define EXPONENT_MASK		0xF800
 #define MANTISSA_MASK		0x3FF
 #define SIGN			BIT(10)
@@ -1281,7 +1303,7 @@ static void batt_profile_init(struct work_struct *work)
 
 static int fg_of_init(struct fg_chip *chip)
 {
-	int rc = 0;
+	int rc = 0, sense_type;
 
 	OF_READ_SETTING(FG_MEM_SOFT_HOT, "warm-bat-decidegc", rc, 1);
 	OF_READ_SETTING(FG_MEM_SOFT_COLD, "cool-bat-decidegc", rc, 1);
@@ -1292,6 +1314,24 @@ static int fg_of_init(struct fg_chip *chip)
 	chip->use_otp_profile = of_property_read_bool(
 			chip->spmi->dev.of_node,
 			"qcom,use-otp-profile");
+
+	sense_type = of_property_read_bool(chip->spmi->dev.of_node,
+					"qcom,ext-sense-type");
+	if (rc == 0) {
+		if (fg_sense_type < 0)
+			fg_sense_type = sense_type;
+
+		if (fg_debug_mask & FG_STATUS) {
+			if (fg_sense_type == 0)
+				pr_info("Using internal sense\n");
+			else if (fg_sense_type == 1)
+				pr_info("Using external sense\n");
+			else
+				pr_info("Using default sense\n");
+		}
+	} else {
+		rc = 0;
+	}
 
 	return rc;
 }
@@ -1393,6 +1433,7 @@ static int fg_init_irqs(struct fg_chip *chip)
 				return rc;
 			}
 
+			enable_irq_wake(chip->soc_irq[DELTA_SOC].irq);
 			enable_irq_wake(chip->soc_irq[FULL_SOC].irq);
 			enable_irq_wake(chip->soc_irq[EMPTY_SOC].irq);
 			break;
@@ -1828,6 +1869,52 @@ err_remove_fs:
 	return -ENOMEM;
 }
 
+static int soc_to_setpoint(int soc)
+{
+	return DIV_ROUND_CLOSEST(soc * 255, 100);
+}
+
+#define SOC_CNFG	0x450
+#define SOC_DELTA_OFFSET	3
+#define DELTA_SOC_PERCENT	1
+#define BATT_TEMP_OFFSET	3
+#define BATT_TEMP_CNTRL_MASK	0x0F
+#define BATT_TEMP_ON		0x0E
+#define BATT_TEMP_OFF		0x01
+static int fg_hw_init(struct fg_chip *chip)
+{
+	int rc = 0;
+
+	if (fg_sense_type >= 0) {
+		rc = set_prop_sense_type(chip, fg_sense_type);
+		if (rc) {
+			pr_err("failed to config sense type %d rc=%d\n",
+					fg_sense_type, rc);
+			return rc;
+		}
+	}
+
+	rc = fg_mem_masked_write(chip, EXTERNAL_SENSE_SELECT,
+			BATT_TEMP_CNTRL_MASK,
+			BATT_TEMP_ON,
+			BATT_TEMP_OFFSET);
+	if (rc) {
+		pr_err("failed to write to memif rc=%d\n", rc);
+		return rc;
+	}
+
+	rc = fg_mem_masked_write(chip, SOC_CNFG,
+			0xFF,
+			soc_to_setpoint(DELTA_SOC_PERCENT),
+			SOC_DELTA_OFFSET);
+	if (rc) {
+		pr_err("failed to write to memif rc=%d\n", rc);
+		return rc;
+	}
+
+	return 0;
+}
+
 #define INIT_JEITA_DELAY_MS 1000
 static int fg_probe(struct spmi_device *spmi)
 {
@@ -1961,6 +2048,12 @@ static int fg_probe(struct spmi_device *spmi)
 
 	update_sram_data(&chip->update_sram_data.work);
 
+	rc = fg_hw_init(chip);
+	if (rc) {
+		pr_err("failed to hw init rc = %d\n", rc);
+		goto cancel_jeita_work;
+	}
+
 	if (!chip->use_otp_profile)
 		schedule_work(&chip->batt_profile_init);
 
@@ -1968,6 +2061,8 @@ static int fg_probe(struct spmi_device *spmi)
 
 	return rc;
 
+cancel_jeita_work:
+	cancel_delayed_work_sync(&chip->update_jeita_setting);
 power_supply_unregister:
 	power_supply_unregister(&chip->bms_psy);
 of_init_fail:
@@ -1978,36 +2073,95 @@ of_init_fail:
 static int fg_suspend(struct device *dev)
 {
 	struct fg_chip *chip = dev_get_drvdata(dev);
-	union power_supply_propval propval;
+	ktime_t  enter_time;
+	ktime_t  total_time;
+	int total_time_ms;
 	int rc;
 
-	if (chip->batt_psy == NULL)
-		chip->batt_psy = power_supply_get_by_name("battery");
-	if (chip->batt_psy) {
-		rc = chip->batt_psy->get_property(chip->batt_psy,
-				POWER_SUPPLY_PROP_STATUS, &propval);
-		if (rc) {
-			pr_err("Unable to read battery status: %d\n", rc);
-			goto done;
-		}
-		if (propval.intval == POWER_SUPPLY_STATUS_FULL
-				&& !chip->wake_on_delta_soc) {
-			enable_irq_wake(chip->soc_irq[DELTA_SOC].irq);
-			chip->wake_on_delta_soc = true;
-		}
-		if (propval.intval != POWER_SUPPLY_STATUS_FULL
-				&& chip->wake_on_delta_soc) {
-			disable_irq_wake(chip->soc_irq[DELTA_SOC].irq);
-			chip->wake_on_delta_soc = false;
-		}
-	}
-done:
+	enter_time = ktime_get();
+	rc = fg_mem_masked_write(chip, EXTERNAL_SENSE_SELECT,
+			BATT_TEMP_CNTRL_MASK,
+			BATT_TEMP_OFF,
+			BATT_TEMP_OFFSET);
+	if (rc)
+		pr_err("failed to write to memif rc=%d\n", rc);
+
+	total_time = ktime_sub(ktime_get(), enter_time);
+	total_time_ms = ktime_to_ms(total_time);
+
+	if ((total_time_ms > 1500) && (fg_debug_mask & FG_STATUS))
+		pr_info("spent %dms configuring rbias\n", total_time_ms);
+
+	return 0;
+}
+
+static int fg_resume(struct device *dev)
+{
+	struct fg_chip *chip = dev_get_drvdata(dev);
+	ktime_t  enter_time;
+	ktime_t  total_time;
+	int total_time_ms;
+	int rc;
+
+	enter_time = ktime_get();
+	rc = fg_mem_masked_write(chip, EXTERNAL_SENSE_SELECT,
+			BATT_TEMP_CNTRL_MASK,
+			BATT_TEMP_ON,
+			BATT_TEMP_OFFSET);
+	if (rc)
+		pr_err("failed to write to memif rc=%d\n", rc);
+	total_time = ktime_sub(ktime_get(), enter_time);
+	total_time_ms = ktime_to_ms(total_time);
+
+	if ((total_time_ms > 1500) && (fg_debug_mask & FG_STATUS))
+		pr_info("spent %dms configuring rbias\n", total_time_ms);
 	return 0;
 }
 
 static const struct dev_pm_ops qpnp_fg_pm_ops = {
 	.suspend	= fg_suspend,
+	.resume		= fg_resume,
 };
+
+static int fg_sense_type_set(const char *val, const struct kernel_param *kp)
+{
+	int rc;
+	struct power_supply *bms_psy;
+	struct fg_chip *chip;
+	int old_fg_sense_type = fg_sense_type;
+
+	rc = param_set_int(val, kp);
+	if (rc) {
+		pr_err("Unable to set fg_sense_type: %d\n", rc);
+		return rc;
+	}
+
+	if (fg_sense_type != 0 && fg_sense_type != 1) {
+		pr_err("Bad value %d\n", fg_sense_type);
+		fg_sense_type = old_fg_sense_type;
+		return -EINVAL;
+	}
+
+	if (fg_debug_mask & FG_STATUS)
+		pr_info("fg_sense_type set to %d\n", fg_sense_type);
+
+	bms_psy = power_supply_get_by_name("bms");
+	if (!bms_psy) {
+		pr_err("bms psy not found\n");
+		return 0;
+	}
+
+	chip = container_of(bms_psy, struct fg_chip, bms_psy);
+	rc = set_prop_sense_type(chip, fg_sense_type);
+	return rc;
+}
+
+static struct kernel_param_ops fg_sense_type_ops = {
+	.set = fg_sense_type_set,
+	.get = param_get_int,
+};
+
+module_param_cb(sense_type, &fg_sense_type_ops, &fg_sense_type, 0644);
 
 static struct spmi_driver fg_driver = {
 	.driver		= {
