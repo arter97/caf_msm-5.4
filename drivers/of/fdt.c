@@ -325,7 +325,7 @@ static void __unflatten_device_tree(void *blob,
 
 	/* First pass, scan for size */
 	start = 0;
-	size = (unsigned long)unflatten_dt_node(blob, NULL, &start, NULL, NULL, 0);
+	size = (unsigned long)unflatten_dt_node(blob, 0, &start, NULL, NULL, 0);
 	size = ALIGN(size, 4);
 
 	pr_debug("  size is %lx, allocating...\n", size);
@@ -427,7 +427,7 @@ static int __init __reserved_mem_reserve_reg(unsigned long node,
  * in /reserved-memory matches the values supported by the current implementation,
  * also check if ranges property has been provided
  */
-static int __reserved_mem_check_root(unsigned long node)
+static int __init __reserved_mem_check_root(unsigned long node)
 {
 	const __be32 *prop;
 
@@ -600,73 +600,6 @@ struct fdt_scan_status {
 	int (*iterator)(unsigned long node, const char *uname, int depth, void *data);
 	void *data;
 };
-
-/**
- * fdt_scan_node_by_path - iterator for of_scan_flat_dt_by_path function
- */
-static int __init fdt_scan_node_by_path(unsigned long node, const char *uname,
-					int depth, void *data)
-{
-	struct fdt_scan_status *st = data;
-
-	/*
-	 * if scan at the requested fdt node has been completed,
-	 * return -ENXIO to abort further scanning
-	 */
-	if (depth <= st->depth)
-		return -ENXIO;
-
-	/* requested fdt node has been found, so call iterator function */
-	if (st->found)
-		return st->iterator(node, uname, depth, st->data);
-
-	/* check if scanning automata is entering next level of fdt nodes */
-	if (depth == st->depth + 1 &&
-	    strncmp(st->name, uname, st->namelen) == 0 &&
-	    uname[st->namelen] == 0) {
-		st->depth += 1;
-		if (st->name[st->namelen] == 0) {
-			st->found = 1;
-		} else {
-			const char *next = st->name + st->namelen + 1;
-			st->name = next;
-			st->namelen = strcspn(next, "/");
-		}
-		return 0;
-	}
-
-	/* scan next fdt node */
-	return 0;
-}
-
-/**
- * of_scan_flat_dt_by_path - scan flattened tree blob and call callback on each
- *			     child of the given path.
- * @path: path to start searching for children
- * @it: callback function
- * @data: context data pointer
- *
- * This function is used to scan the flattened device-tree starting from the
- * node given by path. It is used to extract information (like reserved
- * memory), which is required on ealy boot before we can unflatten the tree.
- */
-int __init of_scan_flat_dt_by_path(const char *path,
-	int (*it)(unsigned long node, const char *name, int depth, void *data),
-	void *data)
-{
-	struct fdt_scan_status st = {path, 0, -1, 0, it, data};
-	int ret = 0;
-
-	if (initial_boot_params)
-                ret = of_scan_flat_dt(fdt_scan_node_by_path, &st);
-
-	if (!st.found)
-		return -ENOENT;
-	else if (ret == -ENXIO)	/* scan has been completed */
-		return 0;
-	else
-		return ret;
-}
 
 const char * __init of_flat_dt_get_machine_name(void)
 {

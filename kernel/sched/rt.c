@@ -849,7 +849,7 @@ out:
 	pr_err("%s", buf);
 	BUG();
 #else
-	printk_sched("%s", buf);
+	printk_deferred("%s", buf);
 #endif
 }
 

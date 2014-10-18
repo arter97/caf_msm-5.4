@@ -704,7 +704,6 @@ ENDPROC(__calc_phys_offset)
 1:	.quad	.
 	.quad	PAGE_OFFSET
 
-
 /*
  * Exception handling. Something went wrong and we can't proceed. We ought to
  * tell the user, but since we don't have any guarantee that we're even
