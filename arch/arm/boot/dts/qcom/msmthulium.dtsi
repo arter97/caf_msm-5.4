@@ -338,6 +338,15 @@
 			interrupts = <0 157 1>;
 		};
 
+		qcom,smd-dsps {
+			compatible = "qcom,smd";
+			qcom,smd-edge = <3>;
+			qcom,smd-irq-offset = <0x0>;
+			qcom,smd-irq-bitmask = <0x1000000>;
+			interrupts = <0 176 1>;
+			label = "dsps";
+		};
+
 		qcom,smd-rpm {
 			compatible = "qcom,smd";
 			qcom,smd-edge = <15>;
