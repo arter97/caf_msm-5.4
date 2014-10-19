@@ -1965,7 +1965,7 @@
 			<0xe0020 0x55555556>,
 			<0xe0024 0x55555556>,
 			<0x80124 0x3>;
-		qcom,ocmem-size = <524288>; /* 512 * 1024*/
+		qcom,imem-size = <524288>; /* 512 * 1024*/
 		qcom,max-hw-load = <1281600>; /* Full 4k @ 30 + 1080p @ 30 */
 		qcom,clock-names = "core_clk", "core0_clk", "core1_clk", "core2_clk",
 			"iface_clk", "bus_clk", "mem_clk";
