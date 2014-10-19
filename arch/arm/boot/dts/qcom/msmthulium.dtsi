@@ -74,22 +74,22 @@
 		#size-cells = <2>;
 		ranges;
 
-		removed_regions: removed_regions@85c00000 {
+		removed_regions: removed_regions@83e00000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0 0x85c00000 0 0x1800000>;
+			reg = <0 0x83e00000 0 0x3500000>;
 		};
 
-		peripheral_mem: peripheral_region@8cc00000 {
+		peripheral_mem: peripheral_region@8cb00000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0 0x8cc00000 0 0x2100000>;
+			reg = <0 0x8cb00000 0 0x2100000>;
 		};
 
-		modem_mem: modem_region@87400000 {
+		modem_mem: modem_region@87300000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0 0x87400000 0 0x5800000>;
+			reg = <0 0x87300000 0 0x5800000>;
 		};
 	};
 };
