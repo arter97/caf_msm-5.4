@@ -529,6 +529,8 @@ static int sendcmd(struct adreno_device *adreno_dev,
 	trace_adreno_cmdbatch_submitted(cmdbatch, (int) dispatcher->inflight,
 		time.ticks, (unsigned long) secs, nsecs / 1000);
 
+	cmdbatch->submit_ticks = time.ticks;
+
 	dispatch_q->cmd_q[dispatch_q->tail] = cmdbatch;
 	dispatch_q->tail = (dispatch_q->tail + 1) %
 		ADRENO_DISPATCH_CMDQUEUE_SIZE;
@@ -578,6 +580,7 @@ static int dispatcher_context_sendcmds(struct adreno_device *adreno_dev,
 	int count = 0;
 	int ret = 0;
 	int inflight = _cmdqueue_inflight(dispatch_q);
+	unsigned int timestamp;
 
 	if (dispatch_q->inflight >= inflight)
 		return -EBUSY;
@@ -619,6 +622,8 @@ static int dispatcher_context_sendcmds(struct adreno_device *adreno_dev,
 			continue;
 		}
 
+		timestamp = cmdbatch->timestamp;
+
 		ret = sendcmd(adreno_dev, cmdbatch);
 
 		/*
@@ -634,6 +639,8 @@ static int dispatcher_context_sendcmds(struct adreno_device *adreno_dev,
 				ret = -EINVAL;
 			break;
 		}
+
+		drawctxt->submitted_timestamp = timestamp;
 
 		count++;
 	}
@@ -958,7 +965,7 @@ int adreno_dispatcher_queue_cmd(struct adreno_device *adreno_dev,
 		 */
 
 		if (!drawctxt->queued && kgsl_check_timestamp(cmdbatch->device,
-			cmdbatch->context, drawctxt->inflight_timestamp)) {
+			cmdbatch->context, drawctxt->queued_timestamp)) {
 			trace_adreno_cmdbatch_queued(cmdbatch,
 				drawctxt->queued);
 
@@ -973,12 +980,12 @@ int adreno_dispatcher_queue_cmd(struct adreno_device *adreno_dev,
 		 * comes along and forces the marker to execute)
 		 */
 
-		cmdbatch->marker_timestamp = drawctxt->inflight_timestamp;
+		cmdbatch->marker_timestamp = drawctxt->queued_timestamp;
 	}
 
 	/* SYNC commands have timestamp 0 and will get optimized out anyway */
 	if (!(cmdbatch->flags & KGSL_CONTEXT_SYNC))
-		drawctxt->inflight_timestamp = *timestamp;
+		drawctxt->queued_timestamp = *timestamp;
 
 	/*
 	 * Set the fault tolerance policy for the command batch - assuming the
@@ -1790,6 +1797,13 @@ static int adreno_dispatch_process_cmdqueue(struct adreno_device *adreno_dev,
 			trace_adreno_cmdbatch_retired(cmdbatch,
 				(int) dispatcher->inflight, start_ticks,
 				retire_ticks);
+
+			/* Record the delta between submit and retire ticks */
+			drawctxt->submit_retire_ticks[drawctxt->ticks_index] =
+				retire_ticks - cmdbatch->submit_ticks;
+
+			drawctxt->ticks_index = (drawctxt->ticks_index + 1)
+				% SUBMIT_RETIRE_TICKS_SIZE;
 
 			/* Zero the old entry*/
 			dispatch_q->cmd_q[dispatch_q->head] = NULL;
