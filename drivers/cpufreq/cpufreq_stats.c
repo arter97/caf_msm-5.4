@@ -191,8 +191,10 @@ static int __cpufreq_stats_create_table(struct cpufreq_policy *policy,
 	if (per_cpu(cpufreq_stats_table, cpu))
 		return -EBUSY;
 	stat = kzalloc(sizeof(*stat), GFP_KERNEL);
-	if ((stat) == NULL)
+	if ((stat) == NULL) {
+		pr_err("Failed to alloc cpufreq_stats table\n");
 		return -ENOMEM;
+	}
 
 	current_policy = cpufreq_cpu_get(cpu);
 	if (current_policy == NULL) {
@@ -201,8 +203,10 @@ static int __cpufreq_stats_create_table(struct cpufreq_policy *policy,
 	}
 
 	ret = sysfs_create_group(&current_policy->kobj, &stats_attr_group);
-	if (ret)
+	if (ret) {
+		pr_err("Failed to create cpufreq_stats sysfs\n");
 		goto error_out;
+	}
 
 	stat->cpu = cpu;
 	per_cpu(cpufreq_stats_table, cpu) = stat;
@@ -223,6 +227,7 @@ static int __cpufreq_stats_create_table(struct cpufreq_policy *policy,
 	stat->time_in_state = kzalloc(alloc_size, GFP_KERNEL);
 	if (!stat->time_in_state) {
 		ret = -ENOMEM;
+		pr_err("Failed to alloc cpufreq_stats table\n");
 		goto error_out;
 	}
 	stat->freq_table = (unsigned int *)(stat->time_in_state + count);
