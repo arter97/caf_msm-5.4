@@ -271,7 +271,7 @@
 		compatible = "qcom,clock-a53-8916";
 		reg = <0x0b011050 0x8>,
 		      <0x0005c004 0x8>;
-		reg-names = "rcg-base", "efuse";
+		reg-names = "rcg-base", "efuse1";
 		qcom,safe-freq = < 400000000 >;
 		cpu-vdd-supply = <&apc_vreg_corner>;
 		clocks = <&clock_gcc clk_gpll0_ao_clk_src>,
@@ -1499,13 +1499,13 @@
 		qcom,core-limit-temp = <80>;
 		qcom,core-temp-hysteresis = <10>;
 		qcom,core-control-mask = <0xe>;
-		qcom,hotplug-temp = <110>;
-		qcom,hotplug-temp-hysteresis = <20>;
+		qcom,hotplug-temp = <82>;
+		qcom,hotplug-temp-hysteresis = <15>;
 		qcom,cpu-sensors = "tsens_tz_sensor5", "tsens_tz_sensor5",
 				"tsens_tz_sensor4", "tsens_tz_sensor4";
-		qcom,freq-mitigation-temp = <110>;
-		qcom,freq-mitigation-temp-hysteresis = <20>;
-		qcom,freq-mitigation-value = <960000>;
+		qcom,freq-mitigation-temp = <82>;
+		qcom,freq-mitigation-temp-hysteresis = <10>;
+		qcom,freq-mitigation-value = <400000>;
 		qcom,freq-mitigation-control-mask = <0x01>;
 		qcom,vdd-restriction-temp = <5>;
 		qcom,vdd-restriction-temp-hysteresis = <10>;
