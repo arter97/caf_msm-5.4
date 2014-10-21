@@ -349,34 +349,6 @@ static void __sync_tlb(struct msm_iommu_drvdata *iommu_drvdata, int ctx)
 		check_tlb_sync_state(iommu_drvdata, ctx);
 }
 
-static int __flush_iotlb_va(struct iommu_domain *domain, unsigned int va)
-{
-	struct msm_iommu_priv *priv = domain->priv;
-	struct msm_iommu_drvdata *iommu_drvdata;
-	struct msm_iommu_ctx_drvdata *ctx_drvdata;
-	int ret = 0;
-
-	list_for_each_entry(ctx_drvdata, &priv->list_attached, attached_elm) {
-		BUG_ON(!ctx_drvdata->pdev || !ctx_drvdata->pdev->dev.parent);
-
-		iommu_drvdata = dev_get_drvdata(ctx_drvdata->pdev->dev.parent);
-		BUG_ON(!iommu_drvdata);
-
-
-		ret = __enable_clocks(iommu_drvdata);
-		if (ret)
-			goto fail;
-
-		SET_TLBIVA(iommu_drvdata->cb_base, ctx_drvdata->num,
-			   ctx_drvdata->asid | (va & CB_TLBIVA_VA));
-		mb();
-		__sync_tlb(iommu_drvdata, ctx_drvdata->num);
-		__disable_clocks(iommu_drvdata);
-	}
-fail:
-	return ret;
-}
-
 static int __flush_iotlb(struct iommu_domain *domain)
 {
 	struct msm_iommu_priv *priv = domain->priv;
@@ -958,7 +930,7 @@ static int msm_iommu_map(struct iommu_domain *domain, unsigned long va,
 	if (ret)
 		goto fail;
 
-	ret = __flush_iotlb_va(domain, va);
+	ret = __flush_iotlb(domain);
 fail:
 	mutex_unlock(&msm_iommu_lock);
 	return ret;
@@ -980,7 +952,7 @@ static size_t msm_iommu_unmap(struct iommu_domain *domain, unsigned long va,
 	if (ret < 0)
 		goto fail;
 
-	ret = __flush_iotlb_va(domain, va);
+	ret = __flush_iotlb(domain);
 fail:
 	mutex_unlock(&msm_iommu_lock);
 
