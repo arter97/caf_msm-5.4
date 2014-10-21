@@ -12,17 +12,44 @@
 
 #define CLKFLAG_NO_RATE_CACHE					0x00004000
 
-#define RPM_REGULATOR_CORNER_NONE				1
-#define RPM_REGULATOR_CORNER_SVS_SOC				4
-#define RPM_REGULATOR_CORNER_NOMINAL				5
-#define RPM_REGULATOR_CORNER_SUPER_TURBO			7
-
 #define FMAX_LOWER						0
 #define FMAX_LOW						1
 #define FMAX_NOM						2
 #define FMAX_TURBO						3
 
 #define HALT_CHECK_DELAY					5
+
+#define RPM_MISC_CLK_TYPE					0x306b6c63
+#define RPM_BUS_CLK_TYPE					0x316b6c63
+#define RPM_MEM_CLK_TYPE					0x326b6c63
+#define RPM_IPA_CLK_TYPE					0x617069
+#define RPM_CE_CLK_TYPE						0x6563
+#define RPM_AGGR_CLK_TYPE					0x72676761
+#define RPM_SMD_KEY_ENABLE					0x62616E45
+
+#define CXO_CLK_SRC_ID						0x0
+#define QDSS_CLK_ID						0x1
+
+#define PNOC_CLK_ID						0x0
+#define SNOC_CLK_ID						0x1
+#define CNOC_CLK_ID						0x2
+#define BIMC_CLK_ID						0x0
+#define IPA_CLK_ID						0x0
+#define CE1_CLK_ID						0x0
+#define BB_CLK1_ID						0x1
+#define BB_CLK2_ID						0x2
+#define RF_CLK1_ID						0x4
+#define RF_CLK2_ID						0x5
+#define LN_BB_CLK_ID						0x8
+#define DIV_CLK1_ID						0xb
+#define DIV_CLK2_ID						0xc
+#define DIV_CLK3_ID						0xd
+#define BB_CLK1_PIN_ID						0x1
+#define BB_CLK2_PIN_ID						0x2
+#define RF_CLK1_PIN_ID						0x4
+#define RF_CLK2_PIN_ID						0x5
+#define AGGR1_NOC_ID						0x1
+#define AGGR2_NOC_ID						0x2
 
 #define MMSS_MMPLL0_MODE					(0x0000)
 #define MMSS_MMPLL1_MODE					(0x0030)
@@ -254,8 +281,10 @@
 #define MMSS_HLOS2_VOTE_VFE_SMMU_CBCR				(0x9018)
 
 #define GCC_GPLL0_MODE						(0x00000)
-#define GCC_SYS_NOC_USB3_AXI_CBCR				(0x0F03C)
-#define GCC_SYS_NOC_UFS_AXI_CBCR				(0x75038)
+#define PLLTEST_PAD_CFG					        (0x6200C)
+#define GCC_XO_DIV4_CBCR				        (0x43008)
+#define CLOCK_FRQ_MEASURE_CTL				        (0x62004)
+#define CLOCK_FRQ_MEASURE_STATUS			        (0x62008)
 #define GCC_USB_30_BCR						(0x0F000)
 #define GCC_USB30_MASTER_CBCR					(0x0F008)
 #define GCC_USB30_SLEEP_CBCR					(0x0F00C)
@@ -364,7 +393,6 @@
 #define GCC_TSIF_REF_CMD_RCGR					(0x36010)
 #define GCC_BOOT_ROM_AHB_CBCR					(0x38004)
 #define GCC_GCC_XO_DIV4_CBCR					(0x43008)
-#define GCC_LPASS_Q6_AXI_CBCR					(0x47000)
 #define GCC_APCS_GPLL_ENA_VOTE					(0x52000)
 #define GCC_APCS_CLOCK_BRANCH_ENA_VOTE				(0x52004)
 #define GCC_GCC_DEBUG_CLK_CTL					(0x62000)
@@ -440,9 +468,6 @@
 #define GCC_PCIE_1_PIPE_CMD_RCGR				(0x6D01C)
 #define GCC_PCIE_2_PIPE_CMD_RCGR				(0x6E01C)
 #define GCC_USB20_MOCK_UTMI_CMD_RCGR				(0x12024)
-#define GCC_LPASS_Q6_AXI_CBCR					(0x47000)
-#define GCC_LPASS_Q6_SMMU_AXI_CBCR				(0x47004)
-#define GCC_LPASS_SWAY_CBCR					(0x47008)
 #define GCC_SYS_NOC_HS_AXI_CBCR					(0x04034)
 #define GCC_UFS_ICE_CORE_CBCR					(0x76010)
 #define GCC_UFS_UNIPRO_CORE_CBCR				(0x7600C)
@@ -463,3 +488,6 @@
 #define GCC_HLOS2_VOTE_AGGRE0_NOC_SMMU_CBCR			(0x7E000)
 #define GCC_HLOS2_VOTE_LPASS_CORE_SMMU_CBCR			(0x7E010)
 #define GCC_HLOS2_VOTE_LPASS_ADSP_SMMU_CBCR			(0x7E014)
+#define GCC_MMSS_SYS_NOC_AXI_CBCR				(0x09004)
+#define GCC_MMSS_NOC_AT_CBCR					(0x0900C)
+#define GCC_MMSS_NOC_CFG_AHB_CBCR				(0x09008)
