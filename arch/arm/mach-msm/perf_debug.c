@@ -26,6 +26,7 @@ static char *descriptions =
 	" 1 perf: support hotplug\n"
 	" 2 msm: perf: add perf support for krait cpus\n"
 	" 3 perf: preserve pmuseren register\n"
+	"31 Perf: make debug dir handle exportable\n"
 ;
 
 static ssize_t desc_read(struct file *fp, char __user *buf,
