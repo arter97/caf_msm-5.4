@@ -46,6 +46,7 @@
 #define HORSCALER_COEFF_NUM		17
 #define MDP_MIN_VBP		4
 #define MAX_FREE_LIST_SIZE	12
+#define OVERLAY_MAX		10
 
 #define C3_ALPHA	3	/* alpha */
 #define C2_R_Cr		2	/* R/Cr */
