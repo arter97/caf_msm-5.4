@@ -27,6 +27,7 @@ static char *descriptions =
 	" 2 msm: perf: add perf support for krait cpus\n"
 	" 3 perf: preserve pmuseren register\n"
 	"31 Perf: make debug dir handle exportable\n"
+	"32 msm: perf: add perf trace user\n"
 ;
 
 static ssize_t desc_read(struct file *fp, char __user *buf,
