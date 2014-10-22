@@ -588,7 +588,7 @@
 		qcom,sysmon-id = <1>;
 		qcom,ssctl-instance-id = <0x14>;
 		qcom,firmware-name = "adsp";
-		linux,contiguous-region = <&peripheral_mem>;
+		memory-region = <&peripheral_mem>;
 	};
 
 	qcom,venus@ce0000 {
@@ -617,7 +617,7 @@
 		qcom,pas-id = <9>;
 		qcom,proxy-timeout-ms = <5000>;
 		qcom,firmware-name = "venus";
-		linux,contiguous-region = <&peripheral_mem>;
+		memory-region = <&peripheral_mem>;
 		qcom,pil-no-auth;
 	};
 

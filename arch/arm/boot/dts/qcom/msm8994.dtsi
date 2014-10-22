@@ -1562,7 +1562,7 @@
 		qcom,pas-id = <9>;
 		qcom,proxy-timeout-ms = <5000>;
 		qcom,firmware-name = "venus";
-		contiguous-region = <&peripheral_mem>;
+		memory-region = <&peripheral_mem>;
 	};
 
 	qcom,mss@fc880000 {
@@ -1609,7 +1609,7 @@
 		/* GPIO output to mss */
 		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_1_out 0 0>;
 
-		contiguous-region = <&modem_mem>;
+		memory-region = <&modem_mem>;
 	};
 
 	qcom,lpass@fe200000 {
@@ -1643,7 +1643,7 @@
 		/* GPIO output to lpass */
 		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_2_out 0 0>;
 
-		contiguous-region = <&peripheral_mem>;
+		memory-region = <&peripheral_mem>;
 	};
 
 	clock_rpm: qcom,rpmcc@fc401880 {
@@ -2954,13 +2954,13 @@
 	audio_heap {
 		compatible = "qcom,msm-shared-memory";
 		qcom,proc-id = <1>;
-		contiguous-region = <&audio_mem>;
+		memory-region = <&audio_mem>;
 	};
 
 	adsp_heap {
 		compatible = "qcom,msm-shared-memory";
 		qcom,proc-id = <1>;
-		contiguous-region = <&secure_mem>;
+		memory-region = <&secure_mem>;
 	};
 
 	qcom,msm-core {
