@@ -16,6 +16,7 @@
 / {
 	model = "Qualcomm Technologies, Inc. MSM THULIUM";
 	compatible = "qcom,msmthulium";
+	qcom,msm-id = <246 0x0>;
 	interrupt-parent = <&intc>;
 
 	aliases {
