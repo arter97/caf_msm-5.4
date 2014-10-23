@@ -713,6 +713,8 @@ static int32_t adm_callback(struct apr_client_data *data, void *priv)
 					data->payload_size))
 				break;
 
+			/* payload[3] is the param size, check if payload */
+			/* is big enough and has a valid param size */
 			if ((payload[0] == 0) && (data->payload_size >
 				(4 * sizeof(*payload))) &&
 				(data->payload_size/sizeof(*payload)-4 >=
