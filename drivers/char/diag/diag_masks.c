@@ -1535,7 +1535,7 @@ int diag_process_apps_masks(unsigned char *buf, int len)
 	}
 
 	if (hdlr)
-		size = hdlr(buf, len, driver->apps_rsp_buf, APPS_BUF_SIZE);
+		size = hdlr(buf, len, driver->apps_rsp_buf, DIAG_MAX_RSP_SIZE);
 
 	return (size > 0) ? size : 0;
 }
