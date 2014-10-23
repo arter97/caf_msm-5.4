@@ -310,9 +310,7 @@ static int _ringbuffer_start_common(struct adreno_ringbuffer *rb)
 		return status;
 
 	/* idle device to validate ME INIT */
-	status = adreno_spin_idle(device);
-
-	return status;
+	return adreno_spin_idle(device);
 }
 
 /**
