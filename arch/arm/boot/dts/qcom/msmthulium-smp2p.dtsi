@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  */
 &soc {
-	qcom,smp2p-modem {
+	qcom,smp2p-modem@9820010 {
 		compatible = "qcom,smp2p";
 		reg = <0x9820010 0x4>;
 		qcom,remote-pid = <1>;
@@ -18,7 +18,7 @@
 		interrupts = <0 27 1>;
 	};
 
-	qcom,smp2p-adsp {
+	qcom,smp2p-adsp@9820010 {
 		compatible = "qcom,smp2p";
 		reg = <0x9820010 0x4>;
 		qcom,remote-pid = <2>;
