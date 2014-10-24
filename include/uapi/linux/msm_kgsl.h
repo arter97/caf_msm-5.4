@@ -199,9 +199,7 @@ enum kgsl_ctx_reset_stat {
 /* device id */
 enum kgsl_deviceid {
 	KGSL_DEVICE_3D0		= 0x00000000,
-	KGSL_DEVICE_2D0		= 0x00000001,
-	KGSL_DEVICE_2D1		= 0x00000002,
-	KGSL_DEVICE_MAX		= 0x00000003
+	KGSL_DEVICE_MAX
 };
 
 struct kgsl_devinfo {
