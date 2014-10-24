@@ -1022,8 +1022,9 @@ bool ipa_should_pipe_be_suspended(enum ipa_client_type client);
 int ipa_tag_aggr_force_close(int pipe_num);
 
 void ipa_active_clients_lock(void);
-int ipa_active_clients_trylock(void);
+int ipa_active_clients_trylock(unsigned long *flags);
 void ipa_active_clients_unlock(void);
+void ipa_active_clients_trylock_unlock(unsigned long *flags);
 
 int ipa_sps_connect_safe(struct sps_pipe *h, struct sps_connect *connect,
 	u32 pipe_number);
