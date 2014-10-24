@@ -449,8 +449,6 @@
 #define clk_mmss_debug_mux		0xe646ffda
 #define clk_mmss_gcc_dbg_clk		0xafa4d48a
 #define clk_gfx3d_clk_src		0x917f76ef
-
-/* clock_mdss controlled clocks */
 #define clk_extpclk_clk_src		0xb2c31abd
 #define clk_mdss_byte0_clk		0xf5a03f64
 #define clk_mdss_byte1_clk		0xb8c7067d
