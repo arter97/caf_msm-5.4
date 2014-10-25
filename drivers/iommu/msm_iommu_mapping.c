@@ -223,7 +223,7 @@ static int msm_iommu_map_iommu(struct msm_iommu_meta *meta,
 		goto out1;
 	}
 
-	ret = iommu_map_range(domain, data->iova_addr,
+	ret = iommu_map_sg(domain, data->iova_addr,
 			      table->sgl,
 			      size, prot);
 	if (ret) {
@@ -243,7 +243,7 @@ static int msm_iommu_map_iommu(struct msm_iommu_meta *meta,
 	return ret;
 
 out2:
-	iommu_unmap_range(domain, data->iova_addr, size);
+	iommu_unmap(domain, data->iova_addr, size);
 out1:
 	msm_free_iova_address(data->iova_addr, domain_num, partition_num,
 				size);
@@ -272,8 +272,8 @@ static void msm_iommu_heap_unmap_iommu(struct msm_iommu_map *data)
 		return;
 	}
 
-	ret = iommu_unmap_range(domain, data->iova_addr, data->mapped_size);
-	WARN_ON(ret < 0);
+	ret = iommu_unmap(domain, data->iova_addr, data->mapped_size);
+	WARN_ON(ret != data->mapped_size);
 	msm_free_iova_address(data->iova_addr, domain_num, partition_num,
 				data->mapped_size);
 

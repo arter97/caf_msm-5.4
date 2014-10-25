@@ -94,7 +94,7 @@ int msm_iommu_map_extra(struct iommu_domain *domain,
 		for (i = 0; i < nrpages; i++)
 			sg_set_page(&sglist[i], dummy_page, PAGE_SIZE, 0);
 
-		ret = iommu_map_range(domain, temp_iova, sglist, size, prot);
+		ret = iommu_map_sg(domain, temp_iova, sglist, size, prot);
 		if (ret) {
 			pr_err("%s: could not map extra %lx in domain %p\n",
 				__func__, start_iova, domain);
@@ -166,7 +166,7 @@ static int msm_iommu_map_iova_phys(struct iommu_domain *domain,
 	sglist->offset = 0;
 	sglist->dma_address = phys;
 
-	ret = iommu_map_range(domain, iova, sglist, size, prot);
+	ret = iommu_map_sg(domain, iova, sglist, size, prot);
 	if (ret) {
 		pr_err("%s: could not map extra %lx in domain %p\n",
 			__func__, iova, domain);
@@ -234,7 +234,7 @@ void msm_iommu_unmap_contig_buffer(dma_addr_t iova,
 
 	domain = msm_get_iommu_domain(domain_no);
 	if (domain) {
-		iommu_unmap_range(domain, iova, size);
+		iommu_unmap(domain, iova, size);
 	} else {
 		pr_err("%s: Could not find domain %u. Unable to unmap\n",
 			__func__, domain_no);

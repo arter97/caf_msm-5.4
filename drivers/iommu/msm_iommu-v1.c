@@ -359,6 +359,7 @@ static void __sync_tlb(struct msm_iommu_drvdata *iommu_drvdata, int ctx)
 		check_tlb_sync_state(iommu_drvdata, ctx);
 }
 
+#ifdef CONFIG_MSM_IOMMU_TLBINVAL_ON_MAP
 static int __flush_iotlb_va(struct iommu_domain *domain, unsigned int va)
 {
 	struct msm_iommu_priv *priv = domain->priv;
@@ -386,6 +387,7 @@ static int __flush_iotlb_va(struct iommu_domain *domain, unsigned int va)
 fail:
 	return ret;
 }
+#endif
 
 static int __flush_iotlb(struct iommu_domain *domain)
 {
@@ -985,7 +987,7 @@ static size_t msm_iommu_unmap(struct iommu_domain *domain, unsigned long va,
 	if (ret < 0)
 		goto fail;
 
-	ret = __flush_iotlb_va(domain, va);
+	ret = __flush_iotlb(domain);
 
 	msm_iommu_pagetable_free_tables(&priv->pt, va, len);
 fail:
@@ -996,23 +998,23 @@ fail:
 	return len;
 }
 
-static int msm_iommu_map_range(struct iommu_domain *domain, unsigned int va,
+static size_t msm_iommu_map_range(struct iommu_domain *domain, unsigned long va,
 			       struct scatterlist *sg, unsigned int len,
 			       int prot)
 {
-	int ret;
+	size_t mapped;
 	struct msm_iommu_priv *priv;
 
 	mutex_lock(&msm_iommu_lock);
 
 	priv = domain->priv;
 	if (!priv) {
-		ret = -EINVAL;
+		mapped = 0;
 		goto fail;
 	}
 
-	ret = msm_iommu_pagetable_map_range(&priv->pt, va, sg, len, prot);
-	if (ret)
+	mapped = msm_iommu_pagetable_map_range(&priv->pt, va, sg, len, prot);
+	if (!mapped)
 		goto fail;
 
 #ifdef CONFIG_MSM_IOMMU_TLBINVAL_ON_MAP
@@ -1021,26 +1023,9 @@ static int msm_iommu_map_range(struct iommu_domain *domain, unsigned int va,
 
 fail:
 	mutex_unlock(&msm_iommu_lock);
-	return ret;
+	return mapped;
 }
 
-
-static int msm_iommu_unmap_range(struct iommu_domain *domain, unsigned int va,
-				 unsigned int len)
-{
-	struct msm_iommu_priv *priv;
-
-	mutex_lock(&msm_iommu_lock);
-
-	priv = domain->priv;
-	msm_iommu_pagetable_unmap_range(&priv->pt, va, len);
-
-	__flush_iotlb(domain);
-
-	msm_iommu_pagetable_free_tables(&priv->pt, va, len);
-	mutex_unlock(&msm_iommu_lock);
-	return 0;
-}
 
 #ifdef CONFIG_IOMMU_LPAE
 static phys_addr_t msm_iommu_get_phy_from_PAR(unsigned long va, u64 par)
@@ -1514,8 +1499,7 @@ static struct iommu_ops msm_iommu_ops = {
 	.detach_dev = msm_iommu_detach_dev,
 	.map = msm_iommu_map,
 	.unmap = msm_iommu_unmap,
-	.map_range = msm_iommu_map_range,
-	.unmap_range = msm_iommu_unmap_range,
+	.map_sg = msm_iommu_map_range,
 	.iova_to_phys = msm_iommu_iova_to_phys,
 	.domain_has_cap = msm_iommu_domain_has_cap,
 	.pgsize_bitmap = MSM_IOMMU_PGSIZES,
