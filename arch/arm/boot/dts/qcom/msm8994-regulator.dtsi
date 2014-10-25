@@ -666,7 +666,6 @@
 				<12 1478400000>;
 		qcom,cpr-speed-bin-max-corners =
 				<0xFFFFFFFF 0 1 4 7 12>;
-		qcom,cpr-enable;
 	};
 
 	apc1_vreg_corner: regulator@f901a000 {
@@ -756,7 +755,6 @@
 				<16 1958400000>;
 		qcom,cpr-speed-bin-max-corners =
 				<0xFFFFFFFF 0 1 5 8 16>;
-		qcom,cpr-enable;
 	};
 
 	bt_vreg: bt_vreg {
