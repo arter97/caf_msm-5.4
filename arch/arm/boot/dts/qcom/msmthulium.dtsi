@@ -541,6 +541,57 @@
 		qcom,not-wakeup; /* Required until RPM is fully configured. */
 	};
 
+	qcom,lpass@9300000 {
+		compatible = "qcom,pil-tz-generic";
+		reg = <0x9300000 0x00100>;
+		interrupts = <0 162 1>;
+
+		vdd_cx-supply = <&pmthulium_s1_corner>;
+		qcom,proxy-reg-names = "vdd_cx";
+		qcom,vdd_cx-uV-uA = <7 100000>;
+
+		clocks = <&clock_gcc clk_cxo_pil_lpass_clk>;
+		clock-names = "xo";
+		qcom,proxy-clock-names = "xo";
+
+		qcom,pas-id = <1>;
+		qcom,proxy-timeout-ms = <10000>;
+		qcom,smem-id = <423>;
+		qcom,sysmon-id = <1>;
+		qcom,ssctl-instance-id = <0x14>;
+		qcom,firmware-name = "adsp";
+		linux,contiguous-region = <&peripheral_mem>;
+	};
+
+	qcom,venus@ce0000 {
+		compatible = "qcom,pil-tz-generic";
+		reg = <0xce0000 0x4000>;
+
+		vdd-supply = <&gdsc_venus>;
+		qcom,proxy-reg-names = "vdd";
+
+		clocks = <&clock_mmss clk_video_core_clk>,
+			<&clock_mmss clk_video_ahb_clk>,
+			<&clock_mmss clk_video_axi_clk>,
+			<&clock_mmss clk_video_maxi_clk>,
+			<&clock_mmss clk_vmem_maxi_clk>;
+		clock-names = "core_clk", "iface_clk",
+				"bus_clk", "maxi_clk", "vmem_maxi";
+		qcom,proxy-clock-names = "core_clk", "iface_clk",
+				"bus_clk", "maxi_clk", "vmem_maxi";
+
+		qcom,msm-bus,name = "pil-venus";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<63 512 0 0>,
+				<63 512 0 304000>;
+		qcom,pas-id = <9>;
+		qcom,proxy-timeout-ms = <5000>;
+		qcom,firmware-name = "venus";
+		linux,contiguous-region = <&peripheral_mem>;
+	};
+
 	tsens: tsens@4a9000 {
 		compatible = "qcom,msmthulium-tsens";
 		reg = <0x4a8000 0x2000>,
