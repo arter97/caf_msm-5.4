@@ -590,6 +590,7 @@
 		qcom,proxy-timeout-ms = <5000>;
 		qcom,firmware-name = "venus";
 		linux,contiguous-region = <&peripheral_mem>;
+		qcom,pil-no-auth;
 	};
 
 	tsens: tsens@4a9000 {
@@ -752,4 +753,10 @@
 	parent-supply = <&gdsc_mmagic_bimc>;
 	status = "ok";
 };
+
+&msm_vidc {
+	qcom,use-non-secure-pil;
+	qcom,fw-bias = <0xbf300000>;
+};
+
 /include/ "msmthulium-regulator.dtsi"
