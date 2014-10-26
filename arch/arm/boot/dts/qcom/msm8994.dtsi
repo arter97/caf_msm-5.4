@@ -1195,6 +1195,10 @@
 			"MAX";
 
 			spm-level = <5>;
+
+			qcom,cpu-affinity = "affine_cores";
+			qcom,cpu-dma-latency-us = <301>;
+
 			status = "disabled";
 		};
 
