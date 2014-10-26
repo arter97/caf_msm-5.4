@@ -276,11 +276,6 @@
 		#clock-cells = <1>;
 	};
 
-	clock_mdss: qcom,mmsscc-mdss@8c0000 {
-		compatible = "qcom,dummycc";
-		#clock-cells = <1>;
-	};
-
 	qcom,rmtfs_sharedmem@00000000 {
 		compatible = "qcom,sharedmem-uio";
 		reg = <0x00000000 0x00180000>;
