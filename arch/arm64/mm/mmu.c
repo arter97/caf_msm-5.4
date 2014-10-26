@@ -45,11 +45,6 @@
 struct page *empty_zero_page;
 EXPORT_SYMBOL(empty_zero_page);
 
-pgprot_t pgprot_default;
-EXPORT_SYMBOL(pgprot_default);
-
-static pmdval_t prot_sect_kernel;
-
 struct cachepolicy {
 	const char	policy[16];
 	u64		mair;
@@ -217,33 +212,6 @@ static int __init early_cachepolicy(char *p)
 }
 early_param("cachepolicy", early_cachepolicy);
 
-/*
- * Adjust the PMD section entries according to the CPU in use.
- */
-void __init init_mem_pgprot(void)
-{
-	pteval_t default_pgprot;
-	int i;
-
-	default_pgprot = PTE_ATTRINDX(MT_NORMAL);
-	prot_sect_kernel = PMD_TYPE_SECT | PMD_SECT_AF | PMD_ATTRINDX(MT_NORMAL);
-
-#ifdef CONFIG_SMP
-	/*
-	 * Mark memory with the "shared" attribute for SMP systems
-	 */
-	default_pgprot |= PTE_SHARED;
-	prot_sect_kernel |= PMD_SECT_S;
-#endif
-
-	for (i = 0; i < 16; i++) {
-		unsigned long v = pgprot_val(protection_map[i]);
-		protection_map[i] = __pgprot(v | default_pgprot);
-	}
-
-	pgprot_default = __pgprot(PTE_TYPE_PAGE | PTE_AF | default_pgprot);
-}
-
 pgprot_t phys_mem_access_prot(struct file *file, unsigned long pfn,
 			      unsigned long size, pgprot_t vma_prot)
 {
@@ -285,19 +253,19 @@ static void __init alloc_init_pte(pmd_t *pmd, unsigned long addr,
 pmdval_t get_pmd_prot_sect_kernel(unsigned long addr)
 {
 	if (addr >= (unsigned long)__init_data_begin)
-		return prot_sect_kernel | PMD_SECT_PXN;
+		return PROT_SECT_NORMAL | PMD_SECT_PXN;
 	if (addr >= (unsigned long)__init_begin)
-		return prot_sect_kernel | PMD_SECT_RDONLY;
+		return PROT_SECT_NORMAL_EXEC | PMD_SECT_RDONLY;
 	if (addr >= (unsigned long)__start_rodata)
-		return prot_sect_kernel | PMD_SECT_RDONLY | PMD_SECT_PXN;
+		return PROT_SECT_NORMAL | PMD_SECT_RDONLY | PMD_SECT_PXN;
 	if (addr >= (unsigned long)_stext)
-		return prot_sect_kernel | PMD_SECT_RDONLY;
-	return prot_sect_kernel | PMD_SECT_PXN;
+		return PROT_SECT_NORMAL_EXEC | PMD_SECT_RDONLY;
+	return PROT_SECT_NORMAL | PMD_SECT_PXN;
 }
 #else
 pmdval_t get_pmd_prot_sect_kernel(unsigned long addr)
 {
-	return prot_sect_kernel;
+	return PROT_SECT_NORMAL_EXEC;
 }
 #endif
 
@@ -315,7 +283,7 @@ static void __init alloc_init_pmd(pud_t *pud, unsigned long addr,
 			    PMD_ATTRINDX(MT_DEVICE_nGnRE);
 		prot_pte = __pgprot(PROT_DEVICE_nGnRE);
 	} else {
-		prot_sect = prot_sect_kernel;
+		prot_sect = PROT_SECT_NORMAL;
 		prot_pte = PAGE_KERNEL;
 	}
 
@@ -448,7 +416,6 @@ static void __init dma_contiguous_remap(void)
 		remap_as_pages(dma_mmu_remap[i].base,
 			       dma_mmu_remap[i].size);
 }
-
 
 
 static void __init map_mem(void)
@@ -682,7 +649,7 @@ int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node)
 			if (!p)
 				return -ENOMEM;
 
-			set_pmd(pmd, __pmd(__pa(p) | prot_sect_kernel));
+			set_pmd(pmd, __pmd(__pa(p) | PROT_SECT_NORMAL));
 		} else
 			vmemmap_verify((pte_t *)pmd, node, addr, next);
 	} while (addr = next, addr != end);
