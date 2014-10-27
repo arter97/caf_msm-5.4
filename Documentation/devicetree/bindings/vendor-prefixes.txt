@@ -53,6 +53,7 @@ img	Imagination Technologies Ltd.
 intercontrol	Inter Control Group
 invn	InvenSense Inc.
 isl	Intersil
+intersil	Intersil Corp.
 karo	Ka-Ro electronics GmbH
 kionix	Kionix Inc.
 lattice	Lattice Semiconductor.
