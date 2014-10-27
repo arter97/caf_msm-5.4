@@ -1,4 +1,4 @@
-/* Copyright (c) 2013 - 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013 - 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -71,6 +71,9 @@ static void panel_io_off(struct qpic_panel_io_desc *qpic_panel_io)
 
 void ili9341_off(struct qpic_panel_io_desc *qpic_panel_io)
 {
+	qpic_send_pkt(OP_SET_DISPLAY_OFF, NULL, 0);
+	/* wait for 20 ms after disply off */
+	msleep(20);
 	panel_io_off(qpic_panel_io);
 }
 

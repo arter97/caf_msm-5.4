@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -240,11 +240,6 @@ static int mdss_qpic_panel_probe(struct platform_device *pdev)
 		pr_info("%s: select default panel driver\n", __func__);
 		qpic_panel_on = ili9341_on;
 		qpic_panel_off = ili9341_off;
-	}
-
-	if (qpic_panel_on == ili9341_on) {
-		vendor_pdata.panel_info.xres = 240;
-		vendor_pdata.panel_info.yres = 320;
 	}
 
 	rc = qpic_register_panel(&vendor_pdata);
