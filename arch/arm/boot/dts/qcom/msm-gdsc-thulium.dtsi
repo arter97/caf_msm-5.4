@@ -127,7 +127,9 @@
 	gdsc_gpu_gx: qcom,gdsc@8c4024 {
 		compatible = "qcom,gdsc";
 		regulator-name = "gdsc_gpu_gx";
-		reg = <0x8c4024 0x4>;
+		reg = <0x8c4024 0x4>,
+		      <0x8c4300 0x4>;
+		reg-names = "base", "domain_addr";
 		status = "disabled";
 	};
 
