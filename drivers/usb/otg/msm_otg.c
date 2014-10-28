@@ -2406,7 +2406,9 @@ static void msm_otg_init_sm(struct msm_otg *motg)
 		break;
 	case USB_PERIPHERAL:
 		set_bit(ID, &motg->inputs);
-		if (pdata->otg_control == OTG_PHY_CONTROL) {
+		if (pdata->otg_control == OTG_USER_CONTROL) {
+			set_bit(B_SESS_VLD, &motg->inputs);
+		} else if (pdata->otg_control == OTG_PHY_CONTROL) {
 			if (otgsc & OTGSC_BSV)
 				set_bit(B_SESS_VLD, &motg->inputs);
 			else
