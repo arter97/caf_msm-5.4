@@ -49,6 +49,7 @@
 #define QPNP_VADC_STATUS1_REQ_STS_EOC_MASK			0x3
 #define QPNP_VADC_STATUS1_OP_MODE_MASK				0x18
 #define QPNP_VADC_MEAS_INT_MODE					0x2
+#define QPNP_VADC_MEAS_INT_MODE_MASK				0x10
 
 #define QPNP_VADC_STATUS2					0x9
 #define QPNP_VADC_STATUS2_CONV_SEQ_STATE				6
@@ -74,6 +75,9 @@
 #define QPNP_VADC_CONV_SEQ_HOLDOFF_SHIFT				4
 #define QPNP_VADC_CONV_SEQ_TRIG_CTL				0x55
 #define QPNP_VADC_MEAS_INTERVAL_CTL				0x57
+#define QPNP_VADC_MEAS_INTERVAL_OP_CTL				0x59
+#define QPNP_VADC_MEAS_INTERVAL_OP_SET				BIT(7)
+
 #define QPNP_VADC_CONV_SEQ_FALLING_EDGE				0x0
 #define QPNP_VADC_CONV_SEQ_RISING_EDGE				0x1
 #define QPNP_VADC_CONV_SEQ_EDGE_SHIFT				7
@@ -159,9 +163,8 @@ static struct qpnp_vadc_scale_fn vadc_scale_fn[] = {
 	[SCALE_NCP_03WF683_THERM] = {qpnp_adc_scale_therm_ncp03},
 };
 
-static struct qpnp_adc_tm_reverse_scale_fn adc_vadc_rscale_fn[] = {
-	[SCALE_RVADC_ABSOLUTE] = {qpnp_adc_absolute_rthr},
-	[SCALE_RVADC_PMIC_THERM] = {qpnp_adc_scale_millidegc_pmic_voltage_thr},
+static struct qpnp_vadc_rscale_fn adc_vadc_rscale_fn[] = {
+	[SCALE_RVADC_ABSOLUTE] = {qpnp_vadc_absolute_rthr},
 };
 
 static int32_t qpnp_vadc_read_reg(struct qpnp_vadc_chip *vadc, int16_t reg,
@@ -327,7 +330,7 @@ static int32_t qpnp_vadc_configure(struct qpnp_vadc_chip *vadc,
 			struct qpnp_adc_amux_properties *chan_prop)
 {
 	u8 decimation = 0, conv_sequence = 0, conv_sequence_trig = 0;
-	u8 mode_ctrl = 0;
+	u8 mode_ctrl = 0, meas_int_op_ctl_data = 0;
 	int rc = 0;
 
 	/* Mode selection */
@@ -377,6 +380,13 @@ static int32_t qpnp_vadc_configure(struct qpnp_vadc_chip *vadc,
 			pr_err("Fast averaging configure error\n");
 			return rc;
 		}
+		/* Ensure MEAS_INTERVAL_OP_CTL is set to 0 */
+		rc = qpnp_vadc_write_reg(vadc, QPNP_VADC_MEAS_INTERVAL_OP_CTL,
+						meas_int_op_ctl_data);
+		if (rc < 0) {
+			pr_err("Measurement interval OP configure error\n");
+			return rc;
+		}
 	} else if (chan_prop->mode_sel == (ADC_OP_CONVERSION_SEQUENCER <<
 					QPNP_VADC_OP_MODE_SHIFT)) {
 		/* Conversion sequence mode */
@@ -397,6 +407,13 @@ static int32_t qpnp_vadc_configure(struct qpnp_vadc_chip *vadc,
 							conv_sequence_trig);
 		if (rc < 0) {
 			pr_err("Conversion trigger error\n");
+			return rc;
+		}
+	} else if (chan_prop->mode_sel == ADC_OP_MEASUREMENT_INTERVAL) {
+		rc = qpnp_vadc_write_reg(vadc, QPNP_VADC_MEAS_INTERVAL_OP_CTL,
+					QPNP_VADC_MEAS_INTERVAL_OP_SET);
+		if (rc < 0) {
+			pr_err("Measurement interval OP configure error\n");
 			return rc;
 		}
 	}
@@ -558,7 +575,19 @@ static irqreturn_t qpnp_vadc_isr(int irq, void *dev_id)
 static irqreturn_t qpnp_vadc_low_thr_isr(int irq, void *data)
 {
 	struct qpnp_vadc_chip *vadc = data;
-	u8 mode_ctl = 0;
+	u8 mode_ctl = 0, mode = 0;
+	int rc = 0;
+
+	rc = qpnp_vadc_read_reg(vadc, QPNP_VADC_MODE_CTL, &mode);
+	if (rc < 0) {
+		pr_err("mode ctl register read failed with %d\n", rc);
+		return rc;
+	}
+
+	if (!(mode & QPNP_VADC_MEAS_INT_MODE_MASK)) {
+		pr_debug("Spurious VADC threshold 0x%x\n", mode);
+		return IRQ_HANDLED;
+	}
 
 	mode_ctl = ADC_OP_NORMAL_MODE;
 	/* Set measurement in single measurement mode */
@@ -572,7 +601,19 @@ static irqreturn_t qpnp_vadc_low_thr_isr(int irq, void *data)
 static irqreturn_t qpnp_vadc_high_thr_isr(int irq, void *data)
 {
 	struct qpnp_vadc_chip *vadc = data;
-	u8 mode_ctl = 0;
+	u8 mode_ctl = 0, mode = 0;
+	int rc = 0;
+
+	rc = qpnp_vadc_read_reg(vadc, QPNP_VADC_MODE_CTL, &mode);
+	if (rc < 0) {
+		pr_err("mode ctl register read failed with %d\n", rc);
+		return rc;
+	}
+
+	if (!(mode & QPNP_VADC_MEAS_INT_MODE_MASK)) {
+		pr_debug("Spurious VADC threshold 0x%x\n", mode);
+		return IRQ_HANDLED;
+	}
 
 	mode_ctl = ADC_OP_NORMAL_MODE;
 	/* Set measurement in single measurement mode */
@@ -1843,7 +1884,7 @@ int32_t qpnp_vadc_channel_monitor(struct qpnp_vadc_chip *chip,
 {
 	uint32_t channel, scale_type = 0;
 	uint32_t low_thr = 0, high_thr = 0;
-	int rc = 0, idx = 0;
+	int rc = 0, idx = 0, amux_prescaling = 0;
 	struct qpnp_vadc_chip *vadc = dev_get_drvdata(chip->dev);
 
 	if (qpnp_vadc_is_valid(vadc))
@@ -1876,12 +1917,25 @@ int32_t qpnp_vadc_channel_monitor(struct qpnp_vadc_chip *chip,
 	}
 
 	scale_type = vadc->adc->adc_channels[idx].adc_scale_fn;
-	if ((scale_type >= SCALE_RVADC_SCALE_NONE) ||
-		((scale_type != SCALE_RVADC_ABSOLUTE) &&
-		(scale_type != SCALE_RVADC_PMIC_THERM))) {
+	if (scale_type >= SCALE_RVADC_SCALE_NONE) {
 		rc = -EBADF;
 		goto fail_unlock;
 	}
+
+	amux_prescaling =
+		vadc->adc->adc_channels[idx].chan_path_prescaling;
+
+	if (amux_prescaling >= PATH_SCALING_NONE) {
+		rc = -EINVAL;
+		goto fail_unlock;
+	}
+
+	vadc->adc->amux_prop->chan_prop->offset_gain_numerator =
+		qpnp_vadc_amux_scaling_ratio[amux_prescaling].num;
+	vadc->adc->amux_prop->chan_prop->offset_gain_denominator =
+		 qpnp_vadc_amux_scaling_ratio[amux_prescaling].den;
+	vadc->adc->amux_prop->chan_prop->calib_type =
+		vadc->adc->adc_channels[idx].calib_type;
 
 	pr_debug("channel:%d, scale_type:%d, dt_idx:%d",
 					channel, scale_type, idx);
@@ -1893,7 +1947,8 @@ int32_t qpnp_vadc_channel_monitor(struct qpnp_vadc_chip *chip,
 	vadc->adc->amux_prop->fast_avg_setup =
 			vadc->adc->adc_channels[idx].fast_avg_setup;
 	vadc->adc->amux_prop->mode_sel = ADC_OP_MEASUREMENT_INTERVAL;
-	adc_vadc_rscale_fn[scale_type].chan(vadc, param,
+	adc_vadc_rscale_fn[scale_type].chan(vadc,
+			vadc->adc->amux_prop->chan_prop, param,
 			&low_thr, &high_thr);
 
 	if (param->timer_interval >= ADC_MEAS1_INTERVAL_NONE) {

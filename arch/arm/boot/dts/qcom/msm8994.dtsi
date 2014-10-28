@@ -200,13 +200,6 @@
 			size = <0 0xfc00000>;
 		};
 
-		adsp_mem: adsp_region {
-			compatible = "shared-dma-pool";
-			reusable;
-			alignment = <0 0x400000>;
-			size = <0 0x4000000>;
-		};
-
 		qsecom_mem: qsecom_region {
 			compatible = "shared-dma-pool";
 			reusable;
@@ -1328,7 +1321,7 @@
 		interrupt-names = "hs_phy_irq", "pwr_event_irq", "pmic_id_irq";
 
 		USB3_GDSC-supply = <&gdsc_usb30>;
-		vbus_dwc3-supply = <&pmi8994_otg_supply>;
+		vbus_dwc3-supply = <&smbcharger_charger_otg>;
 		qcom,dwc-usb3-msm-tx-fifo-size = <29696>;
 		qcom,dwc-usb3-msm-qdss-tx-fifo-size = <8192>;
 		qcom,otg-capability;
@@ -2952,10 +2945,10 @@
 		qcom,msm-bus,num-cases = <4>;
 		qcom,msm-bus,num-paths = <1>;
 		qcom,msm-bus,vectors-KBps =
-					  <45 512 0 0>,           /* No vote */
-					  <45 512 6250 200000>,   /* 50 Mbps */
-					  <45 512 25000 200000>,  /* 200 Mbps */
-					  <45 512 100000 200000>; /* 800 Mbps */
+					<100 512 0 0>,           /* No vote */
+					<100 512 6250 200000>,   /* 50 Mbps */
+					<100 512 25000 200000>,  /* 200 Mbps */
+					<100 512 100000 200000>; /* 800 Mbps */
 	};
 
 	audio_heap {
@@ -2967,7 +2960,7 @@
 	adsp_heap {
 		compatible = "qcom,msm-shared-memory";
 		qcom,proc-id = <1>;
-		contiguous-region = <&adsp_mem>;
+		contiguous-region = <&secure_mem>;
 	};
 
 	qcom,msm-core {
