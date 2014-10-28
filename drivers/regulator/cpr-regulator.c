@@ -1770,13 +1770,53 @@ static int cpr_limit_open_loop_voltage(struct cpr_regulator *cpr_vreg)
 static int cpr_populate_opp_table(struct cpr_regulator *cpr_vreg,
 				struct device *dev)
 {
-	int i, rc;
+	int i, rc = 0;
 
 	for (i = CPR_CORNER_MIN; i <= cpr_vreg->num_corners; i++) {
-		rc = dev_pm_opp_add(dev, i, cpr_vreg->open_loop_volt[i]);
+		rc |= dev_pm_opp_add(dev, i, cpr_vreg->open_loop_volt[i]);
 		if (rc)
-			cpr_err(cpr_vreg, "could not add OPP entry <%d, %d>, rc=%d\n",
+			cpr_debug(cpr_vreg, "could not add OPP entry <%d, %d>, rc=%d\n",
 				i, cpr_vreg->open_loop_volt[i], rc);
+	}
+	if (rc)
+		cpr_err(cpr_vreg, "adding OPP entry failed - OPP may not be enabled, rc=%d\n",
+				rc);
+
+	return 0;
+}
+
+/*
+ * Conditionally reduce the per-virtual-corner ceiling voltages if certain
+ * device tree flags are present.  This must be called only after the ceiling
+ * array has been initialized and the open_loop_volt array values have been
+ * initialized and limited to the existing floor to ceiling voltage range.
+ */
+static int cpr_reduce_ceiling_voltage(struct cpr_regulator *cpr_vreg,
+				struct device *dev)
+{
+	bool reduce_to_fuse_open_loop, reduce_to_interpolated_open_loop;
+	int i;
+
+	reduce_to_fuse_open_loop = of_property_read_bool(dev->of_node,
+				"qcom,cpr-init-voltage-as-ceiling");
+	reduce_to_interpolated_open_loop = of_property_read_bool(dev->of_node,
+				"qcom,cpr-scaled-init-voltage-as-ceiling");
+
+	if (!reduce_to_fuse_open_loop && !reduce_to_interpolated_open_loop)
+		return 0;
+
+	for (i = CPR_CORNER_MIN; i <= cpr_vreg->num_corners; i++) {
+		if (reduce_to_interpolated_open_loop &&
+		    cpr_vreg->open_loop_volt[i] < cpr_vreg->ceiling_volt[i])
+			cpr_vreg->ceiling_volt[i] = cpr_vreg->open_loop_volt[i];
+		else if (reduce_to_fuse_open_loop &&
+				cpr_vreg->pvs_corner_v[cpr_vreg->corner_map[i]]
+				< cpr_vreg->ceiling_volt[i])
+			cpr_vreg->ceiling_volt[i]
+				= max((u32)cpr_vreg->floor_volt[i],
+			       cpr_vreg->pvs_corner_v[cpr_vreg->corner_map[i]]);
+		cpr_debug(cpr_vreg, "lowered ceiling[%d] = %d uV\n",
+			i, cpr_vreg->ceiling_volt[i]);
 	}
 
 	return 0;
@@ -2697,6 +2737,11 @@ static int cpr_init_cpr(struct platform_device *pdev,
 	 * open-loop voltage pairs.
 	 */
 	rc = cpr_populate_opp_table(cpr_vreg, &pdev->dev);
+	if (rc)
+		return rc;
+
+	/* Reduce the ceiling voltage if allowed. */
+	rc = cpr_reduce_ceiling_voltage(cpr_vreg, &pdev->dev);
 	if (rc)
 		return rc;
 
