@@ -46,12 +46,11 @@ int ipa_enable_data_path(u32 clnt_hdl)
 	/* Enable the pipe */
 	if (IPA_CLIENT_IS_CONS(ep->client) &&
 	    (ep->keep_ipa_awake ||
-	     ep->resume_on_connect ||
+	     ipa_ctx->resume_on_connect[ep->client] ||
 	     !ipa_should_pipe_be_suspended(ep->client))) {
 		memset(&ep_cfg_ctrl, 0 , sizeof(ep_cfg_ctrl));
 		ep_cfg_ctrl.ipa_ep_suspend = false;
 		ipa_cfg_ep_ctrl(clnt_hdl, &ep_cfg_ctrl);
-		ep->resume_on_connect = false;
 	}
 
 	return res;
@@ -223,6 +222,7 @@ int ipa_connect(const struct ipa_connect_params *in, struct ipa_sps_params *sps,
 	}
 
 	memset(&ipa_ctx->ep[ipa_ep_idx], 0, sizeof(struct ipa_ep_context));
+
 	ipa_inc_client_enable_clks();
 
 	ep->skip_ep_cfg = in->skip_ep_cfg;
@@ -423,7 +423,6 @@ int ipa_disconnect(u32 clnt_hdl)
 	ipa_delete_dflt_flt_rules(clnt_hdl);
 
 	memset(&ipa_ctx->ep[clnt_hdl], 0, sizeof(struct ipa_ep_context));
-
 	ipa_dec_client_disable_clks();
 
 	IPADBG("client (ep: %d) disconnected\n", clnt_hdl);
