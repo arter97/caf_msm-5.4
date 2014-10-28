@@ -136,4 +136,31 @@
 		};
 
 	};
+
+	/* IOMMU Data */
+	msm_iommu: qcom,kgsl-iommu{
+		compatible = "qcom,kgsl-smmu-v2";
+		reg = <0xb40000 0x20000>;
+		clocks = <&clock_mmss clk_gpu_ahb_clk>,
+			<&clock_gcc clk_gcc_mmss_bimc_gfx_clk>,
+			<&clock_mmss clk_mmss_mmagic_ahb_clk>,
+			<&clock_mmss clk_mmss_mmagic_cfg_ahb_clk>;
+		clock-names = "gpu_ahb_clk", "bimc_gfx_clk", "mmagic_ahb_clk", "mmagic_cfg_ahb_clk";
+		num_cb = <2>;
+		retention = <1>;
+
+		iommu_kgsl_cb2: iommu_kgsl_cb2 {
+			compatible = "qcom,smmu-kgsl-cb";
+			label = "gfx3d_user";
+			iommus = <&kgsl_smmu 0>,
+				 <&kgsl_smmu 1>;
+		};
+
+		iommu_kgsl_cb3: iommu_kgsl_cb3 {
+			compatible = "qcom,smmu-kgsl-cb";
+			label = "gfx3d_secure";
+			iommus = <&kgsl_smmu 2>;
+		};
+	};
+
 };

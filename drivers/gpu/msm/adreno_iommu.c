@@ -809,8 +809,7 @@ unsigned int adreno_iommu_set_pt_generate_cmds(
 		cmds += _adreno_iommu_set_pt_v1(rb, cmds, pt_val, pt->name);
 
 	/* invalidate all base pointers */
-	*cmds++ = cp_packet(adreno_dev, CP_INVALIDATE_STATE, 1);
-	*cmds++ = 0x7fff;
+	cmds += cp_invalidate_state(adreno_dev, cmds);
 
 	return cmds - cmds_orig;
 }
@@ -1019,12 +1018,20 @@ void adreno_iommu_init(struct adreno_device *adreno_dev)
 	struct kgsl_iommu *iommu = device->mmu.priv;
 	struct kgsl_iommu_unit *iommu_unit = &iommu->iommu_unit;
 
-	/* Overwrite the ahb_base for iommu v2 targets here */
+	if (kgsl_mmu_get_mmutype() == KGSL_MMU_TYPE_NONE)
+		return;
+
+	/* Overwrite the ahb_base_offset for iommu v2 targets here */
 	if (kgsl_msm_supports_iommu_v2()) {
-		if (adreno_is_a405(adreno_dev) || adreno_is_a5xx(adreno_dev))
-			iommu_unit->ahb_base = KGSL_IOMMU_V2_AHB_BASE_A405;
+		if (adreno_is_a405(adreno_dev))
+			iommu_unit->ahb_base_offset =
+					KGSL_IOMMU_V2_AHB_BASE_OFFSET_A405;
+		else if (adreno_is_a530(adreno_dev))
+			iommu_unit->ahb_base_offset =
+					KGSL_IOMMU_V2_AHB_BASE_OFFSET_A530;
 		else
-			iommu_unit->ahb_base = KGSL_IOMMU_V2_AHB_BASE;
+			iommu_unit->ahb_base_offset =
+					KGSL_IOMMU_V2_AHB_BASE_OFFSET;
 	}
 
 	/*
@@ -1034,6 +1041,10 @@ void adreno_iommu_init(struct adreno_device *adreno_dev)
 	kgsl_sharedmem_writel(device, &device->mmu.setstate_memory,
 				KGSL_IOMMU_SETSTATE_NOP_OFFSET,
 				cp_packet(adreno_dev, CP_NOP, 1));
+
+	/* set iommu features here */
+	if (adreno_is_a420(adreno_dev))
+		device->mmu.features |= KGSL_MMU_FLUSH_TLB_ON_MAP;
 
 }
 
@@ -1054,7 +1065,7 @@ int adreno_iommu_set_pt_ctx(struct adreno_ringbuffer *rb,
 	struct kgsl_device *device = rb->device;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct kgsl_pagetable *cur_pt = device->mmu.defaultpagetable;
-	int result;
+	int result = 0;
 	int cpu_path = 0;
 
 	if (rb->drawctxt_active)

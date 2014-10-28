@@ -78,20 +78,18 @@
 /* Adreno core features */
 /* The core uses OCMEM for GMEM/binning memory */
 #define ADRENO_USES_OCMEM     BIT(0)
-/* The core requires the TLB to be flushed on map */
-#define IOMMU_FLUSH_TLB_ON_MAP BIT(1)
 /* The core supports an accelerated warm start */
-#define ADRENO_WARM_START     BIT(2)
+#define ADRENO_WARM_START     BIT(1)
 /* The core supports the microcode bootstrap functionality */
-#define ADRENO_USE_BOOTSTRAP  BIT(3)
+#define ADRENO_USE_BOOTSTRAP  BIT(2)
 /* The core supports SP/TP hw controlled power collapse */
-#define ADRENO_SPTP_PC BIT(5)
+#define ADRENO_SPTP_PC BIT(3)
 /* The core supports Peak Power Detection(PPD)*/
-#define ADRENO_PPD BIT(6)
+#define ADRENO_PPD BIT(4)
 /* The microcode supports register to register copy and compare */
-#define ADRENO_HAS_REG_TO_REG_CMDS BIT(7)
+#define ADRENO_HAS_REG_TO_REG_CMDS BIT(5)
 /* The GPU supports content protection */
-#define ADRENO_CONTENT_PROTECTION BIT(8)
+#define ADRENO_CONTENT_PROTECTION BIT(6)
 
 /* Flags to control command packet settings */
 #define KGSL_CMD_FLAGS_NONE             0

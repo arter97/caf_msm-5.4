@@ -164,6 +164,171 @@ void adreno_writereg64(struct adreno_device *adreno_dev,
 			((uint64_t)(val) >> 32));
 }
 
+/**
+ * adreno_of_read_property() - Adreno read property
+ * @node: Device node
+ *
+ * Read a u32 property.
+ */
+static inline int adreno_of_read_property(struct device_node *node,
+	const char *prop, unsigned int *ptr)
+{
+	int ret = of_property_read_u32(node, prop, ptr);
+	if (ret)
+		KGSL_CORE_ERR("Unable to read '%s'\n", prop);
+	return ret;
+}
+
+static struct kgsl_device_iommu_data iommu_pdev_data;
+
+/**
+ * adreno_iommu_cb_probe() - Adreno iommu context bank probe
+ * @pdev: Platform device
+ *
+ * Iommu context bank probe function.
+ */
+static int adreno_iommu_cb_probe(struct platform_device *pdev)
+{
+	static int ctx;
+	int ret = 0;
+
+	if (ctx >=  iommu_pdev_data.iommu_ctx_count)
+		return -ENOMEM;
+
+	iommu_pdev_data.iommu_ctxs[ctx].dev = &pdev->dev;
+	ret = of_property_read_string(pdev->dev.of_node, "label",
+			&iommu_pdev_data.iommu_ctxs[ctx].iommu_ctx_name);
+
+	if (!strcmp("gfx3d_user",
+		iommu_pdev_data.iommu_ctxs[ctx].iommu_ctx_name)) {
+			iommu_pdev_data.iommu_ctxs[ctx].ctx_id =
+				KGSL_IOMMU_CONTEXT_USER;
+	} else if (!strcmp("gfx3d_secure",
+		iommu_pdev_data.iommu_ctxs[ctx].iommu_ctx_name)) {
+			iommu_pdev_data.iommu_ctxs[ctx].ctx_id =
+				KGSL_IOMMU_CONTEXT_SECURE;
+	} else {
+		KGSL_CORE_ERR("dt: IOMMU context %s is invalid\n",
+			iommu_pdev_data.iommu_ctxs[ctx].iommu_ctx_name);
+		return -EINVAL;
+	}
+
+	ctx++;
+	return 0;
+}
+
+static struct of_device_id iommu_match_table[] = {
+	{ .compatible = "qcom,kgsl-smmu-v2", },
+	{ .compatible = "qcom,smmu-kgsl-cb", },
+	{}
+};
+
+/**
+ * adreno_iommu_cb_probe() - Adreno iommu context bank probe
+ * @pdev: Platform device
+ *
+ * Iommu probe function.
+ */
+static int kgsl_iommu_pdev_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	const char *cname;
+	struct property *prop;
+	struct kgsl_device_iommu_data *data = &iommu_pdev_data;
+	struct kgsl_iommu_ctx *ctxs = NULL;
+	u32 reg_val[2];
+	int result = -EINVAL, i = 0;
+	uint retention = 0;
+
+	if (of_device_is_compatible(dev->of_node, "qcom,smmu-kgsl-cb"))
+		return adreno_iommu_cb_probe(pdev);
+
+	if (of_property_read_u32_array(pdev->dev.of_node, "reg", reg_val, 2)) {
+		KGSL_CORE_ERR("dt: Unable to read KGSL IOMMU register range\n");
+		goto err;
+	}
+
+	data->physstart = reg_val[0];
+	data->physend = data->physstart + reg_val[1] - 1;
+
+	data->features |= KGSL_MMU_DMA_API;
+
+	result = adreno_of_read_property(pdev->dev.of_node, "num_cb",
+					&data->iommu_ctx_count);
+	if (result)
+		goto err;
+
+	if (!data->iommu_ctx_count) {
+		KGSL_CORE_ERR(
+			"dt: KGSL IOMMU context bank count cannot be zero\n");
+		goto err;
+	}
+
+	ctxs = kzalloc(data->iommu_ctx_count * sizeof(struct kgsl_iommu_ctx),
+					GFP_KERNEL);
+
+	if (ctxs == NULL) {
+		result = -ENOMEM;
+		goto err;
+	}
+
+	data->iommu_ctxs = ctxs;
+
+	of_property_for_each_string(dev->of_node, "clock-names", prop, cname) {
+		struct clk *c = devm_clk_get(dev, cname);
+		if (IS_ERR(c)) {
+			KGSL_CORE_ERR("dt: Couldn't get clock: %s\n", cname);
+			result = -ENODEV;
+			goto err;
+		}
+		data->clks[i] = c;
+		++i;
+	}
+
+	result = adreno_of_read_property(pdev->dev.of_node, "retention",
+				&retention);
+	if (result)
+		goto err;
+
+	if (retention)
+		data->features |= KGSL_MMU_RETENTION;
+
+
+	result = of_platform_populate(pdev->dev.of_node, iommu_match_table,
+				NULL, &pdev->dev);
+	if (!result)
+		return 0;
+
+err:
+	kfree(ctxs);
+	for (; i >= 0 && data->clks[i]; i--)
+		devm_clk_put(dev, data->clks[i]);
+
+	return result;
+}
+
+static struct platform_driver kgsl_iommu_platform_driver = {
+	.probe = kgsl_iommu_pdev_probe,
+	.driver = {
+		.owner = THIS_MODULE,
+		.name = "kgsl-iommu",
+		.of_match_table = iommu_match_table,
+	}
+};
+
+static int __init kgsl_iommu_pdev_init(void)
+{
+	return platform_driver_register(&kgsl_iommu_platform_driver);
+}
+
+static void __exit kgsl_iommu_pdev_exit(void)
+{
+	platform_driver_unregister(&kgsl_iommu_platform_driver);
+}
+
+module_init(kgsl_iommu_pdev_init);
+module_exit(kgsl_iommu_pdev_exit);
+
 static int _get_counter(struct adreno_device *adreno_dev,
 		int group, int countable, unsigned int *lo,
 		unsigned int *hi)
@@ -586,15 +751,6 @@ static const struct of_device_id adreno_match_table[] = {
 	{}
 };
 
-static inline int adreno_of_read_property(struct device_node *node,
-	const char *prop, unsigned int *ptr)
-{
-	int ret = of_property_read_u32(node, prop, ptr);
-	if (ret)
-		KGSL_CORE_ERR("Unable to read '%s'\n", prop);
-	return ret;
-}
-
 static struct device_node *adreno_of_find_subnode(struct device_node *parent,
 	const char *name)
 {
@@ -837,9 +993,14 @@ static int adreno_of_get_pdata(struct platform_device *pdev)
 		goto err;
 	}
 
-	ret = adreno_of_get_iommu(pdev, pdata);
-	if (ret)
-		goto err;
+	/* If iommu phandle present parse iommu data old way */
+	if (of_parse_phandle(pdev->dev.of_node, "iommu", 0)) {
+		ret = adreno_of_get_iommu(pdev, pdata);
+		if (ret)
+			goto err;
+	} else
+		pdata->iommu_data = &iommu_pdev_data;
+
 
 	pdata->coresight_pdata = of_get_coresight_platform_data(&pdev->dev,
 			pdev->dev.of_node);

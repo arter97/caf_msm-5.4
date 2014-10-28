@@ -54,8 +54,8 @@ static const struct adreno_gpu_core adreno_gpulist[] = {
 		.major = 2,
 		.minor = 0,
 		.patchid = ANY_ID,
-		.features = ADRENO_USES_OCMEM  | IOMMU_FLUSH_TLB_ON_MAP |
-			ADRENO_WARM_START | ADRENO_USE_BOOTSTRAP,
+		.features = ADRENO_USES_OCMEM | ADRENO_WARM_START |
+					ADRENO_USE_BOOTSTRAP,
 		.pm4fw_name = "a420_pm4.fw",
 		.pfpfw_name = "a420_pfp.fw",
 		.gpudev = &adreno_a4xx_gpudev,

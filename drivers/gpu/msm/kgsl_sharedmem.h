@@ -134,9 +134,7 @@ memdesc_sg_phys(struct kgsl_memdesc *memdesc,
 
 	memdesc->sglen = 1;
 	sg_init_table(memdesc->sg, 1);
-	memdesc->sg[0].length = size;
-	memdesc->sg[0].offset = 0;
-	memdesc->sg[0].dma_address = physaddr;
+	sg_set_page(memdesc->sg, phys_to_page(physaddr), size, 0);
 	return 0;
 }
 
