@@ -78,6 +78,8 @@
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,fsm9010")
 #define early_machine_is_msmtellurium()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msmtellurium")
+#define early_machine_is_msmthulium()	\
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msmthulium")
 #else
 #define of_board_is_sim()		0
 #define of_board_is_rumi()		0
@@ -108,6 +110,7 @@
 #define early_machine_is_fsm9900()	0
 #define early_machine_is_fsm9010()	0
 #define early_machine_is_msmtellurium()	0
+#define early_machine_is_msmthulium()	0
 #endif
 
 #define PLATFORM_SUBTYPE_MDM	1
@@ -161,6 +164,7 @@ enum msm_cpu {
 	MSM_CPU_8992,
 	FSM_CPU_9010,
 	MSM_CPU_TELLURIUM,
+	MSM_CPU_THULIUM,
 };
 
 struct msm_soc_info {
