@@ -2,6 +2,7 @@ obj-y += io.o
 obj-$(CONFIG_USE_OF) += board-dt.o
 
 obj-$(CONFIG_ARCH_MSM_KRAIT) += msm-krait-l2-accessors.o
+obj-$(CONFIG_DEBUG_FS) += perf_debug.o
 
 obj-$(CONFIG_MSM_TIMER) += timer.o
 obj-$(CONFIG_MSM_PROC_COMM) += clock.o
