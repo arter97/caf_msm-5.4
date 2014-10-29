@@ -15,6 +15,12 @@
 #include <linux/interrupt.h>
 #include <linux/perf_event.h>
 
+enum arm_pmu_state {
+	ARM_PMU_STATE_OFF       = 0,
+	ARM_PMU_STATE_GOING_DOWN,
+	ARM_PMU_STATE_RUNNING,
+};
+
 /*
  * struct arm_pmu_platdata - ARM PMU platform data
  *
@@ -22,6 +28,10 @@
  *	interrupt and passed the address of the low level handler,
  *	and can be used to implement any platform specific handling
  *	before or after calling it.
+ * @request_pmu_irq: an optional handler in case the platform wants
+ *     to use a percpu IRQ API call. e.g. request_percpu_irq
+ * @free_pmu_irq: an optional handler in case the platform wants
+ *     to use a percpu IRQ API call. e.g. free_percpu_irq
  * @runtime_resume: an optional handler which will be called by the
  *	runtime PM framework following a call to pm_runtime_get().
  *	Note that if pm_runtime_get() is called more than once in
@@ -36,6 +46,8 @@
 struct arm_pmu_platdata {
 	irqreturn_t (*handle_irq)(int irq, void *dev,
 				  irq_handler_t pmu_handler);
+	int (*request_pmu_irq)(int irq, irq_handler_t *irq_h, void *dev_id);
+	void (*free_pmu_irq)(int irq, void *dev_id);
 	int (*runtime_resume)(struct device *dev);
 	int (*runtime_suspend)(struct device *dev);
 };
@@ -55,6 +67,8 @@ struct pmu_hw_events {
 	 */
 	unsigned long           *used_mask;
 
+	u32			*from_idle;
+
 	/*
 	 * Hardware lock to serialize accesses to PMU registers. Needed for the
 	 * read/modify/write sequences.
@@ -69,6 +83,8 @@ struct cpupmu_regs {
 	u32 pmintenset;
 	u32 pmxevttype[8];
 	u32 pmxevtcnt[8];
+	u32 pmresr[8];
+	u32 pmactlr;
 };
 
 struct arm_pmu {
@@ -76,7 +92,17 @@ struct arm_pmu {
 	cpumask_t	active_irqs;
 	cpumask_t	valid_cpus;
 	char		*name;
+	int		num_events;
+	int             pmu_state;
+	int             percpu_irq;
+	atomic_t	active_events;
+	struct mutex	reserve_mutex;
+	u64		max_period;
+	struct platform_device	*plat_device;
 	irqreturn_t	(*handle_irq)(int irq_num, void *dev);
+	int		(*request_pmu_irq)(int irq, irq_handler_t *irq_h,
+					   void *dev_id);
+	void		(*free_pmu_irq)(int irq, void *dev_id);
 	void		(*enable)(struct perf_event *event);
 	void		(*disable)(struct perf_event *event);
 	int		(*get_event_idx)(struct pmu_hw_events *hw_events,
@@ -88,17 +114,17 @@ struct arm_pmu {
 	void		(*start)(struct arm_pmu *);
 	void		(*stop)(struct arm_pmu *);
 	void		(*reset)(void *);
+	void		(*force_reset)(void *);
 	int		(*request_irq)(struct arm_pmu *, irq_handler_t handler);
 	void		(*free_irq)(struct arm_pmu *);
 	int		(*map_event)(struct perf_event *event);
 	void		(*save_regs)(struct arm_pmu *, struct cpupmu_regs *);
 	void		(*restore_regs)(struct arm_pmu *, struct cpupmu_regs *);
-	int		num_events;
-	atomic_t	active_events;
-	struct mutex	reserve_mutex;
-	u64		max_period;
-	struct platform_device	*plat_device;
 	struct pmu_hw_events	*(*get_hw_events)(void);
+	int		(*test_set_event_constraints)(struct perf_event *event);
+	int		(*clear_event_constraints)(struct perf_event *event);
+	void		(*save_pm_registers)(void *hcpu);
+	void		(*restore_pm_registers)(void *hcpu);
 };
 
 #define to_arm_pmu(p) (container_of(p, struct arm_pmu, pmu))
@@ -117,6 +143,10 @@ int armpmu_map_event(struct perf_event *event,
 						[PERF_COUNT_HW_CACHE_OP_MAX]
 						[PERF_COUNT_HW_CACHE_RESULT_MAX],
 		     u32 raw_event_mask);
+
+int cpu_pmu_request_irq(struct arm_pmu *cpu_pmu, irq_handler_t handler);
+
+void cpu_pmu_free_irq(struct arm_pmu *cpu_pmu);
 
 #endif /* CONFIG_HW_PERF_EVENTS */
 

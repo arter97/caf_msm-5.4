@@ -16,10 +16,15 @@ Required properties:
 	"arm,arm11mpcore-pmu"
 	"arm,arm1176-pmu"
 	"arm,arm1136-pmu"
+	"qcom,krait-pmu"
 - interrupts : 1 combined interrupt or 1 per core.
 - cluster : a phandle to the cluster to which it belongs
 	If there are more than one cluster with same CPU type
 	then there should be separate PMU nodes per cluster.
+
+Optional:
+- qcom,irq-is-percpu:   Define this if the IRQ of the PMU is a PPI. This will tell perf to use
+			the per_cpu IRQ API for request and free.
 
 Example:
 
@@ -27,3 +32,19 @@ pmu {
         compatible = "arm,cortex-a9-pmu";
         interrupts = <100 101>;
 };
+
+For the L2CC PMU:
+If the L2 cache controller PMU is available, its DT bindings should be defined as
+follows.
+
+Required Properties:
+
+- compatible: Should be "qcom,l2-pmu"
+- interrupts : 1 combined interrupt.
+
+Example:
+
+  l2-pmu {
+                compatible = "qcom,l2-pmu";
+                interrupts = <0 1 0>;
+        };
