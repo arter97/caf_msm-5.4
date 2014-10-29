@@ -14,6 +14,7 @@
 
 #include <linux/device.h>
 #include <linux/pci.h>
+#include <linux/skbuff.h>
 
 #ifdef CONFIG_WCNSS_MEM_PRE_ALLOC
 #define WCNSS_PRE_ALLOC_GET_THRESHOLD (4*1024)
@@ -114,6 +115,7 @@ extern void cnss_get_monotonic_boottime(struct timespec *ts);
 extern void cnss_get_boottime(struct timespec *ts);
 extern void cnss_init_work(struct work_struct *work, work_func_t func);
 extern void cnss_init_delayed_work(struct delayed_work *work, work_func_t func);
+extern int cnss_vendor_cmd_reply(struct sk_buff *skb);
 extern int cnss_request_bus_bandwidth(int bandwidth);
 
 extern int cnss_get_sha_hash(const u8 *data, u32 data_len,

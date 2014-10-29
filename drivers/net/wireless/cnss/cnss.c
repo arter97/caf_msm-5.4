@@ -45,6 +45,7 @@
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/subsystem_notif.h>
 #include <soc/qcom/ramdump.h>
+#include <net/cfg80211.h>
 #include <net/cnss.h>
 
 #define subsys_to_drv(d) container_of(d, struct cnss_data, subsys_desc)
@@ -91,7 +92,7 @@ static struct cnss_fw_files FW_FILES_DEFAULT = {
 "utfbd.bin", "epping.bin", "evicted.bin"};
 
 #define QCA6180_VENDOR_ID	(0x168C)
-#define QCA6180_DEVICE_ID      (0x0041)
+#define QCA6180_DEVICE_ID	(0x0041)
 #define QCA6180_REV_ID_OFFSET	(0x08)
 
 #define WLAN_VREG_NAME		"vdd-wlan"
@@ -112,10 +113,10 @@ static struct cnss_fw_files FW_FILES_DEFAULT = {
 #define WLAN_VREG_XTAL_MAX	1800000
 #define WLAN_VREG_XTAL_MIN	1800000
 
-#define POWER_ON_DELAY		2000
-#define WLAN_ENABLE_DELAY	10000
-#define WLAN_RECOVERY_DELAY	1000
-#define PCIE_ENABLE_DELAY	100000
+#define POWER_ON_DELAY		2
+#define WLAN_ENABLE_DELAY	10
+#define WLAN_RECOVERY_DELAY	1
+#define PCIE_ENABLE_DELAY	100
 #define EVICT_BIN_MAX_SIZE      (512*1024)
 #define CNSS_PINCTRL_STATE_ACTIVE "default"
 
@@ -1394,10 +1395,10 @@ again:
 		goto err_wlan_vreg_on;
 	}
 
-	usleep(POWER_ON_DELAY);
+	msleep(POWER_ON_DELAY);
 
 	cnss_wlan_gpio_set(gpio_info, WLAN_EN_HIGH);
-	usleep(WLAN_ENABLE_DELAY);
+	msleep(WLAN_ENABLE_DELAY);
 
 	if (!pdev) {
 		pr_debug("%s: invalid pdev. register pci device\n", __func__);
@@ -1465,9 +1466,9 @@ again:
 					    pdev, NULL, PM_OPTIONS);
 			penv->pcie_link_state = PCIE_LINK_DOWN;
 			cnss_wlan_gpio_set(gpio_info, WLAN_EN_LOW);
-			usleep(WLAN_ENABLE_DELAY);
+			msleep(WLAN_ENABLE_DELAY);
 			cnss_wlan_vreg_set(vreg_info, VREG_OFF);
-			usleep(POWER_ON_DELAY);
+			msleep(POWER_ON_DELAY);
 			probe_again++;
 			goto again;
 		}
@@ -1760,6 +1761,12 @@ void cnss_init_delayed_work(struct delayed_work *work, work_func_t func)
 }
 EXPORT_SYMBOL(cnss_init_delayed_work);
 
+int cnss_vendor_cmd_reply(struct sk_buff *skb)
+{
+	return cfg80211_vendor_cmd_reply(skb);
+}
+EXPORT_SYMBOL(cnss_vendor_cmd_reply);
+
 int cnss_get_ramdump_mem(unsigned long *address, unsigned long *size)
 {
 	struct resource *res;
@@ -1874,9 +1881,9 @@ static int cnss_powerup(const struct subsys_desc *subsys)
 		goto err_wlan_vreg_on;
 	}
 
-	usleep(POWER_ON_DELAY);
+	msleep(POWER_ON_DELAY);
 	cnss_wlan_gpio_set(gpio_info, WLAN_EN_HIGH);
-	usleep(WLAN_ENABLE_DELAY);
+	msleep(WLAN_ENABLE_DELAY);
 
 	if (!pdev) {
 		pr_err("%d: invalid pdev\n", __LINE__);
@@ -2012,7 +2019,7 @@ void cnss_device_self_recovery(void)
 	penv->recovery_in_progress = true;
 	cnss_pm_wake_lock(&penv->ws);
 	cnss_shutdown(NULL, false);
-	usleep(WLAN_RECOVERY_DELAY);
+	msleep(WLAN_RECOVERY_DELAY);
 	cnss_powerup(NULL);
 	cnss_pm_wake_lock_release(&penv->ws);
 	penv->recovery_in_progress = false;
@@ -2085,7 +2092,7 @@ static int cnss_probe(struct platform_device *pdev)
 		goto err_get_wlan_res;
 
 	cnss_wlan_gpio_set(&penv->gpio_info, WLAN_EN_HIGH);
-	usleep(WLAN_ENABLE_DELAY);
+	msleep(WLAN_ENABLE_DELAY);
 
 	ret = of_property_read_u32(dev->of_node, "qcom,wlan-rc-num", &rc_num);
 	if (ret) {
