@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013 - 2014, The Linux Foundation. All rights reserved.
 
 * This program is free software; you can redistribute it and/or modify
 * it under the terms of the GNU General Public License version 2 and
@@ -381,7 +381,6 @@ static int msm_pcm_probe(struct platform_device *pdev)
 {
 	struct msm_pcm_loopback *pcm;
 
-	dev_set_name(&pdev->dev, "%s", "msm-pcm-loopback");
 
 	dev_dbg(&pdev->dev, "%s: dev name %s\n",
 		__func__, dev_name(&pdev->dev));

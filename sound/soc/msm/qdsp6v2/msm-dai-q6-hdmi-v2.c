@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -234,6 +234,9 @@ static int msm_dai_q6_hdmi_dai_probe(struct snd_soc_dai *dai)
 	} else
 		dev_set_drvdata(dai->dev, dai_data);
 
+	if (dai->driver->id)
+		dai->id = dai->driver->id;
+
 	kcontrol = &hdmi_config_controls[0];
 
 	rc = snd_ctl_add(dai->card->snd_card,
@@ -311,6 +314,8 @@ static struct snd_soc_dai_driver msm_dai_q6_hdmi_hdmi_rx_dai = {
 		.rate_min =	48000,
 	},
 	.ops = &msm_dai_q6_hdmi_ops,
+	.name = "msm-dai-q6-hdmi.8",
+	.id = HDMI_RX,
 	.probe = msm_dai_q6_hdmi_dai_probe,
 	.remove = msm_dai_q6_hdmi_dai_remove,
 };
@@ -333,7 +338,6 @@ static int msm_dai_q6_hdmi_dev_probe(struct platform_device *pdev)
 	}
 
 	pdev->id = id;
-	dev_set_name(&pdev->dev, "%s.%d", "msm-dai-q6-hdmi", id);
 
 	pr_debug("%s: dev name %s, id:%d\n", __func__,
 			dev_name(&pdev->dev), pdev->id);

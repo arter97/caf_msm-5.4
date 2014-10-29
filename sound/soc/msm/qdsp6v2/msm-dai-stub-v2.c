@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -23,6 +23,10 @@ enum {
 	STUB_TX,
 	STUB_1_RX,
 	STUB_1_TX,
+};
+
+struct msm_stub_q6_dai_data {
+	int stub_id;
 };
 
 static int msm_dai_stub_set_channel_map(struct snd_soc_dai *dai,
@@ -72,6 +76,10 @@ static int msm_dai_stub_add_route(struct snd_soc_dai *dai)
 
 static int msm_dai_stub_dai_probe(struct snd_soc_dai *dai)
 {
+	struct msm_stub_q6_dai_data *dai_data =
+				dev_get_drvdata(dai->dev);
+
+	dai->id = dai_data->stub_id;
 	return msm_dai_stub_add_route(dai);
 }
 
@@ -94,6 +102,8 @@ static struct snd_soc_dai_driver msm_dai_stub_dai_rx = {
 		.rate_max = 48000,
 	},
 	.ops = &msm_dai_stub_ops,
+	.name = "msm-dai-stub-dev.0",
+	.id = STUB_RX,
 	.probe = &msm_dai_stub_dai_probe,
 	.remove = &msm_dai_stub_dai_remove,
 };
@@ -112,6 +122,8 @@ static struct snd_soc_dai_driver msm_dai_stub_dai_tx[] = {
 			.rate_max = 48000,
 		},
 		.ops = &msm_dai_stub_ops,
+		.name = "msm-dai-stub-dev.1",
+		.id = STUB_TX,
 		.probe = &msm_dai_stub_dai_probe,
 		.remove = &msm_dai_stub_dai_remove,
 	},
@@ -128,6 +140,8 @@ static struct snd_soc_dai_driver msm_dai_stub_dai_tx[] = {
 			.rate_max = 48000,
 		},
 		.ops = &msm_dai_stub_ops,
+		.name = "msm-dai-stub-dev.3",
+		.id = STUB_1_TX,
 		.probe = &msm_dai_stub_dai_probe,
 		.remove = &msm_dai_stub_dai_remove,
 	}
@@ -141,6 +155,7 @@ static int msm_dai_stub_dev_probe(struct platform_device *pdev)
 {
 	int rc, id = -1;
 	const char *stub_dev_id = "qcom,msm-dai-stub-dev-id";
+	struct msm_stub_q6_dai_data *dai_data;
 
 	rc = of_property_read_u32(pdev->dev.of_node, stub_dev_id, &id);
 	if (rc) {
@@ -148,12 +163,20 @@ static int msm_dai_stub_dev_probe(struct platform_device *pdev)
 			"%s: missing %s in dt node\n", __func__, stub_dev_id);
 		return rc;
 	}
-
 	pdev->id = id;
-	dev_set_name(&pdev->dev, "%s.%d", "msm-dai-stub-dev", id);
+
+	dai_data = kzalloc(sizeof(struct msm_stub_q6_dai_data), GFP_KERNEL);
+	if (!dai_data) {
+		dev_err(&pdev->dev, "failed to allocate dai_data\n");
+		rc = -ENOMEM;
+		return rc;
+	}
 
 	pr_debug("%s: dev name %s, id:%d\n", __func__,
 		 dev_name(&pdev->dev), pdev->id);
+	dai_data->stub_id = id;
+
+	dev_set_drvdata(&pdev->dev, dai_data);
 
 	switch (id) {
 	case STUB_RX:
