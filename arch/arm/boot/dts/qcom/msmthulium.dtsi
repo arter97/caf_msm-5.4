@@ -103,6 +103,13 @@
 			reg = <0 0x8cb00000 0 0x2100000>;
 		};
 
+		qseecom_mem: qseecom_region {
+			compatible = "shared-dma-pool";
+			reusable;
+			alignment = <0 0x400000>;
+			size = <0 0x1400000>;
+		};
+
 		modem_mem: modem_region@87300000 {
 			compatible = "removed-dma-pool";
 			no-map;
