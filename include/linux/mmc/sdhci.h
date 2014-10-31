@@ -17,6 +17,7 @@
 #include <linux/io.h>
 #include <linux/mmc/host.h>
 #include <linux/pm_qos.h>
+#include <linux/ratelimit.h>
 
 struct sdhci_next {
 	unsigned int sg_count;
@@ -274,6 +275,7 @@ struct sdhci_host {
 	int reset_wa_applied; /* reset workaround status */
 	ktime_t reset_wa_t; /* time when the reset workaround is applied */
 	int reset_wa_cnt; /* total number of times workaround is used */
+	struct ratelimit_state dbg_dump_rs;
 
 	unsigned long private[0] ____cacheline_aligned;
 };
