@@ -1,4 +1,3 @@
 source "drivers/media/platform/msm/vidc/Kconfig"
-source "drivers/media/platform/msm/wfd/Kconfig"
 source "drivers/media/platform/msm/broadcast/Kconfig"
 source "drivers/media/platform/msm/vpu/Kconfig"

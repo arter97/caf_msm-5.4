@@ -5073,10 +5073,6 @@
 		};
 	};
 
-	qcom,wfd {
-		compatible = "qcom,msm-wfd";
-	};
-
 	qcom,msm-ssc-sensors {
 		compatible = "qcom,msm-ssc-sensors";
 	};
