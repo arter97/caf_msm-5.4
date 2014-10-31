@@ -165,6 +165,7 @@ struct msm_bus_hw_algorithm {
 	void (*config_master)(struct msm_bus_fabric_registration *fab_pdata,
 		struct msm_bus_inode_info *info,
 		uint64_t req_clk, uint64_t req_bw);
+	bool (*update_bw_reg)(int mode);
 };
 
 struct msm_bus_fabric_device {
