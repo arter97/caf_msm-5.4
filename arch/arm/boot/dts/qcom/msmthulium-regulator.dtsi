@@ -116,8 +116,8 @@
 		compatible = "qcom,stub-regulator";
 		regulator-name = "pm8994_l3";
 		qcom,hpm-min-load = <10000>;
-		regulator-min-microvolt = <875000>;
-		regulator-max-microvolt = <875000>;
+		regulator-min-microvolt = <850000>;
+		regulator-max-microvolt = <850000>;
 	};
 
 	pm8994_l4: regulator-l4 {
@@ -164,8 +164,8 @@
 		compatible = "qcom,stub-regulator";
 		regulator-name = "pm8994_l11";
 		qcom,hpm-min-load = <10000>;
-		regulator-min-microvolt = <1200000>;
-		regulator-max-microvolt = <1200000>;
+		regulator-min-microvolt = <1150000>;
+		regulator-max-microvolt = <1150000>;
 	};
 
 	pm8994_l12: regulator-l12 {
@@ -212,8 +212,8 @@
 		compatible = "qcom,stub-regulator";
 		regulator-name = "pm8994_l17";
 		qcom,hpm-min-load = <10000>;
-		regulator-min-microvolt = <2700000>;
-		regulator-max-microvolt = <2700000>;
+		regulator-min-microvolt = <2500000>;
+		regulator-max-microvolt = <2500000>;
 	};
 
 	pm8994_l18: regulator-l18 {
@@ -228,8 +228,8 @@
 		compatible = "qcom,stub-regulator";
 		regulator-name = "pm8994_l19";
 		qcom,hpm-min-load = <10000>;
-		regulator-min-microvolt = <2800000>;
-		regulator-max-microvolt = <2800000>;
+		regulator-min-microvolt = <3000000>;
+		regulator-max-microvolt = <3000000>;
 	};
 
 	pm8994_l20: regulator-l20 {
@@ -252,8 +252,8 @@
 		compatible = "qcom,stub-regulator";
 		regulator-name = "pm8994_l22";
 		qcom,hpm-min-load = <10000>;
-		regulator-min-microvolt = <3000000>;
-		regulator-max-microvolt = <3000000>;
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
 	};
 
 	pm8994_l23: regulator-l23 {
@@ -292,8 +292,8 @@
 		compatible = "qcom,stub-regulator";
 		regulator-name = "pm8994_l27";
 		qcom,hpm-min-load = <10000>;
-		regulator-min-microvolt = <1200000>;
-		regulator-max-microvolt = <1200000>;
+		regulator-min-microvolt = <1000000>;
+		regulator-max-microvolt = <1000000>;
 	};
 
 	pm8994_l28: regulator-l28 {
@@ -324,8 +324,8 @@
 		compatible = "qcom,stub-regulator";
 		regulator-name = "pm8994_l31";
 		qcom,hpm-min-load = <10000>;
-		regulator-min-microvolt = <875000>;
-		regulator-max-microvolt = <875000>;
+		regulator-min-microvolt = <850000>;
+		regulator-max-microvolt = <850000>;
 	};
 
 	pm8994_l32: regulator-l32 {
