@@ -574,7 +574,7 @@
 		reg = <0x9300000 0x00100>;
 		interrupts = <0 162 1>;
 
-		vdd_cx-supply = <&pmthulium_s1_corner>;
+		vdd_cx-supply = <&pm8994_s1_corner>;
 		qcom,proxy-reg-names = "vdd_cx";
 		qcom,vdd_cx-uV-uA = <7 100000>;
 
@@ -731,7 +731,7 @@
 };
 
 &gdsc_gpu_gx {
-	parent-supply = <&pmithulium_s2_corner>;
+	parent-supply = <&pmi8994_s2_corner>;
 	status = "ok";
 };
 
