@@ -37,7 +37,7 @@ obj-$(CONFIG_MSM_MEMORY_DUMP_V2) += memory_dump_v2.o
 obj-$(CONFIG_MSM_DDR_HEALTH) += ddr-health.o
 obj-$(CONFIG_MSM_WATCHDOG_V2) += watchdog_v2.o
 obj-$(CONFIG_MEM_SHARE_QMI_SERVICE) += memshare/
-obj-$(CONFIG_MSM_SPM_V2) += spm-v2.o spm_devices.o
+obj-$(CONFIG_MSM_SPM) += spm.o spm_devices.o
 obj-$(CONFIG_SOC_BUS)	+=	socinfo.o
 obj-y			+=	qdsp6v2/
 
