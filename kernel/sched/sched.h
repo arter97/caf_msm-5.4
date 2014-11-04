@@ -494,6 +494,8 @@ struct rq {
 	int capacity;
 	int max_possible_capacity;
 	u64 window_start;
+	u32 mostly_idle_load;
+	int mostly_idle_nr_run;
 
 	u64 curr_runnable_sum;
 	u64 prev_runnable_sum;
@@ -737,6 +739,12 @@ dec_cumulative_runnable_avg(struct rq *rq, struct task_struct *p)
 		rq->cumulative_runnable_avg -= p->ravg.demand;
 	BUG_ON((s64)rq->cumulative_runnable_avg < 0);
 }
+
+#define pct_to_real(tunable)	\
+		(div64_u64((u64)tunable * (u64)max_task_load(), 100))
+
+#define real_to_pct(tunable)	\
+		(div64_u64((u64)tunable * (u64)100, (u64)max_task_load()))
 
 #else	/* CONFIG_SCHED_FREQ_INPUT || CONFIG_SCHED_HMP */
 

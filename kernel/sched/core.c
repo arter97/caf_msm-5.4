@@ -1740,6 +1740,7 @@ void reset_all_window_stats(u64 window_start, unsigned int window_size)
 {
 	int cpu;
 	unsigned long flags;
+	unsigned int old_window_size = sched_ravg_window;
 
 	disable_window_stats();
 
@@ -1762,8 +1763,13 @@ void reset_all_window_stats(u64 window_start, unsigned int window_size)
 	for_each_possible_cpu(cpu) {
 		struct rq *rq = cpu_rq(cpu);
 
-		if (window_start)
+		if (window_start) {
+			u32 mostly_idle_load = rq->mostly_idle_load;
+
 			rq->window_start = window_start;
+			rq->mostly_idle_load = div64_u64((u64)mostly_idle_load *
+				 (u64)sched_ravg_window, (u64)old_window_size);
+		}
 		rq->curr_runnable_sum = rq->prev_runnable_sum = 0;
 		rq->cumulative_runnable_avg = 0;
 		fixup_nr_big_small_task(cpu);
@@ -8364,6 +8370,8 @@ void __init sched_init(void)
 #endif
 #ifdef CONFIG_SCHED_HMP
 		rq->nr_small_tasks = rq->nr_big_tasks = 0;
+		rq->mostly_idle_load = pct_to_real(20);
+		rq->mostly_idle_nr_run = 3;
 		rq->curr_runnable_sum = rq->prev_runnable_sum = 0;
 		rq->hmp_flags = 0;
 #endif
