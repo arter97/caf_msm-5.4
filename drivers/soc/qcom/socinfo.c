@@ -1,4 +1,5 @@
-/* Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
+/*
+ * Copyright (c) 2009-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -470,6 +471,12 @@ static struct msm_soc_info cpu_of_id[] = {
 	[236] = {MSM_CPU_ZIRC, "MSMZIRC"},
 	[237] = {MSM_CPU_ZIRC, "MSMZIRC"},
 	[238] = {MSM_CPU_ZIRC, "MSMZIRC"},
+
+	/* 8929 IDs */
+	[268] = {MSM_CPU_8929, "MSM8929"},
+	[269] = {MSM_CPU_8929, "MSM8629"},
+	[270] = {MSM_CPU_8929, "MSM8229"},
+	[271] = {MSM_CPU_8929, "APQ8029"},
 
 	/* Uninitialized IDs are not known to run Linux.
 	   MSM_CPU_UNKNOWN is set to 0 to ensure these IDs are
@@ -976,6 +983,10 @@ static void * __init setup_dummy_socinfo(void)
 	} else if (early_machine_is_msmzirc()) {
 		dummy_socinfo.id = 238;
 		strlcpy(dummy_socinfo.build_id, "msmzirc - ",
+			sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_msm8929()) {
+		dummy_socinfo.id = 268;
+		strlcpy(dummy_socinfo.build_id, "msm8929 - ",
 			sizeof(dummy_socinfo.build_id));
 	}
 
