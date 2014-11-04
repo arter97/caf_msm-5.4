@@ -956,6 +956,9 @@ Optional properties:
 	no SMMU. Audio lib introduce wrapper for ION APIs. The wrapper needs
         presence of SMMU in ADSP to handle ION APIs differently.
         Presence of this property means ADSP has SMMU in it.
+ - iommus:
+	A phandle parsed by smmu driver. Number of entries will vary across
+	targets.
 
 Example:
 
