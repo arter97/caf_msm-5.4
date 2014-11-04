@@ -190,18 +190,7 @@ static void diag_smd_cntl_send_req(int proc_num)
 					/* Nothing to read from SMD */
 					pr_err("diag: In %s, proc=%d, Nothing to read from SMD\n",
 						__func__, proc_num);
-					wait_event(driver->smd_wait_q,
-						((smd_ch == 0) || smd_read_avail(smd_ch)));
-					/* If the smd channel is open */
-					if (smd_ch) {
-						pr_debug("diag: In %s, return from wait_queue\n",
-							__func__);
-						continue;
-					} else {
-						pr_debug("diag: In %s, return from wait_queue, channel is closed\n",
-							__func__);
-						return;
-					}
+					break;
 				}
 				if (pkt_len < r) {
 					pr_err("diag: In %s, proc=%d, sending incorrect pkt (r=%d, total_recd_partial=%d, pkt_len=%d)\n",
