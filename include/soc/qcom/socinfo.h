@@ -82,6 +82,8 @@
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msmtellurium")
 #define early_machine_is_msmthulium()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msmthulium")
+#define early_machine_is_msmnickel()	\
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msmnickel")
 #else
 #define of_board_is_sim()		0
 #define of_board_is_rumi()		0
@@ -113,7 +115,8 @@
 #define early_machine_is_fsm9010()	0
 #define early_machine_is_msmtellurium()	0
 #define early_machine_is_msmthulium()	0
-#define early_machine_is_msmterbium() 0
+#define early_machine_is_msmterbium()	0
+#define early_machine_is_msmnickel()	0
 #endif
 
 #define PLATFORM_SUBTYPE_MDM	1
@@ -169,6 +172,7 @@ enum msm_cpu {
 	MSM_CPU_TELLURIUM,
 	MSM_CPU_THULIUM,
 	MSM_CPU_TERBIUM,
+	MSM_CPU_NICKEL,
 };
 
 struct msm_soc_info {
@@ -560,6 +564,18 @@ static inline int cpu_is_msmtellurium(void)
 	return 0;
 #endif
 
+}
+
+static inline int cpu_is_msmnickel(void)
+{
+#ifdef CONFIG_ARCH_MSM8916
+	enum msm_cpu cpu = socinfo_get_msm_cpu();
+
+	BUG_ON(cpu == MSM_CPU_UNKNOWN);
+	return cpu == MSM_CPU_NICKEL;
+#else
+	return 0;
+#endif
 }
 
 static inline int cpu_is_msm8625q(void)
