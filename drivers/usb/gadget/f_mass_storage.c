@@ -1377,7 +1377,7 @@ static int do_prevent_allow(struct fsg_common *common)
 		return -EINVAL;
 	}
 
-	if (curlun->prevent_medium_removal && !prevent)
+	if (!curlun->nofua && curlun->prevent_medium_removal && !prevent)
 		fsg_lun_fsync_sub(curlun);
 	curlun->prevent_medium_removal = prevent;
 	return 0;
@@ -2445,8 +2445,13 @@ static void handle_exception(struct fsg_common *common)
 				       &common->fsg->atomic_bitflags))
 			usb_ep_clear_halt(common->fsg->bulk_in);
 
-		if (common->ep0_req_tag == exception_req_tag)
-			ep0_queue(common);	/* Complete the status stage */
+		if (common->ep0_req_tag == exception_req_tag) {
+			/* Complete the status stage */
+			if (common->cdev)
+				usb_composite_setup_continue(common->cdev);
+			else
+				ep0_queue(common);
+		}
 
 		/*
 		 * Technically this should go here, but it would only be
@@ -2942,6 +2947,7 @@ int fsg_common_create_lun(struct fsg_common *common, struct fsg_lun_config *cfg,
 	lun->ro = cfg->cdrom || cfg->ro;
 	lun->initially_ro = lun->ro;
 	lun->removable = !!cfg->removable;
+	lun->nofua = !!cfg->nofua;
 
 	if (!common->sysfs) {
 		/* we DON'T own the name!*/

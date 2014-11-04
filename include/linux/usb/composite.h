@@ -51,7 +51,7 @@
 #define USB_GADGET_DELAYED_STATUS       0x7fff	/* Impossibly large value */
 
 /* big enough to hold our biggest descriptor */
-#define USB_COMP_EP0_BUFSIZ	1024
+#define USB_COMP_EP0_BUFSIZ	4096
 
 #define USB_MS_TO_HS_INTERVAL(x)	(ilog2((x * 1000 / 125)) + 1)
 struct usb_configuration;
@@ -99,6 +99,9 @@ struct usb_configuration;
  *	Function Suspend state (used in Super Speed mode only).
  * @func_wakeup_allowed: Tells whether Function Remote Wakeup has been allowed
  *	by the USB host (used in Super Speed mode only).
+ * @func_wakeup_pending: Marks that the function has issued a Function Wakeup
+ *	while the USB bus was suspended and therefore a Function Wakeup
+ *	notification needs to be sent once the USB bus is resumed.
  *
  * A single USB function uses one or more interfaces, and should in most
  * cases support operation at both full and high speeds.  Each function is
@@ -164,6 +167,7 @@ struct usb_function {
 						u8 suspend_opt);
 	unsigned		func_is_suspended:1;
 	unsigned		func_wakeup_allowed:1;
+	unsigned		func_wakeup_pending:1;
 	/* private: */
 	/* internals */
 	struct list_head		list;

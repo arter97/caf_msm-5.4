@@ -69,6 +69,16 @@
  *   - MS-Windows drivers sometimes emit undocumented requests.
  */
 
+static unsigned int rndis_dl_max_pkt_per_xfer = 3;
+module_param(rndis_dl_max_pkt_per_xfer, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(rndis_dl_max_pkt_per_xfer,
+	"Maximum packets per transfer for DL aggregation");
+
+static unsigned int rndis_ul_max_pkt_per_xfer = 3;
+module_param(rndis_ul_max_pkt_per_xfer, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(rndis_ul_max_pkt_per_xfer,
+	"Maximum packets per transfer for UL aggregation");
+
 struct f_rndis {
 	struct gether			port;
 	u8				ctrl_id, data_id;
@@ -372,13 +382,36 @@ static struct sk_buff *rndis_add_header(struct gether *port,
 					struct sk_buff *skb)
 {
 	struct sk_buff *skb2;
+	struct rndis_packet_msg_type *header = NULL;
+	struct f_rndis *rndis = func_to_rndis(&port->func);
+	struct usb_composite_dev *cdev = port->func.config->cdev;
 
-	skb2 = skb_realloc_headroom(skb, sizeof(struct rndis_packet_msg_type));
-	if (skb2)
-		rndis_add_hdr(skb2);
+	if (rndis->port.multi_pkt_xfer || cdev->gadget->sg_supported) {
+		if (port->header) {
+			header = port->header;
+			header->MessageType = cpu_to_le32(RNDIS_MSG_PACKET);
+			header->MessageLength = cpu_to_le32(skb->len +
+							sizeof(*header));
+			header->DataOffset = cpu_to_le32(36);
+			header->DataLength = cpu_to_le32(skb->len);
+			pr_debug("MessageLength:%d DataLength:%d\n",
+						header->MessageLength,
+						header->DataLength);
+			return skb;
+		} else {
+			dev_kfree_skb_any(skb);
+			pr_err("RNDIS header is NULL.\n");
+			return NULL;
+		}
+	} else {
+		skb2 = skb_realloc_headroom(skb,
+				sizeof(struct rndis_packet_msg_type));
+		if (skb2)
+			rndis_add_hdr(skb2);
 
-	dev_kfree_skb_any(skb);
-	return skb2;
+		dev_kfree_skb_any(skb);
+		return skb2;
+	}
 }
 
 static void rndis_response_available(void *_rndis)
@@ -410,8 +443,13 @@ static void rndis_response_available(void *_rndis)
 static void rndis_response_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct f_rndis			*rndis = req->context;
-	struct usb_composite_dev	*cdev = rndis->port.func.config->cdev;
+	struct usb_composite_dev	*cdev;
 	int				status = req->status;
+
+	if (!rndis->port.func.config || !rndis->port.func.config->cdev)
+		return;
+	else
+		cdev = rndis->port.func.config->cdev;
 
 	/* after TX:
 	 *  - USB_CDC_GET_ENCAPSULATED_RESPONSE (ep0/control)
@@ -446,10 +484,18 @@ static void rndis_response_complete(struct usb_ep *ep, struct usb_request *req)
 	}
 }
 
+#define MAX_PKTS_PER_XFER	10
 static void rndis_command_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct f_rndis			*rndis = req->context;
+	struct usb_composite_dev	*cdev;
 	int				status;
+	rndis_init_msg_type		*buf;
+
+	if (!rndis->port.func.config || !rndis->port.func.config->cdev)
+		return;
+	else
+		cdev = rndis->port.func.config->cdev;
 
 	/* received RNDIS command from USB_CDC_SEND_ENCAPSULATED_COMMAND */
 //	spin_lock(&dev->lock);
@@ -457,6 +503,38 @@ static void rndis_command_complete(struct usb_ep *ep, struct usb_request *req)
 	if (status < 0)
 		pr_err("RNDIS command error %d, %d/%d\n",
 			status, req->actual, req->length);
+
+	buf = (rndis_init_msg_type *)req->buf;
+
+	if (buf->MessageType == RNDIS_MSG_INIT) {
+		if (cdev->gadget->sg_supported) {
+			rndis->port.dl_max_xfer_size = buf->MaxTransferSize;
+			gether_update_dl_max_xfer_size(&rndis->port,
+					rndis->port.dl_max_xfer_size);
+
+			/* if SG is enabled multiple packets can be put
+			 * together too quickly. However, module param
+			 * is not honored.
+			 */
+			rndis->port.dl_max_pkts_per_xfer = 5;
+
+			gether_update_dl_max_pkts_per_xfer(&rndis->port,
+					 rndis->port.dl_max_pkts_per_xfer);
+
+			return;
+		}
+
+		if (buf->MaxTransferSize > 2048)
+			rndis->port.multi_pkt_xfer = 1;
+		else
+			rndis->port.multi_pkt_xfer = 0;
+		DBG(cdev, "%s: MaxTransferSize: %d : Multi_pkt_txr: %s\n",
+				__func__, buf->MaxTransferSize,
+				rndis->port.multi_pkt_xfer ? "enabled" :
+							    "disabled");
+		if (rndis_dl_max_pkt_per_xfer <= 1)
+			rndis->port.multi_pkt_xfer = 0;
+	}
 //	spin_unlock(&dev->lock);
 }
 
@@ -783,6 +861,7 @@ rndis_bind(struct usb_configuration *c, struct usb_function *f)
 
 	rndis_set_param_medium(rndis->config, RNDIS_MEDIUM_802_3, 0);
 	rndis_set_host_mac(rndis->config, rndis->ethaddr);
+	rndis_set_max_pkt_xfer(rndis->config, rndis_ul_max_pkt_per_xfer);
 
 	if (rndis->manufacturer && rndis->vendorID &&
 			rndis_set_param_vendor(rndis->config, rndis->vendorID,
@@ -862,6 +941,8 @@ rndis_bind_config_vendor(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
 	rndis->port.header_len = sizeof(struct rndis_packet_msg_type);
 	rndis->port.wrap = rndis_add_header;
 	rndis->port.unwrap = rndis_rm_hdr;
+	rndis->port.ul_max_pkts_per_xfer = rndis_ul_max_pkt_per_xfer;
+	rndis->port.dl_max_pkts_per_xfer = rndis_dl_max_pkt_per_xfer;
 
 	rndis->port.func.name = "rndis";
 	/* descriptors are per-instance copies */
