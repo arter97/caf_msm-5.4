@@ -1,4 +1,5 @@
-/* Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
+/*
+ * Copyright (c) 2009-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -82,6 +83,8 @@
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msmtellurium")
 #define early_machine_is_msmthulium()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msmthulium")
+#define early_machine_is_msm8929()	\
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8929")
 #else
 #define of_board_is_sim()		0
 #define of_board_is_rumi()		0
@@ -114,6 +117,7 @@
 #define early_machine_is_msmtellurium()	0
 #define early_machine_is_msmthulium()	0
 #define early_machine_is_msmterbium() 0
+#define early_machine_is_msm8929()	0
 #endif
 
 #define PLATFORM_SUBTYPE_MDM	1
@@ -169,6 +173,7 @@ enum msm_cpu {
 	MSM_CPU_TELLURIUM,
 	MSM_CPU_THULIUM,
 	MSM_CPU_TERBIUM,
+	MSM_CPU_8929,
 };
 
 struct msm_soc_info {
@@ -560,6 +565,18 @@ static inline int cpu_is_msmtellurium(void)
 	return 0;
 #endif
 
+}
+
+static inline int cpu_is_msm8929(void)
+{
+#ifdef CONFIG_ARCH_MSM8916
+	enum msm_cpu cpu = socinfo_get_msm_cpu();
+
+	BUG_ON(cpu == MSM_CPU_UNKNOWN);
+	return cpu == MSM_CPU_8929;
+#else
+	return 0;
+#endif
 }
 
 static inline int cpu_is_msm8226(void)
