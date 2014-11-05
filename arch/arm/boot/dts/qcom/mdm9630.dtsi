@@ -469,17 +469,6 @@
 		compatible = "qcom,rmnet-ipa";
 	};
 
-	hsic: hsic@f9a15000 {
-		compatible = "qcom,hsic-peripheral";
-		reg = <0xf9a15000 0x352>;
-		interrupts = <0 136 0>, <0 148 0>;
-		interrupt-names = "hsic_irq", "async_hsic_irq";
-		qcom,hsic-usb-core-id = <1>;
-		GDSC-supply = <&gdsc_usb_hsic>;
-		vdd-supply = <&pmd9635_l2>;
-		qcom,vdd-voltage-level = <0 1200000 1200000>;
-	};
-
 	usb3: ssusb@f9200000 {
 		compatible = "qcom,dwc-usb3-msm";
 		reg = <0xf9200000 0xfc000>,
@@ -536,11 +525,6 @@
 		qcom,android-usb-swfi-latency = <100>;
 	};
 
-	android_hsic {
-		compatible = "qcom,android-usb";
-		qcom,usb-core-id = <1>;
-	};
-
 	hsphy0: hsphy@f92f8800 {
 		compatible = "qcom,usb-hsphy";
 		reg = <0xf92f8800 0x3ff>;
@@ -574,10 +558,10 @@
 
 	qcom,usbbam@f9304000 {
 		compatible = "qcom,usb-bam-msm";
-		reg = <0xf9304000 0x8814>, <0xf9a04000 0x8814>;
-		reg-names = "ssusb", "hsic";
-		interrupts = <0 132 0>, <0 139 0>;
-		interrupt-names = "ssusb", "hsic";
+		reg = <0xf9304000 0x8814>;
+		reg-names = "ssusb";
+		interrupts = <0 132 0>;
+		interrupt-names = "ssusb";
 		qcom,usb-bam-fifo-baseaddr = <0xfe803000>;
 		qcom,usb-bam-num-pipes = <16>;
 		qcom,ignore-core-reset-ack;
@@ -707,34 +691,6 @@
 			qcom,peer-bam = <2>;
 			qcom,dst-bam-physical-address = <0xf9304000>;
 			qcom,dst-bam-pipe-index = <7>;
-			qcom,data-fifo-size = <0x8000>;
-			qcom,descriptor-fifo-size = <0x2000>;
-			qcom,reset-bam-on-connect;
-		};
-
-		/* HSIC pipes */
-		qcom,pipe9 {
-			label = "hsic-ipa-out-0";
-			qcom,usb-bam-mem-type = <2>;
-			qcom,bam-type = <2>;
-			qcom,dir = <0>;
-			qcom,pipe-num = <0>;
-			qcom,peer-bam = <2>;
-			qcom,src-bam-physical-address = <0xf9a04000>;
-			qcom,src-bam-pipe-index = <1>;
-			qcom,data-fifo-size = <0x8000>;
-			qcom,descriptor-fifo-size = <0x2000>;
-			qcom,reset-bam-on-connect;
-		};
-		qcom,pipe10 {
-			label = "hsic-ipa-in-0";
-			qcom,usb-bam-mem-type = <2>;
-			qcom,bam-type = <2>;
-			qcom,dir = <1>;
-			qcom,pipe-num = <0>;
-			qcom,peer-bam = <2>;
-			qcom,dst-bam-physical-address = <0xf9a04000>;
-			qcom,dst-bam-pipe-index = <0>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
 			qcom,reset-bam-on-connect;
