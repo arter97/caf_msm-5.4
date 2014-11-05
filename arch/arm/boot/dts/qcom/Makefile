@@ -1,6 +1,6 @@
 ifeq ($(CONFIG_OF),y)
 
-dtb-$(CONFIG_ARCH_MSMFERRUM) += msmferrum-sim.dtb \
+dtb-$(CONFIG_ARCH_MSM8909) += msm8909-sim.dtb \
 	mdmferrum-rumi.dtb \
 	mdmferrum-cdp.dtb \
 	mdmferrum-mtp.dtb
