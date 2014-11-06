@@ -253,6 +253,12 @@
 #define clk_gcc_aggre0_cnoc_ahb_clk	&gcc_aggre0_cnoc_ahb_clk
 #define clk_gcc_aggre0_noc_at_clk	&gcc_aggre0_noc_at_clk
 #define clk_gcc_aggre0_snoc_axi_clk	&gcc_aggre0_snoc_axi_clk
+#define clk_hlos1_vote_aggre0_noc_smmu_clk	&hlos1_vote_aggre0_noc_smmu_clk
+#define clk_hlos1_vote_lpass_core_smmu_clk	&hlos1_vote_lpass_core_smmu_clk
+#define clk_hlos1_vote_lpass_adsp_smmu_clk	&hlos1_vote_lpass_adsp_smmu_clk
+#define clk_hlos2_vote_aggre0_noc_smmu_clk	&hlos2_vote_aggre0_noc_smmu_clk
+#define clk_hlos2_vote_lpass_core_smmu_clk	&hlos2_vote_lpass_core_smmu_clk
+#define clk_hlos2_vote_lpass_adsp_smmu_clk	&hlos2_vote_lpass_adsp_smmu_clk
 #define clk_gpll0_out_mmsscc		&gpll0_out_mmsscc
 
 /* clock_mmss controlled clocks */
@@ -455,6 +461,20 @@
 #define clk_mdss_extpclk_clk		0xfa5aadb0
 #define clk_mdss_pclk0_clk		0x3487234a
 #define clk_mdss_pclk1_clk		0xd5804246
+#define clk_hlos1_vote_gpu_smmu_clk	0xe4d92770
+#define clk_hlos1_vote_rot_smmu_clk	0xbe00c101
+#define clk_hlos1_vote_mdp_smmu_clk	0x5ad0ec59
+#define clk_hlos1_vote_video_smmu_clk	0x8fe345b0
+#define clk_hlos1_vote_cpp_smmu_clk	0x4d2986aa
+#define clk_hlos1_vote_jpeg_smmu_clk	0x1a8d717a
+#define clk_hlos1_vote_vfe_smmu_clk	0xa69d1925
+#define clk_hlos2_vote_gpu_smmu_clk	0x66f5fe3c
+#define clk_hlos2_vote_rot_smmu_clk	0x24413eb5
+#define clk_hlos2_vote_mdp_smmu_clk	0xa25f47e5
+#define clk_hlos2_vote_video_smmu_clk	0x116114ff
+#define clk_hlos2_vote_cpp_smmu_clk	0x076630c4
+#define clk_hlos2_vote_jpeg_smmu_clk	0x1d821088
+#define clk_hlos2_vote_vfe_smmu_clk	0x1892cdaf
 
 /* clock_debug controlled clocks */
 #define clk_gcc_debug_mux		&gcc_debug_mux

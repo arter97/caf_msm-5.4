@@ -2522,6 +2522,36 @@
 		qcom,has-sibling;
 	};
 
+	hlos1_vote_aggre0_noc_smmu_clk: hlos1_vote_aggre0_noc_smmu_clk {
+		compatible = "qcom,cbc";
+		qcom,base-offset = <GCC_HLOS1_VOTE_AGGRE0_NOC_SMMU_CBCR>;
+	};
+
+	hlos1_vote_lpass_core_smmu_clk: hlos1_vote_lpass_core_smmu_clk {
+		compatible = "qcom,cbc";
+		qcom,base-offset = <GCC_HLOS1_VOTE_LPASS_CORE_SMMU_CBCR>;
+	};
+
+	hlos1_vote_lpass_adsp_smmu_clk: hlos1_vote_lpass_adsp_smmu_clk {
+		compatible = "qcom,cbc";
+		qcom,base-offset = <GCC_HLOS1_VOTE_LPASS_ADSP_SMMU_CBCR>;
+	};
+
+	hlos2_vote_aggre0_noc_smmu_clk: hlos2_vote_aggre0_noc_smmu_clk {
+		compatible = "qcom,cbc";
+		qcom,base-offset = <GCC_HLOS2_VOTE_AGGRE0_NOC_SMMU_CBCR>;
+	};
+
+	hlos2_vote_lpass_core_smmu_clk: hlos2_vote_lpass_core_smmu_clk {
+		compatible = "qcom,cbc";
+		qcom,base-offset = <GCC_HLOS2_VOTE_LPASS_CORE_SMMU_CBCR>;
+	};
+
+	hlos2_vote_lpass_adsp_smmu_clk: hlos2_vote_lpass_adsp_smmu_clk {
+		compatible = "qcom,cbc";
+		qcom,base-offset = <GCC_HLOS2_VOTE_LPASS_ADSP_SMMU_CBCR>;
+	};
+
 	gcc_debug_mux: gcc_debug_mux {
 		compatible = "qcom,measure-mux";
 		qcom,offset = <GCC_GCC_DEBUG_CLK_CTL>;
