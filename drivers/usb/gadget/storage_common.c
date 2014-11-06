@@ -346,6 +346,9 @@ ssize_t fsg_show_file(struct fsg_lun *curlun, struct rw_semaphore *filesem,
 			rc = PTR_ERR(p);
 		else {
 			rc = strlen(p);
+			if (rc > PAGE_SIZE - 2)
+				rc = PAGE_SIZE - 2;
+
 			memmove(buf, p, rc);
 			buf[rc] = '\n';		/* Add a newline */
 			buf[++rc] = 0;
@@ -436,10 +439,16 @@ ssize_t fsg_store_file(struct fsg_lun *curlun, struct rw_semaphore *filesem,
 {
 	int		rc = 0;
 
+
+#if !defined(CONFIG_USB_G_ANDROID)
+	/* disabled in android because we need to allow closing the backing file
+	 * if the media was removed
+	 */
 	if (curlun->prevent_medium_removal && fsg_lun_is_open(curlun)) {
 		LDBG(curlun, "eject attempt prevented\n");
 		return -EBUSY;				/* "Door is locked" */
 	}
+#endif
 
 	/* Remove a trailing newline */
 	if (count > 0 && buf[count-1] == '\n')

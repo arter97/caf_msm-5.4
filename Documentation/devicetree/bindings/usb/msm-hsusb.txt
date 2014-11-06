@@ -14,20 +14,3 @@ Example EHCI controller device node:
 		reg = <0xf9a55000 0x400>;
 		usb-phy = <&usb_otg>;
 	};
-
-
-ANDROID USB:
-
-Required properties:
-- compatible: should be "qcom,android-usb"
-
-Optional properties :
-- reg  : offset and length of memory region that is used by driver to
-  update USB PID and serial numbers used by bootloader in DLOAD mode.
-
-Example Android USB device node :
-	android_usb@fc42b0c8 {
-		compatible = "qcom,android-usb";
-		reg = <0xfc42b0c8 0xc8>;
-	};
-

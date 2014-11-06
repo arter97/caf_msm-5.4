@@ -363,14 +363,17 @@ int usb_get_func_interface_id(struct usb_function *func)
 	return -ENODEV;
 }
 
-int usb_func_wakeup(struct usb_function *func)
+static int usb_func_wakeup_int(struct usb_function *func,
+					bool use_pending_flag)
 {
 	int ret;
-	unsigned interface_id;
+	int interface_id;
+	unsigned long flags;
 	struct usb_gadget *gadget;
+	struct usb_composite_dev *cdev;
 
-	pr_debug("%s function wakeup\n",
-		func->name ? func->name : "");
+	pr_debug("%s - %s function wakeup, use pending: %u\n",
+		__func__, func->name ? func->name : "", use_pending_flag);
 
 	if (!func || !func->config || !func->config->cdev ||
 		!func->config->cdev->gadget)
@@ -379,32 +382,67 @@ int usb_func_wakeup(struct usb_function *func)
 	gadget = func->config->cdev->gadget;
 	if ((gadget->speed != USB_SPEED_SUPER) || !func->func_wakeup_allowed) {
 		DBG(func->config->cdev,
-			"Function Wakeup is not possible. speed=%u, func_wakeup_allowed=%u",
+			"Function Wakeup is not possible. speed=%u, func_wakeup_allowed=%u\n",
 			gadget->speed,
 			func->func_wakeup_allowed);
 
 		return -ENOTSUPP;
 	}
 
+	cdev = get_gadget_data(gadget);
+	spin_lock_irqsave(&cdev->lock, flags);
+
+	if (use_pending_flag && !func->func_wakeup_pending) {
+		pr_debug("Pending flag is cleared - Function wakeup is cancelled.\n");
+		spin_unlock_irqrestore(&cdev->lock, flags);
+		return 0;
+	}
+
 	ret = usb_get_func_interface_id(func);
 	if (ret < 0) {
 		ERROR(func->config->cdev,
-			"Function %s - Unknown interface id. Canceling USB request. ret=%d",
+			"Function %s - Unknown interface id. Canceling USB request. ret=%d\n",
 			func->name ? func->name : "", ret);
+
+		spin_unlock_irqrestore(&cdev->lock, flags);
 		return ret;
 	}
 
 	interface_id = ret;
 	ret = usb_gadget_func_wakeup(gadget, interface_id);
-	if (ret) {
-		ERROR(func->config->cdev,
-			"Failed to wake function %s from suspend state. interface id: %d, ret=%d. Canceling USB request.",
-			func->name ? func->name : "",
-			interface_id, ret);
-		return ret;
+
+	if (use_pending_flag) {
+		func->func_wakeup_pending = false;
+	} else {
+		if (ret == -EAGAIN)
+			func->func_wakeup_pending = true;
 	}
 
-	return 0;
+	spin_unlock_irqrestore(&cdev->lock, flags);
+
+	return ret;
+}
+
+int usb_func_wakeup(struct usb_function *func)
+{
+	int ret;
+
+	pr_debug("%s function wakeup\n",
+		func->name ? func->name : "");
+
+	ret = usb_func_wakeup_int(func, false);
+	if (ret == -EAGAIN) {
+		DBG(func->config->cdev,
+			"Function wakeup for %s could not complete due to suspend state. Delayed until after bus resume.\n",
+			func->name ? func->name : "");
+		ret = 0;
+	} else if (ret < 0) {
+		ERROR(func->config->cdev,
+			"Failed to wake function %s from suspend state. ret=%d. Canceling USB request.\n",
+			func->name ? func->name : "", ret);
+	}
+
+	return ret;
 }
 
 int usb_func_ep_queue(struct usb_function *func, struct usb_ep *ep,
@@ -427,7 +465,8 @@ int usb_func_ep_queue(struct usb_function *func, struct usb_ep *ep,
 		ret = usb_func_wakeup(func);
 		if (ret) {
 			pr_err("Failed to send function wake up notification. func name:%s, ep:%u\n",
-				func->name ? func->name : "", ep->address);
+				func->name ? func->name : "",
+				ep->address);
 			return ret;
 		}
 	}
@@ -691,6 +730,7 @@ static void reset_config(struct usb_composite_dev *cdev)
 		/* USB 3.0 addition */
 		f->func_is_suspended = false;
 		f->func_wakeup_allowed = false;
+		f->func_wakeup_pending = false;
 
 		bitmap_zero(f->endpoints, 32);
 	}
@@ -706,6 +746,16 @@ static int set_config(struct usb_composite_dev *cdev,
 	int			result = -EINVAL;
 	unsigned		power = gadget_is_otg(gadget) ? 8 : 100;
 	int			tmp;
+
+	/*
+	 * ignore 2nd time SET_CONFIGURATION
+	 * only for same config value twice.
+	 */
+	if (cdev->config && (cdev->config->bConfigurationValue == number)) {
+		DBG(cdev, "already in the same config with value %d\n",
+				number);
+		return 0;
+	}
 
 	if (number) {
 		list_for_each_entry(c, &cdev->configs, list) {
@@ -957,6 +1007,11 @@ void usb_remove_config(struct usb_composite_dev *cdev,
 	unsigned long flags;
 
 	spin_lock_irqsave(&cdev->lock, flags);
+
+	if (WARN_ON(!config->cdev)) {
+		spin_unlock_irqrestore(&cdev->lock, flags);
+		return;
+	}
 
 	if (cdev->config == config)
 		reset_config(cdev);
@@ -1336,6 +1391,10 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 	struct usb_function		*f = NULL;
 	u8				endp;
 
+
+	if (w_length > USB_COMP_EP0_BUFSIZ)
+		return value;
+
 	/* partial re-init of the response message; the function or the
 	 * gadget might need to intercept e.g. a control-OUT completion
 	 * when we delegate to it.
@@ -1442,6 +1501,15 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 			break;
 		if (w_value && !f->set_alt)
 			break;
+		/*
+		 * We put interfaces in default settings (alt 0)
+		 * upon set config#1. Call set_alt for non-zero
+		 * alternate setting.
+		 */
+		if (!w_value && cdev->config) {
+			value = 0;
+			break;
+		}
 		value = f->set_alt(f, w_index, w_value);
 		if (value == USB_GADGET_DELAYED_STATUS) {
 			DBG(cdev,
@@ -1583,6 +1651,14 @@ unknown:
 			if (f->setup)
 				value = f->setup(f, ctrl);
 		}
+		if (f && value == USB_GADGET_DELAYED_STATUS) {
+			DBG(cdev,
+			 "%s: interface %d (%s) requested delayed status\n",
+					__func__, intf, f->name);
+			cdev->delayed_status++;
+			DBG(cdev, "delayed_status count %d\n",
+					cdev->delayed_status);
+		}
 
 		goto done;
 	}
@@ -1621,6 +1697,10 @@ void composite_disconnect(struct usb_gadget *gadget)
 		reset_config(cdev);
 	if (cdev->driver->disconnect)
 		cdev->driver->disconnect(cdev);
+	if (cdev->delayed_status != 0) {
+		INFO(cdev, "delayed status mismatch..resetting\n");
+		cdev->delayed_status = 0;
+	}
 	spin_unlock_irqrestore(&cdev->lock, flags);
 }
 
@@ -1844,6 +1924,7 @@ composite_resume(struct usb_gadget *gadget)
 	struct usb_composite_dev	*cdev = get_gadget_data(gadget);
 	struct usb_function		*f;
 	u16				maxpower;
+	int ret;
 
 	/* REVISIT:  should we have config level
 	 * suspend/resume callbacks?
@@ -1851,8 +1932,24 @@ composite_resume(struct usb_gadget *gadget)
 	DBG(cdev, "resume\n");
 	if (cdev->driver->resume)
 		cdev->driver->resume(cdev);
+
 	if (cdev->config) {
 		list_for_each_entry(f, &cdev->config->functions, list) {
+			ret = usb_func_wakeup_int(f, true);
+			if (ret) {
+				if (ret == -EAGAIN) {
+					ERROR(f->config->cdev,
+						"Function wakeup for %s could not complete due to suspend state.\n",
+						f->name ? f->name : "");
+					break;
+				} else {
+					ERROR(f->config->cdev,
+						"Failed to wake function %s from suspend state. ret=%d. Canceling USB request.\n",
+						f->name ? f->name : "",
+						ret);
+				}
+			}
+
 			if (f->resume)
 				f->resume(f);
 		}
@@ -1902,6 +1999,7 @@ static const struct usb_gadget_driver composite_driver_template = {
 int usb_composite_probe(struct usb_composite_driver *driver)
 {
 	struct usb_gadget_driver *gadget_driver;
+	u8 core_id;
 
 	if (!driver || !driver->dev || !driver->bind)
 		return -EINVAL;
@@ -1909,6 +2007,7 @@ int usb_composite_probe(struct usb_composite_driver *driver)
 	if (!driver->name)
 		driver->name = "composite";
 
+	core_id = driver->gadget_driver.usb_core_id;
 	driver->gadget_driver = composite_driver_template;
 	gadget_driver = &driver->gadget_driver;
 
@@ -1916,6 +2015,11 @@ int usb_composite_probe(struct usb_composite_driver *driver)
 	gadget_driver->driver.name = driver->name;
 	gadget_driver->max_speed = driver->max_speed;
 
+	if (core_id)
+		gadget_driver->usb_core_id = core_id;
+
+	pr_debug("%s(): gadget_driver->usb_core_id:%d\n", __func__,
+					gadget_driver->usb_core_id);
 	return usb_gadget_probe_driver(gadget_driver);
 }
 EXPORT_SYMBOL_GPL(usb_composite_probe);

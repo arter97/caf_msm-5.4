@@ -218,6 +218,7 @@ static struct usb_bam_ctx_type ctx;
 static struct usb_bam_host_info host_info[MAX_BAMS];
 static struct device *usb_device;
 static bool probe_finished;
+static bool qdss_usb_active;
 
 static int __usb_bam_register_wake_cb(int idx, int (*callback)(void *user),
 	void *param, bool trigger_cb_per_pipe);
@@ -263,7 +264,8 @@ static int get_bam_type_from_core_name(const char *name)
 		strnstr(name, "dwc3", USB_BAM_MAX_STR_LEN))
 		return DWC3_CTRL;
 	else if (strnstr(name, bam_enable_strings[HSIC_CTRL],
-			USB_BAM_MAX_STR_LEN))
+			USB_BAM_MAX_STR_LEN) ||
+		strnstr(name, "ci13xxx_msm_hsic", USB_BAM_MAX_STR_LEN))
 		return HSIC_CTRL;
 	else if (strnstr(name, bam_enable_strings[CI_CTRL],
 			USB_BAM_MAX_STR_LEN) ||
@@ -3519,6 +3521,12 @@ int usb_bam_get_connection_idx(const char *core_name, enum peer_bam client,
 }
 EXPORT_SYMBOL(usb_bam_get_connection_idx);
 
+int usb_bam_get_bam_type(int connection_idx)
+{
+	return usb_bam_connections[connection_idx].bam_type;
+}
+EXPORT_SYMBOL(usb_bam_get_bam_type);
+
 bool msm_bam_device_lpm_ok(enum usb_ctrl bam_type)
 {
 	pr_debug("%s: enter bam%s\n", __func__, bam_enable_strings[bam_type]);
@@ -3565,11 +3573,20 @@ bool msm_bam_device_lpm_ok(enum usb_ctrl bam_type)
 	}
 }
 
+void msm_bam_set_qdss_usb_active(bool is_active)
+{
+	pr_debug("%s: set qdss_usb_active: %d\n", __func__, is_active);
+	qdss_usb_active = is_active;
+}
+EXPORT_SYMBOL(msm_bam_set_qdss_usb_active);
+
 bool msm_bam_usb_lpm_ok(enum usb_ctrl bam)
 {
 	pr_debug("%s: enter mode %d on %s\n",
 		__func__, info[bam].cur_bam_mode, bam_enable_strings[bam]);
 
+	if (qdss_usb_active)
+		return 0;
 	if (info[bam].cur_bam_mode == USB_BAM_DEVICE)
 		return msm_bam_device_lpm_ok(bam);
 	else /* USB_BAM_HOST */ {
