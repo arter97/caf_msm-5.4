@@ -26,6 +26,14 @@
 		interrupts = <0 158 1>;
 	};
 
+	qcom,smp2p-dsps@9820010 {
+		compatible = "qcom,smp2p";
+		reg = <0x9820010 0x4>;
+		qcom,remote-pid = <3>;
+		qcom,irq-bitmask = <0x4000000>;
+		interrupts = <0 178 1>;
+	};
+
 	smp2pgpio_smp2p_7_in: qcom,smp2pgpio-smp2p-7-in {
 		compatible = "qcom,smp2pgpio";
 		qcom,entry-name = "smp2p";
@@ -117,5 +125,36 @@
 	qcom,smp2pgpio_test_smp2p_2_out {
 		compatible = "qcom,smp2pgpio_test_smp2p_2_out";
 		gpios = <&smp2pgpio_smp2p_2_out 0 0>;
+	};
+
+	smp2pgpio_smp2p_3_in: qcom,smp2pgpio-smp2p-3-in {
+		compatible = "qcom,smp2pgpio";
+		qcom,entry-name = "smp2p";
+		qcom,remote-pid = <3>;
+		qcom,is-inbound;
+		gpio-controller;
+		#gpio-cells = <2>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+	};
+
+	qcom,smp2pgpio_test_smp2p_3_in {
+		compatible = "qcom,smp2pgpio_test_smp2p_3_in";
+		gpios = <&smp2pgpio_smp2p_3_in 0 0>;
+	};
+
+	smp2pgpio_smp2p_3_out: qcom,smp2pgpio-smp2p-3-out {
+		compatible = "qcom,smp2pgpio";
+		qcom,entry-name = "smp2p";
+		qcom,remote-pid = <3>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+	};
+
+	qcom,smp2pgpio_test_smp2p_3_out {
+		compatible = "qcom,smp2pgpio_test_smp2p_3_out";
+		gpios = <&smp2pgpio_smp2p_3_out 0 0>;
 	};
 };
