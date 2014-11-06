@@ -60,6 +60,7 @@
 #include "f_mbim.c"
 #include "f_qc_rndis.c"
 #include "u_bam_data.c"
+#include "u_data_ipa.c"
 #include "u_ether.c"
 #include "u_qc_ether.c"
 #ifdef CONFIG_SND_PCM
