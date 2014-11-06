@@ -2740,6 +2740,7 @@ qpnp_batt_external_power_changed(struct power_supply *psy)
 					else
 						qpnp_chg_iusbmax_set(chip,
 							OVP_USB_WALL_TRSH_MA);
+			} else {
 				qpnp_chg_iusbmax_set(chip, ret.intval / 1000);
 			}
 
