@@ -127,6 +127,17 @@
 		qcom,mdss-prefill-post-scaler-buffer-pixels = <2048>;
 		qcom,mdss-prefill-pingpong-buffer-pixels = <5120>;
 
+		qcom,mdss-pp-offsets {
+			qcom,mdss-sspp-mdss-igc-lut-off = <0x3000>;
+			qcom,mdss-sspp-vig-pcc-off = <0x1580>;
+			qcom,mdss-sspp-rgb-pcc-off = <0x180>;
+			qcom,mdss-sspp-dma-pcc-off = <0x180>;
+			qcom,mdss-lm-pgc-off = <0x3C0>;
+			qcom,mdss-dspp-gamut-off = <0x1600>;
+			qcom,mdss-dspp-pcc-off = <0x1700>;
+			qcom,mdss-dspp-pgc-off = <0x17C0>;
+		};
+
 		mdss_fb0: qcom,mdss_fb_primary {
 			cell-index = <0>;
 			compatible = "qcom,mdss-fb";
