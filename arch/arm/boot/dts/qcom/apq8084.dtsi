@@ -4453,6 +4453,7 @@
 		compatible = "qcom,usb-hsphy";
 		reg = <0xf92f8800 0x3ff>,
 			<0xfd4ab204 0x4>;
+		reg-names = "core", "tcsr";
 		qcom,hsphy-init = <0x00D191A4>;
 		vdd-supply = <&pma8084_s1>;
 		vdda18-supply = <&pma8084_l6>;
@@ -4479,6 +4480,7 @@
 	hsphy1: hsphy@f94f8800 {
 		compatible = "qcom,usb-hsphy";
 		reg = <0xf94f8800 0x3ff>;
+		reg-names = "core";
 		qcom,hsphy-init = <0x00D191A4>;
 		vdd-supply = <&pma8084_s1>;
 		vdda18-supply = <&pma8084_l6>;
