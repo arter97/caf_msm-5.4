@@ -90,7 +90,6 @@ DEFINE_CLK_RPM_SMD(ce1_clk, ce1_a_clk, RPM_CE_CLK_TYPE,
 					CE1_CLK_ID, NULL);
 DEFINE_CLK_DUMMY(gcc_ce1_ahb_m_clk, 0);
 DEFINE_CLK_DUMMY(gcc_ce1_axi_m_clk, 0);
-DEFINE_CLK_DUMMY(gcc_mmss_bimc_gfx_m_clk, 0);
 
 DEFINE_CLK_RPM_SMD_XO_BUFFER(ln_bb_clk, ln_bb_a_clk, LN_BB_CLK_ID);
 static DEFINE_CLK_VOTER(mcd_ce1_clk, &ce1_clk.c, 85710000);
@@ -2048,6 +2047,17 @@ static struct branch_clk gcc_gp3_clk = {
 	},
 };
 
+static struct branch_clk gcc_mmss_bimc_gfx_clk = {
+	.cbcr_reg = GCC_MMSS_BIMC_GFX_CBCR,
+	.has_sibling = 1,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_mmss_bimc_gfx_clk",
+		.ops = &clk_ops_branch,
+		CLK_INIT(gcc_mmss_bimc_gfx_clk.c),
+	},
+};
+
 static struct branch_clk gcc_mmss_noc_at_clk = {
 	.cbcr_reg = GCC_MMSS_NOC_AT_CBCR,
 	.has_sibling = 1,
@@ -2717,13 +2727,13 @@ static struct mux_clk gcc_debug_mux = {
 		{ &pnoc_clk.c, 0x0011 },
 		{ &snoc_clk.c, 0x0000 },
 		{ &bimc_clk.c, 0x00ad },
-		{ &gcc_mmss_bimc_gfx_m_clk.c, 0x001c },
 		{ &ce1_clk.c, 0x0099 },
 		{ &gcc_ce1_axi_m_clk.c, 0x009a },
 		{ &gcc_ce1_ahb_m_clk.c, 0x009b },
 		{ &gcc_mmss_sys_noc_axi_clk.c, 0x0018 },
 		{ &gcc_mmss_noc_cfg_ahb_clk.c, 0x0019 },
 		{ &gcc_mmss_noc_at_clk.c, 0x001a},
+		{ &gcc_mmss_bimc_gfx_clk.c, 0x001c },
 		{ &gcc_usb30_master_clk.c, 0x002d },
 		{ &gcc_usb30_sleep_clk.c, 0x002e },
 		{ &gcc_usb30_mock_utmi_clk.c, 0x002f },
@@ -2893,7 +2903,6 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(ce1_clk),
 	CLK_LIST(gcc_ce1_ahb_m_clk),
 	CLK_LIST(gcc_ce1_axi_m_clk),
-	CLK_LIST(gcc_mmss_bimc_gfx_m_clk),
 	CLK_LIST(gpll0_out_main),
 	CLK_LIST(gpll4_out_main),
 	CLK_LIST(ufs_axi_clk_src),
@@ -2940,6 +2949,7 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(gp1_clk_src),
 	CLK_LIST(gp2_clk_src),
 	CLK_LIST(gp3_clk_src),
+	CLK_LIST(gcc_mmss_bimc_gfx_clk),
 	CLK_LIST(pdm2_clk_src),
 	CLK_LIST(sdcc1_apps_clk_src),
 	CLK_LIST(sdcc2_apps_clk_src),
