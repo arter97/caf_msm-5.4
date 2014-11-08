@@ -310,6 +310,13 @@
 			reg = <0 0x03400000 0 0x2200000>;
 		};
 
+		dfps_data_mem: dfps_data_mem@0 {
+			linux,reserve-contiguous-region;
+			linux,reserve-region;
+			reg = <0 0x03400000 0 0x1000>;
+			label = "dfps_data_mem";
+		};
+
 		peripheral_mem: peripheral_region@c800000 {
 			compatible = "removed-dma-pool";
 			no-map;
