@@ -41,6 +41,8 @@
 
 #define F_MN(f, s, _m, _n) { .freq = f, .src = s, .m = _m, .n = _n }
 
+#define F_MN(f, s, _m, _n) { .freq = f, .src = s, .m = _m, .n = _n }
+
 static u8 mmcc_pxo_pll8_pll2_map[] = {
 	[P_PXO]		= 0,
 	[P_PLL8]	= 2,

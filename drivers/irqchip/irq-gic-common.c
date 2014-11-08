@@ -22,7 +22,7 @@
 #include "irq-gic-common.h"
 
 void gic_configure_irq(unsigned int irq, unsigned int type,
-                       void __iomem *base, void (*sync_access)(void))
+		       void __iomem *base, void (*sync_access)(void))
 {
 	u32 enablemask = 1 << (irq % 32);
 	u32 enableoff = (irq / 32) * 4;
@@ -31,6 +31,10 @@ void gic_configure_irq(unsigned int irq, unsigned int type,
 	bool enabled = false;
 	u32 val;
 
+	/*
+	 * Read current configuration register, and insert the config
+	 * for "irq", depending on "type".
+	 */
 	val = readl_relaxed(base + GIC_DIST_CONFIG + confoff);
 	if (type == IRQ_TYPE_LEVEL_HIGH)
 		val &= ~confmask;
@@ -48,13 +52,17 @@ void gic_configure_irq(unsigned int irq, unsigned int type,
 		enabled = true;
 	}
 
+	/*
+	 * Write back the new configuration, and possibly re-enable
+	 * the interrupt.
+	 */
 	writel_relaxed(val, base + GIC_DIST_CONFIG + confoff);
 
-	if (enabled) {
+	if (enabled)
 		writel_relaxed(enablemask, base + GIC_DIST_ENABLE_SET + enableoff);
-		if (sync_access)
-			sync_access();
-	}
+
+	if (sync_access)
+		sync_access();
 }
 
 void __init gic_dist_config(void __iomem *base, int gic_irqs,
