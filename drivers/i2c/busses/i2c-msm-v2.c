@@ -3276,6 +3276,8 @@ static void i2c_msm_pm_xfer_end(struct i2c_msm_ctrl *ctrl)
 	struct i2c_msm_bam_pipe      *prod = &bam->pipe[I2C_MSM_BAM_PROD];
 	struct i2c_msm_bam_pipe      *cons = &bam->pipe[I2C_MSM_BAM_CONS];
 
+	disable_irq(ctrl->rsrcs.irq);
+
 	/* efectively disabling our ISR */
 	atomic_set(&ctrl->xfer.is_active, 0);
 
@@ -3291,7 +3293,6 @@ static void i2c_msm_pm_xfer_end(struct i2c_msm_ctrl *ctrl)
 	} else {
 		i2c_msm_pm_suspend(ctrl->dev);
 	}
-	disable_irq(ctrl->rsrcs.irq);
 	mutex_unlock(&ctrl->xfer.mtx);
 }
 
