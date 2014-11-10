@@ -242,6 +242,15 @@
 #define clk_hlos2_vote_aggre0_noc_smmu_clk	0xdd72fafe
 #define clk_hlos2_vote_lpass_core_smmu_clk	0x2419cf5d
 #define clk_hlos2_vote_lpass_adsp_smmu_clk	0x34d3924b
+#define clk_gcc_usb3_phy_reset		0x03d559f1
+#define clk_gcc_usb3phy_phy_reset	0xb1a4f885
+#define clk_gcc_usb3_clkref_clk		0xb6cc8f01
+#define clk_gcc_hdmi_clkref_clk		0x4d4eec04
+#define clk_gcc_edp_clkref_clk		0xa8685c3f
+#define clk_gcc_ufs_clkref_clk		0x92aa126f
+#define clk_gcc_pcie_clkref_clk		0xa2e247fa
+#define clk_gcc_rx2_usb2_clkref_clk	0x27ec24ba
+#define clk_gcc_rx1_usb2_clkref_clk	0x53351d25
 
 /* clock_mmss controlled clocks */
 #define clk_mmsscc_xo			0x05e63704

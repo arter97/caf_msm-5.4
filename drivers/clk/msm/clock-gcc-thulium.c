@@ -2699,6 +2699,100 @@ static struct branch_clk hlos2_vote_lpass_adsp_smmu_clk = {
 	},
 };
 
+static struct reset_clk gcc_usb3_phy_reset = {
+	.reset_reg = GCC_USB3_PHY_BCR,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_usb3_phy_reset",
+		.ops = &clk_ops_rst,
+		CLK_INIT(gcc_usb3_phy_reset.c),
+	},
+};
+
+static struct reset_clk gcc_usb3phy_phy_reset = {
+	.reset_reg = GCC_USB3PHY_PHY_BCR,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_usb3phy_phy_reset",
+		.ops = &clk_ops_rst,
+		CLK_INIT(gcc_usb3phy_phy_reset.c),
+	},
+};
+
+static struct branch_clk gcc_usb3_clkref_clk = {
+	.cbcr_reg = GCC_USB3_CLKREF_EN,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_usb3_clkref_clk",
+		.ops = &clk_ops_branch,
+		CLK_INIT(gcc_usb3_clkref_clk.c),
+	},
+};
+
+static struct branch_clk gcc_hdmi_clkref_clk = {
+	.cbcr_reg = GCC_HDMI_CLKREF_EN,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_hdmi_clkref_clk",
+		.ops = &clk_ops_branch,
+		CLK_INIT(gcc_hdmi_clkref_clk.c),
+	},
+};
+
+static struct branch_clk gcc_edp_clkref_clk = {
+	.cbcr_reg = GCC_EDP_CLKREF_EN,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_edp_clkref_clk",
+		.ops = &clk_ops_branch,
+		CLK_INIT(gcc_edp_clkref_clk.c),
+	},
+};
+
+static struct branch_clk gcc_ufs_clkref_clk = {
+	.cbcr_reg = GCC_UFS_CLKREF_EN,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_ufs_clkref_clk",
+		.ops = &clk_ops_branch,
+		CLK_INIT(gcc_ufs_clkref_clk.c),
+	},
+};
+
+static struct branch_clk gcc_pcie_clkref_clk = {
+	.cbcr_reg = GCC_PCIE_CLKREF_EN,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_pcie_clkref_clk",
+		.ops = &clk_ops_branch,
+		CLK_INIT(gcc_pcie_clkref_clk.c),
+	},
+};
+
+static struct local_vote_clk gcc_rx2_usb2_clkref_clk = {
+	.cbcr_reg = GCC_RX2_USB2_CLKREF_EN,
+	.vote_reg = GCC_RX2_USB2_CLKREF_EN,
+	.en_mask = BIT(0),
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_rx2_usb2_clkref_clk",
+		.ops = &clk_ops_vote,
+		CLK_INIT(gcc_rx2_usb2_clkref_clk.c),
+	},
+};
+
+static struct local_vote_clk gcc_rx1_usb2_clkref_clk = {
+	.cbcr_reg = GCC_RX1_USB2_CLKREF_EN,
+	.vote_reg = GCC_RX1_USB2_CLKREF_EN,
+	.en_mask = BIT(0),
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_rx1_usb2_clkref_clk",
+		.ops = &clk_ops_vote,
+		CLK_INIT(gcc_rx1_usb2_clkref_clk.c),
+	},
+};
+
 static struct mux_clk gcc_debug_mux;
 static struct clk_ops clk_ops_debug_mux;
 
@@ -3059,6 +3153,15 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(hlos2_vote_aggre0_noc_smmu_clk),
 	CLK_LIST(hlos2_vote_lpass_core_smmu_clk),
 	CLK_LIST(hlos2_vote_lpass_adsp_smmu_clk),
+	CLK_LIST(gcc_usb3_phy_reset),
+	CLK_LIST(gcc_usb3phy_phy_reset),
+	CLK_LIST(gcc_usb3_clkref_clk),
+	CLK_LIST(gcc_hdmi_clkref_clk),
+	CLK_LIST(gcc_edp_clkref_clk),
+	CLK_LIST(gcc_ufs_clkref_clk),
+	CLK_LIST(gcc_pcie_clkref_clk),
+	CLK_LIST(gcc_rx2_usb2_clkref_clk),
+	CLK_LIST(gcc_rx1_usb2_clkref_clk),
 };
 
 static int msm_gcc_thulium_probe(struct platform_device *pdev)
