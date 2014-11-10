@@ -4799,6 +4799,8 @@ void cfg80211_authorization_event(struct net_device *dev,
 				  const u8 *key_replay_ctr,
 				  gfp_t gfp);
 
+void cfg80211_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *info);
+
 /* Logging, debugging and troubleshooting/diagnostic helpers. */
 
 /* wiphy_printk helpers, similar to dev_printk */

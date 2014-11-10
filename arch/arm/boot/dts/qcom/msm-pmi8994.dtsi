@@ -177,10 +177,10 @@
 			qcom,fastchg-current-ma = <2000>;
 			qcom,float-voltage-mv = <4350>;
 			qcom,resume-delta-mv = <200>;
+			qcom,chg-inhibit-fg;
 			qcom,dc-psy-type = "Mains";
 			qcom,dc-psy-ma = <1500>;
 			qcom,rparasitic-uohm = <100000>;
-			qcom,resume-soc = <95>;
 			qcom,bms-psy-name = "bms";
 			qcom,thermal-mitigation = <1500 700 600 0>;
 			qcom,parallel-usb-min-current-ma = <1400>;
@@ -284,6 +284,7 @@
 			compatible = "qcom,qpnp-fg";
 			#address-cells = <1>;
 			#size-cells = <1>;
+			qcom,resume-soc = <95>;
 			status = "okay";
 
 			qcom,fg-soc@4000 {
@@ -362,7 +363,7 @@
 			      <0xb042 0x7e>;
 			reg-names = "qpnp-lpg-channel-base", "qpnp-lpg-lut-base";
 			qcom,channel-id = <0>;
-			qcom,supported-sizes = <6>, <7>, <9>;
+			qcom,supported-sizes = <6>, <9>;
 			qcom,ramp-index = <0>;
 			#pwm-cells = <2>;
 		};
@@ -373,7 +374,7 @@
 			      <0xb042 0x7e>;
 			reg-names = "qpnp-lpg-channel-base", "qpnp-lpg-lut-base";
 			qcom,channel-id = <1>;
-			qcom,supported-sizes = <6>, <7>, <9>;
+			qcom,supported-sizes = <6>, <9>;
 			qcom,ramp-index = <1>;
 			#pwm-cells = <2>;
 		};
@@ -384,7 +385,7 @@
 			      <0xb042 0x7e>;
 			reg-names = "qpnp-lpg-channel-base", "qpnp-lpg-lut-base";
 			qcom,channel-id = <2>;
-			qcom,supported-sizes = <6>, <7>, <9>;
+			qcom,supported-sizes = <6>, <9>;
 			qcom,ramp-index = <2>;
 			#pwm-cells = <2>;
 		};
@@ -395,7 +396,7 @@
 			      <0xb042 0x7e>;
 			reg-names = "qpnp-lpg-channel-base", "qpnp-lpg-lut-base";
 			qcom,channel-id = <3>;
-			qcom,supported-sizes = <6>, <7>, <9>;
+			qcom,supported-sizes = <6>, <9>;
 			qcom,ramp-index = <3>;
 			#pwm-cells = <2>;
 		};
@@ -421,7 +422,7 @@
 			qcom,ovp-mv = <29500>;
 			qcom,ilim-ma = <980>;
 			qcom,boost-duty-ns = <26>;
-			qcom,mod-freq-khz = <19200>;
+			qcom,mod-freq-khz = <9600>;
 			qcom,dim-mode = "hybrid";
 			qcom,dim-method = "linear";
 			qcom,hyb-thres = <625>;
@@ -430,6 +431,7 @@
 			qcom,en-phase-stag;
 			qcom,ibb-pwrup-dly = <8>;
 			qcom,led-strings-list = [00 01 02 03];
+			qcom,en-ext-pfet-sc-pro;
 		};
 
 		pmi8994_haptics: qcom,haptic@c000 {
@@ -447,7 +449,7 @@
 			qcom,ilim-ma = <800>;
 			qcom,sc-deb-cycles = <8>;
 			qcom,int-pwm-freq-khz = <505>;
-			qcom,brake-pattern = [00 00 03 03];
+			qcom,brake-pattern = [03 03 00 00];
 			qcom,use-play-irq;
 			qcom,use-sc-irq;
 			qcom,wave-samples = [3e 3e 3e 3e 3e 3e 3e 3e];

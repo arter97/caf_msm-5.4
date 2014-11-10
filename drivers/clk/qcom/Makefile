@@ -20,3 +20,4 @@ obj-$(CONFIG_MSM_MMCC_8974) += mmcc-msm8974.o
 # MSM8992
 obj-$(CONFIG_ARCH_MSM8992)	+= clock-rpm-8992.o
 obj-$(CONFIG_ARCH_MSM8992)	+= clock-gcc-8992.o
+obj-$(CONFIG_ARCH_MSM8992)	+= clock-mmss-8992.o

@@ -16,6 +16,7 @@
 #define ADM_PATH_PLAYBACK 0x1
 #define ADM_PATH_LIVE_REC 0x2
 #define ADM_PATH_NONLIVE_REC 0x3
+#define ADM_PATH_COMPRESSED_RX 0x5
 #include <linux/qdsp6v2/rtac.h>
 #include <sound/q6afe-v2.h>
 #include <sound/q6audio-v2.h>
@@ -38,6 +39,8 @@ enum {
 };
 
 #define MAX_COPPS_PER_PORT 0x8
+#define ADM_MAX_CHANNELS 8
+
 /* multiple copp per stream. */
 struct route_payload {
 	unsigned int copp_idx[MAX_COPPS_PER_PORT];
@@ -123,4 +126,7 @@ int adm_wait_timeout(int port_id, int copp_idx, int wait_time);
 int adm_store_cal_data(int port_id, int copp_idx, int path, int perf_mode,
 		       int cal_type, char *params, int *size);
 
+int adm_send_compressed_device_mute(int port_id, int copp_idx, bool mute_on);
+
+int adm_send_compressed_device_latency(int port_id, int copp_idx, int latency);
 #endif /* __Q6_ADM_V2_H__ */

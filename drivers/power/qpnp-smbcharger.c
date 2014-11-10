@@ -83,7 +83,6 @@ struct smbchg_chip {
 	int				safety_time;
 	int				prechg_safety_time;
 	int				bmd_pin_src;
-	int				resume_soc_threshold;
 	bool				use_vfloat_adjustments;
 	bool				iterm_disabled;
 	bool				bmd_algo_disabled;
@@ -92,6 +91,7 @@ struct smbchg_chip {
 	bool				low_icl_wa_on;
 	bool				battery_unknown;
 	bool				charge_unknown_battery;
+	bool				chg_inhibit_source_fg;
 	u8				original_usbin_allowance;
 	struct parallel_usb_cfg		parallel;
 	struct delayed_work		parallel_en_work;
@@ -108,7 +108,6 @@ struct smbchg_chip {
 	bool				dc_present;
 	bool				usb_present;
 	bool				batt_present;
-	bool				chg_done_batt_full;
 	bool				otg_retries;
 
 	/* jeita and temperature */
@@ -143,7 +142,6 @@ struct smbchg_chip {
 	int				otg_oc_irq;
 	int				aicl_done_irq;
 	int				usbid_change_irq;
-	int				chg_inhibit_irq;
 	int				chg_error_irq;
 	bool				enable_aicl_wake;
 
@@ -381,6 +379,29 @@ static void smbchg_relax(struct smbchg_chip *chip, int reason)
 	}
 	chip->wake_reasons = reasons;
 	mutex_unlock(&chip->pm_lock);
+};
+
+enum pwr_path_type {
+	UNKNOWN = 0,
+	PWR_PATH_BATTERY = 1,
+	PWR_PATH_USB = 2,
+	PWR_PATH_DC = 3,
+};
+
+#define PWR_PATH		0x08
+#define PWR_PATH_MASK		0x03
+static enum pwr_path_type smbchg_get_pwr_path(struct smbchg_chip *chip)
+{
+	int rc;
+	u8 reg;
+
+	rc = smbchg_read(chip, &reg, chip->usb_chgpth_base + PWR_PATH, 1);
+	if (rc < 0) {
+		dev_err(chip->dev, "Couldn't read PWR_PATH rc = %d\n", rc);
+		return PWR_PATH_BATTERY;
+	}
+
+	return reg & PWR_PATH_MASK;
 }
 
 #define RID_STS				0xB
@@ -447,18 +468,23 @@ static bool is_otg_present(struct smbchg_chip *chip)
 #define DCIN_UNREG			BIT(1)
 #define DCIN_LV				BIT(0)
 #define INPUT_STS			0x0D
+#define DCIN_UV_BIT			0x0
+#define DCIN_OV_BIT			0x1
 static bool is_dc_present(struct smbchg_chip *chip)
 {
 	int rc;
 	u8 reg;
 
-	rc = smbchg_read(chip, &reg, chip->usb_chgpth_base + INPUT_STS, 1);
+	rc = smbchg_read(chip, &reg, chip->dc_chgpth_base + RT_STS, 1);
 	if (rc < 0) {
-		dev_err(chip->dev, "Couldn't read usb status rc = %d\n", rc);
+		dev_err(chip->dev, "Couldn't read dc status rc = %d\n", rc);
 		return false;
 	}
 
-	return !!(reg & (DCIN_9V | DCIN_UNREG | DCIN_LV));
+	if ((reg & DCIN_UV_BIT) || (reg & DCIN_OV_BIT))
+		return false;
+
+	return true;
 }
 
 static bool is_usb_present(struct smbchg_chip *chip)
@@ -545,12 +571,29 @@ static enum power_supply_property smbchg_battery_properties[] = {
 #define BATT_FAST_CHG_VAL		0x2
 #define BATT_TAPER_CHG_VAL		0x3
 #define CHG_EN_BIT			BIT(0)
+#define CHG_INHIBIT_BIT		BIT(1)
+#define BAT_TCC_REACHED_BIT		BIT(7)
 static int get_prop_batt_status(struct smbchg_chip *chip)
 {
 	int rc, status = POWER_SUPPLY_STATUS_DISCHARGING;
 	u8 reg = 0, chg_type;
+	bool charger_present, chg_inhibit;
 
-	if (chip->chg_done_batt_full)
+	rc = smbchg_read(chip, &reg, chip->chgr_base + RT_STS, 1);
+	if (rc < 0) {
+		dev_err(chip->dev, "Unable to read RT_STS rc = %d\n", rc);
+		return POWER_SUPPLY_STATUS_UNKNOWN;
+	}
+
+	if (reg & BAT_TCC_REACHED_BIT)
+		return POWER_SUPPLY_STATUS_FULL;
+
+	charger_present = is_usb_present(chip) | is_dc_present(chip);
+	if (!charger_present)
+		return POWER_SUPPLY_STATUS_DISCHARGING;
+
+	chg_inhibit = reg & CHG_INHIBIT_BIT;
+	if (chg_inhibit)
 		return POWER_SUPPLY_STATUS_FULL;
 
 	rc = smbchg_read(chip, &reg, chip->chgr_base + CHGR_STS, 1);
@@ -1325,9 +1368,7 @@ static void smbchg_parallel_usb_disable(struct smbchg_chip *chip)
 #define PARALLEL_FCC_PERCENT_REDUCTION		75
 #define MINIMUM_PARALLEL_FCC_MA			500
 #define CHG_ERROR_BIT		BIT(0)
-#define CHG_INHIBIT_BIT		BIT(1)
 #define BAT_TAPER_MODE_BIT	BIT(6)
-#define BAT_TCC_REACHED_BIT	BIT(7)
 static void smbchg_parallel_usb_taper(struct smbchg_chip *chip)
 {
 	struct power_supply *parallel_psy = get_parallel_psy(chip);
@@ -1821,7 +1862,6 @@ static int smbchg_dc_get_property(struct power_supply *psy,
 {
 	struct smbchg_chip *chip = container_of(psy,
 				struct smbchg_chip, dc_psy);
-	bool user_enabled = (chip->dc_suspended & REASON_USER) == 0;
 
 	switch (prop) {
 	case POWER_SUPPLY_PROP_PRESENT:
@@ -1832,7 +1872,9 @@ static int smbchg_dc_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_ONLINE:
 		/* return if dc is charging the battery */
-		val->intval = user_enabled && chip->dc_present;
+		val->intval = (smbchg_get_pwr_path(chip) == PWR_PATH_DC)
+				&& (get_prop_batt_status(chip)
+					== POWER_SUPPLY_STATUS_CHARGING);
 		break;
 	default:
 		return -EINVAL;
@@ -1875,44 +1917,6 @@ static void smbchg_unknown_battery_en(struct smbchg_chip *chip, bool en)
 	}
 }
 
-#define CHGR_CFG2			0xFC
-#define CHG_EN_COMMAND_BIT		BIT(6)
-#define CHARGER_INHIBIT_BIT		BIT(0)
-static void smbchg_restart_charging(struct smbchg_chip *chip)
-{
-	int rc;
-
-	pr_smb(PR_STATUS, "restarting charging\n");
-
-	rc = smbchg_sec_masked_write(chip, chip->chgr_base + CHGR_CFG2,
-			CHARGER_INHIBIT_BIT | CHG_EN_COMMAND_BIT, 0);
-	if (rc < 0) {
-		dev_err(chip->dev, "Couldn't set chgr_cfg2 rc=%d\n", rc);
-		return;
-	}
-
-	/* Sleep for 100 ms in order to let charge inhibit fall */
-	msleep(100);
-
-	rc = smbchg_sec_masked_write(chip, chip->chgr_base + CHGR_CFG2,
-			CHG_EN_COMMAND_BIT, CHG_EN_COMMAND_BIT);
-	if (rc < 0) {
-		dev_err(chip->dev, "Couldn't set chgr_cfg2 rc=%d\n", rc);
-		return;
-	}
-
-	/* Sleep for 500 ms in order to give charging a chance to restart */
-	msleep(500);
-
-	rc = smbchg_sec_masked_write(chip, chip->chgr_base + CHGR_CFG2,
-			CHARGER_INHIBIT_BIT | CHG_EN_COMMAND_BIT,
-			CHARGER_INHIBIT_BIT | CHG_EN_COMMAND_BIT);
-	if (rc < 0) {
-		dev_err(chip->dev, "Couldn't set chgr_cfg2 rc=%d\n", rc);
-		return;
-	}
-}
-
 #define CMD_CHG_REG	0x42
 #define EN_BAT_CHG_BIT		BIT(1)
 static int smbchg_charging_en(struct smbchg_chip *chip, bool en)
@@ -1942,21 +1946,6 @@ static void smbchg_external_power_changed(struct power_supply *psy)
 		smbchg_unknown_battery_en(chip, en);
 		en = strcmp(prop.strval, LOADING_BATT_TYPE) != 0;
 		smbchg_charging_en(chip, en);
-
-		if (get_prop_batt_capacity(chip) <= chip->resume_soc_threshold
-				&& chip->resume_soc_threshold >= 0
-				&& !chip->batt_cool && !chip->batt_warm
-				&& (get_prop_batt_status(chip)
-					== POWER_SUPPLY_STATUS_FULL
-				|| get_prop_batt_status(chip)
-					== POWER_SUPPLY_STATUS_NOT_CHARGING))
-			smbchg_restart_charging(chip);
-		else if (chip->resume_soc_threshold >= 0)
-			pr_smb(PR_MISC,
-				"not resuming, soc: %d - %d, status = %d\n",
-				get_prop_batt_capacity(chip),
-				chip->resume_soc_threshold,
-				get_prop_batt_status(chip));
 	}
 
 	rc = chip->usb_psy->get_property(chip->usb_psy,
@@ -2445,7 +2434,6 @@ static irqreturn_t chg_term_handler(int irq, void *_chip)
 	u8 reg = 0;
 
 	smbchg_read(chip, &reg, chip->chgr_base + RT_STS, 1);
-	chip->chg_done_batt_full = !!(reg & BAT_TCC_REACHED_BIT);
 	pr_smb(PR_INTERRUPT, "triggered: 0x%02x\n", reg);
 	smbchg_parallel_usb_check_ok(chip);
 	if (chip->psy_registered)
@@ -2713,24 +2701,6 @@ static irqreturn_t usbid_change_handler(int irq, void *_chip)
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t chg_inhibit_handler(int irq, void *_chip)
-{
-	/*
-	 * charger is inserted when the battery voltage is high
-	 * so h/w won't start charging just yet. Treat this as
-	 * battery full
-	 */
-	struct smbchg_chip *chip = _chip;
-	u8 reg = 0;
-
-	smbchg_read(chip, &reg, chip->chgr_base + RT_STS, 1);
-	chip->chg_done_batt_full = !!(reg & CHG_INHIBIT_BIT);
-	pr_smb(PR_INTERRUPT, "triggered: 0x%02x\n", reg);
-	if (chip->psy_registered)
-		power_supply_changed(&chip->batt_psy);
-	return IRQ_HANDLED;
-}
-
 static int determine_initial_status(struct smbchg_chip *chip)
 {
 	/*
@@ -2801,6 +2771,7 @@ static inline int get_bpd(const char *name)
 #define CHGR_CFG1			0xFB
 #define RECHG_THRESHOLD_SRC_BIT		BIT(1)
 #define TERM_I_SRC_BIT			BIT(2)
+#define CHGR_CFG2			0xFC
 #define CHG_INHIB_CFG_REG		0xF7
 #define CHG_INHIBIT_50MV_VAL		0x00
 #define CHG_INHIBIT_100MV_VAL		0x01
@@ -2809,9 +2780,11 @@ static inline int get_bpd(const char *name)
 #define CHG_INHIBIT_MASK		0x03
 #define USE_REGISTER_FOR_CURRENT	BIT(2)
 #define CHG_EN_SRC_BIT			BIT(7)
+#define CHG_EN_COMMAND_BIT		BIT(6)
 #define P2F_CHG_TRAN			BIT(5)
 #define I_TERM_BIT			BIT(3)
 #define AUTO_RECHG_BIT			BIT(2)
+#define CHARGER_INHIBIT_BIT		BIT(0)
 #define CFG_TCC_REG			0xF9
 #define CHG_ITERM_50MA			0x1
 #define CHG_ITERM_100MA			0x2
@@ -2906,11 +2879,18 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
 	}
 
 	/*
-	 * use the analog sensors instead of the fuelgauge adcs so that
-	 * tcc detection works without trimmed parts
+	 * Based on the configuration, use the analog sensors or the fuelgauge
+	 * adc for recharge threshold source.
 	 */
-	rc = smbchg_sec_masked_write(chip, chip->chgr_base + CHGR_CFG1,
+
+	if (chip->chg_inhibit_source_fg)
+		rc = smbchg_sec_masked_write(chip, chip->chgr_base + CHGR_CFG1,
+			TERM_I_SRC_BIT | RECHG_THRESHOLD_SRC_BIT,
+			RECHG_THRESHOLD_SRC_BIT);
+	else
+		rc = smbchg_sec_masked_write(chip, chip->chgr_base + CHGR_CFG1,
 			TERM_I_SRC_BIT | RECHG_THRESHOLD_SRC_BIT, 0);
+
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't set chgr_cfg2 rc=%d\n", rc);
 		return rc;
@@ -3042,22 +3022,29 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
 	smbchg_dc_en(chip, chip->chg_enabled, REASON_USER);
 	/* resume threshold */
 	if (chip->resume_delta_mv != -EINVAL) {
-		if (chip->resume_delta_mv < 100)
-			reg = CHG_INHIBIT_50MV_VAL;
-		else if (chip->resume_delta_mv < 200)
-			reg = CHG_INHIBIT_100MV_VAL;
-		else if (chip->resume_delta_mv < 300)
-			reg = CHG_INHIBIT_200MV_VAL;
-		else
-			reg = CHG_INHIBIT_300MV_VAL;
 
-		rc = smbchg_sec_masked_write(chip,
-				chip->chgr_base + CHG_INHIB_CFG_REG,
-				CHG_INHIBIT_MASK, reg);
-		if (rc < 0) {
-			dev_err(chip->dev, "Couldn't set inhibit val rc = %d\n",
-					rc);
-			return rc;
+		/*
+		 * Configure only if the recharge threshold source is not
+		 * fuel gauge ADC.
+		 */
+		if (!chip->chg_inhibit_source_fg) {
+			if (chip->resume_delta_mv < 100)
+				reg = CHG_INHIBIT_50MV_VAL;
+			else if (chip->resume_delta_mv < 200)
+				reg = CHG_INHIBIT_100MV_VAL;
+			else if (chip->resume_delta_mv < 300)
+				reg = CHG_INHIBIT_200MV_VAL;
+			else
+				reg = CHG_INHIBIT_300MV_VAL;
+
+			rc = smbchg_sec_masked_write(chip,
+					chip->chgr_base + CHG_INHIB_CFG_REG,
+					CHG_INHIBIT_MASK, reg);
+			if (rc < 0) {
+				dev_err(chip->dev, "Couldn't set inhibit val rc = %d\n",
+						rc);
+				return rc;
+			}
 		}
 
 		rc = smbchg_sec_masked_write(chip,
@@ -3159,7 +3146,6 @@ static int smb_parse_dt(struct smbchg_chip *chip)
 	OF_PROP_READ(chip, chip->vfloat_mv, "float-voltage-mv", rc, 1);
 	OF_PROP_READ(chip, chip->safety_time, "charging-timeout-mins", rc, 1);
 	OF_PROP_READ(chip, chip->rpara_uohm, "rparasitic-uohm", rc, 1);
-	OF_PROP_READ(chip, chip->resume_soc_threshold, "resume-soc", rc, 1);
 	OF_PROP_READ(chip, chip->prechg_safety_time, "precharging-timeout-mins",
 			rc, 1);
 	if (chip->safety_time != -EINVAL &&
@@ -3200,6 +3186,8 @@ static int smb_parse_dt(struct smbchg_chip *chip)
 						"qcom,charging-disabled"));
 	chip->charge_unknown_battery = of_property_read_bool(node,
 						"qcom,charge-unknown-battery");
+	chip->chg_inhibit_source_fg = of_property_read_bool(node,
+						"qcom,chg-inhibit-fg");
 
 	/* parse the battery missing detection pin source */
 	rc = of_property_read_string(chip->spmi->dev.of_node,
@@ -3345,8 +3333,6 @@ static int smbchg_request_irqs(struct smbchg_chip *chip)
 			disable_irq_nosync(chip->taper_irq);
 			REQUEST_IRQ(chip, spmi_resource, chip->chg_term_irq,
 				"chg-tcc-thr", chg_term_handler, flags, rc);
-			REQUEST_IRQ(chip, spmi_resource, chip->chg_inhibit_irq,
-				"chg-inhibit", chg_inhibit_handler, flags, rc);
 			REQUEST_IRQ(chip, spmi_resource, chip->recharge_irq,
 				"chg-rechg-thr", recharge_handler, flags, rc);
 			REQUEST_IRQ(chip, spmi_resource, chip->fastchg_irq,

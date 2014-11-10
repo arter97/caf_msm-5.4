@@ -542,6 +542,13 @@ config MSM_SHARED_HEAP_ACCESS
 	 Enable support to provide access to clients to certain HLOS regions
 	 which are protected by the secure environment.
 
+config MSM_PACMAN
+	bool "Enable the Peripheral Access Control Manager (PACMan)"
+	help
+	  Add support for the Peripheral Access Control Manager (PACMan)
+	  This driver allows reconfiguration of the Bus Access Manager
+	  Low Speed Peripheral (BLSP) ownership.
+
 source "drivers/soc/qcom/memshare/Kconfig"
 
 endif # ARCH_MSM

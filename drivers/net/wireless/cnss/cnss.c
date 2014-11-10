@@ -46,6 +46,7 @@
 #include <soc/qcom/subsystem_notif.h>
 #include <soc/qcom/ramdump.h>
 #include <net/cfg80211.h>
+#include <soc/qcom/memory_dump.h>
 #include <net/cnss.h>
 
 #define subsys_to_drv(d) container_of(d, struct cnss_data, subsys_desc)
@@ -56,6 +57,10 @@
 #define WLAN_EN_LOW		0
 #define PCIE_LINK_UP		1
 #define PCIE_LINK_DOWN		0
+#define CNSS_DUMP_FORMAT_VER	0x11
+#define CNSS_DUMP_MAGIC_VER_V2	0x42445953
+#define CNSS_DUMP_NAME		"CNSS_WLAN"
+
 
 #define QCA6174_VENDOR_ID	(0x168C)
 #define QCA6174_DEVICE_ID	(0x003E)
@@ -131,7 +136,8 @@ static DEFINE_SPINLOCK(pci_link_down_lock);
 #define MAX_IMAGE_SIZE		(2*1024*1024)
 #define FW_IMAGE_FTM		(0x01)
 #define FW_IMAGE_MISSION	(0x02)
-#define FW_IMAGE_PRINT		(0x03)
+#define FW_IMAGE_BDATA		(0x03)
+#define FW_IMAGE_PRINT		(0x04)
 
 #define SEG_METADATA		(0x01)
 #define SEG_NON_PAGED		(0x02)
@@ -201,7 +207,12 @@ static struct cnss_data {
 	struct platform_device *pldev;
 	struct subsys_device *subsys;
 	struct subsys_desc    subsysdesc;
+	bool ramdump_dynamic;
 	struct ramdump_device *ramdump_dev;
+	unsigned long ramdump_size;
+	void *ramdump_addr;
+	phys_addr_t ramdump_phys;
+	struct msm_dump_data dump_data;
 	u16 unsafe_ch_count;
 	u16 unsafe_ch_list[CNSS_MAX_CH_NUM];
 	struct cnss_wlan_driver *driver;
@@ -239,13 +250,18 @@ static struct cnss_data {
 	void *fw_mem;
 #endif
 	u32 device_id;
-	void *fw_image_cpu;
 	int fw_image_setup;
-	dma_addr_t dma_fw_image;
-	u32 dma_fw_size;
-	u32 seg_count;
 	uint32_t bmi_test;
-	struct segment_memory seg_mem[MAX_NUM_OF_SEGMENTS];
+	void *fw_cpu;
+	dma_addr_t fw_dma;
+	u32 fw_dma_size;
+	u32 fw_seg_count;
+	struct segment_memory fw_seg_mem[MAX_NUM_OF_SEGMENTS];
+	void *bdata_cpu;
+	dma_addr_t bdata_dma;
+	u32 bdata_dma_size;
+	u32 bdata_seg_count;
+	struct segment_memory bdata_seg_mem[MAX_NUM_OF_SEGMENTS];
 } *penv;
 
 static int cnss_wlan_vreg_on(struct cnss_wlan_vreg_info *vreg_info)
@@ -747,9 +763,11 @@ static void print_allocated_image_table(void)
 {
 	u32 seg = 0, count = 0;
 	u8 *dump_addr;
-	struct segment_memory *pseg_mem = penv->seg_mem;
+	struct segment_memory *pseg_mem = penv->fw_seg_mem;
+	struct segment_memory *p_bdata_seg_mem = penv->bdata_seg_mem;
 
-	while (seg++ < penv->seg_count) {
+	pr_debug("%s: Dumping FW IMAGE\n", __func__);
+	while (seg++ < penv->fw_seg_count) {
 		dump_addr = (u8 *)pseg_mem->cpu_region +
 			sizeof(struct region_desc);
 		for (count = 0; count < pseg_mem->size -
@@ -758,25 +776,58 @@ static void print_allocated_image_table(void)
 
 		pseg_mem++;
 	}
+
+	seg = 0;
+	pr_debug("%s: Dumping BOARD DATA\n", __func__);
+	while (seg++ < penv->bdata_seg_count) {
+		dump_addr = (u8 *)p_bdata_seg_mem->cpu_region +
+			sizeof(struct region_desc);
+		for (count = 0; count < p_bdata_seg_mem->size -
+			     sizeof(struct region_desc); count++)
+			pr_debug("%02x ", dump_addr[count]);
+
+		p_bdata_seg_mem++;
+	}
 }
 
 static void free_allocated_image_table(void)
 {
 	struct device *dev = &penv->pdev->dev;
-	struct segment_memory *pseg_mem = penv->seg_mem;
+	struct segment_memory *pseg_mem;
 	u32 seg = 0;
 
-	while (seg++ < penv->seg_count) {
+	/* free fw memroy */
+	pseg_mem = penv->fw_seg_mem;
+	while (seg++ < penv->fw_seg_count) {
 		dma_free_coherent(dev, pseg_mem->size,
-		  pseg_mem->cpu_region, pseg_mem->dma_region);
+			pseg_mem->cpu_region, pseg_mem->dma_region);
 		pseg_mem++;
 	}
-	dma_free_coherent(dev,
-		sizeof(struct segment_desc) * MAX_NUM_OF_SEGMENTS,
-		    penv->fw_image_cpu, penv->dma_fw_image);
-	penv->seg_count = 0;
-	penv->dma_fw_image = 0;
-	penv->dma_fw_size = 0;
+	if (penv->fw_cpu)
+		dma_free_coherent(dev,
+			sizeof(struct segment_desc) * MAX_NUM_OF_SEGMENTS,
+			penv->fw_cpu, penv->fw_dma);
+	penv->fw_seg_count = 0;
+	penv->fw_dma = 0;
+	penv->fw_cpu = NULL;
+	penv->fw_dma_size = 0;
+
+	/* free bdata memory */
+	seg = 0;
+	pseg_mem = penv->bdata_seg_mem;
+	while (seg++ < penv->bdata_seg_count) {
+		dma_free_coherent(dev, pseg_mem->size,
+			pseg_mem->cpu_region, pseg_mem->dma_region);
+		pseg_mem++;
+	}
+	if (penv->bdata_cpu)
+		dma_free_coherent(dev,
+			sizeof(struct segment_desc) * MAX_NUM_OF_SEGMENTS,
+			penv->bdata_cpu, penv->bdata_dma);
+	penv->bdata_seg_count = 0;
+	penv->bdata_dma = 0;
+	penv->bdata_cpu = NULL;
+	penv->bdata_dma_size = 0;
 }
 
 static int cnss_setup_fw_image_table(int mode)
@@ -797,6 +848,10 @@ static int cnss_setup_fw_image_table(int mode)
 	uintptr_t address;
 	int ret = 0;
 	dma_addr_t dma_addr;
+	void *vaddr = NULL;
+	dma_addr_t paddr;
+	struct segment_memory *pseg_mem;
+	u32 *pseg_count;
 
 	if (!penv || !penv->pdev) {
 		pr_err("cnss: invalid penv or pdev or dev\n");
@@ -805,28 +860,48 @@ static int cnss_setup_fw_image_table(int mode)
 	}
 	dev = &penv->pdev->dev;
 
+	/*  meta data file has image details */
+	switch (mode) {
+	case FW_IMAGE_FTM:
+		ret = scnprintf(index_file, FW_FILENAME_LENGTH, "qftm.bin");
+		pseg_mem = penv->fw_seg_mem;
+		pseg_count = &penv->fw_seg_count;
+		break;
+	case FW_IMAGE_MISSION:
+		ret = scnprintf(index_file, FW_FILENAME_LENGTH, "qwlan.bin");
+		pseg_mem = penv->fw_seg_mem;
+		pseg_count = &penv->fw_seg_count;
+		break;
+	case FW_IMAGE_BDATA:
+		ret = scnprintf(index_file, FW_FILENAME_LENGTH, "bdwlan.bin");
+		pseg_mem = penv->bdata_seg_mem;
+		pseg_count = &penv->bdata_seg_count;
+		break;
+	default:
+		pr_err("%s: Unknown meta data file type 0x%x\n",
+		       __func__, mode);
+		ret = -EINVAL;
+	}
+	if (ret < 0)
+		goto err;
+
 	image_desc_size = sizeof(struct image_desc_hdr) +
 		sizeof(struct segment_desc) * MAX_NUM_OF_SEGMENTS;
 
-	penv->fw_image_cpu = dma_alloc_coherent(dev, image_desc_size,
-			&penv->dma_fw_image, GFP_KERNEL);
+	vaddr = dma_alloc_coherent(dev, image_desc_size,
+			&paddr, GFP_KERNEL);
 
-	if (!penv->fw_image_cpu) {
+	if (!vaddr) {
 		pr_err("cnss: image desc allocation failure\n");
 		ret = -ENOMEM;
 		goto err;
 	}
 
-	memset(penv->fw_image_cpu, 0, image_desc_size);
+	memset(vaddr, 0, image_desc_size);
 
-	image_hdr = (struct image_desc_hdr *)penv->fw_image_cpu;
+	image_hdr = (struct image_desc_hdr *)vaddr;
 	image_hdr->image_id = mode;
 	memcpy(image_hdr->reserved, reserved, 3);
-
-	/*  meta data file has image details */
-	ret = scnprintf(index_file, FW_FILENAME_LENGTH, "qwlan.bin");
-	if (ret < 0)
-		goto err_free;
 
 	pr_err("cnss: request meta data file %s\n", index_file);
 	ret = request_firmware(&fw_index, index_file, dev);
@@ -856,7 +931,7 @@ static int cnss_setup_fw_image_table(int mode)
 
 		file_size -= ret;
 		index_pos += ret;
-		pseg = penv->fw_image_cpu + image_pos +
+		pseg = vaddr + image_pos +
 				sizeof(struct image_desc_hdr);
 
 		switch (type) {
@@ -907,13 +982,13 @@ static int cnss_setup_fw_image_table(int mode)
 			reg_desc->reserved = 0;
 			reg_desc->size = fw_image->size;
 
-			penv->seg_mem[penv->seg_count].dma_region = dma_addr;
-			penv->seg_mem[penv->seg_count].cpu_region = reg_desc;
-			penv->seg_mem[penv->seg_count].size =
+			pseg_mem[*pseg_count].dma_region = dma_addr;
+			pseg_mem[*pseg_count].cpu_region = reg_desc;
+			pseg_mem[*pseg_count].size =
 				sizeof(struct region_desc) + fw_image->size;
 
 			release_firmware(fw_image);
-			penv->seg_count++;
+			(*pseg_count)++;
 			break;
 
 		default:
@@ -923,10 +998,18 @@ static int cnss_setup_fw_image_table(int mode)
 	    }
 	    image_pos += sizeof(struct segment_desc);
 	}
-	penv->dma_fw_size = sizeof(struct image_desc_hdr) +
-	  sizeof(struct segment_desc) * image_hdr->segments_cnt;
-
-	pr_info("Image setup table built on host");
+	if (mode != FW_IMAGE_BDATA) {
+		penv->fw_cpu = vaddr;
+		penv->fw_dma = paddr;
+		penv->fw_dma_size = sizeof(struct image_desc_hdr) +
+			sizeof(struct segment_desc) * image_hdr->segments_cnt;
+	} else {
+		penv->bdata_cpu = vaddr;
+		penv->bdata_dma = paddr;
+		penv->bdata_dma_size = sizeof(struct image_desc_hdr) +
+			sizeof(struct segment_desc) * image_hdr->segments_cnt;
+	}
+	pr_info("%s: Mode %d: Image setup table built on host", __func__, mode);
 
 	return file_size;
 
@@ -938,13 +1021,16 @@ err:
 	return ret;
 }
 
-int cnss_get_fw_image(dma_addr_t *fw_image, u32 *image_size)
+int cnss_get_fw_image(struct image_desc_info *image_desc_info)
 {
-	if (!fw_image || !penv || !penv->seg_count)
+	if (!image_desc_info || !penv ||
+	    !penv->fw_seg_count || !penv->bdata_seg_count)
 		return -EINVAL;
 
-	*fw_image = penv->dma_fw_image;
-	*image_size = penv->dma_fw_size;
+	image_desc_info->fw_addr = penv->fw_dma;
+	image_desc_info->fw_size = penv->fw_dma_size;
+	image_desc_info->bdata_addr = penv->bdata_dma;
+	image_desc_info->bdata_size = penv->bdata_dma_size;
 
 	return 0;
 }
@@ -1195,11 +1281,13 @@ static ssize_t fw_image_setup_store(struct device *dev,
 	if (sscanf(buf, "%d", &val) != 1)
 		return -EINVAL;
 
-	if (val == FW_IMAGE_FTM || val == FW_IMAGE_MISSION) {
-		pr_err("fw image setup triggered %d\n", val);
+	if (val == FW_IMAGE_FTM || val == FW_IMAGE_MISSION
+	    || val == FW_IMAGE_BDATA) {
+		pr_info("%s: fw image setup triggered %d\n", __func__, val);
 		ret = cnss_setup_fw_image_table(val);
 		if (ret != 0) {
-			pr_err("Invalid parsing of FW image files %d", ret);
+			pr_err("%s: Invalid parsing of FW image files %d",
+			       __func__, ret);
 			return -EINVAL;
 		}
 		penv->fw_image_setup = val;
@@ -1769,22 +1857,26 @@ EXPORT_SYMBOL(cnss_vendor_cmd_reply);
 
 int cnss_get_ramdump_mem(unsigned long *address, unsigned long *size)
 {
-	struct resource *res;
-
 	if (!penv || !penv->pldev)
 		return -ENODEV;
 
-	res = platform_get_resource_byname(penv->pldev,
-			IORESOURCE_MEM, "ramdump");
-	if (!res)
-		return -EINVAL;
-
-	*address = res->start;
-	*size = resource_size(res);
+	*address = penv->ramdump_phys;
+	*size = penv->ramdump_size;
 
 	return 0;
 }
 EXPORT_SYMBOL(cnss_get_ramdump_mem);
+
+void *cnss_get_virt_ramdump_mem(unsigned long *size)
+{
+	if (!penv || !penv->pldev)
+		return NULL;
+
+	*size = penv->ramdump_size;
+
+	return penv->ramdump_addr;
+}
+EXPORT_SYMBOL(cnss_get_virt_ramdump_mem);
 
 void cnss_device_crashed(void)
 {
@@ -1968,24 +2060,21 @@ err_wlan_vreg_on:
 static int cnss_ramdump(int enable, const struct subsys_desc *subsys)
 {
 	struct ramdump_segment segment;
-	unsigned long address = 0;
-	unsigned long size = 0;
-	int ret = 0;
 
 	if (!penv)
 		return -ENODEV;
 
+	if (!penv->ramdump_size)
+		return -ENOENT;
+
 	if (!enable)
-		return ret;
+		return 0;
 
-	if (cnss_get_ramdump_mem(&address, &size))
-		return -EINVAL;
+	memset(&segment, 0, sizeof(segment));
+	segment.v_address = penv->ramdump_addr;
+	segment.size = penv->ramdump_size;
 
-	segment.address = address;
-	segment.size = size;
-	ret = do_ramdump(penv->ramdump_dev, &segment, 1);
-
-	return ret;
+	return do_ramdump(penv->ramdump_dev, &segment, 1);
 }
 
 static void cnss_crash_shutdown(const struct subsys_desc *subsys)
@@ -1998,8 +2087,15 @@ static void cnss_crash_shutdown(const struct subsys_desc *subsys)
 
 	wdrv = penv->driver;
 	pdev = penv->pdev;
+
+	penv->dump_data.version = CNSS_DUMP_FORMAT_VER;
+	strlcpy(penv->dump_data.name, CNSS_DUMP_NAME,
+			sizeof(penv->dump_data.name));
+
 	if (pdev && wdrv && wdrv->crash_shutdown)
 		wdrv->crash_shutdown(pdev);
+
+	penv->dump_data.magic = CNSS_DUMP_MAGIC_VER_V2;
 }
 
 void cnss_device_self_recovery(void)
@@ -2067,6 +2163,9 @@ static int cnss_probe(struct platform_device *pdev)
 	const char *client_desc;
 	struct device *dev = &pdev->dev;
 	u32 rc_num;
+	struct msm_dump_entry dump_entry;
+	struct resource *res;
+	u32 ramdump_size = 0;
 
 	if (penv)
 		return -ENODEV;
@@ -2142,6 +2241,59 @@ static int cnss_probe(struct platform_device *pdev)
 		goto err_subsys_reg;
 	}
 
+	if (of_property_read_u32(dev->of_node, "qcom,wlan-ramdump-dynamic",
+				&ramdump_size) == 0) {
+		penv->ramdump_addr = dma_alloc_coherent(&pdev->dev,
+				ramdump_size, &penv->ramdump_phys, GFP_KERNEL);
+
+		if (penv->ramdump_addr)
+			penv->ramdump_size = ramdump_size;
+		penv->ramdump_dynamic = true;
+	} else {
+		res = platform_get_resource_byname(penv->pldev,
+				IORESOURCE_MEM, "ramdump");
+		if (res) {
+			penv->ramdump_phys = res->start;
+			ramdump_size = resource_size(res);
+			penv->ramdump_addr = ioremap(penv->ramdump_phys,
+					ramdump_size);
+
+			if (penv->ramdump_addr)
+				penv->ramdump_size = ramdump_size;
+
+			penv->ramdump_dynamic = false;
+		}
+	}
+
+	pr_debug("%s: ramdump addr: %p, phys: %pa\n", __func__,
+			penv->ramdump_addr, &penv->ramdump_phys);
+
+	if (penv->ramdump_size == 0) {
+		pr_info("%s: CNSS ramdump will not be collected", __func__);
+		goto skip_ramdump;
+	}
+
+	penv->dump_data.addr = penv->ramdump_phys;
+	penv->dump_data.len = penv->ramdump_size;
+	dump_entry.id = MSM_DUMP_DATA_CNSS_WLAN;
+	dump_entry.addr = virt_to_phys(&penv->dump_data);
+
+	ret = msm_dump_data_register(MSM_DUMP_TABLE_APPS, &dump_entry);
+	if (ret) {
+		pr_err("%s: Dump table setup failed: %d\n", __func__, ret);
+		goto err_ramdump_create;
+	}
+
+	penv->subsys_handle = subsystem_get(penv->subsysdesc.name);
+
+	penv->ramdump_dev = create_ramdump_device(penv->subsysdesc.name,
+				penv->subsysdesc.dev);
+	if (!penv->ramdump_dev) {
+		ret = -ENOMEM;
+		goto err_ramdump_create;
+	}
+
+skip_ramdump:
 	penv->modem_current_status = 0;
 
 	if (penv->notify_modem_status) {
@@ -2154,15 +2306,6 @@ static int cnss_probe(struct platform_device *pdev)
 			pr_err("%s: Register notifier Failed\n", __func__);
 			goto err_notif_modem;
 		}
-	}
-
-	penv->subsys_handle = subsystem_get(penv->subsysdesc.name);
-
-	penv->ramdump_dev = create_ramdump_device(penv->subsysdesc.name,
-				penv->subsysdesc.dev);
-	if (!penv->ramdump_dev) {
-		ret = -ENOMEM;
-		goto err_ramdump_create;
 	}
 
 	ret = pci_register_driver(&cnss_wlan_pci_driver);
@@ -2211,12 +2354,22 @@ err_pci_reg:
 	destroy_ramdump_device(penv->ramdump_dev);
 
 err_ramdump_create:
-	subsystem_put(penv->subsys_handle);
+	if (penv->subsys_handle)
+		subsystem_put(penv->subsys_handle);
 	if (penv->notify_modem_status)
 		subsys_notif_unregister_notifier
 			(penv->modem_notify_handler, &mnb);
 
 err_notif_modem:
+	if (penv->ramdump_addr) {
+		if (penv->ramdump_dynamic) {
+			dma_free_coherent(&pdev->dev, penv->ramdump_size,
+					penv->ramdump_addr, penv->ramdump_phys);
+		} else {
+			iounmap(penv->ramdump_addr);
+		}
+	}
+
 	subsys_unregister(penv->subsys);
 
 err_subsys_reg:
@@ -2252,6 +2405,15 @@ static int cnss_remove(struct platform_device *pdev)
 
 	if (penv->bus_scale_table)
 		msm_bus_cl_clear_pdata(penv->bus_scale_table);
+
+	if (penv->ramdump_addr) {
+		if (penv->ramdump_dynamic) {
+			dma_free_coherent(&pdev->dev, penv->ramdump_size,
+					penv->ramdump_addr, penv->ramdump_phys);
+		} else {
+			iounmap(penv->ramdump_addr);
+		}
+	}
 
 	cnss_wlan_gpio_set(gpio_info, WLAN_EN_LOW);
 	if (cnss_wlan_vreg_set(vreg_info, VREG_OFF))
