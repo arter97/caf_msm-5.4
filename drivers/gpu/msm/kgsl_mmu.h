@@ -179,6 +179,8 @@ void kgsl_remove_global_pt_entry(struct kgsl_memdesc *memdesc);
 
 struct kgsl_memdesc *kgsl_search_global_pt_entries(unsigned int gpuaddr,
 		unsigned int size);
+struct kgsl_pagetable *kgsl_mmu_get_pt_from_ptname(struct kgsl_mmu *mmu,
+							int ptname);
 
 /*
  * Static inline functions of MMU that simply call the SMMU specific

@@ -1258,7 +1258,7 @@ static int adreno_stop(struct kgsl_device *device)
 
 	kgsl_pwrctrl_enable(device);
 
-	adreno_set_active_ctx_null(adreno_dev);
+	adreno_set_active_ctxs_null(adreno_dev);
 
 	adreno_dispatcher_stop(adreno_dev);
 
@@ -2213,7 +2213,7 @@ static int adreno_soft_reset(struct kgsl_device *device)
 	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 	int ret;
 
-	adreno_set_active_ctx_null(adreno_dev);
+	adreno_set_active_ctxs_null(adreno_dev);
 
 	if (kgsl_pwrctrl_isenabled(device))
 		adreno_irqctrl(adreno_dev, 0);
@@ -2412,7 +2412,7 @@ static int adreno_suspend_context(struct kgsl_device *device)
 		offsetof(struct adreno_ringbuffer_pagetable_info,
 			current_global_ptname), 0);
 	/* set ringbuffers to NULL ctxt */
-	adreno_set_active_ctx_null(adreno_dev);
+	adreno_set_active_ctxs_null(adreno_dev);
 
 	return status;
 }

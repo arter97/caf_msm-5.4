@@ -24,6 +24,12 @@
 
 /* type3 packets */
 
+/* Enable preemption flag */
+#define CP_PREEMPT_ENABLE 0x1C
+/* Preemption token command on which preemption occurs */
+#define CP_PREEMPT_TOKEN 0x1E
+/* Bit to set in CP_PREEMPT_TOKEN ordinal for interrupt on preemption */
+#define CP_PREEMPT_ORDINAL_INTERRUPT 24
 /* copy from ME scratch RAM to a register */
 #define CP_SCRATCH_TO_REG      0x4d
 

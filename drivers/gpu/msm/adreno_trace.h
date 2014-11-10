@@ -31,16 +31,19 @@ TRACE_EVENT(adreno_cmdbatch_queued,
 		__field(unsigned int, timestamp)
 		__field(unsigned int, queued)
 		__field(unsigned int, flags)
+		__field(unsigned int, prio)
 	),
 	TP_fast_assign(
 		__entry->id = cmdbatch->context->id;
 		__entry->timestamp = cmdbatch->timestamp;
 		__entry->queued = queued;
 		__entry->flags = cmdbatch->flags;
+		__entry->prio = cmdbatch->context->priority;
 	),
 	TP_printk(
-		"ctx=%u ts=%u queued=%u flags=%s",
-			__entry->id, __entry->timestamp, __entry->queued,
+		"ctx=%u ctx_prio=%u ts=%u queued=%u flags=%s",
+			__entry->id, __entry->prio,
+			__entry->timestamp, __entry->queued,
 			__entry->flags ? __print_flags(__entry->flags, "|",
 						KGSL_CMDBATCH_FLAGS) : "none"
 	)
@@ -48,8 +51,9 @@ TRACE_EVENT(adreno_cmdbatch_queued,
 
 TRACE_EVENT(adreno_cmdbatch_submitted,
 	TP_PROTO(struct kgsl_cmdbatch *cmdbatch, int inflight, uint64_t ticks,
-		unsigned long secs, unsigned long usecs),
-	TP_ARGS(cmdbatch, inflight, ticks, secs, usecs),
+		unsigned long secs, unsigned long usecs,
+		struct adreno_ringbuffer *rb),
+	TP_ARGS(cmdbatch, inflight, ticks, secs, usecs, rb),
 	TP_STRUCT__entry(
 		__field(unsigned int, id)
 		__field(unsigned int, timestamp)
@@ -58,7 +62,11 @@ TRACE_EVENT(adreno_cmdbatch_submitted,
 		__field(uint64_t, ticks)
 		__field(unsigned long, secs)
 		__field(unsigned long, usecs)
-
+		__field(int, prio)
+		__field(int, rb_id)
+		__field(unsigned int, rptr)
+		__field(unsigned int, wptr)
+		__field(int, q_inflight)
 	),
 	TP_fast_assign(
 		__entry->id = cmdbatch->context->id;
@@ -68,21 +76,29 @@ TRACE_EVENT(adreno_cmdbatch_submitted,
 		__entry->ticks = ticks;
 		__entry->secs = secs;
 		__entry->usecs = usecs;
+		__entry->prio = cmdbatch->context->priority;
+		__entry->rb_id = rb->id;
+		__entry->rptr = rb->rptr;
+		__entry->wptr = rb->wptr;
+		__entry->q_inflight = rb->dispatch_q.inflight;
 	),
 	TP_printk(
-		"ctx=%u ts=%u inflight=%d flags=%s ticks=%lld time=%lu.%0lu",
-			__entry->id, __entry->timestamp,
+		"ctx=%u ctx_prio=%d ts=%u inflight=%d flags=%s ticks=%lld time=%lu.%0lu rb_id=%d r/w=%x/%x, q_inflight=%d",
+			__entry->id, __entry->prio, __entry->timestamp,
 			__entry->inflight,
 			__entry->flags ? __print_flags(__entry->flags, "|",
 				KGSL_CMDBATCH_FLAGS) : "none",
-			__entry->ticks, __entry->secs, __entry->usecs
+			__entry->ticks, __entry->secs, __entry->usecs,
+			__entry->rb_id, __entry->rptr, __entry->wptr,
+			__entry->q_inflight
 	)
 );
 
 TRACE_EVENT(adreno_cmdbatch_retired,
 	TP_PROTO(struct kgsl_cmdbatch *cmdbatch, int inflight,
-		uint64_t start, uint64_t retire),
-	TP_ARGS(cmdbatch, inflight, start, retire),
+		uint64_t start, uint64_t retire,
+		struct adreno_ringbuffer *rb),
+	TP_ARGS(cmdbatch, inflight, start, retire, rb),
 	TP_STRUCT__entry(
 		__field(unsigned int, id)
 		__field(unsigned int, timestamp)
@@ -91,6 +107,11 @@ TRACE_EVENT(adreno_cmdbatch_retired,
 		__field(unsigned int, flags)
 		__field(uint64_t, start)
 		__field(uint64_t, retire)
+		__field(int, prio)
+		__field(int, rb_id)
+		__field(unsigned int, rptr)
+		__field(unsigned int, wptr)
+		__field(int, q_inflight)
 	),
 	TP_fast_assign(
 		__entry->id = cmdbatch->context->id;
@@ -100,10 +121,15 @@ TRACE_EVENT(adreno_cmdbatch_retired,
 		__entry->flags = cmdbatch->flags;
 		__entry->start = start;
 		__entry->retire = retire;
+		__entry->prio = cmdbatch->context->priority;
+		__entry->rb_id = rb->id;
+		__entry->rptr = rb->rptr;
+		__entry->wptr = rb->wptr;
+		__entry->q_inflight = rb->dispatch_q.inflight;
 	),
 	TP_printk(
-		"ctx=%u ts=%u inflight=%d recovery=%s flags=%s start=%lld retire=%lld",
-			__entry->id, __entry->timestamp,
+		"ctx=%u ctx_prio=%d ts=%u inflight=%d recovery=%s flags=%s start=%lld retire=%lld rb_id=%d, r/w=%x/%x, q_inflight=%d",
+			__entry->id, __entry->prio, __entry->timestamp,
 			__entry->inflight,
 			__entry->recovery ?
 				__print_flags(__entry->recovery, "|",
@@ -111,7 +137,9 @@ TRACE_EVENT(adreno_cmdbatch_retired,
 			__entry->flags ? __print_flags(__entry->flags, "|",
 				KGSL_CMDBATCH_FLAGS) : "none",
 			__entry->start,
-			__entry->retire
+			__entry->retire,
+			__entry->rb_id, __entry->rptr, __entry->wptr,
+			__entry->q_inflight
 	)
 );
 
@@ -261,9 +289,9 @@ TRACE_EVENT(adreno_gpu_fault,
 	TP_PROTO(unsigned int ctx, unsigned int ts,
 		unsigned int status, unsigned int rptr, unsigned int wptr,
 		unsigned int ib1base, unsigned int ib1size,
-		unsigned int ib2base, unsigned int ib2size),
+		unsigned int ib2base, unsigned int ib2size, int rb_id),
 	TP_ARGS(ctx, ts, status, rptr, wptr, ib1base, ib1size, ib2base,
-		ib2size),
+		ib2size, rb_id),
 	TP_STRUCT__entry(
 		__field(unsigned int, ctx)
 		__field(unsigned int, ts)
@@ -274,6 +302,7 @@ TRACE_EVENT(adreno_gpu_fault,
 		__field(unsigned int, ib1size)
 		__field(unsigned int, ib2base)
 		__field(unsigned int, ib2size)
+		__field(int, rb_id)
 	),
 	TP_fast_assign(
 		__entry->ctx = ctx;
@@ -285,11 +314,12 @@ TRACE_EVENT(adreno_gpu_fault,
 		__entry->ib1size = ib1size;
 		__entry->ib2base = ib2base;
 		__entry->ib2size = ib2size;
+		__entry->rb_id = rb_id;
 	),
-	TP_printk("ctx=%d ts=%d status=%X RB=%X/%X IB1=%X/%X IB2=%X/%X",
-		__entry->ctx, __entry->ts, __entry->status, __entry->wptr,
-		__entry->rptr, __entry->ib1base, __entry->ib1size,
-		__entry->ib2base, __entry->ib2size)
+	TP_printk("ctx=%d ts=%d rb_id=%d status=%X RB=%X/%X IB1=%X/%X IB2=%X/%X",
+		__entry->ctx, __entry->ts, __entry->rb_id, __entry->status,
+		__entry->wptr, __entry->rptr, __entry->ib1base,
+		__entry->ib1size, __entry->ib2base, __entry->ib2size)
 );
 
 TRACE_EVENT(adreno_sp_tp,
@@ -435,6 +465,133 @@ TRACE_EVENT(kgsl_a4xx_irq_status,
 			{ 1 << A4XX_INT_RBBM_DPM_THERMAL_RED_ERR,
 				"RBBM_DPM_THERMAL_RED_ERR" })
 		: "None"
+	)
+);
+
+DECLARE_EVENT_CLASS(adreno_hw_preempt_template,
+	TP_PROTO(struct adreno_ringbuffer *cur_rb,
+		struct adreno_ringbuffer *new_rb),
+	TP_ARGS(cur_rb, new_rb),
+	TP_STRUCT__entry(__field(int, cur_level)
+			__field(int, new_level)
+			__field(unsigned int, cur_rptr)
+			__field(unsigned int, new_rptr)
+			__field(unsigned int, cur_wptr)
+			__field(unsigned int, new_wptr)
+			__field(unsigned int, cur_rbbase)
+			__field(unsigned int, new_rbbase)
+	),
+	TP_fast_assign(__entry->cur_level = cur_rb->id;
+			__entry->new_level = new_rb->id;
+			__entry->cur_rptr = cur_rb->rptr;
+			__entry->new_rptr = new_rb->rptr;
+			__entry->cur_wptr = cur_rb->wptr;
+			__entry->new_wptr = new_rb->wptr;
+			__entry->cur_rbbase = cur_rb->buffer_desc.gpuaddr;
+			__entry->new_rbbase = new_rb->buffer_desc.gpuaddr;
+	),
+	TP_printk(
+	"cur_rb_lvl=%d rptr=%x wptr=%x rbbase=%x new_rb_lvl=%d rptr=%x wptr=%x rbbase=%x",
+		__entry->cur_level, __entry->cur_rptr,
+		__entry->cur_wptr, __entry->cur_rbbase,
+		__entry->new_level, __entry->new_rptr,
+		__entry->new_wptr, __entry->new_rbbase
+	)
+);
+
+DEFINE_EVENT(adreno_hw_preempt_template, adreno_hw_preempt_clear_to_trig,
+	TP_PROTO(struct adreno_ringbuffer *cur_rb,
+		struct adreno_ringbuffer *new_rb),
+	TP_ARGS(cur_rb, new_rb)
+);
+
+DEFINE_EVENT(adreno_hw_preempt_template, adreno_hw_preempt_trig_to_comp,
+	TP_PROTO(struct adreno_ringbuffer *cur_rb,
+		struct adreno_ringbuffer *new_rb),
+	TP_ARGS(cur_rb, new_rb)
+);
+
+TRACE_EVENT(adreno_hw_preempt_comp_to_clear,
+	TP_PROTO(struct adreno_ringbuffer *cur_rb,
+		struct adreno_ringbuffer *new_rb),
+	TP_ARGS(cur_rb, new_rb),
+	TP_STRUCT__entry(__field(int, cur_level)
+			__field(int, new_level)
+			__field(unsigned int, cur_rptr)
+			__field(unsigned int, new_rptr)
+			__field(unsigned int, cur_wptr)
+			__field(unsigned int, new_wptr_end)
+			__field(unsigned int, new_wptr)
+			__field(unsigned int, cur_rbbase)
+			__field(unsigned int, new_rbbase)
+	),
+	TP_fast_assign(__entry->cur_level = cur_rb->id;
+			__entry->new_level = new_rb->id;
+			__entry->cur_rptr = cur_rb->rptr;
+			__entry->new_rptr = new_rb->rptr;
+			__entry->cur_wptr = cur_rb->wptr;
+			__entry->new_wptr_end = new_rb->wptr_preempt_end;
+			__entry->new_wptr = new_rb->wptr;
+			__entry->cur_rbbase = cur_rb->buffer_desc.gpuaddr;
+			__entry->new_rbbase = new_rb->buffer_desc.gpuaddr;
+	),
+	TP_printk(
+	"cur_rb_lvl=%d rptr=%x wptr=%x rbbase=%x prev_rb_lvl=%d rptr=%x wptr_preempt_end=%x wptr=%x rbbase=%x",
+		__entry->cur_level, __entry->cur_rptr,
+		__entry->cur_wptr, __entry->cur_rbbase,
+		__entry->new_level, __entry->new_rptr,
+		__entry->new_wptr_end, __entry->new_wptr, __entry->new_rbbase
+	)
+);
+
+TRACE_EVENT(adreno_hw_preempt_token_submit,
+	TP_PROTO(struct adreno_ringbuffer *cur_rb,
+		struct adreno_ringbuffer *new_rb),
+	TP_ARGS(cur_rb, new_rb),
+	TP_STRUCT__entry(__field(int, cur_level)
+		__field(int, new_level)
+		__field(unsigned int, cur_rptr)
+		__field(unsigned int, new_rptr)
+		__field(unsigned int, cur_wptr)
+		__field(unsigned int, cur_wptr_end)
+		__field(unsigned int, new_wptr)
+		__field(unsigned int, cur_rbbase)
+		__field(unsigned int, new_rbbase)
+	),
+	TP_fast_assign(__entry->cur_level = cur_rb->id;
+			__entry->new_level = new_rb->id;
+			__entry->cur_rptr = cur_rb->rptr;
+			__entry->new_rptr = new_rb->rptr;
+			__entry->cur_wptr = cur_rb->wptr;
+			__entry->cur_wptr_end = cur_rb->wptr_preempt_end;
+			__entry->new_wptr = new_rb->wptr;
+			__entry->cur_rbbase = cur_rb->buffer_desc.gpuaddr;
+			__entry->new_rbbase = new_rb->buffer_desc.gpuaddr;
+	),
+	TP_printk(
+		"cur_rb_lvl=%d rptr=%x wptr_preempt_end=%x wptr=%x rbbase=%x new_rb_lvl=%d rptr=%x wptr=%x rbbase=%x",
+		__entry->cur_level, __entry->cur_rptr,
+		__entry->cur_wptr_end, __entry->cur_wptr,
+		__entry->cur_rbbase,
+		__entry->new_level, __entry->new_rptr,
+		__entry->new_wptr, __entry->new_rbbase
+	)
+);
+
+TRACE_EVENT(adreno_rb_starve,
+	TP_PROTO(struct adreno_ringbuffer *rb),
+	TP_ARGS(rb),
+	TP_STRUCT__entry(__field(int, id)
+		__field(unsigned int, rptr)
+		__field(unsigned int, wptr)
+	),
+	TP_fast_assign(__entry->id = rb->id;
+		__entry->rptr = rb->rptr;
+		__entry->wptr = rb->wptr;
+	),
+	TP_printk(
+		"rb %d r/w %x/%x starved", __entry->id, __entry->rptr,
+		__entry->wptr
 	)
 );
 

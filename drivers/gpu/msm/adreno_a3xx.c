@@ -714,9 +714,9 @@ int adreno_a3xx_pwron_fixup_init(struct adreno_device *adreno_dev)
  * @rb: Pointer to the ringbuffer of device
  *
  * Submit commands for ME initialization, common function shared between
- * a3xx and a4xx devices
+ * a3xx devices
  */
-int a3xx_rb_init(struct adreno_device *adreno_dev,
+static int a3xx_rb_init(struct adreno_device *adreno_dev,
 			 struct adreno_ringbuffer *rb)
 {
 	unsigned int *cmds;
@@ -1041,6 +1041,9 @@ int a3xx_perfcounter_enable(struct adreno_device *adreno_dev,
 		ret = adreno_ringbuffer_issuecmds(rb, 0, cmds, 4);
 		if (ret)
 			goto done;
+		/* schedule dispatcher to make sure rb[0] is run */
+		if (adreno_dev->cur_rb != rb)
+			adreno_dispatcher_schedule(rb->device);
 		/* wait for the above commands submitted to complete */
 		ret = adreno_ringbuffer_waittimestamp(rb, rb->timestamp,
 				ADRENO_IDLE_TIMEOUT);

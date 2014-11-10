@@ -458,6 +458,24 @@ kgsl_mmu_get_ptname_from_ptbase(struct kgsl_mmu *mmu, phys_addr_t pt_base)
 }
 EXPORT_SYMBOL(kgsl_mmu_get_ptname_from_ptbase);
 
+struct kgsl_pagetable *kgsl_mmu_get_pt_from_ptname(struct kgsl_mmu *mmu,
+						int ptname)
+{
+	struct kgsl_pagetable *pt;
+
+	spin_lock(&kgsl_driver.ptlock);
+	list_for_each_entry(pt, &kgsl_driver.pagetable_list, list) {
+		if (pt->name == ptname) {
+			spin_unlock(&kgsl_driver.ptlock);
+			return pt;
+		}
+	}
+	spin_unlock(&kgsl_driver.ptlock);
+	return NULL;
+
+}
+EXPORT_SYMBOL(kgsl_mmu_get_pt_from_ptname);
+
 unsigned int
 kgsl_mmu_log_fault_addr(struct kgsl_mmu *mmu, phys_addr_t pt_base,
 					unsigned int addr)

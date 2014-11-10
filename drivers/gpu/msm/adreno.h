@@ -72,6 +72,9 @@
 #define ADRENO_CMDBATCH_DISPATCH_CMDQUEUE(c)	\
 	(&((ADRENO_CONTEXT(c->context))->rb->dispatch_q))
 
+#define ADRENO_CMDBATCH_RB(c)			\
+	((ADRENO_CONTEXT(c->context))->rb)
+
 /* Adreno core features */
 /* The core uses OCMEM for GMEM/binning memory */
 #define ADRENO_USES_OCMEM     BIT(0)
@@ -146,6 +149,7 @@ enum adreno_gpurev {
 #define ADRENO_HARD_FAULT BIT(1)
 #define ADRENO_TIMEOUT_FAULT BIT(2)
 #define ADRENO_IOMMU_PAGE_FAULT BIT(3)
+#define ADRENO_PREEMPT_FAULT BIT(4)
 
 #define ADRENO_SPTP_PC_CTRL 0
 #define ADRENO_PPD_CTRL     1
@@ -215,6 +219,8 @@ struct adreno_device {
 	struct adreno_ringbuffer ringbuffers[ADRENO_PRIORITY_MAX_RB_LEVELS];
 	int num_ringbuffers;
 	struct adreno_ringbuffer *cur_rb;
+	struct adreno_ringbuffer *next_rb;
+	struct adreno_ringbuffer *prev_rb;
 	unsigned int wait_timeout;
 	unsigned int ib_check_level;
 	unsigned int fast_hang_detect;
@@ -400,6 +406,21 @@ enum adreno_regs {
 	ADRENO_REG_CP_MEQ_DATA,
 	ADRENO_REG_CP_HW_FAULT,
 	ADRENO_REG_CP_PROTECT_STATUS,
+	ADRENO_REG_CP_PREEMPT,
+	ADRENO_REG_CP_PREEMPT_DEBUG,
+	ADRENO_REG_CP_PREEMPT_DISABLE,
+	ADRENO_REG_CP_SCRATCH_REG8,
+	ADRENO_REG_CP_SCRATCH_REG9,
+	ADRENO_REG_CP_SCRATCH_REG10,
+	ADRENO_REG_CP_SCRATCH_REG11,
+	ADRENO_REG_CP_SCRATCH_REG12,
+	ADRENO_REG_CP_SCRATCH_REG13,
+	ADRENO_REG_CP_SCRATCH_REG14,
+	ADRENO_REG_CP_SCRATCH_REG15,
+	ADRENO_REG_CP_SCRATCH_REG16,
+	ADRENO_REG_CP_SCRATCH_REG17,
+	ADRENO_REG_CP_SCRATCH_REG18,
+	ADRENO_REG_CP_SCRATCH_REG23,
 	ADRENO_REG_RBBM_STATUS,
 	ADRENO_REG_RBBM_PERFCTR_CTL,
 	ADRENO_REG_RBBM_PERFCTR_LOAD_CMD0,
@@ -756,8 +777,9 @@ void adreno_coresight_remove(struct adreno_device *adreno_dev);
 
 bool adreno_hw_isidle(struct adreno_device *adreno_dev);
 
-int adreno_iommu_set_pt(struct adreno_ringbuffer *rb,
-			struct kgsl_pagetable *new_pt);
+int adreno_iommu_set_pt_ctx(struct adreno_ringbuffer *rb,
+			struct kgsl_pagetable *new_pt,
+			struct adreno_context *drawctxt);
 
 void adreno_iommu_set_pt_generate_rb_cmds(struct adreno_ringbuffer *rb,
 					struct kgsl_pagetable *pt);
@@ -767,6 +789,15 @@ void adreno_fault_detect_stop(struct adreno_device *adreno_dev);
 
 void adreno_hang_int_callback(struct adreno_device *adreno_dev, int bit);
 void adreno_cp_callback(struct adreno_device *adreno_dev, int bit);
+
+unsigned int adreno_iommu_set_pt_ib(struct adreno_ringbuffer *rb,
+					unsigned int *cmds,
+					struct kgsl_pagetable *pt);
+
+unsigned int adreno_iommu_set_pt_generate_cmds(
+				struct adreno_ringbuffer *rb,
+				unsigned int *cmds,
+				struct kgsl_pagetable *pt);
 
 static inline int adreno_is_a3xx(struct adreno_device *adreno_dev)
 {
@@ -1276,6 +1307,19 @@ static inline int adreno_bootstrap_ucode(struct adreno_device *adreno_dev)
 }
 
 /**
+ * adreno_preempt_state() - Check if preemption state is equal to given state
+ * @adreno_dev: Device whose preemption state is checked
+ * @state: State to compare against
+ */
+static inline unsigned int adreno_preempt_state(
+			struct adreno_device *adreno_dev,
+			enum adreno_dispatcher_preempt_states state)
+{
+	return atomic_read(&adreno_dev->dispatcher.preemption_state) ==
+		state;
+}
+
+/**
  * adreno_get_rptr() - Get the current ringbuffer read pointer
  * @rb: Pointer the ringbuffer to query
  *
@@ -1285,7 +1329,9 @@ static inline unsigned int
 adreno_get_rptr(struct adreno_ringbuffer *rb)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(rb->device);
-	if (adreno_dev->cur_rb == rb) {
+	if (adreno_dev->cur_rb == rb &&
+		adreno_preempt_state(adreno_dev,
+			ADRENO_DISPATCHER_PREEMPT_CLEAR)) {
 		adreno_readreg(adreno_dev, ADRENO_REG_CP_RB_RPTR, &(rb->rptr));
 		rmb();
 	}
@@ -1321,11 +1367,11 @@ static inline struct adreno_ringbuffer *adreno_ctx_get_rb(
 				adreno_dev->num_ringbuffers - 1]);
 }
 /*
- * adreno_set_active_ctx_null() - Put back reference to any active context
+ * adreno_set_active_ctxs_null() - Put back reference to any active context
  * and set the active context to NULL
  * @adreno_dev: The adreno device
  */
-static inline void adreno_set_active_ctx_null(struct adreno_device *adreno_dev)
+static inline void adreno_set_active_ctxs_null(struct adreno_device *adreno_dev)
 {
 	int i;
 	struct adreno_ringbuffer *rb;
@@ -1384,6 +1430,19 @@ static inline unsigned int adreno_set_apriv(struct adreno_device *adreno_dev,
 		*cmds++ = 0;
 
 	return cmds - cmds_orig;
+}
+
+/*
+ * adreno_compare_prio_level() - Compares 2 priority levels based on enum values
+ * @p1: First priority level
+ * @p2: Second priority level
+ *
+ * Returns greater than 0 if p1 is higher priority, 0 if levels are equal else
+ * less than 0
+ */
+static inline int adreno_compare_prio_level(int p1, int p2)
+{
+	return p2 - p1;
 }
 
 #endif /*__ADRENO_H */

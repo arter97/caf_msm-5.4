@@ -219,16 +219,29 @@ struct kgsl_devinfo {
 	size_t gmem_sizebytes;
 };
 
-/* this structure defines the region of memory that can be mmap()ed from this
-   driver. The timestamp fields are volatile because they are written by the
-   GPU
-*/
+/*
+ * struct kgsl_devmemstore - this structure defines the region of memory
+ * that can be mmap()ed from this driver. The timestamp fields are volatile
+ * because they are written by the GPU
+ * @soptimestamp: Start of pipeline timestamp written by GPU before the
+ * commands in concern are processed
+ * @sbz: Unused, kept for 8 byte alignment
+ * @eoptimestamp: End of pipeline timestamp written by GPU after the
+ * commands in concern are processed
+ * @sbz2: Unused, kept for 8 byte alignment
+ * @preempted: Indicates if the context was preempted
+ * @sbz3: Unused, kept for 8 byte alignment
+ * @ref_wait_ts: Timestamp on which to generate interrupt, unused now.
+ * @sbz4: Unused, kept for 8 byte alignment
+ * @current_context: The current context the GPU is working on
+ * @sbz5: Unused, kept for 8 byte alignment
+ */
 struct kgsl_devmemstore {
 	volatile unsigned int soptimestamp;
 	unsigned int sbz;
 	volatile unsigned int eoptimestamp;
 	unsigned int sbz2;
-	volatile unsigned int ts_cmp_enable;
+	volatile unsigned int preempted;
 	unsigned int sbz3;
 	volatile unsigned int ref_wait_ts;
 	unsigned int sbz4;
