@@ -1921,13 +1921,14 @@ static int select_best_cpu(struct task_struct *p, int target, int reason,
 	/* Todo : Optimize this loop */
 	for_each_cpu_and(i, tsk_cpus_allowed(p), cpu_online_mask) {
 
-		if (skip_cpu(p, i, reason))
-			continue;
-
 		trace_sched_cpu_load(cpu_rq(i), idle_cpu(i),
 				     mostly_idle_cpu_sync(i, sync), power_cost(p, i));
 
-		/* The least-loaded mostly-idle CPU where the task
+		if (skip_cpu(p, i, reason))
+			continue;
+
+		/*
+		 * The least-loaded mostly-idle CPU where the task
 		 * won't fit is our fallback if we can't find a CPU
 		 * where the task will fit. */
 		if (!task_will_fit(p, i)) {
