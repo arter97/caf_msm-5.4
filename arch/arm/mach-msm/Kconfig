@@ -2623,4 +2623,7 @@ config MSM_USE_USER_ACCESSIBLE_TIMERS
 	  Enables MSM-specific user accessible timers via a shared
 	  memory page containing the cycle counter.
 
+config MSM_S4_AS_REVERSE_GEAR
+	bool "Enables the use of s4 switch to trigger reverse camera."
+
 endif

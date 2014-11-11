@@ -33,6 +33,7 @@ struct reverse_reverse_data {
 	const char *name_off;
 	const char *state_on;
 	const char *state_off;
+	int active_low;
 	int irq;
 	struct work_struct work;
 	struct delayed_work detect_delayed_work;
@@ -84,9 +85,13 @@ static void reverse_detection_work(struct work_struct *work)
 			detect_delayed_work.work);
 	state = gpio_get_value(data->gpio);
 
-	switch_set_state(&data->sdev, !state);
+	/* Invert the state if active low*/
+	if (data->active_low)
+		state = (state == 0) ? 1 : 0;
 
-	if (!state && (camera_status == CAMERA_POWERED_UP
+	switch_set_state(&data->sdev, state);
+
+	if (state && (camera_status == CAMERA_POWERED_UP
 				|| camera_status == CAMERA_PREVIEW_DISABLED)) {
 		if (enable_camera_preview() == 0)
 			camera_status = CAMERA_PREVIEW_ENABLED;
@@ -98,7 +103,7 @@ static void reverse_detection_work(struct work_struct *work)
 		show_pic_exit();
 	}
 
-	input_report_key(data->idev, data->key_code, !state);
+	input_report_key(data->idev, data->key_code, state);
 	input_sync(data->idev);
 }
 
@@ -185,6 +190,7 @@ static int switch_reverse_probe(struct platform_device *pdev)
 	reverse_data->name_off = pdata->name_off;
 	reverse_data->state_on = pdata->state_on;
 	reverse_data->state_off = pdata->state_off;
+	reverse_data->active_low = pdata->active_low;
 	reverse_data->sdev.print_state = switch_gpio_print_state;
 
 	ret = switch_dev_register(&reverse_data->sdev);

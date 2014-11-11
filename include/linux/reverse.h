@@ -21,6 +21,7 @@ struct reverse_switch_platform_data {
 	unsigned	gpio;
 	unsigned int	key_code;
 	unsigned	debounce_time;	/* ms */
+	int		active_low;
 
 	/* if NULL, switch_dev.name will be printed */
 	const char *name_on;
