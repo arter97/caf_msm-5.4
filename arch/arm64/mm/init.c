@@ -126,8 +126,6 @@ static void arm64_memory_present(void)
 
 void __init arm64_memblock_init(void)
 {
-	phys_addr_t dma_phys_limit = 0;
-
 	/*
 	 * Register the kernel text, kernel data, initrd, and initial
 	 * pagetables with memblock.
@@ -139,11 +137,7 @@ void __init arm64_memblock_init(void)
 #endif
 
 	early_init_fdt_scan_reserved_mem();
-
-	/* 4GB maximum for 32-bit only capable devices */
-	if (IS_ENABLED(CONFIG_ZONE_DMA))
-		dma_phys_limit = dma_to_phys(NULL, DMA_BIT_MASK(32)) + 1;
-	dma_contiguous_reserve(dma_phys_limit);
+	dma_contiguous_reserve(0);
 
 	memblock_allow_resize();
 	memblock_dump_all();
