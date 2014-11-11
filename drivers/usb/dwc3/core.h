@@ -882,6 +882,7 @@ struct dwc3 {
 	struct dwc3_gadget_events	dbg_gadget_events;
 
 	atomic_t		in_lpm;
+	int			irq;
 };
 
 /* -------------------------------------------------------------------------- */
