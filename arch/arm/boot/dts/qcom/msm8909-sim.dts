@@ -12,12 +12,12 @@
 
 /dts-v1/;
 
-#include "msmferrum.dtsi"
-#include "msmferrum-pinctrl.dtsi"
+#include "msm8909.dtsi"
+#include "msm8909-pinctrl.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. MSMFERRUM Simulator";
-	compatible = "qcom,msmferrum-sim", "qcom,msmferrum", "qcom,sim";
+	model = "Qualcomm Technologies, Inc. MSM8909 Simulator";
+	compatible = "qcom,msm8909-sim", "qcom,msm8909", "qcom,sim";
 	qcom,board-id= <16 0>;
 };
 
@@ -28,11 +28,11 @@
 };
 
 &sdhc_1 {
-	vdd-supply = <&pmferrum_l8>;
+	vdd-supply = <&pm8909_l8>;
 	qcom,vdd-voltage-level = <2900000 2900000>;
 	qcom,vdd-current-level = <200 400000>;
 
-	vdd-io-supply = <&pmferrum_l5>;
+	vdd-io-supply = <&pm8909_l5>;
 	qcom,vdd-io-always-on;
 	qcom,vdd-io-lpm-sup;
 	qcom,vdd-io-voltage-level = <1800000 1800000>;
@@ -61,11 +61,11 @@
 	interrupt-names = "hc_irq", "pwr_irq", "status_irq";
 	cd-gpios = <&msm_gpio 38 0x1>;
 
-	vdd-supply = <&pmferrum_l11>;
+	vdd-supply = <&pm8909_l11>;
 	qcom,vdd-voltage-level = <1800000 2950000>;
 	qcom,vdd-current-level = <15000 400000>;
 
-	vdd-io-supply = <&pmferrum_l12>;
+	vdd-io-supply = <&pm8909_l12>;
 	qcom,vdd-io-voltage-level = <1800000 2950000>;
 	qcom,vdd-io-current-level = <200 50000>;
 
@@ -78,10 +78,10 @@
 	status = "ok";
 };
 
-&pmferrum_mpps {
+&pm8909_mpps {
 	status = "disabled";
 };
 
-&pmferrum_gpios {
+&pm8909_gpios {
 	status = "disabled";
 };

@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/uaccess.h>
 #include <linux/delay.h>
+#include <linux/dma-buf.h>
 
 #include "mdp3_ctrl.h"
 #include "mdp3.h"
@@ -351,7 +352,7 @@ static int mdp3_ctrl_res_req_bus(struct msm_fb_data_type *mfd, int status)
 		struct mdss_panel_info *panel_info = mfd->panel_info;
 		u64 ab = 0;
 		u64 ib = 0;
-		ab = panel_info->xres * panel_info->yres * 4;
+		ab = panel_info->xres * panel_info->yres * 4 * 2;
 		ab *= panel_info->mipi.frame_rate;
 		ib = (ab * 3) / 2;
 		rc = mdp3_bus_scale_set_quota(MDP3_CLIENT_DMA_P, ab, ib);
@@ -590,6 +591,11 @@ static int mdp3_ctrl_on(struct msm_fb_data_type *mfd)
 	}
 
 	mdp3_enable_regulator(true);
+	rc = mdp3_footswitch_ctrl(1);
+	if (rc) {
+		pr_err("fail to enable mdp footswitch ctrl\n");
+		goto on_error;
+	}
 	mdp3_ctrl_notifier_register(mdp3_session,
 		&mdp3_session->mfd->mdp_sync_pt_data.notifier);
 
@@ -602,7 +608,8 @@ static int mdp3_ctrl_on(struct msm_fb_data_type *mfd)
 
 	panel = mdp3_session->panel;
 	if (panel->event_handler) {
-		rc = panel->event_handler(panel, MDSS_EVENT_UNBLANK, NULL);
+		rc = panel->event_handler(panel, MDSS_EVENT_LINK_READY, NULL);
+		rc |= panel->event_handler(panel, MDSS_EVENT_UNBLANK, NULL);
 		rc |= panel->event_handler(panel, MDSS_EVENT_PANEL_ON, NULL);
 	}
 	if (rc) {
@@ -702,6 +709,7 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 	mdp3_ctrl_notifier_unregister(mdp3_session,
 		&mdp3_session->mfd->mdp_sync_pt_data.notifier);
 	mdp3_enable_regulator(false);
+	mdp3_footswitch_ctrl(0);
 	mdp3_session->vsync_enabled = 0;
 	atomic_set(&mdp3_session->vsync_countdown, 0);
 	atomic_set(&mdp3_session->dma_done_cnt, 0);
@@ -1257,6 +1265,15 @@ static int mdp3_get_metadata(struct msm_fb_data_type *mfd,
 		if (ret) {
 			pr_err("failed to release mdp clks\n");
 			return ret;
+		}
+		break;
+	case metadata_op_get_ion_fd:
+		if (mfd->fb_ion_handle) {
+			metadata->data.fbmem_ionfd =
+					dma_buf_fd(mfd->fbmem_buf, 0);
+			if (metadata->data.fbmem_ionfd < 0)
+				pr_err("fd allocation failed. fd = %d\n",
+						metadata->data.fbmem_ionfd);
 		}
 		break;
 	default:

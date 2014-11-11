@@ -3409,7 +3409,10 @@ static irqreturn_t dwc3_interrupt(int irq, void *_dwc)
 	struct dwc3			*dwc = _dwc;
 	int				i;
 	irqreturn_t			ret = IRQ_NONE;
+	unsigned			temp_cnt = 0;
+	ktime_t				start_time;
 
+	start_time = ktime_get();
 	spin_lock(&dwc->lock);
 
 	for (i = 0; i < dwc->num_event_buffers; i++) {
@@ -3418,9 +3421,17 @@ static irqreturn_t dwc3_interrupt(int irq, void *_dwc)
 		status = dwc3_check_event_buf(dwc, i);
 		if (status == IRQ_WAKE_THREAD)
 			ret = status;
+
+		temp_cnt += dwc->ev_buffs[i]->count;
 	}
 
 	spin_unlock(&dwc->lock);
+
+	dwc->irq_start_time[dwc->irq_dbg_index] = start_time;
+	dwc->irq_completion_time[dwc->irq_dbg_index] =
+		ktime_us_delta(ktime_get(), start_time);
+	dwc->irq_event_count[dwc->irq_dbg_index] = temp_cnt / 4;
+	dwc->irq_dbg_index = (dwc->irq_dbg_index + 1) % MAX_INTR_STATS;
 
 	if (ret == IRQ_WAKE_THREAD) {
 		disable_irq_nosync(irq);

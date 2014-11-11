@@ -73,3 +73,4 @@ obj-$(CONFIG_MSM_JTAGV8) += jtag-fuse.o jtagv8.o jtagv8-mm.o
 obj-$(CONFIG_MSM_SYSTEM_HEALTH_MONITOR) += system_health_monitor_v01.o
 obj-$(CONFIG_MSM_SYSTEM_HEALTH_MONITOR) += system_health_monitor.o
 obj-$(CONFIG_MSM_RTB) += msm_rtb-hotplug.o
+obj-$(CONFIG_MSM_PACMAN)        += msm_pacman.o

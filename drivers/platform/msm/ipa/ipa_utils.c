@@ -414,13 +414,15 @@ int ipa_suspend_resource_sync(enum ipa_rm_resource_name resource)
 			continue;
 		}
 		if (ipa_ctx->ep[ipa_ep_idx].client == client &&
-		    ipa_should_pipe_be_suspended(client) &&
-		    ipa_ctx->ep[ipa_ep_idx].valid) {
-			/* suspend endpoint */
-			memset(&suspend, 0, sizeof(suspend));
-			suspend.ipa_ep_suspend = true;
-			ipa_cfg_ep_ctrl(ipa_ep_idx, &suspend);
-			pipe_suspended = true;
+		    ipa_should_pipe_be_suspended(client)) {
+			if (ipa_ctx->ep[ipa_ep_idx].valid) {
+				/* suspend endpoint */
+				memset(&suspend, 0, sizeof(suspend));
+				suspend.ipa_ep_suspend = true;
+				ipa_cfg_ep_ctrl(ipa_ep_idx, &suspend);
+				pipe_suspended = true;
+		    }
+		    ipa_ctx->resume_on_connect[client] = false;
 		}
 	}
 	/* Sleep ~1 msec */
@@ -477,12 +479,14 @@ int ipa_suspend_resource_no_block(enum ipa_rm_resource_name resource)
 			continue;
 		}
 		if (ipa_ctx->ep[ipa_ep_idx].client == client &&
-		    ipa_should_pipe_be_suspended(client) &&
-		    ipa_ctx->ep[ipa_ep_idx].valid) {
-			/* suspend endpoint */
-			memset(&suspend, 0, sizeof(suspend));
-			suspend.ipa_ep_suspend = true;
-			ipa_cfg_ep_ctrl(ipa_ep_idx, &suspend);
+		    ipa_should_pipe_be_suspended(client)) {
+			if (ipa_ctx->ep[ipa_ep_idx].valid) {
+				/* suspend endpoint */
+				memset(&suspend, 0, sizeof(suspend));
+				suspend.ipa_ep_suspend = true;
+				ipa_cfg_ep_ctrl(ipa_ep_idx, &suspend);
+		    }
+		    ipa_ctx->resume_on_connect[client] = false;
 		}
 	}
 
@@ -536,10 +540,15 @@ int ipa_resume_resource(enum ipa_rm_resource_name resource)
 				memset(&suspend, 0, sizeof(suspend));
 				suspend.ipa_ep_suspend = false;
 				ipa_cfg_ep_ctrl(ipa_ep_idx, &suspend);
-			} else {
-				ipa_ctx->ep[ipa_ep_idx].resume_on_connect =
-					true;
 			}
+			/*
+			 * The related ep, will be resumed on connect
+			 * while its resource is granted
+			 */
+			ipa_ctx->resume_on_connect[client] =
+				true;
+			IPADBG("%d will be resumed on connect.\n",
+					client);
 		}
 	}
 
@@ -770,13 +779,7 @@ int ipa_init_hw(void)
 	if (ipa_ctx->ipa_hw_type == IPA_HW_v2_5) {
 		/* set ipa_bcr to 0xFFFFFFFF for using new IPA behavior */
 		ipa_write_reg(ipa_ctx->mmio, IPA_BCR_OFST, IPA_BCR_REG_VAL);
-
-		/* Disable HW error generation on zero trailing byte issue */
-		ipa_write_reg(ipa_ctx->mmio,
-			IPA_SPARE_REG_1_OFST,
-			BIT(IPA_SPARE_REG_1_IGNORE_TRAILING_ZERO_ERR_SHFT));
 	}
-
 	return 0;
 }
 

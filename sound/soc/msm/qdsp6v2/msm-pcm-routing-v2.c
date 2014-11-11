@@ -88,6 +88,20 @@ static const char * const mad_audio_mux_text[] = {
 	TERT_MI2S_TX_TEXT
 };
 
+struct msm_pcm_route_bdai_pp_params {
+	u16 port_id; /* AFE port ID */
+	unsigned long pp_params_config;
+	bool mute_on;
+	int latency;
+};
+
+static struct msm_pcm_route_bdai_pp_params
+	msm_bedais_pp_params[MSM_BACKEND_DAI_PP_PARAMS_REQ_MAX] = {
+	{HDMI_RX, 0, 0, 0}
+};
+
+static int msm_routing_send_device_pp_params(int port_id,  int copp_idx);
+
 static void msm_pcm_routing_cfg_pp(int port_id, int copp_idx, int topology,
 				   int channels)
 {
@@ -192,61 +206,61 @@ static void msm_pcm_routng_cfg_matrix_map_pp(struct route_payload payload,
 
 #define SLIMBUS_EXTPROC_RX AFE_PORT_INVALID
 struct msm_pcm_routing_bdai_data msm_bedais[MSM_BACKEND_DAI_MAX] = {
-	{ PRIMARY_I2S_RX, 0, 0, 0, 0, 0, 0, LPASS_BE_PRI_I2S_RX},
-	{ PRIMARY_I2S_TX, 0, 0, 0, 0, 0, 0, LPASS_BE_PRI_I2S_TX},
-	{ SLIMBUS_0_RX, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_0_RX},
-	{ SLIMBUS_0_TX, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_0_TX},
-	{ HDMI_RX, 0, 0, 0, 0, 0, 0, LPASS_BE_HDMI},
-	{ INT_BT_SCO_RX, 0, 0, 0, 0, 0, 0, LPASS_BE_INT_BT_SCO_RX},
-	{ INT_BT_SCO_TX, 0, 0, 0, 0, 0, 0, LPASS_BE_INT_BT_SCO_TX},
-	{ INT_FM_RX, 0, 0, 0, 0, 0, 0, LPASS_BE_INT_FM_RX},
-	{ INT_FM_TX, 0, 0, 0, 0, 0, 0, LPASS_BE_INT_FM_TX},
-	{ RT_PROXY_PORT_001_RX, 0, 0, 0, 0, 0, 0, LPASS_BE_AFE_PCM_RX},
-	{ RT_PROXY_PORT_001_TX, 0, 0, 0, 0, 0, 0, LPASS_BE_AFE_PCM_TX},
-	{ AFE_PORT_ID_PRIMARY_PCM_RX, 0, 0, 0, 0, 0, 0, LPASS_BE_AUXPCM_RX},
-	{ AFE_PORT_ID_PRIMARY_PCM_TX, 0, 0, 0, 0, 0, 0, LPASS_BE_AUXPCM_TX},
-	{ VOICE_PLAYBACK_TX, 0, 0, 0, 0, 0, 0, LPASS_BE_VOICE_PLAYBACK_TX},
-	{ VOICE2_PLAYBACK_TX, 0, 0, 0, 0, 0, 0, LPASS_BE_VOICE2_PLAYBACK_TX},
-	{ VOICE_RECORD_RX, 0, 0, 0, 0, 0, 0, LPASS_BE_INCALL_RECORD_RX},
-	{ VOICE_RECORD_TX, 0, 0, 0, 0, 0, 0, LPASS_BE_INCALL_RECORD_TX},
-	{ MI2S_RX, 0, 0, 0, 0, 0, 0, LPASS_BE_MI2S_RX},
-	{ MI2S_TX, 0, 0, 0, 0, 0, 0, LPASS_BE_MI2S_TX},
-	{ SECONDARY_I2S_RX, 0, 0, 0, 0, 0, 0, LPASS_BE_SEC_I2S_RX},
-	{ SLIMBUS_1_RX, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_1_RX},
-	{ SLIMBUS_1_TX, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_1_TX},
-	{ SLIMBUS_4_RX, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_4_RX},
-	{ SLIMBUS_4_TX, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_4_TX},
-	{ SLIMBUS_3_RX, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_3_RX},
-	{ SLIMBUS_3_TX, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_3_TX},
-	{ SLIMBUS_5_TX, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_5_TX},
-	{ SLIMBUS_EXTPROC_RX, 0, 0, 0, 0, 0, 0, LPASS_BE_STUB_RX},
-	{ SLIMBUS_EXTPROC_RX, 0, 0, 0, 0, 0, 0, LPASS_BE_STUB_TX},
-	{ SLIMBUS_EXTPROC_RX, 0, 0, 0, 0, 0, 0, LPASS_BE_STUB_1_TX},
-	{ AFE_PORT_ID_QUATERNARY_MI2S_RX, 0, 0, 0, 0, 0, 0,
+	{ PRIMARY_I2S_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_PRI_I2S_RX},
+	{ PRIMARY_I2S_TX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_PRI_I2S_TX},
+	{ SLIMBUS_0_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_0_RX},
+	{ SLIMBUS_0_TX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_0_TX},
+	{ HDMI_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_HDMI},
+	{ INT_BT_SCO_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_INT_BT_SCO_RX},
+	{ INT_BT_SCO_TX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_INT_BT_SCO_TX},
+	{ INT_FM_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_INT_FM_RX},
+	{ INT_FM_TX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_INT_FM_TX},
+	{ RT_PROXY_PORT_001_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_AFE_PCM_RX},
+	{ RT_PROXY_PORT_001_TX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_AFE_PCM_TX},
+	{ AFE_PORT_ID_PRIMARY_PCM_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_AUXPCM_RX},
+	{ AFE_PORT_ID_PRIMARY_PCM_TX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_AUXPCM_TX},
+	{ VOICE_PLAYBACK_TX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_VOICE_PLAYBACK_TX},
+	{ VOICE2_PLAYBACK_TX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_VOICE2_PLAYBACK_TX},
+	{ VOICE_RECORD_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_INCALL_RECORD_RX},
+	{ VOICE_RECORD_TX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_INCALL_RECORD_TX},
+	{ MI2S_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_MI2S_RX},
+	{ MI2S_TX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_MI2S_TX},
+	{ SECONDARY_I2S_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_SEC_I2S_RX},
+	{ SLIMBUS_1_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_1_RX},
+	{ SLIMBUS_1_TX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_1_TX},
+	{ SLIMBUS_4_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_4_RX},
+	{ SLIMBUS_4_TX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_4_TX},
+	{ SLIMBUS_3_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_3_RX},
+	{ SLIMBUS_3_TX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_3_TX},
+	{ SLIMBUS_5_TX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_5_TX},
+	{ SLIMBUS_EXTPROC_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_STUB_RX},
+	{ SLIMBUS_EXTPROC_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_STUB_TX},
+	{ SLIMBUS_EXTPROC_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_STUB_1_TX},
+	{ AFE_PORT_ID_QUATERNARY_MI2S_RX, 0, 0, 0, 0, 0, 0, 0,
 	  LPASS_BE_TERT_MI2S_RX},
-	{ AFE_PORT_ID_QUATERNARY_MI2S_TX, 0, 0, 0, 0, 0, 0,
+	{ AFE_PORT_ID_QUATERNARY_MI2S_TX, 0, 0, 0, 0, 0, 0, 0,
 	  LPASS_BE_TERT_MI2S_TX},
-	{ AFE_PORT_ID_SECONDARY_MI2S_RX,  0, 0, 0, 0, 0, 0,
+	{ AFE_PORT_ID_SECONDARY_MI2S_RX,  0, 0, 0, 0, 0, 0, 0,
 	  LPASS_BE_SEC_MI2S_RX},
-	{ AFE_PORT_ID_SECONDARY_MI2S_TX,  0, 0, 0, 0, 0, 0,
+	{ AFE_PORT_ID_SECONDARY_MI2S_TX,  0, 0, 0, 0, 0, 0, 0,
 	  LPASS_BE_SEC_MI2S_TX},
-	{ AFE_PORT_ID_PRIMARY_MI2S_RX,    0, 0, 0, 0, 0, 0,
+	{ AFE_PORT_ID_PRIMARY_MI2S_RX,    0, 0, 0, 0, 0, 0, 0,
 	  LPASS_BE_PRI_MI2S_RX},
-	{ AFE_PORT_ID_PRIMARY_MI2S_TX,    0, 0, 0, 0, 0, 0,
+	{ AFE_PORT_ID_PRIMARY_MI2S_TX,    0, 0, 0, 0, 0, 0, 0,
 	  LPASS_BE_PRI_MI2S_TX},
-	{ AFE_PORT_ID_TERTIARY_MI2S_RX,   0, 0, 0, 0, 0, 0,
+	{ AFE_PORT_ID_TERTIARY_MI2S_RX,   0, 0, 0, 0, 0, 0, 0,
 	  LPASS_BE_TERT_MI2S_RX},
-	{ AFE_PORT_ID_TERTIARY_MI2S_TX,   0, 0, 0, 0, 0, 0,
+	{ AFE_PORT_ID_TERTIARY_MI2S_TX,   0, 0, 0, 0, 0, 0, 0,
 	  LPASS_BE_TERT_MI2S_TX},
-	{ AUDIO_PORT_ID_I2S_RX,           0, 0, 0, 0, 0, 0,
+	{ AUDIO_PORT_ID_I2S_RX,           0, 0, 0, 0, 0, 0, 0,
 	  LPASS_BE_AUDIO_I2S_RX},
-	{ AFE_PORT_ID_SECONDARY_PCM_RX,	  0, 0, 0, 0, 0, 0,
+	{ AFE_PORT_ID_SECONDARY_PCM_RX,	  0, 0, 0, 0, 0, 0, 0,
 	  LPASS_BE_SEC_AUXPCM_RX},
-	{ AFE_PORT_ID_SECONDARY_PCM_TX,   0, 0, 0, 0, 0, 0,
+	{ AFE_PORT_ID_SECONDARY_PCM_TX,   0, 0, 0, 0, 0, 0, 0,
 	  LPASS_BE_SEC_AUXPCM_TX},
-	{ SLIMBUS_6_RX, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_6_RX},
-	{ SLIMBUS_6_TX, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_6_TX},
-	{ AFE_PORT_ID_SPDIF_RX, 0, 0, 0, 0, 0, 0, LPASS_BE_SPDIF_RX},
+	{ SLIMBUS_6_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_6_RX},
+	{ SLIMBUS_6_TX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_6_TX},
+	{ AFE_PORT_ID_SPDIF_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_SPDIF_RX},
 };
 
 
@@ -465,8 +479,10 @@ static void msm_pcm_routing_build_matrix(int fedai_id, int sess_type,
 	int i, port_type, j, num_copps = 0;
 	struct route_payload payload;
 
-	port_type = (path_type == ADM_PATH_PLAYBACK ? MSM_AFE_PORT_TYPE_RX :
-						      MSM_AFE_PORT_TYPE_TX);
+	port_type = ((path_type == ADM_PATH_PLAYBACK  ||
+		     path_type == ADM_PATH_COMPRESSED_RX) ?
+		MSM_AFE_PORT_TYPE_RX : MSM_AFE_PORT_TYPE_TX);
+
 	for (i = 0; i < MSM_BACKEND_DAI_MAX; i++) {
 		if (!is_be_dai_extproc(i) &&
 		   (afe_get_port_type(msm_bedais[i].port_id) == port_type) &&
@@ -535,8 +551,127 @@ void msm_pcm_routing_reg_psthr_stream(int fedai_id, int dspst_id,
 	mutex_unlock(&routing_lock);
 }
 
+int msm_pcm_routing_reg_phy_compr_stream(int fe_id, bool perf_mode,
+					  int dspst_id, int stream_type,
+					  uint32_t compr_passthr_mode)
+{
+	int i, j, session_type, path_type, port_type, topology, num_copps = 0;
+	struct route_payload payload;
+	u32 channels, sample_rate;
+	u16 bit_width = 16;
+
+	pr_debug("%s:fe_id[%d] perf_mode[%d] id[%d] stream_type[%d] passt[%d]",
+		 __func__, fe_id, perf_mode, dspst_id,
+		 stream_type, compr_passthr_mode);
+
+	if (fe_id > MSM_FRONTEND_DAI_MM_MAX_ID) {
+		/* bad ID assigned in machine driver */
+		pr_err("%s: bad MM ID %d\n", __func__, fe_id);
+		return -EINVAL;
+	}
+
+	if (stream_type == SNDRV_PCM_STREAM_PLAYBACK) {
+		session_type = SESSION_TYPE_RX;
+		if (compr_passthr_mode != LEGACY_PCM)
+			path_type = ADM_PATH_COMPRESSED_RX;
+		else
+			path_type = ADM_PATH_PLAYBACK;
+		port_type = MSM_AFE_PORT_TYPE_RX;
+	} else if (stream_type == SNDRV_PCM_STREAM_CAPTURE) {
+		session_type = SESSION_TYPE_TX;
+		path_type = ADM_PATH_LIVE_REC;
+		port_type = MSM_AFE_PORT_TYPE_TX;
+	} else {
+		pr_err("%s: invalid stream type %d\n", __func__, stream_type);
+		return -EINVAL;
+	}
+
+	mutex_lock(&routing_lock);
+
+	payload.num_copps = 0; /* only RX needs to use payload */
+	fe_dai_map[fe_id][session_type].strm_id = dspst_id;
+	/* re-enable EQ if active */
+	msm_qti_pp_send_eq_values(fe_id);
+	for (i = 0; i < MSM_BACKEND_DAI_MAX; i++) {
+		if (test_bit(fe_id, &msm_bedais[i].fe_sessions))
+			msm_bedais[i].compr_passthr_mode = compr_passthr_mode;
+
+		if (!is_be_dai_extproc(i) &&
+			(afe_get_port_type(msm_bedais[i].port_id) ==
+			port_type) &&
+			(msm_bedais[i].active) &&
+			(test_bit(fe_id, &msm_bedais[i].fe_sessions))) {
+			int app_type, app_type_idx, copp_idx, acdb_dev_id;
+			channels = msm_bedais[i].channel;
+
+			if (msm_bedais[i].format == SNDRV_PCM_FORMAT_S16_LE)
+				bit_width = 16;
+			else if (msm_bedais[i].format ==
+					SNDRV_PCM_FORMAT_S24_LE)
+				bit_width = 24;
+			app_type = (stream_type == SNDRV_PCM_STREAM_PLAYBACK) ?
+				   fe_dai_app_type_cfg[fe_id].app_type : 0;
+			if (app_type) {
+				app_type_idx =
+					msm_pcm_routing_get_app_type_idx(
+						app_type);
+				sample_rate =
+					app_type_cfg[app_type_idx].sample_rate;
+				bit_width =
+					app_type_cfg[app_type_idx].bit_width;
+			} else {
+				sample_rate = msm_bedais[i].sample_rate;
+			}
+			acdb_dev_id = fe_dai_app_type_cfg[fe_id].acdb_dev_id;
+			topology = msm_routing_get_adm_topology(path_type,
+								fe_id);
+			pr_err("%s: Before adm open topology %d\n", __func__,
+				topology);
+
+			copp_idx =
+				adm_open(msm_bedais[i].port_id,
+					 path_type, sample_rate, channels,
+					 topology, perf_mode, bit_width,
+					 app_type, acdb_dev_id);
+			if ((copp_idx < 0) &&
+				(copp_idx >= MAX_COPPS_PER_PORT)) {
+				pr_err("%s:adm open failed coppid:%d\n",
+				__func__, copp_idx);
+				mutex_unlock(&routing_lock);
+				return -EINVAL;
+			}
+			pr_debug("%s: set idx bit of fe:%d, type: %d, be:%d\n",
+				 __func__, fe_id, session_type, i);
+			set_bit(copp_idx,
+				&session_copp_map[fe_id][session_type][i]);
+			for (j = 0; j < MAX_COPPS_PER_PORT; j++) {
+				unsigned long copp =
+				session_copp_map[fe_id][session_type][i];
+				if (test_bit(j, &copp)) {
+					payload.port_id[num_copps] =
+					msm_bedais[i].port_id;
+					payload.copp_idx[num_copps] = j;
+					num_copps++;
+				}
+			}
+			msm_routing_send_device_pp_params(msm_bedais[i].port_id,
+							  copp_idx);
+		}
+	}
+	if (num_copps) {
+		payload.num_copps = num_copps;
+		payload.session_id = fe_dai_map[fe_id][session_type].strm_id;
+		payload.app_type = fe_dai_app_type_cfg[fe_id].app_type;
+		payload.acdb_dev_id = fe_dai_app_type_cfg[fe_id].acdb_dev_id;
+		adm_matrix_map(path_type, payload, perf_mode);
+		msm_pcm_routng_cfg_matrix_map_pp(payload, path_type, perf_mode);
+	}
+	mutex_unlock(&routing_lock);
+	return 0;
+}
+
 int msm_pcm_routing_reg_phy_stream(int fedai_id, int perf_mode,
-				   int dspst_id, int stream_type)
+					int dspst_id, int stream_type)
 {
 	int i, j, session_type, path_type, port_type, topology, num_copps = 0;
 	struct route_payload payload;
@@ -574,7 +709,8 @@ int msm_pcm_routing_reg_phy_stream(int fedai_id, int perf_mode,
 		   (test_bit(fedai_id, &msm_bedais[i].fe_sessions))) {
 			int app_type, app_type_idx, copp_idx, acdb_dev_id;
 			channels = msm_bedais[i].channel;
-
+			msm_bedais[i].compr_passthr_mode =
+				LEGACY_PCM;
 			if (msm_bedais[i].format == SNDRV_PCM_FORMAT_S16_LE)
 				bits_per_sample = 16;
 			else if (msm_bedais[i].format ==
@@ -624,7 +760,9 @@ int msm_pcm_routing_reg_phy_stream(int fedai_id, int perf_mode,
 					num_copps++;
 				}
 			}
-			if (perf_mode == LEGACY_PCM_MODE)
+			if ((perf_mode == LEGACY_PCM_MODE) &&
+				(msm_bedais[i].compr_passthr_mode ==
+				LEGACY_PCM))
 				msm_pcm_routing_cfg_pp(msm_bedais[i].port_id,
 						       copp_idx, topology,
 						       channels);
@@ -710,7 +848,9 @@ void msm_pcm_routing_dereg_phy_stream(int fedai_id, int stream_type)
 				  &session_copp_map[fedai_id][session_type][i]);
 			if ((DOLBY_ADM_COPP_TOPOLOGY_ID == topology ||
 				DS2_ADM_COPP_TOPOLOGY_ID == topology) &&
-			    (fdai->perf_mode == LEGACY_PCM_MODE))
+			    (fdai->perf_mode == LEGACY_PCM_MODE) &&
+			    (msm_bedais[i].compr_passthr_mode ==
+					LEGACY_PCM))
 				msm_pcm_routing_deinit_pp(msm_bedais[i].port_id,
 							  topology);
 		}
@@ -756,7 +896,10 @@ static void msm_pcm_routing_process_audio(u16 reg, u16 val, int set)
 	if (afe_get_port_type(msm_bedais[reg].port_id) ==
 		MSM_AFE_PORT_TYPE_RX) {
 		session_type = SESSION_TYPE_RX;
-		path_type = ADM_PATH_PLAYBACK;
+		if (msm_bedais[reg].compr_passthr_mode != LEGACY_PCM)
+			path_type = ADM_PATH_COMPRESSED_RX;
+		else
+			path_type = ADM_PATH_PLAYBACK;
 	} else {
 		session_type = SESSION_TYPE_TX;
 		path_type = ADM_PATH_LIVE_REC;
@@ -830,7 +973,9 @@ static void msm_pcm_routing_process_audio(u16 reg, u16 val, int set)
 			msm_pcm_routing_build_matrix(val, session_type,
 						     path_type,
 						     fdai->perf_mode);
-			if (fdai->perf_mode == LEGACY_PCM_MODE)
+			if ((fdai->perf_mode == LEGACY_PCM_MODE) &&
+				(msm_bedais[reg].compr_passthr_mode ==
+					LEGACY_PCM))
 				msm_pcm_routing_cfg_pp(msm_bedais[reg].port_id,
 						       copp_idx, topology,
 						       channels);
@@ -859,7 +1004,9 @@ static void msm_pcm_routing_process_audio(u16 reg, u16 val, int set)
 				  &session_copp_map[val][session_type][reg]);
 			if ((DOLBY_ADM_COPP_TOPOLOGY_ID == topology ||
 				DS2_ADM_COPP_TOPOLOGY_ID == topology) &&
-			    (fdai->perf_mode == LEGACY_PCM_MODE))
+			    (fdai->perf_mode == LEGACY_PCM_MODE) &&
+			    (msm_bedais[reg].compr_passthr_mode ==
+				LEGACY_PCM))
 				msm_pcm_routing_deinit_pp(
 						msm_bedais[reg].port_id,
 						topology);
@@ -5204,12 +5351,14 @@ static int msm_pcm_routing_close(struct snd_pcm_substream *substream)
 				 __func__, copp, i, session_type, be_id);
 			clear_bit(idx,
 				  &session_copp_map[i][session_type][be_id]);
-			if (fdai->perf_mode == LEGACY_PCM_MODE)
+			if ((fdai->perf_mode == LEGACY_PCM_MODE) &&
+				(bedai->compr_passthr_mode == LEGACY_PCM))
 				msm_pcm_routing_deinit_pp(bedai->port_id,
 							  topology);
 		}
 	}
 
+	bedai->compr_passthr_mode = LEGACY_PCM;
 	bedai->active = 0;
 	bedai->sample_rate = 0;
 	bedai->channel = 0;
@@ -5237,7 +5386,10 @@ static int msm_pcm_routing_prepare(struct snd_pcm_substream *substream)
 	bedai = &msm_bedais[be_id];
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		path_type = ADM_PATH_PLAYBACK;
+		if (bedai->compr_passthr_mode != LEGACY_PCM)
+			path_type = ADM_PATH_COMPRESSED_RX;
+		else
+			path_type = ADM_PATH_PLAYBACK;
 		session_type = SESSION_TYPE_RX;
 	} else {
 		path_type = ADM_PATH_LIVE_REC;
@@ -5310,7 +5462,9 @@ static int msm_pcm_routing_prepare(struct snd_pcm_substream *substream)
 
 			msm_pcm_routing_build_matrix(i, session_type, path_type,
 						     fdai->perf_mode);
-			if (fdai->perf_mode == LEGACY_PCM_MODE)
+			if ((fdai->perf_mode == LEGACY_PCM_MODE) &&
+				(bedai->compr_passthr_mode ==
+					LEGACY_PCM))
 				msm_pcm_routing_cfg_pp(bedai->port_id, copp_idx,
 						       topology, channels);
 		}
@@ -5321,6 +5475,172 @@ done:
 
 	return 0;
 }
+
+static int msm_routing_send_device_pp_params(int port_id, int copp_idx)
+{
+	int index, topo_id, be_idx;
+	unsigned long pp_config = 0;
+	bool mute_on;
+	int latency;
+
+	pr_debug("%s: port_id %d, copp_idx %d\n", __func__, port_id, copp_idx);
+
+	if (port_id != HDMI_RX) {
+		pr_err("%s: Device pp params on invalid port %d\n",
+			__func__, port_id);
+		return  -EINVAL;
+	}
+
+	for (be_idx = 0; be_idx < MSM_BACKEND_DAI_MAX; be_idx++) {
+		if (port_id == msm_bedais[be_idx].port_id)
+			break;
+	}
+
+	if (be_idx >= MSM_BACKEND_DAI_MAX) {
+		pr_debug("%s: Invalid be id %d\n", __func__, be_idx);
+		return  -EINVAL;
+	}
+
+	for (index = 0; index < MSM_BACKEND_DAI_PP_PARAMS_REQ_MAX; index++) {
+		if (msm_bedais_pp_params[index].port_id == port_id)
+			break;
+	}
+	if (index >= MSM_BACKEND_DAI_PP_PARAMS_REQ_MAX) {
+		pr_err("%s: Invalid backend pp params index %d\n",
+			__func__, index);
+		return -EINVAL;
+	}
+
+	topo_id = adm_get_topology_for_port_copp_idx(port_id, copp_idx);
+	if (topo_id != COMPRESSED_PASSTHROUGH_DEFAULT_TOPOLOGY) {
+		pr_err("%s: Invalid passthrough topology 0x%x\n",
+			__func__, topo_id);
+		return -EINVAL;
+	}
+
+	pp_config = msm_bedais_pp_params[index].pp_params_config;
+	if (test_bit(ADM_PP_PARAM_MUTE_BIT, &pp_config)) {
+		pr_debug("%s: ADM_PP_PARAM_MUTE\n", __func__);
+		clear_bit(ADM_PP_PARAM_MUTE_BIT, &pp_config);
+		mute_on = msm_bedais_pp_params[index].mute_on;
+		if ((msm_bedais[be_idx].active) &&
+			(msm_bedais[be_idx].compr_passthr_mode !=
+			 LEGACY_PCM))
+			adm_send_compressed_device_mute(port_id,
+								copp_idx,
+								mute_on);
+	}
+	if (test_bit(ADM_PP_PARAM_LATENCY_BIT, &pp_config)) {
+		pr_debug("%s: ADM_PP_PARAM_LATENCY\n", __func__);
+		clear_bit(ADM_PP_PARAM_LATENCY_BIT,
+			  &pp_config);
+		latency = msm_bedais_pp_params[index].latency;
+		if ((msm_bedais[be_idx].active) &&
+			(msm_bedais[be_idx].compr_passthr_mode !=
+			 LEGACY_PCM))
+			adm_send_compressed_device_latency(port_id,
+							   copp_idx,
+							   latency);
+	}
+	return 0;
+}
+
+static int msm_routing_put_device_pp_params_mixer(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	int pp_id = ucontrol->value.integer.value[0];
+	int port_id = 0;
+	int index, be_idx, i, topo_id, idx;
+	bool mute;
+	int latency;
+
+	pr_debug("%s: pp_id: 0x%x\n", __func__, pp_id);
+
+	for (be_idx = 0; be_idx < MSM_BACKEND_DAI_MAX; be_idx++) {
+		port_id = msm_bedais[be_idx].port_id;
+		if (port_id == HDMI_RX)
+			break;
+	}
+
+	if (be_idx >= MSM_BACKEND_DAI_MAX) {
+		pr_debug("%s: Invalid be id %d\n", __func__, be_idx);
+		return  -EINVAL;
+	}
+
+	for (index = 0; index < MSM_BACKEND_DAI_PP_PARAMS_REQ_MAX; index++) {
+		if (msm_bedais_pp_params[index].port_id == port_id)
+			break;
+	}
+	if (index >= MSM_BACKEND_DAI_PP_PARAMS_REQ_MAX) {
+		pr_err("%s: Invalid pp params backend index %d\n",
+			__func__, index);
+		return -EINVAL;
+	}
+
+	for_each_set_bit(i, &msm_bedais[be_idx].fe_sessions,
+				MSM_FRONTEND_DAI_MM_SIZE) {
+		for (idx = 0; idx < MAX_COPPS_PER_PORT; idx++) {
+			unsigned long copp =
+				session_copp_map[i]
+				[SESSION_TYPE_RX][be_idx];
+			if (!test_bit(idx, &copp))
+				continue;
+			topo_id = adm_get_topology_for_port_copp_idx(port_id,
+								     copp);
+			if (topo_id != COMPRESSED_PASSTHROUGH_DEFAULT_TOPOLOGY)
+				continue;
+		pr_debug("%s: port: 0x%x, copp %ld, be active: %d, passt: %d\n",
+			 __func__, port_id, copp, msm_bedais[be_idx].active,
+			 msm_bedais[be_idx].compr_passthr_mode);
+		switch (pp_id) {
+		case ADM_PP_PARAM_MUTE_ID:
+			pr_debug("%s: ADM_PP_PARAM_MUTE\n", __func__);
+			mute = ucontrol->value.integer.value[1] ? true : false;
+			msm_bedais_pp_params[index].mute_on = mute;
+			set_bit(ADM_PP_PARAM_MUTE_BIT,
+				&msm_bedais_pp_params[index].pp_params_config);
+			if ((msm_bedais[be_idx].active) &&
+				(msm_bedais[be_idx].compr_passthr_mode !=
+				LEGACY_PCM))
+				adm_send_compressed_device_mute(port_id,
+					copp, mute);
+			break;
+		case ADM_PP_PARAM_LATENCY_ID:
+			pr_debug("%s: ADM_PP_PARAM_LATENCY\n", __func__);
+			msm_bedais_pp_params[index].latency =
+				ucontrol->value.integer.value[1];
+			set_bit(ADM_PP_PARAM_LATENCY_BIT,
+				&msm_bedais_pp_params[index].pp_params_config);
+			latency = msm_bedais_pp_params[index].latency =
+				ucontrol->value.integer.value[1];
+			if ((msm_bedais[be_idx].active) &&
+				(msm_bedais[be_idx].compr_passthr_mode !=
+				LEGACY_PCM))
+				adm_send_compressed_device_latency(port_id,
+					copp, latency);
+			break;
+		default:
+			pr_info("%s, device pp param %d not supported\n",
+				__func__, pp_id);
+			break;
+		}
+		}
+	}
+	return 0;
+}
+
+static int msm_routing_get_device_pp_params_mixer(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s:msm_routing_get_device_pp_params_mixer", __func__);
+	return 0;
+}
+
+static const struct snd_kcontrol_new device_pp_params_mixer_controls[] = {
+	SOC_SINGLE_MULTI_EXT("Device PP Params", SND_SOC_NOPM, 0, 0xFFFFFFFF,
+	0, 3, msm_routing_get_device_pp_params_mixer,
+	msm_routing_put_device_pp_params_mixer),
+};
 
 static struct snd_pcm_ops msm_routing_pcm_ops = {
 	.hw_params	= msm_pcm_routing_hw_params,
@@ -5379,6 +5699,10 @@ static int msm_routing_probe(struct snd_soc_platform *platform)
 	snd_soc_add_platform_controls(platform,
 			use_ds1_or_ds2_controls,
 			ARRAY_SIZE(use_ds1_or_ds2_controls));
+
+	snd_soc_add_platform_controls(platform,
+				device_pp_params_mixer_controls,
+				ARRAY_SIZE(device_pp_params_mixer_controls));
 
 	return 0;
 }
@@ -5451,7 +5775,8 @@ int msm_routing_check_backend_enabled(int fedai_id)
 
 static int get_cal_path(int path_type)
 {
-	if (path_type == ADM_PATH_PLAYBACK)
+	if (path_type == ADM_PATH_PLAYBACK ||
+	    path_type == ADM_PATH_COMPRESSED_RX)
 		return RX_DEVICE;
 	else
 		return TX_DEVICE;

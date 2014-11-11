@@ -329,6 +329,11 @@ struct fbc_panel_info {
 	u32 lossy_mode_thd;
 	u32 lossy_rgb_thd;
 	u32 lossy_mode_idx;
+
+	u32 slice_height;
+	bool pred_mode;
+	bool enc_mode;
+	u32 max_pred_err;
 };
 
 struct mdss_mdp_pp_tear_check {

@@ -279,6 +279,18 @@
 		qcom,key = "KHz";
 		qcom,rpm-peer = <&ce_clk>;
 	};
+
+	qcedev_ce_clk: qcedev_ce_clk {
+		compatible = "qcom,sw-vote-clk";
+		qcom,parent = <&ce_clk>;
+		qcom,config-rate = <85710000>;
+	};
+
+	qcrypto_ce_clk: qcrypto_ce_clk {
+		compatible = "qcom,sw-vote-clk";
+		qcom,parent = <&ce_clk>;
+		qcom,config-rate = <85710000>;
+	};
 };
 
 &clock_gcc {
@@ -1069,6 +1081,13 @@
 		qcom,has-sibling;
 	};
 
+	gcc_prng_ahb_clk: gcc_prng_ahb_clk {
+		compatible = "qcom,local-vote-clk";
+		qcom,base-offset = <GCC_PRNG_AHB_CBCR>;
+		qcom,en-offset = <GCC_APCS_CLOCK_BRANCH_ENA_VOTE>;
+		qcom,en-bit = <8>;
+	};
+
 	gcc_sdcc1_ahb_clk: gcc_sdcc1_ahb_clk {
 		compatible = "qcom,cbc";
 		qcom,base-offset = <GCC_SDCC1_AHB_CBCR>;
@@ -1143,10 +1162,11 @@
 	};
 
 	gcc_usb3_pipe_clk: gcc_usb3_pipe_clk {
-		compatible = "qcom,cbc";
-		qcom,base-offset = <GCC_USB3_PIPE_CBCR>;
+		compatible = "qcom,gate-clk";
+		qcom,en-offset = <GCC_USB3_PIPE_CBCR>;
+		qcom,en-bit = <0>;
 		qcom,parent = <&usb3_pipe_clk_src>;
-		qcom,bcr-offset = <GCC_USB3PHY_PHY_BCR>;
+		qcom,delay = <50>;
 	};
 
 	gcc_usb_phy_cfg_ahb_clk: gcc_usb_phy_cfg_ahb_clk {
@@ -1202,6 +1222,7 @@
 			<0x009a &gcc_blsp1_uart4_apps_clk>,
 			<0x00d0 &gcc_pdm_ahb_clk>,
 			<0x00d2 &gcc_pdm2_clk>,
+			<0x00d8 &gcc_prng_ahb_clk>,
 			<0x00f8 &gcc_boot_rom_ahb_clk>,
 			<0x016A &gcc_a7_debug_clk>,
 			<0x0203 &gcc_usb3_axi_tbu_clk>,

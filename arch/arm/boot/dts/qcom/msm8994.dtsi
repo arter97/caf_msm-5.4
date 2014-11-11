@@ -11,6 +11,7 @@
  */
 
 /memreserve/ 0x00000000 0x00001000;
+/memreserve/ 0xac1c0000 0x00001000;
 
 #include "skeleton64.dtsi"
 #include <dt-bindings/clock/msm-clocks-8994.h>
@@ -35,6 +36,7 @@
 		i2c2 = &i2c_2;
 		i2c5 = &i2c_5;
 		spi0 = &spi_0;
+		qup2 = &i2c_2;
 	};
 
 	cpus {
@@ -198,6 +200,13 @@
 			reusable;
 			alignment = <0 0x400000>;
 			size = <0 0xfc00000>;
+		};
+
+		adsp_mem: adsp_region {
+			compatible = "shared-dma-pool";
+			reusable;
+			alignment = <0 0x400000>;
+			size = <0 0x4000000>;
 		};
 
 		qsecom_mem: qsecom_region {
@@ -945,6 +954,7 @@
 
 		qcom,bus-width = <8>;
 		qcom,cpu-dma-latency-us = <301>;
+		qcom,cpu-affinity = "affine_cores";
 
 		qcom,msm-bus,name = "sdhc1";
 		qcom,msm-bus,num-cases = <9>;
@@ -982,6 +992,7 @@
 
 		qcom,bus-width = <4>;
 		qcom,cpu-dma-latency-us = <301>;
+		qcom,cpu-affinity = "affine_cores";
 
 		qcom,msm-bus,name = "sdhc2";
 		qcom,msm-bus,num-cases = <8>;
@@ -1014,6 +1025,7 @@
 
 		qcom,bus-width = <4>;
 		qcom,cpu-dma-latency-us = <301>;
+		qcom,cpu-affinity = "affine_cores";
 
 		qcom,msm-bus,name = "sdhc3";
 		qcom,msm-bus,num-cases = <8>;
@@ -1148,6 +1160,10 @@
 
 	qcom,msm-ssc-sensors {
 		compatible = "qcom,msm-ssc-sensors";
+	};
+
+	qcom,msm-pacman {
+		compatible = "qcom,msm-pacman";
 	};
 
 	wcd9xxx_intc: wcd9xxx-irq {
@@ -1960,8 +1976,6 @@
 			<0x80124 0x3>;
 		qcom,imem-size = <524288>; /* 512 * 1024*/
 		qcom,max-hw-load = <1281600>; /* Full 4k @ 30 + 1080p @ 30 */
-		qcom,clock-names = "core_clk", "core0_clk", "core1_clk", "core2_clk",
-			"iface_clk", "bus_clk", "mem_clk";
 		clock-names = "core_clk", "core0_clk", "core1_clk", "core2_clk",
 			"iface_clk", "bus_clk", "mem_clk";
 		venus-supply = <&gdsc_venus>;
@@ -2960,7 +2974,7 @@
 	adsp_heap {
 		compatible = "qcom,msm-shared-memory";
 		qcom,proc-id = <1>;
-		memory-region = <&secure_mem>;
+		memory-region = <&adsp_mem>;
 	};
 
 	qcom,msm-core {
