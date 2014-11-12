@@ -69,7 +69,6 @@ void adreno_ringbuffer_submit(struct adreno_ringbuffer *rb,
 		struct adreno_submit_time *time)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(rb->device);
-	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 	BUG_ON(rb->wptr == 0);
 
 	/* Write the changes to CFF if so enabled */
@@ -93,10 +92,7 @@ void adreno_ringbuffer_submit(struct adreno_ringbuffer *rb,
 		unsigned long flags;
 		local_irq_save(flags);
 
-		if (gpudev->alwayson_counter_read != NULL)
-			time->ticks = gpudev->alwayson_counter_read(adreno_dev);
-		else
-			time->ticks = 0;
+		time->ticks = perfcounter_read_alwayson(adreno_dev);
 
 		time->clock = local_clock();
 

@@ -715,15 +715,6 @@ enum a4xx_vfd_perfctr_vfd_sel {
 #define A4XX_VBIF_PERF_CNT_HIGH2	0x30e2
 #define A4XX_VBIF_PERF_CNT_HIGH3	0x30e3
 
-#define A4XX_VBIF_PERF_CNT_SEL_MASK	0x7F
-
-/* offset of clear register from select register */
-#define A4XX_VBIF_PERF_CLR_REG_SEL_OFF	8
-/* offset of enable register from select register */
-#define A4XX_VBIF_PERF_EN_REG_SEL_OFF	16
-/* offset of high counter from low counter value */
-#define A4XX_VBIF_PERF_HIGH_REG_LOW_OFF	8
-
 #define A4XX_VBIF_PERF_PWR_CNT_EN0	0x3100
 #define A4XX_VBIF_PERF_PWR_CNT_EN1	0x3101
 #define A4XX_VBIF_PERF_PWR_CNT_EN2	0x3102
@@ -740,11 +731,6 @@ enum a4xx_vfd_perfctr_vfd_sel {
 #define A4XX_VBIF_PERF_PWR_CNT_HIGH1	0x3119
 #define A4XX_VBIF_PERF_PWR_CNT_HIGH2	0x311a
 #define A4XX_VBIF_PERF_PWR_CNT_HIGH3	0x311b
-
-/* offset of clear register from the enable register */
-#define A4XX_VBIF_PERF_PWR_CLR_REG_EN_OFF	8
-/* offset of high counter from low counter value */
-#define A4XX_VBIF_PERF_PWR_HIGH_REG_LOW_OFF	8
 
 /* Bit flags for RBBM_CTL */
 #define A4XX_RBBM_RBBM_CTL_RESET_PWR_CTR0	0x00000001
