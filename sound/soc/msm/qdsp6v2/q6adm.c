@@ -404,9 +404,18 @@ int adm_get_params(int port_id, uint32_t module_id, uint32_t param_id,
 		rc = -EINVAL;
 		goto adm_get_param_return;
 	}
-	if (params_data) {
+	if ((params_data) && (ARRAY_SIZE(adm_get_parameters) >=
+		(1+adm_get_parameters[0])) &&
+		(params_length/sizeof(int) >=
+		adm_get_parameters[0])) {
 		for (i = 0; i < adm_get_parameters[0]; i++)
 			params_data[i] = adm_get_parameters[1+i];
+	} else {
+		pr_err("%s: Get param data not copied! get_param array size %zd, index %d, params array size %zd, index %d\n",
+		__func__, ARRAY_SIZE(adm_get_parameters),
+		(1+adm_get_parameters[0]),
+		params_length/sizeof(int),
+		adm_get_parameters[0]);
 	}
 	rc = 0;
 adm_get_param_return:
@@ -500,6 +509,20 @@ static int32_t adm_callback(struct apr_client_data *data, void *priv)
 				atomic_set(&this_adm.copp_stat[index], 1);
 				wake_up(&this_adm.wait[index]);
 				break;
+			case ADM_CMD_GET_PP_PARAMS_V5:
+				pr_debug("%s: ADM_CMD_GET_PP_PARAMS_V5\n",
+					__func__);
+				/* Should only come here if there is an APR */
+				/* error or malformed APR packet. Otherwise */
+				/* response will be returned as */
+				/* ADM_CMDRSP_GET_PP_PARAMS_V5 */
+				if (payload[1] != 0) {
+					pr_err("%s: ADM get param error = %d, resuming\n",
+						__func__, payload[1]);
+					rtac_make_adm_callback(payload,
+						data->payload_size);
+				}
+				break;
 			default:
 				pr_err("%s: Unknown Cmd: 0x%x\n", __func__,
 								payload[0]);
@@ -526,10 +549,33 @@ static int32_t adm_callback(struct apr_client_data *data, void *priv)
 			wake_up(&this_adm.wait[index]);
 			}
 			break;
-		case ADM_CMD_GET_PP_PARAMS_V5:
-			pr_debug("%s: ADM_CMD_GET_PP_PARAMS_V5\n", __func__);
-			rtac_make_adm_callback(payload,
-				data->payload_size);
+		case ADM_CMDRSP_GET_PP_PARAMS_V5:
+			pr_debug("%s: ADM_CMDRSP_GET_PP_PARAMS_V5\n", __func__);
+			if (payload[0] != 0)
+				pr_err("%s: ADM_CMDRSP_GET_PP_PARAMS_V5 returned error = 0x%x\n",
+					__func__, payload[0]);
+			if (rtac_make_adm_callback(payload,
+					data->payload_size))
+				break;
+			if ((payload[0] == 0) && (data->payload_size >
+				(4 * sizeof(*payload))) &&
+				(data->payload_size/sizeof(*payload)-4 >=
+				payload[3]) &&
+				(ARRAY_SIZE(adm_get_parameters)-1 >=
+				payload[3])) {
+				adm_get_parameters[0] = payload[3];
+				pr_debug("%s: GET_PP PARAM:received parameter length: 0x%x\n",
+					__func__, adm_get_parameters[0]);
+				/* storing param size then params */
+				for (i = 0; i < payload[3]; i++)
+					adm_get_parameters[1+i] = payload[4+i];
+			} else {
+				adm_get_parameters[0] = -1;
+				pr_err("%s: GET_PP_PARAMS failed, setting size to %d\n",
+					__func__, adm_get_parameters[0]);
+			}
+			atomic_set(&this_adm.copp_stat[index], 1);
+			wake_up(&this_adm.wait[index]);
 			break;
 		default:
 			pr_err("%s: Unknown cmd:0x%x\n", __func__,
