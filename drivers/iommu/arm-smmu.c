@@ -1970,6 +1970,9 @@ static int arm_smmu_domain_set_attr(struct iommu_domain *domain,
 		if (htw_disable)
 			smmu_domain->attributes |=
 				(1 << DOMAIN_ATTR_COHERENT_HTW_DISABLE);
+		else
+			smmu_domain->attributes &=
+				~(1 << DOMAIN_ATTR_COHERENT_HTW_DISABLE);
 		return 0;
 	}
 	default:
