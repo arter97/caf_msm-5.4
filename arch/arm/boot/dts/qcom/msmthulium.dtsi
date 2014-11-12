@@ -919,3 +919,4 @@
 /include/ "msm-pm8994.dtsi"
 /include/ "msm-pmi8994.dtsi"
 /include/ "msmthulium-regulator.dtsi"
+#include "msmthulium-camera.dtsi"

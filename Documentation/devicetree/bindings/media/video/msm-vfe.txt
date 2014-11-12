@@ -6,6 +6,7 @@ Required properties:
     - "qcom,vfe"
     - "qcom,vfe40"
     - "qcom,vfe44"
+    - "qcom,vfe47"
 - reg : offset and length of the register set for the device
     for the vfe operating in compatible mode.
 - reg-names : should specify relevant names to each reg property defined.
