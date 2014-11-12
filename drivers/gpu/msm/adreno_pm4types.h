@@ -17,9 +17,9 @@
 #define CP_PKT_MASK	0xc0000000
 
 #define CP_TYPE0_PKT	((unsigned int)0 << 30)
-#define CP_TYPE1_PKT	((unsigned int)1 << 30)
-#define CP_TYPE2_PKT	((unsigned int)2 << 30)
 #define CP_TYPE3_PKT	((unsigned int)3 << 30)
+#define CP_TYPE4_PKT    ((unsigned int)4 << 28)
+#define CP_TYPE7_PKT    ((unsigned int)7 << 28)
 
 
 /* type3 packets */
@@ -231,22 +231,41 @@
 #define CP_LOADSTATE_STATETYPE_SHIFT 0x00000000
 #define CP_LOADSTATE_EXTSRCADDR_SHIFT 0x00000002
 
-/* packet header building macros */
-#define cp_type0_packet(regindx, cnt) \
-	(CP_TYPE0_PKT | (((cnt)-1) << 16) | ((regindx) & 0x7FFF))
+static inline uint pm4_calc_odd_parity_bit(uint val)
+{
+	return (0x9669 >> (0xf & ((val) ^
+	((val) >> 4) ^ ((val) >> 8) ^ ((val) >> 12) ^
+	((val) >> 16) ^ ((val) >> 20) ^ ((val) >> 24) ^
+	((val) >> 28)))) & 1;
+}
 
-#define cp_type0_packet_for_sameregister(regindx, cnt) \
-	((CP_TYPE0_PKT | (((cnt)-1) << 16) | ((1 << 15) | \
-		((regindx) & 0x7FFF)))
+/* PM4 packet header functions */
+static inline uint cp_type0_packet(uint regindx, uint cnt)
+{
+	return CP_TYPE0_PKT | ((cnt-1) << 16) | ((regindx) & 0x7FFF);
+}
 
-#define cp_type1_packet(reg0, reg1) \
-	 (CP_TYPE1_PKT | ((reg1) << 12) | (reg0))
+static inline uint cp_type3_packet(uint opcode, uint cnt)
+{
+	return CP_TYPE3_PKT | ((cnt-1) << 16) | (((opcode) & 0xFF) << 8);
+}
 
-#define cp_type3_packet(opcode, cnt) \
-	 (CP_TYPE3_PKT | (((cnt)-1) << 16) | (((opcode) & 0xFF) << 8))
+static inline uint cp_type4_packet(uint opcode, uint cnt)
+{
+	return CP_TYPE4_PKT | ((cnt-1) << 0) |
+	(pm4_calc_odd_parity_bit(cnt-1) << 7) |
+	(((opcode) & 0x3FFFF) << 8) |
+	((pm4_calc_odd_parity_bit(opcode) << 27));
+}
 
-#define cp_predicated_type3_packet(opcode, cnt) \
-	 (CP_TYPE3_PKT | (((cnt)-1) << 16) | (((opcode) & 0xFF) << 8) | 0x1)
+static inline uint cp_type7_packet(uint opcode, uint cnt)
+{
+	return CP_TYPE7_PKT | ((cnt-1) << 0) |
+	(pm4_calc_odd_parity_bit(cnt-1) << 15) |
+	(((opcode) & 0x7F) << 16) |
+	((pm4_calc_odd_parity_bit(opcode) << 23));
+
+}
 
 #define cp_nop_packet(cnt) \
 	 (CP_TYPE3_PKT | (((cnt)-1) << 16) | (CP_NOP << 8))
