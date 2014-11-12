@@ -156,9 +156,11 @@ int diag_process_smd_cntl_read_data(struct diag_smd_info *smd_info, void *buf,
 		data_len = *(uint32_t *)(buf + 4);
 		if (type < DIAG_CTRL_MSG_REG ||
 				 type > DIAG_CTRL_MSG_LAST) {
-			pr_alert("diag: In %s, Invalid Msg type %d proc %d",
+			pr_debug("diag: In %s, Invalid Msg type %d proc %d",
 				 __func__, type, smd_info->peripheral);
-			break;
+			buf = buf + HDR_SIZ + data_len;
+			count_bytes = count_bytes + HDR_SIZ + data_len;
+			continue;
 		}
 		if (data_len < 0 || data_len > total_recd) {
 			pr_alert("diag: In %s, Invalid data len %d, total_recd: %d, proc %d",
