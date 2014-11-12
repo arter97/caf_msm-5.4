@@ -174,7 +174,7 @@ static inline int parse_ib(struct kgsl_device *device,
 		uint64_t gpuaddr, uint64_t dwords)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
-	unsigned int ib1base;
+	uint64_t ib1base;
 	int ret = 0;
 	struct adreno_ib_object_list *ib_obj_list;
 
@@ -184,7 +184,8 @@ static inline int parse_ib(struct kgsl_device *device,
 	 * list
 	 */
 
-	adreno_readreg(adreno_dev, ADRENO_REG_CP_IB1_BASE, &ib1base);
+	adreno_readreg64(adreno_dev, ADRENO_REG_CP_IB1_BASE,
+		ADRENO_REG_CP_IB1_BASE_HI, &ib1base);
 
 	if (gpuaddr == ib1base) {
 		push_object(SNAPSHOT_OBJ_TYPE_IB, process,
@@ -217,7 +218,8 @@ static size_t snapshot_rb(struct kgsl_device *device, u8 *buf,
 	unsigned int *data = (unsigned int *)(buf + sizeof(*header));
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct adreno_ringbuffer *rb = ADRENO_CURRENT_RINGBUFFER(adreno_dev);
-	unsigned int rptr, *rbptr, ibbase;
+	unsigned int rptr, *rbptr;
+	uint64_t ibbase;
 	int index, i;
 	int parse_ibs = 0, ib_parse_start;
 	struct kgsl_snapshot *snapshot = priv;
@@ -226,7 +228,8 @@ static size_t snapshot_rb(struct kgsl_device *device, u8 *buf,
 	adreno_readreg(adreno_dev, ADRENO_REG_CP_RB_RPTR, &rptr);
 
 	/* Address of the last processed IB */
-	adreno_readreg(adreno_dev, ADRENO_REG_CP_IB1_BASE, &ibbase);
+	adreno_readreg64(adreno_dev, ADRENO_REG_CP_IB1_BASE,
+				ADRENO_REG_CP_IB1_BASE_HI, &ibbase);
 
 	/*
 	 * Figure out the window of ringbuffer data to dump.  First we need to

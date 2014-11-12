@@ -1752,40 +1752,26 @@ static void adreno_fault_header(struct adreno_ringbuffer *rb,
 {
 	struct kgsl_device *device = rb->device;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
-	unsigned int status, base, rptr, wptr, ib1base, ib2base, ib1sz, ib2sz;
 	struct adreno_context *drawctxt = ADRENO_CONTEXT(cmdbatch->context);
+	unsigned int status, rptr, wptr, ib1sz, ib2sz;
+	uint64_t ib1base, ib2base;
 
-	kgsl_regread(device,
-			adreno_getreg(adreno_dev, ADRENO_REG_RBBM_STATUS),
-			&status);
-	kgsl_regread(device,
-		adreno_getreg(adreno_dev, ADRENO_REG_CP_RB_BASE),
-		&base);
-	kgsl_regread(device,
-		adreno_getreg(adreno_dev, ADRENO_REG_CP_RB_RPTR),
-		&rptr);
-	kgsl_regread(device,
-		adreno_getreg(adreno_dev, ADRENO_REG_CP_RB_WPTR),
-		&wptr);
-	kgsl_regread(device,
-		adreno_getreg(adreno_dev, ADRENO_REG_CP_IB1_BASE),
-		&ib1base);
-	kgsl_regread(device,
-		adreno_getreg(adreno_dev, ADRENO_REG_CP_IB1_BUFSZ),
-		&ib1sz);
-	kgsl_regread(device,
-		adreno_getreg(adreno_dev, ADRENO_REG_CP_IB2_BASE),
-		&ib2base);
-	kgsl_regread(device,
-		adreno_getreg(adreno_dev, ADRENO_REG_CP_IB2_BUFSZ),
-		&ib2sz);
+	adreno_readreg(adreno_dev , ADRENO_REG_RBBM_STATUS, &status);
+	adreno_readreg(adreno_dev, ADRENO_REG_CP_RB_RPTR, &rptr);
+	adreno_readreg(adreno_dev, ADRENO_REG_CP_RB_WPTR, &wptr);
+	adreno_readreg64(adreno_dev, ADRENO_REG_CP_IB1_BASE,
+					  ADRENO_REG_CP_IB1_BASE_HI, &ib1base);
+	adreno_readreg(adreno_dev, ADRENO_REG_CP_IB1_BUFSZ, &ib1sz);
+	adreno_readreg64(adreno_dev, ADRENO_REG_CP_IB2_BASE,
+					   ADRENO_REG_CP_IB2_BASE_HI, &ib2base);
+	adreno_readreg(adreno_dev, ADRENO_REG_CP_IB2_BUFSZ, &ib2sz);
 
 	trace_adreno_gpu_fault(cmdbatch->context->id, cmdbatch->timestamp,
 		status, rptr, wptr, ib1base, ib1sz,
 		ib2base, ib2sz, drawctxt->rb->id);
 
 	pr_fault(device, cmdbatch,
-		"gpu fault ctx %d ts %d status %8.8X rb %4.4x/%4.4x ib1 %8.8x/%4.4x ib2 %8.8x/%4.4x\n",
+		"gpu fault ctx %d ts %d status %8.8X rb %4.4x/%4.4x ib1 %16.16llX/%4.4x ib2 %16.16llX/%4.4x\n",
 		cmdbatch->context->id, cmdbatch->timestamp, status,
 		rptr, wptr, ib1base, ib1sz, ib2base, ib2sz);
 	pr_fault(device, cmdbatch,
