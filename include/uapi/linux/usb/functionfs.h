@@ -28,6 +28,10 @@ struct usb_endpoint_descriptor_no_audio {
 	__u8  bInterval;
 } __attribute__((packed));
 
+/*
+ * All numbers must be in little endian order.
+ */
+
 /* Legacy format, deprecated as of 3.14 but still used in MSM */
 struct usb_functionfs_descs_head {
 	__le32 magic;
