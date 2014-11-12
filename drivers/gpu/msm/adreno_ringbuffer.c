@@ -45,7 +45,7 @@ static void _cff_write_ringbuffer(struct adreno_ringbuffer *rb)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(rb->device);
 	struct kgsl_device *device = &adreno_dev->dev;
-	unsigned int gpuaddr;
+	uint64_t gpuaddr;
 	unsigned int *hostptr;
 	size_t size;
 
@@ -126,7 +126,7 @@ adreno_ringbuffer_waitspace(struct adreno_ringbuffer *rb,
 	unsigned int freecmds;
 	unsigned int wptr = rb->wptr;
 	unsigned int *cmds = NULL;
-	unsigned int gpuaddr;
+	uint64_t gpuaddr;
 	unsigned long wait_time;
 	unsigned long wait_timeout = msecs_to_jiffies(ADRENO_IDLE_TIMEOUT);
 	unsigned int rptr;
@@ -535,7 +535,7 @@ static void _ringbuffer_setup_common(struct adreno_ringbuffer *rb)
 		(1 << 27));
 
 	adreno_writereg(adreno_dev, ADRENO_REG_CP_RB_BASE,
-					rb->buffer_desc.gpuaddr);
+					(unsigned int) rb->buffer_desc.gpuaddr);
 
 	/* CP ROQ queue sizes (bytes) - RB:16, ST:16, IB1:32, IB2:64 */
 	if (adreno_is_a305(adreno_dev) || adreno_is_a305c(adreno_dev) ||
@@ -769,7 +769,7 @@ void adreno_ringbuffer_close(struct adreno_device *adreno_dev)
 static int
 adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 				unsigned int flags, unsigned int *cmds,
-				int sizedwords, uint32_t timestamp,
+				unsigned int sizedwords, uint32_t timestamp,
 				struct adreno_submit_time *time)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(rb->device);
@@ -777,7 +777,7 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 	unsigned int total_sizedwords = sizedwords;
 	unsigned int i;
 	unsigned int context_id = 0;
-	unsigned int gpuaddr = rb->device->memstore.gpuaddr;
+	uint64_t gpuaddr = rb->device->memstore.gpuaddr;
 	bool profile_ready;
 	struct adreno_context *drawctxt = rb->drawctxt_active;
 	bool secured_ctxt = false;
@@ -881,7 +881,7 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 		*ringcmds++ = cp_nop_packet(1);
 		*ringcmds++ = KGSL_PWRON_FIXUP_IDENTIFIER;
 		*ringcmds++ = CP_HDR_INDIRECT_BUFFER_PFE;
-		*ringcmds++ = adreno_dev->pwron_fixup.gpuaddr;
+		*ringcmds++ = (unsigned int) adreno_dev->pwron_fixup.gpuaddr;
 		*ringcmds++ = adreno_dev->pwron_fixup_dwords;
 
 		/* Re-enable protected mode */
@@ -897,10 +897,10 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 	/* start-of-pipeline timestamp */
 	*ringcmds++ = cp_type3_packet(CP_MEM_WRITE, 2);
 	if (drawctxt && !(flags & KGSL_CMD_FLAGS_INTERNAL_ISSUE))
-		*ringcmds++ = gpuaddr +
+		*ringcmds++ = (unsigned int) gpuaddr +
 			KGSL_MEMSTORE_OFFSET(context_id, soptimestamp);
 	else
-		*ringcmds++ = gpuaddr +
+		*ringcmds++ = (unsigned int) gpuaddr +
 			KGSL_MEMSTORE_RB_OFFSET(rb, soptimestamp);
 	*ringcmds++ = timestamp;
 
@@ -970,16 +970,17 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 	*ringcmds++ = CACHE_FLUSH_TS;
 
 	if (drawctxt && !(flags & KGSL_CMD_FLAGS_INTERNAL_ISSUE)) {
-		*ringcmds++ = gpuaddr + KGSL_MEMSTORE_OFFSET(context_id,
-							eoptimestamp);
+		*ringcmds++ = (unsigned int)
+			gpuaddr + KGSL_MEMSTORE_OFFSET(context_id,
+				eoptimestamp);
 		*ringcmds++ = timestamp;
 		*ringcmds++ = cp_type3_packet(CP_MEM_WRITE, 2);
-		*ringcmds++ = gpuaddr +
+		*ringcmds++ = (unsigned int) gpuaddr +
 			KGSL_MEMSTORE_RB_OFFSET(rb, eoptimestamp);
 		*ringcmds++ = rb->timestamp;
 	} else {
-		*ringcmds++ = gpuaddr + KGSL_MEMSTORE_RB_OFFSET(rb,
-							eoptimestamp);
+		*ringcmds++ = (unsigned int)
+			gpuaddr + KGSL_MEMSTORE_RB_OFFSET(rb, eoptimestamp);
 		*ringcmds++ = timestamp;
 	}
 
@@ -1034,8 +1035,8 @@ adreno_ringbuffer_issuecmds(struct adreno_ringbuffer *rb,
 		sizedwords, 0, NULL);
 }
 
-static bool _parse_ibs(struct kgsl_device_private *dev_priv, uint gpuaddr,
-			   int sizedwords);
+static bool _parse_ibs(struct kgsl_device_private *dev_priv, uint64_t gpuaddr,
+			   uint64_t sizedwords);
 
 static bool
 _handle_type3(struct kgsl_device_private *dev_priv, uint *hostaddr)
@@ -1116,12 +1117,12 @@ _handle_type0(struct kgsl_device_private *dev_priv, uint *hostaddr)
  * framebuffer config to test vector
  */
 static bool _parse_ibs(struct kgsl_device_private *dev_priv,
-			   uint gpuaddr, int sizedwords)
+			   uint64_t gpuaddr, uint64_t sizedwords)
 {
 	static uint level; /* recursion level */
 	bool ret = false;
 	uint *hostaddr, *hoststart;
-	int dwords_left = sizedwords; /* dwords left in the current command
+	uint64_t dwords_left = sizedwords; /* dwords left in the current command
 					 buffer */
 	struct kgsl_mem_entry *entry;
 
@@ -1129,14 +1130,14 @@ static bool _parse_ibs(struct kgsl_device_private *dev_priv,
 					   gpuaddr, sizedwords * sizeof(uint));
 	if (entry == NULL) {
 		KGSL_CMD_ERR(dev_priv->device,
-			     "no mapping for gpuaddr: 0x%08x\n", gpuaddr);
+			     "no mapping for gpuaddr: 0x%016llX\n", gpuaddr);
 		return false;
 	}
 
 	hostaddr = kgsl_gpuaddr_to_vaddr(&entry->memdesc, gpuaddr);
 	if (hostaddr == NULL) {
 		KGSL_CMD_ERR(dev_priv->device,
-			     "no mapping for gpuaddr: 0x%08x\n", gpuaddr);
+			     "no mapping for gpuaddr: 0x%016llX\n", gpuaddr);
 		return false;
 	}
 
@@ -1144,7 +1145,8 @@ static bool _parse_ibs(struct kgsl_device_private *dev_priv,
 
 	level++;
 
-	KGSL_CMD_INFO(dev_priv->device, "ib: gpuaddr:0x%08x, wc:%d, hptr:%p\n",
+	KGSL_CMD_INFO(dev_priv->device,
+		"ib: gpuaddr:0x%016llX, wc:%llu, hptr:%p\n",
 		gpuaddr, sizedwords, hostaddr);
 
 	mb();
@@ -1165,8 +1167,8 @@ static bool _parse_ibs(struct kgsl_device_private *dev_priv,
 			cur_ret = _handle_type3(dev_priv, hostaddr);
 			break;
 		default:
-			KGSL_CMD_ERR(dev_priv->device, "unexpected type: "
-				"type:%d, word:0x%08x @ 0x%p, gpu:0x%08x\n",
+			KGSL_CMD_ERR(dev_priv->device,
+				"unexpected type: type:%d, word:0x%08X @ 0x%p, gpu:0x%016llX\n",
 				*hostaddr >> 30, *hostaddr, hostaddr,
 				gpuaddr+4*(sizedwords-dwords_left));
 			cur_ret = false;
@@ -1176,8 +1178,7 @@ static bool _parse_ibs(struct kgsl_device_private *dev_priv,
 
 		if (!cur_ret) {
 			KGSL_CMD_ERR(dev_priv->device,
-				"bad sub-type: #:%d/%d, v:0x%08x"
-				" @ 0x%p[gb:0x%08x], level:%d\n",
+			"bad sub-type: #:%llu/%llu, v:0x%08X @ 0x%p[gb:0x%016llX], level:%d\n",
 				sizedwords-dwords_left, sizedwords, *hostaddr,
 				hostaddr, gpuaddr+4*(sizedwords-dwords_left),
 				level);
@@ -1196,8 +1197,7 @@ static bool _parse_ibs(struct kgsl_device_private *dev_priv,
 		hostaddr += count;
 		if (dwords_left < 0) {
 			KGSL_CMD_ERR(dev_priv->device,
-				"bad count: c:%d, #:%d/%d, "
-				"v:0x%08x @ 0x%p[gb:0x%08x], level:%d\n",
+			"bad count: c:%d, #:%llu/%llu, v:0x%08x @ 0x%p[gb:0x%016llX], level:%d\n",
 				count, sizedwords-(dwords_left+count),
 				sizedwords, *(hostaddr-count), hostaddr-count,
 				gpuaddr+4*(sizedwords-(dwords_left+count)),
@@ -1216,8 +1216,8 @@ static bool _parse_ibs(struct kgsl_device_private *dev_priv,
 done:
 	if (!ret)
 		KGSL_DRV_ERR(dev_priv->device,
-			"parsing failed: gpuaddr:0x%08x, "
-			"host:0x%p, wc:%d\n", gpuaddr, hoststart, sizedwords);
+		"parsing failed: gpuaddr:0x%016llX, host:0x%p, wc:%llu\n",
+		gpuaddr, hoststart, sizedwords);
 
 	level--;
 
@@ -1241,7 +1241,7 @@ static inline bool _ringbuffer_verify_ib(struct kgsl_device_private *dev_priv,
 
 	/* Check that the size of the IBs is under the allowable limit */
 	if (ib->sizedwords == 0 || ib->sizedwords > 0xFFFFF) {
-		KGSL_DRV_ERR(device, "Invalid IB size 0x%zX\n",
+		KGSL_DRV_ERR(device, "Invalid IB size 0x%llX\n",
 				ib->sizedwords);
 		return false;
 	}
@@ -1578,8 +1578,8 @@ int adreno_ringbuffer_submitcmd(struct adreno_device *adreno_dev,
 			else
 				*cmds++ = CP_HDR_INDIRECT_BUFFER_PFE;
 
-			*cmds++ = ib->gpuaddr;
-			*cmds++ = ib->sizedwords;
+			*cmds++ = (unsigned int) ib->gpuaddr;
+			*cmds++ = (unsigned int) ib->sizedwords;
 			/* preamble is required on only for first command */
 			use_preamble = false;
 		}

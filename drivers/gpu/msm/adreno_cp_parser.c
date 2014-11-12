@@ -23,8 +23,8 @@
 #define NUM_SET_DRAW_GROUPS 32
 
 struct set_draw_state {
-	unsigned int cmd_stream_addr;
-	unsigned int cmd_stream_dwords;
+	uint64_t cmd_stream_addr;
+	uint64_t cmd_stream_dwords;
 };
 
 /* List of variables used when parsing an IB */
@@ -52,7 +52,7 @@ static int load_state_unit_sizes[7][2] = {
 
 static int adreno_ib_find_objs(struct kgsl_device *device,
 				struct kgsl_process_private *process,
-				unsigned int gpuaddr, unsigned int dwords,
+				uint64_t gpuaddr, uint64_t dwords,
 				int obj_type,
 				struct adreno_ib_object_list *ib_obj_list);
 
@@ -70,10 +70,10 @@ static int ib_parse_set_draw_state(struct kgsl_device *device,
  * @size: Size of the merging address
  */
 static void adreno_ib_merge_range(struct adreno_ib_object *ib_obj,
-		unsigned int gpuaddr, unsigned int size)
+		uint64_t gpuaddr, uint64_t size)
 {
-	unsigned int addr_end1 = ib_obj->gpuaddr + ib_obj->size;
-	unsigned int addr_end2 = gpuaddr + size;
+	uint64_t addr_end1 = ib_obj->gpuaddr + ib_obj->size;
+	uint64_t addr_end2 = gpuaddr + size;
 	if (gpuaddr < ib_obj->gpuaddr)
 		ib_obj->gpuaddr = gpuaddr;
 	if (addr_end2 > addr_end1)
@@ -92,8 +92,8 @@ static void adreno_ib_merge_range(struct adreno_ib_object *ib_obj,
  * Checks if an address range overlaps with a list of address ranges
  * Returns the entry from list which overlaps else NULL
  */
-static struct adreno_ib_object *adreno_ib_check_overlap(unsigned int gpuaddr,
-		unsigned int size, int type,
+static struct adreno_ib_object *adreno_ib_check_overlap(uint64_t gpuaddr,
+		uint64_t size, int type,
 		struct adreno_ib_object_list *ib_obj_list)
 {
 	struct adreno_ib_object *ib_obj;
@@ -125,8 +125,8 @@ static struct adreno_ib_object *adreno_ib_check_overlap(unsigned int gpuaddr,
  * Returns 0 on success else error code
  */
 static int adreno_ib_add_range(struct kgsl_process_private *process,
-				unsigned int gpuaddr,
-				unsigned int size, int type,
+				uint64_t gpuaddr,
+				uint64_t size, int type,
 				struct adreno_ib_object_list *ib_obj_list)
 {
 	struct adreno_ib_object *ib_obj;
@@ -693,12 +693,12 @@ static int ib_parse_set_draw_state(struct kgsl_device *device,
  */
 static int adreno_ib_find_objs(struct kgsl_device *device,
 				struct kgsl_process_private *process,
-				unsigned int gpuaddr, unsigned int dwords,
+				uint64_t gpuaddr, uint64_t dwords,
 				int obj_type,
 				struct adreno_ib_object_list *ib_obj_list)
 {
 	int ret = 0;
-	int rem = dwords;
+	uint64_t rem = dwords;
 	int i;
 	struct ib_parser_variables ib_parse_vars;
 	unsigned int *src;
@@ -750,8 +750,8 @@ static int adreno_ib_find_objs(struct kgsl_device *device,
 
 		if (pkt_is_type3(src[i])) {
 			if (adreno_cmd_is_ib(src[i])) {
-				unsigned int gpuaddrib2 = src[i + 1];
-				unsigned int size = src[i + 2];
+				uint64_t gpuaddrib2 = src[i + 1];
+				uint64_t size = src[i + 2];
 
 				adreno_ib_find_objs(
 						device, process,
@@ -811,7 +811,7 @@ done:
  */
 int adreno_ib_create_object_list(struct kgsl_device *device,
 		struct kgsl_process_private *process,
-		unsigned int gpuaddr, unsigned int dwords,
+		uint64_t gpuaddr, uint64_t dwords,
 		struct adreno_ib_object_list **out_ib_obj_list)
 {
 	int ret = 0;

@@ -93,7 +93,7 @@ static inline void _create_ib_ref(struct kgsl_memdesc *memdesc,
 		unsigned int *cmd, unsigned int cnt, unsigned int off)
 {
 	cmd[0] = CP_HDR_INDIRECT_BUFFER_PFE;
-	cmd[1] = memdesc->gpuaddr + off;
+	cmd[1] = (unsigned int) memdesc->gpuaddr + off;
 	cmd[2] = cnt;
 }
 
@@ -121,7 +121,7 @@ static void _build_pre_ib_cmds(struct adreno_profile *profile,
 	struct adreno_profile_assigns_list *entry;
 	unsigned int *start, *ibcmds;
 	unsigned int count = profile->assignment_count;
-	unsigned int gpuaddr = profile->shared_buffer.gpuaddr;
+	uint64_t gpuaddr = profile->shared_buffer.gpuaddr;
 	unsigned int ib_offset = head + SIZE_DATA(count);
 	unsigned int data_offset = head * sizeof(unsigned int);
 
@@ -135,27 +135,30 @@ static void _build_pre_ib_cmds(struct adreno_profile *profile,
 	 * Write ringbuffer commands to save the following to memory:
 	 * timestamp, count, context_id, pid, tid, context type
 	 */
-	IB_CMD(ibcmds, CP_MEM_WRITE, gpuaddr + data_offset,
+	IB_CMD(ibcmds, CP_MEM_WRITE, (unsigned int) gpuaddr + data_offset,
 			timestamp, data_offset);
-	IB_CMD(ibcmds, CP_MEM_WRITE, gpuaddr + data_offset,
+	IB_CMD(ibcmds, CP_MEM_WRITE, (unsigned int) gpuaddr + data_offset,
 			profile->assignment_count, data_offset);
-	IB_CMD(ibcmds, CP_MEM_WRITE, gpuaddr + data_offset,
+	IB_CMD(ibcmds, CP_MEM_WRITE, (unsigned int) gpuaddr + data_offset,
 			drawctxt->base.id, data_offset);
-	IB_CMD(ibcmds, CP_MEM_WRITE, gpuaddr + data_offset,
+	IB_CMD(ibcmds, CP_MEM_WRITE, (unsigned int) gpuaddr + data_offset,
 			drawctxt->base.proc_priv->pid, data_offset);
-	IB_CMD(ibcmds, CP_MEM_WRITE, gpuaddr + data_offset,
+	IB_CMD(ibcmds, CP_MEM_WRITE, (unsigned int) gpuaddr + data_offset,
 			drawctxt->base.tid, data_offset);
-	IB_CMD(ibcmds, CP_MEM_WRITE, gpuaddr + data_offset,
+	IB_CMD(ibcmds, CP_MEM_WRITE, (unsigned int) gpuaddr + data_offset,
 			drawctxt->type, data_offset);
 
 	/* loop for each countable assigned */
 	list_for_each_entry(entry, &profile->assignments_list, list) {
-		IB_CMD(ibcmds, CP_MEM_WRITE, gpuaddr + data_offset,
+		IB_CMD(ibcmds, CP_MEM_WRITE,
+				(unsigned int) gpuaddr + data_offset,
 				entry->offset, data_offset);
 		IB_CMD(ibcmds, CP_REG_TO_MEM, entry->offset,
-				gpuaddr + data_offset, data_offset);
+				(unsigned int) gpuaddr + data_offset,
+				data_offset);
 		IB_CMD(ibcmds, CP_REG_TO_MEM, entry->offset_hi,
-				gpuaddr + data_offset, data_offset);
+				(unsigned int) gpuaddr + data_offset,
+				data_offset);
 
 		/* skip over post_ib counter data */
 		data_offset += sizeof(unsigned int) * 2;
@@ -174,7 +177,7 @@ static void _build_post_ib_cmds(struct adreno_profile *profile,
 	struct adreno_profile_assigns_list *entry;
 	unsigned int *start, *ibcmds;
 	unsigned int count = profile->assignment_count;
-	unsigned int gpuaddr =  profile->shared_buffer.gpuaddr;
+	uint64_t gpuaddr =  profile->shared_buffer.gpuaddr;
 	unsigned int ib_offset = head + SIZE_DATA(count) + SIZE_PREIB(count);
 	unsigned int data_offset = head * sizeof(unsigned int);
 
@@ -192,9 +195,11 @@ static void _build_post_ib_cmds(struct adreno_profile *profile,
 		data_offset += sizeof(unsigned int) * 3;
 
 		IB_CMD(ibcmds, CP_REG_TO_MEM, entry->offset,
-				gpuaddr + data_offset, data_offset);
+				(unsigned int) gpuaddr + data_offset,
+				data_offset);
 		IB_CMD(ibcmds, CP_REG_TO_MEM, entry->offset_hi,
-				gpuaddr + data_offset, data_offset);
+				(unsigned int) gpuaddr + data_offset,
+				data_offset);
 	}
 
 	/* end of profile identifier */

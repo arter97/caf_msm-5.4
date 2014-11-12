@@ -208,8 +208,8 @@ int kgsl_add_global_pt_entry(struct kgsl_device *device,
 {
 	int i;
 	int index = 0;
-	unsigned int gaddr = KGSL_MMU_GLOBAL_MEM_BASE;
-	unsigned int size = ALIGN(memdesc->size, PAGE_SIZE);
+	uint64_t gaddr = KGSL_MMU_GLOBAL_MEM_BASE;
+	uint64_t size = ALIGN(memdesc->size, PAGE_SIZE);
 
 	/* do we already have a mapping? */
 	if (memdesc->gpuaddr != 0)
@@ -239,7 +239,7 @@ int kgsl_add_global_pt_entry(struct kgsl_device *device,
 		return -ENOMEM;
 
 	if (kgsl_mmu_type == KGSL_MMU_TYPE_NONE)
-		memdesc->gpuaddr = memdesc->physaddr;
+		memdesc->gpuaddr = (uint64_t) memdesc->physaddr;
 	else
 		memdesc->gpuaddr = gaddr;
 
@@ -347,7 +347,7 @@ sysfs_show_mapped(struct kobject *kobj,
 	pt = _get_pt_from_kobj(kobj);
 
 	if (pt)
-		ret += snprintf(buf, PAGE_SIZE, "%d\n", pt->stats.mapped);
+		ret += snprintf(buf, PAGE_SIZE, "%llu\n", pt->stats.mapped);
 
 	kgsl_put_pagetable(pt);
 	return ret;
@@ -364,7 +364,7 @@ sysfs_show_max_mapped(struct kobject *kobj,
 	pt = _get_pt_from_kobj(kobj);
 
 	if (pt)
-		ret += snprintf(buf, PAGE_SIZE, "%d\n", pt->stats.max_mapped);
+		ret += snprintf(buf, PAGE_SIZE, "%llu\n", pt->stats.max_mapped);
 
 	kgsl_put_pagetable(pt);
 	return ret;
@@ -690,7 +690,7 @@ int
 kgsl_mmu_get_gpuaddr(struct kgsl_pagetable *pagetable,
 			struct kgsl_memdesc *memdesc)
 {
-	int size;
+	uint64_t size;
 	int page_align;
 	int align_mask;
 	unsigned long bit, start_bit, bitmap_size;
@@ -698,7 +698,6 @@ kgsl_mmu_get_gpuaddr(struct kgsl_pagetable *pagetable,
 	if (kgsl_mmu_type == KGSL_MMU_TYPE_NONE)
 		return _nommu_get_gpuaddr(memdesc);
 
-	/* Add space for the guard page when allocating the mmu VA. */
 	size = memdesc->size;
 	if (kgsl_memdesc_has_guard_page(memdesc))
 		size += PAGE_SIZE;
@@ -763,10 +762,11 @@ kgsl_mmu_get_gpuaddr(struct kgsl_pagetable *pagetable,
 				return -ENOMEM;
 		} else {
 			if (KGSL_MMU_SECURE_PT == pagetable->name)
-				memdesc->gpuaddr = (bit << PAGE_SHIFT) +
-						KGSL_IOMMU_SECURE_MEM_BASE;
+				memdesc->gpuaddr = (uint64_t)(bit << PAGE_SHIFT)
+						+ KGSL_IOMMU_SECURE_MEM_BASE;
 			else
-				memdesc->gpuaddr = (bit << PAGE_SHIFT);
+				memdesc->gpuaddr = (uint64_t)
+							(bit << PAGE_SHIFT);
 			bitmap_set(pagetable->mem_bitmap,
 				bit, size >> PAGE_SHIFT);
 			break;
@@ -834,7 +834,7 @@ int
 kgsl_mmu_put_gpuaddr(struct kgsl_pagetable *pagetable,
 			struct kgsl_memdesc *memdesc)
 {
-	int size;
+	uint64_t size;
 
 	if (memdesc->size == 0 || memdesc->gpuaddr == 0)
 		return 0;
@@ -849,12 +849,13 @@ kgsl_mmu_put_gpuaddr(struct kgsl_pagetable *pagetable,
 
 	if (KGSL_MMU_SECURE_PT == pagetable->name)
 		bitmap_clear(pagetable->mem_bitmap,
-			(memdesc->gpuaddr - KGSL_IOMMU_SECURE_MEM_BASE)
-						>> PAGE_SHIFT,
-						size >> PAGE_SHIFT);
+			(int)((memdesc->gpuaddr - KGSL_IOMMU_SECURE_MEM_BASE)
+						>> PAGE_SHIFT),
+						(int)(size >> PAGE_SHIFT));
 	else
 		bitmap_clear(pagetable->mem_bitmap,
-			memdesc->gpuaddr >> PAGE_SHIFT, size >> PAGE_SHIFT);
+			(int) (memdesc->gpuaddr >> PAGE_SHIFT),
+			(int) (size >> PAGE_SHIFT));
 
 	/*
 	 * Don't clear the gpuaddr on global mappings because they
@@ -872,8 +873,8 @@ kgsl_mmu_unmap(struct kgsl_pagetable *pagetable,
 		struct kgsl_memdesc *memdesc)
 {
 	int size;
-	unsigned int start_addr = 0;
-	unsigned int end_addr = 0;
+	uint64_t start_addr = 0;
+	uint64_t end_addr = 0;
 
 	if (memdesc->size == 0 || memdesc->gpuaddr == 0 ||
 		!(KGSL_MEMDESC_MAPPED & memdesc->priv))
@@ -951,7 +952,7 @@ void kgsl_mmu_set_mmutype(char *mmutype)
 }
 EXPORT_SYMBOL(kgsl_mmu_set_mmutype);
 
-int kgsl_mmu_gpuaddr_in_range(struct kgsl_pagetable *pt, unsigned int gpuaddr)
+int kgsl_mmu_gpuaddr_in_range(struct kgsl_pagetable *pt, uint64_t gpuaddr)
 {
 	if (KGSL_MMU_TYPE_NONE == kgsl_mmu_type)
 		return (gpuaddr != 0);

@@ -78,16 +78,16 @@ struct kgsl_driver {
 	struct mutex devlock;
 
 	struct {
-		unsigned int vmalloc;
-		unsigned int vmalloc_max;
-		unsigned int page_alloc;
-		unsigned int page_alloc_max;
-		unsigned int coherent;
-		unsigned int coherent_max;
-		unsigned int secure;
-		unsigned int secure_max;
-		unsigned int mapped;
-		unsigned int mapped_max;
+		uint64_t vmalloc;
+		uint64_t vmalloc_max;
+		uint64_t page_alloc;
+		uint64_t page_alloc_max;
+		uint64_t coherent;
+		uint64_t coherent_max;
+		uint64_t secure;
+		uint64_t secure_max;
+		uint64_t mapped;
+		uint64_t mapped_max;
 	} stats;
 	unsigned int full_cache_threshold;
 };
@@ -124,20 +124,38 @@ struct kgsl_memdesc_ops {
 /* The memdesc is TZ locked content protection */
 #define KGSL_MEMDESC_TZ_LOCKED BIT(7)
 
-/* shared memory allocation */
+/**
+ * struct kgsl_memdesc - GPU memory object descriptor
+ * @pagetable: Pointer to the pagetable that the object is mapped in
+ * @hostptr: Kernel virtual address
+ * @hostptr_count: Number of threads using hostptr
+ * @useraddr: User virtual address (if applicable)
+ * @gpuaddr: GPU virtual address
+ * @physaddr: Physical address of the memory object
+ * @size: Size of the memory object
+ * @mmapsize: Total size of the object in VM (including guard)
+ * @priv: Internal flags and settings
+ * @sg: Scatter gather list for the allocated pages
+ * @sglen: Number of active entries in the sglist
+ * @ops: Function hooks for the memdesc memory type
+ * @flags: Flags set from userspace
+ * @dev: Pointer to the struct device that owns this memory
+ * @memmap: bitmap of pages for mmapsize
+ * @memmap_len: Number of bits for memmap
+ */
 struct kgsl_memdesc {
 	struct kgsl_pagetable *pagetable;
-	void *hostptr; /* kernel virtual address */
-	unsigned int hostptr_count; /* number of threads using hostptr */
-	unsigned long useraddr; /* userspace address */
-	unsigned int gpuaddr;
+	void *hostptr;
+	unsigned int hostptr_count;
+	unsigned long useraddr;
+	uint64_t gpuaddr;
 	phys_addr_t physaddr;
-	size_t size;
+	uint64_t size;
 	unsigned int priv; /* Internal flags and settings */
 	struct scatterlist *sg;
-	unsigned int sglen; /* Active entries in the sglist */
+	unsigned int sglen;
 	struct kgsl_memdesc_ops *ops;
-	unsigned int flags; /* Flags set from userspace */
+	unsigned int flags;
 	struct device *dev;
 };
 
@@ -294,8 +312,8 @@ int kgsl_cmdbatch_add_sync(struct kgsl_device *device,
 void kgsl_mem_entry_destroy(struct kref *kref);
 
 struct kgsl_mem_entry *kgsl_sharedmem_find_region(
-	struct kgsl_process_private *private, unsigned int gpuaddr,
-	size_t size);
+	struct kgsl_process_private *private, uint64_t gpuaddr,
+	uint64_t size);
 
 void kgsl_get_memory_usage(char *str, size_t len, unsigned int memflags);
 
@@ -305,7 +323,7 @@ int kgsl_suspend_driver(struct platform_device *pdev, pm_message_t state);
 int kgsl_resume_driver(struct platform_device *pdev);
 
 static inline int kgsl_gpuaddr_in_memdesc(const struct kgsl_memdesc *memdesc,
-				unsigned int gpuaddr, size_t size)
+				uint64_t gpuaddr, uint64_t size)
 {
 	/* set a minimum size to search for */
 	if (!size)
@@ -337,7 +355,7 @@ static inline void kgsl_memdesc_unmap(struct kgsl_memdesc *memdesc)
 }
 
 static inline void *kgsl_gpuaddr_to_vaddr(struct kgsl_memdesc *memdesc,
-					     unsigned int gpuaddr)
+					     uint64_t gpuaddr)
 {
 	void *hostptr = NULL;
 
@@ -390,9 +408,8 @@ kgsl_mem_entry_put(struct kgsl_mem_entry *entry)
  * Function returns true if the 2 given address ranges overlap
  * else false
  */
-static inline bool kgsl_addr_range_overlap(unsigned int gpuaddr1,
-		unsigned int size1,
-		unsigned int gpuaddr2, unsigned int size2)
+static inline bool kgsl_addr_range_overlap(uint64_t gpuaddr1,
+		uint64_t size1, uint64_t gpuaddr2, uint64_t size2)
 {
 	if ((size1 > (UINT_MAX - gpuaddr1)) || (size2 > (UINT_MAX - gpuaddr2)))
 		return false;

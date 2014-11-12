@@ -59,8 +59,8 @@ struct kgsl_pagetable {
 
 	struct {
 		unsigned int entries;
-		unsigned int mapped;
-		unsigned int max_mapped;
+		uint64_t mapped;
+		uint64_t max_mapped;
 	} stats;
 	const struct kgsl_mmu_pt_ops *pt_ops;
 	unsigned int fault_addr;
@@ -88,7 +88,7 @@ struct kgsl_mmu_ops {
 		(struct kgsl_mmu *mmu);
 	uint64_t (*mmu_get_default_ttbr0)(struct kgsl_mmu *mmu,
 				enum kgsl_iommu_context_id ctx_id);
-	unsigned int (*mmu_get_reg_gpuaddr)(struct kgsl_mmu *mmu,
+	uint64_t (*mmu_get_reg_gpuaddr)(struct kgsl_mmu *mmu,
 			int ctx_id, int reg);
 	unsigned int (*mmu_get_reg_ahbaddr)(struct kgsl_mmu *mmu,
 			int ctx_id, enum kgsl_iommu_reg_map reg);
@@ -163,7 +163,7 @@ unsigned int kgsl_mmu_log_fault_addr(struct kgsl_mmu *mmu,
 int kgsl_mmu_enabled(void);
 void kgsl_mmu_set_mmutype(char *mmutype);
 enum kgsl_mmutype kgsl_mmu_get_mmutype(void);
-int kgsl_mmu_gpuaddr_in_range(struct kgsl_pagetable *pt, unsigned int gpuaddr);
+int kgsl_mmu_gpuaddr_in_range(struct kgsl_pagetable *pt, uint64_t gpuaddr);
 
 int kgsl_add_global_pt_entry(struct kgsl_device *device,
 	struct kgsl_memdesc *memdesc);
@@ -245,8 +245,8 @@ static inline void kgsl_mmu_disable_clk(struct kgsl_mmu *mmu)
 		mmu->mmu_ops->mmu_disable_clk(mmu);
 }
 
-static inline unsigned int kgsl_mmu_get_reg_gpuaddr(struct kgsl_mmu *mmu,
-							int ctx_id, int reg)
+static inline uint64_t kgsl_mmu_get_reg_gpuaddr(struct kgsl_mmu *mmu,
+						int ctx_id, int reg)
 {
 	if (mmu->mmu_ops && mmu->mmu_ops->mmu_get_reg_gpuaddr)
 		return mmu->mmu_ops->mmu_get_reg_gpuaddr(mmu, ctx_id, reg);

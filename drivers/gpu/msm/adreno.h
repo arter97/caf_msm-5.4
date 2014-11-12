@@ -907,16 +907,17 @@ static inline int adreno_context_timestamp(struct kgsl_context *k_ctxt)
 }
 
 static inline int __adreno_add_idle_indirect_cmds(unsigned int *cmds,
-						unsigned int nop_gpuaddr)
+		uint64_t nop_gpuaddr)
 {
-	/* Adding an indirect buffer ensures that the prefetch stalls until
+	/*
+	 * Adding an indirect buffer ensures that the prefetch stalls until
 	 * the commands in indirect buffer have completed. We need to stall
 	 * prefetch with a nop indirect buffer when updating pagetables
 	 * because it provides stabler synchronization */
 	*cmds++ = cp_type3_packet(CP_WAIT_FOR_ME, 1);
 	*cmds++ = 0;
 	*cmds++ = CP_HDR_INDIRECT_BUFFER_PFE;
-	*cmds++ = nop_gpuaddr;
+	*cmds++ = (unsigned int) nop_gpuaddr;
 	*cmds++ = 2;
 	*cmds++ = cp_type3_packet(CP_WAIT_FOR_IDLE, 1);
 	*cmds++ = 0x00000000;
@@ -925,7 +926,7 @@ static inline int __adreno_add_idle_indirect_cmds(unsigned int *cmds,
 
 static inline int adreno_add_bank_change_cmds(unsigned int *cmds,
 					int cur_ctx_bank,
-					unsigned int nop_gpuaddr)
+					uint64_t nop_gpuaddr)
 {
 	unsigned int *start = cmds;
 
@@ -943,15 +944,15 @@ static inline int adreno_add_bank_change_cmds(unsigned int *cmds,
  * @nop_gpuaddr - NOP GPU address
  * equal to value
  */
-static inline int adreno_add_read_cmds(unsigned int *cmds, unsigned int addr,
-				unsigned int val, unsigned int nop_gpuaddr)
+static inline int adreno_add_read_cmds(unsigned int *cmds, uint64_t addr,
+				unsigned int val, uint64_t nop_gpuaddr)
 {
 	unsigned int *start = cmds;
 
 	*cmds++ = cp_type3_packet(CP_WAIT_REG_MEM, 5);
 	/* MEM SPACE = memory, FUNCTION = equals */
 	*cmds++ = 0x13;
-	*cmds++ = addr;
+	*cmds++ = (unsigned int) addr;
 	*cmds++ = val;
 	*cmds++ = 0xFFFFFFFF;
 	*cmds++ = 0xFFFFFFFF;
