@@ -545,6 +545,7 @@ struct usb_gadget {
 	const char			*name;
 	struct device			dev;
 	u8				usb_core_id;
+	u8				pdev_id;
 };
 
 static inline void set_gadget_data(struct usb_gadget *gadget, void *data)
@@ -857,6 +858,7 @@ struct usb_gadget_driver {
 	struct device_driver	driver;
 
 	u8			usb_core_id;
+	u8			pdev_id;
 };
 
 

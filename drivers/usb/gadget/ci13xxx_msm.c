@@ -20,8 +20,10 @@
 
 #include "ci13xxx_udc.c"
 
-#define MSM_USB_BASE	(udc->regs)
+#define MSM_USB_BASE		(udc->regs)
+#define MAX_USB_CORE_NUM	4
 
+/* device index 1 is used for USB1 Controller,3 for USB3 and id 4 for USB4 */
 struct ci13xxx_udc_context {
 	int irq;
 	void __iomem *regs;
@@ -30,40 +32,49 @@ struct ci13xxx_udc_context {
 	bool wake_irq_state;
 };
 
-static struct ci13xxx_udc_context _udc_ctxt;
+static struct ci13xxx_udc_context _udc_ctxt[MAX_USB_CORE_NUM+1];
 
 static irqreturn_t msm_udc_irq(int irq, void *data)
 {
-	return udc_irq();
+	struct platform_device *pdev = data;
+
+	return udc_irq(irq, pdev);
 }
 
-static void ci13xxx_msm_suspend(void)
+static void ci13xxx_msm_suspend(struct ci13xxx *udc)
 {
-	struct device *dev = _udc->gadget.dev.parent;
+	struct device *dev = udc->gadget.dev.parent;
+	struct platform_device *pdev =
+		container_of(dev, struct platform_device, dev);
+
 	dev_dbg(dev, "ci13xxx_msm_suspend\n");
 
-	if (_udc_ctxt.wake_irq && !_udc_ctxt.wake_irq_state) {
-		enable_irq_wake(_udc_ctxt.wake_irq);
-		enable_irq(_udc_ctxt.wake_irq);
-		_udc_ctxt.wake_irq_state = true;
+	if (_udc_ctxt[pdev->id].wake_irq &&
+			!_udc_ctxt[pdev->id].wake_irq_state) {
+		enable_irq_wake(_udc_ctxt[pdev->id].wake_irq);
+		enable_irq(_udc_ctxt[pdev->id].wake_irq);
+		_udc_ctxt[pdev->id].wake_irq_state = true;
 	}
 }
 
-static void ci13xxx_msm_resume(void)
+static void ci13xxx_msm_resume(struct ci13xxx *udc)
 {
-	struct device *dev = _udc->gadget.dev.parent;
+	struct device *dev = udc->gadget.dev.parent;
+	struct platform_device *pdev =
+		container_of(dev, struct platform_device, dev);
+
 	dev_dbg(dev, "ci13xxx_msm_resume\n");
 
-	if (_udc_ctxt.wake_irq && _udc_ctxt.wake_irq_state) {
-		disable_irq_wake(_udc_ctxt.wake_irq);
-		disable_irq_nosync(_udc_ctxt.wake_irq);
-		_udc_ctxt.wake_irq_state = false;
+	if (_udc_ctxt[pdev->id].wake_irq &&
+		_udc_ctxt[pdev->id].wake_irq_state) {
+		disable_irq_wake(_udc_ctxt[pdev->id].wake_irq);
+		disable_irq_nosync(_udc_ctxt[pdev->id].wake_irq);
+		_udc_ctxt[pdev->id].wake_irq_state = false;
 	}
 }
 
-static void ci13xxx_msm_disconnect(void)
+static void ci13xxx_msm_disconnect(struct ci13xxx *udc)
 {
-	struct ci13xxx *udc = _udc;
 	struct usb_phy *phy = udc->transceiver;
 
 	if (phy && (phy->flags & ENABLE_DP_MANUAL_PULLUP))
@@ -73,9 +84,8 @@ static void ci13xxx_msm_disconnect(void)
 				ULPI_CLR(ULPI_MISC_A));
 }
 
-static void ci13xxx_msm_connect(void)
+static void ci13xxx_msm_connect(struct ci13xxx *udc)
 {
-	struct ci13xxx *udc = _udc;
 	struct usb_phy *phy = udc->transceiver;
 
 	if (phy && (phy->flags & ENABLE_DP_MANUAL_PULLUP)) {
@@ -116,20 +126,20 @@ static void ci13xxx_msm_notify_event(struct ci13xxx *udc, unsigned event)
 		break;
 	case CI13XXX_CONTROLLER_DISCONNECT_EVENT:
 		dev_info(dev, "CI13XXX_CONTROLLER_DISCONNECT_EVENT received\n");
-		ci13xxx_msm_disconnect();
-		ci13xxx_msm_resume();
+		ci13xxx_msm_disconnect(udc);
+		ci13xxx_msm_resume(udc);
 		break;
 	case CI13XXX_CONTROLLER_CONNECT_EVENT:
 		dev_info(dev, "CI13XXX_CONTROLLER_CONNECT_EVENT received\n");
-		ci13xxx_msm_connect();
+		ci13xxx_msm_connect(udc);
 		break;
 	case CI13XXX_CONTROLLER_SUSPEND_EVENT:
 		dev_info(dev, "CI13XXX_CONTROLLER_SUSPEND_EVENT received\n");
-		ci13xxx_msm_suspend();
+		ci13xxx_msm_suspend(udc);
 		break;
 	case CI13XXX_CONTROLLER_RESUME_EVENT:
 		dev_info(dev, "CI13XXX_CONTROLLER_RESUME_EVENT received\n");
-		ci13xxx_msm_resume();
+		ci13xxx_msm_resume(udc);
 		break;
 
 	default:
@@ -140,12 +150,12 @@ static void ci13xxx_msm_notify_event(struct ci13xxx *udc, unsigned event)
 
 static irqreturn_t ci13xxx_msm_resume_irq(int irq, void *data)
 {
-	struct ci13xxx *udc = _udc;
+	struct ci13xxx *udc = data;
 
 	if (udc->transceiver && udc->vbus_active && udc->suspended)
 		usb_phy_set_suspend(udc->transceiver, 0);
 	else if (!udc->suspended)
-		ci13xxx_msm_resume();
+		ci13xxx_msm_resume(udc);
 
 	return IRQ_HANDLED;
 }
@@ -165,36 +175,37 @@ static struct ci13xxx_udc_driver ci13xxx_msm_udc_driver = {
 static int ci13xxx_msm_install_wake_gpio(struct platform_device *pdev,
 				struct resource *res)
 {
+	struct ci13xxx *udc = _udc[pdev->id];
 	int wake_irq;
 	int ret;
 
 	dev_dbg(&pdev->dev, "ci13xxx_msm_install_wake_gpio\n");
 
-	_udc_ctxt.wake_gpio = res->start;
-	gpio_request(_udc_ctxt.wake_gpio, "USB_RESUME");
-	gpio_direction_input(_udc_ctxt.wake_gpio);
-	wake_irq = gpio_to_irq(_udc_ctxt.wake_gpio);
+	_udc_ctxt[pdev->id].wake_gpio = res->start;
+	gpio_request(_udc_ctxt[pdev->id].wake_gpio, "USB_RESUME");
+	gpio_direction_input(_udc_ctxt[pdev->id].wake_gpio);
+	wake_irq = gpio_to_irq(_udc_ctxt[pdev->id].wake_gpio);
 	if (wake_irq < 0) {
 		dev_err(&pdev->dev, "could not register USB_RESUME GPIO.\n");
 		return -ENXIO;
 	}
 
 	dev_dbg(&pdev->dev, "_udc_ctxt.gpio_irq = %d and irq = %d\n",
-			_udc_ctxt.wake_gpio, wake_irq);
+			_udc_ctxt[pdev->id].wake_gpio, wake_irq);
 	ret = request_irq(wake_irq, ci13xxx_msm_resume_irq,
-		IRQF_TRIGGER_RISING | IRQF_ONESHOT, "usb resume", NULL);
+		IRQF_TRIGGER_RISING | IRQF_ONESHOT, "usb resume", udc);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "could not register USB_RESUME IRQ.\n");
 		goto gpio_free;
 	}
 	disable_irq(wake_irq);
-	_udc_ctxt.wake_irq = wake_irq;
+	_udc_ctxt[pdev->id].wake_irq = wake_irq;
 
 	return 0;
 
 gpio_free:
-	gpio_free(_udc_ctxt.wake_gpio);
-	_udc_ctxt.wake_gpio = 0;
+	gpio_free(_udc_ctxt[pdev->id].wake_gpio);
+	_udc_ctxt[pdev->id].wake_gpio = 0;
 	return ret;
 }
 
@@ -202,9 +213,9 @@ static void ci13xxx_msm_uninstall_wake_gpio(struct platform_device *pdev)
 {
 	dev_dbg(&pdev->dev, "ci13xxx_msm_uninstall_wake_gpio\n");
 
-	if (_udc_ctxt.wake_gpio) {
-		gpio_free(_udc_ctxt.wake_gpio);
-		_udc_ctxt.wake_gpio = 0;
+	if (_udc_ctxt[pdev->id].wake_gpio) {
+		gpio_free(_udc_ctxt[pdev->id].wake_gpio);
+		_udc_ctxt[pdev->id].wake_gpio = 0;
 	}
 }
 
@@ -221,20 +232,21 @@ static int ci13xxx_msm_probe(struct platform_device *pdev)
 		return -ENXIO;
 	}
 
-	_udc_ctxt.regs = ioremap(res->start, resource_size(res));
-	if (!_udc_ctxt.regs) {
+	_udc_ctxt[pdev->id].regs = ioremap(res->start, resource_size(res));
+	if (!_udc_ctxt[pdev->id].regs) {
 		dev_err(&pdev->dev, "ioremap failed\n");
 		return -ENOMEM;
 	}
 
-	ret = udc_probe(&ci13xxx_msm_udc_driver, &pdev->dev, _udc_ctxt.regs);
+	ret = udc_probe(&ci13xxx_msm_udc_driver, pdev,
+					_udc_ctxt[pdev->id].regs);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "udc_probe failed\n");
 		goto iounmap;
 	}
 
-	_udc_ctxt.irq = platform_get_irq(pdev, 0);
-	if (_udc_ctxt.irq < 0) {
+	_udc_ctxt[pdev->id].irq = platform_get_irq(pdev, 0);
+	if (_udc_ctxt[pdev->id].irq < 0) {
 		dev_err(&pdev->dev, "IRQ not found\n");
 		ret = -ENXIO;
 		goto udc_remove;
@@ -249,8 +261,8 @@ static int ci13xxx_msm_probe(struct platform_device *pdev)
 		}
 	}
 
-	ret = request_irq(_udc_ctxt.irq, msm_udc_irq, IRQF_SHARED, pdev->name,
-					  pdev);
+	ret = request_irq(_udc_ctxt[pdev->id].irq, msm_udc_irq, IRQF_SHARED,
+			pdev->name, pdev);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "request_irq failed\n");
 		goto gpio_uninstall;
@@ -264,9 +276,9 @@ static int ci13xxx_msm_probe(struct platform_device *pdev)
 gpio_uninstall:
 	ci13xxx_msm_uninstall_wake_gpio(pdev);
 udc_remove:
-	udc_remove();
+	udc_remove(pdev);
 iounmap:
-	iounmap(_udc_ctxt.regs);
+	iounmap(_udc_ctxt[pdev->id].regs);
 
 	return ret;
 }
@@ -274,16 +286,16 @@ iounmap:
 int ci13xxx_msm_remove(struct platform_device *pdev)
 {
 	pm_runtime_disable(&pdev->dev);
-	free_irq(_udc_ctxt.irq, pdev);
+	free_irq(_udc_ctxt[pdev->id].irq, pdev);
 	ci13xxx_msm_uninstall_wake_gpio(pdev);
-	udc_remove();
-	iounmap(_udc_ctxt.regs);
+	udc_remove(pdev);
+	iounmap(_udc_ctxt[pdev->id].regs);
 	return 0;
 }
 
 void ci13xxx_msm_shutdown(struct platform_device *pdev)
 {
-	ci13xxx_pullup(&_udc->gadget, 0);
+	ci13xxx_pullup(&_udc[pdev->id]->gadget, 0);
 }
 
 static struct platform_driver ci13xxx_msm_driver = {
