@@ -77,7 +77,6 @@
 #define clk_ce1_clk			0x42229c55
 #define clk_gcc_ce1_ahb_m_clk		0x2eb28c01
 #define clk_gcc_ce1_axi_m_clk		0xc174dfba
-#define clk_gcc_mmss_bimc_gfx_m_clk	0xcf06f534
 #define clk_aggre1_noc_clk		0x049abba8
 #define clk_aggre1_noc_a_clk		0xc12e4220
 #define clk_aggre2_noc_clk		0xaa681404
@@ -182,6 +181,7 @@
 #define clk_gcc_gp1_clk			0x057f7b69
 #define clk_gcc_gp2_clk			0x9bf83ffd
 #define clk_gcc_gp3_clk			0xec6539ee
+#define clk_gcc_mmss_bimc_gfx_clk	0xe4f28754
 #define clk_gcc_mmss_sys_noc_axi_clk	0x4467b15b
 #define clk_gcc_mmss_noc_cfg_ahb_clk	0xb41a9d99
 #define clk_gcc_mmss_noc_at_clk		0x564eeb65
