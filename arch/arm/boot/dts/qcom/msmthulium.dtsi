@@ -117,7 +117,6 @@
 #include "msmthulium-ipcrouter.dtsi"
 #include "msmthulium-iommu.dtsi"
 #include "msm-gdsc-thulium.dtsi"
-#include "msmthulium-cc.dtsi"
 #include "msmthulium-bus.dtsi"
 
 &soc {
@@ -305,8 +304,33 @@
 			    <84 512 500 800>;
 	};
 
+	clock_gcc: qcom,gcc@300000 {
+		compatible = "qcom,gcc-thulium";
+		reg = <0x300000 0x8f014>;
+		reg-names = "cc_base";
+		vdd_dig-supply = <&pm8994_s1_corner>;
+		#clock-cells = <1>;
+	};
+
 	clock_mmss: qcom,mmsscc@8c0000 {
-		compatible = "qcom,dummycc";
+		compatible = "qcom,mmsscc-thulium";
+		reg = <0x8c0000 0xb00c>;
+		reg-names = "cc_base";
+		vdd_dig-supply = <&pm8994_s1_corner>;
+		mmpll4_dig-supply = <&pm8994_s1_corner>;
+		mmpll4_analog-supply = <&pm8994_l12>;
+		clock-names = "xo", "gpll0";
+		clocks = <&clock_gcc clk_cxo_clk_src>,
+			 <&clock_gcc clk_gpll0_out_main>;
+		#clock-cells = <1>;
+	};
+
+	clock_debug: qcom,cc-debug@362000 {
+		compatible = "qcom,cc-debug-thulium";
+		reg = <0x362000 0x4>;
+		reg-names = "cc_base";
+		clock-names = "debug_mmss_clk";
+		clocks = <&clock_mmss clk_mmss_gcc_dbg_clk>;
 		#clock-cells = <1>;
 	};
 
