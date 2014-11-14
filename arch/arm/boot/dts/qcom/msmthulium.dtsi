@@ -775,6 +775,11 @@
 			 <&clock_gcc clk_gcc_ce1_axi_m_clk>;
 		qcom,ce-opp-freq = <171430000>;
 	};
+
+	qcom_tzlog: tz-log@66bf720 {
+		compatible = "qcom,tz-log";
+		reg = <0x066bf720 0x1000>;
+	};
 };
 
 &gdsc_venus {
