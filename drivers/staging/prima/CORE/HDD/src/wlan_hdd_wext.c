@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014, The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1862,7 +1862,7 @@ void hdd_tx_per_hit_cb (void *pCallbackContext)
     unsigned char tx_fail[16];
     union iwreq_data wrqu;
 
-    if (NULL == pAdapter)
+if (NULL == pAdapter || (WLAN_HDD_ADAPTER_MAGIC != pAdapter->magic))
     {
         hddLog(LOGE, "hdd_tx_per_hit_cb: pAdapter is NULL\n");
         return;
