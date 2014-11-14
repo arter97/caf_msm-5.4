@@ -117,6 +117,8 @@ void preview_set_data_pipeline()
 	int ispif_stream_enable;
 	u32 freq = 128000000;
 	u32 flags = 0;
+
+	pr_debug("%s:  kpi entry!!!\n", __func__);
 	dual_enabled = 0; /* set according to log */
 	/* power on and enable  clock for vfe and axi, before csi */
 	rc = msm_axi_subdev_init_rdi_only(lsh_axi_ctrl, dual_enabled, s_ctrl);
@@ -133,9 +135,15 @@ void preview_set_data_pipeline()
 	params_list.params[0].vfe_intf =  VFE0;
 	params_list.params[0].cid_mask = (1 << 0);
 	params_list.len = 1;
+
+	pr_debug("%s: config ispif\n", __func__);
+
 	/* ISPIF_CFG,use csid 1,rdi1 */
 	rc = msm_ispif_config(lsh_ispif, &params_list);
 	rc = msm_csid_config(lsh_csid_dev, &csid_params); /* CSID_CFG */
+
+	pr_debug("%s: config csid\n", __func__);
+
 	/* CSIPHY_CFG */
 	rc = msm_csiphy_lane_config(lsh_csiphy_dev, &csiphy_params);
 	ispif_stream_enable = 129;  /* configure to select RDI 1, VFE0 */
@@ -147,6 +155,8 @@ void preview_set_data_pipeline()
 	axi_vfe_config_cmd_para(&vfe_axi_cmd_para);
 	rc = vfe32_config_axi_rdi_only(my_axi_ctrl, OUTPUT_TERT2,
 			(uint32_t *)&vfe_axi_cmd_para);
+
+	pr_debug("%s: kpi exit!!!\n", __func__);
 }
 
 void preview_buffer_alloc(void)
@@ -443,6 +453,10 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 			overlay_data[OVERLAY_GUIDANCE_LANE].data.memory_id =
 					overlay_fd[OVERLAY_GUIDANCE_LANE];
 
+			/* Only log once for early camera kpi */
+			pr_info_once("kpi cam rdi1 first frame %d\n",
+				      rdi1_irq_count);
+
 			schedule_work(&wq_mdp_queue_overlay_buffers);
 			if (free_buf) {
 				vfe32_put_ch_addr(ping_pong,
@@ -643,7 +657,9 @@ static void guidance_lane_pic_update_all(void)
 
 static void guidance_lane_set_data_pipeline(void)
 {
+	pr_debug("%s entry\n", __func__);
 	guidance_lane_pic_update_all();
+	pr_debug("%s exit\n", __func__);
 }
 
 static int adp_rear_camera_enable(void)
@@ -651,6 +667,7 @@ static int adp_rear_camera_enable(void)
 	struct preview_mem *ping_buffer, *pong_buffer, *free_buffer;
 	struct av_rvc_status rvc_status;
 
+	pr_debug("%s: kpi entry\n", __func__);
 	my_axi_ctrl->share_ctrl->current_mode = 4096;
 	vfe_para.operation_mode = VFE_OUTPUTS_RDI1;
 
@@ -686,6 +703,8 @@ static int adp_rear_camera_enable(void)
 	guidance_lane_set_data_pipeline();
 	my_axi_ctrl->share_ctrl->current_mode = 4096; /* BIT(12) */
 	my_axi_ctrl->share_ctrl->operation_mode = 4096;
+	pr_debug("%s: kpi exit\n", __func__);
+
 	return 0;
 }
 
@@ -699,12 +718,14 @@ int  init_camera_kthread(void)
 	INIT_WORK(&wq_mdp_queue_overlay_buffers, mdp_queue_overlay_buffers);
 	ret = adp_rear_camera_enable();
 	complete(&camera_enabled);
+	pr_debug("%s: exit\n", __func__);
+
 	return 0;
 }
 
 void  exit_camera_kthread(void)
 {
-	pr_debug("Exiting  camera\n");
+	pr_debug("%s: entry\n", __func__);
 	wait_for_completion(&preview_disabled);
 	guidance_lane_buffer_free();
 	preview_buffer_free();
@@ -714,10 +735,14 @@ void  exit_camera_kthread(void)
 	msm_csiphy_release(lsh_csiphy_dev, &csi_lane_params);
 	msm_ispif_release(lsh_ispif);
 	cancel_work_sync(&wq_mdp_queue_overlay_buffers);
+
+	pr_debug("%s: exit\n", __func__);
 }
 
 int disable_camera_preview(void)
 {
+	pr_debug("%s: kpi entry\n", __func__);
+
 	wait_for_completion(&preview_enabled);
 	axi_stop_rdi1_only(my_axi_ctrl);
 	av_mgr_rvc_stream_enable(FALSE);
@@ -737,6 +762,8 @@ int disable_camera_preview(void)
 	mdpclient_display_commit();
 
 	complete(&preview_disabled);
+
+	pr_debug("%s: kpi entry\n", __func__);
 	return 0;
 }
 
@@ -746,6 +773,8 @@ int enable_camera_preview(void)
 	int waitcounter_camera = 0;
 	int waitcounter_guidance = 0;
 	int max_wait_count = 15;
+	pr_debug("%s: kpi entry\n", __func__);
+
 	wait_for_completion(&camera_enabled);
 	mdpclient_msm_fb_open();
 	if (mdpclient_msm_fb_blank(FB_BLANK_UNBLANK, true))
@@ -806,5 +835,7 @@ int enable_camera_preview(void)
 	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);
 	complete(&camera_enabled);
 	complete(&preview_enabled);
+
+	pr_debug("%s: kpi exit\n", __func__);
 	return 0;
 }
