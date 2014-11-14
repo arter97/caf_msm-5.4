@@ -1611,7 +1611,7 @@ static int _load_firmware(struct kgsl_device *device, const char *fwfile,
 		return ret;
 	}
 
-	if (!fw)
+	if (fw)
 		*buf = kmalloc(fw->size, GFP_KERNEL);
 	else
 		return -EINVAL;
