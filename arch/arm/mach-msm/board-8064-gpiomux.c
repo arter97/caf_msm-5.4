@@ -25,6 +25,8 @@
 #include "devices.h"
 #include "board-8064.h"
 
+#define LA_SPI_DRIVER
+
 #define GPIO_KEY_VOLUME_DOWN_PM8921     PM8921_GPIO_PM_TO_SYS(38)
 
 /* The SPI configurations apply to GSBI 5*/
@@ -72,6 +74,14 @@ static struct gpiomux_setting gpio_epm_spi_cs_config = {
 	.drv = GPIOMUX_DRV_12MA,
 	.pull = GPIOMUX_PULL_UP,
 };
+
+/* The SPI configurations apply to GSBI 5 chip select 1*/
+static struct gpiomux_setting gpio_spi_cs1_config = {
+	.func = GPIOMUX_FUNC_3,
+	.drv = GPIOMUX_DRV_12MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+
 
 #ifdef CONFIG_MSM_VCAP
 static struct gpiomux_setting gpio_vcap_config[] = {
@@ -1074,6 +1084,15 @@ static struct msm_gpiomux_config adp_spi_config[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &gpio_spi_config_sus,
 		},
 	},
+#ifdef LA_SPI_DRIVER
+	{
+		.gpio	   = 47,		/*GSBI QUP SPI_CS1 */
+		.settings = {
+			[GPIOMUX_ACTIVE] = &gpio_spi_cs1_config,
+			[GPIOMUX_SUSPENDED] = &gpio_spi_cs1_config,
+		},
+	},
+#endif
 	{
 		.gpio      = 53,		/*GSBI QUP SPI_CS */
 		.settings = {

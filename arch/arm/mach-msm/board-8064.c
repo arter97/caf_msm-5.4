@@ -2929,6 +2929,13 @@ static struct spi_board_info spi_board_info[] __initdata = {
 		.chip_select		= 3,
 		.mode			= SPI_MODE_0,
 	},
+	{
+		.modalias		= "audio_spislave",
+		.max_speed_hz		= 1100000,
+		.bus_num		= 0,
+		.chip_select		= 1,
+		.mode			= SPI_MODE_1,
+	},
 };
 
 static struct slim_boardinfo apq8064_slim_devices[] = {
