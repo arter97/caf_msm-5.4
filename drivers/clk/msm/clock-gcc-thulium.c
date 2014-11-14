@@ -1516,6 +1516,28 @@ static struct branch_clk gcc_aggre0_snoc_axi_clk = {
 	},
 };
 
+static struct branch_clk gcc_smmu_aggre0_ahb_clk = {
+	.cbcr_reg = GCC_SMMU_AGGRE0_AHB_CBCR,
+	.has_sibling = 1,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_smmu_aggre0_ahb_clk",
+		.ops = &clk_ops_branch,
+		CLK_INIT(gcc_smmu_aggre0_ahb_clk.c),
+	},
+};
+
+static struct branch_clk gcc_smmu_aggre0_axi_clk = {
+	.cbcr_reg = GCC_SMMU_AGGRE0_AXI_CBCR,
+	.has_sibling = 1,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_smmu_aggre0_axi_clk",
+		.ops = &clk_ops_branch,
+		CLK_INIT(gcc_smmu_aggre0_axi_clk.c),
+	},
+};
+
 static struct gate_clk gcc_pcie_0_pipe_clk = {
 	.en_reg = GCC_PCIE_0_PIPE_CBCR,
 	.en_mask = BIT(0),
@@ -2921,6 +2943,8 @@ static struct mux_clk gcc_debug_mux = {
 		{ &gcc_aggre0_snoc_axi_clk.c, 0x0116 },
 		{ &gcc_aggre0_cnoc_ahb_clk.c, 0x0117 },
 		{ &gcc_aggre0_noc_at_clk.c, 0x0118 },
+		{ &gcc_smmu_aggre0_axi_clk.c, 0x0119 },
+		{ &gcc_smmu_aggre0_ahb_clk.c, 0x011a },
 	),
 	.c = {
 		.dbg_name = "gcc_debug_mux",
@@ -3057,6 +3081,8 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(gcc_aggre0_cnoc_ahb_clk),
 	CLK_LIST(gcc_aggre0_noc_at_clk),
 	CLK_LIST(gcc_aggre0_snoc_axi_clk),
+	CLK_LIST(gcc_smmu_aggre0_ahb_clk),
+	CLK_LIST(gcc_smmu_aggre0_axi_clk),
 	CLK_LIST(gcc_blsp1_ahb_clk),
 	CLK_LIST(gcc_blsp1_qup1_i2c_apps_clk),
 	CLK_LIST(gcc_blsp1_qup1_spi_apps_clk),
