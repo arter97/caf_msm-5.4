@@ -705,13 +705,6 @@ int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 	pipe->dst.w = req->dst_rect.w;
 	pipe->dst.h = req->dst_rect.h;
 
-	if (mfd->panel_orientation & MDP_FLIP_LR)
-		pipe->dst.x = pipe->mixer_left->width
-			- pipe->dst.x - pipe->dst.w;
-	if (mfd->panel_orientation & MDP_FLIP_UD)
-		pipe->dst.y = pipe->mixer_left->height
-			- pipe->dst.y - pipe->dst.h;
-
 	pipe->horz_deci = req->horz_deci;
 	pipe->vert_deci = req->vert_deci;
 
@@ -1298,6 +1291,11 @@ static int __overlay_queue_pipes(struct msm_fb_data_type *mfd)
 		} else {
 			pr_debug("no buf detected pnum=%d use solid fill\n",
 					pipe->num);
+			if ((pipe->flags & MDP_SOLID_FILL) == 0) {
+				pr_warn("commit without buffer on pipe %d\n",
+					pipe->num);
+				ret = -EINVAL;
+			}
 			buf = NULL;
 		}
 
