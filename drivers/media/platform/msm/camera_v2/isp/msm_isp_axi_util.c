@@ -430,7 +430,7 @@ void msm_isp_update_framedrop_reg(struct vfe_device *vfe_dev)
 	}
 }
 
-static void msm_isp_reset_framedrop(struct vfe_device *vfe_dev,
+void msm_isp_reset_framedrop(struct vfe_device *vfe_dev,
 			struct msm_vfe_axi_stream *stream_info)
 {
 	stream_info->runtime_init_frame_drop = stream_info->init_frame_drop;
