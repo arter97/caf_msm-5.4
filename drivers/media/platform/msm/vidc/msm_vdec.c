@@ -17,6 +17,7 @@
 #include "msm_vidc_common.h"
 #include "vidc_hfi_api.h"
 #include "msm_vidc_debug.h"
+#include "msm_vidc_dcvs.h"
 
 #define MSM_VDEC_DVC_NAME "msm_vdec_8974"
 #define MIN_NUM_OUTPUT_BUFFERS 4
@@ -766,6 +767,14 @@ int msm_vdec_prepare_buf(struct msm_vidc_inst *inst,
 	}
 	hdev = inst->core->device;
 
+	if (inst->state == MSM_VIDC_CORE_INVALID ||
+			inst->core->state == VIDC_CORE_INVALID) {
+		dprintk(VIDC_ERR,
+			"Core %p in bad state, ignoring prepare buf\n",
+				inst->core);
+		goto exit;
+	}
+
 	switch (b->type) {
 	case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
 		break;
@@ -816,6 +825,7 @@ int msm_vdec_prepare_buf(struct msm_vidc_inst *inst,
 		dprintk(VIDC_ERR, "Buffer type not recognized: %d\n", b->type);
 		break;
 	}
+exit:
 	return rc;
 }
 
@@ -1129,7 +1139,7 @@ int msm_vdec_s_parm(struct msm_vidc_inst *inst, struct v4l2_streamparm *a)
 		dprintk(VIDC_PROF, "reported fps changed for %p: %d->%d\n",
 				inst, inst->prop.fps, fps);
 		inst->prop.fps = fps;
-		msm_comm_init_dcvs_load(inst);
+		msm_dcvs_init_load(inst);
 		msm_comm_scale_clocks_and_bus(inst);
 	}
 exit:
@@ -1498,7 +1508,7 @@ static inline int start_streaming(struct msm_vidc_inst *inst)
 			"Failed to move inst: %p to start done state\n", inst);
 		goto fail_start;
 	}
-	msm_comm_init_dcvs_load(inst);
+	msm_dcvs_init_load(inst);
 	if (msm_comm_get_stream_output_mode(inst) ==
 		HAL_VIDEO_DECODER_SECONDARY) {
 		rc = msm_comm_queue_output_buffers(inst);

@@ -481,10 +481,9 @@
 		reg = <0x86c000 0x108>,
 		      <0x86cfb0 0x4>,
 		      <0x78c5010 0x4>,
-		      <0x7885010 0x4>,
-		      <0x801020 0x10>;
+		      <0x7885010 0x4>;
 		reg-names = "wrapper-mux", "wrapper-lockaccess", "usbbam-mux",
-		            "blsp-mux", "apb-mux";
+		            "blsp-mux";
 		coresight-id = <30>;
 		coresight-name = "coresight-hwevent";
 		coresight-nr-inports = <0>;

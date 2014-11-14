@@ -761,8 +761,9 @@ void mdss_bus_bandwidth_ctrl(int enable)
 
 	if (changed) {
 		if (!enable) {
-			msm_bus_scale_client_update_request(
-				mdata->bus_hdl, 0);
+			if (!mdata->handoff_pending)
+				msm_bus_scale_client_update_request(
+						mdata->bus_hdl, 0);
 			pm_runtime_mark_last_busy(&mdata->pdev->dev);
 			pm_runtime_put_autosuspend(&mdata->pdev->dev);
 		} else {
@@ -912,6 +913,8 @@ static int mdss_mdp_irq_clk_setup(struct mdss_data_type *mdata)
 	mdata->gdsc_cb.priority = 5;
 	if (regulator_register_notifier(mdata->fs, &(mdata->gdsc_cb)))
 		pr_warn("GDSC notification registration failed!\n");
+	else
+		mdata->regulator_notif_register = true;
 
 	mdata->vdd_cx = devm_regulator_get(&mdata->pdev->dev,
 				"vdd-cx");
@@ -1128,8 +1131,9 @@ int mdss_hw_init(struct mdss_data_type *mdata)
 
 	mdss_hw_rev_init(mdata);
 
-	/* disable hw underrun recovery */
-	writel_relaxed(0x0, mdata->mdp_base +
+	/* Disable hw underrun recovery only for older mdp reversions. */
+	if (mdata->mdp_rev < MDSS_MDP_HW_REV_105)
+		writel_relaxed(0x0, mdata->mdp_base +
 			MDSS_MDP_REG_VIDEO_INTF_UNDERFLOW_CTL);
 
 	if (mdata->hw_settings) {
@@ -1570,6 +1574,9 @@ static int mdss_mdp_probe(struct platform_device *pdev)
 	mdss_res->mdss_util->mdp_probe_done = true;
 probe_done:
 	if (IS_ERR_VALUE(rc)) {
+		if (mdata->regulator_notif_register)
+			regulator_unregister_notifier(mdata->fs,
+						&(mdata->gdsc_cb));
 		mdss_mdp_hw.ptr = NULL;
 		mdss_mdp_pp_term(&pdev->dev);
 		mutex_destroy(&mdata->reg_lock);
@@ -3183,6 +3190,8 @@ static int mdss_mdp_remove(struct platform_device *pdev)
 	mdss_mdp_pp_term(&pdev->dev);
 	mdss_mdp_bus_scale_unregister(mdata);
 	mdss_debugfs_remove(mdata);
+	if (mdata->regulator_notif_register)
+		regulator_unregister_notifier(mdata->fs, &(mdata->gdsc_cb));
 	return 0;
 }
 

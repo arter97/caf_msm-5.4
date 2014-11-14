@@ -125,7 +125,9 @@ dtb-$(CONFIG_ARCH_MSM8994) += msm8994-v1-sim.dtb \
 	apq8094-v2-fluid.dtb
 
 dtb-$(CONFIG_ARCH_MSM8992) += msm8992-sim.dtb \
-	msm8992-rumi.dtb
+	msm8992-rumi.dtb \
+	msm8992-cdp.dtb \
+	msm8992-mtp.dtb
 dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
 	msm8916-rumi.dtb \
 	msm8916-cdp.dtb \

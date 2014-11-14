@@ -342,6 +342,7 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_drv_cm_data shared_pdata;
 	u32 pclk_rate;
 	u32 byte_clk_rate;
+	bool refresh_clk_rate; /* flag to recalculate clk_rate */
 	struct dss_module_power power_data[DSI_MAX_PM];
 	u32 dsi_irq_mask;
 	struct mdss_hw *dsi_hw;
@@ -351,8 +352,9 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_panel_cmds off_cmds;
 	struct dsi_panel_cmds status_cmds;
 	u32 status_cmds_rlen;
-	u32 status_value;
+	u32 *status_value;
 	u32 status_error_count;
+	u32 max_status_error_count;
 
 	struct dsi_panel_cmds video2cmd;
 	struct dsi_panel_cmds cmd2video;
@@ -588,6 +590,12 @@ static inline bool mdss_dsi_ulps_feature_enabled(
 	struct mdss_panel_data *pdata)
 {
 	return pdata->panel_info.ulps_feature_enabled;
+}
+
+static inline bool mdss_dsi_cmp_panel_reg(struct dsi_buf status_buf,
+	u32 *status_val, int i)
+{
+	return status_buf.data[i] == status_val[i];
 }
 
 #endif /* MDSS_DSI_H */
