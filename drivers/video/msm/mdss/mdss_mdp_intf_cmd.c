@@ -617,14 +617,21 @@ static int mdss_mdp_cmd_set_partial_roi(struct mdss_mdp_ctl *ctl)
 {
 	int rc = 0;
 	if (ctl->roi.w && ctl->roi.h && ctl->roi_changed &&
-			ctl->panel_data->panel_info.partial_update_enabled) {
-		ctl->panel_data->panel_info.roi_x = ctl->roi.x;
-		ctl->panel_data->panel_info.roi_y = ctl->roi.y;
+		ctl->panel_data->panel_info.partial_update_enabled) {
+
+		if (ctl->mfd && (ctl->mfd->panel_orientation & MDP_FLIP_LR))
+			ctl->panel_data->panel_info.roi_x = ctl->mixer_left->width - (ctl->roi.x + ctl->roi.w);
+		else
+			ctl->panel_data->panel_info.roi_x = ctl->roi.x;
+		if (ctl->mfd && (ctl->mfd->panel_orientation & MDP_FLIP_UD))
+			ctl->panel_data->panel_info.roi_y = ctl->mixer_left->height - (ctl->roi.y + ctl->roi.h);
+		else
+			ctl->panel_data->panel_info.roi_y = ctl->roi.y;
 		ctl->panel_data->panel_info.roi_w = ctl->roi.w;
 		ctl->panel_data->panel_info.roi_h = ctl->roi.h;
 
 		rc = mdss_mdp_ctl_intf_event(ctl,
-				MDSS_EVENT_ENABLE_PARTIAL_UPDATE, NULL);
+							MDSS_EVENT_ENABLE_PARTIAL_UPDATE, NULL);
 	}
 	return rc;
 }
