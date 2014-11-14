@@ -725,6 +725,32 @@
 		qcom,pil-no-auth;
 	};
 
+	qcom,ssc@1c00000 {
+		compatible = "qcom,pil-tz-generic";
+		reg = <0x1c00000 0x4000>;
+		interrupts = <0 390 1>;
+
+		vdd_cx-supply = <&pm8994_l26>;
+		vdd_mx-supply = <&pm8994_l31>;
+		vdd_px-supply = <&pm8994_lvs2>;
+		qcom,vdd_cx-uV-uA = <775000 0>;
+		qcom,vdd_mx-uV-uA = <820000 0>;
+		qcom,vdd_px-uV-uA = <1650000 0>;
+		qcom,proxy-reg-names = "vdd_cx", "vdd_mx", "vdd_px";
+
+		clocks = <&clock_gcc clk_cxo_pil_ssc_clk>;
+		clock-names = "xo";
+		qcom,proxy-clock-names = "xo";
+
+		qcom,pas-id = <12>;
+		qcom,proxy-timeout-ms = <10000>;
+		qcom,smem-id = <424>;
+		qcom,sysmon-id = <3>;
+		qcom,ssctl-instance-id = <0x16>;
+		qcom,firmware-name = "slpi";
+		memory-region = <&peripheral_mem>;
+	};
+
 	tsens: tsens@4a9000 {
 		compatible = "qcom,msmthulium-tsens";
 		reg = <0x4a8000 0x2000>,
