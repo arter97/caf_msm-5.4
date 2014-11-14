@@ -1782,10 +1782,10 @@ static void __ref do_core_control(long temp)
 	mutex_lock(&core_control_mutex);
 	if (msm_thermal_info.core_control_mask &&
 		temp >= msm_thermal_info.core_limit_temp_degC) {
-		for (i = num_possible_cpus(); i > 0; i--) {
+		for (i = num_possible_cpus() - 1; i > 0; i--) {
 			if (!(msm_thermal_info.core_control_mask & BIT(i)))
 				continue;
-			if (cpus_offlined & BIT(i) && !cpu_online(i))
+			if (!cpu_online(i))
 				continue;
 			pr_info("Set Offline: CPU%d Temp: %ld\n",
 					i, temp);
