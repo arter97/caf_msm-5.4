@@ -3381,6 +3381,8 @@ static irqreturn_t dwc3_thread_interrupt(int irq, void *_dwc)
 	spin_unlock_irqrestore(&dwc->lock, flags);
 
 	pm_runtime_put(dwc->dev);
+	/* Enable core IRQ back as it is disabled from hardirq handler */
+	enable_irq(dwc->irq);
 	return ret;
 }
 
@@ -3426,8 +3428,17 @@ static irqreturn_t dwc3_interrupt(int irq, void *_dwc)
 
 	spin_unlock(&dwc->lock);
 
-	if (ret == IRQ_WAKE_THREAD)
+	/*
+	 * Disable Core IRQ here and enable back once it
+	 * is being handled from thread context. Without
+	 * this same interrupt is being triggered multiple
+	 * time casusing PM usage count incremented one time
+	 * more without being decremented again.
+	 */
+	if (ret == IRQ_WAKE_THREAD) {
+		disable_irq_nosync(dwc->irq);
 		pm_runtime_get(dwc->dev);
+	}
 
 	return ret;
 }
