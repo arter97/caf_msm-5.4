@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -188,7 +188,7 @@ static int footswitch_enable(struct regulator_dev *rdev)
 	writel_relaxed(regval, fs->gfs_ctl_reg);
 	/* Wait for the rail to fully charge. */
 	mb();
-	udelay(1);
+	udelay(2);
 
 	/* Un-clamp the I/O ports. */
 	regval &= ~CLAMP_BIT;
@@ -207,6 +207,8 @@ static int footswitch_enable(struct regulator_dev *rdev)
 
 	/* Prevent core memory from collapsing when its clock is gated. */
 	clk_set_flags(fs->core_clk, CLKFLAG_RETAIN);
+	/* Wait for the memory to power on. */
+	udelay(1);
 
 	/* Return clocks to their state before this function. */
 	restore_clocks(fs);
