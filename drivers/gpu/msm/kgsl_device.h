@@ -183,6 +183,8 @@ struct kgsl_functable {
 	void (*regulator_enable)(struct kgsl_device *);
 	bool (*is_hw_collapsible)(struct kgsl_device *);
 	void (*regulator_disable)(struct kgsl_device *);
+	void (*pwrlevel_change_settings)(struct kgsl_device *device,
+		bool mask_throttle);
 };
 
 typedef long (*kgsl_ioctl_func_t)(struct kgsl_device_private *,
@@ -297,6 +299,8 @@ struct kgsl_cmdbatch_sync_event {
  * @CMDBATCH_FLAG_WFI - Force wait-for-idle for the submission
  * @CMDBATCH_FLAG_PROFILE - store the start / retire ticks for the command batch
  * in the profiling buffer
+ * @CMDBATCH_FLAG_FENCE_LOG - Set if the cmdbatch is dumping fence logs via the
+ * cmdbatch timer - this is used to avoid recursion
  */
 
 enum kgsl_cmdbatch_priv {
@@ -304,6 +308,7 @@ enum kgsl_cmdbatch_priv {
 	CMDBATCH_FLAG_FORCE_PREAMBLE,
 	CMDBATCH_FLAG_WFI,
 	CMDBATCH_FLAG_PROFILE,
+	CMDBATCH_FLAG_FENCE_LOG,
 };
 
 struct kgsl_device {
@@ -705,7 +710,8 @@ int kgsl_add_event(struct kgsl_device *device, struct kgsl_event_group *group,
 		unsigned int timestamp, kgsl_event_func func, void *priv);
 void kgsl_process_event_group(struct kgsl_device *device,
 	struct kgsl_event_group *group);
-
+void kgsl_flush_event_group(struct kgsl_device *device,
+		struct kgsl_event_group *group);
 void kgsl_process_events(struct work_struct *work);
 
 void kgsl_context_destroy(struct kref *kref);

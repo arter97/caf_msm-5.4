@@ -172,12 +172,6 @@ static int epm_psoc_generic_request(struct epm_adc_drv *epm_adc,
 	if (rc)
 		return rc;
 
-	memset(tx_buf, 0, sizeof(tx_buf));
-
-	rc = spi_sync(epm_adc->epm_spi_client, &m);
-	if (rc)
-		return rc;
-
 	for (data_loop = 0; data_loop < 64; data_loop++)
 		psoc_get_data->buf[data_loop] = rx_buf[data_loop];
 
@@ -267,10 +261,8 @@ static long epm_adc_ioctl(struct file *file, unsigned int cmd,
 			int rc;
 
 			rc = epm_adc_psoc_gpio_init(epm_adc, true);
-			if (rc) {
+			if (rc)
 				pr_err("GPIO init failed with %d\n", rc);
-				return -EINVAL;
-			}
 
 			if (copy_to_user((void __user *)arg, &rc,
 						sizeof(int)))
@@ -299,10 +291,8 @@ static long epm_adc_ioctl(struct file *file, unsigned int cmd,
 				return -EFAULT;
 
 			rc = epm_psoc_generic_request(epm_adc, &psoc_get_data);
-			if (rc) {
+			if (rc)
 				pr_err("Generic request failed\n");
-				return -EINVAL;
-			}
 
 			if (copy_to_user((void __user *)arg, &psoc_get_data,
 				sizeof(struct

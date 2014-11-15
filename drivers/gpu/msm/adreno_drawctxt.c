@@ -77,6 +77,13 @@ void adreno_drawctxt_dump(struct kgsl_device *device,
 		struct kgsl_cmdbatch *cmdbatch =
 			drawctxt->cmdqueue[drawctxt->cmdqueue_head];
 
+		if (test_bit(CMDBATCH_FLAG_FENCE_LOG, &cmdbatch->priv)) {
+			dev_err(device->dev,
+				"  possible deadlock. Context %d might be blocked for itself\n",
+				context->id);
+			goto stats;
+		}
+
 		spin_lock(&cmdbatch->lock);
 
 		if (!list_empty(&cmdbatch->synclist)) {
@@ -89,6 +96,7 @@ void adreno_drawctxt_dump(struct kgsl_device *device,
 		spin_unlock(&cmdbatch->lock);
 	}
 
+stats:
 	memset(buf, 0, sizeof(buf));
 
 	pos = 0;
@@ -264,8 +272,8 @@ void adreno_drawctxt_invalidate(struct kgsl_device *device,
 
 	spin_unlock(&drawctxt->lock);
 
-	/* Make sure all "retired" events are processed */
-	kgsl_process_event_group(device, &context->events);
+	/* Make sure all pending events are processed or cancelled */
+	kgsl_flush_event_group(device, &context->events);
 
 	/* Give the bad news to everybody waiting around */
 	wake_up_all(&drawctxt->waiting);

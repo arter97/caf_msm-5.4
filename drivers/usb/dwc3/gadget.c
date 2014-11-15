@@ -179,7 +179,7 @@ int dwc3_gadget_resize_tx_fifos(struct dwc3 *dwc)
 	int		num_eps;
 	struct usb_composite_dev *cdev = get_gadget_data(&dwc->gadget);
 
-	if (!dwc->needs_fifo_resize)
+	if (!(cdev && cdev->config) || !dwc->needs_fifo_resize)
 		return 0;
 
 	/* gadget.num_eps never be greater than dwc->num_in_eps */
@@ -777,8 +777,8 @@ static int dwc3_gadget_ep_disable(struct usb_ep *ep)
 	dwc = dep->dwc;
 
 	if (!(dep->flags & DWC3_EP_ENABLED)) {
-		dev_WARN_ONCE(dwc->dev, true, "%s is already disabled\n",
-				dep->name);
+		dev_dbg(dwc->dev, "%s is already disabled\n", dep->name);
+		dbg_event(dep->number, "ALRDY DISABLED", dep->flags);
 		return 0;
 	}
 
@@ -2877,6 +2877,9 @@ static void dwc3_gadget_reset_interrupt(struct dwc3 *dwc)
 	dwc3_stop_active_transfers(dwc);
 	dwc3_clear_stall_all_ep(dwc);
 	dwc->start_config_issued = false;
+
+	/* bus reset issued due to missing status stage of a control transfer */
+	dwc->resize_fifos = 0;
 
 	/* Reset device address to zero */
 	reg = dwc3_readl(dwc->regs, DWC3_DCFG);

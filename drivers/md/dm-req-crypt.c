@@ -605,6 +605,11 @@ static void req_cryptd_crypt_write_convert(struct req_dm_crypt_io *io)
 		blk_queue_bounce(clone->q, &bio_src);
 	}
 
+	/*
+	 * Recalculate the phy_segments as we allocate new pages
+	 * This is used by storage driver to fill the sg list.
+	 */
+	blk_recalc_rq_segments(clone);
 
 ablkcipher_req_alloc_failure:
 	if (req)
@@ -865,6 +870,8 @@ static void req_crypt_dtr(struct dm_target *ti)
 		destroy_workqueue(req_crypt_queue);
 		req_crypt_queue = NULL;
 	}
+
+	kmem_cache_destroy(_req_crypt_io_pool);
 	if (dev) {
 		dm_put_device(ti, dev);
 		dev = NULL;
@@ -934,6 +941,12 @@ static int req_crypt_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		is_fde_enabled = true; /* backward compatible */
 	}
 
+	_req_crypt_io_pool = KMEM_CACHE(req_dm_crypt_io, 0);
+	if (!_req_crypt_io_pool) {
+		err =  DM_REQ_CRYPT_ERROR;
+		goto ctr_exit;
+	}
+
 	req_crypt_queue = alloc_workqueue("req_cryptd",
 					WQ_UNBOUND |
 					WQ_CPU_INTENSIVE |
@@ -953,6 +966,8 @@ static int req_crypt_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		err =  DM_REQ_CRYPT_ERROR;
 		goto ctr_exit;
 	}
+
+	num_engines_fde = num_engines_pfe = 0;
 
 	mutex_lock(&engine_list_mutex);
 	num_engines = qcrypto_get_num_engines();
@@ -1056,14 +1071,11 @@ static int __init req_dm_crypt_init(void)
 {
 	int r;
 
-	_req_crypt_io_pool = KMEM_CACHE(req_dm_crypt_io, 0);
-	if (!_req_crypt_io_pool)
-		return -ENOMEM;
 
 	r = dm_register_target(&req_crypt_target);
 	if (r < 0) {
 		DMERR("register failed %d", r);
-		kmem_cache_destroy(_req_crypt_io_pool);
+		return r;
 	}
 
 	DMINFO("dm-req-crypt successfully initalized.\n");
@@ -1073,7 +1085,6 @@ static int __init req_dm_crypt_init(void)
 
 static void __exit req_dm_crypt_exit(void)
 {
-	kmem_cache_destroy(_req_crypt_io_pool);
 	dm_unregister_target(&req_crypt_target);
 }
 

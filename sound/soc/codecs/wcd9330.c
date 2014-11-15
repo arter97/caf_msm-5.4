@@ -62,6 +62,9 @@
 #define HPH_PA_ENABLE true
 #define HPH_PA_DISABLE false
 
+#define SLIM_BW_CLK_GEAR_9 6200000
+#define SLIM_BW_UNVOTE 0
+
 static int cpe_debug_mode;
 module_param(cpe_debug_mode, int,
 	     S_IRUGO | S_IWUSR | S_IWGRP);
@@ -652,6 +655,20 @@ static unsigned short tx_digital_gain_reg[] = {
 	TOMTOM_A_CDC_TX9_VOL_CTL_GAIN,
 	TOMTOM_A_CDC_TX10_VOL_CTL_GAIN,
 };
+
+int tomtom_enable_qfuse_sensing(struct snd_soc_codec *codec)
+{
+	snd_soc_write(codec, TOMTOM_A_QFUSE_CTL, 0x03);
+	/*
+	 * 5ms sleep required after enabling qfuse control
+	 * before checking the status.
+	 */
+	usleep_range(5000, 5500);
+	if ((snd_soc_read(codec, TOMTOM_A_QFUSE_STATUS) & (0x03)) != 0x03)
+		WARN(1, "%s: Qfuse sense is not complete\n", __func__);
+	return 0;
+}
+EXPORT_SYMBOL(tomtom_enable_qfuse_sensing);
 
 static int tomtom_get_sample_rate(struct snd_soc_codec *codec, int path)
 {
@@ -8202,6 +8219,12 @@ static int tomtom_post_reset_cb(struct wcd9xxx *wcd9xxx)
 	for (count = 0; count < NUM_CODEC_DAIS; count++)
 		tomtom->dai[count].bus_down_in_recovery = true;
 
+	/*
+	 * After SSR, the qfuse sensing is lost.
+	 * Perform qfuse sensing again after SSR
+	 * handling is finished.
+	 */
+	tomtom_enable_qfuse_sensing(codec);
 	mutex_unlock(&codec->mutex);
 	return ret;
 }
@@ -8316,11 +8339,47 @@ static int tomtom_codec_fll_enable(struct snd_soc_codec *codec,
 	return 0;
 }
 
+static int tomtom_codec_slim_reserve_bw(struct snd_soc_codec *codec,
+		u32 bw_ops, bool commit)
+{
+	struct wcd9xxx *wcd9xxx;
+	if (!codec) {
+		pr_err("%s: Invalid handle to codec\n",
+			__func__);
+		return -EINVAL;
+	}
+
+	wcd9xxx = dev_get_drvdata(codec->dev->parent);
+
+	if (!wcd9xxx) {
+		dev_err(codec->dev, "%s: Invalid parent drv_data\n",
+			__func__);
+		return -EINVAL;
+	}
+
+	return wcd9xxx_slim_reserve_bw(wcd9xxx, bw_ops, commit);
+}
+
+static int tomtom_codec_vote_max_bw(struct snd_soc_codec *codec,
+			bool vote)
+{
+	u32 bw_ops;
+
+	if (vote)
+		bw_ops = SLIM_BW_CLK_GEAR_9;
+	else
+		bw_ops = SLIM_BW_UNVOTE;
+
+	return tomtom_codec_slim_reserve_bw(codec,
+			bw_ops, true);
+}
+
 static const struct wcd_cpe_cdc_cb cpe_cb = {
 	.cdc_clk_en = tomtom_codec_internal_rco_ctrl,
 	.cpe_clk_en = tomtom_codec_fll_enable,
 	.slimtx_lab_en = tomtom_codec_enable_slimtx_mad,
 	.cdc_ext_clk = tomtom_codec_ext_clk_en,
+	.bus_vote_bw = tomtom_codec_vote_max_bw,
 };
 
 static int tomtom_cpe_initialize(struct snd_soc_codec *codec)
@@ -8349,20 +8408,6 @@ static int tomtom_cpe_initialize(struct snd_soc_codec *codec)
 
 	return 0;
 }
-
-int tomtom_enable_qfuse_sensing(struct snd_soc_codec *codec)
-{
-	snd_soc_write(codec, TOMTOM_A_QFUSE_CTL, 0x03);
-	/*
-	 * 5ms sleep required after enabling qfuse control
-	 * before checking the status.
-	 */
-	usleep_range(5000, 5500);
-	if ((snd_soc_read(codec, TOMTOM_A_QFUSE_STATUS) & (0x03)) != 0x03)
-		WARN(1, "%s: Qfuse sense is not complete\n", __func__);
-	return 0;
-}
-EXPORT_SYMBOL(tomtom_enable_qfuse_sensing);
 
 static int tomtom_codec_probe(struct snd_soc_codec *codec)
 {

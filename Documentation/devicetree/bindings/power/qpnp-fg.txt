@@ -40,8 +40,16 @@ Parent node optional properties:
 					be exactly 6 bytes in length.
 					Example: [01 02 03 04 05 06]
 - qcom,resume-soc:			soc to resume charging in percentage.
+- qcom,bcl-lm-threshold-ma:		BCL LPM to MPM mode transition threshold
+					in milliAmpere.
+- qcom,bcl-mh-threshold-ma:		BCL MPM to HPM mode transition threshold
+					in milliAmpere.
 - qcom,use-otp-profile:			Specify this flag to avoid RAM loading
 					any battery profile.
+- qcom,sw-rbias-control:		Boolean property which defines whether
+					the Rbias needs to be controlled by
+					software. If this is not set, it will
+					be controlled by hardware (default).
 
 qcom,fg-soc node required properties:
 - reg : offset and length of the PMIC peripheral register map.

@@ -38,6 +38,7 @@
 		 i2c5 = &i2c_5; /* I2c5 cntroller device */
 		i2c3 = &i2c_3; /* I2C3 controller */
 		i2c1 = &i2c_1; /* I2C1 controller */
+		i2c4 = &i2c_4; /* I2C4 controller device */
 	};
 
 	cpus {
@@ -336,29 +337,29 @@
 		sensor_information0: qcom,sensor-information@0 {
 			qcom,sensor-type = "tsens";
 			qcom,sensor-name = "tsens_tz_sensor0";
+			qcom,alias-name = "pop_mem";
 		};
 
 		sensor_information1: qcom,sensor-information@1 {
 			qcom,sensor-type =  "tsens";
 			qcom,sensor-name = "tsens_tz_sensor1";
-			qcom,alias-name = "cpu0-2";
 		};
 
 		sensor_information2: qcom,sensor-information@2 {
 			qcom,sensor-type =  "tsens";
 			qcom,sensor-name = "tsens_tz_sensor2";
-			qcom,alias-name = "cpu1-3";
 		};
 
 		sensor_information3: qcom,sensor-information@3 {
 			qcom,sensor-type =  "tsens";
 			qcom,sensor-name = "tsens_tz_sensor3";
-			qcom,alias-name = "pop_mem";
+			qcom,alias-name = "cpu0-2";
 		};
 
 		sensor_information4: qcom,sensor-information@4 {
 			qcom,sensor-type = "tsens";
 			qcom,sensor-name = "tsens_tz_sensor4";
+			qcom,alias-name = "cpu1-3";
 		};
 
 		sensor_information5: qcom,sensor-information@5 {
@@ -369,7 +370,7 @@
 
 	qcom,msm-thermal {
 		compatible = "qcom,msm-thermal";
-		qcom,sensor-id = <1>;
+		qcom,sensor-id = <3>;
 		qcom,poll-ms = <250>;
 		qcom,limit-temp = <60>;
 		qcom,temp-hysteresis = <10>;
@@ -380,8 +381,8 @@
 		qcom,core-control-mask = <0xe>;
 		qcom,hotplug-temp = <110>;
 		qcom,hotplug-temp-hysteresis = <20>;
-		qcom,cpu-sensors = "tsens_tz_sensor1", "tsens_tz_sensor2",
-				"tsens_tz_sensor1", "tsens_tz_sensor2";
+		qcom,cpu-sensors = "tsens_tz_sensor3", "tsens_tz_sensor4",
+				"tsens_tz_sensor3", "tsens_tz_sensor4";
 		qcom,freq-mitigation-temp = <110>;
 		qcom,freq-mitigation-temp-hysteresis = <20>;
 		qcom,freq-mitigation-value = <400000>;
@@ -901,6 +902,30 @@
                 qcom,bam-consumer-pipe-index = <14>;
                 qcom,bam-producer-pipe-index = <15>;
                 qcom,master-id = <86>;
+	};
+
+	i2c_4: i2c@78b8000 { /* BLSP1 QUP4 */
+		compatible = "qcom,i2c-msm-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr", "bam_phys_addr";
+		reg = <0x78b8000 0x1000>,
+		      <0x7884000 0x23000>;
+		interrupt-names = "qup_irq", "bam_irq";
+		interrupts = <0 98 0>, <0 238 0>;
+		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
+			 <&clock_gcc clk_gcc_blsp1_qup4_i2c_apps_clk>;
+		clock-names = "iface_clk", "core_clk";
+		qcom,clk-freq-out = <100000>;
+		qcom,clk-freq-in  = <19200000>;
+		pinctrl-names = "i2c_active", "i2c_sleep";
+		pinctrl-0 = <&i2c_4_active>;
+		pinctrl-1 = <&i2c_4_sleep>;
+		qcom,noise-rjct-scl = <0>;
+		qcom,noise-rjct-sda = <0>;
+		qcom,bam-pipe-idx-cons = <10>;
+		qcom,bam-pipe-idx-prod = <11>;
+		qcom,master-id = <86>;
 	};
 
 	 i2c_5: i2c@78b9000 { /* BLSP1 QUP5 */
@@ -1428,23 +1453,37 @@
 };
 
 &gdsc_venus {
+	clock-names = "bus_clk", "core_clk";
+	clocks = <&clock_gcc clk_gcc_venus0_axi_clk>,
+		 <&clock_gcc clk_gcc_venus0_vcodec0_clk>;
 	status = "okay";
 };
 
 &gdsc_venus_core0 {
 	qcom,support-hw-trigger;
+	clock-names = "core0_clk";
+	clocks = <&clock_gcc clk_gcc_venus0_core0_vcodec0_clk>;
 	status = "okay";
 };
 
 &gdsc_mdss {
+	clock-names = "core_clk", "bus_clk";
+	clocks = <&clock_gcc clk_gcc_mdss_mdp_clk>,
+		 <&clock_gcc clk_gcc_mdss_axi_clk>;
 	status = "okay";
 };
 
 &gdsc_vfe {
+	clock-names = "core_clk", "bus_clk", "csi_clk";
+	clocks = <&clock_gcc clk_gcc_camss_vfe0_clk>,
+		 <&clock_gcc clk_gcc_camss_vfe_axi_clk>,
+		 <&clock_gcc clk_gcc_camss_csi_vfe0_clk>;
 	status = "okay";
 };
 
 &gdsc_oxili_gx {
+	clock-names = "core_clk";
+	clocks = <&clock_gcc clk_gcc_oxili_gfx3d_clk>;
 	status = "okay";
 };
 
