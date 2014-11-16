@@ -423,19 +423,34 @@ struct mdp_qseed_cfg_data {
 #define MDP_CSC_FLAG_YUV_IN	0x2
 #define MDP_CSC_FLAG_YUV_OUT	0x4
 
+#define MDP_CSC_MATRIX_COEFF_SIZE	9
+#define MDP_CSC_CLAMP_SIZE		6
+#define MDP_CSC_BIAS_SIZE		3
+
 struct mdp_csc_cfg {
 	/* flags for enable CSC, toggling RGB,YUV input/output */
 	uint32_t flags;
-	uint32_t csc_mv[9];
-	uint32_t csc_pre_bv[3];
-	uint32_t csc_post_bv[3];
-	uint32_t csc_pre_lv[6];
-	uint32_t csc_post_lv[6];
+	uint32_t csc_mv[MDP_CSC_MATRIX_COEFF_SIZE];
+	uint32_t csc_pre_bv[MDP_CSC_BIAS_SIZE];
+	uint32_t csc_post_bv[MDP_CSC_BIAS_SIZE];
+	uint32_t csc_pre_lv[MDP_CSC_CLAMP_SIZE];
+	uint32_t csc_post_lv[MDP_CSC_CLAMP_SIZE];
+};
+
+struct mdp_csc_cfg_v1_7 {
+	uint32_t csc_mv[MDP_CSC_MATRIX_COEFF_SIZE];
+	uint32_t csc_pre_bv[MDP_CSC_BIAS_SIZE];
+	uint32_t csc_post_bv[MDP_CSC_BIAS_SIZE];
+	uint32_t csc_pre_lv[MDP_CSC_CLAMP_SIZE];
+	uint32_t csc_post_lv[MDP_CSC_CLAMP_SIZE];
 };
 
 struct mdp_csc_cfg_data {
 	uint32_t block;
+	uint32_t version;
+	uint32_t flags;
 	struct mdp_csc_cfg csc_data;
+	void *cfg_payload;
 };
 
 struct mdp_pa_cfg {
@@ -449,6 +464,16 @@ struct mdp_pa_cfg {
 struct mdp_pa_mem_col_cfg {
 	uint32_t color_adjust_p0;
 	uint32_t color_adjust_p1;
+	uint32_t hue_region;
+	uint32_t sat_region;
+	uint32_t val_region;
+};
+
+struct mdp_pa_mem_col_cfg_v1_7 {
+	uint32_t color_adjust_p0;
+	uint32_t color_adjust_p1;
+	uint32_t color_adjust_p2;
+	uint32_t blend_gain;
 	uint32_t hue_region;
 	uint32_t sat_region;
 	uint32_t val_region;
@@ -472,9 +497,42 @@ struct mdp_pa_v2_data {
 	uint32_t *six_zone_curve_p1;
 };
 
+struct mdp_pa_data_v1_7 {
+	uint32_t global_hue_adj;
+	uint32_t global_sat_adj;
+	uint32_t global_val_adj;
+	uint32_t global_cont_adj;
+	struct mdp_pa_mem_col_cfg_v1_7 skin_cfg;
+	struct mdp_pa_mem_col_cfg_v1_7 sky_cfg;
+	struct mdp_pa_mem_col_cfg_v1_7 fol_cfg;
+	uint32_t six_zone_len;
+	uint32_t six_zone_thresh;
+	uint32_t six_zone_adj_p0;
+	uint32_t six_zone_adj_p1;
+	uint32_t *six_zone_curve_p0;
+	uint32_t *six_zone_curve_p1;
+};
+
+struct mdp_pa_v2_cfg_data {
+	uint32_t version;
+	uint32_t block;
+	uint32_t flags;
+	uint32_t mode;
+	struct mdp_pa_v2_data pa_v2_data;
+	void *cfg_payload;
+};
+
 struct mdp_igc_lut_data {
 	uint32_t block;
+	uint32_t version;
 	uint32_t len, ops;
+	uint32_t *c0_c1_data;
+	uint32_t *c2_data;
+	void *cfg_payload;
+};
+
+struct mdp_igc_lut_data_v1_7 {
+	uint32_t len;
 	uint32_t *c0_c1_data;
 	uint32_t *c2_data;
 };
@@ -487,11 +545,18 @@ struct mdp_histogram_cfg {
 	uint16_t num_bins;
 };
 
+struct mdp_hist_lut_data_v1_7 {
+	uint32_t len;
+	uint32_t *data;
+};
+
 struct mdp_hist_lut_data {
 	uint32_t block;
+	uint32_t version;
 	uint32_t ops;
 	uint32_t len;
 	uint32_t *data;
+	void *cfg_payload;
 };
 
 struct mdp_overlay_pp_params {
@@ -763,13 +828,21 @@ struct mdp_pcc_coeff {
 	uint32_t c, r, g, b, rr, gg, bb, rg, gb, rb, rgb_0, rgb_1;
 };
 
+struct mdp_pcc_coeff_v1_7 {
+	uint32_t c, r, g, b, rg, gb, rb, rgb;
+};
+
+struct mdp_pcc_data_v1_7 {
+	struct mdp_pcc_coeff_v1_7 r, g, b;
+};
+
 struct mdp_pcc_cfg_data {
+	uint32_t version;
 	uint32_t block;
 	uint32_t ops;
 	struct mdp_pcc_coeff r, g, b;
+	void *cfg_payload;
 };
-
-#define MDP_GAMUT_TABLE_NUM		8
 
 enum {
 	mdp_lut_igc,
@@ -778,6 +851,8 @@ enum {
 	mdp_lut_max,
 };
 
+#define GC_LUT_ENTRIES_V1_7	512
+
 struct mdp_ar_gc_lut_data {
 	uint32_t x_start;
 	uint32_t slope;
@@ -785,6 +860,7 @@ struct mdp_ar_gc_lut_data {
 };
 
 struct mdp_pgc_lut_data {
+	uint32_t version;
 	uint32_t block;
 	uint32_t flags;
 	uint8_t num_r_stages;
@@ -793,8 +869,15 @@ struct mdp_pgc_lut_data {
 	struct mdp_ar_gc_lut_data *r_data;
 	struct mdp_ar_gc_lut_data *g_data;
 	struct mdp_ar_gc_lut_data *b_data;
+	void *cfg_payload;
 };
 
+struct mdp_pgc_lut_data_v1_7 {
+	uint32_t  len;
+	uint32_t  *c0_data;
+	uint32_t  *c1_data;
+	uint32_t  *c2_data;
+};
 
 struct mdp_lut_cfg_data {
 	uint32_t lut_type;
@@ -815,27 +898,48 @@ struct mdp_pa_cfg_data {
 	struct mdp_pa_cfg pa_data;
 };
 
-struct mdp_pa_v2_cfg_data {
-	uint32_t block;
-	struct mdp_pa_v2_data pa_v2_data;
-};
-
-struct mdp_dither_cfg_data {
-	uint32_t block;
-	uint32_t flags;
+struct mdp_dither_data_v1_7 {
 	uint32_t g_y_depth;
 	uint32_t r_cr_depth;
 	uint32_t b_cb_depth;
 };
 
+struct mdp_dither_cfg_data {
+	uint32_t version;
+	uint32_t block;
+	uint32_t flags;
+	uint32_t mode;
+	uint32_t g_y_depth;
+	uint32_t r_cr_depth;
+	uint32_t b_cb_depth;
+	void *cfg_payload;
+};
+
+#define MDP_GAMUT_TABLE_NUM		8
+#define MDP_GAMUT_TABLE_NUM_V1_7	4
+#define MDP_GAMUT_SCALE_OFF_TABLE_NUM	3
+
 struct mdp_gamut_cfg_data {
 	uint32_t block;
 	uint32_t flags;
+	uint32_t version;
+	/* v1 version specific params */
 	uint32_t gamut_first;
 	uint32_t tbl_size[MDP_GAMUT_TABLE_NUM];
 	uint16_t *r_tbl[MDP_GAMUT_TABLE_NUM];
 	uint16_t *g_tbl[MDP_GAMUT_TABLE_NUM];
 	uint16_t *b_tbl[MDP_GAMUT_TABLE_NUM];
+	/* params for newer versions of gamut */
+	void *cfg_payload;
+};
+
+struct mdp_gamut_data_v1_7 {
+	uint32_t mode;
+	uint32_t tbl_size[MDP_GAMUT_TABLE_NUM_V1_7];
+	uint32_t *c0_data[MDP_GAMUT_TABLE_NUM_V1_7];
+	uint32_t *c1_c2_data[MDP_GAMUT_TABLE_NUM_V1_7];
+	uint32_t  c0_c1_c2_scale_off_size[MDP_GAMUT_SCALE_OFF_TABLE_NUM];
+	uint32_t  *c0_c1_c2_scale_off[MDP_GAMUT_SCALE_OFF_TABLE_NUM];
 };
 
 struct mdp_calib_config_data {
