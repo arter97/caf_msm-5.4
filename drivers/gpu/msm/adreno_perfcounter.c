@@ -15,6 +15,7 @@
 
 #include "kgsl.h"
 #include "adreno.h"
+#include "adreno_pm4types.h"
 
 /* Bit flags for RBBM_CTL */
 #define RBBM_RBBM_CTL_RESET_PWR_CTR0	0x00000001
@@ -796,15 +797,15 @@ int adreno_perfcounter_enable(struct adreno_device *adreno_dev,
 
 	if (test_bit(ADRENO_DEVICE_STARTED, &adreno_dev->priv)) {
 		struct adreno_ringbuffer *rb = &adreno_dev->ringbuffers[0];
-		unsigned int cmds[4];
+		unsigned int buf[4];
+		unsigned int *cmds = buf;
 		int ret;
 
-		cmds[0] = cp_type3_packet(CP_WAIT_FOR_IDLE, 1);
-		cmds[1] = 0;
-		cmds[2] = cp_type0_packet(reg->select, 1);
-		cmds[3] = countable;
+		cmds += cp_wait_for_idle(adreno_dev, cmds);
+		*cmds++ = cp_register(adreno_dev, reg->select, 1);
+		*cmds++ = countable;
 		/* submit to highest priority RB always */
-		ret = adreno_ringbuffer_issuecmds(rb, 0, cmds, 4);
+		ret = adreno_ringbuffer_issuecmds(rb, 0, buf, 4);
 		if (ret)
 			goto done;
 		/* wait for the above commands submitted to complete */

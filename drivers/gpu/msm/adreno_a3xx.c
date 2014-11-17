@@ -25,6 +25,7 @@
 #include "a4xx_reg.h"
 #include "adreno_cp_parser.h"
 #include "adreno_trace.h"
+#include "adreno_pm4types.h"
 
 /*
  * Set of registers to dump for A3XX on snapshot.

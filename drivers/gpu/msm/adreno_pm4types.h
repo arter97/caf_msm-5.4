@@ -13,6 +13,7 @@
 #ifndef __ADRENO_PM4TYPES_H
 #define __ADRENO_PM4TYPES_H
 
+#include "adreno.h"
 
 #define CP_PKT_MASK	0xc0000000
 
@@ -267,9 +268,6 @@ static inline uint cp_type7_packet(uint opcode, uint cnt)
 
 }
 
-#define cp_nop_packet(cnt) \
-	 (CP_TYPE3_PKT | (((cnt)-1) << 16) | (CP_NOP << 8))
-
 #define pkt_is_type0(pkt) (((pkt) & 0XC0000000) == CP_TYPE0_PKT)
 
 #define type0_pkt_size(pkt) ((((pkt) >> 16) & 0x3FFF) + 1)
@@ -287,11 +285,6 @@ static inline uint cp_type7_packet(uint opcode, uint cnt)
 #define cp_type3_opcode(pkt) (((pkt) >> 8) & 0xFF)
 #define type3_pkt_size(pkt) ((((pkt) >> 16) & 0x3FFF) + 1)
 
-/* packet headers */
-#define CP_HDR_ME_INIT	cp_type3_packet(CP_ME_INIT, 18)
-#define CP_HDR_INDIRECT_BUFFER_PFD cp_type3_packet(CP_INDIRECT_BUFFER_PFD, 2)
-#define CP_HDR_INDIRECT_BUFFER_PFE cp_type3_packet(CP_INDIRECT_BUFFER_PFE, 2)
-
 /* dword base address of the GFX decode space */
 #define SUBBLOCK_OFFSET(reg) ((unsigned int)((reg) - (0x2000)))
 
@@ -306,6 +299,113 @@ static inline int adreno_cmd_is_ib(unsigned int cmd)
 		cmd == cp_type3_packet(CP_INDIRECT_BUFFER_PFD, 2) ||
 		cmd == cp_type3_packet(CP_COND_INDIRECT_BUFFER_PFE, 2) ||
 		cmd == cp_type3_packet(CP_COND_INDIRECT_BUFFER_PFD, 2));
+}
+
+/**
+ * cp_packet - Generic CP packet to support different opcodes on
+ * different GPU cores.
+ * @adreno_dev: The adreno device
+ * @opcode: Operation for cp packet
+ * @size: size for cp packet
+ */
+static inline uint cp_packet(struct adreno_device *adreno_dev,
+				int opcode, uint size)
+{
+	if (ADRENO_GPUREV(adreno_dev) < 500)
+		return cp_type3_packet(opcode, size);
+	else
+		return cp_type7_packet(opcode, size + 1);
+}
+
+/**
+ * cp_mem_packet - Generic CP memory packet to support different
+ * opcodes on different GPU cores.
+ * @adreno_dev: The adreno device
+ * @opcode: mem operation for cp packet
+ * @size: size for cp packet
+ * @num_mem: num of mem access
+ */
+static inline uint cp_mem_packet(struct adreno_device *adreno_dev,
+				int opcode, uint size, uint num_mem)
+{
+	if (ADRENO_GPUREV(adreno_dev) < 500)
+		return cp_type3_packet(opcode, size);
+	else
+		return cp_type7_packet(opcode, size + 1 + num_mem);
+}
+
+/**
+ * cp_gpuaddr - Generic function to add 64bit and 32bit gpuaddr
+ * to pm4 commands
+ * @adreno_dev: The adreno device
+ * @cmds: command pointer to add gpuaddr
+ * @gpuaddr: gpuaddr to add
+ */
+static inline uint cp_gpuaddr(struct adreno_device *adreno_dev,
+		   uint *cmds, uint64_t gpuaddr)
+{
+	uint *start = cmds;
+
+	if (ADRENO_GPUREV(adreno_dev) < 500)
+		*cmds++ = (uint)gpuaddr;
+	else {
+		*cmds++ = (uint)(gpuaddr);
+		*cmds++ = ((uint64_t)(gpuaddr) >> 32);
+	}
+	return cmds - start;
+}
+
+/**
+ * cp_register - Generic function for gpu register operation
+ * @adreno_dev: The adreno device
+ * @reg: GPU register
+ * @size: count for PM4 operation
+ */
+static inline uint cp_register(struct adreno_device *adreno_dev,
+			unsigned int reg, unsigned int size)
+{
+	if (ADRENO_GPUREV(adreno_dev) < 500)
+		return cp_type0_packet(reg, size);
+	else
+		return cp_type4_packet(reg, size + 1);
+}
+
+/**
+ * cp_wait_for_me - common function for WAIT_FOR_ME
+ * @adreno_dev: The adreno device
+ * @cmds: command pointer to add gpuaddr
+ */
+static inline uint cp_wait_for_me(struct adreno_device *adreno_dev,
+				uint *cmds)
+{
+	uint *start = cmds;
+
+	if (ADRENO_GPUREV(adreno_dev) < 500) {
+		*cmds++ = cp_type3_packet(CP_WAIT_FOR_ME, 1);
+		*cmds++ = 0;
+	} else
+		*cmds++ = cp_type7_packet(CP_WAIT_FOR_ME, 1);
+
+	return cmds - start;
+}
+
+/**
+ * cp_wait_for_idle - common function for WAIT_FOR_IDLE
+ * @adreno_dev: The adreno device
+ * @cmds: command pointer to add gpuaddr
+ */
+static inline uint cp_wait_for_idle(struct adreno_device *adreno_dev,
+				uint *cmds)
+{
+	uint *start = cmds;
+
+	if (ADRENO_GPUREV(adreno_dev) < 500) {
+		*cmds++ = cp_type3_packet(CP_WAIT_FOR_IDLE, 1);
+		*cmds++ = 0;
+	} else
+		*cmds++ = cp_type7_packet(CP_WAIT_FOR_IDLE, 1);
+
+	return cmds - start;
 }
 
 #endif	/* __ADRENO_PM4TYPES_H */
