@@ -67,3 +67,23 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart_console_active>;
 };
+
+&kgsl_smmu {
+	status = "disable";
+};
+
+&venus_smmu {
+	status = "disable";
+};
+
+&mdp_smmu {
+	status = "disable";
+};
+
+&rot_smmu {
+	status = "disable";
+};
+
+&lpass_q6_smmu {
+	status = "disable";
+};
