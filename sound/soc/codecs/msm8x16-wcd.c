@@ -166,6 +166,7 @@ static struct msm8x16_wcd_pdata *msm8x16_wcd_populate_dt_pdata(
 	struct device *dev);
 static int msm8x16_wcd_enable_ext_mb_source(struct snd_soc_codec *codec,
 					    bool turn_on);
+static void msm8x16_trim_btn_reg(struct snd_soc_codec *codec);
 
 struct msm8x16_wcd_spmi msm8x16_wcd_modules[MAX_MSM8X16_WCD_DEVICE];
 
@@ -175,6 +176,7 @@ static struct snd_soc_codec *registered_codec;
 
 static const struct wcd_mbhc_cb mbhc_cb = {
 	.enable_mb_source = msm8x16_wcd_enable_ext_mb_source,
+	.trim_btn_reg = msm8x16_trim_btn_reg,
 };
 
 int msm8x16_unregister_notifier(struct snd_soc_codec *codec,
@@ -1819,6 +1821,26 @@ static int msm8x16_wcd_codec_enable_dmic(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
+static void msm8x16_trim_btn_reg(struct snd_soc_codec *codec)
+{
+	struct msm8x16_wcd_priv *msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
+
+	if (TOMBAK_IS_1_0(msm8x16_wcd->pmic_rev)) {
+		pr_debug("%s: This device needs to be trimmed\n", __func__);
+		/*
+		 * Calculate the trim value for each device used
+		 * till is comes in production by hardware team
+		 */
+		snd_soc_update_bits(codec,
+				MSM8X16_WCD_A_ANALOG_SEC_ACCESS,
+				0xA5, 0xA5);
+		snd_soc_update_bits(codec,
+				MSM8X16_WCD_A_ANALOG_TRIM_CTRL2,
+				0xFF, 0x30);
+	} else {
+		pr_debug("%s: This device is trimmed at ATE\n", __func__);
+	}
+}
 static int msm8x16_wcd_enable_ext_mb_source(struct snd_soc_codec *codec,
 					    bool turn_on)
 {
@@ -2241,12 +2263,17 @@ static int msm8x16_wcd_hph_pa_event(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		if (w->shift == 5)
+		if (w->shift == 5) {
 			snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_ANALOG_RX_HPH_L_TEST, 0x04, 0x04);
-		else if (w->shift == 4)
+			msm8x16_notifier_call(codec,
+					WCD_EVENT_PRE_HPHL_PA_ON);
+		} else if (w->shift == 4) {
 			snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_ANALOG_RX_HPH_R_TEST, 0x04, 0x04);
+			msm8x16_notifier_call(codec,
+					WCD_EVENT_PRE_HPHR_PA_ON);
+		}
 		snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_ANALOG_NCP_FBCTRL, 0x20, 0x20);
 		break;
@@ -3624,6 +3651,7 @@ static int msm8x16_wcd_spmi_probe(struct spmi_device *spmi)
 		msm8x16_wcd_modules[0].base = (spmi->sid << 16) +
 						wcd_resource->start;
 		wcd9xxx_spmi_set_dev(msm8x16_wcd_modules[0].spmi, 0);
+		device_init_wakeup(&spmi->dev, true);
 		break;
 	case TOMBAK_CORE_1_SPMI_ADDR:
 		msm8x16_wcd_modules[1].spmi = spmi;

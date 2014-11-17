@@ -622,6 +622,7 @@ enum i2c_msm_err_bit_field {
 	I2C_MSM_ERR_ARB_LOST = 1U << 1,
 	I2C_MSM_ERR_BUS_ERR  = 1U << 2,
 	I2C_MSM_ERR_TIMEOUT  = 1U << 3,
+	I2C_MSM_ERR_OVR_UNDR_RUN = 1U << 5,
 };
 
 /*

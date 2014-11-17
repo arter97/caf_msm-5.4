@@ -310,7 +310,7 @@ static int cpu_power_select(struct cpuidle_device *dev,
 		if (best_level_pwr >= pwr) {
 			best_level = i;
 			best_level_pwr = pwr;
-			if (next_event_us < sleep_us &&
+			if (next_event_us && next_event_us < sleep_us &&
 				(mode != MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT))
 				modified_time_us
 					= next_event_us - lvl_latency_us;
@@ -652,7 +652,7 @@ static int lpm_cpuidle_enter(struct cpuidle_device *dev,
 	}
 
 	pwr_params = &cluster->cpu->levels[idx].pwr;
-	sched_set_cpu_cstate(smp_processor_id(), idx,
+	sched_set_cpu_cstate(smp_processor_id(), idx + 1,
 		pwr_params->energy_overhead, pwr_params->latency_us);
 
 	cpu_prepare(cluster, idx, true);

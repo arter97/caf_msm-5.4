@@ -121,8 +121,6 @@ enum {
 	SMD_PKT_STATUS = 1U << 0,
 	SMD_PKT_READ = 1U << 1,
 	SMD_PKT_WRITE = 1U << 2,
-	SMD_PKT_READ_DUMP_BUFFER = 1U << 3,
-	SMD_PKT_WRITE_DUMP_BUFFER = 1U << 4,
 	SMD_PKT_POLL = 1U << 5,
 };
 
@@ -134,18 +132,6 @@ enum {
 do { \
 	if (smd_pkt_ilctxt) \
 		ipc_log_string(smd_pkt_ilctxt, "<SMD_PKT>: "x); \
-} while (0)
-
-#define SMD_PKT_LOG_BUF(buf, cnt) \
-do { \
-	char log_buf[128]; \
-	int i; \
-	if (smd_pkt_ilctxt) { \
-		i = cnt < 16 ? cnt : 16; \
-		hex_dump_to_buffer(buf, i, 16, 1, log_buf, \
-				   sizeof(log_buf), false); \
-		ipc_log_string(smd_pkt_ilctxt, "<SMD_PKT>: %s", log_buf); \
-	} \
 } while (0)
 
 #define D_STATUS(x...) \
@@ -169,24 +155,6 @@ do { \
 	SMD_PKT_LOG_STRING(x); \
 } while (0)
 
-#define D_READ_DUMP_BUFFER(prestr, cnt, buf) \
-do { \
-	if (msm_smd_pkt_debug_mask & SMD_PKT_READ_DUMP_BUFFER) \
-		print_hex_dump(KERN_INFO, prestr, \
-			       DUMP_PREFIX_NONE, 16, 1, \
-			       buf, cnt, 1); \
-	SMD_PKT_LOG_BUF(buf, cnt); \
-} while (0)
-
-#define D_WRITE_DUMP_BUFFER(prestr, cnt, buf) \
-do { \
-	if (msm_smd_pkt_debug_mask & SMD_PKT_WRITE_DUMP_BUFFER) \
-		print_hex_dump(KERN_INFO, prestr, \
-			       DUMP_PREFIX_NONE, 16, 1, \
-			       buf, cnt, 1); \
-	SMD_PKT_LOG_BUF(buf, cnt); \
-} while (0)
-
 #define D_POLL(x...) \
 do { \
 	if (msm_smd_pkt_debug_mask & SMD_PKT_POLL) \
@@ -204,8 +172,6 @@ do { \
 #define D_STATUS(x...) do {} while (0)
 #define D_READ(x...) do {} while (0)
 #define D_WRITE(x...) do {} while (0)
-#define D_READ_DUMP_BUFFER(prestr, cnt, buf) do {} while (0)
-#define D_WRITE_DUMP_BUFFER(prestr, cnt, buf) do {} while (0)
 #define D_POLL(x...) do {} while (0)
 #define E_SMD_PKT_SSR(x) do {} while (0)
 #endif
@@ -535,7 +501,6 @@ wait_for_packet:
 			return notify_reset(smd_pkt_devp);
 		}
 	} while (pkt_size != bytes_read);
-	D_READ_DUMP_BUFFER("Read: ", (bytes_read > 16 ? 16 : bytes_read), buf);
 	mutex_unlock(&smd_pkt_devp->rx_lock);
 
 	mutex_lock(&smd_pkt_devp->ch_lock);
@@ -643,8 +608,6 @@ ssize_t smd_pkt_write(struct file *file,
 	} while (bytes_written != count);
 	smd_write_end(smd_pkt_devp->ch);
 	mutex_unlock(&smd_pkt_devp->tx_lock);
-	D_WRITE_DUMP_BUFFER("Write: ",
-			    (bytes_written > 16 ? 16 : bytes_written), buf);
 	D_WRITE("Finished %s on smd_pkt_dev id:%d %zu bytes\n",
 		__func__, smd_pkt_devp->i, count);
 
@@ -1070,11 +1033,7 @@ int smd_pkt_open(struct inode *inode, struct file *file)
 
 	mutex_lock(&smd_pkt_devp->ch_lock);
 	if (smd_pkt_devp->ch == 0) {
-		wakeup_source_init(&smd_pkt_devp->pa_ws,
-							smd_pkt_devp->dev_name);
-		INIT_WORK(&smd_pkt_devp->packet_arrival_work,
-				packet_arrival_worker);
-		init_completion(&smd_pkt_devp->ch_allocated);
+		INIT_COMPLETION(smd_pkt_devp->ch_allocated);
 
 		r = smd_pkt_add_driver(smd_pkt_devp);
 		if (r) {
@@ -1179,9 +1138,6 @@ release_pd:
 	if (r < 0)
 		smd_pkt_remove_driver(smd_pkt_devp);
 out:
-	if (!smd_pkt_devp->ch)
-		wakeup_source_trash(&smd_pkt_devp->pa_ws);
-
 	mutex_unlock(&smd_pkt_devp->ch_lock);
 
 
@@ -1218,11 +1174,14 @@ int smd_pkt_release(struct inode *inode, struct file *file)
 		smd_pkt_devp->has_reset = 0;
 		smd_pkt_devp->do_reset_notification = 0;
 		smd_pkt_devp->ws_locked = 0;
-		wakeup_source_trash(&smd_pkt_devp->pa_ws);
 	}
 	mutex_unlock(&smd_pkt_devp->tx_lock);
 	mutex_unlock(&smd_pkt_devp->rx_lock);
 	mutex_unlock(&smd_pkt_devp->ch_lock);
+
+	if (flush_work(&smd_pkt_devp->packet_arrival_work))
+		D_STATUS("%s: Flushed work for smd_pkt_dev id:%d\n", __func__,
+				smd_pkt_devp->i);
 
 	D_STATUS("Finished %s on smd_pkt_dev id:%d\n",
 		 __func__, smd_pkt_devp->i);
@@ -1258,6 +1217,9 @@ static int smd_pkt_init_add_device(struct smd_pkt_dev *smd_pkt_devp, int i)
 	mutex_init(&smd_pkt_devp->ch_lock);
 	mutex_init(&smd_pkt_devp->rx_lock);
 	mutex_init(&smd_pkt_devp->tx_lock);
+	wakeup_source_init(&smd_pkt_devp->pa_ws, smd_pkt_devp->dev_name);
+	INIT_WORK(&smd_pkt_devp->packet_arrival_work, packet_arrival_worker);
+	init_completion(&smd_pkt_devp->ch_allocated);
 
 	cdev_init(&smd_pkt_devp->cdev, &smd_pkt_fops);
 	smd_pkt_devp->cdev.owner = THIS_MODULE;
@@ -1281,6 +1243,7 @@ static int smd_pkt_init_add_device(struct smd_pkt_dev *smd_pkt_devp, int i)
 			__func__, i);
 		r = -ENOMEM;
 		cdev_del(&smd_pkt_devp->cdev);
+		wakeup_source_trash(&smd_pkt_devp->pa_ws);
 		return r;
 	}
 	if (device_create_file(smd_pkt_devp->devicep,

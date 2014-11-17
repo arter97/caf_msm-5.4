@@ -79,7 +79,7 @@
 		qcom,mdss-has-fixed-qos-arbiter-enabled;
 		qcom,mdss-has-dst-split;
 
-		vdd-cx-supply = <&pm8916_s1_corner>;
+		vdd-cx-supply = <&pm8916_s2_corner>;
 		clocks = <&clock_gcc clk_gcc_mdss_ahb_clk>,
 			 <&clock_gcc clk_gcc_mdss_axi_clk>,
 			 <&clock_gcc clk_mdp_clk_src>,
@@ -108,6 +108,7 @@
 			cell-index = <0>;
 			compatible = "qcom,mdss-fb";
 			qcom,memblock-reserve = <0x83200000 0xfa0000>;
+			qcom,mdss-fb-splash-logo-enabled;
 		};
 
 		mdss_fb1: qcom,mdss_fb_wfd {
