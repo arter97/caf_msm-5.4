@@ -475,7 +475,8 @@ struct usb_gadget_ops {
 
 	/* Those two are deprecated */
 	int	(*start)(struct usb_gadget_driver *,
-			int (*bind)(struct usb_gadget *));
+			int (*bind)(struct usb_gadget *,
+				struct usb_gadget_driver *driver));
 	int	(*stop)(struct usb_gadget_driver *);
 };
 
@@ -885,7 +886,7 @@ struct usb_gadget_driver {
  * be in init sections.
  */
 int usb_gadget_probe_driver(struct usb_gadget_driver *driver,
-		int (*bind)(struct usb_gadget *));
+		int (*bind)(struct usb_gadget *, struct usb_gadget_driver *));
 
 /**
  * usb_gadget_unregister_driver - unregister a gadget driver

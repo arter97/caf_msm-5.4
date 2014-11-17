@@ -118,7 +118,7 @@ EXPORT_SYMBOL_GPL(usb_gadget_unmap_request);
  */
 static inline int usb_gadget_start(struct usb_gadget *gadget,
 		struct usb_gadget_driver *driver,
-		int (*bind)(struct usb_gadget *))
+		int (*bind)(struct usb_gadget *, struct usb_gadget_driver *))
 {
 	return gadget->ops->start(driver, bind);
 }
@@ -312,7 +312,7 @@ EXPORT_SYMBOL_GPL(usb_del_gadget_udc);
 /* ------------------------------------------------------------------------- */
 
 int usb_gadget_probe_driver(struct usb_gadget_driver *driver,
-		int (*bind)(struct usb_gadget *))
+		int (*bind)(struct usb_gadget *, struct usb_gadget_driver *))
 {
 	struct usb_udc		*udc = NULL;
 	int			ret;
@@ -341,7 +341,7 @@ found:
 	driver->pdev_id = udc->gadget->pdev_id;
 
 	if (udc_is_newstyle(udc)) {
-		ret = bind(udc->gadget);
+		ret = bind(udc->gadget, driver);
 		if (ret)
 			goto err1;
 		ret = usb_gadget_udc_start(udc->gadget, driver);

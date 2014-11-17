@@ -295,6 +295,7 @@ struct usb_composite_driver {
 	/* global suspend hooks */
 	void			(*suspend)(struct usb_composite_dev *);
 	void			(*resume)(struct usb_composite_dev *);
+	struct usb_gadget_driver		gadget_driver;
 };
 
 extern int usb_composite_probe(struct usb_composite_driver *driver,
@@ -302,6 +303,11 @@ extern int usb_composite_probe(struct usb_composite_driver *driver,
 extern void usb_composite_unregister(struct usb_composite_driver *driver);
 extern void usb_composite_setup_continue(struct usb_composite_dev *cdev);
 
+static inline struct usb_composite_driver *to_cdriver(
+		struct usb_gadget_driver *gdrv)
+{
+	return container_of(gdrv, struct usb_composite_driver, gadget_driver);
+}
 
 /**
  * struct usb_composite_device - represents one composite usb gadget

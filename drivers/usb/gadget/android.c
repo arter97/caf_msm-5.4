@@ -2539,8 +2539,9 @@ static int android_create_device(struct android_dev *dev, u8 usb_core_id)
 	 */
 	snprintf(device_node_name, ANDROID_DEVICE_NODE_NAME_LENGTH,
 		 "android%d", usb_core_id);
+	pr_debug("%s(): creating android%d device\n", __func__, usb_core_id);
 	dev->dev = device_create(android_class, NULL,
-					MKDEV(0, 0), NULL, device_node_name);
+				MKDEV(0, usb_core_id), NULL, device_node_name);
 	if (IS_ERR(dev->dev))
 		return PTR_ERR(dev->dev);
 
@@ -2645,11 +2646,13 @@ static int __devinit android_probe(struct platform_device *pdev)
 	android_dev_count++;
 
 	if (pdata)
-		composite_driver.usb_core_id = pdata->usb_core_id;
+		composite_driver_template.usb_core_id = pdata->usb_core_id;
 	else
-		composite_driver.usb_core_id = 0; /*To backward compatibility*/
+		/*To backward compatibility*/
+		composite_driver_template.usb_core_id = 0;
 
-	ret = android_create_device(android_dev, composite_driver.usb_core_id);
+	ret = android_create_device(android_dev,
+				composite_driver_template.usb_core_id);
 	if (ret) {
 		pr_err("%s(): android_create_device failed\n", __func__);
 		goto err_dev;
@@ -2739,8 +2742,8 @@ static int __init init(void)
 	int ret;
 
 	/* Override composite driver functions */
-	composite_driver.setup = android_setup;
-	composite_driver.disconnect = android_disconnect;
+	composite_driver_template.setup = android_setup;
+	composite_driver_template.disconnect = android_disconnect;
 
 	INIT_LIST_HEAD(&android_dev_list);
 	android_dev_count = 0;
