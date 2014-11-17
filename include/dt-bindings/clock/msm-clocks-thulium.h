@@ -251,6 +251,8 @@
 #define clk_gcc_pcie_clkref_clk		0xa2e247fa
 #define clk_gcc_rx2_usb2_clkref_clk	0x27ec24ba
 #define clk_gcc_rx1_usb2_clkref_clk	0x53351d25
+#define clk_gcc_smmu_aggre0_ahb_clk	0x47a06ce4
+#define clk_gcc_smmu_aggre0_axi_clk	0x3cac4a6c
 
 /* clock_mmss controlled clocks */
 #define clk_mmsscc_xo			0x05e63704
