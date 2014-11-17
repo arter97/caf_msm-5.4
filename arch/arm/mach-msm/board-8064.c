@@ -91,6 +91,7 @@
 #include "devices-msm8x60.h"
 #include "smd_private.h"
 #include "sysmon.h"
+#include "ci13xxx_udc.h"
 #include <linux/i2c/atmel_mxt_ts.h>
 #include <linux/bluetooth-power.h>
 #include <linux/reverse.h>
@@ -859,15 +860,42 @@ out:
 	return 0;
 }
 
-static struct android_usb_platform_data android_usb_pdata = {
+static struct android_usb_platform_data android_usb1_pdata = {
+	.usb_core_id = 0,
 	.update_pid_and_serial_num = usb_diag_update_pid_and_serial_num,
 };
 
-static struct platform_device android_usb_device = {
+static struct platform_device android_usb1_device = {
 	.name	= "android_usb",
-	.id	= -1,
+	.id	= 1,
 	.dev	= {
-		.platform_data = &android_usb_pdata,
+		.platform_data = &android_usb1_pdata,
+	},
+};
+
+static struct android_usb_platform_data android_usb3_pdata = {
+	.usb_core_id = 1,
+	.update_pid_and_serial_num = usb_diag_update_pid_and_serial_num,
+};
+
+static struct platform_device android_usb3_device = {
+	.name   = "android_usb",
+	.id     = 3,
+	.dev    = {
+		.platform_data = &android_usb3_pdata,
+	},
+};
+
+static struct android_usb_platform_data android_usb4_pdata = {
+	.usb_core_id = 2,
+	.update_pid_and_serial_num = usb_diag_update_pid_and_serial_num,
+};
+
+static struct platform_device android_usb4_device = {
+	.name   = "android_usb",
+	.id     = 4,
+	.dev    = {
+		.platform_data = &android_usb4_pdata,
 	},
 };
 
@@ -944,6 +972,18 @@ static struct msm_otg_platform_data msm_otg_usb4_pdata = {
 	.phy_init_seq		= phy_init_seq,
 };
 
+static struct ci13xxx_platform_data msm_usb1_peripheral_pdata = {
+	.usb_core_id = 0,
+};
+
+static struct ci13xxx_platform_data msm_usb3_peripheral_pdata = {
+	.usb_core_id = 1,
+};
+
+static struct ci13xxx_platform_data msm_usb4_peripheral_pdata = {
+	.usb_core_id = 2,
+};
+
 static struct platform_device *usb_common_devices[] __initdata = {
 	&apq8064_device_usb1_otg,
 	&apq8064_device_usb3_otg,
@@ -952,7 +992,11 @@ static struct platform_device *usb_common_devices[] __initdata = {
 	&apq8064_device_hsusb_usb3_host,
 	&apq8064_device_hsusb_usb4_host,
 	&apq8064_device_gadget_usb1_peripheral,
-	&android_usb_device
+	&apq8064_device_gadget_usb3_peripheral,
+	&apq8064_device_gadget_usb4_peripheral,
+	&android_usb1_device,
+	&android_usb3_device,
+	&android_usb4_device
 };
 
 static void __init apq8064_usb_otg_init(void)
@@ -960,6 +1004,12 @@ static void __init apq8064_usb_otg_init(void)
 	apq8064_device_usb1_otg.dev.platform_data = &msm_otg_usb1_pdata;
 	apq8064_device_usb3_otg.dev.platform_data = &msm_otg_usb3_pdata;
 	apq8064_device_usb4_otg.dev.platform_data = &msm_otg_usb4_pdata;
+	apq8064_device_gadget_usb1_peripheral.dev.platform_data =
+			&msm_usb1_peripheral_pdata;
+	apq8064_device_gadget_usb3_peripheral.dev.platform_data =
+			&msm_usb3_peripheral_pdata;
+	apq8064_device_gadget_usb4_peripheral.dev.platform_data =
+			&msm_usb4_peripheral_pdata;
 
 	if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2() ||
 		machine_is_apq8064_mplatform() ||
@@ -3821,7 +3871,11 @@ static void __init apq8064_common_init(void)
 	if (machine_is_apq8064_liquid())
 		msm_otg_usb1_pdata.mhl_enable = true;
 
-	android_usb_pdata.swfi_latency =
+	android_usb1_pdata.swfi_latency =
+		msm_rpmrs_levels[0].latency_us;
+	android_usb3_pdata.swfi_latency =
+		msm_rpmrs_levels[0].latency_us;
+	android_usb4_pdata.swfi_latency =
 		msm_rpmrs_levels[0].latency_us;
 
 	apq8064_usb_otg_init();
