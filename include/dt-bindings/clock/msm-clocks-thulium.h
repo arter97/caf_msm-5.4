@@ -472,4 +472,28 @@
 #define clk_edp_pixel_clk_src		0xce3cfd11
 #define clk_edp_mainlink_clk_src	0x384569b6
 
+/* CPU clocks */
+#define clk_pwrcl_clk 0xc554130e
+#define clk_pwrcl_pll 0x25454ca1
+#define clk_pwrcl_alt_pll 0xc445471b
+#define clk_pwrcl_pll_main 0x28948e22
+#define clk_pwrcl_alt_pll_main 0x25c8270e
+#define clk_pwrcl_hf_mux 0x77706ae6
+#define clk_pwrcl_lf_mux 0xd99e334d
+#define clk_perfcl_clk 0x58869997
+#define clk_perfcl_pll 0x97dcec1c
+#define clk_perfcl_alt_pll 0xfe2eaea1
+#define clk_perfcl_pll_main 0x0dbf0c0b
+#define clk_perfcl_alt_pll_main 0x0b892aab
+#define clk_perfcl_hf_mux 0x9e8bbe59
+#define clk_perfcl_lf_mux 0x2f9c278d
+#define clk_cbf_pll 0xfe2e96a3
+#define clk_cbf_hf_mux 0x71244f73
+#define clk_cbf_lf_mux 0x8abdf099
+#define clk_xo_ao 0x428c856d
+#define clk_sys_apcsaux_clk 0x0b0dd513
+#define clk_pwrcl_debug_mux 0xf4405808
+#define clk_perfcl_debug_mux 0xf107e489
+#define clk_cpu_debug_mux 0xc7acaa31
+
 #endif
