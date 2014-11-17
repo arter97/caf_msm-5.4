@@ -95,6 +95,7 @@ struct kgsl_pwr_constraint {
  * @gpu_reg - array of pointers to the regulator structures
  * @gpu_reg_name - array of pointers to the regulator names
  * @pcl - bus scale identifier
+ * @ocmem - ocmem bus scale identifier
  * @irq_name - resource name for the IRQ
  * @clk_stats - structure of clock statistics
  * @pm_qos_req_dma - the power management quality of service structure
@@ -130,6 +131,7 @@ struct kgsl_pwrctrl {
 	struct regulator *gpu_reg[KGSL_MAX_REGULATORS];
 	char gpu_reg_name[KGSL_MAX_REGULATORS][KGSL_MAX_REGULATOR_NAME_LEN];
 	uint32_t pcl;
+	uint32_t ocmem_pcl;
 	const char *irq_name;
 	struct kgsl_clk_stats clk_stats;
 	struct pm_qos_request pm_qos_req_dma;
