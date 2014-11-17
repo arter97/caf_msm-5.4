@@ -2235,7 +2235,8 @@ static const struct snd_kcontrol_new sb_tx10_mux =
 static int wcd9330_put_dec_enum(struct snd_kcontrol *kcontrol,
 			      struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_dapm_widget_list *wlist = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_dapm_widget_list *wlist =
+					dapm_kcontrol_get_wlist(kcontrol);
 	struct snd_soc_dapm_widget *w = wlist->widgets[0];
 	struct snd_soc_codec *codec = w->codec;
 	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
@@ -2448,7 +2449,8 @@ static const struct snd_kcontrol_new aif4_vi_switch =
 static int slim_tx_mixer_get(struct snd_kcontrol *kcontrol,
 			     struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_dapm_widget_list *wlist = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_dapm_widget_list *wlist =
+					dapm_kcontrol_get_wlist(kcontrol);
 	struct snd_soc_dapm_widget *widget = wlist->widgets[0];
 	struct snd_soc_codec *codec = widget->codec;
 	struct tomtom_priv *tomtom_p = snd_soc_codec_get_drvdata(codec);
@@ -2460,7 +2462,8 @@ static int slim_tx_mixer_get(struct snd_kcontrol *kcontrol,
 static int slim_tx_mixer_put(struct snd_kcontrol *kcontrol,
 			     struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_dapm_widget_list *wlist = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_dapm_widget_list *wlist =
+					dapm_kcontrol_get_wlist(kcontrol);
 	struct snd_soc_dapm_widget *widget = wlist->widgets[0];
 	struct snd_soc_codec *codec = widget->codec;
 	struct tomtom_priv *tomtom_p = snd_soc_codec_get_drvdata(codec);
@@ -2552,7 +2555,8 @@ static int slim_tx_mixer_put(struct snd_kcontrol *kcontrol,
 static int slim_rx_mux_get(struct snd_kcontrol *kcontrol,
 			   struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_dapm_widget_list *wlist = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_dapm_widget_list *wlist =
+					dapm_kcontrol_get_wlist(kcontrol);
 	struct snd_soc_dapm_widget *widget = wlist->widgets[0];
 	struct snd_soc_codec *codec = widget->codec;
 	struct tomtom_priv *tomtom_p = snd_soc_codec_get_drvdata(codec);
@@ -2568,7 +2572,8 @@ static const char *const slim_rx_mux_text[] = {
 static int slim_rx_mux_put(struct snd_kcontrol *kcontrol,
 			   struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_dapm_widget_list *wlist = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_dapm_widget_list *wlist =
+					dapm_kcontrol_get_wlist(kcontrol);
 	struct snd_soc_dapm_widget *widget = wlist->widgets[0];
 	struct snd_soc_codec *codec = widget->codec;
 	struct tomtom_priv *tomtom_p = snd_soc_codec_get_drvdata(codec);
