@@ -506,6 +506,9 @@ static struct msm_soc_info cpu_of_id[] = {
 	/* Thulium IDs */
 	[246] = {MSM_CPU_THULIUM, "MSMTHULIUM"},
 
+	/* Terbium ID */
+	[266] = {MSM_CPU_TERBIUM, "MSMTERBIUM"},
+
 	/* Uninitialized IDs are not known to run Linux.
 	   MSM_CPU_UNKNOWN is set to 0 to ensure these IDs are
 	   considered as unknown CPU. */
@@ -1015,6 +1018,10 @@ static void * __init setup_dummy_socinfo(void)
 	} else if (early_machine_is_msm8992()) {
 		dummy_socinfo.id = 251;
 		strlcpy(dummy_socinfo.build_id, "msm8992 - ",
+			sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_msmterbium()) {
+		dummy_socinfo.id = 266;
+		strlcpy(dummy_socinfo.build_id, "msmterbium - ",
 			sizeof(dummy_socinfo.build_id));
 	} else if (early_machine_is_msmtellurium()) {
 		dummy_socinfo.id = 264;
