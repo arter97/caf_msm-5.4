@@ -954,12 +954,12 @@ static void armv7pmu_save_regs(struct arm_pmu *cpu_pmu,
 					struct cpupmu_regs *regs)
 {
 	unsigned int cnt;
+	asm volatile("mrc p15, 0, %0, c9, c14, 0" : "=r" (regs->pmuseren));
 	asm volatile("mrc p15, 0, %0, c9, c12, 0" : "=r" (regs->pmc));
 	if (!(regs->pmc & ARMV7_PMNC_E))
 		return;
 
 	asm volatile("mrc p15, 0, %0, c9, c12, 1" : "=r" (regs->pmcntenset));
-	asm volatile("mrc p15, 0, %0, c9, c14, 0" : "=r" (regs->pmuseren));
 	asm volatile("mrc p15, 0, %0, c9, c14, 1" : "=r" (regs->pmintenset));
 	asm volatile("mrc p15, 0, %0, c9, c13, 0" : "=r" (regs->pmxevtcnt[0]));
 	for (cnt = ARMV7_IDX_COUNTER0;
@@ -977,11 +977,11 @@ static void armv7pmu_restore_regs(struct arm_pmu *cpu_pmu,
 					struct cpupmu_regs *regs)
 {
 	unsigned int cnt;
+	asm volatile("mcr p15, 0, %0, c9, c14, 0" : : "r" (regs->pmuseren));
 	if (!(regs->pmc & ARMV7_PMNC_E))
 		return;
 
 	asm volatile("mcr p15, 0, %0, c9, c12, 1" : : "r" (regs->pmcntenset));
-	asm volatile("mcr p15, 0, %0, c9, c14, 0" : : "r" (regs->pmuseren));
 	asm volatile("mcr p15, 0, %0, c9, c14, 1" : : "r" (regs->pmintenset));
 	asm volatile("mcr p15, 0, %0, c9, c13, 0" : : "r" (regs->pmxevtcnt[0]));
 	for (cnt = ARMV7_IDX_COUNTER0;
