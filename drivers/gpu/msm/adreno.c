@@ -408,13 +408,25 @@ void _soft_reset(struct adreno_device *adreno_dev)
 	struct adreno_gpudev *gpudev  = ADRENO_GPU_DEVICE(adreno_dev);
 	unsigned int reg;
 
-	adreno_writereg(adreno_dev, ADRENO_REG_RBBM_SW_RESET_CMD, 1);
 	/*
-	 * Do a dummy read to get a brief read cycle delay for the reset to take
-	 * effect
+	 * On a530 v1 RBBM cannot be reset in soft reset.
+	 * Reset all blocks except RBBM for a530v1.
 	 */
-	adreno_readreg(adreno_dev, ADRENO_REG_RBBM_SW_RESET_CMD, &reg);
-	adreno_writereg(adreno_dev, ADRENO_REG_RBBM_SW_RESET_CMD, 0);
+	if (adreno_is_a530v1(adreno_dev)) {
+		adreno_writereg(adreno_dev, ADRENO_REG_RBBM_BLOCK_SW_RESET_CMD,
+						 0xFFDFFC0);
+		adreno_writereg(adreno_dev, ADRENO_REG_RBBM_BLOCK_SW_RESET_CMD2,
+						0x1FFFFFFF);
+	} else {
+
+		adreno_writereg(adreno_dev, ADRENO_REG_RBBM_SW_RESET_CMD, 1);
+		/*
+		 * Do a dummy read to get a brief read cycle delay for the
+		 * reset to take effect
+		 */
+		adreno_readreg(adreno_dev, ADRENO_REG_RBBM_SW_RESET_CMD, &reg);
+		adreno_writereg(adreno_dev, ADRENO_REG_RBBM_SW_RESET_CMD, 0);
+	}
 
 	/* The SP/TP regulator gets turned off after a soft reset */
 
@@ -1013,6 +1025,8 @@ static int adreno_init(struct kgsl_device *device)
 	if (ret)
 		return ret;
 
+	adreno_iommu_init(adreno_dev);
+
 	/* Make a high priority workqueue for starting the GPU */
 	adreno_wq = alloc_workqueue("adreno", 0, 1);
 
@@ -1141,6 +1155,20 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 	status = kgsl_mmu_start(device);
 	if (status)
 		goto error_clk_off;
+
+	/* Program GPU contect protection init values */
+	if (device->mmu.secured) {
+		adreno_writereg(adreno_dev,
+				ADRENO_REG_RBBM_SECVID_TRUST_CONFIG, 0x2);
+		adreno_writereg(adreno_dev,
+				ADRENO_REG_RBBM_SECVID_TSB_CONTROL, 0x0);
+		adreno_writereg(adreno_dev,
+				ADRENO_REG_RBBM_SECVID_TSB_TRUSTED_BASE,
+				KGSL_IOMMU_SECURE_MEM_BASE);
+		adreno_writereg(adreno_dev,
+				ADRENO_REG_RBBM_SECVID_TSB_TRUSTED_SIZE,
+				KGSL_IOMMU_SECURE_MEM_SIZE);
+	}
 
 	status = adreno_ocmem_malloc(adreno_dev);
 	if (status) {

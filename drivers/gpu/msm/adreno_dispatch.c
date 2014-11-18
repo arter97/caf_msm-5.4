@@ -1160,8 +1160,7 @@ static void __adreno_dispatcher_preempt_clear_state(
 	trace_adreno_hw_preempt_clear_to_trig(adreno_dev->cur_rb,
 						adreno_dev->next_rb);
 	/* issue PREEMPT trigger */
-	adreno_writereg(adreno_dev, ADRENO_REG_CP_PREEMPT,
-				1 << A4XX_CP_PREEMPT_STOP_SHIFT);
+	adreno_writereg(adreno_dev, ADRENO_REG_CP_PREEMPT, 1);
 	/*
 	 * IOMMU clock can be safely switched off after the timestamp
 	 * of the first command in the new rb
@@ -1328,6 +1327,14 @@ static void __adreno_dispatcher_schedule_preempt(
 {
 	struct adreno_dispatcher *dispatcher = &adreno_dev->dispatcher;
 	struct kgsl_device *device = &(adreno_dev->dev);
+
+	/*
+	 * a4xx style preemption is only supported on a4xx for now, for
+	 * other targets like a5xx do nothing for now. When a5xx
+	 * preemption comes along we can see if we can reuse this code.
+	 */
+	if (!adreno_is_a4xx(adreno_dev))
+		return;
 
 	mutex_lock(&device->mutex);
 

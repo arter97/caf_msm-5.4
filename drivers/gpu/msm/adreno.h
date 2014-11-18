@@ -27,9 +27,6 @@
 #include <soc/qcom/ocmem.h>
 #endif
 
-#include "a3xx_reg.h"
-#include "a4xx_reg.h"
-
 #define DEVICE_3D_NAME "kgsl-3d"
 #define DEVICE_3D0_NAME "kgsl-3d0"
 
@@ -57,6 +54,9 @@
 
 /* ADRENO_GPUREV - Return the GPU ID for the given adreno_device */
 #define ADRENO_GPUREV(_a) ((_a)->gpucore->gpurev)
+
+/* ADRENO_GPUREV - Return the GPU patchid for the given adreno_device */
+#define ADRENO_PATCHID(_a) ((_a)->gpucore->patchid)
 
 /*
  * ADRENO_FEATURE - return true if the specified feature is supported by the GPU
@@ -143,6 +143,7 @@ enum adreno_gpurev {
 	ADRENO_REV_A418 = 418,
 	ADRENO_REV_A420 = 420,
 	ADRENO_REV_A430 = 430,
+	ADRENO_REV_A530 = 530,
 };
 
 enum adreno_start_type {
@@ -188,6 +189,7 @@ struct adreno_busy_data {
  * @pfp_bstrp_ver: Version of the PFP microcode that supports bootstraping
  * @shader_offset: Offset of shader from gpu reg base
  * @shader_size: Shader size
+ * @num_protected_regs: number of protected registers
  */
 struct adreno_gpu_core {
 	enum adreno_gpurev gpurev;
@@ -206,6 +208,7 @@ struct adreno_gpu_core {
 	unsigned int pfp_bstrp_ver;
 	unsigned long shader_offset;
 	unsigned int shader_size;
+	unsigned int num_protected_regs;
 };
 
 struct adreno_device {
@@ -218,9 +221,11 @@ struct adreno_device {
 	unsigned int *pfp_fw;
 	size_t pfp_fw_size;
 	unsigned int pfp_fw_version;
+	struct kgsl_memdesc pfp;
 	unsigned int *pm4_fw;
 	size_t pm4_fw_size;
 	unsigned int pm4_fw_version;
+	struct kgsl_memdesc pm4;
 	struct adreno_ringbuffer ringbuffers[ADRENO_PRIORITY_MAX_RB_LEVELS];
 	int num_ringbuffers;
 	struct adreno_ringbuffer *cur_rb;
@@ -429,17 +434,21 @@ enum adreno_regs {
 	ADRENO_REG_CP_SCRATCH_REG17,
 	ADRENO_REG_CP_SCRATCH_REG18,
 	ADRENO_REG_CP_SCRATCH_REG23,
+	ADRENO_REG_CP_PROTECT_REG_0,
 	ADRENO_REG_RBBM_STATUS,
 	ADRENO_REG_RBBM_PERFCTR_CTL,
 	ADRENO_REG_RBBM_PERFCTR_LOAD_CMD0,
 	ADRENO_REG_RBBM_PERFCTR_LOAD_CMD1,
 	ADRENO_REG_RBBM_PERFCTR_LOAD_CMD2,
+	ADRENO_REG_RBBM_PERFCTR_LOAD_CMD3,
 	ADRENO_REG_RBBM_PERFCTR_PWR_1_LO,
 	ADRENO_REG_RBBM_INT_0_MASK,
 	ADRENO_REG_RBBM_INT_0_STATUS,
 	ADRENO_REG_RBBM_PM_OVERRIDE2,
 	ADRENO_REG_RBBM_INT_CLEAR_CMD,
 	ADRENO_REG_RBBM_SW_RESET_CMD,
+	ADRENO_REG_RBBM_BLOCK_SW_RESET_CMD,
+	ADRENO_REG_RBBM_BLOCK_SW_RESET_CMD2,
 	ADRENO_REG_RBBM_CLOCK_CTL,
 	ADRENO_REG_VPC_DEBUG_RAM_SEL,
 	ADRENO_REG_VPC_DEBUG_RAM_READ,
@@ -456,6 +465,10 @@ enum adreno_regs {
 	ADRENO_REG_RBBM_ALWAYSON_COUNTER_HI,
 	ADRENO_RBBM_RBBM_CTL,
 	ADRENO_RBBM_PERFCTR_CTL,
+	ADRENO_REG_RBBM_SECVID_TRUST_CONFIG,
+	ADRENO_REG_RBBM_SECVID_TSB_CONTROL,
+	ADRENO_REG_RBBM_SECVID_TSB_TRUSTED_BASE,
+	ADRENO_REG_RBBM_SECVID_TSB_TRUSTED_SIZE,
 	ADRENO_REG_REGISTER_MAX,
 };
 
@@ -696,6 +709,7 @@ extern unsigned int *adreno_ft_regs_val;
 
 extern struct adreno_gpudev adreno_a3xx_gpudev;
 extern struct adreno_gpudev adreno_a4xx_gpudev;
+extern struct adreno_gpudev adreno_a5xx_gpudev;
 
 /* A3XX register set defined in adreno_a3xx.c */
 extern const unsigned int a3xx_registers[];
@@ -801,6 +815,8 @@ int adreno_iommu_set_pt_ctx(struct adreno_ringbuffer *rb,
 			struct kgsl_pagetable *new_pt,
 			struct adreno_context *drawctxt);
 
+void adreno_iommu_init(struct adreno_device *adreno_dev);
+
 void adreno_iommu_set_pt_generate_rb_cmds(struct adreno_ringbuffer *rb,
 					struct kgsl_pagetable *pt);
 
@@ -880,7 +896,8 @@ static inline int adreno_is_a330v21(struct adreno_device *adreno_dev)
 
 static inline int adreno_is_a4xx(struct adreno_device *adreno_dev)
 {
-	return (ADRENO_GPUREV(adreno_dev) >= 400);
+	return ADRENO_GPUREV(adreno_dev) >= 400 &&
+		ADRENO_GPUREV(adreno_dev) < 500;
 }
 
 static inline int adreno_is_a405(struct adreno_device *adreno_dev)
@@ -906,6 +923,23 @@ static inline int adreno_is_a430v2(struct adreno_device *adreno_dev)
 static inline int adreno_is_a418(struct adreno_device *adreno_dev)
 {
 	return (ADRENO_GPUREV(adreno_dev) == ADRENO_REV_A418);
+}
+
+static inline int adreno_is_a5xx(struct adreno_device *adreno_dev)
+{
+	return ADRENO_GPUREV(adreno_dev) >= 500 &&
+			ADRENO_GPUREV(adreno_dev) < 600;
+}
+
+static inline int adreno_is_a530(struct adreno_device *adreno_dev)
+{
+	return ADRENO_GPUREV(adreno_dev) == ADRENO_REV_A530;
+}
+
+static inline int adreno_is_a530v1(struct adreno_device *adreno_dev)
+{
+	return (ADRENO_GPUREV(adreno_dev) == ADRENO_REV_A530) &&
+			(ADRENO_PATCHID(adreno_dev) == 1);
 }
 
 /**
@@ -1127,11 +1161,11 @@ static inline void adreno_set_protected_registers(
 		unsigned int reg, int mask_len)
 {
 	unsigned int val;
+	unsigned int reg_0 =
+		adreno_getreg(adreno_dev, ADRENO_REG_CP_PROTECT_REG_0);
 
-	/* A430 has 24 registers (yay!).  Everything else has 16 (boo!) */
-
-	if (adreno_is_a430(adreno_dev))
-		BUG_ON(*index >= 24);
+	if (adreno_dev->gpucore->num_protected_regs)
+		BUG_ON(*index >= adreno_dev->gpucore->num_protected_regs);
 	else
 		BUG_ON(*index >= 16);
 
@@ -1141,13 +1175,7 @@ static inline void adreno_set_protected_registers(
 	 * Write the protection range to the next available protection
 	 * register
 	 */
-
-	if (adreno_is_a4xx(adreno_dev))
-		kgsl_regwrite(&adreno_dev->dev,
-				A4XX_CP_PROTECT_REG_0 + *index, val);
-	else if (adreno_is_a3xx(adreno_dev))
-		kgsl_regwrite(&adreno_dev->dev,
-				A3XX_CP_PROTECT_REG_0 + *index, val);
+	kgsl_regwrite(&adreno_dev->dev, reg_0 + *index, val);
 	*index = *index + 1;
 }
 

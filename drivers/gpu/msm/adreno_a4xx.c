@@ -894,6 +894,7 @@ static unsigned int a4xx_register_offsets[ADRENO_REG_REGISTER_MAX] = {
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_PREEMPT_DEBUG, A4XX_CP_PREEMPT_DEBUG),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_PREEMPT_DISABLE,
 						A4XX_CP_PREEMPT_DISABLE),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_PROTECT_REG_0, A4XX_CP_PROTECT_REG_0),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_STATUS, A4XX_RBBM_STATUS),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_PERFCTR_CTL, A4XX_RBBM_PERFCTR_CTL),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_PERFCTR_LOAD_CMD0,
@@ -902,6 +903,8 @@ static unsigned int a4xx_register_offsets[ADRENO_REG_REGISTER_MAX] = {
 					A4XX_RBBM_PERFCTR_LOAD_CMD1),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_PERFCTR_LOAD_CMD2,
 				A4XX_RBBM_PERFCTR_LOAD_CMD2),
+	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_PERFCTR_LOAD_CMD3,
+				ADRENO_REG_SKIP),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_PERFCTR_PWR_1_LO,
 					A4XX_RBBM_PERFCTR_PWR_1_LO),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_INT_0_MASK, A4XX_RBBM_INT_0_MASK),
@@ -926,6 +929,14 @@ static unsigned int a4xx_register_offsets[ADRENO_REG_REGISTER_MAX] = {
 				A4XX_RBBM_ALWAYSON_COUNTER_LO),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_ALWAYSON_COUNTER_HI,
 				A4XX_RBBM_ALWAYSON_COUNTER_HI),
+	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_SECVID_TRUST_CONFIG,
+				A4XX_RBBM_SECVID_TRUST_CONFIG),
+	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_SECVID_TSB_CONTROL,
+				A4XX_RBBM_SECVID_TSB_CONTROL),
+	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_SECVID_TSB_TRUSTED_BASE,
+				A4XX_RBBM_SECVID_TSB_TRUSTED_BASE),
+	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_SECVID_TSB_TRUSTED_SIZE,
+				A4XX_RBBM_SECVID_TSB_TRUSTED_SIZE),
 };
 
 const struct adreno_reg_offsets a4xx_reg_offsets = {
@@ -1249,10 +1260,10 @@ static struct adreno_perfcounters a4xx_perfcounters = {
 };
 
 struct adreno_ft_perf_counters a4xx_ft_perf_counters[] = {
-	{KGSL_PERFCOUNTER_GROUP_SP, SP_ALU_ACTIVE_CYCLES},
-	{KGSL_PERFCOUNTER_GROUP_SP, SP0_ICL1_MISSES},
-	{KGSL_PERFCOUNTER_GROUP_SP, SP_FS_CFLOW_INSTRUCTIONS},
-	{KGSL_PERFCOUNTER_GROUP_TSE, TSE_INPUT_PRIM_NUM},
+	{KGSL_PERFCOUNTER_GROUP_SP, A4XX_SP_ALU_ACTIVE_CYCLES},
+	{KGSL_PERFCOUNTER_GROUP_SP, A4XX_SP0_ICL1_MISSES},
+	{KGSL_PERFCOUNTER_GROUP_SP, A4XX_SP_FS_CFLOW_INSTRUCTIONS},
+	{KGSL_PERFCOUNTER_GROUP_TSE, A4XX_TSE_INPUT_PRIM_NUM},
 };
 
 /*
@@ -1350,6 +1361,8 @@ static struct adreno_coresight_register a4xx_coresight_registers[] = {
 
 static int a4xx_perfcounter_init(struct adreno_device *adreno_dev)
 {
+	int ret;
+
 	if (adreno_is_a420(adreno_dev)) {
 		struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 		struct adreno_perfcounters *counters = gpudev->perfcounters;
@@ -1376,6 +1389,16 @@ static int a4xx_perfcounter_init(struct adreno_device *adreno_dev)
 
 		gpudev->invalid_countables = a420_perfctr_invalid_countables;
 	}
+
+	/*
+	 * Turn on the GPU busy counter(s) and let them run free
+	 * GPU busy counts
+	 */
+	ret = adreno_perfcounter_get(adreno_dev, KGSL_PERFCOUNTER_GROUP_PWR, 1,
+				 NULL, NULL, PERFCOUNTER_FLAG_KERNEL);
+	if (ret)
+		return ret;
+
 	return 0;
 }
 

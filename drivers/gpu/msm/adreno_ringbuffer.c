@@ -442,6 +442,9 @@ void adreno_ringbuffer_close(struct adreno_device *adreno_dev)
 	adreno_dev->pfp_fw = NULL;
 	adreno_dev->pm4_fw = NULL;
 
+	kgsl_free_global(&adreno_dev->pm4);
+	kgsl_free_global(&adreno_dev->pfp);
+
 	FOR_EACH_RINGBUFFER(adreno_dev, rb, i)
 		_adreno_ringbuffer_close(rb);
 }
@@ -613,7 +616,8 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 		*ringcmds++ = cp_packet(adreno_dev, CP_SET_PROTECTED_MODE, 1);
 		*ringcmds++ = 0;
 		*ringcmds++ = cp_packet(adreno_dev, CP_WIDE_REG_WRITE, 2);
-		*ringcmds++ = A4XX_RBBM_SECVID_TRUST_CONTROL;
+		*ringcmds++ = adreno_getreg(adreno_dev,
+				ADRENO_REG_RBBM_SECVID_TRUST_CONTROL);
 		*ringcmds++ = 1;
 		*ringcmds++ = cp_packet(adreno_dev, CP_SET_PROTECTED_MODE, 1);
 		*ringcmds++ = 1;
@@ -696,7 +700,8 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 		*ringcmds++ = cp_packet(adreno_dev, CP_SET_PROTECTED_MODE, 1);
 		*ringcmds++ = 0;
 		*ringcmds++ = cp_packet(adreno_dev, CP_WIDE_REG_WRITE, 2);
-		*ringcmds++ = A4XX_RBBM_SECVID_TRUST_CONTROL;
+		*ringcmds++ = adreno_getreg(adreno_dev,
+				ADRENO_REG_RBBM_SECVID_TRUST_CONTROL);
 		*ringcmds++ = 0;
 		*ringcmds++ = cp_packet(adreno_dev, CP_SET_PROTECTED_MODE, 1);
 		*ringcmds++ = 1;
