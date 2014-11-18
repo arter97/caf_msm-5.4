@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3078,6 +3078,7 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(gcc_ce1_ahb_m_clk),
 	CLK_LIST(gcc_ce1_axi_m_clk),
 	CLK_LIST(gpll0),
+	CLK_LIST(gpll0_ao),
 	CLK_LIST(gpll0_out_main),
 	CLK_LIST(gpll4),
 	CLK_LIST(gpll4_out_main),

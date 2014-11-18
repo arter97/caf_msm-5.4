@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -84,6 +84,7 @@
 #define clk_aggre2_noc_a_clk		0xcab67089
 
 #define clk_gpll0			0x1ebe3bc4
+#define clk_gpll0_ao			0xa1368304
 #define clk_gpll0_out_main		0xe9374de7
 #define clk_gpll4			0xb3b5d85b
 #define clk_gpll4_out_main		0xa9a0ab9d
