@@ -14,8 +14,9 @@
 	mdss_mdp: qcom,mdss_mdp@900000 {
 		compatible = "qcom,mdss_mdp";
 		reg = <0x00900000 0x90000>,
-		      <0x009b0000 0x1040>;
-		reg-names = "mdp_phys", "vbif_phys";
+		      <0x009b0000 0x1040>,
+		      <0x009b8000 0x1040>;
+		reg-names = "mdp_phys", "vbif_phys", "vbif_nrt_phys";
 		interrupts = <0 83 0>;
 		vdd-supply = <&gdsc_mdss>;
 
@@ -23,10 +24,11 @@
 		qcom,msm-bus,name = "mdss_mdp";
 		qcom,msm-bus,num-cases = <3>;
 		qcom,msm-bus,num-paths = <2>;
+		qcom,mdss-num-nrt-paths = <1>;
 		qcom,msm-bus,vectors-KBps =
-			<22 512 0 0>, <23 512 0 0>,
-			<22 512 0 6400000>, <23 512 0 6400000>,
-			<22 512 0 6400000>, <23 512 0 6400000>;
+			<22 512 0 0>, <23 512 0 0>, <25 512 0 0>,
+			<22 512 0 6400000>, <23 512 0 6400000>, <25 512 0 6400000>,
+			<22 512 0 6400000>, <23 512 0 6400000>, <25 512 0 6400000>;
 
 		/* Fudge factors */
 		qcom,mdss-ab-factor = <1 1>;		/* 1 time  */
