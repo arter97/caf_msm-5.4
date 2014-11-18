@@ -82,7 +82,9 @@
 #define clk_aggre2_noc_clk		0xaa681404
 #define clk_aggre2_noc_a_clk		0xcab67089
 
+#define clk_gpll0			0x1ebe3bc4
 #define clk_gpll0_out_main		0xe9374de7
+#define clk_gpll4			0xb3b5d85b
 #define clk_gpll4_out_main		0xa9a0ab9d
 #define clk_ufs_axi_clk_src		0x297ca380
 #define clk_pcie_aux_clk_src		0xebc50566
