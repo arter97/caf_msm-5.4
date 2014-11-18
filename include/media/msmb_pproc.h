@@ -232,6 +232,12 @@ struct msm_pproc_queue_buf_info {
 	uint8_t is_buf_dirty;
 };
 
+struct msm_cpp_clock_settings_t {
+	unsigned long clock_rate;
+	uint64_t avg;
+	uint64_t inst;
+};
+
 #define VIDIOC_MSM_CPP_CFG \
 	_IOWR('V', BASE_VIDIOC_PRIVATE, struct msm_camera_v4l2_ioctl_t)
 
@@ -291,6 +297,9 @@ struct msm_pproc_queue_buf_info {
 
 #define VIDIOC_MSM_CPP_IOMMU_DETACH \
 	_IOWR('V', BASE_VIDIOC_PRIVATE + 19, struct msm_camera_v4l2_ioctl_t)
+
+#define VIDIOC_MSM_CPP_DELETE_STREAM_BUFF\
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 20, struct msm_camera_v4l2_ioctl_t)
 
 
 #define V4L2_EVENT_CPP_FRAME_DONE  (V4L2_EVENT_PRIVATE_START + 0)
@@ -411,6 +420,9 @@ struct cpp_hw_info_32_t {
 
 #define VIDIOC_MSM_CPP_IOMMU_DETACH32 \
 	_IOWR('V', BASE_VIDIOC_PRIVATE + 19, struct msm_camera_v4l2_ioctl32_t)
+
+#define VIDIOC_MSM_CPP_DELETE_STREAM_BUFF32\
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 20, struct msm_camera_v4l2_ioctl32_t)
 
 struct msm_camera_v4l2_ioctl32_t {
 	uint32_t id;

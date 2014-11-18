@@ -221,6 +221,8 @@ enum msm_vfe_axi_stream_update_type {
 	UPDATE_STREAM_STATS_FRAMEDROP_PATTERN,
 	UPDATE_STREAM_AXI_CONFIG,
 	UPDATE_STREAM_REQUEST_FRAMES,
+	UPDATE_STREAM_ADD_BUFQ,
+	UPDATE_STREAM_REMOVE_BUFQ,
 };
 
 enum msm_vfe_iommu_type {
@@ -228,10 +230,16 @@ enum msm_vfe_iommu_type {
 	IOMMU_DETACH,
 };
 
+enum msm_vfe_buff_queue_id {
+	VFE_BUF_QUEUE_DEFAULT,
+	VFE_BUF_QUEUE_SHARED,
+	VFE_BUF_QUEUE_MAX,
+};
+
 struct msm_vfe_axi_stream_cfg_update_info {
 	uint32_t stream_handle;
 	uint32_t output_format;
-	uint32_t request_frm_num;
+	uint32_t user_stream_id;
 	enum msm_vfe_frame_skip_pattern skip_pattern;
 	struct msm_vfe_axi_plane_cfg plane_cfg[MAX_PLANES_PER_STREAM];
 };
@@ -317,6 +325,7 @@ enum msm_vfe_reg_cfg_type {
 	VFE_HW_UPDATE_LOCK,
 	VFE_HW_UPDATE_UNLOCK,
 	SET_WM_UB_SIZE,
+	SET_UB_POLICY,
 };
 
 struct msm_vfe_cfg_cmd2 {
@@ -488,9 +497,21 @@ struct msm_isp_event_data {
 #define V4L2_PIX_FMT_QGBRG12 v4l2_fourcc('Q', 'G', 'B', '2')
 #define V4L2_PIX_FMT_QGRBG12 v4l2_fourcc('Q', 'G', 'R', '2')
 #define V4L2_PIX_FMT_QRGGB12 v4l2_fourcc('Q', 'R', 'G', '2')
+#define V4L2_PIX_FMT_QBGGR14 v4l2_fourcc('Q', 'B', 'G', '4')
+#define V4L2_PIX_FMT_QGBRG14 v4l2_fourcc('Q', 'G', 'B', '4')
+#define V4L2_PIX_FMT_QGRBG14 v4l2_fourcc('Q', 'G', 'R', '4')
+#define V4L2_PIX_FMT_QRGGB14 v4l2_fourcc('Q', 'R', 'G', '4')
+#define V4L2_PIX_FMT_P16BGGR10 v4l2_fourcc('P', 'B', 'G', '0')
+#define V4L2_PIX_FMT_P16GBRG10 v4l2_fourcc('P', 'G', 'B', '0')
+#define V4L2_PIX_FMT_P16GRBG10 v4l2_fourcc('P', 'G', 'R', '0')
+#define V4L2_PIX_FMT_P16RGGB10 v4l2_fourcc('P', 'R', 'G', '0')
 #define V4L2_PIX_FMT_NV14 v4l2_fourcc('N', 'V', '1', '4')
 #define V4L2_PIX_FMT_NV41 v4l2_fourcc('N', 'V', '4', '1')
 #define V4L2_PIX_FMT_META v4l2_fourcc('Q', 'M', 'E', 'T')
+#define V4L2_PIX_FMT_SBGGR14 v4l2_fourcc('B', 'G', '1', '4') /* 14 BGBG.GRGR.*/
+#define V4L2_PIX_FMT_SGBRG14 v4l2_fourcc('G', 'B', '1', '4') /* 14 GBGB.RGRG.*/
+#define V4L2_PIX_FMT_SGRBG14 v4l2_fourcc('B', 'A', '1', '4') /* 14 GRGR.BGBG.*/
+#define V4L2_PIX_FMT_SRGGB14 v4l2_fourcc('R', 'G', '1', '4') /* 14 RGRG.GBGB.*/
 
 #define VIDIOC_MSM_VFE_REG_CFG \
 	_IOWR('V', BASE_VIDIOC_PRIVATE, struct msm_vfe_cfg_cmd2)
