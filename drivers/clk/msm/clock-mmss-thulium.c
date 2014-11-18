@@ -330,6 +330,8 @@ static struct rcg_clk gfx3d_clk_src = {
 static struct clk_freq_tbl ftbl_csi0_clk_src[] = {
 	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
 	F_MM( 200000000,   mmsscc_gpll0,    3,    0,     0),
+	F_MM( 274290000, mmpll4_out_main,  3.5,    0,     0),
+	F_MM( 320000000, mmpll4_out_main,    3,    0,     0),
 	F_MM( 480000000, mmpll4_out_main,    2,    0,     0),
 	F_MM( 600000000,   mmsscc_gpll0,    1,    0,     0),
 	F_END
@@ -405,6 +407,8 @@ static struct rcg_clk vfe1_clk_src = {
 static struct clk_freq_tbl ftbl_csi1_clk_src[] = {
 	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
 	F_MM( 200000000,   mmsscc_gpll0,    3,    0,     0),
+	F_MM( 274290000, mmpll4_out_main,  3.5,    0,     0),
+	F_MM( 320000000, mmpll4_out_main,    3,    0,     0),
 	F_MM( 480000000, mmpll4_out_main,    2,    0,     0),
 	F_MM( 600000000,   mmsscc_gpll0,    1,    0,     0),
 	F_END
@@ -428,6 +432,8 @@ static struct rcg_clk csi1_clk_src = {
 static struct clk_freq_tbl ftbl_csi2_clk_src[] = {
 	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
 	F_MM( 200000000,   mmsscc_gpll0,    3,    0,     0),
+	F_MM( 274290000, mmpll4_out_main,  3.5,    0,     0),
+	F_MM( 320000000, mmpll4_out_main,    3,    0,     0),
 	F_MM( 480000000, mmpll4_out_main,    2,    0,     0),
 	F_MM( 600000000,   mmsscc_gpll0,    1,    0,     0),
 	F_END
@@ -451,6 +457,8 @@ static struct rcg_clk csi2_clk_src = {
 static struct clk_freq_tbl ftbl_csi3_clk_src[] = {
 	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
 	F_MM( 200000000,   mmsscc_gpll0,    3,    0,     0),
+	F_MM( 274290000, mmpll4_out_main,  3.5,    0,     0),
+	F_MM( 320000000, mmpll4_out_main,    3,    0,     0),
 	F_MM( 480000000, mmpll4_out_main,    2,    0,     0),
 	F_MM( 600000000,   mmsscc_gpll0,    1,    0,     0),
 	F_END
@@ -3162,6 +3170,7 @@ static struct mux_clk mmss_gcc_dbg_clk = {
 		{ &camss_jpeg_dma_clk.c, 0x007b },
 		{ &camss_vfe0_ahb_clk.c, 0x0086 },
 		{ &camss_vfe1_ahb_clk.c, 0x0087 },
+		{ &gpu_aon_isense_clk.c, 0x0088 },
 		{ &fd_core_clk.c, 0x0089 },
 		{ &fd_core_uar_clk.c, 0x008a },
 		{ &fd_ahb_clk.c, 0x008c },
@@ -3198,7 +3207,8 @@ static struct mux_clk mmss_gcc_dbg_clk = {
 		{ &throttle_mdss_axi_clk.c, 0x00ab },
 		{ &throttle_video_axi_clk.c, 0x00ac },
 		{ &mmagic_camss_noc_cfg_ahb_clk.c, 0x00ad },
-		{ &mmagic_video_noc_cfg_ahb_clk.c, 0x00ae },
+		{ &mmagic_mdss_noc_cfg_ahb_clk.c, 0x00ae },
+		{ &mmagic_video_noc_cfg_ahb_clk.c, 0x00af },
 		{ &mmagic_bimc_noc_cfg_ahb_clk.c, 0x00b0 },
 	),
 	.c = {
