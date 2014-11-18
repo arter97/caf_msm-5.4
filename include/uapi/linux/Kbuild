@@ -294,6 +294,7 @@ header-y += msm_ipc.h
 header-y += msm_kgsl.h
 header-y += msm_mdp.h
 header-y += msm_mdp_ext.h
+header-y += mdss_rotator.h
 header-y += msm_pft.h
 header-y += msm_q6vdec.h
 header-y += msm_q6venc.h
