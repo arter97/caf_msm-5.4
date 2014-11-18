@@ -167,8 +167,7 @@ static int switch_reverse_probe(struct platform_device *pdev)
 	struct reverse_reverse_data *reverse_data;
 	unsigned long irq_flags;
 	int ret = 0;
-
-	pr_debug("%s: entry\n", __func__);
+	pr_debug("%s: kpi entry\n", __func__);
 
 	if (!pdata)
 		return -EBUSY;
@@ -257,9 +256,7 @@ static int switch_reverse_probe(struct platform_device *pdev)
 	reverse_detection_work(&reverse_data->detect_delayed_work.work);
 	enable_irq(reverse_data->irq);
 
-	pr_debug("%s: exit\n", __func__);
-
-
+	pr_debug("%s: kpi exit\n", __func__);
 	return 0;
 
 err_free_gpio:
