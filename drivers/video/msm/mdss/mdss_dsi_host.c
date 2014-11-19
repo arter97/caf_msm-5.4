@@ -1218,7 +1218,9 @@ int mdss_dsi_cmds_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 		if (ctrl_rev >= MDSS_DSI_HW_REV_101) {
 			/* clear the RDBK_DATA registers */
 			MIPI_OUTP(ctrl->ctrl_base + 0x01d4, 0x1);
+			wmb(); /* make sure the RDBK registers are cleared */
 			MIPI_OUTP(ctrl->ctrl_base + 0x01d4, 0x0);
+			wmb(); /* make sure the RDBK registers are cleared */
 		}
 
 		mdss_dsi_wait4video_eng_busy(ctrl);	/* video mode only */
