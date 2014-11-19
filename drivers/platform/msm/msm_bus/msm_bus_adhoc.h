@@ -37,6 +37,7 @@ struct msm_bus_noc_ops {
 	int (*set_bw)(struct msm_bus_node_device_type *dev,
 			void __iomem *qos_base, uint32_t qos_off,
 			uint32_t qos_delta, uint32_t qos_freq);
+	bool (*update_bw_reg)(int mode);
 };
 
 struct nodebw {
