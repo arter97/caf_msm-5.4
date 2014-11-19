@@ -19,3 +19,7 @@ obj-$(CONFIG_SND_SOC_CPE) += snd-soc-cpe.o
 # for MSM 8994 sound card driver
 snd-soc-msm8994-objs := msm8994.o
 obj-$(CONFIG_SND_SOC_MSM8994) += snd-soc-msm8994.o
+
+# for MSMTHULIUM sound card driver
+snd-soc-msmthulium-objs := msmthulium.o
+obj-$(CONFIG_SND_SOC_MSMTHULIUM) += snd-soc-msmthulium.o

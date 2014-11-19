@@ -1367,3 +1367,96 @@ Example:
 		asoc-codec = <&stub>;
 		asoc-codec-names = "msm-stub-codec.1";
 	};
+
+* MSMTHULIUM ASoC Machine driver
+
+Required properties:
+- compatible : "qcom,msmthulium-asoc-snd"
+- qcom,model : The user-visible name of this sound card.
+- clock-names : clock name defined for external clock.
+- clocks : external clock defined for codec clock.
+- pinctrl-names : pinctrl state names for each pin group configuration.
+- pinctrl-x : defines pinctrl state for each pin group
+
+Optional properties:
+- qcom,ext-ult-spk-amp-gpio : GPIO to enable ultrasound emitter amp.
+- qcom,mbhc-audio-jack-type : String to indicate the jack type on the hardware.
+		Possible Values:
+		4-pole-jack : Jack on the hardware is 4-pole.
+		5-pole-jack : Jack on the hardware is 5-pole.
+		6-pole-jack : Jack on the hardware is 6-pole.
+
+Example:
+
+	sound {
+	compatible = "qcom,msmthulium-asoc-snd";
+	qcom,model = "msmthulium-tomtom-snd-card";
+
+	qcom,audio-routing =
+		"RX_BIAS", "MCLK",
+		"LDO_H", "MCLK",
+		"AIF4 MAD", "MCLK",
+		"ultrasound amp", "LINEOUT1",
+		"ultrasound amp", "LINEOUT3",
+		"AMIC1", "MIC BIAS1 Internal1",
+		"MIC BIAS1 Internal1", "Handset Mic",
+		"AMIC2", "MIC BIAS2 External",
+		"MIC BIAS2 External", "Headset Mic",
+		"AMIC3", "MIC BIAS2 External",
+		"MIC BIAS2 External", "ANCRight Headset Mic",
+		"AMIC4", "MIC BIAS2 External",
+		"MIC BIAS2 External", "ANCLeft Headset Mic",
+		"DMIC1", "MIC BIAS1 External",
+		"MIC BIAS1 External", "Digital Mic1",
+		"DMIC2", "MIC BIAS1 External",
+		"MIC BIAS1 External", "Digital Mic2",
+		"DMIC3", "MIC BIAS3 External",
+		"MIC BIAS3 External", "Digital Mic3",
+		"DMIC4", "MIC BIAS3 External",
+		"MIC BIAS3 External", "Digital Mic4",
+		"DMIC5", "MIC BIAS4 External",
+		"MIC BIAS4 External", "Digital Mic5",
+		"DMIC6", "MIC BIAS4 External",
+		"MIC BIAS4 External", "Digital Mic6";
+
+	clock-names = "osr_clk";
+	clocks = <&clock_rpm clk_div_clk1>;
+	pinctrl-names= "mi2s-sleep",
+			"mi2s-active",
+			"auxpcm-sleep",
+			"auxpcm-active";
+	pinctrl-0 = <&pri_mi2s_sleep>;
+	pinctrl-1 = <&pri_mi2s_active>;
+	pinctrl-2 = <&sec_aux_pcm_sleep>;
+	pinctrl-3 = <&sec_aux_pcm_active>;
+	qcom,mbhc-audio-jack-type = "6-pole-jack";
+		asoc-platform = <&pcm0>, <&pcm1>, <&pcm2>, <&voip>, <&voice>,
+				<&loopback>, <&compress>, <&hostless>,
+				<&afe>, <&lsm>, <&routing>, <&cpe>, <&compr>;
+		asoc-platform-names = "msm-pcm-dsp.0", "msm-pcm-dsp.1", "msm-pcm-dsp.2",
+				"msm-voip-dsp", "msm-pcm-voice", "msm-pcm-loopback",
+				"msm-compress-dsp", "msm-pcm-hostless", "msm-pcm-afe",
+				"msm-lsm-client", "msm-pcm-routing", "msm-cpe-lsm",
+				"msm-compr-dsp";
+		asoc-cpu = <&dai_pri_auxpcm>, <&dai_sec_auxpcm>, <&dai_hdmi>, <&dai_mi2s>,
+				<&sb_0_rx>, <&sb_0_tx>, <&sb_1_rx>, <&sb_1_tx>,
+				<&sb_2_rx>, <&sb_2_tx>, <&sb_3_rx>, <&sb_3_tx>,
+				<&sb_4_rx>, <&sb_4_tx>, <&sb_5_tx>, <&afe_pcm_rx>,
+				<&afe_pcm_tx>, <&afe_proxy_rx>, <&afe_proxy_tx>,
+				<&incall_record_rx>, <&incall_record_tx>,
+				<&incall_music_rx>, <&incall_music2_rx>;
+		asoc-cpu-names = "msm-dai-q6-auxpcm.1", "msm-dai-q6-auxpcm.2",
+				"msm-dai-q6-hdmi.8", "msm-dai-q6-mi2s.2",
+				"msm-dai-q6-dev.16384", "msm-dai-q6-dev.16385",
+				"msm-dai-q6-dev.16386", "msm-dai-q6-dev.16387",
+				"msm-dai-q6-dev.16388", "msm-dai-q6-dev.16389",
+				"msm-dai-q6-dev.16390", "msm-dai-q6-dev.16391",
+				"msm-dai-q6-dev.16392", "msm-dai-q6-dev.16393",
+				"msm-dai-q6-dev.16395", "msm-dai-q6-dev.224",
+				"msm-dai-q6-dev.225", "msm-dai-q6-dev.241",
+				"msm-dai-q6-dev.240", "msm-dai-q6-dev.32771",
+				"msm-dai-q6-dev.32772", "msm-dai-q6-dev.32773",
+				"msm-dai-q6-dev.32770";
+		asoc-codec = <&stub_codec>;
+		asoc-codec-names = "msm-stub-codec.1";
+	};
