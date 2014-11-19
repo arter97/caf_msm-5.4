@@ -1214,6 +1214,15 @@
 		qcom,ssctl-instance-id = <0x14>;
 		qcom,firmware-name = "adsp";
 		memory-region = <&peripheral_mem>;
+
+		/* GPIO inputs from lpass */
+		qcom,gpio-err-fatal = <&smp2pgpio_ssr_smp2p_2_in 0 0>;
+		qcom,gpio-proxy-unvote = <&smp2pgpio_ssr_smp2p_2_in 2 0>;
+		qcom,gpio-err-ready = <&smp2pgpio_ssr_smp2p_2_in 1 0>;
+		qcom,gpio-stop-ack = <&smp2pgpio_ssr_smp2p_2_in 3 0>;
+
+		/* GPIO output to lpass */
+		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_2_out 0 0>;
 	};
 
 	qcom,venus@ce0000 {
@@ -1270,6 +1279,15 @@
 		qcom,ssctl-instance-id = <0x16>;
 		qcom,firmware-name = "slpi";
 		memory-region = <&peripheral_mem>;
+
+		/* GPIO inputs from ssc */
+		qcom,gpio-err-fatal = <&smp2pgpio_ssr_smp2p_3_in 0 0>;
+		qcom,gpio-proxy-unvote = <&smp2pgpio_ssr_smp2p_3_in 2 0>;
+		qcom,gpio-err-ready = <&smp2pgpio_ssr_smp2p_3_in 1 0>;
+		qcom,gpio-stop-ack = <&smp2pgpio_ssr_smp2p_3_in 3 0>;
+
+		/* GPIO output to ssc */
+		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_3_out 0 0>;
 	};
 
 	tsens: tsens@4a9000 {
