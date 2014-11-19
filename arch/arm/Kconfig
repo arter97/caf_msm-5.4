@@ -1825,6 +1825,14 @@ config HW_PERF_EVENTS
 	  Enable hardware performance counter support for perf events. If
 	  disabled, perf events will use software events only.
 
+config PERF_EVENTS_USERMODE
+	bool "Enable usermode access for perf events"
+	depends on PERF_EVENTS
+	help
+	  Enable user-mode access to performance counters for perf events.
+	  If enabled, the access permissions allowing CPU performance
+	  counters to be accessed from user-mode are set.
+
 config SYS_SUPPORTS_HUGETLBFS
        def_bool y
        depends on ARM_LPAE
@@ -1835,6 +1843,14 @@ config HAVE_ARCH_TRANSPARENT_HUGEPAGE
 
 config ARCH_WANT_GENERAL_HUGETLB
 	def_bool y
+
+config PERF_EVENTS_RESET_PMU_DEBUGFS
+	bool "Reset PMU via debugfs node"
+	depends on PERF_EVENTS
+	help
+	  Enable the debugfs node that can be used to reset PMUs and all
+	  state variables associated with PMUs. If enabled, PMU and internal
+	  state variable are cleared.
 
 source "mm/Kconfig"
 

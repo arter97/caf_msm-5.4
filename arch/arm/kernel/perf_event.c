@@ -135,6 +135,9 @@ u64 armpmu_event_update(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 	u64 delta, prev_raw_count, new_raw_count;
 
+	if (event->state <= PERF_EVENT_STATE_OFF)
+		return 0;
+
 again:
 	prev_raw_count = local64_read(&hwc->prev_count);
 	new_raw_count = armpmu->read_counter(event);
@@ -217,6 +220,10 @@ armpmu_del(struct perf_event *event, int flags)
 	hw_events->events[idx] = NULL;
 	clear_bit(idx, hw_events->used_mask);
 
+	/* Clear event constraints. */
+	if (armpmu->clear_event_constraints)
+		armpmu->clear_event_constraints(event);
+
 	perf_event_update_userpage(event);
 }
 
@@ -234,6 +241,17 @@ armpmu_add(struct perf_event *event, int flags)
 		return 0;
 
 	perf_pmu_disable(event->pmu);
+	/*
+	 * Tests if event is constrained. If not sets it so that next
+	 * collision can be detected.
+	 */
+	if (armpmu->test_set_event_constraints)
+		if (armpmu->test_set_event_constraints(event) < 0) {
+			pr_err("Event: %llx failed constraint check.\n",
+			       event->attr.config);
+			event->state = PERF_EVENT_STATE_OFF;
+			goto out;
+		}
 
 	/* If we don't have a space for the counter then finish early. */
 	idx = armpmu->get_event_idx(hw_events, event);
@@ -310,7 +328,7 @@ validate_group(struct perf_event *event)
 
 static irqreturn_t armpmu_dispatch_irq(int irq, void *dev)
 {
-	struct arm_pmu *armpmu = (struct arm_pmu *) dev;
+	struct arm_pmu *armpmu = *(struct arm_pmu **) dev;
 	struct platform_device *plat_device = armpmu->plat_device;
 	struct arm_pmu_platdata *plat = dev_get_platdata(&plat_device->dev);
 	int ret;
@@ -318,37 +336,76 @@ static irqreturn_t armpmu_dispatch_irq(int irq, void *dev)
 
 	start_clock = sched_clock();
 	if (plat && plat->handle_irq)
-		ret = plat->handle_irq(irq, dev, armpmu->handle_irq);
+		ret = plat->handle_irq(irq, armpmu, armpmu->handle_irq);
 	else
-		ret = armpmu->handle_irq(irq, dev);
+		ret = armpmu->handle_irq(irq, armpmu);
 	finish_clock = sched_clock();
 
 	perf_sample_event_took(finish_clock - start_clock);
 	return ret;
 }
 
+static int
+armpmu_generic_request_irq(int irq, irq_handler_t *handle_irq, void *dev_id)
+{
+	return request_irq(irq, *handle_irq,
+			   IRQF_DISABLED | IRQF_NOBALANCING,
+			   "arm-pmu", dev_id);
+}
+
+static void
+armpmu_generic_free_irq(int irq, void *dev_id)
+{
+	if (irq >= 0)
+		free_irq(irq, dev_id);
+}
+
 static void
 armpmu_release_hardware(struct arm_pmu *armpmu)
 {
+	/*
+	 * If a cpu comes online during this function, do not enable its irq.
+	 * If a cpu goes offline, it should disable its irq.
+	 */
+	armpmu->pmu_state = ARM_PMU_STATE_GOING_DOWN;
 	armpmu->free_irq(armpmu);
 	pm_runtime_put_sync(&armpmu->plat_device->dev);
+	armpmu->pmu_state = ARM_PMU_STATE_OFF;
 }
 
 static int
 armpmu_reserve_hardware(struct arm_pmu *armpmu)
 {
 	int err;
+	int cpu;
+	struct arm_pmu_platdata *plat;
 	struct platform_device *pmu_device = armpmu->plat_device;
 
 	if (!pmu_device)
 		return -ENODEV;
 
 	pm_runtime_get_sync(&pmu_device->dev);
+
+	plat = dev_get_platdata(&pmu_device->dev);
+	if (plat && plat->request_pmu_irq)
+		armpmu->request_pmu_irq = plat->request_pmu_irq;
+	else if (!armpmu->request_pmu_irq)
+		armpmu->request_pmu_irq = armpmu_generic_request_irq;
+
+	if (plat && plat->free_pmu_irq)
+		armpmu->free_pmu_irq = plat->free_pmu_irq;
+	else if (!armpmu->free_pmu_irq)
+		armpmu->free_pmu_irq = armpmu_generic_free_irq;
+
 	err = armpmu->request_irq(armpmu, armpmu_dispatch_irq);
 	if (err) {
 		armpmu_release_hardware(armpmu);
 		return err;
 	}
+	armpmu->pmu_state = ARM_PMU_STATE_RUNNING;
+	if (armpmu->reset)
+		for_each_cpu(cpu, cpu_online_mask)
+			smp_call_function_single(cpu, armpmu->reset, armpmu, 1);
 
 	return 0;
 }
@@ -479,6 +536,24 @@ static void armpmu_enable(struct pmu *pmu)
 	struct arm_pmu *armpmu = to_arm_pmu(pmu);
 	struct pmu_hw_events *hw_events = armpmu->get_hw_events();
 	int enabled = bitmap_weight(hw_events->used_mask, armpmu->num_events);
+	int idx;
+
+	if (*hw_events->from_idle) {
+		for (idx = 0; idx <= armpmu->num_events; ++idx) {
+			struct perf_event *event = hw_events->events[idx];
+
+			if (!event)
+				continue;
+
+			armpmu->enable(event);
+		}
+
+		/* Reset bit so we don't needlessly re-enable counters.*/
+		*hw_events->from_idle = 0;
+	}
+
+	/* So we don't start the PMU before enabling counters after idle. */
+	barrier();
 
 	if (enabled)
 		armpmu->start(armpmu);
@@ -530,6 +605,7 @@ static void armpmu_init(struct arm_pmu *armpmu)
 		.start		= armpmu_start,
 		.stop		= armpmu_stop,
 		.read		= armpmu_read,
+		.events_across_hotplug = 1,
 	};
 }
 
