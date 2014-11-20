@@ -310,7 +310,7 @@ static int cpu_power_select(struct cpuidle_device *dev,
 		if (best_level_pwr >= pwr) {
 			best_level = i;
 			best_level_pwr = pwr;
-			if (next_event_us < sleep_us &&
+			if (next_event_us && next_event_us < sleep_us &&
 				(mode != MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT))
 				modified_time_us
 					= next_event_us - lvl_latency_us;
@@ -438,8 +438,8 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 
 	spin_lock(&cluster->sync_lock);
 
-	if (!cpumask_equal(&cluster->num_childs_in_sync,
-					&cluster->child_cpus)) {
+	if (!cpumask_equal(&cluster->num_childs_in_sync, &cluster->child_cpus)
+			|| is_IPI_pending(&cluster->num_childs_in_sync)) {
 		spin_unlock(&cluster->sync_lock);
 		return -EPERM;
 	}
