@@ -114,7 +114,7 @@ int eem_bind_config(struct usb_configuration *c);
 int rndis_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN]);
 int rndis_bind_config_vendor(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
 				u32 vendorID, const char *manufacturer);
-int rndis_rx_trigger(void);
+int rndis_rx_trigger(bool);
 
 #else
 
@@ -132,7 +132,7 @@ rndis_bind_config_vendor(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
 }
 
 static inline int
-rndis_rx_trigger(void)
+rndis_rx_trigger(bool)
 {
 	return 0;
 }
