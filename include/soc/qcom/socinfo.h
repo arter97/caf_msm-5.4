@@ -506,18 +506,6 @@ static inline int cpu_is_msm8974pro_ac(void)
 #endif
 }
 
-static inline int cpu_is_msm8909(void)
-{
-#if defined(CONFIG_ARCH_MSM8909) || defined(CONFIG_ARCH_MDMFERRUM)
-	enum msm_cpu cpu = socinfo_get_msm_cpu();
-
-	BUG_ON(cpu == MSM_CPU_UNKNOWN);
-	return cpu == MSM_CPU_8909;
-#else
-	return 0;
-#endif
-}
-
 static inline int cpu_is_msm8916(void)
 {
 #ifdef CONFIG_ARCH_MSM8916
@@ -568,30 +556,6 @@ static inline int cpu_is_msmtellurium(void)
 	return 0;
 #endif
 
-}
-
-static inline int cpu_is_msm8226(void)
-{
-#ifdef CONFIG_ARCH_MSM8226
-	enum msm_cpu cpu = socinfo_get_msm_cpu();
-
-	BUG_ON(cpu == MSM_CPU_UNKNOWN);
-	return cpu == MSM_CPU_8226;
-#else
-	return 0;
-#endif
-}
-
-static inline int cpu_is_msm8610(void)
-{
-#ifdef CONFIG_ARCH_MSM8610
-	enum msm_cpu cpu = socinfo_get_msm_cpu();
-
-	BUG_ON(cpu == MSM_CPU_UNKNOWN);
-	return cpu == MSM_CPU_8610;
-#else
-	return 0;
-#endif
 }
 
 static inline int cpu_is_msm8625q(void)
