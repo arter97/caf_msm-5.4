@@ -968,7 +968,7 @@ int iommu_unmap_range(struct iommu_domain *domain, unsigned int iova,
 	BUG_ON(iova & (~PAGE_MASK));
 
 	if (unlikely(domain->ops->unmap_range == NULL))
-		return iommu_unmap(domain, iova, len);
+		return !iommu_unmap(domain, iova, len);
 	else
 		return domain->ops->unmap_range(domain, iova, len);
 }
