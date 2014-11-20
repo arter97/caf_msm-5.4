@@ -154,11 +154,13 @@ EXPORT_SYMBOL(kgsl_pwrscale_update);
 void kgsl_pwrscale_disable(struct kgsl_device *device)
 {
 	BUG_ON(!mutex_is_locked(&device->mutex));
-	if (device->pwrscale.devfreq)
+
+	if (device->pwrscale.enabled) {
 		queue_work(device->pwrscale.devfreq_wq,
 			&device->pwrscale.devfreq_suspend_ws);
-	device->pwrscale.enabled = false;
-	kgsl_pwrctrl_pwrlevel_change(device, KGSL_PWRLEVEL_TURBO);
+		device->pwrscale.enabled = false;
+		kgsl_pwrctrl_pwrlevel_change(device, KGSL_PWRLEVEL_TURBO);
+	}
 }
 EXPORT_SYMBOL(kgsl_pwrscale_disable);
 
@@ -173,18 +175,10 @@ void kgsl_pwrscale_enable(struct kgsl_device *device)
 {
 	BUG_ON(!mutex_is_locked(&device->mutex));
 
-	if (device->pwrscale.devfreq) {
+	if (!device->pwrscale.enabled) {
+		device->pwrscale.enabled = true;
 		queue_work(device->pwrscale.devfreq_wq,
 			&device->pwrscale.devfreq_resume_ws);
-		device->pwrscale.enabled = true;
-	} else {
-		/*
-		 * Don't enable it if devfreq is not set and let the device
-		 * run at default level;
-		 */
-		kgsl_pwrctrl_pwrlevel_change(device,
-					device->pwrctrl.default_pwrlevel);
-		device->pwrscale.enabled = false;
 	}
 }
 EXPORT_SYMBOL(kgsl_pwrscale_enable);
@@ -475,10 +469,8 @@ int kgsl_pwrscale_init(struct device *dev, const char *governor)
 	}
 
 	devfreq = devfreq_add_device(dev, &pwrscale->profile, governor, NULL);
-	if (IS_ERR(devfreq)) {
-		device->pwrscale.enabled = false;
+	if (IS_ERR(devfreq))
 		return PTR_ERR(devfreq);
-	}
 
 	pwrscale->devfreq = devfreq;
 
@@ -510,8 +502,6 @@ void kgsl_pwrscale_close(struct kgsl_device *device)
 	BUG_ON(!mutex_is_locked(&device->mutex));
 
 	pwrscale = &device->pwrscale;
-	if (!pwrscale->devfreq)
-		return;
 	flush_workqueue(pwrscale->devfreq_wq);
 	destroy_workqueue(pwrscale->devfreq_wq);
 	devfreq_remove_device(device->pwrscale.devfreq);
