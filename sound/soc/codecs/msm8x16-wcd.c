@@ -2434,8 +2434,6 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"RX3 CHAIN", NULL, "RX3 CLK"},
 	{"RX1 CHAIN", NULL, "RX1 MIX2"},
 	{"RX2 CHAIN", NULL, "RX2 MIX2"},
-	{"RX1 CHAIN", NULL, "RX1 MIX1"},
-	{"RX2 CHAIN", NULL, "RX2 MIX1"},
 	{"RX3 CHAIN", NULL, "RX3 MIX1"},
 
 	{"RX1 MIX1", NULL, "RX1 MIX1 INP1"},
@@ -2445,7 +2443,9 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"RX2 MIX1", NULL, "RX2 MIX1 INP2"},
 	{"RX3 MIX1", NULL, "RX3 MIX1 INP1"},
 	{"RX3 MIX1", NULL, "RX3 MIX1 INP2"},
+	{"RX1 MIX2", NULL, "RX1 MIX1"},
 	{"RX1 MIX2", NULL, "RX1 MIX2 INP1"},
+	{"RX2 MIX2", NULL, "RX2 MIX1"},
 	{"RX2 MIX2", NULL, "RX2 MIX2 INP1"},
 
 	{"RX1 MIX1 INP1", "RX1", "I2S RX1"},
@@ -2945,16 +2945,8 @@ static const struct snd_soc_dapm_widget msm8x16_wcd_dapm_widgets[] = {
 			SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 			SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
 
-	SND_SOC_DAPM_MIXER_E("RX1 MIX1",
-			MSM8X16_WCD_A_CDC_CLK_RX_B1_CTL, 0, 0, NULL, 0,
-			msm8x16_wcd_codec_enable_interpolator,
-			SND_SOC_DAPM_POST_PMU |
-			SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MIXER_E("RX2 MIX1",
-			MSM8X16_WCD_A_CDC_CLK_RX_B1_CTL, 1, 0, NULL, 0,
-			msm8x16_wcd_codec_enable_interpolator,
-			SND_SOC_DAPM_POST_PMU |
-			SND_SOC_DAPM_POST_PMD),
+	SND_SOC_DAPM_MIXER("RX1 MIX1", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_MIXER("RX2 MIX1", SND_SOC_NOPM, 0, 0, NULL, 0),
 
 	SND_SOC_DAPM_MIXER_E("RX1 MIX2",
 		MSM8X16_WCD_A_CDC_CLK_RX_B1_CTL, 0, 0, NULL,
@@ -3209,6 +3201,9 @@ static struct regulator *wcd8x16_wcd_codec_find_regulator(
 
 static int msm8x16_wcd_device_down(struct snd_soc_codec *codec)
 {
+	struct msm8916_asoc_mach_data *pdata = NULL;
+
+	pdata = snd_soc_card_get_drvdata(codec->card);
 	dev_dbg(codec->dev, "%s: device down!\n", __func__);
 	msm8x16_wcd_write(codec,
 		MSM8X16_WCD_A_ANALOG_TX_1_EN, 0x3);
@@ -3225,6 +3220,7 @@ static int msm8x16_wcd_device_down(struct snd_soc_codec *codec)
 
 	msm8x16_wcd_write(codec, MSM8X16_WCD_A_DIGITAL_PERPH_RESET_CTL4, 0x1);
 	msm8x16_wcd_write(codec, MSM8X16_WCD_A_ANALOG_PERPH_RESET_CTL4, 0x1);
+	atomic_set(&pdata->mclk_enabled, false);
 	snd_soc_card_change_online_state(codec->card, 0);
 	return 0;
 }
