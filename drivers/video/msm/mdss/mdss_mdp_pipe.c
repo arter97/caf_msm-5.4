@@ -1184,6 +1184,7 @@ static int mdss_mdp_image_setup(struct mdss_mdp_pipe *pipe,
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	struct mdss_rect sci, dst, src;
 	bool rotation = false;
+	u32 panel_orientation = 0;
 
 	pr_debug("pnum=%d wh=%dx%d src={%d,%d,%d,%d} dst={%d,%d,%d,%d}\n",
 			pipe->num, pipe->img_width, pipe->img_height,
@@ -1228,6 +1229,15 @@ static int mdss_mdp_image_setup(struct mdss_mdp_pipe *pipe,
 	    !pipe->mixer_left->ctl->is_video_mode &&
 	    !pipe->src_split_req)
 		mdss_mdp_crop_rect(&src, &dst, &sci);
+
+	if (!(pipe->mixer_left->rotator_mode)) {
+		panel_orientation = pipe->mixer_left->ctl->mfd->panel_orientation;
+		if (panel_orientation & MDP_FLIP_LR)
+			dst.x =  pipe->mixer_left->ctl->roi.w - dst.x - dst.w;
+
+		if (panel_orientation & MDP_FLIP_UD)
+			dst.y =  pipe->mixer_left->ctl->roi.h - dst.y - dst.h;
+	}
 
 	src_size = (src.h << 16) | src.w;
 	src_xy = (src.y << 16) | src.x;
