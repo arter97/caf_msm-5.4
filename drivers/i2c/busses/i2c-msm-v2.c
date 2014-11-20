@@ -3278,6 +3278,7 @@ static void i2c_msm_pm_xfer_end(struct i2c_msm_ctrl *ctrl)
 
 	disable_irq(ctrl->rsrcs.irq);
 
+	/* efectively disabling our ISR */
 	atomic_set(&ctrl->xfer.is_active, 0);
 
 	if (cons->is_init)
