@@ -2992,6 +2992,7 @@ void msm_bam_hsic_reset(void)
 		return;
 	}
 
+	info[HSIC_BAM].pending_bam_reset = 0;
 	pdata = ctx.usb_bam_pdev->dev.platform_data;
 
 	WARN_ON(ctx.pipes_enabled_per_bam[HSIC_BAM] != 0);
