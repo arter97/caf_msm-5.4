@@ -25,7 +25,7 @@ config ARCH_APQ8084
 	select HAVE_CLK_PREPARE
 	select MSM_IRQ
 	select PINCTRL
-	select MSM_SPM_V2
+	select MSM_SPM
 	select MSM_L2_SPM
 	select MSM_PM if PM
 	select ARCH_DMA_ADDR_T_64BIT if ARM_LPAE
