@@ -1381,7 +1381,7 @@ static int rmnet_ioctl_extended(struct net_device *dev, struct ifreq *ifr)
 			    sizeof(struct rmnet_ioctl_extended_s));
 
 	if (rc) {
-		DBG("%s(): copy_from_user() failed\n", __func__);
+		DBG(eth_dev, "%s(): copy_from_user() failed\n", __func__);
 		return rc;
 	}
 
@@ -1402,8 +1402,8 @@ static int rmnet_ioctl_extended(struct net_device *dev, struct ifreq *ifr)
 			eth_dev->port_usb->is_fixed = true;
 			eth_dev->port_usb->fixed_out_len =
 				(size_t) ext_cmd.u.data;
-			DBG("[%s] rmnet_ioctl(): SET MRU to %u\n", dev->name,
-				eth_dev->mru);
+			DBG(eth_dev, "[%s] rmnet_ioctl(): SET MRU to %u\n",
+				dev->name, eth_dev->port_usb->fixed_out_len);
 		} else {
 			pr_err("[%s]: %s: SET MRU failed. Cable disconnected\n",
 				dev->name, __func__);
@@ -1436,7 +1436,7 @@ static int rmnet_ioctl_extended(struct net_device *dev, struct ifreq *ifr)
 			  sizeof(struct rmnet_ioctl_extended_s));
 
 	if (rc)
-		DBG("%s(): copy_to_user() failed\n", __func__);
+		DBG(eth_dev, "%s(): copy_to_user() failed\n", __func__);
 	return rc;
 }
 
