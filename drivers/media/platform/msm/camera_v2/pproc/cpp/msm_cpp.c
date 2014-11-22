@@ -59,18 +59,23 @@
 #define CPP_FW_VERSION_1_4_0	0x10040000
 #define CPP_FW_VERSION_1_6_0	0x10060000
 #define CPP_FW_VERSION_1_8_0	0x10080000
+#define CPP_FW_VERSION_1_10_0	0x10100000
 
 /* stripe information offsets in frame command */
 #define STRIPE_BASE_FW_1_2_0	130
 #define STRIPE_BASE_FW_1_4_0	140
 #define STRIPE_BASE_FW_1_6_0	464
 #define STRIPE_BASE_FW_1_8_0	493
+#define STRIPE_BASE_FW_1_10_0	553
+
 
 
 /* dump the frame command before writing to the hardware */
 #define  MSM_CPP_DUMP_FRM_CMD 0
 
 #define CPP_CLK_INFO_MAX 16
+
+#define MSM_CPP_IRQ_MASK_VAL 0x7c8
 
 static int msm_cpp_buffer_ops(struct cpp_device *cpp_dev,
 	uint32_t buff_mgr_ops, struct msm_buf_mngr_info *buff_mgr_info);
@@ -592,31 +597,31 @@ static irqreturn_t msm_cpp_irq(int irq_num, void *data)
 	} else if (irq_status & 0x7C0) {
 		pr_err("%s: fatal error: 0x%x\n", __func__, irq_status);
 		pr_err("%s: DEBUG_SP: 0x%x\n", __func__,
-			msm_camera_io_r(cpp_dev->cpp_hw_base + 0x40));
+			msm_camera_io_r(cpp_dev->base + 0x40));
 		pr_err("%s: DEBUG_T: 0x%x\n", __func__,
-			msm_camera_io_r(cpp_dev->cpp_hw_base + 0x44));
+			msm_camera_io_r(cpp_dev->base + 0x44));
 		pr_err("%s: DEBUG_N: 0x%x\n", __func__,
-			msm_camera_io_r(cpp_dev->cpp_hw_base + 0x48));
+			msm_camera_io_r(cpp_dev->base + 0x48));
 		pr_err("%s: DEBUG_R: 0x%x\n", __func__,
-			msm_camera_io_r(cpp_dev->cpp_hw_base + 0x4C));
+			msm_camera_io_r(cpp_dev->base + 0x4C));
 		pr_err("%s: DEBUG_OPPC: 0x%x\n", __func__,
-			msm_camera_io_r(cpp_dev->cpp_hw_base + 0x50));
+			msm_camera_io_r(cpp_dev->base + 0x50));
 		pr_err("%s: DEBUG_MO: 0x%x\n", __func__,
-			msm_camera_io_r(cpp_dev->cpp_hw_base + 0x54));
+			msm_camera_io_r(cpp_dev->base + 0x54));
 		pr_err("%s: DEBUG_TIMER0: 0x%x\n", __func__,
-			msm_camera_io_r(cpp_dev->cpp_hw_base + 0x60));
+			msm_camera_io_r(cpp_dev->base + 0x60));
 		pr_err("%s: DEBUG_TIMER1: 0x%x\n", __func__,
-			msm_camera_io_r(cpp_dev->cpp_hw_base + 0x64));
+			msm_camera_io_r(cpp_dev->base + 0x64));
 		pr_err("%s: DEBUG_GPI: 0x%x\n", __func__,
-			msm_camera_io_r(cpp_dev->cpp_hw_base + 0x70));
+			msm_camera_io_r(cpp_dev->base + 0x70));
 		pr_err("%s: DEBUG_GPO: 0x%x\n", __func__,
-			msm_camera_io_r(cpp_dev->cpp_hw_base + 0x74));
+			msm_camera_io_r(cpp_dev->base + 0x74));
 		pr_err("%s: DEBUG_T0: 0x%x\n", __func__,
-			msm_camera_io_r(cpp_dev->cpp_hw_base + 0x80));
+			msm_camera_io_r(cpp_dev->base + 0x80));
 		pr_err("%s: DEBUG_R0: 0x%x\n", __func__,
-			msm_camera_io_r(cpp_dev->cpp_hw_base + 0x84));
+			msm_camera_io_r(cpp_dev->base + 0x84));
 		pr_err("%s: DEBUG_T1: 0x%x\n", __func__,
-			msm_camera_io_r(cpp_dev->cpp_hw_base + 0x88));
+			msm_camera_io_r(cpp_dev->base + 0x88));
 		pr_err("%s: DEBUG_R1: 0x%x\n", __func__,
 			msm_camera_io_r(cpp_dev->cpp_hw_base + 0x8C));
 	}
@@ -1547,7 +1552,8 @@ static int msm_cpp_cfg_frame(struct cpp_device *cpp_dev,
 		CPP_DBG("out_phyaddr1= %08x\n", (uint32_t)out_phyaddr1);
 	}
 
-	if ((cpp_dev->fw_version & 0xffff0000) != CPP_FW_VERSION_1_8_0) {
+	if ((cpp_dev->fw_version & 0xffff0000) != CPP_FW_VERSION_1_8_0 &&
+		(cpp_dev->fw_version & 0xffff0000) != CPP_FW_VERSION_1_10_0) {
 		num_stripes = ((cpp_frame_msg[12] >> 20) & 0x3FF) +
 			((cpp_frame_msg[12] >> 10) & 0x3FF) +
 			(cpp_frame_msg[12] & 0x3FF);
@@ -1610,11 +1616,63 @@ static int msm_cpp_cfg_frame(struct cpp_device *cpp_dev,
 			((cpp_frame_msg[9] >> 10) & 0x3FF) +
 			(cpp_frame_msg[9] & 0x3FF);
 
-		stripe_base = STRIPE_BASE_FW_1_8_0;
-
+		if ((cpp_dev->fw_version & 0xffff0000) ==
+			CPP_FW_VERSION_1_8_0) {
+			stripe_base = STRIPE_BASE_FW_1_8_0;
+			for (i = 0; i < num_stripes; i++) {
+				cpp_frame_msg[stripe_base + 8 + i * 48] +=
+					(uint32_t) in_phyaddr;
+				cpp_frame_msg[stripe_base + 14 + i * 48] +=
+					(uint32_t) tnr_scratch_buffer0;
+				cpp_frame_msg[stripe_base + 20 + i * 48] +=
+					(uint32_t) out_phyaddr0;
+				cpp_frame_msg[stripe_base + 21 + i * 48] +=
+					(uint32_t) out_phyaddr1;
+				cpp_frame_msg[stripe_base + 22 + i * 48] +=
+					(uint32_t) out_phyaddr0;
+				cpp_frame_msg[stripe_base + 23 + i * 48] +=
+					(uint32_t) out_phyaddr1;
+				cpp_frame_msg[stripe_base + 30 + i * 48] +=
+					(uint32_t) tnr_scratch_buffer1;
+			}
 		if ((stripe_base + num_stripes*48 + 1) != new_frame->msg_len) {
-			pr_err("Invalid frame message\n");
+			pr_err("Invalid frame message,msg_len=%d,expected=%d\n",
+			new_frame->msg_len, (stripe_base + num_stripes*48 + 1));
 			rc = -EINVAL;
+			goto phyaddr_err;
+		}
+
+		} else if ((cpp_dev->fw_version & 0xffff0000) ==
+			CPP_FW_VERSION_1_10_0) {
+			stripe_base = STRIPE_BASE_FW_1_10_0;
+			for (i = 0; i < num_stripes; i++) {
+				cpp_frame_msg[stripe_base + 11 + i * 61] +=
+					(uint32_t) in_phyaddr;
+				cpp_frame_msg[stripe_base + 17 + i * 61] +=
+					(uint32_t) tnr_scratch_buffer0;
+				cpp_frame_msg[stripe_base + 23 + i * 61] +=
+					(uint32_t) out_phyaddr0;
+				cpp_frame_msg[stripe_base + 24 + i * 61] +=
+					(uint32_t) out_phyaddr1;
+				cpp_frame_msg[stripe_base + 25 + i * 61] +=
+					(uint32_t) out_phyaddr0;
+				cpp_frame_msg[stripe_base + 26 + i * 61] +=
+					(uint32_t) out_phyaddr1;
+				cpp_frame_msg[stripe_base + 36 + i * 61] +=
+					(uint32_t) tnr_scratch_buffer1;
+			}
+			if ((stripe_base + num_stripes*61 + 1) !=
+					new_frame->msg_len) {
+				pr_err(
+				"Invalid frame message,len=%d,expected=%d\n",
+					new_frame->msg_len,
+					(stripe_base + num_stripes*61 + 1));
+				rc = -EINVAL;
+				goto phyaddr_err;
+			}
+
+		} else {
+			pr_err("invalid fw version %08x", cpp_dev->fw_version);
 			goto phyaddr_err;
 		}
 
