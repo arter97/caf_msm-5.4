@@ -16,6 +16,7 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 		reg = <0xf9065000 0x1000>;
+		reg-names = "saw-base";
 		qcom,name = "system-cci"; /* CCI SAW */
 		qcom,saw2-ver-reg = <0xfd0>;
 		qcom,saw2-cfg = <0x01>;
@@ -41,6 +42,7 @@
 		#size-cells = <1>;
 		reg = <0xf9012000 0x1000>,
 		    <0xf900D210 0x8>;
+		reg-names = "saw-base", "q2s";
 		qcom,name = "a53-l2"; /* A53 L2 SAW */
 		qcom,saw2-ver-reg = <0xfd0>;
 		qcom,saw2-cfg = <0x01>;
@@ -59,6 +61,7 @@
 		#size-cells = <1>;
 		reg = <0xf9013000 0x1000>,
 		    <0xf900f210 0x8>;
+		reg-names = "saw-base", "q2s";
 		qcom,name = "a57-l2"; /* A57 L2 SAW */
 		qcom,saw2-ver-reg = <0xfd0>;
 		qcom,saw2-cfg = <0x01>;
@@ -84,6 +87,7 @@
 		#size-cells = <1>;
 		reg = <0xf9089000 0x1000>,
 			<0xf908b060 0x8>;
+		reg-names = "saw-base", "q2s";
 		qcom,name = "cpu0";
 		qcom,cpu = <&CPU0>;
 		qcom,saw2-ver-reg = <0xfd0>;
@@ -103,6 +107,7 @@
 		#size-cells = <1>;
 		reg = <0xf9099000 0x1000>,
 			<0xf909b060 0x8>;
+		reg-names = "saw-base", "q2s";
 		qcom,name = "cpu1";
 		qcom,cpu = <&CPU1>;
 		qcom,saw2-ver-reg = <0xfd0>;
@@ -122,6 +127,7 @@
 		#size-cells = <1>;
 		reg = <0xf90a9000 0x1000>,
 		    <0xf90ab060 0x8>;
+		reg-names = "saw-base", "q2s";
 		qcom,name = "cpu2";
 		qcom,cpu = <&CPU2>;
 		qcom,saw2-ver-reg = <0xfd0>;
@@ -141,6 +147,7 @@
 		#size-cells = <1>;
 		reg = <0xf90b9000 0x1000>,
 		    <0xf90bb060 0x8>;
+		reg-names = "saw-base", "q2s";
 		qcom,name = "cpu3";
 		qcom,cpu = <&CPU3>;
 		qcom,saw2-ver-reg = <0xfd0>;
@@ -160,6 +167,7 @@
 		#size-cells = <1>;
 		reg = <0xf90c9000 0x1000>,
 		    <0xf90cb060 0x8>;
+		reg-names = "saw-base", "q2s";
 		qcom,name = "cpu4";
 		qcom,cpu = <&CPU4>;
 		qcom,saw2-ver-reg = <0xfd0>;
@@ -179,6 +187,7 @@
 		#size-cells = <1>;
 		reg = <0xf90d9000 0x1000>,
 		    <0xf90db060 0x8>;
+		reg-names = "saw-base", "q2s";
 		qcom,name = "cpu5";
 		qcom,cpu = <&CPU5>;
 		qcom,saw2-ver-reg = <0xfd0>;
@@ -198,6 +207,7 @@
 		#size-cells = <1>;
 		reg = <0xf90e9000 0x1000>,
 		    <0xf90eb060 0x8>;
+		reg-names = "saw-base", "q2s";
 		qcom,name = "cpu6";
 		qcom,cpu = <&CPU6>;
 		qcom,saw2-ver-reg = <0xfd0>;
@@ -217,6 +227,7 @@
 		#size-cells = <1>;
 		reg = <0xf90f9000 0x1000>,
 		    <0xf90fb060 0x8>;
+		reg-names = "saw-base", "q2s";
 		qcom,name = "cpu7";
 		qcom,cpu = <&CPU7>;
 		qcom,saw2-ver-reg = <0xfd0>;
