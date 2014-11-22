@@ -817,46 +817,32 @@ static void msm_pcie_config_controller(struct msm_pcie_dev_t *dev)
 
 static void msm_pcie_config_l1ss(struct msm_pcie_dev_t *dev)
 {
-	u32 offset = 0;
-
-	if (!dev->rc_idx)
-		offset = PCIE20_EP_L1SUB_CTL1_OFFSET;
-
 	/* Enable the AUX Clock and the Core Clk to be synchronous for L1SS*/
 	if (!dev->aux_clk_sync)
 		msm_pcie_write_mask(dev->parf +
 				PCIE20_PARF_SYS_CTRL, BIT(3), 0);
 
-	/* Enable L1SS on RC */
+	/* Enable L1 on RC */
 	msm_pcie_write_mask(dev->dm_core + PCIE20_CAP_LINKCTRLSTATUS, 0,
 					BIT(1)|BIT(0));
-	msm_pcie_write_mask(dev->dm_core + PCIE20_L1SUB_CONTROL1, 0,
-					BIT(3)|BIT(2)|BIT(1)|BIT(0));
 	msm_pcie_write_mask(dev->dm_core + PCIE20_DEVICE_CONTROL2_STATUS2, 0,
 					BIT(10));
 	readl_relaxed(dev->elbi);
 	if (dev->shadow_en) {
 		dev->rc_shadow[PCIE20_CAP_LINKCTRLSTATUS / 4] =
 			readl_relaxed(dev->dm_core + PCIE20_CAP_LINKCTRLSTATUS);
-		dev->rc_shadow[PCIE20_L1SUB_CONTROL1 / 4] =
-			readl_relaxed(dev->dm_core + PCIE20_L1SUB_CONTROL1);
 		dev->rc_shadow[PCIE20_DEVICE_CONTROL2_STATUS2 / 4] =
 			readl_relaxed(dev->dm_core +
 					PCIE20_DEVICE_CONTROL2_STATUS2);
 	}
 	PCIE_DBG2(dev, "RC's CAP_LINKCTRLSTATUS:0x%x\n",
 		readl_relaxed(dev->dm_core + PCIE20_CAP_LINKCTRLSTATUS));
-	PCIE_DBG2(dev, "RC's L1SUB_CONTROL1:0x%x\n",
-		readl_relaxed(dev->dm_core + PCIE20_L1SUB_CONTROL1));
 	PCIE_DBG2(dev, "RC's DEVICE_CONTROL2_STATUS2:0x%x\n",
 		readl_relaxed(dev->dm_core + PCIE20_DEVICE_CONTROL2_STATUS2));
 
-	/* Enable L1SS on EP */
+	/* Enable L1 on EP */
 	msm_pcie_write_mask(dev->conf + PCIE20_CAP_LINKCTRLSTATUS, 0,
 					BIT(1)|BIT(0));
-	msm_pcie_write_mask(dev->conf + PCIE20_L1SUB_CONTROL1 +
-					offset, 0,
-					BIT(3)|BIT(2)|BIT(1)|BIT(0));
 	msm_pcie_write_mask(dev->conf + PCIE20_DEVICE_CONTROL2_STATUS2, 0,
 					BIT(10));
 	readl_relaxed(dev->elbi);
@@ -864,18 +850,12 @@ static void msm_pcie_config_l1ss(struct msm_pcie_dev_t *dev)
 		dev->ep_shadow[PCIE20_CAP_LINKCTRLSTATUS / 4] =
 			readl_relaxed(dev->conf +
 			PCIE20_CAP_LINKCTRLSTATUS);
-		dev->ep_shadow[PCIE20_L1SUB_CONTROL1 / 4 + offset / 4] =
-			readl_relaxed(dev->conf +
-			PCIE20_L1SUB_CONTROL1 + offset);
 		dev->ep_shadow[PCIE20_DEVICE_CONTROL2_STATUS2 / 4] =
 			readl_relaxed(dev->conf +
 			PCIE20_DEVICE_CONTROL2_STATUS2);
 	}
 	PCIE_DBG2(dev, "EP's CAP_LINKCTRLSTATUS:0x%x\n",
 		readl_relaxed(dev->conf + PCIE20_CAP_LINKCTRLSTATUS));
-	PCIE_DBG2(dev, "EP's L1SUB_CONTROL1:0x%x\n",
-		readl_relaxed(dev->conf + PCIE20_L1SUB_CONTROL1 +
-					offset));
 	PCIE_DBG2(dev, "EP's DEVICE_CONTROL2_STATUS2:0x%x\n",
 		readl_relaxed(dev->conf + PCIE20_DEVICE_CONTROL2_STATUS2));
 }
