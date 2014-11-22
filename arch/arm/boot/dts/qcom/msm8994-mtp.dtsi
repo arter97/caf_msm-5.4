@@ -277,6 +277,8 @@
 
 #include "dsi-panel-sharp-dualmipi0-wqxga-video.dtsi"
 #include "dsi-panel-sharp-dualmipi1-wqxga-video.dtsi"
+#include "dsi-panel-jdi-1080p-video.dtsi"
+
 &mdss_mdp {
 	qcom,mdss-pref-prim-intf = "dsi";
 };
@@ -293,10 +295,18 @@
 	pinctrl-1 = <&mdss_dsi_suspend>;
 	qcom,dsi-panel-bias-vreg;
 	qcom,platform-reset-gpio = <&msm_gpio 78 0>;
+        qcom,platform-enable-gpio = <&pm8994_gpios 14 0>;
 };
 
 &mdss_dsi1 {
 	qcom,dsi-pref-prim-pan = <&dsi_dual_sharp_video_1>;
+};
+
+&dsi_jdi_1080_vid {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,cont-splash-enabled;
 };
 
 &dsi_dual_sharp_video_0 {
@@ -625,6 +635,15 @@
 		qcom,master-en = <1>;	/* ENABLE GPIO */
 		status = "okay";
 	};
+
+	gpio@c400 {	/* GPIO 5  OTG SWITCH EN */
+		qcom,mode = <1>;	/* DIGITAL OUT */
+		qcom,pull = <5>;	/* No Pull */
+		qcom,vin-sel = <2>;	/* 1.8 */
+		qcom,src-sel = <0>;	/* GPIO */
+		qcom,master-en = <1>;	/* ENABLE GPIO */
+		status = "okay";
+	};
 };
 
 &pmi8994_mpps {
@@ -728,7 +747,18 @@
 
 &pmi8994_charger {
 	qcom,ext-sense-type;
-	qcom,dc-psy-type = "Wireless";
+	qcom,dc-psy-type = "Wipower";
+	qcom,dcin-vadc = <&pmi8994_vadc>;
+	qcom,wipower-default-ilim-map = <4000000 20000000 550 700 300>;
+	qcom,wipower-pt-ilim-map = <4000000 7140000 550 700 300>,
+					<7140000 8140000 550 700 300>,
+					<8140000 9140000 500 700 300>,
+					<9140000 9950000 500 700 300>;
+	qcom,wipower-div2-ilim-map = <4000000 4820000 550 700 300>,
+					<4820000 5820000 550 700 300>,
+					<5820000 6820000 550 650 650>,
+					<6820000 7820000 550 700 600>,
+					<7820000 8500000 550 700 550>;
 };
 
 &cnss {
@@ -744,4 +774,13 @@
 		qcom,float-voltage-mv = <4400>;
 		qcom,recharge-thresh-mv = <100>;
 	};
+};
+
+&usb_ehci {
+	status = "ok";
+	qcom,usb2-enable-uicc;
+};
+
+&qusb_phy {
+	status = "ok";
 };

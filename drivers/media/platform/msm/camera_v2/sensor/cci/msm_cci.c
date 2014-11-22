@@ -1265,6 +1265,7 @@ static int msm_cci_probe(struct platform_device *pdev)
 	rc = msm_cci_get_clk_info(new_cci_dev, pdev);
 	if (rc < 0) {
 		pr_err("%s: msm_cci_get_clk_info() failed", __func__);
+		kfree(new_cci_dev);
 		return -EFAULT;
 	}
 

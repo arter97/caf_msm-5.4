@@ -173,8 +173,7 @@ static void mdss_mdp_video_intf_recovery(void *data, int event)
 		pr_err("Unable to calculate clock period\n");
 		return;
 	}
-	min_ln_cnt = pinfo->lcdc.v_back_porch + pinfo->lcdc.v_front_porch
-						  + pinfo->lcdc.v_pulse_width;
+	min_ln_cnt = pinfo->lcdc.v_back_porch + pinfo->lcdc.v_pulse_width;
 	active_lns_cnt = pinfo->yres;
 	time_of_line = (pinfo->lcdc.h_back_porch +
 		 pinfo->lcdc.h_front_porch +
@@ -182,7 +181,8 @@ static void mdss_mdp_video_intf_recovery(void *data, int event)
 		 pinfo->xres) * clk_period;
 
 	/* delay in micro seconds */
-	delay = (time_of_line * min_ln_cnt) / 1000000;
+	delay = (time_of_line * (min_ln_cnt +
+			pinfo->lcdc.v_front_porch)) / 1000000;
 
 	/*
 	 * Wait for max delay before
@@ -194,7 +194,8 @@ static void mdss_mdp_video_intf_recovery(void *data, int event)
 	while (1) {
 		line_cnt = mdss_mdp_video_line_count(ctl);
 
-		if ((line_cnt >= min_ln_cnt) && (line_cnt < active_lns_cnt)) {
+		if ((line_cnt >= min_ln_cnt) && (line_cnt <
+			(active_lns_cnt + min_ln_cnt))) {
 			pr_debug("%s, Needed lines left line_cnt=%d\n",
 						__func__, line_cnt);
 			return;
@@ -657,27 +658,76 @@ static void mdss_mdp_video_underrun_intr_done(void *arg)
 		schedule_work(&ctl->recover_work);
 }
 
+static int mdss_mdp_video_timegen_update(struct mdss_mdp_video_ctx *ctx,
+					struct mdss_panel_info *pinfo)
+{
+	u32 hsync_period, vsync_period;
+	u32 hsync_start_x, hsync_end_x, display_v_start, display_v_end;
+	u32 display_hctl, hsync_ctl;
+
+	hsync_period = mdss_panel_get_htotal(pinfo, true);
+	vsync_period = mdss_panel_get_vtotal(pinfo);
+
+	display_v_start = ((pinfo->lcdc.v_pulse_width +
+			pinfo->lcdc.v_back_porch) * hsync_period) +
+					pinfo->lcdc.hsync_skew;
+	display_v_end = ((vsync_period - pinfo->lcdc.v_front_porch) *
+				hsync_period) + pinfo->lcdc.hsync_skew - 1;
+
+	hsync_start_x = pinfo->lcdc.h_back_porch + pinfo->lcdc.h_pulse_width;
+	hsync_end_x = hsync_period - pinfo->lcdc.h_front_porch - 1;
+
+	hsync_ctl = (hsync_period << 16) | pinfo->lcdc.h_pulse_width;
+	display_hctl = (hsync_end_x << 16) | hsync_start_x;
+
+	mdp_video_write(ctx, MDSS_MDP_REG_INTF_HSYNC_CTL, hsync_ctl);
+	mdp_video_write(ctx, MDSS_MDP_REG_INTF_VSYNC_PERIOD_F0,
+				vsync_period * hsync_period);
+	mdp_video_write(ctx, MDSS_MDP_REG_INTF_VSYNC_PULSE_WIDTH_F0,
+			pinfo->lcdc.v_pulse_width * hsync_period);
+	mdp_video_write(ctx, MDSS_MDP_REG_INTF_DISPLAY_HCTL, display_hctl);
+	mdp_video_write(ctx, MDSS_MDP_REG_INTF_DISPLAY_V_START_F0,
+						display_v_start);
+	mdp_video_write(ctx, MDSS_MDP_REG_INTF_DISPLAY_V_END_F0, display_v_end);
+
+	return 0;
+}
+
+static int mdss_mdp_video_hfp_fps_update(struct mdss_mdp_video_ctx *ctx,
+			struct mdss_panel_data *pdata, int new_fps)
+{
+	int curr_fps;
+	int add_h_pixels = 0;
+	int hsync_period;
+	int diff;
+
+	hsync_period = mdss_panel_get_htotal(&pdata->panel_info, true);
+	curr_fps = mdss_panel_get_framerate(&pdata->panel_info);
+
+	diff = curr_fps - new_fps;
+	add_h_pixels = mult_frac(hsync_period, diff, new_fps);
+	pdata->panel_info.lcdc.h_front_porch += add_h_pixels;
+
+	mdss_mdp_video_timegen_update(ctx, &pdata->panel_info);
+	return 0;
+}
+
 static int mdss_mdp_video_vfp_fps_update(struct mdss_mdp_video_ctx *ctx,
 				 struct mdss_panel_data *pdata, int new_fps)
 {
 	int curr_fps;
-	u32 add_v_lines = 0;
+	int add_v_lines = 0;
 	u32 current_vsync_period_f0, new_vsync_period_f0;
-	u32 vsync_period, hsync_period;
+	int vsync_period, hsync_period;
+	int diff;
 
 	vsync_period = mdss_panel_get_vtotal(&pdata->panel_info);
 	hsync_period = mdss_panel_get_htotal(&pdata->panel_info, true);
 	curr_fps = mdss_panel_get_framerate(&pdata->panel_info);
 
-	if (curr_fps > new_fps) {
-		add_v_lines = mult_frac(vsync_period,
-				(curr_fps - new_fps), new_fps);
-		pdata->panel_info.lcdc.v_front_porch += add_v_lines;
-	} else {
-		add_v_lines = mult_frac(vsync_period,
-				(new_fps - curr_fps), new_fps);
-		pdata->panel_info.lcdc.v_front_porch -= add_v_lines;
-	}
+	diff = curr_fps - new_fps;
+	add_v_lines = mult_frac(vsync_period, diff, new_fps);
+	pdata->panel_info.lcdc.v_front_porch += add_v_lines;
 
 	vsync_period = mdss_panel_get_vtotal(&pdata->panel_info);
 	current_vsync_period_f0 = mdp_video_read(ctx,
@@ -697,6 +747,20 @@ static int mdss_mdp_video_vfp_fps_update(struct mdss_mdp_video_ctx *ctx,
 	}
 
 	return 0;
+}
+
+static int mdss_mdp_video_fps_update(struct mdss_mdp_video_ctx *ctx,
+				 struct mdss_panel_data *pdata, int new_fps)
+{
+	int rc;
+
+	if (pdata->panel_info.dfps_update ==
+				DFPS_IMMEDIATE_PORCH_UPDATE_MODE_HFP)
+		rc = mdss_mdp_video_hfp_fps_update(ctx, pdata, new_fps);
+	else
+		rc = mdss_mdp_video_vfp_fps_update(ctx, pdata, new_fps);
+
+	return rc;
 }
 
 static int mdss_mdp_video_dfps_wait4vsync(struct mdss_mdp_ctl *ctl)
@@ -835,7 +899,9 @@ static int mdss_mdp_video_config_fps(struct mdss_mdp_ctl *ctl,
 			WARN(rc, "intf %d panel fps update error (%d)\n",
 							ctl->intf_num, rc);
 		} else if (pdata->panel_info.dfps_update
-				== DFPS_IMMEDIATE_PORCH_UPDATE_MODE) {
+				== DFPS_IMMEDIATE_PORCH_UPDATE_MODE_VFP ||
+				pdata->panel_info.dfps_update
+				== DFPS_IMMEDIATE_PORCH_UPDATE_MODE_HFP) {
 			bool wait4vsync;
 			unsigned long flags;
 			if (!ctx->timegen_en) {
@@ -866,13 +932,13 @@ static int mdss_mdp_video_config_fps(struct mdss_mdp_ctl *ctl,
 					goto exit_dfps;
 			}
 
-			rc = mdss_mdp_video_vfp_fps_update(ctx, pdata, new_fps);
+			rc = mdss_mdp_video_fps_update(ctx, pdata, new_fps);
 			if (rc < 0) {
 				pr_err("%s: Error during DFPS\n", __func__);
 				goto exit_dfps;
 			}
 			if (sctx) {
-				rc = mdss_mdp_video_vfp_fps_update(sctx,
+				rc = mdss_mdp_video_fps_update(sctx,
 							pdata->next, new_fps);
 				if (rc < 0) {
 					pr_err("%s: DFPS error\n", __func__);
@@ -1235,15 +1301,21 @@ static int mdss_mdp_video_intfs_setup(struct mdss_mdp_ctl *ctl,
 
 	dst_bpp = pinfo->fbc.enabled ? (pinfo->fbc.target_bpp) : (pinfo->bpp);
 
-	itp.width = mult_frac((pinfo->xres + pinfo->lcdc.xres_pad),
-				dst_bpp, pinfo->bpp);
-	itp.height = pinfo->yres + pinfo->lcdc.yres_pad;
+	itp.width = mult_frac((pinfo->xres + pinfo->lcdc.border_left +
+			pinfo->lcdc.border_right), dst_bpp, pinfo->bpp);
+	itp.height = pinfo->yres + pinfo->lcdc.border_top +
+					pinfo->lcdc.border_bottom;
 	itp.border_clr = pinfo->lcdc.border_clr;
 	itp.underflow_clr = pinfo->lcdc.underflow_clr;
 	itp.hsync_skew = pinfo->lcdc.hsync_skew;
 
-	itp.xres = mult_frac(pinfo->xres, dst_bpp, pinfo->bpp);
-	itp.yres = pinfo->yres;
+	/* tg active area is not work, hence yres should equal to height */
+	itp.xres = mult_frac((pinfo->xres + pinfo->lcdc.border_left +
+			pinfo->lcdc.border_right), dst_bpp, pinfo->bpp);
+
+	itp.yres = pinfo->yres + pinfo->lcdc.border_top +
+				pinfo->lcdc.border_bottom;
+
 	itp.h_back_porch = pinfo->lcdc.h_back_porch;
 	itp.h_front_porch = pinfo->lcdc.h_front_porch;
 	itp.v_back_porch = pinfo->lcdc.v_back_porch;

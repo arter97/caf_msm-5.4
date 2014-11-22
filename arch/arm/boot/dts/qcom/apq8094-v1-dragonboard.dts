@@ -18,6 +18,7 @@
 
 / {
 	model = "Qualcomm Technologies, Inc. APQ8094 Dragonboard";
-	compatible = "apq8094-dragonboard", "qcom,apq8094", "qcom,dragonboard";
+	compatible = "qcom,apq8094-dragonboard", "qcom,apq8094", "qcom,dragonboard";
 	qcom,board-id = <10 0>;
+	qcom,msm-id = <207 0x10000>, <253 0x10000>;
 };

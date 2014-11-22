@@ -26,7 +26,6 @@
 
 #include "u_bam_data.h"
 
-#define BAM2BAM_DATA_N_PORTS	1
 #define BAM_DATA_RX_Q_SIZE	128
 #define BAM_DATA_MUX_RX_REQ_SIZE  2048   /* Must be 1KB aligned */
 #define BAM_DATA_PENDING_LIMIT	220
@@ -594,14 +593,20 @@ static void bam_data_endless_tx_complete(struct usb_ep *ep,
 static void bam_data_start_endless_rx(struct bam_data_port *port)
 {
 	struct bam_data_ch_info *d = &port->data_ch;
+	struct usb_ep *ep;
+	unsigned long flags;
 	int status;
 
+	spin_lock_irqsave(&port->port_lock, flags);
 	if (!port->port_usb) {
+		spin_unlock_irqrestore(&port->port_lock, flags);
 		return;
 	}
+	ep = port->port_usb->out;
+	spin_unlock_irqrestore(&port->port_lock, flags);
 
 	pr_debug("%s: enqueue\n", __func__);
-	status = usb_ep_queue(port->port_usb->out, d->rx_req, GFP_ATOMIC);
+	status = usb_ep_queue(ep, d->rx_req, GFP_ATOMIC);
 	if (status)
 		pr_err("error enqueuing transfer, %d\n", status);
 }
@@ -609,13 +614,20 @@ static void bam_data_start_endless_rx(struct bam_data_port *port)
 static void bam_data_start_endless_tx(struct bam_data_port *port)
 {
 	struct bam_data_ch_info *d = &port->data_ch;
+	struct usb_ep *ep;
+	unsigned long flags;
 	int status;
 
-	if (!port->port_usb)
+	spin_lock_irqsave(&port->port_lock, flags);
+	if (!port->port_usb) {
+		spin_unlock_irqrestore(&port->port_lock, flags);
 		return;
+	}
+	ep = port->port_usb->in;
+	spin_unlock_irqrestore(&port->port_lock, flags);
 
 	pr_debug("%s: enqueue\n", __func__);
-	status = usb_ep_queue(port->port_usb->in, d->tx_req, GFP_ATOMIC);
+	status = usb_ep_queue(ep, d->tx_req, GFP_ATOMIC);
 	if (status)
 		pr_err("error enqueuing transfer, %d\n", status);
 }
@@ -623,11 +635,12 @@ static void bam_data_start_endless_tx(struct bam_data_port *port)
 static void bam_data_stop_endless_rx(struct bam_data_port *port)
 {
 	struct bam_data_ch_info *d = &port->data_ch;
+	unsigned long flags;
 	int status;
 
-	spin_lock(&port->port_lock);
+	spin_lock_irqsave(&port->port_lock, flags);
 	if (!port->port_usb) {
-		spin_unlock(&port->port_lock);
+		spin_unlock_irqrestore(&port->port_lock, flags);
 		return;
 	}
 
@@ -636,18 +649,25 @@ static void bam_data_stop_endless_rx(struct bam_data_port *port)
 	if (status)
 		pr_err("%s: error dequeuing transfer, %d\n", __func__, status);
 
-	spin_unlock(&port->port_lock);
+	spin_unlock_irqrestore(&port->port_lock, flags);
 }
 static void bam_data_stop_endless_tx(struct bam_data_port *port)
 {
 	struct bam_data_ch_info *d = &port->data_ch;
+	struct usb_ep *ep;
+	unsigned long flags;
 	int status;
 
-	if (!port->port_usb)
+	spin_lock_irqsave(&port->port_lock, flags);
+	if (!port->port_usb) {
+		spin_unlock_irqrestore(&port->port_lock, flags);
 		return;
+	}
+	ep = port->port_usb->in;
+	spin_unlock_irqrestore(&port->port_lock, flags);
 
 	pr_debug("%s: dequeue\n", __func__);
-	status = usb_ep_dequeue(port->port_usb->in, d->tx_req);
+	status = usb_ep_dequeue(ep, d->tx_req);
 	if (status)
 		pr_err("%s: error dequeuing transfer, %d\n", __func__, status);
 }
@@ -1262,6 +1282,16 @@ out:
 	spin_unlock_irqrestore(&port->port_lock, flags);
 }
 
+inline int u_bam_data_func_to_port(enum function_type func, u8 func_port)
+{
+	if (func >= USB_NUM_FUNCS || func_port >= PORTS_PER_FUNC) {
+		pr_err("func=%d and func_port=%d are an illegal combination\n",
+			func, func_port);
+		return -EINVAL;
+	}
+	return (PORTS_PER_FUNC * func) + func_port;
+}
+
 static int bam2bam_data_port_alloc(int portno)
 {
 	struct bam_data_port    *port = NULL;
@@ -1654,21 +1684,23 @@ exit:
 	return ret;
 }
 
-int bam_data_setup(unsigned int no_bam2bam_port)
+int bam_data_setup(enum function_type func, unsigned int no_bam2bam_port)
 {
 	int	i;
 	int	ret;
 
 	pr_debug("requested %d BAM2BAM ports", no_bam2bam_port);
 
-	if (!no_bam2bam_port || no_bam2bam_port > BAM2BAM_DATA_N_PORTS) {
-		pr_err("Invalid num of ports count:%d\n", no_bam2bam_port);
+	if (!no_bam2bam_port || no_bam2bam_port > PORTS_PER_FUNC ||
+		func >= USB_NUM_FUNCS) {
+		pr_err("Invalid num of ports count:%d or function type:%d\n",
+			no_bam2bam_port, func);
 		return -EINVAL;
 	}
 
 	for (i = 0; i < no_bam2bam_port; i++) {
 		n_bam2bam_data_ports++;
-		ret = bam2bam_data_port_alloc(i);
+		ret = bam2bam_data_port_alloc(u_bam_data_func_to_port(func, i));
 		if (ret) {
 			n_bam2bam_data_ports--;
 			pr_err("Failed to alloc port:%d\n", i);
@@ -1743,28 +1775,17 @@ static int bam_data_wake_cb(void *param)
 	 * allowed to do so by the host. This is done in order to support non
 	 * fully USB 3.0 compatible hosts.
 	 */
-	if ((gadget->speed == USB_SPEED_SUPER) && (func->func_is_suspended)) {
-		if (!func->func_wakeup_allowed)
-			return -ENOTSUPP;
-		else {
-			ret = usb_func_wakeup(func);
-			if (ret)
-				pr_err("Function wakeup failed. ret=%d\n", ret);
-		}
-	} else {
+	if ((gadget->speed == USB_SPEED_SUPER) && (func->func_is_suspended))
+		ret = usb_func_wakeup(func);
+	else
 		ret = usb_gadget_wakeup(gadget);
-		if (ret) {
-			if ((ret == -EBUSY) || (ret == -EAGAIN))
-				pr_debug("Remote wakeup is delayed due to low-power mode exit.\n");
-			else
-				pr_err("Failed to wake up the USB core. ret=%d.\n",
-					ret);
 
-			return ret;
-		}
-	}
+	if ((ret == -EBUSY) || (ret == -EAGAIN))
+		pr_debug("Remote wakeup is delayed due to LPM exit.\n");
+	else if (ret)
+		pr_err("Failed to wake up the USB core. ret=%d.\n", ret);
 
-	return 0;
+	return ret;
 }
 
 static void bam_data_start(void *param, enum usb_bam_pipe_dir dir)

@@ -53,11 +53,12 @@ static inline const char *mdss_panel2str(u32 panel)
 		PANEL_NAME(MIPI_CMD),
 		PANEL_NAME(EDP),
 		PANEL_NAME(HDMI),
+		PANEL_NAME(DTV),
 		PANEL_NAME(WRITEBACK),
 #undef PANEL_NAME
 	};
 
-	if (panel >= ARRAY_SIZE(names))
+	if (panel >= ARRAY_SIZE(names) || !names[panel])
 		return "UNKNOWN";
 
 	return names[panel];
@@ -90,7 +91,8 @@ enum {
 enum {
 	MDSS_PANEL_POWER_OFF = 0,
 	MDSS_PANEL_POWER_ON,
-	MDSS_PANEL_POWER_DOZE,
+	MDSS_PANEL_POWER_LP1,
+	MDSS_PANEL_POWER_LP2,
 };
 
 enum {
@@ -216,6 +218,10 @@ struct lcd_panel_info {
 	u32 border_clr;
 	u32 underflow_clr;
 	u32 hsync_skew;
+	u32 border_top;
+	u32 border_bottom;
+	u32 border_left;
+	u32 border_right;
 	/* Pad width */
 	u32 xres_pad;
 	/* Pad height */
@@ -298,7 +304,8 @@ struct edp_panel_info {
 enum dynamic_fps_update {
 	DFPS_SUSPEND_RESUME_MODE,
 	DFPS_IMMEDIATE_CLK_UPDATE_MODE,
-	DFPS_IMMEDIATE_PORCH_UPDATE_MODE,
+	DFPS_IMMEDIATE_PORCH_UPDATE_MODE_VFP,
+	DFPS_IMMEDIATE_PORCH_UPDATE_MODE_HFP,
 };
 
 enum lvds_mode {
@@ -517,7 +524,9 @@ static inline int mdss_panel_get_vtotal(struct mdss_panel_info *pinfo)
 {
 	return pinfo->yres + pinfo->lcdc.v_back_porch +
 			pinfo->lcdc.v_front_porch +
-			pinfo->lcdc.v_pulse_width;
+			pinfo->lcdc.v_pulse_width+
+			pinfo->lcdc.border_top +
+			pinfo->lcdc.border_bottom;
 }
 
 /*
@@ -533,10 +542,11 @@ static inline int mdss_panel_get_vtotal(struct mdss_panel_info *pinfo)
 static inline int mdss_panel_get_htotal(struct mdss_panel_info *pinfo, bool
 		consider_fbc)
 {
-	int adj_xres = pinfo->xres;
+	int adj_xres = pinfo->xres + pinfo->lcdc.border_left +
+				pinfo->lcdc.border_right;
 
 	if (consider_fbc && pinfo->fbc.enabled)
-		adj_xres = mult_frac(pinfo->xres,
+		adj_xres = mult_frac(adj_xres,
 				pinfo->fbc.target_bpp, pinfo->bpp);
 
 	return adj_xres + pinfo->lcdc.h_back_porch +
@@ -615,13 +625,26 @@ static inline bool mdss_panel_is_power_on(int panel_power_state)
  * @panel_power_state: enum identifying the power state to be checked
  *
  * This function returns true if the panel is in an intermediate low power
- * state where it is still on but not fully interactive. It may still accept
- * commands and display updates but would be operating in a low power mode.
+ * state where it is still on but not fully interactive. It may or may not
+ * accept any commands and display updates.
  */
 static inline bool mdss_panel_is_power_on_lp(int panel_power_state)
 {
 	return !mdss_panel_is_power_off(panel_power_state) &&
 		!mdss_panel_is_power_on_interactive(panel_power_state);
+}
+
+/**
+ * mdss_panel_is_panel_power_on_ulp: - checks if panel is in ultra low power mode
+ * @pdata: pointer to the panel struct associated to the panel
+ * @panel_power_state: enum identifying the power state to be checked
+ *
+ * This function returns true if the panel is in a ultra low power
+ * state where it is still on but cannot recieve any display updates.
+ */
+static inline bool mdss_panel_is_power_on_ulp(int panel_power_state)
+{
+	return panel_power_state == MDSS_PANEL_POWER_LP2;
 }
 
 /**

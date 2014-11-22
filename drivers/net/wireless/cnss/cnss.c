@@ -1599,6 +1599,9 @@ again:
 
 		ret = wdrv->probe(pdev, penv->id);
 		if (ret) {
+			wcnss_prealloc_check_memory_leak();
+			wcnss_pre_alloc_reset();
+
 			if (probe_again > 3) {
 				pr_err("Failed to probe WLAN\n");
 				goto err_wlan_probe;
@@ -1691,6 +1694,9 @@ void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver)
 
 	if (wdrv->remove)
 		wdrv->remove(pdev);
+
+	wcnss_prealloc_check_memory_leak();
+	wcnss_pre_alloc_reset();
 
 	if (penv->pcie_link_state && !penv->pcie_link_down_ind) {
 		pci_save_state(pdev);
@@ -2522,12 +2528,22 @@ static void __exit cnss_exit(void)
 
 void cnss_request_pm_qos(u32 qos_val)
 {
+	if (!penv) {
+		pr_err("%s: penv is NULL!\n", __func__);
+		return;
+	}
+
 	pm_qos_add_request(&penv->qos_request, PM_QOS_CPU_DMA_LATENCY, qos_val);
 }
 EXPORT_SYMBOL(cnss_request_pm_qos);
 
 void cnss_remove_pm_qos(void)
 {
+	if (!penv) {
+		pr_err("%s: penv is NULL!\n", __func__);
+		return;
+	}
+
 	pm_qos_remove_request(&penv->qos_request);
 }
 EXPORT_SYMBOL(cnss_remove_pm_qos);

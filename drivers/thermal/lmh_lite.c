@@ -197,7 +197,7 @@ reset_exit:
 	if (!lmh_data->intr_status_val) {
 		/* cancel the poll work after releasing the lock to avoid
 		** deadlock situation */
-		pr_info("Zero throttling. Re-enabling interrupt\n");
+		pr_debug("Zero throttling. Re-enabling interrupt\n");
 		cancel_delayed_work_sync(&lmh_data->poll_work);
 		enable_irq(lmh_data->irq_num);
 	}
@@ -268,7 +268,7 @@ static void lmh_read_and_notify(struct lmh_driver_data *lmh_dat)
 		val = lmh_sensor->last_read_value;
 		if (val > 0 && !(lmh_dat->intr_status_val
 			& BIT(lmh_sensor->sensor_sw_id))) {
-			pr_info("Sensor:[%s] interrupt triggered\n",
+			pr_debug("Sensor:[%s] interrupt triggered\n",
 				lmh_sensor->sensor_name);
 			lmh_dat->intr_status_val
 			       |= BIT(lmh_sensor->sensor_sw_id);
@@ -742,9 +742,9 @@ static int lmh_sensor_init(struct platform_device *pdev)
 	pr_debug("LMH Sensor Init complete\n");
 
 init_exit:
+	up_write(&lmh_sensor_access);
 	if (ret)
 		lmh_remove_sensors();
-	up_write(&lmh_sensor_access);
 
 	return ret;
 }

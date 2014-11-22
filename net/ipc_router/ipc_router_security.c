@@ -82,8 +82,7 @@ void signal_irsc_completion(void)
 int check_permissions(void)
 {
 	int rc = 0;
-	if (uid_eq(current_euid(), GLOBAL_ROOT_UID) ||
-	    capable(CAP_NET_RAW) || capable(CAP_NET_BIND_SERVICE))
+	if (capable(CAP_NET_RAW) || capable(CAP_NET_BIND_SERVICE))
 		rc = 1;
 	return rc;
 }
@@ -169,7 +168,8 @@ int msm_ipc_config_sec_rules(void *arg)
 		return -EFAULT;
 	}
 	for (loop = 0; loop < rule->num_group_info; loop++)
-		rule->group_id[loop] = KGIDT_INIT(group_id[loop]);
+		rule->group_id[loop] = make_kgid(current_user_ns(),
+						 group_id[loop]);
 	kfree(group_id);
 
 	key = rule->service_id & (SEC_RULES_HASH_SZ - 1);
@@ -307,6 +307,8 @@ int msm_ipc_check_send_permissions(void *data)
 		return 1;
 
 	for (i = 0; i < rule->num_group_info; i++) {
+		if (!gid_valid(rule->group_id[i]))
+			continue;
 		if (in_egroup_p(rule->group_id[i]))
 			return 1;
 	}

@@ -403,7 +403,7 @@ static int msm_ext_ultrasound_event(struct snd_soc_dapm_widget *w,
 			     struct snd_kcontrol *k, int event)
 {
 	pr_debug("%s()\n", __func__);
-	if (strcmp(w->name, "ultrasound amp")) {
+	if (!strcmp(w->name, "ultrasound amp")) {
 		if (!gpio_is_valid(ext_us_amp_gpio)) {
 			pr_err("%s: ext_us_amp_gpio isn't configured\n",
 				__func__);
@@ -2970,7 +2970,7 @@ static int msm8994_populate_dai_link_component_of_node(
 						"asoc-platform-names",
 						dai_link[i].platform_name);
 			if (index < 0) {
-				pr_err("%s: No match found for platform name: %s\n",
+				pr_debug("%s: No match found for platform name: %s\n",
 					__func__, dai_link[i].platform_name);
 				ret = index;
 				goto err;

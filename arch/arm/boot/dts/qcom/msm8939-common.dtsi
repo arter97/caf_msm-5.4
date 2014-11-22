@@ -573,6 +573,7 @@
 		reg-names = "slimbus_physical", "slimbus_bam_physical";
 		interrupts = <0 163 0>, <0 180 0>;
 		interrupt-names = "slimbus_irq", "slimbus_bam_irq";
+		qcom,apps-ch-pipes = <0x600000>;
 		qcom,ea-pc = <0x140>;
 		status = "disabled";
 	};
@@ -669,7 +670,6 @@
 		qcom,bam-pipe-pair = <2>;
 		qcom,ce-hw-instance = <0>;
 		qcom,ce-device = <0>;
-		qcom,ce-hw-shared;
 		qcom,msm-bus,name = "qcrypto-noc";
 		qcom,msm-bus,num-cases = <2>;
 		qcom,msm-bus,num-paths = <1>;
@@ -682,6 +682,10 @@
 			 <&clock_gcc clk_gcc_crypto_axi_clk>;
 		clock-names = "core_clk_src", "core_clk",
 				"iface_clk", "bus_clk";
+                qcom,use-sw-aes-cbc-ecb-ctr-algo;
+                qcom,use-sw-aes-xts-algo;
+                qcom,use-sw-aes-ccm-algo;
+                qcom,use-sw-ahash-algo;
 		status = "disabled";
 		qcom,ce-opp-freq = <100000000>;
 	};
@@ -787,6 +791,9 @@
 		qcom,hsusb-otg-otg-control = <2>;
 		qcom,hsusb-otg-disable-reset;
 		qcom,dp-manual-pullup;
+		qcom,hsusb-otg-mpm-dpsehv-int = <49>;
+		qcom,hsusb-otg-mpm-dmsehv-int = <58>;
+		qcom,usbin-vadc = <&pm8916_vadc>;
 
 		qcom,msm-bus,name = "usb2";
 		qcom,msm-bus,num-cases = <3>;
@@ -908,7 +915,7 @@
 		interrupt-names = "spi_irq", "spi_bam_irq";
 		interrupts = <0 97 0>, <0 238 0>;
 		spi-max-frequency = <19200000>;
-		pinctrl-names = "default", "sleep";
+		pinctrl-names = "spi_default", "spi_sleep";
 		pinctrl-0 = <&spi0_default &spi0_cs0_active>;
 		pinctrl-1 = <&spi0_sleep &spi0_cs0_sleep>;
 		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
@@ -984,7 +991,7 @@
 		interrupts = <0 99 0>, <0 238 0>;
 		spi-max-frequency = <18000000>;
 		qcom,use-pinctrl;
-		pinctrl-names = "default", "sleep";
+		pinctrl-names = "spi_default", "spi_sleep";
 		pinctrl-0 = <&spi5_default &spi5_cs0_active>;
 		pinctrl-1 = <&spi5_sleep &spi5_cs0_sleep>;
 		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
@@ -996,6 +1003,7 @@
 		qcom,bam-consumer-pipe-index = <12>;
 		qcom,bam-producer-pipe-index = <13>;
 		qcom,master-id = <86>;
+		qcom,rt-priority;
 		status = "disabled";
 	};
 
@@ -1100,7 +1108,7 @@
 			 <&clock_gcc clk_gcc_sdcc2_apps_clk>;
 		clock-names = "iface_clk", "core_clk";
 
-		qcom,clk-rates = <400000 25000000 50000000 100000000 200000000>;
+		qcom,clk-rates = <400000 25000000 50000000 100000000 177770000>;
 
 		status = "disabled";
 	};
@@ -1460,7 +1468,6 @@
 		clock-names = "core_clk", "core0_clk", "core1_clk", "iface_clk", "bus_clk";
 		qcom,clock-configs = <0x1 0x0 0x0 0x0 0x0>;
 		qcom,sw-power-collapse;
-		qcom,enable-minimum-voting;
 		qcom,load-freq-tbl =
 			<489600 266670000 0x0c000000>, /* HEVC  decoder 1080p 60fps  */
 			<489600 266670000 0x030fcfff>, /* Legacy decoder 1080p 60fps  */
@@ -1547,6 +1554,16 @@
 					<63 512 1306624 2291405>;
 				qcom,bus-configs = <0x0c000000>;
 			};
+			qcom,msm-bus-client@3 {
+				qcom,msm-bus,name = "venus-arm9-ddr";
+				qcom,msm-bus,num-cases = <2>;
+				qcom,msm-bus,num-paths = <1>;
+				qcom,msm-bus,vectors-KBps =
+					<63 512 0 0>,
+					<63 512 1000 1000>;
+				qcom,bus-configs = <0x00000000>;
+				qcom,bus-passive;
+			};
 		};
 	};
 
@@ -1598,12 +1615,9 @@
 };
 
 &gdsc_venus {
-	clock-names = "bus_clk", "core_clk",
-			"core0_clk", "core1_clk";
+	clock-names = "bus_clk", "core_clk";
 	clocks = <&clock_gcc clk_gcc_venus0_axi_clk>,
-		 <&clock_gcc clk_gcc_venus0_vcodec0_clk>,
-		 <&clock_gcc clk_gcc_venus0_core0_vcodec0_clk>,
-		 <&clock_gcc clk_gcc_venus0_core1_vcodec0_clk>;
+		 <&clock_gcc clk_gcc_venus0_vcodec0_clk>;
 	status = "okay";
 };
 
@@ -1642,10 +1656,16 @@
 };
 
 &gdsc_venus_core0 {
+	qcom,support-hw-trigger;
+	clock-names ="core0_clk";
+	clocks = <&clock_gcc clk_gcc_venus0_core0_vcodec0_clk>;
 	status = "okay";
 };
 
 &gdsc_venus_core1 {
+	qcom,support-hw-trigger;
+	clock-names ="core1_clk";
+	clocks = <&clock_gcc clk_gcc_venus0_core1_vcodec0_clk>;
 	status = "okay";
 };
 
