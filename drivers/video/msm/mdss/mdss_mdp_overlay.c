@@ -1299,7 +1299,13 @@ static int __overlay_queue_pipes(struct msm_fb_data_type *mfd)
 			buf = NULL;
 		}
 
-		ret = mdss_mdp_pipe_queue_data(pipe, buf);
+		/*
+		 * if we reach here without errors and buf == NULL
+		 * then solid fill will be set
+		*/
+		if (!IS_ERR_VALUE(ret))
+			ret = mdss_mdp_pipe_queue_data(pipe, buf);
+
 		if (IS_ERR_VALUE(ret)) {
 			pr_warn("Unable to queue data for pnum=%d\n",
 					pipe->num);
