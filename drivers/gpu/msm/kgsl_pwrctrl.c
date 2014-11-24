@@ -229,6 +229,9 @@ void kgsl_pwrctrl_buslevel_update(struct kgsl_device *device,
 	if (pwr->pcl)
 		msm_bus_scale_client_update_request(pwr->pcl, buslevel);
 
+	/* vote for ocmem, shut down based on "on" parameter */
+	msm_bus_scale_client_update_request(pwr->pcl,
+		on ? pwr->active_pwrlevel : pwr->num_pwrlevels - 1);
 	/* ask a governor to vote on behalf of us */
 	devfreq_vbif_update_bw(ib_votes[last_vote_buslevel], ab);
 }
@@ -1497,7 +1500,8 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 	 * file.
 	 */
 	freq_i = pwr->min_pwrlevel;
-	pwr->pwrlevels[freq_i].bus_min = 1;
+	if (set_bus == 1)
+		pwr->pwrlevels[freq_i].bus_min = 1;
 
 	/*
 	 * Pull the BW vote out of the bus table.  They will be used to
@@ -1552,7 +1556,8 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 			}
 		}
 	}
-	pwr->pwrlevels[0].bus_max = i - 1;
+	if (set_bus == 1)
+		pwr->pwrlevels[0].bus_max = i - 1;
 
 	INIT_WORK(&pwr->thermal_cycle_ws, kgsl_thermal_cycle);
 	setup_timer(&pwr->thermal_timer, kgsl_thermal_timer,
