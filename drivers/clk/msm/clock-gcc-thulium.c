@@ -80,6 +80,7 @@ static DEFINE_CLK_BRANCH_VOTER(cxo_dwc3_clk, &cxo_clk_src.c);
 static DEFINE_CLK_BRANCH_VOTER(cxo_lpm_clk, &cxo_clk_src.c);
 static DEFINE_CLK_BRANCH_VOTER(cxo_otg_clk, &cxo_clk_src.c);
 static DEFINE_CLK_BRANCH_VOTER(cxo_pil_lpass_clk, &cxo_clk_src.c);
+static DEFINE_CLK_BRANCH_VOTER(cxo_pil_ssc_clk, &cxo_clk_src.c);
 DEFINE_CLK_RPM_SMD_XO_BUFFER(div_clk1, div_clk1_ao, DIV_CLK1_ID);
 DEFINE_CLK_RPM_SMD_XO_BUFFER(div_clk2, div_clk2_ao, DIV_CLK2_ID);
 DEFINE_CLK_RPM_SMD_XO_BUFFER(div_clk3, div_clk3_ao, DIV_CLK3_ID);
@@ -2986,6 +2987,7 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(cxo_lpm_clk),
 	CLK_LIST(cxo_otg_clk),
 	CLK_LIST(cxo_pil_lpass_clk),
+	CLK_LIST(cxo_pil_ssc_clk),
 	CLK_LIST(div_clk1),
 	CLK_LIST(div_clk1_ao),
 	CLK_LIST(div_clk2),
