@@ -521,6 +521,9 @@ Optional properties:
 - qcom,cpr-skip-voltage-change-during-suspend: Boolean property which indicates that the CPR voltage
 				should not be adjusted based upon the number of online cores while
 				entering or exiting system suspend.
+- qcom,cpr-quot-min-diff:	Integer which defines the minimum target-quotient difference between
+				the highest and (highest - 1) fuse corner to keep CPR enabled. If this
+				property is not specified a default value of 50 is used.
 
 Example:
 	apc_vreg_corner: regulator@f9018000 {
