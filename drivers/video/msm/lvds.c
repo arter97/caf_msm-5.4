@@ -95,6 +95,15 @@ static void lvds_init(struct msm_fb_data_type *mfd)
 		MDP_OUTP(MDP_BASE + 0xc3000, 0x11);
 		MDP_OUTP(MDP_BASE + 0xc3064, 0x05);
 		MDP_OUTP(MDP_BASE + 0xc3050, 0x20);
+	} else if (mfd->panel_info.clk_rate == 79400000) {
+		MDP_OUTP(MDP_BASE + 0xc3004, 0x87);
+		MDP_OUTP(MDP_BASE + 0xc3008, 0x30);
+		MDP_OUTP(MDP_BASE + 0xc300c, 0x06);
+		MDP_OUTP(MDP_BASE + 0xc3014, 0x20);
+		MDP_OUTP(MDP_BASE + 0xc3018, 0x0F);
+		MDP_OUTP(MDP_BASE + 0xc301c, 0x01);
+		MDP_OUTP(MDP_BASE + 0xc3020, 0x41);
+		MDP_OUTP(MDP_BASE + 0xc3024, 0x0d);
 	} else {
 		MDP_OUTP(MDP_BASE + 0xc3004, 0x8f);
 		MDP_OUTP(MDP_BASE + 0xc3008, 0x30);
