@@ -2532,6 +2532,7 @@ static struct branch_clk mmss_s0_axi_clk = {
 		.dbg_name = "mmss_s0_axi_clk",
 		.parent = &axi_clk_src.c,
 		.ops = &clk_ops_branch,
+		.depends = &mmss_mmagic_axi_clk.c,
 		CLK_INIT(mmss_s0_axi_clk.c),
 	},
 };
