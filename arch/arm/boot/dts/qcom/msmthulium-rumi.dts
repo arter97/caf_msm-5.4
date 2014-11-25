@@ -63,6 +63,12 @@
 };
 
 &uartblsp1dm1 {
+	status = "disabled";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart_console_active>;
+};
+
+&uartblsp2dm1 {
 	status = "ok";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart_console_active>;
