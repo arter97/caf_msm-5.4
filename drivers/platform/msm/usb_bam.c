@@ -1759,6 +1759,7 @@ int usb_bam_connect_ipa(struct usb_bam_connect_ipa_params *ipa_params)
 		spin_unlock(&usb_bam_lock);
 
 		if (cur_bam == HSUSB_BAM) {
+			pr_debug("Resetting HSUSB BAM on connect!!!\n");
 			msm_hw_bam_disable(1);
 
 			if (sps_device_reset(ctx.h_bam[cur_bam]))
@@ -1782,8 +1783,11 @@ int usb_bam_connect_ipa(struct usb_bam_connect_ipa_params *ipa_params)
 
 		/* On re-connect assume out from lpm for all BAMs */
 		info[cur_bam].in_lpm = false;
-	} else
+	} else {
 		spin_unlock(&usb_bam_lock);
+		if (!ctx.pipes_enabled_per_bam[cur_bam])
+			pr_debug("No BAM reset on connect, just pipe reset\n");
+	}
 
 	if (ipa_params->dir == USB_TO_PEER_PERIPHERAL) {
 		if (info[cur_bam].prod_pipes_enabled_per_bam == 0)
@@ -2538,6 +2542,9 @@ static struct msm_usb_bam_platform_data *usb_bam_dt_to_pdata(
 	pdata->disable_clk_gating = of_property_read_bool(node,
 		"qcom,disable-clk-gating");
 
+	pdata->enable_hsusb_bam_on_boot = of_property_read_bool(node,
+		"qcom,enable-hsusb-bam-on-boot");
+
 	for_each_child_of_node(pdev->dev.of_node, node)
 		ctx.max_connections++;
 
@@ -2662,6 +2669,7 @@ static int usb_bam_init(int bam_idx)
 		ctx.usb_bam_pdev->dev.platform_data;
 	struct resource *res, *ram_resource;
 	struct sps_bam_props props = ctx.usb_bam_sps.usb_props;
+	struct usb_phy *trans = usb_get_transceiver();
 
 	pr_debug("%s: usb_bam_init - %s\n", __func__,
 		bam_enable_strings[bam_idx]);
@@ -2730,12 +2738,32 @@ static int usb_bam_init(int bam_idx)
 	if (pdata->disable_clk_gating)
 		props.options |= SPS_BAM_NO_LOCAL_CLK_GATING;
 
+	/*
+	 * HSUSB BAM is not NDP BAM and it must be enabled early before
+	 * starting peripheral controller to avoid switching USB core mode
+	 * from legacy to BAM with ongoing data transfers.
+	 */
+	if (pdata->enable_hsusb_bam_on_boot && bam_idx == HSUSB_BAM) {
+		pr_info("Register and enable HSUSB BAM\n");
+		props.options |= SPS_BAM_OPT_ENABLE_AT_BOOT;
+		/* Incase HS OTG driver puts h/w in LPM if no USB connection */
+		pm_runtime_resume(trans->dev);
+	}
+
 	ret = sps_register_bam_device(&props, &(ctx.h_bam[bam_idx]));
 	if (ret < 0) {
 		pr_err("%s: register bam error %d\n", __func__, ret);
 		ret = -EFAULT;
 		goto free_qscratch_reg;
 	}
+
+	/* put pm_runtime vote to match previous get */
+	if (pdata->enable_hsusb_bam_on_boot && bam_idx == HSUSB_BAM) {
+		pm_runtime_put_noidle(trans->dev);
+		pm_runtime_suspend(trans->dev);
+	}
+
+	usb_put_transceiver(trans);
 
 	return 0;
 
@@ -2866,8 +2894,14 @@ static int usb_bam_probe(struct platform_device *pdev)
 {
 	int ret, i;
 	struct msm_usb_bam_platform_data *pdata;
+	struct usb_phy *trans = usb_get_transceiver();
 
 	dev_dbg(&pdev->dev, "usb_bam_probe\n");
+
+	if (!trans) {
+		pr_err("OTG not yet probed\n");
+		return -EPROBE_DEFER;
+	}
 
 	ret = device_create_file(&pdev->dev, &dev_attr_inactivity_timer);
 	if (ret) {
@@ -2947,6 +2981,8 @@ static int usb_bam_probe(struct platform_device *pdev)
 	spin_lock_init(&usb_bam_ipa_handshake_info_lock);
 	usb_bam_ipa_create_resources();
 	spin_lock_init(&usb_bam_lock);
+
+	usb_put_transceiver(trans);
 
 	return ret;
 }
