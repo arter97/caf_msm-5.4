@@ -157,6 +157,7 @@ struct usb_bam_pipe_connect {
  *                         private memory.
  * @ignore_core_reset_ack: BAM can ignore ACK from USB core during PIPE RESET
  * @disable_clk_gating: Disable clock gating
+ * @enable_hsusb_bam_on_boot: Enable HSUSB BAM (non-NDP) on bootup itself
  */
 struct msm_usb_bam_platform_data {
 	struct usb_bam_pipe_connect *connections;
@@ -166,6 +167,7 @@ struct msm_usb_bam_platform_data {
 	bool ignore_core_reset_ack;
 	bool reset_on_connect[MAX_BAMS];
 	bool disable_clk_gating;
+	bool enable_hsusb_bam_on_boot;
 };
 
 #ifdef CONFIG_USB_BAM
