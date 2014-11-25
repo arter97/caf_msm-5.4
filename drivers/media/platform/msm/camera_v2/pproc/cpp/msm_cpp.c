@@ -41,6 +41,7 @@
 #include "msm_isp_util.h"
 #include "msm_camera_io_util.h"
 #include <linux/debugfs.h>
+#include "cam_smmu_api.h"
 
 #define MSM_CPP_DRV_NAME "msm_cpp"
 
@@ -292,70 +293,31 @@ static unsigned long msm_cpp_queue_buffer_info(struct cpp_device *cpp_dev,
 		pr_err("error allocating memory\n");
 		return -EINVAL;
 	}
-
 	buff->map_info.buff_info = *buffer_info;
-	buff->map_info.dma_buf = dma_buf_get(buffer_info->fd);
 
-	if (IS_ERR_OR_NULL(buff->map_info.dma_buf)) {
-		pr_err("dma_buf_get() failed\n");
-		rc = PTR_ERR(buff->map_info.dma_buf);
-		goto err_dma_buf_get;
-	}
-
-	buff->map_info.attachment = dma_buf_attach(buff->map_info.dma_buf,
-				    &cpp_dev->pdev->dev);
-	if (IS_ERR_OR_NULL(buff->map_info.attachment)) {
-		pr_err("DMA buf attach failed\n");
-		rc = PTR_ERR(buff->map_info.attachment);
-		goto err_attach_buf;
-	}
-
-	buff->map_info.table = dma_buf_map_attachment(
-		buff->map_info.attachment, DMA_BIDIRECTIONAL);
-	if (IS_ERR_OR_NULL(buff->map_info.table)) {
-		pr_err("DMA buf map attachment failed\n");
-		rc = PTR_ERR(buff->map_info.table);
-		goto err_map_table;
-	}
-
-	rc = msm_map_dma_buf(buff->map_info.dma_buf, buff->map_info.table,
-		cpp_dev->domain_num, 0, SZ_4K, 0,
-		&buff->map_info.phy_addr,
-		&buff->map_info.len, 0, 0);
-
+	buff->map_info.buf_fd = buffer_info->fd;
+	rc = cam_smmu_get_phy_addr(cpp_dev->iommu_hdl, buffer_info->fd,
+				CAM_SMMU_MAP_RW, &buff->map_info.phy_addr,
+				&buff->map_info.len);
 	if (rc < 0) {
-		pr_err("DMA map failed\n");
-		goto err_detach;
+		pr_err("ION mmap failed\n");
+		kzfree(buff);
+		return rc;
 	}
 
 	INIT_LIST_HEAD(&buff->entry);
 	list_add_tail(&buff->entry, buff_head);
 
 	return buff->map_info.phy_addr;
-
-err_detach:
-	dma_buf_unmap_attachment(buff->map_info.attachment,
-				buff->map_info.table,
-				DMA_BIDIRECTIONAL);
-err_map_table:
-	dma_buf_detach(buff->map_info.dma_buf, buff->map_info.attachment);
-err_attach_buf:
-	dma_buf_put(buff->map_info.dma_buf);
-	buff->map_info.dma_buf = NULL;
-err_dma_buf_get:
-	kzfree(buff);
-	return 0;
 }
 
 static void msm_cpp_dequeue_buffer_info(struct cpp_device *cpp_dev,
 	struct msm_cpp_buffer_map_list_t *buff)
 {
-	msm_unmap_dma_buf(buff->map_info.table, cpp_dev->domain_num, 0);
-	dma_buf_unmap_attachment(buff->map_info.attachment,
-		buff->map_info.table, DMA_BIDIRECTIONAL);
-	dma_buf_detach(buff->map_info.dma_buf, buff->map_info.attachment);
-	dma_buf_put(buff->map_info.dma_buf);
-	buff->map_info.dma_buf = NULL;
+	int ret = -1;
+	ret = cam_smmu_put_phy_addr(cpp_dev->iommu_hdl, buff->map_info.buf_fd);
+	if (ret < 0)
+		pr_err("Error: cannot put the iommu handle back to ion fd\n");
 
 	list_del_init(&buff->entry);
 	kzfree(buff);
@@ -554,6 +516,25 @@ static void msm_cpp_poll_rx_empty(void __iomem *cpp_base)
 	else
 		pr_err("Poll rx empty failed\n");
 }
+
+
+static int cpp_init_mem(struct cpp_device *cpp_dev)
+{
+	int rc = 0;
+	int iommu_hdl;
+
+	if (cpp_dev->hw_info.cpp_hw_version == CPP_HW_VERSION_5_0_0)
+		rc = cam_smmu_get_handle("cpp_0", &iommu_hdl);
+	else
+		rc = cam_smmu_get_handle("cpp", &iommu_hdl);
+
+	if (rc < 0)
+		return -ENODEV;
+
+	cpp_dev->iommu_hdl = iommu_hdl;
+	return 0;
+}
+
 
 static irqreturn_t msm_cpp_irq(int irq_num, void *data)
 {
@@ -1056,6 +1037,15 @@ static int cpp_open_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 			return rc;
 		}
 
+		rc = cpp_init_mem(cpp_dev);
+		if (rc < 0) {
+			pr_err("Error: init memory fail\n");
+			cpp_dev->cpp_open_cnt--;
+			cpp_dev->cpp_subscribe_list[i].active = 0;
+			cpp_dev->cpp_subscribe_list[i].vfh = NULL;
+			mutex_unlock(&cpp_dev->mutex);
+			return rc;
+		}
 		cpp_dev->state = CPP_STATE_IDLE;
 	}
 	mutex_unlock(&cpp_dev->mutex);
@@ -1065,6 +1055,7 @@ static int cpp_open_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 static int cpp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 {
 	uint32_t i;
+	int rc = -1;
 	struct cpp_device *cpp_dev = NULL;
 	struct msm_device_queue *processing_q = NULL;
 	struct msm_device_queue *eventData_q = NULL;
@@ -1139,10 +1130,12 @@ static int cpp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 		msm_cpp_clear_timer(cpp_dev);
 		cpp_release_hardware(cpp_dev);
 		if (cpp_dev->iommu_state == CPP_IOMMU_STATE_ATTACHED) {
-			iommu_detach_device(cpp_dev->domain,
-				cpp_dev->iommu_ctx);
 			cpp_dev->iommu_state = CPP_IOMMU_STATE_DETACHED;
+			rc = cam_smmu_ops(cpp_dev->iommu_hdl, CAM_SMMU_DETACH);
+			if (rc < 0)
+				pr_err("Error: Detach fail in release\n");
 		}
+		cam_smmu_destroy_handle(cpp_dev->iommu_hdl);
 		msm_cpp_empty_list(processing_q, list_frame);
 		msm_cpp_empty_list(eventData_q, list_eventdata);
 		cpp_dev->state = CPP_STATE_OFF;
@@ -2214,12 +2207,12 @@ STREAM_BUFF_END:
 		break;
 	case VIDIOC_MSM_CPP_IOMMU_ATTACH: {
 		if (cpp_dev->iommu_state == CPP_IOMMU_STATE_DETACHED) {
-			rc = iommu_attach_device(cpp_dev->domain,
-				cpp_dev->iommu_ctx);
+			rc = cam_smmu_ops(cpp_dev->iommu_hdl, CAM_SMMU_ATTACH);
 			if (rc < 0) {
 				pr_err("%s:%dError iommu_attach_device failed\n",
 					__func__, __LINE__);
 				rc = -EINVAL;
+				break;
 			}
 			cpp_dev->iommu_state = CPP_IOMMU_STATE_ATTACHED;
 		} else {
@@ -2231,8 +2224,13 @@ STREAM_BUFF_END:
 	}
 	case VIDIOC_MSM_CPP_IOMMU_DETACH: {
 		if (cpp_dev->iommu_state == CPP_IOMMU_STATE_ATTACHED) {
-			iommu_detach_device(cpp_dev->domain,
-				cpp_dev->iommu_ctx);
+			rc = cam_smmu_ops(cpp_dev->iommu_hdl, CAM_SMMU_DETACH);
+			if (rc < 0) {
+				pr_err("%s:%dError iommu atach failed\n",
+					__func__, __LINE__);
+				rc = -EINVAL;
+				break;
+			}
 			cpp_dev->iommu_state = CPP_IOMMU_STATE_DETACHED;
 		} else {
 			pr_err("%s:%d IOMMMU attach triggered in invalid state\n",
@@ -2745,22 +2743,6 @@ static long msm_cpp_subdev_fops_compat_ioctl(struct file *file,
 }
 #endif
 
-static int cpp_register_domain(void)
-{
-	struct msm_iova_partition cpp_fw_partition = {
-		.start = SZ_128K,
-		.size = SZ_2G - SZ_128K,
-	};
-	struct msm_iova_layout cpp_fw_layout = {
-		.partitions = &cpp_fw_partition,
-		.npartitions = 1,
-		.client_name = "camera_cpp",
-		.domain_flags = 0,
-	};
-
-	return msm_register_domain(&cpp_fw_layout);
-}
-
 static int msm_cpp_get_clk_info(struct cpp_device *cpp_dev,
 	struct platform_device *pdev)
 {
@@ -2893,40 +2875,14 @@ static int cpp_probe(struct platform_device *pdev)
 		goto mem_err;
 	}
 
-	cpp_dev->domain_num = cpp_register_domain();
-	if (cpp_dev->domain_num < 0) {
-		pr_err("%s: could not register domain\n", __func__);
-		rc = -ENODEV;
-		goto iommu_err;
-	}
-
-	cpp_dev->domain =
-		msm_get_iommu_domain(cpp_dev->domain_num);
-	if (!cpp_dev->domain) {
-		pr_err("%s: cannot find domain\n", __func__);
-		rc = -ENODEV;
-		goto iommu_err;
-	}
-
 	if (msm_cpp_get_clk_info(cpp_dev, pdev) < 0) {
 		pr_err("msm_cpp_get_clk_info() failed\n");
-		goto iommu_err;
+		goto region_err;
 	}
 
 	rc = cpp_init_hardware(cpp_dev);
 	if (rc < 0)
 		goto cpp_probe_init_error;
-
-	if (cpp_dev->hw_info.cpp_hw_version == CPP_HW_VERSION_5_0_0)
-		cpp_dev->iommu_ctx = msm_iommu_get_ctx("cpp_0");
-	else
-		cpp_dev->iommu_ctx = msm_iommu_get_ctx("cpp");
-
-	if (IS_ERR(cpp_dev->iommu_ctx)) {
-		pr_err("%s: cannot get iommu_ctx\n", __func__);
-		rc = -EPROBE_DEFER;
-		goto iommu_err;
-	}
 
 	media_entity_init(&cpp_dev->msm_sd.sd.entity, 0, NULL, 0);
 	cpp_dev->msm_sd.sd.entity.type = MEDIA_ENT_T_V4L2_SUBDEV;
@@ -2982,7 +2938,7 @@ static int cpp_probe(struct platform_device *pdev)
 cpp_probe_init_error:
 	media_entity_cleanup(&cpp_dev->msm_sd.sd.entity);
 	msm_sd_unregister(&cpp_dev->msm_sd);
-iommu_err:
+region_err:
 	release_mem_region(cpp_dev->mem->start, resource_size(cpp_dev->mem));
 mem_err:
 	kfree(cpp_dev->cpp_clk);

@@ -237,7 +237,7 @@ static int msm_fd_start_streaming(struct vb2_queue *q, unsigned int count)
 	struct fd_ctx *ctx = vb2_get_drv_priv(q);
 	int ret;
 
-	if (!ctx->work_buf.dma_buf) {
+	if (ctx->work_buf.fd == -1) {
 		dev_err(ctx->fd_device->dev, "Missing working buffer\n");
 		return -EINVAL;
 	}
@@ -376,8 +376,6 @@ static int msm_fd_open(struct file *file)
 	}
 
 	ctx->mem_pool.fd_device = ctx->fd_device;
-	ctx->mem_pool.domain_num = ctx->fd_device->iommu_domain_num;
-
 	ctx->stats = vmalloc(sizeof(*ctx->stats) * MSM_FD_MAX_RESULT_BUFS);
 	if (!ctx->stats) {
 		dev_err(device->dev, "No memory for face statistics\n");
@@ -408,7 +406,7 @@ static int msm_fd_release(struct file *file)
 
 	vfree(ctx->stats);
 
-	if (ctx->work_buf.dma_buf)
+	if (ctx->work_buf.fd != -1)
 		msm_fd_hw_unmap_buffer(&ctx->work_buf);
 
 	v4l2_fh_del(&ctx->fh);
@@ -890,7 +888,7 @@ static int msm_fd_g_ctrl(struct file *file, void *fh, struct v4l2_control *a)
 		a->value = ctx->format.size->work_size;
 		break;
 	case V4L2_CID_FD_WORK_MEMORY_FD:
-		if (!ctx->work_buf.dma_buf)
+		if (!ctx->work_buf.fd == -1)
 			return -EINVAL;
 
 		a->value = ctx->work_buf.fd;
@@ -960,9 +958,8 @@ static int msm_fd_s_ctrl(struct file *file, void *fh, struct v4l2_control *a)
 			a->value = ctx->format.size->work_size;
 		break;
 	case V4L2_CID_FD_WORK_MEMORY_FD:
-		if (ctx->work_buf.dma_buf)
+		if (ctx->work_buf.fd != -1)
 			msm_fd_hw_unmap_buffer(&ctx->work_buf);
-
 		if (a->value >= 0) {
 			ret = msm_fd_hw_map_buffer(&ctx->mem_pool,
 				a->value, &ctx->work_buf);
@@ -1241,12 +1238,6 @@ static int fd_probe(struct platform_device *pdev)
 		goto error_get_clocks;
 	}
 
-	ret = msm_fd_hw_get_iommu(fd);
-	if (ret < 0) {
-		dev_err(&pdev->dev, " Fail to get iommu ret = %d\n", ret);
-		goto error_iommu_get;
-	}
-
 	fd->irq_num = platform_get_irq(pdev, 0);
 	if (fd->irq_num < 0) {
 		dev_err(&pdev->dev, "Can not get fd irq resource\n");
@@ -1307,8 +1298,6 @@ error_v4l2_register:
 error_alloc_workqueue:
 	devm_free_irq(&pdev->dev, fd->irq_num, fd);
 error_irq_request:
-	msm_fd_hw_put_iommu(fd);
-error_iommu_get:
 	msm_fd_hw_put_clocks(fd);
 error_get_clocks:
 	regulator_put(fd->vdd);
@@ -1336,7 +1325,6 @@ static int fd_device_remove(struct platform_device *pdev)
 	destroy_workqueue(fd->work_queue);
 	v4l2_device_unregister(&fd->v4l2_dev);
 	devm_free_irq(&pdev->dev, fd->irq_num, fd);
-	msm_fd_hw_put_iommu(fd);
 	msm_fd_hw_put_clocks(fd);
 	regulator_put(fd->vdd);
 	msm_fd_hw_release_mem_resources(fd);

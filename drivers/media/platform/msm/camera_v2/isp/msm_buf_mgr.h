@@ -60,9 +60,7 @@ enum msm_isp_buf_mgr_state {
 struct msm_isp_buffer_mapped_info {
 	unsigned long len;
 	dma_addr_t paddr;
-	struct dma_buf_attachment *attachment;
-	struct dma_buf *dma_buf;
-	struct sg_table *table;
+	int buf_fd;
 };
 
 struct buffer_cmd {
@@ -170,6 +168,9 @@ struct msm_isp_buf_mgr {
 
 	struct msm_sd_req_vb2_q *vb2_ops;
 
+	/*IOMMU driver*/
+	int ns_iommu_hdl;
+	int sec_iommu_hdl;
 	/*IOMMU specific*/
 	int iommu_domain_num;
 	struct iommu_domain *iommu_domain;
@@ -192,8 +193,7 @@ struct msm_isp_buf_mgr {
 };
 
 int msm_isp_create_isp_buf_mgr(struct msm_isp_buf_mgr *buf_mgr,
-	struct msm_sd_req_vb2_q *vb2_ops, struct msm_iova_layout *iova_layout,
-	struct device *dev);
+	struct msm_sd_req_vb2_q *vb2_ops, struct device *dev);
 
 int msm_isp_proc_buf_cmd(struct msm_isp_buf_mgr *buf_mgr,
 	unsigned int cmd, void *arg);
