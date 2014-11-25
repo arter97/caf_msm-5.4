@@ -1041,7 +1041,7 @@ static const char * const qdss_stm18_groups[] = {
 	"gpio63",
 };
 static const char * const pri_mi2s_groups[] = {
-	"gpio64", "gpio65", "gpio66", "gpio67", "gpio68",
+	"gpio64", "gpio65", "gpio67", "gpio68",
 };
 static const char * const qdss_stm17_groups[] = {
 	"gpio64",
@@ -1057,6 +1057,9 @@ static const char * const blsp_uim4_groups[] = {
 };
 static const char * const qdss_stm16_groups[] = {
 	"gpio65",
+};
+static const char * const pri_mi2s_ws_groups[] = {
+	"gpio66",
 };
 static const char * const qdss_stm15_groups[] = {
 	"gpio66",
@@ -1424,6 +1427,7 @@ static const struct msm_function msmthulium_functions[] = {
 	FUNCTION(blsp_uart4),
 	FUNCTION(blsp_uim4),
 	FUNCTION(qdss_stm16),
+	FUNCTION(pri_mi2s_ws),
 	FUNCTION(qdss_stm15),
 	FUNCTION(dac_calib26),
 	FUNCTION(blsp_i2c4),
@@ -1606,7 +1610,7 @@ static const struct msm_pingroup msmthulium_groups[] = {
 		 NA, NA),
 	PINGROUP(65, pri_mi2s, blsp_spi4, blsp_uart4, blsp_uim4, NA,
 		 qdss_stm16, qdss_tracedata_a, NA, NA),
-	PINGROUP(66, pri_mi2s, blsp_spi4, blsp_uart4, blsp_uim4, NA,
+	PINGROUP(66, pri_mi2s_ws, blsp_spi4, blsp_uart4, blsp_uim4, NA,
 		 qdss_stm15, qdss_tracedata_a, NA, NA),
 	PINGROUP(67, pri_mi2s, blsp_spi4, blsp_uart4, blsp_i2c4, qdss_stm14,
 		 qdss_tracedata_a, NA, NA, NA),
