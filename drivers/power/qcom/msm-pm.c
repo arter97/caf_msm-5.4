@@ -24,7 +24,6 @@
 #include <linux/delay.h>
 #include <linux/platform_device.h>
 #include <linux/of_platform.h>
-#include <linux/cpu_pm.h>
 #include <linux/msm-bus.h>
 #include <linux/uaccess.h>
 #include <linux/dma-mapping.h>
@@ -251,9 +250,6 @@ static bool __ref msm_pm_spm_power_collapse(
 		pr_info("CPU%u: %s: notify_rpm %d\n",
 			cpu, __func__, (int) notify_rpm);
 
-	if (from_idle)
-		cpu_pm_enter();
-
 	ret = msm_spm_set_low_power_mode(
 			MSM_SPM_MODE_POWER_COLLAPSE, notify_rpm);
 	WARN_ON(ret);
@@ -282,9 +278,6 @@ static bool __ref msm_pm_spm_power_collapse(
 		local_fiq_enable();
 
 	msm_pm_boot_config_after_pc(cpu);
-
-	if (from_idle)
-		cpu_pm_exit();
 
 	if (MSM_PM_DEBUG_POWER_COLLAPSE & msm_pm_debug_mask)
 		pr_info("CPU%u: %s: msm_pm_collapse returned, collapsed %d\n",
@@ -764,6 +757,10 @@ static int msm_pm_clk_init(struct platform_device *pdev)
 	u32 cpu;
 	char clk_name[] = "cpu??_clk";
 	char *key;
+
+	key = "qcom,saw-turns-off-pll";
+	if (of_property_read_bool(pdev->dev.of_node, key))
+		return 0;
 
 	key = "qcom,synced-clocks";
 	synced_clocks = of_property_read_bool(pdev->dev.of_node, key);

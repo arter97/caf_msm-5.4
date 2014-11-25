@@ -2367,6 +2367,29 @@ void _ipa_enable_clks_v1(void)
 
 }
 
+static unsigned int ipa_get_bus_vote(void)
+{
+	unsigned int idx = 1;
+
+	if (ipa_ctx->curr_ipa_clk_rate == ipa_ctx->ctrl->ipa_clk_rate_lo) {
+		idx = 1;
+	} else if (ipa_ctx->curr_ipa_clk_rate ==
+			ipa_ctx->ctrl->ipa_clk_rate_hi) {
+		if (ipa_ctx->ctrl->msm_bus_data_ptr->num_usecases == 2)
+			idx = 1;
+		else if (ipa_ctx->ctrl->msm_bus_data_ptr->num_usecases == 3)
+			idx = 2;
+		else
+			WARN_ON(1);
+	} else {
+		WARN_ON(1);
+	}
+
+	IPADBG("curr %d idx %d\n", ipa_ctx->curr_ipa_clk_rate, idx);
+
+	return idx;
+}
+
 /**
 * ipa_enable_clks() - Turn on IPA clocks
 *
@@ -2379,7 +2402,8 @@ void ipa_enable_clks(void)
 
 	ipa_ctx->ctrl->ipa_enable_clks();
 
-	if (msm_bus_scale_client_update_request(ipa_ctx->ipa_bus_hdl, 1))
+	if (msm_bus_scale_client_update_request(ipa_ctx->ipa_bus_hdl,
+				ipa_get_bus_vote()))
 		WARN_ON(1);
 }
 
@@ -2620,10 +2644,14 @@ int ipa_set_required_perf_profile(enum ipa_voltage_level floor_voltage,
 	ipa_active_clients_lock();
 	ipa_ctx->curr_ipa_clk_rate = clk_rate;
 	IPADBG("setting clock rate to %u\n", ipa_ctx->curr_ipa_clk_rate);
-	if (ipa_ctx->ipa_active_clients.cnt > 0)
+	if (ipa_ctx->ipa_active_clients.cnt > 0) {
 		clk_set_rate(ipa_clk, ipa_ctx->curr_ipa_clk_rate);
-	else
+		if (msm_bus_scale_client_update_request(ipa_ctx->ipa_bus_hdl,
+					ipa_get_bus_vote()))
+			WARN_ON(1);
+	} else {
 		IPADBG("clocks are gated, not setting rate\n");
+	}
 	ipa_active_clients_unlock();
 	IPADBG("Done\n");
 	return 0;
@@ -2672,14 +2700,24 @@ static int ipa_init_flt_block(void)
 			rule->at_rear = 1;
 			if (ip == IPA_IP_v4) {
 				rule->rule.attrib.attrib_mask =
-					IPA_FLT_PROTOCOL;
+					IPA_FLT_PROTOCOL | IPA_FLT_DST_ADDR;
 				rule->rule.attrib.u.v4.protocol =
 				   IPA_INVALID_L4_PROTOCOL;
+				rule->rule.attrib.u.v4.dst_addr_mask = ~0;
+				rule->rule.attrib.u.v4.dst_addr = ~0;
 			} else if (ip == IPA_IP_v6) {
 				rule->rule.attrib.attrib_mask =
-					IPA_FLT_NEXT_HDR;
+					IPA_FLT_NEXT_HDR | IPA_FLT_DST_ADDR;
 				rule->rule.attrib.u.v6.next_hdr =
-				   IPA_INVALID_L4_PROTOCOL;
+					IPA_INVALID_L4_PROTOCOL;
+				rule->rule.attrib.u.v6.dst_addr_mask[0] = ~0;
+				rule->rule.attrib.u.v6.dst_addr_mask[1] = ~0;
+				rule->rule.attrib.u.v6.dst_addr_mask[2] = ~0;
+				rule->rule.attrib.u.v6.dst_addr_mask[3] = ~0;
+				rule->rule.attrib.u.v6.dst_addr[0] = ~0;
+				rule->rule.attrib.u.v6.dst_addr[1] = ~0;
+				rule->rule.attrib.u.v6.dst_addr[2] = ~0;
+				rule->rule.attrib.u.v6.dst_addr[3] = ~0;
 			} else {
 				result = -EINVAL;
 				WARN_ON(1);
@@ -2867,7 +2905,7 @@ static void sps_event_cb(enum sps_callback_case event, void *param)
 /**
 * ipa_init() - Initialize the IPA Driver
 * @resource_p:	contain platform specific values from DST file
-* @ipa_dev:	The basic device structure representing the IPA driver
+* @pdev:	The platform device structure representing the IPA driver
 *
 * Function initialization process:
 * - Allocate memory for the driver context data struct
@@ -2898,13 +2936,15 @@ static void sps_event_cb(enum sps_callback_case event, void *param)
 * - Initialize IPA RM (resource manager)
 */
 static int ipa_init(const struct ipa_plat_drv_res *resource_p,
-		struct device *ipa_dev)
+		struct platform_device *pdev)
 {
 	int result = 0;
 	int i;
 	struct sps_bam_props bam_props = { 0 };
 	struct ipa_flt_tbl *flt_tbl;
 	struct ipa_rt_tbl_set *rset;
+	struct msm_bus_scale_pdata *bus_scale_table;
+	struct device *ipa_dev = &pdev->dev;
 
 	IPADBG("IPA Driver initialization started\n");
 
@@ -2950,6 +2990,12 @@ static int ipa_init(const struct ipa_plat_drv_res *resource_p,
 	       ipa_ctx->hdr_tbl_lcl, ipa_ctx->ip4_rt_tbl_lcl,
 	       ipa_ctx->ip6_rt_tbl_lcl, ipa_ctx->ip4_flt_tbl_lcl,
 	       ipa_ctx->ip6_flt_tbl_lcl);
+
+	bus_scale_table = msm_bus_cl_get_pdata(pdev);
+	if (bus_scale_table) {
+		IPADBG("Use bus scaling info from device tree\n");
+		ipa_ctx->ctrl->msm_bus_data_ptr = bus_scale_table;
+	}
 
 	/* get BUS handle */
 	ipa_ctx->ipa_bus_hdl =
@@ -3535,7 +3581,7 @@ static int ipa_plat_drv_probe(struct platform_device *pdev_p)
 	}
 
 	/* Proceed to real initialization */
-	result = ipa_init(&ipa_res, &pdev_p->dev);
+	result = ipa_init(&ipa_res, pdev_p);
 	if (result) {
 		IPAERR("ipa_init failed\n");
 		return result;

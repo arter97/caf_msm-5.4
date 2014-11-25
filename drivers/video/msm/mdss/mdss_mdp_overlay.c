@@ -341,12 +341,15 @@ int mdss_mdp_overlay_req_check(struct msm_fb_data_type *mfd,
 		if (req->flags & MDP_BWC_EN) {
 			if ((req->src.width != req->src_rect.w) ||
 			    (req->src.height != req->src_rect.h)) {
-				pr_err("BWC: unequal src img and rect w,h\n");
+				pr_err("BWC: mismatch of src img=%dx%d rect=%dx%d\n",
+					req->src.width, req->src.height,
+					req->src_rect.w, req->src_rect.h);
 				return -EINVAL;
 			}
 
-			if (req->flags & MDP_DECIMATION_EN) {
-				pr_err("Can't enable BWC decode && decimate\n");
+			if ((req->flags & MDP_DECIMATION_EN) ||
+					req->vert_deci || req->horz_deci) {
+				pr_err("Can't enable BWC and decimation\n");
 				return -EINVAL;
 			}
 		}
@@ -446,14 +449,16 @@ static int __mdss_mdp_validate_pxl_extn(struct mdss_mdp_pipe *pipe)
 
 		/*
 		 * For chroma plane, width is half for the following sub sampled
-		 * formats
+		 * formats. Except in case of decimation, where hardware avoids
+		 * 1 line of decimation instead of downsampling.
 		 */
-		if (plane == 1 &&
+		if (plane == 1 && !pipe->horz_deci &&
 		    ((pipe->src_fmt->chroma_sample == MDSS_MDP_CHROMA_420) ||
-		     (pipe->src_fmt->chroma_sample == MDSS_MDP_CHROMA_H2V1)))
+		     (pipe->src_fmt->chroma_sample == MDSS_MDP_CHROMA_H2V1))) {
 			src_w >>= 1;
+		}
 
-		if (plane == 1 &&
+		if (plane == 1 && !pipe->vert_deci &&
 		    ((pipe->src_fmt->chroma_sample == MDSS_MDP_CHROMA_420) ||
 		     (pipe->src_fmt->chroma_sample == MDSS_MDP_CHROMA_H1V2)))
 			src_h >>= 1;
@@ -486,7 +491,8 @@ static int __mdss_mdp_validate_pxl_extn(struct mdss_mdp_pipe *pipe)
 			(hor_ov_fetch > pipe->img_width) ||
 			(vert_req_pixels != vert_fetch_pixels) ||
 			(vert_ov_fetch > pipe->img_height)) {
-			pr_err("err: h_req:%d h_fetch:%d v_req:%d v_fetch:%d src_img:[%d,%d]\n",
+			pr_err("err: plane=%d h_req:%d h_fetch:%d v_req:%d v_fetch:%d src_img:[%d,%d]\n",
+					plane,
 					hor_req_pixels, hor_fetch_pixels,
 					vert_req_pixels, vert_fetch_pixels,
 					pipe->img_width, pipe->img_height);
@@ -676,7 +682,8 @@ int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 		pipe = mdss_mdp_pipe_alloc(mixer, pipe_type, left_blend_pipe);
 
 		/* RGB pipes can be used instead of DMA */
-		if ((req->pipe_type == PIPE_TYPE_AUTO) && !pipe &&
+		if (IS_ERR_OR_NULL(pipe) &&
+		    (req->pipe_type == PIPE_TYPE_AUTO) &&
 		    (pipe_type == MDSS_MDP_PIPE_TYPE_DMA)) {
 			pr_debug("giving RGB pipe for fb%d. flags:0x%x\n",
 				mfd->index, req->flags);
@@ -686,7 +693,8 @@ int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 		}
 
 		/* VIG pipes can also support RGB format */
-		if ((req->pipe_type == PIPE_TYPE_AUTO) && !pipe &&
+		if (IS_ERR_OR_NULL(pipe) &&
+		    (req->pipe_type == PIPE_TYPE_AUTO) &&
 		    (pipe_type == MDSS_MDP_PIPE_TYPE_RGB)) {
 			pr_debug("giving ViG pipe for fb%d. flags:0x%x\n",
 				mfd->index, req->flags);
@@ -695,9 +703,11 @@ int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 				left_blend_pipe);
 		}
 
-		if (pipe == NULL) {
-			pr_err("error allocating pipe. flags=0x%x\n",
-				req->flags);
+		if (IS_ERR(pipe)) {
+			return PTR_ERR(pipe);
+		} else if (!pipe) {
+			pr_err("error allocating pipe. flags=0x%x req->pipe_type=%d pipe_type=%d\n",
+				req->flags, req->pipe_type, pipe_type);
 			return -ENODEV;
 		}
 
@@ -799,6 +809,11 @@ int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 	pipe->dst.y = req->dst_rect.y;
 	pipe->dst.w = req->dst_rect.w;
 	pipe->dst.h = req->dst_rect.h;
+
+	if (mixer->ctl) {
+		pipe->dst.x += mixer->ctl->border_x_off;
+		pipe->dst.y += mixer->ctl->border_y_off;
+	}
 
 	if (mfd->panel_orientation & MDP_FLIP_LR)
 		pipe->dst.x = pipe->mixer_left->width
@@ -1518,7 +1533,7 @@ int mdss_mdp_overlay_kickoff(struct msm_fb_data_type *mfd,
 	 * to return an error and force fallback strategy. Instead change
 	 * the ROI to be full screen and continue with the update.
 	 */
-	if (data) {
+	if (data && ctl->panel_data->panel_info.partial_update_enabled) {
 		struct mdss_rect ctl_roi;
 		struct mdp_rect *in_roi;
 		skip_partial_update = false;
@@ -2958,7 +2973,8 @@ static int mdss_fb_get_metadata(struct msm_fb_data_type *mfd,
 static int __mdss_overlay_map(struct mdp_overlay *ovs,
 	struct mdp_overlay *op_ovs, int num_ovs, int num_ovs_processed)
 {
-	int i = num_ovs_processed, j, k;
+	int mapped = num_ovs_processed;
+	int j, k;
 
 	for (j = 0; j < num_ovs; j++) {
 		for (k = 0; k < num_ovs; k++) {
@@ -2969,15 +2985,14 @@ static int __mdss_overlay_map(struct mdp_overlay *ovs,
 				break;
 			}
 		}
-		if ((i != num_ovs) && (i != j) &&
-		    (ovs[j].dst_rect.x == op_ovs[k].dst_rect.x) &&
-		    (ovs[i].z_order == op_ovs[k].z_order)) {
-			pr_debug("mapped %d->%d\n", i, j);
-			i = j;
+
+		if ((mapped != num_ovs) && (mapped == j)) {
+			pr_debug("mapped %d->%d\n", mapped, k);
+			mapped = k;
 		}
 	}
 
-	return i;
+	return mapped;
 }
 
 static inline void __overlay_swap_func(void *a, void *b, int size)
@@ -3192,7 +3207,7 @@ static int __handle_ioctl_overlay_prepare(struct msm_fb_data_type *mfd,
 	if (copy_from_user(&ovlist, argp, sizeof(ovlist)))
 		return -EFAULT;
 
-	if (ovlist.num_overlays >= OVERLAY_MAX) {
+	if (ovlist.num_overlays > OVERLAY_MAX) {
 		pr_err("Number of overlays exceeds max\n");
 		return -EINVAL;
 	}

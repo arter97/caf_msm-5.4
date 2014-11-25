@@ -60,6 +60,7 @@ linux	Linux-specific binding
 lsi	LSI Corp. (LSI Logic)
 marvell	Marvell Technology Group Ltd.
 maxim	Maxim Integrated Products
+mcube	mCube, Inc.
 memsic	MEMSIC, Inc
 microchip	Microchip Technology Inc.
 mosaixtech	Mosaix Technologies, Inc.
@@ -98,6 +99,7 @@ spansion	Spansion Inc.
 st	STMicroelectronics
 ste	ST-Ericsson
 stericsson	ST-Ericsson
+synopsys 	Synopsys, Inc. (deprecated, use snps)
 ti	Texas Instruments
 tlm	Trusted Logic Mobility
 toshiba	Toshiba Corporation

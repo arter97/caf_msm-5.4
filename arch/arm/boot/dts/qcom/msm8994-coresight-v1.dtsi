@@ -155,7 +155,7 @@
 
 		coresight-id = <7>;
 		coresight-name = "coresight-funnel-apss";
-		coresight-nr-inports = <4>;
+		coresight-nr-inports = <8>;
 		coresight-outports = <0>;
 		coresight-child-list = <&funnel_in1>;
 		coresight-child-ports = <6>;
@@ -196,6 +196,8 @@
 		coresight-outports = <0>;
 		coresight-child-list = <&funnel_in0>;
 		coresight-child-ports = <7>;
+
+		qcom,data-barrier;
 
 		clocks = <&clock_rpm clk_qdss_clk>,
 			 <&clock_rpm clk_qdss_a_clk>;

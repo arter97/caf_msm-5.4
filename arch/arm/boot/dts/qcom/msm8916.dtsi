@@ -474,6 +474,8 @@
 		qcom,hsusb-otg-mode = <1>;
 		qcom,hsusb-otg-otg-control = <2>;
 		qcom,dp-manual-pullup;
+		qcom,hsusb-otg-mpm-dpsehv-int = <49>;
+		qcom,hsusb-otg-mpm-dmsehv-int = <58>;
 
 		qcom,msm-bus,name = "usb2";
 		qcom,msm-bus,num-cases = <3>;
@@ -684,6 +686,7 @@
 				"iface_clk", "bus_clk";
 		qcom,use-sw-aes-cbc-ecb-ctr-algo;
 		qcom,use-sw-aes-xts-algo;
+		qcom,use-sw-aes-ccm-algo;
 		qcom,use-sw-ahash-algo;
 		status = "disabled";
 		qcom,ce-opp-freq = <100000000>;
@@ -1345,7 +1348,7 @@
                 interrupt-names = "spi_irq", "spi_bam_irq";
                 interrupts = <0 97 0>, <0 238 0>;
                 spi-max-frequency = <50000000>;
-                pinctrl-names = "default", "sleep";
+                pinctrl-names = "spi_default", "spi_sleep";
                 pinctrl-0 = <&spi0_default &spi0_cs0_active>;
 		pinctrl-1 = <&spi0_sleep &spi0_cs0_sleep>;
 		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
@@ -1574,6 +1577,7 @@
 		qcom,freq-mitigation-temp-hysteresis = <10>;
 		qcom,freq-mitigation-value = <400000>;
 		qcom,freq-mitigation-control-mask = <0x01>;
+		qcom,online-hotplug-core;
 		qcom,vdd-restriction-temp = <5>;
 		qcom,vdd-restriction-temp-hysteresis = <10>;
 		vdd-dig-supply = <&pm8916_s1_floor_corner>;

@@ -161,6 +161,7 @@ static struct qpnp_vadc_scale_fn vadc_scale_fn[] = {
 	[SCALE_QRD_SKUG_BATT_THERM] = {qpnp_adc_scale_qrd_skug_batt_therm},
 	[SCALE_QRD_SKUH_BATT_THERM] = {qpnp_adc_scale_qrd_skuh_batt_therm},
 	[SCALE_NCP_03WF683_THERM] = {qpnp_adc_scale_therm_ncp03},
+	[SCALE_QRD_SKUT1_BATT_THERM] = {qpnp_adc_scale_qrd_skut1_batt_therm},
 };
 
 static struct qpnp_vadc_rscale_fn adc_vadc_rscale_fn[] = {
@@ -458,7 +459,8 @@ static int32_t qpnp_vadc_read_conversion_result(struct qpnp_vadc_chip *vadc,
 
 	*data = (rslt_msb << 8) | rslt_lsb;
 
-	status = qpnp_vadc_check_result(data);
+	status = qpnp_vadc_check_result(data,
+			(vadc->vadc_recalib_check ? true : false));
 	if (status < 0) {
 		pr_err("VADC data check failed\n");
 		goto fail;

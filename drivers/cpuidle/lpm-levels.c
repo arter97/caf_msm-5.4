@@ -33,6 +33,7 @@
 #include <linux/coresight-cti.h>
 #include <linux/moduleparam.h>
 #include <linux/sched.h>
+#include <linux/cpu_pm.h>
 #include <soc/qcom/spm.h>
 #include <soc/qcom/pm.h>
 #include <soc/qcom/rpm-notifier.h>
@@ -224,7 +225,10 @@ int set_l2_mode(struct low_power_ops *ops, int mode, bool notify_rpm)
 
 int set_cci_mode(struct low_power_ops *ops, int mode, bool notify_rpm)
 {
-	return msm_spm_config_low_power_mode(ops->spm, mode, notify_rpm);
+	int lpm = mode;
+	if (mode == MSM_SPM_MODE_CLOCK_GATING)
+		lpm = MSM_SPM_MODE_DISABLED;
+	return msm_spm_config_low_power_mode(ops->spm, lpm, notify_rpm);
 }
 
 static int cpu_power_select(struct cpuidle_device *dev,
@@ -467,8 +471,15 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 		ret = cluster->lpm_dev[i].set_mode(&cluster->lpm_dev[i],
 				level->mode[i],
 				level->notify_rpm);
+
 		if (ret)
 			goto failed_set_mode;
+
+		/*
+		 * Notify that the cluster is entering a low power mode
+		 */
+		if (level->mode[i] == MSM_PM_SLEEP_MODE_POWER_COLLAPSE)
+			cpu_cluster_pm_enter();
 	}
 	if (level->notify_rpm) {
 		struct cpumask nextcpu;
@@ -605,7 +616,12 @@ static void cluster_unprepare(struct lpm_cluster *cluster,
 		ret = cluster->lpm_dev[i].set_mode(&cluster->lpm_dev[i],
 				level->mode[i],
 				level->notify_rpm);
+
 		BUG_ON(ret);
+
+		if (cluster->levels[last_level].mode[i] ==
+				MSM_PM_SLEEP_MODE_POWER_COLLAPSE)
+			cpu_cluster_pm_exit();
 	}
 unlock_return:
 	spin_unlock(&cluster->sync_lock);
@@ -632,6 +648,11 @@ static inline void cpu_prepare(struct lpm_cluster *cluster, int cpu_index,
 	if (from_idle && (cpu_level->use_bc_timer ||
 			(cpu_index >= cluster->min_child_level)))
 		clockevents_notify(CLOCK_EVT_NOTIFY_BROADCAST_ENTER, &cpu);
+
+	if (from_idle && ((cpu_level->mode == MSM_PM_SLEEP_MODE_POWER_COLLAPSE)
+		|| (cpu_level->mode ==
+			MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE)))
+		cpu_pm_enter();
 }
 
 static inline void cpu_unprepare(struct lpm_cluster *cluster, int cpu_index,
@@ -643,6 +664,11 @@ static inline void cpu_unprepare(struct lpm_cluster *cluster, int cpu_index,
 	if (from_idle && (cpu_level->use_bc_timer ||
 			(cpu_index >= cluster->min_child_level)))
 		clockevents_notify(CLOCK_EVT_NOTIFY_BROADCAST_EXIT, &cpu);
+
+	if (from_idle && ((cpu_level->mode == MSM_PM_SLEEP_MODE_POWER_COLLAPSE)
+		|| (cpu_level->mode ==
+			MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE)))
+		cpu_pm_exit();
 }
 
 static int lpm_cpuidle_enter(struct cpuidle_device *dev,
@@ -1102,5 +1128,4 @@ void lpm_cpu_hotplug_enter(unsigned int cpu)
 
 	msm_cpu_pm_enter_sleep(mode, false);
 }
-
 

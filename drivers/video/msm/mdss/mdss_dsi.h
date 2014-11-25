@@ -163,6 +163,8 @@ enum dsi_pm_type {
 #define DSI_INTR_CMD_MDP_DONE		BIT(8)
 #define DSI_INTR_CMD_DMA_DONE_MASK	BIT(1)
 #define DSI_INTR_CMD_DMA_DONE		BIT(0)
+/* Update this if more interrupt masks are added in future chipsets */
+#define DSI_INTR_TOTAL_MASK		0x2222AA02
 
 #define DSI_CMD_TRIGGER_NONE		0x0	/* mdp trigger */
 #define DSI_CMD_TRIGGER_TE		0x02
@@ -175,6 +177,9 @@ enum dsi_pm_type {
 #define DSI_DYNAMIC_TERM    BIT(4)
 #define DSI_BTA_TERM    BIT(1)
 #define DSI_CMD_TERM    BIT(0)
+
+#define DSI_DATA_LANES_STOP_STATE	0xF
+#define DSI_CLK_LANE_STOP_STATE		BIT(4)
 
 /* offsets for dynamic refresh */
 #define DSI_DYNAMIC_REFRESH_CTRL		0x200
@@ -413,6 +418,7 @@ int mdss_dsi_cmds_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 void mdss_dsi_host_init(struct mdss_panel_data *pdata);
 void mdss_dsi_op_mode_config(int mode,
 				struct mdss_panel_data *pdata);
+void mdss_dsi_restore_intr_mask(struct mdss_dsi_ctrl_pdata *ctrl);
 void mdss_dsi_cmd_mode_ctrl(int enable);
 void mdp4_dsi_cmd_trigger(void);
 void mdss_dsi_cmd_mdp_start(struct mdss_dsi_ctrl_pdata *ctrl);
