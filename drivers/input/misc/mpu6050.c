@@ -2494,6 +2494,7 @@ MODULE_DEVICE_TABLE(i2c, mpu6050_ids);
 
 static const struct of_device_id mpu6050_of_match[] = {
 	{ .compatible = "invn,mpu6050", },
+	{ .compatible = "invn,mpu6880", },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, mpu6050_of_match);
