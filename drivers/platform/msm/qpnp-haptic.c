@@ -113,6 +113,7 @@
 #define QPNP_HAP_TIMEOUT_MS_MAX		15000
 #define QPNP_HAP_STR_SIZE		20
 #define QPNP_HAP_MAX_RETRIES		5
+#define QPNP_HAP_CYCLS			5
 
 /* haptic debug register set */
 static u8 qpnp_hap_dbg_regs[] = {
@@ -277,16 +278,20 @@ static int qpnp_hap_mod_enable(struct qpnp_hap *hap, int on)
 	} else {
 		for (i = 0; i < QPNP_HAP_MAX_RETRIES; i++) {
 			/* wait for 4 cycles of play rate */
-			unsigned long sleep_time = 4 * hap->wave_play_rate_us;
+			unsigned long sleep_time =
+				QPNP_HAP_CYCLS * hap->wave_play_rate_us;
 
 			rc = qpnp_hap_read_reg(hap, &val,
 				QPNP_HAP_STATUS(hap->base));
 
 			dev_dbg(&hap->spmi->dev, "HAP_STATUS=0x%x\n", val);
 
-			if (val & QPNP_HAP_STATUS_BUSY)
+			/* wait for QPNP_HAP_CYCLS cycles of play rate */
+			if (val & QPNP_HAP_STATUS_BUSY) {
 				usleep_range(sleep_time, sleep_time);
-			else
+				if (hap->play_mode == QPNP_HAP_DIRECT)
+					break;
+			} else
 				break;
 		}
 
