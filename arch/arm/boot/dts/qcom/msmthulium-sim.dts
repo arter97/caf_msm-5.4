@@ -81,3 +81,11 @@
 &mdss_dsi0 {
 	qcom,dsi-pref-prim-pan = <&dsi_sim_vid>;
 };
+
+&ufsphy1 {
+	status = "ok";
+};
+
+&ufs1 {
+	status = "ok";
+};
