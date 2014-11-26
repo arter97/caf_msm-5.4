@@ -27,8 +27,6 @@
 
 #define LA_SPI_DRIVER
 
-#define GPIO_KEY_VOLUME_DOWN_PM8921     PM8921_GPIO_PM_TO_SYS(38)
-
 /* The SPI configurations apply to GSBI 5*/
 static struct gpiomux_setting gpio_spi_config = {
 	.func = GPIOMUX_FUNC_2,
@@ -1697,9 +1695,16 @@ static struct msm_gpiomux_config mxt540e_gpio_alt_config[] __initdata = {
 		},
 	},
 };
+
+#ifdef CONFIG_MSM_S4_AS_REVERSE_GEAR
+#define GPIO_KEY_REVERSE                PM8921_GPIO_PM_TO_SYS(38)
+#else
+#define GPIO_KEY_REVERSE                PM8921_GPIO_PM_TO_SYS(20)
+#endif
+
 static struct msm_gpiomux_config adp2_reverse_gpio_config[] __initdata = {
 	{      /* REVERSE */
-		.gpio = GPIO_KEY_VOLUME_DOWN_PM8921,
+		.gpio = GPIO_KEY_REVERSE,
 		.settings = {
 			[GPIOMUX_ACTIVE]    = &mplatform_int_act_cfg,
 			[GPIOMUX_SUSPENDED] = &mplatform_int_sus_cfg,

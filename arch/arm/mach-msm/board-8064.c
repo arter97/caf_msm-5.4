@@ -3148,6 +3148,17 @@ static struct gpio_keys_button cdp_keys_pm8921[] = {
 		.wakeup		= 1,
 		.debounce_interval = 15,
 	},
+#ifndef CONFIG_MSM_S4_AS_REVERSE_GEAR
+	{
+		.code           = KEY_VOLUMEDOWN,
+		.gpio           = GPIO_KEY_VOLUME_DOWN_PM8921,
+		.desc           = "volume_down_key",
+		.active_low     = 1,
+		.type		= EV_KEY,
+		.wakeup		= 1,
+		.debounce_interval = 15,
+	},
+#endif
 	{
 		.code           = SW_ROTATE_LOCK,
 		.gpio           = GPIO_KEY_ROTATION_PM8921,
@@ -3738,7 +3749,14 @@ static void __init apq8064ab_update_retention_spm(void)
 	}
 }
 
-#define GPIO_KEY_REVERSE                GPIO_KEY_VOLUME_DOWN_PM8921
+#ifdef CONFIG_MSM_S4_AS_REVERSE_GEAR
+#define GPIO_KEY_REVERSE		GPIO_KEY_VOLUME_DOWN_PM8921
+#define GPIO_ACTIVE_LEVEL		1
+#else
+#define GPIO_KEY_REVERSE		PM8921_GPIO_PM_TO_SYS(20)
+#define GPIO_ACTIVE_LEVEL		0
+#endif
+
 static struct reverse_switch_platform_data mplatform_reverse_data = {
 	.name = "reverse",
 	.gpio = GPIO_KEY_REVERSE,
@@ -3748,6 +3766,7 @@ static struct reverse_switch_platform_data mplatform_reverse_data = {
 	.state_on = NULL,
 	.state_off = NULL,
 	.debounce_time = 200,
+	.active_low = GPIO_ACTIVE_LEVEL,
 };
 
 static struct platform_device mplatform_reverse_pdev = {
