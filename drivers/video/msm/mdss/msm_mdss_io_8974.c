@@ -65,7 +65,8 @@ int mdss_dsi_clk_init(struct platform_device *pdev,
 	}
 
 	if ((ctrl->panel_data.panel_info.type == MIPI_CMD_PANEL) ||
-		ctrl->panel_data.panel_info.mipi.dynamic_switch_enabled) {
+		ctrl->panel_data.panel_info.mipi.dynamic_switch_enabled ||
+		ctrl->panel_data.panel_info.ulps_suspend_enabled) {
 		ctrl->mmss_misc_ahb_clk = clk_get(dev, "core_mmss_clk");
 		if (IS_ERR(ctrl->mmss_misc_ahb_clk)) {
 			ctrl->mmss_misc_ahb_clk = NULL;
@@ -545,6 +546,20 @@ static int mdss_dsi_clk_ctrl_sub(struct mdss_dsi_ctrl_pdata *ctrl,
 			}
 		}
 		if (clk_type & DSI_LINK_CLKS) {
+			if (ctrl->mmss_clamp) {
+				mdss_dsi_phy_init(pdata);
+				mdss_dsi_ctrl_setup(pdata);
+				mdss_dsi_host_init(pdata);
+				mdss_dsi_op_mode_config(pdata->panel_info.mipi.mode,
+					pdata);
+				/*
+				 * ULPS Entry Request. This is needed because, after power
+				 * collapse and reset, the DSI controller resets back to
+				 * idle state and not ULPS.
+				 */
+				mdss_dsi_ulps_config(ctrl, 1);
+				mdss_dsi_clamp_ctrl(ctrl, 0);
+			}
 			rc = mdss_dsi_link_clk_start(ctrl);
 			if (rc) {
 				pr_err("Failed to start link clocks. rc=%d\n",
@@ -568,10 +583,15 @@ static int mdss_dsi_clk_ctrl_sub(struct mdss_dsi_ctrl_pdata *ctrl,
 			 * No need to enable ULPS when turning off clocks
 			 * while blanking the panel.
 			 */
-			if ((mdss_dsi_ulps_feature_enabled(pdata)) &&
-				(pdata->panel_info.panel_power_on))
+			if (((mdss_dsi_ulps_feature_enabled(pdata)) &&
+				(pdata->panel_info.panel_power_on)) ||
+				pdata->panel_info.ulps_suspend_enabled) {
 				mdss_dsi_ulps_config(ctrl, 1);
-			mdss_dsi_link_clk_stop(ctrl);
+				mdss_dsi_link_clk_stop(ctrl);
+				mdss_dsi_clamp_ctrl(ctrl, 1);
+			} else {
+				mdss_dsi_link_clk_stop(ctrl);
+			}
 		}
 		if (clk_type & DSI_BUS_CLKS) {
 			mdss_dsi_bus_clk_stop(ctrl);
