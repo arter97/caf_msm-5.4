@@ -584,6 +584,16 @@
 		};
 	};
 
+	qcom,wdt@9830000 {
+		compatible = "qcom,msm-watchdog";
+		reg = <0x9830000 0x1000>;
+		reg-names = "wdt-base";
+		interrupts = <0 28 0>, <0 29 0>;
+		qcom,bark-time = <11000>;
+		qcom,pet-time = <10000>;
+		qcom,ipi-ping;
+	};
+
 	rpm_bus: qcom,rpm-smd {
 		 compatible = "qcom,rpm-smd";
 		 rpm-channel-name = "rpm_requests";
