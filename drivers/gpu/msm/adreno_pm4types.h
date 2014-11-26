@@ -240,7 +240,11 @@ static inline uint pm4_calc_odd_parity_bit(uint val)
 	((val) >> 28)))) & 1;
 }
 
-/* PM4 packet header functions */
+/*
+ * PM4 packet header functions
+ * For all the packet functions the passed in count should be the size of the
+ * payload excluding the header
+ */
 static inline uint cp_type0_packet(uint regindx, uint cnt)
 {
 	return CP_TYPE0_PKT | ((cnt-1) << 16) | ((regindx) & 0x7FFF);
@@ -253,16 +257,16 @@ static inline uint cp_type3_packet(uint opcode, uint cnt)
 
 static inline uint cp_type4_packet(uint opcode, uint cnt)
 {
-	return CP_TYPE4_PKT | ((cnt-1) << 0) |
-	(pm4_calc_odd_parity_bit(cnt-1) << 7) |
+	return CP_TYPE4_PKT | ((cnt) << 0) |
+	(pm4_calc_odd_parity_bit(cnt) << 7) |
 	(((opcode) & 0x3FFFF) << 8) |
 	((pm4_calc_odd_parity_bit(opcode) << 27));
 }
 
 static inline uint cp_type7_packet(uint opcode, uint cnt)
 {
-	return CP_TYPE7_PKT | ((cnt-1) << 0) |
-	(pm4_calc_odd_parity_bit(cnt-1) << 15) |
+	return CP_TYPE7_PKT | ((cnt) << 0) |
+	(pm4_calc_odd_parity_bit(cnt) << 15) |
 	(((opcode) & 0x7F) << 16) |
 	((pm4_calc_odd_parity_bit(opcode) << 23));
 
@@ -301,6 +305,9 @@ static inline int adreno_cmd_is_ib(unsigned int cmd)
 		cmd == cp_type3_packet(CP_COND_INDIRECT_BUFFER_PFD, 2));
 }
 
+/* Return true if the hardware uses the legacy (A4XX and older) PM4 format */
+#define ADRENO_LEGACY_PM4(_d) (ADRENO_GPUREV(_d) < 500)
+
 /**
  * cp_packet - Generic CP packet to support different opcodes on
  * different GPU cores.
@@ -311,10 +318,10 @@ static inline int adreno_cmd_is_ib(unsigned int cmd)
 static inline uint cp_packet(struct adreno_device *adreno_dev,
 				int opcode, uint size)
 {
-	if (ADRENO_GPUREV(adreno_dev) < 500)
+	if (ADRENO_LEGACY_PM4(adreno_dev))
 		return cp_type3_packet(opcode, size);
-	else
-		return cp_type7_packet(opcode, size + 1);
+
+	return cp_type7_packet(opcode, size);
 }
 
 /**
@@ -328,10 +335,10 @@ static inline uint cp_packet(struct adreno_device *adreno_dev,
 static inline uint cp_mem_packet(struct adreno_device *adreno_dev,
 				int opcode, uint size, uint num_mem)
 {
-	if (ADRENO_GPUREV(adreno_dev) < 500)
+	if (ADRENO_LEGACY_PM4(adreno_dev))
 		return cp_type3_packet(opcode, size);
-	else
-		return cp_type7_packet(opcode, size + 1 + num_mem);
+
+	return cp_type7_packet(opcode, size + num_mem);
 }
 
 /**
@@ -346,7 +353,7 @@ static inline uint cp_gpuaddr(struct adreno_device *adreno_dev,
 {
 	uint *start = cmds;
 
-	if (ADRENO_GPUREV(adreno_dev) < 500)
+	if (ADRENO_LEGACY_PM4(adreno_dev))
 		*cmds++ = (uint)gpuaddr;
 	else {
 		*cmds++ = (uint)(gpuaddr);
@@ -364,10 +371,10 @@ static inline uint cp_gpuaddr(struct adreno_device *adreno_dev,
 static inline uint cp_register(struct adreno_device *adreno_dev,
 			unsigned int reg, unsigned int size)
 {
-	if (ADRENO_GPUREV(adreno_dev) < 500)
+	if (ADRENO_LEGACY_PM4(adreno_dev))
 		return cp_type0_packet(reg, size);
-	else
-		return cp_type4_packet(reg, size + 1);
+
+	return cp_type4_packet(reg, size);
 }
 
 /**
@@ -380,11 +387,11 @@ static inline uint cp_wait_for_me(struct adreno_device *adreno_dev,
 {
 	uint *start = cmds;
 
-	if (ADRENO_GPUREV(adreno_dev) < 500) {
+	if (ADRENO_LEGACY_PM4(adreno_dev)) {
 		*cmds++ = cp_type3_packet(CP_WAIT_FOR_ME, 1);
 		*cmds++ = 0;
 	} else
-		*cmds++ = cp_type7_packet(CP_WAIT_FOR_ME, 1);
+		*cmds++ = cp_type7_packet(CP_WAIT_FOR_ME, 0);
 
 	return cmds - start;
 }
@@ -399,11 +406,11 @@ static inline uint cp_wait_for_idle(struct adreno_device *adreno_dev,
 {
 	uint *start = cmds;
 
-	if (ADRENO_GPUREV(adreno_dev) < 500) {
+	if (ADRENO_LEGACY_PM4(adreno_dev)) {
 		*cmds++ = cp_type3_packet(CP_WAIT_FOR_IDLE, 1);
 		*cmds++ = 0;
 	} else
-		*cmds++ = cp_type7_packet(CP_WAIT_FOR_IDLE, 1);
+		*cmds++ = cp_type7_packet(CP_WAIT_FOR_IDLE, 0);
 
 	return cmds - start;
 }

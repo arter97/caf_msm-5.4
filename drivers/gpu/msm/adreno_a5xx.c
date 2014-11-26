@@ -175,7 +175,7 @@ int a5xx_rb_init(struct adreno_device *adreno_dev,
 	if (cmds == NULL)
 		return -ENOSPC;
 
-	*cmds++ = cp_type7_packet(CP_ME_INIT, 8);
+	*cmds++ = cp_type7_packet(CP_ME_INIT, 7);
 	/*
 	 *  Mask -- look for all ordinals but drawcall
 	 *  range and reset ucode scratch memory.
