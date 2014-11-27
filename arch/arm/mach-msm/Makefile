@@ -2,7 +2,6 @@ obj-y += io.o
 obj-$(CONFIG_USE_OF) += board-dt.o
 
 obj-$(CONFIG_HW_PERF_EVENTS) += perf_trace_counters.o
-obj-$(CONFIG_ARCH_MSM_KRAIT) += msm-krait-l2-accessors.o
 obj-$(CONFIG_ARCH_MSM_KRAIT) += msm-krait-l2-accessors.o perf_event_msm_krait_l2.o
 obj-$(CONFIG_DEBUG_FS) += perf_debug.o
 
