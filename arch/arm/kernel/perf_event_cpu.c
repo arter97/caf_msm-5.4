@@ -556,6 +556,15 @@ static int __init register_pmu_driver(void)
 }
 device_initcall(register_pmu_driver);
 
+static struct dentry *perf_debug_dir;
+
+struct dentry *perf_create_debug_dir(void)
+{
+	if (!perf_debug_dir)
+		perf_debug_dir = debugfs_create_dir("msm_perf", NULL);
+	return perf_debug_dir;
+}
+
 #ifdef CONFIG_PERF_EVENTS_RESET_PMU_DEBUGFS
 static void reset_pmu_force(void)
 {
