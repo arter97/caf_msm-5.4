@@ -114,18 +114,23 @@ static void mdp4_overlay_lcdc_start(struct vsycn_ctrl *vctrl)
 			MDP_OUTP(MDP_BASE + LCDC_BASE, 1);
 		lcdc_enabled = 1;
 		spin_unlock_irqrestore(&mdp_spin_lock, flag);
-		/*
-		 * A single unknown-cause underrun may happen. Wait
-		 * until the underrun instance is over and restore
-		 * underrun color.
-		 */
-		if (vctrl->base_pipe &&
-			(vctrl->base_pipe->mixer_num == MDP4_MIXER0))
-			mdp4_lcdc_wait4dmap_done(0);
-		if (vctrl->mfd) {
-			vctrl->mfd->panel_info.lcdc.underflow_clr |= 0x80000000;
-			MDP_OUTP(MDP_BASE + LCDC_BASE + 0x2c,
+
+		if (!(machine_is_apq8064_adp2_es2() ||
+				machine_is_apq8064_adp2_es2p5())) {
+			/*
+			 * A single unknown-cause underrun may happen. Wait
+			 * until the underrun instance is over and restore
+			 * underrun color. Only need for ADP platform.
+			 */
+			if (vctrl->base_pipe &&
+				(vctrl->base_pipe->mixer_num == MDP4_MIXER0))
+				mdp4_lcdc_wait4dmap_done(0);
+			if (vctrl->mfd) {
+				vctrl->mfd->panel_info.lcdc.underflow_clr
+					|= 0x80000000;
+				MDP_OUTP(MDP_BASE + LCDC_BASE + 0x2c,
 				vctrl->mfd->panel_info.lcdc.underflow_clr);
+			}
 		}
 	}
 }
