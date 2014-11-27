@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -314,13 +314,20 @@ static ssize_t mdp_stat_read(
 					mdp4_stat.intr_dma_e);
 	bp += len;
 	dlen -= len;
-
 	len = snprintf(bp, dlen, "primary:   vsync: %08lu\t",
 					mdp4_stat.intr_vsync_p);
 	bp += len;
 	dlen -= len;
-	len = snprintf(bp, dlen, "underrun: %08lu\n",
+	len = snprintf(bp, dlen, "primary underrun: %08lu\n",
 					mdp4_stat.intr_underrun_p);
+	bp += len;
+	dlen -= len;
+	len = snprintf(bp, dlen, "secondary:   vsync: %08lu\t",
+					mdp4_stat.intr_vsync_s);
+	bp += len;
+	dlen -= len;
+	len = snprintf(bp, dlen, "secondary underrun: %08lu\n",
+					mdp4_stat.intr_underrun_s);
 	bp += len;
 	dlen -= len;
 	len = snprintf(bp, dlen, "external:  vsync: %08lu\t",

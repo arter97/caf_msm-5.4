@@ -535,11 +535,24 @@ irqreturn_t mdp4_isr(int irq, void *ptr)
 		}
 	}
 
-	if (isr & INTR_EXTERNAL_INTF_UDERRUN) {
-		pr_debug("%s: UNDERRUN -- external\n", __func__);
-		mdp4_stat.intr_underrun_e++;
+	if (isr & INTR_SECONDARY_INTF_UDERRUN) {
+		pr_debug("%s: UNDERRUN -- secondary\n", __func__);
+		mdp4_stat.intr_underrun_s++;
+		/* When underun occurs mdp clear the histogram registers
+		that are set before in hw_init so restore them back so
+		that histogram works.*/
+		for (i = 0; i < MDP_HIST_MGMT_MAX; i++) {
+			mgmt = mdp_hist_mgmt_array[i];
+			if (!mgmt)
+				continue;
+			mgmt->mdp_is_hist_valid = FALSE;
+		}
 	}
 
+	if (isr & INTR_EXTERNAL_INTF_UDERRUN) {
+			pr_debug("%s: UNDERRUN -- external\n", __func__);
+			mdp4_stat.intr_underrun_e++;
+	}
 	isr &= mask;
 
 	if (isr == 0)
@@ -646,6 +659,14 @@ irqreturn_t mdp4_isr(int irq, void *ptr)
 
 	if (isr & INTR_PRIMARY_VSYNC) {
 		mdp4_stat.intr_vsync_p++;
+		if (panel & MDP4_PANEL_LCDC)
+			mdp4_primary_vsync_lcdc();
+		else if (panel & MDP4_PANEL_DSI_VIDEO)
+			mdp4_primary_vsync_dsi_video();
+	}
+
+	if (isr & INTR_SECONDARY_VSYNC) {
+		mdp4_stat.intr_vsync_s++;
 		if (panel & MDP4_PANEL_LCDC)
 			mdp4_primary_vsync_lcdc();
 		else if (panel & MDP4_PANEL_DSI_VIDEO)

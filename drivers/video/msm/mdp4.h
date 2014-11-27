@@ -121,17 +121,19 @@ enum {
 
 /* system interrupts */
 /*note histogram interrupts defined in mdp.h*/
-#define INTR_OVERLAY0_DONE		BIT(0)
-#define INTR_OVERLAY1_DONE		BIT(1)
-#define INTR_DMA_S_DONE			BIT(2)
-#define INTR_DMA_E_DONE			BIT(3)
-#define INTR_DMA_P_DONE			BIT(4)
-#define INTR_PRIMARY_VSYNC		BIT(7)
+#define INTR_OVERLAY0_DONE	BIT(0)
+#define INTR_OVERLAY1_DONE	BIT(1)
+#define INTR_DMA_S_DONE	BIT(2)
+#define INTR_DMA_E_DONE	BIT(3)
+#define INTR_DMA_P_DONE	BIT(4)
+#define INTR_PRIMARY_VSYNC	BIT(7)
 #define INTR_PRIMARY_INTF_UDERRUN	BIT(8)
-#define INTR_EXTERNAL_VSYNC		BIT(9)
+#define INTR_EXTERNAL_VSYNC	BIT(9)
 #define INTR_EXTERNAL_INTF_UDERRUN	BIT(10)
-#define INTR_PRIMARY_RDPTR		BIT(11)	/* read pointer */
-#define INTR_OVERLAY2_DONE		BIT(30)
+#define INTR_PRIMARY_RDPTR	BIT(11)	/* read pointer */
+#define INTR_SECONDARY_VSYNC	BIT(27)
+#define INTR_SECONDARY_INTF_UDERRUN	BIT(28)
+#define INTR_OVERLAY2_DONE	BIT(30)
 
 #ifdef CONFIG_FB_MSM_OVERLAY
 #define MDP4_ANY_INTR_MASK	(0)
@@ -399,6 +401,8 @@ struct mdp4_statistic {
 	ulong intr_overlay2;
 	ulong intr_vsync_p;	/* Primary interface */
 	ulong intr_underrun_p;	/* Primary interface */
+	ulong intr_vsync_s;	/* Secondary interface */
+	ulong intr_underrun_s;	/* Secondary interface */
 	ulong intr_vsync_e;	/* external interface */
 	ulong intr_underrun_e;	/* external interface */
 	ulong intr_histogram;
