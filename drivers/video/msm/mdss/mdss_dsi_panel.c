@@ -841,6 +841,10 @@ static int mdss_dsi_parse_panel_features(struct device_node *np,
 		"qcom,ulps-enabled");
 	pr_info("%s: ulps feature %s", __func__,
 		(pinfo->ulps_feature_enabled ? "enabled" : "disabled"));
+	pinfo->ulps_suspend_enabled = of_property_read_bool(np,
+		"qcom,suspend-ulps-enabled");
+	pr_info("%s: ulps during suspend feature %s", __func__,
+		(pinfo->ulps_suspend_enabled ? "enabled" : "disabled"));
 	pinfo->esd_check_enabled = of_property_read_bool(np,
 		"qcom,esd-check-enabled");
 
@@ -1198,13 +1202,15 @@ int mdss_dsi_panel_init(struct device_node *node,
 	pinfo = &ctrl_pdata->panel_data.panel_info;
 
 	pr_debug("%s:%d\n", __func__, __LINE__);
+	pinfo->panel_name[0] = '\0';
 	panel_name = of_get_property(node, "qcom,mdss-dsi-panel-name", NULL);
-	if (!panel_name)
+	if (!panel_name) {
 		pr_info("%s:%d, Panel name not specified\n",
 						__func__, __LINE__);
-	else
+	} else {
 		pr_info("%s: Panel Name = %s\n", __func__, panel_name);
-
+		strlcpy(&pinfo->panel_name[0], panel_name, MDSS_MAX_PANEL_LEN);
+	}
 	rc = mdss_panel_parse_dt(node, ctrl_pdata);
 	if (rc) {
 		pr_err("%s:%d panel dt parse failed\n", __func__, __LINE__);
