@@ -1934,6 +1934,119 @@ static int cpr_reduce_ceiling_voltage(struct cpr_regulator *cpr_vreg,
 }
 
 /*
+ * Adjust the per-virtual-corner open loop voltage with an offset specfied by a
+ * device-tree property. This must be called after open-loop voltage scaling.
+ */
+static int cpr_virtual_corner_voltage_adjust(struct cpr_regulator *cpr_vreg,
+						struct device *dev)
+{
+	char *prop_name = "qcom,cpr-virtual-corner-init-voltage-adjustment";
+	int i, rc, tuple_count, tuple_match, index, len;
+	u32 voltage_adjust;
+
+	if (!of_find_property(dev->of_node, prop_name, &len)) {
+		cpr_debug(cpr_vreg, "%s not specified\n", prop_name);
+		return 0;
+	}
+
+	if (cpr_vreg->cpr_fuse_map_count) {
+		if (cpr_vreg->cpr_fuse_map_match == FUSE_MAP_NO_MATCH) {
+			/* No matching index to use for voltage adjustment. */
+			return 0;
+		}
+		tuple_count = cpr_vreg->cpr_fuse_map_count;
+		tuple_match = cpr_vreg->cpr_fuse_map_match;
+	} else {
+		tuple_count = 1;
+		tuple_match = 0;
+	}
+
+	if (len != cpr_vreg->num_corners * tuple_count * sizeof(u32)) {
+		cpr_err(cpr_vreg, "%s length=%d is invalid\n", prop_name,
+			len);
+		return -EINVAL;
+	}
+
+	for (i = CPR_CORNER_MIN; i <= cpr_vreg->num_corners; i++) {
+		index = tuple_match * cpr_vreg->num_corners
+				+ i - CPR_CORNER_MIN;
+		rc = of_property_read_u32_index(dev->of_node, prop_name,
+						index, &voltage_adjust);
+		if (rc) {
+			cpr_err(cpr_vreg, "could not read %s index %u, rc=%d\n",
+				prop_name, index, rc);
+			return rc;
+		}
+
+		if (voltage_adjust) {
+			cpr_vreg->open_loop_volt[i] += (int)voltage_adjust;
+			cpr_info(cpr_vreg, "corner=%d adjusted open-loop voltage=%d\n",
+				i, cpr_vreg->open_loop_volt[i]);
+		}
+	}
+
+	return 0;
+}
+
+/*
+ * Adjust the per-virtual-corner quot with an offset specfied by a
+ * device-tree property. This must be called after the quot-scaling adjustments
+ * are completed.
+ */
+static int cpr_virtual_corner_quot_adjust(struct cpr_regulator *cpr_vreg,
+						struct device *dev)
+{
+	char *prop_name = "qcom,cpr-virtual-corner-quotient-adjustment";
+	int i, rc, tuple_count, tuple_match, index, len;
+	u32 quot_adjust;
+
+	if (!of_find_property(dev->of_node, prop_name, &len)) {
+		cpr_debug(cpr_vreg, "%s not specified\n", prop_name);
+		return 0;
+	}
+
+	if (cpr_vreg->cpr_fuse_map_count) {
+		if (cpr_vreg->cpr_fuse_map_match == FUSE_MAP_NO_MATCH) {
+			/* No matching index to use for quotient adjustment. */
+			return 0;
+		}
+		tuple_count = cpr_vreg->cpr_fuse_map_count;
+		tuple_match = cpr_vreg->cpr_fuse_map_match;
+	} else {
+		tuple_count = 1;
+		tuple_match = 0;
+	}
+
+	if (len != cpr_vreg->num_corners * tuple_count * sizeof(u32)) {
+		cpr_err(cpr_vreg, "%s length=%d is invalid\n", prop_name,
+			len);
+		return -EINVAL;
+	}
+
+	for (i = CPR_CORNER_MIN; i <= cpr_vreg->num_corners; i++) {
+		index = tuple_match * cpr_vreg->num_corners
+				+ i - CPR_CORNER_MIN;
+		rc = of_property_read_u32_index(dev->of_node, prop_name,
+						index, &quot_adjust);
+		if (rc) {
+			cpr_err(cpr_vreg, "could not read %s index %u, rc=%d\n",
+				prop_name, index, rc);
+			return rc;
+		}
+
+		if (quot_adjust) {
+			cpr_vreg->quot_adjust[i] -= (int)quot_adjust;
+			cpr_info(cpr_vreg, "corner=%d adjusted quotient=%d\n",
+					i,
+			cpr_vreg->cpr_fuse_target_quot[cpr_vreg->corner_map[i]]
+						- cpr_vreg->quot_adjust[i]);
+		}
+	}
+
+	return 0;
+}
+
+/*
  * cpr_get_corner_quot_adjustment() -- get the quot_adjust for each corner.
  *
  * Get the virtual corner to fuse corner mapping and virtual corner to APC clock
@@ -2058,15 +2171,17 @@ static int cpr_get_corner_quot_adjustment(struct cpr_regulator *cpr_vreg,
 	 */
 	match_found = false;
 	for (i = 0; i < size; i += cpr_vreg->num_fuse_corners + 2) {
-		if (tmp[i] == cpr_vreg->speed_bin &&
-		    tmp[i + 1] == cpr_vreg->pvs_version) {
-			for (j = CPR_FUSE_CORNER_MIN;
-			     j <= cpr_vreg->num_fuse_corners; j++)
-				corner_max[j]
-					= tmp[i + 2 + j - CPR_FUSE_CORNER_MIN];
-			match_found = true;
-			break;
-		}
+		if (tmp[i] != cpr_vreg->speed_bin &&
+		    tmp[i] != FUSE_PARAM_MATCH_ANY)
+			continue;
+		if (tmp[i + 1] != cpr_vreg->pvs_version &&
+		    tmp[i + 1] != FUSE_PARAM_MATCH_ANY)
+			continue;
+		for (j = CPR_FUSE_CORNER_MIN;
+		     j <= cpr_vreg->num_fuse_corners; j++)
+			corner_max[j] = tmp[i + 2 + j - CPR_FUSE_CORNER_MIN];
+		match_found = true;
+		break;
 	}
 	kfree(tmp);
 
@@ -2244,21 +2359,39 @@ static int cpr_get_corner_quot_adjustment(struct cpr_regulator *cpr_vreg,
 			}
 		}
 	}
+
+	rc = cpr_virtual_corner_quot_adjust(cpr_vreg, dev);
+	if (rc) {
+		cpr_err(cpr_vreg, "count not adjust virtual-corner quot rc=%d\n",
+			rc);
+		goto free_arrays;
+	}
+
 	for (i = CPR_CORNER_MIN; i <= cpr_vreg->num_corners; i++)
 		cpr_info(cpr_vreg, "adjusted quotient[%d] = %d\n", i,
 			cpr_vreg->cpr_fuse_target_quot[cpr_vreg->corner_map[i]]
 			- cpr_vreg->quot_adjust[i]);
+
 	maps_valid = true;
 
 free_arrays:
 	if (!rc) {
+
 		rc = cpr_get_open_loop_voltage(cpr_vreg, dev, corner_max,
 						freq_map, maps_valid);
-		if (rc)
+		if (rc) {
 			cpr_err(cpr_vreg, "could not fill open loop voltage array, rc=%d\n",
+				rc);
+			goto free_arrays_1;
+		}
+
+		rc = cpr_virtual_corner_voltage_adjust(cpr_vreg, dev);
+		if (rc)
+			cpr_err(cpr_vreg, "count not adjust virtual-corner voltage rc=%d\n",
 				rc);
 	}
 
+free_arrays_1:
 	kfree(max_factor);
 	kfree(scaling);
 	kfree(freq_map);
@@ -2837,15 +2970,16 @@ static int cpr_fill_override_voltage(struct cpr_regulator *cpr_vreg,
 	 * and pvs_version values.
 	 */
 	for (i = 0; i < size; i += cpr_vreg->num_corners + 2) {
-		if (tmp[i] == cpr_vreg->speed_bin &&
-		    tmp[i + 1] == cpr_vreg->pvs_version) {
-			for (j = CPR_CORNER_MIN;
-			     j <= cpr_vreg->num_corners; j++)
-				virtual_limit[j]
-					= tmp[i + 2 + j - CPR_FUSE_CORNER_MIN];
-			match_found = true;
-			break;
-		}
+		if (tmp[i] != cpr_vreg->speed_bin &&
+		    tmp[i] != FUSE_PARAM_MATCH_ANY)
+			continue;
+		if (tmp[i + 1] != cpr_vreg->pvs_version &&
+		    tmp[i + 1] != FUSE_PARAM_MATCH_ANY)
+			continue;
+		for (j = CPR_CORNER_MIN; j <= cpr_vreg->num_corners; j++)
+			virtual_limit[j] = tmp[i + 2 + j - CPR_FUSE_CORNER_MIN];
+		match_found = true;
+		break;
 	}
 	kfree(tmp);
 

@@ -1363,6 +1363,29 @@ int sps_ctrl_bam_dma_clk(bool clk_on);
 int sps_pipe_reset(unsigned long dev, u32 pipe);
 
 /*
+ * sps_pipe_disable - disable a pipe of a BAM.
+ * @dev:	BAM device handle
+ * @pipe:	pipe index
+ *
+ * This function disables a pipe of a BAM.
+ *
+ * Return: 0 on success, negative value on error
+ */
+int sps_pipe_disable(unsigned long dev, u32 pipe);
+
+/*
+ * sps_pipe_pending_desc - checking pending descriptor.
+ * @dev:	BAM device handle
+ * @pipe:	pipe index
+ * @pending:	indicate if there is any pending descriptor.
+ *
+ * This function checks if a pipe of a BAM has any pending descriptor.
+ *
+ * Return: 0 on success, negative value on error
+ */
+int sps_pipe_pending_desc(unsigned long dev, u32 pipe, bool *pending);
+
+/*
  * sps_bam_process_irq - process IRQ of a BAM.
  * @dev:	BAM device handle
  *
@@ -1540,6 +1563,17 @@ static inline int sps_ctrl_bam_dma_clk(bool clk_on)
 }
 
 static inline int sps_pipe_reset(unsigned long dev, u32 pipe)
+{
+	return -EPERM;
+}
+
+static inline int sps_pipe_disable(unsigned long dev, u32 pipe)
+{
+	return -EPERM;
+}
+
+static inline int sps_pipe_pending_desc(unsigned long dev, u32 pipe,
+					bool *pending)
 {
 	return -EPERM;
 }

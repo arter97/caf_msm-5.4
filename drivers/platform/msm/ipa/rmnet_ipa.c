@@ -384,6 +384,14 @@ int copy_ul_filter_rule_to_ipa(struct ipa_install_fltr_rule_req_msg_v01
 	}
 	/* copy UL filter rules from Modem*/
 	for (i = 0; i < num_q6_rule; i++) {
+		/* check if rules overside the cache*/
+		if (i == MAX_NUM_Q6_RULE) {
+			IPAWANERR("Reaching (%d) max cache ",
+				MAX_NUM_Q6_RULE);
+			IPAWANERR(" however total (%d)\n",
+				num_q6_rule);
+			break;
+		}
 		/* construct UL_filter_rule handler QMI use-cas */
 		q6_ul_filter_rule[i].filter_hdl =
 			UL_FILTER_RULE_HANDLE_START + i;
@@ -1262,10 +1270,15 @@ static int ipa_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		case RMNET_IOCTL_SET_EGRESS_DATA_FORMAT:
 			IPAWANDBG("get RMNET_IOCTL_SET_EGRESS_DATA_FORMAT\n");
 			if ((extend_ioctl_data.u.data) &
-					RMNET_IOCTL_EGRESS_FORMAT_CHECKSUM)
+					RMNET_IOCTL_EGRESS_FORMAT_CHECKSUM) {
 				apps_to_ipa_ep_cfg.ipa_ep_cfg.hdr.hdr_len = 8;
-			else
+				apps_to_ipa_ep_cfg.ipa_ep_cfg.cfg.
+					cs_offload_en = 1;
+				apps_to_ipa_ep_cfg.ipa_ep_cfg.cfg.
+					cs_metadata_hdr_offset = 1;
+			} else {
 				apps_to_ipa_ep_cfg.ipa_ep_cfg.hdr.hdr_len = 4;
+			}
 			if ((extend_ioctl_data.u.data) &
 					RMNET_IOCTL_EGRESS_FORMAT_AGGREGATION)
 				apps_to_ipa_ep_cfg.ipa_ep_cfg.aggr.aggr_en =
