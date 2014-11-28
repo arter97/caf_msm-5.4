@@ -21,7 +21,6 @@
 #include <sound/apr_audio.h>
 #include <linux/usb/android.h>
 #include <asm/hardware/gic.h>
-#include <asm/mach/flash.h>
 #include <mach/board.h>
 #include <mach/msm_iomap.h>
 #include <mach/msm_hsusb.h>
@@ -699,18 +698,11 @@ static struct resource resources_nand[] = {
 	},
 };
 
-struct flash_platform_data msm_nand_data = {
-	.version = VERSION_2,
-};
-
 struct platform_device msm_device_nand = {
 	.name		= "msm_nand",
 	.id		= -1,
 	.num_resources	= ARRAY_SIZE(resources_nand),
 	.resource	= resources_nand,
-	.dev		= {
-		.platform_data	= &msm_nand_data,
-	},
 };
 
 struct platform_device msm_device_smd = {

@@ -64,6 +64,14 @@ uint32_t enable_bch_ecc;
 
 #define VERBOSE 0
 
+#define MSM_NAND_BUS_VOTING_DELAY	200 /* msecs */
+
+struct msm_nand_bus_vote {
+	uint32_t client_handle;
+	uint32_t curr_vote;
+	struct delayed_work vote_work;
+};
+
 struct msm_nand_chip {
 	struct device *dev;
 	wait_queue_head_t wait_queue;
@@ -78,6 +86,7 @@ struct msm_nand_chip {
 	unsigned cw_size;
 	unsigned int uncorrectable_bit_mask;
 	unsigned int num_err_mask;
+	struct msm_nand_bus_vote bus_vote;
 };
 
 #define CFG1_WIDE_FLASH (1U << 1)
@@ -93,6 +102,7 @@ struct msm_nand_chip {
 	((chip)->dma_addr + \
 	 ((uint8_t *)(vaddr) - (chip)->dma_buffer))
 
+static void msm_nand_bus_vote_set(struct msm_nand_chip *msm_nand, int enable);
 /**
  * msm_nand_oob_64 - oob info for 2KB page
  */
@@ -294,9 +304,11 @@ unsigned flash_rd_reg(struct msm_nand_chip *chip, unsigned addr)
 	dma_buffer->data = 0xeeeeeeee;
 
 	mb();
+	msm_nand_bus_vote_set(chip, 1);
 	msm_dmov_exec_cmd(
 		chip->dma_channel, DMOV_CMD_PTR_LIST |
 		DMOV_CMD_ADDR(msm_virt_to_dma(chip, &dma_buffer->cmdptr)));
+	msm_nand_bus_vote_set(chip, 0);
 	mb();
 
 	rv = dma_buffer->data;
@@ -328,9 +340,11 @@ void flash_wr_reg(struct msm_nand_chip *chip, unsigned addr, unsigned val)
 	dma_buffer->data = val;
 
 	mb();
+	msm_nand_bus_vote_set(chip, 1);
 	msm_dmov_exec_cmd(
 		chip->dma_channel, DMOV_CMD_PTR_LIST |
 		DMOV_CMD_ADDR(msm_virt_to_dma(chip, &dma_buffer->cmdptr)));
+	msm_nand_bus_vote_set(chip, 0);
 	mb();
 
 	msm_nand_release_dma_buffer(chip, dma_buffer, sizeof(*dma_buffer));
@@ -414,8 +428,10 @@ uint32_t flash_read_id(struct msm_nand_chip *chip)
 			) | CMD_PTR_LP;
 
 	mb();
+	msm_nand_bus_vote_set(chip, 1);
 	msm_dmov_exec_cmd(chip->dma_channel, DMOV_CMD_PTR_LIST |
 		DMOV_CMD_ADDR(msm_virt_to_dma(chip, &dma_buffer->cmdptr)));
+	msm_nand_bus_vote_set(chip, 0);
 	mb();
 
 	pr_info("status: %x\n", dma_buffer->data[3]);
@@ -679,9 +695,11 @@ uint32_t flash_onfi_probe(struct msm_nand_chip *chip)
 				>> 3) | CMD_PTR_LP;
 
 		mb();
+		msm_nand_bus_vote_set(chip, 1);
 		msm_dmov_exec_cmd(chip->dma_channel,
 			DMOV_CMD_PTR_LIST | DMOV_CMD_ADDR(msm_virt_to_dma(chip,
 			&dma_buffer->cmdptr)));
+		msm_nand_bus_vote_set(chip, 0);
 		mb();
 
 		/* Check for errors, protection violations etc */
@@ -1052,9 +1070,11 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 			| CMD_PTR_LP;
 
 		mb();
+		msm_nand_bus_vote_set(chip, 1);
 		msm_dmov_exec_cmd(chip->dma_channel,
 			DMOV_CMD_PTR_LIST | DMOV_CMD_ADDR(msm_virt_to_dma(chip,
 			&dma_buffer->cmdptr)));
+		msm_nand_bus_vote_set(chip, 0);
 		mb();
 
 		/* if any of the writes failed (0x10), or there
@@ -1832,9 +1852,11 @@ static int msm_nand_read_oob_dualnandc(struct mtd_info *mtd, loff_t from,
 			| CMD_PTR_LP;
 
 		mb();
+		msm_nand_bus_vote_set(chip, 1);
 		msm_dmov_exec_cmd(chip->dma_channel,
 			DMOV_CMD_PTR_LIST | DMOV_CMD_ADDR(msm_virt_to_dma(chip,
 			&dma_buffer->cmdptr)));
+		msm_nand_bus_vote_set(chip, 0);
 		mb();
 
 		/* if any of the writes failed (0x10), or there
@@ -2276,9 +2298,11 @@ msm_nand_write_oob(struct mtd_info *mtd, loff_t to, struct mtd_oob_ops *ops)
 			CMD_PTR_LP;
 
 		mb();
+		msm_nand_bus_vote_set(chip, 1);
 		msm_dmov_exec_cmd(chip->dma_channel,
 			DMOV_CMD_PTR_LIST | DMOV_CMD_ADDR(
 				msm_virt_to_dma(chip, &dma_buffer->cmdptr)));
+		msm_nand_bus_vote_set(chip, 0);
 		mb();
 
 		/* if any of the writes failed (0x10), or there was a
@@ -2885,9 +2909,11 @@ msm_nand_write_oob_dualnandc(struct mtd_info *mtd, loff_t to,
 		((msm_virt_to_dma(chip, dma_buffer->cmd) >> 3) | CMD_PTR_LP);
 
 		mb();
+		msm_nand_bus_vote_set(chip, 1);
 		msm_dmov_exec_cmd(chip->dma_channel,
 			DMOV_CMD_PTR_LIST | DMOV_CMD_ADDR(
 				msm_virt_to_dma(chip, &dma_buffer->cmdptr)));
+		msm_nand_bus_vote_set(chip, 0);
 		mb();
 
 		/* if any of the writes failed (0x10), or there was a
@@ -3078,9 +3104,11 @@ msm_nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 		(msm_virt_to_dma(chip, dma_buffer->cmd) >> 3) | CMD_PTR_LP;
 
 	mb();
+	msm_nand_bus_vote_set(chip, 1);
 	msm_dmov_exec_cmd(
 		chip->dma_channel, DMOV_CMD_PTR_LIST |
 		DMOV_CMD_ADDR(msm_virt_to_dma(chip, &dma_buffer->cmdptr)));
+	msm_nand_bus_vote_set(chip, 0);
 	mb();
 
 	/* we fail if there was an operation error, a mpu error, or the
@@ -3317,9 +3345,11 @@ msm_nand_erase_dualnandc(struct mtd_info *mtd, struct erase_info *instr)
 		(msm_virt_to_dma(chip, dma_buffer->cmd) >> 3) | CMD_PTR_LP;
 
 	mb();
+	msm_nand_bus_vote_set(chip, 1);
 	msm_dmov_exec_cmd(
 		chip->dma_channel, DMOV_CMD_PTR_LIST |
 		DMOV_CMD_ADDR(msm_virt_to_dma(chip, &dma_buffer->cmdptr)));
+	msm_nand_bus_vote_set(chip, 0);
 	mb();
 
 	/* we fail if there was an operation error, a mpu error, or the
@@ -3469,8 +3499,10 @@ msm_nand_block_isbad(struct mtd_info *mtd, loff_t ofs)
 				dma_buffer->cmd) >> 3) | CMD_PTR_LP;
 
 	mb();
+	msm_nand_bus_vote_set(chip, 1);
 	msm_dmov_exec_cmd(chip->dma_channel, DMOV_CMD_PTR_LIST |
 		DMOV_CMD_ADDR(msm_virt_to_dma(chip, &dma_buffer->cmdptr)));
+	msm_nand_bus_vote_set(chip, 0);
 	mb();
 
 	ret = 0;
@@ -3726,8 +3758,10 @@ msm_nand_block_isbad_dualnandc(struct mtd_info *mtd, loff_t ofs)
 				dma_buffer->cmd) >> 3) | CMD_PTR_LP;
 
 	mb();
+	msm_nand_bus_vote_set(chip, 1);
 	msm_dmov_exec_cmd(chip->dma_channel, DMOV_CMD_PTR_LIST |
 		DMOV_CMD_ADDR(msm_virt_to_dma(chip, &dma_buffer->cmdptr)));
+	msm_nand_bus_vote_set(chip, 0);
 	mb();
 
 	ret = 0;
@@ -3941,9 +3975,11 @@ uint32_t flash_onenand_probe(struct msm_nand_chip *chip)
 			>> 3) | CMD_PTR_LP;
 
 	mb();
+	msm_nand_bus_vote_set(chip, 1);
 	msm_dmov_exec_cmd(chip->dma_channel, DMOV_CMD_PTR_LIST
 			| DMOV_CMD_ADDR(msm_virt_to_dma(chip,
 			&dma_buffer->cmdptr)));
+	msm_nand_bus_vote_set(chip, 0);
 	mb();
 
 	/* Check for errors, protection violations etc */
@@ -4570,9 +4606,11 @@ int msm_onenand_read_oob(struct mtd_info *mtd,
 				>> 3) | CMD_PTR_LP;
 
 		mb();
+		msm_nand_bus_vote_set(chip, 1);
 		msm_dmov_exec_cmd(chip->dma_channel,
 			DMOV_CMD_PTR_LIST | DMOV_CMD_ADDR(msm_virt_to_dma(chip,
 				&dma_buffer->cmdptr)));
+		msm_nand_bus_vote_set(chip, 0);
 		mb();
 
 		ecc_status = (dma_buffer->data.data3 >> 16) &
@@ -5316,9 +5354,11 @@ static int msm_onenand_write_oob(struct mtd_info *mtd, loff_t to,
 				>> 3) | CMD_PTR_LP;
 
 		mb();
+		msm_nand_bus_vote_set(chip, 1);
 		msm_dmov_exec_cmd(chip->dma_channel,
 			DMOV_CMD_PTR_LIST | DMOV_CMD_ADDR(msm_virt_to_dma(chip,
 				&dma_buffer->cmdptr)));
+		msm_nand_bus_vote_set(chip, 0);
 		mb();
 
 		ecc_status = (dma_buffer->data.data3 >> 16) & 0x0000FFFF;
@@ -5739,9 +5779,11 @@ static int msm_onenand_erase(struct mtd_info *mtd, struct erase_info *instr)
 			>> 3) | CMD_PTR_LP;
 
 	mb();
+	msm_nand_bus_vote_set(chip, 1);
 	msm_dmov_exec_cmd(chip->dma_channel, DMOV_CMD_PTR_LIST
 			| DMOV_CMD_ADDR(msm_virt_to_dma(chip,
 			&dma_buffer->cmdptr)));
+	msm_nand_bus_vote_set(chip, 0);
 	mb();
 
 	ecc_status = (dma_buffer->data.data3 >> 16) & 0x0000FFFF;
@@ -6203,9 +6245,11 @@ static int msm_onenand_unlock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
 				>> 3) | CMD_PTR_LP;
 
 		mb();
+		msm_nand_bus_vote_set(chip, 1);
 		msm_dmov_exec_cmd(chip->dma_channel,
 			DMOV_CMD_PTR_LIST | DMOV_CMD_ADDR(msm_virt_to_dma(chip,
 				&dma_buffer->cmdptr)));
+		msm_nand_bus_vote_set(chip, 0);
 		mb();
 
 		write_prot_status = (dma_buffer->data.data3 >> 16) & 0x0000FFFF;
@@ -6567,9 +6611,11 @@ static int msm_onenand_lock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
 				>> 3) | CMD_PTR_LP;
 
 		mb();
+		msm_nand_bus_vote_set(chip, 1);
 		msm_dmov_exec_cmd(chip->dma_channel,
 			DMOV_CMD_PTR_LIST | DMOV_CMD_ADDR(msm_virt_to_dma(chip,
 				&dma_buffer->cmdptr)));
+		msm_nand_bus_vote_set(chip, 0);
 		mb();
 
 		write_prot_status = (dma_buffer->data.data3 >> 16) & 0x0000FFFF;
@@ -6947,9 +6993,11 @@ static int msm_nand_nc10_xfr_settings(struct mtd_info *mtd)
 				| CMD_PTR_LP;
 
 	mb();
+	msm_nand_bus_vote_set(chip, 1);
 	msm_dmov_exec_cmd(chip->dma_channel, DMOV_CMD_PTR_LIST
 			| DMOV_CMD_ADDR(msm_virt_to_dma(chip,
 			&dma_buffer->cmdptr)));
+	msm_nand_bus_vote_set(chip, 0);
 	mb();
 	msm_nand_release_dma_buffer(chip, dma_buffer, sizeof(*dma_buffer));
 	return 0;
@@ -6976,12 +7024,61 @@ static int setup_mtd_device(struct platform_device *pdev,
 	return err;
 }
 
+static inline int msm_nand_bus_vote_update(struct msm_nand_chip *msm_nand,
+					     int vote)
+{
+	int rc = 0;
+
+	if (vote != msm_nand->bus_vote.curr_vote) {
+		rc = msm_bus_scale_client_update_request(
+				msm_nand->bus_vote.client_handle, vote);
+		if (rc)
+			pr_err("%s: msm_bus_scale_client_update_request() failed."
+			       " bus_client_handle=0x%x, vote=%d, err=%d\n",
+			       __func__, msm_nand->bus_vote.client_handle,
+			       vote, rc);
+		else
+			msm_nand->bus_vote.curr_vote = vote;
+	}
+	return rc;
+}
+
+static void msm_nand_bus_vote_set(struct msm_nand_chip *msm_nand,
+					int enable)
+{
+	if (!msm_nand->bus_vote.client_handle)
+		return;
+
+	if (enable) {
+		cancel_delayed_work_sync(&msm_nand->bus_vote.vote_work);
+		msm_nand_bus_vote_update(msm_nand, 1);
+	} else {
+		queue_delayed_work(system_nrt_wq,
+				   &msm_nand->bus_vote.vote_work,
+				   msecs_to_jiffies(MSM_NAND_BUS_VOTING_DELAY));
+	}
+
+}
+
+static void msm_nand_bus_work(struct work_struct *work)
+{
+	struct msm_nand_chip *msm_nand = container_of(work,
+					struct msm_nand_chip,
+					bus_vote.vote_work.work);
+
+	if (!msm_nand->bus_vote.client_handle)
+		return;
+
+	msm_nand_bus_vote_update(msm_nand, 0);
+}
+
 static int __devinit msm_nand_probe(struct platform_device *pdev)
 {
 	struct msm_nand_info *info;
 	struct resource *res;
 	int err;
 	struct flash_platform_data *plat_data;
+	struct msm_bus_scale_pdata *bus_pdata;
 
 	plat_data = pdev->dev.platform_data;
 
@@ -7046,6 +7143,23 @@ no_dual_nand_ctlr_support:
 
 	info->msm_nand.dev = &pdev->dev;
 
+	if (plat_data && plat_data->bus_pdata) {
+		bus_pdata = plat_data->bus_pdata;
+		if (!bus_pdata->usecase) {
+			pr_err("%s: no valid usecases\n", __func__);
+			goto skip_voting;
+		}
+		info->msm_nand.bus_vote.client_handle =
+				msm_bus_scale_register_client(bus_pdata);
+		if (!info->msm_nand.bus_vote.client_handle) {
+			pr_err("%s: msm_bus_scale_register_client() failed\n",
+			       __func__);
+			goto skip_voting;
+		}
+		INIT_DELAYED_WORK(&info->msm_nand.bus_vote.vote_work,
+				  msm_nand_bus_work);
+	}
+skip_voting:
 	init_waitqueue_head(&info->msm_nand.wait_queue);
 
 	info->msm_nand.dma_channel = res->start;
@@ -7119,6 +7233,9 @@ static int __devexit msm_nand_remove(struct platform_device *pdev)
 	dev_set_drvdata(&pdev->dev, NULL);
 
 	if (info) {
+		if (info->msm_nand.bus_vote.client_handle)
+			msm_bus_scale_unregister_client(
+				info->msm_nand.bus_vote.client_handle);
 		msm_nand_release(&info->mtd);
 		dma_free_coherent(NULL, MSM_NAND_DMA_BUFFER_SIZE,
 				  info->msm_nand.dma_buffer,

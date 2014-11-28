@@ -10,6 +10,8 @@
 #ifndef ASMARM_MACH_FLASH_H
 #define ASMARM_MACH_FLASH_H
 
+#include <mach/msm_bus.h>
+
 struct mtd_partition;
 struct mtd_info;
 
@@ -43,6 +45,7 @@ struct flash_platform_data {
 	struct mtd_partition *parts;
 	unsigned int	nr_parts;
 	enum sw_version	version;
+	struct msm_bus_scale_pdata *bus_pdata;
 };
 
 #endif
