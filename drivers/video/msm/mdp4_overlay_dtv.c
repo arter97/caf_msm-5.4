@@ -621,8 +621,6 @@ int mdp4_dtv_on(struct platform_device *pdev)
 	/* Mdp clock enable */
 	mdp_clk_ctrl(1);
 
-	mdp4_overlay_panel_mode(MDP4_PANEL_DTV);
-
 	/* Allocate dtv_pipe at dtv_on*/
 	if (vctrl->base_pipe == NULL) {
 		if (mdp4_overlay_dtv_set(mfd, NULL)) {
@@ -632,6 +630,11 @@ int mdp4_dtv_on(struct platform_device *pdev)
 			return -EINVAL;
 		}
 	}
+
+	if (IS_ERR_OR_NULL(vctrl->base_pipe))
+		return -EPERM;
+
+	mdp4_overlay_panel_mode(MDP4_PANEL_DTV, vctrl->base_pipe->mixer_num);
 
 	ret = panel_next_on(pdev);
 	if (ret != 0)
@@ -701,7 +704,7 @@ int mdp4_dtv_off(struct platform_device *pdev)
 
 	atomic_set(&vctrl->suspend, 1);
 
-	mdp4_overlay_panel_mode_unset(MDP4_PANEL_DTV);
+	mdp4_overlay_panel_mode_unset(MDP4_PANEL_DTV, mixer);
 
 	undx =  vctrl->update_ndx;
 	vp = &vctrl->vlist[undx];

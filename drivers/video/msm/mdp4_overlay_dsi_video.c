@@ -285,8 +285,7 @@ int mdp4_dsi_video_pipe_commit(int cndx, int wait)
 	if (wait) {
 		if (pipe->ov_blt_addr)
 			mdp4_dsi_video_wait4ov(0);
-		else if (vctrl->base_pipe && (vctrl->base_pipe->mixer_num ==
-				MDP4_MIXER0))
+		else
 			mdp4_dsi_video_wait4vsync(0);
 	}
 
@@ -295,25 +294,41 @@ int mdp4_dsi_video_pipe_commit(int cndx, int wait)
 
 static void mdp4_video_vsync_irq_ctrl(int cndx, int enable)
 {
-	struct vsycn_ctrl *vctrl;
+	struct vsycn_ctrl *vctrl = NULL;
+	int intr = 0;
+	int term = 0;
 
 	vctrl = &vsync_ctrl_db[cndx];
 
 	mutex_lock(&vctrl->update_lock);
-	if (enable) {
-		if (vsync_irq_cnt == 0)
-			vsync_irq_enable(INTR_PRIMARY_VSYNC,
-						MDP_PRIM_VSYNC_TERM);
-		vsync_irq_cnt++;
-	} else {
-		if (vsync_irq_cnt) {
-			vsync_irq_cnt--;
+	if (vctrl->base_pipe->mixer_num == MDP4_MIXER0) {
+		intr = INTR_PRIMARY_VSYNC;
+		term = MDP_PRIM_VSYNC_TERM;
+	} else if (vctrl->base_pipe->mixer_num == MDP4_MIXER1) {
+		intr = INTR_EXTERNAL_VSYNC;
+		term = MDP_EXTER_VSYNC_TERM;
+	} else if (vctrl->base_pipe->mixer_num == MDP4_MIXER_NONE) {
+		intr = INTR_SECONDARY_VSYNC;
+		term = MDP_SEC_VSYNC_TERM;
+	} else
+		pr_err("%s: wrong mixer_number=%d\n",
+				__func__, vctrl->base_pipe->mixer_num);
+
+	if (intr != 0) {
+		if (enable) {
 			if (vsync_irq_cnt == 0)
-				vsync_irq_disable(INTR_PRIMARY_VSYNC,
-						MDP_PRIM_VSYNC_TERM);
+				vsync_irq_enable(intr, term);
+			vsync_irq_cnt++;
+		} else {
+			if (vsync_irq_cnt) {
+				vsync_irq_cnt--;
+				if (vsync_irq_cnt == 0)
+					vsync_irq_disable(intr, term);
+			}
 		}
 	}
-	pr_debug("%s: enable=%d cnt=%d\n", __func__, enable, vsync_irq_cnt);
+	pr_debug("%s: enable=%d cnt=%d intr=0x%x\n",
+				__func__, enable, vsync_irq_cnt, intr);
 	mutex_unlock(&vctrl->update_lock);
 }
 
@@ -645,9 +660,10 @@ int mdp4_dsi_video_on(struct platform_device *pdev)
 	}
 
 	if (mfd->panel_info.pdest == DISPLAY_4)
-		mdp4_overlay_panel_mode(MDP4_PANEL_DSI_VIDEO_DMA_S);
+		mdp4_overlay_panel_mode(MDP4_PANEL_DSI_VIDEO_DMA_S,
+					pipe->mixer_num);
 	else
-		mdp4_overlay_panel_mode(MDP4_PANEL_DSI_VIDEO);
+		mdp4_overlay_panel_mode(MDP4_PANEL_DSI_VIDEO, pipe->mixer_num);
 
 	bpp = fbi->var.bits_per_pixel / 8;
 	buf = (uint8 *) fbi->fix.smem_start;
@@ -794,8 +810,7 @@ int mdp4_dsi_video_off(struct platform_device *pdev)
 	vctrl = &vsync_ctrl_db[cndx];
 	pipe = vctrl->base_pipe;
 
-	if (mfd->panel_info.pdest == DISPLAY_1)
-		mdp4_dsi_video_wait4vsync(cndx);
+	mdp4_dsi_video_wait4vsync(cndx);
 
 	if (pipe->ov_blt_addr) {
 		spin_lock_irqsave(&vctrl->spin_lock, flags);
@@ -1232,7 +1247,7 @@ void mdp4_dsi_video_overlay(struct msm_fb_data_type *mfd)
 	if (cnt >= 0) {
 		if (pipe->ov_blt_addr)
 			mdp4_dsi_video_wait4ov(cndx);
-		else if (mfd->panel_info.pdest == DISPLAY_1)
+		else
 			mdp4_dsi_video_wait4vsync(cndx);
 	}
 

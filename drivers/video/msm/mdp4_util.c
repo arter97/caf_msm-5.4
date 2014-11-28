@@ -501,10 +501,11 @@ void mdp4_clear_lcdc(void)
 
 irqreturn_t mdp4_isr(int irq, void *ptr)
 {
-	uint32 isr, mask, panel;
-	struct mdp_dma_data *dma;
+	uint32 isr = 0, mask = 0;
+	struct mdp_dma_data *dma = NULL;
 	struct mdp_hist_mgmt *mgmt = NULL;
-	int i, ret;
+	int i = 0, ret = 0;
+	uint32 panel[MDP4_MIXER_MAX];
 
 	mdp_is_in_isr = TRUE;
 
@@ -558,18 +559,19 @@ irqreturn_t mdp4_isr(int irq, void *ptr)
 	if (isr == 0)
 		goto out;
 
-	panel = mdp4_overlay_panel_list();
+	for (i = 0; i < MDP4_MIXER_MAX; i++)
+		panel[i] = mdp4_overlay_panel_list(i);
 
 	if (isr & INTR_DMA_P_DONE) {
 		mdp4_stat.intr_dma_p++;
 		dma = &dma2_data;
-		if (panel & MDP4_PANEL_LCDC)
+		if (panel[MDP4_MIXER0] & MDP4_PANEL_LCDC)
 			mdp4_dmap_done_lcdc(0);
 #ifdef CONFIG_FB_MSM_OVERLAY
 #ifdef CONFIG_FB_MSM_MIPI_DSI
-		else if (panel & MDP4_PANEL_DSI_VIDEO)
+		else if (panel[MDP4_MIXER0] & MDP4_PANEL_DSI_VIDEO)
 			mdp4_dmap_done_dsi_video(0);
-		else if (panel & MDP4_PANEL_DSI_CMD)
+		else if (panel[MDP4_MIXER0] & MDP4_PANEL_DSI_CMD)
 			mdp4_dmap_done_dsi_cmd(0);
 #else
 		else { /* MDDI */
@@ -603,27 +605,28 @@ irqreturn_t mdp4_isr(int irq, void *ptr)
 	}
 	if (isr & INTR_DMA_E_DONE) {
 		mdp4_stat.intr_dma_e++;
-		if (panel & MDP4_PANEL_DTV)
+		if (panel[MDP4_MIXER1] & MDP4_PANEL_DTV)
 			mdp4_dmae_done_dtv();
 	}
 #ifdef CONFIG_FB_MSM_OVERLAY
 	if (isr & INTR_OVERLAY0_DONE) {
 		mdp4_stat.intr_overlay0++;
 		dma = &dma2_data;
-		if (panel & (MDP4_PANEL_LCDC | MDP4_PANEL_DSI_VIDEO)) {
+		if (panel[MDP4_MIXER0] & \
+			(MDP4_PANEL_LCDC | MDP4_PANEL_DSI_VIDEO)) {
 			/* disable LCDC interrupt */
-			if (panel & MDP4_PANEL_LCDC)
+			if (panel[MDP4_MIXER0] & MDP4_PANEL_LCDC)
 				mdp4_overlay0_done_lcdc(0);
 #ifdef CONFIG_FB_MSM_MIPI_DSI
-			else if (panel & MDP4_PANEL_DSI_VIDEO)
+			else if (panel[MDP4_MIXER0] & MDP4_PANEL_DSI_VIDEO)
 				mdp4_overlay0_done_dsi_video(0);
 #endif
 		} else {        /* MDDI, DSI_CMD  */
 #ifdef CONFIG_FB_MSM_MIPI_DSI
-			if (panel & MDP4_PANEL_DSI_CMD)
+			if (panel[MDP4_MIXER0] & MDP4_PANEL_DSI_CMD)
 				mdp4_overlay0_done_dsi_cmd(0);
 #else
-			if (panel & MDP4_PANEL_MDDI)
+			if (panel[MDP4_MIXER0] & MDP4_PANEL_MDDI)
 				mdp4_overlay0_done_mddi(dma);
 #endif
 		}
@@ -639,11 +642,11 @@ irqreturn_t mdp4_isr(int irq, void *ptr)
 		dma->waiting = FALSE;
 		spin_unlock(&mdp_spin_lock);
 #if defined(CONFIG_FB_MSM_DTV)
-		if (panel & MDP4_PANEL_DTV)
+		if (panel[MDP4_MIXER1] & MDP4_PANEL_DTV)
 			mdp4_overlay1_done_dtv();
 #endif
 #if defined(CONFIG_FB_MSM_TVOUT)
-		if (panel & MDP4_PANEL_ATV)
+		if (panel[MDP4_MIXER1] & MDP4_PANEL_ATV)
 			mdp4_overlay1_done_atv();
 #endif
 	}
@@ -651,7 +654,7 @@ irqreturn_t mdp4_isr(int irq, void *ptr)
 	if (isr & INTR_OVERLAY2_DONE) {
 		mdp4_stat.intr_overlay2++;
 		/* disable DTV interrupt */
-		if (panel & MDP4_PANEL_WRITEBACK)
+		if (panel[MDP4_MIXER2] & MDP4_PANEL_WRITEBACK)
 			mdp4_overlay2_done_wfd(&dma_wb_data);
 	}
 #endif
@@ -659,23 +662,24 @@ irqreturn_t mdp4_isr(int irq, void *ptr)
 
 	if (isr & INTR_PRIMARY_VSYNC) {
 		mdp4_stat.intr_vsync_p++;
-		if (panel & MDP4_PANEL_LCDC)
+		if (panel[MDP4_MIXER0] & MDP4_PANEL_LCDC)
 			mdp4_primary_vsync_lcdc();
-		else if (panel & MDP4_PANEL_DSI_VIDEO)
+		else if (panel[MDP4_MIXER0] & MDP4_PANEL_DSI_VIDEO)
 			mdp4_primary_vsync_dsi_video();
 	}
 
 	if (isr & INTR_SECONDARY_VSYNC) {
 		mdp4_stat.intr_vsync_s++;
-		if (panel & MDP4_PANEL_LCDC)
+		if (panel[MDP4_MIXER_NONE] & MDP4_PANEL_LCDC)
 			mdp4_primary_vsync_lcdc();
-		else if (panel & MDP4_PANEL_DSI_VIDEO)
+		else if ((panel[MDP4_MIXER_NONE] & MDP4_PANEL_DSI_VIDEO) ||
+			(panel[MDP4_MIXER_NONE] & MDP4_PANEL_DSI_VIDEO_DMA_S))
 			mdp4_primary_vsync_dsi_video();
 	}
 #ifdef CONFIG_FB_MSM_DTV
 	if (isr & INTR_EXTERNAL_VSYNC) {
 		mdp4_stat.intr_vsync_e++;
-		if (panel & MDP4_PANEL_DTV)
+		if (panel[MDP4_MIXER1] & MDP4_PANEL_DTV)
 			mdp4_external_vsync_dtv();
 	}
 #endif

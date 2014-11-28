@@ -121,19 +121,19 @@ enum {
 
 /* system interrupts */
 /*note histogram interrupts defined in mdp.h*/
-#define INTR_OVERLAY0_DONE	BIT(0)
-#define INTR_OVERLAY1_DONE	BIT(1)
-#define INTR_DMA_S_DONE	BIT(2)
-#define INTR_DMA_E_DONE	BIT(3)
-#define INTR_DMA_P_DONE	BIT(4)
-#define INTR_PRIMARY_VSYNC	BIT(7)
+#define INTR_OVERLAY0_DONE		BIT(0)
+#define INTR_OVERLAY1_DONE		BIT(1)
+#define INTR_DMA_S_DONE			BIT(2)
+#define INTR_DMA_E_DONE			BIT(3)
+#define INTR_DMA_P_DONE			BIT(4)
+#define INTR_PRIMARY_VSYNC		BIT(7)
 #define INTR_PRIMARY_INTF_UDERRUN	BIT(8)
-#define INTR_EXTERNAL_VSYNC	BIT(9)
+#define INTR_EXTERNAL_VSYNC		BIT(9)
 #define INTR_EXTERNAL_INTF_UDERRUN	BIT(10)
-#define INTR_PRIMARY_RDPTR	BIT(11)	/* read pointer */
-#define INTR_SECONDARY_VSYNC	BIT(27)
+#define INTR_PRIMARY_RDPTR		BIT(11)	/* read pointer */
+#define INTR_SECONDARY_VSYNC		BIT(27)
 #define INTR_SECONDARY_INTF_UDERRUN	BIT(28)
-#define INTR_OVERLAY2_DONE	BIT(30)
+#define INTR_OVERLAY2_DONE		BIT(30)
 
 #ifdef CONFIG_FB_MSM_OVERLAY
 #define MDP4_ANY_INTR_MASK	(0)
@@ -619,7 +619,6 @@ int mdp4_overlay_format2type(uint32 format);
 int mdp4_overlay_format2pipe(struct mdp4_overlay_pipe *pipe);
 int mdp4_overlay_get(struct fb_info *info, struct mdp_overlay *req);
 int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req);
-int mdp4_overlay_wait4vsync(struct fb_info *info);
 int mdp4_overlay_vsync_ctrl(struct fb_info *info, int enable);
 int mdp4_overlay_unset(struct fb_info *info, int ndx);
 int mdp4_overlay_unset_mixer(int mixer);
@@ -793,10 +792,10 @@ void mdp4_lcdc_overlay_blt_start(struct msm_fb_data_type *mfd);
 void mdp4_lcdc_overlay_blt_stop(struct msm_fb_data_type *mfd);
 void mdp4_dtv_overlay_blt_start(struct msm_fb_data_type *mfd);
 void mdp4_dtv_overlay_blt_stop(struct msm_fb_data_type *mfd);
-void mdp4_overlay_panel_mode(uint32 mode);
-void mdp4_overlay_panel_mode_unset(uint32 mode);
+void mdp4_overlay_panel_mode(uint32 mode, uint32 mixer_num);
+void mdp4_overlay_panel_mode_unset(uint32 mode, uint32 mixer_num);
 int mdp4_overlay_mixer_play(int mixer_num);
-uint32 mdp4_overlay_panel_list(void);
+uint32 mdp4_overlay_panel_list(uint32 mixer_num);
 void mdp4_lcdc_overlay_kickoff(struct msm_fb_data_type *mfd,
 			struct mdp4_overlay_pipe *pipe);
 
