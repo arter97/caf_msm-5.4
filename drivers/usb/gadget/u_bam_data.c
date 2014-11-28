@@ -101,13 +101,20 @@ static void bam_data_endless_tx_complete(struct usb_ep *ep,
 static void bam_data_start_endless_rx(struct bam_data_port *port)
 {
 	struct bam_data_ch_info *d = &port->data_ch;
+	struct usb_ep *ep;
+	unsigned long flags;
 	int status;
 
-	if (!port->port_usb)
+	spin_lock_irqsave(&port->port_lock, flags);
+	if (!port->port_usb) {
+		spin_unlock_irqrestore(&port->port_lock, flags);
 		return;
+	}
+	ep = port->port_usb->out;
+	spin_unlock_irqrestore(&port->port_lock, flags);
 
 	pr_debug("%s: enqueue\n", __func__);
-	status = usb_ep_queue(port->port_usb->out, d->rx_req, GFP_ATOMIC);
+	status = usb_ep_queue(ep, d->rx_req, GFP_ATOMIC);
 	if (status)
 		pr_err("error enqueuing transfer, %d\n", status);
 }
@@ -115,13 +122,20 @@ static void bam_data_start_endless_rx(struct bam_data_port *port)
 static void bam_data_start_endless_tx(struct bam_data_port *port)
 {
 	struct bam_data_ch_info *d = &port->data_ch;
+	struct usb_ep *ep;
+	unsigned long flags;
 	int status;
 
-	if (!port->port_usb)
+	spin_lock_irqsave(&port->port_lock, flags);
+	if (!port->port_usb) {
+		spin_unlock_irqrestore(&port->port_lock, flags);
 		return;
+	}
+	ep = port->port_usb->in;
+	spin_unlock_irqrestore(&port->port_lock, flags);
 
 	pr_debug("%s: enqueue\n", __func__);
-	status = usb_ep_queue(port->port_usb->in, d->tx_req, GFP_ATOMIC);
+	status = usb_ep_queue(ep, d->tx_req, GFP_ATOMIC);
 	if (status)
 		pr_err("error enqueuing transfer, %d\n", status);
 }
@@ -129,13 +143,20 @@ static void bam_data_start_endless_tx(struct bam_data_port *port)
 static void bam_data_stop_endless_rx(struct bam_data_port *port)
 {
 	struct bam_data_ch_info *d = &port->data_ch;
+	struct usb_ep *ep;
+	unsigned long flags;
 	int status;
 
-	if (!port->port_usb)
+	spin_lock_irqsave(&port->port_lock, flags);
+	if (!port->port_usb) {
+		spin_unlock_irqrestore(&port->port_lock, flags);
 		return;
+	}
+	ep = port->port_usb->out;
+	spin_unlock_irqrestore(&port->port_lock, flags);
 
 	pr_debug("%s: dequeue\n", __func__);
-	status = usb_ep_dequeue(port->port_usb->out, d->rx_req);
+	status = usb_ep_dequeue(ep, d->rx_req);
 	if (status)
 		pr_err("%s: error dequeuing transfer, %d\n", __func__, status);
 
@@ -143,13 +164,20 @@ static void bam_data_stop_endless_rx(struct bam_data_port *port)
 static void bam_data_stop_endless_tx(struct bam_data_port *port)
 {
 	struct bam_data_ch_info *d = &port->data_ch;
+	struct usb_ep *ep;
+	unsigned long flags;
 	int status;
 
-	if (!port->port_usb)
+	spin_lock_irqsave(&port->port_lock, flags);
+	if (!port->port_usb) {
+		spin_unlock_irqrestore(&port->port_lock, flags);
 		return;
+	}
+	ep = port->port_usb->in;
+	spin_unlock_irqrestore(&port->port_lock, flags);
 
 	pr_debug("%s: dequeue\n", __func__);
-	status = usb_ep_dequeue(port->port_usb->in, d->tx_req);
+	status = usb_ep_dequeue(ep, d->tx_req);
 	if (status)
 		pr_err("%s: error dequeuing transfer, %d\n", __func__, status);
 }
