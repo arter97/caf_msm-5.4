@@ -136,6 +136,36 @@ struct ipa_modem_mem_info_type_v01 {
 	/*	Size of the block allocated for the modem driver */
 };  /* Type */
 
+struct ipa_hdr_proc_ctx_tbl_info_type_v01 {
+
+	uint32_t modem_offset_start;
+	/*  Offset from the start of IPA shared memory from which the modem
+	 *	driver may insert header processing context table entries.
+	 */
+
+	uint32_t modem_offset_end;
+	/*  Offset from the start of IPA shared memory beyond which the modem
+	 *	driver may not insert header proc table entries. The space
+	 *	available for the modem driver includes modem_offset_start and
+	 *	modem_offset_end.
+	 */
+};  /* Type */
+
+struct ipa_zip_tbl_info_type_v01 {
+
+	uint32_t modem_offset_start;
+	/*  Offset from the start of IPA shared memory from which the modem
+	 *	driver may insert compression/decompression command entries.
+	 */
+
+	uint32_t modem_offset_end;
+	/*  Offset from the start of IPA shared memory beyond which the modem
+	 *	driver may not insert compression/decompression command entries.
+	 *	The space available for the modem driver includes
+	 *  modem_offset_start and modem_offset_end.
+	 */
+};  /* Type */
+
 /** Request Message; Requests the modem IPA driver to perform initializtion */
 struct ipa_init_modem_driver_req_msg_v01 {
 
@@ -218,6 +248,21 @@ struct ipa_init_modem_driver_req_msg_v01 {
 	 *	initialization.
 	 */
 
+	/* Optional */
+	/*  Header Processing Context Table Information */
+	uint8_t hdr_proc_ctx_tbl_info_valid;
+	/* Must be set to true if hdr_proc_ctx_tbl_info is being passed */
+	struct ipa_hdr_proc_ctx_tbl_info_type_v01 hdr_proc_ctx_tbl_info;
+	/* Provides information about the header processing context table.
+	*/
+
+	/* Optional */
+	/*  Compression Decompression Table Information */
+	uint8_t zip_tbl_info_valid;
+	/* Must be set to true if zip_tbl_info is being passed */
+	struct ipa_zip_tbl_info_type_v01 zip_tbl_info;
+	/* Provides information about the header processing context table.
+	*/
 };  /* Message */
 
 /* Response Message; Requests the modem IPA driver about initializtion */
@@ -465,14 +510,10 @@ struct ipa_filter_rule_type_v01 {
 enum ipa_ip_type_enum_v01 {
 	IPA_IP_TYPE_ENUM_MIN_ENUM_VAL_V01 = -2147483647,
 	/* To force a 32 bit signed enum.  Do not change or use*/
-	QMI_IPA_IP_TYPE_INVALID_V01 = 0,
-	/*  Invalid IP type identifier */
-	QMI_IPA_IP_TYPE_V4_V01 = 1,
+	QMI_IPA_IP_TYPE_V4_V01 = 0,
 	/*  IP V4 type */
-	QMI_IPA_IP_TYPE_V6_V01 = 2,
+	QMI_IPA_IP_TYPE_V6_V01 = 1,
 	/*  IP V6 type */
-	QMI_IPA_IP_TYPE_V4V6_V01 = 3,
-	/*  Applies to both IP types */
 	IPA_IP_TYPE_ENUM_MAX_ENUM_VAL_V01 = 2147483647
 	/* To force a 32 bit signed enum.  Do not change or use*/
 };
@@ -998,7 +1039,7 @@ struct ipa_config_resp_msg_v01 {
 #define QMI_IPA_CONFIG_RESP_V01 0x0027
 
 /* add for max length*/
-#define QMI_IPA_INIT_MODEM_DRIVER_REQ_MAX_MSG_LEN_V01 76
+#define QMI_IPA_INIT_MODEM_DRIVER_REQ_MAX_MSG_LEN_V01 98
 #define QMI_IPA_INIT_MODEM_DRIVER_RESP_MAX_MSG_LEN_V01 21
 #define QMI_IPA_INDICATION_REGISTER_REQ_MAX_MSG_LEN_V01 4
 #define QMI_IPA_INDICATION_REGISTER_RESP_MAX_MSG_LEN_V01 7

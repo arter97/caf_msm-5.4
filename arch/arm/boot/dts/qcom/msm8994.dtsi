@@ -399,25 +399,25 @@
 	ldo0:ldo-vref@f9070000 {
 		compatible = "qcom,8994-cpu-ldo-vref";
 		reg = <0xf9070000 0x30>;
-		qcom,ldo-vref-ret = <0x3e>;
+		qcom,ldo-vref-ret = <0x20>;
 	};
 
 	ldo1:ldo-vref@f9071000 {
 		compatible = "qcom,8994-cpu-ldo-vref";
 		reg = <0xf9071000 0x30>;
-		qcom,ldo-vref-ret = <0x3e>;
+		qcom,ldo-vref-ret = <0x20>;
 	};
 
 	ldo2:ldo-vref@f9072000 {
 		compatible = "qcom,8994-cpu-ldo-vref";
 		reg = <0xf9072000 0x30>;
-		qcom,ldo-vref-ret = <0x3e>;
+		qcom,ldo-vref-ret = <0x20>;
 	};
 
 	ldo3:ldo-vref@f9073000 {
 		compatible = "qcom,8994-cpu-ldo-vref";
 		reg = <0xf9073000 0x30>;
-		qcom,ldo-vref-ret = <0x3e>;
+		qcom,ldo-vref-ret = <0x20>;
 	};
 
 	ldo4:ldo-vref@f9074000 {
@@ -1269,6 +1269,7 @@
 			"MAX";
 
 			qcom,cpu-affinity = "affine_cores";
+			qcom,cpu-affinity-mask = <0xf>; /* little cluster */
 			qcom,cpu-dma-latency-us = <301>;
 
 			spm-level = <5>;
@@ -2124,6 +2125,14 @@
 			<0xe0020 0x55555556>,
 			<0xe0024 0x55555556>,
 			<0x80124 0x3>;
+		qcom,qdss-presets = <0xfc325000 0x1000>,
+			<0xfc326000 0x1000>,
+			<0xfc321000 0x1000>,
+			<0xfc322000 0x1000>,
+			<0xfc323000 0x1000>,
+			<0xfc302000 0x1000>,
+			<0xfa180000 0x1000>,
+			<0xfa181000 0x1000>;
 		qcom,imem-size = <524288>; /* 512 * 1024*/
 		qcom,max-hw-load = <1281600>; /* Full 4k @ 30 + 1080p @ 30 */
 		clock-names = "core_clk", "core0_clk", "core1_clk", "core2_clk",
@@ -3074,7 +3083,7 @@
 		qcom,core-temp-hysteresis = <10>;
 		qcom,core-control-mask = <0xfe>;
 		qcom,hotplug-temp = <105>;
-		qcom,hotplug-temp-hysteresis = <20>;
+		qcom,hotplug-temp-hysteresis = <40>;
 		qcom,cpu-sensors = "tsens_tz_sensor7", "tsens_tz_sensor8",
 				   "tsens_tz_sensor9", "tsens_tz_sensor10",
 				   "tsens_tz_sensor13", "tsens_tz_sensor14",

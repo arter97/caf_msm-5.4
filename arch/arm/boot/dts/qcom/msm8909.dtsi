@@ -16,7 +16,10 @@
 / {
 	model = "Qualcomm Technologies, Inc. MSM8909";
 	compatible = "qcom,msm8909";
-	qcom,msm-id = <245 0>;
+	qcom,msm-id =	<245 0>,
+			<258 0>,
+			<259 0>,
+			<265 0>;
 	interrupt-parent = <&intc>;
 
 	aliases {
@@ -389,6 +392,15 @@
 		qcom,freq-mitigation-control-mask = <0x01>;
 		qcom,online-hotplug-core;
 		qcom,therm-reset-temp = <115>;
+		qcom,vdd-restriction-temp = <5>;
+		qcom,vdd-restriction-temp-hysteresis = <10>;
+		vdd-dig-supply = <&pm8909_s1_floor_corner>;
+
+		qcom,vdd-dig-rstr{
+			qcom,vdd-rstr-reg = "vdd-dig";
+			qcom,levels = <5 7 7>; /* Nominal, Super Turbo, Super Turbo */
+			qcom,min-level = <1>; /* No Request */
+		};
 	};
 
 	qcom,ipc-spinlock@1905000 {

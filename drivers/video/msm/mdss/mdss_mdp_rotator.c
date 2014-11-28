@@ -324,7 +324,7 @@ static struct mdss_mdp_rotator_session
 		struct mdss_mdp_rotator_session, head);
 
 	if (rot) {
-		list_del(&rot->head);
+		list_del_init(&rot->head);
 		rot_mgr->session_count--;
 	}
 	mutex_unlock(&rot_mgr->session_lock);
@@ -339,8 +339,12 @@ static void mdss_mdp_rot_mgr_del_session(struct mdss_mdp_rotator_session *rot)
 		return;
 	}
 
+	/* if head is empty means that session was already removed */
+	if (list_empty(&rot->head))
+		return;
+
 	mutex_lock(&rot_mgr->session_lock);
-	list_del(&rot->head);
+	list_del_init(&rot->head);
 	rot_mgr->session_count--;
 
 	mutex_lock(&rot_mgr->pipe_lock);
@@ -404,7 +408,13 @@ static void mdss_mdp_rotator_session_free(
 	if (!list_empty(&rot->list))
 		list_del(&rot->list);
 
-	kfree(rot->rot_sync_pt_data);
+	if (rot->rot_sync_pt_data) {
+		struct sync_timeline *obj;
+
+		obj = (struct sync_timeline *) rot->rot_sync_pt_data->timeline;
+		sync_timeline_destroy(obj);
+		kfree(rot->rot_sync_pt_data);
+	}
 	kfree(rot);
 }
 
@@ -797,6 +807,7 @@ static int mdss_mdp_rotator_config(struct msm_fb_data_type *mfd,
 	req->src.format = mdss_mdp_get_rotator_dst_format(req->src.format,
 		req->flags & MDP_ROT_90, req->flags & MDP_BWC_EN);
 
+	rot->req_data = *req;
 	rot->params_changed++;
 
 	return 0;
@@ -877,6 +888,12 @@ static int mdss_mdp_rotator_config_ex(struct msm_fb_data_type *mfd,
 		return -ENODEV;
 	}
 
+	/* if session hasn't changed, skip reconfiguration */
+	if (!memcmp(req, &rot->req_data, sizeof(*req)))
+		return 0;
+
+	flush_work(&rot->commit_work);
+
 	mutex_lock(&rot->lock);
 	ret = mdss_mdp_rotator_config(mfd, rot, req, fmt);
 	mutex_unlock(&rot->lock);
@@ -917,7 +934,7 @@ static int mdss_mdp_rotator_finish(struct mdss_mdp_rotator_session *rot)
 {
 	pr_debug("finish rot id=%x\n", rot->session_id);
 
-	cancel_work_sync(&rot->commit_work);
+	flush_work(&rot->commit_work);
 	mdss_mdp_rot_mgr_del_session(rot);
 
 	return 0;
@@ -928,6 +945,8 @@ int mdss_mdp_rotator_release(struct mdss_mdp_rotator_session *rot)
 	int rc;
 
 	rc = mdss_mdp_rotator_finish(rot);
+	mdss_mdp_data_free(&rot->src_buf);
+	mdss_mdp_data_free(&rot->dst_buf);
 	mdss_mdp_rotator_session_free(rot);
 
 	return rc;
@@ -942,8 +961,13 @@ int mdss_mdp_rotator_release_all(void)
 		if (!rot)
 			break;
 
-		mdss_mdp_rotator_finish(rot);
+		mdss_mdp_rotator_release(rot);
 	}
+
+	mutex_lock(&rot_mgr->pipe_lock);
+	if (rot_mgr->session_count < rot_mgr->pipe_count)
+		mdss_mdp_rot_mgr_remove_free_pipe();
+	mutex_unlock(&rot_mgr->pipe_lock);
 
 	return 0;
 }
@@ -1021,12 +1045,8 @@ int mdss_mdp_rotator_unset(int ndx)
 	int ret = 0;
 
 	rot = mdss_mdp_rot_mgr_get_session(ndx);
-	if (rot) {
-		ret = mdss_mdp_rotator_finish(rot);
-		mdss_mdp_data_free(&rot->src_buf);
-		mdss_mdp_data_free(&rot->dst_buf);
-		mdss_mdp_rotator_session_free(rot);
-	}
+	if (rot)
+		ret = mdss_mdp_rotator_release(rot);
 
 	return ret;
 }

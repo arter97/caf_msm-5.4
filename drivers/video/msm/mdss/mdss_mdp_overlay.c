@@ -1231,6 +1231,10 @@ int mdss_mdp_overlay_start(struct msm_fb_data_type *mfd)
 					mfd->index);
 			return 0;
 		}
+	} else if (mdata->handoff_pending) {
+		pr_warn("fb%d: commit while splash handoff pending\n",
+				mfd->index);
+		return -EPERM;
 	}
 
 	pr_debug("starting fb%d overlay\n", mfd->index);
@@ -1467,6 +1471,9 @@ int mdss_mdp_overlay_kickoff(struct msm_fb_data_type *mfd,
 	bool need_cleanup = false, skip_partial_update = true;
 	struct mdss_mdp_commit_cb commit_cb;
 	LIST_HEAD(destroy_pipes);
+
+	if (!ctl)
+		return -ENODEV;
 
 	ATRACE_BEGIN(__func__);
 	if (ctl->shared_lock) {
@@ -2365,14 +2372,51 @@ static ssize_t mdss_mdp_ad_store(struct device *dev,
 	return count;
 }
 
+static ssize_t mdss_mdp_dyn_pu_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = fbi->par;
+	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
+	int ret, state;
+
+	state = (mdp5_data->dyn_pu_state >= 0) ? mdp5_data->dyn_pu_state : -1;
+
+	ret = scnprintf(buf, PAGE_SIZE, "%d", state);
+
+	return ret;
+}
+
+static ssize_t mdss_mdp_dyn_pu_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = fbi->par;
+	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
+	int ret, dyn_pu;
+
+	ret = kstrtoint(buf, 10, &dyn_pu);
+	if (ret) {
+		pr_err("Invalid input for partial udpate: ret = %d\n", ret);
+		return ret;
+	}
+
+	mdp5_data->dyn_pu_state = dyn_pu;
+	sysfs_notify(&dev->kobj, NULL, "dyn_pu");
+
+	return count;
+}
 
 static DEVICE_ATTR(vsync_event, S_IRUGO, mdss_mdp_vsync_show_event, NULL);
 static DEVICE_ATTR(ad, S_IRUGO | S_IWUSR | S_IWGRP, mdss_mdp_ad_show,
 	mdss_mdp_ad_store);
+static DEVICE_ATTR(dyn_pu, S_IRUGO | S_IWUSR | S_IWGRP, mdss_mdp_dyn_pu_show,
+	mdss_mdp_dyn_pu_store);
 
 static struct attribute *mdp_overlay_sysfs_attrs[] = {
 	&dev_attr_vsync_event.attr,
 	&dev_attr_ad.attr,
+	&dev_attr_dyn_pu.attr,
 	NULL,
 };
 
@@ -2658,6 +2702,62 @@ static int mdss_bl_scale_config(struct msm_fb_data_type *mfd,
 	return ret;
 }
 
+static int mdss_mdp_pp_is_disable_op(struct msmfb_mdp_pp *pp)
+{
+	int flags = 0, ret = 0;
+	switch (pp->op) {
+	case mdp_op_pa_cfg:
+		flags = pp->data.pa_cfg_data.pa_data.flags;
+		break;
+	case mdp_op_pa_v2_cfg:
+		flags = pp->data.pa_v2_cfg_data.pa_v2_data.flags;
+		break;
+	case mdp_op_pcc_cfg:
+		flags = pp->data.pcc_cfg_data.ops;
+		break;
+	case mdp_op_lut_cfg:
+		switch (pp->data.lut_cfg_data.lut_type) {
+		case mdp_lut_igc:
+			flags = pp->data.lut_cfg_data.data.igc_lut_data.ops;
+			break;
+		case mdp_lut_pgc:
+			flags = pp->data.lut_cfg_data.data.pgc_lut_data.flags;
+			break;
+		case mdp_lut_hist:
+			flags = pp->data.lut_cfg_data.data.hist_lut_data.ops;
+			break;
+		default:
+			break;
+		}
+		break;
+	case mdp_op_dither_cfg:
+		flags = pp->data.dither_cfg_data.flags;
+		break;
+	case mdp_op_gamut_cfg:
+		flags = pp->data.gamut_cfg_data.flags;
+		break;
+	case mdp_op_ad_cfg:
+		flags = pp->data.ad_init_cfg.ops;
+		break;
+	case mdp_bl_scale_cfg:
+		flags = MDP_PP_OPS_DISABLE;
+		break;
+	case mdp_op_ad_input:
+	case mdp_op_calib_cfg:
+	case mdp_op_calib_mode:
+	case mdp_op_calib_buffer:
+	case mdp_op_calib_dcm_state:
+		break;
+	default:
+		pr_err("Unsupported request to MDP_PP IOCTL. %d = op\n",
+			pp->op);
+		break;
+	}
+	if (flags & MDP_PP_OPS_DISABLE)
+		ret = 1;
+	return ret;
+}
+
 static int mdss_mdp_pp_ioctl(struct msm_fb_data_type *mfd,
 				void __user *argp)
 {
@@ -2666,6 +2766,7 @@ static int mdss_mdp_pp_ioctl(struct msm_fb_data_type *mfd,
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	u32 copyback = 0;
 	u32 copy_from_kernel = 0;
+	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
 
 	if (!mdata)
 		return -EPERM;
@@ -2680,6 +2781,12 @@ static int mdss_mdp_pp_ioctl(struct msm_fb_data_type *mfd,
 	if (mdata->pp_enable == MDP_PP_DISABLE &&
 				mdp_pp.op != mdp_op_pp_init_cfg) {
 		pr_err("Partial update feature is enabled\n");
+		return -EPERM;
+	}
+
+	if (mfd->panel_info->partial_update_enabled && mdp5_data->dyn_pu_state
+			&& !mdss_mdp_pp_is_disable_op(&mdp_pp)) {
+		pr_debug("Partial update feature is enabled.\n");
 		return -EPERM;
 	}
 
@@ -2795,12 +2902,19 @@ static int mdss_mdp_histo_ioctl(struct msm_fb_data_type *mfd, u32 cmd,
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	u32 block;
 	static int req = -1;
+	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
 
 	if (!mdata)
 		return -EPERM;
 
 	if (mdata->pp_enable == MDP_PP_DISABLE) {
 		pr_err("Partial update feature is enabled\n");
+		return -EPERM;
+	}
+
+	if (mfd->panel_info->partial_update_enabled && mdp5_data->dyn_pu_state
+			&& (cmd != MSMFB_HISTOGRAM_STOP)) {
+		pr_err("Partial update feature is enabled.\n");
 		return -EPERM;
 	}
 
@@ -3204,6 +3318,9 @@ static int __handle_ioctl_overlay_prepare(struct msm_fb_data_type *mfd,
 	struct mdp_overlay *overlays;
 	int i, ret;
 
+	if (!mfd_to_ctl(mfd))
+		return -ENODEV;
+
 	if (copy_from_user(&ovlist, argp, sizeof(ovlist)))
 		return -EFAULT;
 
@@ -3434,7 +3551,7 @@ static struct mdss_mdp_ctl *__mdss_mdp_overlay_ctl_init(
 	INIT_WORK(&ctl->remove_underrun_handler,
 				remove_underrun_vsync_handler);
 
-	if (is_split_lm(mfd)) {
+	if (mfd->split_mode == MDP_DUAL_LM_DUAL_DISPLAY) {
 		/* enable split display */
 		rc = mdss_mdp_ctl_split_display_setup(ctl, pdata->next);
 		if (rc) {
@@ -3625,14 +3742,6 @@ ctl_stop:
 	return rc;
 }
 
-int mdss_panel_register_done(struct mdss_panel_data *pdata)
-{
-	if (pdata->panel_info.cont_splash_enabled)
-		mdss_mdp_footswitch_ctrl_splash(1);
-
-	return 0;
-}
-
 static int __mdss_mdp_ctl_handoff(struct mdss_mdp_ctl *ctl,
 	struct mdss_data_type *mdata)
 {
@@ -3731,7 +3840,7 @@ static int mdss_mdp_overlay_handoff(struct msm_fb_data_type *mfd)
 		goto error;
 	}
 
-	if (is_split_lm(mfd)) {
+	if (mfd->split_mode == MDP_DUAL_LM_DUAL_DISPLAY) {
 		sctl = mdss_mdp_get_split_ctl(ctl);
 		if (!sctl) {
 			pr_err("cannot get secondary ctl. fail the handoff\n");
@@ -3921,7 +4030,6 @@ int mdss_mdp_overlay_init(struct msm_fb_data_type *mfd)
 	mdp5_interface->cursor_update = mdss_mdp_hw_cursor_update;
 	mdp5_interface->dma_fnc = mdss_mdp_overlay_pan_display;
 	mdp5_interface->ioctl_handler = mdss_mdp_overlay_ioctl_handler;
-	mdp5_interface->panel_register_done = mdss_panel_register_done;
 	mdp5_interface->kickoff_fnc = mdss_mdp_overlay_kickoff;
 	mdp5_interface->get_sync_fnc = mdss_mdp_rotator_sync_pt_get;
 	mdp5_interface->splash_init_fnc = mdss_mdp_splash_init;
@@ -3950,8 +4058,8 @@ int mdss_mdp_overlay_init(struct msm_fb_data_type *mfd)
 	}
 	mfd->mdp.private1 = mdp5_data;
 	mfd->wait_for_kickoff = true;
-	if (is_panel_split(mfd) && mdp5_data->mdata->has_dst_split)
-		mfd->split_mode = MDP_SPLIT_MODE_DST;
+	if (is_panel_split(mfd) && mdp5_data->mdata->has_pingpong_split)
+		mfd->split_mode = MDP_PINGPONG_SPLIT;
 
 	if (mfd->panel_info->partial_update_enabled && is_split_lm(mfd))
 		mdp5_data->mdata->has_src_split = false;
@@ -3965,10 +4073,18 @@ int mdss_mdp_overlay_init(struct msm_fb_data_type *mfd)
 	if (rc)
 		return rc;
 
+	/*
+	 * disable BWC if primary panel is video mode on specific
+	 * chipsets to workaround HW problem.
+	 */
+	if (mdss_has_quirk(mdp5_data->mdata, MDSS_QUIRK_BWCPANIC) &&
+	    mfd->panel_info->type == MIPI_VIDEO_PANEL && (0 == mfd->index))
+		mdp5_data->mdata->has_bwc = false;
+
 	mfd->panel_orientation = mfd->panel_info->panel_orientation;
 
 	if ((mfd->panel_info->panel_orientation & MDP_FLIP_LR) &&
-		(is_split_lm(mfd)))
+	    (mfd->split_mode == MDP_DUAL_LM_DUAL_DISPLAY))
 		mdp5_data->mixer_swap = true;
 
 	rc = sysfs_create_group(&dev->kobj, &mdp_overlay_sysfs_group);
@@ -4038,6 +4154,7 @@ int mdss_mdp_overlay_init(struct msm_fb_data_type *mfd)
 			rc = 0;
 		}
 	}
+	mdp5_data->dyn_pu_state = mfd->panel_info->partial_update_enabled;
 
 	if (mdss_mdp_pp_overlay_init(mfd))
 		pr_warn("Failed to initialize pp overlay data.\n");
