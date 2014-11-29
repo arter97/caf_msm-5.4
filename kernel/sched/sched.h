@@ -496,6 +496,7 @@ struct rq {
 	u64 window_start;
 	u32 mostly_idle_load;
 	int mostly_idle_nr_run;
+	int mostly_idle_freq;
 
 	u64 curr_runnable_sum;
 	u64 prev_runnable_sum;
