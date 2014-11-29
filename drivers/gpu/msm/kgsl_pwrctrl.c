@@ -19,6 +19,7 @@
 #include <linux/msm-bus-board.h>
 #include <linux/ktime.h>
 #include <linux/delay.h>
+#include <linux/msm_adreno_devfreq.h>
 
 #include "kgsl.h"
 #include "kgsl_pwrscale.h"
@@ -41,6 +42,8 @@
  */
 #define INIT_UDELAY		200
 #define MAX_UDELAY		2000
+
+#define KGSL_MAX_BUSLEVELS	20
 
 struct clk_pair {
 	const char *name;
@@ -86,8 +89,18 @@ static struct clk_pair clks[KGSL_MAX_CLKS] = {
 	},
 };
 
+static unsigned int ib_votes[KGSL_MAX_BUSLEVELS];
+static int last_vote_buslevel;
 static void kgsl_pwrctrl_axi(struct kgsl_device *device, int state);
 static void kgsl_pwrctrl_pwrrail(struct kgsl_device *device, int state);
+
+/**
+ * kgsl_get_bw() - Return latest msm bus IB vote
+ */
+static unsigned int kgsl_get_bw(void)
+{
+	return ib_votes[last_vote_buslevel];
+}
 
 /*
  * Given a requested power level do bounds checking on the constraints and
@@ -129,8 +142,12 @@ void kgsl_pwrctrl_buslevel_update(struct kgsl_device *device,
 				cur + pwr->bus_mod);
 		buslevel = max_t(int, buslevel, 1);
 	}
-	msm_bus_scale_client_update_request(pwr->pcl, buslevel);
 	trace_kgsl_buslevel(device, pwr->active_pwrlevel, buslevel);
+	last_vote_buslevel = buslevel;
+	/* vote for ocmem */
+	msm_bus_scale_client_update_request(pwr->pcl, buslevel);
+	/* ask a governor to vote on behalf of us */
+	devfreq_vbif_update_bw();
 }
 EXPORT_SYMBOL(kgsl_pwrctrl_buslevel_update);
 
@@ -943,6 +960,8 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 		container_of(device->parentdev, struct platform_device, dev);
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	struct kgsl_device_platform_data *pdata = pdev->dev.platform_data;
+	struct device_node *ocmem_bus_node;
+	struct msm_bus_scale_pdata *ocmem_scale_table = NULL;
 
 	/*acquire clocks */
 	for (i = 0; i < KGSL_MAX_CLKS; i++) {
@@ -1019,13 +1038,25 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 	if (pdata->bus_scale_table == NULL)
 		return result;
 
-	pwr->pcl = msm_bus_scale_register_client(pdata->
-						bus_scale_table);
+	ocmem_bus_node = of_find_node_by_name(pdev->dev.of_node,
+				"qcom,ocmem-bus-client");
+	/* If platform has splitted ocmem bus client - use it */
+	if (ocmem_bus_node) {
+		ocmem_scale_table = msm_bus_pdata_from_node
+				(pdev, ocmem_bus_node);
+		if (ocmem_scale_table)
+			pwr->pcl = msm_bus_scale_register_client
+					(ocmem_scale_table);
+	} else
+		pwr->pcl = msm_bus_scale_register_client
+					(pdata->bus_scale_table);
+
 	if (!pwr->pcl) {
 		KGSL_PWR_ERR(device,
 				"msm_bus_scale_register_client failed: "
-				"id %d table %p", device->id,
-				pdata->bus_scale_table);
+				"id %d table %p %p", device->id,
+				pdata->bus_scale_table,
+				ocmem_scale_table);
 		result = -EINVAL;
 		goto done;
 	}
@@ -1053,6 +1084,16 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 		struct msm_bus_vectors *vector = &usecase->vectors[0];
 		if (vector->dst == MSM_BUS_SLAVE_EBI_CH0 &&
 				vector->ib != 0) {
+			if (i < KGSL_MAX_BUSLEVELS)
+				/*
+				 * Want to convert bytes to Mbytes,
+				 * but msm_bus_of.c uses a strange macro
+				 *  #define KBTOB(a) (a * 1000ULL)
+				 * thats why 1024*1000, not 1024*1024
+				 */
+				ib_votes[i] =
+					DIV_ROUND_UP_ULL(vector->ib, 1024000);
+
 			for (k = 0; k < n; k++)
 				if (vector->ib == pwr->bus_ib[k]) {
 					static uint64_t last_ib = 0xFFFFFFFF;
@@ -1081,6 +1122,8 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 		}
 	}
 	pwr->pwrlevels[freq_i].bus_max = i - 1;
+
+	devfreq_vbif_register_callback(kgsl_get_bw);
 
 	return result;
 
