@@ -163,6 +163,20 @@
 /* generate interrupt from the command stream */
 #define CP_INTERRUPT		0x40
 
+/* A5XX Enable yield in RB only */
+#define CP_YIELD_ENABLE 0x1C
+
+/* Enable/Disable/Defer A5x global preemption model */
+#define CP_PREEMPT_ENABLE_GLOBAL    0x69
+
+/* Enable/Disable A5x local preemption model */
+#define CP_PREEMPT_ENABLE_LOCAL     0x6A
+
+/* Yeild token on a5xx similar to CP_PREEMPT on a4xx */
+#define CP_CONTEXT_SWITCH_YIELD     0x6B
+
+/* Inform CP about current render mode (needed for a5xx preemption) */
+#define CP_SET_RENDER_MODE          0x6C
 
 /* copy sequencer instruction memory to system memory */
 #define CP_IM_STORE            0x2c

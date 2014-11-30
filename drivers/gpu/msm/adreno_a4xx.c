@@ -177,6 +177,110 @@ static const struct adreno_vbif_platform a4xx_vbif_platforms[] = {
 	{ adreno_is_a418, a430_vbif },
 };
 
+/* a4xx_preemption_start() - Setup state to start preemption */
+static void a4xx_preemption_start(struct adreno_device *adreno_dev,
+		struct adreno_ringbuffer *rb)
+{
+	struct kgsl_device *device = &adreno_dev->dev;
+	uint32_t val;
+
+	/*
+	 * Setup scratch registers from which the GPU will program the
+	 * registers required to start execution of new ringbuffer
+	 * set ringbuffer address
+	 */
+	kgsl_regwrite(device, A4XX_CP_SCRATCH_REG8,
+		rb->buffer_desc.gpuaddr);
+	kgsl_regread(device, A4XX_CP_RB_CNTL, &val);
+	/* scratch REG9 corresponds to CP_RB_CNTL register */
+	kgsl_regwrite(device, A4XX_CP_SCRATCH_REG9, val);
+	/* scratch REG10 corresponds to rptr address */
+	kgsl_regwrite(device, A4XX_CP_SCRATCH_REG10, 0);
+	/* scratch REG11 corresponds to rptr */
+	kgsl_regwrite(device, A4XX_CP_SCRATCH_REG11, rb->rptr);
+	/* scratch REG12 corresponds to wptr */
+	kgsl_regwrite(device, A4XX_CP_SCRATCH_REG12, rb->wptr);
+	/*
+	 * scratch REG13 corresponds to  IB1_BASE,
+	 * 0 since we do not do switches in between IB's
+	 */
+	kgsl_regwrite(device, A4XX_CP_SCRATCH_REG13, 0);
+	/* scratch REG14 corresponds to IB1_BUFSZ */
+	kgsl_regwrite(device, A4XX_CP_SCRATCH_REG14, 0);
+	/* scratch REG15 corresponds to IB2_BASE */
+	kgsl_regwrite(device, A4XX_CP_SCRATCH_REG15, 0);
+	/* scratch REG16 corresponds to  IB2_BUFSZ */
+	kgsl_regwrite(device, A4XX_CP_SCRATCH_REG16, 0);
+	/* scratch REG17 corresponds to GPR11 */
+	kgsl_regwrite(device, A4XX_CP_SCRATCH_REG17, rb->gpr11);
+}
+
+/* a4xx_preemption_save() - Save the state after preemption is done */
+static void a4xx_preemption_save(struct adreno_device *adreno_dev,
+		struct adreno_ringbuffer *rb)
+{
+	struct kgsl_device *device = &adreno_dev->dev;
+
+	kgsl_regread(device, A4XX_CP_SCRATCH_REG18, &rb->rptr);
+	kgsl_regread(device, A4XX_CP_SCRATCH_REG23, &rb->gpr11);
+}
+
+static int a4xx_preemption_token(struct adreno_device *adreno_dev,
+			struct adreno_ringbuffer *rb, unsigned int *cmds,
+			uint64_t gpuaddr)
+{
+	unsigned int *cmds_orig = cmds;
+
+	/* Turn on preemption flag */
+	/* preemption token - fill when pt switch command size is known */
+	*cmds++ = cp_type3_packet(CP_PREEMPT_TOKEN, 3);
+	*cmds++ = (uint)gpuaddr;
+	*cmds++ = 1;
+	/* generate interrupt on preemption completion */
+	*cmds++ = 1 << CP_PREEMPT_ORDINAL_INTERRUPT;
+
+	return cmds - cmds_orig;
+
+}
+
+static int a4xx_preemption_pre_ibsubmit(
+			struct adreno_device *adreno_dev,
+			struct adreno_ringbuffer *rb, unsigned int *cmds,
+			struct kgsl_context *context, uint64_t cond_addr,
+			struct kgsl_memobj_node *ib)
+{
+	unsigned int *cmds_orig = cmds;
+	int exec_ib = 0;
+
+	cmds += a4xx_preemption_token(adreno_dev, rb, cmds,
+				rb->device->memstore.gpuaddr +
+				KGSL_MEMSTORE_OFFSET(context->id, preempted));
+
+	if (ib)
+		exec_ib = 1;
+
+	*cmds++ = cp_type3_packet(CP_COND_EXEC, 4);
+	*cmds++ = cond_addr;
+	*cmds++ = cond_addr;
+	*cmds++ = 1;
+	*cmds++ = 7 + exec_ib * 3;
+	if (exec_ib) {
+		*cmds++ = cp_type3_packet(CP_INDIRECT_BUFFER_PFE, 2);
+		*cmds++ = ib->gpuaddr;
+		*cmds++ = ib->sizedwords;
+	}
+	/* clear preemption flag */
+	*cmds++ = cp_type3_packet(CP_MEM_WRITE, 2);
+	*cmds++ = cond_addr;
+	*cmds++ = 0;
+	*cmds++ = cp_type3_packet(CP_WAIT_MEM_WRITES, 1);
+	*cmds++ = 0;
+	*cmds++ = cp_type3_packet(CP_WAIT_FOR_ME, 1);
+	*cmds++ = 0;
+
+	return cmds - cmds_orig;
+}
+
 /*
  * a4xx_is_sptp_idle() - A430 SP/TP should be off to be considered idle
  * @adreno_dev: The adreno device pointer
@@ -734,18 +838,6 @@ static unsigned int a4xx_register_offsets[ADRENO_REG_REGISTER_MAX] = {
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_PROTECT_STATUS, A4XX_CP_PROTECT_STATUS),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG6, A4XX_CP_SCRATCH_REG6),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG7, A4XX_CP_SCRATCH_REG7),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG8, A4XX_CP_SCRATCH_REG8),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG9, A4XX_CP_SCRATCH_REG9),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG10, A4XX_CP_SCRATCH_REG10),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG11, A4XX_CP_SCRATCH_REG11),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG12, A4XX_CP_SCRATCH_REG12),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG13, A4XX_CP_SCRATCH_REG13),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG14, A4XX_CP_SCRATCH_REG14),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG15, A4XX_CP_SCRATCH_REG15),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG16, A4XX_CP_SCRATCH_REG16),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG17, A4XX_CP_SCRATCH_REG17),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG18, A4XX_CP_SCRATCH_REG18),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_SCRATCH_REG23, A4XX_CP_SCRATCH_REG23),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_PREEMPT, A4XX_CP_PREEMPT),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_PREEMPT_DEBUG, A4XX_CP_PREEMPT_DEBUG),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_PREEMPT_DISABLE,
@@ -1688,4 +1780,8 @@ struct adreno_gpudev adreno_a4xx_gpudev = {
 	.pwrlevel_change_settings = a4xx_pwrlevel_change_settings,
 	.regulator_enable = a4xx_regulator_enable,
 	.regulator_disable = a4xx_regulator_disable,
+	.preemption_pre_ibsubmit = a4xx_preemption_pre_ibsubmit,
+	.preemption_token = a4xx_preemption_token,
+	.preemption_start = a4xx_preemption_start,
+	.preemption_save = a4xx_preemption_save,
 };

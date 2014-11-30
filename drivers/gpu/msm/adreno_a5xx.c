@@ -15,6 +15,7 @@
 #include "adreno.h"
 #include "a5xx_reg.h"
 #include "adreno_a3xx.h"
+#include "adreno_a5xx.h"
 #include "adreno_cp_parser.h"
 #include "adreno_trace.h"
 #include "adreno_pm4types.h"
@@ -42,6 +43,207 @@ static const struct adreno_vbif_platform a5xx_vbif_platforms[] = {
  * giving up and returning failure.
  */
 #define PWR_RETRY 100
+
+/*
+ * a5xx_preemption_start() - Setup state to start preemption
+ */
+static void a5xx_preemption_start(struct adreno_device *adreno_dev,
+		struct adreno_ringbuffer *rb)
+{
+	struct kgsl_device *device = &(adreno_dev->dev);
+	struct kgsl_iommu *iommu = device->mmu.priv;
+	uint64_t ttbr0;
+
+	kgsl_sharedmem_writel(device, &rb->preemption_desc,
+		offsetof(struct a5xx_cp_preemption_record, wptr), rb->wptr);
+	kgsl_regwrite(device, A5XX_CP_CONTEXT_SWITCH_RESTORE_ADDR_LO,
+		_lo_32(rb->preemption_desc.gpuaddr));
+	kgsl_regwrite(device, A5XX_CP_CONTEXT_SWITCH_RESTORE_ADDR_HI,
+		_hi_32(rb->preemption_desc.gpuaddr));
+	kgsl_sharedmem_readq(&rb->pagetable_desc, &ttbr0,
+		offsetof(struct adreno_ringbuffer_pagetable_info, ttbr0));
+	kgsl_sharedmem_writeq(device, &iommu->smmu_info,
+		offsetof(struct a5xx_cp_smmu_info, ttbr0), ttbr0);
+}
+
+/*
+ * a5xx_preemption_save() - Save the state after preemption is done
+ */
+static void a5xx_preemption_save(struct adreno_device *adreno_dev,
+		struct adreno_ringbuffer *rb)
+{
+	/* save the rptr from ctxrecord here */
+	kgsl_sharedmem_readl(&rb->preemption_desc, &rb->rptr,
+		offsetof(struct a5xx_cp_preemption_record, rptr));
+}
+
+/*
+ * a5xx_preemption_init() - Init preemption
+ */
+static void a5xx_preemption_init(struct adreno_device *adreno_dev)
+{
+	struct kgsl_device *device = &adreno_dev->dev;
+	struct kgsl_iommu *iommu = device->mmu.priv;
+	struct adreno_ringbuffer *rb;
+	uint i, ret;
+
+	if (!adreno_is_preemption_enabled(adreno_dev))
+		return;
+
+	/* Allocate mem for storing preemption switch record */
+	FOR_EACH_RINGBUFFER(adreno_dev, rb, i) {
+		ret = kgsl_allocate_global(&adreno_dev->dev,
+			&rb->preemption_desc,
+			A5XX_CP_CTXRECORD_SIZE_IN_BYTES, 0,
+			KGSL_MEMDESC_PRIVILEGED);
+		if (!ret)
+			/* Initialize the context switch record here */
+			kgsl_sharedmem_writel(rb->device, &rb->preemption_desc,
+				offsetof(struct a5xx_cp_preemption_record,
+				magic), A5XX_CP_CTXRECORD_MAGIC_REF);
+		else {
+			adreno_preemption_disable(adreno_dev);
+			WARN(1, "gpu preemption: disabled due to low memory");
+		}
+	}
+
+	/* Allocate mem for storing preemption smmu record */
+	ret = kgsl_allocate_global(device, &iommu->smmu_info, PAGE_SIZE,
+			   KGSL_MEMDESC_PRIVILEGED, 0);
+	if (ret) {
+		adreno_preemption_disable(adreno_dev);
+		WARN(1, "preemption: disabled due to low memory");
+	} else {
+		/* Initialize the context switch record here */
+		kgsl_sharedmem_writel(device, &iommu->smmu_info,
+				offsetof(struct a5xx_cp_smmu_info, magic),
+				A5XX_CP_SMMU_INFO_MAGIC_REF);
+		kgsl_sharedmem_writeq(device, &iommu->smmu_info,
+				offsetof(struct a5xx_cp_smmu_info, ttbr0),
+				kgsl_mmu_get_default_ttbr0(&device->mmu,
+				KGSL_IOMMU_CONTEXT_USER));
+		adreno_writereg64(adreno_dev,
+				ADRENO_REG_CP_CONTEXT_SWITCH_SMMU_INFO_LO,
+				ADRENO_REG_CP_CONTEXT_SWITCH_SMMU_INFO_HI,
+				iommu->smmu_info.gpuaddr);
+	}
+}
+
+/*
+ * a5xx_preemption_token() - Preempt token on a5xx
+ * PM4 commands for preempt token on a5xx. These commands are
+ * submitted to ringbuffer to trigger preemption.
+ */
+static int a5xx_preemption_token(struct adreno_device *adreno_dev,
+			struct adreno_ringbuffer *rb, unsigned int *cmds,
+			uint64_t gpuaddr)
+{
+	unsigned int *cmds_orig = cmds;
+
+	/* Enable yield in RB only */
+	*cmds++ = cp_type7_packet(CP_YIELD_ENABLE, 1);
+	*cmds++ = 1;
+
+	*cmds++ = cp_type7_packet(CP_CONTEXT_SWITCH_YIELD, 4);
+	cmds += cp_gpuaddr(adreno_dev, cmds, gpuaddr);
+	*cmds++ = 1;
+	/* generate interrupt on preemption completion */
+	*cmds++ = 1;
+
+	return cmds - cmds_orig;
+
+}
+
+/*
+ * a5xx_preemption_pre_ibsubmit() - Below PM4 commands are
+ * added at the beginning of every cmdbatch submission.
+ */
+static int a5xx_preemption_pre_ibsubmit(
+			struct adreno_device *adreno_dev,
+			struct adreno_ringbuffer *rb, unsigned int *cmds,
+			struct kgsl_context *context, uint64_t cond_addr,
+			struct kgsl_memobj_node *ib)
+{
+	unsigned int *cmds_orig = cmds;
+	uint64_t gpuaddr = rb->preemption_desc.gpuaddr;
+
+	/*
+	 * CP_PREEMPT_ENABLE_GLOBAL(global preemption) can only be set by KMD
+	 * in ringbuffer.
+	 * 1) set global preemption to 0x0 to disable global preemption.
+	 *    Only RB level preemption is allowed in this mode
+	 * 2) Set global preemption to defer(0x2) for finegrain preemption.
+	 *    when global preemption is set to defer(0x2),
+	 *    CP_PREEMPT_ENABLE_LOCAL(local preemption) determines the
+	 *    preemption point. Local preemption
+	 *    can be enabled by both UMD(within IB) and KMD.
+	 */
+	*cmds++ = cp_type7_packet(CP_PREEMPT_ENABLE_GLOBAL, 1);
+	*cmds++ = (ADRENO_PREEMPT_STYLE(context->flags)
+			   == KGSL_CONTEXT_PREEMPT_STYLE_FINEGRAIN) ? 2 : 0;
+
+	/* Turn CP protection OFF */
+	*cmds++ = cp_type7_packet(CP_SET_PROTECTED_MODE, 1);
+	*cmds++ = 0;
+
+	/*
+	 * CP during context switch will save context switch info to
+	 * a5xx_cp_preemption_record pointed by CONTEXT_SWITCH_SAVE_ADDR
+	 */
+	*cmds++ = cp_type4_packet(A5XX_CP_CONTEXT_SWITCH_SAVE_ADDR_LO, 1);
+	*cmds++ = _lo_32(gpuaddr);
+	*cmds++ = cp_type4_packet(A5XX_CP_CONTEXT_SWITCH_SAVE_ADDR_HI, 1);
+	*cmds++ = _hi_32(gpuaddr);
+
+	/* Turn CP protection ON */
+	*cmds++ = cp_type7_packet(CP_SET_PROTECTED_MODE, 1);
+	*cmds++ = 1;
+
+	/*
+	 * Enable local preemption for finegrain preemption in case of
+	 * a misbehaving IB
+	 */
+	if (ADRENO_PREEMPT_STYLE(context->flags) ==
+				KGSL_CONTEXT_PREEMPT_STYLE_FINEGRAIN) {
+		*cmds++ = cp_type7_packet(CP_PREEMPT_ENABLE_LOCAL, 1);
+		*cmds++ = 1;
+	}
+
+	return cmds - cmds_orig;
+}
+
+/*
+ * a5xx_preemption_post_ibsubmit() - Below PM4 commands are
+ * added after every cmdbatch submission.
+ */
+static int a5xx_preemption_post_ibsubmit(
+			struct adreno_device *adreno_dev,
+			struct adreno_ringbuffer *rb, unsigned int *cmds,
+			struct kgsl_context *context)
+{
+	unsigned int *cmds_orig = cmds;
+
+	/*
+	 * SRM -- set render mode (ex binning, direct render etc)
+	 * SRM is set by UMD usually at start of IB to tell CP the type of
+	 * preemption.
+	 * KMD needs to set SRM to NULL to indicate CP that rendering is
+	 * done by IB.
+	 */
+	*cmds++ = cp_type7_packet(CP_SET_RENDER_MODE, 5);
+	*cmds++ = 0;
+	*cmds++ = 0;
+	*cmds++ = 0;
+	*cmds++ = 0;
+	*cmds++ = 0;
+
+	cmds += a5xx_preemption_token(adreno_dev, rb, cmds,
+				rb->device->memstore.gpuaddr +
+				KGSL_MEMSTORE_OFFSET(context->id, preempted));
+
+	return cmds - cmds_orig;
+
+}
 
 /**
  * a5xx_protect_init() - Initializes register protection on a5xx
@@ -298,11 +500,22 @@ int a5xx_rb_init(struct adreno_device *adreno_dev,
 			 struct adreno_ringbuffer *rb)
 {
 	unsigned int *cmds;
+	unsigned int rb_cntl;
 	cmds = adreno_ringbuffer_allocspace(rb, 8);
 	if (IS_ERR(cmds))
 		return PTR_ERR(cmds);
 	if (cmds == NULL)
 		return -ENOSPC;
+
+	/*
+	 * For a5xx enable RB_ENA_PFP_UPDATE to allow PFP to write to
+	 * context record during preemption
+	 */
+	if (adreno_is_preemption_enabled(adreno_dev)) {
+		kgsl_regread(&adreno_dev->dev, A5XX_CP_RB_CNTL, &rb_cntl);
+		rb_cntl = (rb_cntl | (1 << 26));
+		kgsl_regwrite(&adreno_dev->dev, A5XX_CP_RB_CNTL, rb_cntl);
+	}
 
 	*cmds++ = cp_type7_packet(CP_ME_INIT, 7);
 	/*
@@ -744,6 +957,13 @@ static unsigned int a5xx_register_offsets[ADRENO_REG_REGISTER_MAX] = {
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_MEQ_ADDR, A5XX_CP_MEQ_DBG_ADDR),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_MEQ_DATA, A5XX_CP_MEQ_DBG_DATA),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_PROTECT_REG_0, A5XX_CP_PROTECT_REG_0),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_PREEMPT, A5XX_CP_CONTEXT_SWITCH_CNTL),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_PREEMPT_DEBUG, ADRENO_REG_SKIP),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_PREEMPT_DISABLE, ADRENO_REG_SKIP),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_CONTEXT_SWITCH_SMMU_INFO_LO,
+				A5XX_CP_CONTEXT_SWITCH_SMMU_INFO_LO),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_CONTEXT_SWITCH_SMMU_INFO_HI,
+				A5XX_CP_CONTEXT_SWITCH_SMMU_INFO_HI),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_STATUS, A5XX_RBBM_STATUS),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_PERFCTR_CTL, A5XX_RBBM_PERFCTR_CNTL),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_PERFCTR_LOAD_CMD0,
@@ -957,5 +1177,12 @@ struct adreno_gpudev adreno_a5xx_gpudev = {
 	.vbif_xin_halt_ctrl0_mask = A5XX_VBIF_XIN_HALT_CTRL0_MASK,
 	.regulator_enable = a5xx_regulator_enable,
 	.regulator_disable = a5xx_regulator_disable,
+	.preemption_pre_ibsubmit = a5xx_preemption_pre_ibsubmit,
+	.preemption_post_ibsubmit =
+				a5xx_preemption_post_ibsubmit,
+	.preemption_token = a5xx_preemption_token,
+	.preemption_start = a5xx_preemption_start,
+	.preemption_save = a5xx_preemption_save,
+	.preemption_init = a5xx_preemption_init,
 };
 

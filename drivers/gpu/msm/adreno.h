@@ -68,6 +68,13 @@
 	((_dev)->gpucore->features & (_bit))
 
 /*
+ * ADRENO_PREEMPT_STYLE - return preemption style
+ */
+#define ADRENO_PREEMPT_STYLE(flags) \
+	((flags & KGSL_CONTEXT_PREEMPT_STYLE_MASK) >> \
+		  KGSL_CONTEXT_PREEMPT_STYLE_SHIFT)
+
+/*
  * return the dispatcher cmdqueue in which the given cmdbatch should
  * be submitted
  */
@@ -92,6 +99,8 @@
 #define ADRENO_HAS_REG_TO_REG_CMDS BIT(5)
 /* The GPU supports content protection */
 #define ADRENO_CONTENT_PROTECTION BIT(6)
+/* The GPU supports preemption */
+#define ADRENO_PREEMPTION BIT(7)
 
 /* Flags to control command packet settings */
 #define KGSL_CMD_FLAGS_NONE             0
@@ -262,6 +271,7 @@ struct adreno_device {
  * send any more commands to the ringbuffer)
  * @ADRENO_DEVICE_CMDBATCH_PROFILE - Set if the device supports command batch
  * profiling via the ALWAYSON counter
+ * @ADRENO_DEVICE_PREEMPTION - Turn on/off preemption
  */
 enum adreno_device_flags {
 	ADRENO_DEVICE_PWRON = 0,
@@ -273,6 +283,7 @@ enum adreno_device_flags {
 	ADRENO_DEVICE_FAULT = 6,
 	ADRENO_DEVICE_CMDBATCH_PROFILE = 7,
 	ADRENO_DEVICE_GPU_REGULATOR_ENABLED = 8,
+	ADRENO_DEVICE_PREEMPTION = 9,
 };
 
 #define PERFCOUNTER_FLAG_NONE 0x0
@@ -415,19 +426,9 @@ enum adreno_regs {
 	ADRENO_REG_CP_PREEMPT,
 	ADRENO_REG_CP_PREEMPT_DEBUG,
 	ADRENO_REG_CP_PREEMPT_DISABLE,
-	ADRENO_REG_CP_SCRATCH_REG8,
-	ADRENO_REG_CP_SCRATCH_REG9,
-	ADRENO_REG_CP_SCRATCH_REG10,
-	ADRENO_REG_CP_SCRATCH_REG11,
-	ADRENO_REG_CP_SCRATCH_REG12,
-	ADRENO_REG_CP_SCRATCH_REG13,
-	ADRENO_REG_CP_SCRATCH_REG14,
-	ADRENO_REG_CP_SCRATCH_REG15,
-	ADRENO_REG_CP_SCRATCH_REG16,
-	ADRENO_REG_CP_SCRATCH_REG17,
-	ADRENO_REG_CP_SCRATCH_REG18,
-	ADRENO_REG_CP_SCRATCH_REG23,
 	ADRENO_REG_CP_PROTECT_REG_0,
+	ADRENO_REG_CP_CONTEXT_SWITCH_SMMU_INFO_LO,
+	ADRENO_REG_CP_CONTEXT_SWITCH_SMMU_INFO_HI,
 	ADRENO_REG_RBBM_STATUS,
 	ADRENO_REG_RBBM_PERFCTR_CTL,
 	ADRENO_REG_RBBM_PERFCTR_LOAD_CMD0,
@@ -649,6 +650,21 @@ struct adreno_gpudev {
 	void (*regulator_disable)(struct adreno_device *);
 	void (*pwrlevel_change_settings)(struct adreno_device *,
 					bool mask_throttle);
+	int (*preemption_pre_ibsubmit)(struct adreno_device *,
+				struct adreno_ringbuffer *, unsigned int *,
+				struct kgsl_context *, uint64_t cond_addr,
+				struct kgsl_memobj_node *);
+	int (*preemption_post_ibsubmit)(struct adreno_device *,
+				struct adreno_ringbuffer *, unsigned int *,
+				struct kgsl_context *);
+	int (*preemption_token)(struct adreno_device *,
+				struct adreno_ringbuffer *, unsigned int *,
+				uint64_t gpuaddr);
+	void (*preemption_start)(struct adreno_device *,
+				struct adreno_ringbuffer *);
+	void (*preemption_save)(struct adreno_device *,
+				struct adreno_ringbuffer *);
+	void (*preemption_init)(struct adreno_device *);
 };
 
 struct log_field {
@@ -1329,5 +1345,26 @@ void adreno_writereg64(struct adreno_device *adreno_dev,
 
 unsigned int adreno_iommu_set_apriv(struct adreno_device *adreno_dev,
 				unsigned int *cmds, int set);
+
+static inline void adreno_preemption_disable(struct adreno_device *adreno_dev)
+{
+	clear_bit(ADRENO_DEVICE_PREEMPTION, &adreno_dev->priv);
+}
+
+static inline bool adreno_is_preemption_enabled(
+				struct adreno_device *adreno_dev)
+{
+	return test_bit(ADRENO_DEVICE_PREEMPTION, &adreno_dev->priv);
+}
+
+static inline uint _lo_32(uint64_t val)
+{
+	return (uint) (val & 0xFFFFFFFF);
+}
+
+static inline uint _hi_32(uint64_t val)
+{
+	return (uint) ((val >> 32) & 0xFFFFFFFF);
+}
 
 #endif /*__ADRENO_H */

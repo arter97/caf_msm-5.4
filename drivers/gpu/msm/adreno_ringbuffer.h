@@ -89,6 +89,8 @@ struct adreno_ringbuffer_pagetable_info {
  * @events: A kgsl_event_group for this context - contains the list of GPU
  * events
  * @drawctxt_active: The last pagetable that this ringbuffer is set to
+ * @preemption_desc: The memory descriptor containing
+ * preemption info written/read by CP
  * @pagetable_desc: Memory to hold information about the pagetables being used
  * and the commands to switch pagetable on the RB
  * @pt_update_desc: The memory descriptor containing commands that update
@@ -117,6 +119,7 @@ struct adreno_ringbuffer {
 	unsigned int timestamp;
 	struct kgsl_event_group events;
 	struct adreno_context *drawctxt_active;
+	struct kgsl_memdesc preemption_desc;
 	struct kgsl_memdesc pagetable_desc;
 	struct kgsl_memdesc pt_update_desc;
 	struct adreno_dispatcher_cmdqueue dispatch_q;

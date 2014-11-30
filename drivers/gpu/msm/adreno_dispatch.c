@@ -875,46 +875,6 @@ static int get_timestamp(struct adreno_context *drawctxt,
 }
 
 /**
- * adreno_dispatch_setup_rb_regs() - Write scratch registers to setup preemption
- * @adreno_dev: Device on which preemption is setup
- * @rb: The ringbuffer to which the device will preempt
- */
-static void adreno_dispatch_setup_rb_regs(struct adreno_device *adreno_dev,
-					struct adreno_ringbuffer *rb)
-{
-	unsigned int val;
-	/*
-	 * Setup scratch registers from which the GPU will program the
-	 * registers required to start execution of new ringbuffer
-	 * set ringbuffer address
-	 */
-	adreno_writereg(adreno_dev, ADRENO_REG_CP_SCRATCH_REG8,
-			rb->buffer_desc.gpuaddr);
-	adreno_readreg(adreno_dev, ADRENO_REG_CP_RB_CNTL, &val);
-	/* scratch REG9 corresponds to CP_RB_CNTL register */
-	adreno_writereg(adreno_dev, ADRENO_REG_CP_SCRATCH_REG9, val);
-	/* scratch REG10 corresponds to rptr address */
-	adreno_writereg(adreno_dev, ADRENO_REG_CP_SCRATCH_REG10, 0);
-	/* scratch REG11 corresponds to rptr */
-	adreno_writereg(adreno_dev, ADRENO_REG_CP_SCRATCH_REG11, rb->rptr);
-	/* scratch REG12 corresponds to wptr */
-	adreno_writereg(adreno_dev, ADRENO_REG_CP_SCRATCH_REG12, rb->wptr);
-	/*
-	 * scratch REG13 corresponds to  IB1_BASE,
-	 * 0 since we do not do switches in between IB's
-	 */
-	adreno_writereg(adreno_dev, ADRENO_REG_CP_SCRATCH_REG13, 0);
-	/* scratch REG14 corresponds to IB1_BUFSZ */
-	adreno_writereg(adreno_dev, ADRENO_REG_CP_SCRATCH_REG14, 0);
-	/* scratch REG15 corresponds to IB2_BASE */
-	adreno_writereg(adreno_dev, ADRENO_REG_CP_SCRATCH_REG15, 0);
-	/* scratch REG16 corresponds to  IB2_BUFSZ */
-	adreno_writereg(adreno_dev, ADRENO_REG_CP_SCRATCH_REG16, 0);
-	/* scratch REG17 corresponds to GPR11 */
-	adreno_writereg(adreno_dev, ADRENO_REG_CP_SCRATCH_REG17, rb->gpr11);
-}
-
-/**
  * adreno_dispatcher_preempt_timer() - Timer that triggers when preemption has
  * not completed
  * @data: Pointer to adreno device that did not preempt in timely manner
@@ -1098,6 +1058,7 @@ static void __adreno_dispatcher_preempt_clear_state(
 {
 	struct adreno_dispatcher *dispatcher = &adreno_dev->dispatcher;
 	struct kgsl_device *device = &(adreno_dev->dev);
+	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 	struct adreno_dispatcher_cmdqueue *dispatch_tempq;
 	struct kgsl_cmdbatch *cmdbatch;
 	struct adreno_ringbuffer *highest_busy_rb;
@@ -1152,10 +1113,12 @@ static void __adreno_dispatcher_preempt_clear_state(
 	}
 
 	/*
-	 * setup registers to do the switch to highest priority RB
+	 * setup registers/memory to do the switch to highest priority RB
 	 * which is not empty or may be starving away(poor thing)
 	 */
-	adreno_dispatch_setup_rb_regs(adreno_dev, highest_busy_rb);
+	if (gpudev->preemption_start)
+		gpudev->preemption_start(adreno_dev, highest_busy_rb);
+
 	/* turn on IOMMU as the preemption may trigger pt switch */
 	kgsl_mmu_enable_clk(&device->mmu);
 
@@ -1215,9 +1178,10 @@ static void __adreno_dispatcher_preempt_complete_state(
 {
 	struct adreno_dispatcher *dispatcher = &adreno_dev->dispatcher;
 	struct kgsl_device *device = &(adreno_dev->dev);
+	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 	struct adreno_dispatcher_cmdqueue *dispatch_q;
 	struct kgsl_cmdbatch *cmdbatch;
-	unsigned int rbbase;
+	uint64_t rbbase;
 	unsigned int wptr;
 	unsigned int val, val1;
 
@@ -1233,20 +1197,20 @@ static void __adreno_dispatcher_preempt_complete_state(
 		adreno_set_gpu_fault(adreno_dev, ADRENO_PREEMPT_FAULT);
 		return adreno_dispatcher_schedule(device);
 	}
-	adreno_readreg(adreno_dev, ADRENO_REG_CP_RB_BASE, &rbbase);
+	adreno_readreg64(adreno_dev, ADRENO_REG_CP_RB_BASE,
+				ADRENO_REG_CP_RB_BASE_HI, &rbbase);
 	if (rbbase != adreno_dev->next_rb->buffer_desc.gpuaddr) {
 		KGSL_DRV_ERR(device,
-		"RBBASE incorrect after preemption, expected %08x got %08llx\b",
+		"RBBASE incorrect after preemption, expected %016llx got %016llx\b",
 		rbbase,
 		adreno_dev->next_rb->buffer_desc.gpuaddr);
 		adreno_set_gpu_fault(adreno_dev, ADRENO_PREEMPT_FAULT);
 		return adreno_dispatcher_schedule(device);
 	}
 
-	adreno_readreg(adreno_dev, ADRENO_REG_CP_SCRATCH_REG18,
-				&adreno_dev->cur_rb->rptr);
-	adreno_readreg(adreno_dev, ADRENO_REG_CP_SCRATCH_REG23,
-				&adreno_dev->cur_rb->gpr11);
+	if (gpudev->preemption_save)
+		gpudev->preemption_save(adreno_dev, adreno_dev->cur_rb);
+
 	dispatch_q = &(adreno_dev->cur_rb->dispatch_q);
 	/* new RB is the current RB */
 	trace_adreno_hw_preempt_comp_to_clear(adreno_dev->next_rb,
@@ -1337,12 +1301,7 @@ static void __adreno_dispatcher_schedule_preempt(
 	struct adreno_dispatcher *dispatcher = &adreno_dev->dispatcher;
 	struct kgsl_device *device = &(adreno_dev->dev);
 
-	/*
-	 * a4xx style preemption is only supported on a4xx for now, for
-	 * other targets like a5xx do nothing for now. When a5xx
-	 * preemption comes along we can see if we can reuse this code.
-	 */
-	if (!adreno_is_a4xx(adreno_dev))
+	if (!adreno_is_preemption_enabled(adreno_dev))
 		return;
 
 	mutex_lock(&device->mutex);

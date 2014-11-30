@@ -1267,6 +1267,17 @@ static int adreno_init(struct kgsl_device *device)
 				&adreno_dev->priv);
 	}
 
+	if (ADRENO_FEATURE(adreno_dev, ADRENO_PREEMPTION))
+		set_bit(ADRENO_DEVICE_PREEMPTION, &adreno_dev->priv);
+
+	/* disable preemption for no mmu mode */
+	if (kgsl_mmu_get_mmutype() == KGSL_MMU_TYPE_NONE)
+		adreno_preemption_disable(adreno_dev);
+
+	/* Initialize preemption here */
+	if (gpudev->preemption_init && adreno_is_preemption_enabled(adreno_dev))
+		gpudev->preemption_init(adreno_dev);
+
 	return 0;
 }
 
