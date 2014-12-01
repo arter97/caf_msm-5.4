@@ -349,6 +349,39 @@ static ssize_t flush_show(struct device *dev,
 				? "not exist" : "exist");
 }
 
+static ssize_t enable_wakeup_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct sensors_classdev *sensors_cdev = dev_get_drvdata(dev);
+	ssize_t ret;
+	unsigned long enable;
+
+	if (sensors_cdev->sensors_enable_wakeup == NULL) {
+		dev_err(dev, "Invalid sensor class enable_wakeup handle\n");
+		return -EINVAL;
+	}
+
+	ret = kstrtoul(buf, 10, &enable);
+	if (ret)
+		return ret;
+
+	enable = enable ? 1 : 0;
+	ret = sensors_cdev->sensors_enable_wakeup(sensors_cdev, enable);
+	if (ret)
+		return ret;
+
+	sensors_cdev->wakeup = enable;
+
+	return size;
+}
+
+static ssize_t enable_wakeup_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sensors_classdev *sensors_cdev = dev_get_drvdata(dev);
+	return snprintf(buf, PAGE_SIZE, "%d\n", sensors_cdev->wakeup);
+}
+
 static ssize_t calibrate_show(struct device *dev,
 		struct device_attribute *atte, char *buf)
 {
@@ -427,6 +460,8 @@ static DEVICE_ATTR_RO(self_test);
 static DEVICE_ATTR_RW(batch);
 static DEVICE_ATTR_RW(flush);
 static DEVICE_ATTR(calibrate, 0664, calibrate_show, calibrate_store);
+static DEVICE_ATTR(enable_wakeup, 0664, enable_wakeup_show,
+		enable_wakeup_store);
 
 static struct attribute *sensors_attrs[] = {
 	&dev_attr_name.attr,
@@ -446,6 +481,7 @@ static struct attribute *sensors_attrs[] = {
 	&dev_attr_batch.attr,
 	&dev_attr_flush.attr,
 	&dev_attr_calibrate.attr,
+	&dev_attr_enable_wakeup.attr,
 	NULL,
 };
 
