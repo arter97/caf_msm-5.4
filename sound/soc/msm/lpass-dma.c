@@ -409,6 +409,7 @@ static int __devinit dai_probe(struct platform_device *pdev)
 	int rc = 0;
 	int i = 0;
 	struct resource *src;
+        return 0;
 	src = platform_get_resource_byname(pdev, IORESOURCE_MEM, "msm-dai");
 	if (!src) {
 		rc = -ENODEV;
