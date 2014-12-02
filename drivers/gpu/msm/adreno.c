@@ -52,16 +52,6 @@
 static void adreno_start_work(struct work_struct *work);
 static void adreno_input_work(struct work_struct *work);
 
-/*
- * The default values for the simpleondemand governor are 90 and 5,
- * we use different values here.
- * They have to be tuned and compare with the tz governor anyway.
- */
-static struct devfreq_simple_ondemand_data adreno_ondemand_data = {
-	.upthreshold = 80,
-	.downdifferential = 20,
-};
-
 static struct devfreq_msm_adreno_tz_data adreno_tz_data = {
 	.bus = {
 		.max = 350,
@@ -69,18 +59,12 @@ static struct devfreq_msm_adreno_tz_data adreno_tz_data = {
 	.device_id = KGSL_DEVICE_3D0,
 };
 
-static const struct devfreq_governor_data adreno_governors[] = {
-	{ .name = "simple_ondemand", .data = &adreno_ondemand_data },
-	{ .name = "msm-adreno-tz", .data = &adreno_tz_data },
-};
-
 static const struct kgsl_functable adreno_functable;
 
 static struct adreno_device device_3d0 = {
 	.dev = {
 		KGSL_DEVICE_COMMON_INIT(device_3d0.dev),
-		.pwrscale = KGSL_PWRSCALE_INIT(adreno_governors,
-					ARRAY_SIZE(adreno_governors)),
+		.pwrscale = KGSL_PWRSCALE_INIT(&adreno_tz_data),
 		.name = DEVICE_3D0_NAME,
 		.id = KGSL_DEVICE_3D0,
 		.pwrctrl = {
@@ -3415,6 +3399,47 @@ static void __exit kgsl_3d_exit(void)
 
 module_init(kgsl_3d_init);
 module_exit(kgsl_3d_exit);
+
+
+static struct of_device_id busmon_match_table[] = {
+	{ .compatible = "qcom,kgsl-busmon", .data = &device_3d0 },
+	{}
+};
+
+static int kgsl_busmon_probe(struct platform_device *pdev)
+{
+	struct kgsl_device *device;
+	const struct of_device_id *pdid =
+			of_match_device(busmon_match_table, &pdev->dev);
+
+	device = (struct kgsl_device *)pdid->data;
+	device->busmondev = &pdev->dev;
+	dev_set_drvdata(device->busmondev, device);
+
+	return 0;
+}
+
+static struct platform_driver kgsl_bus_platform_driver = {
+	.probe = kgsl_busmon_probe,
+	.driver = {
+		.owner = THIS_MODULE,
+		.name = "kgsl-busmon",
+	.of_match_table = busmon_match_table,
+	}
+};
+
+static int __init kgsl_busmon_init(void)
+{
+	return platform_driver_register(&kgsl_bus_platform_driver);
+}
+
+static void __exit kgsl_busmon_exit(void)
+{
+	platform_driver_unregister(&kgsl_bus_platform_driver);
+}
+
+module_init(kgsl_busmon_init);
+module_exit(kgsl_busmon_exit);
 
 MODULE_DESCRIPTION("3D Graphics driver");
 MODULE_VERSION("1.2");
