@@ -141,7 +141,7 @@ static int msm_isp_prepare_isp_buf(struct msm_isp_buf_mgr *buf_mgr,
 		mapped_info = &buf_info->mapped_info[i];
 		mapped_info->dma_buf = dma_buf_get(qbuf_buf->planes[i].addr);
 		if (IS_ERR_OR_NULL(mapped_info->dma_buf)) {
-			pr_err("Ion dma get buf failed\n");
+			pr_err_ratelimited("Ion dma get buf failed\n");
 			rc = PTR_ERR(mapped_info->dma_buf);
 			return rc;
 		}
@@ -149,7 +149,7 @@ static int msm_isp_prepare_isp_buf(struct msm_isp_buf_mgr *buf_mgr,
 		mapped_info->attachment =
 			dma_buf_attach(mapped_info->dma_buf, buf_mgr->isp_dev);
 		if (IS_ERR_OR_NULL(mapped_info->attachment)) {
-			pr_err("Ion dma buf attach failed\n");
+			pr_err_ratelimited("Ion dma buf attach failed\n");
 			rc = PTR_ERR(mapped_info->attachment);
 			goto err_out;
 		}
@@ -158,7 +158,7 @@ static int msm_isp_prepare_isp_buf(struct msm_isp_buf_mgr *buf_mgr,
 			dma_buf_map_attachment(mapped_info->attachment,
 				DMA_BIDIRECTIONAL);
 		if (IS_ERR_OR_NULL(mapped_info->table)) {
-			pr_err("DMA buf map attachment failed\n");
+			pr_err_ratelimited("DMA buf map attachment failed\n");
 			rc = PTR_ERR(mapped_info->table);
 			goto err_put;
 		}
@@ -167,7 +167,7 @@ static int msm_isp_prepare_isp_buf(struct msm_isp_buf_mgr *buf_mgr,
 				0, &(mapped_info->paddr),
 				&(mapped_info->len), 0, 0) < 0) {
 			rc = -EINVAL;
-			pr_err("%s: cannot map address", __func__);
+			pr_err_ratelimited("%s: cannot map address", __func__);
 			goto err_attach;
 		}
 
@@ -177,7 +177,7 @@ static int msm_isp_prepare_isp_buf(struct msm_isp_buf_mgr *buf_mgr,
 
 		buf_pending = kzalloc(sizeof(struct buffer_cmd), GFP_ATOMIC);
 		if (!buf_pending) {
-			pr_err("No free memory for buf_pending\n");
+			pr_err_ratelimited("No free memory for buf_pending\n");
 			rc = -ENOMEM;
 			goto err_map;
 		}
@@ -307,7 +307,7 @@ static int msm_isp_buf_prepare(struct msm_isp_buf_mgr *buf_mgr,
 
 	rc = msm_isp_prepare_isp_buf(buf_mgr, buf_info, &buf);
 	if (rc < 0) {
-		pr_err("%s: Prepare buffer error\n", __func__);
+		pr_err_ratelimited("%s: Prepare buffer error\n", __func__);
 		return rc;
 	}
 	spin_lock_irqsave(&bufq->bufq_lock, flags);
@@ -809,7 +809,7 @@ static int msm_isp_buf_enqueue(struct msm_isp_buf_mgr *buf_mgr,
 	struct msm_isp_buffer *buf_info = NULL;
 	buf_state = msm_isp_buf_prepare(buf_mgr, info, NULL);
 	if (buf_state < 0) {
-		pr_err("%s: Buf prepare failed\n", __func__);
+		pr_err_ratelimited("%s: Buf prepare failed\n", __func__);
 		return -EINVAL;
 	}
 
