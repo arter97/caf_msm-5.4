@@ -2075,6 +2075,7 @@ static struct branch_clk gcc_mmss_bimc_gfx_clk = {
 	.cbcr_reg = GCC_MMSS_BIMC_GFX_CBCR,
 	.has_sibling = 1,
 	.base = &virt_base,
+	.no_halt_check_on_disable = true,
 	.c = {
 		.dbg_name = "gcc_mmss_bimc_gfx_clk",
 		.ops = &clk_ops_branch,
