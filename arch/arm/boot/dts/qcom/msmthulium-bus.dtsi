@@ -1305,7 +1305,7 @@
 			label = "slv-mnoc-bimc";
 			qcom,buswidth = <16>;
 			qcom,ap-owned;
-			qcom,bus-dev = <&fab_mnoc_ahb>;
+			qcom,bus-dev = <&fab_mnoc>;
 			qcom,connections = <&mas_mnoc_bimc>;
 			qcom,slv-rpm-id = <ICBID_SLAVE_MNOC_BIMC>;
 		};
