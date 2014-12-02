@@ -1559,7 +1559,7 @@ static int kgsl_iommu_flush_pt(struct kgsl_mmu *mmu)
 		tlbflush_ctxt, TLBSTATUS) &
 		(KGSL_IOMMU_CTX_TLBSTATUS_SACTIVE)) {
 		if (time_after(jiffies, wait_for_flush)) {
-			KGSL_DRV_ERR(mmu->device,
+			KGSL_DRV_WARN(mmu->device,
 			"Wait limit reached for IOMMU tlb flush\n");
 			break;
 		}

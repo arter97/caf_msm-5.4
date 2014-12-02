@@ -466,6 +466,8 @@ enum adreno_regs {
 	ADRENO_REG_RBBM_SECVID_TSB_CONTROL,
 	ADRENO_REG_RBBM_SECVID_TSB_TRUSTED_BASE,
 	ADRENO_REG_RBBM_SECVID_TSB_TRUSTED_SIZE,
+	ADRENO_REG_VBIF_XIN_HALT_CTRL0,
+	ADRENO_REG_VBIF_XIN_HALT_CTRL1,
 	ADRENO_REG_REGISTER_MAX,
 };
 
@@ -630,9 +632,11 @@ struct adreno_gpudev {
 
 	struct adreno_irq *irq;
 	int num_prio_levels;
+	unsigned int vbif_xin_halt_ctrl0_mask;
 	/* GPU specific function hooks */
 	void (*irq_trace)(struct adreno_device *, unsigned int status);
 	void (*snapshot)(struct adreno_device *, struct kgsl_snapshot *);
+	void (*gpudev_init)(struct adreno_device *);
 	int (*rb_init)(struct adreno_device *, struct adreno_ringbuffer *);
 	void (*microcode_read)(struct adreno_device *);
 	int (*microcode_load)(struct adreno_device *, unsigned int start_type);
