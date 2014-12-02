@@ -127,6 +127,48 @@ Optional Properties:
 - qcom,cool-bat-mv		Maximum cool battery target voltage in milli-volts.
 - qcom,warm-bat-ma		Maximum warm battery charge current in milli-amps.
 - qcom,cool-bat-ma		Maximum cool battery charge current in milli-amps.
+- qcom,rsense-10mhom		A bool property to indicate the Rsense resistor
+				configuraton. If set, the Rsense is 10mOhm else
+				its 20mOhm.
+- qcom,otg-fet-present		A bool property to indicate that a pMOS FET is present
+				to boost the OTG current. On enabling this the max OTG
+				current supported is 3x(qcom,otg-batt-curr-limit).
+- qcom,otg-fet-enable-gpio	GPIO for enabling and disabling OTG FET.
+				Following should be the PMIC gpio configuration:
+				{
+					qcom,mode = <1>; //Digital output
+					qcom,pull = <0>; //Pull up configuration
+					qcom,vin-sel = <0>; //Voltage level: VPH_PWR
+					qcom,src-sel = <0>; //Pin function: GPIO
+					qcom,master-en = <1>; //Enable
+				}
+				Please go through the documentation for PMIC gpio
+				configuration details:
+				Documentation/devicetree/bindings/gpio/qpnp-pin.txt
+- qcom,min-icl-100ma		A bool property to set the minimum ICL current
+				to 100mA. If this property is not set the minimum
+				ICL is set to 500mA in all the scenarios.
+- qcom,config-hard-thresholds	This property indicates if cold and hot thresholds need be modified.
+				If it's not defined, default temp thresholds will be used. If this
+				defined, it's required to specify the "qcom,hot-bat-decidegc" and
+				"qcom,cold-bat-decidegc" values.
+- qcom,hot-bat-decidegc		Hot battery temperature in decidegC. This property must be
+				out of range [0, 55].
+- qcom,cold-bat-decidegc	Cold battery temperature in decidegC. This property must be
+				out of range [0, 55].
+- qcom,soft-jeita-supported	This property indicates whether soft jeita supported.
+- qcom,warm-bat-decidegc	Warm battery temperature in decidegC. After hitting this threshold,
+				"qcom,warm-bat-ma" defines maximum charging current and
+				"qcom,warm-bat-mv" defines maximum target voltage.
+				This property must be in range [0, 55] if needed.
+- qcom,cool-bat-decidegc	Cool battery temperature in decidegC. After hitting this threshold,
+				"qcom,cool-bat-ma" defines maximum charging current and
+				"qcom,cool-bat-mv" defines maximum target voltage.
+				This property must be in range [0, 55] if needed.
+- qcom,warm-bat-mv		Maximum warm battery target voltage in milli-volts.
+- qcom,cool-bat-mv		Maximum cool battery target voltage in milli-volts.
+- qcom,warm-bat-ma		Maximum warm battery charge current in milli-amps.
+- qcom,cool-bat-ma		Maximum cool battery charge current in milli-amps.
 
 Example:
 	i2c@f9967000 {
@@ -176,5 +218,7 @@ Example:
 			qcom,cool-bat-ma = <750>;
 
 			qcom,otg-batt-curr-limit = <950>;
+			qcom,otg-fet-present;
+			qcom,otg-fet-enable-gpio = <&pm8916_gpios 3 0>;
 		};
 	};
