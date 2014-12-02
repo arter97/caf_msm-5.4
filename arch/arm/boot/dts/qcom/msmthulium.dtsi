@@ -35,7 +35,7 @@
 		#address-cells = <2>;
 		#size-cells = <0>;
 
-		cpu@0 {
+		CPU0: cpu@0 {
 			device_type = "cpu";
 			compatible = "arm,armv8";
 			reg = <0x0 0x0>;
@@ -50,7 +50,7 @@
 
 		};
 
-		cpu@1 {
+		CPU1: cpu@1 {
 			device_type = "cpu";
 			compatible = "arm,armv8";
 			reg = <0x0 0x1>;
@@ -59,7 +59,7 @@
 			next-level-cache = <&L2_0>;
 		};
 
-		cpu@100 {
+		CPU2: cpu@100 {
 			device_type = "cpu";
 			compatible = "arm,armv8";
 			reg = <0x0 0x100>;
@@ -73,7 +73,7 @@
 			};
 		};
 
-		cpu@101 {
+		CPU3: cpu@101 {
 			device_type = "cpu";
 			compatible = "arm,armv8";
 			reg = <0x0 0x101>;
