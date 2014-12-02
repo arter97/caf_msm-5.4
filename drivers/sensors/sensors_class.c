@@ -127,6 +127,20 @@ static ssize_t type_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d\n", sensors_cdev->type);
 }
 
+static ssize_t max_delay_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sensors_classdev *sensors_cdev = dev_get_drvdata(dev);
+	return snprintf(buf, PAGE_SIZE, "%d\n", sensors_cdev->max_delay);
+}
+
+static ssize_t flags_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sensors_classdev *sensors_cdev = dev_get_drvdata(dev);
+	return snprintf(buf, PAGE_SIZE, "%d\n", sensors_cdev->flags);
+}
+
 static ssize_t max_range_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -261,55 +275,49 @@ static ssize_t self_test_show(struct device *dev,
 			ret ? "fail" : "pass");
 }
 
-static ssize_t batch_store(struct device *dev,
+static ssize_t max_latency_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
 {
 	struct sensors_classdev *sensors_cdev = dev_get_drvdata(dev);
-	unsigned int enable, mode, period_ms, timeout_ms;
+	unsigned long latency;
 	int ret = -EINVAL;
 
-	ret = sscanf(buf, "enable=%u, mode=%u, period_ms=%u, timeout_ms=%u",
-		&enable, &mode, &period_ms, &timeout_ms);
-
-	if (ret != 4)
-		return -EINVAL;
-	if (enable && (timeout_ms == 0)) {
-		dev_err(dev,
-			"Cannot set timeout to zero while enable batch mode\n");
-		return -EINVAL;
-	}
-	if (enable && ((period_ms * 1000) < sensors_cdev->min_delay)) {
-		dev_err(dev,
-			"batch: invalid value of delay, delay(ms)=%u\n",
-				period_ms);
-		return -EINVAL;
-	}
-	if (sensors_cdev->sensors_batch == NULL) {
-		dev_err(dev, "Invalid sensor class batch handle\n");
-		return -EINVAL;
-	}
-	ret = sensors_cdev->sensors_batch(sensors_cdev,
-			enable, mode, period_ms, timeout_ms);
+	ret = kstrtoul(buf, 10, &latency);
 	if (ret)
 		return ret;
 
-	sensors_cdev->batch_enable = enable;
-	sensors_cdev->batch_mode = mode;
-	sensors_cdev->delay_msec = period_ms;
-	sensors_cdev->batch_timeout_ms = timeout_ms;
+	if (latency > sensors_cdev->max_delay) {
+		dev_err(dev, "max_latency(%lu) is greater than max_delay(%u)\n",
+				latency, sensors_cdev->max_delay);
+		return -EINVAL;
+	}
+
+	if (sensors_cdev->sensors_set_latency == NULL) {
+		dev_err(dev, "Invalid sensor calss set latency handle\n");
+		return -EINVAL;
+	}
+
+	/* Disable batching for this sensor */
+	if (latency < sensors_cdev->delay_msec) {
+		dev_err(dev, "max_latency is less than delay_msec\n");
+		return -EINVAL;
+	}
+
+	ret = sensors_cdev->sensors_set_latency(sensors_cdev, latency);
+	if (ret)
+		return ret;
+
+	sensors_cdev->max_latency = latency;
+
 	return size;
 }
 
-static ssize_t batch_show(struct device *dev,
+static ssize_t max_latency_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct sensors_classdev *sensors_cdev = dev_get_drvdata(dev);
 	return snprintf(buf, PAGE_SIZE,
-		"enable=%u, mode=%u, period_ms=%u, timeout_ms=%u\n",
-			sensors_cdev->batch_enable,
-			sensors_cdev->batch_mode,
-			sensors_cdev->delay_msec,
-			sensors_cdev->batch_timeout_ms);
+		"%u\n", sensors_cdev->max_latency);
 }
 
 static ssize_t flush_store(struct device *dev,
@@ -448,6 +456,7 @@ static DEVICE_ATTR(version, 0444, version_show, NULL);
 static DEVICE_ATTR(handle, 0444, handle_show, NULL);
 static DEVICE_ATTR(type, 0444, type_show, NULL);
 static DEVICE_ATTR(max_range, 0444, max_range_show, NULL);
+static DEVICE_ATTR(max_delay, 0444, max_delay_show, NULL);
 static DEVICE_ATTR(resolution, 0444, resolution_show, NULL);
 static DEVICE_ATTR(sensor_power, 0444, sensor_power_show, NULL);
 static DEVICE_ATTR(min_delay, 0444, min_delay_show, NULL);
@@ -457,11 +466,12 @@ static DEVICE_ATTR(fifo_max_event_count, 0444, fifo_max_event_count_show, NULL);
 static DEVICE_ATTR(enable, 0664, enable_show, enable_store);
 static DEVICE_ATTR(poll_delay, 0664, poll_delay_show, poll_delay_store);
 static DEVICE_ATTR_RO(self_test);
-static DEVICE_ATTR_RW(batch);
+static DEVICE_ATTR_RW(max_latency);
 static DEVICE_ATTR_RW(flush);
 static DEVICE_ATTR(calibrate, 0664, calibrate_show, calibrate_store);
 static DEVICE_ATTR(enable_wakeup, 0664, enable_wakeup_show,
 		enable_wakeup_store);
+static DEVICE_ATTR(flags, 0444, flags_show, NULL);
 
 static struct attribute *sensors_attrs[] = {
 	&dev_attr_name.attr,
@@ -470,6 +480,7 @@ static struct attribute *sensors_attrs[] = {
 	&dev_attr_handle.attr,
 	&dev_attr_type.attr,
 	&dev_attr_max_range.attr,
+	&dev_attr_max_delay.attr,
 	&dev_attr_resolution.attr,
 	&dev_attr_sensor_power.attr,
 	&dev_attr_min_delay.attr,
@@ -478,10 +489,11 @@ static struct attribute *sensors_attrs[] = {
 	&dev_attr_enable.attr,
 	&dev_attr_poll_delay.attr,
 	&dev_attr_self_test.attr,
-	&dev_attr_batch.attr,
 	&dev_attr_flush.attr,
 	&dev_attr_calibrate.attr,
 	&dev_attr_enable_wakeup.attr,
+	&dev_attr_max_latency.attr,
+	&dev_attr_flags.attr,
 	NULL,
 };
 
