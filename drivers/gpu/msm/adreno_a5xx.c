@@ -23,6 +23,7 @@
 #include "kgsl.h"
 
 static const struct adreno_vbif_data a530_vbif[] = {
+	{A5XX_VBIF_ROUND_ROBIN_QOS_ARB, 0x00000003},
 	{0, 0},
 };
 
