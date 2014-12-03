@@ -937,7 +937,7 @@ static inline int adreno_is_a530(struct adreno_device *adreno_dev)
 static inline int adreno_is_a530v1(struct adreno_device *adreno_dev)
 {
 	return (ADRENO_GPUREV(adreno_dev) == ADRENO_REV_A530) &&
-			(ADRENO_PATCHID(adreno_dev) == 1);
+		(ADRENO_CHIPID_PATCH(adreno_dev->chipid) == 0);
 }
 
 /**
