@@ -1402,12 +1402,6 @@ fail:
 	return ret;
 }
 
-static phys_addr_t msm_iommu_get_pt_base_addr(struct iommu_domain *domain)
-{
-	struct msm_iommu_priv *priv = domain->priv;
-	return __pa(priv->pt.fl_table);
-}
-
 #define DUMP_REG_INIT(dump_reg, cb_reg, mbp, drt)		\
 	do {							\
 		dump_regs_tbl[dump_reg].reg_offset = cb_reg;	\
@@ -1512,7 +1506,6 @@ static struct iommu_ops msm_iommu_ops = {
 	.unmap_range = msm_iommu_unmap_range,
 	.iova_to_phys = msm_iommu_iova_to_phys,
 	.domain_has_cap = msm_iommu_domain_has_cap,
-	.get_pt_base_addr = msm_iommu_get_pt_base_addr,
 	.pgsize_bitmap = MSM_IOMMU_PGSIZES,
 	.domain_set_attr = msm_iommu_domain_set_attr,
 	.domain_get_attr = msm_iommu_domain_get_attr,
