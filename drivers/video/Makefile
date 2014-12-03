@@ -4,6 +4,8 @@
 
 # Each configuration option enables a list of files.
 
+obj-$(CONFIG_VIDEO_ADV7180)	+=  ../media/video/adv7180.o
+
 obj-$(CONFIG_VGASTATE)            += vgastate.o
 obj-y                             += fb_notify.o
 obj-$(CONFIG_FB)                  += fb.o
