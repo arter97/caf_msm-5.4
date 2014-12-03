@@ -45,6 +45,7 @@
 #include <mach/msm_memtypes.h>
 #include <mach/cpuidle.h>
 #include <mach/usb_bam.h>
+#include <asm/mach/flash.h>
 #include "timer.h"
 #include "devices.h"
 #include "board-9615.h"
@@ -980,6 +981,49 @@ static void __init msm9615_reserve(void)
 #endif
 }
 
+#define MSM_BUS_CPSS_TO_DDR_VOTE_VECTOR(num, _ib) \
+static struct msm_bus_vectors cpss_to_ddr_perf_vectors_##num[] = { \
+	{ \
+		.src = MSM_BUS_MASTER_ADM_PORT0, \
+		.dst = MSM_BUS_SLAVE_EBI_CH0, \
+		.ib = (_ib) * 1000000UL, \
+		.ab = 0, \
+	} \
+}
+
+#define MSM_BUS_CPSS_TO_DDR_VOTE_VECTOR_USECASE(num) \
+	{ \
+		ARRAY_SIZE(cpss_to_ddr_perf_vectors_##num), \
+		cpss_to_ddr_perf_vectors_##num, \
+	}
+
+/* no bandwidth required */
+MSM_BUS_CPSS_TO_DDR_VOTE_VECTOR(0, 0);
+/* max. possible bandwidth to run the bus at 192MHz */
+MSM_BUS_CPSS_TO_DDR_VOTE_VECTOR(1, 1536);
+
+static struct msm_bus_paths cpss_to_ddr_bus_scale_usecases[] = {
+	MSM_BUS_CPSS_TO_DDR_VOTE_VECTOR_USECASE(0),
+	MSM_BUS_CPSS_TO_DDR_VOTE_VECTOR_USECASE(1),
+};
+
+static struct msm_bus_scale_pdata cpss_to_ddr_bus_scale_data = {
+	cpss_to_ddr_bus_scale_usecases,
+	ARRAY_SIZE(cpss_to_ddr_bus_scale_usecases),
+	.name = "msm_nand",
+};
+
+struct flash_platform_data msm_nand_data = {
+	.version = VERSION_2,
+	.bus_pdata = &cpss_to_ddr_bus_scale_data,
+};
+
+static void __init msm9615_init_nand(void)
+{
+	msm_device_nand.dev.platform_data =
+					&msm_nand_data;
+}
+
 static void __init msm9615_common_init(void)
 {
 	struct android_usb_platform_data *android_pdata =
@@ -1008,6 +1052,7 @@ static void __init msm9615_common_init(void)
 	msm_device_hsic_peripheral.dev.platform_data =
 		&msm_hsic_peripheral_pdata;
 	msm_device_usb_bam.dev.platform_data = &msm_usb_bam_pdata;
+	msm9615_init_nand();
 	platform_add_devices(common_devices, ARRAY_SIZE(common_devices));
 	msm9615_pm8xxx_gpio_mpp_init();
 	acpuclk_init(&acpuclk_9615_soc_data);
