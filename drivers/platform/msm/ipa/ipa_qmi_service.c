@@ -34,7 +34,7 @@
 #define IPA_Q6_SERVICE_SVC_ID 0x31
 #define IPA_Q6_SERVICE_INS_ID 2
 
-#define QMI_SEND_REQ_TIMEOUT_MS 10000
+#define QMI_SEND_REQ_TIMEOUT_MS 60000
 
 static struct qmi_handle *ipa_svc_handle;
 static void ipa_a5_svc_recv_msg(struct work_struct *work);
@@ -110,7 +110,7 @@ static int handle_indication_req(void *req_h, void *req)
 				ipa_master_driver_init_complt_ind_msg_v01));
 		ind.master_driver_init_status.result =
 			IPA_QMI_RESULT_SUCCESS_V01;
-		rc = qmi_send_ind(ipa_svc_handle, curr_conn,
+		rc = qmi_send_ind_from_cb(ipa_svc_handle, curr_conn,
 			&ipa_master_driver_complete_indication_desc,
 			&ind,
 			sizeof(ind));
@@ -428,9 +428,11 @@ static int qmi_init_modem_send_sync_msg(void)
 	resp_desc.msg_id = QMI_IPA_INIT_MODEM_DRIVER_RESP_V01;
 	resp_desc.ei_array = ipa_init_modem_driver_resp_msg_data_v01_ei;
 
+	pr_info("Sending QMI_IPA_INIT_MODEM_DRIVER_REQ_V01\n");
 	rc = qmi_send_req_wait(ipa_q6_clnt, &req_desc, &req, sizeof(req),
 			&resp_desc, &resp, sizeof(resp),
 			QMI_SEND_REQ_TIMEOUT_MS);
+	pr_info("QMI_IPA_INIT_MODEM_DRIVER_REQ_V01 response received\n");
 	return ipa_check_qmi_response(rc,
 		QMI_IPA_INIT_MODEM_DRIVER_REQ_V01, resp.resp.result,
 		resp.resp.error, "ipa_init_modem_driver_resp_msg_v01");
@@ -575,6 +577,15 @@ static void ipa_q6_clnt_svc_arrive(struct work_struct *work)
 		/* Cleanup will take place when ipa_wwan_remove is called */
 		return;
 	}
+	if (rc != 0) {
+		IPAWANERR("qmi_init_modem_send_sync_msg failed\n");
+		/*
+		 * This is a very unexpected scenario, which requires a kernel
+		 * panic in order to force dumps for QMI/Q6 side analysis.
+		 */
+		BUG();
+		return;
+	}
 	qmi_modem_init_fin = true;
 	ipa_q6_init_done();
 	IPAWANDBG("complete, qmi_modem_init_fin : %d\n",
@@ -638,8 +649,6 @@ static void ipa_qmi_service_init_worker(struct work_struct *work)
 
 	/* Initialize QMI-service*/
 	IPAWANDBG("IPA A7 QMI init OK :>>>>\n");
-	qmi_modem_init_fin = false;
-	qmi_indication_fin = false;
 
 	ipa_svc_workqueue = create_singlethread_workqueue("ipa_A7_svc");
 	if (!ipa_svc_workqueue) {
@@ -695,14 +704,18 @@ static void ipa_qmi_service_init_worker(struct work_struct *work)
 
 destroy_clnt_resp_wq:
 	destroy_workqueue(ipa_clnt_resp_workqueue);
+	ipa_clnt_resp_workqueue = NULL;
 destroy_clnt_req_wq:
 	destroy_workqueue(ipa_clnt_req_workqueue);
+	ipa_clnt_req_workqueue = NULL;
 deregister_qmi_srv:
 	qmi_svc_unregister(ipa_svc_handle);
 destroy_qmi_handle:
 	qmi_handle_destroy(ipa_svc_handle);
+	ipa_svc_handle = 0;
 destroy_ipa_A7_svc_wq:
 	destroy_workqueue(ipa_svc_workqueue);
+	ipa_svc_workqueue = NULL;
 	return;
 }
 
@@ -710,6 +723,8 @@ int ipa_qmi_service_init(bool load_uc, uint32_t wan_platform_type)
 {
 	ipa_wan_platform = wan_platform_type;
 	is_load_uc = load_uc;
+	qmi_modem_init_fin = false;
+	qmi_indication_fin = false;
 	if (!ipa_svc_handle) {
 		INIT_WORK(&ipa_qmi_service_init_work,
 			ipa_qmi_service_init_worker);
@@ -721,6 +736,7 @@ int ipa_qmi_service_init(bool load_uc, uint32_t wan_platform_type)
 void ipa_qmi_service_exit(void)
 {
 	int ret = 0;
+
 	/* qmi-service */
 	if (ipa_svc_handle) {
 		ret = qmi_svc_unregister(ipa_svc_handle);
@@ -731,14 +747,15 @@ void ipa_qmi_service_exit(void)
 	if (ipa_svc_workqueue) {
 		flush_workqueue(ipa_svc_workqueue);
 		destroy_workqueue(ipa_svc_workqueue);
+		ipa_svc_workqueue = NULL;
 	}
+
 	if (ipa_svc_handle) {
 		ret = qmi_handle_destroy(ipa_svc_handle);
 		if (ret < 0)
 			IPAWANERR("Error destroying qmi handle %p, ret=%d\n",
 			ipa_svc_handle, ret);
 	}
-
 
 	/* qmi-client */
 	ret = qmi_svc_event_notifier_unregister(IPA_Q6_SERVICE_SVC_ID,
@@ -748,10 +765,17 @@ void ipa_qmi_service_exit(void)
 		IPAWANERR(
 		"Error qmi_svc_event_notifier_unregister service %d, ret=%d\n",
 		IPA_Q6_SERVICE_SVC_ID, ret);
-	if (ipa_clnt_req_workqueue)
+
+	if (ipa_clnt_req_workqueue) {
 		destroy_workqueue(ipa_clnt_req_workqueue);
-	if (ipa_clnt_resp_workqueue)
+		ipa_clnt_req_workqueue = NULL;
+	}
+	if (ipa_clnt_resp_workqueue) {
 		destroy_workqueue(ipa_clnt_resp_workqueue);
+		ipa_clnt_resp_workqueue = NULL;
+	}
 
 	ipa_svc_handle = 0;
+	qmi_modem_init_fin = false;
+	qmi_indication_fin = false;
 }

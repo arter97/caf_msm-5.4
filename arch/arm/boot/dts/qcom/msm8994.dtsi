@@ -93,11 +93,11 @@
 			};
 			L1_I_0: l1-icache {
 				compatible = "arm,arch-cache";
-				qcom,dump-size = <0x9000>;
+				qcom,dump-size = <0x9040>;
 			};
 			L1_D_0: l1-dcache {
 				compatible = "arm,arch-cache";
-				qcom,dump-size = <0x9000>;
+				qcom,dump-size = <0x9040>;
 			};
 		};
 
@@ -111,11 +111,11 @@
 			next-level-cache = <&L2_0>;
 			L1_I_1: l1-icache {
 				compatible = "arm,arch-cache";
-				qcom,dump-size = <0x9000>;
+				qcom,dump-size = <0x9040>;
 			};
 			L1_D_1: l1-dcache {
 				compatible = "arm,arch-cache";
-				qcom,dump-size = <0x9000>;
+				qcom,dump-size = <0x9040>;
 			};
 		};
 
@@ -129,11 +129,11 @@
 			next-level-cache = <&L2_0>;
 			L1_I_2: l1-icache {
 				compatible = "arm,arch-cache";
-				qcom,dump-size = <0x9000>;
+				qcom,dump-size = <0x9040>;
 			};
 			L1_D_2: l1-dcache {
 				compatible = "arm,arch-cache";
-				qcom,dump-size = <0x9000>;
+				qcom,dump-size = <0x9040>;
 			};
 		};
 
@@ -147,11 +147,11 @@
 			next-level-cache = <&L2_0>;
 			L1_I_3: l1-icache {
 				compatible = "arm,arch-cache";
-				qcom,dump-size = <0x9000>;
+				qcom,dump-size = <0x9040>;
 			};
 			L1_D_3: l1-dcache {
 				compatible = "arm,arch-cache";
-				qcom,dump-size = <0x9000>;
+				qcom,dump-size = <0x9040>;
 			};
 		};
 
@@ -166,7 +166,7 @@
 			L2_1: l2-cache {
 			      compatible = "arm,arch-cache";
 			      cache-level = <2>;
-			      qcom,dump-size = <0x240000>;		/*A57 Cluster L2 size is 1MB */
+			      qcom,dump-size = <0x280040>;		/*A57 Cluster L2 size is 1MB */
 			      power-domain = <&l2ccc_1>;
 			      L2_tlb_1: l2-tlb {
 					qcom,dump-size = <0x4000>;
@@ -180,11 +180,11 @@
 			};
 			L1_I_100: l1-icache {
 				compatible = "arm,arch-cache";
-				qcom,dump-size = <0xd800>;
+				qcom,dump-size = <0xd840>;
 			};
 			L1_D_100: l1-dcache {
 				compatible = "arm,arch-cache";
-				qcom,dump-size = <0x9000>;
+				qcom,dump-size = <0x9040>;
 			};
 		};
 
@@ -204,11 +204,11 @@
 			};
 			L1_I_101: l1-icache {
 				compatible = "arm,arch-cache";
-				qcom,dump-size = <0xd800>;
+				qcom,dump-size = <0xd840>;
 			};
 			L1_D_101: l1-dcache {
 				compatible = "arm,arch-cache";
-				qcom,dump-size = <0x9000>;
+				qcom,dump-size = <0x9040>;
 			};
 		};
 
@@ -228,11 +228,11 @@
 			};
 			L1_I_102: l1-icache {
 				compatible = "arm,arch-cache";
-				qcom,dump-size = <0xd800>;
+				qcom,dump-size = <0xd840>;
 			};
 			L1_D_102: l1-dcache {
 				compatible = "arm,arch-cache";
-				qcom,dump-size = <0x9000>;
+				qcom,dump-size = <0x9040>;
 			};
 		};
 
@@ -252,11 +252,11 @@
 			};
 			L1_I_103: l1-icache {
 				compatible = "arm,arch-cache";
-				qcom,dump-size = <0xd800>;
+				qcom,dump-size = <0xd840>;
 			};
 			L1_D_103: l1-dcache {
 				compatible = "arm,arch-cache";
-				qcom,dump-size = <0x9000>;
+				qcom,dump-size = <0x9040>;
 			};
 		};
 	};
@@ -1094,6 +1094,7 @@
 		qcom,bus-width = <8>;
 		qcom,cpu-dma-latency-us = <301>;
 		qcom,cpu-affinity = "affine_cores";
+		qcom,cpu-affinity-mask = <0x0f>;
 
 		qcom,msm-bus,name = "sdhc1";
 		qcom,msm-bus,num-cases = <9>;
@@ -1132,6 +1133,7 @@
 		qcom,bus-width = <4>;
 		qcom,cpu-dma-latency-us = <301>;
 		qcom,cpu-affinity = "affine_cores";
+		qcom,cpu-affinity-mask = <0x0f>;
 
 		qcom,msm-bus,name = "sdhc2";
 		qcom,msm-bus,num-cases = <8>;
@@ -1165,6 +1167,7 @@
 		qcom,bus-width = <4>;
 		qcom,cpu-dma-latency-us = <301>;
 		qcom,cpu-affinity = "affine_cores";
+		qcom,cpu-affinity-mask = <0x0f>;
 
 		qcom,msm-bus,name = "sdhc3";
 		qcom,msm-bus,num-cases = <8>;
@@ -1743,12 +1746,13 @@
 
 		clocks = <&clock_rpm clk_cxo_clk_src>,
 			 <&clock_rpm clk_mss_cfg_ahb_clk>,
+			 <&clock_rpm clk_pnoc_clk>,
 			 <&clock_gcc clk_gcc_mss_q6_bimc_axi_clk>,
 			 <&clock_gcc clk_gcc_boot_rom_ahb_clk>,
 			 <&clock_gcc clk_gpll0_out_msscc>;
-		clock-names = "xo", "iface_clk", "bus_clk", "mem_clk",
-			      "gpll0_mss_clk";
-		qcom,proxy-clock-names = "xo";
+		clock-names = "xo", "iface_clk", "pnoc_clk", "bus_clk",
+			      "mem_clk", "gpll0_mss_clk";
+		qcom,proxy-clock-names = "xo", "pnoc_clk";
 		qcom,active-clock-names = "iface_clk", "bus_clk", "mem_clk",
 				     "gpll0_mss_clk";
 
@@ -1766,6 +1770,7 @@
 		qcom,ssctl-instance-id = <0x12>;
 		qcom,override-acc;
 		qcom,ahb-clk-vote;
+		qcom,pnoc-clk-vote;
 
 		/* GPIO inputs from mss */
 		qcom,gpio-err-fatal = <&smp2pgpio_ssr_smp2p_1_in 0 0>;
