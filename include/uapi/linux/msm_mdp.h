@@ -646,6 +646,7 @@ enum mdss_mdp_blend_op {
 
 #define MAX_PLANES	4
 struct mdp_scale_data {
+	/* scaling factors are enabled for this input layer */
 	uint8_t enable_pxl_ext;
 
 	int init_phase_x[MAX_PLANES];
@@ -653,20 +654,33 @@ struct mdp_scale_data {
 	int init_phase_y[MAX_PLANES];
 	int phase_step_y[MAX_PLANES];
 
+	/*
+	 * Number of pixels extension in left, right, top and bottom direction
+	 * for all color components. This pixel value for each color component
+	 * should be sum of fetch + repeat pixels.
+	 */
 	int num_ext_pxls_left[MAX_PLANES];
 	int num_ext_pxls_right[MAX_PLANES];
 	int num_ext_pxls_top[MAX_PLANES];
 	int num_ext_pxls_btm[MAX_PLANES];
 
+	/*
+	 * Number of pixels needs to be overfetched in left, right, top and
+	 * bottom directions from source image for scaling.
+	 */
 	int left_ftch[MAX_PLANES];
-	int left_rpt[MAX_PLANES];
 	int right_ftch[MAX_PLANES];
-	int right_rpt[MAX_PLANES];
-
-	int top_rpt[MAX_PLANES];
-	int btm_rpt[MAX_PLANES];
 	int top_ftch[MAX_PLANES];
 	int btm_ftch[MAX_PLANES];
+
+	/*
+	 * Number of pixels needs to be repeated in left, right, top and
+	 * bottom directions for scaling.
+	 */
+	int left_rpt[MAX_PLANES];
+	int right_rpt[MAX_PLANES];
+	int top_rpt[MAX_PLANES];
+	int btm_rpt[MAX_PLANES];
 
 	uint32_t roi_w[MAX_PLANES];
 };
