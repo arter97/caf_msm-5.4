@@ -479,14 +479,14 @@ static void mmc_wait_for_req_done(struct mmc_host *host,
 		cmd = mrq->cmd;
 
 		/*
-		 * If host has timed out waiting for the sanitize
+		 * If host has timed out waiting for the sanitize/bkops
 		 * to complete, card might be still in programming state
 		 * so let's try to bring the card out of programming
 		 * state.
 		 */
-		if (cmd->sanitize_busy && cmd->error == -ETIMEDOUT) {
+		if ((cmd->bkops_busy || cmd->sanitize_busy) && cmd->error == -ETIMEDOUT) {
 			if (!mmc_interrupt_hpi(host->card)) {
-				pr_warning("%s: %s: Interrupted sanitize\n",
+				pr_warning("%s: %s: Interrupted sanitize/bkops\n",
 					   mmc_hostname(host), __func__);
 				cmd->error = 0;
 				break;
