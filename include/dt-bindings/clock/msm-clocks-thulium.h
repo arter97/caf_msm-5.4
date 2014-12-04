@@ -256,6 +256,10 @@
 #define clk_gcc_rx1_usb2_clkref_clk	0x53351d25
 #define clk_gcc_smmu_aggre0_ahb_clk	0x47a06ce4
 #define clk_gcc_smmu_aggre0_axi_clk	0x3cac4a6c
+#define clk_gcc_sys_noc_usb3_axi_clk	0x94d26800
+#define clk_gcc_sys_noc_ufs_axi_clk	0x19d38312
+#define clk_gcc_aggre2_usb3_axi_clk	0xd5822a8e
+#define clk_gcc_aggre2_ufs_axi_clk	0xb31e5191
 
 /* clock_mmss controlled clocks */
 #define clk_mmsscc_xo			0x05e63704

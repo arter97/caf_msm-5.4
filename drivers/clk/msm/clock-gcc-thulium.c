@@ -2817,6 +2817,54 @@ static struct local_vote_clk gcc_rx1_usb2_clkref_clk = {
 	},
 };
 
+static struct branch_clk gcc_sys_noc_usb3_axi_clk = {
+	.cbcr_reg = GCC_SYS_NOC_USB3_AXI_CBCR,
+	.has_sibling = 1,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_sys_noc_usb3_axi_clk",
+		.parent = &usb30_master_clk_src.c,
+		.ops = &clk_ops_branch,
+		CLK_INIT(gcc_sys_noc_usb3_axi_clk.c),
+	},
+};
+
+static struct branch_clk gcc_sys_noc_ufs_axi_clk = {
+	.cbcr_reg = GCC_SYS_NOC_UFS_AXI_CBCR,
+	.has_sibling = 1,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_sys_noc_ufs_axi_clk",
+		.parent = &ufs_axi_clk_src.c,
+		.ops = &clk_ops_branch,
+		CLK_INIT(gcc_sys_noc_ufs_axi_clk.c),
+	},
+};
+
+static struct branch_clk gcc_aggre2_usb3_axi_clk = {
+	.cbcr_reg = GCC_AGGRE2_USB3_AXI_CBCR,
+	.has_sibling = 1,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_aggre2_usb3_axi_clk",
+		.parent = &usb30_master_clk_src.c,
+		.ops = &clk_ops_branch,
+		CLK_INIT(gcc_aggre2_usb3_axi_clk.c),
+	},
+};
+
+static struct branch_clk gcc_aggre2_ufs_axi_clk = {
+	.cbcr_reg = GCC_AGGRE2_UFS_AXI_CBCR,
+	.has_sibling = 1,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_aggre2_ufs_axi_clk",
+		.parent = &ufs_axi_clk_src.c,
+		.ops = &clk_ops_branch,
+		CLK_INIT(gcc_aggre2_ufs_axi_clk.c),
+	},
+};
+
 static struct mux_clk gcc_debug_mux;
 static struct clk_ops clk_ops_debug_mux;
 
@@ -2851,6 +2899,8 @@ static struct mux_clk gcc_debug_mux = {
 		{ &gcc_mmss_sys_noc_axi_clk.c, 0x0018 },
 		{ &gcc_mmss_noc_cfg_ahb_clk.c, 0x0019 },
 		{ &gcc_mmss_noc_at_clk.c, 0x001a},
+		{ &gcc_sys_noc_usb3_axi_clk.c, 0x0006 },
+		{ &gcc_sys_noc_ufs_axi_clk.c, 0x0007 },
 		{ &gcc_mmss_bimc_gfx_clk.c, 0x001c },
 		{ &gcc_usb30_master_clk.c, 0x002d },
 		{ &gcc_usb30_sleep_clk.c, 0x002e },
@@ -2947,6 +2997,8 @@ static struct mux_clk gcc_debug_mux = {
 		{ &gcc_aggre0_noc_at_clk.c, 0x0118 },
 		{ &gcc_smmu_aggre0_axi_clk.c, 0x0119 },
 		{ &gcc_smmu_aggre0_ahb_clk.c, 0x011a },
+		{ &gcc_aggre2_ufs_axi_clk.c, 0x0126 },
+		{ &gcc_aggre2_usb3_axi_clk.c, 0x0127 },
 	),
 	.c = {
 		.dbg_name = "gcc_debug_mux",
@@ -3088,6 +3140,8 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(gcc_aggre0_snoc_axi_clk),
 	CLK_LIST(gcc_smmu_aggre0_ahb_clk),
 	CLK_LIST(gcc_smmu_aggre0_axi_clk),
+	CLK_LIST(gcc_aggre2_usb3_axi_clk),
+	CLK_LIST(gcc_aggre2_ufs_axi_clk),
 	CLK_LIST(gcc_blsp1_ahb_clk),
 	CLK_LIST(gcc_blsp1_qup1_i2c_apps_clk),
 	CLK_LIST(gcc_blsp1_qup1_spi_apps_clk),
@@ -3133,6 +3187,8 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(gcc_mmss_noc_at_clk),
 	CLK_LIST(gcc_mmss_noc_cfg_ahb_clk),
 	CLK_LIST(gcc_mmss_sys_noc_axi_clk),
+	CLK_LIST(gcc_sys_noc_usb3_axi_clk),
+	CLK_LIST(gcc_sys_noc_ufs_axi_clk),
 	CLK_LIST(gcc_pcie_0_aux_clk),
 	CLK_LIST(gcc_pcie_0_cfg_ahb_clk),
 	CLK_LIST(gcc_pcie_0_mstr_axi_clk),
