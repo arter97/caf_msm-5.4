@@ -1313,3 +1313,4 @@
 /include/ "msm-pmi8994.dtsi"
 /include/ "msmthulium-regulator.dtsi"
 #include "msmthulium-camera.dtsi"
+#include "msmthulium-gpu.dtsi"
