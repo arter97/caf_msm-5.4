@@ -55,6 +55,8 @@
 
 #include "mdss_fb.h"
 #include "mdss_mdp_splash_logo.h"
+#define CREATE_TRACE_POINTS
+#include "mdss_debug.h"
 
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MDSS_FB_NUM 3
@@ -1236,16 +1238,16 @@ static int mdss_fb_blank_blank(struct msm_fb_data_type *mfd,
 	complete(&mfd->no_update.comp);
 
 	mfd->op_enable = false;
-	mutex_lock(&mfd->bl_lock);
 	if (mdss_panel_is_power_off(req_power_state)) {
 		/* Stop Display thread */
 		if (mfd->disp_thread)
 			mdss_fb_stop_disp_thread(mfd);
+		mutex_lock(&mfd->bl_lock);
 		mdss_fb_set_backlight(mfd, 0);
 		mfd->bl_updated = 0;
+		mutex_unlock(&mfd->bl_lock);
 	}
 	mfd->panel_power_state = req_power_state;
-	mutex_unlock(&mfd->bl_lock);
 
 	ret = mfd->mdp.off_fnc(mfd);
 	if (ret)
@@ -1325,6 +1327,7 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 	int ret = 0;
 	int cur_power_state, req_power_state = MDSS_PANEL_POWER_OFF;
+	char trace_buffer[32];
 
 	if (!mfd || !op_enable)
 		return -EPERM;
@@ -1334,6 +1337,10 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 
 	pr_debug("%pS mode:%d\n", __builtin_return_address(0),
 		blank_mode);
+
+	snprintf(trace_buffer, sizeof(trace_buffer), "fb%d blank %d",
+		mfd->index, blank_mode);
+	ATRACE_BEGIN(trace_buffer);
 
 	cur_power_state = mfd->panel_power_state;
 
@@ -1401,6 +1408,8 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 
 	/* Notify listeners */
 	sysfs_notify(&mfd->fbi->dev->kobj, NULL, "show_blank_event");
+
+	ATRACE_END(trace_buffer);
 
 	return ret;
 }
@@ -2305,9 +2314,6 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
 		if (mfd->mdp.release_fnc)
 			mfd->mdp.release_fnc(mfd, true, pid);
 
-		if (mfd->fb_ion_handle)
-			mdss_fb_free_fb_ion_memory(mfd);
-
 		ret = mdss_fb_blank_sub(FB_BLANK_POWERDOWN, info,
 			mfd->op_enable);
 		if (ret) {
@@ -2315,6 +2321,9 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
 			      mfd->index, ret, task->comm, current->tgid, pid);
 			return ret;
 		}
+		if (mfd->fb_ion_handle)
+			mdss_fb_free_fb_ion_memory(mfd);
+
 		atomic_set(&mfd->ioctl_ref_cnt, 0);
 	} else if (release_needed) {
 		pr_debug("current process=%s pid=%d known pid=%d mfd->ref=%d\n",
