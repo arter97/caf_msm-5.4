@@ -45,10 +45,11 @@
 	qcom,vdd-io-current-level = <200 325000>;
 
 	pinctrl-names = "active", "sleep";
-	pinctrl-0 = <&sdc1_clk_on &sdc1_cmd_on &sdc1_data_on>;
-	pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off>;
+	pinctrl-0 = <&sdc1_clk_on &sdc1_cmd_on &sdc1_data_on &sdc1_rclk_on>;
+	pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off &sdc1_rclk_off>;
 
-	qcom,clk-rates = <400000 20000000 25000000 50000000>;
+	qcom,clk-rates = <400000 20000000 25000000 50000000 100000000 192000000 384000000>;
+	qcom,bus-speed-mode = "HS400_1p8v", "HS200_1p8v", "DDR_1p8v";
 	qcom,nonremovable;
 	status = "ok";
 };
@@ -87,6 +88,30 @@
 };
 
 &pm8994_gpios {
+	gpio@c200 { /* GPIO 3 */
+		qcom,mode = <0>;		/* Digital in */
+		qcom,pull = <0>;		/* PULL up 30uA */
+		qcom,vin-sel = <2>;		/* Logical 1 voltage value 1.8v */
+		qcom,src-sel = <0>;		/* Constant */
+		status = "okay";
+	};
+
+	gpio@c300 { /* GPIO 4 */
+		qcom,mode = <0>;		/* Digital in */
+		qcom,pull = <0>;		/* PULL up 30uA */
+		qcom,vin-sel = <2>;		/* Logical 1 voltage value 1.8v */
+		qcom,src-sel = <0>;		/* Constant */
+		status = "okay";
+	};
+
+	gpio@c400 { /* GPIO 5 */
+		qcom,mode = <0>;		/* Digital in */
+		qcom,pull = <0>;		/* PULL up 30uA */
+		qcom,vin-sel = <2>;		/* Logical 1 voltage value 1.8v */
+		qcom,src-sel = <0>;		/* Constant */
+		status = "okay";
+	};
+
 	gpio@c700 { /* GPIO 8 */
 		qcom,mode = <0>;                /* Digital in */
 		qcom,pull = <0>;                /* PULL up 30uA */
@@ -111,6 +136,20 @@
 	};
 };
 
+&pmi8994_charger {
+	qcom,charging-disabled;
+};
+
+&pmi8994_mpps {
+	mpp@a300 { /* MPP 4 */
+		/* WLED FET */
+		qcom,mode = <1>;	/* DIGITAL OUT */
+		qcom,vin-sel = <0>;	/* VIN0 */
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+};
+
 &i2c_2 {
 	synaptics@20 {
 		compatible = "synaptics,dsx";
@@ -125,7 +164,7 @@
 		synaptics,display-coords = <0 0 1599 2559>;
 		synaptics,panel-coords = <0 0 1599 2703>;
 		synaptics,reset-gpio = <&msm_gpio 60 0x00>;
-		synaptics,irq-gpio = <&msm_gpio 61 0x00>;
+		synaptics,irq-gpio = <&msm_gpio 61 0x2008>;
 		synaptics,disable-gpios;
 	};
 };
@@ -139,5 +178,37 @@
 		qcom,panel-maxx = <1599>;
 		qcom,panel-maxy = <2703>;
 		qcom,key-codes = <158 139 102 217>;
+	};
+
+	gpio_keys {
+		compatible = "gpio-keys";
+		input-name = "gpio-keys";
+
+		vol_up {
+			label = "volume_up";
+			gpios = <&pm8994_gpios 3 0x1>;
+			linux,input-type = <1>;
+			linux,code = <115>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+
+		cam_snapshot {
+			label = "cam_snapshot";
+			gpios = <&pm8994_gpios 4 0x1>;
+			linux,input-type = <1>;
+			linux,code = <766>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+
+		cam_focus {
+			label = "cam_focus";
+			gpios = <&pm8994_gpios 5 0x1>;
+			linux,input-type = <1>;
+			linux,code = <528>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
 	};
 };

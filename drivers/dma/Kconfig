@@ -82,6 +82,16 @@ config INTEL_IOP_ADMA
 
 source "drivers/dma/dw/Kconfig"
 
+config QCOM_SPS_DMA
+	tristate "Qualcomm technologies inc DMA driver for sps-BAM"
+	depends on ARCH_MSM
+	select DMA_ENGINE
+	help
+	  Enable support for Qualcomm technologies inc, BAM DMA engine.
+	  This DMA-engine-driver is a wrapper of the sps-BAM library. DMA
+	  engine callbacks are implemented using the sps-BAM functionality
+	  to access HW.
+
 config AT_HDMAC
 	tristate "Atmel AHB DMA support"
 	depends on ARCH_AT91

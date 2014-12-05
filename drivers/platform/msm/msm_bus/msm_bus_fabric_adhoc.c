@@ -608,15 +608,15 @@ static int msm_bus_qos_enable_clk(struct msm_bus_node_device_type *node)
 				__func__, node->node_info->id);
 			goto exit_enable_qos_clk;
 		}
-
-		ret = enable_nodeclk(&bus_node->clk[DUAL_CTX]);
-		if (ret) {
-			MSM_BUS_ERR("%s: Failed to enable bus clk, node %d",
-				__func__, node->node_info->id);
-			goto exit_enable_qos_clk;
-		}
-		bus_qos_enabled = 1;
 	}
+
+	ret = enable_nodeclk(&bus_node->clk[DUAL_CTX]);
+	if (ret) {
+		MSM_BUS_ERR("%s: Failed to enable bus clk, node %d",
+			__func__, node->node_info->id);
+		goto exit_enable_qos_clk;
+	}
+	bus_qos_enabled = 1;
 
 	if (!IS_ERR_OR_NULL(node->qos_clk.clk)) {
 		rounded_rate = clk_round_rate(node->qos_clk.clk, 1);
@@ -681,7 +681,7 @@ int msm_bus_enable_limiter(struct msm_bus_node_device_type *node_dev,
 				bus_node_dev->fabdev->qos_off,
 				bus_node_dev->fabdev->qos_freq,
 				enable, lim_bw);
-		msm_bus_qos_disable_clk(node_dev, ret);
+		ret = msm_bus_qos_disable_clk(node_dev, ret);
 	}
 
 exit_enable_limiter:
@@ -739,7 +739,7 @@ static int msm_bus_dev_init_qos(struct device *dev, void *data)
 					bus_node_info->fabdev->base_offset,
 					bus_node_info->fabdev->qos_off,
 					bus_node_info->fabdev->qos_freq);
-				msm_bus_qos_disable_clk(node_dev, ret);
+				ret = msm_bus_qos_disable_clk(node_dev, ret);
 			}
 		} else
 			MSM_BUS_ERR("%s: Skipping QOS init for %d",
@@ -1114,6 +1114,9 @@ static int msm_bus_node_debug(struct device *bus_dev, void *data)
 		MSM_BUS_DBG("\n\t Connection[%d] %d", j, bdev->node_info->id);
 	}
 
+	if (bus_node->node_info->is_fab_dev)
+		msm_bus_floor_init(bus_dev);
+
 exit_node_debug:
 	return ret;
 }
@@ -1176,10 +1179,11 @@ static int msm_bus_device_probe(struct platform_device *pdev)
 		goto exit_device_probe;
 	}
 
-	bus_for_each_dev(&msm_bus_type, NULL, NULL, msm_bus_node_debug);
 
 	/* Register the arb layer ops */
 	msm_bus_arb_setops_adhoc(&arb_ops);
+	bus_for_each_dev(&msm_bus_type, NULL, NULL, msm_bus_node_debug);
+
 	devm_kfree(&pdev->dev, pdata->info);
 	devm_kfree(&pdev->dev, pdata);
 exit_device_probe:

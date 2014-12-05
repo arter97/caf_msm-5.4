@@ -119,6 +119,7 @@ enum fg_mem_setting_index {
 	FG_MEM_BCL_LM_THRESHOLD,
 	FG_MEM_BCL_MH_THRESHOLD,
 	FG_MEM_TERM_CURRENT,
+	FG_MEM_IRQ_VOLT_EMPTY,
 	FG_MEM_SETTING_MAX,
 };
 
@@ -129,6 +130,7 @@ enum fg_mem_data_index {
 	FG_DATA_VOLTAGE,
 	FG_DATA_CURRENT,
 	FG_DATA_BATT_ESR,
+	FG_DATA_BATT_ESR_COUNT,
 	FG_DATA_BATT_ID,
 	FG_DATA_BATT_ID_INFO,
 	FG_DATA_MAX,
@@ -151,6 +153,7 @@ static struct fg_mem_setting settings[FG_MEM_SETTING_MAX] = {
 	SETTING(BCL_LM_THRESHOLD, 0x47C,   2,      50),
 	SETTING(BCL_MH_THRESHOLD, 0x47C,   3,      752),
 	SETTING(TERM_CURRENT,	 0x40C,   2,      250),
+	SETTING(IRQ_VOLT_EMPTY,	 0x458,   3,      3350),
 };
 
 #define DATA(_idx, _address, _offset, _length,  _value)	\
@@ -168,6 +171,7 @@ static struct fg_mem_data fg_data[FG_DATA_MAX] = {
 	DATA(VOLTAGE,         0x5CC,   1,      2,     -EINVAL),
 	DATA(CURRENT,         0x5CC,   3,      2,     -EINVAL),
 	DATA(BATT_ESR,        0x554,   2,      2,     -EINVAL),
+	DATA(BATT_ESR_COUNT,  0x558,   2,      2,     -EINVAL),
 	DATA(BATT_ID,         0x594,   1,      1,     -EINVAL),
 	DATA(BATT_ID_INFO,    0x594,   3,      1,     -EINVAL),
 };
@@ -943,8 +947,29 @@ out:
 	return rc;
 }
 
-#define DEFAULT_CAPACITY 50
-#define MISSING_CAPACITY 100
+#define SOC_EMPTY	BIT(3)
+static bool fg_is_batt_empty(struct fg_chip *chip)
+{
+	u8 fg_soc_sts;
+	int rc;
+
+	rc = fg_read(chip, &fg_soc_sts,
+				 INT_RT_STS(chip->soc_base), 1);
+	if (rc) {
+		pr_err("spmi read failed: addr=%03X, rc=%d\n",
+				INT_RT_STS(chip->soc_base), rc);
+		return false;
+	}
+
+	if (fg_debug_mask & FG_IRQS)
+		pr_info("fg soc sts 0x%x\n", fg_soc_sts);
+
+	return (fg_soc_sts & SOC_EMPTY) != 0;
+}
+
+#define EMPTY_CAPACITY		0
+#define DEFAULT_CAPACITY	50
+#define MISSING_CAPACITY	100
 static int get_prop_capacity(struct fg_chip *chip)
 {
 	u8 cap[2];
@@ -954,7 +979,12 @@ static int get_prop_capacity(struct fg_chip *chip)
 		return MISSING_CAPACITY;
 	if (!chip->profile_loaded && !chip->use_otp_profile)
 		return DEFAULT_CAPACITY;
-
+	if (fg_is_batt_empty(chip)) {
+		if (fg_debug_mask & FG_POWER_SUPPLY)
+			pr_info_ratelimited("capacity: %d, EMPTY\n",
+					EMPTY_CAPACITY);
+		return EMPTY_CAPACITY;
+	}
 	while (tries < MAX_TRIES_SOC) {
 		rc = fg_read(chip, cap,
 				chip->soc_base + SOC_MONOTONIC_SOC, 2);
@@ -1172,6 +1202,9 @@ static void update_sram_data(struct fg_chip *chip, int *resched_ms)
 		case FG_DATA_BATT_ESR:
 			fg_data[i].value = float_decode((u16) temp);
 			break;
+		case FG_DATA_BATT_ESR_COUNT:
+			fg_data[i].value = (u16)temp;
+			break;
 		case FG_DATA_BATT_ID:
 			if (battid_valid)
 				fg_data[i].value = reg[0] * LSB_8B;
@@ -1354,6 +1387,7 @@ static enum power_supply_property fg_power_props[] = {
 	POWER_SUPPLY_PROP_BATTERY_TYPE,
 	POWER_SUPPLY_PROP_UPDATE_NOW,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
+	POWER_SUPPLY_PROP_ESR_COUNT,
 };
 
 static int fg_power_get_property(struct power_supply *psy,
@@ -1392,6 +1426,9 @@ static int fg_power_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_RESISTANCE:
 		val->intval = get_sram_prop_now(chip, FG_DATA_BATT_ESR);
+		break;
+	case POWER_SUPPLY_PROP_ESR_COUNT:
+		val->intval = get_sram_prop_now(chip, FG_DATA_BATT_ESR_COUNT);
 		break;
 	case POWER_SUPPLY_PROP_RESISTANCE_ID:
 		val->intval = get_sram_prop_now(chip, FG_DATA_BATT_ID);
@@ -1924,6 +1961,22 @@ static void update_bcl_thresholds(struct fg_chip *chip)
 			data[lm_offset], data[mh_offset]);
 }
 
+#define VOLT_UV_TO_VOLTCMP8(volt_uv)	\
+			((volt_uv - 2500000) / 9766)
+static int update_irq_volt_empty(struct fg_chip *chip)
+{
+	u8 data;
+	int volt_mv = settings[FG_MEM_IRQ_VOLT_EMPTY].value;
+
+	data = (u8)VOLT_UV_TO_VOLTCMP8(volt_mv * 1000);
+
+	if (fg_debug_mask & FG_STATUS)
+		pr_info("voltage = %d, converted_raw = %04x\n", volt_mv, data);
+	return fg_mem_write(chip, &data,
+			settings[FG_MEM_IRQ_VOLT_EMPTY].address, 1,
+			settings[FG_MEM_IRQ_VOLT_EMPTY].offset, 0);
+}
+
 #define CURRENT_UA_TO_ADC_RAW(cur_ua)	\
 			(cur_ua * LSB_16B_DENMTR / LSB_16B_NUMRTR)
 static int update_iterm(struct fg_chip *chip)
@@ -1964,6 +2017,7 @@ static int fg_of_init(struct fg_chip *chip)
 		chip->use_thermal_coefficients = true;
 	}
 	OF_READ_SETTING(FG_MEM_RESUME_SOC, "resume-soc", rc, 1);
+	OF_READ_SETTING(FG_MEM_IRQ_VOLT_EMPTY, "irq-volt-empty-mv", rc, 1);
 
 	/* Get the use-otp-profile property */
 	chip->use_otp_profile = of_property_read_bool(
@@ -2585,6 +2639,7 @@ static int fg_hw_init(struct fg_chip *chip)
 	int rc = 0;
 
 	update_iterm(chip);
+	update_irq_volt_empty(chip);
 	update_bcl_thresholds(chip);
 	rc = fg_set_auto_recharge(chip);
 	if (rc) {
