@@ -15,6 +15,7 @@
 &soc {
 	jpeg_smmu: arm,smmu@d80000 {
 		compatible = "qcom,smmu-v2";
+		qcom,halt-and-tlb-on-atos;
 		reg = <0xd80000 0x10000>;
 		#global-interrupts = <1>;
 
@@ -32,6 +33,7 @@
 
 	kgsl_smmu: arm,smmu@b40000 {
 		compatible = "qcom,smmu-v2";
+		qcom,halt-and-tlb-on-atos;
 		reg = <0xb40000 0x10000>;
 		#global-interrupts = <1>;
 
@@ -50,6 +52,7 @@
 
 	vfe_smmu: arm,smmu@da0000 {
 		compatible = "qcom,smmu-v2";
+		qcom,halt-and-tlb-on-atos;
 		reg = <0xda0000 0x10000>;
 		#global-interrupts = <1>;
 
@@ -70,6 +73,7 @@
 
 	venus_smmu: arm,smmu@d40000 {
 		compatible = "qcom,smmu-v2";
+		qcom,halt-and-tlb-on-atos;
 		reg = <0xd40000 0x20000>;
 		#global-interrupts = <1>;
 
@@ -91,6 +95,7 @@
 
 	mdp_smmu: arm,smmu@d00000 {
 		compatible = "qcom,smmu-v2";
+		qcom,halt-and-tlb-on-atos;
 		reg = <0xd00000 0x10000>;
 		#global-interrupts = <1>;
 
@@ -111,6 +116,7 @@
 
 	rot_smmu: arm,smmu@d20000 {
 		compatible = "qcom,smmu-v2";
+		qcom,halt-and-tlb-on-atos;
 		reg = <0xd20000 0x10000>;
 		#global-interrupts = <1>;
 
@@ -130,6 +136,7 @@
 
 	cpp_fd_smmu: arm,smmu@d60000 {
 		compatible = "qcom,smmu-v2";
+		qcom,halt-and-tlb-on-atos;
 		reg = <0xd60000 0x10000>;
 		#global-interrupts = <1>;
 
@@ -150,6 +157,7 @@
 
 	lpass_q6_smmu: arm,smmu@1600000 {
 		compatible = "qcom,smmu-v2";
+		qcom,halt-and-tlb-on-atos;
 		reg = <0x1600000 0x20000>;
 		#global-interrupts = <1>;
 
