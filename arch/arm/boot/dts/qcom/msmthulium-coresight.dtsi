@@ -16,6 +16,8 @@
 		reg = <0x3026000 0x1000>,
 		      <0x3084000 0x15000>;
 		reg-names = "tmc-base", "bam-base";
+		interrupts = <0 270 0>;
+		interrupt-names = "byte-cntr-irq";
 
 		qcom,memory-size = <0x2000000>;
 		qcom,tmc-flush-powerdown;
