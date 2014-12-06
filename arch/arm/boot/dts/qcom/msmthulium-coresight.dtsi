@@ -234,4 +234,14 @@
 
 		qcom,blk-size = <1>;
 	};
+
+	fuse: fuse@7602c {
+		compatible = "arm,coresight-fuse";
+		reg = <0x7602c 0xc>;
+		reg-names = "fuse-base";
+
+		coresight-id = <13>;
+		coresight-name = "coresight-fuse";
+		coresight-nr-inports = <0>;
+	};
 };
