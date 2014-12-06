@@ -523,7 +523,8 @@ static int cpp_init_mem(struct cpp_device *cpp_dev)
 	int rc = 0;
 	int iommu_hdl;
 
-	if (cpp_dev->hw_info.cpp_hw_version == CPP_HW_VERSION_5_0_0)
+	if (cpp_dev->hw_info.cpp_hw_version == CPP_HW_VERSION_5_0_0 ||
+		cpp_dev->hw_info.cpp_hw_version == CPP_HW_VERSION_5_1_0)
 		rc = cam_smmu_get_handle("cpp_0", &iommu_hdl);
 	else
 		rc = cam_smmu_get_handle("cpp", &iommu_hdl);
