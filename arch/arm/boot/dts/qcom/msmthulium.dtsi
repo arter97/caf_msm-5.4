@@ -125,6 +125,7 @@
 #include "msmthulium-iommu.dtsi"
 #include "msm-gdsc-thulium.dtsi"
 #include "msmthulium-bus.dtsi"
+#include "msmthulium-coresight.dtsi"
 
 &soc {
 	#address-cells = <1>;
