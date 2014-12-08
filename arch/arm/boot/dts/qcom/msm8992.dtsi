@@ -2544,6 +2544,10 @@
 		qcom,proc-id = <1>;
 		linux,contiguous-region = <&adsp_mem>;
 	};
+
+	qcom,msm-ssc-sensors {
+		compatible = "qcom,msm-ssc-sensors";
+	};
 };
 
 &gdsc_usb30 {
