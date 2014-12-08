@@ -90,6 +90,11 @@ static int fb_event_callback(struct notifier_block *self,
 	struct mdss_panel_info *pinfo;
 	struct msm_fb_data_type *mfd;
 
+	if (!evdata) {
+		pr_err("%s: event data not available\n", __func__);
+		return NOTIFY_BAD;
+	}
+
 	mfd = evdata->info->par;
 	ctrl_pdata = container_of(dev_get_platdata(&mfd->pdev->dev),
 				struct mdss_dsi_ctrl_pdata, panel_data);
