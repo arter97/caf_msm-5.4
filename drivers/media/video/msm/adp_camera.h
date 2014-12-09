@@ -46,6 +46,14 @@ enum camera_preview_buffer_state {
 	CAMERA_PREVIEW_BUFFER_STATE_DEQUEUED_FROM_DISPLAY
 };
 
+/* MDP buffer fifo */
+#define MDP_BUF_QUEUE_LENGTH (PREVIEW_BUFFER_COUNT+1)
+struct mdp_buf_queue {
+	int read_idx;
+	int write_idx;
+	int bufq[MDP_BUF_QUEUE_LENGTH];
+};
+
 /* Guidance lane variables */
 #define GUIDANCE_LANE_BUFFER_COUNT 3
 int GUIDANCE_LANE_HEIGHT;

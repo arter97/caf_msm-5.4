@@ -69,6 +69,7 @@ struct msm_camera_csid_params csid_params = {
 	},
 };
 static struct msm_camera_preview_data preview_data;
+static struct mdp_buf_queue s_mdp_buf_queue;
 
 /* -------------------- Guidance Lane Data Structures ----------------------- */
 static struct msm_guidance_lane_data guidance_lane_data;
@@ -110,6 +111,32 @@ int axi_vfe_config_cmd_para(struct vfe_axi_output_config_cmd_type *cmd)
 	cmd->wm[ch0_wm].bus_ub_depth = 0x3f0;
 
 	return 0;
+}
+
+void mdp_buf_queue_enq(int buf_idx)
+{
+	s_mdp_buf_queue.bufq[s_mdp_buf_queue.write_idx] = buf_idx;
+
+	s_mdp_buf_queue.write_idx =
+		(s_mdp_buf_queue.write_idx+1)%MDP_BUF_QUEUE_LENGTH;
+
+	pr_debug("enq buf_idx %d write_idx %d",
+		buf_idx, s_mdp_buf_queue.write_idx-1);
+
+}
+
+int mdp_buf_queue_deq(void)
+{
+	int buf_idx = -1;
+	if (s_mdp_buf_queue.read_idx != s_mdp_buf_queue.write_idx) {
+		buf_idx = s_mdp_buf_queue.bufq[s_mdp_buf_queue.read_idx];
+		s_mdp_buf_queue.read_idx =
+			(s_mdp_buf_queue.read_idx+1)%MDP_BUF_QUEUE_LENGTH;
+
+		pr_debug("deq buf_idx %d read_idx %d",
+			buf_idx, s_mdp_buf_queue.read_idx-1);
+	}
+	return buf_idx;
 }
 
 void preview_set_data_pipeline()
@@ -233,28 +260,19 @@ int preview_buffer_init(void)
 		list_add(&(preview_data.preview_buffer[i].list),
 				&(preview_data.camera_preview_list));
 		preview_data.preview_buffer[i].state =
-			CAMERA_PREVIEW_BUFFER_STATE_INITIALIZED;
+		CAMERA_PREVIEW_BUFFER_STATE_INITIALIZED;
 	}
 
 	pr_debug("%s: setup buffer list\n", __func__);
 	return 0;
 }
 
-void preview_buffer_return(uint32_t paddr)
+void preview_buffer_return_by_index(int i)
 {
-	/* search in the 4 buffer list, if the physical address matches,
-	   set the buffer state as initialized and can be reused */
-	int i;
-	for (i = 0; i < PREVIEW_BUFFER_COUNT; i++) {
-		if (preview_data.preview_buffer[i].cam_preview.ch_paddr[0] ==
-				(uint32_t)(paddr)) {
-			preview_data.preview_buffer[i].state =
-					CAMERA_PREVIEW_BUFFER_STATE_INITIALIZED;
-			pr_debug("%s: phys addr = 0x%x\n", __func__,
-			preview_data.preview_buffer[i].cam_preview.ch_paddr[0]);
-			break;
-		}
-	}
+	preview_data.preview_buffer[i].state =
+			CAMERA_PREVIEW_BUFFER_STATE_INITIALIZED;
+	pr_debug("%s: bufidx %i phys addr = 0x%x\n", __func__, i,
+	preview_data.preview_buffer[i].cam_preview.ch_paddr[0]);
 	return;
 }
 
@@ -295,21 +313,26 @@ int preview_find_buffer_index_by_paddr(uint32_t paddr)
 
 struct preview_mem *preview_buffer_find_free_for_ping_pong()
 {
-	int ret = 0;
 	struct preview_mem *buf = NULL;
+	bool found_buff = false;
 
 	pr_debug("%s: begin to find free buffer for ping pong\n",
 			__func__);
 	list_for_each_entry(buf, &(preview_data.camera_preview_list), list) {
-		if (buf->state == CAMERA_PREVIEW_BUFFER_STATE_INITIALIZED)
+		if (buf->state == CAMERA_PREVIEW_BUFFER_STATE_INITIALIZED) {
+			found_buff = true;
 			break;
-		ret = 1;
+		}
 	}
 	if (IS_ERR_OR_NULL((void *) buf))
 		pr_err("%s: can not find free buffer\n", __func__);
 
-	pr_debug("%s: free buff find finished, physical addr is %x\n",
-		__func__, buf->cam_preview.ch_paddr[0]);
+
+	pr_debug("%s: free buff find finished, physical addr is %x buf 0x%p\n",
+		__func__, buf->cam_preview.ch_paddr[0], buf);
+
+	if (found_buff == false)
+		buf = NULL;
 	return buf;
 }
 
@@ -393,11 +416,44 @@ void format_convert(int index)
 
 static void mdp_queue_overlay_buffers(struct work_struct *work)
 {
+	int buffer_index = 0;
+	/* dequeue next buffer to display */
+	buffer_index = mdp_buf_queue_deq();
+
+	if (buffer_index < 0) {
+		pr_err("%s: mdp buf queue empty/n", __func__);
+		return;
+	} else if (buffer_index > PREVIEW_BUFFER_COUNT - 1) {
+		pr_err("%s: mdp buf queue invalid buffer %d/n",
+			__func__, buffer_index);
+		return;
+	}
+
+	/* configure overlay data for guidance lane */
+	overlay_data[OVERLAY_CAMERA_PREVIEW].id =
+			overlay_req[OVERLAY_CAMERA_PREVIEW].id;
+	overlay_data[OVERLAY_CAMERA_PREVIEW].data.flags =
+		MSMFB_DATA_FLAG_ION_NOT_FD;
+	overlay_data[OVERLAY_CAMERA_PREVIEW].data.offset =
+		(buffer_index * PREVIEW_BUFFER_LENGTH);
+	overlay_data[OVERLAY_CAMERA_PREVIEW].data.memory_id =
+			overlay_fd[OVERLAY_CAMERA_PREVIEW];
+
+	/* configure overlay data for guidance lane */
+	overlay_data[OVERLAY_GUIDANCE_LANE].id =
+			overlay_req[OVERLAY_GUIDANCE_LANE].id;
+	overlay_data[OVERLAY_GUIDANCE_LANE].data.flags =
+		MSMFB_DATA_FLAG_ION_NOT_FD;
+	overlay_data[OVERLAY_GUIDANCE_LANE].data.offset =
+		(buffer_index * GUIDANCE_LANE_BUFFER_LENGTH);
+	overlay_data[OVERLAY_GUIDANCE_LANE].data.memory_id =
+			overlay_fd[OVERLAY_GUIDANCE_LANE];
+
 	mdpclient_overlay_play(&overlay_data[OVERLAY_CAMERA_PREVIEW]);
 	mdpclient_overlay_play(&overlay_data[OVERLAY_GUIDANCE_LANE]);
-
 	/* perform display commit */
 	mdpclient_display_commit();
+	preview_buffer_return_by_index(buffer_index);
 }
 
 void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
@@ -433,25 +489,8 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 			buffer_index =
 				preview_find_buffer_index_by_paddr(ch0_paddr);
 
-			/* configure overlay data for guidance lane */
-			overlay_data[OVERLAY_CAMERA_PREVIEW].id =
-					overlay_req[OVERLAY_CAMERA_PREVIEW].id;
-			overlay_data[OVERLAY_CAMERA_PREVIEW].data.flags =
-				MSMFB_DATA_FLAG_ION_NOT_FD;
-			overlay_data[OVERLAY_CAMERA_PREVIEW].data.offset =
-				(buffer_index * PREVIEW_BUFFER_LENGTH);
-			overlay_data[OVERLAY_CAMERA_PREVIEW].data.memory_id =
-					overlay_fd[OVERLAY_CAMERA_PREVIEW];
-
-			/*  configure overlay data for guidance lane */
-			overlay_data[OVERLAY_GUIDANCE_LANE].id =
-					overlay_req[OVERLAY_GUIDANCE_LANE].id;
-			overlay_data[OVERLAY_GUIDANCE_LANE].data.flags =
-				MSMFB_DATA_FLAG_ION_NOT_FD;
-			overlay_data[OVERLAY_GUIDANCE_LANE].data.offset =
-				(buffer_index * GUIDANCE_LANE_BUFFER_LENGTH);
-			overlay_data[OVERLAY_GUIDANCE_LANE].data.memory_id =
-					overlay_fd[OVERLAY_GUIDANCE_LANE];
+			/* enq buffer to mdp buffers */
+			mdp_buf_queue_enq(buffer_index);
 
 			/* Only log once for early camera kpi */
 			pr_info_once("kpi cam rdi1 first frame %d\n",
@@ -471,7 +510,6 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 				free_buf->state =
 				CAMERA_PREVIEW_BUFFER_STATE_QUEUED_TO_PINGPONG;
 			}
-			preview_buffer_return(ch0_paddr);
 			if (axi_ctrl->share_ctrl->
 					outpath.out3.capture_cnt == 1)
 				axi_ctrl->share_ctrl->
@@ -698,6 +736,9 @@ static int adp_rear_camera_enable(void)
 	/* step 2, configure the free buffer to ping pong buffer */
 	preview_configure_ping_pong_buffer(ping_buffer, pong_buffer,
 		free_buffer);
+
+	/* init mdp buffer queue */
+	memset(&s_mdp_buf_queue, 0, sizeof(s_mdp_buf_queue));
 
 	guidance_lane_configure_bufs();
 	guidance_lane_set_data_pipeline();
