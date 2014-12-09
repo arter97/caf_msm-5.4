@@ -71,6 +71,9 @@ SoCs:
 - MSMZIRC
   compatible = "qcom,msmzirc"
 
+- VPIPA
+  compatible = "qcom,msmvpipa"
+
 
 
 Generic board variants:
@@ -184,3 +187,4 @@ compatible = "qcom,msmzirc-cdp"
 compatible = "qcom,msmzirc-mtp"
 compatible = "qcom,msmzirc-rumi"
 compatible = "qcom,msmzirc-sim"
+compatible = "qcom,msmvpipa-sim"
