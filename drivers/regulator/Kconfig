@@ -743,5 +743,15 @@ config REGULATOR_CPR3_MMSS
 	  initial voltage values out of hardware fuses and CPR target quotient
 	  values out of device tree.
 
+config REGULATOR_KRYO
+	bool "Kryo regulator driver"
+	depends on OF
+	help
+	  Some MSM designs have CPUs that can be directly powered from a common
+	  voltage rail via a Block Head Switch (BHS) or an LDO whose output voltage
+	  can be configured for use when certain power constraints are met.
+	  Say yes to support management of LDO and BHS modes for the clusters in the
+	  CPU subsystem.
+
 endif
 
