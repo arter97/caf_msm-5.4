@@ -119,7 +119,6 @@ enum mdp_wfd_blk_type {
 	MDSS_MDP_WFD_DEDICATED,
 };
 
-
 /**
  * enum mdp_commit_stage_type - Indicate different commit stages
  *
@@ -131,6 +130,12 @@ enum mdp_wfd_blk_type {
 enum mdp_commit_stage_type {
 	MDP_COMMIT_STAGE_SETUP_DONE,
 	MDP_COMMIT_STAGE_READY_FOR_KICKOFF,
+};
+
+enum mdss_mdp_reg_bus_cfg {
+	REG_CLK_CFG_OFF,
+	REG_CLK_CFG_LOW,
+	REG_CLK_CFG_HIGH,
 };
 
 struct mdss_mdp_ctl;
