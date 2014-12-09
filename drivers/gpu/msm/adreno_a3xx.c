@@ -1762,6 +1762,7 @@ static int _ringbuffer_bootstrap_ucode(struct adreno_ringbuffer *rb,
 {
 	unsigned int *cmds, bootstrap_size, rb_size;
 	int i = 0;
+	int ret;
 	struct kgsl_device *device = rb->device;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	unsigned int pm4_size, pm4_idx, pm4_addr, pfp_size, pfp_idx, pfp_addr;
@@ -1864,7 +1865,14 @@ static int _ringbuffer_bootstrap_ucode(struct adreno_ringbuffer *rb,
 	}
 
 	/* idle device to validate bootstrap */
-	return adreno_spin_idle(device);
+	ret = adreno_spin_idle(device);
+
+	/* Clear the chicken bit for speed up on A430 cores */
+	if (adreno_is_a430(adreno_dev))
+		kgsl_regwrite(device, A4XX_CP_DEBUG,
+					A4XX_CP_DEBUG_DEFAULT & ~(1 << 14));
+
+	return ret;
 }
 
 int a3xx_microcode_load(struct adreno_device *adreno_dev,
