@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -102,6 +102,7 @@ struct kgsl_mmu_ops {
 	void (*mmu_set_pagefault)(struct kgsl_mmu *mmu);
 	struct kgsl_protected_registers *(*mmu_get_prot_regs)
 			(struct kgsl_mmu *mmu);
+	int (*mmu_init_pt)(struct kgsl_mmu *mmu, struct kgsl_pagetable *);
 };
 
 struct kgsl_mmu_pt_ops {
@@ -109,9 +110,6 @@ struct kgsl_mmu_pt_ops {
 			struct kgsl_memdesc *memdesc);
 	int (*mmu_unmap) (struct kgsl_pagetable *pt,
 			struct kgsl_memdesc *memdesc);
-	void *(*mmu_create_pagetable) (void);
-	void *(*mmu_create_secure_pagetable) (void);
-	void * (*mmu_create_dma_pagetable)(void);
 	void (*mmu_destroy_pagetable) (struct kgsl_pagetable *);
 	phys_addr_t (*get_ptbase) (struct kgsl_pagetable *);
 };
@@ -146,7 +144,6 @@ struct kgsl_mmu {
 };
 
 extern struct kgsl_mmu_ops kgsl_iommu_ops;
-extern struct kgsl_mmu_pt_ops iommu_pt_ops;
 
 struct kgsl_pagetable *kgsl_mmu_getpagetable(struct kgsl_mmu *,
 						unsigned long name);
