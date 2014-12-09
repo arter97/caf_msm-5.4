@@ -645,7 +645,7 @@ int mdp4_lcdc_on(struct platform_device *pdev)
 	if (IS_ERR_OR_NULL(pipe))
 		return -EPERM;
 
-	mdp4_overlay_panel_mode(MDP4_PANEL_LCDC);
+	mdp4_overlay_panel_mode(MDP4_PANEL_LCDC, pipe->mixer_num);
 
 	bpp = fbi->var.bits_per_pixel / 8;
 	buf = (uint8 *) fbi->fix.smem_start;

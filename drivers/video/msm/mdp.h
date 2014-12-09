@@ -298,6 +298,7 @@ extern struct mdp_hist_mgmt *mdp_hist_mgmt_array[];
 #define MDP_PRIM_VSYNC_TERM 0x100
 #define MDP_EXTER_VSYNC_TERM 0x200
 #define MDP_PRIM_RDPTR_TERM 0x400
+#define MDP_SEC_VSYNC_TERM 0x800
 #endif
 #define MDP_OVERLAY2_TERM 0x80
 #define MDP_HISTOGRAM_TERM_DMA_P 0x10000
