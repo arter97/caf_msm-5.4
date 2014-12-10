@@ -66,6 +66,72 @@
 			};
 		};
 
+		pmx_mdss: pmx_mdss {
+			label = "mdss-pins";
+			qcom,pin-func = <0>;
+			mdss_dsi_active: active {
+				drive-strength = <8>; /* 8 mA */
+				bias-disable = <0>; /* no pull */
+			};
+			mdss_dsi_suspend: suspend {
+				drive-strength = <2>; /* 2 mA */
+				bias-pull-down; /* pull down */
+			};
+		};
+
+		pmx_mdss_te: pmx_mdss_te {
+			label = "mdss-te-pins";
+			qcom,pin-func = <1>;
+			mdss_te_active: active {
+				drive-strength = <2>; /* 8 mA */
+				bias-pull-down = <0>; /* pull down*/
+				input-debounce = <0>;
+			};
+			mdss_te_suspend: suspend {
+				drive-strength = <2>; /* 2 mA */
+				bias-pull-down; /* pull down */
+				input-debounce = <0>;
+			};
+		};
+
+		pmx_hdmi_cec: pmx_hdmi_cec {
+			qcom,pin-func = <1>;
+			label = "hdmi-cec-pins";
+			mdss_hdmi_cec_active: cec_active {
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+			mdss_hdmi_cec_suspend: cec_suspend {
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+
+		pmx_hdmi_ddc: pmx_hdmi_ddc {
+			qcom,pin-func = <1>;
+			label = "hdmi-ddc-pins";
+			mdss_hdmi_ddc_active: ddc_active {
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+			mdss_hdmi_ddc_suspend: ddc_suspend {
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+
+		pmx_hdmi_hpd: pmx_hdmi_hpd {
+			qcom,pin-func = <1>;
+			label = "hdmi-hpd-pin";
+			mdss_hdmi_hpd_active: hpd_active {
+				drive-strength = <16>;
+				bias-pull-down;
+			};
+			mdss_hdmi_hpd_suspend: hpd_suspend {
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
 		/* SDC pin type */
 		sdc: sdc {
 			/* 0-3 for sdc1 4-6 for sdc2 */
@@ -728,6 +794,68 @@
 			spi0_unused_cs_default: default {
 				drive-strength = <2>;
 				bias-pull-up;
+			};
+		};
+
+		pmx_sec_aux_pcm {
+			qcom,pins = <&gp 79>, <&gp 80>, <&gp 82>;
+			qcom,num-grp-pins = <3>;
+			qcom,pin-func = <1>;
+			label = "sec_aux_pcm";
+			sec_aux_pcm_sleep: sec_aux_pcm_sleep {
+				drive-strength = <2>;	/* 2 mA */
+				bias-pull-down;		/* PULL DOWN */
+			};
+			sec_aux_pcm_active: sec_aux_pcm_active {
+				drive-strength = <8>;	/* 8 mA */
+				bias-disable;		/* NO PULL */
+				output-high;
+			};
+		};
+
+		pmx_sec_aux_pcm_din {
+			qcom,pins = <&gp 81>;
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <1>;
+			label = "sec_aux_pcm_din";
+			sec_aux_pcm_din_sleep: sec_aux_pcm_din_sleep {
+				drive-strength = <2>;	/* 2 mA */
+				bias-pull-down;		/* PULL DOWN */
+			};
+			sec_aux_pcm_din_active: sec_aux_pcm_din_active {
+				drive-strength = <8>;	/* 8 mA */
+				bias-disable;		/* NO PULL */
+			};
+		};
+
+		pmx_pri_mi2s {
+			qcom,pins = <&gp 65>, <&gp 66>;
+			qcom,num-grp-pins = <2>;
+			qcom,pin-func = <1>;
+			label = "pri_mi2s";
+			pri_mi2s_sleep: pri_mi2s_sleep {
+				drive-strength = <2>;	/* 2 mA */
+				bias-pull-down;		/* PULL DOWN */
+			};
+			pri_mi2s_active: pri_mi2s_active {
+				drive-strength = <2>;	/* 2 mA */
+				bias-disable;		/* NO PULL */
+				output-high;
+			};
+		};
+
+		pmx_pri_mi2s_sd0 {
+			qcom,pins = <&gp 67>;
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <1>;
+			label = "pri_mi2s_sd0";
+			pri_mi2s_sd0_sleep: pri_mi2s_sd0_sleep {
+				drive-strength = <2>;	/* 2 mA */
+				bias-pull-down;		/* PULL DOWN */
+			};
+			pri_mi2s_sd0_active: pri_mi2s_sd0_active {
+				drive-strength = <2>;	/* 2 mA */
+				bias-disable;		/* NO PULL */
 			};
 		};
 	};
