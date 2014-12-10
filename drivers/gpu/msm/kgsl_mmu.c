@@ -598,11 +598,16 @@ kgsl_mmu_createpagetableobject(struct kgsl_mmu *mmu,
 	if (KGSL_MMU_TYPE_IOMMU == kgsl_mmu_type)
 		pagetable->pt_ops = &iommu_pt_ops;
 
-	if (mmu->secured && (KGSL_MMU_SECURE_PT == name))
+	if (MMU_FEATURE(mmu, KGSL_MMU_DMA_API)) {
+		pagetable->priv = pagetable->pt_ops->mmu_create_dma_pagetable();
+	} else if (mmu->secured && (KGSL_MMU_SECURE_PT == name))
 		pagetable->priv =
 			pagetable->pt_ops->mmu_create_secure_pagetable();
 	else {
 		pagetable->priv = pagetable->pt_ops->mmu_create_pagetable();
+	}
+
+	if (KGSL_MMU_SECURE_PT != name) {
 		if (pagetable->priv) {
 			status = kgsl_map_global_pt_entries(pagetable);
 			if (status)

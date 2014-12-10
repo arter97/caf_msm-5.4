@@ -88,10 +88,9 @@ struct kgsl_mmu_ops {
 		(struct kgsl_mmu *mmu);
 	uint64_t (*mmu_get_default_ttbr0)(struct kgsl_mmu *mmu,
 				enum kgsl_iommu_context_id ctx_id);
-	uint64_t (*mmu_get_reg_gpuaddr)(struct kgsl_mmu *mmu,
-			int ctx_id, int reg);
 	unsigned int (*mmu_get_reg_ahbaddr)(struct kgsl_mmu *mmu,
-			int ctx_id, enum kgsl_iommu_reg_map reg);
+			enum kgsl_iommu_context_id ctx_id,
+			enum kgsl_iommu_reg_map reg);
 	int (*mmu_pt_equal) (struct kgsl_mmu *mmu,
 			struct kgsl_pagetable *pt,
 			phys_addr_t pt_base);
@@ -112,9 +111,24 @@ struct kgsl_mmu_pt_ops {
 			struct kgsl_memdesc *memdesc);
 	void *(*mmu_create_pagetable) (void);
 	void *(*mmu_create_secure_pagetable) (void);
+	void * (*mmu_create_dma_pagetable)(void);
 	void (*mmu_destroy_pagetable) (struct kgsl_pagetable *);
 	phys_addr_t (*get_ptbase) (struct kgsl_pagetable *);
 };
+
+/*
+ * MMU_FEATURE - return true if the specified feature is supported by the GPU
+ * MMU
+ */
+#define MMU_FEATURE(_mmu, _bit) \
+	((_mmu)->features & (_bit))
+
+/* MMU can use DMA API */
+#define KGSL_MMU_DMA_API    BIT(0)
+/* MMU has register retention */
+#define KGSL_MMU_RETENTION  BIT(1)
+/* MMU requires the TLB to be flushed on map */
+#define KGSL_MMU_FLUSH_TLB_ON_MAP BIT(2)
 
 struct kgsl_mmu {
 	uint32_t      flags;
@@ -124,12 +138,11 @@ struct kgsl_mmu {
 	struct kgsl_pagetable  *defaultpagetable;
 	/* secure global pagetable device mmu */
 	struct kgsl_pagetable  *securepagetable;
-	/* pagetable object used for priv bank of IOMMU */
-	struct kgsl_pagetable  *priv_bank_table;
 	const struct kgsl_mmu_ops *mmu_ops;
 	void *priv;
 	atomic_t fault;
 	bool secured;
+	uint features;
 };
 
 extern struct kgsl_mmu_ops kgsl_iommu_ops;
@@ -245,15 +258,6 @@ static inline void kgsl_mmu_disable_clk(struct kgsl_mmu *mmu)
 		mmu->mmu_ops->mmu_disable_clk(mmu);
 }
 
-static inline uint64_t kgsl_mmu_get_reg_gpuaddr(struct kgsl_mmu *mmu,
-						int ctx_id, int reg)
-{
-	if (mmu->mmu_ops && mmu->mmu_ops->mmu_get_reg_gpuaddr)
-		return mmu->mmu_ops->mmu_get_reg_gpuaddr(mmu, ctx_id, reg);
-	else
-		return 0;
-}
-
 /*
  * kgsl_mmu_get_reg_ahbaddr() - Calls the mmu specific function pointer to
  * return the address that GPU can use to access register
@@ -264,8 +268,8 @@ static inline uint64_t kgsl_mmu_get_reg_gpuaddr(struct kgsl_mmu *mmu,
  * Returns the ahb address of reg else 0
  */
 static inline unsigned int kgsl_mmu_get_reg_ahbaddr(struct kgsl_mmu *mmu,
-						int ctx_id,
-						enum kgsl_iommu_reg_map reg)
+				enum kgsl_iommu_context_id ctx_id,
+				enum kgsl_iommu_reg_map reg)
 {
 	if (mmu->mmu_ops && mmu->mmu_ops->mmu_get_reg_ahbaddr)
 		return mmu->mmu_ops->mmu_get_reg_ahbaddr(mmu, ctx_id, reg);
