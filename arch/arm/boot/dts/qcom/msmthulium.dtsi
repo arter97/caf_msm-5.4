@@ -1305,7 +1305,7 @@
 
 &msm_vidc {
 	qcom,use-non-secure-pil;
-	qcom,fw-bias = <0xbf300000>;
+	qcom,fw-bias = <0xbdf00000>;
 };
 
 /include/ "msm-pm8994-rpm-regulator.dtsi"
