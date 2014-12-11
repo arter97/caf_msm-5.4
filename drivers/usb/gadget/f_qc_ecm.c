@@ -78,6 +78,7 @@ struct f_ecm_qc {
 	bool				ecm_mdm_ready_trigger;
 	const struct usb_endpoint_descriptor *in_ep_desc_backup;
 	const struct usb_endpoint_descriptor *out_ep_desc_backup;
+	bool				data_interface_up;
 };
 
 static struct f_ecm_qc	*__ecm;
@@ -428,9 +429,6 @@ static int ecm_qc_bam_disconnect(struct f_ecm_qc *dev)
 
 	bam_data_disconnect(&dev->bam_port, 0);
 
-	dev->bam_port.cdev = NULL;
-	dev->bam_port.func = NULL;
-
 	return 0;
 }
 
@@ -617,6 +615,8 @@ static int ecm_qc_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 
 			if (ecm_qc_bam_connect(ecm))
 				goto fail;
+
+			ecm->data_interface_up = true;
 		}
 
 		/* NOTE this can be a minor disagreement with the ECM spec,
@@ -657,6 +657,8 @@ static void ecm_qc_disable(struct usb_function *f)
 		ecm_qc_bam_disconnect(ecm);
 		if (ecm->xport != USB_GADGET_XPORT_BAM2BAM_IPA)
 			gether_qc_disconnect_name(&ecm->port, "ecm0");
+
+		ecm->data_interface_up = false;
 	} else {
 		/* release EPs incase no set_alt(1) yet */
 		ecm->port.in_ep->desc = NULL;
@@ -675,10 +677,13 @@ static void ecm_qc_suspend(struct usb_function *f)
 	struct f_ecm_qc	*ecm = func_to_ecm_qc(f);
 
 	/* Is DATA interface initialized? */
-	if (!ecm->bam_port.cdev) {
-		pr_debug("data interface not up\n");
+	if (!ecm->data_interface_up) {
+		pr_err("%s(): data interface not up\n", __func__);
 		return;
 	}
+
+	pr_info("%s(): remote_wakeup:%d\n:", __func__,
+			f->config->cdev->gadget->remote_wakeup);
 
 	if (f->config->cdev->gadget->remote_wakeup) {
 		bam_data_suspend(ECM_QC_ACTIVE_PORT);
@@ -703,8 +708,8 @@ static void ecm_qc_resume(struct usb_function *f)
 	struct f_ecm_qc	*ecm = func_to_ecm_qc(f);
 
 	/* Nothing to do if DATA interface wasn't initialized */
-	if (!ecm->bam_port.cdev) {
-		pr_debug("data interface was not up\n");
+	if (!ecm->data_interface_up) {
+		pr_err("%s(): data interface was not up\n", __func__);
 		return;
 	}
 
