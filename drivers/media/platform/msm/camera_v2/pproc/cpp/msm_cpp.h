@@ -150,9 +150,7 @@ struct msm_cpp_tasklet_queue_cmd {
 struct msm_cpp_buffer_map_info_t {
 	unsigned long len;
 	dma_addr_t phy_addr;
-	struct dma_buf_attachment *attachment;
-	struct dma_buf *dma_buf;
-	struct sg_table *table;
+	int buf_fd;
 	struct msm_cpp_buffer_info_t buff_info;
 };
 
@@ -205,6 +203,7 @@ struct cpp_device {
 	struct device *iommu_ctx;
 	uint32_t num_clk;
 
+	int iommu_hdl;
 	/* Reusing proven tasklet from msm isp */
 	atomic_t irq_cnt;
 	uint8_t taskletq_idx;
