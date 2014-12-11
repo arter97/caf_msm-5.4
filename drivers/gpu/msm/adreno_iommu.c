@@ -706,7 +706,7 @@ static unsigned int _adreno_iommu_set_pt_v2_a5xx(struct kgsl_device *device,
 			1, 0xFFFFFFFF, 0xF);
 
 	/* set the iommu lock bit */
-	*cmds++ = cp_packet(adreno_dev, CP_REG_RMW, 4);
+	*cmds++ = cp_packet(adreno_dev, CP_REG_RMW, 3);
 	*cmds++ = mmu_ctrl;
 	/* AND to unmask the lock bit */
 	*cmds++ = ~(KGSL_IOMMU_IMPLDEF_MICRO_MMU_CTRL_HALT);
@@ -735,7 +735,7 @@ static unsigned int _adreno_iommu_set_pt_v2_a5xx(struct kgsl_device *device,
 	}
 
 	/* unlock the IOMMU lock */
-	*cmds++ = cp_packet(adreno_dev, CP_REG_RMW, 4);
+	*cmds++ = cp_packet(adreno_dev, CP_REG_RMW, 3);
 	*cmds++ = mmu_ctrl;
 	/* AND to unmask the lock bit */
 	*cmds++ = ~(KGSL_IOMMU_IMPLDEF_MICRO_MMU_CTRL_HALT);
