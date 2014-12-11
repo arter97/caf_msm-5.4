@@ -214,6 +214,7 @@
 		interrupts = <0 44 0>;
 		qcom,hfi = "venus";
 		qcom,max-hw-load = <1281600>; /* Full 4k @ 30 + 1080p @ 30 */
+		qcom,imem-size = <1048576>; /* 1 MB */
 		venus-supply = <&gdsc_venus>;
 		non_secure_cb {
 			compatible = "qcom,msm-vidc,context-bank";
