@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -52,8 +52,55 @@ struct csiphy_reg_parms_t {
 	uint32_t csiphy_version;
 };
 
+struct csiphy_reg_3ph_parms_t {
+/*MIPI CSI PHY registers*/
+	uint32_t mipi_csiphy_3ph_cmn_ctrl5_addr;
+	uint32_t mipi_csiphy_3ph_cmn_ctrl6_addr;
+	uint32_t mipi_csiphy_3ph_lnn_ctrl34_addr;
+	uint32_t mipi_csiphy_3ph_lnn_ctrl35_addr;
+	uint32_t mipi_csiphy_3ph_lnn_ctrl36_addr;
+	uint32_t mipi_csiphy_3ph_lnn_ctrl2_addr;
+	uint32_t mipi_csiphy_3ph_lnn_ctrl3_addr;
+	uint32_t mipi_csiphy_3ph_lnn_ctrl6_addr;
+	uint32_t mipi_csiphy_3ph_lnn_ctrl7_addr;
+	uint32_t mipi_csiphy_3ph_lnn_ctrl8_addr;
+	uint32_t mipi_csiphy_3ph_lnn_ctrl9_addr;
+	uint32_t mipi_csiphy_3ph_lnn_ctrl10_addr;
+	uint32_t mipi_csiphy_3ph_lnn_ctrl11_addr;
+	uint32_t mipi_csiphy_3ph_lnn_ctrl17_addr;
+	uint32_t mipi_csiphy_3ph_lnn_ctrl24_addr;
+	uint32_t mipi_csiphy_3ph_lnn_ctrl51_addr;
+	uint32_t mipi_csiphy_3ph_lnn_ctrl25_addr;
+	uint32_t mipi_csiphy_3ph_cmn_ctrl7_addr;
+	uint32_t mipi_csiphy_3ph_cmn_ctrl11_addr;
+	uint32_t mipi_csiphy_3ph_cmn_ctrl12_addr;
+	uint32_t mipi_csiphy_3ph_cmn_ctrl13_addr;
+	uint32_t mipi_csiphy_3ph_cmn_ctrl14_addr;
+	uint32_t mipi_csiphy_3ph_cmn_ctrl15_addr;
+	uint32_t mipi_csiphy_3ph_cmn_ctrl16_addr;
+	uint32_t mipi_csiphy_3ph_cmn_ctrl17_addr;
+	uint32_t mipi_csiphy_3ph_cmn_ctrl18_addr;
+	uint32_t mipi_csiphy_3ph_cmn_ctrl19_addr;
+	uint32_t mipi_csiphy_3ph_cmn_ctrl20_addr;
+	uint32_t mipi_csiphy_3ph_cmn_ctrl21_addr;
+	uint32_t mipi_csiphy_2ph_lnn_misc1_addr;
+	uint32_t mipi_csiphy_3ph_cmn_ctrl0_addr;
+	uint32_t mipi_csiphy_2ph_lnn_cfg1_addr;
+	uint32_t mipi_csiphy_2ph_lnn_cfg2_addr;
+	uint32_t mipi_csiphy_2ph_lnn_cfg3_addr;
+	uint32_t mipi_csiphy_2ph_lnn_cfg4_addr;
+	uint32_t mipi_csiphy_2ph_lnn_cfg5_addr;
+	uint32_t mipi_csiphy_2ph_lnn_cfg6_addr;
+	uint32_t mipi_csiphy_2ph_lnn_cfg7_addr;
+	uint32_t mipi_csiphy_2ph_lnn_cfg8_addr;
+	uint32_t mipi_csiphy_2ph_lnn_cfg9_addr;
+	uint32_t mipi_csiphy_2ph_lnn_ctrl15_addr;
+	uint32_t mipi_csiphy_2ph_lnn_test_imp_addr;
+};
+
 struct csiphy_ctrl_t {
 	struct csiphy_reg_parms_t csiphy_reg;
+	struct csiphy_reg_3ph_parms_t csiphy_3ph_reg;
 };
 
 enum msm_csiphy_state_t {
@@ -84,6 +131,7 @@ struct csiphy_device {
 	uint32_t is_3_1_20nm_hw;
 	uint32_t csiphy_clk_index;
 	uint32_t csiphy_max_clk;
+	uint8_t csiphy_3phase;
 };
 
 #define VIDIOC_MSM_CSIPHY_RELEASE \
