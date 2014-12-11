@@ -10,6 +10,8 @@
  * GNU General Public License for more details.
  */
 
+/memreserve/ 0x00000000 0x00001000;
+
 #include "skeleton64.dtsi"
 #include <dt-bindings/clock/msm-clocks-8992.h>
 
@@ -24,6 +26,7 @@
 		sdhc1 = &sdhc_1; /* SDC1 eMMC slot */
 		sdhc2 = &sdhc_2; /* SDC2 SD card slot */
 		i2c2  = &i2c_2;
+		i2c5 = &i2c_5;
 
 		/* smdtty devices */
 		smd4 = &smdtty_mbalbridge;
@@ -848,7 +851,6 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		cell-index = <0>;
-		qcom,not-wakeup; /* Required until RPM is fully configured. */
 	};
 
 	pcie0: qcom,pcie@fc520000 {
@@ -899,10 +901,23 @@
 		vreg-1.8-supply = <&pm8994_l12>;
 		vreg-0.9-supply = <&pm8994_l28>;
 
+		qcom,l1-supported;
+		qcom,l1ss-supported;
+		qcom,aux-clk-sync;
+
 		qcom,ep-latency = <10>;
+
+		qcom,ep-wakeirq;
 
 		qcom,msi-gicm-addr = <0xf9006040>;
 		qcom,msi-gicm-base = <0x180>;
+
+		qcom,msm-bus,name = "pcie0";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<45 512 0 0>,
+				<45 512 500 800>;
 
 		qcom,scm-dev-id = <11>;
 
@@ -920,6 +935,20 @@
 			"pcie_0_slv_axi_clk", "pcie_0_ldo", "pcie_0_phy_reset";
 
 		max-clock-frequency-hz = <125000000>, <0>, <1011000>, <0>, <0>, <0>, <0>, <0>;
+	};
+
+	qcom,cnss {
+		compatible = "qcom,cnss";
+		wlan-bootstrap-gpio = <&msm_gpio 112 0>;
+		wlan-en-gpio = <&msm_gpio 113 0>;
+		vdd-wlan-supply = <&wlan_vreg>;
+		vdd-wlan-io-supply = <&pm8994_s4>;
+		vdd-wlan-xtal-supply = <&pm8994_l30>;
+		qcom,notify-modem-status;
+		pinctrl-names = "default";
+		pinctrl-0 = <&cnss_default>;
+		qcom,wlan-rc-num = <0>;
+		qcom,wlan-ramdump-dynamic = <0x200000>;
 	};
 
 	ipa_hw: qcom,ipa@fd4c0000 {
@@ -1005,6 +1034,31 @@
 		interrupt-parent = <&msm_gpio>;
 		interrupts = <72 0>;
 		interrupt-names = "cdc-int";
+	};
+
+	i2c_5: i2c_11: i2c@f9967000 { /* BLSP2 QUP5 */
+		compatible = "qcom,i2c-msm-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr", "bam_phys_addr";
+		reg = <0xf9967000 0x1000>,
+			<0xf9944000 0x19000>;
+		interrupt-names = "qup_irq", "bam_irq";
+		interrupts = <0 105 0>, <0 239 0>;
+		qcom,clk-freq-out = <100000>;
+		qcom,clk-freq-in  = <19200000>;
+		clock-names = "iface_clk", "core_clk";
+		clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
+				<&clock_gcc clk_gcc_blsp2_qup5_i2c_apps_clk>;
+
+		pinctrl-names = "i2c_active", "i2c_sleep";
+		pinctrl-0 = <&i2c_5_active>;
+		pinctrl-1 = <&i2c_5_sleep>;
+		qcom,noise-rjct-scl = <0>;
+		qcom,noise-rjct-sda = <0>;
+		qcom,bam-pipe-idx-cons = <20>;
+		qcom,bam-pipe-idx-prod = <21>;
+		qcom,master-id = <84>;
 	};
 
 	slim_msm: slim@fe12f000 {
@@ -1544,12 +1598,13 @@
 
 		clocks = <&clock_rpm clk_cxo_clk_src>,
 			 <&clock_gcc clk_gcc_mss_cfg_ahb_clk>,
+			 <&clock_rpm clk_pnoc_modem_clk>,
 			 <&clock_gcc clk_gcc_mss_q6_bimc_axi_clk>,
 			 <&clock_gcc clk_gcc_boot_rom_ahb_clk>,
 			 <&clock_gcc clk_gpll0_out_msscc>;
-		clock-names = "xo", "iface_clk", "bus_clk", "mem_clk",
+		clock-names = "xo", "iface_clk", "pnoc_clk", "bus_clk", "mem_clk",
 			      "gpll0_mss_clk";
-		qcom,proxy-clock-names = "xo";
+		qcom,proxy-clock-names = "xo", "pnoc_clk";
 		qcom,active-clock-names = "iface_clk", "bus_clk", "mem_clk",
 				     "gpll0_mss_clk";
 
@@ -1566,6 +1621,8 @@
 		qcom,sysmon-id = <0>;
 		qcom,ssctl-instance-id = <0x12>;
 		qcom,override-acc;
+		qcom,ahb-clk-vote;
+		qcom,pnoc-clk-vote;
 
 		/* GPIO inputs from mss */
 		qcom,gpio-err-fatal = <&smp2pgpio_ssr_smp2p_1_in 0 0>;
@@ -2103,7 +2160,6 @@
 		compatible = "qcom,rpm-smd";
 		rpm-channel-name = "rpm_requests";
 		rpm-channel-type = <15>; /* SMD_APPS_RPM */
-		rpm-standalone;
 	};
 
 	qcom,sensor-information {

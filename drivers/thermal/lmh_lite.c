@@ -26,6 +26,7 @@
 #include <linux/slab.h>
 #include <asm/cacheflush.h>
 #include <soc/qcom/scm.h>
+#include <linux/dma-mapping.h>
 
 #define LMH_DRIVER_NAME			"lmh-lite-driver"
 #define LMH_INTERRUPT			"lmh-interrupt"
@@ -230,6 +231,8 @@ static void lmh_read_and_update(struct lmh_driver_data *lmh_dat)
 	else
 		ret = scm_call2(SCM_SIP_FNID(SCM_SVC_LMH,
 			LMH_GET_INTENSITY), &desc_arg);
+	/* Have memory barrier before we access the TZ data */
+	mb();
 	if (ret) {
 		pr_err("Error in SCM v%d read call. err:%d\n",
 				(is_scm_armv8()) ? 8 : 7, ret);
@@ -501,23 +504,26 @@ static int lmh_get_sensor_list(void)
 		uint32_t addr;
 		uint32_t size;
 	} cmd_buf;
+	dma_addr_t payload_phys;
+	DEFINE_DMA_ATTRS(attrs);
+	struct device dev = {0};
 
-	payload = devm_kzalloc(lmh_data->dev, sizeof(struct lmh_sensor_packet),
-		GFP_KERNEL);
+	dev.coherent_dma_mask = DMA_BIT_MASK(sizeof(dma_addr_t) * 8);
+	dma_set_attr(DMA_ATTR_STRONGLY_ORDERED, &attrs);
+	payload = dma_alloc_attrs(&dev,
+			 PAGE_ALIGN(sizeof(struct lmh_sensor_packet)),
+			 &payload_phys, GFP_KERNEL, &attrs);
 	if (!payload) {
 		pr_err("No payload\n");
-		ret = -ENOMEM;
-		goto get_exit;
+		return -ENOMEM;
 	}
 
 	do {
 		payload->count = next;
-		desc_arg.args[0] = cmd_buf.addr = SCM_BUFFER_PHYS(payload);
+		desc_arg.args[0] = cmd_buf.addr = payload_phys;
 		desc_arg.args[1] = cmd_buf.size = SCM_BUFFER_SIZE(struct
 				lmh_sensor_packet);
 		desc_arg.arginfo = SCM_ARGS(2, SCM_RW, SCM_VAL);
-		dmac_flush_range(payload, payload
-			       + sizeof(struct lmh_sensor_packet));
 		if (!is_scm_armv8())
 			ret = scm_call(SCM_SVC_LMH, LMH_GET_SENSORS,
 				(void *) &cmd_buf,
@@ -526,6 +532,8 @@ static int lmh_get_sensor_list(void)
 		else
 			ret = scm_call2(SCM_SIP_FNID(SCM_SVC_LMH,
 				LMH_GET_SENSORS), &desc_arg);
+		/* Have memory barrier before we access the TZ data */
+		mb();
 		if (ret < 0) {
 			pr_err("Error in SCM v%d call. err:%d\n",
 					(is_scm_armv8()) ? 8 : 7, ret);
@@ -548,7 +556,7 @@ static int lmh_get_sensor_list(void)
 	} while (next < size);
 
 get_exit:
-	devm_kfree(lmh_data->dev, payload);
+	dma_free_attrs(&dev, size, payload, payload_phys, &attrs);
 	return ret;
 }
 
@@ -661,6 +669,8 @@ static int lmh_get_dev_info(void)
 				LMH_GET_PROFILES), &desc_arg);
 			size = desc_arg.ret[0];
 		}
+		/* Have memory barrier before we access the TZ data */
+		mb();
 		if (ret) {
 			pr_err("Error in SCM v%d get Profile call. err:%d\n",
 					(is_scm_armv8()) ? 8 : 7, ret);
