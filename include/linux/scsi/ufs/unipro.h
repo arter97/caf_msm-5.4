@@ -1,6 +1,4 @@
 /*
- * drivers/scsi/ufs/unipro.h
- *
  * Copyright (C) 2013 Samsung Electronics Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -11,6 +9,50 @@
 
 #ifndef _UNIPRO_H_
 #define _UNIPRO_H_
+
+/*
+ * M-TX Configuration Attributes
+ */
+#define TX_HIBERN8TIME_CAPABILITY		0x000F
+#define TX_MODE					0x0021
+#define TX_HSRATE_SERIES			0x0022
+#define TX_HSGEAR				0x0023
+#define TX_PWMGEAR				0x0024
+#define TX_AMPLITUDE				0x0025
+#define TX_HS_SLEWRATE				0x0026
+#define TX_SYNC_SOURCE				0x0027
+#define TX_HS_SYNC_LENGTH			0x0028
+#define TX_HS_PREPARE_LENGTH			0x0029
+#define TX_LS_PREPARE_LENGTH			0x002A
+#define TX_HIBERN8_CONTROL			0x002B
+#define TX_LCC_ENABLE				0x002C
+#define TX_PWM_BURST_CLOSURE_EXTENSION		0x002D
+#define TX_BYPASS_8B10B_ENABLE			0x002E
+#define TX_DRIVER_POLARITY			0x002F
+#define TX_HS_UNTERMINATED_LINE_DRIVE_ENABLE	0x0030
+#define TX_LS_TERMINATED_LINE_DRIVE_ENABLE	0x0031
+#define TX_LCC_SEQUENCER			0x0032
+#define TX_MIN_ACTIVATETIME			0x0033
+#define TX_PWM_G6_G7_SYNC_LENGTH		0x0034
+
+/*
+ * M-RX Configuration Attributes
+ */
+#define RX_MODE					0x00A1
+#define RX_HSRATE_SERIES			0x00A2
+#define RX_HSGEAR				0x00A3
+#define RX_PWMGEAR				0x00A4
+#define RX_LS_TERMINATED_ENABLE			0x00A5
+#define RX_HS_UNTERMINATED_ENABLE		0x00A6
+#define RX_ENTER_HIBERN8			0x00A7
+#define RX_BYPASS_8B10B_ENABLE			0x00A8
+#define RX_TERMINATION_FORCE_ENABLE		0x0089
+#define RX_MIN_ACTIVATETIME_CAPABILITY		0x008F
+#define RX_HIBERN8TIME_CAPABILITY		0x0092
+
+#define is_mphy_tx_attr(attr)			(attr < RX_MODE)
+#define RX_MIN_ACTIVATETIME_UNIT_US		100
+#define HIBERN8TIME_UNIT_US			100
 
 /*
  * PHY Adpater attributes
@@ -72,6 +114,9 @@
 #define PA_STALLNOCONFIGTIME	0x15A3
 #define PA_SAVECONFIGTIME	0x15A4
 
+#define PA_TACTIVATE_TIME_UNIT_US	10
+#define PA_HIBERN8_TIME_UNIT_US		100
+
 /* PA power modes */
 enum {
 	FAST_MODE	= 1,
@@ -85,6 +130,34 @@ enum {
 enum {
 	PA_HS_MODE_A	= 1,
 	PA_HS_MODE_B	= 2,
+};
+
+enum ufs_pwm_gear_tag {
+	UFS_PWM_DONT_CHANGE,	/* Don't change Gear */
+	UFS_PWM_G1,		/* PWM Gear 1 (default for reset) */
+	UFS_PWM_G2,		/* PWM Gear 2 */
+	UFS_PWM_G3,		/* PWM Gear 3 */
+	UFS_PWM_G4,		/* PWM Gear 4 */
+	UFS_PWM_G5,		/* PWM Gear 5 */
+	UFS_PWM_G6,		/* PWM Gear 6 */
+	UFS_PWM_G7,		/* PWM Gear 7 */
+};
+
+enum ufs_hs_gear_tag {
+	UFS_HS_DONT_CHANGE,	/* Don't change Gear */
+	UFS_HS_G1,		/* HS Gear 1 (default for reset) */
+	UFS_HS_G2,		/* HS Gear 2 */
+	UFS_HS_G3,		/* HS Gear 3 */
+};
+
+enum ufs_unipro_ver {
+	UFS_UNIPRO_VER_RESERVED = 0,
+	UFS_UNIPRO_VER_1_40 = 1, /* UniPro version 1.40 */
+	UFS_UNIPRO_VER_1_41 = 2, /* UniPro version 1.41 */
+	UFS_UNIPRO_VER_1_6 = 3,  /* UniPro version 1.6 */
+	UFS_UNIPRO_VER_MAX = 4,  /* UniPro unsupported version */
+	/* UniPro version field mask in PA_LOCALVERINFO */
+	UFS_UNIPRO_VER_MASK = 0xF,
 };
 
 /*

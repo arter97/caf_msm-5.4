@@ -1195,8 +1195,9 @@
 	};
 
 	ufsphy1: ufsphy@fc597000 {
-			compatible = "qcom,ufs-msm-phy-qmp-20nm";
+			compatible = "qcom,ufs-phy-qmp-20nm";
 			reg = <0xfc597000 0xda8>;
+			reg-names = "phy_mem";
 			#phy-cells = <0>;
 			vdda-phy-supply = <&pm8994_l28>;
 			vdda-pll-supply = <&pm8994_l12>;
@@ -1206,10 +1207,12 @@
 			vddp-ref-clk-max-microamp = <100>;
 			vddp-ref-clk-always-on;
 			clock-names = "ref_clk_src",
+				"ref_clk_parent",
 				"ref_clk",
 				"tx_iface_clk",
 				"rx_iface_clk";
 			clocks = <&clock_rpm clk_ln_bb_clk>,
+				<&clock_gcc clk_pcie_1_phy_ldo >,
 				<&clock_gcc clk_ufs_phy_ldo>,
 				<&clock_gcc clk_gcc_ufs_tx_cfg_clk>,
 				<&clock_gcc clk_gcc_ufs_rx_cfg_clk>;
