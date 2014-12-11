@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -116,8 +116,7 @@ static struct alpha_pll_clk mmpll0 = {
 		.parent = &mmsscc_xo.c,
 		.dbg_name = "mmpll0",
 		.ops = &clk_ops_fixed_alpha_pll,
-		VDD_DIG_FMAX_MAP3(LOWER, 400000000, LOW, 400000000,
-							NOMINAL, 800000000),
+		VDD_DIG_FMAX_MAP2(LOWER, 400000000, NOMINAL, 800000000),
 		CLK_INIT(mmpll0.c),
 	},
 };
@@ -137,8 +136,7 @@ static struct alpha_pll_clk mmpll1 = {
 		.parent = &mmsscc_xo.c,
 		.dbg_name = "mmpll1",
 		.ops = &clk_ops_fixed_alpha_pll,
-		VDD_DIG_FMAX_MAP3(LOWER, 370000000, LOW, 370000000,
-							NOMINAL, 740000000),
+		VDD_DIG_FMAX_MAP2(LOWER, 370000000, NOMINAL, 740000000),
 		CLK_INIT(mmpll1.c),
 	},
 };
@@ -156,8 +154,7 @@ static struct alpha_pll_clk mmpll4 = {
 		.rate = 960000000,
 		.dbg_name = "mmpll4",
 		.ops = &clk_ops_fixed_alpha_pll,
-		VDD_MMPLL4_FMAX_MAP3(LOWER, 480000000, LOW, 480000000,
-							NOMINAL, 960000000),
+		VDD_MMPLL4_FMAX_MAP2(LOWER, 480000000, NOMINAL, 960000000),
 		CLK_INIT(mmpll4.c),
 	},
 };
@@ -175,8 +172,7 @@ static struct alpha_pll_clk mmpll3 = {
 		.rate = 900000000,
 		.dbg_name = "mmpll3",
 		.ops = &clk_ops_fixed_alpha_pll,
-		VDD_DIG_FMAX_MAP3(LOWER, 450000000, LOW, 450000000,
-							NOMINAL, 900000000),
+		VDD_DIG_FMAX_MAP2(LOWER, 450000000, NOMINAL, 900000000),
 		CLK_INIT(mmpll3.c),
 	},
 };
@@ -205,7 +201,7 @@ static struct rcg_clk ahb_clk_src = {
 
 static struct clk_freq_tbl ftbl_axi_clk_src[] = {
 	F_MM(  75000000,   mmsscc_gpll0,    8,    0,     0),
-	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
+	F_MM( 171430000,   mmsscc_gpll0,  3.5,    0,     0),
 	F_MM( 200000000,   mmsscc_gpll0,    3,    0,     0),
 	F_MM( 320000000, mmpll0_out_main,  2.5,    0,     0),
 	F_MM( 370000000, mmpll1_out_main,    2,    0,     0),
@@ -236,11 +232,10 @@ static struct alpha_pll_clk mmpll2 = {
 	.enable_config = 0x1,
 	.c = {
 		.parent = &mmsscc_xo.c,
-		.rate = 650000000,
+		.rate = 410000000,
 		.dbg_name = "mmpll2",
 		.ops = &clk_ops_fixed_alpha_pll,
-		VDD_DIG_FMAX_MAP3(LOWER, 325000000, LOW, 325000000,
-							NOMINAL, 650000000),
+		VDD_DIG_FMAX_MAP1(LOWER, 410000000),
 		CLK_INIT(mmpll2.c),
 	},
 };
@@ -255,11 +250,10 @@ static struct alpha_pll_clk mmpll8 = {
 	.enable_config = 0x1,
 	.c = {
 		.parent = &mmsscc_xo.c,
-		.rate = 640000000,
+		.rate = 360000000,
 		.dbg_name = "mmpll8",
 		.ops = &clk_ops_fixed_alpha_pll,
-		VDD_DIG_FMAX_MAP3(LOWER, 320000000, LOW, 320000000,
-							NOMINAL, 640000000),
+		VDD_DIG_FMAX_MAP1(LOWER, 360000000),
 		CLK_INIT(mmpll8.c),
 	},
 };
@@ -274,11 +268,10 @@ static struct alpha_pll_clk mmpll9 = {
 	.enable_config = 0x1,
 	.c = {
 		.parent = &mmsscc_xo.c,
-		.rate = 960000000,
+		.rate = 480000000,
 		.dbg_name = "mmpll9",
 		.ops = &clk_ops_fixed_alpha_pll,
-		VDD_MMPLL4_FMAX_MAP3(LOWER, 480000000, LOW, 480000000,
-							NOMINAL, 960000000),
+		VDD_MMPLL4_FMAX_MAP1(LOWER, 480000000),
 		CLK_INIT(mmpll9.c),
 	},
 };
@@ -296,8 +289,7 @@ static struct alpha_pll_clk mmpll5 = {
 		.rate = 720000000,
 		.dbg_name = "mmpll5",
 		.ops = &clk_ops_fixed_alpha_pll,
-		VDD_DIG_FMAX_MAP3(LOWER, 360000000, LOW, 360000000,
-							NOMINAL, 720000000),
+		VDD_DIG_FMAX_MAP2(LOWER, 360000000, LOW, 720000000),
 		CLK_INIT(mmpll5.c),
 	},
 };
@@ -305,10 +297,11 @@ DEFINE_EXT_CLK(mmpll5_out_main, &mmpll5.c);
 
 static struct clk_freq_tbl ftbl_gfx3d_clk_src[] = {
 	F_MM(  19200000,      mmsscc_xo,    1,    0,     0),
-	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
-	F_MM( 162500000, mmpll2_out_main,    4,    0,     0),
-	F_MM( 320000000, mmpll9_out_main,    3,    0,     0),
-	F_MM( 480000000, mmpll9_out_main,    2,    0,     0),
+	F_MM(  60000000, mmpll8_out_main,    6,    0,     0),
+	F_MM( 120000000, mmpll8_out_main,    3,    0,     0),
+	F_MM( 205000000, mmpll2_out_main,    2,    0,     0),
+	F_MM( 360000000, mmpll8_out_main,    1,    0,     0),
+	F_MM( 480000000, mmpll9_out_main,    1,    0,     0),
 	F_END
 };
 
@@ -321,8 +314,8 @@ static struct rcg_clk gfx3d_clk_src = {
 	.c = {
 		.dbg_name = "gfx3d_clk_src",
 		.ops = &clk_ops_rcg,
-		VDD_DIG_FMAX_MAP4(LOWER, 100000000, LOW, 162500000,
-					NOMINAL, 320000000, HIGH, 480000000),
+		VDD_DIG_FMAX_MAP4(LOWER, 120000000, LOW, 205000000,
+					NOMINAL, 360000000, HIGH, 480000000),
 		CLK_INIT(gfx3d_clk_src.c),
 	},
 };
@@ -722,6 +715,7 @@ static struct rcg_clk fd_core_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_cci_clk_src[] = {
+	F_MM(  19200000,      mmsscc_xo,    1,    0,     0),
 	F_MM(  50000000,     mmsscc_gpll0,   12,    0,     0),
 	F_MM( 100000000,     mmsscc_gpll0,    6,    0,     0),
 	F_END
@@ -1058,9 +1052,9 @@ static struct rcg_clk dsa_core_clk_src = {
 
 static struct clk_freq_tbl ftbl_isense_clk_src[] = {
 	F_MM(  19200000,      mmsscc_xo,    1,    0,     0),
-	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
-	F_MM( 162500000, mmpll2_out_main,    4,    0,     0),
-	F_MM( 320000000, mmpll9_out_main,    3,    0,     0),
+	F_MM( 150000000,   mmsscc_gpll0,    4,    0,     0),
+	F_MM( 320000000, mmpll0_out_main,  2.5,    0,     0),
+	F_MM( 360000000, mmpll8_out_main,    1,    0,     0),
 	F_END
 };
 
@@ -1073,7 +1067,8 @@ static struct rcg_clk isense_clk_src = {
 	.c = {
 		.dbg_name = "isense_clk_src",
 		.ops = &clk_ops_rcg,
-		VDD_DIG_FMAX_MAP2(LOWER, 162500000, NOMINAL, 320000000),
+		VDD_DIG_FMAX_MAP3(LOWER, 150000000, NOMINAL, 320000000,
+					HIGH, 360000000),
 		CLK_INIT(isense_clk_src.c),
 	},
 };
@@ -3024,6 +3019,7 @@ static struct mux_clk mmss_gcc_dbg_clk = {
 		{ &mmss_mmagic_maxi_clk.c, 0x0070 },
 		{ &camss_vfe0_stream_clk.c, 0x0071 },
 		{ &camss_vfe1_stream_clk.c, 0x0072 },
+		{ &camss_cpp_vbif_ahb_clk.c, 0x0073 },
 		{ &mmss_mmagic_cfg_ahb_clk.c, 0x0074 },
 		{ &dsa_core_clk.c, 0x0075 },
 		{ &dsa_noc_cfg_ahb_clk.c, 0x0076 },
