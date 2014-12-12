@@ -801,6 +801,13 @@ int adreno_perfcounter_enable(struct adreno_device *adreno_dev,
 		ret = adreno_ringbuffer_issuecmds(rb, 0, buf, 4);
 		if (ret)
 			goto done;
+		/*
+		 * schedule dispatcher to make sure rb[0] is run, because
+		 * if the current RB is not rb[0] and gpu is idle then
+		 * rb[0] will not get scheduled to run
+		 */
+		if (adreno_dev->cur_rb != rb)
+			adreno_dispatcher_schedule(rb->device);
 		/* wait for the above commands submitted to complete */
 		ret = adreno_ringbuffer_waittimestamp(rb, rb->timestamp,
 				ADRENO_IDLE_TIMEOUT);
