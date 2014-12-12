@@ -1936,7 +1936,7 @@ done:
 
 void inc_nr_big_small_task(struct rq *rq, struct task_struct *p)
 {
-	if (!sched_enable_hmp)
+	if (!sched_enable_hmp || sched_disable_window_stats)
 		return;
 
 	if (is_big_task(p))
@@ -1947,7 +1947,7 @@ void inc_nr_big_small_task(struct rq *rq, struct task_struct *p)
 
 void dec_nr_big_small_task(struct rq *rq, struct task_struct *p)
 {
-	if (!sched_enable_hmp)
+	if (!sched_enable_hmp || sched_disable_window_stats)
 		return;
 
 	if (is_big_task(p))
@@ -2002,48 +2002,33 @@ void post_big_small_task_count_change(const struct cpumask *cpus)
 	local_irq_enable();
 }
 
-static DEFINE_MUTEX(policy_mutex);
+DEFINE_MUTEX(policy_mutex);
 
-int sched_acct_wait_time_update_handler(struct ctl_table *table, int write,
-		void __user *buffer, size_t *lenp,
-		loff_t *ppos)
+static inline int invalid_value(unsigned int *data)
 {
-	int ret;
-	unsigned int *data = (unsigned int *)table->data;
-	unsigned int old_val;
-	unsigned long flags;
+	int val = *data;
 
-	if (!sched_enable_hmp)
-		return -EINVAL;
+	if (data == &sysctl_sched_ravg_hist_size)
+		return (val < 2 || val > RAVG_HIST_SIZE_MAX);
 
-	mutex_lock(&policy_mutex);
+	if (data == &sysctl_sched_window_stats_policy)
+		return (val >= WINDOW_STATS_INVALID_POLICY);
 
-	old_val = *data;
-
-	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
-	if (ret || !write || (write && old_val == *data))
-		goto done;
-
-	local_irq_save(flags);
-
-	reset_all_window_stats(0, 0, -1, sysctl_sched_account_wait_time, 0);
-
-	local_irq_restore(flags);
-
-done:
-	mutex_unlock(&policy_mutex);
-
-	return ret;
+	return 0;
 }
 
-int sched_ravg_hist_size_update_handler(struct ctl_table *table, int write,
+/*
+ * Handle "atomic" update of sysctl_sched_window_stats_policy,
+ * sysctl_sched_ravg_hist_size, sysctl_sched_account_wait_time and
+ * sched_freq_legacy_mode variables.
+ */
+int sched_window_update_handler(struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp,
 		loff_t *ppos)
 {
 	int ret;
 	unsigned int *data = (unsigned int *)table->data;
 	unsigned int old_val;
-	unsigned long flags;
 
 	if (!sched_enable_hmp)
 		return -EINVAL;
@@ -2056,49 +2041,13 @@ int sched_ravg_hist_size_update_handler(struct ctl_table *table, int write,
 	if (ret || !write || (write && (old_val == *data)))
 		goto done;
 
-	if (*data > RAVG_HIST_SIZE_MAX || *data < 1) {
+	if (invalid_value(data)) {
 		*data = old_val;
 		ret = -EINVAL;
 		goto done;
 	}
 
-	local_irq_save(flags);
-
-	reset_all_window_stats(0, 0, -1, -1, sysctl_sched_ravg_hist_size);
-
-	local_irq_restore(flags);
-
-done:
-	mutex_unlock(&policy_mutex);
-
-	return ret;
-}
-
-int sched_window_stats_policy_update_handler(struct ctl_table *table, int write,
-		void __user *buffer, size_t *lenp,
-		loff_t *ppos)
-{
-	int ret;
-	unsigned int *data = (unsigned int *)table->data;
-	unsigned int old_val;
-	unsigned long flags;
-
-	if (!sched_enable_hmp)
-		return -EINVAL;
-
-	mutex_lock(&policy_mutex);
-
-	old_val = *data;
-
-	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
-	if (ret || !write || (write && old_val == *data))
-		goto done;
-
-	local_irq_save(flags);
-
-	reset_all_window_stats(0, 0, sysctl_sched_window_stats_policy, -1, 0);
-
-	local_irq_restore(flags);
+	reset_all_window_stats(0, 0);
 
 done:
 	mutex_unlock(&policy_mutex);
