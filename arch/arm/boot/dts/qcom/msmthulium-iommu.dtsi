@@ -128,7 +128,7 @@
 		attach-impl-defs = <0x124 0x3>;
 	};
 
-	cpp_smmu: arm,smmu@d60000 {
+	cpp_fd_smmu: arm,smmu@d60000 {
 		compatible = "qcom,smmu-v2";
 		reg = <0xd60000 0x10000>;
 		#global-interrupts = <1>;
