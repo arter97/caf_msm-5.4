@@ -295,15 +295,12 @@ static int cam_smmu_find_index_by_handle(int hdl)
 	int i;
 	CDBG("%s: find handle %d\n", __func__, (int)hdl);
 
-	mutex_lock(&iommu_table_lock);
 	for (i = 0; i < iommu_cb_set.cb_num; i++) {
 		if (iommu_cb_set.cb_info[i].handle == hdl) {
 			CDBG("%s: handle found, index=%d\n", __func__, i);
-			mutex_unlock(&iommu_table_lock);
 			return i;
 		}
 	}
-	mutex_unlock(&iommu_table_lock);
 	pr_err("%s: handle cannot be found\n", __func__);
 	return -EINVAL;
 }
@@ -325,7 +322,7 @@ static struct cam_dma_buff_info *cam_smmu_find_mapping_by_ion_index(int idx,
 
 	mutex_unlock(&iommu_cb_set.cb_info[idx].lock);
 	pr_err("%s: Error: Cannot find fd %d by index %d\n",
-		__func__, idx, ion_fd);
+		__func__, ion_fd, idx);
 	return NULL;
 }
 
@@ -468,7 +465,7 @@ static int cam_smmu_map_buffer_and_add_to_list(int idx, int ion_fd,
 	mapping_info->paddr = sg_dma_address(table->sgl);
 	mapping_info->len = (size_t)sg_dma_len(table->sgl);
 	mapping_info->dir = dma_dir;
-	mapping_info->ref_count = 0;
+	mapping_info->ref_count = 1;
 
 	/* return paddr and len to client */
 	*paddr_ptr = sg_dma_address(table->sgl);
@@ -677,7 +674,6 @@ int cam_smmu_put_phy_addr(int handle, int ion_fd)
 		pr_err("%s: index is not valid, index = %d.\n", __func__, idx);
 		return -EINVAL;
 	}
-
 
 	/* based on ion fd and index, we can find mapping info of buffer */
 	mapping_info = cam_smmu_find_mapping_by_ion_index(idx, ion_fd);
