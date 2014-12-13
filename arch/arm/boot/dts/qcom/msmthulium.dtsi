@@ -250,6 +250,19 @@
 		};
 	};
 
+	qcom,vmem@880000 {
+		compatible = "qcom,msm-vmem";
+		interrupts = <0 429 0>;
+		reg = <0x880000 0x800>,
+		    <0x6800000 0x100000>;
+		reg-names = "reg-base", "mem-base";
+
+		clocks = <&clock_mmss clk_vmem_ahb_clk>,
+		       <&clock_mmss clk_vmem_maxi_clk>;
+		clock-names = "ahb", "maxi";
+		qcom,banks = <4>;
+	};
+
 	i2c_2: i2c@7576000 { /* BLSP1 QUP2 */
 		compatible = "qcom,i2c-msm-v2";
 		#address-cells = <1>;
