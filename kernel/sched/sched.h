@@ -685,8 +685,15 @@ extern void init_new_task_load(struct task_struct *p);
 
 #if defined(CONFIG_SCHED_FREQ_INPUT) || defined(CONFIG_SCHED_HMP)
 
+#define WINDOW_STATS_USE_RECENT		0
+#define WINDOW_STATS_USE_MAX		1
+#define WINDOW_STATS_USE_AVG		2
+#define WINDOW_STATS_INVALID_POLICY	3
+
+extern struct mutex policy_mutex;
 extern unsigned int sched_ravg_window;
 extern unsigned int sched_use_pelt;
+extern unsigned int sched_disable_window_stats;
 extern unsigned int max_possible_freq;
 extern unsigned int min_max_freq;
 extern unsigned int pct_task_load(struct task_struct *p);
@@ -716,7 +723,7 @@ inc_cumulative_runnable_avg(struct rq *rq, struct task_struct *p)
 	if (sched_use_pelt)
 		rq->cumulative_runnable_avg +=
 				p->se.avg.runnable_avg_sum_scaled;
-	else
+	else if (!sched_disable_window_stats)
 		rq->cumulative_runnable_avg += p->ravg.demand;
 }
 
@@ -726,7 +733,7 @@ dec_cumulative_runnable_avg(struct rq *rq, struct task_struct *p)
 	if (sched_use_pelt)
 		rq->cumulative_runnable_avg -=
 				p->se.avg.runnable_avg_sum_scaled;
-	else
+	else if (!sched_disable_window_stats)
 		rq->cumulative_runnable_avg -= p->ravg.demand;
 	BUG_ON((s64)rq->cumulative_runnable_avg < 0);
 }
@@ -800,14 +807,13 @@ extern void inc_nr_big_small_task(struct rq *rq, struct task_struct *p);
 extern void dec_nr_big_small_task(struct rq *rq, struct task_struct *p);
 extern void set_hmp_defaults(void);
 extern unsigned int power_cost_at_freq(int cpu, unsigned int freq);
-extern void reset_all_window_stats(u64 window_start, unsigned int window_size,
-				 int policy, int acct_wait_time,
-				 unsigned int ravg_hist_size);
+extern void reset_all_window_stats(u64 window_start, unsigned int window_size);
 extern void boost_kick(int cpu);
 
 #else /* CONFIG_SCHED_HMP */
 
 #define sched_enable_hmp 0
+#define sched_freq_legacy_mode 1
 
 static inline void check_for_migration(struct rq *rq, struct task_struct *p) { }
 static inline void pre_big_small_task_count_change(void) { }

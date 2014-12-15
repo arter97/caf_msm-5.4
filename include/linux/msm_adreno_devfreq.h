@@ -1,6 +1,7 @@
 #ifndef MSM_ADRENO_DEVFREQ_H
 #define MSM_ADRENO_DEVFREQ_H
 
+#include <linux/devfreq.h>
 #include <linux/notifier.h>
 
 #define ADRENO_DEVFREQ_NOTIFY_SUBMIT	1
@@ -43,5 +44,27 @@ struct devfreq_msm_adreno_tz_data {
 	} bus;
 	unsigned int device_id;
 };
+
+struct msm_adreno_extended_profile {
+	struct devfreq_msm_adreno_tz_data *private_data;
+	struct devfreq *bus_devfreq;
+	struct workqueue_struct *partner_wq;
+	struct work_struct partner_start_event_ws;
+	struct work_struct partner_stop_event_ws;
+	struct work_struct partner_suspend_event_ws;
+	struct work_struct partner_resume_event_ws;
+	struct devfreq_dev_profile profile;
+};
+
+struct msm_busmon_extended_profile {
+	u32 flag;
+	struct devfreq_msm_adreno_tz_data *private_data;
+	struct devfreq_dev_profile profile;
+};
+
+#ifdef CONFIG_DEVFREQ_GOV_MSM_GPUBW_MON
+int devfreq_vbif_update_bw(void);
+int devfreq_vbif_register_callback(void *);
+#endif
 
 #endif
