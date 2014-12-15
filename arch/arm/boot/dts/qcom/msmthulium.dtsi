@@ -598,7 +598,7 @@
 		};
 	};
 
-	qcom,wdt@9830000 {
+	wdog: qcom,wdt@9830000 {
 		compatible = "qcom,msm-watchdog";
 		reg = <0x9830000 0x1000>;
 		reg-names = "wdt-base";
