@@ -63,6 +63,8 @@ static int msm8x16_enable_codec_ext_clk(struct snd_soc_codec *codec, int enable,
 static int msm_snd_enable_codec_ext_clk(struct snd_soc_codec *codec, int enable,
 					bool dapm);
 
+static int conf_int_codec_mux(struct msm8916_asoc_mach_data *pdata);
+
 static struct wcd_mbhc_config mbhc_cfg = {
 	.read_fw_bin = false,
 	.calibration = NULL,
@@ -237,7 +239,7 @@ static int msm8x16_mclk_event(struct snd_soc_dapm_widget *w,
 
 static const struct snd_soc_dapm_widget msm8x16_dapm_widgets[] = {
 
-	SND_SOC_DAPM_SUPPLY("MCLK",  SND_SOC_NOPM, 0, 0,
+	SND_SOC_DAPM_SUPPLY_S("MCLK", -1, SND_SOC_NOPM, 0, 0,
 	msm8x16_mclk_event, SND_SOC_DAPM_POST_PMD),
 	SND_SOC_DAPM_MIC("Handset Mic", NULL),
 	SND_SOC_DAPM_MIC("Headset Mic", NULL),
@@ -332,31 +334,65 @@ static int loopback_mclk_put(struct snd_kcontrol *kcontrol,
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 
 	pdata = snd_soc_card_get_drvdata(codec->card);
-
+	conf_int_codec_mux(pdata);
+	pr_debug("%s: mclk_rsc_ref %d enable %ld\n",
+			__func__, atomic_read(&pdata->mclk_rsc_ref),
+			ucontrol->value.integer.value[0]);
 	switch (ucontrol->value.integer.value[0]) {
 	case 1:
-		pdata->digital_cdc_clk.clk_val = 9600000;
-		ret = afe_set_digital_codec_core_clock(
-				AFE_PORT_ID_PRIMARY_MI2S_RX,
-				&pdata->digital_cdc_clk);
+		ret = pinctrl_select_state(pinctrl_info.pinctrl,
+				pinctrl_info.cdc_lines_act);
 		if (ret < 0) {
-			pr_err("%s: failed to enable the MCLK: %d\n",
+			pr_err("%s: failed to configure the gpio; ret=%d\n",
 					__func__, ret);
 			break;
 		}
+		mutex_lock(&pdata->cdc_mclk_mutex);
+		if ((!atomic_read(&pdata->mclk_rsc_ref)) &&
+				(!atomic_read(&pdata->mclk_enabled))) {
+			pdata->digital_cdc_clk.clk_val = 9600000;
+			ret = afe_set_digital_codec_core_clock(
+					AFE_PORT_ID_PRIMARY_MI2S_RX,
+					&pdata->digital_cdc_clk);
+			if (ret < 0) {
+				pr_err("%s: failed to enable the MCLK: %d\n",
+						__func__, ret);
+				mutex_unlock(&pdata->cdc_mclk_mutex);
+				pinctrl_select_state(pinctrl_info.pinctrl,
+						pinctrl_info.cdc_lines_sus);
+				break;
+			}
+			atomic_set(&pdata->mclk_enabled, true);
+		}
+		mutex_unlock(&pdata->cdc_mclk_mutex);
+		atomic_inc(&pdata->mclk_rsc_ref);
 		msm8x16_wcd_mclk_enable(codec, 1, true);
 		break;
 	case 0:
-		pdata->digital_cdc_clk.clk_val = 0;
-		ret = afe_set_digital_codec_core_clock(
-				AFE_PORT_ID_PRIMARY_MI2S_RX,
-				&pdata->digital_cdc_clk);
-		if (ret < 0) {
-			pr_err("%s: failed to disable the MCLK: %d\n",
-					__func__, ret);
+		if (atomic_read(&pdata->mclk_rsc_ref) <= 0)
 			break;
-		}
 		msm8x16_wcd_mclk_enable(codec, 0, true);
+		mutex_lock(&pdata->cdc_mclk_mutex);
+		if ((!atomic_dec_return(&pdata->mclk_rsc_ref)) &&
+				(atomic_read(&pdata->mclk_enabled))) {
+			pdata->digital_cdc_clk.clk_val = 0;
+			ret = afe_set_digital_codec_core_clock(
+					AFE_PORT_ID_PRIMARY_MI2S_RX,
+					&pdata->digital_cdc_clk);
+			if (ret < 0) {
+				pr_err("%s: failed to disable the MCLK: %d\n",
+						__func__, ret);
+				mutex_unlock(&pdata->cdc_mclk_mutex);
+				break;
+			}
+			atomic_set(&pdata->mclk_enabled, false);
+		}
+		mutex_unlock(&pdata->cdc_mclk_mutex);
+		ret = pinctrl_select_state(pinctrl_info.pinctrl,
+				pinctrl_info.cdc_lines_sus);
+		if (ret < 0)
+			pr_err("%s: failed to configure the gpio; ret=%d\n",
+					__func__, ret);
 		break;
 	default:
 		pr_err("%s: Unexpected input value\n", __func__);
@@ -803,28 +839,16 @@ static int conf_int_codec_mux_sec(struct msm8916_asoc_mach_data *pdata)
 	/*
 	 * Configure the secondary MI2S to TLMM.
 	 */
-	vaddr = ioremap(LPASS_CSR_GP_IO_MUX_SPKR_CTL , 4);
-	if (!vaddr) {
-		pr_err("%s ioremap failure for addr %x",
-					__func__, LPASS_CSR_GP_IO_MUX_SPKR_CTL);
-		return -ENOMEM;
-	}
+	vaddr = pdata->vaddr_gpio_mux_spkr_ctl;
 	val = ioread32(vaddr);
 	/* enable sec MI2S interface to TLMM GPIO */
 	val = val | 0x0004007E;
 	pr_debug("%s: Sec mux configuration = %x\n", __func__, val);
 	iowrite32(val, vaddr);
-	iounmap(vaddr);
-	vaddr = ioremap(LPASS_CSR_GP_IO_MUX_MIC_CTL , 4);
-	if (!vaddr) {
-		pr_err("%s ioremap failure for addr %x",
-					__func__, LPASS_CSR_GP_IO_MUX_MIC_CTL);
-		return -ENOMEM;
-	}
+	vaddr = pdata->vaddr_gpio_mux_mic_ctl;
 	val = ioread32(vaddr);
 	val = val | 0x00200000;
 	iowrite32(val, vaddr);
-	iounmap(vaddr);
 	return ret;
 }
 
@@ -922,26 +946,15 @@ static int conf_int_codec_mux(struct msm8916_asoc_mach_data *pdata)
 	 * slave select to invalid state, for machine mode this
 	 * should move to HW, I do not like to do it here
 	 */
-	vaddr = ioremap(LPASS_CSR_GP_IO_MUX_SPKR_CTL , 4);
-	if (!vaddr) {
-		pr_err("%s ioremap failure for addr %x",
-				__func__, LPASS_CSR_GP_IO_MUX_SPKR_CTL);
-		return -ENOMEM;
-	}
+	vaddr = pdata->vaddr_gpio_mux_spkr_ctl;
 	val = ioread32(vaddr);
 	val = val | 0x00030300;
 	iowrite32(val, vaddr);
-	iounmap(vaddr);
-	vaddr = ioremap(LPASS_CSR_GP_IO_MUX_MIC_CTL , 4);
-	if (!vaddr) {
-		pr_err("%s ioremap failure for addr %x",
-				__func__, LPASS_CSR_GP_IO_MUX_MIC_CTL);
-		return -ENOMEM;
-	}
+
+	vaddr = pdata->vaddr_gpio_mux_mic_ctl;
 	val = ioread32(vaddr);
 	val = val | 0x00220002;
 	iowrite32(val, vaddr);
-	iounmap(vaddr);
 	return ret;
 }
 
@@ -992,43 +1005,15 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 		 * and Data 1 to TLMM GPIO,
 		 * TODO MUX config
 		 */
-
-		vaddr = ioremap(LPASS_CSR_GP_IO_MUX_SPKR_CTL , 4);
-		if (!vaddr) {
-			pr_err("%s ioremap failure for addr %x\n",
-					__func__,
-					LPASS_CSR_GP_IO_MUX_SPKR_CTL);
-			return -ENOMEM;
-		}
+		vaddr = pdata->vaddr_gpio_mux_spkr_ctl;
 		val = ioread32(vaddr);
-		iounmap(vaddr);
 		val = val | 0x00000002;
-		vaddr = ioremap(LPASS_CSR_GP_IO_MUX_SPKR_CTL , 4);
-		if (!vaddr) {
-			pr_err("%s ioremap failure for addr %x",
-					__func__, LPASS_CSR_GP_IO_MUX_SPKR_CTL);
-			return -ENOMEM;
-		}
 		iowrite32(val, vaddr);
-		iounmap(vaddr);
 
-		vaddr = ioremap(LPASS_CSR_GP_IO_MUX_MIC_CTL , 4);
-		if (!vaddr) {
-			pr_err("%s ioremap failure for addr %x",
-					__func__, LPASS_CSR_GP_IO_MUX_MIC_CTL);
-			return -ENOMEM;
-		}
+		vaddr = pdata->vaddr_gpio_mux_mic_ctl;
 		val = ioread32(vaddr);
-		iounmap(vaddr);
 		val = val | 0x00000002;
-		vaddr = ioremap(LPASS_CSR_GP_IO_MUX_MIC_CTL , 4);
-		if (!vaddr) {
-			pr_err("%s ioremap failure for addr %x",
-					__func__, LPASS_CSR_GP_IO_MUX_MIC_CTL);
-			return -ENOMEM;
-		}
 		iowrite32(val, vaddr);
-		iounmap(vaddr);
 
 		ret = pinctrl_select_state(ext_cdc_pinctrl_info.pinctrl,
 						ext_cdc_pinctrl_info.tlmm_act);
@@ -2063,6 +2048,23 @@ static int msm8x16_asoc_machine_probe(struct platform_device *pdev)
 		goto err;
 	}
 
+	pdata->vaddr_gpio_mux_spkr_ctl =
+		ioremap(LPASS_CSR_GP_IO_MUX_SPKR_CTL , 4);
+	if (!pdata->vaddr_gpio_mux_spkr_ctl) {
+		pr_err("%s ioremap failure for addr %x",
+				__func__, LPASS_CSR_GP_IO_MUX_SPKR_CTL);
+		ret = -ENOMEM;
+		goto err;
+	}
+	pdata->vaddr_gpio_mux_mic_ctl =
+		ioremap(LPASS_CSR_GP_IO_MUX_MIC_CTL , 4);
+	if (!pdata->vaddr_gpio_mux_mic_ctl) {
+		pr_err("%s ioremap failure for addr %x",
+				__func__, LPASS_CSR_GP_IO_MUX_MIC_CTL);
+		ret = -ENOMEM;
+		goto err;
+	}
+
 	ret = of_property_read_u32(pdev->dev.of_node, card_dev_id, &id);
 	if (ret) {
 		dev_err(&pdev->dev,
@@ -2213,6 +2215,10 @@ static int msm8x16_asoc_machine_probe(struct platform_device *pdev)
 	return 0;
 err:
 	devm_kfree(&pdev->dev, pdata);
+	if (pdata->vaddr_gpio_mux_spkr_ctl)
+		iounmap(pdata->vaddr_gpio_mux_spkr_ctl);
+	if (pdata->vaddr_gpio_mux_mic_ctl)
+		iounmap(pdata->vaddr_gpio_mux_mic_ctl);
 	return ret;
 }
 
@@ -2221,6 +2227,10 @@ static int msm8x16_asoc_machine_remove(struct platform_device *pdev)
 	struct snd_soc_card *card = platform_get_drvdata(pdev);
 	struct msm8916_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
 
+	if (pdata->vaddr_gpio_mux_spkr_ctl)
+		iounmap(pdata->vaddr_gpio_mux_spkr_ctl);
+	if (pdata->vaddr_gpio_mux_mic_ctl)
+		iounmap(pdata->vaddr_gpio_mux_mic_ctl);
 	snd_soc_unregister_card(card);
 	mutex_destroy(&pdata->cdc_mclk_mutex);
 	return 0;

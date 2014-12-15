@@ -126,6 +126,30 @@ struct mdss_hw mdss_mdp_hw = {
 	.irq_handler = mdss_mdp_isr,
 };
 
+#define MDP_REG_BUS_VECTOR_ENTRY(ab_val, ib_val)		\
+	{						\
+		.src = MSM_BUS_MASTER_SPDM,		\
+		.dst = MSM_BUS_SLAVE_IMEM_CFG,		\
+		.ab = (ab_val),				\
+		.ib = (ib_val),				\
+	}
+
+#define SZ_37_5M (37500000 * 8)
+#define SZ_75M (75000000 * 8)
+
+static struct msm_bus_vectors mdp_reg_bus_vectors[] = {
+	MDP_REG_BUS_VECTOR_ENTRY(0, 0),
+	MDP_REG_BUS_VECTOR_ENTRY(0, SZ_37_5M),
+	MDP_REG_BUS_VECTOR_ENTRY(0, SZ_75M),
+};
+static struct msm_bus_paths mdp_reg_bus_usecases[ARRAY_SIZE(
+		mdp_reg_bus_vectors)];
+static struct msm_bus_scale_pdata mdp_reg_bus_scale_table = {
+	.usecase = mdp_reg_bus_usecases,
+	.num_usecases = ARRAY_SIZE(mdp_reg_bus_usecases),
+	.name = "mdss_reg",
+};
+
 static DEFINE_SPINLOCK(mdss_lock);
 struct mdss_hw *mdss_irq_handlers[MDSS_MAX_HW_BLK];
 
@@ -367,6 +391,9 @@ EXPORT_SYMBOL(mdss_disable_irq_nosync);
 
 static int mdss_mdp_bus_scale_register(struct mdss_data_type *mdata)
 {
+	struct msm_bus_scale_pdata *reg_bus_pdata;
+	int i;
+
 	if (!mdata->bus_hdl) {
 		mdata->bus_hdl =
 			msm_bus_scale_register_client(mdata->bus_scale_table);
@@ -378,6 +405,24 @@ static int mdss_mdp_bus_scale_register(struct mdss_data_type *mdata)
 		pr_debug("register bus_hdl=%x\n", mdata->bus_hdl);
 	}
 
+	if (!mdata->reg_bus_hdl) {
+		reg_bus_pdata = &mdp_reg_bus_scale_table;
+		for (i = 0; i < reg_bus_pdata->num_usecases; i++) {
+			mdp_reg_bus_usecases[i].num_paths = 1;
+			mdp_reg_bus_usecases[i].vectors =
+				&mdp_reg_bus_vectors[i];
+		}
+
+		mdata->reg_bus_hdl =
+			msm_bus_scale_register_client(reg_bus_pdata);
+		if (!mdata->reg_bus_hdl) {
+			/* Continue without reg_bus scaling */
+			pr_warn("reg_bus_client register failed\n");
+		} else
+			pr_debug("register reg_bus_hdl=%x\n",
+					mdata->reg_bus_hdl);
+	}
+
 	return mdss_bus_scale_set_quota(MDSS_HW_MDP, AB_QUOTA, 0, IB_QUOTA);
 }
 
@@ -387,6 +432,13 @@ static void mdss_mdp_bus_scale_unregister(struct mdss_data_type *mdata)
 
 	if (mdata->bus_hdl)
 		msm_bus_scale_unregister_client(mdata->bus_hdl);
+
+	pr_debug("unregister reg_bus_hdl=%x\n", mdata->reg_bus_hdl);
+
+	if (mdata->reg_bus_hdl) {
+		msm_bus_scale_unregister_client(mdata->reg_bus_hdl);
+		mdata->reg_bus_hdl = 0;
+	}
 }
 
 int mdss_mdp_bus_scale_set_quota(u64 ab_quota_rt, u64 ab_quota_nrt,
@@ -714,14 +766,18 @@ int mdss_iommu_ctrl(int enable)
 
 	if (enable) {
 
-		if (mdata->iommu_ref_cnt == 0)
+		if (mdata->iommu_ref_cnt == 0) {
+			mdss_bus_scale_set_quota(MDSS_HW_IOMMU, SZ_1M, 0, SZ_1M);
 			rc = mdss_iommu_attach(mdata);
+		}
 		mdata->iommu_ref_cnt++;
 	} else {
 		if (mdata->iommu_ref_cnt) {
 			mdata->iommu_ref_cnt--;
-			if (mdata->iommu_ref_cnt == 0)
+			if (mdata->iommu_ref_cnt == 0) {
 				rc = mdss_iommu_dettach(mdata);
+				mdss_bus_scale_set_quota(MDSS_HW_IOMMU, 0, 0, 0);
+			}
 		} else {
 			pr_err("unbalanced iommu ref\n");
 		}
@@ -2485,6 +2541,8 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 		"qcom,mdss-has-decimation");
 	mdata->has_no_lut_read = of_property_read_bool(pdev->dev.of_node,
 		"qcom,mdss-no-lut-read");
+	mdata->needs_hist_vote = !(of_property_read_bool(pdev->dev.of_node,
+		"qcom,mdss-no-hist-vote"));
 	wfd_data = of_get_property(pdev->dev.of_node,
 					"qcom,mdss-wfd-mode", NULL);
 	if (wfd_data) {
@@ -2551,6 +2609,16 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 	mdata->ib_factor_overlap.denom = mdata->ib_factor.denom;
 	mdss_mdp_parse_dt_fudge_factors(pdev, "qcom,mdss-ib-factor-overlap",
 		&mdata->ib_factor_overlap);
+
+	/*
+	 * 1x factor on ib_factor_cmd as default value. This value is
+	 * experimentally determined and should be tuned in device
+	 * tree
+	 */
+	mdata->ib_factor_cmd.numer = 1;
+	mdata->ib_factor_cmd.denom = 1;
+	mdss_mdp_parse_dt_fudge_factors(pdev, "qcom,mdss-ib-factor-cmd",
+		&mdata->ib_factor_cmd);
 
 	mdata->clk_factor.numer = 1;
 	mdata->clk_factor.denom = 1;
