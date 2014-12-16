@@ -984,10 +984,12 @@ static int msm_isp_init_isp_buf_mgr(
 		pr_err("vfe non secure get handled failed\n");
 		goto get_handle_error1;
 	}
-	rc = cam_smmu_get_handle("vfe_secure", &buf_mgr->sec_iommu_hdl);
-	if (rc < 0) {
-		pr_err("vfe secure get handled failed\n");
-		goto get_handle_error2;
+	if (buf_mgr->num_iommu_secure_ctx) {
+		rc = cam_smmu_get_handle("vfe_secure", &buf_mgr->sec_iommu_hdl);
+		if (rc < 0) {
+			pr_err("vfe secure get handled failed\n");
+			goto get_handle_error2;
+		}
 	}
 	buf_mgr->buf_handle_cnt = 0;
 	buf_mgr->pagefault_debug = 0;
@@ -1017,8 +1019,11 @@ static int msm_isp_deinit_isp_buf_mgr(
 		cam_smmu_ops(buf_mgr->ns_iommu_hdl, CAM_SMMU_DETACH);
 	else
 		cam_smmu_ops(buf_mgr->sec_iommu_hdl, CAM_SMMU_DETACH);
+
 	cam_smmu_destroy_handle(buf_mgr->ns_iommu_hdl);
-	cam_smmu_destroy_handle(buf_mgr->sec_iommu_hdl);
+	if (buf_mgr->num_iommu_secure_ctx)
+		cam_smmu_destroy_handle(buf_mgr->sec_iommu_hdl);
+
 	return 0;
 }
 
