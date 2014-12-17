@@ -1679,25 +1679,6 @@ static int msm_cpp_cfg_frame(struct cpp_device *cpp_dev,
 			pr_err("invalid fw version %08x", cpp_dev->fw_version);
 			goto phyaddr_err;
 		}
-
-		for (i = 0; i < num_stripes; i++) {
-
-			cpp_frame_msg[stripe_base + 8 + i * 48] +=
-				(uint32_t) in_phyaddr;
-			cpp_frame_msg[stripe_base + 14 + i * 48] +=
-				(uint32_t) tnr_scratch_buffer0;
-			cpp_frame_msg[stripe_base + 20 + i * 48] +=
-				(uint32_t) out_phyaddr0;
-			cpp_frame_msg[stripe_base + 21 + i * 48] +=
-				(uint32_t) out_phyaddr1;
-			cpp_frame_msg[stripe_base + 22 + i * 48] +=
-				(uint32_t) out_phyaddr0;
-			cpp_frame_msg[stripe_base + 23 + i * 48] +=
-				(uint32_t) out_phyaddr1;
-			cpp_frame_msg[stripe_base + 30 + i * 48] +=
-				(uint32_t) tnr_scratch_buffer1;
-		}
-
 		cpp_frame_msg[10] = out_phyaddr0 - in_phyaddr;
 	}
 
