@@ -2542,6 +2542,15 @@ static int ipa_init(const struct ipa_plat_drv_res *resource_p,
 	}
 
 	ipa_debugfs_init();
+
+	result = ipa_uc_interface_init();
+	if (result)
+		IPAERR(":ipa Uc interface init failed (%d)\n", -result);
+	else
+		IPADBG(":ipa Uc interface init ok\n");
+
+	ipa_register_panic_hdlr();
+
 	ipa_dec_client_disable_clks();
 
 	pr_info("IPA driver initialization was successful.\n");

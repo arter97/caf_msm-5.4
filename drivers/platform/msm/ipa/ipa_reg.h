@@ -335,6 +335,13 @@ Common Registers
 #define IPA_DEBUG_TX_IDLE_BMSK (0xFF)
 
 #define BAM_P_RST_n(n) (0xfd4c5004 + 0x1000 * (n))
+
+#define IPA_IRQ_EE_UC_n_OFFS(n) (0x0000101c + 0x1000 * (n))
+#define IPA_IRQ_EE_UC_n_RMSK 0x1
+#define IPA_IRQ_EE_UC_n_MAXn 3
+#define IPA_IRQ_EE_UC_n_INT_BMSK 0x1
+#define IPA_IRQ_EE_UC_n_INT_SHFT 0x0
+
 #endif
 
 
