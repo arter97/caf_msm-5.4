@@ -120,6 +120,8 @@ int chk_config_get_id(void)
 		return MSM8992_TOOLS_ID;
 	case MSM_CPU_THULIUM:
 		return MSM_THULIUM_TOOLS_ID;
+	case MSM_CPU_TELLURIUM:
+		return MSMTELLURIUM_TOOLS_ID;
 	default:
 		if (driver->use_device_tree) {
 			if (machine_is_msm8974())
