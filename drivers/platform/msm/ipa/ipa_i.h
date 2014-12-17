@@ -1193,5 +1193,6 @@ int ipa_uc_send_cmd(u32 cmd, u32 opcode, u32 expected_status,
 void ipa_register_panic_hdlr(void);
 void ipa_uc_register_handlers(enum ipa_hw_features feature,
 			      struct ipa_uc_hdlrs *hdlrs);
+int ipa_uc_notify_clk_state(bool enabled);
 
 #endif /* _IPA_I_H_ */
