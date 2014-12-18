@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -28,10 +28,10 @@
 #include "kgsl_cffdump.h"
 #include "kgsl_sharedmem.h"
 #include "kgsl_iommu.h"
-#include "kgsl_compat.h"
 #include "kgsl_trace.h"
 
 #include "adreno.h"
+#include "adreno_compat.h"
 #include "adreno_pm4types.h"
 #include "adreno_trace.h"
 
