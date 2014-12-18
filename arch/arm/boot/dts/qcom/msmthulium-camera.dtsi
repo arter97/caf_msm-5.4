@@ -403,7 +403,7 @@
 		reg-names = "irqrouter";
 	};
 
-	qcom,cpp@a04000 {
+	cpp: qcom,cpp@a04000 {
 		cell-index = <0>;
 		compatible = "qcom,cpp";
 		reg = <0xa04000 0x100>,
