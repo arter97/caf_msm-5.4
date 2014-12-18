@@ -1440,7 +1440,7 @@ static struct branch_clk camss_cpp_ahb_clk = {
 
 static struct branch_clk camss_cpp_clk = {
 	.cbcr_reg = MMSS_CAMSS_CPP_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_base,
 	.c = {
 		.dbg_name = "camss_cpp_clk",
@@ -1806,7 +1806,7 @@ static struct branch_clk camss_ispif_ahb_clk = {
 
 static struct branch_clk camss_jpeg0_clk = {
 	.cbcr_reg = MMSS_CAMSS_JPEG0_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_base,
 	.c = {
 		.dbg_name = "camss_jpeg0_clk",
@@ -1818,7 +1818,7 @@ static struct branch_clk camss_jpeg0_clk = {
 
 static struct branch_clk camss_jpeg2_clk = {
 	.cbcr_reg = MMSS_CAMSS_JPEG2_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_base,
 	.c = {
 		.dbg_name = "camss_jpeg2_clk",
@@ -1853,7 +1853,7 @@ static struct branch_clk camss_jpeg_axi_clk = {
 
 static struct branch_clk camss_jpeg_dma_clk = {
 	.cbcr_reg = MMSS_CAMSS_JPEG_DMA_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_base,
 	.c = {
 		.dbg_name = "camss_jpeg_dma_clk",
@@ -2851,7 +2851,7 @@ static struct branch_clk video_axi_clk = {
 
 static struct branch_clk video_core_clk = {
 	.cbcr_reg = MMSS_VIDEO_CORE_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_base,
 	.c = {
 		.dbg_name = "video_core_clk",
