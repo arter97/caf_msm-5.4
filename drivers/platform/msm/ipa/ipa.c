@@ -1562,6 +1562,7 @@ void _ipa_enable_clks_v2_0(void)
 		clk_enable(ipa_clk);
 		IPADBG("curr_ipa_clk_rate=%d", ipa_ctx->curr_ipa_clk_rate);
 		clk_set_rate(ipa_clk, ipa_ctx->curr_ipa_clk_rate);
+		ipa_uc_notify_clk_state(true);
 	} else {
 		WARN_ON(1);
 	}
@@ -1663,6 +1664,7 @@ void _ipa_disable_clks_v1(void)
 void _ipa_disable_clks_v2_0(void)
 {
 	IPADBG("disabling gcc_ipa_clk\n");
+	ipa_uc_notify_clk_state(false);
 	if (ipa_clk)
 		clk_disable_unprepare(ipa_clk);
 	else
