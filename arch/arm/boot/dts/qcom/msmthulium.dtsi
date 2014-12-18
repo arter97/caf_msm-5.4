@@ -1300,6 +1300,12 @@
 		compatible = "qcom,msm-ssc-sensors";
 		status = "ok";
 	};
+
+	cpu-pmu {
+		compatible = "arm,armv8-pmuv3";
+		qcom,irq-is-percpu;
+		interrupts = <1 7 4>;
+	};
 };
 
 &gdsc_venus {
