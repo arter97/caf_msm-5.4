@@ -153,6 +153,8 @@ enum dsi_pm_type {
 #define DSI_INTR_CMD_MDP_DONE		BIT(8)
 #define DSI_INTR_CMD_DMA_DONE_MASK	BIT(1)
 #define DSI_INTR_CMD_DMA_DONE		BIT(0)
+/* Update this if more interrupt masks are added in future chipsets */
+#define DSI_INTR_TOTAL_MASK		0x2222AA02
 
 #define DSI_CMD_TRIGGER_NONE		0x0	/* mdp trigger */
 #define DSI_CMD_TRIGGER_TE		0x02
@@ -164,6 +166,9 @@ enum dsi_pm_type {
 #define DSI_MDP_TERM    BIT(8)
 #define DSI_BTA_TERM    BIT(1)
 #define DSI_CMD_TERM    BIT(0)
+
+#define DSI_DATA_LANES_STOP_STATE	0xF
+#define DSI_CLK_LANE_STOP_STATE		BIT(4)
 
 extern struct device dsi_dev;
 extern u32 dsi_irq;
@@ -255,6 +260,7 @@ enum {
 #define DSI_EV_PLL_UNLOCKED		0x0001
 #define DSI_EV_MDP_FIFO_UNDERFLOW	0x0002
 #define DSI_EV_DSI_FIFO_EMPTY		0x0004
+#define DSI_EV_DLNx_FIFO_OVERFLOW	0x0008
 #define DSI_EV_MDP_BUSY_RELEASE		0x80000000
 
 struct mdss_dsi_ctrl_pdata {
@@ -303,7 +309,7 @@ struct mdss_dsi_ctrl_pdata {
 	struct dss_module_power power_data[DSI_MAX_PM];
 	u32 dsi_irq_mask;
 	struct mdss_hw *dsi_hw;
-	struct mdss_panel_recovery *recovery;
+	struct mdss_intf_recovery *recovery;
 
 	struct dsi_panel_cmds on_cmds;
 	struct dsi_panel_cmds off_cmds;
@@ -408,6 +414,9 @@ int mdss_dsi_panel_init(struct device_node *node,
 int mdss_panel_get_dst_fmt(u32 bpp, char mipi_mode, u32 pixel_packing,
 				char *dst_format);
 void mdss_dsi_dln0_phy_err(struct mdss_dsi_ctrl_pdata *ctrl);
+int mdss_dsi_register_recovery_handler(struct mdss_dsi_ctrl_pdata *ctrl,
+		struct mdss_intf_recovery *recovery);
+
 static inline const char *__mdss_dsi_pm_name(enum dsi_pm_type module)
 {
 	switch (module) {
@@ -476,6 +485,16 @@ static inline bool mdss_dsi_ulps_feature_enabled(
 	struct mdss_panel_data *pdata)
 {
 	return pdata->panel_info.ulps_feature_enabled;
+}
+
+static inline bool mdss_dsi_split_display_enabled(void)
+{
+        /*
+         * currently the only supported mode is split display.
+         * So, if both controllers are initialized, then assume that
+         * split display mode is enabled.
+         */
+        return ctrl_list[DSI_CTRL_MASTER] && ctrl_list[DSI_CTRL_SLAVE];
 }
 
 #endif /* MDSS_DSI_H */
