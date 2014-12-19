@@ -282,6 +282,49 @@
 		qcom,clock-rates = <0 0 320000000 0 0 0 0>;
 	};
 
+	qcom,cam_smmu {
+		compatible = "qcom,msm-cam-smmu";
+
+		msm_cam_smmu_cb1 {
+			compatible = "qcom,msm-cam-smmu-cb";
+			iommus = <&vfe_smmu 0>,
+					<&vfe_smmu 1>,
+					<&vfe_smmu 2>,
+					<&vfe_smmu 3>;
+			label = "vfe";
+		};
+
+		msm_cam_smmu_cb2 {
+			compatible = "qcom,msm-cam-smmu-cb";
+			iommus = <&cpp_fd_smmu 0>;
+			label = "cpp";
+		};
+
+		msm_cam_smmu_cb3 {
+			compatible = "qcom,msm-cam-smmu-cb";
+			iommus = <&cpp_fd_smmu 1>;
+			label = "camera_fd";
+		};
+
+		msm_cam_smmu_cb4 {
+			compatible = "qcom,msm-cam-smmu-cb";
+			iommus = <&jpeg_smmu 1>;
+			label = "jpeg_enc";
+		};
+
+		msm_cam_smmu_cb5 {
+			compatible = "qcom,msm-cam-smmu-cb";
+			iommus = <&jpeg_smmu 0>;
+			label = "jpeg_dma";
+		};
+
+		msm_cam_smmu_cb6 {
+			compatible = "qcom,msm-cam-smmu-cb";
+			iommus = <&jpeg_smmu 2>;
+			label = "jpeg_dec";
+		};
+	};
+
 	qcom,jpeg@a1c000 {
 		cell-index = <0>;
 		compatible = "qcom,jpeg";
