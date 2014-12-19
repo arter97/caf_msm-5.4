@@ -119,7 +119,6 @@ enum mdp_wfd_blk_type {
 	MDSS_MDP_WFD_DEDICATED,
 };
 
-
 /**
  * enum mdp_commit_stage_type - Indicate different commit stages
  *
