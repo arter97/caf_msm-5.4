@@ -888,7 +888,7 @@ static int msm_fd_g_ctrl(struct file *file, void *fh, struct v4l2_control *a)
 		a->value = ctx->format.size->work_size;
 		break;
 	case V4L2_CID_FD_WORK_MEMORY_FD:
-		if (!ctx->work_buf.fd == -1)
+		if (ctx->work_buf.fd == -1)
 			return -EINVAL;
 
 		a->value = ctx->work_buf.fd;
