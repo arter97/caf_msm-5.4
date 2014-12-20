@@ -1421,7 +1421,12 @@ static int mdp3_histogram_stop(struct mdp3_session_data *session,
 		goto histogram_stop_err;
 	}
 
-	mdp3_clk_enable(1, 0);
+	ret = mdp3_clk_enable(1, 0);
+	if (ret) {
+		pr_err("failure enabling clocks to stop histogram %d\n", ret);
+		ret = -EPERM;
+		goto histogram_stop_err;
+	}
 	ret = session->dma->histo_op(session->dma, MDP3_DMA_HISTO_OP_CANCEL);
 	mdp3_clk_enable(0, 0);
 	if (ret)
@@ -1461,7 +1466,11 @@ static int mdp3_histogram_collect(struct mdp3_session_data *session,
 
 	mutex_unlock(&session->histo_lock);
 
-	mdp3_clk_enable(1, 0);
+	ret = mdp3_clk_enable(1, 0);
+	if (ret) {
+		pr_err("failure enabling clocks for hist collect %d\n", ret);
+		return -EPERM;
+	}
 	ret = session->dma->get_histo(session->dma);
 	mdp3_clk_enable(0, 0);
 	if (ret) {
@@ -1819,7 +1828,11 @@ static int mdp3_ctrl_lut_update_locked(struct msm_fb_data_type *mfd,
 		return -EPERM;
 	}
 
-	mdp3_clk_enable(1, 0);
+	rc = mdp3_clk_enable(1, 0);
+	if (rc) {
+		pr_err("Failed enabling clocks for lut update %d\n", rc);
+		return -EPERM;
+	}
 	rc = dma->config_lut(dma, &lut_config, cmap);
 	mdp3_clk_enable(0, 0);
 	if (rc)
