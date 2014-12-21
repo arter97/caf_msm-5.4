@@ -1222,7 +1222,7 @@
 
 	ufs1: ufshc@fc594000 {
 			compatible = "qcom,ufshc";
-			reg = <0xfc594000 0x2500>;
+			reg = <0xfc594000 0x2500>, <0xfd512074 0x4>;
 			interrupts = <0 265 0>;
 			phys = <&ufsphy1>;
 			phy-names = "ufsphy";
