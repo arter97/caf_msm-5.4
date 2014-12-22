@@ -4030,6 +4030,117 @@ static void __init apq8064_allocate_memory_regions(void)
 	apq8064_allocate_fb_region();
 }
 
+
+#ifdef CONFIG_BOOT_TIME_MARKER
+#define BOOT_MARKER_MAX_LEN 20
+#define MAX_PRINT_LEN 50
+
+struct boot_marker {
+	char marker_name[BOOT_MARKER_MAX_LEN];
+	unsigned long int timer_value;
+	struct list_head list;
+};
+
+static struct boot_marker boot_marker_list;
+
+static int print_boot_markers(char *page, char **start,
+			off_t off, int count,
+			int *eof, void *data)
+{
+	char *p = page;
+	struct boot_marker *marker;
+
+	list_for_each_entry(marker, &boot_marker_list.list, list) {
+		p += snprintf(p, MAX_PRINT_LEN, "%-22s:%ld.%03ld seconds\n",
+			marker->marker_name,
+			marker->timer_value/TIMER_KHZ,
+			(((marker->timer_value % TIMER_KHZ)
+			* 1000) / TIMER_KHZ));
+	}
+
+	return p-page;
+}
+
+static int proc_write_response(struct file *file,
+				const char *buffer,
+				unsigned long count,
+				void *data)
+{
+	int value_len;
+	char value[BOOT_MARKER_MAX_LEN] = {0};
+
+	if (copy_from_user(value, buffer, count))
+		return -EFAULT;
+
+	value_len = (count < BOOT_MARKER_MAX_LEN) ? count :
+			 (BOOT_MARKER_MAX_LEN - 1);
+
+	if (value_len > 0)
+		value[value_len] = '\0';
+
+	place_marker(value);
+	return value_len;
+}
+
+int init_marker_proc_fs(void)
+{
+	static struct proc_dir_entry *proc_parent;
+	static struct proc_dir_entry *proc_write_entry;
+	static struct proc_dir_entry *proc_read_entry;
+
+	proc_parent = proc_mkdir("bootkpi", NULL);
+	if (!proc_parent) {
+		pr_err("Error creating proc entry\n");
+		return -ENOMEM;
+	}
+
+	proc_write_entry = create_proc_read_entry("kpi_values", 0666,
+						proc_parent,
+						print_boot_markers, NULL);
+	if (!proc_write_entry) {
+		pr_err("Error creating proc entry\n");
+		return -ENOMEM;
+	}
+
+	/*
+	* create proc entry marker-entry for
+	* reading a init marker keyword
+	*/
+	proc_read_entry = create_proc_entry("marker_entry", 0666, proc_parent);
+	if (proc_read_entry == NULL)
+		return -ENOMEM;
+
+	proc_read_entry->read_proc = NULL;
+	proc_read_entry->write_proc = proc_write_response;
+
+	INIT_LIST_HEAD(&boot_marker_list.list);
+
+	return 0;
+}
+
+void place_marker(char *name)
+{
+	struct boot_marker *new_boot_marker;
+	unsigned long int timer_value = msm_timer_get_sclk_ticks();
+
+	pr_debug("%-22s:%ld.%03ld seconds\n", name,
+			timer_value/TIMER_KHZ,
+			((timer_value % TIMER_KHZ)
+			* 1000) / TIMER_KHZ);
+
+	new_boot_marker = kmalloc(sizeof(*new_boot_marker), GFP_KERNEL);
+	strlcpy(new_boot_marker->marker_name, name,
+		sizeof(new_boot_marker->marker_name));
+	new_boot_marker->timer_value = timer_value;
+	INIT_LIST_HEAD(&new_boot_marker->list);
+	list_add_tail(&(new_boot_marker->list), &(boot_marker_list.list));
+}
+#else
+void place_marker(char *name)
+{
+}
+#endif
+
 static void __init apq8064_cdp_init(void)
 {
 	if (meminfo_init(SYS_MEMORY, SZ_256M) < 0)
