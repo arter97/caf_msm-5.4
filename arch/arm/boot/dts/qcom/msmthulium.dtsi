@@ -606,6 +606,7 @@
 			<&clock_gcc clk_gcc_ufs_tx_symbol_0_clk>,
 			<&clock_gcc clk_gcc_ufs_rx_symbol_1_clk>;
 
+		lanes-per-direction = <1>;
 		qcom,msm-bus,name = "ufs1";
 		qcom,msm-bus,num-cases = <12>;
 		qcom,msm-bus,num-paths = <2>;
