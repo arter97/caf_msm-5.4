@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -124,11 +124,6 @@
 
 enum adreno_gpurev {
 	ADRENO_REV_UNKNOWN = 0,
-	ADRENO_REV_A200 = 200,
-	ADRENO_REV_A203 = 203,
-	ADRENO_REV_A205 = 205,
-	ADRENO_REV_A220 = 220,
-	ADRENO_REV_A225 = 225,
 	ADRENO_REV_A304 = 304,
 	ADRENO_REV_A305 = 305,
 	ADRENO_REV_A305C = 306,
