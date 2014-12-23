@@ -209,6 +209,7 @@
 		qcom,usb-bam-num-pipes = <16>;
 		qcom,ignore-core-reset-ack;
 		qcom,disable-clk-gating;
+		qcom,enable-hsusb-bam-on-boot;
 
 		qcom,pipe0 {
 			label = "hsusb-ipa-out-0";
@@ -221,7 +222,6 @@
 			qcom,src-bam-pipe-index = <1>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
-			qcom,reset-bam-on-connect;
 		};
 		qcom,pipe1 {
 			label = "hsusb-ipa-in-0";
@@ -234,7 +234,6 @@
 			qcom,dst-bam-pipe-index = <0>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
-			qcom,reset-bam-on-connect;
 		};
 		qcom,pipe2 {
 			label = "hsusb-qdss-in-0";
@@ -329,7 +328,6 @@
 			qcom,src-bam-pipe-index = <5>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
-			qcom,reset-bam-on-connect;
 		};
 
 		qcom,pipe9 {
@@ -343,7 +341,6 @@
 			qcom,dst-bam-pipe-index = <4>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
-			qcom,reset-bam-on-connect;
 		};
 
 		qcom,pipe10 {
@@ -357,7 +354,6 @@
 			qcom,src-bam-pipe-index = <7>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
-			qcom,reset-bam-on-connect;
 		};
 
 		qcom,pipe11 {
@@ -371,7 +367,6 @@
 			qcom,dst-bam-pipe-index = <6>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
-			qcom,reset-bam-on-connect;
 		};
 
 		qcom,pipe12 {
@@ -385,7 +380,6 @@
 			qcom,src-bam-pipe-index = <8>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
-			qcom,reset-bam-on-connect;
 		};
 
 		qcom,pipe13 {
@@ -399,7 +393,6 @@
 			qcom,dst-bam-pipe-index = <9>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
-			qcom,reset-bam-on-connect;
 		};
 	};
 
