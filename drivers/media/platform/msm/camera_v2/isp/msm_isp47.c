@@ -1970,7 +1970,7 @@ static struct v4l2_subdev_internal_ops msm_vfe47_internal_ops = {
 
 struct msm_vfe_hardware_info vfe47_hw_info = {
 	.num_iommu_ctx = 1,
-	.num_iommu_secure_ctx = 1,
+	.num_iommu_secure_ctx = 0,
 	.vfe_clk_idx = VFE47_CLK_IDX,
 	.vfe_ops = {
 		.irq_ops = {
