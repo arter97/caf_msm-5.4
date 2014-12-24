@@ -139,7 +139,7 @@ int mdp4_overlay_writeback_on(struct platform_device *pdev)
 		pipe->mixer_stage  = MDP4_MIXER_STAGE_BASE;
 		pipe->mixer_num  = MDP4_MIXER2;
 		pipe->src_format = MDP_ARGB_8888;
-		mdp4_overlay_panel_mode(MDP4_PANEL_WRITEBACK);
+		mdp4_overlay_panel_mode(MDP4_PANEL_WRITEBACK, pipe->mixer_num);
 		ret = mdp4_overlay_format2pipe(pipe);
 		if (ret < 0)
 			pr_info("%s: format2type failed\n", __func__);
