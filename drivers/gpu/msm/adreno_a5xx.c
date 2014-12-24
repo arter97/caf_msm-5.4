@@ -651,6 +651,10 @@ static unsigned int a5xx_register_offsets[ADRENO_REG_REGISTER_MAX] = {
 				A5XX_RBBM_ALWAYSON_COUNTER_LO),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_ALWAYSON_COUNTER_HI,
 				A5XX_RBBM_ALWAYSON_COUNTER_HI),
+	ADRENO_REG_DEFINE(ADRENO_REG_VBIF_XIN_HALT_CTRL0,
+				A5XX_VBIF_XIN_HALT_CTRL0),
+	ADRENO_REG_DEFINE(ADRENO_REG_VBIF_XIN_HALT_CTRL1,
+				A5XX_VBIF_XIN_HALT_CTRL1),
 
 };
 
@@ -800,5 +804,6 @@ struct adreno_gpudev adreno_a5xx_gpudev = {
 	.microcode_read = a5xx_microcode_read,
 	.microcode_load = a5xx_microcode_load,
 	.perfcounters = &a5xx_perfcounters,
+	.vbif_xin_halt_ctrl0_mask = A5XX_VBIF_XIN_HALT_CTRL0_MASK,
 };
 

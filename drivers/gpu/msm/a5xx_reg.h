@@ -459,6 +459,10 @@
 #define A5XX_VBIF_IN_RD_LIM_CONF0          0x302C
 #define A5XX_VBIF_IN_RD_LIM_CONF1          0x302D
 
+#define A5XX_VBIF_XIN_HALT_CTRL0	   0x3080
+#define A5XX_VBIF_XIN_HALT_CTRL0_MASK	   0xF
+#define A5XX_VBIF_XIN_HALT_CTRL1	   0x3081
+
 #define A5XX_VBIF_PERF_CNT_SEL0            0x30D0
 #define A5XX_VBIF_PERF_CNT_SEL1            0x30D1
 #define A5XX_VBIF_PERF_CNT_SEL2            0x30D2
