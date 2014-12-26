@@ -308,7 +308,7 @@ int mdss_mdp_overlay_req_check(struct msm_fb_data_type *mfd,
 		src_w = req->src_rect.w >> req->horz_deci;
 		src_h = req->src_rect.h >> req->vert_deci;
 
-		if (src_w > mdata->max_mixer_width) {
+		if (src_w > mdata->max_pipe_width) {
 			pr_err("invalid source width=%d HDec=%d\n",
 					req->src_rect.w, req->horz_deci);
 			return -EINVAL;
@@ -1366,9 +1366,11 @@ static void __overlay_kickoff_requeue(struct msm_fb_data_type *mfd)
 	mdss_mdp_display_commit(ctl, NULL, NULL);
 	mdss_mdp_display_wait4comp(ctl);
 
-	ATRACE_BEGIN("sspp_programming");
+	/* unstage any recovery pipes and re-queue used pipes */
+	mdss_mdp_mixer_unstage_all(ctl->mixer_left);
+	mdss_mdp_mixer_unstage_all(ctl->mixer_right);
+
 	__overlay_queue_pipes(mfd);
-	ATRACE_END("sspp_programming");
 
 	mdss_mdp_display_commit(ctl, NULL,  NULL);
 	mdss_mdp_display_wait4comp(ctl);
@@ -1440,6 +1442,7 @@ int mdss_mdp_overlay_kickoff(struct msm_fb_data_type *mfd,
 	}
 
 	mutex_lock(&mdp5_data->ov_lock);
+	ctl->bw_pending = 0;
 	ret = mdss_mdp_overlay_start(mfd);
 	if (ret) {
 		pr_err("unable to start overlay %d (%d)\n", mfd->index, ret);
@@ -1555,19 +1558,25 @@ int mdss_mdp_overlay_kickoff(struct msm_fb_data_type *mfd,
 
 	if (mfd->panel.type == WRITEBACK_PANEL) {
 		ATRACE_BEGIN("wb_kickoff");
-		ret = mdss_mdp_wb_kickoff(mfd);
+		if (!need_cleanup) {
+			commit_cb.commit_cb_fnc = mdss_mdp_commit_cb;
+			commit_cb.data = mfd;
+			ret = mdss_mdp_wb_kickoff(mfd, &commit_cb);
+		} else {
+			mdss_mdp_wb_kickoff(mfd, NULL);
+		}
 		ATRACE_END("wb_kickoff");
-	} else if (!need_cleanup) {
-		ATRACE_BEGIN("display_commit");
-		commit_cb.commit_cb_fnc = mdss_mdp_commit_cb;
-		commit_cb.data = mfd;
-		ret = mdss_mdp_display_commit(mdp5_data->ctl, NULL,
-			&commit_cb);
-		ATRACE_END("display_commit");
 	} else {
 		ATRACE_BEGIN("display_commit");
-		ret = mdss_mdp_display_commit(mdp5_data->ctl, NULL,
-			NULL);
+		if (!need_cleanup) {
+			commit_cb.commit_cb_fnc = mdss_mdp_commit_cb;
+			commit_cb.data = mfd;
+			ret = mdss_mdp_display_commit(mdp5_data->ctl, NULL,
+				&commit_cb);
+		} else  {
+			ret = mdss_mdp_display_commit(mdp5_data->ctl, NULL,
+				NULL);
+		}
 		ATRACE_END("display_commit");
 	}
 
@@ -2031,9 +2040,13 @@ static void mdss_mdp_overlay_pan_display(struct msm_fb_data_type *mfd)
 	buf->num_planes = 1;
 	mdss_mdp_pipe_unmap(pipe);
 
-	if (fbi->var.xres > mdata->max_mixer_width || is_split_lm(mfd)) {
+	if (fbi->var.xres > mdata->max_pipe_width || is_split_lm(mfd)) {
+		/*
+		 * TODO: Need to revisit the function for panels with width more
+		 * than max_pipe_width and less than max_mixer_width.
+		 */
 		ret = mdss_mdp_overlay_get_fb_pipe(mfd, &pipe,
-					   MDSS_MDP_MIXER_MUX_RIGHT);
+				MDSS_MDP_MIXER_MUX_RIGHT);
 		if (ret) {
 			pr_err("unable to allocate right base pipe\n");
 			goto pan_display_error;
@@ -2364,7 +2377,116 @@ static ssize_t mdss_mdp_dyn_pu_store(struct device *dev,
 
 	return count;
 }
+static ssize_t mdss_cmd_autorefresh_enabled(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	ssize_t ret = 0;
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+	struct mdss_mdp_ctl *ctl;
 
+	if (!mfd) {
+		pr_err("Invalid mfd structure\n");
+		return -EINVAL;
+	}
+
+	ctl = mfd_to_ctl(mfd);
+	if (!ctl) {
+		pr_err("Invalid ctl structure\n");
+		return -EINVAL;
+	}
+
+
+	if (mfd->panel_info->type != MIPI_CMD_PANEL) {
+		pr_err("Panel doesnt support autorefresh\n");
+		ret = -EINVAL;
+	} else {
+		ret = snprintf(buf, PAGE_SIZE, "%d\n",
+				ctl->autorefresh_frame_cnt);
+	}
+	return ret;
+}
+
+static inline int mdss_validate_autorefresh_param(int frame_cnt,
+		struct mdss_mdp_ctl *ctl)
+{
+	int rc = 0;
+
+	if (frame_cnt == ctl->autorefresh_frame_cnt) {
+		/* No parameters were changed */
+		rc = -EINVAL;
+		pr_debug("No change to autorefresh parameters\n");
+		goto no_change;
+	}
+
+	/* Check for correctness. Frame cnt length is 16bits */
+	if (frame_cnt < 0 || frame_cnt >= BIT(16)) {
+		rc = -EINVAL;
+		pr_err("Invalid frame_cnt=%d passed to autorefresh\n",
+				frame_cnt);
+		goto no_change;
+	}
+
+	pr_debug("Setting autorefresh_enable=%d frame_cnt=%d\n",
+			ctl->cmd_autorefresh_en,
+			frame_cnt);
+
+no_change:
+	return rc;
+}
+
+static ssize_t mdss_set_cmd_autorefresh(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t len)
+{
+	u32 data = 0;
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+	struct mdss_mdp_ctl *ctl;
+
+	if (!mfd) {
+		pr_err("Invalid mfd structure\n");
+		len = 0;
+		goto mode_fail;
+	}
+
+	ctl = mfd_to_ctl(mfd);
+	if (!ctl) {
+		pr_err("Invalid ctl structure\n");
+		len = 0;
+		goto mode_fail;
+	}
+
+	if (mfd->panel_info->type != MIPI_CMD_PANEL) {
+		pr_err("Panel doesnt support autorefresh\n");
+		len = 0;
+		goto mode_fail;
+	}
+
+	if (1 != sscanf(buf, "%d", &data)) {
+		pr_err("Not able to read video autorefresh value\n");
+	} else if (!mdss_validate_autorefresh_param(data, ctl)) {
+		if (ctl->autorefresh_frame_cnt) {
+			mfd->mdp_sync_pt_data.threshold = 2;
+			mfd->mdp_sync_pt_data.retire_threshold = 0;
+		} else {
+			mfd->mdp_sync_pt_data.threshold = 1;
+			mfd->mdp_sync_pt_data.retire_threshold = 1;
+		}
+		mdss_mdp_ctl_cmd_autorefresh_enable(ctl,
+				data);
+	}
+	pr_debug("Setting video autorefresh=%d cnt=%d\n",
+			ctl->cmd_autorefresh_en,
+			data);
+
+mode_fail:
+	return len;
+}
+
+
+static DEVICE_ATTR(msm_cmd_autorefresh_en, S_IRUGO | S_IWUSR,
+		mdss_cmd_autorefresh_enabled,
+		mdss_set_cmd_autorefresh);
 static DEVICE_ATTR(vsync_event, S_IRUGO, mdss_mdp_vsync_show_event, NULL);
 static DEVICE_ATTR(ad, S_IRUGO | S_IWUSR | S_IWGRP, mdss_mdp_ad_show,
 	mdss_mdp_ad_store);
@@ -2375,6 +2497,7 @@ static struct attribute *mdp_overlay_sysfs_attrs[] = {
 	&dev_attr_vsync_event.attr,
 	&dev_attr_ad.attr,
 	&dev_attr_dyn_pu.attr,
+	&dev_attr_msm_cmd_autorefresh_en.attr,
 	NULL,
 };
 

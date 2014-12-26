@@ -59,6 +59,7 @@
 
 #define AXI_HALT_TIMEOUT_US	0x4000
 #define AUTOSUSPEND_TIMEOUT_MS	200
+#define DEFAULT_MDP_PIPE_WIDTH 2048
 
 struct mdss_data_type *mdss_res;
 
@@ -169,6 +170,7 @@ static int mdss_mdp_parse_dt_prefill(struct platform_device *pdev);
 static int mdss_mdp_parse_dt_misc(struct platform_device *pdev);
 static int mdss_mdp_parse_dt_ad_cfg(struct platform_device *pdev);
 static int mdss_mdp_parse_dt_bus_scale(struct platform_device *pdev);
+static int mdss_mdp_parse_dt_ppb_off(struct platform_device *pdev);
 static int mdss_mdp_parse_dt_cdm(struct platform_device *pdev);
 
 /**
@@ -1093,9 +1095,13 @@ static void mdss_mdp_hw_rev_caps_init(struct mdss_data_type *mdata)
 	switch (mdata->mdp_rev) {
 	case MDSS_MDP_HW_REV_105:
 	case MDSS_MDP_HW_REV_109:
-	case MDSS_MDP_HW_REV_110:
 		mdss_set_quirk(mdata, MDSS_QUIRK_BWCPANIC);
 		mdata->max_target_zorder = 7; /* excluding base layer */
+		mdata->max_cursor_size = 128;
+		break;
+	case MDSS_MDP_HW_REV_110:
+		mdss_set_quirk(mdata, MDSS_QUIRK_BWCPANIC);
+		mdata->max_target_zorder = 4; /* excluding base layer */
 		mdata->max_cursor_size = 128;
 		break;
 	default:
@@ -1393,6 +1399,8 @@ static ssize_t mdss_mdp_show_capabilities(struct device *dev,
 		SPRINT("max_bandwidth_low=%u\n", mdata->max_bw_low);
 	if (mdata->max_bw_high)
 		SPRINT("max_bandwidth_high=%u\n", mdata->max_bw_high);
+	if (mdata->max_pipe_width)
+		SPRINT("max_pipe_width=%d\n", mdata->max_pipe_width);
 	if (mdata->max_mixer_width)
 		SPRINT("max_mixer_width=%d\n", mdata->max_mixer_width);
 	SPRINT("features=");
@@ -1754,6 +1762,10 @@ static int mdss_mdp_parse_dt(struct platform_device *pdev)
 		pr_err("Error in device tree : bus scale\n");
 		return rc;
 	}
+
+	rc = mdss_mdp_parse_dt_ppb_off(pdev);
+	if (rc)
+		pr_debug("Info in device tree: ppb offset not configured\n");
 
 	rc = mdss_mdp_parse_dt_cdm(pdev);
 	if (rc)
@@ -2817,6 +2829,12 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 	if (rc)
 		pr_debug("number of channels property not specified\n");
 
+	rc = of_property_read_u32(pdev->dev.of_node,
+			"qcom,max-pipe-width", &mdata->max_pipe_width);
+	if (rc) {
+		pr_debug("max pipe width not specified. Using default value\n");
+		mdata->max_pipe_width = DEFAULT_MDP_PIPE_WIDTH;
+	}
 	return 0;
 }
 
@@ -2858,6 +2876,31 @@ static int mdss_mdp_parse_dt_ad_cfg(struct platform_device *pdev)
 parse_done:
 	kfree(ad_offsets);
 	return rc;
+}
+
+static int mdss_mdp_parse_dt_ppb_off(struct platform_device *pdev)
+{
+	struct mdss_data_type *mdata = platform_get_drvdata(pdev);
+	u32 len, index;
+	const u32 *arr;
+	arr = of_get_property(pdev->dev.of_node, "qcom,mdss-ppb-off", &len);
+	if (arr) {
+		mdata->nppb = len / sizeof(u32);
+		mdata->ppb = devm_kzalloc(&mdata->pdev->dev,
+				sizeof(struct mdss_mdp_ppb) *
+				mdata->nppb, GFP_KERNEL);
+
+		if (mdata->ppb == NULL)
+			return -ENOMEM;
+
+		for (index = 0; index <  mdata->nppb; index++) {
+			mdata->ppb[index].ctl_off = be32_to_cpu(arr[index]);
+			mdata->ppb[index].cfg_off =
+				mdata->ppb[index].ctl_off + 4;
+		}
+		return 0;
+	}
+	return -EINVAL;
 }
 
 static int mdss_mdp_parse_dt_bus_scale(struct platform_device *pdev)
@@ -3037,7 +3080,7 @@ int mdss_mdp_wait_for_xin_halt(u32 xin_id, bool is_vbif_nrt)
 	if (rc == -ETIMEDOUT) {
 		pr_err("VBIF client %d not halting. TIMEDOUT.\n",
 			xin_id);
-		BUG();
+		MDSS_XLOG_TOUT_HANDLER("mdp", "vbif", "panic");
 	} else {
 		pr_debug("VBIF client %d is halted\n", xin_id);
 	}

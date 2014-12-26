@@ -971,7 +971,8 @@ int mdss_mdp_perf_bw_check(struct mdss_mdp_ctl *ctl,
 {
 	struct mdss_data_type *mdata = ctl->mdata;
 	struct mdss_mdp_perf_params perf;
-	u32 bw, threshold;
+	u32 bw, threshold, i;
+	u64 bw_sum_of_intfs = 0;
 
 	/* we only need bandwidth check on real-time clients (interfaces) */
 	if (ctl->intf_type == MDSS_MDP_NO_INTF)
@@ -980,13 +981,24 @@ int mdss_mdp_perf_bw_check(struct mdss_mdp_ctl *ctl,
 	__mdss_mdp_perf_calc_ctl_helper(ctl, &perf,
 			left_plist, left_cnt, right_plist, right_cnt,
 			PERF_CALC_PIPE_CALC_SMP_SIZE);
+	ctl->bw_pending = perf.bw_ctl;
+
+	for (i = 0; i < mdata->nctl; i++) {
+		struct mdss_mdp_ctl *temp = mdata->ctl_off + i;
+		if (temp->power_state == MDSS_PANEL_POWER_ON  &&
+				(temp->intf_type != MDSS_MDP_NO_INTF))
+			bw_sum_of_intfs += temp->bw_pending;
+	}
 
 	/* convert bandwidth to kb */
-	bw = DIV_ROUND_UP_ULL(perf.bw_ctl, 1000);
+	bw = DIV_ROUND_UP_ULL(bw_sum_of_intfs, 1000);
 	pr_debug("calculated bandwidth=%uk\n", bw);
 
-	threshold = ctl->is_video_mode ? mdata->max_bw_low : mdata->max_bw_high;
+	threshold = (ctl->is_video_mode ||
+		mdss_mdp_video_mode_intf_connected(ctl)) ?
+		mdata->max_bw_low : mdata->max_bw_high;
 	if (bw > threshold) {
+		ctl->bw_pending = 0;
 		pr_debug("exceeds bandwidth: %ukb > %ukb\n", bw, threshold);
 		return -E2BIG;
 	}
@@ -1051,7 +1063,8 @@ static void mdss_mdp_perf_calc_ctl(struct mdss_mdp_ctl *ctl,
 	__mdss_mdp_perf_calc_ctl_helper(ctl, perf,
 		left_plist, left_cnt, right_plist, right_cnt, 0);
 
-	if (ctl->is_video_mode || mdss_mdp_video_mode_intf_connected(ctl)) {
+	if (ctl->is_video_mode || ((ctl->intf_type != MDSS_MDP_NO_INTF) &&
+		mdss_mdp_video_mode_intf_connected(ctl))) {
 		perf->bw_ctl =
 			max(apply_fudge_factor(perf->bw_overlap,
 				&mdss_res->ib_factor_overlap),
@@ -1786,6 +1799,20 @@ int mdss_mdp_wb_mixer_destroy(struct mdss_mdp_mixer *mixer)
 	return 0;
 }
 
+int mdss_mdp_ctl_cmd_autorefresh_enable(struct mdss_mdp_ctl *ctl,
+		int frame_cnt)
+{
+	int ret = 0;
+	if (ctl->panel_data->panel_info.type == MIPI_CMD_PANEL) {
+		mdss_mdp_cmd_set_autorefresh_mode(ctl,
+				frame_cnt);
+	} else {
+		pr_err("Mode not supported for this panel\n");
+		ret = -EINVAL;
+	}
+	return ret;
+}
+
 int mdss_mdp_ctl_splash_finish(struct mdss_mdp_ctl *ctl, bool handoff)
 {
 	switch (ctl->panel_data->panel_info.type) {
@@ -2278,20 +2305,27 @@ static void mdss_mdp_ctl_split_display_enable(int enable,
 }
 
 static void mdss_mdp_ctl_dst_split_display_enable(int enable,
-	struct mdss_mdp_ctl *ctl)
+		struct mdss_mdp_ctl *ctl)
 {
 	u32 config = 0, cntl = 0;
+
+	if (ctl->mdata->nppb == 0) {
+		pr_err("No PPB to enable PP split\n");
+		BUG();
+	}
 
 	mdss_mdp_ctl_split_display_enable(enable, ctl, NULL);
 
 	if (enable) {
-		config = BIT(16); /* Set horizontal split*/
+		/* Set slave intf */
+		config = ((ctl->intf_num + 1) - MDSS_MDP_INTF0) << 20;
+		config |= BIT(16); /* Set horizontal split*/
 		cntl = BIT(5); /* enable dst split*/
 	}
+
 	writel_relaxed(config, ctl->mdata->mdp_base +
-		MDSS_MDP_REG_PPB0_CONFIG);
-	writel_relaxed(cntl, ctl->mdata->mdp_base +
-		MDSS_MDP_REG_PPB0_CNTL);
+			ctl->mdata->ppb[0].cfg_off);
+	writel_relaxed(cntl, ctl->mdata->mdp_base + ctl->mdata->ppb[0].ctl_off);
 }
 
 int mdss_mdp_ctl_destroy(struct mdss_mdp_ctl *ctl)

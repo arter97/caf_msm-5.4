@@ -1,5 +1,6 @@
 ifeq ($(CONFIG_OF),y)
 
+dtb-$(CONFIG_ARCH_MSMVPIPA) += msmvpipa-sim.dtb
 dtb-$(CONFIG_ARCH_APQ8084) += apq8084-v1.0-old-pwr-grid-liquid.dtb \
 	apq8084-v1.1-old-pwr-grid-liquid.dtb \
 	apq8084-v1.1-liquid.dtb \
@@ -75,6 +76,7 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
 	msm8939-sim.dtb \
 	msm8939-rumi.dtb \
 	msm8939-qrd-skuk.dtb \
+	msm8939-qrd-skul.dtb \
 	msm8939-cdp.dtb \
 	msm8939-cdp-jdi.dtb \
 	msm8939-mtp.dtb \

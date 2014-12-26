@@ -1061,8 +1061,8 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 	int ret = -EINVAL;
 	bool bl_notify_needed = false;
 
-	if (((mdss_fb_is_power_off(mfd) && mfd->dcm_state != DCM_ENTER)
-		|| !mfd->bl_updated) && !IS_CALIB_MODE_BL(mfd) &&
+	if ((((mdss_fb_is_power_off(mfd) && mfd->dcm_state != DCM_ENTER)
+		|| !mfd->bl_updated) && !IS_CALIB_MODE_BL(mfd)) ||
 		mfd->panel_info->cont_splash_enabled) {
 		mfd->unset_bl_level = bkl_lvl;
 		return;
@@ -2507,9 +2507,11 @@ static int __mdss_fb_sync_buf_done_callback(struct notifier_block *p,
 
 	switch (event) {
 	case MDP_NOTIFY_FRAME_BEGIN:
-		if (mfd->idle_time)
-			mod_delayed_work(system_wq, &mfd->idle_notify_work,
-				msecs_to_jiffies(mfd->idle_time));
+		if (mfd->idle_time && !mod_delayed_work(system_wq,
+					&mfd->idle_notify_work,
+					msecs_to_jiffies(WAIT_DISP_OP_TIMEOUT)))
+			pr_debug("fb%d: start idle delayed work\n",
+					mfd->index);
 		break;
 	case MDP_NOTIFY_FRAME_READY:
 		if (sync_pt_data->async_wait_fences &&
@@ -2519,6 +2521,11 @@ static int __mdss_fb_sync_buf_done_callback(struct notifier_block *p,
 			__mdss_fb_wait_for_fence_sub(sync_pt_data,
 				sync_pt_data->temp_fen, fence_cnt);
 		}
+		if (mfd->idle_time && !mod_delayed_work(system_wq,
+					&mfd->idle_notify_work,
+					msecs_to_jiffies(mfd->idle_time)))
+			pr_debug("fb%d: restarted idle work\n",
+					mfd->index);
 		break;
 	case MDP_NOTIFY_FRAME_FLUSHED:
 		pr_debug("%s: frame flushed\n", sync_pt_data->fence_name);

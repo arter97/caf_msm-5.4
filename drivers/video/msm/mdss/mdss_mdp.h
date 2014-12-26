@@ -228,6 +228,7 @@ struct mdss_mdp_ctl {
 	struct mdss_mdp_perf_params new_perf;
 	u32 perf_transaction_status;
 	bool perf_release_ctl_bw;
+	u64 bw_pending;
 
 	bool traffic_shaper_enabled;
 	u32  traffic_shaper_mdp_clk;
@@ -251,6 +252,9 @@ struct mdss_mdp_ctl {
 	struct mdss_rect roi_bkup;
 	u8 roi_changed;
 	u8 valid_roi;
+
+	int cmd_autorefresh_en;
+	int autorefresh_frame_cnt;
 
 	int (*start_fnc) (struct mdss_mdp_ctl *ctl);
 	int (*stop_fnc) (struct mdss_mdp_ctl *ctl, int panel_power_state);
@@ -877,6 +881,7 @@ void mdss_mdp_ctl_notifier_register(struct mdss_mdp_ctl *ctl,
 	struct notifier_block *notifier);
 void mdss_mdp_ctl_notifier_unregister(struct mdss_mdp_ctl *ctl,
 	struct notifier_block *notifier);
+u32 mdss_mdp_ctl_perf_get_transaction_status(struct mdss_mdp_ctl *ctl);
 
 int mdss_mdp_scan_pipes(void);
 
@@ -1010,7 +1015,8 @@ void mdss_mdp_crop_rect(struct mdss_rect *src_rect,
 	const struct mdss_rect *sci_rect);
 
 
-int mdss_mdp_wb_kickoff(struct msm_fb_data_type *mfd);
+int mdss_mdp_wb_kickoff(struct msm_fb_data_type *mfd,
+		struct mdss_mdp_commit_cb *commit_cb);
 int mdss_mdp_wb_ioctl_handler(struct msm_fb_data_type *mfd, u32 cmd, void *arg);
 
 int mdss_mdp_get_ctl_mixers(u32 fb_num, u32 *mixer_id);
@@ -1042,5 +1048,9 @@ int  mdss_mdp_ctl_reset(struct mdss_mdp_ctl *ctl);
 int mdss_mdp_wait_for_xin_halt(u32 xin_id, bool is_vbif_nrt);
 void mdss_mdp_set_ot_limit(struct mdss_mdp_set_ot_params *params,
 	bool is_rot, bool is_wb, bool is_yuv);
+int mdss_mdp_cmd_set_autorefresh_mode(struct mdss_mdp_ctl *ctl,
+		int frame_cnt);
+int mdss_mdp_ctl_cmd_autorefresh_enable(struct mdss_mdp_ctl *ctl,
+		int frame_cnt);
 
 #endif /* MDSS_MDP_H */
