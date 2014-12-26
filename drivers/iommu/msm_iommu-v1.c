@@ -215,7 +215,7 @@ static int __check_vbif_state(struct msm_iommu_drvdata const *drvdata)
 
 	if (base) {
 		__dump_vbif_state(drvdata->base, base);
-		__halt_vbif_xin(drvdata->base);
+		__halt_vbif_xin(base);
 		__dump_vbif_state(drvdata->base, base);
 		iounmap(base);
 	} else {
@@ -257,7 +257,7 @@ static void check_tlb_sync_state(struct msm_iommu_drvdata const *drvdata,
 {
 	int res;
 	unsigned int val;
-	void __iomem *base = drvdata->base;
+	void __iomem *base = drvdata->cb_base;
 	char const *name = drvdata->name;
 
 	pr_err("Timed out waiting for TLB SYNC to complete for %s\n", name);
