@@ -1091,19 +1091,17 @@ int ipa_interrupts_init(u32 ipa_irq, u32 ee, struct device *ipa_dev);
 int __ipa_del_rt_rule(u32 rule_hdl);
 int __ipa_del_hdr(u32 hdr_hdl);
 int __ipa_release_hdr(u32 hdr_hdl);
-int _ipa_read_gen_reg_v1_0(char *buff, int max_len);
 int _ipa_read_gen_reg_v1_1(char *buff, int max_len);
 int _ipa_read_gen_reg_v2_0(char *buff, int max_len);
-int _ipa_read_ep_reg_v1_0(char *buf, int max_len, int pipe);
 int _ipa_read_ep_reg_v1_1(char *buf, int max_len, int pipe);
 int _ipa_read_ep_reg_v2_0(char *buf, int max_len, int pipe);
-void _ipa_write_dbg_cnt_v1(int option);
+void _ipa_write_dbg_cnt_v1_1(int option);
 void _ipa_write_dbg_cnt_v2_0(int option);
-int _ipa_read_dbg_cnt_v1(char *buf, int max_len);
+int _ipa_read_dbg_cnt_v1_1(char *buf, int max_len);
 int _ipa_read_dbg_cnt_v2_0(char *buf, int max_len);
-void _ipa_enable_clks_v1(void);
+void _ipa_enable_clks_v1_1(void);
 void _ipa_enable_clks_v2_0(void);
-void _ipa_disable_clks_v1(void);
+void _ipa_disable_clks_v1_1(void);
 void _ipa_disable_clks_v2_0(void);
 
 static inline u32 ipa_read_reg(void *base, u32 offset)
@@ -1147,11 +1145,11 @@ void wwan_cleanup(void);
 int teth_bridge_driver_init(void);
 void ipa_lan_rx_cb(void *priv, enum ipa_dp_evt_type evt, unsigned long data);
 
-int __ipa_commit_flt_v1(enum ipa_ip_type ip);
+int __ipa_commit_flt_v1_1(enum ipa_ip_type ip);
 int __ipa_commit_flt_v2(enum ipa_ip_type ip);
-int __ipa_commit_rt_v1(enum ipa_ip_type ip);
+int __ipa_commit_rt_v1_1(enum ipa_ip_type ip);
 int __ipa_commit_rt_v2(enum ipa_ip_type ip);
-int __ipa_commit_hdr_v1(void);
+int __ipa_commit_hdr_v1_1(void);
 int __ipa_commit_hdr_v2(void);
 int ipa_generate_flt_eq(enum ipa_ip_type ip,
 		const struct ipa_rule_attrib *attrib,
