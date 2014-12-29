@@ -17,7 +17,6 @@
 #include <linux/platform_device.h>
 #include <linux/thermal.h>
 #include <linux/interrupt.h>
-#include <linux/workqueue.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/io.h>
@@ -610,7 +609,6 @@ struct tsens_sensor_dbg_info {
 
 struct tsens_tm_device {
 	struct platform_device		*pdev;
-	struct workqueue_struct		*tsens_wq;
 	struct workqueue_struct		*tsens_critical_wq;
 	bool				is_ready;
 	bool				prev_reading_avail;
@@ -631,8 +629,7 @@ struct tsens_tm_device {
 	uint32_t			calib_mode;
 	uint32_t			tsens_type;
 	bool				tsens_valid_status_check;
-	struct tsens_dbg_counter	tsens_irq_dbg;
-	struct tsens_dbg_counter	tsens_wq_dbg;
+	struct tsens_dbg_counter	tsens_thread_iq_dbg;
 	struct tsens_sensor_dbg_info	sensor_dbg_info[16];
 	struct tsens_tm_device_sensor	sensor[0];
 };
@@ -1224,9 +1221,6 @@ static struct thermal_zone_device_ops tsens_thermal_zone_ops = {
 	.notify = tsens_tz_notify,
 };
 
-uint32_t tsens1_dbg_cnt;
-unsigned long long tsens1_time_stmp;
-
 /* Thermal zone ops for decidegC */
 static struct thermal_zone_device_ops tsens_tm_thermal_zone_ops = {
 	.get_temp = tsens_tz_get_temp,
@@ -1363,10 +1357,9 @@ static void tsens_tm_upper_lower_scheduler(struct work_struct *work)
 	mb();
 }
 
-static void tsens_scheduler_fn(struct work_struct *work)
+static irqreturn_t tsens_irq_thread(int irq, void *data)
 {
-	struct tsens_tm_device *tm = container_of(work, struct tsens_tm_device,
-						tsens_work);
+	struct tsens_tm_device *tm = data;
 	unsigned int i, status, threshold;
 	void __iomem *sensor_status_addr;
 	void __iomem *sensor_status_ctrl_addr;
@@ -1437,29 +1430,12 @@ static void tsens_scheduler_fn(struct work_struct *work)
 		}
 	}
 	/* debug */
-	idx = tmdev->tsens_wq_dbg.idx;
-	tmdev->tsens_wq_dbg.dbg_count[idx%10]++;
-	tmdev->tsens_wq_dbg.time_stmp[idx%10] = sched_clock();
-	tmdev->tsens_wq_dbg.idx++;
+	idx = tmdev->tsens_thread_iq_dbg.idx;
+	tmdev->tsens_thread_iq_dbg.dbg_count[idx%10]++;
+	tmdev->tsens_thread_iq_dbg.time_stmp[idx%10] = sched_clock();
+	tmdev->tsens_thread_iq_dbg.idx++;
 
 	mb();
-
-	enable_irq(tmdev->tsens_irq);
-}
-
-static irqreturn_t tsens_isr(int irq, void *data)
-{
-	uint32_t idx = 0;
-
-	disable_irq_nosync(tmdev->tsens_irq);
-
-	/* debug */
-	idx = tmdev->tsens_irq_dbg.idx;
-	tmdev->tsens_irq_dbg.dbg_count[idx%10]++;
-	tmdev->tsens_irq_dbg.time_stmp[idx%10] = sched_clock();
-	tmdev->tsens_irq_dbg.idx++;
-
-	queue_work(tmdev->tsens_wq, &tmdev->tsens_work);
 
 	return IRQ_HANDLED;
 }
@@ -3692,11 +3668,6 @@ static int tsens_tm_probe(struct platform_device *pdev)
 		return -ENODEV;
 
 	tmdev->pdev = pdev;
-	tmdev->tsens_wq = alloc_workqueue("tsens_wq", WQ_HIGHPRI, 0);
-	if (!tmdev->tsens_wq) {
-		rc = -ENOMEM;
-		goto fail;
-	}
 
 	tmdev->tsens_critical_wq = alloc_workqueue("tsens_critical_wq",
 							WQ_HIGHPRI, 0);
@@ -3724,8 +3695,6 @@ static int tsens_tm_probe(struct platform_device *pdev)
 
 	return 0;
 fail:
-	if (tmdev->tsens_wq)
-		destroy_workqueue(tmdev->tsens_wq);
 	if (tmdev->tsens_critical_wq)
 		destroy_workqueue(tmdev->tsens_critical_wq);
 	if (tmdev->tsens_calib_addr)
@@ -3791,8 +3760,8 @@ static int _tsens_register_thermal(void)
 		}
 	}
 
-	rc = devm_request_irq(&tmdev->pdev->dev, tmdev->tsens_irq,
-		tsens_isr, IRQF_TRIGGER_HIGH, "tsens_interrupt", tmdev);
+	rc = request_threaded_irq(tmdev->tsens_irq, NULL, tsens_irq_thread,
+		IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "tsens_interrupt", tmdev);
 	if (rc < 0) {
 		pr_err("%s: request_irq FAIL: %d\n", __func__, rc);
 		for (i = 0; i < tmdev->tsens_num_sensor; i++)
@@ -3825,8 +3794,7 @@ static int _tsens_register_thermal(void)
 		INIT_WORK(&tmdev->tsens_work, tsens_tm_upper_lower_scheduler);
 		INIT_WORK(&tmdev->tsens_critical_work,
 						tsens_tm_critical_scheduler);
-	} else
-		INIT_WORK(&tmdev->tsens_work, tsens_scheduler_fn);
+	}
 
 	return 0;
 fail:
@@ -3860,8 +3828,6 @@ static int tsens_tm_remove(struct platform_device *pdev)
 	if (tmdev->res_tsens_mem)
 		release_mem_region(tmdev->res_tsens_mem->start,
 			tmdev->tsens_len);
-	if (tmdev->tsens_wq)
-		destroy_workqueue(tmdev->tsens_wq);
 	if (tmdev->tsens_critical_wq)
 		destroy_workqueue(tmdev->tsens_critical_wq);
 	platform_set_drvdata(pdev, NULL);
