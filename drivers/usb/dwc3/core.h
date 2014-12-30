@@ -47,6 +47,7 @@
 #include <linux/mm.h>
 #include <linux/debugfs.h>
 #include <linux/hrtimer.h>
+#include <linux/wait.h>
 
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
@@ -775,6 +776,7 @@ struct dwc3_scratchpad_array {
  * @tx_fifo_size: Available RAM size for TX fifo allocation
  * @err_evt_seen: previous event in queue was erratic error
  * @hird_thresh: value to configure in DCTL[HIRD_Thresh]
+ * @wait_linkstate: waitqueue for waiting LINK to move into required state
  */
 struct dwc3 {
 	struct usb_ctrlrequest	*ctrl_req;
@@ -890,6 +892,7 @@ struct dwc3 {
 
 	atomic_t		in_lpm;
 	int			irq;
+	wait_queue_head_t	wait_linkstate;
 };
 
 /* -------------------------------------------------------------------------- */
