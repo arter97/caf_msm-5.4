@@ -57,6 +57,7 @@ typedef enum sensor_stats_type {
 	YRGB,
 	YYYY,
 } sensor_stats_type_t;
+
 #define MAX_LED_TRIGGERS 3
 
 enum flash_type {
