@@ -24,6 +24,7 @@ obj-$(CONFIG_ARCH_MSM8994)	+= clock-cpu-8994.o
 # MSM THULIUM
 obj-$(CONFIG_ARCH_MSMTHULIUM)	+= clock-gcc-thulium.o
 obj-$(CONFIG_ARCH_MSMTHULIUM)	+= clock-mmss-thulium.o
+obj-$(CONFIG_ARCH_MSMTHULIUM)	+= clock-cpu-thulium.o
 
 # MSM8936
 obj-$(CONFIG_ARCH_MSM8916)	+= clock-rpm-8936.o
