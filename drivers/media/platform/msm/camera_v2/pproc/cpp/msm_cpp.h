@@ -203,6 +203,7 @@ struct cpp_device {
 	struct iommu_domain *domain;
 	struct device *iommu_ctx;
 	uint32_t num_clk;
+	uint32_t min_clk_rate;
 
 	int iommu_hdl;
 	/* Reusing proven tasklet from msm isp */
