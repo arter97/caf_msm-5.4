@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -39,15 +39,6 @@
 	vreg-0.9-supply = <&pma8084_l4>;
 };
 
-&ufsphy1 {
-	vdda-phy-supply = <&pma8084_l4>;
-};
-
 &sataphy0 {
 	vdda-phy-supply = <&pma8084_l4>;
-};
-
-&ufs1 {
-	vccq-supply = <&pma8084_l3>;
-	vccq-max-microamp = <200000>;
 };
