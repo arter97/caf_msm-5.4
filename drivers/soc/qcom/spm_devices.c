@@ -22,6 +22,7 @@
 #include <linux/err.h>
 #include <linux/platform_device.h>
 #include <linux/err.h>
+#include <linux/cpu.h>
 #include <soc/qcom/spm.h>
 #include "spm_driver.h"
 
@@ -283,9 +284,11 @@ int msm_spm_turn_on_cpu_rail(struct device_node *vctl_node,
 	if (base) {
 		/*
 		 * Program Q2S to disable SPM legacy mode and ignore Q2S
-		 * channel requests
+		 * channel requests.
+		 * bit[1] = qchannel_ignore = 1
+		 * bit[2] = spm_legacy_mode = 0
 		 */
-		writel_relaxed(0x1, base);
+		writel_relaxed(0x2, base);
 		mb();
 		iounmap(base);
 	}
@@ -679,6 +682,18 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 
 	for_each_cpu(cpu, &dev->mask)
 		per_cpu(cpu_vctl_device, cpu) = dev;
+
+	cpu = get_cpu_id(pdev->dev.of_node);
+
+	/* For CPUs that are online, the SPM has to be programmed for
+	 * clockgating mode to ensure that it can use SPM for entering these
+	 * low power modes.
+	 */
+	get_online_cpus();
+	if ((cpu >= 0) && (cpu < num_possible_cpus()) && (cpu_online(cpu)))
+		msm_spm_config_low_power_mode(dev, MSM_SPM_MODE_CLOCK_GATING,
+				false);
+	put_online_cpus();
 
 	return ret;
 

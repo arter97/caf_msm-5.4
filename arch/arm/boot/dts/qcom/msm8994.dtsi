@@ -733,8 +733,9 @@
 				"int_aer_legacy", "int_pls_link_up",
 				"int_pls_link_down", "int_bridge_flush_n";
 
-		pinctrl-names = "default";
+		pinctrl-names = "default", "sleep";
 		pinctrl-0 = <&pcie1_clkreq_default &pcie1_perst_default &pcie1_wake_default>;
+		pinctrl-1 = <&pcie1_clkreq_default &pcie1_perst_default &pcie1_wake_sleep>;
 
 		perst-gpio = <&msm_gpio 35 0>;
 		wake-gpio = <&msm_gpio 37 0>;
@@ -1645,6 +1646,21 @@
 			qcom,descriptor-fifo-size = <0x1400>;
 			qcom,reset-bam-on-connect;
 		};
+
+		/* USB BAM pipe (consumer) configuration for accelerated DPL */
+		qcom,pipe3 {
+			label = "ssusb-dpl-ipa-in-1";
+			qcom,usb-bam-mem-type = <2>;
+			qcom,bam-type = <0>;
+			qcom,dir = <1>;
+			qcom,pipe-num = <1>;
+			qcom,peer-bam = <2>;
+			qcom,dst-bam-physical-address = <0xf9304000>;
+			qcom,dst-bam-pipe-index = <2>;
+			qcom,data-fifo-size = <0x8000>;
+			qcom,descriptor-fifo-size = <0x2000>;
+			qcom,reset-bam-on-connect;
+		};
 	};
 
 	usb_otg: usb@f9a55000 {
@@ -2505,14 +2521,18 @@
 		clocks = <&clock_rpm clk_div_clk1>;
 		qcom,cdc-mclk-gpios = <&pm8994_gpios 15 0>;
 		qcom,tomtom-mclk-clk-freq = <9600000>;
-		pinctrl-names = "mi2s-sleep",
+		pinctrl-names = "sleep",
+				"auxpcm-active",
 				"mi2s-active",
-				"auxpcm-sleep",
-				"auxpcm-active";
-		pinctrl-0 = <&pri_mi2s_sleep>, <&pri_mi2s_sd0_sleep>;
-		pinctrl-1 = <&pri_mi2s_active>, <&pri_mi2s_sd0_active>;
-		pinctrl-2 = <&sec_aux_pcm_sleep>, <&sec_aux_pcm_din_sleep>;
-		pinctrl-3 = <&sec_aux_pcm_active>, <&sec_aux_pcm_din_active>;
+				"active";
+		pinctrl-0 = <&pri_mi2s_sleep>, <&pri_mi2s_sd0_sleep>,
+				<&sec_aux_pcm_sleep>, <&sec_aux_pcm_din_sleep>;
+		pinctrl-1 = <&pri_mi2s_sleep>, <&pri_mi2s_sd0_sleep>,
+				<&sec_aux_pcm_active>, <&sec_aux_pcm_din_active>;
+		pinctrl-2 = <&pri_mi2s_active>, <&pri_mi2s_sd0_active>,
+				<&sec_aux_pcm_sleep>, <&sec_aux_pcm_din_sleep>;
+		pinctrl-3 = <&pri_mi2s_active>, <&pri_mi2s_sd0_active>,
+				<&sec_aux_pcm_active>, <&sec_aux_pcm_din_active>;
 		asoc-platform = <&pcm0>, <&pcm1>, <&pcm2>, <&voip>, <&voice>,
 				<&loopback>, <&compress>, <&hostless>,
 				<&afe>, <&lsm>, <&routing>, <&cpe>, <&compr>;
@@ -3198,8 +3218,9 @@
 		memory-region = <&adsp_mem>;
 	};
 
-	qcom,msm-core {
+	qcom,msm-core@fc4b8000 {
 		compatible = "qcom,apss-core-ea";
+		reg = <0xfc4b8000 0x1000>;
 		qcom,low-hyst-temp = <10>;
 		qcom,high-hyst-temp = <5>;
 		qcom,polling-interval = <50>;
@@ -3391,11 +3412,11 @@
 		pmu@a000 {
 			compatible = "arm,cci-400-pmu";
 			reg = <0x9000 0x5000>;
-			interrupts = <0 7 0>,
-				     <0 7 0>,
-				     <0 7 0>,
-				     <0 7 0>,
-				     <0 7 0>;
+			interrupts = <0 344 0>,
+				     <0 344 0>,
+				     <0 344 0>,
+				     <0 344 0>,
+				     <0 344 0>;
 		};
 
 	};

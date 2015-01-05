@@ -2422,6 +2422,7 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 
 	err = ufshcd_send_command(hba, tag);
 	if (err) {
+		spin_unlock_irqrestore(hba->host->host_lock, flags);
 		scsi_dma_unmap(lrbp->cmd);
 		lrbp->cmd = NULL;
 		clear_bit_unlock(tag, &hba->lrb_in_use);
@@ -2429,6 +2430,7 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 		dev_err(hba->dev, "%s: failed sending command, %d\n",
 							__func__, err);
 		err = DID_ERROR;
+		goto out;
 	}
 
 out_unlock:
@@ -6258,9 +6260,11 @@ static int ufshcd_probe_hba(struct ufs_hba *hba)
 			__func__);
 	} else {
 		ret = ufshcd_config_pwr_mode(hba, &hba->max_pwr_info.info);
-		if (ret)
+		if (ret) {
 			dev_err(hba->dev, "%s: Failed setting power mode, err = %d\n",
 					__func__, ret);
+			goto out;
+		}
 	}
 
 	/* set the state as operational after switching to desired gear */

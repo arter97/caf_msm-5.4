@@ -71,6 +71,9 @@ SoCs:
 - MSMZIRC
   compatible = "qcom,msmzirc"
 
+- VPIPA
+  compatible = "qcom,msmvpipa"
+
 
 
 Generic board variants:
@@ -159,6 +162,7 @@ compatible = "qcom,msm8936-mtp"
 compatible = "qcom,msm8939-cdp"
 compatible = "qcom,msm8939-mtp"
 compatible = "qcom,msm8939-qrd-skuk"
+compatible = "qcom,msm8939-qrd-skul"
 compatible = "qcom,msm8939-rumi"
 compatible = "qcom,msm8939-sim"
 compatible = "qcom,msm8960-cdp"
@@ -184,3 +188,4 @@ compatible = "qcom,msmzirc-cdp"
 compatible = "qcom,msmzirc-mtp"
 compatible = "qcom,msmzirc-rumi"
 compatible = "qcom,msmzirc-sim"
+compatible = "qcom,msmvpipa-sim"

@@ -31,8 +31,79 @@
 
 #define XO_CLK_RATE	19200000
 
+static struct dsi_drv_cm_data shared_ctrl_data;
+
 static int mdss_dsi_pinctrl_set_state(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 					bool active);
+
+static int mdss_dsi_labibb_vreg_init(struct platform_device *pdev)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+	int rc;
+
+	ctrl = platform_get_drvdata(pdev);
+	if (!ctrl) {
+		pr_err("%s: invalid driver data\n", __func__);
+		return -EINVAL;
+	}
+
+	if (!ctrl->panel_bias_vreg)
+		return -EINVAL;
+
+	ctrl->lab = regulator_get(&pdev->dev, "lab_reg");
+	rc = PTR_RET(ctrl->lab);
+	if (rc) {
+		pr_err("%s: lab_regi get failed.\n", __func__);
+		return rc;
+	}
+	ctrl->ibb = regulator_get(&pdev->dev, "ibb_reg");
+	rc = PTR_RET(ctrl->ibb);
+	if (rc) {
+		pr_err("%s: ibb_regi get failed.\n", __func__);
+		regulator_put(ctrl->lab);
+		return rc;
+	}
+
+	pr_debug("%s: lab=%p ibb=%p\n", __func__,
+				ctrl->lab, ctrl->ibb);
+
+	return 0;
+}
+
+static int mdss_dsi_labibb_vreg_ctrl(struct mdss_dsi_ctrl_pdata *ctrl,
+							int enable)
+{
+	int rc;
+
+	if (!ctrl->panel_bias_vreg)
+		return -EINVAL;
+
+	pr_debug("%s: ndx=%d enable=%d\n", __func__, ctrl->ndx, enable);
+
+	if (enable) {
+		rc = regulator_enable(ctrl->lab);
+		if (rc) {
+			pr_err("%s: falied at lab\n", __func__);
+			return rc;
+		}
+		rc = regulator_enable(ctrl->ibb);
+		if (rc) {
+			pr_err("%s: falied at ibb\n", __func__);
+			regulator_disable(ctrl->lab);
+			return rc;
+		}
+
+	} else {
+		rc = regulator_disable(ctrl->lab);
+		if (rc)
+			pr_err("%s: falied at lab\n", __func__);
+		rc = regulator_disable(ctrl->ibb);
+		if (rc)
+			pr_err("%s: falied at ibb\n", __func__);
+	}
+
+	return 0;
+}
 
 static int mdss_dsi_regulator_init(struct platform_device *pdev)
 {
@@ -60,6 +131,8 @@ static int mdss_dsi_regulator_init(struct platform_device *pdev)
 			pr_err("%s: failed to init vregs for %s\n",
 				__func__, __mdss_dsi_pm_name(i));
 	}
+
+	mdss_dsi_labibb_vreg_init(pdev);
 
 	return rc;
 }
@@ -91,7 +164,7 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 	if (ctrl_pdata->panel_bias_vreg) {
 		pr_debug("%s: Disabling panel bias vreg. ndx = %d\n",
 		       __func__, ctrl_pdata->ndx);
-		if (qpnp_ibb_enable(false))
+		if (mdss_dsi_labibb_vreg_ctrl(ctrl_pdata, false))
 			pr_err("Unable to disable bias vreg\n");
 		/* Add delay recommended by panel specs */
 		udelay(2000);
@@ -149,7 +222,7 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 	if (ctrl_pdata->panel_bias_vreg) {
 		pr_debug("%s: Enable panel bias vreg. ndx = %d\n",
 		       __func__, ctrl_pdata->ndx);
-		if (qpnp_ibb_enable(true))
+		if (mdss_dsi_labibb_vreg_ctrl(ctrl_pdata, true))
 			pr_err("Unable to configure bias vreg\n");
 		/* Add delay recommended by panel specs */
 		udelay(2000);
@@ -1646,9 +1719,22 @@ int mdss_dsi_retrieve_ctrl_resources(struct platform_device *pdev, int mode,
 		return rc;
 	}
 
+	ctrl->shared_ctrl_data = &shared_ctrl_data;
+	rc = msm_dss_ioremap_byname(pdev,
+			&ctrl->shared_ctrl_data->phy_regulator_io,
+			"dsi_phy_regulator");
+	if (rc) {
+		pr_err("%s:%d unable to remap dsi phy regulator resources\n",
+			       __func__, __LINE__);
+		return rc;
+	}
+
 	pr_info("%s: ctrl_base=%p ctrl_size=%x phy_base=%p phy_size=%x\n",
 		__func__, ctrl->ctrl_base, ctrl->reg_size, ctrl->phy_io.base,
 		ctrl->phy_io.len);
+	pr_info("%s: phy_regulator_base=%p phy_regulator_size=%x\n", __func__,
+		ctrl->shared_ctrl_data->phy_regulator_io.base,
+		ctrl->shared_ctrl_data->phy_regulator_io.len);
 
 	rc = msm_dss_ioremap_byname(pdev, &ctrl->mmss_misc_io,
 		"mmss_misc_phys");
@@ -1955,10 +2041,14 @@ int dsi_panel_device_register(struct device_node *pan_node,
 	if (pinfo->pdest == DISPLAY_1) {
 		mdss_debug_register_io("dsi0_ctrl", &ctrl_pdata->ctrl_io);
 		mdss_debug_register_io("dsi0_phy", &ctrl_pdata->phy_io);
+		mdss_debug_register_io("dsi0_phy_regulator",
+			&ctrl_pdata->shared_ctrl_data->phy_regulator_io);
 		ctrl_pdata->ndx = 0;
 	} else {
 		mdss_debug_register_io("dsi1_ctrl", &ctrl_pdata->ctrl_io);
 		mdss_debug_register_io("dsi1_phy", &ctrl_pdata->phy_io);
+		mdss_debug_register_io("dsi1_phy_regulator",
+			&ctrl_pdata->shared_ctrl_data->phy_regulator_io);
 		ctrl_pdata->ndx = 1;
 	}
 
