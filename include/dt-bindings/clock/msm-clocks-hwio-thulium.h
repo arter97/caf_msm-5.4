@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -468,10 +468,8 @@
 #define GCC_AGGRE0_SNOC_AXI_CBCR				(0x81008)
 #define GCC_AGGRE0_CNOC_AHB_CBCR				(0x8100C)
 #define GCC_AGGRE0_NOC_AT_CBCR					(0x81010)
-#define GCC_HLOS1_VOTE_AGGRE0_NOC_SMMU_CBCR			(0x7D000)
 #define GCC_HLOS1_VOTE_LPASS_CORE_SMMU_CBCR			(0x7D010)
 #define GCC_HLOS1_VOTE_LPASS_ADSP_SMMU_CBCR			(0x7D014)
-#define GCC_HLOS2_VOTE_AGGRE0_NOC_SMMU_CBCR			(0x7E000)
 #define GCC_HLOS2_VOTE_LPASS_CORE_SMMU_CBCR			(0x7E010)
 #define GCC_HLOS2_VOTE_LPASS_ADSP_SMMU_CBCR			(0x7E014)
 #define GCC_MMSS_SYS_NOC_AXI_CBCR				(0x09004)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -239,10 +239,8 @@
 #define clk_gcc_aggre0_cnoc_ahb_clk	0x53a35559
 #define clk_gcc_aggre0_noc_at_clk	0xf753290f
 #define clk_gcc_aggre0_snoc_axi_clk	0x3c446400
-#define clk_hlos1_vote_aggre0_noc_smmu_clk	0x2ac280e4
 #define clk_hlos1_vote_lpass_core_smmu_clk	0x3aaa1743
 #define clk_hlos1_vote_lpass_adsp_smmu_clk	0xc76f702f
-#define clk_hlos2_vote_aggre0_noc_smmu_clk	0xdd72fafe
 #define clk_hlos2_vote_lpass_core_smmu_clk	0x2419cf5d
 #define clk_hlos2_vote_lpass_adsp_smmu_clk	0x34d3924b
 #define clk_gcc_usb3_phy_reset		0x03d559f1
