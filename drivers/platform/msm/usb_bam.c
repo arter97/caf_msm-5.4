@@ -178,7 +178,6 @@ static int ss_usb_cons_release_resource(void);
 static int hsic_cons_request_resource(void);
 static int hsic_cons_release_resource(void);
 
-
 static int (*request_resource_cb[MAX_BAMS])(void) = {
 	[CI_CTRL] = usb_cons_request_resource,
 	[HSIC_CTRL]  = hsic_cons_request_resource,
@@ -223,7 +222,6 @@ struct usb_bam_ipa_handshake_info {
 
 	struct mutex suspend_resume_mutex;
 	struct work_struct resume_work;
-	struct work_struct suspend_work;
 	struct work_struct finish_suspend_work;
 };
 
@@ -246,6 +244,7 @@ static bool probe_finished;
 static int __usb_bam_register_wake_cb(int idx, int (*callback)(void *user),
 	void *param, bool trigger_cb_per_pipe);
 static void wait_for_prod_release(enum usb_ctrl cur_bam);
+static void usb_bam_start_suspend(struct usb_bam_ipa_handshake_info *info_ptr);
 
 static struct {
 	char buf[DBG_MAX_MSG][DBG_MSG_LEN];   /* buffer */
@@ -1818,19 +1817,16 @@ void usb_bam_suspend(struct usb_bam_connect_ipa_params *ipa_params)
 
 	spin_unlock(&usb_bam_ipa_handshake_info_lock);
 
-	queue_work(ctx.usb_bam_wq, &info[cur_bam].suspend_work);
+	usb_bam_start_suspend(&info[cur_bam]);
 }
 
-static void usb_bam_start_suspend(struct work_struct *w)
+static void usb_bam_start_suspend(struct usb_bam_ipa_handshake_info *info_ptr)
 {
 	struct usb_bam_pipe_connect *pipe_connect;
-	struct usb_bam_ipa_handshake_info *info_ptr;
 	enum usb_ctrl cur_bam;
 	u8 src_idx, dst_idx;
 	int pipes_to_suspend;
 
-	info_ptr = container_of(w, struct usb_bam_ipa_handshake_info,
-			suspend_work);
 	cur_bam = info_ptr->bam_type;
 	log_event(1, "%s: Starting suspend sequence(BAM=%s)\n", __func__,
 			bam_enable_strings[cur_bam]);
@@ -3441,7 +3437,6 @@ static int usb_bam_probe(struct platform_device *pdev)
 		info[i].pipes_resumed = 0;
 		info[i].bam_type = i;
 		INIT_WORK(&info[i].resume_work, usb_bam_finish_resume);
-		INIT_WORK(&info[i].suspend_work, usb_bam_start_suspend);
 		INIT_WORK(&info[i].finish_suspend_work,
 			  usb_bam_finish_suspend_);
 		mutex_init(&info[i].suspend_resume_mutex);
