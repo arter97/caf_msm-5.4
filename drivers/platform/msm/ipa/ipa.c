@@ -2743,11 +2743,39 @@ static int ipa_plat_drv_probe(struct platform_device *pdev_p)
 	return result;
 }
 
+static int ipa_ap_suspend(struct device *dev)
+{
+	int res = 0;
+
+	IPADBG("Enter...\n");
+	/* Do not allow A7 to suspend in case there are active clients of IPA */
+	ipa_active_clients_lock();
+	if (ipa_ctx->ipa_active_clients.cnt != 0) {
+		IPADBG("IPA is in use, postponing AP suspend.\n");
+		res = -EAGAIN;
+	}
+	ipa_active_clients_unlock();
+	IPADBG("Exit\n");
+
+	return res;
+}
+
+static int ipa_ap_resume(struct device *dev)
+{
+	return 0;
+}
+
+static const struct dev_pm_ops ipa_pm_ops = {
+	.suspend_noirq = ipa_ap_suspend,
+	.resume_noirq = ipa_ap_resume,
+};
+
 static struct platform_driver ipa_plat_drv = {
 	.probe = ipa_plat_drv_probe,
 	.driver = {
 		.name = DRV_NAME,
 		.owner = THIS_MODULE,
+		.pm = &ipa_pm_ops,
 		.of_match_table = ipa_plat_drv_match,
 	},
 };
