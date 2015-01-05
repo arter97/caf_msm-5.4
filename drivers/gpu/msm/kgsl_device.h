@@ -403,7 +403,7 @@ struct kgsl_device {
 	.wait_queue = __WAIT_QUEUE_HEAD_INITIALIZER((_dev).wait_queue),\
 	.active_cnt_wq = __WAIT_QUEUE_HEAD_INITIALIZER((_dev).active_cnt_wq),\
 	.mutex = __MUTEX_INITIALIZER((_dev).mutex),\
-	.state = KGSL_STATE_INIT,\
+	.state = KGSL_STATE_NONE,\
 	.ver_major = DRIVER_VERSION_MAJOR,\
 	.ver_minor = DRIVER_VERSION_MINOR
 
