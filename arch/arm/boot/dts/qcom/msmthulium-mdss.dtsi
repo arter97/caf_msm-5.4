@@ -1,4 +1,4 @@
-/* Copyright (c) 2014 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -132,9 +132,9 @@
 
 		qcom,mdss-pp-offsets {
 			qcom,mdss-sspp-mdss-igc-lut-off = <0x2000>;
-			qcom,mdss-sspp-vig-pcc-off = <0x1580>;
-			qcom,mdss-sspp-rgb-pcc-off = <0x180>;
-			qcom,mdss-sspp-dma-pcc-off = <0x180>;
+			qcom,mdss-sspp-vig-pcc-off = <0x1780>;
+			qcom,mdss-sspp-rgb-pcc-off = <0x380>;
+			qcom,mdss-sspp-dma-pcc-off = <0x380>;
 			qcom,mdss-lm-pgc-off = <0x3C0>;
 			qcom,mdss-dspp-gamut-off = <0x1600>;
 			qcom,mdss-dspp-pcc-off = <0x1700>;
