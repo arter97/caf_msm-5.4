@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -348,6 +348,127 @@
 		qcom,msm-bus,vectors-KBps =
 			    <84 512 0 0>,
 			    <84 512 500 800>;
+	};
+
+	msm_cpufreq: qcom,msm-cpufreq {
+		compatible = "qcom,msm-cpufreq";
+		clock-names = "l2_clk", "cpu0_clk", "cpu1_clk", "cpu2_clk",
+				"cpu3_clk";
+		clocks = <&clock_cpu clk_cbf_hf_mux>,
+			 <&clock_cpu clk_pwrcl_clk>,
+			 <&clock_cpu clk_pwrcl_clk>,
+			 <&clock_cpu clk_perfcl_clk>,
+			 <&clock_cpu clk_perfcl_clk>;
+
+		qcom,governor-per-policy;
+
+		qcom,cpufreq-table-0 =
+			<  300000 >,
+			<  345600 >,
+			<  422400 >,
+			<  499200 >,
+			<  576000 >,
+			<  652800 >,
+			<  729600 >,
+			<  806400 >,
+			<  883200 >,
+			<  960000 >,
+			< 1036800 >,
+			< 1113600 >,
+			< 1190400 >,
+			< 1267200 >,
+			< 1344000 >,
+			< 1420800 >,
+			< 1459200 >;
+
+		qcom,cpufreq-table-2 =
+			<  300000 >,
+			<  345600 >,
+			<  422400 >,
+			<  499200 >,
+			<  576000 >,
+			<  652800 >,
+			<  729600 >,
+			<  806400 >,
+			<  883200 >,
+			<  960000 >,
+			< 1036800 >,
+			< 1113600 >,
+			< 1190400 >,
+			< 1267200 >,
+			< 1344000 >,
+			< 1420800 >,
+			< 1497600 >,
+			< 1593600 >;
+	};
+
+	clock_cpu: qcom,cpu-clock-thulium@ {
+		compatible = "qcom,cpu-clock-thulium";
+		reg = <0x06400000 0x1000>,
+		      <0x06480000 0x1000>,
+		      <0x09A20000 0x1000>,
+		      <0x06400000 0x1000>,
+		      <0x06480000 0x1000>,
+		      <0x09A11000 0x1000>,
+		      <0x00070130 0x8>;
+		reg-names = "pwrcl_pll", "perfcl_pll", "cbf_pll", "pwrcl_mux", "perfcl_mux", "cbf_mux", "efuse";
+		vdd-pwrcl-supply = <&apc_vreg_corner>;
+		vdd-perfcl-supply = <&apc_vreg_corner>;
+		vdd-cbf-supply = <&apc_vreg_corner>;
+		vdd-dig-supply = <&pm8994_s1_corner_ao>;
+		qcom,pwrcl-speedbin0-v0 =
+			<          0  0 >,
+			<  300000000  1 >,
+			<  345600000  2 >,
+			<  422400000  3 >,
+			<  499200000  4 >,
+			<  576000000  5 >,
+			<  652800000  6 >,
+			<  729600000  7 >,
+			<  806400000  8 >,
+			<  883200000  9 >,
+			<  960000000 10 >,
+			< 1036800000 11 >,
+			< 1113600000 12 >,
+			< 1190400000 13 >,
+			< 1267200000 14 >,
+			< 1344000000 15 >,
+			< 1420800000 16 >,
+			< 1459200000 18 >;
+		qcom,perfcl-speedbin0-v0 =
+			<          0  0 >,
+			<  300000000  1 >,
+			<  345600000  2 >,
+			<  422400000  3 >,
+			<  499200000  4 >,
+			<  576000000  5 >,
+			<  652800000  6 >,
+			<  729600000  7 >,
+			<  806400000  8 >,
+			<  883200000  9 >,
+			<  960000000 10 >,
+			< 1036800000 11 >,
+			< 1113600000 12 >,
+			< 1190400000 13 >,
+			< 1267200000 14 >,
+			< 1344000000 15 >,
+			< 1420800000 16 >,
+			< 1497600000 17 >,
+			< 1593600000 18 >;
+		qcom,cbf-speedbin0-v0 =
+			<	   0  0 >,
+			<  300000000  1 >,
+			<  384000000  3 >,
+			<  499200000  4 >,
+			<  600000000  5 >,
+			<  692120000  6 >,
+			<  787200000  7 >,
+			<  883200000  8 >,
+			< 1036800000 18 >;
+		clock-names = "xo_ao", "aux_clk";
+		clocks = <&clock_gcc clk_cxo_clk_src_ao>,
+			 <&clock_gcc clk_gpll0_ao>;
+		#clock-cells = <1>;
 	};
 
 	clock_gcc: qcom,gcc@300000 {
