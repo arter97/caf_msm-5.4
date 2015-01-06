@@ -1522,6 +1522,7 @@ static struct branch_clk gcc_smmu_aggre0_ahb_clk = {
 	.cbcr_reg = GCC_SMMU_AGGRE0_AHB_CBCR,
 	.has_sibling = 1,
 	.base = &virt_base,
+	.no_halt_check_on_disable = true,
 	.c = {
 		.dbg_name = "gcc_smmu_aggre0_ahb_clk",
 		.ops = &clk_ops_branch,
@@ -1533,6 +1534,7 @@ static struct branch_clk gcc_smmu_aggre0_axi_clk = {
 	.cbcr_reg = GCC_SMMU_AGGRE0_AXI_CBCR,
 	.has_sibling = 1,
 	.base = &virt_base,
+	.no_halt_check_on_disable = true,
 	.c = {
 		.dbg_name = "gcc_smmu_aggre0_axi_clk",
 		.ops = &clk_ops_branch,
@@ -2658,17 +2660,6 @@ static struct branch_clk gcc_usb_phy_cfg_ahb2phy_clk = {
 	},
 };
 
-static struct branch_clk hlos1_vote_aggre0_noc_smmu_clk = {
-	.cbcr_reg = GCC_HLOS1_VOTE_AGGRE0_NOC_SMMU_CBCR,
-	.has_sibling = 0,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "hlos1_vote_aggre0_noc_smmu_clk",
-		.ops = &clk_ops_branch,
-		CLK_INIT(hlos1_vote_aggre0_noc_smmu_clk.c),
-	},
-};
-
 static struct branch_clk hlos1_vote_lpass_core_smmu_clk = {
 	.cbcr_reg = GCC_HLOS1_VOTE_LPASS_CORE_SMMU_CBCR,
 	.has_sibling = 0,
@@ -2688,17 +2679,6 @@ static struct branch_clk hlos1_vote_lpass_adsp_smmu_clk = {
 		.dbg_name = "hlos1_vote_lpass_adsp_smmu_clk",
 		.ops = &clk_ops_branch,
 		CLK_INIT(hlos1_vote_lpass_adsp_smmu_clk.c),
-	},
-};
-
-static struct branch_clk hlos2_vote_aggre0_noc_smmu_clk = {
-	.cbcr_reg = GCC_HLOS2_VOTE_AGGRE0_NOC_SMMU_CBCR,
-	.has_sibling = 0,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "hlos2_vote_aggre0_noc_smmu_clk",
-		.ops = &clk_ops_branch,
-		CLK_INIT(hlos2_vote_aggre0_noc_smmu_clk.c),
 	},
 };
 
@@ -3236,10 +3216,8 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(gcc_ufs_rx_symbol_0_clk),
 	CLK_LIST(gcc_ufs_tx_cfg_clk),
 	CLK_LIST(gcc_ufs_tx_symbol_0_clk),
-	CLK_LIST(hlos1_vote_aggre0_noc_smmu_clk),
 	CLK_LIST(hlos1_vote_lpass_core_smmu_clk),
 	CLK_LIST(hlos1_vote_lpass_adsp_smmu_clk),
-	CLK_LIST(hlos2_vote_aggre0_noc_smmu_clk),
 	CLK_LIST(hlos2_vote_lpass_core_smmu_clk),
 	CLK_LIST(hlos2_vote_lpass_adsp_smmu_clk),
 	CLK_LIST(gcc_usb3_phy_reset),
