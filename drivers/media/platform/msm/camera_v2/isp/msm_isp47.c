@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -103,27 +103,27 @@ static uint32_t vfe47_qos_settings_8996_v1[] = {
 	0xAAA9AAA9, /* QOS_CFG_4 */
 	0xAAA9AAA9, /* QOS_CFG_5 */
 	0xAAA9AAA9, /* QOS_CFG_6 */
-	0x0001AAA9, /* QOS_CFG_7 */
+	0xAAA9AAA9, /* QOS_CFG_7 */
 };
 
 static uint32_t vfe47_ds_settings_8996_v1[] = {
-	0x44441111, /* DS_CFG_0 */
-	0x44441111, /* DS_CFG_1 */
-	0x44441111, /* DS_CFG_2 */
-	0x44441111, /* DS_CFG_3 */
-	0x44441111, /* DS_CFG_4 */
-	0x44441111, /* DS_CFG_5 */
-	0x44441111, /* DS_CFG_6 */
-	0x44441111, /* DS_CFG_7 */
-	0x44441111, /* DS_CFG_8 */
-	0x44441111, /* DS_CFG_9 */
-	0x44441111, /* DS_CFG_10 */
-	0x44441111, /* DS_CFG_11 */
-	0x44441111, /* DS_CFG_12 */
-	0x44441111, /* DS_CFG_13 */
-	0x44441111, /* DS_CFG_14 */
-	0x44441111, /* DS_CFG_15 */
-	0x00000103, /* DS_CFG_16 */
+	0xCCCC0011, /* DS_CFG_0 */
+	0xCCCC0011, /* DS_CFG_1 */
+	0xCCCC0011, /* DS_CFG_2 */
+	0xCCCC0011, /* DS_CFG_3 */
+	0xCCCC0011, /* DS_CFG_4 */
+	0xCCCC0011, /* DS_CFG_5 */
+	0xCCCC0011, /* DS_CFG_6 */
+	0xCCCC0011, /* DS_CFG_7 */
+	0xCCCC0011, /* DS_CFG_8 */
+	0xCCCC0011, /* DS_CFG_9 */
+	0xCCCC0011, /* DS_CFG_10 */
+	0xCCCC0011, /* DS_CFG_11 */
+	0xCCCC0011, /* DS_CFG_12 */
+	0xCCCC0011, /* DS_CFG_13 */
+	0xCCCC0011, /* DS_CFG_14 */
+	0xCCCC0011, /* DS_CFG_15 */
+	0x40000103, /* DS_CFG_16 */
 };
 
 static void msm_vfe47_init_qos_parms(struct vfe_device *vfe_dev)
