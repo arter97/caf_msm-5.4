@@ -209,29 +209,10 @@ static inline u64 __raw_readq_no_log(const volatile void __iomem *addr)
 #define writeq_no_log(v, c)		({ __iowmb(); writeq_relaxed_no_log((v), (c)); })
 
 /*
- * A typesafe __io() helper
- */
-static inline void __iomem *__typesafe_io(unsigned long addr)
-{
-	return (void __iomem *)addr;
-}
-
-/*
  *  I/O port access primitives.
  */
-#define PCI_IOBASE		((void __iomem *)(MODULES_VADDR - SZ_32M))
-
-#if defined(CONFIG_PCI)
-#define IO_SPACE_LIMIT  ((resource_size_t)0xffffffff)
-#define __io(a)         __typesafe_io((unsigned long)PCI_IOBASE + \
-				      ((a) & IO_SPACE_LIMIT))
-#else
 #define IO_SPACE_LIMIT		0xffff
-#define __io(a)         __typesafe_io((a) & IO_SPACE_LIMIT)
-#endif
-extern void __iomem *ioport_map(unsigned long port, unsigned int nr);
-extern void ioport_unmap(void __iomem *addr);
-extern int pci_ioremap_io(unsigned int offset, phys_addr_t phys_addr);
+#define PCI_IOBASE		((void __iomem *)(MODULES_VADDR - SZ_2M))
 
 static inline u8 inb(unsigned long addr)
 {
