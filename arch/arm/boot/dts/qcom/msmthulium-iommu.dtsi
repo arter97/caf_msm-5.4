@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -70,8 +70,6 @@
 			 <&clock_mmss clk_mmss_mmagic_cfg_ahb_clk>;
 		clock-names = "vfe_ahb_clk", "vfe_axi_clk", "mmagic_ahb_clk", "mmagic_cfg_ahb_clk";
 		#clock-cells = <1>;
-
-		attach-impl-defs = <0x124 0x3>;
 	};
 
 	venus_smmu: arm,smmu@d40000 {
@@ -93,8 +91,6 @@
 			 <&clock_mmss clk_mmss_mmagic_cfg_ahb_clk>;
 		clock-names = "video_ahb_clk", "video_axi_clk", "mmagic_ahb_clk", "mmagic_cfg_ahb_clk";
 		#clock-cells = <1>;
-
-		attach-impl-defs = <0x124 0x3>;
 	};
 
 	mdp_smmu: arm,smmu@d00000 {
@@ -115,8 +111,6 @@
 			 <&clock_mmss clk_mmss_mmagic_cfg_ahb_clk>;
 		clock-names = "mdp_ahb_clk", "mdp_axi_clk", "mmagic_ahb_clk", "mmagic_cfg_ahb_clk";
 		#clock-cells = <1>;
-
-		attach-impl-defs = <0x124 0x3>;
 	};
 
 	rot_smmu: arm,smmu@d20000 {
@@ -136,8 +130,6 @@
 			 <&clock_mmss clk_mmss_mmagic_cfg_ahb_clk>;
 		clock-names = "rot_ahb_clk", "rot_axi_clk", "mmagic_ahb_clk", "mmagic_cfg_ahb_clk";
 		#clock-cells = <1>;
-
-		attach-impl-defs = <0x124 0x3>;
 	};
 
 	cpp_fd_smmu: arm,smmu@d60000 {
@@ -158,8 +150,6 @@
 			 <&clock_mmss clk_mmss_mmagic_cfg_ahb_clk>;
 		clock-names = "cpp_ahb_clk", "cpp_axi_clk", "mmagic_ahb_clk", "mmagic_cfg_ahb_clk";
 		#clock-cells = <1>;
-
-		attach-impl-defs = <0x124 0x3>;
 	};
 
 	lpass_q6_smmu: arm,smmu@1600000 {
@@ -180,7 +170,5 @@
 		clocks = <&clock_gcc clk_hlos1_vote_lpass_adsp_smmu_clk>;
 		clock-names = "lpass_q6_smmu_clocks";
 		#clock-cells = <1>;
-
-		attach-impl-defs = <0x124 0x3>;
 	};
 };
