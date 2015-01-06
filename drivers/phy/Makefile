@@ -13,6 +13,5 @@ obj-$(CONFIG_PHY_QCOM_APQ8064_SATA)	+= phy-qcom-apq8064-sata.o
 obj-$(CONFIG_PHY_QCOM_IPQ806X_SATA)	+= phy-qcom-ipq806x-sata.o
 obj-$(CONFIG_PHY_MSM_SATA)		+= phy-msm-sata.o
 obj-$(CONFIG_SCSI_UFS_QCOM) 	+= phy-qcom-ufs.o
-obj-$(CONFIG_SCSI_UFS_QCOM) 	+= phy-qcom-ufs-qmp-28nm.o
 obj-$(CONFIG_SCSI_UFS_QCOM) 	+= phy-qcom-ufs-qmp-20nm.o
 obj-$(CONFIG_SCSI_UFS_QCOM) 	+= phy-qcom-ufs-qmp-14nm.o
