@@ -17,7 +17,6 @@
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/soc.h>
-#include <sound/q6afe-v2.h>
 #include <linux/msm_hdmi.h>
 
 #define MSM_HDMI_PCM_RATES	SNDRV_PCM_RATE_48000
@@ -219,7 +218,11 @@ static u32 msm_hdmi_audio_codec_silent_play(void *data)
 	if (IS_ERR_VALUE(rc))
 		return rc;
 
-	afe_short_silence(100);
+	rc = msm_dai_q6_hdmi_afe_short_silence(100);
+	if (IS_ERR_VALUE(rc)) {
+		pr_err("%s: failed to play silence 0x%x\n", __func__, rc);
+		return rc;
+	}
 
 	return 0;
 }

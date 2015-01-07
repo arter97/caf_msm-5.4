@@ -17,6 +17,7 @@
 #include <linux/bitops.h>
 #include <linux/slab.h>
 #include <linux/of_device.h>
+#include <linux/delay.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/soc.h>
@@ -45,6 +46,8 @@ struct msm_dai_q6_hdmi_dai_data {
 	u32 channels;
 	union afe_port_config port_config;
 };
+
+static struct msm_dai_q6_hdmi_dai_data *pdai_data;
 
 static int msm_dai_q6_hdmi_format_put(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
@@ -104,6 +107,61 @@ static const struct snd_kcontrol_new hdmi_config_controls[] = {
 				 msm_dai_q6_hdmi_ca_get,
 				 msm_dai_q6_hdmi_ca_put),
 };
+
+int msm_dai_q6_hdmi_afe_short_silence(u32 duration)
+{
+	struct msm_dai_q6_hdmi_dai_data *dai_data = pdai_data;
+	int rc = 0;
+	int dai_alloc_loc = 0;
+
+	if (!dai_data) {
+		dai_data = kzalloc(sizeof(struct msm_dai_q6_hdmi_dai_data),
+			GFP_KERNEL);
+		if (!dai_data) {
+			pr_err("%s: fail to allocate dai data\n", __func__);
+			return -ENOMEM;
+		}
+		dai_alloc_loc = 1;
+	}
+
+	if (!test_bit(STATUS_PORT_STARTED, dai_data->status_mask)) {
+		dai_data->rate = 48000;
+		dai_data->port_config.hdmi_multi_ch.bit_width = 16;
+		dai_data->port_config.hdmi_multi_ch.channel_allocation = 0;
+
+		rc = afe_port_start(HDMI_RX, &dai_data->port_config,
+				    dai_data->rate);
+		if (IS_ERR_VALUE(rc)) {
+			pr_err("%s: fail to open AFE port 0x%x\n",
+				__func__, HDMI_RX);
+			goto done;
+		} else {
+			set_bit(STATUS_PORT_STARTED, dai_data->status_mask);
+		}
+	} else {
+		pr_err("%s: AFE port 0x%x already opened\n",
+			__func__, HDMI_RX);
+		goto done;
+	}
+
+	msleep(duration);
+
+	if (test_bit(STATUS_PORT_STARTED, dai_data->status_mask)) {
+		rc = afe_close(HDMI_RX); /* can block */
+
+		if (IS_ERR_VALUE(rc))
+			pr_err("%s: fail to close AFE port 0x%x\n",
+				__func__, HDMI_RX);
+
+		clear_bit(STATUS_PORT_STARTED, dai_data->status_mask);
+	}
+
+done:
+	if (dai_alloc_loc)
+		kfree(dai_data);
+	return 0;
+}
+EXPORT_SYMBOL(msm_dai_q6_hdmi_afe_short_silence);
 
 /* Current implementation assumes hw_param is called once
  * This may not be the case but what to do when ADM and AFE
@@ -250,6 +308,8 @@ static int msm_dai_q6_hdmi_dai_probe(struct snd_soc_dai *dai)
 		dev_set_drvdata(dai->dev, dai_data);
 
 	msm_dai_q6_hdmi_set_dai_id(dai);
+
+	pdai_data = dai_data;
 
 	kcontrol = &hdmi_config_controls[0];
 
