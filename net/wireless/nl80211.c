@@ -11804,9 +11804,10 @@ void cfg80211_ap_stopped(struct net_device *netdev, gfp_t gfp)
 }
 EXPORT_SYMBOL(cfg80211_ap_stopped);
 
-void __cfg80211_authorization_event(struct net_device *dev,
-			    enum nl80211_authorization_status auth_status,
-			    const u8 *key_replay_ctr)
+void cfg80211_authorization_event(struct net_device *dev,
+				  enum nl80211_authorization_status auth_status,
+				  const u8 *key_replay_ctr,
+				  gfp_t gfp)
 {
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
 	struct cfg80211_registered_device *rdev = wiphy_to_dev(wdev->wiphy);
@@ -11814,7 +11815,9 @@ void __cfg80211_authorization_event(struct net_device *dev,
 	void *hdr;
 	int err;
 
-	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	trace_cfg80211_authorization_event(wdev->wiphy, dev, auth_status);
+
+	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, gfp);
 	if (!msg)
 		return;
 
@@ -11838,43 +11841,12 @@ void __cfg80211_authorization_event(struct net_device *dev,
 	}
 
 	genlmsg_multicast_netns(&nl80211_fam, wiphy_net(&rdev->wiphy), msg, 0,
-				NL80211_MCGRP_MLME, GFP_KERNEL);
+				NL80211_MCGRP_MLME, gfp);
 	return;
 
 nla_put_failure:
 	genlmsg_cancel(msg, hdr);
 	nlmsg_free(msg);
-}
-
-void cfg80211_authorization_event(struct net_device *dev,
-				  enum nl80211_authorization_status auth_status,
-				  const u8 *key_replay_ctr,
-				  gfp_t gfp)
-{
-	struct wireless_dev *wdev = dev->ieee80211_ptr;
-	struct cfg80211_registered_device *rdev = wiphy_to_dev(wdev->wiphy);
-	struct cfg80211_event *ev;
-	unsigned long flags;
-
-	/* Valid only in SME_CONNECTED state */
-	if (!wdev->current_bss)
-		return;
-
-	ev = kzalloc(sizeof(*ev), gfp);
-	if (!ev)
-		return;
-
-	trace_cfg80211_authorization_event(wdev->wiphy, dev, auth_status);
-
-	ev->type = EVENT_AUTHORIZATION;
-	ev->au.auth_status = auth_status;
-	memcpy(ev->au.key_replay_ctr, key_replay_ctr,
-		NL80211_KEY_REPLAY_CTR_LEN);
-
-	spin_lock_irqsave(&wdev->event_lock, flags);
-	list_add_tail(&ev->list, &wdev->event_list);
-	spin_unlock_irqrestore(&wdev->event_lock, flags);
-	queue_work(cfg80211_wq, &rdev->event_work);
 }
 EXPORT_SYMBOL(cfg80211_authorization_event);
 
