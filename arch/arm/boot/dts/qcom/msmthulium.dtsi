@@ -217,6 +217,18 @@
 		qcom,hfi = "venus";
 		qcom,max-hw-load = <1281600>; /* Full 4k @ 30 + 1080p @ 30 */
 		qcom,imem-size = <1048576>; /* 1 MB */
+		qcom,load-freq-tbl =
+			/* Encoders */
+			<972000 450000000 0x55555555>, /* 4k UHD @ 30 */
+			<489600 320000000 0x55555555>, /* 1080p @ 60 */
+			<216000 150000000 0x55555555>, /* 720p @ 60 */
+			<108000  75000000 0x55555555>, /* 720p @ 30 */
+
+			/* Decoders */
+			<1944000 450000000 0xffffffff>, /* 4k UHD @ 60 */
+			< 972000 320000000 0xffffffff>, /* 4k UHD @ 30 */
+			< 489600 150000000 0xffffffff>, /* 1080p @ 60 */
+			< 244800  75000000 0xffffffff>; /* 1080p @ 30 */
 
 		/* Regulators */
 		/* Note: don't change the order of the regulators below as they
@@ -238,7 +250,7 @@
 		       <&clock_mmss clk_video_maxi_clk>,
 		       <&clock_mmss clk_video_subcore0_clk>,
 		       <&clock_mmss clk_video_subcore1_clk>;
-		qcom,clock-configs = <0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0>;
+		qcom,clock-configs = <0x0 0x0 0x1 0x0 0x0 0x0 0x1 0x1>;
 
 		/* MMUs */
 		non_secure_cb {
