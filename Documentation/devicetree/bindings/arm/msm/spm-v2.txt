@@ -36,7 +36,7 @@ Optional properties
 
 - reg-names: Register names for the physical address required if spm device
         has more than one physical addressed to be mapped. Allowed register
-        names are: "saw-base", "q2s"
+        names are: "saw-base", "q2s", "hw-flush"
 - qcom,saw2-avs-limit: The AVS limit register
 - qcom,saw2-avs-dly: The AVS delay register is used to specify the delay values
 	between AVS controller requests
@@ -76,7 +76,9 @@ Example 1:
 		compatible = "qcom,spm-v2";
 		#address-cells = <1>;
 		#size-cells = <1>;
-		reg = <0xf9089000 0x1000>;
+		reg = <0xf9089000 0x1000>,
+			<0x9980000 0x4>;
+		reg-names = "saw-base", "hw-flush";
 		qcom,core-id = <0>;
 		qcom,saw2-ver-reg = <0xfd0>;
 		qcom,saw2-cfg = <0x1b>;
