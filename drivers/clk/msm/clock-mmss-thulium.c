@@ -2499,7 +2499,7 @@ static struct branch_clk mmagic_video_noc_cfg_ahb_clk = {
 
 static struct branch_clk mmss_mmagic_ahb_clk = {
 	.cbcr_reg = MMSS_MMSS_MMAGIC_AHB_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_base,
 	.no_halt_check_on_disable = true,
 	.c = {
