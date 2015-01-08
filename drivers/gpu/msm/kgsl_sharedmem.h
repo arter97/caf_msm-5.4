@@ -121,15 +121,21 @@ static inline int
 memdesc_sg_dma(struct kgsl_memdesc *memdesc,
 		phys_addr_t addr, uint64_t size)
 {
+	int ret;
 	struct page *page = phys_to_page(addr);
 
-	memdesc->sg = kmalloc(sizeof(struct scatterlist), GFP_KERNEL);
-	if (memdesc->sg == NULL)
+	memdesc->sgt = kmalloc(sizeof(struct sg_table), GFP_KERNEL);
+	if (memdesc->sgt == NULL)
 		return -ENOMEM;
 
-	memdesc->sglen = 1;
-	sg_init_table(memdesc->sg, 1);
-	sg_set_page(memdesc->sg, page, (size_t) size, 0);
+	ret = sg_alloc_table(memdesc->sgt, 1, GFP_KERNEL);
+	if (ret) {
+		kfree(memdesc->sgt);
+		memdesc->sgt = NULL;
+		return ret;
+	}
+
+	sg_set_page(memdesc->sgt->sgl, page, (size_t) size, 0);
 	return 0;
 }
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -136,8 +136,7 @@ struct kgsl_memdesc_ops {
  * @size: Size of the memory object
  * @mmapsize: Total size of the object in VM (including guard)
  * @priv: Internal flags and settings
- * @sg: Scatter gather list for the allocated pages
- * @sglen: Number of active entries in the sglist
+ * @sgt: Scatter gather table for allocated pages
  * @ops: Function hooks for the memdesc memory type
  * @flags: Flags set from userspace
  * @dev: Pointer to the struct device that owns this memory
@@ -152,9 +151,8 @@ struct kgsl_memdesc {
 	uint64_t gpuaddr;
 	phys_addr_t physaddr;
 	uint64_t size;
-	unsigned int priv; /* Internal flags and settings */
-	struct scatterlist *sg;
-	unsigned int sglen;
+	unsigned int priv;
+	struct sg_table *sgt;
 	struct kgsl_memdesc_ops *ops;
 	unsigned int flags;
 	struct device *dev;

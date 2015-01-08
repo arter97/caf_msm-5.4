@@ -671,13 +671,13 @@ EXPORT_SYMBOL(kgsl_mmu_putpagetable);
 
 static int _nommu_get_gpuaddr(struct kgsl_memdesc *memdesc)
 {
-	if (memdesc->sglen > 1) {
+	if (memdesc->sgt->nents > 1) {
 		KGSL_CORE_ERR(
 			"Attempt to map non-contiguous memory with NOMMU\n");
 		return -EINVAL;
 	}
 
-	memdesc->gpuaddr = (uint64_t) sg_phys(memdesc->sg);
+	memdesc->gpuaddr = (uint64_t) sg_phys(memdesc->sgt->sgl);
 
 	if (memdesc->gpuaddr == 0) {
 		KGSL_CORE_ERR("Unable to get a physical address\n");
