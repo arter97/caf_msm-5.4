@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -46,6 +46,21 @@
 		[VDD_DIG_##l2] = (f2),		\
 		[VDD_DIG_##l3] = (f3),		\
 		[VDD_DIG_##l4] = (f4),		\
+	},					\
+	.num_fmax = VDD_DIG_NUM
+
+#define VDD_MMPLL4_FMAX_MAP1(l1, f1) \
+	.vdd_class = &vdd_mmpll4,		\
+	.fmax = (unsigned long[VDD_DIG_NUM]) {	\
+		[VDD_DIG_##l1] = (f1),		\
+	},					\
+	.num_fmax = VDD_DIG_NUM
+
+#define VDD_MMPLL4_FMAX_MAP2(l1, f1, l2, f2) \
+	.vdd_class = &vdd_mmpll4,		\
+	.fmax = (unsigned long[VDD_DIG_NUM]) {	\
+		[VDD_DIG_##l1] = (f1),		\
+		[VDD_DIG_##l2] = (f2),		\
 	},					\
 	.num_fmax = VDD_DIG_NUM
 
