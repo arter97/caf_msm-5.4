@@ -28,6 +28,7 @@ msm_adreno-y += \
 	adreno_a5xx.o \
 	adreno_a3xx_snapshot.o \
 	adreno_a4xx_snapshot.o \
+	adreno_a5xx_snapshot.o \
 	adreno.o \
 	adreno_cp_parser.o \
 	adreno_iommu.o \
