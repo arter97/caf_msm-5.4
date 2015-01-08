@@ -46,13 +46,6 @@ Optional properties
 	voltage
 - qcom,phase-port: The PVC port used for changing the number of phases
 - qcom,pfm-port: The PVC port used for enabling PWM/PFM modes
-- qcom,saw2-spm-cmd-wfi: The WFI command sequence
-- qcom,saw2-spm-cmd-ret: The Retention command sequence
-- qcom,saw2-spm-cmd-spc: The Standalone PC command sequence
-- qcom,saw2-spm-cmd-pc-no-rpm: The Power Collapse command sequence where APPS
-	proc won't inform the RPM.
-- qcom,saw2-spm-cmd-pc: The Power Collapse command sequence
-- qcom,saw2-spm-cmd-gdhs: L2 GDHS command sequence
 - qcom,cpu-vctl-mask: Mask of cpus, whose voltage the spm device can control.
 	Depricated: Replaced with cpu-vctl-list when cpu phandles are available.
 - qcom,cpu-vctl-list: List of cpu node phandles, whose voltage the spm device
@@ -70,6 +63,31 @@ only on SAW2 v3.0 and above.
 - qcom,use-qchannel-for-wfi: This boolean property is used to indicate
 	that the SPM gets triggerd by the qchannel and not by means of
 	wfi. So a wfe could trigger a spm for clock gating as well.
+- modes: Lists all the available low power modes for the device
+
+Second level properties for modes
+
+Required properties
+- qcom,label: Specifies the mode name such as:
+            qcom,saw2-spm-cmd-wfi: WFI mode
+            qcom,saw2-spm-cmd-ret: Retention mode
+            qcom,saw2-spm-cmd-spc: Standalone PC mode
+            qcom,saw2-spm-cmd-pc: Power Collapse mode
+            qcom,saw2-spm-cmd-gdhs: GDHS mode
+- qcom,sequence: Specifies sequence for the low power mode
+Optional properties
+- qcom,pc_mode: Specifies pc_mode bit should be set in the SPM control register
+- qcom,ret_mode: Specifies ret_mode bit should be set in the SPM control register
+- qcom,spm_en: Specifies spm_en bit should be set in the SPM control register
+- qcom,isar: Specifies isar bit should be set in the SPM control register
+	Specify this property only if SPM should retain its start address at
+	the end of the program.
+- qcom,slp_cmd_mode: Specifies slp_cmd_mode bit should be set in SPM control register.
+	Adding this property results in SPM handshaking with RPM. Please remove
+	the RPM handshake command from the sleep sequence, replace that with
+	Sleep without RPM handshake command.
+- qcom,event_sync: Specifies event_sync byte should be set in SPM control
+	register.
 
 Example 1:
 	qcom,spm@f9089000 {
@@ -89,12 +107,29 @@ Example 1:
 		qcom,saw2-spm-dly= <0x20000400>;
 		qcom,saw2-spm-ctl = <0x1>;
 		qcom,cpu-vctl-mask = <0xf>;
-		qcom,saw2-spm-cmd-wfi = [03 0b 0f];
-		qcom,saw2-spm-cmd-spc = [00 20 50 80 60 70 10 92
+		qcom,mode0 {
+			qcom,label = "qcom,saw2-spm-cmd-wfi";
+			qcom,sequence = [03 0b 0f];
+			qcom,spm_en;
+		};
+
+		qcom,mode1 {
+			qcom,label = "qcom,saw2-spm-cmd-spc";
+			qcom,sequence = [00 20 50 80 60 70 10 92
 				a0 b0 03 68 70 3b 92 a0 b0
 				82 2b 50 10 30 02 22 30 0f];
-		qcom,saw2-spm-cmd-pc = [00 20 10 92 a0 b0 07 3b 92
+			qcom,spm_en;
+			qcom,pc_mode;
+		};
+
+		qcom,mode2 {
+			qcom,label = "qcom,saw2-spm-cmd-pc";
+			qcom,sequence = [00 20 10 92 a0 b0 07 3b 92
 				a0 b0 82 10 30 02 22 30 0f];
+			qcom,spm_en;
+			qcom,pc_mode;
+			qcom,slp_cmd_mode;
+		};
 	};
 
 Example 2:
@@ -113,10 +148,26 @@ Example 2:
 		qcom,saw2-spm-dly= <0x20000400>;
 		qcom,saw2-spm-ctl = <0x1>;
 		qcom,cpu-vctl-list = <&CPU0 &CPU1 &CPU2 &CPU3>;
-		qcom,saw2-spm-cmd-wfi = [03 0b 0f];
-		qcom,saw2-spm-cmd-spc = [00 20 50 80 60 70 10 92
+		qcom,mode0 {
+			qcom,label = "qcom,saw2-spm-cmd-wfi";
+			qcom,sequence = [03 0b 0f];
+			qcom,spm_en;
+		};
+
+		qcom,mode1 {
+			qcom,label = "qcom,saw2-spm-cmd-spc";
+			qcom,sequence = [00 20 50 80 60 70 10 92
 				a0 b0 03 68 70 3b 92 a0 b0
 				82 2b 50 10 30 02 22 30 0f];
-		qcom,saw2-spm-cmd-pc = [00 20 10 92 a0 b0 07 3b 92
+			qcom,spm_en;
+			qcom,pc_mode;
+		};
+
+		qcom,mode2 {
+			qcom,label = "qcom,saw2-spm-cmd-pc";
+			qcom,sequence = [00 20 10 92 a0 b0 07 3b 92
 				a0 b0 82 10 30 02 22 30 0f];
+			qcom,spm_en;
+			qcom,pc_mode;
+		};
 	};
