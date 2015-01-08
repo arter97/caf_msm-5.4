@@ -478,9 +478,8 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 		/*
 		 * Notify that the cluster is entering a low power mode
 		 */
-		if (level->mode[i] == MSM_SPM_MODE_POWER_COLLAPSE) {
-			cpu_cluster_pm_enter();
-		}
+		if (level->mode[i] == MSM_SPM_MODE_POWER_COLLAPSE)
+			cpu_cluster_pm_enter(cluster->aff_level);
 	}
 	if (level->notify_rpm) {
 		struct cpumask nextcpu;
@@ -628,9 +627,8 @@ static void cluster_unprepare(struct lpm_cluster *cluster,
 		BUG_ON(ret);
 
 		if (cluster->levels[last_level].mode[i] ==
-				MSM_SPM_MODE_POWER_COLLAPSE) {
-			cpu_cluster_pm_exit();
-		}
+				MSM_SPM_MODE_POWER_COLLAPSE)
+			cpu_cluster_pm_exit(cluster->aff_level);
 	}
 unlock_return:
 	spin_unlock(&cluster->sync_lock);
