@@ -1863,6 +1863,16 @@ config HIGHMEM
 
 	  If unsure, say n.
 
+config HIGHMEM_DEFER
+	bool "Defer High Memory initialization"
+	depends on HIGHMEM
+	help
+	  The initialization of ZONE_HIGHMEM takes long during memory
+	  Initialization in terms of freeing the highmemory pages and
+	  mark them available to the buddy allocator for further allocation.
+	  To optimize the time taken during HIGHMEM init this config defers
+	  highmemory initialization.
+
 config HIGHPTE
 	bool "Allocate 2nd-level pagetables from highmem"
 	depends on HIGHMEM
