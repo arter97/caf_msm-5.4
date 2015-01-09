@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/of.h>
+#include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
 #include <linux/usb/phy.h>
@@ -38,11 +39,6 @@
 #define PCIE_USB3_PHY_PCS_STATUS		0x728
 #define PHYSTATUS				BIT(6)
 
-#define PCIE_USB3_PHY_REVISION_ID0		0x730
-#define PCIE_USB3_PHY_REVISION_ID1		0x734
-#define PCIE_USB3_PHY_REVISION_ID2		0x738
-#define PCIE_USB3_PHY_REVISION_ID3		0x73C
-
 /* AHB2PHY register offsets */
 #define PERIPH_SS_AHB2PHY_TOP_CFG		0x10
 
@@ -52,6 +48,29 @@
 #define ARCVR_DTCT_EN		BIT(0)
 #define ALFPS_DTCT_EN		BIT(1)
 #define ARCVR_DTCT_EVENT_SEL	BIT(4)
+
+enum qmp_phy_rev_reg {
+	USB3_REVISION_ID0,
+	USB3_REVISION_ID1,
+	USB3_REVISION_ID2,
+	USB3_REVISION_ID3,
+};
+
+/* QMP PHY REVID offset for rev1 */
+unsigned int qmp_phy_rev1[] = {
+	[USB3_REVISION_ID0] = 0x730,
+	[USB3_REVISION_ID1] = 0x734,
+	[USB3_REVISION_ID2] = 0x738,
+	[USB3_REVISION_ID3] = 0x73c,
+};
+
+/* QMP PHY REVID offset for rev2 */
+unsigned int qmp_phy_rev2[] = {
+	[USB3_REVISION_ID0] = 0x788,
+	[USB3_REVISION_ID1] = 0x78C,
+	[USB3_REVISION_ID2] = 0x790,
+	[USB3_REVISION_ID3] = 0x794,
+};
 
 struct qmp_reg_val {
 	u32 offset;
@@ -179,6 +198,68 @@ static const struct qmp_reg_val qmp_settings_rev1[] = {
 	{-1, -1} /* terminating entry */
 };
 
+/* USB3PHY_REVISION_ID3 = 0x20 where register offset is being changed. */
+static const struct qmp_reg_val qmp_settings_rev2[] = {
+	{0x14, 0xAC}, /* QSERDES_COM_SYSCLK_EN_SEL */
+	{0x34, 0xC}, /* QSERDES_COM_BIAS_EN_CLKBUFLR_EN */
+	{0x174, 0x30}, /* QSERDES_COM_CLK_SELECT */
+	{0x3C, 0x06}, /* QSERDES_COM_SYS_CLK_CTRL */
+	{0xB4, 0x00}, /* QSERDES_COM_RESETSM_CNTRL */
+	{0xB8, 0x08}, /* QSERDES_COM_RESETSM_CNTRL2 */
+	{0x194, 0x06}, /* QSERDES_COM_CMN_CONFIG */
+	{0x19C, 0x01}, /* QSERDES_COM_SVS_MODE_CLK_SEL */
+	{0x178, 0x01}, /* QSERDES_COM_HSCLK_SEL */
+	{0xD0, 0x82}, /* QSERDES_COM_DEC_START_MODE0 */
+	{0xDC, 0x55}, /* QSERDES_COM_DIV_FRAC_START1_MODE0 */
+	{0xE0, 0x55}, /* QSERDES_COM_DIV_FRAC_START2_MODE0 */
+	{0xE4, 0x03}, /* QSERDES_COM_DIV_FRAC_START3_MODE0 */
+	{0x78, 0x0B}, /* QSERDES_COM_CP_CTRL_MODE0 */
+	{0x84, 0x16}, /* QSERDES_COM_PLL_RCTRL_MODE0 */
+	{0x90, 0x28}, /* QSERDES_COM_PLL_CCTRL_MODE0 */
+	{0x108, 0x80}, /*QSERDES_COM_INTEGLOOP_GAIN0_MODE0 */
+	{0x10C, 0x00}, /* QSERDES_COM_INTEGLOOP_GAIN1_MODE0 */
+	{0x12C, 0x24}, /* QSERDES_COM_VCO_TUNE1_MODE0 */
+	{0x130, 0x02}, /* QSERDES_COM_VCO_TUNE2_MODE0 */
+	{0x184, 0x0a}, /* QSERDES_COM_CORECLK_DIV */
+	{0x4C, 0x15}, /* QSERDES_COM_LOCK_CMP1_MODE0 */
+	{0x50, 0x34}, /* QSERDES_COM_LOCK_CMP2_MODE0 */
+	{0x54, 0x00}, /* QSERDES_COM_LOCK_CMP3_MODE0 */
+	{0xC8, 0x00}, /* QSERDES_COM_LOCK_CMP_EN */
+	{0x18C, 0x00}, /* QSERDES_COM_CORE_CLK_EN */
+	{0xCC, 0x00}, /* QSERDES_COM_LOCK_CMP_CFG */
+	{0x128, 0x00}, /* QSERDES_COM_VCO_TUNE_MAP */
+	{0x0C, 0x0A}, /* QSERDES_COM_BG_TIMER */
+	{0x10, 0x01}, /* QSERDES_COM_SSC_EN_CENTER */
+	{0x1C, 0x31}, /* QSERDES_COM_SSC_PER1 */
+	{0x20, 0x01}, /* QSERDES_COM_SSC_PER2 */
+	{0x14, 0x00}, /* QSERDES_COM_SSC_ADJ_PER1 */
+	{0x18, 0x00}, /* QSERDES_COM_SSC_ADJ_PER2 */
+	{0x24, 0xDE}, /* QSERDES_COM_SSC_STEP_SIZE1 */
+	{0x28, 0x07}, /* QSERDES_COM_SSC_STEP_SIZE2 */
+	{0x440, 0x0B}, /* QSERDES_RX_UCDR_FASTLOCK_FO_GAIN */
+	{0x4D8, 0x03}, /* QSERDES_RX_RX_EQU_ADAPTOR_CNTRL2 */
+	{0x4DC, 0x6C}, /* QSERDES_RX_RX_EQU_ADAPTOR_CNTRL3 */
+	{0x4E0, 0xB8}, /* QSERDES_RX_RX_EQU_ADAPTOR_CNTRL4 */
+	{0x508, 0x77}, /* QSERDES_RX_RX_EQ_OFFSET_ADAPTOR_CNTRL1 */
+	{0x50C, 0x80}, /* QSERDES_RX_RX_OFFSET_ADAPTOR_CNTRL2 */
+	{0x514, 0x04}, /* QSERDES_RX_SIGDET_CNTRL */
+	{0x518, 0x1B}, /* QSERDES_RX_SIGDET_LVL */
+	{0x51C, 0x16}, /* QSERDES_RX_SIGDET_DEGLITCH_CNTRL */
+	{0x268, 0x45}, /* QSERDES_TX_HIGHZ_TRANSCEIVEREN_BIAS_DRVR_EN */
+	{0x2AC, 0x12}, /* QSERDES_TX_RCV_DETECT_LVL_2 */
+	{0x6C4, 0x03}, /* USB3_PHY_FLL_CNTRL2 */
+	{0x6C0, 0x02}, /* USB3_PHY_FLL_CNTRL1 */
+	{0x6C8, 0x09}, /* USB3_PHY_FLL_CNT_VAL_L */
+	{0x6CC, 0x42}, /* USB3_PHY_FLL_CNT_VAL_H_TOL */
+	{0x6D0, 0x85}, /* USB3_PHY_FLL_MAN_CODE */
+	{0x294, 0x02}, /* QSERDES_TX_LANE_MODE */
+	{0x680, 0xD1}, /* USB3_PHY_LOCK_DETECT_CONFIG1 */
+	{0x684, 0x1F}, /* USB3_PHY_LOCK_DETECT_CONFIG2 */
+	{0x688, 0x47}, /* USB3_PHY_LOCK_DETECT_CONFIG3 */
+
+	{-1, -1} /* terminating entry */
+};
+
 /* Override PLL Calibration */
 static const struct qmp_reg_val qmp_override_pll[] = {
 	{0x04, 0xE1}, /* QSERDES_COM_PLL_VCOTAIL_EN */
@@ -220,7 +301,21 @@ struct msm_ssphy_qmp {
 	bool			emulation;
 	bool			switch_pipe_clk_src;
 	bool			misc_config;
+	unsigned int		*phy_id_reg; /* version base ID offset */
 };
+
+static const struct of_device_id msm_usb_id_table[] = {
+	{
+		.compatible = "qcom,usb-ssphy-qmp",
+		.data = qmp_phy_rev1,
+	},
+	{
+		.compatible = "qcom,usb-ssphy-qmp-v2",
+		.data = qmp_phy_rev2,
+	},
+	{ },
+};
+MODULE_DEVICE_TABLE(of, msm_usb_id_table);
 
 static inline char *get_cable_status_str(struct msm_ssphy_qmp *phy)
 {
@@ -429,12 +524,13 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 
 	/* Rev ID is made up each of the LSBs of REVISION_ID[0-3] */
 	revid = (readl_relaxed(phy->base +
-			PCIE_USB3_PHY_REVISION_ID3) & 0xFF) << 24;
+			phy->phy_id_reg[USB3_REVISION_ID3]) & 0xFF) << 24;
 	revid |= (readl_relaxed(phy->base +
-			PCIE_USB3_PHY_REVISION_ID2) & 0xFF) << 16;
+			phy->phy_id_reg[USB3_REVISION_ID2]) & 0xFF) << 16;
 	revid |= (readl_relaxed(phy->base +
-			PCIE_USB3_PHY_REVISION_ID1) & 0xFF) << 8;
-	revid |= readl_relaxed(phy->base + PCIE_USB3_PHY_REVISION_ID0) & 0xFF;
+			phy->phy_id_reg[USB3_REVISION_ID1]) & 0xFF) << 8;
+	revid |= readl_relaxed(phy->base +
+			phy->phy_id_reg[USB3_REVISION_ID0]) & 0xFF;
 
 	switch (revid) {
 	case 0x10000000:
@@ -443,6 +539,9 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 		break;
 	case 0x10000001:
 		reg = qmp_settings_rev1;
+		break;
+	case 0x20000000:
+		reg = qmp_settings_rev2;
 		break;
 	default:
 		dev_err(uphy->dev, "Unknown revid 0x%x, cannot initialize PHY\n",
@@ -741,10 +840,27 @@ static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct resource *res;
 	int ret = 0;
+	const struct of_device_id *phy_ver;
 
 	phy = devm_kzalloc(dev, sizeof(*phy), GFP_KERNEL);
 	if (!phy)
 		return -ENOMEM;
+
+	phy_ver = of_match_device(msm_usb_id_table, &pdev->dev);
+	if (phy_ver) {
+		dev_dbg(dev, "Found QMP PHY version as:%s.\n",
+						phy_ver->compatible);
+		if (phy_ver->data) {
+			phy->phy_id_reg = (unsigned int *)phy_ver->data;
+		} else {
+			dev_err(dev,
+				"QMP PHY version match but wrong data val.\n");
+			return -EINVAL;
+		}
+	} else {
+		dev_err(dev, "QMP PHY version mismatch.\n");
+		return -ENODEV;
+	}
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 						"qmp_phy_base");
@@ -868,14 +984,6 @@ static int msm_ssphy_qmp_remove(struct platform_device *pdev)
 	kfree(phy);
 	return 0;
 }
-
-static const struct of_device_id msm_usb_id_table[] = {
-	{
-		.compatible = "qcom,usb-ssphy-qmp",
-	},
-	{ },
-};
-MODULE_DEVICE_TABLE(of, msm_usb_id_table);
 
 static struct platform_driver msm_ssphy_qmp_driver = {
 	.probe		= msm_ssphy_qmp_probe,
