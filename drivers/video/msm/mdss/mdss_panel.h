@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -281,7 +281,7 @@ struct mipi_panel_info {
 	/* The packet-size should not bet changed */
 	char no_max_pkt_size;
 	/* Clock required during LP commands */
-	char force_clk_lane_hs;
+	bool force_clk_lane_hs;
 
 	char vsync_enable;
 	char hw_vsync_mode;
