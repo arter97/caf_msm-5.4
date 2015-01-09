@@ -954,7 +954,7 @@
 	};
 
 	fuse: fuse@7602c {
-		compatible = "arm,coresight-fuse";
+		compatible = "arm,coresight-fuse-v3";
 		reg = <0x7602c 0xc>,
 		      <0x76014 0x4>;
 		reg-names = "fuse-base", "qpdi-fuse-base";
