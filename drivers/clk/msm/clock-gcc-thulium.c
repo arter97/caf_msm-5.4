@@ -1542,6 +1542,18 @@ static struct branch_clk gcc_smmu_aggre0_axi_clk = {
 	},
 };
 
+static struct gate_clk gcc_aggre0_noc_qosgen_extref_clk = {
+	.en_reg = GCC_AGGRE0_NOC_QOSGEN_EXTREF_CTL,
+	.en_mask = BIT(0),
+	.delay_us = 500,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_aggre0_noc_qosgen_extref_clk",
+		.ops = &clk_ops_gate,
+		CLK_INIT(gcc_aggre0_noc_qosgen_extref_clk.c),
+	},
+};
+
 static struct gate_clk gcc_pcie_0_pipe_clk = {
 	.en_reg = GCC_PCIE_0_PIPE_CBCR,
 	.en_mask = BIT(0),
@@ -2978,6 +2990,7 @@ static struct mux_clk gcc_debug_mux = {
 		{ &gcc_aggre0_noc_at_clk.c, 0x0118 },
 		{ &gcc_smmu_aggre0_axi_clk.c, 0x0119 },
 		{ &gcc_smmu_aggre0_ahb_clk.c, 0x011a },
+		{ &gcc_aggre0_noc_qosgen_extref_clk.c, 0x011b },
 		{ &gcc_aggre2_ufs_axi_clk.c, 0x0126 },
 		{ &gcc_aggre2_usb3_axi_clk.c, 0x0127 },
 	),
@@ -3122,6 +3135,7 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(gcc_aggre0_snoc_axi_clk),
 	CLK_LIST(gcc_smmu_aggre0_ahb_clk),
 	CLK_LIST(gcc_smmu_aggre0_axi_clk),
+	CLK_LIST(gcc_aggre0_noc_qosgen_extref_clk),
 	CLK_LIST(gcc_aggre2_usb3_axi_clk),
 	CLK_LIST(gcc_aggre2_ufs_axi_clk),
 	CLK_LIST(gcc_blsp1_ahb_clk),
