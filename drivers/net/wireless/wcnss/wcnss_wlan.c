@@ -57,6 +57,8 @@
 #define WCNSS_PINCTRL_STATE_SLEEP "wcnss_sleep"
 #define WCNSS_PINCTRL_GPIO_STATE_DEFAULT "wcnss_gpio_default"
 
+#define IS_CAL_DATA_PRESENT     0
+
 /* module params */
 #define WCNSS_CONFIG_UNSPECIFIED (-1)
 #define UINT32_MAX (0xFFFFFFFFU)
@@ -2266,7 +2268,7 @@ static void wcnss_nvbin_dnld_main(struct work_struct *worker)
 	if (!FW_CALDATA_CAPABLE())
 		goto nv_download;
 
-	if (!penv->fw_cal_available && WCNSS_CONFIG_UNSPECIFIED
+	if (!penv->fw_cal_available && IS_CAL_DATA_PRESENT
 		!= has_calibrated_data && !penv->user_cal_available) {
 		while (!penv->user_cal_available && retry++ < 5)
 			msleep(500);
