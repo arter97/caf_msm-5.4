@@ -35,6 +35,7 @@
 
 int init_marker_proc_fs(void);
 void place_marker(char *name);
+extern char lk_splash_val[];
 #else
 void place_marker(char *name);
 #endif
