@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -47,6 +47,7 @@ struct msm_spm_device {
 	bool allow_rpm_hs;
 	bool use_spm_clk_gating;
 	bool use_qchannel_for_wfi;
+	void __iomem *flush_base_addr;
 };
 
 struct msm_spm_vdd_info {
@@ -185,6 +186,25 @@ static void msm_spm_config_q2s(struct msm_spm_device *dev, unsigned int mode)
 	mb();
 }
 
+static void msm_spm_config_hw_flush(struct msm_spm_device *dev,
+		unsigned int mode)
+{
+	uint32_t val = 0;
+
+	if (!dev->flush_base_addr)
+		return;
+
+	switch (mode) {
+	case MSM_SPM_MODE_POWER_COLLAPSE:
+		val = BIT(0);
+		break;
+	default:
+		break;
+	}
+
+	__raw_writel(val, dev->flush_base_addr);
+}
+
 static int msm_spm_dev_set_low_power_mode(struct msm_spm_device *dev,
 		unsigned int mode, bool notify_rpm)
 {
@@ -218,6 +238,7 @@ static int msm_spm_dev_set_low_power_mode(struct msm_spm_device *dev,
 	}
 
 	msm_spm_config_q2s(dev, mode);
+	msm_spm_config_hw_flush(dev, mode);
 
 	return ret;
 }
@@ -640,6 +661,18 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 
 	key = "qcom,use-qchannel-for-wfi";
 	dev->use_qchannel_for_wfi = of_property_read_bool(node, key);
+
+	/* HW flush address */
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "hw-flush");
+	if (res) {
+		dev->flush_base_addr = devm_ioremap_resource(&pdev->dev, res);
+		if (IS_ERR(dev->flush_base_addr)) {
+			ret = PTR_ERR(dev->flush_base_addr);
+			pr_err("%s(): Unable to iomap hw flush register %d\n",
+					__func__, ret);
+			goto fail;
+		}
+	}
 
 	/*
 	 * At system boot, cpus and or clusters can remain in reset. CCI SPM
