@@ -57,6 +57,7 @@ struct qusb_phy {
 
 	bool			power_enabled;
 	bool			clocks_enabled;
+	bool			cable_connected;
 	bool			suspended;
 	bool			ulpi_mode;
 };
