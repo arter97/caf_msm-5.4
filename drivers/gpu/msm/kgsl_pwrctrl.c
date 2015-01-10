@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1797,8 +1797,7 @@ int kgsl_pwrctrl_enable(struct kgsl_device *device)
 		return status;
 	kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_ON, KGSL_STATE_ACTIVE);
 	kgsl_pwrctrl_axi(device, KGSL_PWRFLAGS_ON);
-	device->ftbl->regulator_enable(device);
-	return status;
+	return device->ftbl->regulator_enable(device);
 }
 EXPORT_SYMBOL(kgsl_pwrctrl_enable);
 

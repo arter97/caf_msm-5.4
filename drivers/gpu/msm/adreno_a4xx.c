@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -377,12 +377,12 @@ static bool a4xx_is_sptp_idle(struct adreno_device *adreno_dev)
  * Some HW blocks may need their regulators explicitly enabled
  * on a restart.  Clocks must be on during this call.
  */
-static void a4xx_regulator_enable(struct adreno_device *adreno_dev)
+static int a4xx_regulator_enable(struct adreno_device *adreno_dev)
 {
 	unsigned int reg;
 	struct kgsl_device *device = &adreno_dev->dev;
 	if (!(adreno_is_a430(adreno_dev) || adreno_is_a418(adreno_dev)))
-		return;
+		return 0;
 
 	/* Set the default register values; set SW_COLLAPSE to 0 */
 	kgsl_regwrite(device, A4XX_RBBM_POWER_CNTL_IP, 0x778000);
@@ -390,6 +390,7 @@ static void a4xx_regulator_enable(struct adreno_device *adreno_dev)
 		udelay(5);
 		kgsl_regread(device, A4XX_RBBM_POWER_STATUS, &reg);
 	} while (!(reg & SP_TP_PWR_ON));
+	return 0;
 }
 
 /*

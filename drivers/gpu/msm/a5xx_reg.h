@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -487,6 +487,12 @@
 #define A5XX_VBIF_PERF_PWR_CNT_HIGH0       0x3118
 #define A5XX_VBIF_PERF_PWR_CNT_HIGH1       0x3119
 #define A5XX_VBIF_PERF_PWR_CNT_HIGH2       0x311A
+
+/* GPMU registers */
+#define A5XX_GPMU_SP_POWER_CNTL            0xA881
+#define A5XX_GPMU_RBCCU_POWER_CNTL         0xA887
+#define A5XX_GPMU_SP_PWR_CLK_STATUS        0xA88B
+#define A5XX_GPMU_RBCCU_PWR_CLK_STATUS     0xA88D
 
 /* COUNTABLE FOR SP PERFCOUNTER */
 #define A5XX_SP_ALU_ACTIVE_CYCLES          0x1

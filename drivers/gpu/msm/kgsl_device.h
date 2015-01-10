@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -180,7 +180,7 @@ struct kgsl_functable {
 	void (*drawctxt_sched)(struct kgsl_device *device,
 		struct kgsl_context *context);
 	void (*resume)(struct kgsl_device *device);
-	void (*regulator_enable)(struct kgsl_device *);
+	int (*regulator_enable)(struct kgsl_device *);
 	bool (*is_hw_collapsible)(struct kgsl_device *);
 	void (*regulator_disable)(struct kgsl_device *);
 	void (*pwrlevel_change_settings)(struct kgsl_device *device,

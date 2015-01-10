@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3002,17 +3002,20 @@ static unsigned int adreno_gpuid(struct kgsl_device *device,
 	return (0x0003 << 16) | ADRENO_GPUREV(adreno_dev);
 }
 
-static void adreno_regulator_enable(struct kgsl_device *device)
+static int adreno_regulator_enable(struct kgsl_device *device)
 {
+	int ret;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct adreno_gpudev *gpudev  = ADRENO_GPU_DEVICE(adreno_dev);
 	if (gpudev->regulator_enable &&
 		!test_bit(ADRENO_DEVICE_GPU_REGULATOR_ENABLED,
 			&adreno_dev->priv)) {
-		gpudev->regulator_enable(adreno_dev);
-		set_bit(ADRENO_DEVICE_GPU_REGULATOR_ENABLED,
-			&adreno_dev->priv);
+		ret = gpudev->regulator_enable(adreno_dev);
+		if (!ret)
+			set_bit(ADRENO_DEVICE_GPU_REGULATOR_ENABLED,
+				&adreno_dev->priv);
 	}
+	return ret;
 }
 
 static bool adreno_is_hw_collapsible(struct kgsl_device *device)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,6 +30,14 @@ static const struct adreno_vbif_data a530_vbif[] = {
 static const struct adreno_vbif_platform a5xx_vbif_platforms[] = {
 	{ adreno_is_a530, a530_vbif },
 };
+
+#define PWR_ON_BIT BIT(20)
+
+/**
+ * Number of times to check if the regulator enabled before
+ * giving up and returning failure.
+ */
+#define PWR_RETRY 3
 
 /**
  * a5xx_protect_init() - Initializes register protection on a5xx
@@ -82,6 +90,65 @@ static void a5xx_protect_init(struct adreno_device *adreno_dev)
 	if (iommu_regs)
 		adreno_set_protected_registers(adreno_dev, &index,
 				iommu_regs->base, iommu_regs->range);
+}
+
+/*
+ * a5xx_regulator_enable() - Enable any necessary HW regulators
+ * @adreno_dev: The adreno device pointer
+ *
+ * Some HW blocks may need their regulators explicitly enabled
+ * on a restart.  Clocks must be on during this call.
+ */
+static int a5xx_regulator_enable(struct adreno_device *adreno_dev)
+{
+	unsigned int reg, retry = PWR_RETRY;
+	struct kgsl_device *device = &adreno_dev->dev;
+	if (!adreno_is_a530(adreno_dev))
+		return 0;
+
+	/* Set the default register values; set SW_COLLAPSE to 0 */
+	kgsl_regwrite(device, A5XX_GPMU_SP_POWER_CNTL, 0x778000);
+	do {
+		udelay(3);
+		kgsl_regread(device, A5XX_GPMU_SP_PWR_CLK_STATUS, &reg);
+	} while (!(reg & PWR_ON_BIT) && retry--);
+	if (!(reg & PWR_ON_BIT))
+		goto err;
+
+	kgsl_regwrite(device, A5XX_GPMU_RBCCU_POWER_CNTL, 0x778000);
+	retry = PWR_RETRY;
+	do {
+		udelay(3);
+		kgsl_regread(device, A5XX_GPMU_RBCCU_PWR_CLK_STATUS, &reg);
+	} while (!(reg & PWR_ON_BIT) && retry--);
+	if (!(reg & PWR_ON_BIT))
+		goto err;
+	else
+		return 0;
+
+err:
+	KGSL_PWR_ERR(device, "regulator enable failed %x\n", reg);
+	return -ENODEV;
+}
+
+/*
+ * a5xx_regulator_disable() - Disable any necessary HW regulators
+ * @adreno_dev: The adreno device pointer
+ *
+ * Some HW blocks may need their regulators explicitly disabled
+ * on a power down to prevent current spikes.  Clocks must be on
+ * during this call.
+ */
+static void a5xx_regulator_disable(struct adreno_device *adreno_dev)
+{
+	struct kgsl_device *device = &adreno_dev->dev;
+	if (!adreno_is_a530(adreno_dev))
+		return;
+
+	/* Set the default register values; set SW_COLLAPSE to 1 */
+	kgsl_regwrite(device, A5XX_GPMU_RBCCU_POWER_CNTL, 0x778001);
+	udelay(3);
+	kgsl_regwrite(device, A5XX_GPMU_SP_POWER_CNTL, 0x778001);
 }
 
 /*
@@ -805,5 +872,7 @@ struct adreno_gpudev adreno_a5xx_gpudev = {
 	.microcode_load = a5xx_microcode_load,
 	.perfcounters = &a5xx_perfcounters,
 	.vbif_xin_halt_ctrl0_mask = A5XX_VBIF_XIN_HALT_CTRL0_MASK,
+	.regulator_enable = a5xx_regulator_enable,
+	.regulator_disable = a5xx_regulator_disable,
 };
 

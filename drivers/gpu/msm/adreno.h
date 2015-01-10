@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -646,7 +646,7 @@ struct adreno_gpudev {
 	bool (*is_sptp_idle)(struct adreno_device *);
 	void (*enable_pc)(struct adreno_device *);
 	void (*enable_ppd)(struct adreno_device *);
-	void (*regulator_enable)(struct adreno_device *);
+	int (*regulator_enable)(struct adreno_device *);
 	void (*regulator_disable)(struct adreno_device *);
 	void (*pwrlevel_change_settings)(struct adreno_device *,
 					bool mask_throttle);
