@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -416,15 +416,15 @@
 #define	MSM_BUS_SLAVE_SMMU_VFE_CFG 706
 #define	MSM_BUS_SLAVE_A0NOC_MPU_CFG 707
 #define	MSM_BUS_SLAVE_VMEM_CFG 708
-#define	MSM_BUS_SLAVE_CAMERA_THROTTLE_CFG 700
-#define	MSM_BUS_SLAVE_VMEM 709
-#define	MSM_BUS_SLAVE_AHB2PHY 710
-#define	MSM_BUS_SLAVE_PIMEM 711
-#define	MSM_BUS_SLAVE_SNOC_VMEM 712
-#define	MSM_BUS_SLAVE_PCIE_2 713
-#define	MSM_BUS_SLAVE_RBCPR_MX 714
-#define	MSM_BUS_SLAVE_RBCPR_CX 715
-#define	MSM_BUS_SLAVE_LAST 716
+#define	MSM_BUS_SLAVE_CAMERA_THROTTLE_CFG 709
+#define	MSM_BUS_SLAVE_VMEM 710
+#define	MSM_BUS_SLAVE_AHB2PHY 711
+#define	MSM_BUS_SLAVE_PIMEM 712
+#define	MSM_BUS_SLAVE_SNOC_VMEM 713
+#define	MSM_BUS_SLAVE_PCIE_2 714
+#define	MSM_BUS_SLAVE_RBCPR_MX 715
+#define	MSM_BUS_SLAVE_RBCPR_CX 716
+#define	MSM_BUS_SLAVE_LAST 717
 
 #define	MSM_BUS_SYSTEM_FPB_SLAVE_SYSTEM  MSM_BUS_SYSTEM_SLAVE_SYSTEM_FPB
 #define MSM_BUS_CPSS_FPB_SLAVE_SYSTEM MSM_BUS_SYSTEM_SLAVE_CPSS_FPB
