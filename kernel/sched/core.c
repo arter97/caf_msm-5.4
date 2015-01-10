@@ -8372,6 +8372,7 @@ void __init sched_init(void)
 		rq->nr_small_tasks = rq->nr_big_tasks = 0;
 		rq->mostly_idle_load = pct_to_real(20);
 		rq->mostly_idle_nr_run = 3;
+		rq->mostly_idle_freq = 0;
 		rq->curr_runnable_sum = rq->prev_runnable_sum = 0;
 		rq->hmp_flags = 0;
 #endif
