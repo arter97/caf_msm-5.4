@@ -1786,11 +1786,6 @@ static inline int xhci_register_pci(void) { return 0; }
 static inline void xhci_unregister_pci(void) {}
 #endif
 
-struct xhci_plat_data {
-	unsigned vendor;
-	unsigned revision;
-};
-
 #if defined(CONFIG_USB_XHCI_PLATFORM) \
 	|| defined(CONFIG_USB_XHCI_PLATFORM_MODULE)
 int xhci_register_plat(void);
@@ -1817,7 +1812,7 @@ void xhci_shutdown(struct usb_hcd *hcd);
 int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks);
 
 #ifdef	CONFIG_PM
-int xhci_suspend(struct xhci_hcd *xhci);
+int xhci_suspend(struct xhci_hcd *xhci, bool do_wakeup);
 int xhci_resume(struct xhci_hcd *xhci, bool hibernated);
 #else
 #define	xhci_suspend	NULL

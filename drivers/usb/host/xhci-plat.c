@@ -11,12 +11,13 @@
  * version 2 as published by the Free Software Foundation.
  */
 
+#include <linux/dma-mapping.h>
+#include <linux/module.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
-#include <linux/module.h>
 #include <linux/slab.h>
-#include <linux/of.h>
-#include <linux/dma-mapping.h>
+#include <linux/usb/xhci_pdriver.h>
 
 #include "xhci.h"
 
@@ -24,7 +25,7 @@
 
 static void xhci_plat_quirks(struct device *dev, struct xhci_hcd *xhci)
 {
-	struct xhci_plat_data *pdata = dev->platform_data;
+	struct usb_xhci_pdata *pdata = dev->platform_data;
 
 	/*
 	 * As of now platform drivers don't provide MSI support so we ensure
@@ -107,6 +108,8 @@ static const struct hc_driver xhci_plat_xhci_driver = {
 
 static int xhci_plat_probe(struct platform_device *pdev)
 {
+	struct device_node	*node = pdev->dev.of_node;
+	struct usb_xhci_pdata	*pdata = dev_get_platdata(&pdev->dev);
 	const struct hc_driver	*driver;
 	struct xhci_hcd		*xhci;
 	struct resource         *res;
@@ -181,6 +184,10 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	}
 
 	hcd_to_bus(xhci->shared_hcd)->skip_resume = true;
+
+	if ((node && of_property_read_bool(node, "usb3-lpm-capable")) ||
+			(pdata && pdata->usb3_lpm_capable))
+		xhci->quirks |= XHCI_LPM_SUPPORT;
 	/*
 	 * Set the xHCI pointer before xhci_plat_setup() (aka hcd_driver.reset)
 	 * is called by usb_add_hcd().
@@ -238,7 +245,15 @@ static int xhci_plat_suspend(struct device *dev)
 	struct usb_hcd	*hcd = dev_get_drvdata(dev);
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
 
-	return xhci_suspend(xhci);
+	/*
+	 * xhci_suspend() needs `do_wakeup` to know whether host is allowed
+	 * to do wakeup during suspend. Since xhci_plat_suspend is currently
+	 * only designed for system suspend, device_may_wakeup() is enough
+	 * to dertermine whether host is allowed to do wakeup. Need to
+	 * reconsider this when xhci_plat_suspend enlarges its scope, e.g.,
+	 * also applies to runtime suspend.
+	 */
+	return xhci_suspend(xhci, device_may_wakeup(dev));
 }
 
 static int xhci_plat_resume(struct device *dev)
@@ -260,7 +275,7 @@ static int xhci_plat_runtime_suspend(struct device *dev)
 
 	dev_dbg(dev, "xhci-plat runtime suspend\n");
 
-	return xhci_suspend(xhci);
+	return xhci_suspend(xhci, true);
 }
 
 static int xhci_plat_runtime_resume(struct device *dev)
