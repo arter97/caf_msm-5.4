@@ -2741,8 +2741,40 @@ static int taiko_codec_enable_mad(struct snd_soc_dapm_widget *w,
 {
 	struct snd_soc_codec *codec = w->codec;
 	int ret = 0;
+	u8 mad_con;
+	u16 txfe_reg;
+	u8 txfe_shift;
 
 	pr_debug("%s %d\n", __func__, event);
+
+	mad_con = snd_soc_read(codec, TAIKO_A_CDC_CONN_MAD) & 0x0F;
+
+	switch (mad_con) {
+	case 1:
+		txfe_reg = TAIKO_A_TX_1_2_TXFE_CLKDIV;
+		txfe_shift = 0;
+		break;
+	case 2:
+		txfe_reg = TAIKO_A_TX_1_2_TXFE_CLKDIV;
+		txfe_shift = 4;
+		break;
+	case 3:
+		txfe_reg = TAIKO_A_TX_3_4_TXFE_CKDIV;
+		txfe_shift = 0;
+		break;
+	case 4:
+		txfe_reg = TAIKO_A_TX_3_4_TXFE_CKDIV;
+		txfe_shift = 4;
+		break;
+	case 5:
+		txfe_reg = TAIKO_A_TX_5_6_TXFE_CKDIV;
+		txfe_shift = 0;
+		break;
+	case 6:
+		txfe_reg = TAIKO_A_TX_5_6_TXFE_CKDIV;
+		txfe_shift = 4;
+		break;
+	}
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		ret = taiko_codec_config_mad(codec);
@@ -2750,8 +2782,20 @@ static int taiko_codec_enable_mad(struct snd_soc_dapm_widget *w,
 			pr_err("%s: Failed to config MAD\n", __func__);
 			break;
 		}
+		if (mad_con >= 1 && mad_con <= 6)
+			snd_soc_update_bits(codec, txfe_reg,
+					(0x0F << txfe_shift),
+					(0x08 << txfe_shift));
+
+		break;
+	case SND_SOC_DAPM_POST_PMD:
+		if (mad_con >= 1 && mad_con <= 6)
+			snd_soc_update_bits(codec, txfe_reg,
+					(0x0F << txfe_shift),
+					(0x05 << txfe_shift));
 		break;
 	}
+
 	return ret;
 }
 
@@ -5769,7 +5813,8 @@ static const struct snd_soc_dapm_widget taiko_dapm_widgets[] = {
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
 	SND_SOC_DAPM_AIF_OUT_E("AIF4 MAD", "AIF4 MAD TX", 0,
 			       SND_SOC_NOPM, 0, 0,
-			       taiko_codec_enable_mad, SND_SOC_DAPM_PRE_PMU),
+			       taiko_codec_enable_mad,
+			       SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 	SND_SOC_DAPM_SWITCH("MADONOFF", SND_SOC_NOPM, 0, 0,
 			    &aif4_mad_switch),
 	SND_SOC_DAPM_INPUT("MADINPUT"),
