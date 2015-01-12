@@ -78,6 +78,7 @@
 #define clk_ce1_clk			0x42229c55
 #define clk_gcc_ce1_ahb_m_clk		0x2eb28c01
 #define clk_gcc_ce1_axi_m_clk		0xc174dfba
+#define clk_measure_only_bimc_hmss_axi_clk	0xc1cc4f11
 #define clk_aggre1_noc_clk		0x049abba8
 #define clk_aggre1_noc_a_clk		0xc12e4220
 #define clk_aggre2_noc_clk		0xaa681404
