@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -48,7 +48,7 @@
 
 #define IPA_AGGR_MAX_STR_LENGTH (10)
 
-#define CLEANUP_TAG_PROCESS_TIMEOUT 20
+#define CLEANUP_TAG_PROCESS_TIMEOUT 150
 
 #define IPA_AGGR_STR_IN_BYTES(str) \
 	(strnlen((str), IPA_AGGR_MAX_STR_LENGTH - 1) + 1)
@@ -1488,7 +1488,7 @@ static int ipa_q6_set_ex_path_dis_agg(void)
 		}
 	}
 
-	/* Will wait 20msecs for IPA tag process completion */
+	/* Will wait 150msecs for IPA tag process completion */
 	retval = ipa_tag_process(desc, num_descs,
 				 msecs_to_jiffies(CLEANUP_TAG_PROCESS_TIMEOUT));
 	if (retval) {
@@ -1499,10 +1499,6 @@ static int ipa_q6_set_ex_path_dis_agg(void)
 				kfree(desc[index].user1);
 			retval = -EINVAL;
 		}
-
-		/* Ignoring TAG process timeout */
-		if (retval == -ETIME)
-			retval = 0;
 	}
 
 	kfree(desc);
