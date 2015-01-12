@@ -310,7 +310,13 @@ static int _ringbuffer_start_common(struct adreno_ringbuffer *rb)
 		return status;
 
 	/* idle device to validate ME INIT */
-	return adreno_spin_idle(device);
+	status = adreno_spin_idle(device);
+	if (status) {
+		KGSL_DRV_ERR(rb->device,
+		"ringbuffer initialization failed to idle\n");
+		kgsl_device_snapshot(device, NULL);
+	}
+	return status;
 }
 
 /**

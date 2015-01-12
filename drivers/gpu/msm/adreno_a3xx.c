@@ -1788,6 +1788,12 @@ static int _ringbuffer_bootstrap_ucode(struct adreno_ringbuffer *rb,
 	/* idle device to validate bootstrap */
 	ret = adreno_spin_idle(device);
 
+	if (ret) {
+		KGSL_DRV_ERR(rb->device,
+		"microcode bootstrap failed to idle\n");
+		kgsl_device_snapshot(device, NULL);
+	}
+
 	/* Clear the chicken bit for speed up on A430 cores */
 	if (adreno_is_a430(adreno_dev))
 		kgsl_regwrite(device, A4XX_CP_DEBUG,
