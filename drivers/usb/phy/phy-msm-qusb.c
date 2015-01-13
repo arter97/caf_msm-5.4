@@ -69,7 +69,7 @@ static int qusb_phy_reset(struct usb_phy *phy)
 	dev_dbg(phy->dev, "%s\n", __func__);
 
 	clk_reset(qphy->phy_reset, CLK_RESET_ASSERT);
-	usleep(100);
+	usleep_range(100, 150);
 	clk_reset(qphy->phy_reset, CLK_RESET_DEASSERT);
 
 	return 0;
