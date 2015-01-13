@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -57,19 +57,25 @@
  * @addr: Address to poll
  * @val: Variable to read the value into
  * @cond: Break condition (usually involving @val)
- * @max_reads: Maximum number of reads before giving up
- * @time_between_us: Time to udelay() between successive reads
+ * @delay_us: Time to udelay between reads in us (0 tight-loops)
+ * @timeout_us: Timeout in us, 0 means never timeout
  *
- * Returns 0 on success and -ETIMEDOUT upon a timeout.
+ * Returns 0 on success and -ETIMEDOUT upon a timeout. In either
+ * case, the last read value at @addr is stored in @val.
  */
-#define readl_poll_timeout_atomic(addr, val, cond, max_reads, time_between_us) \
+#define readl_poll_timeout_atomic(addr, val, cond, delay_us, timeout_us) \
 ({ \
-	int count; \
-	for (count = (max_reads); count > 0; count--) { \
+	ktime_t timeout = ktime_add_us(ktime_get(), timeout_us); \
+	for (;;) { \
 		(val) = readl(addr); \
 		if (cond) \
 			break; \
-		udelay(time_between_us); \
+		if (timeout_us && ktime_compare(ktime_get(), timeout) > 0) { \
+			(val) = readl(addr); \
+			break; \
+		} \
+		if (delay_us) \
+			udelay(delay_us);	\
 	} \
 	(cond) ? 0 : -ETIMEDOUT; \
 })
