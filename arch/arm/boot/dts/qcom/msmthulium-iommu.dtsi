@@ -17,6 +17,7 @@
 		compatible = "qcom,smmu-v2";
 		qcom,halt-and-tlb-on-atos;
 		qcom,register-save;
+		qcom,skip-init;
 		reg = <0xd80000 0x10000>;
 		#global-interrupts = <1>;
 
@@ -36,6 +37,7 @@
 		compatible = "qcom,smmu-v2";
 		qcom,halt-and-tlb-on-atos;
 		qcom,register-save;
+		qcom,skip-init;
 		reg = <0xb40000 0x10000>;
 		#global-interrupts = <1>;
 
@@ -56,6 +58,7 @@
 		compatible = "qcom,smmu-v2";
 		qcom,halt-and-tlb-on-atos;
 		qcom,register-save;
+		qcom,skip-init;
 		reg = <0xda0000 0x10000>;
 		#global-interrupts = <1>;
 
@@ -76,6 +79,7 @@
 		compatible = "qcom,smmu-v2";
 		qcom,halt-and-tlb-on-atos;
 		qcom,register-save;
+		qcom,skip-init;
 		reg = <0xd40000 0x20000>;
 		#global-interrupts = <1>;
 
@@ -97,6 +101,7 @@
 		compatible = "qcom,smmu-v2";
 		qcom,halt-and-tlb-on-atos;
 		qcom,register-save;
+		qcom,skip-init;
 		reg = <0xd00000 0x10000>;
 		#global-interrupts = <1>;
 
@@ -117,6 +122,7 @@
 		compatible = "qcom,smmu-v2";
 		qcom,halt-and-tlb-on-atos;
 		qcom,register-save;
+		qcom,skip-init;
 		reg = <0xd20000 0x10000>;
 		#global-interrupts = <1>;
 
@@ -136,6 +142,7 @@
 		compatible = "qcom,smmu-v2";
 		qcom,halt-and-tlb-on-atos;
 		qcom,register-save;
+		qcom,skip-init;
 		reg = <0xd60000 0x10000>;
 		#global-interrupts = <1>;
 
@@ -156,6 +163,7 @@
 		compatible = "qcom,smmu-v2";
 		qcom,halt-and-tlb-on-atos;
 		qcom,register-save;
+		qcom,skip-init;
 		reg = <0x1600000 0x20000>;
 		#global-interrupts = <1>;
 
