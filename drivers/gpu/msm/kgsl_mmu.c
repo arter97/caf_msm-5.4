@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -752,7 +752,8 @@ kgsl_mmu_get_gpuaddr(struct kgsl_pagetable *pagetable,
 			bitmap_size, start_bit,
 			(unsigned int) (size >> PAGE_SHIFT), align_mask);
 
-		if (!bit || (bit >= bitmap_size)) {
+		/* a return value bigger than bitmap_size is failure */
+		if (bit >= bitmap_size) {
 			if (KGSL_MMU_SECURE_PT == pagetable->name)
 				return -ENOMEM;
 			if (KGSL_MEMFLAGS_USERMEM_MASK & memdesc->flags &&
