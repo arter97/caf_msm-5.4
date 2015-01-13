@@ -91,6 +91,7 @@ DEFINE_CLK_RPM_SMD(ce1_clk, ce1_a_clk, RPM_CE_CLK_TYPE,
 					CE1_CLK_ID, NULL);
 DEFINE_CLK_DUMMY(gcc_ce1_ahb_m_clk, 0);
 DEFINE_CLK_DUMMY(gcc_ce1_axi_m_clk, 0);
+DEFINE_CLK_DUMMY(measure_only_bimc_hmss_axi_clk, 0);
 
 DEFINE_CLK_RPM_SMD_XO_BUFFER(ln_bb_clk, ln_bb_a_clk, LN_BB_CLK_ID);
 static DEFINE_CLK_VOTER(mcd_ce1_clk, &ce1_clk.c, 85710000);
@@ -2889,6 +2890,7 @@ static struct mux_clk gcc_debug_mux = {
 		{ &ce1_clk.c, 0x0099 },
 		{ &gcc_ce1_axi_m_clk.c, 0x009a },
 		{ &gcc_ce1_ahb_m_clk.c, 0x009b },
+		{ &measure_only_bimc_hmss_axi_clk.c, 0x00a5 },
 		{ &gcc_mmss_sys_noc_axi_clk.c, 0x0018 },
 		{ &gcc_mmss_noc_cfg_ahb_clk.c, 0x0019 },
 		{ &gcc_mmss_noc_at_clk.c, 0x001a},
@@ -3070,6 +3072,7 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(ce1_clk),
 	CLK_LIST(gcc_ce1_ahb_m_clk),
 	CLK_LIST(gcc_ce1_axi_m_clk),
+	CLK_LIST(measure_only_bimc_hmss_axi_clk),
 	CLK_LIST(gpll0),
 	CLK_LIST(gpll0_ao),
 	CLK_LIST(gpll0_out_main),
