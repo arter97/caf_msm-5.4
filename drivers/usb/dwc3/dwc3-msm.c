@@ -3211,9 +3211,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		mdwc->hs_phy->flags |= PHY_HOST_MODE;
 		mdwc->ss_phy->flags |= PHY_HOST_MODE;
 	} else {
-		dev_err(&pdev->dev, "DWC3 device-only mode not supported\n");
-		ret = -ENODEV;
-		goto put_dwc3;
+		dev_dbg(&pdev->dev, "DWC3 running in device-only mode\n");
 	}
 
 	if (mdwc->ext_xceiv.otg_capability && mdwc->charger.start_detection) {
