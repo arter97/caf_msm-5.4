@@ -961,12 +961,88 @@ exit_dfps:
 	return rc;
 }
 
-static int mdss_mdp_video_display(struct mdss_mdp_ctl *ctl, void *arg)
+static int mdss_mdp_video_timegen_en(struct mdss_mdp_ctl *ctl)
 {
 	struct mdss_mdp_video_ctx *ctx;
 	struct mdss_mdp_ctl *sctl;
 	struct mdss_panel_data *pdata = ctl->panel_data;
 	int rc;
+
+	if (!ctl) {
+		pr_err("%s: invalid ctl\n", __func__);
+		return -ENODEV;
+	}
+
+	ctx = (struct mdss_mdp_video_ctx *) ctl->priv_data;
+	if (!ctx) {
+		pr_err("%s: invalid ctx\n", __func__);
+		return -ENODEV;
+	}
+
+	pdata = ctl->panel_data;
+
+	if (!pdata) {
+		pr_err("%s: invalid pdata\n", __func__);
+		return -ENODEV;
+	}
+
+	rc = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_LINK_READY, NULL);
+	if (rc) {
+		pr_warn("intf #%d link ready error (%d)\n",
+				ctl->intf_num, rc);
+		video_vsync_irq_disable(ctl);
+		ctx->wait_pending = 0;
+		return rc;
+	}
+
+	rc = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_UNBLANK, NULL);
+	WARN(rc, "intf %d unblank error (%d)\n", ctl->intf_num, rc);
+
+	pr_debug("enabling timing gen for intf=%d\n", ctl->intf_num);
+
+	if (pdata->panel_info.cont_splash_enabled &&
+		!ctl->mfd->splash_info.splash_logo_enabled) {
+		rc = wait_for_completion_timeout(&ctx->vsync_comp,
+				usecs_to_jiffies(VSYNC_TIMEOUT_US));
+	}
+
+	rc = mdss_iommu_ctrl(1);
+	if (IS_ERR_VALUE(rc)) {
+		pr_err("IOMMU attach failed\n");
+		return rc;
+	}
+
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
+
+	mdss_mdp_irq_enable(MDSS_MDP_IRQ_INTF_UNDER_RUN, ctl->intf_num);
+	sctl = mdss_mdp_get_split_ctl(ctl);
+	if (sctl)
+		mdss_mdp_irq_enable(MDSS_MDP_IRQ_INTF_UNDER_RUN,
+			sctl->intf_num);
+
+	mdss_bus_bandwidth_ctrl(true);
+
+	mdp_video_write(ctx, MDSS_MDP_REG_INTF_TIMING_ENGINE_EN, 1);
+
+	/* Make sure TG is enabled */
+	wmb();
+
+	rc = wait_for_completion_timeout(&ctx->vsync_comp,
+			usecs_to_jiffies(VSYNC_TIMEOUT_US));
+	WARN(rc == 0, "timeout (%d) enabling timegen on ctl=%d\n",
+			rc, ctl->num);
+
+	ctx->timegen_en = true;
+	rc = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_PANEL_ON, NULL);
+	WARN(rc, "intf %d panel on error (%d)\n", ctl->intf_num, rc);
+
+	return rc;
+}
+
+
+static int mdss_mdp_video_display(struct mdss_mdp_ctl *ctl, void *arg)
+{
+	struct mdss_mdp_video_ctx *ctx;
 
 	pr_debug("kickoff ctl=%d\n", ctl->num);
 
@@ -986,55 +1062,8 @@ static int mdss_mdp_video_display(struct mdss_mdp_ctl *ctl, void *arg)
 
 	MDSS_XLOG(ctl->num, ctl->underrun_cnt);
 
-	if (!ctx->timegen_en) {
-		rc = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_LINK_READY, NULL);
-		if (rc) {
-			pr_warn("intf #%d link ready error (%d)\n",
-					ctl->intf_num, rc);
-			video_vsync_irq_disable(ctl);
-			ctx->wait_pending = 0;
-			return rc;
-		}
-
-		rc = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_UNBLANK, NULL);
-		WARN(rc, "intf %d unblank error (%d)\n", ctl->intf_num, rc);
-
-		pr_debug("enabling timing gen for intf=%d\n", ctl->intf_num);
-
-		if (pdata->panel_info.cont_splash_enabled &&
-			!ctl->mfd->splash_info.splash_logo_enabled) {
-			rc = wait_for_completion_timeout(&ctx->vsync_comp,
-					usecs_to_jiffies(VSYNC_TIMEOUT_US));
-		}
-
-		rc = mdss_iommu_ctrl(1);
-		if (IS_ERR_VALUE(rc)) {
-			pr_err("IOMMU attach failed\n");
-			return rc;
-		}
-
-		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
-
-		mdss_mdp_irq_enable(MDSS_MDP_IRQ_INTF_UNDER_RUN, ctl->intf_num);
-		sctl = mdss_mdp_get_split_ctl(ctl);
-		if (sctl)
-			mdss_mdp_irq_enable(MDSS_MDP_IRQ_INTF_UNDER_RUN,
-				sctl->intf_num);
-
-		mdss_bus_bandwidth_ctrl(true);
-
-		mdp_video_write(ctx, MDSS_MDP_REG_INTF_TIMING_ENGINE_EN, 1);
-		wmb();
-
-		rc = wait_for_completion_timeout(&ctx->vsync_comp,
-				usecs_to_jiffies(VSYNC_TIMEOUT_US));
-		WARN(rc == 0, "timeout (%d) enabling timegen on ctl=%d\n",
-				rc, ctl->num);
-
-		ctx->timegen_en = true;
-		rc = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_PANEL_ON, NULL);
-		WARN(rc, "intf %d panel on error (%d)\n", ctl->intf_num, rc);
-	}
+	if (!ctx->timegen_en)
+		mdss_mdp_video_timegen_en(ctl);
 
 	return 0;
 }
@@ -1046,7 +1075,20 @@ int mdss_mdp_video_reconfigure_splash_done(struct mdss_mdp_ctl *ctl,
 	int i, ret = 0, off;
 	u32 data, flush;
 	struct mdss_mdp_video_ctx *ctx;
-	struct mdss_mdp_ctl *sctl = mdss_mdp_get_split_ctl(ctl);
+	struct mdss_mdp_ctl *sctl;
+
+	if (!ctl) {
+		pr_err("%s: invalid ctl\n", __func__);
+		return -ENODEV;
+	}
+
+	pdata = ctl->panel_data;
+	if (!pdata) {
+		pr_err("%s: invalid pdata\n", __func__);
+		return -ENODEV;
+	}
+
+	pdata->panel_info.cont_splash_enabled = 0;
 
 	off = 0;
 	ctx = (struct mdss_mdp_video_ctx *) ctl->priv_data;
@@ -1055,9 +1097,8 @@ int mdss_mdp_video_reconfigure_splash_done(struct mdss_mdp_ctl *ctl,
 		return -ENODEV;
 	}
 
-	pdata = ctl->panel_data;
+	sctl = mdss_mdp_get_split_ctl(ctl);
 
-	pdata->panel_info.cont_splash_enabled = 0;
 	if (sctl)
 		sctl->panel_data->panel_info.cont_splash_enabled = 0;
 	else if (ctl->panel_data->next && is_pingpong_split(ctl->mfd))
@@ -1250,6 +1291,8 @@ static int mdss_mdp_video_intfs_setup(struct mdss_mdp_ctl *ctl,
 			return -EINVAL;
 		}
 		mdss_mdp_fetch_start_config(ctx, ctl);
+	} else {
+		mdss_mdp_video_timegen_en(ctl);
 	}
 
 	mdp_video_write(ctx, MDSS_MDP_REG_INTF_PANEL_FORMAT, ctl->dst_format);

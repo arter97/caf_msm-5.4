@@ -546,8 +546,8 @@ struct mdss_overlay_private {
 	int dyn_pu_state;
 
 	bool handoff;
-	u32 splash_mem_addr;
-	u32 splash_mem_size;
+	u32 splash_mem_addr[MSM_FB_MAX_DEV_LIST];
+	u32 splash_mem_size[MSM_FB_MAX_DEV_LIST];
 	u32 sd_enabled;
 
 	struct sw_sync_timeline *vsync_timeline;
@@ -826,6 +826,7 @@ struct mdss_data_type *mdss_mdp_get_mdata(void);
 int mdss_mdp_secure_display_ctrl(unsigned int enable);
 
 int mdss_mdp_overlay_init(struct msm_fb_data_type *mfd);
+int mdss_mdp_overlay_handoff(struct msm_fb_data_type *mfd);
 int mdss_mdp_overlay_req_check(struct msm_fb_data_type *mfd,
 			       struct mdp_overlay *req,
 			       struct mdss_mdp_format_params *fmt);
