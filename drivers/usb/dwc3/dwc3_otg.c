@@ -146,7 +146,6 @@ static int dwc3_otg_start_host(struct usb_otg *otg, int on)
 		dwc3_otg_set_host(otg, NULL);
 		platform_device_del(dwc->xhci);
 
-		platform_device_del(dwc->xhci);
 		/*
 		 * Perform USB hardware RESET (both core reset and DBM reset)
 		 * when moving from host to peripheral. This is required for
