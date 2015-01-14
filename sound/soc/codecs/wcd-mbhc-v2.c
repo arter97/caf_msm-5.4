@@ -228,7 +228,8 @@ static int wcd_event_notify(struct notifier_block *self, unsigned long val,
 		snd_soc_write(codec, MSM8X16_WCD_A_ANALOG_MICB_1_VAL,
 				0x20);
 		/* Enable current source again for polling */
-		snd_soc_update_bits(codec,
+		if (mbhc->is_hs_inserted)
+			snd_soc_update_bits(codec,
 				    MSM8X16_WCD_A_ANALOG_MBHC_FSM_CTL,
 				    0xB0, 0xB0);
 		/* Program Button threshold registers */
