@@ -897,6 +897,11 @@
 	qcom,init-voltage = <2800000>;
 };
 
+&pm8994_l16 { /* GPS ELNA */
+	status = "okay";
+	regulator-always-on;
+};
+
 &pm8994_l17 { /* CAMERAS */
 	status = "okay";
 	regulator-min-microvolt = <2800000>;
