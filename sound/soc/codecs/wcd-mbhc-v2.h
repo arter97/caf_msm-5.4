@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -35,6 +35,11 @@ enum pa_dac_ack_flags {
 enum wcd_mbhc_btn_det_mem {
 	WCD_MBHC_BTN_DET_V_BTN_LOW,
 	WCD_MBHC_BTN_DET_V_BTN_HIGH
+};
+
+enum wcd_mbhc_event_state {
+	WCD_MBHC_EVENT_PA_HPHL,
+	WCD_MBHC_EVENT_PA_HPHR,
 };
 
 struct wcd_mbhc_btn_detect_cfg {
@@ -95,6 +100,7 @@ struct wcd_mbhc {
 
 	/* track PA/DAC state to sync with userspace */
 	unsigned long hph_pa_dac_state;
+	unsigned long event_state;
 	unsigned long jiffies_atreport;
 
 	/* impedance of hphl and hphr */
