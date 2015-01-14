@@ -120,6 +120,7 @@
 
 #include "msmthulium-ion.dtsi"
 #include "msmthulium-mdss.dtsi"
+#include "msmthulium-mdss-pll.dtsi"
 #include "msmthulium-smp2p.dtsi"
 #include "msmthulium-ipcrouter.dtsi"
 #include "msmthulium-iommu.dtsi"
