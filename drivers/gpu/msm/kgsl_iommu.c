@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -18,7 +18,6 @@
 #include <linux/slab.h>
 #include <linux/iommu.h>
 #include <linux/msm_kgsl.h>
-#include <linux/msm_iommu_domains.h>
 #include <stddef.h>
 
 #include "kgsl.h"
@@ -31,6 +30,8 @@
 #include "kgsl_trace.h"
 #include "kgsl_cffdump.h"
 #include "kgsl_pwrctrl.h"
+
+static struct kgsl_mmu_pt_ops iommu_pt_ops;
 
 static struct kgsl_iommu_register_list kgsl_iommuv1_reg[KGSL_IOMMU_REG_MAX] = {
 	{ 0, 0 },			/* GLOBAL_BASE */
@@ -583,118 +584,69 @@ static void kgsl_iommu_destroy_pagetable(struct kgsl_pagetable *pt)
 		phys_addr_t domain_ptbase =
 					kgsl_iommu_get_pt_base_addr(mmu, pt);
 		trace_kgsl_pagetable_destroy(domain_ptbase, pt->name);
-		if (MMU_FEATURE(mmu, KGSL_MMU_DMA_API))
-			iommu_domain_free(iommu_pt->domain);
-		else
-			msm_unregister_domain(iommu_pt->domain);
+
+		iommu_domain_free(iommu_pt->domain);
 	}
 
 	kfree(iommu_pt);
 	iommu_pt = NULL;
 }
 
-/*
- * kgsl_iommu_create_pagetable - Create a IOMMU pagetable
- *
- * Allocate memory to hold a pagetable and allocate the IOMMU
- * domain which is the actual IOMMU pagetable
- * Return - void
- */
-static void *kgsl_iommu_create_pagetable(void)
+/* currently only the MSM_IOMMU driver supports secure iommu */
+#ifdef CONFIG_MSM_IOMMU
+static inline struct bus_type *
+get_secure_bus(void)
 {
-	int domain_num;
-	struct kgsl_iommu_pt *iommu_pt;
-
-	struct msm_iova_layout kgsl_layout = {
-		/* we manage VA space ourselves, so partitions aren't needed */
-		.partitions = NULL,
-		.npartitions = 0,
-		.client_name = "kgsl",
-		.domain_flags = 0,
-	};
-
-	iommu_pt = kzalloc(sizeof(struct kgsl_iommu_pt), GFP_KERNEL);
-	if (!iommu_pt)
-		return NULL;
-
-	domain_num = msm_register_domain(&kgsl_layout);
-	if (domain_num >= 0) {
-		iommu_pt->domain = msm_get_iommu_domain(domain_num);
-
-		if (iommu_pt->domain) {
-			iommu_set_fault_handler(iommu_pt->domain,
-				kgsl_iommu_fault_handler, NULL);
-
-			return iommu_pt;
-		}
-	}
-
-	KGSL_CORE_ERR("Failed to create iommu domain\n");
-	kfree(iommu_pt);
+	return &msm_iommu_sec_bus_type;
+}
+#else
+static inline struct bus_type *
+get_secure_bus(void)
+{
 	return NULL;
 }
+#endif
 
-/*
- * kgsl_iommu_create_secure_pagetable - Create a secure IOMMU pagetable
- *
- * Allocate memory to hold a pagetable and allocate the secure IOMMU
- * domain which is the actual IOMMU pagetable
- * Return - void
- */
-static void *kgsl_iommu_create_secure_pagetable(void)
+/* kgsl_iommu_init_pt - Set up an IOMMU pagetable */
+static int kgsl_iommu_init_pt(struct kgsl_mmu *mmu, struct kgsl_pagetable *pt)
 {
-	int domain_num;
-	struct kgsl_iommu_pt *iommu_pt;
+	int ret = 0;
+	struct kgsl_iommu_pt *iommu_pt = NULL;
+	struct bus_type *bus = &platform_bus_type;
 
-	struct msm_iova_layout kgsl_secure_layout = {
-		/* we manage VA space ourselves, so partitions aren't needed */
-		.partitions = NULL,
-		.npartitions = 0,
-		.client_name = "kgsl_secure",
-		.domain_flags = 0,
-		.is_secure = 1,
-	};
+	if (pt == NULL)
+		return -EINVAL;
 
-	iommu_pt = kzalloc(sizeof(struct kgsl_iommu_pt), GFP_KERNEL);
-	if (!iommu_pt)
-		return NULL;
+	if (KGSL_MMU_SECURE_PT == pt->name) {
+		if (!mmu->secured)
+			return -EPERM;
 
-	domain_num = msm_register_domain(&kgsl_secure_layout);
-	if (domain_num >= 0) {
-		iommu_pt->domain = msm_get_iommu_domain(domain_num);
-
-		if (iommu_pt->domain)
-			return iommu_pt;
+		bus = get_secure_bus();
+		if (bus == NULL)
+			return -EPERM;
 	}
 
-	KGSL_CORE_ERR("Failed to create secure iommu domain\n");
-	kfree(iommu_pt);
-	return NULL;
-}
-
-/**
- * kgsl_iommu_create_dma_pagetable - Create IOMMU pagetable
- *
- * Allocate memory to hold a pagetable and allocate the secure IOMMU
- * domain which is the actual IOMMU pagetable
- * Return - pagetable pointer or NULL.
- */
-static void *kgsl_iommu_create_dma_pagetable(void)
-{
-	struct kgsl_iommu_pt *iommu_pt;
-
 	iommu_pt = kzalloc(sizeof(struct kgsl_iommu_pt), GFP_KERNEL);
 	if (!iommu_pt)
-		return NULL;
+		return -ENOMEM;
 
-	iommu_pt->domain = iommu_domain_alloc(&platform_bus_type);
+	iommu_pt->domain = iommu_domain_alloc(bus);
+	if (iommu_pt->domain == NULL) {
+		ret = -ENOMEM;
+		goto err;
+	}
 
-	if (iommu_pt->domain)
-		return iommu_pt;
+	pt->pt_ops = &iommu_pt_ops;
+	pt->priv = iommu_pt;
 
-	kfree(iommu_pt);
-	return NULL;
+	if (KGSL_MMU_SECURE_PT != pt->name)
+		iommu_set_fault_handler(iommu_pt->domain,
+				kgsl_iommu_fault_handler, pt);
+err:
+	if (ret)
+		kfree(iommu_pt);
 
+	return ret;
 }
 
 /*
@@ -1779,15 +1731,13 @@ struct kgsl_mmu_ops kgsl_iommu_ops = {
 	/* These callbacks will be set on some chipsets */
 	.mmu_set_pf_policy = kgsl_iommu_set_pf_policy,
 	.mmu_set_pagefault = kgsl_iommu_set_pagefault,
-	.mmu_get_prot_regs = kgsl_iommu_get_prot_regs
+	.mmu_get_prot_regs = kgsl_iommu_get_prot_regs,
+	.mmu_init_pt = kgsl_iommu_init_pt,
 };
 
-struct kgsl_mmu_pt_ops iommu_pt_ops = {
+static struct kgsl_mmu_pt_ops iommu_pt_ops = {
 	.mmu_map = kgsl_iommu_map,
 	.mmu_unmap = kgsl_iommu_unmap,
-	.mmu_create_pagetable = kgsl_iommu_create_pagetable,
-	.mmu_create_secure_pagetable = kgsl_iommu_create_secure_pagetable,
-	.mmu_create_dma_pagetable = kgsl_iommu_create_dma_pagetable,
 	.mmu_destroy_pagetable = kgsl_iommu_destroy_pagetable,
 	.get_ptbase = kgsl_iommu_get_ptbase,
 };

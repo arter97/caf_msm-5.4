@@ -595,28 +595,17 @@ kgsl_mmu_createpagetableobject(struct kgsl_mmu *mmu,
 	memset(pagetable->mem_bitmap, 0, BITS_TO_LONGS(
 					pagetable->bitmap_size) * sizeof(long));
 
-	if (KGSL_MMU_TYPE_IOMMU == kgsl_mmu_type)
-		pagetable->pt_ops = &iommu_pt_ops;
-
-	if (MMU_FEATURE(mmu, KGSL_MMU_DMA_API)) {
-		pagetable->priv = pagetable->pt_ops->mmu_create_dma_pagetable();
-	} else if (mmu->secured && (KGSL_MMU_SECURE_PT == name))
-		pagetable->priv =
-			pagetable->pt_ops->mmu_create_secure_pagetable();
-	else {
-		pagetable->priv = pagetable->pt_ops->mmu_create_pagetable();
+	if (mmu->mmu_ops && mmu->mmu_ops->mmu_init_pt) {
+		status = mmu->mmu_ops->mmu_init_pt(mmu, pagetable);
+		if (status)
+			goto err;
 	}
 
 	if (KGSL_MMU_SECURE_PT != name) {
-		if (pagetable->priv) {
-			status = kgsl_map_global_pt_entries(pagetable);
-			if (status)
-				goto err;
-		}
+		status = kgsl_map_global_pt_entries(pagetable);
+		if (status)
+			goto err;
 	}
-
-	if (!pagetable->priv)
-		goto err;
 
 	spin_lock_irqsave(&kgsl_driver.ptlock, flags);
 	list_add(&pagetable->list, &kgsl_driver.pagetable_list);
