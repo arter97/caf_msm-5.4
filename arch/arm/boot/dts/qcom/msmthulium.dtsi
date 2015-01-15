@@ -382,13 +382,23 @@
 	qcom,vmem@880000 {
 		compatible = "qcom,msm-vmem";
 		interrupts = <0 429 0>;
+
 		reg = <0x880000 0x800>,
 		    <0x6800000 0x100000>;
 		reg-names = "reg-base", "mem-base";
 
+		vdd-supply = <&gdsc_mmagic_video>;
 		clocks = <&clock_mmss clk_vmem_ahb_clk>,
 		       <&clock_mmss clk_vmem_maxi_clk>;
 		clock-names = "ahb", "maxi";
+
+		qcom,msm-bus,name = "vmem";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+			<MSM_BUS_MASTER_AMPSS_M0 MSM_BUS_SLAVE_VMEM_CFG   0   0>,
+			<MSM_BUS_MASTER_AMPSS_M0 MSM_BUS_SLAVE_VMEM_CFG 500 800>;
+
 		qcom,banks = <4>;
 	};
 
