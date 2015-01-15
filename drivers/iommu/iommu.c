@@ -994,15 +994,6 @@ void iommu_domain_window_disable(struct iommu_domain *domain, u32 wnd_nr)
 }
 EXPORT_SYMBOL_GPL(iommu_domain_window_disable);
 
-phys_addr_t iommu_get_pt_base_addr(struct iommu_domain *domain)
-{
-	if (unlikely(domain->ops->get_pt_base_addr == NULL))
-		return 0;
-
-	return domain->ops->get_pt_base_addr(domain);
-}
-EXPORT_SYMBOL_GPL(iommu_get_pt_base_addr);
-
 static int __init iommu_init(void)
 {
 	iommu_group_kset = kset_create_and_add("iommu_groups",
