@@ -17,7 +17,7 @@
 		#size-cells = <1>;
 		reg = <0xf9089000 0x1000>;
 		qcom,name = "core0";
-		qcom,core-id = <0>;
+		qcom,cpu = <&CPU0>;
 		qcom,saw2-ver-reg = <0xfd0>;
 		qcom,saw2-cfg = <0x01>;
 		qcom,saw2-avs-ctl = <0>;
@@ -54,7 +54,7 @@
 		#size-cells = <1>;
 		reg = <0xf9099000 0x1000>;
 		qcom,name = "core1";
-		qcom,core-id = <1>;
+		qcom,cpu = <&CPU1>;
 		qcom,saw2-ver-reg = <0xfd0>;
 		qcom,saw2-cfg = <0x01>;
 		qcom,saw2-avs-ctl = <0>;
@@ -91,7 +91,7 @@
 		#size-cells = <1>;
 		reg = <0xf90a9000 0x1000>;
 		qcom,name = "core2";
-		qcom,core-id = <2>;
+		qcom,cpu = <&CPU2>;
 		qcom,saw2-ver-reg = <0xfd0>;
 		qcom,saw2-cfg = <0x01>;
 		qcom,saw2-avs-ctl = <0>;
@@ -128,7 +128,7 @@
 		#size-cells = <1>;
 		reg = <0xf90b9000 0x1000>;
 		qcom,name = "core3";
-		qcom,core-id = <3>;
+		qcom,cpu = <&CPU3>;
 		qcom,saw2-ver-reg = <0xfd0>;
 		qcom,saw2-cfg = <0x01>;
 		qcom,saw2-avs-ctl = <0>;
@@ -165,7 +165,6 @@
 		#size-cells = <1>;
 		reg = <0xf9012000 0x1000>;
 		qcom,name = "system-l2";
-		qcom,core-id = <0xffff>; /* L2/APCS SAW */
 		qcom,saw2-ver-reg = <0xfd0>;
 		qcom,saw2-cfg = <0x14>;
 		qcom,saw2-avs-ctl = <0>;
@@ -180,7 +179,7 @@
 		qcom,vctl-port = <0x0>;
 		qcom,phase-port = <0x1>;
 		qcom,pfm-port = <0x2>;
-		qcom,cpu-vctl-mask = <0xf>;
+		qcom,cpu-vctl-list = <&CPU0 &CPU1 &CPU2 &CPU3>;
 		qcom,mode0 {
 			qcom,label = "qcom,saw2-spm-cmd-ret";
 			qcom,sequence = [1f 00 20 03 22 00 0f];
