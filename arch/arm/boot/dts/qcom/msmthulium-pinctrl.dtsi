@@ -295,6 +295,16 @@
 			};
 		};
 
+		cnss_pins {
+			cnss_default: cnss_default {
+				cnss_pins {
+					pins = "gpio46";
+					drive-strength = <16>;
+					bias-pull-down;
+				};
+			};
+		};
+
 		tert_mi2s {
 			tert_mi2s_sleep: tert_mi2s_sleep {
 				tert_mi2s {
