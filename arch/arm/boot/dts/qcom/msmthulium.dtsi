@@ -1687,10 +1687,10 @@
 	qcom,glink-smem-native-xprt-rpm@68000 {
 		compatible = "qcom,glink-rpm-native-xprt";
 		reg = <0x68000 0x6000>,
-			<0x7b4000 0x8>;
+			<0x9820010 0x4>;
 		reg-names = "msgram", "irq-reg-base";
-		qcom,irq-mask = <0x2>;
-		interrupts = <0 169 1>;
+		qcom,irq-mask = <0x1>;
+		interrupts = <0 168 1>;
 		label = "rpm";
 	};
 
