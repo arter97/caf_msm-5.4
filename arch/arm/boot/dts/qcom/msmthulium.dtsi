@@ -1093,7 +1093,7 @@
 	};
 
 	ssphy: ssphy@7410000 {
-		compatible = "qcom,usb-ssphy-qmp";
+		compatible = "qcom,usb-ssphy-qmp-v2";
 		status = "disabled";
 		reg = <0x7410000 0x45C>,
 		      <0x7416000 0x400>;
