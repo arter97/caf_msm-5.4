@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -49,7 +49,7 @@
 
 		qcom,chipid = <0x05030000>;
 
-		qcom,initial-pwrlevel = <1>;
+		qcom,initial-pwrlevel = <2>;
 
 		qcom,idle-timeout = <8>; //<HZ/12>
 		qcom,strtstp-sleepwake;
@@ -73,22 +73,26 @@
 		/* Bus Scale Settings */
 		qcom,bus-control;
 		qcom,msm-bus,name = "grp3d";
-		qcom,msm-bus,num-cases = <12>;
+		qcom,msm-bus,num-cases = <15>;
 		qcom,msm-bus,num-paths = <1>;
 		qcom,msm-bus,vectors-KBps =
 				<26 512 0 0>,
 
-				<26 512 0 1600000>,     // gpu=100 bus=200
-				<26 512 0 2400000>,     // gpu=100 bus=300
-				<26 512 0 3680000>,     // gpu=100 bus=460
+				<26 512 0 800000>,      // gpu=60 bus=100
+				<26 512 0 1200000>,     // gpu=60 bus=150
+				<26 512 0 1600000>,     // gpu=60 bus=200
 
-				<26 512 0 4376000>,     // gpu=162.5 bus=547
-				<26 512 0 5528000>,     // gpu=162.5 bus=691
-				<26 512 0 6216000>,     // gpu=162.5 bus=777
+				<26 512 0 1600000>,     // gpu=120 bus=200
+				<26 512 0 2400000>,     // gpu=120 bus=300
+				<26 512 0 3680000>,     // gpu=120 bus=460
 
-				<26 512 0 8288000>,     // gpu=320 bus=1036
-				<26 512 0 10368000>,    // gpu=320 bus=1296
-				<26 512 0 12440000>,    // gpu=320 bus=1555
+				<26 512 0 4376000>,     // gpu=205 bus=547
+				<26 512 0 5528000>,     // gpu=205 bus=691
+				<26 512 0 6216000>,     // gpu=205 bus=777
+
+				<26 512 0 8288000>,     // gpu=360 bus=1036
+				<26 512 0 10368000>,    // gpu=360 bus=1296
+				<26 512 0 12440000>,    // gpu=360 bus=1555
 
 				<26 512 0 14896000>,    // gpu=480 bus=1862
 				<26 512 0 17048000>;    // gpu=480 bus=2131
@@ -107,29 +111,35 @@
 			qcom,gpu-pwrlevel@0 {
 				reg = <0>;
 				qcom,gpu-freq = <480000000>;
-				qcom,bus-freq = <11>;
+				qcom,bus-freq = <14>;
 			};
 
 			qcom,gpu-pwrlevel@1 {
 				reg = <1>;
-				qcom,gpu-freq = <320000000>;
-				qcom,bus-freq = <8>;
+				qcom,gpu-freq = <360000000>;
+				qcom,bus-freq = <11>;
 			};
 
 			qcom,gpu-pwrlevel@2 {
 				reg = <2>;
-				qcom,gpu-freq = <162500000>;
-				qcom,bus-freq = <5>;
+				qcom,gpu-freq = <205000000>;
+				qcom,bus-freq = <8>;
 			};
 
 			qcom,gpu-pwrlevel@3 {
 				reg = <3>;
-				qcom,gpu-freq = <100000000>;
-				qcom,bus-freq = <2>;
+				qcom,gpu-freq = <120000000>;
+				qcom,bus-freq = <5>;
 			};
 
 			qcom,gpu-pwrlevel@4 {
 				reg = <4>;
+				qcom,gpu-freq = <60000000>;
+				qcom,bus-freq = <2>;
+			};
+
+			qcom,gpu-pwrlevel@5 {
+				reg = <5>;
 				qcom,gpu-freq = <27000000>;
 				qcom,bus-freq = <0>;
 			};
