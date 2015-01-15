@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -226,7 +226,7 @@ static int hdmi_vco_enable(struct clk *c)
 {
 	u32 status;
 	u32 rc;
-	u32 max_reads, timeout_us;
+	u32 delay_us, timeout_us;
 
 	if (!mdss_gdsc_enabled()) {
 		pr_err("%s: mdss GDSC is not enabled\n", __func__);
@@ -258,10 +258,10 @@ static int hdmi_vco_enable(struct clk *c)
 	udelay(350);
 
 	/* poll for PLL ready status */
-	max_reads = 20;
-	timeout_us = 100;
+	delay_us = 100;
+	timeout_us = 2000;
 	if (readl_poll_timeout_atomic((hdmi_phy_pll_base + HDMI_UNI_PLL_STATUS),
-		status, ((status & BIT(0)) == 1), max_reads, timeout_us)) {
+		status, ((status & BIT(0)) == 1), delay_us, timeout_us)) {
 		pr_err("%s: hdmi phy pll status=%x failed to Lock\n",
 		       __func__, status);
 		hdmi_vco_disable(c);
@@ -272,10 +272,10 @@ static int hdmi_vco_enable(struct clk *c)
 
 	udelay(350);
 	/* poll for PHY ready status */
-	max_reads = 20;
-	timeout_us = 100;
+	delay_us = 100;
+	timeout_us = 2000;
 	if (readl_poll_timeout_atomic((hdmi_phy_base + HDMI_PHY_STATUS),
-		status, ((status & BIT(0)) == 1), max_reads, timeout_us)) {
+		status, ((status & BIT(0)) == 1), delay_us, timeout_us)) {
 		pr_err("%s: hdmi phy status=%x failed to Lock\n",
 		       __func__, status);
 		hdmi_vco_disable(c);
@@ -1251,7 +1251,7 @@ static int dsi_pll_enable_seq_e(void)
 static int dsi_pll_enable_seq_8974(void)
 {
 	int i, rc = 0;
-	u32 status, max_reads, timeout_us;
+	u32 status, delay_us, timeout_us;
 
 	dsi_pll_software_reset();
 
@@ -1277,13 +1277,13 @@ static int dsi_pll_enable_seq_8974(void)
 		DSS_REG_W(mdss_dsi_base, DSI_0_PHY_PLL_UNIPHY_PLL_LKDET_CFG2,
 			0x0d);
 		/* poll for PLL ready status */
-		max_reads = 5;
-		timeout_us = 100;
+		delay_us = 100;
+		timeout_us = 500;
 		if (readl_poll_timeout_atomic((mdss_dsi_base +
 				DSI_0_PHY_PLL_UNIPHY_PLL_STATUS),
 				status,
 				((status & 0x01) == 1),
-				max_reads, timeout_us)) {
+				delay_us, timeout_us)) {
 			pr_debug("%s: DSI PLL status=%x failed to Lock\n",
 			       __func__, status);
 			pr_debug("%s:Trying to power UP PLL again\n",
