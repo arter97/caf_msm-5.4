@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -143,9 +143,6 @@
 /* load constants from a location in memory */
 #define CP_LOAD_CONSTANT_CONTEXT 0x2e
 
-/* (A2x) sets binning configuration registers */
-#define CP_SET_BIN_DATA             0x2f
-
 /* selective invalidation of state pointers */
 #define CP_INVALIDATE_STATE	0x3b
 
@@ -188,20 +185,6 @@
 
 /* Record the real-time when this packet is processed by PFP */
 #define CP_RECORD_PFP_TIMESTAMP	0x11
-
-/*
- * for a20x
- * program an offset that will added to the BIN_BASE value of
- * the 3D_DRAW_INDX_BIN packet
- */
-#define CP_SET_BIN_BASE_OFFSET     0x4B
-
-/*
- * for a22x
- * sets draw initiator flags register in PFP, gets bitwise-ORed into
- * every draw initiator
- */
-#define CP_SET_DRAW_INIT_FLAGS      0x4B
 
 #define CP_SET_PROTECTED_MODE  0x5f /* sets the register protection mode */
 

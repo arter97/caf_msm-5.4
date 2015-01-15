@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -776,7 +776,6 @@ _handle_type3(struct kgsl_device_private *dev_priv, uint *hostaddr)
 	case CP_SET_SHADER_BASES:
 	case CP_SET_BIN_MASK:
 	case CP_SET_BIN_SELECT:
-	case CP_SET_BIN_BASE_OFFSET:
 	case CP_SET_BIN_DATA:
 	case CP_CONTEXT_UPDATE:
 	case CP_INTERRUPT:
