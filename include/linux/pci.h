@@ -395,6 +395,7 @@ struct pci_host_bridge {
 	struct device dev;
 	struct pci_bus *bus;		/* root bus */
 	int domain_nr;
+	resource_size_t io_base;	/* physical address for the start of I/O area */
 	struct list_head windows;	/* pci_host_bridge_windows */
 	void (*release_fn)(struct pci_host_bridge *);
 	void *release_data;
@@ -1786,11 +1787,23 @@ static inline struct device_node *pci_bus_to_OF_node(struct pci_bus *bus)
 	return bus ? bus->dev.of_node : NULL;
 }
 
+struct pci_host_bridge *
+of_create_pci_host_bridge(struct device *parent, struct pci_ops *ops,
+			void *host_data);
+
+int pcibios_fixup_bridge_ranges(struct list_head *resources);
 #else /* CONFIG_OF */
 static inline void pci_set_of_node(struct pci_dev *dev) { }
 static inline void pci_release_of_node(struct pci_dev *dev) { }
 static inline void pci_set_bus_of_node(struct pci_bus *bus) { }
 static inline void pci_release_bus_of_node(struct pci_bus *bus) { }
+
+static inline struct pci_host_bridge *
+of_create_pci_host_bridge(struct device *parent, struct pci_ops *ops,
+			void *host_data)
+{
+	return NULL;
+}
 #endif  /* CONFIG_OF */
 
 #ifdef CONFIG_EEH
