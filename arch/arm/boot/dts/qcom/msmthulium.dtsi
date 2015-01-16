@@ -40,6 +40,8 @@
 			compatible = "arm,armv8";
 			reg = <0x0 0x0>;
 			enable-method = "qcom,msmthulium-acc";
+			qcom,cpuss-pm = <&cpuss_pm>;
+			qcom,cpuss-csr = <&cpuss_csr>;
 			qcom,acc = <&acc0>;
 			next-level-cache = <&L2_0>;
 			L2_0: l2-cache {
@@ -162,6 +164,16 @@
 	acc3: clock-controller@099c1000 {
 		compatible = "qcom,msmthulium-acc";
 		reg = <0x099c1000 0x1000>;
+	};
+
+	cpuss_pm: cpuss-pm@099e0000 {
+		 compatible = "qcom,msmthulium-cpuss-pm";
+		 reg = <0x099e0000 0x1000>;
+	};
+
+	cpuss_csr: cpuss-csr@09820000 {
+		   compatible = "qcom,msmthulium-cpuss-csr";
+		   reg = <0x09820000 0x10000>;
 	};
 
 	intc: interrupt-controller@09bc0000 {

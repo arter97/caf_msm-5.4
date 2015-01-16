@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,6 +30,23 @@
 #include <asm/barrier.h>
 #include <asm/cacheflush.h>
 
+/* CPUSS power domain register offsets */
+#define MSMTHULIUM_APCC_PWR_GATE_DLY0	0x40
+#define MSMTHULIUM_APCC_PWR_GATE_DLY1	0x48
+#define MSMTHULIUM_APCC_MAS_DLY0	0x50
+#define MSMTHULIUM_APCC_MAS_DLY1	0x58
+#define MSMTHULIUM_APCC_SER_EN		0x60
+#define MSMTHULIUM_APCC_SER_DLY		0x68
+#define MSMTHULIUM_APCC_SER_DLY_SEL0	0x70
+#define MSMTHULIUM_APCC_SER_DLY_SEL1	0x78
+#define MSMTHULIUM_APCC_APM_MODE	0x98
+#define MSMTHULIUM_APCC_APM_DLY		0xa0
+#define MSMTHULIUM_APCC_APM_DLY2	0xe8
+#define MSMTHULIUM_APCC_GDHS_DLY	0xb0
+
+/* CPUSS CSR register offsets */
+#define MSMTHULIUM_CPUSS_VERSION	0xfd0
+
 /* CPU power domain register offsets */
 #define CPU_PWR_CTL			0x4
 #define CPU_PWR_GATE_CTL		0x14
@@ -56,6 +73,10 @@
 #define APC_LDO_CFG2		0x10
 #define APC_LDO_VREF_CFG	0x4
 #define APC_LDO_BHS_PWR_CTL	0x28
+
+#define MSMTHULIUM_CPUSS_VER_1P0	0x10000000
+#define MSMTHULIUM_CPUSS_VER_1P1	0x10010000
+#define MSMTHULIUM_CPUSS_VER_1P2	0x10020000
 
 /*
  * struct msm_l2ccc_of_info: represents of data for l2 cache clock controller.
@@ -552,6 +573,91 @@ out_l2ccc:
 out_l2:
 	of_node_put(acc_node);
 out_acc:
+	of_node_put(cpu_node);
+
+	return ret;
+}
+
+int msmthulium_cpuss_pm_init(unsigned int cpu)
+{
+	int ret = 0;
+	struct device_node *cpu_node, *pm_cpuss_node, *csr_cpuss_node;
+	void __iomem *pm_cpuss, *csr_cpuss;
+	u32 version;
+
+	cpu_node = of_get_cpu_node(cpu, NULL);
+	if (!cpu_node)
+		return -ENODEV;
+
+	pm_cpuss_node = of_parse_phandle(cpu_node, "qcom,cpuss-pm", 0);
+	if (!pm_cpuss_node) {
+		ret = -ENODEV;
+		goto out_pm_cpuss_node;
+	}
+
+	pm_cpuss = of_iomap(pm_cpuss_node, 0);
+	if (!pm_cpuss) {
+		ret = -ENOMEM;
+		goto out_pm_cpuss;
+	}
+
+	csr_cpuss_node = of_parse_phandle(cpu_node, "qcom,cpuss-csr", 0);
+	if (!csr_cpuss_node) {
+		ret = -ENODEV;
+		goto out_csr_cpuss_node;
+	}
+
+	csr_cpuss = of_iomap(csr_cpuss_node, 0);
+	if (!csr_cpuss) {
+		ret = -ENOMEM;
+		goto out_csr_cpuss;
+	}
+
+	version = readl_relaxed(csr_cpuss + MSMTHULIUM_CPUSS_VERSION);
+
+	/* Configure delays for Power Gate Switch FSM states */
+	writel_relaxed(0x0a010000, pm_cpuss + MSMTHULIUM_APCC_PWR_GATE_DLY0);
+	writel_relaxed(0x000a000a, pm_cpuss + MSMTHULIUM_APCC_PWR_GATE_DLY1);
+
+	/* Configure delays for Memory Array Sequencer FSM states */
+	writel_relaxed(0x00000000, pm_cpuss + MSMTHULIUM_APCC_MAS_DLY0);
+	writel_relaxed(0x00040400, pm_cpuss + MSMTHULIUM_APCC_MAS_DLY1);
+
+	/* Configure power switch serializer delays */
+	writel_relaxed(0x00000001, pm_cpuss + MSMTHULIUM_APCC_SER_EN);
+	writel_relaxed(0x14141414, pm_cpuss + MSMTHULIUM_APCC_SER_DLY);
+	writel_relaxed(0x00000000, pm_cpuss + MSMTHULIUM_APCC_SER_DLY_SEL0);
+	writel_relaxed(0x00000000, pm_cpuss + MSMTHULIUM_APCC_SER_DLY_SEL1);
+
+	/* Configure initial APC Power Mux mode and delay values */
+	writel_relaxed(0x00000110, pm_cpuss + MSMTHULIUM_APCC_APM_MODE);
+	switch (version) {
+	case MSMTHULIUM_CPUSS_VER_1P0:
+		writel_relaxed(0x00000000, pm_cpuss + MSMTHULIUM_APCC_APM_DLY);
+		break;
+	case MSMTHULIUM_CPUSS_VER_1P1:
+		writel_relaxed(0x07001000, pm_cpuss + MSMTHULIUM_APCC_APM_DLY);
+		break;
+	case MSMTHULIUM_CPUSS_VER_1P2:
+		writel_relaxed(0x01001001, pm_cpuss + MSMTHULIUM_APCC_APM_DLY);
+		writel_relaxed(0x0000000a, pm_cpuss + MSMTHULIUM_APCC_APM_DLY2);
+		break;
+	}
+
+	/* Program GDHS sequencer delays */
+	writel_relaxed(0x0a0a0a0a, pm_cpuss + MSMTHULIUM_APCC_GDHS_DLY);
+
+	/* Ensure writes complete before unmapping memory */
+	mb();
+
+	iounmap(csr_cpuss);
+out_csr_cpuss:
+	of_node_put(csr_cpuss_node);
+out_csr_cpuss_node:
+	iounmap(pm_cpuss);
+out_pm_cpuss:
+	of_node_put(pm_cpuss_node);
+out_pm_cpuss_node:
 	of_node_put(cpu_node);
 
 	return ret;

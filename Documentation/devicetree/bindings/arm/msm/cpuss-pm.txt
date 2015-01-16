@@ -1,0 +1,22 @@
+CPUSS-PM
+
+This device encapsulates the Global Power Management registers of the CPU subsystem
+power domain which houses power control and delay configuration registers for power
+mode switches.
+
+compatible:	Must be "qcom,msmthulium-cpuss-pm"
+reg:		Specifies physical base address for the CPUSS Global PM registers
+		and the size of the memory region
+
+Example:
+
+	cpuss_pm: cpuss-pm@099e0000 {
+		compatible = "qcom,msmthulium-cpuss-pm";
+		reg = <0x099e0000 0x1000>;
+	};
+
+	cpu0: cpu@0: {
+	      ...
+	      qcom,cpuss-pm = <&cpuss_pm>;
+	      ...
+	};
