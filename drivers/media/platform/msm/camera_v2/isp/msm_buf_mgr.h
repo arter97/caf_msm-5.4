@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -152,6 +152,8 @@ struct msm_isp_buf_ops {
 	int (*buf_mgr_debug)(struct msm_isp_buf_mgr *buf_mgr);
 	struct msm_isp_bufq * (*get_bufq)(struct msm_isp_buf_mgr *buf_mgr,
 		uint32_t bufq_handle);
+	int (*update_put_buf_cnt)(struct msm_isp_buf_mgr *buf_mgr,
+		uint32_t bufq_handle, uint32_t buf_index);
 };
 
 struct msm_isp_buf_mgr {
