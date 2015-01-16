@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -189,8 +189,10 @@ static int wcd_event_notify(struct notifier_block *self, unsigned long val,
 	struct msm8x16_wcd_priv *msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
 	struct wcd_mbhc *mbhc = &msm8x16_wcd->mbhc;
 	enum wcd_notify_event event = (enum wcd_notify_event)val;
+	u8 micbias2;
 
 	pr_debug("%s: event %d\n", __func__, event);
+	micbias2 = (snd_soc_read(codec, MSM8X16_WCD_A_ANALOG_MICB_2_EN) & 0x80);
 	switch (event) {
 	/* MICBIAS usage change */
 	case WCD_EVENT_PRE_MICBIAS_2_ON:
@@ -232,12 +234,21 @@ static int wcd_event_notify(struct notifier_block *self, unsigned long val,
 			snd_soc_update_bits(codec,
 				    MSM8X16_WCD_A_ANALOG_MBHC_FSM_CTL,
 				    0xB0, 0xB0);
+		/* Enable PULL UP if PA's are enabled */
+		if ((test_bit(WCD_MBHC_EVENT_PA_HPHL, &mbhc->event_state)) ||
+				(test_bit(WCD_MBHC_EVENT_PA_HPHR,
+					  &mbhc->event_state)))
+			/* enable pullup and cs, disable mb */
+			snd_soc_update_bits(codec,
+					MSM8X16_WCD_A_ANALOG_MICB_2_EN,
+					0x40, 0x40);
 		/* Program Button threshold registers */
 		wcd_program_btn_threshold(mbhc, false);
 		break;
 	case WCD_EVENT_POST_HPHL_PA_OFF:
 		if (mbhc->hph_status & SND_JACK_OC_HPHL)
 			hphlocp_off_report(mbhc, SND_JACK_OC_HPHL);
+		clear_bit(WCD_MBHC_EVENT_PA_HPHL, &mbhc->event_state);
 		snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_ANALOG_MICB_2_EN,
 				0x40, 0x0);
@@ -245,13 +256,22 @@ static int wcd_event_notify(struct notifier_block *self, unsigned long val,
 	case WCD_EVENT_POST_HPHR_PA_OFF:
 		if (mbhc->hph_status & SND_JACK_OC_HPHR)
 			hphrocp_off_report(mbhc, SND_JACK_OC_HPHR);
+		clear_bit(WCD_MBHC_EVENT_PA_HPHR, &mbhc->event_state);
 		snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_ANALOG_MICB_2_EN,
 				0x40, 0x00);
 		break;
 	case WCD_EVENT_PRE_HPHL_PA_ON:
+		set_bit(WCD_MBHC_EVENT_PA_HPHL, &mbhc->event_state);
+		if (!micbias2)
+			snd_soc_update_bits(codec,
+				MSM8X16_WCD_A_ANALOG_MICB_2_EN,
+				0x40, 0x40);
+		break;
 	case WCD_EVENT_PRE_HPHR_PA_ON:
-		snd_soc_update_bits(codec,
+		set_bit(WCD_MBHC_EVENT_PA_HPHR, &mbhc->event_state);
+		if (!micbias2)
+			snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_ANALOG_MICB_2_EN,
 				0x40, 0x40);
 		break;
