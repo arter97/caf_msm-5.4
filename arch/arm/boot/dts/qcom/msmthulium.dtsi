@@ -341,6 +341,17 @@
 					<MSM_BUS_MASTER_VIDEO_P0_OCMEM MSM_BUS_SLAVE_VMEM 1717000 3632000>;
 				qcom,bus-configs = <0xffffffff>;
 			};
+
+			qcom,msm-bus-client@5 {
+				qcom,msm-bus,name = "cpu-venus-cnoc";
+				qcom,msm-bus,num-cases = <2>;
+				qcom,msm-bus,num-paths = <1>;
+				qcom,msm-bus,vectors-KBps =
+					<MSM_BUS_MASTER_AMPSS_M0 MSM_BUS_SLAVE_VENUS_CFG    0 0>,
+					<MSM_BUS_MASTER_AMPSS_M0 MSM_BUS_SLAVE_VENUS_CFG 1000 0>;
+				qcom,bus-configs = <0x00000000>;
+				qcom,bus-passive;
+			};
 		};
 
 		/* MMUs */
