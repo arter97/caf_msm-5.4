@@ -955,11 +955,30 @@
 
 	fuse: fuse@7602c {
 		compatible = "arm,coresight-fuse";
-		reg = <0x7602c 0xc>;
-		reg-names = "fuse-base";
+		reg = <0x7602c 0xc>,
+		      <0x76014 0x4>;
+		reg-names = "fuse-base", "qpdi-fuse-base";
 
 		coresight-id = <60>;
 		coresight-name = "coresight-fuse";
 		coresight-nr-inports = <0>;
+	};
+
+	qpdi: qpdi@7A1000 {
+		compatible = "qcom,coresight-qpdi";
+		reg = <0x7A1000 0x4>;
+		reg-names = "qpdi-base";
+
+		coresight-id = <61>;
+		coresight-name = "coresight-qpdi";
+		coresight-nr-inports = <0>;
+
+		vdd-supply = <&pm8994_l21>;
+		qcom,vdd-voltage-level = <2950000 2950000>;
+		qcom,vdd-current-level = <200 800000>;
+
+		vdd-io-supply = <&pm8994_l13>;
+		qcom,vdd-io-voltage-level = <2950000 2950000>;
+		qcom,vdd-io-current-level = <200 22000>;
 	};
 };
