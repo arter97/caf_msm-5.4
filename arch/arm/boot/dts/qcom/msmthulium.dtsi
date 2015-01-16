@@ -379,7 +379,7 @@
 		};
 	};
 
-	qcom,vmem@880000 {
+	vmem: qcom,vmem@880000 {
 		compatible = "qcom,msm-vmem";
 		interrupts = <0 429 0>;
 

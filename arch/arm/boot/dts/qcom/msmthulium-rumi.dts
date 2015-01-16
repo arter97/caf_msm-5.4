@@ -70,6 +70,10 @@
 	status = "disabled";
 };
 
+&vmem {
+	status = "disabled";
+};
+
 &uartblsp1dm1 {
 	status = "disabled";
 	pinctrl-names = "default";
