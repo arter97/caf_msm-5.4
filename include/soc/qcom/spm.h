@@ -40,6 +40,11 @@ int msm_spm_config_low_power_mode(struct msm_spm_device *dev,
 int msm_spm_device_init(void);
 bool msm_spm_is_mode_avail(unsigned int mode);
 void msm_spm_dump_regs(unsigned int cpu);
+int msm_spm_is_avs_enabled(unsigned int cpu);
+int msm_spm_avs_enable(unsigned int cpu);
+int msm_spm_avs_disable(unsigned int cpu);
+int msm_spm_avs_set_limit(unsigned int cpu, uint32_t min_lvl,
+		uint32_t max_lvl);
 #if defined(CONFIG_MSM_L2_SPM)
 
 /* Public functions */
