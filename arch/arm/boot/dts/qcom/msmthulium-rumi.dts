@@ -235,3 +235,11 @@
 &gdsc_mmagic_camss {
 	status = "disable";
 };
+
+&msm_vidc {
+	status = "disable";
+};
+
+&qcom_rng {
+	status = "disable";
+};
