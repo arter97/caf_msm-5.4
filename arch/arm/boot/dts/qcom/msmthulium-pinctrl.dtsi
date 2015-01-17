@@ -29,20 +29,20 @@
 			};
 		};
 
-		blsp2_uart2 {
-			function = "blsp_uart8";
+		blsp1_uart2 {
+			function = "blsp_uart2";
 			bias-disable;
 
-			blsp2_uart2_active: blsp2_uart2_active {
-				blsp2_uart2 {
-					pins = "gpio4", "gpio5", "gpio6", "gpio7";
+			blsp1_uart2_active: blsp1_uart2_active {
+				blsp1_uart2 {
+					pins = "gpio41", "gpio42", "gpio43", "gpio44";
 					drive-strength = <2>;
 				};
 			};
 
-			blsp2_uart2_sleep: blsp2_uart2_sleep {
-				blsp2_uart2 {
-					pins = "gpio4", "gpio5", "gpio6", "gpio7";
+			blsp1_uart2_sleep: blsp1_uart2_sleep {
+				blsp1_uart2 {
+					pins = "gpio41", "gpio42", "gpio43", "gpio44";
 					drive-strength = <2>;
 				};
 			};

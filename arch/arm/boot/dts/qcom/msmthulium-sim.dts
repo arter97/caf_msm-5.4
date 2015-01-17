@@ -30,7 +30,7 @@
 	pinctrl-0 = <&uart_console_active>;
 };
 
-&blsp2_uart2 {
+&blsp1_uart2 {
 	status = "ok";
 };
 
