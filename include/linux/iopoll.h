@@ -23,7 +23,8 @@
 #include <linux/io.h>
 
 /**
- * readl_poll_timeout - Periodically poll an address until a condition is met or a timeout occurs
+ * readx_poll_timeout - Periodically poll an address until a condition is met or a timeout occurs
+ * @op: accessor function (takes @addr as its only argument)
  * @addr: Address to poll
  * @val: Variable to read the value into
  * @cond: Break condition (usually involving @val)
@@ -33,17 +34,20 @@
  * Returns 0 on success and -ETIMEDOUT upon a timeout. In either
  * case, the last read value at @addr is stored in @val. Must not
  * be called from atomic context if sleep_us or timeout_us are used.
+ *
+ * When available, you'll probably want to use one of the specialized
+ * macros defined below rather than this macro directly.
  */
-#define readl_poll_timeout(addr, val, cond, sleep_us, timeout_us) \
+#define readx_poll_timeout(op, addr, val, cond, sleep_us, timeout_us)	\
 ({ \
 	ktime_t timeout = ktime_add_us(ktime_get(), timeout_us); \
 	might_sleep_if(sleep_us); \
 	for (;;) { \
-		(val) = readl(addr); \
+		(val) = op(addr); \
 		if (cond) \
 			break; \
 		if (timeout_us && ktime_compare(ktime_get(), timeout) > 0) { \
-			(val) = readl(addr); \
+			(val) = op(addr); \
 			break; \
 		} \
 		if (sleep_us) \
@@ -53,7 +57,8 @@
 })
 
 /**
- * readl_poll_timeout_atomic - Periodically poll an address until a condition is met or a timeout occurs
+ * readx_poll_timeout_atomic - Periodically poll an address until a condition is met or a timeout occurs
+ * @op: accessor function (takes @addr as its only argument)
  * @addr: Address to poll
  * @val: Variable to read the value into
  * @cond: Break condition (usually involving @val)
@@ -62,16 +67,19 @@
  *
  * Returns 0 on success and -ETIMEDOUT upon a timeout. In either
  * case, the last read value at @addr is stored in @val.
+ *
+ * When available, you'll probably want to use one of the specialized
+ * macros defined below rather than this macro directly.
  */
-#define readl_poll_timeout_atomic(addr, val, cond, delay_us, timeout_us) \
+#define readx_poll_timeout_atomic(op, addr, val, cond, delay_us, timeout_us) \
 ({ \
 	ktime_t timeout = ktime_add_us(ktime_get(), timeout_us); \
 	for (;;) { \
-		(val) = readl(addr); \
+		(val) = op(addr); \
 		if (cond) \
 			break; \
 		if (timeout_us && ktime_compare(ktime_get(), timeout) > 0) { \
-			(val) = readl(addr); \
+			(val) = op(addr); \
 			break; \
 		} \
 		if (delay_us) \
@@ -79,5 +87,62 @@
 	} \
 	(cond) ? 0 : -ETIMEDOUT; \
 })
+
+
+#define readb_poll_timeout(addr, val, cond, delay_us, timeout_us) \
+	readx_poll_timeout(readb, addr, val, cond, delay_us, timeout_us)
+
+#define readb_poll_timeout_atomic(addr, val, cond, delay_us, timeout_us) \
+	readx_poll_timeout_atomic(readb, addr, val, cond, delay_us, timeout_us)
+
+#define readw_poll_timeout(addr, val, cond, delay_us, timeout_us) \
+	readx_poll_timeout(readw, addr, val, cond, delay_us, timeout_us)
+
+#define readw_poll_timeout_atomic(addr, val, cond, delay_us, timeout_us) \
+	readx_poll_timeout_atomic(readw, addr, val, cond, delay_us, timeout_us)
+
+#define readl_poll_timeout(addr, val, cond, delay_us, timeout_us) \
+	readx_poll_timeout(readl, addr, val, cond, delay_us, timeout_us)
+
+#define readl_poll_timeout_atomic(addr, val, cond, delay_us, timeout_us) \
+	readx_poll_timeout_atomic(readl, addr, val, cond, delay_us, timeout_us)
+
+#define readq_poll_timeout(addr, val, cond, delay_us, timeout_us) \
+	readx_poll_timeout(readq, addr, val, cond, delay_us, timeout_us)
+
+#define readq_poll_timeout_atomic(addr, val, cond, delay_us, timeout_us) \
+	readx_poll_timeout_atomic(readq, addr, val, cond, delay_us, timeout_us)
+
+#define readb_relaxed_poll_timeout(addr, val, cond, delay_us, timeout_us) \
+	readx_poll_timeout(readb_relaxed, addr, val, cond, delay_us, timeout_us)
+
+#define readb_relaxed_poll_timeout_atomic(addr, val, cond, delay_us,	\
+					timeout_us)			\
+	readx_poll_timeout_atomic(readb_relaxed, addr, val, cond, delay_us, \
+				timeout_us)
+
+#define readw_relaxed_poll_timeout(addr, val, cond, delay_us, timeout_us) \
+	readx_poll_timeout(readw_relaxed, addr, val, cond, delay_us, timeout_us)
+
+#define readw_relaxed_poll_timeout_atomic(addr, val, cond, delay_us, \
+					timeout_us)			\
+	readx_poll_timeout_atomic(readw_relaxed, addr, val, cond, delay_us, \
+				timeout_us)
+
+#define readl_relaxed_poll_timeout(addr, val, cond, delay_us, timeout_us) \
+	readx_poll_timeout(readl_relaxed, addr, val, cond, delay_us, timeout_us)
+
+#define readl_relaxed_poll_timeout_atomic(addr, val, cond, delay_us, \
+					timeout_us)			\
+	readx_poll_timeout_atomic(readl_relaxed, addr, val, cond, delay_us, \
+				timeout_us)
+
+#define readq_relaxed_poll_timeout(addr, val, cond, delay_us, timeout_us) \
+	readx_poll_timeout(readq_relaxed, addr, val, cond, delay_us, timeout_us)
+
+#define readq_relaxed_poll_timeout_atomic(addr, val, cond, delay_us, \
+					timeout_us)			\
+	readx_poll_timeout_atomic(readq_relaxed, addr, val, cond, delay_us, \
+				timeout_us)
 
 #endif /* _LINUX_IOPOLL_H */
