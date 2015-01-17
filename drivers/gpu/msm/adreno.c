@@ -1067,6 +1067,11 @@ int adreno_probe(struct platform_device *pdev)
 	struct adreno_device *adreno_dev;
 	int status;
 
+	/* Defer adreno probe if IOMMU is not already probed */
+	if (!of_parse_phandle(pdev->dev.of_node, "iommu", 0) &&
+			(iommu_pdev_data.physend == 0))
+		return -EPROBE_DEFER;
+
 	adreno_dev = adreno_get_dev(pdev);
 
 	if (adreno_dev == NULL) {
