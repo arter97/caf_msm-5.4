@@ -16,7 +16,9 @@ Required properties:
     - "fd_core" - FD CORE hardware register set.
     - "fd_misc" - FD MISC hardware register set.
     - "fd_vbif" - FD VBIF hardware register set.
-- interrupts: should contain the fd interrupts.
+- interrupts: should contain the fd interrupts. From fd cores with
+  revisions 0x10010000 and higher, power collapse sequence is required.
+  Face detection misc irq is needed to perform power collapse.
 - interrupt-names: should specify relevant names to each interrupts
   property defined.
 - vdd-supply: phandle to GDSC regulator controlling face detection hw.
@@ -30,6 +32,8 @@ Optional properties:
 
 - clock-rates: should specify clock rates in Hz to each clocks
   property defined.
+  If we want to have different operating clock frequencies we can define
+  rate levels. They should be defined in incremental order.
 
 Example:
 
