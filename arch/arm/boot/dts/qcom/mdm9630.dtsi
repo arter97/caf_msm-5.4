@@ -811,6 +811,13 @@
 		qcom,slope = <2901 2846 3200 3200 3200>;
 	};
 
+	mhi_dev {
+		compatible = "qcom,msm-mhi-dev";
+		reg = <0xfc527000 0x1000>;
+		reg-names = "mhi_mmio_base";
+		interrupts = <0 42 0>;
+	};
+
 	qcom,clock-a7@f9010008 {
 		compatible = "qcom,clock-a7-9630";
 		reg = <0xf9010008 0x8>;
