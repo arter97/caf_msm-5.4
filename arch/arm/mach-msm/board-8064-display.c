@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -569,12 +569,16 @@ static int lvds_panel_power(int on)
 			return -EINVAL;
 		}
 
-		reg_ext_3p3v = regulator_get(&msm_lvds_device.dev,
-			"lvds_vccs_3p3v");
-		if (IS_ERR_OR_NULL(reg_ext_3p3v)) {
-			pr_err("could not get reg_ext_3p3v, rc = %ld\n",
-			       PTR_ERR(reg_ext_3p3v));
-		    return -ENODEV;
+		if (!(machine_is_apq8064_adp_2() ||
+			machine_is_apq8064_adp2_es2() ||
+			machine_is_apq8064_adp2_es2p5())) {
+			reg_ext_3p3v = regulator_get(&msm_lvds_device.dev,
+				"lvds_vccs_3p3v");
+			if (IS_ERR_OR_NULL(reg_ext_3p3v)) {
+				pr_err("could not get reg_ext_3p3v, rc = %ld\n",
+					PTR_ERR(reg_ext_3p3v));
+				return -ENODEV;
+			}
 		}
 
 		gpio26 = PM8921_GPIO_PM_TO_SYS(26);
@@ -631,10 +635,15 @@ static int lvds_panel_power(int on)
 			return -ENODEV;
 		}
 
-		rc = regulator_enable(reg_ext_3p3v);
-		if (rc) {
-			pr_err("enable reg_ext_3p3v failed, rc=%d\n", rc);
-			return -ENODEV;
+		if (!(machine_is_apq8064_adp_2() ||
+			machine_is_apq8064_adp2_es2() ||
+			machine_is_apq8064_adp2_es2p5())) {
+			rc = regulator_enable(reg_ext_3p3v);
+			if (rc) {
+				pr_err("enable reg_ext_3p3v failed, rc=%d\n",
+					rc);
+				return -ENODEV;
+			}
 		}
 
 		if (machine_is_apq8064_adp_2() ||
@@ -679,10 +688,15 @@ static int lvds_panel_power(int on)
 			pr_err("disable reg_l2 failed, rc=%d\n", rc);
 			return -ENODEV;
 		}
-		rc = regulator_disable(reg_ext_3p3v);
-		if (rc) {
-			pr_err("disable reg_ext_3p3v failed, rc=%d\n", rc);
-			return -ENODEV;
+		if (!(machine_is_apq8064_adp_2() ||
+			machine_is_apq8064_adp2_es2() ||
+			machine_is_apq8064_adp2_es2p5())) {
+			rc = regulator_disable(reg_ext_3p3v);
+			if (rc) {
+				pr_err("disable reg_ext_3p3v failed, rc=%d\n",
+					rc);
+				return -ENODEV;
+			}
 		}
 	}
 
@@ -880,14 +894,18 @@ static int hdmi_core_power(int on, int show)
 		return 0;
 
 	/* TBD: PM8921 regulator instead of 8901 */
-	if (!reg_ext_3p3v) {
-		reg_ext_3p3v = regulator_get(&hdmi_msm_device.dev,
-					     "hdmi_mux_vdd");
-		if (IS_ERR_OR_NULL(reg_ext_3p3v)) {
-			pr_err("could not get reg_ext_3p3v, rc = %ld\n",
-			       PTR_ERR(reg_ext_3p3v));
-			reg_ext_3p3v = NULL;
-			return -ENODEV;
+	if (!(machine_is_apq8064_adp_2() ||
+		machine_is_apq8064_adp2_es2() ||
+		machine_is_apq8064_adp2_es2p5())) {
+		if (!reg_ext_3p3v) {
+			reg_ext_3p3v = regulator_get(&hdmi_msm_device.dev,
+							"hdmi_mux_vdd");
+			if (IS_ERR_OR_NULL(reg_ext_3p3v)) {
+				pr_err("could not get reg_ext_3p3v, rc = %ld\n",
+					PTR_ERR(reg_ext_3p3v));
+				reg_ext_3p3v = NULL;
+				return -ENODEV;
+			}
 		}
 	}
 
@@ -922,16 +940,21 @@ static int hdmi_core_power(int on, int show)
 		 * Configure 3P3V_BOOST_EN as GPIO, 8mA drive strength,
 		 * pull none, out-high
 		 */
-		rc = regulator_set_optimum_mode(reg_ext_3p3v, 290000);
-		if (rc < 0) {
-			pr_err("set_optimum_mode ext_3p3v failed, rc=%d\n", rc);
-			return -EINVAL;
-		}
-
-		rc = regulator_enable(reg_ext_3p3v);
-		if (rc) {
-			pr_err("enable reg_ext_3p3v failed, rc=%d\n", rc);
-			return rc;
+		if (!(machine_is_apq8064_adp_2() ||
+			machine_is_apq8064_adp2_es2() ||
+			machine_is_apq8064_adp2_es2p5())) {
+			rc = regulator_set_optimum_mode(reg_ext_3p3v, 290000);
+			if (rc < 0) {
+				pr_err("set_optimum_mode ext_3p3v failed," \
+					" rc=%d\n", rc);
+				return -EINVAL;
+			}
+			rc = regulator_enable(reg_ext_3p3v);
+			if (rc) {
+				pr_err("enable reg_ext_3p3v failed, rc=%d\n",
+					rc);
+				return rc;
+			}
 		}
 		rc = regulator_enable(reg_8921_lvs7);
 		if (rc) {
@@ -947,10 +970,15 @@ static int hdmi_core_power(int on, int show)
 		}
 		pr_debug("%s(on): success\n", __func__);
 	} else {
-		rc = regulator_disable(reg_ext_3p3v);
-		if (rc) {
-			pr_err("disable reg_ext_3p3v failed, rc=%d\n", rc);
-			return -ENODEV;
+		if (!(machine_is_apq8064_adp_2() ||
+			machine_is_apq8064_adp2_es2() ||
+			machine_is_apq8064_adp2_es2p5())) {
+			rc = regulator_disable(reg_ext_3p3v);
+			if (rc) {
+				pr_err("disable reg_ext_3p3v failed, rc=%d\n",
+					rc);
+				return -ENODEV;
+			}
 		}
 		rc = regulator_disable(reg_8921_lvs7);
 		if (rc) {
@@ -972,7 +1000,11 @@ static int hdmi_core_power(int on, int show)
 error2:
 	regulator_disable(reg_8921_lvs7);
 error1:
-	regulator_disable(reg_ext_3p3v);
+	if (!(machine_is_apq8064_adp_2() ||
+		machine_is_apq8064_adp2_es2() ||
+		machine_is_apq8064_adp2_es2p5())) {
+		regulator_disable(reg_ext_3p3v);
+	}
 	return rc;
 }
 
