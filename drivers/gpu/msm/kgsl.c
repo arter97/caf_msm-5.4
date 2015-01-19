@@ -4545,9 +4545,16 @@ int kgsl_device_platform_probe(struct kgsl_device *device)
 	rwlock_init(&device->context_lock);
 
 	setup_timer(&device->idle_timer, kgsl_timer, (unsigned long) device);
-	status = kgsl_create_device_workqueue(device);
-	if (status)
+
+	/* Create our primary workqueue for events and power */
+	device->work_queue = create_singlethread_workqueue(device->name);
+	if (device->work_queue == NULL) {
+		status = -ENODEV;
+		KGSL_DRV_ERR(device,
+			"create_singelthreaded_workqueue(%s) failed\n",
+			device->name);
 		goto error_pwrctrl_close;
+	}
 
 	status = kgsl_mmu_init(device);
 	if (status != 0) {
