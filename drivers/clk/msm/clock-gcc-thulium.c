@@ -215,6 +215,7 @@ static struct rcg_clk pcie_aux_clk_src = {
 
 static struct clk_freq_tbl ftbl_usb30_master_clk_src[] = {
 	F( 120000000, gpll0_out_main,    5,    0,    0),
+	F( 150000000, gpll0_out_main,    4,    0,    0),
 	F_END
 };
 
@@ -227,7 +228,7 @@ static struct rcg_clk usb30_master_clk_src = {
 	.c = {
 		.dbg_name = "usb30_master_clk_src",
 		.ops = &clk_ops_rcg_mnd,
-		VDD_DIG_FMAX_MAP3(LOWER, 62010000, LOW, 120000000,
+		VDD_DIG_FMAX_MAP3(LOWER, 60000000, LOW, 120000000,
 						NOMINAL, 150000000),
 		CLK_INIT(usb30_master_clk_src.c),
 	},
@@ -1420,7 +1421,7 @@ static struct rcg_clk tsif_ref_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_usb20_mock_utmi_clk_src[] = {
-	F(  60000000, gpll0_out_main,   10,    0,     0),
+	F(  19200000, cxo_clk_src,    1,    0,     0),
 	F_END
 };
 
@@ -1439,7 +1440,7 @@ static struct rcg_clk usb20_mock_utmi_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_usb30_mock_utmi_clk_src[] = {
-	F(  60000000, gpll0_out_main,   10,    0,     0),
+	F(  19200000, cxo_clk_src,    1,    0,     0),
 	F_END
 };
 
