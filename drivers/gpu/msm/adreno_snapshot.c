@@ -348,8 +348,17 @@ static size_t snapshot_rb(struct kgsl_device *device, u8 *buf,
 			parse_ibs = 0;
 
 		if (parse_ibs && adreno_cmd_is_ib(adreno_dev, rbptr[index])) {
-			unsigned int ibaddr = rbptr[index + 1];
-			unsigned int ibsize = rbptr[index + 2];
+			uint64_t ibaddr;
+			unsigned int ibsize;
+
+			if (ADRENO_LEGACY_PM4(adreno_dev)) {
+				ibaddr = rbptr[index + 1];
+				ibsize = rbptr[index + 2];
+			} else {
+				ibaddr = rbptr[index + 2];
+				ibaddr = ibaddr << 32 | rbptr[index + 1];
+				ibsize = rbptr[index + 3];
+			}
 
 			/*
 			 * Sometimes the kernel generates IBs in global

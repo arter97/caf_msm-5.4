@@ -62,6 +62,11 @@ static int ib_parse_set_draw_state(struct kgsl_device *device,
 	struct adreno_ib_object_list *ib_obj_list,
 	struct ib_parser_variables *ib_parse_vars);
 
+static int ib_parse_type7_set_draw_state(struct kgsl_device *device,
+	unsigned int *ptr,
+	struct kgsl_process_private *process,
+	struct adreno_ib_object_list *ib_obj_list);
+
 /*
  * adreno_ib_merge_range() - Increases the address range tracked by an ib
  * object
@@ -486,6 +491,27 @@ static int ib_parse_draw_indx(struct kgsl_device *device, unsigned int *pkt,
 }
 
 /*
+ * Parse all the type7 opcode packets that may contain important information,
+ * such as additional GPU buffers to grab or a draw initator
+ */
+
+static int ib_parse_type7(struct kgsl_device *device, unsigned int *ptr,
+	struct kgsl_process_private *process,
+	struct adreno_ib_object_list *ib_obj_list,
+	struct ib_parser_variables *ib_parse_vars)
+{
+	int opcode = cp_type7_opcode(*ptr);
+
+	switch (opcode) {
+	case CP_SET_DRAW_STATE:
+		return ib_parse_type7_set_draw_state(device, ptr, process,
+					ib_obj_list);
+	}
+
+	return 0;
+}
+
+/*
  * Parse all the type3 opcode packets that may contain important information,
  * such as additional GPU buffers to grab or a draw initator
  */
@@ -617,6 +643,63 @@ static void ib_parse_type0(struct kgsl_device *device, unsigned int *ptr,
 	}
 }
 
+static int ib_parse_type7_set_draw_state(struct kgsl_device *device,
+	unsigned int *ptr,
+	struct kgsl_process_private *process,
+	struct adreno_ib_object_list *ib_obj_list)
+{
+	int size = type7_pkt_size(*ptr);
+	int i;
+	int grp_id;
+	int ret = 0;
+	int flags;
+	uint64_t cmd_stream_dwords;
+	uint64_t cmd_stream_addr;
+
+	/*
+	 * size is the size of the packet that does not include the DWORD
+	 * for the packet header, we only want to loop here through the
+	 * packet parameters from ptr[1] till ptr[size] where ptr[0] is the
+	 * packet header. In each loop we look at 3 DWORDS hence increment
+	 * loop counter by 3 always
+	 */
+	for (i = 1; i <= size; i += 3) {
+		grp_id = (ptr[i] & 0x1F000000) >> 24;
+		/* take action based on flags */
+		flags = (ptr[i] & 0x000F0000) >> 16;
+
+		/*
+		 * dirty flag or no flags both mean we need to load it for
+		 * next draw. No flags is used when the group is activated
+		 * or initialized for the first time in the IB
+		 */
+		if (flags & 0x1 || !flags) {
+			cmd_stream_dwords = ptr[i] & 0x0000FFFF;
+			cmd_stream_addr = ptr[i + 2];
+			cmd_stream_addr = cmd_stream_addr << 32 | ptr[i + 1];
+			if (cmd_stream_dwords)
+				ret = adreno_ib_find_objs(device, process,
+					cmd_stream_addr, cmd_stream_dwords,
+					SNAPSHOT_GPU_OBJECT_DRAW, ib_obj_list);
+			if (ret)
+				break;
+			continue;
+		}
+		/* load immediate */
+		if (flags & 0x8) {
+			uint64_t gpuaddr = ptr[i + 2];
+			gpuaddr = gpuaddr << 32 | ptr[i + 1];
+			ret = adreno_ib_find_objs(device, process,
+				gpuaddr, (ptr[i] & 0x0000FFFF),
+				SNAPSHOT_GPU_OBJECT_IB,
+				ib_obj_list);
+			if (ret)
+				break;
+		}
+	}
+	return ret;
+}
+
 static int ib_parse_set_draw_state(struct kgsl_device *device,
 	unsigned int *ptr,
 	struct kgsl_process_private *process,
@@ -633,7 +716,7 @@ static int ib_parse_set_draw_state(struct kgsl_device *device,
 	 * size is the size of the packet that does not include the DWORD
 	 * for the packet header, we only want to loop here through the
 	 * packet parameters from ptr[1] till ptr[size] where ptr[0] is the
-	 * packet header. In each loop we look at 2 DWRODS hence increment
+	 * packet header. In each loop we look at 2 DWORDS hence increment
 	 * loop counter by 2 always
 	 */
 	for (i = 1; i <= size; i += 2) {
@@ -738,16 +821,27 @@ static int adreno_ib_find_objs(struct kgsl_device *device,
 	for (i = 0; rem > 0; rem--, i++) {
 		int pktsize;
 
+		if (pkt_is_type0(src[i]))
+			pktsize = type0_pkt_size(src[i]);
+
+		else if (pkt_is_type3(src[i]))
+			pktsize = type3_pkt_size(src[i]);
+
+		else if (pkt_is_type4(src[i]))
+			pktsize = type4_pkt_size(src[i]);
+
+		else if (pkt_is_type7(src[i]))
+			pktsize = type7_pkt_size(src[i]);
+
 		/*
-		 * If the packet isn't a type 1 or a type 3, then don't bother
-		 * parsing it - it is likely corrupted
+		 * If the packet isn't a type 1, type 3, type 4 or type 7 then
+		 * don't bother parsing it - it is likely corrupted
 		 */
-		if (!pkt_is_type0(src[i]) && !pkt_is_type3(src[i]))
+		else
 			break;
 
-		pktsize = type3_pkt_size(src[i]);
-
-		if (!pktsize || (pktsize + 1) > rem)
+		if (((pkt_is_type0(src[i]) || pkt_is_type3(src[i])) && !pktsize)
+			|| ((pktsize + 1) > rem))
 			break;
 
 		if (pkt_is_type3(src[i])) {
@@ -760,7 +854,6 @@ static int adreno_ib_find_objs(struct kgsl_device *device,
 						gpuaddrib2, size,
 						SNAPSHOT_GPU_OBJECT_IB,
 						ib_obj_list);
-
 			} else {
 				ret = ib_parse_type3(device, &src[i], process,
 						ib_obj_list,
@@ -774,9 +867,37 @@ static int adreno_ib_find_objs(struct kgsl_device *device,
 				if (ret < 0)
 					goto done;
 			}
-		} else if (pkt_is_type0(src[i])) {
+		}
+
+		else if (pkt_is_type7(src[i])) {
+			if (adreno_cmd_is_ib(adreno_dev, src[i])) {
+				uint64_t size = src[i + 3];
+				uint64_t gpuaddrib2 = src[i + 2];
+				gpuaddrib2 = gpuaddrib2 << 32 | src[i + 1];
+
+				adreno_ib_find_objs(
+						device, process,
+						gpuaddrib2, size,
+						SNAPSHOT_GPU_OBJECT_IB,
+						ib_obj_list);
+			} else {
+				ret = ib_parse_type7(device, &src[i], process,
+						ib_obj_list,
+						&ib_parse_vars);
+				/*
+				 * If the parse function failed (probably
+				 * because of a bad decode) then bail out and
+				 * just capture the binary IB data
+				 */
+
+				if (ret < 0)
+					goto done;
+			}
+		}
+
+		else if (pkt_is_type0(src[i])) {
 			ib_parse_type0(device, &src[i], process, ib_obj_list,
-					&ib_parse_vars);
+				&ib_parse_vars);
 		}
 
 		i += pktsize;
