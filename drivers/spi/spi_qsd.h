@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -306,7 +306,7 @@ struct msm_spi {
 	struct device           *dev;
 	spinlock_t               queue_lock;
 	struct mutex             core_lock;
-	struct spi_message      *cur_msg;
+	struct spi_device       *spi;
 	struct spi_transfer     *cur_transfer;
 	struct completion        transfer_complete;
 	struct clk              *clk;    /* core clock */
@@ -364,7 +364,6 @@ struct msm_spi {
 #endif
 	struct msm_spi_platform_data *pdata; /* Platform data */
 	/* When set indicates multiple transfers in a single message */
-	bool                     multi_xfr;
 	bool                     done;
 	u32                      cur_msg_len;
 	/* Used in FIFO mode to keep track of the transfer being processed */
@@ -378,7 +377,6 @@ struct msm_spi {
 	struct spi_cs_gpio       cs_gpios[ARRAY_SIZE(spi_cs_rsrcs)];
 	enum msm_spi_qup_version qup_ver;
 	int			 max_trfr_len;
-	int			 num_xfrs_grped;
 	u16			 xfrs_delay_usec;
 	struct pinctrl		*pinctrl;
 	struct pinctrl_state	*pins_active;
