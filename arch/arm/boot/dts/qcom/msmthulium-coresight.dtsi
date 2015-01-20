@@ -245,6 +245,10 @@
 		coresight-child-list = <&funnel_in0>;
 		coresight-child-ports = <3>;
 
+		qcom,bc-elem-size = <6 32>;
+		qcom,tc-elem-size = <6 32>;
+		qcom,dsb-elem-size = <6 32>,
+				     <7 32>;
 		qcom,cmb-elem-size = <0 32>,
 				     <1 32>,
 				     <2 32>,
@@ -266,6 +270,10 @@
 		coresight-outports = <0>;
 		coresight-child-list = <&funnel_apss_merge>;
 		coresight-child-ports = <2>;
+
+		qcom,bc-elem-size = <0 32>,
+				    <1 32>;
+		qcom,tc-elem-size = <0 32>;
 
 		clocks = <&clock_gcc clk_qdss_clk>,
 			 <&clock_gcc clk_qdss_a_clk>;
