@@ -217,6 +217,7 @@
 		interrupts = <0 287 0>;
 		qcom,hfi = "venus";
 		qcom,max-hw-load = <1281600>; /* Full 4k @ 30 + 1080p @ 30 */
+		qcom,firmware-name = "venus";
 		qcom,imem-size = <1048576>; /* 1 MB */
 		qcom,load-freq-tbl =
 			/* Encoders */
