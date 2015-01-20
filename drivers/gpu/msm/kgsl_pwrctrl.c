@@ -1118,8 +1118,7 @@ static void kgsl_pwrctrl_axi(struct kgsl_device *device, int state)
 static int kgsl_pwrctrl_pwrrail(struct kgsl_device *device, int state)
 {
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
-	int status_gpu = 0;
-	int status_cx = 0;
+	int i, j, status = 0;
 
 	if (test_bit(KGSL_PWRFLAGS_POWER_ON, &pwr->ctrl_flags))
 		return 0;
@@ -1128,39 +1127,33 @@ static int kgsl_pwrctrl_pwrrail(struct kgsl_device *device, int state)
 		if (test_and_clear_bit(KGSL_PWRFLAGS_POWER_ON,
 			&pwr->power_flags)) {
 			trace_kgsl_rail(device, state);
-			if (pwr->gpu_cx)
-				regulator_disable(pwr->gpu_cx);
-			if (pwr->gpu_reg)
-				regulator_disable(pwr->gpu_reg);
+			for (i = KGSL_MAX_REGULATORS - 1; i >= 0; i--) {
+				if (pwr->gpu_reg[i])
+					regulator_disable(pwr->gpu_reg[i]);
+			}
 		}
 	} else if (state == KGSL_PWRFLAGS_ON) {
 		if (!test_and_set_bit(KGSL_PWRFLAGS_POWER_ON,
 			&pwr->power_flags)) {
-			if (pwr->gpu_reg) {
-				status_gpu = regulator_enable(pwr->gpu_reg);
-				if (status_gpu)
+			for (i = 0; i < KGSL_MAX_REGULATORS; i++) {
+				if (pwr->gpu_reg[i])
+					status = regulator_enable(
+							pwr->gpu_reg[i]);
+				if (status) {
 					KGSL_DRV_ERR(device,
-							"core regulator_enable "
-							"failed: %d\n",
-							status_gpu);
+						"%s regulator failure: %d\n",
+						pwr->gpu_reg_name[i],
+						status);
+					break;
+				}
 			}
-			if (pwr->gpu_cx) {
-				status_cx = regulator_enable(pwr->gpu_cx);
-				if (status_cx)
-					KGSL_DRV_ERR(device,
-							"cx regulator_enable "
-							"failed: %d\n",
-							status_cx);
-			}
-			if (status_gpu || status_cx) {
-				/*
-				 * If only one rail succeeded, disable it
-				 * before we bail out.
-				 */
-				if (pwr->gpu_reg && !status_gpu)
-					regulator_disable(pwr->gpu_reg);
-				if (pwr->gpu_cx && !status_cx)
-					regulator_disable(pwr->gpu_cx);
+
+			if (status) {
+				for (j = i - 1; j >= 0; j--) {
+					if (pwr->gpu_reg[j])
+						regulator_disable(
+							pwr->gpu_reg[j]);
+				}
 				clear_bit(KGSL_PWRFLAGS_POWER_ON,
 					&pwr->power_flags);
 			} else
@@ -1168,7 +1161,7 @@ static int kgsl_pwrctrl_pwrrail(struct kgsl_device *device, int state)
 		}
 	}
 
-	return status_gpu || status_cx;
+	return status;
 }
 
 void kgsl_pwrctrl_irq(struct kgsl_device *device, int state)
@@ -1255,6 +1248,8 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 	struct msm_bus_scale_pdata *ocmem_scale_table = NULL;
 	struct device_node *gpubw_dev_node;
 	struct platform_device *p2dev;
+	struct property *prop;
+	const char *reg_name;
 
 	/*acquire clocks */
 	for (i = 0; i < KGSL_MAX_CLKS; i++) {
@@ -1317,16 +1312,49 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 		clk_set_rate(pwr->grp_clks[6], rbbmtimer_freq);
 	}
 
-	pwr->gpu_reg = regulator_get(&pdev->dev, "vdd");
-	if (IS_ERR(pwr->gpu_reg))
-		pwr->gpu_reg = NULL;
+	if (of_find_property(device->pdev->dev.of_node,
+				"regulator-names", NULL) && pwr->gpu_reg) {
+		i = 0;
+		of_property_for_each_string(device->pdev->dev.of_node,
+						"regulator-names",
+						prop,
+						reg_name) {
+			struct regulator *reg = regulator_get(&pdev->dev,
+								reg_name);
+			if (IS_ERR(reg)) {
+				KGSL_CORE_ERR("Couldn't get regulator: %s\n",
+					reg_name);
+				result = -ENODEV;
+				goto done;
+			}
+			if (i >= KGSL_MAX_REGULATORS) {
+				KGSL_CORE_ERR("No buffer for regulator: %s\n",
+					reg_name);
+				result = -ENOBUFS;
+				goto done;
+			}
+			pwr->gpu_reg[i] = reg;
+			strlcpy(pwr->gpu_reg_name[i],
+				reg_name,
+				KGSL_MAX_REGULATOR_NAME_LEN);
+			++i;
+		}
+	} else {
+		/* for backward compatiblity */
+		pwr->gpu_reg[0] = regulator_get(&pdev->dev, "vdd");
+		if (IS_ERR(pwr->gpu_reg[0])) {
+			KGSL_CORE_ERR("Couldn't get the core regulator.\n");
+			result = -ENODEV;
+			goto done;
+		}
 
-	if (pwr->gpu_reg) {
-		pwr->gpu_cx = regulator_get(&pdev->dev, "vddcx");
-		if (IS_ERR(pwr->gpu_cx))
-			pwr->gpu_cx = NULL;
-	} else
-		pwr->gpu_cx = NULL;
+		pwr->gpu_reg[1] = regulator_get(&pdev->dev, "vddcx");
+		if (IS_ERR(pwr->gpu_reg)) {
+			KGSL_CORE_ERR("Couldn't get the cx regulator.\n");
+			result = -ENODEV;
+			goto done;
+		}
+	}
 
 	pwr->power_flags = 0;
 
@@ -1472,14 +1500,11 @@ void kgsl_pwrctrl_close(struct kgsl_device *device)
 
 	pwr->pcl = 0;
 
-	if (pwr->gpu_reg) {
-		regulator_put(pwr->gpu_reg);
-		pwr->gpu_reg = NULL;
-	}
-
-	if (pwr->gpu_cx) {
-		regulator_put(pwr->gpu_cx);
-		pwr->gpu_cx = NULL;
+	for (i = 0; i < KGSL_MAX_REGULATORS; i++) {
+		if (pwr->gpu_reg[i]) {
+			regulator_put(pwr->gpu_reg[i]);
+			pwr->gpu_reg[i] = NULL;
+		}
 	}
 
 	for (i = 1; i < KGSL_MAX_CLKS; i++)

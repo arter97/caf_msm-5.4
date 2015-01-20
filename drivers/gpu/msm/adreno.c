@@ -1300,7 +1300,7 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = &adreno_dev->dev;
 	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
-	int status = -EINVAL;
+	int i, status = -EINVAL;
 	unsigned int state = device->state;
 	unsigned int regulator_left_on = 0;
 	unsigned int pmqos_wakeup_vote = device->pwrctrl.pm_qos_wakeup_latency;
@@ -1316,9 +1316,13 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 
 	kgsl_pwrctrl_change_state(device, KGSL_STATE_INIT);
 
-	regulator_left_on = (regulator_is_enabled(device->pwrctrl.gpu_reg) ||
-				(device->pwrctrl.gpu_cx &&
-				regulator_is_enabled(device->pwrctrl.gpu_cx)));
+	for (i = 0; i < KGSL_MAX_REGULATORS; i++) {
+		if (device->pwrctrl.gpu_reg[i] &&
+			regulator_is_enabled(device->pwrctrl.gpu_reg[i])) {
+			regulator_left_on = 1;
+			break;
+		}
+	}
 
 	/* Clear any GPU faults that might have been left over */
 	adreno_clear_gpu_fault(adreno_dev);
