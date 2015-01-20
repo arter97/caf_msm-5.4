@@ -1123,5 +1123,5 @@ static void __exit usb_stor_exit(void)
 	usb_usual_clear_present(USB_US_TYPE_STOR);
 }
 
-module_init(usb_stor_init);
+subsys_initcall(usb_stor_init);
 module_exit(usb_stor_exit);
