@@ -40,6 +40,7 @@
 #include <linux/msm_thermal_ioctl.h>
 #include <soc/qcom/rpm-smd.h>
 #include <soc/qcom/scm.h>
+#include <linux/sched/rt.h>
 
 #define MAX_CURRENT_UA 100000
 #define MAX_RAILS 5
@@ -1800,10 +1801,10 @@ static void __ref do_core_control(long temp)
 	mutex_lock(&core_control_mutex);
 	if (msm_thermal_info.core_control_mask &&
 		temp >= msm_thermal_info.core_limit_temp_degC) {
-		for (i = num_possible_cpus(); i > 0; i--) {
+		for (i = num_possible_cpus() - 1; i > 0; i--) {
 			if (!(msm_thermal_info.core_control_mask & BIT(i)))
 				continue;
-			if (cpus_offlined & BIT(i) && !cpu_online(i))
+			if (!cpu_online(i))
 				continue;
 			pr_info("Set Offline: CPU%d Temp: %ld\n",
 					i, temp);
@@ -2446,14 +2447,15 @@ static __ref int do_freq_mitigation(void *data)
 {
 	int ret = 0;
 	uint32_t cpu = 0, max_freq_req = 0, min_freq_req = 0;
+	struct sched_param param = {.sched_priority = MAX_RT_PRIO-1};
 
+	sched_setscheduler(current, SCHED_FIFO, &param);
 	while (!kthread_should_stop()) {
 		while (wait_for_completion_interruptible(
 			&freq_mitigation_complete) != 0)
 			;
 		INIT_COMPLETION(freq_mitigation_complete);
 
-		get_online_cpus();
 		for_each_possible_cpu(cpu) {
 			max_freq_req = (cpus[cpu].max_freq) ?
 					msm_thermal_info.freq_limit :
@@ -2483,7 +2485,6 @@ reset_threshold:
 			}
 		}
 		update_cluster_freq();
-		put_online_cpus();
 	}
 	return ret;
 }
