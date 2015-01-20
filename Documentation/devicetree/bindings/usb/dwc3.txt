@@ -9,11 +9,13 @@ Required properties:
  - interrupt-names : Required interrupt resource entries are:
 	"irq" : Interrupt for DWC3 core
 	"otg_irq" : Interrupt for DWC3 core's OTG Events
+
+Optional properties:
  - usb-phy : array of phandle for the PHY device.  The first element
    in the array is expected to be a handle to the USB2/HS PHY and
    the second element is expected to be a handle to the USB3/SS PHY
-
-Optional properties:
+ - phys: from the *Generic PHY* bindings
+ - phy-names: from the *Generic PHY* bindings
  - tx-fifo-resize: determines if the FIFO *has* to be reallocated.
  - snps,nominal-elastic-buffer: When set, the nominal elastic buffer setting
 	is used. By default, the half-full setting is used.
