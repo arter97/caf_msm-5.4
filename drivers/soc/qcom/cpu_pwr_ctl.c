@@ -334,7 +334,8 @@ static int power_on_l2_msmthulium(struct device_node *l2ccc_node, u32 pon_mask,
 				int cpu)
 {
 	u32 pwr_ctl;
-	void __iomem *l2_base, *qll_clksel;
+	void __iomem *l2_base, *local_clksel, *peer_clksel;
+	struct device_node *peer_node;
 
 	l2_base = of_iomap(l2ccc_node, 0);
 	if (!l2_base)
@@ -347,10 +348,24 @@ static int power_on_l2_msmthulium(struct device_node *l2ccc_node, u32 pon_mask,
 		goto unmap;
 
 	if (of_property_read_bool(l2ccc_node, "qcom,cbf-clock-seq")) {
-		qll_clksel = of_iomap(l2ccc_node, 1);
-		if (!qll_clksel)
+
+		peer_node = of_parse_phandle(l2ccc_node,
+					     "qcom,cbf-clock-peer", 0);
+		if (!peer_node)
 			goto unmap;
-		select_cbf_source(qll_clksel, true);
+
+		local_clksel = of_iomap(l2ccc_node, 1);
+		if (!local_clksel)
+			goto unmap;
+
+		peer_clksel = of_iomap(peer_node, 1);
+		if (!local_clksel) {
+			iounmap(local_clksel);
+			goto unmap;
+		}
+
+		select_cbf_source(local_clksel, true);
+		select_cbf_source(peer_clksel, true);
 	}
 
 	/* assert POR reset, clamp, close L2 APM HS */
@@ -383,8 +398,12 @@ static int power_on_l2_msmthulium(struct device_node *l2ccc_node, u32 pon_mask,
 	wmb();
 
 	/* Restore original clock source */
-	if (of_property_read_bool(l2ccc_node, "qcom,cbf-clock-seq"))
-		select_cbf_source(qll_clksel, false);
+	if (of_property_read_bool(l2ccc_node, "qcom,cbf-clock-seq")) {
+		select_cbf_source(local_clksel, false);
+		select_cbf_source(peer_clksel, false);
+		iounmap(local_clksel);
+		iounmap(peer_clksel);
+	}
 
 unmap:
 	iounmap(l2_base);
