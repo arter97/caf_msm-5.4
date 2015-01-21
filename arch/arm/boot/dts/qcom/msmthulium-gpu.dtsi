@@ -64,7 +64,7 @@
 		clocks = <&clock_mmss clk_gpu_gx_gfx3d_clk>,
 			<&clock_mmss clk_gpu_ahb_clk>,
 			<&clock_mmss clk_gpu_gx_rbbmtimer_clk>,
-			<&clock_gcc  clk_gcc_mmss_bimc_gfx_clk>,
+			<&clock_gcc  clk_bimc_clk>,
 			<&clock_mmss clk_mmss_mmagic_ahb_clk>;
 
 		clock-names = "core_clk", "iface_clk", "rbbmtimer_clk",
@@ -152,7 +152,7 @@
 		compatible = "qcom,kgsl-smmu-v2";
 		reg = <0xb40000 0x20000>;
 		clocks = <&clock_mmss clk_gpu_ahb_clk>,
-			<&clock_gcc clk_gcc_mmss_bimc_gfx_clk>,
+			<&clock_gcc clk_bimc_clk>,
 			<&clock_mmss clk_mmss_mmagic_ahb_clk>,
 			<&clock_mmss clk_mmss_mmagic_cfg_ahb_clk>;
 		clock-names = "gpu_ahb_clk", "bimc_gfx_clk", "mmagic_ahb_clk", "mmagic_cfg_ahb_clk";

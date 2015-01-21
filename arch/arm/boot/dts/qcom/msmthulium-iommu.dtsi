@@ -45,7 +45,7 @@
 		#iommu-cells = <1>;
 		vdd-supply = <&gdsc_gpu>;
 		clocks = <&clock_mmss clk_gpu_ahb_clk>,
-			 <&clock_gcc clk_gcc_mmss_bimc_gfx_clk>,
+			 <&clock_gcc clk_bimc_clk>,
 			 <&clock_mmss clk_mmss_mmagic_ahb_clk>,
 			 <&clock_mmss clk_mmss_mmagic_cfg_ahb_clk>;
 		clock-names = "gpu_ahb_clk", "bimc_gfx_clk", "mmagic_ahb_clk", "mmagic_cfg_ahb_clk";
