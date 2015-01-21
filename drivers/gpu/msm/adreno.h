@@ -585,15 +585,17 @@ struct adreno_debugbus_block {
 /*
  * struct adreno_snapshot_section_sizes - Structure holding the size of
  * different sections dumped during device snapshot
- * @cp_state_deb_size: Debug data section size
- * @vpc_mem_size: VPC memory section size
- * @cp_meq_size: CP MEQ size
- * @shader_mem_size: Size of shader memory of 1 shader section
- * @cp_merciu_size: CP MERCIU size
- * @roq_size: ROQ size
+ * @cp_pfp: CP PFP data section size
+ * @cp_me: CP ME data section size
+ * @vpc_mem: VPC memory section size
+ * @cp_meq: CP MEQ size
+ * @shader_mem: Size of shader memory of 1 shader section
+ * @cp_merciu: CP MERCIU size
+ * @roq: ROQ size
  */
 struct adreno_snapshot_sizes {
-	int cp_state_deb;
+	int cp_pfp;
+	int cp_me;
 	int vpc_mem;
 	int cp_meq;
 	int shader_mem;
@@ -706,33 +708,6 @@ extern unsigned int *adreno_ft_regs_val;
 extern struct adreno_gpudev adreno_a3xx_gpudev;
 extern struct adreno_gpudev adreno_a4xx_gpudev;
 extern struct adreno_gpudev adreno_a5xx_gpudev;
-
-/* A3XX register set defined in adreno_a3xx.c */
-extern const unsigned int a3xx_registers[];
-extern const unsigned int a3xx_registers_count;
-
-extern const unsigned int a3xx_hlsq_registers[];
-extern const unsigned int a3xx_hlsq_registers_count;
-
-extern const unsigned int a330_registers[];
-extern const unsigned int a330_registers_count;
-
-/* A4XX register set defined in adreno_a4xx.c */
-extern const unsigned int a4xx_registers[];
-extern const unsigned int a4xx_registers_count;
-
-extern const unsigned int a4xx_sp_tp_registers[];
-extern const unsigned int a4xx_sp_tp_registers_count;
-
-extern const unsigned int a4xx_ppd_registers[];
-extern const unsigned int a4xx_ppd_registers_count;
-
-extern const unsigned int a4xx_xpu_registers[];
-extern const unsigned int a4xx_xpu_reg_cnt;
-
-extern const struct adreno_vbif_snapshot_registers
-				a4xx_vbif_snapshot_registers[];
-extern const unsigned int a4xx_vbif_snapshot_reg_cnt;
 
 int adreno_spin_idle(struct kgsl_device *device);
 int adreno_idle(struct kgsl_device *device);

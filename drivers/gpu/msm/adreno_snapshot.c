@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -18,9 +18,12 @@
 #include "adreno_pm4types.h"
 #include "a3xx_reg.h"
 #include "adreno_cp_parser.h"
+#include "adreno_snapshot.h"
 
 /* Number of dwords of ringbuffer history to record */
 #define NUM_DWORDS_OF_RINGBUFFER_HISTORY 100
+
+#define VPC_MEMORY_BANKS 4
 
 /* Maintain a list of the objects we see during parsing */
 
@@ -260,7 +263,7 @@ static size_t snapshot_rb(struct kgsl_device *device, u8 *buf,
 			}
 		}
 
-		if (adreno_cmd_is_ib(rbptr[index]) &&
+		if (adreno_cmd_is_ib(adreno_dev, rbptr[index]) &&
 			rbptr[index + 1] == ibbase)
 			break;
 	} while (index != rb->wptr);
@@ -344,7 +347,7 @@ static size_t snapshot_rb(struct kgsl_device *device, u8 *buf,
 							&rbptr[index]))
 			parse_ibs = 0;
 
-		if (parse_ibs && adreno_cmd_is_ib(rbptr[index])) {
+		if (parse_ibs && adreno_cmd_is_ib(adreno_dev, rbptr[index])) {
 			unsigned int ibaddr = rbptr[index + 1];
 			unsigned int ibsize = rbptr[index + 2];
 
@@ -723,4 +726,214 @@ void adreno_snapshot(struct kgsl_device *device, struct kgsl_snapshot *snapshot,
 		KGSL_CORE_ERR("GPU snapshot froze %zdKb of GPU buffers\n",
 			snapshot_frozen_objsize / 1024);
 
+}
+
+/*
+ * adreno_snapshot_cp_roq - Dump CP merciu data in snapshot
+ * @device: Device being snapshotted
+ * @remain: Bytes remaining in snapshot memory
+ * @priv: Size of merciu data in Dwords
+ */
+size_t adreno_snapshot_cp_merciu(struct kgsl_device *device, u8 *buf,
+		size_t remain, void *priv)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct kgsl_snapshot_debug *header = (struct kgsl_snapshot_debug *)buf;
+	unsigned int *data = (unsigned int *)(buf + sizeof(*header));
+	int i, size = *((int *)priv);
+
+	/* The MERCIU data is two dwords per entry */
+	size = size << 1;
+
+	if (remain < DEBUG_SECTION_SZ(size)) {
+		SNAPSHOT_ERR_NOMEM(device, "CP MERCIU DEBUG");
+		return 0;
+	}
+
+	header->type = SNAPSHOT_DEBUG_CP_MERCIU;
+	header->size = size;
+
+	adreno_writereg(adreno_dev, ADRENO_REG_CP_MERCIU_ADDR, 0x0);
+
+	for (i = 0; i < size; i++) {
+		adreno_readreg(adreno_dev, ADRENO_REG_CP_MERCIU_DATA,
+			&data[(i * 2)]);
+		adreno_readreg(adreno_dev, ADRENO_REG_CP_MERCIU_DATA2,
+			&data[(i * 2) + 1]);
+	}
+
+	return DEBUG_SECTION_SZ(size);
+}
+
+/*
+ * adreno_snapshot_cp_roq - Dump ROQ data in snapshot
+ * @device: Device being snapshotted
+ * @remain: Bytes remaining in snapshot memory
+ * @priv: Size of ROQ data in Dwords
+ */
+size_t adreno_snapshot_cp_roq(struct kgsl_device *device, u8 *buf,
+		size_t remain, void *priv)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct kgsl_snapshot_debug *header = (struct kgsl_snapshot_debug *)buf;
+	unsigned int *data = (unsigned int *)(buf + sizeof(*header));
+	int i, size = *((int *)priv);
+
+	if (remain < DEBUG_SECTION_SZ(size)) {
+		SNAPSHOT_ERR_NOMEM(device, "CP ROQ DEBUG");
+		return 0;
+	}
+
+	header->type = SNAPSHOT_DEBUG_CP_ROQ;
+	header->size = size;
+
+	adreno_writereg(adreno_dev, ADRENO_REG_CP_ROQ_ADDR, 0x0);
+	for (i = 0; i < size; i++)
+		adreno_readreg(adreno_dev, ADRENO_REG_CP_ROQ_DATA, &data[i]);
+
+	return DEBUG_SECTION_SZ(size);
+}
+
+/*
+ * adreno_snapshot_cp_pm4_ram() - Dump PM4 data in snapshot
+ * @device: Device being snapshotted
+ * @buf: Snapshot memory
+ * @remain: Number of bytes left in snapshot memory
+ * @priv: Unused
+ */
+size_t adreno_snapshot_cp_pm4_ram(struct kgsl_device *device, u8 *buf,
+		size_t remain, void *priv)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct kgsl_snapshot_debug *header = (struct kgsl_snapshot_debug *)buf;
+	unsigned int *data = (unsigned int *)(buf + sizeof(*header));
+	int i;
+	size_t size = adreno_dev->pm4_fw_size - 1;
+
+	if (remain < DEBUG_SECTION_SZ(size)) {
+		SNAPSHOT_ERR_NOMEM(device, "CP PM4 RAM DEBUG");
+		return 0;
+	}
+
+	header->type = SNAPSHOT_DEBUG_CP_PM4_RAM;
+	header->size = size;
+
+	/*
+	 * Read the firmware from the GPU rather than use our cache in order to
+	 * try to catch mis-programming or corruption in the hardware.  We do
+	 * use the cached version of the size, however, instead of trying to
+	 * maintain always changing hardcoded constants
+	 */
+
+	kgsl_regwrite(device, ADRENO_REG_CP_ME_RAM_WADDR, 0x0);
+	for (i = 0; i < size; i++)
+		kgsl_regread(device, ADRENO_REG_CP_ME_RAM_DATA, &data[i]);
+
+	return DEBUG_SECTION_SZ(size);
+}
+
+/*
+ * adreno_snapshot_cp_pfp_ram() - Dump the PFP data on snapshot
+ * @device: Device being snapshotted
+ * @buf: Snapshot memory
+ * @remain: Amount of butes left in snapshot memory
+ * @priv: Unused
+ */
+size_t adreno_snapshot_cp_pfp_ram(struct kgsl_device *device, u8 *buf,
+		size_t remain, void *priv)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct kgsl_snapshot_debug *header = (struct kgsl_snapshot_debug *)buf;
+	unsigned int *data = (unsigned int *)(buf + sizeof(*header));
+	int i, size = adreno_dev->pfp_fw_size - 1;
+
+	if (remain < DEBUG_SECTION_SZ(size)) {
+		SNAPSHOT_ERR_NOMEM(device, "CP PFP RAM DEBUG");
+		return 0;
+	}
+
+	header->type = SNAPSHOT_DEBUG_CP_PFP_RAM;
+	header->size = size;
+
+	/*
+	 * Read the firmware from the GPU rather than use our cache in order to
+	 * try to catch mis-programming or corruption in the hardware.  We do
+	 * use the cached version of the size, however, instead of trying to
+	 * maintain always changing hardcoded constants
+	 */
+	adreno_writereg(adreno_dev, ADRENO_REG_CP_PFP_UCODE_ADDR, 0x0);
+	for (i = 0; i < size; i++)
+		adreno_readreg(adreno_dev, ADRENO_REG_CP_PFP_UCODE_DATA,
+				&data[i]);
+
+	return DEBUG_SECTION_SZ(size);
+}
+
+/*
+ * adreno_snapshot_vpc_memory() - Save VPC data in snapshot
+ * @device: Device being snapshotted
+ * @buf: Snapshot memory
+ * @remain: Number of bytes left in snapshot memory
+ * @priv: Private data for VPC if any
+ */
+size_t adreno_snapshot_vpc_memory(struct kgsl_device *device, u8 *buf,
+		size_t remain, void *priv)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct kgsl_snapshot_debug *header = (struct kgsl_snapshot_debug *)buf;
+	unsigned int *data = (unsigned int *)(buf + sizeof(*header));
+	int vpc_mem_size = *((int *)priv);
+	size_t size = VPC_MEMORY_BANKS * vpc_mem_size;
+	int bank, addr, i = 0;
+
+	if (remain < DEBUG_SECTION_SZ(size)) {
+		SNAPSHOT_ERR_NOMEM(device, "VPC MEMORY");
+		return 0;
+	}
+
+	header->type = SNAPSHOT_DEBUG_VPC_MEMORY;
+	header->size = size;
+
+	for (bank = 0; bank < VPC_MEMORY_BANKS; bank++) {
+		for (addr = 0; addr < vpc_mem_size; addr++) {
+			unsigned int val = bank | (addr << 4);
+			adreno_writereg(adreno_dev,
+				ADRENO_REG_VPC_DEBUG_RAM_SEL, val);
+			adreno_readreg(adreno_dev,
+				ADRENO_REG_VPC_DEBUG_RAM_READ, &data[i++]);
+		}
+	}
+
+	return DEBUG_SECTION_SZ(size);
+}
+
+/*
+ * adreno_snapshot_cp_meq() - Save CP MEQ data in snapshot
+ * @device: Device being snapshotted
+ * @buf: Snapshot memory
+ * @remain: Number of bytes left in snapshot memory
+ * @priv: Contains the size of MEQ data
+ */
+size_t adreno_snapshot_cp_meq(struct kgsl_device *device, u8 *buf,
+		size_t remain, void *priv)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct kgsl_snapshot_debug *header = (struct kgsl_snapshot_debug *)buf;
+	unsigned int *data = (unsigned int *)(buf + sizeof(*header));
+	int i;
+	int cp_meq_sz = *((int *)priv);
+
+	if (remain < DEBUG_SECTION_SZ(cp_meq_sz)) {
+		SNAPSHOT_ERR_NOMEM(device, "CP MEQ DEBUG");
+		return 0;
+	}
+
+	header->type = SNAPSHOT_DEBUG_CP_MEQ;
+	header->size = cp_meq_sz;
+
+	adreno_writereg(adreno_dev, ADRENO_REG_CP_MEQ_ADDR, 0x0);
+	for (i = 0; i < cp_meq_sz; i++)
+		adreno_readreg(adreno_dev, ADRENO_REG_CP_MEQ_DATA, &data[i]);
+
+	return DEBUG_SECTION_SZ(cp_meq_sz);
 }

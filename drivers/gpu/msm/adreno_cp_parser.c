@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -705,6 +705,7 @@ static int adreno_ib_find_objs(struct kgsl_device *device,
 	unsigned int *src;
 	struct adreno_ib_object *ib_obj;
 	struct kgsl_mem_entry *entry;
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 
 	/* check that this IB is not already on list */
 	for (i = 0; i < ib_obj_list->num_objs; i++) {
@@ -750,7 +751,7 @@ static int adreno_ib_find_objs(struct kgsl_device *device,
 			break;
 
 		if (pkt_is_type3(src[i])) {
-			if (adreno_cmd_is_ib(src[i])) {
+			if (adreno_cmd_is_ib(adreno_dev, src[i])) {
 				uint64_t gpuaddrib2 = src[i + 1];
 				uint64_t size = src[i + 2];
 

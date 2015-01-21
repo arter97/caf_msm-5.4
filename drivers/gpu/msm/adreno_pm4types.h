@@ -278,16 +278,6 @@ static inline uint cp_type7_packet(uint opcode, uint cnt)
 /* gmem command buffer length */
 #define CP_REG(reg) ((0x4 << 16) | (SUBBLOCK_OFFSET(reg)))
 
-
-/* Return 1 if the command is an indirect buffer of any kind */
-static inline int adreno_cmd_is_ib(unsigned int cmd)
-{
-	return (cmd == cp_type3_packet(CP_INDIRECT_BUFFER_PFE, 2) ||
-		cmd == cp_type3_packet(CP_INDIRECT_BUFFER_PFD, 2) ||
-		cmd == cp_type3_packet(CP_COND_INDIRECT_BUFFER_PFE, 2) ||
-		cmd == cp_type3_packet(CP_COND_INDIRECT_BUFFER_PFD, 2));
-}
-
 /* Return true if the hardware uses the legacy (A4XX and older) PM4 format */
 #define ADRENO_LEGACY_PM4(_d) (ADRENO_GPUREV(_d) < 500)
 
@@ -305,6 +295,16 @@ static inline uint cp_packet(struct adreno_device *adreno_dev,
 		return cp_type3_packet(opcode, size);
 
 	return cp_type7_packet(opcode, size);
+}
+
+/* Return 1 if the command is an indirect buffer of any kind */
+static inline int adreno_cmd_is_ib(struct adreno_device *adreno_dev,
+					unsigned int cmd)
+{
+	return cmd == cp_packet(adreno_dev, CP_INDIRECT_BUFFER_PFE, 2) ||
+		cmd == cp_packet(adreno_dev, CP_INDIRECT_BUFFER_PFD, 2) ||
+		cmd == cp_packet(adreno_dev, CP_COND_INDIRECT_BUFFER_PFE, 2) ||
+		cmd == cp_packet(adreno_dev, CP_COND_INDIRECT_BUFFER_PFD, 2);
 }
 
 /**
