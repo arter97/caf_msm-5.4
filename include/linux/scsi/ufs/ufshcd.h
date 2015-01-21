@@ -55,6 +55,7 @@
 #include <linux/completion.h>
 #include <linux/regulator/consumer.h>
 #include <linux/pm_qos.h>
+#include <linux/scsi/ufs/unipro.h>
 
 #include <asm/irq.h>
 #include <asm/byteorder.h>
@@ -296,6 +297,7 @@ struct debugfs_files {
 	struct dentry *power_mode;
 	struct dentry *dme_local_read;
 	struct dentry *dme_peer_read;
+	struct dentry *dbg_print_en;
 	u32 dme_local_attr_id;
 	u32 dme_peer_attr_id;
 #ifdef CONFIG_UFS_FAULT_INJECTION
@@ -382,6 +384,8 @@ struct ufs_pwr_mode_info {
  * @crypto_engine_reset_err: resets the saved error status of
  *                         the cryptographic engine
  * @dbg_register_dump: used to dump controller debug information
+ * @add_debugfs: used to add debugfs entries
+ * @remove_debugfs: used to remove debugfs entries
  */
 struct ufs_hba_variant_ops {
 	const char *name;
@@ -399,10 +403,15 @@ struct ufs_hba_variant_ops {
 	int     (*resume)(struct ufs_hba *, enum ufs_pm_op);
 	int	(*update_sec_cfg)(struct ufs_hba *hba, bool restore_sec_cfg);
 	int	(*crypto_engine_cfg)(struct ufs_hba *, unsigned int);
+	int	(*crypto_engine_reset)(struct ufs_hba *);
 	int	(*crypto_engine_eh)(struct ufs_hba *);
 	int	(*crypto_engine_get_err)(struct ufs_hba *);
 	void	(*crypto_engine_reset_err)(struct ufs_hba *);
 	void	(*dbg_register_dump)(struct ufs_hba *hba);
+#ifdef CONFIG_DEBUG_FS
+	void	(*add_debugfs)(struct ufs_hba *hba, struct dentry *root);
+	void	(*remove_debugfs)(struct ufs_hba *hba);
+#endif
 };
 
 /* clock gating state  */
@@ -412,6 +421,20 @@ enum clk_gating_state {
 	REQ_CLKS_OFF,
 	REQ_CLKS_ON,
 };
+
+/* UFS Host Controller debug print bitmask */
+#define UFSHCD_DBG_PRINT_CLK_FREQ_EN		UFS_BIT(0)
+#define UFSHCD_DBG_PRINT_UIC_ERR_HIST_EN	UFS_BIT(1)
+#define UFSHCD_DBG_PRINT_HOST_REGS_EN		UFS_BIT(2)
+#define UFSHCD_DBG_PRINT_TRS_EN			UFS_BIT(3)
+#define UFSHCD_DBG_PRINT_TMRS_EN		UFS_BIT(4)
+#define UFSHCD_DBG_PRINT_PWR_EN			UFS_BIT(5)
+
+#define UFSHCD_DBG_PRINT_ALL						   \
+		(UFSHCD_DBG_PRINT_CLK_FREQ_EN		|		   \
+		 UFSHCD_DBG_PRINT_UIC_ERR_HIST_EN	|		   \
+		 UFSHCD_DBG_PRINT_HOST_REGS_EN | UFSHCD_DBG_PRINT_TRS_EN | \
+		 UFSHCD_DBG_PRINT_TMRS_EN | UFSHCD_DBG_PRINT_PWR_EN)
 
 /**
  * struct ufs_clk_gating - UFS clock gating related info
@@ -578,6 +601,7 @@ struct ufshcd_pm_qos {
  * @hibern8_on_idle: UFS Hibern8 on idle related data
  * @ufs_stats: ufshcd statistics to be used via debugfs
  * @debugfs_files: debugfs files associated with the ufs stats
+ * @ufshcd_dbg_print: Bitmask for enabling debug prints
  */
 struct ufs_hba {
 	void __iomem *mmio_base;
@@ -754,6 +778,9 @@ struct ufs_hba {
 
 	/* Number of lanes available (1 or 2) for Rx/Tx */
 	u32 lanes_per_direction;
+
+	/* Bitmask for enabling debug prints */
+	u32 ufshcd_dbg_print;
 };
 
 /* Returns true if clocks can be gated. Otherwise false */
@@ -880,6 +907,14 @@ static inline int ufshcd_dme_peer_get(struct ufs_hba *hba,
 }
 
 int ufshcd_read_device_desc(struct ufs_hba *hba, u8 *buf, u32 size);
+
+static inline bool ufshcd_is_hs_mode(struct ufs_pa_layer_attr *pwr_info)
+{
+	return (pwr_info->pwr_rx == FAST_MODE ||
+		pwr_info->pwr_rx == FASTAUTO_MODE) &&
+		(pwr_info->pwr_tx == FAST_MODE ||
+		pwr_info->pwr_tx == FASTAUTO_MODE);
+}
 
 #define ASCII_STD true
 #define UTF16_STD false

@@ -26,6 +26,7 @@
 #include "mhi.h"
 #include "mhi_hwio.h"
 #include "mhi_macros.h"
+#include "mhi_trace.h"
 
 static void mhi_write_db(struct mhi_device_ctxt *mhi_dev_ctxt,
 		  void __iomem *io_addr_lower,
@@ -585,6 +586,7 @@ enum MHI_STATUS mhi_queue_xfer(struct mhi_client_handle *client_handle,
 	pkt_loc = mhi_dev_ctxt->mhi_local_chan_ctxt[chan].wp;
 	pkt_loc->data_tx_pkt.buffer_ptr = buf;
 	pkt_loc->type.info = mhi_flags;
+	trace_mhi_tre(pkt_loc, chan, 0);
 
 	if (likely(0 != client_handle->intmod_t))
 		MHI_TRB_SET_INFO(TX_TRB_BEI, pkt_loc, 1);
@@ -632,17 +634,19 @@ enum MHI_STATUS mhi_send_cmd(struct mhi_device_ctxt *mhi_dev_ctxt,
 	enum MHI_PKT_TYPE ring_el_type = MHI_PKT_TYPE_NOOP_CMD;
 	struct mutex *chan_mutex = NULL;
 
+	if (chan >= MHI_MAX_CHANNELS ||
+		cmd >= MHI_COMMAND_MAX_NR || mhi_dev_ctxt == NULL) {
+		mhi_log(MHI_MSG_ERROR,
+			"Invalid channel id, received id: 0x%x", chan);
+		return MHI_STATUS_ERROR;
+	}
+
 	mhi_log(MHI_MSG_INFO,
 		"Entered, MHI state %d dev_exec_env %d chan %d cmd %d\n",
 			mhi_dev_ctxt->mhi_state,
 			mhi_dev_ctxt->dev_exec_env,
 			chan, cmd);
-	if (chan >= MHI_MAX_CHANNELS ||
-		cmd >= MHI_COMMAND_MAX_NR || NULL == mhi_dev_ctxt) {
-		mhi_log(MHI_MSG_ERROR,
-			"Invalid channel id, received id: 0x%x", chan);
-		goto error_general;
-	}
+
 	mhi_assert_device_wake(mhi_dev_ctxt);
 	/*
 	 * If there is a cmd pending a struct device confirmation,
@@ -863,6 +867,8 @@ enum MHI_STATUS parse_xfer_event(struct mhi_device_ctxt *ctxt,
 	u32 nr_trb_to_parse;
 	u32 i = 0;
 
+	trace_mhi_ev(event);
+
 	switch (MHI_EV_READ_CODE(EV_TRB_CODE, event)) {
 	case MHI_EVENT_CC_EOB:
 		chan = MHI_EV_READ_CHID(EV_CHID, event);
@@ -905,6 +911,8 @@ enum MHI_STATUS parse_xfer_event(struct mhi_device_ctxt *ctxt,
 					mhi_dev_ctxt->mhi_ctrl_seg_info,
 							phy_ev_trb_loc);
 		local_trb_loc = (union mhi_xfer_pkt *)local_chan_ctxt->rp;
+
+		trace_mhi_tre(local_trb_loc, chan, 1);
 
 		ret_val = get_nr_enclosed_el(local_chan_ctxt,
 				      local_trb_loc,
@@ -1248,7 +1256,6 @@ enum MHI_STATUS parse_cmd_event(struct mhi_device_ctxt *mhi_dev_ctxt,
 								cmd_pkt))
 				mhi_log(MHI_MSG_INFO,
 					"Failed to process reset cmd\n");
-			atomic_dec(&mhi_dev_ctxt->start_cmd_pending_ack);
 			wake_up_interruptible(
 				mhi_dev_ctxt->chan_start_complete);
 			break;
@@ -1294,20 +1301,22 @@ int mhi_poll_inbound(struct mhi_client_handle *client_handle,
 					(union mhi_xfer_pkt *)pending_trb);
 		result->flags = pending_trb->info;
 		result->transaction_status = MHI_STATUS_SUCCESS;
+		ret_val = delete_element(local_chan_ctxt,
+					&local_chan_ctxt->ack_rp,
+					&local_chan_ctxt->rp, NULL);
+		if (ret_val != MHI_STATUS_SUCCESS) {
+			mhi_log(MHI_MSG_ERROR,
+				"Internal Failure, inconsistent ring state, ret %d chan %d\n",
+				ret_val, chan);
+			result->payload_buf = 0;
+			result->bytes_xferd = 0;
+			result->transaction_status = MHI_STATUS_ERROR;
+		}
 	} else {
 		result->payload_buf = 0;
 		result->bytes_xferd = 0;
 		result->transaction_status = MHI_STATUS_SUCCESS;
-	}
-	ret_val = delete_element(local_chan_ctxt, &local_chan_ctxt->ack_rp,
-				&local_chan_ctxt->rp, NULL);
-	if (ret_val != MHI_STATUS_SUCCESS) {
-		mhi_log(MHI_MSG_ERROR,
-			"Failed to remove from inbound ring ret %d chan %d\n",
-			ret_val, chan);
-		result->payload_buf = 0;
-		result->bytes_xferd = 0;
-		result->transaction_status = MHI_STATUS_SUCCESS;
+		ret_val = MHI_STATUS_RING_EMPTY;
 	}
 	mutex_unlock(chan_mutex);
 	return ret_val;

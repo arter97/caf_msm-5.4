@@ -17,6 +17,9 @@ Optional properties:
 - reg-names  : may have "chnls", "obsrvr"
 - reg : offset and length of the PMIC Arbiter Core Channels register map.
 - reg : offset and length of the PMIC Arbiter Core Observer Channels reg map.
+- qcom,pmic-arb-max-peripherals : the max supported peripheral channels on device
+- qcom,pmic-arb-max-periph-interrupts : the max supported peripheral channels
+					interrupts on device
 
 Example:
 

@@ -50,7 +50,7 @@ Parent node optional properties:
 					the Rbias needs to be controlled by
 					software. If this is not set, it will
 					be controlled by hardware (default).
-- qcom,fg-current-ma:			Battery current at which the fuel gauge
+- qcom,fg-iterm-ma:			Battery current at which the fuel gauge
 					will issue end of charge if the charger
 					is configured to use the fuel gauge
 					ADCs for end of charge detection. This
@@ -65,6 +65,28 @@ Parent node optional properties:
 					power supply framework. The userspace
 					will read 0% soc and immediately
 					shutdown.
+- qcom,fg-cutoff-voltage-mv:		The voltage where the fuel gauge will
+					steer the SOC to be zero. For example,
+					if the cutoff voltage is set to 3400mv,
+					the fuel gauge will try to count SoC so
+					that the battery SoC will be 0 when it
+					is 3400mV.
+- qcom,fg-vbat-estimate-diff-mv:	If the estimated voltage based on SoC
+					and battery current/resistance differs
+					from the actual voltage by more than
+					this amount, the fuel gauge will
+					redo the first SoC estimate when the
+					driver probes.
+- qcom,fg-delta-soc:			How many percent the monotonic SoC must
+					change before a new delta_soc interrupt
+					is asserted. If this value is raised
+					above 3-4, some period workarounds may
+					not function well, so it's best to
+					leave this at 1 or 2%.
+- qcom,fg-max-soc:			The percent SoC threshold at which the
+					HIGH_SOC interrupt will be asserted.
+- qcom,fg-min-soc:			The percent SoC threshold at which the
+					LOW_SOC interrupt will be asserted.
 
 qcom,fg-soc node required properties:
 - reg : offset and length of the PMIC peripheral register map.

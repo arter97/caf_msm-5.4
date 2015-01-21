@@ -256,6 +256,7 @@
 #define clk_xo_pil_mss_clk			0xe97a8354
 #define clk_xo_pil_pronto_clk			0x89dae6d0
 #define clk_xo_wlan_clk				0x0116b76f
+#define clk_xo_pil_lpass_clk			0xb72aa4c9
 #define clk_bb_clk1				0xf5304268
 #define clk_bb_clk1_a				0xfa113810
 #define clk_bb_clk1_pin				0x6dd0a779
@@ -277,5 +278,9 @@
 #define clk_gcc_debug_mux			0x8121ac15
 #define clk_rpm_debug_mux			0x25cd1f3a
 #define clk_wcnss_m_clk				0x709f430b
+
+#define clk_a53ssmux_lc				0x71a9377b
+#define clk_a53ssmux_bc				0xb5983c42
+#define clk_a53ssmux_cci			0x15560bd5
 
 #endif

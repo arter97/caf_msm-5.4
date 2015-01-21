@@ -1,6 +1,6 @@
 /*
  * Copyright (c) International Business Machines Corp., 2006
- * Copyright (c) 2014, Linux Foundation. All rights reserved.
+ * Copyright (c) 2014 - 2015, Linux Foundation. All rights reserved.
  * Linux Foundation chooses to take subject only to the GPLv2
  * license terms, and distributes only under these terms.
  *
@@ -105,7 +105,6 @@
 #include <linux/crc32.h>
 #include <linux/freezer.h>
 #include <linux/kthread.h>
-#include <linux/time.h>
 #include "ubi.h"
 
 /* Number of physical eraseblocks reserved for wear-leveling purposes */
@@ -145,6 +144,8 @@ static int self_check_in_pq(const struct ubi_device *ubi,
 			    struct ubi_wl_entry *e);
 static int schedule_erase(struct ubi_device *ubi, struct ubi_wl_entry *e,
 			  int vol_id, int lnum, int torture);
+static int sync_erase(struct ubi_device *ubi, struct ubi_wl_entry *e,
+		      int torture);
 
 #ifdef CONFIG_MTD_UBI_FASTMAP
 /**
@@ -451,7 +452,7 @@ static struct ubi_wl_entry *find_anchor_wl_entry(struct rb_root *root)
 	return victim;
 }
 
-static int anchor_pebs_avalible(struct rb_root *root, int rd_threshold)
+static int anchor_pebs_avalible(struct rb_root *root)
 {
 	struct rb_node *p;
 	struct ubi_wl_entry *e;
@@ -561,37 +562,13 @@ retry:
 static void return_unused_pool_pebs(struct ubi_device *ubi,
 				    struct ubi_fm_pool *pool)
 {
-	int i, err;
+	int i;
 	struct ubi_wl_entry *e;
-	struct timeval tv;
-
-	do_gettimeofday(&tv);
 
 	for (i = pool->used; i < pool->size; i++) {
 		e = ubi->lookuptbl[pool->pebs[i]];
-		/* If given PEB pending to be scrubbed - remove it */
-		if (ubi_in_wl_tree(e, &ubi->scrub)) {
-			ubi_err(ubi->ubi_num,
-				"PEB %d was pending scrubb", e->pnum);
-			self_check_in_wl_tree(ubi, e, &ubi->scrub);
-			rb_erase(&e->u.rb, &ubi->scrub);
-		}
-		if (e->last_erase_time + UBI_DT_THRESHOLD <
-			 (tv.tv_sec / NUM_SEC_IN_DAY)) {
-			spin_unlock(&ubi->wl_lock);
-			err = schedule_erase(ubi, e, UBI_UNKNOWN,
-					 UBI_UNKNOWN, 0);
-			spin_lock(&ubi->wl_lock);
-			if (err) {
-				ubi_err(ubi->ubi_num,
-				"Failed to schedule erase for PEB %d (err=%d)",
-					e->pnum, err);
-				ubi_ro_mode(ubi);
-			}
-		} else {
-			wl_tree_add(e, &ubi->free);
-			ubi->free_count++;
-		}
+		wl_tree_add(e, &ubi->free);
+		ubi->free_count++;
 	}
 }
 
@@ -757,120 +734,151 @@ int ubi_wl_get_peb(struct ubi_device *ubi)
  * ubi_wl_scan_all - Scan all PEB's
  * @ubi: UBI device description object
  *
- * This function scans all device PEBs in order to locate once
- * need scrubbing; due to read disturb threashold or last erase
- * timestamp.
+ * This function schedules all device PEBs for erasure if free, or for
+ * scrubbing otherwise. This trigger is used to prevent data loss due to read
+ * disturb, data retention.
  *
- * Return 0 in case of sucsess, (negative) error code otherwise
+ * Return 0 in case of success, (negative) error code otherwise
  *
  */
-int ubi_wl_scan_all(struct ubi_device *ubi)
+int ubi_wl_scrub_all(struct ubi_device *ubi)
 {
-	struct timeval tv;
 	struct rb_node *node;
 	struct ubi_wl_entry *wl_e, *tmp;
-	int used_cnt, free_cnt;
-	int err;
+	int i, err = 0;
+	struct ubi_wl_entry *sync_erase_q[NUM_PEBS_TO_SYNC_ERASE] = {0};
+	int sync_erase_pos = 0;
 
-	do_gettimeofday(&tv);
 	if (!ubi->lookuptbl) {
 		ubi_err(ubi->ubi_num, "lookuptbl is null");
 		return -ENOENT;
 	}
 
 	spin_lock(&ubi->wl_lock);
-	if (ubi->scan_in_progress) {
+	if (ubi->scrub_in_progress) {
 		ubi_err(ubi->ubi_num,
 			"Scan already in progress, ignoring the trigger");
 		err = -EPERM;
-		goto out;
+		spin_unlock(&ubi->wl_lock);
+		return err;
 	}
-	ubi->scan_in_progress = true;
+	ubi->scrub_in_progress = true;
+	/* stop all works in order to freeze system state */
+	ubi->thread_enabled = 0;
+	spin_unlock(&ubi->wl_lock);
+	down_write(&ubi->work_sem);
+	up_write(&ubi->work_sem);
 
-	ubi_msg(ubi->ubi_num,
-		"Scanning all PEBs for read-disturb/erasures");
-	/* For PEBs in free list rc=0 */
-	free_cnt = 0;
-	node = rb_first(&ubi->free);
-	while (node) {
+	/*
+	 * fm_mutex prevents fastmap flush.
+	 * Without FM flush there is no pools refill.
+	 * When the pools are empty, there are no available PEBSs for write.
+	 * Thus prevent PEBS's from moving under our feet.
+	 *
+	 * Keep the wl_lock, while iterating the wl data structures.
+	 */
+	mutex_lock(&ubi->fm_mutex);
+	spin_lock(&ubi->wl_lock);
+
+	ubi_msg(ubi->ubi_num, "Scheduling all PEBs for scrub/erasure");
+
+	/*
+	 * Flush the pools into the free list before erasing all the
+	 * PEBS in the free list.
+	 */
+	return_unused_pool_pebs(ubi, &ubi->fm_wl_pool);
+	ubi->fm_wl_pool.used = ubi->fm_wl_pool.size = 0;
+	return_unused_pool_pebs(ubi, &ubi->fm_pool);
+	ubi->fm_pool.used = ubi->fm_pool.size = 0;
+
+	/* PEBs in free list */
+	while ((node = rb_first(&ubi->free)) != NULL) {
 		wl_e = rb_entry(node, struct ubi_wl_entry, u.rb);
-		node = rb_next(node);
-		if (wl_e->last_erase_time + UBI_DT_THRESHOLD <
-			 (tv.tv_sec / NUM_SEC_IN_DAY)) {
-			if (self_check_in_wl_tree(ubi, wl_e, &ubi->free)) {
-				ubi_err(ubi->ubi_num,
-					"PEB %d moved from free tree",
-					wl_e->pnum);
-				err = -EAGAIN;
-				goto out;
-			}
-			rb_erase(&wl_e->u.rb, &ubi->free);
-			ubi->free_count--;
+		/* Sanity check to verify consistency */
+		if (self_check_in_wl_tree(ubi, wl_e, &ubi->free)) {
+			ubi_err(ubi->ubi_num, "PEB %d moved from free tree",
+				wl_e->pnum);
+			err = -EAGAIN;
+			spin_unlock(&ubi->wl_lock);
+			goto out;
+		}
+		rb_erase(&wl_e->u.rb, &ubi->free);
+		ubi->free_count--;
+		if (sync_erase_pos < NUM_PEBS_TO_SYNC_ERASE) {
+			sync_erase_q[sync_erase_pos++] = wl_e;
+		} else {
 			spin_unlock(&ubi->wl_lock);
 			err = schedule_erase(ubi, wl_e, UBI_UNKNOWN,
 					 UBI_UNKNOWN, 0);
 			spin_lock(&ubi->wl_lock);
-			if (err) {
-				ubi_err(ubi->ubi_num,
+		}
+		if (err) {
+			ubi_err(ubi->ubi_num,
 				"Failed to schedule erase for PEB %d (err=%d)",
-					wl_e->pnum, err);
-				ubi_ro_mode(ubi);
-				goto out;
-			}
-			free_cnt++;
+				wl_e->pnum, err);
+			ubi_ro_mode(ubi);
+			spin_unlock(&ubi->wl_lock);
+			goto out;
 		}
 	}
 
-	used_cnt = 0;
-	node = rb_first(&ubi->used);
-	while (node) {
+	/* Move all used pebs to scrub tree */
+	while ((node = rb_first(&ubi->used)) != NULL) {
 		wl_e = rb_entry(node, struct ubi_wl_entry, u.rb);
-		node = rb_next(node);
-		if ((wl_e->rc >= UBI_RD_THRESHOLD) ||
-			(wl_e->last_erase_time +
-			 UBI_DT_THRESHOLD < (tv.tv_sec / NUM_SEC_IN_DAY))) {
-			spin_unlock(&ubi->wl_lock);
-			err = ubi_wl_scrub_peb(ubi, wl_e->pnum);
-			if (err)
-				ubi_err(ubi->ubi_num,
-				"Failed to schedule scrub for PEB %d (err=%d)",
-					wl_e->pnum, err);
-			else
-				used_cnt++;
-			spin_lock(&ubi->wl_lock);
-		}
+		rb_erase(&wl_e->u.rb, &ubi->used);
+		wl_tree_add(wl_e, &ubi->scrub);
 	}
 
 	/* Go over protection queue */
-	list_for_each_entry_safe(wl_e, tmp, &ubi->pq[ubi->pq_head], u.list) {
-		if ((wl_e->rc >= UBI_RD_THRESHOLD) ||
-			(wl_e->last_erase_time +
-			 UBI_DT_THRESHOLD < (tv.tv_sec / NUM_SEC_IN_DAY))) {
+	for (i = 0; i < UBI_PROT_QUEUE_LEN; i++) {
+		list_for_each_entry_safe(wl_e, tmp, &ubi->pq[i], u.list) {
 			spin_unlock(&ubi->wl_lock);
 			err = ubi_wl_scrub_peb(ubi, wl_e->pnum);
+			spin_lock(&ubi->wl_lock);
 			if (err)
 				ubi_err(ubi->ubi_num,
-				"Failed to schedule scrub for PEB %d (err=%d)",
+					"Failed to schedule scrub for PEB %d (err=%d)",
 					wl_e->pnum, err);
-			else
-				used_cnt++;
-			spin_lock(&ubi->wl_lock);
 		}
 	}
 	spin_unlock(&ubi->wl_lock);
-	ubi_msg(ubi->ubi_num, "Scheduled %d for erasure", free_cnt);
-	ubi_msg(ubi->ubi_num, "Scehduled %d for scrubbing", used_cnt);
-	err = ubi_wl_flush(ubi, UBI_ALL, UBI_ALL);
-	if (err)
-		ubi_err(ubi->ubi_num, "Failed to flush ubi wq. err = %d", err);
-	else
-		ubi_msg(ubi->ubi_num, "Flashed ubi wq");
+	for (i = 0; i < sync_erase_pos; i++) {
+		wl_e = sync_erase_q[i];
+		err = sync_erase(ubi, wl_e, 0);
+		if (err) {
+			ubi_err(ubi->ubi_num, "Failed to erase PEB %d (err=%d)",
+				wl_e->pnum, err);
+			err = schedule_erase(ubi, wl_e, UBI_UNKNOWN,
+					UBI_UNKNOWN, 0);
+			if (err)
+				ubi_err(ubi->ubi_num, "Failed to schedule scrub for PEB %d (err=%d)",
+					wl_e->pnum, err);
+		}
+		/* even if have errors we still have to return those PEB's */
+		spin_lock(&ubi->wl_lock);
+		wl_tree_add(wl_e, &ubi->free);
+		ubi->free_count++;
+		spin_unlock(&ubi->wl_lock);
+	}
+
+out:
+	mutex_unlock(&ubi->fm_mutex);
+
+	/* Resume the worker thread */
+	spin_lock(&ubi->wl_lock);
+	ubi->thread_enabled = 1;
+	spin_unlock(&ubi->wl_lock);
+	if (!ubi_dbg_is_bgt_disabled(ubi))
+		wake_up_process(ubi->bgt_thread);
+
+	/* Make sure all PEBs are scrubed after reset */
+	err = ubi_update_fastmap(ubi);
 
 	spin_lock(&ubi->wl_lock);
-out:
-	ubi->scan_in_progress = false;
+	ubi->scrub_in_progress = false;
 	spin_unlock(&ubi->wl_lock);
-	ubi_msg(ubi->ubi_num, "Scanning all PEBs completed. err = %d", err);
+	ubi_msg(ubi->ubi_num, "Scrubbing all PEBs completed. err = %d", err);
+
 	return err;
 }
 
@@ -913,7 +921,6 @@ static int sync_erase(struct ubi_device *ubi, struct ubi_wl_entry *e,
 	int err;
 	struct ubi_ec_hdr *ec_hdr;
 	unsigned long long ec = e->ec;
-	struct timeval tv;
 
 	dbg_wl("erase PEB %d, old EC %llu", e->pnum, ec);
 
@@ -946,16 +953,11 @@ static int sync_erase(struct ubi_device *ubi, struct ubi_wl_entry *e,
 
 	ec_hdr->ec = cpu_to_be64(ec);
 
-	do_gettimeofday(&tv);
-	/* The last erase time resolution is in days */
-	ec_hdr->last_erase_time = cpu_to_be64(tv.tv_sec / NUM_SEC_IN_DAY);
 	err = ubi_io_write_ec_hdr(ubi, e->pnum, ec_hdr);
 	if (err)
 		goto out_free;
 
 	e->ec = ec;
-	e->last_erase_time = tv.tv_sec / NUM_SEC_IN_DAY;
-	e->rc = 0;
 	spin_lock(&ubi->wl_lock);
 	if (e->ec > ubi->max_ec)
 		ubi->max_ec = e->ec;
@@ -1090,13 +1092,6 @@ static int schedule_erase(struct ubi_device *ubi, struct ubi_wl_entry *e,
 	wl_wrk->lnum = lnum;
 	wl_wrk->torture = torture;
 
-	/* If given PEB pending to be scrubbed - remove it */
-	if (ubi_in_wl_tree(e, &ubi->scrub)) {
-		self_check_in_wl_tree(ubi, e, &ubi->scrub);
-		rb_erase(&e->u.rb, &ubi->scrub);
-		ubi_msg(ubi->ubi_num, "PEB %d was pending scrubb",
-				e->pnum);
-	}
 	schedule_ubi_work(ubi, wl_wrk);
 	return 0;
 }
@@ -1125,14 +1120,6 @@ static int do_sync_erase(struct ubi_device *ubi, struct ubi_wl_entry *e,
 	wl_wrk->vol_id = vol_id;
 	wl_wrk->lnum = lnum;
 	wl_wrk->torture = torture;
-
-	/* If given PEB pending to be scrubbed - remove it */
-	if (ubi_in_wl_tree(e, &ubi->scrub)) {
-		self_check_in_wl_tree(ubi, e, &ubi->scrub);
-		rb_erase(&e->u.rb, &ubi->scrub);
-		ubi_msg(ubi->ubi_num, "PEB %d was pending scrubb",
-				e->pnum);
-	}
 
 	return erase_worker(ubi, wl_wrk, 0);
 }
@@ -1172,8 +1159,6 @@ int ubi_wl_put_fm_peb(struct ubi_device *ubi, struct ubi_wl_entry *fm_e,
 		ubi->lookuptbl[pnum] = e;
 	} else {
 		e->ec = fm_e->ec;
-		e->rc = fm_e->rc;
-		e->last_erase_time = fm_e->last_erase_time;
 		kfree(fm_e);
 	}
 
@@ -1238,7 +1223,7 @@ static int wear_leveling_worker(struct ubi_device *ubi, struct ubi_work *wrk,
 #ifdef CONFIG_MTD_UBI_FASTMAP
 	/* Check whether we need to produce an anchor PEB */
 	if (!anchor)
-		anchor = !anchor_pebs_avalible(&ubi->free, ubi->rd_threshold);
+		anchor = !anchor_pebs_avalible(&ubi->free);
 
 	if (anchor) {
 		e1 = find_anchor_wl_entry(&ubi->used);
@@ -1807,8 +1792,6 @@ retry:
 		} else if (ubi_in_wl_tree(e, &ubi->scrub)) {
 			self_check_in_wl_tree(ubi, e, &ubi->scrub);
 			rb_erase(&e->u.rb, &ubi->scrub);
-			ubi_msg(ubi->ubi_num, "PEB %d was pending scrubb",
-				e->pnum);
 		} else if (ubi_in_wl_tree(e, &ubi->erroneous)) {
 			self_check_in_wl_tree(ubi, e, &ubi->erroneous);
 			rb_erase(&e->u.rb, &ubi->erroneous);
@@ -1851,6 +1834,8 @@ retry:
 int ubi_wl_scrub_peb(struct ubi_device *ubi, int pnum)
 {
 	struct ubi_wl_entry *e;
+
+	ubi_msg(ubi->ubi_num, "schedule PEB %d for scrubbing", pnum);
 
 retry:
 	spin_lock(&ubi->wl_lock);
@@ -2075,21 +2060,6 @@ static void cancel_pending(struct ubi_device *ubi)
 }
 
 /**
- * enable_check_rd_at_attach - Enable the check read disturb at attach.
- */
-#ifdef CONFIG_MTD_UBI_ENABLE_RD_AT_ATTACH
-static bool enable_check_rd_at_attach(void)
-{
-	return true;
-}
-#else
-static bool enable_check_rd_at_attach(void)
-{
-	return false;
-}
-#endif
-
-/**
  * ubi_wl_init - initialize the WL sub-system using attaching information.
  * @ubi: UBI device description object
  * @ai: attaching information
@@ -2104,16 +2074,7 @@ int ubi_wl_init(struct ubi_device *ubi, struct ubi_attach_info *ai)
 	struct ubi_ainf_volume *av;
 	struct ubi_ainf_peb *aeb, *tmp;
 	struct ubi_wl_entry *e;
-	struct timeval tv;
-	bool check_rd_at_attach;
 
-	check_rd_at_attach = enable_check_rd_at_attach();
-	if (check_rd_at_attach)
-		ubi_msg(ubi->ubi_num, "Read disturb check ENABLED at attach");
-	else
-		ubi_msg(ubi->ubi_num, "Read disturb check DISABLED at attach");
-
-	do_gettimeofday(&tv);
 	ubi->used = ubi->erroneous = ubi->free = ubi->scrub = RB_ROOT;
 	spin_lock_init(&ubi->wl_lock);
 	mutex_init(&ubi->move_mutex);
@@ -2135,9 +2096,6 @@ int ubi_wl_init(struct ubi_device *ubi, struct ubi_attach_info *ai)
 		INIT_LIST_HEAD(&ubi->pq[i]);
 	ubi->pq_head = 0;
 
-	ubi->rd_threshold = UBI_RD_THRESHOLD;
-	ubi->dt_threshold = UBI_DT_THRESHOLD;
-
 	list_for_each_entry_safe(aeb, tmp, &ai->erase, u.list) {
 		cond_resched();
 
@@ -2147,20 +2105,6 @@ int ubi_wl_init(struct ubi_device *ubi, struct ubi_attach_info *ai)
 
 		e->pnum = aeb->pnum;
 		e->ec = aeb->ec;
-		e->last_erase_time = aeb->last_erase_time;
-		e->rc = aeb->rc;
-		if (!ubi->fm) {
-			if (e->rc < UBI_MAX_READCOUNTER) {
-				e->rc++;
-			} else {
-				ubi_err(ubi->ubi_num,
-				  "read counter overflow at PEB %d, RC %d",
-					e->pnum, e->rc);
-				kmem_cache_free(ubi_wl_entry_slab, e);
-				goto out_free;
-			}
-
-		}
 		ubi_assert(!ubi_is_fm_block(ubi, e->pnum));
 		ubi->lookuptbl[e->pnum] = e;
 		if (schedule_erase(ubi, e, aeb->vol_id, aeb->lnum, 0)) {
@@ -2181,39 +2125,14 @@ int ubi_wl_init(struct ubi_device *ubi, struct ubi_attach_info *ai)
 
 		e->pnum = aeb->pnum;
 		e->ec = aeb->ec;
-		e->rc = aeb->rc;
-		if (!ubi->fm) {
-			if (e->rc < UBI_MAX_READCOUNTER) {
-				e->rc++;
-			} else {
-				ubi_err(ubi->ubi_num,
-					"rc overflow at PEB %d, RC %d",
-						e->pnum, e->rc);
-				kmem_cache_free(ubi_wl_entry_slab, e);
-				goto out_free;
-			}
-
-		}
-		e->last_erase_time = aeb->last_erase_time;
 		ubi_assert(e->ec >= 0);
 		ubi_assert(!ubi_is_fm_block(ubi, e->pnum));
+
+		wl_tree_add(e, &ubi->free);
+		ubi->free_count++;
+
 		ubi->lookuptbl[e->pnum] = e;
 
-		/* Check last erase time stamp (in days) */
-		if (check_rd_at_attach &&
-			(e->last_erase_time + ubi->dt_threshold <
-			(tv.tv_sec / NUM_SEC_IN_DAY))) {
-			if (schedule_erase(ubi, e, aeb->vol_id, aeb->lnum, 0)) {
-				kmem_cache_free(ubi_wl_entry_slab, e);
-				goto out_free;
-			}
-		} else if (!ai->failed_fm) {
-			wl_tree_add(e, &ubi->free);
-			ubi->free_count++;
-		} else if (schedule_erase(ubi, e, aeb->vol_id, aeb->lnum, 0)) {
-			kmem_cache_free(ubi_wl_entry_slab, e);
-			goto out_free;
-		}
 		found_pebs++;
 	}
 
@@ -2227,34 +2146,7 @@ int ubi_wl_init(struct ubi_device *ubi, struct ubi_attach_info *ai)
 
 			e->pnum = aeb->pnum;
 			e->ec = aeb->ec;
-			e->rc = aeb->rc;
-			if (!ubi->fm) {
-				if (e->rc < UBI_MAX_READCOUNTER) {
-					e->rc++;
-				} else {
-					ubi_err(ubi->ubi_num,
-					 "rc overflow at PEB %d, RC %d",
-							e->pnum, e->rc);
-					kmem_cache_free(ubi_wl_entry_slab, e);
-					goto out_free;
-				}
-			}
-			e->last_erase_time = aeb->last_erase_time;
 			ubi->lookuptbl[e->pnum] = e;
-
-			/*
-			 * Verify last erase timestamp
-			 * (in days) and read counter
-			 */
-			if (check_rd_at_attach &&
-				(e->last_erase_time + ubi->dt_threshold <
-				(tv.tv_sec / NUM_SEC_IN_DAY) ||
-				e->rc > ubi->rd_threshold)) {
-				ubi_msg(ubi->ubi_num,
-					"scrub PEB %d rc = %d",
-				       e->pnum, e->rc);
-				aeb->scrub = 1;
-			}
 
 			if (!aeb->scrub) {
 				dbg_wl("add PEB %d EC %d to the used tree",

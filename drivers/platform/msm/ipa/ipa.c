@@ -40,9 +40,6 @@
 			       x == IPA_MODE_MOBILE_AP_WLAN)
 #define IPA_CNOC_CLK_RATE (75 * 1000 * 1000UL)
 #define IPA_A5_MUX_HEADER_LENGTH (8)
-#define IPA_DMA_POOL_SIZE (512)
-#define IPA_DMA_POOL_ALIGNMENT (4)
-#define IPA_DMA_POOL_BOUNDARY (1024)
 #define IPA_ROUTING_RULE_BYTE_SIZE (4)
 #define IPA_BAM_CNFG_BITS_VALv1_1 (0x7FFFE004)
 #define IPA_BAM_CNFG_BITS_VALv2_0 (0xFFFFE004)
@@ -1502,6 +1499,10 @@ static int ipa_q6_set_ex_path_dis_agg(void)
 				kfree(desc[index].user1);
 			retval = -EINVAL;
 		}
+
+		/* Ignoring TAG process timeout */
+		if (retval == -ETIME)
+			retval = 0;
 	}
 
 	kfree(desc);
@@ -1659,7 +1660,6 @@ int _ipa_init_sram_v2_5(void)
 							IPA_MEM_CANARY_VAL);
 	IPA_SRAM_SET(IPA_MEM_PART(modem_hdr_proc_ctx_ofst), IPA_MEM_CANARY_VAL);
 	IPA_SRAM_SET(IPA_MEM_PART(modem_ofst), IPA_MEM_CANARY_VAL);
-	IPA_SRAM_SET(IPA_MEM_PART(apps_v4_flt_ofst), IPA_MEM_CANARY_VAL);
 	IPA_SRAM_SET(IPA_MEM_PART(end_ofst), IPA_MEM_CANARY_VAL);
 
 	iounmap(ipa_sram_mmio);
@@ -2321,7 +2321,7 @@ void _ipa_enable_clks_v2_0(void)
 	}
 }
 
-void _ipa_enable_clks_v1(void)
+void _ipa_enable_clks_v1_1(void)
 {
 
 	if (ipa_cnoc_clk) {
@@ -2410,7 +2410,7 @@ void ipa_enable_clks(void)
 		WARN_ON(1);
 }
 
-void _ipa_disable_clks_v1(void)
+void _ipa_disable_clks_v1_1(void)
 {
 
 	if (ipa_inactivity_clk)
@@ -2579,7 +2579,6 @@ static int ipa_setup_bam_cfg(const struct ipa_plat_drv_res *res)
 	if (!ipa_bam_mmio)
 		return -ENOMEM;
 	switch (ipa_ctx->ipa_hw_type) {
-	case IPA_HW_v1_0:
 	case IPA_HW_v1_1:
 		reg_val = IPA_BAM_CNFG_BITS_VALv1_1;
 		break;
@@ -3168,21 +3167,11 @@ static int ipa_init(const struct ipa_plat_drv_res *resource_p,
 		result = -ENOMEM;
 		goto fail_rx_pkt_wrapper_cache;
 	}
-	/*
-	 * setup DMA pool 4 byte aligned, don't cross 1k boundaries, nominal
-	 * size 512 bytes
-	 * This is an issue with IPA HW v1.0 only.
-	 */
-	if (ipa_ctx->ipa_hw_type == IPA_HW_v1_0) {
-		ipa_ctx->dma_pool = dma_pool_create("ipa_1k",
-				ipa_ctx->pdev,
-				IPA_DMA_POOL_SIZE, IPA_DMA_POOL_ALIGNMENT,
-				IPA_DMA_POOL_BOUNDARY);
-	} else {
-		ipa_ctx->dma_pool = dma_pool_create("ipa_tx", ipa_ctx->pdev,
-			IPA_NUM_DESC_PER_SW_TX * sizeof(struct sps_iovec),
-			0, 0);
-	}
+
+	/* Setup DMA pool */
+	ipa_ctx->dma_pool = dma_pool_create("ipa_tx", ipa_ctx->pdev,
+		IPA_NUM_DESC_PER_SW_TX * sizeof(struct sps_iovec),
+		0, 0);
 	if (!ipa_ctx->dma_pool) {
 		IPAERR("cannot alloc DMA pool.\n");
 		result = -ENOMEM;
@@ -3418,11 +3407,6 @@ fail_empty_rt_tbl:
 			  ipa_ctx->empty_rt_tbl_mem.phys_base);
 fail_apps_pipes:
 	idr_destroy(&ipa_ctx->ipa_idr);
-	/*
-	 * DMA pool need to be released only for IPA HW v1.0 only.
-	 */
-	if (ipa_ctx->ipa_hw_type == IPA_HW_v1_0)
-		dma_pool_destroy(ipa_ctx->dma_pool);
 fail_dma_pool:
 	kmem_cache_destroy(ipa_ctx->rx_pkt_wrapper_cache);
 fail_rx_pkt_wrapper_cache:
@@ -3594,11 +3578,59 @@ static int ipa_plat_drv_probe(struct platform_device *pdev_p)
 	return result;
 }
 
+/**
+* ipa_ap_suspend() - suspend callback for runtime_pm
+* @dev: pointer to device
+*
+* This callback will be invoked by the runtime_pm framework when an AP suspend
+* operation is invoked, usually by pressing a suspend button.
+*
+* Returns -EAGAIN to runtime_pm framework in case IPA is in use.
+* This will postpone the suspend operation until all IPA clients release
+* its resources and clocks can be turned off.
+*/
+static int ipa_ap_suspend(struct device *dev)
+{
+	int res = 0;
+
+	IPADBG("Enter...\n");
+	/* Do not allow A7 to suspend in case there are active clients of IPA */
+	ipa_active_clients_lock();
+	if (ipa_ctx->ipa_active_clients.cnt != 0) {
+		IPADBG("IPA is in use, postponing AP suspend.\n");
+		res = -EAGAIN;
+	}
+	ipa_active_clients_unlock();
+	IPADBG("Exit\n");
+
+	return res;
+}
+
+/**
+* ipa_ap_resume() - resume callback for runtime_pm
+* @dev: pointer to device
+*
+* This callback will be invoked by the runtime_pm framework when an AP resume
+* operation is invoked.
+*
+* Always returns 0 since resume should always succeed.
+*/
+static int ipa_ap_resume(struct device *dev)
+{
+	return 0;
+}
+
+static const struct dev_pm_ops ipa_pm_ops = {
+	.suspend_noirq = ipa_ap_suspend,
+	.resume_noirq = ipa_ap_resume,
+};
+
 static struct platform_driver ipa_plat_drv = {
 	.probe = ipa_plat_drv_probe,
 	.driver = {
 		.name = DRV_NAME,
 		.owner = THIS_MODULE,
+		.pm = &ipa_pm_ops,
 		.of_match_table = ipa_plat_drv_match,
 	},
 };
