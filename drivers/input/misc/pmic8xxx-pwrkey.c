@@ -19,6 +19,7 @@
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/log2.h>
+#include <linux/wakelock.h>
 
 #include <linux/mfd/pm8xxx/core.h>
 #include <linux/input/pmic8xxx-pwrkey.h>
@@ -26,6 +27,7 @@
 #define PON_CNTL_1 0x1C
 #define PON_CNTL_PULL_UP BIT(7)
 #define PON_CNTL_TRIG_DELAY_MASK (0x7)
+#define WAKELOCK_TIMEOUT 2000
 
 /**
  * struct pmic8xxx_pwrkey - pmic8xxx pwrkey information
@@ -35,6 +37,9 @@
 struct pmic8xxx_pwrkey {
 	struct input_dev *pwr;
 	int key_press_irq;
+	int key_release_irq;
+	struct wake_lock pwr_key_wakelock;
+
 	const struct pm8xxx_pwrkey_platform_data *pdata;
 };
 
@@ -52,6 +57,7 @@ static irqreturn_t pwrkey_release_irq(int irq, void *_pwrkey)
 {
 	struct pmic8xxx_pwrkey *pwrkey = _pwrkey;
 
+	wake_lock_timeout(&pwrkey->pwr_key_wakelock, msecs_to_jiffies(WAKELOCK_TIMEOUT));
 	input_report_key(pwrkey->pwr, KEY_POWER, 0);
 	input_sync(pwrkey->pwr);
 
@@ -198,6 +204,8 @@ static int __devinit pmic8xxx_pwrkey_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, pwrkey);
 
+	wake_lock_init(&pwrkey->pwr_key_wakelock, WAKE_LOCK_SUSPEND, "pm8921_pwrkey_rel_wakelock");
+
 	err = request_any_context_irq(key_press_irq, pwrkey_press_irq,
 		IRQF_TRIGGER_RISING, "pmic8xxx_pwrkey_press", pwrkey);
 	if (err < 0) {
@@ -231,6 +239,7 @@ free_rel_irq:
 	free_irq(key_release_irq, pwrkey);
 free_press_irq:
 	free_irq(key_press_irq, pwrkey);
+	wake_lock_destroy(&pwrkey->pwr_key_wakelock);
 unreg_input_dev:
 	platform_set_drvdata(pdev, NULL);
 	input_unregister_device(pwr);
@@ -250,6 +259,7 @@ static int __devexit pmic8xxx_pwrkey_remove(struct platform_device *pdev)
 
 	device_init_wakeup(&pdev->dev, 0);
 
+	wake_lock_destroy(&pwrkey->pwr_key_wakelock);
 	device_remove_file(&pdev->dev, &dev_attr_debounce_us);
 	free_irq(key_press_irq, pwrkey);
 	free_irq(key_release_irq, pwrkey);
