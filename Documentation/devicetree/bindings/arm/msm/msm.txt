@@ -74,6 +74,8 @@ SoCs:
 - VPIPA
   compatible = "qcom,msmvpipa"
 
+- THULIUM
+  compatbile = "qcom,msmthulium"
 
 
 Generic board variants:
@@ -189,3 +191,8 @@ compatible = "qcom,msmzirc-mtp"
 compatible = "qcom,msmzirc-rumi"
 compatible = "qcom,msmzirc-sim"
 compatible = "qcom,msmvpipa-sim"
+compatible = "qcom,msmthulium-rumi"
+compatible = "qcom,msmthulium-sim"
+compatible = "qcom,msmthulium-cdp"
+compatible = "qcom,msmthulium-fluid"
+compatible = "qcom,msmthulium-mtp"
