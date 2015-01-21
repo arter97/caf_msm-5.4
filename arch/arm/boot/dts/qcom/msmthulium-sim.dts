@@ -91,7 +91,6 @@
 };
 
 &usb3 {
-	status = "ok";
 	qcom,skip-charger-detection;
 	qcom,vbus-present;
 	dwc3@6a00000 {
@@ -99,17 +98,6 @@
 	};
 };
 
-&qusb_phy {
-	status = "ok";
-};
-
 &ssphy {
-	status = "ok";
 	qcom,emulation;
-};
-
-&soc {
-	android_usb {
-		status = "ok";
-	};
 };
