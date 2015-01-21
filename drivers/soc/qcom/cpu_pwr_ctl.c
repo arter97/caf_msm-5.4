@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -279,11 +279,62 @@ static void msmthulium_poll_steady_active(void __iomem *base, long offset)
 	}
 }
 
+#define CBF_SECSRCSEL_VAL	0x2
+#define SEC_PRISRCSEL_VAL	0x0
+#define SRCSEL_MASK		0x3
+#define PRISRCSEL_SHIFT		0
+#define SECSRCSEL_SHIFT		2
+enum mux_type {
+	MUX_PRI,
+	MUX_SEC,
+};
+
+static int set_clk_mux(void __iomem *reg, enum mux_type mux, int src)
+{
+	u32 regval, prev_src = 0;
+
+	regval = readl_relaxed(reg);
+	switch (mux) {
+	case MUX_PRI:
+		prev_src = (regval >> PRISRCSEL_SHIFT) & SRCSEL_MASK;
+		regval &= ~(SRCSEL_MASK << PRISRCSEL_SHIFT);
+		regval |= (src & SRCSEL_MASK) << PRISRCSEL_SHIFT;
+		break;
+	case MUX_SEC:
+		prev_src = (regval >> SECSRCSEL_SHIFT) & SRCSEL_MASK;
+		regval &= ~(SRCSEL_MASK << SECSRCSEL_SHIFT);
+		regval |= (src & SRCSEL_MASK) << SECSRCSEL_SHIFT;
+		break;
+	default:
+		break;
+	}
+	writel_relaxed(regval, reg);
+
+	/* wait for mux switch to complete */
+	wmb();
+	udelay(1);
+
+	return prev_src;
+}
+
+static void select_cbf_source(void __iomem *reg, bool cbf)
+{
+	static u32 pri_saved, sec_saved;
+
+	if (cbf) {
+		sec_saved = set_clk_mux(reg, MUX_SEC, CBF_SECSRCSEL_VAL);
+		pri_saved = set_clk_mux(reg, MUX_PRI, SEC_PRISRCSEL_VAL);
+	} else {
+		set_clk_mux(reg, MUX_PRI, pri_saved);
+		set_clk_mux(reg, MUX_SEC, sec_saved);
+	}
+}
+
 static int power_on_l2_msmthulium(struct device_node *l2ccc_node, u32 pon_mask,
 				int cpu)
 {
 	u32 pwr_ctl;
-	void __iomem *l2_base;
+	void __iomem *l2_base, *qll_clksel;
 
 	l2_base = of_iomap(l2ccc_node, 0);
 	if (!l2_base)
@@ -294,6 +345,13 @@ static int power_on_l2_msmthulium(struct device_node *l2ccc_node, u32 pon_mask,
 
 	if (pwr_ctl == 0)
 		goto unmap;
+
+	if (of_property_read_bool(l2ccc_node, "qcom,cbf-clock-seq")) {
+		qll_clksel = of_iomap(l2ccc_node, 1);
+		if (!qll_clksel)
+			goto unmap;
+		select_cbf_source(qll_clksel, true);
+	}
 
 	/* assert POR reset, clamp, close L2 APM HS */
 	writel_relaxed(0x00000055 , l2_base + MSMTHULIUM_L2_PWR_CTL);
@@ -321,8 +379,12 @@ static int power_on_l2_msmthulium(struct device_node *l2ccc_node, u32 pon_mask,
 	/* de-assert reset */
 	writel_relaxed(0x00000000 , l2_base + MSMTHULIUM_L2_PWR_CTL);
 
-	/* ensure power-up before returning */
+	/* ensure power-up before restoring the clock and returning */
 	wmb();
+
+	/* Restore original clock source */
+	if (of_property_read_bool(l2ccc_node, "qcom,cbf-clock-seq"))
+		select_cbf_source(qll_clksel, false);
 
 unmap:
 	iounmap(l2_base);
