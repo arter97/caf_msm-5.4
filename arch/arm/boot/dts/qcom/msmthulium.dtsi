@@ -835,9 +835,9 @@
 		vcc-supply = <&pm8994_l20>;
 		vccq-supply = <&pm8994_l25>;
 		vccq2-supply = <&pm8994_s4>;
-		vcc-max-microamp = <750000>;
-		vccq-max-microamp = <50000>;
-		vccq2-max-microamp = <750000>;
+		vcc-max-microamp = <600000>;
+		vccq-max-microamp = <450000>;
+		vccq2-max-microamp = <450000>;
 
 		clock-names =
 			"core_clk_src",
