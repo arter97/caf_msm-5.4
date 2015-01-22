@@ -71,6 +71,8 @@
 #define CMD_CAN_READ_ASYNC		0x5D
 #define CMD_CAN_FULL_WRITE		0x5E
 #define CMD_CAN_FULL_READ		0x5F
+#define CMD_CAN_TS_READ_ASYNC	0x60
+#define CMD_CAN_TS_FULL_READ	0x61
 
 
 struct sam4e_usb {
@@ -177,27 +179,55 @@ struct sam4e_can_unsl_receive {
 	u8 data[8];
 } __packed;
 
+struct sam4e_can_full_ts_read {
+	u8 can;
+	u8 mailbox;
+	u8 ts_on;
+	u32 mid;
+	u32 filter;
+} __packed;
+
+struct sam4e_can_unsl_ts_receive {
+	u8 can;
+	u8 mailbox;
+	u32 ts;
+	u32 mid;
+	u8 dlc;
+	u8 data[8];
+} __packed;
+
 static void sam4e_usb_receive_frame(struct net_device *netdev,
-		struct sam4e_can_unsl_receive *frame)
+		struct sam4e_can_unsl_ts_receive *frame)
 {
 	struct can_frame *cf;
 	struct sk_buff *skb;
+	struct skb_shared_hwtstamps *skt;
+	struct timeval tv;
+	static int msec;
 	int i;
 
 	skb = alloc_can_skb(netdev, &cf);
 	if (skb == NULL)
 		return;
 
-	LOGNI(" rcv frame %x %d %x %x %x %x %x %x %x %x\n",
-			frame->mid, frame->dlc, frame->data[0], frame->data[1],
-			frame->data[2], frame->data[3], frame->data[4],
-			frame->data[5], frame->data[6], frame->data[7]);
+	LOGNI(" rcv frame %d %x %d %x %x %x %x %x %x %x %x\n",
+			frame->ts, frame->mid, frame->dlc, frame->data[0],
+			frame->data[1], frame->data[2], frame->data[3],
+			frame->data[4], frame->data[5], frame->data[6],
+			frame->data[7]);
 	cf->can_id = le32_to_cpu(frame->mid);
 	cf->can_dlc = get_can_dlc(frame->dlc);
 
 	for (i = 0; i < cf->can_dlc; i++)
 		cf->data[i] = frame->data[i];
 
+	msec = le32_to_cpu(frame->ts);
+	tv.tv_sec = msec / 1000;
+	tv.tv_usec = (msec - tv.tv_sec * 1000) * 1000;
+	skt = skb_hwtstamps(skb);
+	skt->hwtstamp = timeval_to_ktime(tv);
+	LOGNI("   hwtstamp %lld\n", ktime_to_ms(skt->hwtstamp));
+	skb->tstamp = timeval_to_ktime(tv);
 	netif_rx(skb);
 }
 
@@ -208,12 +238,13 @@ static void sam4e_process_response(struct sam4e_usb *dev,
 	LOGNI("<%x %2d [%d] %d buff:[%d]\n", resp->cmd,
 			resp->len, resp->seq, resp->err,
 			atomic_read(&dev->active_tx_urbs));
-	if (resp->cmd == CMD_CAN_READ_ASYNC) {
+	if (resp->cmd == CMD_CAN_TS_READ_ASYNC) {
 		/* v1.3 of the firmware uses different frame structure for
 		   unsol messages. (the one without error code) */
 		struct sam4e_unsol_msg *msg = (struct sam4e_unsol_msg *)resp;
-		struct sam4e_can_unsl_receive *frame =
-				(struct sam4e_can_unsl_receive *)&msg->data;
+		/* v2.2 of the firmware supports TS_READ_ASYNC */
+		struct sam4e_can_unsl_ts_receive *frame =
+				(struct sam4e_can_unsl_ts_receive *)&msg->data;
 		if (msg->len > length) {
 			LOGNI("process_response: Saving %d bytes of response\n",
 					length);
@@ -594,16 +625,18 @@ static int sam4e_usb_probe(struct usb_interface *intf,
 	/* TODO: This is probe function! Don't do lengthy stuff here */
 	/* Set mailbox 7 to read all EFF msgs */
 	req = kzalloc(sizeof(struct sam4e_req) +
-			sizeof(struct sam4e_can_full_read), GFP_KERNEL);
+			sizeof(struct sam4e_can_full_ts_read), GFP_KERNEL);
 	if (req != 0) {
-		struct sam4e_can_full_read *cfr =
-				(struct sam4e_can_full_read *)&req->data;
-		req->cmd = CMD_CAN_FULL_READ;
+		struct sam4e_can_full_ts_read *cfr =
+				(struct sam4e_can_full_ts_read *)&req->data;
+		req->cmd = CMD_CAN_TS_FULL_READ;
 		req->len = sizeof(struct sam4e_req) +
-				sizeof(struct sam4e_can_full_read);
+				sizeof(struct sam4e_can_full_ts_read);
 		req->seq = atomic_inc_return(&dev->msg_seq);
 		cfr->can = 0;
 		cfr->mailbox = 7;
+		/* Timestamping on */
+		cfr->ts_on = 1;
 		/* accept EFF frames here */
 		cfr->mid = CAN_EFF_FLAG;
 		cfr->filter = CAN_EFF_FLAG;
@@ -611,7 +644,7 @@ static int sam4e_usb_probe(struct usb_interface *intf,
 		result = usb_bulk_msg(udev, usb_sndbulkpipe(udev, BULK_OUT_EP),
 				req,
 				sizeof(struct sam4e_req) +
-				sizeof(struct sam4e_can_full_read),
+				sizeof(struct sam4e_can_full_ts_read),
 				&actual_length, 1000);
 
 		LOGNI("sent %x result %d, actual_length %d",
@@ -635,16 +668,18 @@ static int sam4e_usb_probe(struct usb_interface *intf,
 
 	/* Set mailbox 6 to read all SFF msgs */
 	req = kzalloc(sizeof(struct sam4e_req) +
-			sizeof(struct sam4e_can_full_read), GFP_KERNEL);
+			sizeof(struct sam4e_can_full_ts_read), GFP_KERNEL);
 	if (req != 0) {
-		struct sam4e_can_full_read *cfr =
-				(struct sam4e_can_full_read *)&req->data;
-		req->cmd = CMD_CAN_FULL_READ;
+		struct sam4e_can_full_ts_read *cfr =
+				(struct sam4e_can_full_ts_read *)&req->data;
+		req->cmd = CMD_CAN_TS_FULL_READ;
 		req->len = sizeof(struct sam4e_req) +
-				sizeof(struct sam4e_can_full_read);
+				sizeof(struct sam4e_can_full_ts_read);
 		req->seq = atomic_inc_return(&dev->msg_seq);
 		cfr->can = 0;
 		cfr->mailbox = 6;
+		/* Timestamping on */
+		cfr->ts_on = 1;
 		/* accept SFF frames here */
 		cfr->mid = 0;
 		cfr->filter = CAN_EFF_FLAG;
@@ -652,7 +687,7 @@ static int sam4e_usb_probe(struct usb_interface *intf,
 		result =  usb_bulk_msg(udev, usb_sndbulkpipe(udev, BULK_OUT_EP),
 				req,
 				sizeof(struct sam4e_req) +
-				sizeof(struct sam4e_can_full_read),
+				sizeof(struct sam4e_can_full_ts_read),
 				&actual_length, 1000);
 
 		LOGNI("sent %x result %d, actual_length %d",
