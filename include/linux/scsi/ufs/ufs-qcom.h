@@ -15,6 +15,7 @@
 #define UFS_QCOM_H_
 
 #include <linux/phy/phy.h>
+#include <linux/scsi/ufs/ufshcd.h>
 
 #define MAX_UFS_QCOM_HOSTS	1
 #define MAX_U32                 (~(u32)0)
@@ -60,6 +61,12 @@ enum {
 	REG_UFS_CFG2                        = 0xE0,
 	REG_UFS_HW_VERSION                  = 0xE4,
 
+	UFS_TEST_BUS				= 0xE8,
+	UFS_TEST_BUS_CTRL_0			= 0xEC,
+	UFS_TEST_BUS_CTRL_1			= 0xF0,
+	UFS_TEST_BUS_CTRL_2			= 0xF4,
+	UFS_UNIPRO_CFG				= 0xF8,
+
 	UFS_DBG_RD_REG_UAWM			= 0x100,
 	UFS_DBG_RD_REG_UARM			= 0x200,
 	UFS_DBG_RD_REG_TXUC			= 0x300,
@@ -77,6 +84,8 @@ enum {
 
 /* bit definitions for REG_UFS_CFG1 register */
 #define QUNIPRO_SEL	UFS_BIT(0)
+#define TEST_BUS_EN		BIT(18)
+#define TEST_BUS_SEL		GENMASK(22, 19)
 
 /* bit definitions for REG_UFS_CFG2 register */
 #define UAWM_HW_CGC_EN		(1 << 0)
@@ -87,6 +96,9 @@ enum {
 #define TRLUT_HW_CGC_EN		(1 << 5)
 #define TMRLUT_HW_CGC_EN	(1 << 6)
 #define OCSC_HW_CGC_EN		(1 << 7)
+
+/* bit definition for UFS_UFS_TEST_BUS_CTRL_n */
+#define TEST_BUS_SUB_SEL_MASK	0x1F  /* All XXX_SEL fields are 5 bits wide */
 
 #define REG_UFS_CFG2_CGC_EN_ALL (UAWM_HW_CGC_EN | UARM_HW_CGC_EN |\
 				 TXUC_HW_CGC_EN | RXUC_HW_CGC_EN |\
@@ -120,6 +132,15 @@ struct ufs_qcom_phy_vreg {
 	bool enabled;
 	bool is_always_on;
 };
+
+/* QCOM UFS debug print bit mask */
+#define UFS_QCOM_DBG_PRINT_REGS_EN	BIT(0)
+#define UFS_QCOM_DBG_PRINT_ICE_REGS_EN	BIT(1)
+#define UFS_QCOM_DBG_PRINT_TEST_BUS_EN	BIT(2)
+
+#define UFS_QCOM_DBG_PRINT_ALL	\
+	(UFS_QCOM_DBG_PRINT_REGS_EN | UFS_QCOM_DBG_PRINT_ICE_REGS_EN | \
+	 UFS_QCOM_DBG_PRINT_TEST_BUS_EN)
 
 static inline void
 ufs_qcom_get_controller_revision(struct ufs_hba *hba,
@@ -183,6 +204,30 @@ struct ufs_qcom_ice_data {
 	bool crypto_engine_err;
 };
 
+/* Host controller hardware version: major.minor.step */
+struct ufs_hw_version {
+	u16 step;
+	u16 minor;
+	u8 major;
+};
+
+#ifdef CONFIG_DEBUG_FS
+struct qcom_debugfs_files {
+	struct dentry *debugfs_root;
+	struct dentry *dbg_print_en;
+	struct dentry *testbus;
+	struct dentry *testbus_en;
+	struct dentry *testbus_cfg;
+	struct dentry *testbus_bus;
+	struct dentry *dbg_regs;
+};
+#endif
+
+struct ufs_qcom_testbus {
+	u8 select_major;
+	u8 select_minor;
+};
+
 struct ufs_qcom_host {
 	/*
 	 * Set this capability if host controller supports the QUniPro mode
@@ -204,11 +249,25 @@ struct ufs_qcom_host {
 	bool is_lane_clks_enabled;
 	bool sec_cfg_updated;
 	struct ufs_qcom_ice_data ice;
+	void __iomem *dev_ref_clk_ctrl_mmio;
+	bool is_dev_ref_clk_enabled;
+	struct ufs_hw_version hw_ver;
+#ifdef CONFIG_DEBUG_FS
+	struct qcom_debugfs_files debugfs_files;
+#endif
+	/* Bitmask for enabling debug prints */
+	u32 dbg_print_en;
+	struct ufs_qcom_testbus testbus;
 };
 
 #define ufs_qcom_is_link_off(hba) ufshcd_is_link_off(hba)
 #define ufs_qcom_is_link_active(hba) ufshcd_is_link_active(hba)
 #define ufs_qcom_is_link_hibern8(hba) ufshcd_is_link_hibern8(hba)
+
+int ufs_qcom_testbus_config(struct ufs_qcom_host *host);
+void ufs_qcom_print_hw_debug_reg_all(struct ufs_hba *hba, void *priv,
+		void (*print_fn)(struct ufs_hba *hba, int offset, int num_regs,
+				char *str, void *priv));
 
 #define MAX_PROP_NAME              32
 #define VDDA_PHY_MIN_UV            1000000

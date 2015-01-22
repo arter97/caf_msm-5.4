@@ -144,6 +144,12 @@
 		#address-cells = <2>;
 		#size-cells = <2>;
 
+		secure_mem: secure_region@0 {
+			linux,reserve-contiguous-region;
+			reg = <0 0 0 0x12c00000>;
+			label = "secure_mem";
+		};
+
 		adsp_mem: adsp_region@0 {
                         linux,reserve-contiguous-region;
 			reg = <0 0 0 0x300000>;
@@ -151,8 +157,8 @@
 		};
 
 		qsecom_mem: qsecom_region@0 {
-                        linux,reserve-contiguous-region;
-			reg = <0 0 0 0x300000>;
+			linux,reserve-contiguous-region;
+			reg = <0 0 0 0x1800000>;
 			label = "qseecom_mem";
 		};
 
@@ -1052,7 +1058,7 @@
 		interrupt-names = "cdc-int";
 	};
 
-	i2c_5: i2c_11: i2c@f9967000 { /* BLSP2 QUP5 */
+	i2c_5: i2c@f9967000 { /* BLSP2 QUP5 */
 		compatible = "qcom,i2c-msm-v2";
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -2209,6 +2215,25 @@
 		rpm-channel-type = <15>; /* SMD_APPS_RPM */
 	};
 
+	qcom,msm-rng@f9bff000 {
+		compatible = "qcom,msm-rng";
+		reg = <0xf9bff000 0x200>;
+		qcom,msm-bus,name = "msm-rng-noc";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<88 618 0 0>,
+				<88 618 0 800>;
+		qcom,msm-rng-iface-clk;
+		clocks = <&clock_gcc clk_gcc_prng_ahb_clk>;
+		clock-names = "iface_clk";
+        };
+
+	qcom_tzlog: tz-log@fe80f720 {
+		compatible = "qcom,tz-log";
+		reg = <0xfe80f720 0x2000>;
+	};
+
 	qcom,sensor-information {
 		compatible = "qcom,sensor-information";
 		sensor_information0: qcom,sensor-information@0 {
@@ -2715,3 +2740,4 @@
 #include "msm8992-smp2p.dtsi"
 #include "msm8992-pm.dtsi"
 #include "msm8992-coresight.dtsi"
+#include "msm8992-camera.dtsi"

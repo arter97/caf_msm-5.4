@@ -27,6 +27,12 @@
 			reg = <0x100 0x100>;
 		};
 
+		qcom,power-on@800 {
+			compatible = "qcom,qpnp-power-on";
+			reg = <0x800 0x100>;
+			qcom,secondary-pon-reset;
+		};
+
 		pmi8994_gpios: gpios {
 			spmi-dev-container;
 			compatible = "qcom,qpnp-pin";
@@ -140,11 +146,11 @@
 					"bcl-low-vbat-int";
 			qcom,vbat-scaling-factor = <39000>;
 			qcom,vbat-gain-numerator = <1>;
-			qcom,vbat-gain-denominator = <32>;
+			qcom,vbat-gain-denominator = <128>;
 			qcom,vbat-polling-delay-ms = <50>;
 			qcom,ibat-scaling-factor = <39000>;
 			qcom,ibat-gain-numerator = <1>;
-			qcom,ibat-gain-denominator = <32>;
+			qcom,ibat-gain-denominator = <128>;
 			qcom,ibat-offset-numerator = <1200>;
 			qcom,ibat-offset-denominator = <1>;
 			qcom,ibat-polling-delay-ms = <50>;

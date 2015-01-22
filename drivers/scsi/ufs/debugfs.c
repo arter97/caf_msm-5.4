@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -181,7 +181,7 @@ static void ufsdbg_setup_fault_injection(struct ufs_hba *hba)
 }
 #endif /* CONFIG_UFS_FAULT_INJECTION */
 
-#define BUFF_LINE_CAPACITY 16
+#define BUFF_LINE_SIZE 16 /* Must be a multiplication of sizeof(u32) */
 #define TAB_CHARS 8
 
 static int ufsdbg_tag_stats_show(struct seq_file *file, void *data)
@@ -436,20 +436,28 @@ exit:
 	return ret;
 }
 
-static void
-ufsdbg_pr_buf_to_std(struct seq_file *file, void *buff, int size, char *str)
+void ufsdbg_pr_buf_to_std(struct ufs_hba *hba, int offset, int num_regs,
+				char *str, void *priv)
 {
 	int i;
 	char linebuf[38];
-	int lines = size/BUFF_LINE_CAPACITY +
-			(size % BUFF_LINE_CAPACITY ? 1 : 0);
+	int size = num_regs * sizeof(u32);
+	int lines = size / BUFF_LINE_SIZE +
+			(size % BUFF_LINE_SIZE ? 1 : 0);
+	struct seq_file *file = priv;
+
+	if (!hba || !file) {
+		pr_err("%s called with NULL pointer\n", __func__);
+		return;
+	}
 
 	for (i = 0; i < lines; i++) {
-		hex_dump_to_buffer(buff + i * BUFF_LINE_CAPACITY,
-				BUFF_LINE_CAPACITY, BUFF_LINE_CAPACITY, 4,
+		hex_dump_to_buffer(hba->mmio_base + offset + i * BUFF_LINE_SIZE,
+				min(BUFF_LINE_SIZE, size), BUFF_LINE_SIZE, 4,
 				linebuf, sizeof(linebuf), false);
-		seq_printf(file, "%s [%x]: %s\n", str, i * BUFF_LINE_CAPACITY,
+		seq_printf(file, "%s [%x]: %s\n", str, i * BUFF_LINE_SIZE,
 				linebuf);
+		size -= BUFF_LINE_SIZE/sizeof(u32);
 	}
 }
 
@@ -459,8 +467,8 @@ static int ufsdbg_host_regs_show(struct seq_file *file, void *data)
 
 	ufshcd_hold(hba, false);
 	pm_runtime_get_sync(hba->dev);
-	ufsdbg_pr_buf_to_std(file, hba->mmio_base, UFSHCI_REG_SPACE_SIZE,
-				"host regs");
+	ufsdbg_pr_buf_to_std(hba, 0, UFSHCI_REG_SPACE_SIZE / sizeof(u32),
+				"host regs", file);
 	pm_runtime_put_sync(hba->dev);
 	ufshcd_release(hba, false);
 	return 0;
@@ -778,12 +786,12 @@ static ssize_t ufsdbg_power_mode_write(struct file *file,
 	struct ufs_hba *hba = file->f_mapping->host->i_private;
 	struct ufs_pa_layer_attr pwr_mode;
 	struct ufs_pa_layer_attr final_pwr_mode;
-	char pwr_mode_str[BUFF_LINE_CAPACITY] = {0};
+	char pwr_mode_str[BUFF_LINE_SIZE] = {0};
 	loff_t buff_pos = 0;
 	int ret;
 	int idx = 0;
 
-	ret = simple_write_to_buffer(pwr_mode_str, BUFF_LINE_CAPACITY,
+	ret = simple_write_to_buffer(pwr_mode_str, BUFF_LINE_SIZE,
 		&buff_pos, ubuf, cnt);
 
 	pwr_mode.gear_rx = pwr_mode_str[idx++] - '0';
@@ -917,6 +925,36 @@ DEFINE_SIMPLE_ATTRIBUTE(ufsdbg_dme_peer_read_ops,
 			ufsdbg_dme_peer_set_attr_id,
 			"%llu\n");
 
+static int ufsdbg_dbg_print_en_read(void *data, u64 *attr_val)
+{
+	struct ufs_hba *hba = data;
+
+	if (!hba)
+		return -EINVAL;
+
+	*attr_val = (u64)hba->ufshcd_dbg_print;
+	return 0;
+}
+
+static int ufsdbg_dbg_print_en_set(void *data, u64 attr_id)
+{
+	struct ufs_hba *hba = data;
+
+	if (!hba)
+		return -EINVAL;
+
+	if (attr_id & ~UFSHCD_DBG_PRINT_ALL)
+		return -EINVAL;
+
+	hba->ufshcd_dbg_print = (u32)attr_id;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(ufsdbg_dbg_print_en_ops,
+			ufsdbg_dbg_print_en_read,
+			ufsdbg_dbg_print_en_set,
+			"%llu\n");
+
 void ufsdbg_add_debugfs(struct ufs_hba *hba)
 {
 	if (!hba) {
@@ -1022,7 +1060,21 @@ void ufsdbg_add_debugfs(struct ufs_hba *hba)
 		goto err;
 	}
 
+	hba->debugfs_files.dbg_print_en =
+		debugfs_create_file("dbg_print_en", S_IRUSR | S_IWUSR,
+				    hba->debugfs_files.debugfs_root, hba,
+				    &ufsdbg_dbg_print_en_ops);
+	if (!hba->debugfs_files.dbg_print_en) {
+		dev_err(hba->dev,
+			"%s:  failed create dbg_print_en debugfs entry\n",
+			__func__);
+		goto err;
+	}
+
 	ufsdbg_setup_fault_injection(hba);
+
+	if (hba->vops && hba->vops->add_debugfs)
+		hba->vops->add_debugfs(hba, hba->debugfs_files.debugfs_root);
 
 	return;
 
@@ -1035,6 +1087,8 @@ err_no_root:
 
 void ufsdbg_remove_debugfs(struct ufs_hba *hba)
 {
+	if (hba->vops && hba->vops->remove_debugfs)
+		hba->vops->remove_debugfs(hba);
 	debugfs_remove_recursive(hba->debugfs_files.debugfs_root);
 	kfree(hba->ufs_stats.tag_stats);
 

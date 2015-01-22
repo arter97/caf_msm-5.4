@@ -98,6 +98,7 @@ struct cpu_static_info {
 
 static DEFINE_MUTEX(policy_update_mutex);
 static DEFINE_MUTEX(kthread_update_mutex);
+static DEFINE_SPINLOCK(update_lock);
 static struct delayed_work sampling_work;
 static struct completion sampling_completion;
 static struct task_struct *sampling_task;
@@ -118,6 +119,7 @@ module_param_named(disabled, disabled, int,
 		S_IRUGO | S_IWUSR | S_IWGRP);
 static bool in_suspend;
 static bool activate_power_table;
+
 /*
  * Cannot be called from an interrupt context
  */
@@ -142,6 +144,19 @@ static void set_threshold(struct cpu_activity_info *cpu_node)
 {
 	if (cpu_node->sensor_id < 0)
 		return;
+
+	/*
+	 * Before operating on the threshold structure which is used by
+	 * thermal core ensure that the sensor is disabled to prevent
+	 * incorrect operations on the sensor list maintained by thermal code.
+	 */
+	sensor_activate_trip(cpu_node->sensor_id,
+			&cpu_node->hi_threshold, false);
+	sensor_activate_trip(cpu_node->sensor_id,
+			&cpu_node->low_threshold, false);
+
+	cpu_node->hi_threshold.temp = cpu_node->temp + high_hyst_temp;
+	cpu_node->low_threshold.temp = cpu_node->temp - low_hyst_temp;
 
 	/*
 	 * Set the threshold only if we are below the hotplug limit
@@ -183,6 +198,9 @@ static void repopulate_stats(int cpu)
 	int temp_point;
 	struct cpu_pstate_pwr *pt =  per_cpu(ptable, cpu);
 
+	if (!pt)
+		return;
+
 	if (cpu_node->temp < TEMP_BASE_POINT)
 		temp_point = 0;
 	else if (cpu_node->temp > TEMP_MAX_POINT)
@@ -202,7 +220,6 @@ void trigger_cpu_pwr_stats_calc(void)
 {
 	int cpu;
 	static long prev_temp[NR_CPUS];
-	static DEFINE_SPINLOCK(update_lock);
 	struct cpu_activity_info *cpu_node;
 
 	if (disabled)
@@ -225,6 +242,20 @@ void trigger_cpu_pwr_stats_calc(void)
 	spin_unlock(&update_lock);
 }
 EXPORT_SYMBOL(trigger_cpu_pwr_stats_calc);
+
+void set_cpu_throttled(cpumask_t *mask, bool throttling)
+{
+	int cpu;
+
+	if (!mask)
+		return;
+
+	spin_lock(&update_lock);
+	for_each_cpu(cpu, mask)
+		cpu_stats[cpu].throttling = throttling;
+	spin_unlock(&update_lock);
+}
+EXPORT_SYMBOL(set_cpu_throttled);
 
 static void update_related_freq_table(struct cpufreq_policy *policy)
 {
@@ -274,10 +305,6 @@ static __ref int do_sampling(void *data)
 			cpu_node = &activity[cpu];
 			if (prev_temp[cpu] != cpu_node->temp) {
 				prev_temp[cpu] = cpu_node->temp;
-				cpu_node->low_threshold.temp = cpu_node->temp
-							- low_hyst_temp;
-				cpu_node->hi_threshold.temp = cpu_node->temp
-							+ high_hyst_temp;
 				set_threshold(cpu_node);
 				trace_temp_threshold(cpu, cpu_node->temp,
 					cpu_node->hi_threshold.temp,
@@ -502,6 +529,7 @@ static int msm_core_stats_init(struct device *dev, int cpu)
 	cpu_node = &activity[cpu];
 	cpu_stats[cpu].cpu = cpu;
 	cpu_stats[cpu].temp = cpu_node->temp;
+	cpu_stats[cpu].throttling = false;
 
 	cpu_stats[cpu].len = cpu_node->sp->num_of_freqs;
 	pstate = devm_kzalloc(dev,

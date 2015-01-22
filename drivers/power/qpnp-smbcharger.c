@@ -472,8 +472,8 @@ static enum pwr_path_type smbchg_get_pwr_path(struct smbchg_chip *chip)
 #define IDEV_STS			0x8
 #define RT_STS				0x10
 #define USBID_MSB			0xE
-#define USBIN_UV_BIT			0x0
-#define USBIN_OV_BIT			0x1
+#define USBIN_UV_BIT			BIT(0)
+#define USBIN_OV_BIT			BIT(1)
 #define FMB_STS_MASK			SMB_MASK(3, 0)
 #define USBID_GND_THRESHOLD		0x495
 static bool is_otg_present(struct smbchg_chip *chip)
@@ -531,8 +531,8 @@ static bool is_otg_present(struct smbchg_chip *chip)
 #define DCIN_UNREG			BIT(1)
 #define DCIN_LV				BIT(0)
 #define INPUT_STS			0x0D
-#define DCIN_UV_BIT			0x0
-#define DCIN_OV_BIT			0x1
+#define DCIN_UV_BIT			BIT(0)
+#define DCIN_OV_BIT			BIT(1)
 static bool is_dc_present(struct smbchg_chip *chip)
 {
 	int rc;
@@ -764,7 +764,8 @@ static void smbchg_check_and_notify_fg_soc(struct smbchg_chip *chip)
 		&& get_prop_batt_status(chip)
 			== POWER_SUPPLY_STATUS_CHARGING) {
 		pr_smb(PR_STATUS, "Adjusting battery soc in FG\n");
-		set_property_on_fg(chip, POWER_SUPPLY_PROP_CHARGE_FULL, 1);
+		set_property_on_fg(chip, POWER_SUPPLY_PROP_STATUS,
+				POWER_SUPPLY_STATUS_FULL);
 	}
 }
 
@@ -1199,7 +1200,7 @@ static int smbchg_set_high_usb_chg_current(struct smbchg_chip *chip,
 
 		rc = smbchg_sec_masked_write(chip,
 					chip->usb_chgpth_base + CHGPTH_CFG,
-					CFG_USB_2_3_SEL_BIT, CFG_USB_2);
+					CFG_USB_2_3_SEL_BIT, CFG_USB_3);
 		rc |= smbchg_masked_write(chip, chip->usb_chgpth_base + CMD_IL,
 					USBIN_MODE_CHG_BIT | USB51_MODE_BIT,
 					USBIN_LIMITED_MODE | USB51_100MA);
@@ -1800,7 +1801,7 @@ static int smbchg_dcin_ilim_config(struct smbchg_chip *chip, int offset, int ma)
 {
 	int i, rc;
 
-	for (i = ARRAY_SIZE(ilim_ma_table); i >= 0; i--) {
+	for (i = ARRAY_SIZE(ilim_ma_table) - 1; i >= 0; i--) {
 		if (ma >= ilim_ma_table[i])
 			break;
 	}
@@ -3776,13 +3777,14 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
 	}
 
 	/*
-	 * force using current from the register i.e. ignore auto
-	 * power source detect (APSD) mA ratings
+	 * Do not force using current from the register i.e. use auto
+	 * power source detect (APSD) mA ratings for the initial current values.
+	 *
+	 * If this is set, AICL will not rerun at 9V for HVDCPs
 	 */
-	reg = USE_REGISTER_FOR_CURRENT;
-
 	rc = smbchg_masked_write(chip, chip->usb_chgpth_base + CMD_IL,
-			USE_REGISTER_FOR_CURRENT, USE_REGISTER_FOR_CURRENT);
+			USE_REGISTER_FOR_CURRENT, 0);
+
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't set input limit cmd rc=%d\n", rc);
 		return rc;

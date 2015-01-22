@@ -75,10 +75,6 @@
 	status = "disabled";
 };
 
-&ufs_ice {
-	status = "ok";
-};
-
 &ufsphy1 {
 	status = "ok";
 };

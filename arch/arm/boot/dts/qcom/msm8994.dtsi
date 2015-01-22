@@ -1222,7 +1222,7 @@
 
 	ufs1: ufshc@fc594000 {
 			compatible = "qcom,ufshc";
-			reg = <0xfc594000 0x2500>;
+			reg = <0xfc594000 0x2500>, <0xfd512074 0x4>;
 			interrupts = <0 265 0>;
 			phys = <&ufsphy1>;
 			phy-names = "ufsphy";
@@ -3172,12 +3172,14 @@
 		qcom,bcl-enable;
 		qcom,bcl-framework-interface;
 		qcom,bcl-hotplug-list = <&CPU6 &CPU7>;
+		qcom,bcl-soc-hotplug-list = <&CPU4 &CPU5 &CPU6 &CPU7>;
 		qcom,ibat-monitor {
 			qcom,low-threshold-uamp = <2000000>;
 			qcom,high-threshold-uamp = <3500000>;
 			qcom,mitigation-freq-khz = <768000>;
-			qcom,vph-high-threshold-uv = <3900000>;
-			qcom,vph-low-threshold-uv = <3600000>;
+			qcom,vph-high-threshold-uv = <3500000>;
+			qcom,vph-low-threshold-uv = <3300000>;
+			qcom,soc-low-threshold = <10>;
 			qcom,thermal-handle = <&msm_thermal_freq>;
 		};
 	};
