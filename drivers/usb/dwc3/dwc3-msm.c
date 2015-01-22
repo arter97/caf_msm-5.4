@@ -147,6 +147,7 @@ struct dwc3_msm {
 	struct clk		*xo_clk;
 	struct clk		*ref_clk;
 	struct clk		*core_clk;
+	long			core_clk_rate;
 	struct clk		*iface_clk;
 	struct clk		*sleep_clk;
 	struct clk		*utmi_clk;
@@ -2815,6 +2816,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	/*
 	 * DWC3 Core requires its CORE CLK (aka master / bus clk) to
 	 * run at 125Mhz in SSUSB mode and >60MHZ for HSUSB mode.
+	 * On newer platform it can run at 150MHz as well.
 	 */
 	mdwc->core_clk = devm_clk_get(&pdev->dev, "core_clk");
 	if (IS_ERR(mdwc->core_clk)) {
@@ -2822,7 +2824,21 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		ret = PTR_ERR(mdwc->core_clk);
 		goto disable_xo;
 	}
-	clk_set_rate(mdwc->core_clk, 125000000);
+
+	/*
+	 * Get Max supported clk frequency for USB Core CLK and request
+	 * to set the same.
+	 */
+	mdwc->core_clk_rate = clk_round_rate(mdwc->core_clk, LONG_MAX);
+	if (IS_ERR_VALUE(mdwc->core_clk_rate)) {
+		dev_err(&pdev->dev, "fail to get core clk max freq.\n");
+	} else {
+		ret = clk_set_rate(mdwc->core_clk, mdwc->core_clk_rate);
+		if (ret)
+			dev_err(&pdev->dev, "fail to set core_clk freq:%d\n",
+								ret);
+	}
+
 	clk_prepare_enable(mdwc->core_clk);
 
 	mdwc->iface_clk = devm_clk_get(&pdev->dev, "iface_clk");
@@ -2831,7 +2847,6 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		ret = PTR_ERR(mdwc->iface_clk);
 		goto disable_core_clk;
 	}
-	clk_set_rate(mdwc->iface_clk, 125000000);
 	clk_prepare_enable(mdwc->iface_clk);
 
 	mdwc->sleep_clk = devm_clk_get(&pdev->dev, "sleep_clk");
