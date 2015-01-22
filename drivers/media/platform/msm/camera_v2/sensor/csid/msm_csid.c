@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -528,6 +528,159 @@ static long msm_csid_subdev_ioctl(struct v4l2_subdev *sd,
 	mutex_unlock(&csid_dev->mutex);
 	return rc;
 }
+
+<<<<<<< HEAD
+=======
+
+#ifdef CONFIG_COMPAT
+static int32_t msm_csid_cmd32(struct csid_device *csid_dev, void __user *arg)
+{
+	int rc = 0;
+	struct csid_cfg_data *cdata;
+	struct csid_cfg_data32 *arg32 =  (struct csid_cfg_data32 *) (arg);
+	struct csid_cfg_data local_arg;
+	local_arg.cfgtype = arg32->cfgtype;
+	cdata = &local_arg;
+
+	if (!csid_dev || !cdata) {
+		pr_err("%s:%d csid_dev %p, cdata %p\n", __func__, __LINE__,
+			csid_dev, cdata);
+		return -EINVAL;
+	}
+
+	CDBG("%s cfgtype = %d\n", __func__, cdata->cfgtype);
+	switch (cdata->cfgtype) {
+	case CSID_INIT:
+		rc = msm_csid_init(csid_dev, &cdata->cfg.csid_version);
+		arg32->cfg.csid_version = local_arg.cfg.csid_version;
+		CDBG("%s csid version 0x%x\n", __func__,
+			cdata->cfg.csid_version);
+		break;
+	case CSID_CFG: {
+
+		struct msm_camera_csid_params csid_params;
+		struct msm_camera_csid_vc_cfg *vc_cfg = NULL;
+		int8_t i = 0;
+		struct msm_camera_csid_lut_params32 lut_par32;
+		struct msm_camera_csid_params32 csid_params32;
+		struct msm_camera_csid_vc_cfg vc_cfg32;
+
+		if (copy_from_user(&csid_params32,
+			(void *)compat_ptr(arg32->cfg.csid_params),
+			sizeof(struct msm_camera_csid_params32))) {
+			pr_err("%s: %d failed\n", __func__, __LINE__);
+			rc = -EFAULT;
+			break;
+		}
+
+		csid_params.lane_cnt = csid_params32.lane_cnt;
+		csid_params.lane_assign = csid_params32.lane_assign;
+		csid_params.phy_sel = csid_params32.phy_sel;
+		csid_params.csi_clk = csid_params32.csi_clk;
+
+		lut_par32 = csid_params32.lut_params;
+		csid_params.lut_params.num_cid = lut_par32.num_cid;
+
+		if (csid_params.lut_params.num_cid < 1 ||
+			csid_params.lut_params.num_cid > 16) {
+			pr_err("%s: %d num_cid outside range\n",
+				 __func__, __LINE__);
+			rc = -EINVAL;
+			break;
+		}
+
+		for (i = 0; i < lut_par32.num_cid; i++) {
+			vc_cfg = kzalloc(sizeof(struct msm_camera_csid_vc_cfg),
+				GFP_KERNEL);
+			if (!vc_cfg) {
+				pr_err("%s: %d failed\n", __func__, __LINE__);
+				for (i--; i >= 0; i--)
+					kfree(csid_params.lut_params.vc_cfg[i]);
+				rc = -ENOMEM;
+				break;
+			}
+			/* msm_camera_csid_vc_cfg size
+			 * does not change in COMPAT MODE
+			 */
+			if (copy_from_user(&vc_cfg32,
+				(void *)compat_ptr(lut_par32.vc_cfg[i]),
+				sizeof(vc_cfg32))) {
+				pr_err("%s: %d failed\n", __func__, __LINE__);
+				for (i--; i >= 0; i--) {
+					kfree(csid_params.lut_params.vc_cfg[i]);
+					csid_params.lut_params.vc_cfg[i] = NULL;
+				}
+				kfree(vc_cfg);
+				vc_cfg = NULL;
+				rc = -EFAULT;
+				break;
+			}
+			vc_cfg->cid = vc_cfg32.cid;
+			vc_cfg->dt = vc_cfg32.dt;
+			vc_cfg->decode_format = vc_cfg32.decode_format;
+			csid_params.lut_params.vc_cfg[i] = vc_cfg;
+		}
+
+		if (rc < 0)
+			break;
+		rc = msm_csid_config(csid_dev, &csid_params);
+		for (i--; i >= 0; i--)
+			kfree(csid_params.lut_params.vc_cfg[i]);
+		break;
+	}
+	case CSID_RELEASE:
+		rc = msm_csid_release(csid_dev);
+		break;
+	default:
+		pr_err("%s: %d failed\n", __func__, __LINE__);
+		rc = -ENOIOCTLCMD;
+		break;
+	}
+	return rc;
+}
+
+static long msm_csid_subdev_ioctl32(struct v4l2_subdev *sd,
+			unsigned int cmd, void *arg)
+{
+	int rc = -ENOIOCTLCMD;
+	struct csid_device *csid_dev = v4l2_get_subdevdata(sd);
+
+	mutex_lock(&csid_dev->mutex);
+	CDBG("%s:%d id %d\n", __func__, __LINE__, csid_dev->pdev->id);
+	switch (cmd) {
+	case VIDIOC_MSM_SENSOR_GET_SUBDEV_ID:
+		rc = msm_csid_get_subdev_id(csid_dev, arg);
+		break;
+	case VIDIOC_MSM_CSID_IO_CFG32:
+		rc = msm_csid_cmd32(csid_dev, arg);
+		break;
+	case VIDIOC_MSM_CSID_RELEASE:
+	case MSM_SD_SHUTDOWN:
+		rc = msm_csid_release(csid_dev);
+		break;
+	default:
+		pr_err_ratelimited("%s: command not found\n", __func__);
+	}
+	CDBG("%s:%d\n", __func__, __LINE__);
+	mutex_unlock(&csid_dev->mutex);
+	return rc;
+}
+
+static long msm_csid_subdev_do_ioctl32(
+	struct file *file, unsigned int cmd, void *arg)
+{
+	struct video_device *vdev = video_devdata(file);
+	struct v4l2_subdev *sd = vdev_to_v4l2_subdev(vdev);
+
+	return msm_csid_subdev_ioctl32(sd, cmd, arg);
+}
+
+static long msm_csid_subdev_fops_ioctl32(struct file *file, unsigned int cmd,
+	unsigned long arg)
+{
+	return video_usercopy(file, cmd, arg, msm_csid_subdev_do_ioctl32);
+}
+#endif
 
 static const struct v4l2_subdev_internal_ops msm_csid_internal_ops;
 
