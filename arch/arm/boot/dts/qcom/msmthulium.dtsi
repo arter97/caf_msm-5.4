@@ -1144,8 +1144,9 @@
 		};
 	};
 
-	android_usb {
+	android_usb@66bf0c8 {
 		compatible = "qcom,android-usb";
+		reg = <0x066bf0c8 0xc8>;
 	};
 
 	qusb_phy: qusb@7411000 {
