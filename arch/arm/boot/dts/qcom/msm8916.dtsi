@@ -170,6 +170,7 @@
 	restart@4ab000 {
 		compatible = "qcom,pshold";
 		reg = <0x4ab000 0x4>;
+		reg-names = "pshold-base";
 	};
 
 	qcom,mpm2-sleep-counter@4a3000 {
