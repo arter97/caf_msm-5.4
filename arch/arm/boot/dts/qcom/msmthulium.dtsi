@@ -1105,7 +1105,6 @@
 
 	usb3: ssusb@6a00000{
 		compatible = "qcom,dwc-usb3-msm";
-		status = "disabled";
 		reg = <0x06a00000 0xfc100>;
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -1147,12 +1146,10 @@
 
 	android_usb {
 		compatible = "qcom,android-usb";
-		status = "disabled";
 	};
 
 	qusb_phy: qusb@7411000 {
 		compatible = "qcom,qusb2phy";
-		status = "disabled";
 		reg = <0x07411000 0x180>;
 		reg-names = "qusb_phy_base";
 		vdd-supply = <&pm8994_s2_corner>;
@@ -1170,7 +1167,6 @@
 
 	ssphy: ssphy@7410000 {
 		compatible = "qcom,usb-ssphy-qmp-v2";
-		status = "disabled";
 		reg = <0x7410000 0x45C>,
 		      <0x7416000 0x400>;
 		reg-names = "qmp_phy_base",
