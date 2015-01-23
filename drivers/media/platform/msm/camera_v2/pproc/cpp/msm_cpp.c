@@ -1502,6 +1502,63 @@ ERROR1:
 	return rc;
 }
 
+void msm_cpp_clean_queue(struct cpp_device *cpp_dev)
+{
+	struct msm_queue_cmd *frame_qcmd = NULL;
+	struct msm_cpp_frame_info_t *processed_frame = NULL;
+	struct msm_device_queue *queue = NULL;
+
+	while (cpp_dev->processing_q.len) {
+		pr_info("queue len:%d\n", cpp_dev->processing_q.len);
+		queue = &cpp_dev->processing_q;
+		frame_qcmd = msm_dequeue(queue, list_frame);
+		if (frame_qcmd) {
+			processed_frame = frame_qcmd->command;
+			kfree(frame_qcmd);
+			if (processed_frame)
+				kfree(processed_frame->cpp_cmd_msg);
+			kfree(processed_frame);
+		}
+	}
+}
+
+#ifdef CONFIG_COMPAT
+static int msm_cpp_copy_from_ioctl_ptr(void *dst_ptr,
+	struct msm_camera_v4l2_ioctl_t *ioctl_ptr)
+{
+	int ret;
+	if ((ioctl_ptr->ioctl_ptr == NULL) || (ioctl_ptr->len == 0)) {
+		pr_err("Wrong ioctl_ptr %p\n", ioctl_ptr);
+		return -EINVAL;
+	}
+
+	/* For compat task, source ptr is in kernel space */
+	if (is_compat_task()) {
+		memcpy(dst_ptr, ioctl_ptr->ioctl_ptr, ioctl_ptr->len);
+		ret = 0;
+	} else {
+		ret = copy_from_user(dst_ptr,
+			(void __user *)ioctl_ptr->ioctl_ptr, ioctl_ptr->len);
+		if (ret)
+			pr_err("Copy from user fail %d\n", ret);
+	}
+	return ret ? -EFAULT : 0;
+}
+#else
+static int msm_cpp_copy_from_ioctl_ptr(void *dst_ptr,
+	struct msm_camera_v4l2_ioctl_t *ioctl_ptr)
+{
+	int ret;
+
+	ret = copy_from_user(dst_ptr,
+		(void __user *)ioctl_ptr->ioctl_ptr, ioctl_ptr->len);
+	if (ret)
+		pr_err("Copy from user fail %d\n", ret);
+
+	return ret ? -EFAULT : 0;
+}
+#endif
+
 long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 			unsigned int cmd, void *arg)
 {
@@ -1555,6 +1612,7 @@ long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 			if (ioctl_ptr->ioctl_ptr == NULL) {
 				pr_err("ioctl_ptr->ioctl_ptr=NULL\n");
 				mutex_unlock(&cpp_dev->mutex);
+				kfree(cpp_dev->fw_name_bin);
 				return -EINVAL;
 			}
 			rc = (copy_from_user(cpp_dev->fw_name_bin,
@@ -1741,6 +1799,9 @@ long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 				process_frame,
 				sizeof(struct msm_cpp_frame_info_t))) {
 					mutex_unlock(&cpp_dev->mutex);
+					kfree(process_frame->cpp_cmd_msg);
+					kfree(process_frame);
+					kfree(event_qcmd);
 					return -EINVAL;
 		}
 
@@ -1825,6 +1886,10 @@ long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 	case VIDIOC_MSM_CPP_POP_STREAM_BUFFER: {
 		struct msm_buf_mngr_info buff_mgr_info;
 		struct msm_cpp_frame_info_t frame_info;
+		if (ioctl_ptr->ioctl_ptr == NULL) {
+			rc = -EINVAL;
+			break;
+		}
 		rc = (copy_from_user(&frame_info,
 			(void __user *)ioctl_ptr->ioctl_ptr,
 			sizeof(struct msm_cpp_frame_info_t)) ? -EFAULT : 0);
