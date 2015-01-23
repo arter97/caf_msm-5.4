@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -952,13 +952,15 @@ static int mdp3_overlay_set(struct msm_fb_data_type *mfd,
 	stride = req->src.width * ppp_bpp(req->src.format);
 	format = mdp3_ctrl_get_source_format(req->src.format);
 
-	mutex_lock(&mdp3_session->lock);
 
 	if (mdp3_session->overlay.id != req->id)
 		pr_err("overlay was not released, continue to recover\n");
-
-	mdp3_session->overlay = *req;
+	/*
+	 * A change in overlay structure will always come with
+	 * MSMFB_NEW_REQUEST for MDP3
+	*/
 	if (req->id == MSMFB_NEW_REQUEST) {
+		mutex_lock(&mdp3_session->lock);
 		if (dma->source_config.stride != stride ||
 				dma->source_config.format != format) {
 			dma->source_config.format = format;
@@ -967,11 +969,11 @@ static int mdp3_overlay_set(struct msm_fb_data_type *mfd,
 				mdp3_ctrl_get_pack_pattern(req->src.format);
 			dma->update_src_cfg = true;
 		}
+		mdp3_session->overlay = *req;
 		mdp3_session->overlay.id = 1;
 		req->id = 1;
+		mutex_unlock(&mdp3_session->lock);
 	}
-
-	mutex_unlock(&mdp3_session->lock);
 
 	return rc;
 }
@@ -1065,10 +1067,11 @@ bool update_roi(struct mdp3_rect oldROI, struct mdp_rect newROI)
 
 bool is_roi_valid(struct mdp3_dma_source source_config, struct mdp_rect roi)
 {
-	return  ((roi.x >= source_config.x) &&
+	return  (roi.w > 0) && (roi.h > 0) &&
+		(roi.x >= source_config.x) &&
 		((roi.x + roi.w) <= source_config.width) &&
 		(roi.y >= source_config.y) &&
-		((roi.y + roi.h) <= source_config.height));
+		((roi.y + roi.h) <= source_config.height);
 }
 
 static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
