@@ -1105,7 +1105,7 @@
 
 	usb3: ssusb@6a00000{
 		compatible = "qcom,dwc-usb3-msm";
-		reg = <0x06a00000 0xfc100>;
+		reg = <0x06a00000 0xc8d0>;
 		#address-cells = <1>;
 		#size-cells = <1>;
 		ranges;
@@ -1134,7 +1134,7 @@
 
 		dwc3@6a00000 {
 			compatible = "snps,dwc3";
-			reg = <0x06a00000 0xfc100>;
+			reg = <0x06a00000 0xc8d0>;
 			interrupt-parent = <&intc>;
 			interrupts = <0 131 0>, <0 134 0>;
 			interrupt-names = "irq", "otg_irq";
@@ -1150,8 +1150,10 @@
 
 	qusb_phy: qusb@7411000 {
 		compatible = "qcom,qusb2phy";
-		reg = <0x07411000 0x180>;
-		reg-names = "qusb_phy_base";
+		reg = <0x07411000 0x180>,
+			<0x06af8800 0x400>;
+		reg-names = "qusb_phy_base",
+			"qscratch_base";
 		vdd-supply = <&pm8994_s2_corner>;
 		vdda18-supply = <&pm8994_l12>;
 		vdda33-supply = <&pm8994_l24>;
