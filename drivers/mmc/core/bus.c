@@ -131,6 +131,16 @@ static void mmc_bus_shutdown(struct device *dev)
 	struct mmc_host *host = card->host;
 	int ret;
 
+	if (!drv) {
+		pr_debug("%s: %s: drv is NULL\n", dev_name(dev), __func__);
+		return;
+	}
+
+	if (!card) {
+		pr_debug("%s: %s: card is NULL\n", dev_name(dev), __func__);
+		return;
+	}
+
 	if (dev->driver && drv->shutdown)
 		drv->shutdown(card);
 
@@ -185,24 +195,16 @@ static int mmc_runtime_suspend(struct device *dev)
 {
 	struct mmc_card *card = mmc_dev_to_card(dev);
 	struct mmc_host *host = card->host;
-	int ret = 0;
 
-	if (host->bus_ops->runtime_suspend)
-		ret = host->bus_ops->runtime_suspend(host);
-
-	return ret;
+	return host->bus_ops->runtime_suspend(host);
 }
 
 static int mmc_runtime_resume(struct device *dev)
 {
 	struct mmc_card *card = mmc_dev_to_card(dev);
 	struct mmc_host *host = card->host;
-	int ret = 0;
 
-	if (host->bus_ops->runtime_resume)
-		ret = host->bus_ops->runtime_resume(host);
-
-	return ret;
+	return host->bus_ops->runtime_resume(host);
 }
 
 static int mmc_runtime_idle(struct device *dev)
@@ -294,6 +296,8 @@ struct mmc_card *mmc_alloc_card(struct mmc_host *host, struct device_type *type)
 	card->dev.release = mmc_release_card;
 	card->dev.type = type;
 
+	spin_lock_init(&card->wr_pack_stats.lock);
+
 	return card;
 }
 
@@ -349,16 +353,17 @@ int mmc_add_card(struct mmc_card *card)
 	if (mmc_host_is_spi(card->host)) {
 		pr_info("%s: new %s%s%s card on SPI\n",
 			mmc_hostname(card->host),
-			mmc_card_highspeed(card) ? "high speed " : "",
-			mmc_card_ddr_mode(card) ? "DDR " : "",
+			mmc_card_hs(card) ? "high speed " : "",
+			mmc_card_ddr52(card) ? "DDR " : "",
 			type);
 	} else {
 		pr_info("%s: new %s%s%s%s%s card at address %04x\n",
 			mmc_hostname(card->host),
 			mmc_card_uhs(card) ? "ultra high speed " :
-			(mmc_card_highspeed(card) ? "high speed " : ""),
+			(mmc_card_hs(card) ? "high speed " : ""),
+			mmc_card_hs400(card) ? "HS400 " :
 			(mmc_card_hs200(card) ? "HS200 " : ""),
-			mmc_card_ddr_mode(card) ? "DDR " : "",
+			mmc_card_ddr52(card) ? "DDR " : "",
 			uhs_bus_speed_mode, type, card->rca);
 	}
 
@@ -367,6 +372,12 @@ int mmc_add_card(struct mmc_card *card)
 #endif
 	mmc_init_context_info(card->host);
 
+	if (mmc_card_sdio(card)) {
+		ret = device_init_wakeup(&card->dev, true);
+		if (ret)
+			pr_err("%s: %s: failed to init wakeup: %d\n",
+			       mmc_hostname(card->host), __func__, ret);
+	}
 	ret = device_add(&card->dev);
 	if (ret)
 		return ret;
@@ -396,6 +407,9 @@ void mmc_remove_card(struct mmc_card *card)
 		}
 		device_del(&card->dev);
 	}
+
+	kfree(card->wr_pack_stats.packing_events);
+	kfree(card->cached_ext_csd);
 
 	put_device(&card->dev);
 }

@@ -600,12 +600,14 @@ static inline void esdhc_pltfm_set_clock(struct sdhci_host *host,
 	u32 temp, val;
 
 	if (clock == 0) {
+		host->mmc->actual_clock = 0;
+
 		if (esdhc_is_usdhc(imx_data)) {
 			val = readl(host->ioaddr + ESDHC_VENDOR_SPEC);
 			writel(val & ~ESDHC_VENDOR_SPEC_FRC_SDCLK_ON,
 					host->ioaddr + ESDHC_VENDOR_SPEC);
 		}
-		goto out;
+		return;
 	}
 
 	if (esdhc_is_usdhc(imx_data) && !imx_data->is_ddr)
@@ -645,8 +647,6 @@ static inline void esdhc_pltfm_set_clock(struct sdhci_host *host,
 	}
 
 	mdelay(1);
-out:
-	host->clock = clock;
 }
 
 static unsigned int esdhc_pltfm_get_ro(struct sdhci_host *host)
@@ -668,7 +668,7 @@ static unsigned int esdhc_pltfm_get_ro(struct sdhci_host *host)
 	return -ENOSYS;
 }
 
-static int esdhc_pltfm_bus_width(struct sdhci_host *host, int width)
+static void esdhc_pltfm_set_bus_width(struct sdhci_host *host, int width)
 {
 	u32 ctrl;
 
@@ -686,8 +686,6 @@ static int esdhc_pltfm_bus_width(struct sdhci_host *host, int width)
 
 	esdhc_clrset_le(host, ESDHC_CTRL_BUSWIDTH_MASK, ctrl,
 			SDHCI_HOST_CONTROL);
-
-	return 0;
 }
 
 static void esdhc_prepare_tuning(struct sdhci_host *host, u32 val)
@@ -837,7 +835,7 @@ static int esdhc_change_pinstate(struct sdhci_host *host,
 	return pinctrl_select_state(imx_data->pinctrl, pinctrl);
 }
 
-static int esdhc_set_uhs_signaling(struct sdhci_host *host, unsigned int uhs)
+static void esdhc_set_uhs_signaling(struct sdhci_host *host, unsigned int uhs)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct pltfm_imx_data *imx_data = pltfm_host->priv;
@@ -875,7 +873,15 @@ static int esdhc_set_uhs_signaling(struct sdhci_host *host, unsigned int uhs)
 		break;
 	}
 
-	return esdhc_change_pinstate(host, uhs);
+	esdhc_change_pinstate(host, uhs);
+}
+
+static void esdhc_reset(struct sdhci_host *host, u8 mask)
+{
+	sdhci_reset(host, mask);
+
+	sdhci_writel(host, host->ier, SDHCI_INT_ENABLE);
+	sdhci_writel(host, host->ier, SDHCI_SIGNAL_ENABLE);
 }
 
 static struct sdhci_ops sdhci_esdhc_ops = {
@@ -888,8 +894,9 @@ static struct sdhci_ops sdhci_esdhc_ops = {
 	.get_max_clock = esdhc_pltfm_get_max_clock,
 	.get_min_clock = esdhc_pltfm_get_min_clock,
 	.get_ro = esdhc_pltfm_get_ro,
-	.platform_bus_width = esdhc_pltfm_bus_width,
+	.set_bus_width = esdhc_pltfm_set_bus_width,
 	.set_uhs_signaling = esdhc_set_uhs_signaling,
+	.reset = esdhc_reset,
 };
 
 static const struct sdhci_pltfm_data sdhci_esdhc_imx_pdata = {
@@ -1170,8 +1177,10 @@ static int sdhci_esdhc_runtime_suspend(struct device *dev)
 
 	ret = sdhci_runtime_suspend_host(host);
 
-	clk_disable_unprepare(imx_data->clk_per);
-	clk_disable_unprepare(imx_data->clk_ipg);
+	if (!sdhci_sdio_irq_enabled(host)) {
+		clk_disable_unprepare(imx_data->clk_per);
+		clk_disable_unprepare(imx_data->clk_ipg);
+	}
 	clk_disable_unprepare(imx_data->clk_ahb);
 
 	return ret;
@@ -1183,8 +1192,10 @@ static int sdhci_esdhc_runtime_resume(struct device *dev)
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct pltfm_imx_data *imx_data = pltfm_host->priv;
 
-	clk_prepare_enable(imx_data->clk_per);
-	clk_prepare_enable(imx_data->clk_ipg);
+	if (!sdhci_sdio_irq_enabled(host)) {
+		clk_prepare_enable(imx_data->clk_per);
+		clk_prepare_enable(imx_data->clk_ipg);
+	}
 	clk_prepare_enable(imx_data->clk_ahb);
 
 	return sdhci_runtime_resume_host(host);
