@@ -2477,6 +2477,8 @@ done:
 		/* There are still things in flight - update the idle counts */
 		mutex_lock(&device->mutex);
 		kgsl_pwrscale_update(device);
+		mod_timer(&device->idle_timer, jiffies +
+				device->pwrctrl.interval_timeout);
 		mutex_unlock(&device->mutex);
 	} else {
 		/* There is nothing left in the pipeline.  Shut 'er down boys */
