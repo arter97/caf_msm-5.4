@@ -199,13 +199,14 @@ static unsigned int esdhc_of_get_min_clock(struct sdhci_host *host)
 
 static void esdhc_of_set_clock(struct sdhci_host *host, unsigned int clock)
 {
-
 	int pre_div = 2;
 	int div = 1;
 	u32 temp;
 
+	host->mmc->actual_clock = 0;
+
 	if (clock == 0)
-		goto out;
+		return;
 
 	/* Workaround to reduce the clock frequency for p1010 esdhc */
 	if (of_find_compatible_node(NULL, NULL, "fsl,p1010-esdhc")) {
@@ -238,8 +239,6 @@ static void esdhc_of_set_clock(struct sdhci_host *host, unsigned int clock)
 		| (pre_div << ESDHC_PREDIV_SHIFT));
 	sdhci_writel(host, temp, ESDHC_SYSTEM_CONTROL);
 	mdelay(1);
-out:
-	host->clock = clock;
 }
 
 #ifdef CONFIG_PM
@@ -269,7 +268,7 @@ static void esdhc_of_platform_init(struct sdhci_host *host)
 		host->quirks &= ~SDHCI_QUIRK_NO_BUSY_IRQ;
 }
 
-static int esdhc_pltfm_bus_width(struct sdhci_host *host, int width)
+static void esdhc_pltfm_set_bus_width(struct sdhci_host *host, int width)
 {
 	u32 ctrl;
 
@@ -289,8 +288,6 @@ static int esdhc_pltfm_bus_width(struct sdhci_host *host, int width)
 
 	clrsetbits_be32(host->ioaddr + SDHCI_HOST_CONTROL,
 			ESDHC_CTRL_BUSWIDTH_MASK, ctrl);
-
-	return 0;
 }
 
 static const struct sdhci_ops sdhci_esdhc_ops = {
@@ -310,7 +307,9 @@ static const struct sdhci_ops sdhci_esdhc_ops = {
 	.platform_resume = esdhc_of_resume,
 #endif
 	.adma_workaround = esdhci_of_adma_workaround,
-	.platform_bus_width = esdhc_pltfm_bus_width,
+	.set_bus_width = esdhc_pltfm_set_bus_width,
+	.reset = sdhci_reset,
+	.set_uhs_signaling = sdhci_set_uhs_signaling,
 };
 
 static const struct sdhci_pltfm_data sdhci_esdhc_pdata = {

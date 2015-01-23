@@ -108,11 +108,13 @@ static unsigned int tegra_sdhci_get_ro(struct sdhci_host *host)
 	return mmc_gpio_get_ro(host->mmc);
 }
 
-static void tegra_sdhci_reset_exit(struct sdhci_host *host, u8 mask)
+static void tegra_sdhci_reset(struct sdhci_host *host, u8 mask)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct sdhci_tegra *tegra_host = pltfm_host->priv;
 	const struct sdhci_tegra_soc_data *soc_data = tegra_host->soc_data;
+
+	sdhci_reset(host, mask);
 
 	if (!(mask & SDHCI_RESET_ALL))
 		return;
@@ -127,7 +129,7 @@ static void tegra_sdhci_reset_exit(struct sdhci_host *host, u8 mask)
 	}
 }
 
-static int tegra_sdhci_buswidth(struct sdhci_host *host, int bus_width)
+static void tegra_sdhci_set_bus_width(struct sdhci_host *host, int bus_width)
 {
 	u32 ctrl;
 
@@ -144,7 +146,6 @@ static int tegra_sdhci_buswidth(struct sdhci_host *host, int bus_width)
 			ctrl &= ~SDHCI_CTRL_4BITBUS;
 	}
 	sdhci_writeb(host, ctrl, SDHCI_HOST_CONTROL);
-	return 0;
 }
 
 static const struct sdhci_ops tegra_sdhci_ops = {
@@ -152,8 +153,10 @@ static const struct sdhci_ops tegra_sdhci_ops = {
 	.read_l     = tegra_sdhci_readl,
 	.read_w     = tegra_sdhci_readw,
 	.write_l    = tegra_sdhci_writel,
-	.platform_bus_width = tegra_sdhci_buswidth,
-	.platform_reset_exit = tegra_sdhci_reset_exit,
+	.set_clock  = sdhci_set_clock,
+	.set_bus_width = tegra_sdhci_set_bus_width,
+	.reset      = tegra_sdhci_reset,
+	.set_uhs_signaling = sdhci_set_uhs_signaling,
 };
 
 static const struct sdhci_pltfm_data sdhci_tegra20_pdata = {

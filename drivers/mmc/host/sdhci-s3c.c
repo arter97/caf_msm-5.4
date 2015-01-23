@@ -57,6 +57,8 @@ struct sdhci_s3c {
 
 	struct clk		*clk_io;
 	struct clk		*clk_bus[MAX_BUS_CLK];
+
+	bool			no_divider;
 };
 
 /**
@@ -69,6 +71,7 @@ struct sdhci_s3c {
  */
 struct sdhci_s3c_drv_data {
 	unsigned int	sdhci_quirks;
+	bool		no_divider;
 };
 
 static inline struct sdhci_s3c *to_s3c(struct sdhci_host *host)
@@ -153,7 +156,7 @@ static unsigned int sdhci_s3c_consider_clock(struct sdhci_s3c *ourhost,
 	 * If controller uses a non-standard clock division, find the best clock
 	 * speed possible with selected clock source and skip the division.
 	 */
-	if (ourhost->host->quirks & SDHCI_QUIRK_NONSTANDARD_CLOCK) {
+	if (ourhost->no_divider) {
 		rate = clk_round_rate(clksrc, wanted);
 		return wanted - rate;
 	}
@@ -188,9 +191,13 @@ static void sdhci_s3c_set_clock(struct sdhci_host *host, unsigned int clock)
 	int src;
 	u32 ctrl;
 
+	host->mmc->actual_clock = 0;
+
 	/* don't bother if the clock is going off. */
-	if (clock == 0)
+	if (clock == 0) {
+		sdhci_set_clock(host, clock);
 		return;
+	}
 
 	for (src = 0; src < MAX_BUS_CLK; src++) {
 		delta = sdhci_s3c_consider_clock(ourhost, src, clock);
@@ -240,6 +247,8 @@ static void sdhci_s3c_set_clock(struct sdhci_host *host, unsigned int clock)
 	if (clock < 25 * 1000000)
 		ctrl |= (S3C_SDHCI_CTRL3_FCSEL3 | S3C_SDHCI_CTRL3_FCSEL2);
 	writel(ctrl, host->ioaddr + S3C_SDHCI_CONTROL3);
+
+	sdhci_set_clock(host, clock);
 }
 
 /**
@@ -296,18 +305,17 @@ static void sdhci_cmu_set_clock(struct sdhci_host *host, unsigned int clock)
 	unsigned long timeout;
 	u16 clk = 0;
 
+	host->mmc->actual_clock = 0;
+
 	/* If the clock is going off, set to 0 at clock control register */
 	if (clock == 0) {
 		sdhci_writew(host, 0, SDHCI_CLOCK_CONTROL);
-		host->clock = clock;
 		return;
 	}
 
 	sdhci_s3c_set_clock(host, clock);
 
 	clk_set_rate(ourhost->clk_bus[ourhost->cur_clk], clock);
-
-	host->clock = clock;
 
 	clk = SDHCI_CLOCK_INT_EN;
 	sdhci_writew(host, clk, SDHCI_CLOCK_CONTROL);
@@ -330,14 +338,14 @@ static void sdhci_cmu_set_clock(struct sdhci_host *host, unsigned int clock)
 }
 
 /**
- * sdhci_s3c_platform_bus_width - support 8bit buswidth
+ * sdhci_s3c_set_bus_width - support 8bit buswidth
  * @host: The SDHCI host being queried
  * @width: MMC_BUS_WIDTH_ macro for the bus width being requested
  *
  * We have 8-bit width support but is not a v3 controller.
  * So we add platform_bus_width() and support 8bit width.
  */
-static int sdhci_s3c_platform_bus_width(struct sdhci_host *host, int width)
+static void sdhci_s3c_set_bus_width(struct sdhci_host *host, int width)
 {
 	u8 ctrl;
 
@@ -359,15 +367,15 @@ static int sdhci_s3c_platform_bus_width(struct sdhci_host *host, int width)
 	}
 
 	sdhci_writeb(host, ctrl, SDHCI_HOST_CONTROL);
-
-	return 0;
 }
 
 static struct sdhci_ops sdhci_s3c_ops = {
 	.get_max_clock		= sdhci_s3c_get_max_clk,
 	.set_clock		= sdhci_s3c_set_clock,
 	.get_min_clock		= sdhci_s3c_get_min_clock,
-	.platform_bus_width	= sdhci_s3c_platform_bus_width,
+	.set_bus_width		= sdhci_s3c_set_bus_width,
+	.reset			= sdhci_reset,
+	.set_uhs_signaling	= sdhci_set_uhs_signaling,
 };
 
 static void sdhci_s3c_notify_change(struct platform_device *dev, int state)
@@ -617,8 +625,10 @@ static int sdhci_s3c_probe(struct platform_device *pdev)
 	/* Setup quirks for the controller */
 	host->quirks |= SDHCI_QUIRK_NO_ENDATTR_IN_NOPDESC;
 	host->quirks |= SDHCI_QUIRK_NO_HISPD_BIT;
-	if (drv_data)
+	if (drv_data) {
 		host->quirks |= drv_data->sdhci_quirks;
+		sc->no_divider = drv_data->no_divider;
+	}
 
 #ifndef CONFIG_MMC_SDHCI_S3C_DMA
 
@@ -667,7 +677,7 @@ static int sdhci_s3c_probe(struct platform_device *pdev)
 	 * If controller does not have internal clock divider,
 	 * we can use overriding functions instead of default.
 	 */
-	if (host->quirks & SDHCI_QUIRK_NONSTANDARD_CLOCK) {
+	if (sc->no_divider) {
 		sdhci_s3c_ops.set_clock = sdhci_cmu_set_clock;
 		sdhci_s3c_ops.get_min_clock = sdhci_cmu_get_min_clock;
 		sdhci_s3c_ops.get_max_clock = sdhci_cmu_get_max_clock;
@@ -813,7 +823,7 @@ static const struct dev_pm_ops sdhci_s3c_pmops = {
 
 #if defined(CONFIG_CPU_EXYNOS4210) || defined(CONFIG_SOC_EXYNOS4212)
 static struct sdhci_s3c_drv_data exynos4_sdhci_drv_data = {
-	.sdhci_quirks = SDHCI_QUIRK_NONSTANDARD_CLOCK,
+	.no_divider = true,
 };
 #define EXYNOS4_SDHCI_DRV_DATA ((kernel_ulong_t)&exynos4_sdhci_drv_data)
 #else

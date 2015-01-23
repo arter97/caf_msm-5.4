@@ -16,12 +16,20 @@
 #include <linux/kthread.h>
 #include <linux/scatterlist.h>
 #include <linux/dma-mapping.h>
+#include <linux/bitops.h>
 
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
 #include "queue.h"
 
 #define MMC_QUEUE_BOUNCESZ	65536
+
+/*
+ * Based on benchmark tests the default num of requests to trigger the write
+ * packing was determined, to keep the read latency as low as possible and
+ * manage to keep the high write throughput.
+ */
+#define DEFAULT_NUM_REQS_TO_START_PACK 17
 
 /*
  * Prepare a MMC request. This just filters out odd stuff.
@@ -69,8 +77,8 @@ static int mmc_queue_thread(void *d)
 			set_current_state(TASK_RUNNING);
 			cmd_flags = req ? req->cmd_flags : 0;
 			mq->issue_fn(mq, req);
-			if (mq->flags & MMC_QUEUE_NEW_REQUEST) {
-				mq->flags &= ~MMC_QUEUE_NEW_REQUEST;
+			if (test_bit(MMC_QUEUE_NEW_REQUEST, &mq->flags)) {
+				clear_bit(MMC_QUEUE_NEW_REQUEST, &mq->flags);
 				continue; /* fetch again */
 			}
 
@@ -207,6 +215,9 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 	mq->mqrq_cur = mqrq_cur;
 	mq->mqrq_prev = mqrq_prev;
 	mq->queue->queuedata = mq;
+	mq->num_wr_reqs_to_start_packing =
+		min_t(int, (int)card->ext_csd.max_packed_writes,
+		     DEFAULT_NUM_REQS_TO_START_PACK);
 
 	blk_queue_prep_rq(mq->queue, mmc_prep_request);
 	queue_flag_set_unlocked(QUEUE_FLAG_NONROT, mq->queue);
@@ -271,22 +282,43 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 #endif
 
 	if (!mqrq_cur->bounce_buf && !mqrq_prev->bounce_buf) {
+		unsigned int max_segs = host->max_segs;
+
 		blk_queue_bounce_limit(mq->queue, limit);
 		blk_queue_max_hw_sectors(mq->queue,
 			min(host->max_blk_count, host->max_req_size / 512));
-		blk_queue_max_segments(mq->queue, host->max_segs);
 		blk_queue_max_segment_size(mq->queue, host->max_seg_size);
+retry:
+		blk_queue_max_segments(mq->queue, host->max_segs);
 
 		mqrq_cur->sg = mmc_alloc_sg(host->max_segs, &ret);
-		if (ret)
+		if (ret == -ENOMEM)
+			goto cur_sg_alloc_failed;
+		else if (ret)
 			goto cleanup_queue;
-
 
 		mqrq_prev->sg = mmc_alloc_sg(host->max_segs, &ret);
-		if (ret)
+		if (ret == -ENOMEM)
+			goto prev_sg_alloc_failed;
+		else if (ret)
 			goto cleanup_queue;
+
+		goto success;
+
+prev_sg_alloc_failed:
+		kfree(mqrq_cur->sg);
+		mqrq_cur->sg = NULL;
+cur_sg_alloc_failed:
+		host->max_segs /= 2;
+		if (host->max_segs) {
+			goto retry;
+		} else {
+			host->max_segs = max_segs;
+			goto cleanup_queue;
+		}
 	}
 
+success:
 	sema_init(&mq->thread_sem, 1);
 
 	mq->thread = kthread_run(mmc_queue_thread, mq, "mmcqd/%d%s",
@@ -406,25 +438,40 @@ void mmc_packed_clean(struct mmc_queue *mq)
 /**
  * mmc_queue_suspend - suspend a MMC request queue
  * @mq: MMC queue to suspend
+ * @wait: Wait till MMC request queue is empty
  *
  * Stop the block request queue, and wait for our thread to
  * complete any outstanding requests.  This ensures that we
  * won't suspend while a request is being processed.
  */
-void mmc_queue_suspend(struct mmc_queue *mq)
+int mmc_queue_suspend(struct mmc_queue *mq, int wait)
 {
 	struct request_queue *q = mq->queue;
 	unsigned long flags;
+	int rc = 0;
 
-	if (!(mq->flags & MMC_QUEUE_SUSPENDED)) {
-		mq->flags |= MMC_QUEUE_SUSPENDED;
-
+	if (!(test_and_set_bit(MMC_QUEUE_SUSPENDED, &mq->flags))) {
 		spin_lock_irqsave(q->queue_lock, flags);
 		blk_stop_queue(q);
 		spin_unlock_irqrestore(q->queue_lock, flags);
 
-		down(&mq->thread_sem);
+		rc = down_trylock(&mq->thread_sem);
+		if (rc && !wait) {
+			/*
+			 * Failed to take the lock so better to abort the
+			 * suspend because mmcqd thread is processing requests.
+			 */
+			clear_bit(MMC_QUEUE_SUSPENDED, &mq->flags);
+			spin_lock_irqsave(q->queue_lock, flags);
+			blk_start_queue(q);
+			spin_unlock_irqrestore(q->queue_lock, flags);
+			rc = -EBUSY;
+		} else if (rc && wait) {
+			down(&mq->thread_sem);
+			rc = 0;
+		}
 	}
+	return rc;
 }
 
 /**
@@ -436,8 +483,7 @@ void mmc_queue_resume(struct mmc_queue *mq)
 	struct request_queue *q = mq->queue;
 	unsigned long flags;
 
-	if (mq->flags & MMC_QUEUE_SUSPENDED) {
-		mq->flags &= ~MMC_QUEUE_SUSPENDED;
+	if (test_and_clear_bit(MMC_QUEUE_SUSPENDED, &mq->flags)) {
 
 		up(&mq->thread_sem);
 

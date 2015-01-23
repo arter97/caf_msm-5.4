@@ -90,12 +90,22 @@ static int process_sdio_pending_irqs(struct mmc_host *host)
 	return ret;
 }
 
+void sdio_run_irqs(struct mmc_host *host)
+{
+	mmc_claim_host(host);
+	host->sdio_irq_pending = true;
+	process_sdio_pending_irqs(host);
+	mmc_release_host(host);
+}
+EXPORT_SYMBOL_GPL(sdio_run_irqs);
+
 static int sdio_irq_thread(void *_host)
 {
 	struct mmc_host *host = _host;
 	struct sched_param param = { .sched_priority = 1 };
 	unsigned long period, idle_period;
 	int ret;
+	bool ws;
 
 	sched_setscheduler(current, SCHED_FIFO, &param);
 
@@ -129,6 +139,17 @@ static int sdio_irq_thread(void *_host)
 		ret = __mmc_claim_host(host, &host->sdio_irq_thread_abort);
 		if (ret)
 			break;
+		ws = false;
+		/*
+		 * prevent suspend if it has started when scheduled;
+		 * 100 msec (approx. value) should be enough for the system to
+		 * resume and attend to the card's request
+		 */
+		if ((host->dev_status == DEV_SUSPENDING) ||
+		    (host->dev_status == DEV_SUSPENDED)) {
+			pm_wakeup_event(&host->card->dev, 100);
+			ws = true;
+		}
 		ret = process_sdio_pending_irqs(host);
 		host->sdio_irq_pending = false;
 		mmc_release_host(host);
@@ -165,6 +186,12 @@ static int sdio_irq_thread(void *_host)
 			host->ops->enable_sdio_irq(host, 1);
 			mmc_host_clk_release(host);
 		}
+		/*
+		 * function drivers would have processed the event from card
+		 * unless suspended, hence release wake source
+		 */
+		if (ws && (host->dev_status == DEV_RESUMED))
+			pm_relax(&host->card->dev);
 		if (!kthread_should_stop())
 			schedule_timeout(period);
 		set_current_state(TASK_RUNNING);
@@ -189,14 +216,20 @@ static int sdio_card_irq_get(struct mmc_card *card)
 	WARN_ON(!host->claimed);
 
 	if (!host->sdio_irqs++) {
-		atomic_set(&host->sdio_irq_thread_abort, 0);
-		host->sdio_irq_thread =
-			kthread_run(sdio_irq_thread, host, "ksdioirqd/%s",
-				mmc_hostname(host));
-		if (IS_ERR(host->sdio_irq_thread)) {
-			int err = PTR_ERR(host->sdio_irq_thread);
-			host->sdio_irqs--;
-			return err;
+		if (!(host->caps2 & MMC_CAP2_SDIO_IRQ_NOTHREAD)) {
+			atomic_set(&host->sdio_irq_thread_abort, 0);
+			host->sdio_irq_thread =
+				kthread_run(sdio_irq_thread, host,
+					    "ksdioirqd/%s", mmc_hostname(host));
+			if (IS_ERR(host->sdio_irq_thread)) {
+				int err = PTR_ERR(host->sdio_irq_thread);
+				host->sdio_irqs--;
+				return err;
+			}
+		} else {
+			mmc_host_clk_hold(host);
+			host->ops->enable_sdio_irq(host, 1);
+			mmc_host_clk_release(host);
 		}
 	}
 
@@ -211,8 +244,14 @@ static int sdio_card_irq_put(struct mmc_card *card)
 	BUG_ON(host->sdio_irqs < 1);
 
 	if (!--host->sdio_irqs) {
-		atomic_set(&host->sdio_irq_thread_abort, 1);
-		kthread_stop(host->sdio_irq_thread);
+		if (!(host->caps2 & MMC_CAP2_SDIO_IRQ_NOTHREAD)) {
+			atomic_set(&host->sdio_irq_thread_abort, 1);
+			kthread_stop(host->sdio_irq_thread);
+		} else {
+			mmc_host_clk_hold(host);
+			host->ops->enable_sdio_irq(host, 0);
+			mmc_host_clk_release(host);
+		}
 	}
 
 	return 0;
