@@ -1218,6 +1218,7 @@ config WCD9330_CODEC
 config WCD9335_CODEC
 	tristate "WCD9335 Codec"
 	depends on SLIMBUS
+	select SOUNDWIRE_WCD_CTRL
 	select MFD_CORE
 	help
 	  Enables the WCD9xxx codec core driver. The core driver provides
