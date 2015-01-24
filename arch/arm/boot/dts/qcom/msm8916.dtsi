@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -300,8 +300,9 @@
 	qcom,clock-a7@0b011050 {
 		compatible = "qcom,clock-a53-8916";
 		reg = <0x0b011050 0x8>,
-		      <0x0005c004 0x8>;
-		reg-names = "rcg-base", "efuse1";
+		      <0x0005c004 0x8>,
+		      <0x0005c00c 0x8>;
+		reg-names = "rcg-base", "efuse1", "efuse";
 		qcom,safe-freq = < 400000000 >;
 		cpu-vdd-supply = <&apc_vreg_corner>;
 		clocks = <&clock_gcc clk_gpll0_ao_clk_src>,
@@ -327,6 +328,29 @@
 			<  998400000 5>,
 			< 1094400000 6>,
 			< 1152000000 7>;
+
+		qcom,speed0-bin-v1 =
+			<          0 0>,
+			<  200000000 1>,
+			<  400000000 2>,
+			<  533333000 3>,
+			<  800000000 4>,
+			<  998400000 5>,
+			< 1094400000 6>,
+			< 1152000000 7>,
+			< 1209600000 8>;
+
+		qcom,speed2-bin-v1 =
+			<          0 0>,
+			<  200000000 1>,
+			<  400000000 2>,
+			<  533333000 3>,
+			<  800000000 4>,
+			<  998400000 5>,
+			< 1094400000 6>,
+			< 1152000000 7>,
+			< 1209600000 8>,
+			< 1363200000 9>;
 	};
 
 	cpubw: qcom,cpubw {
@@ -370,7 +394,8 @@
 			 <  998400 >,
 			 < 1094400 >,
 			 < 1152000 >,
-			 < 1209600 >;
+			 < 1209600 >,
+			 < 1363200 >;
 	};
 
 	qcom,sps {
