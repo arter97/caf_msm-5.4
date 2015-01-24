@@ -13,8 +13,15 @@ Required properties:
 		the register region.
 
 Optional properties:
-- reg:		An optional second tuple specifies the shared common base
-		address required to trigger the L2 SPM out of power collapse.
+- reg:		For "qcom,8994-l2ccc only", an optional second tuple specifies
+		the shared common base address required to trigger the L2 SPM
+		out of power collapse.
+		For "qcom,msmthulium-l2ccc" only, an optional second tuple
+		specifies the address of the CLKSEL register for the cluster.
+- qcom,cbf-clock-seq: For "qcom,msmthulium-l2ccc" only, specify this to
+		temporarily select the CBF clock source while powering up the
+		L2. If present, the CLKSEL "reg" tuple must also be specified
+		as described above.
 - qcom,vctl-node: Reference to a node that controls the power rails for the
  cluster.
 - qcom,vctl-val: The voltage control register value that must be set before
