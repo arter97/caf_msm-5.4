@@ -141,7 +141,9 @@
 
 	l2ccc_1: clock-controller@099d1000 {
 		compatible = "qcom,msmthulium-l2ccc";
-		reg = <0x099d1000 0x1000>;
+		reg = <0x099d1000 0x1000>,
+		      <0x06480040 0x4>;
+		qcom,cbf-clock-seq;
 	};
 
 	acc0: clock-controller@09981000 {
