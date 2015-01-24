@@ -893,8 +893,6 @@
 		"HS_RB_G1_L1", "HS_RB_G2_L1", "HS_RB_G3_L1",
 		"MAX";
 
-		spm-level = <5>;
-
 		qcom,cpu-affinity = "affine_cores";
 		qcom,cpu-dma-latency-us = <301>;
 
