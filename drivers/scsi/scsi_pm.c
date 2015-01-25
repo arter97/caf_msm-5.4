@@ -162,8 +162,17 @@ static int scsi_bus_restore(struct device *dev)
 static int sdev_runtime_suspend(struct device *dev)
 {
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
+	int (*cb)(struct device *) = pm ? pm->runtime_suspend : NULL;
 	struct scsi_device *sdev = to_scsi_device(dev);
 	int err;
+
+	if (!sdev->request_queue->dev) {
+		err = scsi_dev_type_suspend(dev, cb);
+		if (err == -EAGAIN)
+			pm_schedule_suspend(dev, jiffies_to_msecs(
+					round_jiffies_up_relative(HZ/10)));
+		return err;
+	}
 
 	err = blk_pre_runtime_suspend(sdev->request_queue);
 	if (err)
@@ -192,7 +201,11 @@ static int sdev_runtime_resume(struct device *dev)
 {
 	struct scsi_device *sdev = to_scsi_device(dev);
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
+	int (*cb)(struct device *) = pm ? pm->runtime_resume : NULL;
 	int err = 0;
+
+	if (!sdev->request_queue->dev)
+		return scsi_dev_type_resume(dev, cb);
 
 	blk_pre_runtime_resume(sdev->request_queue);
 	if (pm && pm->runtime_resume)
