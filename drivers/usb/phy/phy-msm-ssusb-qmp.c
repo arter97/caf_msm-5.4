@@ -200,8 +200,8 @@ static const struct qmp_reg_val qmp_settings_rev1[] = {
 
 /* USB3PHY_REVISION_ID3 = 0x20 where register offset is being changed. */
 static const struct qmp_reg_val qmp_settings_rev2[] = {
-	{0x14, 0xAC}, /* QSERDES_COM_SYSCLK_EN_SEL */
-	{0x34, 0xC}, /* QSERDES_COM_BIAS_EN_CLKBUFLR_EN */
+	{0xAC, 0x14}, /* QSERDES_COM_SYSCLK_EN_SEL */
+	{0x34, 0x08}, /* QSERDES_COM_BIAS_EN_CLKBUFLR_EN */
 	{0x174, 0x30}, /* QSERDES_COM_CLK_SELECT */
 	{0x3C, 0x06}, /* QSERDES_COM_SYS_CLK_CTRL */
 	{0xB4, 0x00}, /* QSERDES_COM_RESETSM_CNTRL */
@@ -256,6 +256,7 @@ static const struct qmp_reg_val qmp_settings_rev2[] = {
 	{0x680, 0xD1}, /* USB3_PHY_LOCK_DETECT_CONFIG1 */
 	{0x684, 0x1F}, /* USB3_PHY_LOCK_DETECT_CONFIG2 */
 	{0x688, 0x47}, /* USB3_PHY_LOCK_DETECT_CONFIG3 */
+	{0x664, 0x08}, /* USB3_PHY_POWER_STATE_CONFIG2 */
 
 	{-1, -1} /* terminating entry */
 };
