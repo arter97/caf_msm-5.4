@@ -801,11 +801,6 @@ static int mbim_bam_connect(struct f_mbim *dev)
 	port_num = u_bam_data_func_to_port(USB_FUNC_MBIM, MBIM_DEFAULT_PORT);
 	if (port_num < 0)
 		return port_num;
-	ret = bam2bam_data_port_select(port_num);
-	if (ret) {
-		pr_err("mbim port select failed err: %d\n", ret);
-		return ret;
-	}
 
 	src_connection_idx = usb_bam_get_connection_idx(gadget->name, bam_name,
 		USB_TO_PEER_PERIPHERAL, USB_BAM_DEVICE, dev->port_num);

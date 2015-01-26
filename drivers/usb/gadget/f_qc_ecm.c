@@ -462,11 +462,6 @@ static int ecm_qc_bam_connect(struct f_ecm_qc *dev)
 					    ECM_QC_DEFAULT_PORT));
 	if (port_num < 0)
 		return port_num;
-	ret = bam2bam_data_port_select(port_num);
-	if (ret) {
-		pr_err("ecm_qc port select failed with err:%d\n", ret);
-		return ret;
-	}
 
 	dev->bam_port.cdev = cdev;
 	dev->bam_port.func = &dev->port.func;
