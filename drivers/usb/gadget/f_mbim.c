@@ -67,7 +67,6 @@ struct mbim_ipa_ep_info {
 
 
 #define NR_MBIM_PORTS			1
-#define MBIM_DEFAULT_PORT		0
 
 /* ID for Microsoft OS String */
 #define MBIM_OS_STRING_ID   0xEE
@@ -796,12 +795,6 @@ static int mbim_bam_connect(struct f_mbim *dev)
 							IPA_P_BAM : A2_P_BAM;
 
 	pr_info("dev:%p portno:%d\n", dev, dev->port_num);
-
-	ret = bam2bam_data_port_select(MBIM_DEFAULT_PORT);
-	if (ret) {
-		pr_err("mbim port select failed err: %d\n", ret);
-		return ret;
-	}
 
 	src_connection_idx = usb_bam_get_connection_idx(gadget->name, bam_name,
 		USB_TO_PEER_PERIPHERAL, USB_BAM_DEVICE, dev->port_num);
