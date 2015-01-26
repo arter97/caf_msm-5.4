@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2492,7 +2492,7 @@
 			 <&clock_gcc clk_gcc_usb3phy_phy_reset>,
 			 <&clock_gcc clk_usb_ss_phy_ldo>;
 		clock-names = "aux_clk", "pipe_clk", "cfg_ahb_clk", "phy_reset",
-				"phy_phy_reset", "ldo_clk";
+				"phy_phy_reset", "ref_clk";
 	};
 
 	dbm_1p5: dbm@f92f8000 {
