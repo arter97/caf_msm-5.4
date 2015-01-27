@@ -2183,7 +2183,6 @@ static int dwc3_gadget_start(struct usb_gadget *g,
 	}
 
 	spin_unlock_irqrestore(&dwc->lock, flags);
-	init_waitqueue_head(&dwc->wait_linkstate);
 	pm_runtime_put(dwc->dev);
 
 	return 0;
