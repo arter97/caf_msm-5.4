@@ -434,6 +434,250 @@ const unsigned int a5xx_registers[] = {
 
 const unsigned int a5xx_registers_count = ARRAY_SIZE(a5xx_registers) / 2;
 
+struct a5xx_hlsq_sp_tp_regs {
+	unsigned int statetype;
+	unsigned int ahbaddr;
+	unsigned int size;
+};
+
+static const struct a5xx_hlsq_sp_tp_regs a5xx_hlsq_sp_tp_registers[] = {
+	/* HLSQ CTX 0 3D */
+	{ 0x32, 0xE780, 0x7f },
+	/* HLSQ CTX 1 3D */
+	{ 0x34, 0xEF80, 0x7f },
+
+	/* SP non context */
+	{ 0x3f, 0x0EC0, 0x40 },
+	/* SP CTX 0 2D */
+	{ 0x3d, 0x2040, 0x1 },
+	/* SP CTX 1 2D */
+	{ 0x3b, 0x2440, 0x1 },
+	/* SP CTX 0 3D */
+	{ 0x3e, 0xE580, 0x180 },
+	/* SP CTX 1 3D */
+	{ 0x3c, 0xED80, 0x180 },
+
+	/* TP non context */
+	{ 0x3a, 0x0F00, 0x40 },
+	/* TP CTX 0 2D */
+	{ 0x38, 0x2000, 0x10 },
+	/* TP CTX 1 2D */
+	{ 0x36, 0x2400, 0x10 },
+	/* TP CTX 0 3D */
+	{ 0x39, 0xE700, 0x128 },
+	/* TP CTX 1 3D */
+	{ 0x37, 0xEF00, 0x128 },
+};
+
+#define A5XX_NUM_SHADER_BANKS 4
+#define A5XX_SHADER_STATETYPE_SHIFT 8
+
+enum a5xx_shader_obj {
+	A5XX_TP_W_MEMOBJ = 1,
+	A5XX_TP_W_SAMPLER = 2,
+	A5XX_TP_W_MIPMAP_BASE = 3,
+	A5XX_TP_W_MEMOBJ_TAG = 4,
+	A5XX_TP_W_SAMPLER_TAG = 5,
+	A5XX_TP_S_3D_MEMOBJ = 6,
+	A5XX_TP_S_3D_SAMPLER = 0x7,
+	A5XX_TP_S_3D_MEMOBJ_TAG = 0x8,
+	A5XX_TP_S_3D_SAMPLER_TAG = 0x9,
+	A5XX_TP_S_CS_MEMOBJ = 0xA,
+	A5XX_TP_S_CS_SAMPLER = 0xB,
+	A5XX_TP_S_CS_MEMOBJ_TAG = 0xC,
+	A5XX_TP_S_CS_SAMPLER_TAG = 0xD,
+	A5XX_SP_W_INSTR = 0xE,
+	A5XX_SP_W_CONST = 0xF,
+	A5XX_SP_W_UAV_SIZE = 0x10,
+	A5XX_SP_W_CB_SIZE = 0x11,
+	A5XX_SP_W_UAV_BASE = 0x12,
+	A5XX_SP_W_CB_BASE = 0x13,
+	A5XX_SP_W_INST_TAG = 0x14,
+	A5XX_SP_W_STATE = 0x15,
+	A5XX_SP_S_3D_INSTR = 0x16,
+	A5XX_SP_S_3D_CONST = 0x17,
+	A5XX_SP_S_3D_CB_BASE = 0x18,
+	A5XX_SP_S_3D_CB_SIZE = 0x19,
+	A5XX_SP_S_3D_UAV_BASE = 0x1A,
+	A5XX_SP_S_3D_UAV_SIZE = 0x1B,
+	A5XX_SP_S_CS_INSTR = 0x1C,
+	A5XX_SP_S_CS_CONST = 0x1D,
+	A5XX_SP_S_CS_CB_BASE = 0x1E,
+	A5XX_SP_S_CS_CB_SIZE = 0x1F,
+	A5XX_SP_S_CS_UAV_BASE = 0x20,
+	A5XX_SP_S_CS_UAV_SIZE = 0x21,
+	A5XX_SP_S_3D_INSTR_DIRTY = 0x22,
+	A5XX_SP_S_3D_CONST_DIRTY = 0x23,
+	A5XX_SP_S_3D_CB_BASE_DIRTY = 0x24,
+	A5XX_SP_S_3D_CB_SIZE_DIRTY = 0x25,
+	A5XX_SP_S_3D_UAV_BASE_DIRTY = 0x26,
+	A5XX_SP_S_3D_UAV_SIZE_DIRTY = 0x27,
+	A5XX_SP_S_CS_INSTR_DIRTY = 0x28,
+	A5XX_SP_S_CS_CONST_DIRTY = 0x29,
+	A5XX_SP_S_CS_CB_BASE_DIRTY = 0x2A,
+	A5XX_SP_S_CS_CB_SIZE_DIRTY = 0x2B,
+	A5XX_SP_S_CS_UAV_BASE_DIRTY = 0x2C,
+	A5XX_SP_S_CS_UAV_SIZE_DIRTY = 0x2D,
+	A5XX_HLSQ_ICB = 0x2E,
+	A5XX_HLSQ_ICB_DIRTY = 0x2F,
+	A5XX_HLSQ_ICB_CB_BASE_DIRTY = 0x30,
+	A5XX_SP_POWER_RESTORE_RAM = 0x40,
+	A5XX_SP_POWER_RESTORE_RAM_TAG = 0x41,
+	A5XX_TP_POWER_RESTORE_RAM = 0x42,
+	A5XX_TP_POWER_RESTORE_RAM_TAG = 0x43,
+
+};
+
+struct a5xx_shader_block {
+	unsigned int statetype;
+	unsigned int sz;
+};
+
+struct a5xx_shader_block_info {
+	const struct a5xx_shader_block *shader_block;
+	unsigned int shader_num;
+};
+
+static const struct a5xx_shader_block a5xx_shader_blocks[] = {
+	{A5XX_TP_W_MEMOBJ,              0x200},
+	{A5XX_TP_W_MIPMAP_BASE,         0x3C0},
+	{A5XX_TP_W_SAMPLER_TAG,          0x40},
+	{A5XX_TP_S_3D_SAMPLER,           0x80},
+	{A5XX_TP_S_3D_SAMPLER_TAG,       0x20},
+	{A5XX_TP_S_CS_SAMPLER,           0x40},
+	{A5XX_TP_S_CS_SAMPLER_TAG,       0x10},
+	{A5XX_SP_W_CONST,               0x800},
+	{A5XX_SP_W_CB_SIZE,              0x30},
+	{A5XX_SP_W_CB_BASE,              0xF0},
+	{A5XX_SP_W_STATE,                 0x1},
+	{A5XX_SP_S_3D_CONST,            0x800},
+	{A5XX_SP_S_3D_CB_SIZE,           0x28},
+	{A5XX_SP_S_3D_UAV_SIZE,          0x80},
+	{A5XX_SP_S_CS_CONST,            0x400},
+	{A5XX_SP_S_CS_CB_SIZE,            0x8},
+	{A5XX_SP_S_CS_UAV_SIZE,          0x80},
+	{A5XX_SP_S_3D_CONST_DIRTY,       0x12},
+	{A5XX_SP_S_3D_CB_SIZE_DIRTY,      0x1},
+	{A5XX_SP_S_3D_UAV_SIZE_DIRTY,     0x2},
+	{A5XX_SP_S_CS_CONST_DIRTY,        0xA},
+	{A5XX_SP_S_CS_CB_SIZE_DIRTY,      0x1},
+	{A5XX_SP_S_CS_UAV_SIZE_DIRTY,     0x2},
+	{A5XX_HLSQ_ICB_DIRTY,             0xB},
+	{A5XX_SP_POWER_RESTORE_RAM_TAG,   0xA},
+	{A5XX_TP_POWER_RESTORE_RAM_TAG,   0xA},
+	{A5XX_TP_W_SAMPLER,              0x80},
+	{A5XX_TP_W_MEMOBJ_TAG,           0x40},
+	{A5XX_TP_S_3D_MEMOBJ,           0x200},
+	{A5XX_TP_S_3D_MEMOBJ_TAG,        0x20},
+	{A5XX_TP_S_CS_MEMOBJ,           0x100},
+	{A5XX_TP_S_CS_MEMOBJ_TAG,        0x10},
+	{A5XX_SP_W_INSTR,               0x800},
+	{A5XX_SP_W_UAV_SIZE,             0x80},
+	{A5XX_SP_W_UAV_BASE,             0x80},
+	{A5XX_SP_W_INST_TAG,             0x40},
+	{A5XX_SP_S_3D_INSTR,            0x800},
+	{A5XX_SP_S_3D_CB_BASE,           0xC8},
+	{A5XX_SP_S_3D_UAV_BASE,          0x80},
+	{A5XX_SP_S_CS_INSTR,            0x400},
+	{A5XX_SP_S_CS_CB_BASE,           0x28},
+	{A5XX_SP_S_CS_UAV_BASE,          0x80},
+	{A5XX_SP_S_3D_INSTR_DIRTY,        0x1},
+	{A5XX_SP_S_3D_CB_BASE_DIRTY,      0x5},
+	{A5XX_SP_S_3D_UAV_BASE_DIRTY,     0x2},
+	{A5XX_SP_S_CS_INSTR_DIRTY,        0x1},
+	{A5XX_SP_S_CS_CB_BASE_DIRTY,      0x1},
+	{A5XX_SP_S_CS_UAV_BASE_DIRTY,     0x2},
+	{A5XX_HLSQ_ICB,                 0x200},
+	{A5XX_HLSQ_ICB_CB_BASE_DIRTY,     0x4},
+	{A5XX_SP_POWER_RESTORE_RAM,     0x140},
+	{A5XX_TP_POWER_RESTORE_RAM,      0x40},
+};
+
+static size_t a5xx_snapshot_shader_memory(struct kgsl_device *device,
+	u8 *buf, size_t remain, void *priv)
+{
+	struct kgsl_snapshot_shader *header =
+				(struct kgsl_snapshot_shader *)buf;
+	unsigned int *data = (unsigned int *)(buf + sizeof(*header));
+	unsigned int i;
+	struct a5xx_shader_block_info *shader_block_info =
+				(struct a5xx_shader_block_info *)priv;
+	unsigned int statetype = shader_block_info->shader_block->statetype;
+	unsigned int size = shader_block_info->shader_block->sz;
+	unsigned int shader_num = shader_block_info->shader_num;
+
+
+	if (remain < SHADER_SECTION_SZ(size)) {
+		SNAPSHOT_ERR_NOMEM(device, "SHADER MEMORY");
+		return 0;
+	}
+
+	kgsl_regwrite(device, A5XX_HLSQ_DBG_READ_SEL,
+		  ((statetype << A5XX_SHADER_STATETYPE_SHIFT) | shader_num));
+
+	header->type = statetype;
+	header->index = shader_num;
+	header->size = size;
+
+	for (i = 0; i < size; i++)
+		kgsl_regread(device, A5XX_HLSQ_DBG_AHB_READ_APERTURE + i,
+				data++);
+
+	return SHADER_SECTION_SZ(size);
+}
+
+static void a5xx_snapshot_shader(struct kgsl_device *device,
+			   struct kgsl_snapshot *snapshot)
+{
+	unsigned int i, j;
+	struct a5xx_shader_block_info blk;
+
+	for (i = 0; i < ARRAY_SIZE(a5xx_shader_blocks); i++) {
+		for (j = 0; j < A5XX_NUM_SHADER_BANKS; j++) {
+			blk.shader_block = &a5xx_shader_blocks[i];
+			blk.shader_num = j;
+			/* Shader working/shadow memory */
+			kgsl_snapshot_add_section(device,
+				KGSL_SNAPSHOT_SECTION_SHADER,
+				snapshot, a5xx_snapshot_shader_memory, &blk);
+		}
+	}
+}
+
+size_t a5xx_snapshot_dump_hlsq_sp_tp_regs(struct kgsl_device *device, u8 *buf,
+	size_t remain, void *priv)
+{
+	struct kgsl_snapshot_regs *header = (struct kgsl_snapshot_regs *)buf;
+	unsigned int *data = (unsigned int *)(buf + sizeof(*header));
+	int count = 0, i, j, val = 0;
+
+	/* Figure out how many registers we are going to dump */
+	for (i = 0; i < ARRAY_SIZE(a5xx_hlsq_sp_tp_registers); i++)
+			count += a5xx_hlsq_sp_tp_registers[i].size;
+
+	if (remain < (count * 8) + sizeof(*header)) {
+		SNAPSHOT_ERR_NOMEM(device, "REGISTERS");
+		return 0;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(a5xx_hlsq_sp_tp_registers); i++) {
+		kgsl_regwrite(device, A5XX_HLSQ_DBG_READ_SEL,
+				  (a5xx_hlsq_sp_tp_registers[i].statetype <<
+				   A5XX_SHADER_STATETYPE_SHIFT));
+		for (j = 0; j < a5xx_hlsq_sp_tp_registers[i].size; j++) {
+			kgsl_regread(device,
+				A5XX_HLSQ_DBG_AHB_READ_APERTURE + j, &val);
+			*data++ = a5xx_hlsq_sp_tp_registers[i].ahbaddr + j;
+			*data++ = val;
+		}
+	}
+
+	header->count = count;
+
+	/* Return the size of the section */
+	return (count * 8) + sizeof(*header);
+}
+
 /*
  * a5xx_snapshot() - A5XX GPU snapshot function
  * @adreno_dev: Device being snapshotted
@@ -468,6 +712,10 @@ void a5xx_snapshot(struct adreno_device *adreno_dev,
 	/* Master set of (non debug) registers */
 	kgsl_snapshot_add_section(device, KGSL_SNAPSHOT_SECTION_REGS, snapshot,
 		kgsl_snapshot_dump_regs, &list);
+
+	/* Dump SP TP HLSQ registers */
+	kgsl_snapshot_add_section(device, KGSL_SNAPSHOT_SECTION_REGS, snapshot,
+		a5xx_snapshot_dump_hlsq_sp_tp_regs, NULL);
 
 	/* CP_PFP indexed registers */
 	kgsl_snapshot_indexed_registers(device, snapshot,
@@ -524,6 +772,9 @@ void a5xx_snapshot(struct adreno_device *adreno_dev,
 
 	kgsl_snapshot_add_section(device, KGSL_SNAPSHOT_SECTION_DEBUG,
 		snapshot, a5xx_snapshot_cp_pm4, NULL);
+
+	/* Shader memory */
+	a5xx_snapshot_shader(device, snapshot);
 
 	/* Debug bus */
 	a5xx_snapshot_debugbus(device, snapshot);

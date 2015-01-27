@@ -872,7 +872,6 @@ static struct adreno_snapshot_sizes a5xx_snap_sizes = {
 	.cp_meq = 64,
 	.cp_merciu = 64,
 	.roq = 512,
-	.shader_mem = 0x4000,
 };
 
 static struct adreno_snapshot_data a5xx_snapshot_data = {
