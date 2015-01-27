@@ -288,6 +288,9 @@ static inline int kgsl_allocate_global(struct kgsl_device *device,
 
 	BUG_ON(size > SIZE_MAX);
 
+	if (size == 0)
+		return -EINVAL;
+
 	memdesc->flags = flags;
 	memdesc->priv = priv;
 
