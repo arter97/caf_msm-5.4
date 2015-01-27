@@ -54,6 +54,7 @@ struct msm_spm_device {
 	bool use_spm_clk_gating;
 	bool use_qchannel_for_wfi;
 	void __iomem *flush_base_addr;
+	void __iomem *slpreq_base_addr;
 };
 
 struct msm_spm_vdd_info {
@@ -212,6 +213,28 @@ static void msm_spm_config_hw_flush(struct msm_spm_device *dev,
 	__raw_writel(val, dev->flush_base_addr);
 }
 
+static void msm_spm_config_slpreq(struct msm_spm_device *dev,
+		unsigned int mode)
+{
+	uint32_t val = 0;
+
+	if (!dev->slpreq_base_addr)
+		return;
+
+	switch (mode) {
+	case MSM_SPM_MODE_FASTPC:
+	case MSM_SPM_MODE_GDHS:
+	case MSM_SPM_MODE_POWER_COLLAPSE:
+		val = BIT(4);
+		break;
+	default:
+		break;
+	}
+
+	val = (__raw_readl(dev->slpreq_base_addr) & ~BIT(4)) | val;
+	__raw_writel(val, dev->slpreq_base_addr);
+}
+
 static int msm_spm_dev_set_low_power_mode(struct msm_spm_device *dev,
 		unsigned int mode, bool notify_rpm)
 {
@@ -245,6 +268,7 @@ static int msm_spm_dev_set_low_power_mode(struct msm_spm_device *dev,
 
 	msm_spm_config_q2s(dev, mode);
 	msm_spm_config_hw_flush(dev, mode);
+	msm_spm_config_slpreq(dev, mode);
 
 	return ret;
 }
@@ -679,6 +703,20 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 			ret = PTR_ERR(dev->flush_base_addr);
 			pr_err("%s(): Unable to iomap hw flush register %d\n",
 					__func__, ret);
+			goto fail;
+		}
+	}
+
+	/* Sleep req address */
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "slpreq");
+	if (res) {
+		dev->slpreq_base_addr = devm_ioremap(&pdev->dev, res->start,
+					resource_size(res));
+		if (!dev->slpreq_base_addr) {
+			ret = -ENOMEM;
+			pr_err("%s(): Unable to iomap slpreq register\n",
+					__func__);
+			ret = -EADDRNOTAVAIL;
 			goto fail;
 		}
 	}
