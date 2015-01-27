@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2015, The Linux Foundation. All rights reserved.
  * Author: San Mehat <san@android.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -35,6 +35,7 @@ enum msm_pm_sleep_mode {
 	MSM_PM_SLEEP_MODE_RETENTION,
 	MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE,
 	MSM_PM_SLEEP_MODE_POWER_COLLAPSE,
+	MSM_PM_SLEEP_MODE_FASTPC,
 	MSM_PM_SLEEP_MODE_POWER_COLLAPSE_SUSPEND,
 	MSM_PM_SLEEP_MODE_NR,
 	MSM_PM_SLEEP_MODE_NOT_SELECTED,

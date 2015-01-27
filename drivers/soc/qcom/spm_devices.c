@@ -201,6 +201,7 @@ static void msm_spm_config_hw_flush(struct msm_spm_device *dev,
 		return;
 
 	switch (mode) {
+	case MSM_SPM_MODE_FASTPC:
 	case MSM_SPM_MODE_POWER_COLLAPSE:
 		val = BIT(0);
 		break;
@@ -596,6 +597,7 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 		{"qcom,saw2-spm-cmd-gdhs", MSM_SPM_MODE_GDHS},
 		{"qcom,saw2-spm-cmd-spc", MSM_SPM_MODE_POWER_COLLAPSE},
 		{"qcom,saw2-spm-cmd-pc", MSM_SPM_MODE_POWER_COLLAPSE},
+		{"qcom,saw2-spm-cmd-fpc", MSM_SPM_MODE_FASTPC},
 	};
 
 	dev = msm_spm_get_device(pdev);

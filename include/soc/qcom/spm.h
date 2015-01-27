@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -19,6 +19,7 @@ enum {
 	MSM_SPM_MODE_RETENTION,
 	MSM_SPM_MODE_GDHS,
 	MSM_SPM_MODE_POWER_COLLAPSE,
+	MSM_SPM_MODE_FASTPC,
 	MSM_SPM_MODE_NR
 };
 

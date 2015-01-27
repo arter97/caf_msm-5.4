@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -354,6 +354,7 @@ static int parse_lpm_mode(const char *str)
 	int i;
 	struct lpm_lookup_table mode_lookup[] = {
 		{MSM_SPM_MODE_POWER_COLLAPSE, "pc"},
+		{MSM_SPM_MODE_FASTPC, "fpc"},
 		{MSM_SPM_MODE_GDHS, "gdhs"},
 		{MSM_SPM_MODE_RETENTION, "retention"},
 		{MSM_SPM_MODE_CLOCK_GATING, "wfi"},
@@ -468,6 +469,8 @@ static int parse_cpu_mode(const char *mode_name)
 			"pc"},
 		{MSM_PM_SLEEP_MODE_RETENTION,
 			"retention"},
+		{MSM_PM_SLEEP_MODE_FASTPC,
+			"fpc"},
 	};
 	int i;
 	int ret = -EINVAL;

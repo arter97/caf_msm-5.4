@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -208,6 +208,7 @@ int set_l2_mode(struct low_power_ops *ops, int mode, bool notify_rpm)
 		break;
 	case MSM_SPM_MODE_CLOCK_GATING:
 	case MSM_SPM_MODE_RETENTION:
+	case MSM_SPM_MODE_FASTPC:
 	case MSM_SPM_MODE_DISABLED:
 		ops->tz_flag = MSM_SCM_L2_ON;
 		break;
@@ -1104,8 +1105,12 @@ void lpm_cpu_hotplug_enter(unsigned int cpu)
 	 * available
 	 */
 	if (!cluster) {
-		if (msm_spm_is_mode_avail(MSM_SPM_MODE_POWER_COLLAPSE)) {
+		if (msm_spm_is_mode_avail(
+					MSM_SPM_MODE_POWER_COLLAPSE)){
 			mode = MSM_PM_SLEEP_MODE_POWER_COLLAPSE;
+		} else if (msm_spm_is_mode_avail(
+				MSM_SPM_MODE_FASTPC)) {
+			mode = MSM_PM_SLEEP_MODE_FASTPC;
 		} else if (msm_spm_is_mode_avail(
 				MSM_SPM_MODE_RETENTION)) {
 			mode = MSM_PM_SLEEP_MODE_RETENTION;
