@@ -27,10 +27,16 @@
 #include "spm_driver.h"
 
 #define VDD_DEFAULT 0xDEADF00D
+#define SLP_CMD_BIT 17
+#define PC_MODE_BIT 16
+#define RET_MODE_BIT 15
+#define EVENT_SYNC_BIT 24
+#define ISAR_BIT 3
+#define SPM_EN_BIT 0
 
 struct msm_spm_power_modes {
 	uint32_t mode;
-	uint32_t start_addr;
+	uint32_t ctl;
 };
 
 struct msm_spm_device {
@@ -209,16 +215,16 @@ static int msm_spm_dev_set_low_power_mode(struct msm_spm_device *dev,
 		unsigned int mode, bool notify_rpm)
 {
 	uint32_t i;
-	uint32_t start_addr = 0;
 	int ret = -EINVAL;
-	bool pc_mode = false;
+	uint32_t ctl;
+
+	if (!dev) {
+		pr_err("dev is NULL\n");
+		return -ENODEV;
+	}
 
 	if (!dev->initialized)
 		return -ENXIO;
-
-	if ((mode == MSM_SPM_MODE_POWER_COLLAPSE)
-			|| (mode == MSM_SPM_MODE_GDHS))
-		pc_mode = true;
 
 	if (mode == MSM_SPM_MODE_DISABLED) {
 		ret = msm_spm_drv_set_spm_enable(&dev->reg_data, false);
@@ -227,14 +233,13 @@ static int msm_spm_dev_set_low_power_mode(struct msm_spm_device *dev,
 			if (dev->modes[i].mode != mode)
 				continue;
 
+			ctl = dev->modes[i].ctl;
 			if (!dev->allow_rpm_hs && notify_rpm)
-				notify_rpm = false;
+				ctl &= ~BIT(SLP_CMD_BIT);
 
-			start_addr = dev->modes[i].start_addr;
 			break;
 		}
-		ret = msm_spm_drv_set_low_power_mode(&dev->reg_data,
-					start_addr, pc_mode, notify_rpm);
+		ret = msm_spm_drv_set_low_power_mode(&dev->reg_data, ctl);
 	}
 
 	msm_spm_config_q2s(dev, mode);
@@ -269,7 +274,8 @@ static int msm_spm_dev_init(struct msm_spm_device *dev,
 		/* Default offset is 0 and gets updated as we write more
 		 * sequences into SPM
 		 */
-		dev->modes[i].start_addr = offset;
+		dev->modes[i].ctl = data->modes[i].ctl | ((offset & 0x1FF)
+						<< 4);
 		ret = msm_spm_drv_write_seq_data(&dev->reg_data,
 						data->modes[i].cmd, &offset);
 		if (ret < 0)
@@ -277,7 +283,7 @@ static int msm_spm_dev_init(struct msm_spm_device *dev,
 
 		dev->modes[i].mode = data->modes[i].mode;
 	}
-	msm_spm_drv_flush_seq_entry(&dev->reg_data);
+	msm_spm_drv_reinit(&dev->reg_data);
 	dev->initialized = true;
 
 	return 0;
@@ -546,6 +552,7 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 	int cpu = 0;
 	int i = 0;
 	struct device_node *node = pdev->dev.of_node;
+	struct device_node *n = NULL;
 	struct msm_spm_platform_data spm_data;
 	char *key = NULL;
 	uint32_t val = 0;
@@ -689,15 +696,55 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 		spm_data.reg_init_values[spm_of_data[i].id] = val;
 	}
 
-	for (i = 0; i < ARRAY_SIZE(mode_of_data); i++) {
-		key = mode_of_data[i].key;
-		modes[mode_count].cmd =
-			(uint8_t *)of_get_property(node, key, &len);
-		if (!modes[mode_count].cmd)
+	for_each_child_of_node(node, n) {
+		const char *name;
+		bool bit_set;
+		int sync;
+
+		if (!n->name)
 			continue;
+
+		ret = of_property_read_string(n, "qcom,label", &name);
+		if (ret)
+			continue;
+
+		pr_err("label name %s\n", name);
+		for (i = 0; i < ARRAY_SIZE(mode_of_data); i++)
+			if (!strcmp(name, mode_of_data[i].key))
+					break;
+
+		if (i == ARRAY_SIZE(mode_of_data)) {
+			pr_err("Mode name invalid %s\n", name);
+			break;
+		}
+
 		modes[mode_count].mode = mode_of_data[i].id;
-		pr_debug("%s(): dev: %s cmd:%s, mode:%d\n", __func__,
-				dev->name, key, modes[mode_count].mode);
+		modes[mode_count].cmd =
+			(uint8_t *)of_get_property(n, "qcom,sequence", &len);
+		if (!modes[mode_count].cmd) {
+			pr_err("cmd is empty\n");
+			continue;
+		}
+
+		bit_set = of_property_read_bool(n, "qcom,pc_mode");
+		modes[mode_count].ctl |= bit_set ? BIT(PC_MODE_BIT) : 0;
+
+		bit_set = of_property_read_bool(n, "qcom,ret_mode");
+		modes[mode_count].ctl |= bit_set ? BIT(RET_MODE_BIT) : 0;
+
+		bit_set = of_property_read_bool(n, "qcom,slp_cmd_mode");
+		modes[mode_count].ctl |= bit_set ? BIT(SLP_CMD_BIT) : 0;
+
+		bit_set = of_property_read_bool(n, "qcom,isar");
+		modes[mode_count].ctl |= bit_set ? BIT(ISAR_BIT) : 0;
+
+		bit_set = of_property_read_bool(n, "qcom,spm_en");
+		modes[mode_count].ctl |= bit_set ? BIT(SPM_EN_BIT) : 0;
+
+		ret = of_property_read_u32(n, "qcom,event_sync", &sync);
+		if (!ret)
+			modes[mode_count].ctl |= sync << EVENT_SYNC_BIT;
+
 		mode_count++;
 	}
 

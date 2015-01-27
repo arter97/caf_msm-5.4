@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,8 +13,8 @@
 &soc {
 	qcom,spm@f9089000 {
 		compatible = "qcom,spm-v2";
-	#address-cells = <1>;
-	#size-cells = <1>;
+		#address-cells = <1>;
+		#size-cells = <1>;
 		reg = <0xf9089000 0x1000>;
 		qcom,name = "core0";
 		qcom,core-id = <0>;
@@ -26,11 +26,26 @@
 		qcom,saw2-avs-dly= <0>;
 		qcom,saw2-spm-dly= <0x3C102800>;
 		qcom,saw2-spm-ctl = <0x1>;
-		qcom,saw2-spm-cmd-wfi = [03 0b 0f];
-		qcom,saw2-spm-cmd-ret = [42 1b 00 d8 5b 03 3b d8 5b 0b 00
+		qcom,mode0 {
+			qcom,label = "qcom,saw2-spm-cmd-wfi";
+			qcom,sequence = [03 0b 0f];
+			qcom,spm_en;
+		};
+
+		qcom,mode1 {
+			qcom,label = "qcom,saw2-spm-cmd-ret";
+			qcom,sequence = [42 1b 00 d8 5b 03 3b d8 5b 0b 00
 				42 1b 0f];
-		qcom,saw2-spm-cmd-pc = [00 20 80 10 e8 5b 03 3b e8 5b 82
+			qcom,spm_en;
+		};
+
+		qcom,mode2 {
+			qcom,label = "qcom,saw2-spm-cmd-pc";
+			qcom,sequence = [00 20 80 10 e8 5b 03 3b e8 5b 82
 				10 0b 30 06 26 30 0f];
+			qcom,pc_mode;
+			qcom,spm_en;
+		};
 	};
 
 	qcom,spm@f9099000 {
@@ -48,11 +63,26 @@
 		qcom,saw2-avs-dly= <0>;
 		qcom,saw2-spm-dly= <0x3C102800>;
 		qcom,saw2-spm-ctl = <0x1>;
-		qcom,saw2-spm-cmd-wfi = [03 0b 0f];
-		qcom,saw2-spm-cmd-ret = [42 1b 00 d8 5b 03 3b d8 5b 0b 00
+		qcom,mode0 {
+			qcom,label = "qcom,saw2-spm-cmd-wfi";
+			qcom,sequence = [03 0b 0f];
+			qcom,spm_en;
+		};
+
+		qcom,mode1 {
+			qcom,label = "qcom,saw2-spm-cmd-ret";
+			qcom,sequence = [42 1b 00 d8 5b 03 3b d8 5b 0b 00
 				42 1b 0f];
-		qcom,saw2-spm-cmd-pc = [00 20 80 10 e8 5b 03 3b e8 5b 82
+			qcom,spm_en;
+		};
+
+		qcom,mode2 {
+			qcom,label = "qcom,saw2-spm-cmd-pc";
+			qcom,sequence = [00 20 80 10 e8 5b 03 3b e8 5b 82
 				10 0b 30 06 26 30 0f];
+			qcom,pc_mode;
+			qcom,spm_en;
+		};
 	};
 
 	qcom,spm@f90a9000 {
@@ -70,11 +100,26 @@
 		qcom,saw2-avs-dly= <0>;
 		qcom,saw2-spm-dly= <0x3C102800>;
 		qcom,saw2-spm-ctl = <0x1>;
-		qcom,saw2-spm-cmd-wfi = [03 0b 0f];
-		qcom,saw2-spm-cmd-ret = [42 1b 00 d8 5b 03 3b
-				d8 5b 0b 00 42 1b 0f];
-		qcom,saw2-spm-cmd-pc = [00 20 80 10 e8 5b 03 3b e8 5b 82
+		qcom,mode0 {
+			qcom,label = "qcom,saw2-spm-cmd-wfi";
+			qcom,sequence = [03 0b 0f];
+			qcom,spm_en;
+		};
+
+		qcom,mode1 {
+			qcom,label = "qcom,saw2-spm-cmd-ret";
+			qcom,sequence = [42 1b 00 d8 5b 03 3b d8 5b 0b 00
+				42 1b 0f];
+			qcom,spm_en;
+		};
+
+		qcom,mode2 {
+			qcom,label = "qcom,saw2-spm-cmd-pc";
+			qcom,sequence = [00 20 80 10 e8 5b 03 3b e8 5b 82
 				10 0b 30 06 26 30 0f];
+			qcom,pc_mode;
+			qcom,spm_en;
+		};
 	};
 
 	qcom,spm@f90b9000 {
@@ -92,11 +137,26 @@
 		qcom,saw2-avs-dly= <0>;
 		qcom,saw2-spm-dly= <0x3C102800>;
 		qcom,saw2-spm-ctl = <0x1>;
-		qcom,saw2-spm-cmd-wfi = [03 0b 0f];
-		qcom,saw2-spm-cmd-ret = [42 1b 00 d8 5b 03 3b
-				d8 5b 0b 00 42 1b 0f];
-		qcom,saw2-spm-cmd-pc = [00 20 80 10 e8 5b 03 3b e8 5b 82
+		qcom,mode0 {
+			qcom,label = "qcom,saw2-spm-cmd-wfi";
+			qcom,sequence = [03 0b 0f];
+			qcom,spm_en;
+		};
+
+		qcom,mode1 {
+			qcom,label = "qcom,saw2-spm-cmd-ret";
+			qcom,sequence = [42 1b 00 d8 5b 03 3b d8 5b 0b 00
+				42 1b 0f];
+			qcom,spm_en;
+		};
+
+		qcom,mode2 {
+			qcom,label = "qcom,saw2-spm-cmd-pc";
+			qcom,sequence = [00 20 80 10 e8 5b 03 3b e8 5b 82
 				10 0b 30 06 26 30 0f];
+			qcom,pc_mode;
+			qcom,spm_en;
+		};
 	};
 
 	qcom,spm@f9012000 {
@@ -121,10 +181,25 @@
 		qcom,phase-port = <0x1>;
 		qcom,pfm-port = <0x2>;
 		qcom,cpu-vctl-mask = <0xf>;
-		qcom,saw2-spm-cmd-ret = [1f 00 20 03 22 00 0f];
-		qcom,saw2-spm-cmd-gdhs = [00 20 32 42 03 44 22 50 02 32 50 0f];
-		qcom,saw2-spm-cmd-pc = [00 22 12 32 b0 11 42 07 01 b0 12 22
-				44 50 02 32 50 0f];
+		qcom,mode0 {
+			qcom,label = "qcom,saw2-spm-cmd-ret";
+			qcom,sequence = [1f 00 20 03 22 00 0f];
+			qcom,spm_en;
+		};
+
+		qcom,mode1 {
+			qcom,label = "qcom,saw2-spm-cmd-gdhs";
+			qcom,sequence = [00 20 32 42 03 44 22 50 02 32 50 0f];
+			qcom,spm_en;
+		};
+
+		qcom,mode2 {
+			qcom,label = "qcom,saw2-spm-cmd-pc";
+			qcom,sequence = [00 22 12 32 b0 11 42 07 01 b0 12 22
+			44 50 02 32 50 0f];
+			qcom,pc_mode;
+			qcom,spm_en;
+		};
 	};
 
 	qcom,lpm-levels {

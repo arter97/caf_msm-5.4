@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -140,42 +140,10 @@ static inline uint32_t msm_spm_drv_get_num_spm_entry(
 	return (dev->reg_shadow[MSM_SPM_REG_SAW_ID] >> 24) & 0xFF;
 }
 
-static inline void msm_spm_drv_set_notify_rpm(
-		struct msm_spm_driver_data *dev, bool notify_rpm)
-{
-	if (dev->major != 0x3)
-		return;
-
-	dev->reg_shadow[MSM_SPM_REG_SAW_SPM_CTL] &= ~BIT(17);
-	dev->reg_shadow[MSM_SPM_REG_SAW_SPM_CTL] |= notify_rpm << 17;
-}
-
-static inline void msm_spm_drv_set_start_addr2(
-		struct msm_spm_driver_data *dev, uint32_t addr, bool pc_mode)
-{
-	addr &= 0x1FF;
-	addr <<= 4;
-	dev->reg_shadow[MSM_SPM_REG_SAW_SPM_CTL] &= 0xFFFFF80F;
-	dev->reg_shadow[MSM_SPM_REG_SAW_SPM_CTL] |= addr;
-
-	if (dev->major != 0x3)
-		return;
-
-	dev->reg_shadow[MSM_SPM_REG_SAW_SPM_CTL] &= 0xFFFEFFFF;
-	if (pc_mode)
-		dev->reg_shadow[MSM_SPM_REG_SAW_SPM_CTL] |= 0x00010000;
-}
-
 static inline void msm_spm_drv_set_start_addr(
-		struct msm_spm_driver_data *dev, uint32_t addr, bool pc_mode)
+		struct msm_spm_driver_data *dev, uint32_t ctl)
 {
-	if (dev->major == 0x3)
-		return msm_spm_drv_set_start_addr2(dev, addr, pc_mode);
-
-	addr &= 0x7F;
-	addr <<= 4;
-	dev->reg_shadow[MSM_SPM_REG_SAW_SPM_CTL] &= 0xFFFFF80F;
-	dev->reg_shadow[MSM_SPM_REG_SAW_SPM_CTL] |= addr;
+	dev->reg_shadow[MSM_SPM_REG_SAW_SPM_CTL] = ctl;
 }
 
 static inline bool msm_spm_pmic_arb_present(struct msm_spm_driver_data *dev)
@@ -327,7 +295,7 @@ int msm_spm_drv_write_seq_data(struct msm_spm_driver_data *dev,
 }
 
 int msm_spm_drv_set_low_power_mode(struct msm_spm_driver_data *dev,
-		uint32_t addr, bool pc_mode, bool notify_rpm)
+		uint32_t ctl)
 {
 
 	/* SPM is configured to reset start address to zero after end of Program
@@ -335,8 +303,7 @@ int msm_spm_drv_set_low_power_mode(struct msm_spm_driver_data *dev,
 	if (!dev)
 		return -EINVAL;
 
-	msm_spm_drv_set_start_addr(dev, addr, pc_mode);
-	msm_spm_drv_set_notify_rpm(dev, notify_rpm);
+	msm_spm_drv_set_start_addr(dev, ctl);
 
 	msm_spm_drv_flush_shadow(dev, MSM_SPM_REG_SAW_SPM_CTL);
 	wmb();
@@ -527,11 +494,18 @@ void msm_spm_drv_reinit(struct msm_spm_driver_data *dev)
 {
 	int i;
 
+	msm_spm_drv_flush_seq_entry(dev);
+
 	for (i = 0; i < MSM_SPM_REG_SAW_PMIC_DATA_0 + num_pmic_data; i++)
 		msm_spm_drv_flush_shadow(dev, i);
 
-	msm_spm_drv_flush_seq_entry(dev);
 	mb();
+
+	for (i = 0; i < MSM_SPM_REG_SAW_PMIC_DATA_0 + num_pmic_data; i++)
+		msm_spm_drv_load_shadow(dev, i);
+
+	for (i = MSM_SPM_REG_NR_INITIALIZE + 1; i < MSM_SPM_REG_NR; i++)
+		msm_spm_drv_load_shadow(dev, i);
 }
 
 int msm_spm_drv_init(struct msm_spm_driver_data *dev,
@@ -571,20 +545,6 @@ int msm_spm_drv_init(struct msm_spm_driver_data *dev,
 
 	if (!num_pmic_data)
 		num_pmic_data = msm_spm_drv_get_num_pmic_data(dev);
-
-	for (i = 0; i < MSM_SPM_REG_SAW_PMIC_DATA_0 + num_pmic_data; i++)
-		msm_spm_drv_flush_shadow(dev, i);
-
-	/* barrier to ensure write completes before we update shadow
-	 * registers
-	 */
-	mb();
-
-	for (i = 0; i < MSM_SPM_REG_SAW_PMIC_DATA_0 + num_pmic_data; i++)
-		msm_spm_drv_load_shadow(dev, i);
-
-	/* barrier to ensure read completes before we proceed further*/
-	mb();
 
 	num_spm_entry = msm_spm_drv_get_num_spm_entry(dev);
 
