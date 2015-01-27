@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -510,7 +510,7 @@ static void msm_pcie_release_resources(void)
 static void msm_pcie_adjust_tlp_size(struct msm_pcie_dev_t *dev)
 {
 	usleep_range(1000, 1000);
-	writel_relaxed(4, dev->pcie20 +
+	writel_relaxed(3, dev->pcie20 +
 				 PCIE20_PLR_AXI_MSTR_RESP_COMP_CTRL0);
 	usleep_range(1000, 1000);
 	writel_relaxed(1, dev->pcie20 +
