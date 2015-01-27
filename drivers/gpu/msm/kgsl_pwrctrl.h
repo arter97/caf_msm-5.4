@@ -133,6 +133,7 @@ struct kgsl_pwrctrl {
 	unsigned int pm_qos_wakeup_latency;
 	bool bus_control;
 	int bus_mod;
+	struct device *devbw;
 	unsigned int bus_index[KGSL_MAX_PWRLEVELS];
 	uint64_t bus_ib[KGSL_MAX_PWRLEVELS];
 	struct kgsl_pwr_constraint constraint;
