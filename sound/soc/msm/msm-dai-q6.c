@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -66,9 +66,9 @@ static int msm_dai_q6_mi2s_format_put(struct snd_kcontrol *kcontrol,
 	struct msm_dai_q6_dai_data *dai_data = kcontrol->private_data;
 	int value = ucontrol->value.integer.value[0];
 	dai_data->port_config.mi2s.format = value;
-	pr_debug("%s: value = %d, channel = %d, line = %d\n",
+	pr_debug("%s: value = %d, channel = %d, format = %d\n",
 		   __func__, value, dai_data->port_config.mi2s.channel,
-		   dai_data->port_config.mi2s.line);
+		   dai_data->port_config.mi2s.format);
 	return 0;
 }
 
@@ -78,6 +78,47 @@ static int msm_dai_q6_mi2s_format_get(struct snd_kcontrol *kcontrol,
 
 	struct msm_dai_q6_dai_data *dai_data = kcontrol->private_data;
 	ucontrol->value.integer.value[0] = dai_data->port_config.mi2s.format ;
+	return 0;
+}
+
+
+static int msm_mi2s_sd_line_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct msm_dai_q6_mi2s_dai_config *mi2s_dai_config =
+		kcontrol->private_data;
+	ucontrol->value.integer.value[0] = mi2s_dai_config->pdata_mi2s_lines;
+	pr_debug("%s: pdata_mi2s_lines  = %d", __func__,
+		mi2s_dai_config->pdata_mi2s_lines);
+	return 0;
+}
+
+static int msm_mi2s_sd_line_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct msm_dai_q6_mi2s_dai_config *mi2s_dai_config =
+		kcontrol->private_data;
+	int value = ucontrol->value.integer.value[0];
+
+	switch (value) {
+	case 0:
+		mi2s_dai_config->pdata_mi2s_lines = MSM_MI2S_SD0;
+		break;
+	case 1:
+		mi2s_dai_config->pdata_mi2s_lines = MSM_MI2S_SD1;
+		break;
+	case 2:
+		mi2s_dai_config->pdata_mi2s_lines = MSM_MI2S_SD2;
+		break;
+	case 3:
+		mi2s_dai_config->pdata_mi2s_lines = MSM_MI2S_SD3;
+		break;
+	default:
+		mi2s_dai_config->pdata_mi2s_lines = MSM_MI2S_SD0;
+		break;
+	}
+	pr_debug("%s: pdata_mi2s_lines = %d\n",
+	 __func__, mi2s_dai_config->pdata_mi2s_lines);
 	return 0;
 }
 
@@ -98,6 +139,11 @@ static const struct soc_enum mi2s_config_enum[] = {
 	SOC_ENUM_SINGLE_EXT(4, mi2s_format),
 };
 
+static const char * const mi2s_data_line_text[] = {"SD0", "SD1", "SD2", "SD3"};
+static const struct soc_enum msm_mi2s_sd_line_enum[] = {
+	SOC_ENUM_SINGLE_EXT(4, mi2s_data_line_text),
+};
+
 static const struct snd_kcontrol_new mi2s_config_controls[] = {
 	SOC_ENUM_EXT("MI2S RX Format", mi2s_config_enum[0],
 				 msm_dai_q6_mi2s_format_get,
@@ -108,6 +154,9 @@ static const struct snd_kcontrol_new mi2s_config_controls[] = {
 	SOC_ENUM_EXT("MI2S TX Format", mi2s_config_enum[0],
 				 msm_dai_q6_mi2s_format_get,
 				 msm_dai_q6_mi2s_format_put),
+	SOC_ENUM_EXT("MI2S_RX sd_lines", msm_mi2s_sd_line_enum[0],
+				 msm_mi2s_sd_line_get,
+				 msm_mi2s_sd_line_put),
 };
 
 static u8 num_of_bits_set(u8 sd_line_mask)
@@ -1266,6 +1315,16 @@ static int msm_dai_q6_dai_mi2s_probe(struct snd_soc_dai *dai)
 
 		if (IS_ERR_VALUE(rc)) {
 			dev_err(dai->dev, "%s: err add RX fmt ctl\n", __func__);
+			goto rtn;
+		}
+
+		kcontrol = snd_ctl_new1(&mi2s_config_controls[3],
+					&mi2s_dai_data->rx_dai);
+		rc = snd_ctl_add(dai->card->snd_card, kcontrol);
+
+		if (IS_ERR_VALUE(rc)) {
+			dev_err(dai->dev, "%s: err add MI2S RX sd lines selection ctl\n",
+				__func__);
 			goto rtn;
 		}
 	}
