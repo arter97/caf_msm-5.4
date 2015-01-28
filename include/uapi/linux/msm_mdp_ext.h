@@ -301,30 +301,25 @@ struct mdp_layer_commit_v1 {
 	uint32_t		input_layer_cnt;
 
 	/*
-	 * For writeback display output, layers are valid while retire fence is
-	 * valid for primary and external. Vice versa is not a valid
-	 * combination.
+	 * Output layer for writeback display. It supports only one
+	 * layer as output layer. This is not required for primary
+	 * and external displays
 	 */
-	union {
-		/*
-		 * Output layer for writeback display. It supports only one
-		 * layer as output layer.
-		 */
-		struct mdp_output_layer __user *output_layer;
+	struct mdp_output_layer __user *output_layer;
 
-		/*
-		 * This is an output parameter.
-		 *
-		 * Frame buffer device provides retire fence handle if
-		 * COMMIT_RETIRE_FENCE flag is set in commit call. It triggers
-		 * retire fence when current layers are swapped with new layers
-		 * on display hardware. For video mode panel, retire fence and
-		 * release fences are triggered at the same time while command
-		 * mode panel triggers release fence first (on pingpong done)
-		 * and retire fence (on rdptr done) after that.
-		 */
-		int			retire_fence;
-	};
+	/*
+	 * This is an output parameter.
+	 *
+	 * Frame buffer device provides retire fence handle if
+	 * COMMIT_RETIRE_FENCE flag is set in commit call. It triggers
+	 * retire fence when current layers are swapped with new layers
+	 * on display hardware. For video mode panel and writeback,
+	 * retire fence and release fences are triggered at the same
+	 * time while command mode panel triggers release fence first
+	 * (on pingpong done) and retire fence (on rdptr done)
+	 * after that.
+	 */
+	int			retire_fence;
 
 	/* 32-bits reserved value for future usage. */
 	uint32_t		reserved[6];
