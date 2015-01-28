@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  * Copyright (c) 2013 ARM Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -181,6 +181,19 @@ static int msm8994_cpu_boot(unsigned int cpu)
 	return secondary_pen_release(cpu);
 }
 
+static int __init msmthulium_cpu_prepare(unsigned int cpu)
+{
+	int ret;
+
+	if (per_cpu(cold_boot_done, 0) == false) {
+		ret = msmthulium_cpuss_pm_init(0);
+		if (ret)
+			return ret;
+	}
+
+	return msm_cpu_prepare(cpu);
+}
+
 static int msmthulium_cpu_boot(unsigned int cpu)
 {
 	int ret = 0;
@@ -261,7 +274,7 @@ CPU_METHOD_OF_DECLARE(msm8994_cortex_a_ops, &msm8994_cortex_a_ops);
 static const struct cpu_operations msmthulium_ops = {
 	.name		= "qcom,msmthulium-acc",
 	.cpu_init	= msm_cpu_init,
-	.cpu_prepare	= msm_cpu_prepare,
+	.cpu_prepare	= msmthulium_cpu_prepare,
 	.cpu_boot	= msmthulium_cpu_boot,
 	.cpu_postboot	= msm_cpu_postboot,
 #ifdef CONFIG_HOTPLUG_CPU

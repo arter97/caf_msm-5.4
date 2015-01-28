@@ -217,6 +217,20 @@ nodes to be present and contain the properties described below.
 		Definition: Specifies the LDO reference node associated with
 			    this cpu.
 
+	- qcom,cpuss-csr
+		Usage: required for systems that need different configurations
+		       depending upon the CPU subsystem hardware revision
+		Value type: <phandle>
+		Definition: Specifies the CPUSS CSR device node associated with
+			    this CPU.
+
+	- qcom,cpuss-pm
+		Usage: required for systems that need configuration of CPU subsystem
+		       power management registers before CPU boot sequence execution
+		Value type: <phandle>
+		Definition: Specifies the CPUSS PM device node associated with
+			    this CPU.
+
 Example 1 (dual-cluster big.LITTLE system 32-bit):
 
 	cpus {
