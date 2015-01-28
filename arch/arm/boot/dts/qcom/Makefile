@@ -91,6 +91,8 @@ dtb-$(CONFIG_ARCH_MSMTHULIUM) += msmthulium-sim.dtb \
 	msmthulium-rumi.dtb \
 	msmthulium-cdp.dtb \
 	msmthulium-mtp.dtb \
+	msmthulium-pmi8994-pm8004-cdp.dtb \
+	msmthulium-pmi8994-pm8004-mtp.dtb \
 	msmthulium-fluid.dtb
 
 targets += dtbs
