@@ -73,6 +73,7 @@ static int vdd_mmpll4_levels[] = {
 
 static DEFINE_VDD_REGULATORS(vdd_mmpll4, VDD_DIG_NUM, 2, vdd_mmpll4_levels,
 									NULL);
+DEFINE_VDD_REGS_INIT(vdd_gfx, 1);
 
 static struct alpha_pll_masks pll_masks_p = {
 	.lock_mask = BIT(31),
@@ -324,8 +325,7 @@ static struct rcg_clk gfx3d_clk_src = {
 	.c = {
 		.dbg_name = "gfx3d_clk_src",
 		.ops = &clk_ops_rcg,
-		VDD_DIG_FMAX_MAP4(LOWER, 120000000, LOW, 205000000,
-					NOMINAL, 360000000, HIGH, 480000000),
+		.vdd_class = &vdd_gfx,
 		CLK_INIT(gfx3d_clk_src.c),
 	},
 };
@@ -3283,6 +3283,59 @@ static struct clk_lookup msm_clocks_mmss_thulium[] = {
 	CLK_LIST(mmss_gcc_dbg_clk),
 };
 
+static int of_get_fmax_vdd_class(struct platform_device *pdev, struct clk *c,
+								char *prop_name)
+{
+	struct device_node *of = pdev->dev.of_node;
+	int prop_len, i;
+	struct clk_vdd_class *vdd = c->vdd_class;
+	u32 *array;
+
+	if (!of_find_property(of, prop_name, &prop_len)) {
+		dev_err(&pdev->dev, "missing %s\n", prop_name);
+		return -EINVAL;
+	}
+
+	prop_len /= sizeof(u32);
+	if (prop_len % 2) {
+		dev_err(&pdev->dev, "bad length %d\n", prop_len);
+		return -EINVAL;
+	}
+
+	prop_len /= 2;
+	vdd->level_votes = devm_kzalloc(&pdev->dev, prop_len * sizeof(int),
+					GFP_KERNEL);
+	if (!vdd->level_votes)
+		return -ENOMEM;
+
+	vdd->vdd_uv = devm_kzalloc(&pdev->dev, prop_len * sizeof(int),
+					GFP_KERNEL);
+	if (!vdd->vdd_uv)
+		return -ENOMEM;
+
+	c->fmax = devm_kzalloc(&pdev->dev, prop_len * sizeof(unsigned long),
+					GFP_KERNEL);
+	if (!c->fmax)
+		return -ENOMEM;
+
+	array = devm_kzalloc(&pdev->dev,
+			prop_len * sizeof(u32) * 2, GFP_KERNEL);
+	if (!array)
+		return -ENOMEM;
+
+	of_property_read_u32_array(of, prop_name, array, prop_len * 2);
+	for (i = 0; i < prop_len; i++) {
+		c->fmax[i] = array[2 * i];
+		vdd->vdd_uv[i] = array[2 * i + 1];
+	}
+
+	devm_kfree(&pdev->dev, array);
+	vdd->num_levels = prop_len;
+	vdd->cur_level = prop_len;
+	c->num_fmax = prop_len;
+	return 0;
+}
+
 int msm_mmsscc_thulium_probe(struct platform_device *pdev)
 {
 	struct resource *res;
@@ -3324,6 +3377,14 @@ int msm_mmsscc_thulium_probe(struct platform_device *pdev)
 		return PTR_ERR(reg);
 	}
 
+	reg = vdd_gfx.regulator[0] = devm_regulator_get(&pdev->dev,
+								"vdd_gfx");
+	if (IS_ERR(reg)) {
+		if (PTR_ERR(reg) != -EPROBE_DEFER)
+			dev_err(&pdev->dev, "Unable to get vdd_gfx regulator!");
+		return PTR_ERR(reg);
+	}
+
 	tmp = mmsscc_xo.c.parent = devm_clk_get(&pdev->dev, "xo");
 	if (IS_ERR(tmp)) {
 		if (PTR_ERR(tmp) != -EPROBE_DEFER)
@@ -3359,6 +3420,13 @@ int msm_mmsscc_thulium_probe(struct platform_device *pdev)
 	edp_pixel_clk_src.clk_id = "extpixel_src";
 	edp_mainlink_clk_src.dev = &pdev->dev;
 	edp_mainlink_clk_src.clk_id = "edp_mainlink";
+
+	rc = of_get_fmax_vdd_class(pdev, &gfx3d_clk_src.c,
+					"qcom,gfxfreq-corner-v0");
+	if (rc) {
+		dev_err(&pdev->dev, "Unable to get gfx freq-corner mapping info\n");
+		return rc;
+	}
 
 	rc = of_msm_clock_register(pdev->dev.of_node, msm_clocks_mmss_thulium,
 				   ARRAY_SIZE(msm_clocks_mmss_thulium));

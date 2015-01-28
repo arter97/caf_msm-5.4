@@ -646,6 +646,15 @@
 		vdd_dig-supply = <&pm8994_s1_corner>;
 		mmpll4_dig-supply = <&pm8994_s1_corner>;
 		mmpll4_analog-supply = <&pm8994_l12>;
+		vdd_gfx-supply = <&pmi8994_s2_corner>;
+		qcom,gfxfreq-corner-v0 =
+			<	   0  0 >,
+			<   19200000  1 >,
+			<   60000000  1 >,
+			<  120000000  1 >,
+			<  205000000  2 >,
+			<  360000000  3 >,
+			<  480000000  4 >;
 		clock-names = "xo", "gpll0", "gpll0_div";
 		clocks = <&clock_gcc clk_cxo_clk_src>,
 			 <&clock_gcc clk_gpll0_out_main>,
