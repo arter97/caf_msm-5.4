@@ -281,6 +281,12 @@ static const struct qmp_reg_val qmp_settings_rev0_misc[] = {
 	{-1, -1} /* terminating entry */
 };
 
+/* Override for SYSCLK */
+static const struct qmp_reg_val qmp_override_sysclk[] = {
+	{0xAC, 0x17}, /* QSERDES_COM_SYSCLK_EN_SEL */
+	{-1, -1} /* terminating entry */
+};
+
 struct msm_ssphy_qmp {
 	struct usb_phy		phy;
 	void __iomem		*base;
@@ -543,6 +549,7 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 		break;
 	case 0x20000000:
 		reg = qmp_settings_rev2;
+		misc = qmp_override_sysclk;
 		break;
 	default:
 		dev_err(uphy->dev, "Unknown revid 0x%x, cannot initialize PHY\n",
