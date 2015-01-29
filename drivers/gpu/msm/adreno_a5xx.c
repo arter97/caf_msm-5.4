@@ -22,6 +22,9 @@
 #include "kgsl_log.h"
 #include "kgsl.h"
 
+void a5xx_snapshot(struct adreno_device *adreno_dev,
+		struct kgsl_snapshot *snapshot);
+
 static const struct adreno_vbif_data a530_vbif[] = {
 	{A5XX_VBIF_ROUND_ROBIN_QOS_ARB, 0x00000003},
 	{0, 0},
@@ -271,7 +274,7 @@ int a5xx_rb_init(struct adreno_device *adreno_dev,
 }
 
 static int _load_firmware(struct adreno_device *adreno_dev, const char *fwfile,
-			  struct kgsl_memdesc *ucode)
+			  struct kgsl_memdesc *ucode, size_t *ucode_size)
 {
 	struct kgsl_device *device = &adreno_dev->dev;
 	const struct firmware *fw = NULL;
@@ -291,7 +294,8 @@ static int _load_firmware(struct adreno_device *adreno_dev, const char *fwfile,
 	if (ret)
 		return ret;
 
-	memcpy(ucode->hostptr, &fw->data[4], fw->size);
+	memcpy(ucode->hostptr, &fw->data[4], fw->size - 4);
+	*ucode_size = (fw->size - 4) / sizeof(uint32_t);
 
 	release_firmware(fw);
 
@@ -307,12 +311,14 @@ void a5xx_microcode_read(struct adreno_device *adreno_dev)
 	int ret;
 
 	ret = _load_firmware(adreno_dev,
-			 adreno_dev->gpucore->pm4fw_name, &adreno_dev->pm4);
+			 adreno_dev->gpucore->pm4fw_name, &adreno_dev->pm4,
+						 &adreno_dev->pm4_fw_size);
 	if (ret)
 		return;
 
 	ret = _load_firmware(adreno_dev,
-			 adreno_dev->gpucore->pfpfw_name, &adreno_dev->pfp);
+			 adreno_dev->gpucore->pfpfw_name, &adreno_dev->pfp,
+						 &adreno_dev->pfp_fw_size);
 	if (ret)
 		return;
 }
@@ -671,13 +677,14 @@ static unsigned int a5xx_register_offsets[ADRENO_REG_REGISTER_MAX] = {
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_IB2_BASE, A5XX_CP_IB2_BASE),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_IB2_BASE_HI, A5XX_CP_IB2_BASE_HI),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_IB2_BUFSZ, A5XX_CP_IB2_BUFSZ),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_ROQ_ADDR, ADRENO_REG_UNUSED),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_ROQ_DATA, ADRENO_REG_UNUSED),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_MERCIU_ADDR, ADRENO_REG_UNUSED),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_MERCIU_DATA, ADRENO_REG_UNUSED),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_MERCIU_DATA2, ADRENO_REG_UNUSED),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_MEQ_ADDR, ADRENO_REG_UNUSED),
-	ADRENO_REG_DEFINE(ADRENO_REG_CP_MEQ_DATA, ADRENO_REG_UNUSED),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_ROQ_ADDR, A5XX_CP_ROQ_DBG_ADDR),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_ROQ_DATA, A5XX_CP_ROQ_DBG_DATA),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_MERCIU_ADDR, A5XX_CP_MERCIU_DBG_ADDR),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_MERCIU_DATA, A5XX_CP_MERCIU_DBG_DATA_1),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_MERCIU_DATA2,
+				A5XX_CP_MERCIU_DBG_DATA_2),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_MEQ_ADDR, A5XX_CP_MEQ_DBG_ADDR),
+	ADRENO_REG_DEFINE(ADRENO_REG_CP_MEQ_DATA, A5XX_CP_MEQ_DBG_DATA),
 	ADRENO_REG_DEFINE(ADRENO_REG_CP_PROTECT_REG_0, A5XX_CP_PROTECT_REG_0),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_STATUS, A5XX_RBBM_STATUS),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_PERFCTR_CTL, A5XX_RBBM_PERFCTR_CNTL),
@@ -859,12 +866,27 @@ static struct adreno_irq a5xx_irq = {
 	.mask = A5XX_INT_MASK,
 };
 
+static struct adreno_snapshot_sizes a5xx_snap_sizes = {
+	.cp_pfp = 36,
+	.cp_me = 29,
+	.cp_meq = 64,
+	.cp_merciu = 64,
+	.roq = 512,
+	.shader_mem = 0x4000,
+};
+
+static struct adreno_snapshot_data a5xx_snapshot_data = {
+	.sect_sizes = &a5xx_snap_sizes,
+};
+
 struct adreno_gpudev adreno_a5xx_gpudev = {
 	.reg_offsets = &a5xx_reg_offsets,
 	.ft_perf_counters = a5xx_ft_perf_counters,
 	.ft_perf_counters_count = ARRAY_SIZE(a5xx_ft_perf_counters),
 	.start = a5xx_start,
+	.snapshot = a5xx_snapshot,
 	.irq = &a5xx_irq,
+	.snapshot_data = &a5xx_snapshot_data,
 	.irq_trace = trace_kgsl_a5xx_irq_status,
 	.num_prio_levels = 1,
 	.rb_init = a5xx_rb_init,

@@ -54,16 +54,33 @@
 #define A5XX_CP_RB_CNTL                  0x802
 #define A5XX_CP_RB_RPTR                  0x806
 #define A5XX_CP_RB_WPTR                  0x807
+#define A5XX_CP_PFP_STAT_ADDR            0x808
+#define A5XX_CP_PFP_STAT_DATA            0x809
+#define A5XX_CP_DRAW_STATE_ADDR          0x80B
+#define A5XX_CP_DRAW_STATE_DATA          0x80C
+#define A5XX_CP_ME_STAT_ADDR             0x81A
 #define A5XX_CP_ROQ_THRESHOLDS_1         0x81F
 #define A5XX_CP_ROQ_THRESHOLDS_2         0x820
+#define A5XX_CP_ROQ_DBG_ADDR             0x821
+#define A5XX_CP_ROQ_DBG_DATA             0x822
+#define A5XX_CP_MEQ_DBG_ADDR             0x823
+#define A5XX_CP_MEQ_DBG_DATA             0x824
 #define A5XX_CP_MEQ_THRESHOLDS           0x825
 #define A5XX_CP_MERCIU_SIZE              0x826
+#define A5XX_CP_MERCIU_DBG_ADDR          0x827
+#define A5XX_CP_MERCIU_DBG_DATA_1        0x828
+#define A5XX_CP_MERCIU_DBG_DATA_2        0x829
+#define A5XX_CP_PFP_UCODE_DBG_ADDR       0x82A
+#define A5XX_CP_PFP_UCODE_DBG_DATA       0x82B
+#define A5XX_CP_ME_UCODE_DBG_ADDR        0x82F
+#define A5XX_CP_ME_UCODE_DBG_DATA        0x830
 #define A5XX_CP_ME_CNTL                  0x832
 #define A5XX_CP_PFP_INSTR_BASE_LO        0x835
 #define A5XX_CP_PFP_INSTR_BASE_HI        0x836
 #define A5XX_CP_PM4_INSTR_BASE_LO        0x838
 #define A5XX_CP_PM4_INSTR_BASE_HI        0x839
 #define A5XX_CP_PROTECT_STATUS           0x8A0
+#define A5XX_CP_ME_STAT_DATA             0xB14
 #define A5XX_CP_WFI_PEND_CTR             0xB15
 #define A5XX_CP_HW_FAULT                 0xB1A
 #define A5XX_CP_IB1_BASE                 0xB1F
@@ -87,6 +104,22 @@
 #define A5XX_CACHE_FLUSH_TS              0x4
 
 /* RBBM registers */
+#define A5XX_RBBM_CFG_DBGBUS_SEL_A                   0x4
+#define A5XX_RBBM_CFG_DBGBUS_SEL_B                   0x5
+#define A5XX_RBBM_CFG_DBGBUS_SEL_C                   0x6
+#define A5XX_RBBM_CFG_DBGBUS_SEL_D                   0x7
+#define A5XX_RBBM_CFG_DBGBUS_SEL_PING_INDEX_SHIFT    0x0
+#define A5XX_RBBM_CFG_DBGBUS_SEL_PING_BLK_SEL_SHIFT  0x8
+#define A5XX_RBBM_CFG_DBGBUS_SEL_PONG_INDEX_SHIFT    0x10
+#define A5XX_RBBM_CFG_DBGBUS_SEL_PONG_BLK_SEL_SHIFT  0x18
+
+#define A5XX_RBBM_CFG_DBGBUS_CNTLM               0x9
+#define A5XX_RBBM_CFG_DEBBUS_CTLTM_ENABLE_SHIFT	 0x18
+#define A5XX_RBBM_CFG_DBGBUS_TRACE_BUF1          0x50E
+#define A5XX_RBBM_CFG_DBGBUS_TRACE_BUF2          0x50F
+
+#define A5XX_RBBM_CFG_DBGBUS_IDX                 0x22
+
 #define A5XX_RBBM_INTERFACE_HANG_INT_CNTL        0x2F
 #define A5XX_RBBM_INT_CLEAR_CMD                  0x37
 #define A5XX_RBBM_INT_0_MASK                     0x38
@@ -98,25 +131,6 @@
 #define A5XX_RBBM_AHB_CNTL1                      0x94
 #define A5XX_RBBM_AHB_CNTL2                      0x95
 #define A5XX_RBBM_AHB_CMD                        0x96
-#define A5XX_RBBM_ALWAYSON_COUNTER_LO            0x4D2
-#define A5XX_RBBM_ALWAYSON_COUNTER_HI            0x4D3
-#define A5XX_RBBM_STATUS                         0x4F5
-#define A5XX_RBBM_INT_0_STATUS                   0x4E1
-#define A5XX_RBBM_AHB_ME_SPLIT_STATUS            0x4F0
-#define A5XX_RBBM_AHB_PFP_SPLIT_STATUS           0x4F1
-#define A5XX_RBBM_AHB_ERROR_STATUS               0x4F4
-#define A5XX_RBBM_PERFCTR_CNTL                   0x464
-#define A5XX_RBBM_PERFCTR_LOAD_CMD0              0x465
-#define A5XX_RBBM_PERFCTR_LOAD_CMD1              0x466
-#define A5XX_RBBM_PERFCTR_LOAD_CMD2              0x467
-#define A5XX_RBBM_PERFCTR_LOAD_CMD3              0x468
-#define A5XX_RBBM_PERFCTR_LOAD_VALUE_LO          0x469
-#define A5XX_RBBM_PERFCTR_LOAD_VALUE_HI          0x46A
-#define A5XX_RBBM_PERFCTR_RBBM_SEL_0             0x46B
-#define A5XX_RBBM_PERFCTR_RBBM_SEL_1             0x46C
-#define A5XX_RBBM_PERFCTR_RBBM_SEL_2             0x46D
-#define A5XX_RBBM_PERFCTR_RBBM_SEL_3             0x46E
-#define A5XX_RBBM_PERFCTR_GPU_BUSY_MASKED        0x46F
 #define A5XX_RBBM_PERFCTR_CP_0_LO                0x3A0
 #define A5XX_RBBM_PERFCTR_CP_0_HI                0x3A1
 #define A5XX_RBBM_PERFCTR_CP_1_LO                0x3A2
@@ -317,6 +331,26 @@
 #define A5XX_RBBM_PERFCTR_RBBM_SEL_1             0x46C
 #define A5XX_RBBM_PERFCTR_RBBM_SEL_2             0x46D
 #define A5XX_RBBM_PERFCTR_RBBM_SEL_3             0x46E
+#define A5XX_RBBM_ALWAYSON_COUNTER_LO            0x4D2
+#define A5XX_RBBM_ALWAYSON_COUNTER_HI            0x4D3
+#define A5XX_RBBM_STATUS                         0x4F5
+#define A5XX_RBBM_INT_0_STATUS                   0x4E1
+#define A5XX_RBBM_AHB_ME_SPLIT_STATUS            0x4F0
+#define A5XX_RBBM_AHB_PFP_SPLIT_STATUS           0x4F1
+#define A5XX_RBBM_AHB_ERROR_STATUS               0x4F4
+#define A5XX_RBBM_PERFCTR_CNTL                   0x464
+#define A5XX_RBBM_PERFCTR_LOAD_CMD0              0x465
+#define A5XX_RBBM_PERFCTR_LOAD_CMD1              0x466
+#define A5XX_RBBM_PERFCTR_LOAD_CMD2              0x467
+#define A5XX_RBBM_PERFCTR_LOAD_CMD3              0x468
+#define A5XX_RBBM_PERFCTR_LOAD_VALUE_LO          0x469
+#define A5XX_RBBM_PERFCTR_LOAD_VALUE_HI          0x46A
+#define A5XX_RBBM_PERFCTR_RBBM_SEL_0             0x46B
+#define A5XX_RBBM_PERFCTR_RBBM_SEL_1             0x46C
+#define A5XX_RBBM_PERFCTR_RBBM_SEL_2             0x46D
+#define A5XX_RBBM_PERFCTR_RBBM_SEL_3             0x46E
+#define A5XX_RBBM_PERFCTR_GPU_BUSY_MASKED        0x46F
+#define A5XX_RBBM_CFG_DBGBUS_TRACE_BUF4          0x511
 #define A5XX_RBBM_SECVID_TRUST_CONFIG            0xF000
 #define A5XX_RBBM_SECVID_TRUST_CNTL              0xF400
 #define A5XX_RBBM_SECVID_TSB_TRUSTED_BASE_LO     0xF800
@@ -386,6 +420,7 @@
 #define A5XX_PC_PERFCTR_PC_SEL_7            0xD17
 
 /* HLSQ registers */
+#define A5XX_HLSQ_TIMEOUT_THRESHOLD         0xE00
 #define A5XX_HLSQ_PERFCTR_HLSQ_SEL_0        0xE10
 #define A5XX_HLSQ_PERFCTR_HLSQ_SEL_1        0xE11
 #define A5XX_HLSQ_PERFCTR_HLSQ_SEL_2        0xE12
@@ -394,6 +429,9 @@
 #define A5XX_HLSQ_PERFCTR_HLSQ_SEL_5        0xE15
 #define A5XX_HLSQ_PERFCTR_HLSQ_SEL_6        0xE16
 #define A5XX_HLSQ_PERFCTR_HLSQ_SEL_7        0xE17
+#define A5XX_HLSQ_SPTP_RDSEL                0xF08
+#define A5XX_HLSQ_DBG_READ_SEL              0xBC00
+#define A5XX_HLSQ_DBG_AHB_READ_APERTURE     0xA000
 
 /* VFD registers */
 #define A5XX_VFD_PERFCTR_VFD_SEL_0          0xE50
@@ -452,6 +490,11 @@
 
 
 /* VBIF registers */
+#define A5XX_VBIF_VERSION                       0x3000
+#define A5XX_VBIF_CLKON                         0x3001
+#define A5XX_VBIF_CLKON_FORCE_ON_TESTBUS_MASK   0x1
+#define A5XX_VBIF_CLKON_FORCE_ON_TESTBUS_SHIFT  0x1
+
 #define A5XX_VBIF_ABIT_SORT                0x3028
 #define A5XX_VBIF_ABIT_SORT_CONF           0x3029
 #define A5XX_VBIF_ROUND_ROBIN_QOS_ARB      0x3049
@@ -462,6 +505,22 @@
 #define A5XX_VBIF_XIN_HALT_CTRL0	   0x3080
 #define A5XX_VBIF_XIN_HALT_CTRL0_MASK	   0xF
 #define A5XX_VBIF_XIN_HALT_CTRL1	   0x3081
+
+#define A5XX_VBIF_TEST_BUS_OUT_CTRL            0x3084
+#define A5XX_VBIF_TEST_BUS_OUT_CTRL_EN_MASK    0x1
+#define A5XX_VBIF_TEST_BUS_OUT_CTRL_EN_SHIFT   0x0
+
+#define A5XX_VBIF_TEST_BUS1_CTRL0                0x3085
+#define A5XX_VBIF_TEST_BUS1_CTRL1                0x3086
+#define A5XX_VBIF_TEST_BUS1_CTRL1_DATA_SEL_MASK  0xF
+#define A5XX_VBIF_TEST_BUS1_CTRL1_DATA_SEL_SHIFT 0x0
+
+#define A5XX_VBIF_TEST_BUS2_CTRL0                   0x3087
+#define A5XX_VBIF_TEST_BUS2_CTRL1                   0x3088
+#define A5XX_VBIF_TEST_BUS2_CTRL1_DATA_SEL_MASK     0xF
+#define A5XX_VBIF_TEST_BUS2_CTRL1_DATA_SEL_SHIFT    0x0
+
+#define A5XX_VBIF_TEST_BUS_OUT             0x308c
 
 #define A5XX_VBIF_PERF_CNT_SEL0            0x30D0
 #define A5XX_VBIF_PERF_CNT_SEL1            0x30D1
