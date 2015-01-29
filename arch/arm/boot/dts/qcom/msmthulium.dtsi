@@ -202,6 +202,30 @@
 		   reg = <0x09820000 0x10000>;
 	};
 
+	apc_apm: apm@099e0000 {
+		compatible = "qcom,msm-apm";
+		reg = <0x099e0000 0x1000>,
+			<0x09820000 0x10000>,
+			<0x06400050 0x8>,
+			<0x06480050 0x8>,
+			<0x09981068 0x8>,
+			<0x09991068 0x8>,
+			<0x099b1068 0x8>,
+			<0x099c1068 0x8>,
+			<0x099a1068 0x8>,
+			<0x099d1068 0x8>;
+		reg-names = "pm-apcc-glb",
+				"apcs-csr",
+				"apc0-pll-ctl",
+				"apc1-pll-ctl",
+				"apc0-cpu0-spm",
+				"apc0-cpu1-spm",
+				"apc1-cpu0-spm",
+				"apc1-cpu1-spm",
+				"apc0-l2-spm",
+				"apc1-l2-spm";
+	};
+
 	intc: interrupt-controller@09bc0000 {
 		compatible = "arm,gic-v3";
 		#interrupt-cells = <3>;
