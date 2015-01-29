@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -105,6 +105,10 @@ static const int ep_mapping[2][IPA_CLIENT_MAX] = {
 	[IPA_2_0][IPA_CLIENT_ODU_PROD]           = 12,
 	[IPA_2_0][IPA_CLIENT_Q6_LAN_PROD]        =  6,
 	[IPA_2_0][IPA_CLIENT_Q6_CMD_PROD]        =  7,
+	[IPA_2_0][IPA_CLIENT_MEMCPY_DMA_SYNC_PROD]
+						 =  12,
+	[IPA_2_0][IPA_CLIENT_MEMCPY_DMA_ASYNC_PROD]
+						 =  19,
 
 	[IPA_2_0][IPA_CLIENT_HSIC1_CONS]         = 13,
 	[IPA_2_0][IPA_CLIENT_WLAN1_CONS]         = 14,
@@ -130,6 +134,10 @@ static const int ep_mapping[2][IPA_CLIENT_MAX] = {
 	[IPA_2_0][IPA_CLIENT_Q6_LAN_CONS]        =  8,
 	[IPA_2_0][IPA_CLIENT_Q6_WAN_CONS]        =  9,
 	[IPA_2_0][IPA_CLIENT_Q6_DUN_CONS]        = 10,
+	[IPA_2_0][IPA_CLIENT_MEMCPY_DMA_SYNC_CONS]
+						 =  13,
+	[IPA_2_0][IPA_CLIENT_MEMCPY_DMA_ASYNC_CONS]
+						 =  16,
 };
 
 static struct msm_bus_vectors ipa_init_vectors_v1_1[]  = {

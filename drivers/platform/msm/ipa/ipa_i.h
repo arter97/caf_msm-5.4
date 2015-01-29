@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1195,4 +1195,6 @@ void ipa_uc_register_handlers(enum ipa_hw_features feature,
 			      struct ipa_uc_hdlrs *hdlrs);
 int ipa_uc_notify_clk_state(bool enabled);
 
+void ipa_dma_async_memcpy_notify_cb(void *priv,
+		enum ipa_dp_evt_type evt, unsigned long data);
 #endif /* _IPA_I_H_ */
