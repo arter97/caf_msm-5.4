@@ -270,4 +270,10 @@
 			compatible = "qcom,msm-hdmi-audio-codec-rx";
 		};
 	};
+
+	mdss_rotator: qcom,mdss_rotator {
+		compatible = "qcom,mdss_rotator";
+		qcom,mdss-wb-count = <2>;
+		qcom,mdss-has-downscale;
+	};
 };
