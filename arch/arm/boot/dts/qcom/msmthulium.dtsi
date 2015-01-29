@@ -726,8 +726,7 @@
 		interrupt-controller;
 		#interrupt-cells = <1>;
 		interrupt-parent = <&tlmm>;
-		interrupts = <54 0>;
-		interrupt-names = "cdc-int";
+		qcom,gpio-connect = <&tlmm 54 0>;
 	};
 
 	clock_audio: audio_ext_clk {
