@@ -184,6 +184,7 @@ struct kgsl_memdesc *kgsl_search_global_pt_entries(unsigned int gpuaddr,
 struct kgsl_pagetable *kgsl_mmu_get_pt_from_ptname(struct kgsl_mmu *mmu,
 							int ptname);
 
+void kgsl_mmu_detach_pagetable(struct kgsl_pagetable *pagetable);
 /*
  * Static inline functions of MMU that simply call the SMMU specific
  * function using a function pointer. These functions can be thought
