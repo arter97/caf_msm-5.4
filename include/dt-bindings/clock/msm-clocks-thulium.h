@@ -186,10 +186,8 @@
 #define clk_gcc_gp1_clk			0x057f7b69
 #define clk_gcc_gp2_clk			0x9bf83ffd
 #define clk_gcc_gp3_clk			0xec6539ee
-#define clk_gcc_mmss_bimc_gfx_clk	0xe4f28754
 #define clk_gcc_mmss_sys_noc_axi_clk	0x4467b15b
 #define clk_gcc_mmss_noc_cfg_ahb_clk	0xb41a9d99
-#define clk_gcc_mmss_noc_at_clk		0x564eeb65
 #define clk_gcc_pcie_0_aux_clk		0x3d2e3ece
 #define clk_gcc_pcie_0_cfg_ahb_clk	0x4dd325c3
 #define clk_gcc_pcie_0_mstr_axi_clk	0x3f85285b
@@ -239,7 +237,6 @@
 #define clk_gcc_usb3_phy_pipe_clk	0xf279aff2
 #define clk_gcc_usb_phy_cfg_ahb2phy_clk	0xd1231a0e
 #define clk_gcc_aggre0_cnoc_ahb_clk	0x53a35559
-#define clk_gcc_aggre0_noc_at_clk	0xf753290f
 #define clk_gcc_aggre0_snoc_axi_clk	0x3c446400
 #define clk_gcc_aggre0_noc_qosgen_extref_clk	0x8c4356ba
 #define clk_hlos1_vote_lpass_core_smmu_clk	0x3aaa1743
@@ -261,10 +258,12 @@
 #define clk_gcc_sys_noc_ufs_axi_clk	0x19d38312
 #define clk_gcc_aggre2_usb3_axi_clk	0xd5822a8e
 #define clk_gcc_aggre2_ufs_axi_clk	0xb31e5191
+#define clk_gcc_mmss_gpll0_div_clk	0xdd06848d
 
 /* clock_mmss controlled clocks */
 #define clk_mmsscc_xo			0x05e63704
 #define clk_mmsscc_gpll0		0xe900c515
+#define clk_mmsscc_gpll0_div		0x73892e05
 #define clk_mmsscc_mmssnoc_ahb		0x7b4bd6f7
 #define clk_mmpll0			0xdd83b751
 #define clk_mmpll0_out_main		0x2f996a31

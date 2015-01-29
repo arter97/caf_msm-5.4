@@ -153,6 +153,20 @@ static struct pll_vote_clk gpll0_ao = {
 
 DEFINE_EXT_CLK(gpll0_out_main, &gpll0.c);
 
+static struct local_vote_clk gcc_mmss_gpll0_div_clk = {
+	.vote_reg = GCC_APCS_CLOCK_BRANCH_ENA_VOTE_1,
+	.cbcr_reg = GCC_APCS_CLOCK_BRANCH_ENA_VOTE_1,
+	.en_mask = BIT(0),
+	.base = &virt_base,
+	.halt_check = DELAY,
+	.c = {
+		.dbg_name = "gcc_mmss_gpll0_div_clk",
+		.parent = &gpll0.c,
+		.ops = &clk_ops_vote,
+		CLK_INIT(gcc_mmss_gpll0_div_clk.c),
+	},
+};
+
 static struct pll_vote_clk gpll4 = {
 	.en_reg = (void __iomem *)GCC_APCS_GPLL_ENA_VOTE,
 	.en_mask = BIT(4),
@@ -160,12 +174,11 @@ static struct pll_vote_clk gpll4 = {
 	.status_mask = BIT(30),
 	.base = &virt_base,
 	.c = {
-		.rate = 1536000000,
+		.rate = 960000000,
 		.parent = &cxo_clk_src.c,
 		.dbg_name = "gpll4",
 		.ops = &clk_ops_pll_vote,
-		VDD_DIG_FMAX_MAP3(LOWER, 400000000,
-				LOW, 800000000, NOMINAL, 1600000000),
+		VDD_DIG_FMAX_MAP2(LOWER, 800000000, NOMINAL, 1600000000),
 		CLK_INIT(gpll4.c),
 	},
 };
@@ -214,6 +227,7 @@ static struct rcg_clk pcie_aux_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_usb30_master_clk_src[] = {
+	F(  19200000,    cxo_clk_src,    1,    0,    0),
 	F( 120000000, gpll0_out_main,    5,    0,    0),
 	F( 150000000, gpll0_out_main,    4,    0,    0),
 	F_END
@@ -1298,14 +1312,14 @@ static struct rcg_clk pdm2_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_sdcc1_apps_clk_src[] = {
-	F(    144000,         cxo_clk_src,   16,    3,    25),
-	F(    400000,         cxo_clk_src,   12,    1,     4),
-	F(  20000000, gpll0_out_main,   15,    1,     2),
-	F(  25000000, gpll0_out_main,   12,    1,     2),
-	F(  50000000, gpll0_out_main,   12,    0,     0),
-	F(  96000000,          gpll4_out_main,   16,    0,     0),
-	F( 192000000,          gpll4_out_main,    8,    0,     0),
-	F( 384000000,          gpll4_out_main,    4,    0,     0),
+	F(    144000,     cxo_clk_src,   16,    3,    25),
+	F(    400000,     cxo_clk_src,   12,    1,     4),
+	F(  20000000,  gpll0_out_main,   15,    1,     2),
+	F(  25000000,  gpll0_out_main,   12,    1,     2),
+	F(  50000000,  gpll0_out_main,   12,    0,     0),
+	F(  96000000,  gpll4_out_main,   10,    0,     0),
+	F( 192000000,  gpll4_out_main,    5,    0,     0),
+	F( 384000000,  gpll4_out_main,  2.5,    0,     0),
 	F_END
 };
 
@@ -1495,17 +1509,6 @@ static struct branch_clk gcc_aggre0_cnoc_ahb_clk = {
 		.dbg_name = "gcc_aggre0_cnoc_ahb_clk",
 		.ops = &clk_ops_branch,
 		CLK_INIT(gcc_aggre0_cnoc_ahb_clk.c),
-	},
-};
-
-static struct branch_clk gcc_aggre0_noc_at_clk = {
-	.cbcr_reg = GCC_AGGRE0_NOC_AT_CBCR,
-	.has_sibling = 1,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "gcc_aggre0_noc_at_clk",
-		.ops = &clk_ops_branch,
-		CLK_INIT(gcc_aggre0_noc_at_clk.c),
 	},
 };
 
@@ -2084,29 +2087,6 @@ static struct branch_clk gcc_gp3_clk = {
 		.parent = &gp3_clk_src.c,
 		.ops = &clk_ops_branch,
 		CLK_INIT(gcc_gp3_clk.c),
-	},
-};
-
-static struct branch_clk gcc_mmss_bimc_gfx_clk = {
-	.cbcr_reg = GCC_MMSS_BIMC_GFX_CBCR,
-	.has_sibling = 1,
-	.base = &virt_base,
-	.no_halt_check_on_disable = true,
-	.c = {
-		.dbg_name = "gcc_mmss_bimc_gfx_clk",
-		.ops = &clk_ops_branch,
-		CLK_INIT(gcc_mmss_bimc_gfx_clk.c),
-	},
-};
-
-static struct branch_clk gcc_mmss_noc_at_clk = {
-	.cbcr_reg = GCC_MMSS_NOC_AT_CBCR,
-	.has_sibling = 1,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "gcc_mmss_noc_at_clk",
-		.ops = &clk_ops_branch,
-		CLK_INIT(gcc_mmss_noc_at_clk.c),
 	},
 };
 
@@ -2894,10 +2874,8 @@ static struct mux_clk gcc_debug_mux = {
 		{ &measure_only_bimc_hmss_axi_clk.c, 0x00a5 },
 		{ &gcc_mmss_sys_noc_axi_clk.c, 0x0018 },
 		{ &gcc_mmss_noc_cfg_ahb_clk.c, 0x0019 },
-		{ &gcc_mmss_noc_at_clk.c, 0x001a},
 		{ &gcc_sys_noc_usb3_axi_clk.c, 0x0006 },
 		{ &gcc_sys_noc_ufs_axi_clk.c, 0x0007 },
-		{ &gcc_mmss_bimc_gfx_clk.c, 0x001c },
 		{ &gcc_usb30_master_clk.c, 0x002d },
 		{ &gcc_usb30_sleep_clk.c, 0x002e },
 		{ &gcc_usb30_mock_utmi_clk.c, 0x002f },
@@ -2990,7 +2968,6 @@ static struct mux_clk gcc_debug_mux = {
 		{ &gcc_ufs_ice_core_clk.c, 0x0107 },
 		{ &gcc_aggre0_snoc_axi_clk.c, 0x0116 },
 		{ &gcc_aggre0_cnoc_ahb_clk.c, 0x0117 },
-		{ &gcc_aggre0_noc_at_clk.c, 0x0118 },
 		{ &gcc_smmu_aggre0_axi_clk.c, 0x0119 },
 		{ &gcc_smmu_aggre0_ahb_clk.c, 0x011a },
 		{ &gcc_aggre0_noc_qosgen_extref_clk.c, 0x011b },
@@ -3077,6 +3054,7 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(gpll0),
 	CLK_LIST(gpll0_ao),
 	CLK_LIST(gpll0_out_main),
+	CLK_LIST(gcc_mmss_gpll0_div_clk),
 	CLK_LIST(gpll4),
 	CLK_LIST(gpll4_out_main),
 	CLK_LIST(ufs_axi_clk_src),
@@ -3123,7 +3101,6 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(gp1_clk_src),
 	CLK_LIST(gp2_clk_src),
 	CLK_LIST(gp3_clk_src),
-	CLK_LIST(gcc_mmss_bimc_gfx_clk),
 	CLK_LIST(pdm2_clk_src),
 	CLK_LIST(sdcc1_apps_clk_src),
 	CLK_LIST(sdcc2_apps_clk_src),
@@ -3135,7 +3112,6 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(usb3_phy_aux_clk_src),
 	CLK_LIST(gcc_qusb2phy_prim_reset),
 	CLK_LIST(gcc_aggre0_cnoc_ahb_clk),
-	CLK_LIST(gcc_aggre0_noc_at_clk),
 	CLK_LIST(gcc_aggre0_snoc_axi_clk),
 	CLK_LIST(gcc_smmu_aggre0_ahb_clk),
 	CLK_LIST(gcc_smmu_aggre0_axi_clk),
@@ -3184,7 +3160,6 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(gcc_gp1_clk),
 	CLK_LIST(gcc_gp2_clk),
 	CLK_LIST(gcc_gp3_clk),
-	CLK_LIST(gcc_mmss_noc_at_clk),
 	CLK_LIST(gcc_mmss_noc_cfg_ahb_clk),
 	CLK_LIST(gcc_mmss_sys_noc_axi_clk),
 	CLK_LIST(gcc_sys_noc_usb3_axi_clk),

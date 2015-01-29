@@ -42,6 +42,7 @@ static void __iomem *virt_base;
 
 #define mmsscc_xo_mm_source_val			0
 #define mmsscc_gpll0_mm_source_val		5
+#define mmsscc_gpll0_div_mm_source_val		6
 #define dsi0phypll_mm_source_val		1
 #define ext_extpclk_clk_src_mm_source_val	3
 #define edp_mainlink_clk_src_mm_source_val	4
@@ -101,6 +102,7 @@ static struct alpha_pll_vco_tbl mmpll_t_vco[] = {
 
 DEFINE_EXT_CLK(mmsscc_xo, NULL);
 DEFINE_EXT_CLK(mmsscc_gpll0, NULL);
+DEFINE_EXT_CLK(mmsscc_gpll0_div, NULL);
 
 static struct alpha_pll_clk mmpll0 = {
 	.masks = &pll_masks_p,
@@ -179,9 +181,9 @@ static struct alpha_pll_clk mmpll3 = {
 DEFINE_EXT_CLK(mmpll3_out_main, &mmpll3.c);
 
 static struct clk_freq_tbl ftbl_ahb_clk_src[] = {
-	F_MM(  19200000,      mmsscc_xo,    1,    0,     0),
-	F_MM(  40000000,   mmsscc_gpll0,   15,    0,     0),
-	F_MM(  80000000, mmpll0_out_main,   10,    0,     0),
+	F_MM(  19200000,        mmsscc_xo,     1,    0,     0),
+	F_MM(  40000000,  mmsscc_gpll0_div,  7.5,    0,     0),
+	F_MM(  80000000,   mmpll0_out_main,   10,    0,     0),
 	F_END
 };
 
@@ -200,11 +202,11 @@ static struct rcg_clk ahb_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_axi_clk_src[] = {
-	F_MM(  75000000,   mmsscc_gpll0,    8,    0,     0),
-	F_MM( 171430000,   mmsscc_gpll0,  3.5,    0,     0),
-	F_MM( 200000000,   mmsscc_gpll0,    3,    0,     0),
-	F_MM( 320000000, mmpll0_out_main,  2.5,    0,     0),
-	F_MM( 370000000, mmpll1_out_main,    2,    0,     0),
+	F_MM(  75000000,  mmsscc_gpll0_div,    4,    0,     0),
+	F_MM( 171430000,      mmsscc_gpll0,  3.5,    0,     0),
+	F_MM( 200000000,      mmsscc_gpll0,    3,    0,     0),
+	F_MM( 320000000,   mmpll0_out_main,  2.5,    0,     0),
+	F_MM( 370000000,   mmpll1_out_main,    2,    0,     0),
 	F_END
 };
 
@@ -321,12 +323,12 @@ static struct rcg_clk gfx3d_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_csi0_clk_src[] = {
-	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
-	F_MM( 200000000,   mmsscc_gpll0,    3,    0,     0),
-	F_MM( 274290000, mmpll4_out_main,  3.5,    0,     0),
-	F_MM( 320000000, mmpll4_out_main,    3,    0,     0),
-	F_MM( 480000000, mmpll4_out_main,    2,    0,     0),
-	F_MM( 600000000,   mmsscc_gpll0,    1,    0,     0),
+	F_MM( 100000000, mmsscc_gpll0_div,    3,    0,     0),
+	F_MM( 200000000,     mmsscc_gpll0,    3,    0,     0),
+	F_MM( 274290000,  mmpll4_out_main,  3.5,    0,     0),
+	F_MM( 320000000,  mmpll4_out_main,    3,    0,     0),
+	F_MM( 480000000,  mmpll4_out_main,    2,    0,     0),
+	F_MM( 600000000,     mmsscc_gpll0,    1,    0,     0),
 	F_END
 };
 
@@ -346,13 +348,13 @@ static struct rcg_clk csi0_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_vfe0_clk_src[] = {
-	F_MM(  80000000,   mmsscc_gpll0,  7.5,    0,     0),
-	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
-	F_MM( 200000000,   mmsscc_gpll0,    3,    0,     0),
-	F_MM( 320000000, mmpll0_out_main,  2.5,    0,     0),
-	F_MM( 400000000, mmpll0_out_main,    2,    0,     0),
-	F_MM( 480000000, mmpll4_out_main,    2,    0,     0),
-	F_MM( 600000000,   mmsscc_gpll0,    1,    0,     0),
+	F_MM(  75000000,   mmsscc_gpll0_div,    4,    0,     0),
+	F_MM( 100000000,   mmsscc_gpll0_div,    3,    0,     0),
+	F_MM( 200000000,       mmsscc_gpll0,    3,    0,     0),
+	F_MM( 320000000,    mmpll0_out_main,  2.5,    0,     0),
+	F_MM( 400000000,    mmpll0_out_main,    2,    0,     0),
+	F_MM( 480000000,    mmpll4_out_main,    2,    0,     0),
+	F_MM( 600000000,       mmsscc_gpll0,    1,    0,     0),
 	F_END
 };
 
@@ -372,13 +374,13 @@ static struct rcg_clk vfe0_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_vfe1_clk_src[] = {
-	F_MM(  80000000,   mmsscc_gpll0,  7.5,    0,     0),
-	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
-	F_MM( 200000000,   mmsscc_gpll0,    3,    0,     0),
-	F_MM( 320000000, mmpll0_out_main,  2.5,    0,     0),
-	F_MM( 400000000, mmpll0_out_main,    2,    0,     0),
-	F_MM( 480000000, mmpll4_out_main,    2,    0,     0),
-	F_MM( 600000000,   mmsscc_gpll0,    1,    0,     0),
+	F_MM(  75000000,   mmsscc_gpll0_div,    4,    0,     0),
+	F_MM( 100000000,   mmsscc_gpll0_div,    3,    0,     0),
+	F_MM( 200000000,       mmsscc_gpll0,    3,    0,     0),
+	F_MM( 320000000,    mmpll0_out_main,  2.5,    0,     0),
+	F_MM( 400000000,    mmpll0_out_main,    2,    0,     0),
+	F_MM( 480000000,    mmpll4_out_main,    2,    0,     0),
+	F_MM( 600000000,       mmsscc_gpll0,    1,    0,     0),
 	F_END
 };
 
@@ -398,12 +400,12 @@ static struct rcg_clk vfe1_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_csi1_clk_src[] = {
-	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
-	F_MM( 200000000,   mmsscc_gpll0,    3,    0,     0),
-	F_MM( 274290000, mmpll4_out_main,  3.5,    0,     0),
-	F_MM( 320000000, mmpll4_out_main,    3,    0,     0),
-	F_MM( 480000000, mmpll4_out_main,    2,    0,     0),
-	F_MM( 600000000,   mmsscc_gpll0,    1,    0,     0),
+	F_MM( 100000000, mmsscc_gpll0_div,    3,    0,     0),
+	F_MM( 200000000,     mmsscc_gpll0,    3,    0,     0),
+	F_MM( 274290000,  mmpll4_out_main,  3.5,    0,     0),
+	F_MM( 320000000,  mmpll4_out_main,    3,    0,     0),
+	F_MM( 480000000,  mmpll4_out_main,    2,    0,     0),
+	F_MM( 600000000,     mmsscc_gpll0,    1,    0,     0),
 	F_END
 };
 
@@ -423,12 +425,12 @@ static struct rcg_clk csi1_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_csi2_clk_src[] = {
-	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
-	F_MM( 200000000,   mmsscc_gpll0,    3,    0,     0),
-	F_MM( 274290000, mmpll4_out_main,  3.5,    0,     0),
-	F_MM( 320000000, mmpll4_out_main,    3,    0,     0),
-	F_MM( 480000000, mmpll4_out_main,    2,    0,     0),
-	F_MM( 600000000,   mmsscc_gpll0,    1,    0,     0),
+	F_MM( 100000000, mmsscc_gpll0_div,    3,    0,     0),
+	F_MM( 200000000,     mmsscc_gpll0,    3,    0,     0),
+	F_MM( 274290000,  mmpll4_out_main,  3.5,    0,     0),
+	F_MM( 320000000,  mmpll4_out_main,    3,    0,     0),
+	F_MM( 480000000,  mmpll4_out_main,    2,    0,     0),
+	F_MM( 600000000,     mmsscc_gpll0,    1,    0,     0),
 	F_END
 };
 
@@ -448,12 +450,12 @@ static struct rcg_clk csi2_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_csi3_clk_src[] = {
-	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
-	F_MM( 200000000,   mmsscc_gpll0,    3,    0,     0),
-	F_MM( 274290000, mmpll4_out_main,  3.5,    0,     0),
-	F_MM( 320000000, mmpll4_out_main,    3,    0,     0),
-	F_MM( 480000000, mmpll4_out_main,    2,    0,     0),
-	F_MM( 600000000,   mmsscc_gpll0,    1,    0,     0),
+	F_MM( 100000000, mmsscc_gpll0_div,    3,    0,     0),
+	F_MM( 200000000,     mmsscc_gpll0,    3,    0,     0),
+	F_MM( 274290000,  mmpll4_out_main,  3.5,    0,     0),
+	F_MM( 320000000,  mmpll4_out_main,    3,    0,     0),
+	F_MM( 480000000,  mmpll4_out_main,    2,    0,     0),
+	F_MM( 600000000,     mmsscc_gpll0,    1,    0,     0),
 	F_END
 };
 
@@ -473,12 +475,12 @@ static struct rcg_clk csi3_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_maxi_clk_src[] = {
-	F_MM(  19200000,      mmsscc_xo,    1,    0,     0),
-	F_MM(  75000000,   mmsscc_gpll0,    8,    0,     0),
-	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
-	F_MM( 200000000,   mmsscc_gpll0,    3,    0,     0),
-	F_MM( 320000000, mmpll0_out_main,  2.5,    0,     0),
-	F_MM( 370000000, mmpll1_out_main,    2,    0,     0),
+	F_MM(  19200000,       mmsscc_xo,     1,    0,     0),
+	F_MM(  75000000, mmsscc_gpll0_div,    4,    0,     0),
+	F_MM( 100000000,     mmsscc_gpll0,    6,    0,     0),
+	F_MM( 200000000,     mmsscc_gpll0,    3,    0,     0),
+	F_MM( 320000000,  mmpll0_out_main,  2.5,    0,     0),
+	F_MM( 370000000,  mmpll1_out_main,    2,    0,     0),
 	F_END
 };
 
@@ -498,11 +500,11 @@ static struct rcg_clk maxi_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_cpp_clk_src[] = {
-	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
-	F_MM( 200000000,   mmsscc_gpll0,    3,    0,     0),
-	F_MM( 320000000, mmpll0_out_main,  2.5,    0,     0),
-	F_MM( 480000000, mmpll4_out_main,    2,    0,     0),
-	F_MM( 640000000, mmpll4_out_main,  1.5,    0,     0),
+	F_MM( 100000000, mmsscc_gpll0_div,    3,    0,     0),
+	F_MM( 200000000,     mmsscc_gpll0,    3,    0,     0),
+	F_MM( 320000000,  mmpll0_out_main,  2.5,    0,     0),
+	F_MM( 480000000,  mmpll4_out_main,    2,    0,     0),
+	F_MM( 640000000,  mmpll4_out_main,  1.5,    0,     0),
 	F_END
 };
 
@@ -522,12 +524,12 @@ static struct rcg_clk cpp_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_jpeg0_clk_src[] = {
-	F_MM(  75000000,   mmsscc_gpll0,    8,    0,     0),
-	F_MM( 150000000,   mmsscc_gpll0,    4,    0,     0),
-	F_MM( 228571429, mmpll0_out_main,  3.5,    0,     0),
-	F_MM( 266666667, mmpll0_out_main,    3,    0,     0),
-	F_MM( 320000000, mmpll0_out_main,  2.5,    0,     0),
-	F_MM( 480000000, mmpll4_out_main,    2,    0,     0),
+	F_MM(  75000000, mmsscc_gpll0_div,    4,    0,     0),
+	F_MM( 150000000,     mmsscc_gpll0,    4,    0,     0),
+	F_MM( 228571429,  mmpll0_out_main,  3.5,    0,     0),
+	F_MM( 266666667,  mmpll0_out_main,    3,    0,     0),
+	F_MM( 320000000,  mmpll0_out_main,  2.5,    0,     0),
+	F_MM( 480000000,  mmpll4_out_main,    2,    0,     0),
 	F_END
 };
 
@@ -547,11 +549,11 @@ static struct rcg_clk jpeg0_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_jpeg2_clk_src[] = {
-	F_MM(  75000000,   mmsscc_gpll0,    8,    0,     0),
-	F_MM( 150000000,   mmsscc_gpll0,    4,    0,     0),
-	F_MM( 228571429, mmpll0_out_main,  3.5,    0,     0),
-	F_MM( 266666667, mmpll0_out_main,    3,    0,     0),
-	F_MM( 320000000, mmpll0_out_main,  2.5,    0,     0),
+	F_MM(  75000000, mmsscc_gpll0_div,    4,    0,     0),
+	F_MM( 150000000,     mmsscc_gpll0,    4,    0,     0),
+	F_MM( 228571429,  mmpll0_out_main,  3.5,    0,     0),
+	F_MM( 266666667,  mmpll0_out_main,    3,    0,     0),
+	F_MM( 320000000,  mmpll0_out_main,  2.5,    0,     0),
 	F_END
 };
 
@@ -571,12 +573,12 @@ static struct rcg_clk jpeg2_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_jpeg_dma_clk_src[] = {
-	F_MM(  75000000,   mmsscc_gpll0,    8,    0,     0),
-	F_MM( 150000000,   mmsscc_gpll0,    4,    0,     0),
-	F_MM( 228571429, mmpll0_out_main,  3.5,    0,     0),
-	F_MM( 266666667, mmpll0_out_main,    3,    0,     0),
-	F_MM( 320000000, mmpll0_out_main,  2.5,    0,     0),
-	F_MM( 480000000, mmpll4_out_main,    2,    0,     0),
+	F_MM(  75000000, mmsscc_gpll0_div,    4,    0,     0),
+	F_MM( 150000000,     mmsscc_gpll0,    4,    0,     0),
+	F_MM( 228571429,  mmpll0_out_main,  3.5,    0,     0),
+	F_MM( 266666667,  mmpll0_out_main,    3,    0,     0),
+	F_MM( 320000000,  mmpll0_out_main,  2.5,    0,     0),
+	F_MM( 480000000,  mmpll4_out_main,    2,    0,     0),
 	F_END
 };
 
@@ -670,7 +672,7 @@ static struct rcg_clk pclk1_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_video_core_clk_src[] = {
-	F_MM(  75000000,     mmsscc_gpll0,    8,    0,     0),
+	F_MM(  75000000, mmsscc_gpll0_div,    4,    0,     0),
 	F_MM( 150000000,     mmsscc_gpll0,    4,    0,     0),
 	F_MM( 320000000,  mmpll0_out_main,  2.5,    0,     0),
 	F_MM( 450000000,  mmpll3_out_main,    2,    0,     0),
@@ -693,9 +695,9 @@ static struct rcg_clk video_core_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_fd_core_clk_src[] = {
-	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
-	F_MM( 200000000,   mmsscc_gpll0,    3,    0,     0),
-	F_MM( 400000000, mmpll0_out_main,    2,    0,     0),
+	F_MM( 100000000,  mmsscc_gpll0_div,    3,    0,     0),
+	F_MM( 200000000,      mmsscc_gpll0,    3,    0,     0),
+	F_MM( 400000000,   mmpll0_out_main,    2,    0,     0),
 	F_END
 };
 
@@ -737,9 +739,9 @@ static struct rcg_clk cci_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_csiphy0_3p_clk_src[] = {
-	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
-	F_MM( 200000000,   mmsscc_gpll0,    3,    0,     0),
-	F_MM( 320000000, mmpll4_out_main,    3,    0,     0),
+	F_MM( 100000000, mmsscc_gpll0_div,    3,    0,     0),
+	F_MM( 200000000,     mmsscc_gpll0,    3,    0,     0),
+	F_MM( 320000000,  mmpll4_out_main,    3,    0,     0),
 	F_END
 };
 
@@ -759,9 +761,9 @@ static struct rcg_clk csiphy0_3p_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_csiphy1_3p_clk_src[] = {
-	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
-	F_MM( 200000000,   mmsscc_gpll0,    3,    0,     0),
-	F_MM( 320000000, mmpll4_out_main,    3,    0,     0),
+	F_MM( 100000000, mmsscc_gpll0_div,    3,    0,     0),
+	F_MM( 200000000,     mmsscc_gpll0,    3,    0,     0),
+	F_MM( 320000000,  mmpll4_out_main,    3,    0,     0),
 	F_END
 };
 
@@ -781,9 +783,9 @@ static struct rcg_clk csiphy1_3p_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_csiphy2_3p_clk_src[] = {
-	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
-	F_MM( 200000000,   mmsscc_gpll0,    3,    0,     0),
-	F_MM( 320000000, mmpll4_out_main,    3,    0,     0),
+	F_MM( 100000000, mmsscc_gpll0_div,    3,    0,     0),
+	F_MM( 200000000,     mmsscc_gpll0,    3,    0,     0),
+	F_MM( 320000000,  mmpll4_out_main,    3,    0,     0),
 	F_END
 };
 
@@ -805,10 +807,10 @@ static struct rcg_clk csiphy2_3p_clk_src = {
 static struct clk_freq_tbl ftbl_camss_gp0_clk_src[] = {
 	F_MM(     10000,        mmsscc_xo,   16,    1,   120),
 	F_MM(     24000,        mmsscc_xo,   16,    1,    50),
-	F_MM(   6000000,     mmsscc_gpll0,   10,    1,    10),
-	F_MM(  12000000,     mmsscc_gpll0,   10,    1,     5),
-	F_MM(  13000000,     mmsscc_gpll0,    4,   13,   150),
-	F_MM(  24000000,     mmsscc_gpll0,    5,    1,     5),
+	F_MM(   6000000, mmsscc_gpll0_div,   10,    1,     5),
+	F_MM(  12000000, mmsscc_gpll0_div,    1,    1,    25),
+	F_MM(  13000000, mmsscc_gpll0_div,    2,   13,   150),
+	F_MM(  24000000, mmsscc_gpll0_div,    1,    2,    25),
 	F_END
 };
 
@@ -830,10 +832,10 @@ static struct rcg_clk camss_gp0_clk_src = {
 static struct clk_freq_tbl ftbl_camss_gp1_clk_src[] = {
 	F_MM(     10000,        mmsscc_xo,   16,    1,   120),
 	F_MM(     24000,        mmsscc_xo,   16,    1,    50),
-	F_MM(   6000000,     mmsscc_gpll0,   10,    1,    10),
-	F_MM(  12000000,     mmsscc_gpll0,   10,    1,     5),
-	F_MM(  13000000,     mmsscc_gpll0,    4,   13,   150),
-	F_MM(  24000000,     mmsscc_gpll0,    5,    1,     5),
+	F_MM(   6000000, mmsscc_gpll0_div,   10,    1,     5),
+	F_MM(  12000000, mmsscc_gpll0_div,    1,    1,    25),
+	F_MM(  13000000, mmsscc_gpll0_div,    2,   13,   150),
+	F_MM(  24000000, mmsscc_gpll0_div,    1,    2,    25),
 	F_END
 };
 
@@ -853,16 +855,16 @@ static struct rcg_clk camss_gp1_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_mclk0_clk_src[] = {
-	F_MM(   4800000,        mmsscc_xo,    4,    0,     0),
-	F_MM(   6000000,  mmpll4_out_main,   10,    1,    16),
-	F_MM(   8000000,  mmpll4_out_main,   10,    1,    12),
-	F_MM(   9600000,        mmsscc_xo,    2,    0,     0),
-	F_MM(  16000000,  mmpll4_out_main,   10,    1,     6),
-	F_MM(  19200000,        mmsscc_xo,    1,    0,     0),
-	F_MM(  24000000,  mmpll4_out_main,   10,    1,     4),
-	F_MM(  32000000,  mmpll4_out_main,   10,    1,     3),
-	F_MM(  48000000,  mmpll4_out_main,   10,    1,     2),
-	F_MM(  64000000,  mmpll4_out_main,   15,    0,     0),
+	F_MM(   4800000,         mmsscc_xo,   4,    0,     0),
+	F_MM(   6000000,  mmsscc_gpll0_div,  10,    1,     5),
+	F_MM(   8000000,  mmsscc_gpll0_div,   1,    2,    75),
+	F_MM(   9600000,         mmsscc_xo,   2,    0,     0),
+	F_MM(  16666667,  mmsscc_gpll0_div,   2,    1,     9),
+	F_MM(  19200000,         mmsscc_xo,   1,    0,     0),
+	F_MM(  24000000,  mmsscc_gpll0_div,   1,    2,    25),
+	F_MM(  33333333,  mmsscc_gpll0_div,   1,    1,     9),
+	F_MM(  48000000,      mmsscc_gpll0,   1,    2,    25),
+	F_MM(  66666667,      mmsscc_gpll0,   1,    1,     9),
 	F_END
 };
 
@@ -882,16 +884,16 @@ static struct rcg_clk mclk0_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_mclk1_clk_src[] = {
-	F_MM(   4800000,        mmsscc_xo,    4,    0,     0),
-	F_MM(   6000000,  mmpll4_out_main,   10,    1,    16),
-	F_MM(   8000000,  mmpll4_out_main,   10,    1,    12),
-	F_MM(   9600000,        mmsscc_xo,    2,    0,     0),
-	F_MM(  16000000,  mmpll4_out_main,   10,    1,     6),
-	F_MM(  19200000,        mmsscc_xo,    1,    0,     0),
-	F_MM(  24000000,  mmpll4_out_main,   10,    1,     4),
-	F_MM(  32000000,  mmpll4_out_main,   10,    1,     3),
-	F_MM(  48000000,  mmpll4_out_main,   10,    1,     2),
-	F_MM(  64000000,  mmpll4_out_main,   15,    0,     0),
+	F_MM(   4800000,         mmsscc_xo,   4,    0,     0),
+	F_MM(   6000000,  mmsscc_gpll0_div,  10,    1,     5),
+	F_MM(   8000000,  mmsscc_gpll0_div,   1,    2,    75),
+	F_MM(   9600000,         mmsscc_xo,   2,    0,     0),
+	F_MM(  16666667,  mmsscc_gpll0_div,   2,    1,     9),
+	F_MM(  19200000,         mmsscc_xo,   1,    0,     0),
+	F_MM(  24000000,  mmsscc_gpll0_div,   1,    2,    25),
+	F_MM(  33333333,  mmsscc_gpll0_div,   1,    1,     9),
+	F_MM(  48000000,      mmsscc_gpll0,   1,    2,    25),
+	F_MM(  66666667,      mmsscc_gpll0,   1,    1,     9),
 	F_END
 };
 
@@ -911,16 +913,16 @@ static struct rcg_clk mclk1_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_mclk2_clk_src[] = {
-	F_MM(   4800000,        mmsscc_xo,    4,    0,     0),
-	F_MM(   6000000,  mmpll4_out_main,   10,    1,    16),
-	F_MM(   8000000,  mmpll4_out_main,   10,    1,    12),
-	F_MM(   9600000,        mmsscc_xo,    2,    0,     0),
-	F_MM(  16000000,  mmpll4_out_main,   10,    1,     6),
-	F_MM(  19200000,        mmsscc_xo,    1,    0,     0),
-	F_MM(  24000000,  mmpll4_out_main,   10,    1,     4),
-	F_MM(  32000000,  mmpll4_out_main,   10,    1,     3),
-	F_MM(  48000000,  mmpll4_out_main,   10,    1,     2),
-	F_MM(  64000000,  mmpll4_out_main,   15,    0,     0),
+	F_MM(   4800000,         mmsscc_xo,   4,    0,     0),
+	F_MM(   6000000,  mmsscc_gpll0_div,  10,    1,     5),
+	F_MM(   8000000,  mmsscc_gpll0_div,   1,    2,    75),
+	F_MM(   9600000,         mmsscc_xo,   2,    0,     0),
+	F_MM(  16666667,  mmsscc_gpll0_div,   2,    1,     9),
+	F_MM(  19200000,         mmsscc_xo,   1,    0,     0),
+	F_MM(  24000000,  mmsscc_gpll0_div,   1,    2,    25),
+	F_MM(  33333333,  mmsscc_gpll0_div,   1,    1,     9),
+	F_MM(  48000000,      mmsscc_gpll0,   1,    2,    25),
+	F_MM(  66666667,      mmsscc_gpll0,   1,    1,     9),
 	F_END
 };
 
@@ -940,16 +942,16 @@ static struct rcg_clk mclk2_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_mclk3_clk_src[] = {
-	F_MM(   4800000,        mmsscc_xo,    4,    0,     0),
-	F_MM(   6000000,  mmpll4_out_main,   10,    1,    16),
-	F_MM(   8000000,  mmpll4_out_main,   10,    1,    12),
-	F_MM(   9600000,        mmsscc_xo,    2,    0,     0),
-	F_MM(  16000000,  mmpll4_out_main,   10,    1,     6),
-	F_MM(  19200000,        mmsscc_xo,    1,    0,     0),
-	F_MM(  24000000,  mmpll4_out_main,   10,    1,     4),
-	F_MM(  32000000,  mmpll4_out_main,   10,    1,     3),
-	F_MM(  48000000,  mmpll4_out_main,   10,    1,     2),
-	F_MM(  64000000,  mmpll4_out_main,   15,    0,     0),
+	F_MM(   4800000,         mmsscc_xo,   4,    0,     0),
+	F_MM(   6000000,  mmsscc_gpll0_div,  10,    1,     5),
+	F_MM(   8000000,  mmsscc_gpll0_div,   1,    2,    75),
+	F_MM(   9600000,         mmsscc_xo,   2,    0,     0),
+	F_MM(  16666667,  mmsscc_gpll0_div,   2,    1,     9),
+	F_MM(  19200000,         mmsscc_xo,   1,    0,     0),
+	F_MM(  24000000,  mmsscc_gpll0_div,   1,    2,    25),
+	F_MM(  33333333,  mmsscc_gpll0_div,   1,    1,     9),
+	F_MM(  48000000,      mmsscc_gpll0,   1,    2,    25),
+	F_MM(  66666667,      mmsscc_gpll0,   1,    1,     9),
 	F_END
 };
 
@@ -969,9 +971,9 @@ static struct rcg_clk mclk3_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_csi0phytimer_clk_src[] = {
-	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
-	F_MM( 200000000, mmpll0_out_main,    4,    0,     0),
-	F_MM( 266666667, mmpll0_out_main,    3,    0,     0),
+	F_MM( 100000000, mmsscc_gpll0_div,    3,    0,     0),
+	F_MM( 200000000,  mmpll0_out_main,    4,    0,     0),
+	F_MM( 266666667,  mmpll0_out_main,    3,    0,     0),
 	F_END
 };
 
@@ -990,9 +992,9 @@ static struct rcg_clk csi0phytimer_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_csi1phytimer_clk_src[] = {
-	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
-	F_MM( 200000000, mmpll0_out_main,    4,    0,     0),
-	F_MM( 266666667, mmpll0_out_main,    3,    0,     0),
+	F_MM( 100000000, mmsscc_gpll0_div,    3,    0,     0),
+	F_MM( 200000000,  mmpll0_out_main,    4,    0,     0),
+	F_MM( 266666667,  mmpll0_out_main,    3,    0,     0),
 	F_END
 };
 
@@ -1011,9 +1013,9 @@ static struct rcg_clk csi1phytimer_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_csi2phytimer_clk_src[] = {
-	F_MM( 100000000,   mmsscc_gpll0,    6,    0,     0),
-	F_MM( 200000000, mmpll0_out_main,    4,    0,     0),
-	F_MM( 266666667, mmpll0_out_main,    3,    0,     0),
+	F_MM( 100000000, mmsscc_gpll0_div,    3,    0,     0),
+	F_MM( 200000000,  mmpll0_out_main,    4,    0,     0),
+	F_MM( 266666667,  mmpll0_out_main,    3,    0,     0),
 	F_END
 };
 
@@ -1032,7 +1034,7 @@ static struct rcg_clk csi2phytimer_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_dsa_core_clk_src[] = {
-	F_MM( 300000000,   mmsscc_gpll0,    2,    0,     0),
+	F_MM( 300000000,   mmsscc_gpll0_div,    1,    0,     0),
 	F_END
 };
 
@@ -1051,10 +1053,10 @@ static struct rcg_clk dsa_core_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_isense_clk_src[] = {
-	F_MM(  19200000,      mmsscc_xo,    1,    0,     0),
-	F_MM( 150000000,   mmsscc_gpll0,    4,    0,     0),
-	F_MM( 320000000, mmpll0_out_main,  2.5,    0,     0),
-	F_MM( 360000000, mmpll8_out_main,    1,    0,     0),
+	F_MM(  19200000,        mmsscc_xo,    1,    0,     0),
+	F_MM( 150000000, mmsscc_gpll0_div,    2,    0,     0),
+	F_MM( 320000000,  mmpll0_out_main,  2.5,    0,     0),
+	F_MM( 360000000,  mmpll8_out_main,    1,    0,     0),
 	F_END
 };
 
@@ -1158,7 +1160,7 @@ static struct rcg_clk edpaux_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_edpgtc_clk_src[] = {
-	F_MM( 300000000,   mmsscc_gpll0,    2,    0,     0),
+	F_MM( 300000000,   mmsscc_gpll0_div,    1,    0,     0),
 	F_END
 };
 
@@ -1342,7 +1344,7 @@ static struct rcg_clk rbcpr_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_video_subcore0_clk_src[] = {
-	F_MM(  75000000,     mmsscc_gpll0,    8,    0,     0),
+	F_MM(  75000000, mmsscc_gpll0_div,    4,    0,     0),
 	F_MM( 150000000,     mmsscc_gpll0,    4,    0,     0),
 	F_MM( 320000000,  mmpll0_out_main,  2.5,    0,     0),
 	F_MM( 450000000,  mmpll3_out_main,    2,    0,     0),
@@ -1365,7 +1367,7 @@ static struct rcg_clk video_subcore0_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_video_subcore1_clk_src[] = {
-	F_MM(  75000000,     mmsscc_gpll0,    8,    0,     0),
+	F_MM(  75000000, mmsscc_gpll0_div,    4,    0,     0),
 	F_MM( 150000000,     mmsscc_gpll0,    4,    0,     0),
 	F_MM( 320000000,  mmpll0_out_main,  2.5,    0,     0),
 	F_MM( 450000000,  mmpll3_out_main,    2,    0,     0),
@@ -3080,6 +3082,7 @@ static struct mux_clk mmss_gcc_dbg_clk = {
 static struct clk_lookup msm_clocks_mmss_thulium[] = {
 	CLK_LIST(mmsscc_xo),
 	CLK_LIST(mmsscc_gpll0),
+	CLK_LIST(mmsscc_gpll0_div),
 	CLK_LIST(mmpll0),
 	CLK_LIST(mmpll0_out_main),
 	CLK_LIST(mmpll1),
@@ -3324,6 +3327,13 @@ int msm_mmsscc_thulium_probe(struct platform_device *pdev)
 	if (IS_ERR(tmp)) {
 		if (PTR_ERR(tmp) != -EPROBE_DEFER)
 			dev_err(&pdev->dev, "Unable to get gpll0 clock!\n");
+		return PTR_ERR(tmp);
+	}
+
+	tmp = mmsscc_gpll0_div.c.parent = devm_clk_get(&pdev->dev, "gpll0_div");
+	if (IS_ERR(tmp)) {
+		if (PTR_ERR(tmp) != -EPROBE_DEFER)
+			dev_err(&pdev->dev, "Unable to get gpll0_div clock!\n");
 		return PTR_ERR(tmp);
 	}
 
