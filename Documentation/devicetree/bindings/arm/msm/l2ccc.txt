@@ -18,10 +18,14 @@ Optional properties:
 		out of power collapse.
 		For "qcom,msmthulium-l2ccc" only, an optional second tuple
 		specifies the address of the CLKSEL register for the cluster.
+- qcom,cbf-clock-peer: For "qcom,msmthulium-l2ccc" only, a phandle to a peer
+                "qcom,msmthulium-l2ccc" node, which shares a common CBF clock
+		source.
 - qcom,cbf-clock-seq: For "qcom,msmthulium-l2ccc" only, specify this to
 		temporarily select the CBF clock source while powering up the
 		L2. If present, the CLKSEL "reg" tuple must also be specified
-		as described above.
+		for this node and in the "cbf-clock-peer" node.  The
+		"cbf-clock-peer" node is required in such cases, as well.
 - qcom,vctl-node: Reference to a node that controls the power rails for the
  cluster.
 - qcom,vctl-val: The voltage control register value that must be set before
