@@ -239,3 +239,11 @@
 &qcom_rng {
 	status = "disable";
 };
+
+&tpdm_vsense {
+	status = "disable";
+};
+
+&tpdm_prng {
+	status = "disable";
+};
