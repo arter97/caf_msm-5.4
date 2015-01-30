@@ -530,11 +530,20 @@ config SRAM
 	  areas found on many SoCs.
 
 config QSEECOM
-	tristate "Qualcomm Secure Execution Communicator driver"
+	tristate "QTI Secure Execution Communicator driver"
 	help
 	  Provides a communication interface between userspace and
-	  Qualcomm Secure Execution Environment (QSEE) using Secure Channel
-	  Manager (SCM) interface.
+	  QTI Secure Execution Environment (QSEE) using Secure Channel
+	  Manager (SCM) interface. It exposes APIs for both userspace and
+	  kernel clients.
+
+config HDCP_QSEECOM
+	tristate "QTI High-Bandwidth Digital Content Protection Module"
+	help
+	  This module implements HDCP 2.2 features over HDMI. It exposes APIs
+	  for HDMI driver to communicate with QTI Secure Execution
+	  Environment (QSEE) via the QSEECOM Driver and also calls the APIs
+	  exposed by the HDMI driver to communicate with the Receiver.
 
 config QFP_FUSE
 	tristate "QFPROM Fuse Read/Write support"
@@ -548,7 +557,7 @@ config QPNP_MISC
 	tristate "QPNP Misc Peripheral"
 	depends on SPMI
 	help
-	  Say 'y' here to include support for the Qualcomm QPNP MISC
+	  Say 'y' here to include support for the QTI QPNP MISC
 	  peripheral. The MISC peripheral holds the USB ID interrupt
 	  and the driver provides an API to check if this interrupt
 	  is available on the current PMIC chip.
@@ -569,7 +578,7 @@ config QCOM_LIQUID_DOCK
 	depends on OF_GPIO
 	help
 	  This option enables support for the USB and Ethernet ports found on
-	  the docking station of various models of Qualcomm Technology's
+	  the docking station of various models of QTI's
 	  LiQUID Mobile Development Platforms.
 
 config HAPTIC_ISA1200
