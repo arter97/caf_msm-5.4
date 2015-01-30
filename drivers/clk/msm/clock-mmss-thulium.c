@@ -96,8 +96,15 @@ static struct alpha_pll_masks pll_masks_t = {
 	.output_mask = 0xf,
 };
 
+static struct alpha_pll_masks pll_masks_b = {
+	.lock_mask = BIT(31),
+	.alpha_en_mask = BIT(24),
+	.output_mask = 0xf,
+	.post_div_mask = BM(11, 8),
+};
+
 static struct alpha_pll_vco_tbl mmpll_t_vco[] = {
-	VCO(0, 500000000, 1250000000),
+	VCO(0, 500000000, 1000000000),
 };
 
 DEFINE_EXT_CLK(mmsscc_xo, NULL);
@@ -262,18 +269,19 @@ static struct alpha_pll_clk mmpll8 = {
 DEFINE_EXT_CLK(mmpll8_out_main, &mmpll8.c);
 
 static struct alpha_pll_clk mmpll9 = {
-	.masks = &pll_masks_t,
+	.masks = &pll_masks_b,
 	.base = &virt_base,
 	.offset = MMSS_MMPLL9_MODE,
 	.vco_tbl = mmpll_t_vco,
 	.num_vco = ARRAY_SIZE(mmpll_t_vco),
+	.post_div_config = 0x100,
 	.enable_config = 0x1,
 	.c = {
 		.parent = &mmsscc_xo.c,
-		.rate = 480000000,
+		.rate = 960000000,
 		.dbg_name = "mmpll9",
 		.ops = &clk_ops_fixed_alpha_pll,
-		VDD_MMPLL4_FMAX_MAP1(LOWER, 480000000),
+		VDD_MMPLL4_FMAX_MAP2(LOWER, 480000000, NOMINAL, 960000000),
 		CLK_INIT(mmpll9.c),
 	},
 };
