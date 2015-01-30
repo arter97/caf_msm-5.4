@@ -24,6 +24,7 @@
 #include "left_lane.h"
 #include "right_lane.h"
 #include "av_mgr.h"
+#include <mach/board.h>
 
 static void *k_addr[OVERLAY_COUNT];
 static int alloc_overlay_pipe_flag[OVERLAY_COUNT];
@@ -407,6 +408,7 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 	/* this must be rdi image output. */
 	struct preview_mem *free_buf = NULL;
 	int buffer_index;
+	static bool is_camera_first_frame = true;
 
 	pr_debug("%s:  enter into rdi1 irq now, rdi1_irq_count is %d!!!\n",
 			__func__, rdi1_irq_count);
@@ -456,6 +458,11 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 			/* Only log once for early camera kpi */
 			pr_info_once("kpi cam rdi1 first frame %d\n",
 				      rdi1_irq_count);
+
+			if (is_camera_first_frame == true) {
+				place_marker("First Camera Frame");
+				is_camera_first_frame = false;
+			}
 
 			schedule_work(&wq_mdp_queue_overlay_buffers);
 			if (free_buf) {

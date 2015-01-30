@@ -27,6 +27,18 @@
 #include <linux/msm_ssbi.h>
 #include <mach/msm_bus.h>
 
+#ifdef CONFIG_BOOT_TIME_MARKER
+#include "../mach-msm/timer.h"
+#include <linux/proc_fs.h>
+#include <asm/uaccess.h>
+#define TIMER_KHZ 32768
+
+int init_marker_proc_fs(void);
+void place_marker(char *name);
+#else
+void place_marker(char *name);
+#endif
+
 struct msm_camera_io_ext {
 	uint32_t mdcphy;
 	uint32_t mdcsz;
