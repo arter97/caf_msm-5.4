@@ -1240,7 +1240,7 @@
 		qcom,vdd-voltage-level = <1 5 7>;
 		phy_type= "utmi";
 
-		clocks = <&clock_gcc clk_ln_bb_clk>,
+		clocks = <&clock_gcc clk_gcc_rx1_usb2_clkref_clk>,
 			 <&clock_gcc clk_gcc_usb_phy_cfg_ahb2phy_clk>,
 			 <&clock_gcc clk_gcc_qusb2phy_prim_reset>;
 
@@ -1262,9 +1262,9 @@
 		clocks = <&clock_gcc clk_gcc_usb3_phy_aux_clk>,
 			 <&clock_gcc clk_gcc_usb3_phy_pipe_clk>,
 			 <&clock_gcc clk_gcc_usb_phy_cfg_ahb2phy_clk>,
-			 <&clock_gcc clk_gcc_usb3_phy_aux_clk>,
-			 <&clock_gcc clk_gcc_usb3_phy_aux_clk>,
-			 <&clock_gcc clk_gcc_usb3_phy_aux_clk>;
+			 <&clock_gcc clk_gcc_usb3_phy_reset>,
+			 <&clock_gcc clk_gcc_usb3phy_phy_reset>,
+			 <&clock_gcc clk_gcc_usb3_clkref_clk>;
 
 		clock-names = "aux_clk", "pipe_clk", "cfg_ahb_clk", "phy_reset",
 			      "phy_phy_reset", "ldo_clk";
