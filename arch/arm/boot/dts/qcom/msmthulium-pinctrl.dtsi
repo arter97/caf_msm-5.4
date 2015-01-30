@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -274,6 +274,198 @@
 					drive-strength = <8>;   /* 8 mA */
 					bias-disable;           /* NO PULL */
 				};
+			};
+		};
+
+		cci0_active: cci0_active {
+			cci0_active_mux {
+				/* CLK, DATA */
+				pins = "gpio17","gpio18"; // Only 2
+				function = "cci_i2c";
+			};
+			cci0_active_cfg {
+				pins = "gpio17","gpio18";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cci0_suspend: cci0_suspend {
+			cci0_suspend_mux {
+				/* CLK, DATA */
+				pins = "gpio17","gpio18";
+				function = "cci_i2c";
+			};
+			cci0_suspend_cfg {
+				pins = "gpio17","gpio18";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cci1_active: cci1_active {
+			cci1_active_mux {
+				/* CLK, DATA */
+				pins = "gpio19","gpio20";
+				function = "cci_i2c";
+			};
+			cci1_active_cfg {
+				pins = "gpio19","gpio20";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cci1_suspend: cci1_suspend {
+			cci1_suspend_mux {
+				/* CLK, DATA */
+				pins = "gpio19","gpio20";
+				function = "cci_i2c";
+			};
+			cci1_suspend_cfg {
+				pins = "gpio19","gpio20";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cam_sensor_mclk0_active: cam_sensor_mclk0_active {
+			/* MCLK0 */
+			mclk0_active_mux {
+				/* CLK, DATA */
+				pins = "gpio13";
+				function = "cam_mclk";
+			};
+			mclk0_active_cfg {
+				pins = "gpio13";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cam_sensor_mclk0_suspend: cam_sensor_mclk0_suspend {
+			/* MCLK0 */
+			mclk0_suspend_mux {
+				/* CLK, DATA */
+				pins = "gpio13";
+				function = "cam_mclk";
+			};
+			mclk0_suspend_cfg {
+				pins = "gpio13";
+				bias-pull-down; /* PULL DOWN */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cam_sensor_rear_active: cam_sensor_rear_active {
+			/* RESET, STANDBY */
+			cam_rear_active_cfg {
+				pins = "gpio30","gpio29";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cam_sensor_rear_suspend: cam_sensor_rear_suspend{
+			/* RESET, STANDBY */
+			cam_rear_suspend_cfg {
+				pins = "gpio30","gpio29";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cam_sensor_mclk1_active: cam_sensor_mclk1_active{
+			/* MCLK1 */
+			mclk1_active_mux {
+				/* CLK, DATA */
+				pins = "gpio14";
+				function = "cam_mclk";
+			};
+			mclk1_active_cfg {
+				pins = "gpio14";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cam_sensor_mclk1_suspend: cam_sensor_mclk1_suspend {
+			/* MCLK1 */
+			mclk1_suspend_mux {
+				/* CLK, DATA */
+				pins = "gpio14";
+				function = "cam_mclk";
+			};
+			mclk1_suspend_cfg {
+				pins = "gpio14";
+				bias-pull-down; /* PULL DOWN */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cam_sensor_rear2_active: cam_sensor_rear2_active {
+			/* RESET, STANDBY */
+			cam_rear2_active_cfg {
+				pins = "gpio63","gpio62";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cam_sensor_rear2_sus {
+			cam_sensor_rear2_suspend: cam_sensor_rear2_suspend{
+				/* RESET, STANDBY */
+				cam_rear2_suspend_cfg {
+					pins = "gpio63","gpio62";
+					bias-disable; /* No PULL */
+					drive-strength = <2>; /* 2 MA */
+				};
+			};
+		};
+
+		cam_sensor_mclk2_active: cam_sensor_mclk2_active {
+			/* MCLK1 */
+			mclk2_active_mux {
+				/* CLK, DATA */
+				pins = "gpio15";
+				function = "cam_mclk";
+			};
+			mclk2_active_cfg {
+				pins = "gpio15";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cam_sensor_mclk2_suspend: cam_sensor_mclk2_suspend{
+			/* MCLK1 */
+			mclk1_suspend_mux {
+				/* CLK, DATA */
+				pins = "gpio15";
+				function = "cam_mclk";
+			};
+			mclk2_suspend_cfg {
+				pins = "gpio15";
+				bias-pull-down; /* PULL DOWN */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cam_sensor_front_active: cam_sensor_front_active{
+			/* RESET, STANDBY */
+			cam_front_active_cfg {
+				pins = "gpio23","gpio26";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cam_sensor_front_suspend: cam_sensor_front_suspend{
+			/* RESET, STANDBY */
+			cam_front_suspend_cfg {
+				pins = "gpio23","gpio26";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
 			};
 		};
 	};
