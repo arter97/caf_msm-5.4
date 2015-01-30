@@ -2987,6 +2987,9 @@ static void adreno_power_stats(struct kgsl_device *device,
 	if (device->state != KGSL_STATE_ACTIVE)
 		return;
 
+	if (gpudev->busy_cycles == NULL)
+		return;
+
 	/* Get the busy cycles counted since the counter was last reset */
 	gpudev->busy_cycles(adreno_dev, &busy_data);
 
