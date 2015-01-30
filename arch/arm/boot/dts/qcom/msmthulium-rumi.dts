@@ -30,12 +30,12 @@
 &sdhc_1 {
 	vdd-supply = <&pm8994_l20>;
 	qcom,vdd-voltage-level = <2950000 2950000>;
-	qcom,vdd-current-level = <200 750000>;
+	qcom,vdd-current-level = <200 570000>;
 
 	vdd-io-supply = <&pm8994_s4>;
 	qcom,vdd-io-always-on;
 	qcom,vdd-io-voltage-level = <1800000 1800000>;
-	qcom,vdd-io-current-level = <200 154000>;
+	qcom,vdd-io-current-level = <110 325000>;
 
 	pinctrl-names = "active", "sleep";
 	pinctrl-0 = <&sdc1_clk_on &sdc1_cmd_on &sdc1_data_on &sdc1_rclk_on>;
