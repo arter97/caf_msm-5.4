@@ -906,6 +906,7 @@
 			"core_clk_src",
 			"core_clk",
 			"bus_clk",
+			"bus_aggr_clk",
 			"iface_clk",
 			"core_clk_unipro_src",
 			"core_clk_unipro",
@@ -916,6 +917,7 @@
 			<&clock_gcc clk_ufs_axi_clk_src>,
 			<&clock_gcc clk_gcc_ufs_axi_clk>,
 			<&clock_gcc clk_gcc_sys_noc_ufs_axi_clk>,
+			<&clock_gcc clk_gcc_aggre2_ufs_axi_clk>,
 			<&clock_gcc clk_gcc_ufs_ahb_clk>,
 			<&clock_gcc clk_ufs_ice_core_clk_src>,
 			<&clock_gcc clk_gcc_ufs_unipro_core_clk>,
@@ -924,6 +926,7 @@
 			<&clock_gcc clk_gcc_ufs_rx_symbol_0_clk>;
 		freq-table-hz =
 			<100000000 200000000>,
+			<0 0>,
 			<0 0>,
 			<0 0>,
 			<0 0>,
