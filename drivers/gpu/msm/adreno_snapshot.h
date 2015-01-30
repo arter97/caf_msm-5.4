@@ -18,6 +18,9 @@
 #define DEBUG_SECTION_SZ(_dwords) (((_dwords) * sizeof(unsigned int)) \
 		+ sizeof(struct kgsl_snapshot_debug))
 
+#define SHADER_SECTION_SZ(_dwords) (((_dwords) * sizeof(unsigned int)) \
+		+ sizeof(struct kgsl_snapshot_shader))
+
 /* Section sizes for A320 */
 #define A320_SNAPSHOT_CP_STATE_SECTION_SIZE	0x2e
 #define A320_SNAPSHOT_ROQ_SECTION_SIZE		512
