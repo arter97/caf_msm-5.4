@@ -272,6 +272,27 @@ static inline uint cp_type7_packet(uint opcode, uint cnt)
 #define cp_type3_opcode(pkt) (((pkt) >> 8) & 0xFF)
 #define type3_pkt_size(pkt) ((((pkt) >> 16) & 0x3FFF) + 1)
 
+#define pkt_is_type4(pkt) \
+	((((pkt) & 0xF0000000) == CP_TYPE4_PKT) && \
+	 ((((pkt) >> 27) & 0x1) == \
+	 pm4_calc_odd_parity_bit(cp_type4_base_index_one_reg_wr(pkt))) \
+	 && ((((pkt) >> 7) & 0x1) == \
+	 pm4_calc_odd_parity_bit(type4_pkt_size(pkt))))
+
+#define cp_type4_base_index_one_reg_wr(pkt) (((pkt) >> 8) & 0x7FFFF)
+#define type4_pkt_size(pkt) ((pkt) & 0x7F)
+
+#define pkt_is_type7(pkt) \
+	((((pkt) & 0xF0000000) == CP_TYPE7_PKT) && \
+	 (((pkt) & 0x0F000000) == 0) && \
+	 ((((pkt) >> 23) & 0x1) == \
+	 pm4_calc_odd_parity_bit(cp_type7_opcode(pkt))) \
+	 && ((((pkt) >> 15) & 0x1) == \
+	 pm4_calc_odd_parity_bit(type7_pkt_size(pkt))))
+
+#define cp_type7_opcode(pkt) (((pkt) >> 16) & 0x7F)
+#define type7_pkt_size(pkt) ((pkt) & 0x3FFF)
+
 /* dword base address of the GFX decode space */
 #define SUBBLOCK_OFFSET(reg) ((unsigned int)((reg) - (0x2000)))
 
@@ -297,16 +318,6 @@ static inline uint cp_packet(struct adreno_device *adreno_dev,
 	return cp_type7_packet(opcode, size);
 }
 
-/* Return 1 if the command is an indirect buffer of any kind */
-static inline int adreno_cmd_is_ib(struct adreno_device *adreno_dev,
-					unsigned int cmd)
-{
-	return cmd == cp_packet(adreno_dev, CP_INDIRECT_BUFFER_PFE, 2) ||
-		cmd == cp_packet(adreno_dev, CP_INDIRECT_BUFFER_PFD, 2) ||
-		cmd == cp_packet(adreno_dev, CP_COND_INDIRECT_BUFFER_PFE, 2) ||
-		cmd == cp_packet(adreno_dev, CP_COND_INDIRECT_BUFFER_PFD, 2);
-}
-
 /**
  * cp_mem_packet - Generic CP memory packet to support different
  * opcodes on different GPU cores.
@@ -322,6 +333,20 @@ static inline uint cp_mem_packet(struct adreno_device *adreno_dev,
 		return cp_type3_packet(opcode, size);
 
 	return cp_type7_packet(opcode, size + num_mem);
+}
+
+/* Return 1 if the command is an indirect buffer of any kind */
+static inline int adreno_cmd_is_ib(struct adreno_device *adreno_dev,
+					unsigned int cmd)
+{
+	return cmd == cp_mem_packet(adreno_dev,
+			CP_INDIRECT_BUFFER_PFE, 2, 1) ||
+		cmd == cp_mem_packet(adreno_dev,
+			CP_INDIRECT_BUFFER_PFD, 2, 1) ||
+		cmd == cp_mem_packet(adreno_dev,
+			CP_COND_INDIRECT_BUFFER_PFE, 2, 1) ||
+		cmd == cp_mem_packet(adreno_dev,
+			CP_COND_INDIRECT_BUFFER_PFD, 2, 1);
 }
 
 /**
