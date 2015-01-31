@@ -5,7 +5,7 @@
  *
  * Copyright (C) 2012 Alexandra Chin <alexandra.chin@tw.synaptics.com>
  * Copyright (C) 2012 Scott Lin <scott.lin@tw.synaptics.com>
- * Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -603,9 +603,8 @@ static ssize_t synaptics_secure_touch_enable_store(struct device *dev,
 			err = -EIO;
 			break;
 		}
-
-		INIT_COMPLETION(rmi4_data->st_powerdown);
-		INIT_COMPLETION(rmi4_data->st_irq_processed);
+		reinit_completion(&rmi4_data->st_powerdown);
+		reinit_completion(&rmi4_data->st_irq_processed);
 		atomic_set(&rmi4_data->st_enabled, 1);
 		atomic_set(&rmi4_data->st_pending_irqs,  0);
 		break;
