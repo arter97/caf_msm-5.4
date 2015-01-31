@@ -64,6 +64,7 @@ Bus Scaling Data:
 			to be used by ocmem msm bus scaling client.
 
 GDSC Oxili Regulators:
+- regulator-names:		List of regulator name strings sorted in power-on order
 - vddcx-supply:			Phandle for vddcx regulator device node.
 - vdd-supply:			Phandle for vdd regulator device node.
 

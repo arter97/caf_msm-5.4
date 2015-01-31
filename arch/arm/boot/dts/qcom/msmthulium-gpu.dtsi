@@ -97,6 +97,8 @@
 				<26 512 0 14896000>,    // gpu=480 bus=1862
 				<26 512 0 17048000>;    // gpu=480 bus=2131
 
+		/* GDSC regulator names */
+		regulator-names = "vddcx", "vdd";
 		/* GDSC oxili regulators */
 		vddcx-supply = <&gdsc_gpu>;
 		vdd-supply = <&gdsc_gpu_gx>;
