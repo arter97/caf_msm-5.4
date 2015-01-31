@@ -1583,6 +1583,16 @@ static struct gate_clk gcc_aggre0_noc_qosgen_extref_clk = {
 	},
 };
 
+static struct reset_clk gcc_pcie_0_phy_reset = {
+	.reset_reg = GCC_PCIE_0_PHY_BCR,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_pcie_0_phy_reset",
+		.ops = &clk_ops_rst,
+		CLK_INIT(gcc_pcie_0_phy_reset.c),
+	},
+};
+
 static struct gate_clk gcc_pcie_0_pipe_clk = {
 	.en_reg = GCC_PCIE_0_PIPE_CBCR,
 	.en_mask = BIT(0),
@@ -1592,6 +1602,16 @@ static struct gate_clk gcc_pcie_0_pipe_clk = {
 		.dbg_name = "gcc_pcie_0_pipe_clk",
 		.ops = &clk_ops_gate,
 		CLK_INIT(gcc_pcie_0_pipe_clk.c),
+	},
+};
+
+static struct reset_clk gcc_pcie_1_phy_reset = {
+	.reset_reg = GCC_PCIE_1_PHY_BCR,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_pcie_1_phy_reset",
+		.ops = &clk_ops_rst,
+		CLK_INIT(gcc_pcie_1_phy_reset.c),
 	},
 };
 
@@ -2261,6 +2281,16 @@ static struct branch_clk gcc_pcie_2_mstr_axi_clk = {
 	},
 };
 
+static struct reset_clk gcc_pcie_2_phy_reset = {
+	.reset_reg = GCC_PCIE_2_PHY_BCR,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_pcie_2_phy_reset",
+		.ops = &clk_ops_rst,
+		CLK_INIT(gcc_pcie_2_phy_reset.c),
+	},
+};
+
 static struct gate_clk gcc_pcie_2_pipe_clk = {
 	.en_reg = GCC_PCIE_2_PIPE_CBCR,
 	.en_mask = BIT(0),
@@ -2281,6 +2311,36 @@ static struct branch_clk gcc_pcie_2_slv_axi_clk = {
 		.dbg_name = "gcc_pcie_2_slv_axi_clk",
 		.ops = &clk_ops_branch,
 		CLK_INIT(gcc_pcie_2_slv_axi_clk.c),
+	},
+};
+
+static struct reset_clk gcc_pcie_phy_reset = {
+	.reset_reg = GCC_PCIE_PHY_BCR,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_pcie_phy_reset",
+		.ops = &clk_ops_rst,
+		CLK_INIT(gcc_pcie_phy_reset.c),
+	},
+};
+
+static struct reset_clk gcc_pcie_phy_com_reset = {
+	.reset_reg = GCC_PCIE_PHY_COM_BCR,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_pcie_phy_com_reset",
+		.ops = &clk_ops_rst,
+		CLK_INIT(gcc_pcie_phy_com_reset.c),
+	},
+};
+
+static struct reset_clk gcc_pcie_phy_nocsr_com_phy_reset = {
+	.reset_reg = GCC_PCIE_PHY_NOCSR_COM_PHY_BCR,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_pcie_phy_nocsr_com_phy_reset",
+		.ops = &clk_ops_rst,
+		CLK_INIT(gcc_pcie_phy_nocsr_com_phy_reset.c),
 	},
 };
 
@@ -3248,21 +3308,27 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(gcc_mmss_sys_noc_axi_clk),
 	CLK_LIST(gcc_sys_noc_usb3_axi_clk),
 	CLK_LIST(gcc_sys_noc_ufs_axi_clk),
+	CLK_LIST(gcc_pcie_0_phy_reset),
 	CLK_LIST(gcc_pcie_0_pipe_clk),
 	CLK_LIST(gcc_pcie_0_aux_clk),
 	CLK_LIST(gcc_pcie_0_cfg_ahb_clk),
 	CLK_LIST(gcc_pcie_0_mstr_axi_clk),
 	CLK_LIST(gcc_pcie_0_slv_axi_clk),
+	CLK_LIST(gcc_pcie_1_phy_reset),
 	CLK_LIST(gcc_pcie_1_pipe_clk),
 	CLK_LIST(gcc_pcie_1_aux_clk),
 	CLK_LIST(gcc_pcie_1_cfg_ahb_clk),
 	CLK_LIST(gcc_pcie_1_mstr_axi_clk),
 	CLK_LIST(gcc_pcie_1_slv_axi_clk),
+	CLK_LIST(gcc_pcie_2_phy_reset),
 	CLK_LIST(gcc_pcie_2_pipe_clk),
 	CLK_LIST(gcc_pcie_2_aux_clk),
 	CLK_LIST(gcc_pcie_2_cfg_ahb_clk),
 	CLK_LIST(gcc_pcie_2_mstr_axi_clk),
 	CLK_LIST(gcc_pcie_2_slv_axi_clk),
+	CLK_LIST(gcc_pcie_phy_reset),
+	CLK_LIST(gcc_pcie_phy_com_reset),
+	CLK_LIST(gcc_pcie_phy_nocsr_com_phy_reset),
 	CLK_LIST(gcc_pcie_phy_aux_clk),
 	CLK_LIST(gcc_pcie_phy_cfg_ahb_clk),
 	CLK_LIST(gcc_pdm2_clk),
