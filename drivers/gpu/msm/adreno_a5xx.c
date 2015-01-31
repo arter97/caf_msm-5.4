@@ -40,7 +40,7 @@ static const struct adreno_vbif_platform a5xx_vbif_platforms[] = {
  * Number of times to check if the regulator enabled before
  * giving up and returning failure.
  */
-#define PWR_RETRY 3
+#define PWR_RETRY 100
 
 /**
  * a5xx_protect_init() - Initializes register protection on a5xx
@@ -111,27 +111,37 @@ static int a5xx_regulator_enable(struct adreno_device *adreno_dev)
 
 	/* Set the default register values; set SW_COLLAPSE to 0 */
 	kgsl_regwrite(device, A5XX_GPMU_SP_POWER_CNTL, 0x778000);
+	/* Insert a delay between SPTP and RAC GDSC to avoid voltage droop */
+	udelay(3);
+	/*
+	 * Poll the status register till the power-on bit is set or the max
+	 * retries are exceeded.
+	 */
 	do {
-		udelay(3);
+		udelay(1);
 		kgsl_regread(device, A5XX_GPMU_SP_PWR_CLK_STATUS, &reg);
 	} while (!(reg & PWR_ON_BIT) && retry--);
-	if (!(reg & PWR_ON_BIT))
-		goto err;
+	if (!(reg & PWR_ON_BIT)) {
+		KGSL_PWR_ERR(device, "SPTP GDSC enable failed %x\n", reg);
+		return -ENODEV;
+	}
 
 	kgsl_regwrite(device, A5XX_GPMU_RBCCU_POWER_CNTL, 0x778000);
 	retry = PWR_RETRY;
+	/*
+	 * Poll the status register till the power-on bit is set or the max
+	 * retries are exceeded.
+	 */
 	do {
-		udelay(3);
+		udelay(1);
 		kgsl_regread(device, A5XX_GPMU_RBCCU_PWR_CLK_STATUS, &reg);
 	} while (!(reg & PWR_ON_BIT) && retry--);
-	if (!(reg & PWR_ON_BIT))
-		goto err;
-	else
-		return 0;
+	if (!(reg & PWR_ON_BIT)) {
+		KGSL_PWR_ERR(device, "RBCCU GDSC enable failed %x\n", reg);
+		return -ENODEV;
+	}
 
-err:
-	KGSL_PWR_ERR(device, "regulator enable failed %x\n", reg);
-	return -ENODEV;
+	return 0;
 }
 
 /*
@@ -144,14 +154,42 @@ err:
  */
 static void a5xx_regulator_disable(struct adreno_device *adreno_dev)
 {
+	unsigned int reg, retry = PWR_RETRY;
 	struct kgsl_device *device = &adreno_dev->dev;
 	if (!adreno_is_a530(adreno_dev))
 		return;
 
 	/* Set the default register values; set SW_COLLAPSE to 1 */
-	kgsl_regwrite(device, A5XX_GPMU_RBCCU_POWER_CNTL, 0x778001);
-	udelay(3);
 	kgsl_regwrite(device, A5XX_GPMU_SP_POWER_CNTL, 0x778001);
+	/* Insert a delay between SPTP and RAC GDSC to avoid voltage droop */
+	udelay(3);
+	/*
+	 * Poll the status register till the power-on bit is cleared or the max
+	 * retries are exceeded.
+	 */
+	do {
+		udelay(1);
+		kgsl_regread(device, A5XX_GPMU_SP_PWR_CLK_STATUS, &reg);
+	} while ((reg & PWR_ON_BIT) && retry--);
+	if (reg & PWR_ON_BIT)
+		KGSL_PWR_WARN(device, "SPTP GDSC disable failed %x\n", reg);
+
+	kgsl_regwrite(device, A5XX_GPMU_RBCCU_POWER_CNTL, 0x778001);
+	retry = PWR_RETRY;
+	/*
+	 * Poll the status register till the power-on bit is cleared or the max
+	 * retries are exceeded.
+	 */
+	do {
+		udelay(1);
+		kgsl_regread(device, A5XX_GPMU_RBCCU_PWR_CLK_STATUS, &reg);
+	} while ((reg & PWR_ON_BIT) && retry--);
+	if (reg & PWR_ON_BIT)
+		KGSL_PWR_WARN(device, "RBCCU GDSC disable failed %x\n", reg);
+
+	/* Reset VBIF before PC to avoid popping bogus FIFO entries */
+	kgsl_regwrite(device, A5XX_RBBM_BLOCK_SW_RESET_CMD, 0x003C0000);
+	kgsl_regwrite(device, A5XX_RBBM_BLOCK_SW_RESET_CMD, 0);
 }
 
 /*
