@@ -1802,6 +1802,9 @@
 			"DMIC6", "MIC BIAS4 External",
 			"MIC BIAS4 External", "Digital Mic6";
 
+		clock-names = "osr_clk";
+		clocks = <&clock_gcc clk_div_clk1>;
+		qcom,cdc-mclk-gpios = <&pm8994_gpios 15 0>;
 		qcom,tomtom-mclk-clk-freq = <9600000>;
 		pinctrl-names = "mi2s-sleep",
 				"mi2s-active",
