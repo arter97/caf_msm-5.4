@@ -226,7 +226,7 @@ int set_l2_mode(struct low_power_ops *ops, int mode, bool notify_rpm)
 	return rc;
 }
 
-int set_cci_mode(struct low_power_ops *ops, int mode, bool notify_rpm)
+int set_system_mode(struct low_power_ops *ops, int mode, bool notify_rpm)
 {
 	return msm_spm_config_low_power_mode(ops->spm, mode, notify_rpm);
 }
