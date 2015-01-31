@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -77,7 +77,11 @@
 #define TSENS_TM_UPPER_THRESHOLD_VALUE_SHIFT(n)	((n) >> 12)
 #define TSENS_TM_LOWER_THRESHOLD_VALUE(n)	((n) & 0xfff)
 #define TSENS_TM_UPPER_THRESHOLD_VALUE(n)	(((n) & 0xfff000) >> 12)
+#define TSENS_TM_UPPER_THRESHOLD_MASK	0xfff000
+#define TSENS_TM_LOWER_THRESHOLD_MASK	0xfff
+#define TSENS_TM_UPPER_THRESHOLD_SHIFT	12
 
+#define TSENS_TM_SN_CRITICAL_THRESHOLD_MASK	0xfff
 #define TSENS_TM_SN_CRITICAL_THRESHOLD(n)	((n) + 0x1060)
 #define TSENS_TM_SN_STATUS(n)			((n) + 0x10a0)
 #define TSENS_TM_SN_STATUS_VALID_BIT		BIT(21)
@@ -1055,14 +1059,14 @@ static int tsens_tm_get_trip_temp(struct thermal_zone_device *thermal,
 						(tmdev->tsens_addr)) +
 				(tm_sensor->sensor_hw_num *
 				TSENS_SN_ADDR_OFFSET));
-		reg_cntl = TSENS_TM_UPPER_THRESHOLD_VALUE_SHIFT(reg_cntl);
+		reg_cntl = TSENS_TM_UPPER_THRESHOLD_VALUE(reg_cntl);
 		break;
 	case TSENS_TM_TRIP_COOL:
 		reg_cntl = readl_relaxed((TSENS_TM_UPPER_LOWER_THRESHOLD
 						(tmdev->tsens_addr)) +
 				(tm_sensor->sensor_hw_num *
 				TSENS_SN_ADDR_OFFSET));
-		reg_cntl = TSENS_TM_UPPER_THRESHOLD_VALUE_SHIFT(reg_cntl);
+		reg_cntl = TSENS_TM_LOWER_THRESHOLD_VALUE(reg_cntl);
 		break;
 	default:
 		return -EINVAL;
@@ -1128,6 +1132,7 @@ static int tsens_tm_set_trip_temp(struct thermal_zone_device *thermal,
 
 	switch (trip) {
 	case TSENS_TM_TRIP_CRITICAL:
+		temp &= TSENS_TM_SN_CRITICAL_THRESHOLD_MASK;
 		writel_relaxed(temp,
 			(TSENS_TM_SN_CRITICAL_THRESHOLD(tmdev->tsens_addr) +
 			(tm_sensor->sensor_hw_num * TSENS_SN_ADDR_OFFSET)));
@@ -1137,8 +1142,10 @@ static int tsens_tm_set_trip_temp(struct thermal_zone_device *thermal,
 				(tmdev->tsens_addr)) +
 				(tm_sensor->sensor_hw_num *
 				TSENS_SN_ADDR_OFFSET));
-		temp = reg_cntl | TSENS_TM_UPPER_THRESHOLD_SET(temp);
-		writel_relaxed(temp,
+		temp = TSENS_TM_UPPER_THRESHOLD_SET(temp);
+		temp &= TSENS_TM_UPPER_THRESHOLD_MASK;
+		reg_cntl &= ~TSENS_TM_UPPER_THRESHOLD_MASK;
+		writel_relaxed(reg_cntl | temp,
 			(TSENS_TM_UPPER_LOWER_THRESHOLD(tmdev->tsens_addr) +
 			(tm_sensor->sensor_hw_num * TSENS_SN_ADDR_OFFSET)));
 		break;
@@ -1147,14 +1154,16 @@ static int tsens_tm_set_trip_temp(struct thermal_zone_device *thermal,
 				(tmdev->tsens_addr)) +
 				(tm_sensor->sensor_hw_num *
 				TSENS_SN_ADDR_OFFSET));
-		temp = reg_cntl | TSENS_TM_LOWER_THRESHOLD_VALUE(temp);
-		writel_relaxed(temp,
+		temp &= TSENS_TM_LOWER_THRESHOLD_MASK;
+		reg_cntl &= ~TSENS_TM_LOWER_THRESHOLD_MASK;
+		writel_relaxed(reg_cntl | temp,
 			(TSENS_TM_UPPER_LOWER_THRESHOLD(tmdev->tsens_addr) +
 			(tm_sensor->sensor_hw_num * TSENS_SN_ADDR_OFFSET)));
 		break;
 	default:
 		return -EINVAL;
 	}
+
 	/* Set trip temperature thresholds */
 	mb();
 	return 0;
