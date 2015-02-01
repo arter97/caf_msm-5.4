@@ -72,6 +72,7 @@
 #define CFG_E_REG			0x0E
 #define POLARITY_100_500_BIT		BIT(2)
 #define USB_CTRL_BY_PIN_BIT		BIT(1)
+#define HVDCP_5_9_BIT			BIT(4)
 
 #define CFG_11_REG			0x11
 #define PRIORITY_BIT			BIT(7)
@@ -376,6 +377,7 @@ struct smb135x_chg {
 	bool				soft_vfloat_comp_disabled;
 	struct mutex			irq_complete;
 	struct regulator		*therm_bias_vreg;
+	struct regulator		*usb_pullup_vreg;
 	struct delayed_work		wireless_insertion_work;
 
 	unsigned int			thermal_levels;
@@ -3303,11 +3305,26 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 		}
 	}
 
+	/*
+	 * Enable USB data line pullup regulator this is needed for the D+
+	 * line to be at proper voltage for HVDCP charger detection.
+	 */
+	if (chip->usb_pullup_vreg) {
+		rc = regulator_enable(chip->usb_pullup_vreg);
+		if (rc) {
+			pr_err("Unable to enable data line pull-up regulator rc=%d\n",
+					rc);
+			if (chip->therm_bias_vreg)
+				regulator_disable(chip->therm_bias_vreg);
+			return rc;
+		}
+	}
+
 	rc = smb135x_enable_volatile_writes(chip);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't configure for volatile rc = %d\n",
 				rc);
-		return rc;
+		goto free_regulator;
 	}
 
 	/*
@@ -3325,7 +3342,7 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 	rc = smb135x_masked_write(chip, CMD_INPUT_LIMIT, mask, reg);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't set input limit cmd rc=%d\n", rc);
-		return rc;
+		goto free_regulator;
 	}
 
 	/* set bit 0 = 100mA bit 1 = 500mA and set register control */
@@ -3334,7 +3351,7 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 			POLARITY_100_500_BIT);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't set usbin cfg rc=%d\n", rc);
-		return rc;
+		goto free_regulator;
 	}
 
 	/*
@@ -3353,7 +3370,7 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 			| EN_CHG_INHIBIT_BIT, reg);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't set cfg 14 rc=%d\n", rc);
-		return rc;
+		goto free_regulator;
 	}
 
 	/* control USB suspend via command bits */
@@ -3366,7 +3383,7 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 		if (rc < 0) {
 			dev_err(chip->dev,
 				"Couldn't set float voltage rc = %d\n", rc);
-			return rc;
+			goto free_regulator;
 		}
 	}
 
@@ -3374,7 +3391,8 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 	if (chip->iterm_ma != -EINVAL) {
 		if (chip->iterm_disabled) {
 			dev_err(chip->dev, "Error: Both iterm_disabled and iterm_ma set\n");
-			return -EINVAL;
+			rc = -EINVAL;
+			goto free_regulator;
 		} else {
 			if (chip->iterm_ma <= 50)
 				reg = CHG_ITERM_50MA;
@@ -3398,7 +3416,7 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 			if (rc) {
 				dev_err(chip->dev,
 					"Couldn't set iterm rc = %d\n", rc);
-				return rc;
+				goto free_regulator;
 			}
 
 			rc = smb135x_masked_write(chip, CFG_14_REG,
@@ -3406,7 +3424,7 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 			if (rc) {
 				dev_err(chip->dev,
 					"Couldn't enable iterm rc = %d\n", rc);
-				return rc;
+				goto free_regulator;
 			}
 		}
 	} else  if (chip->iterm_disabled) {
@@ -3416,7 +3434,7 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 		if (rc) {
 			dev_err(chip->dev, "Couldn't set iterm rc = %d\n",
 								rc);
-			return rc;
+			goto free_regulator;
 		}
 	}
 
@@ -3430,7 +3448,7 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 				dev_err(chip->dev,
 				"Couldn't disable safety timer rc = %d\n",
 				rc);
-				return rc;
+				goto free_regulator;
 			}
 		} else {
 			for (i = 0; i < ARRAY_SIZE(chg_time); i++) {
@@ -3446,7 +3464,7 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 				dev_err(chip->dev,
 					"Couldn't set safety timer rc = %d\n",
 					rc);
-				return rc;
+				goto free_regulator;
 			}
 		}
 	}
@@ -3459,7 +3477,18 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't set batt_missing config = %d\n",
 									rc);
-		return rc;
+		goto free_regulator;
+	}
+
+	if (chip->usb_pullup_vreg) {
+		/* enable 9V HVDCP adapter support */
+		rc = smb135x_masked_write(chip, CFG_E_REG, HVDCP_5_9_BIT,
+					HVDCP_5_9_BIT);
+		if (rc < 0) {
+			dev_err(chip->dev,
+				"Couldn't request for 5 or 9V rc=%d\n", rc);
+			goto free_regulator;
+		}
 	}
 
 	__smb135x_charging(chip, chip->chg_enabled);
@@ -3473,7 +3502,7 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 		if (rc < 0) {
 			dev_err(chip->dev, "Couldn't set irq config rc = %d\n",
 					rc);
-			return rc;
+			goto free_regulator;
 		}
 
 		/* enabling only interesting interrupts */
@@ -3497,7 +3526,7 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 		if (rc < 0) {
 			dev_err(chip->dev, "Couldn't set irq enable rc = %d\n",
 					rc);
-			return rc;
+			goto free_regulator;
 		}
 	}
 
@@ -3512,7 +3541,7 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 		if (rc < 0) {
 			dev_err(chip->dev, "Couldn't set dc charge current rc = %d\n",
 					rc);
-			return rc;
+			goto free_regulator;
 		}
 	}
 
@@ -3531,7 +3560,7 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 		if (rc < 0) {
 			dev_err(chip->dev, "Couldn't disable soft vfloat rc = %d\n",
 					rc);
-			return rc;
+			goto free_regulator;
 		}
 	}
 
@@ -3544,9 +3573,15 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't write to otg cfg reg rc = %d\n",
 				rc);
-		return rc;
+		goto free_regulator;
 	}
+	return 0;
 
+free_regulator:
+	if (chip->therm_bias_vreg)
+		regulator_disable(chip->therm_bias_vreg);
+	if (chip->usb_pullup_vreg)
+		regulator_disable(chip->usb_pullup_vreg);
 	return rc;
 }
 
@@ -3685,6 +3720,14 @@ static int smb_parse_dt(struct smb135x_chg *chip)
 			pr_err("Couldn't read threm limits rc = %d\n", rc);
 			return rc;
 		}
+	}
+
+	if (of_find_property(node, "usb-pullup-supply", NULL)) {
+		/* get the data line pull-up regulator */
+		chip->usb_pullup_vreg = devm_regulator_get(chip->dev,
+							"usb-pullup");
+		if (IS_ERR(chip->usb_pullup_vreg))
+			return PTR_ERR(chip->usb_pullup_vreg);
 	}
 
 	chip->pinctrl_state_name = of_get_property(node, "pinctrl-names", NULL);
@@ -4051,6 +4094,11 @@ static int smb135x_charger_remove(struct i2c_client *client)
 			pr_err("Couldn't disable therm-bias rc = %d\n", rc);
 	}
 
+	if (chip->usb_pullup_vreg) {
+		rc = regulator_disable(chip->usb_pullup_vreg);
+		if (rc)
+			pr_err("Couldn't disable data-pullup rc = %d\n", rc);
+	}
 
 	if (chip->dc_psy_type != -EINVAL)
 		power_supply_unregister(&chip->dc_psy);
@@ -4163,6 +4211,23 @@ static const struct i2c_device_id smb135x_charger_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, smb135x_charger_id);
 
+static void smb135x_shutdown(struct i2c_client *client)
+{
+	int rc;
+	struct smb135x_chg *chip = i2c_get_clientdata(client);
+
+	if (chip->usb_pullup_vreg) {
+		/*
+		 * switch to 5V adapter to prevent any errorneous request of 12V
+		 * when USB D+ line pull-up regulator turns off.
+		 */
+		rc = smb135x_masked_write(chip, CFG_E_REG, HVDCP_5_9_BIT, 0);
+		if (rc < 0)
+			dev_err(chip->dev,
+				"Couldn't request for 5V rc=%d\n", rc);
+	}
+}
+
 static struct i2c_driver smb135x_charger_driver = {
 	.driver		= {
 		.name		= "smb135x-charger",
@@ -4173,6 +4238,7 @@ static struct i2c_driver smb135x_charger_driver = {
 	.probe		= smb135x_charger_probe,
 	.remove		= smb135x_charger_remove,
 	.id_table	= smb135x_charger_id,
+	.shutdown	= smb135x_shutdown,
 };
 
 module_i2c_driver(smb135x_charger_driver);
