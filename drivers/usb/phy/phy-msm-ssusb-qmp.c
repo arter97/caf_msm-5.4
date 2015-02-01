@@ -34,9 +34,7 @@
 #define PCIE_USB3_PHY_SW_RESET			0x600
 #define PCIE_USB3_PHY_POWER_DOWN_CONTROL	0x604
 #define PCIE_USB3_PHY_START			0x608
-#define PCIE_USB3_PHY_AUTONOMOUS_MODE_CTRL	0x6BC
 
-#define PCIE_USB3_PHY_PCS_STATUS		0x728
 #define PHYSTATUS				BIT(6)
 
 /* AHB2PHY register offsets */
@@ -54,22 +52,28 @@ enum qmp_phy_rev_reg {
 	USB3_REVISION_ID1,
 	USB3_REVISION_ID2,
 	USB3_REVISION_ID3,
+	USB3_PHY_PCS_STATUS,
+	USB3_PHY_AUTONOMOUS_MODE_CTRL,
 };
 
-/* QMP PHY REVID offset for rev1 */
+/* QMP PHY register offset for rev1 */
 unsigned int qmp_phy_rev1[] = {
 	[USB3_REVISION_ID0] = 0x730,
 	[USB3_REVISION_ID1] = 0x734,
 	[USB3_REVISION_ID2] = 0x738,
 	[USB3_REVISION_ID3] = 0x73c,
+	[USB3_PHY_PCS_STATUS] = 0x728,
+	[USB3_PHY_AUTONOMOUS_MODE_CTRL] = 0x6BC,
 };
 
-/* QMP PHY REVID offset for rev2 */
+/* QMP PHY register offset for rev2 */
 unsigned int qmp_phy_rev2[] = {
 	[USB3_REVISION_ID0] = 0x788,
 	[USB3_REVISION_ID1] = 0x78C,
 	[USB3_REVISION_ID2] = 0x790,
 	[USB3_REVISION_ID3] = 0x794,
+	[USB3_PHY_PCS_STATUS] = 0x77C,
+	[USB3_PHY_AUTONOMOUS_MODE_CTRL] = 0x6D4,
 };
 
 struct qmp_reg_val {
@@ -308,7 +312,7 @@ struct msm_ssphy_qmp {
 	bool			emulation;
 	bool			switch_pipe_clk_src;
 	bool			misc_config;
-	unsigned int		*phy_id_reg; /* version base ID offset */
+	unsigned int		*phy_reg; /* revision based offset */
 };
 
 static const struct of_device_id msm_usb_id_table[] = {
@@ -335,7 +339,8 @@ static void msm_ssusb_qmp_enable_autonomous(struct msm_ssphy_qmp *phy)
 
 	dev_dbg(phy->phy.dev, "enabling QMP autonomous mode with cable %s\n",
 			get_cable_status_str(phy));
-	val = readb_relaxed(phy->base + PCIE_USB3_PHY_AUTONOMOUS_MODE_CTRL);
+	val = readb_relaxed(phy->base +
+			phy->phy_reg[USB3_PHY_AUTONOMOUS_MODE_CTRL]);
 
 	val |= ARCVR_DTCT_EN;
 	if (phy->cable_connected) {
@@ -348,7 +353,8 @@ static void msm_ssusb_qmp_enable_autonomous(struct msm_ssphy_qmp *phy)
 		val |= ARCVR_DTCT_EVENT_SEL;
 	}
 
-	writeb_relaxed(val, phy->base + PCIE_USB3_PHY_AUTONOMOUS_MODE_CTRL);
+	writeb_relaxed(val, phy->base +
+			phy->phy_reg[USB3_PHY_AUTONOMOUS_MODE_CTRL]);
 }
 
 
@@ -531,13 +537,13 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 
 	/* Rev ID is made up each of the LSBs of REVISION_ID[0-3] */
 	revid = (readl_relaxed(phy->base +
-			phy->phy_id_reg[USB3_REVISION_ID3]) & 0xFF) << 24;
+			phy->phy_reg[USB3_REVISION_ID3]) & 0xFF) << 24;
 	revid |= (readl_relaxed(phy->base +
-			phy->phy_id_reg[USB3_REVISION_ID2]) & 0xFF) << 16;
+			phy->phy_reg[USB3_REVISION_ID2]) & 0xFF) << 16;
 	revid |= (readl_relaxed(phy->base +
-			phy->phy_id_reg[USB3_REVISION_ID1]) & 0xFF) << 8;
+			phy->phy_reg[USB3_REVISION_ID1]) & 0xFF) << 8;
 	revid |= readl_relaxed(phy->base +
-			phy->phy_id_reg[USB3_REVISION_ID0]) & 0xFF;
+			phy->phy_reg[USB3_REVISION_ID0]) & 0xFF;
 
 	switch (revid) {
 	case 0x10000000:
@@ -593,8 +599,8 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 
 	/* Wait for PHY initialization to be done */
 	do {
-		if (readl_relaxed(phy->base + PCIE_USB3_PHY_PCS_STATUS) &
-			PHYSTATUS)
+		if (readl_relaxed(phy->base +
+			phy->phy_reg[USB3_PHY_PCS_STATUS]) & PHYSTATUS)
 			usleep_range(1, 2);
 		else
 			break;
@@ -859,7 +865,7 @@ static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 		dev_dbg(dev, "Found QMP PHY version as:%s.\n",
 						phy_ver->compatible);
 		if (phy_ver->data) {
-			phy->phy_id_reg = (unsigned int *)phy_ver->data;
+			phy->phy_reg = (unsigned int *)phy_ver->data;
 		} else {
 			dev_err(dev,
 				"QMP PHY version match but wrong data val.\n");
