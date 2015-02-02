@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -113,6 +113,7 @@ static const struct adreno_gpu_core adreno_gpulist[] = {
 		.pfp_bstrp_ver = 0x4ff083,
 		.shader_offset = 0x20000, /* SP and TP addresses */
 		.shader_size = 0x10000,
+		.num_protected_regs = 0x18,
 	},
 	{
 		.gpurev = ADRENO_REV_A530,
