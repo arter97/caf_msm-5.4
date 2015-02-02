@@ -468,6 +468,12 @@
 /* external multimedia clocks */
 #define clk_mdss_pixel_clk_mux		0xf261a1a6
 #define clk_mdss_byte_clk_mux		0x64a23fa0
+#define clk_byte_clk_src		0x3a911c53
+#define clk_pixel_clk_src		0x8b6f83d8
+#define clk_n2_div_clk			0x55f99368
+#define clk_post_n1_div_clk		0x8d82b2ed
+#define clk_dsi_vco_clk			0x57ed31b4
+#define clk_mdss_dsi1_vco_clk_src	0xfcd15658
 #define clk_hdmi_vco_clk		0x66003284
 #define clk_edp_pixel_clk_src		0xce3cfd11
 #define clk_edp_mainlink_clk_src	0x384569b6
