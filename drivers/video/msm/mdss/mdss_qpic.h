@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014 - 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -85,6 +85,9 @@ struct qpic_data_type {
 	struct qpic_panel_io_desc panel_io;
 	u32 bus_handle;
 	struct completion fifo_eof_comp;
+	u32 qpic_is_on;
+	bool splash_screen_transition;
+	bool lk_transition_done;
 };
 
 u32 qpic_send_frame(
