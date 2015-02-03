@@ -245,6 +245,7 @@
 		coresight-child-list = <&funnel_in0>;
 		coresight-child-ports = <3>;
 
+		qcom,tpda-atid = <65>;
 		qcom,bc-elem-size = <6 32>;
 		qcom,tc-elem-size = <6 32>;
 		qcom,dsb-elem-size = <6 32>,
@@ -271,6 +272,7 @@
 		coresight-child-list = <&funnel_apss_merge>;
 		coresight-child-ports = <2>;
 
+		qcom,tpda-atid = <66>;
 		qcom,bc-elem-size = <0 32>,
 				    <1 32>;
 		qcom,tc-elem-size = <0 32>;
