@@ -2548,6 +2548,30 @@ static struct branch_clk gcc_ufs_unipro_core_clk = {
 	},
 };
 
+static struct gate_clk gcc_ufs_sys_clk_core_clk = {
+	.en_reg = GCC_UFS_SYS_CLK_CORE_CBCR,
+	.en_mask = BIT(0),
+	.delay_us = 500,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_ufs_sys_clk_core_clk",
+		.ops = &clk_ops_gate,
+		CLK_INIT(gcc_ufs_sys_clk_core_clk.c),
+	},
+};
+
+static struct gate_clk gcc_ufs_tx_symbol_clk_core_clk = {
+	.en_reg = GCC_UFS_TX_SYMBOL_CLK_CORE_CBCR,
+	.en_mask = BIT(0),
+	.delay_us = 500,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_ufs_tx_symbol_clk_core_clk",
+		.ops = &clk_ops_gate,
+		CLK_INIT(gcc_ufs_tx_symbol_clk_core_clk.c),
+	},
+};
+
 static struct branch_clk gcc_usb3_phy_pipe_clk = {
 	.cbcr_reg = GCC_USB3_PHY_PIPE_CBCR,
 	.bcr_reg = GCC_USB3PHY_PHY_BCR,
@@ -2966,6 +2990,8 @@ static struct mux_clk gcc_debug_mux = {
 		{ &gcc_ufs_rx_symbol_1_clk.c, 0x0102 },
 		{ &gcc_ufs_unipro_core_clk.c, 0x0106 },
 		{ &gcc_ufs_ice_core_clk.c, 0x0107 },
+		{ &gcc_ufs_sys_clk_core_clk.c, 0x108},
+		{ &gcc_ufs_tx_symbol_clk_core_clk.c, 0x0109 },
 		{ &gcc_aggre0_snoc_axi_clk.c, 0x0116 },
 		{ &gcc_aggre0_cnoc_ahb_clk.c, 0x0117 },
 		{ &gcc_smmu_aggre0_axi_clk.c, 0x0119 },
@@ -3212,6 +3238,8 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(gcc_ufs_rx_symbol_0_clk),
 	CLK_LIST(gcc_ufs_tx_cfg_clk),
 	CLK_LIST(gcc_ufs_tx_symbol_0_clk),
+	CLK_LIST(gcc_ufs_sys_clk_core_clk),
+	CLK_LIST(gcc_ufs_tx_symbol_clk_core_clk),
 	CLK_LIST(hlos1_vote_lpass_core_smmu_clk),
 	CLK_LIST(hlos1_vote_lpass_adsp_smmu_clk),
 	CLK_LIST(hlos2_vote_lpass_core_smmu_clk),
