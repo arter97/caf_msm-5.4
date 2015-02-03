@@ -62,12 +62,15 @@
 #include <linux/i2c.h>
 #include <linux/regulator/consumer.h>
 #include <linux/leds-lp5521.h>
+#include <linux/i2c/adp5588.h>
 
 
 
 
 static	struct regulator *reg_lvs1_5523;
 static	struct regulator *reg_lvs1_5521;
+static	struct regulator *reg_lvs1_adp5588;
+
 
 static struct lp5523_led_config lp5523_led_config[] = {
 	{
@@ -260,6 +263,53 @@ static struct i2c_board_info lp5521_i2c_boardinfo[] __initdata = {
 };
 
 
+int adp5588_gpio_setup(struct i2c_client *client,
+				int gpio, unsigned ngpio,
+				void *context)
+{
+	int rc;
+
+	reg_lvs1_adp5588= regulator_get(NULL,"vdd_led");
+	rc = regulator_enable(reg_lvs1_adp5588);
+
+	if (rc) {
+		pr_err("reg_lvs1_adp5588 - lvs1 fail\n");
+	}
+
+	return rc;
+}
+
+int adp5588_gpio_teardown(struct i2c_client *client,
+				int gpio, unsigned ngpio,
+				void *context)
+{
+	int rc = 0;
+
+	rc = regulator_disable(reg_lvs1_adp5588);
+
+	if (rc) {
+		pr_err("reg_lvs1_adp5588 - lvs1 fail\n");
+	}
+
+	return rc;
+}
+
+
+static struct adp5588_gpio_platform_data adp5588_gpio_data = {
+	.gpio_start = 200,
+	.pullup_dis_mask = 0,
+	.setup = adp5588_gpio_setup,
+	.teardown = adp5588_gpio_teardown,
+
+};
+
+static struct i2c_board_info adp5588_gpio_i2c_boardinfo[] __initdata = {
+	{
+	I2C_BOARD_INFO("adp5588-gpio", 0x34),
+	.platform_data = &adp5588_gpio_data,
+	},
+};
+
 static struct memtype_reserve msm8226_reserve_table[] __initdata = {
 	[MEMTYPE_SMI] = {
 	},
@@ -341,10 +391,6 @@ void __init msm8226_add_drivers(void)
 	else
 		msm_clock_init(&msm8226_clock_init_data);
 	msm_bus_fabric_init_driver();
-	qup_i2c_init_driver();
-	ncp6335d_regulator_init();
-	fan53555_regulator_init();
-	cpr_regulator_init();
 	tsens_tm_init_driver();
 	msm_thermal_device_init();
 }
@@ -377,6 +423,7 @@ void __init msm8226_init(void)
 		/* qm8626 register the LED drivers LP5521/5523 with I2C */
 		i2c_register_board_info( 1,lp5523_i2c_boardinfo , ARRAY_SIZE(lp5523_i2c_boardinfo) );
 		i2c_register_board_info( 1,lp5521_i2c_boardinfo , ARRAY_SIZE(lp5521_i2c_boardinfo) );
+		i2c_register_board_info( 1,adp5588_gpio_i2c_boardinfo , ARRAY_SIZE(adp5588_gpio_i2c_boardinfo) );
 	}
 }
 
