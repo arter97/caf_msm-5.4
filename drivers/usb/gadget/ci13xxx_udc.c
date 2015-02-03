@@ -3536,6 +3536,13 @@ static const struct usb_ep_ops usb_ep_ops = {
 /******************************************************************************
  * GADGET block
  *****************************************************************************/
+int usb_gadget_flush_wq(struct usb_gadget *gadget)
+{
+	flush_workqueue(gadget->func_wq);
+	return 0;
+}
+
+
 static int ci13xxx_vbus_session(struct usb_gadget *_gadget, int is_active)
 {
 	struct ci13xxx *udc = container_of(_gadget, struct ci13xxx, gadget);
@@ -4039,6 +4046,14 @@ static int udc_probe(struct ci13xxx_udc_driver *driver, struct device *dev,
 	if (retval)
 		goto remove_trans;
 
+	udc->gadget.func_wq = alloc_workqueue("k_func", WQ_UNBOUND |
+			WQ_MEM_RECLAIM, 1);
+	if (!udc->gadget.func_wq) {
+		pr_err("%s: Unable to create workqueue func_wq\n", __func__);
+		retval = -ENOMEM;
+		goto del_gadget;
+	}
+
 	pm_runtime_no_callbacks(&udc->gadget.dev);
 	pm_runtime_enable(&udc->gadget.dev);
 
@@ -4048,6 +4063,8 @@ static int udc_probe(struct ci13xxx_udc_driver *driver, struct device *dev,
 	_udc = udc;
 	return retval;
 
+del_gadget:
+	usb_del_gadget_udc(&udc->gadget);
 remove_trans:
 	if (udc->transceiver) {
 		otg_set_peripheral(udc->transceiver->otg, &udc->gadget);
@@ -4089,6 +4106,7 @@ static void udc_remove(void)
 	if (retval)
 		pr_err("Unregistering trace failed\n");
 
+	destroy_workqueue(udc->gadget.func_wq);
 	usb_del_gadget_udc(&udc->gadget);
 
 	if (udc->transceiver) {

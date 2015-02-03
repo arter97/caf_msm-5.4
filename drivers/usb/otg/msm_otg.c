@@ -896,6 +896,7 @@ static int msm_otg_suspend(struct msm_otg *motg)
 		return -EBUSY;
 
 	disable_irq(motg->irq);
+	usb_gadget_flush_wq(phy->otg->gadget);
 	host_bus_suspend = !test_bit(MHL, &motg->inputs) && phy->otg->host &&
 		!test_bit(ID, &motg->inputs);
 	device_bus_suspend = phy->otg->gadget && test_bit(ID, &motg->inputs) &&

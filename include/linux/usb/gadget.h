@@ -547,6 +547,7 @@ struct usb_gadget {
 	u8				usb_core_id;
 	bool				l1_supported;
 	bool                remote_wakeup;
+	struct workqueue_struct		*func_wq;
 };
 
 static inline void set_gadget_data(struct usb_gadget *gadget, void *data)
@@ -597,6 +598,8 @@ static inline int gadget_is_otg(struct usb_gadget *g)
 	return 0;
 #endif
 }
+
+int usb_gadget_flush_wq(struct usb_gadget *gadget);
 
 /**
  * usb_gadget_frame_number - returns the current frame number

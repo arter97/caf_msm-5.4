@@ -32,7 +32,6 @@
 #define BAM_N_PORTS	1
 #define BAM2BAM_N_PORTS	4
 
-static struct workqueue_struct *gbam_wq;
 static int n_bam_ports;
 static int n_bam2bam_ports;
 static unsigned n_tx_req_queued;
@@ -293,6 +292,8 @@ void gbam_data_write_done(void *p, struct sk_buff *skb)
 	struct gbam_port	*port = p;
 	struct bam_ch_info	*d = &port->data_ch;
 	unsigned long		flags;
+	struct f_rmnet		*dev;
+	struct usb_gadget	*gadget;
 
 	if (!skb)
 		return;
@@ -309,7 +310,9 @@ void gbam_data_write_done(void *p, struct sk_buff *skb)
 
 	spin_unlock_irqrestore(&port->port_lock_ul, flags);
 
-	queue_work(gbam_wq, &d->write_tobam_w);
+	dev = port_to_rmnet(port->gr);
+	gadget = dev->cdev->gadget;
+	queue_work(gadget->func_wq, &d->write_tobam_w);
 }
 
 static void gbam_data_write_tobam(struct work_struct *w)
@@ -370,6 +373,8 @@ static void gbam_epin_complete(struct usb_ep *ep, struct usb_request *req)
 	struct bam_ch_info	*d;
 	struct sk_buff		*skb = req->context;
 	int			status = req->status;
+	struct f_rmnet		*dev;
+	struct usb_gadget	*gadget;
 
 	switch (status) {
 	case 0:
@@ -397,7 +402,9 @@ static void gbam_epin_complete(struct usb_ep *ep, struct usb_request *req)
 	list_add_tail(&req->list, &d->tx_idle);
 	spin_unlock(&port->port_lock_dl);
 
-	queue_work(gbam_wq, &d->write_tohost_w);
+	dev = port_to_rmnet(port->gr);
+	gadget = dev->cdev->gadget;
+	queue_work(gadget->func_wq, &d->write_tohost_w);
 }
 
 static void
@@ -408,6 +415,11 @@ gbam_epout_complete(struct usb_ep *ep, struct usb_request *req)
 	struct sk_buff		*skb = req->context;
 	int			status = req->status;
 	int			queue = 0;
+	struct f_rmnet		*dev;
+	struct usb_gadget	*gadget;
+
+	dev = port_to_rmnet(port->gr);
+	gadget = dev->cdev->gadget;
 
 	switch (status) {
 	case 0:
@@ -433,7 +445,7 @@ gbam_epout_complete(struct usb_ep *ep, struct usb_request *req)
 	spin_lock(&port->port_lock_ul);
 	if (queue) {
 		__skb_queue_tail(&d->rx_skb_q, skb);
-		queue_work(gbam_wq, &d->write_tobam_w);
+		queue_work(gadget->func_wq, &d->write_tobam_w);
 	}
 
 	/* TODO: Handle flow control gracefully by having
@@ -994,12 +1006,16 @@ static int gbam_data_ch_probe(struct platform_device *pdev)
 	struct bam_ch_info	*d;
 	int			i;
 	unsigned long		flags;
+	struct f_rmnet		*dev;
+	struct usb_gadget	*gadget;
 
 	pr_debug("%s: name:%s\n", __func__, pdev->name);
 
 	for (i = 0; i < n_bam_ports; i++) {
 		port = bam_ports[i].port;
 		d = &port->data_ch;
+		dev = port_to_rmnet(port->gr);
+		gadget = dev->cdev->gadget;
 
 		if (!strncmp(bam_ch_names[i], pdev->name,
 					BAM_DMUX_CH_NAME_MAX_LEN)) {
@@ -1009,7 +1025,7 @@ static int gbam_data_ch_probe(struct platform_device *pdev)
 			spin_lock_irqsave(&port->port_lock_ul, flags);
 			spin_lock(&port->port_lock_dl);
 			if (port->port_usb)
-				queue_work(gbam_wq, &port->connect_w);
+				queue_work(gadget->func_wq, &port->connect_w);
 			spin_unlock(&port->port_lock_dl);
 			spin_unlock_irqrestore(&port->port_lock_ul, flags);
 
@@ -1274,6 +1290,9 @@ void gbam_disconnect(struct grmnet *gr, u8 port_num, enum transport_type trans)
 	struct gbam_port	*port;
 	unsigned long		flags;
 	struct bam_ch_info	*d;
+	struct f_rmnet		*dev;
+	struct usb_gadget	*gadget;
+
 
 	pr_debug("%s: grmnet:%p port#%d\n", __func__, gr, port_num);
 
@@ -1320,10 +1339,12 @@ void gbam_disconnect(struct grmnet *gr, u8 port_num, enum transport_type trans)
 
 	gr->in->driver_data = NULL;
 	gr->out->driver_data = NULL;
+	dev = port_to_rmnet(port->gr);
+	gadget = dev->cdev->gadget;
 
 	if (trans == USB_GADGET_XPORT_BAM ||
 		trans == USB_GADGET_XPORT_BAM2BAM_IPA)
-		queue_work(gbam_wq, &port->disconnect_w);
+		queue_work(gadget->func_wq, &port->disconnect_w);
 	else if (trans == USB_GADGET_XPORT_BAM2BAM) {
 		if (port_num == 0) {
 			if (usb_bam_client_ready(false)) {
@@ -1342,6 +1363,8 @@ int gbam_connect(struct grmnet *gr, u8 port_num,
 	struct bam_ch_info	*d;
 	int			ret;
 	unsigned long		flags;
+	struct f_rmnet		*dev;
+	struct usb_gadget	*gadget;
 
 	pr_debug("%s: grmnet:%p port#%d\n", __func__, gr, port_num);
 
@@ -1416,7 +1439,10 @@ int gbam_connect(struct grmnet *gr, u8 port_num,
 	}
 
 	d->trans = trans;
-	queue_work(gbam_wq, &port->connect_w);
+	dev = port_to_rmnet(port->gr);
+	gadget = dev->cdev->gadget;
+
+	queue_work(gadget->func_wq, &port->connect_w);
 
 	return 0;
 }
@@ -1434,13 +1460,6 @@ int gbam_setup(unsigned int no_bam_port, unsigned int no_bam2bam_port)
 		pr_err("%s: Invalid num of ports count:%d,%d\n",
 				__func__, no_bam_port, no_bam2bam_port);
 		return -EINVAL;
-	}
-
-	gbam_wq = alloc_workqueue("k_gbam", WQ_UNBOUND | WQ_MEM_RECLAIM, 1);
-	if (!gbam_wq) {
-		pr_err("%s: Unable to create workqueue gbam_wq\n",
-				__func__);
-		return -ENOMEM;
 	}
 
 	for (i = 0; i < no_bam_port; i++) {
@@ -1470,7 +1489,6 @@ free_bam_ports:
 		gbam_port_free(i);
 	for (i = 0; i < n_bam2bam_ports; i++)
 		gbam2bam_port_free(i);
-	destroy_workqueue(gbam_wq);
 
 	return ret;
 }
@@ -1479,6 +1497,8 @@ void gbam_suspend(struct grmnet *gr, u8 port_num, enum transport_type trans)
 {
 	struct gbam_port	*port;
 	struct bam_ch_info *d;
+	struct f_rmnet		*dev;
+	struct usb_gadget	*gadget;
 
 	if (trans != USB_GADGET_XPORT_BAM2BAM &&
 		trans != USB_GADGET_XPORT_BAM2BAM_IPA)
@@ -1486,16 +1506,20 @@ void gbam_suspend(struct grmnet *gr, u8 port_num, enum transport_type trans)
 
 	port = bam2bam_ports[port_num];
 	d = &port->data_ch;
+	dev = port_to_rmnet(port->gr);
+	gadget = dev->cdev->gadget;
 
 	pr_debug("%s: suspended port %d\n", __func__, port_num);
 
-	queue_work(gbam_wq, &port->suspend_w);
+	queue_work(gadget->func_wq, &port->suspend_w);
 }
 
 void gbam_resume(struct grmnet *gr, u8 port_num, enum transport_type trans)
 {
 	struct gbam_port	*port;
 	struct bam_ch_info *d;
+	struct f_rmnet		*dev;
+	struct usb_gadget	*gadget;
 
 	if (trans != USB_GADGET_XPORT_BAM2BAM &&
 		trans != USB_GADGET_XPORT_BAM2BAM_IPA)
@@ -1503,8 +1527,10 @@ void gbam_resume(struct grmnet *gr, u8 port_num, enum transport_type trans)
 
 	port = bam2bam_ports[port_num];
 	d = &port->data_ch;
+	dev = port_to_rmnet(port->gr);
+	gadget = dev->cdev->gadget;
 
 	pr_debug("%s: resumed port %d\n", __func__, port_num);
 
-	queue_work(gbam_wq, &port->resume_w);
+	queue_work(gadget->func_wq, &port->resume_w);
 }

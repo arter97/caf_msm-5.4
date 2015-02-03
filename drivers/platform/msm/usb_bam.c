@@ -1344,6 +1344,7 @@ static void usb_bam_start_suspend(struct work_struct *w)
 
 	pr_debug("%s: enter", __func__);
 	mutex_lock(&info[cur_bam].suspend_resume_mutex);
+	usb_bam_resume_core(cur_bam);
 
 	spin_lock(&usb_bam_ipa_handshake_info_lock);
 	/* If cable was disconnected, let disconnection seq do everything */
