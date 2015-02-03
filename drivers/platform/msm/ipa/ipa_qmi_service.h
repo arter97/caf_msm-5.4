@@ -95,6 +95,12 @@ int qmi_filter_request_send(struct ipa_install_fltr_rule_req_msg_v01 *req);
 /* sending filter-installed-notify-request to modem*/
 int qmi_filter_notify_send(struct ipa_fltr_installed_notif_req_msg_v01 *req);
 
+int qmi_enable_force_clear_datapath_send(
+	struct ipa_enable_force_clear_datapath_req_msg_v01 *req);
+
+int qmi_disable_force_clear_datapath_send(
+	struct ipa_disable_force_clear_datapath_req_msg_v01 *req);
+
 int copy_ul_filter_rule_to_ipa(struct ipa_install_fltr_rule_req_msg_v01
 	*rule_req, uint32_t *rule_hdl);
 
@@ -130,6 +136,18 @@ static inline int qmi_filter_request_send(
 /* sending filter-installed-notify-request to modem*/
 static inline int qmi_filter_notify_send(
 	struct ipa_fltr_installed_notif_req_msg_v01 *req)
+{
+	return -EPERM;
+}
+
+static inline int qmi_enable_force_clear_datapath_send(
+	struct ipa_enable_force_clear_datapath_req_msg_v01 *req)
+{
+	return -EPERM;
+}
+
+static inline int qmi_disable_force_clear_datapath_send(
+	struct ipa_disable_force_clear_datapath_req_msg_v01 *req)
 {
 	return -EPERM;
 }
