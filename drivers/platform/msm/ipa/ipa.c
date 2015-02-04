@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -999,7 +999,7 @@ static int ipa_init_sram(void)
 	IPA_SRAM_SET(IPA_v2_RAM_MODEM_HDR_OFST, IPA_CANARY_VAL);
 	IPA_SRAM_SET(IPA_v2_RAM_MODEM_OFST, IPA_CANARY_VAL);
 	IPA_SRAM_SET(IPA_v2_RAM_APPS_V4_FLT_OFST, IPA_CANARY_VAL);
-	IPA_SRAM_SET(IPA_v2_RAM_END_OFST, IPA_CANARY_VAL);
+	IPA_SRAM_SET(IPA_v2_RAM_UC_INFO_OFST, IPA_CANARY_VAL);
 
 	iounmap(ipa_sram_mmio);
 

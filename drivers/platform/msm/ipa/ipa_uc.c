@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -658,3 +658,20 @@ int ipa_uc_notify_clk_state(bool enabled)
 	return ipa_uc_send_cmd(0, opcode, 0, true, 0);
 }
 EXPORT_SYMBOL(ipa_uc_notify_clk_state);
+
+/**
+ * ipa_uc_update_hw_flags() - send uC the HW flags to be used
+ * @flags: This field is expected to be used as bitmask for enum ipa_hw_flags
+ *
+ * Returns: 0 on success, negative on failure
+ */
+int ipa_uc_update_hw_flags(u32 flags)
+{
+	union IpaHwUpdateFlagsCmdData_t cmd;
+
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.params.newFlags = flags;
+	return ipa_uc_send_cmd(cmd.raw32b, IPA_CPU_2_HW_CMD_UPDATE_FLAGS, 0,
+		false, HZ);
+}
+EXPORT_SYMBOL(ipa_uc_update_hw_flags);
