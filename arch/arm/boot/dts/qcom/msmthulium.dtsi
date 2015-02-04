@@ -1228,6 +1228,7 @@
 		vdda18-supply = <&pm8994_l12>;
 		vdda33-supply = <&pm8994_l24>;
 		qcom,vdd-voltage-level = <1 5 7>;
+		qcom,qusb-tune = <0xa0c393d7>;
 		phy_type= "utmi";
 
 		clocks = <&clock_gcc clk_gcc_rx1_usb2_clkref_clk>,
