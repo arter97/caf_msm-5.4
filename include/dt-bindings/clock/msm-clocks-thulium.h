@@ -227,6 +227,8 @@
 #define clk_gcc_ufs_tx_cfg_clk		0xba2cf8b5
 #define clk_gcc_ufs_tx_symbol_0_clk	0x6a9f747a
 #define clk_gcc_ufs_unipro_core_clk	0x2daf7fd2
+#define clk_gcc_ufs_sys_clk_core_clk	0x360e5ac8
+#define clk_gcc_ufs_tx_symbol_clk_core_clk	0xf6fb0df7
 #define clk_gcc_usb20_master_clk	0x24c3b66a
 #define clk_gcc_usb20_mock_utmi_clk	0xe8db8203
 #define clk_gcc_usb20_sleep_clk		0x6e8cb4b2
