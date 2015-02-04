@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -65,11 +65,105 @@ struct static_rules_type {
 
 static struct static_rules_type static_rules;
 
-static int enable_nodeclk(struct nodeclk *nclk)
+static int bus_get_reg(struct nodeclk *nclk, struct device *dev)
+{
+	int ret = 0;
+	struct msm_bus_node_device_type *node_dev;
+
+	if (!(dev && nclk))
+		return -ENXIO;
+
+	node_dev = dev->platform_data;
+	if (!strlen(nclk->reg_name)) {
+		dev_dbg(dev, "No regulator exist for node %d\n",
+						node_dev->node_info->id);
+		goto exit_of_get_reg;
+	} else {
+		if (!(IS_ERR_OR_NULL(nclk->reg)))
+			goto exit_of_get_reg;
+
+		nclk->reg = devm_regulator_get(dev, nclk->reg_name);
+		if (IS_ERR_OR_NULL(nclk->reg)) {
+			dev_err(dev, "Error: Failed to get reg %s",
+							nclk->reg_name);
+			ret =
+			(IS_ERR(nclk->reg) ? PTR_ERR(nclk->reg) : -ENXIO);
+		} else {
+			dev_dbg(dev, "Succesfully got regulator for %d\n",
+				node_dev->node_info->id);
+		}
+	}
+
+exit_of_get_reg:
+	return ret;
+}
+
+static int bus_enable_reg(struct nodeclk *nclk)
+{
+	int ret = 0;
+
+	if (!nclk) {
+		ret = -ENXIO;
+		goto exit_bus_enable_reg;
+	}
+
+	if ((IS_ERR_OR_NULL(nclk->reg))) {
+		ret = -ENXIO;
+		goto exit_bus_enable_reg;
+	}
+
+	ret = regulator_enable(nclk->reg);
+	if (ret) {
+		MSM_BUS_ERR("Failed to enable regulator for\n");
+		goto exit_bus_enable_reg;
+	}
+	pr_debug("%s: Enabled Reg\n", __func__);
+exit_bus_enable_reg:
+	return ret;
+}
+
+static int bus_disable_reg(struct nodeclk *nclk)
+{
+	int ret = 0;
+
+	if (!nclk) {
+		ret = -ENXIO;
+		goto exit_bus_disable_reg;
+	}
+
+	if ((IS_ERR_OR_NULL(nclk->reg))) {
+		ret = -ENXIO;
+		goto exit_bus_disable_reg;
+	}
+
+	regulator_disable(nclk->reg);
+	pr_debug("%s: Disabled Reg\n", __func__);
+exit_bus_disable_reg:
+	return ret;
+}
+
+static int enable_nodeclk(struct nodeclk *nclk, struct device *dev)
 {
 	int ret = 0;
 
 	if (!nclk->enable) {
+		if (dev && strlen(nclk->reg_name)) {
+			if (IS_ERR_OR_NULL(nclk->reg)) {
+				ret = bus_get_reg(nclk, dev);
+				if (ret) {
+					dev_err(dev, "\nFailed to get reg %d",
+									ret);
+					goto exit_enable_nodeclk;
+				}
+			}
+
+			ret = bus_enable_reg(nclk);
+			if (ret) {
+				dev_err(dev, "\nFailed to enable reg %d",
+									ret);
+				goto exit_enable_nodeclk;
+			}
+		}
 		ret = clk_prepare_enable(nclk->clk);
 
 		if (ret) {
@@ -78,6 +172,7 @@ static int enable_nodeclk(struct nodeclk *nclk)
 		} else
 			nclk->enable = true;
 	}
+exit_enable_nodeclk:
 	return ret;
 }
 
@@ -88,6 +183,7 @@ static int disable_nodeclk(struct nodeclk *nclk)
 	if (nclk->enable) {
 		clk_disable_unprepare(nclk->clk);
 		nclk->enable = false;
+		bus_disable_reg(nclk);
 	}
 	return ret;
 }
@@ -305,11 +401,12 @@ static int flush_clk_data(struct device *node_device, int ctx)
 				goto exit_flush_clk_data;
 			}
 
-			ret = enable_nodeclk(nodeclk);
+			ret = enable_nodeclk(nodeclk, node_device);
 
 			if ((node->node_info->is_fab_dev) &&
 				!IS_ERR_OR_NULL(node->qos_clk.clk))
-					ret = enable_nodeclk(&node->qos_clk);
+					ret = enable_nodeclk(&node->qos_clk,
+								node_device);
 		} else {
 			if ((node->node_info->is_fab_dev) &&
 				!IS_ERR_OR_NULL(node->qos_clk.clk))
@@ -627,7 +724,8 @@ static int msm_bus_qos_enable_clk(struct msm_bus_node_device_type *node)
 		}
 	}
 
-	ret = enable_nodeclk(&bus_node->clk[DUAL_CTX]);
+	ret = enable_nodeclk(&bus_node->clk[DUAL_CTX],
+					node->node_info->bus_device);
 	if (ret) {
 		MSM_BUS_ERR("%s: Failed to enable bus clk, node %d",
 			__func__, node->node_info->id);
@@ -636,7 +734,8 @@ static int msm_bus_qos_enable_clk(struct msm_bus_node_device_type *node)
 	bus_qos_enabled = 1;
 
 	if (!IS_ERR_OR_NULL(bus_node->qos_clk.clk)) {
-		ret = enable_nodeclk(&bus_node->qos_clk);
+		ret = enable_nodeclk(&bus_node->qos_clk,
+					node->node_info->bus_device);
 		if (ret) {
 			MSM_BUS_ERR("%s: Failed to enable bus QOS clk, node %d",
 				__func__, node->node_info->id);
@@ -653,7 +752,7 @@ static int msm_bus_qos_enable_clk(struct msm_bus_node_device_type *node)
 			goto exit_enable_qos_clk;
 		}
 
-		ret = enable_nodeclk(&node->qos_clk);
+		ret = enable_nodeclk(&node->qos_clk, NULL);
 		if (ret) {
 			MSM_BUS_ERR("Err enable mas qos clk, node %d ret %d",
 				node->node_info->id, ret);
@@ -839,6 +938,10 @@ static int msm_bus_init_clk(struct device *bus_dev,
 			node_dev->clk[ctx].clk = pdata->clk[ctx].clk;
 			node_dev->clk[ctx].enable = false;
 			node_dev->clk[ctx].dirty = false;
+			strlcpy(node_dev->clk[ctx].reg_name,
+				pdata->clk[ctx].reg_name, MAX_REG_NAME);
+			node_dev->clk[ctx].reg = NULL;
+			bus_get_reg(&node_dev->clk[ctx], bus_dev);
 			MSM_BUS_ERR("%s: Valid node clk node %d ctx %d",
 				__func__, node_dev->node_info->id, ctx);
 		}
@@ -847,6 +950,9 @@ static int msm_bus_init_clk(struct device *bus_dev,
 	if (!IS_ERR_OR_NULL(pdata->qos_clk.clk)) {
 		node_dev->qos_clk.clk = pdata->qos_clk.clk;
 		node_dev->qos_clk.enable = false;
+		strlcpy(node_dev->qos_clk.reg_name,
+			pdata->qos_clk.reg_name, MAX_REG_NAME);
+		node_dev->qos_clk.reg = NULL;
 		MSM_BUS_ERR("%s: Valid Iface clk node %d", __func__,
 						node_dev->node_info->id);
 	}
@@ -1015,6 +1121,7 @@ static struct device *msm_bus_device_init(
 	bus_node->node_info = node_info;
 	bus_node->ap_owned = pdata->ap_owned;
 	bus_dev->platform_data = bus_node;
+	bus_dev->of_node = pdata->of_node;
 
 	if (msm_bus_copy_node_info(pdata, bus_dev) < 0) {
 		devm_kfree(bus_dev, bus_node);
@@ -1145,6 +1252,25 @@ exit_node_debug:
 	return ret;
 }
 
+static int msm_bus_free_dev(struct device *dev, void *data)
+{
+	struct msm_bus_node_device_type *bus_node = NULL;
+
+	bus_node = dev->platform_data;
+
+	if (bus_node)
+		MSM_BUS_ERR("\n%s: Removing device %d", __func__,
+						bus_node->node_info->id);
+	device_unregister(dev);
+	return 0;
+}
+
+int msm_bus_device_remove(struct platform_device *pdev)
+{
+	bus_for_each_dev(&msm_bus_type, NULL, NULL, msm_bus_free_dev);
+	return 0;
+}
+
 static int msm_bus_device_probe(struct platform_device *pdev)
 {
 	unsigned int i, ret;
@@ -1177,6 +1303,11 @@ static int msm_bus_device_probe(struct platform_device *pdev)
 		}
 
 		ret = msm_bus_init_clk(node_dev, &pdata->info[i]);
+		if (ret) {
+			MSM_BUS_ERR("\n Failed to init bus clk. ret %d", ret);
+			msm_bus_device_remove(pdev);
+			goto exit_device_probe;
+		}
 		/*Is this a fabric device ?*/
 		if (pdata->info[i].node_info->is_fab_dev) {
 			MSM_BUS_DBG("%s: %d is a fab", __func__,
@@ -1244,24 +1375,6 @@ int msm_bus_device_rules_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static int msm_bus_free_dev(struct device *dev, void *data)
-{
-	struct msm_bus_node_device_type *bus_node = NULL;
-
-	bus_node = dev->platform_data;
-
-	if (bus_node)
-		MSM_BUS_ERR("\n%s: Removing device %d", __func__,
-						bus_node->node_info->id);
-	device_unregister(dev);
-	return 0;
-}
-
-int msm_bus_device_remove(struct platform_device *pdev)
-{
-	bus_for_each_dev(&msm_bus_type, NULL, NULL, msm_bus_free_dev);
-	return 0;
-}
 
 static struct of_device_id rules_match[] = {
 	{.compatible = "qcom,msm-bus-static-bw-rules"},

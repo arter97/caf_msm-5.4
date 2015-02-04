@@ -65,6 +65,15 @@ qcom,vrail-comp:	Parameter that represents the voltage rail compensation to push
 qcom,bus-type:		Parameter that represents the bus type such as BIMC or NOC.
 			Typically these optional properties are used for
 			devices that represent fabric devices.
+bus-gdsc-supply:	Optional fabric device parameter that is a reference to the dual
+			context GDSC supply that is needed before clock operations.
+bus-a-gdsc-supply:	Optional fabric device parameter that is a reference to an active
+			only context GDSC supply that is needed before clock operations.
+bus-qos-gdsc-supply:	Optional node or fabric device parameter that is a reference to a GDSC
+			supply that is needed before use of the clock needed to program
+			QoS registers.
+node-gdsc-supply:	Optional node device parameter that is a reference to a GDSC supply
+			that is needed before node-clock operations.
 clock-names:		Optional property that represents the clock name associated
 			with the device "bus_clk", "bus_a_clk";
 clocks:			Property pair that represents the clock controller and the clock

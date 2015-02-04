@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -118,6 +118,7 @@ struct msm_bus_node_device_type {
 	unsigned int ap_owned;
 	struct nodeclk clk[NUM_CTX];
 	struct nodeclk qos_clk;
+	struct device_node *of_node;
 };
 
 int msm_bus_enable_limiter(struct msm_bus_node_device_type *nodedev,

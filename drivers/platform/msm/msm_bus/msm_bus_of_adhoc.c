@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -357,7 +357,7 @@ node_info_err:
 	return NULL;
 }
 
-static unsigned int get_bus_node_device_data(
+static int get_bus_node_device_data(
 		struct device_node * const dev_node,
 		struct platform_device * const pdev,
 		struct msm_bus_node_device_type * const node_device)
@@ -386,26 +386,61 @@ static unsigned int get_bus_node_device_data(
 		node_device->clk[DUAL_CTX].clk = of_clk_get_by_name(dev_node,
 							"bus_clk");
 
-		if (IS_ERR_OR_NULL(node_device->clk[DUAL_CTX].clk))
+		if (IS_ERR_OR_NULL(node_device->clk[DUAL_CTX].clk)) {
+			int ret;
 			dev_err(&pdev->dev,
 				"%s:Failed to get bus clk for bus%d ctx%d",
 				__func__, node_device->node_info->id,
 								DUAL_CTX);
+			ret = (IS_ERR(node_device->clk[DUAL_CTX].clk) ?
+			PTR_ERR(node_device->clk[DUAL_CTX].clk) : -ENXIO);
+			return ret;
+		}
+
+		if (of_find_property(dev_node, "bus-gdsc-supply", NULL))
+			scnprintf(node_device->clk[DUAL_CTX].reg_name,
+				MAX_REG_NAME, "%s", "bus-gdsc");
+		else
+			scnprintf(node_device->clk[DUAL_CTX].reg_name,
+				MAX_REG_NAME, "%c", '\0');
 
 		node_device->clk[ACTIVE_CTX].clk = of_clk_get_by_name(dev_node,
 							"bus_a_clk");
-		if (IS_ERR_OR_NULL(node_device->clk[ACTIVE_CTX].clk))
+		if (IS_ERR_OR_NULL(node_device->clk[ACTIVE_CTX].clk)) {
+			int ret;
 			dev_err(&pdev->dev,
 				"Failed to get bus clk for bus%d ctx%d",
 				 node_device->node_info->id, ACTIVE_CTX);
+			ret = (IS_ERR(node_device->clk[DUAL_CTX].clk) ?
+			PTR_ERR(node_device->clk[DUAL_CTX].clk) : -ENXIO);
+			return ret;
+		}
+
+		if (of_find_property(dev_node, "bus-a-gdsc-supply", NULL))
+			scnprintf(node_device->clk[ACTIVE_CTX].reg_name,
+				MAX_REG_NAME, "%s", "bus-a-gdsc");
+		else
+			scnprintf(node_device->clk[ACTIVE_CTX].reg_name,
+				MAX_REG_NAME, "%c", '\0');
 
 		node_device->qos_clk.clk = of_clk_get_by_name(dev_node,
 							"bus_qos_clk");
 
-		if (IS_ERR_OR_NULL(node_device->qos_clk.clk))
+		if (IS_ERR_OR_NULL(node_device->qos_clk.clk)) {
 			dev_dbg(&pdev->dev,
 				"%s:Failed to get bus qos clk for %d",
 				__func__, node_device->node_info->id);
+			scnprintf(node_device->qos_clk.reg_name,
+					MAX_REG_NAME, "%c", '\0');
+		} else {
+			if (of_find_property(dev_node, "bus-qos-gdsc-supply",
+								NULL))
+				scnprintf(node_device->qos_clk.reg_name,
+					MAX_REG_NAME, "%s", "bus-qos-gdsc");
+			else
+				scnprintf(node_device->qos_clk.reg_name,
+					MAX_REG_NAME, "%c", '\0');
+		}
 
 		if (msmbus_coresight_init_adhoc(pdev, dev_node))
 			dev_warn(&pdev->dev,
@@ -420,6 +455,14 @@ static unsigned int get_bus_node_device_data(
 				"%s:Failed to get bus qos clk for mas%d",
 				__func__, node_device->node_info->id);
 
+		if (of_find_property(dev_node, "bus-qos-gdsc-supply",
+									NULL))
+			scnprintf(node_device->qos_clk.reg_name,
+				MAX_REG_NAME, "%s", "bus-qos-gdsc");
+		else
+			scnprintf(node_device->qos_clk.reg_name,
+				MAX_REG_NAME, "%c", '\0');
+
 		node_device->clk[DUAL_CTX].clk = of_clk_get_by_name(dev_node,
 							"node_clk");
 
@@ -428,6 +471,13 @@ static unsigned int get_bus_node_device_data(
 				"%s:Failed to get bus clk for bus%d ctx%d",
 				__func__, node_device->node_info->id,
 								DUAL_CTX);
+
+		if (of_find_property(dev_node, "node-gdsc-supply", NULL))
+			scnprintf(node_device->clk[DUAL_CTX].reg_name,
+				MAX_REG_NAME, "%s", "node-gdsc");
+		else
+			scnprintf(node_device->clk[DUAL_CTX].reg_name,
+				MAX_REG_NAME, "%c", '\0');
 
 	}
 	return 0;
@@ -477,6 +527,7 @@ struct msm_bus_device_node_registration
 			dev_err(&pdev->dev, "Error: unable to initialize bus nodes\n");
 			goto node_reg_err_1;
 		}
+		pdata->info[i].of_node = child_node;
 		i++;
 	}
 
