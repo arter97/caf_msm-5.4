@@ -14,7 +14,7 @@
 
 #include "msmthulium.dtsi"
 #include "msmthulium-pm8994-pmi8994-pm8004.dtsi"
-#include "msmthulium-pinctrl.dtsi"
+#include "msmthulium-cdp.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. MSM THULIUM + PMI8994 + PM8004 CDP";

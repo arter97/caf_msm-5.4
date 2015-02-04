@@ -10,18 +10,7 @@
  * GNU General Public License for more details.
  */
 
-
-/dts-v1/;
-
-#include "msmthulium.dtsi"
 #include "msmthulium-pinctrl.dtsi"
-
-
-/ {
-	model = "Qualcomm Technologies, Inc. MSM THULIUM MTP";
-	compatible = "qcom,msmthulium-mtp", "qcom,msmthulium", "qcom,mtp";
-	qcom,board-id = <8 0>;
-};
 
 &ufsphy1 {
 	status = "ok";
