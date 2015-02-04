@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ /* Copyright (c) 2014-2015  The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -51,5 +51,12 @@ struct csid_reg_parms_t csid_v3_1 = {
 	0x4,
 	17,
 	0x30010000,
+	0xFFFFFFFF,
+	0xFFFFFFFF,
+	0xFFFFFFFF,
+	0x7f010800,
+	20,
+	0xFFFFFFFF,
+	0xFFFFFFFF,
 };
 #endif

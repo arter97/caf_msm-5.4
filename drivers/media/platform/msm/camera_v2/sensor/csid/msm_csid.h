@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -58,6 +58,13 @@ struct csid_reg_parms_t {
 	uint32_t csid_dl_input_sel_shift;
 	uint32_t csid_phy_sel_shift;
 	uint32_t csid_version;
+	uint32_t csid_3p_ctrl_0_addr;
+	uint32_t csid_3p_pkt_hdr_addr;
+	uint32_t csid_test_bus_ctrl;
+	uint32_t csid_irq_mask_val;
+	uint32_t csid_err_lane_overflow_offset_2p;
+	uint32_t csid_err_lane_overflow_offset_3p;
+	uint32_t csid_phy_sel_shift_3p;
 };
 
 struct csid_ctrl_t {
@@ -89,6 +96,7 @@ struct csid_device {
 	struct clk *csid_clk[CSID_NUM_CLK_MAX];
 	uint32_t csid_clk_index;
 	uint32_t csid_max_clk;
+	uint32_t csid_3p_enabled;
 };
 
 #define VIDIOC_MSM_CSID_RELEASE \
