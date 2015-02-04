@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1032,6 +1032,7 @@ static void mdp4_overlay_vg_get_src_offset(struct mdp4_overlay_pipe *pipe,
 		case MDP_BGR_565:
 		case MDP_XRGB_8888:
 		case MDP_RGB_888:
+		case MDP_BGR_888:
 		case MDP_YCBCR_H1V1:
 		case MDP_YCRCB_H1V1:
 			*luma_off = (pipe->src_x * pipe->bpp) +
@@ -1209,6 +1210,7 @@ int mdp4_overlay_format2type(uint32 format)
 	switch (format) {
 	case MDP_RGB_565:
 	case MDP_RGB_888:
+	case MDP_BGR_888:
 	case MDP_BGR_565:
 	case MDP_XRGB_8888:
 	case MDP_ARGB_8888:
@@ -1283,6 +1285,23 @@ int mdp4_overlay_format2pipe(struct mdp4_overlay_pipe *pipe)
 		pipe->element2 = C1_B_Cb;	/* B */
 		pipe->element1 = C0_G_Y;	/* G */
 		pipe->element0 = C2_R_Cr;	/* R */
+		pipe->bpp = 3;	/* 3 bpp */
+		pipe->chroma_sample = MDP4_CHROMA_RGB;
+		break;
+	case MDP_BGR_888:
+		pipe->frame_format = MDP4_FRAME_FORMAT_LINEAR;
+		pipe->fetch_plane = OVERLAY_PLANE_INTERLEAVED;
+		pipe->a_bit = 0;
+		pipe->r_bit = 3;	/* R, 8 bits */
+		pipe->b_bit = 3;	/* B, 8 bits */
+		pipe->g_bit = 3;	/* G, 8 bits */
+		pipe->alpha_enable = 0;
+		pipe->unpack_tight = 1;
+		pipe->unpack_align_msb = 0;
+		pipe->unpack_count = 2;
+		pipe->element2 = C2_R_Cr;	/* R */
+		pipe->element1 = C0_G_Y;	/* G */
+		pipe->element0 = C1_B_Cb;	/* B */
 		pipe->bpp = 3;	/* 3 bpp */
 		pipe->chroma_sample = MDP4_CHROMA_RGB;
 		break;
@@ -1585,6 +1604,7 @@ void transp_color_key(int format, uint32 transp,
 		b_num = 5;
 		break;
 	case MDP_RGB_888:
+	case MDP_BGR_888:
 	case MDP_XRGB_8888:
 	case MDP_ARGB_8888:
 	case MDP_BGRA_8888:

@@ -1,7 +1,7 @@
 /* drivers/video/msm_fb/mdp_hw.h
  *
- * Copyright (C) 2007 QUALCOMM Incorporated
  * Copyright (C) 2007 Google Incorporated
+ * Copyright (c) 2007, 2015 The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -596,7 +596,9 @@ void mdp_ppp_dump_debug(const struct mdp_info *mdp);
 /* Helpful array generation macros */
 #define PPP_ARRAY0(name) \
 	[MDP_RGB_565] = PPP_##name##_MDP_RGB_565,\
+	[MDP_BGR_565] = PPP_##name##_MDP_BGR_565,\
 	[MDP_RGB_888] = PPP_##name##_MDP_RGB_888,\
+	[MDP_BGR_888] = PPP_##name##_MDP_BGR_888,\
 	[MDP_XRGB_8888] = PPP_##name##_MDP_XRGB_8888,\
 	[MDP_ARGB_8888] = PPP_##name##_MDP_ARGB_8888,\
 	[MDP_RGBA_8888] = PPP_##name##_MDP_RGBA_8888,\
@@ -610,7 +612,9 @@ void mdp_ppp_dump_debug(const struct mdp_info *mdp);
 
 #define PPP_ARRAY1(name, dir) \
 	[MDP_RGB_565] = PPP_##name##_MDP_RGB_565(dir),\
+	[MDP_BGR_565] = PPP_##name##_MDP_BGR_565(dir),\
 	[MDP_RGB_888] = PPP_##name##_MDP_RGB_888(dir),\
+	[MDP_BGR_888] = PPP_##name##_MDP_BGR_888(dir),\
 	[MDP_XRGB_8888] = PPP_##name##_MDP_XRGB_8888(dir),\
 	[MDP_ARGB_8888] = PPP_##name##_MDP_ARGB_8888(dir),\
 	[MDP_RGBA_8888] = PPP_##name##_MDP_RGBA_8888(dir),\
@@ -626,6 +630,7 @@ void mdp_ppp_dump_debug(const struct mdp_info *mdp);
 		       (img == MDP_Y_CRCB_H2V1) | (img == MDP_Y_CBCR_H2V1) | \
 		       (img == MDP_YCRYCB_H2V1))
 #define IS_RGB(img) ((img == MDP_RGB_565) | (img == MDP_RGB_888) | \
+		     (img == MDP_BGR_565) | (img == MDP_BGR_888) | \
 		     (img == MDP_ARGB_8888) | (img == MDP_RGBA_8888) | \
 		     (img == MDP_XRGB_8888) | (img == MDP_BGRA_8888) | \
 		     (img == MDP_RGBX_8888))
