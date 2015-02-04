@@ -1501,6 +1501,28 @@ static struct reset_clk gcc_qusb2phy_prim_reset = {
 	},
 };
 
+static struct reset_clk gcc_qusb2phy_sec_reset = {
+	.reset_reg = GCC_QUSB2PHY_SEC_BCR,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_qusb2phy_sec_reset",
+		.ops = &clk_ops_rst,
+		CLK_INIT(gcc_qusb2phy_sec_reset.c),
+	},
+};
+
+static struct branch_clk gcc_periph_noc_usb20_ahb_clk = {
+	.cbcr_reg = GCC_PERIPH_NOC_USB20_AHB_CBCR,
+	.has_sibling = 1,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_periph_noc_usb20_ahb_clk",
+		.parent = &usb20_master_clk_src.c,
+		.ops = &clk_ops_branch,
+		CLK_INIT(gcc_periph_noc_usb20_ahb_clk.c),
+	},
+};
+
 static struct branch_clk gcc_aggre0_cnoc_ahb_clk = {
 	.cbcr_reg = GCC_AGGRE0_CNOC_AHB_CBCR,
 	.has_sibling = 1,
@@ -2872,6 +2894,7 @@ static struct mux_clk gcc_debug_mux = {
 		{ &gcc_ce1_axi_m_clk.c, 0x009a },
 		{ &gcc_ce1_ahb_m_clk.c, 0x009b },
 		{ &measure_only_bimc_hmss_axi_clk.c, 0x00a5 },
+		{ &gcc_periph_noc_usb20_ahb_clk.c, 0x0014 },
 		{ &gcc_mmss_sys_noc_axi_clk.c, 0x0018 },
 		{ &gcc_mmss_noc_cfg_ahb_clk.c, 0x0019 },
 		{ &gcc_sys_noc_usb3_axi_clk.c, 0x0006 },
@@ -3111,6 +3134,8 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(usb30_mock_utmi_clk_src),
 	CLK_LIST(usb3_phy_aux_clk_src),
 	CLK_LIST(gcc_qusb2phy_prim_reset),
+	CLK_LIST(gcc_qusb2phy_sec_reset),
+	CLK_LIST(gcc_periph_noc_usb20_ahb_clk),
 	CLK_LIST(gcc_aggre0_cnoc_ahb_clk),
 	CLK_LIST(gcc_aggre0_snoc_axi_clk),
 	CLK_LIST(gcc_smmu_aggre0_ahb_clk),
