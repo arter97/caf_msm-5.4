@@ -154,6 +154,7 @@ struct dwc3_msm {
 	struct clk		*phy_com_reset;
 	unsigned int		utmi_clk_rate;
 	struct clk		*utmi_clk_src;
+	struct clk		*bus_aggr_clk;
 	struct regulator	*dwc3_gdsc;
 
 	struct usb_phy		*hs_phy, *ss_phy;
@@ -1676,6 +1677,8 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 	}
 
 	clk_disable_unprepare(mdwc->iface_clk);
+	if (mdwc->bus_aggr_clk)
+		clk_disable_unprepare(mdwc->bus_aggr_clk);
 	clk_disable_unprepare(mdwc->utmi_clk);
 
 	if (can_suspend_ssphy) {
@@ -1797,6 +1800,9 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 		mdwc->lpm_flags &= ~MDWC3_PHY_REF_CLK_OFF;
 	}
 	usleep_range(1000, 1200);
+
+	if (mdwc->bus_aggr_clk)
+		clk_prepare_enable(mdwc->bus_aggr_clk);
 
 	clk_prepare_enable(mdwc->iface_clk);
 	if (mdwc->lpm_flags & MDWC3_CORECLK_OFF) {
@@ -2893,6 +2899,12 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	clk_set_rate(mdwc->ref_clk, 19200000);
 	clk_prepare_enable(mdwc->ref_clk);
 
+	mdwc->bus_aggr_clk = devm_clk_get(&pdev->dev, "bus_aggr_clk");
+	if (IS_ERR(mdwc->bus_aggr_clk))
+		mdwc->bus_aggr_clk = NULL;
+	else
+		clk_prepare_enable(mdwc->bus_aggr_clk);
+
 	mdwc->id_state = mdwc->ext_xceiv.id = DWC3_ID_FLOAT;
 	mdwc->charger.charging_disabled = of_property_read_bool(node,
 				"qcom,charging-disabled");
@@ -3275,6 +3287,9 @@ put_psupply:
 	if (mdwc->usb_psy.dev)
 		power_supply_unregister(&mdwc->usb_psy);
 disable_ref_clk:
+	if (mdwc->bus_aggr_clk)
+		clk_disable_unprepare(mdwc->bus_aggr_clk);
+
 	clk_disable_unprepare(mdwc->ref_clk);
 disable_utmi_clk:
 	clk_disable_unprepare(mdwc->utmi_clk);
@@ -3322,6 +3337,8 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 		clk_prepare_enable(mdwc->iface_clk);
 		clk_prepare_enable(mdwc->sleep_clk);
 		clk_prepare_enable(mdwc->ref_clk);
+		if (mdwc->bus_aggr_clk)
+			clk_prepare_enable(mdwc->bus_aggr_clk);
 		clk_prepare_enable(mdwc->xo_clk);
 	}
 
