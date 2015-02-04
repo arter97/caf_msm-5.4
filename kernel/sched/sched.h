@@ -1424,8 +1424,10 @@ static const u32 prio_to_wmult[40] = {
 #define ENQUEUE_WAKING		0
 #endif
 #define ENQUEUE_REPLENISH	8
+#define ENQUEUE_MIGRATING	16
 
 #define DEQUEUE_SLEEP		1
+#define DEQUEUE_MIGRATING	2
 
 struct sched_class {
 	const struct sched_class *next;
