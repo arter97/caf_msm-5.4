@@ -27,10 +27,10 @@
 
 #include <linux/types.h>
 #include <sound/asound.h>
-#include "compress_params.h"
+#include <sound/compress_params.h>
 
 
-#define SNDRV_COMPRESS_VERSION SNDRV_PROTOCOL_VERSION(0, 1, 0)
+#define SNDRV_COMPRESS_VERSION SNDRV_PROTOCOL_VERSION(0, 1, 1)
 /**
  * struct snd_compressed_buffer: compressed buffer
  * @fragment_size: size of buffer fragment in bytes
@@ -123,16 +123,6 @@ struct snd_compr_codec_caps {
 };
 
 /**
- * struct snd_compr_audio_info: compressed input audio information
- * @frame_size: legth of the encoded frame with valid data
- * @reserved: reserved for furture use
- */
-struct snd_compr_audio_info {
-	uint32_t frame_size;
-	uint32_t reserved[15];
-};
-
-/**
  * @SNDRV_COMPRESS_ENCODER_PADDING: no of samples appended by the encoder at the
  * end of the track
  * @SNDRV_COMPRESS_ENCODER_DELAY: no of samples inserted by the encoder at the
@@ -151,6 +141,16 @@ enum {
 struct snd_compr_metadata {
 	 __u32 key;
 	 __u32 value[8];
+};
+
+/**
+ * struct snd_compr_audio_info: compressed input audio information
+ * @frame_size: legth of the encoded frame with valid data
+ * @reserved: reserved for furture use
+ */
+struct snd_compr_audio_info {
+	uint32_t frame_size;
+	uint32_t reserved[15];
 };
 
 /**
@@ -196,6 +196,9 @@ struct snd_compr_metadata {
  *
  */
 #define SND_COMPR_TRIGGER_DRAIN 7 /*FIXME move this to pcm.h */
+#define SND_COMPR_TRIGGER_NEXT_TRACK 8
+#define SND_COMPR_TRIGGER_PARTIAL_DRAIN 9
+
 #define SND_COMPR_TRIGGER_NEXT_TRACK 8
 #define SND_COMPR_TRIGGER_PARTIAL_DRAIN 9
 
