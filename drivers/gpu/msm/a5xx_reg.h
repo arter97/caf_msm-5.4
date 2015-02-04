@@ -126,6 +126,8 @@
 #define A5XX_RBBM_SW_RESET_CMD                   0x43
 #define A5XX_RBBM_BLOCK_SW_RESET_CMD             0x45
 #define A5XX_RBBM_BLOCK_SW_RESET_CMD2            0x46
+#define A5XX_RBBM_CLOCK_CNTL4_UCHE               0x5D
+#define A5XX_RBBM_CLOCK_HYST_UCHE                0x5E
 #define A5XX_RBBM_CLOCK_CNTL                     0x67
 #define A5XX_RBBM_AHB_CNTL0                      0x93
 #define A5XX_RBBM_AHB_CNTL1                      0x94

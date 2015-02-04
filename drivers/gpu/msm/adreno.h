@@ -138,6 +138,7 @@ enum adreno_gpurev {
 	ADRENO_REV_A418 = 418,
 	ADRENO_REV_A420 = 420,
 	ADRENO_REV_A430 = 430,
+	ADRENO_REV_A510 = 510,
 	ADRENO_REV_A530 = 530,
 };
 
@@ -912,6 +913,11 @@ static inline int adreno_is_a530v1(struct adreno_device *adreno_dev)
 {
 	return (ADRENO_GPUREV(adreno_dev) == ADRENO_REV_A530) &&
 		(ADRENO_CHIPID_PATCH(adreno_dev->chipid) == 0);
+}
+
+static inline int adreno_is_a510(struct adreno_device *adreno_dev)
+{
+	return ADRENO_GPUREV(adreno_dev) == ADRENO_REV_A510;
 }
 
 /**
