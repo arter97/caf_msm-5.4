@@ -15,7 +15,7 @@
 
 #include "msmthulium.dtsi"
 #include "msmthulium-pinctrl.dtsi"
-
+#include "msmthulium-camera-sensor-cdp.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. MSM THULIUM CDP";
