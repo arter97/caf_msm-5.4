@@ -1205,8 +1205,7 @@
 			compatible = "snps,dwc3";
 			reg = <0x06a00000 0xc8d0>;
 			interrupt-parent = <&intc>;
-			interrupts = <0 131 0>, <0 134 0>;
-			interrupt-names = "irq", "otg_irq";
+			interrupts = <0 131 0>;
 			usb-phy = <&qusb_phy>, <&ssphy>;
 			snps,nominal-elastic-buffer;
 			snps,hird_thresh = <0x10>;
