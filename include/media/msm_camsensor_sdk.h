@@ -271,6 +271,7 @@ struct msm_camera_csiphy_params {
 	uint8_t combo_mode;
 	uint8_t csid_core;
 	uint32_t csiphy_clk;
+	uint8_t csi_3phase;
 };
 
 struct msm_camera_i2c_seq_reg_array {
