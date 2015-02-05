@@ -437,12 +437,6 @@ static int rndis_qc_bam_connect(struct f_rndis_qc *dev)
 	if (port_num < 0)
 		return port_num;
 
-	ret = bam2bam_data_port_select(port_num);
-	if (ret) {
-		pr_err("qc rndis bam port setup failed err:%d\n", ret);
-		return ret;
-	}
-
 	/* currently we use the first connection */
 	src_connection_idx = usb_bam_get_connection_idx(gadget->name, peer_bam,
 		USB_TO_PEER_PERIPHERAL, USB_BAM_DEVICE, 0);
