@@ -671,6 +671,13 @@ config MSM_CACHE_M4M_ERP64_PANIC_ON_UE
 	  Say 'Y' here to cause kernel panic when uncorrectable cache/M4M errors
 	  are detected.
 
+config TRACER_PKT
+	bool "Tracer Packet"
+	help
+	  Tracer Packet helps in profiling the performance of inter-
+	  processor communication protocols. The profiling information
+	  can be logged into the tracer packet itself.
+
 source "drivers/soc/qcom/memshare/Kconfig"
 
 config MSM_SECURE_BUFFER
