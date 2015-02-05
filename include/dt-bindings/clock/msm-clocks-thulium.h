@@ -263,6 +263,8 @@
 #define clk_gcc_aggre2_usb3_axi_clk	0xd5822a8e
 #define clk_gcc_aggre2_ufs_axi_clk	0xb31e5191
 #define clk_gcc_mmss_gpll0_div_clk	0xdd06848d
+#define clk_gcc_mmss_bimc_gfx_clk	0xe4f28754
+#define clk_gcc_bimc_gfx_clk		0x3edd69ad
 
 /* clock_mmss controlled clocks */
 #define clk_mmsscc_xo			0x05e63704

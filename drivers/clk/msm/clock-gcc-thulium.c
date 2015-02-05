@@ -2886,6 +2886,28 @@ static struct branch_clk gcc_aggre2_ufs_axi_clk = {
 	},
 };
 
+static struct branch_clk gcc_mmss_bimc_gfx_clk = {
+	.cbcr_reg = GCC_MMSS_BIMC_GFX_CBCR,
+	.has_sibling = 1,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_mmss_bimc_gfx_clk",
+		.ops = &clk_ops_branch,
+		CLK_INIT(gcc_mmss_bimc_gfx_clk.c),
+	},
+};
+
+static struct branch_clk gcc_bimc_gfx_clk = {
+	.cbcr_reg = GCC_BIMC_GFX_CBCR,
+	.has_sibling = 1,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_bimc_gfx_clk",
+		.ops = &clk_ops_branch,
+		CLK_INIT(gcc_bimc_gfx_clk.c),
+	},
+};
+
 static struct mux_clk gcc_debug_mux;
 static struct clk_ops clk_ops_debug_mux;
 
@@ -2921,6 +2943,8 @@ static struct mux_clk gcc_debug_mux = {
 		{ &gcc_periph_noc_usb20_ahb_clk.c, 0x0014 },
 		{ &gcc_mmss_sys_noc_axi_clk.c, 0x0018 },
 		{ &gcc_mmss_noc_cfg_ahb_clk.c, 0x0019 },
+		{ &gcc_mmss_bimc_gfx_clk.c, 0x001c},
+		{ &gcc_bimc_gfx_clk.c, 0x00af},
 		{ &gcc_sys_noc_usb3_axi_clk.c, 0x0006 },
 		{ &gcc_sys_noc_ufs_axi_clk.c, 0x0007 },
 		{ &gcc_usb30_master_clk.c, 0x002d },
@@ -3278,6 +3302,8 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(gcc_pcie_clkref_clk),
 	CLK_LIST(gcc_rx2_usb2_clkref_clk),
 	CLK_LIST(gcc_rx1_usb2_clkref_clk),
+	CLK_LIST(gcc_mmss_bimc_gfx_clk),
+	CLK_LIST(gcc_bimc_gfx_clk),
 };
 
 static int msm_gcc_thulium_probe(struct platform_device *pdev)
