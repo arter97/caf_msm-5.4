@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -713,6 +713,11 @@ struct platform_device apq8064_device_uart_gsbi7 = {
 	.id	= 0,
 	.num_resources	= ARRAY_SIZE(resources_uart_gsbi7),
 	.resource	= resources_uart_gsbi7,
+};
+
+struct platform_device apq8064_msm_ba_device = {
+	.name = "msm_ba_v4l2",
+	.id	= 0,
 };
 
 struct platform_device apq_pcm = {

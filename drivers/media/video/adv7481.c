@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -28,13 +28,13 @@
 #include <linux/mutex.h>
 #include <linux/delay.h>
 #include <media/adv7481.h>
+#include <media/msm_ba.h>
 
 #include "adv7481_reg.h"
-#include "msm/av_mgr.h"
 
 #define DRIVER_NAME "adv7481"
 #define I2C_RESET_DELAY		75000
-#define I2C_RW_DELAY		75000
+#define I2C_RW_DELAY		100
 #define I2C_SW_DELAY		10000
 #define GPIO_HW_DELAY_LOW	100000
 #define GPIO_HW_DELAY_HI	10000
@@ -836,7 +836,8 @@ static int adv7481_probe(struct i2c_client *client,
 	/* Check if the adapter supports the needed features */
 	if (!i2c_check_functionality(client->adapter,
 					I2C_FUNC_SMBUS_BYTE_DATA)) {
-		pr_err("Check i2c Functionality Fail\n");
+		pr_err("%s %s Check i2c Functionality Fail\n",
+					__func__, client->name);
 		ret = -EIO;
 		goto err;
 	}
@@ -906,11 +907,11 @@ static int adv7481_probe(struct i2c_client *client,
 	/*Set cvbs settings*/
 	ret |= adv7481_set_cvbs_mode(state);
 
-	/*Av mgr registration*/
-	ret |= av_mgr_sd_register(sd);
+	/* BA registration */
+	ret |= msm_ba_register_subdev_node(sd, MSM_BA_SUBDEV_0);
 	if (ret) {
 		ret = -EIO;
-		pr_err("AV MGR INIT FAILED\n");
+		pr_err("BA INIT FAILED\n");
 		goto err_media_entity;
 	}
 	pr_debug("Probe successful!\n");
@@ -932,7 +933,7 @@ static int adv7481_remove(struct i2c_client *client)
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct adv7481_state *state = to_state(sd);
 
-	av_mgr_sd_unregister(sd);
+	msm_ba_unregister_subdev_node(sd);
 	v4l2_device_unregister_subdev(sd);
 	media_entity_cleanup(&sd->entity);
 
