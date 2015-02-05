@@ -2594,14 +2594,14 @@ static struct gate_clk gcc_ufs_tx_symbol_clk_core_clk = {
 	},
 };
 
-static struct branch_clk gcc_usb3_phy_pipe_clk = {
-	.cbcr_reg = GCC_USB3_PHY_PIPE_CBCR,
-	.bcr_reg = GCC_USB3PHY_PHY_BCR,
-	.has_sibling = 1,
+static struct gate_clk gcc_usb3_phy_pipe_clk = {
+	.en_reg = GCC_USB3_PHY_PIPE_CBCR,
+	.en_mask = BIT(0),
+	.delay_us = 50,
 	.base = &virt_base,
 	.c = {
 		.dbg_name = "gcc_usb3_phy_pipe_clk",
-		.ops = &clk_ops_branch,
+		.ops = &clk_ops_gate,
 		CLK_INIT(gcc_usb3_phy_pipe_clk.c),
 	},
 };
