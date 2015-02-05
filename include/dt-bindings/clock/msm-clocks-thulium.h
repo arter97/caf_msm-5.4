@@ -143,6 +143,8 @@
 #define clk_usb30_mock_utmi_clk_src	0xa024a976
 #define clk_usb3_phy_aux_clk_src	0x15eec63c
 #define clk_gcc_qusb2phy_prim_reset	0x07550fa1
+#define clk_gcc_qusb2phy_sec_reset	0x3f3a87d0
+#define clk_gcc_periph_noc_usb20_ahb_clk	0xfb9f26e9
 #define clk_gcc_mmss_gcc_dbg_clk	0xe89d461c
 #define clk_gcc_blsp1_ahb_clk		0x8caa5b4f
 #define clk_gcc_blsp1_qup1_i2c_apps_clk 0xc303fae9
