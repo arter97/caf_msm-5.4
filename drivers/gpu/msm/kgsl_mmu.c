@@ -263,13 +263,7 @@ static void kgsl_destroy_pagetable(struct kref *kref)
 	struct kgsl_pagetable *pagetable = container_of(kref,
 		struct kgsl_pagetable, refcount);
 
-	unsigned long flags;
-
-	spin_lock_irqsave(&kgsl_driver.ptlock, flags);
-	list_del(&pagetable->list);
-	spin_unlock_irqrestore(&kgsl_driver.ptlock, flags);
-
-	pagetable_remove_sysfs_objects(pagetable);
+	kgsl_mmu_detach_pagetable(pagetable);
 
 	kgsl_unmap_global_pt_entries(pagetable);
 
@@ -407,6 +401,7 @@ pagetable_remove_sysfs_objects(struct kgsl_pagetable *pagetable)
 				   &pagetable_attr_group);
 
 	kobject_put(pagetable->kobj);
+	pagetable->kobj = NULL;
 }
 
 static int
@@ -432,6 +427,21 @@ err:
 	}
 
 	return ret;
+}
+
+void
+kgsl_mmu_detach_pagetable(struct kgsl_pagetable *pagetable)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&kgsl_driver.ptlock, flags);
+	if (pagetable->list.next) {
+		list_del(&pagetable->list);
+		pagetable->list.next = NULL;
+	}
+	spin_unlock_irqrestore(&kgsl_driver.ptlock, flags);
+
+	pagetable_remove_sysfs_objects(pagetable);
 }
 
 int
