@@ -272,6 +272,17 @@ static const struct qmp_reg_val qmp_override_pll[] = {
 	{-1, -1} /* terminating entry */
 };
 
+/* Override PLL Calibration for QMP PHY revision 2*/
+static const struct qmp_reg_val qmp_override_pll_rev2[] = {
+	{0x124, 0x1C}, /* USB3PHY_QSERDES_COM_VCO_TUNE_CTRL */
+	{0x12C, 0x3F}, /* USB3PHY_QSERDES_COM_VCO_TUNE1_MODE0 */
+	{0x130, 0x01}, /* USB3PHY_QSERDES_COM_VCO_TUNE2_MODE0 */
+	{0xC4, 0x15}, /* USB3PHY_QSERDES_COM_RESCODE_DIV_NUM */
+	{0x70, 0x0F}, /* USB3PHY_QSERDES_COM_BG_TRIM */
+	{0x48, 0x0F}, /* SB3PHY_QSERDES_COM_PLL_IVCO */
+	{-1, -1} /* terminating entry */
+};
+
 /* Foundry specific settings */
 static const struct qmp_reg_val qmp_settings_rev0_misc[] = {
 	{0x10C, 0x37}, /* QSERDES_COM_PLL_CRCTRL */
@@ -520,7 +531,7 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 	int ret;
 	unsigned init_timeout_usec = INIT_MAX_TIME_USEC;
 	u32 revid;
-	const struct qmp_reg_val *reg = NULL, *misc = NULL;
+	const struct qmp_reg_val *reg = NULL, *misc = NULL, *pll = NULL;
 
 	dev_dbg(uphy->dev, "Initializing QMP phy\n");
 
@@ -545,6 +556,8 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 	revid |= readl_relaxed(phy->base +
 			phy->phy_reg[USB3_REVISION_ID0]) & 0xFF;
 
+	pll = qmp_override_pll;
+
 	switch (revid) {
 	case 0x10000000:
 		reg = qmp_settings_rev0;
@@ -556,6 +569,7 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 	case 0x20000000:
 		reg = qmp_settings_rev2;
 		misc = qmp_override_sysclk;
+		pll = qmp_override_pll_rev2;
 		break;
 	default:
 		dev_err(uphy->dev, "Unknown revid 0x%x, cannot initialize PHY\n",
@@ -578,8 +592,7 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 
 	/* Feature specific configurations */
 	if (phy->override_pll_cal) {
-		reg = qmp_override_pll;
-		ret = configure_phy_regs(uphy, reg);
+		ret = configure_phy_regs(uphy, pll);
 		if (ret) {
 			dev_err(uphy->dev,
 				"Failed the PHY PLL override configuration\n");
