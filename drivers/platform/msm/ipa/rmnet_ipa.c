@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -902,9 +902,10 @@ static void apps_ipa_packet_receive_notify(void *priv,
 	skb->dev = ipa_netdevs[0];
 	skb->protocol = 0xda1a;
 
-	result = netif_rx(skb);
+	result = netif_rx_ni(skb);
 	if (result)
-		IPAWANERR("fail on netif_rx\n");
+		pr_err_ratelimited(DEV_NAME " %s:%d fail on netif_rx_ni\n",
+				__func__, __LINE__);
 	return;
 }
 
