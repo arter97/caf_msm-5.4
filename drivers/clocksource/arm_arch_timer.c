@@ -13,6 +13,7 @@
 #include <linux/device.h>
 #include <linux/smp.h>
 #include <linux/cpu.h>
+#include <linux/cpu_pm.h>
 #include <linux/clockchips.h>
 #include <linux/interrupt.h>
 #include <linux/of_irq.h>
@@ -80,10 +81,10 @@ static inline void arch_timer_reg_write(int access, int reg, u32 val,
 		struct arch_timer *timer = to_arch_timer(clk);
 		switch (reg) {
 		case ARCH_TIMER_REG_CTRL:
-			writel_relaxed(val, timer->base + CNTP_CTL);
+			writel_relaxed_no_log(val, timer->base + CNTP_CTL);
 			break;
 		case ARCH_TIMER_REG_TVAL:
-			writel_relaxed(val, timer->base + CNTP_TVAL);
+			writel_relaxed_no_log(val, timer->base + CNTP_TVAL);
 			break;
 		default:
 			BUILD_BUG();
@@ -92,10 +93,10 @@ static inline void arch_timer_reg_write(int access, int reg, u32 val,
 		struct arch_timer *timer = to_arch_timer(clk);
 		switch (reg) {
 		case ARCH_TIMER_REG_CTRL:
-			writel_relaxed(val, timer->base + CNTV_CTL);
+			writel_relaxed_no_log(val, timer->base + CNTV_CTL);
 			break;
 		case ARCH_TIMER_REG_TVAL:
-			writel_relaxed(val, timer->base + CNTV_TVAL);
+			writel_relaxed_no_log(val, timer->base + CNTV_TVAL);
 			break;
 		default:
 			BUILD_BUG();
@@ -114,10 +115,10 @@ static inline u32 arch_timer_reg_read(int access, int reg,
 		struct arch_timer *timer = to_arch_timer(clk);
 		switch (reg) {
 		case ARCH_TIMER_REG_CTRL:
-			val = readl_relaxed(timer->base + CNTP_CTL);
+			val = readl_relaxed_no_log(timer->base + CNTP_CTL);
 			break;
 		case ARCH_TIMER_REG_TVAL:
-			val = readl_relaxed(timer->base + CNTP_TVAL);
+			val = readl_relaxed_no_log(timer->base + CNTP_TVAL);
 			break;
 		default:
 			BUILD_BUG();
@@ -126,10 +127,10 @@ static inline u32 arch_timer_reg_read(int access, int reg,
 		struct arch_timer *timer = to_arch_timer(clk);
 		switch (reg) {
 		case ARCH_TIMER_REG_CTRL:
-			val = readl_relaxed(timer->base + CNTV_CTL);
+			val = readl_relaxed_no_log(timer->base + CNTV_CTL);
 			break;
 		case ARCH_TIMER_REG_TVAL:
-			val = readl_relaxed(timer->base + CNTV_TVAL);
+			val = readl_relaxed_no_log(timer->base + CNTV_TVAL);
 			break;
 		default:
 			BUILD_BUG();
@@ -307,7 +308,37 @@ static void __cpuinit __arch_timer_setup(unsigned type,
 	clockevents_config_and_register(clk, arch_timer_rate, 0xf, 0x7fffffff);
 }
 
-static int __cpuinit arch_timer_setup(struct clock_event_device *clk)
+static void arch_counter_set_user_access(void)
+{
+	u32 cntkctl = arch_timer_get_cntkctl();
+
+	/* Disable user access to the timers and the physical counter */
+	/* Also disable virtual event stream */
+	cntkctl &= ~(ARCH_TIMER_USR_PT_ACCESS_EN
+			| ARCH_TIMER_USR_VT_ACCESS_EN
+			| ARCH_TIMER_VIRT_EVT_EN
+			| ARCH_TIMER_USR_PCT_ACCESS_EN);
+
+	/* Enable user access to the virtual counter */
+	cntkctl |= ARCH_TIMER_USR_VCT_ACCESS_EN;
+
+	arch_timer_set_cntkctl(cntkctl);
+}
+
+static void arch_timer_configure_evtstream(void)
+{
+	int evt_stream_div, pos;
+
+	/* Find the closest power of two to the divisor */
+	evt_stream_div = arch_timer_rate / ARCH_TIMER_EVT_STREAM_FREQ;
+	pos = fls(evt_stream_div);
+	if (pos > 1 && !(evt_stream_div & (1 << (pos - 2))))
+		pos--;
+	/* enable event stream */
+	arch_timer_evtstrm_enable(min(pos, 15));
+}
+
+static int arch_timer_setup(struct clock_event_device *clk)
 {
 	__arch_timer_setup(ARCH_CP15_TIMER, clk);
 
@@ -320,6 +351,8 @@ static int __cpuinit arch_timer_setup(struct clock_event_device *clk)
 	}
 
 	arch_counter_set_user_access();
+	if (IS_ENABLED(CONFIG_ARM_ARCH_TIMER_EVTSTREAM))
+		arch_timer_configure_evtstream();
 
 	return 0;
 }
@@ -334,7 +367,8 @@ arch_timer_detect_rate(void __iomem *cntbase, struct device_node *np)
 	/* Try to determine the frequency from the device tree or CNTFRQ */
 	if (of_property_read_u32(np, "clock-frequency", &arch_timer_rate)) {
 		if (cntbase)
-			arch_timer_rate = readl_relaxed(cntbase + CNTFRQ);
+			arch_timer_rate = readl_relaxed_no_log(cntbase
+								+ CNTFRQ);
 		else
 			arch_timer_rate = arch_timer_get_cntfrq();
 	}
@@ -371,9 +405,9 @@ static u64 arch_counter_get_cntpct_mem(void)
 	u32 pct_lo, pct_hi, tmp_hi;
 
 	do {
-		pct_hi = readl_relaxed(arch_counter_base + CNTPCT_HI);
-		pct_lo = readl_relaxed(arch_counter_base + CNTPCT_LO);
-		tmp_hi = readl_relaxed(arch_counter_base + CNTPCT_HI);
+		pct_hi = readl_relaxed_no_log(arch_counter_base + CNTPCT_HI);
+		pct_lo = readl_relaxed_no_log(arch_counter_base + CNTPCT_LO);
+		tmp_hi = readl_relaxed_no_log(arch_counter_base + CNTPCT_HI);
 	} while (pct_hi != tmp_hi);
 
 	return ((u64) pct_hi << 32) | pct_lo;
@@ -384,9 +418,9 @@ static notrace u64 arch_counter_get_cntvct_mem(void)
 	u32 vct_lo, vct_hi, tmp_hi;
 
 	do {
-		vct_hi = readl_relaxed(arch_counter_base + CNTVCT_HI);
-		vct_lo = readl_relaxed(arch_counter_base + CNTVCT_LO);
-		tmp_hi = readl_relaxed(arch_counter_base + CNTVCT_HI);
+		vct_hi = readl_relaxed_no_log(arch_counter_base + CNTVCT_HI);
+		vct_lo = readl_relaxed_no_log(arch_counter_base + CNTVCT_LO);
+		tmp_hi = readl_relaxed_no_log(arch_counter_base + CNTVCT_HI);
 	} while (vct_hi != tmp_hi);
 
 	return ((u64) vct_hi << 32) | vct_lo;
@@ -423,6 +457,7 @@ u64 arch_counter_get_cntvct(void)
 {
 	return arch_timer_read_counter();
 }
+EXPORT_SYMBOL(arch_counter_get_cntvct);
 
 static struct clocksource clocksource_counter = {
 	.name	= "arch_sys_counter",
@@ -503,6 +538,33 @@ static struct notifier_block arch_timer_cpu_nb __cpuinitdata = {
 	.notifier_call = arch_timer_cpu_notify,
 };
 
+#ifdef CONFIG_CPU_PM
+static unsigned int saved_cntkctl;
+static int arch_timer_cpu_pm_notify(struct notifier_block *self,
+				    unsigned long action, void *hcpu)
+{
+	if (action == CPU_PM_ENTER)
+		saved_cntkctl = arch_timer_get_cntkctl();
+	else if (action == CPU_PM_ENTER_FAILED || action == CPU_PM_EXIT)
+		arch_timer_set_cntkctl(saved_cntkctl);
+	return NOTIFY_OK;
+}
+
+static struct notifier_block arch_timer_cpu_pm_notifier = {
+	.notifier_call = arch_timer_cpu_pm_notify,
+};
+
+static int __init arch_timer_cpu_pm_init(void)
+{
+	return cpu_pm_register_notifier(&arch_timer_cpu_pm_notifier);
+}
+#else
+static int __init arch_timer_cpu_pm_init(void)
+{
+	return 0;
+}
+#endif
+
 static int __init arch_timer_register(void)
 {
 	int err;
@@ -542,11 +604,17 @@ static int __init arch_timer_register(void)
 	if (err)
 		goto out_free_irq;
 
+	err = arch_timer_cpu_pm_init();
+	if (err)
+		goto out_unreg_notify;
+
 	/* Immediately configure the timer on the boot CPU */
 	arch_timer_setup(this_cpu_ptr(arch_timer_evt));
 
 	return 0;
 
+out_unreg_notify:
+	unregister_cpu_notifier(&arch_timer_cpu_nb);
 out_free_irq:
 	if (arch_timer_use_virtual)
 		free_percpu_irq(arch_timer_ppi[VIRT_PPI], arch_timer_evt);
@@ -674,7 +742,7 @@ static void __init arch_timer_mem_init(struct device_node *np)
 		return;
 	}
 
-	cnttidr = readl_relaxed(cntctlbase + CNTTIDR);
+	cnttidr = readl_relaxed_no_log(cntctlbase + CNTTIDR);
 	iounmap(cntctlbase);
 
 	/*
