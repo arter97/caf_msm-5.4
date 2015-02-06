@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -63,6 +63,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/leds-lp5521.h>
 #include <linux/i2c/adp5588.h>
+#include <linux/spi/spi.h>
 
 
 
@@ -310,6 +311,33 @@ static struct i2c_board_info adp5588_gpio_i2c_boardinfo[] __initdata = {
 	},
 };
 
+static struct spi_board_info spidev_board_info_hw_3[] __initdata = {
+	{
+		.modalias = "spidev",
+		.max_speed_hz = 1000000,
+		.bus_num = 0,
+		.chip_select = 0,
+		.mode = SPI_MODE_0,
+	},
+};
+
+static struct spi_board_info spidev_board_info_hw_4[] __initdata = {
+	{
+		.modalias = "spidev",
+		.max_speed_hz = 1000000,
+		.bus_num = 0,
+		.chip_select = 0,
+		.mode = SPI_MODE_0,
+	},
+	{
+		.modalias = "spidev",
+		.max_speed_hz = 1000000,
+		.bus_num = 0,
+		.chip_select = 1,
+		.mode = SPI_MODE_0,
+	},
+};
+
 static struct memtype_reserve msm8226_reserve_table[] __initdata = {
 	[MEMTYPE_SMI] = {
 	},
@@ -424,6 +452,11 @@ void __init msm8226_init(void)
 		i2c_register_board_info( 1,lp5523_i2c_boardinfo , ARRAY_SIZE(lp5523_i2c_boardinfo) );
 		i2c_register_board_info( 1,lp5521_i2c_boardinfo , ARRAY_SIZE(lp5521_i2c_boardinfo) );
 		i2c_register_board_info( 1,adp5588_gpio_i2c_boardinfo , ARRAY_SIZE(adp5588_gpio_i2c_boardinfo) );
+
+		if (socinfo_get_platform_subtype() == 3)
+			spi_register_board_info(spidev_board_info_hw_3, ARRAY_SIZE(spidev_board_info_hw_3));
+		if (socinfo_get_platform_subtype() == 4)
+			spi_register_board_info(spidev_board_info_hw_4, ARRAY_SIZE(spidev_board_info_hw_4));
 	}
 }
 
