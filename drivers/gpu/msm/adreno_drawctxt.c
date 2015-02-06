@@ -94,6 +94,13 @@ void adreno_drawctxt_dump(struct kgsl_device *device,
 		struct kgsl_cmdbatch *cmdbatch =
 			drawctxt->cmdqueue[drawctxt->cmdqueue_head];
 
+		if (test_bit(CMDBATCH_FLAG_FENCE_LOG, &cmdbatch->priv)) {
+			dev_err(device->dev,
+				"  possible deadlock. Context %d might be blocked for itself\n",
+				context->id);
+			goto done;
+		}
+
 		/*
 		 * We may have cmdbatch timer running, which also uses same
 		 * lock, take a lock with software interrupt disabled (bh)
@@ -111,6 +118,7 @@ void adreno_drawctxt_dump(struct kgsl_device *device,
 		spin_unlock_bh(&cmdbatch->lock);
 	}
 
+done:
 	spin_unlock(&drawctxt->lock);
 }
 
