@@ -121,7 +121,6 @@ static inline unsigned ecm_qc_bitrate(struct usb_gadget *g)
 
 /* Currently only one std ecm instance is supported - port index 0. */
 #define ECM_QC_NO_PORTS						1
-#define ECM_QC_DEFAULT_PORT					0
 #define ECM_QC_ACTIVE_PORT					0
 
 /* interface descriptor: */
@@ -456,12 +455,6 @@ static int ecm_qc_bam_connect(struct f_ecm_qc *dev)
 	struct usb_gadget *gadget = cdev->gadget;
 	enum peer_bam peer_bam = (dev->xport == USB_GADGET_XPORT_BAM2BAM_IPA) ?
 		IPA_P_BAM : A2_P_BAM;
-
-	ret = bam2bam_data_port_select(ECM_QC_DEFAULT_PORT);
-	if (ret) {
-		pr_err("ecm_qc port select failed with err:%d\n", ret);
-		return ret;
-	}
 
 	dev->bam_port.cdev = cdev;
 	dev->bam_port.func = &dev->port.func;
