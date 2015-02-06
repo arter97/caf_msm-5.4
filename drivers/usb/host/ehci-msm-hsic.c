@@ -53,7 +53,7 @@
 
 #define MSM_USB_BASE (hcd->regs)
 #define USB_REG_START_OFFSET 0x90
-#define USB_REG_END_OFFSET 0x250
+#define USB_REG_END_OFFSET 0x324
 
 static struct workqueue_struct  *ehci_wq;
 struct ehci_timer {
@@ -126,6 +126,9 @@ static unsigned int ep_addr_rxdbg_mask = 9;
 module_param(ep_addr_rxdbg_mask, uint, S_IRUGO | S_IWUSR);
 static unsigned int ep_addr_txdbg_mask = 9;
 module_param(ep_addr_txdbg_mask, uint, S_IRUGO | S_IWUSR);
+
+static unsigned int dbg_qh_addr;
+module_param(dbg_qh_addr, uint, S_IRUGO | S_IWUSR);
 
 /* Maximum debug message length */
 #define DBG_MSG_LEN   128UL
@@ -317,6 +320,44 @@ static inline struct usb_hcd *hsic_to_hcd(struct msm_hsic_hcd *mehci)
 {
 	return container_of((void *) mehci, struct usb_hcd, hcd_priv);
 }
+
+static void dbg_msm_qh(struct ehci_hcd *ehci, struct ehci_qh *qh)
+{
+	struct ehci_qh_hw *hw = qh->hw;
+
+	pr_info("EP:%x qh %p info %x %x c_qtd-%08x\n",
+			(hw->hw_info1 & 0xF00) >> 8, qh, hw->hw_info1,
+			 hw->hw_info2, hw->hw_current);
+	pr_info("overlay n%08x %08x t-%08x nak-%x c_err %x\n",
+		hw->hw_qtd_next, hw->hw_alt_next,
+		hw->hw_token,
+		(hw->hw_alt_next & 0xE)>>1, (hw->hw_token & 0xC00) >> 10);
+}
+
+static void dump_msm_qhs(struct usb_hcd *hcd)
+{
+	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
+	struct ehci_qh		*qh, *qh_next;
+	unsigned long flags;
+	int i;
+
+	for (i = 0; i < 5; i++) {
+		pr_info("Dump QHs, iteration:%d\n", i);
+		spin_lock_irqsave(&ehci->lock, flags);
+		qh_next = ehci->async->qh_next.qh;
+		while (qh_next) {
+			qh = qh_next;
+			qh_next = qh->qh_next.qh;
+
+			if (!dbg_qh_addr ||
+			   ((struct ehci_qh *)dbg_qh_addr) == qh)
+				dbg_msm_qh(ehci, qh);
+		}
+		spin_unlock_irqrestore(&ehci->lock, flags);
+		usleep_range(5000, 10000);
+	}
+}
+
 
 static void dump_hsic_regs(struct usb_hcd *hcd)
 {
@@ -1799,6 +1840,27 @@ const struct file_operations ehci_hsic_msm_dbg_ctrl_fops = {
 	.release = single_release,
 };
 
+static int ehci_hsic_msm_qh_show(struct seq_file *s, void *unused)
+{
+	struct msm_hsic_hcd *mehci = s->private;
+
+	dump_msm_qhs(hsic_to_hcd(mehci));
+
+	return 0;
+}
+
+static int ehci_hsic_msm_qh_open(struct inode *inode, struct file *f)
+{
+	return single_open(f, ehci_hsic_msm_qh_show, inode->i_private);
+}
+
+const struct file_operations ehci_hsic_msm_qh_fops = {
+	.open = ehci_hsic_msm_qh_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
 static struct dentry *ehci_hsic_msm_dbg_root;
 static int ehci_hsic_msm_debugfs_init(struct msm_hsic_hcd *mehci)
 {
@@ -1843,6 +1905,16 @@ static int ehci_hsic_msm_debugfs_init(struct msm_hsic_hcd *mehci)
 		S_IRUGO,
 		ehci_hsic_msm_dbg_root, mehci,
 		&ehci_hsic_msm_dbg_data_fops);
+
+	if (!ehci_hsic_msm_dentry) {
+		debugfs_remove_recursive(ehci_hsic_msm_dbg_root);
+		return -ENODEV;
+	}
+
+	ehci_hsic_msm_dentry = debugfs_create_file("show_hsic_qh",
+		S_IRUGO,
+		ehci_hsic_msm_dbg_root, mehci,
+		&ehci_hsic_msm_qh_fops);
 
 	if (!ehci_hsic_msm_dentry) {
 		debugfs_remove_recursive(ehci_hsic_msm_dbg_root);
