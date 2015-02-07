@@ -3324,6 +3324,9 @@ static int msm_gcc_thulium_probe(struct platform_device *pdev)
 	clk_set_rate(&pnoc_keepalive_a_clk.c, 19200000);
 	clk_prepare_enable(&pnoc_keepalive_a_clk.c);
 
+	/* This clock is used for all MMSS register access */
+	clk_prepare_enable(&gcc_mmss_noc_cfg_ahb_clk.c);
+
 	dev_info(&pdev->dev, "Registered GCC clocks.\n");
 	return 0;
 }
