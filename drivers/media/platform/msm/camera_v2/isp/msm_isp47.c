@@ -512,6 +512,14 @@ static void msm_vfe47_process_epoch_irq(struct vfe_device *vfe_dev,
 		msm_isp_update_framedrop_reg(vfe_dev, VFE_PIX_0);
 		msm_isp_update_stats_framedrop_reg(vfe_dev);
 		msm_isp_update_error_frame_count(vfe_dev);
+		if (vfe_dev->axi_data.src_info[VFE_PIX_0].raw_stream_count > 0
+			&& vfe_dev->axi_data.src_info[VFE_PIX_0].
+			pix_stream_count == 0) {
+			if (vfe_dev->axi_data.stream_update[VFE_PIX_0])
+				msm_isp_axi_stream_update(vfe_dev, VFE_PIX_0);
+			vfe_dev->hw_info->vfe_ops.core_ops.reg_update(
+				vfe_dev, VFE_PIX_0);
+		}
 	}
 }
 
@@ -536,7 +544,7 @@ static void msm_vfe47_reg_update(struct vfe_device *vfe_dev,
 	ISP_DBG("%s update_mask %x\n", __func__, update_mask);
 	vfe_dev->axi_data.reg_update_requested |= update_mask;
 	msm_camera_io_w_mb(vfe_dev->axi_data.reg_update_requested,
-		vfe_dev->vfe_base + 0x3D8);
+		vfe_dev->vfe_base + 0x4AC);
 }
 
 static long msm_vfe47_reset_hardware(struct vfe_device *vfe_dev,
@@ -1127,9 +1135,9 @@ static void msm_vfe47_update_camif_state(struct vfe_device *vfe_dev,
 		val = msm_camera_io_r(vfe_dev->vfe_base + 0x3AC);
 		val &= 0xFFFFFF3F;
 		val = val | bus_en << 7 | vfe_en << 6;
-		msm_camera_io_w(val, vfe_dev->vfe_base + 0x3AC);
-		msm_camera_io_w_mb(0x4, vfe_dev->vfe_base + 0x3A8);
-		msm_camera_io_w_mb(0x1, vfe_dev->vfe_base + 0x3A8);
+		msm_camera_io_w(val, vfe_dev->vfe_base + 0x47C);
+		msm_camera_io_w_mb(0x4, vfe_dev->vfe_base + 0x478);
+		msm_camera_io_w_mb(0x1, vfe_dev->vfe_base + 0x478);
 		msm_camera_io_w_mb(0x200, vfe_dev->vfe_base + 0x4A0);
 		vfe_dev->axi_data.src_info[VFE_PIX_0].active = 1;
 		/* testgen GO*/
