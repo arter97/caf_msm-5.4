@@ -89,8 +89,8 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
 	msm8936-mtp-wcd9306.dtb
 dtb-$(CONFIG_ARCH_MSMTHULIUM) += msmthulium-sim.dtb \
 	msmthulium-rumi.dtb \
-	msmthulium-cdp.dtb \
-	msmthulium-mtp.dtb \
+	msmthulium-pmi8994-cdp.dtb \
+	msmthulium-pmi8994-mtp.dtb \
 	msmthulium-pmi8994-pm8004-cdp.dtb \
 	msmthulium-pmi8994-pm8004-mtp.dtb \
 	msmthulium-fluid.dtb

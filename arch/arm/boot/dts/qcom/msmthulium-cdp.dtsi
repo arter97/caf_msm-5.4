@@ -10,18 +10,8 @@
  * GNU General Public License for more details.
  */
 
-
-/dts-v1/;
-
-#include "msmthulium.dtsi"
 #include "msmthulium-pinctrl.dtsi"
 #include "msmthulium-camera-sensor-cdp.dtsi"
-
-/ {
-	model = "Qualcomm Technologies, Inc. MSM THULIUM CDP";
-	compatible = "qcom,msmthulium-cdp", "qcom,msmthulium", "qcom,cdp";
-	qcom,board-id = <1 0>;
-};
 
 &ufsphy1 {
 	status = "ok";
