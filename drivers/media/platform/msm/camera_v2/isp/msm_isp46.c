@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -88,28 +88,27 @@ static uint8_t stats_pingpong_offset_map[] = {
 #define VFE46_CLK_IDX 2
 static struct msm_cam_clk_info msm_vfe46_clk_info[VFE_CLK_INFO_MAX];
 static int32_t msm_vfe46_init_dt_parms(struct vfe_device *vfe_dev,
-				struct msm_vfe_hw_init_parms *dt_parms)
+	struct msm_vfe_hw_init_parms *dt_parms, void __iomem *dev_mem_base)
 {
-	void __iomem *vfebase = vfe_dev->vfe_base;
 	struct device_node *of_node;
 	int32_t i = 0 , rc = 0;
-	uint32_t *dt_settings = NULL, *dt_regs = NULL, dt_entries = 0;
+	uint32_t *dt_settings = NULL, *dt_regs = NULL, num_dt_entries = 0;
 
 	of_node = vfe_dev->pdev->dev.of_node;
 
 	rc = of_property_read_u32(of_node, dt_parms->entries,
-		&dt_entries);
-	if (rc < 0 || !dt_entries) {
+		&num_dt_entries);
+	if (rc < 0 || !num_dt_entries) {
 		pr_err("%s: NO QOS entries found\n", __func__);
 		return -EINVAL;
 	} else {
-		dt_settings = kzalloc(sizeof(uint32_t) * dt_entries,
+		dt_settings = kzalloc(sizeof(uint32_t) * num_dt_entries,
 			GFP_KERNEL);
 		if (!dt_settings) {
 			pr_err("%s:%d No memory\n", __func__, __LINE__);
 			return -ENOMEM;
 		}
-		dt_regs = kzalloc(sizeof(uint32_t) * dt_entries,
+		dt_regs = kzalloc(sizeof(uint32_t) * num_dt_entries,
 			GFP_KERNEL);
 		if (!dt_regs) {
 			pr_err("%s:%d No memory\n", __func__, __LINE__);
@@ -117,7 +116,7 @@ static int32_t msm_vfe46_init_dt_parms(struct vfe_device *vfe_dev,
 			return -ENOMEM;
 		}
 		rc = of_property_read_u32_array(of_node, dt_parms->regs,
-			dt_regs, dt_entries);
+			dt_regs, num_dt_entries);
 		if (rc < 0) {
 			pr_err("%s: NO QOS BUS BDG info\n", __func__);
 			kfree(dt_settings);
@@ -127,16 +126,17 @@ static int32_t msm_vfe46_init_dt_parms(struct vfe_device *vfe_dev,
 			if (dt_parms->settings) {
 				rc = of_property_read_u32_array(of_node,
 					dt_parms->settings,
-					dt_settings, dt_entries);
+					dt_settings, num_dt_entries);
 				if (rc < 0) {
 					pr_err("%s: NO QOS settings\n",
 						__func__);
 					kfree(dt_settings);
 					kfree(dt_regs);
 				} else {
-					for (i = 0; i < dt_entries; i++) {
+					for (i = 0; i < num_dt_entries; i++) {
 						msm_camera_io_w(dt_settings[i],
-							vfebase + dt_regs[i]);
+							dev_mem_base +
+								dt_regs[i]);
 					}
 					kfree(dt_settings);
 					kfree(dt_regs);
@@ -253,6 +253,10 @@ static void msm_vfe46_init_hardware_reg(struct vfe_device *vfe_dev)
 	struct msm_vfe_hw_init_parms vbif_parms;
 	struct msm_vfe_hw_init_parms ds_parms;
 
+	memset(&qos_parms, 0, sizeof(struct msm_vfe_hw_init_parms));
+	memset(&vbif_parms, 0, sizeof(struct msm_vfe_hw_init_parms));
+	memset(&ds_parms, 0, sizeof(struct msm_vfe_hw_init_parms));
+
 	qos_parms.entries = "qos-entries";
 	qos_parms.regs = "qos-regs";
 	qos_parms.settings = "qos-settings";
@@ -263,9 +267,9 @@ static void msm_vfe46_init_hardware_reg(struct vfe_device *vfe_dev)
 	ds_parms.regs = "ds-regs";
 	ds_parms.settings = "ds-settings";
 
-	msm_vfe46_init_dt_parms(vfe_dev, &qos_parms);
-	msm_vfe46_init_dt_parms(vfe_dev, &ds_parms);
-	msm_vfe46_init_dt_parms(vfe_dev, &vbif_parms);
+	msm_vfe46_init_dt_parms(vfe_dev, &qos_parms, vfe_dev->vfe_base);
+	msm_vfe46_init_dt_parms(vfe_dev, &ds_parms, vfe_dev->vfe_base);
+	msm_vfe46_init_dt_parms(vfe_dev, &vbif_parms, vfe_dev->vfe_vbif_base);
 
 	/* BUS_CFG */
 	msm_camera_io_w(0x00000001, vfe_dev->vfe_base + 0x84);
