@@ -2153,7 +2153,7 @@ static struct branch_clk gpu_aon_isense_clk = {
 
 static struct branch_clk gpu_gx_gfx3d_clk = {
 	.cbcr_reg = MMSS_GPU_GX_GFX3D_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_base,
 	.c = {
 		.dbg_name = "gpu_gx_gfx3d_clk",
