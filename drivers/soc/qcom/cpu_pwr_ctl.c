@@ -338,16 +338,22 @@ static int set_clk_mux(void __iomem *reg, enum mux_type mux, int src)
 	return prev_src;
 }
 
-static void select_cbf_source(void __iomem *reg, bool cbf)
+struct clkmux {
+	void __iomem *reg;
+	u32 pri_val;
+	u32 sec_val;
+};
+
+static void select_cbf_source(struct clkmux *mux, bool cbf)
 {
-	static u32 pri_saved, sec_saved;
+	void __iomem *reg = mux->reg;
 
 	if (cbf) {
-		sec_saved = set_clk_mux(reg, MUX_SEC, CBF_SECSRCSEL_VAL);
-		pri_saved = set_clk_mux(reg, MUX_PRI, SEC_PRISRCSEL_VAL);
+		mux->sec_val = set_clk_mux(reg, MUX_SEC, CBF_SECSRCSEL_VAL);
+		mux->pri_val = set_clk_mux(reg, MUX_PRI, SEC_PRISRCSEL_VAL);
 	} else {
-		set_clk_mux(reg, MUX_PRI, pri_saved);
-		set_clk_mux(reg, MUX_SEC, sec_saved);
+		set_clk_mux(reg, MUX_PRI, mux->pri_val);
+		set_clk_mux(reg, MUX_SEC, mux->sec_val);
 	}
 }
 
@@ -355,8 +361,9 @@ static int power_on_l2_msmthulium(struct device_node *l2ccc_node, u32 pon_mask,
 				int cpu)
 {
 	u32 pwr_ctl;
-	void __iomem *l2_base, *local_clksel, *peer_clksel;
+	void __iomem *l2_base;
 	struct device_node *peer_node;
+	struct clkmux local_mux, peer_mux;
 
 	l2_base = of_iomap(l2ccc_node, 0);
 	if (!l2_base)
@@ -375,18 +382,18 @@ static int power_on_l2_msmthulium(struct device_node *l2ccc_node, u32 pon_mask,
 		if (!peer_node)
 			goto unmap;
 
-		local_clksel = of_iomap(l2ccc_node, 1);
-		if (!local_clksel)
+		local_mux.reg = of_iomap(l2ccc_node, 1);
+		if (!local_mux.reg)
 			goto unmap;
 
-		peer_clksel = of_iomap(peer_node, 1);
-		if (!local_clksel) {
-			iounmap(local_clksel);
+		peer_mux.reg = of_iomap(peer_node, 1);
+		if (!peer_mux.reg) {
+			iounmap(local_mux.reg);
 			goto unmap;
 		}
 
-		select_cbf_source(local_clksel, true);
-		select_cbf_source(peer_clksel, true);
+		select_cbf_source(&local_mux, true);
+		select_cbf_source(&peer_mux, true);
 	}
 
 	/* assert POR reset, clamp, close L2 APM HS */
@@ -420,10 +427,10 @@ static int power_on_l2_msmthulium(struct device_node *l2ccc_node, u32 pon_mask,
 
 	/* Restore original clock source */
 	if (of_property_read_bool(l2ccc_node, "qcom,cbf-clock-seq")) {
-		select_cbf_source(local_clksel, false);
-		select_cbf_source(peer_clksel, false);
-		iounmap(local_clksel);
-		iounmap(peer_clksel);
+		select_cbf_source(&local_mux, false);
+		select_cbf_source(&peer_mux, false);
+		iounmap(local_mux.reg);
+		iounmap(peer_mux.reg);
 	}
 
 unmap:
