@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2557,6 +2557,13 @@ static struct platform_device *early_common_devices[] __initdata = {
 	&apq8064_device_qup_spi_gsbi5,
 };
 
+static struct platform_device *adp_pm8921_common_devices[] __initdata = {
+	&apq8064_device_ext_5v_vreg,
+	&apq8064_device_ext_mpp8_vreg,
+	&apq8064_device_ssbi_pmic1,
+	&apq8064_device_ssbi_pmic2,
+};
+
 static struct platform_device *pm8921_common_devices[] __initdata = {
 	&apq8064_device_ext_5v_vreg,
 	&apq8064_device_ext_mpp8_vreg,
@@ -3908,7 +3915,14 @@ static void __init apq8064_common_init(void)
 	}
 	platform_add_devices(early_common_devices,
 				ARRAY_SIZE(early_common_devices));
-	if (socinfo_get_pmic_model() != PMIC_MODEL_PM8917)
+
+	if (machine_is_apq8064_adp_2() ||
+		machine_is_apq8064_adp2_es2() ||
+		machine_is_apq8064_mplatform() ||
+		machine_is_apq8064_adp2_es2p5())
+		platform_add_devices(adp_pm8921_common_devices,
+			ARRAY_SIZE(adp_pm8921_common_devices));
+	else if (socinfo_get_pmic_model() != PMIC_MODEL_PM8917)
 		platform_add_devices(pm8921_common_devices,
 			ARRAY_SIZE(pm8921_common_devices));
 	else
