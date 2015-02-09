@@ -140,4 +140,13 @@ config SSM
 	  This driver uses Secure Channel Manager interface for trustzone
 	  communication and communicates with modem over SMD channel.
 
+config PIEZO_CLK_MND
+	bool "Piezo clock source using MND counter"
+	depends on SYSFS
+	help
+	  This driver provides the clock source to the piezobuzzer using
+	  GPIO pin which can be programmed to other function.
+	  Duration, frequency and duty cycle can be programmed from the
+	  user space. Device tree node also exist for default values.
+
 endmenu

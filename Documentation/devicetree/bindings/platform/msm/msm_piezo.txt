@@ -1,0 +1,39 @@
+Qualcomm MSM Piezo-electric Sound Buzzer
+
+msm-piezo is a driver which utilizes the embedded M:N/D counter inside
+Qualcomm chip.
+It is used to provide a good range of clock source to piezzobuzzer.
+In MSM8626, GPIO 22 is used for this functionality. GPIO 22 will need to
+be selected as function 5. Check out MSM SW Interface document to see
+which GPIO pin is used as GP_MN for your target to utilize this driver.
+The frequency range that this driver provides is from 1KHz to 6KHz.
+
+Required properties:
+- compatible:		Must be "qcom,msm-piezo"
+- reg:				Physical base address of clock and MND counter registers
+                    This address will be io-mapped during initialization
+                    to allow direct read and write access
+- reg-names:        Names of the base for the above register
+					Register name referred in SW Interface document
+
+Optional properties:
+- qcom,piezo-frequency:		default target frequency to source piezo
+- qcom,piezo-duration:		default duration of how long the clock will be
+							turned on
+- qcom,piezo-duty-cycle: 	default duty cycle
+- qcom,piezo-command: 		default command state is 0(off)
+- qcom,piezo-gp-mn-gpio: 	gpio pin used to source clock/frequency
+
+Example:
+
+msm-piezo {
+	compatible = "qcom,msm-piezo";
+	reg = <0xF9BFE040 0x04>;
+		reg-names = "periph_ss_pdm";
+	qcom,piezo-frequency = <4000>;
+	qcom,piezo-duration = <5000>;
+	qcom,piezo-duty-cycle = <50>;
+	qcom,piezo-command = <0>;
+	qcom,piezo-gp-mn-gpio = <22>;
+	};
+
