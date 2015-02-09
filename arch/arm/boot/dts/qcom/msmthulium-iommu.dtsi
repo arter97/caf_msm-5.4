@@ -214,3 +214,5 @@
 		#clock-cells = <1>;
 	};
 };
+
+#include "msmthulium-iommu-impl-defs.dtsi"
