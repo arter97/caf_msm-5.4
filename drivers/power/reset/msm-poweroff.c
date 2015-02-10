@@ -50,6 +50,7 @@ static bool scm_pmic_arbiter_disable_supported;
 static bool scm_deassert_ps_hold_supported;
 /* Download mode master kill-switch */
 static void __iomem *msm_ps_hold;
+static phys_addr_t tcsr_boot_misc_detect;
 
 #ifdef CONFIG_MSM_DLOAD_MODE
 #define EDL_MODE_PROP "qcom,msm-imem-emergency_download_mode"
@@ -84,8 +85,12 @@ int scm_set_dload_mode(int arg1, int arg2)
 		.arginfo = SCM_ARGS(2),
 	};
 
-	if (!scm_dload_supported)
+	if (!scm_dload_supported) {
+		if (tcsr_boot_misc_detect)
+			return scm_io_write(tcsr_boot_misc_detect, arg1);
+
 		return 0;
+	}
 
 	if (!is_scm_armv8())
 		return scm_call_atomic2(SCM_SVC_BOOT, SCM_DLOAD_CMD, arg1,
@@ -381,7 +386,6 @@ static int msm_restart_probe(struct platform_device *pdev)
 			pr_err("unable to map imem EDLOAD mode offset\n");
 	}
 
-	set_dload_mode(download_mode);
 #endif
 	np = of_find_compatible_node(NULL, NULL,
 				"qcom,msm-imem-restart_reason");
@@ -401,6 +405,10 @@ static int msm_restart_probe(struct platform_device *pdev)
 	if (IS_ERR(msm_ps_hold))
 		return PTR_ERR(msm_ps_hold);
 
+	mem = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+	if (mem)
+		tcsr_boot_misc_detect = mem->start;
+
 	pm_power_off = do_msm_poweroff;
 	arm_pm_restart = do_msm_restart;
 
@@ -409,6 +417,8 @@ static int msm_restart_probe(struct platform_device *pdev)
 
 	if (scm_is_call_available(SCM_SVC_PWR, SCM_IO_DEASSERT_PS_HOLD) > 0)
 		scm_deassert_ps_hold_supported = true;
+
+	set_dload_mode(download_mode);
 
 	return 0;
 
