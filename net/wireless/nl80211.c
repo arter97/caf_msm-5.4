@@ -8959,7 +8959,7 @@ void cfg80211_ft_event(struct net_device *netdev,
 	genlmsg_multicast_netns(wiphy_net(&rdev->wiphy), msg, 0,
 				nl80211_mlme_mcgrp.id, GFP_KERNEL);
 	return;
- out:
+out:
 	nlmsg_free(msg);
 }
 EXPORT_SYMBOL(cfg80211_ft_event);
