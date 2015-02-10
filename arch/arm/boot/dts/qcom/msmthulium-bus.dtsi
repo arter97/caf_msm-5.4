@@ -14,7 +14,7 @@
 
 &soc {
 	ad_hoc_bus: ad-hoc-bus {
-		/* Version = 13 */
+		/* Version = 16 */
 		compatible = "qcom,msm-bus-device";
 		reg = <0x520000 0xA000>,
 			<0x400000 0x62000>,
@@ -111,7 +111,7 @@
 			clock-names = "bus_clk", "bus_a_clk", "bus_qos_clk";
 			clocks = <&clock_mmss clk_mmss_s0_axi_clk>,
 			     <&clock_mmss  clk_mmss_s0_axi_clk>,
-			     <&clock_mmss clk_mmss_mmagic_ahb_clk>;
+			     <&clock_mmss  clk_mmss_mmagic_cfg_ahb_clk>;
 			bus-qos-gdsc-supply = <&gdsc_mmagic_bimc>;
 		};
 
@@ -655,7 +655,7 @@
 		mas_qdss_bam: mas-qdss-bam {
 			cell-id = <MSM_BUS_MASTER_QDSS_BAM>;
 			label = "mas-qdss-bam";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,ap-owned;
 			qcom,qport = <2>;
@@ -671,7 +671,7 @@
 		mas_snoc_cfg: mas-snoc-cfg {
 			cell-id = <MSM_BUS_MASTER_SNOC_CFG>;
 			label = "mas-snoc-cfg";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,ap-owned;
 			qcom,connections = <&slv_srvc_snoc>;
@@ -682,7 +682,7 @@
 		mas_bimc_snoc_0: mas-bimc-snoc-0 {
 			cell-id = <MSM_BUS_BIMC_SNOC_MAS>;
 			label = "mas-bimc-snoc-0";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,connections = < &slv_snoc_vmem &slv_usb3 &slv_pimem
 				 &slv_lpass &slv_hmss
@@ -695,7 +695,7 @@
 		mas_bimc_snoc_1: mas-bimc-snoc-1 {
 			cell-id = <MSM_BUS_BIMC_SNOC_1_MAS>;
 			label = "mas-bimc-snoc-1";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,ap-owned;
 			qcom,connections = < &slv_pcie_2 &slv_pcie_1&slv_pcie_0>;
@@ -706,7 +706,7 @@
 		mas_a0noc_snoc: mas-a0noc-snoc {
 			cell-id = <MSM_BUS_A0NOC_SNOC_MAS>;
 			label = "mas-a0noc-snoc";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,ap-owned;
 			qcom,connections = < &slv_snoc_pnoc &slv_imem&slv_hmss
@@ -718,7 +718,7 @@
 		mas_a1noc_snoc: mas-a1noc-snoc {
 			cell-id = <MSM_BUS_A1NOC_SNOC_MAS>;
 			label = "mas-a1noc-snoc";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,connections = < &slv_snoc_vmem &slv_usb3 &slv_pcie_0
 				 &slv_pimem &slv_pcie_2
@@ -733,7 +733,7 @@
 		mas_a2noc_snoc: mas-a2noc-snoc {
 			cell-id = <MSM_BUS_A2NOC_SNOC_MAS>;
 			label = "mas-a2noc-snoc";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,connections = < &slv_snoc_vmem &slv_usb3 &slv_pcie_1
 				 &slv_pimem &slv_pcie_2
@@ -748,7 +748,7 @@
 		mas_qdss_etr: mas-qdss-etr {
 			cell-id = <MSM_BUS_MASTER_QDSS_ETR>;
 			label = "mas-qdss-etr";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,ap-owned;
 			qcom,qport = <3>;
@@ -1555,7 +1555,7 @@
 		slv_hmss: slv-hmss {
 			cell-id = <MSM_BUS_SLAVE_APPSS>;
 			label = "slv-hmss";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,ap-owned;
 			qcom,bus-dev = <&fab_snoc>;
@@ -1565,7 +1565,7 @@
 		slv_lpass: slv-lpass {
 			cell-id = <MSM_BUS_SLAVE_LPASS>;
 			label = "slv-lpass";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,ap-owned;
 			qcom,bus-dev = <&fab_snoc>;
@@ -1575,7 +1575,7 @@
 		slv_usb3: slv-usb3 {
 			cell-id = <MSM_BUS_SLAVE_USB3>;
 			label = "slv-usb3";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,ap-owned;
 			qcom,bus-dev = <&fab_snoc>;
@@ -1585,7 +1585,7 @@
 		slv_snoc_bimc: slv-snoc-bimc {
 			cell-id = <MSM_BUS_SNOC_BIMC_SLV>;
 			label = "slv-snoc-bimc";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <32>;
 			qcom,agg-ports = <2>;
 			qcom,bus-dev = <&fab_snoc>;
 			qcom,connections = <&mas_snoc_bimc>;
@@ -1595,7 +1595,7 @@
 		slv_snoc_cnoc: slv-snoc-cnoc {
 			cell-id = <MSM_BUS_SNOC_CNOC_SLV>;
 			label = "slv-snoc-cnoc";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,bus-dev = <&fab_snoc>;
 			qcom,connections = <&mas_snoc_cnoc>;
@@ -1603,9 +1603,9 @@
 		};
 
 		slv_imem: slv-imem {
-			cell-id = <MSM_BUS_SLAVE_SYSTEM_IMEM>;
+			cell-id = <MSM_BUS_SLAVE_OCIMEM>;
 			label = "slv-imem";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,bus-dev = <&fab_snoc>;
 			qcom,slv-rpm-id = <ICBID_SLAVE_IMEM>;
@@ -1614,7 +1614,7 @@
 		slv_pimem: slv-pimem {
 			cell-id = <MSM_BUS_SLAVE_PIMEM>;
 			label = "slv-pimem";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,bus-dev = <&fab_snoc>;
 			qcom,slv-rpm-id = <ICBID_SLAVE_PIMEM>;
@@ -1623,7 +1623,7 @@
 		slv_snoc_vmem: slv-snoc-vmem {
 			cell-id = <MSM_BUS_SLAVE_SNOC_VMEM>;
 			label = "slv-snoc-vmem";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,ap-owned;
 			qcom,bus-dev = <&fab_snoc>;
@@ -1634,7 +1634,7 @@
 		slv_snoc_pnoc: slv-snoc-pnoc {
 			cell-id = <MSM_BUS_SNOC_PNOC_SLV>;
 			label = "slv-snoc-pnoc";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,bus-dev = <&fab_snoc>;
 			qcom,connections = <&mas_snoc_pnoc>;
@@ -1644,7 +1644,7 @@
 		slv_qdss_stm: slv-qdss-stm {
 			cell-id = <MSM_BUS_SLAVE_QDSS_STM>;
 			label = "slv-qdss-stm";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,bus-dev = <&fab_snoc>;
 			qcom,slv-rpm-id = <ICBID_SLAVE_QDSS_STM>;
@@ -1653,7 +1653,7 @@
 		slv_pcie_0: slv-pcie-0 {
 			cell-id = <MSM_BUS_SLAVE_PCIE_0>;
 			label = "slv-pcie-0";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,ap-owned;
 			qcom,bus-dev = <&fab_snoc>;
@@ -1663,7 +1663,7 @@
 		slv_pcie_1: slv-pcie-1 {
 			cell-id = <MSM_BUS_SLAVE_PCIE_1>;
 			label = "slv-pcie-1";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,ap-owned;
 			qcom,bus-dev = <&fab_snoc>;
@@ -1673,7 +1673,7 @@
 		slv_pcie_2: slv-pcie-2 {
 			cell-id = <MSM_BUS_SLAVE_PCIE_2>;
 			label = "slv-pcie-2";
-			qcom,buswidth = <8>;
+			qcom,buswidth = <16>;
 			qcom,agg-ports = <1>;
 			qcom,ap-owned;
 			qcom,bus-dev = <&fab_snoc>;
