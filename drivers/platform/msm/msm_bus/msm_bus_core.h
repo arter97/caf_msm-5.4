@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -17,6 +17,7 @@
 #include <linux/device.h>
 #include <linux/radix-tree.h>
 #include <linux/platform_device.h>
+#include <linux/regulator/consumer.h>
 #include <linux/msm-bus-board.h>
 #include <linux/msm-bus.h>
 
@@ -41,6 +42,7 @@
 #define INTERLEAVED_VAL(fab_pdata, n) \
 	((fab_pdata->il_flag) ? (n) : 1)
 #define KBTOB(a) (a * 1000ULL)
+#define MAX_REG_NAME	(20)
 
 enum msm_bus_dbg_op_type {
 	MSM_BUS_DBG_UNREGISTER = -2,
@@ -139,9 +141,11 @@ struct msm_bus_link_info {
 
 struct nodeclk {
 	struct clk *clk;
+	struct regulator *reg;
 	uint64_t rate;
 	bool dirty;
 	bool enable;
+	char reg_name[MAX_REG_NAME];
 };
 
 struct msm_bus_inode_info {
