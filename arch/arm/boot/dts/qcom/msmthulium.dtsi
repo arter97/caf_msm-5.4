@@ -462,6 +462,49 @@
 			iommus = <&venus_smmu 0x180>,
 				<&venus_smmu 0x186>;
 		};
+
+		secure_bitstream_cb {
+			compatible = "qcom,msm-vidc,context-bank";
+			label = "venus_sec_bitstream";
+			iommus = <&venus_smmu 0x100>,
+				<&venus_smmu 0x102>,
+				<&venus_smmu 0x109>,
+				<&venus_smmu 0x10a>,
+				<&venus_smmu 0x10b>,
+				<&venus_smmu 0x10e>,
+				<&venus_smmu 0x126>,
+				<&venus_smmu 0x129>,
+				<&venus_smmu 0x12b>;
+			buffer-types = <0x241>;
+			virtual-addr-pool = <0x4b000000 0x12c00000>;
+		};
+
+		secure_pixel_cb {
+			compatible = "qcom,msm-vidc,context-bank";
+			label = "venus_sec_pixel";
+			iommus = <&venus_smmu 0x104>,
+				<&venus_smmu 0x10c>,
+				<&venus_smmu 0x110>,
+				<&venus_smmu 0x12c>;
+			buffer-types = <0x106>;
+			virtual-addr-pool = <0x25800000 0x25800000>;
+		};
+
+		secure_non_pixel_cb {
+			compatible = "qcom,msm-vidc,context-bank";
+			label = "venus_sec_non_pixel";
+			iommus = <&venus_smmu 0x105>,
+				<&venus_smmu 0x107>,
+				<&venus_smmu 0x108>,
+				<&venus_smmu 0x10d>,
+				<&venus_smmu 0x10f>,
+				<&venus_smmu 0x125>,
+				<&venus_smmu 0x128>,
+				<&venus_smmu 0x12d>,
+				<&venus_smmu 0x140>;
+			buffer-types = <0x480>;
+			virtual-addr-pool = <0x1000000 0x24800000>;
+		};
 	};
 
 	vmem: qcom,vmem@880000 {
