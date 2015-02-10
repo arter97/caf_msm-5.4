@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -377,13 +377,26 @@
 		};
 	};
 
+	/* PM8994 LDO26 = VDD_SS_CX supply */
 	rpm-regulator-ldoa26 {
 		status = "okay";
-		pm8994_l26: regulator-l26 {
-			regulator-min-microvolt = <800000>;
-			regulator-max-microvolt = <800000>;
-			qcom,init-voltage = <800000>;
-			status = "okay";
+		pm8994_l26_corner: regulator-l26-corner {
+			compatible = "qcom,rpm-smd-regulator";
+			regulator-name = "pm8994_l26_corner";
+			qcom,set = <3>;
+			regulator-min-microvolt = <1>;
+			regulator-max-microvolt = <7>;
+			qcom,use-voltage-corner;
+		};
+
+		pm8994_l26_floor_corner: regulator-l26-floor-corner {
+			compatible = "qcom,rpm-smd-regulator";
+			regulator-name = "pm8994_l26_floor_corner";
+			qcom,set = <3>;
+			regulator-min-microvolt = <1>;
+			regulator-max-microvolt = <7>;
+			qcom,use-voltage-floor-corner;
+			qcom,always-send-voltage;
 		};
 	};
 
@@ -426,16 +439,6 @@
 			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <1800000>;
 			qcom,init-voltage = <1800000>;
-			status = "okay";
-		};
-	};
-
-	rpm-regulator-ldoa31 {
-		status = "okay";
-		pm8994_l31: regulator-l31 {
-			regulator-min-microvolt = <850000>;
-			regulator-max-microvolt = <850000>;
-			qcom,init-voltage = <850000>;
 			status = "okay";
 		};
 	};

@@ -1441,12 +1441,10 @@
 		interrupts = <0 390 1>;
 
 		/* These may have to move to proxy votes in the future */
-		vdd_cx-supply = <&pm8994_l26>;
-		vdd_mx-supply = <&pm8994_l31>;
+		vdd_cx-supply = <&pm8994_l26_corner>;
 		vdd_px-supply = <&pm8994_lvs2>;
-		qcom,vdd_cx-uV-uA = <645000 0>;
-		qcom,vdd_mx-uV-uA = <765000 0>;
-		qcom,active-reg-names = "vdd_cx", "vdd_mx", "vdd_px";
+		qcom,vdd_cx-uV-uA = <5 0>;
+		qcom,active-reg-names = "vdd_cx", "vdd_px";
 
 		clocks = <&clock_gcc clk_cxo_pil_ssc_clk>;
 		clock-names = "xo";
