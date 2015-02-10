@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -315,6 +315,7 @@ Common Registers
 #define IPA_IRQ_EE_UC_n_INT_BMSK 0x1
 #define IPA_IRQ_EE_UC_n_INT_SHFT 0x0
 
+#define IPA_UC_MAILBOX_m_n_OFFS(m, n) (0x0001a000 + 0x80 * (m)+0x4 * (n))
+#define IPA_UC_MAILBOX_m_n_OFFS_v2_5(m, n) (0x00022000 + 0x80 * (m)+0x4 * (n))
+
 #endif
-
-
