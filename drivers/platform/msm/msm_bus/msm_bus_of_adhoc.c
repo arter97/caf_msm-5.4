@@ -362,6 +362,8 @@ static int get_bus_node_device_data(
 		struct platform_device * const pdev,
 		struct msm_bus_node_device_type * const node_device)
 {
+	bool enable_only;
+
 	node_device->node_info = get_node_info_data(dev_node, pdev);
 	if (IS_ERR_OR_NULL(node_device->node_info)) {
 		dev_err(&pdev->dev, "Error: Node info missing\n");
@@ -383,6 +385,12 @@ static int get_bus_node_device_data(
 				return -ENODATA;
 			}
 		}
+
+		enable_only = of_property_read_bool(dev_node,
+							"qcom,enable-only-clk");
+		node_device->clk[DUAL_CTX].enable_only_clk = enable_only;
+		node_device->clk[ACTIVE_CTX].enable_only_clk = enable_only;
+
 		node_device->clk[DUAL_CTX].clk = of_clk_get_by_name(dev_node,
 							"bus_clk");
 

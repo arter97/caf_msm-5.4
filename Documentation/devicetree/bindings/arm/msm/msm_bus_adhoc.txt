@@ -74,6 +74,8 @@ bus-qos-gdsc-supply:	Optional node or fabric device parameter that is a referenc
 			QoS registers.
 node-gdsc-supply:	Optional node device parameter that is a reference to a GDSC supply
 			that is needed before node-clock operations.
+qcom,enable-only-clk:   Optional property that is represents if the clock doesn't support
+                        the clk_set_rate API and should only be enabled/disabled.
 clock-names:		Optional property that represents the clock name associated
 			with the device "bus_clk", "bus_a_clk";
 clocks:			Property pair that represents the clock controller and the clock

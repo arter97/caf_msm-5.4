@@ -144,6 +144,7 @@ struct nodeclk {
 	struct regulator *reg;
 	uint64_t rate;
 	bool dirty;
+	bool enable_only_clk;
 	bool enable;
 	char reg_name[MAX_REG_NAME];
 };

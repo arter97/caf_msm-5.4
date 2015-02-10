@@ -192,7 +192,8 @@ static int setrate_nodeclk(struct nodeclk *nclk, long rate)
 {
 	int ret = 0;
 
-	ret = clk_set_rate(nclk->clk, rate);
+	if (!nclk->enable_only_clk)
+		ret = clk_set_rate(nclk->clk, rate);
 
 	if (ret)
 		MSM_BUS_ERR("%s: failed to setrate clk", __func__);
@@ -936,6 +937,8 @@ static int msm_bus_init_clk(struct device *bus_dev,
 	for (ctx = 0; ctx < NUM_CTX; ctx++) {
 		if (!IS_ERR_OR_NULL(pdata->clk[ctx].clk)) {
 			node_dev->clk[ctx].clk = pdata->clk[ctx].clk;
+			node_dev->clk[ctx].enable_only_clk =
+					pdata->clk[ctx].enable_only_clk;
 			node_dev->clk[ctx].enable = false;
 			node_dev->clk[ctx].dirty = false;
 			strlcpy(node_dev->clk[ctx].reg_name,
@@ -949,6 +952,8 @@ static int msm_bus_init_clk(struct device *bus_dev,
 
 	if (!IS_ERR_OR_NULL(pdata->qos_clk.clk)) {
 		node_dev->qos_clk.clk = pdata->qos_clk.clk;
+		node_dev->qos_clk.enable_only_clk =
+					pdata->qos_clk.enable_only_clk;
 		node_dev->qos_clk.enable = false;
 		strlcpy(node_dev->qos_clk.reg_name,
 			pdata->qos_clk.reg_name, MAX_REG_NAME);
