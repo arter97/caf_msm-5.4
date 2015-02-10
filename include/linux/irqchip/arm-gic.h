@@ -2,7 +2,7 @@
  *  include/linux/irqchip/arm-gic.h
  *
  *  Copyright (C) 2002 ARM Limited, All Rights Reserved.
- *  Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ *  Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -39,6 +39,7 @@
 #define GIC_DIST_SOFTINT		0xf00
 #define GIC_DIST_SGI_PENDING_CLEAR	0xf10
 #define GIC_DIST_SGI_PENDING_SET	0xf20
+#define GIC_INVL_INTERRUPT_MASK		0x3ff
 
 #define GICH_HCR			0x0
 #define GICH_VTR			0x4
@@ -87,7 +88,7 @@ void gic_cpu_if_down(void);
 
 bool gic_is_irq_pending(unsigned int irq);
 void gic_clear_irq_pending(unsigned int irq);
-
+bool gic_is_any_irq_pending(void);
 static inline void gic_init(unsigned int nr, int start,
 			    void __iomem *dist , void __iomem *cpu)
 {
