@@ -236,6 +236,80 @@
                         };
                 };
 
+		i2c_7 {
+			i2c_7_active: i2c_7_active {
+				i2c_7 {
+					pins = "gpio55", "gpio56";
+					function = "blsp_i2c7";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+
+			i2c_7_sleep: i2c_7_sleep {
+				i2c_7 {
+					pins = "gpio55", "gpio56";
+					function = "blsp_i2c7";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+		};
+
+		pmx_fm_int {
+			fm_int_active: fm_int_active {
+				pmx_fm_int {
+					pins = "gpio38";
+					drive-strength = <16>;
+					bias-pull-up;
+				};
+			};
+
+		fm_int_suspend: fm_int_suspend {
+			pmx_fm_int {
+				pins = "gpio38";
+					drive-strength = <16>;
+					bias-disable;
+				};
+			};
+		};
+
+		pmx_fm_status {
+			fm_status_int_active: fm_status_int_active {
+				pmx_fm_status {
+					pins = "gpio78";
+					drive-strength = <16>;
+					bias-pull-up;
+				};
+			};
+
+			fm_status_int_suspend: fm_status_int_suspend {
+				pmx_fm_status {
+					pins = "gpio78";
+					drive-strength = <16>;
+					bias-disable;
+				};
+			};
+		};
+
+		pmx_fm_rst {
+			fm_rst_active: fm_rst_active {
+				pmx_fm_rst {
+					pins = "gpio39";
+					drive-strength = <16>;
+					bias-pull-down;
+				};
+			};
+
+			fm_rst_suspend: m_rst_suspend {
+				pmx_fm_rst {
+					pins = "gpio39";
+					drive-strength = <16>;
+					bias-pull-down;
+				};
+			};
+		};
+
 		spi_0 {
 			spi_0_active: spi_0_active {
 				spi_0 {
