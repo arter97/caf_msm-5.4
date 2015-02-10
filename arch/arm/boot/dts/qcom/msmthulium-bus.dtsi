@@ -43,6 +43,8 @@
 			clock-names = "bus_clk", "bus_a_clk";
 			clocks = <&clock_gcc clk_gcc_aggre0_snoc_axi_clk>,
 			     <&clock_gcc clk_gcc_aggre0_snoc_axi_clk>;
+			bus-gdsc-supply = <&gdsc_aggre0_noc>;
+			bus-a-gdsc-supply = <&gdsc_aggre0_noc>;
 		};
 
 		fab_a1noc: fab-a1noc {
@@ -108,6 +110,7 @@
 			clocks = <&clock_mmss clk_mmss_s0_axi_clk>,
 			     <&clock_mmss  clk_mmss_s0_axi_clk>,
 			     <&clock_mmss clk_mmss_mmagic_ahb_clk>;
+			bus-qos-gdsc-supply = <&gdsc_mmagic_bimc>;
 		};
 
 		fab_mnoc_ahb: fab-mnoc-ahb {
@@ -120,6 +123,8 @@
 			clock-names = "bus_clk", "bus_a_clk";
 			clocks = <&clock_mmss clk_mmss_mmagic_ahb_clk>,
 			     <&clock_mmss clk_mmss_mmagic_ahb_clk>;
+			bus-gdsc-supply = <&gdsc_mmagic_bimc>;
+			bus-a-gdsc-supply = <&gdsc_mmagic_bimc>;
 		};
 
 		fab_pnoc: fab-pnoc {
