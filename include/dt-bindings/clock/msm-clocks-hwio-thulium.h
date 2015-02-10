@@ -265,6 +265,7 @@
 #define MMSS_MMAGICAXI_BCR					(0x5060)
 #define MMSS_MMSS_SPDM_BCR					(0x0200)
 #define MMSS_VIDEO_BCR						(0x1020)
+#define MMSS_MNOC_DCD_CONFIG_AHB				(0x50D8)
 
 #define GCC_GPLL0_MODE						(0x00000)
 #define PLLTEST_PAD_CFG					        (0x6200C)
