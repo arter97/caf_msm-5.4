@@ -25,6 +25,12 @@
 	};
 };
 
+&uartblsp2dm1 {
+	status = "ok";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart_console_active>;
+};
+
 &ufsphy1 {
 	status = "ok";
 };
