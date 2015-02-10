@@ -2495,7 +2495,7 @@
 		interrupt-names = "m4m_irq";
 	};
 
-	qcom,lmh {
+	lmh: qcom,lmh {
 		compatible = "qcom,lmh";
 		interrupts = <0 23 4>;
 	};

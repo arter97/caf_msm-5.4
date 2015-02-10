@@ -61,6 +61,10 @@
 	status = "ok";
 };
 
+&lmh {
+	status = "disabled";
+};
+
 &wdog {
 	status = "disabled";
 };
