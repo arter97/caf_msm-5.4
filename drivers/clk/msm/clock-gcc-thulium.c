@@ -2136,7 +2136,7 @@ static struct branch_clk gcc_mmss_sys_noc_axi_clk = {
 
 static struct branch_clk gcc_pcie_0_aux_clk = {
 	.cbcr_reg = GCC_PCIE_0_AUX_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_base,
 	.c = {
 		.dbg_name = "gcc_pcie_0_aux_clk",
@@ -2181,7 +2181,7 @@ static struct branch_clk gcc_pcie_0_slv_axi_clk = {
 
 static struct branch_clk gcc_pcie_1_aux_clk = {
 	.cbcr_reg = GCC_PCIE_1_AUX_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_base,
 	.c = {
 		.dbg_name = "gcc_pcie_1_aux_clk",
@@ -2226,7 +2226,7 @@ static struct branch_clk gcc_pcie_1_slv_axi_clk = {
 
 static struct branch_clk gcc_pcie_2_aux_clk = {
 	.cbcr_reg = GCC_PCIE_2_AUX_CBCR,
-	.has_sibling = 1,
+	.has_sibling = 0,
 	.base = &virt_base,
 	.c = {
 		.dbg_name = "gcc_pcie_2_aux_clk",
