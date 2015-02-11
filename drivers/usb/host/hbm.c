@@ -170,10 +170,10 @@ int hbm_pipe_init(u32 QH_addr, u32 pipe_num, bool is_consumer)
 		1 << pipe_num, 0);
 
 	/* Reset HBM SideBand */
-	hbm_msm_write_reg_field(hbm_ctx->base, USB_OTG_HS_HBM_SB_SW_RST, 1 << 0,
-			1);
-	hbm_msm_write_reg_field(hbm_ctx->base, USB_OTG_HS_HBM_SB_SW_RST, 1 << 0,
-			0);
+	hbm_msm_write_reg_field(hbm_ctx->base, USB_OTG_HS_HBM_SB_SW_RST,
+		1 << pipe_num, 1);
+	hbm_msm_write_reg_field(hbm_ctx->base, USB_OTG_HS_HBM_SB_SW_RST,
+		1 << pipe_num, 0);
 
 	/* map QH(ep) <> pipe */
 	hbm_msm_write_reg(hbm_ctx->base,
@@ -230,7 +230,7 @@ static int hbm_submit_async(struct ehci_hcd *ehci, struct urb *urb,
 {
 	int epnum;
 	unsigned long flags;
-	struct ehci_qh *qh = NULL;
+	struct ehci_qh *qh = (struct ehci_qh *) urb->ep->hcpriv;
 	int rc;
 	struct usb_host_bam_type *bam =
 		(struct usb_host_bam_type *)urb->priv_data;
@@ -246,6 +246,9 @@ static int hbm_submit_async(struct ehci_hcd *ehci, struct urb *urb,
 	rc = usb_hcd_link_urb_to_ep(ehci_to_hcd(ehci), urb);
 	if (unlikely(rc))
 		goto done;
+
+	if (qh != NULL)
+		pr_debug("%s: QH NOT NULL (%p)\n", __func__, qh);
 
 	qh = qh_append_tds(ehci, urb, qtd_list, epnum, &urb->ep->hcpriv);
 	if (unlikely(qh == NULL)) {
@@ -263,8 +266,10 @@ static int hbm_submit_async(struct ehci_hcd *ehci, struct urb *urb,
 
 	hbm_pipe_init(qh->qh_dma, bam->pipe_num, bam->dir);
 
-	if (likely(qh->qh_state == QH_STATE_IDLE))
+	if (likely(qh->qh_state == QH_STATE_IDLE)) {
+		pr_debug("%s: QH was IDLE (%p)\n", __func__, qh);
 		qh_link_async(ehci, qh);
+	}
 
 	/* Start Async Scheduler */
 	cmd = ehci_readl(ehci, &ehci->regs->command);
@@ -277,8 +282,13 @@ static int hbm_submit_async(struct ehci_hcd *ehci, struct urb *urb,
 
 done:
 	spin_unlock_irqrestore(&ehci->lock, flags);
+
+	pr_debug("QH:%p urb:%p <--> pipe:%u ep:%d(out:%u)\n",
+		urb->ep->hcpriv, urb,  bam->pipe_num, epnum, bam->dir);
+
 	if (unlikely(qh == NULL))
 		qtd_list_free(ehci, urb, qtd_list);
+
 	return rc;
 }
 

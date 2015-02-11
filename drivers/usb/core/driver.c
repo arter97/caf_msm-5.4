@@ -1218,7 +1218,21 @@ static int usb_suspend_both(struct usb_device *udev, pm_message_t msg)
 	} else {
 		udev->can_submit = 0;
 		for (i = 0; i < 16; ++i) {
-			usb_hcd_flush_endpoint(udev, udev->ep_out[i]);
+			struct urb *urb;
+			struct usb_host_endpoint *ep = udev->ep_out[i];
+			bool   hbm_enabled_ep = false;
+			if (ep && !list_empty(&ep->urb_list)) {
+				urb = list_first_entry(&ep->urb_list,
+							struct urb, urb_list);
+				if (urb->priv_data)
+					hbm_enabled_ep = true;
+			}
+			if (hbm_enabled_ep) {
+				pr_info("Not flushing HBM-EP on susp:%p:%p\n",
+							urb, urb->priv_data);
+			} else {
+				usb_hcd_flush_endpoint(udev, udev->ep_out[i]);
+			}
 			usb_hcd_flush_endpoint(udev, udev->ep_in[i]);
 		}
 	}
