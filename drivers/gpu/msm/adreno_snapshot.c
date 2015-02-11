@@ -834,9 +834,9 @@ size_t adreno_snapshot_cp_pm4_ram(struct kgsl_device *device, u8 *buf,
 	 * maintain always changing hardcoded constants
 	 */
 
-	kgsl_regwrite(device, ADRENO_REG_CP_ME_RAM_WADDR, 0x0);
+	adreno_writereg(adreno_dev, ADRENO_REG_CP_ME_RAM_RADDR, 0x0);
 	for (i = 0; i < size; i++)
-		kgsl_regread(device, ADRENO_REG_CP_ME_RAM_DATA, &data[i]);
+		adreno_readreg(adreno_dev, ADRENO_REG_CP_ME_RAM_DATA, &data[i]);
 
 	return DEBUG_SECTION_SZ(size);
 }
