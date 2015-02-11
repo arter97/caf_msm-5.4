@@ -289,7 +289,7 @@
 			<0x80018 0x00001555>,
 			<0x8001C 0x00001555>;
 		qcom,max-hw-load = <1281600>; /* Full 4k @ 30 + 1080p @ 30 */
-		qcom,firmware-name = "venus-v1";
+		qcom,firmware-name = "venus";
 		qcom,load-freq-tbl =
 			/* Encoders */
 			<972000 450000000 0x55555555>, /* 4k UHD @ 30 */
