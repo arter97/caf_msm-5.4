@@ -34,6 +34,11 @@ Optional properties:
   property defined.
   If we want to have different operating clock frequencies we can define
   rate levels. They should be defined in incremental order.
+- bus-bandwidth-vectors: Specifies instant and average bus bandwidth
+  vectors per clock rate.
+  Each of entries contains:
+  - ab. Average bus bandwidth (Bps).
+  - ib. Instantaneous bus bandwidth (Bps).
 
 Example:
 
@@ -52,5 +57,10 @@ Example:
                  <&clock_mmss clk_fd_ahb_clk>;
         clock-names = "fd_core_clk", "fd_core_uar_clk",
                       "fd_axi_clk", "fd_ahb_clk";
-        clock-rates = <400000000 400000000 333000000 80000000>;
+        clock-rates = <60000000 60000000 75000000 40000000>,
+			<200000000 200000000 150000000 40000000>,
+			<400000000 400000000 333000000 80000000>;
+	bus-bandwidth-vectors = <13000000 26000000>,
+				<45000000 90000000>,
+				<90000000 180000000>;
     };
