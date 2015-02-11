@@ -1063,6 +1063,8 @@ int ipa_dma_sync_memcpy(phys_addr_t dest, phys_addr_t src, int len);
 int ipa_dma_async_memcpy(phys_addr_t dest, phys_addr_t src, int len,
 			void (*user_cb)(void *user1), void *user_param);
 
+int ipa_dma_uc_memcpy(phys_addr_t dest, phys_addr_t src, int len);
+
 void ipa_dma_destroy(void);
 
 /*
@@ -1605,6 +1607,11 @@ static inline int ipa_dma_sync_memcpy(phys_addr_t dest, phys_addr_t src
 static inline int ipa_dma_async_memcpy(phys_addr_t dest, phys_addr_t src
 			, int len, void (*user_cb)(void *user1),
 			void *user_param)
+{
+	return -EPERM;
+}
+
+static inline int ipa_dma_uc_memcpy(phys_addr_t dest, phys_addr_t src, int len)
 {
 	return -EPERM;
 }
