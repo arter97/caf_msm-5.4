@@ -841,7 +841,8 @@ static long msm_isp_ioctl_unlocked(struct v4l2_subdev *sd,
 		break;
 
 	default:
-		pr_err_ratelimited("%s: Invalid ISP command\n", __func__);
+		pr_err_ratelimited("%s: Invalid ISP command %d\n", __func__,
+				    cmd);
 		rc = -EINVAL;
 	}
 	return rc;
