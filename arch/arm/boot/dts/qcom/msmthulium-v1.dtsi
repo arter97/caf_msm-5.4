@@ -23,6 +23,10 @@
 	qcom,msm-id = <246 0x10000>;
 };
 
+&l2ccc_1 {
+	qcom,cbf-clock-seq;
+};
+
 &msm_vidc {
 	qcom,firmware-name = "venus-v1";
 };
