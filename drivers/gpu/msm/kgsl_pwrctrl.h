@@ -44,6 +44,10 @@
 	{ KGSL_CONSTRAINT_PWR_MIN, "Min" }, \
 	{ KGSL_CONSTRAINT_PWR_MAX, "Max" }
 
+#define KGSL_PWR_ADD_LIMIT 0
+#define KGSL_PWR_DEL_LIMIT 1
+#define KGSL_PWR_SET_LIMIT 2
+
 /*
  * States for thermal cycling.  _DISABLE means that no cycling has been
  * requested.  _ENABLE means that cycling has been requested, but GPU
@@ -109,6 +113,14 @@ struct kgsl_pwr_constraint {
  * @constraint - currently active power constraint
  * @superfast - Boolean flag to indicate that the GPU start should be run in the
  * higher priority thread
+ * @thermal_cycle_ws - Work struct for scheduling thermal cycling
+ * @thermal_timer - Timer for thermal cycling
+ * @thermal_timeout - Cycling timeout for switching between frequencies
+ * @thermal_cycle - Is thermal cycling enabled
+ * @thermal_highlow - flag for swithcing between high and low frequency
+ * @limits - list head for limits
+ * @limits_lock - spin lock to protect limits list
+ * @sysfs_pwr_limit - pointer to the sysfs limits node
  */
 
 struct kgsl_pwrctrl {
@@ -150,6 +162,9 @@ struct kgsl_pwrctrl {
 	uint32_t thermal_timeout;
 	uint32_t thermal_cycle;
 	uint32_t thermal_highlow;
+	struct list_head limits;
+	spinlock_t limits_lock;
+	struct kgsl_pwr_limit *sysfs_pwr_limit;
 };
 
 int kgsl_pwrctrl_init(struct kgsl_device *device);

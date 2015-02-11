@@ -1014,5 +1014,17 @@ static inline uint64_t kgsl_device_max_gpuaddr(struct kgsl_device *device)
 	return (uint64_t) UINT_MAX;
 }
 
+/**
+ * struct kgsl_pwr_limit - limit structure for each client
+ * @node: Local list node for the limits list
+ * @level: requested power level
+ * @device: pointer to the device structure
+ */
+struct kgsl_pwr_limit {
+	struct list_head node;
+	unsigned int level;
+	struct kgsl_device *device;
+};
+
 
 #endif  /* __KGSL_DEVICE_H */
