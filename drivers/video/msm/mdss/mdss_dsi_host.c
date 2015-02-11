@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -112,6 +112,21 @@ void mdss_dsi_ctrl_init(struct mdss_dsi_ctrl_pdata *ctrl)
 		mutex_init(&dsi_mtx);
 		dsi_event.inited  = 1;
 	}
+}
+
+static void mdss_dsi_set_reg(struct mdss_dsi_ctrl_pdata *ctrl, int off,
+						u32 mask, u32 val)
+{
+	u32 data;
+
+	off &= ~0x03;
+	val &= mask;	/* set bits indicated at mask only */
+	data = MIPI_INP(ctrl->ctrl_base + off);
+	data &= ~mask;
+	data |= val;
+	pr_debug("%s: ndx=%d off=%x data=%x\n", __func__,
+				ctrl->ndx, off, data);
+	MIPI_OUTP(ctrl->ctrl_base + off, data);
 }
 
 void mdss_dsi_clk_req(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
@@ -1281,6 +1296,7 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 	unsigned long size;
 	dma_addr_t addr;
 	struct mdss_dsi_ctrl_pdata *mctrl = NULL;
+	int ignored = 0;	/* overflow ignored */
 
 	bp = tp->data;
 
@@ -1302,16 +1318,29 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 
 	INIT_COMPLETION(ctrl->dma_comp);
 
+	if (ctrl->panel_mode == DSI_VIDEO_MODE)
+		ignored = 1;
+
 	/* Ensure that for slave controller, master is also configured */
 	if (mdss_dsi_is_slave_ctrl(ctrl)) {
 		mctrl = mdss_dsi_get_master_ctrl();
 		if (mctrl) {
+			if (ignored) {
+				/* mask out overflow isr */
+				mdss_dsi_set_reg(mctrl, 0x10c,
+						0x0f0000, 0x0f0000);
+			}
 			MIPI_OUTP(mctrl->ctrl_base + 0x048, addr);
 			MIPI_OUTP(mctrl->ctrl_base + 0x04c, len);
 		} else {
 			pr_warn("%s: Unable to get master control\n",
 				__func__);
 		}
+	}
+
+	if (ignored) {
+		/* mask out overflow isr */
+		mdss_dsi_set_reg(ctrl, 0x10c, 0x0f0000, 0x0f0000);
 	}
 
 	MIPI_OUTP((ctrl->ctrl_base) + 0x048, addr);
@@ -1336,6 +1365,19 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 		msm_iommu_unmap_contig_buffer(addr,
 			mdss_get_iommu_domain(domain), 0, size);
 
+	if (mctrl && ignored) {
+		/* clear pending overflow status */
+		mdss_dsi_set_reg(mctrl, 0xc, 0xffffffff, 0x44440000);
+		/* restore overflow isr */
+		mdss_dsi_set_reg(mctrl, 0x10c, 0x0f0000, 0);
+	}
+
+	if (ignored) {
+		/* clear pending overflow status */
+		mdss_dsi_set_reg(ctrl, 0xc, 0xffffffff, 0x44440000);
+		/* restore overflow isr */
+		mdss_dsi_set_reg(ctrl, 0x10c, 0x0f0000, 0);
+	}
 	return ret;
 }
 
@@ -1827,7 +1869,6 @@ irqreturn_t mdss_dsi_isr(int irq, void *ptr)
 
 	if (isr & DSI_INTR_ERROR) {
 		MDSS_XLOG(ctrl->ndx, ctrl->mdp_busy, isr, 0x97);
-		pr_err("%s: ndx=%d isr=%x\n", __func__, ctrl->ndx, isr);
 		mdss_dsi_error(ctrl);
 	}
 
