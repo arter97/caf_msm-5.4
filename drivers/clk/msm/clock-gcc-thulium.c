@@ -208,7 +208,7 @@ static struct rcg_clk ufs_axi_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_pcie_aux_clk_src[] = {
-	F(   1010526,         cxo_clk_src,   19,    0,     0),
+	F(   1010526,   cxo_clk_src,   1,    1,   19),
 	F_END
 };
 
