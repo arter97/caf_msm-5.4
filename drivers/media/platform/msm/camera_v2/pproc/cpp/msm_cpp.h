@@ -183,9 +183,11 @@ struct cpp_device {
 	struct resource	*vbif_mem;
 	struct resource *vbif_io;
 	struct resource	*cpp_hw_mem;
+	struct resource	*camss_cpp;
 	void __iomem *vbif_base;
 	void __iomem *base;
 	void __iomem *cpp_hw_base;
+	void __iomem *camss_cpp_base;
 	struct clk **cpp_clk;
 	struct regulator *fs_cpp;
 	struct mutex mutex;
