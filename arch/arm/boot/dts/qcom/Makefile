@@ -87,12 +87,24 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
 	msm8936-mtp.dtb \
 	msm8936-mtp-smb1360.dtb \
 	msm8936-mtp-wcd9306.dtb
-dtb-$(CONFIG_ARCH_MSMTHULIUM) += msmthulium-sim.dtb \
-	msmthulium-rumi.dtb \
-	msmthulium-pmi8994-cdp.dtb \
-	msmthulium-pmi8994-mtp.dtb \
-	msmthulium-pmi8994-pm8004-cdp.dtb \
-	msmthulium-pmi8994-pm8004-mtp.dtb \
+dtb-$(CONFIG_ARCH_MSMTHULIUM) += msmthulium-v1-sim.dtb \
+	msmthulium-v2-sim.dtb \
+	msmthulium-v3-sim.dtb \
+	msmthulium-v1-rumi.dtb \
+	msmthulium-v2-rumi.dtb \
+	msmthulium-v3-rumi.dtb \
+	msmthulium-v1-pmi8994-cdp.dtb \
+	msmthulium-v1-pmi8994-mtp.dtb \
+	msmthulium-v1-pmi8994-pm8004-cdp.dtb \
+	msmthulium-v1-pmi8994-pm8004-mtp.dtb \
+	msmthulium-v2-pmi8994-cdp.dtb \
+	msmthulium-v2-pmi8994-mtp.dtb \
+	msmthulium-v2-pmi8994-pm8004-cdp.dtb \
+	msmthulium-v2-pmi8994-pm8004-mtp.dtb \
+	msmthulium-v3-pmi8994-cdp.dtb \
+	msmthulium-v3-pmi8994-mtp.dtb \
+	msmthulium-v3-pmi8994-pm8004-cdp.dtb \
+	msmthulium-v3-pmi8994-pm8004-mtp.dtb \
 	msmthulium-fluid.dtb
 
 targets += dtbs
