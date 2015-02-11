@@ -1189,7 +1189,7 @@
 
 	usb3: ssusb@6a00000{
 		compatible = "qcom,dwc-usb3-msm";
-		reg = <0x06a00000 0xc8d0>;
+		reg = <0x06a00000 0xfc000>;
 		#address-cells = <1>;
 		#size-cells = <1>;
 		ranges;
