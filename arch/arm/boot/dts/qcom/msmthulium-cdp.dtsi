@@ -72,6 +72,10 @@
 		     &setb_14 &setb_15 &setb_16 &setb_17 &setb_18>;
 };
 
+&pmi8994_charger {
+	qcom,charging-disabled;
+};
+
 &pm8994_vadc {
 	chan@5 {
 		label = "vcoin";
