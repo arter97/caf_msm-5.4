@@ -233,7 +233,7 @@
 					00 00 10 0f
 					00 00 10 0f
 					00 00 10 0f
-					00 c0 10 8f];
+					00 00 10 8f];
 
 		qcom,core-supply-entries {
 			#address-cells = <1>;
@@ -288,10 +288,10 @@
                 };
 	};
 
-	mdss_dsi1: qcom,mdss_dsi@994000 {
+	mdss_dsi1: qcom,mdss_dsi@996000 {
 		compatible = "qcom,mdss-dsi-ctrl";
-		label = "MDSS DSI CTRL->0";
-		cell-index = <0>;
+		label = "MDSS DSI CTRL->1";
+		cell-index = <1>;
 		reg = 	<0x996000 0x400>,
 			<0x996400 0x558>,
 			<0x828000 0x108>;
@@ -308,9 +308,9 @@
                          <&clock_mmss clk_mdss_ahb_clk>,
 			 <&clock_mmss clk_mmss_misc_ahb_clk>,
                          <&clock_mmss clk_mdss_axi_clk>,
-                         <&clock_mmss clk_mdss_byte0_clk>,
-                         <&clock_mmss clk_mdss_pclk0_clk>,
-                         <&clock_mmss clk_mdss_esc0_clk>,
+                         <&clock_mmss clk_mdss_byte1_clk>,
+                         <&clock_mmss clk_mdss_pclk1_clk>,
+                         <&clock_mmss clk_mdss_esc1_clk>,
 			 <&mdss_dsi0_pll clk_mdss_byte_clk_mux>,
 			 <&mdss_dsi0_pll clk_mdss_pixel_clk_mux>,
 			 <&mdss_dsi0_pll clk_byte_clk_src>,
@@ -332,7 +332,7 @@
 					00 00 10 0f
 					00 00 10 0f
 					00 00 10 0f
-					00 c0 10 8f];
+					00 00 10 8f];
 
 		qcom,core-supply-entries {
 			#address-cells = <1>;
