@@ -289,7 +289,6 @@
 			<0x8001C 0x00001555>;
 		qcom,max-hw-load = <1281600>; /* Full 4k @ 30 + 1080p @ 30 */
 		qcom,firmware-name = "venus-v1";
-		qcom,imem-size = <1048576>; /* 1 MB */
 		qcom,load-freq-tbl =
 			/* Encoders */
 			<972000 450000000 0x55555555>, /* 4k UHD @ 30 */
@@ -2336,7 +2335,7 @@
 
 &msm_vidc {
 	qcom,use-non-secure-pil;
-	qcom,fw-bias = <0x8cb00000>;
+	qcom,fw-bias = <0x8cc00000>;
 };
 
 /include/ "msm-pm8994-rpm-regulator.dtsi"
