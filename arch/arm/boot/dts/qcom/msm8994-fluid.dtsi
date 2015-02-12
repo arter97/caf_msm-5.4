@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -300,15 +300,22 @@
 	qcom,mdss-dsi-bl-min-level = <1>;
 	qcom,mdss-dsi-bl-max-level = <4095>;
 	qcom,cont-splash-enabled;
+	qcom,mdss-dsi-pan-enable-dynamic-fps;
+	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
+	qcom,mdss-dsi-min-refresh-rate = <30>;
 };
 
 &dsi_dual_sharp_video_1 {
 	qcom,cont-splash-enabled;
+	qcom,mdss-dsi-pan-enable-dynamic-fps;
+	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
+	qcom,mdss-dsi-min-refresh-rate = <30>;
 };
 
 &labibb {
 	status = "ok";
 	qpnp,qpnp-labibb-mode = "lcd";
+	qcom,qpnp-ibb-discharge-resistor = <32>;
 };
 
 &pmx_hdmi_cec {
@@ -327,6 +334,7 @@
 };
 
 &mdss_hdmi_tx {
+	status = "disabled";
 	pinctrl-names = "hdmi_hpd_active", "hdmi_ddc_active",
 				"hdmi_cec_active", "hdmi_active",
 				"hdmi_sleep";
@@ -475,7 +483,7 @@
 	};
 
 	sound {
-		qcom,model = "msm8994-tomtom-mtp-snd-card";
+		qcom,model = "msm8994-tomtom-fluid-snd-card";
 		qcom,us-euro-gpios = <&pm8994_mpps 2 0>;
 		qcom,cdc-micbias2-headset-only;
 		qcom,mbhc-audio-jack-type = "6-pole-jack";
@@ -745,6 +753,7 @@
 
 &pmi8994_fg {
 	qcom,battery-data = <&mtp_batterydata>;
+	qcom,ext-sense-type;
 };
 
 &pmi8994_haptics {
@@ -752,6 +761,5 @@
 };
 
 &pmi8994_charger {
-	qcom,ext-sense-type;
 	qcom,dc-psy-type = "Wipower";
 };

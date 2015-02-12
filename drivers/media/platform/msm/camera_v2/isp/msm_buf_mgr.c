@@ -981,6 +981,7 @@ int msm_isp_smmu_attach(struct msm_isp_buf_mgr *buf_mgr,
 		iommu_hdl = buf_mgr->sec_iommu_hdl;
 
 	pr_debug("%s: cmd->security_mode : %d\n", __func__, cmd->security_mode);
+	mutex_lock(&buf_mgr->lock);
 	if (cmd->iommu_attach_mode == IOMMU_ATTACH) {
 		buf_mgr->secure_enable = cmd->security_mode;
 		rc = cam_smmu_ops(iommu_hdl, CAM_SMMU_ATTACH);
@@ -997,6 +998,7 @@ int msm_isp_smmu_attach(struct msm_isp_buf_mgr *buf_mgr,
 	}
 
 iommu_error:
+	mutex_unlock(&buf_mgr->lock);
 	return rc;
 }
 
@@ -1006,11 +1008,15 @@ static int msm_isp_init_isp_buf_mgr(
 	const char *ctx_name, uint16_t num_buf_q)
 {
 	int rc = -1;
-	if (buf_mgr->open_count++)
+	mutex_lock(&buf_mgr->lock);
+	if (buf_mgr->open_count++) {
+		mutex_unlock(&buf_mgr->lock);
 		return 0;
+	}
 
 	if (!num_buf_q) {
 		pr_err("Invalid buffer queue number\n");
+		mutex_unlock(&buf_mgr->lock);
 		return rc;
 	}
 	CDBG("%s: E\n", __func__);
@@ -1039,6 +1045,7 @@ static int msm_isp_init_isp_buf_mgr(
 	}
 	buf_mgr->buf_handle_cnt = 0;
 	buf_mgr->pagefault_debug = 0;
+	mutex_unlock(&buf_mgr->lock);
 	return 0;
 
 get_handle_error2:
@@ -1046,17 +1053,21 @@ get_handle_error2:
 get_handle_error1:
 	kfree(buf_mgr->bufq);
 bufq_error:
+	mutex_unlock(&buf_mgr->lock);
 	return rc;
 }
 
 static int msm_isp_deinit_isp_buf_mgr(
 	struct msm_isp_buf_mgr *buf_mgr)
 {
+	mutex_lock(&buf_mgr->lock);
 	if (buf_mgr->open_count > 0)
 		buf_mgr->open_count--;
 
-	if (buf_mgr->open_count)
+	if (buf_mgr->open_count) {
+		mutex_unlock(&buf_mgr->lock);
 		return 0;
+	}
 	msm_isp_release_all_bufq(buf_mgr);
 	kfree(buf_mgr->bufq);
 	buf_mgr->num_buf_q = 0;
@@ -1070,6 +1081,7 @@ static int msm_isp_deinit_isp_buf_mgr(
 	if (buf_mgr->num_iommu_secure_ctx)
 		cam_smmu_destroy_handle(buf_mgr->sec_iommu_hdl);
 
+	mutex_unlock(&buf_mgr->lock);
 	return 0;
 }
 
@@ -1182,6 +1194,7 @@ int msm_isp_create_isp_buf_mgr(
 	buf_mgr->pagefault_debug = 0;
 	buf_mgr->secure_enable = NON_SECURE_MODE;
 	buf_mgr->attach_state = MSM_ISP_BUF_MGR_DETACH;
+	mutex_init(&buf_mgr->lock);
 
 	return 0;
 }

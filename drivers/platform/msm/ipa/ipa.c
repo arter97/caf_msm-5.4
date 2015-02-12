@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -48,7 +48,7 @@
 
 #define IPA_AGGR_MAX_STR_LENGTH (10)
 
-#define CLEANUP_TAG_PROCESS_TIMEOUT 20
+#define CLEANUP_TAG_PROCESS_TIMEOUT 150
 
 #define IPA_AGGR_STR_IN_BYTES(str) \
 	(strnlen((str), IPA_AGGR_MAX_STR_LENGTH - 1) + 1)
@@ -1488,7 +1488,7 @@ static int ipa_q6_set_ex_path_dis_agg(void)
 		}
 	}
 
-	/* Will wait 20msecs for IPA tag process completion */
+	/* Will wait 150msecs for IPA tag process completion */
 	retval = ipa_tag_process(desc, num_descs,
 				 msecs_to_jiffies(CLEANUP_TAG_PROCESS_TIMEOUT));
 	if (retval) {
@@ -1499,10 +1499,6 @@ static int ipa_q6_set_ex_path_dis_agg(void)
 				kfree(desc[index].user1);
 			retval = -EINVAL;
 		}
-
-		/* Ignoring TAG process timeout */
-		if (retval == -ETIME)
-			retval = 0;
 	}
 
 	kfree(desc);
@@ -2771,7 +2767,7 @@ void ipa_suspend_handler(enum ipa_irq_type interrupt,
 static void ipa_sps_process_irq_schedule_rel(void)
 {
 	ipa_ctx->sps_pm.res_rel_in_prog = true;
-	queue_delayed_work(ipa_ctx->power_mgmt_wq,
+	queue_delayed_work(ipa_ctx->sps_power_mgmt_wq,
 			   &ipa_dec_clients_delayed_work,
 			   msecs_to_jiffies(IPA_SPS_PROD_TIMEOUT_MSEC));
 }
@@ -2888,7 +2884,7 @@ static void sps_event_cb(enum sps_callback_case event, void *param)
 				ipa_ctx->sps_pm.res_granted = true;
 				*ready = true;
 			} else {
-				queue_work(ipa_ctx->power_mgmt_wq,
+				queue_work(ipa_ctx->sps_power_mgmt_wq,
 					   &ipa_sps_process_irq_work);
 				*ready = false;
 			}
@@ -3058,13 +3054,21 @@ static int ipa_init(const struct ipa_plat_drv_res *resource_p,
 	spin_lock_init(&ipa_ctx->ipa_active_clients.spinlock);
 	ipa_ctx->ipa_active_clients.cnt = 1;
 
-	/* Create workqueue for power management */
+	/* Create workqueues for power management */
 	ipa_ctx->power_mgmt_wq =
 		create_singlethread_workqueue("ipa_power_mgmt");
 	if (!ipa_ctx->power_mgmt_wq) {
-		IPAERR("failed to create wq\n");
+		IPAERR("failed to create power mgmt wq\n");
 		result = -ENOMEM;
 		goto fail_init_hw;
+	}
+
+	ipa_ctx->sps_power_mgmt_wq =
+		create_singlethread_workqueue("sps_ipa_power_mgmt");
+	if (!ipa_ctx->sps_power_mgmt_wq) {
+		IPAERR("failed to create sps power mgmt wq\n");
+		result = -ENOMEM;
+		goto fail_create_sps_wq;
 	}
 
 	spin_lock_init(&ipa_ctx->sps_pm.lock);
@@ -3428,6 +3432,8 @@ fail_rt_rule_cache:
 fail_flt_rule_cache:
 	sps_deregister_bam_device(ipa_ctx->bam_handle);
 fail_register_bam_device:
+	destroy_workqueue(ipa_ctx->sps_power_mgmt_wq);
+fail_create_sps_wq:
 	destroy_workqueue(ipa_ctx->power_mgmt_wq);
 fail_init_hw:
 	iounmap(ipa_ctx->mmio);

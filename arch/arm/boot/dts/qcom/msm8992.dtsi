@@ -21,6 +21,10 @@
 	qcom,msm-id = <251 0>, <252 0>;
 	interrupt-parent = <&intc>;
 
+	chosen {
+		bootargs = "sched_enable_hmp=1";
+	};
+
 	aliases {
 		spi0 = &spi_0;
 		sdhc1 = &sdhc_1; /* SDC1 eMMC slot */
@@ -79,6 +83,15 @@
 			      compatible = "arm,arch-cache";
 			      cache-level = <2>;
 			      power-domain = <&l2ccc_0>;
+			      qcom,dump-size = <0x0>;		/* A53 L2 dump not supported */
+			};
+			L1_I_0: l1-icache {
+				compatible = "arm,arch-cache";
+				qcom,dump-size = <0x9040>;
+			};
+			L1_D_0: l1-dcache {
+				compatible = "arm,arch-cache";
+				qcom,dump-size = <0x9040>;
 			};
 		};
 
@@ -90,6 +103,14 @@
 			qcom,acc = <&acc1>;
 			qcom,ldo = <&ldo1>;
 			next-level-cache = <&L2_0>;
+			L1_I_1: l1-icache {
+				compatible = "arm,arch-cache";
+				qcom,dump-size = <0x9040>;
+			};
+			L1_D_1: l1-dcache {
+				compatible = "arm,arch-cache";
+				qcom,dump-size = <0x9040>;
+			};
 		};
 
 		CPU2: cpu@2 {
@@ -100,6 +121,14 @@
 			qcom,acc = <&acc2>;
 			qcom,ldo = <&ldo2>;
 			next-level-cache = <&L2_0>;
+			L1_I_2: l1-icache {
+				compatible = "arm,arch-cache";
+				qcom,dump-size = <0x9040>;
+			};
+			L1_D_2: l1-dcache {
+				compatible = "arm,arch-cache";
+				qcom,dump-size = <0x9040>;
+			};
 		};
 
 		CPU3: cpu@3 {
@@ -110,6 +139,14 @@
 			qcom,acc = <&acc3>;
 			qcom,ldo = <&ldo3>;
 			next-level-cache = <&L2_0>;
+			L1_I_3: l1-icache {
+				compatible = "arm,arch-cache";
+				qcom,dump-size = <0x9040>;
+			};
+			L1_D_3: l1-dcache {
+				compatible = "arm,arch-cache";
+				qcom,dump-size = <0x9040>;
+			};
 		};
 
 		CPU4: cpu@100 {
@@ -124,6 +161,15 @@
 			      compatible = "arm,arch-cache";
 			      cache-level = <2>;
 			      power-domain = <&l2ccc_1>;
+			      qcom,dump-size = <0x140040>;
+			};
+			L1_I_100: l1-icache {
+				compatible = "arm,arch-cache";
+				qcom,dump-size = <0xd840>;
+			};
+			L1_D_100: l1-dcache {
+				compatible = "arm,arch-cache";
+				qcom,dump-size = <0x9040>;
 			};
 		};
 
@@ -135,6 +181,14 @@
 			qcom,acc = <&acc5>;
 			qcom,ldo = <&ldo5>;
 			next-level-cache = <&L2_1>;
+			L1_I_101: l1-icache {
+				compatible = "arm,arch-cache";
+				qcom,dump-size = <0xd840>;
+			};
+			L1_D_101: l1-dcache {
+				compatible = "arm,arch-cache";
+				qcom,dump-size = <0x9040>;
+			};
 		};
 	};
 
@@ -148,12 +202,6 @@
 			linux,reserve-contiguous-region;
 			reg = <0 0 0 0x12c00000>;
 			label = "secure_mem";
-		};
-
-		adsp_mem: adsp_region@0 {
-                        linux,reserve-contiguous-region;
-			reg = <0 0 0 0x300000>;
-			label = "adsp_mem";
 		};
 
 		qsecom_mem: qsecom_region@0 {
@@ -744,6 +792,7 @@
 				<  960000 729600 >,
 				< 1248000 787200 >;
 			cpu-to-dev-map-4 =
+				<  384000 134400 >,
 				<  480000 300000 >,
 				<  633600 384000 >,
 				<  768000 556800 >,
@@ -1007,10 +1056,11 @@
 		compatible = "qcom,spi-qup-v2";
 		#address-cells = <1>;
 		#size-cells = <0>;
-		reg-names = "spi_physical";
-		reg = <0xf9923000 0x600>;
-		interrupt-names = "spi_irq";
-		interrupts = <0 95 0>;
+		reg-names = "spi_physical", "spi_bam_physical";
+		reg = <0xf9923000 0x500>,
+		      <0xf9904000 0x20000>;
+		interrupt-names = "spi_irq", "spi_bam_irq";
+		interrupts = <0 95 0>, <0 238 0>;
 		spi-max-frequency = <50000000>;
 		pinctrl-names = "default", "sleep";
 		pinctrl-0 = <&spi0_default &spi0_cs2_active>;
@@ -1593,7 +1643,7 @@
 		reg = <0x00000000 0x00010000>;
 		reg-names = "rfsa_dsp";
 		qcom,client-id = <0x011013ec>;
-		linux,contiguous-region = <&adsp_mem>;
+		linux,contiguous-region = <&secure_mem>;
 	};
 
 	qcom,mdm_sharedmem@00000000 {
@@ -1608,7 +1658,7 @@
 		reg = <0x00000000 0x00010000>;
 		reg-names = "rfsa_sensor";
 		qcom,client-id = <0x011013ee>;
-		linux,contiguous-region = <&adsp_mem>;
+		linux,contiguous-region = <&secure_mem>;
 	};
 
 	qcom,venus@fdce0000 {
@@ -2689,11 +2739,80 @@
 	adsp_heap {
 		compatible = "qcom,msm-shared-memory";
 		qcom,proc-id = <1>;
-		linux,contiguous-region = <&adsp_mem>;
+		linux,contiguous-region = <&secure_mem>;
 	};
 
 	qcom,msm-ssc-sensors {
 		compatible = "qcom,msm-ssc-sensors";
+	};
+
+	qcom,avtimer@fe09c000 {
+		compatible = "qcom,avtimer";
+		reg = <0xFE09C00C 0x4>,
+		      <0xFE09C010 0x4>;
+		reg-names = "avtimer_lsb_addr", "avtimer_msb_addr";
+		qcom,clk_div = <27>;
+	};
+
+	cpuss_dump {
+		compatible = "qcom,cpuss-dump";
+
+		qcom,l2_dump0 {
+			qcom,dump-node = <&L2_0>;	/* L2 cache dump for A53 cluster */
+			qcom,dump-id = <0xC0>;
+		};
+		qcom,l2_dump1 {
+			qcom,dump-node = <&L2_1>;	/* L2 cache dump for A57 cluster */
+			qcom,dump-id = <0xC1>;
+		};
+		qcom,l1_i_cache0 {
+			qcom,dump-node = <&L1_I_0>;
+			qcom,dump-id = <0x60>;
+		};
+		qcom,l1_i_cache1 {
+			qcom,dump-node = <&L1_I_1>;
+			qcom,dump-id = <0x61>;
+		};
+		qcom,l1_i_cache2 {
+			qcom,dump-node = <&L1_I_2>;
+			qcom,dump-id = <0x62>;
+		};
+		qcom,l1_i_cache3 {
+			qcom,dump-node = <&L1_I_3>;
+			qcom,dump-id = <0x63>;
+		};
+		qcom,l1_i_cache100 {
+			qcom,dump-node = <&L1_I_100>;
+			qcom,dump-id = <0x64>;
+		};
+		qcom,l1_i_cache101 {
+			qcom,dump-node = <&L1_I_101>;
+			qcom,dump-id = <0x65>;
+		};
+		qcom,l1_d_cache0 {
+			qcom,dump-node = <&L1_D_0>;
+			qcom,dump-id = <0x80>;
+		};
+		qcom,l1_d_cache1 {
+			qcom,dump-node = <&L1_D_1>;
+			qcom,dump-id = <0x81>;
+		};
+		qcom,l1_d_cache2 {
+			qcom,dump-node = <&L1_D_2>;
+			qcom,dump-id = <0x82>;
+		};
+		qcom,l1_d_cache3 {
+			qcom,dump-node = <&L1_D_3>;
+			qcom,dump-id = <0x83>;
+		};
+		qcom,l1_d_cache100 {
+			qcom,dump-node = <&L1_D_100>;
+			qcom,dump-id = <0x84>;
+		};
+		qcom,l1_d_cache101 {
+			qcom,dump-node = <&L1_D_101>;
+			qcom,dump-id = <0x85>;
+		};
 	};
 };
 

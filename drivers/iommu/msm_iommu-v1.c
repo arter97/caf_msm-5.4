@@ -176,6 +176,14 @@ struct iommu_access_ops iommu_access_ops_v1 = {
 	.iommu_lock_release = _iommu_lock_release,
 };
 
+static BLOCKING_NOTIFIER_HEAD(msm_iommu_notifier_list);
+
+void msm_iommu_register_notify(struct notifier_block *nb)
+{
+	blocking_notifier_chain_register(&msm_iommu_notifier_list, nb);
+}
+EXPORT_SYMBOL(msm_iommu_register_notify);
+
 #ifdef CONFIG_MSM_IOMMU_VBIF_CHECK
 
 #define VBIF_XIN_HALT_CTRL0 0x200
@@ -215,7 +223,7 @@ static int __check_vbif_state(struct msm_iommu_drvdata const *drvdata)
 
 	if (base) {
 		__dump_vbif_state(drvdata->base, base);
-		__halt_vbif_xin(drvdata->base);
+		__halt_vbif_xin(base);
 		__dump_vbif_state(drvdata->base, base);
 		iounmap(base);
 	} else {
@@ -257,7 +265,7 @@ static void check_tlb_sync_state(struct msm_iommu_drvdata const *drvdata,
 {
 	int res;
 	unsigned int val;
-	void __iomem *base = drvdata->base;
+	void __iomem *base = drvdata->cb_base;
 	char const *name = drvdata->name;
 
 	pr_err("Timed out waiting for TLB SYNC to complete for %s\n", name);
