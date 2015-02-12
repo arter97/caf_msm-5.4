@@ -965,7 +965,8 @@ static int diag_switch_logging(int requested_mode)
 		return 0;
 	}
 
-	if (new_mode == SOCKET_MODE &&
+	mutex_lock(&driver->diagchar_mutex);
+	if (requested_mode == MEMORY_DEVICE_MODE &&
 	    driver->md_proc[DIAG_LOCAL_PROC].socket_process) {
 		err = send_sig(SIGCONT,
 			       driver->md_proc[DIAG_LOCAL_PROC].socket_process,
@@ -974,9 +975,9 @@ static int diag_switch_logging(int requested_mode)
 			pr_err("diag: In %s, error notifying socket process %d\n",
 			       __func__, err);
 		}
+		driver->md_proc[DIAG_LOCAL_PROC].socket_process = NULL;
 	}
 
-	mutex_lock(&driver->diagchar_mutex);
 	driver->logging_mode = new_mode;
 	err = diag_mux_switch_logging(mux_mode);
 	if (err) {
