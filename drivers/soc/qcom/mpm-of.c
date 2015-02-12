@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -804,7 +804,7 @@ static const struct mpm_of mpm_of_map[MSM_MPM_NR_IRQ_DOMAINS] = {
 #elif defined(CONFIG_GPIO_MSM_V3)
 		&msm_gpio_irq_extn,
 #else
-		NULL,
+		&mpm_pinctrl_extn,
 #endif
 		mpm_irq_domain_size,
 	},

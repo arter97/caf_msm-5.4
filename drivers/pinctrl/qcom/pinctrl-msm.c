@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013, Sony Mobile Communications AB.
- * Copyright (c) 2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -43,6 +43,7 @@
  * @pctrl:          pinctrl handle.
  * @domain:         irqdomain handle.
  * @chip:           gpiochip handle.
+ * @irq_chip_extn:  MPM extension of TLMM irqchip.
  * @irq:            parent irq for the TLMM irq_chip.
  * @lock:           Spinlock to protect register resources as well
  *                  as msm_pinctrl data structures.
@@ -57,6 +58,7 @@ struct msm_pinctrl {
 	struct pinctrl_dev *pctrl;
 	struct irq_domain *domain;
 	struct gpio_chip chip;
+	struct irq_chip *irq_chip_extn;
 	int irq;
 
 	spinlock_t lock;
@@ -633,6 +635,8 @@ static void msm_gpio_irq_mask(struct irq_data *d)
 	clear_bit(d->hwirq, pctrl->enabled_irqs);
 
 	spin_unlock_irqrestore(&pctrl->lock, flags);
+	if (pctrl->irq_chip_extn->irq_mask)
+		pctrl->irq_chip_extn->irq_mask(d);
 }
 
 static void msm_gpio_irq_unmask(struct irq_data *d)
@@ -658,6 +662,8 @@ static void msm_gpio_irq_unmask(struct irq_data *d)
 	set_bit(d->hwirq, pctrl->enabled_irqs);
 
 	spin_unlock_irqrestore(&pctrl->lock, flags);
+	if (pctrl->irq_chip_extn->irq_unmask)
+		pctrl->irq_chip_extn->irq_unmask(d);
 }
 
 static void msm_gpio_irq_ack(struct irq_data *d)
@@ -776,6 +782,8 @@ static int msm_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 	else if (type & (IRQ_TYPE_EDGE_FALLING | IRQ_TYPE_EDGE_RISING))
 		__irq_set_handler_locked(d->irq, handle_edge_irq);
 
+	if (pctrl->irq_chip_extn->irq_set_type)
+		pctrl->irq_chip_extn->irq_set_type(d, type);
 	return 0;
 }
 
@@ -792,6 +800,8 @@ static int msm_gpio_irq_set_wake(struct irq_data *d, unsigned int on)
 
 	spin_unlock_irqrestore(&pctrl->lock, flags);
 
+	if (pctrl->irq_chip_extn->irq_set_wake)
+		pctrl->irq_chip_extn->irq_set_wake(d, on);
 	return 0;
 }
 
@@ -813,6 +823,8 @@ static void msm_gpio_irq_shutdown(struct irq_data *d)
 
 	msm_gpio_irq_mask(d);
 	gpio_unlock_as_irq(&pctrl->chip, d->hwirq);
+	if (pctrl->irq_chip_extn->irq_disable)
+		pctrl->irq_chip_extn->irq_disable(d);
 }
 
 static struct irq_chip msm_gpio_irq_chip = {
@@ -864,6 +876,22 @@ static void msm_gpio_irq_handler(unsigned int irq, struct irq_desc *desc)
  * category than their parents, so it won't report false recursion.
  */
 static struct lock_class_key gpio_lock_class;
+
+/*
+ * Add MPM extensions for the irqchip.
+ * Enable the MPM driver to enable/disable
+ * suspend/resume based on gpio interrupts
+ */
+
+struct irq_chip mpm_pinctrl_extn = {
+	.irq_eoi	= NULL,
+	.irq_mask	= NULL,
+	.irq_unmask	= NULL,
+	.irq_retrigger	= NULL,
+	.irq_set_type	= NULL,
+	.irq_set_wake	= NULL,
+	.irq_disable	= NULL,
+};
 
 static int msm_gpio_init(struct msm_pinctrl *pctrl)
 {
@@ -961,7 +989,7 @@ int msm_pinctrl_probe(struct platform_device *pdev,
 		pinctrl_unregister(pctrl->pctrl);
 		return ret;
 	}
-
+	pctrl->irq_chip_extn = &mpm_pinctrl_extn;
 	platform_set_drvdata(pdev, pctrl);
 
 	dev_dbg(&pdev->dev, "Probed Qualcomm pinctrl driver\n");
