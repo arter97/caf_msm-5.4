@@ -1696,11 +1696,10 @@
 		reg = <0x1c00000 0x4000>;
 		interrupts = <0 390 1>;
 
-		/* These may have to move to proxy votes in the future */
 		vdd_cx-supply = <&pm8994_l26_corner>;
 		vdd_px-supply = <&pm8994_lvs2>;
 		qcom,vdd_cx-uV-uA = <5 0>;
-		qcom,active-reg-names = "vdd_cx", "vdd_px";
+		qcom,proxy-reg-names = "vdd_cx", "vdd_px";
 
 		clocks = <&clock_gcc clk_cxo_pil_ssc_clk>;
 		clock-names = "xo";
