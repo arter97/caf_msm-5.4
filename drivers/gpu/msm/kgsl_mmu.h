@@ -312,7 +312,8 @@ static inline int kgsl_mmu_is_perprocess(struct kgsl_mmu *mmu)
  */
 static inline int kgsl_mmu_use_cpu_map(struct kgsl_mmu *mmu)
 {
-	return kgsl_mmu_is_perprocess(mmu);
+	return kgsl_mmu_is_perprocess(mmu) &&
+		kgsl_mmu_get_mmutype() != KGSL_MMU_TYPE_NONE;
 }
 
 static inline int kgsl_mmu_set_pagefault_policy(struct kgsl_mmu *mmu,
