@@ -1239,20 +1239,16 @@ struct adreno_ft_perf_counters a3xx_ft_perf_counters[] = {
  * a3xx_perfcounter_init() - Allocate performance counters for use in the kernel
  * @adreno_dev: Pointer to an adreno_device structure
  */
-int a3xx_perfcounter_init(struct adreno_device *adreno_dev)
+void a3xx_perfcounter_init(struct adreno_device *adreno_dev)
 {
 	struct adreno_perfcounters *counters = ADRENO_PERFCOUNTERS(adreno_dev);
-	int ret;
-
-	if (counters == NULL)
-		return -EINVAL;
 
 	/* SP[3] counter is broken on a330 so disable it if a330 device */
 	if (adreno_is_a330(adreno_dev))
 		a3xx_perfcounters_sp[3].countable = KGSL_PERFCOUNTER_BROKEN;
 
-	if (adreno_is_a306(adreno_dev) ||
-		adreno_is_a304(adreno_dev)) {
+	if (counters &&
+		(adreno_is_a306(adreno_dev) || adreno_is_a304(adreno_dev))) {
 		counters->groups[KGSL_PERFCOUNTER_GROUP_VBIF].regs =
 			a3xx_perfcounters_vbif2;
 		counters->groups[KGSL_PERFCOUNTER_GROUP_VBIF_PWR].regs =
@@ -1260,15 +1256,11 @@ int a3xx_perfcounter_init(struct adreno_device *adreno_dev)
 	}
 
 	/*
-	 * Turn on the GPU busy counter(s) and let them run free
-	 * GPU busy counts
+	 * Enable the GPU busy count counter. This is a fixed counter on
+	 * A3XX so we don't need to bother checking the return value
 	 */
-	ret = adreno_perfcounter_get(adreno_dev, KGSL_PERFCOUNTER_GROUP_PWR, 1,
-				 NULL, NULL, PERFCOUNTER_FLAG_KERNEL);
-	if (ret)
-		return ret;
-
-	return 0;
+	adreno_perfcounter_get(adreno_dev, KGSL_PERFCOUNTER_GROUP_PWR, 1,
+		NULL, NULL, PERFCOUNTER_FLAG_KERNEL);
 }
 
 /**

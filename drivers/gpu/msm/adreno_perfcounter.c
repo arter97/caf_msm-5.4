@@ -69,28 +69,18 @@ static inline int active_countable(unsigned int countable)
  * counters used by the kernel can be obtained by the user, but these
  * performance counters will remain active as long as the device is alive.
  */
-
-int adreno_perfcounter_init(struct adreno_device *adreno_dev)
+void adreno_perfcounter_init(struct adreno_device *adreno_dev)
 {
-	int ret = 0;
-	struct adreno_perfcounters *counters = ADRENO_PERFCOUNTERS(adreno_dev);
 	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 
-	if (counters == NULL)
-		return -EINVAL;
-
 	if (gpudev->perfcounter_init)
-		ret = gpudev->perfcounter_init(adreno_dev);
-
-	if (ret)
-		return ret;
+		gpudev->perfcounter_init(adreno_dev);
 
 	if (adreno_dev->fast_hang_detect)
 		adreno_fault_detect_start(adreno_dev);
 
 	/* Default performance counter profiling to false */
 	adreno_dev->profile.enabled = false;
-	return ret;
 }
 
 /**
