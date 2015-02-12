@@ -2778,10 +2778,6 @@ static ssize_t dispatcher_sysfs_store(struct kobject *kobj,
 	return ret;
 }
 
-static void dispatcher_sysfs_release(struct kobject *kobj)
-{
-}
-
 static const struct sysfs_ops dispatcher_sysfs_ops = {
 	.show = dispatcher_sysfs_show,
 	.store = dispatcher_sysfs_store
@@ -2790,7 +2786,6 @@ static const struct sysfs_ops dispatcher_sysfs_ops = {
 static struct kobj_type ktype_dispatcher = {
 	.sysfs_ops = &dispatcher_sysfs_ops,
 	.default_attrs = dispatcher_attrs,
-	.release = dispatcher_sysfs_release
 };
 
 /**

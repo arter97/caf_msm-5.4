@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -908,10 +908,6 @@ struct kgsl_snapshot_attribute attr_##_name = { \
 static SNAPSHOT_ATTR(timestamp, 0444, timestamp_show, NULL);
 static SNAPSHOT_ATTR(faultcount, 0644, faultcount_show, faultcount_store);
 
-static void snapshot_sysfs_release(struct kobject *kobj)
-{
-}
-
 static ssize_t snapshot_sysfs_show(struct kobject *kobj,
 	struct attribute *attr, char *buf)
 {
@@ -949,8 +945,6 @@ static const struct sysfs_ops snapshot_sysfs_ops = {
 
 static struct kobj_type ktype_snapshot = {
 	.sysfs_ops = &snapshot_sysfs_ops,
-	.default_attrs = NULL,
-	.release = snapshot_sysfs_release,
 };
 
 /**
