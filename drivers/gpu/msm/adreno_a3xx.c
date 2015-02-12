@@ -1235,11 +1235,7 @@ struct adreno_ft_perf_counters a3xx_ft_perf_counters[] = {
 	{KGSL_PERFCOUNTER_GROUP_TSE, TSE_INPUT_PRIM_NUM},
 };
 
-/**
- * a3xx_perfcounter_init() - Allocate performance counters for use in the kernel
- * @adreno_dev: Pointer to an adreno_device structure
- */
-void a3xx_perfcounter_init(struct adreno_device *adreno_dev)
+static void a3xx_perfcounter_init(struct adreno_device *adreno_dev)
 {
 	struct adreno_perfcounters *counters = ADRENO_PERFCOUNTERS(adreno_dev);
 
@@ -1261,6 +1257,12 @@ void a3xx_perfcounter_init(struct adreno_device *adreno_dev)
 	 */
 	adreno_perfcounter_get(adreno_dev, KGSL_PERFCOUNTER_GROUP_PWR, 1,
 		NULL, NULL, PERFCOUNTER_FLAG_KERNEL);
+}
+
+static void a3xx_perfcounter_close(struct adreno_device *adreno_dev)
+{
+	adreno_perfcounter_put(adreno_dev, KGSL_PERFCOUNTER_GROUP_PWR, 1,
+		PERFCOUNTER_FLAG_KERNEL);
 }
 
 /**
@@ -1890,6 +1892,7 @@ struct adreno_gpudev adreno_a3xx_gpudev = {
 	.microcode_read = a3xx_microcode_read,
 	.microcode_load = a3xx_microcode_load,
 	.perfcounter_init = a3xx_perfcounter_init,
+	.perfcounter_close = a3xx_perfcounter_close,
 	.busy_cycles = a3xx_busy_cycles,
 	.start = a3xx_start,
 	.snapshot = a3xx_snapshot,
