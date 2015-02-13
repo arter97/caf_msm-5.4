@@ -251,3 +251,7 @@
 		qcom,fast-avg-setup = <0>;
 	};
 };
+
+&blsp1_uart2 {
+	status = "ok";
+};
