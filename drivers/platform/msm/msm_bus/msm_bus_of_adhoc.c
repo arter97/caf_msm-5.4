@@ -476,6 +476,10 @@ static int get_bus_node_device_data(
 			scnprintf(node_device->qos_clk.reg_name,
 				MAX_REG_NAME, "%c", '\0');
 
+		enable_only = of_property_read_bool(dev_node,
+							"qcom,enable-only-clk");
+		node_device->clk[DUAL_CTX].enable_only_clk = enable_only;
+
 		node_device->clk[DUAL_CTX].clk = of_clk_get_by_name(dev_node,
 							"node_clk");
 
