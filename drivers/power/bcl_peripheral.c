@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -178,7 +178,7 @@ static void convert_ibat_to_adc_val(int *val)
 	if (!bcl_perph)
 		return;
 	perph_data = &bcl_perph->param[BCL_PARAM_CURRENT];
-	*val /= (*val * 100 / (100 + perph_data->gain_factor_num
+	*val = (*val * 100 / (100 + perph_data->gain_factor_num
 		* BCL_CONSTANT_NUM / perph_data->gain_factor_den)
 		- perph_data->offset_factor_num
 		/ perph_data->offset_factor_den)
@@ -350,7 +350,7 @@ static int bcl_clear_vbat_min(void)
 {
 	int ret  = 0;
 
-	ret = bcl_write_register(BCL_VBAT_MIN, BIT(7));
+	ret = bcl_write_register(BCL_VBAT_MIN_CLR, BIT(7));
 	if (ret)
 		pr_err("Error in clearing vbat min reg. err:%d", ret);
 
@@ -361,7 +361,7 @@ static int bcl_clear_ibat_max(void)
 {
 	int ret  = 0;
 
-	ret = bcl_write_register(BCL_IBAT_MAX, BIT(7));
+	ret = bcl_write_register(BCL_IBAT_MAX_CLR, BIT(7));
 	if (ret)
 		pr_err("Error in clearing ibat max reg. err:%d", ret);
 
@@ -544,7 +544,6 @@ static void bcl_handle_ibat(struct work_struct *work)
 		pr_err("Invalid state %d\n", perph_data->state);
 		return;
 	}
-	disable_irq(perph_data->irq_num);
 	perph_data->state = BCL_PARAM_POLLING;
 	ret = perph_data->read_max(&val);
 	if (ret)
@@ -570,7 +569,6 @@ static void bcl_handle_vbat(struct work_struct *work)
 		pr_err("Invalid state %d\n", perph_data->state);
 		return;
 	}
-	disable_irq(perph_data->irq_num);
 	perph_data->state = BCL_PARAM_POLLING;
 	ret = perph_data->read_max(&val);
 	if (ret)
@@ -592,6 +590,7 @@ static irqreturn_t bcl_handle_isr(int irq, void *data)
 		(struct bcl_peripheral_data *)data;
 
 	if (perph_data->state == BCL_PARAM_MONITOR) {
+		disable_irq_nosync(perph_data->irq_num);
 		perph_data->state = BCL_PARAM_TRIPPED;
 		queue_work(bcl_perph->bcl_isr_wq, &perph_data->isr_work);
 	}
@@ -806,8 +805,6 @@ static int bcl_probe(struct spmi_device *spmi)
 	if (ret) {
 		dev_err(&spmi->dev, "Error requesting VBAT irq. err:%d", ret);
 		goto bcl_probe_exit;
-	} else {
-		enable_irq_wake(bcl_perph->param[BCL_PARAM_VOLTAGE].irq_num);
 	}
 	ret = devm_request_irq(&spmi->dev,
 			bcl_perph->param[BCL_PARAM_CURRENT].irq_num,
@@ -817,8 +814,6 @@ static int bcl_probe(struct spmi_device *spmi)
 	if (ret) {
 		dev_err(&spmi->dev, "Error requesting IBAT irq. err:%d", ret);
 		goto bcl_probe_exit;
-	} else {
-		enable_irq_wake(bcl_perph->param[BCL_PARAM_CURRENT].irq_num);
 	}
 
 	dev_set_drvdata(&spmi->dev, bcl_perph);

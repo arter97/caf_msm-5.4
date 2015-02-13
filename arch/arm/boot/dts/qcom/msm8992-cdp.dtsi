@@ -63,7 +63,13 @@
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
 	qcom,mdss-dsi-bl-min-level = <1>;
 	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,cont-splash-enabled;
 };
+
+&dsi_dual_sharp_video_1 {
+	qcom,cont-splash-enabled;
+};
+
 
 &dsi_dual_jdi_video_0 {
 	pwms = <&pmi8994_pwm_4 0 0>;
@@ -91,13 +97,11 @@
 	qcom,mdss-dsi-bl-max-level = <4095>;
 	qcom,5v-boost-gpio = <&pm8994_gpios 14 0>;
 	qcom,cont-splash-enabled;
-	qcom,partial-update-enabled;
 	qcom,panel-roi-alignment = <4 4 2 2 20 20>;
 };
 
 &dsi_dual_jdi_cmd_1 {
 	qcom,cont-splash-enabled;
-	qcom,partial-update-enabled;
 	qcom,panel-roi-alignment = <4 4 2 2 20 20>;
 };
 
@@ -150,9 +154,6 @@
 	pinctrl-0 = <&uart_console_sleep>;
 };
 
-&spi_0 {
-	status = "disabled";
-};
 
 &usb3 {
 	status = "ok";
@@ -280,6 +281,15 @@
 		status = "okay";
 	};
 
+	gpio@cd00 { /* GPIO 14 */
+		qcom,mode = <1>;
+		qcom,pull = <5>;
+		qcom,vin-sel = <2>;
+		qcom,src-sel = <0>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+
 	gpio@ce00 { /* GPIO 15 */
 		qcom,mode = <1>;
 		qcom,output-type = <0>;
@@ -402,11 +412,27 @@
 	};
 };
 
+&pmi8994_pwm_4 {
+	qcom,channel-owner = "lcd_bl";
+	qcom,lpg-dtest-line = <4>;
+	qcom,dtest-output = <1>;
+	status = "okay";
+};
+
 &pmi8994_charger {
 	qcom,charging-disabled;
 };
 
 &pmi8994_mpps {
+	mpp@a000 { /* MPP 1 */
+		qcom,mode = <1>;        /* DIGITAL OUT */
+		qcom,output-type = <0>; /* CMOS logic */
+		qcom,vin-sel = <2>;     /* S4 1.8V */
+		qcom,src-sel = <7>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+
 	mpp@a300 { /* MPP 4 */
 		/* WLED FET */
 		qcom,mode = <1>;	/* DIGITAL OUT */

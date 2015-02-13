@@ -1,4 +1,5 @@
-/* Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
+/*
+ * Copyright (c) 2009-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -509,11 +510,11 @@ static struct msm_soc_info cpu_of_id[] = {
 	/* Terbium ID */
 	[266] = {MSM_CPU_TERBIUM, "MSMTERBIUM"},
 
-	/* Nickel ID */
-	[268] = {MSM_CPU_NICKEL, "MSMNICKEL"},
-	[269] = {MSM_CPU_NICKEL, "MSMNICKEL"},
-	[270] = {MSM_CPU_NICKEL, "MSMNICKEL"},
-	[271] = {MSM_CPU_NICKEL, "APQNICKEL"},
+	/* 8929 IDs */
+	[268] = {MSM_CPU_8929, "MSM8929"},
+	[269] = {MSM_CPU_8929, "MSM8629"},
+	[270] = {MSM_CPU_8929, "MSM8229"},
+	[271] = {MSM_CPU_8929, "APQ8029"},
 
 	/* Uninitialized IDs are not known to run Linux.
 	   MSM_CPU_UNKNOWN is set to 0 to ensure these IDs are
@@ -1037,9 +1038,9 @@ static void * __init setup_dummy_socinfo(void)
 		dummy_socinfo.id = 246;
 		strlcpy(dummy_socinfo.build_id, "msmthulium - ",
 			sizeof(dummy_socinfo.build_id));
-	} else if (early_machine_is_msmnickel()) {
+	} else if (early_machine_is_msm8929()) {
 		dummy_socinfo.id = 268;
-		strlcpy(dummy_socinfo.build_id, "msmnickel - ",
+		strlcpy(dummy_socinfo.build_id, "msm8929 - ",
 			sizeof(dummy_socinfo.build_id));
 	}
 

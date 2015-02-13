@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -698,6 +698,9 @@ struct ipa_nat_mem {
 	u32 size_base_tables;
 	u32 size_expansion_tables;
 	u32 public_ip_addr;
+	void *tmp_vaddr;
+	dma_addr_t tmp_dma_handle;
+	bool is_tmp_mem;
 };
 
 /**
@@ -998,6 +1001,7 @@ struct ipa_sps_pm {
  * @ip6_flt_tbl_lcl: where ip6 flt tables reside 1-local; 0-system
  * @empty_rt_tbl_mem: empty routing tables memory
  * @power_mgmt_wq: workqueue for power management
+ * @sps_power_mgmt_wq: workqueue SPS related power management
  * @tag_process_before_gating: indicates whether to start tag process before
  *  gating IPA clocks
  * @sps_pm: sps power management related information
@@ -1069,6 +1073,7 @@ struct ipa_context {
 	struct dma_pool *dma_pool;
 	struct ipa_active_clients ipa_active_clients;
 	struct workqueue_struct *power_mgmt_wq;
+	struct workqueue_struct *sps_power_mgmt_wq;
 	bool tag_process_before_gating;
 	struct ipa_sps_pm sps_pm;
 	u32 clnt_hdl_cmd;

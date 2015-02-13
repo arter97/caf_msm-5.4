@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -36,15 +36,26 @@
 #define EMAC_SGMII_PHY_IRQ    5
 #define EMAC_NUM_IRQ          6
 
-/* emac clocks */
-#define EMAC_AXI_CLK          0
-#define EMAC_CFG_AHB_CLK      1
-#define EMAC_125M_CLK         2
-#define EMAC_SYS_25M_CLK      3
-#define EMAC_TX_CLK           4
-#define EMAC_RX_CLK           5
-#define EMAC_SYS_CLK          6
-#define EMAC_NUM_CLK          7
+enum emac_clk_id {
+	EMAC_CLK_AXI,
+	EMAC_CLK_CFG_AHB,
+	EMAC_CLK_125M,
+	EMAC_CLK_SYS_25M,
+	EMAC_CLK_TX,
+	EMAC_CLK_RX,
+	EMAC_CLK_SYS,
+	EMAC_CLK_CNT
+};
+
+#define KHz(RATE)	((RATE)    * 1000)
+#define MHz(RATE)	(KHz(RATE) * 1000)
+
+enum emac_clk_rate {
+	EMC_CLK_RATE_2_5MHz	= KHz(2500),
+	EMC_CLK_RATE_19_2MHz	= KHz(19200),
+	EMC_CLK_RATE_25MHz	= MHz(25),
+	EMC_CLK_RATE_125MHz	= MHz(125),
+};
 
 /* mdio/mdc gpios */
 #define EMAC_NUM_GPIO         2
@@ -177,10 +188,35 @@ struct emac_hw_stats {
 	u64 tx_col;             /* collisions */
 };
 
+enum emac_hw_flags {
+	EMAC_FLAG_HW_PROMISC_EN,
+	EMAC_FLAG_HW_VLANSTRIP_EN,
+	EMAC_FLAG_HW_MULTIALL_EN,
+	EMAC_FLAG_HW_LOOPBACK_EN,
+	EMAC_FLAG_HW_PTP_CAP,
+	EMAC_FLAG_HW_PTP_EN,
+	EMAC_FLAG_HW_TS_RX_EN,
+	EMAC_FLAG_HW_TS_TX_EN,
+};
+
+enum emac_adapter_flags {
+	EMAC_FLAG_ADPT_STATE_RESETTING,
+	EMAC_FLAG_ADPT_STATE_DOWN,
+	EMAC_FLAG_ADPT_STATE_WATCH_DOG,
+	EMAC_FLAG_ADPT_TASK_REINIT_REQ,
+	EMAC_FLAG_ADPT_TASK_LSC_REQ,
+	EMAC_FLAG_ADPT_TASK_CHK_SGMII_REQ,
+};
+
+/* emac shorthand bitops macros */
+#define TEST_FLAG(OBJ, FLAG)	test_bit(EMAC_FLAG_ ## FLAG,  &((OBJ)->flags))
+#define SET_FLAG(OBJ,  FLAG)	set_bit(EMAC_FLAG_ ## FLAG,   &((OBJ)->flags))
+#define CLR_FLAG(OBJ,  FLAG)	clear_bit(EMAC_FLAG_ ## FLAG, &((OBJ)->flags))
+#define TEST_N_SET_FLAG(OBJ, FLAG) \
+			test_and_set_bit(EMAC_FLAG_ ## FLAG,  &((OBJ)->flags))
+
 struct emac_hw {
 	void __iomem *reg_addr[NUM_EMAC_REG_BASES];
-
-	struct emac_adapter *adpt;
 
 	u16     devid;
 	u16     revid;
@@ -236,20 +272,6 @@ struct emac_hw {
 	u32                 preamble;
 	unsigned long       flags;
 };
-
-#define EMAC_HW_FLAG_PROMISC_EN          0
-#define EMAC_HW_FLAG_VLANSTRIP_EN        1
-#define EMAC_HW_FLAG_MULTIALL_EN         2
-#define EMAC_HW_FLAG_LOOPBACK_EN         3
-
-#define EMAC_HW_FLAG_PTP_CAP             4
-#define EMAC_HW_FLAG_PTP_EN              5
-#define EMAC_HW_FLAG_TS_RX_EN            6
-#define EMAC_HW_FLAG_TS_TX_EN            7
-
-#define CHK_HW_FLAG(_flag)              CHK_FLAG(hw, HW, _flag)
-#define SET_HW_FLAG(_flag)              SET_FLAG(hw, HW, _flag)
-#define CLI_HW_FLAG(_flag)              CLI_FLAG(hw, HW, _flag)
 
 /* RSS hstype Definitions */
 #define EMAC_RSS_HSTYP_IPV4_EN           0x00000001
@@ -516,11 +538,9 @@ struct emac_gpio_info {
 	char *name;
 };
 
-struct emac_clk_info {
-	struct clk           *clk;
-	char                 *name;
-	bool                  enabled;
-	struct emac_adapter  *adpt;
+struct emac_clk {
+	struct clk		*clk;
+	bool			enabled;
 };
 
 /* emac_ring_header represents a single, contiguous block of DMA space
@@ -650,7 +670,7 @@ struct emac_adapter {
 
 	struct emac_irq_info  irq_info[EMAC_NUM_IRQ];
 	struct emac_gpio_info gpio_info[EMAC_NUM_GPIO];
-	struct emac_clk_info  clk_info[EMAC_NUM_CLK];
+	struct emac_clk			clk[EMAC_CLK_CNT];
 
 	/* dma parameters */
 	u64                             dma_mask;
@@ -694,28 +714,10 @@ struct emac_adapter {
 	unsigned long   flags;
 };
 
-#define EMAC_ADPT_FLAG_STATE_RESETTING          16
-#define EMAC_ADPT_FLAG_STATE_DOWN               17
-#define EMAC_ADPT_FLAG_STATE_WATCH_DOG          18
-
-#define EMAC_ADPT_FLAG_TASK_REINIT_REQ          19
-#define EMAC_ADPT_FLAG_TASK_LSC_REQ             20
-#define EMAC_ADPT_FLAG_TASK_CHK_SGMII_REQ       21
-
-#define CHK_ADPT_FLAG(_flag)           CHK_FLAG(adpt, ADPT, _flag)
-#define SET_ADPT_FLAG(_flag)           SET_FLAG(adpt, ADPT, _flag)
-#define CLI_ADPT_FLAG(_flag)           CLI_FLAG(adpt, ADPT, _flag)
-#define CHK_AND_SET_ADPT_FLAG(_flag)   CHK_AND_SET_FLAG(adpt, ADPT, _flag)
-
-/* definitions for flags */
-#define CHK_FLAG(_st, _type, _flag) \
-		test_bit((EMAC_##_type##_FLAG_##_flag), &((_st)->flags))
-#define SET_FLAG(_st, _type, _flag) \
-		set_bit((EMAC_##_type##_FLAG_##_flag), &((_st)->flags))
-#define CLI_FLAG(_st, _type, _flag) \
-		clear_bit((EMAC_##_type##_FLAG_##_flag), &((_st)->flags))
-#define CHK_AND_SET_FLAG(_st, _type, _flag) \
-		test_and_set_bit((EMAC_##_type##_FLAG_##_flag), &((_st)->flags))
+static inline struct emac_adapter *emac_hw_get_adap(struct emac_hw *hw)
+{
+	return container_of(hw, struct emac_adapter, hw);
+}
 
 /* default to trying for four seconds */
 #define EMAC_TRY_LINK_TIMEOUT     (4 * HZ)
