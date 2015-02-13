@@ -81,6 +81,7 @@
 					0x0006C000 0x0006C800>;
 		qcom,mdss-pingpong-off = <0x00071000 0x00071800
 					  0x00072000 0x00072800>;
+		qcom,mdss-ad-off = <0x0079000 0x00079800 0x0007a000>;
 		qcom,mdss-cdm-off = <0x0007a200>;
 		qcom,mdss-wfd-mode = "intf";
 
