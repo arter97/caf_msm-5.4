@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -116,7 +116,14 @@ static struct gpiomux_setting wlan_suspend_config = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
 	.pull = GPIOMUX_PULL_NONE,
-	.dir = GPIOMUX_IN,
+	.dir = GPIOMUX_OUT_LOW,
+};
+
+static struct gpiomux_setting wlan_suspend_on_config = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_NONE,
+	.dir = GPIOMUX_OUT_HIGH,
 };
 
 static struct msm_gpiomux_config msm9615_audio_codec_configs[] __initdata = {
@@ -150,7 +157,7 @@ static struct msm_gpiomux_config msm9615_sdcc2_configs[] __initdata = {
 		.gpio      = 27,
 		.settings = {
 			[GPIOMUX_ACTIVE]    = &sdcc2_cmd_data_0_3_actv_cfg,
-			[GPIOMUX_SUSPENDED] = &sdcc2_suspend_cfg,
+			[GPIOMUX_SUSPENDED] = &wlan_suspend_on_config,
 		},
 	},
 	{
@@ -340,7 +347,7 @@ static struct msm_gpiomux_config msm9615_ebi2_lcdc_configs[] __initdata = {
 
 static struct msm_gpiomux_config msm9615_wlan_configs[] __initdata = {
 	{
-		.gpio      = 21,/* WLAN_RESET_N */
+		.gpio      = 84,/* WLAN_RESET_N */
 		.settings = {
 			[GPIOMUX_ACTIVE] = &wlan_active_config,
 			[GPIOMUX_SUSPENDED] = &wlan_suspend_config,

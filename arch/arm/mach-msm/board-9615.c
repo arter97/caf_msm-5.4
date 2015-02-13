@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -834,14 +834,14 @@ out:
 	return 0;
 }
 
-static struct platform_device msm_wlan_ar6000_pm_device = {
-	.name           = "wlan_ar6000_pm_dev",
+static struct platform_device msm_wlan_qcacld_device = {
+	.name           = "wlan-qcacld-platform",
 	.id             = -1,
 };
 
-static int __init msm9615_init_ar6000pm(void)
+static int __init msm9615_init_wlan(void)
 {
-	return platform_device_register(&msm_wlan_ar6000_pm_device);
+	return platform_device_register(&msm_wlan_qcacld_device);
 }
 
 #ifdef CONFIG_LTC4088_CHARGER
@@ -1057,8 +1057,8 @@ static void __init msm9615_common_init(void)
 	msm9615_pm8xxx_gpio_mpp_init();
 	acpuclk_init(&acpuclk_9615_soc_data);
 
-	/* Ensure ar6000pm device is registered before MMC/SDC */
-	msm9615_init_ar6000pm();
+	/* Ensure WLAN device is registered before MMC/SDC */
+	msm9615_init_wlan();
 
 	msm9615_init_mmc();
 	slim_register_board_info(msm_slim_devices,
