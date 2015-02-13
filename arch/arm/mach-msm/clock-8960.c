@@ -1553,6 +1553,11 @@ static unsigned long fmax_sdc1_8064v2[VDD_DIG_NUM] = {
 	[VDD_DIG_NOMINAL] = 200000000,
 };
 
+static unsigned long fmax_sdc2_8064[VDD_DIG_NUM] = {
+	[VDD_DIG_LOW]     = 33000000,
+	[VDD_DIG_NOMINAL] = 67000000,
+};
+
 #define F_TSIF_REF(f, s, d, m, n) \
 	{ \
 		.freq_hz = f, \
@@ -7050,7 +7055,7 @@ static void __init msm8960_clock_pre_init(void)
 	 * Change the freq tables for and voltage requirements for
 	 * clocks which differ between chips.
 	 */
-	if (cpu_is_apq8064() || cpu_is_apq8064aa()) {
+	if (cpu_is_apq8064() || cpu_is_apq8064aa() || cpu_is_apq8064au()) {
 		gfx3d_clk.c.fmax = fmax_gfx3d_8064;
 	}
 	if (cpu_is_apq8064ab()) {
@@ -7058,7 +7063,8 @@ static void __init msm8960_clock_pre_init(void)
 	}
 	if ((cpu_is_apq8064() &&
 		SOCINFO_VERSION_MAJOR(socinfo_get_version()) == 2) ||
-		cpu_is_apq8064ab() || cpu_is_apq8064aa()) {
+		cpu_is_apq8064ab() || cpu_is_apq8064aa() ||
+		cpu_is_apq8064au()) {
 
 		vcodec_clk.c.fmax = fmax_vcodec_8064v2;
 		ce3_src_clk.c.fmax = fmax_ce3_8064v2;
@@ -7070,6 +7076,7 @@ static void __init msm8960_clock_pre_init(void)
 		tv_src_clk.c.fmax = fmax_tv_src_8064;
 		vfe_clk.c.fmax = fmax_vfe_8064;
 		gmem_axi_clk.c.depends = &gfx3d_axi_clk.c;
+		sdc2_clk.c.fmax= fmax_sdc2_8064;
 	}
 
 	/*
