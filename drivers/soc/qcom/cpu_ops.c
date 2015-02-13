@@ -243,6 +243,11 @@ static void msm_wfi_cpu_die(unsigned int cpu)
 		BUG();
 	}
 }
+
+static int msm_cpu_kill(unsigned int cpu)
+{
+	return msm_pm_wait_cpu_shutdown(cpu) ? 0 : 1;
+}
 #endif
 
 static const struct cpu_operations msm_cortex_a_ops = {
@@ -279,6 +284,7 @@ static const struct cpu_operations msmthulium_ops = {
 	.cpu_postboot	= msm_cpu_postboot,
 #ifdef CONFIG_HOTPLUG_CPU
 	.cpu_die        = msm_wfi_cpu_die,
+	.cpu_kill	= msm_cpu_kill,
 #endif
 	.cpu_suspend       = msm_pm_collapse,
 };
