@@ -689,6 +689,7 @@
 				 &slv_snoc_cnoc &slv_snoc_pnoc
 				 &slv_imem &slv_qdss_stm>;
 			qcom,bus-dev = <&fab_snoc>;
+			qcom,ap-owned;
 			qcom,mas-rpm-id = <ICBID_MASTER_BIMC_SNOC>;
 		};
 
@@ -823,6 +824,7 @@
 			qcom,buswidth = <8>;
 			qcom,agg-ports = <1>;
 			qcom,bus-dev = <&fab_bimc>;
+			qcom,ap-owned;
 			qcom,connections = <&mas_bimc_snoc_0>;
 			qcom,slv-rpm-id = <ICBID_SLAVE_BIMC_SNOC>;
 		};
