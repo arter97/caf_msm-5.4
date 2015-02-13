@@ -924,7 +924,7 @@ static int mdp3_hw_init(void)
 	}
 	mdp3_res->intf[MDP3_DMA_OUTPUT_SEL_AHB].available = 0;
 	mdp3_res->intf[MDP3_DMA_OUTPUT_SEL_LCDC].available = 0;
-	mdp3_res->smart_blit_en = true;
+	mdp3_res->smart_blit_en = false;
 	return 0;
 }
 
