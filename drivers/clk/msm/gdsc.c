@@ -61,11 +61,22 @@ struct gdsc {
 static int gdsc_is_enabled(struct regulator_dev *rdev)
 {
 	struct gdsc *sc = rdev_get_drvdata(rdev);
+	uint32_t regval;
 
 	if (!sc->toggle_logic)
 		return !sc->resets_asserted;
 
-	return !!(readl_relaxed(sc->gdscr) & PWR_ON_MASK);
+	regval = readl_relaxed(sc->gdscr);
+	if (regval & PWR_ON_MASK) {
+		/*
+		 * The GDSC might be turned on due to TZ/HYP vote on the
+		 * votable GDS registers. Check the SW_COLLAPSE_MASK to
+		 * determine if HLOS has voted for it.
+		 */
+		if (!(regval & SW_COLLAPSE_MASK))
+			return true;
+	}
+	return false;
 }
 
 static int gdsc_enable(struct regulator_dev *rdev)
