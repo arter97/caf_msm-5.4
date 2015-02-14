@@ -30,6 +30,17 @@
 
 &soc {
 
+	msm-piezo {
+	compatible = "qcom,msm-piezo";
+	reg = <0xF9BFE040 0x04>;
+		reg-names = "periph_ss_pdm";
+	qcom,piezo-frequency = <4000>;
+	qcom,piezo-duration = <5000>;
+	qcom,piezo-duty-cycle = <50>;
+	qcom,piezo-command = <0>;
+	qcom,piezo-gp-mn-gpio = <22>;
+	};
+
 	hsic@f9a00000 {
 	status = "ok";
 	};
