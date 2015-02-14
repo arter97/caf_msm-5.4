@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -18,7 +18,7 @@
 /include/ "msm8226-camera-sensor-mtp.dtsi"
 
 / {
-	model = "Qualcomm QM8626 subtype:1";
+	model = "QTI QM8626 subtype:1";
 	compatible = "qcom,msm8226-mtp", "qcom,msm8226", "qcom,mtp", "qcom,qm8626";
 	qcom,board-id = <5 1>;
 
@@ -30,6 +30,17 @@
 };
 
 &soc {
+
+	msm-piezo {
+	compatible = "qcom,msm-piezo";
+	reg = <0xF9BFE040 0x04>;
+		reg-names = "periph_ss_pdm";
+	qcom,piezo-frequency = <4000>;
+	qcom,piezo-duration = <5000>;
+	qcom,piezo-duty-cycle = <50>;
+	qcom,piezo-command = <0>;
+	qcom,piezo-gp-mn-gpio = <22>;
+	};
 
 	hsic@f9a00000 {
 	status = "ok";
