@@ -1252,7 +1252,7 @@ static void __enqueue_in_driver(struct vb2_buffer *vb)
 static int __buf_prepare(struct vb2_buffer *vb, const struct v4l2_buffer *b)
 {
 	struct vb2_queue *q = vb->vb2_queue;
-	struct rw_semaphore *mmap_sem;
+	struct rw_semaphore *mmap_sem = NULL;
 	int ret;
 
 	ret = __verify_length(vb, b);
@@ -1280,14 +1280,16 @@ static int __buf_prepare(struct vb2_buffer *vb, const struct v4l2_buffer *b)
 		 * the videobuf2 core releases the driver's lock, takes
 		 * mmap_sem and then takes the driver's lock again.
 		 */
-		mmap_sem = &current->mm->mmap_sem;
 		call_qop(q, wait_prepare, q);
-		down_read(mmap_sem);
+		if (current && current->mm) {
+			mmap_sem = &current->mm->mmap_sem;
+			down_read(mmap_sem);
+		}
 		call_qop(q, wait_finish, q);
-
 		ret = __qbuf_userptr(vb, b);
 
-		up_read(mmap_sem);
+		if (mmap_sem)
+			up_read(mmap_sem);
 		break;
 	case V4L2_MEMORY_DMABUF:
 		ret = __qbuf_dmabuf(vb, b);
