@@ -33,8 +33,8 @@
 			<&clock_mmss clk_smmu_jpeg_axi_clk>,
 			<&clock_mmss clk_mmagic_bimc_axi_clk>,
 			<&clock_mmss clk_mmagic_camss_axi_clk>;
-		clock-names = "jpeg_ahb_clk", "jpeg_axi_clk",
-			"mmagic_ahb_clk", "mmagic_cfg_ahb_clk",
+		clock-names = "mmagic_ahb_clk", "mmagic_cfg_ahb_clk",
+			"jpeg_ahb_clk", "jpeg_axi_clk",
 			"mmagic_bimc_axi_clk", "mmagic_camss_axi_clk";
 		#clock-cells = <1>;
 	};
