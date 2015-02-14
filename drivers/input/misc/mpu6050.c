@@ -1,7 +1,7 @@
 /*
  * MPU6050 6-axis gyroscope + accelerometer driver
  *
- * Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2653,7 +2653,7 @@ static int mpu6050_probe(struct i2c_client *client,
 		goto err_power_off_device;
 	}
 
-	sensor->accel_dev = input_allocate_device();
+	sensor->accel_dev = devm_input_allocate_device(&client->dev);
 	if (!sensor->accel_dev) {
 		dev_err(&client->dev,
 			"Failed to allocate accelerometer input device\n");
@@ -2661,12 +2661,12 @@ static int mpu6050_probe(struct i2c_client *client,
 		goto err_power_off_device;
 	}
 
-	sensor->gyro_dev = input_allocate_device();
+	sensor->gyro_dev = devm_input_allocate_device(&client->dev);
 	if (!sensor->gyro_dev) {
 		dev_err(&client->dev,
 			"Failed to allocate gyroscope input device\n");
 		ret = -ENOMEM;
-		goto err_free_input_accel;
+		goto err_power_off_device;
 	}
 
 	sensor->accel_dev->name = MPU6050_DEV_NAME_ACCEL;
@@ -2712,7 +2712,7 @@ static int mpu6050_probe(struct i2c_client *client,
 			dev_err(&client->dev,
 				"Unable to request interrupt gpio %d\n",
 				sensor->pdata->gpio_int);
-			goto err_free_input_gyro;
+			goto err_power_off_device;
 		}
 
 		ret = gpio_direction_input(sensor->pdata->gpio_int);
@@ -2760,13 +2760,13 @@ static int mpu6050_probe(struct i2c_client *client,
 	ret = input_register_device(sensor->gyro_dev);
 	if (ret) {
 		dev_err(&client->dev, "Failed to register input device\n");
-		goto err_unregister_accel;
+		goto err_free_irq;
 	}
 
 	ret = create_accel_sysfs_interfaces(&sensor->accel_dev->dev);
 	if (ret < 0) {
 		dev_err(&client->dev, "failed to create sysfs for accel\n");
-		goto err_unregister_gyro;
+		goto err_free_irq;
 	}
 	ret = create_gyro_sysfs_interfaces(&sensor->gyro_dev->dev);
 	if (ret < 0) {
@@ -2826,10 +2826,6 @@ err_remove_gyro_sysfs:
 	remove_accel_sysfs_interfaces(&sensor->gyro_dev->dev);
 err_remove_accel_sysfs:
 	remove_accel_sysfs_interfaces(&sensor->accel_dev->dev);
-err_unregister_gyro:
-	input_unregister_device(sensor->gyro_dev);
-err_unregister_accel:
-	input_unregister_device(sensor->accel_dev);
 err_free_irq:
 	if (client->irq > 0)
 		free_irq(client->irq, sensor);
@@ -2837,10 +2833,6 @@ err_free_gpio:
 	if ((sensor->pdata->use_int) &&
 		(gpio_is_valid(sensor->pdata->gpio_int)))
 		gpio_free(sensor->pdata->gpio_int);
-err_free_input_gyro:
-	input_free_device(sensor->gyro_dev);
-err_free_input_accel:
-	input_free_device(sensor->accel_dev);
 err_power_off_device:
 	mpu6050_power_ctl(sensor, false);
 err_deinit_regulator:
@@ -2868,15 +2860,11 @@ static int mpu6050_remove(struct i2c_client *client)
 	sensors_classdev_unregister(&sensor->gyro_cdev);
 	remove_gyro_sysfs_interfaces(&sensor->gyro_dev->dev);
 	remove_accel_sysfs_interfaces(&sensor->accel_dev->dev);
-	input_unregister_device(sensor->gyro_dev);
-	input_unregister_device(sensor->accel_dev);
 	if (client->irq > 0)
 		free_irq(client->irq, sensor);
 	if ((sensor->pdata->use_int) &&
 		(gpio_is_valid(sensor->pdata->gpio_int)))
 		gpio_free(sensor->pdata->gpio_int);
-	input_free_device(sensor->gyro_dev);
-	input_free_device(sensor->accel_dev);
 	mpu6050_power_ctl(sensor, false);
 	mpu6050_power_deinit(sensor);
 	if (gpio_is_valid(sensor->enable_gpio))
