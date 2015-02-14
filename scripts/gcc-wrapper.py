@@ -52,12 +52,12 @@ allowed_warnings = set([
     "xc4000.c:1049",
     "xc4000.c:1063",
     "inet_hashtables.h:356",
-    "f_qdss.c:586",	
-    "mipi_tc358764_dsi2lvds.c:746",	
-    "dynamic_debug.h:75",	
-    "hci_conn.c:407",	
-    "f_qdss.c:740",	
-    "mipi_novatek.c:569",	
+    "f_qdss.c:586",
+    "mipi_tc358764_dsi2lvds.c:746",
+    "dynamic_debug.h:75",
+    "hci_conn.c:407",
+    "f_qdss.c:740",
+    "mipi_novatek.c:569",
     "swab.h:34",
  ])
 

@@ -1080,7 +1080,6 @@ static int __qseecom_send_cmd_legacy(struct qseecom_dev_handle *data,
 static int __validate_send_cmd_inputs(struct qseecom_dev_handle *data,
 				struct qseecom_send_cmd_req *req)
 {
-
 	if (!data || !data->client.ihandle) {
 		pr_err("Client or client handle is not initialized\n");
 		return -EINVAL;
@@ -1203,7 +1202,6 @@ static int qseecom_send_cmd(struct qseecom_dev_handle *data, void __user *argp)
 	}
 	if (__validate_send_cmd_inputs(data, &req))
 		return -EINVAL;
-
 	if (qseecom.qseos_version == QSEOS_VERSION_14)
 		ret = __qseecom_send_cmd(data, &req);
 	else
@@ -1271,7 +1269,6 @@ static int __qseecom_update_with_phy_addr(
 					req->ifd_data[i].cmd_buf_offset);
 				return -EINVAL;
 			}
-
 			/* Populate the cmd data structure with the phys_addr */
 			ret = ion_phys(qseecom.ion_clnt, ihandle, &pa, &length);
 			if (ret)
@@ -1555,6 +1552,7 @@ static int __qseecom_load_fw(struct qseecom_dev_handle *data, char *appname)
 	}
 	kzfree(img_data);
 	qsee_disable_clock_vote(CLK_SFPB);
+	kzfree(img_data);
 
 	return ret;
 }

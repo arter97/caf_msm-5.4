@@ -1222,7 +1222,7 @@ static int _qcrypto_process_aead(struct crypto_priv *cp,
 
 			if ((MAX_ALIGN_SIZE*2 > UINT_MAX - qreq.assoclen) ||
 				((MAX_ALIGN_SIZE*2 + qreq.assoclen) >
-						UINT_MAX - qreq.authsize) ||
+					UINT_MAX - qreq.authsize) ||
 				((MAX_ALIGN_SIZE*2 + qreq.assoclen +
 						qreq.authsize) >
 						UINT_MAX - req->cryptlen)) {
