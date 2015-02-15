@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -54,6 +54,7 @@ struct gdsc {
 	bool			resets_asserted;
 	bool			root_en;
 	int			root_clk_idx;
+	bool			no_status_check_on_disable;
 	void __iomem		*domain_addr;
 };
 
@@ -161,12 +162,21 @@ static int gdsc_disable(struct regulator_dev *rdev)
 		regval |= SW_COLLAPSE_MASK;
 		writel_relaxed(regval, sc->gdscr);
 
-		ret = readl_poll_timeout(sc->gdscr, regval,
+		if (sc->no_status_check_on_disable) {
+			/*
+			 * Add a short delay here to ensure that gdsc_enable
+			 * right after it was disabled does not put it in a
+			 * wierd state.
+			 */
+			udelay(TIMEOUT_US);
+		} else {
+			ret = readl_poll_timeout(sc->gdscr, regval,
 					 !(regval & PWR_ON_MASK), 0,
 					 TIMEOUT_US);
-		if (ret)
-			dev_err(&rdev->dev, "%s disable timed out: 0x%x\n",
-				sc->rdesc.name, regval);
+			if (ret)
+				dev_err(&rdev->dev, "%s disable timed out: 0x%x\n",
+					sc->rdesc.name, regval);
+		}
 
 		if (sc->domain_addr) {
 			regval = readl_relaxed(sc->domain_addr);
@@ -370,6 +380,9 @@ static int gdsc_probe(struct platform_device *pdev)
 	regval |= EN_REST_WAIT_VAL | EN_FEW_WAIT_VAL | CLK_DIS_WAIT_VAL;
 	writel_relaxed(regval, sc->gdscr);
 
+	sc->no_status_check_on_disable =
+			of_property_read_bool(pdev->dev.of_node,
+					"qcom,no-status-check-on-disable");
 	retain_mem = of_property_read_bool(pdev->dev.of_node,
 					    "qcom,retain-mem");
 	sc->toggle_mem = !retain_mem;

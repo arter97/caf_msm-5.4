@@ -32,6 +32,8 @@ Optional properties:
 			should be named as "core_root_clk".
  - reg-names:		Names of the bases for the above "reg" registers.
 			Ex. "base", "domain_addr".
+ - qcom,no-status-check-on-disable: Do not poll the status bit when GDSC
+			is disabled.
 
 Example:
 	gdsc_oxili_gx: qcom,gdsc@fd8c4024 {
