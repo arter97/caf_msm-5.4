@@ -36,10 +36,10 @@ struct devfreq_msm_adreno_tz_data {
 		u64 gpu_time;
 		u32 num;
 		u32 max;
-		u32 up[MSM_ADRENO_MAX_PWRLEVELS];
-		u32 down[MSM_ADRENO_MAX_PWRLEVELS];
-		u32 p_up[MSM_ADRENO_MAX_PWRLEVELS];
-		u32 p_down[MSM_ADRENO_MAX_PWRLEVELS];
+		u32 *up;
+		u32 *down;
+		u32 *p_up;
+		u32 *p_down;
 		unsigned int *index;
 		uint64_t *ib;
 	} bus;

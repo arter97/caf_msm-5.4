@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,6 +14,7 @@
 #include <linux/devfreq.h>
 #include <linux/module.h>
 #include <linux/msm_adreno_devfreq.h>
+#include <linux/slab.h>
 
 #include "devfreq_trace.h"
 #include "governor.h"
@@ -129,11 +130,20 @@ static int gpubw_start(struct devfreq *devfreq)
 					struct msm_busmon_extended_profile,
 					profile);
 	unsigned int t1, t2 = 2 * HIST;
-	int i;
+	int i, bus_size;
 
 
 	devfreq->data = bus_profile->private_data;
 	priv = devfreq->data;
+
+	bus_size = sizeof(u32) * priv->bus.num;
+	priv->bus.up = kzalloc(bus_size, GFP_KERNEL);
+	priv->bus.down = kzalloc(bus_size, GFP_KERNEL);
+	priv->bus.p_up = kzalloc(bus_size, GFP_KERNEL);
+	priv->bus.p_down = kzalloc(bus_size, GFP_KERNEL);
+	if (priv->bus.up == NULL || priv->bus.down == NULL ||
+		priv->bus.p_up == NULL || priv->bus.p_down == NULL)
+		return -ENOMEM;
 
 	/* Set up the cut-over percentages for the bus calculation. */
 	for (i = 0; i < priv->bus.num; i++) {
@@ -156,6 +166,13 @@ static int gpubw_start(struct devfreq *devfreq)
 
 static int gpubw_stop(struct devfreq *devfreq)
 {
+	struct devfreq_msm_adreno_tz_data *priv = devfreq->data;
+	if (priv) {
+		kfree(priv->bus.up);
+		kfree(priv->bus.down);
+		kfree(priv->bus.p_up);
+		kfree(priv->bus.p_down);
+	}
 	devfreq->data = NULL;
 	return 0;
 }
