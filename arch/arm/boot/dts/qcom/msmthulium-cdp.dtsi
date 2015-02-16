@@ -21,6 +21,12 @@
 	status = "ok";
 };
 
+&soc {
+	sound {
+		qcom,model = "msmthulium-tomtom-cdp-snd-card";
+	};
+};
+
 &sdhc_1 {
 	vdd-supply = <&pm8994_l20>;
 	qcom,vdd-voltage-level = <2950000 2950000>;
@@ -295,6 +301,16 @@
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
 	qcom,mdss-dsi-bl-min-level = <1>;
 	qcom,mdss-dsi-bl-max-level = <4095>;
+};
+
+&slim_msm {
+	tomtom_codec {
+		qcom,cdc-micbias2-headset-only;
+		qcom,cdc-micbias1-ext-cap;
+		qcom,cdc-micbias2-ext-cap;
+		qcom,cdc-micbias3-ext-cap;
+		qcom,cdc-micbias4-ext-cap;
+	};
 };
 
 &pm8994_gpios {
