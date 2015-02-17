@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2010-2015, The Linux Foundation. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -381,26 +381,29 @@ done:
 	return;
 }
 
-int q6asm_set_io_mode(struct audio_client *ac, uint32_t mode)
+int q6asm_set_io_mode(struct audio_client *ac, uint32_t mode1)
 {
+	uint32_t mode;
+
 	if (ac == NULL) {
-		pr_err("%s APR handle NULL\n", __func__);
+		pr_err("%s: APR handle NULL\n", __func__);
 		return -EINVAL;
 	}
 
-	if (mode == ASYNC_IO_MODE) {
-		ac->io_mode &= ~SYNC_IO_MODE;
-		ac->io_mode |= ASYNC_IO_MODE;
-	} else if (mode == SYNC_IO_MODE) {
-		ac->io_mode &= ~ASYNC_IO_MODE;
-		ac->io_mode |= SYNC_IO_MODE;
+	ac->io_mode &= 0xFF00;
+	mode = (mode1 & 0xF);
+
+	pr_debug("%s: ac->mode after anding with FF00:0x%x,\n",
+		__func__, ac->io_mode);
+
+	if ((mode == ASYNC_IO_MODE) || (mode == SYNC_IO_MODE)) {
+		ac->io_mode |= mode1;
+		pr_debug("%s: Set Mode to 0x%x\n", __func__, ac->io_mode);
+		return 0;
 	} else {
-		pr_err("%s:Not an valid IO Mode:%d\n", __func__, ac->io_mode);
+		pr_err("%s: Not an valid IO Mode:%d\n", __func__, ac->io_mode);
 		return -EINVAL;
 	}
-
-	pr_debug("%s:Set Mode to %d\n", __func__, ac->io_mode);
-	return 0;
 }
 
 struct audio_client *q6asm_audio_client_alloc(app_cb cb, void *priv)
@@ -1523,7 +1526,8 @@ fail_cmd:
 	return -EINVAL;
 }
 
-int q6asm_open_write(struct audio_client *ac, uint32_t format)
+static int __q6asm_open_write(struct audio_client *ac, uint32_t format,
+				  uint16_t bits_per_sample)
 {
 	int rc = 0x00;
 	struct asm_stream_cmd_open_write open;
@@ -1532,24 +1536,18 @@ int q6asm_open_write(struct audio_client *ac, uint32_t format)
 		pr_err("%s: APR handle NULL\n", __func__);
 		return -EINVAL;
 	}
-	pr_debug("%s: session[%d] wr_format[0x%x]", __func__, ac->session,
-		format);
+	pr_debug("%s: session[%d] wr_format[0x%x] bits[%d]", __func__,
+		ac->session, format, bits_per_sample);
 
 	q6asm_add_hdr(ac, &open.hdr, sizeof(open), TRUE);
-
+	open.hdr.opcode = ASM_STREAM_CMD_OPEN_WRITE_V2_1;
+	open.bits_per_sample = bits_per_sample;
+	open.sink_endpoint = ASM_END_POINT_DEVICE_MATRIX;
 	if (ac->perf_mode) {
 		pr_debug("%s In Performance/lowlatency mode", __func__);
-		open.hdr.opcode = ASM_STREAM_CMD_OPEN_WRITE_V2_1;
 		open.uMode = ASM_OPEN_WRITE_PERF_MODE_BIT;
-		/* source endpoint : matrix */
-		open.sink_endpoint = ASM_END_POINT_DEVICE_MATRIX;
-		open.stream_handle = PCM_BITS_PER_SAMPLE;
 	} else {
-		open.hdr.opcode = ASM_STREAM_CMD_OPEN_WRITE;
 		open.uMode = STREAM_PRIORITY_HIGH;
-		/* source endpoint : matrix */
-		open.sink_endpoint = ASM_END_POINT_DEVICE_MATRIX;
-		open.stream_handle = 0x00;
 	}
 	open.post_proc_top = get_asm_topology();
 	if (open.post_proc_top == 0)
@@ -1618,6 +1616,17 @@ int q6asm_open_write(struct audio_client *ac, uint32_t format)
 	return 0;
 fail_cmd:
 	return -EINVAL;
+}
+
+int q6asm_open_write(struct audio_client *ac, uint32_t format)
+{
+	return __q6asm_open_write(ac, format, 16);
+}
+
+int q6asm_open_write_v2(struct audio_client *ac, uint32_t format,
+			      uint16_t bits_per_sample)
+{
+	return __q6asm_open_write(ac, format, bits_per_sample);
 }
 
 int q6asm_open_read_write(struct audio_client *ac,
@@ -2437,14 +2446,16 @@ fail_cmd:
 	return -EINVAL;
 }
 
-int q6asm_media_format_block_pcm(struct audio_client *ac,
-				uint32_t rate, uint32_t channels)
+static int __q6asm_media_format_block_pcm(struct audio_client *ac,
+				uint32_t rate, uint32_t channels,
+				uint16_t bits_per_sample)
 {
 	struct asm_stream_media_format_update fmt;
 	int rc = 0;
 
-	pr_debug("%s:session[%d]rate[%d]ch[%d]\n", __func__, ac->session, rate,
-		channels);
+	pr_debug("%s:session[%d]rate[%d]ch[%d] bits[%d]\n", __func__,
+		ac->session, rate,
+		channels, bits_per_sample);
 
 	q6asm_add_hdr(ac, &fmt.hdr, sizeof(fmt), TRUE);
 
@@ -2453,7 +2464,7 @@ int q6asm_media_format_block_pcm(struct audio_client *ac,
 	fmt.format = LINEAR_PCM;
 	fmt.cfg_size = sizeof(struct asm_pcm_cfg);
 	fmt.write_cfg.pcm_cfg.ch_cfg = channels;
-	fmt.write_cfg.pcm_cfg.bits_per_sample = 16;
+	fmt.write_cfg.pcm_cfg.bits_per_sample = bits_per_sample;
 	fmt.write_cfg.pcm_cfg.sample_rate = rate;
 	fmt.write_cfg.pcm_cfg.is_signed = 1;
 	fmt.write_cfg.pcm_cfg.interleaved = 1;
@@ -2474,15 +2485,34 @@ fail_cmd:
 	return -EINVAL;
 }
 
-int q6asm_media_format_block_multi_ch_pcm(struct audio_client *ac,
+int q6asm_media_format_block_pcm(struct audio_client *ac,
 				uint32_t rate, uint32_t channels)
+{
+	return __q6asm_media_format_block_pcm(ac, rate, channels, 16);
+}
+
+int q6asm_media_format_block_pcm_v2(struct audio_client *ac,
+						    uint32_t rate,
+						    uint32_t channels,
+						    uint16_t bits_per_sample)
+{
+	return __q6asm_media_format_block_pcm(ac, rate, channels,
+					      bits_per_sample);
+}
+
+static int __q6asm_media_format_block_multi_ch_pcm(
+				struct audio_client *ac,
+				uint32_t rate,
+				uint32_t channels,
+				uint16_t bits_per_sample)
 {
 	struct asm_stream_media_format_update fmt;
 	u8 *channel_mapping;
 	int rc = 0;
 
-	pr_debug("%s:session[%d]rate[%d]ch[%d]\n", __func__, ac->session, rate,
-		channels);
+	pr_debug("%s:session[%d]rate[%d]ch[%d]bitwidth[%d]\n",
+		 __func__, ac->session, rate,
+		 channels, bits_per_sample);
 
 	q6asm_add_hdr(ac, &fmt.hdr, sizeof(fmt), TRUE);
 
@@ -2491,7 +2521,7 @@ int q6asm_media_format_block_multi_ch_pcm(struct audio_client *ac,
 	fmt.format = MULTI_CHANNEL_PCM;
 	fmt.cfg_size = sizeof(struct asm_multi_channel_pcm_fmt_blk);
 	fmt.write_cfg.multi_ch_pcm_cfg.num_channels = channels;
-	fmt.write_cfg.multi_ch_pcm_cfg.bits_per_sample = 16;
+	fmt.write_cfg.multi_ch_pcm_cfg.bits_per_sample = bits_per_sample;
 	fmt.write_cfg.multi_ch_pcm_cfg.sample_rate = rate;
 	fmt.write_cfg.multi_ch_pcm_cfg.is_signed = 1;
 	fmt.write_cfg.multi_ch_pcm_cfg.is_interleaved = 1;
@@ -2546,6 +2576,29 @@ int q6asm_media_format_block_multi_ch_pcm(struct audio_client *ac,
 	return 0;
 fail_cmd:
 	return -EINVAL;
+}
+
+int q6asm_media_format_block_multi_ch_pcm(
+				struct audio_client *ac,
+				uint32_t rate,
+				uint32_t channels)
+{
+	return __q6asm_media_format_block_multi_ch_pcm(ac,
+						      rate,
+						      channels,
+						      16);
+}
+
+int q6asm_media_format_block_multi_ch_pcm_v2(
+				struct audio_client *ac,
+				uint32_t rate,
+				uint32_t channels,
+				uint16_t bits_per_sample)
+{
+	return __q6asm_media_format_block_multi_ch_pcm(ac,
+						      rate,
+						      channels,
+						      bits_per_sample);
 }
 
 int q6asm_media_format_block_aac(struct audio_client *ac,

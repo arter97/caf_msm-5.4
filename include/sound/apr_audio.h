@@ -1,6 +1,6 @@
 /*
  *
- * Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2010-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -579,7 +579,7 @@ struct adm_multi_ch_copp_open_command {
 	u16 endpoint_id2;
 	u32 topology_id;
 	u16 channel_config;
-	u16 reserved;
+	u16 bit_width;
 	u32 rate;
 	u8 dev_channel_mapping[8];
 } __packed;
@@ -1202,7 +1202,7 @@ struct asm_stream_cmd_open_write {
 	struct apr_hdr hdr;
 	u32            uMode;
 	u16            sink_endpoint;
-	u16            stream_handle;
+	u16            bits_per_sample;
 	u32            post_proc_top;
 	u32            format;
 } __attribute__((packed));

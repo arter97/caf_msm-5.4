@@ -307,6 +307,7 @@ extern struct platform_device apq_voice;
 extern struct platform_device apq_voip;
 extern struct platform_device apq_lpa_pcm;
 extern struct platform_device apq_compr_dsp;
+extern struct platform_device apq_compress_dsp;
 extern struct platform_device apq_multi_ch_pcm;
 extern struct platform_device apq_lowlatency_pcm;
 extern struct platform_device apq_pcm_hostless;

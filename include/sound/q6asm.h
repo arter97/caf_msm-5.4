@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -73,8 +73,10 @@
 
 #define TUN_WRITE_IO_MODE 0x0008 /* tunnel read write mode */
 #define TUN_READ_IO_MODE  0x0004 /* tunnel read write mode */
-#define ASYNC_IO_MODE	  0x0002
-#define SYNC_IO_MODE	  0x0001
+#define SYNC_IO_MODE	0x0001
+#define ASYNC_IO_MODE	0x0002
+#define COMPRESSED_IO	0x0040
+#define COMPRESSED_STREAM_IO	0x0080
 #define NO_TIMESTAMP      0xFF00
 #define SET_TIMESTAMP     0x0000
 
@@ -181,19 +183,24 @@ int q6asm_audio_client_buf_alloc_contiguous(unsigned int dir
 				struct audio_client *ac,
 				unsigned int bufsz,
 				unsigned int bufcnt);
-
 int q6asm_audio_client_buf_free_contiguous(unsigned int dir,
-			struct audio_client *ac);
+					   struct audio_client *ac);
 
 int q6asm_open_read(struct audio_client *ac, uint32_t format);
+
 int q6asm_open_read_v2_1(struct audio_client *ac, uint32_t format);
 
 int q6asm_open_read_compressed(struct audio_client *ac,
-			 uint32_t frames_per_buffer, uint32_t meta_data_mode);
+			       uint32_t frames_per_buffer,
+			       uint32_t meta_data_mode);
 
 int q6asm_open_write(struct audio_client *ac, uint32_t format);
 
-int q6asm_open_write_compressed(struct audio_client *ac, uint32_t format);
+int q6asm_open_write_v2(struct audio_client *ac, uint32_t format,
+			uint16_t bits_per_sample);
+
+int q6asm_open_write_compressed(struct audio_client *ac,
+					 uint32_t format);
 
 int q6asm_open_read_write(struct audio_client *ac,
 			uint32_t rd_format,
@@ -201,10 +208,12 @@ int q6asm_open_read_write(struct audio_client *ac,
 
 int q6asm_open_loopback(struct audio_client *ac);
 
-int q6asm_open_loopback_v2(struct audio_client *ac, uint16_t bits_per_sample);
+int q6asm_open_loopback_v2(struct audio_client *ac,
+			   uint16_t bits_per_sample);
 
 int q6asm_write(struct audio_client *ac, uint32_t len, uint32_t msw_ts,
 				uint32_t lsw_ts, uint32_t flags);
+
 int q6asm_write_nolock(struct audio_client *ac, uint32_t len, uint32_t msw_ts,
 				uint32_t lsw_ts, uint32_t flags);
 
@@ -218,6 +227,7 @@ int q6asm_async_read_compressed(struct audio_client *ac,
 					  struct audio_aio_read_param *param);
 
 int q6asm_read(struct audio_client *ac);
+
 int q6asm_read_nolock(struct audio_client *ac);
 
 int q6asm_memory_map(struct audio_client *ac, uint32_t buf_add,
@@ -263,6 +273,10 @@ int q6asm_enc_cfg_blk_pcm_native(struct audio_client *ac,
 int q6asm_enc_cfg_blk_multi_ch_pcm(struct audio_client *ac,
 			uint32_t rate, uint32_t channels);
 
+int q6asm_enc_cfg_blk_multi_ch_pcm_v2(struct audio_client *ac,
+			uint32_t rate, uint32_t channels,
+			uint16_t bits_per_sample);
+
 int q6asm_enable_sbrps(struct audio_client *ac,
 			uint32_t sbr_ps);
 
@@ -289,10 +303,19 @@ int q6asm_enc_cfg_blk_amrwb(struct audio_client *ac, uint32_t frames_per_buf,
 		uint16_t band_mode, uint16_t dtx_enable);
 
 int q6asm_media_format_block_pcm(struct audio_client *ac,
-			uint32_t rate, uint32_t channels);
+				 uint32_t rate, uint32_t channels);
+
+int q6asm_media_format_block_pcm_v2(struct audio_client *ac,
+			uint32_t rate, uint32_t channels,
+			uint16_t bits_per_sample);
 
 int q6asm_media_format_block_multi_ch_pcm(struct audio_client *ac,
 				uint32_t rate, uint32_t channels);
+
+int q6asm_media_format_block_multi_ch_pcm_v2(struct audio_client *ac,
+					     uint32_t rate,
+					     uint32_t channels,
+					     uint16_t bits_per_sample);
 
 int q6asm_media_format_block_aac(struct audio_client *ac,
 			struct asm_aac_cfg *cfg);

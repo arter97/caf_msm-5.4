@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2013, 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -766,14 +766,15 @@ fail_cmd:
 
 
 int adm_multi_ch_copp_open(int port_id, int path, int rate, int channel_mode,
-				int topology, int perfmode)
+				int topology, int perfmode, uint16_t bit_width)
 {
 	struct adm_multi_ch_copp_open_command open;
 	int ret = 0;
 	int index;
 
-	pr_debug("%s: port %d path:%d rate:%d channel :%d\n", __func__,
-				port_id, path, rate, channel_mode);
+	pr_debug("%s: port %d path:%d rate:%d channel :%d topology: 0x%X bit_width: %d\n",
+		 __func__, port_id, path, rate, channel_mode,
+		 topology, bit_width);
 
 	port_id = afe_convert_virtual_to_portid(port_id);
 
@@ -804,15 +805,12 @@ int adm_multi_ch_copp_open(int port_id, int path, int rate, int channel_mode,
 
 		open.hdr.pkt_size =
 			sizeof(struct adm_multi_ch_copp_open_command);
-
+		open.hdr.opcode = ADM_CMD_MULTI_CHANNEL_COPP_OPEN_V3;
+		open.flags = 0;
+		open.bit_width = bit_width;
 		if (perfmode) {
 			pr_debug("%s Performance mode", __func__);
-			open.hdr.opcode = ADM_CMD_MULTI_CHANNEL_COPP_OPEN_V3;
 			open.flags = ADM_MULTI_CH_COPP_OPEN_PERF_MODE_BIT;
-			open.reserved = PCM_BITS_PER_SAMPLE;
-		} else {
-			open.hdr.opcode = ADM_CMD_MULTI_CHANNEL_COPP_OPEN;
-			open.reserved = 0;
 		}
 
 		memset(open.dev_channel_mapping, 0, 8);
@@ -880,16 +878,19 @@ int adm_multi_ch_copp_open(int port_id, int path, int rate, int channel_mode,
 				rate = 16000;
 		}
 
-        if ((open.topology_id  == 0) || (port_id == VOICE_RECORD_RX) || (port_id == VOICE_RECORD_TX))
-          open.topology_id = topology;
+		if ((open.topology_id  == 0) || (port_id == VOICE_RECORD_RX) ||
+		    (port_id == VOICE_RECORD_TX))
+			open.topology_id = topology;
 
 		open.channel_config = channel_mode & 0x00FF;
 		open.rate  = rate;
 
-		pr_debug("%s: channel_config=%d port_id=%d rate=%d"
-			" topology_id=0x%X\n", __func__, open.channel_config,
+		pr_debug("%s: channel_config=%d port_id=%d rate=%d topology_id=0x%X bit_width=%d\n",
+			__func__,
+			open.channel_config,
 			open.endpoint_id1, open.rate,
-			open.topology_id);
+			open.topology_id,
+			bit_width);
 
 		atomic_set(&this_adm.copp_stat[index], 0);
 
