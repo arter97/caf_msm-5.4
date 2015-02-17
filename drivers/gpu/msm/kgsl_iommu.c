@@ -613,6 +613,7 @@ static int kgsl_iommu_init_pt(struct kgsl_mmu *mmu, struct kgsl_pagetable *pt)
 	int ret = 0;
 	struct kgsl_iommu_pt *iommu_pt = NULL;
 	struct bus_type *bus = &platform_bus_type;
+	int disable_htw = 1;
 
 	if (pt == NULL)
 		return -EINVAL;
@@ -635,6 +636,10 @@ static int kgsl_iommu_init_pt(struct kgsl_mmu *mmu, struct kgsl_pagetable *pt)
 		ret = -ENOMEM;
 		goto err;
 	}
+
+	/* Disable coherent HTW, it is not supported by SMMU driver */
+	iommu_domain_set_attr(iommu_pt->domain,
+			DOMAIN_ATTR_COHERENT_HTW_DISABLE, &disable_htw);
 
 	pt->pt_ops = &iommu_pt_ops;
 	pt->priv = iommu_pt;
