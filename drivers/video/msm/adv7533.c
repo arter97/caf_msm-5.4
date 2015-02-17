@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,6 +13,7 @@
 
 #include "mipi_dsi_i2c.h"
 #include "adv7533.h"
+#include "msm_fb.h"
 
 #define ADV7533_REG_CHIP_REVISION (0x00)
 #define ADV7533_MAIN (0x3d) /* 7a main right shift 1 */
@@ -39,70 +40,6 @@ static struct mipi_dsi_i2c_reg_cfg setup_cfg[] = {
 	{ADV7533_MAIN, 0x49, 0x02, 0},
 	{ADV7533_MAIN, 0x0D, 1 << 6, 0},
 	{ADV7533_CEC_DSI, 0x1C, 0x30, 0},
-};
-
-static struct mipi_dsi_i2c_reg_cfg tg_cfg_480p[] = { /* default 480x720 */
-	/* hsync and vsync active low */
-	{ADV7533_MAIN, 0x17, 0x60, 0},
-	/* h_width 0x35A 858 */
-	{ADV7533_CEC_DSI, 0x28, 0x35, 0},
-	{ADV7533_CEC_DSI, 0x29, 0xA0, 0},
-	/* hsync_width 0x3e 62 */
-	{ADV7533_CEC_DSI, 0x2A, 0x03, 0},
-	{ADV7533_CEC_DSI, 0x2B, 0xE0, 0},
-	/* hfp 0x10 16 */
-	{ADV7533_CEC_DSI, 0x2C, 0x01, 0},
-	{ADV7533_CEC_DSI, 0x2D, 0x00, 0},
-	/* hbp 0x3c 60 */
-	{ADV7533_CEC_DSI, 0x2E, 0x03, 0},
-	{ADV7533_CEC_DSI, 0x2F, 0xC0, 0},
-	/* v_total 0x20d 525 */
-	{ADV7533_CEC_DSI, 0x30, 0x20, 0},
-	{ADV7533_CEC_DSI, 0x31, 0xD0, 0},
-	/* vsync_width 0x06 6*/
-	{ADV7533_CEC_DSI, 0x32, 0x00, 0},
-	{ADV7533_CEC_DSI, 0x33, 0x60, 0},
-	/* vfp 0x09 09  */
-	{ADV7533_CEC_DSI, 0x34, 0x00, 0},
-	{ADV7533_CEC_DSI, 0x35, 0x90, 0},
-	/* vbp 0x1e 30 */
-	{ADV7533_CEC_DSI, 0x36, 0x01, 0},
-	{ADV7533_CEC_DSI, 0x37, 0xE0, 0},
-
-	{ADV7533_CEC_DSI, 0x03, 0x09, 0},		/* HDMI disabled */
-	{ADV7533_CEC_DSI, 0x03, 0x89, 0},		/* HDMI enabled */
-};
-
-static struct mipi_dsi_i2c_reg_cfg tg_cfg_720p[] = {
-	/* hsync and vsync active low */
-	{ADV7533_MAIN, 0x17, 0x00, 0},
-	/* h_width 0x672 1650*/
-	{ADV7533_CEC_DSI, 0x28, 0x67, 0},
-	{ADV7533_CEC_DSI, 0x29, 0x20, 0},
-	/* hsync_width 0x28 40*/
-	{ADV7533_CEC_DSI, 0x2A, 0x02, 0},
-	{ADV7533_CEC_DSI, 0x2B, 0x80, 0},
-	/* hfp 0x6e 110 */
-	{ADV7533_CEC_DSI, 0x2C, 0x06, 0},
-	{ADV7533_CEC_DSI, 0x2D, 0xE0, 0},
-	/* hbp 0xdc 220 */
-	{ADV7533_CEC_DSI, 0x2E, 0x0D, 0},
-	{ADV7533_CEC_DSI, 0x2F, 0xC0, 0},
-	/* v_total 0x2ee 750 */
-	{ADV7533_CEC_DSI, 0x30, 0x2E, 0},
-	{ADV7533_CEC_DSI, 0x31, 0xE0, 0},
-	/* vsync_width 0x05 5*/
-	{ADV7533_CEC_DSI, 0x32, 0x00, 0},
-	{ADV7533_CEC_DSI, 0x33, 0x50, 0},
-	/* vfp 0x05 5  */
-	{ADV7533_CEC_DSI, 0x34, 0x00, 0},
-	{ADV7533_CEC_DSI, 0x35, 0x50, 0},
-	/* vbp 0x14 20 */
-	{ADV7533_CEC_DSI, 0x36, 0x01, 0},
-	{ADV7533_CEC_DSI, 0x37, 0x40, 0},
-
-	{ADV7533_CEC_DSI, 0x03, 0x09, 0},/* HDMI disabled */
-	{ADV7533_CEC_DSI, 0x03, 0x89, 0},/* HDMI enabled */
 };
 
 static int mipi_adv7533_read_device_rev(void)
@@ -159,45 +96,79 @@ s_err:
 	return ret;
 }
 
-static int mipi_adv7533_config_480p(void)
+static int mipi_adv7533_config_timing(struct msm_panel_info *pinfo)
 {
-	int ret;
+	if (pinfo != NULL) {
+		int ret;
+		uint32 h_total = (pinfo->xres +
+			pinfo->lcdc.h_back_porch  +
+			pinfo->lcdc.h_pulse_width +
+			pinfo->lcdc.h_front_porch);
 
-	ret = mipi_adv7533_config_common();
-	if (ret)
-		goto s1_err;
+		uint32 v_total = (pinfo->yres +
+			pinfo->lcdc.v_back_porch  +
+			pinfo->lcdc.v_pulse_width +
+			pinfo->lcdc.v_front_porch);
 
-	ret = mipi_dsi_i2c_write_regs(tg_cfg_480p, ARRAY_SIZE(tg_cfg_480p));
+		uint32 active_high =
+		(pinfo->lcdc.is_sync_active_high == FALSE) ? 0x00 : 0x60;
 
-s1_err:
-	return ret;
-}
+		struct mipi_dsi_i2c_reg_cfg tg_cfg[] = {
+			/* hsync and vsync active low */ /*60 or 00*/
+			{ADV7533_MAIN, 0x17, active_high, 0},
+			/* h_width 0x672 1650*/
+			{ADV7533_CEC_DSI, 0x28, ((h_total & 0xFF0) >> 4), 0},
+			{ADV7533_CEC_DSI, 0x29, ((h_total & 0xF) << 4), 0},
+			/* hsync_width 0x28 40*/
+			{ADV7533_CEC_DSI, 0x2A,
+				((pinfo->lcdc.h_pulse_width & 0xFF0) >> 4), 0},
+			{ADV7533_CEC_DSI, 0x2B,
+				((pinfo->lcdc.h_pulse_width & 0xF) << 4), 0},
+			/* hfp 0x6e 110 */
+			{ADV7533_CEC_DSI, 0x2C,
+				((pinfo->lcdc.h_front_porch & 0xFF0) >> 4), 0},
+			{ADV7533_CEC_DSI, 0x2D,
+				((pinfo->lcdc.h_front_porch & 0xF) << 4), 0},
+			/* hbp 0xdc 220 */
+			{ADV7533_CEC_DSI, 0x2E,
+				((pinfo->lcdc.h_back_porch & 0xFF0) >> 4), 0},
+			{ADV7533_CEC_DSI, 0x2F,
+				((pinfo->lcdc.h_back_porch & 0xF) << 4), 0},
+			/* v_total 0x2ee 750 */
+			{ADV7533_CEC_DSI, 0x30, ((v_total & 0xFF0) >> 4), 0},
+			{ADV7533_CEC_DSI, 0x31, ((v_total & 0xF) << 4), 0},
+			/* vsync_width 0x05 5*/
+			{ADV7533_CEC_DSI, 0x32,
+				((pinfo->lcdc.v_pulse_width & 0xFF0) >> 4), 0},
+			{ADV7533_CEC_DSI, 0x33,
+				((pinfo->lcdc.v_pulse_width & 0xF) << 4), 0},
+			/* vfp 0x05 5  */
+			{ADV7533_CEC_DSI, 0x34,
+				((pinfo->lcdc.v_front_porch & 0xFF0) >> 4), 0},
+			{ADV7533_CEC_DSI, 0x35,
+				((pinfo->lcdc.v_front_porch & 0xF) << 4), 0},
+			/* vbp 0x14 20 */
+			{ADV7533_CEC_DSI, 0x36,
+				((pinfo->lcdc.v_back_porch & 0xFF0) >> 4), 0},
+			{ADV7533_CEC_DSI, 0x37,
+				((pinfo->lcdc.v_back_porch & 0xF) << 4), 0},
+			{ADV7533_CEC_DSI, 0x03, 0x09, 0},/* HDMI disabled */
+			{ADV7533_CEC_DSI, 0x03, 0x89, 0},/* HDMI enabled */
+		};
 
-static int mipi_adv7533_config_720p(void)
-{
-	int ret;
-
-	ret = mipi_adv7533_config_common();
-	if (ret)
-		goto s2_err;
-
-	ret = mipi_dsi_i2c_write_regs(tg_cfg_720p, ARRAY_SIZE(tg_cfg_720p));
-
-s2_err:
-	return ret;
+		ret = mipi_adv7533_config_common();
+		if (!ret)
+			ret = mipi_dsi_i2c_write_regs(
+					tg_cfg, ARRAY_SIZE(tg_cfg));
+		return ret;
+	}
+	return -EFAULT;
 }
 
 static int __init adv7533_init(void)
 {
 	struct mipi_dsi_i2c_configure *cfg = &dsi_i2c_cfg;
-
-	if (!msm_fb_detect_client("mipi_dsi_i2c_video_wvga"))
-		cfg->config_i2c = mipi_adv7533_config_480p;
-	else if (!msm_fb_detect_client("mipi_dsi_i2c_video_xga"))
-		cfg->config_i2c = mipi_adv7533_config_720p;
-	else
-		cfg->config_i2c = NULL;
-
+	cfg->config_i2c = mipi_adv7533_config_timing;
 	return 0;
 }
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -167,6 +167,8 @@ static struct i2c_driver mipi_dsi_i2c_driver = {
 	.id_table = mipi_dsi_i2c_id,
 };
 
+static struct msm_fb_panel_data mipi_dsi_i2c_p_data;
+
 static int mipi_dsi_i2c_lcd_on(struct platform_device *pdev)
 {
 	struct mipi_dsi_i2c_configure *cfg = &dsi_i2c_cfg;
@@ -179,7 +181,7 @@ static int mipi_dsi_i2c_lcd_on(struct platform_device *pdev)
 		cfg->config_reset_dev();
 
 	if (cfg->config_i2c)
-		if (cfg->config_i2c())
+		if (cfg->config_i2c(&mipi_dsi_i2c_p_data.panel_info))
 			pr_err("mipi dsi i2c config i2c fails!\n");
 
 	return 0;
@@ -288,6 +290,7 @@ int mipi_dsi_i2c_device_register(struct msm_panel_info *pinfo)
 	}
 
 	mipi_dsi_i2c_panel_data.panel_info = *pinfo;
+	mipi_dsi_i2c_p_data.panel_info = *pinfo;
 
 	ret = platform_device_add_data(pdev, &mipi_dsi_i2c_panel_data,
 		sizeof(mipi_dsi_i2c_panel_data));
