@@ -818,6 +818,8 @@ static noinline int init_post(void)
 
 	current->signal->flags |= SIGNAL_UNKILLABLE;
 
+	place_marker("Linux_Kernel - End");
+
 	if (ramdisk_execute_command) {
 		run_init_process(ramdisk_execute_command);
 		printk(KERN_WARNING "Failed to execute %s\n",
