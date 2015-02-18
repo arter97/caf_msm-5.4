@@ -1430,11 +1430,32 @@ Example:
 * MSMTHULIUM ASoC Machine driver
 
 Required properties:
-- compatible : "qcom,msmthulium-asoc-snd"
+- compatible : "qcom,msmthulium-asoc-snd-tomtom" for tomtom codec and
+		node is "sound" and "qcom,msmthulium-asoc-snd-tasha"
+		for tasha codec and node is "sound-9335"
 - qcom,model : The user-visible name of this sound card.
-- clock-names : clock name defined for external clock.
-- clocks : external clock defined for codec clock.
-
+- qcom,tomtom-mclk-clk-freq : MCLK frequency value for tomtom codec
+			      and node is "sound"
+- qcom,tasha-mclk-clk-freq : MCLK frequency value for tasha codec
+			     and node is "sound-9335"
+- qcom,audio-routing : A list of the connections between audio components.
+- asoc-platform: This is phandle list containing the references to platform device
+		 nodes that are used as part of the sound card dai-links.
+- asoc-platform-names: This property contains list of platform names. The order of
+		       the platform names should match to that of the phandle order
+		       given in "asoc-platform".
+- asoc-cpu: This is phandle list containing the references to cpu dai device nodes
+	    that are used as part of the sound card dai-links.
+- asoc-cpu-names: This property contains list of cpu dai names. The order of the
+		  cpu dai names should match to that of the phandle order given
+		  in "asoc-cpu". The cpu names are in the form of "%s.%d" form,
+		  where the id (%d) field represents the back-end AFE port id that
+		  this CPU dai is associated with.
+- asoc-codec: This is phandle list containing the references to codec dai device
+	      nodes that are used as part of the sound card dai-links.
+- asoc-codec-names: This property contains list of codec dai names. The order of the
+		    codec dai names should match to that of the phandle order given
+		    in "asoc-codec".
 Optional properties:
 - qcom,ext-ult-spk-amp-gpio : GPIO to enable ultrasound emitter amp.
 - qcom,mbhc-audio-jack-type : String to indicate the jack type on the hardware.
@@ -1442,6 +1463,8 @@ Optional properties:
 		4-pole-jack : Jack on the hardware is 4-pole.
 		5-pole-jack : Jack on the hardware is 5-pole.
 		6-pole-jack : Jack on the hardware is 6-pole.
+- clock-names : clock name defined for external clock.
+- clocks : external clock defined for codec clock.
 
 Example:
 

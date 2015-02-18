@@ -6035,6 +6035,11 @@ cdc_reg_fail:
 
 static int tasha_remove(struct platform_device *pdev)
 {
+	struct tasha_priv *tasha;
+
+	tasha = platform_get_drvdata(pdev);
+
+	clk_put(tasha->wcd_ext_clk);
 	snd_soc_unregister_codec(&pdev->dev);
 	return 0;
 }
