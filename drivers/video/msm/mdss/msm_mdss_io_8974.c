@@ -585,7 +585,8 @@ static int mdss_dsi_clk_ctrl_sub(struct mdss_dsi_ctrl_pdata *ctrl,
 			 */
 			if (((mdss_dsi_ulps_feature_enabled(pdata)) &&
 				(pdata->panel_info.panel_power_on)) ||
-				pdata->panel_info.ulps_suspend_enabled) {
+				(pdata->panel_info.ulps_suspend_enabled &&
+				  !pdata->panel_info.panel_power_on)) {
 				mdss_dsi_ulps_config(ctrl, 1);
 				mdss_dsi_link_clk_stop(ctrl);
 				mdss_dsi_clamp_ctrl(ctrl, 1);
