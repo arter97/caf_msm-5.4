@@ -19,6 +19,8 @@
 		qcom,skip-init;
 		qcom,errata-ctx-fault-hang;
 		qcom,fatal-asf;
+		qcom,tz-device-id = "JPEG";
+		qcom,errata-tz-atos;
 		reg = <0xd80000 0x10000>;
 		#global-interrupts = <1>;
 
@@ -44,6 +46,8 @@
 		qcom,skip-init;
 		qcom,errata-ctx-fault-hang;
 		qcom,fatal-asf;
+		qcom,tz-device-id = "GPU";
+		qcom,errata-tz-atos;
 		reg = <0xb40000 0x10000>;
 		#global-interrupts = <1>;
 
@@ -68,6 +72,8 @@
 		qcom,skip-init;
 		qcom,errata-ctx-fault-hang;
 		qcom,fatal-asf;
+		qcom,tz-device-id = "VFE";
+		qcom,errata-tz-atos;
 		reg = <0xda0000 0x10000>;
 		#global-interrupts = <1>;
 
@@ -94,6 +100,8 @@
 		qcom,skip-init;
 		qcom,errata-ctx-fault-hang;
 		qcom,fatal-asf;
+		qcom,tz-device-id = "VIDEO";
+		qcom,errata-tz-atos;
 		reg = <0xd40000 0x20000>;
 		#global-interrupts = <1>;
 
@@ -121,6 +129,8 @@
 		qcom,skip-init;
 		qcom,errata-ctx-fault-hang;
 		qcom,fatal-asf;
+		qcom,tz-device-id = "MDSS";
+		qcom,errata-tz-atos;
 		reg = <0xd00000 0x10000>;
 		#global-interrupts = <1>;
 
@@ -147,6 +157,8 @@
 		qcom,skip-init;
 		qcom,errata-ctx-fault-hang;
 		qcom,fatal-asf;
+		qcom,tz-device-id = "ROT";
+		qcom,errata-tz-atos;
 		reg = <0xd20000 0x10000>;
 		#global-interrupts = <1>;
 
@@ -172,6 +184,8 @@
 		qcom,skip-init;
 		qcom,errata-ctx-fault-hang;
 		qcom,fatal-asf;
+		qcom,tz-device-id = "CPP";
+		qcom,errata-tz-atos;
 		reg = <0xd60000 0x10000>;
 		#global-interrupts = <1>;
 
@@ -198,6 +212,8 @@
 		qcom,skip-init;
 		qcom,errata-ctx-fault-hang;
 		qcom,fatal-asf;
+		qcom,tz-device-id = "LPASS";
+		qcom,errata-tz-atos;
 		reg = <0x1600000 0x20000>;
 		#global-interrupts = <1>;
 
