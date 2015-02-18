@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -106,7 +106,8 @@ static DEFINE_VDD_REGULATORS(vdd_dig, VDD_DIG_NUM, 1, vdd_corner, NULL);
 #define MUX_OFFSET	0x40
 
 DEFINE_EXT_CLK(xo_ao, NULL);
-DEFINE_EXT_CLK(sys_apcsaux_clk, NULL);
+DEFINE_EXT_CLK(sys_apcsaux_clk_gcc, NULL);
+DEFINE_FIXED_SLAVE_DIV_CLK(sys_apcsaux_clk, 2, &sys_apcsaux_clk_gcc.c);
 
 static struct pll_clk perfcl_pll = {
 	.mode_reg = (void __iomem *)C1_PLL_MODE,
@@ -282,6 +283,7 @@ static struct mux_clk pwrcl_hf_mux = {
 	),
 	.en_mask = 0,
 	.safe_parent = &pwrcl_lf_mux.c,
+	.safe_freq = 300000000,
 	.ops = &cpu_mux_ops,
 	.mask = 0x3,
 	.shift = 0,
@@ -321,6 +323,7 @@ static struct mux_clk perfcl_hf_mux = {
 		{ &perfcl_lf_mux.c,  0 },
 	),
 	.safe_parent = &perfcl_lf_mux.c,
+	.safe_freq = 300000000,
 	.ops = &cpu_mux_ops,
 	.mask = 0x3,
 	.shift = 0,
@@ -463,16 +466,30 @@ static struct mux_clk cpu_debug_mux = {
 
 static struct clk *logical_cpu_to_clk(int cpu)
 {
-	struct device_node *cpu_node = of_get_cpu_node(cpu, NULL);
-	u32 reg;
+	struct device_node *cpu_node;
+	const u32 *cell;
+	u64 hwid;
 
-	if (cpu_node && !of_property_read_u32(cpu_node, "reg", &reg)) {
-		if ((reg | pwrcl_clk.cpu_reg_mask) == pwrcl_clk.cpu_reg_mask)
-			return &pwrcl_clk.c;
-		if ((reg | perfcl_clk.cpu_reg_mask) == perfcl_clk.cpu_reg_mask)
-			return &perfcl_clk.c;
+	cpu_node = of_get_cpu_node(cpu, NULL);
+	if (!cpu_node)
+		goto fail;
+
+	cell = of_get_property(cpu_node, "reg", NULL);
+	if (!cell) {
+		pr_err("%s: missing reg property\n", cpu_node->full_name);
+		goto fail;
 	}
 
+	hwid = of_read_number(cell, of_n_addr_cells(cpu_node));
+	if (!hwid)
+		goto fail;
+
+	if ((hwid | pwrcl_clk.cpu_reg_mask) == pwrcl_clk.cpu_reg_mask)
+		return &pwrcl_clk.c;
+	if ((hwid | perfcl_clk.cpu_reg_mask) == perfcl_clk.cpu_reg_mask)
+		return &perfcl_clk.c;
+
+fail:
 	return NULL;
 }
 
@@ -521,7 +538,7 @@ static struct mux_clk cbf_lf_mux = {
 		{ &xo_ao.c, 0 },
 	),
 	.en_mask = 0,
-	.safe_parent = &sys_apcsaux_clk.c,
+	.safe_parent = &xo_ao.c,
 	.ops = &cpu_mux_ops,
 	.mask = 0x3,
 	.shift = 2,
@@ -545,7 +562,7 @@ static struct mux_clk cbf_hf_mux = {
 		{ &sys_apcsaux_clk.c, 3 },
 	),
 	.en_mask = 0,
-	.safe_parent = &cbf_lf_mux.c,
+	.safe_parent = &sys_apcsaux_clk.c,
 	.ops = &cpu_mux_ops,
 	.mask = 0x3,
 	.shift = 0,
@@ -710,7 +727,11 @@ static int cpu_clock_thulium_resources_init(struct platform_device *pdev)
 				PTR_ERR(c));
 		return PTR_ERR(c);
 	}
-	sys_apcsaux_clk.c.parent = c;
+	sys_apcsaux_clk_gcc.c.parent = c;
+
+	vdd_perfcl.use_max_uV = true;
+	vdd_pwrcl.use_max_uV = true;
+	vdd_cbf.use_max_uV = true;
 
 	return 0;
 }
@@ -894,7 +915,7 @@ static int cpu_clock_thulium_driver_probe(struct platform_device *pdev)
 	/* Set low frequencies until thermal/cpufreq probe. */
 	clk_set_rate(&pwrcl_clk.c, 768000000);
 	clk_set_rate(&perfcl_clk.c, 300000000);
-	clk_set_rate(&cbf_hf_mux.c, 300000000);
+	clk_set_rate(&cbf_hf_mux.c, 595200000);
 
 	populate_opp_table(pdev);
 
@@ -931,10 +952,13 @@ module_exit(cpu_clock_thulium_exit);
 
 #define APC0_BASE_PHY 0x06400000
 #define APC1_BASE_PHY 0x06480000
+#define AUX_BASE_PHY 0x09820050
 
 int __init cpu_clock_thulium_init_perfcl(void)
 {
 	int ret = 0;
+	void __iomem *auxbase;
+	u32 regval;
 
 	pr_info("clock-cpu-thulium: configuring clocks for the perf cluster\n");
 
@@ -945,7 +969,27 @@ int __init cpu_clock_thulium_init_perfcl(void)
 		goto fail;
 	}
 
-	/* Select GPLL0 for 300MHz */
+	auxbase = ioremap(AUX_BASE_PHY, SZ_4K);
+	if (!auxbase) {
+		WARN(1, "Unable to ioremap aux base. Can't set safe source freq.\n");
+		ret = -ENOMEM;
+		goto auxbase_fail;
+	}
+
+	/*
+	 * Set GPLL0 divider for div-2 to get 300Mhz. This divider
+	 * can be programmed dynamically.
+	 */
+	regval = readl_relaxed(auxbase);
+	regval &= ~BM(17, 16);
+	regval |= 0x1 << 16;
+	writel_relaxed(regval, auxbase);
+
+	/* Ensure write goes through before selecting the aux clock. */
+	mb();
+	udelay(5);
+
+	/* Select GPLL0 for 300MHz for the perf cluster */
 	writel_relaxed(0xC, vbases[APC1_BASE] + MUX_OFFSET);
 
 	/* Ensure write goes through before CPUs are brought up. */
@@ -954,6 +998,9 @@ int __init cpu_clock_thulium_init_perfcl(void)
 
 	pr_cont("clock-cpu-thulium: finished configuring perf cluster clocks.\n");
 
+	iounmap(auxbase);
+auxbase_fail:
+	iounmap(vbases[APC1_BASE]);
 fail:
 	return ret;
 }
