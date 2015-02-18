@@ -47,6 +47,10 @@ int msm_fd_hw_get_clocks(struct msm_fd_device *fd);
 
 int msm_fd_hw_put_clocks(struct msm_fd_device *fd);
 
+int msm_fd_hw_get_bus(struct msm_fd_device *fd);
+
+void msm_fd_hw_put_bus(struct msm_fd_device *fd);
+
 int msm_fd_hw_get(struct msm_fd_device *fd, unsigned int clock_rate_idx);
 
 void msm_fd_hw_put(struct msm_fd_device *fd);
