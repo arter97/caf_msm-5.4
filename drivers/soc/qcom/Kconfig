@@ -664,4 +664,14 @@ config MSM_CACHE_M4M_ERP64_PANIC_ON_UE
 
 source "drivers/soc/qcom/memshare/Kconfig"
 
+config MSM_TZ_SMMU
+	bool "Helper functions for SMMU configuration through TZ"
+	depends on ARCH_MSMTHULIUM
+	help
+	  Say 'Y' here for targets that need to call into TZ to configure
+	  SMMUs for any reason (for example, for errata workarounds or
+	  configuration of SMMU virtualization).
+
+	  If unsure, say N.
+
 endif # ARCH_MSM
