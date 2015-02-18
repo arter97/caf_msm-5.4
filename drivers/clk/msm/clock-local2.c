@@ -607,6 +607,10 @@ static enum handoff branch_clk_handoff(struct clk *c)
 	if ((cbcr_regval & CBCR_BRANCH_OFF_BIT))
 		return HANDOFF_DISABLED_CLK;
 
+	if (branch->check_enable_bit &&
+			!(cbcr_regval & CBCR_BRANCH_ENABLE_BIT))
+		return HANDOFF_DISABLED_CLK;
+
 	if (branch->max_div) {
 		cbcr_regval &= BM(CBCR_CDIV_MSB, CBCR_CDIV_LSB);
 		cbcr_regval >>= CBCR_CDIV_LSB;
