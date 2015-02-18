@@ -28,8 +28,9 @@ Example:
 		compatible = "qcom,cpp";
 		reg = <0xfda04000 0x100>,
 			<0xfda80000 0x200>,
-			<0xfda18000 0x008>;
-		reg-names = "cpp", "cpp_vbif", "cpp_hw";
+			<0xfda18000 0x008>,
+			<0xfd8c36D4 0x4>;
+		reg-names = "cpp", "cpp_vbif", "cpp_hw", "camss_cpp";
 		interrupts = <0 49 0>;
 		interrupt-names = "cpp";
 		vdd-supply = <&gdsc_cpp>;

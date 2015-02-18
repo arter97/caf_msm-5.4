@@ -83,6 +83,8 @@
 static int msm_cpp_buffer_ops(struct cpp_device *cpp_dev,
 	uint32_t buff_mgr_ops, struct msm_buf_mngr_info *buff_mgr_info);
 
+static  int cpp_update_power_collapse_status(struct cpp_device *cpp_dev,
+	bool status);
 #if CONFIG_MSM_CPP_DBG
 #define CPP_DBG(fmt, args...) pr_err(fmt, ##args)
 #else
@@ -907,6 +909,16 @@ static int cpp_init_hardware(struct cpp_device *cpp_dev)
 		goto clk_failed;
 	}
 
+	if (cpp_dev->camss_cpp != NULL) {
+		cpp_dev->camss_cpp_base = ioremap(cpp_dev->camss_cpp->start,
+			resource_size(cpp_dev->camss_cpp));
+		if (!cpp_dev->camss_cpp_base) {
+			rc = -ENOMEM;
+			pr_err("ioremap failed\n");
+			goto remap_failed;
+		}
+	}
+
 	cpp_dev->base = ioremap(cpp_dev->mem->start,
 		resource_size(cpp_dev->mem));
 	if (!cpp_dev->base) {
@@ -949,6 +961,12 @@ static int cpp_init_hardware(struct cpp_device *cpp_dev)
 		}
 	}
 
+	rc = cpp_update_power_collapse_status(cpp_dev, true);
+	if (rc < 0) {
+		pr_err("update power collapse status failed\n");
+		goto req_irq_fail;
+	}
+
 	cpp_dev->hw_info.cpp_hw_version =
 		msm_camera_io_r(cpp_dev->cpp_hw_base);
 	if (cpp_dev->hw_info.cpp_hw_version == CPP_HW_VERSION_4_1_0) {
@@ -963,7 +981,7 @@ static int cpp_init_hardware(struct cpp_device *cpp_dev)
 	if (msm_cpp_core_clk_idx < 0)  {
 		pr_err("cpp_core_clk: fail to get clock index\n");
 		rc = msm_cpp_core_clk_idx;
-		goto req_irq_fail;
+		goto pwr_collapse_reset;
 	}
 	cpp_get_clk_freq_tbl(cpp_dev->cpp_clk[msm_cpp_core_clk_idx],
 		&cpp_dev->hw_info, cpp_dev->min_clk_rate);
@@ -975,7 +993,7 @@ static int cpp_init_hardware(struct cpp_device *cpp_dev)
 	if (rc < 0) {
 		pr_err("%s: create buff queue failed with err %d\n",
 			__func__, rc);
-		goto req_irq_fail;
+		goto pwr_collapse_reset;
 	}
 	pr_err("stream_cnt:%d\n", cpp_dev->stream_cnt);
 	cpp_dev->stream_cnt = 0;
@@ -990,6 +1008,9 @@ static int cpp_init_hardware(struct cpp_device *cpp_dev)
 	}
 
 	return rc;
+
+pwr_collapse_reset:
+	cpp_update_power_collapse_status(cpp_dev, false);
 req_irq_fail:
 	iounmap(cpp_dev->cpp_hw_base);
 cpp_hw_remap_failed:
@@ -997,6 +1018,7 @@ cpp_hw_remap_failed:
 vbif_remap_failed:
 	iounmap(cpp_dev->base);
 remap_failed:
+	iounmap(cpp_dev->camss_cpp_base);
 	msm_cam_clk_enable(&cpp_dev->pdev->dev, cpp_clk_info,
 		cpp_dev->cpp_clk, cpp_dev->num_clk, 0);
 clk_failed:
@@ -1023,9 +1045,11 @@ static void cpp_release_hardware(struct cpp_device *cpp_dev)
 		atomic_set(&cpp_dev->irq_cnt, 0);
 	}
 	msm_cpp_delete_buff_queue(cpp_dev);
+	cpp_update_power_collapse_status(cpp_dev, false);
 	iounmap(cpp_dev->base);
 	iounmap(cpp_dev->vbif_base);
 	iounmap(cpp_dev->cpp_hw_base);
+	iounmap(cpp_dev->camss_cpp_base);
 	msm_cam_clk_enable(&cpp_dev->pdev->dev, cpp_clk_info,
 		cpp_dev->cpp_clk, cpp_dev->num_clk, 0);
 	regulator_disable(cpp_dev->fs_cpp);
@@ -2927,6 +2951,30 @@ struct v4l2_file_operations msm_cpp_v4l2_subdev_fops = {
 	.compat_ioctl32 = msm_cpp_subdev_fops_compat_ioctl,
 #endif
 };
+static  int cpp_update_power_collapse_status(struct cpp_device *cpp_dev,
+	bool status)
+{
+	int rc = 0;
+	int value = 0;
+	if (!cpp_dev) {
+		pr_err("%s: cpp device invalid\n", __func__);
+		rc = -EINVAL;
+		goto end;
+	}
+
+	if (cpp_dev->camss_cpp_base) {
+		value = msm_camera_io_r(cpp_dev->camss_cpp_base);
+		pr_debug("value from camss cpp %x\n", value);
+		if (status)
+			value &= 0xFFFFFFFE;
+		else
+			value |= 0x1;
+		pr_debug("value %x after camss cpp mask\n", value);
+		msm_camera_io_w(value, cpp_dev->camss_cpp_base);
+	}
+end:
+	return rc;
+}
 
 static int cpp_probe(struct platform_device *pdev)
 {
@@ -2964,6 +3012,11 @@ static int cpp_probe(struct platform_device *pdev)
 					"cell-index", &pdev->id);
 
 	cpp_dev->pdev = pdev;
+
+	cpp_dev->camss_cpp = platform_get_resource_byname(pdev,
+					IORESOURCE_MEM, "camss_cpp");
+	if (!cpp_dev->camss_cpp)
+		pr_debug("no mem resource?\n");
 
 	cpp_dev->mem = platform_get_resource_byname(pdev,
 					IORESOURCE_MEM, "cpp");
@@ -3103,6 +3156,9 @@ static int cpp_device_remove(struct platform_device *dev)
 		resource_size(cpp_dev->vbif_mem));
 	release_mem_region(cpp_dev->cpp_hw_mem->start,
 		resource_size(cpp_dev->cpp_hw_mem));
+	if (cpp_dev->camss_cpp)
+		release_mem_region(cpp_dev->camss_cpp->start,
+			resource_size(cpp_dev->camss_cpp));
 	mutex_destroy(&cpp_dev->mutex);
 	kfree(cpp_dev->work);
 	destroy_workqueue(cpp_dev->timer_wq);
