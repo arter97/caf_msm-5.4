@@ -97,6 +97,9 @@ struct csid_device {
 	uint32_t csid_clk_index;
 	uint32_t csid_max_clk;
 	uint32_t csid_3p_enabled;
+	struct camera_vreg_t *csid_vreg;
+	struct regulator *csid_reg_ptr[MAX_REGULATOR];
+	int32_t regulator_count;
 };
 
 #define VIDIOC_MSM_CSID_RELEASE \

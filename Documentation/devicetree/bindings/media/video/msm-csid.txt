@@ -26,7 +26,8 @@ Required properties:
 	- 0 if appropriate clock is required but doesn't have to apply the rate
 
 Optional properties:
-- qcom,gdscr-vdd-supply : should contain regulator used for csid clocks
+- qcom,cam-vreg-name : name of the voltage regulators required for the device.
+- gdscr-supply : should contain regulator used for csid clocks.
 
 Example:
 

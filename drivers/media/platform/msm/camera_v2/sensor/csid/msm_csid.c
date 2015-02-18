@@ -17,6 +17,7 @@
 #include "msm_csid.h"
 #include "msm_sd.h"
 #include "msm_camera_io_util.h"
+#include "msm_camera_dt_util.h"
 #include "include/msm_csid_2_0_hwreg.h"
 #include "include/msm_csid_2_2_hwreg.h"
 #include "include/msm_csid_3_0_hwreg.h"
@@ -362,6 +363,15 @@ static int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 		pr_err("%s: regulator on failed\n", __func__);
 		goto vreg_config_failed;
 	}
+
+	rc = msm_camera_config_vreg(&csid_dev->pdev->dev, csid_dev->csid_vreg,
+		csid_dev->regulator_count, NULL, 0,
+		&csid_dev->csid_reg_ptr[0], 1);
+	if (rc < 0) {
+		pr_err("%s:%d csid config_vreg failed\n", __func__, __LINE__);
+		goto csid_vreg_config_failed;
+	}
+
 	if (csid_dev->ctrl_reg->csid_reg.csid_version < CSID_VERSION_V22) {
 		rc = msm_camera_enable_vreg(&csid_dev->pdev->dev,
 			csid_8960_vreg_info, ARRAY_SIZE(csid_8960_vreg_info),
@@ -376,25 +386,18 @@ static int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 		goto vreg_enable_failed;
 	}
 
-	csid_dev->reg_ptr = regulator_get(&(csid_dev->pdev->dev),
-					 "qcom,gdscr-vdd");
-	if (IS_ERR_OR_NULL(csid_dev->reg_ptr)) {
-		pr_err(" %s: Failed in getting TOP gdscr regulator handle",
-			__func__);
-	} else {
-		rc = regulator_enable(csid_dev->reg_ptr);
-		if (rc) {
-			pr_err(" %s: regulator enable failed for GDSCR\n",
-				__func__);
-			goto gdscr_regulator_enable_failed;
-		}
+	rc = msm_camera_enable_vreg(&csid_dev->pdev->dev, csid_dev->csid_vreg,
+		csid_dev->regulator_count, NULL, 0,
+		&csid_dev->csid_reg_ptr[0], 1);
+	if (rc < 0) {
+		pr_err("%s:%d csid enable_vreg failed\n", __func__, __LINE__);
+		goto csid_vreg_enable_failed;
 	}
 
 	if (csid_dev->ctrl_reg->csid_reg.csid_version == CSID_VERSION_V22)
 		msm_cam_clk_sel_src(&csid_dev->pdev->dev,
 			&csid_clk_info[3], csid_clk_src_info,
 			csid_dev->num_clk_src_info);
-
 
 	rc = msm_cam_clk_enable(&csid_dev->pdev->dev,
 			csid_clk_info, csid_dev->csid_clk,
@@ -421,6 +424,10 @@ static int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 	return rc;
 
 clk_enable_failed:
+	msm_camera_enable_vreg(&csid_dev->pdev->dev, csid_dev->csid_vreg,
+		csid_dev->regulator_count, NULL, 0,
+		&csid_dev->csid_reg_ptr[0], 0);
+csid_vreg_enable_failed:
 	if (csid_dev->ctrl_reg->csid_reg.csid_version < CSID_VERSION_V22) {
 		msm_camera_enable_vreg(&csid_dev->pdev->dev,
 			csid_8960_vreg_info, ARRAY_SIZE(csid_8960_vreg_info),
@@ -430,14 +437,11 @@ clk_enable_failed:
 			csid_vreg_info, ARRAY_SIZE(csid_vreg_info),
 			NULL, 0, &csid_dev->csi_vdd, 0);
 	}
-gdscr_regulator_enable_failed:
-	if (!IS_ERR_OR_NULL(csid_dev->reg_ptr)) {
-		regulator_disable(csid_dev->reg_ptr);
-		regulator_put(csid_dev->reg_ptr);
-		csid_dev->reg_ptr = NULL;
-	}
-
 vreg_enable_failed:
+	msm_camera_config_vreg(&csid_dev->pdev->dev, csid_dev->csid_vreg,
+		csid_dev->regulator_count, NULL, 0,
+		&csid_dev->csid_reg_ptr[0], 0);
+csid_vreg_config_failed:
 	if (csid_dev->ctrl_reg->csid_reg.csid_version < CSID_VERSION_V22) {
 		msm_camera_config_vreg(&csid_dev->pdev->dev,
 			csid_8960_vreg_info, ARRAY_SIZE(csid_8960_vreg_info),
@@ -939,27 +943,41 @@ static int csid_probe(struct platform_device *pdev)
 		goto csid_no_resource;
 	}
 
+	rc = msm_camera_get_dt_vreg_data(pdev->dev.of_node,
+		&(new_csid_dev->csid_vreg), &(new_csid_dev->regulator_count));
+	if (rc < 0) {
+		pr_err("%s: get vreg data from dtsi fail\n", __func__);
+		rc = -EFAULT;
+		goto csid_no_resource;
+	}
+
+	if (new_csid_dev->regulator_count > MAX_REGULATOR) {
+		pr_err("%s: invalid reg count = %d, max is %d\n", __func__,
+			new_csid_dev->regulator_count, MAX_REGULATOR);
+		rc = -EFAULT;
+		goto csid_no_resource;
+	}
 
 	new_csid_dev->mem = platform_get_resource_byname(pdev,
 					IORESOURCE_MEM, "csid");
 	if (!new_csid_dev->mem) {
 		pr_err("%s: no mem resource?\n", __func__);
 		rc = -ENODEV;
-		goto csid_no_resource;
+		goto csid_invalid_vreg_data;
 	}
 	new_csid_dev->irq = platform_get_resource_byname(pdev,
 					IORESOURCE_IRQ, "csid");
 	if (!new_csid_dev->irq) {
 		pr_err("%s: no irq resource?\n", __func__);
 		rc = -ENODEV;
-		goto csid_no_resource;
+		goto csid_invalid_vreg_data;
 	}
 	new_csid_dev->io = request_mem_region(new_csid_dev->mem->start,
 		resource_size(new_csid_dev->mem), pdev->name);
 	if (!new_csid_dev->io) {
 		pr_err("%s: no valid mem region\n", __func__);
 		rc = -EBUSY;
-		goto csid_no_resource;
+		goto csid_invalid_vreg_data;
 	}
 
 	new_csid_dev->pdev = pdev;
@@ -986,7 +1004,7 @@ static int csid_probe(struct platform_device *pdev)
 			resource_size(new_csid_dev->mem));
 		pr_err("%s: irq request fail\n", __func__);
 		rc = -EBUSY;
-		goto csid_no_resource;
+		goto csid_invalid_vreg_data;
 	}
 	disable_irq(new_csid_dev->irq->start);
 	if (rc < 0) {
@@ -994,7 +1012,7 @@ static int csid_probe(struct platform_device *pdev)
 			resource_size(new_csid_dev->mem));
 		pr_err("%s Error registering irq ", __func__);
 		rc = -EBUSY;
-		goto csid_no_resource;
+		goto csid_invalid_vreg_data;
 	}
 
 	if (of_device_is_compatible(new_csid_dev->pdev->dev.of_node,
@@ -1027,14 +1045,16 @@ static int csid_probe(struct platform_device *pdev)
 		new_csid_dev->hw_dts_version = CSID_VERSION_V35;
 	} else {
 		pr_err("%s:%d, invalid hw version : 0x%x", __func__, __LINE__,
-		new_csid_dev->hw_dts_version);
+			new_csid_dev->hw_dts_version);
 		rc = -EINVAL;
-		goto csid_no_resource;
+		goto csid_invalid_vreg_data;
 	}
 
 	new_csid_dev->csid_state = CSID_POWER_DOWN;
 	return 0;
 
+csid_invalid_vreg_data:
+	kfree(new_csid_dev->csid_vreg);
 csid_no_resource:
 	mutex_destroy(&new_csid_dev->mutex);
 	kfree(new_csid_dev->ctrl_reg);
