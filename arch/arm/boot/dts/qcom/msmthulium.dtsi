@@ -2169,7 +2169,7 @@
 	qcom,msm-audio-ion {
 		compatible = "qcom,msm-audio-ion";
 		qcom,smmu-enabled;
-		iommus = <&lpass_q6_smmu 0>;
+		iommus = <&lpass_q6_smmu 1>;
 	};
 
 	pcm0: qcom,msm-pcm {
