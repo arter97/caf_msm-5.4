@@ -320,3 +320,7 @@
 		status = "okay";
 	};
 };
+
+&blsp1_uart2 {
+	status = "ok";
+};
