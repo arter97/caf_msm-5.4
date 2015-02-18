@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -143,7 +143,6 @@ struct msm_fd_stats {
  * @mem_pool: FD hw memory pool.
  * @stats: Pointer to statistic buffers.
  * @work_buf: Working memory buffer handle.
- * @wait_stop_stream: Pointer to completion to wait on stop stream.
  */
 struct fd_ctx {
 	struct msm_fd_device *fd_device;
@@ -156,7 +155,6 @@ struct fd_ctx {
 	struct msm_fd_mem_pool mem_pool;
 	struct msm_fd_stats *stats;
 	struct msm_fd_buf_handle work_buf;
-	struct completion *wait_stop_stream;
 };
 
 /*
@@ -186,8 +184,10 @@ enum msm_fd_mem_resources {
 
 /*
  * struct msm_fd_device - FD device structure.
+ * @hw_revision: Face detection hw revision.
  * @lock: Lock used for reference count.
  * @slock: Spinlock used to protect FD device struct.
+ * @irq_num: Face detection irq number.
  * @ref_count: Device reference count.
  * @res_mem: Array of memory resources used by FD device.
  * @iomem_base: Array of register mappings used by FD device.
@@ -205,8 +205,11 @@ enum msm_fd_mem_resources {
  * @buf_queue: FD device processing queue.
  * @work_queue: Pointer to FD device IRQ bottom half workqueue.
  * @work: IRQ bottom half work struct.
+ * @hw_halt_completion: Completes when face detection hw halt completes.
  */
 struct msm_fd_device {
+	u32 hw_revision;
+
 	struct mutex lock;
 	spinlock_t slock;
 	int ref_count;
@@ -235,6 +238,7 @@ struct msm_fd_device {
 	struct list_head buf_queue;
 	struct workqueue_struct *work_queue;
 	struct work_struct work;
+	struct completion hw_halt_completion;
 };
 
 #endif /* __MSM_FD_DEV_H__ */
