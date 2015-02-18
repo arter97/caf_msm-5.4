@@ -1043,25 +1043,6 @@ static struct rcg_clk csi2phytimer_clk_src = {
 	},
 };
 
-static struct clk_freq_tbl ftbl_dsa_core_clk_src[] = {
-	F_MM( 300000000,   mmsscc_gpll0_div,    1,    0,     0),
-	F_END
-};
-
-static struct rcg_clk dsa_core_clk_src = {
-	.cmd_rcgr_reg = MMSS_DSA_CORE_CMD_RCGR,
-	.set_rate = set_rate_hid,
-	.freq_tbl = ftbl_dsa_core_clk_src,
-	.current_freq = &rcg_dummy_freq,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "dsa_core_clk_src",
-		.ops = &clk_ops_rcg,
-		VDD_DIG_FMAX_MAP1(LOWER, 300000000),
-		CLK_INIT(dsa_core_clk_src.c),
-	},
-};
-
 static struct clk_freq_tbl ftbl_isense_clk_src[] = {
 	F_MM(  19200000,        mmsscc_xo,    1,    0,     0),
 	F_MM( 150000000, mmsscc_gpll0_div,    2,    0,     0),
@@ -2070,29 +2051,6 @@ static struct branch_clk camss_vfe1_stream_clk = {
 	},
 };
 
-static struct branch_clk dsa_core_clk = {
-	.cbcr_reg = MMSS_DSA_CORE_CBCR,
-	.has_sibling = 0,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "dsa_core_clk",
-		.parent = &dsa_core_clk_src.c,
-		.ops = &clk_ops_branch,
-		CLK_INIT(dsa_core_clk.c),
-	},
-};
-
-static struct branch_clk dsa_noc_cfg_ahb_clk = {
-	.cbcr_reg = MMSS_DSA_NOC_CFG_AHB_CBCR,
-	.has_sibling = 1,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "dsa_noc_cfg_ahb_clk",
-		.ops = &clk_ops_branch,
-		CLK_INIT(dsa_noc_cfg_ahb_clk.c),
-	},
-};
-
 static struct branch_clk fd_ahb_clk = {
 	.cbcr_reg = MMSS_FD_AHB_CBCR,
 	.has_sibling = 1,
@@ -2754,114 +2712,6 @@ static struct branch_clk smmu_video_axi_clk = {
 	},
 };
 
-static struct branch_clk throttle_camss_ahb_clk = {
-	.cbcr_reg = MMSS_THROTTLE_CAMSS_AHB_CBCR,
-	.has_sibling = 1,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "throttle_camss_ahb_clk",
-		.parent = &ahb_clk_src.c,
-		.ops = &clk_ops_branch,
-		CLK_INIT(throttle_camss_ahb_clk.c),
-	},
-};
-
-static struct branch_clk throttle_camss_axi_clk = {
-	.cbcr_reg = MMSS_THROTTLE_CAMSS_AXI_CBCR,
-	.has_sibling = 1,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "throttle_camss_axi_clk",
-		.parent = &axi_clk_src.c,
-		.ops = &clk_ops_branch,
-		CLK_INIT(throttle_camss_axi_clk.c),
-	},
-};
-
-static struct branch_clk throttle_camss_cxo_clk = {
-	.cbcr_reg = MMSS_THROTTLE_CAMSS_CXO_CBCR,
-	.has_sibling = 1,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "throttle_camss_cxo_clk",
-		.parent = &mmsscc_xo.c,
-		.ops = &clk_ops_branch,
-		CLK_INIT(throttle_camss_cxo_clk.c),
-	},
-};
-
-static struct branch_clk throttle_mdss_ahb_clk = {
-	.cbcr_reg = MMSS_THROTTLE_MDSS_AHB_CBCR,
-	.has_sibling = 1,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "throttle_mdss_ahb_clk",
-		.parent = &ahb_clk_src.c,
-		.ops = &clk_ops_branch,
-		CLK_INIT(throttle_mdss_ahb_clk.c),
-	},
-};
-
-static struct branch_clk throttle_mdss_axi_clk = {
-	.cbcr_reg = MMSS_THROTTLE_MDSS_AXI_CBCR,
-	.has_sibling = 1,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "throttle_mdss_axi_clk",
-		.parent = &axi_clk_src.c,
-		.ops = &clk_ops_branch,
-		CLK_INIT(throttle_mdss_axi_clk.c),
-	},
-};
-
-static struct branch_clk throttle_mdss_cxo_clk = {
-	.cbcr_reg = MMSS_THROTTLE_MDSS_CXO_CBCR,
-	.has_sibling = 1,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "throttle_mdss_cxo_clk",
-		.parent = &mmsscc_xo.c,
-		.ops = &clk_ops_branch,
-		CLK_INIT(throttle_mdss_cxo_clk.c),
-	},
-};
-
-static struct branch_clk throttle_video_ahb_clk = {
-	.cbcr_reg = MMSS_THROTTLE_VIDEO_AHB_CBCR,
-	.has_sibling = 1,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "throttle_video_ahb_clk",
-		.parent = &ahb_clk_src.c,
-		.ops = &clk_ops_branch,
-		CLK_INIT(throttle_video_ahb_clk.c),
-	},
-};
-
-static struct branch_clk throttle_video_axi_clk = {
-	.cbcr_reg = MMSS_THROTTLE_VIDEO_AXI_CBCR,
-	.has_sibling = 1,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "throttle_video_axi_clk",
-		.parent = &axi_clk_src.c,
-		.ops = &clk_ops_branch,
-		CLK_INIT(throttle_video_axi_clk.c),
-	},
-};
-
-static struct branch_clk throttle_video_cxo_clk = {
-	.cbcr_reg = MMSS_THROTTLE_VIDEO_CXO_CBCR,
-	.has_sibling = 1,
-	.base = &virt_base,
-	.c = {
-		.dbg_name = "throttle_video_cxo_clk",
-		.parent = &mmsscc_xo.c,
-		.ops = &clk_ops_branch,
-		CLK_INIT(throttle_video_cxo_clk.c),
-	},
-};
-
 static struct branch_clk video_ahb_clk = {
 	.cbcr_reg = MMSS_VIDEO_AHB_CBCR,
 	.has_sibling = 1,
@@ -3048,8 +2898,6 @@ static struct mux_clk mmss_gcc_dbg_clk = {
 		{ &camss_vfe1_stream_clk.c, 0x0072 },
 		{ &camss_cpp_vbif_ahb_clk.c, 0x0073 },
 		{ &mmss_mmagic_cfg_ahb_clk.c, 0x0074 },
-		{ &dsa_core_clk.c, 0x0075 },
-		{ &dsa_noc_cfg_ahb_clk.c, 0x0076 },
 		{ &mmss_misc_cxo_clk.c, 0x0077 },
 		{ &camss_cpp_axi_clk.c, 0x007a },
 		{ &camss_jpeg_dma_clk.c, 0x007b },
@@ -3082,15 +2930,6 @@ static struct mux_clk mmss_gcc_dbg_clk = {
 		{ &smmu_video_axi_clk.c, 0x00a1 },
 		{ &mmagic_video_axi_clk.c, 0x00a2 },
 		{ &mmagic_bimc_axi_clk.c, 0x00a3 },
-		{ &throttle_camss_ahb_clk.c, 0x00a4 },
-		{ &throttle_mdss_ahb_clk.c, 0x00a5 },
-		{ &throttle_video_ahb_clk.c, 0x00a6 },
-		{ &throttle_camss_cxo_clk.c, 0x00a7 },
-		{ &throttle_mdss_cxo_clk.c, 0x00a8 },
-		{ &throttle_video_cxo_clk.c, 0x00a9 },
-		{ &throttle_camss_axi_clk.c, 0x00aa },
-		{ &throttle_mdss_axi_clk.c, 0x00ab },
-		{ &throttle_video_axi_clk.c, 0x00ac },
 		{ &mmagic_camss_noc_cfg_ahb_clk.c, 0x00ad },
 		{ &mmagic_mdss_noc_cfg_ahb_clk.c, 0x00ae },
 		{ &mmagic_video_noc_cfg_ahb_clk.c, 0x00af },
@@ -3154,7 +2993,6 @@ static struct clk_lookup msm_clocks_mmss_thulium[] = {
 	CLK_LIST(csi0phytimer_clk_src),
 	CLK_LIST(csi1phytimer_clk_src),
 	CLK_LIST(csi2phytimer_clk_src),
-	CLK_LIST(dsa_core_clk_src),
 	CLK_LIST(isense_clk_src),
 	CLK_LIST(rbbmtimer_clk_src),
 	CLK_LIST(edplink_clk_src),
@@ -3225,8 +3063,6 @@ static struct clk_lookup msm_clocks_mmss_thulium[] = {
 	CLK_LIST(camss_vfe1_ahb_clk),
 	CLK_LIST(camss_vfe1_clk),
 	CLK_LIST(camss_vfe1_stream_clk),
-	CLK_LIST(dsa_core_clk),
-	CLK_LIST(dsa_noc_cfg_ahb_clk),
 	CLK_LIST(fd_ahb_clk),
 	CLK_LIST(fd_core_clk),
 	CLK_LIST(fd_core_uar_clk),
@@ -3280,15 +3116,6 @@ static struct clk_lookup msm_clocks_mmss_thulium[] = {
 	CLK_LIST(smmu_vfe_axi_clk),
 	CLK_LIST(smmu_video_ahb_clk),
 	CLK_LIST(smmu_video_axi_clk),
-	CLK_LIST(throttle_camss_ahb_clk),
-	CLK_LIST(throttle_camss_axi_clk),
-	CLK_LIST(throttle_camss_cxo_clk),
-	CLK_LIST(throttle_mdss_ahb_clk),
-	CLK_LIST(throttle_mdss_axi_clk),
-	CLK_LIST(throttle_mdss_cxo_clk),
-	CLK_LIST(throttle_video_ahb_clk),
-	CLK_LIST(throttle_video_axi_clk),
-	CLK_LIST(throttle_video_cxo_clk),
 	CLK_LIST(video_ahb_clk),
 	CLK_LIST(video_axi_clk),
 	CLK_LIST(video_core_clk),
