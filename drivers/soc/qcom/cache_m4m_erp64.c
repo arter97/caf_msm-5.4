@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -454,6 +454,7 @@ static int msm_cache_erp_probe(struct platform_device *pdev)
 		       hml3_base + L3_QLL_HML3_FIRAT1S);
 
 	/* L0/L1 erp irq per cpu */
+	dev_info(&pdev->dev, "Registering for L1 error interrupts\n");
 	ret = request_percpu_irq(erp_irqs[IRQ_L1], msm_l1_erp_irq,
 				 erp_irq_names[IRQ_L1], &msm_l1_erp_stats);
 	if (ret) {
@@ -474,6 +475,7 @@ static int msm_cache_erp_probe(struct platform_device *pdev)
 	put_online_cpus();
 
 	/* L2 erp irq per cluster */
+	dev_info(&pdev->dev, "Registering for L2 error interrupts\n");
 	for (i = IRQ_L2_INFO0; i <= IRQ_L2_ERR1; i++) {
 		ret = devm_request_threaded_irq(&pdev->dev, erp_irqs[i], NULL,
 						msm_l2_erp_irq,
@@ -488,6 +490,7 @@ static int msm_cache_erp_probe(struct platform_device *pdev)
 	}
 
 	/* L3 erp irq */
+	dev_info(&pdev->dev, "Registering for L3 error interrupts\n");
 	ret = devm_request_irq(&pdev->dev, erp_irqs[IRQ_L3], msm_l3_erp_irq,
 			       IRQF_ONESHOT | IRQF_TRIGGER_HIGH,
 			       erp_irq_names[IRQ_L3], NULL);
@@ -534,6 +537,7 @@ static int msm_m4m_erp_m4m_probe(struct platform_device *pdev)
 	}
 	erp_irqs[IRQ_M4M] = r->start;
 
+	dev_info(&pdev->dev, "Registering for M4M error interrupts\n");
 	ret = devm_request_threaded_irq(&pdev->dev, erp_irqs[IRQ_M4M], NULL,
 					msm_m4m_erp_irq,
 					IRQF_ONESHOT | IRQF_TRIGGER_HIGH,
