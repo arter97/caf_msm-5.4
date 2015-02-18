@@ -38,7 +38,7 @@
 
 		CPU0: cpu@0 {
 			device_type = "cpu";
-			compatible = "arm,armv8";
+			compatible = "qcom,thulia";
 			reg = <0x0 0x0>;
 			enable-method = "qcom,msmthulium-acc";
 			qcom,cpuss-pm = <&cpuss_pm>;
@@ -55,7 +55,7 @@
 
 		CPU1: cpu@1 {
 			device_type = "cpu";
-			compatible = "arm,armv8";
+			compatible = "qcom,thulia";
 			reg = <0x0 0x1>;
 			enable-method = "qcom,msmthulium-acc";
 			qcom,acc = <&acc1>;
@@ -64,7 +64,7 @@
 
 		CPU2: cpu@100 {
 			device_type = "cpu";
-			compatible = "arm,armv8";
+			compatible = "qcom,thulia";
 			reg = <0x0 0x100>;
 			enable-method = "qcom,msmthulium-acc";
 			qcom,acc = <&acc2>;
@@ -78,7 +78,7 @@
 
 		CPU3: cpu@101 {
 			device_type = "cpu";
-			compatible = "arm,armv8";
+			compatible = "qcom,thulia";
 			reg = <0x0 0x101>;
 			enable-method = "qcom,msmthulium-acc";
 			qcom,acc = <&acc3>;
