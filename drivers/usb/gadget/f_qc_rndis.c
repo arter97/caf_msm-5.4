@@ -6,7 +6,7 @@
  * Copyright (C) 2008 Nokia Corporation
  * Copyright (C) 2009 Samsung Electronics
  *			Author: Michal Nazarewicz (mina86@mina86.com)
- * Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2
@@ -1127,7 +1127,6 @@ rndis_qc_unbind(struct usb_configuration *c, struct usb_function *f)
 
 	pr_debug("rndis_qc_unbind: free\n");
 	rndis_deregister(rndis->config);
-	rndis_exit();
 
 	if (gadget_is_dualspeed(c->cdev->gadget))
 		usb_free_descriptors(f->hs_descriptors);
@@ -1242,11 +1241,6 @@ rndis_qc_bind_config_vendor(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
 		pr_debug("%s: invalid argument\n", __func__);
 		return -EINVAL;
 	}
-
-	/* setup RNDIS itself */
-	status = rndis_init();
-	if (status < 0)
-		return status;
 
 	/* maybe allocate device-global string IDs */
 	if (rndis_qc_string_defs[0].id == 0) {
@@ -1365,7 +1359,6 @@ rndis_qc_bind_config_vendor(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
 fail:
 	kfree(rndis);
 	_rndis_qc = NULL;
-	rndis_exit();
 	return status;
 }
 
