@@ -3357,6 +3357,7 @@ int msm_mmsscc_thulium_probe(struct platform_device *pdev)
 	int rc;
 	struct clk *tmp;
 	struct regulator *reg;
+	u32 regval;
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "cc_base");
 	if (!res) {
@@ -3368,6 +3369,16 @@ int msm_mmsscc_thulium_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to map CC registers\n");
 		return -ENOMEM;
 	}
+
+	/* Clear the DBG_CLK_DIV bits of the MMSS debug register */
+	regval = readl_relaxed(virt_base + mmss_gcc_dbg_clk.offset);
+	regval &= ~BM(18, 17);
+	writel_relaxed(regval, virt_base + mmss_gcc_dbg_clk.offset);
+
+	/* Disable the AHB DCD */
+	regval = readl_relaxed(virt_base + MMSS_MNOC_DCD_CONFIG_AHB);
+	regval &= ~BIT(31);
+	writel_relaxed(regval, virt_base + MMSS_MNOC_DCD_CONFIG_AHB);
 
 	reg = vdd_dig.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_dig");
 	if (IS_ERR(reg)) {
