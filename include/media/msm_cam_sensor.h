@@ -36,6 +36,7 @@
 
 #define MAX_AF_ITERATIONS 3
 #define MAX_NUMBER_OF_STEPS 47
+#define MAX_REGULATOR 5
 
 enum flash_type {
 	LED_FLASH = 1,

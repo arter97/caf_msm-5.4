@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -151,9 +151,11 @@ struct cci_device {
 	uint8_t master_clk_init[MASTER_MAX];
 	struct msm_pinctrl_info cci_pinctrl;
 	uint8_t cci_pinctrl_status;
-	struct regulator *reg_ptr;
 	uint32_t cycles_per_us;
 	uint32_t cci_clk_src;
+	struct camera_vreg_t *cci_vreg;
+	struct regulator *cci_reg_ptr[MAX_REGULATOR];
+	int32_t regulator_count;
 };
 
 enum msm_cci_i2c_cmd_type {

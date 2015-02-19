@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -22,6 +22,7 @@
 #include "msm_cci.h"
 #include "msm_cam_cci_hwreg.h"
 #include "msm_camera_io_util.h"
+#include "msm_camera_dt_util.h"
 
 #define V4L2_IDENT_CCI 50005
 #define CCI_I2C_QUEUE_0_SIZE 64
@@ -790,31 +791,32 @@ static int32_t msm_cci_init(struct v4l2_subdev *sd,
 		CDBG("%s: request gpio failed\n", __func__);
 		goto request_gpio_failed;
 	}
-	cci_dev->reg_ptr = regulator_get(&(cci_dev->pdev->dev),
-					 "qcom,gdscr-vdd");
-	if (IS_ERR_OR_NULL(cci_dev->reg_ptr)) {
-		pr_err(" %s: Failed in getting TOP gdscr regulator handle",
-			__func__);
-	} else {
-		rc = regulator_enable(cci_dev->reg_ptr);
-		if (rc) {
-			pr_err(" %s: regulator enable failed for TOP GDSCR\n",
-				__func__);
-			goto clk_enable_failed;
-		}
+
+	rc = msm_camera_config_vreg(&cci_dev->pdev->dev, cci_dev->cci_vreg,
+		cci_dev->regulator_count, NULL, 0, &cci_dev->cci_reg_ptr[0], 1);
+	if (rc < 0) {
+		pr_err("%s:%d cci config_vreg failed\n", __func__, __LINE__);
+		goto clk_enable_failed;
+	}
+
+	rc = msm_camera_enable_vreg(&cci_dev->pdev->dev, cci_dev->cci_vreg,
+		cci_dev->regulator_count, NULL, 0, &cci_dev->cci_reg_ptr[0], 1);
+	if (rc < 0) {
+		pr_err("%s:%d cci enable_vreg failed\n", __func__, __LINE__);
+		goto reg_enable_failed;
 	}
 
 	clk_info = msm_cci_get_clk(cci_dev, c_ctrl);
 	if (!clk_info) {
 		pr_err("%s: clk enable failed\n", __func__);
-		goto clk_enable_failed;
+		goto reg_enable_failed;
 	}
 
 	rc = msm_cam_clk_enable(&cci_dev->pdev->dev, clk_info,
 		cci_dev->cci_clk, cci_dev->num_clk, 1);
 	if (rc < 0) {
 		CDBG("%s: clk enable failed\n", __func__);
-		goto clk_enable_failed;
+		goto reg_enable_failed;
 	}
 	enable_irq(cci_dev->irq->start);
 	cci_dev->hw_version = msm_camera_io_r_mb(cci_dev->base +
@@ -851,6 +853,9 @@ reset_complete_failed:
 	disable_irq(cci_dev->irq->start);
 	msm_cam_clk_enable(&cci_dev->pdev->dev, clk_info,
 		cci_dev->cci_clk, cci_dev->num_clk, 0);
+reg_enable_failed:
+	msm_camera_config_vreg(&cci_dev->pdev->dev, cci_dev->cci_vreg,
+		cci_dev->regulator_count, NULL, 0, &cci_dev->cci_reg_ptr[0], 0);
 clk_enable_failed:
 	if (cci_dev->cci_pinctrl_status) {
 		ret = pinctrl_select_state(cci_dev->cci_pinctrl.pinctrl,
@@ -861,12 +866,6 @@ clk_enable_failed:
 	}
 	msm_camera_request_gpio_table(cci_dev->cci_gpio_tbl,
 		cci_dev->cci_gpio_tbl_size, 0);
-
-	if (!IS_ERR_OR_NULL(cci_dev->reg_ptr)) {
-		regulator_disable(cci_dev->reg_ptr);
-		regulator_put(cci_dev->reg_ptr);
-		cci_dev->reg_ptr = NULL;
-	}
 request_gpio_failed:
 	cci_dev->ref_count--;
 	return rc;
@@ -890,11 +889,17 @@ static int32_t msm_cci_release(struct v4l2_subdev *sd)
 	disable_irq(cci_dev->irq->start);
 	msm_cam_clk_enable(&cci_dev->pdev->dev, &cci_clk_info[0][0],
 		cci_dev->cci_clk, cci_dev->num_clk, 0);
-	if (!IS_ERR_OR_NULL(cci_dev->reg_ptr)) {
-		regulator_disable(cci_dev->reg_ptr);
-		regulator_put(cci_dev->reg_ptr);
-		cci_dev->reg_ptr = NULL;
-	}
+
+	rc = msm_camera_enable_vreg(&cci_dev->pdev->dev, cci_dev->cci_vreg,
+		cci_dev->regulator_count, NULL, 0, &cci_dev->cci_reg_ptr[0], 0);
+	if (rc < 0)
+		pr_err("%s:%d cci disable_vreg failed\n", __func__, __LINE__);
+
+	rc = msm_camera_config_vreg(&cci_dev->pdev->dev, cci_dev->cci_vreg,
+		cci_dev->regulator_count, NULL, 0, &cci_dev->cci_reg_ptr[0], 0);
+	if (rc < 0)
+		pr_err("%s:%d cci unconfig_vreg failed\n", __func__, __LINE__);
+
 	if (cci_dev->cci_pinctrl_status) {
 		rc = pinctrl_select_state(cci_dev->cci_pinctrl.pinctrl,
 				cci_dev->cci_pinctrl.gpio_state_suspend);
@@ -1342,7 +1347,7 @@ static int msm_cci_probe(struct platform_device *pdev)
 	CDBG("%s: pdev %p device id = %d\n", __func__, pdev, pdev->id);
 	new_cci_dev = kzalloc(sizeof(struct cci_device), GFP_KERNEL);
 	if (!new_cci_dev) {
-		CDBG("%s: no enough memory\n", __func__);
+		pr_err("%s: no enough memory\n", __func__);
 		return -ENOMEM;
 	}
 	v4l2_subdev_init(&new_cci_dev->msm_sd.sd, &msm_cci_subdev_ops);
@@ -1356,7 +1361,6 @@ static int msm_cci_probe(struct platform_device *pdev)
 		of_property_read_u32((&pdev->dev)->of_node,
 			"cell-index", &pdev->id);
 
-	new_cci_dev->reg_ptr = NULL;
 	rc = msm_cci_get_clk_info(new_cci_dev, pdev);
 	if (rc < 0) {
 		pr_err("%s: msm_cci_get_clk_info() failed", __func__);
@@ -1368,7 +1372,7 @@ static int msm_cci_probe(struct platform_device *pdev)
 	new_cci_dev->mem = platform_get_resource_byname(pdev,
 					IORESOURCE_MEM, "cci");
 	if (!new_cci_dev->mem) {
-		CDBG("%s: no mem resource?\n", __func__);
+		pr_err("%s: no mem resource?\n", __func__);
 		rc = -ENODEV;
 		goto cci_no_resource;
 	}
@@ -1379,14 +1383,14 @@ static int msm_cci_probe(struct platform_device *pdev)
 		(int) new_cci_dev->irq->start,
 		(int) new_cci_dev->irq->end);
 	if (!new_cci_dev->irq) {
-		CDBG("%s: no irq resource?\n", __func__);
+		pr_err("%s: no irq resource?\n", __func__);
 		rc = -ENODEV;
 		goto cci_no_resource;
 	}
 	new_cci_dev->io = request_mem_region(new_cci_dev->mem->start,
 		resource_size(new_cci_dev->mem), pdev->name);
 	if (!new_cci_dev->io) {
-		CDBG("%s: no valid mem region\n", __func__);
+		pr_err("%s: no valid mem region\n", __func__);
 		rc = -EBUSY;
 		goto cci_no_resource;
 	}
@@ -1400,10 +1404,11 @@ static int msm_cci_probe(struct platform_device *pdev)
 	rc = request_irq(new_cci_dev->irq->start, msm_cci_irq,
 		IRQF_TRIGGER_RISING, "cci", new_cci_dev);
 	if (rc < 0) {
-		CDBG("%s: irq request fail\n", __func__);
+		pr_err("%s: irq request fail\n", __func__);
 		rc = -EBUSY;
 		goto cci_release_mem;
 	}
+
 	disable_irq(new_cci_dev->irq->start);
 	new_cci_dev->msm_sd.close_seq = MSM_SD_CLOSE_2ND_CATEGORY | 0x6;
 	msm_sd_register(&new_cci_dev->msm_sd);
@@ -1411,6 +1416,23 @@ static int msm_cci_probe(struct platform_device *pdev)
 	msm_cci_init_cci_params(new_cci_dev);
 	msm_cci_init_clk_params(new_cci_dev);
 	msm_cci_init_gpio_params(new_cci_dev);
+
+	rc = msm_camera_get_dt_vreg_data(new_cci_dev->pdev->dev.of_node,
+		&(new_cci_dev->cci_vreg), &(new_cci_dev->regulator_count));
+	if (rc < 0) {
+		pr_err("%s: msm_camera_get_dt_vreg_data fail\n", __func__);
+		rc = -EFAULT;
+		goto cci_release_mem;
+	}
+
+	if ((new_cci_dev->regulator_count < 0) ||
+		(new_cci_dev->regulator_count > MAX_REGULATOR)) {
+		pr_err("%s: invalid reg count = %d, max is %d\n", __func__,
+			new_cci_dev->regulator_count, MAX_REGULATOR);
+		rc = -EFAULT;
+		goto cci_invalid_vreg_data;
+	}
+
 	rc = of_platform_populate(pdev->dev.of_node, NULL, NULL, &pdev->dev);
 	if (rc)
 		pr_err("%s: failed to add child nodes, rc=%d\n", __func__, rc);
@@ -1420,12 +1442,14 @@ static int msm_cci_probe(struct platform_device *pdev)
 	CDBG("%s line %d\n", __func__, __LINE__);
 	return 0;
 
+cci_invalid_vreg_data:
+	kfree(new_cci_dev->cci_vreg);
 cci_release_mem:
 	release_mem_region(new_cci_dev->mem->start,
 		resource_size(new_cci_dev->mem));
 cci_no_resource:
 	kfree(new_cci_dev);
-	return 0;
+	return rc;
 }
 
 static int msm_cci_exit(struct platform_device *pdev)
