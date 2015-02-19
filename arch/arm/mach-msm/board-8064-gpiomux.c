@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, 2014 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2014-2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2340,7 +2340,10 @@ void __init apq8064_init_gpiomux(void)
 		}
 	}
 
-	if (!machine_is_apq8064_mplatform())
+	if (!machine_is_apq8064_mplatform() &&
+		!machine_is_apq8064_adp_2() &&
+		!machine_is_apq8064_adp2_es2() &&
+		!machine_is_apq8064_adp2_es2p5())
 		msm_gpiomux_install(apq8064_ext_regulator_configs,
 			ARRAY_SIZE(apq8064_ext_regulator_configs));
 
