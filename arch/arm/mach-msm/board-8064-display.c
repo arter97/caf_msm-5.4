@@ -374,6 +374,11 @@ static int mipi_dsi_panel_power(int on)
 
 	pr_debug("%s: on=%d\n", __func__, on);
 
+	if (machine_is_apq8064_adp_2() ||
+		machine_is_apq8064_adp2_es2() ||
+		machine_is_apq8064_adp2_es2p5())
+		return 0;
+
 	if (!dsi_power_on) {
 		reg_lvs7 = regulator_get(&msm_mipi_dsi1_device.dev,
 				"dsi1_vddio");
@@ -721,6 +726,16 @@ static int lvds_pixel_remap(void)
 	return 0;
 }
 
+static bool is_automotive_board(void)
+{
+	if (machine_is_apq8064_adp_2() ||
+		machine_is_apq8064_adp2_es2() ||
+		machine_is_apq8064_adp2_es2p5()) {
+		return true;
+	}
+	return false;
+}
+
 static struct lcdc_platform_data lvds_pdata = {
 	.lcdc_power_save = lvds_panel_power,
 	.lvds_pixel_remap = lvds_pixel_remap
@@ -822,6 +837,7 @@ static struct msm_bus_scale_pdata dtv_bus_scale_pdata = {
 static struct lcdc_platform_data dtv_pdata = {
 	.bus_scale_table = &dtv_bus_scale_pdata,
 	.lcdc_power_save = hdmi_panel_power,
+	.is_automotive_board = is_automotive_board,
 };
 
 static int hdmi_panel_power(int on)

@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/include/mach/board.h
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -415,6 +415,7 @@ struct lcdc_platform_data {
 	struct msm_bus_scale_pdata *bus_scale_table;
 #endif
 	int (*lvds_pixel_remap)(void);
+	bool (*is_automotive_board)(void);
 };
 
 struct tvenc_platform_data {

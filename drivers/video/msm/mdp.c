@@ -2,7 +2,7 @@
  *
  * MSM MDP Interface (used by framebuffer core)
  *
- * Copyright (c) 2007-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2007-2015, The Linux Foundation. All rights reserved.
  * Copyright (C) 2007 Google Incorporated
  *
  * This software is licensed under the terms of the GNU General Public
@@ -2392,6 +2392,8 @@ static int mdp_off(struct platform_device *pdev)
 		}
 	} else {
 		pr_err("mdp was not initialized\n");
+		mdp_clk_ctrl(0);
+		return ret;
 	}
 
 	ret = panel_next_early_off(pdev);
@@ -2850,7 +2852,7 @@ static int mdp_probe(struct platform_device *pdev)
 		size =  resource_size(&pdev->resource[0]);
 		msm_mdp_base = ioremap(pdev->resource[0].start, size);
 
-		MSM_FB_DEBUG("MDP HW Base phy_Address = 0x%x virt = 0x%x\n",
+		MSM_FB_INFO("MDP HW Base phy_Address = 0x%x virt = 0x%x\n",
 			(int)pdev->resource[0].start, (int)msm_mdp_base);
 
 		if (unlikely(!msm_mdp_base))
