@@ -730,6 +730,15 @@
 		interrupt-names = "cdc-int";
 	};
 
+	clock_audio: audio_ext_clk {
+		compatible = "qcom,audio-ref-clk";
+		qcom,audio-ref-clk-gpio = <&pm8994_gpios 15 0>;
+		clock-names = "osr_clk";
+		clocks = <&clock_gcc clk_div_clk1>;
+		qcom,node_has_rpm_clock;
+		#clock-cells = <1>;
+	};
+
 	slim_msm: slim@91c0000 {
 		cell-index = <1>;
 		compatible = "qcom,slim-ngd";
@@ -814,6 +823,9 @@
 				      30>;
 
 			qcom,cdc-reset-gpio = <&tlmm 64 0>;
+
+			clock-names = "wcd_clk";
+			clocks = <&clock_audio clk_audio_pmi_clk>;
 
 			cdc-vdd-buck-supply = <&pm8994_s4>;
 			qcom,cdc-vdd-buck-voltage = <1800000 1800000>;
