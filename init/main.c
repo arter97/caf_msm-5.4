@@ -390,6 +390,12 @@ static noinline void __init_refok rest_init(void)
 	cpu_idle();
 }
 
+/* Splash screen Boot marker value from LK */
+#ifdef CONFIG_BOOT_TIME_MARKER
+#define MAX_SS_LK_MARKER_SIZE 16
+char lk_splash_val[MAX_SS_LK_MARKER_SIZE] = "0";
+#endif
+
 /* Check for early params. */
 static int __init do_early_param(char *param, char *val)
 {
@@ -404,6 +410,10 @@ static int __init do_early_param(char *param, char *val)
 				printk(KERN_WARNING
 				       "Malformed early option '%s'\n", param);
 		}
+#ifdef CONFIG_BOOT_TIME_MARKER
+		if (strcmp(param, "LK_splash") == 0)
+			strlcpy(lk_splash_val, val, sizeof(lk_splash_val));
+#endif
 	}
 	/* We accept everything at this stage. */
 	return 0;

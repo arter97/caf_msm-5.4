@@ -4102,6 +4102,9 @@ int init_marker_proc_fs(void)
 	static struct proc_dir_entry *proc_write_entry;
 	static struct proc_dir_entry *proc_read_entry;
 
+	struct boot_marker *new_boot_marker;
+	unsigned long int timer_value;
+
 	proc_parent = proc_mkdir("bootkpi", NULL);
 	if (!proc_parent) {
 		pr_err("Error creating proc entry\n");
@@ -4112,7 +4115,7 @@ int init_marker_proc_fs(void)
 						proc_parent,
 						print_boot_markers, NULL);
 	if (!proc_write_entry) {
-		pr_err("Error creating proc entry\n");
+		pr_err("Error creating proc write entry\n");
 		return -ENOMEM;
 	}
 
@@ -4121,14 +4124,30 @@ int init_marker_proc_fs(void)
 	* reading a init marker keyword
 	*/
 	proc_read_entry = create_proc_entry("marker_entry", 0666, proc_parent);
-	if (proc_read_entry == NULL)
+	if (!proc_read_entry) {
+		pr_err("Error creating proc read entry\n");
 		return -ENOMEM;
+	}
 
 	proc_read_entry->read_proc = NULL;
 	proc_read_entry->write_proc = proc_write_response;
 
 	INIT_LIST_HEAD(&boot_marker_list.list);
 
+	if (strcmp(lk_splash_val, "0") == 0) {
+		pr_info("no splash screen marker value from LK\n");
+	} else {
+		new_boot_marker = kmalloc(sizeof(*new_boot_marker),
+							 GFP_KERNEL);
+		strlcpy(new_boot_marker->marker_name, "Splash Screen",
+			sizeof(new_boot_marker->marker_name));
+		if (kstrtol(lk_splash_val, 10, &timer_value))
+			return -EINVAL;
+		new_boot_marker->timer_value = timer_value;
+		INIT_LIST_HEAD(&new_boot_marker->list);
+		list_add_tail(&(new_boot_marker->list),
+				&(boot_marker_list.list));
+	}
 	return 0;
 }
 
