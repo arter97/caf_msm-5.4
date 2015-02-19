@@ -508,4 +508,7 @@
 #define clk_perfcl_debug_mux 0xf107e489
 #define clk_cpu_debug_mux 0xc7acaa31
 
+/* Audio External Clocks */
+#define clk_audio_ap_clk 0x312ac429
+#define clk_audio_pmi_clk 0xb7ba2274
 #endif
