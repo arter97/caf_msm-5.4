@@ -22,6 +22,15 @@
 
 #define CSID_NUM_CLK_MAX  16
 
+enum csiphy_lane_assign {
+	PHY_LANE_D0,
+	PHY_LANE_CLK,
+	PHY_LANE_D1,
+	PHY_LANE_D2,
+	PHY_LANE_D3,
+	PHY_LANE_MAX,
+};
+
 struct csid_reg_parms_t {
 /* MIPI	CSID registers */
 	uint32_t csid_hw_version_addr;
@@ -69,6 +78,7 @@ struct csid_reg_parms_t {
 
 struct csid_ctrl_t {
 	struct csid_reg_parms_t csid_reg;
+	uint8_t *csid_lane_assign;
 };
 
 enum msm_csid_state_t {
