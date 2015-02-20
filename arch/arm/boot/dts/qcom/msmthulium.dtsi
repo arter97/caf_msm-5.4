@@ -1802,12 +1802,12 @@
 		qcom,limit-temp = <60>;
 		qcom,temp-hysteresis = <10>;
 		qcom,therm-reset-temp = <115>;
-		qcom,freq-step = <2>;
+		qcom,freq-step = <4>;
 		qcom,freq-control-mask = <0x0f>;
-		qcom,core-limit-temp = <80>;
+		qcom,core-limit-temp = <125>;
 		qcom,core-temp-hysteresis = <10>;
 		qcom,core-control-mask = <0x0e>;
-		qcom,hotplug-temp = <95>;
+		qcom,hotplug-temp = <120>;
 		qcom,hotplug-temp-hysteresis = <40>;
 		qcom,cpu-sensors = "tsens_tz_sensor4", "tsens_tz_sensor6",
 				"tsens_tz_sensor9", "tsens_tz_sensor11";
