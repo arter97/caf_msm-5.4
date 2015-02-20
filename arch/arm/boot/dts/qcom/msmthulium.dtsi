@@ -1809,14 +1809,14 @@
 		qcom,core-control-mask = <0x0e>;
 		qcom,hotplug-temp = <95>;
 		qcom,hotplug-temp-hysteresis = <40>;
-		qcom,cpu-sensors = "tsens_tz_sensor8", "tsens_tz_sensor10",
-				   "tsens_tz_sensor6", "tsens_tz_sensor4";
-		qcom,freq-mitigation-temp = <70>;
+		qcom,cpu-sensors = "tsens_tz_sensor4", "tsens_tz_sensor6",
+				"tsens_tz_sensor9", "tsens_tz_sensor11";
+		qcom,freq-mitigation-temp = <80>;
 		qcom,freq-mitigation-temp-hysteresis = <20>;
 		qcom,freq-mitigation-value = <576000>;
 		qcom,freq-mitigation-control-mask = <0x0f>;
 		qcom,online-hotplug-core;
-		qcom,synchronous-cluster-id = <0 2>;
+		qcom,synchronous-cluster-id = <0 1>;
 		qcom,mx-restriction-temp = <5>;
 		qcom,mx-restriction-temp-hysteresis = <10>;
 		qcom,mx-retention-min = <3>;
