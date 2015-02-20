@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2012, 2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -91,6 +91,7 @@ static int dtv_off(struct platform_device *pdev)
 {
 	int ret = 0;
 	struct msm_fb_data_type *mfd = NULL;
+	boolean sync_suspend = FALSE;
 
 	if (!pdev) {
 		pr_err("%s: FAILED: invalid arg\n", __func__);
@@ -104,6 +105,12 @@ static int dtv_off(struct platform_device *pdev)
 	}
 
 	dtv_pdev = pdev;
+
+	/* For automotive boards, we always do pwoer down synchronously,
+	 * because there is no audio for the HDMI panel */
+	if (dtv_pdata && dtv_pdata->is_automotive_board)
+		sync_suspend = dtv_pdata->is_automotive_board();
+
 	/*
 	 * If it's a suspend operation then handle the device
 	 * power down synchronously.
@@ -111,7 +118,7 @@ static int dtv_off(struct platform_device *pdev)
 	 * This is needed since we need to wait for the audio engine
 	 * to shutdown first before we turn off the DTV device.
 	 */
-	if (!mfd->suspend.op_suspend) {
+	if (!mfd->suspend.op_suspend && !sync_suspend) {
 		pr_debug("%s: Queuing work to turn off HDMI core\n", __func__);
 		queue_work(dtv_work_queue, &dtv_off_work);
 	} else {

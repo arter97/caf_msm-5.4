@@ -1017,10 +1017,7 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 	case FB_BLANK_POWERDOWN:
 	default:
 		if (mfd->panel_power_on) {
-			int curr_pwr_state;
-
 			mfd->op_enable = FALSE;
-			curr_pwr_state = mfd->panel_power_on;
 			down(&mfd->sem);
 			mfd->panel_power_on = FALSE;
 			if (mfd->fbi->node == 0)
@@ -1033,13 +1030,14 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 			complete(&mfd->msmfb_no_update_notify);
 
 			/* clean fb to prevent displaying old fb */
-			if (info->screen_base)
+			if (info->screen_base && info->fix.smem_len)
 				memset((void *)info->screen_base, 0,
 				       info->fix.smem_len);
 
 			ret = pdata->off(mfd->pdev);
 			if (ret)
-				mfd->panel_power_on = curr_pwr_state;
+				pr_err("%s: pdata->off err=%d, panel=%d",
+				__func__, ret, pdata->panel_info.type);
 
 			msm_fb_release_timeline(mfd);
 			mfd->op_enable = TRUE;
