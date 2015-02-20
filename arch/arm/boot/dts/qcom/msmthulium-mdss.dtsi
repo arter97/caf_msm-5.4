@@ -145,6 +145,7 @@
 		smmu_mdp_unsec: qcom,smmu_mdp_unsec_cb {
 			compatible = "qcom,smmu_mdp_unsec";
 			iommus = <&mdp_smmu 0>;
+			gdsc-mmagic-mdss-supply = <&gdsc_mmagic_mdss>;
 			clocks = <&clock_mmss clk_smmu_mdp_ahb_clk>,
 				<&clock_mmss clk_smmu_mdp_axi_clk>;
 			clock-names = "mdp_ahb_clk", "mdp_axi_clk";
@@ -153,6 +154,7 @@
 		smmu_rot_unsec: qcom,smmu_rot_unsec_cb {
 			compatible = "qcom,smmu_rot_unsec";
 			iommus = <&rot_smmu 0>;
+			gdsc-mmagic-mdss-supply = <&gdsc_mmagic_mdss>;
 			clocks = <&clock_mmss clk_smmu_rot_ahb_clk>,
 				<&clock_mmss clk_smmu_rot_axi_clk>;
 			clock-names = "rot_ahb_clk", "rot_axi_clk";
@@ -161,6 +163,7 @@
 		smmu_mdp_sec: qcom,smmu_mdp_sec_cb {
 			compatible = "qcom,smmu_mdp_sec";
 			iommus = <&mdp_smmu 1>;
+			gdsc-mmagic-mdss-supply = <&gdsc_mmagic_mdss>;
 			clocks = <&clock_mmss clk_smmu_mdp_ahb_clk>,
 				<&clock_mmss clk_smmu_mdp_axi_clk>;
 			clock-names = "mdp_ahb_clk", "mdp_axi_clk";
@@ -169,6 +172,7 @@
 		smmu_rot_sec: qcom,smmu_rot_sec_cb {
 			compatible = "qcom,smmu_rot_sec";
 			iommus = <&rot_smmu 1>;
+			gdsc-mmagic-mdss-supply = <&gdsc_mmagic_mdss>;
 			clocks = <&clock_mmss clk_smmu_rot_ahb_clk>,
 				<&clock_mmss clk_smmu_rot_axi_clk>;
 			clock-names = "rot_ahb_clk", "rot_axi_clk";
