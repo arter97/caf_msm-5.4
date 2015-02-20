@@ -1410,8 +1410,47 @@
 			reg = <0x06a00000 0xc8d0>;
 			interrupt-parent = <&intc>;
 			interrupts = <0 131 0>;
-			usb-phy = <&qusb_phy>, <&ssphy>;
+			usb-phy = <&qusb_phy0>, <&ssphy>;
 			tx-fifo-resize;
+			snps,nominal-elastic-buffer;
+			snps,hird_thresh = <0x10>;
+		};
+	};
+
+	usb2s: hsusb@7600000 {
+		compatible = "qcom,dwc-usb3-msm";
+		reg = <0x07600000 0xfc000>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+		status = "disabled";
+
+		interrupts = <0 139 0>, <0 140 0>;
+		interrupt-names = "hs_phy_irq", "pwr_event_irq";
+
+		qcom,msm-bus,name = "usb-hs";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+					<87 512 0 0>,
+					<87 512 60000 960000>;
+
+		clocks = <&clock_gcc clk_gcc_usb20_master_clk>,
+			 <&clock_gcc clk_gcc_periph_noc_usb20_ahb_clk>,
+			 <&clock_gcc clk_gcc_usb20_mock_utmi_clk>,
+			 <&clock_gcc clk_gcc_usb20_sleep_clk>,
+			 <&clock_gcc clk_ln_bb_clk>,
+			 <&clock_gcc clk_cxo_dwc3_clk>;
+		clock-names = "core_clk", "iface_clk", "utmi_clk", "sleep_clk",
+			      "ref_clk", "xo";
+
+		dwc3@7600000 {
+			compatible = "snps,dwc3";
+			reg = <0x07600000 0xc8d0>;
+			interrupt-parent = <&intc>;
+			interrupts = <0 138 0>;
+			usb-phy = <&qusb_phy1>, <&usb_nop_phy>;
+			maximum-speed = "high-speed";
 			snps,nominal-elastic-buffer;
 			snps,hird_thresh = <0x10>;
 		};
@@ -1422,7 +1461,7 @@
 		reg = <0x066bf0c8 0xc8>;
 	};
 
-	qusb_phy: qusb@7411000 {
+	qusb_phy0: qusb@7411000 {
 		compatible = "qcom,qusb2phy";
 		reg = <0x07411000 0x180>,
 			<0x06af8800 0x400>;
@@ -1438,6 +1477,27 @@
 		clocks = <&clock_gcc clk_gcc_rx1_usb2_clkref_clk>,
 			 <&clock_gcc clk_gcc_usb_phy_cfg_ahb2phy_clk>,
 			 <&clock_gcc clk_gcc_qusb2phy_prim_reset>;
+
+		clock-names = "ref_clk", "cfg_ahb_clk", "phy_reset";
+	};
+
+	qusb_phy1: qusb@7412000 {
+		compatible = "qcom,qusb2phy";
+		reg = <0x07412000 0x180>,
+			<0x076f8800 0x400>;
+		reg-names = "qusb_phy_base",
+			"qscratch_base";
+		vdd-supply = <&pm8994_s2_corner>;
+		vdda18-supply = <&pm8994_l12>;
+		vdda33-supply = <&pm8994_l24>;
+		qcom,vdd-voltage-level = <1 5 7>;
+		qcom,qusb-tune = <0xa0c393d7>;
+		phy_type = "utmi";
+		status = "disabled";
+
+		clocks = <&clock_gcc clk_gcc_rx2_usb2_clkref_clk>,
+			 <&clock_gcc clk_gcc_usb_phy_cfg_ahb2phy_clk>,
+			 <&clock_gcc clk_gcc_qusb2phy_sec_reset>;
 
 		clock-names = "ref_clk", "cfg_ahb_clk", "phy_reset";
 	};
@@ -1464,6 +1524,11 @@
 
 		clock-names = "aux_clk", "pipe_clk", "cfg_ahb_clk", "phy_reset",
 			      "phy_phy_reset", "ref_clk";
+	};
+
+	usb_nop_phy: usb_nop_phy {
+		compatible = "usb-nop-xceiv";
+		status = "disabled";
 	};
 
 	dbm_1p5: dbm@6af8000 {
