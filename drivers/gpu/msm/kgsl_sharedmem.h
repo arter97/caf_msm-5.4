@@ -109,18 +109,6 @@ kgsl_memdesc_set_align(struct kgsl_memdesc *memdesc, unsigned int align)
 	return 0;
 }
 
-static inline unsigned int kgsl_get_sg_pa(struct scatterlist *sg)
-{
-	/*
-	 * Try sg_dma_address first to support ion carveout
-	 * regions which do not work with sg_phys().
-	 */
-	unsigned int pa = sg_dma_address(sg);
-	if (pa == 0)
-		pa = sg_phys(sg);
-	return pa;
-}
-
 /**
  * memdesg_sg_dma() - Turn a dma_addr (from CMA) into a sg table
  * @memdesc: Pointer to the memdesc structure
@@ -142,14 +130,6 @@ memdesc_sg_dma(struct kgsl_memdesc *memdesc,
 	memdesc->sglen = 1;
 	sg_init_table(memdesc->sg, 1);
 	sg_set_page(memdesc->sg, page, (size_t) size, 0);
-
-	/*
-	 * Continuing a grand tradition of doing it wrong this should be the
-	 * dma_addr_t and not the phys_addr_t. But everything downstream of us
-	 * assume this is a phys_addr_t so we do this.
-	 */
-
-	sg_dma_address(memdesc->sg) = addr;
 	return 0;
 }
 
