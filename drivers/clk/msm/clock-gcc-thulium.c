@@ -1292,6 +1292,25 @@ static struct rcg_clk gp3_clk_src = {
 	},
 };
 
+static struct clk_freq_tbl ftbl_hmss_rbcpr_clk_src[] = {
+	F(  19200000,     cxo_clk_src,    1,    0,     0),
+	F_END
+};
+
+static struct rcg_clk hmss_rbcpr_clk_src = {
+	.cmd_rcgr_reg = GCC_HMSS_RBCPR_CMD_RCGR,
+	.set_rate = set_rate_hid,
+	.freq_tbl = ftbl_hmss_rbcpr_clk_src,
+	.current_freq = &rcg_dummy_freq,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "hmss_rbcpr_clk_src",
+		.ops = &clk_ops_rcg,
+		VDD_DIG_FMAX_MAP1(LOWER, 19200000),
+		CLK_INIT(hmss_rbcpr_clk_src.c),
+	},
+};
+
 static struct clk_freq_tbl ftbl_pdm2_clk_src[] = {
 	F(  60000000, gpll0_out_main,   10,    0,     0),
 	F_END
@@ -2703,6 +2722,18 @@ static struct branch_clk gcc_usb_phy_cfg_ahb2phy_clk = {
 	},
 };
 
+static struct branch_clk gcc_hmss_rbcpr_clk = {
+	.cbcr_reg = GCC_HMSS_RBCPR_CBCR,
+	.has_sibling = 0,
+	.base = &virt_base,
+	.c = {
+		.dbg_name = "gcc_hmss_rbcpr_clk",
+		.parent = &hmss_rbcpr_clk_src.c,
+		.ops = &clk_ops_branch,
+		CLK_INIT(gcc_hmss_rbcpr_clk.c),
+	},
+};
+
 static struct branch_clk hlos1_vote_lpass_core_smmu_clk = {
 	.cbcr_reg = GCC_HLOS1_VOTE_LPASS_CORE_SMMU_CBCR,
 	.has_sibling = 0,
@@ -3020,6 +3051,7 @@ static struct mux_clk gcc_debug_mux = {
 		{ &gcc_gp1_clk.c, 0x00e3 },
 		{ &gcc_gp2_clk.c, 0x00e4 },
 		{ &gcc_gp3_clk.c, 0x00e5 },
+		{ &gcc_hmss_rbcpr_clk.c, 0x00ba },
 		{ &gcc_pcie_0_slv_axi_clk.c, 0x00e6 },
 		{ &gcc_pcie_0_mstr_axi_clk.c, 0x00e7 },
 		{ &gcc_pcie_0_cfg_ahb_clk.c, 0x00e8 },
@@ -3183,6 +3215,7 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(gp1_clk_src),
 	CLK_LIST(gp2_clk_src),
 	CLK_LIST(gp3_clk_src),
+	CLK_LIST(hmss_rbcpr_clk_src),
 	CLK_LIST(pdm2_clk_src),
 	CLK_LIST(sdcc1_apps_clk_src),
 	CLK_LIST(sdcc2_apps_clk_src),
@@ -3244,6 +3277,7 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(gcc_gp1_clk),
 	CLK_LIST(gcc_gp2_clk),
 	CLK_LIST(gcc_gp3_clk),
+	CLK_LIST(gcc_hmss_rbcpr_clk),
 	CLK_LIST(gcc_mmss_noc_cfg_ahb_clk),
 	CLK_LIST(gcc_mmss_sys_noc_axi_clk),
 	CLK_LIST(gcc_sys_noc_usb3_axi_clk),
