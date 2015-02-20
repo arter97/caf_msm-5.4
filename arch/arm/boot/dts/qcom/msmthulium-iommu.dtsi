@@ -16,7 +16,6 @@
 	jpeg_smmu: arm,smmu@d80000 {
 		compatible = "qcom,smmu-v2";
 		qcom,halt-and-tlb-on-atos;
-		qcom,register-save;
 		qcom,skip-init;
 		qcom,errata-ctx-fault-hang;
 		qcom,fatal-asf;
@@ -42,7 +41,6 @@
 	kgsl_smmu: arm,smmu@b40000 {
 		compatible = "qcom,smmu-v2";
 		qcom,halt-and-tlb-on-atos;
-		qcom,register-save;
 		qcom,skip-init;
 		qcom,errata-ctx-fault-hang;
 		qcom,fatal-asf;
@@ -67,7 +65,6 @@
 	vfe_smmu: arm,smmu@da0000 {
 		compatible = "qcom,smmu-v2";
 		qcom,halt-and-tlb-on-atos;
-		qcom,register-save;
 		qcom,skip-init;
 		qcom,errata-ctx-fault-hang;
 		qcom,fatal-asf;
@@ -94,7 +91,6 @@
 	venus_smmu: arm,smmu@d40000 {
 		compatible = "qcom,smmu-v2";
 		qcom,halt-and-tlb-on-atos;
-		qcom,register-save;
 		qcom,skip-init;
 		qcom,errata-ctx-fault-hang;
 		qcom,fatal-asf;
@@ -122,7 +118,6 @@
 	mdp_smmu: arm,smmu@d00000 {
 		compatible = "qcom,smmu-v2";
 		qcom,halt-and-tlb-on-atos;
-		qcom,register-save;
 		qcom,skip-init;
 		qcom,errata-ctx-fault-hang;
 		qcom,fatal-asf;
@@ -149,7 +144,6 @@
 	rot_smmu: arm,smmu@d20000 {
 		compatible = "qcom,smmu-v2";
 		qcom,halt-and-tlb-on-atos;
-		qcom,register-save;
 		qcom,skip-init;
 		qcom,errata-ctx-fault-hang;
 		qcom,fatal-asf;
@@ -175,7 +169,6 @@
 	cpp_fd_smmu: arm,smmu@d60000 {
 		compatible = "qcom,smmu-v2";
 		qcom,halt-and-tlb-on-atos;
-		qcom,register-save;
 		qcom,skip-init;
 		qcom,errata-ctx-fault-hang;
 		qcom,fatal-asf;
@@ -202,7 +195,6 @@
 	lpass_q6_smmu: arm,smmu@1600000 {
 		compatible = "qcom,smmu-v2";
 		qcom,halt-and-tlb-on-atos;
-		qcom,register-save;
 		qcom,skip-init;
 		qcom,errata-ctx-fault-hang;
 		qcom,fatal-asf;
