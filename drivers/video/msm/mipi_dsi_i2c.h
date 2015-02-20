@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -29,7 +29,7 @@ struct mipi_dsi_i2c_resource {
  */
 struct mipi_dsi_i2c_configure {
 	int (*config_dsi)(void);
-	int (*config_i2c)(void);
+	int (*config_i2c)(struct msm_panel_info *pinfo);
 	void (*config_reset_dev)(void);
 };
 
