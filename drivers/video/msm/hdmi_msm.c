@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2062,25 +2062,29 @@ static int hdmi_msm_read_edid_block(int block, uint8 *edid_buf)
 
 static int hdmi_msm_read_edid(void)
 {
-	int status;
+	int status = 0;
 
-	msm_hdmi_init_ddc();
-	/* Looks like we need to turn on HDMI engine before any
-	 * DDC transaction */
-	if (!hdmi_msm_is_power_on()) {
-		DEV_ERR("%s: failed: HDMI power is off", __func__);
-		status = -ENXIO;
-		goto error;
-	}
+	if (!external_common_state->skip_edid) {
+		msm_hdmi_init_ddc();
+		/* Looks like we need to turn on HDMI engine before any
+		 * DDC transaction */
+		if (!hdmi_msm_is_power_on()) {
+			DEV_ERR("%s: failed: HDMI power is off", __func__);
+			status = -ENXIO;
+			goto error;
+		}
 
-	external_common_state->read_edid_block = hdmi_msm_read_edid_block;
+		external_common_state->read_edid_block =
+					hdmi_msm_read_edid_block;
 #ifdef CONFIG_SLIMPORT_ANX7808
-	external_common_state->read_edid_block = slimport_read_edid_block;
+		external_common_state->read_edid_block =
+					slimport_read_edid_block;
 #endif
 
-	status = hdmi_common_read_edid();
-	if (!status)
-		DEV_DBG("EDID: successfully read\n");
+		status = hdmi_common_read_edid();
+		if (!status)
+			DEV_DBG("EDID: successfully read\n");
+	}
 
 error:
 	return status;
@@ -4918,6 +4922,11 @@ static int __init hdmi_msm_init(void)
 	}
 
 	external_common_state = &hdmi_msm_state->common;
+
+	if (machine_is_apq8064_adp_2() ||
+		machine_is_apq8064_adp2_es2() ||
+		machine_is_apq8064_adp2_es2p5())
+		external_common_state->skip_edid = true;
 
 	if (hdmi_prim_display && hdmi_prim_resolution)
 		external_common_state->video_resolution =

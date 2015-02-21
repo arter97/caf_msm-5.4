@@ -1838,10 +1838,7 @@ static int msm_fb_open(struct fb_info *info, int user)
 			pr_debug("%s:%d no mdp_set_dma_pan_info %d\n",
 				__func__, __LINE__, info->node);
 
-		if (mfd->is_panel_ready && !mfd->is_panel_ready())
-			unblank = false;
-
-		if (unblank && (mfd->panel_info.type != DTV_PANEL)) {
+		if (unblank) {
 			if (msm_fb_blank_sub(FB_BLANK_UNBLANK, info, TRUE)) {
 				pr_err("msm_fb_open: can't turn on display\n");
 				return -EINVAL;
