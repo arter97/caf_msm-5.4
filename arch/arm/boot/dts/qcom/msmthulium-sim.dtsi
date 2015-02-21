@@ -100,7 +100,3 @@
 &cpp {
 	status = "disabled";
 };
-
-&msm_vidc {
-	qcom,firmware-name = "venus";
-};

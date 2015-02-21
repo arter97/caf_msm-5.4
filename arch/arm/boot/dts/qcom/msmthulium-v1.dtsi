@@ -22,3 +22,7 @@
 	model = "Qualcomm Technologies, Inc. MSM THULIUM v1";
 	qcom,msm-id = <246 0x10000>;
 };
+
+&msm_vidc {
+	qcom,firmware-name = "venus-v1";
+};
