@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -108,7 +108,7 @@ struct kgsl_iommu_register_list {
 };
 
 /* Max number of iommu clks per IOMMU unit */
-#define KGSL_IOMMU_MAX_CLKS 4
+#define KGSL_IOMMU_MAX_CLKS 5
 
 enum kgsl_iommu_context_id {
 	KGSL_IOMMU_CONTEXT_USER = 0,
