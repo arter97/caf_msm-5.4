@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -450,6 +450,8 @@
 #define A5XX_VPC_PERFCTR_VPC_SEL_3          0xE67
 
 /* UCHE registers */
+#define A5XX_UCHE_WRITE_THRU_BASE_LO        0xE87
+#define A5XX_UCHE_WRITE_THRU_BASE_HI        0xE88
 #define A5XX_UCHE_TRAP_BASE_LO              0xE89
 #define A5XX_UCHE_TRAP_BASE_HI              0xE8A
 #define A5XX_UCHE_INVALIDATE0               0xE95

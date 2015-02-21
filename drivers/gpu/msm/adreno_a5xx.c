@@ -88,6 +88,9 @@ static void a5xx_protect_init(struct adreno_device *adreno_dev)
 	adreno_set_protected_registers(adreno_dev, &index, 0xE68, 3);
 	adreno_set_protected_registers(adreno_dev, &index, 0xE70, 4);
 
+	/* UCHE registers */
+	adreno_set_protected_registers(adreno_dev, &index, 0xE87, 4);
+
 	/* SMMU registers */
 	iommu_regs = kgsl_mmu_get_prot_regs(&device->mmu);
 	if (iommu_regs)
@@ -233,9 +236,14 @@ static void a5xx_start(struct adreno_device *adreno_dev)
 
 	memset(&adreno_dev->busy_data, 0, sizeof(adreno_dev->busy_data));
 
-	/* Disable L2 bypass to avoid UCHE out of bounds errors */
+	/*
+	 * Set UCHE_WRITE_THRU_BASE to the UCHE_TRAP_BASE effectively
+	 * disabling L2 bypass
+	 */
 	kgsl_regwrite(device, A5XX_UCHE_TRAP_BASE_LO, 0xffff0000);
-	kgsl_regwrite(device, A5XX_UCHE_TRAP_BASE_HI, 0xffff0000);
+	kgsl_regwrite(device, A5XX_UCHE_TRAP_BASE_HI, 0x0001ffff);
+	kgsl_regwrite(device, A5XX_UCHE_WRITE_THRU_BASE_LO, 0xffff0000);
+	kgsl_regwrite(device, A5XX_UCHE_WRITE_THRU_BASE_HI, 0x0001ffff);
 
 	/*
 	 * Below CP registers are 0x0 by default, program init
@@ -832,6 +840,9 @@ void a5xx_err_callback(struct adreno_device *adreno_dev, int bit)
 	case A5XX_INT_UCHE_OOB_ACCESS:
 		KGSL_DRV_CRIT_RATELIMIT(device, "UCHE: Out of bounds access\n");
 		break;
+	case A5XX_INT_UCHE_TRAP_INTR:
+		KGSL_DRV_CRIT_RATELIMIT(device, "UCHE: Trap interrupt\n");
+		break;
 	default:
 		KGSL_DRV_CRIT_RATELIMIT(device, "Unknown interrupt %d\n", bit);
 	}
@@ -850,7 +861,8 @@ void a5xx_err_callback(struct adreno_device *adreno_dev, int bit)
 	 (1 << A5XX_INT_CP_IB2) |			\
 	 (1 << A5XX_INT_CP_RB) |			\
 	 (1 << A5XX_INT_RBBM_ATB_BUS_OVERFLOW) |	\
-	 (1 << A5XX_INT_UCHE_OOB_ACCESS))
+	 (1 << A5XX_INT_UCHE_OOB_ACCESS)) |		\
+	 (1 << A5XX_INT_UCHE_TRAP_INTR)
 
 
 static struct adreno_irq_funcs a5xx_irq_funcs[] = {
@@ -889,7 +901,7 @@ static struct adreno_irq_funcs a5xx_irq_funcs[] = {
 	/* 23 - MISC_HANG_DETECT */
 	ADRENO_IRQ_CALLBACK(adreno_hang_int_callback),
 	ADRENO_IRQ_CALLBACK(a5xx_err_callback), /* 24 - UCHE_OOB_ACCESS */
-	ADRENO_IRQ_CALLBACK(NULL), /* 25 - UCHE_TRAP_INTR */
+	ADRENO_IRQ_CALLBACK(a5xx_err_callback), /* 25 - UCHE_TRAP_INTR */
 	ADRENO_IRQ_CALLBACK(NULL), /* 27 - DEBBUS_INTR_0 */
 	ADRENO_IRQ_CALLBACK(NULL), /* 28 - DEBBUS_INTR_1 */
 	ADRENO_IRQ_CALLBACK(NULL), /* 29 - GPMU_ERROR */
