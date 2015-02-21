@@ -105,7 +105,10 @@ dtb-$(CONFIG_ARCH_MSMTHULIUM) += msmthulium-v1-sim.dtb \
 	msmthulium-v3-pmi8994-mtp.dtb \
 	msmthulium-v3-pmi8994-pm8004-cdp.dtb \
 	msmthulium-v3-pmi8994-pm8004-mtp.dtb \
-	msmthulium-fluid.dtb
+	msmthulium-v2-fluid.dtb \
+	msmthulium-v3-fluid.dtb \
+	msmthulium-v2-liquid.dtb \
+	msmthulium-v3-liquid.dtb
 
 targets += dtbs
 targets += $(addprefix ../, $(dtb-y))

@@ -11,11 +11,7 @@
  */
 
 
-/dts-v1/;
-
-#include "msmthulium.dtsi"
 #include "msmthulium-pinctrl.dtsi"
-
 
 / {
 	model = "Qualcomm Technologies, Inc. MSM THULIUM FLUID";
