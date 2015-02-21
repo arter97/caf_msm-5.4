@@ -652,6 +652,7 @@ static int msm_audio_smmu_init(struct device *dev)
 	struct dma_iommu_mapping *mapping;
 	int ret;
 	int order = 0;
+	int disable_htw = 1;
 
 	mapping = arm_iommu_create_mapping(&platform_bus_type,
 					   MSM_AUDIO_ION_VA_START,
@@ -659,6 +660,10 @@ static int msm_audio_smmu_init(struct device *dev)
 					   order);
 	if (IS_ERR(mapping))
 		return PTR_ERR(mapping);
+
+	iommu_domain_set_attr(mapping->domain,
+				DOMAIN_ATTR_COHERENT_HTW_DISABLE,
+				&disable_htw);
 
 	ret = arm_iommu_attach_device(dev, mapping);
 	if (ret) {
