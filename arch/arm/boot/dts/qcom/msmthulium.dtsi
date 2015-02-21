@@ -1142,9 +1142,6 @@
 		qcom,cpu-affinity = "affine_cores";
 		qcom,cpu-dma-latency-us = <301>;
 
-		rpm-level = <0>;
-		spm-level = <0>;
-
 		status = "disabled";
 	};
 
