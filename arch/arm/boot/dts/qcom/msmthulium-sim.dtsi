@@ -10,13 +10,8 @@
  * GNU General Public License for more details.
  */
 
-
-/dts-v1/;
-
-#include "msmthulium.dtsi"
 #include "msmthulium-pinctrl.dtsi"
 #include "dsi-panel-sim-video.dtsi"
-
 
 / {
 	model = "Qualcomm Technologies, Inc. MSM THULIUM SIM";

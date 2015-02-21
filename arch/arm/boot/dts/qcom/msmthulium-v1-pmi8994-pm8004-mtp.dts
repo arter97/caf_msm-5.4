@@ -10,14 +10,14 @@
  * GNU General Public License for more details.
  */
 
-
 /dts-v1/;
 
-#include "msmthulium.dtsi"
+#include "msmthulium-v1.dtsi"
+#include "msmthulium-pm8994-pmi8994-pm8004.dtsi"
 #include "msmthulium-mtp.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. MSM THULIUM + PMI8994 MTP";
+	model = "Qualcomm Technologies, Inc. MSM THULIUM v1 + PMI8994 + PM8004 MTP";
 	compatible = "qcom,msmthulium-mtp", "qcom,msmthulium", "qcom,mtp";
 	qcom,board-id = <8 0>;
 };
