@@ -267,10 +267,7 @@ Required properties:
 
  - interrupt-parent :                      Parent interrupt controller
 
- - interrupts :                            Interrupt number on the parent
-                                           interrupt controller
-
- - interrupt-names :                       Name of interrupt on the parent
+ - qcom,gpio-connect                       Gpio that connects to parent
                                            interrupt controller
 
 * audio-ext-clk
