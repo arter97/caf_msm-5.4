@@ -755,9 +755,8 @@
 				<  787200  3509 >,
 				<  864000  4173 >,
 				<  960000  5271 >,
-				< 1248000  7102 >;
+				< 1440000  7102 >;
 			cpu-to-dev-map-4 =
-				<  384000  1525 >,
 				<  633600  2288 >,
 				<  768000  3509 >,
 				<  864000  4173 >,
@@ -773,10 +772,8 @@
 				<  460800 2288 >,
 				<  600000 3509 >,
 				<  672000 4173 >,
-				< 1248000 5271 >;
+				< 1440000 5271 >;
 			cpu-to-dev-map-4 =
-				<  300000 1525 >,
-				<  480000 2288 >,
 				<  633600 3509 >,
 				<  768000 4173 >,
 				< 1824000 5271 >;
@@ -790,11 +787,9 @@
 				<  787200 384000 >,
 				<  864000 556800 >,
 				<  960000 729600 >,
-				< 1248000 787200 >;
+				< 1440000 787200 >;
 			cpu-to-dev-map-4 =
-				<  384000 134400 >,
-				<  480000 300000 >,
-				<  633600 384000 >,
+				<  633600 134400 >,
 				<  768000 556800 >,
 				<  960000 600000 >,
 				< 1440000 729600 >,
@@ -825,12 +820,10 @@
 			<  787200 >,
 			<  864000 >,
 			<  960000 >,
-			< 1248000 >;
+			< 1248000 >,
+			< 1440000 >;
 
 		qcom,cpufreq-table-4 =
-			<  300000 >,
-			<  384000 >,
-			<  480000 >,
 			<  633600 >,
 			<  768000 >,
 			<  864000 >,
@@ -853,7 +846,7 @@
 		      <0xf900d000 0x1000>,
 		      <0xf900f000 0x1000>,
 		      <0xf9112000 0x1000>,
-		      <0xfc4b80b0 0x8>;
+		      <0xfc4b80b0 0x10>;
 		reg-names = "c0_pll", "c1_pll", "cci_pll", "c0_mux", "c1_mux", "cci_mux", "efuse";
 		vdd-a53-supply = <&apc0_vreg_corner>;
 		vdd-a57-supply = <&apc1_vreg_corner>;
@@ -870,11 +863,20 @@
 				<  864000000 7>,
 				<  960000000 8>,
 				< 1248000000 9>;
+		qcom,a53-speedbin1-v0 =
+				<	   0 0>,
+				<  300000000 1>,
+				<  384000000 2>,
+				<  460800000 3>,
+				<  600000000 4>,
+				<  672000000 5>,
+				<  787200000 6>,
+				<  864000000 7>,
+				<  960000000 8>,
+				< 1248000000 9>,
+				< 1440000000 10>;
 		qcom,a57-speedbin0-v0 =
 				<	   0 0>,
-				<  300000000 2>,
-				<  384000000 3>,
-				<  480000000 4>,
 				<  633600000 5>,
 				<  768000000 6>,
 				<  864000000 7>,
@@ -1157,6 +1159,56 @@
 		qcom,bam-pipe-idx-cons = <22>;
 		qcom,bam-pipe-idx-prod = <23>;
 		qcom,master-id = <86>;
+	};
+
+	tspp: msm_tspp@f99d8000 {
+		compatible = "qcom,msm_tspp";
+		reg = <0xf99d8000 0x1000>, /* MSM_TSIF0_PHYS */
+		      <0xf99d9000 0x1000>, /* MSM_TSIF1_PHYS */
+		      <0xf99da000 0x1000>, /* MSM_TSPP_PHYS  */
+		      <0xf99c4000 0x11000>; /* MSM_TSPP_BAM_PHYS */
+		reg-names = "MSM_TSIF0_PHYS",
+			"MSM_TSIF1_PHYS",
+			"MSM_TSPP_PHYS",
+			"MSM_TSPP_BAM_PHYS";
+		interrupts = <0 121 0>, /* TSIF_TSPP_IRQ */
+			<0 119 0>, /* TSIF0_IRQ */
+			<0 120 0>, /* TSIF1_IRQ */
+			<0 122 0>; /* TSIF_BAM_IRQ */
+		interrupt-names = "TSIF_TSPP_IRQ",
+			"TSIF0_IRQ",
+			"TSIF1_IRQ",
+			"TSIF_BAM_IRQ";
+
+		clock-names = "iface_clk", "ref_clk";
+		clocks = <&clock_gcc clk_gcc_tsif_ahb_clk>,
+			<&clock_gcc clk_gcc_tsif_ref_clk>;
+
+		qcom,msm-bus,name = "tsif";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<82 512 0 0>, /* No vote */
+				<82 512 12288 24576>; /* Max. bandwidth, 2xTSIF, each max of 96Mbps */
+
+		pinctrl-names = "disabled",
+			"tsif0-mode1", "tsif0-mode2",
+			"tsif1-mode1", "tsif1-mode2",
+			"dual-tsif-mode1", "dual-tsif-mode2";
+
+		pinctrl-0 = <>;				/* disabled */
+		pinctrl-1 = <&tsif0_signals_active>;	/* tsif0-mode1 */
+		pinctrl-2 = <&tsif0_signals_active
+			&tsif0_sync_active>;		/* tsif0-mode2 */
+		pinctrl-3 = <&tsif1_signals_active>;	/* tsif1-mode1 */
+		pinctrl-4 = <&tsif1_signals_active
+			&tsif1_sync_active>;		/* tsif1-mode2 */
+		pinctrl-5 = <&tsif0_signals_active
+			&tsif1_signals_active>;		/* dual-tsif-mode1 */
+		pinctrl-6 = <&tsif0_signals_active
+			&tsif0_sync_active
+			&tsif1_signals_active
+			&tsif1_sync_active>;		/* dual-tsif-mode2 */
 	};
 
 	slim_msm: slim@fe12f000 {
@@ -1575,7 +1627,9 @@
 		interrupt-names = "hc_irq", "pwr_irq";
 
 		qcom,bus-width = <8>;
-		qcom,cpu-dma-latency-us = <701>;
+		qcom,cpu-dma-latency-us = <301>;
+		qcom,cpu-affinity = "affine_cores";
+		qcom,cpu-affinity-mask = <0x0f>;
 
 		qcom,msm-bus,name = "sdhc1";
 		qcom,msm-bus,num-cases = <9>;
@@ -1612,7 +1666,9 @@
 			 <&clock_gcc clk_gcc_sdcc2_apps_clk>;
 
 		qcom,bus-width = <4>;
-		qcom,cpu-dma-latency-us = <701>;
+		qcom,cpu-dma-latency-us = <301>;
+		qcom,cpu-affinity = "affine_cores";
+		qcom,cpu-affinity-mask = <0x0f>;
 
 		qcom,msm-bus,name = "sdhc2";
 		qcom,msm-bus,num-cases = <8>;
@@ -1813,8 +1869,8 @@
 		qcom,load-freq-tbl =
 			<783360 510000000 0xffffffff>,
 			<783360 510000000 0x55555555>,
-			<489600 266670000 0xffffffff>,
-			<489600 266670000 0x55555555>,
+			<489600 320000000 0xffffffff>,
+			<489600 320000000 0x55555555>,
 			<244800 133330000 0xffffffff>,
 			<244800 133330000 0x55555555>;
 		qcom,buffer-type-tz-usage-table = <0x241 0x1>,
@@ -2487,12 +2543,15 @@
 		qcom,bcl-enable;
 		qcom,bcl-framework-interface;
 		qcom,bcl-hotplug-list = <&CPU4 &CPU5>;
+		qcom,bcl-freq-control-list = <&CPU4 &CPU5>;
+		qcom,bcl-soc-hotplug-list = <&CPU4 &CPU5>;
 		qcom,ibat-monitor {
 			qcom,low-threshold-uamp = <2000000>;
 			qcom,high-threshold-uamp = <3500000>;
 			qcom,mitigation-freq-khz = <768000>;
 			qcom,vph-high-threshold-uv = <3900000>;
 			qcom,vph-low-threshold-uv = <3600000>;
+			qcom,soc-low-threshold = <10>;
 			qcom,thermal-handle = <&msm_thermal_freq>;
 		};
 	};
@@ -2812,6 +2871,46 @@
 		qcom,l1_d_cache101 {
 			qcom,dump-node = <&L1_D_101>;
 			qcom,dump-id = <0x85>;
+		};
+	};
+
+	qcom,msm-core@fc4b8000 {
+		compatible = "qcom,apss-core-ea";
+		reg = <0xfc4b8000 0x1000>;
+		qcom,low-hyst-temp = <10>;
+		qcom,high-hyst-temp = <5>;
+		qcom,polling-interval = <50>;
+
+		qcom,core-mapping {
+			qcom,cpu0-chars {
+				qcom,sensor = <&sensor_information6>;
+				qcom,cpu-name = <&CPU0>;
+			};
+
+			qcom,cpu1-chars {
+				qcom,sensor = <&sensor_information6>;
+				qcom,cpu-name = <&CPU1>;
+			};
+
+			qcom,cpu2-chars {
+				qcom,sensor = <&sensor_information7>;
+				qcom,cpu-name = <&CPU2>;
+			};
+
+			qcom,cpu3-chars {
+				qcom,sensor = <&sensor_information8>;
+				qcom,cpu-name = <&CPU3>;
+			};
+
+			qcom,cpu4-chars {
+				qcom,sensor = <&sensor_information11>;
+				qcom,cpu-name = <&CPU4>;
+			};
+
+			qcom,cpu5-chars {
+				qcom,sensor = <&sensor_information12>;
+				qcom,cpu-name = <&CPU5>;
+			};
 		};
 	};
 };
