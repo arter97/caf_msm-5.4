@@ -32,6 +32,7 @@ static const struct adreno_vbif_data a530_vbif[] = {
 
 static const struct adreno_vbif_platform a5xx_vbif_platforms[] = {
 	{ adreno_is_a530, a530_vbif },
+	{ adreno_is_a510, a530_vbif },
 };
 
 #define PWR_ON_BIT BIT(20)
@@ -249,10 +250,17 @@ static void a5xx_start(struct adreno_device *adreno_dev)
 	 * Below CP registers are 0x0 by default, program init
 	 * values based on a5xx flavor.
 	 */
-	kgsl_regwrite(device, A5XX_CP_MEQ_THRESHOLDS, 0x40);
-	kgsl_regwrite(device, A5XX_CP_MERCIU_SIZE, 0x40);
-	kgsl_regwrite(device, A5XX_CP_ROQ_THRESHOLDS_2, 0x80000060);
-	kgsl_regwrite(device, A5XX_CP_ROQ_THRESHOLDS_1, 0x40201B16);
+	if (adreno_is_a510(adreno_dev)) {
+		kgsl_regwrite(device, A5XX_CP_MEQ_THRESHOLDS, 0x20);
+		kgsl_regwrite(device, A5XX_CP_MERCIU_SIZE, 0x20);
+		kgsl_regwrite(device, A5XX_CP_ROQ_THRESHOLDS_2, 0x40000030);
+		kgsl_regwrite(device, A5XX_CP_ROQ_THRESHOLDS_1, 0x20100D0A);
+	} else {
+		kgsl_regwrite(device, A5XX_CP_MEQ_THRESHOLDS, 0x40);
+		kgsl_regwrite(device, A5XX_CP_MERCIU_SIZE, 0x40);
+		kgsl_regwrite(device, A5XX_CP_ROQ_THRESHOLDS_2, 0x80000060);
+		kgsl_regwrite(device, A5XX_CP_ROQ_THRESHOLDS_1, 0x40201B16);
+	}
 	kgsl_regwrite(device, A5XX_PC_DBG_ECO_CNTL,
 					(0x400 << 11 | 0x300 << 22));
 
