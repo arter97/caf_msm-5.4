@@ -434,6 +434,10 @@ kgsl_mmu_detach_pagetable(struct kgsl_pagetable *pagetable)
 {
 	unsigned long flags;
 
+	/* NOMMU has no pagetable so return early if its NULL */
+	if (!pagetable)
+		return;
+
 	spin_lock_irqsave(&kgsl_driver.ptlock, flags);
 	if (pagetable->list.next) {
 		list_del(&pagetable->list);
