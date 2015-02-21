@@ -19,7 +19,8 @@
 	compatible = "qcom,msm8909";
 	qcom,msm-id =	<245 0>,
 			<258 0>,
-			<265 0>;
+			<265 0>,
+			<275 0>;
 	interrupt-parent = <&intc>;
 
 	chosen {
@@ -158,7 +159,8 @@
 
 	restart@4ab000 {
 		compatible = "qcom,pshold";
-		reg = <0x4ab000 0x4>;
+		reg =	<0x4ab000 0x4>,
+			<0x193d100 0x4>;
 	};
 
 	timer {
@@ -412,6 +414,11 @@
 		sensor_information5: qcom,sensor-information@5 {
 			qcom,sensor-type = "adc";
 			qcom,sensor-name = "pa_therm0";
+		};
+
+		sensor_information6: qcom,sensor-information@6 {
+			qcom,sensor-type = "adc";
+			qcom,sensor-name = "case_therm";
 		};
 	};
 
