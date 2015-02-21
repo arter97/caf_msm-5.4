@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -577,6 +577,7 @@
 		qcom,corner-acc-map = <1 1 0 0>;
 		qcom,acc-sel-l1-bit-pos = <0>;
 		qcom,acc-sel-l1-bit-size = <1>;
+		status = "disabled";
 	};
 
 	mem_acc1_vreg_corner: mem-acc1-regulator {
@@ -589,6 +590,7 @@
 		qcom,corner-acc-map = <1 1 0 0>;
 		qcom,acc-sel-l1-bit-pos = <1>;
 		qcom,acc-sel-l1-bit-size = <1>;
+		status = "disabled";
 	};
 
 	apc0_vreg_corner: regulator@f9019000 {
@@ -599,18 +601,16 @@
 		regulator-name = "apc0_corner";
 		qcom,cpr-fuse-corners = <4>;
 		regulator-min-microvolt = <1>;
-		regulator-max-microvolt = <9>;
+		regulator-max-microvolt = <10>;
 
 		qcom,cpr-voltage-ceiling = <900000 900000 1000000 1180000>;
-		qcom,cpr-voltage-floor =   <700000 725000  840000 1000000>;
+		qcom,cpr-voltage-floor =   <640000 700000  800000  850000>;
 		vdd-apc-supply = <&pm8994_s8>;
 
 		qcom,vdd-mx-corner-map = <3 4 5 7>;
 		qcom,vdd-mx-vmax = <7>;
 		qcom,vdd-mx-vmin-method = <4>;
 		vdd-mx-supply = <&pm8994_s2_corner_ao>;
-
-		mem-acc-supply = <&mem_acc0_vreg_corner>;
 
 		qcom,cpr-ref-clk = <19200>;
 		qcom,cpr-timer-delay = <5000>;
@@ -646,6 +646,7 @@
 					<138 48 6 0>,
 					<138 54 7 0>;
 		qcom,cpr-fuse-revision = <137 34 3 0>;
+		qcom,speed-bin-fuse-sel = <22 56 2 0>;
 
 		qcom,fuse-remap-base-row = <1000>;
 		qcom,fuse-remap-source =
@@ -661,18 +662,58 @@
 					<1000 47 6 0>,
 					<1000 32 6 0>;
 
-		qcom,cpr-init-voltage-ref = <800000 900000 1000000 1225000>;
+		qcom,cpr-init-voltage-ref = <800000 900000 1000000 1230000>;
 		qcom,cpr-init-voltage-step = <10000>;
 
-		qcom,cpr-corner-map = <1 1 2 2 3 3 4 4 4>;
+		qcom,cpr-corner-map = <1 1 2 2 3 3 4 4 4 4>;
 		qcom,cpr-voltage-ceiling-override =
 				<0xFFFFFFFF 0  800000  800000  900000  900000
-					      1000000 1000000 1180000 1180000
-					      1180000>;
+					      1000000 1000000 1115000 1115000
+					      1180000 1180000>;
+		qcom,cpr-voltage-floor-override =
+				<0xFFFFFFFF 0  640000  655000  700000  735000
+					       800000  835000  850000  875000
+					       950000 1000000>;
+		qcom,cpr-fuse-version-map =
+				<0 0xffffffff 0 0 0 0 0>,
+				<0 0xffffffff 1 0 0 0 0>,
+				<0 0xffffffff 2 0 0 0 0>,
+				<0 0xffffffff 3 0 0 0 0>,
+				<1 0xffffffff 0 0 0 0 0>,
+				<1 0xffffffff 1 0 0 0 0>,
+				<1 0xffffffff 2 0 0 0 0>,
+				<1 0xffffffff 3 0 0 0 0>;
+		qcom,cpr-quotient-adjustment =
+				<0 0 0 0>,
+				<0 0 0 0>,
+				<20 (-60) (-90) 20>,
+				<(-70) (-100) (-100) (-10)>,
+				<0 0 0 0>,
+				<0 0 0 0>,
+				<20 (-60) (-90) 140>,
+				<(-70) (-100) (-100) 110>;
+		qcom,cpr-init-voltage-adjustment =
+				<0 0 0 0>,
+				<25000 (-15000) (-35000) 35000>,
+				<25000 (-15000) (-35000) 35000>,
+				<30000 (-15000) (-25000) (-15000)>,
+				<0 0 0 0>,
+				<25000 (-15000) (-35000) 95000>,
+				<25000 (-15000) (-35000) 95000>,
+				<30000 (-15000) (-25000) 45000>;
+		qcom,cpr-allowed =
+				<0>,
+				<0>,
+				<1>,
+				<1>,
+				<0>,
+				<0>,
+				<1>,
+				<1>;
 
 		qcom,cpr-scaled-init-voltage-as-ceiling;
-		qcom,cpr-voltage-scaling-factor-max = <0 0 2000 2000>;
-		qcom,cpr-quot-adjust-scaling-factor-max = <0 0 0 0>;
+		qcom,cpr-voltage-scaling-factor-max = <0 2000 2000 2000>;
+		qcom,cpr-quot-adjust-scaling-factor-max = <0 2000 2000 2000>;
 		qcom,cpr-corner-frequency-map =
 				<1   300000000>,
 				<2   384000000>,
@@ -682,9 +723,12 @@
 				<6   787200000>,
 				<7   864000000>,
 				<8   960000000>,
-				<9  1248000000>;
+				<9  1248000000>,
+				<10 1440000000>;
 		qcom,cpr-speed-bin-max-corners =
-				<0xFFFFFFFF 0 2 4 6 9>;
+				<0 0 2 4 6 9>,
+				<1 0 2 4 6 10>;
+		qcom,cpr-enable;
 	};
 
 	apc1_vreg_corner: regulator@f901a000 {
@@ -697,16 +741,14 @@
 		regulator-min-microvolt = <1>;
 		regulator-max-microvolt = <15>;
 
-		qcom,cpr-voltage-ceiling = <900000 900000 1000000 1225000>;
-		qcom,cpr-voltage-floor =   <725000 725000  840000 1000000>;
+		qcom,cpr-voltage-ceiling = <900000 900000 1000000 1180000>;
+		qcom,cpr-voltage-floor =   <640000 640000  745000  850000>;
 		vdd-apc-supply = <&pm8994_s11>;
 
 		qcom,vdd-mx-corner-map = <3 4 5 7>;
 		qcom,vdd-mx-vmax = <7>;
 		qcom,vdd-mx-vmin-method = <4>;
 		vdd-mx-supply = <&pm8994_s2_corner_ao>;
-
-		mem-acc-supply = <&mem_acc1_vreg_corner>;
 
 		qcom,cpr-ref-clk = <19200>;
 		qcom,cpr-timer-delay = <5000>;
@@ -743,6 +785,7 @@
 					<139 58 6 0>,
 					<140 0 7 0>;
 		qcom,cpr-fuse-revision = <137 34 3 0>;
+		qcom,speed-bin-fuse-sel = <22 0 3 0>;
 
 		qcom,fuse-remap-base-row = <1000>;
 		qcom,fuse-remap-source =
@@ -760,23 +803,44 @@
 					<1000 39 6 0>,
 					<1000 24 6 0>;
 
-		qcom,cpr-init-voltage-ref = <900000 900000 1000000 1225000>;
+		qcom,cpr-init-voltage-ref = <900000 900000 1000000 1230000>;
 		qcom,cpr-init-voltage-step = <10000>;
 
 		qcom,cpr-corner-map = <1 2 2 2 2 3 3 3 4 4 4 4 4 4 4>;
 		qcom,cpr-voltage-ceiling-override =
 				<0xFFFFFFFF 0  900000  900000  900000  900000
 					       900000 1000000 1000000 1000000
-					      1160000 1160000 1160000 1160000
-					      1160000 1160000 1225000>;
+					      1115000 1115000 1115000 1115000
+					      1115000 1115000 1180000>;
+		qcom,cpr-voltage-floor-override =
+				<0xFFFFFFFF 0  640000  640000  665000  690000
+					       735000  745000  770000  785000
+					       850000  860000  880000  900000
+					       920000  935000 1000000>;
 		qcom,cpr-fuse-version-map =
-				<0xffffffff 0xffffffff 1 4 4 4 4>;
+				<0xffffffff 0xffffffff 0 4 4 4 4>,
+				<0xffffffff 0xffffffff 1 4 4 4 4>,
+				<0xffffffff 0xffffffff 2 4 4 4 4>,
+				<0xffffffff 0xffffffff 3 2 2 2 2>;
+		qcom,cpr-quotient-adjustment =
+				<0 0 0 0>,
+				<0 0 0 0>,
+				<(-21) (-21) 21 (-42)>,
+				<10 10 (-84) (-24)>;
 		qcom,cpr-init-voltage-adjustment =
-				<(-25000) (-25000) (-25000) (-25000)>;
+				<0 0 0 0>,
+				<0 0 (-25000) (-25000)>,
+				<0 0 30000 (-5000)>,
+				<30000 30000 (-20000) (-20000)>;
+		qcom,cpr-allowed =
+				<0>,
+				<0>,
+				<1>,
+				<1>;
 
 		qcom,cpr-scaled-init-voltage-as-ceiling;
-		qcom,cpr-voltage-scaling-factor-max = <0 0 2000 2000>;
-		qcom,cpr-quot-adjust-scaling-factor-max = <0 0 0 0>;
+		qcom,cpr-voltage-scaling-factor-max = <0 2000 2000 2000>;
+		qcom,cpr-quot-adjust-scaling-factor-max = <0 2000 2000 2000>;
 		qcom,cpr-corner-frequency-map =
 				<1   300000000>, /* SVS Fmin for "SVS2" */
 				<2   300000000>,
@@ -795,6 +859,7 @@
 				<15 1824000000>;
 		qcom,cpr-speed-bin-max-corners =
 				<0xFFFFFFFF 0 1 5 8 15>;
+		qcom,cpr-enable;
 	};
 
 /* Miscellaneous regulators */

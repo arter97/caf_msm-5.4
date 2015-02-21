@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -19,16 +19,6 @@
 #include "msm8994.dtsi"
 #include "msm8994-coresight-v2.dtsi"
 #include "msm8994-camera-v2.dtsi"
-
-/ {
-	model = "Qualcomm Technologies, Inc. MSM 8994v2";
-	compatible = "qcom,msm8994";
-	qcom,msm-id = <207 0x20000>;
-
-	chosen {
-		bootargs = "sched_enable_hmp=1 sched_enable_power_aware=1";
-	};
-};
 
 &soc {
 
@@ -83,7 +73,6 @@
 	vdd-dig-supply = <&pm8994_s2_corner_ao>;
 	qcom,a53-speedbin0-v0 =
 			<	   0 0>,
-			<  300000000 2>,
 			<  384000000 3>,
 			<  460800000 4>,
 			<  600000000 5>,
@@ -97,9 +86,6 @@
 			< 1555200000 13>;
 	qcom,a57-speedbin0-v0 =
 			<	   0 0>,
-			<  300000000 2>,
-			<  384000000 3>,
-			<  480000000 4>,
 			<  633600000 5>,
 			<  768000000 6>,
 			<  864000000 7>,
@@ -114,9 +100,6 @@
 			< 1958400000 17>;
 	qcom,a57-speedbin1-v0 =
 			<	   0 0>,
-			<  300000000 2>,
-			<  384000000 3>,
-			<  480000000 4>,
 			<  633600000 5>,
 			<  768000000 6>,
 			<  864000000 7>,
@@ -149,7 +132,6 @@
 
 &msm_cpufreq {
 	qcom,cpufreq-table-0 =
-		<  300000 >,
 		<  384000 >,
 		<  460800 >,
 		<  600000 >,
@@ -163,9 +145,6 @@
 		< 1555200 >;
 
 	qcom,cpufreq-table-4 =
-		<  300000 >,
-		<  384000 >,
-		<  480000 >,
 		<  633600 >,
 		<  768000 >,
 		<  864000 >,
@@ -183,7 +162,6 @@
 &devfreq_cpufreq {
 	cpubw-cpufreq {
 		cpu-to-dev-map-0 =
-			<  300000  1525 >,
 			<  384000  1525 >,
 			<  460800  1525 >,
 			<  600000  1525 >,
@@ -196,9 +174,6 @@
 			< 1478400 11863 >,
 			< 1555200 11863 >;
 		cpu-to-dev-map-4 =
-			<  300000  1525 >,
-			<  384000  1525 >,
-			<  480000  2288 >,
 			<  633600  2288 >,
 			<  768000  3509 >,
 			<  864000  4066 >,
@@ -216,7 +191,6 @@
 	mincpubw-cpufreq {
 		target-dev = <&mincpubw>;
 		cpu-to-dev-map-0 =
-			<  300000 1525 >,
 			<  384000 2288 >,
 			<  460800 2288 >,
 			<  600000 3509 >,
@@ -229,9 +203,6 @@
 			< 1478400 5928 >,
 			< 1555200 5928 >;
 		cpu-to-dev-map-4 =
-			<  300000 1525 >,
-			<  384000 2288 >,
-			<  480000 2288 >,
 			<  633600 3509 >,
 			<  768000 5126 >,
 			<  864000 5928 >,
@@ -248,7 +219,6 @@
 
 	cci-cpufreq {
 		cpu-to-dev-map-0 =
-			<  300000 300000 >,
 			<  384000 300000 >,
 			<  460800 300000 >,
 			<  600000 300000 >,
@@ -261,10 +231,7 @@
 			< 1478400 787200 >,
 			< 1555200 787200 >;
 		cpu-to-dev-map-4 =
-			<  300000 300000 >,
-			<  384000 300000 >,
-			<  480000 300000 >,
-			<  633600 384000 >,
+			<  633600 300000 >,
 			<  768000 537600 >,
 			<  864000 600000 >,
 			<  960000 600000 >,
@@ -301,9 +268,6 @@
 
 /* GPU overrides */
 &msm_gpu {
-	/* Updated chip ID */
-	qcom,chipid = <0x04030001>;
-
 	qcom,initial-pwrlevel = <4>;
 	qcom,msm-bus,num-cases = <19>;
 	qcom,msm-bus,vectors-KBps =

@@ -135,6 +135,7 @@ struct smbchg_chip {
 	int				n_vbat_samples;
 
 	/* status variables */
+	int				battchg_disabled;
 	int				usb_suspended;
 	int				dc_suspended;
 	int				wake_reasons;
@@ -148,6 +149,7 @@ struct smbchg_chip {
 	bool				aicl_deglitch_on;
 	bool				sw_esr_pulse_en;
 	bool				safety_timer_en;
+	bool				aicl_complete;
 
 	/* jeita and temperature */
 	bool				batt_hot;
@@ -203,6 +205,7 @@ struct smbchg_chip {
 	spinlock_t			sec_access_lock;
 	struct mutex			current_change_lock;
 	struct mutex			usb_set_online_lock;
+	struct mutex			battchg_disabled_lock;
 	struct mutex			usb_en_lock;
 	struct mutex			dc_en_lock;
 	struct mutex			fcc_lock;
@@ -615,6 +618,7 @@ static inline enum power_supply_type get_usb_supply_type(int type)
 static enum power_supply_property smbchg_battery_properties[] = {
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED,
 	POWER_SUPPLY_PROP_CHARGING_ENABLED,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_CAPACITY,
@@ -629,6 +633,8 @@ static enum power_supply_property smbchg_battery_properties[] = {
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_SAFETY_TIMER_ENABLE,
+	POWER_SUPPLY_PROP_INPUT_CURRENT_MAX,
+	POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED,
 };
 
 #define CHGR_STS			0x0E
@@ -973,6 +979,15 @@ static int calc_thermal_limited_current(struct smbchg_chip *chip,
 	return current_ma;
 }
 
+#define CMD_CHG_REG	0x42
+#define EN_BAT_CHG_BIT		BIT(1)
+static int smbchg_charging_en(struct smbchg_chip *chip, bool en)
+{
+	/* The en bit is configured active low */
+	return smbchg_masked_write(chip, chip->bat_if_base + CMD_CHG_REG,
+			EN_BAT_CHG_BIT, en ? 0 : EN_BAT_CHG_BIT);
+}
+
 #define CMD_IL			0x40
 #define USBIN_SUSPEND_BIT	BIT(4)
 #define CURRENT_100_MA		100
@@ -1060,6 +1075,13 @@ enum enable_reason {
 	REASON_OTG = BIT(5),
 };
 
+enum battchg_enable_reason {
+	/* userspace has disabled battery charging */
+	REASON_BATTCHG_USER		= BIT(0),
+	/* battery charging disabled while loading battery profiles */
+	REASON_BATTCHG_LOADING_PROFILE	= BIT(1),
+};
+
 static struct power_supply *get_parallel_psy(struct smbchg_chip *chip)
 {
 	if (!chip->parallel.avail)
@@ -1098,6 +1120,57 @@ static bool smbchg_primary_usb_is_en(struct smbchg_chip *chip,
 	mutex_unlock(&chip->usb_en_lock);
 
 	return enabled;
+}
+
+static bool smcghg_is_battchg_en(struct smbchg_chip *chip,
+		enum battchg_enable_reason reason)
+{
+	bool enabled;
+
+	mutex_lock(&chip->battchg_disabled_lock);
+	enabled = !(chip->battchg_disabled & reason);
+	mutex_unlock(&chip->battchg_disabled_lock);
+
+	return enabled;
+}
+
+static int smbchg_battchg_en(struct smbchg_chip *chip, bool enable,
+		enum battchg_enable_reason reason, bool *changed)
+{
+	int rc = 0, battchg_disabled;
+
+	pr_smb(PR_STATUS, "battchg %s, susp = %02x, en? = %d, reason = %02x\n",
+			chip->battchg_disabled == 0 ? "enabled" : "disabled",
+			chip->battchg_disabled, enable, reason);
+
+	mutex_lock(&chip->battchg_disabled_lock);
+	if (!enable)
+		battchg_disabled = chip->battchg_disabled | reason;
+	else
+		battchg_disabled = chip->battchg_disabled & (~reason);
+
+	/* avoid unnecessary spmi interactions if nothing changed */
+	if (!!battchg_disabled == !!chip->battchg_disabled) {
+		*changed = false;
+		goto out;
+	}
+
+	rc = smbchg_charging_en(chip, !battchg_disabled);
+	if (rc < 0) {
+		dev_err(chip->dev,
+			"Couldn't configure batt chg: 0x%x rc = %d\n",
+			battchg_disabled, rc);
+		goto out;
+	}
+	*changed = true;
+
+	pr_smb(PR_STATUS, "batt charging %s, battchg_disabled = %02x\n",
+			battchg_disabled == 0 ? "enabled" : "disabled",
+			battchg_disabled);
+out:
+	chip->battchg_disabled = battchg_disabled;
+	mutex_unlock(&chip->battchg_disabled_lock);
+	return rc;
 }
 
 static int smbchg_primary_usb_en(struct smbchg_chip *chip, bool enable,
@@ -1760,8 +1833,8 @@ static struct ilim_entry *smbchg_wipower_find_entry(struct smbchg_chip *chip,
 	struct ilim_entry *ret = &(chip->wipower_default.entries[0]);
 
 	for (i = 0; i < map->num; i++) {
-		if (is_between(uv,
-			map->entries[i].vmin_uv, map->entries[i].vmax_uv))
+		if (is_between(map->entries[i].vmin_uv, map->entries[i].vmax_uv,
+			uv))
 			ret = &map->entries[i];
 	}
 	return ret;
@@ -2278,10 +2351,15 @@ static int smbchg_battery_set_property(struct power_supply *psy,
 				       const union power_supply_propval *val)
 {
 	int rc = 0;
+	bool unused;
 	struct smbchg_chip *chip = container_of(psy,
 				struct smbchg_chip, batt_psy);
 
 	switch (prop) {
+	case POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED:
+		smbchg_battchg_en(chip, val->intval,
+				REASON_BATTCHG_USER, &unused);
+		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
 		smbchg_usb_en(chip, val->intval, REASON_USER);
 		smbchg_dc_en(chip, val->intval, REASON_USER);
@@ -2317,6 +2395,7 @@ static int smbchg_battery_is_writeable(struct power_supply *psy,
 	int rc;
 
 	switch (prop) {
+	case POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED:
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
 	case POWER_SUPPLY_PROP_CAPACITY:
 	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
@@ -2346,6 +2425,9 @@ static int smbchg_battery_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_PRESENT:
 		val->intval = get_prop_batt_present(chip);
 		break;
+	case POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED:
+		val->intval = smcghg_is_battchg_en(chip, REASON_BATTCHG_USER);
+		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
 		val->intval = chip->chg_enabled;
 		break;
@@ -2369,6 +2451,12 @@ static int smbchg_battery_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
 		val->intval = chip->therm_lvl_sel;
+		break;
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_MAX:
+		val->intval = smbchg_get_aicl_level_ma(chip) * 1000;
+		break;
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED:
+		val->intval = (int)chip->aicl_complete;
 		break;
 	/* properties from fg */
 	case POWER_SUPPLY_PROP_CAPACITY:
@@ -2480,14 +2568,6 @@ static void smbchg_unknown_battery_en(struct smbchg_chip *chip, bool en)
 	}
 }
 
-#define CMD_CHG_REG	0x42
-#define EN_BAT_CHG_BIT		BIT(1)
-static int smbchg_charging_en(struct smbchg_chip *chip, bool en)
-{
-	return smbchg_masked_write(chip, chip->bat_if_base + CMD_CHG_REG,
-			EN_BAT_CHG_BIT, en ? 0 : EN_BAT_CHG_BIT);
-}
-
 static void smbchg_vfloat_adjust_check(struct smbchg_chip *chip)
 {
 	if (!chip->use_vfloat_adjustments)
@@ -2586,6 +2666,7 @@ static void smbchg_external_power_changed(struct power_supply *psy)
 	union power_supply_propval prop = {0,};
 	int rc, current_limit = 0, soc;
 	bool en;
+	bool unused;
 
 	if (chip->bms_psy_name)
 		chip->bms_psy =
@@ -2597,7 +2678,8 @@ static void smbchg_external_power_changed(struct power_supply *psy)
 		en = strcmp(prop.strval, UNKNOWN_BATT_TYPE) != 0;
 		smbchg_unknown_battery_en(chip, en);
 		en = strcmp(prop.strval, LOADING_BATT_TYPE) != 0;
-		smbchg_charging_en(chip, en);
+		smbchg_battchg_en(chip, en, REASON_BATTCHG_LOADING_PROFILE,
+				&unused);
 		soc = get_prop_batt_capacity(chip);
 		if (chip->previous_soc != soc) {
 			chip->previous_soc = soc;
@@ -3618,10 +3700,23 @@ static irqreturn_t aicl_done_handler(int irq, void *_chip)
 {
 	struct smbchg_chip *chip = _chip;
 	bool usb_present = is_usb_present(chip);
+	int rc;
+	u8 reg;
 
 	pr_smb(PR_INTERRUPT, "aicl_done triggered\n");
 	if (usb_present)
 		smbchg_parallel_usb_check_ok(chip);
+
+	rc = smbchg_read(chip, &reg,
+			chip->usb_chgpth_base + ICL_STS_1_REG, 1);
+	if (!rc)
+		chip->aicl_complete = reg & AICL_STS_BIT;
+	else
+		chip->aicl_complete = false;
+
+	if (chip->aicl_complete)
+		power_supply_changed(&chip->batt_psy);
+
 	return IRQ_HANDLED;
 }
 
@@ -3843,6 +3938,7 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
 		dev_err(chip->dev, "Couldn't set chgr_cfg2 rc=%d\n", rc);
 		return rc;
 	}
+	chip->battchg_disabled = 0;
 
 	/*
 	 * Based on the configuration, use the analog sensors or the fuelgauge
@@ -4699,6 +4795,7 @@ static int smbchg_probe(struct spmi_device *spmi)
 	mutex_init(&chip->fcc_lock);
 	mutex_init(&chip->current_change_lock);
 	mutex_init(&chip->usb_set_online_lock);
+	mutex_init(&chip->battchg_disabled_lock);
 	mutex_init(&chip->usb_en_lock);
 	mutex_init(&chip->dc_en_lock);
 	mutex_init(&chip->parallel.lock);
