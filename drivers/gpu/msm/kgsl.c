@@ -872,7 +872,10 @@ static void kgsl_destroy_process_private(struct kref *kref)
 
 	idr_destroy(&private->mem_idr);
 	idr_destroy(&private->syncsource_idr);
-	kgsl_mmu_putpagetable(private->pagetable);
+
+	/* When using global pagetables, do not detach global pagetable */
+	if (private->pagetable->name != KGSL_MMU_GLOBAL_PT)
+		kgsl_mmu_putpagetable(private->pagetable);
 
 	kfree(private);
 	return;
@@ -1022,7 +1025,9 @@ static void kgsl_process_private_close(struct kgsl_device_private *dev_priv,
 
 	process_release_sync_sources(private);
 
-	kgsl_mmu_detach_pagetable(private->pagetable);
+	/* When using global pagetables, do not detach global pagetable */
+	if (private->pagetable->name != KGSL_MMU_GLOBAL_PT)
+		kgsl_mmu_detach_pagetable(private->pagetable);
 
 	/* Remove the process struct from the master list */
 	list_del(&private->list);
