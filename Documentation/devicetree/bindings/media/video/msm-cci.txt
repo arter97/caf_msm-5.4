@@ -22,7 +22,9 @@ Required properties:
 - clock-rates: clock rate in Hz
 
 Optional properties:
-- qcom,gdscr-vdd-supply : should contain regulator used for cci clocks
+- qcom,cam-vreg-name : name of the voltage regulators required for the device.
+- gdscr-supply : should contain gdsr regulator used for cci clocks.
+- mmagic-supply : should contain mmagic regulator used for mmagic clocks.
 
 - I2c speed settings (*)
 	- i2c_freq_100Khz: qcom,i2c_standard_mode - node should contain clock settings for

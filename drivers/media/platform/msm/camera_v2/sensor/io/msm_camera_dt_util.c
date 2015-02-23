@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1097,7 +1097,7 @@ int msm_camera_get_dt_vreg_data(struct device_node *of_node,
 	struct camera_vreg_t **cam_vreg, int *num_vreg)
 {
 	int rc = 0, i = 0;
-	uint32_t count = 0;
+	int32_t count = 0;
 	uint32_t *vreg_array = NULL;
 	struct camera_vreg_t *vreg = NULL;
 	bool custom_vreg_name =  false;
@@ -1105,8 +1105,11 @@ int msm_camera_get_dt_vreg_data(struct device_node *of_node,
 	count = of_property_count_strings(of_node, "qcom,cam-vreg-name");
 	CDBG("%s qcom,cam-vreg-name count %d\n", __func__, count);
 
-	if (!count)
+	if (!count || (count == -EINVAL)) {
+		pr_err("%s:%d number of entries is 0 or not present in dts\n",
+			__func__, __LINE__);
 		return 0;
+	}
 
 	vreg = kzalloc(sizeof(*vreg) * count, GFP_KERNEL);
 	if (!vreg) {
@@ -1162,48 +1165,71 @@ int msm_camera_get_dt_vreg_data(struct device_node *of_node,
 		} else {
 			for (i = 0; i < count; i++) {
 				vreg[i].type = vreg_array[i];
-				CDBG("%s cam_vreg[%d].type = %d\n", __func__, i,
-					vreg[i].type);
+				CDBG("%s cam_vreg[%d].type = %d\n",
+					__func__, i, vreg[i].type);
 			}
 		}
 	} else {
+		pr_err("%s:%d no qcom,cam-vreg-type entries in dts\n",
+			__func__, __LINE__);
 		rc = 0;
 	}
 
 	rc = of_property_read_u32_array(of_node, "qcom,cam-vreg-min-voltage",
 		vreg_array, count);
-	if (rc < 0) {
-		pr_err("%s failed %d\n", __func__, __LINE__);
-		goto ERROR2;
-	}
-	for (i = 0; i < count; i++) {
-		vreg[i].min_voltage = vreg_array[i];
-		CDBG("%s cam_vreg[%d].min_voltage = %d\n", __func__,
-			i, vreg[i].min_voltage);
+	if (rc != -EINVAL) {
+		if (rc < 0) {
+			pr_err("%s failed %d\n", __func__, __LINE__);
+			goto ERROR2;
+		} else {
+			for (i = 0; i < count; i++) {
+				vreg[i].min_voltage = vreg_array[i];
+				CDBG("%s cam_vreg[%d].min_voltage = %d\n",
+					__func__, i, vreg[i].min_voltage);
+			}
+		}
+	} else {
+		pr_err("%s:%d no qcom,cam-vreg-min-voltage entries in dts\n",
+			__func__, __LINE__);
+		rc = 0;
 	}
 
 	rc = of_property_read_u32_array(of_node, "qcom,cam-vreg-max-voltage",
 		vreg_array, count);
-	if (rc < 0) {
-		pr_err("%s failed %d\n", __func__, __LINE__);
-		goto ERROR2;
-	}
-	for (i = 0; i < count; i++) {
-		vreg[i].max_voltage = vreg_array[i];
-		CDBG("%s cam_vreg[%d].max_voltage = %d\n", __func__,
-			i, vreg[i].max_voltage);
+	if (rc != -EINVAL) {
+		if (rc < 0) {
+			pr_err("%s failed %d\n", __func__, __LINE__);
+			goto ERROR2;
+		} else {
+			for (i = 0; i < count; i++) {
+				vreg[i].max_voltage = vreg_array[i];
+				CDBG("%s cam_vreg[%d].max_voltage = %d\n",
+					__func__, i, vreg[i].max_voltage);
+			}
+		}
+	} else {
+		pr_err("%s:%d no qcom,cam-vreg-max-voltage entries in dts\n",
+			__func__, __LINE__);
+		rc = 0;
 	}
 
 	rc = of_property_read_u32_array(of_node, "qcom,cam-vreg-op-mode",
 		vreg_array, count);
-	if (rc < 0) {
-		pr_err("%s failed %d\n", __func__, __LINE__);
-		goto ERROR2;
-	}
-	for (i = 0; i < count; i++) {
-		vreg[i].op_mode = vreg_array[i];
-		CDBG("%s cam_vreg[%d].op_mode = %d\n", __func__, i,
-			vreg[i].op_mode);
+	if (rc != -EINVAL) {
+		if (rc < 0) {
+			pr_err("%s failed %d\n", __func__, __LINE__);
+			goto ERROR2;
+		} else {
+			for (i = 0; i < count; i++) {
+				vreg[i].op_mode = vreg_array[i];
+				CDBG("%s cam_vreg[%d].op_mode = %d\n",
+					__func__, i, vreg[i].op_mode);
+			}
+		}
+	} else {
+		pr_err("%s:%d no qcom,cam-vreg-op-mode entries in dts\n",
+			__func__, __LINE__);
+		rc = 0;
 	}
 
 	kfree(vreg_array);
@@ -1601,3 +1627,4 @@ int msm_camera_power_down(struct msm_camera_power_ctrl_t *ctrl,
 	CDBG("%s exit\n", __func__);
 	return 0;
 }
+
