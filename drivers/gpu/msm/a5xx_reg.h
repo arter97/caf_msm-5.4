@@ -75,6 +75,7 @@
 #define A5XX_CP_ME_UCODE_DBG_ADDR        0x82F
 #define A5XX_CP_ME_UCODE_DBG_DATA        0x830
 #define A5XX_CP_ME_CNTL                  0x832
+#define A5XX_CP_CHICKEN_DBG              0x833
 #define A5XX_CP_PFP_INSTR_BASE_LO        0x835
 #define A5XX_CP_PFP_INSTR_BASE_HI        0x836
 #define A5XX_CP_PM4_INSTR_BASE_LO        0x838
