@@ -28,6 +28,7 @@ Required properties:
 Optional properties:
 - qcom,cam-vreg-name : name of the voltage regulators required for the device.
 - gdscr-supply : should contain regulator used for csid clocks.
+- mmagic-supply : should contain mmagic regulator used for mmagic clocks.
 
 Example:
 
