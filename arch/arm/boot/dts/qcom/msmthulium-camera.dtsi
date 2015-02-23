@@ -22,9 +22,8 @@
 	qcom,csiphy@a34000 {
 		cell-index = <0>;
 		compatible = "qcom,csiphy-v3.5", "qcom,csiphy";
-		reg = <0xa34000 0x1000>,
-                      <0xa30030 0x4>;
-		reg-names = "csiphy", "csiphy_clk_mux";
+		reg = <0xa34000 0x1000>;
+		reg-names = "csiphy";
 		interrupts = <0 78 0>;
 		interrupt-names = "csiphy";
 		clocks = <&clock_mmss clk_camss_top_ahb_clk>,
@@ -48,9 +47,8 @@
 	qcom,csiphy@a35000 {
 		cell-index = <1>;
 		compatible = "qcom,csiphy-v3.5", "qcom,csiphy";
-		reg = <0xa35000 0x1000>,
-                      <0xa30038 0x4>;
-		reg-names = "csiphy", "csiphy_clk_mux";
+		reg = <0xa35000 0x1000>;
+		reg-names = "csiphy";
 		interrupts = <0 79 0>;
 		interrupt-names = "csiphy";
 		clocks = <&clock_mmss clk_camss_top_ahb_clk>,
@@ -74,9 +72,8 @@
 	qcom,csiphy@a36000 {
 		cell-index = <2>;
 		compatible = "qcom,csiphy-v3.5", "qcom,csiphy";
-		reg = <0xa36000 0x1000>,
-                      <0xa30040 0x4>;
-		reg-names = "csiphy", "csiphy_clk_mux";
+		reg = <0xa36000 0x1000>;
+		reg-names = "csiphy";
 		interrupts = <0 80 0>;
 		interrupt-names = "csiphy";
 		clocks = <&clock_mmss clk_camss_top_ahb_clk>,
