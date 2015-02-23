@@ -159,7 +159,6 @@
 			<&clock_mmss clk_mmss_mmagic_cfg_ahb_clk>;
 		clock-names = "gpu_ahb_clk", "bimc_gfx_clk", "mmagic_ahb_clk", "mmagic_cfg_ahb_clk";
 		num_cb = <2>;
-		retention = <1>;
 
 		iommu_kgsl_cb2: iommu_kgsl_cb2 {
 			compatible = "qcom,smmu-kgsl-cb";
