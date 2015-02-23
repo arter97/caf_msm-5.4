@@ -480,11 +480,11 @@ static int wil_cfg80211_disconnect(struct wiphy *wiphy,
 }
 
 int wil_cfg80211_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
-			 struct ieee80211_channel *chan, bool offchan,
-			 unsigned int wait, const u8 *buf, size_t len,
-			 bool no_cck, bool dont_wait_for_ack,
+			 struct cfg80211_mgmt_tx_params *params,
 			 u64 *cookie)
 {
+	const u8 *buf = params->buf;
+	size_t len = params->len;
 	struct wil6210_priv *wil = wiphy_to_wil(wiphy);
 	int rc;
 	bool tx_status = false;

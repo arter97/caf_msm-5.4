@@ -703,9 +703,7 @@ void wil_configure_interrupt_moderation(struct wil6210_priv *wil);
 void wil_disable_irq(struct wil6210_priv *wil);
 void wil_enable_irq(struct wil6210_priv *wil);
 int wil_cfg80211_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
-			 struct ieee80211_channel *chan, bool offchan,
-			 unsigned int wait, const u8 *buf, size_t len,
-			 bool no_cck, bool dont_wait_for_ack,
+			 struct cfg80211_mgmt_tx_params *params,
 			 u64 *cookie);
 
 int wil6210_debugfs_init(struct wil6210_priv *wil);

@@ -696,6 +696,7 @@ static ssize_t wil_write_file_txmgmt(struct file *file, const char __user *buf,
 	struct wil6210_priv *wil = file->private_data;
 	struct wiphy *wiphy = wil_to_wiphy(wil);
 	struct wireless_dev *wdev = wil_to_wdev(wil);
+	struct cfg80211_mgmt_tx_params params;
 	int rc;
 	void *frame = kmalloc(len, GFP_KERNEL);
 
@@ -707,9 +708,11 @@ static ssize_t wil_write_file_txmgmt(struct file *file, const char __user *buf,
 		return -EIO;
 	}
 
-	rc = wil_cfg80211_mgmt_tx(wiphy, wdev, wdev->preset_chandef.chan,
-				true, 0, frame, len, true, false, NULL);
+	params.buf = frame;
+	params.len = len;
+	params.chan = wdev->preset_chandef.chan;
 
+	rc = wil_cfg80211_mgmt_tx(wiphy, wdev, &params, NULL);
 	kfree(frame);
 	wil_info(wil, "%s() -> %d\n", __func__, rc);
 

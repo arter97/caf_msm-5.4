@@ -720,7 +720,7 @@ int wil_reset(struct wil6210_priv *wil)
 	/* init after reset */
 	wil->pending_connect_cid = -1;
 	reinit_completion(&wil->wmi_ready);
-	INIT_COMPLETION(wil->wmi_call);
+	reinit_completion(&wil->wmi_call);
 
 	wil_configure_interrupt_moderation(wil);
 	wil_unmask_irq(wil);
