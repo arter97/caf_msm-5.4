@@ -73,7 +73,7 @@ static int vdd_mmpll4_levels[] = {
 
 static DEFINE_VDD_REGULATORS(vdd_mmpll4, VDD_DIG_NUM, 2, vdd_mmpll4_levels,
 									NULL);
-DEFINE_VDD_REGS_INIT(vdd_gfx, 1);
+DEFINE_VDD_REGS_INIT(vdd_gfx, 2);
 
 static struct alpha_pll_masks pll_masks_p = {
 	.lock_mask = BIT(31),
@@ -3312,18 +3312,18 @@ static int of_get_fmax_vdd_class(struct platform_device *pdev, struct clk *c,
 	}
 
 	prop_len /= sizeof(u32);
-	if (prop_len % 2) {
+	if (prop_len % 3) {
 		dev_err(&pdev->dev, "bad length %d\n", prop_len);
 		return -EINVAL;
 	}
 
-	prop_len /= 2;
+	prop_len /= 3;
 	vdd->level_votes = devm_kzalloc(&pdev->dev, prop_len * sizeof(int),
 					GFP_KERNEL);
 	if (!vdd->level_votes)
 		return -ENOMEM;
 
-	vdd->vdd_uv = devm_kzalloc(&pdev->dev, prop_len * sizeof(int),
+	vdd->vdd_uv = devm_kzalloc(&pdev->dev, prop_len * sizeof(int) * 2,
 					GFP_KERNEL);
 	if (!vdd->vdd_uv)
 		return -ENOMEM;
@@ -3334,14 +3334,15 @@ static int of_get_fmax_vdd_class(struct platform_device *pdev, struct clk *c,
 		return -ENOMEM;
 
 	array = devm_kzalloc(&pdev->dev,
-			prop_len * sizeof(u32) * 2, GFP_KERNEL);
+			prop_len * sizeof(u32) * 3, GFP_KERNEL);
 	if (!array)
 		return -ENOMEM;
 
-	of_property_read_u32_array(of, prop_name, array, prop_len * 2);
+	of_property_read_u32_array(of, prop_name, array, prop_len * 3);
 	for (i = 0; i < prop_len; i++) {
-		c->fmax[i] = array[2 * i];
-		vdd->vdd_uv[i] = array[2 * i + 1];
+		c->fmax[i] = array[3 * i];
+		vdd->vdd_uv[2 * i] = array[3 * i + 1];
+		vdd->vdd_uv[2 * i + 1] = array[3 * i + 2];
 	}
 
 	devm_kfree(&pdev->dev, array);
@@ -3408,6 +3409,13 @@ int msm_mmsscc_thulium_probe(struct platform_device *pdev)
 	if (IS_ERR(reg)) {
 		if (PTR_ERR(reg) != -EPROBE_DEFER)
 			dev_err(&pdev->dev, "Unable to get vdd_gfx regulator!");
+		return PTR_ERR(reg);
+	}
+
+	reg = vdd_gfx.regulator[1] = devm_regulator_get(&pdev->dev, "vdd_mx");
+	if (IS_ERR(reg)) {
+		if (PTR_ERR(reg) != -EPROBE_DEFER)
+			dev_err(&pdev->dev, "Unable to get vdd_mx regulator!");
 		return PTR_ERR(reg);
 	}
 
