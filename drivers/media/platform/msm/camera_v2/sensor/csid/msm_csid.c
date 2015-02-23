@@ -497,8 +497,16 @@ static int msm_csid_release(struct csid_device *csid_dev)
 			csid_dev->num_clk, 0);
 
 		msm_camera_enable_vreg(&csid_dev->pdev->dev,
+			csid_dev->csid_vreg, csid_dev->regulator_count, NULL,
+			0, &csid_dev->csid_reg_ptr[0], 0);
+
+		msm_camera_enable_vreg(&csid_dev->pdev->dev,
 			csid_vreg_info, ARRAY_SIZE(csid_vreg_info),
 			NULL, 0, &csid_dev->csi_vdd, 0);
+
+		msm_camera_config_vreg(&csid_dev->pdev->dev,
+			csid_dev->csid_vreg, csid_dev->regulator_count, NULL,
+			0, &csid_dev->csid_reg_ptr[0], 0);
 
 		msm_camera_config_vreg(&csid_dev->pdev->dev,
 			csid_vreg_info, ARRAY_SIZE(csid_vreg_info),
@@ -951,7 +959,8 @@ static int csid_probe(struct platform_device *pdev)
 		goto csid_no_resource;
 	}
 
-	if (new_csid_dev->regulator_count > MAX_REGULATOR) {
+	if ((new_csid_dev->regulator_count < 0) ||
+		(new_csid_dev->regulator_count > MAX_REGULATOR)) {
 		pr_err("%s: invalid reg count = %d, max is %d\n", __func__,
 			new_csid_dev->regulator_count, MAX_REGULATOR);
 		rc = -EFAULT;
