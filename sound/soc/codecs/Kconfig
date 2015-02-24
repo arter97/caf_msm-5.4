@@ -402,7 +402,7 @@ config SND_SOC_WCD_CPE
 
 config AUDIO_EXT_CLK
 	tristate
-	default y if SND_SOC_WCD9335=y
+	default y if SND_SOC_WCD9335=y || SND_SOC_WCD9330=y
 
 config SND_SOC_WL1273
 	tristate
