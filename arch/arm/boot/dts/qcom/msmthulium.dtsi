@@ -1727,7 +1727,6 @@
 		qcom,proxy-timeout-ms = <5000>;
 		qcom,firmware-name = "venus";
 		memory-region = <&peripheral_mem>;
-		qcom,pil-no-auth;
 	};
 
 	qcom,ssc@1c00000 {
@@ -2622,11 +2621,6 @@
 &gdsc_mmagic_camss {
 	parent-supply = <&gdsc_mmagic_bimc>;
 	status = "ok";
-};
-
-&msm_vidc {
-	qcom,use-non-secure-pil;
-	qcom,fw-bias = <0x8cc00000>;
 };
 
 /include/ "msm-pm8994-rpm-regulator.dtsi"
