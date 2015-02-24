@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -109,72 +109,40 @@ error:
 	return rc;
 }
 
-void msm_jpeg_platform_p2v(struct msm_jpeg_device *pgmn_dev,
-		struct msm_jpeg_hw_buf *buf_p, int domain_num)
+void msm_jpeg_platform_p2v(int iommu_hdl, int fd)
 {
-	msm_unmap_dma_buf(buf_p->table, pgmn_dev->domain_num, 0);
-	dma_buf_unmap_attachment(buf_p->attachment,
-		buf_p->table, DMA_BIDIRECTIONAL);
-	dma_buf_detach(buf_p->dbuf, buf_p->attachment);
-	dma_buf_put(buf_p->dbuf);
-	buf_p->dbuf = NULL;
+	cam_smmu_put_phy_addr(iommu_hdl, fd);
+	return;
 }
 
 uint32_t msm_jpeg_platform_v2p(struct msm_jpeg_device *pgmn_dev, int fd,
-	uint32_t len, struct msm_jpeg_hw_buf *buf_p, int domain_num) {
-
+	uint32_t len, int iommu_hdl)
+{
 	dma_addr_t paddr;
 	unsigned long size;
 	int rc;
 
-	buf_p->dbuf = dma_buf_get(fd);
-	if (IS_ERR_OR_NULL(buf_p->dbuf)) {
-		pr_err("dma_buf_get() failed\n");
-		rc = PTR_ERR(buf_p->dbuf);
-		goto err_dma_buf_get;
-	}
+	rc = cam_smmu_get_phy_addr(pgmn_dev->iommu_hdl, fd, CAM_SMMU_MAP_RW,
+			&paddr, &size);
+	JPEG_DBG("%s:%d] addr 0x%x size %ld", __func__, __LINE__,
+		(uint32_t)paddr, size);
 
-	buf_p->attachment = dma_buf_attach(buf_p->dbuf, &pgmn_dev->pdev->dev);
-	if (IS_ERR_OR_NULL(buf_p->attachment)) {
-		pr_err("DMA buf attach failed\n");
-		rc = PTR_ERR(buf_p->attachment);
-		goto err_attach_buf;
-	}
-
-	buf_p->table =
-		dma_buf_map_attachment(buf_p->attachment, DMA_BIDIRECTIONAL);
-	if (IS_ERR_OR_NULL(buf_p->table)) {
-		pr_err("DMA buf map attachment failed\n");
-		rc = PTR_ERR(buf_p->table);
-		goto err_map_table;
-	}
-
-	rc = msm_map_dma_buf(buf_p->dbuf, buf_p->table, domain_num, 0,
-		SZ_4K, 0, &paddr, (unsigned long *)&size, 0, 0);
 	if (rc < 0) {
-		JPEG_PR_ERR("%s: DMA map failed fd %d error %d\n", __func__, fd,
+		JPEG_PR_ERR("%s: fd %d got phy addr error %d\n", __func__, fd,
 			rc);
-		goto err_detach;
+		goto err_get_phy;
 	}
 
 	/* validate user input */
 	if (len > size) {
 		JPEG_PR_ERR("%s: invalid offset + len\n", __func__);
-		goto err_detach;
+		goto err_size;
 	}
 
 	return paddr;
-
-err_detach:
-	dma_buf_unmap_attachment(buf_p->attachment,
-		buf_p->table, DMA_BIDIRECTIONAL);
-err_map_table:
-	dma_buf_detach(buf_p->dbuf, buf_p->attachment);
-err_attach_buf:
-	dma_buf_put(buf_p->dbuf);
-	buf_p->dbuf = NULL;
-err_dma_buf_get:
-
+err_size:
+	cam_smmu_put_phy_addr(pgmn_dev->iommu_hdl, fd);
+err_get_phy:
 	return 0;
 }
 
@@ -268,32 +236,22 @@ static struct msm_bus_scale_pdata msm_jpeg_bus_client_pdata = {
 #ifdef CONFIG_MSM_IOMMU
 static int msm_jpeg_attach_iommu(struct msm_jpeg_device *pgmn_dev)
 {
-	int i;
-
-	for (i = 0; i < pgmn_dev->iommu_cnt; i++) {
-		int rc = iommu_attach_device(pgmn_dev->domain,
-				pgmn_dev->iommu_ctx_arr[i]);
-		if (rc < 0) {
-			JPEG_PR_ERR("%s: Device attach failed\n", __func__);
-			return -ENODEV;
-		}
-		JPEG_DBG("%s:%d] dom 0x%lx ctx 0x%lx", __func__, __LINE__,
-				(unsigned long)pgmn_dev->domain,
-				(unsigned long)pgmn_dev->iommu_ctx_arr[i]);
+	int rc;
+	rc = cam_smmu_ops(pgmn_dev->iommu_hdl, CAM_SMMU_ATTACH);
+	if (rc < 0) {
+		JPEG_PR_ERR("%s: Device attach failed\n", __func__);
+		return -ENODEV;
 	}
+	JPEG_DBG("%s:%d] handle %d attach\n",
+			__func__, __LINE__, pgmn_dev->iommu_hdl);
 	return 0;
 }
+
 static int msm_jpeg_detach_iommu(struct msm_jpeg_device *pgmn_dev)
 {
-	int i;
-
-	for (i = 0; i < pgmn_dev->iommu_cnt; i++) {
-		JPEG_DBG("%s:%d] dom 0x%lx ctx 0x%lx", __func__, __LINE__,
-				(unsigned long)pgmn_dev->domain,
-				(unsigned long)pgmn_dev->iommu_ctx_arr[i]);
-		iommu_detach_device(pgmn_dev->domain,
-				pgmn_dev->iommu_ctx_arr[i]);
-	}
+	JPEG_DBG("%s:%d] handle %d detach\n",
+			__func__, __LINE__, pgmn_dev->iommu_hdl);
+	cam_smmu_ops(pgmn_dev->iommu_hdl, CAM_SMMU_DETACH);
 	return 0;
 }
 #else

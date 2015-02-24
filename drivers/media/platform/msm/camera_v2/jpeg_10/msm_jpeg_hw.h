@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,11 +27,9 @@ struct msm_jpeg_hw_buf {
 	uint32_t cbcr_buffer_addr;
 	uint32_t cbcr_len;
 	uint32_t num_of_mcu_rows;
+	int ion_fd;
 	uint32_t pln2_addr;
 	uint32_t pln2_len;
-	struct dma_buf *dbuf;
-	struct dma_buf_attachment *attachment;
-	struct sg_table *table;
 };
 
 struct msm_jpeg_hw_pingpong {
