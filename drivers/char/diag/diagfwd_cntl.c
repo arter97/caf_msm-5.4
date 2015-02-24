@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -154,17 +154,19 @@ int diag_process_smd_cntl_read_data(struct diag_smd_info *smd_info, void *buf,
 	while (count_bytes + HDR_SIZ <= total_recd) {
 		type = *(uint32_t *)(buf);
 		data_len = *(uint32_t *)(buf + 4);
-		if (type < DIAG_CTRL_MSG_REG ||
-				 type > DIAG_CTRL_MSG_LAST) {
-			pr_alert("diag: In %s, Invalid Msg type %d proc %d",
-				 __func__, type, smd_info->peripheral);
-			break;
-		}
 		if (data_len < 0 || data_len > total_recd) {
 			pr_alert("diag: In %s, Invalid data len %d, total_recd: %d, proc %d",
 				 __func__, data_len, total_recd,
 				 smd_info->peripheral);
 			break;
+		}
+		if (type < DIAG_CTRL_MSG_REG ||
+				 type > DIAG_CTRL_MSG_LAST) {
+			pr_debug("diag: In %s, Invalid Msg type %d proc %d",
+				 __func__, type, smd_info->peripheral);
+			buf = buf + HDR_SIZ + data_len;
+			count_bytes = count_bytes + HDR_SIZ + data_len;
+			continue;
 		}
 		count_bytes = count_bytes+HDR_SIZ+data_len;
 		if (type == DIAG_CTRL_MSG_REG && total_recd >= count_bytes) {
