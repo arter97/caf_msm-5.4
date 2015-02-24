@@ -1072,10 +1072,6 @@ static int msm_isp_deinit_isp_buf_mgr(
 	kfree(buf_mgr->bufq);
 	buf_mgr->num_buf_q = 0;
 	buf_mgr->pagefault_debug = 0;
-	if (buf_mgr->secure_enable == NON_SECURE_MODE)
-		cam_smmu_ops(buf_mgr->ns_iommu_hdl, CAM_SMMU_DETACH);
-	else
-		cam_smmu_ops(buf_mgr->sec_iommu_hdl, CAM_SMMU_DETACH);
 
 	cam_smmu_destroy_handle(buf_mgr->ns_iommu_hdl);
 	if (buf_mgr->num_iommu_secure_ctx)
