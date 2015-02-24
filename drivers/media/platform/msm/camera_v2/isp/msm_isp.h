@@ -572,6 +572,8 @@ struct vfe_device {
 	struct device *iommu_secure_ctx[MAX_IOMMU_CTX];
 
 	struct regulator *fs_vfe;
+	struct regulator *fs_camss;
+	struct regulator *fs_mmagic_camss;
 	struct clk **vfe_clk;
 	uint32_t num_clk;
 
