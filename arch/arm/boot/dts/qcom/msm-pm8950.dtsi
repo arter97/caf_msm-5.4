@@ -12,36 +12,36 @@
 
 &spmi_bus {
 
-	qcom,pmtellurium@0 {
+	qcom,pm8950@0 {
 		spmi-slave-container;
 		reg = <0x0>;
 		#address-cells = <1>;
 		#size-cells = <1>;
 
-		pmtellurium_revid: qcom,revid@100 {
+		pm8950_revid: qcom,revid@100 {
 			compatible = "qcom,qpnp-revid";
 			reg = <0x100 0x100>;
 		};
 
-		pmtellurium_temp_alarm: qcom,temp-alarm@2400 {
+		pm8950_temp_alarm: qcom,temp-alarm@2400 {
 			status = "disabled";
 			compatible = "qcom,qpnp-temp-alarm";
 			reg = <0x2400 0x100>;
 			interrupts = <0x0 0x24 0x0>;
-			label = "pmtellurium_tz";
+			label = "pm8950_tz";
 			qcom,channel-num = <8>;
 			qcom,threshold-set = <0>;
-			qcom,temp_alarm-vadc = <&pmtellurium_vadc>;
+			qcom,temp_alarm-vadc = <&pm8950_vadc>;
 		};
 
-		pmtellurium_mpps: mpps {
+		pm8950_mpps: mpps {
 			compatible = "qcom,qpnp-pin";
 			spmi-dev-container;
 			gpio-controller;
 			#gpio-cells = <2>;
 			#address-cells = <1>;
 			#size-cells = <1>;
-			label = "pmtellurium-mpp";
+			label = "pm8950-mpp";
 
 			mpp@a000 {
 				reg = <0xa000 0x100>;
@@ -73,14 +73,14 @@
 			};
 		};
 
-		pmtellurium_gpios: gpios {
+		pm8950_gpios: gpios {
 			spmi-dev-container;
 			compatible = "qcom,qpnp-pin";
 			gpio-controller;
 			#gpio-cells = <2>;
 			#address-cells = <1>;
 			#size-cells = <1>;
-			label = "pmtellurium-gpio";
+			label = "pm8950-gpio";
 
 			gpio@c000 {
 				reg = <0xc000 0x100>;
@@ -131,7 +131,7 @@
 			};
 		};
 
-		pmtellurium_vadc: vadc@3100 {
+		pm8950_vadc: vadc@3100 {
 			compatible = "qcom,qpnp-vadc";
 			reg = <0x3100 0x100>;
 			#address-cells = <1>;
@@ -253,7 +253,7 @@
 			};
 		};
 
-		pmtellurium_adc_tm: vadc@3400 {
+		pm8950_adc_tm: vadc@3400 {
 			compatible = "qcom,qpnp-adc-tm";
 			reg = <0x3400 0x100>;
 			#address-cells = <1>;
@@ -266,7 +266,7 @@
 						"low-thr-en-set";
 			qcom,adc-bit-resolution = <15>;
 			qcom,adc-vdd-reference = <1800>;
-			qcom,adc_tm-vadc = <&pmtellurium_vadc>;
+			qcom,adc_tm-vadc = <&pm8950_vadc>;
 
 			chan@36 {
 				label = "pa_therm0";
@@ -281,7 +281,7 @@
 			};
 		};
 
-		pmtellurium_rtc: qcom,pmtellurium_rtc {
+		pm8950_rtc: qcom,pm8950_rtc {
 			spmi-dev-container;
 			compatible = "qcom,qpnp-rtc";
 			#address-cells = <1>;
@@ -289,24 +289,24 @@
 			qcom,qpnp-rtc-write = <0>;
 			qcom,qpnp-rtc-alarm-pwrup = <0>;
 
-			qcom,pmtellurium_rtc_rw@6000 {
+			qcom,pm8950_rtc_rw@6000 {
 				reg = <0x6000 0x100>;
 			};
 
-			qcom,pmtellurium_rtc_alarm@6100 {
+			qcom,pm8950_rtc_alarm@6100 {
 				reg = <0x6100 0x100>;
 				interrupts = <0x0 0x61 0x1>;
 			};
 		};
 	};
 
-	qcom,pmtellurium@1 {
+	qcom,pm8950@1 {
 		spmi-slave-container;
 		reg = <0x1>;
 		#address-cells = <1>;
 		#size-cells = <1>;
 
-		pmtellurium_pwm: pwm@bc00 {
+		pm8950_pwm: pwm@bc00 {
 			status = "disabled";
 			compatible = "qcom,qpnp-pwm";
 			reg = <0xbc00 0x100>;
@@ -315,7 +315,7 @@
 			qcom,supported-sizes = <6>, <9>;
 			#pwm-cells = <2>;
 		};
-		pmtellurium_cajon_dig: tellurium_wcd_codec@f000 {
+		pm8950_cajon_dig: 8950_wcd_codec@f000 {
 			compatible = "qcom,msm8x16_wcd_codec";
 			reg = <0xf000 0x100>;
 			interrupt-parent = <&spmi_bus>;
@@ -336,27 +336,27 @@
 					  "ins_rem_det",
 					  "mbhc_int";
 
-			cdc-vdda-cp-supply = <&pmtellurium_s4>;
+			cdc-vdda-cp-supply = <&pm8950_s4>;
 			qcom,cdc-vdda-cp-voltage = <2050000 2050000>;
 			qcom,cdc-vdda-cp-current = <500000>;
 
-			cdc-vdda-rx-h-supply = <&pmtellurium_l5>;
+			cdc-vdda-rx-h-supply = <&pm8950_l5>;
 			qcom,cdc-vdda-rx-h-voltage = <1800000 1800000>;
 			qcom,cdc-vdda-rx-h-current = <5000>;
 
-			cdc-vdda-tx-h-supply = <&pmtellurium_l5>;
+			cdc-vdda-tx-h-supply = <&pm8950_l5>;
 			qcom,cdc-vdda-tx-h-voltage = <1800000 1800000>;
 			qcom,cdc-vdda-tx-h-current = <5000>;
 
-			cdc-vdd-px-supply = <&pmtellurium_l5>;
+			cdc-vdd-px-supply = <&pm8950_l5>;
 			qcom,cdc-vdd-px-voltage = <1800000 1800000>;
 			qcom,cdc-vdd-px-current = <5000>;
 
-			cdc-vdd-pa-supply = <&pmtellurium_s4>;
+			cdc-vdd-pa-supply = <&pm8950_s4>;
 			qcom,cdc-vdd-pa-voltage = <2050000 2050000>;
 			qcom,cdc-vdd-pa-current = <260000>;
 
-			cdc-vdd-mic-bias-supply = <&pmtellurium_l13>;
+			cdc-vdd-mic-bias-supply = <&pm8950_l13>;
 			qcom,cdc-vdd-mic-bias-voltage = <3075000 3075000>;
 			qcom,cdc-vdd-mic-bias-current = <5000>;
 
@@ -371,7 +371,7 @@
 			qcom,cdc-on-demand-supplies = "cdc-vdd-mic-bias";
 		};
 
-		pmtellurium_cajon_analog: tellurium_wcd_codec@f100 {
+		pm8950_cajon_analog: 8950_wcd_codec@f100 {
 			compatible = "qcom,msm8x16_wcd_codec";
 			reg = <0xf100 0x100>;
 			interrupt-parent = <&spmi_bus>;
