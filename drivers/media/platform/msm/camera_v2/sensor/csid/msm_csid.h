@@ -110,6 +110,8 @@ struct csid_device {
 	struct camera_vreg_t *csid_vreg;
 	struct regulator *csid_reg_ptr[MAX_REGULATOR];
 	int32_t regulator_count;
+	uint8_t is_testmode;
+	struct msm_camera_csid_testmode_parms testmode_params;
 };
 
 #define VIDIOC_MSM_CSID_RELEASE \
