@@ -1,4 +1,5 @@
 
+source "drivers/video/msm/ba/Kconfig"
 source "drivers/video/msm/vidc/Kconfig"
 
 config FB_MSM

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -19,11 +19,11 @@
 #include <linux/delay.h>
 #include <linux/swab.h>
 #include <asm/mach-types.h>
+#include <media/msm_ba.h>
 #include "adp_camera.h"
 #include "background.h"
 #include "left_lane.h"
 #include "right_lane.h"
-#include "av_mgr.h"
 #include <mach/board.h>
 
 static void *k_addr[OVERLAY_COUNT];
@@ -70,6 +70,12 @@ struct msm_camera_csid_params csid_params = {
 	},
 };
 static struct msm_camera_preview_data preview_data;
+
+struct adp_camera_ctxt {
+	void *ba_inst_hdlr;
+};
+
+static struct adp_camera_ctxt *adp_cam_ctxt;
 
 /* -------------------- Guidance Lane Data Structures ----------------------- */
 static struct msm_guidance_lane_data guidance_lane_data;
@@ -672,22 +678,40 @@ static void guidance_lane_set_data_pipeline(void)
 static int adp_rear_camera_enable(void)
 {
 	struct preview_mem *ping_buffer, *pong_buffer, *free_buffer;
-	struct av_rvc_status rvc_status;
+	struct v4l2_input input;
+	struct v4l2_format fmt;
 
 	pr_debug("%s: kpi entry\n", __func__);
 	my_axi_ctrl->share_ctrl->current_mode = 4096;
 	vfe_para.operation_mode = VFE_OUTPUTS_RDI1;
 
 	/* Detect NTSC or PAL, get the preview width and height */
-	av_mgr_rvc_enable(NTSC);
-	av_mgr_rvc_get_status(&rvc_status);
-	if (!rvc_status.signal_lock) {
-		pr_err("%s: can't lock to video signals!\n", __func__);
-		return -EAGAIN;
+	if (NULL == adp_cam_ctxt)
+		adp_cam_ctxt = kzalloc(sizeof(struct adp_camera_ctxt),
+								GFP_KERNEL);
+	if (adp_cam_ctxt) {
+		int index;
+
+		adp_cam_ctxt->ba_inst_hdlr = msm_ba_open();
+		msm_ba_g_input(adp_cam_ctxt->ba_inst_hdlr, &index);
+		pr_debug("%s: input index: %d\n", __func__, index);
+		if (BA_RVC_IP != index) {
+			index = BA_RVC_IP;
+			msm_ba_s_input(adp_cam_ctxt->ba_inst_hdlr, index);
+		}
+		memset(&input, 0, sizeof(input));
+		input.index = index;
+		msm_ba_enum_input(adp_cam_ctxt->ba_inst_hdlr, &input);
+		pr_debug("%s: input info: %s\n", __func__, input.name);
+		msm_ba_g_fmt(adp_cam_ctxt->ba_inst_hdlr, &fmt);
+		pr_debug("%s: format: %dx%d\n", __func__, fmt.fmt.pix.width,
+				fmt.fmt.pix.height);
+	} else {
+		pr_err("%s: No memory for adp ctxt!\n", __func__);
 	}
 
-	PREVIEW_HEIGHT = rvc_status.height;
-	PREVIEW_WIDTH = rvc_status.width;
+	PREVIEW_HEIGHT = fmt.fmt.pix.height;
+	PREVIEW_WIDTH = fmt.fmt.pix.width;
 
 	PREVIEW_BUFFER_LENGTH =  PREVIEW_WIDTH * PREVIEW_HEIGHT*2;
 	PREVIEW_BUFFER_SIZE  =  PREVIEW_BUFFER_COUNT * PREVIEW_BUFFER_LENGTH;
@@ -741,6 +765,7 @@ void  exit_camera_kthread(void)
 	msm_csid_release(lsh_csid_dev);
 	msm_csiphy_release(lsh_csiphy_dev, &csi_lane_params);
 	msm_ispif_release(lsh_ispif);
+	msm_ba_close(adp_cam_ctxt->ba_inst_hdlr);
 	cancel_work_sync(&wq_mdp_queue_overlay_buffers);
 
 	pr_debug("%s: exit\n", __func__);
@@ -752,7 +777,7 @@ int disable_camera_preview(void)
 
 	wait_for_completion(&preview_enabled);
 	axi_stop_rdi1_only(my_axi_ctrl);
-	av_mgr_rvc_stream_enable(FALSE);
+	msm_ba_streamoff(adp_cam_ctxt->ba_inst_hdlr, 0);
 	mdpclient_display_commit();
 	mdpclient_msm_fb_close();
 	if (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] == 0) {
@@ -838,7 +863,7 @@ int enable_camera_preview(void)
 		return -EBUSY;
 	}
 
-	av_mgr_rvc_stream_enable(TRUE);
+	msm_ba_streamon(adp_cam_ctxt->ba_inst_hdlr, 0);
 	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);
 	complete(&camera_enabled);
 	complete(&preview_enabled);
