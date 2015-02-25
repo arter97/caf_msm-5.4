@@ -42,6 +42,9 @@ Optional properties:
 				"kpdpwr", "resin", "kpdpwr-or-resin" or
 				"kpdpwr-and-resin". The default value is
 				"kpdpwr-and-resin".
+- qcom,store-hard-reset-reason	Boolean property which if set will store the hardware
+				reset reason to SOFT_RB_SPARE register of the core PMIC
+				PON peripheral.
 
 All the below properties are in the sub-node section (properties of the child
 node).
@@ -99,6 +102,7 @@ Example:
 		qcom,system-reset;
 		qcom,s3-debounce = <32>;
 		qcom,s3-src = "resin";
+		qcom,store-hard-reset-reason;
 
 		qcom,pon_1 {
 			qcom,pon-type = <0>;
