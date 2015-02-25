@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -909,6 +909,11 @@ void __init configure_apq8064_adp_power_grid(void)
 {
 	static struct rpm_regulator_init_data *rpm_data;
 	int i;
+
+	apq8064_gpio_regulator_pdata[GPIO_VREG_ID_EXT_TS_SW].
+				init_data.supply_regulator = NULL;
+	apq8064_gpio_regulator_pdata[GPIO_VREG_ID_EXT_SATA_PWR].
+				init_data.supply_regulator = NULL;
 
 	for (i = 0; i < ARRAY_SIZE(apq8064_rpm_regulator_init_data); i++) {
 		rpm_data = &apq8064_rpm_regulator_init_data[i];
