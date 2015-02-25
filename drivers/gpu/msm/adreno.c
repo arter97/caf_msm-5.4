@@ -3160,7 +3160,62 @@ static unsigned int adreno_gpuid(struct kgsl_device *device,
 	 * Bottom word is core specific identifer
 	 */
 
-	return (0x0003 << 16) | ((int) adreno_dev->gpurev);
+	return (0x0003 << 16) | ADRENO_GPUREV(adreno_dev);
+}
+
+static void adreno_regulator_enable(struct kgsl_device *device)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct adreno_gpudev *gpudev  = ADRENO_GPU_DEVICE(adreno_dev);
+	if (gpudev->regulator_enable &&
+		!test_bit(ADRENO_DEVICE_GPU_REGULATOR_ENABLED,
+			&adreno_dev->priv)) {
+		gpudev->regulator_enable(adreno_dev);
+		set_bit(ADRENO_DEVICE_GPU_REGULATOR_ENABLED,
+			&adreno_dev->priv);
+	}
+}
+
+static bool adreno_is_hw_collapsible(struct kgsl_device *device)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct adreno_gpudev *gpudev  = ADRENO_GPU_DEVICE(adreno_dev);
+
+	/*
+	 * Skip power collapse for A304, if power ctrl flag is set to
+	 * non zero. As A304 soft_reset will not work, power collapse
+	 * needs to disable to avoid soft_reset.
+	 */
+	if (adreno_is_a304(adreno_dev) &&
+			device->pwrctrl.ctrl_flags)
+		return false;
+
+	return adreno_isidle(device) && (gpudev->is_sptp_idle ?
+				gpudev->is_sptp_idle(adreno_dev) : true);
+}
+
+static void adreno_regulator_disable(struct kgsl_device *device)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct adreno_gpudev *gpudev  = ADRENO_GPU_DEVICE(adreno_dev);
+	if (gpudev->regulator_disable &&
+		test_bit(ADRENO_DEVICE_GPU_REGULATOR_ENABLED,
+			&adreno_dev->priv)) {
+		gpudev->regulator_disable(adreno_dev);
+		clear_bit(ADRENO_DEVICE_GPU_REGULATOR_ENABLED,
+			&adreno_dev->priv);
+	}
+}
+
+static void adreno_pwrlevel_change_settings(struct kgsl_device *device,
+						bool mask_throttle)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct adreno_gpudev *gpudev  = ADRENO_GPU_DEVICE(adreno_dev);
+
+	if (gpudev->pwrlevel_change_settings)
+		gpudev->pwrlevel_change_settings(adreno_dev, mask_throttle);
+>>>>>>> bead2d4... msm:  kgsl: skip power collapse for A304 if power ctrl flag is set
 }
 
 static const struct kgsl_functable adreno_functable = {
