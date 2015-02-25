@@ -2304,6 +2304,9 @@ static struct branch_clk mdss_mdp_clk = {
 	},
 };
 
+static DEFINE_CLK_VOTER(mdss_mdp_vote_clk, &mdss_mdp_clk.c, 85714286);
+static DEFINE_CLK_VOTER(mdss_rotator_vote_clk, &mdss_mdp_clk.c, 85714286);
+
 static struct branch_clk mdss_pclk0_clk = {
 	.cbcr_reg = MMSS_MDSS_PCLK0_CBCR,
 	.has_sibling = 0,
@@ -3125,6 +3128,8 @@ static struct clk_lookup msm_clocks_mmss_thulium[] = {
 	CLK_LIST(vmem_ahb_clk),
 	CLK_LIST(vmem_maxi_clk),
 	CLK_LIST(mmss_gcc_dbg_clk),
+	CLK_LIST(mdss_mdp_vote_clk),
+	CLK_LIST(mdss_rotator_vote_clk),
 };
 
 static int of_get_fmax_vdd_class(struct platform_device *pdev, struct clk *c,
