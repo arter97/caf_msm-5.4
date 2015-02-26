@@ -253,8 +253,6 @@
 #define clk_gcc_aggre0_noc_qosgen_extref_clk	0x8c4356ba
 #define clk_hlos1_vote_lpass_core_smmu_clk	0x3aaa1743
 #define clk_hlos1_vote_lpass_adsp_smmu_clk	0xc76f702f
-#define clk_hlos2_vote_lpass_core_smmu_clk	0x2419cf5d
-#define clk_hlos2_vote_lpass_adsp_smmu_clk	0x34d3924b
 #define clk_gcc_usb3_phy_reset		0x03d559f1
 #define clk_gcc_usb3phy_phy_reset	0xb1a4f885
 #define clk_gcc_usb3_clkref_clk		0xb6cc8f01

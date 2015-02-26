@@ -157,30 +157,6 @@
 		status = "disabled";
 	};
 
-	gdsc_hlos2_vote_aggre0_noc: qcom,gdsc@37e024 {
-		compatible = "qcom,gdsc";
-		regulator-name = "gdsc_hlos2_vote_aggre0_noc";
-		reg = <0x37e024 0x4>;
-		qcom,no-status-check-on-disable;
-		status = "disabled";
-	};
-
-	gdsc_hlos2_vote_lpass_adsp: qcom,gdsc@37e034 {
-		compatible = "qcom,gdsc";
-		regulator-name = "gdsc_hlos2_vote_lpass_adsp";
-		reg = <0x37e034 0x4>;
-		qcom,no-status-check-on-disable;
-		status = "disabled";
-	};
-
-	gdsc_hlos2_vote_lpass_core: qcom,gdsc@37e038 {
-		compatible = "qcom,gdsc";
-		regulator-name = "gdsc_hlos2_vote_lpass_core";
-		reg = <0x37e038 0x4>;
-		qcom,no-status-check-on-disable;
-		status = "disabled";
-	};
-
 	gdsc_aggre0_noc: qcom,gdsc@381004 {
 		compatible = "qcom,gdsc";
 		regulator-name = "gdsc_aggre0_noc";

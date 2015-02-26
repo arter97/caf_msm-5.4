@@ -2617,18 +2617,6 @@
 	status = "ok";
 };
 
-&gdsc_hlos2_vote_aggre0_noc {
-	status = "ok";
-};
-
-&gdsc_hlos2_vote_lpass_adsp {
-	status = "ok";
-};
-
-&gdsc_hlos2_vote_lpass_core {
-	status = "ok";
-};
-
 &gdsc_aggre0_noc {
 	status = "ok";
 };

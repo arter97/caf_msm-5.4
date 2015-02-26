@@ -207,18 +207,6 @@
 	status = "disable";
 };
 
-&gdsc_hlos2_vote_aggre0_noc {
-	status = "disable";
-};
-
-&gdsc_hlos2_vote_lpass_adsp {
-	status = "disable";
-};
-
-&gdsc_hlos2_vote_lpass_core {
-	status = "disable";
-};
-
 &gdsc_aggre0_noc {
 	status = "disable";
 };
