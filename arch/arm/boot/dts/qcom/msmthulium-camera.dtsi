@@ -103,9 +103,11 @@
 		interrupt-names = "csid";
 		qcom,csi-vdd-voltage = <1250000>;
 		qcom,mipi-csi-vdd-supply = <&pm8994_l2>;
+		mmagic-supply = <&gdsc_mmagic_camss>;
 		gdscr-supply = <&gdsc_camss_top>;
-		qcom,cam-vreg-name = "gdscr";
-		clocks = <&clock_mmss clk_camss_top_ahb_clk>,
+		qcom,cam-vreg-name = "mmagic", "gdscr";
+		clocks = <&clock_mmss clk_mmss_mmagic_ahb_clk>,
+			<&clock_mmss clk_camss_top_ahb_clk>,
 			<&clock_mmss clk_camss_ispif_ahb_clk>,
 			<&clock_mmss clk_csi0_clk_src>,
 			<&clock_mmss clk_camss_csi0_clk>,
@@ -113,11 +115,11 @@
 			<&clock_mmss clk_camss_csi0rdi_clk>,
 			<&clock_mmss clk_camss_csi0pix_clk>,
 			<&clock_mmss clk_camss_ahb_clk>;
-		clock-names = "camss_top_ahb_clk",
+		clock-names = "mmagic_camss_ahb_clk", "camss_top_ahb_clk",
 			"ispif_ahb_clk", "csi_clk", "csi_ahb_clk",
-			"csi_src_clk", "csi_rdi_clk",
-			 "csi_pix_clk", "camss_ahb_clk";
-		qcom,clock-rates = <0 0 240000000 0 0 0 0 0>;
+			"csi_src_clk", "csi_rdi_clk", "csi_pix_clk",
+			"camss_ahb_clk";
+		qcom,clock-rates = <0 0 0 240000000 0 0 0 0 0>;
 		status = "ok";
 	};
 
@@ -130,9 +132,11 @@
 		interrupt-names = "csid";
 		qcom,csi-vdd-voltage = <1250000>;
 		qcom,mipi-csi-vdd-supply = <&pm8994_l2>;
+		mmagic-supply = <&gdsc_mmagic_camss>;
 		gdscr-supply = <&gdsc_camss_top>;
-		qcom,cam-vreg-name = "gdscr";
-		clocks = <&clock_mmss clk_camss_top_ahb_clk>,
+		qcom,cam-vreg-name = "mmagic", "gdscr";
+		clocks = <&clock_mmss clk_mmss_mmagic_ahb_clk>,
+			<&clock_mmss clk_camss_top_ahb_clk>,
 			<&clock_mmss clk_camss_ispif_ahb_clk>,
 			<&clock_mmss clk_csi1_clk_src>,
 			<&clock_mmss clk_camss_csi1_clk>,
@@ -140,11 +144,11 @@
 			<&clock_mmss clk_camss_csi1rdi_clk>,
 			<&clock_mmss clk_camss_csi1pix_clk>,
 			<&clock_mmss clk_camss_ahb_clk>;
-		clock-names = "camss_top_ahb_clk",
+		clock-names = "mmagic_camss_ahb_clk", "camss_top_ahb_clk",
 			"ispif_ahb_clk", "csi_clk", "csi_ahb_clk",
-			"csi_src_clk", "csi_rdi_clk",
-			 "csi_pix_clk", "camss_ahb_clk";
-		qcom,clock-rates = <0 0 240000000 0 0 0 0 0>;
+			"csi_src_clk", "csi_rdi_clk", "csi_pix_clk",
+			"camss_ahb_clk";
+		qcom,clock-rates = <0 0 0 240000000 0 0 0 0 0>;
 		status = "ok";
 	};
 
@@ -157,9 +161,11 @@
 		interrupt-names = "csid";
 		qcom,csi-vdd-voltage = <1250000>;
 		qcom,mipi-csi-vdd-supply = <&pm8994_l2>;
+		mmagic-supply = <&gdsc_mmagic_camss>;
 		gdscr-supply = <&gdsc_camss_top>;
-		qcom,cam-vreg-name = "gdscr";
-		clocks = <&clock_mmss clk_camss_top_ahb_clk>,
+		qcom,cam-vreg-name = "mmagic", "gdscr";
+		clocks = <&clock_mmss clk_mmss_mmagic_ahb_clk>,
+			<&clock_mmss clk_camss_top_ahb_clk>,
 			<&clock_mmss clk_camss_ispif_ahb_clk>,
 			<&clock_mmss clk_csi2_clk_src>,
 			<&clock_mmss clk_camss_csi2_clk>,
@@ -167,11 +173,11 @@
 			<&clock_mmss clk_camss_csi2rdi_clk>,
 			<&clock_mmss clk_camss_csi2pix_clk>,
 			<&clock_mmss clk_camss_ahb_clk>;
-		clock-names = "camss_top_ahb_clk",
+		clock-names = "mmagic_camss_ahb_clk", "camss_top_ahb_clk",
 			"ispif_ahb_clk", "csi_clk", "csi_ahb_clk",
-			"csi_src_clk", "csi_rdi_clk",
-			 "csi_pix_clk", "camss_ahb_clk";
-		qcom,clock-rates = <0 0 240000000 0 0 0 0 0>;
+			"csi_src_clk", "csi_rdi_clk", "csi_pix_clk",
+			"camss_ahb_clk";
+		qcom,clock-rates = <0 0 0 240000000 0 0 0 0 0>;
 		status = "ok";
 	};
 
@@ -184,9 +190,11 @@
 		interrupt-names = "csid";
 		qcom,csi-vdd-voltage = <1250000>;
 		qcom,mipi-csi-vdd-supply = <&pm8994_l2>;
+		mmagic-supply = <&gdsc_mmagic_camss>;
 		gdscr-supply = <&gdsc_camss_top>;
-		qcom,cam-vreg-name = "gdscr";
-		clocks = <&clock_mmss clk_camss_top_ahb_clk>,
+		qcom,cam-vreg-name = "mmagic", "gdscr";
+		clocks = <&clock_mmss clk_mmss_mmagic_ahb_clk>,
+			<&clock_mmss clk_camss_top_ahb_clk>,
 			<&clock_mmss clk_camss_ispif_ahb_clk>,
 			<&clock_mmss clk_csi3_clk_src>,
 			<&clock_mmss clk_camss_csi3_clk>,
@@ -194,11 +202,11 @@
 			<&clock_mmss clk_camss_csi3rdi_clk>,
 			<&clock_mmss clk_camss_csi3pix_clk>,
 			<&clock_mmss clk_camss_ahb_clk>;
-		clock-names = "camss_top_ahb_clk",
+		clock-names = "mmagic_camss_ahb_clk", "camss_top_ahb_clk",
 			"ispif_ahb_clk", "csi_clk", "csi_ahb_clk",
-			"csi_src_clk", "csi_rdi_clk",
-			 "csi_pix_clk", "camss_ahb_clk";
-		qcom,clock-rates = <0 0 240000000 0 0 0 0 0>;
+			"csi_src_clk", "csi_rdi_clk", "csi_pix_clk",
+			"camss_ahb_clk";
+		qcom,clock-rates = <0 0 0 240000000 0 0 0 0 0>;
 		status = "ok";
 	};
 
