@@ -44,7 +44,7 @@ static void __iomem *virt_base;
 #define mmsscc_gpll0_mm_source_val		5
 #define mmsscc_gpll0_div_mm_source_val		6
 #define dsi0phypll_mm_source_val		1
-#define ext_extpclk_clk_src_mm_source_val	3
+#define ext_extpclk_clk_src_mm_source_val	1
 #define edp_mainlink_clk_src_mm_source_val	4
 #define edp_pixel_clk_src_mm_source_val		5
 
