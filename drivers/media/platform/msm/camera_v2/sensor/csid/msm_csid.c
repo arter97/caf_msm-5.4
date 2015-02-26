@@ -382,6 +382,14 @@ static int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 	pr_info("%s: CSID_VERSION = 0x%x\n", __func__,
 		csid_dev->ctrl_reg->csid_reg.csid_version);
 	/* power up */
+	rc = msm_camera_config_vreg(&csid_dev->pdev->dev, csid_dev->csid_vreg,
+		csid_dev->regulator_count, NULL, 0,
+		&csid_dev->csid_reg_ptr[0], 1);
+	if (rc < 0) {
+		pr_err("%s:%d csid config_vreg failed\n", __func__, __LINE__);
+		goto top_vreg_config_failed;
+	}
+
 	if (csid_dev->ctrl_reg->csid_reg.csid_version < CSID_VERSION_V22) {
 		rc = msm_camera_config_vreg(&csid_dev->pdev->dev,
 			csid_8960_vreg_info, ARRAY_SIZE(csid_8960_vreg_info),
@@ -393,15 +401,15 @@ static int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 	}
 	if (rc < 0) {
 		pr_err("%s: regulator on failed\n", __func__);
-		goto vreg_config_failed;
+		goto csid_vreg_config_failed;
 	}
 
-	rc = msm_camera_config_vreg(&csid_dev->pdev->dev, csid_dev->csid_vreg,
+	rc = msm_camera_enable_vreg(&csid_dev->pdev->dev, csid_dev->csid_vreg,
 		csid_dev->regulator_count, NULL, 0,
 		&csid_dev->csid_reg_ptr[0], 1);
 	if (rc < 0) {
-		pr_err("%s:%d csid config_vreg failed\n", __func__, __LINE__);
-		goto csid_vreg_config_failed;
+		pr_err("%s:%d csid enable_vreg failed\n", __func__, __LINE__);
+		goto top_vreg_enable_failed;
 	}
 
 	if (csid_dev->ctrl_reg->csid_reg.csid_version < CSID_VERSION_V22) {
@@ -415,14 +423,6 @@ static int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 	}
 	if (rc < 0) {
 		pr_err("%s: regulator enable failed\n", __func__);
-		goto vreg_enable_failed;
-	}
-
-	rc = msm_camera_enable_vreg(&csid_dev->pdev->dev, csid_dev->csid_vreg,
-		csid_dev->regulator_count, NULL, 0,
-		&csid_dev->csid_reg_ptr[0], 1);
-	if (rc < 0) {
-		pr_err("%s:%d csid enable_vreg failed\n", __func__, __LINE__);
 		goto csid_vreg_enable_failed;
 	}
 
@@ -456,34 +456,34 @@ static int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 	return rc;
 
 clk_enable_failed:
+	if (csid_dev->ctrl_reg->csid_reg.csid_version < CSID_VERSION_V22) {
+		msm_camera_enable_vreg(&csid_dev->pdev->dev,
+			csid_8960_vreg_info, ARRAY_SIZE(csid_8960_vreg_info),
+			NULL, 0, &csid_dev->csi_vdd, 0);
+	} else {
+		msm_camera_enable_vreg(&csid_dev->pdev->dev,
+			csid_vreg_info, ARRAY_SIZE(csid_vreg_info),
+			NULL, 0, &csid_dev->csi_vdd, 0);
+	}
+csid_vreg_enable_failed:
 	msm_camera_enable_vreg(&csid_dev->pdev->dev, csid_dev->csid_vreg,
 		csid_dev->regulator_count, NULL, 0,
 		&csid_dev->csid_reg_ptr[0], 0);
-csid_vreg_enable_failed:
+top_vreg_enable_failed:
 	if (csid_dev->ctrl_reg->csid_reg.csid_version < CSID_VERSION_V22) {
-		msm_camera_enable_vreg(&csid_dev->pdev->dev,
+		msm_camera_config_vreg(&csid_dev->pdev->dev,
 			csid_8960_vreg_info, ARRAY_SIZE(csid_8960_vreg_info),
 			NULL, 0, &csid_dev->csi_vdd, 0);
 	} else {
-		msm_camera_enable_vreg(&csid_dev->pdev->dev,
+		msm_camera_config_vreg(&csid_dev->pdev->dev,
 			csid_vreg_info, ARRAY_SIZE(csid_vreg_info),
 			NULL, 0, &csid_dev->csi_vdd, 0);
 	}
-vreg_enable_failed:
+csid_vreg_config_failed:
 	msm_camera_config_vreg(&csid_dev->pdev->dev, csid_dev->csid_vreg,
 		csid_dev->regulator_count, NULL, 0,
 		&csid_dev->csid_reg_ptr[0], 0);
-csid_vreg_config_failed:
-	if (csid_dev->ctrl_reg->csid_reg.csid_version < CSID_VERSION_V22) {
-		msm_camera_config_vreg(&csid_dev->pdev->dev,
-			csid_8960_vreg_info, ARRAY_SIZE(csid_8960_vreg_info),
-			NULL, 0, &csid_dev->csi_vdd, 0);
-	} else {
-		msm_camera_config_vreg(&csid_dev->pdev->dev,
-			csid_vreg_info, ARRAY_SIZE(csid_vreg_info),
-			NULL, 0, &csid_dev->csi_vdd, 0);
-	}
-vreg_config_failed:
+top_vreg_config_failed:
 	iounmap(csid_dev->base);
 	csid_dev->base = NULL;
 	return rc;
@@ -529,20 +529,20 @@ static int msm_csid_release(struct csid_device *csid_dev)
 			csid_dev->num_clk, 0);
 
 		msm_camera_enable_vreg(&csid_dev->pdev->dev,
-			csid_dev->csid_vreg, csid_dev->regulator_count, NULL,
-			0, &csid_dev->csid_reg_ptr[0], 0);
+			csid_vreg_info, ARRAY_SIZE(csid_vreg_info),
+			NULL, 0, &csid_dev->csi_vdd, 0);
 
 		msm_camera_enable_vreg(&csid_dev->pdev->dev,
-			csid_vreg_info, ARRAY_SIZE(csid_vreg_info),
-			NULL, 0, &csid_dev->csi_vdd, 0);
-
-		msm_camera_config_vreg(&csid_dev->pdev->dev,
 			csid_dev->csid_vreg, csid_dev->regulator_count, NULL,
 			0, &csid_dev->csid_reg_ptr[0], 0);
 
 		msm_camera_config_vreg(&csid_dev->pdev->dev,
 			csid_vreg_info, ARRAY_SIZE(csid_vreg_info),
 			NULL, 0, &csid_dev->csi_vdd, 0);
+
+		msm_camera_config_vreg(&csid_dev->pdev->dev,
+			csid_dev->csid_vreg, csid_dev->regulator_count, NULL,
+			0, &csid_dev->csid_reg_ptr[0], 0);
 	}
 
 	if (!IS_ERR_OR_NULL(csid_dev->reg_ptr)) {
