@@ -32,10 +32,10 @@
 #include <linux/videodev2.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ctrls.h>
+#include <media/msm_ba.h>
 #include <linux/mutex.h>
 #include <linux/delay.h>
 
-#include "msm/av_mgr.h"
 #define DRIVER_NAME "adv7180"
 
 #define I2C_RW_DELAY 1
@@ -1630,7 +1630,7 @@ static int adv7180_probe(struct i2c_client *client,
 			goto err_free_ctrl;
 	}
 
-	ret = av_mgr_sd_register(sd);
+	ret = msm_ba_register_subdev_node(sd, MSM_BA_SUBDEV_1);
 	if (ret)
 		goto err_free_irq;
 
@@ -1661,7 +1661,7 @@ static int adv7180_remove(struct i2c_client *client)
 	struct adv7180_state *state = to_state(sd);
 	pr_debug("%s : entry\n", __func__);
 
-	av_mgr_sd_unregister(sd);
+	msm_ba_unregister_subdev_node(sd);
 	if (state->irq > 0)
 		free_irq(client->irq, state);
 

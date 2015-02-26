@@ -4,6 +4,7 @@
 
 # Each configuration option enables a list of files.
 
+obj-$(CONFIG_MSM_BA_V4L2) += msm/ba/
 obj-$(CONFIG_VIDEO_ADV7180)	+=  ../media/video/adv7180.o
 
 obj-$(CONFIG_VGASTATE)            += vgastate.o

@@ -414,8 +414,3 @@ config OV7692
 	depends on MSM_CAMERA
 	---help---
 	  Omni Vision VGA YUV Sensor
-config AV_MGR
-	tristate "AV Manager support ADV7180 and ADV7481"
-	depends on MSM_CAMERA
-	---help---
-	Say y here to enable av_mgr support.
