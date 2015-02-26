@@ -1635,9 +1635,9 @@ static int mdss_fb_fbmem_ion_mmap(struct fb_info *info,
 				vma->vm_page_prot =
 					pgprot_writecombine(vma->vm_page_prot);
 
-			pr_debug("vma=%p, addr=%x len=%ld",
+			pr_debug("vma=%p, addr=%x len=%ld\n",
 					vma, (unsigned int)addr, len);
-			pr_cont("vm_start=%x vm_end=%x vm_page_prot=%ld\n",
+			pr_debug("vm_start=%x vm_end=%x vm_page_prot=%ld\n",
 					(unsigned int)vma->vm_start,
 					(unsigned int)vma->vm_end,
 					(unsigned long int)vma->vm_page_prot);
@@ -1711,13 +1711,21 @@ static int mdss_fb_physical_mmap(struct fb_info *info,
 static int mdss_fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
-	int rc = 0;
+	int rc = -EINVAL;
 
-	if (!info->fix.smem_start && !mfd->fb_ion_handle)
+	if (mfd->fb_mmap_type == MDP_FB_MMAP_ION_ALLOC) {
 		rc = mdss_fb_fbmem_ion_mmap(info, vma);
-	else
+	} else if (mfd->fb_mmap_type == MDP_FB_MMAP_PHYSICAL_ALLOC) {
 		rc = mdss_fb_physical_mmap(info, vma);
-
+	} else {
+		if (!info->fix.smem_start && !mfd->fb_ion_handle) {
+			rc = mdss_fb_fbmem_ion_mmap(info, vma);
+			mfd->fb_mmap_type = MDP_FB_MMAP_ION_ALLOC;
+		} else {
+			rc = mdss_fb_physical_mmap(info, vma);
+			mfd->fb_mmap_type = MDP_FB_MMAP_PHYSICAL_ALLOC;
+		}
+	}
 	if (rc < 0)
 		pr_err("fb mmap failed with rc = %d\n", rc);
 
@@ -2357,7 +2365,7 @@ static void __mdss_fb_copy_fence(struct msm_sync_pt_data *sync_pt_data,
 	mutex_unlock(&sync_pt_data->sync_mutex);
 }
 
-static void __mdss_fb_wait_for_fence_sub(struct msm_sync_pt_data *sync_pt_data,
+static int __mdss_fb_wait_for_fence_sub(struct msm_sync_pt_data *sync_pt_data,
 	struct sync_fence **fences, int fence_cnt)
 {
 	int i, ret = 0;
@@ -2412,7 +2420,7 @@ static void __mdss_fb_wait_for_fence_sub(struct msm_sync_pt_data *sync_pt_data,
 		for (; i < fence_cnt; i++)
 			sync_fence_put(fences[i]);
 	}
-
+	return ret;
 }
 
 int mdss_fb_wait_for_fence(struct msm_sync_pt_data *sync_pt_data)
@@ -2502,6 +2510,7 @@ static int __mdss_fb_sync_buf_done_callback(struct notifier_block *p,
 	struct msm_sync_pt_data *sync_pt_data;
 	struct msm_fb_data_type *mfd;
 	int fence_cnt;
+	int ret = NOTIFY_OK;
 
 	sync_pt_data = container_of(p, struct msm_sync_pt_data, notifier);
 	mfd = container_of(sync_pt_data, struct msm_fb_data_type,
@@ -2520,7 +2529,7 @@ static int __mdss_fb_sync_buf_done_callback(struct notifier_block *p,
 			sync_pt_data->temp_fen_cnt) {
 			fence_cnt = sync_pt_data->temp_fen_cnt;
 			sync_pt_data->temp_fen_cnt = 0;
-			__mdss_fb_wait_for_fence_sub(sync_pt_data,
+			ret = __mdss_fb_wait_for_fence_sub(sync_pt_data,
 				sync_pt_data->temp_fen, fence_cnt);
 		}
 		if (mfd->idle_time && !mod_delayed_work(system_wq,
@@ -2528,6 +2537,8 @@ static int __mdss_fb_sync_buf_done_callback(struct notifier_block *p,
 					msecs_to_jiffies(mfd->idle_time)))
 			pr_debug("fb%d: restarted idle work\n",
 					mfd->index);
+		if (ret == -ETIME)
+			ret = NOTIFY_BAD;
 		break;
 	case MDP_NOTIFY_FRAME_FLUSHED:
 		pr_debug("%s: frame flushed\n", sync_pt_data->fence_name);
@@ -2552,7 +2563,7 @@ static int __mdss_fb_sync_buf_done_callback(struct notifier_block *p,
 		break;
 	}
 
-	return NOTIFY_OK;
+	return ret;
 }
 
 /**
@@ -2635,6 +2646,15 @@ static int mdss_fb_pan_display_ex(struct fb_info *info,
 	if (ret) {
 		pr_err("Shutdown pending. Aborting operation\n");
 		return ret;
+	}
+
+	if (mfd->mdp.pre_commit_fnc) {
+		ret = mfd->mdp.pre_commit_fnc(mfd);
+		if (ret) {
+			pr_err("fb%d: pre commit failed %d\n",
+					mfd->index, ret);
+			return ret;
+		}
 	}
 
 	mutex_lock(&mfd->mdp_sync_pt_data.sync_mutex);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -204,10 +204,12 @@ static void ca53_ca57_print_error_state_regs(void)
 	u64 l2merrsr;
 	u64 cpumerrsr;
 	u32 esr_el1;
+	u32 l2ectlr;
 
 	cpumerrsr = read_cpumerrsr_el1;
 	l2merrsr = read_l2merrsr_el1;
 	esr_el1 = read_esr_el1;
+	l2ectlr = read_l2ectlr_el1;
 
 	/* store data in uncached rtb logs */
 	uncached_logk_pc(LOGK_READL, __builtin_return_address(0),
@@ -216,12 +218,15 @@ static void ca53_ca57_print_error_state_regs(void)
 				(void *)l2merrsr);
 	uncached_logk_pc(LOGK_READL, __builtin_return_address(0),
 				(void *)((u64)esr_el1));
+	uncached_logk_pc(LOGK_READL, __builtin_return_address(0),
+				(void *)((u64)l2ectlr));
 
 	edac_printk(KERN_CRIT, EDAC_CPU, "CPUMERRSR value = %#llx\n",
 								cpumerrsr);
 	edac_printk(KERN_CRIT, EDAC_CPU, "L2MERRSR value = %#llx\n", l2merrsr);
 
 	edac_printk(KERN_CRIT, EDAC_CPU, "ESR value = %#x\n", esr_el1);
+	edac_printk(KERN_CRIT, EDAC_CPU, "L2ECTLR value = %#x\n", l2ectlr);
 	if (ESR_L2_DBE(esr_el1))
 		edac_printk(KERN_CRIT, EDAC_CPU,
 			"Double bit error on dirty L2 cacheline\n");
@@ -861,11 +866,15 @@ static int arm64_edac_pmu_cpu_notify(struct notifier_block *self,
 	return NOTIFY_OK;
 }
 
+#ifndef CONFIG_EDAC_CORTEX_ARM64_DBE_IRQ_ONLY
 void arm64_check_cache_ecc(void *info)
 {
 	if (panic_handler_drvdata)
 		check_sbe_event(panic_handler_drvdata);
 }
+#else
+static inline void arm64_check_cache_ecc(void *info) {}
+#endif
 
 static int arm64_erp_panic_notify(struct notifier_block *this,
 			      unsigned long event, void *ptr)
@@ -919,7 +928,7 @@ static int arm64_cpu_erp_probe(struct platform_device *pdev)
 
 	rc = of_property_read_u32(pdev->dev.of_node, "poll-delay-ms",
 							&poll_msec);
-	if (!rc) {
+	if (!rc && !IS_ENABLED(CONFIG_EDAC_CORTEX_ARM64_DBE_IRQ_ONLY)) {
 		drv->edev_ctl->edac_check = arm64_monitor_cache_errors;
 		drv->edev_ctl->poll_msec = poll_msec;
 		drv->edev_ctl->defer_work = 1;
@@ -968,7 +977,7 @@ static int arm64_cpu_erp_probe(struct platform_device *pdev)
 		goto out_irq;
 
 	sbe_irq = platform_get_irq_byname(pdev, "sbe-irq");
-	if (sbe_irq < 0) {
+	if (sbe_irq < 0 || IS_ENABLED(CONFIG_EDAC_CORTEX_ARM64_DBE_IRQ_ONLY)) {
 		pr_err("ARM64 CPU ERP: Could not find sbe-irq IRQ property. Proceeding anyway.\n");
 		fail++;
 		goto out_irq;

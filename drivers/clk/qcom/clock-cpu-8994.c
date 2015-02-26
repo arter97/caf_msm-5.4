@@ -175,7 +175,6 @@ static struct pll_clk a57_pll0 = {
 	.pgm_test_ctl_enable = true,
 	.masks = {
 		.pre_div_mask = BIT(12),
-		.post_div_mask = BM(9, 8),
 		.mn_en_mask = BIT(24),
 		.main_output_mask = BIT(0),
 		.early_output_mask = BIT(3),
@@ -183,7 +182,6 @@ static struct pll_clk a57_pll0 = {
 		.lock_mask = BIT(31),
 	},
 	.vals = {
-		.post_div_masked = 0x100,
 		.pre_div_masked = 0x0,
 		.config_ctl_val = 0x000D6968,
 		.test_ctl_lo_val = 0x00010000,
@@ -212,7 +210,6 @@ static struct pll_clk a57_pll1 = {
 	.pgm_test_ctl_enable = true,
 	.masks = {
 		.pre_div_mask = BIT(12),
-		.post_div_mask = BM(9, 8),
 		.mn_en_mask = BIT(24),
 		.main_output_mask = BIT(0),
 		.early_output_mask = BIT(3),
@@ -220,7 +217,6 @@ static struct pll_clk a57_pll1 = {
 		.lock_mask = BIT(31),
 	},
 	.vals = {
-		.post_div_masked = 0x300,
 		.pre_div_masked = 0x0,
 		.config_ctl_val = 0x000D6968,
 		.test_ctl_lo_val = 0x00010000,
@@ -701,6 +697,9 @@ static struct clk_div_ops pll_div_ops = {
 DEFINE_PLL_MUX_DIV(a53_pll0div_main, C0_PLL_BASE, &a53_pll0.c, C0_PLL_USER_CTL);
 DEFINE_PLL_MUX_DIV(a53_pll1div_main, C0_PLL_BASE, &a53_pll1.c,
 		   C0_PLLA_USER_CTL);
+DEFINE_PLL_MUX_DIV(a57_pll0div_main, C1_PLL_BASE, &a57_pll0.c, C1_PLL_USER_CTL);
+DEFINE_PLL_MUX_DIV(a57_pll1div_main, C1_PLL_BASE, &a57_pll1.c,
+		   C1_PLLA_USER_CTL);
 
 static struct mux_clk a53_lf_mux_v2 = {
 	.offset = MUX_OFFSET,
@@ -752,12 +751,13 @@ static struct mux_clk a53_hf_mux_v2 = {
 static struct mux_clk a57_lf_mux_v2 = {
 	.offset = MUX_OFFSET,
 	MUX_SRC_LIST(
-		{ &xo_ao.c,           0 },
-		{ &a57_pll1_main.c,   1 },
-		{ &a57_pll0_main.c,   2 },
-		{ &sys_apcsaux_clk.c, 3 },
+		{ &xo_ao.c,            0 },
+		{ &a57_pll1div_main.c, 1 },
+		{ &a57_pll0div_main.c, 2 },
+		{ &sys_apcsaux_clk.c,  3 },
 	),
 	.low_power_sel = 3,
+	.en_mask = 3,
 	.ops = &cpu_mux_ops,
 	.mask = 0x3,
 	.shift = 1,
@@ -780,6 +780,7 @@ static struct mux_clk a57_hf_mux_v2 = {
 		{ &a57_pll0.c,       3 },
 	),
 	.low_power_sel = 0,
+	.en_mask = 0,
 	.ops = &cpu_mux_ops,
 	.mask = 0x3,
 	.shift = 3,
@@ -920,22 +921,29 @@ void sanity_check_clock_tree(u32 muxval, struct mux_clk *mux)
 	void *base = NULL;
 	unsigned long rate;
 	struct clk *c;
+	int cur_uv, req_uv;
+	int *uv;
 
 	if (!msm8994_v2)
 		return;
 
 	if (mux->base == &vbases[ALIAS0_GLB_BASE]) {
-		level = a53_clk.c.vdd_class->cur_level;
 		base = vbases[C0_PLL_BASE];
 		c = &a53_clk.c;
 	}
 	if (mux->base == &vbases[ALIAS1_GLB_BASE]) {
-		level = a57_clk.c.vdd_class->cur_level;
 		base = vbases[C1_PLL_BASE];
 		c = &a57_clk.c;
 	}
 
 	if (!base)
+		return;
+
+	uv = c->vdd_class->vdd_uv;
+	level = c->vdd_class->cur_level;
+
+	/* Possibly hotplugged out */
+	if (!level || !uv[level])
 		return;
 
 	switch (hfmux_sel) {
@@ -986,9 +994,13 @@ void sanity_check_clock_tree(u32 muxval, struct mux_clk *mux)
 	break;
 	};
 
-	if (level < find_vdd_level(c, rate)) {
-		pr_err("rate is %lu, level is %d, cur level is %d\n", rate,
-			find_vdd_level(c, rate), level);
+	/* One regulator */
+	cur_uv = uv[level];
+	req_uv = uv[find_vdd_level(c, rate)];
+
+	if (cur_uv < req_uv) {
+		pr_err("%s: rate is %lu, uv is %d, req uv is %d\n", c->dbg_name,
+			rate, cur_uv, req_uv);
 		BUG();
 	}
 }
@@ -1589,7 +1601,6 @@ static void populate_opp_table(struct platform_device *pdev)
 
 static void init_v2_data(void)
 {
-	a57_pll1.vals.post_div_masked = 0x100;
 	a53_pll0.vals.config_ctl_val = 0x004D6968;
 	a53_pll1.vals.config_ctl_val = 0x004D6968;
 	a57_pll0.vals.config_ctl_val = 0x004D6968;
@@ -2126,6 +2137,7 @@ module_exit(cpu_clock_8994_exit);
 #define ALIAS0_GLB_BASE_PHY 0xF900D000
 #define ALIAS1_GLB_BASE_PHY 0xF900F000
 #define C1_PLL_BASE_PHY 0xF9016000
+#define C0_PLL_BASE_PHY 0xF9015000
 
 int __init cpu_clock_8994_init_a57_v2(void)
 {
@@ -2149,17 +2161,59 @@ int __init cpu_clock_8994_init_a57_v2(void)
 		goto iomap_fail;
 	}
 
+	vbases[C0_PLL_BASE] = ioremap(C0_PLL_BASE_PHY, SZ_4K);
+	if (!vbases[C0_PLL_BASE]) {
+		WARN(1, "Unable to ioremap A53 pll base. Can't configure A53 clocks.\n");
+		ret = -ENOMEM;
+		goto iomap_c0_pll_fail;
+	}
+
+	vbases[C1_PLL_BASE] = ioremap(C1_PLL_BASE_PHY, SZ_4K);
+	if (!vbases[C1_PLL_BASE]) {
+		WARN(1, "Unable to ioremap A57 pll base. Can't configure A57 clocks.\n");
+		ret = -ENOMEM;
+		goto iomap_c1_pll_fail;
+	}
+
 	/* Select GPLL0 for 600MHz on the A57s */
 	writel_relaxed(0x6, vbases[ALIAS1_GLB_BASE] + MUX_OFFSET);
 	/* Select GPLL0 for 600MHz on the A53s */
 	writel_relaxed(0x6, vbases[ALIAS0_GLB_BASE] + MUX_OFFSET);
 
-	/* Ensure write goes through before A53s are brought up. */
+	/* Ensure write goes through before we disable PLLs below. */
+	mb();
+	udelay(5);
+
+	/*
+	 * Disable the PLLs in order to allow early rate setting to work.
+	 * The PLL ping-pong scheme needs the PLL to refuse round_rate
+	 * requests if prepare. However handoff will set the PLL ref count
+	 * to one thus preventing PLL ping-ponging to work correctly before
+	 * late_init.
+	 */
+	writel_relaxed(0x0,  vbases[C0_PLL_BASE] + C0_PLL_MODE);
+	writel_relaxed(0x0,  vbases[C0_PLL_BASE] + C0_PLLA_MODE);
+	writel_relaxed(0x0,  vbases[C1_PLL_BASE] + C1_PLL_MODE);
+	writel_relaxed(0x0,  vbases[C1_PLL_BASE] + C1_PLLA_MODE);
+
+	/* Ensure writes go through before divider config below */
+	mb();
+	udelay(5);
+
+	/* Setup dividers and outputs */
+	writel_relaxed(0x109, vbases[C0_PLL_BASE] + C0_PLLA_USER_CTL);
+	writel_relaxed(0x109, vbases[C1_PLL_BASE] + C1_PLL_USER_CTL);
+	writel_relaxed(0x109, vbases[C1_PLL_BASE] + C1_PLLA_USER_CTL);
+
+	/* Ensure writes go through before clock driver probe */
 	mb();
 	udelay(5);
 
 	pr_cont("clock-cpu-8994-v2: finished configuring A57 cluster clocks.\n");
 
+iomap_c1_pll_fail:
+	iounmap(vbases[C0_PLL_BASE]);
+iomap_c0_pll_fail:
 	iounmap(vbases[ALIAS1_GLB_BASE]);
 iomap_fail:
 	iounmap(vbases[ALIAS0_GLB_BASE]);

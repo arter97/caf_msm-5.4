@@ -31,7 +31,7 @@
 			compatible = "qcom,qpnp-power-on";
 			reg = <0x800 0x100>;
 			qcom,secondary-pon-reset;
-			qcom,s3-debounce = <16>;
+			qcom,s3-debounce = <32>;
 			qcom,s3-src = "kpdpwr-and-resin";
 		};
 
@@ -141,7 +141,8 @@
 
 		bcl@4200 {
 			compatible = "qcom,msm-bcl";
-			reg = <0x4200 0xFF>;
+			reg = <0x4200 0xff 0x88e 0x2>;
+			reg-names = "fg_user_adc", "pon_spare";
 			interrupts = <0x2 0x42 0x0>,
 					<0x2 0x42 0x1>;
 			interrupt-names = "bcl-high-ibat-int",
@@ -156,6 +157,7 @@
 			qcom,ibat-offset-numerator = <1200>;
 			qcom,ibat-offset-denominator = <1>;
 			qcom,ibat-polling-delay-ms = <100>;
+			qcom,inhibit-derating-ua = <550000>;
 		};
 
 		pmi8994_vadc: vadc@3100 {
@@ -295,6 +297,7 @@
 			qcom,resume-soc = <95>;
 			status = "okay";
 			qcom,bcl-lm-threshold-ma = <127>;
+			qcom,bcl-mh-threshold-ma = <405>;
 			qcom,fg-iterm-ma = <100>;
 
 			qcom,fg-soc@4000 {
@@ -347,6 +350,10 @@
 
 			qcom,fg-adc-ibat@4255 {
 				reg = <0x4255 0x1>;
+			};
+
+			qcom,revid-tp-rev@1f1 {
+				reg = <0x1f1 0x1>;
 			};
 
 			qcom,fg-memif@4400 {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -40,7 +40,7 @@
  * unreasonably large. Set to 1s more than first wait + final wait which
  * are already quite long and proceed without any further waits. */
 #define WAIT_DISP_OP_TIMEOUT (WAIT_FENCE_FIRST_TIMEOUT + \
-		WAIT_FENCE_FINAL_TIMEOUT + 1)
+		WAIT_FENCE_FINAL_TIMEOUT + MSEC_PER_SEC)
 
 #ifndef MAX
 #define  MAX(x, y) (((x) > (y)) ? (x) : (y))
@@ -109,6 +109,18 @@ enum mdp_split_mode {
 	MDP_PINGPONG_SPLIT,
 };
 
+/* enum mdp_mmap_type - Lists the possible mmap type in the device
+ *
+ * @MDP_FB_MMAP_NONE: Unknown type.
+ * @MDP_FB_MMAP_ION_ALLOC:   Use ION allocate a buffer for mmap
+ * @MDP_FB_MMAP_PHYSICAL_ALLOC:  Use physical buffer for mmap
+ */
+enum mdp_mmap_type {
+	MDP_FB_MMAP_NONE,
+	MDP_FB_MMAP_ION_ALLOC,
+	MDP_FB_MMAP_PHYSICAL_ALLOC,
+};
+
 struct disp_info_type_suspend {
 	int op_enable;
 	int panel_power_state;
@@ -159,6 +171,7 @@ struct msm_mdp_interface {
 				uint32_t pid);
 	int (*kickoff_fnc)(struct msm_fb_data_type *mfd,
 					struct mdp_display_commit *data);
+	int (*pre_commit_fnc)(struct msm_fb_data_type *mfd);
 	int (*ioctl_handler)(struct msm_fb_data_type *mfd, u32 cmd, void *arg);
 	void (*dma_fnc)(struct msm_fb_data_type *mfd);
 	int (*cursor_update)(struct msm_fb_data_type *mfd,
@@ -287,6 +300,8 @@ struct msm_fb_data_type {
 
 	u32 wait_for_kickoff;
 	u32 thermal_level;
+
+	int fb_mmap_type;
 };
 
 static inline void mdss_fb_update_notify_update(struct msm_fb_data_type *mfd)
