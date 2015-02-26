@@ -866,7 +866,7 @@
 		vdd_dig-supply = <&pm8994_s1_corner>;
 		mmpll4_dig-supply = <&pm8994_s1_corner>;
 		mmpll4_analog-supply = <&pm8994_l12>;
-		vdd_gfx-supply = <&pmi8994_s2_corner>;
+		vdd_gfx-supply = <&gfx_vreg>;
 		vdd_mx-supply = <&pm8994_s2_corner>;
 		qcom,gfxfreq-corner-v0 =
 			<	   0  0  0 >,
@@ -2088,7 +2088,7 @@
 		qcom,vdd-restriction-temp-hysteresis = <10>;
 
 		vdd-dig-supply = <&pm8994_s1_floor_corner>;
-		vdd-gfx-supply = <&pmi8994_s2_corner>;
+		vdd-gfx-supply = <&gfx_vreg>;
 
 		qcom,vdd-dig-rstr{
 			qcom,vdd-rstr-reg = "vdd-dig";
@@ -2098,7 +2098,7 @@
 
 		qcom,vdd-gfx-rstr{
 			qcom,vdd-rstr-reg = "vdd-gfx";
-			qcom,levels = <5 7 7>; /* Nominal, Super Turbo, Super Turbo */
+			qcom,levels = <3 4 4>; /* Nominal, Super Turbo, Super Turbo */
 			qcom,min-level = <1>; /* No Request */
 		};
 
@@ -2601,7 +2601,7 @@
 };
 
 &gdsc_gpu_gx {
-	parent-supply = <&pmi8994_s2_corner>;
+	parent-supply = <&gfx_vreg>;
 	status = "ok";
 };
 
