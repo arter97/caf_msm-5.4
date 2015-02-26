@@ -514,6 +514,109 @@
 	};
 };
 
+/* SPM controlled regulators: */
+&spmi_bus {
+	qcom,pm8994@1 {
+		/*
+		 * PM8994 S8 + S9 + S10 + S11 = 4 phase VDD_APCC supply
+		 * S11 is the gang leader.
+		 */
+		pm8994_s11: spm-regulator@3200 {
+			compatible = "qcom,spm-regulator";
+			reg = <0x3200 0x100>;
+			regulator-name = "pm8994_s11";
+			regulator-min-microvolt = <520000>;
+			regulator-max-microvolt = <1015000>;
+			qcom,cpu-num = <0>;
+			qcom,bypass-spm;
+		};
+	};
+};
+
+/* CPR controlled regulators */
+&soc {
+	apcc_cpr: cpr3-ctrl@99e8000 {
+		compatible = "qcom,cpr3-msmthulium-hmss-regulator";
+		reg = <0x099e8000 0x4000>, <0x00074000 0x1000>;
+		reg-names = "cpr_ctrl", "fuse_base";
+		qcom,cpr-ctrl-name = "apcc";
+
+		qcom,apm-ctrl = <&apc_apm>;
+		qcom,apm-threshold-voltage = <850000>;
+		qcom,apm-hysteresis-voltage = <5000>;
+
+		vdd-supply = <&pm8994_s11>;
+
+		apc0_vreg: regulator@0 {
+			qcom,cpr-thread-id = <0>;
+			regulator-name = "apc0_corner";
+			regulator-min-microvolt = <1>;
+			regulator-max-microvolt = <19>;
+
+			qcom,voltage-step = <5000>;
+
+			qcom,cpr-fuse-corners = <4>;
+			qcom,cpr-fuse-combos = <1>;
+			qcom,cpr-corners = <19>;
+
+			qcom,cpr-corner-fmax-map = <1 6 11 19>;
+
+			qcom,cpr-voltage-ceiling =
+				<605000  670000  745000  745000  745000  745000
+				 905000  905000  905000  905000  905000 1015000
+				1015000 1015000 1015000 1015000 1015000 1015000
+				1015000>;
+			qcom,cpr-voltage-floor =
+				<520000  545000  625000  625000  625000  625000
+				 755000  755000  755000  755000  755000  855000
+				 855000  855000  855000  855000  855000  855000
+				 855000>;
+
+			qcom,corner-frequencies =
+				<192000000  268800000  300000000  345600000
+				 403200000  480000000  576000000  633600000
+				 729600000  806400000  883200000  960000000
+				1017600000 1113600000 1190400000 1267200000
+				1344000000 1420800000 1459200000>;
+
+			qcom,allow-voltage-interpolation;
+		};
+
+		apc1_vreg: regulator@1 {
+			qcom,cpr-thread-id = <1>;
+			regulator-name = "apc1_corner";
+			regulator-min-microvolt = <1>;
+			regulator-max-microvolt = <18>;
+
+			qcom,voltage-step = <5000>;
+
+			qcom,cpr-fuse-corners = <4>;
+			qcom,cpr-fuse-combos = <1>;
+			qcom,cpr-corners = <18>;
+
+			qcom,cpr-corner-fmax-map = <1 5 11 18>;
+
+			qcom,cpr-voltage-ceiling =
+				<605000  670000  670000  745000  745000  905000
+				 905000  905000  905000  905000  905000 1015000
+				1015000 1015000 1015000 1015000 1015000 1015000>;
+			qcom,cpr-voltage-floor =
+				<520000  545000  545000  625000  625000  755000
+				 755000  755000  755000  755000  755000  855000
+				 855000  855000  855000  855000  855000  940000>;
+
+			qcom,corner-frequencies =
+				<300000000  345600000  403200000  480000000
+				 576000000  633600000  729600000  806400000
+				 883200000  960000000 1017600000 1113600000
+				1190400000 1267200000 1344000000 1420800000
+				1497600000 1593600000>;
+
+			qcom,allow-voltage-interpolation;
+		};
+	};
+};
+
 &soc {
 /* Miscellaneous regulators */
 	usb_otg_switch: usb-otg-switch {
