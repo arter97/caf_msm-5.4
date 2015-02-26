@@ -1003,6 +1003,9 @@ static int msm_core_dev_probe(struct platform_device *pdev)
 	if (ret)
 		pr_info("msm-core initialized without polling period\n");
 
+	key = "qcom,throttling-temp";
+	ret = of_property_read_u32(node, key, &max_throttling_temp);
+
 	ret = uio_init(pdev);
 	if (ret)
 		return ret;
