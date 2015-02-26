@@ -32,6 +32,10 @@ Optional properties:
 		the caches can be turned on. This would be a required property
 		if the target necessitates a voltage rail be turned on before
 		turning on the cache.
+- qcom,clamped-reset-seq: For "qcom,msmthulium-l2ccc" only, specify this to
+		apply an alternate L2 reset sequence, which repeatedly toggles
+		the reset signal while clamps are enabled.
+
 Example:
 
 	clock-controller@f900f000 {

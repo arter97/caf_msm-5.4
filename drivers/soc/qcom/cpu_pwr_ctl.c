@@ -407,6 +407,26 @@ static int power_on_l2_msmthulium(struct device_node *l2ccc_node, u32 pon_mask,
 	/* L2 reset requirement */
 	udelay(2);
 
+	/*
+	 * Work-around periodic clock gating issue, which prevents resets from
+	 * propagating on some early sample parts, by repeatedly asserting/
+	 * de-asserting reset at different intervals.
+	 */
+	if (of_property_read_bool(l2ccc_node, "qcom,clamped-reset-seq")) {
+		u32 delay_us;
+		for (delay_us = 3500; delay_us; delay_us /= 2) {
+			/* de-assert reset with clamps on */
+			writel_relaxed(0x00000041, l2_base + MSMTHULIUM_L2_PWR_CTL);
+
+			/* wait for clock to enable */
+			wmb();
+			udelay(delay_us);
+
+			/* re-assert reset */
+			writel_relaxed(0x00000045, l2_base + MSMTHULIUM_L2_PWR_CTL);
+		}
+	}
+
 	/* de-assert clamp */
 	writel_relaxed(0x00000004 , l2_base + MSMTHULIUM_L2_PWR_CTL);
 
