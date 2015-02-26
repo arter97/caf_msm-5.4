@@ -975,6 +975,9 @@
 
 			qcom,cdc-reset-gpio = <&tlmm 64 0>;
 
+			clock-names = "wcd_clk";
+			clocks = <&clock_audio clk_audio_pmi_clk>;
+
 			cdc-vdd-buck-supply = <&pm8994_s4>;
 			qcom,cdc-vdd-buck-voltage = <1800000 1800000>;
 			qcom,cdc-vdd-buck-current = <650000>;
@@ -2163,9 +2166,6 @@
 			"DMIC6", "MIC BIAS4 External",
 			"MIC BIAS4 External", "Digital Mic6";
 
-		clock-names = "osr_clk";
-		clocks = <&clock_gcc clk_div_clk1>;
-		qcom,cdc-mclk-gpios = <&pm8994_gpios 15 0>;
 		qcom,tomtom-mclk-clk-freq = <9600000>;
 		pinctrl-names = "mi2s-sleep",
 				"mi2s-active",
