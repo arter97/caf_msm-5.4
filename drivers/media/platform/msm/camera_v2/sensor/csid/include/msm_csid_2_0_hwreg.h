@@ -15,6 +15,8 @@
 
 #include <sensor/csid/msm_csid.h>
 
+uint8_t csid_lane_assign_v2_0[PHY_LANE_MAX] = {0, 1, 2, 3, 4};
+
 struct csid_reg_parms_t csid_v2_0 = {
 
 	/* MIPI	CSID registers */

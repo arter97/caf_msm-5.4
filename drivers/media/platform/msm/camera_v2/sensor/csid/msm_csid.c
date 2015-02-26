@@ -76,10 +76,13 @@ static int msm_csid_cid_lut(
 		pr_err("%s:%d csid_lut_params NULL\n", __func__, __LINE__);
 		return -EINVAL;
 	}
-	for (i = 0; i < csid_lut_params->num_cid && i < 16; i++) {
-		if (csid_lut_params->vc_cfg[i]->cid >=
-			csid_lut_params->num_cid ||
-			csid_lut_params->vc_cfg[i]->cid < 0) {
+	if (csid_lut_params->num_cid > MAX_CID) {
+		pr_err("%s:%d num_cid exceeded limit num_cid = %d max = %d\n",
+			__func__, __LINE__, csid_lut_params->num_cid, MAX_CID);
+		return -EINVAL;
+	}
+	for (i = 0; i < csid_lut_params->num_cid; i++) {
+		if (csid_lut_params->vc_cfg[i]->cid >= MAX_CID) {
 			pr_err("%s: cid outside range %d\n",
 				 __func__, csid_lut_params->vc_cfg[i]->cid);
 			return -EINVAL;
@@ -176,9 +179,11 @@ static void msm_csid_reset(struct csid_device *csid_dev)
 static int msm_csid_config(struct csid_device *csid_dev,
 	struct msm_camera_csid_params *csid_params)
 {
-	int rc = 0, i;
+	int rc = 0, i, j;
 	uint32_t val = 0, clk_rate = 0;
 	uint32_t round_rate = 0, input_sel;
+	uint32_t lane_assign = 0;
+	uint8_t  lane_num = 0;
 	struct clk **csid_clk_ptr;
 	void __iomem *csidbase;
 	csidbase = csid_dev->base;
@@ -219,7 +224,32 @@ static int msm_csid_config(struct csid_device *csid_dev,
 	}
 
 	val = csid_params->lane_cnt - 1;
-	val |= csid_params->lane_assign <<
+
+	for (i = 0, j = 0; i < PHY_LANE_MAX; i++) {
+		if (i == PHY_LANE_CLK)
+			continue;
+		lane_num = (csid_params->lane_assign >> j) & 0xF;
+		if (lane_num >= PHY_LANE_MAX) {
+			pr_err("%s:%d invalid lane number %d\n",
+				__func__, __LINE__, lane_num);
+			return -EINVAL;
+		}
+		if (csid_dev->ctrl_reg->csid_lane_assign[lane_num] >=
+			PHY_LANE_MAX){
+			pr_err("%s:%d invalid lane map %d\n",
+				__func__, __LINE__,
+				csid_dev->ctrl_reg->csid_lane_assign[lane_num]);
+			return -EINVAL;
+		}
+		lane_assign |=
+			csid_dev->ctrl_reg->csid_lane_assign[lane_num] << j;
+		j += 4;
+	}
+
+	CDBG("%s csid_params calculated lane_assign = 0x%X\n",
+		__func__, lane_assign);
+
+	val |= lane_assign <<
 		csid_dev->ctrl_reg->csid_reg.csid_dl_input_sel_shift;
 	if (csid_dev->hw_version < CSID_VERSION_V30) {
 		val |= (0xF << 10);
@@ -250,8 +280,10 @@ static int msm_csid_config(struct csid_device *csid_dev,
 	}
 
 	rc = msm_csid_cid_lut(&csid_params->lut_params, csid_dev);
-	if (rc < 0)
+	if (rc < 0) {
+		pr_err("%s:%d config cid lut failed\n", __func__, __LINE__);
 		return rc;
+	}
 	msm_csid_set_debug_reg(csid_dev, csid_params);
 	return rc;
 }
@@ -545,7 +577,7 @@ static int32_t msm_csid_cmd(struct csid_device *csid_dev, void __user *arg)
 			break;
 		}
 		if (csid_params.lut_params.num_cid < 1 ||
-			csid_params.lut_params.num_cid > 16) {
+			csid_params.lut_params.num_cid > MAX_CID) {
 			pr_err("%s: %d num_cid outside range\n",
 				 __func__, __LINE__);
 			rc = -EINVAL;
@@ -676,7 +708,7 @@ static int32_t msm_csid_cmd32(struct csid_device *csid_dev, void __user *arg)
 		csid_params.lut_params.num_cid = lut_par32.num_cid;
 
 		if (csid_params.lut_params.num_cid < 1 ||
-			csid_params.lut_params.num_cid > 16) {
+			csid_params.lut_params.num_cid > MAX_CID) {
 			pr_err("%s: %d num_cid outside range %d\n", __func__,
 				__LINE__, csid_params.lut_params.num_cid);
 			rc = -EINVAL;
@@ -1018,30 +1050,44 @@ static int csid_probe(struct platform_device *pdev)
 	if (of_device_is_compatible(new_csid_dev->pdev->dev.of_node,
 		"qcom,csid-v2.0")) {
 		new_csid_dev->ctrl_reg->csid_reg = csid_v2_0;
+		new_csid_dev->ctrl_reg->csid_lane_assign =
+			csid_lane_assign_v2_0;
 		new_csid_dev->hw_dts_version = CSID_VERSION_V20;
 	} else if (of_device_is_compatible(new_csid_dev->pdev->dev.of_node,
 		"qcom,csid-v2.2")) {
 		new_csid_dev->ctrl_reg->csid_reg = csid_v2_2;
+		new_csid_dev->ctrl_reg->csid_lane_assign =
+			csid_lane_assign_v2_2;
 		new_csid_dev->hw_dts_version = CSID_VERSION_V22;
 	} else if (of_device_is_compatible(new_csid_dev->pdev->dev.of_node,
 		"qcom,csid-v3.0")) {
 		new_csid_dev->ctrl_reg->csid_reg = csid_v3_0;
+		new_csid_dev->ctrl_reg->csid_lane_assign =
+			csid_lane_assign_v3_0;
 		new_csid_dev->hw_dts_version = CSID_VERSION_V30;
 	} else if (of_device_is_compatible(new_csid_dev->pdev->dev.of_node,
 		"qcom,csid-v4.0")) {
 		new_csid_dev->ctrl_reg->csid_reg = csid_v3_0;
+		new_csid_dev->ctrl_reg->csid_lane_assign =
+			csid_lane_assign_v3_0;
 		new_csid_dev->hw_dts_version = CSID_VERSION_V40;
 	} else if (of_device_is_compatible(new_csid_dev->pdev->dev.of_node,
 		"qcom,csid-v3.1")) {
 		new_csid_dev->ctrl_reg->csid_reg = csid_v3_1;
+		new_csid_dev->ctrl_reg->csid_lane_assign =
+			csid_lane_assign_v3_1;
 		new_csid_dev->hw_dts_version = CSID_VERSION_V31;
 	} else if (of_device_is_compatible(new_csid_dev->pdev->dev.of_node,
 		"qcom,csid-v3.2")) {
 		new_csid_dev->ctrl_reg->csid_reg = csid_v3_2;
+		new_csid_dev->ctrl_reg->csid_lane_assign =
+			csid_lane_assign_v3_2;
 		new_csid_dev->hw_dts_version = CSID_VERSION_V32;
 	} else if (of_device_is_compatible(new_csid_dev->pdev->dev.of_node,
 		"qcom,csid-v3.5")) {
 		new_csid_dev->ctrl_reg->csid_reg = csid_v3_5;
+		new_csid_dev->ctrl_reg->csid_lane_assign =
+			csid_lane_assign_v3_5;
 		new_csid_dev->hw_dts_version = CSID_VERSION_V35;
 	} else {
 		pr_err("%s:%d, invalid hw version : 0x%x", __func__, __LINE__,
