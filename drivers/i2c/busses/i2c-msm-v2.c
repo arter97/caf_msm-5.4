@@ -885,6 +885,8 @@ static struct i2c_msm_tag i2c_msm_tag_create(bool is_high_speed,
 	u8 slave_addr)
 {
 	struct i2c_msm_tag tag;
+	/* Normalize booleans to 1 or 0 */
+	start_req = start_req ? 1 : 0;
 	is_last_buf = is_last_buf ? 1 : 0;
 	is_rx = is_rx ? 1 : 0;
 
@@ -2740,26 +2742,6 @@ static irqreturn_t i2c_msm_qup_isr(int irq, void *devid)
 	err_flags   = readl_relaxed(base + QUP_ERROR_FLAGS);
 	qup_op      = readl_relaxed(base + QUP_OPERATIONAL);
 
-	/* clear interrupts fields */
-	clr_flds = i2c_status & QUP_MSTR_STTS_ERR_MASK;
-	if (clr_flds)
-		writel_relaxed(clr_flds, base + QUP_I2C_STATUS);
-
-	clr_flds = err_flags & QUP_ERR_FLGS_MASK;
-	if (clr_flds)
-		writel_relaxed(clr_flds,  base + QUP_ERROR_FLAGS);
-
-	clr_flds = qup_op & (QUP_OUTPUT_SERVICE_FLAG | QUP_INPUT_SERVICE_FLAG);
-
-	if (clr_flds)
-		writel_relaxed(clr_flds, base + QUP_OPERATIONAL);
-	mb();
-
-	if (err_flags & QUP_ERR_FLGS_MASK) {
-		signal_complete = true;
-		log_event       = true;
-	}
-
 	if (i2c_status & QUP_MSTR_STTS_ERR_MASK) {
 		signal_complete = true;
 		log_event       = true;
@@ -2826,10 +2808,10 @@ static irqreturn_t i2c_msm_qup_isr(int irq, void *devid)
 
 		/* HW workaround: when interrupt is level triggerd, more
 		 * than one interrupt may fire in error cases. Thus we
-		 * reset the core immidiatly in the ISR to ward off the
-		 * next interrupt.
+		 * resetting the QUP core state immediately in the ISR
+		 * to ward off the next interrupt.
 		 */
-		i2c_msm_qup_sw_reset(ctrl);
+		i2c_msm_qup_state_set(ctrl, QUP_STATE_RESET);
 
 		need_wmb        = true;
 		signal_complete = true;
@@ -2891,11 +2873,18 @@ static irqreturn_t i2c_msm_qup_isr(int irq, void *devid)
 		}
 	}
 
+isr_end:
+	/* Ensure that QUP configuration is written before leaving this func */
+	if (need_wmb)
+		wmb();
+
+	if (ctrl->xfer.err || (ctrl->dbgfs.dbg_lvl >= MSM_DBG))
+		i2c_msm_dbg_dump_diag(ctrl, true, i2c_status, qup_op);
+
 	if (log_event || (ctrl->dbgfs.dbg_lvl >= MSM_DBG))
 		i2c_msm_prof_evnt_add(ctrl, MSM_PROF,
 					i2c_msm_prof_dump_irq_end,
 					i2c_status, qup_op, err_flags);
-isr_end:
 	if (signal_complete)
 		complete(&ctrl->xfer.complete);
 
@@ -3191,6 +3180,9 @@ static int i2c_msm_xfer_wait_for_completion(struct i2c_msm_ctrl *ctrl,
 		i2c_msm_prof_evnt_add(ctrl, MSM_ERR, i2c_msm_prof_dump_cmplt_fl,
 					xfer->timeout, time_left, 0);
 	} else {
+		/* return an error if one detected by ISR */
+		if (xfer->err)
+			ret = -(xfer->err);
 		i2c_msm_prof_evnt_add(ctrl, MSM_DBG, i2c_msm_prof_dump_cmplt_ok,
 					xfer->timeout, time_left, 0);
 	}
@@ -3222,7 +3214,8 @@ static bool i2c_msm_xfer_buf_is_last(struct i2c_msm_ctrl *ctrl)
 	struct i2c_msm_xfer_buf *cur_buf = &ctrl->xfer.cur_buf;
 	struct i2c_msg *cur_msg = ctrl->xfer.msgs + cur_buf->msg_idx;
 
-	return (cur_buf->byte_idx + ctrl->ver.max_buf_size) >= cur_msg->len;
+	return i2c_msm_xfer_msg_is_last(ctrl) &&
+		((cur_buf->byte_idx + ctrl->ver.max_buf_size) >= cur_msg->len);
 }
 
 static void i2c_msm_xfer_create_cur_tag(struct i2c_msm_ctrl *ctrl,
@@ -3403,10 +3396,10 @@ static void i2c_msm_xfer_scan(struct i2c_msm_ctrl *ctrl)
 		xfer->rx_ovrhd_cnt += cur_buf->in_tag.len;
 		xfer->tx_ovrhd_cnt += cur_buf->out_tag.len;
 
-		if (cur_buf->is_last)
+		if (i2c_msm_xfer_msg_is_last(ctrl))
 			xfer->last_is_rx = cur_buf->is_rx;
 	}
-	ctrl->xfer.cur_buf  = first_buf;
+	ctrl->xfer.cur_buf = first_buf;
 }
 
 static int
