@@ -159,7 +159,7 @@ struct dwc3_msm {
 	bool			hs_phy_irq_seen;
 	struct delayed_work	resume_work;
 	struct work_struct	restart_usb_work;
-	struct work_struct	usb_block_reset_work;
+	bool			in_restart;
 	struct dwc3_charger	charger;
 	struct usb_phy		*otg_xceiv;
 	struct delayed_work	chg_work;
@@ -196,7 +196,6 @@ struct dwc3_msm {
 #define MDWC3_PHY_REF_AND_CORECLK_OFF	\
 			(MDWC3_PHY_REF_CLK_OFF | MDWC3_CORECLK_OFF)
 
-	u32 gctl_val;
 	u32 qscratch_ctl_val;
 	dev_t ext_chg_dev;
 	struct cdev ext_chg_cdev;
@@ -857,11 +856,15 @@ void dwc3_tx_fifo_resize_request(struct usb_ep *ep, bool qdss_enabled)
 }
 EXPORT_SYMBOL(dwc3_tx_fifo_resize_request);
 
+static void dwc3_resume_work(struct work_struct *w);
+
 static void dwc3_restart_usb_work(struct work_struct *w)
 {
 	struct dwc3_msm *mdwc = container_of(w, struct dwc3_msm,
 						restart_usb_work);
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+	enum dwc3_chg_type chg_type;
+	unsigned timeout = 50;
 
 	dev_dbg(mdwc->dev, "%s\n", __func__);
 
@@ -870,19 +873,41 @@ static void dwc3_restart_usb_work(struct work_struct *w)
 		return;
 	}
 
+	/* guard against concurrent VBUS handling */
+	mdwc->in_restart = true;
+
 	if (!mdwc->ext_xceiv.bsv) {
 		dev_dbg(mdwc->dev, "%s bailing out in disconnect\n", __func__);
+		dwc->err_evt_seen = false;
+		mdwc->in_restart = false;
 		return;
 	}
 
+	dbg_event(0xFF, "RestartUSB", 0);
+	chg_type = mdwc->charger.chg_type;
+
 	/* Reset active USB connection */
 	mdwc->ext_xceiv.bsv = false;
-	queue_delayed_work(system_nrt_wq, &mdwc->resume_work, 0);
-	/* Make sure disconnect is processed before sending connect */
-	flush_delayed_work(&mdwc->resume_work);
+	dwc3_resume_work(&mdwc->resume_work.work);
 
-	mdwc->ext_xceiv.bsv = true;
-	queue_delayed_work(system_nrt_wq, &mdwc->resume_work, 0);
+	/* Make sure disconnect is processed before sending connect */
+	while (--timeout && !pm_runtime_suspended(mdwc->dev))
+		msleep(20);
+
+	if (!timeout) {
+		dev_warn(mdwc->dev, "Not in LPM after disconnect, forcing suspend...\n");
+		pm_runtime_suspend(mdwc->dev);
+	}
+
+	/* Force reconnect only if cable is still connected */
+	if (mdwc->vbus_active) {
+		mdwc->ext_xceiv.bsv = true;
+		mdwc->charger.chg_type = chg_type;
+		dwc3_resume_work(&mdwc->resume_work.work);
+	}
+
+	dwc->err_evt_seen = false;
+	mdwc->in_restart = false;
 }
 
 /**
@@ -1093,6 +1118,7 @@ static void dwc3_msm_qscratch_reg_init(struct dwc3_msm *mdwc)
 static void dwc3_msm_notify_event(struct dwc3 *dwc, unsigned event)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
+	u32 reg;
 
 	if (dwc->revision < DWC3_REVISION_230A)
 		return;
@@ -1102,11 +1128,14 @@ static void dwc3_msm_notify_event(struct dwc3 *dwc, unsigned event)
 		dev_info(mdwc->dev, "DWC3_CONTROLLER_ERROR_EVENT received\n");
 		dwc3_msm_dump_phy_info(mdwc);
 		dwc3_gadget_disable_irq(dwc);
-		/*
-		 * schedule work for doing block reset for recovery from erratic
-		 * error event.
-		 */
-		queue_work(system_nrt_wq, &mdwc->usb_block_reset_work);
+
+		/* prevent core from generating interrupts until recovery */
+		reg = dwc3_msm_read_reg(mdwc->base, DWC3_GCTL);
+		reg |= DWC3_GCTL_CORESOFTRESET;
+		dwc3_msm_write_reg(mdwc->base, DWC3_GCTL, reg);
+
+		/* restart USB which performs full reset and reconnect */
+		queue_work(system_nrt_wq, &mdwc->restart_usb_work);
 		break;
 	case DWC3_CONTROLLER_RESET_EVENT:
 		dev_dbg(mdwc->dev, "DWC3_CONTROLLER_RESET_EVENT received\n");
@@ -1180,24 +1209,6 @@ static void dwc3_msm_block_reset(struct dwc3_ext_xceiv *xceiv, bool core_reset)
 		DBM_EN_MASK, 0x1);
 	dbm_enable(mdwc->dbm);
 
-}
-
-static void dwc3_block_reset_usb_work(struct work_struct *w)
-{
-	struct dwc3_msm *mdwc = container_of(w, struct dwc3_msm,
-						usb_block_reset_work);
-	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
-	unsigned long flags;
-
-	dev_dbg(mdwc->dev, "%s\n", __func__);
-	dwc3_msm_block_reset(&mdwc->ext_xceiv, true);
-	if (mdwc->ext_xceiv.bsv) {
-		dbg_event(0xFF, "BR EnEVT", 0);
-		dwc3_gadget_enable_irq(dwc);
-	}
-	spin_lock_irqsave(&dwc->lock, flags);
-	dwc->err_evt_seen = 0;
-	spin_unlock_irqrestore(&dwc->lock, flags);
 }
 
 static void dwc3_chg_enable_secondary_det(struct dwc3_msm *mdwc)
@@ -1494,6 +1505,7 @@ static void dwc3_msm_power_collapse_por(struct dwc3_msm *mdwc)
 
 	/* Re-configure event buffers */
 	dwc3_event_buffers_setup(dwc);
+	dwc3_msm_notify_event(dwc, DWC3_CONTROLLER_POST_INITIALIZATION_EVENT);
 }
 
 static int dwc3_msm_prepare_suspend(struct dwc3_msm *mdwc)
@@ -1724,9 +1736,6 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 	/* make sure above writes are completed before turning off clocks */
 	wmb();
 
-	/* Save value of GCTL to rewrite upon resume */
-	mdwc->gctl_val = dwc3_msm_read_reg(mdwc->base, DWC3_GCTL);
-
 	/* Perform controller power collapse */
 	if (!host_bus_suspend && !device_bus_suspend && mdwc->power_collapse) {
 		mdwc->lpm_flags |= MDWC3_POWER_COLLAPSE;
@@ -1888,8 +1897,6 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 		mdwc->lpm_flags &= ~MDWC3_POWER_COLLAPSE;
 	}
 
-	dwc3_msm_write_reg(mdwc->base, DWC3_GCTL, mdwc->gctl_val);
-
 	atomic_set(&dwc->in_lpm, 0);
 
 	msm_bam_notify_lpm_resume(DWC3_CTRL);
@@ -1955,43 +1962,6 @@ static void dwc3_wait_for_ext_chg_done(struct dwc3_msm *mdwc)
 	}
 }
 
-static void dwc3_flush_event_buffers(struct dwc3_msm *mdwc)
-{
-	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
-	int i;
-	unsigned long flags;
-
-	/* Only disable/flush all events when cable is disconnected */
-	if (mdwc->ext_xceiv.bsv)
-		return;
-
-	/* Disable all events on cable disconnect */
-	dbg_event(0xFF, "Dis EVT", 0);
-	dwc3_gadget_disable_irq(dwc);
-
-	/* Skip remaining events on disconnect */
-	spin_lock_irqsave(&dwc->lock, flags);
-	for (i = 0; i < dwc->num_event_buffers; i++) {
-		struct dwc3_event_buffer *evt;
-		evt = dwc->ev_buffs[i];
-		evt->lpos = (evt->lpos + evt->count) %
-			DWC3_EVENT_BUFFERS_SIZE;
-		evt->count = 0;
-		evt->flags &= ~DWC3_EVENT_PENDING;
-	}
-	spin_unlock_irqrestore(&dwc->lock, flags);
-
-	/*
-	 * If there is a pending block reset due to erratic event,
-	 * wait for it to complete
-	 */
-	if (dwc->err_evt_seen) {
-		dbg_event(0xFF, "Flush BR", 0);
-		flush_work(&mdwc->usb_block_reset_work);
-		dwc->err_evt_seen = 0;
-	}
-}
-
 static void dwc3_resume_work(struct work_struct *w)
 {
 	struct dwc3_msm *mdwc = container_of(w, struct dwc3_msm,
@@ -2004,8 +1974,6 @@ static void dwc3_resume_work(struct work_struct *w)
 		dev_dbg(mdwc->dev, "%s: notifying xceiv event\n", __func__);
 		if (mdwc->otg_xceiv) {
 			dwc3_wait_for_ext_chg_done(mdwc);
-			/* Handle erratic events during cable disconnect */
-			dwc3_flush_event_buffers(mdwc);
 			mdwc->ext_xceiv.notify_ext_events(mdwc->otg_xceiv->otg,
 							DWC3_EVENT_XCEIV_STATE);
 		}
@@ -2024,11 +1992,6 @@ static void dwc3_resume_work(struct work_struct *w)
 	} else {
 		pm_runtime_get_sync(mdwc->dev);
 		if (mdwc->otg_xceiv) {
-			/*
-			 * Handle erratic events during bus suspend and cable
-			 * disconnect
-			 */
-			dwc3_flush_event_buffers(mdwc);
 			mdwc->ext_xceiv.notify_ext_events(mdwc->otg_xceiv->otg,
 							DWC3_EVENT_PHY_RESUME);
 		} else if (mdwc->scope == POWER_SUPPLY_SCOPE_SYSTEM) {
@@ -2332,8 +2295,12 @@ static int dwc3_msm_power_set_property_usb(struct power_supply *psy,
 	/* Process PMIC notification in PRESENT prop */
 	case POWER_SUPPLY_PROP_PRESENT:
 		dev_dbg(mdwc->dev, "%s: notify xceiv event\n", __func__);
-		if (mdwc->otg_xceiv && !mdwc->ext_inuse &&
+		mdwc->vbus_active = val->intval;
+		if (mdwc->otg_xceiv && !mdwc->ext_inuse && !mdwc->in_restart &&
 		    (mdwc->ext_xceiv.otg_capability || !init)) {
+			if (mdwc->ext_xceiv.bsv == val->intval)
+				break;
+
 			mdwc->ext_xceiv.bsv = val->intval;
 			/*
 			 * Set debouncing delay to 120ms. Otherwise battery
@@ -2345,7 +2312,6 @@ static int dwc3_msm_power_set_property_usb(struct power_supply *psy,
 			if (!init)
 				init = true;
 		}
-		mdwc->vbus_active = val->intval;
 		break;
 	case POWER_SUPPLY_PROP_ONLINE:
 		mdwc->online = val->intval;
@@ -2856,7 +2822,6 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&mdwc->chg_work, dwc3_chg_detect_work);
 	INIT_DELAYED_WORK(&mdwc->resume_work, dwc3_resume_work);
 	INIT_WORK(&mdwc->restart_usb_work, dwc3_restart_usb_work);
-	INIT_WORK(&mdwc->usb_block_reset_work, dwc3_block_reset_usb_work);
 	INIT_WORK(&mdwc->id_work, dwc3_id_work);
 	INIT_WORK(&mdwc->bus_vote_w, dwc3_msm_bus_vote_w);
 	INIT_DELAYED_WORK(&mdwc->init_adc_work, dwc3_init_adc_work);
@@ -3470,11 +3435,6 @@ static int dwc3_msm_pm_resume(struct device *dev)
 
 		/* Let OTG know about resume event and update pm_count */
 		if (mdwc->otg_xceiv) {
-			/*
-			 * Handle erratic events on bus suspend, PM suspend
-			 * and cable disconnect
-			 */
-			dwc3_flush_event_buffers(mdwc);
 			mdwc->ext_xceiv.notify_ext_events(mdwc->otg_xceiv->otg,
 							DWC3_EVENT_PHY_RESUME);
 			if (mdwc->ext_xceiv.otg_capability)
