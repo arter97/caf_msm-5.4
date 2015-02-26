@@ -808,9 +808,9 @@
 		      <0x09A11000 0x1000>,
 		      <0x00070130    0x8>;
 		reg-names = "pwrcl_pll", "perfcl_pll", "cbf_pll", "pwrcl_mux", "perfcl_mux", "cbf_mux", "efuse";
-		vdd-pwrcl-supply = <&apc_vreg_corner>;
-		vdd-perfcl-supply = <&apc_vreg_corner>;
-		vdd-cbf-supply = <&apc_vreg_corner>;
+		vdd-pwrcl-supply = <&apc0_vreg>;
+		vdd-perfcl-supply = <&apc1_vreg>;
+		vdd-cbf-supply = <&apc0_vreg>;
 		vdd-dig-supply = <&pm8994_s1_corner_ao>;
 		qcom,pwrcl-speedbin0-v0 =
 			<          0  0 >,
