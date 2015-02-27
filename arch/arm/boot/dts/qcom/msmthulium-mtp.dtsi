@@ -11,6 +11,7 @@
  */
 
 #include "msmthulium-pinctrl.dtsi"
+#include "msmthulium-camera-sensor-mtp.dtsi"
 
 &ufsphy1 {
 	status = "ok";
