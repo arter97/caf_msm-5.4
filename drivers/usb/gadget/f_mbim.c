@@ -175,8 +175,8 @@ static inline unsigned mbim_bitrate(struct usb_gadget *g)
 #define MBIM_NTB_OUT_SIZE		(0x1000)
 #define MBIM_NDP_IN_DIVISOR		(0x4)
 
-#define NTB_DEFAULT_IN_SIZE_IPA	(0x2000)
-#define MBIM_NTB_OUT_SIZE_IPA		(0x2000)
+#define NTB_DEFAULT_IN_SIZE_IPA	(0x4000)
+#define MBIM_NTB_OUT_SIZE_IPA		(0x4000)
 
 #define MBIM_FORMATS_SUPPORTED	USB_CDC_NCM_NTB16_SUPPORTED
 static int mbim_ntb_out_size_sys2bam;
