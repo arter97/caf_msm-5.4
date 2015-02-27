@@ -429,10 +429,19 @@ static void gic_cpu_init(void)
 
 #ifdef CONFIG_SMP
 static int gic_secondary_init(struct notifier_block *nfb,
-			      unsigned long action, void *hcpu)
+			unsigned long action, void *hcpu)
 {
-	if (action == CPU_STARTING || action == CPU_STARTING_FROZEN)
+	switch (action) {
+	case CPU_STARTING:
+	case CPU_STARTING_FROZEN:
 		gic_cpu_init();
+		break;
+	case CPU_DYING:
+	case CPU_DYING_FROZEN:
+		gic_write_grpen1(0);
+		break;
+	}
+
 	return NOTIFY_OK;
 }
 
@@ -727,7 +736,6 @@ static int __init gic_of_init(struct device_node *node, struct device_node *pare
 	gic_dist_init();
 	gic_cpu_init();
 	gic_cpu_pm_init();
-
 	return 0;
 
 out_free:
