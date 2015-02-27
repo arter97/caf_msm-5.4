@@ -758,6 +758,7 @@ static int cfg80211_netdev_notifier_call(struct notifier_block *nb,
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
 	struct cfg80211_registered_device *rdev;
 	int ret;
+	struct cfg80211_sched_scan_request *sched_scan_req;
 
 	if (!wdev)
 		return NOTIFY_DONE;
@@ -820,9 +821,10 @@ static int cfg80211_netdev_notifier_call(struct notifier_block *nb,
 			break;
 		case NL80211_IFTYPE_P2P_CLIENT:
 		case NL80211_IFTYPE_STATION:
-			rtnl_lock();
-			__cfg80211_stop_sched_scan(rdev, false);
-			rtnl_unlock();
+			ASSERT_RTNL();
+			sched_scan_req = rtnl_dereference(rdev->sched_scan_req);
+			if (sched_scan_req && dev == sched_scan_req->dev)
+				__cfg80211_stop_sched_scan(rdev, false);
 
 			wdev_lock(wdev);
 #ifdef CONFIG_CFG80211_WEXT
