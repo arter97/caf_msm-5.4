@@ -23,7 +23,7 @@ end of this file.
 - qcom,chg-otg:		OTG configuration control.
 
 Parent node required properties:
-- compatible:		Must be "qcom,qpnp-smbcharger"
+- compatible:		Can be "qcom,qpnp-smbcharger" or "qcom,qpnp-smbcharger-lite"
 - spmi-dev-container:	Must be included in the parent node to set up the spmi
 			sub node devices.
 - #address-cells:	Must be <1>

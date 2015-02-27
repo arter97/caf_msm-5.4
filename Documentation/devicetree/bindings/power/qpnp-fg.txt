@@ -90,6 +90,8 @@ Parent node optional properties:
 					HIGH_SOC interrupt will be asserted.
 - qcom,fg-min-soc:			The percent SoC threshold at which the
 					LOW_SOC interrupt will be asserted.
+- qcom,support-ima:			Boolean property to indicate SRAM
+					supports Interleaved Memory Acess.
 
 qcom,fg-soc node required properties:
 - reg : offset and length of the PMIC peripheral register map.
