@@ -29,7 +29,7 @@
 
 &soc {
 
-	hsic@f9a00000 {
+	smsc_hub: hsic_hub {
 	status = "ok";
 	};
 
@@ -285,6 +285,11 @@
 	rpm-regulator-ldoa8 {
 		regulator-l8 {
 			qcom,consumer-supplies = "l8_keep_alive", "";
+		};
+	};
+	rpm-regulator-ldoa20 {
+		regulator-l20 {
+			qcom,consumer-supplies = "l20_usb_id_switch", "";
 		};
 	};
 };
