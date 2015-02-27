@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2011-2012, LG Eletronics,Inc. All rights reserved.
+ *  Copyright (C) 2011-2012, 2015, LG Eletronics,Inc. All rights reserved.
  *      Hitach LCD device driver
  *
  * This program is free software; you can redistribute it and/or modify
@@ -44,16 +44,21 @@ static struct mipi_dsi_phy_ctrl dsi_video_mode_phy_db = {
 static int __init mipi_video_lgit_wxga_pt_init(void)
 {
 	int ret;
+	struct platform_disp_info info = {
+		.id = DISPLAY_PRIMARY,
+		.dest = DISPLAY_1
+	};
 
 #ifdef CONFIG_FB_MSM_MIPI_PANEL_DETECT
-	if (msm_fb_detect_client("mipi_video_lgit_wxga"))
+	if (msm_fb_detect_client("mipi_video_lgit_wxga", &info))
 		return 0;
 #endif
 
 	pinfo.xres = 768;
 	pinfo.yres = 1280;
 	pinfo.type = MIPI_VIDEO_PANEL;
-	pinfo.pdest = DISPLAY_1;
+	pinfo.pdest = info.dest;
+	pinfo.disp_id = info.id;
 	pinfo.wait_cycle = 0;
 	pinfo.bpp = 24;
 	pinfo.lcdc.h_back_porch = 180;

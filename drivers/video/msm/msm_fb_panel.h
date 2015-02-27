@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,6 +15,7 @@
 #define MSM_FB_PANEL_H
 
 #include "msm_fb_def.h"
+#include "mach/board.h"
 
 struct msm_fb_data_type;
 
@@ -40,6 +41,14 @@ typedef struct panel_id_s {
 #define WRITEBACK_PANEL		10	/* Wifi display */
 #define LVDS_PANEL		11	/* LVDS */
 
+/* Display panel type */
+enum DISPLAY_ID {
+	DISPLAY_PRIMARY = 0,
+	DISPLAY_SECONDARY,
+	DISPLAY_TERTIARY,
+	DISPLAY_WRITEBACK,
+	DISPLAY_MAX,
+};
 /* panel class */
 typedef enum {
 	DISPLAY_LCD = 0,	/* lcd = ebi2/mddi */
@@ -185,6 +194,8 @@ struct msm_panel_info {
 	struct lvds_panel_info lvds;
 	__u32 xres_aligned;
 	__u32 yres_aligned;
+
+	enum DISPLAY_ID disp_id;
 };
 
 #define MSM_FB_SINGLE_MODE_PANEL(pinfo)		\
@@ -229,7 +240,7 @@ int lcdc_device_register(struct msm_panel_info *pinfo);
 
 int mddi_toshiba_device_register(struct msm_panel_info *pinfo,
 					u32 channel, u32 panel);
-int mipi_dsi_i2c_video_wvga_device_register(u32 pdest);
-int mipi_dsi_i2c_video_xga_device_register(u32 pdest);
+int mipi_dsi_i2c_video_wvga_device_register(struct platform_disp_info *info);
+int mipi_dsi_i2c_video_xga_device_register(struct platform_disp_info *info);
 
 #endif /* MSM_FB_PANEL_H */

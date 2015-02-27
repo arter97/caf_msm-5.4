@@ -51,6 +51,23 @@
 #endif  /* CONFIG_FB_MSM_OVERLAY1_WRITEBACK */
 
 
+/* Display panel type */
+enum DISPLAY_ID {
+	DISPLAY_PRIMARY = 0,
+	DISPLAY_SECONDARY,
+	DISPLAY_TERTIARY,
+	DISPLAY_WRITEBACK,
+	DISPLAY_MAX,
+};
+/* panel device locaiton */
+enum DISP_TARGET_PHYS {
+	DISPLAY_1 = 0,		/* attached as first device */
+	DISPLAY_2,		/* attached on second device */
+	DISPLAY_3,              /* attached on third writeback device */
+	DISPLAY_4,		/* attached on third dsi/lvds device */
+	MAX_PHYS_TARGET_NUM,
+};
+
 static struct resource msm_fb_resources[] = {
 	{
 		.flags = IORESOURCE_DMA,
@@ -90,7 +107,8 @@ unsigned char apq8064_mhl_display_enabled(void)
 
 static void set_mdp_clocks_for_wuxga(void);
 
-static int msm_fb_detect_panel(const char *name)
+static int msm_fb_detect_panel(const char *name, struct platform_disp_info
+			       *disp_info)
 {
 	u32 version;
 	if (machine_is_apq8064_liquid()) {
@@ -120,10 +138,28 @@ static int msm_fb_detect_panel(const char *name)
 	} else if (machine_is_apq8064_adp_2() ||
 			machine_is_apq8064_adp2_es2() ||
 			machine_is_apq8064_adp2_es2p5()) {
-		if (!strcmp(name, LVDS_CHIMEI_PANEL_NAME))
+		if (!strcmp(name, LVDS_CHIMEI_PANEL_NAME)) {
+			if (disp_info) {
+				disp_info->id = DISPLAY_PRIMARY;
+				disp_info->dest = DISPLAY_1;
+			}
 			return 0;
-		else if (!strcmp(name, MIPI_DSI_I2C_VIDEO_WVGA_NAME))
+		} else if (!strcmp(name, MIPI_DSI_I2C_VIDEO_WVGA_NAME)) {
+			if (disp_info) {
+				disp_info->id = DISPLAY_TERTIARY;
+				disp_info->dest = DISPLAY_4;
+			}
 			return 0;
+		} else if (!strcmp(name, HDMI_PANEL_NAME)) {
+			if (disp_info) {
+				disp_info->id = DISPLAY_SECONDARY;
+				disp_info->dest = DISPLAY_2;
+			}
+			if (apq8064_hdmi_as_primary_selected())
+				set_mdp_clocks_for_wuxga();
+			return 0;
+		}
+
 	} else if (machine_is_mpq8064_dtv()) {
 		if (!strncmp(name, LVDS_FRC_PANEL_NAME,
 			strnlen(LVDS_FRC_PANEL_NAME,
@@ -1163,7 +1199,7 @@ static void set_mdp_clocks_for_wuxga(void)
 }
 
 void __init apq8064_set_display_params(char *prim_panel, char *ext_panel,
-		unsigned char resolution)
+		unsigned char resolution, char *sec_panel)
 {
 	/*
 	 * For certain MPQ boards, HDMI should be set as primary display
@@ -1204,6 +1240,13 @@ void __init apq8064_set_display_params(char *prim_panel, char *ext_panel,
 			pr_debug("MHL is external display by boot parameter\n");
 			mhl_display_enabled = 1;
 		}
+	}
+
+	if (strnlen(sec_panel, PANEL_NAME_MAX_LEN)) {
+		strlcpy(msm_fb_pdata.sec_panel_name, sec_panel,
+			PANEL_NAME_MAX_LEN);
+		pr_debug("msm_fb_pdata.sec_panel_name %s\n",
+			 msm_fb_pdata.sec_panel_name);
 	}
 
 	msm_fb_pdata.ext_resolution = resolution;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -16,11 +16,15 @@
 static int __init mdp4_dma_s_panel_init(void)
 {
 	int ret = 0;
+	struct platform_disp_info info = {
+		.id = DISPLAY_PRIMARY,
+		.dest = DISPLAY_1
+	};
 
-	if (!msm_fb_detect_client("mipi_dsi_i2c_video_wvga"))
-		ret = mipi_dsi_i2c_video_wvga_device_register(DISPLAY_4);
-	else if (!msm_fb_detect_client("mipi_dsi_i2c_video_xga"))
-		ret = mipi_dsi_i2c_video_xga_device_register(DISPLAY_4);
+	if (!msm_fb_detect_client("mipi_dsi_i2c_video_wvga", &info))
+		ret = mipi_dsi_i2c_video_wvga_device_register(&info);
+	else if (!msm_fb_detect_client("mipi_dsi_i2c_video_xga", &info))
+		ret = mipi_dsi_i2c_video_xga_device_register(&info);
 
 	return ret;
 }

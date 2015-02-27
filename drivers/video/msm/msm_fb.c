@@ -216,28 +216,31 @@ static struct msm_fb_platform_data *msm_fb_pdata;
 unsigned char hdmi_prim_display;
 unsigned char hdmi_prim_resolution;
 
-int msm_fb_detect_client(const char *name)
+int msm_fb_detect_client(const char *name, struct platform_disp_info *disp_info)
 {
 	int ret = 0;
 	u32 len;
 #ifdef CONFIG_FB_MSM_MDDI_AUTO_DETECT
 	u32 id;
 #endif
-	if (!msm_fb_pdata)
+	if (!msm_fb_pdata || !name || !disp_info)
 		return -EPERM;
 
 	len = strnlen(name, PANEL_NAME_MAX_LEN);
 	if (strnlen(msm_fb_pdata->prim_panel_name, PANEL_NAME_MAX_LEN)) {
 		pr_err("\n name = %s, prim_display = %s",
-			name, msm_fb_pdata->prim_panel_name);
+				name, msm_fb_pdata->prim_panel_name);
 		if (!strncmp((char *)msm_fb_pdata->prim_panel_name,
-			name, len)) {
+			     name, len)) {
 			if (!strncmp((char *)msm_fb_pdata->prim_panel_name,
-				"hdmi_msm", len))
+				"hdmi_msm", len)) {
 				hdmi_prim_display = 1;
 				hdmi_prim_resolution =
 					msm_fb_pdata->ext_resolution;
-			return 0;
+		}
+		disp_info->id = DISPLAY_PRIMARY;
+		disp_info->dest = DISPLAY_1;
+		return 0;
 		} else {
 			ret = -EPERM;
 		}
@@ -245,19 +248,31 @@ int msm_fb_detect_client(const char *name)
 
 	if (strnlen(msm_fb_pdata->ext_panel_name, PANEL_NAME_MAX_LEN)) {
 		pr_err("\n name = %s, ext_display = %s",
-			name, msm_fb_pdata->ext_panel_name);
-		if (!strncmp((char *)msm_fb_pdata->ext_panel_name, name, len))
+			    name, msm_fb_pdata->ext_panel_name);
+		if (!strcmp((char *)msm_fb_pdata->ext_panel_name, name)) {
+			disp_info->id = DISPLAY_SECONDARY;
+			disp_info->dest = DISPLAY_2;
 			return 0;
-		else
+		} else {
 			ret = -EPERM;
+		}
 	}
 
-	if (ret)
-		return ret;
+	if (strnlen(msm_fb_pdata->sec_panel_name, PANEL_NAME_MAX_LEN)) {
+		pr_debug("name = %s, sec_display = %s",
+				name, msm_fb_pdata->sec_panel_name);
+		if (!strcmp((char *)msm_fb_pdata->sec_panel_name, name)) {
+			disp_info->id = DISPLAY_TERTIARY;
+			disp_info->dest = DISPLAY_4;
+			return 0;
+		} else {
+			ret = -EPERM;
+		}
+	}
 
 	ret = -EPERM;
 	if (msm_fb_pdata && msm_fb_pdata->detect_client) {
-		ret = msm_fb_pdata->detect_client(name);
+		ret = msm_fb_pdata->detect_client(name, disp_info);
 
 		/* if it's non mddi panel, we need to pre-scan
 		   mddi client to see if we can disable mddi host */
@@ -351,12 +366,42 @@ static ssize_t msm_fb_msm_fb_type(struct device *dev,
 	return ret;
 }
 
+static ssize_t msm_fb_rda_disp_id_attr(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	ssize_t ret = 0;
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+	struct msm_fb_panel_data *pdata =
+	      (struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
+
+	switch (pdata->panel_info.disp_id) {
+	case DISPLAY_PRIMARY:
+		ret = snprintf(buf, PAGE_SIZE, "PRIMARY\n");
+		break;
+	case DISPLAY_SECONDARY:
+		ret = snprintf(buf, PAGE_SIZE, "SECONDARY\n");
+		break;
+	case DISPLAY_WRITEBACK:
+		ret = snprintf(buf, PAGE_SIZE, "WRITEBACK\n");
+		break;
+	case DISPLAY_TERTIARY:
+		ret = snprintf(buf, PAGE_SIZE, "TERTIARY\n");
+		break;
+	default:
+		ret = snprintf(buf, PAGE_SIZE, "UNKNOWN\n");
+		break;
+	}
+	return ret;
+}
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, msm_fb_msm_fb_type, NULL);
 static DEVICE_ATTR(msm_fb_fps_level, S_IRUGO | S_IWUSR | S_IWGRP, NULL, \
 				msm_fb_fps_level_change);
+static DEVICE_ATTR(msm_fb_disp_id, S_IRUGO, msm_fb_rda_disp_id_attr, NULL);
 static struct attribute *msm_fb_attrs[] = {
 	&dev_attr_msm_fb_type.attr,
 	&dev_attr_msm_fb_fps_level.attr,
+	&dev_attr_msm_fb_disp_id.attr,
 	NULL,
 };
 static struct attribute_group msm_fb_attr_group = {
@@ -1652,8 +1697,9 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 	}
 
 	MSM_FB_INFO
-	    ("FrameBuffer[%d] %dx%d size=%d bytes is registered successfully!\n",
-	     mfd->index, fbi->var.xres, fbi->var.yres, fbi->fix.smem_len);
+	    ("FrameBuffer[%d] Interface = %d, mixer = %d, id = %d, res=%dx%d\n",
+	     mfd->index, mfd->panel_info.type, mfd->panel_info.pdest,
+	     mfd->panel_info.disp_id, fbi->var.xres, fbi->var.yres);
 
 #ifdef CONFIG_FB_MSM_LOGO
 	/* Flip buffer */

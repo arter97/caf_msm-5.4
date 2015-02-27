@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -39,7 +39,7 @@ static struct mipi_dsi_phy_ctrl dsi_video_mode_phy_db = {
 	 0x00},
 };
 
-int mipi_dsi_i2c_video_xga_device_register(u32 pdest)
+int mipi_dsi_i2c_video_xga_device_register(struct platform_disp_info *info)
 {
 	int ret;
 
@@ -50,7 +50,8 @@ int mipi_dsi_i2c_video_xga_device_register(u32 pdest)
 	pinfo.lcdc.yres_pad = 0;
 
 	pinfo.type = MIPI_VIDEO_PANEL;
-	pinfo.pdest = pdest;
+	pinfo.pdest = info->dest;
+	pinfo.disp_id = info->id;
 	pinfo.wait_cycle = 0;
 	pinfo.bpp = 24;
 	pinfo.lcdc.h_back_porch = 220;
@@ -118,8 +119,13 @@ int mipi_dsi_i2c_video_xga_device_register(u32 pdest)
 
 static int __init mipi_dsi_i2c_video_xga_init(void)
 {
-	return (msm_fb_detect_client("mipi_dsi_video_xga")) ? 0 :
-		mipi_dsi_i2c_video_xga_device_register(DISPLAY_1);
+	struct platform_disp_info info = {
+		.id = DISPLAY_PRIMARY,
+		.dest = DISPLAY_1
+	};
+
+	return (msm_fb_detect_client("mipi_dsi_video_xga", &info)) ?
+		0 : mipi_dsi_i2c_video_xga_device_register(&info);
 }
 
 module_init(mipi_dsi_i2c_video_xga_init);

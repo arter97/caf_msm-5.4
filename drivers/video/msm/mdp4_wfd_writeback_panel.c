@@ -1,4 +1,4 @@
-/* Copyright (c) 2011, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011, 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -40,6 +40,7 @@ static struct msm_fb_panel_data writeback_msm_panel_data = {
 		.xres = 1280,
 		.yres = 720,
 		.pdest = DISPLAY_3,
+		.disp_id = DISPLAY_WRITEBACK,
 		.wait_cycle = 0,
 		.bpp = 24,
 		.fb_num = 1,

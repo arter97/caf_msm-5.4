@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2011, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2011, 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -51,14 +51,19 @@ static struct mipi_dsi_phy_ctrl dsi_video_mode_phy_db = {
 static int __init mipi_video_toshiba_wvga_pt_init(void)
 {
 	int ret;
+	struct platform_disp_info info = {
+		.id = DISPLAY_PRIMARY,
+		.dest = DISPLAY_1
+	};
 
-	if (msm_fb_detect_client("mipi_video_toshiba_wvga"))
+	if (msm_fb_detect_client("mipi_video_toshiba_wvga", &info))
 		return 0;
 
 	pinfo.xres = 480;
 	pinfo.yres = 864; /* 856 for V1 surf */
 	pinfo.type = MIPI_VIDEO_PANEL;
-	pinfo.pdest = DISPLAY_1;
+	pinfo.pdest = info.dest;
+	pinfo.disp_id = info.id;
 	pinfo.wait_cycle = 0;
 	pinfo.bpp = 24;
 	pinfo.lcdc.h_back_porch = 64;
