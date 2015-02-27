@@ -87,6 +87,7 @@ static int q6asm_map_channels(u8 *channel_mapping, uint32_t channels);
 void *q6asm_mmap_apr_reg(void);
 
 static int q6asm_is_valid_session(struct apr_client_data *data, void *priv);
+static int q6asm_send_asm_cal(struct audio_client *ac);
 
 /* for ASM custom topology */
 static struct cal_type_data *cal_data[ASM_MAX_CAL_TYPES];
@@ -2104,6 +2105,10 @@ static int __q6asm_open_read(struct audio_client *ac,
 	}
 
 	ac->io_mode |= TUN_READ_IO_MODE;
+
+	rc = q6asm_send_asm_cal(ac);
+	pr_debug("%s: q6asm_send_asm_cal ret=%d\n", __func__, rc);
+
 	return 0;
 fail_cmd:
 	return -EINVAL;
@@ -2185,6 +2190,9 @@ int q6asm_open_write_compressed(struct audio_client *ac, uint32_t format,
 		rc = -ETIMEDOUT;
 		goto fail_cmd;
 	}
+	rc = q6asm_send_asm_cal(ac);
+	pr_debug("%s: q6asm_send_asm_cal ret=%d\n", __func__, rc);
+
 	return 0;
 fail_cmd:
 	return rc;
@@ -2311,6 +2319,10 @@ static int __q6asm_open_write(struct audio_client *ac, uint32_t format,
 		goto fail_cmd;
 	}
 	ac->io_mode |= TUN_WRITE_IO_MODE;
+
+	rc = q6asm_send_asm_cal(ac);
+	pr_debug("%s: q6asm_send_asm_cal ret=%d\n", __func__, rc);
+
 	return 0;
 fail_cmd:
 	return -EINVAL;
@@ -2469,6 +2481,9 @@ static int __q6asm_open_read_write(struct audio_client *ac, uint32_t rd_format,
 				__func__, atomic_read(&ac->cmd_state));
 		goto fail_cmd;
 	}
+	rc = q6asm_send_asm_cal(ac);
+	pr_debug("%s: q6asm_send_asm_cal ret=%d\n", __func__, rc);
+
 	return 0;
 fail_cmd:
 	return -EINVAL;
@@ -5831,6 +5846,93 @@ done:
 	return topology;
 }
 
+static int q6asm_send_asm_cal(struct audio_client *ac)
+{
+	struct cal_block_data *cal_block = NULL;
+	struct apr_hdr	hdr;
+	char *asm_params = NULL;
+	struct asm_stream_cmd_set_pp_params_v2 payload_params;
+	int sz, rc = -EINVAL;
+	pr_debug("%s:\n", __func__);
+
+	if (!ac) {
+		pr_err("%s: APR handle NULL\n", __func__);
+		return -EINVAL;
+	}
+	if (ac->apr == NULL) {
+		pr_err("%s: AC APR handle NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	if (cal_data[ASM_AUDSTRM_CAL] == NULL)
+		goto done;
+
+	if (ac->perf_mode == ULTRA_LOW_LATENCY_PCM_MODE)
+		goto done;
+
+	sz = sizeof(struct apr_hdr) +
+		sizeof(struct asm_stream_cmd_set_pp_params_v2);
+	asm_params = kzalloc(sz, GFP_KERNEL);
+	if (!asm_params) {
+		pr_err("%s, asm params memory alloc failed", __func__);
+		return -ENOMEM;
+	}
+	mutex_lock(&cal_data[ASM_AUDSTRM_CAL]->lock);
+	cal_block = cal_utils_get_only_cal_block(cal_data[ASM_AUDSTRM_CAL]);
+	if (cal_block == NULL)
+		goto unlock;
+
+	remap_cal_data(cal_block);
+
+	q6asm_add_hdr_async(ac, &hdr, (sizeof(struct apr_hdr) +
+		sizeof(struct asm_stream_cmd_set_pp_params_v2)), TRUE);
+
+	atomic_set(&ac->cmd_state, 1);
+	hdr.opcode = ASM_STREAM_CMD_SET_PP_PARAMS_V2;
+	payload_params.data_payload_addr_lsw =
+			lower_32_bits(cal_block->cal_data.paddr);
+	payload_params.data_payload_addr_msw =
+			upper_32_bits(cal_block->cal_data.paddr);
+	payload_params.mem_map_handle = cal_block->map_data.q6map_handle;
+	payload_params.data_payload_size = cal_block->cal_data.size;
+	memcpy(((u8 *)asm_params), &hdr, sizeof(struct apr_hdr));
+	memcpy(((u8 *)asm_params + sizeof(struct apr_hdr)), &payload_params,
+			sizeof(struct asm_stream_cmd_set_pp_params_v2));
+
+	pr_debug("%s: phyaddr lsw = %x msw = %x, maphdl = %x calsize = %d\n",
+		__func__, payload_params.data_payload_addr_lsw,
+		payload_params.data_payload_addr_msw,
+		payload_params.mem_map_handle,
+		payload_params.data_payload_size);
+
+	rc = apr_send_pkt(ac->apr, (uint32_t *) asm_params);
+	if (rc < 0) {
+		pr_err("%s: audio audstrm cal send failed\n", __func__);
+		rc = -EINVAL;
+		goto unlock;
+	}
+	rc = wait_event_timeout(ac->cmd_wait,
+				(atomic_read(&ac->cmd_state) <= 0), 5 * HZ);
+	if (!rc) {
+		pr_err("%s: timeout, audio audstrm cal send\n", __func__);
+		rc = -ETIMEDOUT;
+		goto unlock;
+	}
+	if (atomic_read(&ac->cmd_state) < 0) {
+		pr_err("%s: DSP returned error[%d] audio audstrm cal send\n",
+				__func__, atomic_read(&ac->cmd_state));
+		rc = -EINVAL;
+		goto unlock;
+	}
+
+	rc = 0;
+
+unlock:
+	mutex_unlock(&cal_data[ASM_AUDSTRM_CAL]->lock);
+	kfree(asm_params);
+done:
+	return rc;
+}
 
 static int get_cal_type_index(int32_t cal_type)
 {
