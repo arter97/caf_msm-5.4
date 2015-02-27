@@ -864,7 +864,7 @@ fail:
 	return len;
 }
 
-static int msm_iommu_map_range(struct iommu_domain *domain, unsigned int va,
+static size_t msm_iommu_map_range(struct iommu_domain *domain, unsigned long va,
 			       struct scatterlist *sg, unsigned int len,
 			       int prot)
 {
@@ -883,33 +883,7 @@ static int msm_iommu_map_range(struct iommu_domain *domain, unsigned int va,
 	iommu_access_ops->iommu_clk_off(iommu_drvdata);
 fail:
 	iommu_access_ops->iommu_lock_release(0);
-	return ret;
-}
-
-
-static int msm_iommu_unmap_range(struct iommu_domain *domain, unsigned int va,
-				 unsigned int len)
-{
-	struct msm_iommu_drvdata *iommu_drvdata;
-	struct msm_iommu_ctx_drvdata *ctx_drvdata;
-	int ret = -EINVAL;
-
-	if (!IS_ALIGNED(va, SZ_1M) || !IS_ALIGNED(len, SZ_1M))
-		return -EINVAL;
-
-	iommu_access_ops->iommu_lock_acquire(0);
-
-	ret = get_drvdata(domain, &iommu_drvdata, &ctx_drvdata);
-	if (ret)
-		goto fail;
-
-	iommu_access_ops->iommu_clk_on(iommu_drvdata);
-	ret = msm_iommu_sec_ptbl_unmap(iommu_drvdata, ctx_drvdata, va, len);
-	iommu_access_ops->iommu_clk_off(iommu_drvdata);
-
-fail:
-	iommu_access_ops->iommu_lock_release(0);
-	return ret ? ret : 0;
+	return ret ? 0 : len;
 }
 
 static phys_addr_t msm_iommu_iova_to_phys(struct iommu_domain *domain,
@@ -957,8 +931,7 @@ static struct iommu_ops msm_iommu_ops = {
 	.detach_dev = msm_iommu_detach_dev,
 	.map = msm_iommu_map,
 	.unmap = msm_iommu_unmap,
-	.map_range = msm_iommu_map_range,
-	.unmap_range = msm_iommu_unmap_range,
+	.map_sg = msm_iommu_map_range,
 	.iova_to_phys = msm_iommu_iova_to_phys,
 	.domain_has_cap = msm_iommu_domain_has_cap,
 	.pgsize_bitmap = MSM_IOMMU_PGSIZES,
