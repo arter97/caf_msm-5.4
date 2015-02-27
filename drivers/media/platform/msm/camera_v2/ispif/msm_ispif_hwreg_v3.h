@@ -22,6 +22,7 @@
 #define ISPIF_VFE(m)                             ((m) * 0x200)
 
 #define ISPIF_VFE_m_CTRL_0(m)                    (0x200 + ISPIF_VFE(m))
+#define ISPIF_VFE_m_CTRL_1(m)                    (0x204 + ISPIF_VFE(m))
 #define ISPIF_VFE_m_IRQ_MASK_0(m)                (0x208 + ISPIF_VFE(m))
 #define ISPIF_VFE_m_IRQ_MASK_1(m)                (0x20C + ISPIF_VFE(m))
 #define ISPIF_VFE_m_IRQ_MASK_2(m)                (0x210 + ISPIF_VFE(m))
@@ -36,12 +37,14 @@
 #define ISPIF_VFE_m_INTF_CMD_1(m)                (0x24C + ISPIF_VFE(m))
 #define ISPIF_VFE_m_PIX_INTF_n_CID_MASK(m, n)    (0x254 + ISPIF_VFE(m) + 4*(n))
 #define ISPIF_VFE_m_RDI_INTF_n_CID_MASK(m, n)    (0x264 + ISPIF_VFE(m) + 4*(n))
-#define ISPIF_VFE_m_PIX_INTF_n_CROP(m, n)        (0x278 + ISPIF_VFE(m) + 4*(n))
-#define ISPIF_VFE_m_3D_THRESHOLD(m)              (0x288 + ISPIF_VFE(m))
-#define ISPIF_VFE_m_OUTPUT_SEL(m)                (0x28C + ISPIF_VFE(m))
-#define ISPIF_VFE_m_PIX_OUTPUT_n_MISR(m, n)      (0x290 + ISPIF_VFE(m) + 4*(n))
-#define ISPIF_VFE_m_RDI_OUTPUT_n_MISR_0(m, n)    (0x298 + ISPIF_VFE(m) + 8*(n))
-#define ISPIF_VFE_m_RDI_OUTPUT_n_MISR_1(m, n)    (0x29C + ISPIF_VFE(m) + 8*(n))
+#define ISPIF_VFE_m_RDI_INTF_n_PACK_0(m, n)      (0x270 + ISPIF_VFE(m) + 4*(n))
+#define ISPIF_VFE_m_RDI_INTF_n_PACK_1(m, n)      (0x27C + ISPIF_VFE(m) + 4*(n))
+#define ISPIF_VFE_m_PIX_INTF_n_CROP(m, n)        (0x288 + ISPIF_VFE(m) + 4*(n))
+#define ISPIF_VFE_m_3D_THRESHOLD(m)              (0x290 + ISPIF_VFE(m))
+#define ISPIF_VFE_m_OUTPUT_SEL(m)                (0x294 + ISPIF_VFE(m))
+#define ISPIF_VFE_m_PIX_OUTPUT_n_MISR(m, n)      (0x298 + ISPIF_VFE(m) + 4*(n))
+#define ISPIF_VFE_m_RDI_OUTPUT_n_MISR_0(m, n)    (0x29C + ISPIF_VFE(m) + 8*(n))
+#define ISPIF_VFE_m_RDI_OUTPUT_n_MISR_1(m, n)    (0x2A0 + ISPIF_VFE(m) + 8*(n))
 #define ISPIF_VFE_m_PIX_INTF_n_STATUS(m, n)      (0x2C0 + ISPIF_VFE(m) + 4*(n))
 #define ISPIF_VFE_m_RDI_INTF_n_STATUS(m, n)      (0x2D0 + ISPIF_VFE(m) + 4*(n))
 #define ISPIF_VFE_m_3D_DESKEW_SIZE(m)            (0x2E4 + ISPIF_VFE(m))
@@ -71,11 +74,11 @@
 #define MISC_LOGIC_RST_STB                       BIT(1)
 #define STROBED_RST_EN                           BIT(0)
 
-#define ISPIF_RST_CMD_MASK                       0xFE0F1FFF
-#define ISPIF_RST_CMD_1_MASK                     0xFC0F1FF9
+#define ISPIF_RST_CMD_MASK                       0xFE7F1FFF
+#define ISPIF_RST_CMD_1_MASK                     0xFC7F1FF9
 
-#define ISPIF_RST_CMD_MASK_RESTART               0x00001FF9
-#define ISPIF_RST_CMD_1_MASK_RESTART             0x00001FF9
+#define ISPIF_RST_CMD_MASK_RESTART               0x7F1FFF
+#define ISPIF_RST_CMD_1_MASK_RESTART             0x7F1FF9
 
 #define PIX_INTF_0_OVERFLOW_IRQ                  BIT(12)
 #define RAW_INTF_0_OVERFLOW_IRQ                  BIT(25)
