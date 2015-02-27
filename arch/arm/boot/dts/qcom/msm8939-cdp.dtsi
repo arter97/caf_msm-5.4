@@ -20,8 +20,9 @@
 			reg = <0x20>;
 			interrupt-parent = <&msm_gpio>;
 			interrupts = <13 0x2008>;
-			avdd-supply = <&pm8916_l17>;
-			vdd-supply = <&pm8916_l6>;
+			/* Revisit - PM8950 regulator -> pm8950 */
+			avdd-supply = <&pm8950_l17>;
+			vdd-supply = <&pm8950_l6>;
 			/* pins used by touchscreen */
 			pinctrl-names = "pmx_ts_active","pmx_ts_suspend","pmx_ts_suspend";
 			pinctrl-0 = <&ts_int_active &ts_reset_active>;
@@ -64,7 +65,8 @@
 			pinctrl-names = "nfc_active","nfc_suspend";
 			pinctrl-0 = <&nfc_int_active &nfc_disable_active>;
 			pinctrl-1 = <&nfc_int_suspend &nfc_disable_suspend>;
-			qcom,clk-gpio = <&pm8916_gpios 2 0>;
+			/* Revisit: Removing PM8950 GPIOs */
+			/* qcom,clk-gpio = <&pm8950_gpios 2 0>; */
 			clocks = <&clock_rpm clk_bb_clk2_pin>;
 			clock-names = "ref_clk";
 		};
@@ -113,9 +115,10 @@
 			pinctrl-1 = <&mpu6050_sleep>;
 			interrupt-parent = <&msm_gpio>;
 			interrupts = <115 0x2>;
-			vdd-supply = <&pm8916_l17>;
-			vlogic-supply = <&pm8916_l16>;
-			vi2c-supply = <&pm8916_l6>;
+			/* Revisit - PM8950 regulator -> pm8950 */
+			vdd-supply = <&pm8950_l17>;
+			vlogic-supply = <&pm8950_l16>;
+			vi2c-supply = <&pm8950_l6>;
 			invn,gpio-int = <&msm_gpio 115 0x2>;
 			invn,place = "Portrait Down Back Side";
 		};
@@ -128,8 +131,9 @@
 			pinctrl-1 = <&apds99xx_sleep>;
 			interrupt-parent = <&msm_gpio>;
 			interrupts = <113 0x2002>;
-			vdd-supply = <&pm8916_l17>;
-			vio-supply = <&pm8916_l6>;
+			/* Revisit - PM8950 regulator -> pm8950 */
+			vdd-supply = <&pm8950_l17>;
+			vio-supply = <&pm8950_l6>;
 			avago,irq-gpio = <&msm_gpio 113 0x2002>;
 			avago,ps-threshold = <600>;
 			avago,ps-hysteresis-threshold = <500>;
@@ -149,8 +153,9 @@
 			pinctrl-1 = <&ak8963_sleep>;
 			interrupt-parent = <&msm_gpio>;
 			interrupts = <69 0x2>;
-			vdd-supply = <&pm8916_l17>;
-			vio-supply = <&pm8916_l6>;
+			/* Revisit - PM8950 regulator -> pm8950 */
+			vdd-supply = <&pm8950_l17>;
+			vio-supply = <&pm8950_l6>;
 			ak,layout = <0x6>;
 			ak,auto-report;
 		};
@@ -215,19 +220,9 @@
 				"msm-dai-q6-dev.241", "msm-dai-q6-dev.240",
 				"msm-dai-q6-dev.32771", "msm-dai-q6-dev.32772",
 				"msm-dai-q6-dev.32773", "msm-dai-q6-dev.32770";
-		asoc-codec = <&stub_codec>, <&pm8916_tombak_dig>;
+		/* Revisit - Remove PM8950 Codec */
+		/* soc-codec = <&stub_codec>, <&pm8950_tombak_dig>; */
 		asoc-codec-names = "msm-stub-codec.1", "tombak_codec";
-	};
-};
-
-&pm8916_gpios {
-	gpio@c100 { /* GPIO 2 */
-		/* NFC_CLK_REQ */
-		qcom,mode = <0>; /* QPNP_PIN_MODE_DIG_IN */
-		qcom,pull = <5>; /* QPNP_PIN_PULL_NO */
-		qcom,vin-sel = <2>; /* QPNP_PIN_VIN2 */
-		qcom,src-sel = <2>; /* QPNP_PIN_SEL_FUNC_1 */
-		qcom,master-en = <1>;
 	};
 };
 
@@ -237,40 +232,14 @@
 	pinctrl-0 = <&uart_console_sleep>;
 };
 
-&spmi_bus {
-	qcom,pm8916@1 {
-		qcom,vibrator@c000 {
-			status = "okay";
-			qcom,vib-timeout-ms = <15000>;
-			qcom,vib-vtg-level-mV = <3100>;
-		};
-	};
-
-	qcom,pm8916@0 {
-		qcom,leds@a100 {
-			status = "okay";
-			qcom,led_mpp_2 {
-				label = "mpp";
-				linux,name = "button-backlight";
-				linux,default-trigger = "none";
-				qcom,default-state = "off";
-				qcom,max-current = <40>;
-				qcom,current-setting = <5>;
-				qcom,id = <6>;
-				qcom,mode = "manual";
-				qcom,source-sel = <1>;
-				qcom,mode-ctrl = <0x60>;
-			};
-		};
-	};
-};
 
 &sdhc_1 {
-	vdd-supply = <&pm8916_l8>;
+	/* Revisit - PM8950 regulator -> pm8950 */
+	vdd-supply = <&pm8950_l8>;
 	qcom,vdd-voltage-level = <2900000 2900000>;
 	qcom,vdd-current-level = <200 400000>;
 
-	vdd-io-supply = <&pm8916_l5>;
+	vdd-io-supply = <&pm8950_l5>;
 	qcom,vdd-io-always-on;
 	qcom,vdd-io-lpm-sup;
 	qcom,vdd-io-voltage-level = <1800000 1800000>;
@@ -286,11 +255,12 @@
 };
 
 &sdhc_2 {
-	vdd-supply = <&pm8916_l11>;
+	/* Revisit - PM8950 regulator -> pm8950 */
+	vdd-supply = <&pm8950_l11>;
 	qcom,vdd-voltage-level = <2800000 2950000>;
 	qcom,vdd-current-level = <15000 400000>;
 
-	vdd-io-supply = <&pm8916_l12>;
+	vdd-io-supply = <&pm8950_l12>;
 	qcom,vdd-io-voltage-level = <1800000 2950000>;
 	qcom,vdd-io-current-level = <200 50000>;
 
@@ -310,17 +280,6 @@
 	cd-gpios = <&msm_gpio 38 0x1>;
 
 	status = "disabled";
-};
-
-&pm8916_chg {
-	status = "ok";
-	qcom,charging-disabled;
-	qcom,disable-follow-on-reset;
-};
-
-&pm8916_bms {
-	status = "ok";
-	qcom,disable-bms;
 };
 
 &qcom_tzlog {
@@ -359,7 +318,8 @@
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_pwm";
 	qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
 	qcom,mdss-dsi-bl-pmic-bank-select = <0>;
-	qcom,mdss-dsi-pwm-gpio = <&pm8916_mpps 4 0>;
+	//Revisit: Removing PM8950 MPP
+	//qcom,mdss-dsi-pwm-gpio = <&pm8950_mpps 4 0>;
 	qcom,cont-splash-enabled;
 	qcom,mdss-dsi-pan-enable-dynamic-fps;
 	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
@@ -369,7 +329,8 @@
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_pwm";
 	qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
 	qcom,mdss-dsi-bl-pmic-bank-select = <0>;
-	qcom,mdss-dsi-pwm-gpio = <&pm8916_mpps 4 0>;
+	//Revisit: Removing PM8950 MPP
+	//qcom,mdss-dsi-pwm-gpio = <&pm8950_mpps 4 0>;
 	qcom,cont-splash-enabled;
 };
 
@@ -377,7 +338,8 @@
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_pwm";
 	qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
 	qcom,mdss-dsi-bl-pmic-bank-select = <0>;
-	qcom,mdss-dsi-pwm-gpio = <&pm8916_mpps 4 0>;
+	//Revisit: Removing PM8950 MPP
+	//qcom,mdss-dsi-pwm-gpio = <&pm8950_mpps 4 0>;
 	qcom,cont-splash-enabled;
 	qcom,esd-check-enabled;
 	qcom,mdss-dsi-pan-enable-dynamic-fps;
@@ -388,7 +350,8 @@
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_pwm";
 	qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
 	qcom,mdss-dsi-bl-pmic-bank-select = <0>;
-	qcom,mdss-dsi-pwm-gpio = <&pm8916_mpps 4 0>;
+	//Revisit: Removing PM8950 MPP
+	//qcom,mdss-dsi-pwm-gpio = <&pm8950_mpps 4 0>;
 	qcom,cont-splash-enabled;
 	qcom,esd-check-enabled;
 };
@@ -397,7 +360,7 @@
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_pwm";
 	qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
 	qcom,mdss-dsi-bl-pmic-bank-select = <0>;
-	qcom,mdss-dsi-pwm-gpio = <&pm8916_mpps 4 0>;
+	qcom,mdss-dsi-pwm-gpio = <&pm8950_mpps 4 0>;
 	qcom,cont-splash-enabled;
 };
 
@@ -426,7 +389,8 @@
         qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_pwm";
         qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
         qcom,mdss-dsi-bl-pmic-bank-select = <0>;
-        qcom,mdss-dsi-pwm-gpio = <&pm8916_mpps 4 0>;
+	//Revisit: Removing PM8950 MPP
+	//qcom,mdss-dsi-pwm-gpio = <&pm8950_mpps 4 0>;
 	qcom,mdss-dsi-lane-map = "lane_map_0123";
 	qcom,cont-splash-enabled;
 };
@@ -434,58 +398,6 @@
 &dsi_dual_sharp_video_1 {
         qcom,mdss-dsi-lane-map = "lane_map_3210";
 	qcom,cont-splash-enabled;
-};
-
-&pm8916_mpps {
-	mpp@a000 { /* MPP 1 */
-		/* VDD_PX */
-		status = "disabled";
-	};
-
-	mpp@a100 { /* MPP 2 */
-		/* HR LED */
-		status = "disabled";
-	};
-
-	mpp@a200 { /* MPP 3 */
-		/* VREF DAC */
-		status = "disabled";
-	};
-
-	mpp@a300 { /* MPP 4 */
-		/* Backlight PWM */
-		qcom,mode = <1>;		/* Digital output */
-		qcom,invert = <0>;		/* Disable invert */
-		qcom,src-sel = <4>;		/* DTEST1 */
-		qcom,vin-sel = <0>;		/* VPH_PWR */
-		qcom,master-en = <1>;		/* Enable MPP */
-	};
-};
-
-&pm8916_gpios {
-	gpio@c000 { /* GPIO 1 */
-		/* Battery UICC Alarm */
-		status = "disabled";
-	};
-
-	gpio@c100 { /* GPIO 2 */
-		/* NFC_CLK_REQ */
-		qcom,mode = <0>; /* QPNP_PIN_MODE_DIG_IN */
-		qcom,pull = <5>; /* QPNP_PIN_PULL_NO */
-		qcom,vin-sel = <2>; /* QPNP_PIN_VIN2 */
-		qcom,src-sel = <2>; /* QPNP_PIN_SEL_FUNC_1 */
-		qcom,master-en = <1>;
-	};
-
-	gpio@c200 { /* GPIO 3 */
-		/* External regulator control for WTR */
-		status = "disabled";
-	};
-
-	gpio@c300 { /* GPIO 4 */
-		/* External regulator control for APC */
-		status = "disabled";
-	};
 };
 
 /* CoreSight */
