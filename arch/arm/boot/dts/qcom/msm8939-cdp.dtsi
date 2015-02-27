@@ -1,4 +1,5 @@
-/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+/*
+ * Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,7 +12,6 @@
  */
 
 #include "msm8939-pinctrl.dtsi"
-#include "msm8939-camera-sensor-cdp.dtsi"
 
 &soc {
 	i2c@78b9000 { /* BLSP1 QUP5 */
@@ -158,6 +158,7 @@
 	};
 
 	sound {
+		status = "disabled";
 		compatible = "qcom,msm8x16-audio-codec";
 		qcom,model = "msm8939-snd-card";
 		qcom,msm-snd-card-id = <0>;
@@ -308,7 +309,7 @@
 	interrupt-names = "hc_irq", "pwr_irq", "status_irq";
 	cd-gpios = <&msm_gpio 38 0x1>;
 
-	status = "ok";
+	status = "disabled";
 };
 
 &pm8916_chg {
@@ -327,15 +328,15 @@
 };
 
 &qcom_rng {
-	status = "okay";
+	status = "disabled";
 };
 
 &qcom_crypto {
-	status = "okay";
+	status = "disabled";
 };
 
 &qcom_cedev {
-	status = "okay";
+	status = "disabled";
 };
 
 &qcom_seecom {
@@ -489,6 +490,7 @@
 
 /* CoreSight */
 &tpiu {
+	status = "disabled";
 	pinctrl-names = "seta-pctrl", "setb-pctrl", "sdcard", "trace",
 			"swduart", "swdtrc", "jtag", "spmi";
 	/* Mictor */

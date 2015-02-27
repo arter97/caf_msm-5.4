@@ -106,7 +106,6 @@
 #include "msm8939-bus.dtsi"
 #include "msm8939-mdss.dtsi"
 #include "msm8939-iommu-domains.dtsi"
-#include "msm8939-camera.dtsi"
 #include "msm8939-mdss-pll.dtsi"
 
 &soc {
@@ -201,6 +200,7 @@
 	};
 
 	qcom,wdt@b017000 {
+		status = "disabled";
 		compatible = "qcom,msm-watchdog";
 		reg = <0xb017000 0x1000>;
 		reg-names = "wdt-base";
@@ -211,6 +211,7 @@
 	};
 
 	qcom,msm-rtb {
+		status = "disabled";
 		compatible = "qcom,msm-rtb";
 		qcom,rtb-size = <0x100000>;
 	};
@@ -219,6 +220,7 @@
                 compatible = "qcom,rpm-smd";
                 rpm-channel-name = "rpm_requests";
                 rpm-channel-type = <15>; /* SMD_APPS_RPM */
+		/* rpm-standalone; */
         };
 
 	bam_dmux: qcom,bam_dmux@4044000 {
@@ -438,6 +440,7 @@
 	};
 
 	qcom,iris-fm {
+		status = "disabled";
 		compatible = "qcom,iris_fm";
 	};
 
@@ -552,6 +555,7 @@
 	};
 
 	qcom,bcl {
+		status = "disabled";
 		compatible = "qcom,bcl";
 		qcom,bcl-no-bms;
 	};
@@ -627,6 +631,7 @@
 	};
 
 	qcom,cpu-bwmon {
+		status = "disabled";
 		compatible = "qcom,bimc-bwmon";
 		reg = <0x408000 0x300>, <0x401000 0x200>;
 		reg-names = "base", "global_base";
@@ -1261,15 +1266,18 @@
 	};
 
 	pcm0: qcom,msm-pcm {
+		status = "disabled";
 		compatible = "qcom,msm-pcm-dsp";
 		qcom,msm-pcm-dsp-id = <0>;
 	};
 
 	routing: qcom,msm-pcm-routing {
+		status = "disabled";
 		compatible = "qcom,msm-pcm-routing";
 	};
 
 	pcm1: qcom,msm-pcm-low-latency {
+		status = "disabled";
 		compatible = "qcom,msm-pcm-dsp";
 		qcom,msm-pcm-dsp-id = <1>;
 		qcom,msm-pcm-low-latency;
@@ -1277,43 +1285,53 @@
 	};
 
 	lpa: qcom,msm-pcm-lpa {
+		status = "disabled";
 		compatible = "qcom,msm-pcm-lpa";
 	};
 
 	compress: qcom,msm-compress-dsp {
+		status = "disabled";
 		compatible = "qcom,msm-compress-dsp";
 	};
 
 	voip: qcom,msm-voip-dsp {
+		status = "disabled";
 		compatible = "qcom,msm-voip-dsp";
 	};
 
 	voice: qcom,msm-pcm-voice {
+		status = "disabled";
 		compatible = "qcom,msm-pcm-voice";
 		qcom,destroy-cvd;
 	};
 
 	stub_codec: qcom,msm-stub-codec {
+		status = "disabled";
 		compatible = "qcom,msm-stub-codec";
 	};
 
 	qcom,msm-dai-fe {
+		status = "disabled";
 		compatible = "qcom,msm-dai-fe";
 	};
 
 	afe: qcom,msm-pcm-afe {
+		status = "disabled";
 		compatible = "qcom,msm-pcm-afe";
 	};
 
 	qcom,msm-voice-svc {
+		status = "disabled";
 		compatible = "qcom,msm-voice-svc";
 	};
 
 	loopback: qcom,msm-pcm-loopback {
+		status = "disabled";
 		compatible = "qcom,msm-pcm-loopback";
 	};
 
 	qcom,msm-dai-mi2s {
+		status = "disabled";
 		compatible = "qcom,msm-dai-mi2s";
 		dai_mi2s0: qcom,msm-dai-q6-mi2s-prim {
 			compatible = "qcom,msm-dai-q6-mi2s";
@@ -1345,15 +1363,18 @@
 	};
 
 	dai_hdmi: qcom,msm-dai-q6-hdmi {
+		status = "disabled";
 		compatible = "qcom,msm-dai-q6-hdmi";
 		qcom,msm-dai-q6-dev-id = <8>;
 	};
 
 	lsm: qcom,msm-lsm-client {
+		status = "disabled";
 		compatible = "qcom,msm-lsm-client";
 	};
 
 	qcom,msm-dai-q6 {
+		status = "disabled";
 		compatible = "qcom,msm-dai-q6";
 		sb_0_rx: qcom,msm-dai-q6-sb-0-rx {
 			compatible = "qcom,msm-dai-q6-dev";
@@ -1462,10 +1483,12 @@
 	};
 
 	hostless: qcom,msm-pcm-hostless {
+		status = "disabled";
 		compatible = "qcom,msm-pcm-hostless";
 	};
 
 	dai_pri_auxpcm: qcom,msm-pri-auxpcm {
+		status = "disabled";
 		compatible = "qcom,msm-auxpcm-dev";
 		qcom,msm-cpudai-auxpcm-mode = <0>, <0>;
 		qcom,msm-cpudai-auxpcm-sync = <1>, <1>;

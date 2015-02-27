@@ -85,35 +85,8 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
 	msm8916-qrd-skut3.dtb \
 	apq8016-mtp.dtb \
 	apq8016-mtp-smb1360.dtb \
-	msm8939-sim.dtb \
-	msm8939-rumi.dtb \
-	msm8939-qrd-skuk.dtb \
-	msm8939-qrd-skul.dtb \
-	msm8939-cdp.dtb \
-	msm8939-cdp-jdi.dtb \
-	msm8939-cdp-jdi-a216-fhd.dtb \
-	msm8939-mtp.dtb \
-	msm8939-mtp-jdi.dtb \
-	msm8939-mtp-smb1360.dtb \
-	msm8939-mtp-wcd9306.dtb \
-	msm8936-qrd-skuk.dtb \
-	msm8936-cdp.dtb \
-	msm8936-cdp-smb1360.dtb \
-	msm8936-mtp.dtb \
-	msm8936-mtp-smb1360.dtb \
-	msm8936-mtp-wcd9306.dtb \
-	msm8952-sim.dtb \
-	msm8952-rumi.dtb \
-	msmterbium-sim.dtb \
-	msmterbium-rumi.dtb \
-	msm8929-cdp.dtb \
-	msm8929-mtp.dtb \
-	msm8929-mtp-smb1360.dtb \
-	msm8929-mtp-jdi-smb1360.dtb \
-	msm8929-mtp-wcd9306-smb1360.dtb \
-	msm8929-qrd-skul.dtb \
-	msm8929-qrd-skulb.dtb \
-	msm8929-cdp-jdi.dtb
+	msm8939-interposer-cdp-8952.dtb \
+	msm8939-interposer-mtp-8952.dtb
 dtb-$(CONFIG_ARCH_MSM8226) += msm8226-sim.dtb \
 	msm8226-fluid.dtb \
 	msm8226-v1-cdp.dtb \
