@@ -232,7 +232,6 @@ static int kgsl_iommu_pdev_probe(struct platform_device *pdev)
 	struct kgsl_iommu_ctx *ctxs = NULL;
 	u32 reg_val[2];
 	int result = -EINVAL, i = 0;
-	uint retention = 0;
 
 	if (of_device_is_compatible(dev->of_node, "qcom,smmu-kgsl-cb"))
 		return adreno_iommu_cb_probe(pdev);
@@ -279,14 +278,8 @@ static int kgsl_iommu_pdev_probe(struct platform_device *pdev)
 		++i;
 	}
 
-	result = adreno_of_read_property(pdev->dev.of_node, "retention",
-				&retention);
-	if (result)
-		goto err;
-
-	if (retention)
+	if (of_property_read_bool(pdev->dev.of_node, "retention"))
 		data->features |= KGSL_MMU_RETENTION;
-
 
 	result = of_platform_populate(pdev->dev.of_node, iommu_match_table,
 				NULL, &pdev->dev);

@@ -9,7 +9,6 @@ Required properties:
 - reg		: Base address and size of the SMMU.
 
 - num_cb	: Number of context banks
-- retention	: Retention supported or not
 
 - clocks	: List of clocks to be used during SMMU register access. See
 		  Documentation/devicetree/bindings/clock/clock-bindings.txt
@@ -33,6 +32,8 @@ Optional properties:
 		   <kgsl_smmu SID> pair, kgsl_smmu is the string parsed by iommu
 		   driver to match this context bank with the kgsl_smmu device
 		   defined in iommu device tree.
+	 - retention :  A boolean specifying if retention is supported on this
+			target
 
 Example:
 
@@ -45,7 +46,7 @@ Example:
 			<&clock_mmss clk_mmss_mmagic_cfg_ahb_clk>;
 		clock-names = "gpu_ahb_clk", "bimc_gfx_clk", "mmagic_ahb_clk", "mmagic_cfg_ahb_clk";
 		num_cb = <2>;
-		retention = <1>;
+		retention;
 
 		iommu_kgsl_cb2: iommu_kgsl_cb2 {
 			compatible = "qcom,smmu-kgsl-cb";
