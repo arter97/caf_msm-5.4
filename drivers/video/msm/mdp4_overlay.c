@@ -1249,7 +1249,6 @@ int mdp4_overlay_format2type(uint32 format)
 #define C2_R_Cr		2	/* R/Cr */
 #define C1_B_Cb		1	/* B/Cb */
 #define C0_G_Y		0	/* G/luma */
-#define YUV_444_MAX_WIDTH		1280	/* Max width for YUV 444*/
 
 int mdp4_overlay_format2pipe(struct mdp4_overlay_pipe *pipe)
 {
@@ -1463,10 +1462,7 @@ int mdp4_overlay_format2pipe(struct mdp4_overlay_pipe *pipe)
 		} else if (pipe->src_format == MDP_Y_CRCB_H1V1) {
 			pipe->element1 = C1_B_Cb;
 			pipe->element0 = C2_R_Cr;
-			if (pipe->src_width > YUV_444_MAX_WIDTH)
-				pipe->chroma_sample = MDP4_CHROMA_H1V2;
-			else
-				pipe->chroma_sample = MDP4_CHROMA_RGB;
+			pipe->chroma_sample = MDP4_CHROMA_RGB;
 		} else if (pipe->src_format == MDP_Y_CBCR_H2V1) {
 			pipe->element1 = C2_R_Cr;
 			pipe->element0 = C1_B_Cb;
@@ -1474,10 +1470,7 @@ int mdp4_overlay_format2pipe(struct mdp4_overlay_pipe *pipe)
 		} else if (pipe->src_format == MDP_Y_CBCR_H1V1) {
 			pipe->element1 = C2_R_Cr;
 			pipe->element0 = C1_B_Cb;
-			if (pipe->src_width > YUV_444_MAX_WIDTH)
-				pipe->chroma_sample = MDP4_CHROMA_H1V2;
-			else
-				pipe->chroma_sample = MDP4_CHROMA_RGB;
+			pipe->chroma_sample = MDP4_CHROMA_RGB;
 		} else if (pipe->src_format == MDP_Y_CRCB_H1V2) {
 			pipe->element1 = C1_B_Cb;
 			pipe->element0 = C2_R_Cr;
@@ -4152,10 +4145,7 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
 			(pipe->src_format == MDP_Y_CBCR_H1V1) ||
 			(pipe->src_format == MDP_Y_CRCB_H1V2) ||
 			(pipe->src_format == MDP_Y_CBCR_H1V2)) {
-			if (pipe->src_width > YUV_444_MAX_WIDTH)
-				pipe->srcp1_ystride = pipe->src_width << 2;
-			else
-				pipe->srcp1_ystride = pipe->src_width << 1;
+			pipe->srcp1_ystride = pipe->src_width << 1;
 		} else
 			pipe->srcp1_ystride = pipe->src_width;
 
