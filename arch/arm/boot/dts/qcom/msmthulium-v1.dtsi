@@ -30,3 +30,11 @@
 &msm_vidc {
 	qcom,firmware-name = "venus-v1";
 };
+
+/* Ensure that both possible VDD_GFX supplies cannot be disabled. */
+&pmi8994_s2 {
+	regulator-always-on;
+};
+&pm8004_s2 {
+	regulator-always-on;
+};
