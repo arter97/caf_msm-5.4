@@ -1,4 +1,4 @@
-/* Copyright (c) 2011, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011, 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -85,8 +85,12 @@ static int __init mipi_chimei_wxga_init(void)
 {
 	int ret;
 	struct msm_panel_info *pinfo = &chimei_wxga_pinfo;
+	struct platform_disp_info info = {
+		.id = DISPLAY_PRIMARY,
+		.dest = DISPLAY_1
+	};
 
-	if (msm_fb_detect_client("mipi_video_chimei_wxga"))
+	if (msm_fb_detect_client("mipi_video_chimei_wxga", &info))
 		return 0;
 
 	pr_debug("mipi-dsi chimei wxga (1366x768) driver ver 1.0.\n");
@@ -94,7 +98,8 @@ static int __init mipi_chimei_wxga_init(void)
 	pinfo->xres = 1366;
 	pinfo->yres = 768;
 	pinfo->type =  MIPI_VIDEO_PANEL;
-	pinfo->pdest = DISPLAY_1; /* Primary Display */
+	pinfo->disp_id = info.id;
+	pinfo->pdest = info.dest;
 	pinfo->wait_cycle = 0;
 	pinfo->bpp = 24; /* RGB888 = 24 bits-per-pixel */
 	pinfo->fb_num = 2; /* using two frame buffers */

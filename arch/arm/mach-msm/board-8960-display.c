@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2013, 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -89,7 +89,8 @@ static struct resource msm_fb_resources[] = {
 
 static void set_mdp_clocks_for_wuxga(void);
 
-static int msm_fb_detect_panel(const char *name)
+static int msm_fb_detect_panel(const char *name, struct platform_disp_info
+			       *disp_info)
 {
 	if (machine_is_msm8960_liquid()) {
 		u32 ver = socinfo_get_platform_version();

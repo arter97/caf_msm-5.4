@@ -724,6 +724,7 @@ static struct reserve_info apq8064_reserve_info __initdata = {
 
 static char prim_panel_name[PANEL_NAME_MAX_LEN];
 static char ext_panel_name[PANEL_NAME_MAX_LEN];
+static char sec_panel_name[PANEL_NAME_MAX_LEN];
 
 static int ext_resolution;
 
@@ -751,10 +752,18 @@ static int __init hdmi_resulution_setup(char *param)
 }
 early_param("ext_resolution", hdmi_resulution_setup);
 
+static int __init sec_display_setup(char *param)
+{
+	if (strnlen(param, PANEL_NAME_MAX_LEN))
+		strlcpy(sec_panel_name, param, PANEL_NAME_MAX_LEN);
+	return 0;
+}
+early_param("sec_display", sec_display_setup);
+
 static void __init apq8064_reserve(void)
 {
 	apq8064_set_display_params(prim_panel_name, ext_panel_name,
-		ext_resolution);
+		ext_resolution, sec_panel_name);
 	msm_reserve();
 }
 

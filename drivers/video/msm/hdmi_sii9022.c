@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2010, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2010, 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,6 +14,7 @@
 #include <linux/i2c.h>
 #include <linux/delay.h>
 #include "msm_fb.h"
+#include "mach/board.h"
 
 #define DEVICE_NAME "sii9022"
 #define SII9022_DEVICE_ID   0xB0
@@ -193,15 +194,20 @@ static int __init hdmi_sii_init(void)
 {
 	int ret;
 	struct msm_panel_info pinfo;
+	struct platform_disp_info info = {
+		.id = DISPLAY_SECONDARY,
+		.dest = DISPLAY_2
+	};
 
-	if (msm_fb_detect_client("hdmi_sii9022"))
+	if (msm_fb_detect_client("hdmi_sii9022", &info))
 		return 0;
 
 	pinfo.xres = 1280;
 	pinfo.yres = 720;
 	MSM_FB_SINGLE_MODE_PANEL(&pinfo);
 	pinfo.type = HDMI_PANEL;
-	pinfo.pdest = DISPLAY_1;
+	pinfo.pdest = info.dest;
+	pinfo.disp_id = info.id;
 	pinfo.wait_cycle = 0;
 	pinfo.bpp = 18;
 	pinfo.fb_num = 2;

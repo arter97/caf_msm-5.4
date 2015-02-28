@@ -27,6 +27,7 @@
 #include <mach/clk.h>
 #include <mach/msm_iomap.h>
 #include <mach/socinfo.h>
+#include "mach/board.h"
 
 #include "msm_fb.h"
 #include "hdmi_msm.h"
@@ -4905,8 +4906,11 @@ static struct platform_device this_device = {
 static int __init hdmi_msm_init(void)
 {
 	int rc;
-
-	if (msm_fb_detect_client("hdmi_msm"))
+	struct platform_disp_info info = {
+		.id = DISPLAY_SECONDARY,
+		.dest = DISPLAY_2
+	};
+	if (msm_fb_detect_client("hdmi_msm", &info))
 		return 0;
 
 #ifdef CONFIG_FB_MSM_HDMI_AS_PRIMARY
@@ -4977,6 +4981,8 @@ static int __init hdmi_msm_init(void)
 	}
 
 	hdmi_common_init_panel_info(&hdmi_msm_panel_data.panel_info);
+	hdmi_msm_panel_data.panel_info.disp_id = info.id;
+	hdmi_msm_panel_data.panel_info.pdest = info.dest;
 	init_completion(&hdmi_msm_state->ddc_sw_done);
 	init_completion(&hdmi_msm_state->hpd_event_processed);
 	INIT_WORK(&hdmi_msm_state->hpd_state_work, hdmi_msm_hpd_state_work);

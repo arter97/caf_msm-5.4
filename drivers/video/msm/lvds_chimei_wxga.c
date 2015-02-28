@@ -1,5 +1,5 @@
 /* Copyright (c) 2012, The Linux Foundation. All rights reserved.
- * Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,6 +15,7 @@
 #include <linux/pwm.h>
 #include <linux/mfd/pm8xxx/pm8921.h>
 #include <mach/socinfo.h>
+#include "mach/board.h"
 
 #define LVDS_CHIMEI_PWM_FREQ_HZ 300
 #define LVDS_CHIMEI_PWM_PERIOD_USEC (USEC_PER_SEC / LVDS_CHIMEI_PWM_FREQ_HZ)
@@ -119,8 +120,12 @@ static int __init lvds_chimei_wxga_init(void)
 {
 	int ret;
 	struct msm_panel_info *pinfo;
+	struct platform_disp_info info = {
+		.id = DISPLAY_PRIMARY,
+		.dest = DISPLAY_1
+	};
 
-	if (msm_fb_detect_client("lvds_chimei_wxga"))
+	if (msm_fb_detect_client("lvds_chimei_wxga", &info))
 		return 0;
 
 	ret = platform_driver_register(&this_driver);
@@ -133,7 +138,7 @@ static int __init lvds_chimei_wxga_init(void)
 		pinfo->yres = 720;
 		MSM_FB_SINGLE_MODE_PANEL(pinfo);
 		pinfo->type = LVDS_PANEL;
-		pinfo->pdest = DISPLAY_1;
+		pinfo->pdest = info.dest;
 		pinfo->wait_cycle = 0;
 		pinfo->bpp = 24;
 		pinfo->fb_num = 2;
@@ -159,13 +164,14 @@ static int __init lvds_chimei_wxga_init(void)
 		pinfo->lcdc.border_clr = 0x0;
 		pinfo->lcdc.xres_pad = 0;
 		pinfo->lcdc.yres_pad = 0;
+		pinfo->disp_id = info.id;
 
 	} else {
 		pinfo->xres = 1366;
 		pinfo->yres = 768;
 		MSM_FB_SINGLE_MODE_PANEL(pinfo);
 		pinfo->type = LVDS_PANEL;
-		pinfo->pdest = DISPLAY_1;
+		pinfo->pdest = info.dest;
 		pinfo->wait_cycle = 0;
 		pinfo->bpp = 24;
 		pinfo->fb_num = 2;
@@ -196,6 +202,7 @@ static int __init lvds_chimei_wxga_init(void)
 		pinfo->lcdc.border_clr = 0x0;
 		pinfo->lcdc.xres_pad = 0;
 		pinfo->lcdc.yres_pad = 0;
+		pinfo->disp_id = info.id;
 	}
 	ret = platform_device_register(&this_device);
 	if (ret)

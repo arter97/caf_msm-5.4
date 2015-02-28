@@ -1,4 +1,5 @@
-/* Copyright (c) 2011-2012, 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2014-2015, The Linux Foundation. All rights
+ * reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -104,7 +105,7 @@ void apq8064_init_fb(void);
 void apq8064_allocate_fb_region(void);
 void apq8064_mdp_writeback(struct memtype_reserve *reserve_table);
 void __init apq8064_set_display_params(char *prim_panel, char *ext_panel,
-		unsigned char resolution);
+		unsigned char resolution, char *sec_panel);
 
 void apq8064_init_gpu(void);
 void apq8064_pm8xxx_gpio_mpp_init(void);

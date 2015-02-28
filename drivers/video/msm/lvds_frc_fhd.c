@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012, 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,6 +11,7 @@
  */
 #include <mach/gpio.h>
 #include "msm_fb.h"
+#include "mach/board.h"
 
 static struct lvds_panel_platform_data *frc_pdata;
 static struct platform_device *frc_fbpdev;
@@ -150,8 +151,12 @@ static int __init lvds_frc_fhd_init(void)
 {
 	int ret;
 	struct msm_panel_info *pinfo;
+	struct platform_disp_info info = {
+		.id = DISPLAY_PRIMARY,
+		.dest = DISPLAY_1
+	};
 
-	if (msm_fb_detect_client("lvds_frc_fhd"))
+	if (msm_fb_detect_client("lvds_frc_fhd", &info))
 		return 0;
 
 	ret = platform_driver_register(&this_driver);
@@ -163,7 +168,8 @@ static int __init lvds_frc_fhd_init(void)
 	pinfo->yres = 1080;
 	MSM_FB_SINGLE_MODE_PANEL(pinfo);
 	pinfo->type = LVDS_PANEL;
-	pinfo->pdest = DISPLAY_1;
+	pinfo->pdest = info.dest;
+	pinfo->disp_id = info.id;
 	pinfo->wait_cycle = 0;
 	pinfo->bpp = 24;
 	pinfo->fb_num = 2;
