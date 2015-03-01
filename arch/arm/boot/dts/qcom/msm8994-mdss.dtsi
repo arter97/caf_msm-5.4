@@ -223,6 +223,9 @@
 		mdss_fb1: qcom,mdss_fb_external {
 			cell-index = <1>;
 			compatible = "qcom,mdss-fb";
+			qcom,cont-splash-memory {
+				linux,contiguous-region = <&ext_cont_splash_mem>;
+			};
 		};
 
 		mdss_fb2: qcom,mdss_fb_wfd {
