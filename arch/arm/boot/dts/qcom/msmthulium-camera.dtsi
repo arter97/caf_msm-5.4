@@ -430,13 +430,13 @@
 
 		msm_cam_smmu_cb4 {
 			compatible = "qcom,msm-cam-smmu-cb";
-			iommus = <&jpeg_smmu 1>;
-			label = "jpeg_enc";
+			iommus = <&jpeg_smmu 0>;
+			label = "jpeg_enc0";
 		};
 
 		msm_cam_smmu_cb5 {
 			compatible = "qcom,msm-cam-smmu-cb";
-			iommus = <&jpeg_smmu 0>;
+			iommus = <&jpeg_smmu 1>;
 			label = "jpeg_dma";
 		};
 
