@@ -246,3 +246,7 @@
 &tpdm_prng {
 	status = "disable";
 };
+
+&rpm_bus {
+	rpm-standalone;
+};
