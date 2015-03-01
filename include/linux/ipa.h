@@ -1239,7 +1239,8 @@ int ipa_get_ep_mapping(enum ipa_client_type client);
 
 bool ipa_is_ready(void);
 
-void ipa_q6_init_done(void);
+void ipa_proxy_clk_vote(void);
+void ipa_proxy_clk_unvote(void);
 
 enum ipa_hw_type ipa_get_hw_type(void);
 
@@ -1871,7 +1872,11 @@ static inline bool ipa_is_ready(void)
 	return false;
 }
 
-static inline void ipa_q6_init_done(void)
+static inline void ipa_proxy_clk_vote(void)
+{
+}
+
+static inline void ipa_proxy_clk_unvote(void)
 {
 }
 
