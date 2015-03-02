@@ -260,6 +260,17 @@ static int mdss_pll_probe(struct platform_device *pdev)
 		goto res_parse_error;
 	}
 
+	rc = mdss_mdp_get_pan_cfg(&pll_res->pan_cfg);
+	if (!rc) {
+		if ((pll_res->pan_cfg.pan_intf == MDSS_PANEL_INTF_HDMI) &&
+			(pll_res->pll_interface_type != MDSS_HDMI_PLL_20NM)) {
+			pr_debug("%s hdmi primary, disbling intf %d\n",
+				__func__, pll_res->pll_interface_type);
+			rc = 0;
+			goto res_parse_error;
+		}
+	}
+
 	/*
 	 * DSI PLL 1 is leaking current whenever MDSS GDSC is toggled. Need to
 	 * map PLL1 registers along with the PLl0 so that we can manually turn

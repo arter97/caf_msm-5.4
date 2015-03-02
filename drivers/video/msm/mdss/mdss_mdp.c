@@ -1317,7 +1317,7 @@ static int mdss_mdp_get_pan_intf(const char *pan_intf)
 	return rc;
 }
 
-static int mdss_mdp_get_pan_cfg(struct mdss_panel_cfg *pan_cfg)
+int mdss_mdp_get_pan_cfg(struct mdss_panel_cfg *pan_cfg)
 {
 	char *t = NULL;
 	char pan_intf_str[MDSS_MAX_PANEL_LEN];

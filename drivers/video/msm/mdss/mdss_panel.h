@@ -18,6 +18,7 @@
 #include <linux/stringify.h>
 #include <linux/types.h>
 #include <linux/debugfs.h>
+#include <linux/msm_mdp.h>
 
 /* panel id type */
 struct panel_id {
@@ -82,13 +83,6 @@ enum {
 };
 
 enum {
-	MDSS_PANEL_INTF_INVALID = -1,
-	MDSS_PANEL_INTF_DSI,
-	MDSS_PANEL_INTF_EDP,
-	MDSS_PANEL_INTF_HDMI,
-};
-
-enum {
 	MDSS_PANEL_POWER_OFF = 0,
 	MDSS_PANEL_POWER_ON,
 	MDSS_PANEL_POWER_LP1,
@@ -112,20 +106,6 @@ struct mdss_rect {
 	u16 y;
 	u16 w;
 	u16 h;
-};
-
-#define MDSS_MAX_PANEL_LEN      256
-#define MDSS_INTF_MAX_NAME_LEN 5
-struct mdss_panel_intf {
-	char name[MDSS_INTF_MAX_NAME_LEN];
-	int  type;
-};
-
-struct mdss_panel_cfg {
-	char arg_cfg[MDSS_MAX_PANEL_LEN + 1];
-	int  pan_intf;
-	bool lk_cfg;
-	bool init_done;
 };
 
 #define MDP_INTF_DSI_CMD_FIFO_UNDERFLOW		0x0001

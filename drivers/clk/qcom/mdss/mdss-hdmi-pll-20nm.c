@@ -753,20 +753,27 @@ static int hdmi_20nm_vco_set_rate(struct clk *c, unsigned long rate)
 static unsigned long hdmi_20nm_vco_get_rate(struct clk *c)
 {
 	unsigned long freq = 0;
-	int rc;
 	struct hdmi_pll_vco_clk *vco = to_hdmi_20nm_vco_clk(c);
 	struct mdss_pll_resources *io = vco->priv;
+	struct mdss_panel_cfg *panel_cfg = &io->pan_cfg;
+	int vic;
 
-	if (is_gdsc_disabled(io))
-		return 0;
+	if (kstrtoint(panel_cfg->arg_cfg, 10, &vic))
+		vic = 0;
 
-	rc = mdss_pll_resource_enable(io, true);
-	if (rc) {
-		pr_err("pll resource can't be enabled\n");
-		return rc;
+	switch (vic) {
+	case 1:
+		freq = 25200000;
+		break;
+	case 4:
+		freq = 74250000;
+		break;
+	case 16:
+		freq = 148500000;
+		break;
+	default:
+		freq = 0;
 	}
-
-	mdss_pll_resource_enable(io, false);
 
 	return freq;
 }

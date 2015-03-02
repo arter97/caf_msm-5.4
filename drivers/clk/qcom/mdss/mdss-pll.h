@@ -14,6 +14,7 @@
 #define __MDSS_PLL_H
 
 #include <linux/mdss_io_util.h>
+#include <linux/msm_mdp.h>
 #include <linux/io.h>
 
 #define MDSS_PLL_REG_W(base, offset, data)	\
@@ -50,6 +51,8 @@ struct mdss_pll_resources {
 	/* Pll specific resources like GPIO, power supply, clocks, etc*/
 	struct dss_module_power mp;
 
+	/* panel configurations */
+	struct mdss_panel_cfg pan_cfg;
 	/*
 	 * dsi/edp/hmdi plls' base register, phy, gdsc and dynamic refresh
 	 * register mapping
