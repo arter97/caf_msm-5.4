@@ -33,6 +33,7 @@
 #define PIEZO_COMMAND_OFF 0
 
 /* SW Interface document (SWI_80-NC832) explains all the definitions below */
+#define CONFIG_GP_MN_GPIO_FUNC 5
 #define SOURCE_CLOCK_FREQUENCY 4800000
 #define MAX_TARGET_FREQUENCY   6000
 
@@ -235,12 +236,57 @@ static void __init piezo_config_pdm_clk(void)
 }
 
 static void
+piezo_config_gpmn_func(void)
+{
+	int rc = 0;
+
+	rc = gpio_tlmm_config(GPIO_CFG(gp_mn_gpio,
+			CONFIG_GP_MN_GPIO_FUNC,GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL,
+			GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+		if (rc < 0)
+			pr_err(PIEZO_DRIVER_NAME" gpio to gp_mn func failed :%d\n", rc);
+}
+
+static void
+piezo_config_gpmn_gpio(void)
+{
+	int rc = 0;
+
+	/* GP_MN pin is configured during the initialization.
+		When the clock input is complted and turned on, it could have been ended
+		on HIGH signal. Turn this to LOW and change back GPIO to GP_MN functionality.
+	*/
+	rc = gpio_tlmm_config(GPIO_CFG(gp_mn_gpio,
+			0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL,
+			GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+	if (rc < 0) {
+		pr_err(PIEZO_DRIVER_NAME" err to gpio output config result :%d\n", rc);
+	}
+	else {
+		rc = gpio_request(gp_mn_gpio, PIEZO_DRIVER_NAME);
+		if (rc != 0) {
+			pr_err(PIEZO_DRIVER_NAME" gpio_request failed result :%d\n", rc);
+		}
+		else {
+			rc = gpio_direction_output(gp_mn_gpio, 0);
+			gpio_set_value(gp_mn_gpio,0);
+			if (gpio_get_value(gp_mn_gpio) != 0)
+				pr_err(PIEZO_DRIVER_NAME" get value not low : %d\n", rc);
+
+			gpio_free(gp_mn_gpio);
+		}
+	}
+
+}
+
+static void
 piezo_work_queue_execute(struct work_struct *w)
 {
 	pr_debug(PIEZO_DRIVER_NAME" work queue entered \n");
 
 	/* Turn off the clocks now - update register */
 	piezo_reg_clk_off();
+	piezo_config_gpmn_gpio();
 
 	/* Now update sysfs and let user space know the command is done */
 	wq_pending = false;
@@ -255,6 +301,7 @@ static ssize_t piezo_command_run(void)
 	int status;
 
 	if (command == PIEZO_COMMAND_ON) {
+		piezo_config_gpmn_func();
 		piezo_mnd_finder();
 		piezo_reg_clk_on();
 	} else {
@@ -264,7 +311,6 @@ static ssize_t piezo_command_run(void)
 
 	return status;
 }
-
 
 static ssize_t piezo_value_show(struct kobject *kobj,
 								struct kobj_attribute *attr,
@@ -300,6 +346,7 @@ static ssize_t piezo_value_store(struct kobject *kobj,
 		} else if (wq_pending && (var == PIEZO_COMMAND_OFF)) {
 			pr_debug("piezo : OFF command work queue pending \n");
 			piezo_reg_clk_off();
+			piezo_config_gpmn_gpio();
 			cancel_delayed_work(&piezo_clk_off_work);
 			wq_pending = false;
 			command = var;
@@ -350,6 +397,43 @@ static struct attribute_group piezo_attr_group = {
 	.attrs = piezo_attrs,
 };
 
+static void piezo_init_debugfs(void)
+{
+	/* The following debug directory will be created at /sys/kernel/debug */
+	debugfs_dir = debugfs_create_dir("piezo-debug", NULL);
+	if (!debugfs_dir)
+		goto error_root;
+
+	debugfs_m = debugfs_create_u32("m_value", S_IRUGO, debugfs_dir, &m_value);
+	if (!debugfs_m)
+		goto error_m;
+
+	debugfs_n = debugfs_create_u32("n_value", S_IRUGO, debugfs_dir, &n_value);
+	if (!debugfs_m)
+		goto error_n;
+
+	debugfs_d = debugfs_create_u32("d_value", S_IRUGO, debugfs_dir, &d_value);
+	if (!debugfs_m)
+		goto error_d;
+
+	return;
+
+error_d:
+	debugfs_remove(debugfs_dir);
+	debugfs_remove(debugfs_m);
+	debugfs_remove(debugfs_n);
+	return;
+error_n:
+	debugfs_remove(debugfs_dir);
+	debugfs_remove(debugfs_m);
+	return;
+error_m:
+	debugfs_remove(debugfs_dir);
+	return;
+error_root:
+	return;
+}
+
 static void __init piezo_reg_iomap(void)
 {
 	virtual_reg_base = ioremap((u32)PERIPH_SS_PDM_BASE, SZ_16);
@@ -388,6 +472,19 @@ static int piezo_driver_probe(struct platform_device *pdev)
 
 	pr_debug(PIEZO_DRIVER_NAME" %s : devm_base %#x \n", __func__,
 			(u32)devm_base);
+
+	piezo_kobj = kobject_create_and_add(PIEZO_DRIVER_NAME, kernel_kobj);
+
+	if (piezo_kobj) {
+		result = sysfs_create_group(piezo_kobj, &piezo_attr_group);
+		if (result) {
+			result = -1;
+			pr_err(PIEZO_DRIVER_NAME" sysfs_create_group() failed\n");
+			kobject_put(piezo_kobj);
+		}
+	} else {
+		result = -ENOMEM;
+	}
 
 	/* Read default values of piezo control information from device tree */
 	result = of_property_read_u32(pdev->dev.of_node,
@@ -428,6 +525,8 @@ static int piezo_driver_probe(struct platform_device *pdev)
 
 	piezo_config_pdm_clk();
 
+	piezo_init_debugfs();
+
 	return result;
 }
 
@@ -451,44 +550,6 @@ static struct platform_driver piezo_driver = {
 	},
 };
 
-static void piezo_init_debugfs(void)
-{
-	/* The following debug directory will be created at /sys/kernel/debug */
-	debugfs_dir = debugfs_create_dir("piezo-debug", NULL);
-	if (!debugfs_dir)
-		goto error_root;
-
-	debugfs_m = debugfs_create_u32("m_value", S_IRUGO, debugfs_dir, &m_value);
-	if (!debugfs_m)
-		goto error_m;
-
-	debugfs_n = debugfs_create_u32("n_value", S_IRUGO, debugfs_dir, &n_value);
-	if (!debugfs_m)
-		goto error_n;
-
-	debugfs_d = debugfs_create_u32("d_value", S_IRUGO, debugfs_dir, &d_value);
-	if (!debugfs_m)
-		goto error_d;
-
-	return;
-
-error_d:
-	debugfs_remove(debugfs_dir);
-	debugfs_remove(debugfs_m);
-	debugfs_remove(debugfs_n);
-	return;
-error_n:
-	debugfs_remove(debugfs_dir);
-	debugfs_remove(debugfs_m);
-	return;
-error_m:
-	debugfs_remove(debugfs_dir);
-	return;
-error_root:
-	return;
-}
-
-
 static int __init piezo_init(void)
 {
 	int result;
@@ -501,21 +562,6 @@ static int __init piezo_init(void)
 		pr_err(PIEZO_DRIVER_NAME" error creating work queue\n");
 		result = -ENOMEM;
 	}
-
-	piezo_kobj = kobject_create_and_add(PIEZO_DRIVER_NAME, kernel_kobj);
-
-	if (piezo_kobj) {
-		result = sysfs_create_group(piezo_kobj, &piezo_attr_group);
-		if (result) {
-			result = -1;
-			pr_err(PIEZO_DRIVER_NAME" sysfs_create_group() failed\n");
-			kobject_put(piezo_kobj);
-		}
-	} else {
-		result = -ENOMEM;
-	}
-
-	piezo_init_debugfs();
 
 	return result;
 }

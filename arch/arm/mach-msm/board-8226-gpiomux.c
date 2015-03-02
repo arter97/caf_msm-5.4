@@ -307,13 +307,6 @@ static struct msm_gpiomux_config qm8626_msm_lcd_configs[] __initdata = {
     }
 };
 
-static struct gpiomux_setting gpio_gp_mn_cfg = {
-	.func = GPIOMUX_FUNC_5,
-	.drv = GPIOMUX_DRV_2MA,
-	.pull = GPIOMUX_PULL_NONE,
-	.dir = GPIOMUX_OUT_LOW,
-};
-
 static struct gpiomux_setting generic_gpio_out_hi_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
@@ -646,8 +639,8 @@ static struct msm_gpiomux_config qm8626_msm_piezo_config[] __initdata = {
 	{
 		.gpio = 22,		/* Piezo driver, configure for CLK out */
 		.settings = {
-			[GPIOMUX_ACTIVE] = &gpio_gp_mn_cfg,
-			[GPIOMUX_SUSPENDED] = &gpio_gp_mn_cfg,
+			[GPIOMUX_ACTIVE] = &generic_gpio_out_lo_cfg,
+			[GPIOMUX_SUSPENDED] = &generic_gpio_out_lo_cfg,
 		},
 	}
 };
