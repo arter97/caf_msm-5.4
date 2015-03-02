@@ -2029,6 +2029,7 @@ int mdss_dsi_cmdlist_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 			ctrl->do_unicast = true;
 	}
 
+	req->flags |= CMD_REQ_DMA_TPG;
 	len = mdss_dsi_cmds_tx(ctrl, req->cmds, req->cmds_cnt,
 				(req->flags & CMD_REQ_DMA_TPG));
 
