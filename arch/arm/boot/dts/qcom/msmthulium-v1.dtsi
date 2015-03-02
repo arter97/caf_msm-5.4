@@ -23,8 +23,13 @@
 	qcom,msm-id = <246 0x10000>;
 };
 
+&l2ccc_0 {
+	qcom,clamped-reset-seq;
+};
+
 &l2ccc_1 {
 	qcom,cbf-clock-seq;
+	qcom,clamped-reset-seq;
 };
 
 &msm_vidc {
