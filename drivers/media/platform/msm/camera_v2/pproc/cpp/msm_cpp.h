@@ -190,6 +190,8 @@ struct cpp_device {
 	void __iomem *camss_cpp_base;
 	struct clk **cpp_clk;
 	struct regulator *fs_cpp;
+	struct regulator *fs_camss;
+	struct regulator *fs_mmagic_camss;
 	struct mutex mutex;
 	enum cpp_state state;
 	enum cpp_iommu_state iommu_state;
