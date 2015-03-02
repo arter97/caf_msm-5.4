@@ -40,6 +40,7 @@ Required properties:
 			"qcom,mmsscc-8994"
 			"qcom,mmsscc-8992"
 			"qcom,mmsscc-thulium"
+			"qcom,gpucc-thulium"
 
 - reg:			Pairs of physical base addresses and region sizes of
 			memory mapped registers.

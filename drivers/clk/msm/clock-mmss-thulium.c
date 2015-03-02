@@ -30,6 +30,7 @@
 #include "vdd-level-8994.h"
 
 static void __iomem *virt_base;
+static void __iomem *virt_base_gpu;
 
 #define mmpll0_out_main_mm_source_val		1
 #define mmpll1_out_main_mm_source_val		2
@@ -323,7 +324,7 @@ static struct rcg_clk gfx3d_clk_src = {
 	.set_rate = set_rate_hid,
 	.freq_tbl = ftbl_gfx3d_clk_src,
 	.current_freq = &rcg_dummy_freq,
-	.base = &virt_base,
+	.base = &virt_base_gpu,
 	.c = {
 		.dbg_name = "gfx3d_clk_src",
 		.ops = &clk_ops_rcg,
@@ -1056,7 +1057,7 @@ static struct rcg_clk isense_clk_src = {
 	.set_rate = set_rate_hid,
 	.freq_tbl = ftbl_isense_clk_src,
 	.current_freq = &rcg_dummy_freq,
-	.base = &virt_base,
+	.base = &virt_base_gpu,
 	.c = {
 		.dbg_name = "isense_clk_src",
 		.ops = &clk_ops_rcg,
@@ -1076,7 +1077,7 @@ static struct rcg_clk rbbmtimer_clk_src = {
 	.set_rate = set_rate_hid,
 	.freq_tbl = ftbl_rbbmtimer_clk_src,
 	.current_freq = &rcg_dummy_freq,
-	.base = &virt_base,
+	.base = &virt_base_gpu,
 	.c = {
 		.dbg_name = "rbbmtimer_clk_src",
 		.ops = &clk_ops_rcg,
@@ -2090,7 +2091,7 @@ static struct branch_clk gpu_ahb_clk = {
 	.cbcr_reg = MMSS_GPU_AHB_CBCR,
 	.has_sibling = 1,
 	.check_enable_bit = true,
-	.base = &virt_base,
+	.base = &virt_base_gpu,
 	.no_halt_check_on_disable = true,
 	.c = {
 		.dbg_name = "gpu_ahb_clk",
@@ -2103,7 +2104,7 @@ static struct branch_clk gpu_ahb_clk = {
 static struct branch_clk gpu_aon_isense_clk = {
 	.cbcr_reg = MMSS_GPU_AON_ISENSE_CBCR,
 	.has_sibling = 0,
-	.base = &virt_base,
+	.base = &virt_base_gpu,
 	.c = {
 		.dbg_name = "gpu_aon_isense_clk",
 		.parent = &isense_clk_src.c,
@@ -2115,7 +2116,7 @@ static struct branch_clk gpu_aon_isense_clk = {
 static struct branch_clk gpu_gx_gfx3d_clk = {
 	.cbcr_reg = MMSS_GPU_GX_GFX3D_CBCR,
 	.has_sibling = 0,
-	.base = &virt_base,
+	.base = &virt_base_gpu,
 	.c = {
 		.dbg_name = "gpu_gx_gfx3d_clk",
 		.parent = &gfx3d_clk_src.c,
@@ -2127,7 +2128,7 @@ static struct branch_clk gpu_gx_gfx3d_clk = {
 static struct branch_clk gpu_gx_rbbmtimer_clk = {
 	.cbcr_reg = MMSS_GPU_GX_RBBMTIMER_CBCR,
 	.has_sibling = 0,
-	.base = &virt_base,
+	.base = &virt_base_gpu,
 	.c = {
 		.dbg_name = "gpu_gx_rbbmtimer_clk",
 		.parent = &rbbmtimer_clk_src.c,
@@ -2825,8 +2826,6 @@ static struct mux_clk mmss_gcc_dbg_clk = {
 		{ &mmss_s0_axi_clk.c, 0x0005 },
 		{ &vmem_maxi_clk.c, 0x0009 },
 		{ &vmem_ahb_clk.c, 0x000a },
-		{ &gpu_ahb_clk.c, 0x000c },
-		{ &gpu_gx_gfx3d_clk.c, 0x000d },
 		{ &video_core_clk.c, 0x000e },
 		{ &video_axi_clk.c, 0x000f },
 		{ &video_maxi_clk.c, 0x0010 },
@@ -2873,7 +2872,6 @@ static struct mux_clk mmss_gcc_dbg_clk = {
 		{ &camss_cpp_ahb_clk.c, 0x003b },
 		{ &camss_vfe_ahb_clk.c, 0x003c },
 		{ &camss_vfe_axi_clk.c, 0x003d },
-		{ &gpu_gx_rbbmtimer_clk.c, 0x003e },
 		{ &camss_csi_vfe0_clk.c, 0x003f },
 		{ &camss_csi_vfe1_clk.c, 0x0040 },
 		{ &camss_csi0_clk.c, 0x0041 },
@@ -2906,7 +2904,6 @@ static struct mux_clk mmss_gcc_dbg_clk = {
 		{ &camss_jpeg_dma_clk.c, 0x007b },
 		{ &camss_vfe0_ahb_clk.c, 0x0086 },
 		{ &camss_vfe1_ahb_clk.c, 0x0087 },
-		{ &gpu_aon_isense_clk.c, 0x0088 },
 		{ &fd_core_clk.c, 0x0089 },
 		{ &fd_core_uar_clk.c, 0x008a },
 		{ &fd_ahb_clk.c, 0x008c },
@@ -2968,7 +2965,6 @@ static struct clk_lookup msm_clocks_mmss_thulium[] = {
 	CLK_LIST(mmpll9_out_main),
 	CLK_LIST(mmpll5),
 	CLK_LIST(mmpll5_out_main),
-	CLK_LIST(gfx3d_clk_src),
 	CLK_LIST(csi0_clk_src),
 	CLK_LIST(vfe0_clk_src),
 	CLK_LIST(vfe1_clk_src),
@@ -2996,8 +2992,6 @@ static struct clk_lookup msm_clocks_mmss_thulium[] = {
 	CLK_LIST(csi0phytimer_clk_src),
 	CLK_LIST(csi1phytimer_clk_src),
 	CLK_LIST(csi2phytimer_clk_src),
-	CLK_LIST(isense_clk_src),
-	CLK_LIST(rbbmtimer_clk_src),
 	CLK_LIST(edplink_clk_src),
 	CLK_LIST(edp_mainlink_clk_src),
 	CLK_LIST(edpaux_clk_src),
@@ -3069,10 +3063,6 @@ static struct clk_lookup msm_clocks_mmss_thulium[] = {
 	CLK_LIST(fd_ahb_clk),
 	CLK_LIST(fd_core_clk),
 	CLK_LIST(fd_core_uar_clk),
-	CLK_LIST(gpu_ahb_clk),
-	CLK_LIST(gpu_aon_isense_clk),
-	CLK_LIST(gpu_gx_gfx3d_clk),
-	CLK_LIST(gpu_gx_rbbmtimer_clk),
 	CLK_LIST(mdss_ahb_clk),
 	CLK_LIST(mdss_axi_clk),
 	CLK_LIST(mdss_byte0_clk),
@@ -3238,21 +3228,6 @@ int msm_mmsscc_thulium_probe(struct platform_device *pdev)
 		return PTR_ERR(reg);
 	}
 
-	reg = vdd_gfx.regulator[0] = devm_regulator_get(&pdev->dev,
-								"vdd_gfx");
-	if (IS_ERR(reg)) {
-		if (PTR_ERR(reg) != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "Unable to get vdd_gfx regulator!");
-		return PTR_ERR(reg);
-	}
-
-	reg = vdd_gfx.regulator[1] = devm_regulator_get(&pdev->dev, "vdd_mx");
-	if (IS_ERR(reg)) {
-		if (PTR_ERR(reg) != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "Unable to get vdd_mx regulator!");
-		return PTR_ERR(reg);
-	}
-
 	tmp = mmsscc_xo.c.parent = devm_clk_get(&pdev->dev, "xo");
 	if (IS_ERR(tmp)) {
 		if (PTR_ERR(tmp) != -EPROBE_DEFER)
@@ -3289,13 +3264,6 @@ int msm_mmsscc_thulium_probe(struct platform_device *pdev)
 	edp_mainlink_clk_src.dev = &pdev->dev;
 	edp_mainlink_clk_src.clk_id = "edp_mainlink";
 
-	rc = of_get_fmax_vdd_class(pdev, &gfx3d_clk_src.c,
-					"qcom,gfxfreq-corner-v0");
-	if (rc) {
-		dev_err(&pdev->dev, "Unable to get gfx freq-corner mapping info\n");
-		return rc;
-	}
-
 	rc = of_msm_clock_register(pdev->dev.of_node, msm_clocks_mmss_thulium,
 				   ARRAY_SIZE(msm_clocks_mmss_thulium));
 	if (rc)
@@ -3320,8 +3288,111 @@ static struct platform_driver msm_clock_mmss_driver = {
 	},
 };
 
+/* ======== Graphics Clock Controller ======== */
+
+static struct mux_clk gpu_gcc_dbg_clk = {
+	.ops = &mux_reg_ops,
+	.en_mask = BIT(16),
+	.mask = 0x3FF,
+	.offset = MMSS_MMSS_DEBUG_CLK_CTL,
+	.en_offset = MMSS_MMSS_DEBUG_CLK_CTL,
+	.base = &virt_base_gpu,
+	MUX_SRC_LIST(
+		{ &gpu_ahb_clk.c, 0x000c },
+		{ &gpu_gx_gfx3d_clk.c, 0x000d },
+		{ &gpu_gx_rbbmtimer_clk.c, 0x003e },
+		{ &gpu_aon_isense_clk.c, 0x0088 },
+	),
+	.c = {
+		.dbg_name = "gpu_gcc_dbg_clk",
+		.ops = &clk_ops_gen_mux,
+		.flags = CLKFLAG_NO_RATE_CACHE,
+		CLK_INIT(gpu_gcc_dbg_clk.c),
+	},
+};
+
+static struct clk_lookup msm_clocks_gpu_thulium[] = {
+	CLK_LIST(gfx3d_clk_src),
+	CLK_LIST(isense_clk_src),
+	CLK_LIST(rbbmtimer_clk_src),
+	CLK_LIST(gpu_ahb_clk),
+	CLK_LIST(gpu_aon_isense_clk),
+	CLK_LIST(gpu_gx_gfx3d_clk),
+	CLK_LIST(gpu_gx_rbbmtimer_clk),
+	CLK_LIST(gpu_gcc_dbg_clk),
+};
+
+int msm_gpucc_thulium_probe(struct platform_device *pdev)
+{
+	struct resource *res;
+	int rc;
+	struct regulator *reg;
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "cc_base");
+	if (!res) {
+		dev_err(&pdev->dev, "Unable to retrieve register base.\n");
+		return -ENOMEM;
+	}
+
+	virt_base_gpu = devm_ioremap(&pdev->dev, res->start,
+						resource_size(res));
+	if (!virt_base) {
+		dev_err(&pdev->dev, "Failed to map CC registers\n");
+		return -ENOMEM;
+	}
+
+	reg = vdd_gfx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_gfx");
+	if (IS_ERR(reg)) {
+		if (PTR_ERR(reg) != -EPROBE_DEFER)
+			dev_err(&pdev->dev, "Unable to get vdd_gfx regulator!");
+		return PTR_ERR(reg);
+	}
+
+	reg = vdd_gfx.regulator[1] = devm_regulator_get(&pdev->dev, "vdd_mx");
+	if (IS_ERR(reg)) {
+		if (PTR_ERR(reg) != -EPROBE_DEFER)
+			dev_err(&pdev->dev, "Unable to get vdd_mx regulator!");
+		return PTR_ERR(reg);
+	}
+
+	rc = of_get_fmax_vdd_class(pdev, &gfx3d_clk_src.c,
+					"qcom,gfxfreq-corner-v0");
+	if (rc) {
+		dev_err(&pdev->dev, "Unable to get gfx freq-corner mapping info\n");
+		return rc;
+	}
+
+	rc = of_msm_clock_register(pdev->dev.of_node, msm_clocks_gpu_thulium,
+				   ARRAY_SIZE(msm_clocks_gpu_thulium));
+	if (rc)
+		return rc;
+
+	dev_info(&pdev->dev, "Registered GPU clocks.\n");
+
+	return 0;
+}
+
+static struct of_device_id msm_clock_gpu_match_table[] = {
+	{ .compatible = "qcom,gpucc-thulium" },
+	{}
+};
+
+static struct platform_driver msm_clock_gpu_driver = {
+	.probe = msm_gpucc_thulium_probe,
+	.driver = {
+		.name = "qcom,gpucc-thulium",
+		.of_match_table = msm_clock_gpu_match_table,
+		.owner = THIS_MODULE,
+	},
+};
+
 int __init msm_mmsscc_thulium_init(void)
 {
-	return platform_driver_register(&msm_clock_mmss_driver);
+	int ret;
+
+	ret = platform_driver_register(&msm_clock_mmss_driver);
+	if (ret < 0)
+		return ret;
+	return platform_driver_register(&msm_clock_gpu_driver);
 }
 arch_initcall(msm_mmsscc_thulium_init);

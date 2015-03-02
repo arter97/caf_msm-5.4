@@ -61,9 +61,9 @@
 		 */
 		qcom,clk-map = <0x000000DE>;
 
-		clocks = <&clock_mmss clk_gpu_gx_gfx3d_clk>,
-			<&clock_mmss clk_gpu_ahb_clk>,
-			<&clock_mmss clk_gpu_gx_rbbmtimer_clk>,
+		clocks = <&clock_gpu clk_gpu_gx_gfx3d_clk>,
+			<&clock_gpu clk_gpu_ahb_clk>,
+			<&clock_gpu clk_gpu_gx_rbbmtimer_clk>,
 			<&clock_gcc clk_gcc_bimc_gfx_clk>,
 			<&clock_gcc clk_gcc_mmss_bimc_gfx_clk>,
 			<&clock_mmss clk_mmss_mmagic_ahb_clk>;
@@ -163,7 +163,7 @@
 		reg = <0xb40000 0x20000>;
 		clocks = <&clock_mmss clk_mmss_mmagic_ahb_clk>,
 			<&clock_mmss clk_mmss_mmagic_cfg_ahb_clk>,
-			<&clock_mmss clk_gpu_ahb_clk>,
+			<&clock_gpu clk_gpu_ahb_clk>,
 			<&clock_gcc clk_gcc_mmss_bimc_gfx_clk>,
 			<&clock_gcc clk_gcc_bimc_gfx_clk>;
 		clock-names = "mmagic_ahb_clk", "mmagic_cfg_ahb_clk", "gpu_ahb_clk",

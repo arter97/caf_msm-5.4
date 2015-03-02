@@ -464,6 +464,7 @@
 #define clk_mdss_extpclk_clk		0xfa5aadb0
 #define clk_mdss_pclk0_clk		0x3487234a
 #define clk_mdss_pclk1_clk		0xd5804246
+#define clk_gpu_gcc_dbg_clk		0x0ccc42cd
 
 /* clock_debug controlled clocks */
 #define clk_gcc_debug_mux		0x8121ac15
