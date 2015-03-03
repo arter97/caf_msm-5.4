@@ -17,7 +17,7 @@
 #include <linux/notifier.h>
 #include <linux/pm_opp.h>
 
-#define DEVFREQ_NAME_LEN 16
+#define DEVFREQ_NAME_LEN 32
 
 struct devfreq;
 
