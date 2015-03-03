@@ -2153,10 +2153,10 @@ int q6asm_open_write_compressed(struct audio_client *ac, uint32_t format,
 
 	switch (format) {
 	case FORMAT_AC3:
-		open.fmt_id = ASM_MEDIA_FMT_AC3_DEC;
+		open.fmt_id = ASM_MEDIA_FMT_AC3;
 		break;
 	case FORMAT_EAC3:
-		open.fmt_id = ASM_MEDIA_FMT_EAC3_DEC;
+		open.fmt_id = ASM_MEDIA_FMT_EAC3;
 		break;
 	default:
 		pr_err("%s: Invalid format[%d]\n", __func__, format);
@@ -2287,10 +2287,10 @@ static int __q6asm_open_write(struct audio_client *ac, uint32_t format,
 		open.dec_fmt_id = ASM_MEDIA_FMT_MP3;
 		break;
 	case FORMAT_AC3:
-		open.dec_fmt_id = ASM_MEDIA_FMT_EAC3_DEC;
+		open.dec_fmt_id = ASM_MEDIA_FMT_AC3;
 		break;
 	case FORMAT_EAC3:
-		open.dec_fmt_id = ASM_MEDIA_FMT_EAC3_DEC;
+		open.dec_fmt_id = ASM_MEDIA_FMT_EAC3;
 		break;
 	case FORMAT_MP2:
 		open.dec_fmt_id = ASM_MEDIA_FMT_MP2;
@@ -4168,7 +4168,7 @@ fail_cmd:
 
 int q6asm_set_lrgain(struct audio_client *ac, int left_gain, int right_gain)
 {
-	struct asm_volume_ctrl_lr_chan_gain lrgain;
+	struct asm_volume_ctrl_multichannel_gain multi_ch_gain;
 	int sz = 0;
 	int rc  = 0;
 
@@ -4183,26 +4183,30 @@ int q6asm_set_lrgain(struct audio_client *ac, int left_gain, int right_gain)
 		goto fail_cmd;
 	}
 
-	sz = sizeof(struct asm_volume_ctrl_lr_chan_gain);
-	q6asm_add_hdr_async(ac, &lrgain.hdr, sz, TRUE);
+	memset(&multi_ch_gain, 0, sizeof(multi_ch_gain));
+	sz = sizeof(struct asm_volume_ctrl_multichannel_gain);
+	q6asm_add_hdr_async(ac, &multi_ch_gain.hdr, sz, TRUE);
 	atomic_set(&ac->cmd_state, 1);
-	lrgain.hdr.opcode = ASM_STREAM_CMD_SET_PP_PARAMS_V2;
-	lrgain.param.data_payload_addr_lsw = 0;
-	lrgain.param.data_payload_addr_msw = 0;
-	lrgain.param.mem_map_handle = 0;
-	lrgain.param.data_payload_size = sizeof(lrgain) -
-		sizeof(lrgain.hdr) - sizeof(lrgain.param);
-	lrgain.data.module_id = ASM_MODULE_ID_VOL_CTRL;
-	lrgain.data.param_id = ASM_PARAM_ID_VOL_CTRL_LR_CHANNEL_GAIN;
-	lrgain.data.param_size = lrgain.param.data_payload_size -
-		sizeof(lrgain.data);
-	lrgain.data.reserved = 0;
-	lrgain.l_chan_gain = left_gain;
-	lrgain.r_chan_gain = right_gain;
-	rc = apr_send_pkt(ac->apr, (uint32_t *) &lrgain);
+	multi_ch_gain.hdr.opcode = ASM_STREAM_CMD_SET_PP_PARAMS_V2;
+	multi_ch_gain.param.data_payload_addr_lsw = 0;
+	multi_ch_gain.param.data_payload_addr_msw = 0;
+	multi_ch_gain.param.mem_map_handle = 0;
+	multi_ch_gain.param.data_payload_size = sizeof(multi_ch_gain) -
+		sizeof(multi_ch_gain.hdr) - sizeof(multi_ch_gain.param);
+	multi_ch_gain.data.module_id = ASM_MODULE_ID_VOL_CTRL;
+	multi_ch_gain.data.param_id = ASM_PARAM_ID_MULTICHANNEL_GAIN;
+	multi_ch_gain.data.param_size = multi_ch_gain.param.data_payload_size -
+		sizeof(multi_ch_gain.data);
+	multi_ch_gain.data.reserved = 0;
+	multi_ch_gain.gain_data[0].channeltype = PCM_CHANNEL_FL;
+	multi_ch_gain.gain_data[0].gain = left_gain << 15;
+	multi_ch_gain.gain_data[1].channeltype = PCM_CHANNEL_FR;
+	multi_ch_gain.gain_data[1].gain = right_gain << 15;
+	multi_ch_gain.num_channels = 2;
+	rc = apr_send_pkt(ac->apr, (uint32_t *) &multi_ch_gain);
 	if (rc < 0) {
 		pr_err("%s: set-params send failed paramid[0x%x] rc %d\n",
-				__func__, lrgain.data.param_id, rc);
+				__func__, multi_ch_gain.data.param_id, rc);
 		rc = -EINVAL;
 		goto fail_cmd;
 	}
@@ -4211,14 +4215,14 @@ int q6asm_set_lrgain(struct audio_client *ac, int left_gain, int right_gain)
 			(atomic_read(&ac->cmd_state) <= 0), 5*HZ);
 	if (!rc) {
 		pr_err("%s: timeout, set-params paramid[0x%x]\n", __func__,
-				lrgain.data.param_id);
+				multi_ch_gain.data.param_id);
 		rc = -EINVAL;
 		goto fail_cmd;
 	}
 	if (atomic_read(&ac->cmd_state) < 0) {
 		pr_err("%s: DSP returned error[%d] , set-params paramid[0x%x]\n",
 					__func__, atomic_read(&ac->cmd_state),
-					lrgain.data.param_id);
+					multi_ch_gain.data.param_id);
 		rc = -EINVAL;
 		goto fail_cmd;
 	}

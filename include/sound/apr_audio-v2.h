@@ -2855,7 +2855,7 @@ struct asm_dec_ddp_endp_param_v2 {
 } __packed;
 
 /* @brief Multichannel PCM encoder configuration structure used
- * in the #ASM_STREAM_CMD_OPEN_READ_V2 command.
+ * in the #ASM_PARAM_ID_ENCDEC_ENC_CFG_BLK_V2 command.
  */
 
 struct asm_multi_channel_pcm_enc_cfg_v2 {
@@ -3284,7 +3284,7 @@ struct asm_v13k_enc_cfg {
 #define ASM_MEDIA_FMT_EVRC_FS                   0x00010BEE
 
 /*  EVRC encoder configuration structure used in the
- * #ASM_STREAM_CMD_OPEN_READ_V2 command.
+ * #ASM_PARAM_ID_ENCDEC_ENC_CFG_BLK_V2 command.
  */
 struct asm_evrc_enc_cfg {
 	struct apr_hdr hdr;
@@ -3493,8 +3493,8 @@ struct asm_amrwbplus_fmt_blk_v2 {
 
 } __packed;
 
-#define ASM_MEDIA_FMT_AC3_DEC                   0x00010BF6
-#define ASM_MEDIA_FMT_EAC3_DEC                   0x00010C3C
+#define ASM_MEDIA_FMT_AC3			0x00010DEE
+#define ASM_MEDIA_FMT_EAC3			0x00010DEF
 #define ASM_MEDIA_FMT_DTS                    0x00010D88
 #define ASM_MEDIA_FMT_MP2                    0x00010DE9
 #define ASM_MEDIA_FMT_FLAC                   0x00010C16
@@ -3902,10 +3902,6 @@ struct asm_data_cmd_iec_60958_frame_rate {
 } __packed;
 
 /* adsp_asm_data_commands.h*/
-#define ASM_SVC_CMD_GET_STREAM_HANDLES         0x00010C0B
-
-#define ASM_SVC_CMDRSP_GET_STREAM_HANDLES      0x00010C1B
-
 /* Definition of the stream ID bitmask.*/
 #define ASM_BIT_MASK_STREAM_ID                 (0x000000FFUL)
 
@@ -3930,25 +3926,13 @@ struct asm_data_cmd_iec_60958_frame_rate {
 /* Definition of the domain ID shift value.*/
 #define ASM_SHIFT_DOMAIN_ID                    24
 
-/* Payload of the #ASM_SVC_CMDRSP_GET_STREAM_HANDLES message,
- * which returns a list of currently active stream handles.
- * Immediately following this structure are num_handles of uint32
- * stream handles.
- */
-
-
-struct asm_svc_cmdrsp_get_stream_handles {
-	u32                  num_handles;
-	/* Number of active stream handles.	*/
-} __packed;
-
 #define ASM_CMD_SHARED_MEM_MAP_REGIONS               0x00010D92
 #define ASM_CMDRSP_SHARED_MEM_MAP_REGIONS     0x00010D93
 #define ASM_CMD_SHARED_MEM_UNMAP_REGIONS              0x00010D94
 
 /* adsp_asm_service_commands.h */
 
-#define ASM_MAX_SESSION_ID  (8)
+#define ASM_MAX_SESSION_ID  (15)
 
 /* Maximum number of sessions.*/
 #define ASM_MAX_NUM_SESSIONS                ASM_MAX_SESSION_ID
@@ -4156,7 +4140,6 @@ struct asm_session_cmdrsp_get_path_delay_v2 {
 } __packed;
 
 /* adsp_asm_session_command.h*/
-#define ASM_STREAM_CMD_OPEN_WRITE_V2       0x00010D8F
 #define ASM_STREAM_CMD_OPEN_WRITE_V3       0x00010DB3
 
 #define ASM_LOW_LATENCY_STREAM_SESSION				0x10000000
@@ -4236,8 +4219,8 @@ struct asm_stream_cmd_open_write_v3 {
  * - #ASM_MEDIA_FMT_SBC
  * - #ASM_MEDIA_FMT_WMA_V10PRO_V2
  * - #ASM_MEDIA_FMT_WMA_V9_V2
- * - #ASM_MEDIA_FMT_AC3_DEC
- * - #ASM_MEDIA_FMT_EAC3_DEC
+ * - #ASM_MEDIA_FMT_AC3
+ * - #ASM_MEDIA_FMT_EAC3
  * - #ASM_MEDIA_FMT_G711_ALAW_FS
  * - #ASM_MEDIA_FMT_G711_MLAW_FS
  * - #ASM_MEDIA_FMT_G729A_FS
@@ -4247,8 +4230,6 @@ struct asm_stream_cmd_open_write_v3 {
  * - #ASM_MEDIA_FMT_EXAMPLE
  */
 } __packed;
-
-#define ASM_STREAM_CMD_OPEN_READ_V2                 0x00010D8C
 
 #define ASM_STREAM_CMD_OPEN_READ_V3                 0x00010DB4
 
@@ -4354,7 +4335,6 @@ struct asm_stream_cmd_open_read_v3 {
 
 #define ASM_STREAM_CMD_OPEN_READWRITE_V2        0x00010D8D
 #define ASM_STREAM_CMD_OPEN_READWRITE_V2        0x00010D8D
-#define ASM_STREAM_CMD_OPEN_READ_V2             0x00010D8C
 
 struct asm_stream_cmd_open_readwrite_v2 {
 	struct apr_hdr         hdr;
@@ -4406,7 +4386,7 @@ struct asm_stream_cmd_open_readwrite_v2 {
  * - #ASM_MEDIA_FMT_WMA_V10PRO_V2
  * - #ASM_MEDIA_FMT_WMA_V9_V2
  * - #ASM_MEDIA_FMT_AMR_WB_PLUS_V2
- * - #ASM_MEDIA_FMT_AC3_DEC
+ * - #ASM_MEDIA_FMT_AC3
  * - #ASM_MEDIA_FMT_G711_ALAW_FS
  * - #ASM_MEDIA_FMT_G711_MLAW_FS
  * - #ASM_MEDIA_FMT_G729A_FS
@@ -5020,8 +5000,8 @@ struct asm_stream_cmd_open_write_compressed {
 	u32                    fmt_id;
 /* Specifies the media type of the HDMI stream to be opened.
  * Supported values:
- * - #ASM_MEDIA_FMT_AC3_DEC
- * - #ASM_MEDIA_FMT_EAC3_DEC
+ * - #ASM_MEDIA_FMT_AC3
+ * - #ASM_MEDIA_FMT_EAC3
  * - #ASM_MEDIA_FMT_DTS
  * - #ASM_MEDIA_FMT_ATRAC
  * - #ASM_MEDIA_FMT_MAT
@@ -5839,7 +5819,7 @@ struct audproc_topology_module_id_info_t {
  * ID of the Volume Control module pre/postprocessing block.
  * This module supports the following parameter IDs:
  * - #ASM_PARAM_ID_VOL_CTRL_MASTER_GAIN
- * - #ASM_PARAM_ID_VOL_CTRL_LR_CHANNEL_GAIN
+ * - #ASM_PARAM_ID_MULTICHANNEL_GAIN
  * - #ASM_PARAM_ID_VOL_CTRL_MUTE_CONFIG
  * - #ASM_PARAM_ID_SOFT_VOL_STEPPING_PARAMETERS
  * - #ASM_PARAM_ID_SOFT_PAUSE_PARAMETERS
@@ -5866,7 +5846,7 @@ struct audproc_topology_module_id_info_t {
  * @messagepayload
  * @structure{asm_volume_ctrl_lr_chan_gain}
  * @tablespace
- * @inputtable{Audio_Postproc_ASM_PARAM_ID_VOL_CTRL_LR_CHANNEL_GAIN.tex}
+ * @inputtable{Audio_Postproc_ASM_PARAM_ID_MULTICHANNEL_GAIN.tex}
  */
 #define ASM_PARAM_ID_VOL_CTRL_LR_CHANNEL_GAIN     0x00010C00
 
@@ -5929,17 +5909,6 @@ struct asm_volume_ctrl_master_gain {
 	/*< Clients must set this field to zero.
 		*/
 } __packed;
-
-
-/* Structure for the left/right channel gain parameter for a
- * volume control module.
- */
-
-
-/* @brief Payload of the #ASM_PARAM_ID_VOL_CTRL_LR_CHANNEL_GAIN
- * parameters used by the Volume Control module.
- */
-
 
 
 struct asm_volume_ctrl_lr_chan_gain {
@@ -6070,44 +6039,43 @@ struct asm_soft_pause_params {
  */
 
 
-struct asm_volume_ctrl_channelype_gain_pair {
-	struct apr_hdr	hdr;
-	struct asm_stream_cmd_set_pp_params_v2 param;
-	struct asm_stream_param_data_v2 data;
-	uint8_t                   channelype;
-/*< Channel type for which the gain setting is to be applied.
- * Supported values:
- * - #PCM_CHANNEL_L
- * - #PCM_CHANNEL_R
- * - #PCM_CHANNEL_C
- * - #PCM_CHANNEL_LS
- * - #PCM_CHANNEL_RS
- * - #PCM_CHANNEL_LFE
- * - #PCM_CHANNEL_CS
- * - #PCM_CHANNEL_LB
- * - #PCM_CHANNEL_RB
- * - #PCM_CHANNELS
- * - #PCM_CHANNEL_CVH
- * - #PCM_CHANNEL_MS
- * - #PCM_CHANNEL_FLC
- * - #PCM_CHANNEL_FRC
- * - #PCM_CHANNEL_RLC
- * - #PCM_CHANNEL_RRC
- */
+struct asm_volume_ctrl_channeltype_gain_pair {
+	uint8_t                   channeltype;
+	/*
+	 * Channel type for which the gain setting is to be applied.
+	 * Supported values:
+	 * - #PCM_CHANNEL_L
+	 * - #PCM_CHANNEL_R
+	 * - #PCM_CHANNEL_C
+	 * - #PCM_CHANNEL_LS
+	 * - #PCM_CHANNEL_RS
+	 * - #PCM_CHANNEL_LFE
+	 * - #PCM_CHANNEL_CS
+	 * - #PCM_CHANNEL_LB
+	 * - #PCM_CHANNEL_RB
+	 * - #PCM_CHANNELS
+	 * - #PCM_CHANNEL_CVH
+	 * - #PCM_CHANNEL_MS
+	 * - #PCM_CHANNEL_FLC
+	 * - #PCM_CHANNEL_FRC
+	 * - #PCM_CHANNEL_RLC
+	 * - #PCM_CHANNEL_RRC
+	 */
 
 	uint8_t                   reserved1;
-	/*< Clients must set this field to zero. */
+	/* Clients must set this field to zero. */
 
 	uint8_t                   reserved2;
-	/*< Clients must set this field to zero. */
+	/* Clients must set this field to zero. */
 
 	uint8_t                   reserved3;
-	/*< Clients must set this field to zero. */
+	/* Clients must set this field to zero. */
 
 	uint32_t                  gain;
-/*< Gain value for this channel in Q28 format.
- * Supported values: Any
- */
+	/*
+	 * Gain value for this channel in Q28 format.
+	 * Supported values: Any
+	 */
 } __packed;
 
 
@@ -6124,16 +6092,16 @@ struct asm_volume_ctrl_multichannel_gain {
 	struct asm_stream_cmd_set_pp_params_v2 param;
 	struct asm_stream_param_data_v2 data;
 	uint32_t                  num_channels;
-/*< Number of channels for which gain values are provided. Any
- * channels present in the data for which gain is not provided are
- * set to unity gain.
- * Supported values: 1 to 8
- */
+	/*
+	 * Number of channels for which gain values are provided. Any
+	 * channels present in the data for which gain is not provided are
+	 * set to unity gain.
+	 * Supported values: 1 to 8
+	 */
 
-
-	struct asm_volume_ctrl_channelype_gain_pair
+	struct asm_volume_ctrl_channeltype_gain_pair
 		gain_data[VOLUME_CONTROL_MAX_CHANNELS];
-	/*< Array of channel type/gain pairs.*/
+	/* Array of channel type/gain pairs.*/
 } __packed;
 
 
