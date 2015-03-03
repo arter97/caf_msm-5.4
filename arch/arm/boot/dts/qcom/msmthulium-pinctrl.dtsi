@@ -50,6 +50,15 @@
 			};
 		};
 
+		rome_bootstrap: rome_bootstrap {
+			config {
+				pins = "gpio46";
+				drive-strength = <2>;
+				bias-pull-up;
+				output-high;
+			};
+		};
+
 		pmx_mdss: pmx_mdss {
 			mdss_dsi_active: mdss_dsi_active {
 				pmx_mdss {
