@@ -21,3 +21,8 @@
 	compatible = "qcom,msm8939-mtp", "qcom,msm8939", "qcom,mtp";
 	qcom,board-id = <8 0>;
 };
+
+&labibb {
+	status = "ok";
+	qpnp,qpnp-labibb-mode = "lcd";
+};
