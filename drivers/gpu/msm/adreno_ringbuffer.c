@@ -818,7 +818,7 @@ void adreno_ringbuffer_set_constraint(struct kgsl_device *device,
 }
 
 static inline int _get_alwayson_counter(struct adreno_device *adreno_dev,
-		unsigned int *cmds, unsigned int gpuaddr)
+		unsigned int *cmds, uint64_t gpuaddr)
 {
 	unsigned int *p = cmds;
 
@@ -1043,9 +1043,16 @@ int adreno_ringbuffer_submitcmd(struct adreno_device *adreno_dev,
 	dwords += (numibs * 24);
 
 	if (cmdbatch->flags & KGSL_CMDBATCH_PROFILING &&
-		adreno_is_a4xx(adreno_dev) && profile_buffer) {
+		!adreno_is_a3xx(adreno_dev) && profile_buffer) {
 		cmdbatch_user_profiling = true;
 		dwords += 6;
+
+		/*
+		 * REG_TO_MEM packet on A5xx needs another ordinal.
+		 * Add 2 more dwords since we do profiling before and after.
+		 */
+		if (adreno_is_a5xx(adreno_dev))
+			dwords += 2;
 
 		/*
 		 * we want to use an adreno_submit_time struct to get the
@@ -1061,6 +1068,8 @@ int adreno_ringbuffer_submitcmd(struct adreno_device *adreno_dev,
 	if (test_bit(CMDBATCH_FLAG_PROFILE, &cmdbatch->priv)) {
 		cmdbatch_kernel_profiling = true;
 		dwords += 6;
+		if (adreno_is_a5xx(adreno_dev))
+			dwords += 2;
 	}
 
 	link = kzalloc(sizeof(unsigned int) *  dwords, GFP_KERNEL);
