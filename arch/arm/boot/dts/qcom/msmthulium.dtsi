@@ -1799,6 +1799,20 @@
 		memory-region = <&peripheral_mem>;
 	};
 
+	qcom,cnss {
+		compatible = "qcom,cnss";
+		wlan-bootstrap-gpio = <&tlmm 46 0>;
+		wlan-en-gpio = <&pm8994_gpios 8 0>;
+		vdd-wlan-supply = <&rome_vreg>;
+		vdd-wlan-io-supply = <&pm8994_s4>;
+		vdd-wlan-xtal-supply = <&pm8994_l30>;
+		qcom,notify-modem-status;
+		pinctrl-names = "default";
+		pinctrl-0 = <&cnss_default>;
+		qcom,wlan-rc-num = <0>;
+		qcom,wlan-ramdump-dynamic = <0x200000>;
+	};
+
 	qcom,ssc@1c00000 {
 		compatible = "qcom,pil-tz-generic";
 		reg = <0x1c00000 0x4000>;
