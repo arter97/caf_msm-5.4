@@ -816,7 +816,10 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 
 	mdp3_ctrl_clk_enable(mfd, 1);
 
+	/* PP related programming for ctrl off */
 	mdp3_histogram_stop(mdp3_session, MDP_BLOCK_DMA_P);
+	mdp3_session->dma->ccs_config.ccs_dirty = false;
+	mdp3_session->dma->lut_config.lut_dirty = false;
 
 	if (panel->event_handler)
 		rc = panel->event_handler(panel, MDSS_EVENT_BLANK, NULL);
@@ -1191,9 +1194,9 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 	}
 
 	mdp3_session->vsync_before_commit = 0;
-	if ((!splash_done && (panel && panel->set_backlight)) ||
-					mdp3_session->esd_recovery == true ) {
-		panel->set_backlight(panel, panel->panel_info.bl_max);
+	if (!splash_done || mdp3_session->esd_recovery == true) {
+		if(panel && panel->set_backlight)
+			panel->set_backlight(panel, panel->panel_info.bl_max);
 		splash_done = true;
 		mdp3_session->esd_recovery = false;
 	}
@@ -1294,9 +1297,9 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 
 	mdp3_session->vsync_before_commit = 0;
 	panel = mdp3_session->panel;
-	if ((!splash_done && (panel && panel->set_backlight)) ||
-				mdp3_session->esd_recovery == true ) {
-		panel->set_backlight(panel, panel->panel_info.bl_max);
+	if (!splash_done || mdp3_session->esd_recovery == true) {
+		if(panel && panel->set_backlight)
+			panel->set_backlight(panel, panel->panel_info.bl_max);
 		splash_done = true;
 		mdp3_session->esd_recovery = false;
 	}

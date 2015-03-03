@@ -39,6 +39,11 @@
 #define MDP_PPP_MAX_READ_WRITE 3
 #define ENABLE_SOLID_FILL	0x2
 #define DISABLE_SOLID_FILL	0x0
+#define BLEND_LATENCY		3
+#define CSC_LATENCY		1
+
+#define CLK_FUDGE_NUM		12
+#define CLK_FUDGE_DEN		10
 
 struct ppp_resource ppp_res;
 
@@ -348,30 +353,6 @@ void mdp3_ppp_kickoff(void)
 	mdp3_irq_disable(MDP3_PPP_DONE);
 }
 
-u32 mdp3_clk_calc(struct msm_fb_data_type *mfd, struct blit_req_list *lreq)
-{
-	struct mdss_panel_info *panel_info = mfd->panel_info;
-	int i, lcount = 0;
-	struct mdp_blit_req *req;
-	u32 total_pixel;
-	u32 mdp_clk_rate = MDP_CORE_CLK_RATE_SVS;
-
-	total_pixel = panel_info->xres * panel_info->yres;
-	if (total_pixel > SVS_MAX_PIXEL)
-		return MDP_CORE_CLK_RATE_MAX;
-
-	for (i = 0; i < lcount; i++) {
-		req = &(lreq->req_list[i]);
-
-		if (req->src_rect.h != req->dst_rect.h ||
-				req->src_rect.w != req->dst_rect.w) {
-			mdp_clk_rate = MDP_CORE_CLK_RATE_MAX;
-			break;
-		}
-	}
-	return mdp_clk_rate;
-}
-
 struct bpp_info {
 	int bpp_num;
 	int bpp_den;
@@ -428,6 +409,88 @@ int mdp3_get_bpp_info(int format, struct bpp_info *bpp)
 		rc = -EINVAL;
 	}
 	return rc;
+}
+
+bool mdp3_is_blend(struct mdp_blit_req *req)
+{
+	if ((req->transp_mask != MDP_TRANSP_NOP) ||
+		(req->alpha < MDP_ALPHA_NOP) ||
+		(req->src.format == MDP_ARGB_8888) ||
+		(req->src.format == MDP_BGRA_8888) ||
+		(req->src.format == MDP_RGBA_8888))
+		return true;
+	return false;
+}
+
+bool mdp3_is_scale(struct mdp_blit_req *req)
+{
+	if (req->flags & MDP_ROT_90) {
+		if (req->src_rect.w != req->dst_rect.h ||
+			req->src_rect.h != req->dst_rect.w)
+			return true;
+	} else {
+		if (req->src_rect.h != req->dst_rect.h ||
+			req->src_rect.w != req->dst_rect.w)
+			return true;
+	}
+	return false;
+}
+
+u32 mdp3_clk_calc(struct msm_fb_data_type *mfd,
+				struct blit_req_list *lreq, u32 fps)
+{
+	int i, lcount = 0;
+	struct mdp_blit_req *req;
+	u32 mdp_clk_rate = 0;
+	u32 scale_x = 0, scale_y = 0, scale = 0;
+	u32 blend_l, csc_l;
+
+	lcount = lreq->count;
+
+	blend_l = 100 * BLEND_LATENCY;
+	csc_l = 100 * CSC_LATENCY;
+
+	for (i = 0; i < lcount; i++) {
+		req = &(lreq->req_list[i]);
+
+		if (req->flags & MDP_SMART_BLIT)
+			continue;
+
+		if (mdp3_is_scale(req)) {
+			if (req->flags & MDP_ROT_90) {
+				scale_x = 100 * req->src_rect.h /
+							req->dst_rect.w;
+				scale_y = 100 * req->src_rect.w /
+							req->dst_rect.h;
+			} else {
+				scale_x = 100 * req->src_rect.w /
+							req->dst_rect.w;
+				scale_y = 100 * req->src_rect.h /
+							req->dst_rect.h;
+			}
+			scale = max(scale_x, scale_y);
+			scale = scale >= 100 ? scale : 100;
+		}
+		if (mdp3_is_blend(req))
+			scale = max(scale, blend_l);
+
+		if (!check_if_rgb(req->src.format))
+			scale = max(scale, csc_l);
+
+		mdp_clk_rate += (req->src_rect.w * req->src_rect.h *
+							scale / 100) * fps;
+	}
+	mdp_clk_rate = (CLK_FUDGE_NUM * mdp_clk_rate) / CLK_FUDGE_DEN;
+	pr_debug("mdp_clk_rate for ppp = %d\n", mdp_clk_rate);
+
+	if (mdp_clk_rate < MDP_CORE_CLK_RATE_SVS)
+		mdp_clk_rate = MDP_CORE_CLK_RATE_SVS;
+	else if (mdp_clk_rate < MDP_CORE_CLK_RATE_SUPER_SVS)
+		mdp_clk_rate = MDP_CORE_CLK_RATE_SUPER_SVS;
+	else
+		mdp_clk_rate = MDP_CORE_CLK_RATE_MAX;
+
+	return mdp_clk_rate;
 }
 
 u64 mdp3_adjust_scale_factor(struct mdp_blit_req *req, u32 bw_req, int bpp)
@@ -536,10 +599,9 @@ int mdp3_calc_ppp_res(struct msm_fb_data_type *mfd,  struct blit_req_list *lreq)
                 }
 	}
 
-	if (fps != 0)
-		honest_ppp_ab = honest_ppp_ab * fps;
-	else
-		honest_ppp_ab = honest_ppp_ab * panel_info->mipi.frame_rate;
+	if (fps == 0)
+		fps = panel_info->mipi.frame_rate;
+	honest_ppp_ab = honest_ppp_ab * fps;
 
 	if (honest_ppp_ab != ppp_res.next_ab) {
 		pr_debug("bandwidth vote update for ppp: ab = %llx\n",
@@ -549,7 +611,7 @@ int mdp3_calc_ppp_res(struct msm_fb_data_type *mfd,  struct blit_req_list *lreq)
 		ppp_stat->bw_update = true;
 		ATRACE_INT("mdp3_ppp_bus_quota", honest_ppp_ab);
 	}
-	ppp_res.clk_rate = mdp3_clk_calc(mfd, lreq);
+	ppp_res.clk_rate = mdp3_clk_calc(mfd, lreq, fps);
 	ATRACE_INT("mdp3_ppp_clk_rate", ppp_res.clk_rate);
 	ATRACE_END(__func__);
 	return 0;
@@ -1215,24 +1277,89 @@ static void mdp3_free_bw_wq_handler(struct work_struct *work)
 	mutex_unlock(&ppp_stat->config_ppp_mutex);
 }
 
+static bool is_hw_workaround_needed(struct mdp_blit_req req)
+{
+	bool result = false;
+	bool is_bpp_4 = false;
+	uint32_t remainder = 0;
+	uint32_t bpp = ppp_get_bpp(req.dst.format, ppp_stat->mfd->fb_imgType);
+
+	/* MDP width split workaround */
+	remainder = (req.dst_rect.w) % 16;
+	is_bpp_4 = (bpp == 4) ? 1 : 0;
+	if ((is_bpp_4 && (remainder == 6 || remainder == 14)) &&
+		!(req.flags & MDP_SOLID_FILL))
+		result = true;
+
+	/* bg tile fetching HW workaround */
+	if (((req.alpha < MDP_ALPHA_NOP) ||
+		(req.transp_mask != MDP_TRANSP_NOP) ||
+		(req.src.format == MDP_ARGB_8888) ||
+		(req.src.format == MDP_BGRA_8888) ||
+		(req.src.format == MDP_RGBA_8888)) &&
+		(req.flags & MDP_ROT_90) && (req.dst_rect.w <= 16))
+		result = true;
+
+	return result;
+}
+
+static bool is_roi_equal(struct mdp_blit_req req0,
+		 struct mdp_blit_req req1)
+{
+	bool result = false;
+
+	/*
+	 * Check req0 and req1 layer destination ROI and return true if
+	 * they are equal.
+	 */
+	if ((req0.dst_rect.x == req1.dst_rect.x) &&
+		(req0.dst_rect.y == req1.dst_rect.y) &&
+		(req0.dst_rect.w == req1.dst_rect.w) &&
+		(req0.dst_rect.h == req1.dst_rect.h))
+		result = true;
+	return result;
+}
+
+static bool is_scaling_needed(struct mdp_blit_req req)
+{
+	bool result = true;
+
+	/* Return ture if req layer need scaling else return false. */
+	if ((req.src_rect.w == req.dst_rect.w) &&
+		(req.src_rect.h == req.dst_rect.h))
+		result = false;
+	return result;
+}
+
 static bool is_blit_optimization_possible(struct blit_req_list *req, int indx)
 {
 	int next = indx + 1;
 	bool status = false;
+	struct mdp3_img_data tmp_data;
+	bool dst_roi_equal = false;
+	bool hw_woraround_active = false;
+	struct mdp_blit_req bg_req;
+	struct mdp_blit_req fg_req;
 
 	if (!(mdp3_res->smart_blit_en)) {
 		pr_debug("Smart BLIT disabled from sysfs\n");
 		return status;
 	}
 	if (next < req->count) {
+		bg_req = req->req_list[indx];
+		fg_req = req->req_list[next];
+		hw_woraround_active = is_hw_workaround_needed(bg_req);
+		dst_roi_equal = is_roi_equal(bg_req, fg_req);
 		/*
-		 * Check userspace Smart BLIT Flag for current and next request
-		 * Flag for smart blit FG layer index If blit request at index "n" has
-		 * MDP_SMART_BLIT flag set then it will be used as BG layer in smart blit
+		 * Check userspace Smart BLIT Flag for current and next
+		 * request Flag for smart blit FG layer index If blit
+		 * request at index "n" has MDP_SMART_BLIT flag set then
+		 * it will be used as BG layer in smart blit
 		 * and request at index "n+1" will be used as FG layer
 		 */
-		if ((req->req_list[indx].flags & MDP_SMART_BLIT) &&
-		(!(req->req_list[next].flags & MDP_SMART_BLIT)))
+		if ((bg_req.flags & MDP_SMART_BLIT) &&
+		(!(fg_req.flags & MDP_SMART_BLIT)) &&
+		(!(hw_woraround_active)))
 			status = true;
 		/*
 		 * Enable SMART blit between request 0(BG) & request 1(FG) when
@@ -1241,22 +1368,57 @@ static bool is_blit_optimization_possible(struct blit_req_list *req, int indx)
 		 * No rotation on BG Layer.
 		 * BG Layer color format is RGB and marked as MDP_IS_FG.
 		 */
-		else if ((req->req_list[indx].flags & MDP_IS_FG) &&
-			(indx == 0) && (!(req->req_list[indx].flags &
-			(MDP_ROT_90 | MDP_FLIP_UD | MDP_FLIP_LR))) &&
-			(check_if_rgb(req->req_list[indx].src.format)) &&
-			(req->req_list[indx].dst_rect.x == req->req_list[next].dst_rect.x) &&
-			(req->req_list[indx].dst_rect.y == req->req_list[next].dst_rect.y) &&
-			(req->req_list[indx].dst_rect.w == req->req_list[next].dst_rect.w) &&
-			(req->req_list[indx].dst_rect.h == req->req_list[next].dst_rect.h) &&
-			(req->req_list[indx].dst_rect.w == req->req_list[indx].src_rect.w) &&
-			(req->req_list[indx].dst_rect.h == req->req_list[indx].src_rect.h)) {
+		else if ((mdp3_res->smart_blit_en & SMART_BLIT_RGB_EN) &&
+			(indx == 0) && (dst_roi_equal) &&
+			(bg_req.flags & MDP_IS_FG) &&
+			(!(is_scaling_needed(bg_req))) &&
+			(!(bg_req.flags & (MDP_ROT_90))) &&
+			(check_if_rgb(bg_req.src.format)) &&
+			(!(hw_woraround_active))) {
+			status = true;
+			req->req_list[indx].flags |= MDP_SMART_BLIT;
+			pr_debug("Optimize RGB Blit for Req Indx %d\n", indx);
+		}
+		/*
+		 * Swap BG and FG layer to enable SMART blit between request
+		 * 0(BG) & request 1(FG) when destination ROI of BG and FG
+		 * layer are same, No scaling on FG and BG layer
+		 * No rotation on FG Layer. BG Layer color format is YUV
+		 */
+		else if ((indx == 0) &&
+			(mdp3_res->smart_blit_en & SMART_BLIT_YUV_EN) &&
+			(!(fg_req.flags & (MDP_ROT_90))) && (dst_roi_equal) &&
+			(!(check_if_rgb(bg_req.src.format))) &&
+			(!(hw_woraround_active))) {
+			/*
+			 * swap blit requests at index 0 and 1. YUV layer at
+			 * index 0 is replaced with UI layer request present
+			 * at index 1. Since UI layer will be in  background
+			 * set IS_FG flag and clear it from YUV layer flags
+			 */
+			if (!(is_scaling_needed(req->req_list[next]))) {
+				if (bg_req.flags & MDP_IS_FG) {
+					req->req_list[indx].flags &= ~MDP_IS_FG;
+					req->req_list[next].flags |= MDP_IS_FG;
+				}
+				bg_req = req->req_list[next];
+				req->req_list[next] = req->req_list[indx];
+				req->req_list[indx] = bg_req;
+
+				tmp_data = req->src_data[next];
+				req->src_data[next] = req->src_data[indx];
+				req->src_data[indx] = tmp_data;
+
+				tmp_data = req->dst_data[next];
+				req->dst_data[next] = req->dst_data[indx];
+				req->dst_data[indx] = tmp_data;
 				status = true;
 				req->req_list[indx].flags |= MDP_SMART_BLIT;
+				pr_debug("Optimize YUV Blit for Req Indx %d\n",
+					indx);
 			}
 		}
-	if (status)
-		pr_debug("Optimize Blit for Layer: %d Req Count %d\n", indx, req->count) ;
+	}
 	return status;
 }
 

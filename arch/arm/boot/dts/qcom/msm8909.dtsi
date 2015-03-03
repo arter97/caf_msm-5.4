@@ -102,7 +102,7 @@
 			linux,reserve-contiguous-region;
 			linux,reserve-region;
 			linux,remove-completely;
-			reg = <0x0 0x8d500000 0x0 0x0600000>;
+			reg = <0x0 0x8d500000 0x0 0x0500000>;
 			label = "peripheral_mem";
 		};
 
@@ -483,7 +483,6 @@
 		clock-names = "core_clk", "core0_clk", "iface_clk", "bus_clk";
 		qcom,clock-configs = <0x1 0x0 0x0 0x0>;
 		qcom,sw-power-collapse;
-		qcom,enable-minimum-voting;
 		qcom,load-freq-tbl =
 			<244800 266670000 0xffffffff>, /* 1080p@30 Decode */
 			<244800 307200000 0x55555555>, /* 1080p@30 Encode */
@@ -551,6 +550,17 @@
 					<63 512 758800 0>, /* 720p 60 fps */
 					<63 512 758800 0>; /* 1080p 30 fps */
 				qcom,bus-configs = <0x0f00000c>;
+			};
+
+			qcom,msm-bus-client@2 {
+				qcom,msm-bus,name = "venus-arm9-ddr";
+				qcom,msm-bus,num-cases = <2>;
+				qcom,msm-bus,num-paths = <1>;
+				qcom,msm-bus,vectors-KBps =
+					<63 512 0 0>,
+					<63 512 1000 1000>;
+				qcom,bus-configs = <0x00000000>;
+				qcom,bus-passive;
 			};
 		};
 	};
@@ -1059,6 +1069,11 @@
 			reg = <0x10 8>;
 		};
 
+		boot_stats@6b0 {
+			compatible = "qcom,msm-imem-boot_stats";
+			reg = <0x6b0 32>;
+		};
+
 		pil@94c {
 			compatible = "qcom,msm-imem-pil";
 			reg = <0x94c 200>;
@@ -1068,6 +1083,12 @@
 			compatible = "qcom,msm-imem-restart_reason";
 			reg = <0x65c 4>;
 		};
+	};
+
+	qcom,mpm2-sleep-counter@4a3000 {
+		compatible = "qcom,mpm2-sleep-counter";
+		reg = <0x4a3000 0x1000>;
+		clock-frequency = <32768>;
 	};
 
 	spi_0: spi@78ba000 { /* BLSP1 QUP6 */

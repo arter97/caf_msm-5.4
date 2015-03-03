@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -392,19 +392,13 @@ static const struct i2c_msm_qup_reg_dump i2c_msm_qup_reg_dump_map[] = {
 };
 
 const char *i2c_msm_err_str_table[] = {
-	[I2C_MSM_ERR_NACK] =
-		 "NACK: slave not responding, ensure its powered",
-	[I2C_MSM_ERR_ARB_LOST] = "arb_lost",
-	[I2C_MSM_ERR_BUS_ERR] =
-		"BUS ERROR : noisy bus or unexpected start/stop tag",
-	[I2C_MSM_ERR_TIMEOUT] = "",
-	[I2C_MSM_ERR_CORE_CLK] = "CLOCK OFF : Check Core Clock",
+	[I2C_MSM_NO_ERR]     = "NONE",
+	[I2C_MSM_ERR_NACK]   = "NACK: slave not responding, ensure its powered",
+	[I2C_MSM_ERR_ARB_LOST] = "ARB_LOST",
+	[I2C_MSM_ERR_BUS_ERR] = "BUS ERROR:noisy bus/unexpected start/stop tag",
+	[I2C_MSM_ERR_TIMEOUT]  = "TIMEOUT_ERROR",
+	[I2C_MSM_ERR_CORE_CLK] = "CLOCK OFF: Check Core Clock",
 	[I2C_MSM_ERR_OVR_UNDR_RUN] = "OVER_UNDER_RUN_ERROR",
-	[I2C_MSM_ERR_INVALID_WRITE] = "invalid data write",
-	[I2C_MSM_ERR_INVALID_TAG] = "invalid tag",
-	[I2C_MSM_ERR_INVALID_READ_ADDR] = "Invalid slave addr",
-	[I2C_MSM_ERR_INVALID_READ_SEQ] = "start tag error for read",
-	[I2C_MSM_ERR_FAILED] = "I2C transfer failed",
 };
 /*
  * see: struct i2c_msm_qup_reg_dump for more
@@ -431,41 +425,30 @@ static void i2c_msm_dbg_dump_diag(struct i2c_msm_ctrl *ctrl,
 				bool use_param_vals, u32 status, u32 qup_op)
 {
 	struct i2c_msm_xfer *xfer = &ctrl->xfer;
-	char str[I2C_MSM_MAX_ERR_BUF_SZ] = {'\0'};
-	char *p_str = str;
-	const char **diag_msg = i2c_msm_err_str_table;
-	int err = xfer->err;
+	const char *str = i2c_msm_err_str_table[xfer->err];
+	char buf[I2C_MSM_REG_2_STR_BUF_SZ];
 
 	if (!use_param_vals) {
 		void __iomem        *base = ctrl->rsrcs.base;
 		status = readl_relaxed(base + QUP_I2C_STATUS);
 		qup_op = readl_relaxed(base + QUP_OPERATIONAL);
 	}
-	if ((err & BIT(I2C_MSM_ERR_TIMEOUT))) {
+
+	if (xfer->err == I2C_MSM_ERR_TIMEOUT) {
 		/*
-		 * if we are not the bus master or SDA/SCL is
-		 * low then it may be that slave is pulling the
-		 * lines low. Otherwise it is likely a GPIO
-		 * issue
+		 * if we are not the bus master or SDA/SCL is low then it may be
+		 * that slave is pulling the lines low. Otherwise it is likely a
+		 * GPIO issue
 		 */
 		if (!(status & QUP_BUS_MASTER))
-			p_str += snprintf(p_str,
-				I2C_MSM_MAX_ERR_BUF_SZ,
-	"TIMEOUT(val:%dmsec) check GPIO config if SDA/SCL line(s) low, ",
-			jiffies_to_msecs(xfer->timeout));
+			snprintf(buf, I2C_MSM_REG_2_STR_BUF_SZ,
+				"%s(val:%dmsec) misconfigured GPIO or slave pulling bus line(s) low\n",
+				str, jiffies_to_msecs(xfer->timeout));
 		 else
-			p_str += snprintf(p_str,
-				I2C_MSM_MAX_ERR_BUF_SZ,
-			"TIMEOUT(val:%dmsec), ",
-			jiffies_to_msecs(xfer->timeout));
-	}
+			snprintf(buf, I2C_MSM_REG_2_STR_BUF_SZ,
+			"%s(val:%dmsec)", str, jiffies_to_msecs(xfer->timeout));
 
-	for (; err; err >>= 1, ++diag_msg) {
-
-		if (err & 1)
-			p_str += snprintf(p_str,
-			(I2C_MSM_MAX_ERR_BUF_SZ - (p_str - str)),
-			 "%s, ", *diag_msg);
+		str = buf;
 	}
 
 	/* dump xfer details */
@@ -845,8 +828,6 @@ static void i2c_msm_prof_evnt_dump(struct i2c_msm_ctrl *ctrl)
  * @is_new_addr Is start tag required? (which requires two more bytes.)
  * @is_last     Use the XXXXX_N_STOP tag varient
  * @is_rx       READ/WRITE
- * workaround! Due to an HW issues, a stop is issued after every read.
- *    QUP_TAG2_DATA_READ is replaced by QUP_TAG2_DATA_READ_N_STOP.
  */
 static const struct i2c_msm_tag tag_lookup_table[2][2][2] = {
 	{{{QUP_TAG2_DATA_WRITE                                   , 2},
@@ -892,9 +873,6 @@ i2c_msm_qup_state_wait_valid(struct i2c_msm_ctrl *ctrl,
 {
 	u32 status;
 	void __iomem  *base     = ctrl->rsrcs.base;
-	unsigned long  start   = jiffies;
-	unsigned long  timeout = start +
-				 msecs_to_jiffies(I2C_MSM_MAX_POLL_MSEC);
 	int ret      = 0;
 	int read_cnt = 0;
 
@@ -916,7 +894,14 @@ i2c_msm_qup_state_wait_valid(struct i2c_msm_ctrl *ctrl,
 				goto poll_valid_end;
 		}
 
-	} while (time_before_eq(jiffies, timeout));
+		/*
+		 * Sleeping for 1-1.5 ms for every 100 iterations and break if
+		 * iterations crosses the 1500 marks allows roughly 10-15 msec
+		 * of time to get the core to valid state.
+		 */
+		if (!(read_cnt % 100))
+			usleep_range(1000, 1500);
+	} while (read_cnt <= 1500);
 
 	ret = -ETIMEDOUT;
 	dev_err(ctrl->dev,
@@ -959,7 +944,7 @@ static int i2c_msm_qup_sw_reset(struct i2c_msm_ctrl *ctrl)
 	ret = i2c_msm_qup_state_wait_valid(ctrl, QUP_STATE_RESET, false);
 	if (ret) {
 		if (atomic_read(&ctrl->xfer.is_active))
-			ctrl->xfer.err |= BIT(I2C_MSM_ERR_CORE_CLK);
+			ctrl->xfer.err = I2C_MSM_ERR_CORE_CLK;
 		dev_err(ctrl->dev, "error on issuing QUP software-reset\n");
 	}
 	return ret;
@@ -1081,36 +1066,51 @@ static struct i2c_msm_clk_div_fld i2c_msm_clk_div_map[] = {
 	{KHz(1000),  8,  5},
 };
 
-/* @return zero on success */
-static int i2c_msm_set_mstr_clk_ctl(struct i2c_msm_ctrl *ctrl)
+/*
+ * @return zero on success
+ * @fs_div when zero use value from table above, otherwise use given value
+ * @ht_div when zero use value from table above, otherwise use given value
+ *
+ * Format the value to be configured into the clock divider register. This
+ * register is configured every time core is moved from reset to run state.
+ */
+static int i2c_msm_set_mstr_clk_ctl(struct i2c_msm_ctrl *ctrl, int fs_div,
+			int ht_div, int noise_rjct_scl, int noise_rjct_sda)
 {
-	int fs_div = 0;
-	int ht_div = 0;
-	bool match = false;
+	int ret = 0;
 	int i;
 	u32 reg_val = 0;
 	struct i2c_msm_clk_div_fld *itr = i2c_msm_clk_div_map;
 
 	/* set noise rejection values for scl and sda */
-	reg_val = I2C_MSM_SCL_NOISE_REJECTION(reg_val, ctrl->noise_rjct_scl);
-	reg_val = I2C_MSM_SDA_NOISE_REJECTION(reg_val, ctrl->noise_rjct_sda);
+	reg_val = I2C_MSM_SCL_NOISE_REJECTION(reg_val, noise_rjct_scl);
+	reg_val = I2C_MSM_SDA_NOISE_REJECTION(reg_val, noise_rjct_sda);
 
-	/* set divider values */
+	/*
+	 * find matching freq and set divider values unless they are forced
+	 * from parametr list
+	 */
 	for (i = 0; i < ARRAY_SIZE(i2c_msm_clk_div_map); ++i, ++itr) {
 		if (ctrl->rsrcs.clk_freq_out == itr->clk_freq_out) {
-			fs_div = itr->fs_div;
-			ht_div = itr->ht_div;
-			match  = true;
+			if (!fs_div)
+				fs_div = itr->fs_div;
+			if (!ht_div)
+				ht_div = itr->ht_div;
 			break;
 		}
 	}
-	ctrl->mstr_clk_ctl = (reg_val & (~0xff07ff)) | ((ht_div & 0xff) << 16)
-				|(fs_div & 0xff);
+	if (!fs_div) {
+		dev_err(ctrl->dev, "For non-standard clock freq:%dKHz\n"
+		"clk divider value fs_div should be supply by client through\n"
+		"device tree\n", (ctrl->rsrcs.clk_freq_out / 1000));
+		return -EINVAL;
+	}
 
-	if (!match)
-		dev_err(ctrl->dev, "error clock frequency %dKHz is not supported\n"
-					, (ctrl->rsrcs.clk_freq_out / 1000));
-	return !match;
+	/* format values in clk-ctl cache */
+	ctrl->mstr_clk_ctl = (reg_val & (~0xff07ff)) | ((ht_div & 0xff) << 16)
+							|(fs_div & 0xff);
+
+	return ret;
 }
 
 /*
@@ -2687,35 +2687,23 @@ static irqreturn_t i2c_msm_qup_isr(int irq, void *devid)
 	if (i2c_status & QUP_MSTR_STTS_ERR_MASK) {
 		signal_complete = true;
 		log_event       = true;
-
-		if (i2c_status & QUP_PACKET_NACKED)
-			ctrl->xfer.err |= BIT(I2C_MSM_ERR_NACK);
-
+		/*
+		 * If there is more than 1 error here, last one sticks.
+		 * The order of the error set here matters.
+		 */
 		if (i2c_status & QUP_ARB_LOST)
-			ctrl->xfer.err |= BIT(I2C_MSM_ERR_ARB_LOST);
+			ctrl->xfer.err = I2C_MSM_ERR_ARB_LOST;
 
 		if (i2c_status & QUP_BUS_ERROR)
-			ctrl->xfer.err |= BIT(I2C_MSM_ERR_BUS_ERR);
+			ctrl->xfer.err = I2C_MSM_ERR_BUS_ERR;
 
-		if (i2c_status & QUP_INVALID_WRITE)
-			ctrl->xfer.err |= BIT(I2C_MSM_ERR_INVALID_WRITE);
-
-		if (i2c_status & QUP_INVALID_TAG)
-			ctrl->xfer.err |= BIT(I2C_MSM_ERR_INVALID_TAG);
-
-		if (i2c_status & QUP_INVALID_READ_ADDR)
-			ctrl->xfer.err |= BIT(I2C_MSM_ERR_INVALID_READ_ADDR);
-
-		if (i2c_status & QUP_INVALID_READ_SEQ)
-			ctrl->xfer.err |= BIT(I2C_MSM_ERR_INVALID_READ_SEQ);
-
-		if (i2c_status & QUP_FAILED)
-			ctrl->xfer.err |= BIT(I2C_MSM_ERR_FAILED);
+		if (i2c_status & QUP_PACKET_NACKED)
+			ctrl->xfer.err = I2C_MSM_ERR_NACK;
 	}
 
 	/* check for FIFO over/under runs error */
 	if (err_flags & QUP_ERR_FLGS_MASK)
-		ctrl->xfer.err = BIT(I2C_MSM_ERR_OVR_UNDR_RUN);
+		ctrl->xfer.err = I2C_MSM_ERR_OVR_UNDR_RUN;
 
 	/* Dump the register values before reset the core */
 	if (ctrl->xfer.err && ctrl->dbgfs.dbg_lvl >= MSM_DBG)
@@ -2740,22 +2728,34 @@ static irqreturn_t i2c_msm_qup_isr(int irq, void *devid)
 		need_wmb = true;
 	}
 
+	if (need_wmb)
+		/*
+		 * flush writes that clear the interrupt flags before changing
+		 * state to reset.
+		 */
+		wmb();
+
 	/* Reset and bail out on error */
 	if (ctrl->xfer.err) {
 
 		/* Flush for the tags in case of an error and BAM Mode*/
-		if (ctrl->xfer.mode_id == I2C_MSM_XFER_MODE_BAM)
+		if (ctrl->xfer.mode_id == I2C_MSM_XFER_MODE_BAM) {
 			writel_relaxed(QUP_I2C_FLUSH, ctrl->rsrcs.base
 								+ QUP_STATE);
+			/*
+			 * Ensure that QUP_I2C_FLUSH is written before
+			 * State reset
+			 */
+			wmb();
+		}
 
 		/* HW workaround: when interrupt is level triggerd, more
 		 * than one interrupt may fire in error cases. Thus we
-		 * resetting the QUP core state immediately in the ISR
-		 * to ward off the next interrupt.
+		 * change the QUP core state to Reset immediately in the
+		 * ISR to ward off the next interrupt.
 		 */
-		i2c_msm_qup_state_set(ctrl, QUP_STATE_RESET);
+		writel_relaxed(QUP_STATE_RESET, ctrl->rsrcs.base + QUP_STATE);
 
-		need_wmb        = true;
 		signal_complete = true;
 		log_event       = true;
 		goto isr_end;
@@ -2816,10 +2816,6 @@ static irqreturn_t i2c_msm_qup_isr(int irq, void *devid)
 	}
 
 isr_end:
-	/* Ensure that QUP configuration is written before leaving this func */
-	if (need_wmb)
-		wmb();
-
 	if (ctrl->xfer.err || (ctrl->dbgfs.dbg_lvl >= MSM_DBG))
 		i2c_msm_dbg_dump_diag(ctrl, true, i2c_status, qup_op);
 
@@ -2869,9 +2865,7 @@ static int i2c_msm_qup_init(struct i2c_msm_ctrl *ctrl)
 	i2c_msm_qup_sw_reset(ctrl);
 	i2c_msm_qup_state_set(ctrl, QUP_STATE_RESET);
 
-	writel_relaxed(QUP_APP_CLK_ON_EN | QUP_CORE_CLK_ON_EN |
-				QUP_FIFO_CLK_GATE_EN,
-				base + QUP_CONFIG);
+	writel_relaxed(QUP_N_VAL | QUP_MINI_CORE_I2C_VAL, base + QUP_CONFIG);
 
 	writel_relaxed(QUP_OUTPUT_OVER_RUN_ERR_EN | QUP_INPUT_UNDER_RUN_ERR_EN
 		     | QUP_OUTPUT_UNDER_RUN_ERR_EN | QUP_INPUT_OVER_RUN_ERR_EN,
@@ -2980,9 +2974,9 @@ static int i2c_msm_qup_post_xfer(struct i2c_msm_ctrl *ctrl, int err)
 {
 	/* poll until bus is released */
 	if (i2c_msm_qup_poll_bus_active_unset(ctrl)) {
-		if ((ctrl->xfer.err & BIT(I2C_MSM_ERR_ARB_LOST)) ||
-		    (ctrl->xfer.err & BIT(I2C_MSM_ERR_BUS_ERR)) ||
-		    (ctrl->xfer.err & BIT(I2C_MSM_ERR_TIMEOUT))) {
+		if ((ctrl->xfer.err == I2C_MSM_ERR_ARB_LOST) ||
+		    (ctrl->xfer.err == I2C_MSM_ERR_BUS_ERR)  ||
+		    (ctrl->xfer.err == I2C_MSM_ERR_TIMEOUT)) {
 			if (i2c_msm_qup_slv_holds_bus(ctrl))
 				qup_i2c_recover_bus_busy(ctrl);
 
@@ -2992,27 +2986,28 @@ static int i2c_msm_qup_post_xfer(struct i2c_msm_ctrl *ctrl, int err)
 		}
 	}
 
-	/* flush bam data and reset the qup core in timeout error.
+	/*
+	 * Disable the IRQ before change to reset state to avoid
+	 * spurious interrupts.
+	 *
+	 */
+	disable_irq(ctrl->rsrcs.irq);
+
+	/* flush dma data and reset the qup core in timeout error.
 	 * for other error case, its handled by the ISR
 	 */
-	if (ctrl->xfer.err & BIT(I2C_MSM_ERR_TIMEOUT)) {
+	if (ctrl->xfer.err == I2C_MSM_ERR_TIMEOUT) {
 		/* Flush for the BAM registers */
 		if (ctrl->xfer.mode_id == I2C_MSM_XFER_MODE_BAM)
 			writel_relaxed(QUP_I2C_FLUSH, ctrl->rsrcs.base
 								+ QUP_STATE);
 
-		/* reset the sw core */
-		i2c_msm_qup_sw_reset(ctrl);
+		/* reset the qup core */
+		i2c_msm_qup_state_set(ctrl, QUP_STATE_RESET);
 		err = -ETIMEDOUT;
-	}
-
-	if (ctrl->xfer.err & BIT(I2C_MSM_ERR_BUS_ERR)) {
-		if (!err)
-			err = -EIO;
-	}
-
-	if (ctrl->xfer.err & BIT(I2C_MSM_ERR_NACK))
+	} else if (ctrl->xfer.err == I2C_MSM_ERR_NACK) {
 		err = -ENOTCONN;
+	}
 
 	return err;
 }
@@ -3117,7 +3112,7 @@ static int i2c_msm_xfer_wait_for_completion(struct i2c_msm_ctrl *ctrl,
 
 	time_left = wait_for_completion_timeout(complete, xfer->timeout);
 	if (!time_left) {
-		xfer->err |= BIT(I2C_MSM_ERR_TIMEOUT);
+		xfer->err = I2C_MSM_ERR_TIMEOUT;
 		i2c_msm_dbg_dump_diag(ctrl, false, 0, 0);
 		ret = -EIO;
 		i2c_msm_prof_evnt_add(ctrl, MSM_ERR, i2c_msm_prof_dump_cmplt_fl,
@@ -3293,7 +3288,6 @@ static void i2c_msm_pm_xfer_end(struct i2c_msm_ctrl *ctrl)
 	struct i2c_msm_bam_pipe      *prod = &bam->pipe[I2C_MSM_BAM_PROD];
 	struct i2c_msm_bam_pipe      *cons = &bam->pipe[I2C_MSM_BAM_CONS];
 
-	disable_irq(ctrl->rsrcs.irq);
 
 	atomic_set(&ctrl->xfer.is_active, 0);
 
@@ -3468,14 +3462,17 @@ static int i2c_msm_dt_to_pdata_populate(struct i2c_msm_ctrl *ctrl,
 
 
 /*
- * i2c_msm_rsrcs_dt_to_pdata: copy data from DT to platform data
+ * i2c_msm_rsrcs_process_dt: copy data from DT to platform data
  *
  * @pdata out parameter
  * @return zero on success or negative error code
  */
-static int i2c_msm_rsrcs_dt_to_pdata(struct i2c_msm_ctrl *ctrl,
+static int i2c_msm_rsrcs_process_dt(struct i2c_msm_ctrl *ctrl,
 					struct platform_device *pdev)
 {
+	u32 fs_clk_div, ht_clk_div, noise_rjct_scl, noise_rjct_sda;
+	int ret;
+
 	struct i2c_msm_dt_to_pdata_map map[] = {
 	{"i2c",				&pdev->id,	DT_REQ,  DT_ID,  -1},
 	{"qcom,clk-freq-out",		&ctrl->rsrcs.clk_freq_out,
@@ -3490,13 +3487,24 @@ static int i2c_msm_rsrcs_dt_to_pdata(struct i2c_msm_ctrl *ctrl,
 							DT_OPT,  DT_BOOL, 0},
 	{"qcom,master-id",		&(ctrl->rsrcs.clk_path_vote.mstr_id),
 							DT_SGST, DT_U32,  0},
-	{"qcom,noise-rjct-scl",		&(ctrl->noise_rjct_scl),
+	{"qcom,noise-rjct-scl",		&noise_rjct_scl,
 							DT_OPT,  DT_U32,  0},
-	{"qcom,noise-rjct-sda",		&(ctrl->noise_rjct_sda),
+	{"qcom,noise-rjct-sda",		&noise_rjct_sda,
+							DT_OPT,  DT_U32,  0},
+	{"qcom,high-time-clk-div",	&ht_clk_div,
+							DT_OPT,  DT_U32,  0},
+	{"qcom,fs-clk-div",		&fs_clk_div,
 							DT_OPT,  DT_U32,  0},
 	{NULL,  NULL,					0,       0,       0},
 	};
-	return i2c_msm_dt_to_pdata_populate(ctrl, pdev, map);
+
+	ret = i2c_msm_dt_to_pdata_populate(ctrl, pdev, map);
+	if (ret)
+		return ret;
+
+	/* set divider and noise reject values */
+	return i2c_msm_set_mstr_clk_ctl(ctrl, fs_clk_div, ht_clk_div,
+						noise_rjct_scl, noise_rjct_sda);
 }
 
 /*
@@ -4032,9 +4040,11 @@ static int i2c_msm_probe(struct platform_device *pdev)
 		return -EBADE;
 	}
 
-	ret = i2c_msm_rsrcs_dt_to_pdata(ctrl, pdev);
-	if (ret)
+	ret = i2c_msm_rsrcs_process_dt(ctrl, pdev);
+	if (ret) {
+		dev_err(ctrl->dev, "error in process device tree node");
 		return ret;
+	}
 
 	ret = i2c_msm_rsrcs_mem_init(pdev, ctrl);
 	if (ret)
@@ -4052,11 +4062,6 @@ static int i2c_msm_probe(struct platform_device *pdev)
 		dev_err(ctrl->dev, "error in enabling clocks:%d\n", ret);
 		goto clk_err;
 	}
-
-	/* set divider and noise reject values */
-	ret = i2c_msm_set_mstr_clk_ctl(ctrl);
-	if (ret)
-		goto clk_err;
 
 	ret = i2c_msm_ctrl_ver_detect_and_set(ctrl);
 	if (ret) {
