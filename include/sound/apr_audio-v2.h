@@ -7335,6 +7335,124 @@ enum afe_lpass_clk_mode {
 	Q6AFE_LPASS_MODE_BOTH_VALID,
 } __packed;
 
+/* Clock ID Enumeration Define. */
+/* Clock ID for Primary I2S IBIT */
+#define Q6AFE_LPASS_CLK_ID_PRI_MI2S_IBIT                          0x100
+/* Clock ID for Primary I2S EBIT */
+#define Q6AFE_LPASS_CLK_ID_PRI_MI2S_EBIT                          0x101
+/* Clock ID for Secondary I2S IBIT */
+#define Q6AFE_LPASS_CLK_ID_SEC_MI2S_IBIT                          0x102
+/* Clock ID for Secondary I2S EBIT */
+#define Q6AFE_LPASS_CLK_ID_SEC_MI2S_EBIT                          0x103
+/* Clock ID for Tertiary I2S IBIT */
+#define Q6AFE_LPASS_CLK_ID_TER_MI2S_IBIT                          0x104
+/* Clock ID for Tertiary I2S EBIT */
+#define Q6AFE_LPASS_CLK_ID_TER_MI2S_EBIT                          0x105
+/* Clock ID for Quartnery I2S IBIT */
+#define Q6AFE_LPASS_CLK_ID_QUAD_MI2S_IBIT                         0x106
+/* Clock ID for Quartnery I2S EBIT */
+#define Q6AFE_LPASS_CLK_ID_QUAD_MI2S_EBIT                         0x107
+/* Clock ID for Speaker I2S IBIT */
+#define Q6AFE_LPASS_CLK_ID_SPEAKER_I2S_IBIT                       0x108
+/* Clock ID for Speaker I2S EBIT */
+#define Q6AFE_LPASS_CLK_ID_SPEAKER_I2S_EBIT                       0x109
+/* Clock ID for Speaker I2S OSR */
+#define Q6AFE_LPASS_CLK_ID_SPEAKER_I2S_OSR                        0x10A
+
+/* Clock ID for Primary PCM IBIT */
+#define Q6AFE_LPASS_CLK_ID_PRI_PCM_IBIT                           0x200
+/* Clock ID for Primary PCM EBIT */
+#define Q6AFE_LPASS_CLK_ID_PRI_PCM_EBIT                           0x201
+/* Clock ID for Secondary PCM IBIT */
+#define Q6AFE_LPASS_CLK_ID_SEC_PCM_IBIT                           0x202
+/* Clock ID for Secondary PCM EBIT */
+#define Q6AFE_LPASS_CLK_ID_SEC_PCM_EBIT                           0x203
+/* Clock ID for Tertiary PCM IBIT */
+#define Q6AFE_LPASS_CLK_ID_TER_PCM_IBIT                           0x204
+/* Clock ID for Tertiary PCM EBIT */
+#define Q6AFE_LPASS_CLK_ID_TER_PCM_EBIT                           0x205
+/* Clock ID for Quartery PCM IBIT */
+#define Q6AFE_LPASS_CLK_ID_QUAD_PCM_IBIT                          0x206
+/* Clock ID for Quartery PCM EBIT */
+#define Q6AFE_LPASS_CLK_ID_QUAD_PCM_EBIT                          0x207
+
+/* Clock ID for MCLK1 */
+#define Q6AFE_LPASS_CLK_ID_MCLK_1                                 0x300
+/* Clock ID for MCLK2 */
+#define Q6AFE_LPASS_CLK_ID_MCLK_2                                 0x301
+/* Clock ID for MCLK3 */
+#define Q6AFE_LPASS_CLK_ID_MCLK_3                                 0x302
+/* Clock ID for Internal Digital Codec Core */
+#define Q6AFE_LPASS_CLK_ID_INTERNAL_DIGITAL_CODEC_CORE            0x303
+
+/* Clock ID for AHB HDMI input */
+#define Q6AFE_LPASS_CLK_ID_AHB_HDMI_INPUT                         0x400
+
+/* Clock ID for SPDIF core */
+#define Q6AFE_LPASS_CLK_ID_SPDIF_CORE                             0x500
+
+
+/* Clock attribute for invalid use (reserved for internal usage) */
+#define Q6AFE_LPASS_CLK_ATTRIBUTE_INVALID		0x0
+/* Clock attribute for no couple case */
+#define Q6AFE_LPASS_CLK_ATTRIBUTE_COUPLE_NO		0x1
+/* Clock attribute for dividend couple case */
+#define Q6AFE_LPASS_CLK_ATTRIBUTE_COUPLE_DIVIDEND	0x2
+/* Clock attribute for divisor couple case */
+#define Q6AFE_LPASS_CLK_ATTRIBUTE_COUPLE_DIVISOR	0x3
+
+struct afe_clk_set {
+	/*
+	 * Minor version used for tracking clock set.
+	 *	@values #AFE_API_VERSION_CLOCK_SET
+	 */
+	uint32_t clk_set_minor_version;
+
+	/*
+	 * Clock ID
+	 *	@values
+	 *	- 0x100 to 0x10A - MSM8996
+	 *	- 0x200 to 0x207 - MSM8996
+	 *	- 0x300 to 0x302 - MSM8996 @tablebulletend
+	 */
+	uint32_t clk_id;
+
+	/*
+	 * Clock frequency  (in Hertz) to be set.
+	 *	@values
+	 *	- >= 0 for clock frequency to set @tablebulletend
+	 */
+	uint32_t clk_freq_in_hz;
+
+	/* Use to specific divider for two clocks if needed.
+	 *	Set to Q6AFE_LPASS_CLK_ATTRIBUTE_COUPLE_NO for no divider
+	 *	relation clocks
+	 *	@values
+	 *	- #Q6AFE_LPASS_CLK_ATTRIBUTE_COUPLE_NO
+	 *	- #Q6AFE_LPASS_CLK_ATTRIBUTE_COUPLE_DIVIDEND
+	 *	- #Q6AFE_LPASS_CLK_ATTRIBUTE_COUPLE_DIVISOR @tablebulletend
+	 */
+	uint16_t clk_attri;
+
+	/*
+	 * Specifies the root clock source.
+	 *	Currently, only Q6AFE_LPASS_CLK_ROOT_DEFAULT is valid
+	 *	@values
+	 *	- 0 @tablebulletend
+	 */
+	uint16_t clk_root;
+
+	/*
+	 * for enable and disable clock.
+	 *	"clk_freq_in_hz", "clk_attri", and "clk_root"
+	 *	are ignored in disable clock case.
+	 *	@values 
+	 *	- 0 -- Disabled
+	 *	- 1 -- Enabled  @tablebulletend
+	 */
+	uint32_t enable;
+};
+
 struct afe_clk_cfg {
 /* Minor version used for tracking the version of the I2S
  * configuration interface.
@@ -7372,7 +7490,8 @@ struct afe_clk_cfg {
 
 /* This param id is used to configure I2S clk */
 #define AFE_PARAM_ID_LPAIF_CLK_CONFIG	0x00010238
-
+#define AFE_MODULE_CLOCK_SET		0x0001028F
+#define AFE_PARAM_ID_CLOCK_SET		0x00010290
 
 struct afe_lpass_clk_config_command {
 	struct apr_hdr			 hdr;
@@ -7523,6 +7642,13 @@ struct afe_svc_cmd_set_param {
 	uint32_t mem_map_handle;
 } __packed;
 
+struct afe_svc_param_data {
+	uint32_t module_id;
+	uint32_t param_id;
+	uint16_t param_size;
+	uint16_t reserved;
+} __packed;
+
 struct afe_param_hw_mad_ctrl {
 	uint32_t minor_version;
 	uint16_t mad_type;
@@ -7550,8 +7676,15 @@ struct afe_cmd_sw_mad_enable {
 } __packed;
 
 struct afe_param_cdc_reg_cfg_payload {
-	struct afe_port_param_data_v2 common;
+	struct afe_svc_param_data     common;
 	struct afe_param_cdc_reg_cfg  reg_cfg;
+} __packed;
+
+struct afe_lpass_clk_config_command_v2 {
+	struct apr_hdr			hdr;
+	struct afe_svc_cmd_set_param	param;
+	struct afe_svc_param_data	pdata;
+	struct afe_clk_set		clk_cfg;
 } __packed;
 
 /*
