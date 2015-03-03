@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -599,18 +599,14 @@ struct i2c_msm_prof_event {
 	u8              type;
 };
 
-enum i2c_msm_err_bit_field {
-	I2C_MSM_ERR_NACK = 0,
+enum i2c_msm_err {
+	I2C_MSM_NO_ERR = 0,
+	I2C_MSM_ERR_NACK,
 	I2C_MSM_ERR_ARB_LOST,
 	I2C_MSM_ERR_BUS_ERR,
 	I2C_MSM_ERR_TIMEOUT,
 	I2C_MSM_ERR_CORE_CLK,
 	I2C_MSM_ERR_OVR_UNDR_RUN,
-	I2C_MSM_ERR_INVALID_WRITE,
-	I2C_MSM_ERR_INVALID_TAG,
-	I2C_MSM_ERR_INVALID_READ_ADDR,
-	I2C_MSM_ERR_INVALID_READ_SEQ,
-	I2C_MSM_ERR_FAILED,
 };
 
 /*
@@ -641,7 +637,7 @@ struct i2c_msm_xfer {
 	struct i2c_msm_xfer_buf    cur_buf;
 	u32                        timeout;
 	bool                       last_is_rx;
-	enum i2c_msm_err_bit_field err;
+	enum i2c_msm_err           err;
 	struct i2c_msm_prof_event  event[I2C_MSM_PROF_MAX_EVNTS];
 	atomic_t                   event_cnt;
 	atomic_t                   is_active;
@@ -658,10 +654,6 @@ struct i2c_msm_xfer {
  * @dbgfs    debug-fs root and values that may be set via debug-fs.
  * @rsrcs    resources from platform data including clocks, gpios, irqs, and
  *           memory regions.
- * @noise_rjct_scl noise rejection value for the scl line (a field of
- *           I2C_MASTER_CLK_CTL).
- * @noise_rjct_sda noise rejection value for the sda line (a field of
- *           I2C_MASTER_CLK_CTL).
  * @pdata    the platform data (values from board-file or from device-tree)
  * @mstr_clk_ctl cached value for programming to mstr_clk_ctl register
  */
@@ -672,8 +664,6 @@ struct i2c_msm_ctrl {
 	struct i2c_msm_xfer        xfer;
 	struct i2c_msm_dbgfs       dbgfs;
 	struct i2c_msm_resources   rsrcs;
-	int                        noise_rjct_scl;
-	int                        noise_rjct_sda;
 	u32                        mstr_clk_ctl;
 	struct i2c_msm_v2_platform_data *pdata;
 	enum msm_i2c_power_state   pwr_state;
