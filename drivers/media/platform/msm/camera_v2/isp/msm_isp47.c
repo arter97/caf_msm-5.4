@@ -14,6 +14,7 @@
 #include <linux/qcom_iommu.h>
 #include <linux/ratelimit.h>
 
+
 #include "msm_isp47.h"
 #include "msm_isp_util.h"
 #include "msm_isp_axi_util.h"
@@ -172,6 +173,39 @@ static int msm_vfe47_init_hardware(struct vfe_device *vfe_dev)
 		goto bus_scale_register_failed;
 	}
 
+	if (!vfe_dev->fs_vfe) {
+		vfe_dev->fs_vfe = regulator_get(&vfe_dev->pdev->dev, "vdd");
+		if (IS_ERR(vfe_dev->fs_vfe)) {
+			pr_err("%s: Regulator vfe get failed %ld\n", __func__,
+			PTR_ERR(vfe_dev->fs_vfe));
+			rc = -ENODEV;
+			goto bus_scale_register_failed;
+		}
+	}
+
+	if (!vfe_dev->fs_camss) {
+		vfe_dev->fs_camss = regulator_get(&vfe_dev->pdev->dev,
+			"camss-vdd");
+		if (IS_ERR(vfe_dev->fs_camss)) {
+			pr_err("%s: Regulator camss get failed %ld\n", __func__,
+				PTR_ERR(vfe_dev->fs_camss));
+			rc = -ENODEV;
+			goto camss_vdd_regulator_failed;
+		}
+	}
+
+	if (!vfe_dev->fs_mmagic_camss) {
+		vfe_dev->fs_mmagic_camss = regulator_get(&vfe_dev->pdev->dev,
+			"mmagic-vdd");
+		if (IS_ERR(vfe_dev->fs_mmagic_camss)) {
+			pr_err("%s: Regulator mmagic get failed %ld\n",
+				__func__, PTR_ERR(vfe_dev->fs_mmagic_camss));
+			rc = -ENODEV;
+			goto mmagic_vdd_regulator_failed;
+		}
+	}
+
+
 	if (vfe_dev->fs_mmagic_camss) {
 		rc = regulator_enable(vfe_dev->fs_mmagic_camss);
 		if (rc) {
@@ -256,15 +290,20 @@ clk_enable_failed:
 		regulator_disable(vfe_dev->fs_vfe);
 	kfree(vfe_dev->vfe_clk);
 fs_vfe_failed:
-	regulator_put(vfe_dev->fs_vfe);
 	if (vfe_dev->fs_camss)
 		regulator_disable(vfe_dev->fs_camss);
 fs_camss_failed:
-	regulator_put(vfe_dev->fs_camss);
 	if (vfe_dev->fs_mmagic_camss)
 		regulator_disable(vfe_dev->fs_mmagic_camss);
 fs_mmagic_failed:
 	regulator_put(vfe_dev->fs_mmagic_camss);
+	vfe_dev->fs_mmagic_camss = NULL;
+mmagic_vdd_regulator_failed:
+	regulator_put(vfe_dev->fs_camss);
+	vfe_dev->fs_camss = NULL;
+camss_vdd_regulator_failed:
+	regulator_put(vfe_dev->fs_vfe);
+	vfe_dev->fs_vfe = NULL;
 	msm_isp_deinit_bandwidth_mgr(ISP_VFE0 + vfe_dev->pdev->id);
 bus_scale_register_failed:
 	return rc;
@@ -281,12 +320,21 @@ static void msm_vfe47_release_hardware(struct vfe_device *vfe_dev)
 	msm_cam_clk_enable(&vfe_dev->pdev->dev, msm_vfe47_clk_info,
 		vfe_dev->vfe_clk, vfe_dev->num_clk, 0);
 	kfree(vfe_dev->vfe_clk);
-	regulator_disable(vfe_dev->fs_vfe);
-	regulator_disable(vfe_dev->fs_camss);
-	regulator_disable(vfe_dev->fs_mmagic_camss);
-	regulator_put(vfe_dev->fs_vfe);
-	regulator_put(vfe_dev->fs_camss);
-	regulator_put(vfe_dev->fs_mmagic_camss);
+	if (vfe_dev->fs_vfe) {
+		regulator_disable(vfe_dev->fs_vfe);
+		regulator_put(vfe_dev->fs_vfe);
+		vfe_dev->fs_vfe = NULL;
+	}
+	if (vfe_dev->fs_camss) {
+		regulator_disable(vfe_dev->fs_camss);
+		regulator_put(vfe_dev->fs_camss);
+		vfe_dev->fs_camss = NULL;
+	}
+	if (vfe_dev->fs_mmagic_camss) {
+		regulator_disable(vfe_dev->fs_mmagic_camss);
+		regulator_put(vfe_dev->fs_mmagic_camss);
+		vfe_dev->fs_mmagic_camss = NULL;
+	}
 	msm_isp_deinit_bandwidth_mgr(ISP_VFE0 + vfe_dev->pdev->id);
 }
 
@@ -1939,40 +1987,6 @@ static int msm_vfe47_get_platform_data(struct vfe_device *vfe_dev)
 		IORESOURCE_IRQ, "vfe");
 	if (!vfe_dev->vfe_irq) {
 		pr_err("%s: no irq resource?\n", __func__);
-		rc = -ENODEV;
-		goto vfe_no_resource;
-	}
-
-	vfe_dev->fs_vfe = regulator_get(&vfe_dev->pdev->dev, "vdd");
-	if (IS_ERR(vfe_dev->fs_vfe)) {
-		pr_err("%s: Regulator vfe get failed %ld\n", __func__,
-		PTR_ERR(vfe_dev->fs_vfe));
-		vfe_dev->fs_vfe = NULL;
-		rc = -ENODEV;
-		goto vfe_no_resource;
-	}
-
-	vfe_dev->fs_camss = regulator_get(&vfe_dev->pdev->dev, "camss-vdd");
-	if (IS_ERR(vfe_dev->fs_camss)) {
-		pr_err("%s: Regulator camss get failed %ld\n", __func__,
-			PTR_ERR(vfe_dev->fs_camss));
-		regulator_put(vfe_dev->fs_vfe);
-		vfe_dev->fs_vfe = NULL;
-		vfe_dev->fs_camss = NULL;
-		rc = -ENODEV;
-		goto vfe_no_resource;
-	}
-
-	vfe_dev->fs_mmagic_camss = regulator_get(&vfe_dev->pdev->dev,
-		"mmagic-vdd");
-	if (IS_ERR(vfe_dev->fs_mmagic_camss)) {
-		pr_err("%s: Regulator mmagic get failed %ld\n", __func__,
-			PTR_ERR(vfe_dev->fs_mmagic_camss));
-		regulator_put(vfe_dev->fs_camss);
-		regulator_put(vfe_dev->fs_vfe);
-		vfe_dev->fs_vfe = NULL;
-		vfe_dev->fs_camss = NULL;
-		vfe_dev->fs_mmagic_camss = NULL;
 		rc = -ENODEV;
 		goto vfe_no_resource;
 	}
