@@ -571,7 +571,8 @@ ftrace_raw_event_##call(void *__data, proto)				\
 	{ assign; }							\
 									\
 	event_trigger_unlock_commit(ftrace_file, buffer, event, entry, \
-				    irq_flags, pc);		       \
+				    irq_flags, pc,                     \
+				    sizeof(*entry) + __data_size);     \
 }
 /*
  * The ftrace_test_probe is compiled out, it is only here as a build time check
