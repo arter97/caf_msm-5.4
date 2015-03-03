@@ -227,11 +227,14 @@ bail:
  */
 int ipa_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 {
+#define TBL_ENTRY_SIZE 32
+#define INDX_TBL_ENTRY_SIZE 4
 	struct ipa_desc desc = { 0 };
 	struct ipa_ip_v4_nat_init *cmd;
 	u16 size = sizeof(struct ipa_ip_v4_nat_init);
 	int result;
 	u32 offset = 0;
+	size_t tmp;
 
 	IPADBG("\n");
 	if (init->table_entries == 0) {
@@ -240,13 +243,76 @@ int ipa_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 		goto bail;
 	}
 
-	if (init->ipv4_rules_offset >= ipa_ctx->nat_mem.size ||
-	    init->index_offset >= ipa_ctx->nat_mem.size ||
-	    init->expn_rules_offset >= ipa_ctx->nat_mem.size ||
-	    init->index_expn_offset >= ipa_ctx->nat_mem.size) {
-		IPAERR("Table rules offset are not valid\n");
-		result = -EPERM;
-		goto bail;
+	/* check for integer overflow */
+	if (init->ipv4_rules_offset >
+		UINT_MAX - (TBL_ENTRY_SIZE * (init->table_entries + 1))) {
+			IPAERR("Detected overflow\n");
+			return -EPERM;
+	}
+	/* Check Table Entry offset is not
+	   beyond allocated size */
+	tmp = init->ipv4_rules_offset +
+		(TBL_ENTRY_SIZE * (init->table_entries + 1));
+	if (tmp > ipa_ctx->nat_mem.size) {
+		IPAERR("Table rules offset not valid\n");
+		IPAERR("offset:%d entrys:%d size:%zu mem_size:%zu\n",
+			init->ipv4_rules_offset, (init->table_entries + 1),
+			tmp, ipa_ctx->nat_mem.size);
+		return -EPERM;
+	}
+
+	/* check for integer overflow */
+	if (init->expn_rules_offset >
+		UINT_MAX - (TBL_ENTRY_SIZE * init->expn_table_entries)) {
+			IPAERR("Detected overflow\n");
+			return -EPERM;
+	}
+	/* Check Expn Table Entry offset is not
+	   beyond allocated size */
+	tmp = init->expn_rules_offset +
+		(TBL_ENTRY_SIZE * init->expn_table_entries);
+	if (tmp > ipa_ctx->nat_mem.size) {
+		IPAERR("Expn Table rules offset not valid\n");
+		IPAERR("offset:%d entrys:%d size:%zu mem_size:%zu\n",
+			init->expn_rules_offset, init->expn_table_entries,
+			tmp, ipa_ctx->nat_mem.size);
+		return -EPERM;
+	}
+
+  /* check for integer overflow */
+	if (init->index_offset >
+		UINT_MAX - (INDX_TBL_ENTRY_SIZE * (init->table_entries + 1))) {
+			IPAERR("Detected overflow\n");
+			return -EPERM;
+	}
+	/* Check Indx Table Entry offset is not
+	   beyond allocated size */
+	tmp = init->index_offset +
+		(INDX_TBL_ENTRY_SIZE * (init->table_entries + 1));
+	if (tmp > ipa_ctx->nat_mem.size) {
+		IPAERR("Indx Table rules offset not valid\n");
+		IPAERR("offset:%d entrys:%d size:%zu mem_size:%zu\n",
+			init->index_offset, (init->table_entries + 1),
+			tmp, ipa_ctx->nat_mem.size);
+		return -EPERM;
+	}
+
+  /* check for integer overflow */
+	if (init->index_expn_offset >
+		UINT_MAX - (INDX_TBL_ENTRY_SIZE * init->expn_table_entries)) {
+			IPAERR("Detected overflow\n");
+			return -EPERM;
+	}
+	/* Check Expn Table entry offset is not
+	   beyond allocated size */
+	tmp = init->index_expn_offset +
+		(INDX_TBL_ENTRY_SIZE * init->expn_table_entries);
+	if (tmp > ipa_ctx->nat_mem.size) {
+		IPAERR("Indx Expn Table rules offset not valid\n");
+		IPAERR("offset:%d entrys:%d size:%zu mem_size:%zu\n",
+			init->index_expn_offset, init->expn_table_entries,
+			tmp, ipa_ctx->nat_mem.size);
+		return -EPERM;
 	}
 
 	cmd = kmalloc(size, GFP_KERNEL);
