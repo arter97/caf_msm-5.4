@@ -229,9 +229,6 @@ void kgsl_pwrctrl_buslevel_update(struct kgsl_device *device,
 	if (pwr->pcl)
 		msm_bus_scale_client_update_request(pwr->pcl, buslevel);
 
-	/* vote for ocmem, shut down based on "on" parameter */
-	msm_bus_scale_client_update_request(pwr->pcl,
-		on ? pwr->active_pwrlevel : pwr->num_pwrlevels - 1);
 	/* ask a governor to vote on behalf of us */
 	devfreq_vbif_update_bw(ib_votes[last_vote_buslevel], ab);
 }
