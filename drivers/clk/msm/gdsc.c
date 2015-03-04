@@ -97,6 +97,9 @@ static int gdsc_enable(struct regulator_dev *rdev)
 
 		regval &= ~SW_COLLAPSE_MASK;
 		writel_relaxed(regval, sc->gdscr);
+		/* Wait for 8 XO cycles before polling the status bit. */
+		mb();
+		udelay(1);
 
 		ret = readl_poll_timeout(sc->gdscr, regval,
 					 regval & PWR_ON_MASK, 0, TIMEOUT_US);
@@ -161,6 +164,9 @@ static int gdsc_disable(struct regulator_dev *rdev)
 
 		regval |= SW_COLLAPSE_MASK;
 		writel_relaxed(regval, sc->gdscr);
+		/* Wait for 8 XO cycles before polling the status bit. */
+		mb();
+		udelay(1);
 
 		if (sc->no_status_check_on_disable) {
 			/*
