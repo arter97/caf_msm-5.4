@@ -315,6 +315,18 @@
 	qcom,mdss-dsi-bl-max-level = <4095>;
 };
 
+/{
+	mtp_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <15>;
+		#include "batterydata-itech-3000mah.dtsi"
+	};
+};
+
+&pmi8994_fg {
+	qcom,battery-data = <&mtp_batterydata>;
+	qcom,ext-sense-type;
+};
+
 &pmi8994_mpps {
 	mpp@a000 { /* MPP 1 */
 		qcom,mode = <1>;                /* Digital output */
