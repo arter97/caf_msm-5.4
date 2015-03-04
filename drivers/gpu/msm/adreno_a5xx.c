@@ -82,9 +82,6 @@ static void a5xx_protect_init(struct adreno_device *adreno_dev)
 	adreno_set_protected_registers(adreno_dev, &index, 0xCC0, 0);
 	adreno_set_protected_registers(adreno_dev, &index, 0xCF0, 1);
 
-	/* HLSQ registers */
-	adreno_set_protected_registers(adreno_dev, &index, 0xE00, 2);
-
 	/* VPC registers */
 	adreno_set_protected_registers(adreno_dev, &index, 0xE68, 3);
 	adreno_set_protected_registers(adreno_dev, &index, 0xE70, 4);
