@@ -1591,6 +1591,12 @@ static int mdss_mdp_parse_dt(struct platform_device *pdev)
 		return rc;
 	}
 
+	rc = mdss_mdp_parse_dt_misc(pdev);
+	if (rc) {
+		pr_err("Error in device tree : misc\n");
+		return rc;
+	}
+
 	rc = mdss_mdp_parse_dt_wb(pdev);
 	if (rc) {
 		pr_err("Error in device tree : wb\n");
@@ -1618,12 +1624,6 @@ static int mdss_mdp_parse_dt(struct platform_device *pdev)
 	rc = mdss_mdp_parse_dt_prefill(pdev);
 	if (rc) {
 		pr_err("Error in device tree : prefill\n");
-		return rc;
-	}
-
-	rc = mdss_mdp_parse_dt_misc(pdev);
-	if (rc) {
-		pr_err("Error in device tree : misc\n");
 		return rc;
 	}
 
