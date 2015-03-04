@@ -21,3 +21,7 @@
 	compatible = "qcom,msmthulium-mtp", "qcom,msmthulium", "qcom,mtp";
 	qcom,board-id = <8 0>;
 };
+
+&mtp_batterydata {
+	qcom,batt-id-range-pct = <100>;
+};
