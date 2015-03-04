@@ -1496,10 +1496,10 @@ int __msm_jpeg_init(struct msm_jpeg_device *pgmn_dev)
 {
 	int rc = 0;
 	int idx = 0;
-#ifdef CONFIG_MSM_IOMMU
+
 	char *iommu_name[JPEG_DEV_CNT] = {"jpeg_enc0", "jpeg_enc1",
 		"jpeg_dec", "jpeg_dma"};
-#endif
+
 
 	mutex_init(&pgmn_dev->lock);
 
@@ -1515,7 +1515,6 @@ int __msm_jpeg_init(struct msm_jpeg_device *pgmn_dev)
 	msm_jpeg_q_init("input_rtn_q", &pgmn_dev->input_rtn_q);
 	msm_jpeg_q_init("input_buf_q", &pgmn_dev->input_buf_q);
 
-#ifdef CONFIG_MSM_IOMMU
 	/*get device context for IOMMU*/
 	rc = cam_smmu_get_handle(iommu_name[idx], &pgmn_dev->iommu_hdl);
 	JPEG_DBG("%s:%d] hdl %d", __func__, __LINE__,
@@ -1525,12 +1524,10 @@ int __msm_jpeg_init(struct msm_jpeg_device *pgmn_dev)
 				__func__);
 		goto error;
 	}
-#endif
 
 	return rc;
-#ifdef CONFIG_MSM_IOMMU
+
 error:
-#endif
 	mutex_destroy(&pgmn_dev->lock);
 	return -EFAULT;
 }

@@ -31,6 +31,98 @@
 #include "msm_jpeg_common.h"
 #include "msm_jpeg_hw.h"
 
+static int msm_jpeg_get_regulator_info(struct msm_jpeg_device *jpeg_dev,
+	struct platform_device *pdev)
+{
+	uint32_t count;
+	int i, rc;
+
+	struct device_node *of_node;
+	of_node = pdev->dev.of_node;
+
+	if (of_get_property(of_node, "qcom,vdd-names", NULL)) {
+
+		count = of_property_count_strings(of_node, "qcom,vdd-names");
+
+		JPEG_DBG("count = %d\n", count);
+		if ((count == 0) || (count == -EINVAL)) {
+			pr_err("no regulators found in device tree, count=%d",
+				count);
+			return -EINVAL;
+		}
+
+		if (count > JPEG_REGULATOR_MAX) {
+			pr_err("invalid count=%d, max is %d\n", count,
+				JPEG_REGULATOR_MAX);
+			return -EINVAL;
+		}
+
+		for (i = 0; i < count; i++) {
+			rc = of_property_read_string_index(of_node,
+				"qcom,vdd-names", i,
+				&(jpeg_dev->regulator_names[i]));
+			JPEG_DBG("regulator-names[%d] = %s\n",
+			i, jpeg_dev->regulator_names[i]);
+			if (rc < 0) {
+				pr_err("%s failed %d\n", __func__, __LINE__);
+				return rc;
+			}
+		}
+	} else {
+		jpeg_dev->regulator_names[0] = "vdd";
+		count = 1;
+	}
+	jpeg_dev->num_regulator = count;
+	return 0;
+}
+
+static int msm_jpeg_regulator_enable(struct device *dev, const char **reg_names,
+	struct regulator **reg_ptr, int num_reg, int enable)
+{
+	int i;
+	int rc = 0;
+	if (enable) {
+		for (i = 0; i < num_reg; i++) {
+			JPEG_DBG("%s enable %s\n", __func__, reg_names[i]);
+			reg_ptr[i] = regulator_get(dev, reg_names[i]);
+			if (IS_ERR(reg_ptr[i])) {
+				pr_err("%s get failed\n", reg_names[i]);
+				rc = PTR_ERR(reg_ptr[i]);
+				reg_ptr[i] = NULL;
+				goto cam_reg_get_err;
+			}
+
+			rc = regulator_enable(reg_ptr[i]);
+			if (rc < 0) {
+				pr_err("%s enable failed\n", reg_names[i]);
+				goto cam_reg_enable_err;
+			}
+		}
+	} else {
+		for (i = num_reg - 1; i >= 0; i--) {
+			if (reg_ptr[i] != NULL) {
+				JPEG_DBG("%s disable %s\n", __func__,
+					reg_names[i]);
+				regulator_disable(reg_ptr[i]);
+				regulator_put(reg_ptr[i]);
+			}
+		}
+	}
+	return rc;
+
+cam_reg_enable_err:
+	regulator_put(reg_ptr[i]);
+cam_reg_get_err:
+	for (i--; i >= 0; i--) {
+		if (reg_ptr[i] != NULL) {
+			regulator_disable(reg_ptr[i]);
+			regulator_put(reg_ptr[i]);
+		}
+	}
+	return rc;
+}
+
+
 static int msm_jpeg_get_clk_info(struct msm_jpeg_device *jpeg_dev,
 	struct platform_device *pdev)
 {
@@ -233,7 +325,6 @@ static struct msm_bus_scale_pdata msm_jpeg_bus_client_pdata = {
 	.name = "msm_jpeg",
 };
 
-#ifdef CONFIG_MSM_IOMMU
 static int msm_jpeg_attach_iommu(struct msm_jpeg_device *pgmn_dev)
 {
 	int rc;
@@ -254,16 +345,6 @@ static int msm_jpeg_detach_iommu(struct msm_jpeg_device *pgmn_dev)
 	cam_smmu_ops(pgmn_dev->iommu_hdl, CAM_SMMU_DETACH);
 	return 0;
 }
-#else
-static int msm_jpeg_attach_iommu(struct msm_jpeg_device *pgmn_dev)
-{
-	return 0;
-}
-static int msm_jpeg_detach_iommu(struct msm_jpeg_device *pgmn_dev)
-{
-	return 0;
-}
-#endif
 
 
 
@@ -328,12 +409,20 @@ int msm_jpeg_platform_init(struct platform_device *pdev,
 		goto fail_remap;
 	}
 
-	pgmn_dev->jpeg_fs = regulator_get(&pgmn_dev->pdev->dev, "vdd");
-	rc = regulator_enable(pgmn_dev->jpeg_fs);
-	if (rc) {
+	rc = msm_jpeg_get_regulator_info(pgmn_dev, pgmn_dev->pdev);
+	if (rc < 0) {
 		JPEG_PR_ERR("%s:%d]jpeg regulator get failed\n",
 				__func__, __LINE__);
 		goto fail_fs;
+	}
+
+	rc = msm_jpeg_regulator_enable(&pgmn_dev->pdev->dev,
+		pgmn_dev->regulator_names, pgmn_dev->jpeg_fs,
+		pgmn_dev->num_regulator, 1);
+	if (rc < 0) {
+		JPEG_PR_ERR("%s:%d] jpeg regulator enable failed rc = %d\n",
+				 __func__, __LINE__, rc);
+	goto fail_fs;
 	}
 
 	if (msm_jpeg_get_clk_info(pgmn_dev, pgmn_dev->pdev) < 0) {
@@ -396,8 +485,9 @@ fail_vbif:
 	pgmn_dev->jpeg_clk, pgmn_dev->num_clk, 0);
 
 fail_clk:
-	regulator_disable(pgmn_dev->jpeg_fs);
-	regulator_put(pgmn_dev->jpeg_fs);
+	msm_jpeg_regulator_enable(&pgmn_dev->pdev->dev,
+	pgmn_dev->regulator_names, pgmn_dev->jpeg_fs,
+	pgmn_dev->num_regulator, 0);
 
 fail_fs:
 	iounmap(jpeg_base);
@@ -430,15 +520,11 @@ int msm_jpeg_platform_release(struct resource *mem, void *base, int irq,
 	pgmn_dev->jpeg_clk, pgmn_dev->num_clk, 0);
 	JPEG_DBG("%s:%d] clock disbale done", __func__, __LINE__);
 
-	if (pgmn_dev->jpeg_fs) {
-		result = regulator_disable(pgmn_dev->jpeg_fs);
-		if (!result)
-			regulator_put(pgmn_dev->jpeg_fs);
-		else
-			JPEG_PR_ERR("%s:%d] regulator disable failed %d",
-				__func__, __LINE__, result);
-		pgmn_dev->jpeg_fs = NULL;
-	}
+	msm_jpeg_regulator_enable(&pgmn_dev->pdev->dev,
+	pgmn_dev->regulator_names, pgmn_dev->jpeg_fs,
+	pgmn_dev->num_regulator, 0);
+	JPEG_DBG("%s:%d] regulator disable done", __func__, __LINE__);
+
 	iounmap(pgmn_dev->jpeg_vbif);
 	iounmap(base);
 	release_mem_region(mem->start, resource_size(mem));
