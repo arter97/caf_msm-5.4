@@ -36,6 +36,8 @@
 #define MSM_AUDIO_ION_VA_START 0x10000000
 #define MSM_AUDIO_ION_VA_LEN 0x0FFFFFFF
 
+#define MSM_AUDIO_SMMU_SID_OFFSET 32
+
 struct msm_audio_ion_private {
 	bool smmu_enabled;
 	bool audioheap_enabled;
@@ -44,6 +46,7 @@ struct msm_audio_ion_private {
 	u8 device_status;
 	struct list_head alloc_list;
 	struct mutex list_mutex;
+	u64 smmu_sid_bits;
 };
 
 struct msm_audio_alloc_data {
@@ -637,13 +640,21 @@ static int msm_audio_ion_get_phys(struct ion_client *client,
 	pr_debug("%s: smmu_enabled = %d\n", __func__,
 		msm_audio_ion_data.smmu_enabled);
 
-	if (msm_audio_ion_data.smmu_enabled)
-		rc = msm_audio_dma_buf_map(client, handle,
-					   addr, len);
-	else
+	if (msm_audio_ion_data.smmu_enabled) {
+		rc = msm_audio_dma_buf_map(client, handle, addr, len);
+		if (rc) {
+			pr_err("%s: failed to map DMA buf, err = %d\n",
+				__func__, rc);
+			goto err;
+		}
+		/* Append the SMMU SID information to the IOVA address */
+		*addr |= msm_audio_ion_data.smmu_sid_bits;
+	} else {
 		rc = ion_phys(client, handle, addr, len);
+	}
 
 	pr_debug("phys=%pa, len=%zd, rc=%d\n", &(*addr), *len, rc);
+err:
 	return rc;
 }
 
@@ -727,6 +738,21 @@ static int msm_audio_ion_probe(struct platform_device *pdev)
 		(smmu_enabled) ? "Enabled" : "Disabled");
 
 	if (smmu_enabled) {
+		u64 smmu_sid = 0;
+		struct of_phandle_args iommuspec;
+
+		/* Get SMMU SID information from Devicetree */
+		rc = of_parse_phandle_with_args(dev->of_node, "iommus",
+						"#iommu-cells", 0, &iommuspec);
+		if (rc)
+			dev_err(dev, "%s: could not get smmu SID, ret = %d\n",
+				__func__, rc);
+		else
+			smmu_sid = iommuspec.args[0];
+
+		msm_audio_ion_data.smmu_sid_bits =
+			smmu_sid << MSM_AUDIO_SMMU_SID_OFFSET;
+
 		rc = msm_audio_smmu_init(dev);
 		if (rc)
 			dev_err(dev, "%s: smmu init failed, err = %d\n",
