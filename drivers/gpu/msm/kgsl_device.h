@@ -17,7 +17,6 @@
 #include <linux/idr.h>
 #include <linux/pm_qos.h>
 #include <linux/sched.h>
-#include <linux/workqueue.h>
 
 #include "kgsl.h"
 #include "kgsl_mmu.h"
@@ -651,18 +650,6 @@ static inline struct kgsl_device *kgsl_device_from_dev(struct device *dev)
 	}
 
 	return NULL;
-}
-
-static inline int kgsl_create_device_workqueue(struct kgsl_device *device)
-{
-	device->work_queue = create_singlethread_workqueue(device->name);
-	if (!device->work_queue) {
-		KGSL_DRV_ERR(device,
-			     "create_singlethread_workqueue(%s) failed\n",
-			     device->name);
-		return -EINVAL;
-	}
-	return 0;
 }
 
 static inline int kgsl_state_is_awake(struct kgsl_device *device)
