@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -566,7 +566,7 @@ int kgsl_pwrscale_init(struct device *dev, const char *governor)
 	 */
 	if (pwr->bus_control) {
 		out = 0;
-		while (pwr->bus_ib[out]) {
+		while (pwr->bus_ib[out] && out <= pwr->pwrlevels[0].bus_max) {
 			pwr->bus_ib[out] =
 				pwr->bus_ib[out] >> 20;
 			out++;

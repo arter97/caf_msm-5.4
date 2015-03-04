@@ -1503,6 +1503,14 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 	if (set_bus == 1)
 		pwr->pwrlevels[freq_i].bus_min = 1;
 
+	pwr->bus_ib = kzalloc(pdata->bus_scale_table->num_usecases *
+				sizeof(*pwr->bus_ib), GFP_KERNEL);
+	if (pwr->bus_ib == NULL) {
+		KGSL_PWR_ERR(device,
+			"No memory allocated for bus structures\n");
+		result = -ENOMEM;
+		goto done;
+	}
 	/*
 	 * Pull the BW vote out of the bus table.  They will be used to
 	 * calculate the ratio between the votes.
@@ -1620,6 +1628,7 @@ void kgsl_pwrctrl_close(struct kgsl_device *device)
 		kfree(pwr->sysfs_pwr_limit);
 		pwr->sysfs_pwr_limit = NULL;
 	}
+	kfree(pwr->bus_ib);
 }
 
 /**
