@@ -68,9 +68,6 @@ static int msm_proxy_rx_ch = 2;
 static int hdmi_rx_sample_rate = SAMPLING_RATE_48KHZ;
 static int msm_tert_mi2s_tx_ch = 2;
 
-static struct mutex cdc_mclk_mutex;
-static struct clk *codec_clk;
-static int clk_users;
 static atomic_t pri_auxpcm_rsc_ref;
 
 static const char *const pin_states[] = {"Disable", "active"};
@@ -129,7 +126,6 @@ struct msm_pinctrl_info {
 };
 
 struct msmthulium_asoc_mach_data {
-	int mclk_gpio;
 	u32 mclk_freq;
 	int us_euro_gpio;
 	struct msm_pinctrl_info pri_auxpcm_pinctrl_info;
@@ -393,46 +389,13 @@ static int msm_ext_ultrasound_event(struct snd_soc_dapm_widget *w,
 static int msm_snd_enable_codec_ext_clk(struct snd_soc_codec *codec,
 					int enable, bool dapm)
 {
-	int ret = 0;
-	pr_debug("%s: enable = %d clk_users = %d\n",
-		__func__, enable, clk_users);
-
-	mutex_lock(&cdc_mclk_mutex);
-	if (enable) {
-		if (!codec_clk) {
-			dev_err(codec->dev, "%s: did not get codec MCLK\n",
-				__func__);
-			ret = -EINVAL;
-			goto exit;
-		}
-		clk_users++;
-		if (clk_users != 1)
-			goto exit;
-
-		ret = clk_prepare_enable(codec_clk);
-		if (ret) {
-			pr_err("%s: clk_prepare failed, err:%d\n",
-				__func__, ret);
-			clk_users--;
-			goto exit;
-		}
-		tomtom_mclk_enable(codec, 1, dapm);
-	} else {
-		if (clk_users > 0) {
-			clk_users--;
-			if (clk_users == 0) {
-				tomtom_mclk_enable(codec, 0, dapm);
-				clk_disable_unprepare(codec_clk);
-			}
-		} else {
-			pr_err("%s: Error releasing codec MCLK\n", __func__);
-			ret = -EINVAL;
-			goto exit;
-		}
+	if (!strcmp(dev_name(codec->dev), "tomtom_codec"))
+		return tomtom_codec_mclk_enable(codec, enable, dapm);
+	else {
+		dev_err(codec->dev, "%s: unknown codec to enable ext clk\n",
+			__func__);
+		return -EINVAL;
 	}
-exit:
-	mutex_unlock(&cdc_mclk_mutex);
-	return ret;
 }
 
 static int msmthulium_mclk_event(struct snd_soc_dapm_widget *w,
@@ -1451,11 +1414,6 @@ static int msmthulium_codec_event_cb(struct snd_soc_codec *codec,
 	}
 }
 
-static int msm_snd_get_ext_clk_cnt(void)
-{
-	return clk_users;
-}
-
 static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 {
 	int err;
@@ -1551,13 +1509,6 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 
 	snd_soc_dapm_sync(dapm);
 
-	codec_clk = clk_get(&spdev->dev, "osr_clk");
-	if (IS_ERR(codec_clk)) {
-		pr_err("%s: clk_get failed, err = %lu\n",
-			__func__, PTR_ERR(codec_clk));
-		return -EINVAL;
-	}
-
 	snd_soc_dai_set_channel_map(codec_dai, ARRAY_SIZE(tx_ch),
 				    tx_ch, ARRAY_SIZE(rx_ch), rx_ch);
 
@@ -1618,27 +1569,10 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	}
 
 	tomtom_event_register(msmthulium_codec_event_cb, rtd->codec);
-	tomtom_register_ext_clk_cb(msm_snd_enable_codec_ext_clk,
-				   msm_snd_get_ext_clk_cnt,
-				   rtd->codec);
-
-	err = msm_snd_enable_codec_ext_clk(rtd->codec, 1, false);
-	if (IS_ERR_VALUE(err)) {
-		pr_err("%s: Failed to enable mclk, err = 0x%x\n",
-			__func__, err);
-		goto out;
-	}
 	tomtom_enable_qfuse_sensing(rtd->codec);
-	err = msm_snd_enable_codec_ext_clk(rtd->codec, 0, false);
-	if (IS_ERR_VALUE(err)) {
-		pr_err("%s: Failed to disable mclk, err = 0x%x\n",
-			__func__, err);
-		goto out;
-	}
 
 	return 0;
 out:
-	clk_put(codec_clk);
 	return err;
 }
 
@@ -2912,24 +2846,6 @@ err:
 	return ret;
 }
 
-static int msmthulium_prepare_codec_mclk(struct snd_soc_card *card)
-{
-	struct msmthulium_asoc_mach_data *pdata =
-				snd_soc_card_get_drvdata(card);
-	int ret;
-	if (pdata->mclk_gpio) {
-		ret = gpio_request(pdata->mclk_gpio, "TOMTOM_CODEC_PMIC_MCLK");
-		if (ret) {
-			dev_err(card->dev,
-				"%s: request mclk gpio failed %d, err:%d\n",
-				__func__, pdata->mclk_gpio, ret);
-			return ret;
-		}
-	}
-
-	return 0;
-}
-
 static int msmthulium_prepare_us_euro(struct snd_soc_card *card)
 {
 	struct msmthulium_asoc_mach_data *pdata =
@@ -3003,24 +2919,6 @@ static int msmthulium_asoc_machine_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	pdata->mclk_gpio = of_get_named_gpio(pdev->dev.of_node,
-				"qcom,cdc-mclk-gpios", 0);
-	if (pdata->mclk_gpio < 0) {
-		dev_err(&pdev->dev,
-			"Looking up %s property in node %s failed %d\n",
-			"qcom, cdc-mclk-gpios", pdev->dev.of_node->full_name,
-			pdata->mclk_gpio);
-		ret = -ENODEV;
-		goto err;
-	}
-
-	ret = msmthulium_prepare_codec_mclk(card);
-	if (ret) {
-		dev_err(&pdev->dev, "prepare_codec_mclk failed, err:%d\n",
-			ret);
-		goto err;
-	}
-
 	mbhc_cfg.mclk_rate = pdata->mclk_freq;
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,hdmi-audio-rx")) {
 		dev_info(&pdev->dev, "%s: hdmi audio support present\n",
@@ -3040,7 +2938,6 @@ static int msmthulium_asoc_machine_probe(struct platform_device *pdev)
 		card->dai_link	= msmthulium_common_dai_links;
 		card->num_links	= ARRAY_SIZE(msmthulium_common_dai_links);
 	}
-	mutex_init(&cdc_mclk_mutex);
 	atomic_set(&pri_auxpcm_rsc_ref, 0);
 	spdev = pdev;
 
@@ -3134,12 +3031,6 @@ static int msmthulium_asoc_machine_probe(struct platform_device *pdev)
 err_mi2s_pinctrl:
 	msm_auxpcm_release_pinctrl(pdev, PRI_MI2S_PCM);
 err:
-	if (pdata->mclk_gpio > 0) {
-		dev_dbg(&pdev->dev, "%s free gpio %d\n",
-			__func__, pdata->mclk_gpio);
-		gpio_free(pdata->mclk_gpio);
-		pdata->mclk_gpio = 0;
-	}
 	if (pdata->us_euro_gpio > 0) {
 		dev_dbg(&pdev->dev, "%s free us_euro gpio %d\n",
 			__func__, pdata->us_euro_gpio);
@@ -3159,7 +3050,6 @@ static int msmthulium_asoc_machine_remove(struct platform_device *pdev)
 	if (gpio_is_valid(ext_us_amp_gpio))
 		gpio_free(ext_us_amp_gpio);
 
-	gpio_free(pdata->mclk_gpio);
 	gpio_free(pdata->us_euro_gpio);
 
 	if (msmthulium_liquid_dock_dev != NULL) {
