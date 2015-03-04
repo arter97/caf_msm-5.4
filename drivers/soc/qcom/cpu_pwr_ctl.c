@@ -39,7 +39,6 @@
 #define MSMTHULIUM_APCC_SER_DLY		0x68
 #define MSMTHULIUM_APCC_SER_DLY_SEL0	0x70
 #define MSMTHULIUM_APCC_SER_DLY_SEL1	0x78
-#define MSMTHULIUM_APCC_APM_MODE	0x98
 #define MSMTHULIUM_APCC_APM_DLY		0xa0
 #define MSMTHULIUM_APCC_APM_DLY2	0xe8
 #define MSMTHULIUM_APCC_GDHS_DLY	0xb0
@@ -743,8 +742,6 @@ int msmthulium_cpuss_pm_init(unsigned int cpu)
 	writel_relaxed(0x00000000, pm_cpuss + MSMTHULIUM_APCC_SER_DLY_SEL0);
 	writel_relaxed(0x00000000, pm_cpuss + MSMTHULIUM_APCC_SER_DLY_SEL1);
 
-	/* Configure initial APC Power Mux mode and delay values */
-	writel_relaxed(0x00000110, pm_cpuss + MSMTHULIUM_APCC_APM_MODE);
 	switch (version) {
 	case MSMTHULIUM_CPUSS_VER_1P0:
 		writel_relaxed(0x00000000, pm_cpuss + MSMTHULIUM_APCC_APM_DLY);
