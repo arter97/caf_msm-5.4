@@ -484,7 +484,7 @@
 			virtual-addr-pool = <0x4b000000 0x12c00000>;
 		};
 
-		secure_pixel_cb {
+		venus_secure_pixel_cb: secure_pixel_cb {
 			compatible = "qcom,msm-vidc,context-bank";
 			label = "venus_sec_pixel";
 			iommus = <&venus_smmu 0x104>,
@@ -495,7 +495,7 @@
 			virtual-addr-pool = <0x25800000 0x25800000>;
 		};
 
-		secure_non_pixel_cb {
+		venus_secure_non_pixel_cb: secure_non_pixel_cb {
 			compatible = "qcom,msm-vidc,context-bank";
 			label = "venus_sec_non_pixel";
 			iommus = <&venus_smmu 0x105>,
