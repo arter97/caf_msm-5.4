@@ -25,3 +25,13 @@
 &mtp_batterydata {
 	qcom,batt-id-range-pct = <100>;
 };
+
+&i2c_7 {
+	smb1357-charger@1c {
+		compatible = "qcom,smb1357-charger";
+		reg = <0x1c>;
+		qcom,parallel-charger;
+		qcom,float-voltage-mv = <4400>;
+		qcom,recharge-thresh-mv = <100>;
+	};
+};
