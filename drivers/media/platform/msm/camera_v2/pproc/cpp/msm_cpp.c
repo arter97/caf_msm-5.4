@@ -80,12 +80,17 @@
 
 #define MSM_CPP_IRQ_MASK_VAL 0x7c8
 
+#define CPP_GDSCR_SW_COLLAPSE_ENABLE 0xFFFFFFFE
+#define CPP_GDSCR_SW_COLLAPSE_DISABLE 0xFFFFFFFD
+#define CPP_GDSCR_HW_CONTROL_ENABLE 0x2
+#define CPP_GDSCR_HW_CONTROL_DISABLE 0x1
+
 static int msm_cpp_buffer_ops(struct cpp_device *cpp_dev,
 	uint32_t buff_mgr_ops, struct msm_buf_mngr_info *buff_mgr_info);
 static int msm_cpp_send_frame_to_hardware(struct cpp_device *cpp_dev,
 	struct msm_queue_cmd *frame_qcmd);
 
-static  int cpp_update_power_collapse_status(struct cpp_device *cpp_dev,
+static  int msm_cpp_update_gdscr_status(struct cpp_device *cpp_dev,
 	bool status);
 #if CONFIG_MSM_CPP_DBG
 #define CPP_DBG(fmt, args...) pr_err(fmt, ##args)
@@ -839,13 +844,56 @@ static int cpp_init_hardware(struct cpp_device *cpp_dev)
 		goto bus_scale_register_failed;
 	}
 
+	if (of_get_property(cpp_dev->pdev->dev.of_node,
+		"mmagic-vdd-supply", NULL) &&
+		(cpp_dev->fs_mmagic_camss == NULL)) {
+		cpp_dev->fs_mmagic_camss = regulator_get(&cpp_dev->pdev->dev,
+			"mmagic-vdd");
+		if (IS_ERR(cpp_dev->fs_mmagic_camss)) {
+			pr_debug("%s: Regulator mmagic get failed %ld\n",
+				__func__, PTR_ERR(cpp_dev->fs_mmagic_camss));
+			cpp_dev->fs_mmagic_camss = NULL;
+			rc = -ENODEV;
+			goto fs_mmagic_failed;
+		}
+		rc = regulator_enable(cpp_dev->fs_mmagic_camss);
+		if (rc) {
+			pr_err("%s: Regulator enable mmagic camss failed\n",
+				__func__);
+			regulator_put(cpp_dev->fs_mmagic_camss);
+			cpp_dev->fs_mmagic_camss = NULL;
+			goto fs_mmagic_failed;
+		}
+	}
+
+	if (of_get_property(cpp_dev->pdev->dev.of_node,
+		"camss-vdd-supply", NULL) &&
+		(cpp_dev->fs_camss == NULL)) {
+		cpp_dev->fs_camss = regulator_get(&cpp_dev->pdev->dev,
+			"camss-vdd");
+		if (IS_ERR(cpp_dev->fs_camss)) {
+			pr_err("%s: Regulator camss get failed %ld\n",
+				__func__, PTR_ERR(cpp_dev->fs_camss));
+			cpp_dev->fs_camss = NULL;
+			rc = -ENODEV;
+			goto fs_camss_failed;
+		}
+		rc = regulator_enable(cpp_dev->fs_camss);
+		if (rc) {
+			pr_err("%s: Regulator enable camss failed\n", __func__);
+			regulator_put(cpp_dev->fs_camss);
+			cpp_dev->fs_camss = NULL;
+			goto fs_camss_failed;
+		}
+	}
+
 	if (cpp_dev->fs_cpp == NULL) {
 		cpp_dev->fs_cpp =
 			regulator_get(&cpp_dev->pdev->dev, "vdd");
 		if (IS_ERR(cpp_dev->fs_cpp)) {
 			pr_err("Regulator cpp vdd get failed %ld\n",
 				PTR_ERR(cpp_dev->fs_cpp));
-			rc = -EINVAL;
+			rc = -ENODEV;
 			cpp_dev->fs_cpp = NULL;
 			goto fs_failed;
 		}
@@ -862,7 +910,7 @@ static int cpp_init_hardware(struct cpp_device *cpp_dev)
 	if (msm_micro_iface_idx < 0)  {
 		pr_err("Fail to get clock index\n");
 		rc = msm_micro_iface_idx;
-		goto fs_failed;
+		goto clk_failed;
 	}
 
 	cpp_dev->cpp_clk[msm_micro_iface_idx] =
@@ -963,9 +1011,9 @@ static int cpp_init_hardware(struct cpp_device *cpp_dev)
 		}
 	}
 
-	rc = cpp_update_power_collapse_status(cpp_dev, true);
+	rc = msm_cpp_update_gdscr_status(cpp_dev, true);
 	if (rc < 0) {
-		pr_err("update power collapse status failed\n");
+		pr_err("update pcpp gdscr status failed\n");
 		goto req_irq_fail;
 	}
 
@@ -1012,7 +1060,7 @@ static int cpp_init_hardware(struct cpp_device *cpp_dev)
 	return rc;
 
 pwr_collapse_reset:
-	cpp_update_power_collapse_status(cpp_dev, false);
+	msm_cpp_update_gdscr_status(cpp_dev, false);
 req_irq_fail:
 	iounmap(cpp_dev->cpp_hw_base);
 cpp_hw_remap_failed:
@@ -1027,6 +1075,12 @@ clk_failed:
 	regulator_disable(cpp_dev->fs_cpp);
 	regulator_put(cpp_dev->fs_cpp);
 fs_failed:
+	regulator_disable(cpp_dev->fs_camss);
+	regulator_put(cpp_dev->fs_camss);
+fs_camss_failed:
+	regulator_disable(cpp_dev->fs_mmagic_camss);
+	regulator_put(cpp_dev->fs_mmagic_camss);
+fs_mmagic_failed:
 	msm_isp_deinit_bandwidth_mgr(ISP_CPP);
 bus_scale_register_failed:
 	return rc;
@@ -1047,7 +1101,7 @@ static void cpp_release_hardware(struct cpp_device *cpp_dev)
 		atomic_set(&cpp_dev->irq_cnt, 0);
 	}
 	msm_cpp_delete_buff_queue(cpp_dev);
-	cpp_update_power_collapse_status(cpp_dev, false);
+	msm_cpp_update_gdscr_status(cpp_dev, false);
 	iounmap(cpp_dev->base);
 	iounmap(cpp_dev->vbif_base);
 	iounmap(cpp_dev->cpp_hw_base);
@@ -1057,6 +1111,12 @@ static void cpp_release_hardware(struct cpp_device *cpp_dev)
 	regulator_disable(cpp_dev->fs_cpp);
 	regulator_put(cpp_dev->fs_cpp);
 	cpp_dev->fs_cpp = NULL;
+	regulator_disable(cpp_dev->fs_camss);
+	regulator_put(cpp_dev->fs_camss);
+	cpp_dev->fs_camss = NULL;
+	regulator_disable(cpp_dev->fs_mmagic_camss);
+	regulator_put(cpp_dev->fs_mmagic_camss);
+	cpp_dev->fs_mmagic_camss = NULL;
 	if (cpp_dev->stream_cnt > 0) {
 		pr_err("error: stream count active\n");
 		msm_isp_update_bandwidth(ISP_CPP, 0, 0);
@@ -3013,7 +3073,7 @@ struct v4l2_file_operations msm_cpp_v4l2_subdev_fops = {
 	.compat_ioctl32 = msm_cpp_subdev_fops_compat_ioctl,
 #endif
 };
-static  int cpp_update_power_collapse_status(struct cpp_device *cpp_dev,
+static  int msm_cpp_update_gdscr_status(struct cpp_device *cpp_dev,
 	bool status)
 {
 	int rc = 0;
@@ -3026,11 +3086,14 @@ static  int cpp_update_power_collapse_status(struct cpp_device *cpp_dev,
 
 	if (cpp_dev->camss_cpp_base) {
 		value = msm_camera_io_r(cpp_dev->camss_cpp_base);
-		pr_debug("value from camss cpp %x\n", value);
-		if (status)
-			value &= 0xFFFFFFFE;
-		else
-			value |= 0x1;
+		pr_debug("value from camss cpp %x, status %d\n", value, status);
+		if (status) {
+			value &= CPP_GDSCR_SW_COLLAPSE_ENABLE;
+			value |= CPP_GDSCR_HW_CONTROL_ENABLE;
+		} else {
+			value |= CPP_GDSCR_HW_CONTROL_DISABLE;
+			value &= CPP_GDSCR_SW_COLLAPSE_DISABLE;
+		}
 		pr_debug("value %x after camss cpp mask\n", value);
 		msm_camera_io_w(value, cpp_dev->camss_cpp_base);
 	}
