@@ -319,6 +319,10 @@ int msm_isp_get_clk_info(struct vfe_device *vfe_dev,
 			pr_err("%s failed %d\n", __func__, __LINE__);
 			return rc;
 		}
+		if (0 == strcmp(vfe_clk_info[i].clk_name, "vfe_clk_src")) {
+			ISP_DBG("%s: find vfe src clk index %d\n", __func__, i);
+			vfe_dev->hw_info->vfe_clk_idx = i;
+		}
 	}
 	rc = of_property_read_u32_array(of_node, "qcom,clock-rates",
 		rates, count);
