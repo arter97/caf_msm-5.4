@@ -1210,13 +1210,11 @@ static int fd_probe(struct platform_device *pdev)
 		goto error_mem_resources;
 	}
 
-	fd->vdd = regulator_get(&pdev->dev, "vdd");
-	if (IS_ERR(fd->vdd)) {
-		dev_err(&pdev->dev, "Fail to get vdd regulator\n");
-		ret = -ENODEV;
+	ret = msm_fd_hw_get_regulators(fd);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "Fail to get regulators\n");
 		goto error_get_regulator;
 	}
-
 	ret = msm_fd_hw_get_clocks(fd);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "Fail to get clocks\n");
@@ -1283,7 +1281,7 @@ error_hw_get_request_irq:
 error_get_bus:
 	msm_fd_hw_put_clocks(fd);
 error_get_clocks:
-	regulator_put(fd->vdd);
+	msm_fd_hw_put_regulators(fd);
 error_get_regulator:
 	msm_fd_hw_release_mem_resources(fd);
 error_mem_resources:
@@ -1309,7 +1307,7 @@ static int fd_device_remove(struct platform_device *pdev)
 	msm_fd_hw_release_irq(fd);
 	msm_fd_hw_put_bus(fd);
 	msm_fd_hw_put_clocks(fd);
-	regulator_put(fd->vdd);
+	msm_fd_hw_put_regulators(fd);
 	msm_fd_hw_release_mem_resources(fd);
 	kfree(fd);
 

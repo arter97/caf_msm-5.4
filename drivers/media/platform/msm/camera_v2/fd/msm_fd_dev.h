@@ -24,11 +24,13 @@
 /* Maximum number of result buffers */
 #define MSM_FD_MAX_RESULT_BUFS 5
 /* Max number of clocks defined in device tree */
-#define MSM_FD_MAX_CLK_NUM 10
+#define MSM_FD_MAX_CLK_NUM 15
 /* Max number of clock rates defined in device tree */
 #define MSM_FD_MAX_CLK_RATES 5
 /* Max number of faces which can be detected in one hw processing */
 #define MSM_FD_MAX_FACES_DETECTED 32
+/* Max number of regulators defined in device tree */
+#define MSM_FD_MAX_REGULATOR_NUM 3
 
 /*
  * struct msm_fd_size - Structure contain FD size related values.
@@ -222,7 +224,8 @@ struct msm_fd_device {
 	struct resource *res_mem[MSM_FD_IOMEM_LAST];
 	void __iomem *iomem_base[MSM_FD_IOMEM_LAST];
 	struct resource *ioarea[MSM_FD_IOMEM_LAST];
-	struct regulator *vdd;
+	struct regulator *vdd[MSM_FD_MAX_REGULATOR_NUM];
+	unsigned int regulator_num;
 
 	unsigned int clk_num;
 	struct clk *clk[MSM_FD_MAX_CLK_NUM];

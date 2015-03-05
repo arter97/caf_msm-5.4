@@ -723,6 +723,136 @@ int msm_fd_hw_get_mem_resources(struct platform_device *pdev,
 }
 
 /*
+ * msm_fd_hw_get_regulators - Get fd regulators.
+ * @fd: Pointer to fd device.
+ *
+ * Read regulator information from device tree and perform get regulator.
+ */
+int msm_fd_hw_get_regulators(struct msm_fd_device *fd)
+{
+	const char *regulator_name;
+	uint32_t cnt;
+	int i;
+	int ret;
+
+	if (of_get_property(fd->dev->of_node, "qcom,vdd-names", NULL)) {
+		cnt = of_property_count_strings(fd->dev->of_node,
+						 "qcom,vdd-names");
+
+		if ((cnt == 0) || (cnt == -EINVAL)) {
+			dev_err(fd->dev, "no regulators found, count=%d\n",
+				 cnt);
+			return -EINVAL;
+		}
+
+		if (cnt > MSM_FD_MAX_REGULATOR_NUM) {
+			dev_err(fd->dev,
+				 "Exceed max number of regulators %d\n", cnt);
+			return -EINVAL;
+		}
+
+		for (i = 0; i < cnt; i++) {
+			ret = of_property_read_string_index(fd->dev->of_node,
+						"qcom,vdd-names",
+						i, &regulator_name);
+			if (ret < 0) {
+				dev_err(fd->dev,
+					 "Cannot read regulator name %d\n", i);
+				return ret;
+			}
+
+			fd->vdd[i] = regulator_get(fd->dev, regulator_name);
+			if (IS_ERR(fd->vdd[i])) {
+				ret = PTR_ERR(fd->vdd[i]);
+				fd->vdd[i] = NULL;
+				dev_err(fd->dev, "Error regulator get %s\n",
+					 regulator_name);
+				goto regulator_get_error;
+			}
+			dev_dbg(fd->dev, "Regulator name idx %d %s\n", i,
+				 regulator_name);
+		}
+		fd->regulator_num = cnt;
+	} else {
+		fd->regulator_num = 1;
+		fd->vdd[0] = regulator_get(fd->dev, "vdd");
+		if (IS_ERR(fd->vdd[0])) {
+			dev_err(fd->dev, "Fail to get vdd regulator\n");
+			ret = PTR_ERR(fd->vdd[0]);
+			fd->vdd[0] = NULL;
+			return ret;
+		}
+	}
+	return 0;
+
+regulator_get_error:
+	for (; i > 0; i--) {
+		if (!IS_ERR_OR_NULL(fd->vdd[i - 1]))
+			regulator_put(fd->vdd[i - 1]);
+	}
+	return ret;
+}
+
+/*
+ * msm_fd_hw_put_regulators - Put fd regulators.
+ * @fd: Pointer to fd device.
+ */
+int msm_fd_hw_put_regulators(struct msm_fd_device *fd)
+{
+	int i;
+
+	for (i = fd->regulator_num - 1; i >= 0; i--) {
+		if (!IS_ERR_OR_NULL(fd->vdd[i]))
+			regulator_put(fd->vdd[i]);
+	}
+	return 0;
+}
+
+/*
+ * msm_fd_hw_enable_regulators - Prepare and enable fd regulators.
+ * @fd: Pointer to fd device.
+ */
+static int msm_fd_hw_enable_regulators(struct msm_fd_device *fd)
+{
+	int i;
+	int ret;
+
+	for (i = 0; i < fd->regulator_num; i++) {
+
+		ret = regulator_enable(fd->vdd[i]);
+		if (ret < 0) {
+			dev_err(fd->dev, "regulator enable failed %d\n", i);
+			regulator_put(fd->vdd[i]);
+			goto error;
+		}
+	}
+
+	return 0;
+error:
+	for (; i > 0; i--) {
+		if (!IS_ERR_OR_NULL(fd->vdd[i - 1])) {
+			regulator_disable(fd->vdd[i - 1]);
+			regulator_put(fd->vdd[i - 1]);
+		}
+	}
+	return ret;
+}
+
+/*
+ * msm_fd_hw_disable_regulators - Disable fd regulator.
+ * @fd: Pointer to fd device.
+ */
+static void msm_fd_hw_disable_regulators(struct msm_fd_device *fd)
+{
+	int i;
+
+	for (i = fd->regulator_num - 1; i >= 0; i--) {
+		if (!IS_ERR_OR_NULL(fd->vdd[i]))
+			regulator_disable(fd->vdd[i]);
+	}
+}
+
+/*
  * msm_fd_hw_get_clocks - Get fd clocks.
  * @fd: Pointer to fd device.
  *
@@ -931,7 +1061,7 @@ int msm_fd_hw_get_bus(struct msm_fd_device *fd)
 		if (ret < 0)
 			break;
 
-		fd->bus_vectors[usecase].src = MSM_BUS_MASTER_VPU;
+		fd->bus_vectors[usecase].src = MSM_BUS_MASTER_CPP;
 		fd->bus_vectors[usecase].dst = MSM_BUS_SLAVE_EBI_CH0;
 		fd->bus_vectors[usecase].ab = ab;
 		fd->bus_vectors[usecase].ib = ib;
@@ -1021,12 +1151,11 @@ int msm_fd_hw_get(struct msm_fd_device *fd, unsigned int clock_rate_idx)
 			goto error;
 		}
 
-		ret = regulator_enable(fd->vdd);
+		ret = msm_fd_hw_enable_regulators(fd);
 		if (ret < 0) {
-			dev_err(fd->dev, "Fail to enable vdd\n");
+			dev_err(fd->dev, "Fail to enable regulators\n");
 			goto error;
 		}
-
 		ret = msm_fd_hw_enable_clocks(fd);
 		if (ret < 0) {
 			dev_err(fd->dev, "Fail to enable clocks\n");
@@ -1045,6 +1174,7 @@ int msm_fd_hw_get(struct msm_fd_device *fd, unsigned int clock_rate_idx)
 		msm_fd_hw_vbif_register(fd);
 	}
 
+
 	fd->ref_count++;
 	mutex_unlock(&fd->lock);
 
@@ -1053,7 +1183,7 @@ int msm_fd_hw_get(struct msm_fd_device *fd, unsigned int clock_rate_idx)
 error_bus_request:
 	msm_fd_hw_disable_clocks(fd);
 error_clocks:
-	regulator_disable(fd->vdd);
+	msm_fd_hw_disable_regulators(fd);
 error:
 	mutex_unlock(&fd->lock);
 	return ret;
@@ -1080,7 +1210,7 @@ void msm_fd_hw_put(struct msm_fd_device *fd)
 		msm_fd_hw_vbif_unregister(fd);
 		msm_fd_hw_bus_release(fd);
 		msm_fd_hw_disable_clocks(fd);
-		regulator_disable(fd->vdd);
+		msm_fd_hw_disable_regulators(fd);
 	}
 	mutex_unlock(&fd->lock);
 }
