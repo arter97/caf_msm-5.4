@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -29,8 +29,10 @@
 
 #ifdef CONFIG_MSM_ISPIF_V1
 #include "msm_ispif_hwreg_v1.h"
-#else
+#elseif CONFIG_MSM_ISPIF_V2
 #include "msm_ispif_hwreg_v2.h"
+#else
+#include "msm_ispif_hwreg_v3.h"
 #endif
 
 #define V4L2_IDENT_ISPIF                      50001
@@ -824,13 +826,13 @@ static int msm_ispif_restart_frame_boundary(struct ispif_device *ispif,
 		init_completion(&ispif->reset_complete[VFE0]);
 		pr_err("%s Init completion VFE0\n", __func__);
 			/* initiate reset of ISPIF */
-		msm_camera_io_w(0x00001FF9,
+		msm_camera_io_w(ISPIF_RST_CMD_MASK_RESTART,
 				ispif->base + ISPIF_RST_CMD_ADDR);
 	}
 	if (ispif->hw_num_isps > 1 && (vfe_mask & (1 << VFE1))) {
 		init_completion(&ispif->reset_complete[VFE1]);
 		pr_err("%s Init completion VFE1\n", __func__);
-				msm_camera_io_w(0x00001FF9,
+				msm_camera_io_w(ISPIF_RST_CMD_1_MASK_RESTART,
 					ispif->base + ISPIF_RST_CMD_1_ADDR);
 	}
 
