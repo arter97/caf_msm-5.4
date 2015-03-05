@@ -526,7 +526,7 @@ static inline int is_fully_aligned(unsigned int va, phys_addr_t pa, size_t len,
 }
 #endif
 
-size_t msm_iommu_pagetable_map_range(struct msm_iommu_pt *pt, unsigned long va,
+int msm_iommu_pagetable_map_range(struct msm_iommu_pt *pt, unsigned long va,
 		       struct scatterlist *sg, u32 len, s32 prot)
 {
 	phys_addr_t pa;
@@ -609,7 +609,7 @@ size_t msm_iommu_pagetable_map_range(struct msm_iommu_pt *pt, unsigned long va,
 fail:
 	if (ret && offset > 0)
 		__msm_iommu_pagetable_unmap_range(pt, start_va, offset, 1);
-	return ret ? 0 : len;
+	return ret;
 }
 
 void msm_iommu_pagetable_unmap_range(struct msm_iommu_pt *pt, u32 va, u32 len)
