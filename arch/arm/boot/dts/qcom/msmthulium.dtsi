@@ -2963,6 +2963,9 @@
 };
 
 &gdsc_gpu_gx {
+	clock-names = "bimc_core_clk", "core_clk";
+	clocks = <&clock_gcc clk_gcc_mmss_bimc_gfx_clk>,
+		 <&clock_mmss clk_gpu_gx_gfx3d_clk>;
 	parent-supply = <&gfx_vreg>;
 	status = "ok";
 };
