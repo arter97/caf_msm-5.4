@@ -1422,6 +1422,58 @@ static int32_t is_no_wait_cmd_rsp(uint32_t opcode, uint32_t *cmd_type)
 	return 0;
 }
 
+static void q6asm_process_mtmx_get_param_rsp(struct audio_client *ac,
+				struct asm_mtmx_strtr_get_params_cmdrsp *cmdrsp)
+{
+	struct asm_session_mtmx_strtr_param_session_time_v3_t *time;
+
+	if (cmdrsp->err_code) {
+		dev_err_ratelimited(ac->dev,
+				    "%s: err=%x, mod_id=%x, param_id=%x\n",
+				    __func__, cmdrsp->err_code,
+				    cmdrsp->param_info.module_id,
+				    cmdrsp->param_info.param_id);
+		return;
+	} else {
+		dev_dbg_ratelimited(ac->dev,
+				    "%s: mod_id=%x, param_id=%x\n", __func__,
+				    cmdrsp->param_info.module_id,
+				    cmdrsp->param_info.param_id);
+	}
+
+	switch (cmdrsp->param_info.module_id) {
+	case ASM_SESSION_MTMX_STRTR_MODULE_ID_AVSYNC:
+		switch (cmdrsp->param_info.param_id) {
+		case ASM_SESSION_MTMX_STRTR_PARAM_SESSION_TIME_V3:
+			time = &cmdrsp->param_data.session_time;
+			dev_vdbg(ac->dev, "%s: GET_TIME_V3, time_lsw=%x, time_msw=%x\n",
+				 __func__, time->session_time_lsw,
+				 time->session_time_msw);
+			ac->time_stamp = (uint64_t)(((uint64_t)
+					 time->session_time_msw << 32) |
+					 time->session_time_lsw);
+			if (time->flags &
+			    ASM_SESSION_MTMX_STRTR_PARAM_STIME_TSTMP_FLG_BMASK)
+				dev_warn_ratelimited(ac->dev,
+						     "%s: recv inval tstmp\n",
+						     __func__);
+			if (atomic_cmpxchg(&ac->time_flag, 1, 0))
+				wake_up(&ac->time_wait);
+
+			break;
+		default:
+			dev_err(ac->dev, "%s: unexpected param_id %x\n",
+				__func__, cmdrsp->param_info.param_id);
+			break;
+		}
+		break;
+	default:
+		dev_err(ac->dev, "%s: unexpected mod_id %x\n",  __func__,
+			cmdrsp->param_info.module_id);
+		break;
+	}
+}
+
 static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 {
 	int i = 0;
@@ -1745,6 +1797,9 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 				 __func__,
 				payload[0], payload[1], payload[2],
 				payload[3]);
+		break;
+	case ASM_SESSION_CMDRSP_GET_MTMX_STRTR_PARAMS_V2:
+		q6asm_process_mtmx_get_param_rsp(ac, (void *) payload);
 		break;
 	}
 	if (ac->cb)
@@ -5263,7 +5318,7 @@ fail_cmd:
 
 int q6asm_get_session_time(struct audio_client *ac, uint64_t *tstamp)
 {
-	struct apr_hdr hdr;
+	struct asm_mtmx_strtr_get_params mtmx_params;
 	int rc;
 
 	if (ac == NULL) {
@@ -5279,17 +5334,28 @@ int q6asm_get_session_time(struct audio_client *ac, uint64_t *tstamp)
 		return -EINVAL;
 	}
 
-	q6asm_add_hdr(ac, &hdr, sizeof(hdr), TRUE);
-	hdr.opcode = ASM_SESSION_CMD_GET_SESSIONTIME_V3;
+	q6asm_add_hdr(ac, &mtmx_params.hdr, sizeof(mtmx_params), TRUE);
+	mtmx_params.hdr.opcode = ASM_SESSION_CMD_GET_MTMX_STRTR_PARAMS_V2;
+	mtmx_params.param_info.data_payload_addr_lsw = 0;
+	mtmx_params.param_info.data_payload_addr_msw = 0;
+	mtmx_params.param_info.mem_map_handle = 0;
+	mtmx_params.param_info.direction = (ac->io_mode & TUN_READ_IO_MODE
+					    ? 1 : 0);
+	mtmx_params.param_info.module_id =
+		ASM_SESSION_MTMX_STRTR_MODULE_ID_AVSYNC;
+	mtmx_params.param_info.param_id =
+		ASM_SESSION_MTMX_STRTR_PARAM_SESSION_TIME_V3;
+	mtmx_params.param_info.param_max_size =
+		sizeof(struct asm_stream_param_data_v2) +
+		sizeof(struct asm_session_mtmx_strtr_param_session_time_v3_t);
 	atomic_set(&ac->time_flag, 1);
 
 	dev_vdbg(ac->dev, "%s: session[%d]opcode[0x%x]\n", __func__,
-			ac->session,
-			hdr.opcode);
-	rc = apr_send_pkt(ac->apr, (uint32_t *) &hdr);
+		 ac->session, mtmx_params.hdr.opcode);
+	rc = apr_send_pkt(ac->apr, (uint32_t *) &mtmx_params);
 	if (rc < 0) {
-		pr_err("%s: Commmand 0x%x failed %d\n",
-				__func__, hdr.opcode, rc);
+		pr_err("%s: Commmand 0x%x failed %d\n", __func__,
+		       mtmx_params.hdr.opcode, rc);
 		goto fail_cmd;
 	}
 	rc = wait_event_timeout(ac->time_wait,

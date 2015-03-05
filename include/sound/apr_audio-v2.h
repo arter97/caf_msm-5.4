@@ -7767,6 +7767,117 @@ struct asm_mtmx_strtr_params {
 	u32 window_lsw;
 	u32 window_msw;
 } __packed;
+
+#define ASM_SESSION_CMD_GET_MTMX_STRTR_PARAMS_V2 0x00010DCF
+#define ASM_SESSION_CMDRSP_GET_MTMX_STRTR_PARAMS_V2 0x00010DD0
+
+#define ASM_SESSION_MTMX_STRTR_PARAM_SESSION_TIME_V3 0x00012F0B
+#define ASM_SESSION_MTMX_STRTR_PARAM_STIME_TSTMP_FLG_BMASK (0x80000000UL)
+
+struct asm_session_cmd_get_mtmx_strstr_params_v2 {
+	uint32_t                  data_payload_addr_lsw;
+	/* Lower 32 bits of the 64-bit data payload address. */
+
+	uint32_t                  data_payload_addr_msw;
+	/*
+	 * Upper 32 bits of the 64-bit data payload address.
+	 * If the address is not sent (NULL), the message is in the payload.
+	 * If the address is sent (non-NULL), the parameter data payloads
+	 * begin at the specified address.
+	 */
+
+	uint32_t                  mem_map_handle;
+	/*
+	 * Unique identifier for an address. This memory map handle is returned
+	 * by the aDSP through the #ASM_CMD_SHARED_MEM_MAP_REGIONS command.
+	 * values
+	 * - NULL -- Parameter data payloads are within the message payload
+	 * (in-band).
+	 * - Non-NULL -- Parameter data payloads begin at the address specified
+	 * in the data_payload_addr_lsw and data_payload_addr_msw fields
+	 * (out-of-band).
+	 */
+	uint32_t                  direction;
+	/*
+	 * Direction of the entity (matrix mixer or stream router) on which
+	 * the parameter is to be set.
+	 * values
+	 * - 0 -- Rx (for Rx stream router or Rx matrix mixer)
+	 * - 1 -- Tx (for Tx stream router or Tx matrix mixer)
+	 */
+	uint32_t                  module_id;
+	/* Unique module ID. */
+
+	uint32_t                  param_id;
+	/* Unique parameter ID. */
+
+	uint32_t                  param_max_size;
+};
+
+struct asm_session_mtmx_strtr_param_session_time_v3_t {
+	uint32_t                  session_time_lsw;
+	/* Lower 32 bits of the current session time in microseconds */
+
+	uint32_t                  session_time_msw;
+	/*
+	 * Upper 32 bits of the current session time in microseconds.
+	 * The 64-bit number formed by session_time_lsw and session_time_msw
+	 * is treated as signed.
+	 */
+
+	uint32_t                  absolute_time_lsw;
+	/*
+	 * Lower 32 bits of the 64-bit absolute time in microseconds.
+	 * This is the time when the sample corresponding to the
+	 * session_time_lsw is rendered to the hardware. This absolute
+	 * time can be slightly in the future or past.
+	 */
+
+	uint32_t                  absolute_time_msw;
+	/*
+	 * Upper 32 bits of the 64-bit absolute time in microseconds.
+	 * This is the time when the sample corresponding to the
+	 * session_time_msw is rendered to hardware. This absolute
+	 * time can be slightly in the future or past. The 64-bit number
+	 * formed by absolute_time_lsw and absolute_time_msw is treated as
+	 * unsigned.
+	 */
+
+	uint32_t                  time_stamp_lsw;
+	/* Lower 32 bits of the last processed timestamp in microseconds */
+
+	uint32_t                  time_stamp_msw;
+	/*
+	 * Upper 32 bits of the last processed timestamp in microseconds.
+	 * The 64-bit number formed by time_stamp_lsw and time_stamp_lsw
+	 * is treated as unsigned.
+	 */
+
+	uint32_t                  flags;
+	/*
+	 * Keeps track of any additional flags needed.
+	 * @values{for bit 31}
+	 * - 0 -- Uninitialized/invalid
+	 * - 1 -- Valid
+	 * All other bits are reserved; clients must set them to zero.
+	 */
+};
+
+union asm_session_mtmx_strtr_data_type {
+	struct asm_session_mtmx_strtr_param_session_time_v3_t session_time;
+};
+
+struct asm_mtmx_strtr_get_params {
+	struct apr_hdr hdr;
+	struct asm_session_cmd_get_mtmx_strstr_params_v2 param_info;
+} __packed;
+
+struct asm_mtmx_strtr_get_params_cmdrsp {
+	uint32_t err_code;
+	struct asm_stream_param_data_v2 param_info;
+	union asm_session_mtmx_strtr_data_type param_data;
+} __packed;
+
 #define AUDPROC_MODULE_ID_RESAMPLER 0x00010719
 
 enum {
