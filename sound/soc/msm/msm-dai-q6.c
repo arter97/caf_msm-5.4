@@ -256,15 +256,29 @@ static int msm_dai_q6_mi2s_hw_params(struct snd_pcm_substream *substream,
 		goto error_invalid_data;
 	}
 	dai_data->rate = params_rate(params);
-	dai_data->port_config.mi2s.bitwidth = 16;
-	dai_data->bitwidth = 16;
+	switch (params_format(params)) {
+	case SNDRV_PCM_FORMAT_S16_LE:
+		dai_data->port_config.mi2s.bitwidth = 16;
+		dai_data->bitwidth = 16;
+		break;
+	case SNDRV_PCM_FORMAT_S24_LE:
+		dai_data->port_config.mi2s.bitwidth = 24;
+		dai_data->bitwidth = 24;
+		break;
+	default:
+		pr_err("%s: format %d\n",
+			__func__, params_format(params));
+		return -EINVAL;
+	}
 	if (!mi2s_dai_data->rate_constraint.list) {
 		mi2s_dai_data->rate_constraint.list = &dai_data->rate;
 		mi2s_dai_data->bitwidth_constraint.list = &dai_data->bitwidth;
 	}
 
-	pr_debug("%s: dai_data->channels = %d, line = %d\n", __func__,
-			dai_data->channels, dai_data->port_config.mi2s.line);
+	pr_debug("%s: dai_data->channels = %d, line = %d, bit_width = %d\n",
+		 __func__, dai_data->channels,
+		 dai_data->port_config.mi2s.line,
+		 dai_data->bitwidth);
 	return 0;
 error_invalid_data:
 	pr_err("%s: dai_data->channels = %d, line = %d\n", __func__,
@@ -526,13 +540,24 @@ static int msm_dai_q6_cdc_hw_params(struct snd_pcm_hw_params *params,
 		return -EINVAL;
 		break;
 	}
+	switch (params_format(params)) {
+	case SNDRV_PCM_FORMAT_S16_LE:
+		dai_data->port_config.mi2s.bitwidth = 16;
+		break;
+	case SNDRV_PCM_FORMAT_S24_LE:
+		dai_data->port_config.mi2s.bitwidth = 24;
+		break;
+	default:
+		pr_err("%s: format %d\n",
+			__func__, params_format(params));
+		return -EINVAL;
+	}
 	dai_data->rate = params_rate(params);
 
-	dev_dbg(dai->dev, " channel %d sample rate %d entered\n",
-	dai_data->channels, dai_data->rate);
+	dev_dbg(dai->dev, " channel %d sample rate %d bitwidth %d entered\n",
+		dai_data->channels, dai_data->rate,
+		dai_data->port_config.mi2s.bitwidth);
 
-	/* Q6 only supports 16 as now */
-	dai_data->port_config.mi2s.bitwidth = 16;
 	dai_data->port_config.mi2s.line = 1;
 	return 0;
 }
@@ -1551,7 +1576,7 @@ static struct snd_soc_dai_driver msm_dai_q6_i2s_rx_dai = {
 	.playback = {
 		.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
 		SNDRV_PCM_RATE_16000,
-		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE,
 		.channels_min = 1,
 		.channels_max = 4,
 		.rate_min =     8000,
@@ -1566,7 +1591,7 @@ static struct snd_soc_dai_driver msm_dai_q6_i2s_tx_dai = {
 	.capture = {
 		.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
 		SNDRV_PCM_RATE_16000,
-		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE,
 		.channels_min = 1,
 		.channels_max = 2,
 		.rate_min =     8000,
@@ -1786,14 +1811,14 @@ static struct snd_soc_dai_driver msm_dai_q6_mi2s_dai = {
 	.playback = {
 		.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
 		SNDRV_PCM_RATE_16000,
-		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE,
 		.rate_min =     8000,
 		.rate_max =	48000,
 	},
 	.capture = {
 		.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
 		SNDRV_PCM_RATE_16000,
-		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE,
 		.rate_min =     8000,
 		.rate_max =     48000,
 	},

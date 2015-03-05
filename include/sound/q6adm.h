@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2012, 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,7 +27,7 @@ struct route_payload {
 int adm_open(int port, int path, int rate, int mode, int topology);
 
 int adm_multi_ch_copp_open(int port, int path, int rate, int mode,
-				int topology, int perfmode);
+				int topology, int perfmode, uint16_t bit_width);
 
 int adm_memory_map_regions(uint32_t *buf_add, uint32_t mempool_id,
 				uint32_t *bufsz, uint32_t bufcnt);

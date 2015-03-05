@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,23 +26,17 @@
 #include <sound/pcm.h>
 #include <sound/initval.h>
 #include <sound/control.h>
-#include <sound/q6asm-v2.h>
+#include <sound/q6asm.h>
 #include <sound/pcm_params.h>
 #include <asm/dma.h>
 #include <linux/dma-mapping.h>
-#include <linux/msm_audio_ion.h>
-
 #include <sound/timer.h>
 #include <sound/tlv.h>
-
-#include <sound/apr_audio-v2.h>
-#include <sound/q6asm-v2.h>
+#include <sound/apr_audio.h>
 #include <sound/compress_params.h>
 #include <sound/compress_offload.h>
 #include <sound/compress_driver.h>
-
-#include "msm-pcm-routing-v2.h"
-#include "audio_ocmem.h"
+#include "msm-pcm-routing.h"
 
 /* Default values used if user space does not set */
 #define COMPR_PLAYBACK_MIN_FRAGMENT_SIZE (8 * 1024)
@@ -55,7 +49,6 @@ const DECLARE_TLV_DB_LINEAR(msm_compr_vol_gain, 0,
 				COMPRESSED_LR_VOL_MAX_STEPS);
 
 struct msm_compr_pdata {
-	atomic_t audio_ocmem_req;
 	struct snd_compr_stream *cstream[MSM_FRONTEND_DAI_MAX];
 	uint32_t volume[MSM_FRONTEND_DAI_MAX][2]; /* For both L & R */
 };
@@ -156,7 +149,6 @@ static int msm_compr_send_buffer(struct msm_compr_audio *prtd)
 	param.lsw_ts	= 0;
 	param.flags	= NO_TIMESTAMP;
 	param.uid	= buffer_length;
-	param.metadata_len = 0;
 
 	pr_debug("%s: sending %d bytes to DSP byte_offset = %d\n",
 		__func__, buffer_length, prtd->byte_offset);
@@ -171,13 +163,11 @@ static void compr_event_handler(uint32_t opcode,
 {
 	struct msm_compr_audio *prtd = priv;
 	struct snd_compr_stream *cstream = prtd->cstream;
-	uint32_t chan_mode = 0;
-	uint32_t sample_rate = 0;
 
 	pr_debug("%s opcode =%08x\n", __func__, opcode);
 	switch (opcode) {
-	case ASM_DATA_EVENT_WRITE_DONE_V2:
-		pr_debug("ASM_DATA_EVENT_WRITE_DONE_V2\n");
+	case ASM_DATA_EVENT_WRITE_DONE:
+		pr_debug("ASM_DATA_EVENT_WRITE_DONE\n");
 		spin_lock_irq(&prtd->lock);
 		prtd->byte_offset += token;
 		prtd->copied_total += token;
@@ -189,31 +179,11 @@ static void compr_event_handler(uint32_t opcode,
 			msm_compr_send_buffer(prtd);
 		spin_unlock_irq(&prtd->lock);
 		break;
-	case ASM_DATA_EVENT_RENDERED_EOS:
-		pr_debug("ASM_DATA_CMDRSP_EOS\n");
-		if (atomic_read(&prtd->eos)) {
-			pr_debug("ASM_DATA_CMDRSP_EOS wake up\n");
-			prtd->cmd_ack = 1;
-			wake_up(&prtd->eos_wait);
-			atomic_set(&prtd->eos, 0);
-		}
-		break;
-	case ASM_DATA_EVENT_SR_CM_CHANGE_NOTIFY:
-	case ASM_DATA_EVENT_ENC_SR_CM_CHANGE_NOTIFY: {
-		pr_debug("ASM_DATA_EVENT_SR_CM_CHANGE_NOTIFY\n");
-		chan_mode = payload[1] >> 16;
-		sample_rate = payload[2] >> 16;
-		if (prtd && (chan_mode != prtd->num_channels ||
-				sample_rate != prtd->sample_rate)) {
-			prtd->num_channels = chan_mode;
-			prtd->sample_rate = sample_rate;
-		}
-	}
 	case APR_BASIC_RSP_RESULT: {
 		switch (payload[0]) {
-		case ASM_SESSION_CMD_RUN_V2:
+		case ASM_SESSION_CMD_RUN:
 			/* check if the first buffer need to be sent to DSP */
-			pr_debug("ASM_SESSION_CMD_RUN_V2\n");
+			pr_debug("ASM_SESSION_CMD_RUN\n");
 			if (!prtd->copied_total)
 				msm_compr_send_buffer(prtd);
 			break;
@@ -227,9 +197,6 @@ static void compr_event_handler(uint32_t opcode,
 		}
 		break;
 	}
-	case ASM_SESSION_CMDRSP_GET_SESSIONTIME_V3:
-		pr_debug("ASM_SESSION_CMDRSP_GET_SESSIONTIME_V3\n");
-		break;
 	default:
 		pr_debug("Not Supported Event opcode[0x%x]\n", opcode);
 		break;
@@ -248,10 +215,61 @@ static void populate_codec_list(struct msm_compr_audio *prtd)
 			COMPR_PLAYBACK_MIN_NUM_FRAGMENTS;
 	prtd->compr_cap.max_fragments =
 			COMPR_PLAYBACK_MAX_NUM_FRAGMENTS;
-	prtd->compr_cap.num_codecs = 2;
+	prtd->compr_cap.num_codecs = 3;
 	prtd->compr_cap.codecs[0] = SND_AUDIOCODEC_MP3;
 	prtd->compr_cap.codecs[1] = SND_AUDIOCODEC_AAC;
+	prtd->compr_cap.codecs[2] = SND_AUDIOCODEC_PCM;
 }
+
+static int msm_compr_send_media_format_block(
+	struct snd_compr_stream *cstream)
+{
+	struct snd_compr_runtime *runtime = cstream->runtime;
+	struct msm_compr_audio *prtd = runtime->private_data;
+	struct asm_aac_cfg aac_cfg;
+	int ret = 0;
+	uint16_t bit_width = 16;
+
+	switch (prtd->codec) {
+	case FORMAT_LINEAR_PCM:
+		pr_debug("SND_AUDIOCODEC_PCM\n");
+		if (prtd->codec_param.codec.format == SNDRV_PCM_FORMAT_S24_LE)
+			bit_width = 24;
+		ret = q6asm_media_format_block_pcm_v2(prtd->audio_client,
+						      prtd->sample_rate,
+						      prtd->num_channels,
+						      bit_width);
+		if (ret < 0)
+			pr_err("%s: CMD Format block failed\n", __func__);
+
+		break;
+	case FORMAT_MP3:
+		pr_debug("SND_AUDIOCODEC_MP3\n");
+		/* no media format block needed */
+		break;
+	case FORMAT_MPEG4_AAC:
+		pr_debug("SND_AUDIOCODEC_AAC\n");
+		memset(&aac_cfg, 0x0, sizeof(struct asm_aac_cfg));
+		aac_cfg.aot = AAC_ENC_MODE_EAAC_P;
+		if (prtd->codec_param.codec.format ==
+					SND_AUDIOSTREAMFORMAT_MP4ADTS)
+			aac_cfg.format = 0x0;
+		else
+			aac_cfg.format = 0x03;
+		aac_cfg.ch_cfg = prtd->num_channels;
+		aac_cfg.sample_rate = prtd->sample_rate;
+		ret = q6asm_media_format_block_aac(prtd->audio_client,
+						   &aac_cfg);
+		if (ret < 0)
+			pr_err("%s: CMD Format block failed\n", __func__);
+		break;
+	default:
+		pr_debug("%s, unsupported format, skip", __func__);
+		break;
+	}
+	return ret;
+}
+
 
 static int msm_compr_configure_dsp(struct snd_compr_stream *cstream)
 {
@@ -273,6 +291,14 @@ static int msm_compr_configure_dsp(struct snd_compr_stream *cstream)
 	};
 
 	pr_debug("%s\n", __func__);
+
+	if (prtd->codec_param.codec.format == SNDRV_PCM_FORMAT_S24_LE)
+		bits_per_sample = 24;
+	else if (prtd->codec_param.codec.format == SNDRV_PCM_FORMAT_S32_LE)
+		bits_per_sample = 32;
+
+	pr_debug("%s: bits_per_sample %d\n", __func__, bits_per_sample);
+
 	ret = q6asm_open_write_v2(prtd->audio_client,
 				prtd->codec, bits_per_sample);
 	if (ret < 0) {
@@ -330,6 +356,10 @@ static int msm_compr_configure_dsp(struct snd_compr_stream *cstream)
 	prtd->buffer_paddr = prtd->audio_client->port[dir].buf[0].phys;
 	prtd->buffer_size  = runtime->fragments * runtime->fragment_size;
 
+	ret = msm_compr_send_media_format_block(cstream);
+	if (ret < 0)
+		pr_err("%s, failed to send media format block\n", __func__);
+
 	return 0;
 }
 
@@ -382,17 +412,6 @@ static int msm_compr_open(struct snd_compr_stream *cstream)
 	runtime->private_data = prtd;
 	populate_codec_list(prtd);
 
-	if (cstream->direction == SND_COMPRESS_PLAYBACK) {
-		if (!atomic_cmpxchg(&pdata->audio_ocmem_req, 0, 1))
-			audio_ocmem_process_req(AUDIO, true);
-		else
-			atomic_inc(&pdata->audio_ocmem_req);
-		pr_debug("%s: ocmem_req: %d\n", __func__,
-				atomic_read(&pdata->audio_ocmem_req));
-	} else {
-		pr_err("%s: Unsupported stream type", __func__);
-	}
-
 	return 0;
 }
 
@@ -408,17 +427,9 @@ static int msm_compr_free(struct snd_compr_stream *cstream)
 	pr_debug("%s\n", __func__);
 	pdata->cstream[soc_prtd->dai_link->be_id] = NULL;
 	if (cstream->direction == SND_COMPRESS_PLAYBACK) {
-		if (atomic_read(&pdata->audio_ocmem_req) > 1)
-			atomic_dec(&pdata->audio_ocmem_req);
-		else if (atomic_cmpxchg(&pdata->audio_ocmem_req, 1, 0))
-			audio_ocmem_process_req(AUDIO, false);
-
 		msm_pcm_routing_dereg_phy_stream(soc_prtd->dai_link->be_id,
 						SNDRV_PCM_STREAM_PLAYBACK);
 	}
-
-	pr_debug("%s: ocmem_req: %d\n", __func__,
-		atomic_read(&pdata->audio_ocmem_req));
 
 	ret = wait_event_timeout(prtd->eos_wait,
 				prtd->cmd_ack, 5 * HZ);
@@ -480,6 +491,12 @@ static int msm_compr_set_params(struct snd_compr_stream *cstream,
 	pr_debug("%s: sample_rate %d\n", __func__, prtd->sample_rate);
 
 	switch (params->codec.id) {
+	case SND_AUDIOCODEC_PCM: {
+		pr_debug("SND_AUDIOCODEC_PCM\n");
+		prtd->codec = FORMAT_LINEAR_PCM;
+		break;
+	}
+
 	case SND_AUDIOCODEC_MP3: {
 		pr_debug("SND_AUDIOCODEC_MP3\n");
 		prtd->codec = FORMAT_MP3;
@@ -708,7 +725,7 @@ static int msm_compr_ack(struct snd_compr_stream *cstream,
 }
 
 static int msm_compr_copy(struct snd_compr_stream *cstream,
-				const char __user *buf, size_t count)
+				char __user *buf, size_t count)
 {
 	struct snd_compr_runtime *runtime = cstream->runtime;
 	struct msm_compr_audio *prtd = runtime->private_data;
@@ -734,7 +751,6 @@ static int msm_compr_copy(struct snd_compr_stream *cstream,
 			return -EFAULT;
 		prtd->app_pointer = count - copy;
 	}
-	runtime->app_pointer = prtd->app_pointer;
 
 	/*
 	 * If stream is started and all the bytes received were
@@ -871,8 +887,6 @@ static int msm_compr_probe(struct snd_soc_platform *platform)
 		return -ENOMEM;
 
 	snd_soc_platform_set_drvdata(platform, pdata);
-
-	atomic_set(&pdata->audio_ocmem_req, 0);
 
 	for (i = 0; i < MSM_FRONTEND_DAI_MAX; i++) {
 		pdata->volume[i][0] = COMPRESSED_LR_VOL_MAX_STEPS;
