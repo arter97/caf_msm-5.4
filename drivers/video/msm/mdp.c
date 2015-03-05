@@ -2477,8 +2477,8 @@ static int mdp_on(struct platform_device *pdev)
 			}
 			mdp_lut_status_restore();
 			outpdw(MDP_BASE + 0x0038, mdp4_display_intf);
-			mdp_on_init_cnt++;
 		}
+		mdp_on_init_cnt++;
 
 		if (mfd->panel.type == MIPI_CMD_PANEL) {
 			mdp_vsync_cfg_regs(mfd, FALSE);
