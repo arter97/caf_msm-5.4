@@ -435,76 +435,6 @@ put_vdda18_lpm:
 	return rc < 0 ? rc : 0;
 }
 
-static int msm_ssphy_qmp_init_clocks(struct msm_ssphy_qmp *phy)
-{
-	int ret = 0;
-
-	phy->aux_clk = devm_clk_get(phy->phy.dev, "aux_clk");
-	if (IS_ERR(phy->aux_clk)) {
-		dev_err(phy->phy.dev, "failed to get aux_clk\n");
-		ret = PTR_ERR(phy->aux_clk);
-		return ret;
-	}
-	clk_set_rate(phy->aux_clk, clk_round_rate(phy->aux_clk, ULONG_MAX));
-	clk_prepare_enable(phy->aux_clk);
-
-	phy->cfg_ahb_clk = devm_clk_get(phy->phy.dev, "cfg_ahb_clk");
-	if (IS_ERR(phy->cfg_ahb_clk)) {
-		dev_err(phy->phy.dev, "failed to get cfg_ahb_clk\n");
-		ret = PTR_ERR(phy->cfg_ahb_clk);
-		goto disable_aux_clk;
-	}
-	clk_prepare_enable(phy->cfg_ahb_clk);
-
-	phy->pipe_clk = devm_clk_get(phy->phy.dev, "pipe_clk");
-	if (IS_ERR(phy->pipe_clk)) {
-		dev_err(phy->phy.dev, "failed to get pipe_clk\n");
-		ret = PTR_ERR(phy->pipe_clk);
-		goto disable_cfg_ahb_clk;
-	}
-
-	if (phy->switch_pipe_clk_src) {
-		/*
-		 * Before PHY is initilized we must first use the xo clock
-		 * as the source clock for the gcc_usb3_pipe_clk in 19.2MHz
-		 * After PHY initilization we will set the rate again to 125MHz.
-		 */
-		clk_set_rate(phy->pipe_clk, 19200000);
-		clk_prepare_enable(phy->pipe_clk);
-	} /* otherwise pipe_clk must be enabled after initialization */
-
-	phy->phy_com_reset = devm_clk_get(phy->phy.dev, "phy_com_reset");
-	if (IS_ERR(phy->phy_com_reset)) {
-		phy->phy_com_reset = NULL;
-		dev_dbg(phy->phy.dev, "failed to get phy_com_reset\n");
-	}
-
-	phy->phy_reset = devm_clk_get(phy->phy.dev, "phy_reset");
-	if (IS_ERR(phy->phy_reset)) {
-		dev_err(phy->phy.dev, "failed to get phy_reset\n");
-		ret = PTR_ERR(phy->phy_reset);
-		goto disable_pipe_clk;
-	}
-
-	phy->phy_phy_reset = devm_clk_get(phy->phy.dev, "phy_phy_reset");
-	if (IS_ERR(phy->phy_phy_reset)) {
-		phy->phy_phy_reset = NULL;
-		dev_dbg(phy->phy.dev, "phy_phy_reset unavailable\n");
-	}
-
-	phy->clk_enabled = true;
-	return ret;
-
-disable_pipe_clk:
-	clk_disable_unprepare(phy->pipe_clk);
-disable_cfg_ahb_clk:
-	clk_disable_unprepare(phy->cfg_ahb_clk);
-disable_aux_clk:
-	clk_disable_unprepare(phy->aux_clk);
-
-	return ret;
-}
-
 static int configure_phy_regs(struct usb_phy *uphy,
 				const struct qmp_reg_val *reg)
 {
@@ -539,11 +469,20 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 		return 0;
 
 	if (!phy->clk_enabled) {
-		ret = msm_ssphy_qmp_init_clocks(phy);
-		if (ret) {
-			dev_err(uphy->dev, "failed to init clocks %d\n", ret);
-			return ret;
-		}
+		clk_prepare_enable(phy->aux_clk);
+		clk_prepare_enable(phy->cfg_ahb_clk);
+
+		if (phy->switch_pipe_clk_src) {
+			/*
+			 * Before PHY is initilized we must first use the xo
+			 * clock as the source clock for the gcc_usb3_pipe_clk
+			 * as 19.2MHz. After PHY initilization we will set the
+			 * rate again to 125MHz.
+			 */
+			clk_set_rate(phy->pipe_clk, 19200000);
+			clk_prepare_enable(phy->pipe_clk);
+		} /* otherwise pipe_clk must be enabled after initialization */
+		phy->clk_enabled = true;
 	}
 
 	/* Rev ID is made up each of the LSBs of REVISION_ID[0-3] */
@@ -651,14 +590,6 @@ static int msm_ssphy_qmp_reset(struct usb_phy *uphy)
 	int ret;
 
 	dev_dbg(uphy->dev, "Resetting QMP phy\n");
-
-	if (!phy->clk_enabled) {
-		ret = msm_ssphy_qmp_init_clocks(phy);
-		if (ret) {
-			dev_err(uphy->dev, "failed to init clocks %d\n", ret);
-			return ret;
-		}
-	}
 
 	/* Assert USB3 PHY reset */
 	if (phy->phy_com_reset) {
@@ -797,19 +728,10 @@ static int msm_ssphy_qmp_set_suspend(struct usb_phy *uphy, int suspend)
 	dev_dbg(uphy->dev, "QMP PHY set_suspend for %s called with cable %s\n",
 			(suspend ? "suspend" : "resume"),
 			get_cable_status_str(phy));
-	/*
-	 * The dwc3 probe function calls set_suspend on both phys. This prevent
-	 * a situation where would try writing to registers without the phy
-	 * init function being called first.
-	 */
-	if (!phy->clk_enabled) {
-		dev_dbg(uphy->dev, "clocks not enabled yet\n");
-		return -EAGAIN;
-	}
 
-	if (phy->cable_connected && phy->in_suspend && suspend) {
-		dev_dbg(uphy->dev, "%s: USB PHY is already suspended\n",
-			__func__);
+	if (phy->in_suspend == suspend) {
+		dev_dbg(uphy->dev, "%s: USB PHY is already %s.\n",
+			__func__, (suspend ? "suspended" : "resumed"));
 		return 0;
 	}
 
@@ -822,18 +744,20 @@ static int msm_ssphy_qmp_set_suspend(struct usb_phy *uphy, int suspend)
 		}
 		clk_disable_unprepare(phy->cfg_ahb_clk);
 		clk_disable_unprepare(phy->aux_clk);
+		phy->clk_enabled = false;
 		phy->in_suspend = true;
 		msm_ssphy_power_enable(phy, 0);
 		dev_dbg(uphy->dev, "QMP PHY is suspend\n");
 	} else {
 		msm_ssphy_power_enable(phy, 1);
-		clk_prepare_enable(phy->aux_clk);
-		clk_prepare_enable(phy->cfg_ahb_clk);
-		if (!phy->cable_connected) {
+		if (!phy->clk_enabled) {
+			clk_prepare_enable(phy->aux_clk);
+			clk_prepare_enable(phy->cfg_ahb_clk);
 			clk_prepare_enable(phy->pipe_clk);
-			writel_relaxed(0x01,
-				phy->base + PCIE_USB3_PHY_POWER_DOWN_CONTROL);
+			phy->clk_enabled = true;
 		}
+		writel_relaxed(0x01,
+				phy->base + PCIE_USB3_PHY_POWER_DOWN_CONTROL);
 		msm_ssusb_qmp_enable_autonomous(phy);
 		phy->in_suspend = false;
 		dev_dbg(uphy->dev, "QMP PHY is resumed\n");
@@ -864,7 +788,6 @@ static int msm_ssphy_qmp_notify_disconnect(struct usb_phy *uphy,
 	dev_dbg(uphy->dev, " cable_connected=%d\n", phy->cable_connected);
 	msm_ssusb_qmp_enable_autonomous(phy);
 	phy->cable_connected = false;
-	phy->in_suspend = false;
 	return 0;
 }
 
@@ -880,6 +803,69 @@ static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 	if (!phy)
 		return -ENOMEM;
 
+	phy->aux_clk = devm_clk_get(dev, "aux_clk");
+	if (IS_ERR(phy->aux_clk)) {
+		ret = PTR_ERR(phy->aux_clk);
+		phy->aux_clk = NULL;
+		if (ret != -EPROBE_DEFER)
+			dev_err(dev, "failed to get aux_clk\n");
+		goto err;
+	}
+
+	clk_set_rate(phy->aux_clk, clk_round_rate(phy->aux_clk, ULONG_MAX));
+
+	phy->cfg_ahb_clk = devm_clk_get(dev, "cfg_ahb_clk");
+	if (IS_ERR(phy->cfg_ahb_clk)) {
+		ret = PTR_ERR(phy->cfg_ahb_clk);
+		phy->cfg_ahb_clk = NULL;
+		if (ret != -EPROBE_DEFER)
+			dev_err(dev, "failed to get cfg_ahb_clk\n");
+		goto err;
+	}
+
+	phy->pipe_clk = devm_clk_get(dev, "pipe_clk");
+	if (IS_ERR(phy->pipe_clk)) {
+		ret = PTR_ERR(phy->pipe_clk);
+		phy->pipe_clk = NULL;
+		if (ret != -EPROBE_DEFER)
+			dev_err(dev, "failed to get pipe_clk\n");
+		goto err;
+	}
+
+	if (of_property_match_string(pdev->dev.of_node,
+				"clock-names", "phy_com_reset") >= 0) {
+		phy->phy_com_reset = clk_get(&pdev->dev,
+							"phy_com_reset");
+		if (IS_ERR(phy->phy_com_reset)) {
+			ret = PTR_ERR(phy->phy_com_reset);
+			phy->phy_com_reset = NULL;
+			dev_dbg(dev, "failed to get phy_com_reset\n");
+			goto err;
+		}
+	}
+
+	if (of_property_match_string(pdev->dev.of_node,
+				"clock-names", "phy_reset") >= 0) {
+		phy->phy_reset = clk_get(&pdev->dev, "phy_reset");
+		if (IS_ERR(phy->phy_reset)) {
+			ret = PTR_ERR(phy->phy_reset);
+			phy->phy_reset = NULL;
+			dev_dbg(dev, "failed to get phy_reset\n");
+			goto err;
+		}
+	}
+
+	if (of_property_match_string(pdev->dev.of_node,
+				"clock-names", "phy_phy_reset") >= 0) {
+		phy->phy_phy_reset = clk_get(dev, "phy_phy_reset");
+		if (IS_ERR(phy->phy_phy_reset)) {
+			ret = PTR_ERR(phy->phy_phy_reset);
+			phy->phy_phy_reset = NULL;
+			dev_dbg(dev, "phy_phy_reset unavailable\n");
+			goto err;
+		}
+	}
+
 	phy_ver = of_match_device(msm_usb_id_table, &pdev->dev);
 	if (phy_ver) {
 		dev_dbg(dev, "Found QMP PHY version as:%s.\n",
@@ -889,25 +875,31 @@ static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 		} else {
 			dev_err(dev,
 				"QMP PHY version match but wrong data val.\n");
-			return -EINVAL;
+			ret = -EINVAL;
 		}
 	} else {
 		dev_err(dev, "QMP PHY version mismatch.\n");
-		return -ENODEV;
+		ret = -ENODEV;
 	}
+
+	if (ret)
+		goto err;
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 						"qmp_phy_base");
 	phy->base = devm_ioremap_resource(dev, res);
-	if (IS_ERR(phy->base))
-		return PTR_ERR(phy->base);
+	if (IS_ERR(phy->base)) {
+		ret = PTR_ERR(phy->base);
+		goto err;
+	}
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 						"qmp_ahb2phy_base");
 	phy->ahb2phy = devm_ioremap_resource(dev, res);
 	if (IS_ERR(phy->ahb2phy)) {
 		dev_err(dev, "couldn't find qmp_ahb2phy_base address.\n");
-		return PTR_ERR(phy->ahb2phy);
+		ret = PTR_ERR(phy->ahb2phy);
+		goto err;
 	}
 
 	phy->emulation = of_property_read_bool(dev->of_node,
@@ -918,25 +910,27 @@ static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 					 ARRAY_SIZE(phy->vdd_levels));
 	if (ret) {
 		dev_err(dev, "error reading qcom,vdd-voltage-level property\n");
-		return ret;
+		goto err;
 	}
 
 	phy->vdd = devm_regulator_get(dev, "vdd");
 	if (IS_ERR(phy->vdd)) {
 		dev_err(dev, "unable to get vdd supply\n");
-		return PTR_ERR(phy->vdd);
+		ret = PTR_ERR(phy->vdd);
+		goto err;
 	}
 
 	phy->vdda18 = devm_regulator_get(dev, "vdda18");
 	if (IS_ERR(phy->vdda18)) {
 		dev_err(dev, "unable to get vdda18 supply\n");
-		return PTR_ERR(phy->vdda18);
+		ret = PTR_ERR(phy->vdda18);
+		goto err;
 	}
 
 	ret = msm_ssusb_qmp_config_vdd(phy, 1);
 	if (ret) {
 		dev_err(dev, "ssusb vdd_dig configuration failed\n");
-		return ret;
+		goto err;
 	}
 
 	ret = regulator_enable(phy->vdd);
@@ -995,7 +989,7 @@ disable_ss_vdd:
 	regulator_disable(phy->vdd);
 unconfig_ss_vdd:
 	msm_ssusb_qmp_config_vdd(phy, 0);
-
+err:
 	return ret;
 }
 
