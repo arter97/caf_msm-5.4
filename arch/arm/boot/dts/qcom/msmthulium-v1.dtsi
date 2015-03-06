@@ -36,6 +36,14 @@
 	qcom,firmware-name = "venus-v1";
 };
 
+&vmem {
+	status = "disabled";
+};
+
+&lpass_q6_smmu {
+	status = "disabled";
+};
+
 /* Ensure that both possible VDD_GFX supplies cannot be disabled. */
 &pmi8994_s2 {
 	regulator-always-on;
