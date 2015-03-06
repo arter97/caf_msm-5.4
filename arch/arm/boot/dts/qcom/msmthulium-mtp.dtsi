@@ -468,6 +468,10 @@
 	};
 };
 
+&pmi8994_haptics {
+	status = "okay";
+};
+
 &blsp1_uart2 {
 	status = "ok";
 };
