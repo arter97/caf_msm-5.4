@@ -99,7 +99,7 @@ static uint8_t stats_irq_map_comp_mask[] = {
 	(VFE47_STATS_BASE(idx) + 0x4 * \
 	(~(ping_pong >> (stats_pingpong_offset_map[idx])) & 0x1) * 2)
 
-#define VFE47_CLK_IDX 2
+#define VFE47_SRC_CLK_DTSI_IDX 5
 static struct msm_cam_clk_info msm_vfe47_clk_info[VFE_CLK_INFO_MAX];
 static int32_t msm_vfe47_init_dt_parms(struct vfe_device *vfe_dev,
 	struct msm_vfe_hw_init_parms *dt_parms, void __iomem *dev_mem_base)
@@ -2083,7 +2083,7 @@ static struct v4l2_subdev_internal_ops msm_vfe47_internal_ops = {
 struct msm_vfe_hardware_info vfe47_hw_info = {
 	.num_iommu_ctx = 1,
 	.num_iommu_secure_ctx = 0,
-	.vfe_clk_idx = VFE47_CLK_IDX,
+	.vfe_clk_idx = VFE47_SRC_CLK_DTSI_IDX,
 	.vfe_ops = {
 		.irq_ops = {
 			.read_irq_status = msm_vfe47_read_irq_status,
