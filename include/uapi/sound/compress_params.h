@@ -350,6 +350,10 @@ struct snd_dec_flac {
 	__u16 max_frame_size;
 };
 
+struct snd_dec_vorbis {
+	__u32 bit_stream_fmt;
+};
+
 union snd_codec_options {
 	struct snd_enc_wma wma;
 	struct snd_enc_vorbis vorbis;
@@ -358,6 +362,7 @@ union snd_codec_options {
 	struct snd_enc_generic generic;
 	struct snd_dec_ddp ddp;
 	struct snd_dec_flac flac_dec;
+	struct snd_dec_vorbis vorbis_dec;
 };
 
 /** struct snd_codec_desc - description of codec capabilities
