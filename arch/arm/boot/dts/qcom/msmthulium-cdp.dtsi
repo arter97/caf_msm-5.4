@@ -434,6 +434,13 @@
 		qcom,master-en = <1>;           /* Enable MPP */
 		status = "okay";
 	};
+	mpp@a300 { /* MPP 4 */
+		/* WLED FET */
+		qcom,mode = <1>;        /* DIGITAL OUT */
+		qcom,vin-sel = <0>;     /* VIN0 */
+		qcom,master-en = <1>;
+		status = "okay";
+	};
 };
 
 &blsp1_uart2 {
