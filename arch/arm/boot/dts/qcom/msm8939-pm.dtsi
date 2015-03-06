@@ -11,7 +11,9 @@
  */
 
 &soc {
+
 	qcom,spm@b089000 {
+		status = "disabled";
 		compatible = "qcom,spm-v2";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -32,6 +34,7 @@
 	};
 
 	qcom,spm@b099000 {
+		status = "disabled";
 		compatible = "qcom,spm-v2";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -52,6 +55,7 @@
 	};
 
 	qcom,spm@b0a9000 {
+		status = "disabled";
 		compatible = "qcom,spm-v2";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -72,6 +76,7 @@
 	};
 
 	qcom,spm@b0b9000 {
+		status = "disabled";
 		compatible = "qcom,spm-v2";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -92,6 +97,7 @@
 	};
 
 	qcom,spm@b189000 {
+		status = "disabled";
 		compatible = "qcom,spm-v2";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -112,6 +118,7 @@
 	};
 
 	qcom,spm@b199000 {
+		status = "disabled";
 		compatible = "qcom,spm-v2";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -132,6 +139,7 @@
 	};
 
 	qcom,spm@b1a9000 {
+		status = "disabled";
 		compatible = "qcom,spm-v2";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -152,6 +160,7 @@
 	};
 
 	qcom,spm@b1b9000 {
+		status = "disabled";
 		compatible = "qcom,spm-v2";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -172,6 +181,7 @@
 	};
 
 	qcom,spm@b012000 {
+		status = "disabled";
 		compatible = "qcom,spm-v2";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -190,6 +200,7 @@
 	};
 
 	qcom,spm@b112000 {
+		status = "disabled";
 		compatible = "qcom,spm-v2";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -208,6 +219,7 @@
 	};
 
 	qcom,spm@b1d2000 {
+		status = "disabled";
 		compatible = "qcom,spm-v2";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -224,7 +236,7 @@
                 qcom,saw2-spm-cmd-pc = [00 60 50 11 03 70 7B 01 50
                                 02 62 72 0f];
 	};
-
+	
 	qcom,lpm-levels {
 		compatible = "qcom,lpm-levels";
 		#address-cells = <1>;
