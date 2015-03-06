@@ -485,7 +485,7 @@
 			qcom,secure-context-bank;
 		};
 
-		secure_pixel_cb {
+		venus_secure_pixel_cb: secure_pixel_cb {
 			compatible = "qcom,msm-vidc,context-bank";
 			label = "venus_sec_pixel";
 			iommus = <&venus_smmu 0x104>,
@@ -497,7 +497,7 @@
 			qcom,secure-context-bank;
 		};
 
-		secure_non_pixel_cb {
+		venus_secure_non_pixel_cb: secure_non_pixel_cb {
 			compatible = "qcom,msm-vidc,context-bank";
 			label = "venus_sec_non_pixel";
 			iommus = <&venus_smmu 0x105>,
