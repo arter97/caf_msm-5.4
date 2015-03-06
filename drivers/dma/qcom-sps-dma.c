@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -45,6 +45,7 @@
 #define QBAM_OF_MANAGE_LOCAL	"qcom,managed-locally"
 #define QBAM_OF_SUM_THRESHOLD	"qcom,summing-threshold"
 #define QBAM_MAX_DESCRIPTORS	(0x100)
+#define QBAM_MAX_CHANNELS	(32)
 
 /*
  * qbam_async_tx_descriptor - dma descriptor plus a list of xfer_bufs
@@ -63,6 +64,7 @@ struct qbam_async_tx_descriptor {
 #define DMA_TO_QBAM_ASYNC_DESC(dma_async_desc) \
 	container_of(dma_async_desc, struct qbam_async_tx_descriptor, dma_desc)
 
+struct qbam_channel;
 /*
  * qbam_device - top level device of current driver
  * @handle bam sps handle.
@@ -73,6 +75,8 @@ struct qbam_async_tx_descriptor {
  * @manage is bame managed locally or remotely,
  * @summing_threshold event threshold.
  * @irq bam interrupt line.
+ * @channels has the same channels as qbam_dev->dma_dev.channels but
+ *   supports fast access by pipe index.
  */
 struct qbam_device {
 	struct dma_device		dma_dev;
@@ -83,6 +87,7 @@ struct qbam_device {
 	u32				summing_threshold;
 	u32				manage;
 	int				irq;
+	struct qbam_channel		*channels[QBAM_MAX_CHANNELS];
 };
 
 /* qbam_pipe: aggregate of bam pipe related entries of qbam_channel */
@@ -178,6 +183,19 @@ static struct dma_chan *qbam_dma_xlate(struct of_phandle_args *dma_spec,
 
 	channel_index = dma_spec->args[0];
 
+	if (channel_index >= QBAM_MAX_CHANNELS) {
+		qbam_err(qbam_dev,
+			"error: channel_index:%d out of bounds",
+			channel_index);
+		return NULL;
+	}
+	qbam_chan = qbam_dev->channels[channel_index];
+	 /* return qbam_chan if exists, or create one */
+	if (qbam_chan) {
+		qbam_chan->chan.client_count = 1;
+		return &qbam_chan->chan;
+	}
+
 	num_descriptors = dma_spec->args[1];
 	if (!num_descriptors || (num_descriptors > QBAM_MAX_DESCRIPTORS)) {
 		qbam_err(qbam_dev,
@@ -213,6 +231,7 @@ static struct dma_chan *qbam_dma_xlate(struct of_phandle_args *dma_spec,
 
 	/* add to dma_device list of channels */
 	list_add(&qbam_chan->chan.device_node, &qbam_dev->dma_dev.channels);
+	qbam_dev->channels[channel_index] = qbam_chan;
 
 	return &qbam_chan->chan;
 }
@@ -385,6 +404,9 @@ static int qbam_slave_cfg(struct qbam_channel *qbam_chan,
 			return ret;
 	}
 
+	if (qbam_chan->bam_pipe.cfg.desc.base)
+		goto cfg_done;
+
 	ret = sps_get_config(qbam_chan->bam_pipe.handle,
 						&qbam_chan->bam_pipe.cfg);
 	if (ret) {
@@ -422,10 +444,10 @@ static int qbam_slave_cfg(struct qbam_channel *qbam_chan,
 			qbam_chan->bam_pipe.num_descriptors);
 		return -ENOMEM;
 	}
-
+cfg_done:
 	ret = qbam_connect_chan(qbam_chan);
 	if (ret)
-		dma_free_coherent(qbam_dev->dma_dev.dev, pipe_cfg->desc.size,
+		dmam_free_coherent(qbam_dev->dma_dev.dev, pipe_cfg->desc.size,
 				 pipe_cfg->desc.base, pipe_cfg->desc.phys_base);
 
 	return ret;
@@ -592,8 +614,11 @@ static void qbam_pipes_free(struct qbam_device *qbam_dev)
 
 	list_for_each_entry_safe(qbam_chan_cur, qbam_chan_next,
 			&qbam_dev->dma_dev.channels, chan.device_node) {
+		mutex_lock(&qbam_chan_cur->lock);
 		qbam_free_chan(&qbam_chan_cur->chan);
+		sps_free_endpoint(qbam_chan_cur->bam_pipe.handle);
 		list_del(&qbam_chan_cur->chan.device_node);
+		mutex_unlock(&qbam_chan_cur->lock);
 		kfree(qbam_chan_cur);
 	}
 }
