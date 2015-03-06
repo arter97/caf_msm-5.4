@@ -227,6 +227,13 @@ Required properties:
                                           indicates primary AUXPCM interface
                                           "secondary" indicates secondary
                                           AUXPCM interface
+Optional properties:
+
+- pinctrl-names:			  Pinctrl state names for each pin
+					  group configuration.
+- pinctrl-x: 				  Defines pinctrl state for each pin
+					  group
+
 
 * msm-pcm-hostless
 
@@ -517,6 +524,9 @@ Example:
 		qcom,msm-cpudai-auxpcm-pcm-clk-rate = <2048000>, <2048000>;
 		qcom,msm-auxpcm-interface = "primary";
 		compatible = "qcom,msm-auxpcm-dev";
+		pinctrl-names = "default", "idle";
+		pinctrl-0 = <&pri_aux_pcm_active &pri_aux_pcm_din_active>;
+		pinctrl-1 = <&pri_aux_pcm_sleep &pri_aux_pcm_din_sleep>;
 	};
 
         qcom,msm-pcm-hostless {
@@ -876,6 +886,12 @@ Required properties:
 				This element in indicates which input TX lines
 				are used in the MI2S interface.
 
+Optional properties:
+
+- pinctrl-names:		Pinctrl state names for each pin group
+				configuration.
+- pinctrl-x: 			Defines pinctrl state for each pin group
+
 Example:
 
 qcom,msm-dai-mi2s {
@@ -885,6 +901,9 @@ qcom,msm-dai-mi2s {
 			qcom,msm-dai-q6-mi2s-dev-id = <0>;
 			qcom,msm-mi2s-rx-lines = <2>;
 			qcom,msm-mi2s-tx-lines = <1>;
+			pinctrl-names = "default", "idle";
+			pinctrl-0 = <&tert_mi2s_active &tert_mi2s_sd0_active>;
+			pinctrl-1 = <&tert_mi2s_sleep &tert_mi2s_sd0_sleep>;
 		};
 };
 
@@ -1415,8 +1434,6 @@ Required properties:
 - qcom,model : The user-visible name of this sound card.
 - clock-names : clock name defined for external clock.
 - clocks : external clock defined for codec clock.
-- pinctrl-names : pinctrl state names for each pin group configuration.
-- pinctrl-x : defines pinctrl state for each pin group
 
 Optional properties:
 - qcom,ext-ult-spk-amp-gpio : GPIO to enable ultrasound emitter amp.
@@ -1461,14 +1478,6 @@ Example:
 
 	clock-names = "osr_clk";
 	clocks = <&clock_rpm clk_div_clk1>;
-	pinctrl-names= "mi2s-sleep",
-			"mi2s-active",
-			"auxpcm-sleep",
-			"auxpcm-active";
-	pinctrl-0 = <&pri_mi2s_sleep>;
-	pinctrl-1 = <&pri_mi2s_active>;
-	pinctrl-2 = <&sec_aux_pcm_sleep>;
-	pinctrl-3 = <&sec_aux_pcm_active>;
 	qcom,mbhc-audio-jack-type = "6-pole-jack";
 		asoc-platform = <&pcm0>, <&pcm1>, <&pcm2>, <&voip>, <&voice>,
 				<&loopback>, <&compress>, <&hostless>,

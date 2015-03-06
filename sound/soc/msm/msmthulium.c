@@ -68,8 +68,6 @@ static int msm_proxy_rx_ch = 2;
 static int hdmi_rx_sample_rate = SAMPLING_RATE_48KHZ;
 static int msm_tert_mi2s_tx_ch = 2;
 
-static atomic_t pri_auxpcm_rsc_ref;
-
 static const char *const pin_states[] = {"Disable", "active"};
 static const char *const spk_function[] = {"Off", "On"};
 static const char *const slim0_rx_ch_text[] = {"One", "Two"};
@@ -96,18 +94,6 @@ static const struct soc_enum msmthulium_auxpcm_enum[] = {
 		SOC_ENUM_SINGLE_EXT(2, auxpcm_rate_text),
 };
 
-enum pinctrl_pin_state {
-	STATE_DISABLE = 0,
-	STATE_ON = 1
-};
-
-enum mi2s_pcm_port {
-	PRI_MI2S_PCM = 1,
-	SEC_MI2S_PCM,
-	TERT_MI2S_PCM,
-	QUAD_MI2S_PCM
-};
-
 static struct afe_clk_cfg mi2s_tx_clk = {
 	AFE_API_VERSION_I2S_CONFIG,
 	Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ,
@@ -118,18 +104,9 @@ static struct afe_clk_cfg mi2s_tx_clk = {
 	0,
 };
 
-struct msm_pinctrl_info {
-	struct pinctrl *pinctrl;
-	struct pinctrl_state *disable;
-	struct pinctrl_state *active;
-	enum pinctrl_pin_state curr_state;
-};
-
 struct msmthulium_asoc_mach_data {
 	u32 mclk_freq;
 	int us_euro_gpio;
-	struct msm_pinctrl_info pri_auxpcm_pinctrl_info;
-	struct msm_pinctrl_info tert_mi2s_pinctrl_info;
 };
 
 struct msmthulium_liquid_dock_dev {
@@ -806,299 +783,6 @@ static int msmthulium_hdmi_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	return 0;
 }
 
-static int msm_set_pinctrl(struct msm_pinctrl_info *pinctrl_info)
-{
-	int ret = 0;
-
-	if (pinctrl_info == NULL) {
-		pr_err("%s: pinctrl_info is NULL\n", __func__);
-		ret = -EINVAL;
-		goto err;
-	}
-	pr_debug("%s: curr_state = %s\n", __func__,
-		 pin_states[pinctrl_info->curr_state]);
-
-	switch (pinctrl_info->curr_state) {
-	case STATE_DISABLE:
-		ret = pinctrl_select_state(pinctrl_info->pinctrl,
-					   pinctrl_info->active);
-		if (ret) {
-			pr_err("%s: pinctrl_select_state failed with %d\n",
-				__func__, ret);
-			ret = -EIO;
-			goto err;
-		}
-		pinctrl_info->curr_state = STATE_ON;
-		break;
-	case STATE_ON:
-		pr_err("%s: TLMM pins already set\n", __func__);
-		break;
-	default:
-		pr_err("%s: TLMM pin state is invalid\n", __func__);
-		return -EINVAL;
-	}
-
-err:
-	return ret;
-}
-
-static int msm_reset_pinctrl(struct msm_pinctrl_info *pinctrl_info)
-{
-	int ret = 0;
-
-	if (pinctrl_info == NULL) {
-		pr_err("%s: pinctrl_info is NULL\n", __func__);
-		ret = -EINVAL;
-		goto err;
-	}
-	pr_debug("%s: curr_state = %s\n", __func__,
-		 pin_states[pinctrl_info->curr_state]);
-
-	switch (pinctrl_info->curr_state) {
-	case STATE_ON:
-		ret = pinctrl_select_state(pinctrl_info->pinctrl,
-					   pinctrl_info->disable);
-		if (ret) {
-			pr_err("%s: pinctrl_select_state failed with %d\n",
-				__func__, ret);
-			ret = -EIO;
-			goto err;
-		}
-		pinctrl_info->curr_state = STATE_DISABLE;
-		break;
-	case STATE_DISABLE:
-		pr_err("%s: TLMM pins already disabled\n", __func__);
-		break;
-	default:
-		pr_err("%s: TLMM pin state is invalid\n", __func__);
-		return -EINVAL;
-	}
-err:
-	return ret;
-}
-
-static void msm_auxpcm_release_pinctrl(struct platform_device *pdev,
-				       enum mi2s_pcm_port port)
-{
-	struct snd_soc_card *card = platform_get_drvdata(pdev);
-	struct msmthulium_asoc_mach_data *pdata =
-				snd_soc_card_get_drvdata(card);
-	struct msm_pinctrl_info *pinctrl_info = NULL;
-
-	switch (port) {
-	case PRI_MI2S_PCM:
-		pinctrl_info = &pdata->pri_auxpcm_pinctrl_info;
-		break;
-	default:
-		pr_err("%s: Not a valid port ID: %d\n", __func__, port);
-		break;
-	}
-	if (pinctrl_info) {
-		devm_pinctrl_put(pinctrl_info->pinctrl);
-		pinctrl_info->pinctrl = NULL;
-	}
-}
-
-static int msm_auxpcm_get_pinctrl(struct platform_device *pdev,
-				  enum mi2s_pcm_port port)
-{
-	struct snd_soc_card *card = platform_get_drvdata(pdev);
-	struct msmthulium_asoc_mach_data *pdata =
-				snd_soc_card_get_drvdata(card);
-	struct msm_pinctrl_info *pinctrl_info = NULL;
-	struct pinctrl *pinctrl;
-	int ret;
-
-	switch (port) {
-	case PRI_MI2S_PCM:
-		pinctrl_info = &pdata->pri_auxpcm_pinctrl_info;
-		break;
-	default:
-		pr_err("%s: Not a valid port ID: %d\n", __func__, port);
-		break;
-	}
-	if (pinctrl_info == NULL) {
-		pr_err("%s: pinctrl_info is NULL\n", __func__);
-		return -EINVAL;
-	}
-
-	pinctrl = devm_pinctrl_get(&pdev->dev);
-	if (IS_ERR_OR_NULL(pinctrl)) {
-		pr_err("%s: Unable to get pinctrl handle\n", __func__);
-		return -EINVAL;
-	}
-	pinctrl_info->pinctrl = pinctrl;
-
-	/* get all the states handles from Device Tree */
-	pinctrl_info->disable = pinctrl_lookup_state(pinctrl, "auxpcm-sleep");
-	if (IS_ERR(pinctrl_info->disable)) {
-		pr_err("%s: could not get disable pinstate\n", __func__);
-		goto err;
-	}
-
-	pinctrl_info->active = pinctrl_lookup_state(pinctrl, "auxpcm-active");
-	if (IS_ERR(pinctrl_info->active)) {
-		pr_err("%s: could not get active pinstate\n", __func__);
-		goto err;
-	}
-
-	/* Reset the AUXPCM TLMM pins to a default state */
-	ret = pinctrl_select_state(pinctrl_info->pinctrl,
-				   pinctrl_info->disable);
-	if (ret != 0) {
-		pr_err("%s: Disable TLMM pins failed with %d\n",
-			__func__, ret);
-		ret = -EIO;
-		goto err;
-	}
-	pinctrl_info->curr_state = STATE_DISABLE;
-	return 0;
-
-err:
-	devm_pinctrl_put(pinctrl);
-	pinctrl_info->pinctrl = NULL;
-	return -EINVAL;
-}
-
-static int msm_pri_auxpcm_startup(struct snd_pcm_substream *substream)
-{
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_card *card = rtd->card;
-	struct msmthulium_asoc_mach_data *pdata =
-				snd_soc_card_get_drvdata(card);
-	struct msm_pinctrl_info *pinctrl_info =
-				&pdata->pri_auxpcm_pinctrl_info;
-	int ret = 0;
-
-	pr_debug("%s(): substream = %s, pri_auxpcm_rsc_ref counter = %d\n",
-		 __func__, substream->name, atomic_read(&pri_auxpcm_rsc_ref));
-
-	if (pinctrl_info == NULL) {
-		pr_err("%s: pinctrl_info is NULL\n", __func__);
-		ret = -EINVAL;
-		goto err;
-	}
-	if (atomic_inc_return(&pri_auxpcm_rsc_ref) == 1) {
-		ret = msm_set_pinctrl(pinctrl_info);
-		if (ret) {
-			pr_err("%s: AUXPCM TLMM pinctrl set failed with %d\n",
-				__func__, ret);
-			return ret;
-		}
-	}
-err:
-	return ret;
-}
-
-static void msm_pri_auxpcm_shutdown(struct snd_pcm_substream *substream)
-{
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_card *card = rtd->card;
-	struct msmthulium_asoc_mach_data *pdata =
-				snd_soc_card_get_drvdata(card);
-	struct msm_pinctrl_info *pinctrl_info =
-				&pdata->pri_auxpcm_pinctrl_info;
-	int ret = 0;
-
-	pr_debug("%s(): substream = %s, pri_auxpcm_rsc_ref counter = %d\n",
-		 __func__, substream->name, atomic_read(&pri_auxpcm_rsc_ref));
-
-	if (atomic_dec_return(&pri_auxpcm_rsc_ref) == 0) {
-		ret = msm_reset_pinctrl(pinctrl_info);
-		if (ret)
-			pr_err("%s Reset pinctrl failed with %d\n",
-				__func__, ret);
-	}
-}
-
-static struct snd_soc_ops msm_pri_auxpcm_be_ops = {
-	.startup = msm_pri_auxpcm_startup,
-	.shutdown = msm_pri_auxpcm_shutdown,
-};
-
-static void msm_mi2s_release_pinctrl(struct platform_device *pdev,
-				     enum mi2s_pcm_port port)
-{
-	struct snd_soc_card *card = platform_get_drvdata(pdev);
-	struct msmthulium_asoc_mach_data *pdata =
-				snd_soc_card_get_drvdata(card);
-	struct msm_pinctrl_info *pinctrl_info = NULL;
-
-	switch (port) {
-	case TERT_MI2S_PCM:
-		pinctrl_info = &pdata->tert_mi2s_pinctrl_info;
-		break;
-	default:
-		pr_err("%s: Not a valid port ID: %d\n", __func__, port);
-		break;
-	}
-	if (pinctrl_info) {
-		devm_pinctrl_put(pinctrl_info->pinctrl);
-		pinctrl_info->pinctrl = NULL;
-	}
-}
-
-static int msm_mi2s_get_pinctrl(struct platform_device *pdev,
-				enum mi2s_pcm_port port)
-{
-	struct snd_soc_card *card = platform_get_drvdata(pdev);
-	struct msmthulium_asoc_mach_data *pdata =
-				snd_soc_card_get_drvdata(card);
-	struct msm_pinctrl_info *pinctrl_info = NULL;
-	struct pinctrl *pinctrl;
-	int ret;
-
-	switch (port) {
-	case TERT_MI2S_PCM:
-		pinctrl_info = &pdata->tert_mi2s_pinctrl_info;
-		break;
-	default:
-		pr_err("%s: Not a valid port ID: %d\n", __func__, port);
-		break;
-	}
-	if (pinctrl_info == NULL) {
-		pr_err("%s: pinctrl_info is NULL\n", __func__);
-		return -EINVAL;
-	}
-
-	pinctrl = devm_pinctrl_get(&pdev->dev);
-	if (IS_ERR_OR_NULL(pinctrl)) {
-		pr_err("%s: Unable to get pinctrl handle\n", __func__);
-		return -EINVAL;
-	}
-	pinctrl_info->pinctrl = pinctrl;
-
-	/* get all the state handles from Device Tree */
-	pinctrl_info->disable = pinctrl_lookup_state(pinctrl, "mi2s-sleep");
-	if (IS_ERR(pinctrl_info->disable)) {
-		pr_err("%s: could not get disable pinstate\n", __func__);
-		goto err;
-	}
-
-	pinctrl_info->active = pinctrl_lookup_state(pinctrl, "mi2s-active");
-	if (IS_ERR(pinctrl_info->active)) {
-		pr_err("%s: could not get mi2s_active pinstate\n", __func__);
-		goto err;
-	}
-
-	/* Reset the MI2S TLMM pins to a default state */
-	ret = pinctrl_select_state(pinctrl_info->pinctrl,
-					pinctrl_info->disable);
-	if (ret != 0) {
-		pr_err("%s: Disable MI2S TLMM pins failed with %d\n",
-			__func__, ret);
-		ret = -EIO;
-		goto err;
-	}
-	pinctrl_info->curr_state = STATE_DISABLE;
-	return 0;
-
-err:
-	devm_pinctrl_put(pinctrl);
-	pinctrl_info->pinctrl = NULL;
-	return -EINVAL;
-}
-
 static int msm_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 				     struct snd_pcm_hw_params *params)
 {
@@ -1117,27 +801,11 @@ static int msmthulium_mi2s_snd_startup(struct snd_pcm_substream *substream)
 {
 	int ret = 0;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_card *card = rtd->card;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
-	struct msmthulium_asoc_mach_data *pdata =
-				snd_soc_card_get_drvdata(card);
-	struct msm_pinctrl_info *pinctrl_info = &pdata->tert_mi2s_pinctrl_info;
 
 	pr_debug("%s: substream = %s  stream = %d\n", __func__,
 		 substream->name, substream->stream);
 
-	if (pinctrl_info == NULL) {
-		pr_err("%s: pinctrl_info is NULL\n", __func__);
-		ret = -EINVAL;
-		goto err;
-	}
-
-	ret = msm_set_pinctrl(pinctrl_info);
-	if (ret) {
-		pr_err("%s: MI2S TLMM pinctrl set failed with %d\n",
-			__func__, ret);
-		return ret;
-	}
 	mi2s_tx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
 	mi2s_tx_clk.clk_set_mode = Q6AFE_LPASS_MODE_CLK1_VALID;
 	ret = afe_set_lpass_clock(AFE_PORT_ID_TERTIARY_MI2S_TX,
@@ -1156,11 +824,6 @@ err:
 static void msmthulium_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 {
 	int ret = 0;
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_card *card = rtd->card;
-	struct msmthulium_asoc_mach_data *pdata =
-				snd_soc_card_get_drvdata(card);
-	struct msm_pinctrl_info *pinctrl_info = &pdata->tert_mi2s_pinctrl_info;
 
 	pr_debug("%s: substream = %s  stream = %d\n", __func__,
 		substream->name, substream->stream);
@@ -1171,10 +834,6 @@ static void msmthulium_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 				&mi2s_tx_clk);
 	if (ret < 0)
 		pr_err("%s: afe lpass clock failed, err:%d\n", __func__, ret);
-
-	ret = msm_reset_pinctrl(pinctrl_info);
-	if (ret)
-		pr_err("%s: Reset pinctrl failed with %d\n", __func__, ret);
 }
 
 static struct snd_soc_ops msmthulium_mi2s_be_ops = {
@@ -2521,7 +2180,6 @@ static struct snd_soc_dai_link msmthulium_common_dai_links[] = {
 		.dpcm_playback = 1,
 		.be_id = MSM_BACKEND_DAI_AUXPCM_RX,
 		.be_hw_params_fixup = msm_auxpcm_be_params_fixup,
-		.ops = &msm_pri_auxpcm_be_ops,
 		.ignore_pmdown_time = 1,
 		.ignore_suspend = 1,
 		/* this dainlink has playback support */
@@ -2537,7 +2195,6 @@ static struct snd_soc_dai_link msmthulium_common_dai_links[] = {
 		.dpcm_capture = 1,
 		.be_id = MSM_BACKEND_DAI_AUXPCM_TX,
 		.be_hw_params_fixup = msm_auxpcm_be_params_fixup,
-		.ops = &msm_pri_auxpcm_be_ops,
 		.ignore_suspend = 1,
 	},
 	/* Backend DAI Links */
@@ -2938,7 +2595,6 @@ static int msmthulium_asoc_machine_probe(struct platform_device *pdev)
 		card->dai_link	= msmthulium_common_dai_links;
 		card->num_links	= ARRAY_SIZE(msmthulium_common_dai_links);
 	}
-	atomic_set(&pri_auxpcm_rsc_ref, 0);
 	spdev = pdev;
 
 	ret = msmthulium_populate_dai_link_component_of_node(card);
@@ -3005,31 +2661,8 @@ static int msmthulium_asoc_machine_probe(struct platform_device *pdev)
 		dev_info(&pdev->dev, "msmthulium_prepare_us_euro failed (%d)\n",
 			ret);
 
-	/* Parse pinctrl info for AUXPCM, if defined */
-	ret = msm_auxpcm_get_pinctrl(pdev, PRI_MI2S_PCM);
-	if (!ret) {
-		pr_debug("%s: Auxpcm pinctrl parsing successful\n", __func__);
-	} else {
-		dev_info(&pdev->dev,
-			"%s: Parsing pinctrl failed with %d. Cannot use Auxpcm Ports\n",
-			__func__, ret);
-		goto err;
-	}
-
-	/* Parse pinctrl info for MI2S ports, if defined */
-	ret = msm_mi2s_get_pinctrl(pdev, TERT_MI2S_PCM);
-	if (!ret) {
-		pr_debug("%s: MI2S pinctrl parsing successful\n", __func__);
-	} else {
-		dev_info(&pdev->dev,
-			"%s: Parsing pinctrl failed with %d. Cannot use MI2S Ports\n",
-			__func__, ret);
-		goto err_mi2s_pinctrl;
-	}
 	return 0;
 
-err_mi2s_pinctrl:
-	msm_auxpcm_release_pinctrl(pdev, PRI_MI2S_PCM);
 err:
 	if (pdata->us_euro_gpio > 0) {
 		dev_dbg(&pdev->dev, "%s free us_euro gpio %d\n",
@@ -3065,8 +2698,6 @@ static int msmthulium_asoc_machine_remove(struct platform_device *pdev)
 		kfree(msmthulium_liquid_dock_dev);
 		msmthulium_liquid_dock_dev = NULL;
 	}
-	msm_auxpcm_release_pinctrl(pdev, PRI_MI2S_PCM);
-	msm_mi2s_release_pinctrl(pdev, TERT_MI2S_PCM);
 	snd_soc_unregister_card(card);
 
 	return 0;
