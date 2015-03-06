@@ -281,7 +281,6 @@ int wmi_send(struct wil6210_priv *wil, u16 cmdid, void *buf, u16 len)
 /*=== Event handlers ===*/
 static void wmi_evt_ready(struct wil6210_priv *wil, int id, void *d, int len)
 {
-	struct net_device *ndev = wil_to_ndev(wil);
 	struct wireless_dev *wdev = wil->wdev;
 	struct wmi_ready_event *evt = d;
 
@@ -290,11 +289,7 @@ static void wmi_evt_ready(struct wil6210_priv *wil, int id, void *d, int len)
 
 	wil_info(wil, "FW ver. %d; MAC %pM; %d MID's\n", wil->fw_version,
 		 evt->mac, wil->n_mids);
-
-	if (!is_valid_ether_addr(ndev->dev_addr)) {
-		memcpy(ndev->dev_addr, evt->mac, ETH_ALEN);
-		memcpy(ndev->perm_addr, evt->mac, ETH_ALEN);
-	}
+	/* ignore MAC address, we already have it from the boot loader */
 	snprintf(wdev->wiphy->fw_version, sizeof(wdev->wiphy->fw_version),
 		 "%d", wil->fw_version);
 }
@@ -567,7 +562,6 @@ static void wil_addba_tx_cid(struct wil6210_priv *wil, u8 cid, u16 wsize)
 
 static void wmi_evt_linkup(struct wil6210_priv *wil, int id, void *d, int len)
 {
-	struct net_device *ndev = wil_to_ndev(wil);
 	struct wmi_data_port_open_event *evt = d;
 	u8 cid = evt->cid;
 
@@ -581,7 +575,6 @@ static void wmi_evt_linkup(struct wil6210_priv *wil, int id, void *d, int len)
 	wil->sta[cid].data_port_open = true;
 	if (agg_wsize >= 0)
 		wil_addba_tx_cid(wil, cid, agg_wsize);
-	netif_carrier_on(ndev);
 }
 
 static void wmi_evt_linkdown(struct wil6210_priv *wil, int id, void *d, int len)
@@ -882,7 +875,7 @@ int wmi_pcp_start(struct wil6210_priv *wil, int bi, u8 wmi_nettype, u8 chan)
 		struct wmi_pcp_started_event evt;
 	} __packed reply;
 
-	if (!wil->secure_pcp)
+	if (!wil->privacy)
 		cmd.disable_sec = 1;
 
 	if ((cmd.pcp_max_assoc_sta > WIL6210_MAX_CID) ||
@@ -1134,12 +1127,13 @@ int wmi_rx_chain_add(struct wil6210_priv *wil, struct vring *vring)
 	return rc;
 }
 
-int wmi_get_temperature(struct wil6210_priv *wil, u32 *t_m, u32 *t_r)
+int wmi_get_temperature(struct wil6210_priv *wil, u32 *t_bb, u32 *t_rf)
 {
 	int rc;
 	struct wmi_temp_sense_cmd cmd = {
-		.measure_marlon_m_en = cpu_to_le32(!!t_m),
-		.measure_marlon_r_en = cpu_to_le32(!!t_r),
+		.measure_baseband_en = cpu_to_le32(!!t_bb),
+		.measure_rf_en = cpu_to_le32(!!t_rf),
+		.measure_mode = cpu_to_le32(TEMPERATURE_MEASURE_NOW),
 	};
 	struct {
 		struct wil6210_mbox_hdr_wmi wmi;
@@ -1151,10 +1145,10 @@ int wmi_get_temperature(struct wil6210_priv *wil, u32 *t_m, u32 *t_r)
 	if (rc)
 		return rc;
 
-	if (t_m)
-		*t_m = le32_to_cpu(reply.evt.marlon_m_t1000);
-	if (t_r)
-		*t_r = le32_to_cpu(reply.evt.marlon_r_t1000);
+	if (t_bb)
+		*t_bb = le32_to_cpu(reply.evt.baseband_t1000);
+	if (t_rf)
+		*t_rf = le32_to_cpu(reply.evt.rf_t1000);
 
 	return 0;
 }
