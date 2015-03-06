@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -697,7 +697,12 @@ int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 	mdss_mdp_cmd_set_sync_ctx(ctl, NULL);
 
 	mdss_mdp_irq_enable(MDSS_MDP_IRQ_PING_PONG_COMP, ctx->pp_num);
-	mdss_mdp_ctl_write(ctl, MDSS_MDP_REG_CTL_START, 1);
+
+	if (ctl->mdata->mdp_rev == MDSS_MDP_HW_REV_105 ||
+			ctl->mdata->mdp_rev == MDSS_MDP_HW_REV_109)
+		mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_INTF_RESTORE, NULL);
+
+	mdss_mdp_ctl_write(ctl, MDSS_MDP_REG_CTL_START, 1);	/* Kickoff */
 
 	mdss_mdp_ctl_perf_set_transaction_status(ctl,
 		PERF_SW_COMMIT_STATE, PERF_STATUS_DONE);
