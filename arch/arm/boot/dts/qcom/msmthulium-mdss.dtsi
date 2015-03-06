@@ -40,7 +40,7 @@
 		qcom,max-mixer-width = <2560>;
 
 		/* VBIF QoS remapper settings*/
-		qcom,mdss-vbif-qos-rt-setting = <2 2 2 1>;
+		qcom,mdss-vbif-qos-rt-setting = <1 2 2 2>;
 		qcom,mdss-vbif-qos-nrt-setting = <1 1 1 1>;
 
 		qcom,mdss-default-pipe-qos-lut = <0x0055aaff>;
