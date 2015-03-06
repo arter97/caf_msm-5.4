@@ -44,8 +44,8 @@ enum msm_pm_sleep_mode {
 enum msm_pm_l2_scm_flag {
 	MSM_SCM_L2_ON = 0,
 	MSM_SCM_L2_OFF = 1,
-	MSM_SCM_L2_RET = 2,
-	MSM_SCM_L2_GDHS = 3,
+	MSM_SCM_L2_GDHS = 2,
+	MSM_SCM_L3_PC_OFF = 4,
 };
 
 #define MSM_PM_MODE(cpu, mode_nr)  ((cpu) * MSM_PM_SLEEP_MODE_NR + (mode_nr))
