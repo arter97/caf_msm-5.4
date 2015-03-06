@@ -3116,3 +3116,4 @@
 #include "msm8996-regulator.dtsi"
 #include "msm8996-camera.dtsi"
 #include "msm8996-gpu.dtsi"
+#include "msm8996-pm.dtsi"
