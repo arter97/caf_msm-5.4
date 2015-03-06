@@ -410,11 +410,6 @@ static int mipi_dsi_panel_power(int on)
 
 	pr_debug("%s: on=%d\n", __func__, on);
 
-	if (machine_is_apq8064_adp_2() ||
-		machine_is_apq8064_adp2_es2() ||
-		machine_is_apq8064_adp2_es2p5())
-		return 0;
-
 	if (!dsi_power_on) {
 		reg_lvs7 = regulator_get(&msm_mipi_dsi1_device.dev,
 				"dsi1_vddio");
@@ -467,25 +462,29 @@ static int mipi_dsi_panel_power(int on)
 			}
 		}
 
-		gpio25 = PM8921_GPIO_PM_TO_SYS(25);
-		rc = gpio_request(gpio25, "disp_rst_n");
-		if (rc) {
-			pr_err("request gpio 25 failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
+		if (!(machine_is_apq8064_adp_2() ||
+			machine_is_apq8064_adp2_es2() ||
+			machine_is_apq8064_adp2_es2p5())) {
+			gpio25 = PM8921_GPIO_PM_TO_SYS(25);
+			rc = gpio_request(gpio25, "disp_rst_n");
+			if (rc) {
+				pr_err("request gpio 25 failed, rc=%d\n", rc);
+				return -ENODEV;
+			}
 
-		gpio26 = PM8921_GPIO_PM_TO_SYS(26);
-		rc = gpio_request(gpio26, "pwm_backlight_ctrl");
-		if (rc) {
-			pr_err("request gpio 26 failed, rc=%d\n", rc);
-			return -ENODEV;
-		}
+			gpio26 = PM8921_GPIO_PM_TO_SYS(26);
+			rc = gpio_request(gpio26, "pwm_backlight_ctrl");
+			if (rc) {
+				pr_err("request gpio 26 failed, rc=%d\n", rc);
+				return -ENODEV;
+			}
 
-		gpio36 = PM8921_GPIO_PM_TO_SYS(36); /* lcd1_pwr_en_n */
-		rc = gpio_request(gpio36, "lcd1_pwr_en_n");
-		if (rc) {
-			pr_err("request gpio 36 failed, rc=%d\n", rc);
-			return -ENODEV;
+			gpio36 = PM8921_GPIO_PM_TO_SYS(36); /* lcd1_pwr_en_n */
+			rc = gpio_request(gpio36, "lcd1_pwr_en_n");
+			if (rc) {
+				pr_err("request gpio 36 failed, rc=%d\n", rc);
+				return -ENODEV;
+			}
 		}
 
 		dsi_power_on = true;
@@ -530,15 +529,23 @@ static int mipi_dsi_panel_power(int on)
 			gpio_set_value_cansleep(mpp3, 1);
 		}
 
-		gpio_set_value_cansleep(gpio36, 0);
-		gpio_set_value_cansleep(gpio25, 1);
-		if (socinfo_get_pmic_model() == PMIC_MODEL_PM8917)
-			gpio_set_value_cansleep(gpio26, 1);
+		if (!(machine_is_apq8064_adp_2() ||
+			machine_is_apq8064_adp2_es2() ||
+			machine_is_apq8064_adp2_es2p5())) {
+			gpio_set_value_cansleep(gpio36, 0);
+			gpio_set_value_cansleep(gpio25, 1);
+			if (socinfo_get_pmic_model() == PMIC_MODEL_PM8917)
+				gpio_set_value_cansleep(gpio26, 1);
+		}
 	} else {
-		if (socinfo_get_pmic_model() == PMIC_MODEL_PM8917)
-			gpio_set_value_cansleep(gpio26, 0);
-		gpio_set_value_cansleep(gpio25, 0);
-		gpio_set_value_cansleep(gpio36, 1);
+		if (!(machine_is_apq8064_adp_2() ||
+			machine_is_apq8064_adp2_es2() ||
+			machine_is_apq8064_adp2_es2p5())) {
+			if (socinfo_get_pmic_model() == PMIC_MODEL_PM8917)
+				gpio_set_value_cansleep(gpio26, 0);
+			gpio_set_value_cansleep(gpio25, 0);
+			gpio_set_value_cansleep(gpio36, 1);
+		}
 
 		if (machine_is_apq8064_liquid()) {
 			gpio_set_value_cansleep(mpp3, 0);
