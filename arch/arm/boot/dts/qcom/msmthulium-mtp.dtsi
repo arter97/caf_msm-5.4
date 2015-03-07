@@ -407,6 +407,10 @@
 			debounce-interval = <15>;
 		};
 	};
+
+	sound {
+		qcom,model = "msmthulium-tomtom-mtp-snd-card";
+	};
 };
 
 &pm8994_gpios {
@@ -465,6 +469,17 @@
 		status = "okay";
 	};
 
+	gpio@ce00 { /* GPIO 15 */
+		qcom,mode = <1>;
+		qcom,output-type = <0>;
+		qcom,pull = <5>;
+		qcom,vin-sel = <2>;
+		qcom,out-strength = <1>;
+		qcom,src-sel = <2>;
+		qcom,master-en = <1>;
+		status = "okay";
+	};
+
 	gpio@d100 { /* GPIO 18 - Rome Sleep Clock */
 		qcom,mode = <1>;		/* Digital output */
 		qcom,output-type = <0>;		/* CMOS logic */
@@ -519,5 +534,15 @@
 				  1 &tlmm 78 1
 				>;
 		interrupt-names = "silabs_fm_int", "silabs_fm_status_int";
+	};
+};
+
+&slim_msm {
+	tomtom_codec {
+		qcom,cdc-micbias2-headset-only;
+		qcom,cdc-micbias1-ext-cap;
+		qcom,cdc-micbias2-ext-cap;
+		qcom,cdc-micbias3-ext-cap;
+		qcom,cdc-micbias4-ext-cap;
 	};
 };
