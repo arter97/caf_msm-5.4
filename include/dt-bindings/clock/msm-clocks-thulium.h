@@ -272,6 +272,8 @@
 #define clk_gcc_mmss_gpll0_div_clk	0xdd06848d
 #define clk_gcc_mmss_bimc_gfx_clk	0xe4f28754
 #define clk_gcc_bimc_gfx_clk		0x3edd69ad
+#define clk_mdss_mdp_vote_clk		0x588460a4
+#define clk_mdss_rotator_vote_clk	0x5b1f675e
 
 /* clock_mmss controlled clocks */
 #define clk_mmsscc_xo			0x05e63704
