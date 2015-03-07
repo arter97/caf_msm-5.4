@@ -165,7 +165,7 @@
 			qcom,ap-owned;
 			qcom,qport = <0>;
 			qcom,qos-mode = "fixed";
-			qcom,connections = <&slv_a0noc_snoc>;
+			qcom,connections = <&slv_a0noc_qdss>;
 			qcom,prio1 = <1>;
 			qcom,prio0 = <1>;
 			qcom,bus-dev = <&fab_a0noc>;
@@ -180,7 +180,7 @@
 			qcom,ap-owned;
 			qcom,qport = <1>;
 			qcom,qos-mode = "fixed";
-			qcom,connections = <&slv_a0noc_snoc>;
+			qcom,connections = <&slv_a0noc_qdss>;
 			qcom,prio1 = <1>;
 			qcom,prio0 = <1>;
 			qcom,bus-dev = <&fab_a0noc>;
@@ -195,7 +195,7 @@
 			qcom,ap-owned;
 			qcom,qport = <2>;
 			qcom,qos-mode = "fixed";
-			qcom,connections = <&slv_a0noc_snoc>;
+			qcom,connections = <&slv_a0noc_qdss>;
 			qcom,prio1 = <1>;
 			qcom,prio0 = <1>;
 			qcom,bus-dev = <&fab_a0noc>;
@@ -765,6 +765,20 @@
 		/*Internal nodes*/
 
 		/*Slaves*/
+
+		slv_a0noc_qdss: slv-a0noc-qdss {
+			cell-id = <MSM_BUS_A0NOC_QDSS_INT>;
+			label = "slv-a0noc-qdss";
+			qcom,buswidth = <8>;
+			qcom,agg-ports = <1>;
+			qcom,ap-owned;
+			qcom,bus-dev = <&fab_a0noc>;
+			qcom,connections = <&slv_a0noc_snoc>;
+			qcom,slv-rpm-id = <ICBID_SLAVE_A0NOC_SNOC>;
+			qcom,enable-only-clk;
+			clock-names = "node_clk";
+			clocks = <&clock_gcc clk_gcc_aggre0_noc_at_clk>;
+		};
 
 		slv_a0noc_snoc: slv-a0noc-snoc {
 			cell-id = <MSM_BUS_A0NOC_SNOC_SLV>;
