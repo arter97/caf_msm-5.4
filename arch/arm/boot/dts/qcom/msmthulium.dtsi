@@ -1105,6 +1105,7 @@
 		clocks = <&clock_gcc clk_gcc_sdcc1_ahb_clk>,
 			 <&clock_gcc clk_gcc_sdcc1_apps_clk>;
 
+		qcom,large-address-bus;
 		qcom,bus-width = <8>;
 		qcom,cpu-dma-latency-us = <701>;
 
@@ -1139,6 +1140,7 @@
 		clocks = <&clock_gcc clk_gcc_sdcc2_ahb_clk>,
 			 <&clock_gcc clk_gcc_sdcc2_apps_clk>;
 
+		qcom,large-address-bus;
 		qcom,bus-width = <4>;
 		qcom,cpu-dma-latency-us = <701>;
 
