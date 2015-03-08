@@ -19,6 +19,7 @@
 #include <linux/mmc/card.h>
 #include <linux/mmc/mmc.h>
 #include <linux/reboot.h>
+#include <trace/events/mmc.h>
 
 #include "core.h"
 #include "bus.h"
@@ -1909,6 +1910,7 @@ out:
 static int mmc_suspend(struct mmc_host *host)
 {
 	int err;
+	ktime_t start = ktime_get();
 
 	err = _mmc_suspend(host, true);
 	if (!err) {
@@ -1916,6 +1918,8 @@ static int mmc_suspend(struct mmc_host *host)
 		pm_runtime_set_suspended(&host->card->dev);
 	}
 
+	trace_mmc_suspend(mmc_hostname(host), err,
+			ktime_to_us(ktime_sub(ktime_get(), start)));
 	return err;
 }
 
@@ -1996,6 +2000,7 @@ static int mmc_shutdown(struct mmc_host *host)
 static int mmc_resume(struct mmc_host *host)
 {
 	int err = 0;
+	ktime_t start = ktime_get();
 
 	if (!(host->caps & MMC_CAP_RUNTIME_RESUME)) {
 		err = _mmc_resume(host);
@@ -2003,6 +2008,9 @@ static int mmc_resume(struct mmc_host *host)
 		pm_runtime_mark_last_busy(&host->card->dev);
 	}
 	pm_runtime_enable(&host->card->dev);
+
+	trace_mmc_resume(mmc_hostname(host), err,
+			ktime_to_us(ktime_sub(ktime_get(), start)));
 
 	return err;
 }
@@ -2013,6 +2021,7 @@ static int mmc_resume(struct mmc_host *host)
 static int mmc_runtime_suspend(struct mmc_host *host)
 {
 	int err;
+	ktime_t start = ktime_get();
 
 	if (!(host->caps & MMC_CAP_AGGRESSIVE_PM))
 		return 0;
@@ -2022,6 +2031,8 @@ static int mmc_runtime_suspend(struct mmc_host *host)
 		pr_err("%s: error %d doing aggessive suspend\n",
 			mmc_hostname(host), err);
 
+	trace_mmc_runtime_suspend(mmc_hostname(host), err,
+			ktime_to_us(ktime_sub(ktime_get(), start)));
 	return err;
 }
 
@@ -2031,6 +2042,7 @@ static int mmc_runtime_suspend(struct mmc_host *host)
 static int mmc_runtime_resume(struct mmc_host *host)
 {
 	int err;
+	ktime_t start = ktime_get();
 
 	if (!(host->caps & (MMC_CAP_AGGRESSIVE_PM | MMC_CAP_RUNTIME_RESUME)))
 		return 0;
@@ -2039,6 +2051,9 @@ static int mmc_runtime_resume(struct mmc_host *host)
 	if (err)
 		pr_err("%s: error %d doing aggessive resume\n",
 			mmc_hostname(host), err);
+
+	trace_mmc_runtime_resume(mmc_hostname(host), err,
+			ktime_to_us(ktime_sub(ktime_get(), start)));
 
 	return 0;
 }
