@@ -1271,6 +1271,285 @@
 		status = "disabled";
 	};
 
+	pcie0: qcom,pcie@00600000 {
+		compatible = "qcom,pci-msm";
+		cell-index = <0>;
+
+		reg = <0x00600000 0x2000>,
+		      <0x00034000 0x4000>,
+		      <0x0c000000 0xf1d>,
+		      <0x0c000f20 0xa8>,
+		      <0x0c100000 0x100000>,
+		      <0x0c200000 0x100000>,
+		      <0x0c300000 0xd00000>;
+
+		reg-names = "parf", "phy", "dm_core", "elbi",
+				"conf", "io", "bars";
+
+		#address-cells = <3>;
+		#size-cells = <2>;
+		ranges = <0x01000000 0x0 0x0c200000 0x0c200000 0x0 0x100000>,
+			<0x02000000 0x0 0x0c300000 0x0c300000 0x0 0xd00000>;
+		interrupt-parent = <&pcie0>;
+		interrupts = <0 1 2 3 4 5 6 7 8 9 10 11>;
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0x0 0x0 0x0 0xffffffff>;
+		interrupt-map = <0x0 0x0 0x0 0 &intc 0 405 0
+				0x0 0x0 0x0 1 &intc 0 244 0
+				0x0 0x0 0x0 2 &intc 0 245 0
+				0x0 0x0 0x0 3 &intc 0 247 0
+				0x0 0x0 0x0 4 &intc 0 248 0
+				0x0 0x0 0x0 5 &intc 0 249 0
+				0x0 0x0 0x0 6 &intc 0 250 0
+				0x0 0x0 0x0 7 &intc 0 251 0
+				0x0 0x0 0x0 8 &intc 0 252 0
+				0x0 0x0 0x0 9 &intc 0 253 0
+				0x0 0x0 0x0 10 &intc 0 254 0
+				0x0 0x0 0x0 11 &intc 0 255 0>;
+
+		interrupt-names = "int_msi", "int_a", "int_b", "int_c", "int_d",
+				"int_pls_pme", "int_pme_legacy", "int_pls_err",
+				"int_aer_legacy", "int_pls_link_up",
+				"int_pls_link_down", "int_bridge_flush_n";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&pcie0_clkreq_default &pcie0_perst_default &pcie0_wake_default>;
+
+		perst-gpio = <&tlmm 35 0>;
+		wake-gpio = <&tlmm 37 0>;
+
+		gdsc-smmu-supply = <&gdsc_hlos1_vote_aggre0_noc>;
+		gdsc-vdd-supply = <&gdsc_pcie_0>;
+		vreg-1.8-supply = <&pm8994_l12>;
+		vreg-0.9-supply = <&pm8994_l28>;
+
+		qcom,vreg-0.9-voltage-level = <925000 925000 24000>;
+
+		qcom,l1-supported;
+		qcom,l1ss-supported;
+		qcom,aux-clk-sync;
+
+		qcom,ep-latency = <10>;
+
+		qcom,common-phy;
+
+		qcom,ep-wakeirq;
+
+		qcom,msm-bus,name = "pcie0";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<45 512 0 0>,
+				<45 512 500 800>;
+
+		clocks = <&clock_gcc clk_gcc_pcie_0_pipe_clk>,
+			<&clock_gcc clk_ln_bb_clk>,
+			<&clock_gcc clk_gcc_pcie_0_aux_clk>,
+			<&clock_gcc clk_gcc_pcie_0_cfg_ahb_clk>,
+			<&clock_gcc clk_gcc_pcie_0_mstr_axi_clk>,
+			<&clock_gcc clk_gcc_pcie_0_slv_axi_clk>,
+			<&clock_gcc clk_gcc_pcie_clkref_clk>,
+			<&clock_gcc clk_gcc_smmu_aggre0_axi_clk>,
+			<&clock_gcc clk_gcc_pcie_phy_cfg_ahb_clk>,
+			<&clock_gcc clk_gcc_pcie_phy_aux_clk>,
+			<&clock_gcc clk_gcc_pcie_phy_reset>,
+			<&clock_gcc clk_gcc_pcie_phy_com_reset>,
+			<&clock_gcc clk_gcc_pcie_phy_nocsr_com_phy_reset>,
+			<&clock_gcc clk_gcc_pcie_0_phy_reset>;
+
+		clock-names =  "pcie_0_pipe_clk", "pcie_0_ref_clk_src", "pcie_0_aux_clk",
+			"pcie_0_cfg_ahb_clk", "pcie_0_mstr_axi_clk",
+			"pcie_0_slv_axi_clk", "pcie_0_ldo", "pcie_0_smmu_clk",
+			"pcie_phy_cfg_ahb_clk", "pcie_phy_aux_clk", "pcie_phy_reset",
+			"pcie_phy_com_reset", "pcie_phy_nocsr_com_phy_reset",
+			"pcie_0_phy_reset";
+
+		max-clock-frequency-hz = <0>, <0>, <1010526>, <0>, <0>, <0>, <0>,
+					 <0>, <0>, <0>, <0>, <0>, <0>, <0>;
+	};
+
+	pcie1: qcom,pcie@00608000 {
+		compatible = "qcom,pci-msm";
+		cell-index = <1>;
+
+		reg = <0x00608000 0x2000>,
+		      <0x00034000 0x4000>,
+		      <0x0d000000 0xf1d>,
+		      <0x0d000f20 0xa8>,
+		      <0x0d100000 0x100000>,
+		      <0x0d200000 0x100000>,
+		      <0x0d300000 0xd00000>;
+
+		reg-names = "parf", "phy", "dm_core", "elbi",
+				"conf", "io", "bars";
+
+		#address-cells = <3>;
+		#size-cells = <2>;
+		ranges = <0x01000000 0x0 0x0d200000 0x0d200000 0x0 0x100000>,
+			<0x02000000 0x0 0x0d300000 0x0d300000 0x0 0xd00000>;
+		interrupt-parent = <&pcie1>;
+		interrupts = <0 1 2 3 4 5 6 7 8 9 10 11>;
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0x0 0x0 0x0 0xffffffff>;
+		interrupt-map = <0x0 0x0 0x0 0 &intc 0 413 0
+				0x0 0x0 0x0 1 &intc 0 272 0
+				0x0 0x0 0x0 2 &intc 0 273 0
+				0x0 0x0 0x0 3 &intc 0 274 0
+				0x0 0x0 0x0 4 &intc 0 275 0
+				0x0 0x0 0x0 5 &intc 0 276 0
+				0x0 0x0 0x0 6 &intc 0 277 0
+				0x0 0x0 0x0 7 &intc 0 278 0
+				0x0 0x0 0x0 8 &intc 0 279 0
+				0x0 0x0 0x0 9 &intc 0 280 0
+				0x0 0x0 0x0 10 &intc 0 281 0
+				0x0 0x0 0x0 11 &intc 0 282 0>;
+
+		interrupt-names = "int_msi", "int_a", "int_b", "int_c", "int_d",
+				"int_pls_pme", "int_pme_legacy", "int_pls_err",
+				"int_aer_legacy", "int_pls_link_up",
+				"int_pls_link_down", "int_bridge_flush_n";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&pcie1_clkreq_default &pcie1_perst_default &pcie1_wake_default>;
+
+		perst-gpio = <&tlmm 130 0>;
+		wake-gpio = <&tlmm 132 0>;
+
+		gdsc-smmu-supply = <&gdsc_hlos1_vote_aggre0_noc>;
+		gdsc-vdd-supply = <&gdsc_pcie_1>;
+		vreg-1.8-supply = <&pm8994_l12>;
+		vreg-0.9-supply = <&pm8994_l28>;
+
+		qcom,vreg-0.9-voltage-level = <925000 925000 24000>;
+
+		qcom,common-phy;
+
+		qcom,ep-latency = <10>;
+
+		qcom,msm-bus,name = "pcie1";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<100 512 0 0>,
+				<100 512 500 800>;
+
+		clocks = <&clock_gcc clk_gcc_pcie_1_pipe_clk>,
+			<&clock_gcc clk_ln_bb_clk>,
+			<&clock_gcc clk_gcc_pcie_1_aux_clk>,
+			<&clock_gcc clk_gcc_pcie_1_cfg_ahb_clk>,
+			<&clock_gcc clk_gcc_pcie_1_mstr_axi_clk>,
+			<&clock_gcc clk_gcc_pcie_1_slv_axi_clk>,
+			<&clock_gcc clk_gcc_pcie_clkref_clk>,
+			<&clock_gcc clk_gcc_smmu_aggre0_axi_clk>,
+			<&clock_gcc clk_gcc_pcie_phy_cfg_ahb_clk>,
+			<&clock_gcc clk_gcc_pcie_phy_aux_clk>,
+			<&clock_gcc clk_gcc_pcie_phy_reset>,
+			<&clock_gcc clk_gcc_pcie_phy_com_reset>,
+			<&clock_gcc clk_gcc_pcie_phy_nocsr_com_phy_reset>,
+			<&clock_gcc clk_gcc_pcie_1_phy_reset>;
+
+		clock-names =  "pcie_1_pipe_clk", "pcie_1_ref_clk_src", "pcie_1_aux_clk",
+			"pcie_1_cfg_ahb_clk", "pcie_1_mstr_axi_clk",
+			"pcie_1_slv_axi_clk", "pcie_1_ldo", "pcie_1_smmu_clk",
+			"pcie_phy_cfg_ahb_clk", "pcie_phy_aux_clk", "pcie_phy_reset",
+			"pcie_phy_com_reset", "pcie_phy_nocsr_com_phy_reset",
+			"pcie_1_phy_reset";
+
+		max-clock-frequency-hz = <0>, <0>, <1010526>, <0>, <0>, <0>, <0>,
+					 <0>, <0>, <0>, <0>, <0>, <0>, <0>;
+	};
+
+	pcie2: qcom,pcie@00610000 {
+		compatible = "qcom,pci-msm";
+		cell-index = <2>;
+
+		reg = <0x00610000 0x2000>,
+		      <0x00034000 0x4000>,
+		      <0x0e000000 0xf1d>,
+		      <0x0e000f20 0xa8>,
+		      <0x0e100000 0x100000>,
+		      <0x0e200000 0x100000>,
+		      <0x0e300000 0x1d00000>;
+
+		reg-names = "parf", "phy", "dm_core", "elbi",
+				"conf", "io", "bars";
+
+		#address-cells = <3>;
+		#size-cells = <2>;
+		ranges = <0x01000000 0x0 0x0e200000 0x0e200000 0x0 0x100000>,
+			<0x02000000 0x0 0x0e300000 0x0e300000 0x0 0x1d00000>;
+		interrupt-parent = <&pcie2>;
+		interrupts = <0 1 2 3 4 5 6 7 8 9 10 11>;
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0x0 0x0 0x0 0xffffffff>;
+		interrupt-map = <0x0 0x0 0x0 0 &intc 0 421 0
+				0x0 0x0 0x0 1 &intc 0 142 0
+				0x0 0x0 0x0 2 &intc 0 143 0
+				0x0 0x0 0x0 3 &intc 0 144 0
+				0x0 0x0 0x0 4 &intc 0 145 0
+				0x0 0x0 0x0 5 &intc 0 146 0
+				0x0 0x0 0x0 6 &intc 0 147 0
+				0x0 0x0 0x0 7 &intc 0 148 0
+				0x0 0x0 0x0 8 &intc 0 149 0
+				0x0 0x0 0x0 9 &intc 0 260 0
+				0x0 0x0 0x0 10 &intc 0 261 0
+				0x0 0x0 0x0 11 &intc 0 262 0>;
+
+		interrupt-names = "int_msi", "int_a", "int_b", "int_c", "int_d",
+				"int_pls_pme", "int_pme_legacy", "int_pls_err",
+				"int_aer_legacy", "int_pls_link_up",
+				"int_pls_link_down", "int_bridge_flush_n";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&pcie2_clkreq_default &pcie2_perst_default &pcie2_wake_default>;
+
+		perst-gpio = <&tlmm 114 0>;
+		wake-gpio = <&tlmm 116 0>;
+
+		gdsc-smmu-supply = <&gdsc_hlos1_vote_aggre0_noc>;
+		gdsc-vdd-supply = <&gdsc_pcie_2>;
+		vreg-1.8-supply = <&pm8994_l12>;
+		vreg-0.9-supply = <&pm8994_l28>;
+
+		qcom,vreg-0.9-voltage-level = <925000 925000 24000>;
+
+		qcom,common-phy;
+
+		qcom,ep-latency = <10>;
+
+		qcom,msm-bus,name = "pcie2";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<108 512 0 0>,
+				<108 512 500 800>;
+
+		clocks = <&clock_gcc clk_gcc_pcie_2_pipe_clk>,
+			<&clock_gcc clk_ln_bb_clk>,
+			<&clock_gcc clk_gcc_pcie_2_aux_clk>,
+			<&clock_gcc clk_gcc_pcie_2_cfg_ahb_clk>,
+			<&clock_gcc clk_gcc_pcie_2_mstr_axi_clk>,
+			<&clock_gcc clk_gcc_pcie_2_slv_axi_clk>,
+			<&clock_gcc clk_gcc_pcie_clkref_clk>,
+			<&clock_gcc clk_gcc_smmu_aggre0_axi_clk>,
+			<&clock_gcc clk_gcc_pcie_phy_cfg_ahb_clk>,
+			<&clock_gcc clk_gcc_pcie_phy_aux_clk>,
+			<&clock_gcc clk_gcc_pcie_phy_reset>,
+			<&clock_gcc clk_gcc_pcie_phy_com_reset>,
+			<&clock_gcc clk_gcc_pcie_phy_nocsr_com_phy_reset>,
+			<&clock_gcc clk_gcc_pcie_2_phy_reset>;
+
+		clock-names =  "pcie_2_pipe_clk", "pcie_2_ref_clk_src", "pcie_2_aux_clk",
+			"pcie_2_cfg_ahb_clk", "pcie_2_mstr_axi_clk",
+			"pcie_2_slv_axi_clk", "pcie_2_ldo", "pcie_2_smmu_clk",
+			"pcie_phy_cfg_ahb_clk", "pcie_phy_aux_clk", "pcie_phy_reset",
+			"pcie_phy_com_reset", "pcie_phy_nocsr_com_phy_reset",
+			"pcie_2_phy_reset";
+
+		max-clock-frequency-hz = <0>, <0>, <1010526>, <0>, <0>, <0>, <0>,
+					 <0>, <0>, <0>, <0>, <0>, <0>, <0>;
+	};
+
         qcom,ipc-spinlock@740000 {
                 compatible = "qcom,ipc-spinlock-sfpb";
                 reg = <0x740000 0x8000>;
