@@ -107,6 +107,8 @@ int chk_config_get_id(void)
 		return MSM8939_TOOLS_ID;
 	case MSM_CPU_8929:
 		return MSM8929_TOOLS_ID;
+	case MSM_CPU_8939_BC:
+		return MSM8939_TOOLS_ID;
 	default:
 		if (driver->use_device_tree) {
 			if (machine_is_msm8974())
