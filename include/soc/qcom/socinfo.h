@@ -81,6 +81,8 @@
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msmtellurium")
 #define early_machine_is_msm8929()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8929")
+#define early_machine_is_msm8939_bc()	\
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8939_bc")
 #else
 #define of_board_is_sim()		0
 #define of_board_is_rumi()		0
@@ -112,6 +114,7 @@
 #define early_machine_is_fsm9010()	0
 #define early_machine_is_msmtellurium()	0
 #define early_machine_is_msm8929()	0
+#define early_machine_is_msm8939_bc()	0
 #endif
 
 #define PLATFORM_SUBTYPE_MDM	1
@@ -166,6 +169,7 @@ enum msm_cpu {
 	FSM_CPU_9010,
 	MSM_CPU_TELLURIUM,
 	MSM_CPU_8929,
+	MSM_CPU_8939_BC,
 };
 
 struct msm_soc_info {
@@ -578,6 +582,18 @@ static inline int cpu_is_msm8929(void)
 
 	BUG_ON(cpu == MSM_CPU_UNKNOWN);
 	return cpu == MSM_CPU_8929;
+#else
+	return 0;
+#endif
+}
+
+static inline int cpu_is_msm8939_bc(void)
+{
+#ifdef CONFIG_ARCH_MSM8916
+	enum msm_cpu cpu = socinfo_get_msm_cpu();
+
+	BUG_ON(cpu == MSM_CPU_UNKNOWN);
+	return cpu == MSM_CPU_8939_BC;
 #else
 	return 0;
 #endif
