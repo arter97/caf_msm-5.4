@@ -504,6 +504,13 @@
 		asoc-codec = <&stub_codec>, <&hdmi_audio>;
 		asoc-codec-names = "msm-stub-codec.1", "msm-hdmi-audio-codec-rx";
 	};
+
+	sound-9335 {
+		qcom,model = "msmthulium-tasha-cdp-snd-card";
+		qcom,hdmi-audio-rx;
+		asoc-codec = <&stub_codec>, <&hdmi_audio>;
+		asoc-codec-names = "msm-stub-codec.1", "msm-hdmi-audio-codec-rx";
+	};
 };
 
 &pm8994_mpps {
