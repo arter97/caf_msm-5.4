@@ -163,7 +163,6 @@
 	};
 
 	sound {
-		status = "disabled";
 		compatible = "qcom,msm8x16-audio-codec";
 		qcom,model = "msm8939-snd-card";
 		qcom,msm-snd-card-id = <0>;
@@ -177,12 +176,12 @@
 			"RX_BIAS", "MCLK",
 			"SPK_RX_BIAS", "MCLK",
 			"INT_LDO_H", "MCLK",
-			"MIC BIAS Internal1", "Handset Mic",
+			"MIC BIAS External", "Handset Mic",
 			"MIC BIAS Internal2", "Headset Mic",
-			"MIC BIAS Internal3", "Secondary Mic",
-			"AMIC1", "MIC BIAS Internal1",
+			"MIC BIAS External", "Secondary Mic",
+			"AMIC1", "MIC BIAS External",
 			"AMIC2", "MIC BIAS Internal2",
-			"AMIC3", "MIC BIAS Internal3";
+			"AMIC3", "MIC BIAS External";
 		pinctrl-names = "cdc_lines_act",
 				"cdc_lines_sus",
 				"cross_conn_det_act",
@@ -220,8 +219,7 @@
 				"msm-dai-q6-dev.241", "msm-dai-q6-dev.240",
 				"msm-dai-q6-dev.32771", "msm-dai-q6-dev.32772",
 				"msm-dai-q6-dev.32773", "msm-dai-q6-dev.32770";
-		/* Revisit - Remove PM8950 Codec */
-		/* soc-codec = <&stub_codec>, <&pm8950_tombak_dig>; */
+		asoc-codec = <&stub_codec>, <&pm8950_cajon_dig>;
 		asoc-codec-names = "msm-stub-codec.1", "tombak_codec";
 	};
 };

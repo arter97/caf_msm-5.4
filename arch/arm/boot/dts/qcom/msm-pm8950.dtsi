@@ -356,6 +356,7 @@
 			qcom,supported-sizes = <6>, <9>;
 			#pwm-cells = <2>;
 		};
+
 		pm8950_cajon_dig: 8950_wcd_codec@f000 {
 			compatible = "qcom,msm8x16_wcd_codec";
 			reg = <0xf000 0x100>;
