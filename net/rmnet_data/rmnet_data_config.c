@@ -38,7 +38,7 @@ static struct netlink_kernel_cfg rmnet_netlink_cfg = {
 };
 #endif
 
-static struct notifier_block rmnet_dev_notifier = {
+static struct notifier_block rmnet_dev_notifier __read_mostly = {
 	.notifier_call = rmnet_config_notify_cb,
 	.next = 0,
 	.priority = 0

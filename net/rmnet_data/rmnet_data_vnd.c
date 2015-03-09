@@ -44,7 +44,7 @@ enum {
 	RMNET_VND_UPDATE_FLOW_NO_VALID_LEFT
 };
 
-struct net_device *rmnet_devices[RMNET_DATA_MAX_VND];
+struct net_device *rmnet_devices[RMNET_DATA_MAX_VND] __read_mostly;
 
 struct rmnet_map_flow_mapping_s {
 	struct list_head list;
@@ -461,7 +461,7 @@ static int rmnet_vnd_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	return rc;
 }
 
-static const struct net_device_ops rmnet_data_vnd_ops = {
+static const struct net_device_ops rmnet_data_vnd_ops __read_mostly = {
 	.ndo_init = 0,
 	.ndo_start_xmit = rmnet_vnd_start_xmit,
 	.ndo_do_ioctl = rmnet_vnd_ioctl,
