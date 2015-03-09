@@ -1245,6 +1245,16 @@ static int adreno_init(struct kgsl_device *device)
 	if (test_bit(ADRENO_DEVICE_INITIALIZED, &adreno_dev->priv))
 		return 0;
 
+	/*
+	 * Either the microcode read failed because the usermodehelper isn't
+	 * available or the microcode was corrupted. Fail the init and force
+	 * the user to try the open() again
+	 */
+
+	ret = gpudev->microcode_read(adreno_dev);
+	if (ret)
+		return ret;
+
 	/* Put the GPU in a responsive state */
 	ret = kgsl_pwrctrl_change_state(device, KGSL_STATE_AWARE);
 	if (ret)

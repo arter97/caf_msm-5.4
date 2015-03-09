@@ -17,7 +17,7 @@ unsigned int a3xx_irq_pending(struct adreno_device *adreno_dev);
 void a3xx_busy_cycles(struct adreno_device *adreno_dev,
 			struct adreno_busy_data *);
 
-void a3xx_microcode_read(struct adreno_device *adreno_dev);
+int a3xx_microcode_read(struct adreno_device *adreno_dev);
 int a3xx_microcode_load(struct adreno_device *adreno_dev,
 				unsigned int start_type);
 int a3xx_perfcounter_enable(struct adreno_device *adreno_dev,
