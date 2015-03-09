@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -645,6 +645,15 @@ int cam_smmu_get_phy_addr(int handle, int ion_fd,
 		pr_err("Error: index is not valid, index = %d\n", idx);
 		return -EINVAL;
 	}
+
+	mutex_lock(&iommu_cb_set.cb_info[idx].lock);
+	if (iommu_cb_set.cb_info[idx].state != CAM_SMMU_ATTACH) {
+		pr_err("Error: Device %s should call SMMU attach before map buffer\n",
+				iommu_cb_set.cb_info[idx].name);
+		mutex_unlock(&iommu_cb_set.cb_info[idx].lock);
+		return -EINVAL;
+	}
+	mutex_unlock(&iommu_cb_set.cb_info[idx].lock);
 
 	buf_state = cam_smmu_check_fd_in_list(idx, ion_fd, paddr_ptr, len_ptr);
 	if (buf_state == CAM_SMMU_BUFF_EXIST) {
