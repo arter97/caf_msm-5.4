@@ -43,7 +43,11 @@ endif
    zreladdr-$(CONFIG_ARCH_MSM8930)	:= 0x80208000
 
 # APQ8064
+ifeq ($(CONFIG_APQ8064_ADP2_ES2_3GB),y)
+   zreladdr-$(CONFIG_ARCH_APQ8064)	:= 0x40208000
+else
    zreladdr-$(CONFIG_ARCH_APQ8064)	:= 0x80208000
+endif
 
 # MSM8974
    zreladdr-$(CONFIG_ARCH_MSM8974)	:= 0x00008000
