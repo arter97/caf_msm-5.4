@@ -19,6 +19,7 @@
 #include <media/v4l2-subdev.h>
 #include <media/msm_cam_sensor.h>
 #include "msm_sd.h"
+#include "msm_camera_io_util.h"
 
 #define MAX_CSIPHY 3
 #define CSIPHY_NUM_CLK_MAX  16
@@ -96,6 +97,7 @@ struct csiphy_reg_3ph_parms_t {
 	uint32_t mipi_csiphy_2ph_lnn_cfg9_addr;
 	uint32_t mipi_csiphy_2ph_lnn_ctrl15_addr;
 	uint32_t mipi_csiphy_2ph_lnn_test_imp_addr;
+	uint32_t mipi_csiphy_2ph_lnn_test_force;
 };
 
 struct csiphy_ctrl_t {
@@ -126,12 +128,14 @@ struct csiphy_device {
 	struct csiphy_ctrl_t *ctrl_reg;
 	uint32_t num_clk;
 	struct clk *csiphy_clk[CSIPHY_NUM_CLK_MAX];
+	struct msm_cam_clk_info csiphy_clk_info[CSIPHY_NUM_CLK_MAX];
 	int32_t ref_count;
 	uint16_t lane_mask[MAX_CSIPHY];
 	uint32_t is_3_1_20nm_hw;
 	uint32_t csiphy_clk_index;
 	uint32_t csiphy_max_clk;
 	uint8_t csiphy_3phase;
+	uint8_t num_irq_registers;
 };
 
 #define VIDIOC_MSM_CSIPHY_RELEASE \
