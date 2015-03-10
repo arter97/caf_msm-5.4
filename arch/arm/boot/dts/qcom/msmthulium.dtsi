@@ -1078,7 +1078,27 @@
 			qcom,cdc-vdd-buck-voltage = <1800000 1800000>;
 			qcom,cdc-vdd-buck-current = <650000>;
 
-			qcom,cdc-static-supplies = "cdc-vdd-buck";
+			cdc-buck-sido-supply = <&pm8994_s4>;
+			qcom,cdc-buck-sido-voltage = <1800000 1800000>;
+			qcom,cdc-buck-sido-current = <250000>;
+
+			cdc-vdd-tx-h-supply = <&pm8994_s4>;
+			qcom,cdc-vdd-tx-h-voltage = <1800000 1800000>;
+			qcom,cdc-vdd-tx-h-current = <25000>;
+
+			cdc-vdd-rx-h-supply = <&pm8994_s4>;
+			qcom,cdc-vdd-rx-h-voltage = <1800000 1800000>;
+			qcom,cdc-vdd-rx-h-current = <25000>;
+
+			cdc-vddpx-1-supply = <&pm8994_s4>;
+			qcom,cdc-vddpx-1-voltage = <1800000 1800000>;
+			qcom,cdc-vddpx-1-current = <10000>;
+
+			qcom,cdc-static-supplies = "cdc-vdd-buck",
+						   "cdc-buck-sido",
+						   "cdc-vdd-tx-h",
+						   "cdc-vdd-rx-h",
+						   "cdc-vddpx-1";
 
 			qcom,cdc-micbias1-mv = <1800>;
 			qcom,cdc-micbias2-mv = <2700>;
