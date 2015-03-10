@@ -730,6 +730,13 @@ extern struct adreno_gpudev adreno_a5xx_gpudev;
 extern int adreno_wake_nice;
 extern unsigned int adreno_wake_timeout;
 
+long adreno_ioctl(struct kgsl_device_private *dev_priv,
+		unsigned int cmd, unsigned long arg);
+
+long adreno_ioctl_helper(struct kgsl_device_private *dev_priv,
+		unsigned int cmd, unsigned long arg,
+		const struct kgsl_ioctl *cmds, int len);
+
 int adreno_spin_idle(struct kgsl_device *device);
 int adreno_idle(struct kgsl_device *device);
 bool adreno_isidle(struct kgsl_device *device);
@@ -832,6 +839,12 @@ int adreno_sysfs_init(struct kgsl_device *device);
 void adreno_sysfs_close(struct kgsl_device *device);
 
 void adreno_irqctrl(struct adreno_device *adreno_dev, int state);
+
+long adreno_ioctl_perfcounter_get(struct kgsl_device_private *dev_priv,
+	unsigned int cmd, void *data);
+
+long adreno_ioctl_perfcounter_put(struct kgsl_device_private *dev_priv,
+	unsigned int cmd, void *data);
 
 static inline int adreno_is_a3xx(struct adreno_device *adreno_dev)
 {
