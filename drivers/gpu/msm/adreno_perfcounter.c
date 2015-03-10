@@ -143,8 +143,10 @@ static void adreno_perfcounter_write(struct adreno_device *adreno_dev,
  */
 void adreno_perfcounter_close(struct adreno_device *adreno_dev)
 {
-	adreno_perfcounter_put(adreno_dev, KGSL_PERFCOUNTER_GROUP_PWR, 1,
-		PERFCOUNTER_FLAG_KERNEL);
+	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
+
+	if (gpudev->perfcounter_close)
+		gpudev->perfcounter_close(adreno_dev);
 
 	if (adreno_dev->fast_hang_detect)
 		adreno_fault_detect_stop(adreno_dev);

@@ -1254,6 +1254,11 @@ static void a4xx_perfcounter_init(struct adreno_device *adreno_dev)
 		NULL, NULL, PERFCOUNTER_FLAG_KERNEL);
 }
 
+static void a4xx_perfcounter_close(struct adreno_device *adreno_dev)
+{
+	adreno_perfcounter_put(adreno_dev, KGSL_PERFCOUNTER_GROUP_PWR, 1,
+		PERFCOUNTER_FLAG_KERNEL);
+}
 
 static const unsigned int _a4xx_pwron_fixup_fs_instructions[] = {
 	0x00000000, 0x304CC300, 0x00000000, 0x304CC304,
@@ -1669,6 +1674,7 @@ struct adreno_gpudev adreno_a4xx_gpudev = {
 	.vbif_xin_halt_ctrl0_mask = A4XX_VBIF_XIN_HALT_CTRL0_MASK,
 
 	.perfcounter_init = a4xx_perfcounter_init,
+	.perfcounter_close = a4xx_perfcounter_close,
 	.rb_init = a4xx_rb_init,
 	.microcode_read = a3xx_microcode_read,
 	.microcode_load = a3xx_microcode_load,

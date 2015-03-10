@@ -639,6 +639,7 @@ struct adreno_gpudev {
 	void (*microcode_read)(struct adreno_device *);
 	int (*microcode_load)(struct adreno_device *, unsigned int start_type);
 	void (*perfcounter_init)(struct adreno_device *);
+	void (*perfcounter_close)(struct adreno_device *);
 	void (*start)(struct adreno_device *);
 	void (*busy_cycles)(struct adreno_device *, struct adreno_busy_data *);
 	bool (*is_sptp_idle)(struct adreno_device *);
