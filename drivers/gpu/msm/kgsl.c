@@ -2530,74 +2530,6 @@ long kgsl_ioctl_cmdstream_readtimestamp_ctxtid(struct kgsl_device_private
 	return result;
 }
 
-static void kgsl_freemem_event_cb(struct kgsl_device *device,
-		struct kgsl_event_group *group, void *priv, int result)
-{
-	struct kgsl_context *context = group->context;
-	struct kgsl_mem_entry *entry = priv;
-	unsigned int timestamp;
-
-	kgsl_readtimestamp(device, context, KGSL_TIMESTAMP_RETIRED, &timestamp);
-
-	/* Free the memory for all event types */
-	trace_kgsl_mem_timestamp_free(device, entry, KGSL_CONTEXT_ID(context),
-		timestamp, 0);
-	kgsl_mem_entry_put(entry);
-}
-
-long kgsl_ioctl_cmdstream_freememontimestamp_ctxtid(
-		struct kgsl_device_private *dev_priv,
-		unsigned int cmd, void *data)
-{
-	struct kgsl_cmdstream_freememontimestamp_ctxtid *param = data;
-	struct kgsl_device *device = dev_priv->device;
-	struct kgsl_context *context;
-	struct kgsl_mem_entry *entry;
-	int result = -EINVAL;
-	unsigned int temp_cur_ts = 0;
-
-	/* If the user supplies incorrect type for timestamp, bail. */
-	if (param->type != KGSL_TIMESTAMP_RETIRED)
-		return -EINVAL;
-
-	context = kgsl_context_get_owner(dev_priv, param->context_id);
-	if (context == NULL)
-		goto out;
-
-	entry = kgsl_sharedmem_find(dev_priv->process_priv,
-		(uint64_t) param->gpuaddr);
-
-	if (!entry) {
-		KGSL_DRV_ERR(device, "invalid gpuaddr 0x%08lX\n",
-			param->gpuaddr);
-		goto out;
-	}
-	if (!kgsl_mem_entry_set_pend(entry)) {
-		KGSL_DRV_WARN(device,
-			"Cannot set pending bit for gpuaddr 0x%08lX\n",
-			param->gpuaddr);
-		kgsl_mem_entry_put(entry);
-		result = -EBUSY;
-		goto out;
-	}
-
-	kgsl_readtimestamp(device, context, KGSL_TIMESTAMP_RETIRED,
-		&temp_cur_ts);
-	trace_kgsl_mem_timestamp_queue(device, entry, context->id, temp_cur_ts,
-		param->timestamp);
-	result = kgsl_add_event(dev_priv->device, &context->events,
-		param->timestamp, kgsl_freemem_event_cb, entry);
-
-	if (result)
-		kgsl_mem_entry_unset_pend(entry);
-
-	kgsl_mem_entry_put(entry);
-
-out:
-	kgsl_context_put(context);
-	return result;
-}
-
 long kgsl_ioctl_drawctxt_create(struct kgsl_device_private *dev_priv,
 					unsigned int cmd, void *data)
 {
@@ -2632,27 +2564,56 @@ long kgsl_ioctl_drawctxt_destroy(struct kgsl_device_private *dev_priv,
 	return result;
 }
 
-static long _sharedmem_free_entry(struct kgsl_mem_entry *entry)
+static long gpumem_free_entry(struct kgsl_mem_entry *entry)
 {
-	if (!kgsl_mem_entry_set_pend(entry)) {
-		kgsl_mem_entry_put(entry);
+	if (!kgsl_mem_entry_set_pend(entry))
 		return -EBUSY;
-	}
 
 	trace_kgsl_mem_free(entry);
 
 	kgsl_memfree_add(entry->priv->pid, entry->memdesc.gpuaddr,
 		entry->memdesc.size, entry->memdesc.flags);
 
-	/*
-	 * First kgsl_mem_entry_put is for the reference that we took in
-	 * this function when calling kgsl_sharedmem_find, second one is
-	 * to free the memory since this is a free ioctl
-	 */
-	kgsl_mem_entry_put(entry);
 	kgsl_mem_entry_put(entry);
 
 	return 0;
+}
+
+static void gpumem_free_func(struct kgsl_device *device,
+		struct kgsl_event_group *group, void *priv, int ret)
+{
+	struct kgsl_context *context = group->context;
+	struct kgsl_mem_entry *entry = priv;
+	unsigned int timestamp;
+
+	kgsl_readtimestamp(device, context, KGSL_TIMESTAMP_RETIRED, &timestamp);
+
+	/* Free the memory for all event types */
+	trace_kgsl_mem_timestamp_free(device, entry, KGSL_CONTEXT_ID(context),
+		timestamp, 0);
+	kgsl_mem_entry_put(entry);
+}
+
+static long gpumem_free_entry_on_timestamp(struct kgsl_device *device,
+		struct kgsl_mem_entry *entry,
+		struct kgsl_context *context, unsigned int timestamp)
+{
+	int ret;
+	unsigned int temp;
+
+	if (!kgsl_mem_entry_set_pend(entry))
+		return -EBUSY;
+
+	kgsl_readtimestamp(device, context, KGSL_TIMESTAMP_RETIRED, &temp);
+	trace_kgsl_mem_timestamp_queue(device, entry, context->id, temp,
+		timestamp);
+	ret = kgsl_add_event(device, &context->events,
+		timestamp, gpumem_free_func, entry);
+
+	if (ret)
+		kgsl_mem_entry_unset_pend(entry);
+
+	return ret;
 }
 
 long kgsl_ioctl_sharedmem_free(struct kgsl_device_private *dev_priv,
@@ -2660,16 +2621,21 @@ long kgsl_ioctl_sharedmem_free(struct kgsl_device_private *dev_priv,
 {
 	struct kgsl_sharedmem_free *param = data;
 	struct kgsl_process_private *private = dev_priv->process_priv;
-	struct kgsl_mem_entry *entry = NULL;
+	struct kgsl_mem_entry *entry;
+	long ret;
 
-	entry = kgsl_sharedmem_find(private, param->gpuaddr);
-	if (!entry) {
-		KGSL_MEM_INFO(dev_priv->device, "invalid gpuaddr %08lx\n",
-				param->gpuaddr);
+	entry = kgsl_sharedmem_find(private, (uint64_t) param->gpuaddr);
+	if (entry == NULL) {
+		KGSL_MEM_INFO(dev_priv->device,
+			"Invalid GPU address 0x%016llx\n",
+			(uint64_t) param->gpuaddr);
 		return -EINVAL;
 	}
 
-	return _sharedmem_free_entry(entry);
+	ret = gpumem_free_entry(entry);
+	kgsl_mem_entry_put(entry);
+
+	return ret;
 }
 
 long kgsl_ioctl_gpumem_free_id(struct kgsl_device_private *dev_priv,
@@ -2677,16 +2643,156 @@ long kgsl_ioctl_gpumem_free_id(struct kgsl_device_private *dev_priv,
 {
 	struct kgsl_gpumem_free_id *param = data;
 	struct kgsl_process_private *private = dev_priv->process_priv;
-	struct kgsl_mem_entry *entry = NULL;
+	struct kgsl_mem_entry *entry;
+	long ret;
 
 	entry = kgsl_sharedmem_find_id(private, param->id);
-
-	if (!entry) {
-		KGSL_MEM_INFO(dev_priv->device, "invalid id %d\n", param->id);
+	if (entry == NULL) {
+		KGSL_MEM_INFO(dev_priv->device,
+			"Invalid GPU memory object ID %d\n", param->id);
 		return -EINVAL;
 	}
 
-	return _sharedmem_free_entry(entry);
+	ret = gpumem_free_entry(entry);
+	kgsl_mem_entry_put(entry);
+
+	return ret;
+}
+
+static inline int _copy_from_user(void *dest, void __user *src,
+		unsigned int ksize, unsigned int usize)
+{
+	unsigned int copy = ksize < usize ? ksize : usize;
+
+	if (copy == 0)
+		return -EINVAL;
+
+	return copy_from_user(dest, src, copy) ? -EFAULT : 0;
+}
+
+static long gpuobj_free_on_timestamp(struct kgsl_device_private *dev_priv,
+		struct kgsl_mem_entry *entry, struct kgsl_gpuobj_free *param)
+{
+	struct kgsl_gpu_event_timestamp event;
+	struct kgsl_context *context;
+	long ret;
+
+	memset(&event, 0, sizeof(event));
+
+	ret = _copy_from_user(&event, (void __user *) (uintptr_t) param->priv,
+		sizeof(event), param->len);
+	if (ret)
+		return ret;
+
+	if (event.context_id == 0)
+		return -EINVAL;
+
+	context = kgsl_context_get_owner(dev_priv, event.context_id);
+	if (context == NULL)
+		return -EINVAL;
+
+	ret = gpumem_free_entry_on_timestamp(dev_priv->device, entry, context,
+		event.timestamp);
+
+	kgsl_context_put(context);
+	return ret;
+}
+
+static void gpuobj_free_fence_func(void *priv)
+{
+	struct kgsl_mem_entry *entry = priv;
+	kgsl_mem_entry_put(entry);
+}
+
+static long gpuobj_free_on_fence(struct kgsl_device_private *dev_priv,
+		struct kgsl_mem_entry *entry, struct kgsl_gpuobj_free *param)
+{
+	struct kgsl_sync_fence_waiter *handle;
+	struct kgsl_gpu_event_fence event;
+	long ret;
+
+	memset(&event, 0, sizeof(event));
+
+	ret = _copy_from_user(&event, (void __user *) (uintptr_t) param->priv,
+		sizeof(event), param->len);
+	if (ret)
+		return ret;
+
+	if (event.fd < 0)
+		return -EINVAL;
+
+	handle = kgsl_sync_fence_async_wait(event.fd,
+		gpuobj_free_fence_func, entry);
+
+	/* if handle is NULL the fence has already signaled */
+	if (handle == NULL)
+		return gpumem_free_entry(entry);
+
+	return IS_ERR(handle) ? PTR_ERR(handle) : 0;
+}
+
+long kgsl_ioctl_gpuobj_free(struct kgsl_device_private *dev_priv,
+		unsigned int cmd, void *data)
+{
+	struct kgsl_gpuobj_free *param = data;
+	struct kgsl_process_private *private = dev_priv->process_priv;
+	struct kgsl_mem_entry *entry;
+	long ret;
+
+	entry = kgsl_sharedmem_find_id(private, param->id);
+	if (entry == NULL) {
+		KGSL_MEM_ERR(dev_priv->device,
+			"Invalid GPU memory object ID %d\n", param->id);
+		return -EINVAL;
+	}
+
+	/* If no event is specified then free immediately */
+	if (!(param->flags & KGSL_GPUOBJ_FREE_ON_EVENT))
+		ret = gpumem_free_entry(entry);
+	else if (param->type == KGSL_GPU_EVENT_TIMESTAMP)
+		ret = gpuobj_free_on_timestamp(dev_priv, entry, param);
+	else if (param->type == KGSL_GPU_EVENT_FENCE)
+		ret = gpuobj_free_on_fence(dev_priv, entry, param);
+	else
+		ret = -EINVAL;
+
+	kgsl_mem_entry_put(entry);
+	return ret;
+}
+
+long kgsl_ioctl_cmdstream_freememontimestamp_ctxtid(
+		struct kgsl_device_private *dev_priv,
+		unsigned int cmd, void *data)
+{
+	struct kgsl_cmdstream_freememontimestamp_ctxtid *param = data;
+	struct kgsl_context *context = NULL;
+	struct kgsl_mem_entry *entry;
+	long ret = -EINVAL;
+
+	if (param->type != KGSL_TIMESTAMP_RETIRED)
+		return -EINVAL;
+
+	context = kgsl_context_get_owner(dev_priv, param->context_id);
+	if (context == NULL)
+		return -EINVAL;
+
+	entry = kgsl_sharedmem_find(dev_priv->process_priv,
+		(uint64_t) param->gpuaddr);
+	if (entry == NULL) {
+		KGSL_MEM_ERR(dev_priv->device,
+			"Invalid GPU address 0x%016llx\n",
+			(uint64_t) param->gpuaddr);
+		goto out;
+	}
+
+	ret = gpumem_free_entry_on_timestamp(dev_priv->device, entry,
+		context, param->timestamp);
+
+	kgsl_mem_entry_put(entry);
+out:
+	kgsl_context_put(context);
+
+	return ret;
 }
 
 static inline int _check_region(unsigned long start, unsigned long size,
