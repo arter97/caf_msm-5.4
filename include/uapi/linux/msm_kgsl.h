@@ -1113,4 +1113,19 @@ struct kgsl_syncsource_signal_fence {
 #define IOCTL_KGSL_SYNCSOURCE_SIGNAL_FENCE \
 	_IOWR(KGSL_IOC_TYPE, 0x43, struct kgsl_syncsource_signal_fence)
 
+/**
+ * struct kgsl_cff_sync_gpuobj - Argument to IOCTL_KGSL_CFF_SYNC_GPUOBJ
+ * @offset: Offset into the GPU object to sync
+ * @length: Number of bytes to sync
+ * @id: ID of the GPU object to sync
+ */
+struct kgsl_cff_sync_gpuobj {
+	uint64_t offset;
+	uint64_t length;
+	unsigned int id;
+};
+
+#define IOCTL_KGSL_CFF_SYNC_GPUOBJ \
+	_IOW(KGSL_IOC_TYPE, 0x44, struct kgsl_cff_sync_gpuobj)
+
 #endif /* _UAPI_MSM_KGSL_H */

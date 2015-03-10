@@ -301,6 +301,8 @@ long kgsl_ioctl_cff_user_event(struct kgsl_device_private *dev_priv,
 					unsigned int cmd, void *data);
 long kgsl_ioctl_timestamp_event(struct kgsl_device_private *dev_priv,
 					unsigned int cmd, void *data);
+long kgsl_ioctl_cff_sync_gpuobj(struct kgsl_device_private *dev_priv,
+					unsigned int cmd, void *data);
 
 int kgsl_cmdbatch_add_memobj(struct kgsl_cmdbatch *cmdbatch,
 			struct kgsl_ibdesc *ibdesc);
