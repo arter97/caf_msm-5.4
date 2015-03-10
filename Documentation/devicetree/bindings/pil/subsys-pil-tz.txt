@@ -51,6 +51,8 @@ Optional properties:
 - qcom,gpio-stop-ack: GPIO used by the subsystem to ack force stop or a graceful stop
 		      to the apps.
 - qcom,restart-group: List of subsystems that will need to restart together.
+- qcom,keep-proxy-regs-on: Boolean. Present if during proxy unvoting, PIL needs to leave
+			the regulators enabled after removing the voltage/current votes.
 
 Example:
 	qcom,venus@fdce0000 {
