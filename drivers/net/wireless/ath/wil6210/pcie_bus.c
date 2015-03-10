@@ -39,18 +39,6 @@ void wil_set_capabilities(struct wil6210_priv *wil)
 	bitmap_zero(wil->hw_capabilities, hw_capability_last);
 
 	switch (rev_id) {
-	case JTAG_DEV_ID_MARLON_B0:
-		wil->hw_name = "Marlon B0";
-		wil->hw_version = HW_VER_MARLON_B0;
-		break;
-	case JTAG_DEV_ID_SPARROW_A0:
-		wil->hw_name = "Sparrow A0";
-		wil->hw_version = HW_VER_SPARROW_A0;
-		break;
-	case JTAG_DEV_ID_SPARROW_A1:
-		wil->hw_name = "Sparrow A1";
-		wil->hw_version = HW_VER_SPARROW_A1;
-		break;
 	case JTAG_DEV_ID_SPARROW_B0:
 		wil->hw_name = "Sparrow B0";
 		wil->hw_version = HW_VER_SPARROW_B0;
@@ -62,13 +50,6 @@ void wil_set_capabilities(struct wil6210_priv *wil)
 	}
 
 	wil_info(wil, "Board hardware is %s\n", wil->hw_name);
-
-	if (wil->hw_version >= HW_VER_SPARROW_A0)
-		set_bit(hw_capability_reset_v2, wil->hw_capabilities);
-
-	if (wil->hw_version >= HW_VER_SPARROW_B0)
-		set_bit(hw_capability_advanced_itr_moderation,
-			wil->hw_capabilities);
 }
 
 void wil_disable_irq(struct wil6210_priv *wil)
@@ -116,29 +97,27 @@ static int wil_if_pcie_enable(struct wil6210_priv *wil)
 	switch (use_msi) {
 	case 3:
 	case 1:
+		wil_dbg_misc(wil, "Setup %d MSI interrupts\n", use_msi);
+		break;
 	case 0:
+		wil_dbg_misc(wil, "MSI interrupts disabled, use INTx\n");
 		break;
 	default:
-		wil_err(wil, "Invalid use_msi=%d, default to 1\n",
-			use_msi);
+		wil_err(wil, "Invalid use_msi=%d, default to 1\n", use_msi);
 		use_msi = 1;
 	}
-	wil->n_msi = use_msi;
-	if (wil->n_msi) {
-		wil_dbg_misc(wil, "Setup %d MSI interrupts\n", use_msi);
-		rc = pci_enable_msi_block(pdev, wil->n_msi);
-		if (rc && (wil->n_msi == 3)) {
-			wil_err(wil, "3 MSI mode failed, try 1 MSI\n");
-			wil->n_msi = 1;
-			rc = pci_enable_msi_block(pdev, wil->n_msi);
-		}
-		if (rc) {
-			wil_err(wil, "pci_enable_msi failed, use INTx\n");
-			wil->n_msi = 0;
-		}
-	} else {
-		wil_dbg_misc(wil, "MSI interrupts disabled, use INTx\n");
+
+	if (use_msi == 3 && pci_enable_msi_range(pdev, 3, 3) < 0) {
+		wil_err(wil, "3 MSI mode failed, try 1 MSI\n");
+		use_msi = 1;
 	}
+
+	if (use_msi == 1 && pci_enable_msi(pdev)) {
+		wil_err(wil, "pci_enable_msi failed, use INTx\n");
+		use_msi = 0;
+	}
+
+	wil->n_msi = use_msi;
 
 	if ((wil->n_msi == 0) && msi_only) {
 		wil_err(wil, "Interrupt pin not routed, unable to use INTx\n");
@@ -152,7 +131,7 @@ static int wil_if_pcie_enable(struct wil6210_priv *wil)
 
 	/* need reset here to obtain MAC */
 	mutex_lock(&wil->mutex);
-	rc = wil_reset(wil);
+	rc = wil_reset(wil, false);
 	mutex_unlock(&wil->mutex);
 	if (debug_fw)
 		rc = 0;
@@ -307,7 +286,6 @@ static void wil_pcie_remove(struct pci_dev *pdev)
 }
 
 static const struct pci_device_id wil6210_pcie_ids[] = {
-	{ PCI_DEVICE(0x1ae9, 0x0301) },
 	{ PCI_DEVICE(0x1ae9, 0x0310) },
 	{ PCI_DEVICE(0x1ae9, 0x0302) }, /* same as above, firmware broken */
 	{ /* end: all zeroes */	},
