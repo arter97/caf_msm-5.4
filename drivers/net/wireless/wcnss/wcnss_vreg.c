@@ -123,8 +123,8 @@ static struct vregs_info pronto_vregs[] = {
 static struct vregs_info iris_vregs_pronto_v2[] = {
 	{"qcom,iris-vddxo",  VREG_NULL_CONFIG, 1800000, 0,
 		1800000, 10000,  NULL},
-	{"qcom,iris-vddrfa", VREG_NULL_CONFIG, 1300000, 0,
-		1300000, 100000, NULL},
+	{"qcom,iris-vddrfa", VREG_NULL_CONFIG, 1350000, 0,
+		1350000, 100000, NULL},
 	{"qcom,iris-vddpa",  VREG_NULL_CONFIG, 3300000, 0,
 		3300000, 515000, NULL},
 	{"qcom,iris-vdddig", VREG_NULL_CONFIG, 1800000, 0,
