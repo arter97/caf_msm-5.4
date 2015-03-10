@@ -474,9 +474,9 @@
 
 		qcom,pronto-vddmx-supply = <&pm8950_l3>;
 		qcom,pronto-vddcx-supply = <&pm8950_s2_corner>;
-		qcom,pronto-vddpx-supply = <&pm8950_l7>;
+		qcom,pronto-vddpx-supply = <&pm8950_l5>;
 		qcom,iris-vddxo-supply   = <&pm8950_l7>;
-		qcom,iris-vddrfa-supply  = <&pm8950_s3>;
+		qcom,iris-vddrfa-supply  = <&pm8950_l19>;
 		qcom,iris-vddpa-supply   = <&pm8950_l9>;
 		qcom,iris-vdddig-supply  = <&pm8950_l5>;
 
