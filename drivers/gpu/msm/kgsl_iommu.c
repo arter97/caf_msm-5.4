@@ -170,7 +170,7 @@ static struct kgsl_iommu_device *get_iommu_device(struct kgsl_iommu_unit *unit,
 struct _mem_entry {
 	uint64_t gpuaddr;
 	uint64_t size;
-	unsigned int flags;
+	uint64_t flags;
 	unsigned int priv;
 	int pending_free;
 	pid_t pid;
@@ -300,7 +300,7 @@ static void _check_if_freed(struct kgsl_iommu_device *iommu_dev,
 {
 	uint64_t gpuaddr = addr;
 	uint64_t size = 0;
-	unsigned int flags = 0;
+	uint64_t flags = 0;
 
 	char name[32];
 	memset(name, 0, sizeof(name));
@@ -1151,7 +1151,7 @@ kgsl_iommu_unmap(struct kgsl_pagetable *pt,
 	struct kgsl_device *device = pt->mmu->device;
 	int ret = 0;
 	uint64_t range = memdesc->size;
-	size_t unmapped;
+	size_t unmapped = 0;
 	struct kgsl_iommu_pt *iommu_pt = pt->priv;
 
 	/* All GPU addresses as assigned are page aligned, but some
@@ -1274,7 +1274,7 @@ struct scatterlist *_create_sg_no_large_pages(struct kgsl_memdesc *memdesc,
  */
 int _iommu_add_guard_page(struct kgsl_pagetable *pt,
 						   struct kgsl_memdesc *memdesc,
-						   unsigned int gpuaddr,
+						   uint64_t gpuaddr,
 						   unsigned int protflags)
 {
 	struct kgsl_iommu_pt *iommu_pt = pt->priv;
@@ -1308,7 +1308,7 @@ int _iommu_add_guard_page(struct kgsl_pagetable *pt,
 				protflags & ~IOMMU_WRITE);
 		if (ret) {
 			KGSL_CORE_ERR(
-			"iommu_map(%p, addr %x, flags %x) err: %d\n",
+			"iommu_map(%p, addr %016llX, flags %x) err: %d\n",
 			iommu_pt->domain, gpuaddr, protflags & ~IOMMU_WRITE,
 			ret);
 			return ret;
@@ -1322,30 +1322,30 @@ static int
 kgsl_iommu_map(struct kgsl_pagetable *pt,
 			struct kgsl_memdesc *memdesc)
 {
-	int ret;
-	unsigned int iommu_virt_addr;
+	int ret = 0;
+	uint64_t addr;
 	struct kgsl_iommu_pt *iommu_pt = pt->priv;
 	uint64_t size = memdesc->size;
-	unsigned int protflags;
+	unsigned int flags = 0;
 	struct kgsl_device *device = pt->mmu->device;
-	struct scatterlist *sg_temp = NULL;
-	int sg_temp_nents;
-	size_t mapped;
+	size_t mapped = 0;
 
 	BUG_ON(NULL == iommu_pt);
 
 	BUG_ON(memdesc->gpuaddr > UINT_MAX);
 
-	iommu_virt_addr = (unsigned int) memdesc->gpuaddr;
+	addr = (unsigned int) memdesc->gpuaddr;
 
+	flags = IOMMU_READ | IOMMU_WRITE;
 
 	/* Set up the protection for the page(s) */
-	protflags = IOMMU_READ;
-	if (!(memdesc->flags & KGSL_MEMFLAGS_GPUREADONLY))
-		protflags |= IOMMU_WRITE;
+	if (memdesc->flags & KGSL_MEMFLAGS_GPUREADONLY)
+		flags &= ~IOMMU_WRITE;
+	if (memdesc->flags & KGSL_MEMFLAGS_GPUWRITEONLY)
+		flags &= ~IOMMU_READ;
 
 	if (memdesc->priv & KGSL_MEMDESC_PRIVILEGED)
-		protflags |= IOMMU_PRIV;
+		flags |= IOMMU_PRIV;
 
 	if (kgsl_memdesc_is_secured(memdesc)) {
 
@@ -1355,38 +1355,40 @@ kgsl_iommu_map(struct kgsl_pagetable *pt,
 		mutex_lock(&device->mutex);
 		ret = kgsl_active_count_get(device);
 		if (!ret) {
-			mapped = iommu_map_sg(iommu_pt->domain, iommu_virt_addr,
+			mapped = iommu_map_sg(iommu_pt->domain, addr,
 					memdesc->sgt->sgl, memdesc->sgt->nents,
-					protflags);
+					flags);
 			kgsl_active_count_put(device);
 		}
 		mutex_unlock(&device->mutex);
 	} else {
+		struct scatterlist *sg_temp = NULL;
+		int sg_temp_nents;
+
 		sg_temp = _create_sg_no_large_pages(memdesc, &sg_temp_nents);
 
 		if (IS_ERR(sg_temp))
 			return PTR_ERR(sg_temp);
 
-		mapped = iommu_map_sg(iommu_pt->domain, iommu_virt_addr,
+		mapped = iommu_map_sg(iommu_pt->domain, addr,
 				sg_temp ? sg_temp : memdesc->sgt->sgl,
 				sg_temp ? sg_temp_nents : memdesc->sgt->nents,
-				protflags);
+				flags);
+
+		kgsl_free(sg_temp);
 	}
 
-	kgsl_free(sg_temp);
-
 	if (mapped != size) {
-		KGSL_CORE_ERR("iommu_map_sg(%p, %x, %lld, %x) err: %zd\n",
-				iommu_pt->domain, iommu_virt_addr, size,
-				protflags, mapped);
+		KGSL_CORE_ERR("iommu_map_sg(%p, %016llX, %lld, %x) err: %zd\n",
+				iommu_pt->domain, addr, size,
+				flags, mapped);
 		return -ENODEV;
 	}
 
-	ret = _iommu_add_guard_page(pt, memdesc, iommu_virt_addr + size,
-								protflags);
+	ret = _iommu_add_guard_page(pt, memdesc, addr + size, flags);
 	if (ret)
 		/* cleanup the partial mapping */
-		iommu_unmap(iommu_pt->domain, iommu_virt_addr, size);
+		iommu_unmap(iommu_pt->domain, addr, size);
 
 	/*
 	 *  IOMMU V1 BFBs pre-fetch data beyond what is being used by the core.

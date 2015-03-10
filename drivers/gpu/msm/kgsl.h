@@ -154,7 +154,7 @@ struct kgsl_memdesc {
 	unsigned int priv;
 	struct sg_table *sgt;
 	struct kgsl_memdesc_ops *ops;
-	unsigned int flags;
+	uint64_t flags;
 	struct device *dev;
 	struct dma_attrs attrs;
 };
@@ -303,6 +303,8 @@ long kgsl_ioctl_timestamp_event(struct kgsl_device_private *dev_priv,
 					unsigned int cmd, void *data);
 long kgsl_ioctl_cff_sync_gpuobj(struct kgsl_device_private *dev_priv,
 					unsigned int cmd, void *data);
+long kgsl_ioctl_gpuobj_alloc(struct kgsl_device_private *dev_priv,
+					unsigned int cmd, void *data);
 
 int kgsl_cmdbatch_add_memobj(struct kgsl_cmdbatch *cmdbatch,
 			struct kgsl_ibdesc *ibdesc);
@@ -317,7 +319,7 @@ struct kgsl_mem_entry *kgsl_sharedmem_find_region(
 	struct kgsl_process_private *private, uint64_t gpuaddr,
 	uint64_t size);
 
-void kgsl_get_memory_usage(char *str, size_t len, unsigned int memflags);
+void kgsl_get_memory_usage(char *str, size_t len, uint64_t memflags);
 
 extern const struct dev_pm_ops kgsl_pm_ops;
 

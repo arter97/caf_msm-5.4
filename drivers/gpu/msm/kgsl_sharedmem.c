@@ -955,11 +955,11 @@ static const char * const memtype_str[] = {
 	/* KGSL_MEMTYPE_KERNEL handled below, to avoid huge array */
 };
 
-void kgsl_get_memory_usage(char *name, size_t name_size, unsigned int memflags)
+void kgsl_get_memory_usage(char *name, size_t name_size, uint64_t memflags)
 {
-	unsigned char type;
+	unsigned int type = MEMFLAGS(memflags, KGSL_MEMTYPE_MASK,
+		KGSL_MEMTYPE_SHIFT);
 
-	type = (memflags & KGSL_MEMTYPE_MASK) >> KGSL_MEMTYPE_SHIFT;
 	if (type == KGSL_MEMTYPE_KERNEL)
 		strlcpy(name, "kernel", name_size);
 	else if (type < ARRAY_SIZE(memtype_str) && memtype_str[type] != NULL)

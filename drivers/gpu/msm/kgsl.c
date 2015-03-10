@@ -108,7 +108,7 @@ struct memfree_entry {
 	uint64_t gpuaddr;
 	uint64_t size;
 	pid_t pid;
-	unsigned int flags;
+	uint64_t flags;
 };
 
 static struct {
@@ -132,7 +132,7 @@ static void kgsl_memfree_exit(void)
 }
 
 int kgsl_memfree_find_entry(pid_t pid, uint64_t *gpuaddr,
-	uint64_t *size, unsigned int *flags)
+	uint64_t *size, uint64_t *flags)
 {
 	int ptr;
 
@@ -171,7 +171,7 @@ int kgsl_memfree_find_entry(pid_t pid, uint64_t *gpuaddr,
 }
 
 static void kgsl_memfree_add(pid_t pid, uint64_t gpuaddr,
-		uint64_t size, unsigned int flags)
+		uint64_t size, uint64_t flags)
 
 {
 	struct memfree_entry *entry;
@@ -422,7 +422,7 @@ kgsl_mem_entry_untrack_gpuaddr(struct kgsl_process_private *process,
  *
  * @returns - 0 on success or error code on failure.
  */
-static int
+int
 kgsl_mem_entry_attach_process(struct kgsl_mem_entry *entry,
 				   struct kgsl_device_private *dev_priv)
 {
@@ -3013,6 +3013,7 @@ long kgsl_ioctl_map_user_mem(struct kgsl_device_private *dev_priv,
 	 * determined by type of allocation being mapped.
 	 */
 	param->flags &= KGSL_MEMFLAGS_GPUREADONLY
+			| KGSL_MEMFLAGS_GPUWRITEONLY
 			| KGSL_MEMTYPE_MASK
 			| KGSL_MEMALIGN_MASK
 			| KGSL_MEMFLAGS_USE_CPU_MAP
@@ -3075,7 +3076,7 @@ long kgsl_ioctl_map_user_mem(struct kgsl_device_private *dev_priv,
 		kgsl_memdesc_set_align(&entry->memdesc, ilog2(SZ_64));
 
 	/* echo back flags */
-	param->flags = entry->memdesc.flags;
+	param->flags = (unsigned int) entry->memdesc.flags;
 
 	result = kgsl_mem_entry_attach_process(entry, dev_priv);
 	if (result)
@@ -3324,7 +3325,7 @@ long kgsl_ioctl_sharedmem_flush_cache(struct kgsl_device_private *dev_priv,
 }
 
 #ifdef CONFIG_ARM64
-static int kgsl_filter_cachemode(unsigned int flags)
+uint64_t kgsl_filter_cachemode(uint64_t flags)
 {
 	/*
 	 * WRITETHROUGH is not supported in arm64, so we tell the user that we
@@ -3339,7 +3340,7 @@ static int kgsl_filter_cachemode(unsigned int flags)
 	return flags;
 }
 #else
-static int kgsl_filter_cachemode(unsigned int flags)
+uint64_t kgsl_filter_cachemode(uint64_t flags)
 {
 	return flags;
 }
@@ -3348,41 +3349,42 @@ static int kgsl_filter_cachemode(unsigned int flags)
 /* The largest allowable alignment for a GPU object is 32MB */
 #define KGSL_MAX_ALIGN (32 * SZ_1M)
 
-/*
- * The common parts of kgsl_ioctl_gpumem_alloc and kgsl_ioctl_gpumem_alloc_id.
- */
-static int
-_gpumem_alloc(struct kgsl_device_private *dev_priv,
-		struct kgsl_mem_entry **ret_entry,
-		size_t size, unsigned int flags)
+static struct kgsl_mem_entry *gpumem_alloc_entry(
+		struct kgsl_device_private *dev_priv,
+		uint64_t size, uint64_t mmapsize, uint64_t flags)
 {
-	int result;
+	int ret;
 	struct kgsl_process_private *private = dev_priv->process_priv;
 	struct kgsl_mem_entry *entry;
-	int align;
+	unsigned int align;
 
-	/*
-	 * Mask off unknown flags from userspace. This way the caller can
-	 * check if a flag is supported by looking at the returned flags.
-	 */
 	flags &= KGSL_MEMFLAGS_GPUREADONLY
+		| KGSL_MEMFLAGS_GPUWRITEONLY
 		| KGSL_CACHEMODE_MASK
 		| KGSL_MEMTYPE_MASK
 		| KGSL_MEMALIGN_MASK
 		| KGSL_MEMFLAGS_USE_CPU_MAP
 		| KGSL_MEMFLAGS_SECURE;
 
-	/* If content protection is not enabled force memory to be nonsecure */
+	/* Turn off SVM if the system doesn't support it */
+	if (!kgsl_mmu_use_cpu_map(&dev_priv->device->mmu))
+		flags &= ~KGSL_MEMFLAGS_USE_CPU_MAP;
+
+	/* Return not supported error if secure memory isn't enabled */
 	if (!kgsl_mmu_is_secured(&dev_priv->device->mmu) &&
 			(flags & KGSL_MEMFLAGS_SECURE)) {
 		dev_WARN_ONCE(dev_priv->device->dev, 1,
 				"Secure memory not supported");
-		return -EOPNOTSUPP;
+		return ERR_PTR(-EOPNOTSUPP);
 	}
 
-	/* Cap the alignment bits to the highest number we can handle */
+	/* SVM and secure memory are not friends */
+	if ((flags & KGSL_MEMFLAGS_SECURE) &&
+		(flags & KGSL_MEMFLAGS_USE_CPU_MAP))
+		flags &= ~KGSL_MEMFLAGS_USE_CPU_MAP;
 
-	align = (flags & KGSL_MEMALIGN_MASK) >> KGSL_MEMALIGN_SHIFT;
+	/* Cap the alignment bits to the highest number we can handle */
+	align = MEMFLAGS(flags, KGSL_MEMALIGN_MASK, KGSL_MEMALIGN_SHIFT);
 	if (align >= ilog2(KGSL_MAX_ALIGN)) {
 		KGSL_CORE_ERR("Alignment too large; restricting to %dK\n",
 			KGSL_MAX_ALIGN >> 10);
@@ -3392,108 +3394,118 @@ _gpumem_alloc(struct kgsl_device_private *dev_priv,
 			KGSL_MEMALIGN_MASK;
 	}
 
+	if (mmapsize < size)
+		mmapsize = size;
+
+	/* For now only allow allocations up to 4G */
+	if (size > UINT_MAX)
+		return ERR_PTR(-EINVAL);
+
+	/* Only allow a mmap size that we can actually mmap */
+	if (mmapsize > UINT_MAX)
+		return ERR_PTR(-EINVAL);
+
 	flags = kgsl_filter_cachemode(flags);
 
 	entry = kgsl_mem_entry_create();
 	if (entry == NULL)
-		return -ENOMEM;
+		return ERR_PTR(-ENOMEM);
 
 	if (kgsl_mmu_get_mmutype() == KGSL_MMU_TYPE_IOMMU)
 		entry->memdesc.priv |= KGSL_MEMDESC_GUARD_PAGE;
 
-	result = kgsl_allocate_user(dev_priv->device, &entry->memdesc,
-				private->pagetable, size, flags);
-	if (result != 0)
-		goto err;
-
-	*ret_entry = entry;
-	return result;
-err:
-	kfree(entry);
-	*ret_entry = NULL;
-	return result;
-}
-
-long kgsl_ioctl_gpumem_alloc(struct kgsl_device_private *dev_priv,
-			unsigned int cmd, void *data)
-{
-	struct kgsl_process_private *private = dev_priv->process_priv;
-	struct kgsl_gpumem_alloc *param = data;
-	struct kgsl_mem_entry *entry = NULL;
-	int result;
-
-	param->flags &= ~KGSL_MEMFLAGS_USE_CPU_MAP;
-	result = _gpumem_alloc(dev_priv, &entry, param->size, param->flags);
-	if (result)
-		return result;
-
-	if (param->flags & KGSL_MEMFLAGS_SECURE)
+	if (flags & KGSL_MEMFLAGS_SECURE)
 		entry->memdesc.priv |= KGSL_MEMDESC_SECURE;
 
-	result = kgsl_mem_entry_attach_process(entry, dev_priv);
-	if (result != 0)
+	ret = kgsl_allocate_user(dev_priv->device, &entry->memdesc,
+				private->pagetable, size, mmapsize, flags);
+	if (ret != 0)
 		goto err;
+
+	ret = kgsl_mem_entry_attach_process(entry, dev_priv);
+	if (ret != 0) {
+		kgsl_sharedmem_free(&entry->memdesc);
+		goto err;
+	}
 
 	kgsl_process_add_stats(private,
 			kgsl_memdesc_usermem_type(&entry->memdesc),
-			param->size);
+			entry->memdesc.size);
 	trace_kgsl_mem_alloc(entry);
+
+	return entry;
+err:
+	kfree(entry);
+	return ERR_PTR(ret);
+}
+
+long kgsl_ioctl_gpuobj_alloc(struct kgsl_device_private *dev_priv,
+		unsigned int cmd, void *data)
+{
+	struct kgsl_gpuobj_alloc *param = data;
+	struct kgsl_mem_entry *entry;
+
+	/* All allocations should use SVM if it is available */
+	param->flags |= KGSL_MEMFLAGS_USE_CPU_MAP;
+
+	entry = gpumem_alloc_entry(dev_priv, param->size,
+		param->va_len, param->flags);
+
+	if (IS_ERR(entry))
+		return PTR_ERR(entry);
+
+	param->size = entry->memdesc.size;
+	param->flags = entry->memdesc.flags;
+	param->mmapsize = kgsl_memdesc_mmapsize(&entry->memdesc);
+	param->id = entry->id;
+
+	return 0;
+}
+
+long kgsl_ioctl_gpumem_alloc(struct kgsl_device_private *dev_priv,
+		unsigned int cmd, void *data)
+{
+	struct kgsl_gpumem_alloc *param = data;
+	struct kgsl_mem_entry *entry;
+	uint64_t flags = param->flags;
+
+	/* Legacy functions doesn't support these advanced features */
+	flags &= ~KGSL_MEMFLAGS_USE_CPU_MAP;
+
+	entry = gpumem_alloc_entry(dev_priv, (uint64_t) param->size,
+		(uint64_t) param->size, flags);
+
+	if (IS_ERR(entry))
+		return PTR_ERR(entry);
 
 	param->gpuaddr = (unsigned int) entry->memdesc.gpuaddr;
 	param->size = (unsigned int) entry->memdesc.size;
-	param->flags = entry->memdesc.flags;
-	return result;
-err:
-	kgsl_sharedmem_free(&entry->memdesc);
-	kfree(entry);
-	return result;
+	param->flags = (unsigned int) entry->memdesc.flags;
+
+	return 0;
 }
 
 long kgsl_ioctl_gpumem_alloc_id(struct kgsl_device_private *dev_priv,
 			unsigned int cmd, void *data)
 {
-	struct kgsl_process_private *private = dev_priv->process_priv;
-	struct kgsl_device *device = dev_priv->device;
 	struct kgsl_gpumem_alloc_id *param = data;
-	struct kgsl_mem_entry *entry = NULL;
-	int result;
+	struct kgsl_mem_entry *entry;
+	uint64_t flags = param->flags;
 
-	if (!kgsl_mmu_use_cpu_map(&device->mmu))
-		param->flags &= ~KGSL_MEMFLAGS_USE_CPU_MAP;
+	entry = gpumem_alloc_entry(dev_priv, (uint64_t) param->size,
+		(uint64_t) param->mmapsize, flags);
 
-	result = _gpumem_alloc(dev_priv, &entry, param->size, param->flags);
-	if (result != 0)
-		goto err;
-
-	if (param->flags & KGSL_MEMFLAGS_SECURE) {
-		entry->memdesc.priv |= KGSL_MEMDESC_SECURE;
-		if (param->flags & KGSL_MEMFLAGS_USE_CPU_MAP) {
-			result = -EINVAL;
-			goto err;
-		}
-	}
-
-	result = kgsl_mem_entry_attach_process(entry, dev_priv);
-	if (result != 0)
-		goto err;
-
-	kgsl_process_add_stats(private,
-			kgsl_memdesc_usermem_type(&entry->memdesc),
-			param->size);
-	trace_kgsl_mem_alloc(entry);
+	if (IS_ERR(entry))
+		return PTR_ERR(entry);
 
 	param->id = entry->id;
-	param->flags = entry->memdesc.flags;
+	param->flags = (unsigned int) entry->memdesc.flags;
 	param->size = (unsigned int) entry->memdesc.size;
 	param->mmapsize = (unsigned int)
 		kgsl_memdesc_mmapsize(&entry->memdesc);
 	param->gpuaddr = (unsigned int) entry->memdesc.gpuaddr;
-	return result;
-err:
-	if (entry)
-		kgsl_sharedmem_free(&entry->memdesc);
-	kfree(entry);
-	return result;
+
+	return 0;
 }
 
 long kgsl_ioctl_gpumem_get_info(struct kgsl_device_private *dev_priv,
@@ -3524,7 +3536,7 @@ long kgsl_ioctl_gpumem_get_info(struct kgsl_device_private *dev_priv,
 	}
 	param->gpuaddr = (unsigned int) entry->memdesc.gpuaddr;
 	param->id = entry->id;
-	param->flags = entry->memdesc.flags;
+	param->flags = (unsigned int) entry->memdesc.flags;
 	param->size = (unsigned int) entry->memdesc.size;
 	param->mmapsize = (unsigned int) kgsl_memdesc_mmapsize(&entry->memdesc);
 	param->useraddr = entry->memdesc.useraddr;

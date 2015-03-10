@@ -90,20 +90,20 @@
 /* --- Memory allocation flags --- */
 
 /* General allocation hints */
-#define KGSL_MEMFLAGS_GPUREADONLY 0x01000000
-#define KGSL_MEMFLAGS_USE_CPU_MAP 0x10000000
-
-/* Memory is secure */
-#define KGSL_MEMFLAGS_SECURE      0x00000008
+#define KGSL_MEMFLAGS_SECURE      0x00000008U
+#define KGSL_MEMFLAGS_GPUREADONLY 0x01000000U
+#define KGSL_MEMFLAGS_GPUWRITEONLY 0x02000000U
 
 /* Memory caching hints */
-#define KGSL_CACHEMODE_MASK 0x0C000000
+#define KGSL_CACHEMODE_MASK       0x0C000000U
 #define KGSL_CACHEMODE_SHIFT 26
 
 #define KGSL_CACHEMODE_WRITECOMBINE 0
 #define KGSL_CACHEMODE_UNCACHED 1
 #define KGSL_CACHEMODE_WRITETHROUGH 2
 #define KGSL_CACHEMODE_WRITEBACK 3
+
+#define KGSL_MEMFLAGS_USE_CPU_MAP 0x10000000U
 
 /* Memory types for which allocations are made */
 #define KGSL_MEMTYPE_MASK		0x0000FF00
@@ -1127,5 +1127,24 @@ struct kgsl_cff_sync_gpuobj {
 
 #define IOCTL_KGSL_CFF_SYNC_GPUOBJ \
 	_IOW(KGSL_IOC_TYPE, 0x44, struct kgsl_cff_sync_gpuobj)
+
+/**
+ * struct kgsl_gpuobj_alloc - Argument to IOCTL_KGSL_GPUOBJ_ALLOC
+ * @size: Size in bytes of the object to allocate
+ * @flags: mask of KGSL_MEMFLAG_* bits
+ * @va_len: Size in bytes of the virtual region to allocate
+ * @mmapsize: Returns the mmap() size of the object
+ * @id: Returns the GPU object ID of the new object
+ */
+struct kgsl_gpuobj_alloc {
+	uint64_t size;
+	uint64_t flags;
+	uint64_t va_len;
+	uint64_t mmapsize;
+	unsigned int id;
+};
+
+#define IOCTL_KGSL_GPUOBJ_ALLOC \
+	_IOWR(KGSL_IOC_TYPE, 0x45, struct kgsl_gpuobj_alloc)
 
 #endif /* _UAPI_MSM_KGSL_H */
