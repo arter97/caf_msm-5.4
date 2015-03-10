@@ -130,11 +130,6 @@ mem_entry_max_show(struct kgsl_process_private *priv, int type, char *buf)
 	return snprintf(buf, PAGE_SIZE, "%llu\n", priv->stats[type].max);
 }
 
-
-static void mem_entry_sysfs_release(struct kobject *kobj)
-{
-}
-
 static ssize_t mem_entry_sysfs_show(struct kobject *kobj,
 	struct attribute *attr, char *buf)
 {
@@ -160,8 +155,6 @@ static const struct sysfs_ops mem_entry_sysfs_ops = {
 
 static struct kobj_type ktype_mem_entry = {
 	.sysfs_ops = &mem_entry_sysfs_ops,
-	.default_attrs = NULL,
-	.release = mem_entry_sysfs_release
 };
 
 static struct mem_entry_stats mem_stats[] = {

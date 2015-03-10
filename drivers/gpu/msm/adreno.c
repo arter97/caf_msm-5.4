@@ -107,10 +107,10 @@ static unsigned int adreno_ft_regs_default[] = {
 };
 
 /* Nice level for the higher priority GPU start thread */
-static int _wake_nice = -7;
+int adreno_wake_nice = -7;
 
 /* Number of milliseconds to stay active active after a wake on touch */
-static unsigned int _wake_timeout = 100;
+unsigned int adreno_wake_timeout = 100;
 
 /**
  * adreno_readreg64() - Read a 64bit register by getting its offset from the
@@ -424,7 +424,7 @@ static void adreno_input_work(struct work_struct *work)
 	 * further for this special case
 	 */
 	mod_timer(&device->idle_timer,
-		jiffies + msecs_to_jiffies(_wake_timeout));
+		jiffies + msecs_to_jiffies(adreno_wake_timeout));
 	mutex_unlock(&device->mutex);
 }
 
@@ -540,8 +540,6 @@ static struct input_handler adreno_input_handler = {
 	.id_table = adreno_input_ids,
 };
 
-static int adreno_init_sysfs(struct kgsl_device *device);
-static void adreno_uninit_sysfs(struct kgsl_device *device);
 static int adreno_soft_reset(struct kgsl_device *device);
 
 /*
@@ -586,15 +584,12 @@ void _soft_reset(struct adreno_device *adreno_dev)
 }
 
 
-static inline void adreno_irqctrl(struct adreno_device *adreno_dev, int state)
+void adreno_irqctrl(struct adreno_device *adreno_dev, int state)
 {
 	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
+	unsigned int mask = state ? gpudev->irq->mask : 0;
 
-	if (state)
-		adreno_writereg(adreno_dev, ADRENO_REG_RBBM_INT_0_MASK,
-			      gpudev->irq->mask);
-	else
-		adreno_writereg(adreno_dev, ADRENO_REG_RBBM_INT_0_MASK, 0);
+	adreno_writereg(adreno_dev, ADRENO_REG_RBBM_INT_0_MASK, mask);
 }
 
  /*
@@ -1110,7 +1105,7 @@ int adreno_probe(struct platform_device *pdev)
 	adreno_debugfs_init(adreno_dev);
 	adreno_profile_init(adreno_dev);
 
-	adreno_init_sysfs(device);
+	adreno_sysfs_init(device);
 
 	kgsl_pwrscale_init(&pdev->dev, CONFIG_MSM_ADRENO_DEFAULT_GOVERNOR);
 
@@ -1150,7 +1145,7 @@ static int adreno_remove(struct platform_device *pdev)
 #ifdef CONFIG_INPUT
 	input_unregister_handler(&adreno_input_handler);
 #endif
-	adreno_uninit_sysfs(device);
+	adreno_sysfs_close(device);
 
 	adreno_coresight_remove(adreno_dev);
 	adreno_profile_close(adreno_dev);
@@ -1443,8 +1438,8 @@ static int adreno_start(struct kgsl_device *device, int priority)
 	int nice = task_nice(current);
 	int ret;
 
-	if (priority && (_wake_nice < nice))
-		set_user_nice(current, _wake_nice);
+	if (priority && (adreno_wake_nice < nice))
+		set_user_nice(current, adreno_wake_nice);
 
 	ret = _adreno_start(adreno_dev);
 
@@ -1581,578 +1576,6 @@ int adreno_reset(struct kgsl_device *device)
 			current_global_ptname), 0);
 
 	return ret;
-}
-
-/**
- * _get_adreno_dev() -  Routine to get a pointer to adreno dev
- * @dev: device ptr
- * @attr: Device attribute
- * @buf: value to write
- * @count: size of the value to write
- */
-static struct adreno_device *_get_adreno_dev(struct device *dev)
-{
-	struct kgsl_device *device = kgsl_device_from_dev(dev);
-	return device ? ADRENO_DEVICE(device) : NULL;
-}
-
-/**
- * _ft_policy_store() -  Routine to configure FT policy
- * @dev: device ptr
- * @attr: Device attribute
- * @buf: value to write
- * @count: size of the value to write
- *
- * FT policy can be set to any of the options below.
- * KGSL_FT_DISABLE -> BIT(0) Set to disable FT
- * KGSL_FT_REPLAY  -> BIT(1) Set to enable replay
- * KGSL_FT_SKIPIB  -> BIT(2) Set to skip IB
- * KGSL_FT_SKIPFRAME -> BIT(3) Set to skip frame
- * by default set FT policy to KGSL_FT_DEFAULT_POLICY
- */
-static ssize_t _ft_policy_store(struct device *dev,
-				     struct device_attribute *attr,
-				     const char *buf, size_t count)
-{
-	struct adreno_device *adreno_dev = _get_adreno_dev(dev);
-	int ret;
-	unsigned int temp;
-	if (adreno_dev == NULL)
-		return 0;
-
-	mutex_lock(&adreno_dev->dev.mutex);
-	ret = kgsl_sysfs_store(buf, &temp);
-	mutex_unlock(&adreno_dev->dev.mutex);
-	if (!ret) {
-		temp &= KGSL_FT_POLICY_MASK;
-		adreno_dev->ft_policy = temp;
-	}
-
-	return ret < 0 ? ret : count;
-}
-
-/**
- * _ft_policy_show() -  Routine to read FT policy
- * @dev: device ptr
- * @attr: Device attribute
- * @buf: value read
- *
- * This is a routine to read current FT policy
- */
-static ssize_t _ft_policy_show(struct device *dev,
-					struct device_attribute *attr,
-					char *buf)
-{
-	struct adreno_device *adreno_dev = _get_adreno_dev(dev);
-	if (adreno_dev == NULL)
-		return 0;
-	return snprintf(buf, PAGE_SIZE, "0x%X\n", adreno_dev->ft_policy);
-}
-
-/**
- * _ft_pagefault_policy_store() -  Routine to configure FT
- * pagefault policy
- * @dev: device ptr
- * @attr: Device attribute
- * @buf: value to write
- * @count: size of the value to write
- *
- * FT pagefault policy can be set to any of the options below.
- * KGSL_FT_PAGEFAULT_INT_ENABLE -> BIT(0) set to enable pagefault INT
- * KGSL_FT_PAGEFAULT_GPUHALT_ENABLE  -> BIT(1) Set to enable GPU HALT on
- * pagefaults. This stalls the GPU on a pagefault on IOMMU v1 HW.
- * KGSL_FT_PAGEFAULT_LOG_ONE_PER_PAGE  -> BIT(2) Set to log only one
- * pagefault per page.
- * KGSL_FT_PAGEFAULT_LOG_ONE_PER_INT -> BIT(3) Set to log only one
- * pagefault per INT.
- */
-static ssize_t _ft_pagefault_policy_store(struct device *dev,
-				     struct device_attribute *attr,
-				     const char *buf, size_t count)
-{
-	struct adreno_device *adreno_dev = _get_adreno_dev(dev);
-	int ret = 0;
-	unsigned int policy = 0;
-	if (adreno_dev == NULL)
-		return 0;
-
-	mutex_lock(&adreno_dev->dev.mutex);
-
-	ret = kgsl_sysfs_store(buf, &policy);
-	if (ret)
-		goto out;
-
-	policy &= (KGSL_FT_PAGEFAULT_INT_ENABLE |
-			KGSL_FT_PAGEFAULT_GPUHALT_ENABLE |
-			KGSL_FT_PAGEFAULT_LOG_ONE_PER_PAGE |
-			KGSL_FT_PAGEFAULT_LOG_ONE_PER_INT);
-	ret = kgsl_mmu_set_pagefault_policy(&(adreno_dev->dev.mmu), policy);
-	if (!ret)
-		adreno_dev->ft_pf_policy = policy;
-
-out:
-	mutex_unlock(&adreno_dev->dev.mutex);
-	return ret < 0 ? ret : count;
-}
-
-/**
- * _ft_pagefault_policy_show() -  Routine to read FT pagefault
- * policy
- * @dev: device ptr
- * @attr: Device attribute
- * @buf: value read
- *
- * This is a routine to read current FT pagefault policy
- */
-static ssize_t _ft_pagefault_policy_show(struct device *dev,
-					struct device_attribute *attr,
-					char *buf)
-{
-	struct adreno_device *adreno_dev = _get_adreno_dev(dev);
-	if (adreno_dev == NULL)
-		return 0;
-	return snprintf(buf, PAGE_SIZE, "0x%X\n", adreno_dev->ft_pf_policy);
-}
-
-/**
- * _ft_fast_hang_detect_store() -  Routine to configure FT fast
- * hang detect policy
- * @dev: device ptr
- * @attr: Device attribute
- * @buf: value to write
- * @count: size of the value to write
- *
- * 0x1 - Enable fast hang detection
- * 0x0 - Disable fast hang detection
- */
-static ssize_t _ft_fast_hang_detect_store(struct device *dev,
-				     struct device_attribute *attr,
-				     const char *buf, size_t count)
-{
-	struct adreno_device *adreno_dev = _get_adreno_dev(dev);
-	struct adreno_gpudev *gpudev;
-	int ret, tmp;
-
-	if (adreno_dev == NULL)
-		return 0;
-
-	gpudev = ADRENO_GPU_DEVICE(adreno_dev);
-
-	mutex_lock(&adreno_dev->dev.mutex);
-
-	tmp = adreno_dev->fast_hang_detect;
-
-	ret = kgsl_sysfs_store(buf, &adreno_dev->fast_hang_detect);
-
-	if (tmp != adreno_dev->fast_hang_detect) {
-		if (adreno_dev->fast_hang_detect) {
-			if (!kgsl_active_count_get(&adreno_dev->dev)) {
-				adreno_fault_detect_start(adreno_dev);
-				kgsl_active_count_put(&adreno_dev->dev);
-			}
-		} else
-			adreno_fault_detect_stop(adreno_dev);
-	}
-
-	mutex_unlock(&adreno_dev->dev.mutex);
-
-	return ret < 0 ? ret : count;
-
-}
-
-/**
- * _ft_fast_hang_detect_show() -  Routine to read FT fast
- * hang detect policy
- * @dev: device ptr
- * @attr: Device attribute
- * @buf: value read
- */
-static ssize_t _ft_fast_hang_detect_show(struct device *dev,
-					struct device_attribute *attr,
-					char *buf)
-{
-	struct adreno_device *adreno_dev = _get_adreno_dev(dev);
-	if (adreno_dev == NULL)
-		return 0;
-	return snprintf(buf, PAGE_SIZE, "%d\n",
-				(adreno_dev->fast_hang_detect ? 1 : 0));
-}
-
-/**
- * _ft_long_ib_detect_store() -  Routine to configure FT long IB
- * detect policy
- * @dev: device ptr
- * @attr: Device attribute
- * @buf: value to write
- * @count: size of the value to write
- *
- * 0x0 - Enable long IB detection
- * 0x1 - Disable long IB detection
- */
-static ssize_t _ft_long_ib_detect_store(struct device *dev,
-				     struct device_attribute *attr,
-				     const char *buf, size_t count)
-{
-	struct adreno_device *adreno_dev = _get_adreno_dev(dev);
-	int ret;
-	if (adreno_dev == NULL)
-		return 0;
-
-	mutex_lock(&adreno_dev->dev.mutex);
-	ret = kgsl_sysfs_store(buf, &adreno_dev->long_ib_detect);
-	mutex_unlock(&adreno_dev->dev.mutex);
-
-	return ret < 0 ? ret : count;
-
-}
-
-/**
- * _ft_long_ib_detect_show() -  Routine to read FT long IB
- * detect policy
- * @dev: device ptr
- * @attr: Device attribute
- * @buf: value read
- */
-static ssize_t _ft_long_ib_detect_show(struct device *dev,
-					struct device_attribute *attr,
-					char *buf)
-{
-	struct adreno_device *adreno_dev = _get_adreno_dev(dev);
-	if (adreno_dev == NULL)
-		return 0;
-	return snprintf(buf, PAGE_SIZE, "%d\n",
-				(adreno_dev->long_ib_detect ? 1 : 0));
-}
-
-
-/**
- * _ft_hang_intr_status_store -  Routine to enable/disable h/w hang interrupt
- * @dev: device ptr
- * @attr: Device attribute
- * @buf: value to write
- * @count: size of the value to write
- */
-static ssize_t _ft_hang_intr_status_store(struct device *dev,
-				struct device_attribute *attr,
-				const char *buf, size_t count)
-{
-	unsigned int new_setting = 0, old_setting;
-	struct kgsl_device *device = kgsl_device_from_dev(dev);
-	struct adreno_device *adreno_dev;
-	int ret;
-	if (device == NULL)
-		return 0;
-	adreno_dev = ADRENO_DEVICE(device);
-	if (adreno_dev == NULL)
-		return 0;
-
-	mutex_lock(&device->mutex);
-	ret = kgsl_sysfs_store(buf, &new_setting);
-	if (ret)
-		goto done;
-	if (new_setting)
-		new_setting = 1;
-	old_setting =
-		(test_bit(ADRENO_DEVICE_HANG_INTR, &adreno_dev->priv) ? 1 : 0);
-	if (new_setting != old_setting) {
-		if (new_setting)
-			set_bit(ADRENO_DEVICE_HANG_INTR, &adreno_dev->priv);
-		else
-			clear_bit(ADRENO_DEVICE_HANG_INTR, &adreno_dev->priv);
-		/* Set the new setting based on device state */
-		if (test_bit(ADRENO_DEVICE_STARTED, &adreno_dev->priv)) {
-			kgsl_pwrctrl_change_state(device, KGSL_STATE_ACTIVE);
-			adreno_irqctrl(adreno_dev, 1);
-		} else if (device->state == KGSL_STATE_INIT) {
-			ret = -EACCES;
-			/* reset back to old setting on error */
-			if (new_setting)
-				clear_bit(ADRENO_DEVICE_HANG_INTR,
-					&adreno_dev->priv);
-			else
-				set_bit(ADRENO_DEVICE_HANG_INTR,
-					&adreno_dev->priv);
-			goto done;
-		}
-	}
-done:
-	mutex_unlock(&device->mutex);
-	return ret < 0 ? ret : count;
-}
-
-/**
- * _ft_hang_intr_status_show() -  Routine to read hardware hang interrupt
- * enablement
- * @dev: device ptr
- * @attr: Device attribute
- * @buf: value read
- */
-static ssize_t _ft_hang_intr_status_show(struct device *dev,
-					struct device_attribute *attr,
-					char *buf)
-{
-	struct adreno_device *adreno_dev = _get_adreno_dev(dev);
-	if (adreno_dev == NULL)
-		return 0;
-	return snprintf(buf, PAGE_SIZE, "%d\n",
-		test_bit(ADRENO_DEVICE_HANG_INTR, &adreno_dev->priv) ? 1 : 0);
-}
-
-/**
- * _wake_timeout_store() - Store the amount of time to extend idle check after
- * wake on touch
- * @dev: device ptr
- * @attr: Device attribute
- * @buf: value to write
- * @count: size of the value to write
- *
- */
-static ssize_t _wake_timeout_store(struct device *dev,
-				     struct device_attribute *attr,
-				     const char *buf, size_t count)
-{
-	int ret = kgsl_sysfs_store(buf, &_wake_timeout);
-	return ret < 0 ? ret : count;
-}
-
-/**
- * _wake_timeout_show() -  Show the amount of time idle check gets extended
- * after wake on touch
- * detect policy
- * @dev: device ptr
- * @attr: Device attribute
- * @buf: value read
- */
-static ssize_t _wake_timeout_show(struct device *dev,
-					struct device_attribute *attr,
-					char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%u\n", _wake_timeout);
-}
-
-/**
- * _sptp_pc_store() - Enable or disable SP/TP power collapse
- * @dev: device ptr
- * @attr: Device attribute
- * @buf: value to write
- * @count: size of the value to write
- *
- */
-static ssize_t _sptp_pc_store(struct device *dev,
-				struct device_attribute *attr,
-				const char *buf, size_t count)
-{
-	struct adreno_device *adreno_dev = _get_adreno_dev(dev);
-	struct kgsl_device *device = kgsl_device_from_dev(dev);
-	struct adreno_gpudev *gpudev;
-	int ret, t = 0;
-
-	if ((adreno_dev == NULL) || (device == NULL))
-		return -ENODEV;
-
-	gpudev = ADRENO_GPU_DEVICE(adreno_dev);
-	ret = kgsl_sysfs_store(buf, &t);
-	if (ret < 0)
-		return ret;
-
-	mutex_lock(&device->mutex);
-
-	kgsl_pwrctrl_change_state(device, KGSL_STATE_SUSPEND);
-	if (t)
-		set_bit(ADRENO_SPTP_PC_CTRL, &adreno_dev->pwrctrl_flag);
-	else
-		clear_bit(ADRENO_SPTP_PC_CTRL, &adreno_dev->pwrctrl_flag);
-	kgsl_pwrctrl_change_state(device, KGSL_STATE_SLUMBER);
-
-	mutex_unlock(&device->mutex);
-	return count;
-}
-
-/**
- * _sptp_pc_show() -  Show whether SP/TP power collapse is enabled
- * @dev: device ptr
- * @attr: Device attribute
- * @buf: value read
- */
-static ssize_t _sptp_pc_show(struct device *dev,
-					struct device_attribute *attr,
-					char *buf)
-{
-	struct adreno_device *adreno_dev = _get_adreno_dev(dev);
-	return snprintf(buf, PAGE_SIZE, "%u\n", test_bit(ADRENO_SPTP_PC_CTRL,
-					&adreno_dev->pwrctrl_flag));
-}
-
-#define ADRENO_DEVICE_ATTR(name) \
-	DEVICE_ATTR(name, 0644,	_ ## name ## _show, _ ## name ## _store);
-
-static ADRENO_DEVICE_ATTR(ft_policy);
-static ADRENO_DEVICE_ATTR(ft_pagefault_policy);
-static ADRENO_DEVICE_ATTR(ft_fast_hang_detect);
-static ADRENO_DEVICE_ATTR(ft_long_ib_detect);
-static ADRENO_DEVICE_ATTR(ft_hang_intr_status);
-
-static DEVICE_INT_ATTR(wake_nice, 0644, _wake_nice);
-static ADRENO_DEVICE_ATTR(wake_timeout);
-static ADRENO_DEVICE_ATTR(sptp_pc);
-
-static const struct device_attribute *_attr_list[] = {
-	&dev_attr_ft_policy,
-	&dev_attr_ft_pagefault_policy,
-	&dev_attr_ft_fast_hang_detect,
-	&dev_attr_ft_long_ib_detect,
-	&dev_attr_ft_hang_intr_status,
-	&dev_attr_wake_nice.attr,
-	&dev_attr_wake_timeout,
-	&dev_attr_sptp_pc,
-	NULL,
-};
-
-/* Add a ppd directory for controlling different knobs from sysfs */
-struct adreno_ppd_attribute {
-	struct attribute attr;
-	ssize_t (*show)(struct kgsl_device *device, char *buf);
-	ssize_t (*store)(struct kgsl_device *device, const char *buf,
-		size_t count);
-};
-
-#define PPD_ATTR(_name, _mode, _show, _store) \
-struct adreno_ppd_attribute attr_##_name = { \
-	.attr = { .name = __stringify(_name), .mode = _mode }, \
-	.show = _show, \
-	.store = _store, \
-}
-
-#define to_ppd_attr(a) \
-container_of(a, struct adreno_ppd_attribute, attr)
-
-#define kobj_to_device(a) \
-container_of(a, struct kgsl_device, ppd_kobj)
-
-/**
- * ppd_enable_store() - Enable or disable peak power detection
- * @attr: Device attribute
- * @buf: value to write
- * @count: size of the value to write
- *
- */
-static ssize_t ppd_enable_store(struct kgsl_device *device,
-				const char *buf, size_t count)
-{
-	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
-	struct adreno_gpudev *gpudev;
-	unsigned int ret;
-	unsigned int ppd_on = 1;
-
-	if ((adreno_dev == NULL) || (device == NULL))
-		return -ENODEV;
-
-	if (!adreno_is_a430v2(adreno_dev) ||
-		!ADRENO_FEATURE(adreno_dev, ADRENO_PPD))
-		return count;
-
-	gpudev = ADRENO_GPU_DEVICE(adreno_dev);
-	ret = kgsl_sysfs_store(buf, &ppd_on);
-	if (ret < 0)
-		return ret;
-
-	mutex_lock(&device->mutex);
-
-	kgsl_pwrctrl_change_state(device, KGSL_STATE_SUSPEND);
-	if (ppd_on)
-		set_bit(ADRENO_PPD_CTRL, &adreno_dev->pwrctrl_flag);
-	else
-		clear_bit(ADRENO_PPD_CTRL, &adreno_dev->pwrctrl_flag);
-	kgsl_pwrctrl_change_state(device, KGSL_STATE_SLUMBER);
-
-	mutex_unlock(&device->mutex);
-	return count;
-}
-
-/**
- * ppd_enable_show() -  Show whether ppd is enabled
- * @dev: device ptr
- * @buf: value read
- */
-static ssize_t ppd_enable_show(struct kgsl_device *device,
-					char *buf)
-{
-	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
-	return snprintf(buf, PAGE_SIZE, "%u\n", test_bit(ADRENO_PPD_CTRL,
-					&adreno_dev->pwrctrl_flag));
-}
-/* Add individual ppd attributes here */
-static PPD_ATTR(enable, 0644, ppd_enable_show, ppd_enable_store);
-
-static void ppd_sysfs_release(struct kobject *kobj)
-{
-}
-
-static ssize_t ppd_sysfs_show(struct kobject *kobj,
-	struct attribute *attr, char *buf)
-{
-	struct adreno_ppd_attribute *pattr = to_ppd_attr(attr);
-	struct kgsl_device *device = kobj_to_device(kobj);
-	ssize_t ret;
-
-	if (device && pattr->show)
-		ret = pattr->show(device, buf);
-	else
-		ret = -EIO;
-
-	return ret;
-}
-
-static ssize_t ppd_sysfs_store(struct kobject *kobj,
-	struct attribute *attr, const char *buf, size_t count)
-{
-	struct adreno_ppd_attribute *pattr = to_ppd_attr(attr);
-	struct kgsl_device *device = kobj_to_device(kobj);
-	ssize_t ret;
-
-	if (device && pattr->store)
-		ret = pattr->store(device, buf, count);
-	else
-		ret = -EIO;
-
-	return ret;
-}
-
-static const struct sysfs_ops ppd_sysfs_ops = {
-	.show = ppd_sysfs_show,
-	.store = ppd_sysfs_store,
-};
-
-static struct kobj_type ktype_ppd = {
-	.sysfs_ops = &ppd_sysfs_ops,
-	.default_attrs = NULL,
-	.release = ppd_sysfs_release,
-};
-
-static int adreno_init_sysfs(struct kgsl_device *device)
-{
-	int ret;
-	ret =  kgsl_create_device_sysfs_files(device->dev, _attr_list);
-	if (ret)
-		goto done;
-	ret = kobject_init_and_add(&device->ppd_kobj, &ktype_ppd,
-		&device->dev->kobj, "ppd");
-	if (ret)
-		goto done;
-
-	ret  = sysfs_create_file(&device->ppd_kobj, &attr_enable.attr);
-
-done:
-	return ret;
-}
-
-static void adreno_uninit_sysfs(struct kgsl_device *device)
-{
-	sysfs_remove_file(&device->ppd_kobj, &attr_enable.attr);
-
-	kobject_put(&device->ppd_kobj);
-
-	kgsl_remove_device_sysfs_files(device->dev, _attr_list);
 }
 
 static int adreno_getproperty(struct kgsl_device *device,

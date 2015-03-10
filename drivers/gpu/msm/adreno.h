@@ -710,6 +710,9 @@ extern struct adreno_gpudev adreno_a3xx_gpudev;
 extern struct adreno_gpudev adreno_a4xx_gpudev;
 extern struct adreno_gpudev adreno_a5xx_gpudev;
 
+extern int adreno_wake_nice;
+extern unsigned int adreno_wake_timeout;
+
 int adreno_spin_idle(struct kgsl_device *device);
 int adreno_idle(struct kgsl_device *device);
 bool adreno_isidle(struct kgsl_device *device);
@@ -807,6 +810,11 @@ unsigned int adreno_iommu_set_pt_generate_cmds(
 				struct adreno_ringbuffer *rb,
 				unsigned int *cmds,
 				struct kgsl_pagetable *pt);
+
+int adreno_sysfs_init(struct kgsl_device *device);
+void adreno_sysfs_close(struct kgsl_device *device);
+
+void adreno_irqctrl(struct adreno_device *adreno_dev, int state);
 
 static inline int adreno_is_a3xx(struct adreno_device *adreno_dev)
 {
