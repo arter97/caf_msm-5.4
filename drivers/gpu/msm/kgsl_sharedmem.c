@@ -1011,18 +1011,28 @@ int kgsl_cma_alloc_secure(struct kgsl_device *device,
 	struct kgsl_iommu_unit *iommu_unit = &iommu->iommu_unit;
 	int result = 0;
 	struct kgsl_pagetable *pagetable = device->mmu.securepagetable;
+	size_t aligned;
 
 	if (size == 0)
 		return -EINVAL;
 
 	/* Align size to 1M boundaries */
-	size = ALIGN(size, SZ_1M);
+	aligned = ALIGN(size, SZ_1M);
 
 	/* The SCM call uses an unsigned int for the size */
-	if (size > UINT_MAX)
+	if (aligned > UINT_MAX)
 		return -EINVAL;
 
-	memdesc->size = size;
+	/*
+	 * If there is more than a page gap between the requested size and the
+	 * aligned size we don't need to add more memory for a guard page. Yay!
+	 */
+
+	if (memdesc->priv & KGSL_MEMDESC_GUARD_PAGE)
+		if (aligned - size >= SZ_4K)
+			memdesc->priv &= ~KGSL_MEMDESC_GUARD_PAGE;
+
+	memdesc->size = aligned;
 	memdesc->pagetable = pagetable;
 	memdesc->ops = &kgsl_cma_ops;
 	memdesc->dev = iommu_unit->dev[KGSL_IOMMU_CONTEXT_SECURE].dev;
@@ -1030,7 +1040,7 @@ int kgsl_cma_alloc_secure(struct kgsl_device *device,
 	init_dma_attrs(&memdesc->attrs);
 	dma_set_attr(DMA_ATTR_STRONGLY_ORDERED, &memdesc->attrs);
 
-	memdesc->hostptr = dma_alloc_attrs(memdesc->dev, (size_t) size,
+	memdesc->hostptr = dma_alloc_attrs(memdesc->dev, aligned,
 		&memdesc->physaddr, GFP_KERNEL, &memdesc->attrs);
 
 	if (memdesc->hostptr == NULL) {
@@ -1038,7 +1048,7 @@ int kgsl_cma_alloc_secure(struct kgsl_device *device,
 		goto err;
 	}
 
-	result = memdesc_sg_dma(memdesc, memdesc->physaddr, size);
+	result = memdesc_sg_dma(memdesc, memdesc->physaddr, aligned);
 	if (result)
 		goto err;
 
@@ -1053,7 +1063,7 @@ int kgsl_cma_alloc_secure(struct kgsl_device *device,
 	memdesc->priv |= KGSL_MEMDESC_TZ_LOCKED;
 
 	/* Record statistics */
-	KGSL_STATS_ADD(size, kgsl_driver.stats.secure,
+	KGSL_STATS_ADD(aligned, kgsl_driver.stats.secure,
 	       kgsl_driver.stats.secure_max);
 err:
 	if (result)
