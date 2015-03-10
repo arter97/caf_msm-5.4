@@ -638,7 +638,7 @@ struct adreno_gpudev {
 	int (*rb_init)(struct adreno_device *, struct adreno_ringbuffer *);
 	void (*microcode_read)(struct adreno_device *);
 	int (*microcode_load)(struct adreno_device *, unsigned int start_type);
-	int (*perfcounter_init)(struct adreno_device *);
+	void (*perfcounter_init)(struct adreno_device *);
 	void (*start)(struct adreno_device *);
 	void (*busy_cycles)(struct adreno_device *, struct adreno_busy_data *);
 	bool (*is_sptp_idle)(struct adreno_device *);
@@ -753,7 +753,7 @@ void adreno_perfcounter_save(struct adreno_device *adreno_dev);
 
 int adreno_perfcounter_start(struct adreno_device *adreno_dev);
 
-int adreno_perfcounter_init(struct adreno_device *adreno_dev);
+void adreno_perfcounter_init(struct adreno_device *adreno_dev);
 
 int adreno_perfcounter_get_groupid(struct adreno_device *adreno_dev,
 					const char *name);

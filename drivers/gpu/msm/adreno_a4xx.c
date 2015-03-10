@@ -1219,23 +1219,18 @@ static struct adreno_coresight_register a4xx_coresight_registers[] = {
 	{ A4XX_RBBM_CFG_DEBBUS_CTLM },
 };
 
-static int a4xx_perfcounter_init(struct adreno_device *adreno_dev)
+static void a4xx_perfcounter_init(struct adreno_device *adreno_dev)
 {
-	int ret;
-
 	if (adreno_is_a420(adreno_dev)) {
 		struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 		struct adreno_perfcounters *counters = gpudev->perfcounters;
-
-		if (counters == NULL)
-			return -EINVAL;
 
 		/*
 		 * The CP counters on A420 are... special.  Some of the counters
 		 * are swizzled so only a subset of them are usable
 		 */
 
-		if (counters) {
+		if (counters != 0) {
 			counters->groups[KGSL_PERFCOUNTER_GROUP_CP].regs =
 				a420_perfcounters_cp;
 			counters->groups[KGSL_PERFCOUNTER_GROUP_CP].reg_count =
@@ -1251,15 +1246,12 @@ static int a4xx_perfcounter_init(struct adreno_device *adreno_dev)
 	}
 
 	/*
-	 * Turn on the GPU busy counter(s) and let them run free
-	 * GPU busy counts
+	 * Enable the GPU busy count counter. This is a fixed counter on
+	 * A4XX so we don't need to bother checking the return value
 	 */
-	ret = adreno_perfcounter_get(adreno_dev, KGSL_PERFCOUNTER_GROUP_PWR, 1,
-				 NULL, NULL, PERFCOUNTER_FLAG_KERNEL);
-	if (ret)
-		return ret;
 
-	return 0;
+	adreno_perfcounter_get(adreno_dev, KGSL_PERFCOUNTER_GROUP_PWR, 1,
+		NULL, NULL, PERFCOUNTER_FLAG_KERNEL);
 }
 
 

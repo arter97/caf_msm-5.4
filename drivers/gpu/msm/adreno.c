@@ -1208,13 +1208,10 @@ static int adreno_init(struct kgsl_device *device)
 		adreno_ft_regs[i] = adreno_getreg(adreno_dev,
 					adreno_ft_regs_default[i]);
 
-	ret = adreno_perfcounter_init(adreno_dev);
+	adreno_perfcounter_init(adreno_dev);
 
 	/* Power down the device */
 	kgsl_pwrctrl_change_state(device, KGSL_STATE_INIT);
-
-	if (ret)
-		return ret;
 
 	/*
 	 * Enable the power on shader corruption fix
@@ -1270,7 +1267,7 @@ static int adreno_init(struct kgsl_device *device)
 				&adreno_dev->priv);
 	}
 
-	return ret;
+	return 0;
 }
 
 /**
