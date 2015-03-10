@@ -2971,7 +2971,7 @@ static int kgsl_setup_ion(struct kgsl_mem_entry *entry,
 long kgsl_ioctl_map_user_mem(struct kgsl_device_private *dev_priv,
 				     unsigned int cmd, void *data)
 {
-	int result = -EINVAL;
+	int result;
 	struct kgsl_map_user_mem *param = data;
 	struct kgsl_mem_entry *entry = NULL;
 	struct kgsl_process_private *private = dev_priv->process_priv;
@@ -3051,6 +3051,7 @@ long kgsl_ioctl_map_user_mem(struct kgsl_device_private *dev_priv,
 		break;
 	default:
 		KGSL_CORE_ERR("Invalid memory type: %x\n", memtype);
+		result = -ENOTSUPP;
 		break;
 	}
 
