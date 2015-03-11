@@ -94,13 +94,12 @@ static const struct soc_enum msmthulium_auxpcm_enum[] = {
 		SOC_ENUM_SINGLE_EXT(2, auxpcm_rate_text),
 };
 
-static struct afe_clk_cfg mi2s_tx_clk = {
+static struct afe_clk_set mi2s_tx_clk = {
 	AFE_API_VERSION_I2S_CONFIG,
+	Q6AFE_LPASS_CLK_ID_TER_MI2S_IBIT,
 	Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ,
-	Q6AFE_LPASS_OSR_CLK_DISABLE,
-	Q6AFE_LPASS_CLK_SRC_INTERNAL,
+	Q6AFE_LPASS_CLK_ATTRIBUTE_COUPLE_NO,
 	Q6AFE_LPASS_CLK_ROOT_DEFAULT,
-	Q6AFE_LPASS_MODE_CLK1_VALID,
 	0,
 };
 
@@ -806,9 +805,8 @@ static int msmthulium_mi2s_snd_startup(struct snd_pcm_substream *substream)
 	pr_debug("%s: substream = %s  stream = %d\n", __func__,
 		 substream->name, substream->stream);
 
-	mi2s_tx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
-	mi2s_tx_clk.clk_set_mode = Q6AFE_LPASS_MODE_CLK1_VALID;
-	ret = afe_set_lpass_clock(AFE_PORT_ID_TERTIARY_MI2S_TX,
+	mi2s_tx_clk.enable = 1;
+	ret = afe_set_lpass_clock_v2(AFE_PORT_ID_TERTIARY_MI2S_TX,
 				&mi2s_tx_clk);
 	if (ret < 0) {
 		pr_err("%s: afe lpass clock failed, err:%d\n", __func__, ret);
@@ -828,9 +826,8 @@ static void msmthulium_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 	pr_debug("%s: substream = %s  stream = %d\n", __func__,
 		substream->name, substream->stream);
 
-	mi2s_tx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_DISABLE;
-	mi2s_tx_clk.clk_set_mode = Q6AFE_LPASS_MODE_CLK1_VALID;
-	ret = afe_set_lpass_clock(AFE_PORT_ID_TERTIARY_MI2S_TX,
+	mi2s_tx_clk.enable = 0;
+	ret = afe_set_lpass_clock_v2(AFE_PORT_ID_TERTIARY_MI2S_TX,
 				&mi2s_tx_clk);
 	if (ret < 0)
 		pr_err("%s: afe lpass clock failed, err:%d\n", __func__, ret);
