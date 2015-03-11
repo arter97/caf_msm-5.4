@@ -163,13 +163,31 @@ static int mdss_fb_notify_update(struct msm_fb_data_type *mfd,
 	if (notify > NOTIFY_UPDATE_POWER_OFF)
 		return -EINVAL;
 
-	if (mfd->update.is_suspend) {
+	if (notify == NOTIFY_UPDATE_INIT) {
+		mutex_lock(&mfd->update.lock);
+		mfd->update.init_done = true;
+		mutex_unlock(&mfd->update.lock);
+		ret = 1;
+	} else if (notify == NOTIFY_UPDATE_DEINIT) {
+		mutex_lock(&mfd->update.lock);
+		mfd->update.init_done = false;
+		mutex_unlock(&mfd->update.lock);
+		complete(&mfd->update.comp);
+		complete(&mfd->no_update.comp);
+		ret = 1;
+	} else if (mfd->update.is_suspend) {
 		to_user = NOTIFY_TYPE_SUSPEND;
 		mfd->update.is_suspend = 0;
 		ret = 1;
 	} else if (notify == NOTIFY_UPDATE_START) {
-		INIT_COMPLETION(mfd->update.comp);
 		mutex_lock(&mfd->update.lock);
+		if (mfd->update.init_done)
+			INIT_COMPLETION(mfd->update.comp);
+		else {
+			mutex_unlock(&mfd->update.lock);
+			pr_err("notify update start called without init\n");
+			return -EINVAL;
+		}
 		mfd->update.ref_count++;
 		mutex_unlock(&mfd->update.lock);
 		ret = wait_for_completion_interruptible_timeout(
@@ -183,7 +201,15 @@ static int mdss_fb_notify_update(struct msm_fb_data_type *mfd,
 			ret = 1;
 		}
 	} else if (notify == NOTIFY_UPDATE_STOP) {
-		INIT_COMPLETION(mfd->no_update.comp);
+		mutex_lock(&mfd->update.lock);
+		if (mfd->update.init_done)
+			INIT_COMPLETION(mfd->no_update.comp);
+		else {
+			mutex_unlock(&mfd->update.lock);
+			pr_err("notify update stop called without init\n");
+			return -EINVAL;
+		}
+		mutex_unlock(&mfd->update.lock);
 		mutex_lock(&mfd->no_update.lock);
 		mfd->no_update.ref_count++;
 		mutex_unlock(&mfd->no_update.lock);
@@ -1056,8 +1082,7 @@ static void mdss_fb_scale_bl(struct msm_fb_data_type *mfd, u32 *bl_lvl)
 void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 {
 	struct mdss_panel_data *pdata;
-	u32 temp = bkl_lvl, ad_bl;
-	int ret = -EINVAL;
+	u32 temp = bkl_lvl;
 	bool bl_notify_needed = false;
 
 	if ((((mdss_fb_is_power_off(mfd) && mfd->dcm_state != DCM_ENTER)
@@ -1072,18 +1097,11 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 	pdata = dev_get_platdata(&mfd->pdev->dev);
 
 	if ((pdata) && (pdata->set_backlight)) {
-		if (mfd->mdp.ad_calc_bl) {
-			if (mfd->ad_bl_level == 0)
-				mfd->ad_bl_level = temp;
-			ad_bl = mfd->ad_bl_level;
-			ret = (*mfd->mdp.ad_calc_bl)(mfd, temp, &temp, &ad_bl);
-			if ((!ret) && (mfd->ad_bl_level != ad_bl) &&
-				mfd->mdp.ad_invalidate_input) {
-				mfd->ad_bl_level = ad_bl;
-				(*mfd->mdp.ad_invalidate_input)(mfd);
-				bl_notify_needed = true;
-			}
-		}
+		if (mfd->mdp.ad_calc_bl)
+			(*mfd->mdp.ad_calc_bl)(mfd, temp, &temp,
+							&bl_notify_needed);
+		if (bl_notify_needed)
+			mdss_fb_bl_update_notify(mfd);
 		if (!IS_CALIB_MODE_BL(mfd))
 			mdss_fb_scale_bl(mfd, &temp);
 		/*
@@ -1101,19 +1119,15 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 			pdata->set_backlight(pdata, temp);
 			mfd->bl_level = bkl_lvl;
 			mfd->bl_level_scaled = temp;
-			bl_notify_needed = true;
 		}
-		if (bl_notify_needed)
-			mdss_fb_bl_update_notify(mfd);
 	}
 }
 
 void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 {
 	struct mdss_panel_data *pdata;
-	int ret = 0;
 	u32 temp;
-	u32 ad_bl;
+	bool bl_notify = false;
 
 	if (!mfd->unset_bl_level)
 		return;
@@ -1123,22 +1137,14 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 		if ((pdata) && (pdata->set_backlight)) {
 			mfd->bl_level = mfd->unset_bl_level;
 			temp = mfd->bl_level;
-			if (mfd->mdp.ad_calc_bl) {
-				if (mfd->ad_bl_level == 0)
-					mfd->ad_bl_level = temp;
-				ad_bl = mfd->ad_bl_level;
-				ret = (*mfd->mdp.ad_calc_bl)(mfd, temp, &temp,
-					&ad_bl);
-				if ((!ret) && (mfd->ad_bl_level != ad_bl) &&
-						mfd->mdp.ad_invalidate_input) {
-					mfd->ad_bl_level = ad_bl;
-					(*mfd->mdp.ad_invalidate_input)(mfd);
-				}
-			}
+			if (mfd->mdp.ad_calc_bl)
+				(*mfd->mdp.ad_calc_bl)(mfd, temp, &temp,
+								&bl_notify);
+			if (bl_notify)
+				mdss_fb_bl_update_notify(mfd);
 			pdata->set_backlight(pdata, temp);
 			mfd->bl_level_scaled = mfd->unset_bl_level;
 			mfd->bl_updated = 1;
-			mdss_fb_bl_update_notify(mfd);
 		}
 	}
 	mutex_unlock(&mfd->bl_lock);
@@ -2034,6 +2040,7 @@ static int mdss_fb_register(struct msm_fb_data_type *mfd)
 	mfd->no_update.timer.data = (unsigned long)mfd;
 	mfd->update.ref_count = 0;
 	mfd->no_update.ref_count = 0;
+	mfd->update.init_done = false;
 	init_completion(&mfd->update.comp);
 	init_completion(&mfd->no_update.comp);
 	init_completion(&mfd->power_off_comp);
