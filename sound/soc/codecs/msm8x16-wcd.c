@@ -2556,6 +2556,9 @@ static int msm8x16_wcd_codec_enable_micbias(struct snd_soc_dapm_widget *w,
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		if (strnstr(w->name, internal1_text, 30)) {
+			snd_soc_update_bits(codec,
+					MSM8X16_WCD_A_ANALOG_TX_1_2_ATEST_CTL_2,
+					0x02, 0x02);
 			snd_soc_update_bits(codec, micb_int_reg, 0x80, 0x80);
 		} else if (strnstr(w->name, internal2_text, 30)) {
 			snd_soc_update_bits(codec, micb_int_reg, 0x10, 0x10);
