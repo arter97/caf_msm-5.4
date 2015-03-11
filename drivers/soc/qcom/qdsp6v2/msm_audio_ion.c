@@ -497,6 +497,9 @@ static int msm_audio_dma_buf_map(struct ion_client *client,
 		return -ENOMEM;
 	}
 
+	/* Get the ION handle size */
+	ion_handle_get_size(client, handle, len);
+
 	alloc_data->client = client;
 	alloc_data->handle = handle;
 	alloc_data->len = *len;
