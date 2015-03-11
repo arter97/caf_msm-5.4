@@ -2941,47 +2941,75 @@
 };
 
 &gdsc_venus {
+	clock-names = "bus_clk", "maxi_clk", "core_clk";
+	clocks = <&clock_mmss clk_video_axi_clk>,
+		 <&clock_mmss clk_video_maxi_clk>,
+		 <&clock_mmss clk_video_core_clk>;
 	status = "ok";
 };
 
 &gdsc_venus_core0 {
+	clock-names = "core0_clk";
+	clocks = <&clock_mmss clk_video_subcore0_clk>;
 	status = "ok";
 };
 
 &gdsc_venus_core1 {
+	clock-names = "core1_clk";
+	clocks = <&clock_mmss clk_video_subcore1_clk>;
 	status = "ok";
 };
 
 &gdsc_camss_top {
+	clock-names = "bus_clk", "vfe_axi";
+	clocks = <&clock_mmss clk_camss_cpp_axi_clk>,
+		 <&clock_mmss clk_camss_vfe_axi_clk>;
 	status = "ok";
 };
 
 &gdsc_vfe0 {
+	clock-names = "core0_clk";
+	clocks = <&clock_mmss clk_camss_vfe0_clk>;
 	parent-supply = <&gdsc_camss_top>;
 	status = "ok";
 };
 
 &gdsc_vfe1 {
+	clock-names = "core1_clk";
+	clocks = <&clock_mmss clk_camss_vfe1_clk>;
 	parent-supply = <&gdsc_camss_top>;
 	status = "ok";
 };
 
 &gdsc_jpeg {
+	clock-names = "bus_clk", "dma_clk", "core0_clk", "core2_clk";
+	clocks = <&clock_mmss clk_camss_jpeg_axi_clk>,
+		 <&clock_mmss clk_camss_jpeg_dma_clk>,
+		 <&clock_mmss clk_camss_jpeg0_clk>,
+		 <&clock_mmss clk_camss_jpeg2_clk>;
 	parent-supply = <&gdsc_camss_top>;
 	status = "ok";
 };
 
 &gdsc_cpp {
+	clock-names = "core_clk";
+	clocks = <&clock_mmss clk_camss_cpp_clk>;
 	parent-supply = <&gdsc_camss_top>;
 	status = "ok";
 };
 
 &gdsc_fd {
+	clock-names = "core_clk", "core_uar_clk";
+	clocks = <&clock_mmss clk_fd_core_clk>,
+		 <&clock_mmss clk_fd_core_uar_clk>;
 	parent-supply = <&gdsc_camss_top>;
 	status = "ok";
 };
 
 &gdsc_mdss {
+	clock-names = "bus_clk", "core_clk";
+	clocks = <&clock_mmss clk_mdss_axi_clk>,
+		 <&clock_mmss clk_mdss_mdp_clk>;
 	status = "ok";
 };
 
