@@ -974,7 +974,13 @@ static int scm_lock_chunk(struct kgsl_memdesc *memdesc, int lock)
 	chunk_list[0] = memdesc->physaddr;
 	dmac_flush_range((void *)chunk_list, (void *)chunk_list + 1);
 
-	desc.args[0] = request.chunks.chunk_list = virt_to_phys(chunk_list);
+	request.chunks.chunk_list = virt_to_phys(chunk_list);
+	/*
+	 * virt_to_phys(chunk_list) may be an address > 4GB. It is guaranteed
+	 * that when using scm_call (the older interface), the phys addresses
+	 * will be restricted to below 4GB.
+	 */
+	desc.args[0] = virt_to_phys(chunk_list);
 	desc.args[1] = request.chunks.chunk_list_size = 1;
 	desc.args[2] = request.chunks.chunk_size = (unsigned int) memdesc->size;
 	desc.args[3] = request.mem_usage = 0;
