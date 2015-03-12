@@ -523,7 +523,7 @@ static struct pll_clk cbf_pll = {
 		.parent = &xo_ao.c,
 		.dbg_name = "cbf_pll",
 		.ops = &clk_ops_variable_rate_pll,
-		VDD_DIG_FMAX_MAP2(LOW, 600000000, NOMINAL, 3000000000),
+		VDD_DIG_FMAX_MAP1(LOW, 3000000000),
 		CLK_INIT(cbf_pll.c),
 	},
 };
