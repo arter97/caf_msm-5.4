@@ -22,8 +22,8 @@
 	qcom,csiphy@a34000 {
 		cell-index = <0>;
 		compatible = "qcom,csiphy-v3.5", "qcom,csiphy";
-		reg = <0xa34000 0x1000>;
-		reg-names = "csiphy";
+		reg = <0xa34000 0x1000>, <0xA00030 0x4>;
+		reg-names = "csiphy", "csiphy_clk_mux";
 		interrupts = <0 78 0>;
 		interrupt-names = "csiphy";
 		clocks = <&clock_mmss clk_camss_top_ahb_clk>,
@@ -40,15 +40,15 @@
 			"csi_phy_clk", "csiphy_timer_src_clk",
 			"csiphy_timer_clk", "camss_ahb_clk",
 			"csiphy_3p_clk_src", "csi_phy_3p_clk";
-		qcom,clock-rates = <0 0 200000000 0 200000000 0 0
+		qcom,clock-rates = <0 0 480000000 0 266666667 0 0
 			100000000 0>;
 	};
 
 	qcom,csiphy@a35000 {
 		cell-index = <1>;
 		compatible = "qcom,csiphy-v3.5", "qcom,csiphy";
-		reg = <0xa35000 0x1000>;
-		reg-names = "csiphy";
+		reg = <0xa35000 0x1000>, <0xA00038 0x4>;
+		reg-names = "csiphy", "csiphy_clk_mux";
 		interrupts = <0 79 0>;
 		interrupt-names = "csiphy";
 		clocks = <&clock_mmss clk_camss_top_ahb_clk>,
@@ -65,15 +65,15 @@
 			"csi_phy_clk", "csiphy_timer_src_clk",
 			"csiphy_timer_clk", "camss_ahb_clk",
 			"csiphy_3p_clk_src", "csi_phy_3p_clk";
-		qcom,clock-rates = <0 0 200000000 0 200000000 0 0
+		qcom,clock-rates = <0 0 480000000 0 266666667 0 0
 			100000000 0>;
 	};
 
 	qcom,csiphy@a36000 {
 		cell-index = <2>;
 		compatible = "qcom,csiphy-v3.5", "qcom,csiphy";
-		reg = <0xa36000 0x1000>;
-		reg-names = "csiphy";
+		reg = <0xa36000 0x1000>, <0xA00040 0x4>;
+		reg-names = "csiphy", "csiphy_clk_mux";
 		interrupts = <0 80 0>;
 		interrupt-names = "csiphy";
 		clocks = <&clock_mmss clk_camss_top_ahb_clk>,
@@ -90,7 +90,7 @@
 			"csi_phy_clk", "csiphy_timer_src_clk",
 			"csiphy_timer_clk", "camss_ahb_clk",
 			"csiphy_3p_clk_src", "csi_phy_3p_clk";
-		qcom,clock-rates = <0 0 200000000 0 200000000 0 0
+		qcom,clock-rates = <0 0 480000000 0 266666667 0 0
 			100000000 0>;
 	};
 
@@ -116,10 +116,10 @@
 			<&clock_mmss clk_camss_csi0pix_clk>,
 			<&clock_mmss clk_camss_ahb_clk>;
 		clock-names = "mmagic_camss_ahb_clk", "camss_top_ahb_clk",
-			"ispif_ahb_clk", "csi_clk", "csi_ahb_clk",
-			"csi_src_clk", "csi_rdi_clk", "csi_pix_clk",
+			"ispif_ahb_clk", "csi_src_clk", "csi_clk",
+			"csi_ahb_clk", "csi_rdi_clk", "csi_pix_clk",
 			"camss_ahb_clk";
-		qcom,clock-rates = <0 0 0 240000000 0 0 0 0 0>;
+		qcom,clock-rates = <0 0 0 480000000 0 0 0 0 0>;
 		status = "ok";
 	};
 
@@ -145,10 +145,10 @@
 			<&clock_mmss clk_camss_csi1pix_clk>,
 			<&clock_mmss clk_camss_ahb_clk>;
 		clock-names = "mmagic_camss_ahb_clk", "camss_top_ahb_clk",
-			"ispif_ahb_clk", "csi_clk", "csi_ahb_clk",
-			"csi_src_clk", "csi_rdi_clk", "csi_pix_clk",
+			"ispif_ahb_clk", "csi_src_clk", "csi_clk",
+			"csi_ahb_clk", "csi_rdi_clk", "csi_pix_clk",
 			"camss_ahb_clk";
-		qcom,clock-rates = <0 0 0 240000000 0 0 0 0 0>;
+		qcom,clock-rates = <0 0 0 480000000 0 0 0 0 0>;
 		status = "ok";
 	};
 
@@ -174,10 +174,10 @@
 			<&clock_mmss clk_camss_csi2pix_clk>,
 			<&clock_mmss clk_camss_ahb_clk>;
 		clock-names = "mmagic_camss_ahb_clk", "camss_top_ahb_clk",
-			"ispif_ahb_clk", "csi_clk", "csi_ahb_clk",
-			"csi_src_clk", "csi_rdi_clk", "csi_pix_clk",
+			"ispif_ahb_clk", "csi_src_clk", "csi_clk",
+			"csi_ahb_clk", "csi_rdi_clk", "csi_pix_clk",
 			"camss_ahb_clk";
-		qcom,clock-rates = <0 0 0 240000000 0 0 0 0 0>;
+		qcom,clock-rates = <0 0 0 480000000 0 0 0 0 0>;
 		status = "ok";
 	};
 
@@ -203,10 +203,10 @@
 			<&clock_mmss clk_camss_csi3pix_clk>,
 			<&clock_mmss clk_camss_ahb_clk>;
 		clock-names = "mmagic_camss_ahb_clk", "camss_top_ahb_clk",
-			"ispif_ahb_clk", "csi_clk", "csi_ahb_clk",
-			"csi_src_clk", "csi_rdi_clk", "csi_pix_clk",
+			"ispif_ahb_clk", "csi_src_clk", "csi_clk",
+			"csi_ahb_clk", "csi_rdi_clk", "csi_pix_clk",
 			"camss_ahb_clk";
-		qcom,clock-rates = <0 0 0 240000000 0 0 0 0 0>;
+		qcom,clock-rates = <0 0 0 480000000 0 0 0 0 0>;
 		status = "ok";
 	};
 
@@ -255,10 +255,10 @@
 			"vfe0_clk_src", "camss_vfe_vfe0_clk", "camss_csi_vfe0_clk",
 			"vfe1_clk_src", "camss_vfe_vfe1_clk", "camss_csi_vfe1_clk";
 		qcom,clock-rates = <0
-			240000000 0 0 0
-			240000000 0 0 0
-			240000000 0 0 0
-			240000000 0 0 0
+			480000000 0 0 0
+			480000000 0 0 0
+			480000000 0 0 0
+			480000000 0 0 0
 			320000000 0 0
 			320000000 0 0>;
 		status = "ok";
