@@ -29,7 +29,7 @@
 #include <linux/irq.h>
 #include <linux/irqchip/chained_irq.h>
 #include <linux/spinlock.h>
-
+#include <linux/irqchip/msm-mpm-irq.h>
 #include "../core.h"
 #include "../pinconf.h"
 #include "pinctrl-msm.h"
@@ -942,6 +942,7 @@ static int msm_gpio_init(struct msm_pinctrl *pctrl)
 
 	irq_set_handler_data(pctrl->irq, pctrl);
 	irq_set_chained_handler(pctrl->irq, msm_gpio_irq_handler);
+	of_mpm_init();
 
 	return 0;
 }
