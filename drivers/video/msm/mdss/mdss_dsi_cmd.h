@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2013, 2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -39,6 +39,7 @@ struct dsi_buf {
 	int size;	/* size of buffer */
 	char *data;	/* buffer */
 	int len;	/* data length */
+	int read_cnt;	/* DSI read count */
 	dma_addr_t dmap; /* mapped dma addr */
 };
 
