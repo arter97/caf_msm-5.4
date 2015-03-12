@@ -32,7 +32,6 @@
 		smd11 = &smdtty_data11;
 		smd21 = &smdtty_data21;
 		smd36 = &smdtty_loopback;
-		i2c2 = &i2c_2;
 		i2c7 = &i2c_7;
 		i2c12 = &i2c_12;
 		spi0 = &spi_0;
@@ -538,31 +537,6 @@
 		qcom,banks = <4>;
 	};
 
-	i2c_2: i2c@7576000 { /* BLSP1 QUP2 */
-		compatible = "qcom,i2c-msm-v2";
-		#address-cells = <1>;
-		#size-cells = <0>;
-		reg-names = "qup_phys_addr", "bam_phys_addr";
-		reg = <0x7576000 0x1000>,
-		      <0x7544000 0x19000>;
-		interrupt-names = "qup_irq", "bam_irq";
-		interrupts = <0 96 0>, <0 238 0>;
-		qcom,clk-freq-out = <100000>;
-		qcom,clk-freq-in  = <19200000>;
-		clock-names = "iface_clk", "core_clk";
-		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
-			 <&clock_gcc clk_gcc_blsp1_qup2_i2c_apps_clk>;
-
-		pinctrl-names = "i2c_active", "i2c_sleep";
-		pinctrl-0 = <&i2c_2_active>;
-		pinctrl-1 = <&i2c_2_sleep>;
-		qcom,noise-rjct-scl = <0>;
-		qcom,noise-rjct-sda = <0>;
-		qcom,bam-pipe-idx-cons = <14>;
-		qcom,bam-pipe-idx-prod = <15>;
-		qcom,master-id = <86>;
-	};
-
 	i2c_12: i2c@75ba000 {
 		compatible = "qcom,i2c-msm-v2";
 		#address-cells = <1>;
@@ -583,6 +557,7 @@
 		pinctrl-names = "i2c_active", "i2c_sleep";
 		pinctrl-0 = <&i2c_12_active>;
 		pinctrl-1 = <&i2c_12_sleep>;
+		qcom,disable-dma;
 	};
 
 
@@ -622,6 +597,7 @@
 		pinctrl-names = "i2c_active", "i2c_sleep";
 		pinctrl-0 = <&i2c_7_active>;
 		pinctrl-1 = <&i2c_7_sleep>;
+		qcom,disable-dma;
 	};
 
 	blsp1_uart2: uart@07570000 { /* BLSP1 UART2 */
