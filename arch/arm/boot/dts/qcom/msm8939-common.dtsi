@@ -445,7 +445,6 @@
 	};
 
 	qcom,wcnss-wlan@0a000000 {
-		status = "disabled";
 		compatible = "qcom,wcnss_wlan";
 		reg = <0x0a000000 0x280000>,
 			<0xb011008 0x04>,
@@ -1607,7 +1606,6 @@
 	};
 
 	qcom,pronto@a21b000 {
-		status = "disabled";
 		compatible = "qcom,pil-tz-generic";
 		reg = <0x0a21b000 0x3000>;
 		interrupts = <0 149 1>;
