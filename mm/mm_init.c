@@ -11,11 +11,87 @@
 #include <linux/export.h>
 #include "internal.h"
 
+#ifdef CONFIG_HIGHMEM_DEFER
+#include <linux/highmem.h>
+#endif
+
 #ifdef CONFIG_DEBUG_MEMORY_INIT
 int mminit_loglevel;
 
 #ifndef SECTIONS_SHIFT
 #define SECTIONS_SHIFT	0
+#endif
+
+#ifdef CONFIG_HIGHMEM_DEFER
+static ssize_t defer_store(struct kobject *kobj, struct kobj_attribute *attr,
+				const char *buf, size_t size)
+{
+	static int is_highpages_released;
+	int val;
+	int ret;
+
+	ret = sscanf(buf, "%du", &val);
+	if (ret != 1)
+		return -EINVAL;
+
+	if (val == 1) {
+		if (!is_highpages_released) {
+			free_highpages();
+			is_highpages_released = 1;
+		} else {
+			pr_debug("%s : already released high memory pages\n",
+				__func__);
+		}
+	}
+
+	return size;
+}
+
+static struct kobj_attribute defer_attr = {
+	.attr = { .name = "release", .mode = 0222 },
+	.store = defer_store,
+};
+
+static struct attribute *defer_attrs[] = {
+	&defer_attr.attr,
+	NULL,
+};
+
+static struct attribute_group defer_attr_group = {
+	.attrs = defer_attrs,
+	.name = "highmem",
+};
+
+static void create_sysfs_defer_highmem(void)
+{
+	int err = 0;
+	struct kobject *defer_freehighpages;
+
+	defer_freehighpages = kobject_create_and_add("memory", mm_kobj);
+
+	if (!defer_freehighpages) {
+		pr_err("%s : failed to create kobject\n", __func__);
+		goto release_highpages;
+	}
+
+	err = sysfs_create_group(defer_freehighpages, &defer_attr_group);
+
+	if (err) {
+		pr_err("%s : register sysfs failed\n", __func__);
+		goto release_highpages;
+	}
+
+	return;
+
+release_highpages:
+	pr_info("%s : releasing high memory pages\n", __func__);
+	free_highpages();
+}
+#else
+static void create_sysfs_defer_highmem(void)
+{
+	return;
+}
 #endif
 
 /* The zonelists are simply reported, validation is manual. */
@@ -145,6 +221,8 @@ static int __init mm_sysfs_init(void)
 	mm_kobj = kobject_create_and_add("mm", kernel_kobj);
 	if (!mm_kobj)
 		return -ENOMEM;
+
+	create_sysfs_defer_highmem();
 
 	return 0;
 }

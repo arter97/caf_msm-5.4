@@ -36,6 +36,9 @@ static inline void invalidate_kernel_vmap_range(void *vaddr, int size)
 /* declarations for linux/mm/highmem.c */
 unsigned int nr_free_highpages(void);
 extern unsigned long totalhigh_pages;
+#ifdef CONFIG_HIGHMEM_DEFER
+void free_highpages(void);
+#endif
 
 void kmap_flush_unused(void);
 
