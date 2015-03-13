@@ -69,10 +69,11 @@
 #include <linux/moduleparam.h>
 #include <linux/kernel.h>
 #include <linux/stat.h>
+#include <linux/sensors.h>
+#include <linux/regulator/consumer.h>
 
-
-#include <linux/input/lsm330.h>
-/* #include "lsm330.h" */
+#include <lsm330.h>
+/*#include "lsm330.h"*/
 
 /* Maximum polled-device-reported rot speed value value in dps */
 #define FS_MAX		32768
@@ -157,6 +158,11 @@
 #define WHOAMI_LSM330_GYR	(0xD4)  /* Expected content for WAI register*/
 
 
+
+
+#define LSM330_GYRO_MIN_POLL_INTERVAL_MS	10
+#define LSM330_GYRO_MAX_POLL_INTERVAL_MS	5000
+#define LSM330_GYRO_DEFAULT_POLL_INTERVAL_MS	200
 
 static int int1_gpio = LSM330_GYR_DEFAULT_INT1_GPIO;
 static int int2_gpio = LSM330_GYR_DEFAULT_INT2_GPIO;
@@ -243,10 +249,39 @@ struct lsm330_gyr_status {
 	/* fifo related */
 	u8 watermark;
 	u8 fifomode;
-
 	struct hrtimer hr_timer;
 	ktime_t ktime;
 	struct work_struct polling_task;
+	struct sensors_classdev gyro_cdev;
+	struct regulator *vdd;
+	struct regulator *vddio;
+	bool power_enabled;
+};
+
+
+/*  information read by HAL */
+static struct sensors_classdev lsm330_gyr_cdev = {
+	.name = "lsm330_gyr",
+	.vendor = "ST_micro",
+	.version = 1,
+	.handle = SENSORS_GYROSCOPE_HANDLE,
+	.type = SENSOR_TYPE_GYROSCOPE,
+	.max_range = "34.906586",	/*rad/s equivalent to 2000 Deg/s */
+	.resolution = "0.0010681152",	/* rad/s - Need to check this??*/
+	.sensor_power = "5",	/* 5 mA */
+	.min_delay = LSM330_GYRO_MIN_POLL_INTERVAL_MS * 1000,
+	.max_delay = LSM330_GYRO_MAX_POLL_INTERVAL_MS,
+	.delay_msec = LSM330_GYRO_DEFAULT_POLL_INTERVAL_MS,
+	.fifo_reserved_event_count = 0,
+	.fifo_max_event_count = 0,
+	.enabled = 0,
+	.max_latency = 0,
+	.flags = 0, /* SENSOR_FLAG_CONTINUOUS_MODE */
+	.sensors_enable = NULL,
+	.sensors_poll_delay = NULL,
+	.sensors_enable_wakeup = NULL,
+	.sensors_set_latency = NULL,
+	.sensors_flush = NULL,
 };
 
 
@@ -707,9 +742,16 @@ static int lsm330_gyr_get_data(struct lsm330_gyr_status *stat,
 static void lsm330_gyr_report_values(struct lsm330_gyr_status *stat,
 					struct lsm330_gyr_triple *data)
 {
-	input_report_abs(stat->input_dev, ABS_X, data->x);
-	input_report_abs(stat->input_dev, ABS_Y, data->y);
-	input_report_abs(stat->input_dev, ABS_Z, data->z);
+	ktime_t timestamp = ktime_get_boottime();
+	input_report_abs(stat->input_dev, ABS_RX, data->x);
+	input_report_abs(stat->input_dev, ABS_RY, data->y);
+	input_report_abs(stat->input_dev, ABS_RZ, data->z);
+	input_event(stat->input_dev,
+					EV_SYN, SYN_TIME_SEC,
+					ktime_to_timespec(timestamp).tv_sec);
+	input_event(stat->input_dev, EV_SYN,
+					SYN_TIME_NSEC,
+					ktime_to_timespec(timestamp).tv_nsec);
 	input_sync(stat->input_dev);
 }
 
@@ -758,7 +800,7 @@ static void lsm330_gyr_device_power_off(struct lsm330_gyr_status *stat)
 	if (stat->pdata->power_off) {
 		/* disable_irq_nosync(acc->irq1); */
 		disable_irq_nosync(stat->irq2);
-		stat->pdata->power_off();
+		stat->pdata->power_off(stat->client);
 		stat->hw_initialized = 0;
 	}
 
@@ -784,7 +826,7 @@ static int lsm330_gyr_device_power_on(struct lsm330_gyr_status *stat)
 	int err;
 
 	if (stat->pdata->power_on) {
-		err = stat->pdata->power_on();
+		err = stat->pdata->power_on(stat->client);
 		if (err < 0)
 			return err;
 		if (stat->pdata->gpio_int2 >= 0)
@@ -822,11 +864,12 @@ static int lsm330_gyr_enable(struct lsm330_gyr_status *stat)
 {
 	int err;
 
+	mutex_lock(&stat->lock);
 	if (!atomic_cmpxchg(&stat->enabled, 0, 1)) {
-
 		err = lsm330_gyr_device_power_on(stat);
 		if (err < 0) {
 			atomic_set(&stat->enabled, 0);
+			mutex_unlock(&stat->lock);
 			return err;
 		}
 
@@ -837,7 +880,7 @@ static int lsm330_gyr_enable(struct lsm330_gyr_status *stat)
 		}
 
 	}
-
+	mutex_unlock(&stat->lock);
 	return 0;
 }
 
@@ -846,12 +889,13 @@ static int lsm330_gyr_disable(struct lsm330_gyr_status *stat)
 	dev_dbg(&stat->client->dev, "%s: stat->enabled = %d\n", __func__,
 						atomic_read(&stat->enabled));
 
+	mutex_lock(&stat->lock);
 	if (atomic_cmpxchg(&stat->enabled, 1, 0)) {
-
 		lsm330_gyr_device_power_off(stat);
 		hrtimer_cancel(&stat->hr_timer);
 		dev_dbg(&stat->client->dev, "%s: cancel_hrtimer ", __func__);
 	}
+	mutex_unlock(&stat->lock);
 	return 0;
 }
 
@@ -1397,9 +1441,9 @@ static int lsm330_gyr_input_init(struct lsm330_gyr_status *stat)
 	input_set_abs_params(stat->input_dev, ABS_MISC, 0, 1, 0, 0);
 #endif
 
-	input_set_abs_params(stat->input_dev, ABS_X, -FS_MAX-1, FS_MAX, 0, 0);
-	input_set_abs_params(stat->input_dev, ABS_Y, -FS_MAX-1, FS_MAX, 0, 0);
-	input_set_abs_params(stat->input_dev, ABS_Z, -FS_MAX-1, FS_MAX, 0, 0);
+	input_set_abs_params(stat->input_dev, ABS_RX, -FS_MAX-1, FS_MAX, 0, 0);
+	input_set_abs_params(stat->input_dev, ABS_RY, -FS_MAX-1, FS_MAX, 0, 0);
+	input_set_abs_params(stat->input_dev, ABS_RZ, -FS_MAX-1, FS_MAX, 0, 0);
 
 
 	err = input_register_device(stat->input_dev);
@@ -1454,11 +1498,199 @@ enum hrtimer_restart poll_function_read(struct hrtimer *timer)
 	return HRTIMER_NORESTART;
 }
 
+static int lsm330_cdev_enable(struct sensors_classdev *sensors_cdev,
+			unsigned int enable)
+{
+	struct lsm330_gyr_status *stat = container_of(sensors_cdev,
+			struct lsm330_gyr_status, gyro_cdev);
+
+
+	dev_dbg(&stat->client->dev,
+				"enable %u client_data->enable %u\n",
+				enable, atomic_read(&stat->enabled));
+
+
+	if (enable)
+		return lsm330_gyr_enable(stat);
+	else
+		return lsm330_gyr_disable(stat);
+
+}
+
+static int lsm330_cdev_poll_delay(struct sensors_classdev *sensors_cdev,
+			unsigned int interval_ms)
+{
+	struct lsm330_gyr_status *stat = container_of(sensors_cdev,
+			struct lsm330_gyr_status, gyro_cdev);
+	int err;
+
+	if (interval_ms < LSM330_GYRO_MIN_POLL_INTERVAL_MS)
+		interval_ms = LSM330_GYRO_MIN_POLL_INTERVAL_MS;
+
+	mutex_lock(&stat->lock);
+	err = lsm330_gyr_update_odr(stat, interval_ms);
+	if (err >= 0)
+		stat->pdata->poll_interval = interval_ms;
+
+	stat->ktime = ktime_set(stat->pdata->poll_interval / 1000,
+				MS_TO_NS(stat->pdata->poll_interval % 1000));
+
+	if (atomic_read(&stat->enabled)) {
+		hrtimer_cancel(&stat->hr_timer);
+		hrtimer_start(&stat->hr_timer, stat->ktime, HRTIMER_MODE_REL);
+	}
+	mutex_unlock(&stat->lock);
+	return 0;
+}
+
+static int lsm330_cdev_flush(struct sensors_classdev *sensors_cdev)
+{
+	return 0;
+}
+
+static int lsm330_cdev_set_latency(struct sensors_classdev *sensors_cdev,
+					unsigned int max_latency)
+{
+	return 0;
+}
+
+static int lsm330_gyr_power_init(struct i2c_client *client)
+{
+	int ret = 0;
+	struct lsm330_gyr_status *stat = i2c_get_clientdata(client);
+
+	dev_dbg(&stat->client->dev, "power init");
+
+	stat->vdd = regulator_get(&stat->client->dev, "vdd");
+	if (IS_ERR(stat->vdd)) {
+		ret = PTR_ERR(stat->vdd);
+		dev_err(&stat->client->dev,
+			"Regulator get failed(vdd) ret=%d\n", ret);
+		return ret;
+	}
+
+	if (regulator_count_voltages(stat->vdd) > 0) {
+		ret = regulator_set_voltage(stat->vdd, 2400000,
+					3600000);
+		if (ret) {
+			dev_err(&stat->client->dev,
+				"regulator_count_voltages(vdd) failed  ret=%d\n",
+				ret);
+			goto reg_vdd_put;
+		}
+	}
+
+	stat->vddio = regulator_get(&stat->client->dev, "vddio");
+	if (IS_ERR(stat->vddio)) {
+		ret = PTR_ERR(stat->vddio);
+		dev_err(&stat->client->dev,
+			"Regulator get failed(vi2c) ret=%d\n", ret);
+		goto reg_vdd_set_vtg;
+	}
+
+	if (regulator_count_voltages(stat->vddio) > 0) {
+		ret = regulator_set_voltage(stat->vddio,
+				0, 1800000);
+		if (ret) {
+			dev_err(&stat->client->dev,
+				"regulator_count_voltages(vddio) failed ret=%d\n",
+				ret);
+			goto reg_vio_put;
+		}
+	}
+
+	return 0;
+
+reg_vio_put:
+	regulator_put(stat->vddio);
+
+reg_vdd_set_vtg:
+	if (regulator_count_voltages(stat->vdd) > 0)
+			regulator_set_voltage(stat->vdd, 0,
+						3600000);
+
+reg_vdd_put:
+	regulator_put(stat->vdd);
+
+	return ret;
+}
+
+static void lsm330_gyr_power_deinit(struct i2c_client *client)
+{
+	struct lsm330_gyr_status *stat = i2c_get_clientdata(client);
+
+	dev_dbg(&stat->client->dev, "power deinit");
+
+	if (regulator_count_voltages(stat->vddio) > 0)
+		regulator_set_voltage(stat->vddio, 0, 1800000);
+	regulator_put(stat->vddio);
+
+	if (regulator_count_voltages(stat->vdd) > 0)
+		regulator_set_voltage(stat->vdd, 0, 3600000);
+	regulator_put(stat->vdd);
+
+	return ;
+}
+
+
+static int lsm330_gyr_power_on(struct i2c_client *client)
+{
+	int ret = 0;
+	struct lsm330_gyr_status *stat = i2c_get_clientdata(client);
+
+	dev_dbg(&stat->client->dev, "power on");
+
+	if (!stat->power_enabled) {
+		ret = regulator_enable(stat->vdd);
+		if (ret) {
+			dev_err(&stat->client->dev, "regulator_enable failed(vdd)");
+			return ret;
+		}
+		ret = regulator_enable(stat->vddio);
+		if (ret) {
+			regulator_disable(stat->vdd);
+			dev_err(&stat->client->dev, "regulator_enable failed(vddio)");
+			return ret;
+		}
+		stat->power_enabled = true;
+	} else {
+		dev_dbg(&stat->client->dev,
+			"already powered on");
+	}
+	return ret;
+}
+static int lsm330_gyr_power_off(struct i2c_client *client)
+{
+	int ret = 0;
+	struct lsm330_gyr_status *stat = i2c_get_clientdata(client);
+
+	dev_dbg(&stat->client->dev, "power off");
+
+	if (stat->power_enabled) {
+		ret = regulator_disable(stat->vdd);
+		if (ret) {
+			dev_err(&stat->client->dev, "regulator_disable failed(vdd)");
+			return ret;
+		}
+		ret = regulator_disable(stat->vddio);
+		if (ret) {
+			regulator_enable(stat->vdd);
+			dev_err(&stat->client->dev, "regulator_disable failed(vddio)");
+			return ret;
+		}
+		stat->power_enabled = false;
+	} else {
+		dev_dbg(&stat->client->dev,
+			"already powered off");
+	}
+
+	return ret;
+}
+
 static int lsm330_gyr_probe(struct i2c_client *client,
 					const struct i2c_device_id *devid)
 {
 	struct lsm330_gyr_status *stat;
-
 	u32 smbus_func = I2C_FUNC_SMBUS_BYTE_DATA |
 			I2C_FUNC_SMBUS_WORD_DATA | I2C_FUNC_SMBUS_I2C_BLOCK ;
 
@@ -1526,8 +1758,14 @@ static int lsm330_gyr_probe(struct i2c_client *client,
 
 	i2c_set_clientdata(client, stat);
 
+	stat->power_enabled = false;
+	stat->pdata->init = lsm330_gyr_power_init;
+	stat->pdata->exit = lsm330_gyr_power_deinit;
+	stat->pdata->power_on = lsm330_gyr_power_on;
+	stat->pdata->power_off = lsm330_gyr_power_off;
+
 	if (stat->pdata->init) {
-		err = stat->pdata->init();
+		err = stat->pdata->init(client);
 		if (err < 0) {
 			dev_err(&client->dev, "init failed: %d\n", err);
 			goto err1_1;
@@ -1619,6 +1857,22 @@ static int lsm330_gyr_probe(struct i2c_client *client,
 	mutex_unlock(&stat->lock);
 
 	INIT_WORK(&stat->polling_task, poll_function_work);
+	stat->gyro_cdev = lsm330_gyr_cdev;
+	stat->gyro_cdev.delay_msec =
+					LSM330_GYRO_DEFAULT_POLL_INTERVAL_MS;
+	stat->gyro_cdev.sensors_enable = lsm330_cdev_enable;
+	stat->gyro_cdev.sensors_poll_delay = lsm330_cdev_poll_delay;
+	stat->gyro_cdev.fifo_reserved_event_count = 0;
+	stat->gyro_cdev.fifo_max_event_count = 0;
+	stat->gyro_cdev.sensors_set_latency = lsm330_cdev_set_latency;
+	stat->gyro_cdev.sensors_flush = lsm330_cdev_flush;
+
+	err = sensors_classdev_register(&client->dev, &stat->gyro_cdev);
+	if (err) {
+		dev_err(&client->dev, "create class device file failed!\n");
+		goto err6;
+	}
+
 	dev_info(&client->dev, "%s probed: device created successfully\n",
 							LSM330_GYR_DEV_NAME);
 
@@ -1639,7 +1893,7 @@ err3:
 	lsm330_gyr_device_power_off(stat);
 err2:
 	if (stat->pdata->exit)
-		stat->pdata->exit();
+		stat->pdata->exit(client);
 err1_1:
 	mutex_unlock(&stat->lock);
 	kfree(stat->pdata);
@@ -1680,8 +1934,10 @@ static int lsm330_gyr_remove(struct i2c_client *client)
 
 	lsm330_gyr_input_cleanup(stat);
 
-	remove_sysfs_interfaces(&client->dev);
+	if (stat->pdata->exit)
+		stat->pdata->exit(client);
 
+	remove_sysfs_interfaces(&client->dev);
 	kfree(stat->pdata);
 	kfree(stat);
 

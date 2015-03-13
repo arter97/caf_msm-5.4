@@ -57,9 +57,11 @@ Version History.
 #include <linux/slab.h>
 #include <linux/hrtimer.h>
 #include <linux/ktime.h>
+#include <linux/sensors.h>
+#include <linux/regulator/consumer.h>
 
-#include <linux/input/lsm330.h>
-/* #include "lsm330.h" */
+/* #include <linux/input/lsm330.h> */
+#include "lsm330.h"
 
 //#define DEBUG			1
 
@@ -85,11 +87,11 @@ Version History.
 #define I2C_AUTO_INCREMENT	0x00		/* Autoincrement i2c address */
 #define MS_TO_NS(x)		(x*1000000L)
 
-#define SENSITIVITY_2G		60		/* ug/LSB	*/
-#define SENSITIVITY_4G		120		/* ug/LSB	*/
-#define SENSITIVITY_6G		180		/* ug/LSB	*/
-#define SENSITIVITY_8G		240		/* ug/LSB	*/
-#define SENSITIVITY_16G		730		/* ug/LSB	*/
+#define SENSITIVITY_2G		1		/* ug/LSB	*/
+#define SENSITIVITY_4G		2		/* ug/LSB	*/
+#define SENSITIVITY_6G		3		/* ug/LSB	*/
+#define SENSITIVITY_8G		4		/* ug/LSB	*/
+#define SENSITIVITY_16G		12		/* ug/LSB	*/
 
 #define	LSM330_ACC_FS_MASK	(0x38)
 
@@ -309,6 +311,8 @@ Version History.
 
 struct workqueue_struct *lsm330_workqueue = 0;
 
+#define LSM330_SENSOR_ACC_MIN_POLL_PERIOD_MS 10
+
 struct {
 	unsigned int cutoff_ms;
 	unsigned int mask;
@@ -381,12 +385,34 @@ struct lsm330_acc_data {
 	int irq2;
 	struct work_struct irq2_work;
 	struct workqueue_struct *irq2_work_queue;
+	struct sensors_classdev accel_cdev;
+	struct regulator *vdd;
+	struct regulator *vddio;
+	bool power_enabled;
 
 #ifdef DEBUG
 	u8 reg_addr;
 #endif
 };
 
+/* Accelerometer information read by HAL */
+static struct sensors_classdev lsm330_acc_cdev = {
+	.name = LSM330_ACC_DEV_NAME,
+	.vendor = "STMicro",
+	.version = 1,
+	.handle = SENSORS_ACCELERATION_HANDLE,
+	.type = SENSOR_TYPE_ACCELEROMETER,
+	.max_range = "156.8",	/* m/s^2 */
+	.resolution = "0.000598144",	/* m/s^2 */
+	.sensor_power = "0.5",	/* 0.5 mA */
+	.min_delay = LSM330_SENSOR_ACC_MIN_POLL_PERIOD_MS,
+	.delay_msec = 100,
+	.fifo_reserved_event_count = 0,
+	.fifo_max_event_count = 0,
+	.enabled = 0,
+	.sensors_enable = NULL,
+	.sensors_poll_delay = NULL,
+};
 
 /* sets default init values to be written in registers at probe stage */
 static void lsm330_acc_set_init_register_values(struct lsm330_acc_data *acc)
@@ -831,7 +857,7 @@ static void lsm330_acc_device_power_off(struct lsm330_acc_data *acc)
 			disable_irq_nosync(acc->irq1);
 		if(acc->pdata->gpio_int2)
 			disable_irq_nosync(acc->irq2);
-		acc->pdata->power_off();
+		acc->pdata->power_off(acc->client);
 		acc->hw_initialized = 0;
 	}
 	if (acc->hw_initialized) {
@@ -848,7 +874,7 @@ static int lsm330_acc_device_power_on(struct lsm330_acc_data *acc)
 	int err = -1;
 
 	if (acc->pdata->power_on) {
-		err = acc->pdata->power_on();
+		err = acc->pdata->power_on(acc->client);
 		if (err < 0) {
 			dev_err(&acc->client->dev,
 					"power_on failed: %d\n", err);
@@ -951,7 +977,6 @@ static void lsm330_acc_irq1_work_func(struct work_struct *work)
 					LSM330_ACC_DEV_NAME, rbuf[0]);
 	}
 	pr_debug("%s: IRQ1 served\n", LSM330_ACC_DEV_NAME);
-exit:
 	enable_irq(acc->irq1);
 	pr_debug("%s: IRQ1 re-enabled\n", LSM330_ACC_DEV_NAME);
 }
@@ -966,7 +991,6 @@ static void lsm330_acc_irq2_work_func(struct work_struct *work)
 		 ie:lsm330_acc_get_stat_source(acc); */
 	/* ; */
 	pr_debug("%s: IRQ2 served\n", LSM330_ACC_DEV_NAME);
-exit:
 	enable_irq(acc->irq2);
 	pr_debug("%s: IRQ2 re-enabled\n", LSM330_ACC_DEV_NAME);
 }
@@ -1724,6 +1748,196 @@ static void lsm330_acc_input_cleanup(struct lsm330_acc_data *acc)
 	input_free_device(acc->input_dev);
 }
 
+static int lsm330_cdev_enable(struct sensors_classdev *sensors_cdev,
+			unsigned int enable)
+{
+	struct lsm330_acc_data *stat = container_of(sensors_cdev,
+			struct lsm330_acc_data, accel_cdev);
+
+
+	dev_dbg(&stat->client->dev,
+				"enable %u client_data->enable %u\n",
+				enable, atomic_read(&stat->enabled));
+
+
+	if (enable)
+		return lsm330_acc_enable(stat);
+	else
+		return lsm330_acc_disable(stat);
+
+}
+
+static int lsm330_cdev_poll_delay(struct sensors_classdev *sensors_cdev,
+			unsigned int interval_ms)
+{
+	struct lsm330_acc_data *stat = container_of(sensors_cdev,
+			struct lsm330_acc_data, accel_cdev);
+	int err;
+
+	if (interval_ms < LSM330_SENSOR_ACC_MIN_POLL_PERIOD_MS)
+		interval_ms = LSM330_SENSOR_ACC_MIN_POLL_PERIOD_MS;
+
+	mutex_lock(&stat->lock);
+	err = lsm330_acc_update_odr(stat, interval_ms);
+	if (err >= 0)
+		stat->pdata->poll_interval = interval_ms;
+
+	if (atomic_read(&stat->enabled)) {
+		if (stat->enable_polling) {
+			hrtimer_cancel(&stat->hr_timer_acc);
+			hrtimer_start(&stat->hr_timer_acc,
+				stat->ktime_acc, HRTIMER_MODE_REL);
+		}
+	}
+	mutex_unlock(&stat->lock);
+	return 0;
+}
+
+static int lsm330_cdev_flush(struct sensors_classdev *sensors_cdev)
+{
+	return 0;
+}
+
+static int lsm330_cdev_set_latency(struct sensors_classdev *sensors_cdev,
+					unsigned int max_latency)
+{
+	return 0;
+}
+
+static int lsm330_acc_power_init(struct i2c_client *client)
+{
+	int ret = 0;
+	struct lsm330_acc_data *stat = i2c_get_clientdata(client);
+
+	dev_dbg(&stat->client->dev, "power init");
+
+	stat->vdd = regulator_get(&stat->client->dev, "vdd");
+	if (IS_ERR(stat->vdd)) {
+		ret = PTR_ERR(stat->vdd);
+		dev_err(&stat->client->dev,
+			"Regulator get failed(vdd) ret=%d\n", ret);
+		return ret;
+	}
+
+	if (regulator_count_voltages(stat->vdd) > 0) {
+		ret = regulator_set_voltage(stat->vdd, 2400000,
+					3600000);
+		if (ret) {
+			dev_err(&stat->client->dev,
+				"regulator_count_voltages(vdd) failed  ret=%d\n",
+				ret);
+			goto reg_vdd_put;
+		}
+	}
+
+	stat->vddio = regulator_get(&stat->client->dev, "vddio");
+	if (IS_ERR(stat->vddio)) {
+		ret = PTR_ERR(stat->vddio);
+		dev_err(&stat->client->dev,
+			"Regulator get failed(vi2c) ret=%d\n", ret);
+		goto reg_vdd_set_vtg;
+	}
+
+	if (regulator_count_voltages(stat->vddio) > 0) {
+		ret = regulator_set_voltage(stat->vddio,
+				0, 1800000);
+		if (ret) {
+			dev_err(&stat->client->dev,
+				"regulator_count_voltages(vddio) failed ret=%d\n",
+				ret);
+			goto reg_vio_put;
+		}
+	}
+
+	return 0;
+
+reg_vio_put:
+	regulator_put(stat->vddio);
+
+reg_vdd_set_vtg:
+	if (regulator_count_voltages(stat->vdd) > 0)
+			regulator_set_voltage(stat->vdd, 0,
+						3600000);
+
+reg_vdd_put:
+	regulator_put(stat->vdd);
+
+	return ret;
+}
+
+static void lsm330_acc_power_deinit(struct i2c_client *client)
+{
+	struct lsm330_acc_data *stat = i2c_get_clientdata(client);
+
+	dev_dbg(&stat->client->dev, "power deinit");
+
+	if (regulator_count_voltages(stat->vddio) > 0)
+		regulator_set_voltage(stat->vddio, 0, 1800000);
+	regulator_put(stat->vddio);
+
+	if (regulator_count_voltages(stat->vdd) > 0)
+		regulator_set_voltage(stat->vdd, 0, 3600000);
+	regulator_put(stat->vdd);
+
+	return ;
+}
+
+
+static int lsm330_acc_power_on(struct i2c_client *client)
+{
+	int ret = 0;
+	struct lsm330_acc_data *stat = i2c_get_clientdata(client);
+
+	dev_dbg(&stat->client->dev, "power on");
+
+	if (!stat->power_enabled) {
+		ret = regulator_enable(stat->vdd);
+		if (ret) {
+			dev_err(&stat->client->dev, "regulator_enable failed(vdd)");
+			return ret;
+		}
+		ret = regulator_enable(stat->vddio);
+		if (ret) {
+			regulator_disable(stat->vdd);
+			dev_err(&stat->client->dev, "regulator_enable failed(vddio)");
+			return ret;
+		}
+		stat->power_enabled = true;
+	} else {
+		dev_dbg(&stat->client->dev,
+			"already powered on");
+	}
+	return ret;
+}
+static int lsm330_acc_power_off(struct i2c_client *client)
+{
+	int ret = 0;
+	struct lsm330_acc_data *stat = i2c_get_clientdata(client);
+
+	dev_dbg(&stat->client->dev, "power off");
+
+	if (stat->power_enabled) {
+		ret = regulator_disable(stat->vdd);
+		if (ret) {
+			dev_err(&stat->client->dev, "regulator_disable failed(vdd)");
+			return ret;
+		}
+		ret = regulator_disable(stat->vddio);
+		if (ret) {
+			regulator_enable(stat->vdd);
+			dev_err(&stat->client->dev, "regulator_disable failed(vddio)");
+			return ret;
+		}
+		stat->power_enabled = false;
+	} else {
+		dev_dbg(&stat->client->dev,
+			"already powered off");
+	}
+
+	return ret;
+}
+
+
 static void poll_function_work_acc(struct work_struct *input_work_acc)
 {
 	struct lsm330_acc_data *acc;
@@ -1832,8 +2046,14 @@ static int lsm330_acc_probe(struct i2c_client *client,
 		goto exit_kfree_pdata;
 	}
 
+	acc->power_enabled = false;
+	acc->pdata->init = lsm330_acc_power_init;
+	acc->pdata->exit = lsm330_acc_power_deinit;
+	acc->pdata->power_on = lsm330_acc_power_on;
+	acc->pdata->power_off = lsm330_acc_power_off;
+
 	if (acc->pdata->init) {
-		err = acc->pdata->init();
+		err = acc->pdata->init(client);
 		if (err < 0) {
 			dev_err(&client->dev, "init failed: %d\n", err);
 			goto err_pdata_init;
@@ -1872,7 +2092,13 @@ static int lsm330_acc_probe(struct i2c_client *client,
 		goto err_pdata_init;
 	}
 
-	acc->enable_polling = 1;
+	if ((acc->pdata->gpio_int1 < 0)
+		&& (acc->pdata->gpio_int2 < 0)) {
+			acc->enable_polling = 1;
+	} else {
+		acc->enable_polling = 0;
+	}
+
 	atomic_set(&acc->enabled, 1);
 
 	err = lsm330_acc_update_fs_range(acc, acc->pdata->fs_range);
@@ -1951,8 +2177,24 @@ static int lsm330_acc_probe(struct i2c_client *client,
 	}
 
 	INIT_WORK(&acc->input_work_acc, poll_function_work_acc);
-
 	mutex_unlock(&acc->lock);
+
+	acc->accel_cdev = lsm330_acc_cdev;
+	acc->accel_cdev.delay_msec = LSM330_SENSOR_ACC_MIN_POLL_PERIOD_MS;
+	acc->accel_cdev.sensors_enable = lsm330_cdev_enable;
+	acc->accel_cdev.sensors_poll_delay = lsm330_cdev_poll_delay;
+	acc->accel_cdev.fifo_reserved_event_count = 0;
+	acc->accel_cdev.fifo_max_event_count = 0;
+	acc->accel_cdev.sensors_set_latency = lsm330_cdev_set_latency;
+	acc->accel_cdev.sensors_flush = lsm330_cdev_flush;
+
+	err = sensors_classdev_register(&client->dev, &acc->accel_cdev);
+	if (err) {
+		dev_err(&client->dev,
+			"create lsm330_acc class device file failed!\n");
+		err = -EINVAL;
+		goto err_destoyworkqueue2;
+	}
 
 	dev_info(&client->dev, "%s: probed\n", LSM330_ACC_DEV_NAME);
 
@@ -1974,7 +2216,7 @@ err_power_off:
 	lsm330_acc_device_power_off(acc);
 err_pdata_init:
 	if (acc->pdata->exit)
-		acc->pdata->exit();
+		acc->pdata->exit(client);
 exit_kfree_pdata:
 	kfree(acc->pdata);
 err_mutexunlock:
@@ -2011,7 +2253,7 @@ static int __devexit lsm330_acc_remove(struct i2c_client *client)
 	remove_sysfs_interfaces(&client->dev);
 
 	if (acc->pdata->exit)
-		acc->pdata->exit();
+		acc->pdata->exit(client);
 
 	if(!lsm330_workqueue) {
 		flush_workqueue(lsm330_workqueue);

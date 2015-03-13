@@ -137,10 +137,10 @@ struct lsm330_acc_platform_data {
 	u8 negate_y;
 	u8 negate_z;
 
-	int (*init)(void);
-	void (*exit)(void);
-	int (*power_on)(void);
-	int (*power_off)(void);
+	int (*init)(struct i2c_client *client);
+	void (*exit)(struct i2c_client *client);
+	int (*power_on)(struct i2c_client *client);
+	int (*power_off)(struct i2c_client *client);
 
 	/* set gpio_int either to the choosen gpio pin number or to -EINVAL
 	 * if leaved unconnected
@@ -150,10 +150,10 @@ struct lsm330_acc_platform_data {
 };
 
 struct lsm330_gyr_platform_data {
-	int (*init)(void);
-	void (*exit)(void);
-	int (*power_on)(void);
-	int (*power_off)(void);
+	int (*init)(struct i2c_client *client);
+	void (*exit)(struct i2c_client *client);
+	int (*power_on)(struct i2c_client *client);
+	int (*power_off)(struct i2c_client *client);
 
 	unsigned int poll_interval;
 	unsigned int min_interval;

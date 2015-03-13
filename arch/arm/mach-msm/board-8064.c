@@ -1051,6 +1051,18 @@ static struct i2c_board_info mipi_dsi_i2c_device_info[] __initdata = {
 	},
 };
 
+static struct i2c_board_info lsm330_acc_device_info[] __initdata = {
+	{
+		I2C_BOARD_INFO("lsm330_acc", 0x1d),
+	},
+};
+
+static struct i2c_board_info lsm330_gyro_device_info[] __initdata = {
+	{
+		I2C_BOARD_INFO("lsm330_gyr", 0x6b),
+	},
+};
+
 struct sx150x_platform_data apq8064_sx150x_data[] = {
 	[SX150X_EPM] = {
 		.gpio_base	= GPIO_EPM_EXPANDER_BASE,
@@ -3557,6 +3569,18 @@ static struct i2c_registry apq8064_i2c_devices[] __initdata = {
 		APQ_8064_GSBI3_QUP_I2C_BUS_ID,
 		adv7180_device_info,
 		ARRAY_SIZE(adv7180_device_info),
+	},
+	{
+		I2C_SURF,
+		APQ_8064_GSBI3_QUP_I2C_BUS_ID,
+		lsm330_acc_device_info,
+		ARRAY_SIZE(lsm330_acc_device_info),
+	},
+	{
+		I2C_SURF,
+		APQ_8064_GSBI3_QUP_I2C_BUS_ID,
+		lsm330_gyro_device_info,
+		ARRAY_SIZE(lsm330_gyro_device_info),
 	},
 };
 

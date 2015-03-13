@@ -674,4 +674,18 @@ config BMP18X_I2C
          To compile this driver as a module, choose M here: the
          module will be called bmp18x-i2c.
 
+config LSM330_ACCEL
+	tristate "STM LSM330 acceleration sensor support"
+	depends on I2C=y
+	help
+	 If you say yes here you get support for STMicroelectronics's
+	 acceleration sensors LSM330.
+
+config LSM330_GYRO
+        tristate "STM LSM330 acceleration sensor support"
+        depends on I2C=y
+        help
+          If you say yes here you get support for STMicroelectronics's
+          gyroscope sensors LSM330.
+
 endif
