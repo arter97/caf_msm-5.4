@@ -2870,6 +2870,65 @@
 		compatible = "qcom,lmh";
 		interrupts = <0 23 4>;
 	};
+
+	timer@09840000 {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+		compatible = "arm,armv7-timer-mem";
+		reg = <0x09840000 0x1000>;
+		clock-frequency = <19200000>;
+
+		frame@09850000 {
+			frame-number = <0>;
+			interrupts = <0 31 0x4>,
+				     <0 30 0x4>;
+			reg = <0x09850000 0x1000>,
+			      <0x09860000 0x1000>;
+		};
+
+		frame@09870000 {
+			frame-number = <1>;
+			interrupts = <0 32 0x4>;
+			reg = <0x09870000 0x1000>;
+			status = "disabled";
+		};
+
+		frame@09880000 {
+			frame-number = <2>;
+			interrupts = <0 33 0x4>;
+			reg = <0x09880000 0x1000>;
+			status = "disabled";
+		};
+
+		frame@09890000 {
+			frame-number = <3>;
+			interrupts = <0 34 0x4>;
+			reg = <0x09890000 0x1000>;
+			status = "disabled";
+		};
+
+		frame@098a0000 {
+			frame-number = <4>;
+			interrupts = <0 35 0x4>;
+			reg = <0x098a0000 0x1000>;
+			status = "disabled";
+		};
+
+		frame@098b0000 {
+			frame-number = <5>;
+			interrupts = <0 36 0x4>;
+			reg = <0x098b0000 0x1000>;
+			status = "disabled";
+		};
+
+		frame@098c0000 {
+			frame-number = <6>;
+			interrupts = <0 37 0x4>;
+			reg = <0x098c0000 0x1000>;
+			status = "disabled";
+		};
+	};
 };
 
 &gdsc_venus {
