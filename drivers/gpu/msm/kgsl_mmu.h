@@ -29,13 +29,6 @@
 #define KGSL_IOMMU_SECURE_MEM_BASE     0xe8000000
 #define KGSL_IOMMU_SECURE_MEM_SIZE     SZ_256M
 
-/* defconfig option for disabling per process pagetables */
-#ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
-#define KGSL_MMU_USE_PER_PROCESS_PT true
-#else
-#define KGSL_MMU_USE_PER_PROCESS_PT false
-#endif
-
 /* Identifier for the global page table */
 /* Per process page tables will probably pass in the thread group
    as an identifier */
@@ -127,6 +120,9 @@ struct kgsl_mmu_pt_ops {
 #define KGSL_MMU_RETENTION  BIT(1)
 /* MMU requires the TLB to be flushed on map */
 #define KGSL_MMU_FLUSH_TLB_ON_MAP BIT(2)
+/* MMU uses global pagetable */
+#define KGSL_MMU_GLOBAL_PAGETABLE BIT(3)
+
 
 struct kgsl_mmu {
 	uint32_t      flags;
@@ -300,7 +296,7 @@ static inline int kgsl_mmu_hw_halt_supported(struct kgsl_mmu *mmu)
  */
 static inline int kgsl_mmu_is_perprocess(struct kgsl_mmu *mmu)
 {
-	return KGSL_MMU_USE_PER_PROCESS_PT;
+	return MMU_FEATURE(mmu, KGSL_MMU_GLOBAL_PAGETABLE) ? 0 : 1;
 }
 
 /*
