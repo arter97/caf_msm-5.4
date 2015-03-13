@@ -286,14 +286,15 @@
 			<&clock_mmss clk_camss_vfe_ahb_clk>,
 			<&clock_mmss clk_camss_vfe0_ahb_clk>,
 			<&clock_mmss clk_camss_vfe_axi_clk>,
-			<&clock_mmss clk_camss_vfe0_stream_clk>;
+			<&clock_mmss clk_camss_vfe0_stream_clk>,
+			<&clock_mmss clk_smmu_vfe_axi_clk>;
 		clock-names = "mmagic_ahb_clk",
 			"mmagic_axi_clk", "camss_axi_clk",
 			"camss_top_ahb_clk" , "camss_ahb_clk",
 			"vfe_clk_src", "camss_vfe_clk", "camss_csi_vfe_clk",
 			"vfe_vbif_ahb_clk", "vfe_ahb_clk",
-			"bus_clk", "vfe_stream_clk";
-		qcom,clock-rates = <0 0 0 0 0 320000000 0 0 0 0 0 0>;
+			"bus_clk", "vfe_stream_clk", "smmu_vfe_axi_clk";
+		qcom,clock-rates = <0 0 0 0 0 320000000 0 0 0 0 0 0 0>;
 		status = "ok";
 		qos-entries = <8>;
 		qos-regs = <0x404 0x408 0x40C 0x410 0x414 0x418
@@ -356,14 +357,15 @@
 			<&clock_mmss clk_camss_vfe_ahb_clk>,
 			<&clock_mmss clk_camss_vfe1_ahb_clk>,
 			<&clock_mmss clk_camss_vfe_axi_clk>,
-			<&clock_mmss clk_camss_vfe1_stream_clk>;
+			<&clock_mmss clk_camss_vfe1_stream_clk>,
+			<&clock_mmss clk_smmu_vfe_axi_clk>;
 		clock-names = "mmagic_ahb_clk",
 			"mmagic_axi_clk", "camss_axi_clk",
 			"camss_top_ahb_clk" , "camss_ahb_clk",
 			"vfe_clk_src", "camss_vfe_clk", "camss_csi_vfe_clk",
 			"vfe_vbif_ahb_clk", "vfe_ahb_clk",
-			"bus_clk", "vfe_stream_clk";
-		qcom,clock-rates = <0 0 0 0 0 320000000 0 0 0 0 0 0>;
+			"bus_clk", "vfe_stream_clk", "smmu_vfe_axi_clk";
+		qcom,clock-rates = <0 0 0 0 0 320000000 0 0 0 0 0 0 0>;
 		status = "ok";
 		qos-entries = <8>;
 		qos-regs = <0x404 0x408 0x40C 0x410 0x414 0x418
@@ -457,13 +459,14 @@
 		interrupt-names = "jpeg";
 		vdd-supply = <&gdsc_jpeg>;
 		clock-names =  "core_clk", "iface_clk", "bus_clk0",
-			"camss_top_ahb_clk", "camss_ahb_clk";
+			"camss_top_ahb_clk", "camss_ahb_clk", "smmu_jpeg_axi_clk";
 		clocks = <&clock_mmss clk_camss_jpeg0_clk>,
 			<&clock_mmss clk_camss_jpeg_ahb_clk>,
 			<&clock_mmss clk_camss_jpeg_axi_clk>,
 			<&clock_mmss clk_camss_top_ahb_clk>,
-			<&clock_mmss clk_camss_ahb_clk>;
-		qcom,clock-rates = <320000000 0 0 0 0>;
+			<&clock_mmss clk_camss_ahb_clk>,
+			<&clock_mmss clk_smmu_jpeg_axi_clk>;
+		qcom,clock-rates = <320000000 0 0 0 0 0>;
 		status = "ok";
 	};
 
@@ -477,13 +480,14 @@
 		interrupt-names = "jpeg";
 		vdd-supply = <&gdsc_jpeg>;
 		clock-names =  "core_clk", "iface_clk", "bus_clk0",
-                               "camss_top_ahb_clk", "camss_ahb_clk";
+                               "camss_top_ahb_clk", "camss_ahb_clk", "smmu_jpeg_axi_clk";
 		clocks = <&clock_mmss clk_camss_jpeg2_clk>,
 		       <&clock_mmss clk_camss_jpeg_ahb_clk>,
 		       <&clock_mmss clk_camss_jpeg_axi_clk>,
 		       <&clock_mmss clk_camss_top_ahb_clk>,
-		       <&clock_mmss clk_camss_ahb_clk>;
-		qcom,clock-rates = <266670000 0 0 0 0>;
+		       <&clock_mmss clk_camss_ahb_clk>,
+		       <&clock_mmss clk_smmu_jpeg_axi_clk>;
+		qcom,clock-rates = <266670000 0 0 0 0 0>;
 		status = "ok";
 	};
 
@@ -497,13 +501,14 @@
 		interrupt-names = "jpeg";
 		vdd-supply = <&gdsc_jpeg>;
 		clock-names =  "core_clk", "iface_clk", "bus_clk0",
-                               "camss_top_ahb_clk", "camss_ahb_clk";
+                               "camss_top_ahb_clk", "camss_ahb_clk", "smmu_jpeg_axi_clk";
 		clocks = <&clock_mmss clk_camss_jpeg_dma_clk>,
 			<&clock_mmss clk_camss_jpeg_ahb_clk>,
 			<&clock_mmss clk_camss_jpeg_axi_clk>,
 			<&clock_mmss clk_camss_top_ahb_clk>,
-			<&clock_mmss clk_camss_ahb_clk>;
-		qcom,clock-rates = <266670000 0 0 0 0>;
+			<&clock_mmss clk_camss_ahb_clk>,
+			<&clock_mmss clk_smmu_jpeg_axi_clk>;
+		qcom,clock-rates = <266670000 0 0 0 0 0>;
 		status = "ok";
 	};
 
@@ -563,10 +568,11 @@
 		vdd-supply = <&gdsc_fd>;
 		clocks = <&clock_mmss clk_fd_core_clk>,
 			<&clock_mmss clk_fd_core_uar_clk>,
-			<&clock_mmss clk_fd_ahb_clk>;
+			<&clock_mmss clk_fd_ahb_clk>,
+			<&clock_mmss clk_smmu_cpp_axi_clk>;
 		clock-names = "fd_core_clk", "fd_core_uar_clk",
-			 "fd_ahb_clk";
-		clock-rates = <400000000 400000000 800000000>;
+			 "fd_ahb_clk", "smmu_cpp_axi_clk";
+		clock-rates = <400000000 400000000 800000000 0>;
 		status = "ok";
 	};
 
