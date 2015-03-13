@@ -1432,6 +1432,8 @@ static int pp_hist_setup(u32 *op, u32 block, struct mdss_mdp_mixer *mix)
 	mutex_lock(&hist_info->hist_mutex);
 	spin_lock_irqsave(&hist_info->hist_lock, flag);
 	if (hist_info->col_en) {
+		/* Mask histogram HW interrupt */
+		mdss_mdp_hist_irq_mask_locked();
 		*op |= op_flags;
 		if (hist_info->col_state == HIST_IDLE) {
 			/* Kick off collection */
@@ -3928,6 +3930,9 @@ void mdss_mdp_hist_intr_done(u32 isr)
 			spin_unlock(&hist_info->hist_lock);
 			if (need_complete)
 				complete(&hist_info->comp);
+
+			/* Unmask Histogram interrupts */
+			mdss_mdp_hist_irq_unmask_unlocked();
 		} else if (hist_info && (isr_blk & 0x1) &&
 				!(hist_info->col_en)) {
 			/*

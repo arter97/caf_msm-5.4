@@ -652,6 +652,47 @@ void mdss_mdp_hist_irq_disable(u32 irq)
 	spin_unlock_irqrestore(&mdp_lock, irq_flags);
 }
 
+/*
+ * mdss_mdp_hist_irq_mask_locked() - mask hist irq
+ *
+ * This function is called from clock enabled space to mask
+ * histogram irq so that the HW interrupt for collection of
+ * histogram is generated. This should only be called after
+ * mdss_mdp_hist_irq_enable() was called, as this does not
+ * take parameters and only enables what all was enabled in
+ * hist_intr->curr during call to mdss_mdp_hist_irq_enable.
+*/
+void mdss_mdp_hist_irq_mask_locked()
+{
+	unsigned long irq_flags, intr_flags;
+	u32 irq, mask;
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+
+	spin_lock_irqsave(&mdata->hist_intr.lock, intr_flags);
+	spin_lock_irqsave(&mdp_lock, irq_flags);
+	pr_debug("Masking over commit irq=0%x\n", mdata->hist_intr.curr);
+	irq = mdata->hist_intr.curr;
+	mask = mdata->mdp_hist_irq_mask | irq;
+	writel_relaxed(irq, mdata->mdp_base + MDSS_MDP_REG_HIST_INTR_CLEAR);
+	writel_relaxed(mask, mdata->mdp_base + MDSS_MDP_REG_HIST_INTR_EN);
+	spin_unlock_irqrestore(&mdp_lock, irq_flags);
+	spin_unlock_irqrestore(&mdata->hist_intr.lock, intr_flags);
+}
+
+/*
+ * mdss_mdp_hist_irq_unmask_unlocked() - unmask hist irq
+ *
+ * This function is called from interrupt context to unmask
+ * histogram irq so that the HW interrupt for collection of
+ * histogram is not generated.
+*/
+void mdss_mdp_hist_irq_unmask_unlocked()
+{
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+
+	writel_relaxed(0, mdata->mdp_base + MDSS_MDP_REG_HIST_INTR_EN);
+}
+
 /**
  * mdss_mdp_irq_disable_nosync() - disable mdp irq
  * @intr_type:	mdp interface type

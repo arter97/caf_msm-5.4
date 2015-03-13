@@ -606,6 +606,8 @@ int mdss_mdp_irq_enable(u32 intr_type, u32 intf_num);
 void mdss_mdp_irq_disable(u32 intr_type, u32 intf_num);
 int mdss_mdp_hist_irq_enable(u32 irq);
 void mdss_mdp_hist_irq_disable(u32 irq);
+void mdss_mdp_hist_irq_mask_locked(void);
+void mdss_mdp_hist_irq_unmask_unlocked(void);
 void mdss_mdp_irq_disable_nosync(u32 intr_type, u32 intf_num);
 int mdss_mdp_set_intr_callback(u32 intr_type, u32 intf_num,
 			       void (*fnc_ptr)(void *), void *arg);
