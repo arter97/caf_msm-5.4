@@ -802,7 +802,9 @@ static int32_t msm_csid_cmd32(struct csid_device *csid_dev, void __user *arg)
 			if (copy_from_user(&vc_cfg32,
 				(void *)compat_ptr(lut_par32.vc_cfg[i]),
 				sizeof(vc_cfg32))) {
+				pr_err("%s: %d failed\n", __func__, __LINE__);
 				kfree(vc_cfg);
+				vc_cfg = NULL;
 				rc = -EFAULT;
 				goto MEM_CLEAN32;
 			}
@@ -812,9 +814,12 @@ static int32_t msm_csid_cmd32(struct csid_device *csid_dev, void __user *arg)
 			csid_params.lut_params.vc_cfg[i] = vc_cfg;
 		}
 		rc = msm_csid_config(csid_dev, &csid_params);
+
 MEM_CLEAN32:
-		for (i--; i >= 0; i--)
+		for (i--; i >= 0; i--) {
 			kfree(csid_params.lut_params.vc_cfg[i]);
+			csid_params.lut_params.vc_cfg[i] = NULL;
+		}
 		break;
 	}
 	case CSID_RELEASE:
