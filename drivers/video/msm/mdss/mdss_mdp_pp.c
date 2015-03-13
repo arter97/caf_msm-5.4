@@ -3512,7 +3512,7 @@ static int pp_hist_collect(struct mdp_histogram_data *hist,
 	spin_lock_irqsave(&hist_info->hist_lock, flag);
 	if ((hist_info->col_en == 0) ||
 			(hist_info->col_state == HIST_UNKNOWN)) {
-		ret = -EINVAL;
+		ret = -EPROTO;
 		spin_unlock_irqrestore(&hist_info->hist_lock, flag);
 		goto hist_collect_exit;
 	}
@@ -3532,8 +3532,8 @@ static int pp_hist_collect(struct mdp_histogram_data *hist,
 				&(hist_info->first_kick), timeout /
 					HIST_KICKOFF_WAIT_FRACTION);
 		if (kick_ret != 0)
-			wait_ret = wait_for_completion_killable_timeout(
-				&(hist_info->comp), timeout);
+			wait_ret = wait_for_completion_killable(
+					&(hist_info->comp));
 
 		mutex_lock(&hist_info->hist_mutex);
 		spin_lock_irqsave(&hist_info->hist_lock, flag);
@@ -3548,22 +3548,8 @@ static int pp_hist_collect(struct mdp_histogram_data *hist,
 			spin_unlock_irqrestore(&hist_info->hist_lock, flag);
 			goto hist_collect_exit;
 		} else if (wait_ret == 0) {
-			ret = -ETIMEDOUT;
-			pr_debug("bin collection timedout, state %d",
-					hist_info->col_state);
-			/*
-			 * When the histogram has timed out (usually
-			 * underrun) change the SW state back to idle
-			 * since histogram hardware will have done the
-			 * same. Histogram data also needs to be
-			 * cleared in this case, which is done by the
-			 * histogram being read (triggered by READY
-			 * state, which also moves the histogram SW back
-			 * to IDLE).
-			 */
-			hist_info->hist_cnt_time++;
 			hist_info->col_state = HIST_READY;
-		} else if (wait_ret < 0) {
+		} else if (wait_ret != 0) {
 			ret = -EINTR;
 			pr_debug("%s: bin collection interrupted",
 					__func__);
@@ -3577,6 +3563,13 @@ static int pp_hist_collect(struct mdp_histogram_data *hist,
 			pr_debug("%s: state is not ready: %d",
 					__func__, hist_info->col_state);
 		}
+	}
+	if (hist_info->col_en == 0) {
+		pr_debug("hist collection cancelled!\n");
+		hist_info->col_state = HIST_UNKNOWN;
+		spin_unlock_irqrestore(&hist_info->hist_lock, flag);
+		ret = -ECANCELED;
+		goto hist_collect_exit;
 	}
 	if (hist_info->col_state == HIST_READY) {
 		hist_info->col_state = HIST_IDLE;
@@ -3845,6 +3838,34 @@ hist_collect_exit:
 
 	return ret;
 }
+
+void mdss_mdp_hist_dspp_cancel_collect()
+{
+	int i = 0;
+	unsigned long flag;
+	bool is_hist_v1;
+	struct pp_hist_col_info *hists[MDSS_MDP_INTF_MAX_LAYERMIXER];
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+
+	if (!mdata) {
+		pr_debug("invalid mdata!\n");
+		return;
+	}
+
+	is_hist_v1 = mdata->mdp_rev < MDSS_MDP_HW_REV_103;
+	for (i = 0; i < mdata->nmixers_intf; i++)
+		hists[i] = &mdss_pp_res->dspp_hist[i];
+
+	for (i = 0; i < mdata->nmixers_intf; i++) {
+		spin_lock_irqsave(&hists[i]->hist_lock, flag);
+		hists[i]->col_en = 0;
+		if (is_hist_v1)
+			complete_all(&hists[i]->first_kick);
+		complete_all(&hists[i]->comp);
+		spin_unlock_irqrestore(&hists[i]->hist_lock, flag);
+	}
+}
+
 void mdss_mdp_hist_intr_done(u32 isr)
 {
 	u32 isr_blk, blk_idx;
