@@ -31,6 +31,7 @@ struct modem_data {
 	struct clk *xo;
 	struct pil_desc desc;
 	struct device mba_mem_dev;
+	struct device *mba_mem_dev_fixed;
 };
 
 extern struct pil_reset_ops pil_msa_mss_ops;
