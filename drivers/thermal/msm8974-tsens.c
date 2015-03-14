@@ -91,6 +91,8 @@
 #define TSENS_TM_SN_LAST_TEMP_MASK		0xfff
 
 #define TSENS_TM_TRDY(n)			((n) + 0x10e4)
+#define TSENS_TM_CODE_BIT_MASK			0xfff
+#define TSENS_TM_CODE_SIGN_BIT			0x800
 
 /* End TSENS_TM registers for Thulium */
 
@@ -739,7 +741,7 @@ static void msm_tsens_get_temp(int sensor_hw_num, unsigned long *temp)
 	void __iomem *sensor_addr;
 	void __iomem *trdy_addr;
 	int sensor_sw_id = -EINVAL, rc = 0, last_temp = 0, last_temp2 = 0;
-	int last_temp3 = 0, last_temp_mask, valid_status_mask;
+	int last_temp3 = 0, last_temp_mask, valid_status_mask, code_mask = 0;
 	bool last_temp_valid = false, last_temp2_valid = false;
 	bool last_temp3_valid = false;
 
@@ -815,8 +817,14 @@ static void msm_tsens_get_temp(int sensor_hw_num, unsigned long *temp)
 		}
 
 		*temp = tsens_tz_code_to_degc(last_temp, sensor_sw_id);
-	} else
+	} else {
+		if (last_temp & TSENS_TM_CODE_SIGN_BIT) {
+			/* Sign extension for negative value */
+			code_mask = ~TSENS_TM_CODE_BIT_MASK;
+			last_temp |= code_mask;
+		}
 		*temp = last_temp;
+	}
 
 	trace_tsens_read(*temp, sensor_hw_num);
 }
@@ -1040,7 +1048,7 @@ static int tsens_tm_get_trip_temp(struct thermal_zone_device *thermal,
 				   int trip, unsigned long *temp)
 {
 	struct tsens_tm_device_sensor *tm_sensor = thermal->devdata;
-	unsigned int reg_cntl;
+	int reg_cntl, code_mask;
 
 	if (!tm_sensor || trip < 0 || !temp)
 		return -EINVAL;
@@ -1051,6 +1059,11 @@ static int tsens_tm_get_trip_temp(struct thermal_zone_device *thermal,
 							(tmdev->tsens_addr)) +
 				(tm_sensor->sensor_hw_num *
 				TSENS_SN_ADDR_OFFSET));
+		if (reg_cntl & TSENS_TM_CODE_SIGN_BIT) {
+			/* Sign extension for negative value */
+			code_mask = ~TSENS_TM_CODE_BIT_MASK;
+			reg_cntl |= code_mask;
+		}
 		break;
 	case TSENS_TM_TRIP_WARM:
 		reg_cntl = readl_relaxed((TSENS_TM_UPPER_LOWER_THRESHOLD
@@ -1058,6 +1071,11 @@ static int tsens_tm_get_trip_temp(struct thermal_zone_device *thermal,
 				(tm_sensor->sensor_hw_num *
 				TSENS_SN_ADDR_OFFSET));
 		reg_cntl = TSENS_TM_UPPER_THRESHOLD_VALUE(reg_cntl);
+		if (reg_cntl & TSENS_TM_CODE_SIGN_BIT) {
+			/* Sign extension for negative value */
+			code_mask = ~TSENS_TM_CODE_BIT_MASK;
+			reg_cntl |= code_mask;
+		}
 		break;
 	case TSENS_TM_TRIP_COOL:
 		reg_cntl = readl_relaxed((TSENS_TM_UPPER_LOWER_THRESHOLD
@@ -1065,6 +1083,11 @@ static int tsens_tm_get_trip_temp(struct thermal_zone_device *thermal,
 				(tm_sensor->sensor_hw_num *
 				TSENS_SN_ADDR_OFFSET));
 		reg_cntl = TSENS_TM_LOWER_THRESHOLD_VALUE(reg_cntl);
+		if (reg_cntl & TSENS_TM_CODE_SIGN_BIT) {
+			/* Sign extension for negative value */
+			code_mask = ~TSENS_TM_CODE_BIT_MASK;
+			reg_cntl |= code_mask;
+		}
 		break;
 	default:
 		return -EINVAL;
