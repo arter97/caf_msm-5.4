@@ -34,6 +34,8 @@ Optional properties:
 		   defined in iommu device tree.
 	 - retention :  A boolean specifying if retention is supported on this
 			target
+	 - qcom,global_pt :  A boolean specifying if global pagetable should be used.
+			     When not set we use per process pagetables
 
 Example:
 
@@ -47,6 +49,7 @@ Example:
 		clock-names = "gpu_ahb_clk", "bimc_gfx_clk", "mmagic_ahb_clk", "mmagic_cfg_ahb_clk";
 		num_cb = <2>;
 		retention;
+		qcom,global_pt;
 
 		iommu_kgsl_cb2: iommu_kgsl_cb2 {
 			compatible = "qcom,smmu-kgsl-cb";

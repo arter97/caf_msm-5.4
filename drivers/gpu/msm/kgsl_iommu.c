@@ -975,8 +975,7 @@ static int kgsl_iommu_init(struct kgsl_mmu *mmu)
 	if (status)
 		goto done;
 
-	if (KGSL_MMU_USE_PER_PROCESS_PT &&
-		of_property_match_string(pdev->dev.of_node, "clock-names",
+	if (of_property_match_string(pdev->dev.of_node, "clock-names",
 						"gtcu_iface_clk") >= 0)
 		iommu->gtcu_iface_clk = clk_get(&pdev->dev, "gtcu_iface_clk");
 
