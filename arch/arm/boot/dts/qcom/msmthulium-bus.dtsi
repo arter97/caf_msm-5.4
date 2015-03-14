@@ -45,6 +45,13 @@
 			     <&clock_gcc clk_gcc_aggre0_snoc_axi_clk>;
 			bus-gdsc-supply = <&gdsc_aggre0_noc>;
 			bus-a-gdsc-supply = <&gdsc_aggre0_noc>;
+
+			coresight-id = <206>;
+			coresight-name = "coresight-a0noc";
+			coresight-nr-inports = <0>;
+			coresight-outports = <0>;
+			coresight-child-list = <&funnel_in1>;
+			coresight-child-ports = <7>;
 		};
 
 		fab_a1noc: fab-a1noc {
@@ -59,6 +66,12 @@
 			clock-names = "bus_clk", "bus_a_clk";
 			clocks = <&clock_gcc  clk_aggre1_noc_clk>,
 			     <&clock_gcc  clk_aggre1_noc_a_clk>;
+			coresight-id = <205>;
+			coresight-name = "coresight-a1noc";
+			coresight-nr-inports = <0>;
+			coresight-outports = <0>;
+			coresight-child-list = <&funnel_in0>;
+			coresight-child-ports = <6>;
 		};
 
 		fab_a2noc: fab-a2noc {
@@ -73,6 +86,12 @@
 			clock-names = "bus_clk", "bus_a_clk";
 			clocks = <&clock_gcc  clk_aggre2_noc_clk>,
 			     <&clock_gcc  clk_aggre2_noc_a_clk>;
+			coresight-id = <204>;
+			coresight-name = "coresight-a2noc";
+			coresight-nr-inports = <0>;
+			coresight-outports = <0>;
+			coresight-child-list = <&funnel_in1>;
+			coresight-child-ports = <5>;
 		};
 
 		fab_bimc: fab-bimc {
@@ -86,6 +105,12 @@
 			clock-names = "bus_clk", "bus_a_clk";
 			clocks = <&clock_gcc  clk_bimc_msmbus_clk>,
 			     <&clock_gcc  clk_bimc_msmbus_a_clk>;
+			coresight-id = <203>;
+			coresight-name = "coresight-bimc";
+			coresight-nr-inports = <0>;
+			coresight-outports = <0>;
+			coresight-child-list = <&funnel_in1>;
+			coresight-child-ports = <4>;
 		};
 
 		fab_cnoc: fab-cnoc {
@@ -113,6 +138,12 @@
 			     <&clock_mmss  clk_mmss_s0_axi_clk>,
 			     <&clock_mmss  clk_mmss_mmagic_cfg_ahb_clk>;
 			bus-qos-gdsc-supply = <&gdsc_mmagic_bimc>;
+			coresight-id = <202>;
+			coresight-name = "coresight-mnoc";
+			coresight-nr-inports = <0>;
+			coresight-outports = <0>;
+			coresight-child-list = <&funnel_in1>;
+			coresight-child-ports = <0>;
 		};
 
 		fab_mnoc_ahb: fab-mnoc-ahb {
@@ -139,6 +170,12 @@
 			clock-names = "bus_clk", "bus_a_clk";
 			clocks = <&clock_gcc  clk_pnoc_msmbus_clk>,
 			     <&clock_gcc  clk_pnoc_msmbus_a_clk>;
+			coresight-id = <201>;
+			coresight-name = "coresight-pnoc";
+			coresight-nr-inports = <0>;
+			coresight-outports = <0>;
+			coresight-child-list = <&funnel_in1>;
+			coresight-child-ports = <2>;
 		};
 
 		fab_snoc: fab-snoc {
@@ -153,6 +190,12 @@
 			clock-names = "bus_clk", "bus_a_clk";
 			clocks = <&clock_gcc  clk_snoc_msmbus_clk>,
 			     <&clock_gcc  clk_snoc_msmbus_a_clk>;
+			coresight-id = <200>;
+			coresight-name = "coresight-snoc";
+			coresight-nr-inports = <0>;
+			coresight-outports = <0>;
+			coresight-child-list = <&funnel_in0>;
+			coresight-child-ports = <5>;
 		};
 
 		/*Masters*/
