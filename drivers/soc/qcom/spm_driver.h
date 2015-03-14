@@ -112,6 +112,12 @@ int msm_spm_drv_set_spm_enable(struct msm_spm_driver_data *dev,
 int msm_spm_drv_set_pmic_data(struct msm_spm_driver_data *dev,
 		enum msm_spm_pmic_port port, unsigned int data);
 
+int msm_spm_drv_set_avs_limit(struct msm_spm_driver_data *dev,
+		 uint32_t min_lvl, uint32_t max_lvl);
+
+int msm_spm_drv_set_avs_enable(struct msm_spm_driver_data *dev,
+		 bool enable);
+int msm_spm_drv_get_avs_enable(struct msm_spm_driver_data *dev);
 void msm_spm_reinit(void);
 int msm_spm_init(struct msm_spm_platform_data *data, int nr_devs);
 

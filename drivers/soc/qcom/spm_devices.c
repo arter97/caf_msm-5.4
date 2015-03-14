@@ -397,6 +397,82 @@ bool msm_spm_is_mode_avail(unsigned int mode)
 }
 
 /**
+ * msm_spm_is_avs_enabled() - Functions returns 1 if AVS is enabled and
+ *			      0 if it is not.
+ * @cpu: specifies cpu's avs should be read
+ *
+ * Returns errno in case of failure or AVS enable state otherwise
+ */
+int msm_spm_is_avs_enabled(unsigned int cpu)
+{
+	struct msm_spm_device *dev = per_cpu(cpu_vctl_device, cpu);
+
+	if (!dev)
+		return -ENXIO;
+
+	return msm_spm_drv_get_avs_enable(&dev->reg_data);
+}
+EXPORT_SYMBOL(msm_spm_is_avs_enabled);
+
+/**
+ * msm_spm_avs_enable() - Enables AVS on the SAW that controls this cpu's
+ *			  voltage.
+ * @cpu: specifies which cpu's avs should be enabled
+ *
+ * Returns errno in case of failure or 0 if successful
+ */
+int msm_spm_avs_enable(unsigned int cpu)
+{
+	struct msm_spm_device *dev = per_cpu(cpu_vctl_device, cpu);
+
+	if (!dev)
+		return -ENXIO;
+
+	return msm_spm_drv_set_avs_enable(&dev->reg_data, true);
+}
+EXPORT_SYMBOL(msm_spm_avs_enable);
+
+/**
+ * msm_spm_avs_disable() - Disables AVS on the SAW that controls this cpu's
+ *			   voltage.
+ * @cpu: specifies which cpu's avs should be enabled
+ *
+ * Returns errno in case of failure or 0 if successful
+ */
+int msm_spm_avs_disable(unsigned int cpu)
+{
+	struct msm_spm_device *dev = per_cpu(cpu_vctl_device, cpu);
+
+	if (!dev)
+		return -ENXIO;
+
+	return msm_spm_drv_set_avs_enable(&dev->reg_data, false);
+}
+EXPORT_SYMBOL(msm_spm_avs_disable);
+
+/**
+ * msm_spm_avs_set_limit() - Set maximum and minimum AVS limits on the
+ *			     SAW that controls this cpu's voltage.
+ * @cpu: specify which cpu's avs should be configured
+ * @min_lvl: specifies the minimum PMIC output voltage control register
+ *		value that may be sent to the PMIC
+ * @max_lvl: specifies the maximum PMIC output voltage control register
+ *		value that may be sent to the PMIC
+ * Returns errno in case of failure or 0 if successful
+ */
+int msm_spm_avs_set_limit(unsigned int cpu,
+		uint32_t min_lvl, uint32_t max_lvl)
+{
+	struct msm_spm_device *dev = per_cpu(cpu_vctl_device, cpu);
+
+	if (!dev)
+		return -ENXIO;
+
+	return msm_spm_drv_set_avs_limit(&dev->reg_data, min_lvl, max_lvl);
+}
+EXPORT_SYMBOL(msm_spm_avs_set_limit);
+
+/**
  * msm_spm_set_low_power_mode() - Configure SPM start address for low power mode
  * @mode: SPM LPM mode to enter
  * @notify_rpm: Notify RPM in this mode

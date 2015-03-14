@@ -231,6 +231,48 @@ inline int msm_spm_drv_set_spm_enable(
 	}
 	return 0;
 }
+
+int msm_spm_drv_get_avs_enable(struct msm_spm_driver_data *dev)
+{
+	if (!dev)
+		return -EINVAL;
+
+	return dev->reg_shadow[MSM_SPM_REG_SAW_AVS_CTL] & 0x01;
+}
+
+int msm_spm_drv_set_avs_enable(struct msm_spm_driver_data *dev,
+		 bool enable)
+{
+	uint32_t value = enable ? 0x1 : 0x0;
+
+	if (!dev)
+		return -EINVAL;
+
+	if ((dev->reg_shadow[MSM_SPM_REG_SAW_AVS_CTL] & 0x1) ^ value) {
+		dev->reg_shadow[MSM_SPM_REG_SAW_AVS_CTL] &= ~0x1;
+		dev->reg_shadow[MSM_SPM_REG_SAW_AVS_CTL] |= value;
+
+		msm_spm_drv_flush_shadow(dev, MSM_SPM_REG_SAW_AVS_CTL);
+	}
+
+	return 0;
+}
+
+int msm_spm_drv_set_avs_limit(struct msm_spm_driver_data *dev,
+		uint32_t min_lvl, uint32_t max_lvl)
+{
+	uint32_t value = (max_lvl & 0xff) << 16 | (min_lvl & 0xff);
+
+	if (!dev)
+		return -EINVAL;
+
+	dev->reg_shadow[MSM_SPM_REG_SAW_AVS_LIMIT] = value;
+
+	msm_spm_drv_flush_shadow(dev, MSM_SPM_REG_SAW_AVS_LIMIT);
+
+	return 0;
+}
+
 void msm_spm_drv_flush_seq_entry(struct msm_spm_driver_data *dev)
 {
 	int i;
