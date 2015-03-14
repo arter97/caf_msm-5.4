@@ -119,6 +119,12 @@ struct wcd_mbhc_imped_detect_cfg {
 	u16 _beta[3];
 } __packed;
 
+enum wcd_mbhc_hph_type {
+	WCD_MBHC_HPH_NONE = 0,
+	WCD_MBHC_HPH_MONO,
+	WCD_MBHC_HPH_STEREO,
+};
+
 struct wcd_mbhc_config {
 	bool read_fw_bin;
 	void *calibration;
@@ -188,6 +194,9 @@ struct wcd_mbhc {
 	/* impedance of hphl and hphr */
 	uint32_t zl, zr;
 	bool impedance_detect;
+
+	/* Holds type of Headset - Mono/Stereo */
+	enum wcd_mbhc_hph_type hph_type;
 
 	struct snd_soc_jack headset_jack;
 	struct snd_soc_jack button_jack;
