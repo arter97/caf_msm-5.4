@@ -3144,7 +3144,7 @@ static struct mux_clk gcc_debug_mux = {
 	},
 };
 
-static struct clk_lookup msm_clocks_gcc_thulium[] = {
+static struct clk_lookup msm_clocks_rpm_thulium[] = {
 	CLK_LIST(cxo_clk_src),
 	CLK_LIST(pnoc_a_clk),
 	CLK_LIST(pnoc_clk),
@@ -3213,6 +3213,9 @@ static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(gcc_ce1_ahb_m_clk),
 	CLK_LIST(gcc_ce1_axi_m_clk),
 	CLK_LIST(measure_only_bimc_hmss_axi_clk),
+};
+
+static struct clk_lookup msm_clocks_gcc_thulium[] = {
 	CLK_LIST(gpll0),
 	CLK_LIST(gpll0_ao),
 	CLK_LIST(gpll0_out_main),
@@ -3407,7 +3410,7 @@ static int msm_gcc_thulium_probe(struct platform_device *pdev)
 	struct resource *res;
 	int ret;
 
-	ret = enable_rpm_scaling();
+	ret = vote_bimc(&bimc_clk, INT_MAX);
 	if (ret < 0)
 		return ret;
 
@@ -3431,11 +3434,19 @@ static int msm_gcc_thulium_probe(struct platform_device *pdev)
 		return PTR_ERR(vdd_dig.regulator[0]);
 	}
 
+	ret = of_msm_clock_register(pdev->dev.of_node, msm_clocks_rpm_thulium,
+				    ARRAY_SIZE(msm_clocks_rpm_thulium));
+	if (ret)
+		return ret;
+
+	ret = enable_rpm_scaling();
+	if (ret < 0)
+		return ret;
+
 	ret = of_msm_clock_register(pdev->dev.of_node, msm_clocks_gcc_thulium,
 				    ARRAY_SIZE(msm_clocks_gcc_thulium));
 	if (ret)
 		return ret;
-
 	/*
 	 * Hold an active set vote for the PNOC AHB source. Sleep set vote is 0.
 	 */
