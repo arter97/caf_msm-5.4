@@ -350,9 +350,14 @@ adreno_drawctxt_create(struct kgsl_device_private *dev_priv,
 		KGSL_CONTEXT_TYPE_MASK |
 		KGSL_CONTEXT_PWR_CONSTRAINT |
 		KGSL_CONTEXT_IFH_NOP |
-		KGSL_CONTEXT_SECURE);
+		KGSL_CONTEXT_SECURE |
+		KGSL_CONTEXT_PREEMPT_STYLE_MASK);
 
 	/* Check for errors before trying to initialize */
+
+	/* If preemption is not supported, ignore preemption request */
+	if (ADRENO_FEATURE(adreno_dev, ADRENO_PREEMPTION))
+		local &= ~KGSL_CONTEXT_PREEMPT_STYLE_MASK;
 
 	/* We no longer support legacy context switching */
 	if ((local & KGSL_CONTEXT_PREAMBLE) == 0 ||

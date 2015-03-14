@@ -239,6 +239,7 @@ struct kgsl_iommu_unit {
  * accessing IOMMU registers from the GPU
  * @iommu_reg_list: List of IOMMU registers { offset, map, shift } array
  * @gtcu_iface_clk: The gTCU AHB Clock connected to SMMU
+ * @smmu_info: smmu info used in a5xx preemption
  */
 struct kgsl_iommu {
 	struct kgsl_iommu_unit iommu_unit;
@@ -247,6 +248,7 @@ struct kgsl_iommu {
 	unsigned int ctx_ahb_offset;
 	struct kgsl_iommu_register_list *iommu_reg_list;
 	struct clk *gtcu_iface_clk;
+	struct kgsl_memdesc smmu_info;
 };
 
 /*

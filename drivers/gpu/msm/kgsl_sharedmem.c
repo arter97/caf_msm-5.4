@@ -24,6 +24,7 @@
 #include "kgsl_cffdump.h"
 #include "kgsl_device.h"
 #include "kgsl_log.h"
+#include "adreno.h"
 
 static DEFINE_MUTEX(kernel_map_global_lock);
 
@@ -854,6 +855,64 @@ kgsl_sharedmem_writel(struct kgsl_device *device,
 	return 0;
 }
 EXPORT_SYMBOL(kgsl_sharedmem_writel);
+
+int
+kgsl_sharedmem_readq(const struct kgsl_memdesc *memdesc,
+			uint64_t *dst,
+			uint64_t offsetbytes)
+{
+	uint64_t *src;
+	BUG_ON(memdesc == NULL || memdesc->hostptr == NULL || dst == NULL);
+	WARN_ON(offsetbytes % sizeof(uint32_t) != 0);
+	if (offsetbytes % sizeof(uint32_t) != 0)
+		return -EINVAL;
+
+	WARN_ON(offsetbytes + sizeof(uint32_t) > memdesc->size);
+	if (offsetbytes + sizeof(uint32_t) > memdesc->size)
+		return -ERANGE;
+
+	/*
+	 * We are reading shared memory between CPU and GPU.
+	 * Make sure reads before this are complete
+	 */
+	rmb();
+	src = (uint64_t *)(memdesc->hostptr + offsetbytes);
+	*dst = *src;
+	return 0;
+}
+EXPORT_SYMBOL(kgsl_sharedmem_readq);
+
+int
+kgsl_sharedmem_writeq(struct kgsl_device *device,
+			const struct kgsl_memdesc *memdesc,
+			uint64_t offsetbytes,
+			uint64_t src)
+{
+	uint64_t *dst;
+	BUG_ON(memdesc == NULL || memdesc->hostptr == NULL);
+	WARN_ON(offsetbytes % sizeof(uint32_t) != 0);
+	if (offsetbytes % sizeof(uint32_t) != 0)
+		return -EINVAL;
+
+	WARN_ON(offsetbytes + sizeof(uint32_t) > memdesc->size);
+	if (offsetbytes + sizeof(uint32_t) > memdesc->size)
+		return -ERANGE;
+	kgsl_cffdump_write(device,
+		_lo_32(memdesc->gpuaddr + offsetbytes), src);
+	kgsl_cffdump_write(device,
+		_hi_32(memdesc->gpuaddr + offsetbytes), src);
+	dst = (uint64_t *)(memdesc->hostptr + offsetbytes);
+	*dst = src;
+
+	/*
+	 * We are writing to shared memory between CPU and GPU.
+	 * Make sure write above is posted immediately
+	 */
+	wmb();
+
+	return 0;
+}
+EXPORT_SYMBOL(kgsl_sharedmem_writeq);
 
 int
 kgsl_sharedmem_set(struct kgsl_device *device,
