@@ -1596,6 +1596,7 @@ static struct branch_clk gcc_aggre0_noc_at_clk = {
 	.base = &virt_base,
 	.c = {
 		.dbg_name = "gcc_aggre0_noc_at_clk",
+		.always_on = true,
 		.ops = &clk_ops_branch,
 		CLK_INIT(gcc_aggre0_noc_at_clk.c),
 	},
@@ -2182,6 +2183,7 @@ static struct branch_clk gcc_mmss_sys_noc_axi_clk = {
 	.base = &virt_base,
 	.c = {
 		.dbg_name = "gcc_mmss_sys_noc_axi_clk",
+		.always_on = true,
 		.ops = &clk_ops_branch,
 		CLK_INIT(gcc_mmss_sys_noc_axi_clk.c),
 	},
