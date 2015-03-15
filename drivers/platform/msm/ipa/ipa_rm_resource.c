@@ -602,8 +602,8 @@ bail:
  * @depends_on: [in] depends_on resource
  *
  * Returns: 0 on success, negative on failure
- * EINPROGRESS is returned in case this is the last dependency
- * of given resource and IPA RM client should receive the RELEASED cb
+ * In case the resource state was changed, a notification
+ * will be sent to the RM client
  */
 int ipa_rm_resource_delete_dependency(struct ipa_rm_resource *resource,
 				   struct ipa_rm_resource *depends_on)
@@ -670,12 +670,12 @@ int ipa_rm_resource_delete_dependency(struct ipa_rm_resource *resource,
 		spin_unlock_irqrestore(&resource->state_lock, flags);
 		goto bail;
 	}
-	if (state_changed &&
-		ipa_rm_peers_list_has_last_peer(resource->peers_list))
-			(void) ipa_rm_wq_send_cmd(IPA_RM_WQ_NOTIFY_PROD,
+	if (state_changed) {
+		(void) ipa_rm_wq_send_cmd(IPA_RM_WQ_NOTIFY_PROD,
 				resource->name,
 				evt,
 				false);
+	}
 	IPA_RM_DBG("%s new state: %d\n", ipa_rm_resource_str(resource->name),
 					resource->state);
 	spin_unlock_irqrestore(&resource->state_lock, flags);
