@@ -127,6 +127,11 @@
 	#clock-cells = <1>;
 };
 
+&clock_gpu {
+	compatible = "qcom,dummycc";
+	#clock-cells = <1>;
+};
+
 &clock_debug {
 	status = "disable";
 };
