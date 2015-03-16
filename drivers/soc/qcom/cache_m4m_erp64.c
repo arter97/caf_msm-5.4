@@ -74,11 +74,13 @@
 					BIT(12) | BIT(15) | BIT(17) | \
 					BIT(19) | BIT(22) | BIT(25))
 #define L2ESR0_IA			0x204
-#define L2ESR0_CE			(BIT(0) | BIT(1) | BIT(2) | BIT(3) | \
-					BIT(4) | BIT(5) | BIT(12) | BIT(13) | \
-					BIT(14) | BIT(15) | BIT(16) | BIT(17))
-#define L2ESRS0_IA			0x205
 #define L2ESR0_MASK			0x00FFFFFF
+#define L2ESR0_CE			((BIT(0) | BIT(1) | BIT(2) | BIT(3) | \
+					BIT(4) | BIT(5) | BIT(12) | BIT(13) | \
+					BIT(14) | BIT(15) | BIT(16) | BIT(17)) \
+					& L2ESR0_MASK)
+#define L2ESR0_UE			(~L2ESR0_CE & L2ESR0_MASK)
+#define L2ESRS0_IA			0x205
 #define L2ESR1_IA			0x206
 #define L2ESR1_MASK			0x80FFFBFF
 #define L2ESRS1_IA			0x207
@@ -92,6 +94,7 @@
 
 #define L3_QLL_HML3_FIRA		0x3000
 #define L3_QLL_HML3_FIRA_CE		(BIT(1) | BIT(3) | BIT(5))
+#define L3_QLL_HML3_FIRA_UE		(BIT(2) | BIT(4) | BIT(6))
 #define L3_QLL_HML3_FIRAC		0x3008
 #define L3_QLL_HML3_FIRAS		0x3010
 #define L3_QLL_HML3_FIRAT0C		0x3020
@@ -163,18 +166,19 @@ static DEFINE_PER_CPU(struct msm_l1_err_stats, msm_l1_erp_stats);
 static void msm_erp_show_icache_error(void)
 {
 	u64 icesr;
+	int cpu = smp_processor_id();
 
 	icesr = erp_mrs(ICESR_EL1);
 	if (!(icesr & (ICESR_BIT_L0TPE | ICESR_BIT_L0DPE | ICESR_BIT_L1TPE |
 		       ICESR_BIT_L1DPE))) {
 		pr_debug("CPU%d: No I-cache error detected ICESR 0x%llx\n",
-			 smp_processor_id(), icesr);
+			 cpu, icesr);
 		goto clear_out;
 	}
 
-	pr_alert("CPU%d: I-cache error detected\n", smp_processor_id());
-	pr_alert("ICESYNR0 0x%llx ICESYNR1 0x%llx ICEAR0 0x%llx IECAR1 0x%llx\n",
-		 erp_mrs(ICESYNR0_EL1), erp_mrs(ICESYNR1_EL1),
+	pr_alert("CPU%d: I-cache error\n", cpu);
+	pr_alert("CPU%d: ICESYNR0 0x%llx ICESYNR1 0x%llx ICEAR0 0x%llx IECAR1 0x%llx\n",
+		 cpu, erp_mrs(ICESYNR0_EL1), erp_mrs(ICESYNR1_EL1),
 		 erp_mrs(ICEAR0_EL1), erp_mrs(ICEAR1_EL1));
 
 	/*
@@ -193,18 +197,19 @@ clear_out:
 static void msm_erp_show_dcache_error(void)
 {
 	u64 dcesr;
+	int cpu = smp_processor_id();
 
 	dcesr = erp_mrs(DCESR_EL1);
 	if (!(dcesr & (DCESR_BIT_L1VTPE | DCESR_BIT_L1PTPE | DCESR_BIT_L1DPE |
 		       DCESR_BIT_S1FTLBTPE | DCESR_BIT_S1FTLBDPE))) {
 		pr_debug("CPU%d: No D-cache error detected DCESR 0x%llx\n",
-			 smp_processor_id(), dcesr);
+			 cpu, dcesr);
 		goto clear_out;
 	}
 
-	pr_alert("CPU%d: D-cache error detected\n", smp_processor_id());
-	pr_alert("L1 DCESR 0x%llx, DCESYNR0 0x%llx, DCESYNR1 0x%llx, DCEAR0 0x%llx, DCEAR1 0x%llx\n",
-		dcesr, erp_mrs(DCESYNR0_EL1), erp_mrs(DCESYNR1_EL1),
+	pr_alert("CPU%d: D-cache error detected\n", cpu);
+	pr_alert("CPU%d: L1 DCESR 0x%llx, DCESYNR0 0x%llx, DCESYNR1 0x%llx, DCEAR0 0x%llx, DCEAR1 0x%llx\n",
+		cpu, dcesr, erp_mrs(DCESYNR0_EL1), erp_mrs(DCESYNR1_EL1),
 		erp_mrs(DCEAR0_EL1), erp_mrs(DCEAR1_EL1));
 
 	/* all D-cache erros are correctable */
@@ -229,37 +234,37 @@ static void msm_l2_erp_local_handler(void *force)
 {
 	unsigned long flags;
 	u64 esr0, esr1;
-	bool uncorrectable = false;
-	bool correctable = false;
+	bool parity_ue, parity_ce, misc_ue;
+	int cpu;
 
 	spin_lock_irqsave(&local_handler_lock, flags);
 
 	esr0 = get_l2_indirect_reg(L2ESR0_IA);
 	esr1 = get_l2_indirect_reg(L2ESR1_IA);
+	parity_ue = esr0 & L2ESR0_UE;
+	parity_ce = esr0 & L2ESR0_CE;
+	misc_ue = esr1;
+	cpu = smp_processor_id();
 
-	if (force || (esr0 & L2ESR0_MASK) || (esr1 & L2ESR1_MASK)) {
-		uncorrectable = (esr0 & L2ESR0_MASK & ~L2ESR0_CE) | esr1;
-		correctable = (esr0 & L2ESR0_MASK & L2ESR0_CE);
-		if (uncorrectable)
-			pr_alert("CPU%d: L2 uncorrectable error detected\n",
-				 smp_processor_id());
-		if (correctable)
-			pr_alert("CPU%d: L2 correctable error detected\n",
-				 smp_processor_id());
-		if (force)
-			pr_alert("CPU%d: No L2 error detected\n",
-				 smp_processor_id());
-		pr_alert("L2ESR0 0x%llx, L2ESR1 0x%llx\n", esr0, esr1);
-		pr_alert("L2ESYNR0 0x%llx, L2ESYNR1 0x%llx, L2ESYNR2 0x%llx\n",
-			get_l2_indirect_reg(L2ESYNR0_IA),
+	if (force || parity_ue || parity_ce || misc_ue) {
+		if (parity_ue)
+			pr_alert("CPU%d: L2 uncorrectable parity error\n", cpu);
+		if (parity_ce)
+			pr_alert("CPU%d: L2 correctable parity error\n", cpu);
+		if (misc_ue)
+			pr_alert("CPU%d: L2 (non-parity) error\n", cpu);
+		pr_alert("CPU%d: L2ESR0 0x%llx, L2ESR1 0x%llx\n",
+			cpu, esr0, esr1);
+		pr_alert("CPU%d: L2ESYNR0 0x%llx, L2ESYNR1 0x%llx, L2ESYNR2 0x%llx\n",
+			cpu, get_l2_indirect_reg(L2ESYNR0_IA),
 			get_l2_indirect_reg(L2ESYNR1_IA),
 			get_l2_indirect_reg(L2ESYNR2_IA));
-		pr_alert("L2EAR0 0x%llx, L2ESYNR1 0x%llx\n",
+		pr_alert("CPU%d: L2EAR0 0x%llx, L2EAR1 0x%llx\n", cpu,
 			get_l2_indirect_reg(L2EAR0_IA),
 			get_l2_indirect_reg(L2EAR1_IA));
 	} else {
-		pr_info("CPU%d: No L2 cache error detected L2ESR0 0x%llx, L2ESR1 0x%llx)\n",
-			 smp_processor_id(), esr0, esr1);
+		pr_info("CPU%d: No L2 error detected in L2ESR0 0x%llx, L2ESR1 0x%llx)\n",
+			cpu, esr0, esr1);
 	}
 
 	/* clear */
@@ -267,14 +272,14 @@ static void msm_l2_erp_local_handler(void *force)
 	set_l2_indirect_reg(L2ESR1_IA, esr1);
 
 	if (panic_on_ue)
-		BUG_ON(uncorrectable);
+		BUG_ON(parity_ue || misc_ue);
 	else
-		WARN_ON(uncorrectable);
+		WARN_ON(parity_ue || misc_ue);
 
 	if (panic_on_ce)
-		BUG_ON(correctable);
+		BUG_ON(parity_ce);
 	else
-		WARN_ON(correctable);
+		WARN_ON(parity_ce);
 
 	spin_unlock_irqrestore(&local_handler_lock, flags);
 }
@@ -290,17 +295,21 @@ static irqreturn_t msm_l2_erp_irq(int irq, void *dev_id)
 static irqreturn_t msm_l3_erp_irq(int irq, void *dev_id)
 {
 	u32 hml3_fira;
-	bool uncorrectable, correctable;
+	bool parity_ue, parity_ce, misc_ue;
 
 	hml3_fira = readl_relaxed(hml3_base + L3_QLL_HML3_FIRA);
-	uncorrectable = (hml3_fira & L3_QLL_HML3_FIRAT1S_IRQ_EN) &
-			~L3_QLL_HML3_FIRA_CE;
-	correctable = (hml3_fira & L3_QLL_HML3_FIRAT1S_IRQ_EN) &
-		       L3_QLL_HML3_FIRA_CE;
-	if (correctable)
-		pr_alert("L3 correctable cache error detected\n");
-	if (uncorrectable)
-		pr_alert("L3 uncorrectable cache error detected\n");
+	parity_ue = (hml3_fira & L3_QLL_HML3_FIRAT1S_IRQ_EN) &
+			L3_QLL_HML3_FIRA_UE;
+	parity_ce = (hml3_fira & L3_QLL_HML3_FIRAT1S_IRQ_EN) &
+			L3_QLL_HML3_FIRA_CE;
+	misc_ue = (hml3_fira & L3_QLL_HML3_FIRAT1S_IRQ_EN) &
+			~(L3_QLL_HML3_FIRA_UE | L3_QLL_HML3_FIRA_CE);
+	if (parity_ue)
+		pr_alert("L3 uncorrectable parity error\n");
+	if (parity_ce)
+		pr_alert("L3 correctable parity error\n");
+	if (misc_ue)
+		pr_alert("L3 (non-parity) error\n");
 
 	pr_alert("HML3_FIRA    0x%0x\n", hml3_fira);
 	pr_alert("HML3_FIRSYNA 0x%0x, HML3_FIRSYNB 0x%0x\n",
@@ -311,14 +320,14 @@ static irqreturn_t msm_l3_erp_irq(int irq, void *dev_id)
 		readl_relaxed(hml3_base + L3_QLL_HML3_FIRSYND));
 
 	if (panic_on_ue)
-		BUG_ON(uncorrectable);
+		BUG_ON(parity_ue || misc_ue);
 	else
-		WARN_ON(uncorrectable);
+		WARN_ON(parity_ue || misc_ue);
 
 	if (panic_on_ce)
-		BUG_ON(correctable);
+		BUG_ON(parity_ce);
 	else
-		WARN_ON(correctable);
+		WARN_ON(parity_ce);
 
 	writel_relaxed(hml3_fira, hml3_base + L3_QLL_HML3_FIRAC);
 	/* ensure of irq clear */
