@@ -1212,18 +1212,25 @@ struct scatterlist *_create_sg_no_large_pages(struct kgsl_memdesc *memdesc,
 {
 	struct page *page;
 	struct scatterlist *s, *s_temp, *sg_temp;
-	int sglen_alloc = 0;
-	uint64_t offset;
-	int i;
+	unsigned int sglen_alloc = 0, offset, i, len;
+	uint64_t gpuaddr = memdesc->gpuaddr;
 
-	for_each_sg(memdesc->sg, s, memdesc->sglen, i) {
-		if (SZ_1M <= s->length)
-			sglen_alloc += s->length >> 16;
+	for_each_sg(memdesc->sgt->sgl, s, memdesc->sgt->nents, i) {
+		/*
+		 * We need to unchunk any fully aligned 1M chunks
+		 * to trick the iommu driver into not using 1M
+		 * PTEs
+		 */
+		if (SZ_1M <= s->length
+			&& IS_ALIGNED(gpuaddr, SZ_1M)
+			&& IS_ALIGNED(sg_phys(s), SZ_1M))
+			sglen_alloc += ALIGN(s->length, SZ_64K)/SZ_64K;
 		else
 			sglen_alloc++;
+		gpuaddr += s->length;
 	}
 	/* No large pages were detected */
-	if (sglen_alloc == memdesc->sglen)
+	if (sglen_alloc == memdesc->sgt->nents)
 		return NULL;
 
 	sg_temp = kgsl_malloc(sglen_alloc * sizeof(struct scatterlist));
@@ -1233,17 +1240,24 @@ struct scatterlist *_create_sg_no_large_pages(struct kgsl_memdesc *memdesc,
 	sg_init_table(sg_temp, sglen_alloc);
 	s_temp = sg_temp;
 
-	for_each_sg(memdesc->sg, s, memdesc->sglen, i) {
+	gpuaddr = memdesc->gpuaddr;
+	for_each_sg(memdesc->sgt->sgl, s, memdesc->sgt->nents, i) {
 		page = sg_page(s);
-		if (SZ_1M <= s->length) {
+		if (SZ_1M <= s->length
+			&& IS_ALIGNED(gpuaddr, SZ_1M)
+			&& IS_ALIGNED(sg_phys(s), SZ_1M)) {
 			for (offset = 0; offset < s->length; s_temp++) {
-				sg_set_page(s_temp, page, SZ_64K, offset);
-				offset += SZ_64K;
+				/* the last chunk might be smaller than 64K */
+				len = min_t(unsigned int, SZ_64K,
+					s->length - offset);
+				sg_set_page(s_temp, page, len, offset);
+				offset += len;
 			}
 		} else {
 			sg_set_page(s_temp, page, s->length, 0);
 			s_temp++;
 		}
+		gpuaddr += s->length;
 	}
 	*nents = sglen_alloc;
 	return sg_temp;
@@ -1308,7 +1322,7 @@ static int
 kgsl_iommu_map(struct kgsl_pagetable *pt,
 			struct kgsl_memdesc *memdesc)
 {
-	int ret = 0;
+	int ret;
 	unsigned int iommu_virt_addr;
 	struct kgsl_iommu_pt *iommu_pt = pt->priv;
 	uint64_t size = memdesc->size;
@@ -1342,7 +1356,8 @@ kgsl_iommu_map(struct kgsl_pagetable *pt,
 		ret = kgsl_active_count_get(device);
 		if (!ret) {
 			mapped = iommu_map_sg(iommu_pt->domain, iommu_virt_addr,
-				memdesc->sg, memdesc->sglen, protflags);
+					memdesc->sgt->sgl, memdesc->sgt->nents,
+					protflags);
 			kgsl_active_count_put(device);
 		}
 		mutex_unlock(&device->mutex);
@@ -1353,25 +1368,19 @@ kgsl_iommu_map(struct kgsl_pagetable *pt,
 			return PTR_ERR(sg_temp);
 
 		mapped = iommu_map_sg(iommu_pt->domain, iommu_virt_addr,
-				sg_temp ? sg_temp : memdesc->sg,
-				sg_temp ? sg_temp_nents : memdesc->sglen,
+				sg_temp ? sg_temp : memdesc->sgt->sgl,
+				sg_temp ? sg_temp_nents : memdesc->sgt->nents,
 				protflags);
-	}
-
-	if (mapped != size) {
-		KGSL_CORE_ERR(
-			"iommu_map_sg(%p, %x, %p, %d, %x) mapped wrong size: %zd != %zd\n",
-			iommu_pt->domain, iommu_virt_addr,
-			sg_temp != NULL ? sg_temp : memdesc->sg,
-			sg_temp ? sg_temp_nents : memdesc->sglen,
-			protflags, mapped, (size_t)size);
-		ret = -ENODEV;
 	}
 
 	kgsl_free(sg_temp);
 
-	if (ret)
-		return ret;
+	if (mapped != size) {
+		KGSL_CORE_ERR("iommu_map_sg(%p, %x, %lld, %x) err: %zd\n",
+				iommu_pt->domain, iommu_virt_addr, size,
+				protflags, mapped);
+		return -ENODEV;
+	}
 
 	ret = _iommu_add_guard_page(pt, memdesc, iommu_virt_addr + size,
 								protflags);
@@ -1467,7 +1476,12 @@ static int kgsl_iommu_close(struct kgsl_mmu *mmu)
 
 	if (reg_map->hostptr)
 		iounmap(reg_map->hostptr);
-	kgsl_free(reg_map->sg);
+
+	if (reg_map->sgt) {
+		sg_free_table(reg_map->sgt);
+		kfree(reg_map->sgt);
+		reg_map->sgt = NULL;
+	}
 
 	kfree(iommu);
 

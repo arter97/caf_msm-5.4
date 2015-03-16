@@ -286,12 +286,12 @@ kgsl_mem_entry_destroy(struct kref *kref)
 		kgsl_driver.stats.mapped -= entry->memdesc.size;
 
 	/*
-	 * Ion takes care of freeing the sglist for us so
-	 * clear the sg before freeing the sharedmem so kgsl_sharedmem_free
-	 * doesn't try to free it again
+	 * Ion takes care of freeing the sg_table for us so
+	 * clear the sg table before freeing the sharedmem
+	 * so kgsl_sharedmem_free doesn't try to free it again
 	 */
 	if (memtype == KGSL_MEM_ENTRY_ION)
-		entry->memdesc.sg = NULL;
+		entry->memdesc.sgt = NULL;
 
 	if ((memtype == KGSL_MEM_ENTRY_USER)
 		&& !(entry->memdesc.flags & KGSL_MEMFLAGS_GPUREADONLY)) {
@@ -302,7 +302,8 @@ kgsl_mem_entry_destroy(struct kref *kref)
 		 * Mark all of pages in the scatterlist as dirty since they
 		 * were writable by the GPU.
 		 */
-		for_each_sg(entry->memdesc.sg, sg, entry->memdesc.sglen, i) {
+		for_each_sg(entry->memdesc.sgt->sgl, sg,
+			    entry->memdesc.sgt->nents, i) {
 			page = sg_page(sg);
 			for (j = 0; j < (sg->length >> PAGE_SHIFT); j++)
 				set_page_dirty(nth_page(page, j));
@@ -2726,14 +2727,11 @@ static int memdesc_sg_virt(struct kgsl_memdesc *memdesc, struct file *vmfile)
 	if (pages == NULL)
 		return -ENOMEM;
 
-	memdesc->sg = kgsl_malloc(sglen * sizeof(struct scatterlist));
-	if (memdesc->sg == NULL) {
+	memdesc->sgt = kmalloc(sizeof(struct sg_table), GFP_KERNEL);
+	if (memdesc->sgt == NULL) {
 		ret = -ENOMEM;
 		goto out;
 	}
-	memdesc->sglen = sglen;
-
-	sg_init_table(memdesc->sg, sglen);
 
 	down_read(&current->mm->mmap_sem);
 	/* If we have vmfile, make sure we map the correct vma and map it all */
@@ -2756,15 +2754,15 @@ static int memdesc_sg_virt(struct kgsl_memdesc *memdesc, struct file *vmfile)
 		goto out;
 	}
 
-	for (i = 0; i < npages; i++)
-		sg_set_page(&memdesc->sg[i], pages[i], PAGE_SIZE, 0);
+	ret = sg_alloc_table_from_pages(memdesc->sgt, pages, npages,
+					0, memdesc->size, GFP_KERNEL);
 out:
 	if (ret) {
 		for (i = 0; i < npages; i++)
 			put_page(pages[i]);
 
-		kgsl_free(memdesc->sg);
-		memdesc->sg = NULL;
+		kfree(memdesc->sgt);
+		memdesc->sgt = NULL;
 	}
 	kgsl_free(pages);
 	return ret;
@@ -2901,13 +2899,10 @@ static int kgsl_setup_dma_buf(struct kgsl_mem_entry *entry,
 
 	meta->table = sg_table;
 	entry->priv_data = meta;
-	entry->memdesc.sg = sg_table->sgl;
+	entry->memdesc.sgt = sg_table;
 
 	/* Calculate the size of the memdesc from the sglist */
-
-	entry->memdesc.sglen = 0;
-
-	for (s = entry->memdesc.sg; s != NULL; s = sg_next(s)) {
+	for (s = entry->memdesc.sgt->sgl; s != NULL; s = sg_next(s)) {
 		int priv = (entry->memdesc.priv & KGSL_MEMDESC_SECURE) ? 1 : 0;
 
 		/*
@@ -2921,10 +2916,7 @@ static int kgsl_setup_dma_buf(struct kgsl_mem_entry *entry,
 		}
 
 		entry->memdesc.size += (uint64_t) s->length;
-		entry->memdesc.sglen++;
 	}
-
-	entry->memdesc.size = PAGE_ALIGN(entry->memdesc.size);
 
 out:
 	if (ret) {
@@ -3106,7 +3098,7 @@ error_attach:
 	switch (memtype) {
 	case KGSL_MEM_ENTRY_ION:
 		kgsl_destroy_ion(entry->priv_data);
-		entry->memdesc.sg = NULL;
+		entry->memdesc.sgt = NULL;
 		break;
 	default:
 		break;
@@ -4326,10 +4318,10 @@ static int kgsl_mmap(struct file *file, struct vm_area_struct *vma)
 		|| cache == KGSL_CACHEMODE_WRITETHROUGH) {
 		struct scatterlist *s;
 		int i;
-		int sglen = entry->memdesc.sglen;
 		unsigned long addr = vma->vm_start;
 
-		for_each_sg(entry->memdesc.sg, s, sglen, i) {
+		for_each_sg(entry->memdesc.sgt->sgl, s,
+				entry->memdesc.sgt->nents, i) {
 			int j;
 			for (j = 0; j < (s->length >> PAGE_SHIFT); j++) {
 				struct page *page = sg_page(s);

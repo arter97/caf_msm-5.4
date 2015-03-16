@@ -130,7 +130,7 @@ static void print_mem_entry(struct seq_file *s, struct kgsl_mem_entry *entry)
 			(unsigned long *) m->useraddr,
 			m->size, entry->id, flags,
 			memtype_str(kgsl_memdesc_usermem_type(m)),
-			usage, m->sglen);
+			usage, m->sgt->nents);
 }
 
 static int process_mem_print(struct seq_file *s, void *unused)
