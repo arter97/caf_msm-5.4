@@ -82,6 +82,7 @@ static unsigned int *msm_mpm_irqs_m2a;
 #define hashfn(val) (val % num_mpm_irqs)
 #define SCLK_HZ (32768)
 #define ARCH_TIMER_HZ (19200000)
+#define MAX_IRQ 1024
 
 struct msm_mpm_device_data {
 	uint16_t *irqs_m2a;
@@ -783,7 +784,7 @@ static int msm_mpm_dev_probe(struct platform_device *pdev)
 
 static inline int __init mpm_irq_domain_size(struct irq_domain *d)
 {
-	return d->revmap_size;
+	return d->revmap_size ?: MAX_IRQ;
 }
 
 static const struct mpm_of mpm_of_map[MSM_MPM_NR_IRQ_DOMAINS] = {
