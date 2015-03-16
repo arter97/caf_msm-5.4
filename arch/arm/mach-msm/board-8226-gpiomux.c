@@ -1458,40 +1458,61 @@ static struct msm_gpiomux_config msm_sensor_configs[] __initdata = {
 	},
 };
 
+static struct gpiomux_setting cam_act_cfg = {
+	.func = GPIOMUX_FUNC_1,
+	.drv = GPIOMUX_DRV_4MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+static struct gpiomux_setting cam_sus_cfg = {
+	.func = GPIOMUX_FUNC_1,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_DOWN,
+};
+static struct gpiomux_setting cam_i2c_act_cfg = {
+	.func = GPIOMUX_FUNC_1,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+static struct gpiomux_setting cam_i2c_sus_cfg = {
+	.func = GPIOMUX_FUNC_1,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+
 static struct msm_gpiomux_config qm8626_msm_sensor_configs[] __initdata = {
 	{
 		.gpio = 26, /* CAM_MCLK0 */
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &cam_settings[0],
-			[GPIOMUX_SUSPENDED] = &cam_settings[1],
+			[GPIOMUX_ACTIVE]    = &cam_act_cfg,
+			[GPIOMUX_SUSPENDED] = &cam_sus_cfg,
 		},
 	},
 	{
 		.gpio = 29, /* CCI_I2C_SDA0 */
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &cam_settings[0],
-			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[0],
+			[GPIOMUX_ACTIVE]    = &cam_i2c_act_cfg,
+			[GPIOMUX_SUSPENDED] = &cam_i2c_sus_cfg,
 		},
 	},
 	{
 		.gpio = 30, /* CCI_I2C_SCL0 */
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &cam_settings[0],
-			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[0],
+			[GPIOMUX_ACTIVE]    = &cam_i2c_act_cfg,
+			[GPIOMUX_SUSPENDED] = &cam_i2c_sus_cfg,
 		},
 	},
 	{
 		.gpio = 36, /* CAM1_STANDBY_N */
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &cam_settings[3],
-			[GPIOMUX_SUSPENDED] = &cam_settings[4],
+			[GPIOMUX_ACTIVE]    = &generic_gpio_out_hi_cfg,
+			[GPIOMUX_SUSPENDED] = &generic_gpio_out_hi_cfg,
 		},
 	},
 	{
 		.gpio = 37, /* CAM1_RST_N */
 		.settings = {
-			[GPIOMUX_ACTIVE]    = &cam_settings[3],
-			[GPIOMUX_SUSPENDED] = &cam_settings[4],
+			[GPIOMUX_ACTIVE]    = &generic_gpio_out_hi_cfg,
+			[GPIOMUX_SUSPENDED] = &generic_gpio_out_hi_cfg,
 		},
 	},
 };
