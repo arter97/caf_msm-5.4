@@ -1265,7 +1265,7 @@
 		perst-gpio = <&tlmm 35 0>;
 		wake-gpio = <&tlmm 37 0>;
 
-		gdsc-smmu-supply = <&gdsc_hlos1_vote_aggre0_noc>;
+		gdsc-smmu-supply = <&gdsc_aggre0_noc>;
 		gdsc-vdd-supply = <&gdsc_pcie_0>;
 		vreg-1.8-supply = <&pm8994_l12>;
 		vreg-0.9-supply = <&pm8994_l28>;
@@ -1362,7 +1362,7 @@
 		perst-gpio = <&tlmm 130 0>;
 		wake-gpio = <&tlmm 132 0>;
 
-		gdsc-smmu-supply = <&gdsc_hlos1_vote_aggre0_noc>;
+		gdsc-smmu-supply = <&gdsc_aggre0_noc>;
 		gdsc-vdd-supply = <&gdsc_pcie_1>;
 		vreg-1.8-supply = <&pm8994_l12>;
 		vreg-0.9-supply = <&pm8994_l28>;
@@ -1453,7 +1453,7 @@
 		perst-gpio = <&tlmm 114 0>;
 		wake-gpio = <&tlmm 116 0>;
 
-		gdsc-smmu-supply = <&gdsc_hlos1_vote_aggre0_noc>;
+		gdsc-smmu-supply = <&gdsc_aggre0_noc>;
 		gdsc-vdd-supply = <&gdsc_pcie_2>;
 		vreg-1.8-supply = <&pm8994_l12>;
 		vreg-0.9-supply = <&pm8994_l28>;
