@@ -272,6 +272,7 @@ struct adreno_device {
  * @ADRENO_DEVICE_CMDBATCH_PROFILE - Set if the device supports command batch
  * profiling via the ALWAYSON counter
  * @ADRENO_DEVICE_PREEMPTION - Turn on/off preemption
+ * @ADRENO_DEVICE_SOFT_FAULT_DETECT - Set if soft fault detect is enabled
  */
 enum adreno_device_flags {
 	ADRENO_DEVICE_PWRON = 0,
@@ -284,6 +285,7 @@ enum adreno_device_flags {
 	ADRENO_DEVICE_CMDBATCH_PROFILE = 7,
 	ADRENO_DEVICE_GPU_REGULATOR_ENABLED = 8,
 	ADRENO_DEVICE_PREEMPTION = 9,
+	ADRENO_DEVICE_SOFT_FAULT_DETECT = 10,
 };
 
 #define PERFCOUNTER_FLAG_NONE 0x0
