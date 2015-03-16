@@ -677,10 +677,7 @@ static int _nommu_get_gpuaddr(struct kgsl_memdesc *memdesc)
 		return -EINVAL;
 	}
 
-	memdesc->gpuaddr = (uint64_t) sg_dma_address(memdesc->sg);
-
-	if (memdesc->gpuaddr == 0)
-		memdesc->gpuaddr = (uint64_t) sg_phys(memdesc->sg);
+	memdesc->gpuaddr = (uint64_t) sg_phys(memdesc->sg);
 
 	if (memdesc->gpuaddr == 0) {
 		KGSL_CORE_ERR("Unable to get a physical address\n");
