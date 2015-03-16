@@ -759,7 +759,7 @@
 		vdd-pwrcl-supply = <&apc0_vreg>;
 		vdd-perfcl-supply = <&apc1_vreg>;
 		vdd-cbf-supply = <&apc0_vreg>;
-		vdd-dig-supply = <&pm8994_s1_corner_ao>;
+		vdd-dig-supply = <&pm8994_s2_corner_ao>;
 		qcom,pwrcl-speedbin0-v0 =
 			<          0  0 >,
 			<  300000000  3 >,
