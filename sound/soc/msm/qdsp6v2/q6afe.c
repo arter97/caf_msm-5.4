@@ -4442,6 +4442,7 @@ static int afe_map_cal_data(int32_t cal_type,
 			__func__,
 			&cal_block->cal_data.paddr,
 			cal_block->map_data.map_size);
+		goto done;
 	}
 	cal_block->map_data.q6map_handle = atomic_read(&this_afe.
 		mem_map_cal_handles[cal_index]);
