@@ -996,14 +996,11 @@ static int tx_cmd_ch_open(struct glink_transport_if *if_ptr, uint32_t lcid,
 
 	einfo = container_of(if_ptr, struct edge_info, xprt_if);
 
-	mutex_lock(&einfo->in_ssr_lock);
 	rcu_id = srcu_read_lock(&einfo->ssr_sync);
 	if (einfo->in_ssr) {
 		srcu_read_unlock(&einfo->ssr_sync, rcu_id);
-		mutex_unlock(&einfo->in_ssr_lock);
 		return -EFAULT;
 	}
-	mutex_unlock(&einfo->in_ssr_lock);
 
 	list_for_each_entry(ch, &einfo->channels, node) {
 		if (!strcmp(name, ch->name)) {
@@ -1095,14 +1092,11 @@ static int tx_cmd_ch_close(struct glink_transport_if *if_ptr, uint32_t lcid)
 
 	einfo = container_of(if_ptr, struct edge_info, xprt_if);
 
-	mutex_lock(&einfo->in_ssr_lock);
 	rcu_id = srcu_read_lock(&einfo->ssr_sync);
 	if (einfo->in_ssr) {
 		srcu_read_unlock(&einfo->ssr_sync, rcu_id);
-		mutex_unlock(&einfo->in_ssr_lock);
 		return -EFAULT;
 	}
-	mutex_unlock(&einfo->in_ssr_lock);
 
 	list_for_each_entry(ch, &einfo->channels, node)
 		if (lcid == ch->lcid) {
@@ -1251,9 +1245,7 @@ static int ssr(struct glink_transport_if *if_ptr)
 
 	einfo = container_of(if_ptr, struct edge_info, xprt_if);
 
-	mutex_lock(&einfo->in_ssr_lock);
 	einfo->in_ssr = true;
-	mutex_unlock(&einfo->in_ssr_lock);
 	synchronize_srcu(&einfo->ssr_sync);
 
 	einfo->smd_ctl_ch_open = false;
@@ -1364,14 +1356,11 @@ static int tx_cmd_local_rx_intent(struct glink_transport_if *if_ptr,
 
 	einfo = container_of(if_ptr, struct edge_info, xprt_if);
 
-	mutex_lock(&einfo->in_ssr_lock);
 	rcu_id = srcu_read_lock(&einfo->ssr_sync);
 	if (einfo->in_ssr) {
-		mutex_unlock(&einfo->in_ssr_lock);
 		srcu_read_unlock(&einfo->ssr_sync, rcu_id);
 		return -EFAULT;
 	}
-	mutex_unlock(&einfo->in_ssr_lock);
 
 	list_for_each_entry(ch, &einfo->channels, node) {
 		if (lcid == ch->lcid)
@@ -1455,14 +1444,11 @@ static int tx(struct glink_transport_if *if_ptr, uint32_t lcid,
 
 	einfo = container_of(if_ptr, struct edge_info, xprt_if);
 
-	mutex_lock(&einfo->in_ssr_lock);
 	rcu_id = srcu_read_lock(&einfo->ssr_sync);
 	if (einfo->in_ssr) {
 		srcu_read_unlock(&einfo->ssr_sync, rcu_id);
-		mutex_unlock(&einfo->in_ssr_lock);
 		return -EFAULT;
 	}
-	mutex_unlock(&einfo->in_ssr_lock);
 
 	list_for_each_entry(ch, &einfo->channels, node) {
 		if (lcid == ch->lcid)
