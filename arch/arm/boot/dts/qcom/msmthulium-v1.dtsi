@@ -70,3 +70,11 @@
 	buffer-types = <0x586>;
 	virtual-addr-pool = <0x1000000 0x4A000000>;
 };
+
+&soc {
+	pcie_smmu {
+		compatible = "qcom,pci-msm";
+		iommus = <&anoc0_smmu 0x0>,
+			<&anoc0_smmu 0x100>;
+	};
+};
