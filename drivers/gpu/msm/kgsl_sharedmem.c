@@ -391,7 +391,7 @@ static void kgsl_page_alloc_free(struct kgsl_memdesc *memdesc)
 		while (j < (sg->length/PAGE_SIZE)) {
 			count = 1 << compound_order(p);
 			next = nth_page(p, count);
-			__free_page(p);
+			__free_pages(p, compound_order(p));
 			p = next;
 			j += count;
 
@@ -761,7 +761,7 @@ done:
 		unsigned int count = 1;
 		for (j = 0; j < pcount; j += count) {
 			count = 1 << compound_order(pages[j]);
-			__free_page(pages[j]);
+			__free_pages(pages[j], compound_order(pages[j]));
 		}
 
 		kfree(memdesc->sgt);
