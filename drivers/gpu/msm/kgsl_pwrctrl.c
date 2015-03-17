@@ -1414,11 +1414,16 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 			goto done;
 		}
 
-		pwr->gpu_reg[1] = regulator_get(&pdev->dev, "vddcx");
-		if (IS_ERR(pwr->gpu_reg)) {
-			KGSL_CORE_ERR("Couldn't get the cx regulator.\n");
-			result = -ENODEV;
-			goto done;
+		/* Use vddcx only on targets that have it. */
+		if (of_find_property(device->pdev->dev.of_node,
+				"vddcx-supply", NULL)) {
+			pwr->gpu_reg[1] = regulator_get(&pdev->dev, "vddcx");
+			if (IS_ERR(pwr->gpu_reg[1])) {
+				KGSL_CORE_ERR(
+					"Couldn't get the cx regulator.\n");
+				result = -ENODEV;
+				goto done;
+			}
 		}
 	}
 
