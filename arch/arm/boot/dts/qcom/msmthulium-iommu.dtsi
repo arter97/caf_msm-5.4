@@ -229,6 +229,23 @@
 		clock-names = "lpass_q6_smmu_clocks";
 		#clock-cells = <1>;
 	};
+
+	anoc0_smmu: arm,smmu-anoc0@1640000 {
+		compatible = "qcom,smmu-v2";
+		qcom,no-mmu-enable;
+		reg = <0x1640000 0x10000>;
+		#global-interrupts = <1>;
+
+		interrupts = <0 362 0>, <0 355 0>, <0 356 0>, <0 357 0>,
+			   <0 358 0>, <0 359 0>, <0 360 0>;
+
+		#iommu-cells = <1>;
+		vdd-supply = <&gdsc_aggre0_noc>;
+		clocks = <&clock_gcc clk_gcc_smmu_aggre0_axi_clk>,
+			<&clock_gcc clk_gcc_smmu_aggre0_ahb_clk>;
+		clock-names = "smmu_aggre0_axi_clk", "smmu_aggre0_ahb_clk";
+		#clock-cells = <1>;
+	};
 };
 
 #include "msmthulium-iommu-impl-defs.dtsi"
