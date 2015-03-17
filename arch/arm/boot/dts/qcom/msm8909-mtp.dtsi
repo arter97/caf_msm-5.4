@@ -251,6 +251,10 @@
 	status = "okay";
 };
 
+&qnand_1 {
+	status = "ok";
+};
+
 &sdhc_1 {
 	vdd-supply = <&pm8909_l8>;
 	qcom,vdd-voltage-level = <2900000 2900000>;
