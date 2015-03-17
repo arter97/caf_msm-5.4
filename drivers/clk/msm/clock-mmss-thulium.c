@@ -66,7 +66,7 @@ static DEFINE_VDD_REGULATORS(vdd_dig, VDD_DIG_NUM, 1, vdd_corner, NULL);
 
 static int vdd_mmpll4_levels[] = {
 	RPM_REGULATOR_CORNER_NONE,		0,
-	RPM_REGULATOR_CORNER_SVS_SOC,		1800000,
+	RPM_REGULATOR_CORNER_SVS_KRAIT,		1800000,
 	RPM_REGULATOR_CORNER_SVS_SOC,		1800000,
 	RPM_REGULATOR_CORNER_NORMAL,		1800000,
 	RPM_REGULATOR_CORNER_SUPER_TURBO,	1800000,
@@ -3205,6 +3205,7 @@ int msm_mmsscc_thulium_probe(struct platform_device *pdev)
 	regval &= ~BIT(31);
 	writel_relaxed(regval, virt_base + MMSS_MNOC_DCD_CONFIG_AHB);
 
+	vdd_dig.vdd_uv[1] = RPM_REGULATOR_CORNER_SVS_KRAIT;
 	reg = vdd_dig.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_dig");
 	if (IS_ERR(reg)) {
 		if (PTR_ERR(reg) != -EPROBE_DEFER)

@@ -3431,6 +3431,7 @@ static int msm_gcc_thulium_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+	vdd_dig.vdd_uv[1] = RPM_REGULATOR_CORNER_SVS_KRAIT;
 	vdd_dig.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_dig");
 	if (IS_ERR(vdd_dig.regulator[0])) {
 		if (!(PTR_ERR(vdd_dig.regulator[0]) == -EPROBE_DEFER))
