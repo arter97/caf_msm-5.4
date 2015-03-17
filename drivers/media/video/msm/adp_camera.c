@@ -779,7 +779,6 @@ int disable_camera_preview(void)
 	axi_stop_rdi1_only(my_axi_ctrl);
 	msm_ba_streamoff(adp_cam_ctxt->ba_inst_hdlr, 0);
 	mdpclient_display_commit();
-	mdpclient_msm_fb_close();
 	if (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] == 0) {
 		mdpclient_overlay_unset(&overlay_req[OVERLAY_GUIDANCE_LANE]);
 		pr_debug("%s: overlay_unset guidance lane free pipe !\n",
@@ -793,6 +792,7 @@ int disable_camera_preview(void)
 
 	mdpclient_display_commit();
 
+	mdpclient_msm_fb_close();
 	complete(&preview_disabled);
 
 	pr_debug("%s: kpi entry\n", __func__);
