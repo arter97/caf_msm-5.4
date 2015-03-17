@@ -392,7 +392,7 @@
 			pmx_fm_int {
 				pins = "gpio38";
 					drive-strength = <16>;
-					bias-disable;
+					bias-pull-up;
 				};
 			};
 		};
@@ -410,7 +410,7 @@
 				pmx_fm_status {
 					pins = "gpio78";
 					drive-strength = <16>;
-					bias-disable;
+					bias-pull-up;
 				};
 			};
 		};
@@ -424,7 +424,7 @@
 				};
 			};
 
-			fm_rst_suspend: m_rst_suspend {
+			fm_rst_suspend: fm_rst_suspend {
 				pmx_fm_rst {
 					pins = "gpio39";
 					drive-strength = <16>;
