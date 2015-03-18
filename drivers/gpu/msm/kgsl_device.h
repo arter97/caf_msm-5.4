@@ -167,9 +167,9 @@ struct kgsl_functable {
 	void (*drawctxt_dump) (struct kgsl_device *device,
 		struct kgsl_context *context);
 	long (*ioctl) (struct kgsl_device_private *dev_priv,
-		unsigned int cmd, void *data);
+		unsigned int cmd, unsigned long arg);
 	long (*compat_ioctl) (struct kgsl_device_private *dev_priv,
-		unsigned int cmd, void *data);
+		unsigned int cmd, unsigned long arg);
 	int (*setproperty) (struct kgsl_device_private *dev_priv,
 		enum kgsl_property_type type, void __user *value,
 		unsigned int sizebytes);
@@ -186,17 +186,13 @@ struct kgsl_functable {
 		bool mask_throttle);
 };
 
-typedef long (*kgsl_ioctl_func_t)(struct kgsl_device_private *,
-	unsigned int, void *);
-
 struct kgsl_ioctl {
 	unsigned int cmd;
-	kgsl_ioctl_func_t func;
+	long (*func)(struct kgsl_device_private *, unsigned int, void *);
 };
 
-long kgsl_ioctl_helper(struct file *filep, unsigned int cmd,
-			const struct kgsl_ioctl *ioctl_funcs,
-			unsigned int array_size, unsigned long arg);
+long kgsl_ioctl_helper(struct file *filep, unsigned int cmd, unsigned long arg,
+		const struct kgsl_ioctl *cmds, int len);
 
 /* Flag to mark the memobj_node as a preamble */
 #define MEMOBJ_PREAMBLE BIT(0)
@@ -716,6 +712,14 @@ void kgsl_context_dump(struct kgsl_context *context);
 
 int kgsl_memfree_find_entry(pid_t pid, uint64_t *gpuaddr,
 	uint64_t *size, unsigned int *flags);
+
+long kgsl_ioctl(struct file *filep, unsigned int cmd, unsigned long arg);
+
+long kgsl_ioctl_copy_in(unsigned int kernel_cmd, unsigned int user_cmd,
+		unsigned long arg, unsigned char *ptr);
+
+long kgsl_ioctl_copy_out(unsigned int kernel_cmd, unsigned int user_cmd,
+		unsigned long, unsigned char *ptr);
 
 /**
  * kgsl_context_put() - Release context reference count
