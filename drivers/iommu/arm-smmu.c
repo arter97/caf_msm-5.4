@@ -468,7 +468,7 @@ struct arm_smmu_cfg {
 struct arm_smmu_domain {
 	struct arm_smmu_device		*smmu;
 	struct arm_smmu_cfg		cfg;
-	spinlock_t			lock;
+	struct mutex			lock;
 	u32				attributes;
 };
 
@@ -1139,11 +1139,10 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 					struct arm_smmu_device *smmu)
 {
 	int irq, start, ret = 0;
-	unsigned long flags;
 	struct arm_smmu_domain *smmu_domain = domain->priv;
 	struct arm_smmu_cfg *cfg = &smmu_domain->cfg;
 
-	spin_lock_irqsave(&smmu_domain->lock, flags);
+	mutex_lock(&smmu_domain->lock);
 	if (smmu_domain->smmu)
 		goto out_unlock;
 
@@ -1177,7 +1176,7 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 
 	ACCESS_ONCE(smmu_domain->smmu) = smmu;
 	arm_smmu_init_context_bank(smmu_domain);
-	spin_unlock_irqrestore(&smmu_domain->lock, flags);
+	mutex_unlock(&smmu_domain->lock);
 
 	irq = smmu->irqs[smmu->num_global_irqs + cfg->irptndx];
 	ret = request_threaded_irq(irq, NULL, arm_smmu_context_fault,
@@ -1192,7 +1191,7 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 	return 0;
 
 out_unlock:
-	spin_unlock_irqrestore(&smmu_domain->lock, flags);
+	mutex_unlock(&smmu_domain->lock);
 	return ret;
 }
 
@@ -1242,7 +1241,7 @@ static int arm_smmu_domain_init(struct iommu_domain *domain)
 		goto out_free_domain;
 	smmu_domain->cfg.pgd = pgd;
 
-	spin_lock_init(&smmu_domain->lock);
+	mutex_init(&smmu_domain->lock);
 	domain->priv = smmu_domain;
 	return 0;
 
@@ -1761,7 +1760,6 @@ static int arm_smmu_handle_mapping(struct arm_smmu_domain *smmu_domain,
 	struct arm_smmu_device *smmu = smmu_domain->smmu;
 	struct arm_smmu_cfg *cfg = &smmu_domain->cfg;
 	pgd_t *pgd = cfg->pgd;
-	unsigned long flags;
 
 	/* some extra sanity checks for attached domains */
 	if (smmu) {
@@ -1788,7 +1786,7 @@ static int arm_smmu_handle_mapping(struct arm_smmu_domain *smmu_domain,
 	if (size & ~PAGE_MASK)
 		return -EINVAL;
 
-	spin_lock_irqsave(&smmu_domain->lock, flags);
+	mutex_lock(&smmu_domain->lock);
 	pgd += pgd_index(iova);
 	end = iova + size;
 	do {
@@ -1804,7 +1802,7 @@ static int arm_smmu_handle_mapping(struct arm_smmu_domain *smmu_domain,
 	} while (pgd++, iova != end);
 
 out_unlock:
-	spin_unlock_irqrestore(&smmu_domain->lock, flags);
+	mutex_unlock(&smmu_domain->lock);
 
 	return ret;
 }
