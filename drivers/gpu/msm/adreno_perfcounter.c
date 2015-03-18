@@ -75,12 +75,6 @@ void adreno_perfcounter_init(struct adreno_device *adreno_dev)
 
 	if (gpudev->perfcounter_init)
 		gpudev->perfcounter_init(adreno_dev);
-
-	if (adreno_dev->fast_hang_detect)
-		adreno_fault_detect_start(adreno_dev);
-
-	/* Default performance counter profiling to false */
-	adreno_dev->profile.enabled = false;
 }
 
 /**
@@ -147,11 +141,7 @@ void adreno_perfcounter_close(struct adreno_device *adreno_dev)
 
 	if (gpudev->perfcounter_close)
 		gpudev->perfcounter_close(adreno_dev);
-
-	if (adreno_dev->fast_hang_detect)
-		adreno_fault_detect_stop(adreno_dev);
 }
-
 
 /**
  * adreno_perfcounter_restore() - Restore performance counters

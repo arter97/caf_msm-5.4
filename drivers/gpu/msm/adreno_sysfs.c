@@ -80,19 +80,19 @@ static int _ft_fast_hang_detect_store(struct adreno_device *adreno_dev,
 		unsigned int val)
 {
 	struct kgsl_device *device = &adreno_dev->dev;
+
+	if (!test_bit(ADRENO_DEVICE_SOFT_FAULT_DETECT, &adreno_dev->priv))
+		return 0;
+
 	mutex_lock(&device->mutex);
 
-	if (val != adreno_dev->fast_hang_detect) {
-		adreno_dev->fast_hang_detect = val;
-
-		if (adreno_dev->fast_hang_detect) {
-			if (!kgsl_active_count_get(device)) {
-				adreno_fault_detect_start(adreno_dev);
-				kgsl_active_count_put(device);
-			}
-		} else
-			adreno_fault_detect_stop(adreno_dev);
-	}
+	if (val) {
+		if (!kgsl_active_count_get(device)) {
+			adreno_fault_detect_start(adreno_dev);
+			kgsl_active_count_put(device);
+		}
+	} else
+		adreno_fault_detect_stop(adreno_dev);
 
 	mutex_unlock(&device->mutex);
 

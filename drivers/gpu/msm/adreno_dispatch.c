@@ -173,6 +173,9 @@ static void fault_detect_read(struct kgsl_device *device)
 	int i;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 
+	if (!test_bit(ADRENO_DEVICE_SOFT_FAULT_DETECT, &adreno_dev->priv))
+		return;
+
 	for (i = 0; i < adreno_dev->num_ringbuffers; i++) {
 		struct adreno_ringbuffer *rb = &(adreno_dev->ringbuffers[i]);
 		adreno_rb_readtimestamp(device, rb,
@@ -180,9 +183,9 @@ static void fault_detect_read(struct kgsl_device *device)
 	}
 
 	for (i = 0; i < adreno_ft_regs_num; i++) {
-		if (adreno_ft_regs[i] == 0)
-			continue;
-		kgsl_regread(device, adreno_ft_regs[i], &adreno_ft_regs_val[i]);
+		if (adreno_ft_regs[i] != 0)
+			kgsl_regread(device, adreno_ft_regs[i],
+				&adreno_ft_regs_val[i]);
 	}
 }
 
@@ -193,18 +196,15 @@ static void fault_detect_read(struct kgsl_device *device)
 static inline bool _isidle(struct kgsl_device *device)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
-	unsigned int i;
 
-	if (!kgsl_state_is_awake(device))
-		goto ret;
-
-	/* If GPU HW status is not idle then return false */
-	if (!adreno_hw_isidle(adreno_dev))
+	/* If GPU is powered and is not idle return false */
+	if (kgsl_state_is_awake(device) && !adreno_hw_isidle(adreno_dev))
 		return false;
 
-ret:
-	for (i = 0; i < adreno_ft_regs_num; i++)
-		adreno_ft_regs_val[i] = 0;
+	/* Clear the existing register values */
+	memset(adreno_ft_regs_val, 0,
+		adreno_ft_regs_num * sizeof(unsigned int));
+
 	return true;
 }
 
@@ -248,6 +248,16 @@ static int fault_detect_read_compare(struct kgsl_device *device)
 	}
 
 	return ret;
+}
+
+static void start_fault_timer(struct adreno_device *adreno_dev)
+{
+	struct adreno_dispatcher *dispatcher = &adreno_dev->dispatcher;
+
+	if (test_bit(ADRENO_DEVICE_SOFT_FAULT_DETECT, &adreno_dev->priv) &&
+		adreno_dev->fast_hang_detect)
+		mod_timer(&dispatcher->fault_timer,
+			jiffies + msecs_to_jiffies(_fault_timer_interval));
 }
 
 /**
@@ -595,13 +605,11 @@ static int sendcmd(struct adreno_device *adreno_dev,
 			msecs_to_jiffies(_cmdbatch_timeout);
 		mod_timer(&dispatcher->timer, cmdbatch->expires);
 	}
-	if (dispatcher->inflight == 1) {
-		/* Start the fault detection timer */
-		if (adreno_dev->fast_hang_detect)
-			mod_timer(&dispatcher->fault_timer,
-				jiffies +
-				msecs_to_jiffies(_fault_timer_interval));
-	}
+
+	/* Start the fault detection timer on the first submission */
+	if (dispatcher->inflight == 1)
+		start_fault_timer(adreno_dev);
+
 	/*
 	 * we just submitted something, readjust ringbuffer
 	 * execution level

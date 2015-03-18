@@ -88,6 +88,7 @@ static struct adreno_device device_3d0 = {
 	.input_work = __WORK_INITIALIZER(device_3d0.input_work,
 		adreno_input_work),
 	.pwrctrl_flag = BIT(ADRENO_SPTP_PC_CTRL) | BIT(ADRENO_PPD_CTRL),
+	.profile.enabled = false,
 };
 
 /* Ptr to array for the current set of fault detect registers */
@@ -368,12 +369,20 @@ void adreno_fault_detect_start(struct adreno_device *adreno_dev)
 	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 	unsigned int i, j = ARRAY_SIZE(adreno_ft_regs_default);
 
+	if (!test_bit(ADRENO_DEVICE_SOFT_FAULT_DETECT, &adreno_dev->priv))
+		return;
+
+	if (adreno_dev->fast_hang_detect == 1)
+		return;
+
 	for (i = 0; i < gpudev->ft_perf_counters_count; i++) {
 		_get_counter(adreno_dev, gpudev->ft_perf_counters[i].counter,
 			 gpudev->ft_perf_counters[i].countable,
 			 &adreno_ft_regs[j + (i * 2)],
 			 &adreno_ft_regs[j + ((i * 2) + 1)]);
 	}
+
+	adreno_dev->fast_hang_detect = 1;
 }
 
 /**
@@ -388,6 +397,12 @@ void adreno_fault_detect_stop(struct adreno_device *adreno_dev)
 	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 	unsigned int i, j = ARRAY_SIZE(adreno_ft_regs_default);
 
+	if (!test_bit(ADRENO_DEVICE_SOFT_FAULT_DETECT, &adreno_dev->priv))
+		return;
+
+	if (!adreno_dev->fast_hang_detect)
+		return;
+
 	for (i = 0; i < gpudev->ft_perf_counters_count; i++) {
 		_put_counter(adreno_dev, gpudev->ft_perf_counters[i].counter,
 			 gpudev->ft_perf_counters[i].countable,
@@ -395,6 +410,8 @@ void adreno_fault_detect_stop(struct adreno_device *adreno_dev)
 			 &adreno_ft_regs[j + ((i * 2) + 1)]);
 
 	}
+
+	adreno_dev->fast_hang_detect = 0;
 }
 
 /*
@@ -1157,6 +1174,15 @@ static int adreno_remove(struct platform_device *pdev)
 
 	adreno_dispatcher_close(adreno_dev);
 	adreno_ringbuffer_close(adreno_dev);
+
+	adreno_fault_detect_stop(adreno_dev);
+
+	kfree(adreno_ft_regs);
+	adreno_ft_regs = NULL;
+
+	kfree(adreno_ft_regs_val);
+	adreno_ft_regs_val = NULL;
+
 	adreno_perfcounter_close(adreno_dev);
 	kgsl_device_platform_remove(device);
 
@@ -1169,11 +1195,46 @@ static int adreno_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static void adreno_fault_detect_init(struct adreno_device *adreno_dev)
+{
+	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
+	int i, val = adreno_dev->fast_hang_detect;
+
+	/* Disable the fast hang detect bit until we know its a go */
+	adreno_dev->fast_hang_detect = 0;
+
+	adreno_ft_regs_num = (ARRAY_SIZE(adreno_ft_regs_default) +
+		gpudev->ft_perf_counters_count*2);
+
+	adreno_ft_regs = kzalloc(adreno_ft_regs_num * sizeof(unsigned int),
+		GFP_KERNEL);
+	adreno_ft_regs_val = kzalloc(adreno_ft_regs_num * sizeof(unsigned int),
+		GFP_KERNEL);
+
+	if (adreno_ft_regs == NULL || adreno_ft_regs_val == NULL) {
+		kfree(adreno_ft_regs);
+		kfree(adreno_ft_regs_val);
+
+		adreno_ft_regs = NULL;
+		adreno_ft_regs_val = NULL;
+
+		return;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(adreno_ft_regs_default); i++)
+		adreno_ft_regs[i] = adreno_getreg(adreno_dev,
+			adreno_ft_regs_default[i]);
+
+	set_bit(ADRENO_DEVICE_SOFT_FAULT_DETECT, &adreno_dev->priv);
+
+	if (val)
+		adreno_fault_detect_start(adreno_dev);
+}
+
 static int adreno_init(struct kgsl_device *device)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
-	int i;
 	int ret;
 
 	kgsl_pwrctrl_change_state(device, KGSL_STATE_INIT);
@@ -1196,24 +1257,8 @@ static int adreno_init(struct kgsl_device *device)
 
 	gpudev->microcode_read(adreno_dev);
 
-	adreno_ft_regs_num = (ARRAY_SIZE(adreno_ft_regs_default) +
-				   gpudev->ft_perf_counters_count*2);
-
-	adreno_ft_regs = kzalloc(adreno_ft_regs_num * sizeof(unsigned int),
-						GFP_KERNEL);
-	if (!adreno_ft_regs)
-		return -ENOMEM;
-
-	adreno_ft_regs_val = kzalloc(adreno_ft_regs_num * sizeof(unsigned int),
-						GFP_KERNEL);
-	if (!adreno_ft_regs_val)
-		return -ENOMEM;
-
-	for (i = 0; i < ARRAY_SIZE(adreno_ft_regs_default); i++)
-		adreno_ft_regs[i] = adreno_getreg(adreno_dev,
-					adreno_ft_regs_default[i]);
-
 	adreno_perfcounter_init(adreno_dev);
+	adreno_fault_detect_init(adreno_dev);
 
 	/* Power down the device */
 	kgsl_pwrctrl_change_state(device, KGSL_STATE_INIT);
@@ -1774,7 +1819,6 @@ static int adreno_setproperty(struct kgsl_device_private *dev_priv,
 
 			if (enable) {
 				device->pwrctrl.ctrl_flags = 0;
-				adreno_dev->fast_hang_detect = 1;
 
 				if (!kgsl_active_count_get(&adreno_dev->dev)) {
 					adreno_fault_detect_start(adreno_dev);
@@ -1786,7 +1830,6 @@ static int adreno_setproperty(struct kgsl_device_private *dev_priv,
 				kgsl_pwrctrl_change_state(device,
 							KGSL_STATE_ACTIVE);
 				device->pwrctrl.ctrl_flags = KGSL_PWR_ON;
-				adreno_dev->fast_hang_detect = 0;
 				adreno_fault_detect_stop(adreno_dev);
 				kgsl_pwrscale_disable(device);
 			}
