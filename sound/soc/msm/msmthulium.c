@@ -33,8 +33,9 @@
 #include "qdsp6v2/msm-pcm-routing-v2.h"
 #include "../codecs/wcd9xxx-common.h"
 #include "../codecs/wcd9330.h"
+#include "../codecs/wcd9335.h"
 
-#define DRV_NAME "msmthulim-asoc-snd"
+#define DRV_NAME "msmthulium-asoc-snd"
 
 #define SAMPLING_RATE_8KHZ      8000
 #define SAMPLING_RATE_16KHZ     16000
@@ -47,7 +48,7 @@
 
 #define WCD9XXX_MBHC_DEF_BUTTONS    8
 #define WCD9XXX_MBHC_DEF_RLOADS     5
-#define TOMTOM_EXT_CLK_RATE         9600000
+#define CODEC_EXT_CLK_RATE         9600000
 #define ADSP_STATE_READY_TIMEOUT_MS    3000
 
 static int slim0_rx_sample_rate = SAMPLING_RATE_48KHZ;
@@ -67,6 +68,8 @@ static int msm_hdmi_rx_ch = 2;
 static int msm_proxy_rx_ch = 2;
 static int hdmi_rx_sample_rate = SAMPLING_RATE_48KHZ;
 static int msm_tert_mi2s_tx_ch = 2;
+
+static bool codec_reg_done;
 
 static const char *const pin_states[] = {"Disable", "active"};
 static const char *const spk_function[] = {"Off", "On"};
@@ -108,6 +111,16 @@ struct msmthulium_asoc_mach_data {
 	int us_euro_gpio;
 };
 
+struct msmthulium_asoc_wcd93xx_codec {
+	void* (*get_afe_config_fn)(struct snd_soc_codec *codec,
+				   enum afe_config_type config_type);
+	int (*mbhc_hs_detect)(struct snd_soc_codec *codec,
+			       struct wcd9xxx_mbhc_config *mbhc_cfg);
+	void (*mbhc_hs_detect_exit)(struct snd_soc_codec *codec);
+};
+
+static struct msmthulium_asoc_wcd93xx_codec msmthulium_codec_fn;
+
 struct msmthulium_liquid_dock_dev {
 	int dock_plug_gpio;
 	int dock_plug_irq;
@@ -128,7 +141,7 @@ static struct wcd9xxx_mbhc_config mbhc_cfg = {
 	.micbias = MBHC_MICBIAS2,
 	.anc_micbias = MBHC_MICBIAS2,
 	.mclk_cb_fn = msm_snd_enable_codec_ext_clk,
-	.mclk_rate = TOMTOM_EXT_CLK_RATE,
+	.mclk_rate = CODEC_EXT_CLK_RATE,
 	.gpio_level_insert = 1,
 	.detect_extn_cable = true,
 	.micbias_enable_flags = 1 << MBHC_MICBIAS_ENABLE_THRESHOLD_HEADSET,
@@ -367,6 +380,8 @@ static int msm_snd_enable_codec_ext_clk(struct snd_soc_codec *codec,
 {
 	if (!strcmp(dev_name(codec->dev), "tomtom_codec"))
 		return tomtom_codec_mclk_enable(codec, enable, dapm);
+	else if (!strcmp(dev_name(codec->dev), "tasha_codec"))
+		return tasha_cdc_mclk_enable(codec, enable, dapm);
 	else {
 		dev_err(codec->dev, "%s: unknown codec to enable ext clk\n",
 			__func__);
@@ -407,6 +422,7 @@ static const struct snd_soc_dapm_widget msmthulium_dapm_widgets[] = {
 	SND_SOC_DAPM_MIC("Analog Mic7", NULL),
 	SND_SOC_DAPM_MIC("Analog Mic8", NULL),
 
+	SND_SOC_DAPM_MIC("Digital Mic0", NULL),
 	SND_SOC_DAPM_MIC("Digital Mic1", NULL),
 	SND_SOC_DAPM_MIC("Digital Mic2", NULL),
 	SND_SOC_DAPM_MIC("Digital Mic3", NULL),
@@ -894,7 +910,7 @@ static int msm_slim_5_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 					    struct snd_pcm_hw_params *params)
 {
 	int rc = 0;
-	void *config;
+	void *config = NULL;
 	struct snd_soc_codec *codec = rtd->codec;
 	struct snd_interval *rate = hw_param_interval(params,
 					SNDRV_PCM_HW_PARAM_RATE);
@@ -905,12 +921,15 @@ static int msm_slim_5_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	rate->min = rate->max = SAMPLING_RATE_16KHZ;
 	channels->min = channels->max = 1;
 
-	config = tomtom_get_afe_config(codec, AFE_SLIMBUS_SLAVE_PORT_CONFIG);
-	rc = afe_set_config(AFE_SLIMBUS_SLAVE_PORT_CONFIG, config,
-			    SLIMBUS_5_TX);
-	if (rc) {
-		pr_err("%s: Failed to set slimbus slave port config %d\n",
-			__func__, rc);
+	config = msmthulium_codec_fn.get_afe_config_fn(codec,
+				AFE_SLIMBUS_SLAVE_PORT_CONFIG);
+	if (config) {
+		rc = afe_set_config(AFE_SLIMBUS_SLAVE_PORT_CONFIG, config,
+				    SLIMBUS_5_TX);
+		if (rc) {
+			pr_err("%s: Failed to set slimbus slave port config %d\n",
+				__func__, rc);
+		}
 	}
 
 	return rc;
@@ -979,23 +998,36 @@ static bool msmthulium_swap_gnd_mic(struct snd_soc_codec *codec)
 static int msm_afe_set_config(struct snd_soc_codec *codec)
 {
 	int rc;
-	void *config_data;
+	void *config_data = NULL;
 
 	pr_debug("%s: enter\n", __func__);
-	config_data = tomtom_get_afe_config(codec, AFE_CDC_REGISTERS_CONFIG);
-	rc = afe_set_config(AFE_CDC_REGISTERS_CONFIG, config_data, 0);
-	if (rc) {
-		pr_err("%s: Failed to set codec registers config %d\n",
-		       __func__, rc);
-		return rc;
+
+	if (!msmthulium_codec_fn.get_afe_config_fn) {
+		dev_err(codec->dev, "%s: codec get afe config not init'ed\n",
+			__func__);
+		return -EINVAL;
 	}
 
-	config_data = tomtom_get_afe_config(codec, AFE_SLIMBUS_SLAVE_CONFIG);
-	rc = afe_set_config(AFE_SLIMBUS_SLAVE_CONFIG, config_data, 0);
-	if (rc) {
-		pr_err("%s: Failed to set slimbus slave config %d\n",
-			__func__, rc);
-		return rc;
+	config_data = msmthulium_codec_fn.get_afe_config_fn(codec,
+			AFE_CDC_REGISTERS_CONFIG);
+	if (config_data) {
+		rc = afe_set_config(AFE_CDC_REGISTERS_CONFIG, config_data, 0);
+		if (rc) {
+			pr_err("%s: Failed to set codec registers config %d\n",
+					__func__, rc);
+			return rc;
+		}
+	}
+
+	config_data = msmthulium_codec_fn.get_afe_config_fn(codec,
+			AFE_SLIMBUS_SLAVE_CONFIG);
+	if (config_data) {
+		rc = afe_set_config(AFE_SLIMBUS_SLAVE_CONFIG, config_data, 0);
+		if (rc) {
+			pr_err("%s: Failed to set slimbus slave config %d\n",
+					__func__, rc);
+			return rc;
+		}
 	}
 
 	return 0;
@@ -1078,6 +1110,7 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	bool cdc_type = 0;
 
 	/* Codec SLIMBUS configuration
 	 * RX1, RX2, RX3, RX4, RX5, RX6, RX7, RX8, RX9, RX10, RX11, RX12, RX13
@@ -1091,6 +1124,9 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 					      140, 141, 142, 143};
 
 	pr_info("%s: dev_name%s\n", __func__, dev_name(cpu_dai->dev));
+
+	if (!strcmp(dev_name(codec_dai->dev), "tasha_codec"))
+		cdc_type = 1;
 
 	rtd->pmdown_time = 0;
 
@@ -1138,8 +1174,6 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_ignore_suspend(dapm, "Digital Mic3");
 	snd_soc_dapm_ignore_suspend(dapm, "Digital Mic4");
 	snd_soc_dapm_ignore_suspend(dapm, "Digital Mic5");
-	snd_soc_dapm_ignore_suspend(dapm, "Digital Mic6");
-
 	snd_soc_dapm_ignore_suspend(dapm, "MADINPUT");
 	snd_soc_dapm_ignore_suspend(dapm, "EAR");
 	snd_soc_dapm_ignore_suspend(dapm, "HEADPHONE");
@@ -1147,7 +1181,6 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_ignore_suspend(dapm, "LINEOUT2");
 	snd_soc_dapm_ignore_suspend(dapm, "LINEOUT3");
 	snd_soc_dapm_ignore_suspend(dapm, "LINEOUT4");
-	snd_soc_dapm_ignore_suspend(dapm, "SPK_OUT");
 	snd_soc_dapm_ignore_suspend(dapm, "ANC HEADPHONE");
 	snd_soc_dapm_ignore_suspend(dapm, "ANC EAR");
 	snd_soc_dapm_ignore_suspend(dapm, "AMIC1");
@@ -1161,26 +1194,48 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_ignore_suspend(dapm, "DMIC3");
 	snd_soc_dapm_ignore_suspend(dapm, "DMIC4");
 	snd_soc_dapm_ignore_suspend(dapm, "DMIC5");
-	snd_soc_dapm_ignore_suspend(dapm, "DMIC6");
+	if (cdc_type) { /* Tasha */
+		snd_soc_dapm_ignore_suspend(dapm, "Digital Mic0");
+		snd_soc_dapm_ignore_suspend(dapm, "DMIC0");
+		snd_soc_dapm_ignore_suspend(dapm, "SPK1 OUT");
+		snd_soc_dapm_ignore_suspend(dapm, "SPK2 OUT");
+	} else {
+		snd_soc_dapm_ignore_suspend(dapm, "DMIC6");
+		snd_soc_dapm_ignore_suspend(dapm, "Digital Mic6");
+		snd_soc_dapm_ignore_suspend(dapm, "SPK_OUT");
+	}
 
 	snd_soc_dapm_sync(dapm);
 
 	snd_soc_dai_set_channel_map(codec_dai, ARRAY_SIZE(tx_ch),
 				    tx_ch, ARRAY_SIZE(rx_ch), rx_ch);
 
+	if (cdc_type) {
+		msmthulium_codec_fn.get_afe_config_fn = tasha_get_afe_config;
+		msmthulium_codec_fn.mbhc_hs_detect = NULL;
+		msmthulium_codec_fn.mbhc_hs_detect_exit = NULL;
+	} else {
+		msmthulium_codec_fn.get_afe_config_fn = tomtom_get_afe_config;
+		msmthulium_codec_fn.mbhc_hs_detect = tomtom_hs_detect;
+		msmthulium_codec_fn.mbhc_hs_detect_exit = tomtom_hs_detect_exit;
+	}
 	err = msm_afe_set_config(codec);
 	if (err) {
 		pr_err("%s: Failed to set AFE config %d\n", __func__, err);
 		goto out;
 	}
 
-	config_data = tomtom_get_afe_config(codec, AFE_AANC_VERSION);
-	err = afe_set_config(AFE_AANC_VERSION, config_data, 0);
-	if (err) {
-		pr_err("%s: Failed to set aanc version %d\n", __func__, err);
-		goto out;
+	config_data = msmthulium_codec_fn.get_afe_config_fn(codec,
+						AFE_AANC_VERSION);
+	if (config_data) {
+		err = afe_set_config(AFE_AANC_VERSION, config_data, 0);
+		if (err) {
+			pr_err("%s: Failed to set aanc version %d\n",
+				__func__, err);
+			goto out;
+		}
 	}
-	config_data = tomtom_get_afe_config(codec,
+	config_data = msmthulium_codec_fn.get_afe_config_fn(codec,
 					    AFE_CDC_CLIP_REGISTERS_CONFIG);
 	if (config_data) {
 		err = afe_set_config(AFE_CDC_CLIP_REGISTERS_CONFIG,
@@ -1191,7 +1246,8 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 			goto out;
 		}
 	}
-	config_data = tomtom_get_afe_config(codec, AFE_CLIP_BANK_SEL);
+	config_data = msmthulium_codec_fn.get_afe_config_fn(codec,
+			AFE_CLIP_BANK_SEL);
 	if (config_data) {
 		err = afe_set_config(AFE_CLIP_BANK_SEL, config_data, 0);
 		if (err) {
@@ -1200,7 +1256,9 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 			goto out;
 		}
 	}
-	/* start mbhc */
+	/* Start mbhc */
+	if (cdc_type == 1)
+		goto out_mbhc;
 	mbhc_cfg.calibration = def_codec_mbhc_cal();
 	if (mbhc_cfg.calibration) {
 		err = tomtom_hs_detect(codec, &mbhc_cfg);
@@ -1214,19 +1272,24 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 		err = -ENOMEM;
 		goto out;
 	}
+out_mbhc:
 	adsp_state_notifier = subsys_notif_register_notifier("adsp",
 						&adsp_state_notifier_block);
 	if (!adsp_state_notifier) {
 		pr_err("%s: Failed to register adsp state notifier\n",
 		       __func__);
 		err = -EFAULT;
-		tomtom_hs_detect_exit(codec);
+		if (cdc_type == 0)
+			tomtom_hs_detect_exit(codec);
 		goto out;
 	}
 
-	tomtom_event_register(msmthulium_codec_event_cb, rtd->codec);
-	tomtom_enable_qfuse_sensing(rtd->codec);
+	if (cdc_type == 0) {
+		tomtom_event_register(msmthulium_codec_event_cb, rtd->codec);
+		tomtom_enable_qfuse_sensing(rtd->codec);
+	}
 
+	codec_reg_done = true;
 	return 0;
 out:
 	return err;
@@ -1855,43 +1918,6 @@ static struct snd_soc_dai_link msmthulium_common_dai_links[] = {
 		.ignore_pmdown_time = 1,
 		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA6,
 	},
-	{
-		.name = LPASS_BE_SLIMBUS_4_TX,
-		.stream_name = "Slimbus4 Capture",
-		.cpu_dai_name = "msm-dai-q6-dev.16393",
-		.platform_name = "msm-pcm-hostless",
-		.codec_name = "tomtom_codec",
-		.codec_dai_name = "tomtom_vifeedback",
-		.be_id = MSM_BACKEND_DAI_SLIMBUS_4_TX,
-		.be_hw_params_fixup = msm_slim_4_tx_be_hw_params_fixup,
-		.ops = &msmthulium_be_ops,
-		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
-		.ignore_suspend = 1,
-	},
-	/* Ultrasound RX DAI Link */
-	{
-		.name = "SLIMBUS_2 Hostless Playback",
-		.stream_name = "SLIMBUS_2 Hostless Playback",
-		.cpu_dai_name = "msm-dai-q6-dev.16388",
-		.platform_name = "msm-pcm-hostless",
-		.codec_name = "tomtom_codec",
-		.codec_dai_name = "tomtom_rx2",
-		.ignore_suspend = 1,
-		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
-		.ops = &msmthulium_slimbus_2_be_ops,
-	},
-	/* Ultrasound TX DAI Link */
-	{
-		.name = "SLIMBUS_2 Hostless Capture",
-		.stream_name = "SLIMBUS_2 Hostless Capture",
-		.cpu_dai_name = "msm-dai-q6-dev.16389",
-		.platform_name = "msm-pcm-hostless",
-		.codec_name = "tomtom_codec",
-		.codec_dai_name = "tomtom_tx2",
-		.ignore_suspend = 1,
-		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
-		.ops = &msmthulium_slimbus_2_be_ops,
-	},
 	/* LSM FE */
 	{
 		.name = "Listen 2 Audio Service",
@@ -2135,7 +2161,89 @@ static struct snd_soc_dai_link msmthulium_common_dai_links[] = {
 		 /* this dainlink has playback support */
 		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA16,
 	},
-	/* End of FE DAI LINK */
+};
+
+static struct snd_soc_dai_link msmthulium_tomtom_fe_dai_links[] = {
+	{
+		.name = LPASS_BE_SLIMBUS_4_TX,
+		.stream_name = "Slimbus4 Capture",
+		.cpu_dai_name = "msm-dai-q6-dev.16393",
+		.platform_name = "msm-pcm-hostless",
+		.codec_name = "tomtom_codec",
+		.codec_dai_name = "tomtom_vifeedback",
+		.be_id = MSM_BACKEND_DAI_SLIMBUS_4_TX,
+		.be_hw_params_fixup = msm_slim_4_tx_be_hw_params_fixup,
+		.ops = &msmthulium_be_ops,
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+	},
+	/* Ultrasound RX DAI Link */
+	{
+		.name = "SLIMBUS_2 Hostless Playback",
+		.stream_name = "SLIMBUS_2 Hostless Playback",
+		.cpu_dai_name = "msm-dai-q6-dev.16388",
+		.platform_name = "msm-pcm-hostless",
+		.codec_name = "tomtom_codec",
+		.codec_dai_name = "tomtom_rx2",
+		.ignore_suspend = 1,
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ops = &msmthulium_slimbus_2_be_ops,
+	},
+	/* Ultrasound TX DAI Link */
+	{
+		.name = "SLIMBUS_2 Hostless Capture",
+		.stream_name = "SLIMBUS_2 Hostless Capture",
+		.cpu_dai_name = "msm-dai-q6-dev.16389",
+		.platform_name = "msm-pcm-hostless",
+		.codec_name = "tomtom_codec",
+		.codec_dai_name = "tomtom_tx2",
+		.ignore_suspend = 1,
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ops = &msmthulium_slimbus_2_be_ops,
+	},
+};
+
+static struct snd_soc_dai_link msmthulium_tasha_fe_dai_links[] = {
+	{
+		.name = LPASS_BE_SLIMBUS_4_TX,
+		.stream_name = "Slimbus4 Capture",
+		.cpu_dai_name = "msm-dai-q6-dev.16393",
+		.platform_name = "msm-pcm-hostless",
+		.codec_name = "tasha_codec",
+		.codec_dai_name = "tasha_vifeedback",
+		.be_id = MSM_BACKEND_DAI_SLIMBUS_4_TX,
+		.be_hw_params_fixup = msm_slim_4_tx_be_hw_params_fixup,
+		.ops = &msmthulium_be_ops,
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+	},
+	/* Ultrasound RX DAI Link */
+	{
+		.name = "SLIMBUS_2 Hostless Playback",
+		.stream_name = "SLIMBUS_2 Hostless Playback",
+		.cpu_dai_name = "msm-dai-q6-dev.16388",
+		.platform_name = "msm-pcm-hostless",
+		.codec_name = "tasha_codec",
+		.codec_dai_name = "tasha_rx2",
+		.ignore_suspend = 1,
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ops = &msmthulium_slimbus_2_be_ops,
+	},
+	/* Ultrasound TX DAI Link */
+	{
+		.name = "SLIMBUS_2 Hostless Capture",
+		.stream_name = "SLIMBUS_2 Hostless Capture",
+		.cpu_dai_name = "msm-dai-q6-dev.16389",
+		.platform_name = "msm-pcm-hostless",
+		.codec_name = "tasha_codec",
+		.codec_dai_name = "tasha_tx2",
+		.ignore_suspend = 1,
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ops = &msmthulium_slimbus_2_be_ops,
+	},
+};
+
+static struct snd_soc_dai_link msmthulium_common_be_dai_links[] = {
 	/* Backend AFE DAI Links */
 	{
 		.name = LPASS_BE_AFE_PCM_RX,
@@ -2194,6 +2302,79 @@ static struct snd_soc_dai_link msmthulium_common_dai_links[] = {
 		.be_hw_params_fixup = msm_auxpcm_be_params_fixup,
 		.ignore_suspend = 1,
 	},
+	/* Incall Record Uplink BACK END DAI Link */
+	{
+		.name = LPASS_BE_INCALL_RECORD_TX,
+		.stream_name = "Voice Uplink Capture",
+		.cpu_dai_name = "msm-dai-q6-dev.32772",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-tx",
+		.no_pcm = 1,
+		.dpcm_capture = 1,
+		.be_id = MSM_BACKEND_DAI_INCALL_RECORD_TX,
+		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.ignore_suspend = 1,
+	},
+	/* Incall Record Downlink BACK END DAI Link */
+	{
+		.name = LPASS_BE_INCALL_RECORD_RX,
+		.stream_name = "Voice Downlink Capture",
+		.cpu_dai_name = "msm-dai-q6-dev.32771",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-tx",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.be_id = MSM_BACKEND_DAI_INCALL_RECORD_RX,
+		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.ignore_suspend = 1,
+	},
+	/* Incall Music BACK END DAI Link */
+	{
+		.name = LPASS_BE_VOICE_PLAYBACK_TX,
+		.stream_name = "Voice Farend Playback",
+		.cpu_dai_name = "msm-dai-q6-dev.32773",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-rx",
+		.no_pcm = 1,
+		.dpcm_capture = 1,
+		.be_id = MSM_BACKEND_DAI_VOICE_PLAYBACK_TX,
+		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.ignore_suspend = 1,
+	},
+	/* Incall Music 2 BACK END DAI Link */
+	{
+		.name = LPASS_BE_VOICE2_PLAYBACK_TX,
+		.stream_name = "Voice2 Farend Playback",
+		.cpu_dai_name = "msm-dai-q6-dev.32770",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-rx",
+		.no_pcm = 1,
+		.dpcm_capture = 1,
+		.be_id = MSM_BACKEND_DAI_VOICE2_PLAYBACK_TX,
+		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.ignore_suspend = 1,
+	},
+	{
+		.name = LPASS_BE_TERT_MI2S_TX,
+		.stream_name = "Tertiary MI2S Capture",
+		.cpu_dai_name = "msm-dai-q6-mi2s.2",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-tx",
+		.no_pcm = 1,
+		.dpcm_capture = 1,
+		.be_id = MSM_BACKEND_DAI_TERTIARY_MI2S_TX,
+		.be_hw_params_fixup = msm_tx_be_hw_params_fixup,
+		.ops = &msmthulium_mi2s_be_ops,
+		.ignore_suspend = 1,
+	}
+};
+
+static struct snd_soc_dai_link msmthulium_tomtom_be_dai_links[] = {
 	/* Backend DAI Links */
 	{
 		.name = LPASS_BE_SLIMBUS_0_RX,
@@ -2302,34 +2483,6 @@ static struct snd_soc_dai_link msmthulium_common_dai_links[] = {
 		.ignore_pmdown_time = 1,
 		.ignore_suspend = 1,
 	},
-	/* Incall Record Uplink BACK END DAI Link */
-	{
-		.name = LPASS_BE_INCALL_RECORD_TX,
-		.stream_name = "Voice Uplink Capture",
-		.cpu_dai_name = "msm-dai-q6-dev.32772",
-		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-tx",
-		.no_pcm = 1,
-		.dpcm_capture = 1,
-		.be_id = MSM_BACKEND_DAI_INCALL_RECORD_TX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ignore_suspend = 1,
-	},
-	/* Incall Record Downlink BACK END DAI Link */
-	{
-		.name = LPASS_BE_INCALL_RECORD_RX,
-		.stream_name = "Voice Downlink Capture",
-		.cpu_dai_name = "msm-dai-q6-dev.32771",
-		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-tx",
-		.no_pcm = 1,
-		.dpcm_playback = 1,
-		.be_id = MSM_BACKEND_DAI_INCALL_RECORD_RX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ignore_suspend = 1,
-	},
 	/* MAD BE */
 	{
 		.name = LPASS_BE_SLIMBUS_5_TX,
@@ -2344,48 +2497,117 @@ static struct snd_soc_dai_link msmthulium_common_dai_links[] = {
 		.be_hw_params_fixup = msm_slim_5_tx_be_hw_params_fixup,
 		.ops = &msmthulium_be_ops,
 	},
-	/* Incall Music BACK END DAI Link */
+};
+
+static struct snd_soc_dai_link msmthulium_tasha_be_dai_links[] = {
+	/* Backend DAI Links */
 	{
-		.name = LPASS_BE_VOICE_PLAYBACK_TX,
-		.stream_name = "Voice Farend Playback",
-		.cpu_dai_name = "msm-dai-q6-dev.32773",
+		.name = LPASS_BE_SLIMBUS_0_RX,
+		.stream_name = "Slimbus Playback",
+		.cpu_dai_name = "msm-dai-q6-dev.16384",
 		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-rx",
+		.codec_name = "tasha_codec",
+		.codec_dai_name = "tasha_rx1",
 		.no_pcm = 1,
-		.dpcm_capture = 1,
-		.be_id = MSM_BACKEND_DAI_VOICE_PLAYBACK_TX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.dpcm_playback = 1,
+		.be_id = MSM_BACKEND_DAI_SLIMBUS_0_RX,
+		.init = &msm_audrx_init,
+		.be_hw_params_fixup = msm_slim_0_rx_be_hw_params_fixup,
+		/* this dainlink has playback support */
+		.ignore_pmdown_time = 1,
 		.ignore_suspend = 1,
-	},
-	/* Incall Music 2 BACK END DAI Link */
-	{
-		.name = LPASS_BE_VOICE2_PLAYBACK_TX,
-		.stream_name = "Voice2 Farend Playback",
-		.cpu_dai_name = "msm-dai-q6-dev.32770",
-		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-rx",
-		.no_pcm = 1,
-		.dpcm_capture = 1,
-		.be_id = MSM_BACKEND_DAI_VOICE2_PLAYBACK_TX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ignore_suspend = 1,
+		.ops = &msmthulium_be_ops,
 	},
 	{
-		.name = LPASS_BE_TERT_MI2S_TX,
-		.stream_name = "Tertiary MI2S Capture",
-		.cpu_dai_name = "msm-dai-q6-mi2s.2",
+		.name = LPASS_BE_SLIMBUS_0_TX,
+		.stream_name = "Slimbus Capture",
+		.cpu_dai_name = "msm-dai-q6-dev.16385",
 		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-tx",
+		.codec_name = "tasha_codec",
+		.codec_dai_name = "tasha_tx1",
 		.no_pcm = 1,
 		.dpcm_capture = 1,
-		.be_id = MSM_BACKEND_DAI_TERTIARY_MI2S_TX,
-		.be_hw_params_fixup = msm_tx_be_hw_params_fixup,
-		.ops = &msmthulium_mi2s_be_ops,
+		.be_id = MSM_BACKEND_DAI_SLIMBUS_0_TX,
+		.be_hw_params_fixup = msm_slim_0_tx_be_hw_params_fixup,
 		.ignore_suspend = 1,
-	}
+		.ops = &msmthulium_be_ops,
+	},
+	{
+		.name = LPASS_BE_SLIMBUS_1_RX,
+		.stream_name = "Slimbus1 Playback",
+		.cpu_dai_name = "msm-dai-q6-dev.16386",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "tasha_codec",
+		.codec_dai_name = "tasha_rx1",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.be_id = MSM_BACKEND_DAI_SLIMBUS_1_RX,
+		.be_hw_params_fixup = msm_slim_0_rx_be_hw_params_fixup,
+		.ops = &msmthulium_be_ops,
+		/* dai link has playback support */
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+	},
+	{
+		.name = LPASS_BE_SLIMBUS_1_TX,
+		.stream_name = "Slimbus1 Capture",
+		.cpu_dai_name = "msm-dai-q6-dev.16387",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "tasha_codec",
+		.codec_dai_name = "tasha_tx1",
+		.no_pcm = 1,
+		.dpcm_capture = 1,
+		.be_id = MSM_BACKEND_DAI_SLIMBUS_1_TX,
+		.be_hw_params_fixup = msm_slim_0_tx_be_hw_params_fixup,
+		.ops = &msmthulium_be_ops,
+		.ignore_suspend = 1,
+	},
+	{
+		.name = LPASS_BE_SLIMBUS_3_RX,
+		.stream_name = "Slimbus3 Playback",
+		.cpu_dai_name = "msm-dai-q6-dev.16390",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "tasha_codec",
+		.codec_dai_name = "tasha_rx1",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.be_id = MSM_BACKEND_DAI_SLIMBUS_3_RX,
+		.be_hw_params_fixup = msm_slim_0_rx_be_hw_params_fixup,
+		.ops = &msmthulium_be_ops,
+		/* dai link has playback support */
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+	},
+	{
+		.name = LPASS_BE_SLIMBUS_3_TX,
+		.stream_name = "Slimbus3 Capture",
+		.cpu_dai_name = "msm-dai-q6-dev.16391",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "tasha_codec",
+		.codec_dai_name = "tasha_tx1",
+		.no_pcm = 1,
+		.dpcm_capture = 1,
+		.be_id = MSM_BACKEND_DAI_SLIMBUS_3_TX,
+		.be_hw_params_fixup = msm_slim_0_tx_be_hw_params_fixup,
+		.ops = &msmthulium_be_ops,
+		.ignore_suspend = 1,
+	},
+	{
+		.name = LPASS_BE_SLIMBUS_4_RX,
+		.stream_name = "Slimbus4 Playback",
+		.cpu_dai_name = "msm-dai-q6-dev.16392",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "tasha_codec",
+		.codec_dai_name	= "tasha_rx1",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.be_id = MSM_BACKEND_DAI_SLIMBUS_4_RX,
+		.be_hw_params_fixup = msm_slim_0_rx_be_hw_params_fixup,
+		.ops = &msmthulium_be_ops,
+		/* dai link has playback support */
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+	},
 };
 
 static struct snd_soc_dai_link msmthulium_hdmi_dai_link[] = {
@@ -2406,12 +2628,26 @@ static struct snd_soc_dai_link msmthulium_hdmi_dai_link[] = {
 	},
 };
 
-static struct snd_soc_dai_link msmthulium_dai_links[
+static struct snd_soc_dai_link msmthulium_tomtom_dai_links[
 			 ARRAY_SIZE(msmthulium_common_dai_links) +
+			 ARRAY_SIZE(msmthulium_tomtom_fe_dai_links) +
+			 ARRAY_SIZE(msmthulium_common_be_dai_links) +
+			 ARRAY_SIZE(msmthulium_tomtom_be_dai_links) +
 			 ARRAY_SIZE(msmthulium_hdmi_dai_link)];
 
-struct snd_soc_card snd_soc_card_msmthulium = {
+static struct snd_soc_dai_link msmthulium_tasha_dai_links[
+			 ARRAY_SIZE(msmthulium_common_dai_links) +
+			 ARRAY_SIZE(msmthulium_tasha_fe_dai_links) +
+			 ARRAY_SIZE(msmthulium_common_be_dai_links) +
+			 ARRAY_SIZE(msmthulium_tasha_be_dai_links) +
+			 ARRAY_SIZE(msmthulium_hdmi_dai_link)];
+
+struct snd_soc_card snd_soc_card_tomtom_msmthulium = {
 	.name		= "msmthulium-tomtom-snd-card",
+};
+
+struct snd_soc_card snd_soc_card_tasha_msmthulium = {
+	.name		= "msmthulium-tasha-snd-card",
 };
 
 static int msmthulium_populate_dai_link_component_of_node(
@@ -2520,11 +2756,95 @@ static int msmthulium_prepare_us_euro(struct snd_soc_card *card)
 	return 0;
 }
 
+static const struct of_device_id msmthulium_asoc_machine_of_match[]  = {
+	{ .compatible = "qcom,msmthulium-asoc-snd-tomtom",
+	  .data = "tomtom_codec"},
+	{ .compatible = "qcom,msmthulium-asoc-snd-tasha",
+	  .data = "tasha_codec"},
+	{},
+};
+
+static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
+{
+	struct snd_soc_card *card = NULL;
+	struct snd_soc_dai_link *dailink;
+	int len_1, len_2, len_3, len_4;
+	const struct of_device_id *match;
+
+	match = of_match_node(msmthulium_asoc_machine_of_match, dev->of_node);
+	if (!match) {
+		dev_err(dev, "%s: No DT match found for sound card\n",
+			__func__);
+		return NULL;
+	}
+
+	if (!strcmp(match->data, "tomtom_codec")) {
+		card = &snd_soc_card_tomtom_msmthulium;
+		len_1 = ARRAY_SIZE(msmthulium_common_dai_links);
+		len_2 = len_1 + ARRAY_SIZE(msmthulium_tomtom_fe_dai_links);
+		len_3 = len_2 + ARRAY_SIZE(msmthulium_common_be_dai_links);
+
+		memcpy(msmthulium_tomtom_dai_links,
+		       msmthulium_common_dai_links,
+		       sizeof(msmthulium_common_dai_links));
+		memcpy(msmthulium_tomtom_dai_links + len_1,
+		       msmthulium_tomtom_fe_dai_links,
+		       sizeof(msmthulium_tomtom_fe_dai_links));
+		memcpy(msmthulium_tomtom_dai_links + len_2,
+		       msmthulium_common_be_dai_links,
+		       sizeof(msmthulium_common_be_dai_links));
+		memcpy(msmthulium_tomtom_dai_links + len_3,
+		       msmthulium_tomtom_be_dai_links,
+		       sizeof(msmthulium_tomtom_be_dai_links));
+
+		dailink = msmthulium_tomtom_dai_links;
+		len_4 = len_3 + ARRAY_SIZE(msmthulium_tomtom_be_dai_links);
+	} else {
+		card = &snd_soc_card_tasha_msmthulium;
+		len_1 = ARRAY_SIZE(msmthulium_common_dai_links);
+		len_2 = len_1 + ARRAY_SIZE(msmthulium_tasha_fe_dai_links);
+		len_3 = len_2 + ARRAY_SIZE(msmthulium_common_be_dai_links);
+
+		memcpy(msmthulium_tasha_dai_links,
+		       msmthulium_common_dai_links,
+		       sizeof(msmthulium_common_dai_links));
+		memcpy(msmthulium_tasha_dai_links + len_1,
+		       msmthulium_tasha_fe_dai_links,
+		       sizeof(msmthulium_tasha_fe_dai_links));
+		memcpy(msmthulium_tasha_dai_links + len_2,
+		       msmthulium_common_be_dai_links,
+		       sizeof(msmthulium_common_be_dai_links));
+		memcpy(msmthulium_tasha_dai_links + len_3,
+		       msmthulium_tasha_be_dai_links,
+		       sizeof(msmthulium_tasha_be_dai_links));
+
+		dailink = msmthulium_tasha_dai_links;
+		len_4 = len_3 + ARRAY_SIZE(msmthulium_tasha_be_dai_links);
+	}
+
+	if (of_property_read_bool(dev->of_node, "qcom,hdmi-audio-rx")) {
+		dev_dbg(dev, "%s(): hdmi audio support present\n",
+				__func__);
+		memcpy(dailink + len_4, msmthulium_hdmi_dai_link,
+			sizeof(msmthulium_hdmi_dai_link));
+		len_4 += ARRAY_SIZE(msmthulium_hdmi_dai_link);
+	} else {
+		dev_dbg(dev, "%s(): No hdmi audio support\n", __func__);
+	}
+
+	card->dai_link = dailink;
+	card->num_links = len_4;
+
+	return card;
+}
+
 static int msmthulium_asoc_machine_probe(struct platform_device *pdev)
 {
-	struct snd_soc_card *card = &snd_soc_card_msmthulium;
+	struct snd_soc_card *card;
 	struct msmthulium_asoc_mach_data *pdata;
 	const char *mbhc_audio_jack_type = NULL;
+	char *mclk_freq_prop_name;
+	const struct of_device_id *match;
 	int ret;
 
 	if (!pdev->dev.of_node) {
@@ -2539,6 +2859,12 @@ static int msmthulium_asoc_machine_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+	card = populate_snd_card_dailinks(&pdev->dev);
+	if (!card) {
+		dev_err(&pdev->dev, "%s: Card uninitialized\n", __func__);
+		ret = -EINVAL;
+		goto err;
+	}
 	card->dev = &pdev->dev;
 	platform_set_drvdata(pdev, card);
 	snd_soc_card_set_drvdata(card, pdata);
@@ -2556,17 +2882,25 @@ static int msmthulium_asoc_machine_probe(struct platform_device *pdev)
 			ret);
 		goto err;
 	}
+
+	match = of_match_node(msmthulium_asoc_machine_of_match,
+			pdev->dev.of_node);
+	if (!strcmp(match->data, "tomtom_codec"))
+		mclk_freq_prop_name = "qcom,tomtom-mclk-clk-freq";
+	else
+		mclk_freq_prop_name = "qcom,tasha-mclk-clk-freq";
+
 	ret = of_property_read_u32(pdev->dev.of_node,
-			"qcom,tomtom-mclk-clk-freq", &pdata->mclk_freq);
+			mclk_freq_prop_name, &pdata->mclk_freq);
 	if (ret) {
 		dev_err(&pdev->dev,
 			"Looking up %s property in node %s failed, err%d\n",
-			"qcom,tomtom-mclk-clk-freq",
+			mclk_freq_prop_name,
 			pdev->dev.of_node->full_name, ret);
 		goto err;
 	}
 
-	if (pdata->mclk_freq != TOMTOM_EXT_CLK_RATE) {
+	if (pdata->mclk_freq != CODEC_EXT_CLK_RATE) {
 		dev_err(&pdev->dev, "unsupported mclk freq %u\n",
 			pdata->mclk_freq);
 		ret = -EINVAL;
@@ -2574,24 +2908,6 @@ static int msmthulium_asoc_machine_probe(struct platform_device *pdev)
 	}
 
 	mbhc_cfg.mclk_rate = pdata->mclk_freq;
-	if (of_property_read_bool(pdev->dev.of_node, "qcom,hdmi-audio-rx")) {
-		dev_info(&pdev->dev, "%s: hdmi audio support present\n",
-				__func__);
-		memcpy(msmthulium_dai_links, msmthulium_common_dai_links,
-			sizeof(msmthulium_common_dai_links));
-		memcpy(msmthulium_dai_links +
-			ARRAY_SIZE(msmthulium_common_dai_links),
-			msmthulium_hdmi_dai_link,
-			sizeof(msmthulium_hdmi_dai_link));
-
-		card->dai_link	= msmthulium_dai_links;
-		card->num_links	= ARRAY_SIZE(msmthulium_dai_links);
-	} else {
-		dev_info(&pdev->dev, "%s: No hdmi audio support\n", __func__);
-
-		card->dai_link	= msmthulium_common_dai_links;
-		card->num_links	= ARRAY_SIZE(msmthulium_common_dai_links);
-	}
 	spdev = pdev;
 
 	ret = msmthulium_populate_dai_link_component_of_node(card);
@@ -2602,6 +2918,8 @@ static int msmthulium_asoc_machine_probe(struct platform_device *pdev)
 
 	ret = snd_soc_register_card(card);
 	if (ret == -EPROBE_DEFER) {
+		if (codec_reg_done)
+			ret = -EINVAL;
 		goto err;
 	} else if (ret) {
 		dev_err(&pdev->dev, "snd_soc_register_card failed (%d)\n",
@@ -2699,11 +3017,6 @@ static int msmthulium_asoc_machine_remove(struct platform_device *pdev)
 
 	return 0;
 }
-
-static const struct of_device_id msmthulium_asoc_machine_of_match[]  = {
-	{ .compatible = "qcom,msmthulium-asoc-snd", },
-	{},
-};
 
 static struct platform_driver msmthulium_asoc_machine_driver = {
 	.driver = {
