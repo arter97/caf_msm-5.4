@@ -2692,7 +2692,6 @@ void mdp4_overlay_pipe_free(struct mdp4_overlay_pipe *pipe, int all)
 	orgpipe = mdp4_overlay_ndx2pipe(pipe->pipe_ndx);
 	if (orgpipe != NULL)
 		orgpipe->pipe_used = 0;
-
 }
 
 static struct mdp4_overlay_pipe *mdp4_overlay_alloc_base_pipe(
@@ -3887,16 +3886,22 @@ int mdp4_overlay_unset(struct fb_info *info, int ndx)
 	struct mdp4_overlay_pipe *pipe = NULL;
 	uint32 mixer = 0;
 
-	if (mfd == NULL)
+	if (mfd == NULL) {
+		pr_err("%s,%d mfd is NULL", __func__, __LINE__);
 		return -ENODEV;
+	}
 
-	if (mutex_lock_interruptible(&mfd->dma->ov_mutex))
+	if (mutex_lock_interruptible(&mfd->dma->ov_mutex)) {
+		pr_err("%s,%d mutex_lock_interruptible fail",
+			__func__, __LINE__);
 		return -EINTR;
+	}
 
 	pipe = mdp4_overlay_ndx2pipe(ndx);
 
 	if (pipe == NULL) {
 		mutex_unlock(&mfd->dma->ov_mutex);
+		pr_err("%s,%d pipe is NULL, ndx=%d", __func__, __LINE__, ndx);
 		return -ENODEV;
 	}
 
