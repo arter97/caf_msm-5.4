@@ -34,6 +34,7 @@
 #include "../codecs/wcd9xxx-common.h"
 #include "../codecs/wcd9330.h"
 #include "../codecs/wcd9335.h"
+#include "../codecs/wsa881x.h"
 
 #define DRV_NAME "msmthulium-asoc-snd"
 
@@ -1100,6 +1101,35 @@ static int msmthulium_codec_event_cb(struct snd_soc_codec *codec,
 			__func__, codec_event);
 		return -EINVAL;
 	}
+}
+
+static int msmthulium_wsa881x_init(struct snd_soc_dapm_context *dapm)
+{
+	u8 spkleft_ports[WSA881X_MAX_SWR_PORTS] = {100, 101, 102, 103};
+	u8 spkright_ports[WSA881X_MAX_SWR_PORTS] = {104, 105, 106, 107};
+	unsigned int ch_rate[WSA881X_MAX_SWR_PORTS] = {2400, 600, 300, 1200};
+	unsigned int ch_mask[WSA881X_MAX_SWR_PORTS] = {0x1, 0xF, 0x3, 0x3};
+
+	if (!dapm->codec->name) {
+		pr_err("%s codec_name is NULL\n", __func__);
+		return -EINVAL;
+	}
+	dev_dbg(dapm->codec->dev, "%s codec_name: %s\n", __func__,
+		dapm->codec->name);
+	if (!strcmp(dapm->codec->name, "wsa881x.32000")) {
+		wsa881x_set_channel_map(dapm->codec, &spkleft_ports[0],
+				WSA881X_MAX_SWR_PORTS, &ch_mask[0],
+				&ch_rate[0]);
+	} else if (!strcmp(dapm->codec->name, "wsa881x.42000")) {
+		wsa881x_set_channel_map(dapm->codec, &spkright_ports[0],
+				WSA881X_MAX_SWR_PORTS, &ch_mask[0],
+				&ch_rate[0]);
+	} else {
+		dev_err(dapm->codec->dev, "%s: wrong codec name %s\n", __func__,
+			dapm->codec->name);
+		return -EINVAL;
+	}
+	return 0;
 }
 
 static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
@@ -2642,12 +2672,40 @@ static struct snd_soc_dai_link msmthulium_tasha_dai_links[
 			 ARRAY_SIZE(msmthulium_tasha_be_dai_links) +
 			 ARRAY_SIZE(msmthulium_hdmi_dai_link)];
 
+static struct snd_soc_aux_dev msmthulium_aux_dev[] = {
+	{
+		.name = "wsa881x.0",
+		.codec_name = "wsa881x.32000",
+		.init = msmthulium_wsa881x_init,
+	},
+	{
+		.name = "wsa881x.1",
+		.codec_name = "wsa881x.42000",
+		.init = msmthulium_wsa881x_init,
+	},
+};
+
+static struct snd_soc_codec_conf msmthulium_codec_conf[] = {
+	{
+		.dev_name = "wsa881x.32000",
+		.name_prefix = "SpkrLeft",
+	},
+	{
+		.dev_name = "wsa881x.42000",
+		.name_prefix = "SpkrRight",
+	},
+};
+
 struct snd_soc_card snd_soc_card_tomtom_msmthulium = {
 	.name		= "msmthulium-tomtom-snd-card",
 };
 
 struct snd_soc_card snd_soc_card_tasha_msmthulium = {
 	.name		= "msmthulium-tasha-snd-card",
+	.aux_dev	= msmthulium_aux_dev,
+	.num_aux_devs	= ARRAY_SIZE(msmthulium_aux_dev),
+	.codec_conf	= msmthulium_codec_conf,
+	.num_configs	= ARRAY_SIZE(msmthulium_codec_conf),
 };
 
 static int msmthulium_populate_dai_link_component_of_node(
