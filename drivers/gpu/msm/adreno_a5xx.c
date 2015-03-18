@@ -577,7 +577,7 @@ static int _load_firmware(struct adreno_device *adreno_dev, const char *fwfile,
  * a5xx_microcode_read() - Read microcode
  * @adreno_dev: Pointer to adreno device
  */
-void a5xx_microcode_read(struct adreno_device *adreno_dev)
+int a5xx_microcode_read(struct adreno_device *adreno_dev)
 {
 	int ret;
 
@@ -585,13 +585,12 @@ void a5xx_microcode_read(struct adreno_device *adreno_dev)
 			 adreno_dev->gpucore->pm4fw_name, &adreno_dev->pm4,
 						 &adreno_dev->pm4_fw_size);
 	if (ret)
-		return;
+		return ret;
 
 	ret = _load_firmware(adreno_dev,
 			 adreno_dev->gpucore->pfpfw_name, &adreno_dev->pfp,
 						 &adreno_dev->pfp_fw_size);
-	if (ret)
-		return;
+	return ret;
 }
 
 /*

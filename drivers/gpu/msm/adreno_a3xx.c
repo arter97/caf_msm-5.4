@@ -1552,7 +1552,7 @@ static int _load_firmware(struct kgsl_device *device, const char *fwfile,
 	return (*buf != NULL) ? 0 : -ENOMEM;
 }
 
-void a3xx_microcode_read(struct adreno_device *adreno_dev)
+int a3xx_microcode_read(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = &adreno_dev->dev;
 
@@ -1566,7 +1566,7 @@ void a3xx_microcode_read(struct adreno_device *adreno_dev)
 		if (ret) {
 			KGSL_DRV_FATAL(device, "Failed to read pm4 ucode %s\n",
 					   adreno_dev->gpucore->pm4fw_name);
-			return;
+			return ret;
 		}
 
 		/* PM4 size is 3 dword aligned plus 1 dword of version */
@@ -1574,7 +1574,7 @@ void a3xx_microcode_read(struct adreno_device *adreno_dev)
 			KGSL_DRV_ERR(device, "Bad pm4 microcode size: %d\n",
 				len);
 			kfree(ptr);
-			return;
+			return -ENOMEM;
 		}
 
 		adreno_dev->pm4_fw_size = len / sizeof(uint32_t);
@@ -1591,7 +1591,7 @@ void a3xx_microcode_read(struct adreno_device *adreno_dev)
 		if (ret) {
 			KGSL_DRV_FATAL(device, "Failed to read pfp ucode %s\n",
 					   adreno_dev->gpucore->pfpfw_name);
-			return;
+			return ret;
 		}
 
 		/* PFP size shold be dword aligned */
@@ -1599,13 +1599,15 @@ void a3xx_microcode_read(struct adreno_device *adreno_dev)
 			KGSL_DRV_ERR(device, "Bad PFP microcode size: %d\n",
 						len);
 			kfree(ptr);
-			return;
+			return -ENOMEM;
 		}
 
 		adreno_dev->pfp_fw_size = len / sizeof(uint32_t);
 		adreno_dev->pfp_fw = ptr;
 		adreno_dev->pfp_fw_version = adreno_dev->pfp_fw[5];
 	}
+
+	return 0;
 }
 
 /**
