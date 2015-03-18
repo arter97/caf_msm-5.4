@@ -428,6 +428,7 @@ void __init msm8226_init(void)
 	struct of_dev_auxdata *adata = msm8226_auxdata_lookup;
 
 	struct regulator *reg_l8;
+	struct regulator *reg_l20;
 	int rc;
 
 	if (socinfo_init() < 0)
@@ -447,6 +448,12 @@ void __init msm8226_init(void)
 		rc = regulator_enable(reg_l8);
 		if (rc) {
 			printk(" msm8226_init - l8 fail\n");
+		}
+		/* Need L20 On as it supplies USB ID switch control */
+		reg_l20 = regulator_get(NULL,"l20_usb_id_switch");
+		rc = regulator_enable(reg_l20);
+		if (rc) {
+			printk(" msm8226_init - l20 fail\n");
 		}
 		/* qm8626 register the LED drivers LP5521/5523 with I2C */
 		i2c_register_board_info( 1,lp5523_i2c_boardinfo , ARRAY_SIZE(lp5523_i2c_boardinfo) );
