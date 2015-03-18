@@ -88,6 +88,7 @@ struct qpic_data_type {
 	u32 qpic_is_on;
 	bool splash_screen_transition;
 	bool lk_transition_done;
+	struct clk *qpic_a_clk;
 };
 
 u32 qpic_send_frame(
