@@ -1202,6 +1202,7 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		rc = mdss_dsi_on(pdata);
 		mdss_dsi_op_mode_config(pdata->panel_info.mipi.mode,
 							pdata);
+		mdss_dsi_get_hw_revision(ctrl_pdata);
 		if (ctrl_pdata->on_cmds.link_state == DSI_LP_MODE)
 			rc = mdss_dsi_unblank(pdata);
 		break;
@@ -1256,9 +1257,6 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 	case MDSS_EVENT_REGISTER_RECOVERY_HANDLER:
 		rc = mdss_dsi_register_recovery_handler(ctrl_pdata,
 			(struct mdss_intf_recovery *)arg);
-		break;
-	case MDSS_EVENT_INTF_RESTORE:
-		mdss_dsi_ctrl_phy_restore(ctrl_pdata);
 		break;
 	default:
 		pr_debug("%s: unhandled event=%d\n", __func__, event);

@@ -261,6 +261,7 @@ enum {
 #define DSI_EV_MDP_FIFO_UNDERFLOW	0x0002
 #define DSI_EV_DSI_FIFO_EMPTY		0x0004
 #define DSI_EV_DLNx_FIFO_OVERFLOW	0x0008
+#define DSI_EV_STOP_HS_CLK_LANE		0x40000000
 #define DSI_EV_MDP_BUSY_RELEASE		0x80000000
 
 struct mdss_dsi_ctrl_pdata {
@@ -274,6 +275,7 @@ struct mdss_dsi_ctrl_pdata {
 	void (*switch_mode) (struct mdss_panel_data *pdata, int mode);
 	struct mdss_panel_data panel_data;
 	unsigned char *ctrl_base;
+	u32 hw_rev;
 	struct dss_io_data ctrl_io;
 	struct dss_io_data mmss_misc_io;
 	struct dss_io_data phy_io;
@@ -302,6 +304,7 @@ struct mdss_dsi_ctrl_pdata {
 	int bklt_max;
 	int new_fps;
 	int pwm_enabled;
+	int clk_lane_cnt;
 	struct pwm_device *pwm_bl;
 	struct dsi_drv_cm_data shared_pdata;
 	u32 pclk_rate;
@@ -331,6 +334,7 @@ struct mdss_dsi_ctrl_pdata {
 	int mdp_busy;
 	struct mutex mutex;
 	struct mutex cmd_mutex;
+	struct mutex clk_lane_mutex;
 
 	bool ulps;
 
@@ -402,6 +406,8 @@ int mdss_dsi_bta_status_check(struct mdss_dsi_ctrl_pdata *ctrl);
 int mdss_dsi_reg_status_check(struct mdss_dsi_ctrl_pdata *ctrl);
 bool __mdss_dsi_clk_enabled(struct mdss_dsi_ctrl_pdata *ctrl, u8 clk_type);
 int mdss_dsi_ulps_config(struct mdss_dsi_ctrl_pdata *ctrl, int enable);
+void mdss_dsi_ctrl_setup(struct mdss_panel_data *pdata);
+void mdss_dsi_get_hw_revision(struct mdss_dsi_ctrl_pdata *ctrl);
 
 int mdss_dsi_panel_init(struct device_node *node,
 		struct mdss_dsi_ctrl_pdata *ctrl_pdata,
