@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014 - 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -481,8 +481,7 @@ static int32_t msm_ois_i2c_probe(struct i2c_client *client,
 
 	if (client == NULL) {
 		pr_err("msm_ois_i2c_probe: client is null\n");
-		rc = -EINVAL;
-		goto probe_failure;
+		return -EINVAL;
 	}
 
 	ois_ctrl_t = kzalloc(sizeof(struct msm_ois_ctrl_t),
@@ -494,6 +493,7 @@ static int32_t msm_ois_i2c_probe(struct i2c_client *client,
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		pr_err("i2c_check_functionality failed\n");
+		rc = -EINVAL;
 		goto probe_failure;
 	}
 
@@ -504,7 +504,7 @@ static int32_t msm_ois_i2c_probe(struct i2c_client *client,
 	CDBG("cell-index %d, rc %d\n", ois_ctrl_t->subdev_id, rc);
 	if (rc < 0) {
 		pr_err("failed rc %d\n", rc);
-		return rc;
+		goto probe_failure;
 	}
 
 	ois_ctrl_t->i2c_driver = &msm_ois_i2c_driver;
@@ -536,6 +536,7 @@ static int32_t msm_ois_i2c_probe(struct i2c_client *client,
 	CDBG("Exit\n");
 
 probe_failure:
+	kfree(ois_ctrl_t);
 	return rc;
 }
 
@@ -641,7 +642,7 @@ static int32_t msm_ois_platform_probe(struct platform_device *pdev)
 	rc = of_property_read_u32((&pdev->dev)->of_node, "qcom,cci-master",
 		&msm_ois_t->cci_master);
 	CDBG("qcom,cci-master %d, rc %d\n", msm_ois_t->cci_master, rc);
-	if (rc < 0) {
+	if (rc < 0 || msm_ois_t->cci_master >= MASTER_MAX) {
 		kfree(msm_ois_t);
 		pr_err("failed rc %d\n", rc);
 		return rc;
@@ -678,7 +679,7 @@ static int32_t msm_ois_platform_probe(struct platform_device *pdev)
 
 	cci_client = msm_ois_t->i2c_client.cci_client;
 	cci_client->cci_subdev = msm_cci_get_subdev();
-	cci_client->cci_i2c_master = MASTER_MAX;
+	cci_client->cci_i2c_master = msm_ois_t->cci_master;
 	v4l2_subdev_init(&msm_ois_t->msm_sd.sd,
 		msm_ois_t->ois_v4l2_subdev_ops);
 	v4l2_set_subdevdata(&msm_ois_t->msm_sd.sd, msm_ois_t);
