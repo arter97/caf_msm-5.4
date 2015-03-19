@@ -73,6 +73,8 @@ static const struct kgsl_ioctl kgsl_ioctl_funcs[] = {
 			kgsl_ioctl_syncsource_create_fence),
 	KGSL_IOCTL_FUNC(IOCTL_KGSL_SYNCSOURCE_SIGNAL_FENCE,
 			kgsl_ioctl_syncsource_signal_fence),
+	KGSL_IOCTL_FUNC(IOCTL_KGSL_CFF_SYNC_GPUOBJ,
+			kgsl_ioctl_cff_sync_gpuobj),
 };
 
 long kgsl_ioctl_copy_in(unsigned int kernel_cmd, unsigned int user_cmd,

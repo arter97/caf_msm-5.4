@@ -3536,21 +3536,46 @@ long kgsl_ioctl_gpumem_get_info(struct kgsl_device_private *dev_priv,
 long kgsl_ioctl_cff_syncmem(struct kgsl_device_private *dev_priv,
 					unsigned int cmd, void *data)
 {
-	int result = 0;
 	struct kgsl_cff_syncmem *param = data;
 	struct kgsl_process_private *private = dev_priv->process_priv;
 	struct kgsl_mem_entry *entry = NULL;
+	uint64_t offset;
 
 	entry = kgsl_sharedmem_find_region(private, (uint64_t) param->gpuaddr,
 		(uint64_t) param->len);
-	if (!entry)
+	if (entry == NULL)
 		return -EINVAL;
 
-	kgsl_cffdump_syncmem(dev_priv->device, &entry->memdesc,
-		(uint64_t) param->gpuaddr, (uint64_t) param->len, true);
+	/*
+	 * Calculate the offset between the requested GPU address and the start
+	 * of the object
+	 */
+
+	offset = ((uint64_t) param->gpuaddr) - entry->memdesc.gpuaddr;
+
+	kgsl_cffdump_syncmem(dev_priv->device, entry, offset,
+		(uint64_t) param->len, true);
 
 	kgsl_mem_entry_put(entry);
-	return result;
+	return 0;
+}
+
+long kgsl_ioctl_cff_sync_gpuobj(struct kgsl_device_private *dev_priv,
+		unsigned int cmd, void *data)
+{
+	struct kgsl_cff_sync_gpuobj *param = data;
+	struct kgsl_process_private *private = dev_priv->process_priv;
+	struct kgsl_mem_entry *entry = NULL;
+
+	entry = kgsl_sharedmem_find_id(private, param->id);
+	if (entry == NULL)
+		return -EINVAL;
+
+	kgsl_cffdump_syncmem(dev_priv->device, entry, param->offset,
+		param->length, true);
+
+	kgsl_mem_entry_put(entry);
+	return 0;
 }
 
 long kgsl_ioctl_cff_user_event(struct kgsl_device_private *dev_priv,
