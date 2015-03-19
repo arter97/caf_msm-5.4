@@ -750,6 +750,7 @@ int  init_camera_kthread(void)
 	ret = adp_rear_camera_enable();
 	complete(&camera_enabled);
 	pr_debug("%s: exit\n", __func__);
+	place_marker("rvc thread enabled");
 
 	return 0;
 }
