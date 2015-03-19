@@ -441,7 +441,6 @@
 	};
 
 	qcom,iris-fm {
-		status = "disabled";
 		compatible = "qcom,iris_fm";
 	};
 
