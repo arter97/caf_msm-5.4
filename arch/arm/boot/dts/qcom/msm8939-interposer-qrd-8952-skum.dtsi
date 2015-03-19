@@ -12,3 +12,8 @@
  */
 
 #include "msm8939-interposer-qrd.dtsi"
+
+&labibb {
+	status = "ok";
+	qpnp,qpnp-labibb-mode = "lcd";
+};
