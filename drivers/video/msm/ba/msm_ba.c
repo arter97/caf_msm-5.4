@@ -36,15 +36,22 @@
 #define MSM_BA_CVBS_INPUT			BA_DRV_INPUT_CVBS_AIN2
 #define MSM_BA_HDMI_INPUT			BA_DRV_INPUT_HDMI_RX
 
+#define MSM_BA_MAX_EVENTS			10
+
 int msm_ba_poll(void *instance, struct file *filp,
 		struct poll_table_struct *wait)
 {
 	struct msm_ba_inst *inst = instance;
+	int rc = 0;
 
 	if (!inst)
 		return -EINVAL;
 
-	return 0;
+	poll_wait(filp, &inst->event_handler.wait, wait);
+	if (v4l2_event_pending(&inst->event_handler))
+		rc |= POLLPRI;
+
+	return rc;
 }
 EXPORT_SYMBOL(msm_ba_poll);
 
@@ -145,6 +152,8 @@ int msm_ba_s_input(void *instance, unsigned int index)
 	case BA_RVC_IP:
 		rc = v4l2_subdev_call(sd, video, s_routing,
 						MSM_BA_RVC_INPUT, 0, 0);
+		msm_ba_queue_v4l2_event(inst,
+			V4L2_EVENT_MSM_BA_DEVICE_AVAILABLE);
 		break;
 	case BA_HDMI_IP:
 		rc = v4l2_subdev_call(sd, video, s_routing,
@@ -206,14 +215,17 @@ int msm_ba_g_fmt(void *instance, struct v4l2_format *f)
 		case V4L2_STD_PAL:
 			f->fmt.pix.height = DEFAULT_HEIGHT;
 			f->fmt.pix.width = DEFAULT_WIDTH;
+			f->fmt.pix.pixelformat = V4L2_PIX_FMT_UYVY;
 			break;
 		case V4L2_STD_NTSC:
 			f->fmt.pix.height = DEFAULT_HEIGHT;
 			f->fmt.pix.width = DEFAULT_WIDTH;
+			f->fmt.pix.pixelformat = V4L2_PIX_FMT_UYVY;
 			break;
 		default:
 			f->fmt.pix.height = DEFAULT_HEIGHT;
 			f->fmt.pix.width = DEFAULT_WIDTH;
+			f->fmt.pix.pixelformat = V4L2_PIX_FMT_UYVY;
 			break;
 		}
 	}
@@ -308,7 +320,7 @@ void msm_ba_release_subdev_node(struct video_device *vdev)
 }
 
 static int msm_ba_register_v4l2_subdev(struct v4l2_device *v4l2_dev,
-						struct v4l2_subdev *sd)
+				struct v4l2_subdev *sd)
 {
 	struct video_device *vdev;
 	int rc = 0;
@@ -358,7 +370,7 @@ static int msm_ba_register_v4l2_subdev(struct v4l2_device *v4l2_dev,
 }
 
 int msm_ba_register_subdev_node(struct v4l2_subdev *sd,
-					enum subdev_id sd_id)
+				enum subdev_id sd_id)
 {
 	struct ba_ctxt *ba_ctxt;
 	uint8_t sd_index;
@@ -428,7 +440,7 @@ int msm_ba_unregister_subdev_node(struct v4l2_subdev *sub_dev)
 EXPORT_SYMBOL(msm_ba_unregister_subdev_node);
 
 static int setup_event_queue(void *inst,
-						struct video_device *pvdev)
+				struct video_device *pvdev)
 {
 	int rc = 0;
 	struct msm_ba_inst *ba_inst = (struct msm_ba_inst *)inst;
@@ -437,6 +449,51 @@ static int setup_event_queue(void *inst,
 	v4l2_fh_add(&ba_inst->event_handler);
 
 	return rc;
+}
+
+int msm_ba_subscribe_event(void *inst,
+				struct v4l2_event_subscription *sub)
+{
+	int rc = 0;
+	struct msm_ba_inst *ba_inst = (struct msm_ba_inst *)inst;
+
+	if (!inst || !sub)
+		return -EINVAL;
+
+	rc = v4l2_event_subscribe(&ba_inst->event_handler, sub,
+						MSM_BA_MAX_EVENTS);
+	return rc;
+}
+EXPORT_SYMBOL(msm_ba_subscribe_event);
+
+int msm_ba_unsubscribe_event(void *inst,
+				struct v4l2_event_subscription *sub)
+{
+	int rc = 0;
+	struct msm_ba_inst *ba_inst = (struct msm_ba_inst *)inst;
+
+	if (!inst || !sub)
+		return -EINVAL;
+
+	rc = v4l2_event_unsubscribe(&ba_inst->event_handler, sub);
+	return rc;
+}
+EXPORT_SYMBOL(msm_ba_unsubscribe_event);
+
+void msm_ba_subdev_event_hndlr(struct v4l2_subdev *sd,
+				unsigned int notification, void *arg)
+{
+	dprintk(BA_INFO, "Enter %s\n", __func__);
+
+	if (!sd || !arg)
+		return;
+
+	switch (notification) {
+	default:
+		break;
+	}
+
+	dprintk(BA_INFO, "Exit %s\n", __func__);
 }
 
 void *msm_ba_open(void)
@@ -456,6 +513,7 @@ void *msm_ba_open(void)
 
 		mutex_init(&inst->inst_cs);
 
+		init_waitqueue_head(&inst->kernel_event_queue);
 		inst->state = MSM_BA_DEV_UNINIT_DONE;
 		inst->dev_ctxt = dev_ctxt;
 

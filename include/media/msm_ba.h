@@ -50,6 +50,10 @@ int msm_ba_streamon(void *instance, enum v4l2_buf_type i);
 int msm_ba_streamoff(void *instance, enum v4l2_buf_type i);
 int msm_ba_poll(void *instance, struct file *filp,
 		struct poll_table_struct *pt);
+int msm_ba_subscribe_event(void *instance,
+					struct v4l2_event_subscription *sub);
+int msm_ba_unsubscribe_event(void *instance,
+					struct v4l2_event_subscription *sub);
 int msm_ba_s_parm(void *instance, struct v4l2_streamparm *a);
 int msm_ba_register_subdev_node(struct v4l2_subdev *sd,
 		enum subdev_id sd_id);

@@ -17,5 +17,6 @@
 #include "msm_ba_internal.h"
 
 struct msm_ba_dev *get_ba_dev(void);
+void msm_ba_queue_v4l2_event(struct msm_ba_inst *inst, int event_type);
 
 #endif
