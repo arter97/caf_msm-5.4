@@ -11,6 +11,15 @@
  * GNU General Public License for more details.
  */
 
+&soc {
+	led_flash0: qcom,camera-flash {
+		cell-index = <0>;
+		compatible = "qcom,camera-flash";
+		qcom,flash-source = <&pmi8994_flash0 &pmi8994_flash1>;
+		qcom,torch-source = <&pmi8994_torch0 &pmi8994_torch1>;
+	};
+};
+
 &cci {
 	actuator0: qcom,actuator@0 {
 		cell-index = <0>;
@@ -58,7 +67,6 @@
 		qcom,cam-power-seq-val = "cam_vio";
 		qcom,cam-power-seq-cfg-val = <1>;
 		qcom,cam-power-seq-delay = <1>;
-		status = "ok";
 	};
 
 	eeprom1: qcom,eeprom@1 {
@@ -145,7 +153,7 @@
 		qcom,csiphy-sd-index = <0>;
 		qcom,csid-sd-index = <0>;
 		qcom,mount-angle = <0>;
-		qcom,eeprom-src = <&eeprom0>;
+		qcom,led-flash-src = <&led_flash0>;
 		cam_vdig-supply = <&pm8994_s3>;
 		cam_vio-supply = <&pm8994_lvs1>;
 		cam_vana-supply = <&pm8994_l17>;
@@ -257,7 +265,6 @@
 		cell-index = <2>;
 		compatible = "qcom,camera";
 		reg = <0x02>;
-		qcom,eeprom-src = <&eeprom1>;
 		qcom,csiphy-sd-index = <2>;
 		qcom,csid-sd-index = <2>;
 		qcom,mount-angle = <90>;
