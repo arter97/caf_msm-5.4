@@ -640,7 +640,7 @@ config QCOM_NPA_DUMP
 
 config MSM_CACHE_M4M_ERP64
 	bool "Cache and M4M error report"
-	depends on ARCH_MSMTHULIUM
+	depends on ARCH_MSM8996
 	help
 	  Say 'Y' here to enable reporting of cache and M4M errors to the kernel
 	  log. The kernel log contains collected error syndrome and address
@@ -666,7 +666,7 @@ source "drivers/soc/qcom/memshare/Kconfig"
 
 config MSM_TZ_SMMU
 	bool "Helper functions for SMMU configuration through TZ"
-	depends on ARCH_MSMTHULIUM
+	depends on ARCH_MSM8996
 	help
 	  Say 'Y' here for targets that need to call into TZ to configure
 	  SMMUs for any reason (for example, for errata workarounds or

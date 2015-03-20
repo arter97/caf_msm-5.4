@@ -1,7 +1,7 @@
 * MSM 64bit L0, L1, L2 and L3 cache error reporting driver
 
 Required properties:
-- compatible: Should be "qcom,thulia_cache_erp64"
+- compatible: Should be "qcom,kryo_cache_erp64"
 - reg: I/O address L3 hardware block.
 - interrupts: Should contain the L0/L1, L2 and L3 cache error interrupt number.
 - interrupt-names: Should contain the interrupt names "l1_irq", "l2_irq_info_0",
@@ -9,7 +9,7 @@ Required properties:
 
 Example:
 	qcom,cache_erp64@6500000 {
-		compatible = "qcom,thulia_cache_erp64";
+		compatible = "qcom,kryo_cache_erp64";
 		reg = <0x6500000 0x4000>;
 		/*
 		 * PPI 0  for L0/L1

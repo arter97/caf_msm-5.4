@@ -48,7 +48,7 @@
 		qcom,cmd-sync-wait-broadcast;
 		qcom,cmd-sync-wait-trigger;
 		qcom,mdss-dsi-panel-timings = [e2 36 24 00 66 6a 28 38 2a 03 04 00];
-		qcom,mdss-dsi-panel-timings-thulium = [23 20 06 09 05 03 04 a0
+		qcom,mdss-dsi-panel-timings-8996 = [23 20 06 09 05 03 04 a0
 				23 20 06 09 05 03 04 a0
 				23 20 06 09 05 03 04 a0
 				23 20 06 09 05 03 04 a0

@@ -35,10 +35,10 @@
 
 #include "cpr3-regulator.h"
 
-#define MSMTHULIUM_HMSS_FUSE_CORNERS	4
+#define MSM8996_HMSS_FUSE_CORNERS	4
 
 /**
- * struct cpr3_msmthulium_hmss_fuses - HMSS specific fuse data for MSMTHULIUM
+ * struct cpr3_msm8996_hmss_fuses - HMSS specific fuse data for MSM8996
  * @ro_sel:		Ring oscillator select fuse parameter value for each
  *			fuse corner
  * @init_voltage:	Initial (i.e. open-loop) voltage fuse parameter value
@@ -59,11 +59,11 @@
  * either the primary or redundant fuse locations depending upon the value of
  * redundant_fusing.
  */
-struct cpr3_msmthulium_hmss_fuses {
-	u64	ro_sel[MSMTHULIUM_HMSS_FUSE_CORNERS];
-	u64	init_voltage[MSMTHULIUM_HMSS_FUSE_CORNERS];
-	u64	target_quot[MSMTHULIUM_HMSS_FUSE_CORNERS];
-	u64	quot_offset[MSMTHULIUM_HMSS_FUSE_CORNERS];
+struct cpr3_msm8996_hmss_fuses {
+	u64	ro_sel[MSM8996_HMSS_FUSE_CORNERS];
+	u64	init_voltage[MSM8996_HMSS_FUSE_CORNERS];
+	u64	target_quot[MSM8996_HMSS_FUSE_CORNERS];
+	u64	quot_offset[MSM8996_HMSS_FUSE_CORNERS];
 	u64	speed_bin;
 	u64	cpr_fusing_rev;
 	u64	redundant_fusing;
@@ -71,25 +71,25 @@ struct cpr3_msmthulium_hmss_fuses {
 };
 
 /**
- * enum cpr3_msmthulium_hmss_fuse_combo - fuse combinations supported by the
- *			HMSS CPR3 controller on MSMTHULIUM
- * %CPR3_MSMTHULIUM_HMSS_FUSE_COMBO_DEFAULT:	Initial default combination
- * %CPR3_MSMTHULIUM_HMSS_FUSE_COMBO_COUNT:	Defines the number of
+ * enum cpr3_msm8996_hmss_fuse_combo - fuse combinations supported by the
+ *			HMSS CPR3 controller on MSM8996
+ * %CPR3_MSM8996_HMSS_FUSE_COMBO_DEFAULT:	Initial default combination
+ * %CPR3_MSM8996_HMSS_FUSE_COMBO_COUNT:	Defines the number of
  *						combinations supported
  *
  * This list will be expanded as new requirements are added.
  */
-enum cpr3_msmthulium_hmss_fuse_combo {
-	CPR3_MSMTHULIUM_HMSS_FUSE_COMBO_DEFAULT = 0,
-	CPR3_MSMTHULIUM_HMSS_FUSE_COMBO_COUNT
+enum cpr3_msm8996_hmss_fuse_combo {
+	CPR3_MSM8996_HMSS_FUSE_COMBO_DEFAULT = 0,
+	CPR3_MSM8996_HMSS_FUSE_COMBO_COUNT
 };
 
 /* CPR3 hardware thread IDs */
-#define MSMTHULIUM_HMSS_POWER_CLUSTER_THREAD_ID		0
-#define MSMTHULIUM_HMSS_PERFORMANCE_CLUSTER_THREAD_ID	1
+#define MSM8996_HMSS_POWER_CLUSTER_THREAD_ID		0
+#define MSM8996_HMSS_PERFORMANCE_CLUSTER_THREAD_ID	1
 
 /*
- * MSMTHULIUM HMSS fuse parameter locations:
+ * MSM8996 HMSS fuse parameter locations:
  *
  * Structs are organized with the following dimensions:
  *	Outer:  0 or 1 for power or performance cluster
@@ -102,14 +102,14 @@ enum cpr3_msmthulium_hmss_fuse_combo {
  *		a given parameter may correspond to different fuse rows.
  */
 static const struct cpr3_fuse_param
-msmthulium_hmss_ro_sel_param[2][MSMTHULIUM_HMSS_FUSE_CORNERS][2] = {
-	[MSMTHULIUM_HMSS_POWER_CLUSTER_THREAD_ID] = {
+msm8996_hmss_ro_sel_param[2][MSM8996_HMSS_FUSE_CORNERS][2] = {
+	[MSM8996_HMSS_POWER_CLUSTER_THREAD_ID] = {
 		{{66, 42, 45}, {} },
 		{{66, 38, 41}, {} },
 		{{66, 34, 37}, {} },
 		{{66, 30, 33}, {} },
 	},
-	[MSMTHULIUM_HMSS_PERFORMANCE_CLUSTER_THREAD_ID] = {
+	[MSM8996_HMSS_PERFORMANCE_CLUSTER_THREAD_ID] = {
 		{{64, 58, 61}, {} },
 		{{64, 54, 57}, {} },
 		{{64, 50, 53}, {} },
@@ -118,14 +118,14 @@ msmthulium_hmss_ro_sel_param[2][MSMTHULIUM_HMSS_FUSE_CORNERS][2] = {
 };
 
 static const struct cpr3_fuse_param
-msmthulium_hmss_init_voltage_param[2][MSMTHULIUM_HMSS_FUSE_CORNERS][3] = {
-	[MSMTHULIUM_HMSS_POWER_CLUSTER_THREAD_ID] = {
+msm8996_hmss_init_voltage_param[2][MSM8996_HMSS_FUSE_CORNERS][3] = {
+	[MSM8996_HMSS_POWER_CLUSTER_THREAD_ID] = {
 		{{67,  0,  5}, {} },
 		{{66, 58, 63}, {} },
 		{{66, 52, 57}, {} },
 		{{66, 46, 51}, {} },
 	},
-	[MSMTHULIUM_HMSS_PERFORMANCE_CLUSTER_THREAD_ID] = {
+	[MSM8996_HMSS_PERFORMANCE_CLUSTER_THREAD_ID] = {
 		{{65, 16, 21}, {} },
 		{{65, 10, 15}, {} },
 		{{65,  4,  9}, {} },
@@ -134,14 +134,14 @@ msmthulium_hmss_init_voltage_param[2][MSMTHULIUM_HMSS_FUSE_CORNERS][3] = {
 };
 
 static const struct cpr3_fuse_param
-msmthulium_hmss_target_quot_param[2][MSMTHULIUM_HMSS_FUSE_CORNERS][3] = {
-	[MSMTHULIUM_HMSS_POWER_CLUSTER_THREAD_ID] = {
+msm8996_hmss_target_quot_param[2][MSM8996_HMSS_FUSE_CORNERS][3] = {
+	[MSM8996_HMSS_POWER_CLUSTER_THREAD_ID] = {
 		{{67, 42, 53}, {} },
 		{{67, 30, 41}, {} },
 		{{67, 18, 29}, {} },
 		{{67,  6, 17}, {} },
 	},
-	[MSMTHULIUM_HMSS_PERFORMANCE_CLUSTER_THREAD_ID] = {
+	[MSM8996_HMSS_PERFORMANCE_CLUSTER_THREAD_ID] = {
 		{{65, 58, 63}, {66,  0,  5}, {} },
 		{{65, 46, 57}, {} },
 		{{65, 34, 45}, {} },
@@ -150,14 +150,14 @@ msmthulium_hmss_target_quot_param[2][MSMTHULIUM_HMSS_FUSE_CORNERS][3] = {
 };
 
 static const struct cpr3_fuse_param
-msmthulium_hmss_quot_offset_param[2][MSMTHULIUM_HMSS_FUSE_CORNERS][3] = {
-	[MSMTHULIUM_HMSS_POWER_CLUSTER_THREAD_ID] = {
+msm8996_hmss_quot_offset_param[2][MSM8996_HMSS_FUSE_CORNERS][3] = {
+	[MSM8996_HMSS_POWER_CLUSTER_THREAD_ID] = {
 		{{} },
 		{{68,  6, 13}, {} },
 		{{67, 62, 63}, {68, 0, 5}, {} },
 		{{67, 54, 61}, {} },
 	},
-	[MSMTHULIUM_HMSS_PERFORMANCE_CLUSTER_THREAD_ID] = {
+	[MSM8996_HMSS_PERFORMANCE_CLUSTER_THREAD_ID] = {
 		{{} },
 		{{66, 22, 29}, {} },
 		{{66, 14, 21}, {} },
@@ -170,21 +170,21 @@ msmthulium_hmss_quot_offset_param[2][MSMTHULIUM_HMSS_FUSE_CORNERS][3] = {
  * any particular feature.  CPR is one such feature.  The redundant CPR fuses
  * should be used if this fuse parameter has a value of 1.
  */
-static const struct cpr3_fuse_param msmthulium_redundant_fusing_param[] = {
+static const struct cpr3_fuse_param msm8996_redundant_fusing_param[] = {
 	{73, 61, 63},
 	{},
 };
-#define MSMTHULIUM_CPR_REDUNDANT_FUSING 1
+#define MSM8996_CPR_REDUNDANT_FUSING 1
 
 static const struct cpr3_fuse_param
-msmthulium_hmss_redun_ro_sel_param[2][MSMTHULIUM_HMSS_FUSE_CORNERS][2] = {
-	[MSMTHULIUM_HMSS_POWER_CLUSTER_THREAD_ID] = {
+msm8996_hmss_redun_ro_sel_param[2][MSM8996_HMSS_FUSE_CORNERS][2] = {
+	[MSM8996_HMSS_POWER_CLUSTER_THREAD_ID] = {
 		{{76, 36, 39}, {} },
 		{{76, 32, 35}, {} },
 		{{76, 28, 31}, {} },
 		{{76, 24, 27}, {} },
 	},
-	[MSMTHULIUM_HMSS_PERFORMANCE_CLUSTER_THREAD_ID] = {
+	[MSM8996_HMSS_PERFORMANCE_CLUSTER_THREAD_ID] = {
 		{{74, 52, 55}, {} },
 		{{74, 48, 51}, {} },
 		{{74, 44, 47}, {} },
@@ -193,14 +193,14 @@ msmthulium_hmss_redun_ro_sel_param[2][MSMTHULIUM_HMSS_FUSE_CORNERS][2] = {
 };
 
 static const struct cpr3_fuse_param
-msmthulium_hmss_redun_init_voltage_param[2][MSMTHULIUM_HMSS_FUSE_CORNERS][3] = {
-	[MSMTHULIUM_HMSS_POWER_CLUSTER_THREAD_ID] = {
+msm8996_hmss_redun_init_voltage_param[2][MSM8996_HMSS_FUSE_CORNERS][3] = {
+	[MSM8996_HMSS_POWER_CLUSTER_THREAD_ID] = {
 		{{76, 58, 63}, {} },
 		{{76, 52, 57}, {} },
 		{{76, 46, 51}, {} },
 		{{76, 40, 45}, {} },
 	},
-	[MSMTHULIUM_HMSS_PERFORMANCE_CLUSTER_THREAD_ID] = {
+	[MSM8996_HMSS_PERFORMANCE_CLUSTER_THREAD_ID] = {
 		{{75, 10, 15}, {} },
 		{{75,  4,  9}, {} },
 		{{74, 62, 63}, {75,  0,  3}, {} },
@@ -209,14 +209,14 @@ msmthulium_hmss_redun_init_voltage_param[2][MSMTHULIUM_HMSS_FUSE_CORNERS][3] = {
 };
 
 static const struct cpr3_fuse_param
-msmthulium_hmss_redun_target_quot_param[2][MSMTHULIUM_HMSS_FUSE_CORNERS][2] = {
-	[MSMTHULIUM_HMSS_POWER_CLUSTER_THREAD_ID] = {
+msm8996_hmss_redun_target_quot_param[2][MSM8996_HMSS_FUSE_CORNERS][2] = {
+	[MSM8996_HMSS_POWER_CLUSTER_THREAD_ID] = {
 		{{77, 36, 47}, {} },
 		{{77, 24, 35}, {} },
 		{{77, 12, 23}, {} },
 		{{77,  0, 11}, {} },
 	},
-	[MSMTHULIUM_HMSS_PERFORMANCE_CLUSTER_THREAD_ID] = {
+	[MSM8996_HMSS_PERFORMANCE_CLUSTER_THREAD_ID] = {
 		{{75, 52, 63}, {} },
 		{{75, 40, 51}, {} },
 		{{75, 28, 39}, {} },
@@ -225,14 +225,14 @@ msmthulium_hmss_redun_target_quot_param[2][MSMTHULIUM_HMSS_FUSE_CORNERS][2] = {
 };
 
 static const struct cpr3_fuse_param
-msmthulium_hmss_redun_quot_offset_param[2][MSMTHULIUM_HMSS_FUSE_CORNERS][2] = {
-	[MSMTHULIUM_HMSS_POWER_CLUSTER_THREAD_ID] = {
+msm8996_hmss_redun_quot_offset_param[2][MSM8996_HMSS_FUSE_CORNERS][2] = {
+	[MSM8996_HMSS_POWER_CLUSTER_THREAD_ID] = {
 		{{} },
 		{{68, 11, 18}, {} },
 		{{77, 56, 63}, {} },
 		{{77, 48, 55}, {} },
 	},
-	[MSMTHULIUM_HMSS_PERFORMANCE_CLUSTER_THREAD_ID] = {
+	[MSM8996_HMSS_PERFORMANCE_CLUSTER_THREAD_ID] = {
 		{{} },
 		{{76, 16, 23}, {} },
 		{{76,  8, 15}, {} },
@@ -240,61 +240,61 @@ msmthulium_hmss_redun_quot_offset_param[2][MSMTHULIUM_HMSS_FUSE_CORNERS][2] = {
 	},
 };
 
-static const struct cpr3_fuse_param msmthulium_cpr_fusing_rev_param[] = {
+static const struct cpr3_fuse_param msm8996_cpr_fusing_rev_param[] = {
 	{39, 51, 53},
 	{},
 };
 
-static const struct cpr3_fuse_param msmthulium_hmss_speed_bin_param[] = {
+static const struct cpr3_fuse_param msm8996_hmss_speed_bin_param[] = {
 	{38, 29, 31},
 	{},
 };
 
-static const struct cpr3_fuse_param msmthulium_cpr_limitation_param[] = {
+static const struct cpr3_fuse_param msm8996_cpr_limitation_param[] = {
 	{41, 31, 32},
 	{},
 };
 
 /*
- * Some initial msmthulium parts cannot be used in a meaningful way by software.
+ * Some initial msm8996 parts cannot be used in a meaningful way by software.
  * Other parts can only be used when operating with CPR disabled (i.e. at the
  * fused open-loop voltage) when no voltage interpolation is applied.  A fuse
  * parameter is provided so that software can properly handle these limitations.
  */
-enum msmthulium_cpr_limitation {
-	MSMTHULIUM_CPR_LIMITATION_NONE = 0,
-	MSMTHULIUM_CPR_LIMITATION_UNSUPPORTED = 2,
-	MSMTHULIUM_CPR_LIMITATION_NO_CPR_OR_INTERPOLATION = 3,
+enum msm8996_cpr_limitation {
+	MSM8996_CPR_LIMITATION_NONE = 0,
+	MSM8996_CPR_LIMITATION_UNSUPPORTED = 2,
+	MSM8996_CPR_LIMITATION_NO_CPR_OR_INTERPOLATION = 3,
 };
 
-/* Additional MSMTHULIUM specific data: */
+/* Additional MSM8996 specific data: */
 
 /* Open loop voltage fuse reference voltages in microvolts */
-static const int msmthulium_hmss_fuse_ref_volt[MSMTHULIUM_HMSS_FUSE_CORNERS] = {
+static const int msm8996_hmss_fuse_ref_volt[MSM8996_HMSS_FUSE_CORNERS] = {
 	605000,
 	745000,
 	905000,
 	1015000,
 };
 
-#define MSMTHULIUM_HMSS_FUSE_STEP_VOLT		10000
-#define MSMTHULIUM_HMSS_VOLTAGE_FUSE_SIZE	6
+#define MSM8996_HMSS_FUSE_STEP_VOLT		10000
+#define MSM8996_HMSS_VOLTAGE_FUSE_SIZE	6
 
 /**
- * cpr3_msmthulium_hmss_read_fuse_data() - load HMSS specific fuse parameter
+ * cpr3_msm8996_hmss_read_fuse_data() - load HMSS specific fuse parameter
  *					values
  * @thread:		Pointer to the CPR3 thread
  *
- * This function allocates a cpr3_msmthulium_hmss_fuses struct, fills it with
+ * This function allocates a cpr3_msm8996_hmss_fuses struct, fills it with
  * values read out of hardware fuses, and finally copies common fuse values
  * into the thread struct.
  *
  * Return: 0 on success, errno on failure
  */
-static int cpr3_msmthulium_hmss_read_fuse_data(struct cpr3_thread *thread)
+static int cpr3_msm8996_hmss_read_fuse_data(struct cpr3_thread *thread)
 {
 	void __iomem *base = thread->ctrl->fuse_base;
-	struct cpr3_msmthulium_hmss_fuses *fuse;
+	struct cpr3_msm8996_hmss_fuses *fuse;
 	bool redundant;
 	int i, id, rc;
 
@@ -304,7 +304,7 @@ static int cpr3_msmthulium_hmss_read_fuse_data(struct cpr3_thread *thread)
 		return -ENOMEM;
 	}
 
-	rc = cpr3_read_fuse_param(base, msmthulium_hmss_speed_bin_param,
+	rc = cpr3_read_fuse_param(base, msm8996_hmss_speed_bin_param,
 				&fuse->speed_bin);
 	if (rc) {
 		cpr3_err(thread, "Unable to read speed bin fuse, rc=%d\n", rc);
@@ -312,7 +312,7 @@ static int cpr3_msmthulium_hmss_read_fuse_data(struct cpr3_thread *thread)
 	}
 	cpr3_info(thread, "speed bin = %llu\n", fuse->speed_bin);
 
-	rc = cpr3_read_fuse_param(base, msmthulium_cpr_fusing_rev_param,
+	rc = cpr3_read_fuse_param(base, msm8996_cpr_fusing_rev_param,
 				&fuse->cpr_fusing_rev);
 	if (rc) {
 		cpr3_err(thread, "Unable to read CPR fusing revision fuse, rc=%d\n",
@@ -321,7 +321,7 @@ static int cpr3_msmthulium_hmss_read_fuse_data(struct cpr3_thread *thread)
 	}
 	cpr3_info(thread, "CPR fusing revision = %llu\n", fuse->cpr_fusing_rev);
 
-	rc = cpr3_read_fuse_param(base, msmthulium_redundant_fusing_param,
+	rc = cpr3_read_fuse_param(base, msm8996_redundant_fusing_param,
 				&fuse->redundant_fusing);
 	if (rc) {
 		cpr3_err(thread, "Unable to read redundant fusing config fuse, rc=%d\n",
@@ -329,11 +329,11 @@ static int cpr3_msmthulium_hmss_read_fuse_data(struct cpr3_thread *thread)
 		return rc;
 	}
 
-	redundant = (fuse->redundant_fusing == MSMTHULIUM_CPR_REDUNDANT_FUSING);
+	redundant = (fuse->redundant_fusing == MSM8996_CPR_REDUNDANT_FUSING);
 	cpr3_info(thread, "using redundant fuses = %c\n",
 		redundant ? 'Y' : 'N');
 
-	rc = cpr3_read_fuse_param(base, msmthulium_cpr_limitation_param,
+	rc = cpr3_read_fuse_param(base, msm8996_cpr_limitation_param,
 				&fuse->limitation);
 	if (rc) {
 		cpr3_err(thread, "Unable to read CPR limitation fuse, rc=%d\n",
@@ -341,18 +341,18 @@ static int cpr3_msmthulium_hmss_read_fuse_data(struct cpr3_thread *thread)
 		return rc;
 	}
 	cpr3_info(thread, "CPR limitation = %s\n",
-		fuse->limitation == MSMTHULIUM_CPR_LIMITATION_UNSUPPORTED
+		fuse->limitation == MSM8996_CPR_LIMITATION_UNSUPPORTED
 		? "unsupported chip" : fuse->limitation
-			  == MSMTHULIUM_CPR_LIMITATION_NO_CPR_OR_INTERPOLATION
+			  == MSM8996_CPR_LIMITATION_NO_CPR_OR_INTERPOLATION
 		? "CPR disabled and no interpolation" : "none");
 
 	id = thread->thread_id;
 
-	for (i = 0; i < MSMTHULIUM_HMSS_FUSE_CORNERS; i++) {
+	for (i = 0; i < MSM8996_HMSS_FUSE_CORNERS; i++) {
 		rc = cpr3_read_fuse_param(base,
 			redundant
-			    ? msmthulium_hmss_redun_init_voltage_param[id][i]
-			    : msmthulium_hmss_init_voltage_param[id][i],
+			    ? msm8996_hmss_redun_init_voltage_param[id][i]
+			    : msm8996_hmss_init_voltage_param[id][i],
 			&fuse->init_voltage[i]);
 		if (rc) {
 			cpr3_err(thread, "Unable to read fuse-corner %d initial voltage fuse, rc=%d\n",
@@ -362,8 +362,8 @@ static int cpr3_msmthulium_hmss_read_fuse_data(struct cpr3_thread *thread)
 
 		rc = cpr3_read_fuse_param(base,
 			redundant
-			    ? msmthulium_hmss_redun_target_quot_param[id][i]
-			    : msmthulium_hmss_target_quot_param[id][i],
+			    ? msm8996_hmss_redun_target_quot_param[id][i]
+			    : msm8996_hmss_target_quot_param[id][i],
 			&fuse->target_quot[i]);
 		if (rc) {
 			cpr3_err(thread, "Unable to read fuse-corner %d target quotient fuse, rc=%d\n",
@@ -373,8 +373,8 @@ static int cpr3_msmthulium_hmss_read_fuse_data(struct cpr3_thread *thread)
 
 		rc = cpr3_read_fuse_param(base,
 			redundant
-			    ? msmthulium_hmss_redun_ro_sel_param[id][i]
-			    : msmthulium_hmss_ro_sel_param[id][i],
+			    ? msm8996_hmss_redun_ro_sel_param[id][i]
+			    : msm8996_hmss_ro_sel_param[id][i],
 			&fuse->ro_sel[i]);
 		if (rc) {
 			cpr3_err(thread, "Unable to read fuse-corner %d RO select fuse, rc=%d\n",
@@ -384,8 +384,8 @@ static int cpr3_msmthulium_hmss_read_fuse_data(struct cpr3_thread *thread)
 
 		rc = cpr3_read_fuse_param(base,
 			redundant
-			    ? msmthulium_hmss_redun_quot_offset_param[id][i]
-			    : msmthulium_hmss_quot_offset_param[id][i],
+			    ? msm8996_hmss_redun_quot_offset_param[id][i]
+			    : msm8996_hmss_quot_offset_param[id][i],
 			&fuse->quot_offset[i]);
 		if (rc) {
 			cpr3_err(thread, "Unable to read fuse-corner %d quotient offset fuse, rc=%d\n",
@@ -396,9 +396,9 @@ static int cpr3_msmthulium_hmss_read_fuse_data(struct cpr3_thread *thread)
 
 	thread->speed_bin_fuse		= fuse->speed_bin;
 	thread->cpr_rev_fuse		= fuse->cpr_fusing_rev;
-	thread->fuse_corner_count	= MSMTHULIUM_HMSS_FUSE_CORNERS;
+	thread->fuse_corner_count	= MSM8996_HMSS_FUSE_CORNERS;
 	thread->platform_fuses		= fuse;
-	thread->fuse_combo	= CPR3_MSMTHULIUM_HMSS_FUSE_COMBO_DEFAULT;
+	thread->fuse_combo	= CPR3_MSM8996_HMSS_FUSE_COMBO_DEFAULT;
 
 	return 0;
 }
@@ -426,7 +426,7 @@ static int cpr3_hmss_parse_corner_data(struct cpr3_thread *thread)
 }
 
 /**
- * cpr3_msmthulium_hmss_calculate_open_loop_voltages() - calculate the open-loop
+ * cpr3_msm8996_hmss_calculate_open_loop_voltages() - calculate the open-loop
  *		voltage for each corner of a CPR3 thread
  * @thread:		Pointer to the CPR3 thread
  *
@@ -442,11 +442,11 @@ static int cpr3_hmss_parse_corner_data(struct cpr3_thread *thread)
  *
  * Return: 0 on success, errno on failure
  */
-static int cpr3_msmthulium_hmss_calculate_open_loop_voltages(
+static int cpr3_msm8996_hmss_calculate_open_loop_voltages(
 			struct cpr3_thread *thread)
 {
 	struct device_node *node = thread->of_node;
-	struct cpr3_msmthulium_hmss_fuses *fuse = thread->platform_fuses;
+	struct cpr3_msm8996_hmss_fuses *fuse = thread->platform_fuses;
 	int rc = 0;
 	bool allow_interpolation;
 	u64 freq_low, volt_low, freq_high, volt_high;
@@ -466,9 +466,9 @@ static int cpr3_msmthulium_hmss_calculate_open_loop_voltages(
 
 	for (i = 0; i < thread->fuse_corner_count; i++) {
 		fuse_volt[i] = cpr3_convert_open_loop_voltage_fuse(
-			msmthulium_hmss_fuse_ref_volt[i],
-			MSMTHULIUM_HMSS_FUSE_STEP_VOLT, fuse->init_voltage[i],
-			MSMTHULIUM_HMSS_VOLTAGE_FUSE_SIZE);
+			msm8996_hmss_fuse_ref_volt[i],
+			MSM8996_HMSS_FUSE_STEP_VOLT, fuse->init_voltage[i],
+			MSM8996_HMSS_VOLTAGE_FUSE_SIZE);
 		cpr3_debug(thread, "fuse_corner[%d] open-loop=%d uV\n",
 			i, fuse_volt[i]);
 	}
@@ -485,7 +485,7 @@ static int cpr3_msmthulium_hmss_calculate_open_loop_voltages(
 	}
 
 	if (fuse->limitation
-	    == MSMTHULIUM_CPR_LIMITATION_NO_CPR_OR_INTERPOLATION)
+	    == MSM8996_CPR_LIMITATION_NO_CPR_OR_INTERPOLATION)
 		allow_interpolation = false;
 
 	if (!allow_interpolation) {
@@ -648,21 +648,21 @@ static void cpr3_hmss_print_settings(struct cpr3_thread *thread)
  */
 static int cpr3_hmss_init_thread(struct cpr3_thread *thread)
 {
-	struct cpr3_msmthulium_hmss_fuses *fuse;
+	struct cpr3_msm8996_hmss_fuses *fuse;
 	int rc;
 
-	rc = cpr3_msmthulium_hmss_read_fuse_data(thread);
+	rc = cpr3_msm8996_hmss_read_fuse_data(thread);
 	if (rc) {
 		cpr3_err(thread, "unable to read CPR fuse data, rc=%d\n", rc);
 		return rc;
 	}
 
 	fuse = thread->platform_fuses;
-	if (fuse->limitation == MSMTHULIUM_CPR_LIMITATION_UNSUPPORTED) {
+	if (fuse->limitation == MSM8996_CPR_LIMITATION_UNSUPPORTED) {
 		cpr3_err(thread, "this chip requires an unsupported voltage\n");
 		return -EPERM;
 	} else if (fuse->limitation
-			== MSMTHULIUM_CPR_LIMITATION_NO_CPR_OR_INTERPOLATION) {
+			== MSM8996_CPR_LIMITATION_NO_CPR_OR_INTERPOLATION) {
 		thread->ctrl->cpr_allowed = false;
 	}
 
@@ -673,7 +673,7 @@ static int cpr3_hmss_init_thread(struct cpr3_thread *thread)
 		return rc;
 	}
 
-	rc = cpr3_msmthulium_hmss_calculate_open_loop_voltages(thread);
+	rc = cpr3_msm8996_hmss_calculate_open_loop_voltages(thread);
 	if (rc) {
 		cpr3_err(thread, "unable to calculate open-loop voltages, rc=%d\n",
 			rc);
@@ -792,7 +792,7 @@ static int cpr3_hmss_regulator_resume(struct platform_device *pdev)
 }
 
 static struct of_device_id cpr_regulator_match_table[] = {
-	{ .compatible = "qcom,cpr3-msmthulium-hmss-regulator", },
+	{ .compatible = "qcom,cpr3-msm8996-hmss-regulator", },
 	{}
 };
 
@@ -832,8 +832,8 @@ static int cpr3_hmss_regulator_probe(struct platform_device *pdev)
 	}
 
 	rc = cpr3_allocate_threads(ctrl,
-		MSMTHULIUM_HMSS_POWER_CLUSTER_THREAD_ID,
-		MSMTHULIUM_HMSS_PERFORMANCE_CLUSTER_THREAD_ID);
+		MSM8996_HMSS_POWER_CLUSTER_THREAD_ID,
+		MSM8996_HMSS_PERFORMANCE_CLUSTER_THREAD_ID);
 	if (rc) {
 		cpr3_err(ctrl, "failed to allocate CPR thread array, rc=%d\n",
 			rc);

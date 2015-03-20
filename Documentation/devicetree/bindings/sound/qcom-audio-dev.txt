@@ -1427,11 +1427,11 @@ Example:
 		asoc-codec-names = "msm-stub-codec.1";
 	};
 
-* MSMTHULIUM ASoC Machine driver
+* MSM8996 ASoC Machine driver
 
 Required properties:
-- compatible : "qcom,msmthulium-asoc-snd-tomtom" for tomtom codec and
-		node is "sound" and "qcom,msmthulium-asoc-snd-tasha"
+- compatible : "qcom,msm8996-asoc-snd-tomtom" for tomtom codec and
+		node is "sound" and "qcom,msm8996-asoc-snd-tasha"
 		for tasha codec and node is "sound-9335"
 - qcom,model : The user-visible name of this sound card.
 - qcom,tomtom-mclk-clk-freq : MCLK frequency value for tomtom codec
@@ -1469,8 +1469,8 @@ Optional properties:
 Example:
 
 	sound {
-	compatible = "qcom,msmthulium-asoc-snd";
-	qcom,model = "msmthulium-tomtom-snd-card";
+	compatible = "qcom,msm8996-asoc-snd";
+	qcom,model = "msm8996-tomtom-snd-card";
 
 	qcom,audio-routing =
 		"RX_BIAS", "MCLK",
