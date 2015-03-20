@@ -12,6 +12,7 @@
  */
 
 #include <linux/ioctl.h>
+#include <linux/compat.h>
 #include <linux/uaccess.h>
 #include <linux/fs.h>
 #include "kgsl_device.h"
@@ -126,7 +127,7 @@ long kgsl_ioctl_helper(struct file *filep, unsigned int cmd, unsigned long arg,
 			return ret;
 	}
 
-	ret = kgsl_ioctl_funcs[nr].func(dev_priv, cmd, data);
+	ret = cmds[nr].func(dev_priv, cmd, data);
 
 	if (ret == 0 && _IOC_SIZE(cmds[nr].cmd))
 		ret = kgsl_ioctl_copy_out(cmds[nr].cmd, cmd, arg, data);
@@ -149,7 +150,9 @@ long kgsl_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	 */
 
 	if (ret == -ENOIOCTLCMD) {
-		if (device->ftbl->ioctl != NULL)
+		if (is_compat_task() && device->ftbl->compat_ioctl != NULL)
+			return device->ftbl->compat_ioctl(dev_priv, cmd, arg);
+		else if (device->ftbl->ioctl != NULL)
 			return device->ftbl->ioctl(dev_priv, cmd, arg);
 
 		KGSL_DRV_INFO(device, "invalid ioctl code 0x%08X\n", cmd);
