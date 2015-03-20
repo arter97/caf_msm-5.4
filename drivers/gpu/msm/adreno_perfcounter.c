@@ -17,12 +17,6 @@
 #include "adreno.h"
 #include "adreno_pm4types.h"
 
-/* Bit flags for RBBM_CTL */
-#define RBBM_RBBM_CTL_RESET_PWR_CTR0	0x00000001
-#define RBBM_RBBM_CTL_RESET_PWR_CTR1	0x00000002
-#define RBBM_RBBM_CTL_ENABLE_PWR_CTR0	0x00010000
-#define RBBM_RBBM_CTL_ENABLE_PWR_CTR1	0x00020000
-
 /* Bit flag for RBMM_PERFCTR_CTL */
 #define RBBM_PERFCTR_CTL_ENABLE		0x00000001
 
@@ -642,27 +636,10 @@ int adreno_perfcounter_put(struct adreno_device *adreno_dev,
 static int _perfcounter_enable_pwr(struct adreno_device *adreno_dev,
 	unsigned int counter)
 {
-	unsigned int in, out;
-
 	if (counter > 1)
 		return -EINVAL;
 
-	kgsl_regread(&adreno_dev->dev, ADRENO_RBBM_RBBM_CTL, &in);
-
-	if (counter == 0)
-		out = in | RBBM_RBBM_CTL_RESET_PWR_CTR0;
-	else
-		out = in | RBBM_RBBM_CTL_RESET_PWR_CTR1;
-
-	kgsl_regwrite(&adreno_dev->dev, ADRENO_RBBM_RBBM_CTL, out);
-
-	if (counter == 0)
-		out = in | RBBM_RBBM_CTL_ENABLE_PWR_CTR0;
-	else
-		out = in | RBBM_RBBM_CTL_ENABLE_PWR_CTR1;
-
-	kgsl_regwrite(&adreno_dev->dev, ADRENO_RBBM_RBBM_CTL, out);
-
+	/* PWR counters enabled by default on A3XX/A4XX so nothing to do */
 	return 0;
 }
 
@@ -853,10 +830,12 @@ static uint64_t _perfcounter_read_pwr(struct adreno_device *adreno_dev,
 		return 0;
 
 	if (adreno_is_a3xx(adreno_dev)) {
+		/* On A3XX we need to freeze the counter so we can read it */
 		if (0 == counter)
-			enable_bit = RBBM_RBBM_CTL_ENABLE_PWR_CTR0;
+			enable_bit = 0x00010000;
 		else
-			enable_bit = RBBM_RBBM_CTL_ENABLE_PWR_CTR1;
+			enable_bit = 0x00020000;
+
 		/* freeze counter */
 		adreno_readreg(adreno_dev, ADRENO_REG_RBBM_RBBM_CTL, &in);
 		out = (in & ~enable_bit);
@@ -980,9 +959,9 @@ uint64_t adreno_perfcounter_read(struct adreno_device *adreno_dev,
 
 	/* Freeze the counter */
 	if (adreno_is_a3xx(adreno_dev)) {
-		adreno_readreg(adreno_dev, ADRENO_RBBM_PERFCTR_CTL, &in);
+		adreno_readreg(adreno_dev, ADRENO_REG_RBBM_PERFCTR_CTL, &in);
 		out = in & ~RBBM_PERFCTR_CTL_ENABLE;
-		adreno_writereg(adreno_dev, ADRENO_RBBM_PERFCTR_CTL, out);
+		adreno_writereg(adreno_dev, ADRENO_REG_RBBM_PERFCTR_CTL, out);
 	}
 
 	/* Read the values */
@@ -991,7 +970,7 @@ uint64_t adreno_perfcounter_read(struct adreno_device *adreno_dev,
 
 	/* Re-Enable the counter */
 	if (adreno_is_a3xx(adreno_dev))
-		adreno_writereg(adreno_dev, ADRENO_RBBM_PERFCTR_CTL, in);
+		adreno_writereg(adreno_dev, ADRENO_REG_RBBM_PERFCTR_CTL, in);
 	return (((uint64_t) hi) << 32) | lo;
 }
 
