@@ -630,12 +630,6 @@ static inline void kgsl_remove_device_sysfs_files(struct device *root,
 		device_remove_file(root, list[i]);
 }
 
-static inline struct kgsl_mmu *
-kgsl_get_mmu(struct kgsl_device *device)
-{
-	return (struct kgsl_mmu *) (device ? &device->mmu : NULL);
-}
-
 static inline struct kgsl_device *kgsl_device_from_dev(struct device *dev)
 {
 	int i;

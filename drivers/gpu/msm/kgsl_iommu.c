@@ -110,52 +110,6 @@ static phys_addr_t kgsl_iommu_get_pt_base_addr(struct kgsl_mmu *mmu,
 static struct page *kgsl_guard_page;
 static struct kgsl_memdesc kgsl_secure_guard_page_memdesc;
 
-static int get_iommu_unit(struct device *dev, struct kgsl_mmu **mmu_out,
-			struct kgsl_iommu_unit **iommu_unit_out)
-{
-	int i, j;
-
-	for (i = 0; i < KGSL_DEVICE_MAX; i++) {
-		struct kgsl_mmu *mmu;
-		struct kgsl_iommu *iommu;
-		struct kgsl_iommu_unit *iommu_unit;
-
-		if (kgsl_driver.devp[i] == NULL)
-			continue;
-
-		mmu = kgsl_get_mmu(kgsl_driver.devp[i]);
-		if (mmu == NULL || mmu->priv == NULL)
-			continue;
-
-		iommu = mmu->priv;
-
-		iommu_unit = &iommu->iommu_unit;
-		for (j = 0; j < KGSL_IOMMU_CONTEXT_MAX; j++) {
-			if ((iommu_unit->dev[j].dev) &&
-				(iommu_unit->dev[j].dev == dev)) {
-				*mmu_out = mmu;
-				*iommu_unit_out = iommu_unit;
-				return 0;
-			}
-		}
-	}
-
-	return -EINVAL;
-}
-
-static struct kgsl_iommu_device *get_iommu_device(struct kgsl_iommu_unit *unit,
-		struct device *dev)
-{
-	int k;
-
-	for (k = 0; unit && k < KGSL_IOMMU_CONTEXT_MAX; k++) {
-		if ((unit->dev[k].dev) && (unit->dev[k].dev == dev))
-			return &(unit->dev[k]);
-	}
-
-	return NULL;
-}
-
 /* These functions help find the nearest allocated memory entries on either side
  * of a faulting address. If we know the nearby allocations memory we can
  * get a better determination of what we think should have been located in the
@@ -318,7 +272,8 @@ static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 	struct device *dev, unsigned long addr, int flags, void *token)
 {
 	int ret = 0;
-	struct kgsl_mmu *mmu;
+	struct kgsl_pagetable *default_pt = token;
+	struct kgsl_mmu *mmu = default_pt->mmu;
 	struct kgsl_iommu *iommu;
 	struct kgsl_iommu_unit *iommu_unit;
 	struct kgsl_iommu_device *iommu_dev;
@@ -333,10 +288,11 @@ static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 	unsigned int curr_context_id = 0;
 	struct kgsl_context *context;
 
-	ret = get_iommu_unit(dev, &mmu, &iommu_unit);
-	if (ret)
-		goto done;
+	if (mmu == NULL || mmu->priv == NULL)
+		return ret;
 
+	iommu = mmu->priv;
+	iommu_unit = &iommu->iommu_unit;
 	device = mmu->device;
 	adreno_dev = ADRENO_DEVICE(device);
 	/*
@@ -347,13 +303,7 @@ static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 	if (1 == atomic_cmpxchg(&mmu->fault, 0, 1))
 		goto done;
 
-	iommu_dev = get_iommu_device(iommu_unit, dev);
-	if (!iommu_dev) {
-		KGSL_CORE_ERR("Invalid IOMMU device %p\n", dev);
-		ret = -ENOSYS;
-		goto done;
-	}
-	iommu = mmu->priv;
+	iommu_dev = &(iommu_unit->dev[KGSL_IOMMU_CONTEXT_USER]);
 
 	fsr = KGSL_IOMMU_GET_CTX_REG(iommu, iommu_unit,
 		iommu_dev->ctx_id, FSR);
@@ -648,7 +598,7 @@ static int kgsl_iommu_init_pt(struct kgsl_mmu *mmu, struct kgsl_pagetable *pt)
 	pt->pt_ops = &iommu_pt_ops;
 	pt->priv = iommu_pt;
 
-	if (KGSL_MMU_SECURE_PT != pt->name)
+	if (KGSL_MMU_GLOBAL_PT == pt->name)
 		iommu_set_fault_handler(iommu_pt->domain,
 				kgsl_iommu_fault_handler, pt);
 err:
@@ -1720,7 +1670,8 @@ static void kgsl_iommu_set_pagefault(struct kgsl_mmu *mmu)
 					(&(iommu->iommu_unit)),
 					iommu->iommu_unit.dev[j].ctx_id, FAR);
 			kgsl_iommu_fault_handler(NULL,
-				iommu->iommu_unit.dev[j].dev, far, 0, NULL);
+				iommu->iommu_unit.dev[j].dev, far, 0,
+				mmu->defaultpagetable);
 				break;
 		}
 	}
