@@ -663,9 +663,11 @@ static struct adreno_perfcount_register a5xx_perfcounters_cp[] = {
 		A5XX_RBBM_PERFCTR_CP_7_HI, 0, A5XX_CP_PERFCTR_CP_SEL_7 },
 };
 
+/*
+ * Note that PERFCTR_RBBM_0 is missing - it is used to emulate the PWR counters.
+ * See below.
+ */
 static struct adreno_perfcount_register a5xx_perfcounters_rbbm[] = {
-	{ KGSL_PERFCOUNTER_NOT_USED, 0, 0, A5XX_RBBM_PERFCTR_RBBM_0_LO,
-		A5XX_RBBM_PERFCTR_RBBM_0_HI, 8, A5XX_RBBM_PERFCTR_RBBM_SEL_0 },
 	{ KGSL_PERFCOUNTER_NOT_USED, 0, 0, A5XX_RBBM_PERFCTR_RBBM_1_LO,
 		A5XX_RBBM_PERFCTR_RBBM_1_HI, 9, A5XX_RBBM_PERFCTR_RBBM_SEL_1 },
 	{ KGSL_PERFCOUNTER_NOT_USED, 0, 0, A5XX_RBBM_PERFCTR_RBBM_2_LO,
@@ -914,6 +916,22 @@ static struct adreno_perfcount_register a5xx_perfcounters_alwayson[] = {
 		A5XX_RBBM_ALWAYSON_COUNTER_HI, 0 },
 };
 
+/*
+ * 5XX targets don't really have physical PERFCTR_PWR registers - we emulate
+ * them using similar performance counters from the RBBM block. The difference
+ * betweeen using this group and the RBBM group is that the RBBM counters are
+ * reloaded after a power collapse which is not how the PWR counters behaved on
+ * legacy hardware. In order to limit the disruption on the rest of the system
+ * we go out of our way to ensure backwards compatability. Since RBBM counters
+ * are in short supply, we don't emulate PWR:0 which nobody uses - mark it as
+ * broken.
+ */
+static struct adreno_perfcount_register a5xx_perfcounters_pwr[] = {
+	{ KGSL_PERFCOUNTER_BROKEN, 0, 0, 0, 0, -1, 0 },
+	{ KGSL_PERFCOUNTER_NOT_USED, 0, 0, A5XX_RBBM_PERFCTR_RBBM_0_LO,
+		A5XX_RBBM_PERFCTR_RBBM_0_HI, -1, 0},
+};
+
 #define A5XX_PERFCOUNTER_GROUP(offset, name) \
 	ADRENO_PERFCOUNTER_GROUP(a5xx, offset, name)
 
@@ -938,6 +956,8 @@ static struct adreno_perfcount_group a5xx_perfcounter_groups
 	A5XX_PERFCOUNTER_GROUP(SP, sp),
 	A5XX_PERFCOUNTER_GROUP(RB, rb),
 	A5XX_PERFCOUNTER_GROUP(VSC, vsc),
+	A5XX_PERFCOUNTER_GROUP_FLAGS(PWR, pwr,
+		ADRENO_PERFCOUNTER_GROUP_FIXED),
 	A5XX_PERFCOUNTER_GROUP(VBIF, vbif),
 	A5XX_PERFCOUNTER_GROUP_FLAGS(VBIF_PWR, vbif_pwr,
 		ADRENO_PERFCOUNTER_GROUP_FIXED),

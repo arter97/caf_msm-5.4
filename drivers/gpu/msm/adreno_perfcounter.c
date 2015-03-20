@@ -16,6 +16,7 @@
 #include "kgsl.h"
 #include "adreno.h"
 #include "adreno_pm4types.h"
+#include "a5xx_reg.h"
 
 /* Bit flag for RBMM_PERFCTR_CTL */
 #define RBBM_PERFCTR_CTL_ENABLE		0x00000001
@@ -640,6 +641,21 @@ static int _perfcounter_enable_pwr(struct adreno_device *adreno_dev,
 		return -EINVAL;
 
 	/* PWR counters enabled by default on A3XX/A4XX so nothing to do */
+	if (adreno_is_a3xx(adreno_dev) || adreno_is_a4xx(adreno_dev))
+		return 0;
+
+	/*
+	 * On 5XX we have to emulate the PWR counters which are physically
+	 * missing. Program countable 6 on RBBM_PERFCTR_RBBM_0 as a substitute
+	 * for PWR:1. Don't emulate PWR:0 as nobody uses it and we don't want
+	 * to take away too many of the generic RBBM counters.
+	 */
+
+	if (counter == 0)
+		return -EINVAL;
+
+	kgsl_regwrite(&adreno_dev->dev, A5XX_RBBM_PERFCTR_RBBM_SEL_0, 6);
+
 	return 0;
 }
 
@@ -828,6 +844,10 @@ static uint64_t _perfcounter_read_pwr(struct adreno_device *adreno_dev,
 
 	if (counters == NULL || counter > 1)
 		return 0;
+
+	/* Remember, counter 0 is not emulated on 5XX */
+	if (adreno_is_a5xx(adreno_dev) && (counter == 0))
+		return -EINVAL;
 
 	if (adreno_is_a3xx(adreno_dev)) {
 		/* On A3XX we need to freeze the counter so we can read it */
