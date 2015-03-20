@@ -242,7 +242,23 @@ static int a5xx_preemption_post_ibsubmit(
 				KGSL_MEMSTORE_OFFSET(context->id, preempted));
 
 	return cmds - cmds_orig;
+}
 
+/*
+ * a5xx_gpudev_init() - Initialize gpudev specific fields
+ * @adreno_dev: Pointer to adreno device
+ */
+static void a5xx_gpudev_init(struct adreno_device *adreno_dev)
+{
+	struct adreno_gpudev *gpudev;
+
+	gpudev = ADRENO_GPU_DEVICE(adreno_dev);
+
+	if (adreno_is_a510(adreno_dev)) {
+		gpudev->snapshot_data->sect_sizes->cp_meq = 32;
+		gpudev->snapshot_data->sect_sizes->cp_merciu = 32;
+		gpudev->snapshot_data->sect_sizes->roq = 256;
+	}
 }
 
 /**
@@ -464,8 +480,17 @@ static void a5xx_start(struct adreno_device *adreno_dev)
 		kgsl_regwrite(device, A5XX_CP_ROQ_THRESHOLDS_2, 0x80000060);
 		kgsl_regwrite(device, A5XX_CP_ROQ_THRESHOLDS_1, 0x40201B16);
 	}
-	kgsl_regwrite(device, A5XX_PC_DBG_ECO_CNTL,
-					(0x400 << 11 | 0x300 << 22));
+
+	/*
+	 * vtxFifo and primFifo thresholds default values
+	 * are different for A510.
+	 */
+	if (adreno_is_a510(adreno_dev))
+		kgsl_regwrite(device, A5XX_PC_DBG_ECO_CNTL,
+						(0x200 << 11 | 0x200 << 22));
+	else
+		kgsl_regwrite(device, A5XX_PC_DBG_ECO_CNTL,
+						(0x400 << 11 | 0x300 << 22));
 
 	/*
 	 * A5x USP LDST non valid pixel wrongly update read combine offset
@@ -1147,6 +1172,11 @@ static struct adreno_irq a5xx_irq = {
 	.mask = A5XX_INT_MASK,
 };
 
+/*
+ * Default size for CP queues for A5xx targets. You must
+ * overwrite these value in gpudev_init function for
+ * A5xx derivatives if size differs.
+ */
 static struct adreno_snapshot_sizes a5xx_snap_sizes = {
 	.cp_pfp = 36,
 	.cp_me = 29,
@@ -1169,6 +1199,7 @@ struct adreno_gpudev adreno_a5xx_gpudev = {
 	.snapshot_data = &a5xx_snapshot_data,
 	.irq_trace = trace_kgsl_a5xx_irq_status,
 	.num_prio_levels = 1,
+	.gpudev_init = a5xx_gpudev_init,
 	.rb_init = a5xx_rb_init,
 	.microcode_read = a5xx_microcode_read,
 	.microcode_load = a5xx_microcode_load,
