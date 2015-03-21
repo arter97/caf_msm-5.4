@@ -111,21 +111,22 @@ static char get_cacheflag(const struct kgsl_memdesc *m)
 
 static void print_mem_entry(struct seq_file *s, struct kgsl_mem_entry *entry)
 {
-	char flags[7];
+	char flags[8];
 	char usage[16];
 	struct kgsl_memdesc *m = &entry->memdesc;
 
 	flags[0] = kgsl_memdesc_is_global(m) ?  'g' : '-';
-	flags[1] = m->flags & KGSL_MEMFLAGS_GPUREADONLY ? 'r' : '-';
-	flags[2] = get_alignflag(m);
-	flags[3] = get_cacheflag(m);
-	flags[4] = kgsl_memdesc_use_cpu_map(m) ? 'p' : '-';
-	flags[5] = (m->useraddr) ? 'Y' : 'N';
-	flags[6] = '\0';
+	flags[1] = !(m->flags & KGSL_MEMFLAGS_GPUWRITEONLY) ? 'r' : '-';
+	flags[2] = !(m->flags & KGSL_MEMFLAGS_GPUREADONLY) ? 'w' : '-';
+	flags[3] = get_alignflag(m);
+	flags[4] = get_cacheflag(m);
+	flags[5] = kgsl_memdesc_use_cpu_map(m) ? 'p' : '-';
+	flags[6] = (m->useraddr) ? 'Y' : 'N';
+	flags[7] = '\0';
 
 	kgsl_get_memory_usage(usage, sizeof(usage), m->flags);
 
-	seq_printf(s, "%pK %pK %16llu %5d %6s %10s %16s %5d\n",
+	seq_printf(s, "%pK %pK %16llu %5d %8s %10s %16s %5d\n",
 			(uint64_t *)(uintptr_t) m->gpuaddr,
 			(unsigned long *) m->useraddr,
 			m->size, entry->id, flags,
@@ -140,7 +141,7 @@ static int process_mem_print(struct seq_file *s, void *unused)
 	struct kgsl_process_private *private = s->private;
 	int next = 0;
 
-	seq_printf(s, "%8s %8s %8s %5s %6s %10s %16s %5s\n",
+	seq_printf(s, "%8s %8s %8s %5s %8s %10s %16s %5s\n",
 		   "gpuaddr", "useraddr", "size", "id", "flags", "type",
 		   "usage", "sglen");
 

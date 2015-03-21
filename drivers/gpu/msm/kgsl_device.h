@@ -24,6 +24,7 @@
 #include "kgsl_log.h"
 #include "kgsl_pwrscale.h"
 #include "kgsl_snapshot.h"
+#include "kgsl_sharedmem.h"
 
 #include <linux/sync.h>
 
@@ -581,7 +582,7 @@ struct kgsl_protected_registers {
 struct kgsl_device *kgsl_get_device(int dev_idx);
 
 static inline void kgsl_process_add_stats(struct kgsl_process_private *priv,
-	unsigned int type, size_t size)
+	unsigned int type, uint64_t size)
 {
 	priv->stats[type].cur += size;
 	if (priv->stats[type].max < priv->stats[type].cur)
@@ -705,7 +706,7 @@ int kgsl_context_detach(struct kgsl_context *context);
 void kgsl_context_dump(struct kgsl_context *context);
 
 int kgsl_memfree_find_entry(pid_t pid, uint64_t *gpuaddr,
-	uint64_t *size, unsigned int *flags);
+	uint64_t *size, uint64_t *flags);
 
 long kgsl_ioctl(struct file *filep, unsigned int cmd, unsigned long arg);
 
@@ -714,6 +715,11 @@ long kgsl_ioctl_copy_in(unsigned int kernel_cmd, unsigned int user_cmd,
 
 long kgsl_ioctl_copy_out(unsigned int kernel_cmd, unsigned int user_cmd,
 		unsigned long, unsigned char *ptr);
+
+uint64_t kgsl_filter_cachemode(uint64_t flags);
+
+int kgsl_mem_entry_attach_process(struct kgsl_mem_entry *entry,
+				   struct kgsl_device_private *dev_priv);
 
 /**
  * kgsl_context_put() - Release context reference count
@@ -916,21 +922,6 @@ static inline int kgsl_sysfs_store(const char *buf, unsigned int *ptr)
 }
 
 /*
- * kgsl_memdesc_usermem_type - return buffer type
- * @memdesc - the memdesc
- *
- * Returns a KGSL_MEM_ENTRY_* value for this buffer, which
- * identifies if was allocated by us, or imported from
- * another allocator.
- */
-static inline unsigned int
-kgsl_memdesc_usermem_type(const struct kgsl_memdesc *memdesc)
-{
-	return (memdesc->flags & KGSL_MEMFLAGS_USERMEM_MASK)
-		>> KGSL_MEMFLAGS_USERMEM_SHIFT;
-}
-
-/*
  * A helper macro to print out "not enough memory functions" - this
  * makes it easy to standardize the messages as well as cut down on
  * the number of strings in the binary
@@ -1010,6 +1001,5 @@ struct kgsl_pwr_limit {
 	unsigned int level;
 	struct kgsl_device *device;
 };
-
 
 #endif  /* __KGSL_DEVICE_H */

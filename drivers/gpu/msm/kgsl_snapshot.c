@@ -304,8 +304,8 @@ int kgsl_snapshot_get_object(struct kgsl_snapshot *snapshot,
 	 * Do not save texture and render targets in snapshot,
 	 * they can be just too big
 	 */
-	mem_type = (entry->memdesc.flags & KGSL_MEMTYPE_MASK) >>
-		KGSL_MEMTYPE_SHIFT;
+
+	mem_type = kgsl_memdesc_get_memtype(&entry->memdesc);
 	if (KGSL_MEMTYPE_TEXTURE == mem_type ||
 		KGSL_MEMTYPE_EGL_SURFACE == mem_type ||
 		KGSL_MEMTYPE_EGL_IMAGE == mem_type) {

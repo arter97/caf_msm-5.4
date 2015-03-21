@@ -424,8 +424,7 @@ static size_t snapshot_capture_mem_list(struct kgsl_device *device,
 
 		*data++ = (unsigned int) entry->memdesc.gpuaddr;
 		*data++ = (unsigned int) entry->memdesc.size;
-		*data++ = (entry->memdesc.flags & KGSL_MEMTYPE_MASK) >>
-							KGSL_MEMTYPE_SHIFT;
+		*data++ = kgsl_memdesc_get_memtype(&entry->memdesc);
 	}
 	spin_unlock(&process->mem_lock);
 	return sizeof(*header) + (num_mem * 3 * sizeof(unsigned int));

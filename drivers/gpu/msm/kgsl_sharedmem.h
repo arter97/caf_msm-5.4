@@ -20,6 +20,7 @@
 #include <linux/kmemleak.h>
 #include <linux/iommu.h>
 
+#include "kgsl_mmu.h"
 #include "kgsl_log.h"
 
 struct kgsl_device;
@@ -76,6 +77,9 @@ void kgsl_process_uninit_sysfs(struct kgsl_process_private *private);
 int kgsl_sharedmem_init_sysfs(void);
 void kgsl_sharedmem_uninit_sysfs(void);
 
+#define MEMFLAGS(_flags, _mask, _shift) \
+	((unsigned int) (((_flags) & (_mask)) >> (_shift)))
+
 /*
  * kgsl_memdesc_get_align - Get alignment flags from a memdesc
  * @memdesc - the memdesc
@@ -85,7 +89,8 @@ void kgsl_sharedmem_uninit_sysfs(void);
 static inline int
 kgsl_memdesc_get_align(const struct kgsl_memdesc *memdesc)
 {
-	return (memdesc->flags & KGSL_MEMALIGN_MASK) >> KGSL_MEMALIGN_SHIFT;
+	return MEMFLAGS(memdesc->flags, KGSL_MEMALIGN_MASK,
+		KGSL_MEMALIGN_SHIFT);
 }
 
 /*
@@ -97,9 +102,16 @@ kgsl_memdesc_get_align(const struct kgsl_memdesc *memdesc)
 static inline int
 kgsl_memdesc_get_cachemode(const struct kgsl_memdesc *memdesc)
 {
-	return (memdesc->flags & KGSL_CACHEMODE_MASK) >> KGSL_CACHEMODE_SHIFT;
+	return MEMFLAGS(memdesc->flags, KGSL_CACHEMODE_MASK,
+		KGSL_CACHEMODE_SHIFT);
 }
 
+static inline unsigned int
+kgsl_memdesc_get_memtype(const struct kgsl_memdesc *memdesc)
+{
+	return MEMFLAGS(memdesc->flags, KGSL_MEMTYPE_MASK,
+		KGSL_MEMTYPE_SHIFT);
+}
 /*
  * kgsl_memdesc_set_align - Set alignment flags of a memdesc
  * @memdesc - the memdesc
@@ -116,6 +128,21 @@ kgsl_memdesc_set_align(struct kgsl_memdesc *memdesc, unsigned int align)
 	memdesc->flags &= ~KGSL_MEMALIGN_MASK;
 	memdesc->flags |= (align << KGSL_MEMALIGN_SHIFT) & KGSL_MEMALIGN_MASK;
 	return 0;
+}
+
+/**
+ * kgsl_memdesc_usermem_type - return buffer type
+ * @memdesc - the memdesc
+ *
+ * Returns a KGSL_MEM_ENTRY_* value for this buffer, which
+ * identifies if was allocated by us, or imported from
+ * another allocator.
+ */
+static inline unsigned int
+kgsl_memdesc_usermem_type(const struct kgsl_memdesc *memdesc)
+{
+	return MEMFLAGS(memdesc->flags, KGSL_MEMFLAGS_USERMEM_MASK,
+		KGSL_MEMFLAGS_USERMEM_SHIFT);
 }
 
 /**
@@ -226,7 +253,7 @@ static inline int
 kgsl_allocate_user(struct kgsl_device *device,
 		struct kgsl_memdesc *memdesc,
 		struct kgsl_pagetable *pagetable,
-		uint64_t size, unsigned int flags)
+		uint64_t size, uint64_t mmapsize, uint64_t flags)
 {
 	int ret;
 
@@ -276,7 +303,7 @@ kgsl_allocate_contiguous(struct kgsl_device *device,
  * ringbuffers.
  */
 static inline int kgsl_allocate_global(struct kgsl_device *device,
-	struct kgsl_memdesc *memdesc, uint64_t size, unsigned int flags,
+	struct kgsl_memdesc *memdesc, uint64_t size, uint64_t flags,
 	unsigned int priv)
 {
 	int ret;
