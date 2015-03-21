@@ -18,7 +18,7 @@ Required properties:
 	       should be "qcom,fsm9900-tsens" for 9900 TSENS driver.
 	       should be "qcom,mdm9630-tsens" for 9630 TSENS driver.
 	       should be "qcom,msm8994-tsens" for 8994 TSENS driver.
-	       should be "qcom,msmthulium-tsens" for Thulium TSENS driver.
+	       should be "qcom,msm8996-tsens" for 8996 TSENS driver.
 	       should be "qcom,msm8992-tsens" for 8992 TSENS driver.
 	       The compatible property is used to identify the respective fusemap to use
 	       for the corresponding SoC.
@@ -35,8 +35,8 @@ Required properties:
 - interrupts : TSENS interrupt to notify Upper/Lower temperature threshold.
 - interrupt-names: Should be "tsens-upper-lower" for temperature threshold.
 		   Add "tsens-critical" for Critical temperature threshold notification
-		   in addition to "tsens-upper-lower" for Thulium TSENS since
-		   Thulium supports Upper/Lower and Critical temperature threshold.
+		   in addition to "tsens-upper-lower" for 8996 TSENS since
+		   8996 supports Upper/Lower and Critical temperature threshold.
 - qcom,sensors : Total number of available Temperature sensors for TSENS.
 - qcom,slope : One point calibration characterized slope data for each
 	       sensor used to compute the offset. Slope is represented

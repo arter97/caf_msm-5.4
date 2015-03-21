@@ -18,7 +18,7 @@ Required properties:
 			"qcom,gcc-8994v2"
 			"qcom,gcc-8952"
 			"qcom,gcc-fsm9010"
-			"qcom,gcc-thulium"
+			"qcom,gcc-8996"
 			"qcom,rpmcc-8994"
 			"qcom,rpmcc-8992"
 			"qcom,rpmcc-8916"
@@ -31,7 +31,7 @@ Required properties:
 			"qcom,cc-debug-8994"
 			"qcom,cc-debug-8952"
 			"qcom,cc-debug-fsm9010"
-			"qcom,cc-debug-thulium"
+			"qcom,cc-debug-8996"
 			"qcom,gcc-mdss-8936"
 			"qcom,gcc-mdss-8909"
 			"qcom,gcc-mdss-8916"
@@ -39,8 +39,8 @@ Required properties:
 			"qcom,mmsscc-8994v2"
 			"qcom,mmsscc-8994"
 			"qcom,mmsscc-8992"
-			"qcom,mmsscc-thulium"
-			"qcom,gpucc-thulium"
+			"qcom,mmsscc-8996"
+			"qcom,gpucc-8996"
 
 - reg:			Pairs of physical base addresses and region sizes of
 			memory mapped registers.

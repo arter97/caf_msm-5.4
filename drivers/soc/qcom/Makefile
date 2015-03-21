@@ -34,7 +34,7 @@ obj-$(CONFIG_MSM_SCM)	+=	scm.o scm-boot.o
 obj-$(CONFIG_MSM_SMD)	+=	smd.o smd_debug.o smd_private.o smd_init_dt.o smsm_debug.o
 obj-$(CONFIG_MSM_SMEM)	+=	smem.o smem_debug.o
 
-obj-$(CONFIG_ARCH_MSMTHULIUM) += thulia-l2-accessors.o
+obj-$(CONFIG_ARCH_MSM8996) += kryo-l2-accessors.o
 obj-$(CONFIG_MSM_CACHE_DUMP) += cache_dump.o
 obj-$(CONFIG_MSM_SMEM_LOGGING) += smem_log.o
 obj-$(CONFIG_MSM_COMMON_LOG) += common_log.o

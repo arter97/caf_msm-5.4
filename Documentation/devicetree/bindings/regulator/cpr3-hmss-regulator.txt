@@ -35,7 +35,7 @@ HMSS specific properties:
 - compatible
 	Usage:      required
 	Value type: <string>
-	Definition: should be "qcom,cpr3-msmthulium-hmss-regulator"
+	Definition: should be "qcom,cpr3-msm8996-hmss-regulator"
 
 - qcom,apm-ctrl
 	Usage:      required on systems that need APM management
@@ -84,7 +84,7 @@ Example
 =======
 
 apcc_cpr: cpr3-ctrl@99e8000 {
-	compatible = "qcom,cpr3-msmthulium-hmss-regulator";
+	compatible = "qcom,cpr3-msm8996-hmss-regulator";
 	reg = <0x099e8000 0x4000>, <0x00074000 0x1000>;
 	reg-names = "cpr_ctrl", "fuse_base";
 	qcom,cpr-ctrl-name = "apcc";

@@ -99,28 +99,28 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
 	msm8936-mtp.dtb \
 	msm8936-mtp-smb1360.dtb \
 	msm8936-mtp-wcd9306.dtb
-dtb-$(CONFIG_ARCH_MSMTHULIUM) += msmthulium-v1-sim.dtb \
-	msmthulium-v2-sim.dtb \
-	msmthulium-v3-sim.dtb \
-	msmthulium-v1-rumi.dtb \
-	msmthulium-v2-rumi.dtb \
-	msmthulium-v3-rumi.dtb \
-	msmthulium-v1-pmi8994-cdp.dtb \
-	msmthulium-v1-pmi8994-mtp.dtb \
-	msmthulium-v1-pmi8994-pm8004-cdp.dtb \
-	msmthulium-v1-pmi8994-pm8004-mtp.dtb \
-	msmthulium-v2-pmi8994-cdp.dtb \
-	msmthulium-v2-pmi8994-mtp.dtb \
-	msmthulium-v2-pmi8994-pm8004-cdp.dtb \
-	msmthulium-v2-pmi8994-pm8004-mtp.dtb \
-	msmthulium-v3-pmi8994-cdp.dtb \
-	msmthulium-v3-pmi8994-mtp.dtb \
-	msmthulium-v3-pmi8994-pm8004-cdp.dtb \
-	msmthulium-v3-pmi8994-pm8004-mtp.dtb \
-	msmthulium-v2-fluid.dtb \
-	msmthulium-v3-fluid.dtb \
-	msmthulium-v2-liquid.dtb \
-	msmthulium-v3-liquid.dtb
+dtb-$(CONFIG_ARCH_MSM8996) += msm8996-v1-sim.dtb \
+	msm8996-v2-sim.dtb \
+	msm8996-v3-sim.dtb \
+	msm8996-v1-rumi.dtb \
+	msm8996-v2-rumi.dtb \
+	msm8996-v3-rumi.dtb \
+	msm8996-v1-pmi8994-cdp.dtb \
+	msm8996-v1-pmi8994-mtp.dtb \
+	msm8996-v1-pmi8994-pm8004-cdp.dtb \
+	msm8996-v1-pmi8994-pm8004-mtp.dtb \
+	msm8996-v2-pmi8994-cdp.dtb \
+	msm8996-v2-pmi8994-mtp.dtb \
+	msm8996-v2-pmi8994-pm8004-cdp.dtb \
+	msm8996-v2-pmi8994-pm8004-mtp.dtb \
+	msm8996-v3-pmi8994-cdp.dtb \
+	msm8996-v3-pmi8994-mtp.dtb \
+	msm8996-v3-pmi8994-pm8004-cdp.dtb \
+	msm8996-v3-pmi8994-pm8004-mtp.dtb \
+	msm8996-v2-fluid.dtb \
+	msm8996-v3-fluid.dtb \
+	msm8996-v2-liquid.dtb \
+	msm8996-v3-liquid.dtb
 
 targets += dtbs
 targets += $(addprefix ../, $(dtb-y))

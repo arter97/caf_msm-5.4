@@ -116,8 +116,8 @@ int chk_config_get_id(void)
 		return MSM8909_TOOLS_ID;
 	case MSM_CPU_8992:
 		return MSM8992_TOOLS_ID;
-	case MSM_CPU_THULIUM:
-		return MSM_THULIUM_TOOLS_ID;
+	case MSM_CPU_8996:
+		return MSM_8996_TOOLS_ID;
 	case MSM_CPU_TELLURIUM:
 		return MSMTELLURIUM_TOOLS_ID;
 	default:

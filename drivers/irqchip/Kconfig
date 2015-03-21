@@ -49,9 +49,9 @@ config MSM_SHOW_RESUME_IRQ
 config MSM_GIC_SGI_NEEDS_BARRIER
 	bool "SGI operations require explicit barriers"
 	depends on ARM_GIC_V3
-	def_bool ARCH_MSMTHULIUM
+	def_bool ARCH_MSM8996
 	help
-	  Some early samples of the MSMTHULIUM SoCs require that an explicit
+	  Some early samples of the MSM8996 SoCs require that an explicit
 	  barrier be executed between two sucessive writes to the ICC_SGI1R_EL1
 	  register. If you are building the kernel to work on one of these early
 	  designs, select 'Y' here.

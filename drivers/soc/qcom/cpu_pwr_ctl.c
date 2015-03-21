@@ -31,28 +31,28 @@
 #include <asm/cacheflush.h>
 
 /* CPUSS power domain register offsets */
-#define MSMTHULIUM_APCC_PWR_GATE_DLY0	0x40
-#define MSMTHULIUM_APCC_PWR_GATE_DLY1	0x48
-#define MSMTHULIUM_APCC_MAS_DLY0	0x50
-#define MSMTHULIUM_APCC_MAS_DLY1	0x58
-#define MSMTHULIUM_APCC_SER_EN		0x60
-#define MSMTHULIUM_APCC_SER_DLY		0x68
-#define MSMTHULIUM_APCC_SER_DLY_SEL0	0x70
-#define MSMTHULIUM_APCC_SER_DLY_SEL1	0x78
-#define MSMTHULIUM_APCC_APM_DLY		0xa0
-#define MSMTHULIUM_APCC_APM_DLY2	0xe8
-#define MSMTHULIUM_APCC_GDHS_DLY	0xb0
+#define MSM8996_APCC_PWR_GATE_DLY0	0x40
+#define MSM8996_APCC_PWR_GATE_DLY1	0x48
+#define MSM8996_APCC_MAS_DLY0	0x50
+#define MSM8996_APCC_MAS_DLY1	0x58
+#define MSM8996_APCC_SER_EN		0x60
+#define MSM8996_APCC_SER_DLY		0x68
+#define MSM8996_APCC_SER_DLY_SEL0	0x70
+#define MSM8996_APCC_SER_DLY_SEL1	0x78
+#define MSM8996_APCC_APM_DLY		0xa0
+#define MSM8996_APCC_APM_DLY2	0xe8
+#define MSM8996_APCC_GDHS_DLY	0xb0
 
 /* CPUSS CSR register offsets */
-#define MSMTHULIUM_CPUSS_VERSION	0xfd0
+#define MSM8996_CPUSS_VERSION	0xfd0
 
 /* CPU power domain register offsets */
 #define CPU_PWR_CTL			0x4
 #define CPU_PWR_GATE_CTL		0x14
 
-#define MSMTHULIUM_CPU_PWR_CTL		0x0
-#define MSMTHULIUM_CPU_PGS_STS		0x38
-#define MSMTHULIUM_CPU_MAS_STS		0x40
+#define MSM8996_CPU_PWR_CTL		0x0
+#define MSM8996_CPU_PGS_STS		0x38
+#define MSM8996_CPU_MAS_STS		0x40
 
 /* L2 power domain register offsets */
 #define L2_PWR_CTL_OVERRIDE		0xc
@@ -64,18 +64,18 @@
 #define L2_SPM_STS			0xc
 #define L2_VREG_CTL			0x1c
 
-#define MSMTHULIUM_L2_PWR_CTL		0x0
-#define MSMTHULIUM_L2_PGS_STS		0x30
-#define MSMTHULIUM_L2_MAS_STS		0x38
+#define MSM8996_L2_PWR_CTL		0x0
+#define MSM8996_L2_PGS_STS		0x30
+#define MSM8996_L2_MAS_STS		0x38
 
 #define APC_LDO_CFG1		0xc
 #define APC_LDO_CFG2		0x10
 #define APC_LDO_VREF_CFG	0x4
 #define APC_LDO_BHS_PWR_CTL	0x28
 
-#define MSMTHULIUM_CPUSS_VER_1P0	0x10000000
-#define MSMTHULIUM_CPUSS_VER_1P1	0x10010000
-#define MSMTHULIUM_CPUSS_VER_1P2	0x10020000
+#define MSM8996_CPUSS_VER_1P0	0x10000000
+#define MSM8996_CPUSS_VER_1P1	0x10010000
+#define MSM8996_CPUSS_VER_1P2	0x10020000
 
 /*
  * struct msm_l2ccc_of_info: represents of data for l2 cache clock controller.
@@ -282,7 +282,7 @@ static int power_on_l2_msm8994(struct device_node *l2ccc_node, u32 pon_mask,
 	return 0;
 }
 
-static void msmthulium_poll_steady_active(void __iomem *base, long offset)
+static void msm8996_poll_steady_active(void __iomem *base, long offset)
 {
 	int timeout = 10;
 
@@ -352,7 +352,7 @@ static void select_cbf_source(struct clkmux *mux, bool cbf)
 	}
 }
 
-static int power_on_l2_msmthulium(struct device_node *l2ccc_node, u32 pon_mask,
+static int power_on_l2_msm8996(struct device_node *l2ccc_node, u32 pon_mask,
 				int cpu)
 {
 	u32 pwr_ctl;
@@ -365,7 +365,7 @@ static int power_on_l2_msmthulium(struct device_node *l2ccc_node, u32 pon_mask,
 		return -ENOMEM;
 
 	/* see if we're in a valid power state */
-	pwr_ctl = __raw_readl(l2_base + MSMTHULIUM_L2_PWR_CTL);
+	pwr_ctl = __raw_readl(l2_base + MSM8996_L2_PWR_CTL);
 
 	if (pwr_ctl == 0)
 		goto unmap;
@@ -392,16 +392,16 @@ static int power_on_l2_msmthulium(struct device_node *l2ccc_node, u32 pon_mask,
 	}
 
 	/* assert POR reset, clamp, close L2 APM HS */
-	writel_relaxed(0x00000055 , l2_base + MSMTHULIUM_L2_PWR_CTL);
+	writel_relaxed(0x00000055 , l2_base + MSM8996_L2_PWR_CTL);
 
 	/* poll STEADY_ACTIVE */
-	msmthulium_poll_steady_active(l2_base, MSMTHULIUM_L2_MAS_STS);
+	msm8996_poll_steady_active(l2_base, MSM8996_L2_MAS_STS);
 
 	/* close L2 Logic BHS */
-	writel_relaxed(0x00000045 , l2_base + MSMTHULIUM_L2_PWR_CTL);
+	writel_relaxed(0x00000045 , l2_base + MSM8996_L2_PWR_CTL);
 
 	/* poll STEADY_ACTIVE */
-	msmthulium_poll_steady_active(l2_base, MSMTHULIUM_L2_PGS_STS);
+	msm8996_poll_steady_active(l2_base, MSM8996_L2_PGS_STS);
 
 	/* L2 reset requirement */
 	udelay(2);
@@ -415,19 +415,19 @@ static int power_on_l2_msmthulium(struct device_node *l2ccc_node, u32 pon_mask,
 		u32 delay_us;
 		for (delay_us = 3500; delay_us; delay_us /= 2) {
 			/* de-assert reset with clamps on */
-			writel_relaxed(0x00000041, l2_base + MSMTHULIUM_L2_PWR_CTL);
+			writel_relaxed(0x00000041, l2_base + MSM8996_L2_PWR_CTL);
 
 			/* wait for clock to enable */
 			wmb();
 			udelay(delay_us);
 
 			/* re-assert reset */
-			writel_relaxed(0x00000045, l2_base + MSMTHULIUM_L2_PWR_CTL);
+			writel_relaxed(0x00000045, l2_base + MSM8996_L2_PWR_CTL);
 		}
 	}
 
 	/* de-assert clamp */
-	writel_relaxed(0x00000004 , l2_base + MSMTHULIUM_L2_PWR_CTL);
+	writel_relaxed(0x00000004 , l2_base + MSM8996_L2_PWR_CTL);
 
 	/* ensure write completes before delay */
 	wmb();
@@ -435,7 +435,7 @@ static int power_on_l2_msmthulium(struct device_node *l2ccc_node, u32 pon_mask,
 	udelay(1);
 
 	/* de-assert reset */
-	writel_relaxed(0x00000000 , l2_base + MSMTHULIUM_L2_PWR_CTL);
+	writel_relaxed(0x00000000 , l2_base + MSM8996_L2_PWR_CTL);
 
 	/* ensure power-up before restoring the clock and returning */
 	wmb();
@@ -466,8 +466,8 @@ static const struct msm_l2ccc_of_info l2ccc_info[] = {
 		.l2_power_on_mask = BIT(9),
 	},
 	{
-		.compat = "qcom,msmthulium-l2ccc",
-		.l2_power_on = power_on_l2_msmthulium,
+		.compat = "qcom,msm8996-l2ccc",
+		.l2_power_on = power_on_l2_msm8996,
 	},
 };
 
@@ -691,7 +691,7 @@ out_acc:
 	return ret;
 }
 
-int msmthulium_cpuss_pm_init(unsigned int cpu)
+int msm8996_cpuss_pm_init(unsigned int cpu)
 {
 	int ret = 0;
 	struct device_node *cpu_node, *pm_cpuss_node, *csr_cpuss_node;
@@ -726,37 +726,37 @@ int msmthulium_cpuss_pm_init(unsigned int cpu)
 		goto out_csr_cpuss;
 	}
 
-	version = readl_relaxed(csr_cpuss + MSMTHULIUM_CPUSS_VERSION);
+	version = readl_relaxed(csr_cpuss + MSM8996_CPUSS_VERSION);
 
 	/* Configure delays for Power Gate Switch FSM states */
-	writel_relaxed(0x0a010000, pm_cpuss + MSMTHULIUM_APCC_PWR_GATE_DLY0);
-	writel_relaxed(0x000a000a, pm_cpuss + MSMTHULIUM_APCC_PWR_GATE_DLY1);
+	writel_relaxed(0x0a010000, pm_cpuss + MSM8996_APCC_PWR_GATE_DLY0);
+	writel_relaxed(0x000a000a, pm_cpuss + MSM8996_APCC_PWR_GATE_DLY1);
 
 	/* Configure delays for Memory Array Sequencer FSM states */
-	writel_relaxed(0x00000000, pm_cpuss + MSMTHULIUM_APCC_MAS_DLY0);
-	writel_relaxed(0x00040400, pm_cpuss + MSMTHULIUM_APCC_MAS_DLY1);
+	writel_relaxed(0x00000000, pm_cpuss + MSM8996_APCC_MAS_DLY0);
+	writel_relaxed(0x00040400, pm_cpuss + MSM8996_APCC_MAS_DLY1);
 
 	/* Configure power switch serializer delays */
-	writel_relaxed(0x00000001, pm_cpuss + MSMTHULIUM_APCC_SER_EN);
-	writel_relaxed(0x14141414, pm_cpuss + MSMTHULIUM_APCC_SER_DLY);
-	writel_relaxed(0x00000000, pm_cpuss + MSMTHULIUM_APCC_SER_DLY_SEL0);
-	writel_relaxed(0x00000000, pm_cpuss + MSMTHULIUM_APCC_SER_DLY_SEL1);
+	writel_relaxed(0x00000001, pm_cpuss + MSM8996_APCC_SER_EN);
+	writel_relaxed(0x14141414, pm_cpuss + MSM8996_APCC_SER_DLY);
+	writel_relaxed(0x00000000, pm_cpuss + MSM8996_APCC_SER_DLY_SEL0);
+	writel_relaxed(0x00000000, pm_cpuss + MSM8996_APCC_SER_DLY_SEL1);
 
 	switch (version) {
-	case MSMTHULIUM_CPUSS_VER_1P0:
-		writel_relaxed(0x00000000, pm_cpuss + MSMTHULIUM_APCC_APM_DLY);
+	case MSM8996_CPUSS_VER_1P0:
+		writel_relaxed(0x00000000, pm_cpuss + MSM8996_APCC_APM_DLY);
 		break;
-	case MSMTHULIUM_CPUSS_VER_1P1:
-		writel_relaxed(0x07001000, pm_cpuss + MSMTHULIUM_APCC_APM_DLY);
+	case MSM8996_CPUSS_VER_1P1:
+		writel_relaxed(0x07001000, pm_cpuss + MSM8996_APCC_APM_DLY);
 		break;
-	case MSMTHULIUM_CPUSS_VER_1P2:
-		writel_relaxed(0x01001001, pm_cpuss + MSMTHULIUM_APCC_APM_DLY);
-		writel_relaxed(0x0000000a, pm_cpuss + MSMTHULIUM_APCC_APM_DLY2);
+	case MSM8996_CPUSS_VER_1P2:
+		writel_relaxed(0x01001001, pm_cpuss + MSM8996_APCC_APM_DLY);
+		writel_relaxed(0x0000000a, pm_cpuss + MSM8996_APCC_APM_DLY2);
 		break;
 	}
 
 	/* Program GDHS sequencer delays */
-	writel_relaxed(0x0a0a0a0a, pm_cpuss + MSMTHULIUM_APCC_GDHS_DLY);
+	writel_relaxed(0x0a0a0a0a, pm_cpuss + MSM8996_APCC_GDHS_DLY);
 
 	/* Ensure writes complete before unmapping memory */
 	mb();
@@ -774,7 +774,7 @@ out_pm_cpuss_node:
 	return ret;
 }
 
-int msmthulium_unclamp_secondary_arm_cpu(unsigned int cpu)
+int msm8996_unclamp_secondary_arm_cpu(unsigned int cpu)
 {
 	int ret = 0;
 	struct device_node *cpu_node, *acc_node, *l2_node, *l2ccc_node;
@@ -819,22 +819,22 @@ int msmthulium_unclamp_secondary_arm_cpu(unsigned int cpu)
 	}
 
 	/* assert POR reset, clamp, close CPU APM HS */
-	writel_relaxed(0x00000055, apcc + MSMTHULIUM_CPU_PWR_CTL);
+	writel_relaxed(0x00000055, apcc + MSM8996_CPU_PWR_CTL);
 
 	/* poll STEADY_ACTIVE */
-	msmthulium_poll_steady_active(apcc, MSMTHULIUM_CPU_MAS_STS);
+	msm8996_poll_steady_active(apcc, MSM8996_CPU_MAS_STS);
 
 	/* close CPU logic BHS */
-	writel_relaxed(0x00000045, apcc + MSMTHULIUM_CPU_PWR_CTL);
+	writel_relaxed(0x00000045, apcc + MSM8996_CPU_PWR_CTL);
 
 	/* poll STEADY_ACTIVE */
-	msmthulium_poll_steady_active(apcc, MSMTHULIUM_CPU_PGS_STS);
+	msm8996_poll_steady_active(apcc, MSM8996_CPU_PGS_STS);
 
 	/* delay for CPU reset */
 	udelay(2);
 
 	/* de-assert clamp */
-	writel_relaxed(0x00000004, apcc + MSMTHULIUM_CPU_PWR_CTL);
+	writel_relaxed(0x00000004, apcc + MSM8996_CPU_PWR_CTL);
 
 	/* ensure write completes before delay */
 	wmb();
@@ -842,10 +842,10 @@ int msmthulium_unclamp_secondary_arm_cpu(unsigned int cpu)
 	udelay(1);
 
 	/* de-assert POR reset */
-	writel_relaxed(0x00000000, apcc + MSMTHULIUM_CPU_PWR_CTL);
+	writel_relaxed(0x00000000, apcc + MSM8996_CPU_PWR_CTL);
 
 	/* assert powered up */
-	writel_relaxed(0x00000100, apcc + MSMTHULIUM_CPU_PWR_CTL);
+	writel_relaxed(0x00000100, apcc + MSM8996_CPU_PWR_CTL);
 
 	/* ensure power-up before returning */
 	wmb();

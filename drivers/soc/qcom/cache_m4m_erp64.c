@@ -23,7 +23,7 @@
 #include <linux/workqueue.h>
 #include <linux/of.h>
 
-#include <soc/qcom/thulia-l2-accessors.h>
+#include <soc/qcom/kryo-l2-accessors.h>
 
 /* Instruction cache */
 #define ICECR_EL1			S3_1_c11_c1_0
@@ -564,7 +564,7 @@ exit:
 }
 
 static struct of_device_id cache_erp_dt_ids[] = {
-	{ .compatible = "qcom,thulia_cache_erp64", },
+	{ .compatible = "qcom,kryo_cache_erp64", },
 	{}
 };
 MODULE_DEVICE_TABLE(of, cache_erp_dt_ids);

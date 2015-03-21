@@ -504,8 +504,8 @@ static struct msm_soc_info cpu_of_id[] = {
 	/* Tellurium ID */
 	[264] = {MSM_CPU_TELLURIUM, "MSMTELLURIUM"},
 
-	/* Thulium IDs */
-	[246] = {MSM_CPU_THULIUM, "MSMTHULIUM"},
+	/* 8996 IDs */
+	[246] = {MSM_CPU_8996, "MSM8996"},
 
 	/* Terbium ID */
 	[266] = {MSM_CPU_TERBIUM, "MSMTERBIUM"},
@@ -1034,9 +1034,9 @@ static void * __init setup_dummy_socinfo(void)
 		dummy_socinfo.id = 264;
 		strlcpy(dummy_socinfo.build_id, "msmtellurium - ",
 			sizeof(dummy_socinfo.build_id));
-	} else if (early_machine_is_msmthulium()) {
+	} else if (early_machine_is_msm8996()) {
 		dummy_socinfo.id = 246;
-		strlcpy(dummy_socinfo.build_id, "msmthulium - ",
+		strlcpy(dummy_socinfo.build_id, "msm8996 - ",
 			sizeof(dummy_socinfo.build_id));
 	} else if (early_machine_is_msm8929()) {
 		dummy_socinfo.id = 268;

@@ -88,7 +88,7 @@ conditions.
                   to TZ.  See msm_tz_smmu.c for a full list of mappings.
 
 - qcom,errata-tz-atos : Enable workaround for an ATOS hardware errata on
-                  Thulium v1.  You *must* also set qcom,tz-device-id for
+                  8996 v1.  You *must* also set qcom,tz-device-id for
                   this to work.
 
 - qcom,no-mmu-enable : When attaching to this SMMU, program everything as

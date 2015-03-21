@@ -3,13 +3,13 @@ CPUSS CSR
 This device encapsulates the CPU subsystem domain level Control Status Registers.
 Information that may be obtained includes the hardware revision for the CPU subsystem.
 
-compatible: 	 Must be "qcom,msmthulium-cpss-csr"
+compatible: 	 Must be "qcom,msm8996-cpss-csr"
 reg:		 Specifies the physical base address and size of the memory region
 		 where the CPUSS CSR registers reside
 Example:
 
 	cpuss_csr: cpuss-csr@09820000 {
-		compatible = "qcom,msmthulium-cpuss-csr";
+		compatible = "qcom,msm8996-cpuss-csr";
 		reg = <0x09820000 0x10000>;
 	};
 

@@ -55,7 +55,7 @@
 #define TSENS2_SN_STATUS_VALID_MASK	0x4000
 #define TSENS2_TRDY_ADDR(n)		((n) + 0x84)
 
-/* TSENS_TM registers for Thulium */
+/* TSENS_TM registers for 8996 */
 #define TSENS_TM_INT_EN(n)			((n) + 0x1004)
 #define TSENS_TM_CRITICAL_INT_EN		BIT(2)
 #define TSENS_TM_UPPER_INT_EN			BIT(1)
@@ -94,7 +94,7 @@
 #define TSENS_TM_CODE_BIT_MASK			0xfff
 #define TSENS_TM_CODE_SIGN_BIT			0x800
 
-/* End TSENS_TM registers for Thulium */
+/* End TSENS_TM registers for 8996 */
 
 #define TSENS_CTRL_ADDR(n)		(n)
 #define TSENS_EN			BIT(0)
@@ -3479,7 +3479,7 @@ static struct of_device_id tsens_match[] = {
 	{	.compatible = "qcom,msmzirc-tsens",
 		.data = (void *)TSENS_CALIB_FUSE_MAP_MSMZIRC,
 	},
-	{	.compatible = "qcom,msmthulium-tsens",
+	{	.compatible = "qcom,msm8996-tsens",
 		.data = (void *)TSENS_CALIB_FUSE_MAP_NONE,
 	},
 	{	.compatible = "qcom,msm8992-tsens",
@@ -3576,7 +3576,7 @@ static int get_device_tree_data(struct platform_device *pdev)
 		(!strcmp(id->compatible, "qcom,msm8994-tsens")) ||
 		(!strcmp(id->compatible, "qcom,msm8992-tsens")))
 		tmdev->tsens_type = TSENS_TYPE2;
-	else if (!strcmp(id->compatible, "qcom,msmthulium-tsens"))
+	else if (!strcmp(id->compatible, "qcom,msm8996-tsens"))
 		tmdev->tsens_type = TSENS_TYPE3;
 	else
 		tmdev->tsens_type = TSENS_TYPE0;
@@ -3584,7 +3584,7 @@ static int get_device_tree_data(struct platform_device *pdev)
 	if (!strcmp(id->compatible, "qcom,msm8994-tsens") ||
 		(!strcmp(id->compatible, "qcom,msmzirc-tsens")) ||
 		(!strcmp(id->compatible, "qcom,msm8992-tsens")) ||
-		(!strcmp(id->compatible, "qcom,msmthulium-tsens")))
+		(!strcmp(id->compatible, "qcom,msm8996-tsens")))
 		tmdev->tsens_valid_status_check = true;
 	else
 		tmdev->tsens_valid_status_check = false;
@@ -3597,7 +3597,7 @@ static int get_device_tree_data(struct platform_device *pdev)
 		goto fail_tmdev;
 	}
 
-	if (!strcmp(id->compatible, "qcom,msmthulium-tsens")) {
+	if (!strcmp(id->compatible, "qcom,msm8996-tsens")) {
 		tmdev->tsens_critical_irq =
 				platform_get_irq_byname(pdev,
 						"tsens-critical");

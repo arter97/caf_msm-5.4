@@ -181,12 +181,12 @@ static int msm8994_cpu_boot(unsigned int cpu)
 	return secondary_pen_release(cpu);
 }
 
-static int __init msmthulium_cpu_prepare(unsigned int cpu)
+static int __init msm8996_cpu_prepare(unsigned int cpu)
 {
 	int ret;
 
 	if (per_cpu(cold_boot_done, 0) == false) {
-		ret = msmthulium_cpuss_pm_init(0);
+		ret = msm8996_cpuss_pm_init(0);
 		if (ret)
 			return ret;
 	}
@@ -194,12 +194,12 @@ static int __init msmthulium_cpu_prepare(unsigned int cpu)
 	return msm_cpu_prepare(cpu);
 }
 
-static int msmthulium_cpu_boot(unsigned int cpu)
+static int msm8996_cpu_boot(unsigned int cpu)
 {
 	int ret = 0;
 
 	if (per_cpu(cold_boot_done, cpu) == false) {
-		ret = msmthulium_unclamp_secondary_arm_cpu(cpu);
+		ret = msm8996_unclamp_secondary_arm_cpu(cpu);
 		if (ret)
 			return ret;
 
@@ -276,11 +276,11 @@ static const struct cpu_operations msm8994_cortex_a_ops = {
 };
 CPU_METHOD_OF_DECLARE(msm8994_cortex_a_ops, &msm8994_cortex_a_ops);
 
-static const struct cpu_operations msmthulium_ops = {
-	.name		= "qcom,msmthulium-acc",
+static const struct cpu_operations msm8996_ops = {
+	.name		= "qcom,msm8996-acc",
 	.cpu_init	= msm_cpu_init,
-	.cpu_prepare	= msmthulium_cpu_prepare,
-	.cpu_boot	= msmthulium_cpu_boot,
+	.cpu_prepare	= msm8996_cpu_prepare,
+	.cpu_boot	= msm8996_cpu_boot,
 	.cpu_postboot	= msm_cpu_postboot,
 #ifdef CONFIG_HOTPLUG_CPU
 	.cpu_die        = msm_wfi_cpu_die,
@@ -288,4 +288,4 @@ static const struct cpu_operations msmthulium_ops = {
 #endif
 	.cpu_suspend       = msm_pm_collapse,
 };
-CPU_METHOD_OF_DECLARE(msmthulium_ops, &msmthulium_ops);
+CPU_METHOD_OF_DECLARE(msm8996_ops, &msm8996_ops);

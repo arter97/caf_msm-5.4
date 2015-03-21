@@ -21,7 +21,7 @@
 #include <linux/platform_device.h>
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
-#include <dt-bindings/clock/msm-clocks-thulium.h>
+#include <dt-bindings/clock/msm-clocks-8996.h>
 
 struct audio_ext_ap_clk {
 	bool enabled;

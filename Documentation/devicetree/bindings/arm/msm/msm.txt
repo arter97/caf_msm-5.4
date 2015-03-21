@@ -65,6 +65,9 @@ SoCs:
 - MSM8994
   compatible = "qcom,msm8994"
 
+- MSM8996
+  compatible = "qcom,msm8996"
+
 - MSMTELLURIUM
   compatible = "qcom,msmtellurium"
 
@@ -73,9 +76,6 @@ SoCs:
 
 - VPIPA
   compatible = "qcom,msmvpipa"
-
-- THULIUM
-  compatbile = "qcom,msmthulium"
 
 
 Generic board variants:
@@ -184,6 +184,12 @@ compatible = "qcom,msm8994-liquid"
 compatible = "qcom,msm8994-mtp"
 compatible = "qcom,msm8994-rumi"
 compatible = "qcom,msm8994-sim"
+compatible = "qcom,msm8996-rumi"
+compatible = "qcom,msm8996-sim"
+compatible = "qcom,msm8996-cdp"
+compatible = "qcom,msm8996-fluid"
+compatible = "qcom,msm8996-liquid"
+compatible = "qcom,msm8996-mtp"
 compatible = "qcom,msmtellurium-rumi"
 compatible = "qcom,msmtellurium-sim"
 compatible = "qcom,msmzirc-cdp"
@@ -191,9 +197,3 @@ compatible = "qcom,msmzirc-mtp"
 compatible = "qcom,msmzirc-rumi"
 compatible = "qcom,msmzirc-sim"
 compatible = "qcom,msmvpipa-sim"
-compatible = "qcom,msmthulium-rumi"
-compatible = "qcom,msmthulium-sim"
-compatible = "qcom,msmthulium-cdp"
-compatible = "qcom,msmthulium-fluid"
-compatible = "qcom,msmthulium-liquid"
-compatible = "qcom,msmthulium-mtp"
