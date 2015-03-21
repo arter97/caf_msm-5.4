@@ -1147,4 +1147,49 @@ struct kgsl_gpuobj_alloc {
 #define IOCTL_KGSL_GPUOBJ_ALLOC \
 	_IOWR(KGSL_IOC_TYPE, 0x45, struct kgsl_gpuobj_alloc)
 
+/**
+ * struct kgsl_gpuobj_free - Argument to IOCTL_KGLS_GPUOBJ_FREE
+ * @flags: Mask of: KGSL_GUPOBJ_FREE_ON_EVENT
+ * @priv: Pointer to the private object if KGSL_GPUOBJ_FREE_ON_EVENT is
+ * specified
+ * @id: ID of the GPU object to free
+ * @type: If KGSL_GPUOBJ_FREE_ON_EVENT is specified, the type of asynchronous
+ * event to free on
+ * @len: Length of the data passed in priv
+ */
+struct kgsl_gpuobj_free {
+	uint64_t flags;
+	uint64_t __user priv;
+	unsigned int id;
+	unsigned int type;
+	unsigned int len;
+};
+
+#define KGSL_GPUOBJ_FREE_ON_EVENT 1
+
+#define KGSL_GPU_EVENT_TIMESTAMP 1
+#define KGSL_GPU_EVENT_FENCE     2
+
+/**
+ * struct kgsl_gpu_event_timestamp - Specifies a timestamp event to free a GPU
+ * object on
+ * @context_id: ID of the timestamp event to wait for
+ * @timestamp: Timestamp of the timestamp event to wait for
+ */
+struct kgsl_gpu_event_timestamp {
+	unsigned int context_id;
+	unsigned int timestamp;
+};
+
+/**
+ * struct kgsl_gpu_event_fence - Specifies a fence ID to to free a GPU object on
+ * @fd: File descriptor for the fence
+ */
+struct kgsl_gpu_event_fence {
+	int fd;
+};
+
+#define IOCTL_KGSL_GPUOBJ_FREE \
+	_IOW(KGSL_IOC_TYPE, 0x46, struct kgsl_gpuobj_free)
+
 #endif /* _UAPI_MSM_KGSL_H */

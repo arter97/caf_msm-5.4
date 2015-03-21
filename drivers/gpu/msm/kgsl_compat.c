@@ -346,6 +346,8 @@ static const struct kgsl_ioctl kgsl_compat_ioctl_funcs[] = {
 			kgsl_ioctl_cff_sync_gpuobj),
 	KGSL_IOCTL_FUNC(IOCTL_KGSL_GPUOBJ_ALLOC,
 			kgsl_ioctl_gpuobj_alloc),
+	KGSL_IOCTL_FUNC(IOCTL_KGSL_GPUOBJ_FREE,
+			kgsl_ioctl_gpuobj_free),
 };
 
 long kgsl_compat_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
