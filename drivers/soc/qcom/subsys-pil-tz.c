@@ -73,6 +73,9 @@ struct reg_info {
  * @bus_client: bus client id
  * @enable_bus_scaling: set to true if PIL needs to vote for
  *			bus bandwidth
+ * @keep_proxy_regs_on: If set, during proxy unvoting, PIL removes the
+ *			voltage/current vote for proxy regulators but leaves
+ *			them enabled.
  * @stop_ack: state of completion of stop ack
  * @desc: PIL descriptor
  * @subsys: subsystem device pointer
@@ -92,6 +95,7 @@ struct pil_tz_data {
 	u32 pas_id;
 	u32 bus_client;
 	bool enable_bus_scaling;
+	bool keep_proxy_regs_on;
 	struct completion stop_ack;
 	struct pil_desc desc;
 	struct subsys_device *subsys;
@@ -398,8 +402,9 @@ static int piltz_resc_init(struct platform_device *pdev, struct pil_tz_data *d)
 	return 0;
 }
 
-static int enable_regulators(struct device *dev, struct reg_info *regs,
-								int reg_count)
+static int enable_regulators(struct pil_tz_data *d, struct device *dev,
+				struct reg_info *regs, int reg_count,
+				bool reg_no_enable)
 {
 	int i, rc = 0;
 
@@ -421,6 +426,9 @@ static int enable_regulators(struct device *dev, struct reg_info *regs,
 				goto err_mode;
 			}
 		}
+
+		if (d->keep_proxy_regs_on && reg_no_enable)
+			continue;
 
 		rc = regulator_enable(regs[i].reg);
 		if (rc) {
@@ -446,13 +454,16 @@ err_voltage:
 		if (regs[i].uA > 0)
 			regulator_set_optimum_mode(regs[i].reg, 0);
 
+		if (d->keep_proxy_regs_on && reg_no_enable)
+			continue;
 		regulator_disable(regs[i].reg);
 	}
 
 	return rc;
 }
 
-static void disable_regulators(struct reg_info *regs, int reg_count)
+static void disable_regulators(struct pil_tz_data *d, struct reg_info *regs,
+					int reg_count, bool reg_no_disable)
 {
 	int i;
 
@@ -463,6 +474,8 @@ static void disable_regulators(struct reg_info *regs, int reg_count)
 		if (regs[i].uA > 0)
 			regulator_set_optimum_mode(regs[i].reg, 0);
 
+		if (d->keep_proxy_regs_on && reg_no_disable)
+			continue;
 		regulator_disable(regs[i].reg);
 	}
 }
@@ -505,7 +518,8 @@ static int pil_make_proxy_vote(struct pil_desc *pil)
 	if (d->subsys_desc.no_auth)
 		return 0;
 
-	rc = enable_regulators(pil->dev, d->proxy_regs, d->proxy_reg_count);
+	rc = enable_regulators(d, pil->dev, d->proxy_regs,
+					d->proxy_reg_count, false);
 	if (rc)
 		return rc;
 
@@ -528,7 +542,7 @@ static int pil_make_proxy_vote(struct pil_desc *pil)
 err_bw:
 	disable_unprepare_clocks(d->proxy_clks, d->proxy_clk_count);
 err_clks:
-	disable_regulators(d->proxy_regs, d->proxy_reg_count);
+	disable_regulators(d, d->proxy_regs, d->proxy_reg_count, false);
 
 	return rc;
 }
@@ -548,7 +562,7 @@ static void pil_remove_proxy_vote(struct pil_desc *pil)
 
 	disable_unprepare_clocks(d->proxy_clks, d->proxy_clk_count);
 
-	disable_regulators(d->proxy_regs, d->proxy_reg_count);
+	disable_regulators(d, d->proxy_regs, d->proxy_reg_count, true);
 }
 
 static int pil_init_image_trusted(struct pil_desc *pil,
@@ -658,7 +672,7 @@ static int pil_auth_and_reset(struct pil_desc *pil)
 	desc.args[0] = proc = d->pas_id;
 	desc.arginfo = SCM_ARGS(1);
 
-	rc = enable_regulators(pil->dev, d->regs, d->reg_count);
+	rc = enable_regulators(d, pil->dev, d->regs, d->reg_count, false);
 	if (rc)
 		return rc;
 
@@ -686,7 +700,7 @@ static int pil_auth_and_reset(struct pil_desc *pil)
 err_reset:
 	disable_unprepare_clocks(d->clks, d->clk_count);
 err_clks:
-	disable_regulators(d->regs, d->reg_count);
+	disable_regulators(d, d->regs, d->reg_count, false);
 
 	return rc;
 }
@@ -704,7 +718,8 @@ static int pil_shutdown_trusted(struct pil_desc *pil)
 	desc.args[0] = proc = d->pas_id;
 	desc.arginfo = SCM_ARGS(1);
 
-	rc = enable_regulators(pil->dev, d->proxy_regs, d->proxy_reg_count);
+	rc = enable_regulators(d, pil->dev, d->proxy_regs,
+					d->proxy_reg_count, true);
 	if (rc)
 		return rc;
 
@@ -723,17 +738,17 @@ static int pil_shutdown_trusted(struct pil_desc *pil)
 	}
 
 	disable_unprepare_clocks(d->proxy_clks, d->proxy_clk_count);
-	disable_regulators(d->proxy_regs, d->proxy_reg_count);
+	disable_regulators(d, d->proxy_regs, d->proxy_reg_count, false);
 
 	if (rc)
 		return rc;
 
 	disable_unprepare_clocks(d->clks, d->clk_count);
-	disable_regulators(d->regs, d->reg_count);
+	disable_regulators(d, d->regs, d->reg_count, false);
 
 	return scm_ret;
 err_clks:
-	disable_regulators(d->proxy_regs, d->proxy_reg_count);
+	disable_regulators(d, d->proxy_regs, d->proxy_reg_count, false);
 	return rc;
 }
 
@@ -887,6 +902,9 @@ static int pil_tz_driver_probe(struct platform_device *pdev)
 
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,pil-no-auth"))
 		d->subsys_desc.no_auth = true;
+
+	d->keep_proxy_regs_on = of_property_read_bool(pdev->dev.of_node,
+						"qcom,keep-proxy-regs-on");
 
 	rc = of_property_read_string(pdev->dev.of_node, "qcom,firmware-name",
 				      &d->desc.name);
