@@ -22,6 +22,7 @@
 #include <linux/cpu.h>
 #include <linux/workqueue.h>
 #include <linux/of.h>
+#include <linux/cpu_pm.h>
 
 #include <soc/qcom/kryo-l2-accessors.h>
 
@@ -120,6 +121,8 @@
 #define M4M_ERR_CAP_1			0x10038
 #define M4M_ERR_CAP_2			0x10040
 #define M4M_ERR_CAP_3			0x10048
+
+#define AFFINITY_LEVEL_L3		3
 
 #ifdef CONFIG_MSM_CACHE_M4M_ERP64_PANIC_ON_CE
 static bool __read_mostly panic_on_ce = true;
@@ -394,9 +397,6 @@ static void msm_cache_erp_irq_init(void *param)
 	erp_msr(DCECR_EL1, DCECR_IRQ_EN);
 	/*
 	 * Enable L2 data, tag, QSB and possion error reporting.
-	 * TODO: once cluster level notifier is available use that notifier
-	 * to enable L2 error detection. Currently we assume that L2
-	 * stays on.
 	 */
 	set_l2_indirect_reg(L2ECR0_IA, L2ECR0_IRQ_EN);
 	set_l2_indirect_reg(L2ECR1_IA, L2ECR1_IRQ_EN);
@@ -404,6 +404,34 @@ static void msm_cache_erp_irq_init(void *param)
 		| L2ECR2_IRQ_EN;
 	set_l2_indirect_reg(L2ECR2_IA, v);
 }
+
+static void msm_cache_erp_l3_init(void)
+{
+	writel_relaxed(L3_QLL_HML3_FIRAT0C_IRQ_EN,
+		       hml3_base + L3_QLL_HML3_FIRAT0C);
+	writel_relaxed(L3_QLL_HML3_FIRAT1S_IRQ_EN,
+		       hml3_base + L3_QLL_HML3_FIRAT1S);
+}
+
+static int cache_erp_cpu_pm_callback(struct notifier_block *self,
+				     unsigned long cmd, void *v)
+{
+	unsigned long aff_level = (unsigned long) v;
+
+	switch (cmd) {
+	case CPU_CLUSTER_PM_EXIT:
+		msm_cache_erp_irq_init(NULL);
+
+		if (aff_level >= AFFINITY_LEVEL_L3)
+			msm_cache_erp_l3_init();
+		break;
+	}
+	return NOTIFY_OK;
+}
+
+static struct notifier_block cache_erp_cpu_pm_notifier = {
+	.notifier_call = cache_erp_cpu_pm_callback,
+};
 
 static int cache_erp_cpu_callback(struct notifier_block *nfb,
 				  unsigned long action, void *hcpu)
@@ -450,17 +478,7 @@ static int msm_cache_erp_probe(struct platform_device *pdev)
 		erp_irqs[i] = r->start;
 	}
 
-
-	/*
-	 * Enable L3 cacher error reporting.
-	 * TODO: once cluster level notifier is available use that notifier
-	 * to enable L3 error detection. Currently we assume that L3
-	 * stays on.
-	 */
-	writel_relaxed(L3_QLL_HML3_FIRAT0C_IRQ_EN,
-		       hml3_base + L3_QLL_HML3_FIRAT0C);
-	writel_relaxed(L3_QLL_HML3_FIRAT1S_IRQ_EN,
-		       hml3_base + L3_QLL_HML3_FIRAT1S);
+	msm_cache_erp_l3_init();
 
 	/* L0/L1 erp irq per cpu */
 	dev_info(&pdev->dev, "Registering for L1 error interrupts\n");
@@ -477,6 +495,8 @@ static int msm_cache_erp_probe(struct platform_device *pdev)
 
 	get_online_cpus();
 	register_hotcpu_notifier(&cache_erp_cpu_notifier);
+	cpu_pm_register_notifier(&cache_erp_cpu_pm_notifier);
+
 	/* Perform L1/L2 cache error detection init on online cpus */
 	smp_call_function(msm_cache_erp_irq_init, NULL, 1);
 	/* Enable irqs */
