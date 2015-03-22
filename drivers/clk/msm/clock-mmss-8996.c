@@ -3176,6 +3176,8 @@ static int of_get_fmax_vdd_class(struct platform_device *pdev, struct clk *c,
 	return 0;
 }
 
+static struct platform_driver msm_clock_gpu_driver;
+
 int msm_mmsscc_8996_probe(struct platform_device *pdev)
 {
 	struct resource *res;
@@ -3272,7 +3274,7 @@ int msm_mmsscc_8996_probe(struct platform_device *pdev)
 
 	dev_info(&pdev->dev, "Registered MMSS clocks.\n");
 
-	return 0;
+	return platform_driver_register(&msm_clock_gpu_driver);
 }
 
 static struct of_device_id msm_clock_mmss_match_table[] = {
@@ -3389,11 +3391,6 @@ static struct platform_driver msm_clock_gpu_driver = {
 
 int __init msm_mmsscc_8996_init(void)
 {
-	int ret;
-
-	ret = platform_driver_register(&msm_clock_mmss_driver);
-	if (ret < 0)
-		return ret;
-	return platform_driver_register(&msm_clock_gpu_driver);
+	return platform_driver_register(&msm_clock_mmss_driver);
 }
 arch_initcall(msm_mmsscc_8996_init);
