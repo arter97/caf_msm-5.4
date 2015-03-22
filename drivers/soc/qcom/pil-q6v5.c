@@ -81,6 +81,13 @@ int pil_q6v5_make_proxy_votes(struct pil_desc *pil)
 {
 	int ret;
 	struct q6v5_data *drv = container_of(pil, struct q6v5_data, desc);
+	int uv;
+
+	ret = of_property_read_u32(pil->dev->of_node, "vdd_cx-voltage", &uv);
+	if (ret) {
+		dev_err(pil->dev, "missing vdd_cx-voltage property\n");
+		return ret;
+	}
 
 	ret = clk_prepare_enable(drv->xo);
 	if (ret) {
@@ -94,9 +101,7 @@ int pil_q6v5_make_proxy_votes(struct pil_desc *pil)
 		goto err_pnoc_vote;
 	}
 
-	ret = regulator_set_voltage(drv->vreg_cx,
-				    RPM_REGULATOR_CORNER_SUPER_TURBO,
-				    RPM_REGULATOR_CORNER_SUPER_TURBO);
+	ret = regulator_set_voltage(drv->vreg_cx, uv, uv);
 	if (ret) {
 		dev_err(pil->dev, "Failed to request vdd_cx voltage.\n");
 		goto err_cx_voltage;
@@ -129,8 +134,7 @@ err_vreg_pll:
 err_cx_enable:
 	regulator_set_optimum_mode(drv->vreg_cx, 0);
 err_cx_mode:
-	regulator_set_voltage(drv->vreg_cx, RPM_REGULATOR_CORNER_NONE,
-			      RPM_REGULATOR_CORNER_SUPER_TURBO);
+	regulator_set_voltage(drv->vreg_cx, RPM_REGULATOR_CORNER_NONE, uv);
 err_cx_voltage:
 	clk_disable_unprepare(drv->pnoc_clk);
 err_pnoc_vote:
@@ -143,6 +147,13 @@ EXPORT_SYMBOL(pil_q6v5_make_proxy_votes);
 void pil_q6v5_remove_proxy_votes(struct pil_desc *pil)
 {
 	struct q6v5_data *drv = container_of(pil, struct q6v5_data, desc);
+	int uv, ret = 0;
+
+	ret = of_property_read_u32(pil->dev->of_node, "vdd_cx-voltage", &uv);
+	if (ret) {
+		dev_err(pil->dev, "missing vdd_cx-voltage property\n");
+		return;
+	}
 
 	if (drv->vreg_pll) {
 		regulator_disable(drv->vreg_pll);
@@ -150,8 +161,7 @@ void pil_q6v5_remove_proxy_votes(struct pil_desc *pil)
 	}
 	regulator_disable(drv->vreg_cx);
 	regulator_set_optimum_mode(drv->vreg_cx, 0);
-	regulator_set_voltage(drv->vreg_cx, RPM_REGULATOR_CORNER_NONE,
-			      RPM_REGULATOR_CORNER_SUPER_TURBO);
+	regulator_set_voltage(drv->vreg_cx, RPM_REGULATOR_CORNER_NONE, uv);
 	clk_disable_unprepare(drv->xo);
 	clk_disable_unprepare(drv->pnoc_clk);
 }
@@ -402,6 +412,7 @@ struct q6v5_data *pil_q6v5_init(struct platform_device *pdev)
 	struct q6v5_data *drv;
 	struct resource *res;
 	struct pil_desc *desc;
+	struct property *prop;
 	int ret;
 
 	drv = devm_kzalloc(&pdev->dev, sizeof(*drv), GFP_KERNEL);
@@ -510,6 +521,11 @@ struct q6v5_data *pil_q6v5_init(struct platform_device *pdev)
 	drv->vreg_cx = devm_regulator_get(&pdev->dev, "vdd_cx");
 	if (IS_ERR(drv->vreg_cx))
 		return ERR_CAST(drv->vreg_cx);
+	prop = of_find_property(pdev->dev.of_node, "vdd_cx-voltage", NULL);
+	if (!prop) {
+		dev_err(&pdev->dev, "Missing vdd_cx-voltage property\n");
+		return ERR_CAST(prop);
+	}
 
 	drv->vreg_pll = devm_regulator_get(&pdev->dev, "vdd_pll");
 	if (!IS_ERR_OR_NULL(drv->vreg_pll)) {
