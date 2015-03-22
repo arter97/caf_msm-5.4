@@ -47,7 +47,7 @@ static bool qmi_modem_init_fin, qmi_indication_fin;
 static struct work_struct ipa_qmi_service_init_work;
 static bool is_load_uc;
 static uint32_t ipa_wan_platform;
-
+static bool workqueues_stopped;
 
 /* QMI A5 service */
 
@@ -277,8 +277,9 @@ static void qmi_ipa_a5_svc_ntfy(struct qmi_handle *handle,
 {
 	switch (event) {
 	case QMI_RECV_MSG:
-		queue_delayed_work(ipa_svc_workqueue,
-				   &work_recv_msg, 0);
+		if (!workqueues_stopped)
+			queue_delayed_work(ipa_svc_workqueue,
+					   &work_recv_msg, 0);
 		break;
 	default:
 		break;
@@ -528,8 +529,9 @@ static void ipa_q6_clnt_notify(struct qmi_handle *handle,
 	switch (event) {
 	case QMI_RECV_MSG:
 		IPAWANDBG("client qmi recv message called");
-		queue_delayed_work(ipa_clnt_resp_workqueue,
-				   &work_recv_msg_client, 0);
+		if (!workqueues_stopped)
+			queue_delayed_work(ipa_clnt_resp_workqueue,
+					   &work_recv_msg_client, 0);
 		break;
 	default:
 		break;
@@ -619,12 +621,14 @@ static int ipa_q6_clnt_svc_event_notify(struct notifier_block *this,
 	IPAWANDBG("event %ld\n", code);
 	switch (code) {
 	case QMI_SERVER_ARRIVE:
-		queue_delayed_work(ipa_clnt_req_workqueue,
-				   &work_svc_arrive, 0);
+		if (!workqueues_stopped)
+			queue_delayed_work(ipa_clnt_req_workqueue,
+					   &work_svc_arrive, 0);
 		break;
 	case QMI_SERVER_EXIT:
-		queue_delayed_work(ipa_clnt_req_workqueue,
-				   &work_svc_exit, 0);
+		if (!workqueues_stopped)
+			queue_delayed_work(ipa_clnt_req_workqueue,
+					   &work_svc_exit, 0);
 		break;
 	default:
 		break;
@@ -719,6 +723,8 @@ int ipa_qmi_service_init(bool load_uc, uint32_t wan_platform_type)
 	is_load_uc = load_uc;
 	qmi_modem_init_fin = false;
 	qmi_indication_fin = false;
+	workqueues_stopped = false;
+
 	if (!ipa_svc_handle) {
 		INIT_WORK(&ipa_qmi_service_init_work,
 			ipa_qmi_service_init_worker);
@@ -730,6 +736,8 @@ int ipa_qmi_service_init(bool load_uc, uint32_t wan_platform_type)
 void ipa_qmi_service_exit(void)
 {
 	int ret = 0;
+
+	workqueues_stopped = true;
 
 	/* qmi-service */
 	if (ipa_svc_handle) {
@@ -777,4 +785,18 @@ void ipa_qmi_service_exit(void)
 	ipa_svc_handle = 0;
 	qmi_modem_init_fin = false;
 	qmi_indication_fin = false;
+}
+
+void ipa_qmi_stop_workqueues(void)
+{
+	IPAWANDBG("Stopping all QMI workqueues\n");
+
+	/* Stopping all workqueues so new work won't be scheduled */
+	workqueues_stopped = true;
+
+	/* Making sure that the current scheduled work won't be executed */
+	cancel_delayed_work(&work_recv_msg);
+	cancel_delayed_work(&work_recv_msg_client);
+	cancel_delayed_work(&work_svc_arrive);
+	cancel_delayed_work(&work_svc_exit);
 }
