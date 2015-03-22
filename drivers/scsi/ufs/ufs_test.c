@@ -689,12 +689,12 @@ static void scenario_free_end_io_fn(struct request *rq, int err)
 	spin_unlock_irq(&test_iosched->lock);
 
 	test_iosched_free_test_req_data_buffer(test_rq);
-	kfree(test_rq);
 
 	if (err)
 		pr_err("%s: request %d completed, err=%d", __func__,
 			test_rq->req_id, err);
 
+	kfree(test_rq);
 	check_test_completion(test_iosched);
 }
 
@@ -983,13 +983,13 @@ static void long_test_free_end_io_fn(struct request *rq, int err)
 	}
 
 	test_iosched_free_test_req_data_buffer(test_rq);
-	kfree(test_rq);
 	utd->completed_req_count++;
 
 	if (err)
 		pr_err("%s: request %d completed, err=%d", __func__,
 			test_rq->req_id, err);
 
+	kfree(test_rq);
 	check_test_completion(test_iosched);
 }
 
@@ -1051,6 +1051,7 @@ static int run_long_test(struct test_iosched *test_iosched)
 		utd->long_test_num_reqs = (utd->sector_range * SECTOR_SIZE) /
 			(num_bios_per_request * TEST_BIO_SIZE);
 	default:
+		num_bios_per_request = 1;
 		direction = WRITE;
 	}
 
@@ -1213,6 +1214,7 @@ static int ufs_test_run_data_integrity_test(struct test_iosched *test_iosched)
 	struct request_queue *q = test_iosched->req_q;
 	int sectors[QUEUE_MAX_REQUESTS] = {0};
 	struct ufs_test_data *utd = test_iosched->blk_dev_test_data;
+
 
 	start_sec = test_iosched->start_sector;
 	utd->queue_complete = false;
