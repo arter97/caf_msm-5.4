@@ -242,8 +242,8 @@ static struct sip_list *sip_coalesce_segments(struct nf_conn *ct,
 					*success = true;
 					list_del(list_trav_node);
 					} else
-					skb_push(*skb_ref, dataoff);
-				}
+						skb_push(*skb_ref, dataoff);
+			}
 		} else if (do_not_process)
 			*skip_sip_process = true;
 	}
@@ -376,7 +376,11 @@ int proc_sip_segment(ctl_table *ctl, int write,
 			   void __user *buffer, size_t *lenp, loff_t *ppos)
 {
 	int ret;
+	unsigned sip_segmentation_status = nf_ct_enable_sip_segmentation;
 	ret = proc_dointvec(ctl, write, buffer, lenp, ppos);
+	/* If there is no change in value just return. */
+	if (sip_segmentation_status == nf_ct_enable_sip_segmentation)
+		return ret;
 	if (nf_ct_enable_sip_segmentation) {
 		pr_debug("registering queue handler\n");
 		nf_register_queue_handler(&nf_sip_qh);
@@ -1743,8 +1747,10 @@ static int process_sip_request(struct sk_buff *skb, unsigned int protoff,
 				    SIP_HDR_VIA_UDP, NULL, &matchoff,
 				    &matchlen, &addr, &port) > 0 &&
 	    port != ct->tuplehash[dir].tuple.src.u.udp.port &&
-	    nf_inet_addr_cmp(&addr, &ct->tuplehash[dir].tuple.src.u3))
-		ct_sip_info->forced_dport = port;
+	    nf_inet_addr_cmp(&addr, &ct->tuplehash[dir].tuple.src.u3)) {
+		if (dir == IP_CT_DIR_ORIGINAL)
+			ct_sip_info->forced_dport = port;
+	}
 
 	for (i = 0; i < ARRAY_SIZE(sip_handlers); i++) {
 		const struct sip_handler *handler;
@@ -1821,6 +1827,7 @@ static int sip_help_tcp(struct sk_buff *skb, unsigned int protoff,
 	enum ip_conntrack_dir dir = IP_CT_DIR_MAX;
 	struct sk_buff *combined_skb = NULL;
 	bool content_len_exists = 1;
+	unsigned int len_skb = 0;
 
 	typeof(nf_nat_sip_seq_adjust_hook) nf_nat_sip_seq_adjust;
 
@@ -1953,6 +1960,15 @@ destination:
 		splitlen = (dir == IP_CT_DIR_ORIGINAL) ?
 				ct->segment.skb_len[0] : ct->segment.skb_len[1];
 		oldlen = combined_skb->len - protoff;
+		if (unlikely(skb_linearize(combined_skb))) {
+			pr_debug("Dropping SKB:\n");
+			return NF_DROP;
+		}
+		len_skb = combined_skb->len - splitlen;
+		pr_debug("len to copy is %d\n", len_skb);
+		skb_copy_from_linear_data_offset(combined_skb,
+						    splitlen, skb->data,
+						    len_skb);
 		skb_split(combined_skb, skb, splitlen);
 		/* Headers need to be recalculated since during SIP processing
 		 * headers are calculated based on the change in length of the
@@ -1984,7 +2000,6 @@ destination:
 		else
 			ct->sip_reply_dir = 0;
 	}
-
 
 here:
 
