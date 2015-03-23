@@ -72,6 +72,7 @@ int msm_iommu_map_extra(struct iommu_domain *domain,
 				int prot)
 {
 	int ret = 0;
+	size_t mapped = 0;
 	int i = 0;
 	unsigned long temp_iova = start_iova;
 	/* the extra "padding" should never be written to. map it
@@ -94,10 +95,11 @@ int msm_iommu_map_extra(struct iommu_domain *domain,
 		for (i = 0; i < nrpages; i++)
 			sg_set_page(&sglist[i], dummy_page, PAGE_SIZE, 0);
 
-		ret = iommu_map_sg(domain, temp_iova, sglist, size, prot);
-		if (ret) {
+		mapped = iommu_map_sg(domain, temp_iova, sglist, size, prot);
+		if (mapped != size) {
 			pr_err("%s: could not map extra %lx in domain %p\n",
 				__func__, start_iova, domain);
+			ret = -ENODEV;
 		}
 
 		vfree(sglist);
