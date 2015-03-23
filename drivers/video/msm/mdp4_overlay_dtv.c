@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -236,6 +236,9 @@ int mdp4_dtv_pipe_commit(int cndx, int wait)
 	vctrl->update_ndx &= 0x01;
 	vp->update_cnt = 0;	/* reset */
 	mutex_unlock(&vctrl->update_lock);
+
+	if (!vctrl->mfd->cont_splash_done)
+		mdp4_iommu_attach();
 
 	pipe = vp->plist;
 	for (i = 0; i < OVERLAY_PIPE_MAX; i++, pipe++) {

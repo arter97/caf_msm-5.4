@@ -2623,7 +2623,7 @@ struct mdp4_overlay_pipe *mdp4_alloc_base_primary(struct msm_fb_data_type
 	pipe->src_format = mfd->fb_imgType;
 
 	pr_info("pipe used=%d mixer_num=%d stage=%d fmt=%d\n",
-		pipe->pipe_used, pipe->mixer_stage, pipe->mixer_num,
+		pipe->pipe_used, pipe->mixer_num, pipe->mixer_stage,
 		pipe->src_format);
 
 	ret = mdp4_overlay_format2pipe(pipe);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -216,6 +216,9 @@ int mdp4_dsi_video_pipe_commit(int cndx, int wait)
 		return 0;
 	}
 	spin_unlock_irqrestore(&vctrl->spin_lock, flags);
+
+	if (!vctrl->mfd->cont_splash_done)
+		mdp4_iommu_attach();
 
 	pipe = vp->plist;
 

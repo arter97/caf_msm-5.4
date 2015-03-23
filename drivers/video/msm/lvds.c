@@ -313,7 +313,9 @@ static int lvds_on(struct platform_device *pdev)
 	if (lvds_pdata && lvds_pdata->lcdc_gpio_config)
 		ret = lvds_pdata->lcdc_gpio_config(1);
 
-	lvds_init(mfd);
+	if (mfd->cont_splash_done)
+		lvds_init(mfd);
+
 	ret = panel_next_on(pdev);
 
 out:
