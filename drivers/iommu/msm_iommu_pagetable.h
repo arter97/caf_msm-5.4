@@ -22,7 +22,7 @@ int msm_iommu_pagetable_map(struct msm_iommu_pt *pt, unsigned long va,
 			phys_addr_t pa, size_t len, int prot);
 size_t msm_iommu_pagetable_unmap(struct msm_iommu_pt *pt, unsigned long va,
 				size_t len);
-size_t msm_iommu_pagetable_map_range(struct msm_iommu_pt *pt, unsigned long va,
+int msm_iommu_pagetable_map_range(struct msm_iommu_pt *pt, unsigned long va,
 			struct scatterlist *sg, unsigned int len, int prot);
 void msm_iommu_pagetable_unmap_range(struct msm_iommu_pt *pt, unsigned int va,
 				unsigned int len);
