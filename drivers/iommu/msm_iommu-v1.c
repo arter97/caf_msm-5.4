@@ -998,23 +998,23 @@ fail:
 	return len;
 }
 
-static size_t msm_iommu_map_range(struct iommu_domain *domain, unsigned long va,
+static int msm_iommu_map_range(struct iommu_domain *domain, unsigned long va,
 			       struct scatterlist *sg, unsigned int len,
 			       int prot)
 {
-	size_t mapped;
+	int ret;
 	struct msm_iommu_priv *priv;
 
 	mutex_lock(&msm_iommu_lock);
 
 	priv = domain->priv;
 	if (!priv) {
-		mapped = 0;
+		ret = -EINVAL;
 		goto fail;
 	}
 
-	mapped = msm_iommu_pagetable_map_range(&priv->pt, va, sg, len, prot);
-	if (!mapped)
+	ret = msm_iommu_pagetable_map_range(&priv->pt, va, sg, len, prot);
+	if (ret)
 		goto fail;
 
 #ifdef CONFIG_MSM_IOMMU_TLBINVAL_ON_MAP
@@ -1023,9 +1023,30 @@ static size_t msm_iommu_map_range(struct iommu_domain *domain, unsigned long va,
 
 fail:
 	mutex_unlock(&msm_iommu_lock);
-	return mapped;
+	return ret;
 }
 
+static size_t msm_iommu_map_sg(struct iommu_domain *domain, unsigned long va,
+				struct scatterlist *sg, unsigned int nr_entries,
+				int prot)
+{
+	int ret, i;
+	struct scatterlist *tmp;
+	unsigned long len = 0;
+
+	/*
+	 * Longer term work: convert over to generic page table management
+	 * which means we can work on scattergather lists and the whole range
+	 */
+	for_each_sg(sg, tmp, nr_entries, i)
+		len += tmp->length;
+
+	ret = msm_iommu_map_range(domain, va, sg, len, prot);
+	if (ret)
+		return 0;
+	else
+		return len;
+}
 
 #ifdef CONFIG_IOMMU_LPAE
 static phys_addr_t msm_iommu_get_phy_from_PAR(unsigned long va, u64 par)
@@ -1499,7 +1520,7 @@ static struct iommu_ops msm_iommu_ops = {
 	.detach_dev = msm_iommu_detach_dev,
 	.map = msm_iommu_map,
 	.unmap = msm_iommu_unmap,
-	.map_sg = msm_iommu_map_range,
+	.map_sg = msm_iommu_map_sg,
 	.iova_to_phys = msm_iommu_iova_to_phys,
 	.domain_has_cap = msm_iommu_domain_has_cap,
 	.pgsize_bitmap = MSM_IOMMU_PGSIZES,
