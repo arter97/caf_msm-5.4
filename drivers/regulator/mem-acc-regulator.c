@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -25,12 +25,13 @@
 #include <linux/regulator/of_regulator.h>
 #include <soc/qcom/scm.h>
 
-#define MEM_ACC_SEL_MASK	0x3
+#define MEM_ACC_DEFAULT_SEL_SIZE	2
 
-#define BYTES_PER_FUSE_ROW	8
+#define BYTES_PER_FUSE_ROW		8
 
 /* mem-acc config flags */
 #define MEM_ACC_SKIP_L1_CONFIG	BIT(0)
+#define MEM_ACC_OVERRIDE_CONFIG		BIT(1)
 
 enum {
 	MEMORY_L1,
@@ -45,9 +46,11 @@ struct mem_acc_regulator {
 
 	int			corner;
 	bool			mem_acc_supported[MEMORY_MAX];
+	bool			mem_acc_custom_supported[MEMORY_MAX];
 
 	u32			*acc_sel_mask[MEMORY_MAX];
 	u32			*acc_sel_bit_pos[MEMORY_MAX];
+	u32			acc_sel_bit_size[MEMORY_MAX];
 	u32			num_acc_sel[MEMORY_MAX];
 	u32			*acc_en_bit_pos;
 	u32			num_acc_en;
@@ -59,6 +62,9 @@ struct mem_acc_regulator {
 	phys_addr_t		acc_sel_addr[MEMORY_MAX];
 	phys_addr_t		acc_en_addr;
 	u32			flags;
+
+	void __iomem		*acc_custom_addr[MEMORY_MAX];
+	u32			*acc_custom_data[MEMORY_MAX];
 
 	/* eFuse parameters */
 	phys_addr_t		efuse_addr;
@@ -163,6 +169,16 @@ static void __update_acc_sel(struct mem_acc_regulator *mem_acc_vreg,
 	writel_relaxed(acc_data, mem_acc_vreg->acc_sel_base[mem_type]);
 }
 
+static void __update_acc_custom(struct mem_acc_regulator *mem_acc_vreg,
+						int corner, int mem_type)
+{
+	writel_relaxed(
+		mem_acc_vreg->acc_custom_data[mem_type][corner-1],
+		mem_acc_vreg->acc_custom_addr[mem_type]);
+	pr_debug("corner=%d mem_type=%d custom_data=0x%2x\n", corner,
+		mem_type, mem_acc_vreg->acc_custom_data[mem_type][corner-1]);
+}
+
 static void update_acc_sel(struct mem_acc_regulator *mem_acc_vreg, int corner)
 {
 	int i;
@@ -170,6 +186,8 @@ static void update_acc_sel(struct mem_acc_regulator *mem_acc_vreg, int corner)
 	for (i = 0; i < MEMORY_MAX; i++) {
 		if (mem_acc_vreg->mem_acc_supported[i])
 			__update_acc_sel(mem_acc_vreg, corner, i);
+		if (mem_acc_vreg->mem_acc_custom_supported[i])
+			__update_acc_custom(mem_acc_vreg, corner, i);
 	}
 }
 
@@ -226,7 +244,7 @@ static int __mem_acc_sel_init(struct mem_acc_regulator *mem_acc_vreg,
 							int mem_type)
 {
 	int i;
-	u32 bit;
+	u32 bit, mask;
 
 	mem_acc_vreg->acc_sel_mask[mem_type] = devm_kzalloc(mem_acc_vreg->dev,
 		mem_acc_vreg->num_acc_sel[mem_type] * sizeof(u32), GFP_KERNEL);
@@ -237,8 +255,8 @@ static int __mem_acc_sel_init(struct mem_acc_regulator *mem_acc_vreg,
 
 	for (i = 0; i < mem_acc_vreg->num_acc_sel[mem_type]; i++) {
 		bit = mem_acc_vreg->acc_sel_bit_pos[mem_type][i];
-		mem_acc_vreg->acc_sel_mask[mem_type][i] =
-					MEM_ACC_SEL_MASK << bit;
+		mask = BIT(mem_acc_vreg->acc_sel_bit_size[mem_type]) - 1;
+		mem_acc_vreg->acc_sel_mask[mem_type][i] = mask << bit;
 	}
 
 	return 0;
@@ -316,6 +334,7 @@ static int mem_acc_sel_setup(struct mem_acc_regulator *mem_acc_vreg,
 {
 	int len, rc;
 	char *mem_select_str;
+	char *mem_select_size_str;
 
 	mem_acc_vreg->acc_sel_addr[mem_type] = res->start;
 	len = res->end - res->start + 1;
@@ -333,11 +352,17 @@ static int mem_acc_sel_setup(struct mem_acc_regulator *mem_acc_vreg,
 	switch (mem_type) {
 	case MEMORY_L1:
 		mem_select_str = "qcom,acc-sel-l1-bit-pos";
+		mem_select_size_str = "qcom,acc-sel-l1-bit-size";
 		break;
 	case MEMORY_L2:
 		mem_select_str = "qcom,acc-sel-l2-bit-pos";
+		mem_select_size_str = "qcom,acc-sel-l2-bit-size";
 		break;
 	}
+
+	mem_acc_vreg->acc_sel_bit_size[mem_type] = MEM_ACC_DEFAULT_SEL_SIZE;
+	of_property_read_u32(mem_acc_vreg->dev->of_node, mem_select_size_str,
+			&mem_acc_vreg->acc_sel_bit_size[mem_type]);
 
 	rc = populate_acc_data(mem_acc_vreg, mem_select_str,
 			&mem_acc_vreg->acc_sel_bit_pos[mem_type],
@@ -367,7 +392,8 @@ static int mem_acc_efuse_init(struct platform_device *pdev,
 
 	pr_info("efuse_addr = %pa (len=0x%x)\n", &res->start, len);
 
-	mem_acc_vreg->efuse_base = ioremap(mem_acc_vreg->efuse_addr, len);
+	mem_acc_vreg->efuse_base = devm_ioremap(&pdev->dev,
+						mem_acc_vreg->efuse_addr, len);
 	if (!mem_acc_vreg->efuse_base) {
 		pr_err("Unable to map efuse_addr %pa\n",
 				&mem_acc_vreg->efuse_addr);
@@ -382,7 +408,7 @@ static int mem_acc_efuse_init(struct platform_device *pdev,
 		if (rc < 0) {
 			pr_err("Read failed - qcom,l1-config-skip-fuse-sel rc=%d\n",
 					rc);
-			goto err_out;
+			return rc;
 		}
 
 		if (mem_acc_fuse_is_setting_expected(mem_acc_vreg,
@@ -392,10 +418,112 @@ static int mem_acc_efuse_init(struct platform_device *pdev,
 		}
 	}
 
+	return 0;
+}
 
-err_out:
-	iounmap(mem_acc_vreg->efuse_base);
-	return rc;
+static int mem_acc_custom_data_init(struct platform_device *pdev,
+				 struct mem_acc_regulator *mem_acc_vreg,
+				 int mem_type)
+{
+	struct resource *res;
+	char *custom_apc_addr_str, *custom_apc_data_str;
+	int len, rc = 0;
+
+	switch (mem_type) {
+	case MEMORY_L1:
+		custom_apc_addr_str = "acc-l1-custom";
+		custom_apc_data_str = "qcom,l1-acc-custom-data";
+		break;
+	case MEMORY_L2:
+		custom_apc_addr_str = "acc-l2-custom";
+		custom_apc_data_str = "qcom,l2-acc-custom-data";
+		break;
+	default:
+		pr_err("Invalid memory type: %d\n", mem_type);
+		return -EINVAL;
+	}
+
+	if (!of_find_property(mem_acc_vreg->dev->of_node,
+				custom_apc_data_str, NULL)) {
+		pr_debug("%s custom_data not specified\n", custom_apc_data_str);
+		return 0;
+	}
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
+						custom_apc_addr_str);
+	if (!res || !res->start) {
+		pr_debug("%s resource missing\n", custom_apc_addr_str);
+		return -EINVAL;
+	} else {
+		len = res->end - res->start + 1;
+		mem_acc_vreg->acc_custom_addr[mem_type] =
+			devm_ioremap(mem_acc_vreg->dev, res->start, len);
+		if (!mem_acc_vreg->acc_custom_addr[mem_type]) {
+			pr_err("Unable to map %s %pa\n", custom_apc_addr_str,
+							&res->start);
+			return -EINVAL;
+		}
+	}
+
+	rc = populate_acc_data(mem_acc_vreg, custom_apc_data_str,
+				&mem_acc_vreg->acc_custom_data[mem_type], &len);
+	if (rc) {
+		pr_err("Unable to find %s rc=%d\n", custom_apc_data_str, rc);
+		return rc;
+	}
+
+	if (mem_acc_vreg->num_corners != len) {
+		pr_err("Custom data is not present for all the corners\n");
+		return -EINVAL;
+	}
+
+	mem_acc_vreg->mem_acc_custom_supported[mem_type] = true;
+
+	return 0;
+}
+
+static int override_mem_acc_custom_data(struct platform_device *pdev,
+				 struct mem_acc_regulator *mem_acc_vreg,
+				 int mem_type)
+{
+	char *custom_apc_data_str;
+	int len, rc = 0;
+
+	switch (mem_type) {
+	case MEMORY_L1:
+		custom_apc_data_str = "qcom,override-l1-acc-custom-data";
+		break;
+	case MEMORY_L2:
+		custom_apc_data_str = "qcom,override-l2-acc-custom-data";
+		break;
+	default:
+		pr_err("Invalid memory type: %d\n", mem_type);
+		return -EINVAL;
+	}
+
+	if (!of_find_property(mem_acc_vreg->dev->of_node,
+				custom_apc_data_str, NULL)) {
+		pr_debug("%s not specified\n", custom_apc_data_str);
+		return 0;
+	}
+
+	/* Free old custom data */
+	devm_kfree(&pdev->dev, mem_acc_vreg->acc_custom_data[mem_type]);
+
+	/* Populate override custom data */
+	rc = populate_acc_data(mem_acc_vreg, custom_apc_data_str,
+				&mem_acc_vreg->acc_custom_data[mem_type], &len);
+	if (rc) {
+		pr_err("Unable to find %s rc=%d\n", custom_apc_data_str, rc);
+		return rc;
+	}
+
+	if (mem_acc_vreg->num_corners != len) {
+		pr_err("Override custom data is not present for all the corners\n");
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 static int mem_acc_init(struct platform_device *pdev,
@@ -403,6 +531,7 @@ static int mem_acc_init(struct platform_device *pdev,
 {
 	struct resource *res;
 	int len, rc, i;
+	u32 override_acc_fuse_sel[5];
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "acc-en");
 	if (!res || !res->start) {
@@ -489,6 +618,62 @@ static int mem_acc_init(struct platform_device *pdev,
 	if (rc) {
 		pr_err("Unable to intialize mem_acc_sel reg rc=%d\n", rc);
 		return rc;
+	}
+
+	for (i = 0; i < MEMORY_MAX; i++) {
+		rc = mem_acc_custom_data_init(pdev, mem_acc_vreg, i);
+		if (rc) {
+			pr_err("Unable to initialize custom data for mem_type=%d rc=%d\n",
+					i, rc);
+			return rc;
+		}
+	}
+
+	if (of_find_property(mem_acc_vreg->dev->of_node,
+				"qcom,override-acc-fuse-sel", NULL)) {
+		rc = of_property_read_u32_array(mem_acc_vreg->dev->of_node,
+					"qcom,override-acc-fuse-sel",
+					override_acc_fuse_sel, 5);
+		if (rc < 0) {
+			pr_err("Read failed - qcom,override-acc-fuse-sel rc=%d\n",
+					rc);
+			return rc;
+		}
+
+		if (mem_acc_fuse_is_setting_expected(mem_acc_vreg,
+						override_acc_fuse_sel)) {
+			mem_acc_vreg->flags |= MEM_ACC_OVERRIDE_CONFIG;
+			pr_debug("Apply ACC override configuration\n");
+		}
+	}
+
+	if (mem_acc_vreg->flags & MEM_ACC_OVERRIDE_CONFIG) {
+		if (of_find_property(mem_acc_vreg->dev->of_node,
+				"qcom,override-corner-acc-map", NULL)) {
+			/* Free old corner-acc-map */
+			devm_kfree(&pdev->dev, mem_acc_vreg->corner_acc_map);
+
+			/* Populate override corner acc map */
+			rc = populate_acc_data(mem_acc_vreg,
+						"qcom,override-corner-acc-map",
+						&mem_acc_vreg->corner_acc_map,
+						&mem_acc_vreg->num_corners);
+			if (rc) {
+				pr_err("Unable to find 'qcom,overrie-corner-acc-map' rc=%d\n",
+					rc);
+				return rc;
+			}
+		}
+
+		for (i = 0; i < MEMORY_MAX; i++) {
+			rc = override_mem_acc_custom_data(pdev,
+							mem_acc_vreg, i);
+			if (rc) {
+				pr_err("Unable to override custom data for mem_type=%d rc=%d\n",
+					i, rc);
+				return rc;
+			}
+		}
 	}
 
 	return 0;
