@@ -459,6 +459,56 @@ void adreno_ringbuffer_close(struct adreno_device *adreno_dev)
 		_adreno_ringbuffer_close(rb);
 }
 
+/*
+ * cp_secure_mode() - Put GPU in trusted mode
+ * @adreno_dev: Pointer to adreno device
+ * @cmds: Pointer to cmds to be put in the ringbuffer
+ * @set: 1 - secure mode, 0 - unsecure mode
+ *
+ * Add commands to the ringbuffer to put the GPU in secure mode
+ * or unsecure mode based on the variable set.
+ */
+static int cp_secure_mode(struct adreno_device *adreno_dev, uint *cmds, int set)
+{
+	uint *start = cmds;
+
+	if (adreno_is_a4xx(adreno_dev)) {
+		cmds += cp_wait_for_idle(adreno_dev, cmds);
+		/*
+		 * The two commands will stall the PFP until the PFP-ME-AHB
+		 * is drained and the GPU is idle. As soon as this happens,
+		 * the PFP will start moving again.
+		 */
+		cmds += cp_wait_for_me(adreno_dev, cmds);
+
+		/*
+		 * Below commands are processed by ME. GPU will be
+		 * idle when they are processed. But the PFP will continue
+		 * to fetch instructions at the same time.
+		 */
+		*cmds++ = cp_packet(adreno_dev, CP_SET_PROTECTED_MODE, 1);
+		*cmds++ = 0;
+		*cmds++ = cp_packet(adreno_dev, CP_WIDE_REG_WRITE, 2);
+		*cmds++ = adreno_getreg(adreno_dev,
+				ADRENO_REG_RBBM_SECVID_TRUST_CONTROL);
+		*cmds++ = set;
+		*cmds++ = cp_packet(adreno_dev, CP_SET_PROTECTED_MODE, 1);
+		*cmds++ = 1;
+
+		/* Stall PFP until all above commands are complete */
+		cmds += cp_wait_for_me(adreno_dev, cmds);
+	} else {
+		/*
+		 * A5xx has a separate opcode specifically to put the GPU
+		 * in and out of secure mode.
+		 */
+		*cmds++ = cp_packet(adreno_dev, CP_SET_SECURE_MODE, 1);
+		*cmds++ = set;
+	}
+
+	return cmds - start;
+}
+
 static int
 adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 				unsigned int flags, unsigned int *cmds,
@@ -609,31 +659,8 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 			gpuaddr + KGSL_MEMSTORE_RB_OFFSET(rb, soptimestamp));
 	*ringcmds++ = timestamp;
 
-	if (secured_ctxt) {
-		ringcmds += cp_wait_for_idle(adreno_dev, ringcmds);
-		/*
-		 * The two commands will stall the PFP until the PFP-ME-AHB
-		 * is drained and the GPU is idle. As soon as this happens,
-		 * the PFP will start moving again.
-		 */
-		ringcmds += cp_wait_for_me(adreno_dev, ringcmds);
-
-		/*
-		 * Below commands are processed by ME. GPU will be
-		 * idle when they are processed. But the PFP will continue
-		 * to fetch instructions at the same time.
-		 */
-		*ringcmds++ = cp_packet(adreno_dev, CP_SET_PROTECTED_MODE, 1);
-		*ringcmds++ = 0;
-		*ringcmds++ = cp_packet(adreno_dev, CP_WIDE_REG_WRITE, 2);
-		*ringcmds++ = adreno_getreg(adreno_dev,
-				ADRENO_REG_RBBM_SECVID_TRUST_CONTROL);
-		*ringcmds++ = 1;
-		*ringcmds++ = cp_packet(adreno_dev, CP_SET_PROTECTED_MODE, 1);
-		*ringcmds++ = 1;
-		/* Stall PFP until all above commands are complete */
-		ringcmds += cp_wait_for_me(adreno_dev, ringcmds);
-	}
+	if (secured_ctxt)
+		ringcmds += cp_secure_mode(adreno_dev, ringcmds, 1);
 
 	if (flags & KGSL_CMD_FLAGS_PMODE) {
 		/* disable protected mode error checking */
@@ -704,19 +731,8 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 		ringcmds += cp_wait_for_idle(adreno_dev, ringcmds);
 	}
 
-	if (secured_ctxt) {
-		ringcmds += cp_wait_for_idle(adreno_dev, ringcmds);
-		ringcmds += cp_wait_for_me(adreno_dev, ringcmds);
-		*ringcmds++ = cp_packet(adreno_dev, CP_SET_PROTECTED_MODE, 1);
-		*ringcmds++ = 0;
-		*ringcmds++ = cp_packet(adreno_dev, CP_WIDE_REG_WRITE, 2);
-		*ringcmds++ = adreno_getreg(adreno_dev,
-				ADRENO_REG_RBBM_SECVID_TRUST_CONTROL);
-		*ringcmds++ = 0;
-		*ringcmds++ = cp_packet(adreno_dev, CP_SET_PROTECTED_MODE, 1);
-		*ringcmds++ = 1;
-		ringcmds += cp_wait_for_me(adreno_dev, ringcmds);
-	}
+	if (secured_ctxt)
+		ringcmds += cp_secure_mode(adreno_dev, ringcmds, 0);
 
 	/*
 	 *  Allocate total_sizedwords space in RB, this is the max space

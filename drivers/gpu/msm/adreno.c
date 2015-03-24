@@ -1389,7 +1389,8 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 
 	/* Program GPU contect protection init values */
 	if (device->mmu.secured) {
-		adreno_writereg(adreno_dev,
+		if (adreno_is_a4xx(adreno_dev))
+			adreno_writereg(adreno_dev,
 				ADRENO_REG_RBBM_SECVID_TRUST_CONFIG, 0x2);
 		adreno_writereg(adreno_dev,
 				ADRENO_REG_RBBM_SECVID_TSB_CONTROL, 0x0);

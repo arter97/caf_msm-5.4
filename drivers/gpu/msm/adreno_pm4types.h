@@ -202,6 +202,9 @@
 
 #define CP_SET_PROTECTED_MODE  0x5f /* sets the register protection mode */
 
+/* Used to switch GPU between secure and non-secure modes */
+#define CP_SET_SECURE_MODE 0x66
+
 #define CP_BOOTSTRAP_UCODE  0x6f /* bootstraps microcode */
 
 /*
