@@ -31,6 +31,10 @@
 	pinctrl-0 = <&uart_console_active>;
 };
 
+&ufs_ice {
+	status = "ok";
+};
+
 &ufsphy1 {
 	status = "ok";
 };
