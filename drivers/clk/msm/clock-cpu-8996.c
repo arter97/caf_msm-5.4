@@ -481,9 +481,6 @@ static struct clk *logical_cpu_to_clk(int cpu)
 	}
 
 	hwid = of_read_number(cell, of_n_addr_cells(cpu_node));
-	if (!hwid)
-		goto fail;
-
 	if ((hwid | pwrcl_clk.cpu_reg_mask) == pwrcl_clk.cpu_reg_mask)
 		return &pwrcl_clk.c;
 	if ((hwid | perfcl_clk.cpu_reg_mask) == perfcl_clk.cpu_reg_mask)
