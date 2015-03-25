@@ -559,6 +559,30 @@ void resched_cpu(int cpu)
 }
 
 #ifdef CONFIG_NO_HZ_COMMON
+
+static int _get_nohz_timer_target_hmp(void)
+{
+	int i, best_cpu = smp_processor_id();
+	int min_cost = INT_MAX;
+
+	rcu_read_lock();
+	for_each_online_cpu(i) {
+		struct rq *rq = cpu_rq(i);
+		int cpu_cost = power_cost_at_freq(i, ACCESS_ONCE(rq->min_freq));
+
+		if (cpu_cost < min_cost) {
+			best_cpu = i;
+			min_cost = cpu_cost;
+		} else if (cpu_cost == min_cost) {
+			if (!idle_cpu(i))
+				best_cpu = i;
+		}
+	}
+	rcu_read_unlock();
+
+	return best_cpu;
+}
+
 /*
  * In the semi idle case, use the nearest busy cpu for migrating timers
  * from an idle cpu.  This is good for power-savings.
@@ -572,6 +596,12 @@ int get_nohz_timer_target(void)
 	int cpu = smp_processor_id();
 	int i;
 	struct sched_domain *sd;
+
+	if (sched_enable_hmp)
+		return _get_nohz_timer_target_hmp();
+
+	if (!idle_cpu(cpu))
+		return cpu;
 
 	rcu_read_lock();
 	for_each_domain(cpu, sd) {
