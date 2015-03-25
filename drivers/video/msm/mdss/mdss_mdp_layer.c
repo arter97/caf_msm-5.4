@@ -547,7 +547,7 @@ static struct sync_fence *__create_fence(struct msm_fb_data_type *mfd,
 	mdp5_data = mfd_to_mdp5_data(mfd);
 
 	ctl = mdp5_data->ctl;
-	if (!ctl->add_vsync_handler) {
+	if (!ctl->ops.add_vsync_handler) {
 		pr_err("fb%d vsync pending first update\n", mfd->index);
 		return ERR_PTR(-EOPNOTSUPP);
 	}
@@ -1078,7 +1078,7 @@ static int __validate_layers(struct msm_fb_data_type *mfd,
 	}
 
 	ret = mdss_mdp_perf_bw_check(mdp5_data->ctl, left_plist, left_cnt,
-		right_plist, right_cnt);
+		right_plist, right_cnt, false);
 	if (ret) {
 		pr_err("bw validation check failed: %d\n", ret);
 		goto validate_exit;

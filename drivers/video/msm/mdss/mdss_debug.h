@@ -47,7 +47,11 @@ enum mdss_dbg_xlog_flag {
 		##__VA_ARGS__, DATA_LIMITER)
 
 #define MDSS_XLOG_TOUT_HANDLER(...)	\
-	mdss_xlog_tout_handler_default(__func__, ##__VA_ARGS__, \
+	mdss_xlog_tout_handler_default(false, __func__, ##__VA_ARGS__, \
+		XLOG_TOUT_DATA_LIMITER)
+
+#define MDSS_XLOG_TOUT_HANDLER_WQ(...)	\
+	mdss_xlog_tout_handler_default(true, __func__, ##__VA_ARGS__, \
 		XLOG_TOUT_DATA_LIMITER)
 
 #define MDSS_XLOG_DBG(...) mdss_xlog(__func__, __LINE__, MDSS_XLOG_DBG, \
@@ -66,7 +70,7 @@ enum mdss_dbg_xlog_flag {
 #define ATRACE_INT(name, value) \
 	trace_mdp_trace_counter(current->tgid, name, value)
 
-#ifdef CONFIG_DEBUG_FS
+#if defined(CONFIG_DEBUG_FS) && defined(CONFIG_FB_MSM_MDSS)
 
 #define MDSS_DEBUG_BASE_MAX 10
 
@@ -122,6 +126,8 @@ int mdss_debug_register_base(const char *name, void __iomem *base,
 void mdss_debug_register_dump_range(struct platform_device *pdev,
 	struct mdss_debug_base *blk_base, const char *ranges_prop,
 	const char *name_prop);
+int panel_debug_register_base(const char *name, void __iomem *base,
+				    size_t max_offset);
 int mdss_misr_set(struct mdss_data_type *mdata, struct mdp_misr *req,
 			struct mdss_mdp_ctl *ctl);
 int mdss_misr_get(struct mdss_data_type *mdata, struct mdp_misr *resp,
@@ -130,10 +136,12 @@ void mdss_misr_crc_collect(struct mdss_data_type *mdata, int block_id);
 
 int mdss_create_xlog_debug(struct mdss_debug_data *mdd);
 void mdss_xlog(const char *name, int line, int flag, ...);
-void mdss_xlog_tout_handler_default(const char *name, ...);
+void mdss_xlog_tout_handler_default(bool queue, const char *name, ...);
 int mdss_xlog_tout_handler_iommu(struct iommu_domain *domain,
 	struct device *dev, unsigned long iova, int flags, void *token);
 #else
+struct mdss_debug_base;
+
 static inline int mdss_debugfs_init(struct mdss_data_type *mdata) { return 0; }
 static inline int mdss_debugfs_remove(struct mdss_data_type *mdata)
 {
@@ -143,7 +151,11 @@ static inline int mdss_debug_register_base(const char *name, void __iomem *base,
 	size_t max_offset, struct mdss_debug_base **dbg_blk) { return 0; }
 static inline void mdss_debug_register_dump_range(struct platform_device *pdev,
 	struct mdss_debug_base *blk_base, const char *ranges_prop,
-	const char *name_prop) { return 0; }
+	const char *name_prop) { }
+static inline int panel_debug_register_base(const char *name,
+					void __iomem *base,
+					size_t max_offset)
+{ return 0; }
 static inline int mdss_misr_set(struct mdss_data_type *mdata,
 					struct mdp_misr *req,
 					struct mdss_mdp_ctl *ctl)
@@ -157,11 +169,14 @@ static inline void mdss_misr_crc_collect(struct mdss_data_type *mdata,
 
 static inline int create_xlog_debug(struct mdss_data_type *mdata) { return 0; }
 static inline void mdss_xlog_dump(void) { }
-static inline void mdss_xlog(const char *name, int line, int flag...) { }
+static inline void mdss_xlog(const char *name, int line, int flag, ...) { }
+
 static inline void mdss_dsi_debug_check_te(struct mdss_panel_data *pdata) { }
-static inline void mdss_xlog_tout_handler_default(const char *name, ...) { }
+static inline void mdss_xlog_tout_handler_default(bool queue,
+	const char *name, ...) { }
 static inline int  mdss_xlog_tout_handler_iommu(struct iommu_domain *domain,
-	struct device *dev, unsigned long iova, int flags, void *token) { }
+	struct device *dev, unsigned long iova, int flags, void *token)
+{ return 0; }
 #endif
 
 static inline int mdss_debug_register_io(const char *name,

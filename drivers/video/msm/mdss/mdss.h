@@ -145,6 +145,7 @@ struct mdss_pp_block_off {
 enum mdss_hw_quirk {
 	MDSS_QUIRK_BWCPANIC,
 	MDSS_QUIRK_ROTCDP,
+	MDSS_QUIRK_DOWNSCALE_HANG,
 	MDSS_QUIRK_MAX,
 };
 
@@ -208,6 +209,7 @@ struct mdss_data_type {
 	struct regulator *vdd_cx;
 	bool batfet_required;
 	struct regulator *batfet;
+	bool en_svs_high;
 	u32 max_mdp_clk_rate;
 	struct mdss_util_intf *mdss_util;
 
@@ -256,9 +258,10 @@ struct mdss_data_type {
 	bool has_pixel_ram;
 	bool needs_hist_vote;
 
-	u32 rotator_ot_limit;
-	u32 default_ot_limit;
+	u32 default_ot_rd_limit;
+	u32 default_ot_wr_limit;
 	u32 default_pipe_qos_lut;
+
 	u32 mdp_irq_mask;
 	u32 mdp_hist_irq_mask;
 
@@ -306,6 +309,7 @@ struct mdss_data_type {
 
 	u32 enable_bw_release;
 	u32 enable_rotator_bw_release;
+	u32 serialize_wait4pp;
 
 	struct mdss_hw_settings *hw_settings;
 
@@ -319,8 +323,10 @@ struct mdss_data_type {
 	u32 max_target_zorder;
 	u8  ncursor_pipes;
 	u32 max_cursor_size;
+
 	u32 nppb;
 	struct mdss_mdp_ppb *ppb;
+	char __iomem *slave_pingpong_base;
 
 	struct mdss_mdp_mixer *mixer_intf;
 	struct mdss_mdp_mixer *mixer_wb;

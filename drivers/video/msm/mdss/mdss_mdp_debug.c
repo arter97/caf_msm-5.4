@@ -286,6 +286,10 @@ static void __stats_ctl_dump(struct mdss_mdp_ctl *ctl, struct seq_file *s)
 				ctl->intf_num, ctl->play_cnt);
 		seq_printf(s, "vsync: %08u \tunderrun: %08u\n",
 				ctl->vsync_cnt, ctl->underrun_cnt);
+		if (ctl->mfd) {
+			seq_printf(s, "user_bl: %08u \tmod_bl: %08u\n",
+				ctl->mfd->bl_level, ctl->mfd->bl_level_scaled);
+		}
 	} else {
 		seq_printf(s, "wb: \tmode=%x \tplay: %08u\n",
 				ctl->opmode, ctl->play_cnt);
@@ -343,6 +347,8 @@ int mdss_mdp_debugfs_init(struct mdss_data_type *mdata)
 			&mdss_debugfs_buffers_fops);
 	debugfs_create_file("stat", 0644, mdd->root, mdata,
 			&mdss_debugfs_stats_fops);
+	debugfs_create_bool("serialize_wait4pp", 0644, mdd->root,
+		(u32 *)&mdata->serialize_wait4pp);
 
 	return 0;
 }
