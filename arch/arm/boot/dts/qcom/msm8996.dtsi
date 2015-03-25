@@ -2075,9 +2075,10 @@
 		qcom,proxy-reg-names = "vdd_cx", "vdd_px";
 		qcom,keep-proxy-regs-on;
 
-		clocks = <&clock_gcc clk_cxo_pil_ssc_clk>;
-		clock-names = "xo";
-		qcom,proxy-clock-names = "xo";
+		clocks = <&clock_gcc clk_cxo_pil_ssc_clk>,
+			 <&clock_gcc clk_aggre2_noc_clk>;
+		clock-names = "xo", "aggre2";
+		qcom,proxy-clock-names = "xo", "aggre2";
 
 		qcom,pas-id = <12>;
 		qcom,proxy-timeout-ms = <10000>;
