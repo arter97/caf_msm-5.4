@@ -26,6 +26,7 @@
 #include "right_lane.h"
 #include <mach/board.h>
 
+#define MM_CAM_USE_BYPASS 1
 static void *k_addr[OVERLAY_COUNT];
 static int alloc_overlay_pipe_flag[OVERLAY_COUNT];
 static struct mdp_overlay overlay_req[OVERLAY_COUNT];
@@ -134,7 +135,7 @@ void preview_set_data_pipeline()
 
 	msm_axi_subdev_s_crystal_freq(lsh_axi_ctrl, freq,  flags);
 	csid_version = 1;
-	rc = msm_csid_init(lsh_csid_dev, &csid_version); /* CSID_INIT */
+	rc = msm_csid_init(lsh_csid_dev, &csid_version, MM_CAM_USE_BYPASS);
 	rc = msm_csiphy_init(lsh_csiphy_dev); /* CSIPHY_INIT */
 	rc = msm_ispif_init(lsh_ispif, &csid_version); /* ISPIF_INIT */
 	params_list.params[0].intftype =  RDI1; /* RDI1 */
@@ -762,7 +763,7 @@ void  exit_camera_kthread(void)
 	preview_buffer_free();
 	pr_debug("%s: begin axi release\n", __func__);
 	msm_axi_subdev_release_rdi_only(lsh_axi_ctrl, s_ctrl);
-	msm_csid_release(lsh_csid_dev);
+	msm_csid_release(lsh_csid_dev, MM_CAM_USE_BYPASS);
 	msm_csiphy_release(lsh_csiphy_dev, &csi_lane_params);
 	msm_ispif_release(lsh_ispif);
 	msm_ba_close(adp_cam_ctxt->ba_inst_hdlr);

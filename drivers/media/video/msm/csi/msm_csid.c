@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, 2014 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2014-2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -233,7 +233,8 @@ static struct camera_vreg_t csid_8974_vreg_info[] = {
 	{"mipi_csi_vdd", REG_LDO, 1800000, 1800000, 12000},
 };
 
-int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
+int msm_csid_init(struct csid_device *csid_dev,
+	uint32_t *csid_version, uint32_t bypass)
 {
 	int rc = 0;
 	uint8_t core_id = 0;
@@ -243,9 +244,7 @@ int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 		rc = -EINVAL;
 		return rc;
 	}
-	if (!machine_is_apq8064_adp_2() && !machine_is_apq8064_mplatform()
-					&& !machine_is_apq8064_adp2_es2()
-					&& !machine_is_apq8064_adp2_es2p5()) {
+	if (!bypass) {
 		if (csid_dev->csid_state == CSID_POWER_UP) {
 			pr_err("%s: csid invalid state %d\n", __func__,
 					csid_dev->csid_state);
@@ -262,10 +261,7 @@ int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 	}
 
 	if (CSID_VERSION <= CSID_VERSION_V2) {
-		if (!machine_is_apq8064_adp_2()
-			&& !machine_is_apq8064_mplatform()
-			&& !machine_is_apq8064_adp2_es2()
-			&& !machine_is_apq8064_adp2_es2p5()) {
+		if (!bypass) {
 			rc = msm_camera_config_vreg(&csid_dev->pdev->dev,
 					csid_8960_vreg_info,
 					ARRAY_SIZE(csid_8960_vreg_info),
@@ -293,10 +289,7 @@ int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 			goto clk_enable_failed;
 		}
 	} else if (CSID_VERSION == CSID_VERSION_V3) {
-		if (!machine_is_apq8064_adp_2()
-				&& !machine_is_apq8064_mplatform()
-				&& !machine_is_apq8064_adp2_es2()
-				&& !machine_is_apq8064_adp2_es2p5()) {
+		if (!bypass) {
 			rc = msm_camera_config_vreg(&csid_dev->pdev->dev,
 					csid_8974_vreg_info,
 					ARRAY_SIZE(csid_8974_vreg_info),
@@ -381,7 +374,7 @@ vreg_config_failed:
 	return rc;
 }
 
-int msm_csid_release(struct csid_device *csid_dev)
+int msm_csid_release(struct csid_device *csid_dev, uint32_t bypass)
 {
 	uint32_t irq;
 	uint8_t core_id = 0;
@@ -401,10 +394,7 @@ int msm_csid_release(struct csid_device *csid_dev)
 	if (csid_dev->hw_version <= CSID_VERSION_V2) {
 		msm_cam_clk_enable(&csid_dev->pdev->dev, csid_8960_clk_info,
 			csid_dev->csid_clk, ARRAY_SIZE(csid_8960_clk_info), 0);
-		if (!machine_is_apq8064_adp_2()
-			&& !machine_is_apq8064_mplatform()
-			&& !machine_is_apq8064_adp2_es2()
-			&& !machine_is_apq8064_adp2_es2p5()) {
+		if (!bypass) {
 			msm_camera_enable_vreg(&csid_dev->pdev->dev,
 					csid_8960_vreg_info,
 					ARRAY_SIZE(csid_8960_vreg_info),
@@ -426,10 +416,7 @@ int msm_csid_release(struct csid_device *csid_dev)
 		msm_cam_clk_enable(&csid_dev->pdev->dev,
 			csid_8974_clk_info[0].clk_info, csid_dev->csid0_clk,
 			csid_8974_clk_info[0].num_clk_info, 0);
-		if (!machine_is_apq8064_adp_2()
-				&& !machine_is_apq8064_mplatform()
-				&& !machine_is_apq8064_adp2_es2()
-				&& !machine_is_apq8064_adp2_es2p5()) {
+		if (!bypass) {
 			msm_camera_enable_vreg(&csid_dev->pdev->dev,
 					csid_8974_vreg_info,
 					ARRAY_SIZE(csid_8974_vreg_info),
@@ -467,7 +454,7 @@ static long msm_csid_cmd(struct csid_device *csid_dev, void *arg)
 	CDBG("%s cfgtype = %d\n", __func__, cdata.cfgtype);
 	switch (cdata.cfgtype) {
 	case CSID_INIT:
-		rc = msm_csid_init(csid_dev, &cdata.cfg.csid_version);
+		rc = msm_csid_init(csid_dev, &cdata.cfg.csid_version, 0);
 		if (copy_to_user((void *)arg,
 			&cdata,
 			sizeof(struct csid_cfg_data))) {
@@ -533,7 +520,7 @@ static long msm_csid_subdev_ioctl(struct v4l2_subdev *sd,
 		rc = msm_csid_cmd(csid_dev, arg);
 		break;
 	case VIDIOC_MSM_CSID_RELEASE:
-		rc = msm_csid_release(csid_dev);
+		rc = msm_csid_release(csid_dev, 0);
 		break;
 	default:
 		pr_err("%s: command not found\n", __func__);
@@ -656,14 +643,9 @@ static int __devinit csid_probe(struct platform_device *pdev)
 
 	new_csid_dev->csid_state = CSID_POWER_DOWN;
 
-	if (machine_is_apq8064_adp_2()
-			|| machine_is_apq8064_mplatform()
-			|| machine_is_apq8064_adp2_es2()
-			|| machine_is_apq8064_adp2_es2p5()) {
-		if (pdev->id == 0) {
-			pr_debug("keep track of 1st csid device\n");
-			lsh_csid_dev = new_csid_dev;
-		}
+	if (pdev->id == 0) {
+		pr_debug("keep track of 1st csid device\n");
+		lsh_csid_dev = new_csid_dev;
 	}
 
 	return 0;

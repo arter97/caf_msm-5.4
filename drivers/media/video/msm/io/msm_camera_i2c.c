@@ -1,4 +1,4 @@
-/* Copyright (c) 2011, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011,2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -376,6 +376,10 @@ int32_t msm_camera_i2c_write_tbl(struct msm_camera_i2c_client *client,
 {
 	int i;
 	int32_t rc = -EFAULT;
+
+	if (!client || !reg_conf_tbl)
+		return rc;
+
 	if (client->cci_client) {
 		struct msm_camera_cci_ctrl cci_ctrl;
 		cci_ctrl.cmd = MSM_CCI_I2C_WRITE;
@@ -552,16 +556,18 @@ int32_t msm_camera_i2c_read_seq(struct msm_camera_i2c_client *client,
 int32_t msm_sensor_write_conf_array(struct msm_camera_i2c_client *client,
 			struct msm_camera_i2c_conf_array *array, uint16_t index)
 {
-	int32_t rc;
+	int32_t rc = 0;
 
-	rc = msm_camera_i2c_write_tbl(client,
-		(struct msm_camera_i2c_reg_conf *) array[index].conf,
-		array[index].size, array[index].data_type);
-	if (array[index].delay > 20)
-		msleep(array[index].delay);
-	else
-		usleep_range(array[index].delay*1000,
-					(array[index].delay+1)*1000);
+	if (client && array) {
+		rc = msm_camera_i2c_write_tbl(client,
+			(struct msm_camera_i2c_reg_conf *) array[index].conf,
+			array[index].size, array[index].data_type);
+		if (array[index].delay > 20)
+			msleep(array[index].delay);
+		else
+			usleep_range(array[index].delay*1000,
+						(array[index].delay+1)*1000);
+	}
 	return rc;
 }
 
@@ -596,10 +602,12 @@ int32_t msm_sensor_write_all_conf_array(struct msm_camera_i2c_client *client,
 			struct msm_camera_i2c_conf_array *array, uint16_t size)
 {
 	int32_t rc = 0, i;
-	for (i = 0; i < size; i++) {
-		rc = msm_sensor_write_conf_array(client, array, i);
-		if (rc < 0)
-			break;
+	if (client && array) {
+		for (i = 0; i < size; i++) {
+			rc = msm_sensor_write_conf_array(client, array, i);
+			if (rc < 0)
+				break;
+		}
 	}
 	return rc;
 }

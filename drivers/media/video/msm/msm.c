@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012,2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -364,7 +364,8 @@ static int msm_camera_v4l2_dqbuf(struct file *f, void *pctx,
 	}
 	rc = vb2_dqbuf(&pcam_inst->vid_bufq, pb,  f->f_flags & O_NONBLOCK);
 	if (rc < 0) {
-		pr_err("%s, videobuf_dqbuf returns %d\n", __func__, rc);
+		pr_err("%s, videobuf_dqbuf returns %d, flags 0x%X\n",
+			__func__, rc, f->f_flags);
 		mutex_unlock(&pcam_inst->inst_lock);
 		return rc;
 	}
@@ -693,7 +694,12 @@ static int msm_camera_v4l2_s_crop(struct file *f, void *pctx,
 static int msm_camera_v4l2_g_parm(struct file *f, void *pctx,
 				struct v4l2_streamparm *a)
 {
-	int rc = -EINVAL;
+	int rc = 0;
+	struct msm_cam_v4l2_dev_inst *pcam_inst;
+	pcam_inst = container_of(f->private_data,
+		struct msm_cam_v4l2_dev_inst, eventHandle);
+	if (a)
+		a->parm.capture.extendedmode = pcam_inst->image_mode & 0x7F;
 	return rc;
 }
 static int msm_vidbuf_get_path(u32 extendedmode)
@@ -849,7 +855,9 @@ static long msm_camera_v4l2_private_ioctl(struct file *file, void *fh,
 		break;
 	}
 	default:
-		pr_err("%s Unsupported ioctl cmd %d ", __func__, cmd);
+		pr_err("%s Unsupported ioctl cmd %d (%d)",
+			__func__, cmd,
+			cmd - MSM_CAM_V4L2_IOCTL_GET_CAMERA_INFO + 1);
 		break;
 	}
 	return rc;
