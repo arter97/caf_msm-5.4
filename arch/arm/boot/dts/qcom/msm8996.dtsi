@@ -2073,6 +2073,7 @@
 		vdd_px-supply = <&pm8994_lvs2>;
 		qcom,vdd_cx-uV-uA = <5 0>;
 		qcom,proxy-reg-names = "vdd_cx", "vdd_px";
+		qcom,keep-proxy-regs-on;
 
 		clocks = <&clock_gcc clk_cxo_pil_ssc_clk>;
 		clock-names = "xo";
