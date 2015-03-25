@@ -813,9 +813,14 @@
 
 	mhi_dev {
 		compatible = "qcom,msm-mhi-dev";
-		reg = <0xfc527000 0x1000>;
-		reg-names = "mhi_mmio_base";
+		reg = <0xfc527000 0x1000>,
+		      <0xfd4fa000 0x1>,
+		      <0xfd4fa080 0x1>;
+		reg-names = "mhi_mmio_base", "ipa_uc_mbox_crdb",
+			    "ipa_uc_mbox_erdb";
 		interrupts = <0 42 0>;
+		interrupt-names = "mhi-device-inta";
+		qcom,mhi-ifc-id = <0x030017cb>;
 	};
 
 	qcom,clock-a7@f9010008 {
