@@ -136,6 +136,7 @@ enum fg_mem_setting_index {
 	FG_MEM_BCL_LM_THRESHOLD,
 	FG_MEM_BCL_MH_THRESHOLD,
 	FG_MEM_TERM_CURRENT,
+	FG_MEM_CHG_TERM_CURRENT,
 	FG_MEM_IRQ_VOLT_EMPTY,
 	FG_MEM_CUTOFF_VOLTAGE,
 	FG_MEM_VBAT_EST_DIFF,
@@ -180,6 +181,7 @@ static struct fg_mem_setting settings[FG_MEM_SETTING_MAX] = {
 	SETTING(TERM_CURRENT,	 0x40C,   2,      250),
 	SETTING(IRQ_VOLT_EMPTY,	 0x458,   3,      3350),
 	SETTING(CUTOFF_VOLTAGE,	 0x40C,   0,      3400),
+	SETTING(CHG_TERM_CURRENT, 0x4F8,   2,      250),
 	SETTING(VBAT_EST_DIFF,	 0x000,   0,      30),
 	SETTING(DELTA_SOC,	 0x450,   3,      1),
 	SETTING(SOC_MAX,	 0x458,   1,      85),
@@ -1062,9 +1064,6 @@ static bool fg_is_batt_empty(struct fg_chip *chip)
 				INT_RT_STS(chip->soc_base), rc);
 		return false;
 	}
-
-	if (fg_debug_mask & FG_IRQS)
-		pr_info("fg soc sts 0x%x\n", fg_soc_sts);
 
 	return (fg_soc_sts & SOC_EMPTY) != 0;
 }
@@ -2570,10 +2569,28 @@ done:
 	return rc;
 }
 
+#define MICROUNITS_TO_ADC_RAW(units)	\
+			div64_s64(units * LSB_16B_DENMTR, LSB_16B_NUMRTR)
+static int update_chg_iterm(struct fg_chip *chip)
+{
+	u8 data[2];
+	u16 converted_current_raw;
+	s64 current_ma = -settings[FG_MEM_CHG_TERM_CURRENT].value;
+
+	converted_current_raw = (s16)MICROUNITS_TO_ADC_RAW(current_ma * 1000);
+	data[0] = cpu_to_le16(converted_current_raw) & 0xFF;
+	data[1] = cpu_to_le16(converted_current_raw) >> 8;
+
+	if (fg_debug_mask & FG_STATUS)
+		pr_info("current = %lld, converted_raw = %04x, data = %02x %02x\n",
+			current_ma, converted_current_raw, data[0], data[1]);
+	return fg_mem_write(chip, data,
+			settings[FG_MEM_CHG_TERM_CURRENT].address,
+			2, settings[FG_MEM_CHG_TERM_CURRENT].offset, 0);
+}
+
 #define V_PREDICTED_ADDR		0x540
 #define V_CURRENT_PREDICTED_OFFSET	0
-
-
 #define LOW_LATENCY	BIT(6)
 #define PROFILE_LOAD_TIMEOUT_MS		5000
 #define BATT_PROFILE_OFFSET		0x4C0
@@ -2673,6 +2690,7 @@ wait:
 	if (reg & PROFILE_INTEGRITY_BIT)
 		fg_cap_learning_load_data(chip);
 	if ((reg & PROFILE_INTEGRITY_BIT) && vbat_in_range
+			&& !fg_is_batt_empty(chip)
 			&& memcmp(chip->batt_profile, data, len - 4) == 0) {
 		if (fg_debug_mask & FG_STATUS)
 			pr_info("Battery profiles same, using default\n");
@@ -2680,10 +2698,13 @@ wait:
 			schedule_work(&chip->dump_sram);
 		goto done;
 	}
+	dump_sram(&chip->dump_sram);
 	if ((fg_debug_mask & FG_STATUS) && !vbat_in_range)
 		pr_info("Vbat out of range: v_current_pred: %d, v:%d\n",
 				fg_data[FG_DATA_CPRED_VOLTAGE].value,
 				fg_data[FG_DATA_VOLTAGE].value);
+	if ((fg_debug_mask & FG_STATUS) && fg_is_batt_empty(chip))
+		pr_info("battery empty\n");
 	if (fg_debug_mask & FG_STATUS) {
 		pr_info("Using new profile\n");
 		print_hex_dump(KERN_INFO, "FG: loaded profile: ",
@@ -2838,6 +2859,7 @@ done:
 	chip->first_profile_loaded = true;
 	chip->profile_loaded = true;
 	chip->battery_missing = is_battery_missing(chip);
+	update_chg_iterm(chip);
 	rc = populate_learning_data(chip);
 	if (rc) {
 		pr_err("failed to read ocv properties=%d\n", rc);
@@ -2918,8 +2940,6 @@ static int update_irq_volt_empty(struct fg_chip *chip)
 			settings[FG_MEM_IRQ_VOLT_EMPTY].offset, 0);
 }
 
-#define MICROUNITS_TO_ADC_RAW(units)	\
-			div64_s64(units * LSB_16B_DENMTR, LSB_16B_NUMRTR)
 static int update_cutoff_voltage(struct fg_chip *chip)
 {
 	u8 data[2];
@@ -3004,6 +3024,7 @@ static int fg_of_init(struct fg_chip *chip)
 	OF_READ_SETTING(FG_MEM_BCL_MH_THRESHOLD, "bcl-mh-threshold-ma",
 		rc, 1);
 	OF_READ_SETTING(FG_MEM_TERM_CURRENT, "fg-iterm-ma", rc, 1);
+	OF_READ_SETTING(FG_MEM_CHG_TERM_CURRENT, "fg-chg-iterm-ma", rc, 1);
 	OF_READ_SETTING(FG_MEM_CUTOFF_VOLTAGE, "fg-cutoff-voltage-mv", rc, 1);
 	data = of_get_property(chip->spmi->dev.of_node,
 			"qcom,thermal-coefficients", &len);
