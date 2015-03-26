@@ -863,6 +863,7 @@ void mdp4_overlay_solidfill_init(struct mdp4_overlay_pipe *pipe)
 void mdp4_overlay_dmas_setup(struct mdp4_overlay_pipe *pipe)
 {
 	u32 src_size;
+	uint32 dma2_cfg_reg;
 
 	src_size = ((pipe->src_h << 16) | pipe->src_w);
 
@@ -875,10 +876,45 @@ void mdp4_overlay_dmas_setup(struct mdp4_overlay_pipe *pipe)
 
 	pr_debug("dmas addr=%x ystride=%d\n", pipe->srcp0_addr,
 		pipe->srcp0_ystride);
+	dma2_cfg_reg = (DMA_PACK_ALIGN_LSB |
+			DMA_DSTC2R_8BITS |
+			DMA_DSTC0G_8BITS |
+			DMA_DSTC1B_8BITS);
+	switch (pipe->src_format) {
+	case MDP_RGB_888:
+		dma2_cfg_reg |= (DMA_IBUF_FORMAT_RGB888 | DMA_PACK_PATTERN_BGR);
+		break;
+	case MDP_BGR_888:
+		dma2_cfg_reg |= (DMA_IBUF_FORMAT_RGB888 | DMA_PACK_PATTERN_RGB);
+		break;
+	case MDP_RGB_565:
+		dma2_cfg_reg |= (DMA_IBUF_FORMAT_RGB565 | DMA_PACK_PATTERN_BGR);
+		break;
+	case MDP_BGR_565:
+		dma2_cfg_reg |= (DMA_IBUF_FORMAT_RGB565 | DMA_PACK_PATTERN_RGB);
+		break;
+	case MDP_ARGB_8888:
+	case MDP_XRGB_8888:
+		dma2_cfg_reg |= (DMA_IBUF_FORMAT_xRGB8888_OR_ARGB8888 |
+				DMA_IBUF_FORMAT_EXTEND |
+				DMA_PACK_PATTERN_BGR);
+		break;
+	case MDP_RGBA_8888:
+	case MDP_RGBX_8888:
+		dma2_cfg_reg |= (DMA_IBUF_FORMAT_xRGB8888_OR_ARGB8888 |
+				DMA_PACK_PATTERN_BGR);
+		break;
+	case MDP_BGRA_8888:
+		dma2_cfg_reg |= (DMA_IBUF_FORMAT_xRGB8888_OR_ARGB8888 |
+				DMA_PACK_PATTERN_RGB);
+		break;
+	default:
+		pr_err("%s,%d unsupport color format=%d", __func__, __LINE__,
+			pipe->src_format);
+		break;
+	}
 
-	outpdw(MDP_BASE + 0xA0000, DMA_BUF_FORMAT_XRGB8888 + DMA_DITHER_EN +
-		DMA_PACK_PATTERN_BGR + DMA_PACK_ALIGN_LSB + DMA_DSTC2R_8BITS +
-		DMA_DSTC0G_8BITS + DMA_DSTC1B_8BITS);
+	outpdw(MDP_BASE + 0xA0000, dma2_cfg_reg);
 
 	mdp_clk_ctrl(0);
 }
@@ -2995,6 +3031,27 @@ static int mdp4_overlay_req_check(struct mdp_overlay *req,
 			((req->dst_rect.y + req->dst_rect.h) > yres)) {
 			mdp4_stat.err_size++;
 			pr_err("%s invalid dst rectangle\n", __func__);
+			ret = -ERANGE;
+			goto req_err;
+		}
+	}
+
+	if (mfd->panel_info.pdest == DISPLAY_4) {
+		/* DMA_S */
+		switch (req->src.format) {
+		case MDP_RGB_565:
+		case MDP_XRGB_8888:
+		case MDP_ARGB_8888:
+		case MDP_RGB_888:
+		case MDP_BGR_888:
+		case MDP_RGBA_8888:
+		case MDP_BGRA_8888:
+		case MDP_RGBX_8888:
+		case MDP_BGR_565:
+			break;
+		default:
+			pr_err("%s invalid src format=%d for dma_s",
+				__func__, req->src.format);
 			ret = -ERANGE;
 			goto req_err;
 		}
