@@ -12,6 +12,7 @@
  */
 
 #include "msm8939-interposer-qrd.dtsi"
+#include "dsi-panel-otm1906c-1080p-cmd.dtsi"
 
 &labibb {
 	status = "ok";
@@ -53,4 +54,28 @@
 		qcom,key-codes = <139 172 158>;
 		qcom,y-offset = <0>;
 	};
+};
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&pmx_mdss {
+	qcom,num-grp-pins = <1>;
+	qcom,pins = <&gp 25>;
+};
+
+&pmx_mdss_te {
+	qcom,num-grp-pins = <1>;
+	qcom,pins = <&gp 24>;
+};
+
+&mdss_dsi0 {
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+	qcom,dsi-pref-prim-pan = <&dsi_otm1906c_1080p_cmd>;
+	qcom,dsi-panel-bias-vreg;
+
+	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
 };
