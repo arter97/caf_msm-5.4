@@ -3199,8 +3199,8 @@ static int wcnss_notif_cb(struct notifier_block *this, unsigned long code,
 			 * voting for it's resources too early.
 			 */
 			msleep(20);
-	//		wcnss_wlan_power(&pdev->dev, pwlanconfig,
-	//				WCNSS_WLAN_SWITCH_OFF, NULL);
+			wcnss_wlan_power(&pdev->dev, pwlanconfig,
+					WCNSS_WLAN_SWITCH_OFF, NULL);
 		}
 	} else if ((code == SUBSYS_BEFORE_SHUTDOWN && data && data->crashed) ||
 			code == SUBSYS_SOC_RESET) {
