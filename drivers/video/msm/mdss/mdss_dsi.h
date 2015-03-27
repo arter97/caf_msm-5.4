@@ -343,6 +343,7 @@ struct mdss_dsi_ctrl_pdata {
 	bool dsi_irq_line;
 	atomic_t te_irq_ready;
 
+	bool cmd_clk_ln_recovery_en;
 	bool cmd_sync_wait_broadcast;
 	bool cmd_sync_wait_trigger;
 
@@ -358,6 +359,7 @@ struct mdss_dsi_ctrl_pdata {
 	struct mdss_intf_recovery *recovery;
 
 	struct dsi_panel_cmds on_cmds;
+	struct dsi_panel_cmds post_dms_on_cmds;
 	struct dsi_panel_cmds off_cmds;
 	struct dsi_panel_cmds status_cmds;
 	u32 status_cmds_rlen;
@@ -394,6 +396,7 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_buf rx_buf;
 	struct dsi_buf status_buf;
 	int status_mode;
+	int rx_len;
 
 	struct dsi_pinctrl_res pin_res;
 
@@ -477,7 +480,8 @@ void mdss_dsi_ctrl_setup(struct mdss_dsi_ctrl_pdata *ctrl);
 void mdss_dsi_dln0_phy_err(struct mdss_dsi_ctrl_pdata *ctrl);
 void mdss_dsi_lp_cd_rx(struct mdss_dsi_ctrl_pdata *ctrl);
 void mdss_dsi_get_hw_revision(struct mdss_dsi_ctrl_pdata *ctrl);
-
+u32 mdss_dsi_panel_cmd_read(struct mdss_dsi_ctrl_pdata *ctrl, char cmd0,
+		char cmd1, void (*fxn)(int), char *rbuf, int len);
 int mdss_dsi_panel_init(struct device_node *node,
 		struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 		bool cmd_cfg_cont_splash);

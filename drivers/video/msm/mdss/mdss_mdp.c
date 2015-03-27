@@ -46,6 +46,7 @@
 #include <linux/msm-bus.h>
 #include <linux/msm-bus-board.h>
 #include <soc/qcom/scm.h>
+#include <soc/qcom/rpm-smd.h>
 
 #include "mdss.h"
 #include "mdss_fb.h"
@@ -318,6 +319,7 @@ static int mdss_mdp_bus_scale_set_quota(u64 ab_quota_rt, u64 ab_quota_nrt,
 		u32 nrt_axi_port_cnt = mdss_res->nrt_axi_port_cnt;
 		u32 total_axi_port_cnt = mdss_res->axi_port_cnt;
 		u32 rt_axi_port_cnt = total_axi_port_cnt - nrt_axi_port_cnt;
+		int match_cnt = 0;
 
 		if (!bw_table || !total_axi_port_cnt ||
 		    total_axi_port_cnt > MAX_AXI_PORT_COUNT) {
@@ -356,6 +358,20 @@ static int mdss_mdp_bus_scale_set_quota(u64 ab_quota_rt, u64 ab_quota_nrt,
 				ab_quota[i] = ab_quota[0];
 				ib_quota[i] = ib_quota[0];
 			}
+		}
+
+		for (i = 0; i < total_axi_port_cnt; i++) {
+			vect = &bw_table->usecase
+				[mdss_res->curr_bw_uc_idx].vectors[i];
+			/* avoid performing updates for small changes */
+			if ((ab_quota[i] == vect->ab) &&
+				(ib_quota[i] == vect->ib))
+				match_cnt++;
+		}
+
+		if (match_cnt == total_axi_port_cnt) {
+			pr_debug("skip BW vote\n");
+			return 0;
 		}
 
 		new_uc_idx = (mdss_res->curr_bw_uc_idx %
@@ -1042,6 +1058,9 @@ static void mdss_mdp_hw_rev_caps_init(struct mdss_data_type *mdata)
 		mdata->max_target_zorder = 4; /* excluding base layer */
 		mdata->max_cursor_size = 64;
 	}
+
+	if (mdata->mdp_rev < MDSS_MDP_HW_REV_103)
+		mdss_set_quirk(mdata, MDSS_QUIRK_DOWNSCALE_HANG);
 }
 
 static void mdss_hw_rev_init(struct mdss_data_type *mdata)
@@ -2694,7 +2713,7 @@ static void mdss_mdp_parse_vbif_qos(struct platform_device *pdev)
 static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 {
 	struct mdss_data_type *mdata = platform_get_drvdata(pdev);
-	u32 data;
+	u32 data, slave_pingpong_off;
 	const char *wfd_data;
 	int rc;
 	struct property *prop = NULL;
@@ -2704,12 +2723,12 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 	mdata->rot_block_size = (!rc ? data : 128);
 
 	rc = of_property_read_u32(pdev->dev.of_node,
-		"qcom,mdss-rotator-ot-limit", &data);
-	mdata->rotator_ot_limit = (!rc ? data : 0);
+		"qcom,mdss-default-ot-rd-limit", &data);
+	mdata->default_ot_rd_limit = (!rc ? data : 0);
 
 	rc = of_property_read_u32(pdev->dev.of_node,
-		"qcom,mdss-default-ot-limit", &data);
-	mdata->default_ot_limit = (!rc ? data : 0);
+		"qcom,mdss-default-ot-wr-limit", &data);
+	mdata->default_ot_wr_limit = (!rc ? data : 0);
 
 	rc = of_property_read_u32(pdev->dev.of_node,
 		"qcom,mdss-default-pipe-qos-lut", &data);
@@ -2754,6 +2773,10 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 
 	prop = of_find_property(pdev->dev.of_node, "batfet-supply", NULL);
 	mdata->batfet_required = prop ? true : false;
+	mdata->en_svs_high = of_property_read_bool(pdev->dev.of_node,
+		"qcom,mdss-en-svs-high");
+	if (!mdata->en_svs_high)
+		pr_debug("%s: svs_high is not enabled\n", __func__);
 	rc = of_property_read_u32(pdev->dev.of_node,
 		 "qcom,mdss-highest-bank-bit", &(mdata->highest_bank_bit));
 	if (rc)
@@ -2761,6 +2784,18 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 
 	mdata->has_pingpong_split = of_property_read_bool(pdev->dev.of_node,
 		 "qcom,mdss-has-dst-split");
+
+	if (mdata->has_pingpong_split) {
+		rc = of_property_read_u32(pdev->dev.of_node,
+				"qcom,mdss-slave-pingpong-off",
+				&slave_pingpong_off);
+		if (rc) {
+			pr_err("Error in device tree: slave pingpong offset\n");
+			return rc;
+		}
+		mdata->slave_pingpong_base = mdata->mdss_io.base +
+			slave_pingpong_off;
+	}
 
 	/*
 	 * 2x factor on AB because bus driver will divide by 2
@@ -3137,39 +3172,59 @@ bool force_on_xin_clk(u32 bit_off, u32 clk_ctl_reg_off, bool enable)
 	return clk_forced_on;
 }
 
-static bool limit_rotator_ot(bool is_yuv, u32 width, u32 height)
-{
-	return (true == is_yuv) &&
-		(width * height <= 1080 * 1920);
-}
-
-static int limit_wb_ot(u32 width, u32 height)
-{
-
-	return width * height <= 1080 * 1920;
-}
-
-static u32 get_ot_limit(u32 reg_off, u32 bit_off, bool is_rot,
-	bool is_wb, bool is_yuv, u32 width, u32 height)
+static void apply_dynamic_ot_limit(u32 *ot_lim,
+	struct mdss_mdp_set_ot_params *params)
 {
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
-	u32 ot_lim = mdata->default_ot_limit;
+	u32 res;
+
+	if (!is_dynamic_ot_limit_required(mdata->mdp_rev))
+		return;
+
+	res = params->width * params->height;
+
+	pr_debug("w:%d h:%d rot:%d yuv:%d wb:%d res:%d\n",
+		params->width, params->height, params->is_rot,
+		params->is_yuv, params->is_wb, res);
+
+	if ((params->is_rot && params->is_yuv) ||
+		params->is_wb) {
+		if (res <= 1080 * 1920) {
+			*ot_lim = 2;
+		} else if (res <= 3840 * 2160) {
+			if (params->is_rot && params->is_yuv)
+				*ot_lim = 8;
+			else
+				*ot_lim = 16;
+		}
+	}
+}
+
+static u32 get_ot_limit(u32 reg_off, u32 bit_off,
+	struct mdss_mdp_set_ot_params *params)
+{
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+	u32 ot_lim = 0;
 	u32 is_vbif_nrt, val;
 
+	if (mdata->default_ot_wr_limit &&
+		(params->reg_off_vbif_lim_conf == MMSS_VBIF_WR_LIM_CONF))
+		ot_lim = mdata->default_ot_wr_limit;
+	else if (mdata->default_ot_rd_limit &&
+		(params->reg_off_vbif_lim_conf == MMSS_VBIF_RD_LIM_CONF))
+		ot_lim = mdata->default_ot_rd_limit;
+
 	/*
-	 * If default ot limit is not set from dt,
-	 * then ot limiting is disabled.
+	 * If default ot is not set from dt,
+	 * then do not configure it.
 	 */
 	if (ot_lim == 0)
 		goto exit;
 
+	/* Modify the limits if the target and the use case requires it */
+	apply_dynamic_ot_limit(&ot_lim, params);
+
 	is_vbif_nrt = mdss_mdp_is_vbif_nrt(mdata->mdp_rev);
-
-	if ((is_rot && limit_rotator_ot(is_yuv, width, height)) ||
-		(is_wb && limit_wb_ot(width, height))) {
-		ot_lim = MDSS_OT_LIMIT;
-	}
-
 	val = MDSS_VBIF_READ(mdata, reg_off, is_vbif_nrt);
 	val &= (0xFF << bit_off);
 	val = val >> bit_off;
@@ -3178,11 +3233,11 @@ static u32 get_ot_limit(u32 reg_off, u32 bit_off, bool is_rot,
 		ot_lim = 0;
 
 exit:
+	pr_debug("ot_lim=%d\n", ot_lim);
 	return ot_lim;
 }
 
-void mdss_mdp_set_ot_limit(struct mdss_mdp_set_ot_params *params,
-	bool is_rot, bool is_wb, bool is_yuv)
+void mdss_mdp_set_ot_limit(struct mdss_mdp_set_ot_params *params)
 {
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	u32 ot_lim;
@@ -3193,15 +3248,10 @@ void mdss_mdp_set_ot_limit(struct mdss_mdp_set_ot_params *params,
 	u32 reg_val;
 	bool forced_on;
 
-	if (!mdss_mdp_apply_ot_limit(mdata->mdp_rev))
-		goto exit;
-
 	ot_lim = get_ot_limit(
 		reg_off_vbif_lim_conf,
 		bit_off_vbif_lim_conf,
-		is_rot, is_wb, is_yuv,
-		params->width,
-		params->height) & 0xFF;
+		params) & 0xFF;
 
 	if (ot_lim == 0)
 		goto exit;
@@ -3245,6 +3295,58 @@ exit:
 	return;
 }
 
+#define RPM_MISC_REQ_TYPE 0x6373696d
+#define RPM_MISC_REQ_SVS_PLUS_KEY 0x2B737673
+
+static void mdss_mdp_config_cx_voltage(struct mdss_data_type *mdata, int enable)
+{
+	int ret = 0;
+	static struct msm_rpm_kvp rpm_kvp;
+	static uint8_t svs_en;
+
+	if (!mdata->en_svs_high)
+		return;
+
+	if (!rpm_kvp.key) {
+		rpm_kvp.key = RPM_MISC_REQ_SVS_PLUS_KEY;
+		rpm_kvp.length = sizeof(unsigned);
+		pr_debug("%s: Initialized rpm_kvp structure\n", __func__);
+	}
+
+	if (enable) {
+		svs_en = 1;
+		rpm_kvp.data = &svs_en;
+		pr_debug("%s: voting for svs high\n", __func__);
+		ret = msm_rpm_send_message(MSM_RPM_CTX_ACTIVE_SET,
+					RPM_MISC_REQ_TYPE, 0,
+					&rpm_kvp, 1);
+		if (ret)
+			pr_err("vote for active_set svs high failed: %d\n",
+					ret);
+		ret = msm_rpm_send_message(MSM_RPM_CTX_SLEEP_SET,
+					RPM_MISC_REQ_TYPE, 0,
+					&rpm_kvp, 1);
+		if (ret)
+			pr_err("vote for sleep_set svs high failed: %d\n",
+					ret);
+	} else {
+		svs_en = 0;
+		rpm_kvp.data = &svs_en;
+		pr_debug("%s: Removing vote for svs high\n", __func__);
+		ret = msm_rpm_send_message(MSM_RPM_CTX_ACTIVE_SET,
+					RPM_MISC_REQ_TYPE, 0,
+					&rpm_kvp, 1);
+		if (ret)
+			pr_err("Remove vote:active_set svs high failed: %d\n",
+					ret);
+		ret = msm_rpm_send_message(MSM_RPM_CTX_SLEEP_SET,
+					RPM_MISC_REQ_TYPE, 0,
+					&rpm_kvp, 1);
+		if (ret)
+			pr_err("Remove vote:sleep_set svs high failed: %d\n",
+					ret);
+	}
+}
 
 static int mdss_mdp_cx_ctrl(struct mdss_data_type *mdata, int enable)
 {
@@ -3325,6 +3427,8 @@ static void mdss_mdp_footswitch_ctrl(struct mdss_data_type *mdata, int on)
 				mdss_mdp_batfet_ctrl(mdata, true);
 			}
 		}
+		if (mdata->en_svs_high)
+			mdss_mdp_config_cx_voltage(mdata, true);
 		mdata->fs_ena = true;
 	} else {
 		if (mdata->fs_ena) {
@@ -3342,6 +3446,8 @@ static void mdss_mdp_footswitch_ctrl(struct mdss_data_type *mdata, int on)
 				mdss_mdp_cx_ctrl(mdata, false);
 				mdss_mdp_batfet_ctrl(mdata, false);
 			}
+			if (mdata->en_svs_high)
+				mdss_mdp_config_cx_voltage(mdata, false);
 			regulator_disable(mdata->fs);
 			if (mdata->mmagic_mdss)
 				regulator_disable(mdata->mmagic_mdss);

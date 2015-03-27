@@ -193,7 +193,8 @@ static struct mdss_mdp_rot_pipe *mdss_mdp_rot_mgr_acquire_pipe(
 		pr_debug("find a free pipe %p\n", rot_pipe->pipe);
 	} else {
 		rot_pipe = busy_rot_pipe;
-		pr_debug("find a busy pipe %p\n", rot_pipe->pipe);
+		if (rot_pipe)
+			pr_debug("find a busy pipe %p\n", rot_pipe->pipe);
 	}
 
 	if (rot_pipe)
@@ -562,6 +563,11 @@ static int mdss_mdp_rotator_queue_sub(struct mdss_mdp_rotator_session *rot,
 	dst_data = &rot->dst_buf;
 
 	pipe = rot_pipe->pipe;
+
+	if (!pipe->mixer_left) {
+		pr_debug("Mixer left is null\n");
+		return -EINVAL;
+	}
 
 	orig_ctl = pipe->mixer_left->ctl;
 	if (orig_ctl->shared_lock)

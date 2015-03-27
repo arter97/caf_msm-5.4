@@ -20,6 +20,7 @@
 
 #include "mdss_mdp.h"
 #include "mdss_mdp_trace.h"
+#include "mdss_debug.h"
 
 #define SMP_MB_SIZE		(mdss_res->smp_mb_size)
 #define SMP_MB_CNT		(mdss_res->smp_mb_cnt)
@@ -224,6 +225,7 @@ static inline bool is_unused_smp_allowed(void)
 	case MDSS_GET_MAJOR_MINOR(MDSS_MDP_HW_REV_103):
 	case MDSS_GET_MAJOR_MINOR(MDSS_MDP_HW_REV_105):
 	case MDSS_GET_MAJOR_MINOR(MDSS_MDP_HW_REV_109):
+	case MDSS_GET_MAJOR_MINOR(MDSS_MDP_HW_REV_110):
 		return true;
 	default:
 		return false;
@@ -1000,6 +1002,17 @@ static struct mdss_mdp_pipe *mdss_mdp_pipe_init(struct mdss_mdp_mixer *mixer,
 		break;
 	}
 
+	/* allocate lower priority right blend pipe */
+	if (left_blend_pipe && (left_blend_pipe->type == type) && pipe_pool) {
+		struct mdss_mdp_pipe *pool_head = pipe_pool + off;
+		off += left_blend_pipe->priority - pool_head->priority + 1;
+		if (off >= npipes) {
+			pr_warn("priority limitation. l_pipe:%d. no low priority %d pipe type available.\n",
+				left_blend_pipe->num, type);
+			return NULL;
+		}
+	}
+
 	for (i = off; i < npipes; i++) {
 		pipe = pipe_pool + i;
 		if (atomic_read(&pipe->kref.refcount) == 0) {
@@ -1011,20 +1024,15 @@ static struct mdss_mdp_pipe *mdss_mdp_pipe_init(struct mdss_mdp_mixer *mixer,
 
 	if (pipe && type == MDSS_MDP_PIPE_TYPE_CURSOR) {
 		kref_init(&pipe->kref);
+		INIT_LIST_HEAD(&pipe->buf_queue);
+		pr_debug("cursor: type=%x pnum=%d\n",
+			pipe->type, pipe->num);
 		goto cursor_done;
-	}
-
-	if (left_blend_pipe && pipe &&
-	    pipe->priority <= left_blend_pipe->priority) {
-		pr_debug("priority limitation. l_pipe:%d r_pipe:%d\n",
-			left_blend_pipe->num, pipe->num);
-		return ERR_PTR(-EINVAL);
 	}
 
 	rc = mdss_mdp_pipe_init_config(pipe, mixer, pipe_share);
 	if (rc)
 		return ERR_PTR(-EINVAL);
-
 cursor_done:
 	if (!pipe)
 		pr_err("no %d type pipes available\n", type);
@@ -1237,7 +1245,7 @@ static bool mdss_mdp_check_pipe_in_use(struct mdss_mdp_pipe *pipe)
 			pr_err("IN USE: mixer=%d pipe=%d mcfg:0x%x mask:0x%x\n",
 				mixer->num, pipe->num,
 				mixercfg, stage_off_mask);
-			BUG();
+			MDSS_XLOG_TOUT_HANDLER("mdp", "panic");
 		}
 
 		mixer = ctl->mixer_right;
@@ -1246,7 +1254,7 @@ static bool mdss_mdp_check_pipe_in_use(struct mdss_mdp_pipe *pipe)
 			pr_err("IN USE: mixer=%d pipe=%d mcfg:0x%x mask:0x%x\n",
 				mixer->num, pipe->num,
 				mixercfg, stage_off_mask);
-			BUG();
+			MDSS_XLOG_TOUT_HANDLER("mdp", "panic");
 		}
 	}
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
@@ -1485,8 +1493,8 @@ static int mdss_mdp_image_setup(struct mdss_mdp_pipe *pipe,
 	u32 decimation, reg_data;
 	u32 tmp_src_xy, tmp_src_size;
 	int ret = 0;
+	struct mdss_rect dst, src;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
-	struct mdss_rect sci, dst, src;
 	bool rotation = false;
 
 	pr_debug("ctl: %d pnum=%d wh=%dx%d src={%d,%d,%d,%d} dst={%d,%d,%d,%d}\n",
@@ -1526,14 +1534,33 @@ static int mdss_mdp_image_setup(struct mdss_mdp_pipe *pipe,
 		pr_debug("Image decimation h=%d v=%d\n",
 				pipe->horz_deci, pipe->vert_deci);
 
-	sci = pipe->mixer_left->ctl->roi;
 	dst = pipe->dst;
 	src = pipe->src;
 
-	if ((pipe->mixer_left->type != MDSS_MDP_MIXER_TYPE_WRITEBACK) &&
-		!pipe->mixer_left->ctl->is_video_mode &&
-		!pipe->src_split_req) {
-		mdss_mdp_crop_rect(&src, &dst, &sci);
+	if (!pipe->mixer_left->ctl->is_video_mode &&
+	    (pipe->mixer_left->type != MDSS_MDP_MIXER_TYPE_WRITEBACK)) {
+		struct mdss_rect ctl_roi = pipe->mixer_left->ctl->roi;
+		bool is_right_mixer = pipe->mixer_left->is_right_mixer;
+		/* sctl can be NULL, check validity before use */
+		struct mdss_mdp_ctl *sctl =
+			mdss_mdp_get_split_ctl(pipe->mixer_left->ctl);
+		/* main_ctl can be NULL, check validity before use */
+		struct mdss_mdp_ctl *main_ctl =
+			mdss_mdp_get_main_ctl(pipe->mixer_left->ctl);
+
+		if (pipe->src_split_req && sctl)
+			ctl_roi.w += sctl->roi.w;
+		else if (mdata->has_src_split && is_right_mixer && main_ctl)
+			dst.x -= main_ctl->mixer_left->width;
+
+		mdss_mdp_crop_rect(&src, &dst, &ctl_roi);
+
+		if (is_right_mixer && main_ctl) {
+			/* left + right */
+			if (main_ctl->valid_roi)
+				dst.x += main_ctl->roi.w;
+		}
+
 		if (pipe->flags & MDP_FLIP_LR) {
 			src.x = pipe->src.x + (pipe->src.x + pipe->src.w)
 				- (src.x + src.w);
@@ -1849,11 +1876,11 @@ static void mdss_mdp_set_ot_limit_pipe(struct mdss_mdp_pipe *pipe)
 	ot_params.reg_off_mdp_clk_ctrl = pipe->clk_ctrl.reg_off;
 	ot_params.bit_off_mdp_clk_ctrl = pipe->clk_ctrl.bit_off +
 		CLK_FORCE_ON_OFFSET;
+	ot_params.is_rot = pipe->mixer_left->rotator_mode;
+	ot_params.is_wb = ctl->intf_num == MDSS_MDP_NO_INTF;
+	ot_params.is_yuv = pipe->src_fmt->is_yuv;
 
-	mdss_mdp_set_ot_limit(&ot_params,
-		pipe->mixer_left->rotator_mode,
-		ctl->intf_num ==  MDSS_MDP_NO_INTF,
-		pipe->src_fmt->is_yuv);
+	mdss_mdp_set_ot_limit(&ot_params);
 }
 
 int mdss_mdp_pipe_queue_data(struct mdss_mdp_pipe *pipe,

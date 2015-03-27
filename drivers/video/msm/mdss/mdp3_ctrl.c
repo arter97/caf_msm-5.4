@@ -1158,6 +1158,9 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 	u32 offset;
 	int bpp;
 	struct mdss_panel_info *panel_info;
+	static bool splash_done;
+	struct mdss_panel_data *panel;
+
 	int rc;
 
 	pr_debug("mdp3_ctrl_pan_display\n");
@@ -1232,6 +1235,12 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 	}
 
 	mdp3_session->vsync_before_commit = 0;
+	panel = mdp3_session->panel;
+	if (!splash_done && (panel && panel->set_backlight)) {
+		panel->set_backlight(panel, panel->panel_info.bl_max);
+		splash_done = true;
+	}
+
 
 pan_error:
 	mutex_unlock(&mdp3_session->lock);
@@ -2173,7 +2182,8 @@ int mdp3_wait_for_dma_done(struct mdp3_session_data *session)
 	return rc;
 }
 
-static int mdp3_update_panel_info(struct msm_fb_data_type *mfd, int mode)
+static int mdp3_update_panel_info(struct msm_fb_data_type *mfd, int mode,
+		int dest_ctrl)
 {
 	int ret = 0;
 	struct mdp3_session_data *mdp3_session;
@@ -2188,7 +2198,7 @@ static int mdp3_update_panel_info(struct msm_fb_data_type *mfd, int mode)
 
 	if (!panel->event_handler)
 		return 0;
-	ret = panel->event_handler(panel, MDSS_EVENT_DSI_DYNAMIC_SWITCH,
+	ret = panel->event_handler(panel, MDSS_EVENT_DSI_UPDATE_PANEL_DATA,
 						(void *)(unsigned long)mode);
 	if (ret)
 		pr_err("Dynamic switch to %s mode failed!\n",
