@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -211,7 +211,8 @@ int msm_ispif_config(struct ispif_device *ispif,
 int msm_csiphy_init(struct csiphy_device *csiphy_dev);
 int msm_csiphy_lane_config(struct csiphy_device *csiphy_dev,
 	struct msm_camera_csiphy_params *csiphy_params);
-int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version);
+int msm_csid_init(struct csid_device *csid_dev,
+	uint32_t *csid_version, uint32_t bypass);
 int msm_csid_config(struct csid_device *csid_dev,
 	struct msm_camera_csid_params *csid_params);
 int msm_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl);
@@ -255,7 +256,7 @@ int mdpclient_msm_fb_blank(int blank_mode, bool op_enable);
 
 int mdp_bus_scale_update_request(u64 ab_p0, u64 ib_p0, u64 ab_p1,
 					u64 ib_p1);
-int msm_csid_release(struct csid_device *csid_dev);
+int msm_csid_release(struct csid_device *csid_dev, uint32_t bypass);
 int msm_csiphy_release(struct csiphy_device *csiphy_dev, void *arg);
 void msm_ispif_release(struct ispif_device *ispif);
 void msm_axi_subdev_release_rdi_only(struct v4l2_subdev *sd,
