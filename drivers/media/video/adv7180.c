@@ -186,24 +186,14 @@
 #define ADV7180_DEFAULT_CSI_I2C_ADDR 0x44
 #define ADV7180_DEFAULT_VPP_I2C_ADDR 0x42
 
+#define ADV7180_DEVICE2_CSI_I2C_ADDR 0x45
+#define ADV7180_DEVICE2_VPP_I2C_ADDR 0x43
+
 #define ADV7180_FLAG_V2			BIT(0)
 #define ADV7180_FLAG_MIPI_CSI2		BIT(1)
 #define ADV7180_FLAG_I2P		BIT(2)
 
-
 #define ADV7180_INPUT_DISABLED (~0x00)
-
-/*
- * Local variable used to keep track
- * of csi programming.  Will be set to
- * true the first time streaming is started.
- * Will be set false when adv is powered off.
- */
-static int csi_configured_s;
-/* Keep track of current video standard */
-static v4l2_std_id curr_mode_s;
-/* Keep track of current ain selected */
-static int curr_input_s;
 
 struct adv7180_state;
 
@@ -233,6 +223,18 @@ struct adv7180_state {
 	struct i2c_client	*vpp_client;
 	const struct adv7180_chip_info *chip_info;
 	enum v4l2_field		field;
+	/*
+	 * Local variable used to keep track
+	 * of csi programming.  Will be set to
+	 * true the first time streaming is started.
+	 * Will be set false when adv is powered off.
+	 */
+	int csi_configured;
+	/* Keep track of current video standard */
+	v4l2_std_id curr_mode;
+	/* Keep track of current ain selected */
+	int curr_input;
+	int device_num;
 };
 
 static int adv7180_set_video_standard(struct adv7180_state *state,
@@ -541,16 +543,14 @@ static int adv7180_program_std(struct adv7180_state *state)
 
 		__adv7180_status(state, NULL, &state->curr_norm);
 
-		curr_mode_s = state->curr_norm;
+		state->curr_mode = state->curr_norm;
 		pr_debug("%s: autodetect %d!!!\n",
 			__func__,
 			(int)state->curr_norm);
-
 	} else {
-		if (curr_mode_s == state->curr_norm) {
+		if (state->curr_mode == state->curr_norm) {
 			pr_debug("%s: mode is the same!!!\n", __func__);
 		} else {
-
 			ret = v4l2_std_to_adv7180(state->curr_norm);
 			if (ret < 0)
 				return ret;
@@ -559,7 +559,7 @@ static int adv7180_program_std(struct adv7180_state *state)
 			if (ret < 0)
 				return ret;
 
-			curr_mode_s = state->curr_norm;
+			state->curr_mode = state->curr_norm;
 			pr_debug("%s: set mode %d!!!\n",
 				__func__,
 				(int)state->curr_norm);
@@ -612,7 +612,7 @@ static int adv7180_set_power(struct adv7180_state *state, bool on)
 
 	if (state->chip_info->flags & ADV7180_FLAG_MIPI_CSI2) {
 		if (on) {
-			if (!csi_configured_s) {
+			if (!state->csi_configured) {
 				pr_debug("%s: config csi and vpp!!!\n",
 					__func__);
 				adv7180_vpp_write(state, 0xa3, 0x00);
@@ -635,16 +635,16 @@ static int adv7180_set_power(struct adv7180_state *state, bool on)
 				adv7180_csi_write(state, 0xE0, 0x09);
 				adv7180_csi_write(state, 0x2C, 0x00);
 				adv7180_csi_write(state, 0x1D, 0x80);
-				csi_configured_s = 1;
+				state->csi_configured = 1;
 			} else {
 				pr_debug("%s: csi/vpp already configured!!!\n",
 					__func__);
 			}
 		} else {
 			/* Reset local variables */
-			csi_configured_s = 0;
-			curr_mode_s = V4L2_STD_ALL;
-			curr_input_s = ADV7182_INPUT_UNINITIALIZED;
+			state->csi_configured = 0;
+			state->curr_mode = V4L2_STD_ALL;
+			state->curr_input = ADV7182_INPUT_UNINITIALIZED;
 		}
 	}
 
@@ -1156,7 +1156,7 @@ static int adv7182_init(struct adv7180_state *state)
 		ret = adv7180_csi_write(state, 0x1D, 0x80);
 	usleep(I2C_RW_DELAY);
 
-	if (!csi_configured_s) {
+	if (!state->csi_configured) {
 		pr_debug("%s: config csi and vpp!!!\n",
 			__func__);
 		adv7180_vpp_write(state, 0xa3, 0x00);
@@ -1179,7 +1179,7 @@ static int adv7182_init(struct adv7180_state *state)
 		adv7180_csi_write(state, 0xE0, 0x09);
 		adv7180_csi_write(state, 0x2C, 0x00);
 		adv7180_csi_write(state, 0x1D, 0x80);
-		csi_configured_s = 1;
+		state->csi_configured = 1;
 	} else {
 		pr_debug("%s: csi/vpp already configured!!!\n",
 			__func__);
@@ -1255,14 +1255,14 @@ static int adv7182_select_input(struct adv7180_state *state, unsigned int input)
 	if (input == ADV7180_INPUT_DISABLED)
 		return adv7180_write(state, ADV7180_REG_INPUT_CONTROL, 0xff);
 
-	if (curr_input_s == input) {
+	if (state->curr_input == input) {
 		pr_debug("%s: same input ain\n", __func__);
 	} else {
 		ret = adv7180_write(state, ADV7180_REG_INPUT_CONTROL, input);
 		if (ret)
 			return ret;
 
-		curr_input_s = input;
+		state->curr_input = input;
 
 		input_type = adv7182_get_input_type(input);
 
@@ -1470,6 +1470,8 @@ static const struct adv7180_chip_info adv7282_m_info = {
 static int init_device(struct adv7180_state *state)
 {
 	int ret = 0;
+	u16 csi_i2c_addr = 0;
+	u16 vpp_i2c_addr = 0;
 	pr_debug("%s : entry\n", __func__);
 
 	mutex_lock(&state->mutex);
@@ -1480,13 +1482,25 @@ static int init_device(struct adv7180_state *state)
 
 	usleep(5000);
 
+	if (state->device_num == 0) {
+		csi_i2c_addr = ADV7180_DEFAULT_CSI_I2C_ADDR;
+		vpp_i2c_addr = ADV7180_DEFAULT_VPP_I2C_ADDR;
+	} else if (state->device_num == 1) {
+		csi_i2c_addr = ADV7180_DEVICE2_CSI_I2C_ADDR;
+		vpp_i2c_addr = ADV7180_DEVICE2_VPP_I2C_ADDR;
+	} else {
+		pr_err("%s : Unsupported adv device %d\n",
+			__func__, state->device_num);
+		return -EIO;
+	}
+
 	if (state->chip_info->flags & ADV7180_FLAG_MIPI_CSI2)
 		adv7180_write(state, ADV7180_REG_CSI_SLAVE_ADDR,
-			ADV7180_DEFAULT_CSI_I2C_ADDR << 1);
+			csi_i2c_addr << 1);
 
 	if (state->chip_info->flags & ADV7180_FLAG_I2P)
 		adv7180_write(state, ADV7180_REG_VPP_SLAVE_ADDR,
-			ADV7180_DEFAULT_VPP_I2C_ADDR << 1);
+			vpp_i2c_addr << 1);
 
 	/* Default ain1 CVBS */
 	adv7182_select_input(state, ADV7182_INPUT_CVBS_AIN1);
@@ -1514,6 +1528,9 @@ static int adv7180_probe(struct i2c_client *client,
 	struct adv7180_state *state;
 	struct adv7180_platform_data *pdata = NULL;
 	struct v4l2_subdev *sd;
+	int device_num = 0;
+	u16 csi_i2c_addr = 0;
+	u16 vpp_i2c_addr = 0;
 	int ret;
 	pr_debug("%s : kpi entry\n", __func__);
 
@@ -1529,6 +1546,20 @@ static int adv7180_probe(struct i2c_client *client,
 	v4l_info(client, "chip found @ 0x%02x (%s)\n",
 		 client->addr, client->adapter->name);
 
+	device_num = pdata->dev_num;
+
+	if (device_num == 0) {
+		csi_i2c_addr = ADV7180_DEFAULT_CSI_I2C_ADDR;
+		vpp_i2c_addr = ADV7180_DEFAULT_VPP_I2C_ADDR;
+	} else if (device_num == 1) {
+		csi_i2c_addr = ADV7180_DEVICE2_CSI_I2C_ADDR;
+		vpp_i2c_addr = ADV7180_DEVICE2_VPP_I2C_ADDR;
+	} else {
+		pr_err("%s : Unsupported ADV device %d\n",
+			__func__, device_num);
+		return -EIO;
+	}
+
 	state = devm_kzalloc(&client->dev, sizeof(*state), GFP_KERNEL);
 	if (state == NULL) {
 		ret = -ENOMEM;
@@ -1536,6 +1567,7 @@ static int adv7180_probe(struct i2c_client *client,
 	}
 
 	state->client = client;
+	state->device_num = device_num;
 	state->chip_info = (struct adv7180_chip_info *)id->driver_data;
 	if (state->chip_info->flags & ADV7180_FLAG_I2P)
 		state->field = V4L2_FIELD_NONE;
@@ -1544,14 +1576,14 @@ static int adv7180_probe(struct i2c_client *client,
 
 	if (state->chip_info->flags & ADV7180_FLAG_MIPI_CSI2) {
 		state->csi_client = i2c_new_dummy(client->adapter,
-				ADV7180_DEFAULT_CSI_I2C_ADDR);
+				csi_i2c_addr);
 		if (!state->csi_client)
 			return -ENOMEM;
 	}
 
 	if (state->chip_info->flags & ADV7180_FLAG_I2P) {
 		state->vpp_client = i2c_new_dummy(client->adapter,
-				ADV7180_DEFAULT_VPP_I2C_ADDR);
+				vpp_i2c_addr);
 		if (!state->vpp_client) {
 			ret = -ENOMEM;
 			goto err_unregister_csi_client;
@@ -1574,7 +1606,8 @@ static int adv7180_probe(struct i2c_client *client,
 	v4l2_i2c_subdev_init(sd, client, &adv7180_ops);
 
 	if (gpio_is_valid(pdata->pwdnb_gpio)
-				&& gpio_is_valid(pdata->rstb_gpio)) {
+				&& gpio_is_valid(pdata->rstb_gpio)
+				&& pdata->pwr_on == 1) {
 		ret = gpio_request(pdata->pwdnb_gpio, "pwdnb_gpio");
 		if (ret)
 			goto err_unregister_vpp_client;
@@ -1599,14 +1632,17 @@ static int adv7180_probe(struct i2c_client *client,
 
 		if (ret)
 			goto err_unregister_vpp_client;
+	} else {
+		pr_debug("%s : ADV device Power up sequence not required\n",
+			__func__);
 	}
 
 	/* Initialize csi configurion flag */
-	csi_configured_s = 0;
+	state->csi_configured = 0;
 	/* Initialize current video standard mode */
-	curr_mode_s = V4L2_STD_ALL;
+	state->curr_mode = V4L2_STD_ALL;
 	/* Initialize current ain input */
-	curr_input_s = ADV7182_INPUT_UNINITIALIZED;
+	state->curr_input = ADV7182_INPUT_UNINITIALIZED;
 
 	ret = adv7180_init_controls(state);
 	if (ret)
@@ -1630,7 +1666,16 @@ static int adv7180_probe(struct i2c_client *client,
 			goto err_free_ctrl;
 	}
 
-	ret = msm_ba_register_subdev_node(sd, MSM_BA_SUBDEV_1);
+	if (device_num == 0) {
+		ret = msm_ba_register_subdev_node(sd, MSM_BA_SUBDEV_1);
+	} else if (device_num == 1) {
+		pr_debug("%s : register adv device %d\n",
+			__func__, device_num);
+	} else {
+		ret = -EIO;
+		pr_err("%s : Unsupported adv device %d\n",
+			__func__, device_num);
+	}
 	if (ret)
 		goto err_free_irq;
 
@@ -1661,7 +1706,19 @@ static int adv7180_remove(struct i2c_client *client)
 	struct adv7180_state *state = to_state(sd);
 	pr_debug("%s : entry\n", __func__);
 
-	msm_ba_unregister_subdev_node(sd);
+	if (state->device_num == 0) {
+		pr_debug("%s : deregister from ba dev_num %d\n",
+			__func__, state->device_num);
+		msm_ba_unregister_subdev_node(sd);
+	} else if (state->device_num == 1) {
+		pr_debug("%s : deregister from ba dev_num %d\n",
+			__func__, state->device_num);
+		/* To do deregister from ba */
+	} else {
+		pr_err("%s : Unsupported ADV device %d\n",
+			__func__, state->device_num);
+		return -EIO;
+	}
 	if (state->irq > 0)
 		free_irq(client->irq, state);
 

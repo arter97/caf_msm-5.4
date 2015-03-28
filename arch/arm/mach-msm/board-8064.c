@@ -1279,15 +1279,29 @@ static struct i2c_board_info cs8427_device_info[] __initdata = {
 	},
 };
 
-static struct adv7180_platform_data adv7180_i2c_data __initdata = {
+static struct adv7180_platform_data adv7180_i2c_data[] __initdata = {
+	{
 		.rstb_gpio		= PM8921_GPIO_PM_TO_SYS(05),
 		.pwdnb_gpio		= PM8921_GPIO_PM_TO_SYS(06),
+		.dev_num		= 0,
+		.pwr_on			= 1,
+	},
+	{
+		.rstb_gpio		= PM8921_GPIO_PM_TO_SYS(05),
+		.pwdnb_gpio		= PM8921_GPIO_PM_TO_SYS(06),
+		.dev_num		= 1,
+		.pwr_on			= 0,
+	},
 };
 
 static struct i2c_board_info adv7180_device_info[] __initdata = {
 	{
 		I2C_BOARD_INFO("adv7282-m", 0x21),
-		.platform_data = &adv7180_i2c_data,
+		.platform_data = &adv7180_i2c_data[0],
+	},
+	{
+		I2C_BOARD_INFO("adv7282-m", 0x20),
+		.platform_data = &adv7180_i2c_data[1],
 	},
 };
 

@@ -17,13 +17,17 @@
 
 /**
  * struct adv7180_platform_data
- * structure to pass board specific information to the smb137b charger driver
+ * structure to pass board specific information to the adv7180
  * @rstb_gpio:		put active low to hold chip in reset state
  * @pwdnb_gpio:		put active low to allow chip to pwrdwn and disable I2C
+ * @dev_num:		instance of the device
+ * @pwr_on:		indicates whether power on sequence is required for chip
  */
 struct adv7180_platform_data {
 	int rstb_gpio;
 	int pwdnb_gpio;
+	int dev_num;
+	int pwr_on;
 };
 
 #endif
