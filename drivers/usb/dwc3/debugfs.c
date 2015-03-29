@@ -1174,6 +1174,9 @@ static int dwc3_gadget_int_events_show(struct seq_file *s, void *unused)
 		dbg_gadget_events->cmdcmplt);
 	seq_printf(s, "unknown_event:%u\n", dbg_gadget_events->unknown_event);
 
+	seq_printf(s, "t_pwr evt irq : %lld\t",
+			ktime_to_us(dwc->t_pwr_evt_irq));
+
 	spin_unlock_irqrestore(&dwc->lock, flags);
 	return 0;
 }

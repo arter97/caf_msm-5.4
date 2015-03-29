@@ -2013,9 +2013,15 @@ static void dwc3_resume_work(struct work_struct *w)
 		return;
 	}
 
-	/* bail out if system resume in process, else initiate RESUME */
+	/*
+	 * if system resume in progress exit LPM first to meet resume timeline
+	 * from device side and let pm resume notify otg state machine about
+	 * resume event, else initiate RESUME here
+	 */
 	if (atomic_read(&mdwc->pm_suspended)) {
+		dwc3_msm_resume(mdwc);
 		mdwc->resume_pending = true;
+		dbg_event(0xFF, "RWrk PMSus", 0);
 	} else {
 		pm_runtime_get_sync(mdwc->dev);
 		if (mdwc->otg_xceiv) {
@@ -2219,6 +2225,7 @@ static irqreturn_t msm_dwc3_pwr_irq(int irq, void *data)
 	struct dwc3_msm *mdwc = data;
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 
+	dwc->t_pwr_evt_irq = ktime_get();
 	dev_dbg(mdwc->dev, "%s received\n", __func__);
 	/*
 	 * When in Low Power Mode, can't read PWR_EVNT_IRQ_STAT_REG to acertain
@@ -2227,13 +2234,11 @@ static irqreturn_t msm_dwc3_pwr_irq(int irq, void *data)
 	 * dwc3_pwr_event_handler to handle all other power events
 	 */
 	if (atomic_read(&dwc->in_lpm)) {
-		/* Initate resume if system resume is not in process */
-		if (!atomic_read(&mdwc->pm_suspended))
-				return IRQ_WAKE_THREAD;
+		if (atomic_read(&mdwc->pm_suspended))
+			mdwc->resume_pending = true;
 
-		mdwc->resume_pending = true;
-
-		return IRQ_HANDLED;
+		/* Initate controller resume */
+		return IRQ_WAKE_THREAD;
 	}
 
 	dwc3_pwr_event_handler(mdwc);
@@ -3015,10 +3020,14 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		dev_dbg(&pdev->dev, "pget_irq for pwr_event_irq failed\n");
 		mdwc->pwr_event_irq = 0;
 	} else {
+		/*
+		 * enable pwr event irq early during PM resume to meet bus
+		 * resume timeline from usb device
+		 */
 		ret = devm_request_threaded_irq(&pdev->dev, mdwc->pwr_event_irq,
 					msm_dwc3_pwr_irq,
 					msm_dwc3_pwr_irq_thread,
-					IRQF_TRIGGER_RISING,
+					IRQF_TRIGGER_RISING | IRQF_EARLY_RESUME,
 					"msm_dwc3", mdwc);
 		if (ret) {
 			dev_err(&pdev->dev, "irqreq pwr_event_irq failed: %d\n",
@@ -3446,7 +3455,6 @@ static int dwc3_msm_pm_suspend(struct device *dev)
 
 static int dwc3_msm_pm_resume(struct device *dev)
 {
-	int ret = 0;
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 
@@ -3456,7 +3464,6 @@ static int dwc3_msm_pm_resume(struct device *dev)
 	if (mdwc->resume_pending) {
 		mdwc->resume_pending = false;
 
-		ret = dwc3_msm_resume(mdwc);
 		/* Update runtime PM status */
 		pm_runtime_disable(dev);
 		pm_runtime_set_active(dev);
@@ -3481,7 +3488,7 @@ static int dwc3_msm_pm_resume(struct device *dev)
 		}
 	}
 
-	return ret;
+	return 0;
 }
 #endif
 
