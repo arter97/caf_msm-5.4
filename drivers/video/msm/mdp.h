@@ -627,7 +627,9 @@ extern struct mdp_hist_mgmt *mdp_hist_mgmt_array[];
 #define DMA_OUT_SEL_AHB                     0
 #define DMA_OUT_SEL_LCDC                    BIT(20)
 #define DMA_IBUF_FORMAT_RGB888              0
+#define DMA_IBUF_FORMAT_RGB565              BIT(25)
 #define DMA_IBUF_FORMAT_xRGB8888_OR_ARGB8888  BIT(26)
+#define DMA_IBUF_FORMAT_EXTEND              BIT(27)
 
 #ifdef CONFIG_FB_MSM_MDP303
 #define DMA_OUT_SEL_DSI_CMD                  BIT(19)
