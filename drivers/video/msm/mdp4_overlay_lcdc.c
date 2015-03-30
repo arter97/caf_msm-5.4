@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -255,6 +255,9 @@ int mdp4_lcdc_pipe_commit(int cndx, int wait)
 		if (pipe->ov_blt_addr)
 			mdp4_lcdc_wait4ov(0);
 	}
+
+	if (!vctrl->mfd->cont_splash_done)
+		mdp4_iommu_attach();
 
 	pipe = vp->plist;
 	for (i = 0; i < OVERLAY_PIPE_MAX; i++, pipe++) {

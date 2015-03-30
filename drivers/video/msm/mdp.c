@@ -43,6 +43,9 @@
 #include "mdp4.h"
 #endif
 #include "mipi_dsi.h"
+#include <mach/iommu_domains.h>
+#include <linux/iommu.h>
+
 
 uint32 mdp4_extn_disp;
 u32 mdp_iommu_max_map_size;
@@ -172,6 +175,10 @@ DEFINE_MUTEX(mdp_hist_lut_list_mutex);
 uint32_t last_lut[MDP_HIST_LUT_SIZE];
 
 static int mdp_on_init_cnt;
+static int mdp_resource_initialized;
+static struct msm_panel_common_pdata *mdp_pdata;
+
+uint32 mdp_hw_revision;
 
 uint32_t mdp_block2base(uint32_t block)
 {
@@ -2372,6 +2379,86 @@ static int mdp_fps_level_change(struct platform_device *pdev, u32 fps_level)
 	return ret;
 }
 
+static int mdp_map_splash_buffer(struct msm_fb_data_type *mfd, int layer_id)
+{
+	int rc = 0;
+	int base = 0x20000;
+	int size_off = base + 0x10000 * layer_id;
+	int phys_off = base + 0x10000 * layer_id + 0x10;
+	int stride_off = base + 0x10000 * layer_id + 0x40;
+	int stride = 0;
+	struct iommu_domain *domain = NULL;
+
+	if (layer_id == OVERLAY_PIPE_DMAS) {
+		base = 0xA0000;
+		size_off = base + 0x04;
+		phys_off = base + 0x08;
+		stride_off = base + 0x0C;
+	} else if (layer_id >= OVERLAY_PIPE_RGB3) {
+		pr_err("%s,%d: not support layer id=%d\n",
+			__func__, __LINE__, layer_id);
+		rc = -ENODEV;
+		goto error;
+	}
+	mfd->splash_screen_size[layer_id] = inpdw(MDP_BASE + size_off);
+	stride = inpdw(MDP_BASE + stride_off) & 0x00007FFF;
+	mfd->splash_screen_size[layer_id] =
+			((mfd->splash_screen_size[layer_id] >> 16) &
+			0x00000FFF) * stride;
+
+	/* Aglined with 4K */
+	mfd->splash_screen_size[layer_id] =
+		(mfd->splash_screen_size[layer_id] + 0xFFF) & (~0xFFF);
+	mfd->splash_screen_phys[layer_id] = inpdw(MDP_BASE + phys_off);
+	if (mfd->splash_screen_phys[layer_id] & 0xFFF)
+		pr_warn("%s splash screen phys=0x%08x is not aligned with 4K " \
+			"layer_id=%d, size=%d", __func__,
+			(int)mfd->splash_screen_phys[layer_id], layer_id,
+			mfd->splash_screen_size[layer_id]);
+
+	domain = msm_get_iommu_domain(DISPLAY_READ_DOMAIN);
+	if (domain) {
+		rc = iommu_map(domain,
+				mfd->splash_screen_phys[layer_id],
+				mfd->splash_screen_phys[layer_id],
+				mfd->splash_screen_size[layer_id],
+				IOMMU_READ);
+		if (rc)
+			pr_err("%s,%d: iommu_map, id=%d ret = %d\n",
+				__func__, __LINE__, layer_id, rc);
+
+	} else {
+		pr_err("%s,%d: iommu get domain failed\n", __func__, __LINE__);
+		rc = -ENODEV;
+	}
+
+error:
+	return rc;
+}
+
+static int mdp_unmap_splash_buffer(struct msm_fb_data_type *mfd, int layer_id)
+{
+	int rc = 0;
+	size_t size = 0;
+	struct iommu_domain *domain = NULL;
+
+	domain = msm_get_iommu_domain(DISPLAY_READ_DOMAIN);
+	if (domain && mfd->splash_screen_phys[layer_id]) {
+		size = iommu_unmap(domain,
+				mfd->splash_screen_phys[layer_id],
+				mfd->splash_screen_size[layer_id]);
+		if (size != mfd->splash_screen_size[layer_id])
+			pr_err("%s,%d: iommu_unmap, id=%d size = %d[%d]\n",
+				__func__, __LINE__, layer_id, size,
+				mfd->splash_screen_size[layer_id]);
+	} else {
+		pr_err("%s,%d: iommu get domain failed\n", __func__, __LINE__);
+		rc = -ENODEV;
+	}
+	return rc;
+}
+
+
 static int mdp_off(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -2444,20 +2531,14 @@ static int mdp_on(struct platform_device *pdev)
 
 	pr_debug("%s:+\n", __func__);
 
-	if (!(mfd->cont_splash_done)) {
-		if (mfd->panel.type == MIPI_VIDEO_PANEL)
-			mdp4_dsi_video_splash_done();
-		else if (mfd->panel.type == LVDS_PANEL)
-			mdp4_lcdc_splash_done();
-		/* Clks are enabled in probe.
-		Disabling clocks now */
-		mdp_clk_ctrl(0);
-		mfd->cont_splash_done = 1;
+	if (mdp_pdata == NULL) {
+		pr_err("%s,%d mdp_pdata is NULL", __func__, __LINE__);
+		return -ENODEV;
 	}
 
+	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 	if(mfd->index == 0)
 		mdp_iommu_max_map_size = mfd->max_map_size;
-	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 
 	ret = panel_next_on(pdev);
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
@@ -2491,6 +2572,20 @@ static int mdp_on(struct platform_device *pdev)
 			mdp4_lcdc_on(pdev);
 		}
 
+		if (!mfd->cont_splash_done) {
+			for (i = OVERLAY_PIPE_VG1; i < OVERLAY_PIPE_MAX; i++)
+				if (mfd->splash_screen_phys[i])
+					mdp_unmap_splash_buffer(mfd, i);
+
+			mfd->cont_splash_done = 1;
+		}
+
+		if (mdp_pdata->cont_splash_enabled) {
+			/* Clks are enabled in probe. Disabling clocks now */
+			mdp_clk_ctrl(0);
+			mdp_pdata->cont_splash_enabled = 0;
+		}
+
 		mdp_clk_ctrl(0);
 		mdp4_overlay_reset();
 		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
@@ -2511,11 +2606,6 @@ static int mdp_on(struct platform_device *pdev)
 
 	return ret;
 }
-
-static int mdp_resource_initialized;
-static struct msm_panel_common_pdata *mdp_pdata;
-
-uint32 mdp_hw_revision;
 
 /*
  * mdp_hw_revision:
@@ -2828,7 +2918,6 @@ static int mdp_irq_clk_setup(struct platform_device *pdev,
 	}
 	return 0;
 }
-
 static int mdp_probe(struct platform_device *pdev)
 {
 	struct platform_device *msm_fb_dev = NULL;
@@ -2950,52 +3039,64 @@ static int mdp_probe(struct platform_device *pdev)
 	}
 
 	if (mdp_pdata) {
-		if (mdp_pdata->cont_splash_enabled &&
-				 mfd->panel_info.pdest == DISPLAY_1) {
-			char *cp;
-			uint32 bpp = 3;
-			/*read panel wxh and calculate splash screen
-			  size*/
-			mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+		int i = 0;
+		int layermixer = 0, stage = 0, stage_adj = 0;
+		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+		mdp_clk_ctrl(1);
+		/* Read layer mixer first to see which layer are attached */
+		layermixer = inpdw(MDP_BASE + 0x10100);
+		if (((layermixer & 0x0000FFFF) != 0) &&
+			(mfd->panel_info.pdest < DISPLAY_3)) {
+			for (i = OVERLAY_PIPE_VG1; i < OVERLAY_PIPE_RGB3; i++) {
+				stage = (layermixer >> (i * 4)) & 0x0F;
+				if ((stage & 0x0F) == 0)
+					continue;
 
-			mdp_clk_ctrl(1);
-
-			mdp_pdata->splash_screen_size =
-				inpdw(MDP_BASE + 0x90004);
-			mdp_pdata->splash_screen_size =
-				(((mdp_pdata->splash_screen_size >> 16) &
-				  0x00000FFF) * (
-					  mdp_pdata->splash_screen_size &
-					  0x00000FFF)) * bpp;
-
-			mdp_pdata->splash_screen_addr =
-				inpdw(MDP_BASE + 0x90008);
-
-			mfd->copy_splash_buf = dma_alloc_coherent(NULL,
-					mdp_pdata->splash_screen_size,
-					(dma_addr_t *) &(mfd->copy_splash_phys),
-					GFP_KERNEL);
-
-			if (!mfd->copy_splash_buf) {
-				pr_err("DMA ALLOC FAILED for SPLASH\n");
-				return -ENOMEM;
+				stage_adj = stage +
+					(DISPLAY_2 - mfd->panel_info.pdest) * 8;
+				if (!((stage_adj >= 9) && (stage_adj <= 0x0F)))
+					/* Layer is not for this display*/
+					continue;
+				rc = mdp_map_splash_buffer(mfd, i);
+				if (rc) {
+					pr_err("%s,%d map splash buffer error" \
+						" rc=%d, id=%d", __func__,
+						__LINE__, rc, i);
+					mdp_pipe_ctrl(MDP_CMD_BLOCK,
+						MDP_BLOCK_POWER_OFF,
+						FALSE);
+					mdp_clk_ctrl(0);
+					goto mdp_probe_err;
+				}
+				if (!mfd->cont_splash_enabled)
+					mfd->cont_splash_enabled = 1;
 			}
-
-			cp = (char *)ioremap(
-					mdp_pdata->splash_screen_addr,
-					mdp_pdata->splash_screen_size);
-			if (cp) {
-				memcpy(mfd->copy_splash_buf, cp,
-					mdp_pdata->splash_screen_size);
-
-				MDP_OUTP(MDP_BASE + 0x90008,
-					mfd->copy_splash_phys);
-			} else {
-				pr_err("IOREMAP FAILED for SPLASH\n");
+		} else if (mfd->panel_info.pdest < DISPLAY_4) {
+			/* DMA_S */
+			if (inpdw(MDP_BASE + 0x000010) &&
+				inpdw(MDP_BASE + 0xA0008)) {
+				rc =
+				mdp_map_splash_buffer(mfd, OVERLAY_PIPE_DMAS);
+				if (rc) {
+					pr_err("%s,%d map splash buffer error" \
+						" rc=%d, DMA_S", __func__,
+						__LINE__, rc);
+					mdp_pipe_ctrl(MDP_CMD_BLOCK,
+						MDP_BLOCK_POWER_OFF,
+						FALSE);
+					mdp_clk_ctrl(0);
+					goto mdp_probe_err;
+				}
+				mfd->cont_splash_enabled = 1;
 			}
 		}
-
-		mfd->cont_splash_done = (1 - mdp_pdata->cont_splash_enabled);
+		/* cont_splash_enabled in platform data is a flag used to track
+		   global splash enable state. The default state is disabled.*/
+		if (!mdp_pdata->cont_splash_enabled && mfd->cont_splash_enabled)
+			mdp_pdata->cont_splash_enabled =
+				mfd->cont_splash_enabled;
+		mfd->cont_splash_done = (1 - mfd->cont_splash_enabled);
+		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 	}
 
 	/* data chain */
@@ -3411,17 +3512,6 @@ void mdp_footswitch_ctrl(boolean on)
 		regulator_disable(dsi_pll_vddio);
 
 	mutex_unlock(&mdp_suspend_mutex);
-}
-
-void mdp_free_splash_buffer(struct msm_fb_data_type *mfd)
-{
-	if (mfd->copy_splash_buf) {
-		dma_free_coherent(NULL,	mdp_pdata->splash_screen_size,
-			mfd->copy_splash_buf,
-			(dma_addr_t) mfd->copy_splash_phys);
-
-		mfd->copy_splash_buf = NULL;
-	}
 }
 
 #ifdef CONFIG_PM
