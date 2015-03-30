@@ -118,6 +118,8 @@ enum ieee80211_channel_flags {
 	IEEE80211_CHAN_NO_160MHZ	= 1<<8,
 };
 
+#define CFG80211_DEL_STA_V2 1
+
 #define IEEE80211_CHAN_NO_HT40 \
 	(IEEE80211_CHAN_NO_HT40PLUS | IEEE80211_CHAN_NO_HT40MINUS)
 
@@ -623,6 +625,17 @@ struct station_parameters {
 	u8 supported_channels_len;
 	const u8 *supported_oper_classes;
 	u8 supported_oper_classes_len;
+};
+
+/**
+ * struct station_del_parameters - station deletion parameters
+ *
+ * Used to delete a station entry (or all stations).
+ *
+ * @mac: MAC address of the station to remove or NULL to remove all stations
+ */
+struct station_del_parameters {
+	const u8 *mac;
 };
 
 /**
@@ -1529,7 +1542,7 @@ struct cfg80211_update_ft_ies_params {
  * @stop_ap: Stop being an AP, including stopping beaconing.
  *
  * @add_station: Add a new station.
- * @del_station: Remove a station; @mac may be NULL to remove all stations.
+ * @del_station: Remove a station.
  * @change_station: Modify a given station. Note that flags changes are not much
  *	validated in cfg80211, in particular the auth/assoc/authorized flags
  *	might come to the driver in invalid combinations -- make sure to check
@@ -1710,7 +1723,7 @@ struct cfg80211_ops {
 	int	(*add_station)(struct wiphy *wiphy, struct net_device *dev,
 			       u8 *mac, struct station_parameters *params);
 	int	(*del_station)(struct wiphy *wiphy, struct net_device *dev,
-			       u8 *mac);
+			       struct station_del_parameters *params);
 	int	(*change_station)(struct wiphy *wiphy, struct net_device *dev,
 				  u8 *mac, struct station_parameters *params);
 	int	(*get_station)(struct wiphy *wiphy, struct net_device *dev,
