@@ -219,6 +219,7 @@ static void populate_codec_list(struct msm_compr_audio *prtd)
 	prtd->compr_cap.codecs[0] = SND_AUDIOCODEC_MP3;
 	prtd->compr_cap.codecs[1] = SND_AUDIOCODEC_AAC;
 	prtd->compr_cap.codecs[2] = SND_AUDIOCODEC_PCM;
+	prtd->compr_cap.codecs[3] = SND_AUDIOCODEC_FLAC;
 }
 
 static int msm_compr_send_media_format_block(
@@ -227,6 +228,7 @@ static int msm_compr_send_media_format_block(
 	struct snd_compr_runtime *runtime = cstream->runtime;
 	struct msm_compr_audio *prtd = runtime->private_data;
 	struct asm_aac_cfg aac_cfg;
+	struct asm_flac_cfg flac_cfg;
 	int ret = 0;
 	uint16_t bit_width = 16;
 
@@ -262,6 +264,30 @@ static int msm_compr_send_media_format_block(
 						   &aac_cfg);
 		if (ret < 0)
 			pr_err("%s: CMD Format block failed\n", __func__);
+		break;
+	case FORMAT_FLAC:
+		pr_info("%s: SND_AUDIOCODEC_FLAC\n", __func__);
+		memset(&flac_cfg, 0x0, sizeof(struct asm_flac_cfg));
+		flac_cfg.num_channels = prtd->num_channels;
+		flac_cfg.sample_rate = prtd->sample_rate;
+		flac_cfg.is_stream_info_present = 1;
+		flac_cfg.sample_size =
+			prtd->codec_param.codec.options.flac_dec.sample_size;
+		flac_cfg.min_blk_size =
+			prtd->codec_param.codec.options.flac_dec.min_blk_size;
+		flac_cfg.max_blk_size =
+			prtd->codec_param.codec.options.flac_dec.max_blk_size;
+		flac_cfg.max_frame_size =
+			prtd->codec_param.codec.options.flac_dec.max_frame_size;
+		flac_cfg.min_frame_size =
+			prtd->codec_param.codec.options.flac_dec.min_frame_size;
+
+		ret = q6asm_media_format_block_flac(prtd->audio_client,
+							&flac_cfg);
+		if (ret < 0)
+			pr_err("%s: CMD Format block failed ret %d\n",
+				__func__, ret);
+
 		break;
 	default:
 		pr_debug("%s, unsupported format, skip", __func__);
@@ -506,6 +532,12 @@ static int msm_compr_set_params(struct snd_compr_stream *cstream,
 	case SND_AUDIOCODEC_AAC: {
 		pr_debug("SND_AUDIOCODEC_AAC\n");
 		prtd->codec = FORMAT_MPEG4_AAC;
+		break;
+	}
+
+	case SND_AUDIOCODEC_FLAC: {
+		pr_debug("SND_AUDIOCODEC_FLAC\n");
+		prtd->codec = FORMAT_FLAC;
 		break;
 	}
 
@@ -812,6 +844,8 @@ static int msm_compr_get_codec_caps(struct snd_compr_stream *cstream,
 		codec->descriptor[1].formats =
 			(SND_AUDIOSTREAMFORMAT_MP4ADTS |
 				SND_AUDIOSTREAMFORMAT_RAW);
+		break;
+	case SND_AUDIOCODEC_FLAC:
 		break;
 	default:
 		pr_err("%s: Unsupported audio codec %d\n",

@@ -336,13 +336,25 @@ struct snd_enc_generic {
 	__u32 bw;	/* encoder bandwidth */
 	__s32 reserved[15];
 };
-
+struct snd_dec_ddp {
+	__u32 params_length;
+	__u32 params_id[18];
+	__u32 params_value[18];
+};
+struct snd_dec_flac {
+	__u16 sample_size;
+	__u16 min_blk_size;
+	__u16 max_blk_size;
+	__u16 min_frame_size;
+	__u16 max_frame_size;
+};
 union snd_codec_options {
 	struct snd_enc_wma wma;
 	struct snd_enc_vorbis vorbis;
 	struct snd_enc_real real;
 	struct snd_enc_flac flac;
 	struct snd_enc_generic generic;
+	struct snd_dec_flac flac_dec;
 };
 
 /** struct snd_codec_desc - description of codec capabilities

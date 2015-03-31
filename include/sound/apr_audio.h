@@ -998,16 +998,16 @@ struct asm_amrwbplus_cfg {
 };
 
 struct asm_flac_cfg {
-	u16 stream_info_present;
-	u16 min_blk_size;
-	u16 max_blk_size;
-	u16 ch_cfg;
-	u16 sample_size;
-	u16 sample_rate;
-	u16 md5_sum;
-	u32 ext_sample_rate;
-	u32 min_frame_size;
-	u32 max_frame_size;
+	uint16_t          is_stream_info_present;
+	uint16_t          num_channels;
+	uint16_t          min_blk_size;
+	uint16_t          max_blk_size;
+	uint16_t          md5_sum[8];
+	uint32_t          sample_rate;
+	uint32_t          min_frame_size;
+	uint32_t          max_frame_size;
+	uint16_t          sample_size;
+	uint16_t          reserved;
 };
 
 struct asm_vorbis_cfg {
@@ -1169,6 +1169,7 @@ struct asm_stream_cmd_open_read_v2_1 {
 #define AMR_WB_PLUS  0x00010BF5
 #define AC3_DECODER  0x00010BF6
 #define EAC3_DECODER 0x00010C3C
+#define FLAC_DECODER 0x00010C16
 #define DTS	0x00010D88
 #define DTS_LBR	0x00010DBB
 #define ATRAC	0x00010D89
