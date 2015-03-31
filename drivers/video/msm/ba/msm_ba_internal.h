@@ -141,6 +141,7 @@ struct msm_ba_inst {
 	int state;
 
 	struct v4l2_fh event_handler;
+	wait_queue_head_t kernel_event_queue;
 
 	struct msm_ba_debug debug;
 	struct dentry *debugfs_root;
@@ -148,7 +149,8 @@ struct msm_ba_inst {
 
 struct ba_ctxt *msm_ba_get_ba_context(void);
 
-void msm_ba_queue_v4l2_event(struct msm_ba_inst *inst, int event_type);
+void msm_ba_subdev_event_hndlr(struct v4l2_subdev *sd,
+					unsigned int notification, void *arg);
 
 #endif
 

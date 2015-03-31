@@ -30,3 +30,10 @@ struct msm_ba_dev *get_ba_dev(void)
 
 	return dev_ctxt;
 }
+
+void msm_ba_queue_v4l2_event(struct msm_ba_inst *inst, int event_type)
+{
+	struct v4l2_event event = {.id = 0, .type = event_type};
+	v4l2_event_queue_fh(&inst->event_handler, &event);
+	wake_up(&inst->kernel_event_queue);
+}

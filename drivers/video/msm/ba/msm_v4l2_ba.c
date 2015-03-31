@@ -157,6 +157,22 @@ int msm_v4l2_streamoff(struct file *file, void *fh,
 	return msm_ba_streamoff((void *)ba_inst, i);
 }
 
+static int msm_v4l2_subscribe_event(struct v4l2_fh *fh,
+				struct v4l2_event_subscription *sub)
+{
+	struct msm_ba_inst *ba_inst = container_of(fh,
+			struct msm_ba_inst, event_handler);
+	return msm_ba_subscribe_event((void *)ba_inst, sub);
+}
+
+static int msm_v4l2_unsubscribe_event(struct v4l2_fh *fh,
+				struct v4l2_event_subscription *sub)
+{
+	struct msm_ba_inst *ba_inst = container_of(fh,
+			struct msm_ba_inst, event_handler);
+	return msm_ba_unsubscribe_event((void *)ba_inst, sub);
+}
+
 static int msm_v4l2_s_parm(struct file *file, void *fh,
 					struct v4l2_streamparm *a)
 {
@@ -182,6 +198,8 @@ static const struct v4l2_ioctl_ops msm_v4l2_ioctl_ops = {
 	.vidioc_s_ctrl = msm_v4l2_s_ctrl,
 	.vidioc_g_ctrl = msm_v4l2_g_ctrl,
 	.vidioc_s_ext_ctrls = msm_v4l2_s_ext_ctrl,
+	.vidioc_subscribe_event = msm_v4l2_subscribe_event,
+	.vidioc_unsubscribe_event = msm_v4l2_unsubscribe_event,
 	.vidioc_s_parm = msm_v4l2_s_parm,
 	.vidioc_g_parm = msm_v4l2_g_parm,
 	.vidioc_enum_input = msm_v4l2_enum_input,
@@ -207,13 +225,6 @@ static const struct v4l2_file_operations msm_v4l2_ba_fops = {
 	.ioctl = video_ioctl2,
 	.poll = msm_v4l2_poll,
 };
-
-void msm_ba_subdev_event_hndlr(struct v4l2_subdev *sd,
-					unsigned int notification, void *arg)
-{
-	pr_err("Enter %s\n", __func__);
-	pr_err("Exit %s\n", __func__);
-}
 
 static int msm_ba_device_init(struct platform_device *pdev,
 					struct msm_ba_dev **ret_dev_ctxt)
