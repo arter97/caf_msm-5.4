@@ -12,6 +12,7 @@
 
 #include <linux/types.h>
 #include <linux/kernel.h>
+#include <linux/delay.h>
 #include <linux/list.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
@@ -2278,7 +2279,7 @@ int usb_bam_disconnect_ipa(struct usb_bam_connect_ipa_params *ipa_params)
 		if (info[cur_bam].prod_pipes_enabled_per_bam == 1)
 			wait_for_prod_release(cur_bam);
 		usb_bam_resume_core(cur_bam);
-		/* close USB -> IPA pipe */
+		/* close IPA -> USB pipe */
 		ret = ipa_disconnect(ipa_params->prod_clnt_hdl);
 		if (ret) {
 			pr_err("%s: dst pipe disconnection failure\n",
@@ -2302,15 +2303,38 @@ int usb_bam_disconnect_ipa(struct usb_bam_connect_ipa_params *ipa_params)
 	}
 
 	if (ipa_params->cons_clnt_hdl) {
+		struct sps_pipe *pipe;
+		u32 timeout = 10, pipe_empty;
+
 		idx = ipa_params->src_idx;
 		pipe_connect = &usb_bam_connections[idx];
+		pipe = ctx.usb_bam_sps.sps_pipes[idx];
 
 		pipe_connect->activity_notify = NULL;
 		pipe_connect->inactivity_notify = NULL;
 		pipe_connect->priv = NULL;
 
 		cur_bam = pipe_connect->bam_type;
-		/* close IPA -> USB pipe */
+
+		/* Make sure pipe is empty before disconnecting it */
+		while (1) {
+			ret = sps_is_pipe_empty(pipe, &pipe_empty);
+			if (ret) {
+				pr_err("%s: sps_is_pipe_empty failed with %d\n",
+				       __func__, ret);
+				break;
+			}
+			if (pipe_empty || !--timeout)
+				break;
+
+			/* Check again */
+			usleep_range(1000, 2000);
+		}
+		if (!pipe_empty)
+			pr_err("%s: src pipe(USB) not empty, wait timed out!\n",
+					__func__);
+
+		/* close USB -> IPA pipe */
 		ret = ipa_disconnect(ipa_params->cons_clnt_hdl);
 		if (ret) {
 			pr_err("%s: src pipe disconnection failure\n",
