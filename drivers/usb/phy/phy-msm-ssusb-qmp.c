@@ -36,6 +36,7 @@
 #define PCIE_USB3_PHY_RX_IDLE_DTCT_CNTRL	0x64C
 #define PCIE_USB3_PHY_POWER_STATE_CONFIG2	0x654
 #define PCIE_USB3_PHY_AUTONOMOUS_MODE_CTRL	0x6BC
+#define PCIE_USB3_PHY_LFPS_RXTERM_IRQ_CLEAR	0x6C0
 
 #define PCIE_USB3_PHY_PCS_STATUS		0x728
 #define PHYSTATUS				BIT(6)
@@ -224,6 +225,13 @@ static void msm_ssusb_qmp_enable_autonomous(struct msm_ssphy_qmp *phy)
 
 	dev_dbg(phy->phy.dev, "enabling QMP autonomous mode with cable %s\n",
 			get_cable_status_str(phy));
+
+	/* clear LFPS RXTERM interrupt */
+	writeb_relaxed(1, phy->base + PCIE_USB3_PHY_LFPS_RXTERM_IRQ_CLEAR);
+	/* flush the previous write before next write */
+	wmb();
+	writeb_relaxed(0, phy->base + PCIE_USB3_PHY_LFPS_RXTERM_IRQ_CLEAR);
+
 	val = readb_relaxed(phy->base + PCIE_USB3_PHY_AUTONOMOUS_MODE_CTRL);
 
 	val |= ARCVR_DTCT_EN;
