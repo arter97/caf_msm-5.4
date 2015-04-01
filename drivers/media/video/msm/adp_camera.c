@@ -401,11 +401,18 @@ void format_convert(int index)
 
 static void mdp_queue_overlay_buffers(struct work_struct *work)
 {
+	static int is_first_commit = true;
 	mdpclient_overlay_play(&overlay_data[OVERLAY_CAMERA_PREVIEW]);
 	mdpclient_overlay_play(&overlay_data[OVERLAY_GUIDANCE_LANE]);
 
+	if (is_first_commit == true)
+		place_marker("FF RVC pre commit");
 	/* perform display commit */
 	mdpclient_display_commit();
+	if (is_first_commit == true) {
+		place_marker("FF RVC post commit");
+		is_first_commit = false;
+	}
 }
 
 void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
