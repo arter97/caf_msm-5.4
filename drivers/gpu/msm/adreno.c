@@ -1089,6 +1089,19 @@ static int adreno_init(struct kgsl_device *device)
 	return ret;
 }
 
+#define GCC_GCC_SPARE3_REG 0x0187E004
+static int adreno_disable_gmem_clk_gating(void)
+{
+	void * gmem_gating = NULL;
+
+	gmem_gating = ioremap(GCC_GCC_SPARE3_REG, 4);
+	if(gmem_gating ==NULL){
+		return 1;
+	}
+	iowrite32(0x1U, gmem_gating);
+	return 0;
+}
+
 /**
  * _adreno_start - Power up the GPU and prepare to accept commands
  * @adreno_dev: Pointer to an adreno_device structure
@@ -1137,6 +1150,11 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 	if (status) {
 		KGSL_DRV_ERR(device, "OCMEM malloc failed\n");
 		goto error_mmu_off;
+	}
+
+	status = adreno_disable_gmem_clk_gating();
+	if (status) {
+		KGSL_DRV_ERR(device, "Gmem clock gating disable failed\n");
 	}
 
 	/* Soft reset GPU if regulator is stuck on*/
