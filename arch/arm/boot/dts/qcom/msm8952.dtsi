@@ -114,6 +114,7 @@
 #include "msm8952-bus.dtsi"
 #include "msm8952-pm.dtsi"
 #include "msm8952-iommu-domains.dtsi"
+#include "msm8952-mdss-pll.dtsi"
 
 &soc {
 	#address-cells = <1>;
@@ -142,6 +143,14 @@
 		vdd_sr2_pll-supply = <&pm8950_l7_ao>;
 		vdd_hf_dig-supply = <&pm8950_s2_corner_ao>;
 		vdd_hf_pll-supply = <&pm8950_l7_ao>;
+		#clock-cells = <1>;
+	};
+
+	clock_gcc_mdss: qcom,gcc-mdss@1ac8300 {
+		compatible = "qcom,gcc-mdss-8952";
+		clocks = <&mdss_dsi0_pll clk_pixel_clk_src>,
+			 <&mdss_dsi0_pll clk_byte_clk_src>;
+		clock-names = "pixel_src", "byte_src";
 		#clock-cells = <1>;
 	};
 
@@ -482,6 +491,17 @@
 			qcom,sensor-type = "adc";
 			qcom,sensor-name = "xo_therm_buf";
 		};
+
+		sensor_information15: qcom,sensor-information-15 {
+			qcom,sensor-type = "adc";
+			qcom,sensor-name = "case_therm";
+		};
+
+		sensor_information16: qcom,sensor-information-16 {
+			qcom,sensor-type = "alarm";
+			qcom,sensor-name = "pm8950_tz";
+			qcom,scaling-factor = <1000>;
+		};
 	};
 
 	qcom,msm-thermal {
@@ -513,6 +533,32 @@
 		qcom,synchronous-cluster-id = <0 1>;
 		qcom,synchronous-cluster-map = <1 4 &CPU0 &CPU1 &CPU2 &CPU3>,
 						<0 4 &CPU4 &CPU5 &CPU6 &CPU7>;
+	};
+
+	qcom,memshare {
+		compatible = "qcom,memshare";
+
+		qcom,client_1 {
+			compatible = "qcom,memshare-peripheral";
+			qcom,peripheral-size = <0x200000>;
+			qcom,client-id = <0>;
+			qcom,allocate-boot-time;
+			label = "modem";
+		};
+
+		qcom,client_2 {
+			compatible = "qcom,memshare-peripheral";
+			qcom,peripheral-size = <0x300000>;
+			qcom,client-id = <2>;
+			label = "modem";
+		};
+
+		qcom,client_3 {
+			compatible = "qcom,memshare-peripheral";
+			qcom,peripheral-size = <0>;
+			qcom,client-id = <1>;
+			label = "modem";
+		};
 	};
 
 	ipa_hw: qcom,ipa@07900000 {
@@ -1489,6 +1535,7 @@
 		qcom,pil-self-auth;
 		qcom,sysmon-id = <0>;
 		qcom,ssctl-instance-id = <0x12>;
+		qcom,qdsp6v56-1-3;
 
 		/* GPIO inputs from mss */
 		qcom,gpio-err-fatal = <&smp2pgpio_ssr_smp2p_1_in 0 0>;
@@ -1924,7 +1971,8 @@
 			"MIC BIAS External", "Secondary Mic",
 			"AMIC1", "MIC BIAS External",
 			"AMIC2", "MIC BIAS External2",
-			"AMIC3", "MIC BIAS External";
+			"AMIC3", "MIC BIAS External",
+			"SpkrMono WSA_IN", "WSA_SPK OUT";
 		qcom,msm-gpios =
 			"pri_i2s",
 			"us_eu_gpio";
@@ -1999,6 +2047,28 @@
 		wsa881x-i2c-codec@44 {
 			compatible = "qcom,wsa881x-i2c-codec";
 			reg = <0x44>;
+		};
+		wsa881x-i2c-codec@f {
+			compatible = "qcom,wsa881x-i2c-codec";
+			reg = <0x0f>;
+			qcom,msm-gpios = "wsa_clk",
+					"wsa_reset";
+			qcom,pinctrl-names = "all_off",
+					"wsa_clk",
+					"wsa_active",
+					"wsa_clk_active";
+			pinctrl-names = "all_off",
+					"wsa_clk",
+					"wsa_active",
+					"wsa_clk_active";
+			pinctrl-0 = <&wsa_clk_off &wsa_suspend>;
+			pinctrl-1 = <&wsa_clk_on &wsa_suspend>;
+			pinctrl-2 = <&wsa_clk_off &wsa_active>;
+			pinctrl-3 = <&wsa_clk_on &wsa_active>;
+		};
+		wsa881x-i2c-codec@45 {
+			compatible = "qcom,wsa881x-i2c-codec";
+			reg = <0x45>;
 		};
 	};
 };

@@ -54,6 +54,7 @@ static void __iomem *virt_bases[N_BASES];
 
 #define gpll0_out_aux_source_val	2   /* cci_clk_src and
 					     * usb_fs_system_clk_src */
+#define gpll4_source_val		2   /* sdcc1_apss_clk_src */
 #define gpll6_source_val		2   /* mclk0_2_clk_src */
 #define gpll6_out_aux_source_val	3   /* gfx3d_clk_src */
 #define gpll6_out_main_source_val	1   /* usb_fs_ic_clk_src */
@@ -62,6 +63,18 @@ static void __iomem *virt_bases[N_BASES];
 #define F(f, s, div, m, n) \
 	{ \
 		.freq_hz = (f), \
+		.src_clk = &s##_clk_src.c, \
+		.m_val = (m), \
+		.n_val = ~((n)-(m)) * !!(n), \
+		.d_val = ~(n),\
+		.div_src_val = BVAL(4, 0, (int)(2*(div) - 1)) \
+			| BVAL(10, 8, s##_source_val), \
+	}
+
+#define F_SLEW(f, s_f, s, div, m, n) \
+	{ \
+		.freq_hz = (f), \
+		.src_freq = (s_f), \
 		.src_clk = &s##_clk_src.c, \
 		.m_val = (m), \
 		.n_val = ~((n)-(m)) * !!(n), \
@@ -417,13 +430,14 @@ static struct alpha_pll_masks pll_masks_p = {
 	.vco_shift = 20,
 	.alpha_en_mask = BIT(24),
 	.output_mask = 0xf,
+	.update_mask = BIT(22),
+	.post_div_mask = BM(11, 8),
 };
 
+/* Slewing plls won't allow to change vco_sel.
+ * Hence will have only one vco table entry */
 static struct alpha_pll_vco_tbl p_vco[] = {
-	VCO(3,  250000000,  500000000),
-	VCO(2,  500000000, 1000000000),
-	VCO(1, 1000000000, 1500000000),
-	VCO(0, 1500000000, 2000000000),
+	VCO(0,  700000000, 1400000000),
 };
 
 static struct alpha_pll_clk gpll3_clk_src = {
@@ -432,32 +446,35 @@ static struct alpha_pll_clk gpll3_clk_src = {
 	.offset = GPLL3_MODE,
 	.vco_tbl = p_vco,
 	.num_vco = ARRAY_SIZE(p_vco),
-	.fsm_reg_offset = APCS_GPLL_ENA_VOTE,
-	.fsm_en_mask =  BIT(4),
 	.enable_config = 1,
+	/*
+	 * gpll3 is dedicated to oxili and has a fuse implementation for
+	 * post divider to limit frequency. HW with fuse blown has a divider
+	 * value set to 2. So lets stick to divide by 2 in software to avoid
+	 * conflicts.
+	 */
+	.post_div_config = 1 << 8,
+	.slew = true,
 	.c = {
-		.rate =  1160000000,
+		.rate = 1050000000,
 		.parent = &xo_clk_src.c,
 		.dbg_name = "gpll3_clk_src",
-		.ops = &clk_ops_fixed_alpha_pll,
+		.ops = &clk_ops_dyna_alpha_pll,
 		CLK_INIT(gpll3_clk_src.c),
 	},
 };
 
-static struct alpha_pll_clk gpll4_clk_src = {
-	.masks = &pll_masks_p,
+static struct pll_vote_clk gpll4_clk_src = {
+	.en_reg = (void __iomem *)APCS_GPLL_ENA_VOTE,
+	.en_mask = BIT(5),
+	.status_reg = (void __iomem *)GPLL4_STATUS,
+	.status_mask = BIT(17),
 	.base = &virt_bases[GCC_BASE],
-	.offset = GPLL4_MODE,
-	.vco_tbl = p_vco,
-	.num_vco = ARRAY_SIZE(p_vco),
-	.fsm_reg_offset = APCS_GPLL_ENA_VOTE,
-	.fsm_en_mask =  BIT(5),
-	.enable_config = 1,
 	.c = {
-		.rate =  1200000000,
+		.rate =  1152000000,
 		.parent = &xo_clk_src.c,
 		.dbg_name = "gpll4_clk_src",
-		.ops = &clk_ops_fixed_alpha_pll,
+		.ops = &clk_ops_pll_vote,
 		CLK_INIT(gpll4_clk_src.c),
 	},
 };
@@ -617,28 +634,23 @@ static struct rcg_clk vfe1_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_gcc_oxili_gfx3d_clk[] = {
-	F( 19200000,	xo,		1,	0,	0),
-	F( 50000000,	gpll0,		16,	0,	0),
-	F( 80000000,	gpll0,		10,	0,	0),
-	F( 100000000,	gpll0,		8,	0,	0),
-	F( 160000000,	gpll0,		5,	0,	0),
-	F( 200000000,	gpll0,		4,	0,	0),
-	F( 228570000,	gpll0,		3.5,	0,	0),
-	F( 232000000,	gpll3,		5,	0,	0),
-	F( 257770000,	gpll3,		4.5,	0,	0),
-	F( 266670000,	gpll0,		3,	0,	0),
-	F( 290000000,	gpll3,		4,	0,	0),
-	F( 331400000,	gpll3,		3.5,	0,	0),
-	F( 386670000,	gpll3,		3,	0,	0),
-	F( 400000000,	gpll0,		2,	0,	0),
-	F( 432000000,	gpll6_out_aux,	2.5,	0,	0),
-	F( 464000000,	gpll3,		2.5,	0,	0),
-	F( 540000000,	gpll6_out_aux,	2,	0,	0),
-	F( 580000000,	gpll3,		2,	0,	0),
+	F_SLEW( 19200000,  FIXED_CLK_SRC,	xo,	1,	0,	0),
+	F_SLEW( 50000000,  FIXED_CLK_SRC,	gpll0,	16,	0,	0),
+	F_SLEW( 80000000,  FIXED_CLK_SRC,	gpll0,	10,	0,	0),
+	F_SLEW( 100000000, FIXED_CLK_SRC,	gpll0,	8,	0,	0),
+	F_SLEW( 160000000, FIXED_CLK_SRC,	gpll0,	5,	0,	0),
+	F_SLEW( 200000000, FIXED_CLK_SRC,	gpll0,	4,	0,	0),
+	F_SLEW( 228570000, FIXED_CLK_SRC,	gpll0,	3.5,	0,	0),
+	F_SLEW( 240000000, FIXED_CLK_SRC,	gpll6,	4.5,	0,	0),
+	F_SLEW( 266670000, FIXED_CLK_SRC,	gpll0,	3,	0,	0),
+	F_SLEW( 400000000, FIXED_CLK_SRC,	gpll0,	2,	0,	0),
+	F_SLEW( 465000000, 930000000,		gpll3,	1,	0,	0),
+	F_SLEW( 500000000, 1000000000,		gpll3,	1,	0,	0),
+	F_SLEW( 550000000, 1100000000,		gpll3,	1,	0,	0),
 	F_END
 };
 
-static struct rcg_clk gfx3d_clk_src = {
+static struct  rcg_clk gfx3d_clk_src = {
 	.cmd_rcgr_reg = GFX3D_CMD_RCGR,
 	.set_rate = set_rate_hid,
 	.freq_tbl = ftbl_gcc_oxili_gfx3d_clk,
@@ -648,7 +660,7 @@ static struct rcg_clk gfx3d_clk_src = {
 		.dbg_name = "gfx3d_clk_src",
 		.ops = &clk_ops_rcg,
 		VDD_DIG_FMAX_MAP3(LOW, 228570000, NOMINAL, 400000000,
-						HIGH, 580000000),
+				  HIGH, 550000000),
 		CLK_INIT(gfx3d_clk_src.c),
 	},
 };
@@ -1343,7 +1355,9 @@ static struct clk_freq_tbl ftbl_gcc_sdcc1_2_apps_clk[] = {
 	F( 50000000,	gpll0,	16,	0,	0),
 	F( 100000000,	gpll0,	8,	0,	0),
 	F( 177770000,	gpll0,	4.5,	0,	0),
+	F( 192000000,	gpll4,	6,	0,	0),
 	F( 200000000,	gpll0,	4,	0,	0),
+	F( 384000000,	gpll4,	3,	0,	0),
 	F_END
 };
 
@@ -1356,7 +1370,7 @@ static struct rcg_clk sdcc1_apps_clk_src = {
 	.c = {
 		.dbg_name = "sdcc1_apps_clk_src",
 		.ops = &clk_ops_rcg_mnd,
-		VDD_DIG_FMAX_MAP2(LOW, 200000000, NOMINAL, 400000000),
+		VDD_DIG_FMAX_MAP2(LOW, 200000000, NOMINAL, 384000000),
 		CLK_INIT(sdcc1_apps_clk_src.c),
 	},
 };
