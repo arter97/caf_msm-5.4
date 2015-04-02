@@ -16,17 +16,16 @@
 #include <linux/qcom_iommu.h>
 #include "kgsl.h"
 
-/* Pagetable virtual base */
-#define KGSL_IOMMU_CTX_OFFSET_V0	0
-#define KGSL_IOMMU_CTX_OFFSET_V1	0x8000
-#define KGSL_IOMMU_CTX_OFFSET_V2	0x9000
 #define KGSL_IOMMU_CTX_SHIFT		12
+
+/* Context offsets used for register access */
+#define KGSL_IOMMU_CTX_AHB_OFFSET_V0	0
+#define KGSL_IOMMU_CTX_AHB_OFFSET_V1	0x8000
+#define KGSL_IOMMU_CTX_AHB_OFFSET_V2	0
 
 /* IOMMU V2 AHB base is fixed */
 #define KGSL_IOMMU_V2_AHB_BASE		0xA000
 #define KGSL_IOMMU_V2_AHB_BASE_A405  0x48000
-/* IOMMU_V2 AHB base points to ContextBank1 */
-#define KGSL_IOMMU_CTX_AHB_OFFSET_V2   0
 
 /* TLBLKCR fields */
 #define KGSL_IOMMU_TLBLKCR_LKE_MASK		0x00000001
@@ -120,6 +119,7 @@ enum kgsl_iommu_context_id {
 /**
  * struct kgsl_iommu_ctx - Struct holding context name and id
  * @iommu_ctx_name:     Context name
+ * @physstart:          Start of context bank registers
  * @ctx_id:             Iommu context ID - user or priv
  */
 struct kgsl_iommu_ctx {
@@ -138,6 +138,7 @@ struct kgsl_iommu_ctx {
 struct kgsl_device_iommu_data {
 	const struct kgsl_iommu_ctx *iommu_ctxs;
 	int iommu_ctx_count;
+	unsigned int ctx_offset;
 	unsigned int physstart;
 	unsigned int physend;
 };

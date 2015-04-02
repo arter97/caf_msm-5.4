@@ -1141,6 +1141,7 @@ static int kgsl_get_iommu_ctxt(struct kgsl_mmu *mmu)
 		if (ret)
 			break;
 	}
+	iommu->ctx_offset = pdata->iommu_data[0].ctx_offset;
 	iommu->unit_count = pdata->iommu_count;
 done:
 	return ret;
@@ -1344,16 +1345,13 @@ static int kgsl_iommu_init(struct kgsl_mmu *mmu)
 
 	if (kgsl_msm_supports_iommu_v2()) {
 		iommu->iommu_reg_list = kgsl_iommuv1_reg;
-		iommu->ctx_offset = KGSL_IOMMU_CTX_OFFSET_V2;
 		iommu->ctx_ahb_offset = KGSL_IOMMU_CTX_AHB_OFFSET_V2;
 	} else if (msm_soc_version_supports_iommu_v0()) {
 		iommu->iommu_reg_list = kgsl_iommuv0_reg;
-		iommu->ctx_offset = KGSL_IOMMU_CTX_OFFSET_V0;
-		iommu->ctx_ahb_offset = KGSL_IOMMU_CTX_OFFSET_V0;
+		iommu->ctx_ahb_offset = KGSL_IOMMU_CTX_AHB_OFFSET_V0;
 	} else {
 		iommu->iommu_reg_list = kgsl_iommuv1_reg;
-		iommu->ctx_offset = KGSL_IOMMU_CTX_OFFSET_V1;
-		iommu->ctx_ahb_offset = KGSL_IOMMU_CTX_OFFSET_V1;
+		iommu->ctx_ahb_offset = KGSL_IOMMU_CTX_AHB_OFFSET_V1;
 	}
 
 	/* A nop is required in an indirect buffer when switching

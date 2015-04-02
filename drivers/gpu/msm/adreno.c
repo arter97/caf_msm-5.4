@@ -701,6 +701,12 @@ static int adreno_of_get_iommu(struct platform_device *pdev,
 			goto err;
 		}
 
+		/* Get the context offset of gfx3d_user context */
+		if (ctxs[ctx_index].ctx_id == KGSL_IOMMU_CONTEXT_USER) {
+			if (of_property_read_u32_array(child, "reg", reg_val, 2))
+				goto err;
+			data->ctx_offset = reg_val[0] - data->physstart;
+		}
 		ctx_index++;
 	}
 
