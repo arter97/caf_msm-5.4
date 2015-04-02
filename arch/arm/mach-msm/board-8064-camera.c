@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -749,8 +749,10 @@ void __init apq8064_init_cam(void)
 		platform_device_register(&msm8960_device_i2c_mux_gsbi4);
 	platform_device_register(&msm8960_device_csiphy0);
 	platform_device_register(&msm8960_device_csiphy1);
+	platform_device_register(&msm8960_device_csiphy2);
 	platform_device_register(&msm8960_device_csid0);
 	platform_device_register(&msm8960_device_csid1);
+	platform_device_register(&msm8960_device_csid2);
 	platform_device_register(&msm8960_device_ispif);
 	platform_device_register(&msm8960_device_vfe);
 	platform_device_register(&msm8960_device_vpe);
