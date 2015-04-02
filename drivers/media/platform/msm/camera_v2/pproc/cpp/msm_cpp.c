@@ -2322,7 +2322,7 @@ long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 			&cpp_dev->hw_info,
 			sizeof(struct cpp_hw_info))) {
 			mutex_unlock(&cpp_dev->mutex);
-			return -EINVAL;
+			return -EFAULT;
 		}
 		break;
 	}
@@ -2571,7 +2571,7 @@ STREAM_BUFF_END:
 					kfree(process_frame->cpp_cmd_msg);
 					kfree(process_frame);
 					kfree(event_qcmd);
-					return -EINVAL;
+					return -EFAULT;
 		}
 
 		kfree(process_frame->cpp_cmd_msg);
@@ -2832,7 +2832,7 @@ static long msm_cpp_subdev_do_ioctl(
 		if (copy_to_user(
 				(void __user *)ioctl_ptr->ioctl_ptr, &inst_info,
 				sizeof(struct msm_cpp_frame_info_t))) {
-			return -EINVAL;
+			return -EFAULT;
 		}
 	}
 	break;
@@ -3166,7 +3166,7 @@ static long msm_cpp_subdev_fops_compat_ioctl(struct file *file,
 			cpp_dev->hw_info.freq_tbl_count;
 		if (copy_to_user((void __user *)kp_ioctl.ioctl_ptr,
 			&u32_cpp_hw_info, sizeof(struct cpp_hw_info_32_t)))
-			return -EINVAL;
+			return -EFAULT;
 
 		cmd = VIDIOC_MSM_CPP_GET_HW_INFO;
 		break;
@@ -3258,7 +3258,7 @@ static long msm_cpp_subdev_fops_compat_ioctl(struct file *file,
 			kfree(process_frame);
 			kfree(event_qcmd);
 			mutex_unlock(&cpp_dev->mutex);
-			return -EINVAL;
+			return -EFAULT;
 		}
 
 		kfree(process_frame->cpp_cmd_msg);
