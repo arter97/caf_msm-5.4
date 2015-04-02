@@ -2232,6 +2232,10 @@ ufshcd_send_uic_cmd(struct ufs_hba *hba, struct uic_command *uic_cmd)
 	ufshcd_save_tstamp_of_last_dme_cmd(hba);
 	mutex_unlock(&hba->uic_cmd_mutex);
 	ufshcd_release_all(hba);
+
+	ufsdbg_error_inject_dispatcher(hba,
+		ERR_INJECT_UIC, 0, &ret);
+
 	return ret;
 }
 
@@ -2883,6 +2887,9 @@ static inline void ufshcd_init_query(struct ufs_hba *hba,
 		struct ufs_query_req **request, struct ufs_query_res **response,
 		enum query_opcode opcode, u8 idn, u8 index, u8 selector)
 {
+	ufsdbg_error_inject_dispatcher(hba,
+		ERR_INJECT_QUERY, idn, (int *)&idn);
+
 	*request = &hba->dev_cmd.query.request;
 	*response = &hba->dev_cmd.query.response;
 	memset(*request, 0, sizeof(struct ufs_query_req));
@@ -3647,6 +3654,9 @@ int ufshcd_dme_set_attr(struct ufs_hba *hba, u32 attr_sel,
 	int ret;
 	int retries = UFS_UIC_COMMAND_RETRIES;
 
+	ufsdbg_error_inject_dispatcher(hba,
+		ERR_INJECT_DME_ATTR, attr_sel, &attr_sel);
+
 	uic_cmd.command = peer ?
 		UIC_CMD_DME_PEER_SET : UIC_CMD_DME_SET;
 	uic_cmd.argument1 = attr_sel;
@@ -3718,6 +3728,10 @@ int ufshcd_dme_get_attr(struct ufs_hba *hba, u32 attr_sel,
 
 	uic_cmd.command = peer ?
 		UIC_CMD_DME_PEER_GET : UIC_CMD_DME_GET;
+
+	ufsdbg_error_inject_dispatcher(hba,
+		ERR_INJECT_DME_ATTR, attr_sel, &attr_sel);
+
 	uic_cmd.argument1 = attr_sel;
 
 	do {
@@ -4131,6 +4145,10 @@ int ufshcd_change_power_mode(struct ufs_hba *hba,
 	}
 
 	ufshcd_print_pwr_info(hba);
+
+	ufsdbg_error_inject_dispatcher(hba,
+		ERR_INJECT_PWR_CHANGE, 0, &ret);
+
 	return ret;
 }
 
@@ -4444,6 +4462,9 @@ static int ufshcd_link_startup(struct ufs_hba *hba)
 
 	ret = ufshcd_make_hba_operational(hba);
 out:
+	ufsdbg_error_inject_dispatcher(hba,
+		ERR_INJECT_LINK_STARTUP, 0, &ret);
+
 	if (ret)
 		dev_err(hba->dev, "link startup failed %d\n", ret);
 	return ret;
@@ -5688,7 +5709,7 @@ static void ufshcd_sl_intr(struct ufs_hba *hba, u32 intr_status)
 	bool crypto_engine_err = false;
 
 	ufsdbg_error_inject_dispatcher(hba,
-			ERR_INJECT_INTR, &intr_status);
+		ERR_INJECT_INTR, intr_status, &intr_status);
 
 	if (hba->vops && hba->vops->crypto_engine_eh)
 		crypto_engine_err = hba->vops->crypto_engine_eh(hba);
