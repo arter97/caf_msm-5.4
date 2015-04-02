@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, 2014 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2014-2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,7 +27,7 @@
 #define V4L2_IDENT_CSIPHY                        50003
 #define CSIPHY_VERSION_V3                        0x10
 
-struct csiphy_device *lsh_csiphy_dev;
+struct csiphy_device *lsh_csiphy_dev[MAX_CSIPHY];
 
 int msm_csiphy_lane_config(struct csiphy_device *csiphy_dev,
 	struct msm_camera_csiphy_params *csiphy_params)
@@ -434,9 +434,9 @@ static int __devinit csiphy_probe(struct platform_device *pdev)
 			|| machine_is_apq8064_mplatform()
 			|| machine_is_apq8064_adp2_es2()
 			|| machine_is_apq8064_adp2_es2p5()) {
-		if (pdev->id == 0) {
-			pr_debug("keep track of 1st csi phy device\n");
-			lsh_csiphy_dev = new_csiphy_dev;
+		if (pdev->id >= 0 && pdev->id < MAX_CSIPHY) {
+			pr_debug("Init csiphy %d\n", pdev->id);
+			lsh_csiphy_dev[pdev->id] = new_csiphy_dev;
 		}
 	}
 	return 0;

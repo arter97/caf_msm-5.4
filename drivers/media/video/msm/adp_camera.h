@@ -196,11 +196,9 @@ struct msm_guidance_lane_data {
 	struct mutex guidance_lane_lock;
 };
 
-extern struct csiphy_device *lsh_csiphy_dev;
-extern struct csid_device *lsh_csid_dev;
+extern struct csiphy_device *lsh_csiphy_dev[];
+extern struct csid_device *lsh_csid_dev[];
 extern struct ispif_device *lsh_ispif;
-extern struct msm_sensor_ctrl_t mt9m114_s_ctrl;
-extern struct msm_sensor_ctrl_t adv7481_s_ctrl;
 extern struct v4l2_subdev *lsh_axi_ctrl;
 extern struct axi_ctrl_t *my_axi_ctrl;
 extern struct mdp4_overlay_pipe *pipe[OVERLAY_COUNT];
@@ -283,5 +281,10 @@ static void guidance_lane_set_data_pipeline(void);
 static void mdp_queue_overlay_buffers(struct work_struct *work);
 static void guidance_lane_set_overlay_init(struct mdp_overlay *overlay);
 static int adp_rear_camera_enable(void);
+
+
+extern struct msm_camera_csiphy_params adp_rvc_csiphy_params;
+extern struct msm_camera_csi_lane_params adp_rvc_csi_lane_params;
+extern struct msm_camera_csid_params adp_rvc_csid_params;
 
 #endif /* _MSM_CAMERA_TEST_H */
