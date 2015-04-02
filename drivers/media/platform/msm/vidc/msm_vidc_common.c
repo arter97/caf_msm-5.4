@@ -71,7 +71,7 @@ static inline bool is_thumbnail_session(struct msm_vidc_inst *inst)
 	return !!(inst->flags & VIDC_THUMBNAIL);
 }
 
-static int msm_comm_g_ctrl(struct msm_vidc_inst *inst, int id)
+int msm_comm_g_ctrl(struct msm_vidc_inst *inst, int id)
 {
 	int rc = 0;
 	struct v4l2_control ctrl = {
@@ -3200,6 +3200,15 @@ int msm_comm_release_output_buffers(struct msm_vidc_inst *inst)
 				"Invalid instance pointer = %p\n", inst);
 		return -EINVAL;
 	}
+	mutex_lock(&inst->outputbufs.lock);
+	if (list_empty(&inst->outputbufs.list)) {
+		dprintk(VIDC_DBG, "%s - No OUTPUT buffers allocated\n",
+			__func__);
+		mutex_unlock(&inst->outputbufs.lock);
+		return 0;
+	}
+	mutex_unlock(&inst->outputbufs.lock);
+
 	core = inst->core;
 	if (!core) {
 		dprintk(VIDC_ERR,
