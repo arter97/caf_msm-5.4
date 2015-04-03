@@ -44,6 +44,7 @@ obj-y += mdp4_dtv.o
 obj-y += mdp4_overlay_dtv.o
 endif
 
+obj-$(CONFIG_MSM_DBA) += msm_dba/
 obj-y += mdp_dma.o
 obj-y += mdp_dma_s.o
 obj-y += mdp_vsync.o
