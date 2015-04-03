@@ -1774,6 +1774,76 @@ power_down:
 	return rc;
 }
 
+int32_t msm_sensor_platform_dev_probe(struct platform_device *pdev,
+					void *data)
+{
+	int rc = 0;
+	struct msm_sensor_ctrl_t *s_ctrl;
+	CDBG("%s %s_pdev_probe called\n", __func__, pdev->name);
+	s_ctrl = (struct msm_sensor_ctrl_t *)(data);
+	if (s_ctrl == NULL) {
+		pr_err("%s %s NULL s_ctrl\n", __func__, pdev->name);
+		return -EFAULT;
+	}
+	if (s_ctrl->func_tbl == NULL) {
+		pr_err("%s %s NULL func_tbl\n", __func__, pdev->name);
+		return -EFAULT;
+	}
+	if (s_ctrl->func_tbl->sensor_power_up == NULL) {
+		pr_err("%s %s NULL sensor_power_up\n",
+			__func__, pdev->name);
+		return -EFAULT;
+	}
+	s_ctrl->sensor_device_type = MSM_SENSOR_I2C_DEVICE;
+	s_ctrl->sensordata = pdev->dev.platform_data;
+	if (s_ctrl->sensordata == NULL) {
+		pr_err("%s %s NULL sensor data\n", __func__, pdev->name);
+		return -EFAULT;
+	}
+	rc = s_ctrl->func_tbl->sensor_power_up(s_ctrl);
+	if (rc < 0) {
+		pr_err("%s %s power up failed\n", __func__, pdev->name);
+		return rc;
+	}
+	if (s_ctrl->func_tbl->sensor_match_id)
+		rc = s_ctrl->func_tbl->sensor_match_id(s_ctrl);
+	else
+		rc = msm_sensor_match_id(s_ctrl);
+	if (rc < 0) {
+		pr_err("%s %s_pdev_probe failed\n", __func__, pdev->name);
+		goto power_down;
+	}
+
+	if (!s_ctrl->wait_num_frames)
+		s_ctrl->wait_num_frames = 1 * Q10;
+
+	CDBG("%s %s probe succeeded\n", __func__, pdev->name);
+
+	v4l2_subdev_init(&s_ctrl->sensor_v4l2_subdev,
+		s_ctrl->sensor_v4l2_subdev_ops);
+
+	snprintf(s_ctrl->sensor_v4l2_subdev.name,
+		sizeof(s_ctrl->sensor_v4l2_subdev.name), "%s",
+		s_ctrl->sensordata->sensor_name);
+	v4l2_set_subdevdata(&s_ctrl->sensor_v4l2_subdev, pdev);
+	s_ctrl->sensor_v4l2_subdev.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
+	media_entity_init(&s_ctrl->sensor_v4l2_subdev.entity, 0, NULL, 0);
+	s_ctrl->sensor_v4l2_subdev.entity.type = MEDIA_ENT_T_V4L2_SUBDEV;
+	s_ctrl->sensor_v4l2_subdev.entity.group_id = SENSOR_DEV;
+	s_ctrl->sensor_v4l2_subdev.entity.name =
+		s_ctrl->sensor_v4l2_subdev.name;
+	msm_sensor_register(&s_ctrl->sensor_v4l2_subdev);
+	s_ctrl->sensor_v4l2_subdev.entity.revision =
+		s_ctrl->sensor_v4l2_subdev.devnode->num;
+power_down:
+	if (rc > 0)
+		rc = 0;
+	s_ctrl->func_tbl->sensor_power_down(s_ctrl);
+	s_ctrl->sensor_state = MSM_SENSOR_POWER_DOWN;
+	CDBG("%s %s exitn", __func__, pdev->name);
+	return rc;
+}
+
 static int msm_sensor_subdev_match_core(struct device *dev, void *data)
 {
 	int core_index = (int)data;
