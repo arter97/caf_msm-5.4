@@ -157,6 +157,7 @@
 		qcom,soft-vfloat-comp-disabled;
 		qcom,soft-current-comp-disabled;
 		qcom,thermal-mitigation = <1500 700 600 0>;
+		qcom,gamma-setting = <3 2 0 2>;
 
 		qcom,bms-psy-name = "bms";
 		qcom,iterm-disabled;
@@ -200,6 +201,12 @@
 	status = "ok";
 	qcom,resume-soc = <99>;
 	qcom,battery-data = <&qrd_batterydata>;
+};
+
+&pm8916_vadc {
+	chan@30 {
+		qcom,scale-function = <14>;
+	};
 };
 
 &mdss_dsi0 {

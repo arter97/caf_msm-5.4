@@ -52,6 +52,7 @@
 		regulator-name = "smb1357_otg_vreg";
 		qcom,soft-vfloat-comp-disabled;
 		qcom,soft-current-comp-disabled;
+		qcom,gamma-setting = <3 2 0 2>;
 		qcom,thermal-mitigation = <1500 700 600 0>;
 
 		qcom,bms-psy-name = "bms";
@@ -96,6 +97,12 @@
 	status = "ok";
 	qcom,resume-soc = <99>;
 	qcom,battery-data = <&qrd_batterydata>;
+};
+
+&pm8916_vadc {
+	chan@30 {
+		qcom,scale-function = <14>;
+	};
 };
 
 &usb_otg {
