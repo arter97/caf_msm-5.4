@@ -1480,6 +1480,63 @@ static const u8 mxt1386e_config_data_v2_1[] = {
 	0,
 };
 
+/* configuration data for mxt1386e using V2.4 firmware */
+static const u8 mxt1386e_config_data_v2_4[] = {
+	/* T6 Object */
+	0, 0, 0, 0, 0, 0,
+	/* T38 Object */
+	14, 5, 1, 3, 18, 15, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0,
+	/* T7 Object */
+	32, 8, 50, 0,
+	/* T8 Object */
+	25, 0, 20, 20, 0, 0, 0, 0, 0, 0,
+	/* T9 Object */
+	139, 0, 0, 26, 42, 0, 32, 80, 2, 5,
+	0, 5, 5, 79, 10, 30, 10, 10, 255, 2,
+	85, 5, 0, 5, 9, 5, 12, 35, 70, 40,
+	20, 5, 0, 0, 0, 0,
+	/* T18 Object */
+	0, 0,
+	/* T24 Object */
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0,
+	/* T25 Object */
+	1, 0, 60, 115, 156, 99,
+	/* T27 Object */
+	0, 0, 0, 0, 0, 0, 0,
+	/* T40 Object */
+	0, 0, 0, 0, 0,
+	/* T42 Object */
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	/* T43 Object */
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0,
+	/* T46 Object */
+	68, 0, 16, 16, 0, 0, 0, 0, 0,
+	/* T47 Object */
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	/* T56 Object */
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0,
+	/* T62 Object */
+	1, 0, 0, 2, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 32,
+	40, 10, 52, 10, 100, 10, 10, 10, 90, 0,
+	0, 0, 0, 0, 33, 0, 1, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0,
+};
+
 #define MXT_TS_GPIO_IRQ			6
 #define MXT_ADP_TS_GPIO_IRQ		83
 #define MXT_TS_PWR_EN_GPIO		PM8921_GPIO_PM_TO_SYS(23)
@@ -1494,7 +1551,6 @@ static struct mxt_config_info mxt_config_array[] = {
 		.version	= 0x21,
 		.build		= 0xAA,
 		.bootldr_id	= MXT_BOOTLOADER_ID_1386E,
-		.fw_name	= "atmel_8064_liquid_v2_2_AA.hex",
 	},
 	{
 		/* The config data for V2.2.AA is the same as for V2.1.AA */
@@ -1505,6 +1561,16 @@ static struct mxt_config_info mxt_config_array[] = {
 		.version	= 0x22,
 		.build		= 0xAA,
 		.bootldr_id	= MXT_BOOTLOADER_ID_1386E,
+	},
+	{
+		/* The config data for V2.4.AB */
+		.config		= mxt1386e_config_data_v2_4,
+		.config_length	= ARRAY_SIZE(mxt1386e_config_data_v2_4),
+		.family_id	= 0xA0,
+		.variant_id	= 0xC,
+		.version	= 0x24,
+		.build		= 0xAB,
+		.bootldr_id	= MXT_BOOTLOADER_ID_1386E_v2_4,
 	},
 };
 
