@@ -342,6 +342,7 @@ struct mdss_dsi_ctrl_pdata {
 	bool dmap_iommu_map;
 	bool panel_bias_vreg;
 	bool dsi_irq_line;
+	bool dcs_cmd_insert;
 	atomic_t te_irq_ready;
 
 	bool cmd_clk_ln_recovery_en;

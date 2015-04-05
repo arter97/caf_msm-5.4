@@ -1269,6 +1269,7 @@ static int mdss_mdp_video_ctx_setup(struct mdss_mdp_ctl *ctl,
 	struct intf_timing_params itp = {0};
 	u32 dst_bpp;
 	struct mdss_data_type *mdata = ctl->mdata;
+	struct dsc_desc *dsc = NULL;
 
 	ctx->intf_type = ctl->intf_type;
 	init_completion(&ctx->vsync_comp);
@@ -1309,6 +1310,9 @@ static int mdss_mdp_video_ctx_setup(struct mdss_mdp_ctl *ctl,
 		pr_debug("%s: cdm not supported\n", __func__);
 	}
 
+	if (pinfo->compression_mode == COMPRESSION_DSC)
+		dsc = &pinfo->dsc;
+
 	mdss_mdp_set_intr_callback(MDSS_MDP_IRQ_INTF_VSYNC,
 			ctx->intf_num, mdss_mdp_video_vsync_intr_done,
 			ctl);
@@ -1332,6 +1336,11 @@ static int mdss_mdp_video_ctx_setup(struct mdss_mdp_ctl *ctl,
 
 	itp.yres = pinfo->yres + pinfo->lcdc.border_top +
 				pinfo->lcdc.border_bottom;
+
+	if (dsc) {	/* compressed */
+		itp.width = dsc->pclk_per_line;
+		itp.xres = dsc->pclk_per_line;
+	}
 
 	itp.h_back_porch = pinfo->lcdc.h_back_porch;
 	itp.h_front_porch = pinfo->lcdc.h_front_porch;
