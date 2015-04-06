@@ -59,15 +59,29 @@
 	qcom,cont-splash-enabled;
 };
 
+&dsi_nt35597_wqxga_video {
+	qcom,cont-splash-enabled;
+};
+
+&dsi_nt35597_wqxga_cmd {
+	qcom,cont-splash-enabled;
+};
+
 &dsi_dual_sharp_video_0 {
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
 	qcom,mdss-dsi-bl-min-level = <1>;
 	qcom,mdss-dsi-bl-max-level = <4095>;
 	qcom,cont-splash-enabled;
+	qcom,mdss-dsi-pan-enable-dynamic-fps;
+	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
+	qcom,mdss-dsi-min-refresh-rate = <45>;
 };
 
 &dsi_dual_sharp_video_1 {
 	qcom,cont-splash-enabled;
+	qcom,mdss-dsi-pan-enable-dynamic-fps;
+	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
+	qcom,mdss-dsi-min-refresh-rate = <45>;
 };
 
 
@@ -97,11 +111,13 @@
 	qcom,mdss-dsi-bl-max-level = <4095>;
 	qcom,5v-boost-gpio = <&pm8994_gpios 14 0>;
 	qcom,cont-splash-enabled;
+	qcom,partial-update-enabled;
 	qcom,panel-roi-alignment = <4 4 2 2 20 20>;
 };
 
 &dsi_dual_jdi_cmd_1 {
 	qcom,cont-splash-enabled;
+	qcom,partial-update-enabled;
 	qcom,panel-roi-alignment = <4 4 2 2 20 20>;
 };
 
@@ -113,6 +129,20 @@
 	qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
 	qcom,mdss-dsi-bl-min-level = <1>;
 	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,cont-splash-enabled;
+};
+
+&dsi_nt35597_wqxga_video {
+	qcom,cont-splash-enabled;
+};
+
+&dsi_nt35597_wqxga_cmd {
+	qcom,cont-splash-enabled;
+};
+
+&labibb {
+	status = "ok";
+	qpnp,qpnp-labibb-mode = "lcd";
 };
 
 &pmx_hdmi_cec {
