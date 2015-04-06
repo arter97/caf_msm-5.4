@@ -477,6 +477,14 @@ struct mipi_dsi_panel_platform_data {
 	void (*gpio_set_backlight)(int bl_level);
 };
 
+struct ds90uh92x_platform_data {
+	char chip_id[20];
+	u32 instance_id;
+	int reset_gpio;
+	int irq_gpio;
+	u32 slave_addr;
+};
+
 struct lvds_fpdl3_platform_data {
 	char chip_id[20];
 	u32 instance_id;
