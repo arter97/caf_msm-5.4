@@ -376,6 +376,8 @@ static int msm_hsphy_set_suspend(struct usb_phy *uphy, int suspend)
 					msm_usb_write_readback(phy->base,
 						HS_PHY_CTRL_REG,
 						RETENABLEN, 0);
+				/* Allow VDD min if PHY is put in RETENTION */
+				msm_hsusb_config_vdd(phy, 0);
 			}
 		}
 
@@ -389,11 +391,12 @@ static int msm_hsphy_set_suspend(struct usb_phy *uphy, int suspend)
 		if (!host && !phy->cable_connected) {
 			if (phy->ext_vbus_id)
 				msm_hsusb_ldo_enable(phy, 0);
-			msm_hsusb_config_vdd(phy, 0);
 		}
 	} else {
-		if (!host && !phy->cable_connected) {
+		if (!host && !chg_connected)
 			msm_hsusb_config_vdd(phy, 1);
+
+		if (!host && !phy->cable_connected) {
 			if (phy->ext_vbus_id)
 				msm_hsusb_ldo_enable(phy, 1);
 		}
