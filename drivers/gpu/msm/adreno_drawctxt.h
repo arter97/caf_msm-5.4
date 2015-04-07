@@ -67,7 +67,7 @@ struct adreno_context {
 	int state;
 	unsigned long priv;
 	unsigned int type;
-	struct mutex mutex;
+	spinlock_t lock;
 
 	/* Dispatcher */
 	struct kgsl_cmdbatch *cmdqueue[ADRENO_CONTEXT_CMDQUEUE_SIZE];
