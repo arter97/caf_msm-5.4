@@ -1870,7 +1870,6 @@ int security_load_policy(void *data, size_t len)
 		ss_initialized = 1;
 		seqno = ++latest_granting;
 		selinux_complete_init();
-		avc_ss_reset(seqno);
 		selnl_notify_policyload(seqno);
 		selinux_status_update_policyload(seqno);
 		selinux_netlbl_cache_invalidate();
