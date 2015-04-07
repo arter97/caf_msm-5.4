@@ -734,6 +734,7 @@ struct dwc3_scratchpad_array {
 #define DWC3_CORE_PM_RESUME_EVENT			6
 #define DWC3_CONTROLLER_POST_INITIALIZATION_EVENT	7
 #define DWC3_CONTROLLER_CONNDONE_EVENT			8
+#define DWC3_CONTROLLER_NOTIFY_OTG_EVENT		9
 
 #define MAX_INTR_STATS				10
 /**
@@ -915,6 +916,7 @@ struct dwc3 {
 	u8			hird_thresh;
 	u8			lpm_nyet_thresh;
 	atomic_t		in_lpm;
+	bool			b_suspend;
 	struct dwc3_gadget_events	dbg_gadget_events;
 
 	/* offload IRQ handling to tasklet */
