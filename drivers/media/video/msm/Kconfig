@@ -414,3 +414,9 @@ config OV7692
 	depends on MSM_CAMERA
 	---help---
 	  Omni Vision VGA YUV Sensor
+
+config AVDEVICE
+	bool "Sensor avdevice (video in)"
+	depends on MSM_CAMERA && MSM_BA_V4L2
+	---help---
+	  video in device
