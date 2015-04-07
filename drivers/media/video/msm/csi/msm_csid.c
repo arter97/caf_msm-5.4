@@ -31,7 +31,7 @@
 #define TRUE   1
 #define FALSE  0
 
-struct csid_device *lsh_csid_dev;
+struct csid_device *lsh_csid_dev[MAX_CSID];
 
 static int msm_csid_cid_lut(
 	struct msm_camera_csid_lut_params *csid_lut_params,
@@ -643,9 +643,9 @@ static int __devinit csid_probe(struct platform_device *pdev)
 
 	new_csid_dev->csid_state = CSID_POWER_DOWN;
 
-	if (pdev->id == 0) {
-		pr_debug("keep track of 1st csid device\n");
-		lsh_csid_dev = new_csid_dev;
+	if (pdev->id >= 0 && pdev->id < MAX_CSID) {
+		pr_debug("Init csid %d\n", pdev->id);
+		lsh_csid_dev[pdev->id] = new_csid_dev;
 	}
 
 	return 0;

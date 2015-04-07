@@ -48,28 +48,6 @@ struct completion camera_enabled;
 struct completion preview_enabled;
 struct completion preview_disabled;
 
-struct msm_camera_csiphy_params csiphy_params = {
-	.lane_cnt = 1,
-	.settle_cnt = 0x14,
-	.lane_mask = 0x1,
-};
-struct msm_camera_csi_lane_params csi_lane_params = {
-	.csi_lane_assign = 0xe4,
-	.csi_lane_mask = 0x1,
-	.csi_phy_sel = 0,
-};
-struct msm_camera_csid_vc_cfg mt9m114_cid_cfg1[] = {
-	{0, CSI_YUV422_8, CSI_DECODE_8BIT},
-	{1, CSI_EMBED_DATA, CSI_DECODE_8BIT},
-};
-struct msm_camera_csid_params csid_params = {
-	.lane_cnt = 1,
-	.lane_assign = 0xe4,
-	.lut_params = {
-		.num_cid = ARRAY_SIZE(mt9m114_cid_cfg1),
-		.vc_cfg = mt9m114_cid_cfg1,
-	},
-};
 static struct msm_camera_preview_data preview_data;
 
 struct adp_camera_ctxt {
@@ -135,11 +113,13 @@ void preview_set_data_pipeline()
 
 	msm_axi_subdev_s_crystal_freq(lsh_axi_ctrl, freq,  flags);
 	csid_version = 1;
-	rc = msm_csid_init(lsh_csid_dev, &csid_version, MM_CAM_USE_BYPASS);
-	rc = msm_csiphy_init(lsh_csiphy_dev); /* CSIPHY_INIT */
+	rc = msm_csid_init(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
+			&csid_version, MM_CAM_USE_BYPASS);
+	rc = msm_csiphy_init(
+			lsh_csiphy_dev[adp_rvc_csi_lane_params.csi_phy_sel]);
 	rc = msm_ispif_init(lsh_ispif, &csid_version); /* ISPIF_INIT */
 	params_list.params[0].intftype =  RDI1; /* RDI1 */
-	params_list.params[0].csid = 0;
+	params_list.params[0].csid = adp_rvc_csi_lane_params.csi_phy_sel;
 	params_list.params[0].vfe_intf =  VFE0;
 	params_list.params[0].cid_mask = (1 << 0);
 	params_list.len = 1;
@@ -148,12 +128,15 @@ void preview_set_data_pipeline()
 
 	/* ISPIF_CFG,use csid 1,rdi1 */
 	rc = msm_ispif_config(lsh_ispif, &params_list);
-	rc = msm_csid_config(lsh_csid_dev, &csid_params); /* CSID_CFG */
+	rc = msm_csid_config(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
+			&adp_rvc_csid_params); /* CSID_CFG */
 
 	pr_debug("%s: config csid\n", __func__);
 
 	/* CSIPHY_CFG */
-	rc = msm_csiphy_lane_config(lsh_csiphy_dev, &csiphy_params);
+	rc = msm_csiphy_lane_config(
+			lsh_csiphy_dev[adp_rvc_csi_lane_params.csi_phy_sel],
+			&adp_rvc_csiphy_params);
 	ispif_stream_enable = 129;  /* configure to select RDI 1, VFE0 */
 	msm_ispif_subdev_video_s_stream_rdi_only(lsh_ispif,
 			ispif_stream_enable);
@@ -764,8 +747,10 @@ void  exit_camera_kthread(void)
 	preview_buffer_free();
 	pr_debug("%s: begin axi release\n", __func__);
 	msm_axi_subdev_release_rdi_only(lsh_axi_ctrl, s_ctrl);
-	msm_csid_release(lsh_csid_dev, MM_CAM_USE_BYPASS);
-	msm_csiphy_release(lsh_csiphy_dev, &csi_lane_params);
+	msm_csid_release(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
+			MM_CAM_USE_BYPASS);
+	msm_csiphy_release(lsh_csiphy_dev[adp_rvc_csi_lane_params.csi_phy_sel],
+			&adp_rvc_csi_lane_params);
 	msm_ispif_release(lsh_ispif);
 	msm_ba_close(adp_cam_ctxt->ba_inst_hdlr);
 	cancel_work_sync(&wq_mdp_queue_overlay_buffers);

@@ -794,4 +794,28 @@ struct msm_camera_board_info apq8064_camera_board_info = {
 	.num_i2c_board_info = ARRAY_SIZE(apq8064_camera_i2c_boardinfo),
 };
 #endif
+
+struct msm_camera_csiphy_params adp_rvc_csiphy_params = {
+	.lane_cnt = 1,
+	.settle_cnt = 0x14,
+	.lane_mask = 0x1,
+};
+struct msm_camera_csi_lane_params adp_rvc_csi_lane_params = {
+	.csi_lane_assign = 0xe4,
+	.csi_lane_mask = 0x1,
+	.csi_phy_sel = 0,
+};
+struct msm_camera_csid_vc_cfg adp_rvc_csid_cfg[] = {
+	{0, CSI_YUV422_8, CSI_DECODE_8BIT},
+	{1, CSI_EMBED_DATA, CSI_DECODE_8BIT},
+};
+struct msm_camera_csid_params adp_rvc_csid_params = {
+	.lane_cnt = 1,
+	.lane_assign = 0xe4,
+	.lut_params = {
+		.num_cid = ARRAY_SIZE(adp_rvc_csid_cfg),
+		.vc_cfg = adp_rvc_csid_cfg,
+	},
+};
+
 #endif
