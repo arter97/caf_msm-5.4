@@ -88,3 +88,4 @@ obj-$(CONFIG_MSM_PACMAN)        += msm_pacman.o
 obj-$(CONFIG_MSM_TEST_PACMAN)        += msm_test_pacman.o
 obj-$(CONFIG_MSM_CACHE_M4M_ERP64) += cache_m4m_erp64.o
 obj-$(CONFIG_MSM_TZ_SMMU) += msm_tz_smmu.o
+obj-$(CONFIG_MSM_SECURE_BUFFER) += secure_buffer.o

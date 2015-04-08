@@ -673,6 +673,14 @@ config MSM_CACHE_M4M_ERP64_PANIC_ON_UE
 
 source "drivers/soc/qcom/memshare/Kconfig"
 
+config MSM_SECURE_BUFFER
+	bool "Helper functions for securing buffers through TZ"
+	help
+	 Say 'Y' here for targets that need to call into TZ to secure
+	 memory buffers. This ensures that only the correct clients can
+	 use this memory and no unauthorized access is made to the
+	 buffer
+
 config MSM_TZ_SMMU
 	bool "Helper functions for SMMU configuration through TZ"
 	depends on ARCH_MSM8996
