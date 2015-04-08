@@ -104,6 +104,8 @@ extern struct security_operations *security_ops;
 /* SECMARK reference count */
 static atomic_t selinux_secmark_refcount = ATOMIC_INIT(0);
 
+static int  booting =1;
+
 #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
 int selinux_enforcing;
 
@@ -151,12 +153,19 @@ static int selinux_secmark_enabled(void)
 
 static int selinux_netcache_avc_callback(u32 event)
 {
-	if (event == AVC_CALLBACK_RESET) {
-		sel_netif_flush();
-		sel_netnode_flush();
-		sel_netport_flush();
-		synchronize_net();
+/*
+* synchronize with packet received and processing can be skipped
+* as its too ealry as nic is not configured.
+*/
+	if (!booting) {
+		if (event == AVC_CALLBACK_RESET) {
+			sel_netif_flush();
+			sel_netnode_flush();
+			sel_netport_flush();
+			synchronize_net();
+		}
 	}
+	booting=0;
 	return 0;
 }
 
