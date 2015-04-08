@@ -3568,6 +3568,60 @@ fail_cmd:
 	return rc;
 }
 
+int q6asm_set_high_thd_resampler(struct audio_client *ac, int enable_flag)
+{
+	void *thd_resamp_cmd = NULL;
+	void *payload = NULL;
+	struct asm_pp_params_command *cmd = NULL;
+	struct asm_high_thd_resamp_params *resamp = NULL;
+	int sz = 0;
+	int rc  = 0;
+
+	sz = sizeof(struct asm_pp_params_command) +
+		+ sizeof(struct asm_high_thd_resamp_params);
+	thd_resamp_cmd = kzalloc(sz, GFP_KERNEL);
+	if (thd_resamp_cmd == NULL) {
+		pr_err("%s[%d]: Mem alloc failed\n", __func__, ac->session);
+		rc = -EINVAL;
+		return rc;
+	}
+	cmd = (struct asm_pp_params_command *)thd_resamp_cmd;
+	q6asm_add_hdr_async(ac, &cmd->hdr, sz, TRUE);
+	cmd->hdr.opcode = ASM_STREAM_CMD_SET_PP_PARAMS;
+	cmd->payload = NULL;
+	cmd->payload_size = sizeof(struct  asm_pp_param_data_hdr) +
+				sizeof(struct asm_high_thd_resamp_params);
+	cmd->params.module_id = RESAMPLER_MODULE_ID;
+	cmd->params.param_id = HIGH_THD_RESAMPLER_ENABLE_PARAM_ID;
+	cmd->params.param_size = sizeof(struct asm_high_thd_resamp_params);
+	cmd->params.reserved = 0;
+
+	payload = (u8 *)(thd_resamp_cmd + sizeof(struct asm_pp_params_command));
+	resamp = (struct asm_high_thd_resamp_params *)payload;
+
+	resamp->enable = enable_flag;
+	rc = apr_send_pkt(ac->apr, (uint32_t *) thd_resamp_cmd);
+	if (rc < 0) {
+		pr_err("%s: HIGH_THD_RESAMPLER_ENABLE Command failed\n",
+			__func__);
+		rc = -EINVAL;
+		goto fail_cmd;
+	}
+
+	rc = wait_event_timeout(ac->cmd_wait,
+			(atomic_read(&ac->cmd_state) == 0), 5*HZ);
+	if (!rc) {
+		pr_err("%s: timeout in sending HIGH_THD_RESAMPLER_ENABLE command to apr\n",
+			__func__);
+		rc = -EINVAL;
+		goto fail_cmd;
+	}
+	rc = 0;
+fail_cmd:
+	kfree(thd_resamp_cmd);
+	return rc;
+}
+
 int q6asm_read(struct audio_client *ac)
 {
 	struct asm_stream_cmd_read read;

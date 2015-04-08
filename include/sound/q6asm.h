@@ -358,6 +358,9 @@ int q6asm_set_lrgain(struct audio_client *ac, int left_gain, int right_gain);
 /* Enable Mute/unmute flag */
 int q6asm_set_mute(struct audio_client *ac, int muteflag);
 
+/* Enable/Disable high_thd_resampler */
+int q6asm_set_high_thd_resampler(struct audio_client *ac, int enable_flag);
+
 int q6asm_get_session_time(struct audio_client *ac, uint64_t *tstamp);
 
 /* Client can set the IO mode to either AIO/SIO mode */
