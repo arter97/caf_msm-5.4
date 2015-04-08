@@ -48,7 +48,10 @@ snd-soc-twl4030-objs := twl4030.o
 snd-soc-twl6040-objs := twl6040.o
 snd-soc-uda134x-objs := uda134x.o
 snd-soc-uda1380-objs := uda1380.o
-
+snd-soc-wcd9304-objs := wcd9304.o wcd9304-tables.o
+snd-soc-wcd9310-objs := wcd9310.o wcd9310-tables.o wcdcal-hwdep.o
+snd-soc-cs8427-objs := cs8427.o
+snd-soc-wcd9320-objs := wcd9320.o wcd9320-tables.o
 snd-soc-wl1273-objs := wl1273.o
 snd-soc-wm1250-ev1-objs := wm1250-ev1.o
 snd-soc-wm2000-objs := wm2000.o
