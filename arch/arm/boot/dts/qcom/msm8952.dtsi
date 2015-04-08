@@ -513,6 +513,7 @@
 	};
 
 	qcom,msm-thermal {
+		status = "disabled";
 		compatible = "qcom,msm-thermal";
 		qcom,sensor-id = <5>;
 		qcom,poll-ms = <250>;
@@ -2044,6 +2045,7 @@
 
 	i2c@7af8000 {
 		wsa881x-i2c-codec@e {
+			status = "disabled";
 			compatible = "qcom,wsa881x-i2c-codec";
 			reg = <0x0e>;
 			qcom,msm-gpios = "wsa_clk",
@@ -2062,10 +2064,12 @@
 			pinctrl-3 = <&wsa_clk_on &wsa_active>;
 		};
 		wsa881x-i2c-codec@44 {
+			status = "disabled";
 			compatible = "qcom,wsa881x-i2c-codec";
 			reg = <0x44>;
 		};
 		wsa881x-i2c-codec@f {
+			status = "disabled";
 			compatible = "qcom,wsa881x-i2c-codec";
 			reg = <0x0f>;
 			qcom,msm-gpios = "wsa_clk",
@@ -2084,6 +2088,7 @@
 			pinctrl-3 = <&wsa_clk_on &wsa_active>;
 		};
 		wsa881x-i2c-codec@45 {
+			status = "disabled";
 			compatible = "qcom,wsa881x-i2c-codec";
 			reg = <0x45>;
 		};
@@ -2161,7 +2166,6 @@
 #include "msm-pm8950.dtsi"
 #include "msm-pmi8950.dtsi"
 #include "msm8952-regulator.dtsi"
-#include "msm8952-camera.dtsi"
 
 &pm8950_1 {
 	pm8950_cajon_dig: 8952_wcd_codec@f000 {
