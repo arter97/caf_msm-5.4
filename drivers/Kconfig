@@ -194,4 +194,6 @@ source "drivers/bif/Kconfig"
 
 source "drivers/gator/Kconfig"
 
+source "drivers/gud/Kconfig"
+
 endmenu
