@@ -13,6 +13,7 @@
 
 #include "msm8952.dtsi"
 #include "msm8952-pinctrl.dtsi"
+#include "msm8952-camera-sensor-mtp.dtsi"
 
 &i2c_3 { /* BLSP1 QUP3 */
 	synaptics@20 {
