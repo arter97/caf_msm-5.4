@@ -569,7 +569,7 @@ static int msm_spm_dev_probe(struct platform_device *pdev)
 		{"qcom,saw2-spm-cmd-spc", MSM_SPM_MODE_POWER_COLLAPSE},
 		{"qcom,saw2-spm-cmd-pc", MSM_SPM_MODE_POWER_COLLAPSE},
 	};
-	return 0;
+
 	dev = msm_spm_get_device(pdev);
 	if (!dev) {
 		ret = -ENOMEM;
