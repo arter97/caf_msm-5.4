@@ -4320,6 +4320,9 @@ int mdp4_overlay_commit(struct fb_info *info)
 
 	msm_fb_wait_for_fence(mfd);
 
+	/* Disable splash */
+	mdp_disable_splash(mfd);
+
 	switch (mfd->panel.type) {
 	case MIPI_CMD_PANEL:
 		mdp4_dsi_cmd_pipe_commit(0, 1);
