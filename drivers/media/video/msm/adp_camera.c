@@ -740,6 +740,7 @@ int  init_camera_kthread(void)
 	INIT_WORK(&wq_mdp_queue_overlay_buffers, mdp_queue_overlay_buffers);
 	ret = adp_rear_camera_enable();
 	complete(&camera_enabled);
+	complete(&preview_disabled);
 	pr_debug("%s: exit\n", __func__);
 	place_marker("rvc thread enabled");
 
@@ -788,6 +789,8 @@ int disable_camera_preview(void)
 
 	mdpclient_msm_fb_close();
 	complete(&preview_disabled);
+	/* reset preview enable*/
+	init_completion(&preview_enabled);
 
 	pr_debug("%s: kpi entry\n", __func__);
 	return 0;
@@ -830,6 +833,8 @@ int enable_camera_preview(void)
 			__func__);
 		complete(&camera_enabled);
 		complete(&preview_enabled);
+		/* reset preview disable*/
+		init_completion(&preview_disabled);
 		return -EBUSY;
 	}
 	/* configure pipe for guidance lane */
@@ -854,6 +859,8 @@ int enable_camera_preview(void)
 			__func__);
 		complete(&camera_enabled);
 		complete(&preview_enabled);
+		/* reset preview disable*/
+		init_completion(&preview_disabled);
 		return -EBUSY;
 	}
 
@@ -861,6 +868,8 @@ int enable_camera_preview(void)
 	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);
 	complete(&camera_enabled);
 	complete(&preview_enabled);
+	/* reset preview disable*/
+	init_completion(&preview_disabled);
 
 	pr_debug("%s: kpi exit\n", __func__);
 	return 0;
