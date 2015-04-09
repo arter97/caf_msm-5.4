@@ -280,7 +280,6 @@ void vmpressure_global(gfp_t gfp, unsigned long scanned,
 	struct vmpressure *vmpr = &global_vmpressure;
 	unsigned long pressure;
 
-	return;
 	if (!(gfp & (__GFP_HIGHMEM | __GFP_MOVABLE | __GFP_IO | __GFP_FS)))
 		return;
 
