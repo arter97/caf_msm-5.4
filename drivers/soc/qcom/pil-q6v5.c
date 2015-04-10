@@ -30,6 +30,7 @@
 #define QDSP6SS_RESET			0x014
 #define QDSP6SS_GFMUX_CTL		0x020
 #define QDSP6SS_PWR_CTL			0x030
+#define QDSP6SS_MEM_CTL			0x0B0
 #define QDSP6SS_STRAP_ACC		0x110
 
 /* AXI Halt Register Offsets */
@@ -342,11 +343,18 @@ static int __pil_q6v55_reset(struct pil_desc *pil)
 		val = readl_relaxed(drv->reg_base + QDSP6SS_PWR_CTL);
 		val |= (Q6SS_L2DATA_STBY_N | Q6SS_SLP_RET_N);
 		writel_relaxed(val, drv->reg_base + QDSP6SS_PWR_CTL);
-
+#if 0
 		/* Turn on L1, L2 and ETB memories 1 at a time */
 		for (i = 17; i >= 0; i--) {
 			val |= BIT(i);
 			writel_relaxed(val, drv->reg_base + QDSP6SS_PWR_CTL);
+			udelay(1);
+		}
+#endif
+		/* Turn on L1, L2 and ETB memories 1 at a time */
+		for (i = 19; i >= 0; i--) {
+			val |= BIT(i);
+			writel_relaxed(val, drv->reg_base + QDSP6SS_MEM_CTL);
 			udelay(1);
 		}
 	} else {
