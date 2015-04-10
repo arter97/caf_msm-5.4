@@ -214,7 +214,7 @@ static int playback_prepare_params(struct gaudio_snd_dev *snd)
 	swparams->start_threshold = 1;
 	swparams->stop_threshold = INT_MAX;
 	swparams->silence_size = 0;
-	swparams->silence_threshold =  buffer_size;
+	swparams->silence_threshold = 0;
 
 	result = snd_pcm_kernel_ioctl(substream,
 					SNDRV_PCM_IOCTL_SW_PARAMS, swparams);
