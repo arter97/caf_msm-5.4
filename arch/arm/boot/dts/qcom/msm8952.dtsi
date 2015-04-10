@@ -1244,6 +1244,7 @@
 		qcom,bam-consumer-pipe-index = <4>;
 		qcom,bam-producer-pipe-index = <5>;
 		qcom,master-id = <86>;
+		status = "disabled";
 	};
 
 	qcom_rng: qrng@22000 {
