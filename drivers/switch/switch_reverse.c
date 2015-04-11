@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -173,7 +173,6 @@ static int switch_reverse_probe(struct platform_device *pdev)
 	unsigned long irq_flags;
 	int ret = 0;
 	pr_debug("%s: kpi entry\n", __func__);
-
 	if (!pdata)
 		return -EBUSY;
 
@@ -210,6 +209,8 @@ static int switch_reverse_probe(struct platform_device *pdev)
 	reverse_data->idev->evbit[0] = BIT_MASK(EV_KEY);
 	reverse_data->idev->keybit[BIT_WORD(pdata->key_code)] =
 						BIT_MASK(pdata->key_code);
+
+	platform_set_drvdata(pdev, &reverse_data);
 
 	ret = input_register_device(reverse_data->idev);
 	if (ret) {
@@ -298,9 +299,40 @@ static int __devexit switch_reverse_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static int switch_reverse_suspend(struct platform_device *pdev,
+	pm_message_t state)
+{
+	pr_debug("suspend rear view camera %s", __func__);
+	if ((camera_status == CAMERA_POWERED_UP
+				|| camera_status == CAMERA_PREVIEW_DISABLED)) {
+		exit_camera_kthread();
+		camera_status = CAMERA_POWERED_DOWN;
+		pr_debug("exit thread done %s", __func__);
+	}
+	pr_debug("exit %s", __func__);
+	return 0;
+}
+
+static int switch_reverse_resume(struct platform_device *pdev)
+{
+	int rc = 0;
+	pr_debug("resume rearview camera %s", __func__);
+	if (camera_status == CAMERA_POWERED_DOWN) {
+		rc = init_camera_kthread();
+		if (rc < 0)
+			pr_err("%s: Failed to init the camera", __func__);
+		else
+			camera_status = CAMERA_POWERED_UP;
+		pr_debug("camera_status %d %s", camera_status, __func__);
+	}
+	return rc;
+}
+
 static struct platform_driver switch_reverse_driver = {
 	.probe		= switch_reverse_probe,
 	.remove		= __devexit_p(switch_reverse_remove),
+	.suspend	= switch_reverse_suspend,
+	.resume		= switch_reverse_resume,
 	.driver		= {
 		.name	= "switch-reverse",
 		.owner	= THIS_MODULE,
