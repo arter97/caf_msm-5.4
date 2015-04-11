@@ -389,7 +389,8 @@ int msm_isp_axi_check_stream_state(
 			if ((stream_info->state == PAUSING ||
 				stream_info->state == PAUSED ||
 				stream_info->state == RESUME_PENDING ||
-				stream_info->state == RESUMING) &&
+				stream_info->state == RESUMING ||
+				stream_info->state == UPDATING) &&
 				(stream_cfg_cmd->cmd == STOP_STREAM ||
 				stream_cfg_cmd->cmd == STOP_IMMEDIATELY)) {
 				stream_info->state = ACTIVE;
@@ -1381,7 +1382,8 @@ static int msm_isp_update_stream_bandwidth(struct vfe_device *vfe_dev)
 }
 
 static int msm_isp_axi_wait_for_cfg_done(struct vfe_device *vfe_dev,
-	enum msm_isp_camif_update_state camif_update, uint32_t src_mask)
+	enum msm_isp_camif_update_state camif_update,
+	uint32_t src_mask, int regUpdateCnt)
 {
 	int rc;
 	unsigned long flags;
@@ -1389,8 +1391,17 @@ static int msm_isp_axi_wait_for_cfg_done(struct vfe_device *vfe_dev,
 	spin_lock_irqsave(&vfe_dev->shared_data_lock, flags);
 
 	for (i = 0; i < VFE_SRC_MAX; i++) {
-		if (src_mask & (1 << i))
-			vfe_dev->axi_data.stream_update[i] = 2;
+		if (src_mask & (1 << i)) {
+			if (vfe_dev->axi_data.stream_update[i] > 0) {
+				pr_err("%s:Stream Update in progress. cnt %d\n",
+					__func__,
+					vfe_dev->axi_data.stream_update[i]);
+				spin_unlock_irqrestore(
+					&vfe_dev->shared_data_lock, flags);
+				return -EINVAL;
+			}
+			vfe_dev->axi_data.stream_update[i] = regUpdateCnt;
+		}
 	}
 	if (src_mask) {
 		init_completion(&vfe_dev->stream_config_complete);
@@ -1665,6 +1676,7 @@ static int msm_isp_start_axi_stream(struct vfe_device *vfe_dev,
 		}
 
 		stream_info->state = START_PENDING;
+		pr_debug("%s, Stream 0x%x\n", __func__, stream_info->stream_id);
 		if (src_state) {
 			src_mask |= (1 << SRC_TO_INTF(stream_info->stream_src));
 			wait_for_complete = 1;
@@ -1698,7 +1710,7 @@ static int msm_isp_start_axi_stream(struct vfe_device *vfe_dev,
 
 	if (wait_for_complete) {
 		rc = msm_isp_axi_wait_for_cfg_done(vfe_dev, camif_update,
-			src_mask);
+			src_mask, 2);
 		if (rc < 0)
 			pr_err("%s: wait for config done failed\n", __func__);
 	}
@@ -1733,6 +1745,8 @@ static int msm_isp_stop_axi_stream(struct vfe_device *vfe_dev,
 		wait_for_complete_for_this_stream = 0;
 
 		stream_info->state = STOP_PENDING;
+		pr_debug("%s, Stream 0x%x,\n", __func__,
+			stream_info->stream_id);
 		if (stream_info->stream_src == CAMIF_RAW ||
 			stream_info->stream_src == IDEAL_RAW) {
 			/* We dont get reg update IRQ for raw snapshot
@@ -1769,20 +1783,24 @@ static int msm_isp_stop_axi_stream(struct vfe_device *vfe_dev,
 
 	if (src_mask) {
 		rc = msm_isp_axi_wait_for_cfg_done(vfe_dev, camif_update,
-			src_mask);
+			src_mask, 2);
 		if (rc < 0) {
 			pr_err("%s: wait for config done failed\n", __func__);
 			for (i = 0; i < stream_cfg_cmd->num_streams; i++) {
 				stream_info = &axi_data->stream_info[
 				HANDLE_TO_IDX(
 					stream_cfg_cmd->stream_handle[i])];
-				stream_info->state = STOP_PENDING;
+				stream_info->state = STOPPING;
 				msm_isp_axi_stream_enable_cfg(
 					vfe_dev, stream_info);
 				vfe_dev->hw_info->vfe_ops.core_ops.reg_update(
 					vfe_dev,
 					SRC_TO_INTF(stream_info->stream_src));
-				stream_info->state = INACTIVE;
+				rc = msm_isp_axi_wait_for_cfg_done(vfe_dev,
+					camif_update, src_mask, 1);
+				if (rc < 0)
+					pr_err("cfg done failed\n");
+				rc = -EBUSY;
 			}
 		}
 	}
@@ -2110,12 +2128,13 @@ int msm_isp_update_axi_stream(struct vfe_device *vfe_dev, void *arg)
 		case UPDATE_STREAM_REMOVE_BUFQ: {
 			msm_isp_remove_buf_queue(vfe_dev, stream_info,
 				update_info->user_stream_id);
-
+			pr_debug("%s, Remove bufq for Stream 0x%x\n",
+				__func__, stream_info->stream_id);
 			if (stream_info->state == ACTIVE) {
 				stream_info->state = UPDATING;
 				rc = msm_isp_axi_wait_for_cfg_done(vfe_dev,
 					NO_UPDATE, (1 << SRC_TO_INTF(
-					stream_info->stream_src)));
+					stream_info->stream_src)), 2);
 				if (rc < 0)
 					pr_err("%s: wait for update failed\n",
 						__func__);
@@ -2262,9 +2281,6 @@ void msm_isp_axi_disable_all_wm(struct vfe_device *vfe_dev)
 
 	for (i = 0; i < MAX_NUM_STREAM; i++) {
 		stream_info = &axi_data->stream_info[i];
-
-		if (stream_info->state != ACTIVE)
-			continue;
 
 		for (j = 0; j < stream_info->num_planes; j++)
 			vfe_dev->hw_info->vfe_ops.axi_ops.enable_wm(vfe_dev,
