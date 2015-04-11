@@ -2458,6 +2458,31 @@ static int mdp_unmap_splash_buffer(struct msm_fb_data_type *mfd, int layer_id)
 	return rc;
 }
 
+int mdp_disable_splash(struct msm_fb_data_type *mfd)
+{
+	int rc = 0;
+	int i = 0;
+
+	if (!mfd) {
+		pr_err("%s mfd is NULL", __func__);
+		rc = -ENODEV;
+	} else {
+		if (!mfd->cont_splash_done) {
+			for (i = OVERLAY_PIPE_VG1; i < OVERLAY_PIPE_MAX; i++)
+				if (mfd->splash_screen_phys[i])
+					mdp_unmap_splash_buffer(mfd, i);
+
+			/* Clks are enabled in probe. Disabling clocks now */
+			mdp_clk_ctrl(0);
+			mfd->cont_splash_done = 1;
+		}
+
+		if (mdp_pdata->cont_splash_enabled)
+			mdp_pdata->cont_splash_enabled--;
+	}
+
+	return rc;
+}
 
 static int mdp_off(struct platform_device *pdev)
 {
@@ -2572,20 +2597,8 @@ static int mdp_on(struct platform_device *pdev)
 			mdp4_lcdc_on(pdev);
 		}
 
-		if (!mfd->cont_splash_done) {
-			for (i = OVERLAY_PIPE_VG1; i < OVERLAY_PIPE_MAX; i++)
-				if (mfd->splash_screen_phys[i])
-					mdp_unmap_splash_buffer(mfd, i);
-
-			mfd->cont_splash_done = 1;
-		}
-
-		if (mdp_pdata->cont_splash_enabled) {
-			/* Clks are enabled in probe. Disabling clocks now */
-			mdp_clk_ctrl(0);
-			mdp_pdata->cont_splash_enabled = 0;
-		}
-
+		/* Disable splash */
+		mdp_disable_splash(mfd);
 		mdp_clk_ctrl(0);
 		mdp4_overlay_reset();
 		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
@@ -3042,6 +3055,10 @@ static int mdp_probe(struct platform_device *pdev)
 		int i = 0;
 		int layermixer = 0, stage = 0, stage_adj = 0;
 		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+		/* The clocks for splash image are enabled per display.
+		 * If current display has no splash image, clocks have to be
+		 * disabled in probe. Otherwise, they will be disabled inside
+		 * first mdp_on for this display.*/
 		mdp_clk_ctrl(1);
 		/* Read layer mixer first to see which layer are attached */
 		layermixer = inpdw(MDP_BASE + 0x10100);
@@ -3071,7 +3088,7 @@ static int mdp_probe(struct platform_device *pdev)
 				if (!mfd->cont_splash_enabled)
 					mfd->cont_splash_enabled = 1;
 			}
-		} else if (mfd->panel_info.pdest < DISPLAY_4) {
+		} else if (mfd->panel_info.pdest == DISPLAY_4) {
 			/* DMA_S */
 			if (inpdw(MDP_BASE + 0x000010) &&
 				inpdw(MDP_BASE + 0xA0008)) {
@@ -3088,13 +3105,14 @@ static int mdp_probe(struct platform_device *pdev)
 					goto mdp_probe_err;
 				}
 				mfd->cont_splash_enabled = 1;
-			}
-		}
+			} else
+				mdp_clk_ctrl(0);
+		} else
+			mdp_clk_ctrl(0);
 		/* cont_splash_enabled in platform data is a flag used to track
 		   global splash enable state. The default state is disabled.*/
-		if (!mdp_pdata->cont_splash_enabled && mfd->cont_splash_enabled)
-			mdp_pdata->cont_splash_enabled =
-				mfd->cont_splash_enabled;
+		if (mfd->cont_splash_enabled)
+			mdp_pdata->cont_splash_enabled++;
 		mfd->cont_splash_done = (1 - mfd->cont_splash_enabled);
 		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 	}
