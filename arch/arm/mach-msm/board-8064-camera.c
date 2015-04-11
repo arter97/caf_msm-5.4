@@ -429,6 +429,16 @@ static struct msm_camera_device_platform_data msm_camera_csi_device_data[] = {
 		.is_vpe    = 1,
 		.cam_bus_scale_table = &cam_bus_client_pdata,
 	},
+	{
+		.csid_core = 2,
+		.is_vpe    = 0,
+		.cam_bus_scale_table = &cam_bus_client_pdata,
+	},
+	{
+		.csid_core = 0,
+		.is_vpe    = 0,
+		.cam_bus_scale_table = &cam_bus_client_pdata,
+	},
 };
 
 static struct camera_vreg_t apq_8064_cam_vreg[] = {
@@ -526,6 +536,10 @@ static struct msm_camera_i2c_conf apq8064_front_cam_i2c_conf = {
 };
 
 static struct msm_camera_sensor_flash_data flash_imx135 = {
+	.flash_type = MSM_CAMERA_FLASH_NONE,
+};
+
+static struct msm_camera_sensor_flash_data flash_none = {
 	.flash_type = MSM_CAMERA_FLASH_NONE,
 };
 
@@ -720,6 +734,78 @@ static struct msm_camera_sensor_info msm_camera_sensor_ov2720_data = {
 static struct platform_device msm_camera_server = {
 	.name = "msm_cam_server",
 	.id = 0,
+};
+
+/* avdevice sensors */
+static struct msm_camera_csi_lane_params avdevice_csi_lane_params[] = {
+	{
+	.csi_lane_assign = 0xe4,
+	.csi_lane_mask = 0x1,
+	.csi_phy_sel = 2,
+	},
+	{
+	.csi_lane_assign = 0xe4,
+	.csi_lane_mask = 0x1,
+	.csi_phy_sel = 0,
+	}
+};
+
+static struct msm_camera_sensor_platform_info sensor_board_info_avdevice[] = {
+	{
+	.mount_angle    = 0,
+	.cam_vreg = apq_8064_cam_vreg,
+	.num_vreg = ARRAY_SIZE(apq_8064_cam_vreg),
+	.gpio_conf = &apq8064_back_cam_gpio_conf,
+	.i2c_conf = &apq8064_back_cam_i2c_conf,
+	.csi_lane_params = &avdevice_csi_lane_params[0],
+	},
+	{
+	.mount_angle    = 0,
+	.cam_vreg = apq_8064_cam_vreg,
+	.num_vreg = ARRAY_SIZE(apq_8064_cam_vreg),
+	.gpio_conf = &apq8064_back_cam_gpio_conf,
+	.i2c_conf = &apq8064_back_cam_i2c_conf,
+	.csi_lane_params = &avdevice_csi_lane_params[1],
+	}
+};
+
+static struct msm_camera_sensor_info msm_camera_sensor_avdevice_data[] = {
+	{
+	.sensor_name    = "avdevcvbs",
+	.pdata  = &msm_camera_csi_device_data[2],
+	.flash_data = &flash_none,
+	.sensor_platform_info = &sensor_board_info_avdevice[0],
+	.csi_if = 1,
+	.camera_type = BACK_CAMERA_2D,
+	.sensor_type = YUV_SENSOR,
+	.sensor_pwd  = PM8921_GPIO_PM_TO_SYS(41),
+	},
+	{
+	.sensor_name    = "avdevcvbs",
+	.pdata  = &msm_camera_csi_device_data[3],
+	.flash_data = &flash_none,
+	.sensor_platform_info = &sensor_board_info_avdevice[1],
+	.csi_if = 1,
+	.camera_type = FRONT_CAMERA_2D,
+	.sensor_type = YUV_SENSOR,
+	.sensor_pwd  = PM8921_GPIO_PM_TO_SYS(41),
+	}
+};
+
+struct platform_device msm_camera_avdevice = {
+	.name          = "avdevice",
+	.id            = 0,
+	.num_resources = 0,
+	.resource      = 0,
+	.dev.platform_data = &msm_camera_sensor_avdevice_data[0],
+};
+
+struct platform_device msm_camera_avdevice2 = {
+	.name          = "avdevice",
+	.id            = 1,
+	.num_resources = 0,
+	.resource      = 0,
+	.dev.platform_data = &msm_camera_sensor_avdevice_data[1],
 };
 
 void __init apq8064_init_cam(void)
