@@ -1258,6 +1258,14 @@ static void dwc3_msm_notify_event(struct dwc3 *dwc, unsigned event)
 
 		atomic_set(&dwc->in_lpm, 0);
 		break;
+	case DWC3_CONTROLLER_NOTIFY_OTG_EVENT:
+		dev_dbg(mdwc->dev, "DWC3_CONTROLLER_NOTIFY_OTG_EVENT received\n");
+		if (dwc->enable_bus_suspend) {
+			mdwc->ext_xceiv.suspend = dwc->b_suspend;
+			queue_delayed_work(system_nrt_wq,
+				&mdwc->resume_work, 0);
+		}
+		break;
 	default:
 		dev_dbg(mdwc->dev, "unknown dwc3 event\n");
 		break;
@@ -1414,9 +1422,10 @@ static void dwc3_chg_detect_work(struct work_struct *w)
 	static bool dcd;
 	unsigned long delay;
 
-	dev_dbg(mdwc->dev, "chg detection work\n");
+	dev_dbg(mdwc->dev, "chg detection work, state=%d\n", mdwc->chg_state);
 	switch (mdwc->chg_state) {
 	case USB_CHG_STATE_UNDEFINED:
+		pm_runtime_get_sync(mdwc->dev);
 		dwc3_chg_block_reset(mdwc);
 		dwc3_chg_enable_dcd(mdwc);
 		mdwc->chg_state = USB_CHG_STATE_WAIT_FOR_DCD;
@@ -1493,8 +1502,8 @@ static void dwc3_chg_detect_work(struct work_struct *w)
 			chg_to_string(mdwc->charger.chg_type));
 		mdwc->charger.notify_detection_complete(mdwc->otg_xceiv->otg,
 								&mdwc->charger);
-		return;
 	default:
+		pm_runtime_put_sync(mdwc->dev);
 		return;
 	}
 
@@ -1508,6 +1517,10 @@ static void dwc3_start_chg_det(struct dwc3_charger *charger, bool start)
 	if (start == false) {
 		dev_dbg(mdwc->dev, "canceling charging detection work\n");
 		cancel_delayed_work_sync(&mdwc->chg_work);
+		if (mdwc->chg_state != USB_CHG_STATE_UNDEFINED &&
+				mdwc->chg_state != USB_CHG_STATE_DETECTED)
+			pm_runtime_put_sync(mdwc->dev);
+
 		mdwc->chg_state = USB_CHG_STATE_UNDEFINED;
 		charger->chg_type = DWC3_INVALID_CHARGER;
 		return;
@@ -1639,7 +1652,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 		return 0;
 	}
 
-	if (mdwc->otg_xceiv && mdwc->otg_xceiv->state == OTG_STATE_B_PERIPHERAL)
+	if (mdwc->otg_xceiv && mdwc->otg_xceiv->state == OTG_STATE_B_SUSPEND)
 		device_bus_suspend = true;
 
 	host_bus_suspend = (mdwc->scope == POWER_SUPPLY_SCOPE_SYSTEM);
@@ -1685,7 +1698,9 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 	host_ss_active = dwc3_msm_is_host_superspeed(mdwc);
 
 	if (cancel_delayed_work_sync(&mdwc->chg_work))
-		dev_dbg(mdwc->dev, "%s: chg_work was pending\n", __func__);
+		dev_err(mdwc->dev,
+		"%s: chg_work was pending. mdwc dev pm usage cnt %d\n",
+			__func__, atomic_read(&mdwc->dev->power.usage_count));
 	if (mdwc->chg_state != USB_CHG_STATE_DETECTED) {
 		/* charger detection wasn't complete; re-init flags */
 		mdwc->chg_state = USB_CHG_STATE_UNDEFINED;
@@ -1821,7 +1836,6 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 
 	dev_dbg(mdwc->dev, "%s: exiting lpm\n", __func__);
-	dbg_event(0xFF, "Ctl Res", atomic_read(&dwc->in_lpm));
 
 	if (!atomic_read(&dwc->in_lpm)) {
 		dev_dbg(mdwc->dev, "%s: Already resumed\n", __func__);
@@ -1961,6 +1975,8 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 	 */
 	dwc3_pwr_event_handler(mdwc);
 
+	dbg_event(0xFF, "Ctl Res", atomic_read(&dwc->in_lpm));
+
 	return 0;
 }
 
@@ -1995,44 +2011,32 @@ static void dwc3_resume_work(struct work_struct *w)
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 
 	dev_dbg(mdwc->dev, "%s: dwc3 resume work\n", __func__);
-	/* handle any event that was queued while work was already running */
-	if (!atomic_read(&dwc->in_lpm)) {
-		dev_dbg(mdwc->dev, "%s: notifying xceiv event\n", __func__);
-		dbg_event(0xFF, "RWrk !lpm", 0);
-		if (mdwc->otg_xceiv) {
-			dwc3_wait_for_ext_chg_done(mdwc);
-			mdwc->ext_xceiv.notify_ext_events(mdwc->otg_xceiv->otg,
-							DWC3_EVENT_XCEIV_STATE);
-		}
+
+	/*
+	 * exit LPM first to meet resume timeline from device side.
+	 * resume_pending flag would prevent calling
+	 * dwc3_msm_resume() in case we are here due to system
+	 * wide resume without usb cable connected. This flag is set
+	 * only in case of power event irq in lpm.
+	 */
+	if (mdwc->resume_pending) {
+		dwc3_msm_resume(mdwc);
+		mdwc->resume_pending = false;
+	}
+
+	if (atomic_read(&mdwc->pm_suspended)) {
+		dbg_event(0xFF, "RWrk PMSus", 0);
+		/* let pm resume kick in resume work later */
 		return;
 	}
 
-	/*
-	 * if system resume in progress exit LPM first to meet resume timeline
-	 * from device side and let pm resume notify otg state machine about
-	 * resume event, else initiate RESUME here
-	 */
-	if (atomic_read(&mdwc->pm_suspended)) {
-		dwc3_msm_resume(mdwc);
-		mdwc->resume_pending = true;
-		dbg_event(0xFF, "RWrk PMSus", 0);
-	} else {
-		dbg_event(0xFF, "RWrk !PMSus", mdwc->otg_xceiv ? 1 : 0);
-		pm_runtime_get_sync(mdwc->dev);
-		if (mdwc->otg_xceiv) {
-			mdwc->ext_xceiv.notify_ext_events(mdwc->otg_xceiv->otg,
-							DWC3_EVENT_PHY_RESUME);
-		} else if (mdwc->scope == POWER_SUPPLY_SCOPE_SYSTEM) {
-			struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
-			pm_runtime_resume(&dwc->xhci->dev);
-		}
-
-		pm_runtime_put_noidle(mdwc->dev);
-		if (mdwc->otg_xceiv) {
-			dwc3_wait_for_ext_chg_done(mdwc);
-			mdwc->ext_xceiv.notify_ext_events(mdwc->otg_xceiv->otg,
-							DWC3_EVENT_XCEIV_STATE);
-		}
+	dbg_event(0xFF, "RWrk", mdwc->otg_xceiv ? 1 : 0);
+	if (mdwc->otg_xceiv) {
+		dwc3_wait_for_ext_chg_done(mdwc);
+		mdwc->ext_xceiv.notify_ext_events(mdwc->otg_xceiv->otg);
+	} else if (mdwc->scope == POWER_SUPPLY_SCOPE_SYSTEM) {
+		/* host-only mode: resume xhci directly */
+		pm_runtime_resume(&dwc->xhci->dev);
 	}
 }
 
@@ -2106,12 +2110,14 @@ static irqreturn_t msm_dwc3_pwr_irq_thread(int irq, void *_mdwc)
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 
 	dev_dbg(mdwc->dev, "%s\n", __func__);
-	dbg_event(0xFF, "PWR IRQ", atomic_read(&dwc->in_lpm));
 
 	if (atomic_read(&dwc->in_lpm))
 		dwc3_resume_work(&mdwc->resume_work.work);
 	else
 		dwc3_pwr_event_handler(mdwc);
+
+	dbg_event(0xFF, "PWR IRQ", atomic_read(&dwc->in_lpm));
+
 	return IRQ_HANDLED;
 }
 
@@ -2133,14 +2139,13 @@ static irqreturn_t msm_dwc3_pwr_irq(int irq, void *data)
 	/*
 	 * When in Low Power Mode, can't read PWR_EVNT_IRQ_STAT_REG to acertain
 	 * which interrupts have been triggered, as the clocks are disabled.
-	 * After re-enabling the clocks, dwc3_msm_resume will call
-	 * dwc3_pwr_event_handler to handle all other power events
+	 * Resume controller by waking up pwr event irq thread.After re-enabling
+	 * clocks, dwc3_msm_resume will call dwc3_pwr_event_handler to handle
+	 * all other power events.
 	 */
 	if (atomic_read(&dwc->in_lpm)) {
-		if (atomic_read(&mdwc->pm_suspended))
-			mdwc->resume_pending = true;
-
-		/* Initate controller resume */
+		/* set this to call dwc3_msm_resume() */
+		mdwc->resume_pending = true;
 		return IRQ_WAKE_THREAD;
 	}
 
@@ -3480,31 +3485,18 @@ static int dwc3_msm_pm_suspend(struct device *dev)
 static int dwc3_msm_pm_resume(struct device *dev)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
-	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 
 	dev_dbg(dev, "dwc3-msm PM resume\n");
 
+	dbg_event(0xFF, "PM Res", 0);
+
+	/* flush to avoid race in read/write of pm_suspended */
+	flush_delayed_work(&mdwc->resume_work);
 	atomic_set(&mdwc->pm_suspended, 0);
-	dbg_event(0xFF, "PM Res", mdwc->resume_pending);
-	if (mdwc->resume_pending) {
-		mdwc->resume_pending = false;
 
-		/* Update runtime PM status */
-		pm_runtime_disable(dev);
-		pm_runtime_set_active(dev);
-		pm_runtime_enable(dev);
-
-		/* Let OTG know about resume event and update pm_count */
-		if (mdwc->otg_xceiv) {
-			mdwc->ext_xceiv.notify_ext_events(mdwc->otg_xceiv->otg,
-							DWC3_EVENT_PHY_RESUME);
-			mdwc->ext_xceiv.notify_ext_events(mdwc->otg_xceiv->otg,
-							DWC3_EVENT_XCEIV_STATE);
-
-		} else if (mdwc->scope == POWER_SUPPLY_SCOPE_SYSTEM) {
-			pm_runtime_resume(&dwc->xhci->dev);
-		}
-	}
+	/* kick in otg state machine */
+	queue_delayed_work(system_nrt_wq,
+		&mdwc->resume_work, 0);
 
 	return 0;
 }
