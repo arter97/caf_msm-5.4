@@ -59,7 +59,7 @@ static int voice_send_cvs_packet_exchange_config_cmd(struct voice_data *v);
 static int voice_set_packet_exchange_mode_and_config(uint32_t session_id,
 						     uint32_t mode);
 
-//static int voice_send_cvs_register_cal_cmd(struct voice_data *v);
+static int voice_send_cvs_register_cal_cmd(struct voice_data *v);
 static int voice_send_cvs_deregister_cal_cmd(struct voice_data *v);
 static int voice_send_cvp_register_dev_cfg_cmd(struct voice_data *v);
 static int voice_send_cvp_deregister_dev_cfg_cmd(struct voice_data *v);
@@ -2210,7 +2210,6 @@ done:
 	return ret;
 }
 
-/*
 static int voice_send_cvs_register_cal_cmd(struct voice_data *v)
 {
 	struct cvs_register_cal_data_cmd cvs_reg_cal_cmd;
@@ -2294,7 +2293,7 @@ unlock:
 	mutex_unlock(&common.cal_data[CVS_VOCSTRM_CAL]->lock);
 done:
 	return ret;
-}*/
+}
 
 static int voice_send_cvs_deregister_cal_cmd(struct voice_data *v)
 {
@@ -3344,10 +3343,10 @@ static int voice_setup_vocproc(struct voice_data *v)
 		goto fail;
 	}
 
-/*	voice_send_cvs_register_cal_cmd(v);
+	voice_send_cvs_register_cal_cmd(v);
 	voice_send_cvp_register_dev_cfg_cmd(v);
 	voice_send_cvp_register_cal_cmd(v);
-	voice_send_cvp_register_vol_cal_cmd(v); */
+	voice_send_cvp_register_vol_cal_cmd(v);
 
 	/* enable vocproc */
 	ret = voice_send_enable_vocproc_cmd(v);
