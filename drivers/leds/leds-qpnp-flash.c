@@ -1316,6 +1316,7 @@ static int qpnp_flash_led_parse_common_dt(
 	if (IS_ERR_OR_NULL(led->pinctrl)) {
 		dev_err(&led->spmi_dev->dev,
 					"Unable to acquire pinctrl\n");
+		led->pinctrl = NULL;
 		return 0;
 	} else {
 		led->gpio_state_active =
