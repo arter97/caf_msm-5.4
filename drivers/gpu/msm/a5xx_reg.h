@@ -49,12 +49,12 @@
 #define A5XX_INT_ISDB_UNDER_DEBUG        31
 
 /* CP Interrupt bits */
-#define A5XX_CP_OPCODE_ERROR               1
-#define A5XX_CP_RESERVED_BIT_ERROR         2
-#define A5XX_CP_HW_FAULT_ERROR             3
-#define A5XX_CP_DMA_ERROR                  4
-#define A5XX_CP_REGISTER_PROTECTION_ERROR  5
-#define A5XX_CP_AHB_ERROR                  6
+#define A5XX_CP_OPCODE_ERROR               0
+#define A5XX_CP_RESERVED_BIT_ERROR         1
+#define A5XX_CP_HW_FAULT_ERROR             2
+#define A5XX_CP_DMA_ERROR                  3
+#define A5XX_CP_REGISTER_PROTECTION_ERROR  4
+#define A5XX_CP_AHB_ERROR                  5
 
 /* CP registers */
 #define A5XX_CP_RB_BASE                  0x800
@@ -95,11 +95,11 @@
 #define A5XX_CP_CONTEXT_SWITCH_SAVE_ADDR_HI   0x83F
 #define A5XX_CP_CONTEXT_SWITCH_SMMU_INFO_LO   0x840
 #define A5XX_CP_CONTEXT_SWITCH_SMMU_INFO_HI   0x841
-#define A5XX_CP_PROTECT_STATUS           0x8A0
 #define A5XX_CP_ME_STAT_DATA             0xB14
 #define A5XX_CP_WFI_PEND_CTR             0xB15
 #define A5XX_CP_INTERRUPT_STATUS         0xB18
 #define A5XX_CP_HW_FAULT                 0xB1A
+#define A5XX_CP_PROTECT_STATUS           0xB1C
 #define A5XX_CP_IB1_BASE                 0xB1F
 #define A5XX_CP_IB1_BASE_HI              0xB20
 #define A5XX_CP_IB1_BUFSZ                0xB21
