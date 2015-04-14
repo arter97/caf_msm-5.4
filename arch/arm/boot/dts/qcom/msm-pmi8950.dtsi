@@ -363,6 +363,12 @@
 							"data-rcvry-sug";
 			};
 		};
+
+                qcom,leds@a100 {
+                        compatible = "qcom,leds-qpnp";
+                        reg = <0xa100 0x100>;
+                        label = "mpp";
+                };
 	};
 
 	qcom,pmi8950@3 {
