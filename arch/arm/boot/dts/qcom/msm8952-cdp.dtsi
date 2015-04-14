@@ -84,13 +84,6 @@
 			debounce-interval = <15>;
 		};
 	};
-};
-
-&tlmm_pinmux {
-	tlmm_gpio_key {
-		qcom,pins = <&gp 85>, <&gp 86>, <&gp 87>, <&gp 88>;
-		qcom,num-grp-pins = <4>;
-	};
 
 	 sound {
 		compatible = "qcom,msm8952-audio-codec";
@@ -113,10 +106,10 @@
 			"SPK_RX_BIAS", "MCLK",
 			"INT_LDO_H", "MCLK",
 			"MIC BIAS External", "Handset Mic",
-			"MIC BIAS Internal2", "Headset Mic",
+			"MIC BIAS External2", "Headset Mic",
 			"MIC BIAS External", "Secondary Mic",
 			"AMIC1", "MIC BIAS External",
-			"AMIC2", "MIC BIAS Internal2",
+			"AMIC2", "MIC BIAS External2",
 			"AMIC3", "MIC BIAS External",
 			"SpkrMono WSA_IN", "WSA_SPK OUT";
 		qcom,msm-gpios =
@@ -169,6 +162,13 @@
 				"msm-dai-q6-dev.32773", "msm-dai-q6-dev.32770";
 		asoc-codec = <&stub_codec>, <&pm8950_cajon_dig>;
 		asoc-codec-names = "msm-stub-codec.1", "cajon_codec";
+	};
+};
+
+&tlmm_pinmux {
+	tlmm_gpio_key {
+		qcom,pins = <&gp 85>, <&gp 86>, <&gp 87>, <&gp 88>;
+		qcom,num-grp-pins = <4>;
 	};
 };
 
