@@ -36,10 +36,10 @@ int msm_apm_set_supply(struct msm_apm_ctrl_dev *ctrl_dev,
 		       enum msm_apm_supply supply);
 
 #else
-struct msm_apm_ctrl_dev *msm_apm_ctrl_dev_get(struct device *dev)
+static inline struct msm_apm_ctrl_dev *msm_apm_ctrl_dev_get(struct device *dev)
 { return ERR_PTR(-EPERM); }
-int msm_apm_set_supply(struct msm_apm_ctrl_dev *ctrl_dev,
-		       enum msm_apm_supply supply);
+static inline int msm_apm_set_supply(struct msm_apm_ctrl_dev *ctrl_dev,
+		       enum msm_apm_supply supply)
 { return -EPERM; }
 #endif
 #endif
