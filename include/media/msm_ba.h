@@ -28,18 +28,15 @@ enum msm_ba_ip {
 	BA_NO_IP
 };
 
-enum subdev_id {
-	MSM_BA_SUBDEV_0 = 0,
-	MSM_BA_SUBDEV_1 = 1,
-	MSM_BA_MAX_V4L2_SUBDEV_NUM
-};
-
 void *msm_ba_open(void);
 int msm_ba_close(void *instance);
 int msm_ba_querycap(void *instance, struct v4l2_capability *cap);
 int msm_ba_enum_input(void *instance, struct v4l2_input *input);
 int msm_ba_g_input(void *instance, unsigned int *index);
 int msm_ba_s_input(void *instance, unsigned int index);
+int msm_ba_enum_output(void *instance, struct v4l2_output *output);
+int msm_ba_g_output(void *instance, unsigned int *index);
+int msm_ba_s_output(void *instance, unsigned int index);
 int msm_ba_enum_fmt(void *instance, struct v4l2_fmtdesc *f);
 int msm_ba_s_fmt(void *instance, struct v4l2_format *f);
 int msm_ba_g_fmt(void *instance, struct v4l2_format *f);
@@ -55,7 +52,6 @@ int msm_ba_subscribe_event(void *instance,
 int msm_ba_unsubscribe_event(void *instance,
 					struct v4l2_event_subscription *sub);
 int msm_ba_s_parm(void *instance, struct v4l2_streamparm *a);
-int msm_ba_register_subdev_node(struct v4l2_subdev *sd,
-		enum subdev_id sd_id);
+int msm_ba_register_subdev_node(struct v4l2_subdev *sd);
 int msm_ba_unregister_subdev_node(struct v4l2_subdev *sd);
 #endif

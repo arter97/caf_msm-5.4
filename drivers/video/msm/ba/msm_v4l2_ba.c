@@ -101,6 +101,27 @@ int msm_v4l2_s_input(struct file *file, void *fh,
 	return msm_ba_s_input((void *)ba_inst, index);
 }
 
+int msm_v4l2_enum_output(struct file *file, void *fh,
+					struct v4l2_output *output)
+{
+	struct msm_ba_inst *ba_inst = get_ba_inst(file, fh);
+	return msm_ba_enum_output((void *)ba_inst, output);
+}
+
+int msm_v4l2_g_output(struct file *file, void *fh,
+					unsigned int *index)
+{
+	struct msm_ba_inst *ba_inst = get_ba_inst(file, fh);
+	return msm_ba_g_output((void *)ba_inst, index);
+}
+
+int msm_v4l2_s_output(struct file *file, void *fh,
+					unsigned int index)
+{
+	struct msm_ba_inst *ba_inst = get_ba_inst(file, fh);
+	return msm_ba_s_output((void *)ba_inst, index);
+}
+
 int msm_v4l2_enum_fmt(struct file *file, void *fh,
 					struct v4l2_fmtdesc *f)
 {
@@ -190,9 +211,10 @@ static const struct v4l2_ioctl_ops msm_v4l2_ioctl_ops = {
 	.vidioc_querycap = msm_v4l2_querycap,
 	.vidioc_enum_fmt_vid_cap = msm_v4l2_enum_fmt,
 	.vidioc_enum_fmt_vid_out = msm_v4l2_enum_fmt,
-	.vidioc_s_fmt_vid_out = msm_v4l2_s_fmt,
+	.vidioc_s_fmt_vid_cap = msm_v4l2_s_fmt,
+	.vidioc_s_fmt_vid_cap_mplane = msm_v4l2_s_fmt,
 	.vidioc_g_fmt_vid_cap = msm_v4l2_g_fmt,
-	.vidioc_g_fmt_vid_out = msm_v4l2_g_fmt,
+	.vidioc_g_fmt_vid_cap_mplane = msm_v4l2_g_fmt,
 	.vidioc_streamon = msm_v4l2_streamon,
 	.vidioc_streamoff = msm_v4l2_streamoff,
 	.vidioc_s_ctrl = msm_v4l2_s_ctrl,
@@ -205,6 +227,9 @@ static const struct v4l2_ioctl_ops msm_v4l2_ioctl_ops = {
 	.vidioc_enum_input = msm_v4l2_enum_input,
 	.vidioc_g_input = msm_v4l2_g_input,
 	.vidioc_s_input = msm_v4l2_s_input,
+	.vidioc_enum_output = msm_v4l2_enum_output,
+	.vidioc_g_output = msm_v4l2_g_output,
+	.vidioc_s_output = msm_v4l2_s_output,
 };
 
 static unsigned int msm_v4l2_poll(struct file *filp,
@@ -244,6 +269,7 @@ static int msm_ba_device_init(struct platform_device *pdev,
 
 	memset(dev_ctxt, 0x00, sizeof(struct msm_ba_dev));
 
+	INIT_LIST_HEAD(&dev_ctxt->inputs);
 	INIT_LIST_HEAD(&dev_ctxt->instances);
 	mutex_init(&dev_ctxt->dev_cs);
 

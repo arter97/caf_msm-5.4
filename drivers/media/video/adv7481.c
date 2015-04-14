@@ -908,7 +908,7 @@ static int adv7481_probe(struct i2c_client *client,
 	ret |= adv7481_set_cvbs_mode(state);
 
 	/* BA registration */
-	ret |= msm_ba_register_subdev_node(sd, MSM_BA_SUBDEV_0);
+	ret |= msm_ba_register_subdev_node(sd);
 	if (ret) {
 		ret = -EIO;
 		pr_err("BA INIT FAILED\n");
