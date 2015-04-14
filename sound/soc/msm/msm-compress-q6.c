@@ -353,6 +353,11 @@ static int msm_compr_configure_dsp(struct snd_compr_stream *cstream)
 		pr_err("%s: Send SoftVolume Param failed ret=%d\n",
 			__func__, ret);
 
+	ret = q6asm_set_high_thd_resampler(prtd->audio_client, 1);
+	if (ret < 0)
+		pr_err("%s: Send HIGH_THD_RESAMPLER_ENABLE Param failed ret=%d\n",
+			__func__, ret);
+
 	ret = q6asm_set_io_mode(prtd->audio_client,
 				(COMPRESSED_IO | ASYNC_IO_MODE));
 	if (ret < 0) {

@@ -692,6 +692,10 @@ struct asm_softpause_params {
 	u32 rampingcurve;
 } __packed;
 
+struct asm_high_thd_resamp_params {
+	u32 enable;
+} __packed;
+
 struct asm_pp_param_data_hdr {
 	u32 module_id;
 	u32 param_id;
@@ -723,6 +727,9 @@ struct asm_pp_params_command {
 #define MBADRC_MODULE_ID 0x00010c06
 #define MBADRC_ENABLE_PARAM_ID 0x00010c07
 #define MBADRC_CONFIG_PARAM_ID 0x00010c08
+
+#define RESAMPLER_MODULE_ID   0x00010719
+#define HIGH_THD_RESAMPLER_ENABLE_PARAM_ID 0x0001071A
 
 
 #define ADM_CMD_SET_PARAMS                               0x00010306
