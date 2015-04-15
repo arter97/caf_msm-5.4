@@ -213,6 +213,7 @@ static int msm_btsco_rate = SAMPLE_RATE_8KHZ;
 static int msm_auxpcm_rate = SAMPLE_RATE_8KHZ;
 static atomic_t auxpcm_rsc_ref;
 static int is_mplatform;
+static int is_mi2s_master = 1;
 static int msm_mi2s_rx_bit_format = SNDRV_PCM_FORMAT_S24_LE;
 static int msm_i2s_rx_bit_format = SNDRV_PCM_FORMAT_S24_LE;
 static int msm_i2s_tx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
@@ -694,44 +695,67 @@ static int msm_mi2s_startup(struct snd_pcm_substream *substream)
 	if (atomic_inc_return(&mi2s_rsc_ref) == 1) {
 		pr_debug("%s: acquire mi2s resources\n", __func__);
 		msm_configure_mi2s_gpio();
+		if (is_mi2s_master) {
+			pr_debug("%s: APQ is MI2S master\n", __func__);
+			mi2s_osr_clk = clk_get(cpu_dai->dev, "osr_clk");
+			if (IS_ERR(mi2s_osr_clk)) {
+				pr_err("Unable to get mi2s_osr_clk\n");
+				return PTR_ERR(mi2s_osr_clk);
+			}
+			if (msm_mi2s_rx_bit_format == SNDRV_PCM_FORMAT_S16_LE)
+				rate = OSR_CLK_RATE;
 
-		pr_debug("%s: APQ is MI2S master\n", __func__);
-		mi2s_osr_clk = clk_get(cpu_dai->dev, "osr_clk");
-		if (IS_ERR(mi2s_osr_clk)) {
-			pr_err("Unable to get mi2s_osr_clk\n");
-			return PTR_ERR(mi2s_osr_clk);
-		}
-		if (msm_mi2s_rx_bit_format == SNDRV_PCM_FORMAT_S16_LE)
-			rate = OSR_CLK_RATE;
+			pr_debug("%s: mi2s_osr_clk rate is %lu\n", __func__,
+				 rate);
+			clk_set_rate(mi2s_osr_clk, rate);
 
-		pr_debug("%s: mi2s_osr_clk rate is %lu\n", __func__, rate);
-		clk_set_rate(mi2s_osr_clk, rate);
+			ret = clk_prepare_enable(mi2s_osr_clk);
+			if (IS_ERR_VALUE(ret)) {
+				pr_err("Unable to enable mi2s_osr_clk\n");
+				clk_put(mi2s_osr_clk);
+				return ret;
+			}
+			mi2s_bit_clk = clk_get(cpu_dai->dev, "bit_clk");
+			if (IS_ERR(mi2s_bit_clk)) {
+				pr_err("Unable to get mi2s_bit_clk\n");
+				clk_disable_unprepare(mi2s_osr_clk);
+				clk_put(mi2s_osr_clk);
+				return PTR_ERR(mi2s_bit_clk);
+			}
+			clk_set_rate(mi2s_bit_clk, 8);
+			ret = clk_prepare_enable(mi2s_bit_clk);
+			if (IS_ERR_VALUE(ret)) {
+				pr_err("Unable to enable mi2s_bit_clk\n");
+				clk_disable_unprepare(mi2s_osr_clk);
+				clk_put(mi2s_osr_clk);
+				clk_put(mi2s_bit_clk);
+				return ret;
+			}
+			ret = snd_soc_dai_set_fmt(cpu_dai,
+						  SND_SOC_DAIFMT_CBS_CFS);
+			if (IS_ERR_VALUE(ret))
+				pr_err("set format for CPU dai failed\n");
+		} else {
+			pr_debug("%s: APQ is MI2S slave.\n", __func__);
 
-		ret = clk_prepare_enable(mi2s_osr_clk);
-		if (IS_ERR_VALUE(ret)) {
-			pr_err("Unable to enable mi2s_osr_clk\n");
-			clk_put(mi2s_osr_clk);
-			return ret;
+			mi2s_bit_clk = clk_get(cpu_dai->dev, "bit_clk");
+			if (IS_ERR(mi2s_bit_clk)) {
+				pr_err("Unable to get mi2s_bit_clk\n");
+				return PTR_ERR(mi2s_bit_clk);
+			}
+			clk_set_rate(mi2s_bit_clk, 0);
+			ret = clk_prepare_enable(mi2s_bit_clk);
+			if (IS_ERR_VALUE(ret)) {
+				pr_err("Unable to enable mi2s_bit_clk\n");
+				clk_put(mi2s_bit_clk);
+				return ret;
+			}
+			ret = snd_soc_dai_set_fmt(cpu_dai,
+						  SND_SOC_DAIFMT_CBS_CFM);
+			if (IS_ERR_VALUE(ret))
+				pr_err("set format for CPU dai failed\n");
+
 		}
-		mi2s_bit_clk = clk_get(cpu_dai->dev, "bit_clk");
-		if (IS_ERR(mi2s_bit_clk)) {
-			pr_err("Unable to get mi2s_bit_clk\n");
-			clk_disable_unprepare(mi2s_osr_clk);
-			clk_put(mi2s_osr_clk);
-			return PTR_ERR(mi2s_bit_clk);
-		}
-		clk_set_rate(mi2s_bit_clk, 8);
-		ret = clk_prepare_enable(mi2s_bit_clk);
-		if (IS_ERR_VALUE(ret)) {
-			pr_err("Unable to enable mi2s_bit_clk\n");
-			clk_disable_unprepare(mi2s_osr_clk);
-			clk_put(mi2s_osr_clk);
-			clk_put(mi2s_bit_clk);
-			return ret;
-		}
-		ret = snd_soc_dai_set_fmt(cpu_dai, SND_SOC_DAIFMT_CBS_CFS);
-		if (IS_ERR_VALUE(ret))
-			pr_err("set format for CPU dai failed\n");
 	}
 
 	return ret;
