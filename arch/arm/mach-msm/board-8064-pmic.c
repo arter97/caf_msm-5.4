@@ -1,4 +1,5 @@
-/* Copyright (c) 2011-2012, 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2014-2015, The Linux Foundation.
+ * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -135,11 +136,10 @@ static struct pm8xxx_gpio_init pm8921_gpios[] __initdata = {
 	PM8921_GPIO_OUTPUT(33, 0, HIGH),
 	PM8921_GPIO_INPUT(35, PM_GPIO_PULL_UP_30),
 	PM8921_GPIO_INPUT(38, PM_GPIO_PULL_UP_30),
-#ifndef	CONFIG_MSM_S4_AS_REVERSE_GEAR
+
+	PM8921_GPIO_INPUT(43, PM_GPIO_PULL_UP_30),
 	PM8921_GPIO_INPUT(20, PM_GPIO_PULL_UP_30),
-#else
-	PM8921_GPIO_OUTPUT(20, 0, HIGH),
-#endif
+
 	/* TABLA CODEC RESET */
 	PM8921_GPIO_OUTPUT(34, 0, MED),
 	PM8921_GPIO_OUTPUT_VIN(22, 0, PM_GPIO_VIN_VPH), /* PCIE_CLKEN */

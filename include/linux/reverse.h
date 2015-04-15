@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -16,12 +16,14 @@
 
 #include <linux/switch.h>
 
+#define REVERSE_MAX_GPIO 2
+
 struct reverse_switch_platform_data {
 	const char	*name;
-	unsigned	gpio;
+	unsigned	gpio[REVERSE_MAX_GPIO];
 	unsigned int	key_code;
 	unsigned	debounce_time;	/* ms */
-	int		active_low;
+	int		active_low[REVERSE_MAX_GPIO];
 
 	/* if NULL, switch_dev.name will be printed */
 	const char *name_on;

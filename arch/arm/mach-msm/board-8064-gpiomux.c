@@ -1696,15 +1696,19 @@ static struct msm_gpiomux_config mxt540e_gpio_alt_config[] __initdata = {
 	},
 };
 
-#ifdef CONFIG_MSM_S4_AS_REVERSE_GEAR
-#define GPIO_KEY_REVERSE                PM8921_GPIO_PM_TO_SYS(38)
-#else
-#define GPIO_KEY_REVERSE                PM8921_GPIO_PM_TO_SYS(20)
-#endif
+#define GPIO_KEY_REVERSE_S5             PM8921_GPIO_PM_TO_SYS(43)
+#define GPIO_KEY_REVERSE_ROTARY         PM8921_GPIO_PM_TO_SYS(20)
 
 static struct msm_gpiomux_config adp2_reverse_gpio_config[] __initdata = {
-	{      /* REVERSE */
-		.gpio = GPIO_KEY_REVERSE,
+	{      /* REVERSE_S5*/
+		.gpio = GPIO_KEY_REVERSE_S5,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &mplatform_int_act_cfg,
+			[GPIOMUX_SUSPENDED] = &mplatform_int_sus_cfg,
+		},
+	},
+	{      /* REVERSE_ROTARY*/
+		.gpio = GPIO_KEY_REVERSE_ROTARY,
 		.settings = {
 			[GPIOMUX_ACTIVE]    = &mplatform_int_act_cfg,
 			[GPIOMUX_SUSPENDED] = &mplatform_int_sus_cfg,
