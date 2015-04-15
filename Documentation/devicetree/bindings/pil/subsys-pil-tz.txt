@@ -53,6 +53,7 @@ Optional properties:
 - qcom,restart-group: List of subsystems that will need to restart together.
 - qcom,keep-proxy-regs-on: Boolean. Present if during proxy unvoting, PIL needs to leave
 			the regulators enabled after removing the voltage/current votes.
+- qcom,edge:		GLINK logical name of the remote subsystem
 
 Example:
 	qcom,venus@fdce0000 {
@@ -106,6 +107,7 @@ Example:
 		qcom,pas-id = <1>;
 		qcom,proxy-timeout-ms = <10000>;
 		qcom,firmware-name = "adsp";
+		qcom,edge = "lpass";
 
 		/* GPIO inputs from lpass */
 		qcom,gpio-err-fatal = <&smp2pgpio_ssr_smp2p_2_in 0 0>;
