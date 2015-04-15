@@ -178,20 +178,32 @@ static void q6_hfi_core_work_handler(struct work_struct *work)
 	int rc = 0;
 	struct q6_hfi_device *device = container_of(
 		work, struct q6_hfi_device, vidc_worker);
-	u8 packet[VIDC_IFACEQ_MED_PKT_SIZE];
+	u8 *packet = kmalloc(VIDC_IFACEQ_MED_PKT_SIZE, GFP_KERNEL);
+
+	if (!packet) {
+		dprintk(VIDC_ERR,
+				"Not processing h/w messages due to lack of memory\n");
+		return;
+	}
 
 	/* need to consume all the messages from the firmware */
 	do {
 		rc = q6_hfi_iface_eventq_read(device, packet);
-		if (!rc)
-			hfi_process_msg_packet(device->callback,
-				device->device_id,
-				(struct vidc_hal_msg_pkt_hdr *) packet,
-				&device->sess_head, &device->session_lock);
+		if (!rc) {
+			struct msm_vidc_cb_info info;
+			int rc = hfi_process_msg_packet(device->device_id,
+				(struct vidc_hal_msg_pkt_hdr *)packet, &info);
+
+			if (!rc)
+				device->callback(info.response_type,
+						&info.response);
+		}
 	} while (!rc);
 
 	if (rc != -ENODATA)
 		dprintk(VIDC_ERR, "Failed to read from event queue\n");
+
+	kfree(packet);
 }
 
 static int q6_hfi_init_resources(struct q6_hfi_device *device,
