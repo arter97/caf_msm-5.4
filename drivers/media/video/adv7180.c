@@ -469,7 +469,7 @@ static int adv7180_querystd(struct v4l2_subdev *sd, v4l2_std_id *std)
 {
 	struct adv7180_state *state = to_state(sd);
 	int err  = 0;
-	v4l2_std_id new_std = V4L2_STD_UNKNOWN ;
+	v4l2_std_id new_std = V4L2_STD_UNKNOWN;
 	pr_debug("%s: entry!\n", __func__);
 
 	err = mutex_lock_interruptible(&state->mutex);
@@ -1667,10 +1667,9 @@ static int adv7180_probe(struct i2c_client *client,
 	}
 
 	if (device_num == 0) {
-		ret = msm_ba_register_subdev_node(sd, MSM_BA_SUBDEV_1);
+		ret = msm_ba_register_subdev_node(sd);
 	} else if (device_num == 1) {
-		pr_debug("%s : register adv device %d\n",
-			__func__, device_num);
+		ret = msm_ba_register_subdev_node(sd);
 	} else {
 		ret = -EIO;
 		pr_err("%s : Unsupported adv device %d\n",
@@ -1713,7 +1712,7 @@ static int adv7180_remove(struct i2c_client *client)
 	} else if (state->device_num == 1) {
 		pr_debug("%s : deregister from ba dev_num %d\n",
 			__func__, state->device_num);
-		/* To do deregister from ba */
+		msm_ba_unregister_subdev_node(sd);
 	} else {
 		pr_err("%s : Unsupported ADV device %d\n",
 			__func__, state->device_num);

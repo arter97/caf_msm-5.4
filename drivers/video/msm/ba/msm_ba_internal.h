@@ -101,11 +101,38 @@ struct msm_ba_dev_capability {
 	u32 capability_set;
 };
 
+enum msm_ba_ip_type {
+	BA_INPUT_CVBS = 0,
+	BA_INPUT_COMPONENT,
+	BA_INPUT_YC,
+	BA_INPUT_RGB,
+	BA_INPUT_HDMI,
+	BA_INPUT_MHL,
+	BA_INPUT_DVI,
+	BA_INPUT_TTL,
+	BA_INPUT_MAX = 0xffffffff
+};
+
+struct msm_ba_input_config {
+	enum msm_ba_ip_type inputType;
+	unsigned int index;
+	const char *name;
+	int ba_ip;
+	int ba_out;
+	const char *sd_name;
+	int signal_status;
+};
+
 struct msm_ba_input {
 	struct list_head list;
-	struct v4l2_input input;
-	uint32_t subdev_index;
-	const char *subdev_name;
+	enum msm_ba_ip_type inputType;
+	unsigned int name_index;
+	char name[32];
+	int bridge_chip_ip;
+	int ba_out;
+	int ba_ip;
+	struct v4l2_subdev *sd;
+	int signal_status;
 };
 
 struct msm_ba_dev {
@@ -113,7 +140,7 @@ struct msm_ba_dev {
 
 	enum ba_dev_state state;
 
-	struct msm_ba_input *inputs;
+	struct list_head inputs;
 	uint32_t num_inputs;
 
 	/* V4L2 Framework */
@@ -124,7 +151,6 @@ struct msm_ba_dev {
 	struct list_head instances;
 
 	/* BA v4l2 sub devs */
-	struct v4l2_subdev *sd[MSM_BA_MAX_V4L2_SUBDEV_NUM];
 	uint32_t num_ba_subdevs;
 
 	struct dentry *debugfs_root;
@@ -136,8 +162,8 @@ struct msm_ba_inst {
 	struct msm_ba_dev *dev_ctxt;
 
 	struct v4l2_input sd_input;
-	char sd_name[V4L2_SUBDEV_NAME_SIZE];
-	enum subdev_id sd_id;
+	struct v4l2_output sd_output;
+	struct v4l2_subdev *sd;
 	int state;
 
 	struct v4l2_fh event_handler;

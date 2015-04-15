@@ -90,29 +90,38 @@ EXPORT_SYMBOL(msm_ba_s_parm);
 
 int msm_ba_enum_input(void *instance, struct v4l2_input *input)
 {
+	struct msm_ba_input *ba_input = NULL;
 	struct msm_ba_inst *inst = instance;
+	int status = 0;
 	int rc = 0;
 
 	if (!inst || !input)
 		return -EINVAL;
+
 	if (input->index >= inst->dev_ctxt->num_inputs)
 		return -EINVAL;
 
-	input->type = V4L2_INPUT_TYPE_CAMERA;
-	if (MSM_BA_RVC_INPUT == input->index) {
+	ba_input = msm_ba_find_input(input->index);
+	if (ba_input) {
+		input->type = V4L2_INPUT_TYPE_CAMERA;
 		input->std = V4L2_STD_ALL;
-		snprintf(input->name, sizeof(input->name), "CVBS%d",
-					input->index);
-		input->capabilities = V4L2_IN_CAP_STD;
-	} else if (MSM_BA_CVBS_INPUT == input->index) {
-		input->std = V4L2_STD_ALL;
-		snprintf(input->name, sizeof(input->name), "CVBS%d",
-					input->index);
-		input->capabilities = V4L2_IN_CAP_STD;
-	} else {
-		input->std = 0;
-		strlcpy(input->name, "HDMI0", sizeof(input->name));
-		input->capabilities = V4L2_IN_CAP_CUSTOM_TIMINGS;
+		strlcpy(input->name, ba_input->name, sizeof(input->name));
+		if (BA_INPUT_HDMI == ba_input->inputType ||
+			BA_INPUT_MHL == ba_input->inputType)
+			input->capabilities = V4L2_IN_CAP_CUSTOM_TIMINGS;
+		else
+			input->capabilities = V4L2_IN_CAP_STD;
+		dprintk(BA_DBG, "msm_ba_find_input:name %s", input->name);
+		/* get current signal status */
+		rc = v4l2_subdev_call(
+			ba_input->sd, video, g_input_status, &status);
+		if (rc) {
+			dprintk(BA_ERR, "g_input_status failed for sd: %s",
+				ba_input->sd->name);
+		} else {
+			input->status = status;
+			ba_input->signal_status = status;
+		}
 	}
 	return rc;
 }
@@ -126,7 +135,7 @@ int msm_ba_g_input(void *instance, unsigned int *index)
 	if (!inst || !index)
 		return -EINVAL;
 
-	*index = inst->dev_ctxt->inputs->input.index;
+	*index = inst->sd_input.index;
 
 	return rc;
 }
@@ -135,7 +144,7 @@ EXPORT_SYMBOL(msm_ba_g_input);
 int msm_ba_s_input(void *instance, unsigned int index)
 {
 	struct msm_ba_inst *inst = instance;
-	struct v4l2_subdev *sd = NULL;
+	struct msm_ba_input *ba_input = NULL;
 	int rc = 0;
 
 	if (!inst)
@@ -143,31 +152,88 @@ int msm_ba_s_input(void *instance, unsigned int index)
 	if (index > inst->dev_ctxt->num_inputs)
 		return -EINVAL;
 
-	sd = inst->dev_ctxt->sd[inst->sd_id];
-	if (!sd) {
-		dprintk(BA_ERR, "No sd registered\n");
+	ba_input = msm_ba_find_input(index);
+	if (!ba_input) {
+		dprintk(BA_ERR, "Could not find input index: %d", index);
 		return -EINVAL;
 	}
-	switch (index) {
-	case BA_RVC_IP:
-		rc = v4l2_subdev_call(sd, video, s_routing,
-						MSM_BA_RVC_INPUT, 0, 0);
+	if (!ba_input->sd) {
+		dprintk(BA_ERR, "No sd registered");
+		return -EINVAL;
+	}
+	rc = v4l2_subdev_call(ba_input->sd, video, s_routing,
+			ba_input->bridge_chip_ip, 0, 0);
+	inst->sd_input.index = index;
+	/* get current signal status */
+	rc = v4l2_subdev_call(
+		ba_input->sd, video, g_input_status, &ba_input->signal_status);
+	dprintk(BA_DBG, "msm_ba_queue_v4l2_event: ba_input->signal_status %d",
+		ba_input->signal_status);
+	if (!ba_input->signal_status) {
 		msm_ba_queue_v4l2_event(inst,
 			V4L2_EVENT_MSM_BA_DEVICE_AVAILABLE);
-		break;
-	case BA_HDMI_IP:
-		rc = v4l2_subdev_call(sd, video, s_routing,
-						MSM_BA_HDMI_INPUT, 0, 0);
-		break;
-	default:
-		dprintk(BA_ERR, "(%s): Select Input: ERR %s: %d\n", __func__,
-				  "Unknown input", index);
-		rc = -EINVAL;
-		break;
 	}
 	return rc;
 }
 EXPORT_SYMBOL(msm_ba_s_input);
+
+int msm_ba_enum_output(void *instance, struct v4l2_output *output)
+{
+	struct msm_ba_input *ba_input = NULL;
+	struct msm_ba_inst *inst = instance;
+	int rc = 0;
+
+	if (!inst || !output)
+		return -EINVAL;
+
+	ba_input = msm_ba_find_output(output->index);
+	if (ba_input) {
+		output->type = V4L2_OUTPUT_TYPE_ANALOG;
+		output->std = V4L2_OUT_CAP_STD;
+	}
+	return rc;
+}
+EXPORT_SYMBOL(msm_ba_enum_output);
+
+int msm_ba_g_output(void *instance, unsigned int *index)
+{
+	struct msm_ba_inst *inst = instance;
+	int rc = 0;
+
+	if (!inst || !index)
+		return -EINVAL;
+
+	*index = inst->sd_output.index;
+
+	return rc;
+}
+EXPORT_SYMBOL(msm_ba_g_output);
+
+int msm_ba_s_output(void *instance, unsigned int index)
+{
+	struct msm_ba_inst *inst = instance;
+	struct msm_ba_input *ba_input = NULL;
+	int rc = 0;
+
+	if (!inst)
+		return -EINVAL;
+
+	ba_input = msm_ba_find_output(index);
+	if (ba_input) {
+		if (!ba_input->sd) {
+			dprintk(BA_ERR, "No sd registered");
+			return -EINVAL;
+		}
+		ba_input->ba_out = index;
+		inst->sd_output.index = index;
+		inst->sd = ba_input->sd;
+	} else {
+		dprintk(BA_ERR, "Could not find output index: %d", index);
+		rc = -EINVAL;
+	}
+	return rc;
+}
+EXPORT_SYMBOL(msm_ba_s_output);
 
 int msm_ba_enum_fmt(void *instance, struct v4l2_fmtdesc *f)
 {
@@ -201,14 +267,14 @@ int msm_ba_g_fmt(void *instance, struct v4l2_format *f)
 	if (!inst || !f)
 		return -EINVAL;
 
-	sd = inst->dev_ctxt->sd[inst->sd_id];
+	sd = inst->sd;
 	if (!sd) {
-		dprintk(BA_ERR, "No sd registered\n");
+		dprintk(BA_ERR, "No sd registered");
 		return -EINVAL;
 	}
 	rc = v4l2_subdev_call(sd, video, querystd, &new_std);
 	if (rc) {
-		dprintk(BA_ERR, "querystd failed for sd: %s\n", sd->name);
+		dprintk(BA_ERR, "querystd failed for sd: %s", sd->name);
 	} else {
 		inst->sd_input.std = new_std;
 		switch (inst->sd_input.std) {
@@ -276,14 +342,14 @@ int msm_ba_streamon(void *instance, enum v4l2_buf_type i)
 	if (!inst)
 		return -EINVAL;
 
-	sd = inst->dev_ctxt->sd[inst->sd_id];
+	sd = inst->sd;
 	if (!sd) {
-		dprintk(BA_ERR, "No sd registered\n");
+		dprintk(BA_ERR, "No sd registered");
 		return -EINVAL;
 	}
 	rc = v4l2_subdev_call(sd, video, s_stream, 1);
 	if (rc)
-		dprintk(BA_ERR, "streamon failed on port: %d\n", i);
+		dprintk(BA_ERR, "streamon failed on port: %d", i);
 
 	return rc;
 }
@@ -298,14 +364,14 @@ int msm_ba_streamoff(void *instance, enum v4l2_buf_type i)
 	if (!inst)
 		return -EINVAL;
 
-	sd = inst->dev_ctxt->sd[inst->sd_id];
+	sd = inst->sd;
 	if (!sd) {
-		dprintk(BA_ERR, "No sd registered\n");
+		dprintk(BA_ERR, "No sd registered");
 		return -EINVAL;
 	}
 	rc = v4l2_subdev_call(sd, video, s_stream, 0);
 	if (rc)
-		dprintk(BA_ERR, "streamoff failed on port: %d\n", i);
+		dprintk(BA_ERR, "streamoff failed on port: %d", i);
 
 	return rc;
 }
@@ -325,7 +391,7 @@ static int msm_ba_register_v4l2_subdev(struct v4l2_device *v4l2_dev,
 	struct video_device *vdev;
 	int rc = 0;
 
-	dprintk(BA_DBG, "Enter %s: v4l2_dev 0x%p, v4l2_subdev 0x%p\n",
+	dprintk(BA_DBG, "Enter %s: v4l2_dev 0x%p, v4l2_subdev 0x%p",
 			  __func__, v4l2_dev, sd);
 	if (NULL == v4l2_dev || NULL == sd || !sd->name[0]) {
 		dprintk(BA_ERR, "Invalid input");
@@ -364,38 +430,22 @@ static int msm_ba_register_v4l2_subdev(struct v4l2_device *v4l2_dev,
 			sd->devnode = vdev;
 		}
 	}
-	dprintk(BA_DBG, "Exit %s with rc: %d\n", __func__, rc);
+	dprintk(BA_DBG, "Exit %s with rc: %d", __func__, rc);
 
 	return rc;
 }
 
-int msm_ba_register_subdev_node(struct v4l2_subdev *sd,
-				enum subdev_id sd_id)
+int msm_ba_register_subdev_node(struct v4l2_subdev *sd)
 {
 	struct ba_ctxt *ba_ctxt;
-	uint8_t sd_index;
 	int rc = 0;
 
 	ba_ctxt = msm_ba_get_ba_context();
-	sd_index = sd_id;
-	if (sd_index >= MSM_BA_MAX_V4L2_SUBDEV_NUM) {
-		dprintk(BA_ERR, "%s Invalid sub device index %d",
-			__func__, sd_index);
-		return -EINVAL;
-	}
-	ba_ctxt->dev_ctxt->sd[sd_index] = sd;
-	ba_ctxt->dev_ctxt->num_inputs = 2;
-	ba_ctxt->dev_ctxt->inputs =
-		kzalloc(sizeof(*ba_ctxt->dev_ctxt->inputs)*
-					ba_ctxt->dev_ctxt->num_inputs,
-					GFP_KERNEL);
-	if (!ba_ctxt->dev_ctxt->inputs) {
-		dprintk(BA_ERR, "Failed to allocate memory\n");
-	} else {
-		ba_ctxt->dev_ctxt->inputs->input.index = BA_RVC_IP;
-		ba_ctxt->dev_ctxt->inputs->subdev_index = sd_index;
-	}
 	rc = msm_ba_register_v4l2_subdev(&ba_ctxt->dev_ctxt->v4l2_dev, sd);
+	if (!rc) {
+		ba_ctxt->dev_ctxt->num_ba_subdevs++;
+		msm_ba_add_inputs(sd);
+	}
 
 	return rc;
 }
@@ -404,22 +454,17 @@ EXPORT_SYMBOL(msm_ba_register_subdev_node);
 static void __msm_ba_sd_unregister(struct v4l2_subdev *sub_dev)
 {
 	struct ba_ctxt *ba_ctxt;
-	int i;
 
 	ba_ctxt = msm_ba_get_ba_context();
 	mutex_lock(&ba_ctxt->ba_cs);
 
 	v4l2_device_unregister_subdev(sub_dev);
-	for (i = 0; i < MSM_BA_MAX_V4L2_SUBDEV_NUM; i++) {
-		if (sub_dev == ba_ctxt->dev_ctxt->sd[i]) {
-			ba_ctxt->dev_ctxt->sd[i] = NULL;
-			ba_ctxt->dev_ctxt->num_ba_subdevs--;
-			break;
-		}
-	}
+	ba_ctxt->dev_ctxt->num_ba_subdevs--;
+	msm_ba_del_inputs(sub_dev);
 
 	dprintk(BA_DBG, "%s(%d), BA Unreg Sub Device : num ba devices %d : %s",
-		__func__, __LINE__, i, sub_dev->name);
+		__func__, __LINE__,
+		ba_ctxt->dev_ctxt->num_ba_subdevs, sub_dev->name);
 
 	mutex_unlock(&ba_ctxt->ba_cs);
 }
@@ -500,7 +545,6 @@ void *msm_ba_open(void)
 {
 	struct msm_ba_inst *inst = NULL;
 	struct msm_ba_dev *dev_ctxt = NULL;
-	enum subdev_id i;
 
 	dev_ctxt = get_ba_dev();
 
@@ -508,36 +552,33 @@ void *msm_ba_open(void)
 
 	if (!inst) {
 		dprintk(BA_ERR, "Failed to allocate memory\n");
-	} else {
-		memset(inst, 0x00, sizeof(*inst));
-
-		mutex_init(&inst->inst_cs);
-
-		init_waitqueue_head(&inst->kernel_event_queue);
-		inst->state = MSM_BA_DEV_UNINIT_DONE;
-		inst->dev_ctxt = dev_ctxt;
-
-		for (i = MSM_BA_SUBDEV_0;
-				i < MSM_BA_MAX_V4L2_SUBDEV_NUM; i++) {
-			if (NULL != dev_ctxt->sd[i]) {
-				inst->sd_id = i;
-				break;
-			}
-		}
-
-		mutex_lock(&dev_ctxt->dev_cs);
-		list_add_tail(&inst->list, &dev_ctxt->instances);
-		mutex_unlock(&dev_ctxt->dev_cs);
-
-		dev_ctxt->state = BA_DEV_INIT;
-		dev_ctxt->state = BA_DEV_INIT_DONE;
-		inst->state = MSM_BA_DEV_INIT_DONE;
-
-		inst->debugfs_root =
-			msm_ba_debugfs_init_inst(inst, dev_ctxt->debugfs_root);
-
-		setup_event_queue(inst, dev_ctxt->vdev);
+		return NULL;
 	}
+	memset(inst, 0x00, sizeof(*inst));
+
+	mutex_init(&inst->inst_cs);
+
+	init_waitqueue_head(&inst->kernel_event_queue);
+	inst->state = MSM_BA_DEV_UNINIT_DONE;
+	inst->dev_ctxt = dev_ctxt;
+
+	if (!list_empty(&(inst->dev_ctxt->v4l2_dev.subdevs)))
+		inst->sd = list_first_entry(&(inst->dev_ctxt->v4l2_dev.subdevs),
+			struct v4l2_subdev, list);
+
+	mutex_lock(&dev_ctxt->dev_cs);
+	list_add_tail(&inst->list, &dev_ctxt->instances);
+	mutex_unlock(&dev_ctxt->dev_cs);
+
+	dev_ctxt->state = BA_DEV_INIT;
+	dev_ctxt->state = BA_DEV_INIT_DONE;
+	inst->state = MSM_BA_DEV_INIT_DONE;
+	inst->sd_input.index = BA_RVC_IP;
+
+	inst->debugfs_root =
+		msm_ba_debugfs_init_inst(inst, dev_ctxt->debugfs_root);
+
+	setup_event_queue(inst, dev_ctxt->vdev);
 
 	return inst;
 }

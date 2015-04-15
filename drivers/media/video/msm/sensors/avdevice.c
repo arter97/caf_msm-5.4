@@ -58,16 +58,21 @@ static int32_t avdevice_ba_platform_probe(struct platform_device *pdev)
 		p_sensor_ctrl = &avdevice_a_s_ctrl[0];
 		ba_instance_handler_a[0] = msm_ba_open();
 		pr_debug("csi device %d %p...\n", pdev->id, p_sensor_ctrl);
+		msm_ba_s_output(ba_instance_handler_a[0], 1);
 	} else if (pdev->id == 1) {
 		p_sensor_ctrl = &avdevice_a_s_ctrl[1];
 		ba_instance_handler_a[1] = msm_ba_open();
 		pr_debug("csi device %d %p...\n", pdev->id, p_sensor_ctrl);
+		msm_ba_s_output(ba_instance_handler_a[1], 0);
 	} else {
 		pr_debug("device currently not supported...\n");
 		return 0;
 	}
 
 	p_sensor_ctrl->pdev = pdev;
+	pr_debug("avdevice probe sctrl %p pdev %p...", p_sensor_ctrl, pdev);
+	msm_sensor_platform_dev_probe(pdev, p_sensor_ctrl);
+
 	/* TO DO setup ba handler to map to actual device and video node*/
 	pr_debug("avdevice platform probe exit...\n");
 	return rc;
