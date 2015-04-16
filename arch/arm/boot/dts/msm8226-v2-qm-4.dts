@@ -44,7 +44,6 @@
 	spi@f9923000 {
 		status = "ok";
 		qcom,gpio-cs0  = <&msmgpio 2 0>;
-		qcom,gpio-cs1  = <&msmgpio 22 0>;
 	};
 
 	mdss_dsi0: qcom,mdss_dsi@fd922800 {
@@ -52,19 +51,6 @@
 		qcom,platform-supply-entry1 {
 			qcom,supply-min-voltage = <2850000>;
 			qcom,supply-max-voltage = <2850000>;
-		};
-	};
-
-	i2c@f9925000 {	/* BLSP-1 QUP-2 */
-		nfc-nci@e {
-			compatible = "qcom,nfc-nci";
-			reg = <0x0e>;
-			qcom,irq-gpio = <&msmgpio 21 0x00>;
-			qcom,dis-gpio = <&msmgpio 20 0x00>;
-			qcom,clk-src = "BBCLK2";
-			interrupt-parent = <&msmgpio>;
-			interrupts = <21 0>;
-			qcom,clk-gpio = <&pm8226_gpios 3 0>;
 		};
 	};
 
@@ -111,27 +97,6 @@
 		qcom,panel-maxy = <2080>;
 		qcom,key-codes = <139 102 158>;
 		qcom,y-offset = <0>;
-	};
-
-	gpio_keys {
-		compatible = "gpio-keys";
-		input-name = "gpio-keys";
-		vol_up {
-			label = "volume_up";
-			gpios = <&msmgpio 106 0x1>;
-			linux,input-type = <1>;
-			linux,code = <115>;
-			gpio-key,wakeup;
-			debounce-interval = <15>;
-		};
-		vol_down {
-			label = "volume_down";
-			gpios = <&msmgpio 107 0x1>;
-			linux,input-type = <1>;
-			linux,code = <116>;
-			gpio-key,wakeup;
-			debounce-interval = <15>;
-		};
 	};
 
 	sound {
