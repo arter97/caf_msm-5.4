@@ -45,6 +45,7 @@ struct ipa_install_fltr_rule_req_msg_v01
 int num_ipa_fltr_installed_notif_req_msg;
 struct ipa_fltr_installed_notif_req_msg_v01
 		ipa_fltr_installed_notif_req_msg_cache[MAX_NUM_QMI_RULE_CACHE];
+bool modem_cfg_emb_pipe_flt;
 };
 
 struct rmnet_mux_val {
@@ -64,6 +65,11 @@ int qmi_filter_request_send(struct ipa_install_fltr_rule_req_msg_v01 *req);
 
 /* sending filter-installed-notify-request to modem*/
 int qmi_filter_notify_send(struct ipa_fltr_installed_notif_req_msg_v01 *req);
+
+int qmi_enable_force_clear_datapath_send(
+	struct ipa_enable_force_clear_datapath_req_msg_v01 *req);
+int qmi_disable_force_clear_datapath_send(
+	struct ipa_disable_force_clear_datapath_req_msg_v01 *req);
 
 int copy_ul_filter_rule_to_ipa(struct ipa_install_fltr_rule_req_msg_v01
 		*rule_req, uint32_t *rule_hdl);

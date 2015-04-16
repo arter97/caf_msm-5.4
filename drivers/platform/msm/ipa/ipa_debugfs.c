@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -58,9 +58,12 @@ const char *ipa_event_name[] = {
 	__stringify(WLAN_CLIENT_CONNECT_EX),
 	__stringify(WLAN_SWITCH_TO_SCC),
 	__stringify(WLAN_SWITCH_TO_MCC),
+	__stringify(WLAN_WDI_ENABLE),
+	__stringify(WLAN_WDI_DISABLE),
 	__stringify(WAN_UPSTREAM_ROUTE_ADD),
 	__stringify(WAN_UPSTREAM_ROUTE_DEL),
 	__stringify(WAN_EMBMS_CONNECT),
+	__stringify(WAN_XLAT_CONNECT),
 	__stringify(ECM_CONNECT),
 	__stringify(ECM_DISCONNECT),
 };
@@ -1086,15 +1089,18 @@ static ssize_t ipa_read_wdi(struct file *file, char __user *ubuf,
 			"TX ringEmpty=%u\n"
 			"TX ringUsageHigh=%u\n"
 			"TX ringUsageLow=%u\n"
+			"TX RingUtilCount=%u\n"
 			"TX bamFifoFull=%u\n"
 			"TX bamFifoEmpty=%u\n"
 			"TX bamFifoUsageHigh=%u\n"
 			"TX bamFifoUsageLow=%u\n"
+			"TX bamUtilCount=%u\n"
 			"TX num_db=%u\n"
 			"TX num_unexpected_db=%u\n"
 			"TX num_bam_int_handled=%u\n"
 			"TX num_bam_int_in_non_runnning_state=%u\n"
-			"TX num_qmb_int_handled=%u\n",
+			"TX num_qmb_int_handled=%u\n"
+			"TX num_bam_int_handled_while_wait_for_bam=%u\n",
 			stats.tx_ch_stats.num_pkts_processed,
 			stats.tx_ch_stats.copy_engine_doorbell_value,
 			stats.tx_ch_stats.num_db_fired,
@@ -1102,15 +1108,19 @@ static ssize_t ipa_read_wdi(struct file *file, char __user *ubuf,
 			stats.tx_ch_stats.tx_comp_ring_stats.ringEmpty,
 			stats.tx_ch_stats.tx_comp_ring_stats.ringUsageHigh,
 			stats.tx_ch_stats.tx_comp_ring_stats.ringUsageLow,
+			stats.tx_ch_stats.tx_comp_ring_stats.RingUtilCount,
 			stats.tx_ch_stats.bam_stats.bamFifoFull,
 			stats.tx_ch_stats.bam_stats.bamFifoEmpty,
 			stats.tx_ch_stats.bam_stats.bamFifoUsageHigh,
 			stats.tx_ch_stats.bam_stats.bamFifoUsageLow,
+			stats.tx_ch_stats.bam_stats.bamUtilCount,
 			stats.tx_ch_stats.num_db,
 			stats.tx_ch_stats.num_unexpected_db,
 			stats.tx_ch_stats.num_bam_int_handled,
 			stats.tx_ch_stats.num_bam_int_in_non_runnning_state,
-			stats.tx_ch_stats.num_qmb_int_handled);
+			stats.tx_ch_stats.num_qmb_int_handled,
+			stats.tx_ch_stats.
+				num_bam_int_handled_while_wait_for_bam);
 		cnt += nbytes;
 		nbytes = scnprintf(dbg_buff + cnt, IPA_MAX_MSG_LEN - cnt,
 			"RX max_outstanding_pkts=%u\n"
@@ -1120,13 +1130,16 @@ static ssize_t ipa_read_wdi(struct file *file, char __user *ubuf,
 			"RX ringEmpty=%u\n"
 			"RX ringUsageHigh=%u\n"
 			"RX ringUsageLow=%u\n"
+			"RX RingUtilCount=%u\n"
 			"RX bamFifoFull=%u\n"
 			"RX bamFifoEmpty=%u\n"
 			"RX bamFifoUsageHigh=%u\n"
 			"RX bamFifoUsageLow=%u\n"
+			"RX bamUtilCount=%u\n"
 			"RX num_bam_int_handled=%u\n"
 			"RX num_db=%u\n"
 			"RX num_unexpected_db=%u\n"
+			"RX num_pkts_in_dis_uninit_state=%u\n"
 			"RX reserved1=%u\n"
 			"RX reserved2=%u\n",
 			stats.rx_ch_stats.max_outstanding_pkts,
@@ -1136,13 +1149,16 @@ static ssize_t ipa_read_wdi(struct file *file, char __user *ubuf,
 			stats.rx_ch_stats.rx_ind_ring_stats.ringEmpty,
 			stats.rx_ch_stats.rx_ind_ring_stats.ringUsageHigh,
 			stats.rx_ch_stats.rx_ind_ring_stats.ringUsageLow,
+			stats.rx_ch_stats.rx_ind_ring_stats.RingUtilCount,
 			stats.rx_ch_stats.bam_stats.bamFifoFull,
 			stats.rx_ch_stats.bam_stats.bamFifoEmpty,
 			stats.rx_ch_stats.bam_stats.bamFifoUsageHigh,
 			stats.rx_ch_stats.bam_stats.bamFifoUsageLow,
+			stats.rx_ch_stats.bam_stats.bamUtilCount,
 			stats.rx_ch_stats.num_bam_int_handled,
 			stats.rx_ch_stats.num_db,
 			stats.rx_ch_stats.num_unexpected_db,
+			stats.rx_ch_stats.num_pkts_in_dis_uninit_state,
 			stats.rx_ch_stats.reserved1,
 			stats.rx_ch_stats.reserved2);
 		cnt += nbytes;
@@ -1266,6 +1282,7 @@ static ssize_t ipa_read_nat4(struct file *file,
 	u32 tbl_size, *tmp;
 	u32 value, i, j, rule_id;
 	u16 enable, tbl_entry, flag;
+	u32 no_entrys = 0;
 
 	value = ipa_ctx->nat_mem.public_ip_addr;
 	pr_err(
@@ -1279,7 +1296,7 @@ static ssize_t ipa_read_nat4(struct file *file,
 				ipa_ctx->nat_mem.size_base_tables);
 
 	pr_err("Expansion Table Size:%d\n",
-				ipa_ctx->nat_mem.size_expansion_tables);
+				ipa_ctx->nat_mem.size_expansion_tables-1);
 
 	if (!ipa_ctx->nat_mem.is_sys_mem)
 		pr_err("Not supported for local(shared) memory\n");
@@ -1293,7 +1310,7 @@ static ssize_t ipa_read_nat4(struct file *file,
 
 			pr_err("\nBase Table:\n");
 		} else {
-			tbl_size = ipa_ctx->nat_mem.size_expansion_tables;
+			tbl_size = ipa_ctx->nat_mem.size_expansion_tables-1;
 			base_tbl =
 			 (u32 *)ipa_ctx->nat_mem.ipv4_expansion_rules_addr;
 
@@ -1307,6 +1324,7 @@ static ssize_t ipa_read_nat4(struct file *file,
 				enable = ((value & 0xFFFF0000) >> 16);
 
 				if (enable & NAT_ENTRY_ENABLE) {
+					no_entrys++;
 					pr_err("Rule:%d ", rule_id);
 
 					value = *tmp;
@@ -1391,7 +1409,7 @@ static ssize_t ipa_read_nat4(struct file *file,
 
 			pr_err("\nIndex Table:\n");
 		} else {
-			tbl_size = ipa_ctx->nat_mem.size_expansion_tables;
+			tbl_size = ipa_ctx->nat_mem.size_expansion_tables-1;
 			indx_tbl =
 			 (u32 *)ipa_ctx->nat_mem.index_table_expansion_addr;
 
@@ -1418,6 +1436,7 @@ static ssize_t ipa_read_nat4(struct file *file,
 			}
 		}
 	}
+	pr_err("Current No. Nat Entries: %d\n", no_entrys);
 
 	return 0;
 }

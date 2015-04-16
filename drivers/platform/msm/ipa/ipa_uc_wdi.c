@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,6 +27,8 @@
 #define IPA_WDI_ENABLED BIT(1)
 #define IPA_WDI_RESUMED BIT(2)
 #define IPA_UC_POLL_SLEEP_USEC 100
+
+static void ipa_uc_wdi_loaded_handler(void);
 
 /**
  * enum ipa_hw_2_cpu_wdi_events - Values that represent HW event to be sent to CPU.
@@ -399,15 +401,18 @@ int ipa_get_wdi_stats(struct IpaHwStatsWDIInfoData_t *stats)
 	TX_STATS(tx_comp_ring_stats.ringEmpty);
 	TX_STATS(tx_comp_ring_stats.ringUsageHigh);
 	TX_STATS(tx_comp_ring_stats.ringUsageLow);
+	TX_STATS(tx_comp_ring_stats.RingUtilCount);
 	TX_STATS(bam_stats.bamFifoFull);
 	TX_STATS(bam_stats.bamFifoEmpty);
 	TX_STATS(bam_stats.bamFifoUsageHigh);
 	TX_STATS(bam_stats.bamFifoUsageLow);
+	TX_STATS(bam_stats.bamUtilCount);
 	TX_STATS(num_db);
 	TX_STATS(num_unexpected_db);
 	TX_STATS(num_bam_int_handled);
 	TX_STATS(num_bam_int_in_non_runnning_state);
 	TX_STATS(num_qmb_int_handled);
+	TX_STATS(num_bam_int_handled_while_wait_for_bam);
 
 	RX_STATS(max_outstanding_pkts);
 	RX_STATS(num_pkts_processed);
@@ -416,13 +421,16 @@ int ipa_get_wdi_stats(struct IpaHwStatsWDIInfoData_t *stats)
 	RX_STATS(rx_ind_ring_stats.ringEmpty);
 	RX_STATS(rx_ind_ring_stats.ringUsageHigh);
 	RX_STATS(rx_ind_ring_stats.ringUsageLow);
+	RX_STATS(rx_ind_ring_stats.RingUtilCount);
 	RX_STATS(bam_stats.bamFifoFull);
 	RX_STATS(bam_stats.bamFifoEmpty);
 	RX_STATS(bam_stats.bamFifoUsageHigh);
 	RX_STATS(bam_stats.bamFifoUsageLow);
+	RX_STATS(bam_stats.bamUtilCount);
 	RX_STATS(num_bam_int_handled);
 	RX_STATS(num_db);
 	RX_STATS(num_unexpected_db);
+	RX_STATS(num_pkts_in_dis_uninit_state);
 	RX_STATS(reserved1);
 	RX_STATS(reserved2);
 
@@ -448,6 +456,8 @@ int ipa_wdi_init(void)
 	uc_wdi_cbs.ipa_uc_event_hdlr = ipa_uc_wdi_event_handler;
 	uc_wdi_cbs.ipa_uc_event_log_info_hdlr =
 		ipa_uc_wdi_event_log_info_handler;
+	uc_wdi_cbs.ipa_uc_loaded_hdlr =
+		ipa_uc_wdi_loaded_handler;
 
 	ipa_uc_register_handlers(IPA_HW_FEATURE_WDI, &uc_wdi_cbs);
 
@@ -1067,4 +1077,108 @@ int ipa_write_qmapid_wdi_pipe(u32 clnt_hdl, u8 qmap_id)
 
 uc_timeout:
 	return result;
+}
+
+/**
+ * ipa_uc_reg_rdyCB() - To register uC
+ * ready CB if uC not ready
+ * @inout:	[in/out] input/ouput parameters
+ * from/to client
+ *
+ * Returns:	0 on success, negative on failure
+ *
+ */
+int ipa_uc_reg_rdyCB(
+	struct ipa_wdi_uc_ready_params *inout)
+{
+	int result = 0;
+
+	if (inout == NULL) {
+		IPAERR("bad parm. inout=%p ", inout);
+		return -EINVAL;
+	}
+
+	result = ipa_uc_state_check();
+	if (result) {
+		inout->is_uC_ready = false;
+		ipa_ctx->uc_wdi_ctx.uc_ready_cb = inout->notify;
+		ipa_ctx->uc_wdi_ctx.priv = inout->priv;
+	} else {
+		inout->is_uC_ready = true;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(ipa_uc_reg_rdyCB);
+
+
+/**
+ * ipa_uc_wdi_get_dbpa() - To retrieve
+ * doorbell physical address of wlan pipes
+ * @param:  [in/out] input/ouput parameters
+ *          from/to client
+ *
+ * Returns:	0 on success, negative on failure
+ *
+ */
+int ipa_uc_wdi_get_dbpa(
+	struct ipa_wdi_db_params *param)
+{
+	if (param == NULL || param->client >= IPA_CLIENT_MAX) {
+		IPAERR("bad parm. param=%p ", param);
+		if (param)
+			IPAERR("client = %d\n", param->client);
+		return -EINVAL;
+	}
+
+	if (IPA_CLIENT_IS_CONS(param->client)) {
+		if (ipa_ctx->ipa_hw_type == IPA_HW_v2_5) {
+				param->uc_door_bell_pa =
+				 ipa_ctx->ipa_wrapper_base +
+					IPA_REG_BASE_OFST_v2_5 +
+				   IPA_UC_MAILBOX_m_n_OFFS_v2_5(
+				    IPA_HW_WDI_TX_MBOX_START_INDEX/32,
+				    IPA_HW_WDI_TX_MBOX_START_INDEX % 32);
+		} else {
+				param->uc_door_bell_pa =
+				 ipa_ctx->ipa_wrapper_base +
+					IPA_REG_BASE_OFST_v2_0 +
+				   IPA_UC_MAILBOX_m_n_OFFS(
+				    IPA_HW_WDI_TX_MBOX_START_INDEX/32,
+				    IPA_HW_WDI_TX_MBOX_START_INDEX % 32);
+		}
+	} else {
+		if (ipa_ctx->ipa_hw_type == IPA_HW_v2_5) {
+				param->uc_door_bell_pa =
+				 ipa_ctx->ipa_wrapper_base +
+					IPA_REG_BASE_OFST_v2_5 +
+				   IPA_UC_MAILBOX_m_n_OFFS_v2_5(
+				    IPA_HW_WDI_RX_MBOX_START_INDEX/32,
+				    IPA_HW_WDI_RX_MBOX_START_INDEX % 32);
+		} else {
+				param->uc_door_bell_pa =
+				 ipa_ctx->ipa_wrapper_base +
+					IPA_REG_BASE_OFST_v2_0 +
+				   IPA_UC_MAILBOX_m_n_OFFS(
+				    IPA_HW_WDI_RX_MBOX_START_INDEX/32,
+				    IPA_HW_WDI_RX_MBOX_START_INDEX % 32);
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(ipa_uc_wdi_get_dbpa);
+
+static void ipa_uc_wdi_loaded_handler(void)
+{
+	if (!ipa_ctx) {
+		IPAERR("IPA ctx is null\n");
+		return;
+	}
+
+	if (ipa_ctx->uc_wdi_ctx.uc_ready_cb)
+		ipa_ctx->uc_wdi_ctx.uc_ready_cb(
+			ipa_ctx->uc_wdi_ctx.priv);
+
+	return;
 }

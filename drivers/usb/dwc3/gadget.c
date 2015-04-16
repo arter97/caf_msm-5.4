@@ -1686,8 +1686,9 @@ static void dwc3_gadget_wakeup_work(struct work_struct *w)
 	dwc = dwc3_gadget->dwc;
 
 	if (atomic_read(&dwc->in_lpm)) {
-		dbg_event(0xFF, "Gdgwake gsyn", 0);
 		pm_runtime_get_sync(dwc->dev);
+		dbg_event(0xFF, "Gdgwake gsyn",
+			atomic_read(&dwc->dev->power.usage_count));
 	}
 
 	ret = dwc3_gadget_wakeup_int(dwc);
@@ -1767,10 +1768,15 @@ static int dwc3_gadget_wakeup_int(struct dwc3 *dwc)
 
 	spin_unlock_irqrestore(&dwc->lock, flags);
 	enable_irq(dwc->irq);
+
+	/*
+	 * Have bigger value (16 sec) for timeout since some host PCs driving
+	 * resume for very long time (e.g. 8 sec)
+	 */
 	ret = wait_event_interruptible_timeout(dwc->wait_linkstate,
 			(dwc->link_state < DWC3_LINK_STATE_U3) ||
 			(dwc->link_state == DWC3_LINK_STATE_SS_DIS),
-			msecs_to_jiffies(3000)); /* 3 seconds */
+			msecs_to_jiffies(16000));
 
 	spin_lock_irqsave(&dwc->lock, flags);
 	/* Disable link status change event */
@@ -1951,25 +1957,15 @@ static int dwc3_gadget_vbus_draw(struct usb_gadget *g, unsigned mA)
 static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 {
 	struct dwc3		*dwc = gadget_to_dwc(g);
-	struct dwc3_usb_gadget *dwc3_gadget = g->private;
 	unsigned long		flags;
 	int			ret;
-	unsigned long		timeout;
 
 	is_on = !!is_on;
-
-	spin_lock_irqsave(&dwc->lock, flags);
-
-	/* If pending suspend, abort this suspend. */
-	if (dwc->enable_bus_suspend)
-		usb_phy_set_suspend(dwc->dotg->otg.phy, 0);
 
 	dwc->softconnect = is_on;
 
 	if ((dwc->dotg && !dwc->vbus_active) ||
 		!dwc->gadget_driver) {
-
-		spin_unlock_irqrestore(&dwc->lock, flags);
 
 		/*
 		 * Need to wait for vbus_session(on) from otg driver or to
@@ -1978,48 +1974,29 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 		return 0;
 	}
 
-	/*
-	 * This insures that the core is not in LPM during the pullup
-	 * on/off toggling.
-	 */
-	spin_unlock_irqrestore(&dwc->lock, flags);
-	if (atomic_read(&dwc->in_lpm) && !is_on) {
-		dbg_event(0xFF, "Gdgpull gsyn", 0);
-		pm_runtime_get_sync(dwc->dev);
-		if (dwc3_gadget)
-			dwc3_gadget->disable_during_lpm = true;
-		goto set_run_stop;
-	}
+	pm_runtime_get_sync(dwc->dev);
+	dbg_event(0xFF, "Pullup gsync",
+		atomic_read(&dwc->dev->power.usage_count));
 
-	if (is_on && dwc3_gadget && dwc3_gadget->disable_during_lpm) {
-		dbg_event(0xFF, "Gdgpull psyn", 0);
-		pm_runtime_put_sync(dwc->dev);
-		if (dwc3_gadget)
-			dwc3_gadget->disable_during_lpm = false;
-		goto set_run_stop;
-	}
-
-	if (atomic_read(&dwc->in_lpm)) {
-		pm_runtime_resume(dwc->dev);
-		timeout = jiffies + msecs_to_jiffies(20);
-		do {
-			if (!atomic_read(&dwc->in_lpm))
-				break;
-
-			if (time_after(jiffies, timeout)) {
-				pr_err("%s(): Err getting pullup\n", __func__);
-				return -ETIMEDOUT;
-			}
-			usleep_range(2, 5);
-		} while (true);
-	}
-
-set_run_stop:
 	spin_lock_irqsave(&dwc->lock, flags);
+
+	/*
+	 * If we are here after bus suspend notify otg state machine to
+	 * increment pm usage count of dwc to prevent pm_runtime_suspend
+	 * during enumeration.
+	 */
+	dev_dbg(dwc->dev, "Notify OTG from %s\n", __func__);
+	dwc->b_suspend = false;
+	dwc3_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_OTG_EVENT);
+
 
 	ret = dwc3_gadget_run_stop(dwc, is_on);
 
 	spin_unlock_irqrestore(&dwc->lock, flags);
+
+	pm_runtime_put_noidle(dwc->dev);
+	dbg_event(0xFF, "Pullup put",
+		atomic_read(&dwc->dev->power.usage_count));
 
 	return ret;
 }
@@ -2205,8 +2182,9 @@ static int dwc3_gadget_start(struct usb_gadget *g,
 	int			ret = 0;
 	int			irq;
 
-	dbg_event(0xFF, "GdgStrt Begin", 0);
 	pm_runtime_get_sync(dwc->dev);
+	dbg_event(0xFF, "GdgStrt Begin",
+		atomic_read(&dwc->dev->power.usage_count));
 	irq = platform_get_irq(to_platform_device(dwc->dev), 0);
 	dwc->irq = irq;
 	ret = request_irq(irq, dwc3_interrupt, IRQF_SHARED, "dwc3", dwc);
@@ -2242,13 +2220,16 @@ static int dwc3_gadget_start(struct usb_gadget *g,
 
 	spin_unlock_irqrestore(&dwc->lock, flags);
 	pm_runtime_put(dwc->dev);
-	dbg_event(0xFF, "GdgStrt End", 0);
+	dbg_event(0xFF, "GdgStrt End",
+		atomic_read(&dwc->dev->power.usage_count));
 
 	return 0;
 
 err1:
 	spin_unlock_irqrestore(&dwc->lock, flags);
 	pm_runtime_put(dwc->dev);
+	dbg_event(0xFF, "GdgStrt Err",
+		atomic_read(&dwc->dev->power.usage_count));
 
 err0:
 	free_irq(irq, dwc);
@@ -2915,11 +2896,9 @@ static void dwc3_gadget_disconnect_interrupt(struct dwc3 *dwc)
 {
 	int			reg;
 
-	dev_vdbg(dwc->dev, "%s\n", __func__);
-
-	/* Clear OTG suspend state */
-	if (dwc->enable_bus_suspend)
-		usb_phy_set_suspend(dwc->dotg->otg.phy, 0);
+	dev_dbg(dwc->dev, "Notify OTG from %s\n", __func__);
+	dwc->b_suspend = false;
+	dwc3_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_OTG_EVENT);
 
 	reg = dwc3_readl(dwc->regs, DWC3_DCTL);
 	reg &= ~DWC3_DCTL_INITU1ENA;
@@ -2950,6 +2929,19 @@ void dwc3_gadget_usb3_phy_suspend(struct dwc3 *dwc, int suspend)
 		reg &= ~DWC3_GUSB3PIPECTL_SUSPHY;
 
 	dwc3_writel(dwc->regs, DWC3_GUSB3PIPECTL(0), reg);
+}
+void dwc3_gadget_usb2_phy_suspend(struct dwc3 *dwc, int suspend)
+{
+	u32	reg;
+
+	reg = dwc3_readl(dwc->regs, DWC3_GUSB2PHYCFG(0));
+
+	if (suspend)
+		reg |= (DWC3_GUSB2PHYCFG_ENBLSLPM | DWC3_GUSB2PHYCFG_SUSPHY);
+	else
+		reg &= ~(DWC3_GUSB2PHYCFG_ENBLSLPM | DWC3_GUSB2PHYCFG_SUSPHY);
+
+	dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(0), reg);
 }
 
 static void dwc3_gadget_reset_interrupt(struct dwc3 *dwc)
@@ -2990,14 +2982,15 @@ static void dwc3_gadget_reset_interrupt(struct dwc3 *dwc)
 			dwc3_gadget_disconnect_interrupt(dwc);
 	}
 
-	/* Clear OTG suspend state */
-	if (dwc->enable_bus_suspend)
-		usb_phy_set_suspend(dwc->dotg->otg.phy, 0);
+	dev_dbg(dwc->dev, "Notify OTG from %s\n", __func__);
+	dwc->b_suspend = false;
+	dwc3_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_OTG_EVENT);
 
 	dbg_event(0xFF, "BUS RST", 0);
 	/* after reset -> Default State */
 	usb_gadget_set_state(&dwc->gadget, USB_STATE_DEFAULT);
 
+	dwc3_gadget_usb2_phy_suspend(dwc, false);
 	dwc3_gadget_usb3_phy_suspend(dwc, false);
 
 	if (dotg && dotg->otg.phy)
@@ -3131,9 +3124,15 @@ static void dwc3_gadget_conndone_interrupt(struct dwc3 *dwc)
 		dwc3_writel(dwc->regs, DWC3_DCTL, reg);
 	}
 
-	if (dwc->gadget.speed != USB_SPEED_SUPER)
-		/* Suspend unneeded PHY */
-		dwc3_gadget_usb3_phy_suspend(dwc, true);
+	/* suspend HS phy in super speed mode */
+	if (dwc->gadget.speed == USB_SPEED_SUPER)
+		dwc3_gadget_usb2_phy_suspend(dwc, true);
+
+	/*
+	 * In HS mode this allows SS phy suspend. In SS mode this allows ss phy
+	 * suspend in P3 state and generates IN_P3 power event irq.
+	 */
+	dwc3_gadget_usb3_phy_suspend(dwc, true);
 
 	dep = dwc->eps[0];
 	ret = __dwc3_gadget_ep_enable(dep, &dwc3_gadget_ep0_desc, NULL, true);
@@ -3179,9 +3178,16 @@ static void dwc3_gadget_wakeup_interrupt(struct dwc3 *dwc, bool remote_wakeup)
 	if (perform_resume) {
 		dbg_event(0xFF, "WAKEUP", 0);
 
-		/* Clear OTG suspend state */
-		if (dwc->enable_bus_suspend)
-			usb_phy_set_suspend(dwc->dotg->otg.phy, 0);
+		/*
+		 * In case of remote wake up dwc3_gadget_wakeup_work()
+		 * is doing pm_runtime_get_sync().
+		 */
+		if (!remote_wakeup) {
+			dev_dbg(dwc->dev, "Notify OTG from %s\n", __func__);
+			dwc->b_suspend = false;
+			dwc3_notify_event(dwc,
+					DWC3_CONTROLLER_NOTIFY_OTG_EVENT);
+		}
 
 		/* restart bulk-out timer if needed */
 		dwc3_restart_hrtimer(dwc);
@@ -3323,16 +3329,9 @@ static void dwc3_gadget_suspend_interrupt(struct dwc3 *dwc,
 		dwc->gadget_driver->suspend(&dwc->gadget);
 		spin_lock(&dwc->lock);
 
-		if (dwc->enable_bus_suspend) {
-			/*
-			 * Set OTG suspend state and schedule OTG state machine
-			 * work
-			 */
-			dev_dbg(dwc->dev, "%s: Triggering OTG suspend\n",
-				__func__);
-
-			usb_phy_set_suspend(dwc->dotg->otg.phy, 1);
-		}
+		dev_dbg(dwc->dev, "Notify OTG from %s\n", __func__);
+		dwc->b_suspend = true;
+		dwc3_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_OTG_EVENT);
 	}
 
 	dwc->link_state = next;

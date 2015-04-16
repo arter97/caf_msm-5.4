@@ -46,7 +46,7 @@ struct dwc3_otg {
 	struct dwc3_ext_xceiv	*ext_xceiv;
 #define ID		 0
 #define B_SESS_VLD	 1
-#define DWC3_OTG_SUSPEND 2
+#define B_SUSPEND	2
 	unsigned long inputs;
 	struct power_supply	*psy;
 	struct completion	dwc3_xcvr_vbus_init;
@@ -94,12 +94,6 @@ struct dwc3_charger {
 /* for external charger driver */
 extern int dwc3_set_charger(struct usb_otg *otg, struct dwc3_charger *charger);
 
-enum dwc3_ext_events {
-	DWC3_EVENT_NONE = 0,		/* no change event */
-	DWC3_EVENT_PHY_RESUME,		/* PHY has come out of LPM */
-	DWC3_EVENT_XCEIV_STATE,		/* XCEIV state (id/bsv) has changed */
-};
-
 enum dwc3_id_state {
 	DWC3_ID_GROUND = 0,
 	DWC3_ID_FLOAT,
@@ -110,10 +104,10 @@ struct dwc3_ext_xceiv {
 	enum dwc3_id_state	id;
 	bool			bsv;
 	bool			otg_capability;
+	bool			suspend;
 
 	/* to notify OTG about LPM exit event, provided by OTG */
-	void	(*notify_ext_events)(struct usb_otg *otg,
-					enum dwc3_ext_events ext_event);
+	void	(*notify_ext_events)(struct usb_otg *otg);
 	/* for block reset USB core */
 	void	(*ext_block_reset)(struct dwc3_ext_xceiv *ext_xceiv,
 					bool core_reset);

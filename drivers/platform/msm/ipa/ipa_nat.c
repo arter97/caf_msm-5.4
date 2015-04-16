@@ -303,27 +303,93 @@ bail:
  */
 int ipa_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 {
+#define TBL_ENTRY_SIZE 32
+#define INDX_TBL_ENTRY_SIZE 4
+
 	struct ipa_register_write *reg_write_nop;
 	struct ipa_desc desc[2];
 	struct ipa_ip_v4_nat_init *cmd;
 	u16 size = sizeof(struct ipa_ip_v4_nat_init);
 	int result;
 	u32 offset = 0;
+	size_t tmp;
 
 	IPADBG("\n");
 	if (init->table_entries == 0) {
-		IPADBG("Table index or entries is zero\n");
-		result = -EPERM;
-		goto bail;
+		IPADBG("Table entries is zero\n");
+		return -EPERM;
 	}
 
-	if (init->ipv4_rules_offset >= ipa_ctx->nat_mem.size ||
-	    init->index_offset >= ipa_ctx->nat_mem.size ||
-	    init->expn_rules_offset >= ipa_ctx->nat_mem.size ||
-	    init->index_expn_offset >= ipa_ctx->nat_mem.size) {
-		IPAERR("Table rules offset are not valid\n");
-		result = -EPERM;
-		goto bail;
+	/* check for integer overflow */
+	if (init->ipv4_rules_offset >
+		UINT_MAX - (TBL_ENTRY_SIZE * (init->table_entries + 1))) {
+			IPAERR("Detected overflow\n");
+			return -EPERM;
+	}
+	/* Check Table Entry offset is not
+	   beyond allocated size */
+	tmp = init->ipv4_rules_offset +
+		(TBL_ENTRY_SIZE * (init->table_entries + 1));
+	if (tmp > ipa_ctx->nat_mem.size) {
+		IPAERR("Table rules offset not valid\n");
+		IPAERR("offset:%d entrys:%d size:%zu mem_size:%zu\n",
+			init->ipv4_rules_offset, (init->table_entries + 1),
+			tmp, ipa_ctx->nat_mem.size);
+		return -EPERM;
+	}
+
+	/* check for integer overflow */
+	if (init->expn_rules_offset >
+		UINT_MAX - (TBL_ENTRY_SIZE * init->expn_table_entries)) {
+			IPAERR("Detected overflow\n");
+			return -EPERM;
+	}
+	/* Check Expn Table Entry offset is not
+	   beyond allocated size */
+	tmp = init->expn_rules_offset +
+		(TBL_ENTRY_SIZE * init->expn_table_entries);
+	if (tmp > ipa_ctx->nat_mem.size) {
+		IPAERR("Expn Table rules offset not valid\n");
+		IPAERR("offset:%d entrys:%d size:%zu mem_size:%zu\n",
+			init->expn_rules_offset, init->expn_table_entries,
+			tmp, ipa_ctx->nat_mem.size);
+		return -EPERM;
+	}
+
+  /* check for integer overflow */
+	if (init->index_offset >
+		UINT_MAX - (INDX_TBL_ENTRY_SIZE * (init->table_entries + 1))) {
+			IPAERR("Detected overflow\n");
+			return -EPERM;
+	}
+	/* Check Indx Table Entry offset is not
+	   beyond allocated size */
+	tmp = init->index_offset +
+		(INDX_TBL_ENTRY_SIZE * (init->table_entries + 1));
+	if (tmp > ipa_ctx->nat_mem.size) {
+		IPAERR("Indx Table rules offset not valid\n");
+		IPAERR("offset:%d entrys:%d size:%zu mem_size:%zu\n",
+			init->index_offset, (init->table_entries + 1),
+			tmp, ipa_ctx->nat_mem.size);
+		return -EPERM;
+	}
+
+  /* check for integer overflow */
+	if (init->index_expn_offset >
+		UINT_MAX - (INDX_TBL_ENTRY_SIZE * init->expn_table_entries)) {
+			IPAERR("Detected overflow\n");
+			return -EPERM;
+	}
+	/* Check Expn Table entry offset is not
+	   beyond allocated size */
+	tmp = init->index_expn_offset +
+		(INDX_TBL_ENTRY_SIZE * init->expn_table_entries);
+	if (tmp > ipa_ctx->nat_mem.size) {
+		IPAERR("Indx Expn Table rules offset not valid\n");
+		IPAERR("offset:%d entrys:%d size:%zu mem_size:%zu\n",
+			init->index_expn_offset, init->expn_table_entries,
+			tmp, ipa_ctx->nat_mem.size);
+		return -EPERM;
 	}
 
 	memset(&desc, 0, sizeof(desc));
@@ -362,9 +428,9 @@ int ipa_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 		offset = UINT_MAX - ipa_ctx->nat_mem.dma_handle;
 
 		if ((init->ipv4_rules_offset > offset) ||
-			(init->expn_rules_offset > offset) ||
-			(init->index_offset > offset) ||
-			(init->index_expn_offset > offset)) {
+				(init->expn_rules_offset > offset) ||
+				(init->index_offset > offset) ||
+				(init->index_expn_offset > offset)) {
 			IPAERR("Failed due to integer overflow\n");
 			IPAERR("nat.mem.dma_handle: 0x%pa\n",
 				&ipa_ctx->nat_mem.dma_handle);
@@ -484,6 +550,9 @@ bail:
  */
 int ipa_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 {
+#define NUM_OF_DESC 2
+
+	struct ipa_register_write *reg_write_nop = NULL;
 	struct ipa_nat_dma *cmd = NULL;
 	struct ipa_desc *desc = NULL;
 	u16 size = 0, cnt = 0;
@@ -491,47 +560,75 @@ int ipa_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 
 	IPADBG("\n");
 	if (dma->entries <= 0) {
-		IPADBG("Invalid number of commands\n");
+		IPAERR("Invalid number of commands %d\n",
+			dma->entries);
 		ret = -EPERM;
 		goto bail;
 	}
-	size = sizeof(struct ipa_desc) * dma->entries;
+
+	size = sizeof(struct ipa_desc) * NUM_OF_DESC;
 	desc = kzalloc(size, GFP_KERNEL);
 	if (desc == NULL) {
 		IPAERR("Failed to alloc memory\n");
 		ret = -ENOMEM;
 		goto bail;
 	}
-	size = sizeof(struct ipa_nat_dma) * dma->entries;
-	cmd = kmalloc(size, GFP_KERNEL);
+
+	size = sizeof(struct ipa_nat_dma);
+	cmd = kzalloc(size, GFP_KERNEL);
 	if (cmd == NULL) {
 		IPAERR("Failed to alloc memory\n");
 		ret = -ENOMEM;
 		goto bail;
 	}
+
+	/* NO-OP IC for ensuring that IPA pipeline is empty */
+	reg_write_nop = kzalloc(sizeof(*reg_write_nop), GFP_KERNEL);
+	if (!reg_write_nop) {
+		IPAERR("Failed to alloc memory\n");
+		ret = -ENOMEM;
+		goto bail;
+	}
+
+	reg_write_nop->skip_pipeline_clear = 0;
+	reg_write_nop->value_mask = 0x0;
+
+	desc[0].type = IPA_IMM_CMD_DESC;
+	desc[0].opcode = IPA_REGISTER_WRITE;
+	desc[0].callback = NULL;
+	desc[0].user1 = NULL;
+	desc[0].user2 = 0;
+	desc[0].len = sizeof(*reg_write_nop);
+	desc[0].pyld = (void *)reg_write_nop;
+
 	for (cnt = 0; cnt < dma->entries; cnt++) {
-		cmd[cnt].table_index = dma->dma[cnt].table_index;
-		cmd[cnt].base_addr = dma->dma[cnt].base_addr;
-		cmd[cnt].offset = dma->dma[cnt].offset;
-		cmd[cnt].data = dma->dma[cnt].data;
-		desc[cnt].type = IPA_IMM_CMD_DESC;
-		desc[cnt].opcode = IPA_NAT_DMA;
-		desc[cnt].callback = NULL;
-		desc[cnt].user1 = NULL;
+		cmd->table_index = dma->dma[cnt].table_index;
+		cmd->base_addr = dma->dma[cnt].base_addr;
+		cmd->offset = dma->dma[cnt].offset;
+		cmd->data = dma->dma[cnt].data;
 
-		desc[cnt].user2 = 0;
+		desc[1].type = IPA_IMM_CMD_DESC;
+		desc[1].opcode = IPA_NAT_DMA;
+		desc[1].callback = NULL;
+		desc[1].user1 = NULL;
+		desc[1].user2 = 0;
+		desc[1].len = sizeof(struct ipa_nat_dma);
+		desc[1].pyld = (void *)cmd;
 
-		desc[cnt].len = sizeof(struct ipa_nat_dma);
-		desc[cnt].pyld = (void *)&cmd[cnt];
-
-		ret = ipa_send_cmd(1, &desc[cnt]);
+		ret = ipa_send_cmd(NUM_OF_DESC, desc);
 		if (ret == -EPERM)
 			IPAERR("Fail to send immediate command %d\n", cnt);
 	}
 
 bail:
-	kfree(cmd);
-	kfree(desc);
+	if (cmd != NULL)
+		kfree(cmd);
+
+	if (desc != NULL)
+		kfree(desc);
+
+	if (reg_write_nop != NULL)
+		kfree(reg_write_nop);
 
 	return ret;
 }

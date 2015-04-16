@@ -37,6 +37,7 @@ int ipa_rm_prod_index(enum ipa_rm_resource_name resource_name)
 	case IPA_RM_RESOURCE_WWAN_0_PROD:
 	case IPA_RM_RESOURCE_WLAN_PROD:
 	case IPA_RM_RESOURCE_ODU_ADAPT_PROD:
+	case IPA_RM_RESOURCE_MHI_PROD:
 		break;
 	default:
 		result = IPA_RM_INDEX_INVALID;
@@ -66,6 +67,7 @@ int ipa_rm_cons_index(enum ipa_rm_resource_name resource_name)
 	case IPA_RM_RESOURCE_WLAN_CONS:
 	case IPA_RM_RESOURCE_APPS_CONS:
 	case IPA_RM_RESOURCE_ODU_ADAPT_CONS:
+	case IPA_RM_RESOURCE_MHI_CONS:
 		break;
 	default:
 		result = IPA_RM_INDEX_INVALID;
@@ -653,8 +655,8 @@ bail:
  * @depends_on: [in] depends_on resource
  *
  * Returns: 0 on success, negative on failure
- * EINPROGRESS is returned in case this is the last dependency
- * of given resource and IPA RM client should receive the RELEASED cb
+ * In case the resource state was changed, a notification
+ * will be sent to the RM client
  */
 int ipa_rm_resource_delete_dependency(struct ipa_rm_resource *resource,
 				   struct ipa_rm_resource *depends_on)
@@ -720,13 +722,11 @@ int ipa_rm_resource_delete_dependency(struct ipa_rm_resource *resource,
 		result = -EINVAL;
 		goto bail;
 	}
-	if (state_changed &&
-		ipa_rm_peers_list_has_last_peer(resource->peers_list)) {
+	if (state_changed) {
 		(void) ipa_rm_wq_send_cmd(IPA_RM_WQ_NOTIFY_PROD,
 				resource->name,
 				evt,
 				false);
-		result = -EINPROGRESS;
 	}
 	IPA_RM_DBG("%s new state: %d\n", ipa_rm_resource_str(resource->name),
 					resource->state);

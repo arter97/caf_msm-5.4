@@ -734,6 +734,7 @@ struct dwc3_scratchpad_array {
 #define DWC3_CORE_PM_RESUME_EVENT			6
 #define DWC3_CONTROLLER_POST_INITIALIZATION_EVENT	7
 #define DWC3_CONTROLLER_CONNDONE_EVENT			8
+#define DWC3_CONTROLLER_NOTIFY_OTG_EVENT		9
 
 #define MAX_INTR_STATS				10
 /**
@@ -915,6 +916,7 @@ struct dwc3 {
 	u8			hird_thresh;
 	u8			lpm_nyet_thresh;
 	atomic_t		in_lpm;
+	bool			b_suspend;
 	struct dwc3_gadget_events	dbg_gadget_events;
 
 	/* offload IRQ handling to tasklet */
@@ -925,6 +927,7 @@ struct dwc3 {
 	unsigned                bh_handled_evt_cnt[MAX_INTR_STATS];
 	unsigned                bh_dbg_index;
 	ktime_t			irq_start_time[MAX_INTR_STATS];
+	ktime_t			t_pwr_evt_irq;
 	unsigned                irq_completion_time[MAX_INTR_STATS];
 	unsigned                irq_event_count[MAX_INTR_STATS];
 	unsigned                irq_dbg_index;
@@ -1097,6 +1100,7 @@ void dwc3_gadget_complete(struct dwc3 *dwc);
 int dwc3_gadget_suspend(struct dwc3 *dwc);
 int dwc3_gadget_resume(struct dwc3 *dwc);
 void dwc3_gadget_usb3_phy_suspend(struct dwc3 *dwc, int suspend);
+void dwc3_gadget_usb2_phy_suspend(struct dwc3 *dwc, int suspend);
 #else
 static inline int dwc3_gadget_prepare(struct dwc3 *dwc)
 {
@@ -1118,6 +1122,7 @@ static inline int dwc3_gadget_resume(struct dwc3 *dwc)
 }
 
 static void dwc3_gadget_usb3_phy_suspend(struct dwc3 *dwc, int suspend) { }
+static void dwc3_gadget_usb2_phy_suspend(struct dwc3 *dwc, int suspend) { }
 #endif /* !IS_ENABLED(CONFIG_USB_DWC3_HOST) */
 
 void dwc3_gadget_restart(struct dwc3 *dwc);

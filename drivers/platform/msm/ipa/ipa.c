@@ -64,7 +64,7 @@
 #define IPA_Q6_CLEANUP_EXP_AGGR_MAX_CMDS \
 	(IPA_NUM_PIPES*2) \
 
-#define IPA_SPS_PROD_TIMEOUT_MSEC 1000
+#define IPA_SPS_PROD_TIMEOUT_MSEC 100
 
 #ifdef CONFIG_COMPAT
 #define IPA_IOC_ADD_HDR32 _IOWR(IPA_IOC_MAGIC, \
@@ -2607,7 +2607,7 @@ int ipa_set_required_perf_profile(enum ipa_voltage_level floor_voltage,
 
 	if (ipa_ctx->enable_clock_scaling) {
 		IPADBG("Clock scaling is enabled\n");
-		if (bandwidth_mbps > ipa_ctx->ctrl->clock_scaling_bw_threshold)
+		if (bandwidth_mbps >= ipa_ctx->ctrl->clock_scaling_bw_threshold)
 			needed_voltage = IPA_VOLTAGE_NOMINAL;
 		else
 			needed_voltage = IPA_VOLTAGE_SVS;
@@ -2961,6 +2961,7 @@ static int ipa_init(const struct ipa_plat_drv_res *resource_p,
 	ipa_ctx->ipa_hw_mode = resource_p->ipa_hw_mode;
 	ipa_ctx->use_ipa_teth_bridge = resource_p->use_ipa_teth_bridge;
 	ipa_ctx->ipa_bam_remote_mode = resource_p->ipa_bam_remote_mode;
+	ipa_ctx->modem_cfg_emb_pipe_flt = resource_p->modem_cfg_emb_pipe_flt;
 
 	/* default aggregation parameters */
 	ipa_ctx->aggregation_type = IPA_MBIM_16;
@@ -3458,6 +3459,7 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 	ipa_drv_res->ipa_hw_type = 0;
 	ipa_drv_res->ipa_hw_mode = 0;
 	ipa_drv_res->ipa_bam_remote_mode = false;
+	ipa_drv_res->modem_cfg_emb_pipe_flt = false;
 
 	/* Get IPA HW Version */
 	result = of_property_read_u32(pdev->dev.of_node, "qcom,ipa-hw-ver",
@@ -3489,6 +3491,13 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 			"qcom,ipa-bam-remote-mode");
 	IPADBG(": ipa bam remote mode = %s\n",
 			ipa_drv_res->ipa_bam_remote_mode
+			? "True" : "False");
+
+	ipa_drv_res->modem_cfg_emb_pipe_flt =
+			of_property_read_bool(pdev->dev.of_node,
+			"qcom,modem-cfg-emb-pipe-flt");
+	IPADBG(": modem configure embedded pipe filtering = %s\n",
+			ipa_drv_res->modem_cfg_emb_pipe_flt
 			? "True" : "False");
 
 	/* Get IPA wrapper address */

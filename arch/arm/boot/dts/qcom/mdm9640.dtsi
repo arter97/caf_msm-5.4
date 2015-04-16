@@ -281,8 +281,18 @@
 		qcom,ipa-hw-mode = <0>; /* IPA hw type = Normal */
 		qcom,ee = <0>;
 		qcom,use-ipa-tethering-bridge;
+		qcom,ipa-bam-remote-mode;
+		qcom,modem-cfg-emb-pipe-flt;
 		clock-names = "core_clk";
 		clocks = <&clock_gcc clk_ipa_clk>;
+		qcom,msm-bus,name = "ipa";
+		qcom,msm-bus,num-cases = <3>;
+		qcom,msm-bus,num-paths = <2>;
+		qcom,msm-bus,vectors-KBps =
+		<90 512 0 0>, <90 585 0 0>,         /* No vote */
+		<90 512 80000 640000>, <90 585 80000 640000>,    /* SVS */
+		<90 512 206000 960000>, <90 585 206000 960000>;    /* PERF */
+		qcom,bus-vector-names = "MIN", "SVS", "PERF";
 	};
 
 	qcom,rmnet-ipa {
@@ -313,7 +323,7 @@
 		qcom,src-dst-ports = <1 512>;
 		qcom,active-only;
 		qcom,bw-tbl =
-			< 1541 /* 202 MHz */ >,
+			< 916  /* 120 MHz */ >,
 			< 3082 /* 404 MHz */ >,
 			< 3952 /* 518 MHz */ >;
 	};
@@ -322,7 +332,7 @@
 		cpubw-cpufreq {
 			target-dev = <&cpubw>;
 			cpu-to-dev-map =
-				<  600000 1541 >,
+				<  600000 916 >,
 				<  787200 3082 >,
 				< 1190400 3952 >;
 		};
@@ -463,28 +473,35 @@
 		max-clock-frequency-hz = <125000000>, <0>, <1000000>, <0>, <0>, <0>, <0>, <0>, <0>;
 	};
 
+	dma_blsp1: qcom,sps-dma@7884000 { /* BLSP1 */
+		#dma-cells = <4>;
+		compatible = "qcom,sps-dma";
+		reg = <0x7884000 0x23000>;
+		interrupts = <0 238 0>;
+		qcom,summing-threshold = <10>;
+	};
+
 	i2c_3: i2c@78b7000 { /* BLSP1 QUP3 */
 		compatible = "qcom,i2c-msm-v2";
 		#address-cells = <1>;
 		#size-cells = <0>;
-		reg-names = "qup_phys_addr", "bam_phys_addr";
-		reg = <0x78b7000 0x1000>,
-			<0x7884000 0x23000>;
-		interrupt-names = "qup_irq", "bam_irq";
-		interrupts = <0 97 0>, <0 238 0>;
+		reg-names = "qup_phys_addr";
+		reg = <0x78b7000 0x1000>;
+		interrupt-names = "qup_irq";
+		interrupts = <0 97 0>;
 		qcom,clk-freq-out = <400000>;
 		qcom,clk-freq-in  = <19200000>;
 		clock-names = "iface_clk", "core_clk";
 		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
 		<&clock_gcc clk_gcc_blsp1_qup3_i2c_apps_clk>;
-
 		pinctrl-names = "i2c_active", "i2c_sleep";
 		pinctrl-0 = <&i2c_3_active>;
 		pinctrl-1 = <&i2c_3_sleep>;
 		qcom,noise-rjct-scl = <0>;
 		qcom,noise-rjct-sda = <0>;
-		qcom,bam-pipe-idx-cons = <12>;
-		qcom,bam-pipe-idx-prod = <13>;
+		dmas = <&dma_blsp1 12 64 0x20000020 0x20>,
+			<&dma_blsp1 13 32 0x20000020 0x20>;
+			dma-names = "tx", "rx";
 		qcom,master-id = <86>;
 
 		wcd9xxx_codec@d{
@@ -849,6 +866,7 @@
 				"pmic_id_irq";
 		qcom,otg-capability;
 		USB3_GDSC-supply = <&gdsc_usb30>;
+		vdda33-supply = <&pmd9635_l10>;
 		qcom,usb-dbm = <&dbm_1p5>;
 
 		qcom,msm-bus,name = "usb3";
@@ -856,7 +874,7 @@
 		qcom,msm-bus,num-paths = <1>;
 		qcom,msm-bus,vectors-KBps =
 					<61 512 0 0>,
-					<61 512 240000 960000>;
+					<61 512 240000 640000>;
 		qcom,power-collapse-on-cable-disconnect;
 		qcom,por-after-power-collapse;
 		qcom,lpm-to-suspend-delay-ms = <2000>;
@@ -904,7 +922,7 @@
 		vdda18-supply = <&pmd9635_l8>;
 		vdda33-supply = <&pmd9635_l10>;
 		qcom,vdd-voltage-level = <0 1000000 1000000>;
-		qcom,qusb-tune = <0xa08391d5>;
+		qcom,qusb-tune = <0xa06393d5>;
 		phy_type = "utmi";
 
 		clocks = <&clock_gcc clk_ln_bb_clk>,
@@ -1427,6 +1445,15 @@
 		pinctrl-0 = <&cnss_default>;
 		qcom,wlan-rc-num = <0>;
 		qcom,wlan-ramdump-dynamic = <0x200000>;
+
+		qcom,msm-bus,name = "msm-cnss";
+		qcom,msm-bus,num-cases = <4>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<45 512 0 0>,            /* No vote */
+				<45 512 42252 1647411>,  /* Upto 200 Mbps */
+				<45 512 98572 1647411>,  /* Upto 400 Mbps */
+				<45 512 211212 3311206>; /* Upto 800 Mbps */
 	};
 
 };
@@ -1455,4 +1482,14 @@
 		qcom,pull-up = <1>;
 		linux,code = <116>;
 	};
+};
+
+&pmd9635_vadc {
+	hkadc_ldo-supply = <&pmd9635_l7>;
+	hkadc_ok-supply = <&pmd9635_l3>;
+};
+
+&pmd9635_adc_tm {
+	hkadc_ldo-supply = <&pmd9635_l7>;
+	hkadc_ok-supply = <&pmd9635_l3>;
 };
