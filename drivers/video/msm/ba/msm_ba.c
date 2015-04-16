@@ -28,14 +28,6 @@
 
 #define MSM_BA_DEV_NAME "msm_ba_8064"
 
-#define BA_DRV_INPUT_CVBS_AIN1		BA_RVC_IP
-#define BA_DRV_INPUT_CVBS_AIN2		BA_CVBS_IP
-#define BA_DRV_INPUT_HDMI_RX		BA_HDMI_IP
-
-#define MSM_BA_RVC_INPUT			BA_DRV_INPUT_CVBS_AIN1
-#define MSM_BA_CVBS_INPUT			BA_DRV_INPUT_CVBS_AIN2
-#define MSM_BA_HDMI_INPUT			BA_DRV_INPUT_HDMI_RX
-
 #define MSM_BA_MAX_EVENTS			10
 
 int msm_ba_poll(void *instance, struct file *filp,
@@ -187,10 +179,13 @@ int msm_ba_enum_output(void *instance, struct v4l2_output *output)
 		return -EINVAL;
 
 	ba_input = msm_ba_find_output(output->index);
-	if (ba_input) {
-		output->type = V4L2_OUTPUT_TYPE_ANALOG;
-		output->std = V4L2_OUT_CAP_STD;
-	}
+	if (!ba_input)
+		return -EINVAL;
+	output->type = V4L2_OUTPUT_TYPE_ANALOG;
+	output->std = V4L2_STD_ALL;
+	strlcpy(output->name, ba_input->sd->name, sizeof(output->name));
+	output->capabilities = V4L2_OUT_CAP_STD;
+
 	return rc;
 }
 EXPORT_SYMBOL(msm_ba_enum_output);
@@ -262,6 +257,7 @@ int msm_ba_g_fmt(void *instance, struct v4l2_format *f)
 	struct msm_ba_inst *inst = instance;
 	struct v4l2_subdev *sd = NULL;
 	v4l2_std_id new_std = V4L2_STD_UNKNOWN;
+	struct v4l2_mbus_framefmt sd_mbus_fmt;
 	int rc = 0;
 
 	if (!inst || !f)
@@ -274,31 +270,69 @@ int msm_ba_g_fmt(void *instance, struct v4l2_format *f)
 	}
 	rc = v4l2_subdev_call(sd, video, querystd, &new_std);
 	if (rc) {
-		dprintk(BA_ERR, "querystd failed for sd: %s", sd->name);
+		dprintk(BA_ERR, "querystd failed %d for sd: %s", rc, sd->name);
+		return -EINVAL;
 	} else {
 		inst->sd_input.std = new_std;
-		switch (inst->sd_input.std) {
-		case V4L2_STD_PAL:
-			f->fmt.pix.height = DEFAULT_HEIGHT;
-			f->fmt.pix.width = DEFAULT_WIDTH;
-			f->fmt.pix.pixelformat = V4L2_PIX_FMT_UYVY;
+	}
+
+	rc = v4l2_subdev_call(sd, video, g_mbus_fmt, &sd_mbus_fmt);
+	if (rc) {
+		dprintk(BA_ERR, "g_mbus_fmt failed %d for sd: %s",
+				rc, sd->name);
+	} else {
+		f->fmt.pix.height = sd_mbus_fmt.height;
+		f->fmt.pix.width = sd_mbus_fmt.width;
+		switch (sd_mbus_fmt.code) {
+		case V4L2_MBUS_FMT_YUYV8_2X8:
+			f->fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
 			break;
-		case V4L2_STD_NTSC:
-			f->fmt.pix.height = DEFAULT_HEIGHT;
-			f->fmt.pix.width = DEFAULT_WIDTH;
+		case V4L2_MBUS_FMT_YVYU8_2X8:
+			f->fmt.pix.pixelformat = V4L2_PIX_FMT_YVYU;
+			break;
+		case V4L2_MBUS_FMT_VYUY8_2X8:
+			f->fmt.pix.pixelformat = V4L2_PIX_FMT_VYUY;
+			break;
+		case V4L2_MBUS_FMT_UYVY8_2X8:
 			f->fmt.pix.pixelformat = V4L2_PIX_FMT_UYVY;
 			break;
 		default:
-			f->fmt.pix.height = DEFAULT_HEIGHT;
-			f->fmt.pix.width = DEFAULT_WIDTH;
+			dprintk(BA_ERR, "Unknown sd_mbus_fmt.code 0x%x",
+				sd_mbus_fmt.code);
 			f->fmt.pix.pixelformat = V4L2_PIX_FMT_UYVY;
 			break;
 		}
 	}
-
 	return rc;
 }
 EXPORT_SYMBOL(msm_ba_g_fmt);
+
+int msm_ba_g_frame_interval(void *instance, struct v4l2_fract *interval)
+{
+	struct msm_ba_inst *inst = instance;
+	struct v4l2_subdev *sd = NULL;
+	struct v4l2_subdev_frame_interval sd_frame_interval;
+	int rc = 0;
+
+	if (!inst || !interval)
+		return -EINVAL;
+
+	sd = inst->sd;
+	if (!sd) {
+		dprintk(BA_ERR, "No sd registered");
+		return -EINVAL;
+	}
+	rc = v4l2_subdev_call(sd, video, g_frame_interval, &sd_frame_interval);
+	if (rc) {
+		dprintk(BA_ERR, "g_frame_interval failed %d for sd: %s",
+				rc, sd->name);
+	} else {
+		interval->denominator = sd_frame_interval.interval.denominator;
+		interval->numerator = sd_frame_interval.interval.numerator;
+	}
+	return rc;
+}
+EXPORT_SYMBOL(msm_ba_g_frame_interval);
 
 int msm_ba_s_ctrl(void *instance, struct v4l2_control *control)
 {
@@ -573,7 +607,7 @@ void *msm_ba_open(void)
 	dev_ctxt->state = BA_DEV_INIT;
 	dev_ctxt->state = BA_DEV_INIT_DONE;
 	inst->state = MSM_BA_DEV_INIT_DONE;
-	inst->sd_input.index = BA_RVC_IP;
+	inst->sd_input.index = BA_IP_CVBS_0;
 
 	inst->debugfs_root =
 		msm_ba_debugfs_init_inst(inst, dev_ctxt->debugfs_root);

@@ -493,26 +493,79 @@ static int adv7180_querystd(struct v4l2_subdev *sd, v4l2_std_id *std)
 	return err;
 }
 
+static u32 ba_inp_to_adv7180(u32 input)
+{
+	u32 adv_input = ADV7180_INPUT_CVBS_AIN1;
+
+	switch (input) {
+	case BA_IP_CVBS_0:
+		adv_input = ADV7180_INPUT_CVBS_AIN1;
+		break;
+	case BA_IP_CVBS_1:
+		adv_input = ADV7180_INPUT_CVBS_AIN2;
+		break;
+	case BA_IP_CVBS_2:
+		adv_input = ADV7180_INPUT_CVBS_AIN3;
+		break;
+	case BA_IP_CVBS_3:
+		adv_input = ADV7180_INPUT_CVBS_AIN4;
+		break;
+	case BA_IP_CVBS_4:
+		adv_input = ADV7180_INPUT_CVBS_AIN5;
+		break;
+	case BA_IP_CVBS_5:
+		adv_input = ADV7180_INPUT_CVBS_AIN6;
+		break;
+	case BA_IP_SVIDEO_0:
+		adv_input = ADV7180_INPUT_SVIDEO_AIN1_AIN2;
+		break;
+	case BA_IP_SVIDEO_1:
+		adv_input = ADV7180_INPUT_SVIDEO_AIN3_AIN4;
+		break;
+	case BA_IP_SVIDEO_2:
+		adv_input = ADV7180_INPUT_SVIDEO_AIN5_AIN6;
+		break;
+	case BA_IP_COMPONENT_0:
+		adv_input = ADV7180_INPUT_YPRPB_AIN1_AIN2_AIN3;
+		break;
+	case BA_IP_COMPONENT_1:
+		adv_input = ADV7180_INPUT_YPRPB_AIN4_AIN5_AIN6;
+		break;
+	case BA_IP_DVI_0:
+		adv_input = ADV7180_INPUT_YPRPB_AIN1_AIN2_AIN3;
+		break;
+	case BA_IP_DVI_1:
+		adv_input = ADV7180_INPUT_YPRPB_AIN4_AIN5_AIN6;
+		break;
+	default:
+		adv_input = ADV7180_INPUT_CVBS_AIN1;
+		break;
+	}
+	return adv_input;
+}
+
 static int adv7180_s_routing(struct v4l2_subdev *sd, u32 input,
 				u32 output, u32 config)
 {
 	struct adv7180_state *state = to_state(sd);
+	u32 adv_input = ba_inp_to_adv7180(input);
 	int ret = mutex_lock_interruptible(&state->mutex);
 
 	if (ret)
 		return ret;
 
-	if (input > 31 || !(BIT(input) & state->chip_info->valid_input_mask)) {
+	if (adv_input > 31 ||
+		!(BIT(adv_input) & state->chip_info->valid_input_mask)) {
 		ret = -EINVAL;
 		goto out;
 	}
 
 	if (state->force_free_run) {
-		state->input = input;
+		state->input = adv_input;
 	} else {
-		ret = state->chip_info->select_input(state, input);
+		ret = state->chip_info->select_input(state, adv_input);
 		if (ret == 0)
-			state->input = input;
+			state->input = adv_input;
 	}
 out:
 	mutex_unlock(&state->mutex);
@@ -879,6 +932,16 @@ static int adv7180_init_controls(struct adv7180_state *state)
 	pr_debug("%s: exit\n", __func__);
 	return 0;
 }
+
+static int adv7180_g_frame_interval(struct v4l2_subdev *sd,
+				struct v4l2_subdev_frame_interval *interval)
+{
+	interval->interval.numerator = 1;
+	interval->interval.denominator = 60;
+
+	return 0;
+}
+
 static void adv7180_exit_controls(struct adv7180_state *state)
 {
 	v4l2_ctrl_handler_free(&state->ctrl_hdl);
@@ -896,7 +959,7 @@ static int adv7180_enum_mbus_code(struct v4l2_subdev *sd,
 	return 0;
 }
 
-static int adv7180_mbus_fmt(struct v4l2_subdev *sd,
+static int adv7180_g_mbus_fmt(struct v4l2_subdev *sd,
 			    struct v4l2_mbus_framefmt *fmt)
 {
 	struct adv7180_state *state = to_state(sd);
@@ -904,7 +967,10 @@ static int adv7180_mbus_fmt(struct v4l2_subdev *sd,
 	fmt->code = V4L2_MBUS_FMT_YUYV8_2X8;
 	fmt->colorspace = V4L2_COLORSPACE_SMPTE170M;
 	fmt->width = 720;
-	fmt->height = state->curr_norm & V4L2_STD_525_60 ? 480 : 576;
+	if (state->chip_info->flags & ADV7180_FLAG_I2P)
+		fmt->height = state->curr_norm & V4L2_STD_525_60 ? 507 : 576;
+	else
+		fmt->height = state->curr_norm & V4L2_STD_525_60 ? 254 : 288;
 
 	return 0;
 }
@@ -978,7 +1044,7 @@ static int adv7180_get_pad_format(struct v4l2_subdev *sd,
 	if (format->which == V4L2_SUBDEV_FORMAT_TRY) {
 		format->format = *v4l2_subdev_get_try_format(fh, 0);
 	} else {
-		adv7180_mbus_fmt(sd, &format->format);
+		adv7180_g_mbus_fmt(sd, &format->format);
 		format->format.field = state->field;
 	}
 
@@ -1014,7 +1080,7 @@ static int adv7180_set_pad_format(struct v4l2_subdev *sd,
 		framefmt = v4l2_subdev_get_try_format(fh, 0);
 	}
 
-	return adv7180_mbus_fmt(sd, framefmt);
+	return adv7180_g_mbus_fmt(sd, framefmt);
 }
 
 static int adv7180_g_mbus_config(struct v4l2_subdev *sd,
@@ -1044,6 +1110,8 @@ static const struct v4l2_subdev_video_ops adv7180_video_ops = {
 	.querystd = adv7180_querystd,
 	.g_input_status = adv7180_g_input_status,
 	.s_routing = adv7180_s_routing,
+	.g_frame_interval = adv7180_g_frame_interval,
+	.g_mbus_fmt = adv7180_g_mbus_fmt,
 	.g_mbus_config = adv7180_g_mbus_config,
 	.s_stream = adv7180_s_stream,
 };
