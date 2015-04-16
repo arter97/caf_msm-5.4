@@ -1730,9 +1730,13 @@ static int autosuspend_check(struct usb_device *udev)
 			}
 		}
 	}
-	if (w && !device_can_wakeup(&udev->dev)) {
-		dev_dbg(&udev->dev, "remote wakeup needed for autosuspend\n");
-		return -EOPNOTSUPP;
+	if (udev->descriptor.idProduct != 0x0060 &&
+			udev->descriptor.idProduct != 0x9460) {
+		if (w && !device_can_wakeup(&udev->dev)) {
+			dev_dbg(&udev->dev,
+			"remote wakeup needed for autosuspend\n");
+			return -EOPNOTSUPP;
+		}
 	}
 	udev->do_remote_wakeup = w;
 	return 0;
