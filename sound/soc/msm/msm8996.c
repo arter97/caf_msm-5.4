@@ -1270,8 +1270,8 @@ static int msm8996_codec_event_cb(struct snd_soc_codec *codec,
 
 static int msm8996_wsa881x_init(struct snd_soc_dapm_context *dapm)
 {
-	u8 spkleft_ports[WSA881X_MAX_SWR_PORTS] = {100, 101, 102, 103};
-	u8 spkright_ports[WSA881X_MAX_SWR_PORTS] = {104, 105, 106, 107};
+	u8 spkleft_ports[WSA881X_MAX_SWR_PORTS] = {100, 101, 102, 106};
+	u8 spkright_ports[WSA881X_MAX_SWR_PORTS] = {103, 104, 105, 107};
 	unsigned int ch_rate[WSA881X_MAX_SWR_PORTS] = {2400, 600, 300, 1200};
 	unsigned int ch_mask[WSA881X_MAX_SWR_PORTS] = {0x1, 0xF, 0x3, 0x3};
 
@@ -1281,11 +1281,11 @@ static int msm8996_wsa881x_init(struct snd_soc_dapm_context *dapm)
 	}
 	dev_dbg(dapm->codec->dev, "%s codec_name: %s\n", __func__,
 		dapm->codec->name);
-	if (!strcmp(dapm->codec->name, "wsa881x.32000")) {
+	if (!strcmp(dapm->codec->name, "wsa881x.20170212")) {
 		wsa881x_set_channel_map(dapm->codec, &spkleft_ports[0],
 				WSA881X_MAX_SWR_PORTS, &ch_mask[0],
 				&ch_rate[0]);
-	} else if (!strcmp(dapm->codec->name, "wsa881x.42000")) {
+	} else if (!strcmp(dapm->codec->name, "wsa881x.20170211")) {
 		wsa881x_set_channel_map(dapm->codec, &spkright_ports[0],
 				WSA881X_MAX_SWR_PORTS, &ch_mask[0],
 				&ch_rate[0]);
@@ -2962,23 +2962,23 @@ static struct snd_soc_dai_link msm8996_tasha_dai_links[
 static struct snd_soc_aux_dev msm8996_aux_dev[] = {
 	{
 		.name = "wsa881x.0",
-		.codec_name = "wsa881x.32000",
+		.codec_name = "wsa881x.20170212",
 		.init = msm8996_wsa881x_init,
 	},
 	{
 		.name = "wsa881x.1",
-		.codec_name = "wsa881x.42000",
+		.codec_name = "wsa881x.20170211",
 		.init = msm8996_wsa881x_init,
 	},
 };
 
 static struct snd_soc_codec_conf msm8996_codec_conf[] = {
 	{
-		.dev_name = "wsa881x.32000",
+		.dev_name = "wsa881x.20170212",
 		.name_prefix = "SpkrLeft",
 	},
 	{
-		.dev_name = "wsa881x.42000",
+		.dev_name = "wsa881x.20170211",
 		.name_prefix = "SpkrRight",
 	},
 };
