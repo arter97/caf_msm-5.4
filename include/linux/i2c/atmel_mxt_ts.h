@@ -3,7 +3,8 @@
  *
  * Copyright (C) 2010 Samsung Electronics Co.Ltd
  * Author: Joonyoung Shim <jy0922.shim@samsung.com>
- * Copyright (c) 2011-2012, 2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2012, 2014-2015, The Linux Foundation. All rights
+ * reserved.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -34,6 +35,7 @@
 #define MXT_BOOTLOADER_ID_224E		0x06
 #define MXT_BOOTLOADER_ID_1386		0x01
 #define MXT_BOOTLOADER_ID_1386E		0x10
+#define MXT_BOOTLOADER_ID_1386E_v2_4	0x24
 
 /* Config data for a given maXTouch controller with a specific firmware */
 struct mxt_config_info {
