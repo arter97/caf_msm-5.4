@@ -23,6 +23,7 @@
 #include <linux/workqueue.h>
 #include <linux/msm-bus.h>
 #include <linux/msm-bus-board.h>
+#include <linux/kref.h>
 #include <soc/qcom/ocmem.h>
 #include <media/v4l2-dev.h>
 #include <media/v4l2-device.h>
@@ -301,6 +302,7 @@ struct msm_vidc_inst {
 	struct v4l2_ctrl **ctrls;
 	bool dcvs_mode;
 	enum msm_vidc_pixel_depth bit_depth;
+	struct kref kref;
 };
 
 extern struct msm_vidc_drv *vidc_driver;
@@ -376,4 +378,7 @@ struct msm_smem *msm_smem_user_to_kernel(void *clt, int fd, u32 offset,
 struct context_bank_info *msm_smem_get_context_bank(void *clt,
 		bool is_secure, enum hal_buffer buffer_type);
 void msm_vidc_fw_unload_handler(struct work_struct *work);
+/* XXX: normally should be in msm_vidc.h, but that's meant for public APIs,
+ * whereas this is private */
+int msm_vidc_destroy(struct msm_vidc_inst *inst);
 #endif
