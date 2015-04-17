@@ -83,7 +83,7 @@ VREG_CONSUMERS(S2) = {
 };
 VREG_CONSUMERS(S3) = {
 	REGULATOR_SUPPLY("8018_s3",		NULL),
-	REGULATOR_SUPPLY("wlan_vreg",		"wlan_ar6000_pm_dev"),
+	REGULATOR_SUPPLY("wlan_vreg",		"wlan-qcacld-platform"),
 	REGULATOR_SUPPLY("CDC_VDD_CP",		"tabla-slim"),
 	REGULATOR_SUPPLY("CDC_VDD_CP",		"tabla2x-slim"),
 	REGULATOR_SUPPLY("CDC_VDDA_RX",		"tabla-slim"),
