@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,6 +15,8 @@
 #include "msm_ispif.h"
 #include "msm_camera_i2c_mux.h"
 #include "msm_camera_i2c.h"
+
+#define I2C_SEQ_REG_DATA_MAX    256
 /*=============================================================*/
 
 long msm_sensor_bayer_subdev_ioctl(struct v4l2_subdev *sd,
@@ -83,6 +85,14 @@ int32_t msm_sensor_bayer_config(struct msm_sensor_ctrl_t *s_ctrl,
 			break;
 		}
 
+		if (!conf_array.size ||
+			conf_array.size > I2C_SEQ_REG_DATA_MAX) {
+
+			pr_err("%s:%d failed\n", __func__, __LINE__);
+			rc = -EFAULT;
+			break;
+		}
+
 		regs = kzalloc(conf_array.size * sizeof(
 			struct msm_camera_i2c_reg_array),
 			GFP_KERNEL);
@@ -118,6 +128,14 @@ int32_t msm_sensor_bayer_config(struct msm_sensor_ctrl_t *s_ctrl,
 				pr_err("%s:%d failed\n", __func__, __LINE__);
 				rc = -EFAULT;
 				break;
+		}
+
+		if (!conf_array.size ||
+			conf_array.size > I2C_SEQ_REG_DATA_MAX) {
+
+			pr_err("%s:%d failed\n", __func__, __LINE__);
+			rc = -EFAULT;
+			break;
 		}
 
 		regs = kzalloc(conf_array.size * sizeof(
