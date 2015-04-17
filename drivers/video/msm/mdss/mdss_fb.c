@@ -54,6 +54,7 @@
 
 #include "mdss_fb.h"
 #include "mdss_mdp_splash_logo.h"
+#include "mdss_mdp.h"
 
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MDSS_FB_NUM 3
@@ -190,8 +191,12 @@ static int mdss_fb_notify_update(struct msm_fb_data_type *mfd,
 
 	if (ret == 0)
 		ret = -ETIMEDOUT;
-	else if (ret > 0)
+	else if (ret > 0) {
+		if ((to_user == NOTIFY_TYPE_NO_UPDATE)
+			|| (to_user == NOTIFY_TYPE_SUSPEND))
+			mdss_mdp_hist_dspp_cancel_collect();
 		ret = copy_to_user(argp, &to_user, sizeof(unsigned long));
+	}
 	return ret;
 }
 

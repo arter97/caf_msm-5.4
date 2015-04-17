@@ -738,6 +738,7 @@ int mdss_mdp_hist_intr_setup(struct mdss_intr *intr, int state);
 int mdss_mdp_hist_start(struct mdp_histogram_start_req *req);
 int mdss_mdp_hist_stop(u32 block);
 int mdss_mdp_hist_collect(struct mdp_histogram_data *hist);
+void mdss_mdp_hist_dspp_cancel_collect(void);
 void mdss_mdp_hist_intr_done(u32 isr);
 
 void mdss_mdp_hscl_init(struct mdss_mdp_pipe *pipe);
