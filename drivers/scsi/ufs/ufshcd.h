@@ -637,6 +637,9 @@ struct ufshcd_pm_qos {
  * @ufs_stats: ufshcd statistics to be used via debugfs
  * @debugfs_files: debugfs files associated with the ufs stats
  * @ufshcd_dbg_print: Bitmask for enabling debug prints
+ * @urgent_bkops_lvl: keeps track of urgent bkops level for device
+ * @is_urgent_bkops_lvl_checked: keeps track if the urgent bkops level for
+ *  device is known or not.
  */
 struct ufs_hba {
 	void __iomem *mmio_base;
@@ -829,6 +832,9 @@ struct ufs_hba {
 
 	/* Bitmask for enabling debug prints */
 	u32 ufshcd_dbg_print;
+
+	enum bkops_status urgent_bkops_lvl;
+	bool is_urgent_bkops_lvl_checked;
 };
 
 /* Returns true if clocks can be gated. Otherwise false */
