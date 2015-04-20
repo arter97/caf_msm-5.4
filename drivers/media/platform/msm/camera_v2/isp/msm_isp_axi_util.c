@@ -1366,7 +1366,10 @@ static int msm_isp_update_stream_bandwidth(struct vfe_device *vfe_dev)
 	}
 	total_bandwidth = total_pix_bandwidth + total_rdi_bandwidth;
 	total_streams = num_pix_streams + num_rdi_streams;
-	if (total_streams == 1)
+	if (total_bandwidth == 0)
+		rc = msm_isp_update_bandwidth(ISP_VFE0 + vfe_dev->pdev->id,
+			0, 0);
+	else if (total_streams == 1)
 		rc = msm_isp_update_bandwidth(ISP_VFE0 + vfe_dev->pdev->id,
 		total_bandwidth ,
 		(total_bandwidth * ISP_BUS_UTILIZATION_FACTOR / ISP_Q2));
@@ -2019,7 +2022,9 @@ int msm_isp_update_axi_stream(struct vfe_device *vfe_dev, void *arg)
 			update_cmd->update_type !=
 			UPDATE_STREAM_REQUEST_FRAMES &&
 			update_cmd->update_type !=
-			UPDATE_STREAM_REMOVE_BUFQ) {
+			UPDATE_STREAM_REMOVE_BUFQ &&
+			update_cmd->update_type !=
+			UPDATE_STREAM_SW_FRAME_DROP) {
 			pr_err("%s: Invalid stream state %d, update cmd %d\n",
 				__func__, stream_info->state,
 				stream_info->stream_id);

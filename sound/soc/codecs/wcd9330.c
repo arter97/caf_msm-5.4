@@ -2937,13 +2937,6 @@ static int tomtom_codec_internal_rco_ctrl(struct snd_soc_codec *codec,
 	struct tomtom_priv *tomtom = snd_soc_codec_get_drvdata(codec);
 	int ret = 0;
 
-	if (mutex_is_locked(&tomtom->resmgr.codec_bg_clk_lock)) {
-		dev_err(codec->dev, "%s: BG_CLK already acquired\n",
-			__func__);
-		ret = -EINVAL;
-		goto done;
-	}
-
 	if (!tomtom->codec_ext_clk_en_cb) {
 		dev_err(codec->dev,
 			"%s: Invalid ext_clk_callback\n",
@@ -7803,8 +7796,10 @@ int tomtom_hs_detect(struct snd_soc_codec *codec,
 		snd_soc_update_bits(codec, TOMTOM_A_MICB_CFILT_2_CTL, 0x01,
 				    0x00);
 		tomtom->mbhc.mbhc_cfg = NULL;
+		tomtom->mbhc_started = false;
 		rc = 0;
 	}
+	wcd9xxx_clsh_post_init(&tomtom->clsh_d, tomtom->mbhc_started);
 	return rc;
 }
 EXPORT_SYMBOL(tomtom_hs_detect);
@@ -8751,9 +8746,11 @@ static int tomtom_codec_probe(struct snd_soc_codec *codec)
 	tomtom->micb_2_users = 0;
 	tomtom_update_reg_defaults(codec);
 	pr_debug("%s: MCLK Rate = %x\n", __func__, wcd9xxx->mclk_rate);
-	if (wcd9xxx->mclk_rate == TOMTOM_MCLK_CLK_12P288MHZ)
+	if (wcd9xxx->mclk_rate == TOMTOM_MCLK_CLK_12P288MHZ) {
 		snd_soc_update_bits(codec, TOMTOM_A_CHIP_CTL, 0x06, 0x0);
-	else if (wcd9xxx->mclk_rate == TOMTOM_MCLK_CLK_9P6MHZ)
+		snd_soc_update_bits(codec, TOMTOM_A_RX_COM_TIMER_DIV,
+				    0x01, 0x01);
+	} else if (wcd9xxx->mclk_rate == TOMTOM_MCLK_CLK_9P6MHZ)
 		snd_soc_update_bits(codec, TOMTOM_A_CHIP_CTL, 0x06, 0x2);
 	tomtom_codec_init_reg(codec);
 

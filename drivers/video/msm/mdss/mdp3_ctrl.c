@@ -712,9 +712,14 @@ static int mdp3_ctrl_on(struct msm_fb_data_type *mfd)
 
 	panel = mdp3_session->panel;
 	/* make sure DSI host is initialized properly */
-	if (panel && mdp3_session->in_splash_screen)
-		panel->event_handler(panel,
+	if (panel && mdp3_session->in_splash_screen) {
+		rc = panel->event_handler(panel,
 				MDSS_EVENT_LINK_READY, NULL);
+		rc |= panel->event_handler(panel,
+				MDSS_EVENT_UNBLANK, NULL);
+		rc |= panel->event_handler(panel,
+				MDSS_EVENT_PANEL_ON, NULL);
+	}
 
 	if (mdp3_session->status) {
 		pr_debug("fb%d is on already", mfd->index);
@@ -1660,34 +1665,6 @@ static int mdp3_csc_config(struct mdp3_session_data *session,
 	return ret;
 }
 
-static int mdp3_pp_is_disable_op(struct msmfb_mdp_pp *pp)
-{
-	int flags = 0, ret = 0;
-	switch (pp->op) {
-	case mdp_op_csc_cfg:
-		flags = pp->data.csc_cfg_data.csc_data.flags;
-		break;
-	case mdp_op_lut_cfg:
-		switch (pp->data.lut_cfg_data.lut_type) {
-		case mdp_lut_rgb:
-			flags = pp->data.lut_cfg_data.data.rgb_lut_data.flags;
-			break;
-		default:
-			break;
-		}
-		break;
-	case mdp_bl_scale_cfg:
-		flags = MDP_PP_OPS_DISABLE;
-		break;
-	default:
-		pr_err("Unsupported request to MDP_PP IOCTL. %d = op\n",pp->op);
-		break;
-	}
-	if (flags & MDP_PP_OPS_DISABLE)
-		ret = 1;
-	return ret;
-}
-
 static int mdp3_pp_ioctl(struct msm_fb_data_type *mfd,
 					void __user *argp)
 {
@@ -1705,11 +1682,6 @@ static int mdp3_pp_ioctl(struct msm_fb_data_type *mfd,
 	if (ret)
 		return ret;
 
-	if (mdp3_session->dyn_pu_state && !mdp3_pp_is_disable_op(&mdp_pp)) {
-		pr_debug("Partial update feature is enabled.\n");
-		return -EPERM;
-	}
-
 	switch (mdp_pp.op) {
 	case mdp_bl_scale_cfg:
 		ret = mdp3_validate_scale_config(&mdp_pp.data.bl_scale_data);
@@ -1721,6 +1693,11 @@ static int mdp3_pp_ioctl(struct msm_fb_data_type *mfd,
 						&mdp_pp.data.bl_scale_data);
 		break;
 	case mdp_op_csc_cfg:
+		/* Checking state of dyn_pu before programming CSC block */
+		if (mdp3_session->dyn_pu_state) {
+			pr_debug("Partial update feature is enabled.\n");
+			return -EPERM;
+		}
 		ret = mdp3_validate_csc_data(&(mdp_pp.data.csc_cfg_data));
 		if (ret) {
 			pr_err("%s: invalid csc data\n", __func__);
@@ -1770,11 +1747,6 @@ static int mdp3_histo_ioctl(struct msm_fb_data_type *mfd, u32 cmd,
 		return -EINVAL;
 
 	mdp3_session = mfd->mdp.private1;
-
-	if (mdp3_session->dyn_pu_state && (cmd != MSMFB_HISTOGRAM_STOP)) {
-		pr_debug("Partial update feature is enabled.\n");
-		return -EPERM;
-	}
 
 	switch (cmd) {
 	case MSMFB_HISTOGRAM_START:

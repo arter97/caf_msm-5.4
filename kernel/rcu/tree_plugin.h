@@ -29,6 +29,7 @@
 #include <linux/oom.h>
 #include <linux/smpboot.h>
 #include <linux/tick.h>
+#include "../time/tick-internal.h"
 
 #define RCU_KTHREAD_PRIO 1
 
@@ -458,7 +459,7 @@ static void rcu_print_detail_task_stall_rnp(struct rcu_node *rnp)
 		raw_spin_unlock_irqrestore(&rnp->lock, flags);
 		return;
 	}
-	t = list_entry(rnp->gp_tasks,
+	t = list_entry(rnp->gp_tasks->prev,
 		       struct task_struct, rcu_node_entry);
 	list_for_each_entry_continue(t, &rnp->blkd_tasks, rcu_node_entry)
 		sched_show_task(t);
@@ -523,7 +524,7 @@ static int rcu_print_task_stall(struct rcu_node *rnp)
 	if (!rcu_preempt_blocked_readers_cgp(rnp))
 		return 0;
 	rcu_print_task_stall_begin(rnp);
-	t = list_entry(rnp->gp_tasks,
+	t = list_entry(rnp->gp_tasks->prev,
 		       struct task_struct, rcu_node_entry);
 	list_for_each_entry_continue(t, &rnp->blkd_tasks, rcu_node_entry) {
 		printk(KERN_CONT " P%d", t->pid);
@@ -1105,7 +1106,7 @@ static void __init __rcu_init_preempt(void)
 
 #ifdef CONFIG_RCU_BOOST
 
-#include "rtmutex_common.h"
+#include "../rtmutex_common.h"
 
 #ifdef CONFIG_RCU_TRACE
 
@@ -1914,11 +1915,12 @@ static void print_cpu_stall_info(struct rcu_state *rsp, int cpu)
 		ticks_value = rsp->gpnum - rdp->gpnum;
 	}
 	print_cpu_stall_fast_no_hz(fast_no_hz, cpu);
-	printk(KERN_ERR "\t%d: (%lu %s) idle=%03x/%llx/%d softirq=%u/%u %s\n",
+	pr_err("\t%d: (%lu %s) idle=%03x/%llx/%d softirq=%u/%u fqs=%ld %s\n",
 	       cpu, ticks_value, ticks_title,
 	       atomic_read(&rdtp->dynticks) & 0xfff,
 	       rdtp->dynticks_nesting, rdtp->dynticks_nmi_nesting,
 	       rdp->softirq_snap, kstat_softirqs_cpu(RCU_SOFTIRQ, cpu),
+	       ACCESS_ONCE(rsp->n_force_qs) - rsp->n_force_qs_gpstart,
 	       fast_no_hz);
 }
 
