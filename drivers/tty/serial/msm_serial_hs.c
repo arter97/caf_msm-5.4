@@ -1339,11 +1339,6 @@ void tx_timeout_handler(unsigned long arg)
 	if (UARTDM_ISR_CURRENT_CTS_BMSK & isr)
 		MSM_HS_WARN("%s(): CTS Disabled, ISR 0x%x", __func__, isr);
 	dump_uart_hs_registers(msm_uport);
-	/* Log BAM TX pipe debug information */
-	sps_get_bam_debug_info(msm_uport->bam_handle,
-			93,
-			SPS_BAM_PIPE(msm_uport->bam_tx_ep_pipe_index),
-			0, 2);
 }
 
 /*  Transmit the next chunk of data */
@@ -2990,9 +2985,19 @@ static void msm_hs_pm_suspend(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct msm_hs_port *msm_uport = get_matching_hs_port(pdev);
+	int ret;
 
 	if (!msm_uport)
 		goto err_suspend;
+
+	/* For OBS, don't use wakeup interrupt, set gpio to suspended state */
+	if (msm_uport->obs) {
+		ret = pinctrl_select_state(msm_uport->pinctrl,
+			msm_uport->gpio_state_suspend);
+		if (ret)
+			MSM_HS_ERR("%s(): Error selecting suspend state",
+				__func__);
+	}
 
 	msm_uport->pm_state = MSM_HS_PM_SUSPENDED;
 	msm_hs_resource_off(msm_uport);
@@ -3010,6 +3015,7 @@ static int msm_hs_pm_resume(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct msm_hs_port *msm_uport = get_matching_hs_port(pdev);
+	int ret;
 
 	if (!msm_uport)
 		goto err_resume;
@@ -3018,6 +3024,16 @@ static int msm_hs_pm_resume(struct device *dev)
 	msm_hs_clk_bus_vote(msm_uport);
 	msm_uport->pm_state = MSM_HS_PM_ACTIVE;
 	msm_hs_resource_on(msm_uport);
+
+	/* For OBS, don't use wakeup interrupt, set gpio to active state */
+	if (msm_uport->obs) {
+		ret = pinctrl_select_state(msm_uport->pinctrl,
+			msm_uport->gpio_state_active);
+		if (ret)
+			MSM_HS_ERR("%s(): Error selecting active state",
+				__func__);
+	}
+
 	MSM_HS_DBG("%s(): return resume\n", __func__);
 	return 0;
 err_resume:

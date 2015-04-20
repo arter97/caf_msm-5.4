@@ -215,11 +215,12 @@ int set_l2_mode(struct low_power_ops *ops, int mode, bool notify_rpm)
 		break;
 	}
 
-	/* Do not set L2 SPM. This will be set by TZ */
+	/* Do not program L2 SPM enable bit. This will be set by TZ */
 	if (lpm_wa_get_skip_l2_spm())
-		return 0;
-
-	rc = msm_spm_config_low_power_mode(ops->spm, lpm, true);
+		rc = msm_spm_config_low_power_mode_addr(ops->spm, lpm,
+							true);
+	else
+		rc = msm_spm_config_low_power_mode(ops->spm, lpm, true);
 
 	if (rc)
 		pr_err("%s: Failed to set L2 low power mode %d, ERR %d",
@@ -830,6 +831,8 @@ static void register_cpu_lpm_stats(struct lpm_cpu *cpu,
 
 	lpm_stats_config_level("cpu", level_name, cpu->nlevels,
 			parent->stats, &parent->child_cpus);
+
+	kfree(level_name);
 }
 
 static void register_cluster_lpm_stats(struct lpm_cluster *cl,
