@@ -332,12 +332,6 @@
 			<0x193d100 0x4>;
 	};
 
-	restart@4ab000 {
-		compatible = "qcom,pshold";
-		reg = <0x4ab000 0x4>,
-			<0x193d100 0x4>;
-	};
-
 	timer@b120000 {
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -1617,7 +1611,7 @@
 		qcom,pil-self-auth;
 		qcom,sysmon-id = <0>;
 		qcom,ssctl-instance-id = <0x12>;
-		qcom,qdsp6v56-1-3;
+		qcom,qdsp6v56-1-8;
 
 		/* GPIO inputs from mss */
 		qcom,gpio-err-fatal = <&smp2pgpio_ssr_smp2p_1_in 0 0>;
