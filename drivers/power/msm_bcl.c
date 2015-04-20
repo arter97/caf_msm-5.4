@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -301,7 +301,7 @@ static int bcl_add_sysfs_nodes(enum bcl_param param_type)
 		return ret;
 	}
 	bcl[param_type]->bcl_attr_gp.attrs = kzalloc(sizeof(struct attribute *)
-		* BCL_PARAM_MAX_ATTR + 1, GFP_KERNEL);
+		* (BCL_PARAM_MAX_ATTR + 1), GFP_KERNEL);
 	if (!bcl[param_type]->bcl_attr_gp.attrs) {
 		pr_err("Sysfs attribute create failed.\n");
 		ret = -ENOMEM;
