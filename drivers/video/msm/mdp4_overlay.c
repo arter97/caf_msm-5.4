@@ -4135,12 +4135,15 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
 	int ret = 0;
 	uint32 mixer = 0;
 
-	if (mfd == NULL)
+	if (mfd == NULL) {
+		pr_err("%s mfd is NULL", __func__);
 		return -ENODEV;
+	}
 
 	pipe = mdp4_overlay_ndx2pipe(req->id);
 	if (pipe == NULL) {
 		mdp4_stat.err_play++;
+		pr_err("%s pipe is NULL,id=%d", __func__, req->id);
 		return -ENODEV;
 	}
 

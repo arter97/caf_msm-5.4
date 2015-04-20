@@ -366,32 +366,42 @@ static ssize_t msm_fb_msm_fb_type(struct device *dev,
 	return ret;
 }
 
+static int msm_fb_populate_disp_id(struct msm_fb_data_type *mfd, char *buf,
+	int len)
+{
+	int ret = 0;
+	struct msm_fb_panel_data *pdata =
+		(struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
+
+	switch (pdata->panel_info.disp_id) {
+	case DISPLAY_PRIMARY:
+		ret = snprintf(buf, len, "PRIMARY\n");
+		break;
+	case DISPLAY_SECONDARY:
+		ret = snprintf(buf, len, "SECONDARY\n");
+		break;
+	case DISPLAY_WRITEBACK:
+		ret = snprintf(buf, len, "WRITEBACK\n");
+		break;
+	case DISPLAY_TERTIARY:
+		ret = snprintf(buf, len, "TERTIARY\n");
+		break;
+	default:
+		ret = snprintf(buf, len, "UNKNOWN\n");
+		break;
+	}
+
+	return ret;
+}
+
 static ssize_t msm_fb_rda_disp_id_attr(struct device *dev,
 				    struct device_attribute *attr, char *buf)
 {
 	ssize_t ret = 0;
 	struct fb_info *fbi = dev_get_drvdata(dev);
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
-	struct msm_fb_panel_data *pdata =
-	      (struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
 
-	switch (pdata->panel_info.disp_id) {
-	case DISPLAY_PRIMARY:
-		ret = snprintf(buf, PAGE_SIZE, "PRIMARY\n");
-		break;
-	case DISPLAY_SECONDARY:
-		ret = snprintf(buf, PAGE_SIZE, "SECONDARY\n");
-		break;
-	case DISPLAY_WRITEBACK:
-		ret = snprintf(buf, PAGE_SIZE, "WRITEBACK\n");
-		break;
-	case DISPLAY_TERTIARY:
-		ret = snprintf(buf, PAGE_SIZE, "TERTIARY\n");
-		break;
-	default:
-		ret = snprintf(buf, PAGE_SIZE, "UNKNOWN\n");
-		break;
-	}
+	ret = msm_fb_populate_disp_id(mfd, buf, PAGE_SIZE);
 	return ret;
 }
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, msm_fb_msm_fb_type, NULL);
@@ -3295,13 +3305,19 @@ static int msmfb_vsync_ctrl(struct fb_info *info, void __user *argp)
 }
 
 #ifdef CONFIG_FB_MSM_OVERLAY
-static int msmfb_overlay_get(struct fb_info *info, void __user *p)
+static int msmfb_overlay_get(struct fb_info *info, void *p, int user)
 {
 	struct mdp_overlay req;
 	int ret;
 
-	if (copy_from_user(&req, p, sizeof(req)))
-		return -EFAULT;
+	if (user) {
+		if (copy_from_user(&req, p, sizeof(req))) {
+			pr_err("%s copy_from_user fails", __func__);
+			return -EFAULT;
+		}
+	} else {
+		memcpy(&req, p, sizeof(req));
+	}
 
 	ret = mdp4_overlay_get(info, &req);
 	if (ret) {
@@ -3309,22 +3325,33 @@ static int msmfb_overlay_get(struct fb_info *info, void __user *p)
 			__func__);
 		return ret;
 	}
-	if (copy_to_user(p, &req, sizeof(req))) {
-		printk(KERN_ERR "%s: copy2user failed \n",
-			__func__);
-		return -EFAULT;
+
+	if (user) {
+		if (copy_to_user(p, &req, sizeof(req))) {
+			printk(KERN_ERR "%s: copy2user failed",
+				__func__);
+			return -EFAULT;
+		}
+	} else {
+		memcpy(p, &req, sizeof(req));
 	}
 
 	return 0;
 }
 
-static int msmfb_overlay_set(struct fb_info *info, void __user *p)
+static int msmfb_overlay_set(struct fb_info *info, void *p, int user)
 {
 	struct mdp_overlay req;
 	int ret;
 
-	if (copy_from_user(&req, p, sizeof(req)))
-		return -EFAULT;
+	if (user) {
+		if (copy_from_user(&req, p, sizeof(req))) {
+			pr_err("%s copy_from_user fails", __func__);
+			return -EFAULT;
+		}
+	} else {
+		memcpy(&req, p, sizeof(req));
+	}
 
 	ret = mdp4_overlay_set(info, &req);
 	if (ret) {
@@ -3333,38 +3360,50 @@ static int msmfb_overlay_set(struct fb_info *info, void __user *p)
 		return ret;
 	}
 
-	if (copy_to_user(p, &req, sizeof(req))) {
-		printk(KERN_ERR "%s: copy2user failed \n",
-			__func__);
-		return -EFAULT;
+	if (user) {
+		if (copy_to_user(p, &req, sizeof(req))) {
+			printk(KERN_ERR "%s: copy2user failed",
+				__func__);
+			return -EFAULT;
+		}
+	} else {
+		memcpy(p, &req, sizeof(req));
 	}
 
 	return 0;
 }
 
-static int msmfb_overlay_unset(struct fb_info *info, unsigned long *argp)
+static int msmfb_overlay_unset(struct fb_info *info, void *p, int user)
 {
 	int ret, ndx;
 
-	ret = copy_from_user(&ndx, argp, sizeof(ndx));
-	if (ret) {
-		printk(KERN_ERR "%s:msmfb_overlay_unset ioctl failed \n",
-			__func__);
-		return ret;
+	if (user) {
+		ret = copy_from_user(&ndx, p, sizeof(ndx));
+		if (ret) {
+			printk(KERN_ERR "%s:msmfb_overlay_unset ioctl failed",
+				__func__);
+			return ret;
+		}
+	} else {
+		memcpy(&ndx, p, sizeof(ndx));
 	}
 
 	return mdp4_overlay_unset(info, ndx);
 }
 
-static int msmfb_overlay_vsync_ctrl(struct fb_info *info, void __user *argp)
+static int msmfb_overlay_vsync_ctrl(struct fb_info *info, void *p, int user)
 {
 	int ret;
 	int enable;
 
-	ret = copy_from_user(&enable, argp, sizeof(enable));
-	if (ret) {
-		pr_err("%s:msmfb_overlay_vsync ioctl failed", __func__);
-		return ret;
+	if (user) {
+		ret = copy_from_user(&enable, p, sizeof(enable));
+		if (ret) {
+			pr_err("%s:msmfb_overlay_vsync ioctl failed", __func__);
+			return ret;
+		}
+	} else {
+		memcpy(&enable, p, sizeof(enable));
 	}
 
 	ret = mdp4_overlay_vsync_ctrl(info, enable);
@@ -3372,7 +3411,7 @@ static int msmfb_overlay_vsync_ctrl(struct fb_info *info, void __user *argp)
 	return ret;
 }
 
-static int msmfb_overlay_play_wait(struct fb_info *info, unsigned long *argp)
+static int msmfb_overlay_play_wait(struct fb_info *info, void *p, int user)
 {
 	int ret;
 	struct msmfb_overlay_data req;
@@ -3381,10 +3420,14 @@ static int msmfb_overlay_play_wait(struct fb_info *info, unsigned long *argp)
 	if (mfd->overlay_play_enable == 0)      /* nothing to do */
 		return 0;
 
-	ret = copy_from_user(&req, argp, sizeof(req));
-	if (ret) {
-		pr_err("%s:msmfb_overlay_wait ioctl failed", __func__);
-		return ret;
+	if (user) {
+		ret = copy_from_user(&req, p, sizeof(req));
+		if (ret) {
+			pr_err("%s:msmfb_overlay_wait ioctl failed", __func__);
+			return ret;
+		}
+	} else {
+		memcpy(&req, p, sizeof(req));
 	}
 
 	ret = mdp4_overlay_play_wait(info, &req);
@@ -3392,7 +3435,7 @@ static int msmfb_overlay_play_wait(struct fb_info *info, unsigned long *argp)
 	return ret;
 }
 
-static int msmfb_overlay_play(struct fb_info *info, unsigned long *argp)
+static int msmfb_overlay_play(struct fb_info *info, void *p, int user)
 {
 	int	ret;
 	struct msmfb_overlay_data req;
@@ -3401,11 +3444,15 @@ static int msmfb_overlay_play(struct fb_info *info, unsigned long *argp)
 	if (mfd->overlay_play_enable == 0)	/* nothing to do */
 		return 0;
 
-	ret = copy_from_user(&req, argp, sizeof(req));
-	if (ret) {
-		printk(KERN_ERR "%s:msmfb_overlay_play ioctl failed \n",
-			__func__);
-		return ret;
+	if (user) {
+		ret = copy_from_user(&req, p, sizeof(req));
+		if (ret) {
+			printk(KERN_ERR "%s:msmfb_overlay_play ioctl failed",
+				__func__);
+			return ret;
+		}
+	} else {
+		memcpy(&req, p, sizeof(req));
 	}
 
 	if (info->node == 0 && !(mfd->cont_splash_done)) { /* primary */
@@ -3433,16 +3480,20 @@ static int msmfb_overlay_play(struct fb_info *info, unsigned long *argp)
 	return ret;
 }
 
-static int msmfb_overlay_play_enable(struct fb_info *info, unsigned long *argp)
+static int msmfb_overlay_play_enable(struct fb_info *info, void *p, int user)
 {
 	int	ret, enable;
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 
-	ret = copy_from_user(&enable, argp, sizeof(enable));
-	if (ret) {
-		printk(KERN_ERR "%s:msmfb_overlay_play_enable ioctl failed \n",
-			__func__);
-		return ret;
+	if (user) {
+		ret = copy_from_user(&enable, p, sizeof(enable));
+		if (ret) {
+			pr_err("%s:msmfb_overlay_play_enable ioctl failed",
+				__func__);
+			return ret;
+		}
+	} else {
+		memcpy(&enable, p, sizeof(enable));
 	}
 
 	mfd->overlay_play_enable = enable;
@@ -3450,15 +3501,19 @@ static int msmfb_overlay_play_enable(struct fb_info *info, unsigned long *argp)
 	return 0;
 }
 
-static int msmfb_overlay_blt(struct fb_info *info, unsigned long *argp)
+static int msmfb_overlay_blt(struct fb_info *info, void *p, int user)
 {
 	int     ret;
 	struct msmfb_overlay_blt req;
 
-	ret = copy_from_user(&req, argp, sizeof(req));
-	if (ret) {
-		pr_err("%s: failed\n", __func__);
-		return ret;
+	if (user) {
+		ret = copy_from_user(&req, p, sizeof(req));
+		if (ret) {
+			pr_err("%s: copy_from_user failed\n", __func__);
+			return ret;
+		}
+	} else {
+		memcpy(&req, p, sizeof(req));
 	}
 
 	ret = mdp4_overlay_blt(info, &req);
@@ -3613,16 +3668,20 @@ static int msmfb_overlay_ioctl_writeback_set_mirr_hint(struct fb_info *
 }
 #endif
 
-static int msmfb_overlay_3d_sbys(struct fb_info *info, unsigned long *argp)
+static int msmfb_overlay_3d_sbys(struct fb_info *info, void *p, int user)
 {
 	int	ret;
 	struct msmfb_overlay_3d req;
 
-	ret = copy_from_user(&req, argp, sizeof(req));
-	if (ret) {
-		pr_err("%s:msmfb_overlay_3d_ctrl ioctl failed\n",
-			__func__);
-		return ret;
+	if (user) {
+		ret = copy_from_user(&req, p, sizeof(req));
+		if (ret) {
+			pr_err("%s:msmfb_overlay_3d_ctrl ioctl failed\n",
+				__func__);
+			return ret;
+		}
+	} else {
+		memcpy(&req, p, sizeof(req));
 	}
 
 	ret = mdp4_overlay_3d_sbys(info, &req);
@@ -3893,16 +3952,19 @@ buf_sync_err_1:
 	return ret;
 }
 
-static int msmfb_display_commit(struct fb_info *info,
-						unsigned long *argp)
+static int msmfb_display_commit(struct fb_info *info, void *p, int user)
 {
 	int ret;
 	struct mdp_display_commit disp_commit;
-	ret = copy_from_user(&disp_commit, argp,
-			sizeof(disp_commit));
-	if (ret) {
-		pr_err("%s:copy_from_user failed", __func__);
-		return ret;
+
+	if (user) {
+		ret = copy_from_user(&disp_commit, p, sizeof(disp_commit));
+		if (ret) {
+			pr_err("%s:copy_from_user failed", __func__);
+			return ret;
+		}
+	} else {
+		memcpy(&disp_commit, p, sizeof(disp_commit));
 	}
 
 	ret = msm_fb_pan_display_ex(info, &disp_commit);
@@ -3926,6 +3988,63 @@ static int msmfb_get_metadata(struct msm_fb_data_type *mfd,
 	}
 	return ret;
 }
+
+#ifdef CONFIG_FB_MSM_OVERLAY
+int msm_fb_overlay_ioctl(struct fb_info *info, unsigned int cmd,
+			unsigned long arg, int user)
+{
+	int ret = 0;
+	void *argp = (void *)arg;
+
+	if (!argp) {
+		pr_err("%s arg is NULL, cmd=0x%08x", __func__, cmd);
+		return -EFAULT;
+	}
+
+	switch (cmd) {
+	case MSMFB_OVERLAY_GET:
+		ret = msmfb_overlay_get(info, argp, user);
+		break;
+	case MSMFB_OVERLAY_SET:
+		ret = msmfb_overlay_set(info, argp, user);
+		break;
+	case MSMFB_OVERLAY_UNSET:
+		ret = msmfb_overlay_unset(info, argp, user);
+		break;
+	case MSMFB_OVERLAY_PLAY:
+		ret = msmfb_overlay_play(info, argp, user);
+		break;
+	case MSMFB_OVERLAY_PLAY_ENABLE:
+		ret = msmfb_overlay_play_enable(info, argp, user);
+		break;
+	case MSMFB_OVERLAY_PLAY_WAIT:
+		ret = msmfb_overlay_play_wait(info, argp, user);
+		break;
+	case MSMFB_OVERLAY_BLT:
+		ret = msmfb_overlay_blt(info, argp, user);
+		break;
+	case MSMFB_OVERLAY_3D:
+		ret = msmfb_overlay_3d_sbys(info, argp, user);
+		break;
+	case MSMFB_DISPLAY_COMMIT:
+		ret = msmfb_display_commit(info, argp, user);
+		break;
+	default:
+		MSM_FB_INFO("MDP: unknown ioctl (cmd=%x) received!\n", cmd);
+		ret = -EINVAL;
+		break;
+	}
+	return ret;
+}
+#else
+int msm_fb_overlay_ioctl(struct fb_info *info, unsigned int cmd,
+			unsigned long arg, int user)
+{
+	MSM_FB_INFO("MDP: unknown ioctl (cmd=%x) received! overlay is not " \
+			"supported", cmd);
+	ret = -EINVAL;
+}
+#endif
 
 static int msm_fb_ioctl(struct fb_info *info, unsigned int cmd,
 			unsigned long arg)
@@ -3954,31 +4073,6 @@ static int msm_fb_ioctl(struct fb_info *info, unsigned int cmd,
 	msm_fb_pan_idle(mfd);
 
 	switch (cmd) {
-#ifdef CONFIG_FB_MSM_OVERLAY
-	case MSMFB_OVERLAY_GET:
-		ret = msmfb_overlay_get(info, argp);
-		break;
-	case MSMFB_OVERLAY_SET:
-		ret = msmfb_overlay_set(info, argp);
-		break;
-	case MSMFB_OVERLAY_UNSET:
-		ret = msmfb_overlay_unset(info, argp);
-		break;
-	case MSMFB_OVERLAY_PLAY:
-		ret = msmfb_overlay_play(info, argp);
-		break;
-	case MSMFB_OVERLAY_PLAY_ENABLE:
-		ret = msmfb_overlay_play_enable(info, argp);
-		break;
-	case MSMFB_OVERLAY_PLAY_WAIT:
-		ret = msmfb_overlay_play_wait(info, argp);
-		break;
-	case MSMFB_OVERLAY_BLT:
-		ret = msmfb_overlay_blt(info, argp);
-		break;
-	case MSMFB_OVERLAY_3D:
-		ret = msmfb_overlay_3d_sbys(info, argp);
-		break;
 	case MSMFB_MIXER_INFO:
 		ret = msmfb_mixer_info(info, argp);
 		break;
@@ -4008,12 +4102,11 @@ static int msm_fb_ioctl(struct fb_info *info, unsigned int cmd,
 		ret = msmfb_overlay_ioctl_writeback_set_mirr_hint(
 				info, argp);
 		break;
-#endif
 	case MSMFB_VSYNC_CTRL:
 	case MSMFB_OVERLAY_VSYNC_CTRL:
 		down(&msm_fb_ioctl_ppp_sem);
 		if (mdp_rev >= MDP_REV_40)
-			ret = msmfb_overlay_vsync_ctrl(info, argp);
+			ret = msmfb_overlay_vsync_ctrl(info, argp, true);
 		else
 			ret = msmfb_vsync_ctrl(info, argp);
 		up(&msm_fb_ioctl_ppp_sem);
@@ -4248,10 +4341,6 @@ static int msm_fb_ioctl(struct fb_info *info, unsigned int cmd,
 			ret = copy_to_user(argp, &buf_sync, sizeof(buf_sync));
 		break;
 
-	case MSMFB_DISPLAY_COMMIT:
-		ret = msmfb_display_commit(info, argp);
-		break;
-
 	case MSMFB_METADATA_GET:
 		ret = copy_from_user(&mdp_metadata, argp, sizeof(mdp_metadata));
 		if (ret)
@@ -4264,8 +4353,10 @@ static int msm_fb_ioctl(struct fb_info *info, unsigned int cmd,
 		break;
 
 	default:
-		MSM_FB_INFO("MDP: unknown ioctl (cmd=%x) received!\n", cmd);
-		ret = -EINVAL;
+		ret = msm_fb_overlay_ioctl(info, cmd, arg, true);
+		if (ret)
+			MSM_FB_INFO("%s msm_fb_overlay_ioctl error=%d",
+					__func__, ret);
 		break;
 	}
 
@@ -4545,6 +4636,32 @@ int msm_fb_v4l2_update(void *par,
 #endif
 }
 EXPORT_SYMBOL(msm_fb_v4l2_update);
+
+int mdpclient_msm_fb_get_id(int idx, char *buf, int len)
+{
+	struct fb_info *fbi = NULL;
+	struct msm_fb_data_type *mfd = NULL;
+
+	if (idx >= FB_MAX) {
+		pr_err("%s idx=%d is out of bound=%d", __func__, idx, FB_MAX);
+		return -EFAULT;
+	} else if (!buf || !len) {
+		pr_err("%s buf=0x%08x or len=%d is 0", __func__, (int)buf, len);
+		return -EFAULT;
+	}
+
+	fbi = registered_fb[idx];
+	mfd = (struct msm_fb_data_type *)fbi->par;
+	if (!mfd) {
+		pr_err("%s fbi is NULL, idx=%d", __func__, idx);
+		return -ENODEV;
+	}
+	/* This function is returning buffer length, but not error code.*/
+	msm_fb_populate_disp_id(mfd, buf, len);
+
+	return 0;
+}
+EXPORT_SYMBOL(mdpclient_msm_fb_get_id);
 
 int mdpclient_msm_fb_open(void)
 {

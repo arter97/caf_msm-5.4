@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,6 +14,8 @@
 
 #ifndef MDP4_H
 #define MDP4_H
+
+#include "msm_fb_def.h"
 
 extern struct mdp_dma_data dma2_data;
 extern struct mdp_dma_data dma_s_data;
