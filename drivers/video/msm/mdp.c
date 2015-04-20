@@ -3064,6 +3064,7 @@ static int mdp_probe(struct platform_device *pdev)
 		layermixer = inpdw(MDP_BASE + 0x10100);
 		if (((layermixer & 0x0000FFFF) != 0) &&
 			(mfd->panel_info.pdest < DISPLAY_3)) {
+			mfd->base_layer = OVERLAY_PIPE_MAX;
 			for (i = OVERLAY_PIPE_VG1; i < OVERLAY_PIPE_RGB3; i++) {
 				stage = (layermixer >> (i * 4)) & 0x0F;
 				if ((stage & 0x0F) == 0)
@@ -3074,6 +3075,8 @@ static int mdp_probe(struct platform_device *pdev)
 				if (!((stage_adj >= 9) && (stage_adj <= 0x0F)))
 					/* Layer is not for this display*/
 					continue;
+				if (stage_adj == 9)
+					mfd->base_layer = i;
 				rc = mdp_map_splash_buffer(mfd, i);
 				if (rc) {
 					pr_err("%s,%d map splash buffer error" \

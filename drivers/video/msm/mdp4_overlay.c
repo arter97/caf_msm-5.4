@@ -2601,6 +2601,32 @@ struct mdp4_overlay_pipe *mdp4_overlay_ndx2pipe(int ndx)
 	return pipe;
 }
 
+struct mdp4_overlay_pipe *mdp4_pipe_alloc_by_id(uint32 id)
+{
+	int i;
+	struct mdp4_overlay_pipe *pipe;
+
+	for (i = 0; i < OVERLAY_PIPE_MAX; i++) {
+		pipe = &ctrl->plist[i];
+		if (pipe->pipe_num == id) {
+			if (pipe->pipe_used == 0) {
+				init_completion(&pipe->comp);
+				init_completion(&pipe->dmas_comp);
+				pr_debug("%s: pipe=%x num=%d\n", __func__,
+					(int)pipe, pipe->pipe_num);
+				return pipe;
+			} else {
+				pr_err("%s: pipe%d is already used!\n",
+					__func__, pipe->pipe_num);
+				return NULL;
+			}
+		}
+	}
+
+	pr_err("%s: pipe %d not found!\n", __func__, id);
+	return NULL;
+}
+
 struct mdp4_overlay_pipe *mdp4_overlay_pipe_alloc(int ptype, int mixer)
 {
 	int i;
