@@ -1,0 +1,366 @@
+Introduction:
+=============
+
+The MDP arbitrator driver provides the Qualcomm Mobile Display Processor (MDP)
+hardware overlay layer management. It also receives events from other drivers,
+such as the switch driver, CAN bus, etc, and then dispatches the uevents to the
+clients of this arbitrator to bring up, tear down or reset their use cases.
+
+Hardware description:
+=====================
+
+The MDP subsystem provides multiple hardware overlay layers to fetch the input
+surface from the MMU. These layers support different capabilities of the
+surface, such as color format, size, etc, and provide different post processing,
+such as scaling, color conversion/correction, etc.
+
+Software Description:
+=====================
+
+The driver is based on the platform_driver model, and implements probe and
+remove functions. Once probe function is called the driver registers the MDP
+arbitrator device, which creates a "/dev/mdp_arbitrator" character device node.
+Userspace talks to this node through arbitrator ioctls. The driver also provides
+the same level of kernel APIs as these ioctls for the kernel clients to access.
+
+Software Architecture Diagram
+-----------------------------
+
+The following diagram illustrates the various components/layers of the MDP
+arbitrator driver and communication with the clients.
+
++-------------------------------------------------------------------------+
+|    +---------------------------+   +-----------------------------+      |
+|    |                           |   |                             |      |
+|    |      Kernel Clients       |   |    User Space Clients       |      |
+|    |                           |   |                             |      |
+|    +------------^-+------------+   +-------------^-+-------------+      |
+|                 | |                              | |                    |
+|        Callbacks| |Kernel APIs             uevent| |ioctls              |
+|                 | |                              | |                    |
+|  +--------------+-v------------------------------+-v---------------+    |
+|  |MDP           ^ +                              ^ +               |    |
+|  |Arbitrator    | |                              | |               |    |
+|  |Driver     +--+-v------------------------------+-v---+           |    |
+|  |           |               API Layer                 |           |    |
+|  |           +----+----^---------------------^-----+---+           |    |
+|  |       +--------+    |                     |     +------+        |    |
+|  |       |    +--------+                     +-------+    |        |    |
+|  |   +---v----+----+      +-------------+       +----+----v---+    |    |
+|  |   |             |      |             |       |             |    |    |
+|  |   |-------------|      |-------------|       |-------------|    |    |
+|  |   |             |      |             |       |             |    |    |
+|  |   |   Event     <------>  Database   <------->   Overlay   |    |    |
+|  |   | Management  |      |             |       |  Management |    |    |
+|  |   |             |      |             |       |             |    |    |
+|  |   +------^------+      +--^------^---+       +------+------+    |    |
+|  |          |                |      |             +----+           |    |
+|  |          +  +-------------+      +----------+  v                |    |
+|  +----------^--^-------------------------------^--+----------------+    |
+|             |  |                               |  |                     |
+|             |  | Event            Framebuffer  |  |                     |
+|    Set Event|  | Register/        Register/    |  |Custom Overlay APIs  |
+|             |  | Deregister       Deregister   |  |                     |
+|             |  |                               |  |                     |
+|   +---------+--+---------------+ +-------------+--v-------------+       |
+|   |                            | |                              |       |
+|   |  Switch/CAN bus Driver     | |       Framebuffer Driver     |       |
+|   |                            | |                              |       |
+|   +----------------------------+ +------------------------------+       |
++-------------------------------------------------------------------------+
+
+The MDP arbitrator driver consists of four modules:
+- API Layer:
+  It provides all the public APIs, including ioctls, uevent and
+  kernel APIs, to communicate with both kernel and user space clients.
+
+- Database Module:
+  - It records the client information when it registers/deregisters itself
+    to/from arbitrator driver. The information includes client name, fb file
+    descriptor, event name and state the client cares, priority, etc.
+  - It records the fb information when framebuffer driver registers/deregisters
+    itself to/from arbitrator driver. The information includes fb name, type,
+    index, etc.
+  - It records the event information when the event generator driver (such as
+    switch driver, CAN bus driver, etc) registers/deregisters itself to/from
+    arbitrator driver. The information includes event name, supported state,
+    etc.
+
+- Event Management Module:
+  It receives the event from the event generator driver, then parses it and
+  dispatches the callback/uevent to the clients according to the conditions
+  they register.
+
+- Overlay Management Module:
+  It stores the state of all of the MDP overlay layers. When lack of the layer
+  resources, it dispatches the callback/uevent to the clients to tear down or
+  reset their use case in order to release the resources.
+
+Database Module
+---------------
+This module maintains the database for the information of the clients, events
+and framebuffers. Whenever the client, event generator driver or framebuffer
+registers with the arbitrator driver, it's added into the list by this module.
+And when it deregisters, it's removed from the list. Whenever event generator
+driver calls set_event, the new event state is updated to the database. The
+Event Management Module and Overlay Management Module talk to Database Module to
+retrieve all related information.
+
+Event Management Module
+-----------------------
+This module contains a work queue to process the event. When set_event is
+called, the new event state is added into database, and triggers the work queue
+to go through the client database, find out all clients that register to this
+event, then send up or down uevent and callback.
+
+Overlay Management Module
+-------------------------
+This module receives overlay request from the client and checks the occupied
+resources from the overlay pool. If there is an available overlay, then it
+passes this request to framebuffer driver to get the resource and updates the
+database. Otherwise, it goes through the client database, finds out which
+clients support the reset event, sends the reset uevent/callback, waits for the
+acknowledgement and checks the overlay resource again. If no client supports
+reset or still lacks an overlay resource after reset, it goes through the client
+database again to find clients that have lower priority than the current client,
+sends the down uevent/callback to tear down the client to recover more overlay
+resources. If all of these fail, then an error (-ENOMEM) is returned for the
+current request.
+
+
+Power Management
+================
+
+None.
+
+SMP/Multicore
+=============
+
+The MDP arbitrator driver contains a single thread work queue from the Event
+Management Module. It's used to process the event and trigger the uevent to the
+client. Since it's required to be fast as possible for the event dispatch from
+the performance perspective, a system work queue is not being used in here.
+
+A completion vairable is used in the Overlay Management Module to wait for the
+acknowledgement from the clients.
+
+
+Security
+========
+
+None.
+
+Performance
+===========
+
+The event dispatch is considered as performance critical. To optimize this, a
+dedicated work queue is used instead of system queue.
+
+
+Interface
+=========
+
+The interfaces are provided by the API layer, which sits at the top of the
+driver and provides all of the public APIs to communicate with the clients.
+
+The following structures/enumeration lists are defined to facilitate API
+parameters.
+
+notification enumeration list
+-----------------------------
+enum notification {
+  DOWN = 0x1,
+  UP = 0x02,
+  RESET = 0x04
+};
+
+The following APIs are exported as both IOCTLs and kernel APIs.
+
+register()
+----------
+  It's used for clients to register themselves to the arbitrator with its
+  configuration.
+
+Parameters:
+  [in]@name: string of the client name.
+  [in]@fb_index: framebuffer index for arbitrator to manage the overlay
+  resources.
+  [in]@num_of_events: number of events that client registers.
+  [in]@event: pointer of the event information that client registers.
+    [in]@name: string of the event name that client is registering to. When this
+    event happens, the client should be notified.
+    [in]@num_of_up_state_values: number of event state values for up
+    notification.
+    [in]@up_state_value: pointer of event state values for up notification.
+    [in]@num_of_down_state_values: number of event state values for down
+    notification.
+    [in]@down_state_value: pointer of event state values for down notification.
+  [in]@priority: priority of this client.
+  [in]@notification_support_mask: mask of notifications this client supports.
+  The down and up notifications are mandatory for client to support. The reset
+  notification is optional to support. This parameter could be ORed with the
+  value defined in enum notification.
+
+deregister()
+------------
+  It's used for clients to deregister themselves from the arbitrator.
+  Parameter: None.
+
+acknowledge()
+-------------
+  It's used for clients to acknowledge the response after it receives the
+  uevents and processes them.
+
+Parameter:
+  [in]@notification_mask: mask of notifications this client acknowledges. If
+  client acknowledges multiple notifications in one call, this parameter could
+  be ORed with the value defined in enum notification.
+
+get_event()
+-----------
+  It's used for clients to get the event information such as name, state, etc.
+
+Parameters:
+  [in/out]@num_of_events: number of events supported by the platform. If client
+  passes zero in, driver returns back actual number of events.
+  [out]@event: pointer of the event information.
+    [in]@name: string of the event name.
+    [in/out]@num_of_state: number of states supported by this event. If client
+    passes zero in, driver returns back actual number of states.
+    [out]@value: pointer of event state values.
+
+custom overlay()
+----------------
+  Refer to MSMFB overlay ioctls.
+
+The following APIs are defined for framebuffer driver and event generator
+drivers to communicate with the arbitrator. Those APIs are only for kernel
+drivers.
+
+register_framebuffer()
+----------------------
+  It's used for display framebuffer driver to register itself to the display
+  arbitrator.
+
+Parameter:
+  [in]@fb: framebuffer pointer of structure fb_info.
+
+deregister_framebuffer()
+------------------------
+  It's used for display framebuffer driver to deregister itself from the display
+  arbitrator.
+
+Parameter:
+  [in]@fb: framebuffer pointer of structure fb_info.
+
+register_event()
+----------------
+  It's used for event generator drivers, such as switch, CAN bus, etc, to
+  register the event to the display arbitrator.
+
+Parameters:
+  [in]@num_of_events: number of events that event driver (Switch/CAN) registers
+  to the arbitrator.
+  [in]@event: pointer of the event information.
+    [in]@name: string of the event name.
+    [in]@num_of_state: number of states supported by this event.
+    [in]@value: pointer of event state values.
+
+deregister_event()
+------------------
+  It's used for display event generator drivers to deregister the event from the
+  display arbitrator.
+
+Parameters:
+  [in]@num_of_events: number of events that event driver (Switch/CAN)
+  deregisters from the arbitrator.
+  [in]@event: pointer of the event information.
+    [in]@name: string of the event name.
+
+set_event()
+-----------
+  It's used for display event generator drivers to set the event to the display
+  arbitrator.
+
+Parameters:
+  [in]@name: string of the event name.
+  [in]@value: event state value.
+
+The following uevents/callbacks are defined for clients to receive the
+notification. Uevents are dispatched via "change@/devices/virtual/mdp_arb/
+mdp_arb".
+
+up()
+----
+  The Arbitrator sends this uevent to notify clients to bring up their use case.
+
+Uevent string: "up=client_name_1,client_name_2,... event=event_name state=
+state_value"
+  @client_name_x: name of the client that needs to be brought up.
+  @event_name: name of the event that generates this notification.
+  @state_value: current event state value.
+
+Callback parameters:
+  [out]@num_of_clients: number of clients for this notification.
+  [out]@client: pointer of the client information.
+    [out]@name: string of the client name.
+  [out]@event_name: string of the event name which generates this
+  notification.
+  [out]@value: current event state value.
+
+down()
+------
+  The Arbitrator sends this uevent to notify clients to tear down their use
+  case.
+
+Uevent string: "down=client_name_1,client_name_2,... event=event_name state=
+state_value"
+  @client_name_x: name of the client that needs to be teared down. If it's
+  "all", then all of the clients need to be teared down.
+  @event_name: name of the event that generates this notification.
+  @state_value: current event state value.
+
+Callback parameters:
+  [out]@num_of_clients: number of clients for this notification.
+  [out]@client: pointer of the client information.
+    [out]@name: string of the client name.
+  [out]@event_name: string of the event name which generates this
+  notification.
+  [out]@value: current event state value.
+
+reset()
+-------
+  The Arbitrator sends this uevent to notify clients to reset their use case.
+
+Uevent string: "reset=client_name_1,client_name_2,... event=event_name state=
+state_value layer=max_number_of_layers"
+  @client_name_x: name of the client that needs to be reset or invalidated.
+  @event_name: name of the event that generates this notification.
+  @state_value: current event state value.
+  @max_number_of_layers: maximum number of layers the client(s) can accquire
+  after reset.
+
+Callback parameters:
+  [out]@num_of_clients: number of clients for this notification.
+  [out]@client: pointer of the client information.
+    [out]@name: string of the client name.
+  [out]@event_name: string of the event name which generates this
+  notification.
+  [out]@value: current event state value.
+  [out]@max_number_of_layers: maximum number of layers the client(s) can
+  accquire after reset.
+
+Config options
+==============
+
+MSM_MDP_ARB is used for enabling compilation of the module.
+
+Initialization
+==============
+
+The MDP arbitrator driver is initialized during bootup. It needs to be started
+before framebuffer and event (Switch/CAN) drivers. If framebuffer or event
+driver fails when register to MDP arbitrator driver inside probe, it should
+return EPROBE_DEFER to allow probing again after MDP arbitrator driver being
+initialized.
+

@@ -77,6 +77,19 @@
 						unsigned int)
 #define MSMFB_METADATA_GET  _IOW(MSMFB_IOCTL_MAGIC, 166, struct msmfb_metadata)
 
+/* New ioctls for MDP arbitrator */
+#define MSMFB_ARB_GET_EVENT    _IOWR(MSMFB_IOCTL_MAGIC, 170, \
+					struct mdp_arb_events)
+#define MSMFB_ARB_REGISTER     _IOW(MSMFB_IOCTL_MAGIC, 171, \
+					struct mdp_arb_register)
+#define MSMFB_ARB_DEREGISTER   _IO(MSMFB_IOCTL_MAGIC, 172)
+#define MSMFB_ARB_BIND         _IOW(MSMFB_IOCTL_MAGIC, 173, \
+					struct mdp_arb_bind)
+#define MSMFB_ARB_UNBIND       _IO(MSMFB_IOCTL_MAGIC, 174)
+#define MSMFB_ARB_ACKNOWLEDGE  _IOW(MSMFB_IOCTL_MAGIC, 175, unsigned int)
+#define MSMFB_ARB_GET_STATE    _IOWR(MSMFB_IOCTL_MAGIC, 176, \
+					struct mdp_arb_event)
+
 #define FB_TYPE_3D_PANEL 0x10101010
 #define MDP_IMGTYPE2_START 0x10000
 #define MSMFB_DRIVER_VERSION	0xF9E8D701
@@ -625,6 +638,123 @@ enum {
 	MDP_WRITEBACK_MIRROR_ON,
 	MDP_WRITEBACK_MIRROR_PAUSE,
 	MDP_WRITEBACK_MIRROR_RESUME,
+};
+
+/* MDP Arbitrator related definitions */
+#define MDP_ARB_NAME_LEN	(16)
+
+/**
+ * enum mdp_arb_notification_event - notification events delivered by the
+ * driver.
+ * @MDP_ARB_NOTIFICATION_DOWN: client needs to shutdown and release the overlay
+ *                             resources.
+ * @MDP_ARB_NOTIFICATION_UP: client could bring up its use case and obtain the
+ *                           overlay resources.
+ * @MDP_ARB_NOTIFICATION_OPTIMIZE: client needs to enter the optimized mode and
+ *                                 free as many overlay resources as possible.
+ *                                 Clients may not support this action.
+ */
+enum mdp_arb_notification_event {
+	MDP_ARB_NOTIFICATION_DOWN     = 0x00000001,
+	MDP_ARB_NOTIFICATION_UP       = 0x00000002,
+	MDP_ARB_NOTIFICATION_OPTIMIZE = 0x00000004,
+};
+
+/**
+ * struct mdp_arb_event_register_state - event state values for notification.
+ * @num_of_up_state_value: number of event state values for up notification.
+ * @up_state_value: pointer of event state values for up notification.
+ * @num_of_down_state_value: number of event state values for down notification.
+ * @down_state_value: pointer of event state values for down notification.
+ */
+struct mdp_arb_event_register_state {
+	int num_of_up_state_value;
+	int *up_state_value;
+	int num_of_down_state_value;
+	int *down_state_value;
+};
+
+/**
+ * struct mdp_arb_event_state - event state values information.
+ * @num_of_states: number of event state values.
+ *                 If it's zero, driver returns back actual number of the state.
+ *                 And value is NULL.
+ *                 If it's non-zero, user should have suffcient memory for
+ *                 number of the values.
+ * @value: pointer of event state values.
+ */
+struct mdp_arb_event_state {
+	int num_of_states;
+	int *value;
+};
+
+/**
+ * struct mdp_arb_event - event information.
+ * @name: name of this event.
+ * @event: union of all event information.
+ * @register_state: event state values for notifications used by client calling
+ *                  MSMFB_ARB_REGISTER ioctl.
+ * @get_event: event state values for client to query all event states by
+ *             calling MSMFB_ARB_GET_EVENT ioctl.
+ * @get_state: current event state value for client to query by calling
+ *             MSMFB_ARB_GET_STATE ioctl.
+ * @driver_register: event state values for event driver registering them to
+ *                   MDP arbitrator.
+ * @driver_set_event: event state value for event driver configuring it to MDP
+ *                    arbitrator.
+ */
+struct mdp_arb_event {
+	char name[MDP_ARB_NAME_LEN];
+	union {
+		struct mdp_arb_event_register_state register_state;
+		struct mdp_arb_event_state get_event;
+		int get_state;
+		struct mdp_arb_event_state driver_register;
+		int driver_set_event;
+	} event;
+};
+
+/**
+ * struct mdp_arb_register - information for client registering to driver.
+ * @name: client's name.
+ * @fb_index: framebuffer index.
+ * @num_of_events: number of events that client registers.
+ * @event: pointer of event information client registers.
+ * @priority: priority of this client.
+ * @notification_support_mask: mask of notifications this client supports.
+ */
+struct mdp_arb_register {
+	char name[MDP_ARB_NAME_LEN];
+	int fb_index;
+	int num_of_events;
+	struct mdp_arb_event *event;
+	int priority;
+	int notification_support_mask;
+};
+
+/**
+ * struct mdp_arb_bind - information for binding to a registered client.
+ * @name: client's name.
+ * @fb_index: framebuffer index.
+ */
+struct mdp_arb_bind {
+	char name[MDP_ARB_NAME_LEN];
+	int fb_index;
+};
+
+/**
+ * struct mdp_arb_events - multiple event information for client to query or
+ * event driver to register.
+ * @num_of_events: number of event state values.
+ *                 If it's zero, driver returns back actual number of events.
+ *                 And event pointer is NULL.
+ *                 If it's non-zero, user should have suffcient memory for
+ *                 number of the events.
+ * @event: pointer of event information.
+ */
+struct mdp_arb_events {
+	int num_of_events;
+	struct mdp_arb_event *event;
 };
 
 #ifdef __KERNEL__
