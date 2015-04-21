@@ -529,6 +529,8 @@ Subnode properties:
 			- "rgba8888"
 			- "rgb888"
 			- "rgb565"
+- qcom,mdss_wb_panel: Specifies writeback block properties for Wireless
+		      display and rotation.
 
 Example:
 	mdss_mdp: qcom,mdss_mdp@fd900000 {
@@ -675,5 +677,11 @@ Example:
 				linux,contiguous-region = <&cont_splash_mem>;
 			};
 		};
-	};
 
+		qcom,mdss_wb_panel {
+			compatible = "qcom,mdss_wb";
+			qcom,mdss_pan_res = <1280 720>;
+			qcom,mdss_pan_bpp = <24>;
+			qcom,mdss-fb-map = <&mdss_fb1>;
+		};
+	};
