@@ -15,28 +15,19 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/kernel.h>
-#include <media/v4l2-device.h>
 
 #include "msm_ba_debug.h"
 #include "msm_ba_common.h"
 
-#define ADV_INPUT_CVBS_AIN1 0x00
-#define ADV_INPUT_CVBS_AIN2 0x01
-#define ADV_INPUT_CVBS_AIN3 0x02
-#define ADV_INPUT_CVBS_AIN4 0x03
-#define ADV_INPUT_YPRPB_AIN1_AIN2_AIN3 0x09
-#define ADV_INPUT_HDMI_RX 0x08
-
 struct msm_ba_input_config msm_ba_inp_cfg[] = {
 	/* type, index, name, adv inp, dev id, sd name, signal status */
-	{BA_INPUT_CVBS, 0, "CVBS-0", ADV_INPUT_CVBS_AIN1, 0, "adv7180", 1},
-	{BA_INPUT_CVBS, 1, "CVBS-1", ADV_INPUT_CVBS_AIN2, 0, "adv7180", 1},
-	{BA_INPUT_COMPONENT, 0, "COMP-0", ADV_INPUT_YPRPB_AIN1_AIN2_AIN3,
-		0, "adv7180", 1},
-	{BA_INPUT_CVBS, 2, "CVBS-2", ADV_INPUT_CVBS_AIN1, 1, "adv7180", 1},
-	{BA_INPUT_CVBS, 3, "CVBS-3", ADV_INPUT_CVBS_AIN2, 1, "adv7180", 1},
-	{BA_INPUT_CVBS, 4, "CVBS-4", ADV_INPUT_CVBS_AIN3, 1, "adv7180", 1},
-	{BA_INPUT_HDMI, 0, "HDMI-1", ADV_INPUT_HDMI_RX, 2, "adv7481", 1},
+	{BA_INPUT_CVBS, 0, "CVBS-0", BA_IP_CVBS_0, 0, "adv7180", 1},
+	{BA_INPUT_CVBS, 1, "CVBS-1", BA_IP_CVBS_1, 0, "adv7180", 1},
+	{BA_INPUT_COMPONENT, 0, "COMP-0", BA_IP_COMPONENT_0, 0, "adv7180", 1},
+	{BA_INPUT_CVBS, 2, "CVBS-2", BA_IP_CVBS_0, 1, "adv7180", 1},
+	{BA_INPUT_CVBS, 3, "CVBS-3", BA_IP_CVBS_1, 1, "adv7180", 1},
+	{BA_INPUT_CVBS, 4, "CVBS-4", BA_IP_CVBS_2, 1, "adv7180", 1},
+	{BA_INPUT_HDMI, 0, "HDMI-1", BA_IP_HDMI_1, 2, "adv7481", 1},
 };
 
 struct msm_ba_dev *get_ba_dev(void)

@@ -19,13 +19,23 @@
 #include <linux/poll.h>
 
 enum msm_ba_ip {
-	BA_RVC_IP = 0, /* Rear View Camera */
-	BA_CAM_IP,
-	BA_CVBS_IP,
-	BA_TTL_IP,
-	BA_HDMI_IP,
-	BA_MHL_IP,
-	BA_NO_IP
+	BA_IP_CVBS_0 = 0,
+	BA_IP_CVBS_1,
+	BA_IP_CVBS_2,
+	BA_IP_CVBS_3,
+	BA_IP_CVBS_4,
+	BA_IP_CVBS_5,
+	BA_IP_SVIDEO_0,
+	BA_IP_SVIDEO_1,
+	BA_IP_SVIDEO_2,
+	BA_IP_COMPONENT_0,
+	BA_IP_COMPONENT_1,
+	BA_IP_DVI_0,
+	BA_IP_DVI_1,
+	BA_IP_HDMI_1,
+	BA_IP_MHL_1,
+	BA_IP_TTL,
+	BA_IP_MAX = 0xffffffff
 };
 
 void *msm_ba_open(void);
@@ -40,6 +50,7 @@ int msm_ba_s_output(void *instance, unsigned int index);
 int msm_ba_enum_fmt(void *instance, struct v4l2_fmtdesc *f);
 int msm_ba_s_fmt(void *instance, struct v4l2_format *f);
 int msm_ba_g_fmt(void *instance, struct v4l2_format *f);
+int msm_ba_g_frame_interval(void *instance, struct v4l2_fract *interval);
 int msm_ba_s_ctrl(void *instance, struct v4l2_control *a);
 int msm_ba_s_ext_ctrl(void *instance, struct v4l2_ext_controls *a);
 int msm_ba_g_ctrl(void *instance, struct v4l2_control *a);

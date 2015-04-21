@@ -307,14 +307,14 @@ static int adv7481_get_sd_timings(struct adv7481_state *state, int *sd_standard)
 	} while ((sdp_stat != sdp_stat2) && (timeout < SDP_NUM_TRIES));
 
 	if (sdp_stat != sdp_stat2) {
-		pr_err("%s(%d), adv7481 SDP status unstable: 1 ",
+		pr_err("%s(%d), adv7481 SDP status unstable: 1",
 							__func__, __LINE__);
 		return -ETIMEDOUT;
 	}
 
 	if (!(sdp_stat & 0x01)) {
-		pr_err("%s(%d), adv7481 SD Input NOT Locked: 1 ",
-							__func__, __LINE__);
+		pr_err("%s(%d), adv7481 SD Input NOT Locked: 0x%x",
+				__func__, __LINE__, sdp_stat);
 		return -EBUSY;
 	}
 
@@ -449,10 +449,11 @@ int adv7481_set_analog_mux(struct adv7481_state *state, int input)
 
 static int adv7481_set_ip_mode(struct adv7481_state *state, int input)
 {
-	int ret;
+	int ret = 0;
+
 	switch (input) {
 	case ADV7481_IP_HDMI:
-		adv7481_set_hdmi_mode(state);
+		ret = adv7481_set_hdmi_mode(state);
 		break;
 	case ADV7481_IP_CVBS_1:
 	case ADV7481_IP_CVBS_2:
@@ -462,8 +463,8 @@ static int adv7481_set_ip_mode(struct adv7481_state *state, int input)
 	case ADV7481_IP_CVBS_6:
 	case ADV7481_IP_CVBS_7:
 	case ADV7481_IP_CVBS_8:
-		adv7481_set_cvbs_mode(state);
-		adv7481_set_analog_mux(state, input);
+		ret = adv7481_set_cvbs_mode(state);
+		ret |= adv7481_set_analog_mux(state, input);
 		break;
 	case ADV7481_IP_CVBS_1_HDMI_SIM:
 	case ADV7481_IP_CVBS_2_HDMI_SIM:
@@ -473,9 +474,9 @@ static int adv7481_set_ip_mode(struct adv7481_state *state, int input)
 	case ADV7481_IP_CVBS_6_HDMI_SIM:
 	case ADV7481_IP_CVBS_7_HDMI_SIM:
 	case ADV7481_IP_CVBS_8_HDMI_SIM:
-		adv7481_set_hdmi_mode(state);
-		adv7481_set_cvbs_mode(state);
-		adv7481_set_analog_mux(state, input);
+		ret = adv7481_set_hdmi_mode(state);
+		ret |= adv7481_set_cvbs_mode(state);
+		ret |= adv7481_set_analog_mux(state, input);
 		break;
 	default:
 		ret = -EINVAL;
@@ -483,11 +484,13 @@ static int adv7481_set_ip_mode(struct adv7481_state *state, int input)
 	return ret;
 }
 
-static int adv7482_set_op_src(struct adv7481_state *state,
+static int adv7481_set_op_src(struct adv7481_state *state,
 						int output, int input)
 {
 	int ret = 0;
-	int temp = 0, val = 0;
+	int temp = 0;
+	int val = 0;
+
 	switch (output) {
 	case ADV7481_OP_CSIA:
 		switch (input) {
@@ -534,31 +537,75 @@ static int adv7482_set_op_src(struct adv7481_state *state,
 	return ret;
 }
 
+static u32 ba_inp_to_adv7481(u32 input)
+{
+	u32 adv_input = ADV7481_IP_HDMI;
+
+	switch (input) {
+	case BA_IP_CVBS_0:
+		adv_input = ADV7481_IP_CVBS_1;
+		break;
+	case BA_IP_CVBS_1:
+		adv_input = ADV7481_IP_CVBS_2;
+		break;
+	case BA_IP_CVBS_2:
+		adv_input = ADV7481_IP_CVBS_3;
+		break;
+	case BA_IP_CVBS_3:
+		adv_input = ADV7481_IP_CVBS_4;
+		break;
+	case BA_IP_CVBS_4:
+		adv_input = ADV7481_IP_CVBS_5;
+		break;
+	case BA_IP_CVBS_5:
+		adv_input = ADV7481_IP_CVBS_6;
+		break;
+	case BA_IP_HDMI_1:
+		adv_input = ADV7481_IP_HDMI;
+		break;
+	case BA_IP_MHL_1:
+		adv_input = ADV7481_IP_HDMI;
+		break;
+	case BA_IP_TTL:
+		adv_input = ADV7481_IP_TTL;
+		break;
+	default:
+		adv_input = ADV7481_IP_HDMI;
+		break;
+	}
+	return adv_input;
+}
+
 static int adv7481_s_routing(struct v4l2_subdev *sd, u32 input,
 				u32 output, u32 config)
 {
+	int adv_input = ba_inp_to_adv7481(input);
 	struct adv7481_state *state = to_state(sd);
 	int ret = mutex_lock_interruptible(&state->mutex);
 
 	if (ret)
 		return ret;
 
-	ret = adv7482_set_op_src(state, output, input);
+	ret = adv7481_set_op_src(state, output, adv_input);
 	if (ret) {
-		pr_err("SRC Routing Error\n");
-		return ret;
+		pr_err("Output SRC Routing Error: %d\n", ret);
+		goto unlock_exit;
 	}
 
-	if (state->mode != input) {
-		ret = adv7481_set_ip_mode(state, input);
+	if (state->mode != adv_input) {
+		ret = adv7481_set_ip_mode(state, adv_input);
 		if (ret)
-			state->mode = input;
+			pr_err("Set input mode failed: %d\n", ret);
+		else
+			state->mode = adv_input;
 	}
 
-
+unlock_exit:
 	mutex_unlock(&state->mutex);
+
 	return ret;
 }
+
 static int adv7481_get_hdmi_timings(struct adv7481_state *state,
 				struct adv7481_vid_params *vid_params,
 				struct adv7481_hdmi_params *hdmi_params)
@@ -615,6 +662,7 @@ static int adv7481_get_hdmi_timings(struct adv7481_state *state,
 	case CD_8BIT:
 	default:
 		vid_params->pix_clk /= 1;
+		break;
 	}
 
 	if ((vid_params->tot_pix != 0) && (vid_params->tot_lines != 0)) {
@@ -624,7 +672,7 @@ static int adv7481_get_hdmi_timings(struct adv7481_state *state,
 		vid_params->fr_rate /= (hdmi_params->pix_rep + 1);
 	}
 
-	pr_debug(" %s(%d), adv7481 TMDS Resolution: %d : %d @ %d\n",
+	pr_debug("%s(%d), adv7481 TMDS Resolution: %d : %d @ %d\n",
 			__func__, __LINE__,
 			vid_params->act_lines, vid_params->act_pix,
 			vid_params->fr_rate);
@@ -662,7 +710,7 @@ static int adv7481_query_dv_timings(struct v4l2_subdev *sd,
 		bt_timings->interlaced = vid_params.intrlcd ?
 				V4L2_DV_INTERLACED : V4L2_DV_PROGRESSIVE;
 		if (bt_timings->interlaced == V4L2_DV_INTERLACED)
-			bt_timings->height += bt_timings->height*2;
+			bt_timings->height /= 2;
 		break;
 	default:
 		return -EINVAL;
@@ -671,7 +719,7 @@ static int adv7481_query_dv_timings(struct v4l2_subdev *sd,
 	return ret;
 }
 
-static int  adv7481_query_sd_std(struct v4l2_subdev *sd, v4l2_std_id *std)
+static int adv7481_query_sd_std(struct v4l2_subdev *sd, v4l2_std_id *std)
 {
 	int ret = 0;
 	int temp = 0;
@@ -716,6 +764,51 @@ static int  adv7481_query_sd_std(struct v4l2_subdev *sd, v4l2_std_id *std)
 	return ret;
 }
 
+static int adv7481_g_frame_interval(struct v4l2_subdev *sd,
+				struct v4l2_subdev_frame_interval *interval)
+{
+	interval->interval.numerator = 1;
+	interval->interval.denominator = 60;
+
+	return 0;
+}
+
+static int adv7481_g_mbus_fmt(struct v4l2_subdev *sd,
+				struct v4l2_mbus_framefmt *fmt)
+{
+	int ret;
+	struct adv7481_vid_params vid_params;
+	struct adv7481_hdmi_params hdmi_params;
+	struct adv7481_state *state = to_state(sd);
+
+	if (!fmt)
+		return -EINVAL;
+
+	ret = mutex_lock_interruptible(&state->mutex);
+	if (ret)
+		return ret;
+
+	memset(&vid_params, 0, sizeof(struct adv7481_vid_params));
+	memset(&hdmi_params, 0, sizeof(struct adv7481_hdmi_params));
+
+	switch (state->mode) {
+	case ADV7481_IP_HDMI:
+	case ADV7481_IP_CVBS_1_HDMI_SIM:
+		adv7481_get_hdmi_timings(state, &vid_params, &hdmi_params);
+		fmt->width = vid_params.act_pix;
+		fmt->height = vid_params.act_lines;
+		if (vid_params.intrlcd)
+			fmt->height /= 2;
+		break;
+	default:
+		return -EINVAL;
+	}
+	mutex_unlock(&state->mutex);
+	fmt->code = V4L2_MBUS_FMT_YUYV8_2X8;
+	fmt->colorspace = V4L2_COLORSPACE_SMPTE170M;
+	return ret;
+}
+
 static int adv7481_csi_powerup(struct adv7481_state *state, bool pwr, int tx)
 {
 	int ret;
@@ -754,7 +847,6 @@ static int adv7481_csi_powerup(struct adv7481_state *state, bool pwr, int tx)
 
 }
 
-
 static int adv7481_set_op_stream(struct adv7481_state *state, bool on)
 {
 	int ret;
@@ -769,6 +861,20 @@ static int adv7481_set_op_stream(struct adv7481_state *state, bool on)
 	return ret;
 }
 
+static int adv7481_g_input_status(struct v4l2_subdev *sd, u32 *status)
+{
+	int ret = 0;
+	struct adv7481_state *state = to_state(sd);
+	int signal_status = 0;
+
+	signal_status = adv7481_rd_byte(state->i2c_sdp, SDP_VDEC_LOCK);
+	if (!(signal_status & 0x1)) {
+		pr_err("SIGNAL NOT LOCKED\n");
+		*status |= V4L2_IN_ST_NO_SIGNAL;
+	}
+	return ret;
+}
+
 static int adv7481_s_stream(struct v4l2_subdev *sd, int on)
 {
 	struct adv7481_state *state = to_state(sd);
@@ -780,8 +886,11 @@ static int adv7481_s_stream(struct v4l2_subdev *sd, int on)
 
 static const struct v4l2_subdev_video_ops adv7481_video_ops = {
 	.s_routing = adv7481_s_routing,
+	.g_frame_interval = adv7481_g_frame_interval,
+	.g_mbus_fmt = adv7481_g_mbus_fmt,
 	.querystd = adv7481_query_sd_std,
 	.g_dv_timings = adv7481_query_dv_timings,
+	.g_input_status = adv7481_g_input_status,
 	.s_stream = adv7481_s_stream,
 };
 
@@ -837,7 +946,7 @@ static int adv7481_probe(struct i2c_client *client,
 	if (!i2c_check_functionality(client->adapter,
 					I2C_FUNC_SMBUS_BYTE_DATA)) {
 		pr_err("%s %s Check i2c Functionality Fail\n",
-					__func__, client->name);
+				__func__, client->name);
 		ret = -EIO;
 		goto err;
 	}

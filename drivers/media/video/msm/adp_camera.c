@@ -686,8 +686,8 @@ static int adp_rear_camera_enable(void)
 		adp_cam_ctxt->ba_inst_hdlr = msm_ba_open();
 		msm_ba_g_input(adp_cam_ctxt->ba_inst_hdlr, &index);
 		pr_debug("%s: input index: %d\n", __func__, index);
-		if (BA_RVC_IP != index) {
-			index = BA_RVC_IP;
+		if (BA_IP_CVBS_0 != index) {
+			index = BA_IP_CVBS_0;
 			msm_ba_s_input(adp_cam_ctxt->ba_inst_hdlr, index);
 		}
 		memset(&input, 0, sizeof(input));
