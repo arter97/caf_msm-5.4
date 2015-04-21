@@ -23,8 +23,8 @@
 #include <linux/reverse.h>
 #include <linux/input.h>
 
-struct reverse_reverse_data {
-	struct switch_dev sdev;
+struct reverse_data {
+	struct switch_dev *sdev;
 	struct input_dev *idev;
 	unsigned gpio;
 	unsigned int key_code;
@@ -37,6 +37,18 @@ struct reverse_reverse_data {
 	int irq;
 	struct work_struct work;
 	struct delayed_work detect_delayed_work;
+};
+
+struct reverse_platform_data {
+	struct reverse_data *reverse_data[REVERSE_MAX_GPIO];
+	struct switch_dev *sdev;
+	struct input_dev *idev;
+};
+
+static struct reverse_platform_data g_reverse_platform_data = {
+		{NULL, NULL},
+		NULL,
+		NULL
 };
 
 static int reverse_continue;
@@ -79,9 +91,9 @@ static void show_pic_exit(void)
 static void reverse_detection_work(struct work_struct *work)
 {
 	int state;
-	struct reverse_reverse_data *data;
+	struct reverse_data *data;
 
-	data = container_of(work, struct reverse_reverse_data,
+	data = container_of(work, struct reverse_data,
 			detect_delayed_work.work);
 	state = gpio_get_value(data->gpio);
 
@@ -89,7 +101,7 @@ static void reverse_detection_work(struct work_struct *work)
 	if (data->active_low)
 		state = (state == 0) ? 1 : 0;
 
-	switch_set_state(&data->sdev, state);
+	switch_set_state(data->sdev, state);
 
 	if (state && (camera_status == CAMERA_POWERED_UP
 				|| camera_status == CAMERA_PREVIEW_DISABLED)) {
@@ -109,8 +121,8 @@ static void reverse_detection_work(struct work_struct *work)
 
 static irqreturn_t gpio_irq_handler(int irq, void *dev_id)
 {
-	struct reverse_reverse_data *data =
-		(struct reverse_reverse_data *)dev_id;
+	struct reverse_data *data =
+		(struct reverse_data *)dev_id;
 
 	schedule_delayed_work(&data->detect_delayed_work,
 					msecs_to_jiffies(data->debounce));
@@ -119,8 +131,8 @@ static irqreturn_t gpio_irq_handler(int irq, void *dev_id)
 
 static ssize_t switch_gpio_print_state(struct switch_dev *sdev, char *buf)
 {
-	struct reverse_reverse_data	*data =
-		container_of(sdev, struct reverse_reverse_data, sdev);
+	struct reverse_data *data = g_reverse_platform_data.reverse_data[0];
+
 	const char *state;
 	if (switch_get_state(sdev))
 		state = data->state_on;
@@ -166,61 +178,21 @@ static ssize_t continues_store(struct device *dev,
 static DEVICE_ATTR(continues, S_IRUGO | S_IWUSR,
 		continues_show, continues_store);
 
-static int switch_reverse_probe(struct platform_device *pdev)
+static int switch_reverse_setup_gpios(struct platform_device *pdev,
+		struct reverse_data *reverse_data)
 {
-	struct reverse_switch_platform_data *pdata = pdev->dev.platform_data;
-	struct reverse_reverse_data *reverse_data;
 	unsigned long irq_flags;
 	int ret = 0;
-	pr_debug("%s: kpi entry\n", __func__);
-	if (!pdata)
-		return -EBUSY;
+	pr_debug("%s: entry\n", __func__);
 
-	reverse_data = kzalloc(sizeof(struct reverse_reverse_data), GFP_KERNEL);
-	if (!reverse_data)
-		return -ENOMEM;
-
-	reverse_data->sdev.name = pdata->name;
-	reverse_data->gpio = pdata->gpio;
-	reverse_data->key_code = pdata->key_code;
-	reverse_data->debounce = pdata->debounce_time;
-	reverse_data->name_on = pdata->name_on;
-	reverse_data->name_off = pdata->name_off;
-	reverse_data->state_on = pdata->state_on;
-	reverse_data->state_off = pdata->state_off;
-	reverse_data->active_low = pdata->active_low;
-	reverse_data->sdev.print_state = switch_gpio_print_state;
-
-	ret = switch_dev_register(&reverse_data->sdev);
-	if (ret < 0)
-		goto err_switch_dev_register;
-
-	reverse_data->idev = input_allocate_device();
-	if (!reverse_data->idev) {
-		pr_err("Failed to allocate input dev\n");
-		ret = -ENOMEM;
-		goto err_input_dev_register;
-	}
-
-	reverse_data->idev->name = pdata->name;
-	reverse_data->idev->phys = "reverse_keys/input0";
-	reverse_data->idev->id.bustype = BUS_HOST;
-	reverse_data->idev->dev.parent = &pdev->dev;
-	reverse_data->idev->evbit[0] = BIT_MASK(EV_KEY);
-	reverse_data->idev->keybit[BIT_WORD(pdata->key_code)] =
-						BIT_MASK(pdata->key_code);
-
-	platform_set_drvdata(pdev, &reverse_data);
-
-	ret = input_register_device(reverse_data->idev);
-	if (ret) {
-		pr_err("Can't register input device: %d\n", ret);
-		goto err_input_reg;
+	if (!pdev || !reverse_data) {
+		pr_err("%s: ERROR null params!", __func__);
+		return -EINVAL;
 	}
 
 	ret = gpio_request(reverse_data->gpio, pdev->name);
 	if (ret < 0)
-		goto err_request_gpio;
+		return ret;
 
 	ret = gpio_direction_input(reverse_data->gpio);
 	if (ret < 0)
@@ -240,11 +212,8 @@ static int switch_reverse_probe(struct platform_device *pdev)
 
 	disable_irq(reverse_data->irq);
 
-	ret = device_create_file(reverse_data->sdev.dev, &dev_attr_continues);
-
 	INIT_DELAYED_WORK(&reverse_data->detect_delayed_work,
 						reverse_detection_work);
-	camera_status = CAMERA_POWERED_DOWN;
 
 	pr_debug("%s: init_camera_kthread\n", __func__);
 
@@ -268,21 +237,155 @@ static int switch_reverse_probe(struct platform_device *pdev)
 
 err_free_gpio:
 	gpio_free(reverse_data->gpio);
-err_request_gpio:
-	input_unregister_device(reverse_data->idev);
-err_input_reg:
-	input_free_device(reverse_data->idev);
-err_input_dev_register:
-	switch_dev_unregister(&reverse_data->sdev);
-err_switch_dev_register:
-	kfree(reverse_data);
+
+	pr_debug("%s: kpi exit %x\n", __func__, ret);
 
 	return ret;
 }
 
+static int switch_reverse_probe(struct platform_device *pdev)
+{
+	int ret = 0;
+	int index = 0;
+	struct reverse_switch_platform_data *pdata = pdev->dev.platform_data;
+
+	pr_debug("%s: kpi entry\n", __func__);
+
+	if (!pdata)
+		return -EBUSY;
+
+	/* register switch device */
+	g_reverse_platform_data.sdev =
+			kzalloc(sizeof(struct switch_dev), GFP_KERNEL);
+	if (!g_reverse_platform_data.sdev) {
+		pr_err("%s: failed to alloc for sdev", __func__);
+		return -ENOMEM;
+	}
+
+	g_reverse_platform_data.sdev->name = pdata->name;
+	g_reverse_platform_data.sdev->print_state = switch_gpio_print_state;
+
+	ret = switch_dev_register(g_reverse_platform_data.sdev);
+	if (ret < 0) {
+		pr_err("%s: Failed to register switch dev\n", __func__);
+		goto err_switch_dev_register;
+	}
+
+	/* register input device */
+	g_reverse_platform_data.idev = input_allocate_device();
+	if (!g_reverse_platform_data.idev) {
+		pr_err("%s: Failed to allocate input dev\n", __func__);
+		ret = -ENOMEM;
+		goto err_input_dev_register;
+	}
+
+	g_reverse_platform_data.idev->name = pdata->name;
+	g_reverse_platform_data.idev->phys = "reverse_keys/input0";
+	g_reverse_platform_data.idev->id.bustype = BUS_HOST;
+	g_reverse_platform_data.idev->dev.parent = &pdev->dev;
+	g_reverse_platform_data.idev->evbit[0] = BIT_MASK(EV_KEY);
+	g_reverse_platform_data.idev->keybit[BIT_WORD(pdata->key_code)] =
+						BIT_MASK(pdata->key_code);
+
+	ret = input_register_device(g_reverse_platform_data.idev);
+	if (ret) {
+		pr_err("%s: Can't register input device: %d\n", __func__, ret);
+		goto err_input_reg;
+	}
+
+	ret = device_create_file(g_reverse_platform_data.sdev->dev,
+			&dev_attr_continues);
+	if (ret) {
+		pr_err("%s: Failed device_create_file: %d\n", __func__, ret);
+		goto err_device_create_file;
+	}
+
+	camera_status = CAMERA_POWERED_DOWN;
+
+	for (index = 0; index < REVERSE_MAX_GPIO; index++) {
+		pr_debug("%s : setup reverse gpio(%d) index %d",
+				__func__, pdata->gpio[index], index);
+
+		if (pdata->gpio[index] == -1) {
+			pr_debug("%s: invalid gpio %d for index %d",
+					__func__, pdata->gpio[index], index);
+			break;
+		}
+
+		g_reverse_platform_data.reverse_data[index] =
+				kzalloc(sizeof(struct reverse_data),
+						GFP_KERNEL);
+		if (!g_reverse_platform_data.reverse_data[index]) {
+			pr_err("%s: failed to alloc reverse_data for index %d",
+					__func__, index);
+			ret = -ENOMEM;
+			goto err_setup_gpios;
+		}
+
+		g_reverse_platform_data.reverse_data[index]->sdev =
+				g_reverse_platform_data.sdev;
+		g_reverse_platform_data.reverse_data[index]->idev =
+				g_reverse_platform_data.idev;
+		g_reverse_platform_data.reverse_data[index]->gpio =
+				pdata->gpio[index];
+		g_reverse_platform_data.reverse_data[index]->key_code =
+				pdata->key_code;
+		g_reverse_platform_data.reverse_data[index]->debounce =
+				pdata->debounce_time;
+		g_reverse_platform_data.reverse_data[index]->name_on =
+				pdata->name_on;
+		g_reverse_platform_data.reverse_data[index]->name_off =
+				pdata->name_off;
+		g_reverse_platform_data.reverse_data[index]->state_on =
+				pdata->state_on;
+		g_reverse_platform_data.reverse_data[index]->state_off =
+				pdata->state_off;
+		g_reverse_platform_data.reverse_data[index]->active_low =
+				pdata->active_low[index];
+
+		ret = switch_reverse_setup_gpios(pdev,
+				g_reverse_platform_data.reverse_data[index]);
+		if (ret < 0) {
+			pr_err("%s: switch_reverse_setup_gpios failed with %d",
+					__func__, ret);
+			goto err_setup_gpios;
+		}
+	}
+
+	platform_set_drvdata(pdev, &g_reverse_platform_data);
+
+	pr_debug("%s: kpi exit", __func__);
+
+	return 0;
+
+err_setup_gpios:
+	for (index = 0; index < REVERSE_MAX_GPIO; index++) {
+		if (g_reverse_platform_data.reverse_data[index]) {
+			gpio_free(g_reverse_platform_data.
+					reverse_data[index]->gpio);
+			kfree(g_reverse_platform_data.reverse_data[index]);
+		}
+	}
+err_device_create_file:
+	input_unregister_device(g_reverse_platform_data.idev);
+err_input_reg:
+	input_free_device(g_reverse_platform_data.idev);
+err_input_dev_register:
+	switch_dev_unregister(g_reverse_platform_data.sdev);
+err_switch_dev_register:
+	kfree(g_reverse_platform_data.sdev);
+
+	pr_debug("%s: kpi exit %x", __func__, ret);
+
+	return ret;
+}
+
+
 static int __devexit switch_reverse_remove(struct platform_device *pdev)
 {
-	struct reverse_reverse_data *reverse_data = platform_get_drvdata(pdev);
+	int index = 0;
+	struct reverse_platform_data *reverse_platform_data =
+			platform_get_drvdata(pdev);
 
 	if ((camera_status == CAMERA_POWERED_UP
 				|| camera_status == CAMERA_PREVIEW_DISABLED)) {
@@ -290,11 +393,19 @@ static int __devexit switch_reverse_remove(struct platform_device *pdev)
 		camera_status = CAMERA_POWERED_DOWN;
 	}
 
-	cancel_delayed_work_sync(&reverse_data->detect_delayed_work);
-	gpio_free(reverse_data->gpio);
-	input_unregister_device(reverse_data->idev);
-	switch_dev_unregister(&reverse_data->sdev);
-	kfree(reverse_data);
+	for (index = 0;
+			index < REVERSE_MAX_GPIO &&
+			reverse_platform_data->reverse_data[index];
+			index++) {
+		cancel_delayed_work_sync(&reverse_platform_data->
+				reverse_data[index]->detect_delayed_work);
+		gpio_free(reverse_platform_data->reverse_data[index]->gpio);
+		kfree(reverse_platform_data->reverse_data[index]);
+	}
+
+	input_unregister_device(reverse_platform_data->idev);
+	switch_dev_unregister(reverse_platform_data->sdev);
+	kfree(reverse_platform_data->sdev);
 
 	return 0;
 }
