@@ -42,7 +42,9 @@ Required properties:
 			"qcom,mmsscc-8994"
 			"qcom,mmsscc-8992"
 			"qcom,mmsscc-8996"
+			"qcom,mmsscc-8996-v2"
 			"qcom,gpucc-8996"
+			"qcom,gpucc-8996-v2"
 
 - reg:			Pairs of physical base addresses and region sizes of
 			memory mapped registers.
