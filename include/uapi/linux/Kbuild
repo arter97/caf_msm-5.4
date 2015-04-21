@@ -285,6 +285,7 @@ header-y += msm_audio_sbc.h
 header-y += msm_audio_voicememo.h
 header-y += msm_audio_wma.h
 header-y += msm_audio_wmapro.h
+header-y += msm_audio_alac.h
 header-y += msm_charm.h
 header-y += msm-core-interface.h
 header-y += msm_dsps.h
