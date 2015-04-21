@@ -323,6 +323,10 @@ config FB_MSM_LVDS_CHIMEI_WXGA
 	select FB_MSM_LVDS
 	default n
 
+config FB_MSM_LVDS_FPDL3_WXGA
+	bool
+	select FB_MSM_LVDS
+
 config FB_MSM_MIPI_TOSHIBA_VIDEO_WVGA_PT
 	bool
 	select FB_MSM_MIPI_DSI_TOSHIBA
@@ -533,6 +537,15 @@ config FB_MSM_LVDS_CHIMEI_WXGA_PANEL
         select FB_MSM_LVDS_CHIMEI_WXGA
         ---help---
           Support for LVDS Chimei WXGA(1366x768) panel
+
+config FB_MSM_LVDS_FPDL3_WXGA_PANEL
+	bool "LVDS FPDL3 WXGA Panel"
+	select FB_MSM_LVDS_FPDL3_WXGA
+	---help---
+	  Support for LVDS FPDL3(DS90UH927Q)
+	  WXGA(1366x768) panel.
+	  Panel driver will use the MSM DBA interface
+	  to program the bridge chip
 
 config FB_MSM_LVDS_FRC_FHD_PANEL
 	bool "LVDS FRC FHD Panel"

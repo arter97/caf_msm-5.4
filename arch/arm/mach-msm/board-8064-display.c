@@ -77,6 +77,7 @@ static struct resource msm_fb_resources[] = {
 #define MIPI_DSI_I2C_VIDEO_WVGA_NAME "mipi_dsi_i2c_video_wvga"
 #define MIPI_DSI_I2C_VIDEO_XGA_NAME "mipi_dsi_i2c_video_xga"
 #define LVDS_CHIMEI_PANEL_NAME "lvds_chimei_wxga"
+#define LVDS_FPDL3_PANEL_NAME "lvds_fpdl3_wxga"
 #define LVDS_FRC_PANEL_NAME "lvds_frc_fhd"
 #define MIPI_VIDEO_TOSHIBA_WSVGA_PANEL_NAME "mipi_video_toshiba_wsvga"
 #define MIPI_VIDEO_CHIMEI_WXGA_PANEL_NAME "mipi_video_chimei_wxga"
@@ -792,6 +793,19 @@ static struct platform_device lvds_chimei_panel_device = {
 	.id = 0,
 	.dev = {
 		.platform_data = &lvds_chimei_pdata,
+	}
+};
+
+static struct lvds_fpdl3_platform_data lvds_fpdl3_pdata = {
+	.chip_id = "DS90UH927Q",
+	.instance_id = 0,
+};
+
+struct platform_device lvds_fpdl3_panel_device = {
+	.name = "lvds_fpdl3_wxga",
+	.id = 0,
+	.dev = {
+		.platform_data = &lvds_fpdl3_pdata,
 	}
 };
 
