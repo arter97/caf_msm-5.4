@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012, 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -509,11 +509,10 @@ u32 send_adm_apr(void *buf, u32 opcode)
 	result = wait_event_timeout(rtac_adm_apr_data.cmd_wait,
 		(atomic_read(&rtac_adm_apr_data.cmd_state) == 0),
 		msecs_to_jiffies(TIMEOUT_MS));
-	mutex_unlock(&rtac_adm_apr_mutex);
 	if (!result) {
 		pr_err("%s: Set params timed out port = %d, copp = %d\n",
 			__func__, port_index, copp_id);
-		goto done;
+		goto err;
 	}
 
 	if (rtac_adm_payload_size != 0) {
@@ -521,7 +520,7 @@ u32 send_adm_apr(void *buf, u32 opcode)
 			rtac_adm_payload_size + sizeof(u32))) {
 			pr_err("%s: Could not copy buffer to user,size = %d\n",
 				__func__, payload_size);
-			goto done;
+			goto err;
 		}
 	}
 
@@ -530,10 +529,9 @@ u32 send_adm_apr(void *buf, u32 opcode)
 		bytes_returned = rtac_adm_payload_size;
 	else
 		bytes_returned = payload_size;
-done:
-	return bytes_returned;
 err:
 	mutex_unlock(&rtac_adm_apr_mutex);
+done:
 	return bytes_returned;
 }
 
@@ -676,11 +674,10 @@ u32 send_rtac_asm_apr(void *buf, u32 opcode)
 	result = wait_event_timeout(rtac_asm_apr_data[session_id].cmd_wait,
 		(atomic_read(&rtac_asm_apr_data[session_id].cmd_state) == 0),
 		5 * HZ);
-	mutex_unlock(&rtac_asm_apr_mutex);
 	if (!result) {
 		pr_err("%s: Set params timed out session = %d\n",
 			__func__, session_id);
-		goto done;
+		goto err;
 	}
 
 	if (rtac_asm_payload_size != 0) {
@@ -688,7 +685,7 @@ u32 send_rtac_asm_apr(void *buf, u32 opcode)
 			rtac_asm_payload_size + sizeof(u32))) {
 			pr_err("%s: Could not copy buffer to user,size = %d\n",
 				 __func__, payload_size);
-			goto done;
+			goto err;
 		}
 	}
 
@@ -697,10 +694,9 @@ u32 send_rtac_asm_apr(void *buf, u32 opcode)
 		bytes_returned = rtac_asm_payload_size;
 	else
 		bytes_returned = payload_size;
-done:
-	return bytes_returned;
 err:
 	mutex_unlock(&rtac_asm_apr_mutex);
+done:
 	return bytes_returned;
 }
 
@@ -842,11 +838,10 @@ u32 send_voice_apr(u32 mode, void *buf, u32 opcode)
 	result = wait_event_timeout(rtac_voice_apr_data[mode].cmd_wait,
 		(atomic_read(&rtac_voice_apr_data[mode].cmd_state) == 0),
 		msecs_to_jiffies(TIMEOUT_MS));
-	mutex_unlock(&rtac_voice_apr_mutex);
 	if (!result) {
 		pr_err("%s: apr_send_pkt timed out opcode = %x\n",
 			__func__, opcode);
-		goto done;
+		goto err;
 	}
 
 	if (rtac_voice_payload_size != 0) {
@@ -854,7 +849,7 @@ u32 send_voice_apr(u32 mode, void *buf, u32 opcode)
 			rtac_voice_payload_size + sizeof(u32))) {
 			pr_err("%s: Could not copy buffer to user, size = %d\n",
 				 __func__, payload_size);
-			goto done;
+			goto err;
 		}
 	}
 
@@ -863,10 +858,9 @@ u32 send_voice_apr(u32 mode, void *buf, u32 opcode)
 		bytes_returned = rtac_voice_payload_size;
 	else
 		bytes_returned = payload_size;
-done:
-	return bytes_returned;
 err:
 	mutex_unlock(&rtac_voice_apr_mutex);
+done:
 	return bytes_returned;
 }
 
