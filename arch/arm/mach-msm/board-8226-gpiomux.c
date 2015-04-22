@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -313,10 +313,22 @@ static struct gpiomux_setting generic_gpio_out_hi_cfg = {
 	.pull = GPIOMUX_PULL_UP,
 	.dir = GPIOMUX_OUT_HIGH,
 };
+static struct gpiomux_setting generic_gpio_out_hi_np_cfg = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_4MA,
+	.pull = GPIOMUX_PULL_NONE,
+	.dir = GPIOMUX_OUT_HIGH,
+};
 static struct gpiomux_setting generic_gpio_out_lo_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
 	.pull = GPIOMUX_PULL_DOWN,
+	.dir = GPIOMUX_OUT_LOW,
+};
+static struct gpiomux_setting generic_gpio_out_lo_np_cfg = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_4MA,
+	.pull = GPIOMUX_PULL_NONE,
 	.dir = GPIOMUX_OUT_LOW,
 };
 static struct gpiomux_setting generic_gpio_nc_ip_cfg = {
@@ -627,10 +639,45 @@ static struct msm_gpiomux_config qm8626_msm_blsp_configs_hw_4[] __initdata = {
 		},
 	},
 	{
-		.gpio = 22, 	/*	SPI CS2 on HW Subtype:4 */
+		.gpio = 20, 	/* AMG A0 */
 		.settings = {
-			[GPIOMUX_ACTIVE] = &gpio_spi_cs_act_config,
-			[GPIOMUX_SUSPENDED] = &gpio_spi_susp_config,
+			[GPIOMUX_ACTIVE] = &generic_gpio_out_lo_np_cfg,
+			[GPIOMUX_SUSPENDED] = &generic_gpio_out_lo_np_cfg,
+		},
+	},
+	{
+		.gpio = 21, 	/* AMG A1 */
+		.settings = {
+			[GPIOMUX_ACTIVE] = &generic_gpio_out_lo_np_cfg,
+			[GPIOMUX_SUSPENDED] = &generic_gpio_out_lo_np_cfg,
+		},
+	},
+	{
+		.gpio = 22, 	/* AMG A2 */
+		.settings = {
+			[GPIOMUX_ACTIVE] = &generic_gpio_out_lo_np_cfg,
+			[GPIOMUX_SUSPENDED] = &generic_gpio_out_lo_np_cfg,
+		},
+	},
+	{
+		.gpio = 106,	/* AMG INT1 */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &generic_gpio_nc_ip_np_cfg,
+			[GPIOMUX_SUSPENDED] = &generic_gpio_nc_ip_np_cfg,
+		},
+	},
+	{
+		.gpio = 107,	/* AMG INT2 */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &generic_gpio_nc_ip_np_cfg,
+			[GPIOMUX_SUSPENDED] = &generic_gpio_nc_ip_np_cfg,
+		},
+	},
+	{
+		.gpio = 108,	/* AMG RESET */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &generic_gpio_out_hi_np_cfg,
+			[GPIOMUX_SUSPENDED] = &generic_gpio_out_hi_np_cfg,
 		},
 	},
 };
@@ -1754,9 +1801,6 @@ void __init qm8626_msm8226_init_gpiomux(void)
 		return;
 	}
 
-	msm_gpiomux_install(qm8626_msm_keypad_configs,
-			ARRAY_SIZE(qm8626_msm_keypad_configs));
-
 	msm_gpiomux_install(qm8626_msm_blsp_configs_all,
 			ARRAY_SIZE(qm8626_msm_blsp_configs_all));
 
@@ -1776,18 +1820,20 @@ void __init qm8626_msm8226_init_gpiomux(void)
 		msm_gpiomux_install(qm8626_msm_blsp_configs_hw_4,
 				ARRAY_SIZE(qm8626_msm_blsp_configs_hw_4));
 
-	if (subtype == 1 || subtype == 2 || subtype == 3)
+	if (subtype == 1 || subtype == 2 || subtype == 3) {
 		msm_gpiomux_install(qm8626_msm_piezo_config,
-				ARRAY_SIZE(qm8626_msm_piezo_config));
+			ARRAY_SIZE(qm8626_msm_piezo_config));
+		msm_gpiomux_install(qm8626_msm_keypad_configs,
+			ARRAY_SIZE(qm8626_msm_keypad_configs));
+		msm_gpiomux_install(qm8626_msm_nfc_configs,
+			ARRAY_SIZE(qm8626_msm_nfc_configs));
+	}
 
 	msm_gpiomux_install(qm8626_msm_nc_configs,
 			ARRAY_SIZE(qm8626_msm_nc_configs));
 
 	msm_gpiomux_install(qm8626_msm_usb_id_dis,
 			ARRAY_SIZE(qm8626_msm_usb_id_dis));
-
-	msm_gpiomux_install(qm8626_msm_nfc_configs,
-			ARRAY_SIZE(qm8626_msm_nfc_configs));
 
 	msm_gpiomux_install(wcnss_5wire_interface,
 			ARRAY_SIZE(wcnss_5wire_interface));
