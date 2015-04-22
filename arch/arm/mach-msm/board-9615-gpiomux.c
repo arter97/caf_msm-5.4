@@ -347,7 +347,7 @@ static struct msm_gpiomux_config msm9615_ebi2_lcdc_configs[] __initdata = {
 
 static struct msm_gpiomux_config msm9615_wlan_configs[] __initdata = {
 	{
-		.gpio      = 84,/* WLAN_RESET_N */
+		.gpio      = 21,/* WLAN_RESET_N */
 		.settings = {
 			[GPIOMUX_ACTIVE] = &wlan_active_config,
 			[GPIOMUX_SUSPENDED] = &wlan_suspend_config,

@@ -20,7 +20,7 @@
 
 #include "board-9615.h"
 
-#define GPIO_WLAN_RESET_N		84
+#define GPIO_WLAN_RESET_N		21
 #define GPIO_WLAN_PM_ENABLE		89
 
 static struct gpio wlan_gpios[] = {
