@@ -4663,12 +4663,17 @@ int mdpclient_msm_fb_get_id(int idx, char *buf, int len)
 }
 EXPORT_SYMBOL(mdpclient_msm_fb_get_id);
 
-int mdpclient_msm_fb_open(void)
+int mdpclient_msm_fb_open(int fb_idx)
 {
 	struct fb_info *info;
 	int ret;
 
-	info = registered_fb[0];
+	if (fb_idx >= FB_MAX) {
+		pr_err("%s fb_idx=%d is bigger than max=%d", __func__, fb_idx,
+			FB_MAX);
+		return -EINVAL;
+	}
+	info = registered_fb[fb_idx];
 	if (!info) {
 		pr_err(KERN_WARNING "%s: Can not access framebuffer\n",
 			__func__);
@@ -4684,12 +4689,17 @@ int mdpclient_msm_fb_open(void)
 }
 EXPORT_SYMBOL(mdpclient_msm_fb_open);
 
-int mdpclient_msm_fb_close(void)
+int mdpclient_msm_fb_close(int fb_idx)
 {
 	struct fb_info *info;
 	int ret;
 
-	info = registered_fb[0];
+	if (fb_idx >= FB_MAX) {
+		pr_err("%s fb_idx=%d is bigger than max=%d", __func__, fb_idx,
+			FB_MAX);
+		return -EINVAL;
+	}
+	info = registered_fb[fb_idx];
 	if (!info) {
 		pr_err(KERN_WARNING "%s: Can not access framebuffer\n",
 			__func__);
@@ -4705,12 +4715,17 @@ int mdpclient_msm_fb_close(void)
 }
 EXPORT_SYMBOL(mdpclient_msm_fb_close);
 
-int mdpclient_msm_fb_blank(int blank_mode, bool op_enable)
+int mdpclient_msm_fb_blank(int fb_idx, int blank_mode, bool op_enable)
 {
 	struct fb_info *info;
 	int ret;
 
-	info = registered_fb[0];
+	if (fb_idx >= FB_MAX) {
+		pr_err("%s fb_idx=%d is bigger than max=%d", __func__, fb_idx,
+			FB_MAX);
+		return -EINVAL;
+	}
+	info = registered_fb[fb_idx];
 	if (!info) {
 		pr_err(KERN_WARNING "%s: Can not access framebuffer\n",
 			__func__);
@@ -4727,12 +4742,43 @@ int mdpclient_msm_fb_blank(int blank_mode, bool op_enable)
 }
 EXPORT_SYMBOL(mdpclient_msm_fb_blank);
 
-int mdpclient_overlay_set(struct mdp_overlay *overlay)
+int mdpclient_msm_fb_get_vscreeninfo(int fb_idx, struct fb_var_screeninfo *var)
+{
+	struct fb_info *info;
+
+	if (fb_idx >= FB_MAX) {
+		pr_err("%s fb_idx=%d is bigger than max=%d", __func__, fb_idx,
+			FB_MAX);
+		return -EINVAL;
+	} else if (!var) {
+		pr_err("%s var is NULL", __func__);
+		return -EINVAL;
+	}
+	info = registered_fb[fb_idx];
+	if (!info) {
+		pr_err(KERN_WARNING "%s: Can not access framebuffer\n",
+			__func__);
+		return -ENODEV;
+	}
+	lock_fb_info(info);
+	memcpy(var, &info->var, sizeof(*var));
+	unlock_fb_info(info);
+
+	return 0;
+}
+EXPORT_SYMBOL(mdpclient_msm_fb_get_vscreeninfo);
+
+int mdpclient_overlay_set(int fb_idx, struct mdp_overlay *overlay)
 {
 	struct fb_info *info;
 	int ret;
 
-	info = registered_fb[0];
+	if (fb_idx >= FB_MAX) {
+		pr_err("%s fb_idx=%d is bigger than max=%d", __func__, fb_idx,
+			FB_MAX);
+		return -EINVAL;
+	}
+	info = registered_fb[fb_idx];
 	if (!info) {
 		pr_err(KERN_WARNING "%s: Can not access framebuffer\n",
 			__func__);
@@ -4748,12 +4794,17 @@ int mdpclient_overlay_set(struct mdp_overlay *overlay)
 }
 EXPORT_SYMBOL(mdpclient_overlay_set);
 
-int mdpclient_overlay_unset(struct mdp_overlay *overlay)
+int mdpclient_overlay_unset(int fb_idx, struct mdp_overlay *overlay)
 {
 	struct fb_info *info;
 	int ret;
 
-	info = registered_fb[0];
+	if (fb_idx >= FB_MAX) {
+		pr_err("%s fb_idx=%d is bigger than max=%d", __func__, fb_idx,
+			FB_MAX);
+		return -EINVAL;
+	}
+	info = registered_fb[fb_idx];
 	if (!info) {
 		pr_err(KERN_WARNING "%s: Can not access framebuffer\n",
 			__func__);
@@ -4769,12 +4820,17 @@ int mdpclient_overlay_unset(struct mdp_overlay *overlay)
 }
 EXPORT_SYMBOL(mdpclient_overlay_unset);
 
-int mdpclient_overlay_play(struct msmfb_overlay_data *ovdata)
+int mdpclient_overlay_play(int fb_idx, struct msmfb_overlay_data *ovdata)
 {
 	struct fb_info *info;
 	int ret;
 
-	info = registered_fb[0];
+	if (fb_idx >= FB_MAX) {
+		pr_err("%s fb_idx=%d is bigger than max=%d", __func__, fb_idx,
+			FB_MAX);
+		return -EINVAL;
+	}
+	info = registered_fb[fb_idx];
 	if (!info) {
 		pr_err(KERN_WARNING "%s: Can not access framebuffer\n",
 			__func__);
@@ -4790,13 +4846,18 @@ int mdpclient_overlay_play(struct msmfb_overlay_data *ovdata)
 }
 EXPORT_SYMBOL(mdpclient_overlay_play);
 
-int mdpclient_display_commit(void)
+int mdpclient_display_commit(int fb_idx)
 {
 	struct mdp_display_commit disp_commit;
 	struct fb_info *info;
 	int ret;
 
-	info = registered_fb[0];
+	if (fb_idx >= FB_MAX) {
+		pr_err("%s fb_idx=%d is bigger than max=%d", __func__, fb_idx,
+			FB_MAX);
+		return -EINVAL;
+	}
+	info = registered_fb[fb_idx];
 	if (!info) {
 		pr_err(KERN_WARNING "%s: Can not access framebuffer\n",
 			__func__);
