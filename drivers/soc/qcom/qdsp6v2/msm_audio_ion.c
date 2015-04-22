@@ -496,6 +496,14 @@ static int msm_audio_ion_probe(struct platform_device *pdev)
 					     msm_audio_ion_dt);
 	msm_audio_ion_data.smmu_enabled = smmu_enabled;
 
+	if (sizeof(ion_phys_addr_t) > 4) {
+		pr_debug("%s: 64-bit mode\n", __func__);
+	} else {
+		pr_debug("%s: 32-bit mode - disable SMMU\n", __func__);
+		msm_audio_ion_data.smmu_enabled = false;
+		smmu_enabled = false;
+	}
+
 	if (smmu_enabled) {
 		q6_state = apr_get_q6_state();
 		if (q6_state == APR_SUBSYS_DOWN) {
