@@ -311,29 +311,12 @@ static struct i2c_board_info adp5588_gpio_i2c_boardinfo[] __initdata = {
 	},
 };
 
-static struct spi_board_info spidev_board_info_hw_3[] __initdata = {
+static struct spi_board_info spidev_board_info[] __initdata = {
 	{
 		.modalias = "spidev",
 		.max_speed_hz = 1000000,
 		.bus_num = 0,
 		.chip_select = 0,
-		.mode = SPI_MODE_0,
-	},
-};
-
-static struct spi_board_info spidev_board_info_hw_4[] __initdata = {
-	{
-		.modalias = "spidev",
-		.max_speed_hz = 1000000,
-		.bus_num = 0,
-		.chip_select = 0,
-		.mode = SPI_MODE_0,
-	},
-	{
-		.modalias = "spidev",
-		.max_speed_hz = 1000000,
-		.bus_num = 0,
-		.chip_select = 1,
 		.mode = SPI_MODE_0,
 	},
 };
@@ -459,11 +442,8 @@ void __init msm8226_init(void)
 		i2c_register_board_info( 1,lp5523_i2c_boardinfo , ARRAY_SIZE(lp5523_i2c_boardinfo) );
 		i2c_register_board_info( 1,lp5521_i2c_boardinfo , ARRAY_SIZE(lp5521_i2c_boardinfo) );
 		i2c_register_board_info( 1,adp5588_gpio_i2c_boardinfo , ARRAY_SIZE(adp5588_gpio_i2c_boardinfo) );
-
-		if (socinfo_get_platform_subtype() == 3)
-			spi_register_board_info(spidev_board_info_hw_3, ARRAY_SIZE(spidev_board_info_hw_3));
-		if (socinfo_get_platform_subtype() == 4)
-			spi_register_board_info(spidev_board_info_hw_4, ARRAY_SIZE(spidev_board_info_hw_4));
+		if (socinfo_get_platform_subtype() == 3 || socinfo_get_platform_subtype() == 4)
+			spi_register_board_info(spidev_board_info, ARRAY_SIZE(spidev_board_info));
 	}
 }
 
