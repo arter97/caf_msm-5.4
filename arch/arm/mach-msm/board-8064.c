@@ -3851,7 +3851,12 @@ static void __init apq8064ab_update_retention_spm(void)
 #define GPIO_KEY_REVERSE_S5     PM8921_GPIO_PM_TO_SYS(43)
 #define GPIO_ACTIVE_LEVEL_S5       1
 
+/* Disable rotary if config not set */
+#ifdef CONFIG_MSM_ROTARY_AS_REVERSE_GEAR
 #define GPIO_KEY_REVERSE_ROTARY PM8921_GPIO_PM_TO_SYS(20)
+#else
+#define GPIO_KEY_REVERSE_ROTARY	-1
+#endif
 #define GPIO_ACTIVE_LEVEL_ROTARY       0
 
 

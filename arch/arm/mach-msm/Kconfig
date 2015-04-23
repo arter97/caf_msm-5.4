@@ -2633,4 +2633,6 @@ config MSM_USE_USER_ACCESSIBLE_TIMERS
 	  Enables MSM-specific user accessible timers via a shared
 	  memory page containing the cycle counter.
 
+config MSM_ROTARY_AS_REVERSE_GEAR
+	bool "Enables the use of rotary switch to trigger reverse camera."
 endif

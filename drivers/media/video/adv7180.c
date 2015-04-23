@@ -38,6 +38,7 @@
 
 #define DRIVER_NAME "adv7180"
 
+#define FRAME_START_DELAY 33333
 #define I2C_RW_DELAY 1
 #define I2C_RETRY_DELAY 17000
 #define ADV7180_STD_AD_PAL_BG_NTSC_J_SECAM		0x0
@@ -804,10 +805,12 @@ static int adv7180_set_op_stream(struct adv7180_state *state, bool on)
 				 */
 				lock_status = adv7180_wait_for_lock(state);
 
-				if (lock_status == true)
+				if (lock_status == true) {
+					usleep(FRAME_START_DELAY);
 					/* Enable the csi */
 					ret = adv7180_csi_write(state,
 								0x00, 0x00);
+				}
 				else
 					pr_err("%s: adv sd failed to lock lock_status %d\n",
 						__func__, lock_status);

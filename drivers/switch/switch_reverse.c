@@ -88,6 +88,39 @@ static void show_pic_exit(void)
 	}
 }
 
+static int reverse_get_gpio_state(struct reverse_data *data)
+{
+	int state;
+
+	state = gpio_get_value(data->gpio);
+
+	/* Invert the state if active low*/
+	if (data->active_low)
+		state = (state == 0) ? 1 : 0;
+
+	return state;
+}
+
+static void reverse_set_state(struct reverse_data *data, int state)
+{
+	switch_set_state(data->sdev, state);
+
+	if (state && (camera_status == CAMERA_POWERED_UP
+				|| camera_status == CAMERA_PREVIEW_DISABLED)) {
+		if (enable_camera_preview() == 0)
+			camera_status = CAMERA_PREVIEW_ENABLED;
+	} else {
+		if (camera_status == CAMERA_PREVIEW_ENABLED) {
+			if (disable_camera_preview() == 0)
+				camera_status = CAMERA_PREVIEW_DISABLED;
+		}
+		show_pic_exit();
+	}
+
+	input_report_key(data->idev, data->key_code, state);
+	input_sync(data->idev);
+}
+
 static void reverse_detection_work(struct work_struct *work)
 {
 	int state;
@@ -215,23 +248,6 @@ static int switch_reverse_setup_gpios(struct platform_device *pdev,
 	INIT_DELAYED_WORK(&reverse_data->detect_delayed_work,
 						reverse_detection_work);
 
-	pr_debug("%s: init_camera_kthread\n", __func__);
-
-	if (camera_status == CAMERA_POWERED_DOWN) {
-		int rc = 0;
-		pr_debug("init camera configuration %s\n", __func__);
-		rc = init_camera_kthread();
-		if (rc < 0)
-			pr_err("%s: Failed to init the camera", __func__);
-		else
-			camera_status = CAMERA_POWERED_UP;
-	}
-
-	pr_debug("%s: reverse detection work\n", __func__);
-
-	reverse_detection_work(&reverse_data->detect_delayed_work.work);
-	enable_irq(reverse_data->irq);
-
 	pr_debug("%s: kpi exit\n", __func__);
 	return 0;
 
@@ -247,6 +263,7 @@ static int switch_reverse_probe(struct platform_device *pdev)
 {
 	int ret = 0;
 	int index = 0;
+	int state = 0;
 	struct reverse_switch_platform_data *pdata = pdev->dev.platform_data;
 
 	pr_debug("%s: kpi entry\n", __func__);
@@ -300,17 +317,22 @@ static int switch_reverse_probe(struct platform_device *pdev)
 		goto err_device_create_file;
 	}
 
-	camera_status = CAMERA_POWERED_DOWN;
+	/* init camera */
+	pr_debug("%s: init_camera_kthread\n", __func__);
+
+	if (camera_status == CAMERA_POWERED_DOWN) {
+		int rc = 0;
+		pr_debug("init camera configuration %s\n", __func__);
+		rc = init_camera_kthread();
+		if (rc < 0)
+			pr_err("%s: Failed to init the camera", __func__);
+		else
+			camera_status = CAMERA_POWERED_UP;
+	}
 
 	for (index = 0; index < REVERSE_MAX_GPIO; index++) {
 		pr_debug("%s : setup reverse gpio(%d) index %d",
 				__func__, pdata->gpio[index], index);
-
-		if (pdata->gpio[index] == -1) {
-			pr_debug("%s: invalid gpio %d for index %d",
-					__func__, pdata->gpio[index], index);
-			break;
-		}
 
 		g_reverse_platform_data.reverse_data[index] =
 				kzalloc(sizeof(struct reverse_data),
@@ -343,6 +365,12 @@ static int switch_reverse_probe(struct platform_device *pdev)
 		g_reverse_platform_data.reverse_data[index]->active_low =
 				pdata->active_low[index];
 
+		if (pdata->gpio[index] == -1) {
+			pr_debug("%s: invalid gpio %d for index %d",
+					__func__, pdata->gpio[index], index);
+			continue;
+		}
+
 		ret = switch_reverse_setup_gpios(pdev,
 				g_reverse_platform_data.reverse_data[index]);
 		if (ret < 0) {
@@ -350,7 +378,20 @@ static int switch_reverse_probe(struct platform_device *pdev)
 					__func__, ret);
 			goto err_setup_gpios;
 		}
+
+		/* get initial states of gpios */
+		state |= reverse_get_gpio_state(
+				g_reverse_platform_data.reverse_data[index]);
 	}
+
+	/* set initial camera state */
+	reverse_set_state(g_reverse_platform_data.reverse_data[0], state);
+
+	/* enable interrupts */
+	for (index = 0; index < REVERSE_MAX_GPIO; index++)
+		if (g_reverse_platform_data.reverse_data[index]->irq)
+			enable_irq(g_reverse_platform_data.
+					reverse_data[index]->irq);
 
 	platform_set_drvdata(pdev, &g_reverse_platform_data);
 
