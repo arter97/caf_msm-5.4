@@ -173,4 +173,4 @@ obj-$(CONFIG_BIF)		+= bif/
 obj-$(CONFIG_GATOR)		+= gator/
 
 # <t-base drivers
-obj-$(CONFIG_MOBICORE_DRIVER)	+= gud
+obj-$(CONFIG_MOBICORE_DRIVER)	+= gud/
