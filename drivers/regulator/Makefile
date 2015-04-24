@@ -93,5 +93,6 @@ obj-$(CONFIG_REGULATOR_CPR3) += cpr3-regulator.o cpr3-util.o
 obj-$(CONFIG_REGULATOR_CPR3_HMSS) += cpr3-hmss-regulator.o
 obj-$(CONFIG_REGULATOR_CPR3_MMSS) += cpr3-mmss-regulator.o
 obj-$(CONFIG_REGULATOR_QPNP_LABIBB) += qpnp-labibb-regulator.o
+obj-$(CONFIG_REGULATOR_KRYO) += kryo-regulator.o
 
 ccflags-$(CONFIG_REGULATOR_DEBUG) += -DDEBUG
