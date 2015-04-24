@@ -34,11 +34,11 @@ void rmnet_egress_handler(struct sk_buff *skb,
 			  struct rmnet_logical_ep_conf_s *ep);
 
 #ifdef CONFIG_RMNET_DATA_DEBUG_PKT
-unsigned int dump_pkt_rx;
+unsigned int dump_pkt_rx __read_mostly;
 module_param(dump_pkt_rx, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(dump_pkt_rx, "Dump packets entering ingress handler");
 
-unsigned int dump_pkt_tx;
+unsigned int dump_pkt_tx __read_mostly;
 module_param(dump_pkt_tx, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(dump_pkt_tx, "Dump packets exiting egress handler");
 #endif /* CONFIG_RMNET_DATA_DEBUG_PKT */

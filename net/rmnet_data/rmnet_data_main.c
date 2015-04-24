@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,11 +27,12 @@
 #include "rmnet_data_trace.h"
 
 /* ***************** Module Parameters ************************************** */
-unsigned int rmnet_data_log_level = RMNET_LOG_LVL_ERR | RMNET_LOG_LVL_HI;
+unsigned int rmnet_data_log_level __read_mostly = RMNET_LOG_LVL_ERR
+						  | RMNET_LOG_LVL_HI;
 module_param(rmnet_data_log_level, uint,  S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(log_level, "Logging level");
 
-unsigned int rmnet_data_log_module_mask;
+unsigned int rmnet_data_log_module_mask __read_mostly;
 module_param(rmnet_data_log_module_mask, uint,  S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(rmnet_data_log_module_mask, "Logging module mask");
 
