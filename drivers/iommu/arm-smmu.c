@@ -47,7 +47,6 @@
 
 #include <linux/amba/bus.h>
 #include <soc/qcom/msm_tz_smmu.h>
-#include <soc/qcom/secure_buffer.h>
 
 #include <asm/pgalloc.h>
 
@@ -471,7 +470,6 @@ struct arm_smmu_domain {
 	struct arm_smmu_cfg		cfg;
 	struct mutex			lock;
 	u32				attributes;
-	int				secure_vmid;
 };
 
 static DEFINE_SPINLOCK(arm_smmu_devices_lock);
@@ -1240,18 +1238,6 @@ static void arm_smmu_destroy_domain_context(struct iommu_domain *domain)
 	smmu_domain->smmu = NULL;
 }
 
-static int arm_smmu_assign_call(phys_addr_t addr, u64 size, int dest_vmid)
-{
-	int dest_vmids[2] = {VMID_HLOS, dest_vmid};
-	int dest_perms[2] = {PERM_READ | PERM_WRITE, PERM_READ};
-
-	if (dest_vmid == VMID_INVAL)
-		return 0;
-
-	return hyp_assign_phys(addr, size,
-			dest_vmids, dest_perms, 2);
-}
-
 static int arm_smmu_domain_init(struct iommu_domain *domain)
 {
 	struct arm_smmu_domain *smmu_domain;
@@ -1270,7 +1256,6 @@ static int arm_smmu_domain_init(struct iommu_domain *domain)
 	if (!pgd)
 		goto out_free_domain;
 	smmu_domain->cfg.pgd = pgd;
-	smmu_domain->secure_vmid = VMID_INVAL;
 
 	mutex_init(&smmu_domain->lock);
 	domain->priv = smmu_domain;
@@ -1514,12 +1499,6 @@ static int arm_smmu_attach_dev(struct iommu_domain *domain, struct device *dev)
 	} else {
 		arm_smmu_enable_clocks(smmu);
 	}
-	ret = arm_smmu_assign_call(virt_to_phys(smmu_domain->cfg.pgd),
-					PAGE_SIZE, smmu_domain->secure_vmid);
-	if (ret) {
-		mutex_unlock(&smmu->attach_lock);
-		goto err_disable_clocks;
-	}
 	mutex_unlock(&smmu->attach_lock);
 
 	/*
@@ -1630,7 +1609,6 @@ static int arm_smmu_alloc_init_pte(struct arm_smmu_domain *smmu_domain,
 {
 	pte_t *pte, *start;
 	pteval_t pteval = ARM_SMMU_PTE_PAGE | ARM_SMMU_PTE_AF | ARM_SMMU_PTE_XN;
-	int ret;
 
 	if (pmd_none(*pmd)) {
 		/* Allocate a new set of tables */
@@ -1643,12 +1621,6 @@ static int arm_smmu_alloc_init_pte(struct arm_smmu_domain *smmu_domain,
 				PAGE_SIZE);
 		pmd_populate(NULL, pmd, table);
 		arm_smmu_flush_pgtable(smmu_domain, pmd, sizeof(*pmd));
-		ret = arm_smmu_assign_call(virt_to_phys(page_address(table)),
-					PAGE_SIZE, smmu_domain->secure_vmid);
-		if (ret) {
-			free_page((unsigned long)table);
-			return ret;
-		}
 	}
 
 	if (stage == 1) {
@@ -1759,12 +1731,7 @@ static int arm_smmu_alloc_init_pmd(struct arm_smmu_domain *smmu_domain,
 		arm_smmu_flush_pgtable(smmu_domain, pmd, PAGE_SIZE);
 		pud_populate(NULL, pud, pmd);
 		arm_smmu_flush_pgtable(smmu_domain, pud, sizeof(*pud));
-		ret = arm_smmu_assign_call(virt_to_phys(pmd), PAGE_SIZE,
-						smmu_domain->secure_vmid);
-		if (ret) {
-			free_page((unsigned long)pmd);
-			return ret;
-		}
+
 		pmd += pmd_index(addr);
 	} else
 #endif
@@ -1799,12 +1766,7 @@ static int arm_smmu_alloc_init_pud(struct arm_smmu_domain *smmu_domain,
 		arm_smmu_flush_pgtable(smmu_domain, pud, PAGE_SIZE);
 		pgd_populate(NULL, pgd, pud);
 		arm_smmu_flush_pgtable(smmu_domain, pgd, sizeof(*pgd));
-		ret = arm_smmu_assign_call(virt_to_phys(pud), PAGE_SIZE,
-						smmu_domain->secure_vmid);
-		if (ret) {
-			free_page((unsigned long)pud);
-			return ret;
-		}
+
 		pud += pud_index(addr);
 	} else
 #endif
@@ -2221,11 +2183,6 @@ static int arm_smmu_domain_set_attr(struct iommu_domain *domain,
 		else
 			smmu_domain->attributes &=
 				~(1 << DOMAIN_ATTR_COHERENT_HTW_DISABLE);
-		return 0;
-	}
-	case DOMAIN_ATTR_SECURE_VMID:
-	{
-		smmu_domain->secure_vmid = *((int *)data);
 		return 0;
 	}
 	default:
