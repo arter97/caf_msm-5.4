@@ -48,6 +48,8 @@ struct msm_hdmi_audio_codec_ops {
 	u32 (*play_silent_audio_callback) (void *callback_data);
 };
 
+int msm_dai_q6_hdmi_afe_short_silence(u32 duration);
+
 #ifdef CONFIG_FB_MSM_MDSS_HDMI_PANEL
 /*
  * Register for HDMI cable connect or disconnect notification.
