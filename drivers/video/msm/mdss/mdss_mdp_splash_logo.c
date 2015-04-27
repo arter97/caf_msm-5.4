@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -123,8 +123,8 @@ static int mdss_mdp_splash_iommu_attach(struct msm_fb_data_type *mfd)
 	if (mdata->mdss_util->iommu_attached() ||
 		!mfd->panel_info->cont_splash_enabled ||
 		!mdss_mdp_iommu_dyn_attach_supported(mdp5_data->mdata) ||
-		!mdp5_data->splash_mem_addr ||
-		!mdp5_data->splash_mem_size) {
+		!mdp5_data->splash_mem_addr[mfd->index] ||
+		!mdp5_data->splash_mem_size[mfd->index]) {
 		pr_debug("dynamic attach is not supported\n");
 		return -EPERM;
 	}
@@ -136,17 +136,18 @@ static int mdss_mdp_splash_iommu_attach(struct msm_fb_data_type *mfd)
 		return -EINVAL;
 	}
 
-	rc = iommu_map(domain, mdp5_data->splash_mem_addr,
-				mdp5_data->splash_mem_addr,
-				mdp5_data->splash_mem_size, IOMMU_READ);
+	rc = iommu_map(domain, mdp5_data->splash_mem_addr[mfd->index],
+			mdp5_data->splash_mem_addr[mfd->index],
+			mdp5_data->splash_mem_size[mfd->index], IOMMU_READ);
 	if (rc) {
 		pr_debug("iommu memory mapping failed rc=%d\n", rc);
 	} else {
 		ret = mdss_iommu_ctrl(1);
 		if (IS_ERR_VALUE(ret)) {
 			pr_err("mdss iommu attach failed\n");
-			iommu_unmap(domain, mdp5_data->splash_mem_addr,
-						mdp5_data->splash_mem_size);
+			iommu_unmap(domain,
+			mdp5_data->splash_mem_addr[mfd->index],
+			mdp5_data->splash_mem_size[mfd->index]);
 		} else {
 			mfd->splash_info.iommu_dynamic_attached = true;
 		}
@@ -168,8 +169,8 @@ static void mdss_mdp_splash_unmap_splash_mem(struct msm_fb_data_type *mfd)
 			return;
 		}
 
-		iommu_unmap(domain, mdp5_data->splash_mem_addr,
-						mdp5_data->splash_mem_size);
+		iommu_unmap(domain, mdp5_data->splash_mem_addr[mfd->index],
+				mdp5_data->splash_mem_size[mfd->index]);
 		mdss_iommu_ctrl(0);
 
 		mfd->splash_info.iommu_dynamic_attached = false;
@@ -266,12 +267,17 @@ int mdss_mdp_splash_cleanup(struct msm_fb_data_type *mfd,
 
 	mdss_mdp_ctl_splash_finish(ctl, mdp5_data->handoff);
 
-	if (mdp5_data->splash_mem_addr) {
+	if (mdp5_data->splash_mem_addr[mfd->index]) {
 		/* Give back the reserved memory to the system */
-		memblock_free(mdp5_data->splash_mem_addr,
-					mdp5_data->splash_mem_size);
-		mdss_free_bootmem(mdp5_data->splash_mem_addr,
-					mdp5_data->splash_mem_size);
+		pr_info("%s: clear splash mem for fb%d, addr 0x%x, size 0x%x\n",
+			__func__, mfd->index,
+			mdp5_data->splash_mem_addr[mfd->index],
+			mdp5_data->splash_mem_size[mfd->index]);
+
+		memblock_free(mdp5_data->splash_mem_addr[mfd->index],
+				mdp5_data->splash_mem_size[mfd->index]);
+		mdss_free_bootmem(mdp5_data->splash_mem_addr[mfd->index],
+				mdp5_data->splash_mem_size[mfd->index]);
 	}
 
 	mdss_mdp_footswitch_ctrl_splash(0);
@@ -578,6 +584,7 @@ static __ref int mdss_mdp_splash_parse_dt(struct msm_fb_data_type *mfd)
 	struct mdss_overlay_private *mdp5_mdata = mfd_to_mdp5_data(mfd);
 	int len = 0, rc = 0;
 	u32 offsets[2];
+	u32 cell_index = 0;
 	struct device_node *pnode, *child_node;
 
 	mfd->splash_info.splash_logo_enabled =
@@ -625,25 +632,38 @@ static __ref int mdss_mdp_splash_parse_dt(struct msm_fb_data_type *mfd)
 		}
 	}
 
+	rc = of_property_read_u32(pdev->dev.of_node, "cell-index",
+		&cell_index);
+	if (rc)
+		pr_err("Unable to get the cell-index rc=%d\n", rc);
+
 	if (!memblock_is_reserved(offsets[0])) {
 		pr_debug("failed to reserve memory for fb splash\n");
 		rc = -EINVAL;
 		goto error;
 	}
 
-	mdp5_mdata->splash_mem_addr = offsets[0];
-	mdp5_mdata->splash_mem_size = offsets[1];
-	pr_debug("memaddr=%x size=%x\n", mdp5_mdata->splash_mem_addr,
-		mdp5_mdata->splash_mem_size);
+	mdp5_mdata->splash_mem_addr[mfd->index] = offsets[0];
+	mdp5_mdata->splash_mem_size[mfd->index] = offsets[1];
+
+	pr_info("cell-index: %d, mfd->index: %d, memaddr=%x size=%x\n",
+		cell_index, mfd->index,
+		mdp5_mdata->splash_mem_addr[mfd->index],
+		mdp5_mdata->splash_mem_size[mfd->index]);
 
 error:
 	if (!rc && !mfd->panel_info->cont_splash_enabled &&
-		mdp5_mdata->splash_mem_addr) {
-		pr_debug("mem reservation not reqd if cont splash disabled\n");
-		memblock_free(mdp5_mdata->splash_mem_addr,
-					mdp5_mdata->splash_mem_size);
-		mdss_free_bootmem(mdp5_mdata->splash_mem_addr,
-					mdp5_mdata->splash_mem_size);
+		mdp5_mdata->splash_mem_addr[mfd->index]) {
+
+		pr_info("%s: clear splash mem for fb%d, addr 0x%x, size 0x%x\n",
+			__func__, mfd->index,
+			mdp5_mdata->splash_mem_addr[mfd->index],
+			mdp5_mdata->splash_mem_size[mfd->index]);
+
+		memblock_free(mdp5_mdata->splash_mem_addr[mfd->index],
+				mdp5_mdata->splash_mem_size[mfd->index]);
+		mdss_free_bootmem(mdp5_mdata->splash_mem_addr[mfd->index],
+				mdp5_mdata->splash_mem_size[mfd->index]);
 	} else if (rc && mfd->panel_info->cont_splash_enabled) {
 		pr_err("no rsvd mem found in DT for splash screen\n");
 	} else {
@@ -656,10 +676,26 @@ error:
 int mdss_mdp_splash_init(struct msm_fb_data_type *mfd)
 {
 	int rc;
+	struct mdss_overlay_private *mdp5_data;
 
 	if (!mfd) {
 		rc = -EINVAL;
 		goto end;
+	}
+
+	mdp5_data = mfd_to_mdp5_data(mfd);
+	if (!mdp5_data) {
+		rc = -EINVAL;
+		goto end;
+	}
+
+	if (mfd->panel_info->cont_splash_enabled && !mdp5_data->handoff) {
+		rc = mdss_mdp_overlay_handoff(mfd);
+		if (rc) {
+			pr_err("%s: handoff failed: index %d\n",
+				__func__, mfd->index);
+			goto end;
+		}
 	}
 
 	rc = mdss_mdp_splash_parse_dt(mfd);
