@@ -1533,6 +1533,13 @@ static int sdhci_set_power(struct sdhci_host *host, unsigned short power)
 	return power;
 }
 
+static inline unsigned long sdhci_get_pm_qos_cpumask(struct sdhci_host *host,
+						int index)
+{
+	struct sdhci_host_qos *host_qos = host->host_qos;
+	return cpumask_bits(&(host_qos[index].pm_qos_req_dma.cpus_affine))[0];
+}
+
 static void sdhci_pm_qos_remove_work(struct work_struct *work)
 {
 	struct sdhci_host *host = container_of(work, struct sdhci_host,
@@ -1550,7 +1557,10 @@ static void sdhci_pm_qos_remove_work(struct work_struct *work)
 
 	pm_qos_update_request(&(host_qos[vote].pm_qos_req_dma),
 				PM_QOS_DEFAULT_VALUE);
-
+	trace_mmc_pm_qos_unvote(mmc_hostname(host->mmc), vote,
+		PM_QOS_DEFAULT_VALUE, host_qos[vote].pm_qos_req_dma.type,
+		sdhci_get_pm_qos_cpumask(host, vote),
+		host->power_policy, -EINVAL, vote);
 	host->last_qos_policy = -EINVAL;
 }
 
@@ -1577,6 +1587,7 @@ static inline int sdhci_get_host_qos_index(struct mmc_host *mmc,
 
 	return vote;
 }
+
 static void sdhci_update_pm_qos(struct mmc_host *mmc, struct mmc_request *mrq)
 {
 	struct sdhci_host *host = mmc_priv(mmc);
@@ -1608,9 +1619,20 @@ static void sdhci_update_pm_qos(struct mmc_host *mmc, struct mmc_request *mrq)
 		pm_qos_update_request(
 			&(host_qos[host->last_qos_policy].pm_qos_req_dma),
 			PM_QOS_DEFAULT_VALUE);
+		trace_mmc_pm_qos_unvote(mmc_hostname(host->mmc),
+			host->last_qos_policy, PM_QOS_DEFAULT_VALUE,
+			host_qos[host->last_qos_policy].pm_qos_req_dma.type,
+			sdhci_get_pm_qos_cpumask(host, host->last_qos_policy),
+			host->power_policy, mrq->cmd->opcode, vote);
+
 		}
 	pm_qos_update_request(&(host_qos[vote].pm_qos_req_dma),
 		host_qos[vote].cpu_dma_latency_us[pol_index]);
+	trace_mmc_pm_qos_vote(mmc_hostname(host->mmc), -EINVAL,
+		host_qos[vote].cpu_dma_latency_us[pol_index],
+		host_qos[vote].pm_qos_req_dma.type,
+		sdhci_get_pm_qos_cpumask(host, vote),
+		host->power_policy, mrq->cmd->opcode, vote);
 	host->last_qos_policy = vote;
 out:
 	return;

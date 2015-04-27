@@ -176,6 +176,52 @@ TRACE_EVENT(mmc_clk,
 	)
 );
 
+DECLARE_EVENT_CLASS(mmc_pm_qos,
+	TP_PROTO(const char *dev_name, int last_vote_type, int curr_vote,
+	    unsigned int qos_type, unsigned long cpumask,
+	    unsigned int power_policy, int opcode, int vote_type),
+	TP_ARGS(dev_name, last_vote_type, curr_vote, qos_type, cpumask,
+	    power_policy, opcode, vote_type),
+	TP_STRUCT__entry(
+		__string(dev_name, dev_name)
+		__field(int, last_vote_type)
+		__field(int, curr_vote)
+		__field(unsigned int, qos_type)
+		__field(unsigned long, cpumask)
+		__field(unsigned int, power_policy)
+		__field(int, opcode)
+		__field(int, vote_type)
+	),
+	TP_fast_assign(
+		__assign_str(dev_name, dev_name);
+		__entry->last_vote_type = last_vote_type;
+		__entry->curr_vote = curr_vote;
+		__entry->qos_type = qos_type;
+		__entry->cpumask = cpumask;
+		__entry->power_policy = power_policy;
+		__entry->opcode = opcode;
+		__entry->vote_type = vote_type;
+	),
+	TP_printk("%s: last_vote_type = %d, curr_vote = %d, qos_type = %u, cpumask = 0x%lx, power_policy = %u, opcode = %d, vote_type = %d\n",
+		__get_str(dev_name), __entry->last_vote_type,
+		__entry->curr_vote, __entry->qos_type, __entry->cpumask,
+		__entry->power_policy, __entry->opcode, __entry->vote_type)
+);
+
+DEFINE_EVENT(mmc_pm_qos, mmc_pm_qos_vote,
+	TP_PROTO(const char *dev_name, int last_vote_type, int curr_vote,
+	    unsigned int qos_type, unsigned long cpumask,
+	    unsigned int power_policy, int opcode, int vote_type),
+	TP_ARGS(dev_name, last_vote_type, curr_vote, qos_type, cpumask,
+	    power_policy, opcode, vote_type));
+
+DEFINE_EVENT(mmc_pm_qos, mmc_pm_qos_unvote,
+	TP_PROTO(const char *dev_name, int last_vote_type, int curr_vote,
+	    unsigned int qos_type, unsigned long cpumask,
+	    unsigned int power_policy, int opcode, int vote_type),
+	TP_ARGS(dev_name, last_vote_type, curr_vote, qos_type, cpumask,
+	    power_policy, opcode, vote_type));
+
 DECLARE_EVENT_CLASS(mmc_pm_template,
 	TP_PROTO(const char *dev_name, int err, s64 usecs),
 
