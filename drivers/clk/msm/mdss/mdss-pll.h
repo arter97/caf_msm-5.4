@@ -140,6 +140,11 @@ struct mdss_pll_resources {
 
 	struct mdss_pll_resources *slave;
 
+	/*
+	 * target pll revision information
+	 */
+	int		revision;
+
 	void *priv;
 };
 
