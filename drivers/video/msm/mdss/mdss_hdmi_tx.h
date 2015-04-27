@@ -115,6 +115,9 @@ struct hdmi_tx_ctrl {
 
 	void *feature_data[HDMI_TX_FEAT_MAX];
 	u32 s3d_mode;
+
+	void *codec_data;
+	u32 (*play_short_silent_audio) (void *codec_data);
 };
 
 #define IS_CEC_WAKEUP_EN(ctrl) \
