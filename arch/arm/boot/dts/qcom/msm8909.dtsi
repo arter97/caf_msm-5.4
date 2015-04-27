@@ -1000,9 +1000,10 @@
 	qnand_1: nand@7980000 {
 		compatible = "qcom,msm-nand";
 		reg = <0x7980000 0x1000>,
-			<0x7984000 0x1a000>;
+			<0x7984000 0x1a000>,
+			<0x5e02c 0x4>;
 		reg-names = "nand_phys",
-		    "bam_phys";
+		    "bam_phys", "boot_cfg";
 		interrupts = <0 132 0>;
 		interrupt-names = "bam_irq";
 
@@ -1015,7 +1016,7 @@
 			<91 512 400000 800000>;
 
 		clock-names = "core_clk";
-		clocks = <&clock_gcc clk_qpic_clk>;
+		clocks = <&clock_rpm clk_qpic_clk>;
 		status = "disabled";
 	};
 
