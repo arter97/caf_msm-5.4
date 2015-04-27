@@ -41,29 +41,6 @@ static int _check_context_timestamp(struct kgsl_device *device,
 }
 
 /**
- * adreno_drawctxt_timestamp() - Return the last queued timestamp for the
- * context
- * @context: Pointer to the KGSL context to query
- *
- * Return the last queued timestamp for the given context.
- * This is used to verify that incoming requests are not using an
- * invalid (unsubmitted) timestamp
- */
-unsigned int adreno_drawctxt_timestamp(struct kgsl_context *context)
-{
-	unsigned int timestamp;
-	struct adreno_context *drawctxt = ADRENO_CONTEXT(context);
-
-	BUG_ON(context == NULL);
-
-	spin_lock(&drawctxt->lock);
-	timestamp = drawctxt->timestamp;
-	spin_unlock(&drawctxt->lock);
-
-	return timestamp;
-}
-
-/**
  * adreno_drawctxt_dump() - dump information about a draw context
  * @device: KGSL device that owns the context
  * @context: KGSL context to dump information about
@@ -467,8 +444,16 @@ int adreno_drawctxt_detach(struct kgsl_context *context)
 
 	/* deactivate context */
 	mutex_lock(&device->mutex);
-	if (rb->drawctxt_active == drawctxt)
-		adreno_drawctxt_switch(adreno_dev, rb, NULL, 0);
+	if (rb->drawctxt_active == drawctxt) {
+		if (adreno_dev->cur_rb == rb) {
+			if (!kgsl_active_count_get(device)) {
+				adreno_drawctxt_switch(adreno_dev, rb, NULL, 0);
+				kgsl_active_count_put(device);
+			} else
+				BUG();
+		} else
+			adreno_drawctxt_switch(adreno_dev, rb, NULL, 0);
+	}
 	mutex_unlock(&device->mutex);
 
 	spin_lock(&drawctxt->lock);

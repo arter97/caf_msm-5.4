@@ -41,7 +41,11 @@
 /* The SVM upper bound is the same as the TASK_SIZE in arm32 */
 #define KGSL_SVM_UPPER_BOUND (0xC0000000 - SZ_16M)
 
-#define KGSL_SVM_LOWER_BOUND PAGE_SIZE
+/*
+ * Defines the lowest possible addresses for SVM map. The VA space below
+ * has been reserved for GMEM and SP Memory regions.
+ */
+#define KGSL_SVM_LOWER_BOUND 0x300000
 
 /* A macro for memory statistics - add the new size to the stat and if
    the statisic is greater then _max, set _max
@@ -97,7 +101,6 @@ extern struct kgsl_driver kgsl_driver;
 
 struct kgsl_pagetable;
 struct kgsl_memdesc;
-struct kgsl_cmdbatch;
 
 struct kgsl_memdesc_ops {
 	unsigned int vmflags;
@@ -151,6 +154,7 @@ struct kgsl_memdesc {
 	uint64_t gpuaddr;
 	phys_addr_t physaddr;
 	uint64_t size;
+	uint64_t mmapsize;
 	unsigned int priv;
 	struct sg_table *sgt;
 	struct kgsl_memdesc_ops *ops;
@@ -307,13 +311,12 @@ long kgsl_ioctl_gpuobj_alloc(struct kgsl_device_private *dev_priv,
 					unsigned int cmd, void *data);
 long kgsl_ioctl_gpuobj_free(struct kgsl_device_private *dev_priv,
 					unsigned int cmd, void *data);
-
-int kgsl_cmdbatch_add_memobj(struct kgsl_cmdbatch *cmdbatch,
-			struct kgsl_ibdesc *ibdesc);
-
-int kgsl_cmdbatch_add_sync(struct kgsl_device *device,
-			struct kgsl_cmdbatch *cmdbatch,
-			struct kgsl_cmd_syncpoint *sync);
+long kgsl_ioctl_gpuobj_info(struct kgsl_device_private *dev_priv,
+					unsigned int cmd, void *data);
+long kgsl_ioctl_gpuobj_import(struct kgsl_device_private *dev_priv,
+					unsigned int cmd, void *data);
+long kgsl_ioctl_gpuobj_sync(struct kgsl_device_private *dev_priv,
+					unsigned int cmd, void *data);
 
 void kgsl_mem_entry_destroy(struct kref *kref);
 

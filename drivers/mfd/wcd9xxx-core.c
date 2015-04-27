@@ -367,6 +367,41 @@ static int __wcd9xxx_reg_write(
 	return ret;
 }
 
+static int __wcd9xxx_reg_update_bits(struct wcd9xxx *wcd9xxx,
+				     unsigned short reg, u8 mask, u8 val)
+{
+	int ret;
+	u8 orig, tmp;
+
+	if (wcd9xxx->using_regmap)
+		ret = regmap_update_bits(wcd9xxx->regmap, reg, mask, val);
+	else {
+		mutex_lock(&wcd9xxx->io_lock);
+		ret = wcd9xxx_read(wcd9xxx, reg, 1, &orig, false);
+		if (ret < 0) {
+			dev_err(wcd9xxx->dev, "%s: Codec read 0x%x failed\n",
+				__func__, reg);
+			goto err;
+		}
+		tmp = orig & ~mask;
+		tmp |= val & mask;
+		if (tmp != orig)
+			ret = wcd9xxx_write(wcd9xxx, reg, 1, &tmp, false);
+err:
+		mutex_unlock(&wcd9xxx->io_lock);
+	}
+	return ret;
+}
+
+int wcd9xxx_reg_update_bits(
+	struct wcd9xxx_core_resource *core_res,
+	unsigned short reg, u8 mask, u8 val)
+{
+	struct wcd9xxx *wcd9xxx = (struct wcd9xxx *) core_res->parent;
+	return __wcd9xxx_reg_update_bits(wcd9xxx, reg, mask, val);
+}
+EXPORT_SYMBOL(wcd9xxx_reg_update_bits);
+
 int wcd9xxx_reg_write(
 	struct wcd9xxx_core_resource *core_res,
 	unsigned short reg, u8 val)
@@ -726,9 +761,7 @@ static void wcd9xxx_bring_up(struct wcd9xxx *wcd9xxx)
 	if (wcd9xxx->type == WCD9335) {
 		__wcd9xxx_reg_write(wcd9xxx, WCD9335_CODEC_RPM_RST_CTL, 0x01);
 		__wcd9xxx_reg_write(wcd9xxx,
-				    WCD9335_CODEC_RPM_PWR_CDC_DIG_HM_CTL, 0x4);
-		__wcd9xxx_reg_write(wcd9xxx,
-				    WCD9335_CODEC_RPM_PWR_CDC_DIG_HM_CTL, 0x0);
+				    WCD9335_CODEC_RPM_PWR_CDC_DIG_HM_CTL, 0x3);
 		__wcd9xxx_reg_write(wcd9xxx, WCD9335_CODEC_RPM_RST_CTL, 0x3);
 	} else if (wcd9xxx->type == WCD9330) {
 		__wcd9xxx_reg_write(wcd9xxx, WCD9330_A_LEAKAGE_CTL, 0x4);
@@ -1085,6 +1118,41 @@ static int wcd9xxx_regmap_init_cache(struct wcd9xxx *wcd9xxx)
 	return rc;
 }
 
+static void wcd9xxx_core_res_update_irq_regs(
+		struct wcd9xxx_core_resource *core_res,
+		u16 id_major)
+{
+	switch (id_major) {
+	case TASHA_MAJOR:
+		core_res->intr_reg[WCD9XXX_INTR_STATUS_BASE] =
+					WCD9335_INTR_PIN1_STATUS0;
+		core_res->intr_reg[WCD9XXX_INTR_CLEAR_BASE] =
+					WCD9335_INTR_PIN1_CLEAR0;
+		core_res->intr_reg[WCD9XXX_INTR_MASK_BASE] =
+					WCD9335_INTR_PIN1_MASK0;
+		core_res->intr_reg[WCD9XXX_INTR_LEVEL_BASE] =
+					WCD9335_INTR_LEVEL0;
+		core_res->intr_reg[WCD9XXX_INTR_CLR_COMMIT] =
+					WCD9335_INTR_CLR_COMMIT;
+		break;
+	case TABLA_MAJOR:
+	case TOMTOM_MAJOR:
+	case TAIKO_MAJOR:
+	default:
+		core_res->intr_reg[WCD9XXX_INTR_STATUS_BASE] =
+					WCD9XXX_A_INTR_STATUS0;
+		core_res->intr_reg[WCD9XXX_INTR_CLEAR_BASE] =
+					WCD9XXX_A_INTR_CLEAR0;
+		core_res->intr_reg[WCD9XXX_INTR_MASK_BASE] =
+					WCD9XXX_A_INTR_MASK0;
+		core_res->intr_reg[WCD9XXX_INTR_LEVEL_BASE] =
+					WCD9XXX_A_INTR_LEVEL0;
+		core_res->intr_reg[WCD9XXX_INTR_CLR_COMMIT] =
+					WCD9XXX_A_INTR_MODE;
+		break;
+	};
+}
+
 static int wcd9xxx_device_init(struct wcd9xxx *wcd9xxx)
 {
 	int ret = 0;
@@ -1124,6 +1192,8 @@ static int wcd9xxx_device_init(struct wcd9xxx *wcd9xxx)
 		core_res->intr_table = intr_tbl_v2;
 		core_res->intr_table_size = ARRAY_SIZE(intr_tbl_v2);
 	}
+	wcd9xxx_core_res_update_irq_regs(&wcd9xxx->core_res,
+					 wcd9xxx->codec_type->id_major);
 
 	wcd9xxx_core_res_init(&wcd9xxx->core_res,
 				wcd9xxx->codec_type->num_irqs,
@@ -1891,14 +1961,30 @@ static int wcd9xxx_dt_parse_micbias_info(struct device *dev,
 				&prop_val)))
 		micbias->ldoh_v  =  (u8)prop_val;
 
-	wcd9xxx_read_of_property_u32(dev, "qcom,cdc-micbias-cfilt1-mv",
-				&micbias->cfilt1_mv);
+	if (!(wcd9xxx_read_of_property_u32(dev, "qcom,cdc-micbias-cfilt1-mv",
+				&prop_val)))
+		micbias->cfilt1_mv = prop_val;
+	else if (!(wcd9xxx_read_of_property_u32(dev, "qcom,cdc-micbias1-mv",
+				&prop_val)))
+		micbias->micb1_mv = prop_val;
 
-	wcd9xxx_read_of_property_u32(dev, "qcom,cdc-micbias-cfilt2-mv",
-				&micbias->cfilt2_mv);
+	if (!(wcd9xxx_read_of_property_u32(dev, "qcom,cdc-micbias-cfilt2-mv",
+				&prop_val)))
+		micbias->cfilt2_mv = prop_val;
+	else if (!(wcd9xxx_read_of_property_u32(dev, "qcom,cdc-micbias2-mv",
+				&prop_val)))
+		micbias->micb2_mv = prop_val;
 
-	wcd9xxx_read_of_property_u32(dev, "qcom,cdc-micbias-cfilt3-mv",
-				&micbias->cfilt3_mv);
+	if (!(wcd9xxx_read_of_property_u32(dev, "qcom,cdc-micbias-cfilt3-mv",
+				&prop_val)))
+		micbias->cfilt3_mv = prop_val;
+	else if (!(wcd9xxx_read_of_property_u32(dev, "qcom,cdc-micbias3-mv",
+				&prop_val)))
+		micbias->micb3_mv = prop_val;
+
+	if (!(wcd9xxx_read_of_property_u32(dev, "qcom,cdc-micbias4-mv",
+				&prop_val)))
+		micbias->micb4_mv = prop_val;
 
 	/* Read micbias values for codec. Does not matter even if a few
 	 * micbias values are not defined in the Device Tree. Codec will
@@ -1941,6 +2027,10 @@ static int wcd9xxx_dt_parse_micbias_info(struct device *dev,
 	dev_dbg(dev, "ldoh_v  %u cfilt1_mv %u cfilt2_mv %u cfilt3_mv %u",
 		(u32)micbias->ldoh_v, (u32)micbias->cfilt1_mv,
 		(u32)micbias->cfilt2_mv, (u32)micbias->cfilt3_mv);
+
+	dev_dbg(dev, "micb1_mv %u micb2_mv %u micb3_mv %u micb4_mv %u",
+		micbias->micb1_mv, micbias->micb2_mv,
+		micbias->micb3_mv, micbias->micb4_mv);
 
 	dev_dbg(dev, "bias1_cfilt_sel %u bias2_cfilt_sel %u\n",
 		(u32)micbias->bias1_cfilt_sel, (u32)micbias->bias2_cfilt_sel);

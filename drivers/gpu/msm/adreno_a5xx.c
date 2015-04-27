@@ -37,13 +37,27 @@ static const struct adreno_vbif_platform a5xx_vbif_platforms[] = {
 	{ adreno_is_a510, a530_vbif },
 };
 
-#define PWR_ON_BIT BIT(20)
-
 /**
  * Number of times to check if the regulator enabled before
  * giving up and returning failure.
  */
 #define PWR_RETRY 100
+
+/**
+ * Number of times to check if the GPMU firmware is initialized before
+ * giving up and returning failure.
+ */
+#define GPMU_FW_INIT_RETRY 100
+
+#define GPMU_HEADER_ID		1
+#define GPMU_FIRMWARE_ID	2
+
+#define GPMU_INST_RAM_SIZE	0xFFF
+
+#define GPMU_MAJOR_ID	1
+#define GPMU_MINOR_ID	2
+#define GPMU_DATE_ID	3
+#define GPMU_TIME_ID	4
 
 /*
  * a5xx_preemption_start() - Setup state to start preemption
@@ -251,6 +265,7 @@ static int a5xx_preemption_post_ibsubmit(
  */
 static void a5xx_gpudev_init(struct adreno_device *adreno_dev)
 {
+	uint64_t addr;
 	struct adreno_gpudev *gpudev;
 
 	gpudev = ADRENO_GPU_DEVICE(adreno_dev);
@@ -260,6 +275,11 @@ static void a5xx_gpudev_init(struct adreno_device *adreno_dev)
 		gpudev->snapshot_data->sect_sizes->cp_merciu = 32;
 		gpudev->snapshot_data->sect_sizes->roq = 256;
 	}
+
+	/* Calculate SP local and private mem addresses */
+	addr = ALIGN(ADRENO_UCHE_GMEM_BASE + adreno_dev->gmem_size, SZ_64K);
+	adreno_dev->sp_local_gpuaddr = addr;
+	adreno_dev->sp_pvt_gpuaddr = addr + SZ_64K;
 }
 
 /**
@@ -317,6 +337,53 @@ static void a5xx_protect_init(struct adreno_device *adreno_dev)
 }
 
 /*
+ * a5xx_is_sptp_idle() - A530 SP/TP/RAC should be power collapsed to be
+ * considered idle
+ * @adreno_dev: The adreno_device pointer
+ */
+static bool a5xx_is_sptp_idle(struct adreno_device *adreno_dev)
+{
+	unsigned int reg;
+	struct kgsl_device *device = &adreno_dev->dev;
+
+	/* If feature is not supported or enabled, no worry */
+	if (!ADRENO_FEATURE(adreno_dev, ADRENO_SPTP_PC) ||
+		!test_bit(ADRENO_SPTP_PC_CTRL, &adreno_dev->pwrctrl_flag))
+		return true;
+	kgsl_regread(device, A5XX_GPMU_SP_PWR_CLK_STATUS, &reg);
+	if (reg & BIT(20))
+		return false;
+	kgsl_regread(device, A5XX_GPMU_RBCCU_PWR_CLK_STATUS, &reg);
+	return !(reg & BIT(20));
+}
+
+/*
+ * _poll_gdsc_status() - Poll the GDSC status register
+ * @adreno_dev: The adreno device pointer
+ * @status_reg: Offset of the status register
+ * @status_value: The expected bit value
+ *
+ * Poll the status register till the power-on bit is equal to the
+ * expected value or the max retries are exceeded.
+ */
+static int _poll_gdsc_status(struct adreno_device *adreno_dev,
+				unsigned int status_reg,
+				unsigned int status_value)
+{
+	unsigned int reg, retry = PWR_RETRY;
+	struct kgsl_device *device = &adreno_dev->dev;
+
+	/* Bit 20 is the power on bit of SPTP and RAC GDSC status register */
+	do {
+		udelay(1);
+		kgsl_regread(device, status_reg, &reg);
+	} while (((reg & BIT(20)) != (status_value << 20)) && retry--);
+	if ((reg & BIT(20)) != (status_value << 20))
+		return -ETIMEDOUT;
+	return 0;
+}
+
+/*
  * a5xx_regulator_enable() - Enable any necessary HW regulators
  * @adreno_dev: The adreno device pointer
  *
@@ -325,41 +392,29 @@ static void a5xx_protect_init(struct adreno_device *adreno_dev)
  */
 static int a5xx_regulator_enable(struct adreno_device *adreno_dev)
 {
-	unsigned int reg, retry = PWR_RETRY;
+	unsigned int ret;
 	struct kgsl_device *device = &adreno_dev->dev;
 	if (!adreno_is_a530(adreno_dev))
 		return 0;
 
-	/* Set the default register values; set SW_COLLAPSE to 0 */
-	kgsl_regwrite(device, A5XX_GPMU_SP_POWER_CNTL, 0x778000);
-	/* Insert a delay between SPTP and RAC GDSC to avoid voltage droop */
-	udelay(3);
 	/*
-	 * Poll the status register till the power-on bit is set or the max
-	 * retries are exceeded.
+	 * Turn on smaller power domain first to reduce voltage droop.
+	 * Set the default register values; set SW_COLLAPSE to 0.
 	 */
-	do {
-		udelay(1);
-		kgsl_regread(device, A5XX_GPMU_SP_PWR_CLK_STATUS, &reg);
-	} while (!(reg & PWR_ON_BIT) && retry--);
-	if (!(reg & PWR_ON_BIT)) {
-		KGSL_PWR_ERR(device, "SPTP GDSC enable failed %x\n", reg);
-		return -ENODEV;
+	kgsl_regwrite(device, A5XX_GPMU_RBCCU_POWER_CNTL, 0x778000);
+	/* Insert a delay between RAC and SPTP GDSC to reduce voltage droop */
+	udelay(3);
+	ret = _poll_gdsc_status(adreno_dev, A5XX_GPMU_RBCCU_PWR_CLK_STATUS, 1);
+	if (ret) {
+		KGSL_PWR_ERR(device, "RBCCU GDSC enable failed\n");
+		return ret;
 	}
 
-	kgsl_regwrite(device, A5XX_GPMU_RBCCU_POWER_CNTL, 0x778000);
-	retry = PWR_RETRY;
-	/*
-	 * Poll the status register till the power-on bit is set or the max
-	 * retries are exceeded.
-	 */
-	do {
-		udelay(1);
-		kgsl_regread(device, A5XX_GPMU_RBCCU_PWR_CLK_STATUS, &reg);
-	} while (!(reg & PWR_ON_BIT) && retry--);
-	if (!(reg & PWR_ON_BIT)) {
-		KGSL_PWR_ERR(device, "RBCCU GDSC enable failed %x\n", reg);
-		return -ENODEV;
+	kgsl_regwrite(device, A5XX_GPMU_SP_POWER_CNTL, 0x778000);
+	ret = _poll_gdsc_status(adreno_dev, A5XX_GPMU_SP_PWR_CLK_STATUS, 1);
+	if (ret) {
+		KGSL_PWR_ERR(device, "SPTP GDSC enable failed\n");
+		return ret;
 	}
 
 	return 0;
@@ -375,42 +430,488 @@ static int a5xx_regulator_enable(struct adreno_device *adreno_dev)
  */
 static void a5xx_regulator_disable(struct adreno_device *adreno_dev)
 {
-	unsigned int reg, retry = PWR_RETRY;
+	unsigned int reg;
 	struct kgsl_device *device = &adreno_dev->dev;
-	if (!adreno_is_a530(adreno_dev))
+
+	/* If feature is not supported or not enabled */
+	if (!ADRENO_FEATURE(adreno_dev, ADRENO_SPTP_PC) ||
+		!test_bit(ADRENO_SPTP_PC_CTRL, &adreno_dev->pwrctrl_flag)) {
+		/* Set the default register values; set SW_COLLAPSE to 1 */
+		kgsl_regwrite(device, A5XX_GPMU_SP_POWER_CNTL, 0x778001);
+		/*
+		 * Insert a delay between SPTP and RAC GDSC to reduce voltage
+		 * droop.
+		 */
+		udelay(3);
+		if (_poll_gdsc_status(adreno_dev,
+					A5XX_GPMU_SP_PWR_CLK_STATUS, 0))
+			KGSL_PWR_WARN(device, "SPTP GDSC disable failed\n");
+
+		kgsl_regwrite(device, A5XX_GPMU_RBCCU_POWER_CNTL, 0x778001);
+		if (_poll_gdsc_status(adreno_dev,
+					A5XX_GPMU_RBCCU_PWR_CLK_STATUS, 0))
+			KGSL_PWR_WARN(device, "RBCCU GDSC disable failed\n");
+	} else if (test_bit(ADRENO_DEVICE_GPMU_INITIALIZED,
+			&adreno_dev->priv)) {
+		/* GPMU firmware is supposed to turn off SPTP & RAC GDSCs. */
+		kgsl_regread(device, A5XX_GPMU_SP_PWR_CLK_STATUS, &reg);
+		if (reg & BIT(20))
+			KGSL_PWR_WARN(device, "SPTP GDSC is not disabled\n");
+		kgsl_regread(device, A5XX_GPMU_RBCCU_PWR_CLK_STATUS, &reg);
+		if (reg & BIT(20))
+			KGSL_PWR_WARN(device, "RBCCU GDSC is not disabled\n");
+		/*
+		 * GPMU firmware is supposed to set GMEM to non-retention.
+		 * Bit 14 is the memory core force on bit.
+		 */
+		kgsl_regread(device, A5XX_GPMU_RBCCU_CLOCK_CNTL, &reg);
+		if (reg & BIT(14))
+			KGSL_PWR_WARN(device, "GMEM is forced on\n");
+	}
+
+	if (adreno_is_a530(adreno_dev)) {
+		/* Reset VBIF before PC to avoid popping bogus FIFO entries */
+		kgsl_regwrite(device, A5XX_RBBM_BLOCK_SW_RESET_CMD,
+			0x003C0000);
+		kgsl_regwrite(device, A5XX_RBBM_BLOCK_SW_RESET_CMD, 0);
+	}
+}
+
+struct kgsl_hwcg_reg {
+	unsigned int off;
+	unsigned int val;
+};
+
+static const struct kgsl_hwcg_reg a510_hwcg_regs[] = {
+	{A5XX_RBBM_CLOCK_CNTL_SP0, 0x02222222},
+	{A5XX_RBBM_CLOCK_CNTL_SP1, 0x02222222},
+	{A5XX_RBBM_CLOCK_CNTL2_SP0, 0x02222220},
+	{A5XX_RBBM_CLOCK_CNTL2_SP1, 0x02222220},
+	{A5XX_RBBM_CLOCK_HYST_SP0, 0x0000F3CF},
+	{A5XX_RBBM_CLOCK_HYST_SP1, 0x0000F3CF},
+	{A5XX_RBBM_CLOCK_DELAY_SP0, 0x00000080},
+	{A5XX_RBBM_CLOCK_DELAY_SP1, 0x00000080},
+	{A5XX_RBBM_CLOCK_CNTL_TP0, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL_TP1, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL2_TP0, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL2_TP1, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL3_TP0, 0x00002222},
+	{A5XX_RBBM_CLOCK_CNTL3_TP1, 0x00002222},
+	{A5XX_RBBM_CLOCK_HYST_TP0, 0x77777777},
+	{A5XX_RBBM_CLOCK_HYST_TP1, 0x77777777},
+	{A5XX_RBBM_CLOCK_HYST2_TP0, 0x77777777},
+	{A5XX_RBBM_CLOCK_HYST2_TP1, 0x77777777},
+	{A5XX_RBBM_CLOCK_HYST3_TP0, 0x00007777},
+	{A5XX_RBBM_CLOCK_HYST3_TP1, 0x00007777},
+	{A5XX_RBBM_CLOCK_DELAY_TP0, 0x11111111},
+	{A5XX_RBBM_CLOCK_DELAY_TP1, 0x11111111},
+	{A5XX_RBBM_CLOCK_DELAY2_TP0, 0x11111111},
+	{A5XX_RBBM_CLOCK_DELAY2_TP1, 0x11111111},
+	{A5XX_RBBM_CLOCK_DELAY3_TP0, 0x00001111},
+	{A5XX_RBBM_CLOCK_DELAY3_TP1, 0x00001111},
+	{A5XX_RBBM_CLOCK_CNTL_UCHE, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL2_UCHE, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL3_UCHE, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL4_UCHE, 0x00222222},
+	{A5XX_RBBM_CLOCK_HYST_UCHE, 0x00444444},
+	{A5XX_RBBM_CLOCK_DELAY_UCHE, 0x00000002},
+	{A5XX_RBBM_CLOCK_CNTL_RB0, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL_RB1, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL2_RB0, 0x00222222},
+	{A5XX_RBBM_CLOCK_CNTL2_RB1, 0x00222222},
+	{A5XX_RBBM_CLOCK_CNTL_CCU0, 0x00022220},
+	{A5XX_RBBM_CLOCK_CNTL_CCU1, 0x00022220},
+	{A5XX_RBBM_CLOCK_CNTL_RAC, 0x05522222},
+	{A5XX_RBBM_CLOCK_CNTL2_RAC, 0x00555555},
+	{A5XX_RBBM_CLOCK_HYST_RB_CCU0, 0x04040404},
+	{A5XX_RBBM_CLOCK_HYST_RB_CCU1, 0x04040404},
+	{A5XX_RBBM_CLOCK_HYST_RAC, 0x07444044},
+	{A5XX_RBBM_CLOCK_DELAY_RB_CCU_L1_0, 0x00000002},
+	{A5XX_RBBM_CLOCK_DELAY_RB_CCU_L1_1, 0x00000002},
+	{A5XX_RBBM_CLOCK_DELAY_RAC, 0x00010011},
+	{A5XX_RBBM_CLOCK_CNTL_TSE_RAS_RBBM, 0x04222222},
+	{A5XX_RBBM_CLOCK_MODE_GPC, 0x02222222},
+	{A5XX_RBBM_CLOCK_MODE_VFD, 0x00002222},
+	{A5XX_RBBM_CLOCK_HYST_TSE_RAS_RBBM, 0x00000000},
+	{A5XX_RBBM_CLOCK_HYST_GPC, 0x04104004},
+	{A5XX_RBBM_CLOCK_HYST_VFD, 0x00000000},
+	{A5XX_RBBM_CLOCK_DELAY_HLSQ, 0x00000000},
+	{A5XX_RBBM_CLOCK_DELAY_TSE_RAS_RBBM, 0x00004000},
+	{A5XX_RBBM_CLOCK_DELAY_GPC, 0x00000200},
+	{A5XX_RBBM_CLOCK_DELAY_VFD, 0x00002222}
+};
+
+static const struct kgsl_hwcg_reg a530_hwcg_regs[] = {
+	{A5XX_RBBM_CLOCK_CNTL_SP0, 0x02222222},
+	{A5XX_RBBM_CLOCK_CNTL_SP1, 0x02222222},
+	{A5XX_RBBM_CLOCK_CNTL_SP2, 0x02222222},
+	{A5XX_RBBM_CLOCK_CNTL_SP3, 0x02222222},
+	{A5XX_RBBM_CLOCK_CNTL2_SP0, 0x02222220},
+	{A5XX_RBBM_CLOCK_CNTL2_SP1, 0x02222220},
+	{A5XX_RBBM_CLOCK_CNTL2_SP2, 0x02222220},
+	{A5XX_RBBM_CLOCK_CNTL2_SP3, 0x02222220},
+	{A5XX_RBBM_CLOCK_HYST_SP0, 0x0000F3CF},
+	{A5XX_RBBM_CLOCK_HYST_SP1, 0x0000F3CF},
+	{A5XX_RBBM_CLOCK_HYST_SP2, 0x0000F3CF},
+	{A5XX_RBBM_CLOCK_HYST_SP3, 0x0000F3CF},
+	{A5XX_RBBM_CLOCK_DELAY_SP0, 0x00000080},
+	{A5XX_RBBM_CLOCK_DELAY_SP1, 0x00000080},
+	{A5XX_RBBM_CLOCK_DELAY_SP2, 0x00000080},
+	{A5XX_RBBM_CLOCK_DELAY_SP3, 0x00000080},
+	{A5XX_RBBM_CLOCK_CNTL_TP0, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL_TP1, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL_TP2, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL_TP3, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL2_TP0, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL2_TP1, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL2_TP2, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL2_TP3, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL3_TP0, 0x00002222},
+	{A5XX_RBBM_CLOCK_CNTL3_TP1, 0x00002222},
+	{A5XX_RBBM_CLOCK_CNTL3_TP2, 0x00002222},
+	{A5XX_RBBM_CLOCK_CNTL3_TP3, 0x00002222},
+	{A5XX_RBBM_CLOCK_HYST_TP0, 0x77777777},
+	{A5XX_RBBM_CLOCK_HYST_TP1, 0x77777777},
+	{A5XX_RBBM_CLOCK_HYST_TP2, 0x77777777},
+	{A5XX_RBBM_CLOCK_HYST_TP3, 0x77777777},
+	{A5XX_RBBM_CLOCK_HYST2_TP0, 0x77777777},
+	{A5XX_RBBM_CLOCK_HYST2_TP1, 0x77777777},
+	{A5XX_RBBM_CLOCK_HYST2_TP2, 0x77777777},
+	{A5XX_RBBM_CLOCK_HYST2_TP3, 0x77777777},
+	{A5XX_RBBM_CLOCK_HYST3_TP0, 0x00007777},
+	{A5XX_RBBM_CLOCK_HYST3_TP1, 0x00007777},
+	{A5XX_RBBM_CLOCK_HYST3_TP2, 0x00007777},
+	{A5XX_RBBM_CLOCK_HYST3_TP3, 0x00007777},
+	{A5XX_RBBM_CLOCK_DELAY_TP0, 0x11111111},
+	{A5XX_RBBM_CLOCK_DELAY_TP1, 0x11111111},
+	{A5XX_RBBM_CLOCK_DELAY_TP2, 0x11111111},
+	{A5XX_RBBM_CLOCK_DELAY_TP3, 0x11111111},
+	{A5XX_RBBM_CLOCK_DELAY2_TP0, 0x11111111},
+	{A5XX_RBBM_CLOCK_DELAY2_TP1, 0x11111111},
+	{A5XX_RBBM_CLOCK_DELAY2_TP2, 0x11111111},
+	{A5XX_RBBM_CLOCK_DELAY2_TP3, 0x11111111},
+	{A5XX_RBBM_CLOCK_DELAY3_TP0, 0x00001111},
+	{A5XX_RBBM_CLOCK_DELAY3_TP1, 0x00001111},
+	{A5XX_RBBM_CLOCK_DELAY3_TP2, 0x00001111},
+	{A5XX_RBBM_CLOCK_DELAY3_TP3, 0x00001111},
+	{A5XX_RBBM_CLOCK_CNTL_UCHE, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL2_UCHE, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL3_UCHE, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL4_UCHE, 0x00222222},
+	{A5XX_RBBM_CLOCK_HYST_UCHE, 0x00444444},
+	{A5XX_RBBM_CLOCK_DELAY_UCHE, 0x00000002},
+	{A5XX_RBBM_CLOCK_CNTL_RB0, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL_RB1, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL_RB2, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL_RB3, 0x22222222},
+	{A5XX_RBBM_CLOCK_CNTL2_RB0, 0x00222222},
+	{A5XX_RBBM_CLOCK_CNTL2_RB1, 0x00222222},
+	{A5XX_RBBM_CLOCK_CNTL2_RB2, 0x00222222},
+	{A5XX_RBBM_CLOCK_CNTL2_RB3, 0x00222222},
+	{A5XX_RBBM_CLOCK_CNTL_CCU0, 0x00022220},
+	{A5XX_RBBM_CLOCK_CNTL_CCU1, 0x00022220},
+	{A5XX_RBBM_CLOCK_CNTL_CCU2, 0x00022220},
+	{A5XX_RBBM_CLOCK_CNTL_CCU3, 0x00022220},
+	{A5XX_RBBM_CLOCK_CNTL_RAC, 0x05522222},
+	{A5XX_RBBM_CLOCK_CNTL2_RAC, 0x00555555},
+	{A5XX_RBBM_CLOCK_HYST_RB_CCU0, 0x04040404},
+	{A5XX_RBBM_CLOCK_HYST_RB_CCU1, 0x04040404},
+	{A5XX_RBBM_CLOCK_HYST_RB_CCU2, 0x04040404},
+	{A5XX_RBBM_CLOCK_HYST_RB_CCU3, 0x04040404},
+	{A5XX_RBBM_CLOCK_HYST_RAC, 0x07444044},
+	{A5XX_RBBM_CLOCK_DELAY_RB_CCU_L1_0, 0x00000002},
+	{A5XX_RBBM_CLOCK_DELAY_RB_CCU_L1_1, 0x00000002},
+	{A5XX_RBBM_CLOCK_DELAY_RB_CCU_L1_2, 0x00000002},
+	{A5XX_RBBM_CLOCK_DELAY_RB_CCU_L1_3, 0x00000002},
+	{A5XX_RBBM_CLOCK_DELAY_RAC, 0x00010011},
+	{A5XX_RBBM_CLOCK_CNTL_TSE_RAS_RBBM, 0x04222222},
+	{A5XX_RBBM_CLOCK_MODE_GPC, 0x02222222},
+	{A5XX_RBBM_CLOCK_MODE_VFD, 0x00002222},
+	{A5XX_RBBM_CLOCK_HYST_TSE_RAS_RBBM, 0x00000000},
+	{A5XX_RBBM_CLOCK_HYST_GPC, 0x04104004},
+	{A5XX_RBBM_CLOCK_HYST_VFD, 0x00000000},
+	{A5XX_RBBM_CLOCK_DELAY_HLSQ, 0x00000000},
+	{A5XX_RBBM_CLOCK_DELAY_TSE_RAS_RBBM, 0x00004000},
+	{A5XX_RBBM_CLOCK_DELAY_GPC, 0x00000200},
+	{A5XX_RBBM_CLOCK_DELAY_VFD, 0x00002222}
+};
+
+static void a5xx_hwcg_init(struct kgsl_device *device,
+	const struct kgsl_hwcg_reg *regs, unsigned int nregs)
+{
+	unsigned int i;
+	/* program revision specific HWCG settings */
+	for (i = 0; i < nregs; i++)
+		kgsl_regwrite(device, regs[i].off, regs[i].val);
+	/* enable top level HWCG */
+	kgsl_regwrite(device, A5XX_RBBM_CLOCK_CNTL, 0xAAA8AA00);
+	kgsl_regwrite(device, A5XX_RBBM_ISDB_CNT, 0x00000182);
+}
+
+/*
+ * a5xx_enable_pc() - Enable the GPMU based power collapse of the SPTP and RAC
+ * blocks
+ * @adreno_dev: The adreno device pointer
+ */
+static void a5xx_enable_pc(struct adreno_device *adreno_dev)
+{
+	struct kgsl_device *device = &adreno_dev->dev;
+	if (!ADRENO_FEATURE(adreno_dev, ADRENO_SPTP_PC) ||
+		!test_bit(ADRENO_SPTP_PC_CTRL, &adreno_dev->pwrctrl_flag))
 		return;
 
-	/* Set the default register values; set SW_COLLAPSE to 1 */
-	kgsl_regwrite(device, A5XX_GPMU_SP_POWER_CNTL, 0x778001);
-	/* Insert a delay between SPTP and RAC GDSC to avoid voltage droop */
-	udelay(3);
+	kgsl_regwrite(device, A5XX_GPMU_PWR_COL_INTER_FRAME_CTRL, 0x0000007F);
+	kgsl_regwrite(device, A5XX_GPMU_PWR_COL_BINNING_CTRL, 0);
+	kgsl_regwrite(device, A5XX_GPMU_PWR_COL_INTER_FRAME_HYST, 0x000A0080);
+	kgsl_regwrite(device, A5XX_GPMU_PWR_COL_STAGGER_DELAY, 0x00600040);
+
+	trace_adreno_sp_tp((unsigned long) __builtin_return_address(0));
+};
+
+/*
+ * a5xx_gpmu_ucode_load() - Load the ucode into the GPMU RAM
+ * @adreno_dev: Pointer to adreno device
+
+ * GPMU firmare format (one dword per field):
+ *	Header block length (length dword field not inclusive)
+ *	Header block ID
+ *	Header Field 1 tag
+ *	Header Field 1 data
+ *	Header Field 2 tag
+ *	Header Field 2 data (two tag/data pairs minimum for major and minor)
+ *	. . .
+ *	Header Field M tag
+ *	Header Field M data
+ *	Microcode block length (length dword field not inclusive)
+ *	Microcode block ID
+ *	Microcode data Dword 1
+ *	Microcode data Dword 2
+ *	. . .
+ *	Microcode data Dword N
+ */
+static int a5xx_gpmu_ucode_load(struct adreno_device *adreno_dev)
+{
+	static uint32_t *gpmu_fw_buffer;
+	uint32_t *header, *gpmu_fw;
+	unsigned int i;
+	const struct firmware *fw = NULL;
+	struct kgsl_device *device = &adreno_dev->dev;
+	const struct adreno_gpu_core *gpucore = adreno_dev->gpucore;
+	unsigned int gpmu_major_offset = 0, gpmu_minor_offset = 0;
+	unsigned int gpmu_major = 0, gpmu_minor = 0;
+	/* Dword size if not specified */
+	uint32_t header_size, fw_size, size;
+	int ret = -EIO;
+	int result;
+	uint32_t *cmds = NULL;
+	uint32_t offset;
+	uint32_t payload_size, payload_size_max = PM4_TYPE4_PKT_SIZE_MAX - 1;
+	struct adreno_ringbuffer *rb = &adreno_dev->ringbuffers[0];
+
+	if (gpucore->gpmufw_name == NULL)
+		return -EINVAL;
+	result = request_firmware(&fw, gpucore->gpmufw_name, device->dev);
+	if (result)
+		return result;
+
+	/* Read header block and verify versioning first */
+	header = (uint32_t *)fw->data;
+	fw_size = fw->size / sizeof(uint32_t);
 	/*
-	 * Poll the status register till the power-on bit is cleared or the max
-	 * retries are exceeded.
+	 * The minimum firmware binary size is eight dwords, one for each of
+	 * the following fields: GPMU header block length, header block ID,
+	 * major tag, major vlaue, minor tag, minor value, ucode block length,
+	 * and ucode block ID.
+	 */
+	if (fw_size < 8) {
+		KGSL_CORE_ERR("GPMU firmware size is less than 8 dwords, actual size %d\n",
+			fw_size);
+		goto err;
+	}
+	header_size = header[0];
+	/*
+	 * The minimum firmware header size is five dwords, one for each of
+	 * the following fields: GPMU header block ID, major tag, major value,
+	 * minor tag, minor value.
+	 */
+	if (header_size < 5) {
+		KGSL_CORE_ERR("GPMU firmware header size is less than 5 dwords, actual size %d\n",
+			header_size);
+		goto err;
+	}
+	if (header_size >= fw_size) {
+		KGSL_CORE_ERR("GPMU firmware header size (%d) is larger than firmware size (%d)\n",
+				header_size, fw_size);
+		goto err;
+	}
+	if (header[1] != GPMU_HEADER_ID) {
+		KGSL_CORE_ERR("GPMU firmware header ID mis-match: expected 0x%X, actual 0x%X\n",
+				GPMU_HEADER_ID, header[1]);
+		goto err;
+	}
+	if ((header_size - 1) % 2 != 0) {
+		KGSL_CORE_ERR("GPMU firmware header contains incompete (tag, value) pair\n");
+		goto err;
+	}
+	for (i = 2; i < header_size; i += 2) {
+		switch (header[i]) {
+		case GPMU_MAJOR_ID:
+			gpmu_major_offset = i;
+			gpmu_major = header[i + 1];
+			break;
+		case GPMU_MINOR_ID:
+			gpmu_minor_offset = i;
+			gpmu_minor = header[i + 1];
+			break;
+		case GPMU_DATE_ID:
+		case GPMU_TIME_ID:
+			break;
+		default:
+			KGSL_CORE_ERR("GPMU unknown header ID %d\n",
+					header[i]);
+			goto err;
+		}
+	}
+	if (gpmu_major_offset == 0) {
+		KGSL_CORE_ERR("GPMU major version number is missing\n");
+		goto err;
+	}
+	if (gpmu_minor_offset == 0) {
+		KGSL_CORE_ERR("GPMU minor version number is missing\n");
+		goto err;
+	}
+	/*
+	 * A value of 0 for both the Major and Minor version fields indicates
+	 * the code is un-versioned, and should be allowed to pass all
+	 * versioning checks.
+	 */
+	if ((gpmu_major != 0) || (gpmu_minor != 0)) {
+		if (gpucore->gpmu_major != gpmu_major) {
+			KGSL_CORE_ERR(
+				"GPMU major version mis-match: expected %d, actual %d\n",
+				gpucore->gpmu_major, gpmu_major);
+			goto err;
+		}
+		/*
+		 * Driver should be compatible for firmware with
+		 * smaller minor version number.
+		 */
+		if (gpucore->gpmu_minor < gpmu_minor) {
+			KGSL_CORE_ERR(
+				"GPMU minor version mis-match: expected %d, actual %d\n",
+				gpucore->gpmu_minor, gpmu_minor);
+			goto err;
+		}
+	}
+
+	/*
+	 * Read in the firmware now, 1 dword for header block length field and
+	 * header_size for the remaining.
+	 */
+	gpmu_fw = header + header_size + 1;
+	size = *gpmu_fw++;
+	if (size == 0 || size > GPMU_INST_RAM_SIZE) {
+		KGSL_CORE_ERR("GPMU firmware block size is zero or larger than RAM size\n");
+		goto err;
+	}
+	/*
+	 * Deduct one (block length field) from the firmware block size to
+	 * get the microcode size.
+	 */
+	size -= 1;
+	/*
+	 * The actual microcode size is fw_size - header_size - 2, with
+	 * the two block length dword fields deducted.
+	 */
+	if (size > fw_size - header_size - 2) {
+		KGSL_CORE_ERR("GPMU firmware microcode size (%d) larger than actual (%d)\n",
+				size, fw_size - header_size - 2);
+		goto err;
+	}
+	if (*gpmu_fw++ != GPMU_FIRMWARE_ID) {
+		KGSL_CORE_ERR("GPMU firmware id not mis-match: expected 0x%X, actual 0x%X\n",
+			GPMU_FIRMWARE_ID,  header[header_size + 1 + 1]);
+		goto err;
+	}
+
+	if (gpmu_fw_buffer == NULL) {
+		gpmu_fw_buffer = kmalloc((PM4_TYPE4_PKT_SIZE_MAX << 2),
+					GFP_KERNEL);
+		if (gpmu_fw_buffer == NULL) {
+			KGSL_CORE_ERR("Memory allocation failed.\n");
+			ret = -ENOMEM;
+			goto err;
+		}
+	}
+
+	offset = 0;
+	while (size > 0) {
+		cmds = gpmu_fw_buffer;
+		if (size >= payload_size_max) {
+			*cmds++ = cp_type4_packet(
+					A5XX_GPMU_INST_RAM_BASE + offset,
+					payload_size_max);
+			memcpy(cmds, gpmu_fw, payload_size_max << 2);
+			gpmu_fw += payload_size_max;
+			offset += payload_size_max;
+			payload_size = payload_size_max;
+		} else {
+			*cmds++ = cp_type4_packet(
+					A5XX_GPMU_INST_RAM_BASE + offset,
+					size);
+			memcpy(cmds, gpmu_fw, size << 2);
+			payload_size = size;
+		}
+		size -= payload_size;
+
+		ret = adreno_ringbuffer_issuecmds(rb, 0, gpmu_fw_buffer,
+						payload_size + 1);
+		if (ret) {
+			KGSL_CORE_ERR("GPMU firmware loading failed (%d)\n",
+					ret);
+			goto err;
+		}
+	}
+
+err:
+	release_firmware(fw);
+	return ret;
+}
+
+/*
+ * a5xx_gpmu_start() - Initialize and start the GPMU
+ * @adreno_dev: Pointer to adreno device
+ *
+ * Load the GPMU microcode, set up any features such as hardware clock gating
+ * or IFPC, and take the GPMU out of reset.
+ */
+static void a5xx_gpmu_start(struct adreno_device *adreno_dev)
+{
+	int ret;
+	unsigned int reg, retry = GPMU_FW_INIT_RETRY;
+	struct kgsl_device *device = &adreno_dev->dev;
+
+	if (!ADRENO_FEATURE(adreno_dev, ADRENO_GPMU))
+		return;
+
+	ret = a5xx_gpmu_ucode_load(adreno_dev);
+	if (ret)
+		return;
+
+	/* Kick off GPMU firmware */
+	kgsl_regwrite(device, A5XX_GPMU_CM3_SYSRESET, 0);
+	/*
+	 * The hardware team's estimation of GPMU firmware initialization
+	 * latency is about 3000 cycles, that's about 5 to 24 usec.
 	 */
 	do {
 		udelay(1);
-		kgsl_regread(device, A5XX_GPMU_SP_PWR_CLK_STATUS, &reg);
-	} while ((reg & PWR_ON_BIT) && retry--);
-	if (reg & PWR_ON_BIT)
-		KGSL_PWR_WARN(device, "SPTP GDSC disable failed %x\n", reg);
-
-	kgsl_regwrite(device, A5XX_GPMU_RBCCU_POWER_CNTL, 0x778001);
-	retry = PWR_RETRY;
-	/*
-	 * Poll the status register till the power-on bit is cleared or the max
-	 * retries are exceeded.
-	 */
-	do {
-		udelay(1);
-		kgsl_regread(device, A5XX_GPMU_RBCCU_PWR_CLK_STATUS, &reg);
-	} while ((reg & PWR_ON_BIT) && retry--);
-	if (reg & PWR_ON_BIT)
-		KGSL_PWR_WARN(device, "RBCCU GDSC disable failed %x\n", reg);
-
-	/* Reset VBIF before PC to avoid popping bogus FIFO entries */
-	kgsl_regwrite(device, A5XX_RBBM_BLOCK_SW_RESET_CMD, 0x003C0000);
-	kgsl_regwrite(device, A5XX_RBBM_BLOCK_SW_RESET_CMD, 0);
+		kgsl_regread(device, A5XX_GPMU_GENERAL_0, &reg);
+	} while ((reg != 0xBABEFACE) && retry--);
+	if (reg != 0xBABEFACE)
+		KGSL_CORE_ERR("GPMU firmware initialization timed out\n");
+	else
+		set_bit(ADRENO_DEVICE_GPMU_INITIALIZED, &adreno_dev->priv);
 }
 
 /*
@@ -497,6 +998,15 @@ static void a5xx_start(struct adreno_device *adreno_dev)
 	/* Enable flush of shared cachelines for each timer trigger of 10ms */
 	kgsl_regwrite(device, A5XX_UCHE_SVM_CNTL, (1 << 16) | 0x2EE00);
 
+	/* Program the GMEM VA range for the UCHE path */
+	kgsl_regwrite(device, A5XX_UCHE_GMEM_RANGE_MIN_LO,
+				ADRENO_UCHE_GMEM_BASE);
+	kgsl_regwrite(device, A5XX_UCHE_GMEM_RANGE_MIN_HI, 0x0);
+	kgsl_regwrite(device, A5XX_UCHE_GMEM_RANGE_MAX_LO,
+				ADRENO_UCHE_GMEM_BASE +
+				adreno_dev->gmem_size - 1);
+	kgsl_regwrite(device, A5XX_UCHE_GMEM_RANGE_MAX_HI, 0x0);
+
 	/*
 	 * Below CP registers are 0x0 by default, program init
 	 * values based on a5xx flavor.
@@ -543,7 +1053,18 @@ static void a5xx_start(struct adreno_device *adreno_dev)
 	/* Set the USE_RETENTION_FLOPS chicken bit */
 	kgsl_regwrite(device, A5XX_CP_CHICKEN_DBG, 0x02000000);
 
+	if (adreno_is_a530(adreno_dev) && !adreno_is_a530v1(adreno_dev))
+		a5xx_hwcg_init(device, a530_hwcg_regs,
+			ARRAY_SIZE(a530_hwcg_regs));
+	else if (adreno_is_a510(adreno_dev))
+		a5xx_hwcg_init(device, a510_hwcg_regs,
+			ARRAY_SIZE(a510_hwcg_regs));
+
 	a5xx_protect_init(adreno_dev);
+
+	/* Set A5x specific power control bits to enable features. */
+	if (ADRENO_FEATURE(adreno_dev, ADRENO_SPTP_PC))
+		adreno_dev->pwrctrl_flag |= BIT(ADRENO_SPTP_PC_CTRL);
 }
 
 /*
@@ -1585,6 +2106,8 @@ struct adreno_gpudev adreno_a5xx_gpudev = {
 	.microcode_load = a5xx_microcode_load,
 	.perfcounters = &a5xx_perfcounters,
 	.vbif_xin_halt_ctrl0_mask = A5XX_VBIF_XIN_HALT_CTRL0_MASK,
+	.is_sptp_idle = a5xx_is_sptp_idle,
+	.enable_pc = a5xx_enable_pc,
 	.regulator_enable = a5xx_regulator_enable,
 	.regulator_disable = a5xx_regulator_disable,
 	.preemption_pre_ibsubmit = a5xx_preemption_pre_ibsubmit,
@@ -1594,5 +2117,6 @@ struct adreno_gpudev adreno_a5xx_gpudev = {
 	.preemption_start = a5xx_preemption_start,
 	.preemption_save = a5xx_preemption_save,
 	.preemption_init = a5xx_preemption_init,
+	.gpmu_start = a5xx_gpmu_start,
 };
 

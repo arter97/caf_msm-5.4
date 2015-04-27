@@ -52,6 +52,7 @@ enum i2c_freq_mode_t {
 enum camb_position_t {
 	BACK_CAMERA_B,
 	FRONT_CAMERA_B,
+	AUX_CAMERA_B = 0x100,
 	INVALID_CAMERA_B,
 };
 
@@ -195,6 +196,14 @@ struct msm_sensor_power_setting_array {
 	struct msm_sensor_power_setting  power_down_setting_a[MAX_POWER_CONFIG];
 	struct msm_sensor_power_setting *power_down_setting;
 	unsigned short size_down;
+};
+
+
+struct msm_sensor_i2c_sync_params {
+	unsigned int cid;
+	int csid;
+	unsigned short line;
+	unsigned short delay;
 };
 
 struct msm_sensor_init_params {

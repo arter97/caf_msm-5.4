@@ -33,6 +33,10 @@
 		smd11 = &smdtty_data11;
 		smd21 = &smdtty_data21;
 		smd36 = &smdtty_loopback;
+		i2c2  = &i2c_2;
+		i2c4  = &i2c_4;
+		i2c6  = &i2c_6;
+		i2c8  = &i2c_8;
 	};
 
 	soc: soc { };
@@ -219,6 +223,7 @@
 #include "msmterbium-ion.dtsi"
 #include "msmterbium-iommu.dtsi"
 #include "msmterbium-smp2p.dtsi"
+#include "msmterbium-bus.dtsi"
 
 &soc {
 	#address-cells = <1>;
@@ -513,6 +518,119 @@
 		       <&clock_gcc clk_gcc_blsp1_ahb_clk>;
 	};
 
+	dma_blsp1: qcom,sps-dma@7884000 { /* BLSP1 */
+                #dma-cells = <4>;
+                compatible = "qcom,sps-dma";
+                reg = <0x7884000 0x1f000>;
+                interrupts = <0 238 0>;
+                qcom,summing-threshold = <10>;
+        };
+
+        dma_blsp2: qcom,sps-dma@7ac4000 { /* BLSP2 */
+                #dma-cells = <4>;
+                compatible = "qcom,sps-dma";
+                reg = <0x7ac4000 0x1f000>;
+                interrupts = <0 239 0>;
+                qcom,summing-threshold = <10>;
+        };
+
+	i2c_2: i2c@78b6000 { /* BLSP1 QUP2 */
+                compatible = "qcom,i2c-msm-v2";
+                #address-cells = <1>;
+                #size-cells = <0>;
+                reg-names = "qup_phys_addr";
+                reg = <0x78b6000 0x1000>;
+                interrupt-names = "qup_irq";
+                interrupts = <0 96 0>;
+                qcom,clk-freq-out = <400000>;
+                qcom,clk-freq-in  = <19200000>;
+                clock-names = "iface_clk", "core_clk";
+                clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
+                         <&clock_gcc clk_gcc_blsp1_qup2_i2c_apps_clk>;
+                pinctrl-names = "i2c_active", "i2c_sleep";
+                pinctrl-0 = <&i2c_2_active>;
+                pinctrl-1 = <&i2c_2_sleep>;
+                qcom,noise-rjct-scl = <0>;
+                qcom,noise-rjct-sda = <0>;
+                qcom,master-id = <86>;
+                dmas = <&dma_blsp1 6 64 0x20000020 0x20>,
+                        <&dma_blsp1 7 32 0x20000020 0x20>;
+                dma-names = "tx", "rx";
+        };
+
+	i2c_4: i2c@78b8000 { /* BLSP1 QUP4 */
+		compatible = "qcom,i2c-msm-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr";
+		reg = <0x78b8000 0x600>;
+		interrupt-names = "qup_irq";
+		interrupts = <0 98 0>;
+		qcom,clk-freq-out = <400000>;
+		qcom,clk-freq-in  = <19200000>;
+		clock-names = "iface_clk", "core_clk";
+		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
+			<&clock_gcc clk_gcc_blsp1_qup4_i2c_apps_clk>;
+		pinctrl-names = "i2c_active", "i2c_sleep";
+		pinctrl-0 = <&i2c_4_active>;
+		pinctrl-1 = <&i2c_4_sleep>;
+		qcom,noise-rjct-scl = <0>;
+		qcom,noise-rjct-sda = <0>;
+		qcom,master-id = <86>;
+		dmas = <&dma_blsp1 10 64 0x20000020 0x20>,
+			<&dma_blsp1 11 32 0x20000020 0x20>;
+		dma-names = "tx", "rx";
+	};
+
+	i2c_6: i2c@7af6000 { /* BLSP2 QUP2 */
+		compatible = "qcom,i2c-msm-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr";
+		reg = <0x7af6000 0x600>;
+		interrupt-names = "qup_irq";
+		interrupts = <0 300 0>;
+		qcom,clk-freq-out = <400000>;
+		qcom,clk-freq-in  = <19200000>;
+		clock-names = "iface_clk", "core_clk";
+		clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
+			<&clock_gcc clk_gcc_blsp2_qup2_i2c_apps_clk>;
+		pinctrl-names = "i2c_active", "i2c_sleep";
+		pinctrl-0 = <&i2c_6_active>;
+		pinctrl-1 = <&i2c_6_sleep>;
+		qcom,noise-rjct-scl = <0>;
+		qcom,noise-rjct-sda = <0>;
+		qcom,master-id = <84>;
+		dmas = <&dma_blsp2 6 64 0x20000020 0x20>,
+			<&dma_blsp2 7 32 0x20000020 0x20>;
+		dma-names = "tx", "rx";
+	};
+
+	i2c_8: i2c@7af8000 { /* BLSP2 QUP4 */
+                compatible = "qcom,i2c-msm-v2";
+                #address-cells = <1>;
+                #size-cells = <0>;
+                reg-names = "qup_phys_addr";
+                reg = <0x7af8000 0x600>;
+                interrupt-names = "qup_irq";
+                interrupts = <0 302 0>;
+                qcom,clk-freq-out = <400000>;
+                qcom,clk-freq-in  = <19200000>;
+                clock-names = "iface_clk", "core_clk";
+                clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
+                        <&clock_gcc clk_gcc_blsp2_qup4_i2c_apps_clk>;
+                pinctrl-names = "i2c_active", "i2c_sleep";
+                pinctrl-0 = <&i2c_8_active>;
+                pinctrl-1 = <&i2c_8_sleep>;
+                qcom,noise-rjct-scl = <0>;
+                qcom,noise-rjct-sda = <0>;
+                qcom,master-id = <84>;
+                dmas = <&dma_blsp2 10 64 0x20000020 0x20>,
+                        <&dma_blsp2 11 32 0x20000020 0x20>;
+                dma-names = "tx", "rx";
+        };
+
+
 	usb_otg: usb@78db000 {
 		compatible = "qcom,hsusb-otg";
 		reg = <0x78db000 0x400>, <0x6c000 0x200>;
@@ -566,6 +684,19 @@
 		reg = <0x086000c8 0xc8>;
 		qcom,pm-qos-latency = <2 1001 12701>;
 		qcom,android-usb-uicc-nluns = /bits/ 8 <1>;
+	};
+
+	slim_msm: slim@c140000{
+		cell-index = <1>;
+		compatible = "qcom,slim-ngd";
+		reg = <0xc140000 0x2c000>,
+			<0xc104000 0x2a000>;
+		reg-names = "slimbus_physical", "slimbus_bam_physical";
+		interrupts = <0 163 0>, <0 180 0>;
+		interrupt-names = "slimbus_irq", "slimbus_bam_irq";
+		qcom,apps-ch-pipes = <0x600000>;
+		qcom,ea-pc = <0x170>;
+		status = "disabled";
 	};
 
 	qcom,usbbam@78c4000 {
@@ -782,6 +913,31 @@
 		qcom,msm-bus,vectors-KBps =
 			<55 512 0 0>,
 			<55 512 393600 800000>;
+		clocks = <&clock_gcc clk_crypto_clk_src>,
+			 <&clock_gcc clk_gcc_crypto_clk>,
+			 <&clock_gcc clk_gcc_crypto_ahb_clk>,
+			 <&clock_gcc clk_gcc_crypto_axi_clk>;
+		clock-names = "core_clk_src", "core_clk",
+				"iface_clk", "bus_clk";
+		qcom,ce-opp-freq = <100000000>;
+	};
+
+	qcom_seecom: qseecom@86000000 {
+		compatible = "qcom,qseecom";
+		reg = <0x86000000 0x300000>;
+		reg-names = "secapp-region";
+		qcom,hlos-num-ce-hw-instances = <1>;
+		qcom,hlos-ce-hw-instance = <0>;
+		qcom,qsee-ce-hw-instance = <0>;
+		qcom,msm-bus,name = "qseecom-noc";
+		qcom,msm-bus,num-cases = <4>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,support-bus-scaling;
+		qcom,msm-bus,vectors-KBps =
+			<55 512 0 0>,
+			<55 512 0 0>,
+			<55 512 120000 1200000>,
+			<55 512 393600 3936000>;
 		clocks = <&clock_gcc clk_crypto_clk_src>,
 			 <&clock_gcc clk_gcc_crypto_clk>,
 			 <&clock_gcc clk_gcc_crypto_ahb_clk>,

@@ -24,6 +24,7 @@
 #define DCI_LOG_MASKS_TYPE	0x00000100
 #define DCI_EVENT_MASKS_TYPE	0x00000200
 #define DCI_PKT_TYPE		0x00000400
+#define CALLBACK_HDLC_DATA_TYPE	0x00000800
 
 #define USB_MODE			1
 #define MEMORY_DEVICE_MODE		2
@@ -62,6 +63,7 @@
 #define DIAG_IOCTL_GET_REAL_TIME	34
 #define DIAG_IOCTL_PERIPHERAL_BUF_CONFIG	35
 #define DIAG_IOCTL_PERIPHERAL_BUF_DRAIN		36
+#define DIAG_IOCTL_REGISTER_CALLBACK	37
 
 /* PC Tools IDs */
 #define APQ8060_TOOLS_ID	4062
@@ -140,10 +142,10 @@ the appropriate macros. */
 /* This needs to be modified manually now, when we add
  a new RANGE of SSIDs to the msg_mask_tbl */
 #define MSG_MASK_TBL_CNT		25
-#define APPS_EVENT_LAST_ID		0x0A7C
+#define APPS_EVENT_LAST_ID		0x0A8D
 
 #define MSG_SSID_0			0
-#define MSG_SSID_0_LAST			112
+#define MSG_SSID_0_LAST			115
 #define MSG_SSID_1			500
 #define MSG_SSID_1_LAST			506
 #define MSG_SSID_2			1000
@@ -323,7 +325,10 @@ static const uint32_t msg_bld_masks_0[] = {
 	MSG_LVL_LOW|MSG_LVL_MED|MSG_LVL_HIGH|MSG_LVL_ERROR|MSG_LVL_FATAL,
 	MSG_LVL_LOW|MSG_LVL_MED|MSG_LVL_HIGH|MSG_LVL_ERROR|MSG_LVL_FATAL,
 	MSG_LVL_LOW|MSG_LVL_MED|MSG_LVL_HIGH|MSG_LVL_ERROR|MSG_LVL_FATAL,
-	MSG_LVL_LOW
+	MSG_LVL_LOW,
+	MSG_LVL_MED,
+	MSG_LVL_LOW|MSG_LVL_MED|MSG_LVL_HIGH|MSG_LVL_ERROR|MSG_LVL_FATAL,
+	MSG_LVL_LOW|MSG_LVL_MED|MSG_LVL_HIGH|MSG_LVL_ERROR|MSG_LVL_FATAL
 };
 
 static const uint32_t msg_bld_masks_1[] = {
@@ -792,7 +797,7 @@ static const uint32_t msg_bld_masks_23[] = {
 /* LOG CODES */
 static const uint32_t log_code_last_tbl[] = {
 	0x0,	/* EQUIP ID 0 */
-	0x18C1,	/* EQUIP ID 1 */
+	0x18C6,	/* EQUIP ID 1 */
 	0x0,	/* EQUIP ID 2 */
 	0x0,	/* EQUIP ID 3 */
 	0x4910,	/* EQUIP ID 4 */

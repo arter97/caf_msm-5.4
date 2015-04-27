@@ -592,6 +592,7 @@ static void a4xx_protect_init(struct adreno_device *adreno_dev)
 		 */
 		adreno_set_protected_registers(adreno_dev, &index, 0x2c00, 10);
 		adreno_set_protected_registers(adreno_dev, &index, 0x3300, 8);
+		adreno_set_protected_registers(adreno_dev, &index, 0x3400, 10);
 	}
 
 	/* SMMU registers */
@@ -869,6 +870,7 @@ static unsigned int a4xx_register_offsets[ADRENO_REG_REGISTER_MAX] = {
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_RBBM_CTL, A4XX_RBBM_RBBM_CTL),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_SW_RESET_CMD, A4XX_RBBM_SW_RESET_CMD),
 	ADRENO_REG_DEFINE(ADRENO_REG_UCHE_INVALIDATE0, A4XX_UCHE_INVALIDATE0),
+	ADRENO_REG_DEFINE(ADRENO_REG_UCHE_INVALIDATE1, A4XX_UCHE_INVALIDATE1),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_PERFCTR_LOAD_VALUE_LO,
 				A4XX_RBBM_PERFCTR_LOAD_VALUE_LO),
 	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_PERFCTR_LOAD_VALUE_HI,

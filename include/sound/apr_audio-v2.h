@@ -2719,6 +2719,19 @@ struct asm_vorbis_cfg {
 	u32 bit_stream_fmt;
 };
 
+struct asm_ape_cfg {
+	u16 compatible_version;
+	u16 compression_level;
+	u32 format_flags;
+	u32 blocks_per_frame;
+	u32 final_frame_blocks;
+	u32 total_frames;
+	u16 bits_per_sample;
+	u16 num_channels;
+	u32 sample_rate;
+	u32 seek_table_present;
+};
+
 struct asm_softpause_params {
 	u32 enable;
 	u32 period;
@@ -3163,6 +3176,22 @@ struct asm_alac_fmt_blk_v2 {
 
 } __packed;
 
+struct asm_ape_fmt_blk_v2 {
+	struct apr_hdr hdr;
+	struct asm_data_cmd_media_fmt_update_v2 fmtblk;
+
+	u16 compatible_version;
+	u16 compression_level;
+	u32 format_flags;
+	u32 blocks_per_frame;
+	u32 final_frame_blocks;
+	u32 total_frames;
+	u16 bits_per_sample;
+	u16 num_channels;
+	u32 sample_rate;
+	u32 seek_table_present;
+
+} __packed;
 
 #define ASM_MEDIA_FMT_AMRNB_FS                  0x00010BEB
 
@@ -3564,13 +3593,14 @@ struct asm_amrwbplus_fmt_blk_v2 {
 
 } __packed;
 
-#define ASM_MEDIA_FMT_AC3_DEC                   0x00010BF6
-#define ASM_MEDIA_FMT_EAC3_DEC                   0x00010C3C
+#define ASM_MEDIA_FMT_AC3_DEC                0x00010BF6
+#define ASM_MEDIA_FMT_EAC3_DEC               0x00010C3C
 #define ASM_MEDIA_FMT_DTS                    0x00010D88
 #define ASM_MEDIA_FMT_MP2                    0x00010DE9
 #define ASM_MEDIA_FMT_FLAC                   0x00010C16
 #define ASM_MEDIA_FMT_ALAC                   0x00012F31
-#define ASM_MEDIA_FMT_VORBIS                   0x00010C15
+#define ASM_MEDIA_FMT_VORBIS                 0x00010C15
+#define ASM_MEDIA_FMT_APE                    0x00012F32
 
 
 /* Media format ID for adaptive transform acoustic coding. This
@@ -4318,6 +4348,7 @@ struct asm_stream_cmd_open_write_v3 {
  * - #ASM_MEDIA_FMT_VORBIS
  * - #ASM_MEDIA_FMT_FLAC
  * - #ASM_MEDIA_FMT_ALAC
+ * - #ASM_MEDIA_FMT_APE
  * - #ASM_MEDIA_FMT_EXAMPLE
  */
 } __packed;
@@ -7883,5 +7914,45 @@ struct adm_set_compressed_device_latency {
 	struct adm_cmd_set_pp_params_v5 command;
 	struct adm_param_data_v5 params;
 	u32    latency;
+} __packed;
+
+#define VOICEPROC_MODULE_ID_GENERIC_TX                      0x00010EF6
+#define VOICEPROC_PARAM_ID_FLUENCE_SOUNDFOCUS               0x00010E37
+#define VOICEPROC_PARAM_ID_FLUENCE_SOURCETRACKING           0x00010E38
+#define MAX_SECTORS                                         8
+#define MAX_NOISE_SOURCE_INDICATORS                         3
+#define MAX_POLAR_ACTIVITY_INDICATORS                       360
+
+struct sound_focus_param {
+	uint16_t start_angle[MAX_SECTORS];
+	uint8_t enable[MAX_SECTORS];
+	uint16_t gain_step;
+} __packed;
+
+struct source_tracking_param {
+	uint8_t vad[MAX_SECTORS];
+	uint16_t doa_speech;
+	uint16_t doa_noise[MAX_NOISE_SOURCE_INDICATORS];
+	uint8_t polar_activity[MAX_POLAR_ACTIVITY_INDICATORS];
+} __packed;
+
+struct adm_param_fluence_soundfocus_t {
+	uint16_t start_angles[MAX_SECTORS];
+	uint8_t enables[MAX_SECTORS];
+	uint16_t gain_step;
+	uint16_t reserved;
+} __packed;
+
+struct adm_set_fluence_soundfocus_param {
+	struct adm_cmd_set_pp_params_v5 params;
+	struct adm_param_data_v5 data;
+	struct adm_param_fluence_soundfocus_t soundfocus_data;
+} __packed;
+
+struct adm_param_fluence_sourcetracking_t {
+	uint8_t vad[MAX_SECTORS];
+	uint16_t doa_speech;
+	uint16_t doa_noise[MAX_NOISE_SOURCE_INDICATORS];
+	uint8_t polar_activity[MAX_POLAR_ACTIVITY_INDICATORS];
 } __packed;
 #endif /*_APR_AUDIO_V2_H_ */

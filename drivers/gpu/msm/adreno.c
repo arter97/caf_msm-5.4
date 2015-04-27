@@ -283,6 +283,9 @@ static int kgsl_iommu_pdev_probe(struct platform_device *pdev)
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,global_pt"))
 		data->features |= KGSL_MMU_GLOBAL_PAGETABLE;
 
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,hyp_secure_alloc"))
+		data->features |= KGSL_MMU_HYP_SECURE_ALLOC;
+
 	result = of_platform_populate(pdev->dev.of_node, iommu_match_table,
 				NULL, &pdev->dev);
 	if (!result)
@@ -1482,6 +1485,10 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 	if (gpudev->enable_pc)
 		gpudev->enable_pc(adreno_dev);
 
+	/* GPMU initialization and start */
+	if (gpudev->gpmu_start)
+		gpudev->gpmu_start(adreno_dev);
+
 	/* Enable peak power detect feature */
 	if (gpudev->enable_ppd)
 		gpudev->enable_ppd(adreno_dev);
@@ -1753,6 +1760,42 @@ static int adreno_getproperty(struct kgsl_device *device,
 				break;
 			}
 			if (copy_to_user(value, &int_waits, sizeof(int))) {
+				status = -EFAULT;
+				break;
+			}
+			status = 0;
+		}
+		break;
+	case KGSL_PROP_UCHE_GMEM_VADDR:
+		{
+			uint64_t gmem_vaddr = 0;
+			if (adreno_is_a5xx(adreno_dev))
+				gmem_vaddr = ADRENO_UCHE_GMEM_BASE;
+			if (sizebytes != sizeof(uint64_t)) {
+				status = -EINVAL;
+				break;
+			}
+			if (copy_to_user(value, &gmem_vaddr,
+					sizeof(uint64_t))) {
+				status = -EFAULT;
+				break;
+			}
+			status = 0;
+		}
+		break;
+	case KGSL_PROP_SP_GENERIC_MEM:
+		{
+			struct kgsl_sp_generic_mem sp_mem;
+			if (sizebytes != sizeof(sp_mem)) {
+				status = -EINVAL;
+				break;
+			}
+			memset(&sp_mem, 0, sizeof(sp_mem));
+
+			sp_mem.local = adreno_dev->sp_local_gpuaddr;
+			sp_mem.pvt = adreno_dev->sp_pvt_gpuaddr;
+
+			if (copy_to_user(value, &sp_mem, sizeof(sp_mem))) {
 				status = -EFAULT;
 				break;
 			}
@@ -2360,8 +2403,9 @@ static int adreno_readtimestamp(struct kgsl_device *device,
 {
 	int status = 0;
 	struct kgsl_context *context = priv;
+	unsigned int id = KGSL_CONTEXT_ID(context);
 
-	BUG_ON(NULL == context || context->id >= KGSL_MEMSTORE_MAX);
+	BUG_ON(NULL == context || id >= KGSL_MEMSTORE_MAX);
 	/*
 	 * If user passed in a NULL pointer for timestamp, return without
 	 * doing anything.
@@ -2370,7 +2414,7 @@ static int adreno_readtimestamp(struct kgsl_device *device,
 		return status;
 
 	if (KGSL_TIMESTAMP_QUEUED == type)
-		*timestamp = adreno_drawctxt_timestamp(context);
+		*timestamp = adreno_context_timestamp(context);
 	else
 		status = __adreno_readtimestamp(device,
 				context->id, type, timestamp);

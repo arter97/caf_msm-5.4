@@ -133,6 +133,7 @@ enum {
 	WCD9335_IRQ_MBHC_SW_DET,
 	WCD9335_IRQ_MBHC_ELECT_INS_REM_DET,
 	WCD9335_IRQ_MBHC_BUTTON_PRESS_DET,
+	WCD9335_IRQ_MBHC_BUTTON_RELEASE_DET,
 	WCD9335_IRQ_MBHC_ELECT_INS_REM_LEG_DET,
 	WCD9335_IRQ_RESERVED_0,
 	WCD9335_IRQ_RESERVED_1,
@@ -282,6 +283,7 @@ int wcd9xxx_slim_reserve_bw(struct wcd9xxx *wcd9xxx,
 	defined(CONFIG_WCD9320_CODEC) || \
 	defined(CONFIG_WCD9330_CODEC) || \
 	defined(CONFIG_WCD9306_CODEC) || \
+	defined(CONFIG_WCD9335_CODEC) || \
 	defined(CONFIG_SND_SOC_MSM8X16_WCD)
 int __init wcd9xxx_irq_of_init(struct device_node *node,
 			       struct device_node *parent);

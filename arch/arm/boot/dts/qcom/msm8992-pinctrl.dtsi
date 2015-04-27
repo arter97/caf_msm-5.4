@@ -132,6 +132,22 @@
 				bias-pull-down;
 			};
 		};
+
+		sdhc2_cd_pin {
+			qcom,pins = <&gp 38>;
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <0>;
+			label = "cd-gpio";
+			sdc2_cd_on: cd_on {
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+			sdc2_cd_off: cd_off {
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+
 		/* SDC pin type */
 		sdc: sdc {
 			/* 0-3 for sdc1 4-6 for sdc2 */
@@ -798,7 +814,7 @@
 		};
 
 		cnss_pins {
-			qcom,pins = <&gp 112>, <&gp 54>, <&gp 53>, <&gp 113>;
+			qcom,pins = <&gp 112>, <&gp 0>, <&gp 1>, <&gp 113>;
 			qcom,num-grp-pins = <4>;
 			qcom,pin-func = <0>;
 			label = "cnss_pins";

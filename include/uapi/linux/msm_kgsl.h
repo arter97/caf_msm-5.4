@@ -90,7 +90,7 @@
 /* --- Memory allocation flags --- */
 
 /* General allocation hints */
-#define KGSL_MEMFLAGS_SECURE      0x00000008U
+#define KGSL_MEMFLAGS_SECURE      0x00000008ULL
 #define KGSL_MEMFLAGS_GPUREADONLY 0x01000000U
 #define KGSL_MEMFLAGS_GPUWRITEONLY 0x02000000U
 
@@ -103,7 +103,7 @@
 #define KGSL_CACHEMODE_WRITETHROUGH 2
 #define KGSL_CACHEMODE_WRITEBACK 3
 
-#define KGSL_MEMFLAGS_USE_CPU_MAP 0x10000000U
+#define KGSL_MEMFLAGS_USE_CPU_MAP 0x10000000ULL
 
 /* Memory types for which allocations are made */
 #define KGSL_MEMTYPE_MASK		0x0000FF00
@@ -144,6 +144,11 @@ enum kgsl_user_mem_type {
 	KGSL_USER_MEM_TYPE_ASHMEM	= 0x00000001,
 	KGSL_USER_MEM_TYPE_ADDR		= 0x00000002,
 	KGSL_USER_MEM_TYPE_ION		= 0x00000003,
+	/*
+	 * ION type is retained for backwards compatibilty but Ion buffers are
+	 * dma-bufs so try to use that naming if we can
+	 */
+	KGSL_USER_MEM_TYPE_DMABUF       = 0x00000003,
 	KGSL_USER_MEM_TYPE_MAX		= 0x00000007,
 };
 #define KGSL_MEMFLAGS_USERMEM_MASK 0x000000e0
@@ -279,6 +284,8 @@ enum kgsl_property_type {
 	KGSL_PROP_GPU_RESET_STAT  = 0x00000009,
 	KGSL_PROP_PWRCTRL         = 0x0000000E,
 	KGSL_PROP_PWR_CONSTRAINT  = 0x00000012,
+	KGSL_PROP_UCHE_GMEM_VADDR = 0x00000013,
+	KGSL_PROP_SP_GENERIC_MEM  = 0x00000014,
 };
 
 struct kgsl_shadowprop {
@@ -292,6 +299,11 @@ struct kgsl_version {
 	unsigned int drv_minor;
 	unsigned int dev_major;
 	unsigned int dev_minor;
+};
+
+struct kgsl_sp_generic_mem {
+	uint64_t local;
+	uint64_t pvt;
 };
 
 /* Performance counter groups */
@@ -1199,5 +1211,92 @@ struct kgsl_gpu_event_fence {
 
 #define IOCTL_KGSL_GPUOBJ_FREE \
 	_IOW(KGSL_IOC_TYPE, 0x46, struct kgsl_gpuobj_free)
+
+/**
+ * struct kgsl_gpuobj_info - argument to IOCTL_KGSL_GPUOBJ_INFO
+ * @gpuaddr: GPU address of the object
+ * @flags: Current flags for the object
+ * @size: Size of the object
+ * @va_len: VA size of the object
+ * @va_addr: Virtual address of the object (if it is mapped)
+ * id - GPU object ID of the object to query
+ */
+struct kgsl_gpuobj_info {
+	uint64_t gpuaddr;
+	uint64_t flags;
+	uint64_t size;
+	uint64_t va_len;
+	uint64_t va_addr;
+	unsigned int id;
+};
+
+#define IOCTL_KGSL_GPUOBJ_INFO \
+	_IOWR(KGSL_IOC_TYPE, 0x47, struct kgsl_gpuobj_info)
+
+/**
+ * struct kgsl_gpuobj_import - argument to IOCTL_KGSL_GPUOBJ_IMPORT
+ * @priv: Pointer to the private data for the import type
+ * @priv_len: Length of the private data
+ * @flags: Mask of KGSL_MEMFLAG_ flags
+ * @type: Type of the import (KGSL_USER_MEM_TYPE_*)
+ * @id: Returns the ID of the new GPU object
+ */
+struct kgsl_gpuobj_import {
+	uint64_t __user priv;
+	uint64_t priv_len;
+	uint64_t flags;
+	unsigned int type;
+	unsigned int id;
+};
+
+/**
+ * struct kgsl_gpuobj_import_dma_buf - import a dmabuf object
+ * @fd: File descriptor for the dma-buf object
+ */
+struct kgsl_gpuobj_import_dma_buf {
+	int fd;
+};
+
+/**
+ * struct kgsl_gpuobj_import_useraddr - import an object based on a useraddr
+ * @virtaddr: Virtual address of the object to import
+ */
+struct kgsl_gpuobj_import_useraddr {
+	uint64_t virtaddr;
+};
+
+#define IOCTL_KGSL_GPUOBJ_IMPORT \
+	_IOWR(KGSL_IOC_TYPE, 0x48, struct kgsl_gpuobj_import)
+
+/**
+ * struct kgsl_gpuobj_sync_obj - Individual GPU object to sync
+ * @offset: Offset within the GPU object to sync
+ * @length: Number of bytes to sync
+ * @id: ID of the GPU object to sync
+ * @op: Cache operation to execute
+ */
+
+struct kgsl_gpuobj_sync_obj {
+	uint64_t offset;
+	uint64_t length;
+	unsigned int id;
+	unsigned int op;
+};
+
+/**
+ * struct kgsl_gpuobj_sync - Argument for IOCTL_KGSL_GPUOBJ_SYNC
+ * @objs: Pointer to an array of kgsl_gpuobj_sync_obj structs
+ * @obj_len: Size of each item in the array
+ * @count: Number of items in the array
+ */
+
+struct kgsl_gpuobj_sync {
+	uint64_t __user objs;
+	unsigned int obj_len;
+	unsigned int count;
+};
+
+#define IOCTL_KGSL_GPUOBJ_SYNC \
+	_IOW(KGSL_IOC_TYPE, 0x49, struct kgsl_gpuobj_sync)
 
 #endif /* _UAPI_MSM_KGSL_H */

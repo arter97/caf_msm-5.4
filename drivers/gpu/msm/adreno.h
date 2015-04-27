@@ -100,6 +100,8 @@
 #define ADRENO_CONTENT_PROTECTION BIT(6)
 /* The GPU supports preemption */
 #define ADRENO_PREEMPTION BIT(7)
+/* The core uses GPMU for power and limit management */
+#define ADRENO_GPMU BIT(8)
 
 /* Flags to control command packet settings */
 #define KGSL_CMD_FLAGS_NONE             0
@@ -131,6 +133,8 @@
  */
 
 #define ADRENO_IDLE_TIMEOUT (20 * 1000)
+
+#define ADRENO_UCHE_GMEM_BASE	0x100000
 
 enum adreno_gpurev {
 	ADRENO_REV_UNKNOWN = 0,
@@ -194,6 +198,10 @@ struct adreno_busy_data {
  * @shader_offset: Offset of shader from gpu reg base
  * @shader_size: Shader size
  * @num_protected_regs: number of protected registers
+ * @gpmufw_name: Filename for the GPMU firmware
+ * @gpmu_major: Match for the GPMU & firmware, major revision
+ * @gpmu_minor: Match for the GPMU & firmware, minor revision
+ * @gpmu_features: Supported features for any given GPMU version
  */
 struct adreno_gpu_core {
 	enum adreno_gpurev gpurev;
@@ -213,8 +221,55 @@ struct adreno_gpu_core {
 	unsigned long shader_offset;
 	unsigned int shader_size;
 	unsigned int num_protected_regs;
+	const char *gpmufw_name;
+	unsigned int gpmu_major;
+	unsigned int gpmu_minor;
+	unsigned int gpmu_features;
 };
 
+/**
+ * struct adreno_device - The mothership structure for all adreno related info
+ * @dev: Reference to struct kgsl_device
+ * @priv: Holds the private flags specific to the adreno_device
+ * @chipid: Chip ID specific to the GPU
+ * @gmem_base: Base physical address of GMEM
+ * @gmem_size: GMEM size
+ * @gpucore: Pointer to the adreno_gpu_core structure
+ * @pfp_fw: Buffer which holds the pfp ucode
+ * @pfp_fw_size: Size of pfp ucode buffer
+ * @pfp_fw_version: Version of pfp ucode
+ * @pfp: Memory descriptor which holds pfp ucode buffer info
+ * @pm4_fw: Buffer which holds the pm4 ucode
+ * @pm4_fw_size: Size of pm4 ucode buffer
+ * @pm4_fw_version: Version of pm4 ucode
+ * @pm4: Memory descriptor which holds pm4 ucode buffer info
+ * @ringbuffers: Array of pointers to adreno_ringbuffers
+ * @num_ringbuffers: Number of ringbuffers for the GPU
+ * @cur_rb: Pointer to the current ringbuffer
+ * @next_rb: Ringbuffer we are switching to during preemption
+ * @prev_rb: Ringbuffer we are switching from during preemption
+ * @fast_hang_detect: Software fault detection availability
+ * @ft_policy: Defines the fault tolerance policy
+ * @long_ib_detect: Long IB detection availability
+ * @ft_pf_policy: Defines the fault policy for page faults
+ * @ocmem_hdl: Handle to the ocmem allocated buffer
+ * @profile: Container for adreno profiler information
+ * @dispatcher: Container for adreno GPU dispatcher
+ * @pwron_fixup: Command buffer to run a post-power collapse shader workaround
+ * @pwron_fixup_dwords: Number of dwords in the command buffer
+ * @input_work: Work struct for turning on the GPU after a touch event
+ * @busy_data: Struct holding GPU VBIF busy stats
+ * @ram_cycles_lo: Number of DDR clock cycles for the monitor session
+ * @perfctr_pwr_lo: Number of cycles VBIF is stalled by DDR
+ * @halt: Atomic variable to check whether the GPU is currently halted
+ * @ctx_d_debugfs: Context debugfs node
+ * @pwrctrl_flag: Flag to hold adreno specific power attributes
+ * @cmdbatch_profile_buffer: Memdesc holding the cmdbatch profiling buffer
+ * @cmdbatch_profile_index: Index to store the start/stop ticks in the profiling
+ * buffer
+ * @sp_local_gpuaddr: Base GPU virtual address for SP local memory
+ * @sp_pvt_gpuaddr: Base GPU virtual address for SP private memory
+ */
 struct adreno_device {
 	struct kgsl_device dev;    /* Must be first field in this struct */
 	unsigned long priv;
@@ -255,6 +310,8 @@ struct adreno_device {
 
 	struct kgsl_memdesc cmdbatch_profile_buffer;
 	unsigned int cmdbatch_profile_index;
+	uint64_t sp_local_gpuaddr;
+	uint64_t sp_pvt_gpuaddr;
 };
 
 /**
@@ -273,6 +330,7 @@ struct adreno_device {
  * profiling via the ALWAYSON counter
  * @ADRENO_DEVICE_PREEMPTION - Turn on/off preemption
  * @ADRENO_DEVICE_SOFT_FAULT_DETECT - Set if soft fault detect is enabled
+ * @ADRENO_DEVICE_GPMU_INITIALIZED - Set if GPMU firmware initialization succeed
  */
 enum adreno_device_flags {
 	ADRENO_DEVICE_PWRON = 0,
@@ -286,6 +344,7 @@ enum adreno_device_flags {
 	ADRENO_DEVICE_GPU_REGULATOR_ENABLED = 8,
 	ADRENO_DEVICE_PREEMPTION = 9,
 	ADRENO_DEVICE_SOFT_FAULT_DETECT = 10,
+	ADRENO_DEVICE_GPMU_INITIALIZED = 11,
 };
 
 /**
@@ -374,6 +433,7 @@ enum adreno_regs {
 	ADRENO_REG_TP0_CHICKEN,
 	ADRENO_REG_RBBM_RBBM_CTL,
 	ADRENO_REG_UCHE_INVALIDATE0,
+	ADRENO_REG_UCHE_INVALIDATE1,
 	ADRENO_REG_RBBM_PERFCTR_LOAD_VALUE_LO,
 	ADRENO_REG_RBBM_PERFCTR_LOAD_VALUE_HI,
 	ADRENO_REG_RBBM_SECVID_TRUST_CONTROL,
@@ -567,6 +627,7 @@ struct adreno_gpudev {
 	void (*enable_ppd)(struct adreno_device *);
 	int (*regulator_enable)(struct adreno_device *);
 	void (*regulator_disable)(struct adreno_device *);
+	void (*gpmu_start)(struct adreno_device *);
 	void (*pwrlevel_change_settings)(struct adreno_device *,
 					bool mask_throttle);
 	int (*preemption_pre_ibsubmit)(struct adreno_device *,

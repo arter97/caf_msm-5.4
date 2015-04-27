@@ -102,6 +102,7 @@
 #define MDSS_MDP_HW_REV_109	MDSS_MDP_REV(1, 9, 0) /* 8994 v2.0 */
 #define MDSS_MDP_HW_REV_110	MDSS_MDP_REV(1, 10, 0) /* 8992 v1.0 */
 #define MDSS_MDP_HW_REV_200	MDSS_MDP_REV(2, 0, 0) /* 8092 v1.0 */
+#define MDSS_MDP_HW_REV_112	MDSS_MDP_REV(1, 12, 0) /* 8952 v1.0 */
 
 enum {
 	NOTIFY_UPDATE_INIT,
@@ -166,6 +167,7 @@ enum {
 	MDP_RGB_565_UBWC,
 	MDP_RGBA_8888_UBWC,
 	MDP_Y_CBCR_H2V2_UBWC,
+	MDP_Y_CRCB_H2V2_VENUS,
 	MDP_IMGTYPE_LIMIT,
 	MDP_RGB_BORDERFILL,	/* border fill pipe */
 	MDP_FB_FORMAT = MDP_IMGTYPE2_START,    /* framebuffer format */
@@ -881,15 +883,6 @@ struct mdp_calib_dcm_state {
 	uint32_t dcm_state;
 };
 
-struct mdp_pp_init_data {
-	uint32_t init_request;
-};
-
-enum {
-	MDP_PP_DISABLE,
-	MDP_PP_ENABLE,
-};
-
 enum {
 	DCM_UNINIT,
 	DCM_UNBLANK,
@@ -1004,7 +997,6 @@ enum {
 	mdp_op_calib_buffer,
 	mdp_op_calib_dcm_state,
 	mdp_op_max,
-	mdp_op_pp_init_cfg,
 };
 
 enum {
@@ -1036,7 +1028,6 @@ struct msmfb_mdp_pp {
 		struct mdss_ad_input ad_input;
 		struct mdp_calib_config_buffer calib_buffer;
 		struct mdp_calib_dcm_state calib_dcm;
-		struct mdp_pp_init_data init_data;
 	} data;
 };
 

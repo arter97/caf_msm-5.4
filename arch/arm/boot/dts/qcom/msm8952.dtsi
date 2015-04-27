@@ -43,7 +43,7 @@
 			linux,reserve-contiguous-region;
 			linux,reserve-region;
 			linux,remove-completely;
-			reg = <0x0 0x86800000 0x0 0x05a00000>;
+			reg = <0x0 0x86800000 0x0 0x06400000>;
 			label = "modem_mem";
 		};
 
@@ -51,7 +51,7 @@
 			linux,reserve-contiguous-region;
 			linux,reserve-region;
 			linux,remove-completely;
-			reg = <0x0 0x8c200000 0x0 0x1b00000>;
+			reg = <0x0 0x8cc00000 0x0 0x1b00000>;
 			label = "reloc_mem";
 		};
 
@@ -59,7 +59,7 @@
 			linux,reserve-contiguous-region;
 			linux,reserve-region;
 			linux,remove-completely;
-			reg = <0x0 0x86000000 0x0 0x0800000>;
+			reg = <0x0 0x84a00000 0x0 0x1e00000>;
 			label = "other_ext_mem";
 		};
 
@@ -575,6 +575,11 @@
 		qcom,synchronous-cluster-id = <0 1>;
 		qcom,synchronous-cluster-map = <1 4 &CPU0 &CPU1 &CPU2 &CPU3>,
 						<0 4 &CPU4 &CPU5 &CPU6 &CPU7>;
+		qcom,disable-cx-phase-ctrl;
+		qcom,disable-gfx-phase-ctrl;
+		qcom,disable-vdd-mx;
+		qcom,disable-psm;
+		qcom,disable-ocr;
 		qcom,vdd-restriction-temp = <5>;
 		qcom,vdd-restriction-temp-hysteresis = <10>;
 		vdd-dig-supply = <&pm8950_s2_floor_level>;
@@ -1150,9 +1155,8 @@
 			 <&clock_gcc clk_gcc_sdcc1_apps_clk>;
 		clock-names = "iface_clk", "core_clk";
 
-		qcom,clk-rates = <400000 25000000 50000000 100000000 177770000>;
-		qcom,bus-speed-mode = "HS200_1p8v", "DDR_1p8v";
-
+		qcom,clk-rates = <400000 25000000 50000000 100000000 192000000 384000000>;
+		qcom,bus-speed-mode = "HS400_1p8v", "HS200_1p8v", "DDR_1p8v";
 		status = "disabled";
 	};
 
@@ -1319,7 +1323,7 @@
 
 	qcom_tzlog: tz-log@08600720 {
 		compatible = "qcom,tz-log";
-		reg = <0x08600720 0x1000>;
+		reg = <0x08600720 0x2000>;
 	};
 
 	qcom_crypto: qcrypto@720000 {
@@ -2097,12 +2101,14 @@
 };
 
 &gdsc_venus_core0 {
+	qcom,support-hw-trigger;
 	clock-names ="core0_clk";
 	clocks = <&clock_gcc clk_gcc_venus0_core0_vcodec0_clk>;
 	status = "okay";
 };
 
 &gdsc_venus_core1 {
+	qcom,support-hw-trigger;
 	clock-names ="core1_clk";
 	clocks = <&clock_gcc clk_gcc_venus0_core1_vcodec0_clk>;
 	status = "okay";
@@ -2150,10 +2156,9 @@
 };
 
 &gdsc_oxili_gx {
-	clock-names = "core_root_clk", "core_clk", "gmem_clk";
-	clocks = <&clock_gcc clk_gfx3d_clk_src>,
-		 <&clock_gcc clk_gcc_oxili_gfx3d_clk>,
-		 <&clock_gcc clk_gcc_oxili_gmem_clk>;
+	clock-names = "core_root_clk", "gmem_clk";
+	clocks =<&clock_gcc clk_gfx3d_clk_src>,
+		<&clock_gcc clk_gcc_oxili_gmem_clk>;
 	qcom,enable-root-clk;
 	status = "okay";
 };

@@ -26,6 +26,16 @@
 
 #define TASHA_ZDET_SUPPORTED false
 
+#define WCD9335_DMIC_CLK_DIV_2  0x0
+#define WCD9335_DMIC_CLK_DIV_3  0x1
+#define WCD9335_DMIC_CLK_DIV_4  0x2
+#define WCD9335_DMIC_CLK_DIV_6  0x3
+#define WCD9335_DMIC_CLK_DIV_8  0x4
+#define WCD9335_DMIC_CLK_DIV_16  0x5
+
+#define WCD9335_ANC_DMIC_X2_FULL_RATE 1
+#define WCD9335_ANC_DMIC_X2_HALF_RATE 0
+
 /* Number of input and output Slimbus port */
 enum {
 	TASHA_RX0 = 0,
@@ -84,4 +94,8 @@ struct tasha_reg_mask_val {
 	u8 val;
 };
 
+extern void *tasha_get_afe_config(struct snd_soc_codec *codec,
+				  enum afe_config_type config_type);
+extern int tasha_cdc_mclk_enable(struct snd_soc_codec *codec, bool enable,
+				 bool dapm);
 #endif

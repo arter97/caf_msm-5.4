@@ -532,6 +532,13 @@ Subnode properties:
 - qcom,mdss_wb_panel: Specifies writeback block properties for Wireless
 		      display and rotation.
 
+Subnode properties:
+Required properties:
+- compatible :          Must be "qcom,mdss_wb"
+- qcom,mdss_pan_res:    Specifies size of writeback buffer.
+- qcom,mdss_pan_bpp:    Specifies bits per pixel for writeback buffer.
+- qcom,mdss-fb-map:     Specific framebuffer number.
+
 Example:
 	mdss_mdp: qcom,mdss_mdp@fd900000 {
 		compatible = "qcom,mdss_mdp";

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -348,16 +348,6 @@ void msm_isp_update_req_history(uint32_t client, uint64_t ab,
 }
 
 #ifdef CONFIG_COMPAT
-struct msm_isp_event_data32 {
-	struct compat_timeval timestamp;
-	struct compat_timeval mono_timestamp;
-	enum msm_vfe_input_src input_intf;
-	uint32_t frame_id;
-	union {
-		struct msm_isp_stats_event stats;
-		struct msm_isp_buf_event buf_done;
-	} u;
-};
 static long msm_isp_dqevent(struct file *file, struct v4l2_fh *vfh, void *arg)
 {
 	long rc;
@@ -389,7 +379,6 @@ static long msm_isp_dqevent(struct file *file, struct v4l2_fh *vfh, void *arg)
 				event_data->mono_timestamp.tv_sec;
 		event_data32->mono_timestamp.tv_usec =
 				event_data->mono_timestamp.tv_usec;
-		event_data32->input_intf = event_data->input_intf;
 		event_data32->frame_id = event_data->frame_id;
 		memcpy(&(event_data32->u), &(event_data->u),
 					sizeof(event_data32->u));
@@ -451,17 +440,6 @@ static int vfe_probe(struct platform_device *pdev)
 	/*struct msm_cam_subdev_info sd_info;*/
 	const struct of_device_id *match_dev;
 	int rc = 0;
-
-	struct msm_iova_partition vfe_partition = {
-		.start = SZ_128K,
-		.size = SZ_2G - SZ_128K,
-	};
-	struct msm_iova_layout vfe_layout = {
-		.partitions = &vfe_partition,
-		.npartitions = 1,
-		.client_name = "vfe",
-		.domain_flags = 0,
-	};
 
 	vfe_dev = kzalloc(sizeof(struct vfe_device), GFP_KERNEL);
 	if (!vfe_dev) {
@@ -555,37 +533,13 @@ static int vfe_probe(struct platform_device *pdev)
 	v4l2_subdev_notify(&vfe_dev->subdev.sd,
 		MSM_SD_NOTIFY_REQ_CB, &vfe_vb2_ops);
 	rc = msm_isp_create_isp_buf_mgr(vfe_dev->buf_mgr,
-		&vfe_vb2_ops, &vfe_layout);
+		&vfe_vb2_ops, &pdev->dev);
 	if (rc < 0) {
 		pr_err("%s: Unable to create buffer manager\n", __func__);
 		rc = -EINVAL;
 		goto probe_fail3;
 	}
-	/* create secure context banks*/
-	if (vfe_dev->hw_info->num_iommu_secure_ctx) {
-		/*secure vfe layout*/
-		struct msm_iova_layout vfe_secure_layout = {
-			.partitions = &vfe_partition,
-			.npartitions = 1,
-			.client_name = "vfe_secure",
-			.domain_flags = 0,
-			.is_secure = MSM_IOMMU_DOMAIN_SECURE,
-		};
-		rc = msm_isp_create_secure_domain(vfe_dev->buf_mgr,
-			&vfe_secure_layout);
-		if (rc < 0) {
-			pr_err("%s: fail to create secure domain\n", __func__);
-			msm_sd_unregister(&vfe_dev->subdev);
-			rc = -EINVAL;
-			goto probe_fail3;
-		}
-	}
 	msm_isp_enable_debugfs(vfe_dev, msm_isp_bw_request_history);
-	vfe_dev->buf_mgr->ops->register_ctx(vfe_dev->buf_mgr,
-		&vfe_dev->iommu_ctx[0], &vfe_dev->iommu_secure_ctx[0],
-		vfe_dev->hw_info->num_iommu_ctx,
-		vfe_dev->hw_info->num_iommu_secure_ctx);
-
 	vfe_dev->buf_mgr->init_done = 1;
 	vfe_dev->vfe_open_cnt = 0;
 	return rc;

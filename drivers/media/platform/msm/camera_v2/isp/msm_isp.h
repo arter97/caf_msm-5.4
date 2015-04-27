@@ -480,10 +480,11 @@ struct msm_vfe_error_info {
 	uint32_t error_mask1;
 	uint32_t violation_status;
 	uint32_t camif_status;
-	uint32_t stream_framedrop_count[MAX_NUM_STREAM];
-	uint32_t stats_framedrop_count[MSM_ISP_STATS_MAX];
+	uint8_t stream_framedrop_count[MAX_NUM_STREAM];
+	uint8_t stats_framedrop_count[MSM_ISP_STATS_MAX];
 	uint32_t info_dump_frame_count;
 	uint32_t error_count;
+	uint32_t framedrop_flag;
 };
 
 struct msm_isp_statistics {
@@ -615,7 +616,12 @@ struct vfe_device {
 	uint64_t msm_isp_vfe_clk_rate;
 	struct msm_isp_ub_info *ub_info;
 	uint32_t vfe_ub_policy;
+	uint32_t isp_sof_debug;
+	uint32_t isp_raw0_debug;
+	uint32_t isp_raw1_debug;
+	uint32_t isp_raw2_debug;
 	uint8_t reset_pending;
+	enum msm_vfe_hvx_streaming_cmd hvx_cmd;
 };
 
 #endif

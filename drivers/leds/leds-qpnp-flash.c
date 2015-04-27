@@ -88,7 +88,7 @@
 #define	FLASH_LED_HEADROOM_DIVIDER				100
 #define	FLASH_LED_HEADROOM_OFFSET				2
 #define	FLASH_LED_MAX_CURRENT_MA				1000
-#define	FLASH_LED_THERMAL_THRESHOLD_MIN				80
+#define	FLASH_LED_THERMAL_THRESHOLD_MIN				95
 #define	FLASH_LED_THERMAL_DEVIDER				10
 #define	FLASH_LED_VPH_DROOP_THRESHOLD_MIN_MV			2500
 #define	FLASH_LED_VPH_DROOP_THRESHOLD_DIVIDER			100
@@ -1323,7 +1323,9 @@ static int qpnp_flash_led_parse_common_dt(
 			pinctrl_lookup_state(led->pinctrl, "flash_led_enable");
 		if (IS_ERR_OR_NULL(led->gpio_state_active)) {
 			dev_err(&led->spmi_dev->dev,
-					"Can not get LED active state\n");
+					"Can not lookup LED active state\n");
+			devm_pinctrl_put(led->pinctrl);
+			led->pinctrl = NULL;
 			return PTR_ERR(led->gpio_state_active);
 		}
 		led->gpio_state_suspend =
@@ -1331,7 +1333,9 @@ static int qpnp_flash_led_parse_common_dt(
 							"flash_led_disable");
 		if (IS_ERR_OR_NULL(led->gpio_state_active)) {
 			dev_err(&led->spmi_dev->dev,
-					"Can not get LED active state\n");
+					"Can not lookup LED disable state\n");
+			devm_pinctrl_put(led->pinctrl);
+			led->pinctrl = NULL;
 			return PTR_ERR(led->gpio_state_active);
 		}
 	}

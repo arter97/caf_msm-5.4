@@ -1,6 +1,6 @@
 /* Copyright (C) 2008 Google, Inc.
  * Copyright (C) 2008 HTC Corporation
- * Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2015, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -290,7 +290,7 @@ void audio_aio_async_write_ack(struct q6audio_aio *audio, uint32_t token,
 			wake_up(&audio->write_wait);
 		}
 	} else {
-		pr_err("%s[%p]:expected=%lx ret=%x\n",
+		pr_err("%s[%p]:expected=%x ret=%x\n",
 			__func__, audio, used_buf->token, token);
 		spin_unlock_irqrestore(&audio->dsp_lock, flags);
 	}
@@ -991,7 +991,7 @@ static int audio_aio_ion_remove(struct q6audio_aio *audio,
 			pr_debug("%s[%p]:remove region fd %d vaddr %p\n",
 				__func__, audio, info->fd, info->vaddr);
 			rc = q6asm_memory_unmap(audio->ac,
-						(uint32_t) region->paddr, IN);
+						region->paddr, IN);
 			if (rc < 0)
 				pr_err("%s[%p]: memory unmap failed\n",
 					__func__, audio);

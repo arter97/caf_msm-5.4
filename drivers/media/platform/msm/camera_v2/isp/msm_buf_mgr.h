@@ -60,7 +60,7 @@ enum msm_isp_buf_mgr_state {
 struct msm_isp_buffer_mapped_info {
 	unsigned long len;
 	dma_addr_t paddr;
-	struct ion_handle *handle;
+	int buf_fd;
 };
 
 struct buffer_cmd {
@@ -83,6 +83,7 @@ struct msm_isp_buffer {
 
 	/*Vb2 buffer data*/
 	struct vb2_buffer *vb2_buf;
+	spinlock_t lock;
 
 	/*Share buffer cache state*/
 	struct list_head share_list;
@@ -156,13 +157,15 @@ struct msm_isp_buf_ops {
 	struct msm_isp_bufq * (*get_bufq)(struct msm_isp_buf_mgr *buf_mgr,
 		uint32_t bufq_handle);
 	int (*update_put_buf_cnt)(struct msm_isp_buf_mgr *buf_mgr,
-		uint32_t bufq_handle, uint32_t buf_index);
+		uint32_t bufq_handle, uint32_t buf_index,
+		uint32_t frame_id);
 };
 
 struct msm_isp_buf_mgr {
 	int init_done;
 	uint32_t open_count;
 	uint32_t pagefault_debug;
+	uint32_t frameId_mismatch_recovery;
 	uint16_t num_buf_q;
 	struct msm_isp_bufq *bufq;
 
@@ -172,6 +175,9 @@ struct msm_isp_buf_mgr {
 
 	struct msm_sd_req_vb2_q *vb2_ops;
 
+	/*IOMMU driver*/
+	int ns_iommu_hdl;
+	int sec_iommu_hdl;
 	/*IOMMU specific*/
 	int iommu_domain_num;
 	struct iommu_domain *iommu_domain;
@@ -195,7 +201,7 @@ struct msm_isp_buf_mgr {
 };
 
 int msm_isp_create_isp_buf_mgr(struct msm_isp_buf_mgr *buf_mgr,
-	struct msm_sd_req_vb2_q *vb2_ops, struct msm_iova_layout *iova_layout);
+	struct msm_sd_req_vb2_q *vb2_ops, struct device *dev);
 
 int msm_isp_proc_buf_cmd(struct msm_isp_buf_mgr *buf_mgr,
 	unsigned int cmd, void *arg);

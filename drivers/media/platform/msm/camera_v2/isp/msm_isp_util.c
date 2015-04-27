@@ -507,10 +507,17 @@ int msm_isp_cfg_pix(struct vfe_device *vfe_dev,
 	struct msm_vfe_input_cfg *input_cfg)
 {
 	int rc = 0;
+	struct msm_vfe_pix_cfg *pix_cfg = NULL;
+
 	if (vfe_dev->axi_data.src_info[VFE_PIX_0].active) {
 		pr_err("%s: pixel path is active\n", __func__);
 		return -EINVAL;
 	}
+
+	pix_cfg = &input_cfg->d.pix_cfg;
+	if ((pix_cfg->hvx_cmd > HVX_DISABLE) &&
+		(pix_cfg->hvx_cmd <= HVX_ROUND_TRIP))
+		vfe_dev->hvx_cmd = pix_cfg->hvx_cmd;
 
 	vfe_dev->axi_data.src_info[VFE_PIX_0].pixel_clock =
 		input_cfg->input_pix_clk;
@@ -847,6 +854,12 @@ static long msm_isp_ioctl_unlocked(struct v4l2_subdev *sd,
 		mutex_lock(&vfe_dev->core_mutex);
 		rc = msm_isp_smmu_attach(vfe_dev->buf_mgr, arg);
 		mutex_unlock(&vfe_dev->core_mutex);
+		break;
+	case MSM_SD_NOTIFY_FREEZE:
+		vfe_dev->isp_sof_debug = 0;
+		vfe_dev->isp_raw0_debug = 0;
+		vfe_dev->isp_raw1_debug = 0;
+		vfe_dev->isp_raw2_debug = 0;
 		break;
 	case MSM_SD_SHUTDOWN:
 		while (vfe_dev->vfe_open_cnt != 0)
@@ -1553,33 +1566,34 @@ void msm_isp_update_error_frame_count(struct vfe_device *vfe_dev)
 void msm_isp_process_iommu_page_fault(struct vfe_device *vfe_dev)
 {
 	struct msm_isp_event_data error_event;
+	struct msm_vfe_axi_halt_cmd halt_cmd;
+	uint32_t i;
+
+	memset(&halt_cmd, 0, sizeof(struct msm_vfe_axi_halt_cmd));
+	halt_cmd.stop_camif = 1;
+	halt_cmd.overflow_detected = 0;
+	halt_cmd.blocking_halt = 0;
+
+	msm_isp_axi_halt(vfe_dev, &halt_cmd);
+
+	for (i = 0; i < MAX_NUM_STREAM; i++)
+		vfe_dev->axi_data.stream_info[i].state = INACTIVE;
 
 	pr_err("%s:%d] vfe_dev %p id %d\n", __func__,
 		__LINE__, vfe_dev, vfe_dev->pdev->id);
-	msm_isp_axi_disable_all_wm(vfe_dev);
-	msm_isp_stats_disable(vfe_dev);
-	/* VFE_SRC_MAX will call reg update on all stream src */
-	vfe_dev->hw_info->vfe_ops.core_ops.reg_update(vfe_dev,
-		VFE_SRC_MAX);
+
 	error_event.frame_id =
 		vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id;
 	vfe_dev->buf_mgr->ops->buf_mgr_debug(vfe_dev->buf_mgr);
 	msm_isp_print_ping_pong_address(vfe_dev);
 	vfe_dev->hw_info->vfe_ops.axi_ops.read_wm_ping_pong_addr(vfe_dev);
-	msm_isp_send_event(vfe_dev,
-					ISP_EVENT_IOMMU_P_FAULT, &error_event);
+
+	msm_isp_send_event(vfe_dev, ISP_EVENT_IOMMU_P_FAULT, &error_event);
 }
 
 void msm_isp_process_error_info(struct vfe_device *vfe_dev)
 {
-	int i;
-	uint8_t num_stats_type =
-		vfe_dev->hw_info->stats_hw_info->num_stats_type;
 	struct msm_vfe_error_info *error_info = &vfe_dev->error_info;
-	static DEFINE_RATELIMIT_STATE(rs,
-		DEFAULT_RATELIMIT_INTERVAL, DEFAULT_RATELIMIT_BURST);
-	static DEFINE_RATELIMIT_STATE(rs_stats,
-		DEFAULT_RATELIMIT_INTERVAL, DEFAULT_RATELIMIT_BURST);
 
 	if (error_info->error_count == 1 ||
 		!(error_info->info_dump_frame_count % 100)) {
@@ -1589,24 +1603,6 @@ void msm_isp_process_error_info(struct vfe_device *vfe_dev)
 		error_info->error_mask1 = 0;
 		error_info->camif_status = 0;
 		error_info->violation_status = 0;
-		for (i = 0; i < MAX_NUM_STREAM; i++) {
-			if (error_info->stream_framedrop_count[i] != 0 &&
-				__ratelimit(&rs)) {
-				pr_err("%s: Stream[%d]: dropped %d frames\n",
-					__func__, i,
-					error_info->stream_framedrop_count[i]);
-				error_info->stream_framedrop_count[i] = 0;
-			}
-		}
-		for (i = 0; i < num_stats_type; i++) {
-			if (error_info->stats_framedrop_count[i] != 0 &&
-				__ratelimit(&rs_stats)) {
-				pr_err("%s: Stats stream[%d]: dropped %d frames\n",
-					__func__, i,
-					error_info->stats_framedrop_count[i]);
-				error_info->stats_framedrop_count[i] = 0;
-			}
-		}
 	}
 }
 
@@ -1801,8 +1797,8 @@ void msm_isp_do_tasklet(unsigned long data)
 			msm_isp_process_iommu_page_fault(vfe_dev);
 			continue;
 		}
-		ISP_DBG("%s: status0: 0x%x status1: 0x%x\n",
-			__func__, irq_status0, irq_status1);
+		ISP_DBG("%s: vfe_id %d status0: 0x%x status1: 0x%x\n",
+			__func__, vfe_dev->pdev->id, irq_status0, irq_status1);
 		irq_ops->process_reset_irq(vfe_dev,
 			irq_status0, irq_status1);
 		irq_ops->process_halt_irq(vfe_dev,
@@ -1824,8 +1820,6 @@ void msm_isp_do_tasklet(unsigned long data)
 			irq_status0, irq_status1, &ts);
 		irq_ops->process_epoch_irq(vfe_dev,
 			irq_status0, irq_status1, &ts);
-
-		msm_isp_process_error_info(vfe_dev);
 	}
 }
 
@@ -1839,36 +1833,6 @@ int msm_isp_set_src_state(struct vfe_device *vfe_dev, void *arg)
 	vfe_dev->axi_data.src_info[src_state->input_src].frame_id =
 	src_state->src_frame_id;
 	return 0;
-}
-
-static int msm_vfe_iommu_fault_handler(struct iommu_domain *domain,
-	struct device *dev, unsigned long iova, int flags, void *token)
-{
-	struct vfe_device *vfe_dev = NULL;
-	int rc = -ENOSYS;
-
-	if (token) {
-		vfe_dev = (struct vfe_device *)token;
-		if (!vfe_dev->buf_mgr || !vfe_dev->buf_mgr->ops) {
-			pr_err("%s:%d] buf_mgr %p\n", __func__,
-				__LINE__, vfe_dev->buf_mgr);
-			goto end;
-		}
-		if (!vfe_dev->buf_mgr->pagefault_debug) {
-			vfe_dev->buf_mgr->pagefault_debug = 1;
-			msm_isp_enqueue_tasklet_cmd(vfe_dev, 0, 0, 1);
-		} else {
-			/* Page fault previously handled, avoid flooding logs*/
-			rc = 0;
-			goto end;
-		}
-	} else {
-		ISP_DBG("%s:%d] no token received: %p\n",
-			__func__, __LINE__, token);
-		goto end;
-	}
-end:
-	return rc;
 }
 
 int msm_isp_open_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
@@ -1894,6 +1858,10 @@ int msm_isp_open_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 	}
 
 	vfe_dev->reset_pending = 0;
+	vfe_dev->isp_sof_debug = 0;
+	vfe_dev->isp_raw0_debug = 0;
+	vfe_dev->isp_raw1_debug = 0;
+	vfe_dev->isp_raw2_debug = 0;
 
 	if (vfe_dev->hw_info->vfe_ops.core_ops.init_hw(vfe_dev) < 0) {
 		pr_err("%s: init hardware failed\n", __func__);
@@ -1934,9 +1902,6 @@ int msm_isp_open_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 	vfe_dev->axi_data.hw_info = vfe_dev->hw_info->axi_hw_info;
 	vfe_dev->taskletq_idx = 0;
 	vfe_dev->vt_enable = 0;
-	iommu_set_fault_handler(vfe_dev->buf_mgr->iommu_domain,
-		msm_vfe_iommu_fault_handler, vfe_dev);
-	vfe_dev->buf_mgr->pagefault_debug = 0;
 	mutex_unlock(&vfe_dev->core_mutex);
 	mutex_unlock(&vfe_dev->realtime_mutex);
 	return 0;
