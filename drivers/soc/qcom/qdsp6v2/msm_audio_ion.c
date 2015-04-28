@@ -477,6 +477,23 @@ static int msm_audio_ion_get_phys(struct ion_client *client,
 	return rc;
 }
 
+
+u32 msm_audio_ion_get_smmu_sid_mode32(void)
+{
+	if (msm_audio_ion_data.smmu_enabled)
+		return upper_32_bits(msm_audio_ion_data.smmu_sid_bits);
+	else
+		return 0;
+}
+
+u32 populate_upper_32_bits(ion_phys_addr_t pa)
+{
+	if (sizeof(ion_phys_addr_t) == sizeof(u32))
+		return msm_audio_ion_get_smmu_sid_mode32();
+	else
+		return upper_32_bits(pa);
+}
+
 static int msm_audio_ion_probe(struct platform_device *pdev)
 {
 	int rc = 0;
@@ -495,14 +512,6 @@ static int msm_audio_ion_probe(struct platform_device *pdev)
 	smmu_enabled = of_property_read_bool(pdev->dev.of_node,
 					     msm_audio_ion_dt);
 	msm_audio_ion_data.smmu_enabled = smmu_enabled;
-
-	if (sizeof(ion_phys_addr_t) > 4) {
-		pr_debug("%s: 64-bit mode\n", __func__);
-	} else {
-		pr_debug("%s: 32-bit mode - disable SMMU\n", __func__);
-		msm_audio_ion_data.smmu_enabled = false;
-		smmu_enabled = false;
-	}
 
 	if (smmu_enabled) {
 		q6_state = apr_get_q6_state();
