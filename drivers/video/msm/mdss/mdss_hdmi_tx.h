@@ -102,6 +102,7 @@ struct hdmi_tx_ctrl {
 	bool hdcp_feature_on;
 	bool hpd_disabled;
 	bool ds_registered;
+	bool polarity_reset;
 	u32 present_hdcp;
 
 	u8 spd_vendor_name[9];
@@ -114,6 +115,11 @@ struct hdmi_tx_ctrl {
 
 	void *feature_data[HDMI_TX_FEAT_MAX];
 	u32 s3d_mode;
+
+	void *codec_data;
+	u32 (*play_short_silent_audio) (void *codec_data);
 };
 
+#define IS_CEC_WAKEUP_EN(ctrl) \
+	is_hdmi_cec_wakeup_en((ctrl)->feature_data[HDMI_TX_FEAT_CEC])
 #endif /* __MDSS_HDMI_TX_H__ */

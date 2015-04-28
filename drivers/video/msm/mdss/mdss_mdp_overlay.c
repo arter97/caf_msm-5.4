@@ -4232,6 +4232,45 @@ end:
 	return rc;
 }
 
+static int mdss_mdp_handoff_cleanup_ctl(struct msm_fb_data_type *mfd)
+{
+	int rc;
+	int need_cleanup;
+	struct mdss_overlay_private *mdp5_data;
+
+	if (!mfd)
+		return -ENODEV;
+
+	if (mfd->key != MFD_KEY)
+		return -EINVAL;
+
+	mdp5_data = mfd_to_mdp5_data(mfd);
+
+	mdss_mdp_overlay_free_fb_pipe(mfd);
+
+	mutex_lock(&mdp5_data->list_lock);
+	need_cleanup = !list_empty(&mdp5_data->pipes_cleanup);
+	mutex_unlock(&mdp5_data->list_lock);
+
+	if (need_cleanup)
+		mdss_mdp_overlay_kickoff(mfd, NULL);
+
+	rc = mdss_mdp_ctl_stop(mdp5_data->ctl, mfd->panel_power_state);
+	if (!rc) {
+		if (mdss_fb_is_power_off(mfd)) {
+			mutex_lock(&mdp5_data->list_lock);
+			__mdss_mdp_overlay_free_list_purge(mfd);
+			mutex_unlock(&mdp5_data->list_lock);
+		}
+	}
+
+	rc = mdss_mdp_splash_cleanup(mfd, false);
+	if (rc)
+		pr_err("%s: failed splash clean up %d\n", __func__, rc);
+
+	return rc;
+}
+
 static int mdss_mdp_overlay_off(struct msm_fb_data_type *mfd)
 {
 	int rc;
@@ -4254,6 +4293,9 @@ static int mdss_mdp_overlay_off(struct msm_fb_data_type *mfd)
 
 	if (!mdss_mdp_ctl_is_power_on(mdp5_data->ctl)) {
 		if (mfd->panel_reconfig) {
+			if (mfd->panel_info->cont_splash_enabled)
+				mdss_mdp_handoff_cleanup_ctl(mfd);
+
 			mdp5_data->borderfill_enable = false;
 			mdss_mdp_ctl_destroy(mdp5_data->ctl);
 			mdp5_data->ctl = NULL;
@@ -4412,7 +4454,7 @@ exit:
  * the bootloader to display the splash screen when the continuous splash screen
  * feature is enabled in kernel.
  */
-static int mdss_mdp_overlay_handoff(struct msm_fb_data_type *mfd)
+int mdss_mdp_overlay_handoff(struct msm_fb_data_type *mfd)
 {
 	int rc = 0;
 	struct mdss_data_type *mdata = mfd_to_mdata(mfd);
@@ -4765,20 +4807,6 @@ int mdss_mdp_overlay_init(struct msm_fb_data_type *mfd)
 	if (!mdp5_data->cpu_pm_hdl)
 		pr_warn("%s: unable to add event timer\n", __func__);
 
-	if (mfd->panel_info->cont_splash_enabled) {
-		rc = mdss_mdp_overlay_handoff(mfd);
-		if (rc) {
-			/*
-			 * Even though handoff failed, it is not fatal.
-			 * MDP can continue, just that we would have a longer
-			 * delay in transitioning from splash screen to boot
-			 * animation
-			 */
-			pr_warn("Overlay handoff failed for fb%d. rc=%d\n",
-				mfd->index, rc);
-			rc = 0;
-		}
-	}
 	mdp5_data->dyn_pu_state = mfd->panel_info->partial_update_enabled;
 
 	if (mdss_mdp_pp_overlay_init(mfd))
