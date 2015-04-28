@@ -1429,6 +1429,13 @@ static int hdmi_tx_check_capability(struct hdmi_tx_ctrl *hdmi_ctrl)
 			QFPROM_RAW_FEAT_CONFIG_ROW0_LSB + QFPROM_RAW_VERSION_4);
 		hdcp_disabled = reg_val & BIT(12);
 		hdmi_disabled = reg_val & BIT(13);
+		reg_val = DSS_REG_R_ND(io, SEC_CTRL_HW_VERSION);
+		if (!hdcp_disabled && (reg_val >= HDCP_SEL_MIN_SEC_VERSION)) {
+			reg_val = DSS_REG_R_ND(io,
+				QFPROM_RAW_FEAT_CONFIG_ROW0_MSB +
+				QFPROM_RAW_VERSION_4);
+			hdcp_disabled = !(reg_val & BIT(23));
+		}
 	}
 
 	DEV_DBG("%s: Features <HDMI:%s, HDCP:%s>\n", __func__,
