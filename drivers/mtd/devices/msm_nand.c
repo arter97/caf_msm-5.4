@@ -6843,7 +6843,7 @@ int msm_nand_scan(struct mtd_info *mtd, int maxchips)
 	chip->cw_size = enable_bch_ecc ? 532 : 528;
 	chip->CFG0 = (((mtd_writesize >> 9)-1) << 6) /* 4/8 cw/pg for 2/4k */
 		|  (516 <<  9)  /* 516 user data bytes */
-		|   (10 << 19)  /* 10 parity bytes */
+		|   ( (enable_bch_ecc ? 13 : 10) << 19)  /* 10 parity bytes */
 		|    (5 << 27)  /* 5 address cycles */
 		|    (0 << 30)  /* Do not read status before data */
 		|    (1 << 31)  /* Send read cmd */
