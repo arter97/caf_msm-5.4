@@ -3243,6 +3243,9 @@ static int netif_rx_internal(struct sk_buff *skb)
 {
 	int ret;
 
+	WARN_ONCE(skb_cloned(skb), "Cloned packet from dev %s\n",
+		  skb->dev->name);
+
 	/* if netpoll wants it, pretend we never saw it */
 	if (netpoll_rx(skb))
 		return NET_RX_DROP;
