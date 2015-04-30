@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3512,9 +3512,18 @@ static int pp_hist_collect(struct mdp_histogram_data *hist,
 
 	mutex_lock(&hist_info->hist_mutex);
 	spin_lock_irqsave(&hist_info->hist_lock, flag);
-	if ((hist_info->col_en == 0) ||
-			(hist_info->col_state == HIST_UNKNOWN)) {
+	/*
+	 * If col_en is 0 then histogram start was not called but read has
+	 * been called in which case it is a protocol error. In case that hist
+	 * is enabled but state is found to be HISTUNKNOWN then histogram was
+	 * canceled hence should return ECANCELED error.
+	 */
+	if (hist_info->col_en == 0) {
 		ret = -EPROTO;
+		spin_unlock_irqrestore(&hist_info->hist_lock, flag);
+		goto hist_collect_exit;
+	} else if (hist_info->col_state == HIST_UNKNOWN) {
+		ret = -ECANCELED;
 		spin_unlock_irqrestore(&hist_info->hist_lock, flag);
 		goto hist_collect_exit;
 	}
@@ -3566,9 +3575,8 @@ static int pp_hist_collect(struct mdp_histogram_data *hist,
 					__func__, hist_info->col_state);
 		}
 	}
-	if (hist_info->col_en == 0) {
+	if (hist_info->col_state == HIST_UNKNOWN) {
 		pr_debug("hist collection cancelled!\n");
-		hist_info->col_state = HIST_UNKNOWN;
 		spin_unlock_irqrestore(&hist_info->hist_lock, flag);
 		ret = -ECANCELED;
 		goto hist_collect_exit;
@@ -3860,7 +3868,7 @@ void mdss_mdp_hist_dspp_cancel_collect()
 
 	for (i = 0; i < mdata->nmixers_intf; i++) {
 		spin_lock_irqsave(&hists[i]->hist_lock, flag);
-		hists[i]->col_en = 0;
+		hists[i]->col_state = HIST_UNKNOWN;
 		if (is_hist_v1)
 			complete_all(&hists[i]->first_kick);
 		complete_all(&hists[i]->comp);
@@ -3917,15 +3925,19 @@ void mdss_mdp_hist_intr_done(u32 isr)
 		/* Histogram Done Interrupt */
 		if (hist_info && (isr_blk & 0x1) && (hist_info->col_en)) {
 			spin_lock(&hist_info->hist_lock);
-			if (!is_hist_v2)
-				hist_info->col_state = HIST_READY;
-			if (hist_info->read_request == 1) {
-				hist_info->read_request++;
-				if (is_hist_v2) {
+			if (hist_info->col_state != HIST_UNKNOWN) {
+				if (!is_hist_v2)
 					hist_info->col_state = HIST_READY;
-					writel_relaxed(1, hist_info->base);
+				if (hist_info->read_request == 1) {
+					hist_info->read_request++;
+					if (is_hist_v2) {
+						hist_info->col_state =
+								HIST_READY;
+						writel_relaxed(1,
+							hist_info->base);
+					}
+					need_complete = true;
 				}
-				need_complete = true;
 			}
 			spin_unlock(&hist_info->hist_lock);
 			if (need_complete)
