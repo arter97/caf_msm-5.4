@@ -1,7 +1,7 @@
 /*
  * MDSS MDP Interface (used by framebuffer core)
  *
- * Copyright (c) 2007-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2007-2015, The Linux Foundation. All rights reserved.
  * Copyright (C) 2007 Google Incorporated
  *
  * This software is licensed under the terms of the GNU General Public
@@ -584,11 +584,9 @@ int mdss_mdp_irq_enable(u32 intr_type, u32 intf_num)
 }
 int mdss_mdp_hist_irq_enable(u32 irq)
 {
-	unsigned long irq_flags;
 	int ret = 0;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 
-	spin_lock_irqsave(&mdp_lock, irq_flags);
 	if (mdata->mdp_hist_irq_mask & irq) {
 		pr_warn("MDSS MDP Hist IRQ-0x%x is already set, mask=%x\n",
 				irq, mdata->mdp_hist_irq_mask);
@@ -603,7 +601,6 @@ int mdss_mdp_hist_irq_enable(u32 irq)
 			MDSS_MDP_REG_HIST_INTR_EN);
 		mdss_enable_irq(&mdss_mdp_hw);
 	}
-	spin_unlock_irqrestore(&mdp_lock, irq_flags);
 
 	return ret;
 }
@@ -634,10 +631,8 @@ void mdss_mdp_irq_disable(u32 intr_type, u32 intf_num)
 
 void mdss_mdp_hist_irq_disable(u32 irq)
 {
-	unsigned long irq_flags;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 
-	spin_lock_irqsave(&mdp_lock, irq_flags);
 	if (!(mdata->mdp_hist_irq_mask & irq)) {
 		pr_warn("MDSS MDP IRQ-%x is NOT set, mask=%x\n",
 				irq, mdata->mdp_hist_irq_mask);
@@ -649,7 +644,6 @@ void mdss_mdp_hist_irq_disable(u32 irq)
 			(mdata->mdp_hist_irq_mask == 0))
 			mdss_disable_irq(&mdss_mdp_hw);
 	}
-	spin_unlock_irqrestore(&mdp_lock, irq_flags);
 }
 
 /*
@@ -664,18 +658,15 @@ void mdss_mdp_hist_irq_disable(u32 irq)
 */
 void mdss_mdp_hist_irq_mask_locked()
 {
-	unsigned long irq_flags, intr_flags;
+	unsigned long intr_flags;
 	u32 irq, mask;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 
 	spin_lock_irqsave(&mdata->hist_intr.lock, intr_flags);
-	spin_lock_irqsave(&mdp_lock, irq_flags);
-	pr_debug("Masking over commit irq=0%x\n", mdata->hist_intr.curr);
 	irq = mdata->hist_intr.curr;
 	mask = mdata->mdp_hist_irq_mask | irq;
 	writel_relaxed(irq, mdata->mdp_base + MDSS_MDP_REG_HIST_INTR_CLEAR);
 	writel_relaxed(mask, mdata->mdp_base + MDSS_MDP_REG_HIST_INTR_EN);
-	spin_unlock_irqrestore(&mdp_lock, irq_flags);
 	spin_unlock_irqrestore(&mdata->hist_intr.lock, intr_flags);
 }
 
