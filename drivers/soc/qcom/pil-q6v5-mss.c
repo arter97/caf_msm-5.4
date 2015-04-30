@@ -284,11 +284,23 @@ static int pil_mss_loadable_init(struct modem_data *drv,
 
 	prop = of_find_property(pdev->dev.of_node, "vdd_mss-supply", NULL);
 	if (prop) {
+		int voltage = 0;
 		q6->vreg = devm_regulator_get(&pdev->dev, "vdd_mss");
 		if (IS_ERR(q6->vreg))
 			return PTR_ERR(q6->vreg);
 
-		ret = regulator_set_voltage(q6->vreg, VDD_MSS_UV,
+		if (of_find_property(pdev->dev.of_node,
+					"qcom,vdd_mss", NULL)) {
+			ret = of_property_read_u32(pdev->dev.of_node,
+					"qcom,vdd_mss", &voltage);
+			if (ret) {
+				dev_err(&pdev->dev, "Failed to find vdd_mss voltage\n");
+				return ret;
+			}
+		} else
+			voltage = VDD_MSS_UV;
+
+		ret = regulator_set_voltage(q6->vreg, voltage,
 						MAX_VDD_MSS_UV);
 		if (ret)
 			dev_err(&pdev->dev, "Failed to set vreg voltage.\n");

@@ -2267,6 +2267,8 @@
 		vdd_cx-supply = <&pm8994_s1_corner>;
 		vdd_mx-supply = <&pm8994_s2_corner>;
 		vdd_mx-uV = <6>;
+		vdd_mss-supply = <&pm8994_s7>;
+		qcom,vdd_mss = <800000>;
 		vdd_pll-supply = <&pm8994_l12>;
 		qcom,vdd_pll = <1800000>;
 		qcom,firmware-name = "modem";
