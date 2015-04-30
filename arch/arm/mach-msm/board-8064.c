@@ -2761,7 +2761,6 @@ static struct platform_device *common_devices[] __initdata = {
 	&msm_bus_8064_cpss_fpb,
 	&apq8064_msm_device_vidc,
 	&apq8064_msm_ba_device,
-	&msm_pil_dsps,
 	&msm_8960_q6_lpass,
 	&msm_pil_vidc,
 	&msm_gss,
@@ -2887,7 +2886,6 @@ static struct platform_device *mplatform_common_devices[] __initdata = {
 	&msm_bus_8064_cpss_fpb,
 	&apq8064_msm_device_vidc,
 	&apq8064_msm_ba_device,
-	&msm_pil_dsps,
 	&msm_8960_q6_lpass,
 	&msm_pil_vidc,
 	&msm_gss,
@@ -3500,19 +3498,6 @@ static struct platform_device mpq_keypad_device = {
 		.platform_data  = &mpq_keypad_data,
 	},
 };
-
-/* Sensors DSPS platform data */
-#define DSPS_PIL_GENERIC_NAME		"dsps"
-static void __init apq8064_init_dsps(void)
-{
-	struct msm_dsps_platform_data *pdata =
-		msm_dsps_device_8064.dev.platform_data;
-	pdata->pil_name = DSPS_PIL_GENERIC_NAME;
-	pdata->gpios = NULL;
-	pdata->gpios_num = 0;
-
-	platform_device_register(&msm_dsps_device_8064);
-}
 
 #define I2C_SURF 1
 #define I2C_FFA  (1 << 1)
@@ -4131,10 +4116,6 @@ static void __init apq8064_common_init(void)
 	platform_device_register(&apq8064_slim_ctrl);
 	slim_register_board_info(apq8064_slim_devices,
 		ARRAY_SIZE(apq8064_slim_devices));
-	if (!PLATFORM_IS_MPQ8064()) {
-		apq8064_init_dsps();
-		platform_device_register(&msm_8960_riva);
-	}
 	BUG_ON(msm_pm_boot_init(&msm_pm_boot_pdata));
 	apq8064_epm_adc_init();
 }

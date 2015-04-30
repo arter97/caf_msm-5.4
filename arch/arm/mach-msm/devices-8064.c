@@ -2229,16 +2229,6 @@ static struct resource smd_resource[] = {
 		.flags  = IORESOURCE_IRQ,
 	},
 	{
-		.name   = "dsps_a11",
-		.start  = INT_DSPS_A11,
-		.flags  = IORESOURCE_IRQ,
-	},
-	{
-		.name   = "dsps_a11_smsm",
-		.start  = INT_DSPS_A11_SMSM,
-		.flags  = IORESOURCE_IRQ,
-	},
-	{
 		.name   = "wcnss_a11",
 		.start  = INT_WCNSS_A11,
 		.flags  = IORESOURCE_IRQ,
@@ -2296,29 +2286,6 @@ static struct smd_subsystem_config smd_config_list[] = {
 		.smsm_int.out_bit_pos =  1 << 14,
 		.smsm_int.out_base = (void __iomem *)MSM_APCS_GCC_BASE,
 		.smsm_int.out_offset = 0x8,
-	},
-	{
-		.irq_config_id = SMD_DSPS,
-		.subsys_name = "dsps",
-		.edge = SMD_APPS_DSPS,
-
-		.smd_int.irq_name = "dsps_a11",
-		.smd_int.flags = IRQF_TRIGGER_RISING,
-		.smd_int.irq_id = -1,
-		.smd_int.device_name = "smd_dev",
-		.smd_int.dev_id = 0,
-		.smd_int.out_bit_pos =  1,
-		.smd_int.out_base = (void __iomem *)MSM_SIC_NON_SECURE_BASE,
-		.smd_int.out_offset = 0x4080,
-
-		.smsm_int.irq_name = "dsps_a11_smsm",
-		.smsm_int.flags = IRQF_TRIGGER_RISING,
-		.smsm_int.irq_id = -1,
-		.smsm_int.device_name = "smd_smsm",
-		.smsm_int.dev_id = 0,
-		.smsm_int.out_bit_pos =  1,
-		.smsm_int.out_base = (void __iomem *)MSM_SIC_NON_SECURE_BASE,
-		.smsm_int.out_offset = 0x4094,
 	},
 	{
 		.irq_config_id = SMD_WCNSS,
@@ -2817,8 +2784,6 @@ static char *master_names[] = {
 	"KPSS",
 	"MPSS",
 	"LPASS",
-	"RIVA",
-	"DSPS",
 };
 
 static struct msm_rpm_master_stats_platform_data msm_rpm_master_stat_pdata = {
@@ -2855,74 +2820,10 @@ struct platform_device apq8064_rpm_log_device = {
 	},
 };
 
-/* Sensors DSPS platform data */
-
-#define PPSS_DSPS_TCM_CODE_BASE   0x12000000
-#define PPSS_DSPS_TCM_CODE_SIZE   0x28000
-#define PPSS_DSPS_TCM_BUF_BASE    0x12040000
-#define PPSS_DSPS_TCM_BUF_SIZE    0x4000
-#define PPSS_DSPS_PIPE_BASE       0x12800000
-#define PPSS_DSPS_PIPE_SIZE       0x4000
-#define PPSS_DSPS_DDR_BASE        0x8fe00000
-#define PPSS_DSPS_DDR_SIZE        0x100000
 #define PPSS_SMEM_BASE            0x80000000
 #define PPSS_SMEM_SIZE            0x200000
 #define PPSS_REG_PHYS_BASE        0x12080000
 #define PPSS_WDOG_UNMASKED_INT_EN 0x1808
-
-static struct dsps_clk_info dsps_clks[] = {};
-static struct dsps_regulator_info dsps_regs[] = {};
-
-/*
- * Note: GPIOs field is	intialized in run-time at the function
- * apq8064_init_dsps().
- */
-
-struct msm_dsps_platform_data msm_dsps_pdata_8064 = {
-	.clks = dsps_clks,
-	.clks_num = ARRAY_SIZE(dsps_clks),
-	.gpios = NULL,
-	.gpios_num = 0,
-	.regs = dsps_regs,
-	.regs_num = ARRAY_SIZE(dsps_regs),
-	.dsps_pwr_ctl_en = 1,
-	.tcm_code_start = PPSS_DSPS_TCM_CODE_BASE,
-	.tcm_code_size = PPSS_DSPS_TCM_CODE_SIZE,
-	.tcm_buf_start = PPSS_DSPS_TCM_BUF_BASE,
-	.tcm_buf_size = PPSS_DSPS_TCM_BUF_SIZE,
-	.pipe_start = PPSS_DSPS_PIPE_BASE,
-	.pipe_size = PPSS_DSPS_PIPE_SIZE,
-	.ddr_start = PPSS_DSPS_DDR_BASE,
-	.ddr_size = PPSS_DSPS_DDR_SIZE,
-	.smem_start = PPSS_SMEM_BASE,
-	.smem_size  = PPSS_SMEM_SIZE,
-	.ppss_wdog_unmasked_int_en_reg = PPSS_WDOG_UNMASKED_INT_EN,
-	.signature = DSPS_SIGNATURE,
-};
-
-static struct resource msm_dsps_resources[] = {
-	{
-		.start = PPSS_REG_PHYS_BASE,
-		.end   = PPSS_REG_PHYS_BASE + SZ_8K - 1,
-		.name  = "ppss_reg",
-		.flags = IORESOURCE_MEM,
-	},
-
-	{
-		.start = PPSS_WDOG_TIMER_IRQ,
-		.end   = PPSS_WDOG_TIMER_IRQ,
-		.name  = "ppss_wdog",
-		.flags = IORESOURCE_IRQ,
-	},
-};
-
-struct platform_device msm_dsps_device_8064 = {
-	.name          = "msm_dsps",
-	.id            = 0,
-	.num_resources = ARRAY_SIZE(msm_dsps_resources),
-	.resource      = msm_dsps_resources,
-	.dev.platform_data = &msm_dsps_pdata_8064,
-};
 
 #ifdef CONFIG_MSM_MPM
 static uint16_t msm_mpm_irqs_m2a[MSM_MPM_NR_MPM_IRQS] __initdata = {
@@ -2999,10 +2900,6 @@ static uint16_t msm_mpm_bypassed_apps_irqs[] __initdata = {
 	LPASS_SCSS_GP_HIGH_IRQ,
 	SPS_MTI_30,
 	SPS_MTI_31,
-	RIVA_APSS_SPARE_IRQ,
-	RIVA_APPS_WLAN_SMSM_IRQ,
-	RIVA_APPS_WLAN_RX_DATA_AVAIL_IRQ,
-	RIVA_APPS_WLAN_DATA_XFER_DONE_IRQ,
 	PM8821_SEC_IRQ_N,
 };
 
