@@ -566,6 +566,7 @@ enum {
 	metadata_op_none,
 	metadata_op_base_blend,
 	metadata_op_frame_rate,
+	metadata_op_crc,
 	metadata_op_max
 };
 
@@ -579,6 +580,7 @@ struct msmfb_metadata {
 	union {
 		struct mdp_blend_cfg blend_cfg;
 		uint32_t panel_frame_rate;
+		uint32_t misr_crc;
 	} data;
 };
 

@@ -735,6 +735,55 @@ extern struct mdp_hist_mgmt *mdp_hist_mgmt_array[];
 #define MDP_DMA_P_LUT_C2_EN   BIT(2)
 #define MDP_DMA_P_LUT_POST    BIT(4)
 
+#define MISR_MAX_ONE_FRAME_TIME_WAIT  20
+#define MAX_RETRIES_CRC_CAPTURE       20
+
+/* MDP_TEST_BUS output select (MDP_SEL_TEST_BUS_CLK_DOMAIN) */
+#define MDP_SEL_TEST_BUS_CLK_DOMAIN_CORE_CLOCK    0x0
+#define MDP_SEL_TEST_BUS_CLK_DOMAIN_HCLK          0x1
+#define MDP_SEL_TEST_BUS_CLK_DOMAIN_PCLK          0x2
+#define MDP_SEL_TEST_BUS_CLK_DOMAIN_TV_CLK        0x3
+#define MDP_SEL_TEST_BUS_CLK_DOMAIN_DSI_PCLK      0x4
+#define MDP_SEL_TEST_BUS_CLK_DOMAIN_AXI_CLK       0x5
+
+/* MDP_TEST_MODE_HCLK test point select (MDP_TEST_MODE_HCLK) */
+#define MDP_TEST_MODE_HCLK_DISABLED               0x00
+#define MDP_TEST_MODE_HCLK_MDDI1                  0x10
+#define MDP_TEST_MODE_HCLK_MDDI2                  0x20
+#define MDP_TEST_MODE_HCLK_AHBM                   0x30
+
+/* MDP_TEST_MODE_DCLK test point select (MDP_TEST_MODE_DCLK) */
+#define MDP_TEST_MODE_DCLK_DISABLED               0x00
+#define MDP_TEST_MODE_DCLK_LCDC1                  0x10
+#define MDP_TEST_MODE_DCLK_LCDC2                  0x20
+#define MDP_TEST_MODE_DCLK_DSI_CMD                0x30
+
+/* MDP_TEST_MODE_TVCLK test point select (MDP_TEST_MODE_TVCLK) */
+#define MDP_TEST_MODE_TVCLK_DISABLED              0x00
+#define MDP_TEST_MODE_TVCLK_ATV                   0x10
+#define MDP_TEST_MODE_TVCLK_DTV1                  0x20
+#define MDP_TEST_MODE_TVCLK_DTV2                  0x30
+
+/* MDP_TEST_MODE_DSI_PCLK test point select (MDP_TEST_MODE_DSI_PCLK) */
+#define MDP_TEST_MODE_DSI_PCLK_DISABLED           0x00
+#define MDP_TEST_MODE_DSI_PCLK_DSI_VIDEO1         0x10
+#define MDP_TEST_MODE_DSI_PCLK_DSI_VIDEO2         0x20
+#define MDP_TEST_MODE_DSI_PCLK_DSI_CMD            0x30
+
+/* MISR Reset (MDP_TEST_MISR_RESET_CLK/HCLK/DCLK/TVCLK/DSI_PCLK) */
+#define MDP_TEST_MISR_SW_RESET                    0x1
+
+/*
+ * Capture a maximum frame count of 1 (bits 9:2) and stop after that
+ * frame count (bit 1) (MDP_TEST_CAPTURED_DCLK/TVCLK/DSI_PCLK)
+ */
+#define MDP_TEST_CAPTURE_FRAME_COUNT              0x1
+#define MDP_TEST_CAPTURE_FRAME_COUNT_MASK \
+		((MDP_TEST_CAPTURE_FRAME_COUNT << 2) | BIT(1))
+
+/* MISR captured (MDP_TEST_CAPTURED_DCLK/TVCLK/DSI_PCLK) */
+#define MDP_TEST_CAPTURED_MASK                    0x1
+
 void mdp_hw_init(void);
 int mdp_ppp_pipe_wait(void);
 void mdp_pipe_kickoff_simplified(uint32 term);
@@ -922,6 +971,7 @@ int mdp_ppp_v4l2_overlay_play(struct fb_info *info,
 void mdp_update_pm(struct msm_fb_data_type *mfd, ktime_t pre_vsync);
 
 u32 mdp_get_panel_framerate(struct msm_fb_data_type *mfd);
+int mdp_misr_get(struct msm_fb_data_type *mfd, uint32_t *crc);
 
 #ifdef CONFIG_FB_MSM_DTV
 void mdp_vid_quant_set(void);

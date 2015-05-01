@@ -3984,6 +3984,12 @@ static int msmfb_get_metadata(struct msm_fb_data_type *mfd,
 		metadata_ptr->data.panel_frame_rate =
 			mdp_get_panel_framerate(mfd);
 		break;
+	case metadata_op_crc:
+		ret = mdp_misr_get(mfd, &metadata_ptr->data.misr_crc);
+		if (ret)
+			pr_err("%s: mdp_misr_get failed, error=%d\n",
+				__func__, ret);
+		break;
 	default:
 		pr_warn("Unsupported request to MDP META IOCTL.\n");
 		ret = -EINVAL;

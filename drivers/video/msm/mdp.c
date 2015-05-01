@@ -1574,6 +1574,374 @@ u32 mdp_get_panel_framerate(struct msm_fb_data_type *mfd)
 	return frame_rate;
 }
 
+static void mdp_disable_lvds(void)
+{
+	MDP_OUTP(MDP_BASE + 0xC0000, 0);
+}
+
+static void mdp_enable_lvds(void)
+{
+	MDP_OUTP(MDP_BASE + 0xC0000, 1);
+}
+
+static void mdp_disable_dtv(void)
+{
+	MDP_OUTP(MDP_BASE + 0xD0000, 0);
+}
+
+static void mdp_enable_dtv(void)
+{
+	MDP_OUTP(MDP_BASE + 0xD0000, 1);
+}
+
+static void mdp_disable_dsi_video(void)
+{
+	MDP_OUTP(MDP_BASE + 0xE0000, 0);
+}
+
+static void mdp_enable_dsi_video(void)
+{
+	MDP_OUTP(MDP_BASE + 0xE0000, 1);
+}
+
+static int mdp_misr_setup(uint32_t type)
+{
+	int ret = 0;
+
+	switch (type) {
+	case LCDC_PANEL:
+		MDP_OUTP(MDP_BASE + 0x0044, MDP_SEL_TEST_BUS_CLK_DOMAIN_PCLK);
+		MDP_OUTP(MDP_BASE + 0xF0200, MDP_TEST_MODE_DCLK_LCDC1);
+		break;
+	case LVDS_PANEL:
+		MDP_OUTP(MDP_BASE + 0x0044, MDP_SEL_TEST_BUS_CLK_DOMAIN_PCLK);
+		MDP_OUTP(MDP_BASE + 0xF0200, MDP_TEST_MODE_DCLK_LCDC2);
+		break;
+	case TV_PANEL:
+		MDP_OUTP(MDP_BASE + 0x0044, MDP_SEL_TEST_BUS_CLK_DOMAIN_TV_CLK);
+		MDP_OUTP(MDP_BASE + 0xF0300, MDP_TEST_MODE_TVCLK_ATV);
+		break;
+	case DTV_PANEL:
+		MDP_OUTP(MDP_BASE + 0x0044, MDP_SEL_TEST_BUS_CLK_DOMAIN_TV_CLK);
+		MDP_OUTP(MDP_BASE + 0xF0300, MDP_TEST_MODE_TVCLK_DTV1);
+		break;
+	case MIPI_VIDEO_PANEL:
+		MDP_OUTP(MDP_BASE + 0x0044, MDP_SEL_TEST_BUS_CLK_DOMAIN_PCLK);
+		MDP_OUTP(MDP_BASE + 0xF0400, MDP_TEST_MODE_DSI_PCLK_DSI_VIDEO1);
+		break;
+	case MIPI_CMD_PANEL:
+		MDP_OUTP(MDP_BASE + 0x0044, MDP_SEL_TEST_BUS_CLK_DOMAIN_PCLK);
+		MDP_OUTP(MDP_BASE + 0xF0400, MDP_TEST_MODE_DSI_PCLK_DSI_CMD);
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+
+static int mdp_misr_reset(uint32_t type)
+{
+	int ret = 0;
+
+	switch (type) {
+	case LCDC_PANEL:
+	case LVDS_PANEL:
+		MDP_OUTP(MDP_BASE + 0xF0204, MDP_TEST_MISR_SW_RESET);
+		break;
+	case TV_PANEL:
+	case DTV_PANEL:
+		MDP_OUTP(MDP_BASE + 0xF0304, MDP_TEST_MISR_SW_RESET);
+		break;
+	case MIPI_VIDEO_PANEL:
+	case MIPI_CMD_PANEL:
+		MDP_OUTP(MDP_BASE + 0xF0404, MDP_TEST_MISR_SW_RESET);
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+
+static int mdp_misr_read(uint32_t type, uint32_t *value)
+{
+	int ret = 0;
+
+	if (NULL == value) {
+		ret = -EINVAL;
+	} else {
+		switch (type) {
+		case LCDC_PANEL:
+		case LVDS_PANEL:
+			*value = inpdw(MDP_BASE + 0xF020C);
+			break;
+		case TV_PANEL:
+		case DTV_PANEL:
+			*value = inpdw(MDP_BASE + 0xF030C);
+			break;
+		case MIPI_VIDEO_PANEL:
+		case MIPI_CMD_PANEL:
+			*value = inpdw(MDP_BASE + 0xF040C);
+			break;
+		default:
+			ret = -EINVAL;
+			break;
+		}
+	}
+
+	return ret;
+}
+
+static int mdp_misr_set_frame_count(uint32_t type)
+{
+	int ret = 0;
+
+	switch (type) {
+	case LCDC_PANEL:
+	case LVDS_PANEL:
+		MDP_OUTP(MDP_BASE + 0xF0210, MDP_TEST_CAPTURE_FRAME_COUNT_MASK);
+		break;
+	case TV_PANEL:
+	case DTV_PANEL:
+		MDP_OUTP(MDP_BASE + 0xF0310, MDP_TEST_CAPTURE_FRAME_COUNT_MASK);
+		break;
+	case MIPI_VIDEO_PANEL:
+	case MIPI_CMD_PANEL:
+		MDP_OUTP(MDP_BASE + 0xF0410, MDP_TEST_CAPTURE_FRAME_COUNT_MASK);
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+
+static int mdp_misr_get_capture_status(uint32_t type)
+{
+	int status = 0;
+
+	switch (type) {
+	case LCDC_PANEL:
+	case LVDS_PANEL:
+		status = inpdw(MDP_BASE + 0xF0210) & MDP_TEST_CAPTURED_MASK;
+		break;
+	case TV_PANEL:
+	case DTV_PANEL:
+		status = inpdw(MDP_BASE + 0xF0310) & MDP_TEST_CAPTURED_MASK;
+		break;
+	case MIPI_VIDEO_PANEL:
+	case MIPI_CMD_PANEL:
+		status = inpdw(MDP_BASE + 0xF0410) & MDP_TEST_CAPTURED_MASK;
+		break;
+	default:
+		status = 0;
+		break;
+	}
+
+	return status;
+}
+
+static int mdp_misr_read_captured(uint32_t type, uint32_t *value)
+{
+	int ret = 0;
+	if (NULL == value) {
+		ret = -EINVAL;
+	} else {
+		switch (type) {
+		case LCDC_PANEL:
+		case LVDS_PANEL:
+			*value = inpdw(MDP_BASE + 0xF0214);
+			break;
+		case TV_PANEL:
+		case DTV_PANEL:
+			*value = inpdw(MDP_BASE + 0xF0314);
+			break;
+		case MIPI_VIDEO_PANEL:
+		case MIPI_CMD_PANEL:
+			*value = inpdw(MDP_BASE + 0xF0414);
+			break;
+		default:
+			ret = -EINVAL;
+			break;
+		}
+	}
+	pr_debug("%s panel type = %d, crc = %08X\n", __func__, type, *value);
+	return ret;
+}
+
+int mdp_misr_get(struct msm_fb_data_type *mfd, uint32_t *crc)
+{
+	int ret = 0;
+	uint32_t value = 0;
+	int retry = 0;
+	int status;
+
+	if (!mfd || !crc) {
+		pr_err("%s misr parameter error!\n", __func__);
+		return -EINVAL;
+	}
+
+	mdp_clk_ctrl(1);
+	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+
+	ret = mdp_misr_setup(mfd->panel_info.type);
+	if (ret) {
+		pr_err("%s setup misr failed!\n", __func__);
+		goto out;
+	}
+	ret = mdp_misr_reset(mfd->panel_info.type);
+	if (ret) {
+		pr_err("%s reset misr failed!\n", __func__);
+		goto out;
+	}
+
+	switch (mfd->panel_info.type) {
+	case LVDS_PANEL:
+		mdp_disable_lvds();
+		/* Wait for frame completion */
+		msleep(mfd->panel_info.frame_interval + 2);
+		mdp_misr_set_frame_count(LVDS_PANEL);
+		mdp_misr_reset(LVDS_PANEL);
+		mdp_enable_lvds();
+		/* Need delay between ON and OFF */
+		msleep(mfd->panel_info.frame_interval << 1);
+		mdp_disable_lvds();
+		/* wait for 1 frame time to ensure engine is off */
+		msleep(mfd->panel_info.frame_interval + 2);
+		/*
+		 * Power OFF the display. This is required for LVDS to disable
+		 * the clock lanes, only after which there is an updated MISR
+		 */
+		panel_next_off(mfd->pdev);
+		/* Read MISR value */
+		status = mdp_misr_get_capture_status(LVDS_PANEL);
+		while (!status && retry < MAX_RETRIES_CRC_CAPTURE) {
+			msleep(MISR_MAX_ONE_FRAME_TIME_WAIT);
+			status = mdp_misr_get_capture_status(LVDS_PANEL);
+			retry++;
+		}
+		if (MAX_RETRIES_CRC_CAPTURE == retry) {
+			pr_err("%s capture crc failed!\n", __func__);
+			ret = -EINVAL;
+		} else {
+			ret = mdp_misr_read_captured(LVDS_PANEL, &value);
+		}
+		panel_next_on(mfd->pdev);
+		mdp_enable_lvds();
+		break;
+	case DTV_PANEL:
+		if (mdp_rev == MDP_REV_44 || mdp_rev == MDP_REV_43) {
+			mdp_disable_dtv();
+			/* Wait for frame completion and add 2 ms extra time. */
+			msleep(mfd->panel_info.frame_interval + 2);
+			mdp_misr_set_frame_count(DTV_PANEL);
+			mdp_misr_reset(DTV_PANEL);
+			mdp_enable_dtv();
+			/* Need delay ~10 PCLK between DTV ON and OFF. */
+			msleep(mfd->panel_info.frame_interval);
+			mdp_disable_dtv();
+			/* Wait for frame completion and add 2 ms extra time. */
+			msleep(mfd->panel_info.frame_interval + 2);
+			/* Read MISR value */
+			status = mdp_misr_get_capture_status(DTV_PANEL);
+			while (!status && retry < MAX_RETRIES_CRC_CAPTURE) {
+				msleep(mfd->panel_info.frame_interval);
+				status = mdp_misr_get_capture_status(DTV_PANEL);
+				retry++;
+			}
+			if (MAX_RETRIES_CRC_CAPTURE == retry) {
+				pr_err("%s capture crc failed!\n", __func__);
+				ret = -EINVAL;
+			} else {
+				ret = mdp_misr_read_captured(DTV_PANEL, &value);
+			}
+			mdp_enable_dtv();
+		} else if (mdp_rev == MDP_REV_42 || mdp_rev == MDP_REV_41) {
+			mdp_disable_dtv();
+			/* Wait for frame completion and add 2 ms extra time. */
+			msleep(mfd->panel_info.frame_interval + 2);
+			mdp_misr_reset(DTV_PANEL);
+			mdp_enable_dtv();
+			/* Need delay ~10 PCLK between DTV ON and OFF. */
+			msleep(mfd->panel_info.frame_interval >> 1);
+			mdp_disable_dtv();
+			/* Wait for frame completion and add 2 ms extra time. */
+			msleep(mfd->panel_info.frame_interval + 2);
+			ret = mdp_misr_read(DTV_PANEL, &value);
+			mdp_enable_dtv();
+		} else {
+			pr_err("%s HW ver=%d NOT SUPPORTED for panel type=%u\n",
+				__func__, mdp_rev, mfd->panel_info.type);
+			ret = -EINVAL;
+		}
+		break;
+	case MIPI_VIDEO_PANEL:
+		if (mdp_rev == MDP_REV_44 || mdp_rev == MDP_REV_43) {
+			mdp_disable_dsi_video();
+			/* Wait for frame completion */
+			msleep(MISR_MAX_ONE_FRAME_TIME_WAIT);
+			mdp_misr_set_frame_count(MIPI_VIDEO_PANEL);
+			mdp_misr_reset(MIPI_VIDEO_PANEL);
+			panel_next_off(mfd->pdev);
+			panel_next_on(mfd->pdev);
+			mdp_enable_dsi_video();
+			mdp_disable_dsi_video();
+			/* Wait for frame completion */
+			msleep(MISR_MAX_ONE_FRAME_TIME_WAIT);
+			/* Read MISR value */
+			status = mdp_misr_get_capture_status(MIPI_VIDEO_PANEL);
+			while (!status && retry < MAX_RETRIES_CRC_CAPTURE) {
+				msleep(MISR_MAX_ONE_FRAME_TIME_WAIT);
+				status = mdp_misr_get_capture_status(
+						MIPI_VIDEO_PANEL);
+				retry++;
+			}
+			if (MAX_RETRIES_CRC_CAPTURE == retry) {
+				pr_err("%s capture crc failed!\n", __func__);
+				ret = -EINVAL;
+			} else {
+				ret = mdp_misr_read_captured(MIPI_VIDEO_PANEL,
+						&value);
+			}
+			panel_next_off(mfd->pdev);
+			panel_next_on(mfd->pdev);
+			mdp_enable_dsi_video();
+		} else {
+			mdp_disable_dsi_video();
+			/* Wait for frame completion */
+			msleep(MISR_MAX_ONE_FRAME_TIME_WAIT);
+			mdp_misr_reset(MIPI_VIDEO_PANEL);
+			mdp_misr_read(MIPI_VIDEO_PANEL, &value);
+			panel_next_off(mfd->pdev);
+			panel_next_on(mfd->pdev);
+			mdp_enable_dsi_video();
+			mdp_disable_dsi_video();
+			/* Wait for frame completion */
+			msleep(MISR_MAX_ONE_FRAME_TIME_WAIT);
+			ret = mdp_misr_read(MIPI_VIDEO_PANEL, &value);
+			panel_next_off(mfd->pdev);
+			panel_next_on(mfd->pdev);
+			mdp_enable_dsi_video();
+		}
+		break;
+	default:
+		pr_err("%s Panel type %d MISR Not supported!\n",
+			__func__, mfd->panel_info.type);
+		ret = -EINVAL;
+		break;
+	}
+
+out:
+	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
+	mdp_clk_ctrl(0);
+	*crc = value;
+	return ret;
+}
+
 static int mdp_diff_to_next_vsync(ktime_t cur_time,
 			ktime_t last_vsync, u32 vsync_period)
 {
