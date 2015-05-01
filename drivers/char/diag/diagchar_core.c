@@ -139,15 +139,19 @@ static unsigned int max_clients = 15;
 static unsigned int threshold_client_limit = 30;
 module_param(max_clients, uint, 0);
 
-/* This is the maximum number of pkt registrations supported at initialization*/
-int diag_max_reg = 600;
-int diag_threshold_reg = 750;
-
 /* Timer variables */
 static struct timer_list drain_timer;
 static int timer_in_progress;
-void *buf_hdlc;
-static int buf_hdlc_ctxt;
+
+struct diag_apps_data_t {
+	void *buf;
+	uint32_t len;
+	int ctxt;
+};
+
+static struct diag_apps_data_t hdlc_data;
+static struct diag_apps_data_t non_hdlc_data;
+static struct mutex apps_data_mutex;
 
 #define DIAGPKT_MAX_DELAYED_RSP 0xFFFF
 
@@ -193,27 +197,35 @@ static void drain_timer_func(unsigned long data)
 	queue_work(driver->diag_wq , &(driver->diag_drain_work));
 }
 
-void diag_drain_work_fn(struct work_struct *work)
+static void diag_drain_apps_data(struct diag_apps_data_t *data)
 {
 	int err = 0;
+
+	if (!data || !data->buf)
+		return;
+
+	err = diag_mux_write(DIAG_LOCAL_PROC, data->buf, data->len,
+			     data->ctxt);
+	if (err)
+		diagmem_free(driver, data->buf, POOL_TYPE_HDLC);
+
+	data->buf = NULL;
+	data->len = 0;
+}
+
+void diag_update_user_client_work_fn(struct work_struct *work)
+{
+	diag_update_userspace_clients(HDLC_SUPPORT_TYPE);
+}
+
+void diag_drain_work_fn(struct work_struct *work)
+{
 	timer_in_progress = 0;
 
-	mutex_lock(&driver->diagchar_mutex);
-	if (buf_hdlc) {
-		err = diag_mux_write(DIAG_LOCAL_PROC, buf_hdlc, driver->used,
-				     buf_hdlc_ctxt);
-		if (err)
-			diagmem_free(driver, buf_hdlc, POOL_TYPE_HDLC);
-		buf_hdlc = NULL;
-#ifdef DIAG_DEBUG
-		pr_debug("diag: Number of bytes written "
-				 "from timer is %d ", driver->used);
-#endif
-		driver->used = 0;
-	}
-
-	mutex_unlock(&driver->diagchar_mutex);
-
+	mutex_lock(&apps_data_mutex);
+	diag_drain_apps_data(&hdlc_data);
+	diag_drain_apps_data(&non_hdlc_data);
+	mutex_unlock(&apps_data_mutex);
 }
 
 void check_drain_timer(void)
@@ -422,9 +434,7 @@ static int diagchar_close(struct inode *inode, struct file *file)
 	diag_close_logging_process(current->tgid);
 
 	/* Delete the pkt response table entry for the exiting process */
-	for (i = 0; i < diag_max_reg; i++)
-			if (driver->table[i].process_id == current->tgid)
-					driver->table[i].process_id = 0;
+	diag_cmd_remove_reg_by_pid(current->tgid);
 
 	mutex_lock(&driver->diagchar_mutex);
 	driver->ref_count--;
@@ -444,81 +454,46 @@ static int diagchar_close(struct inode *inode, struct file *file)
 	return 0;
 }
 
-int diag_find_polling_reg(int i)
+void diag_record_stats(int type, int flag)
 {
-	uint16_t subsys_id, cmd_code_lo, cmd_code_hi;
+	struct diag_pkt_stats_t *pkt_stats = NULL;
 
-	subsys_id = driver->table[i].subsys_id;
-	cmd_code_lo = driver->table[i].cmd_code_lo;
-	cmd_code_hi = driver->table[i].cmd_code_hi;
-
-	if (driver->table[i].cmd_code == 0xFF) {
-		if (subsys_id == 0xFF && cmd_code_hi >= 0x0C &&
-			 cmd_code_lo <= 0x0C)
-			return 1;
-		if (subsys_id == 0x04 && cmd_code_hi >= 0x0E &&
-			 cmd_code_lo <= 0x0E)
-			return 1;
-		else if (subsys_id == 0x08 && cmd_code_hi >= 0x02 &&
-			 cmd_code_lo <= 0x02)
-			return 1;
-		else if (subsys_id == 0x32 && cmd_code_hi >= 0x03  &&
-			 cmd_code_lo <= 0x03)
-			return 1;
-		else if (subsys_id == 0x57 && cmd_code_hi >= 0x0E &&
-			 cmd_code_lo <= 0x0E)
-			return 1;
+	switch (type) {
+	case DATA_TYPE_EVENT:
+		pkt_stats = &driver->event_stats;
+		break;
+	case DATA_TYPE_F3:
+		pkt_stats = &driver->msg_stats;
+		break;
+	case DATA_TYPE_LOG:
+		pkt_stats = &driver->log_stats;
+		break;
+	case DATA_TYPE_RESPONSE:
+		pr_err_ratelimited("diag: In %s, dropping response. This shouldn't happen\n",
+				   __func__);
+		return;
+	default:
+		pr_err_ratelimited("diag: In %s, invalid pkt_type: %d\n",
+				   __func__, type);
+		return;
 	}
-	return 0;
-}
 
-void diag_clear_reg(int peripheral)
-{
-	int i;
-
-	mutex_lock(&driver->diagchar_mutex);
-	/* reset polling flag */
-	driver->polling_reg_flag = 0;
-	for (i = 0; i < diag_max_reg; i++) {
-		if (driver->table[i].client_id == peripheral)
-			driver->table[i].process_id = 0;
+	switch (flag) {
+	case PKT_ALLOC:
+		atomic_add(1, (atomic_t *)&pkt_stats->alloc_count);
+		break;
+	case PKT_DROP:
+		atomic_add(1, (atomic_t *)&pkt_stats->drop_count);
+		break;
+	case PKT_RESET:
+		atomic_set((atomic_t *)&pkt_stats->alloc_count, 0);
+		atomic_set((atomic_t *)&pkt_stats->drop_count, 0);
+		break;
+	default:
+		pr_err_ratelimited("diag: In %s, invalid flag: %d\n",
+				   __func__, flag);
+		return;
 	}
-	/* re-scan the registration table */
-	for (i = 0; i < diag_max_reg; i++) {
-		if (driver->table[i].process_id != 0 &&
-				diag_find_polling_reg(i) == 1) {
-			driver->polling_reg_flag = 1;
-			break;
-		}
-	}
-	mutex_unlock(&driver->diagchar_mutex);
-}
-
-int diag_add_reg(int j, struct bindpkt_params *params,
-				  unsigned int *count_entries)
-{
-	if (j < 0 || j >= diag_max_reg || !params || !count_entries)
-		return -EINVAL;
-
-	driver->table[j].cmd_code = params->cmd_code;
-	driver->table[j].subsys_id = params->subsys_id;
-	driver->table[j].cmd_code_lo = params->cmd_code_lo;
-	driver->table[j].cmd_code_hi = params->cmd_code_hi;
-
-	/* check if incoming reg is polling & polling is yet not registered */
-	if (driver->polling_reg_flag == 0)
-		if (diag_find_polling_reg(j) == 1)
-			driver->polling_reg_flag = 1;
-	if (params->proc_id == APPS_PROC) {
-		driver->table[j].process_id = current->tgid;
-		driver->table[j].client_id = APPS_DATA;
-	} else {
-		driver->table[j].process_id = NON_APPS_PROC;
-		driver->table[j].client_id = params->client_id;
-	}
-	(*count_entries)++;
-
-	return 1;
 }
 
 void diag_get_timestamp(char *time_str)
@@ -550,6 +525,211 @@ int diag_get_remote(int remote_info)
 	}
 
 	return remote_val;
+}
+
+int diag_cmd_chk_polling(struct diag_cmd_reg_entry_t *entry)
+{
+	int polling = DIAG_CMD_NOT_POLLING;
+
+	if (!entry)
+		return -EIO;
+
+	if (entry->cmd_code == DIAG_CMD_NO_SUBSYS) {
+		if (entry->subsys_id == DIAG_CMD_NO_SUBSYS &&
+		    entry->cmd_code_hi >= DIAG_CMD_STATUS &&
+		    entry->cmd_code_lo <= DIAG_CMD_STATUS)
+			polling = DIAG_CMD_POLLING;
+		else if (entry->subsys_id == DIAG_SS_WCDMA &&
+			 entry->cmd_code_hi >= DIAG_CMD_QUERY_CALL &&
+			 entry->cmd_code_lo <= DIAG_CMD_QUERY_CALL)
+			polling = DIAG_CMD_POLLING;
+		else if (entry->subsys_id == DIAG_SS_GSM &&
+			 entry->cmd_code_hi >= DIAG_CMD_QUERY_TMC &&
+			 entry->cmd_code_lo <= DIAG_CMD_QUERY_TMC)
+			polling = DIAG_CMD_POLLING;
+		else if (entry->subsys_id == DIAG_SS_PARAMS &&
+			 entry->cmd_code_hi >= DIAG_DIAG_POLL  &&
+			 entry->cmd_code_lo <= DIAG_DIAG_POLL)
+			polling = DIAG_CMD_POLLING;
+		else if (entry->subsys_id == DIAG_SS_TDSCDMA &&
+			 entry->cmd_code_hi >= DIAG_CMD_TDSCDMA_STATUS &&
+			 entry->cmd_code_lo <= DIAG_CMD_TDSCDMA_STATUS)
+			polling = DIAG_CMD_POLLING;
+	}
+
+	return polling;
+}
+
+static void diag_cmd_invalidate_polling(int change_flag)
+{
+	int polling = DIAG_CMD_NOT_POLLING;
+	struct list_head *start;
+	struct list_head *temp;
+	struct diag_cmd_reg_t *item = NULL;
+
+	if (change_flag == DIAG_CMD_ADD) {
+		if (driver->polling_reg_flag)
+			return;
+	}
+
+	driver->polling_reg_flag = 0;
+	list_for_each_safe(start, temp, &driver->cmd_reg_list) {
+		item = list_entry(start, struct diag_cmd_reg_t, link);
+		polling = diag_cmd_chk_polling(&item->entry);
+		if (polling == DIAG_CMD_POLLING) {
+			driver->polling_reg_flag = 1;
+			break;
+		}
+	}
+}
+
+int diag_cmd_add_reg(struct diag_cmd_reg_entry_t *new_entry, uint8_t proc,
+		     int pid)
+{
+	struct diag_cmd_reg_t *new_item = NULL;
+
+	if (!new_entry) {
+		pr_err("diag: In %s, invalid new entry\n", __func__);
+		return -EINVAL;
+	}
+
+	if (proc > APPS_DATA) {
+		pr_err("diag: In %s, invalid peripheral %d\n", __func__, proc);
+		return -EINVAL;
+	}
+
+	if (proc != APPS_DATA)
+		pid = INVALID_PID;
+
+	new_item = kzalloc(sizeof(struct diag_cmd_reg_t), GFP_KERNEL);
+	if (!new_item) {
+		pr_err("diag: In %s, unable to create memory for new command registration\n",
+		       __func__);
+		return -ENOMEM;
+	}
+	kmemleak_not_leak(new_item);
+
+	new_item->pid = pid;
+	new_item->proc = proc;
+	memcpy(&new_item->entry, new_entry,
+	       sizeof(struct diag_cmd_reg_entry_t));
+	INIT_LIST_HEAD(&new_item->link);
+
+	mutex_lock(&driver->cmd_reg_mutex);
+	list_add_tail(&new_item->link, &driver->cmd_reg_list);
+	driver->cmd_reg_count++;
+	diag_cmd_invalidate_polling(DIAG_CMD_ADD);
+	mutex_unlock(&driver->cmd_reg_mutex);
+
+	return 0;
+}
+
+struct diag_cmd_reg_entry_t *diag_cmd_search(
+			struct diag_cmd_reg_entry_t *entry, int proc)
+{
+	struct list_head *start;
+	struct list_head *temp;
+	struct diag_cmd_reg_t *item = NULL;
+	struct diag_cmd_reg_entry_t *temp_entry = NULL;
+
+	if (!entry) {
+		pr_err("diag: In %s, invalid entry\n", __func__);
+		return NULL;
+	}
+
+	list_for_each_safe(start, temp, &driver->cmd_reg_list) {
+		item = list_entry(start, struct diag_cmd_reg_t, link);
+		temp_entry = &item->entry;
+		if (temp_entry->cmd_code == entry->cmd_code &&
+		    temp_entry->subsys_id == entry->subsys_id &&
+		    temp_entry->cmd_code_hi >= entry->cmd_code_hi &&
+		    temp_entry->cmd_code_lo <= entry->cmd_code_lo &&
+		    (proc == item->proc || proc == ALL_PROC)) {
+			return &item->entry;
+		} else if (temp_entry->cmd_code == DIAG_CMD_NO_SUBSYS &&
+			   entry->cmd_code == DIAG_CMD_DIAG_SUBSYS) {
+			if (temp_entry->subsys_id == entry->subsys_id &&
+			    temp_entry->cmd_code_hi >= entry->cmd_code_hi &&
+			    temp_entry->cmd_code_lo <= entry->cmd_code_lo &&
+			    (proc == item->proc || proc == ALL_PROC)) {
+				return &item->entry;
+			}
+		} else if (temp_entry->cmd_code == DIAG_CMD_NO_SUBSYS &&
+			   temp_entry->subsys_id == DIAG_CMD_NO_SUBSYS) {
+			if ((temp_entry->cmd_code_hi >= entry->cmd_code) &&
+			    (temp_entry->cmd_code_lo <= entry->cmd_code) &&
+			    (proc == item->proc || proc == ALL_PROC)) {
+				if (entry->cmd_code == MODE_CMD &&
+				    entry->subsys_id == RESET_ID &&
+				    item->proc != APPS_PROC) {
+					continue;
+				}
+				return &item->entry;
+			}
+		}
+	}
+
+	return NULL;
+}
+
+void diag_cmd_remove_reg(struct diag_cmd_reg_entry_t *entry, uint8_t proc)
+{
+	struct diag_cmd_reg_t *item = NULL;
+	struct diag_cmd_reg_entry_t *temp_entry;
+	if (!entry) {
+		pr_err("diag: In %s, invalid entry\n", __func__);
+		return;
+	}
+
+	mutex_lock(&driver->cmd_reg_mutex);
+	temp_entry = diag_cmd_search(entry, proc);
+	if (temp_entry) {
+		item = container_of(temp_entry, struct diag_cmd_reg_t, entry);
+		if (!item)
+			return;
+		list_del(&item->link);
+		kfree(item);
+		driver->cmd_reg_count--;
+	}
+	diag_cmd_invalidate_polling(DIAG_CMD_REMOVE);
+	mutex_unlock(&driver->cmd_reg_mutex);
+}
+
+void diag_cmd_remove_reg_by_pid(int pid)
+{
+	struct list_head *start;
+	struct list_head *temp;
+	struct diag_cmd_reg_t *item = NULL;
+
+	mutex_lock(&driver->cmd_reg_mutex);
+	list_for_each_safe(start, temp, &driver->cmd_reg_list) {
+		item = list_entry(start, struct diag_cmd_reg_t, link);
+		if (item->pid == pid) {
+			list_del(&item->link);
+			kfree(item);
+			driver->cmd_reg_count--;
+		}
+	}
+	mutex_unlock(&driver->cmd_reg_mutex);
+}
+
+void diag_cmd_remove_reg_by_proc(int proc)
+{
+	struct list_head *start;
+	struct list_head *temp;
+	struct diag_cmd_reg_t *item = NULL;
+
+	mutex_lock(&driver->cmd_reg_mutex);
+	list_for_each_safe(start, temp, &driver->cmd_reg_list) {
+		item = list_entry(start, struct diag_cmd_reg_t, link);
+		if (item->proc == proc) {
+			list_del(&item->link);
+			kfree(item);
+			driver->cmd_reg_count--;
+		}
+	}
+	diag_cmd_invalidate_polling(DIAG_CMD_REMOVE);
+	mutex_unlock(&driver->cmd_reg_mutex);
 }
 
 static int diag_copy_dci(char __user *buf, size_t count,
@@ -668,6 +848,7 @@ static int diag_cb_send_data_remote(int proc, void *buf, int len,
 	int max_len = 0;
 	uint8_t retry_count = 0;
 	uint8_t max_retries = 3;
+	uint16_t payload = 0;
 	struct diag_send_desc_type send = { NULL, NULL, DIAG_STATE_START, 0 };
 	struct diag_hdlc_dest_type enc = { NULL, NULL, 0 };
 
@@ -688,6 +869,17 @@ static int diag_cb_send_data_remote(int proc, void *buf, int len,
 
 	if (driver->cb_buf_len != 0)
 		return -EAGAIN;
+
+	if (driver->hdlc_disabled) {
+		payload = *(uint16_t *)(buf + 2);
+		driver->cb_buf_len = payload;
+		/*
+		 * Adding 4 bytes for start (1 byte), version (1 byte) and
+		 * payload (2 bytes)
+		 */
+		memcpy(driver->cb_buf, buf + 4, payload);
+		goto send_data;
+	}
 
 	if (hdlc_flag) {
 		if (DIAG_MAX_HDLC_BUF_SIZE < len) {
@@ -790,131 +982,6 @@ static int diag_process_userspace_remote(int proc, void *buf, int len)
 	return 0;
 }
 #endif
-
-static int diag_command_reg(struct bindpkt_params_per_process *pkt_params)
-{
-	int retval = -EINVAL;
-	int i = 0, j;
-	void *temp_buf;
-	unsigned int count_entries = 0, interim_count = 0;
-	struct bindpkt_params *params;
-	struct bindpkt_params *head_params;
-
-	if (!pkt_params)
-		return -EINVAL;
-
-	if ((UINT_MAX/sizeof(struct bindpkt_params)) <
-						pkt_params->count) {
-		pr_warn("diag: integer overflow while multiply\n");
-		return -EFAULT;
-	}
-
-	head_params = kzalloc(pkt_params->count*sizeof(struct bindpkt_params),
-								GFP_KERNEL);
-	if (ZERO_OR_NULL_PTR(head_params)) {
-		pr_err("diag: unable to alloc memory\n");
-		return -ENOMEM;
-	} else {
-		params = head_params;
-	}
-
-	if (copy_from_user(params, pkt_params->params,
-			pkt_params->count*sizeof(struct bindpkt_params))) {
-		kfree(head_params);
-		return -EFAULT;
-	}
-	mutex_lock(&driver->diagchar_mutex);
-	for (i = 0; i < diag_max_reg; i++) {
-		if (driver->table[i].process_id == 0) {
-			retval = diag_add_reg(i, params, &count_entries);
-			if (retval == 1 && pkt_params->count > count_entries) {
-				params++;
-			} else {
-				kfree(head_params);
-				mutex_unlock(&driver->diagchar_mutex);
-				return retval;
-			}
-		}
-	}
-	if (i < diag_threshold_reg) {
-		/* Increase table size by amount required */
-		if (pkt_params->count >= count_entries) {
-			interim_count = pkt_params->count - count_entries;
-		} else {
-			pr_warn("diag: error in params count\n");
-			kfree(head_params);
-			mutex_unlock(&driver->diagchar_mutex);
-			return -EFAULT;
-		}
-		if (UINT_MAX - diag_max_reg >= interim_count) {
-			diag_max_reg += interim_count;
-		} else {
-			pr_warn("diag: Integer overflow\n");
-			kfree(head_params);
-			mutex_unlock(&driver->diagchar_mutex);
-			return -EFAULT;
-		}
-		/* Make sure size doesnt go beyond threshold */
-		if (diag_max_reg > diag_threshold_reg) {
-			diag_max_reg = diag_threshold_reg;
-			pr_err("diag: best case memory allocation\n");
-		}
-		if (UINT_MAX/sizeof(struct diag_master_table) < diag_max_reg) {
-			pr_warn("diag: integer overflow\n");
-			kfree(head_params);
-			mutex_unlock(&driver->diagchar_mutex);
-			return -EFAULT;
-		}
-		temp_buf = krealloc(driver->table,
-				diag_max_reg*sizeof(struct
-				diag_master_table), GFP_KERNEL);
-		if (!temp_buf) {
-			pr_err("diag: Insufficient memory for reg.\n");
-
-			if (pkt_params->count >= count_entries) {
-				interim_count = pkt_params->count -
-					count_entries;
-			} else {
-				pr_warn("diag: params count error\n");
-				kfree(head_params);
-				mutex_unlock(&driver->diagchar_mutex);
-				return -EFAULT;
-			}
-			if (diag_max_reg >= interim_count) {
-				diag_max_reg -= interim_count;
-			} else {
-				pr_warn("diag: Integer underflow\n");
-				kfree(head_params);
-				mutex_unlock(&driver->diagchar_mutex);
-				return -EFAULT;
-			}
-			kfree(head_params);
-			mutex_unlock(&driver->diagchar_mutex);
-			return 0;
-		} else {
-			driver->table = temp_buf;
-		}
-		for (j = i; j < diag_max_reg; j++) {
-			retval = diag_add_reg(j, params, &count_entries);
-			if (retval == 1 && pkt_params->count > count_entries) {
-				params++;
-			} else {
-				kfree(head_params);
-				mutex_unlock(&driver->diagchar_mutex);
-				return retval;
-			}
-		}
-		kfree(head_params);
-		mutex_unlock(&driver->diagchar_mutex);
-	} else {
-		kfree(head_params);
-		mutex_unlock(&driver->diagchar_mutex);
-		pr_err("Max size reached, Pkt Registration failed for Process %d",
-					current->tgid);
-	}
-	retval = 0;
-	return retval;
-}
 
 static int diag_switch_logging(int requested_mode)
 {
@@ -1232,6 +1299,22 @@ static int diag_ioctl_dci_support(unsigned long ioarg)
 	return result;
 }
 
+static int diag_ioctl_hdlc_toggle(unsigned long ioarg)
+{
+	uint8_t hdlc_support;
+
+	if (copy_from_user(&hdlc_support, (void __user *)ioarg,
+				sizeof(uint8_t)))
+		return -EFAULT;
+
+	mutex_lock(&driver->hdlc_disable_mutex);
+	driver->hdlc_disabled = hdlc_support;
+	mutex_unlock(&driver->hdlc_disable_mutex);
+	diag_update_userspace_clients(HDLC_SUPPORT_TYPE);
+
+	return 0;
+}
+
 static int diag_ioctl_register_callback(unsigned long ioarg)
 {
 	struct diag_callback_reg_t reg;
@@ -1256,14 +1339,94 @@ static int diag_ioctl_register_callback(unsigned long ioarg)
 	return 0;
 }
 
-#ifdef CONFIG_COMPAT
+static int diag_cmd_register_tbl(struct diag_cmd_reg_tbl_t *reg_tbl)
+{
+	int i;
+	int err = 0;
+	uint32_t count = 0;
+	struct diag_cmd_reg_entry_t *entries = NULL;
+	const uint16_t entry_len = sizeof(struct diag_cmd_reg_entry_t);
 
-struct bindpkt_params_per_process_compat {
-	/* Name of the synchronization object associated with this proc */
+
+	if (!reg_tbl) {
+		pr_err("diag: In %s, invalid registration table\n", __func__);
+		return -EINVAL;
+	}
+
+	count = reg_tbl->count;
+	if ((UINT_MAX / entry_len) < count) {
+		pr_warn("diag: In %s, possbile integer overflow.\n", __func__);
+		return -EFAULT;
+	}
+
+	entries = kzalloc(count * entry_len, GFP_KERNEL);
+	if (!entries) {
+		pr_err("diag: In %s, unable to create memory for registration table entries\n",
+		       __func__);
+		return -ENOMEM;
+	}
+
+	err = copy_from_user(entries, reg_tbl->entries, count * entry_len);
+	if (err) {
+		pr_err("diag: In %s, error copying data from userspace, err: %d\n",
+		       __func__, err);
+		return -EFAULT;
+	}
+
+	for (i = 0; i < count; i++) {
+		err = diag_cmd_add_reg(&entries[i], APPS_DATA, current->tgid);
+		if (err) {
+			pr_err("diag: In %s, unable to register command, err: %d\n",
+			       __func__, err);
+			break;
+		}
+	}
+
+	return err;
+}
+
+static int diag_ioctl_cmd_reg(unsigned long ioarg)
+{
+	struct diag_cmd_reg_tbl_t reg_tbl;
+
+	if (copy_from_user(&reg_tbl, (void __user *)ioarg,
+			   sizeof(struct diag_cmd_reg_tbl_t))) {
+		return -EFAULT;
+	}
+
+	return diag_cmd_register_tbl(&reg_tbl);
+}
+
+#ifdef CONFIG_COMPAT
+/*
+ * @sync_obj_name: name of the synchronization object associated with this proc
+ * @count: number of entries in the bind
+ * @params: the actual packet registrations
+ */
+struct diag_cmd_reg_tbl_compat_t {
 	char sync_obj_name[MAX_SYNC_OBJ_NAME_SIZE];
-	uint32_t count;	/* Number of entries in this bind */
-	compat_uptr_t params; /* first bind params */
+	uint32_t count;
+	compat_uptr_t entries;
 };
+
+static int diag_ioctl_cmd_reg_compat(unsigned long ioarg)
+{
+	struct diag_cmd_reg_tbl_compat_t reg_tbl_compat;
+	struct diag_cmd_reg_tbl_t reg_tbl;
+
+	if (copy_from_user(&reg_tbl_compat, (void __user *)ioarg,
+			   sizeof(struct diag_cmd_reg_tbl_compat_t))) {
+		return -EFAULT;
+	}
+
+	strlcpy(reg_tbl.sync_obj_name, reg_tbl_compat.sync_obj_name,
+		MAX_SYNC_OBJ_NAME_SIZE);
+	reg_tbl.count = reg_tbl_compat.count;
+	reg_tbl.entries = (struct diag_cmd_reg_entry_t *)
+			  (uintptr_t)reg_tbl_compat.entries;
+
+	return diag_cmd_register_tbl(&reg_tbl);
+}
 
 long diagchar_compat_ioctl(struct file *filp,
 			   unsigned int iocmd, unsigned long ioarg)
@@ -1273,23 +1436,11 @@ long diagchar_compat_ioctl(struct file *filp,
 	int client_id = 0;
 	uint16_t delayed_rsp_id = 0;
 	uint16_t remote_dev;
-	struct bindpkt_params_per_process pkt_params;
-	struct bindpkt_params_per_process_compat pkt_params_compat;
 	struct diag_dci_client_tbl *dci_client = NULL;
 
 	switch (iocmd) {
 	case DIAG_IOCTL_COMMAND_REG:
-		if (copy_from_user(&pkt_params_compat, (void __user *)ioarg,
-			sizeof(struct bindpkt_params_per_process_compat))) {
-				return -EFAULT;
-		}
-		strlcpy(pkt_params.sync_obj_name,
-			pkt_params_compat.sync_obj_name,
-			MAX_SYNC_OBJ_NAME_SIZE);
-		pkt_params.count = pkt_params_compat.count;
-		pkt_params.params = (struct bindpkt_params *)(uintptr_t)
-						pkt_params_compat.params;
-		result = diag_command_reg(&pkt_params);
+		result = diag_ioctl_cmd_reg_compat(ioarg);
 		break;
 	case DIAG_IOCTL_GET_DELAYED_RSP_ID:
 		delayed_rsp_id = diag_get_next_delayed_rsp_id();
@@ -1366,6 +1517,9 @@ long diagchar_compat_ioctl(struct file *filp,
 		break;
 	case DIAG_IOCTL_REGISTER_CALLBACK:
 		result = diag_ioctl_register_callback(ioarg);
+		break;
+	case DIAG_IOCTL_HDLC_TOGGLE:
+		result = diag_ioctl_hdlc_toggle(ioarg);
 		break;
 	}
 	return result;
@@ -1380,16 +1534,11 @@ long diagchar_ioctl(struct file *filp,
 	int client_id = 0;
 	uint16_t delayed_rsp_id;
 	uint16_t remote_dev;
-	struct bindpkt_params_per_process pkt_params;
 	struct diag_dci_client_tbl *dci_client = NULL;
 
 	switch (iocmd) {
 	case DIAG_IOCTL_COMMAND_REG:
-		if (copy_from_user(&pkt_params, (void __user *)ioarg,
-			sizeof(struct bindpkt_params_per_process))) {
-				return -EFAULT;
-		}
-		result = diag_command_reg(&pkt_params);
+		result = diag_ioctl_cmd_reg(ioarg);
 		break;
 	case DIAG_IOCTL_GET_DELAYED_RSP_ID:
 		delayed_rsp_id = diag_get_next_delayed_rsp_id();
@@ -1466,8 +1615,206 @@ long diagchar_ioctl(struct file *filp,
 		break;
 	case DIAG_IOCTL_REGISTER_CALLBACK:
 		result = diag_ioctl_register_callback(ioarg);
+		break;
+	case DIAG_IOCTL_HDLC_TOGGLE:
+		result = diag_ioctl_hdlc_toggle(ioarg);
+		break;
 	}
 	return result;
+}
+
+static int diag_process_apps_data_hdlc(unsigned char *buf, int len,
+				       int pkt_type)
+{
+	int err = 0;
+	int ret = PKT_DROP;
+	struct diag_apps_data_t *data = &hdlc_data;
+	struct diag_send_desc_type send = { NULL, NULL, DIAG_STATE_START, 0 };
+	struct diag_hdlc_dest_type enc = { NULL, NULL, 0 };
+	/*
+	 * The maximum encoded size of the buffer can be atmost twice the length
+	 * of the packet. Add three bytes foe footer - 16 bit CRC (2 bytes) +
+	 * delimiter (1 byte).
+	 */
+	const uint32_t max_encoded_size = ((2 * len) + 3);
+
+	if (!buf || len <= 0) {
+		pr_err("diag: In %s, invalid buf: %p len: %d\n",
+		       __func__, buf, len);
+		return -EIO;
+	}
+
+	if (DIAG_MAX_HDLC_BUF_SIZE < max_encoded_size) {
+		pr_err_ratelimited("diag: In %s, encoded data is larger %d than the buffer size %d\n",
+		       __func__, max_encoded_size, DIAG_MAX_HDLC_BUF_SIZE);
+		return -EBADMSG;
+	}
+
+	send.state = DIAG_STATE_START;
+	send.pkt = buf;
+	send.last = (void *)(buf + len - 1);
+	send.terminate = 1;
+
+	if (!data->buf)
+		data->buf = diagmem_alloc(driver, DIAG_MAX_HDLC_BUF_SIZE,
+					  POOL_TYPE_HDLC);
+	if (!data->buf) {
+		ret = PKT_DROP;
+		goto fail_ret;
+	}
+
+	if ((DIAG_MAX_HDLC_BUF_SIZE - data->len) <= max_encoded_size) {
+		err = diag_mux_write(DIAG_LOCAL_PROC, data->buf, data->len,
+				     data->ctxt);
+		if (err) {
+			ret = -EIO;
+			goto fail_free_buf;
+		}
+		data->buf = NULL;
+		data->len = 0;
+		data->buf = diagmem_alloc(driver, DIAG_MAX_HDLC_BUF_SIZE,
+					  POOL_TYPE_HDLC);
+		if (!data->buf) {
+			ret = PKT_DROP;
+			goto fail_ret;
+		}
+	}
+
+	enc.dest = data->buf + data->len;
+	enc.dest_last = (void *)(data->buf + data->len + max_encoded_size);
+	diag_hdlc_encode(&send, &enc);
+
+	/*
+	 * This is to check if after HDLC encoding, we are still within
+	 * the limits of aggregation buffer. If not, we write out the
+	 * current buffer and start aggregation in a newly allocated
+	 * buffer.
+	 */
+	if ((uintptr_t)enc.dest >= (uintptr_t)(data->buf +
+					       DIAG_MAX_HDLC_BUF_SIZE)) {
+		err = diag_mux_write(DIAG_LOCAL_PROC, data->buf, data->len,
+				     data->ctxt);
+		if (err) {
+			ret = -EIO;
+			goto fail_free_buf;
+		}
+		data->buf = NULL;
+		data->len = 0;
+		data->buf = diagmem_alloc(driver, DIAG_MAX_HDLC_BUF_SIZE,
+					 POOL_TYPE_HDLC);
+		if (!data->buf) {
+			ret = PKT_DROP;
+			goto fail_ret;
+		}
+
+		enc.dest = data->buf + data->len;
+		enc.dest_last = (void *)(data->buf + data->len +
+					 max_encoded_size);
+		diag_hdlc_encode(&send, &enc);
+	}
+
+	data->len = (((uintptr_t)enc.dest - (uintptr_t)data->buf) <
+			DIAG_MAX_HDLC_BUF_SIZE) ?
+			((uintptr_t)enc.dest - (uintptr_t)data->buf) :
+			DIAG_MAX_HDLC_BUF_SIZE;
+
+	if (pkt_type == DATA_TYPE_RESPONSE) {
+		err = diag_mux_write(DIAG_LOCAL_PROC, data->buf, data->len,
+				     data->ctxt);
+		if (err) {
+			ret = -EIO;
+			goto fail_free_buf;
+		}
+		data->buf = NULL;
+		data->len = 0;
+	}
+
+	return PKT_ALLOC;
+
+fail_free_buf:
+	diagmem_free(driver, data->buf, POOL_TYPE_HDLC);
+	data->buf = NULL;
+	data->len = 0;
+
+fail_ret:
+	return ret;
+}
+
+static int diag_process_apps_data_non_hdlc(unsigned char *buf, int len,
+					   int pkt_type)
+{
+	int err = 0;
+	int ret = PKT_DROP;
+	struct diag_pkt_frame_t header;
+	struct diag_apps_data_t *data = &non_hdlc_data;
+	uint32_t write_len = 0;
+	/*
+	 * The maximum packet size, when the data is non hdlc encoded is equal
+	 * to the size of the packet frame header and the length. Add 1 for the
+	 * delimiter 0x7E at the end.
+	 */
+	const uint32_t max_pkt_size = sizeof(header) + len + 1;
+
+	if (!buf || len <= 0) {
+		pr_err("diag: In %s, invalid buf: %p len: %d\n",
+		       __func__, buf, len);
+		return -EIO;
+	}
+
+	if (!data->buf) {
+		data->buf = diagmem_alloc(driver, DIAG_MAX_HDLC_BUF_SIZE,
+					  POOL_TYPE_HDLC);
+		if (!data->buf) {
+			ret = PKT_DROP;
+			goto fail_ret;
+		}
+	}
+
+	if ((DIAG_MAX_HDLC_BUF_SIZE - data->len) <= max_pkt_size) {
+		err = diag_mux_write(DIAG_LOCAL_PROC, data->buf, data->len,
+				     data->ctxt);
+		if (err) {
+			ret = -EIO;
+			goto fail_free_buf;
+		}
+		data->buf = NULL;
+		data->len = 0;
+		data->buf = diagmem_alloc(driver, DIAG_MAX_HDLC_BUF_SIZE,
+					  POOL_TYPE_HDLC);
+		if (!data->buf) {
+			ret = PKT_DROP;
+			goto fail_ret;
+		}
+	}
+
+	header.start = CONTROL_CHAR;
+	header.version = 1;
+	header.length = len;
+	memcpy(data->buf, &header, sizeof(header));
+	write_len += sizeof(header);
+	memcpy(data->buf + write_len, buf, len);
+	write_len += sizeof(len);
+	*(uint8_t *)(data->buf + write_len) = CONTROL_CHAR;
+	write_len += sizeof(uint8_t);
+	data->len += write_len;
+	if (pkt_type == DATA_TYPE_RESPONSE) {
+		err = diag_mux_write(DIAG_LOCAL_PROC, data->buf, data->len,
+				     data->ctxt);
+		if (err) {
+			ret = -EIO;
+			goto fail_free_buf;
+		}
+	}
+
+	return PKT_ALLOC;
+
+fail_free_buf:
+	diagmem_free(driver, data->buf, POOL_TYPE_HDLC);
+	data->buf = NULL;
+	data->len = 0;
+
+fail_ret:
+	return ret;
 }
 
 static int diag_user_process_dci_data(const char __user *buf, int len)
@@ -1626,7 +1973,10 @@ static int diag_user_process_callback_hdlc_data(const char __user *buf, int len)
 	if (!remote_proc) {
 		wait_event_interruptible(driver->wait_q,
 					 (driver->in_busy_pktdata == 0));
-		diag_process_hdlc((void *)user_space_data, len);
+		if (driver->hdlc_disabled)
+			diag_process_non_hdlc_pkt(user_space_data, len);
+		else
+			diag_process_hdlc_pkt((void *)user_space_data, len);
 		diagmem_free(driver, user_space_data, mempool);
 		user_space_data = NULL;
 		return 0;
@@ -1703,7 +2053,14 @@ static int diag_user_process_userspace_data(const char __user *buf, int len)
 
 	/* send masks to local processor now */
 	if (!remote_proc) {
-		diag_process_hdlc((void *)(driver->user_space_data_buf), len);
+		if (driver->hdlc_disabled == 0)
+			diag_process_hdlc_pkt((void *)
+				(driver->user_space_data_buf),
+				len);
+		else
+			diag_process_non_hdlc_pkt((char *)
+				(driver->user_space_data_buf),
+				len);
 		return 0;
 	}
 
@@ -1722,29 +2079,14 @@ static int diag_user_process_userspace_data(const char __user *buf, int len)
 static int diag_user_process_apps_data(const char __user *buf, int len,
 				       int pkt_type)
 {
-	int err = 0;
 	int ret = 0;
 	int stm_size = 0;
 	const int mempool = POOL_TYPE_COPY;
 	unsigned char *user_space_data = NULL;
-	struct diag_send_desc_type send = { NULL, NULL, DIAG_STATE_START, 0 };
-	struct diag_hdlc_dest_type enc = { NULL, NULL, 0 };
-	/*
-	 * The maximum encoded size of the buffer can be atmost twice the length
-	 * of the packet. Add three bytes foe footer - 16 bit CRC (2 bytes) +
-	 * delimiter (1 byte).
-	 */
-	const uint32_t max_encoded_size = ((2 * len) + 3);
 
 	if (!buf || len <= 0 || len > DIAG_MAX_RSP_SIZE) {
 		pr_err_ratelimited("diag: In %s, invalid buf %p len: %d\n",
 				   __func__, buf, len);
-		return -EBADMSG;
-	}
-
-	if (DIAG_MAX_HDLC_BUF_SIZE < max_encoded_size) {
-		pr_err("diag: In %s, encoded data is larger %d than the buffer size %d\n",
-		       __func__, max_encoded_size, DIAG_MAX_HDLC_BUF_SIZE);
 		return -EBADMSG;
 	}
 
@@ -1762,15 +2104,19 @@ static int diag_user_process_apps_data(const char __user *buf, int len,
 	}
 
 	user_space_data = diagmem_alloc(driver, len, mempool);
-	if (!user_space_data)
+	if (!user_space_data) {
+		diag_record_stats(pkt_type, PKT_DROP);
 		return -ENOMEM;
+	}
 
-	mutex_lock(&driver->diagchar_mutex);
-	err = copy_from_user(user_space_data, buf, len);
-	if (err) {
+	ret = copy_from_user(user_space_data, buf, len);
+	if (ret) {
 		pr_alert("diag: In %s, unable to copy data from userspace, err: %d\n",
-			 __func__, err);
-		goto fail_free_copy;
+			 __func__, ret);
+		diagmem_free(driver, user_space_data, mempool);
+		user_space_data = NULL;
+		diag_record_stats(pkt_type, PKT_DROP);
+		return -EBADMSG;
 	}
 
 	if (driver->stm_state[APPS_DATA] &&
@@ -1783,104 +2129,35 @@ static int diag_user_process_apps_data(const char __user *buf, int len,
 		}
 		diagmem_free(driver, user_space_data, mempool);
 		user_space_data = NULL;
-		mutex_unlock(&driver->diagchar_mutex);
+
 		return 0;
 	}
 
-	send.state = DIAG_STATE_START;
-	send.pkt = user_space_data;
-	send.last = (void *)(user_space_data + len - 1);
-	send.terminate = 1;
-
-	if (!buf_hdlc)
-		buf_hdlc = diagmem_alloc(driver, DIAG_MAX_HDLC_BUF_SIZE,
-					 POOL_TYPE_HDLC);
-	if (!buf_hdlc) {
-		ret = -ENOMEM;
-		goto fail_free_copy;
+	mutex_lock(&apps_data_mutex);
+	mutex_lock(&driver->hdlc_disable_mutex);
+	if (driver->hdlc_disabled) {
+		ret = diag_process_apps_data_non_hdlc(user_space_data, len,
+						      pkt_type);
+	} else {
+		ret = diag_process_apps_data_hdlc(user_space_data, len,
+						  pkt_type);
 	}
-
-	if ((DIAG_MAX_HDLC_BUF_SIZE - driver->used) <= max_encoded_size) {
-		err = diag_mux_write(DIAG_LOCAL_PROC, buf_hdlc, driver->used,
-				     buf_hdlc_ctxt);
-		if (err) {
-			ret = -EIO;
-			goto fail_free_hdlc;
-		}
-		buf_hdlc = NULL;
-		driver->used = 0;
-		buf_hdlc = diagmem_alloc(driver, DIAG_MAX_HDLC_BUF_SIZE,
-					 POOL_TYPE_HDLC);
-		if (!buf_hdlc) {
-			ret = -ENOMEM;
-			goto fail_free_copy;
-		}
-	}
-
-	enc.dest = buf_hdlc + driver->used;
-	enc.dest_last = (void *)(buf_hdlc + driver->used + max_encoded_size);
-	diag_hdlc_encode(&send, &enc);
-
-	/*
-	 * This is to check if after HDLC encoding, we are still within
-	 * the limits of aggregation buffer. If not, we write out the
-	 * current buffer and start aggregation in a newly allocated
-	 * buffer.
-	 */
-	if ((uintptr_t)enc.dest >= (uintptr_t)(buf_hdlc +
-					       DIAG_MAX_HDLC_BUF_SIZE)) {
-		err = diag_mux_write(DIAG_LOCAL_PROC, buf_hdlc, driver->used,
-				     buf_hdlc_ctxt);
-		if (err) {
-			ret = -EIO;
-			goto fail_free_hdlc;
-		}
-		buf_hdlc = NULL;
-		driver->used = 0;
-		buf_hdlc = diagmem_alloc(driver, DIAG_MAX_HDLC_BUF_SIZE,
-					 POOL_TYPE_HDLC);
-		if (!buf_hdlc) {
-			ret = -ENOMEM;
-			goto fail_free_copy;
-		}
-		enc.dest = buf_hdlc + driver->used;
-		enc.dest_last = (void *)(buf_hdlc + driver->used +
-					 max_encoded_size);
-		diag_hdlc_encode(&send, &enc);
-	}
-
-	driver->used = (((uintptr_t)enc.dest - (uintptr_t)buf_hdlc) <
-						DIAG_MAX_HDLC_BUF_SIZE) ?
-			((uintptr_t)enc.dest - (uintptr_t)buf_hdlc) :
-						DIAG_MAX_HDLC_BUF_SIZE;
-	if (pkt_type == DATA_TYPE_RESPONSE) {
-		err = diag_mux_write(DIAG_LOCAL_PROC, buf_hdlc, driver->used,
-				     buf_hdlc_ctxt);
-		if (err) {
-			ret = -EIO;
-			goto fail_free_hdlc;
-		}
-		buf_hdlc = NULL;
-		driver->used = 0;
-	}
+	mutex_unlock(&driver->hdlc_disable_mutex);
+	mutex_unlock(&apps_data_mutex);
 
 	diagmem_free(driver, user_space_data, mempool);
 	user_space_data = NULL;
-	mutex_unlock(&driver->diagchar_mutex);
 
 	check_drain_timer();
 
-	return 0;
+	if (ret == PKT_DROP)
+		diag_record_stats(pkt_type, PKT_DROP);
+	else if (ret == PKT_ALLOC)
+		diag_record_stats(pkt_type, PKT_ALLOC);
+	else
+		return ret;
 
-fail_free_hdlc:
-	diagmem_free(driver, buf_hdlc, POOL_TYPE_HDLC);
-	buf_hdlc = NULL;
-	driver->used = 0;
-fail_free_copy:
-	diagmem_free(driver, user_space_data, mempool);
-	user_space_data = NULL;
-	mutex_unlock(&driver->diagchar_mutex);
-	return ret;
+	return 0;
 }
 
 static ssize_t diagchar_read(struct file *file, char __user *buf, size_t count,
@@ -1925,6 +2202,15 @@ static ssize_t diagchar_read(struct file *file, char __user *buf, size_t count,
 		/* In case, the thread wakes up and the logging mode is
 		not memory device any more, the condition needs to be cleared */
 		driver->data_ready[index] ^= USER_SPACE_DATA_TYPE;
+	}
+
+	if (driver->data_ready[index] & HDLC_SUPPORT_TYPE) {
+		data_type = driver->data_ready[index] & HDLC_SUPPORT_TYPE;
+		driver->data_ready[index] ^= HDLC_SUPPORT_TYPE;
+		COPY_USER_SPACE_OR_EXIT(buf, data_type, sizeof(int));
+		COPY_USER_SPACE_OR_EXIT(buf+4, driver->hdlc_disabled,
+					sizeof(uint8_t));
+		goto exit;
 	}
 
 	if (driver->data_ready[index] & DEINIT_TYPE) {
@@ -2166,6 +2452,21 @@ void diag_ws_init()
 	spin_lock_init(&driver->ws_lock);
 }
 
+static void diag_stats_init(void)
+{
+	if (!driver)
+		return;
+
+	driver->msg_stats.alloc_count = 0;
+	driver->msg_stats.drop_count = 0;
+
+	driver->log_stats.alloc_count = 0;
+	driver->log_stats.drop_count = 0;
+
+	driver->event_stats.alloc_count = 0;
+	driver->event_stats.drop_count = 0;
+}
+
 void diag_ws_on_notify()
 {
 	/*
@@ -2373,6 +2674,8 @@ int mask_request_validate(unsigned char mask_buf[])
 		case 0x12: /* DIAG_SUBSYS_DIAG_SERV */
 			if ((ss_cmd == 0) || (ss_cmd == 0x6) || (ss_cmd == 0x7))
 				return 1;
+			else if (ss_cmd == 0x218) /* HDLC Disabled Command*/
+				return 0;
 			break;
 		case 0x13: /* DIAG_SUBSYS_FS */
 			if ((ss_cmd == 0) || (ss_cmd == 0x1))
@@ -2482,10 +2785,10 @@ static int __init diagchar_init(void)
 		return -ENOMEM;
 	kmemleak_not_leak(driver);
 
-	driver->used = 0;
 	timer_in_progress = 0;
 	driver->delayed_rsp_id = 0;
 	driver->debug_flag = 1;
+	driver->hdlc_disabled = 0;
 	driver->dci_state = DIAG_DCI_NO_ERROR;
 	setup_timer(&drain_timer, drain_timer_func, 1234);
 	driver->poolsize = poolsize;
@@ -2513,13 +2816,32 @@ static int __init diagchar_init(void)
 	driver->in_busy_pktdata = 0;
 	driver->in_busy_dcipktdata = 0;
 	driver->rsp_buf_ctxt = SET_BUF_CTXT(APPS_DATA, SMD_CMD_TYPE, 1);
-	buf_hdlc_ctxt = SET_BUF_CTXT(APPS_DATA, SMD_DATA_TYPE, 1);
+	hdlc_data.ctxt = SET_BUF_CTXT(APPS_DATA, SMD_DATA_TYPE, 1);
+	hdlc_data.len = 0;
+	non_hdlc_data.ctxt = SET_BUF_CTXT(APPS_DATA, SMD_DATA_TYPE, 1);
+	non_hdlc_data.len = 0;
+	mutex_init(&driver->hdlc_disable_mutex);
 	mutex_init(&driver->diagchar_mutex);
 	mutex_init(&driver->delayed_rsp_mutex);
+	mutex_init(&apps_data_mutex);
 	init_waitqueue_head(&driver->wait_q);
 	init_waitqueue_head(&driver->smd_wait_q);
 	INIT_WORK(&(driver->diag_drain_work), diag_drain_work_fn);
+	INIT_WORK(&(driver->update_user_clients),
+			diag_update_user_client_work_fn);
 	diag_ws_init();
+	diag_stats_init();
+
+	driver->incoming_pkt.capacity = DIAG_MAX_REQ_SIZE;
+	driver->incoming_pkt.data = kzalloc(DIAG_MAX_REQ_SIZE, GFP_KERNEL);
+	if (!driver->incoming_pkt.data)
+		goto fail;
+	kmemleak_not_leak(driver->incoming_pkt.data);
+	driver->incoming_pkt.processing = 0;
+	driver->incoming_pkt.read_len = 0;
+	driver->incoming_pkt.remaining = 0;
+	driver->incoming_pkt.total_len = 0;
+
 	ret = diag_real_time_info_init();
 	if (ret)
 		goto fail;

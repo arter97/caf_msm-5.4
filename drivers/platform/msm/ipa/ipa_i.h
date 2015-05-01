@@ -59,9 +59,7 @@
 #define IPA_STATS
 
 #ifdef IPA_STATS
-#define IPA_STATS_INC_CNT(val) do {			\
-				++val;			\
-			} while (0)
+#define IPA_STATS_INC_CNT(val) (++val)
 #define IPA_STATS_DEC_CNT(val) (--val)
 #define IPA_STATS_EXCP_CNT(flags, base) do {			\
 			int i;					\
@@ -544,7 +542,7 @@ struct ipa_sys_context {
 	struct delayed_work switch_to_intr_work;
 	enum ipa_sys_pipe_policy policy;
 	int (*pyld_hdlr)(struct sk_buff *skb, struct ipa_sys_context *sys);
-	struct sk_buff *(*get_skb)(unsigned int len, gfp_t flags);
+	struct sk_buff * (*get_skb)(unsigned int len, gfp_t flags);
 	void (*free_skb)(struct sk_buff *skb);
 	u32 rx_buff_sz;
 	u32 rx_pool_sz;
@@ -1307,9 +1305,11 @@ struct ipa_mem_partition {
 
 struct ipa_controller {
 	struct ipa_mem_partition mem_partition;
-	u32 ipa_clk_rate_hi;
-	u32 ipa_clk_rate_lo;
-	u32 clock_scaling_bw_threshold;
+	u32 ipa_clk_rate_turbo;
+	u32 ipa_clk_rate_nominal;
+	u32 ipa_clk_rate_svs;
+	u32 clock_scaling_bw_threshold_turbo;
+	u32 clock_scaling_bw_threshold_nominal;
 	u32 ipa_reg_base_ofst;
 	u32 max_holb_tmr_val;
 	void (*ipa_sram_read_settings)(void);

@@ -204,26 +204,27 @@
 		qcom,speed0-bin-v0-c0 =
 			<          0 0>,
 			<  400000000 1>,
-			<  800000000 3>,
-			<  998400000 4>,
+			<  800000000 4>,
+			<  998400000 5>,
 			< 1094400000 6>,
-			< 1209600000 7>;
+			< 1209600000 8>;
 
 		qcom,speed0-bin-v0-c1 =
 			<          0 0>,
 			<  499200000 1>,
 			<  800000000 2>,
-			< 1094400000 3>,
-			< 1344000000 4>,
-			< 1440000000 5>,
-			< 1516800000 6>;
+			<  960000000 3>,
+			< 1094400000 4>,
+			< 1344000000 5>,
+			< 1440000000 6>,
+			< 1516800000 7>;
 
 		qcom,speed0-bin-v0-cci =
 			<          0 0>,
 			<  200000000 1>,
 			<  307200000 2>,
-			<  400000000 3>,
-			<  600000000 5>;
+			<  400000000 4>,
+			<  600000000 6>;
 		#clock-cells = <1>;
 	};
 
@@ -292,15 +293,14 @@
 		cci-cpufreq {
 		target-dev = <&cci_cache>;
 		cpu-to-dev-map-0 =
-			<  400000  200000 >,
-			<  800000  307200 >,
-			< 1094400  400000 >,
-			< 1440000  600000 >,
+			<  500000  200000 >,
+			<  960000  307200 >,
+			< 1344000  400000 >,
 			< 1516800  600000 >;
 		cpu-to-dev-map-4 =
-			<  345600  200000 >,
-			<  499200  307200 >,
-			<  800000  400000 >,
+			<  400000  200000 >,
+			<  800000  307200 >,
+			<  998400  400000 >,
 			< 1209600  600000 >;
 		};
 	};
@@ -321,11 +321,12 @@
 			 <&clock_cpu clk_a53ssmux_lc>,
 			 <&clock_cpu clk_a53ssmux_lc>;
 
+		qcom,governor-per-policy;
+
 		qcom,cpufreq-table-0 =
 			 <  200000 >,
 			 <  345600 >,
-			 <  400000 >,
-			 <  533330 >,
+			 <  499200 >,
 			 <  800000 >,
 			 <  960000 >,
 			 < 1094400 >,
@@ -334,8 +335,8 @@
 			 < 1516800 >;
 		qcom,cpufreq-table-4 =
 			 <  200000 >,
-			 <  345600 >,
-			 <  499200 >,
+			 <  400000 >,
+			 <  533330 >,
 			 <  800000 >,
 			 <  998400 >,
 			 < 1094400 >,
@@ -603,6 +604,25 @@
 		};
 	};
 
+	qcom,bcl {
+		compatible = "qcom,bcl";
+		qcom,bcl-enable;
+		qcom,bcl-framework-interface;
+		qcom,bcl-freq-control-list = <&CPU0 &CPU1 &CPU2 &CPU3
+						&CPU4 &CPU5 &CPU6 &CPU7>;
+		qcom,bcl-hotplug-list = <&CPU2 &CPU3>;
+		qcom,bcl-soc-hotplug-list = <&CPU0 &CPU1 &CPU2 &CPU3>;
+		qcom,ibat-monitor {
+			qcom,low-threshold-uamp = <3400000>;
+			qcom,high-threshold-uamp = <4200000>;
+			qcom,mitigation-freq-khz = <800000>;
+			qcom,vph-high-threshold-uv = <3500000>;
+			qcom,vph-low-threshold-uv = <3200000>;
+			qcom,soc-low-threshold = <10>;
+			qcom,thermal-handle = <&msm_thermal_freq>;
+		};
+	};
+
 	qcom,memshare {
 		compatible = "qcom,memshare";
 
@@ -641,6 +661,14 @@
 		clock-names = "core_clk";
 		clocks = <&clock_gcc clk_ipa_clk>;
 		qcom,ee = <2>;
+		qcom,msm-bus,name = "ipa";
+		qcom,msm-bus,num-cases = <3>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+		<90 512 0 0>,              /* No vote (ab=0 Mbps, ib=0 Mbps – NO BIMC vote) */
+		<90 512 100000 800000>,    /* SVS  - (ab=100Mbps, ib=800Mbps – 50MHz BIMC freq) */
+		<90 512 100000 1200000>;   /* PERF - (ab=100Mbps, ib=1200Mbps – 75MHz BIMC freq) */
+		qcom,bus-vector-names = "MIN", "SVS", "PERF";
 	};
 
 	qcom,rmnet-ipa {
@@ -1952,6 +1980,11 @@
 		sb_4_tx: qcom,msm-dai-q6-sb-4-tx {
 			compatible = "qcom,msm-dai-q6-dev";
 			qcom,msm-dai-q6-dev-id = <16393>;
+		};
+
+		sb_5_tx: qcom,msm-dai-q6-sb-5-tx {
+			compatible = "qcom,msm-dai-q6-dev";
+			qcom,msm-dai-q6-dev-id = <16395>;
 		};
 
 		bt_sco_rx: qcom,msm-dai-q6-bt-sco-rx {

@@ -201,6 +201,8 @@ static struct usb_device_id ath3k_blist_tbl[] = {
 #define USB_REQ_DFU_DNLOAD	1
 #define BULK_SIZE		4096
 #define FW_HDR_SIZE		20
+#define TIMEGAP_USEC_MIN	50
+#define TIMEGAP_USEC_MAX	100
 
 static int ath3k_load_firmware(struct usb_device *udev,
 				const struct firmware *firmware)
@@ -231,6 +233,9 @@ static int ath3k_load_firmware(struct usb_device *udev,
 	count -= 20;
 
 	while (count) {
+		/* workaround the compatibility issue with xHCI controller*/
+		usleep_range(TIMEGAP_USEC_MIN, TIMEGAP_USEC_MAX);
+
 		size = min_t(uint, count, BULK_SIZE);
 		pipe = usb_sndbulkpipe(udev, 0x02);
 		memcpy(send_buf, firmware->data + sent, size);
@@ -361,6 +366,9 @@ static int ath3k_load_fwfile(struct usb_device *udev,
 	count -= size;
 
 	while (count) {
+		/* workaround the compatibility issue with xHCI controller*/
+		usleep_range(TIMEGAP_USEC_MIN, TIMEGAP_USEC_MAX);
+
 		size = min_t(uint, count, BULK_SIZE);
 		pipe = usb_sndbulkpipe(udev, 0x02);
 
@@ -414,6 +422,9 @@ static int ath3k_set_normal_mode(struct usb_device *udev)
 			NULL, 0, USB_CTRL_SET_TIMEOUT);
 }
 
+DECLARE_RWSEM(btusb_pm_sem);
+EXPORT_SYMBOL(btusb_pm_sem);
+
 static int ath3k_load_patch(struct usb_device *udev,
 						struct ath3k_version *version)
 {
@@ -433,12 +444,10 @@ static int ath3k_load_patch(struct usb_device *udev,
 
 	if ((fw_state == ATH3K_PATCH_UPDATE) ||
 		(fw_state == ATH3K_PATCH_SYSCFG_UPDATE)) {
-		BT_INFO("%s: Patch already downloaded(fw_state: %d)", __func__,
-			fw_state);
+		BT_INFO("Patch already downloaded(fw_state: %d)", fw_state);
 		return 0;
 	} else
-		BT_DBG("%s: Downloading RamPatch(fw_state: %d)", __func__,
-			fw_state);
+		BT_DBG("Downloading RamPatch(fw_state: %d)", fw_state);
 
 	switch (version->rom_version) {
 	case ROME1_1_USB_CHIP_VERSION:
@@ -470,11 +479,14 @@ static int ath3k_load_patch(struct usb_device *udev,
 		break;
 	}
 
+	down_read(&btusb_pm_sem);
 	ret = request_firmware(&firmware, filename, &udev->dev);
 	if (ret < 0) {
 		BT_ERR("Patch file not found %s", filename);
+		up_read(&btusb_pm_sem);
 		return ret;
 	}
+	up_read(&btusb_pm_sem);
 
 	if ((version->rom_version == ROME2_1_USB_CHIP_VERSION) ||
 		(version->rom_version == ROME3_0_USB_CHIP_VERSION) ||
