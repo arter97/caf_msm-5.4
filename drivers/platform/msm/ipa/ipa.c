@@ -1662,9 +1662,9 @@ int _ipa_init_sram_v2_5(void)
 
 	IPA_SRAM_SET(IPA_MEM_PART(v4_flt_ofst) - 4, IPA_MEM_CANARY_VAL);
 	IPA_SRAM_SET(IPA_MEM_PART(v4_flt_ofst), IPA_MEM_CANARY_VAL);
-	IPA_SRAM_SET(IPA_MEM_PART(v6_flt_ofst) - 4, IPA_MEM_CANARY_VAL);
+	IPA_SRAM_SET(IPA_MEM_PART(v6_flt_ofst) - 4, 0);
 	IPA_SRAM_SET(IPA_MEM_PART(v6_flt_ofst), IPA_MEM_CANARY_VAL);
-	IPA_SRAM_SET(IPA_MEM_PART(v4_rt_ofst) - 4, IPA_MEM_CANARY_VAL);
+	IPA_SRAM_SET(IPA_MEM_PART(v4_rt_ofst) - 4, 0);
 	IPA_SRAM_SET(IPA_MEM_PART(v4_rt_ofst), IPA_MEM_CANARY_VAL);
 	IPA_SRAM_SET(IPA_MEM_PART(v6_rt_ofst), IPA_MEM_CANARY_VAL);
 	IPA_SRAM_SET(IPA_MEM_PART(modem_hdr_ofst), IPA_MEM_CANARY_VAL);
@@ -1683,6 +1683,12 @@ static inline void ipa_sram_set_canary(u32 *sram_mmio, int offset)
 {
 	/* Set 4 bytes of CANARY before the offset */
 	sram_mmio[(offset - 4) / 4] = IPA_MEM_CANARY_VAL;
+}
+
+static inline void ipa_sram_set_zero(u32 *sram_mmio, int offset)
+{
+	/* Set 4 bytes of 0 before the offset */
+	sram_mmio[(offset - 4) / 4] = 0;
 }
 
 int _ipa_init_sram_v2_6L(void)
@@ -1704,9 +1710,9 @@ int _ipa_init_sram_v2_6L(void)
 	/* Consult with ipa_ram_mmap.h on the location of the CANARY values */
 	ipa_sram_set_canary(ipa_sram_mmio, IPA_MEM_PART(v4_flt_ofst) - 4);
 	ipa_sram_set_canary(ipa_sram_mmio, IPA_MEM_PART(v4_flt_ofst));
-	ipa_sram_set_canary(ipa_sram_mmio, IPA_MEM_PART(v6_flt_ofst) - 4);
+	ipa_sram_set_zero(ipa_sram_mmio, IPA_MEM_PART(v6_flt_ofst) - 4);
 	ipa_sram_set_canary(ipa_sram_mmio, IPA_MEM_PART(v6_flt_ofst));
-	ipa_sram_set_canary(ipa_sram_mmio, IPA_MEM_PART(v4_rt_ofst) - 4);
+	ipa_sram_set_zero(ipa_sram_mmio, IPA_MEM_PART(v4_rt_ofst) - 4);
 	ipa_sram_set_canary(ipa_sram_mmio, IPA_MEM_PART(v4_rt_ofst));
 	ipa_sram_set_canary(ipa_sram_mmio, IPA_MEM_PART(v6_rt_ofst));
 	ipa_sram_set_canary(ipa_sram_mmio, IPA_MEM_PART(modem_hdr_ofst));
@@ -1964,7 +1970,10 @@ int _ipa_init_flt4_v2(void)
 	*entry = ((0xFFFFF << 1) | 0x1);
 	entry++;
 
-	for (i = 0; i <= ipa_ctx->ipa_num_pipes; i++) {
+	*entry = 88 | 0x1;
+	entry++;
+
+	for (i = 0; i < ipa_ctx->ipa_num_pipes; i++) {
 		*entry = ipa_ctx->empty_rt_tbl_mem.phys_base;
 		entry++;
 	}
@@ -2013,7 +2022,10 @@ int _ipa_init_flt6_v2(void)
 	*entry = (0xFFFFF << 1) | 0x1;
 	entry++;
 
-	for (i = 0; i <= ipa_ctx->ipa_num_pipes; i++) {
+	*entry = 88 | 0x1;
+	entry++;
+
+	for (i = 0; i < ipa_ctx->ipa_num_pipes; i++) {
 		*entry = ipa_ctx->empty_rt_tbl_mem.phys_base;
 		entry++;
 	}
@@ -2706,7 +2718,7 @@ int ipa_set_required_perf_profile(enum ipa_voltage_level floor_voltage,
 	return 0;
 }
 
-static int ipa_init_flt_block(void)
+int ipa_init_flt_block(void)
 {
 	int result = 0;
 
@@ -3323,13 +3335,6 @@ static int ipa_init(const struct ipa_plat_drv_res *resource_p,
 		goto fail_empty_rt_tbl;
 	}
 	IPADBG("IPA System2Bam pipes were connected\n");
-
-	if (ipa_init_flt_block()) {
-		IPAERR("fail to setup dummy filter rules\n");
-		result = -ENODEV;
-		goto fail_empty_rt_tbl;
-	}
-	IPADBG("filter block was set with dummy filter rules");
 
 	/* setup the IPA pipe mem pool */
 	if (resource_p->ipa_pipe_mem_size)

@@ -323,7 +323,7 @@ static int ipa_generate_flt_hw_tbl_common(enum ipa_ip_type ip, u8 *base,
 
 #define IPA_WRITE_FLT_HDR(idx, val) {			\
 	if (idx <= 5) {					\
-		*((u32 *)hdr + 1 + idx) = val;		\
+		*((u32 *)hdr + idx) = val;		\
 	} else if (idx >= 6 && idx <= 10) {		\
 		WARN_ON(1);				\
 	} else if (idx >= 11 && idx <= 19) {		\
@@ -728,7 +728,7 @@ static int ipa_generate_flt_hw_tbl_v2(enum ipa_ip_type ip,
 		body_start_offset = IPA_MEM_PART(apps_v6_flt_ofst) -
 			IPA_MEM_PART(v6_flt_ofst);
 
-	num_words = 7;
+	num_words = 6;
 	head1->size = num_words * 4;
 	head1->base = dma_alloc_coherent(ipa_ctx->pdev, head1->size,
 			&head1->phys_base, GFP_KERNEL);
@@ -862,15 +862,6 @@ int __ipa_commit_flt_v2(enum ipa_ip_type ip)
 		goto fail_send_cmd;
 	}
 
-	cmd[num_desc].size = 4;
-	cmd[num_desc].system_addr = head1.phys_base;
-	cmd[num_desc].local_addr = local_addrh;
-
-	desc[num_desc].opcode = IPA_DMA_SHARED_MEM;
-	desc[num_desc].pyld = &cmd[num_desc];
-	desc[num_desc].len = sizeof(struct ipa_hw_imm_cmd_dma_shared_mem);
-	desc[num_desc++].type = IPA_IMM_CMD_DESC;
-
 	for (i = 0; i < 6; i++) {
 		if (ipa_ctx->skip_ep_cfg_shadow[i]) {
 			IPADBG("skip %d\n", i);
@@ -896,7 +887,7 @@ int __ipa_commit_flt_v2(enum ipa_ip_type ip)
 				8 + i * 4;
 		}
 		cmd[num_desc].size = 4;
-		cmd[num_desc].system_addr = head1.phys_base + 4 + i * 4;
+		cmd[num_desc].system_addr = head1.phys_base + i * 4;
 		cmd[num_desc].local_addr = local_addrh;
 
 		desc[num_desc].opcode = IPA_DMA_SHARED_MEM;
@@ -1144,6 +1135,8 @@ static int __ipa_add_global_flt_rule(enum ipa_ip_type ip,
 		const struct ipa_flt_rule *rule, u8 add_rear, u32 *rule_hdl)
 {
 	struct ipa_flt_tbl *tbl;
+
+	BUG();
 
 	if (rule == NULL || rule_hdl == NULL) {
 		IPAERR("bad parms rule=%p rule_hdl=%p\n", rule, rule_hdl);
