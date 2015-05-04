@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -43,6 +43,7 @@
 
 #define SAMPLE_RATE_8KHZ 8000
 #define SAMPLE_RATE_16KHZ 16000
+#define SAMPLE_RATE_48KHZ 48000
 
 #define TOP_AND_BOTTOM_SPK_AMP_POS	0x1
 #define TOP_AND_BOTTOM_SPK_AMP_NEG	0x2
@@ -313,6 +314,8 @@ static int mdm9615_btsco_rate = SAMPLE_RATE_8KHZ;
 static int mdm9615_btsco_ch = 1;
 
 static int mdm9615_auxpcm_rate = SAMPLE_RATE_8KHZ;
+static int mdm9615_i2s_rx_rate = SAMPLE_RATE_48KHZ;
+static int mdm9615_i2s_tx_rate = SAMPLE_RATE_48KHZ;
 
 static struct clk *codec_clk;
 static int clk_users;
@@ -677,6 +680,12 @@ static const struct soc_enum mdm9615_enum[] = {
 	SOC_ENUM_SINGLE_EXT(4, slim0_tx_ch_text),
 };
 
+static const char *i2s_rx_rate_text[] = {"rate_8000", "rate_16000", "rate_48000"};
+static const char *i2s_tx_rate_text[] = {"rate_8000", "rate_16000", "rate_48000"};
+static const struct soc_enum mdm9615_i2s_enum[] = {
+		SOC_ENUM_SINGLE_EXT(3, i2s_rx_rate_text),
+		SOC_ENUM_SINGLE_EXT(3, i2s_tx_rate_text),
+};
 static const char *btsco_rate_text[] = {"8000", "16000"};
 static const struct soc_enum mdm9615_btsco_enum[] = {
 		SOC_ENUM_SINGLE_EXT(2, btsco_rate_text),
@@ -723,6 +732,66 @@ static int mdm9615_slim_0_tx_ch_put(struct snd_kcontrol *kcontrol,
 	pr_debug("%s: mdm9615_slim_0_tx_ch = %d\n", __func__,
 		 mdm9615_slim_0_tx_ch);
 	return 1;
+}
+static int mdm9615_i2s_rx_rate_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: mdm9615_i2s_rate  = %d", __func__,
+		 mdm9615_i2s_rx_rate);
+	ucontrol->value.integer.value[0] = mdm9615_i2s_rx_rate;
+	return 0;
+}
+static int mdm9615_i2s_rx_rate_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	switch (ucontrol->value.integer.value[0]) {
+	case 0:
+		mdm9615_i2s_rx_rate = SAMPLE_RATE_8KHZ;
+		break;
+	case 1:
+		mdm9615_i2s_rx_rate = SAMPLE_RATE_16KHZ;
+		break;
+	case 2:
+		mdm9615_i2s_rx_rate = SAMPLE_RATE_48KHZ;
+		break;
+	default:
+		mdm9615_i2s_rx_rate = SAMPLE_RATE_8KHZ;
+		break;
+	}
+	pr_debug("%s: mdm9615_i2s_rx_rate = %d"
+		 "ucontrol->value.integer.value[0] = %d\n", __func__,
+		 mdm9615_i2s_rx_rate, (int)ucontrol->value.integer.value[0]);
+	return 0;
+}
+static int mdm9615_i2s_tx_rate_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: mdm9615_i2s_rate  = %d", __func__,
+		 mdm9615_i2s_tx_rate);
+	ucontrol->value.integer.value[0] = mdm9615_i2s_tx_rate;
+	return 0;
+}
+static int mdm9615_i2s_tx_rate_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	switch (ucontrol->value.integer.value[0]) {
+	case 0:
+		mdm9615_i2s_tx_rate = SAMPLE_RATE_8KHZ;
+		break;
+	case 1:
+		mdm9615_i2s_tx_rate = SAMPLE_RATE_16KHZ;
+		break;
+	case 2:
+		mdm9615_i2s_tx_rate = SAMPLE_RATE_48KHZ;
+		break;
+	default:
+		mdm9615_i2s_tx_rate = SAMPLE_RATE_8KHZ;
+		break;
+	}
+	pr_debug("%s: mdm9615_i2s_tx_rate = %d"
+		 "ucontrol->value.integer.value[0] = %d\n", __func__,
+		 mdm9615_i2s_tx_rate, (int)ucontrol->value.integer.value[0]);
+	return 0;
 }
 
 static int mdm9615_btsco_rate_get(struct snd_kcontrol *kcontrol,
@@ -800,6 +869,16 @@ static const struct snd_kcontrol_new auxpcm_rate_mixer_controls[] = {
 		mdm9615_auxpcm_rate_get, mdm9615_auxpcm_rate_put),
 };
 
+static const struct snd_kcontrol_new i2s_rate_mixer_controls[] = {
+	SOC_ENUM_EXT("PRI I2S Rx SampleRate", mdm9615_i2s_enum[0],
+		mdm9615_i2s_rx_rate_get, mdm9615_i2s_rx_rate_put),
+	SOC_ENUM_EXT("PRI I2S Tx SampleRate", mdm9615_i2s_enum[1],
+		mdm9615_i2s_tx_rate_get, mdm9615_i2s_tx_rate_put),
+	SOC_ENUM_EXT("SEC I2S Rx SampleRate", mdm9615_i2s_enum[0],
+		mdm9615_i2s_rx_rate_get, mdm9615_i2s_rx_rate_put),
+	SOC_ENUM_EXT("SEC I2S Tx SampleRate", mdm9615_i2s_enum[1],
+		mdm9615_i2s_tx_rate_get, mdm9615_i2s_tx_rate_put),
+};
 static int mdm9615_btsco_init(struct snd_soc_pcm_runtime *rtd)
 {
 	int err = 0;
@@ -1039,13 +1118,18 @@ static int msm9615_i2s_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_codec *codec = rtd->codec;
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	struct snd_soc_platform *platform = rtd->platform;
 	err = snd_soc_add_controls(codec, tabla_msm9615_i2s_controls,
 		ARRAY_SIZE(tabla_msm9615_i2s_controls));
 	if (err < 0) {
 		pr_err("returning loc 1 err = %d\n", err);
 		return err;
 	}
-
+	err = snd_soc_add_platform_controls(platform, i2s_rate_mixer_controls,
+		ARRAY_SIZE(i2s_rate_mixer_controls));
+	if (err < 0) {
+		return err;
+	}
 	snd_soc_dapm_new_controls(dapm, mdm9615_dapm_widgets,
 				  ARRAY_SIZE(mdm9615_dapm_widgets));
 
@@ -1084,7 +1168,7 @@ static int msm9615_i2s_rx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	SNDRV_PCM_HW_PARAM_RATE);
 	struct snd_interval *channels = hw_param_interval(params,
 						SNDRV_PCM_HW_PARAM_CHANNELS);
-	rate->min = rate->max = 48000;
+	rate->min = rate->max = mdm9615_i2s_rx_rate;
 	channels->min = channels->max = msm9615_i2s_rx_ch;
 
 	return 0;
@@ -1098,7 +1182,7 @@ static int msm9615_i2s_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 
 	struct snd_interval *channels = hw_param_interval(params,
 			SNDRV_PCM_HW_PARAM_CHANNELS);
-	rate->min = rate->max = 48000;
+	rate->min = rate->max = mdm9615_i2s_tx_rate;
 
 	channels->min = channels->max = msm9615_i2s_tx_ch;
 
