@@ -1390,7 +1390,8 @@ static void arm_iommu_unmap_page(struct device *dev, dma_addr_t handle,
 {
 	struct dma_iommu_mapping *mapping = dev->archdata.mapping;
 	dma_addr_t iova = handle & PAGE_MASK;
-	struct page *page = phys_to_page(mapping->phys);
+	//struct page *page = phys_to_page(mapping->phys);
+	struct page *page = phys_to_page(iommu_iova_to_phys(mapping->domain, iova));
 	int offset = handle & ~PAGE_MASK;
 	int len = PAGE_ALIGN(size + offset);
 
