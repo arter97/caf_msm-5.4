@@ -1283,12 +1283,14 @@ static struct adv7180_platform_data adv7180_i2c_data[] __initdata = {
 	{
 		.rstb_gpio		= PM8921_GPIO_PM_TO_SYS(05),
 		.pwdnb_gpio		= PM8921_GPIO_PM_TO_SYS(06),
+		.irq_gpio		= PM8921_GPIO_PM_TO_SYS(07),
 		.dev_num		= 0,
 		.pwr_on			= 1,
 	},
 	{
 		.rstb_gpio		= PM8921_GPIO_PM_TO_SYS(05),
 		.pwdnb_gpio		= PM8921_GPIO_PM_TO_SYS(06),
+		.irq_gpio		= PM8921_GPIO_PM_TO_SYS(18),
 		.dev_num		= 1,
 		.pwr_on			= 0,
 	},
@@ -1306,9 +1308,11 @@ static struct i2c_board_info adv7180_device_info[] __initdata = {
 };
 
 static struct adv7481_platform_data adv7481_i2c_data __initdata = {
-#ifdef MOBIS_PLATFORM
+#ifdef M_PLATFORM
 		.rstb_gpio		= PM8921_GPIO_PM_TO_SYS(27),
+		.irq_gpio		= PM8921_GPIO_PM_TO_SYS(7),
 #endif
+		.irq_gpio		= PM8921_GPIO_PM_TO_SYS(7),
 };
 
 static struct i2c_board_info adv7481_device_info[] __initdata = {
@@ -3227,7 +3231,7 @@ static int ethernet_init(void)
 #define GPIO_MPLATFORM_KEY_HOME			30
 #define GPIO_MPLATFORM_KEY_MENU			33
 #define GPIO_MPLATFORM_KEY_BACK			56
-#define MOBIS_PLATFORM machine_is_apq8064_mplatform()
+#define M_PLATFORM machine_is_apq8064_mplatform()
 
 static struct gpio_keys_button cdp_keys_pm8921[] = {
 	{

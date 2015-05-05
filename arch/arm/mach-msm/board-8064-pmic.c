@@ -145,6 +145,10 @@ static struct pm8xxx_gpio_init pm8921_gpios[] __initdata = {
 	PM8921_GPIO_OUTPUT_VIN(22, 0, PM_GPIO_VIN_VPH), /* PCIE_CLKEN */
 	PM8921_GPIO_OUTPUT(13, 0, HIGH),               /* PCIE_CLK_PWR_EN */
 	PM8921_GPIO_INPUT(12, PM_GPIO_PULL_UP_30),     /* PCIE_WAKE_N */
+
+	/* ADV IRQ */
+	PM8921_GPIO_INPUT(07, PM_GPIO_PULL_UP_30), /* ADV7282_IRQ1_N */
+	PM8921_GPIO_INPUT(18, PM_GPIO_PULL_UP_30), /* ADV7282_IRQ2_N */
 };
 /* Initial PM8921 GPIO configurations */
 static struct pm8xxx_gpio_init mplatform_pm8921_gpios[] __initdata = {
@@ -157,7 +161,7 @@ static struct pm8xxx_gpio_init mplatform_pm8921_gpios[] __initdata = {
 	PM8921_GPIO_OUTPUT(20, 0, HIGH),
 	PM8921_GPIO_INPUT(35, PM_GPIO_PULL_UP_30),/*SD_PWR_EN for Mplatform*/
 	PM8921_GPIO_INPUT(38, PM_GPIO_PULL_UP_30),
-#ifdef MOBIS_PLATFORM
+#ifdef M_PLATFORM
 	PM8921_GPIO_OUTPUT_VIN(27, 0, PM_GPIO_VIN_VPH), /* ADV_RESET */
 #endif
 	/* TABLA CODEC RESET */

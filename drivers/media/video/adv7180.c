@@ -117,10 +117,12 @@
 #define ADV7180_REG_IDENT 0x0011
 #define ADV7180_ID_7180 0x18
 
-#define ADV7180_REG_ICONF1		0x00140
+#define ADV7180_REG_ICONF1		0x2040
+
 #define ADV7180_ICONF1_ACTIVE_LOW	0x01
 #define ADV7180_ICONF1_PSYNC_ONLY	0x10
 #define ADV7180_ICONF1_ACTIVE_TO_CLR	0xC0
+
 /* Saturation */
 #define ADV7180_REG_SD_SAT_CB	0x00e3	/* Unsigned */
 #define ADV7180_REG_SD_SAT_CR	0x00e4	/* Unsigned */
@@ -130,15 +132,25 @@
 
 #define ADV7180_IRQ1_LOCK	0x01
 #define ADV7180_IRQ1_UNLOCK	0x02
-#define ADV7180_REG_ISR1	0x0142
-#define ADV7180_REG_ICR1	0x0143
-#define ADV7180_REG_IMR1	0x0144
-#define ADV7180_REG_IMR2	0x0148
+#define ADV7180_IRQ1_MACROVISION 0x40
+
 #define ADV7180_IRQ3_AD_CHANGE	0x08
-#define ADV7180_REG_ISR3	0x014A
-#define ADV7180_REG_ICR3	0x014B
-#define ADV7180_REG_IMR3	0x014C
-#define ADV7180_REG_IMR4	0x0150
+
+#define ADV7180_REG_ISR1	0x2042
+#define ADV7180_REG_ICR1	0x2043
+#define ADV7180_REG_IMR1	0x2044
+
+#define ADV7180_REG_ISR2	0x2046
+#define ADV7180_REG_ICR2	0x2047
+#define ADV7180_REG_IMR2	0x2048
+
+#define ADV7180_REG_ISR3	0x204A
+#define ADV7180_REG_ICR3	0x204B
+#define ADV7180_REG_IMR3	0x204C
+
+#define ADV7180_REG_ISR4	0x204E
+#define ADV7180_REG_ICR4	0x204F
+#define ADV7180_REG_IMR4	0x2050
 
 #define ADV7180_REG_NTSC_V_BIT_END	0x00E6
 #define ADV7180_NTSC_V_BIT_END_MANUAL_NVEND	0x4F
@@ -236,6 +248,9 @@ struct adv7180_state {
 	/* Keep track of current ain selected */
 	int curr_input;
 	int device_num;
+
+	/* worker to handle interrupts */
+	struct delayed_work irq_delayed_work;
 };
 
 static int adv7180_set_video_standard(struct adv7180_state *state,
@@ -1024,15 +1039,19 @@ static int adv7180_set_irq_config(struct adv7180_state *state)
 	int ret = 0;
 
 	if (state->irq > 0) {
-
 		adv7180_write(state, ADV7180_REG_ICONF1,
-					ADV7180_ICONF1_ACTIVE_LOW |
-					ADV7180_ICONF1_PSYNC_ONLY);
-		adv7180_write(state, ADV7180_REG_IMR1, 0);
+				ADV7180_ICONF1_ACTIVE_LOW |
+				ADV7180_ICONF1_PSYNC_ONLY |
+				ADV7180_ICONF1_ACTIVE_TO_CLR);
+		adv7180_write(state, ADV7180_REG_IMR1,
+				ADV7180_IRQ1_LOCK |
+				ADV7180_IRQ1_UNLOCK |
+				ADV7180_IRQ1_MACROVISION);
 		adv7180_write(state, ADV7180_REG_IMR2, 0);
-		adv7180_write(state, ADV7180_REG_IMR3,
-					ADV7180_IRQ3_AD_CHANGE);
+		adv7180_write(state, ADV7180_REG_IMR3, ADV7180_IRQ3_AD_CHANGE);
 		adv7180_write(state, ADV7180_REG_IMR4, 0);
+
+		enable_irq(state->irq);
 	}
 
 	return ret;
@@ -1137,21 +1156,47 @@ static const struct v4l2_subdev_ops adv7180_ops = {
 	.pad = &adv7180_pad_ops,
 };
 
-static irqreturn_t adv7180_irq(int irq, void *devid)
+static irqreturn_t adv7180_irq(int irq, void *dev)
 {
-	struct adv7180_state *state = devid;
+	struct adv7180_state *state = dev;
+
+	schedule_delayed_work(&state->irq_delayed_work,
+						msecs_to_jiffies(0));
+	return IRQ_HANDLED;
+}
+
+static void adv7180_irq_delay_work(struct work_struct *work)
+{
+	struct adv7180_state *state;
+	u8 isr1;
+	u8 isr2;
 	u8 isr3;
+	u8 isr4;
+
+	state = container_of(work, struct adv7180_state,
+				irq_delayed_work.work);
 
 	mutex_lock(&state->mutex);
+
+	isr1 = adv7180_read(state, ADV7180_REG_ISR1);
+	isr2 = adv7180_read(state, ADV7180_REG_ISR2);
 	isr3 = adv7180_read(state, ADV7180_REG_ISR3);
-	/* clear */
+	isr4 = adv7180_read(state, ADV7180_REG_ISR4);
+
+	pr_debug("%s, dev %d got interrupt - %x %x %x %x", __func__,
+			state->device_num, isr1, isr2, isr3, isr4);
+
+	/* clear interrupts */
+	adv7180_write(state, ADV7180_REG_ICR1, isr1);
+	adv7180_write(state, ADV7180_REG_ICR2, isr2);
 	adv7180_write(state, ADV7180_REG_ICR3, isr3);
+	adv7180_write(state, ADV7180_REG_ICR4, isr4);
 
 	if (isr3 & ADV7180_IRQ3_AD_CHANGE && state->autodetect)
 		__adv7180_status(state, NULL, &state->curr_norm);
 	mutex_unlock(&state->mutex);
 
-	return IRQ_HANDLED;
+	return;
 }
 
 static int adv7180_init(struct adv7180_state *state)
@@ -1213,6 +1258,7 @@ static int adv7182_init(struct adv7180_state *state)
 	if (state->chip_info->flags & ADV7180_FLAG_MIPI_CSI2) {
 		adv7180_write(state, 0x0003, 0x4e);
 		adv7180_write(state, 0x0004, 0x57);
+		adv7180_write(state, 0x0013, 0x00);
 		adv7180_write(state, 0x001d, 0xc0);
 	} else {
 		if (state->chip_info->flags & ADV7180_FLAG_V2)
@@ -1602,7 +1648,7 @@ static int adv7180_probe(struct i2c_client *client,
 	int device_num = 0;
 	u16 csi_i2c_addr = 0;
 	u16 vpp_i2c_addr = 0;
-	int ret;
+	int ret = 0;
 	pr_debug("%s : kpi entry\n", __func__);
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE_DATA))
@@ -1661,7 +1707,6 @@ static int adv7180_probe(struct i2c_client *client,
 		}
 	}
 
-	state->irq = client->irq;
 	mutex_init(&state->mutex);
 
 	/* Default to NTSC for faster lock */
@@ -1688,24 +1733,66 @@ static int adv7180_probe(struct i2c_client *client,
 			goto err_unregister_vpp_client;
 
 		ret = gpio_direction_output(pdata->pwdnb_gpio, 1);
-		ret = gpio_direction_output(pdata->rstb_gpio, 1);
-		if (ret)
+		ret |= gpio_direction_output(pdata->rstb_gpio, 1);
+		if (ret) {
+			pr_err("%s : Failed gpio_direction %x", __func__, ret);
 			goto err_unregister_vpp_client;
+		}
 
 		/* Required Control sequence for Powerdown and Reset Pins */
 		/* Delay required following Reset before I2C is accessible */
 		ret = gpio_direction_output(pdata->pwdnb_gpio, 0);
-		ret = gpio_direction_output(pdata->rstb_gpio, 0);
+		ret |= gpio_direction_output(pdata->rstb_gpio, 0);
 		usleep(2000);
-		ret = gpio_direction_output(pdata->pwdnb_gpio, 1);
+		ret |= gpio_direction_output(pdata->pwdnb_gpio, 1);
 		usleep(5000);
-		ret = gpio_direction_output(pdata->rstb_gpio, 1);
+		ret |= gpio_direction_output(pdata->rstb_gpio, 1);
 
-		if (ret)
+		if (ret) {
+			pr_err("%s : Failed gpio_direction %x", __func__, ret);
 			goto err_unregister_vpp_client;
+		}
+
 	} else {
 		pr_debug("%s : ADV device Power up sequence not required\n",
 			__func__);
+	}
+
+
+	if (gpio_is_valid(pdata->irq_gpio)) {
+		ret = gpio_request(pdata->irq_gpio, "irq_gpio");
+		if (ret) {
+			pr_err("%s : Failed to request irq_gpio %x",
+					__func__, ret);
+			goto err_unregister_vpp_client;
+		}
+
+		ret = gpio_direction_input(pdata->irq_gpio);
+		if (ret) {
+			pr_err("%s : Failed gpio_direction irq %x",
+					__func__, ret);
+			goto err_unregister_vpp_client;
+		}
+
+		state->irq = gpio_to_irq(pdata->irq_gpio);
+		if (state->irq) {
+			ret = request_irq(state->irq, adv7180_irq,
+					IRQF_ONESHOT | IRQF_TRIGGER_FALLING,
+					DRIVER_NAME, state);
+			if (ret) {
+				pr_err("%s : Failed request_irq %x",
+						__func__, ret);
+				goto err_unregister_vpp_client;
+			}
+		} else {
+			pr_err("%s : Failed gpio_to_irq %x", __func__, ret);
+		}
+
+		/* disable irq until chip interrupts are programmed */
+		disable_irq(state->irq);
+
+		INIT_DELAYED_WORK(&state->irq_delayed_work,
+				adv7180_irq_delay_work);
 	}
 
 	/* Initialize csi configurion flag */
@@ -1717,7 +1804,7 @@ static int adv7180_probe(struct i2c_client *client,
 
 	ret = adv7180_init_controls(state);
 	if (ret)
-		goto err_unregister_vpp_client;
+		goto err_free_irq;
 
 	state->pad.flags = MEDIA_PAD_FL_SOURCE;
 	state->sd.entity.flags |= MEDIA_ENT_T_V4L2_SUBDEV;
@@ -1729,13 +1816,6 @@ static int adv7180_probe(struct i2c_client *client,
 	if (ret)
 		goto err_media_entity_cleanup;
 
-	if (state->irq) {
-		ret = request_threaded_irq(client->irq, NULL, adv7180_irq,
-					   IRQF_ONESHOT | IRQF_TRIGGER_FALLING,
-					   DRIVER_NAME, state);
-		if (ret)
-			goto err_free_ctrl;
-	}
 
 	if (device_num == 0) {
 		ret = msm_ba_register_subdev_node(sd);
@@ -1747,18 +1827,18 @@ static int adv7180_probe(struct i2c_client *client,
 			__func__, device_num);
 	}
 	if (ret)
-		goto err_free_irq;
+		goto err_media_entity_cleanup;
 
 	pr_debug("%s : kpi exit\n", __func__);
 	return 0;
 
 err_media_entity_cleanup:
 	media_entity_cleanup(&sd->entity);
-err_free_irq:
-	if (state->irq > 0)
-		free_irq(client->irq, state);
 err_free_ctrl:
 	adv7180_exit_controls(state);
+err_free_irq:
+	if (state->irq)
+		free_irq(client->irq, state);
 err_unregister_vpp_client:
 	if (state->chip_info->flags & ADV7180_FLAG_I2P)
 		i2c_unregister_device(state->vpp_client);
