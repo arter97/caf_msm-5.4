@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -526,7 +526,6 @@ static int diag_copy_dci(char __user *buf, size_t count,
 	int ret = 0;
 	int exit_stat = 1;
 	struct diag_dci_buffer_t *buf_entry, *temp;
-	struct diag_smd_info *smd_info = NULL;
 
 	if (!buf || !entry || !pret)
 		return exit_stat;
@@ -554,19 +553,6 @@ drop:
 			buf_entry->data_len = 0;
 			buf_entry->in_list = 0;
 			if (buf_entry->buf_type == DCI_BUF_CMD) {
-				if (buf_entry->data_source == APPS_DATA) {
-					mutex_unlock(&buf_entry->data_mutex);
-					continue;
-				}
-				if (driver->separate_cmdrsp[
-						buf_entry->data_source]) {
-					smd_info = &driver->smd_dci_cmd[
-						buf_entry->data_source];
-				} else {
-					smd_info = &driver->smd_dci[
-						buf_entry->data_source];
-				}
-				smd_info->in_busy_1 = 0;
 				mutex_unlock(&buf_entry->data_mutex);
 				continue;
 			} else if (buf_entry->buf_type == DCI_BUF_SECONDARY) {

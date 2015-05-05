@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -543,10 +543,20 @@ int diag_process_smd_cntl_read_data(struct diag_smd_info *smd_info, void *buf,
 	int read_len = 0;
 	int header_len = sizeof(struct diag_ctrl_pkt_header_t);
 	uint8_t *ptr = buf;
+	unsigned long flags;
+	int *in_busy_ptr = 0;
 	struct diag_ctrl_pkt_header_t *ctrl_pkt = NULL;
 
 	if (!smd_info || !buf || total_recd <= 0)
 		return -EIO;
+
+	if (smd_info->buf_in_1 == buf) {
+		in_busy_ptr = &smd_info->in_busy_1;
+	} else {
+		pr_err("diag: In %s, no match for in_busy_1, peripheral: %d\n",
+			__func__, smd_info->peripheral);
+		return -EIO;
+	}
 
 	while (read_len + header_len < total_recd) {
 		ctrl_pkt = (struct diag_ctrl_pkt_header_t *)ptr;
@@ -581,6 +591,10 @@ int diag_process_smd_cntl_read_data(struct diag_smd_info *smd_info, void *buf,
 		ptr += header_len + ctrl_pkt->len;
 		read_len += header_len + ctrl_pkt->len;
 	}
+
+	spin_lock_irqsave(&smd_info->in_busy_lock, flags);
+	*in_busy_ptr = 0;
+	spin_unlock_irqrestore(&smd_info->in_busy_lock, flags);
 
 	return 0;
 }
