@@ -231,7 +231,7 @@ static int msm_cpp_update_bandwidth(struct cpp_device *cpp_dev,
 
 	int rc;
 	struct msm_bus_paths *path;
-
+	cpp_dev->bus_idx = 3 - cpp_dev->bus_idx;
 	path = &(msm_cpp_bus_scale_data.usecase[cpp_dev->bus_idx]);
 	path->vectors[0].ab = ab;
 	path->vectors[0].ib = ib;
@@ -242,7 +242,6 @@ static int msm_cpp_update_bandwidth(struct cpp_device *cpp_dev,
 		pr_err("Fail bus scale update %d\n", rc);
 		return -EINVAL;
 	}
-	cpp_dev->bus_idx = 3 - cpp_dev->bus_idx;
 
 	return 0;
 }
@@ -453,7 +452,7 @@ static unsigned long msm_cpp_queue_buffer_info(struct cpp_device *cpp_dev,
 	buff->map_info.buf_fd = buffer_info->fd;
 	rc = cam_smmu_get_phy_addr(cpp_dev->iommu_hdl, buffer_info->fd,
 				CAM_SMMU_MAP_RW, &buff->map_info.phy_addr,
-				&buff->map_info.len);
+				(size_t *)&buff->map_info.len);
 	if (rc < 0) {
 		pr_err("ION mmap failed\n");
 		kzfree(buff);
@@ -1488,6 +1487,10 @@ static int msm_cpp_notify_frame_done(struct cpp_device *cpp_dev,
 				(processed_frame->identity & 0xFFFF);
 			buff_mgr_info.frame_id = processed_frame->frame_id;
 			buff_mgr_info.timestamp = processed_frame->timestamp;
+			/*
+			 * Update the reserved field (cds information) to buffer
+			 * manager structure so it is propogated back to HAL
+			 */
 			buff_mgr_info.reserved = processed_frame->reserved;
 			if (processed_frame->batch_info.batch_mode ==
 				BATCH_MODE_VIDEO) {
@@ -1530,6 +1533,11 @@ static int msm_cpp_notify_frame_done(struct cpp_device *cpp_dev,
 			buff_mgr_info.timestamp = processed_frame->timestamp;
 			buff_mgr_info.index =
 				processed_frame->duplicate_buffer_info.index;
+			/*
+			 * Update the reserved field (cds information) to buffer
+			 * manager structure so it is propogated back to HAL
+			 */
+			buff_mgr_info.reserved = processed_frame->reserved;
 			if (put_buf) {
 				rc = msm_cpp_buffer_ops(cpp_dev,
 					VIDIOC_MSM_BUF_MNGR_PUT_BUF,
@@ -2179,7 +2187,8 @@ static int msm_cpp_copy_from_ioctl_ptr(void *dst_ptr,
 {
 	int ret;
 	if ((ioctl_ptr->ioctl_ptr == NULL) || (ioctl_ptr->len == 0)) {
-		pr_err("Wrong ioctl_ptr %p\n", ioctl_ptr);
+		pr_err("%s: Wrong ioctl_ptr %p / len %zu\n", __func__,
+			ioctl_ptr, ioctl_ptr->len);
 		return -EINVAL;
 	}
 
@@ -2200,6 +2209,11 @@ static int msm_cpp_copy_from_ioctl_ptr(void *dst_ptr,
 	struct msm_camera_v4l2_ioctl_t *ioctl_ptr)
 {
 	int ret;
+	if ((ioctl_ptr->ioctl_ptr == NULL) || (ioctl_ptr->len == 0)) {
+		pr_err("%s: Wrong ioctl_ptr %p / len %zu\n", __func__,
+			ioctl_ptr, ioctl_ptr->len);
+		return -EINVAL;
+	}
 
 	ret = copy_from_user(dst_ptr,
 		(void __user *)ioctl_ptr->ioctl_ptr, ioctl_ptr->len);
@@ -2264,8 +2278,9 @@ long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 			}
 			if (ioctl_ptr->ioctl_ptr == NULL) {
 				pr_err("ioctl_ptr->ioctl_ptr=NULL\n");
-				mutex_unlock(&cpp_dev->mutex);
 				kfree(cpp_dev->fw_name_bin);
+				cpp_dev->fw_name_bin = NULL;
+				mutex_unlock(&cpp_dev->mutex);
 				return -EINVAL;
 			}
 			rc = (copy_from_user(cpp_dev->fw_name_bin,
@@ -2532,6 +2547,7 @@ STREAM_BUFF_END:
 				pr_err(" Fail to get clock index\n");
 				return -EINVAL;
 			}
+
 			if (cpp_dev->bus_master_flag)
 				rc = msm_cpp_update_bandwidth(cpp_dev,
 					clock_settings.avg,
@@ -2582,6 +2598,10 @@ STREAM_BUFF_END:
 		struct msm_pproc_queue_buf_info queue_buf_info;
 		CPP_DBG("VIDIOC_MSM_CPP_QUEUE_BUF\n");
 
+		if (ioctl_ptr->len != sizeof(struct msm_pproc_queue_buf_info)) {
+			pr_err("%s: Not valid ioctl_ptr->len\n", __func__);
+			return -EINVAL;
+		}
 		rc = msm_cpp_copy_from_ioctl_ptr(&queue_buf_info, ioctl_ptr);
 		if (rc) {
 			ERR_COPY_FROM_USER();
@@ -2607,7 +2627,9 @@ STREAM_BUFF_END:
 	case VIDIOC_MSM_CPP_POP_STREAM_BUFFER: {
 		struct msm_buf_mngr_info buff_mgr_info;
 		struct msm_cpp_frame_info_t frame_info;
-		if (ioctl_ptr->ioctl_ptr == NULL) {
+		if (ioctl_ptr->ioctl_ptr == NULL ||
+			(ioctl_ptr->len !=
+			sizeof(struct msm_cpp_frame_info_t))) {
 			rc = -EINVAL;
 			break;
 		}
@@ -3175,10 +3197,13 @@ static long msm_cpp_subdev_fops_compat_ioctl(struct file *file,
 
 		CPP_DBG("fid %d\n", process_frame->frame_id);
 		if (copy_to_user((void __user *)kp_ioctl.ioctl_ptr,
-				&k32_process_frame,
-				sizeof(struct msm_cpp_frame_info32_t))) {
-					mutex_unlock(&cpp_dev->mutex);
-					return -EFAULT;
+			&k32_process_frame,
+			sizeof(struct msm_cpp_frame_info32_t))) {
+			kfree(process_frame->cpp_cmd_msg);
+			kfree(process_frame);
+			kfree(event_qcmd);
+			mutex_unlock(&cpp_dev->mutex);
+			return -EINVAL;
 		}
 
 		kfree(process_frame->cpp_cmd_msg);
@@ -3225,6 +3250,12 @@ static long msm_cpp_subdev_fops_compat_ioctl(struct file *file,
 			u32_queue_buf->buff_mgr_info.timestamp.tv_sec;
 		k_queue_buf.buff_mgr_info.timestamp.tv_usec =
 			u32_queue_buf->buff_mgr_info.timestamp.tv_usec;
+		/*
+		 * Update the reserved field (cds information) to buffer
+		 * manager structure so that it is propogated back to HAL
+		 */
+		k_queue_buf.buff_mgr_info.reserved =
+			u32_queue_buf->buff_mgr_info.reserved;
 
 		kp_ioctl.ioctl_ptr = (void *)&k_queue_buf;
 		kp_ioctl.len = sizeof(struct msm_pproc_queue_buf_info);

@@ -39,6 +39,7 @@
 #include "diag_usb.h"
 #include "diag_memorydevice.h"
 #include "diag_mux.h"
+#include "diag_ipc_logging.h"
 
 #include <linux/coresight-stm.h>
 #include <linux/kernel.h>
@@ -154,6 +155,11 @@ static struct diag_apps_data_t non_hdlc_data;
 static struct mutex apps_data_mutex;
 
 #define DIAGPKT_MAX_DELAYED_RSP 0xFFFF
+
+#ifdef DIAG_DEBUG
+uint16_t diag_debug_mask;
+void *diag_ipc_log;
+#endif
 
 /*
  * Returns the next delayed rsp id. If wrapping is enabled,
@@ -469,6 +475,8 @@ void diag_record_stats(int type, int flag)
 		pkt_stats = &driver->log_stats;
 		break;
 	case DATA_TYPE_RESPONSE:
+		if (flag != PKT_DROP)
+			return;
 		pr_err_ratelimited("diag: In %s, dropping response. This shouldn't happen\n",
 				   __func__);
 		return;
@@ -738,6 +746,7 @@ static int diag_copy_dci(char __user *buf, size_t count,
 	int total_data_len = 0;
 	int ret = 0;
 	int exit_stat = 1;
+	uint8_t drain_again = 0;
 	struct diag_dci_buffer_t *buf_entry, *temp;
 	struct diag_smd_info *smd_info = NULL;
 
@@ -746,11 +755,22 @@ static int diag_copy_dci(char __user *buf, size_t count,
 
 	ret = *pret;
 
-	ret += 4;
+	ret += sizeof(int);
+	if (ret >= count) {
+		pr_err("diag: In %s, invalid value for ret: %d, count: %zu\n",
+		       __func__, ret, count);
+		return -EINVAL;
+	}
 
 	mutex_lock(&entry->write_buf_mutex);
 	list_for_each_entry_safe(buf_entry, temp, &entry->list_write_buf,
 								buf_track) {
+
+		if ((ret + buf_entry->data_len) > count) {
+			drain_again = 1;
+			break;
+		}
+
 		list_del(&buf_entry->buf_track);
 		mutex_lock(&buf_entry->data_mutex);
 		if ((buf_entry->data_len > 0) &&
@@ -771,8 +791,8 @@ drop:
 					mutex_unlock(&buf_entry->data_mutex);
 					continue;
 				}
-				if (driver->separate_cmdrsp[
-						buf_entry->data_source]) {
+				if (driver->feature[buf_entry->data_source].
+				    separate_cmd_rsp) {
 					smd_info = &driver->smd_dci_cmd[
 						buf_entry->data_source];
 				} else {
@@ -804,11 +824,13 @@ drop:
 			__func__, total_data_len);
 	}
 
-	entry->in_service = 0;
 	exit_stat = 0;
 exit:
+	entry->in_service = 0;
 	mutex_unlock(&entry->write_buf_mutex);
 	*pret = ret;
+	if (drain_again)
+		dci_drain_data(0);
 
 	return exit_stat;
 }
@@ -1228,8 +1250,8 @@ static int diag_ioctl_get_real_time(unsigned long ioarg)
 	 * mode, overwrite the value of real time with UNKNOWN_MODE
 	 */
 	if (rt_query.proc == DIAG_LOCAL_PROC) {
-		for (i = 0; i < NUM_SMD_CONTROL_CHANNELS; i++) {
-			if (!driver->peripheral_buffering_support[i])
+		for (i = 0; i < NUM_PERIPHERALS; i++) {
+			if (!driver->feature[i].peripheral_buffering)
 				continue;
 			switch (driver->buffering_mode[i].mode) {
 			case DIAG_BUFFERING_MODE_CIRCULAR:
@@ -1265,13 +1287,13 @@ static int diag_ioctl_peripheral_drain_immediate(unsigned long ioarg)
 	if (copy_from_user(&peripheral, (void __user *)ioarg, sizeof(uint8_t)))
 		return -EFAULT;
 
-	if (peripheral > LAST_PERIPHERAL) {
+	if (peripheral >= NUM_PERIPHERALS) {
 		pr_err("diag: In %s, invalid peripheral %d\n", __func__,
 		       peripheral);
 		return -EINVAL;
 	}
 
-	if (!driver->peripheral_buffering_support[peripheral]) {
+	if (!driver->feature[peripheral].peripheral_buffering) {
 		pr_err("diag: In %s, peripheral %d doesn't support buffering\n",
 		       __func__, peripheral);
 		return -EIO;
@@ -1793,7 +1815,7 @@ static int diag_process_apps_data_non_hdlc(unsigned char *buf, int len,
 	memcpy(data->buf, &header, sizeof(header));
 	write_len += sizeof(header);
 	memcpy(data->buf + write_len, buf, len);
-	write_len += sizeof(len);
+	write_len += len;
 	*(uint8_t *)(data->buf + write_len) = CONTROL_CHAR;
 	write_len += sizeof(uint8_t);
 	data->len += write_len;
@@ -1804,6 +1826,8 @@ static int diag_process_apps_data_non_hdlc(unsigned char *buf, int len,
 			ret = -EIO;
 			goto fail_free_buf;
 		}
+		data->buf = NULL;
+		data->len = 0;
 	}
 
 	return PKT_ALLOC;
@@ -2318,15 +2342,15 @@ static ssize_t diagchar_read(struct file *file, char __user *buf, size_t count,
 			if (exit_stat == 1)
 				goto exit;
 		}
-		for (i = 0; i < NUM_SMD_DCI_CHANNELS; i++) {
+		for (i = 0; i < NUM_PERIPHERALS; i++) {
 			if (driver->smd_dci[i].ch) {
 				queue_work(driver->diag_dci_wq,
 				&(driver->smd_dci[i].diag_read_smd_work));
 			}
 		}
 		if (driver->supports_separate_cmdrsp) {
-			for (i = 0; i < NUM_SMD_DCI_CMD_CHANNELS; i++) {
-				if (!driver->separate_cmdrsp[i])
+			for (i = 0; i < NUM_PERIPHERALS; i++) {
+				if (!driver->feature[i].separate_cmd_rsp)
 					continue;
 				if (driver->smd_dci_cmd[i].ch) {
 					queue_work(driver->diag_dci_wq,
@@ -2620,6 +2644,25 @@ void diag_ws_release()
 	spin_unlock_irqrestore(&driver->ws_lock, flags);
 }
 
+#ifdef DIAG_DEBUG
+static void diag_debug_init(void)
+{
+	diag_ipc_log = ipc_log_context_create(DIAG_IPC_LOG_PAGES, "diag", 0);
+	if (!diag_ipc_log)
+		pr_err("diag: Failed to create IPC logging context\n");
+	/*
+	 * Set the bit mask here as per diag_ipc_logging.h to enable debug logs
+	 * to be logged to IPC
+	 */
+	diag_debug_mask = 0;
+}
+#else
+static void diag_debug_init(void)
+{
+
+}
+#endif
+
 static int diag_real_time_info_init(void)
 {
 	int i;
@@ -2787,7 +2830,6 @@ static int __init diagchar_init(void)
 
 	timer_in_progress = 0;
 	driver->delayed_rsp_id = 0;
-	driver->debug_flag = 1;
 	driver->hdlc_disabled = 0;
 	driver->dci_state = DIAG_DCI_NO_ERROR;
 	setup_timer(&drain_timer, drain_timer_func, 1234);
@@ -2803,8 +2845,8 @@ static int __init diagchar_init(void)
 	 * peripheral) + data from SMD command channels
 	 */
 	diagmem_setsize(POOL_TYPE_MUX_APPS, itemsize_usb_apps,
-			poolsize_usb_apps + 1 + (NUM_SMD_DATA_CHANNELS * 2) +
-			NUM_SMD_CMD_CHANNELS);
+			poolsize_usb_apps + 1 + (NUM_PERIPHERALS * 2) +
+			NUM_PERIPHERALS);
 	driver->num_clients = max_clients;
 	driver->logging_mode = USB_MODE;
 	for (i = 0; i < DIAG_NUM_PROC; i++) {
@@ -2815,10 +2857,10 @@ static int __init diagchar_init(void)
 	driver->mask_check = 0;
 	driver->in_busy_pktdata = 0;
 	driver->in_busy_dcipktdata = 0;
-	driver->rsp_buf_ctxt = SET_BUF_CTXT(APPS_DATA, SMD_CMD_TYPE, 1);
-	hdlc_data.ctxt = SET_BUF_CTXT(APPS_DATA, SMD_DATA_TYPE, 1);
+	driver->rsp_buf_ctxt = SET_BUF_CTXT(APPS_DATA, TYPE_CMD, 1);
+	hdlc_data.ctxt = SET_BUF_CTXT(APPS_DATA, TYPE_DATA, 1);
 	hdlc_data.len = 0;
-	non_hdlc_data.ctxt = SET_BUF_CTXT(APPS_DATA, SMD_DATA_TYPE, 1);
+	non_hdlc_data.ctxt = SET_BUF_CTXT(APPS_DATA, TYPE_DATA, 1);
 	non_hdlc_data.len = 0;
 	mutex_init(&driver->hdlc_disable_mutex);
 	mutex_init(&driver->diagchar_mutex);
@@ -2831,6 +2873,7 @@ static int __init diagchar_init(void)
 			diag_update_user_client_work_fn);
 	diag_ws_init();
 	diag_stats_init();
+	diag_debug_init();
 
 	driver->incoming_pkt.capacity = DIAG_MAX_REQ_SIZE;
 	driver->incoming_pkt.data = kzalloc(DIAG_MAX_REQ_SIZE, GFP_KERNEL);
