@@ -12,7 +12,7 @@
  */
 #include "msm_sensor.h"
 #include <media/msm_ba.h>
-#define DRIVER_NAME "avdevice"
+
 #define NUM_AV_DEVICES 2
 
 DEFINE_MUTEX(avdevice_mut);
@@ -303,5 +303,6 @@ static struct msm_sensor_ctrl_t avdevice_a_s_ctrl[] = {
 };
 
 module_init(avdevice_init_module);
+module_exit(avdevice_exit_module);
 MODULE_DESCRIPTION("Qualcomm Technologies, Inc. avdevice sensor driver");
 MODULE_LICENSE("GPL v2");
