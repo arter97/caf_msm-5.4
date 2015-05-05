@@ -27,6 +27,7 @@
 #include "csi/msm_csid.h"
 #include "sensors/msm_sensor_common.h"
 #include "msm.h"
+#include "msm_cam_server.h"
 #include "vfe/msm_vfe32.h"
 #include "../../../video/msm/msm_fb.h"
 
@@ -203,7 +204,8 @@ extern struct v4l2_subdev *lsh_axi_ctrl;
 extern struct axi_ctrl_t *my_axi_ctrl;
 extern struct mdp4_overlay_pipe *pipe[OVERLAY_COUNT];
 
-int msm_ispif_init(struct ispif_device *ispif, const uint32_t *csid_version);
+int msm_ispif_init_rdi(struct ispif_device *ispif,
+	const uint32_t *csid_version);
 int msm_ispif_config(struct ispif_device *ispif,
 	struct msm_ispif_params_list *params_list);
 int msm_csiphy_init(struct csiphy_device *csiphy_dev);
@@ -256,7 +258,7 @@ int mdp_bus_scale_update_request(u64 ab_p0, u64 ib_p0, u64 ab_p1,
 					u64 ib_p1);
 int msm_csid_release(struct csid_device *csid_dev, uint32_t bypass);
 int msm_csiphy_release(struct csiphy_device *csiphy_dev, void *arg);
-void msm_ispif_release(struct ispif_device *ispif);
+void msm_ispif_release_rdi(struct ispif_device *ispif);
 void msm_axi_subdev_release_rdi_only(struct v4l2_subdev *sd,
 					struct msm_sensor_ctrl_t *s_ctrl);
 int msm_axi_subdev_s_crystal_freq(struct v4l2_subdev *sd,
@@ -286,5 +288,6 @@ static int adp_rear_camera_enable(void);
 extern struct msm_camera_csiphy_params adp_rvc_csiphy_params;
 extern struct msm_camera_csi_lane_params adp_rvc_csi_lane_params;
 extern struct msm_camera_csid_params adp_rvc_csid_params;
+
 
 #endif /* _MSM_CAMERA_TEST_H */

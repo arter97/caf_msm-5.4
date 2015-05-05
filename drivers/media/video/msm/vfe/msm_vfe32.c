@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -31,8 +31,19 @@
 
 struct v4l2_subdev *lsh_axi_ctrl;
 struct axi_ctrl_t *my_axi_ctrl;
-
 atomic_t irq_cnt;
+
+#define RDI1_WM_DEFAULT 4
+
+struct rdi1_reserve_info_t {
+	uint32_t reserved;
+	uint32_t wm;
+	uint32_t xbarcfg0;
+	uint32_t xbarcfg1;
+	uint32_t pixifcfg;
+};
+
+static struct rdi1_reserve_info_t rdi1_reserve_info;
 
 #define VFE32_AXI_OFFSET 0x0050
 #define vfe32_get_ch_ping_addr(base, chn) \
@@ -56,7 +67,6 @@ atomic_t irq_cnt;
 static uint32_t vfe_clk_rate;
 static void vfe32_send_isp_msg(struct v4l2_subdev *sd,
 	uint32_t vfeFrameId, uint32_t isp_msg_id);
-
 
 struct vfe32_isr_queue_cmd {
 	struct list_head list;
@@ -748,32 +758,48 @@ int vfe32_config_axi_rdi_only(struct axi_ctrl_t *axi_ctrl, int mode,
 	uint32_t *axi_cfg = ao+V32_AXI_BUS_FMT_OFF;
 	uint32_t bus_cmd = *axi_cfg;
 	int test;
+	uint32_t xbuscfg[4];
 
 	pr_debug("%s: Enter axi configuration, bus_cmd is %d\n",
 			__func__, bus_cmd);
+
+	ch_info = axi_cfg + V32_AXI_CFG_LEN + 9;
+	rdi1_reserve_info.wm = *ch_info;
+	pr_debug("%s: rdi1 use writemaster 0x%x",
+		__func__, rdi1_reserve_info.wm);
+	if (rdi1_reserve_info.wm > 6) {
+		rdi1_reserve_info.wm = RDI1_WM_DEFAULT;
+		pr_err("%s: Invalid writemaster 0x%x",
+			__func__, rdi1_reserve_info.wm);
+		return -EIO;
+	}
 
 	/* as we have bypassed the channel configure,
 	 * so we add 15 to the offset
 	 */
 	ch_info = axi_cfg + V32_AXI_CFG_LEN + 15;
 
-	axi_ctrl->share_ctrl->outpath.out3.ch0 = 3;
+	axi_ctrl->share_ctrl->outpath.out3.ch0 = rdi1_reserve_info.wm;
 	axi_ctrl->share_ctrl->rdi_comp = VFE_RDI_NON_COMPOSITE;
 
 	msm_camera_io_w(*ao, axi_ctrl->share_ctrl->vfebase +
 		VFE_BUS_IO_FORMAT_CFG);
 	axi_cfg++;
 
+	memcpy(xbuscfg, axi_cfg, V32_AXI_BUS_CFG_LEN);
+	rdi1_reserve_info.xbarcfg0 = xbuscfg[1];
+	rdi1_reserve_info.xbarcfg1 = xbuscfg[2];
+
 	msm_camera_io_memcpy(axi_ctrl->share_ctrl->vfebase +
 		vfe32_cmd[VFE_CMD_AXI_OUT_CFG].offset, axi_cfg,
 		V32_AXI_BUS_CFG_LEN);
 	axi_cfg += V32_AXI_BUS_CFG_LEN/4; /* ??? */
-	    axi_cfg += 21;
-    /* this is to configure the last 3 32bit words in wm */
+	axi_cfg += rdi1_reserve_info.wm*6+3;
+	/* this is to configure the last 3 32bit words in wm */
 	pr_debug("%s : Enter axi RDI, axi_cfg %x, %x, %x,\n",
 			__func__, *axi_cfg, *(axi_cfg+1), *(axi_cfg+2));
 	msm_camera_io_memcpy(axi_ctrl->share_ctrl->vfebase + \
-		vfe32_AXI_WM_CFG[3] + 12,
+		vfe32_AXI_WM_CFG[rdi1_reserve_info.wm] + 12,
 		axi_cfg, 12);
 
 	msm_camera_io_w(bus_cmd, axi_ctrl->share_ctrl->vfebase +
@@ -783,6 +809,7 @@ int vfe32_config_axi_rdi_only(struct axi_ctrl_t *axi_ctrl, int mode,
 	test = msm_camera_io_r(axi_ctrl->share_ctrl->vfebase +
 					V32_AXI_BUS_CMD_OFF);
 	pr_debug("%s :read bus cmd is  %x\n", __func__, test);
+	rdi1_reserve_info.pixifcfg = *ch_info;
 	msm_camera_io_w(*ch_info++,
 		axi_ctrl->share_ctrl->vfebase + VFE_PIXEL_IF_CFG);
 	if (msm_camera_io_r(axi_ctrl->share_ctrl->vfebase +
@@ -818,6 +845,8 @@ static int vfe32_config_axi(
 	int vfe_mode = (mode & ~(OUTPUT_TERT1|OUTPUT_TERT2|OUTPUT_TERT3));
 	uint32_t bus_cmd = *axi_cfg;
 	int i;
+	uint32_t xbuscfg[4];
+	uint32_t pixel_if_cfg;
 
 	/* Update the corresponding write masters for each output*/
 	ch_info = axi_cfg + V32_AXI_CFG_LEN;
@@ -907,28 +936,48 @@ bus_cfg:
 	msm_camera_io_w(*ao, axi_ctrl->share_ctrl->vfebase +
 		VFE_BUS_IO_FORMAT_CFG);
 	axi_cfg++;
+
+	memcpy(xbuscfg, axi_cfg, V32_AXI_BUS_CFG_LEN);
+
+	if (rdi1_reserve_info.reserved) {
+		xbuscfg[1] |= rdi1_reserve_info.xbarcfg0;
+		xbuscfg[2] |= rdi1_reserve_info.xbarcfg1;
+	}
+
 	msm_camera_io_memcpy(axi_ctrl->share_ctrl->vfebase +
-		vfe32_cmd[VFE_CMD_AXI_OUT_CFG].offset, axi_cfg,
+		vfe32_cmd[VFE_CMD_AXI_OUT_CFG].offset, xbuscfg,
 		V32_AXI_BUS_CFG_LEN);
 	axi_cfg += V32_AXI_BUS_CFG_LEN/4;
 	for (i = 0; i < ARRAY_SIZE(vfe32_AXI_WM_CFG); i++) {
 		axi_cfg += 3;
-		msm_camera_io_memcpy(
-			axi_ctrl->share_ctrl->vfebase+vfe32_AXI_WM_CFG[i]+12,
-								axi_cfg, 12);
+		if (rdi1_reserve_info.reserved &&
+			(i == rdi1_reserve_info.wm)) {
+			pr_debug("%s skip rdi1 wm config", __func__);
+		} else {
+			msm_camera_io_memcpy(
+				axi_ctrl->share_ctrl->vfebase
+				+vfe32_AXI_WM_CFG[i]+12,
+				axi_cfg, 12);
+		}
 		axi_cfg += 3;
 	}
 	msm_camera_io_w(bus_cmd, axi_ctrl->share_ctrl->vfebase +
 					V32_AXI_BUS_CMD_OFF);
-	msm_camera_io_w(*ch_info++,
+	pixel_if_cfg = *ch_info++;
+	if (rdi1_reserve_info.reserved)
+		pixel_if_cfg |= rdi1_reserve_info.pixifcfg;
+
+	msm_camera_io_w(pixel_if_cfg,
 		axi_ctrl->share_ctrl->vfebase + VFE_PIXEL_IF_CFG);
 	if (msm_camera_io_r(axi_ctrl->share_ctrl->vfebase +
 		V32_GET_HW_VERSION_OFF) ==
 		VFE33_HW_NUMBER) {
-		msm_camera_io_w(*ch_info++,
-			axi_ctrl->share_ctrl->vfebase + VFE_RDI0_CFG);
-		msm_camera_io_w(*ch_info++,
-			axi_ctrl->share_ctrl->vfebase + VFE_RDI1_CFG);
+		if (!rdi1_reserve_info.reserved) {
+			msm_camera_io_w(*ch_info++,
+				axi_ctrl->share_ctrl->vfebase + VFE_RDI0_CFG);
+			msm_camera_io_w(*ch_info++,
+				axi_ctrl->share_ctrl->vfebase + VFE_RDI1_CFG);
+		}
 	}
 	return 0;
 }
@@ -2190,8 +2239,13 @@ static int vfe32_proc_general(
 	case VFE_CMD_RESET:
 		pr_info("vfe32_proc_general: cmdID = %s\n",
 			vfe32_general_cmd[cmd->id]);
-		vfe32_ctrl->share_ctrl->vfe_reset_flag = true;
-		vfe32_reset(vfe32_ctrl);
+		if (!rdi1_reserve_info.reserved) {
+			vfe32_ctrl->share_ctrl->vfe_reset_flag = true;
+			vfe32_reset(vfe32_ctrl);
+
+		} else {
+			pr_debug("reset skipped vfe32_proc_general");
+		}
 		break;
 	case VFE_CMD_START:
 		pr_info("vfe32_proc_general: cmdID = %s\n",
@@ -6137,11 +6191,17 @@ int msm_axi_subdev_init_rdi_only(struct v4l2_subdev *sd,
 	int rc = 0;
 	struct axi_ctrl_t *axi_ctrl = v4l2_get_subdevdata(sd);
 #ifdef CONFIG_MSM_IOMMU
+	int cam_server_domain_num;
 	struct iommu_domain *camera_domain;
 #endif /* CONFIG_MSM_IOMMU */
 	axi_ctrl->share_ctrl->axi_ref_cnt++;
 	if (axi_ctrl->share_ctrl->axi_ref_cnt > 1)
 		return rc;
+	rdi1_reserve_info.reserved = 1;
+	rdi1_reserve_info.wm = RDI1_WM_DEFAULT;
+	rdi1_reserve_info.xbarcfg0 = 0;
+	rdi1_reserve_info.xbarcfg1 = 0;
+	rdi1_reserve_info.pixifcfg = 0;
 	axi_ctrl->share_ctrl->dual_enabled = dual_enabled;
 	axi_ctrl->share_ctrl->lp_mode = 0;
 	spin_lock_init(&axi_ctrl->tasklet_lock);
@@ -6171,9 +6231,14 @@ int msm_axi_subdev_init_rdi_only(struct v4l2_subdev *sd,
 		goto clk_enable_failed;
 
 #ifdef CONFIG_MSM_IOMMU
-	camera_domain = msm_get_iommu_domain(CAMERA_DOMAIN); /* ??? */
+	cam_server_domain_num = msm_cam_server_get_domain_num();
+	pr_debug("%s: cam_server_domain_num %d\n",
+		__func__, cam_server_domain_num);
+
+	camera_domain = msm_get_iommu_domain(cam_server_domain_num);
+	pr_debug("%s cam domain %p", __func__, camera_domain);
+
 	rc = iommu_attach_device(camera_domain, axi_ctrl->iommu_ctx_imgwr);
-	/* rc = iommu_attach_device(mctl->domain, axi_ctrl->iommu_ctx_imgwr); */
 	if (rc < 0) {
 		pr_err("%s: imgwr attach failed rc = %d\n", __func__, rc);
 		rc = -ENODEV;
@@ -6255,47 +6320,57 @@ int msm_axi_subdev_init(struct v4l2_subdev *sd,
 	}
 
 	axi_ctrl->share_ctrl->axi_ref_cnt++;
-	if (axi_ctrl->share_ctrl->axi_ref_cnt > 1)
-		return rc;
+
 	axi_ctrl->share_ctrl->dual_enabled = dual_enabled;
 	axi_ctrl->share_ctrl->lp_mode = 0;
 	spin_lock_init(&axi_ctrl->tasklet_lock);
 	INIT_LIST_HEAD(&axi_ctrl->tasklet_q);
 	spin_lock_init(&axi_ctrl->share_ctrl->sd_notify_lock);
 
-	axi_ctrl->share_ctrl->vfebase = ioremap(axi_ctrl->vfemem->start,
-		resource_size(axi_ctrl->vfemem));
-	if (!axi_ctrl->share_ctrl->vfebase) {
-		rc = -ENOMEM;
-		pr_err("%s: vfe ioremap failed\n", __func__);
-		goto remap_failed;
-	}
-
-	if (axi_ctrl->fs_vfe) {
-		rc = regulator_enable(axi_ctrl->fs_vfe);
-		if (rc) {
-			pr_err("%s: Regulator enable failed\n",	__func__);
-			goto fs_failed;
+	if (!rdi1_reserve_info.reserved) {
+		pr_debug("%s: vfe reset the vfe\n", __func__);
+		axi_ctrl->share_ctrl->vfebase = ioremap(axi_ctrl->vfemem->start,
+			resource_size(axi_ctrl->vfemem));
+		if (!axi_ctrl->share_ctrl->vfebase) {
+			rc = -ENOMEM;
+			pr_err("%s: vfe ioremap failed\n", __func__);
+			goto remap_failed;
 		}
-	}
 
-	rc = msm_cam_clk_enable(&axi_ctrl->pdev->dev, vfe32_clk_info,
-			axi_ctrl->vfe_clk, ARRAY_SIZE(vfe32_clk_info), 1);
-	if (rc < 0)
-		goto clk_enable_failed;
+		if (axi_ctrl->fs_vfe) {
+			rc = regulator_enable(axi_ctrl->fs_vfe);
+			if (rc) {
+				pr_err("%s: Regulator enable failed\n",
+					__func__);
+				goto fs_failed;
+			}
+		}
+
+		rc = msm_cam_clk_enable(&axi_ctrl->pdev->dev, vfe32_clk_info,
+				axi_ctrl->vfe_clk,
+				ARRAY_SIZE(vfe32_clk_info), 1);
+		if (rc < 0)
+			goto clk_enable_failed;
+	}
 
 #ifdef CONFIG_MSM_IOMMU
-	rc = iommu_attach_device(mctl->domain, axi_ctrl->iommu_ctx_imgwr);
-	if (rc < 0) {
-		pr_err("%s: imgwr attach failed rc = %d\n", __func__, rc);
-		rc = -ENODEV;
-		goto device_imgwr_attach_failed;
-	}
-	rc = iommu_attach_device(mctl->domain, axi_ctrl->iommu_ctx_misc);
-	if (rc < 0) {
-		pr_err("%s: misc attach failed rc = %d\n", __func__, rc);
-		rc = -ENODEV;
-		goto device_misc_attach_failed;
+	if (!rdi1_reserve_info.reserved) {
+		rc = iommu_attach_device(mctl->domain,
+			axi_ctrl->iommu_ctx_imgwr);
+		if (rc < 0) {
+			pr_err("%s: imgwr attach failed rc = %d\n",
+				__func__, rc);
+			rc = -ENODEV;
+			goto device_imgwr_attach_failed;
+		}
+		rc = iommu_attach_device(mctl->domain,
+			axi_ctrl->iommu_ctx_misc);
+		if (rc < 0) {
+			pr_err("%s: misc attach failed rc = %d\n",
+				__func__, rc);
+			rc = -ENODEV;
+			goto device_misc_attach_failed;
+		}
 	}
 #endif
 
@@ -6304,7 +6379,7 @@ int msm_axi_subdev_init(struct v4l2_subdev *sd,
 
 	CDBG("%s: axi_ctrl->share_ctrl->dual_enabled ? = %d\n", __func__,
 			axi_ctrl->share_ctrl->dual_enabled);
-	if (axi_ctrl->share_ctrl->dual_enabled){
+	if (axi_ctrl->share_ctrl->dual_enabled) {
 		pr_info("%s: Scaling bus config for dual bus vectors\n",
 			__func__);
 		msm_camio_bus_scale_cfg(
@@ -6324,7 +6399,10 @@ int msm_axi_subdev_init(struct v4l2_subdev *sd,
 	spin_lock_init(&axi_ctrl->share_ctrl->update_ack_lock);
 	spin_lock_init(&axi_ctrl->share_ctrl->start_ack_lock);
 
-	enable_irq(axi_ctrl->vfeirq->start);
+	if (!rdi1_reserve_info.reserved) {
+		/* enable reset_ack interrupt.  */
+		enable_irq(axi_ctrl->vfeirq->start);
+	}
 
 	return rc;
 
@@ -6413,6 +6491,7 @@ void msm_axi_subdev_release(struct v4l2_subdev *sd)
 void msm_axi_subdev_release_rdi_only(struct v4l2_subdev *sd,
 		struct msm_sensor_ctrl_t *s_ctrl)
 {
+	uint32_t cam_server_domain_num = 0;
 	struct axi_ctrl_t *axi_ctrl = v4l2_get_subdevdata(sd);
 #ifdef CONFIG_MSM_IOMMU
 	struct iommu_domain *camera_domain;
@@ -6422,6 +6501,7 @@ void msm_axi_subdev_release_rdi_only(struct v4l2_subdev *sd,
 		pr_err("%s: base address unmapped\n", __func__);
 		return;
 	}
+	rdi1_reserve_info.reserved = 0;
 
 	axi_ctrl->share_ctrl->axi_ref_cnt--;
 	if (axi_ctrl->share_ctrl->axi_ref_cnt > 0)
@@ -6433,7 +6513,10 @@ void msm_axi_subdev_release_rdi_only(struct v4l2_subdev *sd,
 	tasklet_kill(&axi_ctrl->vfe32_tasklet);
 
 #ifdef CONFIG_MSM_IOMMU
-	camera_domain = msm_get_iommu_domain(CAMERA_DOMAIN); /* ??? */
+	cam_server_domain_num = msm_cam_server_get_domain_num();
+	pr_debug("%s: cam_server_domain_num %d\n",
+		__func__, cam_server_domain_num);
+	camera_domain = msm_get_iommu_domain(cam_server_domain_num);
 	iommu_detach_device(camera_domain, axi_ctrl->iommu_ctx_misc);
 	iommu_detach_device(camera_domain, axi_ctrl->iommu_ctx_imgwr);
 #endif
@@ -6455,6 +6538,12 @@ void msm_axi_subdev_release_rdi_only(struct v4l2_subdev *sd,
 				S_EXIT);
 	else
 		pr_err("%s: Null sensor control info\n", __func__);
+
+	rdi1_reserve_info.reserved = 0;
+	rdi1_reserve_info.wm = RDI1_WM_DEFAULT;
+	rdi1_reserve_info.xbarcfg0 = 0;
+	rdi1_reserve_info.xbarcfg1 = 0;
+	rdi1_reserve_info.pixifcfg = 0;
 
 	pr_err("%s: axi release\n", __func__);
 
@@ -6926,7 +7015,7 @@ void axi_start(struct msm_cam_media_controller *pmctl,
 		msm_camera_io_w((
 				0x1 << axi_ctrl->share_ctrl->outpath.out2.ch0),
 				axi_ctrl->share_ctrl->vfebase + VFE_BUS_CMD);
-		msm_camera_io_w(1, axi_ctrl->share_ctrl->vfebase +
+		msm_camera_io_w(0x3 /*1*/, axi_ctrl->share_ctrl->vfebase +
 			vfe32_AXI_WM_CFG[axi_ctrl->share_ctrl->
 			outpath.out2.ch0]);
 	}
@@ -6964,12 +7053,19 @@ void axi_start(struct msm_cam_media_controller *pmctl,
 				0, 1))
 			reg_update |= 0x2;
 	}
-	if (axi_ctrl->share_ctrl->current_mode & VFE_OUTPUTS_RDI1) {
-		if (!atomic_cmpxchg(
-			&axi_ctrl->share_ctrl->rdi1_update_ack_pending,
-				0, 1))
-			reg_update |= 0x4;
+
+	if (!rdi1_reserve_info.reserved) {
+		if (axi_ctrl->share_ctrl->current_mode & VFE_OUTPUTS_RDI1) {
+			if (!atomic_cmpxchg(
+				&axi_ctrl->share_ctrl->rdi1_update_ack_pending,
+					0, 1))
+				reg_update |= 0x4;
+		}
+	} else {
+		pr_err("rdi is reserved skip ack pending");
 	}
+
+
 	if (axi_ctrl->share_ctrl->current_mode & VFE_OUTPUTS_RDI2) {
 		if (!atomic_cmpxchg(
 			&axi_ctrl->share_ctrl->rdi2_update_ack_pending,
@@ -7046,14 +7142,18 @@ void axi_stop(struct msm_cam_media_controller *pmctl,
 				0, 2))
 			reg_update |= 0x2;
 	}
-	if (axi_ctrl->share_ctrl->current_mode & VFE_OUTPUTS_RDI1) {
-		msm_camera_io_w(0, axi_ctrl->share_ctrl->vfebase +
-			vfe32_AXI_WM_CFG[axi_ctrl->share_ctrl->
-				outpath.out3.ch0]);
-		if (!atomic_cmpxchg(
-			&axi_ctrl->share_ctrl->rdi1_update_ack_pending,
-				0, 2))
-			reg_update |= 0x4;
+
+	if (!rdi1_reserve_info.reserved) {
+		pr_debug("reset rdi1 %d", rdi1_reserve_info.reserved);
+		if (axi_ctrl->share_ctrl->current_mode & VFE_OUTPUTS_RDI1) {
+			msm_camera_io_w(0, axi_ctrl->share_ctrl->vfebase +
+				vfe32_AXI_WM_CFG[axi_ctrl->share_ctrl->
+					outpath.out3.ch0]);
+			if (!atomic_cmpxchg(
+				&axi_ctrl->share_ctrl->rdi1_update_ack_pending,
+					0, 2))
+				reg_update |= 0x4;
+		}
 	}
 	if (axi_ctrl->share_ctrl->current_mode & VFE_OUTPUTS_RDI2) {
 		msm_camera_io_w(0, axi_ctrl->share_ctrl->vfebase +
@@ -7079,6 +7179,7 @@ void axi_start_rdi1_only(struct axi_ctrl_t *axi_ctrl,
 {
 	uint32_t reg_update = 0;
 	uint32_t test;
+	uint32_t rdi1_ack_pending = 0;
 
 	pr_debug("%s : axi start = %d\n", __func__ ,
 		axi_ctrl->share_ctrl->current_mode);
@@ -7089,31 +7190,45 @@ void axi_start_rdi1_only(struct axi_ctrl_t *axi_ctrl,
 	else
 		pr_err("%s: Null sensor control info\n", __func__);
 
+	axi_ctrl->share_ctrl->current_mode |= VFE_OUTPUTS_RDI1;
+	axi_ctrl->share_ctrl->outpath.out3.ch0 = 4;
+	axi_ctrl->share_ctrl->outpath.output_mode |=
+		VFE32_OUTPUT_MODE_TERTIARY2;
+
 	axi_enable_wm_irq(axi_ctrl->share_ctrl);
 
 	if (axi_ctrl->share_ctrl->current_mode & VFE_OUTPUTS_RDI1) {
 
-		pr_debug("%s enter rdi1 set\n", __func__);
+		pr_debug("%s enter rdi1 set ch %d\n",
+			__func__, axi_ctrl->share_ctrl->
+			outpath.out3.ch0);
+		axi_ctrl->share_ctrl->outpath.out3.ch0 = 4;
 		axi_ctrl->share_ctrl->rdi1_capture_count = -1;
 		axi_ctrl->share_ctrl->outpath.out3.capture_cnt = -1;
 
 		msm_camera_io_w((
 				0x1 << axi_ctrl->share_ctrl->outpath.out3.ch0),
 				axi_ctrl->share_ctrl->vfebase + VFE_BUS_CMD);
-		msm_camera_io_w(1, axi_ctrl->share_ctrl->vfebase +
+		msm_camera_io_w(3 /*1*/, axi_ctrl->share_ctrl->vfebase +
 			vfe32_AXI_WM_CFG[axi_ctrl->share_ctrl->
 			outpath.out3.ch0]);
 	}
 
 	axi_enable_irq(axi_ctrl->share_ctrl);
 
+	rdi1_ack_pending = atomic_read(
+		&axi_ctrl->share_ctrl->rdi1_update_ack_pending);
+	pr_debug("%s: rdi1_ack_pending 0x%x\n", __func__, rdi1_ack_pending);
+
 	if (axi_ctrl->share_ctrl->current_mode & VFE_OUTPUTS_RDI1) {
 		if (!atomic_cmpxchg(
 			&axi_ctrl->share_ctrl->rdi1_update_ack_pending,
-				0, 1))
+				0, 1)) {
 			reg_update |= 0x4;
+			pr_debug("%s: reg_update 0x%x\n",
+				__func__, reg_update);
+		}
 	}
-
 
 	msm_camera_io_w_mb(reg_update,
 			axi_ctrl->share_ctrl->vfebase +
@@ -7130,13 +7245,40 @@ void axi_start_rdi1_only(struct axi_ctrl_t *axi_ctrl,
 
 void axi_stop_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 {
+	uint32_t reg_update = 0;
 	pr_debug("%s: axi stop = %d\n", __func__,
 		axi_ctrl->share_ctrl->current_mode);
 
-	axi_disable_irq(axi_ctrl->share_ctrl,
-			axi_ctrl->share_ctrl->current_mode);
-	axi_stop_process(axi_ctrl->share_ctrl);
+	if (axi_ctrl->share_ctrl->current_mode & VFE_OUTPUTS_RDI1) {
+		pr_debug("%s enter rdi1 set\n", __func__);
+		axi_ctrl->share_ctrl->rdi1_capture_count = -1;
+		axi_ctrl->share_ctrl->outpath.out3.capture_cnt = -1;
 
+		msm_camera_io_w((
+				0x1 << axi_ctrl->share_ctrl->outpath.out3.ch0),
+				axi_ctrl->share_ctrl->vfebase + VFE_BUS_CMD);
+		msm_camera_io_w(0, axi_ctrl->share_ctrl->vfebase +
+			vfe32_AXI_WM_CFG[axi_ctrl->share_ctrl->
+			outpath.out3.ch0]);
+	}
+
+	if (axi_ctrl->share_ctrl->current_mode & VFE_OUTPUTS_RDI1) {
+		if (!atomic_cmpxchg(
+			&axi_ctrl->share_ctrl->rdi1_update_ack_pending,
+				0, 1))
+			reg_update |= 0x4;
+
+		pr_debug("%s update ack pending %d",
+			__func__,
+			atomic_read(
+			&axi_ctrl->share_ctrl->rdi1_update_ack_pending));
+	}
+
+	msm_camera_io_w_mb(reg_update,
+			axi_ctrl->share_ctrl->vfebase +
+			VFE_REG_UPDATE_CMD);
+	axi_ctrl->share_ctrl->operation_mode |=
+		axi_ctrl->share_ctrl->current_mode;
 }
 
 static int msm_axi_config(struct v4l2_subdev *sd, void __user *arg)
@@ -7434,7 +7576,14 @@ static int msm_axi_config(struct v4l2_subdev *sd, void __user *arg)
 				sizeof(struct msm_camera_vfe_params_t))) {
 				return -EFAULT;
 		}
-		axi_reset(axi_ctrl, vfe_params);
+
+		if (rdi1_reserve_info.reserved) {
+			pr_debug("%s rdi1 reserved, skipping reset %x ",
+				__func__,
+			cfgcmd.cmd_type);
+		} else {
+			axi_reset(axi_ctrl, vfe_params);
+		}
 		}
 		break;
 	case CMD_AXI_ABORT:
@@ -7889,6 +8038,11 @@ static int __devinit vfe32_probe(struct platform_device *pdev)
 		my_axi_ctrl = axi_ctrl;
 		pr_debug("%s: msm_vfe32 finished\n", __func__);
 	}
+	rdi1_reserve_info.reserved = 0;
+	rdi1_reserve_info.wm = RDI1_WM_DEFAULT;
+	rdi1_reserve_info.xbarcfg0 = 0;
+	rdi1_reserve_info.xbarcfg1 = 0;
+	rdi1_reserve_info.pixifcfg = 0;
 	return 0;
 
 vfe32_no_resource:

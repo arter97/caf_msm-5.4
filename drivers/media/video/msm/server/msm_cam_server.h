@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012, 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -72,4 +72,5 @@ int msm_cam_server_config_interface_map(u32 extendedmode,
 	uint32_t mctl_handle, int vnode_id, int is_bayer_sensor);
 uint32_t msm_cam_find_handle_from_mctl_ptr(
 	struct msm_cam_media_controller *p_mctl);
+int msm_cam_server_get_domain_num(void);
 #endif /* _MSM_CAM_SERVER_H */

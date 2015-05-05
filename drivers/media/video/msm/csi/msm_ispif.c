@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, 2014 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012,2014-2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,6 +30,7 @@ static atomic_t ispif_irq_cnt;
 static spinlock_t ispif_tasklet_lock;
 static struct list_head ispif_tasklet_q;
 struct ispif_device *lsh_ispif;
+static uint32_t ispif_reserve_rdi;
 
 static int msm_ispif_intf_reset(struct ispif_device *ispif,
 	uint16_t intfmask, uint8_t vfe_intf)
@@ -737,9 +738,8 @@ int msm_ispif_init(struct ispif_device *ispif,
 	CDBG("%s called %d\n", __func__, __LINE__);
 
 	if (ispif->ispif_state == ISPIF_POWER_UP) {
-		pr_err("%s: ispif invalid state %d\n", __func__,
+		pr_err("%s: ispif already initialized %d\n", __func__,
 			ispif->ispif_state);
-		rc = -EINVAL;
 		return rc;
 	}
 
@@ -785,6 +785,14 @@ void msm_ispif_release(struct ispif_device *ispif)
 		return;
 	}
 
+
+	if (ispif_reserve_rdi) {
+		pr_err("%s: rdi reserved skip ispif power down %d\n",
+			__func__,
+			ispif->ispif_state);
+		return;
+	}
+
 	CDBG("%s, free_irq\n", __func__);
 	free_irq(ispif->irq->start, ispif);
 	tasklet_kill(&ispif->ispif_tasklet);
@@ -797,6 +805,19 @@ void msm_ispif_release(struct ispif_device *ispif)
 			ispif->ispif_clk, ARRAY_SIZE(ispif_8960_clk_info), 0);
 	}
 	ispif->ispif_state = ISPIF_POWER_DOWN;
+}
+
+int msm_ispif_init_rdi(struct ispif_device *ispif,
+	const uint32_t *csid_version)
+{
+	ispif_reserve_rdi = 1;
+	return msm_ispif_init(ispif, csid_version);
+}
+
+void msm_ispif_release_rdi(struct ispif_device *ispif)
+{
+	ispif_reserve_rdi = 0;
+	msm_ispif_release(ispif);
 }
 
 static long msm_ispif_cmd(struct v4l2_subdev *sd, void *arg)
@@ -939,6 +960,7 @@ static int __devinit ispif_probe(struct platform_device *pdev)
 	ispif->subdev.entity.name = pdev->name;
 	ispif->subdev.entity.revision = ispif->subdev.devnode->num;
 	ispif->ispif_state = ISPIF_POWER_DOWN;
+	ispif_reserve_rdi = 0;
 	if (machine_is_apq8064_adp_2()
 			|| machine_is_apq8064_mplatform()
 			|| machine_is_apq8064_adp2_es2()
