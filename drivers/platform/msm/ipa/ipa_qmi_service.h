@@ -64,6 +64,8 @@ void wan_ioctl_enable_qmi_messages(void);
 
 void wan_ioctl_deinit(void);
 
+void ipa_qmi_stop_workqueues(void);
+
 extern struct elem_info ipa_init_modem_driver_req_msg_data_v01_ei[];
 extern struct elem_info ipa_init_modem_driver_resp_msg_data_v01_ei[];
 extern struct elem_info ipa_indication_reg_req_msg_data_v01_ei[];
