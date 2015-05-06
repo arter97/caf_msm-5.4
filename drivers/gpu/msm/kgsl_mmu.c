@@ -134,7 +134,7 @@ static void kgsl_unmap_global_pt_entries(struct kgsl_pagetable *pagetable)
  * Map all the current global PT entries into the specified pagetable.
  * Returns error if an entry fails to map or 0 on success.
  */
-static int kgsl_map_global_pt_entries(struct kgsl_pagetable *pagetable)
+int kgsl_map_global_pt_entries(struct kgsl_pagetable *pagetable)
 {
 	int i, ret = 0;
 
@@ -615,11 +615,13 @@ kgsl_mmu_createpagetableobject(struct kgsl_mmu *mmu,
 			goto err;
 	}
 
+	#if 0
 	if (KGSL_MMU_SECURE_PT != name) {
 		status = kgsl_map_global_pt_entries(pagetable);
 		if (status)
 			goto err;
 	}
+	#endif
 
 	spin_lock_irqsave(&kgsl_driver.ptlock, flags);
 	list_add(&pagetable->list, &kgsl_driver.pagetable_list);

@@ -33,6 +33,8 @@
 
 static struct kgsl_mmu_pt_ops iommu_pt_ops;
 
+int kgsl_map_global_pt_entries(struct kgsl_pagetable *pagetable);
+
 static struct kgsl_iommu_register_list kgsl_iommuv1_reg[KGSL_IOMMU_REG_MAX] = {
 	{ 0, 0 },			/* GLOBAL_BASE */
 	{ 0x0, 1 },			/* SCTLR */
@@ -1017,16 +1019,23 @@ static int kgsl_iommu_start(struct kgsl_mmu *mmu)
 	int sctlr_val = 0;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(mmu->device);
 	struct kgsl_iommu_unit *iommu_unit = &iommu->iommu_unit;
+	static int _map_global = 0;
 
 	if (mmu->defaultpagetable == NULL) {
 		status = kgsl_iommu_setup_defaultpagetable(mmu);
 		if (status)
 			return -ENOMEM;
+		_map_global = 1;
 	}
 
 	status = kgsl_attach_pagetable_iommu_domain(mmu);
 	if (status)
 		goto done;
+
+	if (_map_global) {
+		kgsl_map_global_pt_entries(mmu->defaultpagetable);
+		_map_global = 0;
+	}
 
 	kgsl_iommu_enable_clk(mmu);
 
@@ -1287,6 +1296,10 @@ kgsl_iommu_map(struct kgsl_pagetable *pt,
 	unsigned int flags = 0;
 	struct kgsl_device *device = pt->mmu->device;
 	size_t mapped = 0;
+	struct kgsl_iommu *iommu = pt->mmu->priv;
+	struct kgsl_iommu_unit *iommu_unit = &iommu->iommu_unit;
+
+	BUG_ON(!iommu_unit->dev[0].attached);
 
 	BUG_ON(NULL == iommu_pt);
 
