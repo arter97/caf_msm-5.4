@@ -26,6 +26,8 @@
 #include "right_lane.h"
 #include <mach/board.h>
 
+#define FRAME_DELAY 33333
+#define RDI1_USE_WM 4
 #define MM_CAM_USE_BYPASS 1
 static void *k_addr[OVERLAY_COUNT];
 static int alloc_overlay_pipe_flag[OVERLAY_COUNT];
@@ -58,14 +60,12 @@ static struct adp_camera_ctxt *adp_cam_ctxt;
 
 /* -------------------- Guidance Lane Data Structures ----------------------- */
 static struct msm_guidance_lane_data guidance_lane_data;
-
 int axi_vfe_config_cmd_para(struct vfe_axi_output_config_cmd_type *cmd)
 {
 	/* configure the axi bus parameters here */
 	int config;
 	int ch_wm;
 	int axi_output_ppw;
-	int ch0_wm;
 	int image_width;
 	int image_height;
 	int burst_length;
@@ -79,21 +79,36 @@ int axi_vfe_config_cmd_para(struct vfe_axi_output_config_cmd_type *cmd)
 	cmd->rdi_cfg0.rdi_stream_select1 = 0x3;
 	cmd->rdi_cfg0.rdi_m3_select = 0x0;
 	config = 0x01 | (0x06 << 5);
-	ch_wm = 3;
+	ch_wm = RDI1_USE_WM;
+
 	cmd->xbar_cfg0 = 0;
-	cmd->xbar_cfg0 = (cmd->xbar_cfg0) & ~(0x000000FF << (8 * (ch_wm % 4)));
-	cmd->xbar_cfg0 = (cmd->xbar_cfg0) | (config << (8 * (ch_wm % 4)));
-	ch0_wm = 3;
+	cmd->xbar_cfg1 = 0;
+	if (ch_wm == 3 || ch_wm == 2 || ch_wm == 1 || ch_wm == 0) {
+		cmd->xbar_cfg0 = (cmd->xbar_cfg0) &
+			~(0x000000FF << (8 * (ch_wm % 4)));
+		cmd->xbar_cfg0 = (cmd->xbar_cfg0) |
+			(config << (8 * (ch_wm % 4)));
+	} else if (ch_wm == 6 || ch_wm == 5 || ch_wm == 4) {
+		cmd->xbar_cfg1 = (cmd->xbar_cfg1) &
+			~(0x000000FF << (8 * (ch_wm % 4)));
+		cmd->xbar_cfg1 = (cmd->xbar_cfg1) |
+			(config << (8 * (ch_wm % 4)));
+	}
+
 	axi_output_ppw = 8;
 	burst_length = 1;
-	cmd->wm[ch0_wm].busdwords_per_line = 89;
-	cmd->wm[ch0_wm].busrow_increment =
+	cmd->wm[ch_wm].busdwords_per_line = 89;
+	cmd->wm[ch_wm].busrow_increment =
 		(image_width+(axi_output_ppw-1))/(axi_output_ppw);
-	cmd->wm[ch0_wm].buslines_per_image = image_height - 1;
-	cmd->wm[ch0_wm].busbuffer_num_rows = image_height - 1;
-	cmd->wm[ch0_wm].busburst_length = burst_length;
-	cmd->wm[ch0_wm].bus_ub_offset = 0;
-	cmd->wm[ch0_wm].bus_ub_depth = 0x3f0;
+	cmd->wm[ch_wm].buslines_per_image = image_height - 1;
+	cmd->wm[ch_wm].busbuffer_num_rows = image_height - 1;
+	cmd->wm[ch_wm].busburst_length = burst_length;
+	cmd->wm[ch_wm].bus_ub_offset = 931;
+	cmd->wm[ch_wm].bus_ub_depth = 92;
+
+	/* use frame base */
+	cmd->pixel_if_cfg.rdi_m1_frame_based_enable = 1;
+	cmd->outpath.out3.ch0 = ch_wm;
 
 	return 0;
 }
@@ -101,7 +116,7 @@ int axi_vfe_config_cmd_para(struct vfe_axi_output_config_cmd_type *cmd)
 void preview_set_data_pipeline()
 {
 	int ispif_stream_enable;
-	u32 freq = 128000000;
+	u32 freq = 320000000;
 	u32 flags = 0;
 
 	pr_debug("%s:  kpi entry!!!\n", __func__);
@@ -117,7 +132,7 @@ void preview_set_data_pipeline()
 			&csid_version, MM_CAM_USE_BYPASS);
 	rc = msm_csiphy_init(
 			lsh_csiphy_dev[adp_rvc_csi_lane_params.csi_phy_sel]);
-	rc = msm_ispif_init(lsh_ispif, &csid_version); /* ISPIF_INIT */
+	rc = msm_ispif_init_rdi(lsh_ispif, &csid_version); /* ISPIF_INIT */
 	params_list.params[0].intftype =  RDI1; /* RDI1 */
 	params_list.params[0].csid = adp_rvc_csi_lane_params.csi_phy_sel;
 	params_list.params[0].vfe_intf =  VFE0;
@@ -156,6 +171,7 @@ void preview_buffer_alloc(void)
 	int offset = 0;
 	int mem_len;
 	unsigned long paddr;
+	int cam_domain_num;
 
 	memset(&preview_data, 0, sizeof(struct msm_camera_preview_data));
 	preview_data.ion_client = msm_ion_client_create(-1, "camera");
@@ -177,8 +193,12 @@ void preview_buffer_alloc(void)
 	}
 	k_addr[OVERLAY_CAMERA_PREVIEW] = ion_map_kernel(preview_data.ion_client,
 			preview_data.ion_handle);
+
+	cam_domain_num = msm_cam_server_get_domain_num();
+	pr_debug("%s cam domain num %d", __func__, cam_domain_num);
+
 	result = ion_map_iommu(preview_data.ion_client, preview_data.ion_handle,
-			CAMERA_DOMAIN, GEN_POOL, SZ_4K, 0,
+			cam_domain_num, 0, SZ_4K, 0,
 			(unsigned long *)&paddr,
 			(unsigned long *)&mem_len, 0, 1);
 	if (result < 0) {
@@ -332,8 +352,12 @@ static int preview_configure_ping_pong_buffer(
 static int preview_buffer_free(void)
 {
 	int ret;
+	int cam_domain_num;
+	cam_domain_num = msm_cam_server_get_domain_num();
+	pr_debug("%s cam domain num %d", __func__, cam_domain_num);
+
 	ion_unmap_iommu(preview_data.ion_client, preview_data.ion_handle,
-			CAMERA_DOMAIN, GEN_POOL);
+			cam_domain_num, 0);
 	ion_free(preview_data.ion_client, preview_data.ion_handle);
 	ion_client_destroy(preview_data.ion_client);
 	return ret = 0;
@@ -489,12 +513,12 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 }
 
 /* Guidance Bitmap Implememtation */
-
 void guidance_lane_buffer_alloc(void)
 {
 	int i, result;
 	int offset = 0;
 	int mem_len;
+	int cam_domain_num;
 	unsigned long paddr;
 	memset(&guidance_lane_data, 0, sizeof(struct msm_guidance_lane_data));
 	guidance_lane_data.ion_client = msm_ion_client_create(-1, "camera");
@@ -516,9 +540,13 @@ void guidance_lane_buffer_alloc(void)
 	 k_addr[OVERLAY_GUIDANCE_LANE] =
 			ion_map_kernel(guidance_lane_data.ion_client,
 			guidance_lane_data.ion_handle);
+
+	cam_domain_num = msm_cam_server_get_domain_num();
+	pr_debug("%s cam domain num %d", __func__, cam_domain_num);
+
 	result = ion_map_iommu(guidance_lane_data.ion_client,
 			 guidance_lane_data.ion_handle,
-			 CAMERA_DOMAIN, GEN_POOL, SZ_4K, 0,
+			 cam_domain_num, 0, SZ_4K, 0,
 			(unsigned long *)&paddr,
 			(unsigned long *)&mem_len, 0, 1);
 	if (result < 0) {
@@ -572,9 +600,13 @@ int guidance_lane_buffer_init(void)
 static int guidance_lane_buffer_free(void)
 {
 	int ret;
+	int cam_domain_num;
+	cam_domain_num = msm_cam_server_get_domain_num();
+	pr_debug("%s cam domain num %d", __func__, cam_domain_num);
+
 	ion_unmap_iommu(guidance_lane_data.ion_client,
 			guidance_lane_data.ion_handle,
-			CAMERA_DOMAIN, GEN_POOL);
+			cam_domain_num, 0);
 	ion_free(guidance_lane_data.ion_client, guidance_lane_data.ion_handle);
 	ion_client_destroy(guidance_lane_data.ion_client);
 	return ret = 0;
@@ -759,7 +791,7 @@ void  exit_camera_kthread(void)
 			MM_CAM_USE_BYPASS);
 	msm_csiphy_release(lsh_csiphy_dev[adp_rvc_csi_lane_params.csi_phy_sel],
 			&adp_rvc_csi_lane_params);
-	msm_ispif_release(lsh_ispif);
+	msm_ispif_release_rdi(lsh_ispif);
 	msm_ba_close(adp_cam_ctxt->ba_inst_hdlr);
 	cancel_work_sync(&wq_mdp_queue_overlay_buffers);
 
@@ -772,6 +804,8 @@ int disable_camera_preview(void)
 
 	wait_for_completion(&preview_enabled);
 	axi_stop_rdi1_only(my_axi_ctrl);
+
+	usleep(FRAME_DELAY); /* delay to ensure sof for regupdate*/
 	msm_ba_streamoff(adp_cam_ctxt->ba_inst_hdlr, 0);
 	mdpclient_display_commit();
 	if (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] == 0) {
