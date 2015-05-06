@@ -250,9 +250,8 @@ static void sam4e_usb_read_bulk_callback(struct urb *urb)
 		if (length_left >= sizeof(struct sam4e_resp)) {
 			struct sam4e_resp *resp =
 					(struct sam4e_resp *)data;
-			int size = sizeof(struct sam4e_resp) + resp->len;
 			sam4e_process_response(dev, resp);
-			length_processed += size;
+			length_processed += resp->len;
 		} else {
 			break;
 		}
