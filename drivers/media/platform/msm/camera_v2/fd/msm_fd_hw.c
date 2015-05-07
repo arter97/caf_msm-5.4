@@ -599,6 +599,14 @@ void msm_fd_hw_release_irq(struct msm_fd_device *fd)
  */
 void msm_fd_hw_vbif_register(struct msm_fd_device *fd)
 {
+	uint32_t vbif_enabled = msm_fd_hw_read_reg(fd,
+		MSM_FD_IOMEM_VBIF, MSM_FD_VBIF_CLKON);
+
+	if (vbif_enabled) {
+		pr_debug("%s: VBIF already enabled", __func__);
+		fd->vbif_enabled = 0;
+		return;
+	}
 	msm_fd_hw_reg_set(fd, MSM_FD_IOMEM_VBIF,
 		MSM_FD_VBIF_CLKON, 0x1);
 
@@ -637,6 +645,7 @@ void msm_fd_hw_vbif_register(struct msm_fd_device *fd)
 
 	msm_fd_hw_write_reg(fd, MSM_FD_IOMEM_VBIF,
 		MSM_FD_VBIF_ROUND_ROBIN_QOS_ARB, 0x03);
+	fd->vbif_enabled = 1;
 }
 
 /*
@@ -645,8 +654,11 @@ void msm_fd_hw_vbif_register(struct msm_fd_device *fd)
  */
 void msm_fd_hw_vbif_unregister(struct msm_fd_device *fd)
 {
-	msm_fd_hw_write_reg(fd, MSM_FD_IOMEM_VBIF,
-		MSM_FD_VBIF_CLKON, 0x0);
+	if (fd->vbif_enabled) {
+		pr_debug("%s: Disable VBIF clock", __func__);
+		msm_fd_hw_write_reg(fd, MSM_FD_IOMEM_VBIF,
+			MSM_FD_VBIF_CLKON, 0x0);
+	}
 }
 
 /*
