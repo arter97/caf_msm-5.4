@@ -38,6 +38,10 @@ enum msm_ba_ip {
 	BA_IP_MAX = 0xffffffff
 };
 
+#define MSM_BA_PRIV_BASE_START		(V4L2_CID_USER_BASE | 0x7000)
+#define MSM_BA_PRIV_SD_NODE_ADDR	(MSM_BA_PRIV_BASE_START + 1)
+#define MSM_BA_PRIV_FPS		(MSM_BA_PRIV_BASE_START + 2)
+
 void *msm_ba_open(void);
 int msm_ba_close(void *instance);
 int msm_ba_querycap(void *instance, struct v4l2_capability *cap);
@@ -50,7 +54,6 @@ int msm_ba_s_output(void *instance, unsigned int index);
 int msm_ba_enum_fmt(void *instance, struct v4l2_fmtdesc *f);
 int msm_ba_s_fmt(void *instance, struct v4l2_format *f);
 int msm_ba_g_fmt(void *instance, struct v4l2_format *f);
-int msm_ba_g_frame_interval(void *instance, struct v4l2_fract *interval);
 int msm_ba_s_ctrl(void *instance, struct v4l2_control *a);
 int msm_ba_s_ext_ctrl(void *instance, struct v4l2_ext_controls *a);
 int msm_ba_g_ctrl(void *instance, struct v4l2_control *a);

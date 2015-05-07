@@ -129,6 +129,7 @@ struct msm_ba_input {
 	unsigned int name_index;
 	char name[32];
 	int bridge_chip_ip;
+	int ba_node_addr;
 	int ba_out;
 	int ba_ip;
 	struct v4l2_subdev *sd;
@@ -169,8 +170,25 @@ struct msm_ba_inst {
 	struct v4l2_fh event_handler;
 	wait_queue_head_t kernel_event_queue;
 
+	struct v4l2_ctrl **cluster;
+	struct v4l2_ctrl_handler ctrl_handler;
+	struct v4l2_ctrl **ctrls;
+
 	struct msm_ba_debug debug;
 	struct dentry *debugfs_root;
+};
+
+struct msm_ba_ctrl {
+	u32 id;
+	char name[MAX_NAME_LENGTH];
+	enum v4l2_ctrl_type type;
+	s32 minimum;
+	s32 maximum;
+	s32 default_value;
+	u32 step;
+	u32 menu_skip_mask;
+	u32 flags;
+	const char * const *qmenu;
 };
 
 struct ba_ctxt *msm_ba_get_ba_context(void);
