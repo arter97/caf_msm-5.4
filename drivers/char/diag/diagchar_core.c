@@ -926,6 +926,8 @@ static int diag_switch_logging(int requested_mode)
 		driver->socket_process = current;
 	} else if (driver->logging_mode == CALLBACK_MODE) {
 		driver->callback_process = current;
+	} else if (driver->logging_mode == MEMORY_DEVICE_MODE) {
+		driver->md_client_info->client_process = current;
 	}
 
 	if (driver->logging_mode == UART_MODE ||
@@ -2158,7 +2160,24 @@ int mask_request_validate(unsigned char mask_buf[])
 
 	packet_id = mask_buf[0];
 
-	if (packet_id == 0x4B) {
+	if (packet_id == DIAG_CMD_DIAG_SUBSYS_DELAY) {
+		subsys_id = mask_buf[1];
+		ss_cmd = *(uint16_t*)(mask_buf + 2);
+		switch (subsys_id) {
+		case DIAG_SS_DIAG:
+			if ((ss_cmd == DIAG_SS_FILE_READ_MODEM) ||
+				(ss_cmd == DIAG_SS_FILE_READ_ADSP) ||
+				(ss_cmd == DIAG_SS_FILE_READ_WCNSS) ||
+				(ss_cmd == DIAG_SS_FILE_READ_SLPI) ||
+				(ss_cmd == DIAG_SS_FILE_READ_APPS))
+				return 1;
+			break;
+		default:
+			return 0;
+			break;
+		}
+	}
+    	else if (packet_id == 0x4B) {
 		subsys_id = mask_buf[1];
 		ss_cmd = *(uint16_t *)(mask_buf + 2);
 		/* Packets with SSID which are allowed */
