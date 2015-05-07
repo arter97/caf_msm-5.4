@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -28,6 +28,7 @@
 struct adv7481_platform_data {
 		int rstb_gpio;
 		int pwdnb_gpio;
+		int irq_gpio;
 		int i2c_csi_txa;
 		int i2c_csi_txb;
 		int i2c_hdmi;
