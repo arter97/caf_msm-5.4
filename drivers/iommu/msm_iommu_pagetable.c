@@ -175,6 +175,8 @@ static int __get_pgprot(int prot, int len)
 
 	if (prot & IOMMU_CACHE)
 		tex = (pgprot_val(PAGE_KERNEL) >> 2) & 0x07;
+	else if (prot & IOMMU_DEVICE)
+		tex = 0;
 	else
 		tex = msm_iommu_tex_class[MSM_IOMMU_ATTR_NONCACHED];
 
@@ -206,7 +208,7 @@ static u32 *make_second_level(struct msm_iommu_pt *pt, u32 *fl_pte,
 				u32 *fl_pte_shadow)
 {
 	u32 *sl;
-	sl = (u32 *) __get_free_pages(GFP_KERNEL,
+	sl = (u32 *) __get_free_pages(GFP_ATOMIC,
 			get_order(SZ_4K));
 
 	if (!sl) {
