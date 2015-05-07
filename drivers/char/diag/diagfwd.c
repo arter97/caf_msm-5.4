@@ -1266,20 +1266,20 @@ int diag_process_apps_pkt(unsigned char *buf, int len)
 }
 
 #ifdef CONFIG_DIAG_OVER_USB
-void diag_send_error_rsp(int index)
+void diag_send_error_rsp(unsigned char *buf, int len)
 {
 	int i;
 
 	/* -1 to accomodate the first byte 0x13 */
-	if (index > APPS_BUF_SIZE-1) {
-		pr_err("diag: cannot send err rsp, huge length: %d\n", index);
+	if (len > APPS_BUF_SIZE-1) {
+		pr_err("diag: cannot send err rsp, huge length: %d\n", len);
 		return;
 	}
 
 	driver->apps_rsp_buf[0] = 0x13; /* error code 13 */
-	for (i = 0; i < index; i++)
-		driver->apps_rsp_buf[i+1] = *(driver->hdlc_buf+i);
-	encode_rsp_and_send(index - 3);
+	for (i = 0; i < len; i++)
+		driver->apps_rsp_buf[i+1] = *(buf+i);
+	encode_rsp_and_send(len);
 }
 #else
 static inline void diag_send_error_rsp(int index) {}
@@ -1343,13 +1343,13 @@ void diag_process_hdlc(void *data, unsigned len)
 	}
 	/* send error responses from APPS for Central Routing */
 	if (type == 1 && chk_apps_only()) {
-		diag_send_error_rsp(hdlc.dest_idx);
+		diag_send_error_rsp(driver->hdlc_buf, (hdlc.dest_idx - 3));
 		type = 0;
 	}
 	/* implies this packet is NOT meant for apps */
 	if (!(driver->smd_data[MODEM_DATA].ch) && type == 1) {
 		if (chk_apps_only()) {
-			diag_send_error_rsp(hdlc.dest_idx);
+			diag_send_error_rsp(driver->hdlc_buf, (hdlc.dest_idx - 3));
 		} else { /* APQ 8060, Let Q6 respond */
 			err = diag_smd_write(&driver->smd_data[LPASS_DATA],
 					     driver->hdlc_buf,

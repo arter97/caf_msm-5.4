@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -470,8 +470,8 @@ struct diagchar_dev {
 	uint32_t max_ssid_count[NUM_SMD_CONTROL_CHANNELS];
 #ifdef CONFIG_DIAGFWD_BRIDGE_CODE
 	/* For sending command requests in callback mode */
-	unsigned char *cb_buf;
-	int cb_buf_len;
+	unsigned char *hdlc_encode_buf;
+	int hdlc_encode_buf_len;
 #endif
 };
 
