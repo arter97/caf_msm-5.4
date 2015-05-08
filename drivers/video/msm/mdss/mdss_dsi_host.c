@@ -260,9 +260,12 @@ void mdss_dsi_cmd_test_pattern(struct mdss_dsi_ctrl_pdata *ctrl)
 
 void mdss_dsi_get_hw_revision(struct mdss_dsi_ctrl_pdata *ctrl)
 {
-	mdss_dsi_clk_ctrl(ctrl, DSI_ALL_CLKS, 1);
+	if (ctrl->hw_rev)
+		return;
+
+	mdss_dsi_clk_ctrl(ctrl, DSI_BUS_CLKS, 1);
 	ctrl->hw_rev = MIPI_INP(ctrl->ctrl_base);
-	mdss_dsi_clk_ctrl(ctrl, DSI_ALL_CLKS, 0);
+	mdss_dsi_clk_ctrl(ctrl, DSI_BUS_CLKS, 0);
 
 	pr_debug("%s: ndx=%d hw_rev=%x\n", __func__,
 				ctrl->ndx, ctrl->hw_rev);
@@ -2141,7 +2144,6 @@ static int dsi_event_thread(void *data)
 	u32 todo = 0, ln_status;
 	u32 arg;
 	int ret;
-	u32 ctrl_rev;
 
 	param.sched_priority = 16;
 	ret = sched_setscheduler_nocheck(current, SCHED_FIFO, &param);
@@ -2189,7 +2191,7 @@ static int dsi_event_thread(void *data)
 			mdss_dsi_sw_reset(ctrl, true);
 
 		if (todo & DSI_EV_DLNx_FIFO_OVERFLOW) {
-			ctrl_rev = MIPI_INP(ctrl->ctrl_base);
+			mdss_dsi_get_hw_revision(ctrl);
 			mutex_lock(&dsi_mtx);
 			/*
 			 * For targets other than msm8994,
@@ -2201,7 +2203,7 @@ static int dsi_event_thread(void *data)
 			pr_debug("%s: lane_status: 0x%x\n",
 				       __func__, ln_status);
 			if (ctrl->recovery
-					&& (ctrl_rev != MDSS_DSI_HW_REV_103)
+					&& (ctrl->hw_rev != MDSS_DSI_HW_REV_103)
 					&& (ln_status
 						& DSI_DATA_LANES_STOP_STATE)
 					&& !(ln_status
@@ -2214,7 +2216,7 @@ static int dsi_event_thread(void *data)
 						DSI_INTR_ERROR_MASK, 1);
 				mdss_dsi_clk_ctrl(ctrl, DSI_ALL_CLKS, 0);
 			} else if (ctrl->recovery
-					&& (ctrl_rev
+					&& (ctrl->hw_rev
 					    == MDSS_DSI_HW_REV_103)) {
 				pr_debug("%s: Handle overflow->Rev_103\n",
 								__func__);
