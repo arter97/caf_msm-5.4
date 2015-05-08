@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -217,7 +217,8 @@ static void sam4e_usb_read_bulk_callback(struct urb *urb)
 {
 	struct sam4e_usb *dev = urb->context;
 	struct net_device *netdev = dev->netdev;
-	int err;
+	int err, length_processed = 0;
+
 	if (!netif_device_present(netdev))
 		return;
 
@@ -233,11 +234,25 @@ static void sam4e_usb_read_bulk_callback(struct urb *urb)
 		goto resubmit_urb;
 	}
 
-	if (urb->actual_length >= sizeof(struct sam4e_resp)) {
-		struct sam4e_resp *resp =
-				(struct sam4e_resp *)urb->transfer_buffer;
-		sam4e_process_response(dev, resp);
+	while (length_processed < urb->actual_length) {
+		int length_left = urb->actual_length - length_processed;
+		void *data = urb->transfer_buffer + length_processed;
+		if (length_left >= sizeof(struct sam4e_resp)) {
+			struct sam4e_resp *resp =
+					(struct sam4e_resp *)data;
+			int size = sizeof(struct sam4e_resp) + resp->len;
+			sam4e_process_response(dev, resp);
+			length_processed += size;
+		} else {
+			break;
+		}
 	}
+
+	if (urb->actual_length - length_processed > 0) {
+		LOGNI("Rx URB buffer length > expected: %d > %d\n",
+				urb->actual_length, sizeof(struct sam4e_resp));
+	}
+
 resubmit_urb:
 	usb_fill_bulk_urb(urb, dev->udev,
 			usb_rcvbulkpipe(dev->udev, BULK_IN_EP),
@@ -247,15 +262,10 @@ resubmit_urb:
 	err = usb_submit_urb(urb, GFP_ATOMIC);
 }
 
-static int sam4e_netdev_open(struct net_device *netdev)
+static int sam4e_init_urbs(struct net_device *netdev)
 {
 	int err, i;
 	struct sam4e_usb *dev = netdev_priv(netdev);
-	LOGNI("sam4e_open");
-	err = open_candev(netdev);
-	if (err)
-		return err;
-
 	for (i = 0; i < MAX_RX_URBS; i++) {
 		struct urb *urb = NULL;
 		u8 *buf = NULL;
@@ -305,6 +315,18 @@ static int sam4e_netdev_open(struct net_device *netdev)
 		return err;
 	}
 
+	return err;
+}
+
+static int sam4e_netdev_open(struct net_device *netdev)
+{
+	int err;
+
+	LOGNI("sam4e_open");
+	err = open_candev(netdev);
+	if (err)
+		return err;
+
 	netif_start_queue(netdev);
 
 	return 0;
@@ -330,7 +352,7 @@ static int sam4e_netdev_close(struct net_device *netdev)
 	return 0;
 }
 
-static void ems_usb_write_bulk_callback(struct urb *urb)
+static void sam4e_usb_write_bulk_callback(struct urb *urb)
 {
 	struct sam4e_usb *dev = urb->context;
 	struct net_device *netdev = dev->netdev;
@@ -400,7 +422,7 @@ static netdev_tx_t sam4e_netdev_start_xmit(
 
 	usb_fill_bulk_urb(urb, dev->udev,
 			usb_sndbulkpipe(dev->udev, BULK_OUT_EP), req,
-			size, ems_usb_write_bulk_callback, dev);
+			size, sam4e_usb_write_bulk_callback, dev);
 	urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
 	usb_anchor_urb(urb, &dev->tx_submitted);
 	atomic_inc(&dev->active_tx_urbs);
@@ -580,6 +602,12 @@ static int sam4e_usb_probe(struct usb_interface *intf,
 		LOGNI("data %x %d %d %d\n",
 				resp->cmd, resp->len, resp->seq, resp->err);
 	kfree(resp);
+
+	err = sam4e_init_urbs(netdev);
+	if (err) {
+		netdev_err(netdev, "couldn't init urbs: %d\n", err);
+		goto cleanup_candev;
+	}
 
 	return 0; /*ok. it's ours */
 
