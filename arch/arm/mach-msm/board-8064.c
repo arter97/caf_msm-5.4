@@ -3884,6 +3884,14 @@ static struct platform_device mplatform_reverse_pdev = {
 	},
 };
 
+static struct platform_device adp_camera_pdev = {
+		.name           = "adp_camera",
+		.id             = -1,
+		.dev            = {
+			.platform_data  = NULL,
+		},
+	};
+
 struct bluetooth_power_platform_data *bt_power_pdata;
 
 static struct platform_device msm_bt_power_device = {
@@ -4350,6 +4358,7 @@ static void __init apq8064_cdp_init(void)
 
 	if (machine_is_apq8064_mplatform()) {
 		platform_device_register(&mplatform_kp_pdev);
+		platform_device_register(&adp_camera_pdev);
 		platform_device_register(&mplatform_reverse_pdev);
 	}
 	else if (machine_is_apq8064_cdp() || machine_is_apq8064_liquid()
@@ -4357,6 +4366,7 @@ static void __init apq8064_cdp_init(void)
 			machine_is_apq8064_adp2_es2() ||
 			machine_is_apq8064_adp2_es2p5()) {
 		platform_device_register(&cdp_kp_pdev);
+		platform_device_register(&adp_camera_pdev);
 		platform_device_register(&mplatform_reverse_pdev);
 	}
 	else if (machine_is_apq8064_mtp())

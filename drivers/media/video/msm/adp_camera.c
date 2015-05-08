@@ -45,17 +45,39 @@ struct mdp4_overlay_pipe *pipe[OVERLAY_COUNT];
 static struct vfe_axi_output_config_cmd_type vfe_axi_cmd_para;
 static struct msm_camera_vfe_params_t vfe_para;
 static struct work_struct wq_mdp_queue_overlay_buffers;
+
 static int adp_rear_camera_enable(void);
-struct completion camera_enabled;
+
 struct completion preview_enabled;
 struct completion preview_disabled;
 
 static struct msm_camera_preview_data preview_data;
 
-struct adp_camera_ctxt {
-	void *ba_inst_hdlr;
+enum camera_states {
+	CAMERA_UNINITIALIZED = 0,
+	CAMERA_SUSPENDED,
+	CAMERA_PREVIEW_DISABLED,
+	CAMERA_PREVIEW_ENABLED,
+	CAMERA_TRANSITION_SUSPEND,
+	CAMERA_TRANSITION_PREVIEW,
+	CAMERA_TRANSITION_OFF,
+	CAMERA_UNKNOWN
 };
 
+struct adp_camera_ctxt {
+	void *ba_inst_hdlr;
+
+	/* V4L2 Framework */
+	struct v4l2_device v4l2_dev;
+	struct video_device *vdev;
+	struct media_device mdev;
+
+	/* state */
+	enum camera_states state;
+
+	/* debug */
+	struct dentry *debugfs_root;
+};
 static struct adp_camera_ctxt *adp_cam_ctxt;
 
 /* -------------------- Guidance Lane Data Structures ----------------------- */
@@ -703,35 +725,28 @@ static int adp_rear_camera_enable(void)
 	struct preview_mem *ping_buffer, *pong_buffer, *free_buffer;
 	struct v4l2_input input;
 	struct v4l2_format fmt;
+	int index;
 
 	pr_debug("%s: kpi entry\n", __func__);
 	my_axi_ctrl->share_ctrl->current_mode = 4096;
 	vfe_para.operation_mode = VFE_OUTPUTS_RDI1;
 
 	/* Detect NTSC or PAL, get the preview width and height */
-	if (NULL == adp_cam_ctxt)
-		adp_cam_ctxt = kzalloc(sizeof(struct adp_camera_ctxt),
-								GFP_KERNEL);
-	if (adp_cam_ctxt) {
-		int index;
 
-		adp_cam_ctxt->ba_inst_hdlr = msm_ba_open();
-		msm_ba_g_input(adp_cam_ctxt->ba_inst_hdlr, &index);
-		pr_debug("%s: input index: %d\n", __func__, index);
-		if (BA_IP_CVBS_0 != index) {
-			index = BA_IP_CVBS_0;
-			msm_ba_s_input(adp_cam_ctxt->ba_inst_hdlr, index);
-		}
-		memset(&input, 0, sizeof(input));
-		input.index = index;
-		msm_ba_enum_input(adp_cam_ctxt->ba_inst_hdlr, &input);
-		pr_debug("%s: input info: %s\n", __func__, input.name);
-		msm_ba_g_fmt(adp_cam_ctxt->ba_inst_hdlr, &fmt);
-		pr_debug("%s: format: %dx%d\n", __func__, fmt.fmt.pix.width,
-				fmt.fmt.pix.height);
-	} else {
-		pr_err("%s: No memory for adp ctxt!\n", __func__);
+	adp_cam_ctxt->ba_inst_hdlr = msm_ba_open();
+	msm_ba_g_input(adp_cam_ctxt->ba_inst_hdlr, &index);
+	pr_debug("%s: input index: %d\n", __func__, index);
+	if (BA_IP_CVBS_0 != index) {
+		index = BA_IP_CVBS_0;
+		msm_ba_s_input(adp_cam_ctxt->ba_inst_hdlr, index);
 	}
+	memset(&input, 0, sizeof(input));
+	input.index = index;
+	msm_ba_enum_input(adp_cam_ctxt->ba_inst_hdlr, &input);
+	pr_debug("%s: input info: %s\n", __func__, input.name);
+	msm_ba_g_fmt(adp_cam_ctxt->ba_inst_hdlr, &fmt);
+	pr_debug("%s: format: %dx%d\n", __func__, fmt.fmt.pix.width,
+			fmt.fmt.pix.height);
 
 	PREVIEW_HEIGHT = fmt.fmt.pix.height;
 	PREVIEW_WIDTH = fmt.fmt.pix.width;
@@ -762,30 +777,8 @@ static int adp_rear_camera_enable(void)
 	return 0;
 }
 
-int  init_camera_kthread(void)
+static void adp_rear_camera_disable(void)
 {
-	int ret;
-	pr_debug("%s: entry\n", __func__);
-	init_completion(&camera_enabled);
-	init_completion(&preview_enabled);
-	init_completion(&preview_disabled);
-	INIT_WORK(&wq_mdp_queue_overlay_buffers, mdp_queue_overlay_buffers);
-	ret = adp_rear_camera_enable();
-	complete(&camera_enabled);
-	complete(&preview_disabled);
-	pr_debug("%s: exit\n", __func__);
-	place_marker("rvc thread enabled");
-
-	return 0;
-}
-
-void  exit_camera_kthread(void)
-{
-	pr_debug("%s: entry\n", __func__);
-	wait_for_completion(&preview_disabled);
-	guidance_lane_buffer_free();
-	preview_buffer_free();
-	pr_debug("%s: begin axi release\n", __func__);
 	msm_axi_subdev_release_rdi_only(lsh_axi_ctrl, s_ctrl);
 	msm_csid_release(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
 			MM_CAM_USE_BYPASS);
@@ -793,16 +786,36 @@ void  exit_camera_kthread(void)
 			&adp_rvc_csi_lane_params);
 	msm_ispif_release_rdi(lsh_ispif);
 	msm_ba_close(adp_cam_ctxt->ba_inst_hdlr);
-	cancel_work_sync(&wq_mdp_queue_overlay_buffers);
-
-	pr_debug("%s: exit\n", __func__);
 }
 
 int disable_camera_preview(void)
 {
 	pr_debug("%s: kpi entry\n", __func__);
 
+	if (!adp_cam_ctxt) {
+		pr_err("%s - context is invalid",
+						__func__);
+		return -EPERM;
+	}
+
+	switch (adp_cam_ctxt->state) {
+	case CAMERA_PREVIEW_ENABLED:
+	case CAMERA_TRANSITION_PREVIEW:
+		break;
+	case CAMERA_PREVIEW_DISABLED:
+		pr_warn("%s - preview already disabled", __func__);
+		return 0;
+		break;
+	default:
+		pr_err("%s - cannot disable preview from uninitialized state",
+				__func__);
+		return -EPERM;
+		break;
+	}
+
 	wait_for_completion(&preview_enabled);
+	adp_cam_ctxt->state = CAMERA_TRANSITION_OFF;
+
 	axi_stop_rdi1_only(my_axi_ctrl);
 
 	usleep(FRAME_DELAY); /* delay to ensure sof for regupdate*/
@@ -822,6 +835,8 @@ int disable_camera_preview(void)
 	mdpclient_display_commit();
 
 	mdpclient_msm_fb_close();
+
+	adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
 	complete(&preview_disabled);
 	/* reset preview enable*/
 	init_completion(&preview_enabled);
@@ -838,7 +853,30 @@ int enable_camera_preview(void)
 	int max_wait_count = 15;
 	pr_debug("%s: kpi entry\n", __func__);
 
-	wait_for_completion(&camera_enabled);
+	if (!adp_cam_ctxt) {
+		pr_err("%s - context is invalid",
+						__func__);
+		return -EPERM;
+	}
+
+	switch (adp_cam_ctxt->state) {
+	case CAMERA_PREVIEW_DISABLED:
+	case CAMERA_TRANSITION_OFF:
+		break;
+	case CAMERA_PREVIEW_ENABLED:
+		pr_warn("%s - preview already enabled", __func__);
+		return 0;
+		break;
+	default:
+		pr_err("%s - cannot enable preview from uninitialized state",
+				__func__);
+		return -EPERM;
+		break;
+	}
+
+	wait_for_completion(&preview_disabled);
+	adp_cam_ctxt->state = CAMERA_TRANSITION_PREVIEW;
+
 	mdpclient_msm_fb_open();
 	if (mdpclient_msm_fb_blank(FB_BLANK_UNBLANK, true))
 		pr_err("%s: can't turn on display!\n", __func__);
@@ -865,7 +903,7 @@ int enable_camera_preview(void)
 	if (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] != 0) {
 		pr_err("%s: mdpclient_overlay_set error!1\n",
 			__func__);
-		complete(&camera_enabled);
+		adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
 		complete(&preview_enabled);
 		/* reset preview disable*/
 		init_completion(&preview_disabled);
@@ -891,7 +929,7 @@ int enable_camera_preview(void)
 	if (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] != 0) {
 		pr_err("%s: mdpclient_overlay_set error!1\n",
 			__func__);
-		complete(&camera_enabled);
+		adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
 		complete(&preview_enabled);
 		/* reset preview disable*/
 		init_completion(&preview_disabled);
@@ -900,11 +938,370 @@ int enable_camera_preview(void)
 
 	msm_ba_streamon(adp_cam_ctxt->ba_inst_hdlr, 0);
 	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);
-	complete(&camera_enabled);
+
+	adp_cam_ctxt->state = CAMERA_PREVIEW_ENABLED;
 	complete(&preview_enabled);
+
 	/* reset preview disable*/
 	init_completion(&preview_disabled);
 
 	pr_debug("%s: kpi exit\n", __func__);
 	return 0;
 }
+
+
+static int adp_camera_v4l2_open(struct file *filp)
+{
+	struct video_device *vdev = video_devdata(filp);
+	clear_bit(V4L2_FL_USES_V4L2_FH, &vdev->flags);
+	return 0;
+}
+
+static int adp_camera_v4l2_close(struct file *filp)
+{
+	int rc = 0;
+	return rc;
+}
+
+static int adp_camera_v4l2_cropcap(struct file *file, void *fh,
+				struct v4l2_cropcap *a)
+{
+	pr_err("%s - NOT IMPLEMENTED", __func__);
+	return -EINVAL;
+}
+static int adp_camera_v4l2_g_crop(struct file *file, void *fh,
+				struct v4l2_crop *a)
+{
+	pr_err("%s - NOT IMPLEMENTED", __func__);
+	return -EINVAL;
+}
+static int adp_camera_v4l2_s_crop(struct file *file, void *fh,
+				struct v4l2_crop *a)
+{
+	pr_err("%s - NOT IMPLEMENTED", __func__);
+	return -EINVAL;
+}
+
+
+static const struct v4l2_ioctl_ops adp_camera_v4l2_ioctl_ops = {
+	.vidioc_cropcap = adp_camera_v4l2_cropcap,
+	.vidioc_g_crop = adp_camera_v4l2_g_crop,
+	.vidioc_s_crop = adp_camera_v4l2_s_crop,
+};
+
+
+void adp_camera_release_video_device(struct video_device *pvdev)
+{
+}
+
+static const struct v4l2_file_operations adp_camera_v4l2_fops = {
+	.owner = THIS_MODULE,
+	.open = adp_camera_v4l2_open,
+	.release = adp_camera_v4l2_close,
+	.ioctl = video_ioctl2,
+};
+
+#define ADP_CAMERA_BASE_DEVICE_NUMBER 36
+#define ADP_CAMERA_DRV_NAME "adp_camera_driver"
+
+static int adp_camera_device_init(struct platform_device *pdev)
+{
+	int nr = ADP_CAMERA_BASE_DEVICE_NUMBER;
+	int rc = 0;
+
+	pr_debug("Enter %s\n", __func__);
+
+	adp_cam_ctxt = kzalloc(sizeof(struct adp_camera_ctxt), GFP_KERNEL);
+	if (NULL == adp_cam_ctxt) {
+		pr_err("Failed to allocate adp context\n");
+		return -ENOMEM;
+	}
+
+	adp_cam_ctxt->state = CAMERA_UNINITIALIZED;
+
+	strlcpy(adp_cam_ctxt->v4l2_dev.name, ADP_CAMERA_DRV_NAME,
+		sizeof(adp_cam_ctxt->v4l2_dev.name));
+	adp_cam_ctxt->v4l2_dev.dev = &pdev->dev;
+
+	rc = v4l2_device_register(adp_cam_ctxt->v4l2_dev.dev,
+			&adp_cam_ctxt->v4l2_dev);
+	if (rc) {
+		pr_err("Failed to register v4l2 device\n");
+		goto v4l2_device_register_failed;
+	}
+
+	adp_cam_ctxt->vdev = video_device_alloc();
+	if (NULL == adp_cam_ctxt->vdev) {
+		pr_err("%s - Failed video_device_alloc\n",
+				__func__);
+		rc = -ENOMEM;
+		goto video_device_alloc_failed;
+	}
+
+	strlcpy(adp_cam_ctxt->vdev->name,
+			pdev->name, sizeof(adp_cam_ctxt->vdev->name));
+	adp_cam_ctxt->vdev->v4l2_dev =
+			&adp_cam_ctxt->v4l2_dev;
+	adp_cam_ctxt->vdev->release =
+			adp_camera_release_video_device;
+	adp_cam_ctxt->vdev->fops =
+			&adp_camera_v4l2_fops;
+	adp_cam_ctxt->vdev->ioctl_ops =
+			&adp_camera_v4l2_ioctl_ops;
+	adp_cam_ctxt->vdev->minor = nr;
+	adp_cam_ctxt->vdev->vfl_type = VFL_TYPE_GRABBER;
+
+	video_set_drvdata(adp_cam_ctxt->vdev, &adp_cam_ctxt);
+
+	strlcpy(adp_cam_ctxt->mdev.model, ADP_CAMERA_DRV_NAME,
+			sizeof(adp_cam_ctxt->mdev.model));
+	adp_cam_ctxt->mdev.dev = &pdev->dev;
+	rc = media_device_register(&adp_cam_ctxt->mdev);
+	if (rc) {
+		pr_err("%s - Failed media_device_register\n",
+				__func__);
+		goto media_device_register_failed;
+	}
+
+	adp_cam_ctxt->v4l2_dev.mdev = &adp_cam_ctxt->mdev;
+	rc = media_entity_init(&adp_cam_ctxt->vdev->entity,
+			0, NULL, 0);
+	if (rc) {
+		pr_err("%s - Failed media_entity_init\n", __func__);
+		goto media_entity_init_failed;
+	}
+
+	adp_cam_ctxt->vdev->entity.type =
+			MEDIA_ENT_T_DEVNODE_V4L;
+	adp_cam_ctxt->vdev->entity.group_id = 2;
+
+	rc = video_register_device(adp_cam_ctxt->vdev,
+			VFL_TYPE_GRABBER, nr);
+	if (rc) {
+		pr_err("%s - Failed video_register_device\n",
+				__func__);
+		goto video_register_device_failed;
+	}
+
+	adp_cam_ctxt->vdev->entity.name =
+			video_device_node_name(adp_cam_ctxt->vdev);
+
+	pr_debug("Exit %s with error %d\n", __func__, rc);
+	return 0;
+
+video_register_device_failed:
+	media_entity_cleanup(&adp_cam_ctxt->vdev->entity);
+media_entity_init_failed:
+	media_device_unregister(&adp_cam_ctxt->mdev);
+media_device_register_failed:
+	video_device_release(adp_cam_ctxt->vdev);
+video_device_alloc_failed:
+	v4l2_device_unregister(&adp_cam_ctxt->v4l2_dev);
+v4l2_device_register_failed:
+	kfree(adp_cam_ctxt);
+	adp_cam_ctxt = NULL;
+	return rc;
+}
+
+int  init_camera_kthread(void)
+{
+	int ret;
+	pr_debug("%s: entry\n", __func__);
+	init_completion(&preview_enabled);
+	init_completion(&preview_disabled);
+	INIT_WORK(&wq_mdp_queue_overlay_buffers, mdp_queue_overlay_buffers);
+	ret = adp_rear_camera_enable();
+	if (ret)
+		return ret;
+
+	adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
+	complete(&preview_disabled);
+
+	pr_debug("%s: exit\n", __func__);
+	place_marker("rvc thread enabled");
+
+	return 0;
+}
+
+void  exit_camera_kthread(void)
+{
+	pr_debug("%s: entry\n", __func__);
+
+	if (CAMERA_PREVIEW_ENABLED == adp_cam_ctxt->state)
+		disable_camera_preview();
+
+	wait_for_completion(&preview_disabled);
+	guidance_lane_buffer_free();
+	preview_buffer_free();
+	pr_debug("%s: begin axi release\n", __func__);
+
+	adp_rear_camera_disable();
+	cancel_work_sync(&wq_mdp_queue_overlay_buffers);
+
+	adp_cam_ctxt->state = CAMERA_UNINITIALIZED;
+
+	place_marker("rvc thread disabled");
+
+	pr_debug("%s: exit\n", __func__);
+}
+
+
+static int32_t adp_camera_platform_probe(struct platform_device *pdev)
+{
+	int32_t rc = 0;
+
+	pr_debug("adp_camera platform platform probe...\n");
+
+	rc = adp_camera_device_init(pdev);
+	if (rc < 0) {
+		pr_err("%s: Failed to init device %d", __func__, rc);
+		return rc;
+	}
+
+	rc = init_camera_kthread();
+	if (rc < 0) {
+		pr_err("%s: Failed to init the camera %d", __func__, rc);
+		return rc;
+	}
+
+	pdev->dev.platform_data = adp_cam_ctxt;
+
+	pr_debug("adp_camera platform probe exit %d..\n", rc);
+	return rc;
+}
+
+static int adp_camera_remove(struct platform_device *pdev)
+{
+	struct adp_camera_ctxt *dev_ctxt;
+	int rc = 0;
+
+	pr_debug("Enter %s\n", __func__);
+	if (!pdev) {
+		pr_err("%s invalid input 0x%p", __func__, pdev);
+		rc = -EINVAL;
+	} else {
+		dev_ctxt = pdev->dev.platform_data;
+
+		if (NULL == dev_ctxt) {
+			pr_err("%s invalid device", __func__);
+			rc = -EINVAL;
+		} else {
+			video_unregister_device(dev_ctxt->vdev);
+			v4l2_device_unregister(&dev_ctxt->v4l2_dev);
+		}
+	}
+	pr_debug("Exit %s with error %d\n", __func__, rc);
+
+	return rc;
+}
+
+int adp_camera_destroy(void)
+{
+	media_entity_cleanup(&adp_cam_ctxt->vdev->entity);
+	media_device_unregister(&adp_cam_ctxt->mdev);
+	video_device_release(adp_cam_ctxt->vdev);
+	v4l2_device_unregister(&adp_cam_ctxt->v4l2_dev);
+	kfree(adp_cam_ctxt);
+	kfree(adp_cam_ctxt);
+	return 0;
+}
+
+static int adp_camera_suspend(struct platform_device *pdev,
+	pm_message_t state)
+{
+	pr_debug("suspend rearview camera %s", __func__);
+
+	switch (adp_cam_ctxt->state) {
+	case CAMERA_PREVIEW_DISABLED:
+	case CAMERA_TRANSITION_OFF:
+		break;
+	case CAMERA_SUSPENDED:
+		pr_warn("%s - preview already suspended", __func__);
+		return 0;
+		break;
+	default:
+		pr_err("%s - cannot suspend from state %d",
+				__func__, adp_cam_ctxt->state);
+		return -EPERM;
+		break;
+	}
+
+	wait_for_completion(&preview_disabled);
+	adp_cam_ctxt->state = CAMERA_TRANSITION_SUSPEND;
+
+	msm_axi_subdev_release_rdi_only(lsh_axi_ctrl, s_ctrl);
+	msm_csid_release(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
+			MM_CAM_USE_BYPASS);
+	msm_csiphy_release(lsh_csiphy_dev[adp_rvc_csi_lane_params.csi_phy_sel],
+			&adp_rvc_csi_lane_params);
+	msm_ispif_release_rdi(lsh_ispif);
+
+	init_completion(&preview_disabled);
+	adp_cam_ctxt->state = CAMERA_SUSPENDED;
+
+	pr_debug("exit %s", __func__);
+
+	return 0;
+}
+
+static int adp_camera_resume(struct platform_device *pdev)
+{
+	int rc = 0;
+	pr_debug("resume rearview camera %s", __func__);
+
+	switch (adp_cam_ctxt->state) {
+	case CAMERA_SUSPENDED:
+		break;
+	case CAMERA_PREVIEW_DISABLED:
+		pr_warn("%s - preview already resumed", __func__);
+		return 0;
+		break;
+	default:
+		pr_err("%s - cannot resume from state %d",
+				__func__, adp_cam_ctxt->state);
+		return -EPERM;
+		break;
+	}
+
+	adp_cam_ctxt->state = CAMERA_TRANSITION_OFF;
+
+	preview_set_data_pipeline();
+
+	adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
+	complete(&preview_disabled);
+
+	return rc;
+}
+
+static struct platform_driver adp_camera_platform_driver = {
+	.probe = adp_camera_platform_probe,
+	.remove = adp_camera_remove,
+	.suspend = adp_camera_suspend,
+	.resume	= adp_camera_resume,
+	.driver = {
+		.name = "adp_camera",
+		.owner = THIS_MODULE,
+	},
+};
+
+static int __init adp_camera_init_module(void)
+{
+	int32_t rc = 0;
+	pr_debug("adp_camera platform device init module...\n");
+
+	rc = platform_driver_register(&adp_camera_platform_driver);
+	return rc;
+}
+
+static void __exit adp_camera_exit_module(void)
+{
+	exit_camera_kthread();
+	adp_camera_destroy();
+	platform_driver_unregister(&adp_camera_platform_driver);
+	return;
+}
+
+module_init(adp_camera_init_module);
+module_exit(adp_camera_exit_module);
+MODULE_DESCRIPTION("Qualcomm Technologies, Inc. adp_camera sensor driver");
+MODULE_LICENSE("GPL v2");

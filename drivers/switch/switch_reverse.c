@@ -68,15 +68,6 @@ enum user_interface_status {
 
 enum user_interface_status ui_status = NOT_SHOWING;
 
-enum camera_states {
-	CAMERA_POWERED_DOWN = 0,
-	CAMERA_POWERED_UP,
-	CAMERA_PREVIEW_ENABLED,
-	CAMERA_PREVIEW_DISABLED,
-	CAMERA_UNKNOWN
-};
-static enum camera_states camera_status = CAMERA_POWERED_DOWN;
-
 
 static void show_pic_exit(void)
 {
@@ -105,15 +96,10 @@ static void reverse_set_state(struct reverse_data *data, int state)
 {
 	switch_set_state(data->sdev, state);
 
-	if (state && (camera_status == CAMERA_POWERED_UP
-				|| camera_status == CAMERA_PREVIEW_DISABLED)) {
-		if (enable_camera_preview() == 0)
-			camera_status = CAMERA_PREVIEW_ENABLED;
-	} else {
-		if (camera_status == CAMERA_PREVIEW_ENABLED) {
-			if (disable_camera_preview() == 0)
-				camera_status = CAMERA_PREVIEW_DISABLED;
-		}
+	if (state)
+		enable_camera_preview();
+	else {
+		disable_camera_preview();
 		show_pic_exit();
 	}
 
@@ -136,15 +122,10 @@ static void reverse_detection_work(struct work_struct *work)
 
 	switch_set_state(data->sdev, state);
 
-	if (state && (camera_status == CAMERA_POWERED_UP
-				|| camera_status == CAMERA_PREVIEW_DISABLED)) {
-		if (enable_camera_preview() == 0)
-			camera_status = CAMERA_PREVIEW_ENABLED;
-	} else {
-		if (camera_status == CAMERA_PREVIEW_ENABLED) {
-			if (disable_camera_preview() == 0)
-				camera_status = CAMERA_PREVIEW_DISABLED;
-		}
+	if (state)
+		enable_camera_preview();
+	else {
+		disable_camera_preview();
 		show_pic_exit();
 	}
 
@@ -317,19 +298,6 @@ static int switch_reverse_probe(struct platform_device *pdev)
 		goto err_device_create_file;
 	}
 
-	/* init camera */
-	pr_debug("%s: init_camera_kthread\n", __func__);
-
-	if (camera_status == CAMERA_POWERED_DOWN) {
-		int rc = 0;
-		pr_debug("init camera configuration %s\n", __func__);
-		rc = init_camera_kthread();
-		if (rc < 0)
-			pr_err("%s: Failed to init the camera", __func__);
-		else
-			camera_status = CAMERA_POWERED_UP;
-	}
-
 	for (index = 0; index < REVERSE_MAX_GPIO; index++) {
 		pr_debug("%s : setup reverse gpio(%d) index %d",
 				__func__, pdata->gpio[index], index);
@@ -428,11 +396,7 @@ static int __devexit switch_reverse_remove(struct platform_device *pdev)
 	struct reverse_platform_data *reverse_platform_data =
 			platform_get_drvdata(pdev);
 
-	if ((camera_status == CAMERA_POWERED_UP
-				|| camera_status == CAMERA_PREVIEW_DISABLED)) {
-		exit_camera_kthread();
-		camera_status = CAMERA_POWERED_DOWN;
-	}
+	disable_camera_preview();
 
 	for (index = 0;
 			index < REVERSE_MAX_GPIO &&
@@ -451,40 +415,11 @@ static int __devexit switch_reverse_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static int switch_reverse_suspend(struct platform_device *pdev,
-	pm_message_t state)
-{
-	pr_debug("suspend rear view camera %s", __func__);
-	if ((camera_status == CAMERA_POWERED_UP
-				|| camera_status == CAMERA_PREVIEW_DISABLED)) {
-		exit_camera_kthread();
-		camera_status = CAMERA_POWERED_DOWN;
-		pr_debug("exit thread done %s", __func__);
-	}
-	pr_debug("exit %s", __func__);
-	return 0;
-}
 
-static int switch_reverse_resume(struct platform_device *pdev)
-{
-	int rc = 0;
-	pr_debug("resume rearview camera %s", __func__);
-	if (camera_status == CAMERA_POWERED_DOWN) {
-		rc = init_camera_kthread();
-		if (rc < 0)
-			pr_err("%s: Failed to init the camera", __func__);
-		else
-			camera_status = CAMERA_POWERED_UP;
-		pr_debug("camera_status %d %s", camera_status, __func__);
-	}
-	return rc;
-}
 
 static struct platform_driver switch_reverse_driver = {
 	.probe		= switch_reverse_probe,
 	.remove		= __devexit_p(switch_reverse_remove),
-	.suspend	= switch_reverse_suspend,
-	.resume		= switch_reverse_resume,
 	.driver		= {
 		.name	= "switch-reverse",
 		.owner	= THIS_MODULE,

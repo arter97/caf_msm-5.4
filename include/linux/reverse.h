@@ -48,9 +48,8 @@ struct reverse_struct {
 };
 
 extern int camera_preview_ready;
-extern int init_camera_kthread(void);
 extern int camera_preview_exit;
-extern void exit_camera_kthread(void);
+
 int disable_camera_preview(void);
 int enable_camera_preview(void);
 void show_pic(void);
