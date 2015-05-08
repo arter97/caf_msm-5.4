@@ -1741,6 +1741,9 @@ static int arm_smmu_domain_set_attr(struct iommu_domain *domain,
 				~(1 << DOMAIN_ATTR_COHERENT_HTW_DISABLE);
 		break;
 	}
+	case DOMAIN_ATTR_SECURE_VMID:
+		ret = 0;
+		break;
 	default:
 		ret = -ENODEV;
 	}
