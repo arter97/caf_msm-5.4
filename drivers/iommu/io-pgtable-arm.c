@@ -250,14 +250,19 @@ static bool selftest_running = false;
 static int arm_lpae_init_pte(struct arm_lpae_io_pgtable *data,
 			     unsigned long iova, phys_addr_t paddr,
 			     arm_lpae_iopte prot, int lvl,
-			     arm_lpae_iopte *ptep, arm_lpae_iopte *prev_ptep)
+			     arm_lpae_iopte *ptep, arm_lpae_iopte *prev_ptep,
+			     size_t size)
 {
 	arm_lpae_iopte pte = prot;
 
 	/* We require an unmap first */
 	if (iopte_leaf(*ptep, lvl)) {
-		WARN_ON(!selftest_running);
-		return -EEXIST;
+		if (!selftest_running) {
+			*ptep = 0;
+			data->iop.cfg.tlb->tlb_flush_all(data->iop.cookie);
+		} else {
+			return -EEXIST;
+		}
 	}
 
 	if (data->iop.cfg.quirks & IO_PGTABLE_QUIRK_ARM_NS)
@@ -302,7 +307,7 @@ static int __arm_lpae_map(struct arm_lpae_io_pgtable *data, unsigned long iova,
 	/* If we can install a leaf entry at this level, then do so */
 	if (size == block_size && (size & data->iop.cfg.pgsize_bitmap))
 		return arm_lpae_init_pte(data, iova, paddr, prot, lvl, ptep,
-			prev_ptep);
+					 prev_ptep, size);
 
 	/* We can't allocate tables at the final level */
 	if (WARN_ON(lvl >= ARM_LPAE_MAX_LEVELS - 1))

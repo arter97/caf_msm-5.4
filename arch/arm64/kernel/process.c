@@ -204,7 +204,7 @@ void machine_restart(char *cmd)
 /*
  * dump a block of kernel memory from around the given address
  */
-static void show_data(unsigned long addr, int nbytes, const char *name)
+void show_data(unsigned long addr, int nbytes, const char *name)
 {
 	int	i, j;
 	int	nlines;
