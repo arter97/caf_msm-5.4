@@ -307,33 +307,6 @@ int msm_ba_g_fmt(void *instance, struct v4l2_format *f)
 }
 EXPORT_SYMBOL(msm_ba_g_fmt);
 
-int msm_ba_g_frame_interval(void *instance, struct v4l2_fract *interval)
-{
-	struct msm_ba_inst *inst = instance;
-	struct v4l2_subdev *sd = NULL;
-	struct v4l2_subdev_frame_interval sd_frame_interval;
-	int rc = 0;
-
-	if (!inst || !interval)
-		return -EINVAL;
-
-	sd = inst->sd;
-	if (!sd) {
-		dprintk(BA_ERR, "No sd registered");
-		return -EINVAL;
-	}
-	rc = v4l2_subdev_call(sd, video, g_frame_interval, &sd_frame_interval);
-	if (rc) {
-		dprintk(BA_ERR, "g_frame_interval failed %d for sd: %s",
-				rc, sd->name);
-	} else {
-		interval->denominator = sd_frame_interval.interval.denominator;
-		interval->numerator = sd_frame_interval.interval.numerator;
-	}
-	return rc;
-}
-EXPORT_SYMBOL(msm_ba_g_frame_interval);
-
 int msm_ba_s_ctrl(void *instance, struct v4l2_control *control)
 {
 	struct msm_ba_inst *inst = instance;
@@ -341,7 +314,7 @@ int msm_ba_s_ctrl(void *instance, struct v4l2_control *control)
 	if (!inst || !control)
 		return -EINVAL;
 
-	return -EINVAL;
+	return v4l2_s_ctrl(NULL, &inst->ctrl_handler, control);
 }
 EXPORT_SYMBOL(msm_ba_s_ctrl);
 
@@ -352,7 +325,7 @@ int msm_ba_g_ctrl(void *instance, struct v4l2_control *control)
 	if (!inst || !control)
 		return -EINVAL;
 
-	return -EINVAL;
+	return v4l2_g_ctrl(&inst->ctrl_handler, control);
 }
 EXPORT_SYMBOL(msm_ba_g_ctrl);
 
@@ -579,22 +552,27 @@ void *msm_ba_open(void)
 {
 	struct msm_ba_inst *inst = NULL;
 	struct msm_ba_dev *dev_ctxt = NULL;
+	int rc = 0;
 
 	dev_ctxt = get_ba_dev();
 
 	inst = kzalloc(sizeof(*inst), GFP_KERNEL);
 
 	if (!inst) {
-		dprintk(BA_ERR, "Failed to allocate memory\n");
+		dprintk(BA_ERR, "Failed to allocate memory");
 		return NULL;
 	}
-	memset(inst, 0x00, sizeof(*inst));
 
 	mutex_init(&inst->inst_cs);
 
 	init_waitqueue_head(&inst->kernel_event_queue);
 	inst->state = MSM_BA_DEV_UNINIT_DONE;
 	inst->dev_ctxt = dev_ctxt;
+	rc = msm_ba_ctrl_init(inst);
+	if (rc) {
+		dprintk(BA_WARN, "Failed to initialize controls: %d", rc);
+		msm_ba_ctrl_deinit(inst);
+	}
 
 	if (!list_empty(&(inst->dev_ctxt->v4l2_dev.subdevs)))
 		inst->sd = list_first_entry(&(inst->dev_ctxt->v4l2_dev.subdevs),
@@ -641,7 +619,10 @@ int msm_ba_close(void *instance)
 	}
 	mutex_unlock(&dev_ctxt->dev_cs);
 
-	dprintk(BA_DBG, "Closed BA instance: 0x%p\n", inst);
+	msm_ba_ctrl_deinit(inst);
+	debugfs_remove_recursive(inst->debugfs_root);
+
+	dprintk(BA_DBG, "Closed BA instance: %p", inst);
 	kfree(inst);
 
 	return rc;
