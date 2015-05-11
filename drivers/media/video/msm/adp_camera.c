@@ -455,6 +455,12 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 
 	pr_debug("%s:  enter into rdi1 irq now, rdi1_irq_count is %d!!!\n",
 			__func__, rdi1_irq_count);
+
+	if (adp_cam_ctxt->state == CAMERA_TRANSITION_OFF) {
+		pr_debug("%s - received interrupt; skipping!\n", __func__);
+		return;
+	}
+
 	rdi1_irq_count++;
 	/*RDI1*/
 	if (axi_ctrl->share_ctrl->operation_mode & VFE_OUTPUTS_RDI1) {
