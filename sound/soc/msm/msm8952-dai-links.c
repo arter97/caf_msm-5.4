@@ -30,12 +30,17 @@ static struct snd_soc_ops msm8952_slimbus_be_ops = {
 	.hw_params = msm_snd_hw_params,
 };
 
+
+static struct snd_soc_ops msm8952_cpe_ops = {
+	.hw_params = msm_snd_cpe_hw_params,
+};
+
 static struct snd_soc_dai_link msm8952_tomtom_fe_dai[] = {
 	/* CPE LSM FE */
 	{
 		.name = "CPE Listen service",
 		.stream_name = "CPE Listen Audio Service",
-		.cpu_dai_name = "CPE_LSM_NOHOST",
+		.cpu_dai_name = "msm-dai-slim",
 		.platform_name = "msm-cpe-lsm",
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 			    SND_SOC_DPCM_TRIGGER_POST },
@@ -44,6 +49,7 @@ static struct snd_soc_dai_link msm8952_tomtom_fe_dai[] = {
 		.ignore_pmdown_time = 1,
 		.codec_dai_name = "tomtom_mad1",
 		.codec_name = "tomtom_codec",
+		.ops = &msm8952_cpe_ops,
 	},
 };
 
@@ -550,6 +556,19 @@ static struct snd_soc_dai_link msm8952_common_fe_dai[] = {
 		.codec_name = "snd-soc-dummy",
 	},
 	{/* hw:x,26 */
+		.name = LPASS_BE_SLIMBUS_4_TX,
+		.stream_name = "Slimbus4 Capture",
+		.cpu_dai_name = "msm-dai-q6-dev.16393",
+		.platform_name = "msm-pcm-hostless",
+		.codec_name = "tomtom_codec",
+		.codec_dai_name = "tomtom_vifeedback",
+		.be_id = MSM_BACKEND_DAI_SLIMBUS_4_TX,
+		.be_hw_params_fixup = msm_slim_4_tx_be_hw_params_fixup,
+		.ops = &msm8952_slimbus_be_ops,
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+	},
+	{/* hw:x,27 */
 		.name = "SLIMBUS_4 Hostless",
 		.stream_name = "SLIMBUS_4 Hostless",
 		.cpu_dai_name = "SLIMBUS4_HOSTLESS",
@@ -563,7 +582,7 @@ static struct snd_soc_dai_link msm8952_common_fe_dai[] = {
 		.codec_dai_name = "snd-soc-dummy-dai",
 		.codec_name = "snd-soc-dummy",
 	},
-	{ /* hw:x,27 */
+	{ /* hw:x,28 */
 		.name = "QUAT_MI2S Hostless",
 		.stream_name = "QUAT_MI2S Hostless",
 		.cpu_dai_name = "QUAT_MI2S_RX_HOSTLESS",

@@ -15,6 +15,7 @@
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/init.h>
+#include <linux/types.h>
 #include <linux/of_device.h>
 #include <linux/completion.h>
 #include <linux/idr.h>
@@ -52,9 +53,13 @@ static struct swr_master *swr_master_get(struct swr_master *master)
 static void swr_dev_release(struct device *dev)
 {
 	struct swr_device *swr_dev = to_swr_device(dev);
+	struct swr_master *master = swr_dev->master;
 
-	if (!swr_dev)
+	if (!swr_dev || !master)
 		return;
+	mutex_lock(&master->mlock);
+	list_del_init(&swr_dev->dev_list);
+	mutex_unlock(&master->mlock);
 	swr_master_put(swr_dev->master);
 	kfree(swr_dev);
 }
@@ -96,6 +101,9 @@ struct swr_device *swr_new_device(struct swr_master *master,
 	swr->dev.bus = &soundwire_type;
 	swr->dev.release = swr_dev_release;
 	swr->dev.of_node = info->of_node;
+	mutex_lock(&master->mlock);
+	list_add_tail(&swr->dev_list, &master->devices);
+	mutex_unlock(&master->mlock);
 
 	dev_set_name(&swr->dev, "%s.%lx", swr->name, swr->addr);
 	result = device_register(&swr->dev);
@@ -122,7 +130,7 @@ EXPORT_SYMBOL(swr_new_device);
  * @master: pointer to soundwire master device
  *
  * Registers a soundwire device for each child node of master node which has
- * a "ea-addr" property
+ * a "swr-devid" property
  *
  */
 int of_register_swr_devices(struct swr_master *master)
@@ -135,7 +143,7 @@ int of_register_swr_devices(struct swr_master *master)
 
 	for_each_available_child_of_node(master->dev.of_node, node) {
 		struct swr_boardinfo info = {};
-		struct property *prop;
+		phys_addr_t addr;
 
 		dev_dbg(&master->dev, "of_swr:register %s\n", node->full_name);
 
@@ -144,13 +152,12 @@ int of_register_swr_devices(struct swr_master *master)
 				node->full_name);
 			continue;
 		}
-		prop = of_find_property(node, "ea-addr", NULL);
-		if (!prop) {
-			dev_err(&master->dev, "of_swr:invalid ea-addr %s\n",
+		if (of_property_read_u64(node, "reg", (u64 *)&addr)) {
+			dev_err(&master->dev, "of_swr:invalid reg %s\n",
 				node->full_name);
 			continue;
 		}
-		memcpy(&info.addr, prop->value, 6);
+		info.addr = addr;
 		info.of_node = of_node_get(node);
 		swr = swr_new_device(master, &info);
 		if (!swr) {
@@ -355,6 +362,35 @@ int swr_disconnect_port(struct swr_device *dev, u8 *port_id, u8 num_port)
 EXPORT_SYMBOL(swr_disconnect_port);
 
 /**
+ * swr_get_logical_dev_num - Get soundwire slave logical device number
+ * @dev: pointer to soundwire slave device
+ * @dev_id: physical device id of soundwire slave device
+ * @dev_num: pointer to logical device num of soundwire slave device
+ *
+ * This API will get the logical device number of soundwire slave device
+ */
+int swr_get_logical_dev_num(struct swr_device *dev, u64 dev_id,
+			u8 *dev_num)
+{
+	int ret = 0;
+	struct swr_master *master = dev->master;
+
+	if (!master) {
+		pr_err("%s: Master is NULL\n", __func__);
+		return -EINVAL;
+	}
+	mutex_lock(&master->mlock);
+	ret = master->get_logical_dev_num(master, dev_id, dev_num);
+	if (!ret) {
+		pr_err("%s: Error %d to get logical addr for device %llu\n",
+			__func__, ret, dev_id);
+	}
+	mutex_unlock(&master->mlock);
+	return ret;
+}
+EXPORT_SYMBOL(swr_get_logical_dev_num);
+
+/**
  * swr_read - read soundwire slave device registers
  * @dev: pointer to soundwire slave device
  * @dev_num: logical device num of soundwire slave device
@@ -394,6 +430,91 @@ int swr_write(struct swr_device *dev, u8 dev_num, u32 reg_addr,
 	return master->write(master, dev_num, reg_addr, buf);
 }
 EXPORT_SYMBOL(swr_write);
+
+/**
+ * swr_device_up - Function to bringup the soundwire slave device
+ * @swr_dev: pointer to soundwire slave device
+ * Context: can sleep
+ *
+ * This API will be called by soundwire master to bringup the slave
+ * device.
+ */
+int swr_device_up(struct swr_device *swr_dev)
+{
+	struct device *dev;
+	const struct swr_driver *sdrv;
+
+	if (!swr_dev)
+		return -EINVAL;
+
+	dev = &swr_dev->dev;
+	sdrv = to_swr_driver(dev->driver);
+	if (!sdrv)
+		return -EINVAL;
+
+	if (sdrv->device_up)
+		return sdrv->device_up(to_swr_device(dev));
+
+	return -ENODEV;
+}
+EXPORT_SYMBOL(swr_device_up);
+
+/**
+ * swr_device_down - Function to call soundwire slave device down
+ * @swr_dev: pointer to soundwire slave device
+ * Context: can sleep
+ *
+ * This API will be called by soundwire master to put slave device in
+ * shutdown state.
+ */
+int swr_device_down(struct swr_device *swr_dev)
+{
+	struct device *dev;
+	const struct swr_driver *sdrv;
+
+	if (!swr_dev)
+		return -EINVAL;
+
+	dev = &swr_dev->dev;
+	sdrv = to_swr_driver(dev->driver);
+	if (!sdrv)
+		return -EINVAL;
+
+	if (sdrv->device_down)
+		return sdrv->device_down(to_swr_device(dev));
+
+	return -ENODEV;
+}
+EXPORT_SYMBOL(swr_device_down);
+
+/**
+ * swr_reset_device - reset soundwire slave device
+ * @swr_dev: pointer to soundwire slave device
+ * Context: can sleep
+ *
+ * This API will be called by soundwire master to reset the slave
+ * device when the slave device is not responding or in undefined
+ * state
+ */
+int swr_reset_device(struct swr_device *swr_dev)
+{
+	struct device *dev;
+	const struct swr_driver *sdrv;
+
+	if (!swr_dev)
+		return -EINVAL;
+
+	dev = &swr_dev->dev;
+	sdrv = to_swr_driver(dev->driver);
+	if (!sdrv)
+		return -EINVAL;
+
+	if (sdrv->reset_device)
+		return sdrv->reset_device(to_swr_device(dev));
+
+	return -ENODEV;
+}
+EXPORT_SYMBOL(swr_reset_device);
 
 static int swr_drv_probe(struct device *dev)
 {
@@ -612,7 +733,7 @@ static const struct swr_device_id *swr_match(const struct swr_device_id *id,
 					     const struct swr_device *swr_dev)
 {
 	while (id->name[0]) {
-		if (strcmp((dev_name(&swr_dev->dev)), id->name) == 0)
+		if (strcmp(swr_dev->name, id->name) == 0)
 			return id;
 		id++;
 	}
