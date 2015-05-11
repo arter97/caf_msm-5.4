@@ -530,7 +530,7 @@ static char *get_usb_type_name(u8 type_reg)
 
 static enum power_supply_type usb_type_enum[] = {
 	POWER_SUPPLY_TYPE_USB,		/* bit 0 */
-	POWER_SUPPLY_TYPE_UNKNOWN,	/* bit 1 */
+	POWER_SUPPLY_TYPE_USB_DCP,	/* bit 1 */
 	POWER_SUPPLY_TYPE_USB_DCP,	/* bit 2 */
 	POWER_SUPPLY_TYPE_USB_CDP,	/* bit 3 */
 	POWER_SUPPLY_TYPE_USB,		/* bit 4 error case, report SDP */
