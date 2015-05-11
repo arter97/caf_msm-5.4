@@ -233,7 +233,10 @@ Optional properties:
 					  group configuration.
 - pinctrl-x: 				  Defines pinctrl state for each pin
 					  group
-
+- qcom,msm-cpudai-afe-clk-ver:		  Indicates AFE clock interface to be
+					  used for enabling PCM clock. If not
+					  defined, selects default AFE clock
+					  interface.
 
 * msm-pcm-hostless
 

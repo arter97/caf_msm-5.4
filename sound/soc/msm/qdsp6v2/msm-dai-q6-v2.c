@@ -35,7 +35,18 @@
 #define CHANNEL_STATUS_SIZE 24
 #define CHANNEL_STATUS_MASK_INIT 0x0
 #define CHANNEL_STATUS_MASK 0x4
+#define AFE_API_VERSION_CLOCK_SET 1
+#define AFE_CLK_VERSION_V1	1
+#define AFE_CLK_VERSION_V2	2
 
+static const struct afe_clk_set lpass_clk_set_default = {
+	AFE_API_VERSION_CLOCK_SET,
+	Q6AFE_LPASS_CLK_ID_PRI_PCM_IBIT,
+	Q6AFE_LPASS_OSR_CLK_2_P048_MHZ,
+	Q6AFE_LPASS_CLK_ATTRIBUTE_COUPLE_NO,
+	Q6AFE_LPASS_CLK_ROOT_DEFAULT,
+	0,
+};
 static const struct afe_clk_cfg lpass_clk_cfg_default = {
 	AFE_API_VERSION_I2S_CONFIG,
 	Q6AFE_LPASS_OSR_CLK_2_P048_MHZ,
@@ -93,7 +104,9 @@ struct msm_dai_q6_auxpcm_dai_data {
 	struct mutex rlock; /* auxpcm dev resource lock */
 	u16 rx_pid; /* AUXPCM RX AFE port ID */
 	u16 tx_pid; /* AUXPCM TX AFE port ID */
+	u16 afe_clk_ver;
 	struct afe_clk_cfg clk_cfg; /* hold LPASS clock configuration */
+	struct afe_clk_set clk_set; /* hold LPASS clock configuration */
 	struct msm_dai_q6_dai_data bdai_data; /* incoporate base DAI data */
 };
 
@@ -300,11 +313,52 @@ static int msm_dai_q6_auxpcm_hw_params(
 	return rc;
 }
 
+static int msm_dai_q6_auxpcm_rx_set_clk(
+		struct msm_dai_q6_auxpcm_dai_data *aux_dai_data,
+		bool enable)
+{
+	int rc;
+
+	pr_debug("%s: afe_clk_ver: %d, enable: %d\n", __func__,
+		 aux_dai_data->afe_clk_ver, enable);
+	if (aux_dai_data->afe_clk_ver == AFE_CLK_VERSION_V2) {
+		aux_dai_data->clk_set.enable = enable;
+		rc = afe_set_lpass_clock_v2(aux_dai_data->rx_pid,
+					&aux_dai_data->clk_set);
+	} else {
+		if (!enable)
+			aux_dai_data->clk_cfg.clk_val1 = enable;
+		rc = afe_set_lpass_clock(aux_dai_data->rx_pid,
+					&aux_dai_data->clk_cfg);
+	}
+	return rc;
+}
+
+static int msm_dai_q6_auxpcm_tx_set_clk(
+		struct msm_dai_q6_auxpcm_dai_data *aux_dai_data,
+		bool enable)
+{
+	int rc;
+
+	pr_debug("%s: afe_clk_ver: %d, enable: %d\n", __func__,
+		 aux_dai_data->afe_clk_ver, enable);
+	if (aux_dai_data->afe_clk_ver == AFE_CLK_VERSION_V2) {
+		aux_dai_data->clk_set.enable = enable;
+		rc = afe_set_lpass_clock_v2(aux_dai_data->tx_pid,
+					&aux_dai_data->clk_set);
+	} else {
+		if (!enable)
+			aux_dai_data->clk_cfg.clk_val1 = enable;
+		rc = afe_set_lpass_clock(aux_dai_data->tx_pid,
+					&aux_dai_data->clk_cfg);
+	}
+	return rc;
+}
+
 static void msm_dai_q6_auxpcm_shutdown(struct snd_pcm_substream *substream,
 				struct snd_soc_dai *dai)
 {
 	int rc = 0;
-	struct afe_clk_cfg *lpass_pcm_src_clk = NULL;
 	struct msm_dai_q6_auxpcm_dai_data *aux_dai_data =
 		dev_get_drvdata(dai->dev);
 
@@ -346,8 +400,6 @@ static void msm_dai_q6_auxpcm_shutdown(struct snd_pcm_substream *substream,
 	dev_dbg(dai->dev, "%s: dai->id = %d closing PCM AFE ports\n",
 			__func__, dai->id);
 
-	lpass_pcm_src_clk = (struct afe_clk_cfg *) &aux_dai_data->clk_cfg;
-
 	rc = afe_close(aux_dai_data->rx_pid); /* can block */
 	if (IS_ERR_VALUE(rc))
 		dev_err(dai->dev, "fail to close PCM_RX  AFE port\n");
@@ -356,10 +408,8 @@ static void msm_dai_q6_auxpcm_shutdown(struct snd_pcm_substream *substream,
 	if (IS_ERR_VALUE(rc))
 		dev_err(dai->dev, "fail to close AUX PCM TX port\n");
 
-	lpass_pcm_src_clk->clk_val1 = 0;
-	afe_set_lpass_clock(aux_dai_data->rx_pid, lpass_pcm_src_clk);
-	afe_set_lpass_clock(aux_dai_data->tx_pid, lpass_pcm_src_clk);
-
+	msm_dai_q6_auxpcm_rx_set_clk(aux_dai_data, false);
+	msm_dai_q6_auxpcm_tx_set_clk(aux_dai_data, false);
 exit:
 	mutex_unlock(&aux_dai_data->rlock);
 	return;
@@ -374,11 +424,8 @@ static int msm_dai_q6_auxpcm_prepare(struct snd_pcm_substream *substream,
 	struct msm_dai_auxpcm_pdata *auxpcm_pdata = NULL;
 	int rc = 0;
 	u32 pcm_clk_rate;
-	struct afe_clk_cfg *lpass_pcm_src_clk = NULL;
 
 	auxpcm_pdata = dai->dev->platform_data;
-	lpass_pcm_src_clk = (struct afe_clk_cfg *) &aux_dai_data->clk_cfg;
-
 	mutex_lock(&aux_dai_data->rlock);
 
 	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
@@ -437,12 +484,33 @@ static int msm_dai_q6_auxpcm_prepare(struct snd_pcm_substream *substream,
 		rc = -EINVAL;
 		goto fail;
 	}
+	if (aux_dai_data->afe_clk_ver == AFE_CLK_VERSION_V2) {
+		memcpy(&aux_dai_data->clk_set, &lpass_clk_set_default,
+				sizeof(struct afe_clk_set));
+		aux_dai_data->clk_set.clk_freq_in_hz = pcm_clk_rate;
+		if ((aux_dai_data->tx_pid == AFE_PORT_ID_PRIMARY_PCM_TX) ||
+		    (aux_dai_data->rx_pid == AFE_PORT_ID_PRIMARY_PCM_RX)) {
+			if (pcm_clk_rate)
+				aux_dai_data->clk_set.clk_id =
+					Q6AFE_LPASS_CLK_ID_PRI_PCM_IBIT;
+			else
+				aux_dai_data->clk_set.clk_id =
+					Q6AFE_LPASS_CLK_ID_PRI_PCM_EBIT;
+		} else {
+			if (pcm_clk_rate)
+				aux_dai_data->clk_set.clk_id =
+					Q6AFE_LPASS_CLK_ID_SEC_PCM_IBIT;
+			else
+				aux_dai_data->clk_set.clk_id =
+					Q6AFE_LPASS_CLK_ID_SEC_PCM_EBIT;
+		}
+	} else {
+		memcpy(&aux_dai_data->clk_cfg, &lpass_clk_cfg_default,
+				sizeof(struct afe_clk_cfg));
+		aux_dai_data->clk_cfg.clk_val1 = pcm_clk_rate;
+	}
 
-	memcpy(lpass_pcm_src_clk, &lpass_clk_cfg_default,
-			sizeof(struct afe_clk_cfg));
-	lpass_pcm_src_clk->clk_val1 = pcm_clk_rate;
-
-	rc = afe_set_lpass_clock(aux_dai_data->rx_pid, lpass_pcm_src_clk);
+	rc = msm_dai_q6_auxpcm_rx_set_clk(aux_dai_data, true);
 	if (rc < 0) {
 		dev_err(dai->dev,
 			"%s:afe_set_lpass_clock on RX pcm_src_clk failed\n",
@@ -450,7 +518,7 @@ static int msm_dai_q6_auxpcm_prepare(struct snd_pcm_substream *substream,
 		goto fail;
 	}
 
-	rc = afe_set_lpass_clock(aux_dai_data->tx_pid, lpass_pcm_src_clk);
+	rc = msm_dai_q6_auxpcm_tx_set_clk(aux_dai_data, true);
 	if (rc < 0) {
 		dev_err(dai->dev,
 			"%s:afe_set_lpass_clock on TX pcm_src_clk failed\n",
@@ -506,7 +574,6 @@ static int msm_dai_q6_auxpcm_trigger(struct snd_pcm_substream *substream,
 static int msm_dai_q6_dai_auxpcm_remove(struct snd_soc_dai *dai)
 {
 	struct msm_dai_q6_auxpcm_dai_data *aux_dai_data;
-	struct afe_clk_cfg *lpass_pcm_src_clk = NULL;
 	int rc;
 
 	aux_dai_data = dev_get_drvdata(dai->dev);
@@ -525,12 +592,8 @@ static int msm_dai_q6_dai_auxpcm_remove(struct snd_soc_dai *dai)
 		clear_bit(STATUS_TX_PORT, aux_dai_data->auxpcm_port_status);
 		clear_bit(STATUS_RX_PORT, aux_dai_data->auxpcm_port_status);
 	}
-
-	lpass_pcm_src_clk = (struct afe_clk_cfg *) &aux_dai_data->clk_cfg;
-	lpass_pcm_src_clk->clk_val1 = 0;
-	afe_set_lpass_clock(aux_dai_data->rx_pid, lpass_pcm_src_clk);
-	afe_set_lpass_clock(aux_dai_data->tx_pid, lpass_pcm_src_clk);
-
+	msm_dai_q6_auxpcm_rx_set_clk(aux_dai_data, false);
+	msm_dai_q6_auxpcm_tx_set_clk(aux_dai_data, false);
 	return 0;
 }
 
@@ -1627,6 +1690,7 @@ static int msm_auxpcm_dev_probe(struct platform_device *pdev)
 	struct msm_dai_q6_auxpcm_dai_data *dai_data;
 	struct msm_dai_auxpcm_pdata *auxpcm_pdata;
 	uint32_t val_array[RATE_MAX_NUM_OF_AUX_PCM_RATES];
+	uint32_t val = 0;
 	const char *intf_name;
 	int rc = 0, i = 0, len = 0;
 	const uint32_t *slot_mapping_array = NULL;
@@ -1826,6 +1890,12 @@ static int msm_auxpcm_dev_probe(struct platform_device *pdev)
 			__func__, intf_name);
 		goto fail_invalid_intf;
 	}
+	rc = of_property_read_u32(pdev->dev.of_node,
+				  "qcom,msm-cpudai-afe-clk-ver", &val);
+	if (rc)
+		dai_data->afe_clk_ver = AFE_CLK_VERSION_V1;
+	else
+		dai_data->afe_clk_ver = val;
 
 	mutex_init(&dai_data->rlock);
 	dev_dbg(&pdev->dev, "dev name %s\n", dev_name(&pdev->dev));
