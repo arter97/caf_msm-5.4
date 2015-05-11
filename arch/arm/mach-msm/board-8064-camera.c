@@ -842,6 +842,7 @@ void __init apq8064_init_cam(void)
 	platform_device_register(&msm8960_device_ispif);
 	platform_device_register(&msm8960_device_vfe);
 	platform_device_register(&msm8960_device_vpe);
+	platform_device_register(&msm_camera_avdevice);
 }
 
 #ifdef CONFIG_I2C
