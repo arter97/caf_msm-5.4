@@ -80,6 +80,20 @@ static int msm_v4l2_querycap(struct file *filp, void *fh,
 	return msm_ba_querycap((void *)ba_inst, cap);
 }
 
+static int msm_v4l2_g_priority(struct file *filp, void *fh,
+					enum v4l2_priority *prio)
+{
+	struct msm_ba_inst *ba_inst = get_ba_inst(filp, fh);
+	return msm_ba_g_priority((void *)ba_inst, prio);
+}
+
+static int msm_v4l2_s_priority(struct file *filp, void *fh,
+					enum v4l2_priority prio)
+{
+	struct msm_ba_inst *ba_inst = get_ba_inst(filp, fh);
+	return msm_ba_s_priority((void *)ba_inst, prio);
+}
+
 int msm_v4l2_enum_input(struct file *file, void *fh,
 					struct v4l2_input *input)
 {
@@ -209,6 +223,8 @@ static int msm_v4l2_g_parm(struct file *file, void *fh,
 
 static const struct v4l2_ioctl_ops msm_v4l2_ioctl_ops = {
 	.vidioc_querycap = msm_v4l2_querycap,
+	.vidioc_g_priority = msm_v4l2_g_priority,
+	.vidioc_s_priority = msm_v4l2_s_priority,
 	.vidioc_enum_fmt_vid_cap = msm_v4l2_enum_fmt,
 	.vidioc_enum_fmt_vid_out = msm_v4l2_enum_fmt,
 	.vidioc_s_fmt_vid_cap = msm_v4l2_s_fmt,
@@ -258,7 +274,7 @@ static int msm_ba_device_init(struct platform_device *pdev,
 	int nr = BASE_DEVICE_NUMBER;
 	int rc = 0;
 
-	dprintk(BA_INFO, "Enter %s\n", __func__);
+	dprintk(BA_INFO, "Enter %s", __func__);
 	if ((NULL == ret_dev_ctxt) ||
 			(NULL != *ret_dev_ctxt))
 		return -EINVAL;
@@ -266,8 +282,6 @@ static int msm_ba_device_init(struct platform_device *pdev,
 	dev_ctxt = kzalloc(sizeof(struct msm_ba_dev), GFP_KERNEL);
 	if (NULL == dev_ctxt)
 		return -ENOMEM;
-
-	memset(dev_ctxt, 0x00, sizeof(struct msm_ba_dev));
 
 	INIT_LIST_HEAD(&dev_ctxt->inputs);
 	INIT_LIST_HEAD(&dev_ctxt->instances);

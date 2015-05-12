@@ -22,11 +22,8 @@
 struct msm_ba_input_config msm_ba_inp_cfg[] = {
 	/* type, index, name, adv inp, dev id, sd name, signal status */
 	{BA_INPUT_CVBS, 0, "CVBS-0", BA_IP_CVBS_0, 0, "adv7180", 1},
-	{BA_INPUT_CVBS, 1, "CVBS-1", BA_IP_CVBS_1, 0, "adv7180", 1},
-	{BA_INPUT_COMPONENT, 0, "COMP-0", BA_IP_COMPONENT_0, 0, "adv7180", 1},
-	{BA_INPUT_CVBS, 2, "CVBS-2", BA_IP_CVBS_0, 1, "adv7180", 1},
-	{BA_INPUT_CVBS, 3, "CVBS-3", BA_IP_CVBS_1, 1, "adv7180", 1},
-	{BA_INPUT_CVBS, 4, "CVBS-4", BA_IP_CVBS_2, 1, "adv7180", 1},
+	{BA_INPUT_CVBS, 1, "CVBS-1", BA_IP_CVBS_0, 1, "adv7180", 1},
+	{BA_INPUT_CVBS, 2, "CVBS-2", BA_IP_CVBS_1, 1, "adv7180", 1},
 	{BA_INPUT_HDMI, 0, "HDMI-1", BA_IP_HDMI_1, 2, "adv7481", 1},
 };
 
@@ -140,6 +137,7 @@ void msm_ba_add_inputs(struct v4l2_subdev *sd)
 				input->bridge_chip_ip = msm_ba_inp_cfg[i].ba_ip;
 				input->ba_out = msm_ba_inp_cfg[i].ba_out;
 				input->ba_ip = i;
+				input->prio = V4L2_PRIORITY_DEFAULT;
 				input->sd = sd;
 				rc = v4l2_subdev_call(
 					sd, video, g_input_status, &status);

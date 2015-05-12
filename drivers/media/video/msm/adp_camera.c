@@ -731,7 +731,8 @@ static int adp_rear_camera_enable(void)
 	struct preview_mem *ping_buffer, *pong_buffer, *free_buffer;
 	struct v4l2_input input;
 	struct v4l2_format fmt;
-	int index;
+	int index = BA_IP_CVBS_0;
+	enum v4l2_priority prio = V4L2_PRIORITY_RECORD;
 
 	pr_debug("%s: kpi entry\n", __func__);
 	my_axi_ctrl->share_ctrl->current_mode = 4096;
@@ -740,12 +741,9 @@ static int adp_rear_camera_enable(void)
 	/* Detect NTSC or PAL, get the preview width and height */
 
 	adp_cam_ctxt->ba_inst_hdlr = msm_ba_open();
-	msm_ba_g_input(adp_cam_ctxt->ba_inst_hdlr, &index);
 	pr_debug("%s: input index: %d\n", __func__, index);
-	if (BA_IP_CVBS_0 != index) {
-		index = BA_IP_CVBS_0;
-		msm_ba_s_input(adp_cam_ctxt->ba_inst_hdlr, index);
-	}
+	msm_ba_s_input(adp_cam_ctxt->ba_inst_hdlr, index);
+	msm_ba_s_priority(adp_cam_ctxt->ba_inst_hdlr, prio);
 	memset(&input, 0, sizeof(input));
 	input.index = index;
 	msm_ba_enum_input(adp_cam_ctxt->ba_inst_hdlr, &input);

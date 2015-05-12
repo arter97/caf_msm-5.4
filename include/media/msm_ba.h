@@ -45,6 +45,8 @@ enum msm_ba_ip {
 void *msm_ba_open(void);
 int msm_ba_close(void *instance);
 int msm_ba_querycap(void *instance, struct v4l2_capability *cap);
+int msm_ba_g_priority(void *instance, enum v4l2_priority *prio);
+int msm_ba_s_priority(void *instance, enum v4l2_priority prio);
 int msm_ba_enum_input(void *instance, struct v4l2_input *input);
 int msm_ba_g_input(void *instance, unsigned int *index);
 int msm_ba_s_input(void *instance, unsigned int index);

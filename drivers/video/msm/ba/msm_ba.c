@@ -53,7 +53,7 @@ int msm_ba_querycap(void *instance, struct v4l2_capability *cap)
 
 	if (!inst || !cap) {
 		dprintk(BA_ERR,
-			"Invalid input, inst = 0x%p, cap = 0x%p\n", inst, cap);
+			"Invalid input, inst = 0x%p, cap = 0x%p", inst, cap);
 		return -EINVAL;
 	}
 
@@ -68,6 +68,52 @@ int msm_ba_querycap(void *instance, struct v4l2_capability *cap)
 	return 0;
 }
 EXPORT_SYMBOL(msm_ba_querycap);
+
+int msm_ba_g_priority(void *instance, enum v4l2_priority *prio)
+{
+	struct msm_ba_inst *inst = instance;
+	struct msm_ba_input *ba_input = NULL;
+	int rc = 0;
+
+	if (!inst || !prio) {
+		dprintk(BA_ERR,
+			"Invalid prio, inst = 0x%p, prio = 0x%p", inst, prio);
+		return -EINVAL;
+	}
+
+	ba_input = msm_ba_find_input(inst->sd_input.index);
+	if (!ba_input) {
+		dprintk(BA_ERR, "Could not find input index: %d",
+				inst->sd_input.index);
+		return -EINVAL;
+	}
+	*prio = ba_input->prio;
+
+	return rc;
+}
+EXPORT_SYMBOL(msm_ba_g_priority);
+
+int msm_ba_s_priority(void *instance, enum v4l2_priority prio)
+{
+	struct msm_ba_inst *inst = instance;
+	struct msm_ba_input *ba_input = NULL;
+	int rc = 0;
+
+	if (!inst)
+		return -EINVAL;
+
+	ba_input = msm_ba_find_input(inst->sd_input.index);
+	if (!ba_input) {
+		dprintk(BA_ERR, "Could not find input index: %d",
+				inst->sd_input.index);
+		return -EINVAL;
+	}
+	ba_input->prio = prio;
+	inst->input_prio = prio;
+
+	return rc;
+}
+EXPORT_SYMBOL(msm_ba_s_priority);
 
 int msm_ba_s_parm(void *instance, struct v4l2_streamparm *a)
 {
@@ -103,7 +149,7 @@ int msm_ba_enum_input(void *instance, struct v4l2_input *input)
 			input->capabilities = V4L2_IN_CAP_CUSTOM_TIMINGS;
 		else
 			input->capabilities = V4L2_IN_CAP_STD;
-		dprintk(BA_DBG, "msm_ba_find_input:name %s", input->name);
+		dprintk(BA_DBG, "msm_ba_find_input: name %s", input->name);
 		/* get current signal status */
 		rc = v4l2_subdev_call(
 			ba_input->sd, video, g_input_status, &status);
@@ -122,11 +168,20 @@ EXPORT_SYMBOL(msm_ba_enum_input);
 int msm_ba_g_input(void *instance, unsigned int *index)
 {
 	struct msm_ba_inst *inst = instance;
+	struct msm_ba_input *ba_input = NULL;
 	int rc = 0;
 
 	if (!inst || !index)
 		return -EINVAL;
 
+	/* First find current input */
+	ba_input = msm_ba_find_input(inst->sd_input.index);
+	if (ba_input) {
+		if (V4L2_PRIORITY_RECORD == ba_input->prio &&
+			inst->input_prio != ba_input->prio) {
+			inst->sd_input.index++;
+		}
+	}
 	*index = inst->sd_input.index;
 
 	return rc;
@@ -144,6 +199,22 @@ int msm_ba_s_input(void *instance, unsigned int index)
 	if (index > inst->dev_ctxt->num_inputs)
 		return -EINVAL;
 
+	/* First find current input */
+	ba_input = msm_ba_find_input(inst->sd_input.index);
+	/* If same just set the in use flag and return.
+	 * No need to actually send the command down to hw.
+	 * No need to check for ba_input for NULL as there is
+	 * at least one input connected (default one).
+	 */
+	if (index == inst->sd_input.index) {
+		ba_input->in_use = 1;
+		return rc;
+	}
+	/* Reset current input in use bit
+	 * as we are now switching inputs
+	 */
+	ba_input->in_use = 0;
+	/* Now find requested input */
 	ba_input = msm_ba_find_input(index);
 	if (!ba_input) {
 		dprintk(BA_ERR, "Could not find input index: %d", index);
@@ -152,6 +223,11 @@ int msm_ba_s_input(void *instance, unsigned int index)
 	if (!ba_input->sd) {
 		dprintk(BA_ERR, "No sd registered");
 		return -EINVAL;
+	}
+	if (ba_input->in_use &&
+		ba_input->prio == V4L2_PRIORITY_RECORD) {
+		dprintk(BA_WARN, "Input %d in use", index);
+		return -EBUSY;
 	}
 	rc = v4l2_subdev_call(ba_input->sd, video, s_routing,
 			ba_input->bridge_chip_ip, 0, 0);
@@ -162,6 +238,7 @@ int msm_ba_s_input(void *instance, unsigned int index)
 	dprintk(BA_DBG, "msm_ba_queue_v4l2_event: ba_input->signal_status %d",
 		ba_input->signal_status);
 	if (!ba_input->signal_status) {
+		ba_input->in_use = 1;
 		msm_ba_queue_v4l2_event(inst,
 			V4L2_EVENT_MSM_BA_DEVICE_AVAILABLE);
 	}
@@ -535,7 +612,7 @@ EXPORT_SYMBOL(msm_ba_unsubscribe_event);
 void msm_ba_subdev_event_hndlr(struct v4l2_subdev *sd,
 				unsigned int notification, void *arg)
 {
-	dprintk(BA_INFO, "Enter %s\n", __func__);
+	dprintk(BA_INFO, "Enter %s", __func__);
 
 	if (!sd || !arg)
 		return;
@@ -545,7 +622,7 @@ void msm_ba_subdev_event_hndlr(struct v4l2_subdev *sd,
 		break;
 	}
 
-	dprintk(BA_INFO, "Exit %s\n", __func__);
+	dprintk(BA_INFO, "Exit %s", __func__);
 }
 
 void *msm_ba_open(void)
@@ -586,6 +663,7 @@ void *msm_ba_open(void)
 	dev_ctxt->state = BA_DEV_INIT_DONE;
 	inst->state = MSM_BA_DEV_INIT_DONE;
 	inst->sd_input.index = BA_IP_CVBS_0;
+	inst->input_prio = V4L2_PRIORITY_DEFAULT;
 
 	inst->debugfs_root =
 		msm_ba_debugfs_init_inst(inst, dev_ctxt->debugfs_root);
