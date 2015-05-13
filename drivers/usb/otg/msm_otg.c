@@ -1058,7 +1058,8 @@ static int msm_otg_suspend(struct msm_otg *motg)
 	if (motg->async_irq)
 		enable_irq(motg->async_irq);
 	enable_irq(motg->irq);
-	wake_unlock(&motg->wlock);
+	if (!motg->pdata->ignore_wakeup_source)
+		wake_unlock(&motg->wlock);
 
 	dev_info(phy->dev, "USB in low power mode\n");
 
@@ -1078,7 +1079,8 @@ static int msm_otg_resume(struct msm_otg *motg)
 	if (!atomic_read(&motg->in_lpm))
 		return 0;
 
-	wake_lock(&motg->wlock);
+	if (!motg->pdata->ignore_wakeup_source)
+		wake_lock(&motg->wlock);
 
 	/* Vote for TCXO when waking up the phy */
 	if (motg->lpm_flags & XO_SHUTDOWN) {
@@ -3868,7 +3870,9 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	if (motg->pdata->enable_lpm_on_dev_suspend)
 		motg->caps |= ALLOW_LPM_ON_DEV_SUSPEND;
 
-	wake_lock(&motg->wlock);
+	if (!motg->pdata->ignore_wakeup_source)
+		wake_lock(&motg->wlock);
+
 	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
 
@@ -4066,7 +4070,8 @@ static int msm_otg_pm_resume(struct device *dev)
 	dev_dbg(dev, "OTG PM resume\n");
 
 	atomic_set(&motg->pm_suspended, 0);
-	if (motg->async_int || motg->sm_work_pending) {
+	if (motg->async_int || motg->sm_work_pending ||
+			motg->pdata->ignore_wakeup_source) {
 		pm_runtime_get_noresume(dev);
 		ret = msm_otg_resume(motg);
 
