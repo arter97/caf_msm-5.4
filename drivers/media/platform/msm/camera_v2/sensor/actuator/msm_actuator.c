@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -387,12 +387,14 @@ static int32_t msm_actuator_park_lens(struct msm_actuator_ctrl_t *a_ctrl)
 	a_ctrl->i2c_tbl_index = 0;
 	if ((a_ctrl->curr_step_pos > a_ctrl->total_steps) ||
 		(!a_ctrl->park_lens.max_step) ||
-		(!a_ctrl->step_position_table)) {
+		(!a_ctrl->step_position_table) ||
+		(!a_ctrl->i2c_reg_tbl) ||
+		(!a_ctrl->func_tbl) ||
+		(!a_ctrl->func_tbl->actuator_parse_i2c_params)) {
 		pr_err("%s:%d Failed to park lens.\n",
 			__func__, __LINE__);
 		return 0;
 	}
-
 	if (a_ctrl->park_lens.max_step > a_ctrl->max_code_size)
 		a_ctrl->park_lens.max_step = a_ctrl->max_code_size;
 
@@ -892,9 +894,12 @@ static int msm_actuator_close(struct v4l2_subdev *sd,
 		if (rc < 0)
 			pr_err("cci_init failed\n");
 	}
-	kfree(a_ctrl->i2c_reg_tbl);
-	a_ctrl->i2c_reg_tbl = NULL;
-
+	mutex_lock(a_ctrl->actuator_mutex);
+	if (a_ctrl->i2c_reg_tbl != NULL) {
+		kfree(a_ctrl->i2c_reg_tbl);
+		a_ctrl->i2c_reg_tbl = NULL;
+	}
+	mutex_unlock(a_ctrl->actuator_mutex);
 	CDBG("Exit\n");
 	return rc;
 }
