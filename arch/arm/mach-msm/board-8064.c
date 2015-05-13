@@ -4239,6 +4239,13 @@ int init_marker_proc_fs(void)
 		list_add_tail(&(new_boot_marker->list),
 				&(boot_marker_list.list));
 	}
+	new_boot_marker = kmalloc(sizeof(*new_boot_marker), GFP_KERNEL);
+	strlcpy(new_boot_marker->marker_name, "Linux_Kernel-Start",
+			BOOT_MARKER_MAX_LEN);
+	new_boot_marker->timer_value = kernel_start_marker;
+	INIT_LIST_HEAD(&new_boot_marker->list);
+	list_add_tail(&(new_boot_marker->list), &(boot_marker_list.list));
+
 	return 0;
 }
 

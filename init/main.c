@@ -394,6 +394,7 @@ static noinline void __init_refok rest_init(void)
 #ifdef CONFIG_BOOT_TIME_MARKER
 #define MAX_SS_LK_MARKER_SIZE 16
 char lk_splash_val[MAX_SS_LK_MARKER_SIZE] = "0";
+unsigned long kernel_start_marker;
 #endif
 
 /* Check for early params. */
@@ -505,6 +506,9 @@ asmlinkage void __init start_kernel(void)
 	page_address_init();
 	printk(KERN_NOTICE "%s", linux_banner);
 	setup_arch(&command_line);
+#ifdef CONFIG_BOOT_TIME_MARKER
+	kernel_start_marker = msm_timer_get_sclk_ticks();
+#endif
 	/*
 	 * Set up the the initial canary ASAP:
 	 */

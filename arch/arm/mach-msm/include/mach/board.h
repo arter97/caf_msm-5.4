@@ -36,6 +36,7 @@
 int init_marker_proc_fs(void);
 void place_marker(char *name);
 extern char lk_splash_val[];
+extern unsigned long kernel_start_marker;
 #else
 void place_marker(char *name);
 #endif
