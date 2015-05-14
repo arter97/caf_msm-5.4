@@ -44,16 +44,16 @@
 
 
 struct adv7481_state {
-	/* Platform Data*/
+	/* Platform Data */
 	struct adv7481_platform_data pdata;
 
-	/* V4L2 Data*/
+	/* V4L2 Data */
 	struct v4l2_subdev sd;
 	struct v4l2_ctrl_handler ctrl_hdl;
 	struct v4l2_dv_timings timings;
 	struct v4l2_ctrl *cable_det_ctrl;
 
-	/*media entity controls*/
+	/* media entity controls */
 	struct media_pad pad;
 
 	struct workqueue_struct *work_queues;
@@ -63,17 +63,18 @@ struct adv7481_state {
 	struct i2c_client *i2c_csi_txa;
 	struct i2c_client *i2c_csi_txb;
 	struct i2c_client *i2c_hdmi;
+	struct i2c_client *i2c_edid;
 	struct i2c_client *i2c_cp;
 	struct i2c_client *i2c_sdp;
 	struct i2c_client *i2c_rep;
 
-	/* device status and Flags*/
+	/* device status and Flags */
 	int powerup;
-	/*routing configuration data*/
+	/* routing configuration data */
 	int csia_src;
 	int csib_src;
 	int mode;
-	/*CSI configuration data*/
+	/* CSI configuration data */
 	int txa_auto_params;
 	int txa_lanes;
 };
@@ -97,6 +98,89 @@ struct adv7481_vid_params {
 	uint16_t intrlcd;
 };
 
+const uint8_t adv7481_default_edid_data[] = {
+/* Block 0 (EDID Base Block) */
+0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00,
+/* Vendor Identification */
+0x45, 0x23, 0xDD, 0xDD, 0x01, 0x01, 0x01, 0x01, 0x01, 0x16,
+/* EDID Structure Version and Revision */
+0x01, 0x03,
+/* Display Parameters */
+0x80, 0x90, 0x51, 0x78, 0x0A,
+/* Color characteristics */
+0x0D, 0xC9, 0xA0, 0x57, 0x47, 0x98, 0x27, 0x12, 0x48, 0x4C,
+/* Established Timings */
+0x21, 0x08, 0x00,
+/* Standard Timings */
+0x81, 0x80, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
+0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
+/* Detailed Descriptors */
+0x02, 0x3A, 0x80, 0x18, 0x71, 0x38, 0x2D, 0x40,
+0x58, 0x2C,
+0x45, 0x00, 0xA0, 0x2A, 0x53, 0x00, 0x00, 0x1E,
+/* Detailed Descriptors */
+0x01, 0x1D, 0x00, 0x72, 0x51, 0xD0, 0x1E, 0x20,
+0x6E, 0x28, 0x55, 0x00, 0xA0, 0x2A, 0x53, 0x00,
+0x00, 0x1E,
+/* Monitor Descriptor */
+0x00, 0x00, 0x00, 0xFD, 0x00, 0x3A, 0x3E, 0x0F,
+0x46, 0x0F, 0x00, 0x0A, 0x20, 0x20, 0x20, 0x20,
+0x20, 0x20,
+/* Monitor Descriptor */
+0x00, 0x00, 0x00, 0xFC, 0x00, 0x54, 0x56, 0x0A,
+0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
+0x20, 0x20,
+/* Extension Flag */
+0x01,
+/* checksum */
+0x9A,
+
+/* Block 1 (Extension Block) */
+/* Extension Header */
+0x02, 0x03, 0x37,
+/* Display supports */
+0xF0,
+/* Video Data Bock */
+0x4A, 0x10, 0x04, 0x05, 0x03, 0x02, 0x07, 0x06,
+0x20, 0x01, 0x3C,
+/* Audio Data Block */
+0x29,
+0x09, 0x07, 0x07, /* LPCM, max 2 ch, 48k, 44.1k, 32k */
+0x15, 0x07, 0x50, /* AC-3, max 6 ch, 48k, 44.1k, 32k, max bitrate 640 */
+0x3D, 0x07, 0x50, /* DTS, max 6ch, 48,44.1,32k, max br 640 */
+/* Speaker Allocation Data Block */
+0x83, 0x01, 0x00, 0x00,
+/* HDMI VSDB */
+/* no deep color, Max_TMDS_Clock = 165 MHz */
+0x76, 0x03, 0x0C, 0x00, 0x30, 0x00, 0x80, 0x21,
+/* hdmi_video_present=1, 3d_present=1, 3d_multi_present=0,
+ * hdmi_vic_len=0, hdmi_3d_len=0xC */
+0x2F, 0x88, 0x0C, 0x20, 0x90, 0x08, 0x10, 0x18,
+0x10, 0x28, 0x10, 0x78, 0x10, 0x06, 0x26,
+/* VCDB */
+0xE2, 0x00, 0x7B,
+/* Detailed Descriptor */
+0x01, 0x1D, 0x80, 0x18, 0x71, 0x1C, 0x16, 0x20,
+0x58, 0x2C, 0x25, 0x00, 0xA0, 0x2A, 0x53, 0x00,
+0x00, 0x9E,
+/* Detailed Descriptor */
+0x8C, 0x0A, 0xD0, 0x8A, 0x20, 0xE0, 0x2D, 0x10,
+0x10, 0x3E, 0x96, 0x00, 0xA0, 0x2A, 0x53, 0x00,
+0x00, 0x18,
+/* Detailed Descriptor */
+0x8C, 0x0A, 0xD0, 0x8A, 0x20, 0xE0, 0x2D, 0x10,
+0x10, 0x3E, 0x96, 0x00, 0x38, 0x2A, 0x43, 0x00,
+0x00, 0x18,
+/* Detailed Descriptor */
+0x8C, 0x0A, 0xA0, 0x14, 0x51, 0xF0, 0x16, 0x00,
+0x26, 0x7C, 0x43, 0x00, 0x38, 0x2A, 0x43, 0x00,
+0x00, 0x98,
+/* checksum */
+0x38
+};
+
+#define ADV7481_EDID_SIZE ARRAY_SIZE(adv7481_default_edid_data)
+
 static inline struct v4l2_subdev *to_sd(struct v4l2_ctrl *ctrl)
 {
 	return &(container_of(ctrl->handler,
@@ -108,7 +192,7 @@ static inline struct adv7481_state *to_state(struct v4l2_subdev *sd)
 	return container_of(sd, struct adv7481_state, sd);
 }
 
-/*I2C Rd/Rw Functions*/
+/* I2C Rd/Rw Functions */
 static int adv7481_wr_byte(struct i2c_client *i2c_client, unsigned int reg,
 	unsigned int value)
 {
@@ -130,67 +214,114 @@ static int adv7481_rd_byte(struct i2c_client *i2c_client, unsigned int reg)
 	return ret;
 }
 
-/*Initialize adv7481 I2C Settings*/
+int adv7481_set_edid(struct adv7481_state *state)
+{
+	int i;
+	int ret = 0;
+
+	/* Enable Manual Control of EDID */
+	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x74, 0x01);
+	/* Disable Auto Enable of EDID */
+	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x7A, 0x08);
+	/* Set Primary EDID Size to 256 Bytes */
+	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x70, 0x80);
+
+	for (i = 0; i < ADV7481_EDID_SIZE; i++) {
+		ret |= adv7481_wr_byte(state->i2c_edid, i,
+						adv7481_default_edid_data[i]);
+	}
+	/* Manually Enable EDID on Port A */
+	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x07, 0x01);
+
+	return ret;
+}
+
+/* Initialize adv7481 I2C Settings */
 static int adv7481_dev_init(struct adv7481_state *state,
 						struct i2c_client *client)
 {
 	int ret;
 	mutex_lock(&state->mutex);
 
-	/*Delay required following I2C reset and I2C transactions */
+	/* Delay required following I2C reset and I2C transactions */
 	/* soft reset */
-	ret = adv7481_wr_byte(state->client, IO_REG_RST,
-					IO_CTRL_MAIN_RST);
+	ret = adv7481_wr_byte(state->client,
+					IO_REG_RST, IO_CTRL_MAIN_RST_REG_VALUE);
 	usleep(I2C_SW_DELAY);
 
 	/* power down controls */
-	ret |= adv7481_wr_byte(state->client, IO_CTRL_MASTER_PWDN, 0x76);
-	ret |= adv7481_wr_byte(state->client, IO_REG_CP_VID_STD, 0x4a);
-	ret |= adv7481_wr_byte(state->client, IO_REG_I2C_CFG, 0x01);
+	ret |= adv7481_wr_byte(state->client,
+				IO_REG_PWR_DN2_XTAL_HIGH_ADDR, 0x76);
+	ret |= adv7481_wr_byte(state->client,
+				IO_REG_CP_VID_STD_ADDR, 0x4a);
 
-	/*Configure I2C Maps and I2C Communication Settings*/
-	ret |= adv7481_wr_byte(state->client,
-					IO_REG_DPLL_ADDR, IO_REG_DPLL_SADDR);
-	ret |= adv7481_wr_byte(state->client,
-					IO_REG_CP_ADDR, IO_REG_CP_SADDR);
+	/* Configure I2C Maps and I2C Communication Settings */
+	/* io_reg_f2 I2C Auto Increment */
+	ret |= adv7481_wr_byte(state->client, IO_REG_I2C_CFG_ADDR,
+				IO_REG_I2C_AUTOINC_EN_REG_VALUE);
+	/* DPLL Map Address */
+	ret |= adv7481_wr_byte(state->client, IO_REG_DPLL_ADDR,
+					IO_REG_DPLL_SADDR);
+	/* CP Map Address */
+	ret |= adv7481_wr_byte(state->client, IO_REG_CP_ADDR,
+					IO_REG_CP_SADDR);
+	/* HDMI RX Map Address */
 	ret |= adv7481_wr_byte(state->client, IO_REG_HDMI_ADDR,
 					IO_REG_HDMI_SADDR);
+	/* EDID Map Address */
 	ret |= adv7481_wr_byte(state->client, IO_REG_EDID_ADDR,
 					IO_REG_EDID_SADDR);
-	ret |= adv7481_wr_byte(state->client, IO_REG_CSI_REP_ADDR,
-					IO_REG_CSI_REP_SADDR);
+	/* HDMI RX Repeater Map Address */
+	ret |= adv7481_wr_byte(state->client, IO_REG_HDMI_REP_ADDR,
+					IO_REG_HDMI_REP_SADDR);
+	/* HDMI RX Info-frame Map Address */
 	ret |= adv7481_wr_byte(state->client, IO_REG_HDMI_INF_ADDR,
 					IO_REG_HDMI_INF_SADDR);
+	/* CBUS Map Address */
 	ret |= adv7481_wr_byte(state->client, IO_REG_CBUS_ADDR,
 					IO_REG_CBUS_SADDR);
+	/* CEC Map Address */
 	ret |= adv7481_wr_byte(state->client, IO_REG_CEC_ADDR,
 					IO_REG_CEC_SADDR);
+	/* SDP Main Map Address */
 	ret |= adv7481_wr_byte(state->client, IO_REG_SDP_ADDR,
 					IO_REG_SDP_SADDR);
-	ret |= adv7481_wr_byte(state->client, IO_REG_CSI_TXA_ADDR,
-					IO_REG_CSI_TXA_SADDR);
+	/* CSI-TXB Map Address */
 	ret |= adv7481_wr_byte(state->client, IO_REG_CSI_TXB_ADDR,
 					IO_REG_CSI_TXB_SADDR);
+	/* CSI-TXA Map Address */
+	ret |= adv7481_wr_byte(state->client, IO_REG_CSI_TXA_ADDR,
+					IO_REG_CSI_TXA_SADDR);
 
-	/*Configure i2c clients*/
-	state->i2c_csi_txa = i2c_new_dummy(client->adapter, 0x94 >> 1);
-	state->i2c_csi_txb = i2c_new_dummy(client->adapter, 0x88 >> 1);
-	state->i2c_cp = i2c_new_dummy(client->adapter, 0x44 >> 1);
-	state->i2c_hdmi = i2c_new_dummy(client->adapter, 0x74 >> 1);
-	state->i2c_sdp = i2c_new_dummy(client->adapter, 0xf2 >> 1);
-	state->i2c_rep = i2c_new_dummy(client->adapter, 0x64 >> 1);
+	/* Configure i2c clients */
+	state->i2c_csi_txa = i2c_new_dummy(client->adapter,
+					IO_REG_CSI_TXA_SADDR >> 1);
+	state->i2c_csi_txb = i2c_new_dummy(client->adapter,
+					IO_REG_CSI_TXB_SADDR >> 1);
+	state->i2c_cp = i2c_new_dummy(client->adapter,
+					IO_REG_CP_SADDR >> 1);
+	state->i2c_hdmi = i2c_new_dummy(client->adapter,
+					IO_REG_HDMI_SADDR >> 1);
+	state->i2c_edid = i2c_new_dummy(client->adapter,
+					IO_REG_EDID_SADDR >> 1);
+	state->i2c_sdp = i2c_new_dummy(client->adapter,
+					IO_REG_SDP_SADDR >> 1);
+	state->i2c_rep = i2c_new_dummy(client->adapter,
+					IO_REG_HDMI_REP_SADDR >> 1);
 
 	if (!state->i2c_csi_txa || !state->i2c_csi_txb || !state->i2c_cp ||
-		!state->i2c_sdp || !state->i2c_hdmi || !state->i2c_rep) {
+		!state->i2c_sdp || !state->i2c_hdmi || !state->i2c_edid ||
+		!state->i2c_rep) {
 		pr_err("Additional I2C Client Fail\n");
 		ret = EFAULT;
 	}
+	adv7481_set_edid(state);
 	mutex_unlock(&state->mutex);
 
 	return ret;
 }
 
-/*Initialize adv7481 hardware*/
+/* Initialize adv7481 hardware */
 static int adv7481_hw_init(struct adv7481_platform_data *pdata,
 						struct adv7481_state *state)
 {
@@ -345,6 +476,7 @@ static int adv7481_get_sd_timings(struct adv7481_state *state, int *sd_standard)
 		break;
 	default:
 		*sd_standard = V4L2_STD_UNKNOWN;
+		break;
 	}
 	return ret;
 }
@@ -353,7 +485,7 @@ int adv7481_set_cvbs_mode(struct adv7481_state *state)
 {
 	int ret;
 
-	/* cvbs video settings ntsc etc*/
+	/* cvbs video settings ntsc etc */
 	ret = adv7481_wr_byte(state->client, 0x00, 0x30);
 	ret |= adv7481_wr_byte(state->i2c_sdp, 0x0f, 0x00);
 	ret |= adv7481_wr_byte(state->i2c_sdp, 0x00, 0x00);
@@ -364,9 +496,9 @@ int adv7481_set_cvbs_mode(struct adv7481_state *state)
 	ret |= adv7481_wr_byte(state->i2c_sdp, 0x31, 0x12);
 	ret |= adv7481_wr_byte(state->i2c_sdp, 0x52, 0xcd);
 	ret |= adv7481_wr_byte(state->i2c_sdp, 0x0e, 0xff);
-	/*Enable TxA CSI 1-lane*/
+	/* Enable TxA CSI 1-lane */
 	ret |= adv7481_wr_byte(state->client, 0x10, 0xa8);
-	/*Enable autodetect*/
+	/* Enable autodetect */
 	ret |= adv7481_wr_byte(state->i2c_sdp, 0x0e, 0x81);
 
 	return ret;
@@ -398,7 +530,7 @@ int adv7481_set_hdmi_mode(struct adv7481_state *state)
 	ret |= adv7481_wr_byte(state->i2c_hdmi, 0xCB, 0x01);
 	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x0F, 0x00);
 
-	/* HPA Assert and termination*/
+	/* HPA Assert and termination */
 	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x6C, 0x01);
 	ret |= adv7481_wr_byte(state->i2c_hdmi, 0xF8, 0x01);
 	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x83, 0x00);
@@ -611,7 +743,7 @@ static int adv7481_get_hdmi_timings(struct adv7481_state *state,
 				struct adv7481_hdmi_params *hdmi_params)
 {
 	int ret = 0, temp1 = 0, temp2 = 0, fieldfactor = 0;
-	/*Check TMDS PLL Lock and Frequency*/
+	/* Check TMDS PLL Lock and Frequency */
 	hdmi_params->pll_lock = adv7481_rd_byte(state->i2c_hdmi, 0x04);
 	hdmi_params->pll_lock = (hdmi_params->pll_lock & 0x2) >> 1;
 	if (hdmi_params->pll_lock) {
@@ -625,25 +757,25 @@ static int adv7481_get_hdmi_timings(struct adv7481_state *state,
 	} else {
 		return -EBUSY;
 	}
-	/*Check HDMI Parameters*/
+	/* Check HDMI Parameters */
 	temp1 = adv7481_rd_byte(state->i2c_hdmi, HDMI_REG_HDMI_PARAM6);
 	hdmi_params->color_depth = (temp1 & 0xC0) >> 7;
 	temp1 = adv7481_rd_byte(state->i2c_hdmi,  HDMI_REG_HDMI_PARAM5);
 	hdmi_params->pix_rep = (temp1 & 0x0F);
 
-	/*Check Interlaced and Field Factor*/
+	/* Check Interlaced and Field Factor */
 	vid_params->intrlcd = (temp1 & 0x20) >> 5;
 	fieldfactor = (vid_params->intrlcd == 1) ? 2 : 1;
 
 
-	/*Get Total Timing Data HDMI Map  V:0x26[5:0] + 0x27[7:0]*/
+	/* Get Total Timing Data HDMI Map  V:0x26[5:0] + 0x27[7:0] */
 	temp1 = adv7481_rd_byte(state->i2c_hdmi, HDMI_REG_FLD0_TOT1);
 	vid_params->tot_lines = ((temp1 & 0x3F) << 8);
 	temp1 = adv7481_rd_byte(state->i2c_hdmi, HDMI_REG_FLD0_TOT2);
 	vid_params->tot_lines = (vid_params->tot_lines & 0x1F00) |
 				(temp1 & 0xFF);
 
-	/*Get Active Timing Data HDMI Map  H:0x1E[5:0] + 0x1F[7:0]*/
+	/* Get Active Timing Data HDMI Map  H:0x1E[5:0] + 0x1F[7:0] */
 	temp1 = adv7481_rd_byte(state->i2c_hdmi, HDMI_REG_LINE_TOT1);
 	vid_params->tot_pix = ((temp1 & 0x3F) << 8);
 	temp1 = adv7481_rd_byte(state->i2c_hdmi, HDMI_REG_LINE_TOT2);
@@ -814,7 +946,7 @@ static int adv7481_csi_powerup(struct adv7481_state *state, bool pwr, int tx)
 	int ret;
 	struct i2c_client *csi_map;
 
-	/*Select CSI TX to configure data*/
+	/* Select CSI TX to configure data */
 	if (tx != ADV7481_OP_CSIA || tx != ADV7481_OP_CSIB)
 		/* for future if need to enable txa v txb */;
 	else {
@@ -822,7 +954,7 @@ static int adv7481_csi_powerup(struct adv7481_state *state, bool pwr, int tx)
 				state->i2c_csi_txa : state->i2c_csi_txb;
 	}
 
-	/*TXA 1 lane settings for CSI*/
+	/* TXA 1 lane settings for CSI */
 	ret = adv7481_wr_byte(state->i2c_csi_txa, 0x00, 0x81);
 	ret |= adv7481_wr_byte(state->i2c_csi_txa, 0x00, 0xa1);
 	ret |= adv7481_wr_byte(state->i2c_csi_txa, 0xd6, 0x07);
@@ -834,7 +966,7 @@ static int adv7481_csi_powerup(struct adv7481_state *state, bool pwr, int tx)
 	ret |= adv7481_wr_byte(state->i2c_csi_txa, 0x31, 0x82);
 	ret |= adv7481_wr_byte(state->i2c_csi_txa, 0x1e, 0x40);
 	ret |= adv7481_wr_byte(state->i2c_csi_txa, 0xda, 0x01);
-	/*adi Recommended power up sequence*/
+	/* adi Recommended power up sequence */
 	ret |= adv7481_wr_byte(state->i2c_csi_txa, 0xda, 0x01);
 	msleep(200);
 	ret |= adv7481_wr_byte(state->i2c_csi_txa, 0x00, 0x21);
@@ -953,7 +1085,7 @@ static int adv7481_probe(struct i2c_client *client,
 	v4l_info(client, "chip found @ 0x%02x (%s)\n",
 			 client->addr, client->adapter->name);
 
-	/*Create 7481 State  */
+	/* Create 7481 State */
 	state = devm_kzalloc(&client->dev,
 				sizeof(struct adv7481_state), GFP_KERNEL);
 	if (state == NULL) {
@@ -972,13 +1104,13 @@ static int adv7481_probe(struct i2c_client *client,
 		goto err_mem;
 	}
 
-	/* Configure and Register V4L2 I2C Sub-device  */
+	/* Configure and Register V4L2 I2C Sub-device */
 	sd = &state->sd;
 	v4l2_i2c_subdev_init(sd, client, &adv7481_ops);
 	state->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
 	state->sd.flags |= V4L2_SUBDEV_FL_HAS_EVENTS;
 
-	/*Register as Media Entity*/
+	/* Register as Media Entity */
 	state->pad.flags = MEDIA_PAD_FL_SOURCE;
 	state->sd.entity.flags |= MEDIA_ENT_T_V4L2_SUBDEV;
 	ret = media_entity_init(&state->sd.entity, 1, &state->pad, 0);
@@ -988,7 +1120,7 @@ static int adv7481_probe(struct i2c_client *client,
 		goto err_media_entity;
 	}
 
-	/*Initialize HW Config */
+	/* Initialize HW Config */
 	ret |= adv7481_hw_init(pdata, state);
 	if (ret) {
 		ret = -EIO;
@@ -996,16 +1128,16 @@ static int adv7481_probe(struct i2c_client *client,
 		goto err_media_entity;
 	}
 
-	/*Register V4l2 Control Functions*/
+	/* Register V4l2 Control Functions */
 	hdl = &state->ctrl_hdl;
 	v4l2_ctrl_handler_init(hdl, 4);
 	adv7481_init_v4l2_controls(state);
 
-	/*Initials ADV7481 State Settings*/
+	/* Initials ADV7481 State Settings */
 	state->txa_auto_params = ADV7481_AUTO_PARAMS;
 	state->txa_lanes = ADV7481_CSI_1LANE;
 
-	/*Initialize SW Init Settings and I2C sub maps 7481*/
+	/* Initialize SW Init Settings and I2C sub maps 7481 */
 	ret |= adv7481_dev_init(state, client);
 	if (ret) {
 		ret = -EIO;
@@ -1013,7 +1145,7 @@ static int adv7481_probe(struct i2c_client *client,
 		goto err_media_entity;
 	}
 
-	/*Set cvbs settings*/
+	/* Set cvbs settings */
 	ret |= adv7481_set_cvbs_mode(state);
 
 	/* BA registration */
@@ -1051,6 +1183,7 @@ static int adv7481_remove(struct i2c_client *client)
 	i2c_unregister_device(state->i2c_csi_txa);
 	i2c_unregister_device(state->i2c_csi_txb);
 	i2c_unregister_device(state->i2c_hdmi);
+	i2c_unregister_device(state->i2c_edid);
 	i2c_unregister_device(state->i2c_cp);
 	i2c_unregister_device(state->i2c_sdp);
 	i2c_unregister_device(state->i2c_rep);
