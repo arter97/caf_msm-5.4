@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1510,30 +1510,9 @@ struct platform_device msm_8960_q6_mss_sw = {
 	.dev.platform_data = &msm_8960_q6_mss_sw_data,
 };
 
-static struct resource msm_8960_riva_resources[] = {
-	{
-		.start  = 0x03204000,
-		.end    = 0x03204000 + SZ_256 - 1,
-		.flags  = IORESOURCE_MEM,
-	},
-};
-
-struct platform_device msm_8960_riva = {
-	.name = "pil_riva",
-	.id = -1,
-	.num_resources  = ARRAY_SIZE(msm_8960_riva_resources),
-	.resource       = msm_8960_riva_resources,
-};
-
 struct platform_device msm_pil_tzapps = {
 	.name = "pil_tzapps",
 	.id = -1,
-};
-
-struct platform_device msm_pil_dsps = {
-	.name          = "pil_dsps",
-	.id            = -1,
-	.dev.platform_data = "dsps",
 };
 
 struct platform_device msm_pil_vidc = {
