@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -839,16 +839,17 @@ static const struct i2c_msm_tag tag_lookup_table[2][2][2][2] = {
  * i2c_msm_tag_create: format a qup tag ver2
  */
 static struct i2c_msm_tag i2c_msm_tag_create(bool is_high_speed,
-	bool is_new_addr, bool is_last_buf, bool is_rx, u8 buf_len,
+	bool start_req, bool is_last_buf, bool is_rx, u8 buf_len,
 	u8 slave_addr)
 {
 	struct i2c_msm_tag tag;
 
-	is_new_addr = is_new_addr ? 1 : 0;
+	/* Normalize booleans to 1 or 0 */
+	start_req = start_req ? 1 : 0;
 	is_last_buf = is_last_buf ? 1 : 0;
 	is_rx    = is_rx    ? 1 : 0;
 
-	tag = tag_lookup_table[is_high_speed][is_new_addr][is_last_buf][is_rx];
+	tag = tag_lookup_table[is_high_speed][start_req][is_last_buf][is_rx];
 	/* fill in the non-const value: the address and the length */
 	switch (tag.len) {
 	case 6:
@@ -3314,7 +3315,7 @@ static void i2c_msm_xfer_scan(struct i2c_msm_ctrl *ctrl)
 		xfer->rx_ovrhd_cnt += cur_buf->in_tag.len;
 		xfer->tx_ovrhd_cnt += cur_buf->out_tag.len;
 
-		if (cur_buf->is_last)
+		if (i2c_msm_xfer_msg_is_last(ctrl))
 			xfer->last_is_rx = cur_buf->is_rx;
 	}
 	ctrl->xfer.cur_buf  = first_buf;
