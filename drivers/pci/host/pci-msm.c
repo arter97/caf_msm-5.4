@@ -4534,9 +4534,6 @@ void msm_pcie_destroy_irq(unsigned int irq, struct msm_pcie_dev_t *pcie_dev)
 
 	PCIE_DBG(dev, "RC%d\n", dev->rc_idx);
 
-	if (!dev->msi_gicm_addr)
-		dynamic_irq_cleanup(irq);
-
 	PCIE_DBG(dev, "Before clear_bit pos:%d msi_irq_in_use:%ld\n",
 		pos, *dev->msi_irq_in_use);
 	clear_bit(pos, dev->msi_irq_in_use);
