@@ -34,11 +34,11 @@ static int req_playback_count = 48;
 module_param(req_playback_count, int, S_IRUGO);
 MODULE_PARM_DESC(req_playback_count, "ISO OUT endpoint (playback) request count");
 
-static int audio_playback_buf_size = 256*32;
+static int audio_playback_buf_size = 64*32;
 module_param(audio_playback_buf_size, int, S_IRUGO);
 MODULE_PARM_DESC(audio_playback_buf_size, "Audio buffer size");
 
-#define CAPTURE_EP_MAX_PACKET_SIZE	32
+#define CAPTURE_EP_MAX_PACKET_SIZE	16
 static int req_capture_buf_size = CAPTURE_EP_MAX_PACKET_SIZE;
 module_param(req_capture_buf_size, int, S_IRUGO);
 MODULE_PARM_DESC(req_capture_buf_size, "ISO IN endpoint (capture) request buffer size");
@@ -47,9 +47,13 @@ static int req_capture_count = 48;
 module_param(req_capture_count, int, S_IRUGO);
 MODULE_PARM_DESC(req_capture_count, "ISO IN endpoint (capture) request count");
 
-static int audio_capture_buf_size = 256*32;
+static int audio_capture_buf_size = 64*16;
 module_param(audio_capture_buf_size, int, S_IRUGO);
 MODULE_PARM_DESC(audio_capture_buf_size, "Microphone Audio buffer size");
+
+static int audio_playback_realtime = 1;
+module_param(audio_playback_realtime, int, S_IRUGO);
+MODULE_PARM_DESC(audio_playback_realtime, "Drop packets on overruns");
 
 static int generic_set_cmd(struct usb_audio_control *con, u8 cmd, int value);
 static int generic_get_cmd(struct usb_audio_control *con, u8 cmd);
@@ -486,6 +490,7 @@ static void f_audio_playback_work(struct work_struct *data)
 	unsigned long flags;
 	int res = 0;
 
+	pr_debug("%s: started\n", __func__);
 	spin_lock_irqsave(&audio->playback_lock, flags);
 	if (list_empty(&audio->play_queue)) {
 		pr_err("playback_buf is empty");
@@ -504,6 +509,7 @@ static void f_audio_playback_work(struct work_struct *data)
 		pr_err("copying failed");
 
 	f_audio_buffer_free(play_buf);
+	pr_debug("%s: Done\n", __func__);
 }
 
 static int
@@ -511,6 +517,7 @@ f_audio_playback_ep_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct f_audio *audio = req->context;
 	struct f_audio_buf *copy_buf = audio->playback_copy_buf;
+	unsigned long flags;
 	int err;
 
 	if (!copy_buf)
@@ -520,7 +527,15 @@ f_audio_playback_ep_complete(struct usb_ep *ep, struct usb_request *req)
 	if (audio_playback_buf_size - copy_buf->actual < req->actual) {
 		pr_debug("audio_playback_buf_size %d - copy_buf->actual %d, req->actual %d",
 			audio_playback_buf_size, copy_buf->actual, req->actual);
-		list_add_tail(&copy_buf->list, &audio->play_queue);
+		spin_lock_irqsave(&audio->playback_lock, flags);
+		if (!list_empty(&audio->play_queue) &&
+					audio_playback_realtime) {
+			pr_debug("over-runs, audio write slow.. drop the packet\n");
+			f_audio_buffer_free(copy_buf);
+		} else {
+			list_add_tail(&copy_buf->list, &audio->play_queue);
+		}
+		spin_unlock_irqrestore(&audio->playback_lock, flags);
 		schedule_work(&audio->playback_work);
 		copy_buf = f_audio_buffer_alloc(audio_playback_buf_size);
 		if (IS_ERR(copy_buf)) {
@@ -528,6 +543,8 @@ f_audio_playback_ep_complete(struct usb_ep *ep, struct usb_request *req)
 			return -ENOMEM;
 		}
 	}
+
+	pr_debug("Playback %d bytes", req->actual);
 
 	memcpy(copy_buf->buf + copy_buf->actual, req->buf, req->actual);
 	copy_buf->actual += req->actual;
@@ -547,6 +564,15 @@ static void f_audio_capture_work(struct work_struct *data)
 	struct f_audio_buf *capture_buf;
 	unsigned long flags;
 	int res = 0;
+
+	pr_debug("%s Started\n", __func__);
+	spin_lock_irqsave(&audio->capture_lock, flags);
+	if (!list_empty(&audio->capture_queue)) {
+		spin_unlock_irqrestore(&audio->capture_lock, flags);
+		pr_debug("%s !! buffer already filled\n", __func__);
+		return;
+	}
+	spin_unlock_irqrestore(&audio->capture_lock, flags);
 
 	capture_buf = f_audio_buffer_alloc(audio_capture_buf_size);
 	if (capture_buf <= 0) {
@@ -578,12 +604,18 @@ f_audio_capture_ep_complete(struct usb_ep *ep, struct usb_request *req)
 		spin_lock_irqsave(&audio->capture_lock, flags);
 		if (list_empty(&audio->capture_queue)) {
 			spin_unlock_irqrestore(&audio->capture_lock, flags);
+			pr_debug("%s no data from Audio to send\n", __func__);
 			schedule_work(&audio->capture_work);
+			memset(req->buf, 0, req_capture_buf_size);
 			goto done;
 		}
 		copy_buf = list_first_entry(&audio->capture_queue,
 						struct f_audio_buf, list);
 		list_del(&copy_buf->list);
+
+		if (list_empty(&audio->capture_queue))
+			schedule_work(&audio->capture_work);
+
 		audio->capture_copy_buf = copy_buf;
 		spin_unlock_irqrestore(&audio->capture_lock, flags);
 	}
