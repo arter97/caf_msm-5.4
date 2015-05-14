@@ -1292,6 +1292,7 @@ static int cnss_smmu_init(struct device *dev)
 	struct dma_iommu_mapping *mapping;
 	int order = 0;
 	int disable_htw = 1;
+	int atomic_ctx = 1;
 	int ret;
 
 	mapping = arm_iommu_create_mapping(&platform_bus_type,
@@ -1308,7 +1309,17 @@ static int cnss_smmu_init(struct device *dev)
 			      DOMAIN_ATTR_COHERENT_HTW_DISABLE,
 			      &disable_htw);
 	if (ret) {
-		pr_err("%s: set attributes failed, err = %d\n", __func__, ret);
+		pr_err("%s: set disable_htw attribute failed, err = %d\n",
+			__func__, ret);
+		goto set_attr_fail;
+	}
+
+	ret = iommu_domain_set_attr(mapping->domain,
+				    DOMAIN_ATTR_ATOMIC,
+				    &atomic_ctx);
+	if (ret) {
+		pr_err("%s: set atomic_ctx attribute failed, err = %d\n",
+			__func__, ret);
 		goto set_attr_fail;
 	}
 
