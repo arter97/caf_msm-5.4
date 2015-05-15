@@ -73,6 +73,11 @@ enum user_interface_status ui_status = NOT_SHOWING;
 #define MDP_ARB_EVENT_NAME "switch-reverse"
 #define MDP_ARB_NUM_OF_EVENT_STATE 2
 
+static void reverse_trigger_camera(int state)
+{
+	return;
+}
+
 static int mdp_arb_set_event(int state)
 {
 	int rc = 0;
@@ -125,6 +130,28 @@ static int mdp_arb_deregister_event(void)
 	return rc;
 }
 #else
+static void show_pic_exit(void)
+{
+	if ((pic_status == PIC_SHOWING)) {
+		if (ui_status == SHOWING)
+			pic_status = ALL_CLEAR;
+		else
+			pic_status = SPLASH_LOGO_SHOWING;
+	}
+}
+
+static void reverse_trigger_camera(int state)
+{
+	if (state) {
+		enable_camera_preview();
+	} else {
+		disable_camera_preview();
+		show_pic_exit();
+	}
+
+	return;
+}
+
 static int mdp_arb_set_event(int state)
 {
 	return 0;
@@ -140,16 +167,6 @@ static int mdp_arb_deregister_event(void)
 	return 0;
 }
 #endif/*#ifdef CONFIG_FB_MSM_MDP_ARB*/
-
-static void show_pic_exit(void)
-{
-	if ((pic_status == PIC_SHOWING)) {
-		if (ui_status == SHOWING)
-			pic_status = ALL_CLEAR;
-		else
-			pic_status = SPLASH_LOGO_SHOWING;
-	}
-}
 
 static int reverse_get_gpio_state(struct reverse_data *data)
 {
@@ -168,12 +185,7 @@ static void reverse_set_state(struct reverse_data *data, int state)
 {
 	switch_set_state(data->sdev, state);
 
-	if (state)
-		enable_camera_preview();
-	else {
-		disable_camera_preview();
-		show_pic_exit();
-	}
+	reverse_trigger_camera(state);
 
 	input_report_key(data->idev, data->key_code, state);
 	input_sync(data->idev);
@@ -196,12 +208,7 @@ static void reverse_detection_work(struct work_struct *work)
 
 	mdp_arb_set_event(state);
 
-	if (state)
-		enable_camera_preview();
-	else {
-		disable_camera_preview();
-		show_pic_exit();
-	}
+	reverse_trigger_camera(state);
 
 	input_report_key(data->idev, data->key_code, state);
 	input_sync(data->idev);

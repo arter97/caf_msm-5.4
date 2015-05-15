@@ -36,9 +36,9 @@ struct reverse_switch_platform_data {
 extern int switch_dev_register(struct switch_dev *sdev);
 
 enum reverse_level {
-	CAMERA,
-	DISPLAY_1,
-	DISPLAY_2,
+	REVERSE_CAMERA,
+	REVERSE_DISPLAY_1,
+	REVERSE_DISPLAY_2,
 };
 
 struct reverse_struct {

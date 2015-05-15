@@ -25,6 +25,8 @@
 #include "left_lane.h"
 #include "right_lane.h"
 #include <mach/board.h>
+#include <video/mdp_arb.h>
+#include <linux/reverse.h>
 
 #define FRAME_DELAY 33333
 #define RDI1_USE_WM 4
@@ -84,10 +86,29 @@ struct adp_camera_ctxt {
 	/* state */
 	enum camera_states state;
 
+#ifdef CONFIG_FB_MSM_MDP_ARB
+	/* MDP Arbitrator */
+	void *mdp_arb_handle;
+#endif
+	int fb_idx;
+
 	/* debug */
 	struct dentry *debugfs_root;
 };
 static struct adp_camera_ctxt *adp_cam_ctxt;
+
+static char *display_name[] = {
+	"PRIMARY\n",
+	"SECONDARY\n",
+	"TERTIARY\n",
+};
+
+#define DISPLAY_NAME_LENGTH_MAX 16
+
+#ifdef CONFIG_FB_MSM_MDP_ARB
+#define MDP_ARB_CLIENT_NAME "adp_camera"
+#define MDP_ARB_EVENT_NAME "switch-reverse"
+#endif
 
 /* -------------------- Guidance Lane Data Structures ----------------------- */
 static struct msm_guidance_lane_data guidance_lane_data;
@@ -434,7 +455,8 @@ static void preview_configure_bufs()
 	preview_buffer_init();
 }
 
-static void preview_set_overlay_init(struct mdp_overlay *overlay)
+static void preview_set_overlay_init(struct mdp_overlay *overlay,
+	struct fb_var_screeninfo *var)
 {
 	overlay->id = MSMFB_NEW_REQUEST;
 	overlay->src.width  = PREVIEW_WIDTH;
@@ -446,11 +468,12 @@ static void preview_set_overlay_init(struct mdp_overlay *overlay)
 	overlay->src_rect.h = 240;
 	overlay->dst_rect.x = 0;
 	overlay->dst_rect.y = 0;
-	overlay->dst_rect.w = 1280;
-	overlay->dst_rect.h = 720;
+	overlay->dst_rect.w = var->xres;
+	overlay->dst_rect.h = var->yres;
 	overlay->z_order =  2;
 	overlay->alpha = MDP_ALPHA_NOP;
 	overlay->transp_mask = MDP_TRANSP_NOP;
+	overlay->blend_op = BLEND_OP_OPAQUE;
 	overlay->flags = 0;
 	overlay->is_fg = 0;
 
@@ -467,6 +490,74 @@ void format_convert(int index)
 		__swab32s((uint32 *)(data+4*i));
 }
 
+#ifdef CONFIG_FB_MSM_MDP_ARB
+static void mdp_queue_overlay_buffers(struct work_struct *work)
+{
+	int buffer_index = 0;
+	static int is_first_commit = true;
+	int ret = 0;
+	struct mdp_display_commit commit_data;
+	/* dequeue next buffer to display */
+	buffer_index = mdp_buf_queue_deq();
+
+	if (buffer_index < 0) {
+		pr_err("%s: mdp buf queue empty\n", __func__);
+		return;
+	} else if (buffer_index > PREVIEW_BUFFER_COUNT - 1) {
+		pr_err("%s: mdp buf queue invalid buffer %d/n",
+			__func__, buffer_index);
+		return;
+	}
+
+	if (adp_cam_ctxt->state == CAMERA_PREVIEW_ENABLED) {
+		/* configure overlay data for guidance lane */
+		overlay_data[OVERLAY_CAMERA_PREVIEW].id =
+				overlay_req[OVERLAY_CAMERA_PREVIEW].id;
+		overlay_data[OVERLAY_CAMERA_PREVIEW].data.flags =
+			MSMFB_DATA_FLAG_ION_NOT_FD;
+		overlay_data[OVERLAY_CAMERA_PREVIEW].data.offset =
+			(buffer_index * PREVIEW_BUFFER_LENGTH);
+		overlay_data[OVERLAY_CAMERA_PREVIEW].data.memory_id =
+				overlay_fd[OVERLAY_CAMERA_PREVIEW];
+
+		/* configure overlay data for guidance lane */
+		overlay_data[OVERLAY_GUIDANCE_LANE].id =
+				overlay_req[OVERLAY_GUIDANCE_LANE].id;
+		overlay_data[OVERLAY_GUIDANCE_LANE].data.flags =
+			MSMFB_DATA_FLAG_ION_NOT_FD;
+		overlay_data[OVERLAY_GUIDANCE_LANE].data.offset =
+			(buffer_index * GUIDANCE_LANE_BUFFER_LENGTH);
+		overlay_data[OVERLAY_GUIDANCE_LANE].data.memory_id =
+				overlay_fd[OVERLAY_GUIDANCE_LANE];
+
+		ret = mdp_arb_client_overlay_play(adp_cam_ctxt->mdp_arb_handle,
+			&overlay_data[OVERLAY_CAMERA_PREVIEW]);
+		if (ret)
+			pr_err("%s overlay play preview fails=%d", __func__,
+				ret);
+		ret = mdp_arb_client_overlay_play(adp_cam_ctxt->mdp_arb_handle,
+			&overlay_data[OVERLAY_GUIDANCE_LANE]);
+		if (ret)
+			pr_err("%s overlay play lane fails=%d", __func__, ret);
+
+		if (is_first_commit == true)
+			place_marker("FF RVC pre commit");
+		/* perform display commit */
+		memset(&commit_data, 0, sizeof(commit_data));
+		commit_data.wait_for_finish = true;
+		commit_data.flags = MDP_DISPLAY_COMMIT_OVERLAY;
+		ret = mdp_arb_client_overlay_commit(adp_cam_ctxt->\
+			mdp_arb_handle, &commit_data);
+		if (ret)
+			pr_err("%s overlay commit fails=%d", __func__, ret);
+		if (is_first_commit == true) {
+			place_marker("FF RVC post commit");
+			is_first_commit = false;
+		}
+	}
+	preview_buffer_return_by_index(buffer_index);
+}
+#else
 static void mdp_queue_overlay_buffers(struct work_struct *work)
 {
 	int buffer_index = 0;
@@ -475,7 +566,7 @@ static void mdp_queue_overlay_buffers(struct work_struct *work)
 	buffer_index = mdp_buf_queue_deq();
 
 	if (buffer_index < 0) {
-		pr_err("%s: mdp buf queue empty/n", __func__);
+		pr_err("%s: mdp buf queue empty\n", __func__);
 		return;
 	} else if (buffer_index > PREVIEW_BUFFER_COUNT - 1) {
 		pr_err("%s: mdp buf queue invalid buffer %d/n",
@@ -503,18 +594,22 @@ static void mdp_queue_overlay_buffers(struct work_struct *work)
 	overlay_data[OVERLAY_GUIDANCE_LANE].data.memory_id =
 			overlay_fd[OVERLAY_GUIDANCE_LANE];
 
-	mdpclient_overlay_play(&overlay_data[OVERLAY_CAMERA_PREVIEW]);
-	mdpclient_overlay_play(&overlay_data[OVERLAY_GUIDANCE_LANE]);
+	mdpclient_overlay_play(adp_cam_ctxt->fb_idx,
+		&overlay_data[OVERLAY_CAMERA_PREVIEW]);
+	mdpclient_overlay_play(adp_cam_ctxt->fb_idx,
+		&overlay_data[OVERLAY_GUIDANCE_LANE]);
+
 	if (is_first_commit == true)
 		place_marker("FF RVC pre commit");
 	/* perform display commit */
-	mdpclient_display_commit();
+	mdpclient_display_commit(adp_cam_ctxt->fb_idx);
 	if (is_first_commit == true) {
 		place_marker("FF RVC post commit");
 		is_first_commit = false;
 	}
 	preview_buffer_return_by_index(buffer_index);
 }
+#endif
 
 void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 {
@@ -787,6 +882,148 @@ static void guidance_lane_set_data_pipeline(void)
 	pr_debug("%s exit\n", __func__);
 }
 
+static int find_fb_idx(int display_id, int *fb_idx)
+{
+	int i = 0;
+	int ret = 0;
+	char fb_name[DISPLAY_NAME_LENGTH_MAX];
+
+	int num = sizeof(display_name)/sizeof(char *);
+
+	if (display_id >= num) {
+		pr_err("%s display_id=%d is bigger than max=%d", __func__,
+			display_id, num);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < FB_MAX; i++) {
+		memset(fb_name, 0x00, sizeof(fb_name));
+		ret = mdpclient_msm_fb_get_id(i, fb_name,
+			DISPLAY_NAME_LENGTH_MAX);
+		if (ret) {
+			pr_err("%s fb_get_id fails=%d, idx=%d",
+				__func__, ret, i);
+			break;
+		} else if (!strcmp(fb_name, display_name[display_id])) {
+			break;
+		}
+	}
+	if (i == FB_MAX) {
+		pr_err("%s can't find fb_idx for display_id=%d",
+			__func__, display_id);
+		ret = -EFAULT;
+	} else {
+		if (fb_idx)
+			*fb_idx = i;
+	}
+	return ret;
+}
+
+#ifdef CONFIG_FB_MSM_MDP_ARB
+static int arb_cb(void *handle, struct mdp_arb_cb_info *info, int flag)
+{
+	int ret = 0;
+
+	if (handle != adp_cam_ctxt->mdp_arb_handle) {
+		pr_err("%s handle=0x%x != arb_handle=0x%x", __func__,
+			(int)handle, (int)adp_cam_ctxt->mdp_arb_handle);
+		return -EINVAL;
+	} else if (!info) {
+		pr_err("%s info is NULL", __func__);
+		return -EINVAL;
+	}
+
+	switch (info->event) {
+	case MDP_ARB_NOTIFICATION_DOWN:
+		ret = disable_camera_preview();
+		if (ret)
+			pr_err("%s disable_camera_preview fails=%d",
+				__func__, ret);
+		break;
+	case MDP_ARB_NOTIFICATION_UP:
+		ret = enable_camera_preview();
+		if (ret)
+			pr_err("%s enable_camera_preview fails=%d",
+				__func__, ret);
+		break;
+	default:
+		pr_err("%s doesn't support event=%x", __func__, info->event);
+		ret = -EFAULT;
+		break;
+	}
+
+	ret = mdp_arb_client_acknowledge(adp_cam_ctxt->mdp_arb_handle,
+		info->event);
+	if (ret)
+		pr_err("%s arb ack up fails=%d", __func__, ret);
+	return ret;
+}
+
+static int mdp_init(void)
+{
+	int ret = 0;
+	struct mdp_arb_client_register_info info;
+	struct mdp_arb_event event;
+	int up_state = 1;
+	int down_state = 0;
+
+	ret = find_fb_idx(0, &adp_cam_ctxt->fb_idx);
+	if (ret) {
+		pr_err("%s find_fb_idx fails=%d", __func__, ret);
+		return ret;
+	}
+	memset(&info, 0x00, sizeof(info));
+	memset(&event, 0x00, sizeof(event));
+	info.cb = arb_cb;
+	strlcpy(info.common.name, MDP_ARB_CLIENT_NAME, MDP_ARB_NAME_LEN);
+	info.common.fb_index = adp_cam_ctxt->fb_idx;
+	info.common.num_of_events = 1;
+	strlcpy(event.name, MDP_ARB_EVENT_NAME, MDP_ARB_NAME_LEN);
+	event.event.register_state.num_of_down_state_value = 1;
+	event.event.register_state.down_state_value = &down_state;
+	event.event.register_state.num_of_up_state_value = 1;
+	event.event.register_state.up_state_value = &up_state;
+	info.common.event = &event;
+	info.common.priority = 2;
+	info.common.notification_support_mask =
+		MDP_ARB_NOTIFICATION_DOWN | MDP_ARB_NOTIFICATION_UP;
+	ret = mdp_arb_client_register(&info, &adp_cam_ctxt->mdp_arb_handle);
+	if (ret)
+		pr_err("%s arb_client_register fails=%d", __func__, ret);
+
+	return ret;
+}
+
+static int mdp_exit(void)
+{
+	int ret = 0;
+
+	if (adp_cam_ctxt->mdp_arb_handle) {
+		ret = mdp_arb_client_deregister(adp_cam_ctxt->mdp_arb_handle);
+		if (ret)
+			pr_err("%s arb_client_deregister fails=%d",
+				__func__, ret);
+	}
+	return ret;
+}
+#else
+static int mdp_init(void)
+{
+	int ret = 0;
+	ret = find_fb_idx(0, &adp_cam_ctxt->fb_idx);
+	if (ret) {
+		pr_err("%s find_fb_idx fails=%d", __func__, ret);
+		return ret;
+	}
+	return ret;
+}
+
+static int mdp_exit(void)
+{
+	return 0;
+}
+#endif
+
 static int adp_rear_camera_enable(void)
 {
 	struct preview_mem *ping_buffer, *pong_buffer, *free_buffer;
@@ -794,6 +1031,13 @@ static int adp_rear_camera_enable(void)
 	struct v4l2_format fmt;
 	int index = BA_IP_CVBS_0;
 	enum v4l2_priority prio = V4L2_PRIORITY_RECORD;
+	int ret = 0;
+
+	ret = mdp_init();
+	if (ret) {
+		pr_err("%s mdp_init fails=%d", __func__, ret);
+		return ret;
+	}
 
 	pr_debug("%s: kpi entry\n", __func__);
 	my_axi_ctrl->share_ctrl->current_mode = 4096;
@@ -854,8 +1098,171 @@ static void adp_rear_camera_disable(void)
 			&adp_rvc_csi_lane_params);
 	msm_ispif_release_rdi(lsh_ispif);
 	msm_ba_close(adp_cam_ctxt->ba_inst_hdlr);
+	mdp_exit();
 }
 
+#ifdef CONFIG_FB_MSM_MDP_ARB
+int disable_camera_preview(void)
+{
+	struct mdp_display_commit commit_data;
+	int ret = 0;
+	pr_debug("%s: kpi entry\n", __func__);
+
+	if (!adp_cam_ctxt) {
+		pr_err("%s - context is invalid",
+						__func__);
+		return -EPERM;
+	}
+
+	switch (adp_cam_ctxt->state) {
+	case CAMERA_PREVIEW_ENABLED:
+	case CAMERA_TRANSITION_PREVIEW:
+		break;
+	case CAMERA_PREVIEW_DISABLED:
+		pr_warn("%s - preview already disabled", __func__);
+		return 0;
+		break;
+	default:
+		pr_err("%s - cannot disable preview from uninitialized state",
+				__func__);
+		return -EPERM;
+		break;
+	}
+
+	wait_for_completion(&preview_enabled);
+	adp_cam_ctxt->state = CAMERA_TRANSITION_OFF;
+
+	axi_stop_rdi1_only(my_axi_ctrl);
+
+	usleep(FRAME_DELAY); /* delay to ensure sof for regupdate*/
+	msm_ba_streamoff(adp_cam_ctxt->ba_inst_hdlr, 0);
+	memset(&commit_data, 0, sizeof(commit_data));
+	commit_data.wait_for_finish = true;
+	commit_data.flags = MDP_DISPLAY_COMMIT_OVERLAY;
+	ret = mdp_arb_client_overlay_commit(adp_cam_ctxt->mdp_arb_handle,
+		&commit_data);
+	if (ret)
+		pr_err("%s overlay commit fails=%d", __func__, ret);
+	if (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] == 0) {
+		ret = mdp_arb_client_overlay_unset(adp_cam_ctxt->mdp_arb_handle,
+			overlay_req[OVERLAY_GUIDANCE_LANE].id);
+		if (ret)
+			pr_err("%s overlay unset fails=%d", __func__, ret);
+		pr_debug("%s: overlay_unset guidance lane free pipe !\n",
+			__func__);
+	}
+	if (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] == 0) {
+		ret = mdp_arb_client_overlay_unset(adp_cam_ctxt->mdp_arb_handle,
+			overlay_req[OVERLAY_CAMERA_PREVIEW].id);
+		if (ret)
+			pr_err("%s overlay unset fails=%d", __func__, ret);
+		pr_debug("%s: overlay_unset camera preview free pipe !\n",
+			__func__);
+	}
+
+	ret = mdp_arb_client_overlay_commit(adp_cam_ctxt->mdp_arb_handle,
+		&commit_data);
+	if (ret)
+		pr_err("%s overlay commit fails=%d", __func__, ret);
+
+	mdpclient_msm_fb_close(adp_cam_ctxt->fb_idx);
+
+	adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
+	complete(&preview_disabled);
+	/* reset preview enable*/
+	init_completion(&preview_enabled);
+
+	pr_debug("%s: kpi entry\n", __func__);
+	return ret;
+}
+
+int enable_camera_preview(void)
+{
+	u64 mdp_max_bw_test = 2000000000;
+	struct fb_var_screeninfo var;
+	pr_debug("%s: kpi entry\n", __func__);
+
+	if (!adp_cam_ctxt) {
+		pr_err("%s - context is invalid",
+						__func__);
+		return -EPERM;
+	}
+
+	switch (adp_cam_ctxt->state) {
+	case CAMERA_PREVIEW_DISABLED:
+	case CAMERA_TRANSITION_OFF:
+		break;
+	case CAMERA_PREVIEW_ENABLED:
+		pr_warn("%s - preview already enabled", __func__);
+		return 0;
+		break;
+	default:
+		pr_err("%s - cannot enable preview from uninitialized state",
+				__func__);
+		return -EPERM;
+		break;
+	}
+
+	wait_for_completion(&preview_disabled);
+	adp_cam_ctxt->state = CAMERA_TRANSITION_PREVIEW;
+
+	if (mdpclient_msm_fb_open(adp_cam_ctxt->fb_idx))
+		pr_err("%s: can't open fb=%d", __func__, adp_cam_ctxt->fb_idx);
+
+	if (mdpclient_msm_fb_blank(adp_cam_ctxt->fb_idx,
+		FB_BLANK_UNBLANK, true))
+		pr_err("%s: can't turn on display!\n", __func__);
+
+	if (mdpclient_msm_fb_get_vscreeninfo(adp_cam_ctxt->fb_idx, &var))
+		pr_err("%s: can't get vscreen_info\n", __func__);
+
+	mdp_bus_scale_update_request(mdp_max_bw_test, mdp_max_bw_test,
+		mdp_max_bw_test, mdp_max_bw_test);
+
+	/* configure pipe for reverse camera preview */
+	preview_set_overlay_init(&overlay_req[OVERLAY_CAMERA_PREVIEW], &var);
+	alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] =
+		mdp_arb_client_overlay_set(adp_cam_ctxt->mdp_arb_handle,
+			&overlay_req[OVERLAY_CAMERA_PREVIEW]);
+
+	if (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] != 0) {
+		pr_err("%s: mdpclient_overlay_set error!1\n",
+			__func__);
+		adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
+		complete(&preview_enabled);
+		/* reset preview disable*/
+		init_completion(&preview_disabled);
+		return -EBUSY;
+	}
+	/* configure pipe for guidance lane */
+	guidance_lane_set_overlay_init(&overlay_req[OVERLAY_GUIDANCE_LANE]);
+	alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] =
+		mdp_arb_client_overlay_set(adp_cam_ctxt->mdp_arb_handle,
+			&overlay_req[OVERLAY_GUIDANCE_LANE]);
+
+	if (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] != 0) {
+		pr_err("%s: mdpclient_overlay_set error!1\n",
+			__func__);
+		adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
+		complete(&preview_enabled);
+		/* reset preview disable*/
+		init_completion(&preview_disabled);
+		return -EBUSY;
+	}
+
+	msm_ba_streamon(adp_cam_ctxt->ba_inst_hdlr, 0);
+	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);
+
+	adp_cam_ctxt->state = CAMERA_PREVIEW_ENABLED;
+	complete(&preview_enabled);
+
+	/* reset preview disable*/
+	init_completion(&preview_disabled);
+
+	pr_debug("%s: kpi exit\n", __func__);
+	return 0;
+}
+#else
 int disable_camera_preview(void)
 {
 	pr_debug("%s: kpi entry\n", __func__);
@@ -888,21 +1295,23 @@ int disable_camera_preview(void)
 
 	usleep(FRAME_DELAY); /* delay to ensure sof for regupdate*/
 	msm_ba_streamoff(adp_cam_ctxt->ba_inst_hdlr, 0);
-	mdpclient_display_commit();
+	mdpclient_display_commit(adp_cam_ctxt->fb_idx);
 	if (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] == 0) {
-		mdpclient_overlay_unset(&overlay_req[OVERLAY_GUIDANCE_LANE]);
+		mdpclient_overlay_unset(adp_cam_ctxt->fb_idx,
+			&overlay_req[OVERLAY_GUIDANCE_LANE]);
 		pr_debug("%s: overlay_unset guidance lane free pipe !\n",
 			__func__);
 	}
 	if (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] == 0) {
-		mdpclient_overlay_unset(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
+		mdpclient_overlay_unset(adp_cam_ctxt->fb_idx,
+			&overlay_req[OVERLAY_CAMERA_PREVIEW]);
 		pr_debug("%s: overlay_unset camera preview free pipe !\n",
 			__func__);
 	}
 
-	mdpclient_display_commit();
+	mdpclient_display_commit(adp_cam_ctxt->fb_idx);
 
-	mdpclient_msm_fb_close();
+	mdpclient_msm_fb_close(adp_cam_ctxt->fb_idx);
 
 	adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
 	complete(&preview_disabled);
@@ -919,6 +1328,7 @@ int enable_camera_preview(void)
 	int waitcounter_camera = 0;
 	int waitcounter_guidance = 0;
 	int max_wait_count = 15;
+	struct fb_var_screeninfo var;
 	pr_debug("%s: kpi entry\n", __func__);
 
 	if (!adp_cam_ctxt) {
@@ -945,23 +1355,29 @@ int enable_camera_preview(void)
 	wait_for_completion(&preview_disabled);
 	adp_cam_ctxt->state = CAMERA_TRANSITION_PREVIEW;
 
-	mdpclient_msm_fb_open();
-	if (mdpclient_msm_fb_blank(FB_BLANK_UNBLANK, true))
+	mdpclient_msm_fb_open(adp_cam_ctxt->fb_idx);
+	if (mdpclient_msm_fb_blank(adp_cam_ctxt->fb_idx,
+		FB_BLANK_UNBLANK, true))
 		pr_err("%s: can't turn on display!\n", __func__);
+	if (mdpclient_msm_fb_get_vscreeninfo(adp_cam_ctxt->fb_idx, &var))
+		pr_err("%s: can't get vscreen_info\n", __func__);
+
 	mdp_bus_scale_update_request(mdp_max_bw_test, mdp_max_bw_test,
 		mdp_max_bw_test, mdp_max_bw_test);
 
 	/* configure pipe for reverse camera preview */
-	preview_set_overlay_init(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
+	preview_set_overlay_init(&overlay_req[OVERLAY_CAMERA_PREVIEW], &var);
 	alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] =
-		mdpclient_overlay_set(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
+		mdpclient_overlay_set(adp_cam_ctxt->fb_idx,
+			&overlay_req[OVERLAY_CAMERA_PREVIEW]);
 
 	while (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] != 0 &&
 				waitcounter_camera < max_wait_count) {
 		msleep(100);
 		waitcounter_camera++;
 		alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] =
-		mdpclient_overlay_set(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
+		mdpclient_overlay_set(adp_cam_ctxt->fb_idx,
+			&overlay_req[OVERLAY_CAMERA_PREVIEW]);
 	}
 
 	if (waitcounter_camera > 1)
@@ -980,19 +1396,21 @@ int enable_camera_preview(void)
 	/* configure pipe for guidance lane */
 	guidance_lane_set_overlay_init(&overlay_req[OVERLAY_GUIDANCE_LANE]);
 	alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] =
-		mdpclient_overlay_set(&overlay_req[OVERLAY_GUIDANCE_LANE]);
+		mdpclient_overlay_set(adp_cam_ctxt->fb_idx,
+			&overlay_req[OVERLAY_GUIDANCE_LANE]);
 
 	while (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] != 0 &&
 				waitcounter_guidance < max_wait_count) {
 		msleep(100);
 		waitcounter_guidance++;
 		alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] =
-		mdpclient_overlay_set(&overlay_req[OVERLAY_GUIDANCE_LANE]);
+		mdpclient_overlay_set(adp_cam_ctxt->fb_idx,
+			&overlay_req[OVERLAY_GUIDANCE_LANE]);
 	}
 
 	if (waitcounter_guidance > 1)
-		pr_err("%s: mdpclient_overlay_set guidance lane wait counter value is: %d",
-			__func__, waitcounter_guidance);
+		pr_err("%s: mdpclient_overlay_set guidance lane wait counter"\
+			" value is: %d", __func__, waitcounter_guidance);
 
 	if (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] != 0) {
 		pr_err("%s: mdpclient_overlay_set error!1\n",
@@ -1016,6 +1434,7 @@ int enable_camera_preview(void)
 	pr_debug("%s: kpi exit\n", __func__);
 	return 0;
 }
+#endif
 
 
 static int adp_camera_v4l2_open(struct file *filp)
