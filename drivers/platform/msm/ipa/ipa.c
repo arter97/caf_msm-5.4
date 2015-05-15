@@ -3735,6 +3735,7 @@ static int ipa_smmu_ap_cb_probe(struct device *dev)
 	int order = 0;
 	int result;
 	int disable_htw = 1;
+	int atomic_ctx = 1;
 
 	IPADBG("sub pdev=%p\n", dev);
 
@@ -3767,6 +3768,14 @@ static int ipa_smmu_ap_cb_probe(struct device *dev)
 			arm_iommu_detach_device(cb->dev);
 			return -EIO;
 		}
+	}
+
+	if (iommu_domain_set_attr(cb->mapping->domain,
+				  DOMAIN_ATTR_ATOMIC,
+				  &atomic_ctx)) {
+		IPAERR("couldn't set domain as atomic\n");
+		arm_iommu_detach_device(cb->dev);
+		return -EIO;
 	}
 
 	cb->valid = true;
