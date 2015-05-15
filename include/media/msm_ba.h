@@ -38,10 +38,6 @@ enum msm_ba_ip {
 	BA_IP_MAX = 0xffffffff
 };
 
-#define MSM_BA_PRIV_BASE_START		(V4L2_CID_USER_BASE | 0x7000)
-#define MSM_BA_PRIV_SD_NODE_ADDR	(MSM_BA_PRIV_BASE_START + 1)
-#define MSM_BA_PRIV_FPS		(MSM_BA_PRIV_BASE_START + 2)
-
 void *msm_ba_open(void);
 int msm_ba_close(void *instance);
 int msm_ba_querycap(void *instance, struct v4l2_capability *cap);

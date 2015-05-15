@@ -46,7 +46,7 @@ static struct msm_ba_ctrl msm_ba_ctrls[] = {
 		.type = V4L2_CTRL_TYPE_INTEGER,
 		.minimum = 0,
 		.maximum = 0x7fffffff,
-		.default_value = 30,
+		.default_value = 60 << 16,
 		.step = 1,
 		.menu_skip_mask = 0,
 		.flags = V4L2_CTRL_FLAG_VOLATILE,
@@ -235,7 +235,7 @@ int msm_ba_g_fps(void *instance, int *fps_q16)
 				sd_frame_rate.interval.denominator);
 		} else {
 			*fps_q16 =
-				(sd_frame_rate.interval.numerator << 16) | 1;
+				sd_frame_rate.interval.numerator << 16;
 		}
 	}
 	return rc;
