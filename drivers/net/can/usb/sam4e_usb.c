@@ -44,8 +44,8 @@
 #define LOGNI(...)
 #endif
 
-#define BULK_IN_EP		1
-#define BULK_OUT_EP		2
+#define BULK_IN_EP		3
+#define BULK_OUT_EP		4
 
 #define MAX_RX_URBS		10
 #define MAX_TX_URBS		10
@@ -109,6 +109,13 @@ struct sam4e_resp {
 	u8 len;
 	u16 seq;
 	u8 err;
+	u8 data[0];
+} __packed;
+
+struct sam4e_unsol_msg {
+	u8 cmd;
+	u8 len;
+	u16 seq;
 	u8 data[0];
 } __packed;
 
@@ -199,8 +206,11 @@ static void sam4e_process_response(struct sam4e_usb *dev,
 			resp->len, resp->seq, resp->err,
 			atomic_read(&dev->active_tx_urbs));
 	if (resp->cmd == CMD_CAN_READ_ASYNC) {
+		/* v1.3 of the firmware uses different frame structure for
+		   unsol messages. (the one without error code) */
+		struct sam4e_unsol_msg *msg = (struct sam4e_unsol_msg *)resp;
 		struct sam4e_can_unsl_receive *frame =
-				(struct sam4e_can_unsl_receive *)&resp->data;
+				(struct sam4e_can_unsl_receive *)&msg->data;
 		sam4e_usb_receive_frame(netdev, frame);
 	} else if (resp->cmd == CMD_CAN_FULL_WRITE) {
 		atomic_dec(&dev->active_tx_urbs);
