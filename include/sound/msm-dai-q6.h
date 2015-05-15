@@ -1,4 +1,4 @@
-/* Copyright (c) 2011, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011, 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -34,6 +34,23 @@ struct msm_dai_auxpcm_config {
 struct msm_mi2s_pdata {
 	u16 rx_sd_lines;
 	u16 tx_sd_lines;
+};
+
+struct msm_mi2s_group_config {
+	u16 group_id;
+	u16 channel_mode;
+	u32 sample_rate;
+	u16 *port_id;
+	u16 port_id_size;
+	u16 bit_width;
+};
+
+struct msm_mi2s_group_pdata {
+	u16 rx_sd_lines;
+	u16 tx_sd_lines;
+	struct msm_mi2s_group_config *group_config;
+	u16 *slot_offset;
+	u16 slot_offset_size;
 };
 
 struct msm_dai_auxpcm_pdata {

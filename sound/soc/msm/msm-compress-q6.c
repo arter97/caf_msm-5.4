@@ -976,6 +976,12 @@ static const struct snd_kcontrol_new msm_compr_volume_controls[] = {
 			msm_compr_volume_get,
 			msm_compr_volume_put,
 			msm_compr_vol_gain),
+	SOC_DOUBLE_EXT_TLV("RES Compress Playback Volume",
+			MSM_FRONTEND_DAI_MULTIMEDIA8,
+			0, 8, COMPRESSED_LR_VOL_MAX_STEPS, 0,
+			msm_compr_volume_get,
+			msm_compr_volume_put,
+			msm_compr_vol_gain),
 };
 
 static int msm_compr_probe(struct snd_soc_platform *platform)

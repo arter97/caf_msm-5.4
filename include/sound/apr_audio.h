@@ -62,9 +62,22 @@
 #define SECONDARY_PCM_RX 12			/* index = 32 */
 #define SECONDARY_PCM_TX 13			/* index = 33 */
 
+/** Multichannel I2S Rx group device port. */
+#define MI2S_RX_0 MI2S_RX		/* index = 6 */
+#define MI2S_TX_0 MI2S_TX		/* index = 7 */
+#define MI2S_RX_1 14			/* index = 34 */
+#define MI2S_TX_1 15			/* index = 35 */
+#define MI2S_RX_2 16			/* index = 36 */
+#define MI2S_TX_2 17			/* index = 37 */
 
 #define AFE_PORT_INVALID 0xFFFF
 #define SLIMBUS_EXTPROC_RX AFE_PORT_INVALID
+
+/** Multichannel I2S Rx group device ID. */
+#define AFE_GROUP_DEVICE_ID_MI2S_RX			(MI2S_RX + 0x100)
+
+/** Multichannel I2S Tx group device ID. */
+#define AFE_GROUP_DEVICE_ID_MI2S_TX			(MI2S_TX + 0x100)
 
 #define AFE_PORT_CMD_START 0x000100ca
 
@@ -410,6 +423,25 @@ struct afe_param_loopback_cfg {
 #define AFE_MODULE_ID_PORT_INFO		0x00010200
 /* Module ID for the loopback-related parameters. */
 #define AFE_MODULE_LOOPBACK           0x00010205
+
+#define AFE_MODULE_TDM 0x0001028A
+
+#define AFE_PARAM_ID_PORT_SLOT_MAPPING_CONFIG 0x00010297
+#define AFE_API_VERSION_SLOT_MAPPING_CONFIG 0x1
+
+/* Data align type. */
+#define AFE_SLOT_MAPPING_DATA_ALIGN_MSB 0
+#define AFE_SLOT_MAPPING_DATA_ALIGN_LSB 1
+
+#define AFE_SLOT_MAPPING_OFFSET_INVALID 0xFFFF
+struct afe_param_id_slot_mapping_cfg {
+	uint32_t minor_version;
+	uint16_t num_channel;
+	uint16_t bitwidth;
+	uint32_t data_align_type;
+	uint16_t offset[AFE_PORT_MAX_AUDIO_CHAN_CNT];
+} __packed;
+
 struct afe_param_payload_base {
 	u32 module_id;
 	u32 param_id;
@@ -426,6 +458,7 @@ struct afe_param_payload {
 		struct afe_param_loopback_gain loopback_gain;
 		struct afe_param_loopback_cfg loopback_cfg;
 		struct afe_param_id_device_hw_delay_cfg hw_delay;
+		struct afe_param_id_slot_mapping_cfg slot_mapping_cfg;
 	} __attribute__((packed)) param;
 } __attribute__ ((packed));
 
@@ -512,6 +545,45 @@ struct afe_cmd_rtport_rd {
 } __packed;
 
 #define AFE_EVENT_RT_PROXY_PORT_STATUS 0x00010105
+
+#define AFE_MODULE_GROUP_DEVICE 0x00010254
+
+#define AFE_PARAM_ID_GROUP_DEVICE_I2S_CONFIG 0x00010286
+#define AFE_API_VERSION_GROUP_DEVICE_I2S_CONFIG 0x1
+#define AFE_GROUP_DEVICE_NUM_PORTS 8
+struct afe_param_id_group_device_i2s_cfg_v1 {
+	uint32_t minor_version;
+	uint16_t group_id;
+	uint16_t channel_mode;
+	uint32_t sample_rate;
+	uint16_t port_id[AFE_GROUP_DEVICE_NUM_PORTS];
+	uint16_t bit_width;
+	uint16_t reserved;
+} __packed;
+
+#define AFE_PARAM_ID_GROUP_DEVICE_ENABLE 0x00010256
+struct afe_param_id_group_device_enable {
+	uint16_t group_id;
+	uint16_t enable;
+} __packed;
+
+struct afe_service_param_payload {
+	struct afe_param_payload_base base;
+	union {
+		struct afe_param_id_group_device_i2s_cfg_v1
+				 group_device_i2s_cfg;
+		struct afe_param_id_group_device_enable group_device_enable;
+	} __packed param;
+} __packed;
+
+#define AFE_SERVICE_CMD_SET_PARAM_V1 0x000100F9
+
+struct afe_service_cmd_set_param {
+	struct apr_hdr hdr;
+	u32 payload_size;
+	u32 payload_address;
+	struct afe_service_param_payload payload;
+} __packed;
 
 #define ADM_MAX_COPPS 5
 
