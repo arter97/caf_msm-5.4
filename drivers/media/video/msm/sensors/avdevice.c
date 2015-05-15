@@ -52,31 +52,55 @@ static int32_t avdevice_ba_platform_probe(struct platform_device *pdev)
 {
 	int32_t rc = 0;
 	struct msm_sensor_ctrl_t *p_sensor_ctrl;
+	struct msm_camera_sensor_info *p_sensor_info = pdev->dev.platform_data;
 	struct v4l2_format ba_fmt;
 	struct v4l2_control ctrl;
 
 	pr_debug("avdevice platform platform probe...\n");
 
-	if (pdev->id == 0) {
-		p_sensor_ctrl = &avdevice_a_s_ctrl[0];
-		ba_instance_handler_a[0] = msm_ba_open();
-		pr_debug("csi device %d %p...\n", pdev->id, p_sensor_ctrl);
-		msm_ba_s_output(ba_instance_handler_a[0], 1);
-	} else if (pdev->id == 1) {
-		p_sensor_ctrl = &avdevice_a_s_ctrl[1];
-		ba_instance_handler_a[1] = msm_ba_open();
-		pr_debug("csi device %d %p...\n", pdev->id, p_sensor_ctrl);
-		msm_ba_s_output(ba_instance_handler_a[1], 0);
-	} else {
-		pr_debug("device currently not supported...\n");
-		return 0;
+	if (!p_sensor_info) {
+		pr_err("%s - dev platform data not set\n",
+						__func__);
+		return -EFAULT;
 	}
 
+	if (pdev->id < 0 || pdev->id > 1) {
+		pr_err("%s - device id %d currently not supported...\n",
+				__func__, pdev->id);
+		return -EINVAL;
+	}
 
-	msm_ba_g_fmt(ba_instance_handler_a[pdev->id], &ba_fmt);
+	p_sensor_ctrl = &avdevice_a_s_ctrl[pdev->id];
+	pr_debug("csi device %d %p...\n", pdev->id, p_sensor_ctrl);
+
+	ba_instance_handler_a[pdev->id] = msm_ba_open();
+	if (!ba_instance_handler_a[pdev->id]) {
+		pr_err("%s - msm_ba_open(%d) failed",
+				__func__, pdev->id);
+		return -EFAULT;
+	}
+
+	rc = msm_ba_s_output(ba_instance_handler_a[0], p_sensor_info->ba_idx);
+	if (rc) {
+		pr_err("%s - msm_ba_s_output failed %d\n",
+				__func__, rc);
+		goto ba_failed;
+	}
+
+	rc = msm_ba_g_fmt(ba_instance_handler_a[pdev->id], &ba_fmt);
+	if (rc) {
+		pr_err("%s - msm_ba_g_fmt failed %d\n",
+				__func__, rc);
+		goto ba_failed;
+	}
 
 	ctrl.id = MSM_BA_PRIV_FPS;
-	msm_ba_g_ctrl(ba_instance_handler_a[pdev->id], &ctrl);
+	rc = msm_ba_g_ctrl(ba_instance_handler_a[pdev->id], &ctrl);
+	if (rc) {
+		pr_err("%s - msm_ba_g_ctrl %x failed %d\n",
+				__func__, ctrl.id, rc);
+		goto ba_failed;
+	}
 
 	p_sensor_ctrl->msm_sensor_reg->output_settings->x_output =
 			ba_fmt.fmt.pix.width;
@@ -90,15 +114,24 @@ static int32_t avdevice_ba_platform_probe(struct platform_device *pdev)
 	p_sensor_ctrl->msm_sensor_reg->output_settings->vt_pixel_clk =
 			ba_fmt.fmt.pix.width * ba_fmt.fmt.pix.height *
 			(ctrl.value >> 16);
-	pr_debug("%s - %dx%d @ %d", __func__, ba_fmt.fmt.pix.width,
+	pr_debug("%s - %dx%d @ %d\n", __func__, ba_fmt.fmt.pix.width,
 			ba_fmt.fmt.pix.height, (ctrl.value >> 16));
 
 	p_sensor_ctrl->pdev = pdev;
-	pr_debug("avdevice probe sctrl %p pdev %p...", p_sensor_ctrl, pdev);
-	msm_sensor_platform_dev_probe(pdev, p_sensor_ctrl);
+	pr_debug("avdevice probe sctrl %p pdev %p...\n", p_sensor_ctrl, pdev);
+	rc = msm_sensor_platform_dev_probe(pdev, p_sensor_ctrl);
+	if (rc) {
+		pr_err("%s - msm_sensor_platform_dev_probe failed %d\n",
+				__func__, rc);
+		goto ba_failed;
+	}
 
 	/* TO DO setup ba handler to map to actual device and video node*/
 	pr_debug("avdevice platform probe exit...\n");
+	return rc;
+
+ba_failed:
+	msm_ba_close(ba_instance_handler_a[pdev->id]);
 	return rc;
 }
 
