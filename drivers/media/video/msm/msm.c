@@ -26,6 +26,8 @@
 #include "msm_camera_eeprom.h"
 
 #define MSM_MAX_CAMERA_SENSORS 5
+#define QAV_SENSOR "avdev"
+#define QVIDEO_NAME "msm_avdevice"
 
 #ifdef CONFIG_MSM_CAMERA_DEBUG
 #define D(fmt, args...) pr_debug("msm: " fmt, ##args)
@@ -1314,6 +1316,7 @@ static struct v4l2_file_operations g_msm_fops = {
 static int msm_cam_dev_init(struct msm_cam_v4l2_device *pcam)
 {
 	int rc = -ENOMEM;
+	int check_avdev = -1;
 	struct video_device *pvdev = NULL;
 	struct i2c_client *client = NULL;
 	struct platform_device *pdev = NULL;
@@ -1344,8 +1347,23 @@ static int msm_cam_dev_init(struct msm_cam_v4l2_device *pcam)
 		return rc;
 	}
 
-	strlcpy(pcam->media_dev.model, QCAMERA_NAME,
-			sizeof(pcam->media_dev.model));
+	/* check if sensor has avdev prefix */
+	if (strlen(QAV_SENSOR) <= strlen(pcam->sensor_sdev->name)) {
+		check_avdev = memcmp(QAV_SENSOR, pcam->sensor_sdev->name,
+		strlen(QAV_SENSOR));
+	}
+
+	if (check_avdev == 0) {
+		/* This is an av device that should not be accessed by
+		   camera HAL.*/
+		D("avdev sensor name = %s", pcam->sensor_sdev->name);
+		strlcpy(pcam->media_dev.model, QVIDEO_NAME,
+				sizeof(pcam->media_dev.model));
+	} else {
+		strlcpy(pcam->media_dev.model, QCAMERA_NAME,
+				sizeof(pcam->media_dev.model));
+	}
+
 	rc = media_device_register(&pcam->media_dev);
 	pvdev->v4l2_dev = &pcam->v4l2_dev;
 	pcam->v4l2_dev.mdev = &pcam->media_dev;
