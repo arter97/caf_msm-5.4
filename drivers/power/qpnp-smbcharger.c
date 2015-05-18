@@ -34,6 +34,8 @@
 #include <linux/rtc.h>
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/batterydata-lib.h>
+#include <linux/msm_bcl.h>
+#include <linux/ktime.h>
 
 /* Mask/Bit helpers */
 #define _SMB_MASK(BITS, POS) \
@@ -56,6 +58,8 @@ struct parallel_usb_cfg {
 	bool				avail;
 	struct mutex			lock;
 	int				initial_aicl_ma;
+	ktime_t				last_disabled;
+	bool				enabled_once;
 };
 
 struct ilim_entry {
@@ -94,6 +98,7 @@ struct smbchg_chip {
 	int				usb_tl_current_ma;
 	int				dc_target_current_ma;
 	int				target_fastchg_current_ma;
+	int				cfg_fastchg_current_ma;
 	int				fastchg_current_ma;
 	int				vfloat_mv;
 	int				fastchg_current_comp;
@@ -1339,13 +1344,24 @@ static int smbchg_get_min_parallel_current_ma(struct smbchg_chip *chip)
 #define USBIN_SUSPEND_STS_BIT		BIT(3)
 #define USBIN_ACTIVE_PWR_SRC_BIT	BIT(1)
 #define DCIN_ACTIVE_PWR_SRC_BIT		BIT(0)
+#define PARALLEL_REENABLE_TIMER_MS	30000
 static bool smbchg_is_parallel_usb_ok(struct smbchg_chip *chip)
 {
 	int min_current_thr_ma, rc, type;
+	ktime_t kt_since_last_disable;
 	u8 reg;
 
 	if (!smbchg_parallel_en) {
 		pr_smb(PR_STATUS, "Parallel charging not enabled\n");
+		return false;
+	}
+
+	kt_since_last_disable = ktime_sub(ktime_get_boottime(),
+					chip->parallel.last_disabled);
+	if (chip->parallel.enabled_once && ktime_to_ms(kt_since_last_disable)
+					< PARALLEL_REENABLE_TIMER_MS) {
+		pr_smb(PR_STATUS, "Only been %lld since disable, skipping\n",
+				ktime_to_ms(kt_since_last_disable));
 		return false;
 	}
 
@@ -1445,22 +1461,29 @@ static int smbchg_set_fastchg_current_raw(struct smbchg_chip *chip,
 		dev_err(chip->dev, "cannot write to fcc cfg rc = %d\n", rc);
 		return rc;
 	}
-	pr_smb(PR_STATUS, "fastcharge current set to %d\n",
-			current_ma);
+	pr_smb(PR_STATUS, "fastcharge current requested %d, set to %d\n",
+			current_ma, usb_current_table[cur_val]);
 
-	chip->fastchg_current_ma = usb_current_table[i];
+	chip->fastchg_current_ma = usb_current_table[cur_val];
 	return rc;
 }
 
 static int smbchg_set_fastchg_current(struct smbchg_chip *chip,
 							int current_ma)
 {
-	int rc;
+	int rc = 0;
 
 	mutex_lock(&chip->fcc_lock);
 	if (chip->sw_esr_pulse_en)
 		current_ma = 300;
+	/* If the requested FCC is same, do not configure it again */
+	if (current_ma == chip->fastchg_current_ma) {
+		pr_smb(PR_STATUS, "not configuring FCC current: %d FCC: %d\n",
+			current_ma, chip->fastchg_current_ma);
+		goto out;
+	}
 	rc = smbchg_set_fastchg_current_raw(chip, current_ma);
+out:
 	mutex_unlock(&chip->fcc_lock);
 	return rc;
 }
@@ -1483,8 +1506,7 @@ static int smbchg_sw_esr_pulse_en(struct smbchg_chip *chip, bool en)
 	int rc;
 
 	chip->sw_esr_pulse_en = en;
-	rc = smbchg_set_fastchg_current_raw(chip,
-			chip->target_fastchg_current_ma);
+	rc = smbchg_set_fastchg_current(chip, chip->target_fastchg_current_ma);
 	if (rc)
 		return rc;
 	rc = smbchg_parallel_usb_charging_en(chip, !en);
@@ -1526,12 +1548,14 @@ static void smbchg_parallel_usb_disable(struct smbchg_chip *chip)
 	if (!parallel_psy)
 		return;
 	pr_smb(PR_STATUS, "disabling parallel charger\n");
+	chip->parallel.last_disabled = ktime_get_boottime();
 	taper_irq_en(chip, false);
 	chip->parallel.initial_aicl_ma = 0;
 	chip->parallel.current_max_ma = 0;
 	power_supply_set_current_limit(parallel_psy,
 				SUSPEND_CURRENT_MA * 1000);
 	power_supply_set_present(parallel_psy, false);
+	chip->target_fastchg_current_ma = chip->cfg_fastchg_current_ma;
 	smbchg_set_fastchg_current(chip, chip->target_fastchg_current_ma);
 	chip->usb_tl_current_ma =
 		calc_thermal_limited_current(chip, chip->usb_target_current_ma);
@@ -1571,8 +1595,12 @@ try_again:
 		smbchg_parallel_usb_disable(chip);
 		goto done;
 	}
-	pval.intval = 1000 * ((parallel_fcc_ma
+	pval.intval = ((parallel_fcc_ma
 			* PARALLEL_FCC_PERCENT_REDUCTION) / 100);
+	pr_smb(PR_STATUS, "reducing FCC of parallel charger to %d\n",
+		pval.intval);
+	/* Change it to uA */
+	pval.intval *= 1000;
 	parallel_psy->set_property(parallel_psy,
 			POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, &pval);
 	/*
@@ -1609,6 +1637,10 @@ static int smbchg_get_aicl_level_ma(struct smbchg_chip *chip)
 		return 0;
 	}
 	reg &= ICL_STS_MASK;
+	if (reg & AICL_SUSP_BIT) {
+		pr_warn("AICL suspended: %02x\n", reg);
+		return 0;
+	}
 	if (reg >= ARRAY_SIZE(usb_current_table)) {
 		pr_warn("invalid AICL value: %02x\n", reg);
 		return 0;
@@ -1616,17 +1648,24 @@ static int smbchg_get_aicl_level_ma(struct smbchg_chip *chip)
 	return usb_current_table[reg];
 }
 
+#define PARALLEL_CHG_THRESHOLD_CURRENT	1800
 static void smbchg_parallel_usb_enable(struct smbchg_chip *chip)
 {
 	struct power_supply *parallel_psy = get_parallel_psy(chip);
 	union power_supply_propval pval = {0, };
 	int current_limit_ma, parallel_cl_ma, total_current_ma;
-	int new_parallel_cl_ma, min_current_thr_ma;
+	int new_parallel_cl_ma, min_current_thr_ma, rc;
 
 	if (!parallel_psy)
 		return;
 
 	pr_smb(PR_STATUS, "Attempting to enable parallel charger\n");
+	/* Suspend the parallel charger if the charging current is < 1800 mA */
+	if (chip->cfg_fastchg_current_ma < PARALLEL_CHG_THRESHOLD_CURRENT) {
+		pr_smb(PR_STATUS, "suspend parallel charger as FCC is %d\n",
+			chip->cfg_fastchg_current_ma);
+		goto disable_parallel;
+	}
 	min_current_thr_ma = smbchg_get_min_parallel_current_ma(chip);
 	if (min_current_thr_ma <= 0) {
 		pr_smb(PR_STATUS, "parallel charger unavailable for thr: %d\n",
@@ -1672,6 +1711,19 @@ static void smbchg_parallel_usb_enable(struct smbchg_chip *chip)
 		goto disable_parallel;
 	}
 
+	rc = power_supply_set_voltage_limit(parallel_psy, chip->vfloat_mv + 50);
+	if (rc) {
+		dev_err(chip->dev, "Couldn't set float voltage on parallel psy rc: %d\n",
+			rc);
+		goto disable_parallel;
+	}
+	chip->target_fastchg_current_ma = chip->cfg_fastchg_current_ma / 2;
+	smbchg_set_fastchg_current(chip, chip->target_fastchg_current_ma);
+	pval.intval = chip->target_fastchg_current_ma * 1000;
+	parallel_psy->set_property(parallel_psy,
+			POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, &pval);
+
+	chip->parallel.enabled_once = true;
 	new_parallel_cl_ma = total_current_ma / 2;
 
 	if (new_parallel_cl_ma == parallel_cl_ma) {
@@ -1687,10 +1739,6 @@ static void smbchg_parallel_usb_enable(struct smbchg_chip *chip)
 	taper_irq_en(chip, true);
 	chip->parallel.current_max_ma = new_parallel_cl_ma;
 	power_supply_set_present(parallel_psy, true);
-	smbchg_set_fastchg_current(chip, chip->target_fastchg_current_ma / 2);
-	pval.intval = chip->target_fastchg_current_ma * 1000 / 2;
-	parallel_psy->set_property(parallel_psy,
-			POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, &pval);
 	smbchg_set_usb_current_max(chip, chip->parallel.current_max_ma);
 	power_supply_set_current_limit(parallel_psy,
 				chip->parallel.current_max_ma * 1000);
@@ -1700,6 +1748,21 @@ disable_parallel:
 	if (chip->parallel.current_max_ma != 0) {
 		pr_smb(PR_STATUS, "disabling parallel charger\n");
 		smbchg_parallel_usb_disable(chip);
+	} else if (chip->cfg_fastchg_current_ma !=
+			chip->target_fastchg_current_ma) {
+		/* There is a possibility that parallel charging is enabled
+		 * and a weak charger is connected, AICL result will be
+		 * lower than the min_current_thr_ma. In those cases, we
+		 * should fall back to configure the FCC of main charger.
+		 */
+		rc = smbchg_set_fastchg_current(chip,
+				chip->cfg_fastchg_current_ma);
+		if (rc)
+			pr_err("Couldn't set fastchg current rc: %d\n",
+				rc);
+		else
+			chip->target_fastchg_current_ma =
+				chip->cfg_fastchg_current_ma;
 	}
 }
 
@@ -1711,8 +1774,12 @@ static void smbchg_parallel_usb_en_work(struct work_struct *work)
 
 	smbchg_relax(chip, PM_PARALLEL_CHECK);
 	mutex_lock(&chip->parallel.lock);
-	if (smbchg_is_parallel_usb_ok(chip))
+	if (smbchg_is_parallel_usb_ok(chip)) {
 		smbchg_parallel_usb_enable(chip);
+	} else if (chip->parallel.current_max_ma != 0) {
+		pr_smb(PR_STATUS, "parallel charging unavailable\n");
+		smbchg_parallel_usb_disable(chip);
+	}
 	mutex_unlock(&chip->parallel.lock);
 }
 
@@ -1744,6 +1811,37 @@ static int smbchg_usb_en(struct smbchg_chip *chip, bool enable,
 
 	if (changed)
 		smbchg_parallel_usb_check_ok(chip);
+	return rc;
+}
+
+static int smbchg_set_fastchg_current_user(struct smbchg_chip *chip,
+							int current_ma)
+{
+	int rc = 0;
+
+	mutex_lock(&chip->parallel.lock);
+	pr_smb(PR_STATUS, "User setting FCC to %d\n", current_ma);
+	chip->cfg_fastchg_current_ma = current_ma;
+	if (smbchg_is_parallel_usb_ok(chip)) {
+		smbchg_parallel_usb_enable(chip);
+	} else {
+		if (chip->parallel.current_max_ma != 0) {
+			/*
+			 * If parallel charging is not available, disable it.
+			 * FCC for main charger will be configured in that.
+			 */
+			pr_smb(PR_STATUS, "parallel charging unavailable\n");
+			smbchg_parallel_usb_disable(chip);
+			goto out;
+		}
+		rc = smbchg_set_fastchg_current(chip,
+				chip->cfg_fastchg_current_ma);
+		if (rc)
+			pr_err("Couldn't set fastchg current rc: %d\n",
+				rc);
+	}
+out:
+	mutex_unlock(&chip->parallel.lock);
 	return rc;
 }
 
@@ -2233,6 +2331,7 @@ static int smbchg_float_voltage_comp_set(struct smbchg_chip *chip, int code)
 #define VHIGH_RANGE_FLOAT_STEP_MV	20
 static int smbchg_float_voltage_set(struct smbchg_chip *chip, int vfloat_mv)
 {
+	struct power_supply *parallel_psy = get_parallel_psy(chip);
 	int rc, delta;
 	u8 temp;
 
@@ -2260,6 +2359,14 @@ static int smbchg_float_voltage_set(struct smbchg_chip *chip, int vfloat_mv)
 		temp = VHIGH_RANGE_FLOAT_MIN_VAL + delta
 				/ VHIGH_RANGE_FLOAT_STEP_MV;
 		vfloat_mv -= delta % VHIGH_RANGE_FLOAT_STEP_MV;
+	}
+
+	if (parallel_psy) {
+		rc = power_supply_set_voltage_limit(parallel_psy,
+				vfloat_mv + 50);
+		if (rc)
+			dev_err(chip->dev, "Couldn't set float voltage on parallel psy rc: %d\n",
+				rc);
 	}
 
 	rc = smbchg_sec_masked_write(chip, chip->chgr_base + VFLOAT_CFG_REG,
@@ -2301,7 +2408,7 @@ static int smbchg_battery_set_property(struct power_supply *psy,
 		smbchg_system_temp_level_set(chip, val->intval);
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
-		rc = smbchg_set_fastchg_current(chip, val->intval / 1000);
+		rc = smbchg_set_fastchg_current_user(chip, val->intval / 1000);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		rc = smbchg_float_voltage_set(chip, val->intval);
@@ -3564,6 +3671,7 @@ static void handle_usb_removal(struct smbchg_chip *chip)
 		disable_irq_wake(chip->aicl_done_irq);
 		chip->enable_aicl_wake = false;
 	}
+	chip->parallel.enabled_once = false;
 	chip->vbat_above_headroom = false;
 }
 
@@ -4543,6 +4651,7 @@ static int smb_parse_dt(struct smbchg_chip *chip)
 			"parallel-usb-9v-min-current-ma", rc, 1);
 	OF_PROP_READ(chip, chip->parallel.allowed_lowering_ma,
 			"parallel-allowed-lowering-ma", rc, 1);
+	chip->cfg_fastchg_current_ma = chip->target_fastchg_current_ma;
 	if (chip->parallel.min_current_thr_ma != -EINVAL
 			&& chip->parallel.min_9v_current_thr_ma != -EINVAL)
 		chip->parallel.avail = true;

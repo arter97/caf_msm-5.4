@@ -571,7 +571,7 @@ int mdss_mdp_perf_calc_pipe(struct mdss_mdp_pipe *pipe,
 	 * no need to account for these lines in MDP clock or request bus
 	 * bandwidth to fetch them.
 	 */
-	src_h = src.h >> pipe->vert_deci;
+	src_h = DECIMATED_DIMENSION(src.h, pipe->vert_deci);
 
 	quota = fps * src.w * src_h;
 
@@ -3608,8 +3608,8 @@ int mdss_mdp_get_ctl_mixers(u32 fb_num, u32 *mixer_id)
 	mdata = mdss_mdp_get_mdata();
 	for (i = 0; i < mdata->nctl; i++) {
 		ctl = mdata->ctl_off + i;
-		if ((mdss_mdp_ctl_is_power_on(ctl)) && (ctl->mfd) &&
-			(ctl->mfd->index == fb_num)) {
+		if ((mdss_mdp_ctl_is_power_on(ctl) || mdata->handoff_pending) &&
+				(ctl->mfd) && (ctl->mfd->index == fb_num)) {
 			if (ctl->mixer_left) {
 				mixer_id[mixer_cnt] = ctl->mixer_left->num;
 				mixer_cnt++;
