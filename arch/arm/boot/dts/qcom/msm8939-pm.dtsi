@@ -418,6 +418,11 @@
 		};
 	};
 
+	qcom,lpm-workarounds {
+		compatible = "qcom,lpm-workarounds";
+		qcom,lpm-wa-skip-l2-spm;
+	};
+
 	qcom,mpm@601d0 {
 		compatible = "qcom,mpm-v2";
 		reg = <0x601d0 0x1000>, /* MSM_RPM_MPM_BASE 4K */
@@ -508,6 +513,7 @@
 			<0xff 205>, /* rpm_ipc(25) */
 			<0xff 206>, /* rpm_ipc(26) */
 			<0xff 207>, /* rpm_ipc(27) */
+			<0xff 212>, /* bam interrupt */
 			<0xff 239>, /* crypto_bam_irq[1]*/
 			<0xff 240>, /* summary_irq_kpss */
 			<0xff 253>, /* sdc2_pwr_cmd_irq */
