@@ -252,6 +252,8 @@ void msm_fb_release_timeline(struct msm_fb_data_type *mfd);
 #ifdef CONFIG_FB_BACKLIGHT
 void msm_fb_config_backlight(struct msm_fb_data_type *mfd);
 #endif
+int msm_fb_overlay_ioctl(struct fb_info *info, unsigned int cmd,
+			unsigned long arg, int user);
 
 void fill_black_screen(bool on, uint8 pipe_num, uint8 mixer_num);
 int msm_fb_check_frame_rate(struct msm_fb_data_type *mfd,
