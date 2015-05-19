@@ -213,7 +213,7 @@ int msm_ba_g_fps(void *instance, int *fps_q16)
 {
 	struct msm_ba_inst *inst = instance;
 	struct v4l2_subdev *sd = NULL;
-	struct v4l2_subdev_frame_interval sd_frame_rate;
+	struct v4l2_subdev_frame_interval sd_frame_int;
 	int rc = 0;
 
 	if (!inst || !fps_q16)
@@ -224,18 +224,19 @@ int msm_ba_g_fps(void *instance, int *fps_q16)
 		dprintk(BA_ERR, "No sd registered");
 		return -EINVAL;
 	}
-	rc = v4l2_subdev_call(sd, video, g_frame_interval, &sd_frame_rate);
+	rc = v4l2_subdev_call(sd, video, g_frame_interval, &sd_frame_int);
 	if (rc) {
-		dprintk(BA_ERR, "get fps failed %d for sd: %s",
+		dprintk(BA_ERR, "get frame interval failed %d for sd: %s",
 				rc, sd->name);
 	} else {
-		if (sd_frame_rate.interval.denominator) {
+		/* subdevice returns frame interval not fps! */
+		if (sd_frame_int.interval.numerator) {
 			BA_FRAC_TO_Q16(*fps_q16,
-				sd_frame_rate.interval.numerator,
-				sd_frame_rate.interval.denominator);
+				sd_frame_int.interval.denominator,
+				sd_frame_int.interval.numerator);
 		} else {
 			*fps_q16 =
-				sd_frame_rate.interval.numerator << 16;
+				sd_frame_int.interval.denominator << 16;
 		}
 	}
 	return rc;
