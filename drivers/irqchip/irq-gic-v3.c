@@ -50,6 +50,7 @@ struct gic_chip_data {
 #endif
 };
 
+extern bool from_suspend;
 static struct gic_chip_data gic_data __read_mostly;
 
 #define gic_data_rdist()		(this_cpu_ptr(gic_data.rdist))
@@ -701,6 +702,9 @@ int gic_set_wake(struct irq_data *d, unsigned int on)
 static int gic_cpu_pm_notifier(struct notifier_block *self,
 			       unsigned long cmd, void *v)
 {
+	if (from_suspend)
+		return NOTIFY_OK;
+
 	if (cmd == CPU_PM_EXIT) {
 		gic_enable_redist(true);
 		gic_cpu_sys_reg_init();
