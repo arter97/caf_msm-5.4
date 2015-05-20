@@ -246,6 +246,10 @@ Optional Properties:
 					charger current reduces beyond this threshold
 					parallel charger is disabled. Must be specified
 					if parallel charger is used.
+- qcom,rerun-apsd		A bool property that will force the charger to
+				force the msm USB phy to relinquish control of the
+				USB data lines and rerun APSD when a USB SDP is
+				selected.
 
 Example:
 	qcom,qpnp-smbcharger {
