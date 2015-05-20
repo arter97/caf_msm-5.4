@@ -246,13 +246,15 @@ int vfe32_config_axi_rdi_only(struct axi_ctrl_t *axi_ctrl, int mode,
 	uint32_t *ao);
 void axi_stop_rdi1_only(struct axi_ctrl_t *axi_ctrl);
 
-int mdpclient_overlay_set(struct mdp_overlay *ov);
-int mdpclient_overlay_unset(struct mdp_overlay *ov);
-int mdpclient_overlay_play(struct msmfb_overlay_data *ovdata);
-int mdpclient_display_commit(void);
-int mdpclient_msm_fb_open(void);
-int mdpclient_msm_fb_close(void);
-int mdpclient_msm_fb_blank(int blank_mode, bool op_enable);
+int mdpclient_overlay_set(int fb_idx, struct mdp_overlay *ov);
+int mdpclient_overlay_unset(int fb_idx, struct mdp_overlay *ov);
+int mdpclient_overlay_play(int fb_idx, struct msmfb_overlay_data *ovdata);
+int mdpclient_display_commit(int fb_idx);
+int mdpclient_msm_fb_get_id(int idx, char *buf, int len);
+int mdpclient_msm_fb_open(int fb_idx);
+int mdpclient_msm_fb_close(int fb_idx);
+int mdpclient_msm_fb_blank(int fb_idx, int blank_mode, bool op_enable);
+int mdpclient_msm_fb_get_vscreeninfo(int fb_idx, struct fb_var_screeninfo *var);
 
 int mdp_bus_scale_update_request(u64 ab_p0, u64 ib_p0, u64 ab_p1,
 					u64 ib_p1);
