@@ -779,6 +779,7 @@ static struct msm_camera_sensor_info msm_camera_sensor_avdevice_data[] = {
 	.camera_type = BACK_CAMERA_2D,
 	.sensor_type = YUV_SENSOR,
 	.sensor_pwd  = PM8921_GPIO_PM_TO_SYS(41),
+	.ba_idx = 1,
 	},
 	{
 	.sensor_name    = "avdevcvbs",
@@ -789,6 +790,7 @@ static struct msm_camera_sensor_info msm_camera_sensor_avdevice_data[] = {
 	.camera_type = FRONT_CAMERA_2D,
 	.sensor_type = YUV_SENSOR,
 	.sensor_pwd  = PM8921_GPIO_PM_TO_SYS(41),
+	.ba_idx = 0,
 	}
 };
 
