@@ -22,6 +22,7 @@
 #include <linux/switch.h>
 #include <linux/reverse.h>
 #include <linux/input.h>
+#include <video/mdp_arb.h>
 
 struct reverse_data {
 	struct switch_dev *sdev;
@@ -68,6 +69,77 @@ enum user_interface_status {
 
 enum user_interface_status ui_status = NOT_SHOWING;
 
+#ifdef CONFIG_FB_MSM_MDP_ARB
+#define MDP_ARB_EVENT_NAME "switch-reverse"
+#define MDP_ARB_NUM_OF_EVENT_STATE 2
+
+static int mdp_arb_set_event(int state)
+{
+	int rc = 0;
+	struct mdp_arb_event event;
+
+	memset(&event, 0, sizeof(event));
+	strlcpy(event.name, MDP_ARB_EVENT_NAME, MDP_ARB_NAME_LEN);
+	event.event.driver_set_event = state;
+	rc = mdp_arb_event_set(&event);
+	if (rc)
+		pr_err("%s mdp_arb_event_set fails=%d, event=%s, state=%d",
+			__func__, rc, event.name, state);
+
+	return rc;
+}
+
+static int mdp_arb_register_event(void)
+{
+	int rc = 0;
+	struct mdp_arb_event event;
+	struct mdp_arb_events events;
+	int state[MDP_ARB_NUM_OF_EVENT_STATE] = {0, 1};
+
+	/* Register to MDP arbitrator*/
+	strlcpy(event.name, MDP_ARB_EVENT_NAME, MDP_ARB_NAME_LEN);
+	event.event.driver_register.num_of_states = MDP_ARB_NUM_OF_EVENT_STATE;
+	event.event.driver_register.value = state;
+	events.num_of_events = 1;
+	events.event = &event;
+	rc = mdp_arb_event_register(&events);
+	if (rc) {
+		pr_err("%s mdp_arb_event_register fails=%d", __func__, rc);
+		return rc;
+	}
+	return rc;
+}
+
+static int mdp_arb_deregister_event(void)
+{
+	int rc = 0;
+	struct mdp_arb_event event;
+	struct mdp_arb_events events;
+
+	strlcpy(event.name, MDP_ARB_EVENT_NAME, MDP_ARB_NAME_LEN);
+	events.num_of_events = 1;
+	events.event = &event;
+	rc = mdp_arb_event_deregister(&events);
+	if (rc)
+		pr_err("%s mdp_arb_event_deregister fails=%d", __func__, rc);
+	return rc;
+}
+#else
+static int mdp_arb_set_event(int state)
+{
+	return 0;
+}
+
+static int mdp_arb_register_event(void)
+{
+	return 0;
+}
+
+static int mdp_arb_deregister_event(void)
+{
+	return 0;
+}
+#endif/*#ifdef CONFIG_FB_MSM_MDP_ARB*/
 
 static void show_pic_exit(void)
 {
@@ -121,6 +193,8 @@ static void reverse_detection_work(struct work_struct *work)
 		state = (state == 0) ? 1 : 0;
 
 	switch_set_state(data->sdev, state);
+
+	mdp_arb_set_event(state);
 
 	if (state)
 		enable_camera_preview();
@@ -251,6 +325,13 @@ static int switch_reverse_probe(struct platform_device *pdev)
 
 	if (!pdata)
 		return -EBUSY;
+
+	/* Register to MDP arbitrator*/
+	ret = mdp_arb_register_event();
+	if (ret) {
+		pr_err("%s mdp_arb_register_event fails=%d", __func__, ret);
+		return ret;
+	}
 
 	/* register switch device */
 	g_reverse_platform_data.sdev =
@@ -395,6 +476,7 @@ static int __devexit switch_reverse_remove(struct platform_device *pdev)
 	int index = 0;
 	struct reverse_platform_data *reverse_platform_data =
 			platform_get_drvdata(pdev);
+	int ret = 0;
 
 	disable_camera_preview();
 
@@ -411,6 +493,10 @@ static int __devexit switch_reverse_remove(struct platform_device *pdev)
 	input_unregister_device(reverse_platform_data->idev);
 	switch_dev_unregister(reverse_platform_data->sdev);
 	kfree(reverse_platform_data->sdev);
+
+	ret = mdp_arb_deregister_event();
+	if (ret)
+		pr_err("%s mdp_arb_deregister_event fails=%d", __func__, ret);
 
 	return 0;
 }
