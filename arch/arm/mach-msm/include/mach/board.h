@@ -494,6 +494,11 @@ struct mipi_dsi_i2c_platform_data {
 	int pd_gpio;
 };
 
+struct lsm330_acc_pdata {
+	int gpio_int1;
+	int gpio_int2;
+};
+
 struct platform_disp_info {
 	u32 id;
 	u32 dest;

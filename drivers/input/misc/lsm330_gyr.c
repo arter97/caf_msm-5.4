@@ -73,7 +73,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/kthread.h>
 
-#include <lsm330.h>
+#include <linux/lsm330.h>
 /*#include "lsm330.h"*/
 
 /* Maximum polled-device-reported rot speed value value in dps */

@@ -62,9 +62,9 @@ Version History.
 #include <linux/kthread.h>
 
 /* #include <linux/input/lsm330.h> */
-#include "lsm330.h"
+#include <linux/lsm330.h>
 
-//#define DEBUG			1
+#define DEBUG			1
 
 #define LOAD_SM1_PROGRAM	0
 #define LOAD_SM1_PARAMETERS	0
@@ -142,12 +142,17 @@ Version History.
 
 #define LSM330_INT2_EN_MASK		(0x01 << 4)
 #define LSM330_INT2_EN_ON		(0x01 << 4)
-#define LSM330_INT2_EN_OFF		(0x00)
+#define LSM330_INT2_EN_OFF		~(LSM330_INT2_EN_ON)
 
 #define LSM330_INT1_EN_MASK		(0x01 << 3)
 #define LSM330_INT1_EN_ON		(0x01 << 3)
-#define LSM330_INT1_EN_OFF		(0x00)
+#define LSM330_INT1_EN_OFF		~(LSM330_INT1_EN_ON)
 /* */
+
+/*Data Ready INT*/
+
+#define LSM330_DRDYINT1_EN_ON		(0x01 << 7)
+#define LSM330_DRDYINT1_EN_OFF		~(LSM330_DRDYINT1_EN_ON)
 
 /* CTRLREG4 */
 #define LSM330_BDU_EN			(0x08)
@@ -157,6 +162,7 @@ Version History.
 /* STATUS REG BITS */
 #define LSM330_STAT_INTSM1_BIT		(0x01 << 3)
 #define LSM330_STAT_INTSM2_BIT		(0x01 << 2)
+#define LSM330_STAT_INTDRDY_BIT		(0x01)
 
 #define OUT_AXISDATA_REG		LSM330_OUTX_L
 #define WHOAMI_LSM330_ACC		(0x40)	/* Expected content for WAI */
@@ -369,6 +375,7 @@ struct lsm330_acc_data {
 	atomic_t enabled;
 	atomic_t sign_mot_enabled;
 	int enable_polling;
+	int use_interrupt;
 	int on_before_suspend;
 	int use_smbus;
 
@@ -392,7 +399,7 @@ struct lsm330_acc_data {
 	bool acc_delay_change;
 	struct task_struct *acc_task;
 	wait_queue_head_t acc_wq;
-
+	ktime_t timestamp;
 #ifdef DEBUG
 	u8 reg_addr;
 #endif
@@ -419,23 +426,59 @@ static struct sensors_classdev lsm330_acc_cdev = {
 
 static int acc_poll_thread(void *data);
 
+
+static int lsm330_acc_i2c_write(struct lsm330_acc_data *acc,
+				u8 *buf, int len);
+
+static void lsm330_acc_set_drdyint_register_values(
+		struct lsm330_acc_data *acc, int en)
+{
+	if (en) {
+		if (acc->pdata->gpio_int1 >= 0)
+			acc->resume_state[RES_LSM330_CTRL_REG3] =
+				acc->resume_state[RES_LSM330_CTRL_REG3] | \
+							LSM330_INT1_EN_ON |  \
+							LSM330_DRDYINT1_EN_ON;
+
+		if (acc->pdata->gpio_int2 >= 0)
+			acc->resume_state[RES_LSM330_CTRL_REG3] =
+				acc->resume_state[RES_LSM330_CTRL_REG3] | \
+						LSM330_INT2_EN_ON | \
+						LSM330_DRDYINT1_EN_ON;
+		dev_dbg(&acc->client->dev, "INT ON settings\n");
+	} else {
+		dev_dbg(&acc->client->dev, "INT OFF settings\n");
+		acc->resume_state[RES_LSM330_CTRL_REG3] &=
+						LSM330_INT1_EN_OFF;
+		acc->resume_state[RES_LSM330_CTRL_REG3] &=
+						LSM330_INT2_EN_OFF;
+		acc->resume_state[RES_LSM330_CTRL_REG3] &=
+						LSM330_DRDYINT1_EN_OFF;
+	}
+}
+
+static void lsm330_acc_drdyint(struct lsm330_acc_data *acc)
+{
+	int err = -1;
+	u8 buf[2];
+
+	buf[0] = (LSM330_CTRL_REG3);
+	buf[1] = acc->resume_state[RES_LSM330_CTRL_REG3];
+	err = lsm330_acc_i2c_write(acc, buf, 1);
+	if (err < 0)
+		dev_err(&acc->client->dev, "lsm330_acc_set_drdyint fail\n");
+
+}
+
 /* sets default init values to be written in registers at probe stage */
 static void lsm330_acc_set_init_register_values(struct lsm330_acc_data *acc)
 {
 	acc->resume_state[RES_LSM330_LC_L] = 0x00;
 	acc->resume_state[RES_LSM330_LC_H] = 0x00;
 
-	acc->resume_state[RES_LSM330_CTRL_REG1] = (0x00 | LSM330_SM1INT_PININT1);
-	acc->resume_state[RES_LSM330_CTRL_REG2] = (0x00 | LSM330_SM2INT_PININT1);
 	acc->resume_state[RES_LSM330_CTRL_REG3] = LSM330_INT_ACT_H;
-	if(acc->pdata->gpio_int1 >= 0)
-		acc->resume_state[RES_LSM330_CTRL_REG3] =
-				acc->resume_state[RES_LSM330_CTRL_REG3] | \
-					LSM330_INT1_EN_ON;
-	if(acc->pdata->gpio_int2 >= 0)
-		acc->resume_state[RES_LSM330_CTRL_REG3] =
-				acc->resume_state[RES_LSM330_CTRL_REG3] | \
-					LSM330_INT2_EN_ON;
+
+	lsm330_acc_set_drdyint_register_values(acc, acc->use_interrupt);
 
 	acc->resume_state[RES_LSM330_CTRL_REG4] = (LSM330_BDU_EN |
 							LSM330_ALL_AXES);
@@ -728,13 +771,14 @@ static int lsm330_acc_hw_init(struct lsm330_acc_data *acc)
 	int err = -1;
 	u8 buf[17];
 
-	pr_info("%s: hw init start\n", LSM330_ACC_DEV_NAME);
+	dev_dbg(&acc->client->dev, "hw init start\n");
 
 	buf[0] = LSM330_WHO_AM_I;
 	err = lsm330_acc_i2c_read(acc, buf, 1);
 	if (err < 0) {
-	dev_warn(&acc->client->dev, "Error reading WHO_AM_I: is device "
-		"available/working?\n");
+		dev_warn(&acc->client->dev,
+			"Error reading WHO_AM_I: is device "
+			"available/working?\n");
 		goto err_firstread;
 	} else
 		acc->hw_working = 1;
@@ -835,7 +879,7 @@ static int lsm330_acc_hw_init(struct lsm330_acc_data *acc)
 		goto err_resume_state;
 
 	acc->hw_initialized = 1;
-	pr_info("%s: hw init done\n", LSM330_ACC_DEV_NAME);
+	dev_dbg(&acc->client->dev, "%s: hw init done\n", LSM330_ACC_DEV_NAME);
 	return 0;
 
 err_firstread:
@@ -857,18 +901,33 @@ static void lsm330_acc_device_power_off(struct lsm330_acc_data *acc)
 	if (err < 0)
 		dev_err(&acc->client->dev, "soft power off failed: %d\n", err);
 
+	dev_dbg(&acc->client->dev, "%s:polling:%d\n",
+					__func__, acc->enable_polling);
+
 	if (acc->pdata->power_off) {
-		if(acc->pdata->gpio_int1)
+		if (!acc->enable_polling) {
+			lsm330_acc_set_drdyint_register_values(acc, 0);
+			lsm330_acc_drdyint(acc);
+		}
+		if (acc->pdata->gpio_int1)
 			disable_irq_nosync(acc->irq1);
-		if(acc->pdata->gpio_int2)
+		if (acc->pdata->gpio_int2)
 			disable_irq_nosync(acc->irq2);
 		acc->pdata->power_off(acc->client);
 		acc->hw_initialized = 0;
 	}
+
+	dev_dbg(&acc->client->dev, "%s:hw_initialized:%d\n",
+					__func__, acc->hw_initialized);
+
 	if (acc->hw_initialized) {
-		if(acc->pdata->gpio_int1 >= 0)
+		if (!acc->enable_polling) {
+			lsm330_acc_set_drdyint_register_values(acc, 0);
+			lsm330_acc_drdyint(acc);
+		}
+		if (acc->pdata->gpio_int1 >= 0)
 			disable_irq_nosync(acc->irq1);
-		if(acc->pdata->gpio_int2 >= 0)
+		if (acc->pdata->gpio_int2 >= 0)
 			disable_irq_nosync(acc->irq2);
 		acc->hw_initialized = 0;
 	}
@@ -885,11 +944,10 @@ static int lsm330_acc_device_power_on(struct lsm330_acc_data *acc)
 					"power_on failed: %d\n", err);
 			return err;
 		}
-		if(acc->pdata->gpio_int1 >= 0)
-			enable_irq(acc->irq1);
-		if(acc->pdata->gpio_int2 >= 0)
-			enable_irq(acc->irq2);
 	}
+	dev_dbg(&acc->client->dev, "%s:hw_initialized:%d\n",
+					__func__, acc->hw_initialized);
+
 
 	if (!acc->hw_initialized) {
 		err = lsm330_acc_hw_init(acc);
@@ -899,10 +957,17 @@ static int lsm330_acc_device_power_on(struct lsm330_acc_data *acc)
 		}
 	}
 
+	dev_dbg(&acc->client->dev, "%s:polling:%d\n",
+					__func__, acc->enable_polling);
+
 	if (acc->hw_initialized) {
-		if(acc->pdata->gpio_int1 >= 0)
+		if (!acc->enable_polling) {
+			lsm330_acc_set_drdyint_register_values(acc, 1);
+			lsm330_acc_drdyint(acc);
+		}
+		if (acc->pdata->gpio_int1 >= 0)
 			enable_irq(acc->irq1);
-		if(acc->pdata->gpio_int2 >= 0)
+		if (acc->pdata->gpio_int2 >= 0)
 			enable_irq(acc->irq2);
 	}
 	return 0;
@@ -925,9 +990,10 @@ static irqreturn_t lsm330_acc_isr1(int irq, void *dev)
 	struct lsm330_acc_data *acc = dev;
 
 	disable_irq_nosync(irq);
-	queue_work(acc->irq1_work_queue, &acc->irq1_work);
 	pr_debug("%s: isr1 queued\n", LSM330_ACC_DEV_NAME);
-
+	acc->timestamp = ktime_get_boottime();
+	acc->acc_wkp_flag = 1;
+	wake_up_interruptible(&acc->acc_wq);
 	return IRQ_HANDLED;
 }
 
@@ -953,29 +1019,29 @@ static void lsm330_acc_irq1_work_func(struct work_struct *work)
 	/* TODO  add interrupt service procedure.
 		 ie:lsm330_acc_get_int_source(acc); */
 	pr_debug("%s: IRQ1 triggered\n", LSM330_ACC_DEV_NAME);
-	/*  */
+
 	rbuf[0] = LSM330_INTERR_STAT;
 	err = lsm330_acc_i2c_read(acc, rbuf, 1);
 	pr_debug("%s: INTERR_STAT_REG: 0x%02x\n",
-					LSM330_ACC_DEV_NAME, rbuf[0]);
+				LSM330_ACC_DEV_NAME, rbuf[0]);
 	status = rbuf[0];
-	if(status & LSM330_STAT_INTSM1_BIT) {
-		pr_debug("%s: SM1 interrupt \n", LSM330_ACC_DEV_NAME);
-
-		/* mandatory to unlatch SM2 interrupt */
+	if (status & LSM330_STAT_INTSM1_BIT) {
+		pr_debug("%s: SM1 interrupt\n",
+				LSM330_ACC_DEV_NAME);
+	/* mandatory to unlatch SM2 interrupt */
 		rbuf[0] = LSM330_OUTS_1;
 		err = lsm330_acc_i2c_read(acc, rbuf, 1);
 		pr_debug("%s: OUTS_1: 0x%02x\n",
-					LSM330_ACC_DEV_NAME, rbuf[0]);
+				LSM330_ACC_DEV_NAME, rbuf[0]);
 
 	}
-	if(status & LSM330_STAT_INTSM2_BIT) {
-		pr_debug("%s: SM2 interrupt \n", LSM330_ACC_DEV_NAME);
-
+	if (status & LSM330_STAT_INTSM2_BIT) {
+		pr_debug("%s: SM2 interrupt\n",
+				LSM330_ACC_DEV_NAME);
 #if ENABLE_SIGNIFICANT_MOTION > 0
 		lsm330_acc_signMotion_interrupt_action(acc);
 #endif
-		/* mandatory to unlatch SM2 interrupt */
+	/* mandatory to unlatch SM2 interrupt */
 		rbuf[0] = LSM330_OUTS_2;
 		err = lsm330_acc_i2c_read(acc, rbuf, 1);
 		pr_debug("%s: OUTS_2: 0x%02x\n",
@@ -1073,7 +1139,7 @@ static int lsm330_acc_update_fs_range(struct lsm330_acc_data *acc,
 		* which contains g range setting */
 		err = lsm330_acc_register_masked_update(acc, LSM330_CTRL_REG5,
 			LSM330_ACC_FS_MASK, new_fs_range, RES_LSM330_CTRL_REG5);
-		if(err < 0) {
+		if (err < 0) {
 			dev_err(&acc->client->dev, "update g range failed\n");
 			return err;
 		} else
@@ -1082,7 +1148,7 @@ static int lsm330_acc_update_fs_range(struct lsm330_acc_data *acc,
 #if ENABLE_SIGNIFICANT_MOTION > 0
 		err = lsm330_acc_register_masked_update(acc, LSM330_THRS1_2,
 			0xFF, sigmot_threshold, RES_LSM330_THRS1_2);
-		if(err < 0)
+		if (err < 0)
 			dev_err(&acc->client->dev, "update sign motion theshold"
 								" failed\n");
 		return err;
@@ -1111,6 +1177,7 @@ static int lsm330_acc_update_odr(struct lsm330_acc_data *acc,
 	u8 updated_val;
 	u8 init_val;
 	u8 mask = LSM330_ODR_MASK;
+	int match_odr = 0;
 
 #if ENABLE_SIGNIFICANT_MOTION > 0
 	if (poll_interval_ms == 0)
@@ -1122,10 +1189,29 @@ static int lsm330_acc_update_odr(struct lsm330_acc_data *acc,
 	 * interval), to support the poll_interval requested by the system.
 	 * It must be the longest interval lower then the poll interval.*/
 	for (i = ARRAY_SIZE(lsm330_acc_odr_table) - 1; i >= 0; i--) {
-		if (lsm330_acc_odr_table[i].cutoff_ms <= poll_interval_ms)
-			break;
+		if (lsm330_acc_odr_table[i].cutoff_ms == poll_interval_ms) {
+				match_odr = 1;
+				break;
+		}
 	}
-	new_odr = lsm330_acc_odr_table[i].mask;
+
+	if (match_odr && acc->use_interrupt) {
+		/*found the exact match sampling rate use the interrupt mode*/
+		dev_dbg(&acc->client->dev,
+			"%s:poll_delay matched for int generation\n",
+				__func__);
+		new_odr = lsm330_acc_odr_table[i].mask;
+		acc->enable_polling = 0;
+	} else {
+		/*intoption not available or match_odr is not avaiable , run the
+		sensor at maz ODR and poll on the required frequency to get the
+		accurate physical sample in polling mode*/
+		dev_dbg(&acc->client->dev,
+			"%s:poll_delay *not* matched for int generation\n",
+			__func__);
+		acc->enable_polling = 1;
+		new_odr = LSM330_ODR1600;
+	}
 
 	/* Updates configuration register 4,
 	* which contains odr range setting if device is enabled,
@@ -1134,7 +1220,7 @@ static int lsm330_acc_update_odr(struct lsm330_acc_data *acc,
 		err = lsm330_acc_register_masked_update(acc,
 			LSM330_CTRL_REG4, LSM330_ODR_MASK, new_odr,
 							RES_LSM330_CTRL_REG4);
-		if(err < 0){
+		if (err < 0) {
 			dev_err(&acc->client->dev, "update odr failed\n");
 			return err;
 		}
@@ -1151,57 +1237,17 @@ static int lsm330_acc_update_odr(struct lsm330_acc_data *acc,
 }
 
 
-#ifdef DEBUG
-static int lsm330_acc_register_write(struct lsm330_acc_data *acc, u8 *buf,
-		u8 reg_address, u8 new_value)
-{
-	int err = -1;
-
-	/* Sets configuration register at reg_address
-	 *  NOTE: this is a straight overwrite  */
-		buf[0] = reg_address;
-		buf[1] = new_value;
-		err = lsm330_acc_i2c_write(acc, buf, 1);
-		if (err < 0)
-			return err;
-	return err;
-}
-
-static int lsm330_acc_register_read(struct lsm330_acc_data *acc, u8 *buf,
-		u8 reg_address)
-{
-
-	int err = -1;
-	buf[0] = (reg_address);
-	err = lsm330_acc_i2c_read(acc, buf, 1);
-	return err;
-}
-
-static int lsm330_acc_register_update(struct lsm330_acc_data *acc, u8 *buf,
-		u8 reg_address, u8 mask, u8 new_bit_values)
-{
-	int err = -1;
-	u8 init_val;
-	u8 updated_val;
-	err = lsm330_acc_register_read(acc, buf, reg_address);
-	if (!(err < 0)) {
-		init_val = buf[0];
-		updated_val = ((mask & new_bit_values) | ((~mask) & init_val));
-		err = lsm330_acc_register_write(acc, buf, reg_address,
-				updated_val);
-	}
-	return err;
-}
-#endif
-
-
 static int lsm330_acc_get_data(struct lsm330_acc_data *acc, int *xyz)
 {
+
 	int err = -1;
 	/* Data bytes from hardware xL, xH, yL, yH, zL, zH */
 	u8 acc_data[6];
 	/* x,y,z hardware data */
 	s32 hw_d[3] = { 0 };
+
+	if (acc->enable_polling)
+		acc->timestamp = ktime_get_boottime();
 
 	acc_data[0] = (I2C_AUTO_INCREMENT | OUT_AXISDATA_REG);
 	err = lsm330_acc_i2c_read(acc, acc_data, 6);
@@ -1233,26 +1279,25 @@ static int lsm330_acc_get_data(struct lsm330_acc_data *acc, int *xyz)
 static void lsm330_acc_report_values(struct lsm330_acc_data *acc,
 					int *xyz)
 {
-	ktime_t timestamp = ktime_get_boottime();
 	input_report_abs(acc->input_dev, ABS_X, xyz[0]);
 	input_report_abs(acc->input_dev, ABS_Y, xyz[1]);
 	input_report_abs(acc->input_dev, ABS_Z, xyz[2]);
-	input_event(acc->input_dev,
-			EV_SYN, SYN_TIME_SEC,
-			ktime_to_timespec(timestamp).tv_sec);
-	input_event(acc->input_dev, EV_SYN,
-			SYN_TIME_NSEC,
-			ktime_to_timespec(timestamp).tv_nsec);
+	input_event(acc->input_dev, EV_SYN, SYN_TIME_SEC,
+				ktime_to_timespec(acc->timestamp).tv_sec);
+	input_event(acc->input_dev, EV_SYN, SYN_TIME_NSEC,
+				ktime_to_timespec(acc->timestamp).tv_nsec);
 	input_sync(acc->input_dev);
 }
 
 static void lsm330_acc_polling_manage(struct lsm330_acc_data *acc)
 {
-	if((acc->enable_polling) & (atomic_read(&acc->enabled))) {
-			hrtimer_start(&acc->hr_timer_acc,
-				acc->ktime_acc, HRTIMER_MODE_REL);
-	} else
-		hrtimer_cancel(&acc->hr_timer_acc);
+	if ((acc->enable_polling)) {
+		if (atomic_read(&acc->enabled)) {
+				hrtimer_start(&acc->hr_timer_acc,
+					acc->ktime_acc, HRTIMER_MODE_REL);
+		} else
+			hrtimer_cancel(&acc->hr_timer_acc);
+	}
 }
 
 static int lsm330_acc_enable(struct lsm330_acc_data *acc)
@@ -1294,6 +1339,28 @@ static ssize_t attr_get_enable_polling(struct device *dev,
 	mutex_unlock(&acc->lock);
 	return sprintf(buf, "%d\n", val);
 }
+
+static ssize_t attr_set_disable_IntLine(
+				struct device *dev,
+				struct device_attribute *attr,
+					const char *buf, size_t size)
+{
+	struct lsm330_acc_data *acc = dev_get_drvdata(dev);
+	unsigned long disable;
+
+	if (kstrtoul(buf, 10, &disable))
+		return -EINVAL;
+
+	mutex_lock(&acc->lock);
+	if (disable)
+		acc->use_interrupt = 0;
+	else
+		acc->use_interrupt = 1;
+	mutex_unlock(&acc->lock);
+
+	return size;
+}
+
 
 static ssize_t attr_set_enable_polling(struct device *dev,
 				struct device_attribute *attr,
@@ -1340,10 +1407,8 @@ static ssize_t attr_set_polling_rate(struct device *dev,
 		return -EINVAL;
 	mutex_lock(&acc->lock);
 	err = lsm330_acc_update_odr(acc, interval_ms);
-	if(err >= 0)
-	{
+	if (err >= 0)
 		acc->pdata->poll_interval = interval_ms;
-	}
 	mutex_unlock(&acc->lock);
 	return size;
 }
@@ -1410,10 +1475,8 @@ static ssize_t attr_set_range(struct device *dev,
 
 	mutex_lock(&acc->lock);
 	err = lsm330_acc_update_fs_range(acc, range);
-	if(err >= 0)
-	{
+	if (err >= 0)
 		acc->pdata->fs_range = range;
-	}
 	mutex_unlock(&acc->lock);
 	return size;
 }
@@ -1594,6 +1657,7 @@ static ssize_t attr_addr_set(struct device *dev, struct device_attribute *attr,
 	mutex_unlock(&acc->lock);
 	return size;
 }
+
 #endif
 
 static struct device_attribute attributes[] = {
@@ -1606,6 +1670,7 @@ static struct device_attribute attributes[] = {
 	__ATTR(enable_state_prog, 0666, attr_get_enable_state_prog,
 						attr_set_enable_state_prog),
 #ifdef DEBUG
+	__ATTR(disable_interrupt, 0666, NULL, attr_set_disable_IntLine),
 	__ATTR(reg_value, 0600, attr_reg_get, attr_reg_set),
 	__ATTR(reg_addr, 0200, NULL, attr_addr_set),
 #endif
@@ -1764,17 +1829,20 @@ static int lsm330_cdev_enable(struct sensors_classdev *sensors_cdev,
 {
 	struct lsm330_acc_data *stat = container_of(sensors_cdev,
 			struct lsm330_acc_data, accel_cdev);
-
+	int err;
 
 	dev_dbg(&stat->client->dev,
 				"enable %u client_data->enable %u\n",
 				enable, atomic_read(&stat->enabled));
 
-
+	mutex_lock(&stat->lock);
 	if (enable)
-		return lsm330_acc_enable(stat);
-	else
-		return lsm330_acc_disable(stat);
+			err = lsm330_acc_enable(stat);
+		else
+			err = lsm330_acc_disable(stat);
+	mutex_unlock(&stat->lock);
+
+	return err;
 
 }
 
@@ -1788,7 +1856,19 @@ static int lsm330_cdev_poll_delay(struct sensors_classdev *sensors_cdev,
 	if (interval_ms < LSM330_SENSOR_ACC_MIN_POLL_PERIOD_MS)
 		interval_ms = LSM330_SENSOR_ACC_MIN_POLL_PERIOD_MS;
 
+	dev_dbg(&stat->client->dev, "%s sample_rate %u\n",
+					__func__, interval_ms);
+
 	mutex_lock(&stat->lock);
+	if (atomic_read(&stat->enabled)) {
+		if (stat->enable_polling) {
+				hrtimer_cancel(&stat->hr_timer_acc);
+		} else {
+			lsm330_acc_set_drdyint_register_values(stat, 0);
+			lsm330_acc_drdyint(stat);
+		}
+	}
+
 	err = lsm330_acc_update_odr(stat, interval_ms);
 	if (err >= 0)
 		stat->pdata->poll_interval = interval_ms;
@@ -1796,9 +1876,11 @@ static int lsm330_cdev_poll_delay(struct sensors_classdev *sensors_cdev,
 
 	if (atomic_read(&stat->enabled)) {
 		if (stat->enable_polling) {
-			hrtimer_cancel(&stat->hr_timer_acc);
 			hrtimer_start(&stat->hr_timer_acc,
 				stat->ktime_acc, HRTIMER_MODE_REL);
+		} else {
+			lsm330_acc_set_drdyint_register_values(stat, 1);
+			lsm330_acc_drdyint(stat);
 		}
 	}
 	mutex_unlock(&stat->lock);
@@ -1955,6 +2037,7 @@ static int acc_poll_thread(void *data)
 	int xyz[3] = { 0 };
 	int err;
 	struct lsm330_acc_data *acc = data;
+	u8 status;
 
 	while (1) {
 		wait_event_interruptible(acc->acc_wq,
@@ -1974,13 +2057,37 @@ static int acc_poll_thread(void *data)
 			acc->acc_delay_change = false;
 		}
 
-		err = lsm330_acc_get_data(acc, xyz);
-		if (err < 0)
-			dev_err(&acc->client->dev,
-				"get_accelerometer_data failed\n");
-		else
-			lsm330_acc_report_values(acc, xyz);
+		if (acc->enable_polling) {
+			err = lsm330_acc_get_data(acc, xyz);
+			if (err < 0)
+				dev_err(&acc->client->dev,
+					"get_accelerometer_data failed\n");
+			else
+				lsm330_acc_report_values(acc, xyz);
+			dev_dbg(&acc->client->dev, "using the poll option\n");
+		} else {
+			int err = -1;
+			u8 rbuf[2];
 
+			rbuf[0] = LSM330_INTERR_STAT;
+			err = lsm330_acc_i2c_read(acc, rbuf, 1);
+			dev_dbg(&acc->client->dev, "%s: INTERR_STAT_REG: 0x%02x\n",
+						LSM330_ACC_DEV_NAME, rbuf[0]);
+			status = rbuf[0];
+			if (status & LSM330_STAT_INTDRDY_BIT) {
+				dev_dbg(&acc->client->dev,
+					"data ready interrupt generated\n");
+				err = lsm330_acc_get_data(acc, xyz);
+				enable_irq(acc->irq1);
+				if (err < 0)
+					dev_err(&acc->client->dev,
+						"get_accelerometer_data failed\n");
+				else
+					lsm330_acc_report_values(acc, xyz);
+			} else {
+				enable_irq(acc->irq1);
+			}
+		}
 		mutex_unlock(&acc->lock);
 	}
 	return 0;
@@ -2061,7 +2168,7 @@ static int lsm330_acc_probe(struct i2c_client *client,
 		goto err_mutexunlock;
 	}
 
-	if(client->dev.platform_data == NULL) {
+	if (client->dev.platform_data == NULL) {
 		default_lsm330_acc_pdata.gpio_int1 = int1_gpio;
 		default_lsm330_acc_pdata.gpio_int2 = int2_gpio;
 		memcpy(acc->pdata, &default_lsm330_acc_pdata,
@@ -2092,7 +2199,11 @@ static int lsm330_acc_probe(struct i2c_client *client,
 		}
 	}
 
-	if(acc->pdata->gpio_int1 >= 0){
+	/*use the interrupt mode if INT1 or INT2 are available */
+	acc->use_interrupt = 0;
+
+	if (acc->pdata->gpio_int1 >= 0) {
+		acc->use_interrupt = 1;
 		acc->irq1 = gpio_to_irq(acc->pdata->gpio_int1);
 		pr_info("%s: %s has set irq1 to irq: %d "
 							"mapped on gpio:%d\n",
@@ -2100,7 +2211,8 @@ static int lsm330_acc_probe(struct i2c_client *client,
 							acc->pdata->gpio_int1);
 	}
 
-	if(acc->pdata->gpio_int2 >= 0){
+	if (acc->pdata->gpio_int2 >= 0) {
+		acc->use_interrupt = 1;
 		acc->irq2 = gpio_to_irq(acc->pdata->gpio_int2);
 		pr_info("%s: %s has set irq2 to irq: %d "
 							"mapped on gpio:%d\n",
@@ -2122,13 +2234,6 @@ static int lsm330_acc_probe(struct i2c_client *client,
 	if (err < 0) {
 		dev_err(&client->dev, "power on failed: %d\n", err);
 		goto err_pdata_init;
-	}
-
-	if ((acc->pdata->gpio_int1 < 0)
-		&& (acc->pdata->gpio_int2 < 0)) {
-			acc->enable_polling = 1;
-	} else {
-		acc->enable_polling = 0;
 	}
 
 	atomic_set(&acc->enabled, 1);
@@ -2170,7 +2275,7 @@ static int lsm330_acc_probe(struct i2c_client *client,
 #if ENABLE_SIGNIFICANT_MOTION > 0
 	atomic_set(&acc->sign_mot_enabled, 0);
 #endif
-	if(acc->pdata->gpio_int1 >= 0){
+	if (acc->pdata->gpio_int1 >= 0) {
 		INIT_WORK(&acc->irq1_work, lsm330_acc_irq1_work_func);
 		acc->irq1_work_queue =
 			create_singlethread_workqueue("lsm330_acc_wq1");
@@ -2189,7 +2294,7 @@ static int lsm330_acc_probe(struct i2c_client *client,
 		disable_irq_nosync(acc->irq1);
 	}
 
-	if(acc->pdata->gpio_int2 >= 0){
+	if (acc->pdata->gpio_int2 >= 0) {
 		INIT_WORK(&acc->irq2_work, lsm330_acc_irq2_work_func);
 		acc->irq2_work_queue =
 			create_singlethread_workqueue("lsm330_acc_wq2");
@@ -2232,12 +2337,12 @@ static int lsm330_acc_probe(struct i2c_client *client,
 	return 0;
 
 err_destoyworkqueue2:
-	if(acc->pdata->gpio_int2 >= 0)
+	if (acc->pdata->gpio_int2 >= 0)
 		destroy_workqueue(acc->irq2_work_queue);
 err_free_irq1:
 	free_irq(acc->irq1, acc);
 err_destoyworkqueue1:
-	if(acc->pdata->gpio_int1 >= 0)
+	if (acc->pdata->gpio_int1 >= 0)
 		destroy_workqueue(acc->irq1_work_queue);
 err_remove_sysfs_int:
 	remove_sysfs_interfaces(&client->dev);
@@ -2265,13 +2370,13 @@ static int __devexit lsm330_acc_remove(struct i2c_client *client)
 {
 	struct lsm330_acc_data *acc = i2c_get_clientdata(client);
 
-	if(acc->pdata->gpio_int1 >= 0){
+	if (acc->pdata->gpio_int1 >= 0) {
 		free_irq(acc->irq1, acc);
 		gpio_free(acc->pdata->gpio_int1);
 		destroy_workqueue(acc->irq1_work_queue);
 	}
 
-	if(acc->pdata->gpio_int2 >= 0){
+	if (acc->pdata->gpio_int2 >= 0) {
 		free_irq(acc->irq2, acc);
 		gpio_free(acc->pdata->gpio_int2);
 		destroy_workqueue(acc->irq2_work_queue);
@@ -2299,7 +2404,6 @@ static int lsm330_acc_resume(struct i2c_client *client)
 	struct lsm330_acc_data *acc = i2c_get_clientdata(client);
 
 	if (acc->on_before_suspend) {
-		acc->enable_polling = 1;
 		err = lsm330_acc_enable(acc);
 	}
 
