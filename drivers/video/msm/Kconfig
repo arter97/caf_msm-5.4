@@ -1017,6 +1017,12 @@ config FB_MSM_EBI2_PANEL_DETECT
 	---help---
 	  Support for EBI2 panel auto detect
 
+config FB_MSM_MDP_ARB
+	bool "MDP arbitrator"
+	---help---
+	Support for MDP arbitrator driver.
+	This driver is used to manage overlay resources and events.
+
 if FB_MSM_MDSS
 	source "drivers/video/msm/mdss/Kconfig"
 endif
