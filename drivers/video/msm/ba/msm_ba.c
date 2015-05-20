@@ -199,22 +199,7 @@ int msm_ba_s_input(void *instance, unsigned int index)
 	if (index > inst->dev_ctxt->num_inputs)
 		return -EINVAL;
 
-	/* First find current input */
-	ba_input = msm_ba_find_input(inst->sd_input.index);
-	/* If same just set the in use flag and return.
-	 * No need to actually send the command down to hw.
-	 * No need to check for ba_input for NULL as there is
-	 * at least one input connected (default one).
-	 */
-	if (index == inst->sd_input.index) {
-		ba_input->in_use = 1;
-		return rc;
-	}
-	/* Reset current input in use bit
-	 * as we are now switching inputs
-	 */
-	ba_input->in_use = 0;
-	/* Now find requested input */
+	/* Find requested input */
 	ba_input = msm_ba_find_input(index);
 	if (!ba_input) {
 		dprintk(BA_ERR, "Could not find input index: %d", index);
@@ -433,7 +418,8 @@ int msm_ba_streamon(void *instance, enum v4l2_buf_type i)
 	}
 	rc = v4l2_subdev_call(sd, video, s_stream, 1);
 	if (rc)
-		dprintk(BA_ERR, "streamon failed on port: %d", i);
+		dprintk(BA_ERR, "streamon failed on input: %d",
+			inst->sd_input.index);
 
 	return rc;
 }
@@ -455,7 +441,8 @@ int msm_ba_streamoff(void *instance, enum v4l2_buf_type i)
 	}
 	rc = v4l2_subdev_call(sd, video, s_stream, 0);
 	if (rc)
-		dprintk(BA_ERR, "streamoff failed on port: %d", i);
+		dprintk(BA_ERR, "streamoff failed on input: %d",
+			inst->sd_input.index);
 
 	return rc;
 }
