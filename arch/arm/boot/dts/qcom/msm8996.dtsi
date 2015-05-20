@@ -57,7 +57,6 @@
 			qcom,cpuss-pm = <&cpuss_pm>;
 			qcom,cpuss-csr = <&cpuss_csr>;
 			qcom,acc = <&acc0>;
-			qcom,sleep-status = <&cpu0_slp_sts>;
 			next-level-cache = <&L2_0>;
 			L2_0: l2-cache {
 			      compatible = "arm,arch-cache";
@@ -73,7 +72,6 @@
 			reg = <0x0 0x1>;
 			enable-method = "psci";
 			qcom,acc = <&acc1>;
-			qcom,sleep-status = <&cpu1_slp_sts>;
 			next-level-cache = <&L2_0>;
 		};
 
@@ -83,7 +81,6 @@
 			reg = <0x0 0x100>;
 			enable-method = "psci";
 			qcom,acc = <&acc2>;
-			qcom,sleep-status = <&cpu2_slp_sts>;
 			next-level-cache = <&L2_1>;
 			L2_1: l2-cache {
 			      compatible = "arm,arch-cache";
@@ -97,7 +94,6 @@
 			compatible = "qcom,kryo";
 			reg = <0x0 0x101>;
 			enable-method = "psci";
-			qcom,sleep-status = <&cpu3_slp_sts>;
 			qcom,acc = <&acc3>;
 			next-level-cache = <&L2_1>;
 		};
@@ -3278,24 +3274,31 @@
 		};
 	};
 
-	cpu0_slp_sts: cpu-sleep-status@9981058 {
-		reg = <0x9981058 0x100>;
-		qcom,sleep-status-mask = <0xc00000>;
+	mcd {
+		compatible = "qcom,mcd";
+		qcom,ce-hw-instance = <0>;
+		qcom,ce-device = <0>;
+		interrupts = <0 248 0>;
+		interrupt-names = "mcd_irq";
+		clock-names = "core_clk_src", "core_clk",
+			"iface_clk", "bus_clk";
+		clocks = <&clock_gcc clk_ce1_clk>,
+			<&clock_gcc clk_qseecom_ce1_clk>,
+			<&clock_gcc clk_gcc_ce1_ahb_m_clk>,
+			<&clock_gcc clk_gcc_ce1_axi_m_clk>;
+			qcom,ce-opp-freq = <171430000>;
 	};
 
-	cpu1_slp_sts: cpu-sleep-status@9991058 {
-		reg = <0x9991058 0x100>;
-		qcom,sleep-status-mask = <0xc00000>;
-	};
+	dcc: dcc@4b3000 {
+		compatible = "qcom,dcc";
+		reg = <0x4b3000 0x1000>,
+		      <0x4b4000 0x2000>;
+		reg-names = "dcc-base", "dcc-ram-base";
 
-	cpu2_slp_sts: cpu-sleep-status@99b1058 {
-		reg = <0x99b1058 0x100>;
-		qcom,sleep-status-mask = <0xc00000>;
-	};
+		clocks = <&clock_gcc clk_gcc_dcc_ahb_clk>;
+		clock-names = "dcc_clk";
 
-	cpu3_slp_sts: cpu-sleep-status@99c1058 {
-		reg = <0x99c1058 0x100>;
-		qcom,sleep-status-mask = <0xc00000>;
+		qcom,save-reg;
 	};
 };
 
