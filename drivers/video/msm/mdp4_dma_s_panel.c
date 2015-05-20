@@ -17,8 +17,8 @@ static int __init mdp4_dma_s_panel_init(void)
 {
 	int ret = 0;
 	struct platform_disp_info info = {
-		.id = DISPLAY_PRIMARY,
-		.dest = DISPLAY_1
+		.id = DISPLAY_TERTIARY,
+		.dest = DISPLAY_4
 	};
 
 	if (!msm_fb_detect_client("mipi_dsi_i2c_video_wvga", &info))
