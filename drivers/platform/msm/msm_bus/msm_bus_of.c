@@ -253,8 +253,13 @@ static int *get_arr(struct platform_device *pdev,
 		return NULL;
 	}
 
+	if (!size) {
+		*nports = 0;
+		return NULL;
+	}
+
 	arr = devm_kzalloc(&pdev->dev, size, GFP_KERNEL);
-	if ((size > 0) && ZERO_OR_NULL_PTR(arr)) {
+	if (ZERO_OR_NULL_PTR(arr)) {
 		pr_err("Error: Failed to alloc mem for %s\n", prop);
 		return NULL;
 	}
