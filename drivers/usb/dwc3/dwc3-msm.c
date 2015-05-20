@@ -1587,7 +1587,6 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 	bool host_ss_active;
 	bool can_suspend_ssphy;
 	bool device_bus_suspend;
-	bool cable_connected = mdwc->vbus_active;
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 
 	dev_dbg(mdwc->dev, "%s: entering lpm. usb_lpm_override:%d\n",
@@ -1626,7 +1625,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 		return -EBUSY;
 	}
 
-	if (!cable_connected && mdwc->otg_xceiv &&
+	if (!mdwc->vbus_active && mdwc->otg_xceiv &&
 		mdwc->otg_xceiv->state == OTG_STATE_B_PERIPHERAL) {
 		/*
 		 * In some cases, the pm_runtime_suspend may be called by
@@ -1671,7 +1670,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 	device_bus_suspend = ((mdwc->charger.chg_type == DWC3_SDP_CHARGER) ||
 				 (mdwc->charger.chg_type == DWC3_CDP_CHARGER));
 
-	if (host_bus_suspend || (dwc->softconnect && cable_connected)) {
+	if (host_bus_suspend || device_bus_suspend) {
 		/*
 		 * Check if device is not in CONFIGURED state
 		 * then check cotroller state of L2 and break
@@ -1729,7 +1728,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 	mdwc->gctl_val = dwc3_msm_read_reg(mdwc->base, DWC3_GCTL);
 
 	/* Perform controller power collapse */
-	if (!host_bus_suspend && mdwc->power_collapse && !cable_connected) {
+	if (!host_bus_suspend && !device_bus_suspend && mdwc->power_collapse) {
 		mdwc->lpm_flags |= MDWC3_POWER_COLLAPSE;
 		dev_dbg(mdwc->dev, "%s: power collapse\n", __func__);
 		dwc3_msm_config_gdsc(mdwc, 0);
