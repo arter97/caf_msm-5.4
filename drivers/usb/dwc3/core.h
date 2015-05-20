@@ -895,6 +895,7 @@ struct dwc3 {
 
 	atomic_t		in_lpm;
 	int			irq;
+	ktime_t			t_pwr_evt_irq;
 	wait_queue_head_t	wait_linkstate;
 };
 
