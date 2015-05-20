@@ -726,6 +726,8 @@ struct dwc3_scratchpad_array {
 #define DWC3_CORE_PM_RESUME_EVENT			6
 #define DWC3_CONTROLLER_POST_INITIALIZATION_EVENT	7
 #define DWC3_CONTROLLER_CONNDONE_EVENT			8
+#define DWC3_CONTROLLER_NOTIFY_OTG_EVENT		9
+
 /**
  * struct dwc3 - representation of our controller
  * @ctrl_req: usb control request which is used for ep0
@@ -891,6 +893,7 @@ struct dwc3 {
 	bool			hsphy_auto_suspend_disable;
 	bool			enable_bus_suspend;
 	u8			hird_thresh;
+	bool			b_suspend;
 	struct dwc3_gadget_events	dbg_gadget_events;
 
 	atomic_t		in_lpm;
