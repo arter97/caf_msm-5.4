@@ -1572,6 +1572,15 @@ static int mdss_mdp_probe(struct platform_device *pdev)
 	if (rc)
 		pr_err("mdss_register_irq failed.\n");
 	mdss_res->mdss_util->mdp_probe_done = true;
+
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
+	mdata->mdp_rev = MDSS_REG_READ(mdata, MDSS_REG_HW_VERSION);
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
+
+	/* Restoring Secure configuration during boot-up */
+	if (mdss_mdp_req_init_restore_cfg(mdata))
+		__mdss_restore_sec_cfg(mdata);
+
 probe_done:
 	if (IS_ERR_VALUE(rc)) {
 		mdss_mdp_hw.ptr = NULL;
