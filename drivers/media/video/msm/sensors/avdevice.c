@@ -52,6 +52,9 @@ static int32_t avdevice_ba_platform_probe(struct platform_device *pdev)
 {
 	int32_t rc = 0;
 	struct msm_sensor_ctrl_t *p_sensor_ctrl;
+	struct v4l2_format ba_fmt;
+	struct v4l2_control ctrl;
+
 	pr_debug("avdevice platform platform probe...\n");
 
 	if (pdev->id == 0) {
@@ -68,6 +71,27 @@ static int32_t avdevice_ba_platform_probe(struct platform_device *pdev)
 		pr_debug("device currently not supported...\n");
 		return 0;
 	}
+
+
+	msm_ba_g_fmt(ba_instance_handler_a[pdev->id], &ba_fmt);
+
+	ctrl.id = MSM_BA_PRIV_FPS;
+	msm_ba_g_ctrl(ba_instance_handler_a[pdev->id], &ctrl);
+
+	p_sensor_ctrl->msm_sensor_reg->output_settings->x_output =
+			ba_fmt.fmt.pix.width;
+	p_sensor_ctrl->msm_sensor_reg->output_settings->y_output =
+			ba_fmt.fmt.pix.height;
+	p_sensor_ctrl->msm_sensor_reg->output_settings->line_length_pclk =
+			ba_fmt.fmt.pix.width;
+	p_sensor_ctrl->msm_sensor_reg->output_settings->frame_length_lines =
+			ba_fmt.fmt.pix.height;
+
+	p_sensor_ctrl->msm_sensor_reg->output_settings->vt_pixel_clk =
+			ba_fmt.fmt.pix.width * ba_fmt.fmt.pix.height *
+			(ctrl.value >> 16);
+	pr_debug("%s - %dx%d @ %d", __func__, ba_fmt.fmt.pix.width,
+			ba_fmt.fmt.pix.height, (ctrl.value >> 16));
 
 	p_sensor_ctrl->pdev = pdev;
 	pr_debug("avdevice probe sctrl %p pdev %p...", p_sensor_ctrl, pdev);
@@ -216,6 +240,54 @@ int32_t avdevice_mode_init(struct msm_sensor_ctrl_t *s_ctrl,
 	return 0;
 }
 
+static int32_t avdevice_get_output_info(struct msm_sensor_ctrl_t *s_ctrl,
+		struct sensor_output_info_t *sensor_output_info)
+{
+	int32_t rc = 0;
+	struct v4l2_format ba_fmt;
+	struct v4l2_control ctrl;
+
+	if (!s_ctrl || !sensor_output_info) {
+		pr_err("%s - passed in null param (%p, %p)",
+				__func__, s_ctrl, sensor_output_info);
+		return -EINVAL;
+	}
+
+
+	rc = msm_ba_g_fmt(ba_instance_handler_a[s_ctrl->pdev->id], &ba_fmt);
+	if (rc)	{
+		pr_err("%s : msm_ba_g_fmt failed %d!\n",
+				__func__, rc);
+		return rc;
+	}
+
+	ctrl.id = MSM_BA_PRIV_FPS;
+	rc = msm_ba_g_ctrl(ba_instance_handler_a[s_ctrl->pdev->id], &ctrl);
+	if (rc) {
+		pr_err("%s : msm_ba_g_ctrl failed %d!\n",
+				__func__, rc);
+		return rc;
+	}
+
+	s_ctrl->msm_sensor_reg->output_settings->x_output =
+			ba_fmt.fmt.pix.width;
+	s_ctrl->msm_sensor_reg->output_settings->y_output =
+			ba_fmt.fmt.pix.height;
+	s_ctrl->msm_sensor_reg->output_settings->line_length_pclk =
+			ba_fmt.fmt.pix.width;
+	s_ctrl->msm_sensor_reg->output_settings->frame_length_lines =
+			ba_fmt.fmt.pix.height;
+
+	s_ctrl->msm_sensor_reg->output_settings->vt_pixel_clk =
+			ba_fmt.fmt.pix.width * ba_fmt.fmt.pix.height *
+			(ctrl.value >> 16);
+
+	pr_debug("%s - %dx%d @ %d", __func__, ba_fmt.fmt.pix.width,
+			ba_fmt.fmt.pix.height, ctrl.value >> 16);
+
+	return msm_sensor_get_output_info(s_ctrl, sensor_output_info);
+}
+
 static int32_t avdevice_write_exp_gain(struct msm_sensor_ctrl_t *s_ctrl,
 	uint16_t gain, uint32_t line, int32_t luma_avg, uint16_t fgain)
 {
@@ -240,7 +312,7 @@ static struct msm_sensor_fn_t avdevice_func_tbl = {
 	.sensor_csi_setting = avdevice_write_settings,
 	.sensor_set_sensor_mode = avdevice_set_sensor_mode,
 	.sensor_mode_init = avdevice_mode_init,
-	.sensor_get_output_info = msm_sensor_get_output_info,
+	.sensor_get_output_info = avdevice_get_output_info,
 	.sensor_config = msm_sensor_config,
 	.sensor_power_up = avdevice_pwr_on,
 	.sensor_power_down = avdevice_pwr_off,
