@@ -25,7 +25,7 @@
 
 #include "u_audio.h"
 
-#define PLAYBACK_EP_MAX_PACKET_SIZE	32
+#define PLAYBACK_EP_MAX_PACKET_SIZE	16
 static int req_playback_buf_size = PLAYBACK_EP_MAX_PACKET_SIZE;
 module_param(req_playback_buf_size, int, S_IRUGO);
 MODULE_PARM_DESC(req_playback_buf_size, "ISO OUT endpoint (playback) request buffer size");
@@ -34,7 +34,7 @@ static int req_playback_count = 48;
 module_param(req_playback_count, int, S_IRUGO);
 MODULE_PARM_DESC(req_playback_count, "ISO OUT endpoint (playback) request count");
 
-static int audio_playback_buf_size = 64*32;
+static int audio_playback_buf_size = 1024;	/* Matches with Audio driver */
 module_param(audio_playback_buf_size, int, S_IRUGO);
 MODULE_PARM_DESC(audio_playback_buf_size, "Audio buffer size");
 
@@ -47,7 +47,7 @@ static int req_capture_count = 48;
 module_param(req_capture_count, int, S_IRUGO);
 MODULE_PARM_DESC(req_capture_count, "ISO IN endpoint (capture) request count");
 
-static int audio_capture_buf_size = 64*16;
+static int audio_capture_buf_size = 1024;	/* Matches with Audio driver */
 module_param(audio_capture_buf_size, int, S_IRUGO);
 MODULE_PARM_DESC(audio_capture_buf_size, "Microphone Audio buffer size");
 
@@ -504,7 +504,7 @@ static void f_audio_playback_work(struct work_struct *data)
 
 	pr_debug("play_buf->actual = %d", play_buf->actual);
 
-	res = u_audio_playback(&audio->card, play_buf->buf, play_buf->actual);
+	res = u_audio_playback(&audio->card, play_buf->buf, audio_playback_buf_size);
 	if (res)
 		pr_err("copying failed");
 
@@ -1076,10 +1076,14 @@ static void f_audio_build_desc(struct f_audio *audio)
 	rate = u_audio_get_playback_rate(card);
 	sam_freq = speaker_as_type_i_desc.tSamFreq[0];
 	memcpy(sam_freq, &rate, 3);
+	/* Update maxP as per sample rate, bInterval assumed as 1msec */
+	speaker_as_ep_out_desc.wMaxPacketSize = (rate / 1000) * 2;
 
 	rate = u_audio_get_capture_rate(card);
 	sam_freq = microphone_as_type_i_desc.tSamFreq[0];
 	memcpy(sam_freq, &rate, 3);
+	/* Update maxP as per sample rate, bInterval assumed as 1msec */
+	microphone_as_ep_in_desc.wMaxPacketSize = (rate / 1000) * 2;
 
 	/* Todo: Set Sample bits and other parameters */
 
