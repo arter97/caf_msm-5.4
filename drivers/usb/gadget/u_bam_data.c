@@ -2011,7 +2011,9 @@ static void bam2bam_data_resume_work(struct work_struct *w)
 				configure_usb_data_fifo(d->dst_bam_idx,
 					port->port_usb->in,
 					d->dst_pipe_type);
+				spin_unlock_irqrestore(&port->port_lock, flags);
 				msm_dwc3_reset_dbm_ep(port->port_usb->in);
+				spin_lock_irqsave(&port->port_lock, flags);
 		}
 		d->tx_req_dequeued = false;
 		usb_bam_resume(&d->ipa_params);
