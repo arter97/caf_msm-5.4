@@ -49,7 +49,8 @@
 
 #define MAX_RX_URBS		10
 #define MAX_TX_URBS		10
-#define RX_BUFFER_SIZE		64
+#define RX_BUFFER_SIZE		256
+#define RX_ASSEMBLY_BUFFER_SIZE	64
 
 #define CMD_SYS_SET_BOARD_PWR	0x2
 #define CMD_SYS_GET_BOARD_PWR	0x3
@@ -82,6 +83,8 @@ struct sam4e_usb {
 	atomic_t msg_seq;
 	struct usb_anchor tx_submitted;
 	struct usb_anchor rx_submitted;
+	char *assembly_buffer;
+	u8 assembly_buffer_size;
 };
 
 #define SAM4E_USB_VENDOR_ID 0x05C6
@@ -199,7 +202,7 @@ static void sam4e_usb_receive_frame(struct net_device *netdev,
 }
 
 static void sam4e_process_response(struct sam4e_usb *dev,
-				   struct sam4e_resp *resp)
+				   struct sam4e_resp *resp, int length)
 {
 	struct net_device *netdev = dev->netdev;
 	LOGNI("<%x %2d [%d] %d buff:[%d]\n", resp->cmd,
@@ -211,7 +214,14 @@ static void sam4e_process_response(struct sam4e_usb *dev,
 		struct sam4e_unsol_msg *msg = (struct sam4e_unsol_msg *)resp;
 		struct sam4e_can_unsl_receive *frame =
 				(struct sam4e_can_unsl_receive *)&msg->data;
-		sam4e_usb_receive_frame(netdev, frame);
+		if (msg->len > length) {
+			LOGNI("process_response: Saving %d bytes of response\n",
+					length);
+			memcpy(dev->assembly_buffer, (char *)resp, length);
+			dev->assembly_buffer_size = length;
+		} else {
+			sam4e_usb_receive_frame(netdev, frame);
+		}
 	} else if (resp->cmd == CMD_CAN_FULL_WRITE) {
 		atomic_dec(&dev->active_tx_urbs);
 		if (netif_queue_stopped(netdev) &&
@@ -229,6 +239,7 @@ static void sam4e_usb_read_bulk_callback(struct urb *urb)
 	struct net_device *netdev = dev->netdev;
 	int err, length_processed = 0;
 
+	LOGNI("sam4e_usb_read_bulk_callback length: %d\n", urb->actual_length);
 	if (!netif_device_present(netdev))
 		return;
 
@@ -246,29 +257,77 @@ static void sam4e_usb_read_bulk_callback(struct urb *urb)
 
 	while (length_processed < urb->actual_length) {
 		int length_left = urb->actual_length - length_processed;
-		void *data = urb->transfer_buffer + length_processed;
+		int length = 0; /* length of consumed chunk */
+		void *data;
+		if (dev->assembly_buffer_size > 0) {
+			struct sam4e_resp *resp;
+			LOGNI("callback: Reassembling %d bytes of response\n",
+					dev->assembly_buffer_size);
+			memcpy(dev->assembly_buffer + dev->assembly_buffer_size,
+					urb->transfer_buffer, 2);
+			data = dev->assembly_buffer;
+			resp = (struct sam4e_resp *)data;
+			length = resp->len - dev->assembly_buffer_size;
+			if (length > 0) {
+				memcpy(dev->assembly_buffer +
+						dev->assembly_buffer_size,
+						urb->transfer_buffer, length);
+			}
+			length_left += dev->assembly_buffer_size;
+			dev->assembly_buffer_size = 0;
+		} else {
+			struct sam4e_resp *resp;
+			data = urb->transfer_buffer + length_processed;
+			resp = (struct sam4e_resp *)data;
+			length = resp->len;
+		}
+		LOGNI("processing. p %d -> l %d (t %d)\n",
+				length_processed, length_left,
+				urb->actual_length);
+		length_processed += length;
 		if (length_left >= sizeof(struct sam4e_resp)) {
 			struct sam4e_resp *resp =
 					(struct sam4e_resp *)data;
-			sam4e_process_response(dev, resp);
-			length_processed += resp->len;
+			if (resp->len < sizeof(struct sam4e_resp)) {
+				LOGNI("Error resp->len is %d). Abort.\n",
+						resp->len);
+				break;
+			}
+			sam4e_process_response(dev, resp, length_left);
+		} else if (length_left > 0) {
+			/* Not full message. Store however much we have for
+			   later assembly */
+			LOGNI("callback: Storing %d bytes of response\n",
+					length_left);
+			memcpy(dev->assembly_buffer, data, length_left);
+			dev->assembly_buffer_size = length_left;
+			break;
 		} else {
 			break;
 		}
 	}
 
-	if (urb->actual_length - length_processed > 0) {
-		LOGNI("Rx URB buffer length > expected: %d > %d\n",
-				urb->actual_length, sizeof(struct sam4e_resp));
+	if (urb->actual_length > length_processed) {
+		LOGNI("Error length > length_processed: %d > %d (needed: %d)\n",
+				urb->actual_length, length_processed,
+				sizeof(struct sam4e_resp));
 	}
 
 resubmit_urb:
+	LOGNI("Resubmitting Rx Urb\n");
 	usb_fill_bulk_urb(urb, dev->udev,
 			usb_rcvbulkpipe(dev->udev, BULK_IN_EP),
 			urb->transfer_buffer, RX_BUFFER_SIZE,
 			sam4e_usb_read_bulk_callback, dev);
 
 	err = usb_submit_urb(urb, GFP_ATOMIC);
+	if (err) {
+		usb_unanchor_urb(urb);
+		usb_free_coherent(dev->udev, RX_BUFFER_SIZE,
+				urb->transfer_buffer,
+				urb->transfer_dma);
+		LOGNI("Failed to resubmit Rx Urb: %d\n", err);
+	}
 }
 
 static int sam4e_init_urbs(struct net_device *netdev)
@@ -453,7 +512,7 @@ static netdev_tx_t sam4e_netdev_start_xmit(
 		/* Put on hold tx path */
 		if (atomic_read(&dev->active_tx_urbs) >= MAX_TX_URBS) {
 			LOGNI("Too many outstanding requests (%d). Stop queue",
-			      atomic_read(&dev->active_tx_urbs));
+					atomic_read(&dev->active_tx_urbs));
 			netif_stop_queue(netdev);
 		}
 	}
@@ -475,7 +534,7 @@ static const struct net_device_ops sam4e_usb_netdev_ops = {
 };
 
 /*
- * probe function for new CPC-USB devices
+ * probe function for usb devices
  */
 static int sam4e_usb_probe(struct usb_interface *intf,
 		const struct usb_device_id *id)
@@ -512,6 +571,7 @@ static int sam4e_usb_probe(struct usb_interface *intf,
 	dev = netdev_priv(netdev);
 	dev->udev = interface_to_usbdev(intf);
 	dev->netdev = netdev;
+	dev->assembly_buffer = kzalloc(RX_ASSEMBLY_BUFFER_SIZE, GFP_KERNEL);
 
 	netdev->netdev_ops = &sam4e_usb_netdev_ops;
 
@@ -621,6 +681,7 @@ static int sam4e_usb_probe(struct usb_interface *intf,
 	return 0; /*ok. it's ours */
 
 cleanup_candev:
+	kfree(dev->assembly_buffer);
 	free_candev(netdev);
 	return err;
 }
@@ -639,6 +700,7 @@ static void sam4e_usb_disconnect(struct usb_interface *intf)
 		netdev = dev->netdev;
 		LOGNI("Disconnect sam4e\n");
 		unregister_netdev(dev->netdev);
+		kfree(dev->assembly_buffer);
 		free_candev(dev->netdev);
 		unlink_all_urbs(dev);
 	}
