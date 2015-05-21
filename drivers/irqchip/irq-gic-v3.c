@@ -52,6 +52,7 @@ struct gic_chip_data {
 
 extern bool from_suspend;
 static struct gic_chip_data gic_data __read_mostly;
+static DEFINE_RAW_SPINLOCK(irq_controller_lock);
 
 #define gic_data_rdist()		(this_cpu_ptr(gic_data.rdist))
 #define gic_data_rdist_rd_base()	(*gic_data_rdist())
@@ -340,10 +341,36 @@ static int gic_suspend(void)
 	return 0;
 }
 
+static void gic_show_resume_irq(struct gic_chip_data *gic)
+{
+	unsigned int i;
+	u32 enabled;
+	u32 pending[32];
+	void __iomem *base = gic_data_dist_base(gic);
+
+	if (!msm_show_resume_irq_mask)
+		return;
+
+	raw_spin_lock(&irq_controller_lock);
+	for (i = 0; i * 32 < gic->irq_nr; i++) {
+		enabled = readl_relaxed(base + 0x180 + i * 4);
+		pending[i] = readl_relaxed(base + 0x200 + i * 4);
+		pending[i] &= enabled;
+	}
+	raw_spin_unlock(&irq_controller_lock);
+
+	for (i = find_first_bit((unsigned long *)pending, gic->irq_nr);
+	     i < gic->irq_nr;
+	     i = find_next_bit((unsigned long *)pending, gic->irq_nr, i+1)) {
+		pr_warning("%s: %d triggered\n", __func__, i);
+	}
+}
+
 static void gic_resume_one(struct gic_chip_data *gic)
 {
 	unsigned int i;
 	void __iomem *base = gic_data_dist_base(gic);
+	gic_show_resume_irq(gic);
 
 	for (i = 0; i * 32 < gic->irq_nr; i++) {
 		/* disable all of them */

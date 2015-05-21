@@ -20,6 +20,7 @@
 #include <linux/of.h>
 #include <linux/irqdomain.h>
 
+extern int msm_show_resume_irq_mask;
 extern struct irq_chip gic_arch_extn;
 
 void gic_configure_irq(unsigned int irq, unsigned int type,
