@@ -1026,6 +1026,39 @@ struct msm_mi2s_pdata apq_adp_mi2s_rx_data = {
 	.tx_sd_lines = 0,
 };
 
+struct msm_mi2s_group_config apq_adp_mi2s_group_rx_config = {
+	.group_id = AFE_GROUP_DEVICE_ID_MI2S_RX,
+	.channel_mode = AFE_I2S_6CHS,
+	.sample_rate = 48000,
+	.port_id = (u16 []){MI2S_RX_0, MI2S_RX_1, MI2S_RX_2},
+	.port_id_size = 3,
+	.bit_width = 32,
+};
+
+struct msm_mi2s_group_pdata apq_adp_mi2s_group_rx_0_data = {
+	.rx_sd_lines = MSM_MI2S_SD0,
+	.tx_sd_lines = 0,
+	.group_config = &apq_adp_mi2s_group_rx_config,
+	.slot_offset = (u16 []){0, 4},
+	.slot_offset_size = 2,
+};
+
+struct msm_mi2s_group_pdata apq_adp_mi2s_group_rx_1_data = {
+	.rx_sd_lines = MSM_MI2S_SD1,
+	.tx_sd_lines = 0,
+	.group_config = &apq_adp_mi2s_group_rx_config,
+	.slot_offset = (u16 []){0, 4},
+	.slot_offset_size = 2,
+};
+
+struct msm_mi2s_group_pdata apq_adp_mi2s_group_rx_2_data = {
+	.rx_sd_lines = MSM_MI2S_SD2,
+	.tx_sd_lines = 0,
+	.group_config = &apq_adp_mi2s_group_rx_config,
+	.slot_offset = (u16 []){0, 4},
+	.slot_offset_size = 2,
+};
+
 struct msm_mi2s_pdata apq_mplatform_mi2s_rx_data = {
 	.rx_sd_lines = MSM_MI2S_SD1,
 	.tx_sd_lines = 0,
@@ -1042,6 +1075,30 @@ struct platform_device apq_adp_cpudai_mi2s_rx = {
 	.id	= -1, /*MI2S_RX */
 	.dev = {
 		.platform_data = &apq_adp_mi2s_rx_data,
+	},
+};
+
+struct platform_device apq_adp_cpudai_mi2s_group_rx_0 = {
+	.name	= "msm-dai-q6-mi2s-group",
+	.id	= 6, /*MI2S_RX_0 */
+	.dev = {
+		.platform_data = &apq_adp_mi2s_group_rx_0_data,
+	},
+};
+
+struct platform_device apq_adp_cpudai_mi2s_group_rx_1 = {
+	.name	= "msm-dai-q6-mi2s-group",
+	.id	= 14, /*MI2S_RX_1 */
+	.dev = {
+		.platform_data = &apq_adp_mi2s_group_rx_1_data,
+	},
+};
+
+struct platform_device apq_adp_cpudai_mi2s_group_rx_2 = {
+	.name	= "msm-dai-q6-mi2s-group",
+	.id	= 16, /*MI2S_RX_2 */
+	.dev = {
+		.platform_data = &apq_adp_mi2s_group_rx_2_data,
 	},
 };
 

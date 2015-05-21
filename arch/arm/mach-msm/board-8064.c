@@ -4042,6 +4042,12 @@ static void __init apq8064_common_init(void)
 		if ((SOCINFO_VERSION_MAJOR(socinfo_get_platform_version())
 							== 0x2)) {
 			platform_device_register(&apq_adp_cpudai_mi2s_rx);
+			platform_device_register(
+				&apq_adp_cpudai_mi2s_group_rx_0);
+			platform_device_register(
+				&apq_adp_cpudai_mi2s_group_rx_1);
+			platform_device_register(
+				&apq_adp_cpudai_mi2s_group_rx_2);
 			platform_device_register(&apq_cpudai_mi2s);
 			platform_device_register(&apq_pcm_lpa);
 		} else {
