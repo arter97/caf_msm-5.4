@@ -199,6 +199,7 @@ enum usb_vdd_value {
  *              USB enters LPM.
  * @bus_scale_table: parameters for bus bandwidth requirements
  * @mhl_dev_name: MHL device name used to register with MHL driver.
+ * @mpm_xo_wakeup_int: MPM to KRAIT interrupt for remote wakeup
  */
 struct msm_otg_platform_data {
 	int *phy_init_seq;
@@ -218,6 +219,7 @@ struct msm_otg_platform_data {
 	struct msm_bus_scale_pdata *bus_scale_table;
 	const char *mhl_dev_name;
 	bool ignore_wakeup_source;
+	unsigned int mpm_xo_wakeup_int;
 };
 
 /* phy related flags */
@@ -368,6 +370,11 @@ struct msm_otg {
 	   * USB bus is suspended but cable is connected.
 	   */
 #define ALLOW_LPM_ON_DEV_SUSPEND	    BIT(2)
+	/*
+	 * Allow XO shutdown in host bus suspend if MPM to KRAIT
+	 * interrupt pin is available.
+	 */
+#define ALLOW_XO_SHUTDOWN		BIT(3)
 	unsigned long lpm_flags;
 #define PHY_PWR_COLLAPSED		BIT(0)
 #define PHY_RETENTIONED			BIT(1)
