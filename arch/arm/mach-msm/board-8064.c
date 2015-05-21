@@ -972,6 +972,7 @@ static struct msm_otg_platform_data msm_otg_usb3_pdata = {
 	.phy_type		= SNPS_28NM_INTEGRATED_PHY,
 	.power_budget		= 750,
 	.phy_init_seq		= phy_init_seq,
+	.ignore_wakeup_source	= true,
 };
 
 static struct msm_otg_platform_data msm_otg_usb4_pdata = {
@@ -979,6 +980,7 @@ static struct msm_otg_platform_data msm_otg_usb4_pdata = {
 	.phy_type		= SNPS_28NM_INTEGRATED_PHY,
 	.power_budget		= 750,
 	.phy_init_seq		= phy_init_seq,
+	.ignore_wakeup_source	= true,
 };
 
 static struct ci13xxx_platform_data msm_usb1_peripheral_pdata = {
