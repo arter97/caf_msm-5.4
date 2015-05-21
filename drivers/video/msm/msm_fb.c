@@ -239,7 +239,6 @@ int msm_fb_detect_client(const char *name, struct platform_disp_info *disp_info)
 					msm_fb_pdata->ext_resolution;
 		}
 		disp_info->id = DISPLAY_PRIMARY;
-		disp_info->dest = DISPLAY_1;
 		return 0;
 		} else {
 			ret = -EPERM;
@@ -251,7 +250,6 @@ int msm_fb_detect_client(const char *name, struct platform_disp_info *disp_info)
 			    name, msm_fb_pdata->ext_panel_name);
 		if (!strcmp((char *)msm_fb_pdata->ext_panel_name, name)) {
 			disp_info->id = DISPLAY_SECONDARY;
-			disp_info->dest = DISPLAY_2;
 			return 0;
 		} else {
 			ret = -EPERM;
@@ -263,12 +261,16 @@ int msm_fb_detect_client(const char *name, struct platform_disp_info *disp_info)
 				name, msm_fb_pdata->sec_panel_name);
 		if (!strcmp((char *)msm_fb_pdata->sec_panel_name, name)) {
 			disp_info->id = DISPLAY_TERTIARY;
-			disp_info->dest = DISPLAY_4;
 			return 0;
 		} else {
 			ret = -EPERM;
 		}
 	}
+
+	/* If setting is passed in from kernel command line, then don't apply
+	 * configurations in board-config file.*/
+	if (ret)
+		return ret;
 
 	ret = -EPERM;
 	if (msm_fb_pdata && msm_fb_pdata->detect_client) {
