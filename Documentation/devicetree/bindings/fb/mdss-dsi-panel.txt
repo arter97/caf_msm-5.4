@@ -81,9 +81,6 @@ Optional properties:
 					screen using the qcom,memblock-reserve binding
 					for the framebuffer device attached to the panel.
 - qcom,cmd-sync-wait-broadcast:		Boolean used to broadcast dcs command to panels.
-- qcom,cmd-sync-wait-trigger:		Boolean used to identify the which panel in a dual-dsi
-					configuration will be used to trigger the DCS commands.
-					This flag should be set only for one of the two panels.
 - qcom,mdss-dsi-fbc-enable:		Boolean used to enable frame buffer compression mode.
 - qcom,mdss-dsi-fbc-slice-height:	Slice height(in lines) of compressed block.
 					Expressed as power of 2. To set as 128 lines,
@@ -230,15 +227,6 @@ Optional properties:
 - qcom,mdss-dsi-lane-1-state:		Boolean that specifies whether data lane 1 is enabled.
 - qcom,mdss-dsi-lane-2-state:		Boolean that specifies whether data lane 2 is enabled.
 - qcom,mdss-dsi-lane-3-state:		Boolean that specifies whether data lane 3 is enabled.
-- qcom,mdss-dsi-lane-map:		Specifies the data lane swap configuration.
-					"lane_map_0123" = <0 1 2 3> (default value)
-					"lane_map_3012" = <3 0 1 2>
-					"lane_map_2301" = <2 3 0 1>
-					"lane_map_1230" = <1 2 3 0>
-					"lane_map_0321" = <0 3 2 1>
-					"lane_map_1032" = <1 0 3 2>
-					"lane_map_2103" = <2 1 0 3>
-					"lane_map_3210" = <3 2 1 0>
 - qcom,mdss-dsi-t-clk-post:		Specifies the byte clock cycles after mode switch.
 					0x03 = default value.
 - qcom,mdss-dsi-t-clk-pre:		Specifies the byte clock cycles before mode switch.
@@ -410,6 +398,12 @@ Optional properties:
 - qcom,mdss-dsi-force-clock-lane-hs:	Boolean to force dsi clock lanes to HS mode always.
 - qcom,mdss-dsi-post-init-delay:	Specifies required number of frames to wait so that panel can be functional
 					to show proper display.
+- qcom,panel-supply-entries:		A node that lists the elements of the supply used to
+					power the DSI panel. There can be more than one instance
+					of this binding, in which case the entry would be appended
+					with the supply entry index. For a detailed description of
+					fields in the supply entry, refer to the qcom,ctrl-supply-entries
+					binding above.
 
 Note, if a given optional qcom,* binding is not present, then the driver will configure
 the default values specified.
@@ -425,7 +419,6 @@ Example:
 		qcom,mdss-dsi-pixel-packing = <0>;
 		qcom,mdss-dsi-panel-destination = "display_1";
 		qcom,cmd-sync-wait-broadcast;
-		qcom,cmd-sync-wait-trigger;
 		qcom,mdss-dsi-fbc-enable;
 		qcom,mdss-dsi-fbc-slice-height = <5>;
 		qcom,mdss-dsi-fbc-2d-pred-mode;
@@ -482,7 +475,6 @@ Example:
 		qcom,mdss-dsi-lane-1-state;
 		qcom,mdss-dsi-lane-2-state;
 		qcom,mdss-dsi-lane-3-state;
-		qcom,mdss-dsi-lane-map = <0>;
 		qcom,mdss-dsi-t-clk-post = <0x20>;
 		qcom,mdss-dsi-t-clk-pre = <0x2c>;
 		qcom,mdss-dsi-stream = <0>;
@@ -548,5 +540,35 @@ Example:
 		qcom,mdss-dsi-panel-orientation = "180"
 		qcom,mdss-dsi-force-clock-lane-hs;
 		qcom,mdss-dsi-post-init-delay = <1>;
+		qcom,panel-supply-entries {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			qcom,panel-supply-entry@0 {
+				reg = <0>;
+				qcom,supply-name = "vdd";
+				qcom,supply-min-voltage = <2800000>;
+				qcom,supply-max-voltage = <2800000>;
+				qcom,supply-enable-load = <100000>;
+				qcom,supply-disable-load = <100>;
+				qcom,supply-pre-on-sleep = <0>;
+				qcom,supply-post-on-sleep = <0>;
+				qcom,supply-pre-off-sleep = <0>;
+				qcom,supply-post-off-sleep = <0>;
+			};
+
+			qcom,panel-supply-entry@1 {
+				reg = <1>;
+				qcom,supply-name = "vddio";
+				qcom,supply-min-voltage = <1800000>;
+				qcom,supply-max-voltage = <1800000>;
+				qcom,supply-enable-load = <100000>;
+				qcom,supply-disable-load = <100>;
+				qcom,supply-pre-on-sleep = <0>;
+				qcom,supply-post-on-sleep = <0>;
+				qcom,supply-pre-off-sleep = <0>;
+				qcom,supply-post-off-sleep = <0>;
+			};
+		};
 	};
 };

@@ -2407,7 +2407,7 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 	struct mdss_fb_proc_info *pinfo = NULL, *temp_pinfo = NULL;
 	struct mdss_fb_proc_info *proc_info = NULL;
-	int ret = 0;
+	int ret = 0, ad_ret = 0;
 	int pid = current->tgid;
 	bool unknown_pid = true, release_needed = false;
 	struct task_struct *task = current->group_leader;
@@ -2500,6 +2500,13 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
 		/* resources (if any) will be released during blank */
 		if (mfd->mdp.release_fnc)
 			mfd->mdp.release_fnc(mfd, true, pid);
+
+		if (mfd->mdp.ad_shutdown_cleanup) {
+			ad_ret = (*mfd->mdp.ad_shutdown_cleanup)(mfd);
+			if (ad_ret)
+				pr_err("AD shutdown cleanup failed ret = %d\n",
+									ad_ret);
+		}
 
 		ret = mdss_fb_blank_sub(FB_BLANK_POWERDOWN, info,
 			mfd->op_enable);
@@ -3874,10 +3881,9 @@ static int mdss_fb_register_extra_panel(struct platform_device *pdev,
 }
 
 int mdss_register_panel(struct platform_device *pdev,
-	struct mdss_panel_data *pdata)
+	struct mdss_panel_data *pdata, struct device_node *node)
 {
 	struct platform_device *fb_pdev, *mdss_pdev;
-	struct device_node *node;
 	int rc = 0;
 	bool master_panel = true;
 
@@ -3891,12 +3897,6 @@ int mdss_register_panel(struct platform_device *pdev,
 		return -EPROBE_DEFER;
 	}
 
-	node = of_parse_phandle(pdev->dev.of_node, "qcom,mdss-fb-map", 0);
-	if (!node) {
-		pr_err("Unable to find fb node for device: %s\n",
-				pdev->name);
-		return -ENODEV;
-	}
 	mdss_pdev = of_find_device_by_node(node->parent);
 	if (!mdss_pdev) {
 		pr_err("Unable to find mdss for node: %s\n", node->full_name);

@@ -194,6 +194,8 @@
 
 &pmi8950_charger {
 	qcom,battery-data = <&mtp_batterydata>;
+	qcom,chg-led-support;
+	qcom,chg-led-sw-controls;
 };
 
 &spmi_bus {
@@ -274,9 +276,6 @@
 	status = "ok";
 };
 
-#include "dsi-panel-truly-1080p-video.dtsi"
-#include "dsi-panel-truly-1080p-cmd.dtsi"
-
 &mdss_mdp {
 	qcom,mdss-pref-prim-intf = "dsi";
 };
@@ -285,6 +284,7 @@
 	qcom,cont-splash-enabled;
 	qcom,mdss-dsi-pan-enable-dynamic-fps;
 	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
 
 &pmx_mdss {
@@ -302,7 +302,6 @@
 	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
 	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
 	qcom,dsi-pref-prim-pan = <&dsi_truly_1080_vid>;
-	qcom,dsi-panel-bias-vreg;
 
 	qcom,platform-enable-gpio = <&msm_gpio 90 0>;
 	qcom,platform-reset-gpio = <&msm_gpio 0 0>;
@@ -311,6 +310,7 @@
 
 &dsi_truly_1080_cmd {
 	qcom,cont-splash-enabled;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
 
 &labibb {

@@ -235,6 +235,7 @@ struct smbchg_chip {
 	struct mutex			usb_status_lock;
 	/* apsd workaround */
 	struct work_struct		rerun_apsd_work;
+	bool				do_apsd_reruns;
 	bool				apsd_rerun;
 	bool				apsd_rerun_ignore_uv_irq;
 	struct completion		apsd_src_det_lowered;
@@ -696,7 +697,7 @@ static inline char *get_usb_type_name(int type)
 
 static enum power_supply_type usb_type_enum[] = {
 	POWER_SUPPLY_TYPE_USB,		/* bit 0 */
-	POWER_SUPPLY_TYPE_UNKNOWN,	/* bit 1 */
+	POWER_SUPPLY_TYPE_USB_DCP,	/* bit 1 */
 	POWER_SUPPLY_TYPE_USB_DCP,	/* bit 2 */
 	POWER_SUPPLY_TYPE_USB_CDP,	/* bit 3 */
 	POWER_SUPPLY_TYPE_USB,		/* bit 4 error case, report SDP */
@@ -1323,7 +1324,7 @@ static int smbchg_dc_en(struct smbchg_chip *chip, bool enable,
 		goto out;
 	}
 
-	if (chip->psy_registered)
+	if (chip->dc_psy_type != -EINVAL)
 		power_supply_changed(&chip->dc_psy);
 	pr_smb(PR_STATUS, "dc charging %s, suspended = %02x\n",
 			suspended == 0 ? "enabled"
@@ -4109,6 +4110,8 @@ static void smbchg_hvdcp_det_work(struct work_struct *work)
 				POWER_SUPPLY_TYPE_USB_HVDCP);
 		power_supply_set_supply_type(chip->usb_psy,
 				POWER_SUPPLY_TYPE_USB_HVDCP);
+		if (chip->psy_registered)
+			power_supply_changed(&chip->batt_psy);
 		smbchg_aicl_deglitch_wa_check(chip);
 	}
 }
@@ -4317,7 +4320,8 @@ static void handle_usb_insertion(struct smbchg_chip *chip)
 		power_supply_set_allow_detection(chip->usb_psy, 1);
 	}
 
-	if (!chip->apsd_rerun && usb_supply_type == POWER_SUPPLY_TYPE_USB) {
+	if (chip->do_apsd_reruns && !chip->apsd_rerun
+			&& usb_supply_type == POWER_SUPPLY_TYPE_USB) {
 		chip->apsd_rerun = true;
 		schedule_work(&chip->rerun_apsd_work);
 		return;
@@ -4613,6 +4617,24 @@ out:
 	return IRQ_HANDLED;
 }
 
+static int otg_oc_reset(struct smbchg_chip *chip)
+{
+	int rc;
+
+	rc = smbchg_masked_write(chip, chip->bat_if_base + CMD_CHG_REG,
+						OTG_EN_BIT, 0);
+	if (rc)
+		pr_err("Failed to disable OTG rc=%d\n", rc);
+
+	msleep(20);
+	rc = smbchg_masked_write(chip, chip->bat_if_base + CMD_CHG_REG,
+						OTG_EN_BIT, OTG_EN_BIT);
+	if (rc)
+		pr_err("Failed to re-enable OTG rc=%d\n", rc);
+
+	return rc;
+}
+
 /**
  * otg_oc_handler() - called when the usb otg goes over current
  */
@@ -4620,13 +4642,19 @@ out:
 #define OTG_OC_RETRY_DELAY_US		50000
 static irqreturn_t otg_oc_handler(int irq, void *_chip)
 {
+	int rc;
 	struct smbchg_chip *chip = _chip;
 	s64 elapsed_us = ktime_us_delta(ktime_get(), chip->otg_enable_time);
 
 	pr_smb(PR_INTERRUPT, "triggered\n");
 
-	if (chip->schg_version == QPNP_SCHG_LITE)
+	if (chip->schg_version == QPNP_SCHG_LITE) {
+		pr_smb(PR_STATUS, "Clear OTG-OC by enable/disable OTG\n");
+		rc = otg_oc_reset(chip);
+		if (rc)
+			pr_err("Failed to reset OTG OC state rc=%d\n", rc);
 		return IRQ_HANDLED;
+	}
 
 	if (elapsed_us > OTG_OC_RETRY_DELAY_US)
 		chip->otg_retries = 0;
@@ -4644,11 +4672,9 @@ static irqreturn_t otg_oc_handler(int irq, void *_chip)
 		pr_smb(PR_STATUS,
 			"Retrying OTG enable. Try #%d, elapsed_us %lld\n",
 						chip->otg_retries, elapsed_us);
-		smbchg_masked_write(chip, chip->bat_if_base + CMD_CHG_REG,
-							OTG_EN_BIT, 0);
-		msleep(20);
-		smbchg_masked_write(chip, chip->bat_if_base + CMD_CHG_REG,
-							OTG_EN_BIT, OTG_EN_BIT);
+		rc = otg_oc_reset(chip);
+		if (rc)
+			pr_err("Failed to reset OTG OC state rc=%d\n", rc);
 		chip->otg_enable_time = ktime_get();
 	}
 	return IRQ_HANDLED;
@@ -5504,6 +5530,8 @@ static int smb_parse_dt(struct smbchg_chip *chip)
 					"qcom,low-volt-dcin");
 	chip->force_aicl_rerun = of_property_read_bool(node,
 					"qcom,force-aicl-rerun");
+	chip->do_apsd_reruns = of_property_read_bool(node,
+					"qcom,rerun-apsd");
 
 	/* parse the battery missing detection pin source */
 	rc = of_property_read_string(chip->spmi->dev.of_node,

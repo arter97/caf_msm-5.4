@@ -1289,7 +1289,8 @@ int mdss_mdp_cmd_stop(struct mdss_mdp_ctl *ctl, int panel_power_state)
 	}
 
 panel_events:
-	if ((ctl->num == 0) && send_panel_events) {
+	if ((!is_panel_split(ctl->mfd) || is_pingpong_split(ctl->mfd) ||
+		(is_panel_split(ctl->mfd) && sctl)) && send_panel_events) {
 		pr_debug("%s: send panel events\n", __func__);
 		ret = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_BLANK,
 				(void *) (long int) panel_power_state);
@@ -1416,7 +1417,11 @@ static int mdss_mdp_cmd_intfs_setup(struct mdss_mdp_ctl *ctl,
 
 	ctl->intf_ctx[MASTER_CTX] = ctx;
 
-	ret = mdss_mdp_cmd_ctx_setup(ctl, ctx, session, false);
+	/*
+	 * pp_num for master ctx is same as mixer num independent
+	 * of pingpong split enabled/disabled
+	 */
+	ret = mdss_mdp_cmd_ctx_setup(ctl, ctx, mixer->num, false);
 	if (ret) {
 		pr_err("mdss_mdp_cmd_ctx_setup failed for ping ping: %d\n",
 				mixer->num);

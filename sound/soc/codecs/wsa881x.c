@@ -24,6 +24,7 @@
 #include <linux/kernel.h>
 #include <linux/gpio.h>
 #include <linux/regmap.h>
+#include <linux/debugfs.h>
 #include <linux/soundwire/soundwire.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -34,6 +35,22 @@
 
 #define WSA881X_ADDR_BITS	16
 #define WSA881X_DATA_BITS	8
+
+enum {
+	G_18DB = 0,
+	G_16P5DB,
+	G_15DB,
+	G_13P5DB,
+	G_12DB,
+	G_10P5DB,
+	G_9DB,
+	G_7P5DB,
+	G_6DB,
+	G_4P5DB,
+	G_3DB,
+	G_1P5DB,
+	G_0DB,
+};
 
 enum {
 	DISABLE = 0,
@@ -63,20 +80,213 @@ struct wsa881x_priv {
 	struct device *dev;
 	struct swr_device *swr_slave;
 	struct snd_soc_codec *codec;
-	bool comp_enable;	bool boost_enable;
+	bool comp_enable;
+	bool boost_enable;
 	bool visense_enable;
 	struct swr_port port[WSA881X_MAX_SWR_PORTS];
+};
+
+#define SWR_SLV_MAX_REG_ADDR	0x390
+#define SWR_SLV_START_REG_ADDR	0x40
+#define SWR_SLV_MAX_BUF_LEN	20
+#define BYTES_PER_LINE		12
+#define SWR_SLV_RD_BUF_LEN	8
+#define SWR_SLV_WR_BUF_LEN	32
+#define SWR_SLV_MAX_DEVICES	2
+
+static struct wsa881x_priv *dbgwsa881x;
+static struct dentry *debugfs_wsa881x_dent;
+static struct dentry *debugfs_peek;
+static struct dentry *debugfs_poke;
+static struct dentry *debugfs_reg_dump;
+static unsigned int read_data;
+static unsigned int devnum;
+
+static int codec_debug_open(struct inode *inode, struct file *file)
+{
+	file->private_data = inode->i_private;
+	return 0;
+}
+
+static int get_parameters(char *buf, u32 *param1, int num_of_par)
+{
+	char *token;
+	int base, cnt;
+
+	token = strsep(&buf, " ");
+	for (cnt = 0; cnt < num_of_par; cnt++) {
+		if (token) {
+			if ((token[1] == 'x') || (token[1] == 'X'))
+				base = 16;
+			else
+				base = 10;
+
+			if (kstrtou32(token, base, &param1[cnt]) != 0)
+				return -EINVAL;
+
+			token = strsep(&buf, " ");
+		} else
+			return -EINVAL;
+	}
+	return 0;
+}
+
+static bool is_swr_slv_reg_readable(int reg)
+{
+	bool ret = true;
+
+	if (((reg > 0x46) && (reg < 0x4A)) ||
+	    ((reg > 0x4A) && (reg < 0x50)) ||
+	    ((reg > 0x55) && (reg < 0xE0)) ||
+	    ((reg > 0xE0) && (reg < 0xF0)) ||
+	    ((reg > 0xF0) && (reg < 0x100)) ||
+	    ((reg > 0x105) && (reg < 0x120)) ||
+	    ((reg > 0x128) && (reg < 0x130)) ||
+	    ((reg > 0x138) && (reg < 0x200)) ||
+	    ((reg > 0x205) && (reg < 0x220)) ||
+	    ((reg > 0x228) && (reg < 0x230)) ||
+	    ((reg > 0x238) && (reg < 0x300)) ||
+	    ((reg > 0x305) && (reg < 0x320)) ||
+	    ((reg > 0x328) && (reg < 0x330)) ||
+	    ((reg > 0x338) && (reg < 0x400)) ||
+	    ((reg > 0x405) && (reg < 0x420)))
+		ret = false;
+
+	return ret;
+}
+
+static ssize_t wsa881x_swrslave_reg_show(char __user *ubuf, size_t count,
+					  loff_t *ppos)
+{
+	int i, reg_val, len;
+	ssize_t total = 0;
+	char tmp_buf[SWR_SLV_MAX_BUF_LEN];
+
+	if (!ubuf || !ppos || (devnum == 0))
+		return 0;
+
+	for (i = (((int) *ppos / BYTES_PER_LINE) + SWR_SLV_START_REG_ADDR);
+		i <= SWR_SLV_MAX_REG_ADDR; i++) {
+		if (!is_swr_slv_reg_readable(i))
+			continue;
+		swr_read(dbgwsa881x->swr_slave, devnum,
+			i, &reg_val, 1);
+		len = snprintf(tmp_buf, 25, "0x%.3x: 0x%.2x\n", i,
+			       (reg_val & 0xFF));
+		if ((total + len) >= count - 1)
+			break;
+		if (copy_to_user((ubuf + total), tmp_buf, len)) {
+			pr_err("%s: fail to copy reg dump\n", __func__);
+			total = -EFAULT;
+			goto copy_err;
+		}
+		*ppos += len;
+		total += len;
+	}
+
+copy_err:
+	return total;
+}
+
+static ssize_t codec_debug_read(struct file *file, char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char lbuf[SWR_SLV_RD_BUF_LEN];
+	char *access_str;
+	ssize_t ret_cnt;
+
+	if (!count || !file || !ppos || !ubuf)
+		return -EINVAL;
+
+	access_str = file->private_data;
+	if (*ppos < 0)
+		return -EINVAL;
+
+	if (!strcmp(access_str, "swrslave_peek")) {
+		snprintf(lbuf, sizeof(lbuf), "0x%x\n", (read_data & 0xFF));
+		ret_cnt = simple_read_from_buffer(ubuf, count, ppos, lbuf,
+					       strnlen(lbuf, 7));
+	} else if (!strcmp(access_str, "swrslave_reg_dump")) {
+		ret_cnt = wsa881x_swrslave_reg_show(ubuf, count, ppos);
+	} else {
+		pr_err("%s: %s not permitted to read\n", __func__, access_str);
+		ret_cnt = -EPERM;
+	}
+	return ret_cnt;
+}
+
+static ssize_t codec_debug_write(struct file *filp,
+	const char __user *ubuf, size_t cnt, loff_t *ppos)
+{
+	char lbuf[SWR_SLV_WR_BUF_LEN];
+	int rc;
+	u32 param[5];
+	char *access_str;
+
+	if (!filp || !ppos || !ubuf)
+		return -EINVAL;
+
+	access_str = filp->private_data;
+	if (cnt > sizeof(lbuf) - 1)
+		return -EINVAL;
+
+	rc = copy_from_user(lbuf, ubuf, cnt);
+	if (rc)
+		return -EFAULT;
+
+	lbuf[cnt] = '\0';
+	if (!strcmp(access_str, "swrslave_poke")) {
+		/* write */
+		rc = get_parameters(lbuf, param, 3);
+		if ((param[0] <= SWR_SLV_MAX_REG_ADDR) && (param[1] <= 0xFF) &&
+			(rc == 0))
+			swr_write(dbgwsa881x->swr_slave, param[2],
+				param[0], &param[1]);
+		else
+			rc = -EINVAL;
+	} else if (!strcmp(access_str, "swrslave_peek")) {
+		/* read */
+		rc = get_parameters(lbuf, param, 2);
+		if ((param[0] <= SWR_SLV_MAX_REG_ADDR) && (rc == 0))
+			swr_read(dbgwsa881x->swr_slave, param[1],
+				param[0], &read_data, 1);
+		else
+			rc = -EINVAL;
+	} else if (!strcmp(access_str, "swrslave_reg_dump")) {
+		/* reg dump */
+		rc = get_parameters(lbuf, param, 1);
+		if ((rc == 0) && (param[0] > 0) &&
+		    (param[0] <= SWR_SLV_MAX_DEVICES))
+			devnum = param[0];
+		else
+			rc = -EINVAL;
+	}
+	if (rc == 0)
+		rc = cnt;
+	else
+		pr_err("%s: rc = %d\n", __func__, rc);
+
+	return rc;
+}
+
+static const struct file_operations codec_debug_ops = {
+	.open = codec_debug_open,
+	.write = codec_debug_write,
+	.read = codec_debug_read,
 };
 
 static int wsa881x_boost_ctrl(struct snd_soc_codec *codec, bool enable)
 {
 	dev_dbg(codec->dev, "%s: enable:%d\n", __func__, enable);
-	if (enable) {
+	if (enable)
 		snd_soc_update_bits(codec, WSA881X_BOOST_EN_CTL, 0x80, 0x80);
-		usleep_range(1250, 1260);
-	} else {
+	else
 		snd_soc_update_bits(codec, WSA881X_BOOST_EN_CTL, 0x80, 0x00);
-	}
+	/*
+	 * 1.5ms sleep is needed after boost enable/disable as per
+	 * HW requirement
+	 */
+	usleep_range(1500, 1510);
 	return 0;
 }
 
@@ -85,9 +295,13 @@ static int wsa881x_visense_txfe_ctrl(struct snd_soc_codec *codec, bool enable,
 				     u8 vsense_gain)
 {
 	u8 value = 0;
-	dev_dbg(codec->dev, "%s: enable:%d\n", __func__, enable);
+	dev_dbg(codec->dev,
+		"%s: enable:%d, isense1 gain: %d, isense2 gain: %d, vsense_gain %d\n",
+		__func__, enable, isense1_gain, isense2_gain, vsense_gain);
 
 	if (enable) {
+		snd_soc_update_bits(codec, WSA881X_SPKR_PROT_ATEST2,
+				    0x02, 0x02);
 		value = ((isense2_gain << 6) || (isense1_gain << 4) ||
 			(vsense_gain << 3));
 		snd_soc_update_bits(codec, WSA881X_SPKR_PROT_FE_GAIN,
@@ -95,6 +309,13 @@ static int wsa881x_visense_txfe_ctrl(struct snd_soc_codec *codec, bool enable,
 		snd_soc_update_bits(codec, WSA881X_SPKR_PROT_FE_GAIN,
 				    0x01, 0x01);
 	} else {
+		snd_soc_update_bits(codec, WSA881X_SPKR_PROT_FE_VSENSE_VCM,
+				    0x10, 0x10);
+		/*
+		 * 200us sleep is needed after visense txfe disable as per
+		 * HW requirement.
+		 */
+		usleep_range(200, 210);
 		snd_soc_update_bits(codec, WSA881X_SPKR_PROT_FE_GAIN,
 				    0x01, 0x00);
 	}
@@ -112,34 +333,6 @@ static int wsa881x_visense_adc_ctrl(struct snd_soc_codec *codec, bool enable)
 	return 0;
 }
 
-static int wsa881x_rdac_ctrl(struct snd_soc_codec *codec, bool enable)
-{
-	dev_dbg(codec->dev, "%s: enable:%d\n", __func__, enable);
-	if (enable) {
-		snd_soc_update_bits(codec, WSA881X_SPKR_DRV_GAIN, 0x01, 0x01);
-		snd_soc_update_bits(codec, WSA881X_SPKR_DAC_CTL, 0x20, 0x20);
-		snd_soc_update_bits(codec, WSA881X_SPKR_DAC_CTL, 0x20, 0x00);
-		snd_soc_update_bits(codec, WSA881X_SPKR_DAC_CTL, 0x40, 0x40);
-		snd_soc_update_bits(codec, WSA881X_SPKR_DAC_CTL, 0x80, 0x80);
-	} else {
-		snd_soc_update_bits(codec, WSA881X_SPKR_DAC_CTL, 0x80, 0x00);
-		snd_soc_update_bits(codec, WSA881X_SPKR_DAC_CTL, 0x40, 0x00);
-	}
-	return 0;
-}
-
-static int wsa881x_spkr_pa_ctrl(struct snd_soc_codec *codec, bool enable)
-{
-	dev_dbg(codec->dev, "%s: enable:%d\n", __func__, enable);
-	if (enable) {
-		snd_soc_update_bits(codec, WSA881X_SPKR_MISC_CTL1, 0x01, 0x01);
-		snd_soc_update_bits(codec, WSA881X_SPKR_DRV_EN, 0x80, 0x80);
-	} else {
-		snd_soc_update_bits(codec, WSA881X_SPKR_DRV_EN, 0x80, 0x00);
-	}
-	return 0;
-}
-
 static int wsa881x_bandgap_ctrl(struct snd_soc_codec *codec, bool enable)
 {
 	dev_dbg(codec->dev, "%s: enable:%d\n", __func__, enable);
@@ -149,14 +342,6 @@ static int wsa881x_bandgap_ctrl(struct snd_soc_codec *codec, bool enable)
 	} else {
 		snd_soc_update_bits(codec, WSA881X_TEMP_OP, 0x08, 0x00);
 	}
-	return 0;
-}
-
-static int wsa881x_temp_sensor_ctrl(struct snd_soc_codec *codec, bool enable)
-{
-	dev_dbg(codec->dev, "%s: enable:%d\n", __func__, enable);
-	snd_soc_update_bits(codec, WSA881X_TEMP_OP, (0x01 << 2),
-			    (enable << 2));
 	return 0;
 }
 
@@ -270,7 +455,7 @@ static int wsa881x_enable_swr_dac_port(struct snd_soc_dapm_widget *w,
 	u32 ch_rate[WSA881X_MAX_SWR_PORTS];
 	u8 num_port = 0;
 
-	dev_err(codec->dev, "%s: event %d name %s\n", __func__,
+	dev_dbg(codec->dev, "%s: event %d name %s\n", __func__,
 		event, w->name);
 	if (wsa881x == NULL)
 		return -EINVAL;
@@ -282,14 +467,14 @@ static int wsa881x_enable_swr_dac_port(struct snd_soc_dapm_widget *w,
 				&ch_mask[num_port], &ch_rate[num_port]);
 		++num_port;
 
-		if (wsa881x->boost_enable) {
-			wsa881x_set_port(codec, SWR_BOOST_PORT,
+		if (wsa881x->comp_enable) {
+			wsa881x_set_port(codec, SWR_COMP_PORT,
 					&port_id[num_port], &num_ch[num_port],
 					&ch_mask[num_port], &ch_rate[num_port]);
 			++num_port;
 		}
-		if (wsa881x->comp_enable) {
-			wsa881x_set_port(codec, SWR_COMP_PORT,
+		if (wsa881x->boost_enable) {
+			wsa881x_set_port(codec, SWR_BOOST_PORT,
 					&port_id[num_port], &num_ch[num_port],
 					&ch_mask[num_port], &ch_rate[num_port]);
 			++num_port;
@@ -310,14 +495,14 @@ static int wsa881x_enable_swr_dac_port(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_POST_PMD:
 		port_id[num_port] = wsa881x->port[SWR_DAC_PORT].port_id;
 		++num_port;
-		if (wsa881x->boost_enable) {
-			port_id[num_port] =
-				wsa881x->port[SWR_BOOST_PORT].port_id;
-			++num_port;
-		}
 		if (wsa881x->comp_enable) {
 			port_id[num_port] =
 				wsa881x->port[SWR_COMP_PORT].port_id;
+			++num_port;
+		}
+		if (wsa881x->boost_enable) {
+			port_id[num_port] =
+				wsa881x->port[SWR_BOOST_PORT].port_id;
 			++num_port;
 		}
 		if (wsa881x->visense_enable) {
@@ -345,33 +530,38 @@ static int wsa881x_rdac_event(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
+		snd_soc_write(codec, WSA881X_CDC_DIG_CLK_CTL, 0x01);
+		snd_soc_write(codec, WSA881X_CDC_ANA_CLK_CTL, 0x01);
 		wsa881x_bandgap_ctrl(codec, ENABLE);
 		if (wsa881x->boost_enable)
 			wsa881x_boost_ctrl(codec, ENABLE);
-		break;
-	case SND_SOC_DAPM_POST_PMU:
-		wsa881x_rdac_ctrl(codec, ENABLE);
-		if (wsa881x->visense_enable) {
-			wsa881x_visense_txfe_ctrl(codec, ENABLE,
-						0x00, 0x01, 0x01);
-			wsa881x_visense_adc_ctrl(codec, ENABLE);
-		}
-		break;
-	case SND_SOC_DAPM_PRE_PMD:
-		if (wsa881x->visense_enable) {
-			wsa881x_visense_txfe_ctrl(codec, DISABLE,
-						0x00, 0x01, 0x01);
-			wsa881x_visense_adc_ctrl(codec, DISABLE);
-		}
-		wsa881x_rdac_ctrl(codec, DISABLE);
+		snd_soc_update_bits(codec, WSA881X_SPKR_DAC_CTL, 0x20, 0x20);
+		snd_soc_update_bits(codec, WSA881X_SPKR_DAC_CTL, 0x20, 0x00);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		if (wsa881x->boost_enable)
 			wsa881x_boost_ctrl(codec, DISABLE);
+		snd_soc_write(codec, WSA881X_CDC_ANA_CLK_CTL, 0x00);
+		snd_soc_write(codec, WSA881X_CDC_DIG_CLK_CTL, 0x00);
 		wsa881x_bandgap_ctrl(codec, DISABLE);
 		break;
 	}
+	return 0;
+}
 
+static int wsa881x_ramp_pa_gain(struct snd_soc_codec *codec,
+				int min_gain, int max_gain, int udelay)
+{
+	int val;
+	for (val = min_gain; max_gain <= val; val--) {
+		snd_soc_update_bits(codec, WSA881X_SPKR_DRV_GAIN,
+				    0xF0, val << 4);
+		/*
+		 * 1ms delay is needed for every step change in gain as per
+		 * HW requirement.
+		 */
+		usleep_range(udelay, udelay+10);
+	}
 	return 0;
 }
 
@@ -379,15 +569,54 @@ static int wsa881x_spkr_pa_event(struct snd_soc_dapm_widget *w,
 			struct snd_kcontrol *kcontrol, int event)
 {
 	struct snd_soc_codec *codec = w->codec;
-	dev_dbg(codec->dev, "%s: %s %d\n", __func__, w->name, event);
+	struct wsa881x_priv *wsa881x = snd_soc_codec_get_drvdata(codec);
 
+	dev_dbg(codec->dev, "%s: %s %d\n", __func__, w->name, event);
 	switch (event) {
-	case SND_SOC_DAPM_POST_PMU:
-		wsa881x_spkr_pa_ctrl(codec, ENABLE);
-		wsa881x_temp_sensor_ctrl(codec, ENABLE);
+	case SND_SOC_DAPM_PRE_PMU:
+		snd_soc_update_bits(codec, WSA881X_SPKR_DRV_GAIN, 0x08, 0x08);
+		snd_soc_update_bits(codec, WSA881X_SPKR_DRV_GAIN, 0xF0, 0x40);
+		snd_soc_update_bits(codec, WSA881X_SPKR_MISC_CTL1, 0x01, 0x01);
+		snd_soc_update_bits(codec, WSA881X_ADC_EN_DET_TEST_I,
+				    0x01, 0x01);
+		snd_soc_update_bits(codec, WSA881X_ADC_EN_MODU_V, 0x02, 0x02);
+		snd_soc_update_bits(codec, WSA881X_ADC_EN_DET_TEST_V,
+				    0x10, 0x10);
+		snd_soc_update_bits(codec, WSA881X_SPKR_PWRSTG_DBG, 0xE0, 0xA0);
 		break;
-	case SND_SOC_DAPM_PRE_PMD:
-		wsa881x_spkr_pa_ctrl(codec, DISABLE);
+	case SND_SOC_DAPM_POST_PMU:
+		/*
+		 * 710us delay is needed after PA enable as per
+		 * HW requirement.
+		 */
+		usleep_range(710, 720);
+		snd_soc_update_bits(codec, WSA881X_SPKR_PWRSTG_DBG, 0xE0, 0x00);
+		snd_soc_update_bits(codec, WSA881X_ADC_EN_DET_TEST_V,
+				    0x10, 0x00);
+		snd_soc_update_bits(codec, WSA881X_ADC_EN_MODU_V, 0x02, 0x00);
+		snd_soc_update_bits(codec, WSA881X_ADC_EN_DET_TEST_I,
+				    0x01, 0x00);
+		/*
+		 * 1ms delay is needed before change in gain as per
+		 * HW requirement.
+		 */
+		usleep_range(1000, 1010);
+		wsa881x_ramp_pa_gain(codec, G_12DB, G_13P5DB, 1000);
+		snd_soc_update_bits(codec, WSA881X_ADC_SEL_IBIAS, 0x70, 0x40);
+		if (wsa881x->visense_enable) {
+			wsa881x_visense_txfe_ctrl(codec, ENABLE,
+						0x00, 0x03, 0x01);
+			snd_soc_update_bits(codec, WSA881X_ADC_EN_SEL_IBAIS,
+					    0x07, 0x04);
+			wsa881x_visense_adc_ctrl(codec, ENABLE);
+		}
+		break;
+	case SND_SOC_DAPM_POST_PMD:
+		if (wsa881x->visense_enable) {
+			wsa881x_visense_adc_ctrl(codec, DISABLE);
+			wsa881x_visense_txfe_ctrl(codec, DISABLE,
+						0x00, 0x01, 0x01);
+		}
 		break;
 	}
 	return 0;
@@ -401,13 +630,13 @@ static const struct snd_soc_dapm_widget wsa881x_dapm_widgets[] = {
 		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 		SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
 
-	SND_SOC_DAPM_DAC_E("RDAC", NULL, SND_SOC_NOPM, 0, 0, wsa881x_rdac_event,
-		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
-		SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
+	SND_SOC_DAPM_DAC_E("RDAC", NULL, WSA881X_SPKR_DAC_CTL, 7, 0,
+		wsa881x_rdac_event,
+		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 
-	SND_SOC_DAPM_PGA_E("SPKR PGA", SND_SOC_NOPM, 0, 0, NULL, 0,
-			wsa881x_spkr_pa_event,
-			SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_PRE_PMD),
+	SND_SOC_DAPM_PGA_E("SPKR PGA", WSA881X_SPKR_DRV_EN, 7, 0, NULL, 0,
+			wsa881x_spkr_pa_event, SND_SOC_DAPM_PRE_PMU |
+			SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_OUTPUT("SPKR"),
 };
@@ -442,6 +671,27 @@ int wsa881x_set_channel_map(struct snd_soc_codec *codec, u8 *port, u8 num_port,
 }
 EXPORT_SYMBOL(wsa881x_set_channel_map);
 
+static void wsa881x_init(struct snd_soc_codec *codec)
+{
+	/* Bring out of analog reset */
+	snd_soc_update_bits(codec, WSA881X_CDC_RST_CTL, 0x02, 0x02);
+	/* Bring out of digital reset */
+	snd_soc_update_bits(codec, WSA881X_CDC_RST_CTL, 0x01, 0x01);
+	/* Set DAC polarity to Rising */
+	snd_soc_update_bits(codec, WSA881X_SPKR_DAC_CTL, 0x02, 0x02);
+	/* set Bias Ref ctrl to 1.225V */
+	snd_soc_update_bits(codec, WSA881X_BIAS_REF_CTRL, 0x07, 0x00);
+	snd_soc_update_bits(codec, WSA881X_SPKR_BBM_CTL, 0x02, 0x02);
+	snd_soc_update_bits(codec, WSA881X_SPKR_MISC_CTL1, 0xC0, 0xC0);
+	snd_soc_update_bits(codec, WSA881X_SPKR_MISC_CTL1, 0x06, 0x06);
+	snd_soc_update_bits(codec, WSA881X_SPKR_MISC_CTL2, 0x07, 0x04);
+	snd_soc_update_bits(codec, WSA881X_SPKR_BIAS_INT, 0x0F, 0x0F);
+	snd_soc_update_bits(codec, WSA881X_SPKR_PA_INT, 0xF0, 0x20);
+	snd_soc_update_bits(codec, WSA881X_BOOST_PS_CTL, 0x80, 0x00);
+	snd_soc_update_bits(codec, WSA881X_BOOST_PRESET_OUT1, 0xF0, 0xB0);
+	snd_soc_update_bits(codec, WSA881X_BOOST_ZX_CTL, 0x20, 0x00);
+}
+
 static int wsa881x_probe(struct snd_soc_codec *codec)
 {
 	struct wsa881x_priv *wsa881x = snd_soc_codec_get_drvdata(codec);
@@ -453,8 +703,15 @@ static int wsa881x_probe(struct snd_soc_codec *codec)
 		return -EINVAL;
 
 	dev = wsa881x->swr_slave;
+	wsa881x->codec = codec;
+	/*
+	 * Add 5msec delay to provide sufficient time for
+	 * soundwire auto enumeration of slave devices as
+	 * as per HW requirement.
+	 */
+	usleep_range(5000, 5010);
 	ret = swr_get_logical_dev_num(dev, dev->addr, &devnum);
-	if (!ret) {
+	if (ret) {
 		dev_err(codec->dev, "%s failed to get devnum, err:%d\n",
 			__func__, ret);
 		return ret;
@@ -467,6 +724,7 @@ static int wsa881x_probe(struct snd_soc_codec *codec)
 		dev_err(codec->dev, "%s: failed to set cache_io %d\n",
 			__func__, ret);
 	}
+	wsa881x_init(codec);
 	return ret;
 }
 
@@ -529,7 +787,29 @@ static int wsa881x_swr_probe(struct swr_device *pdev)
 			__func__);
 		goto err;
 	}
+	if (!debugfs_wsa881x_dent) {
+		dbgwsa881x = wsa881x;
+		debugfs_wsa881x_dent = debugfs_create_dir(
+						"wsa881x_swr_slave", 0);
+		if (!IS_ERR(debugfs_wsa881x_dent)) {
+			debugfs_peek = debugfs_create_file("swrslave_peek",
+					S_IFREG | S_IRUGO, debugfs_wsa881x_dent,
+					(void *) "swrslave_peek",
+					&codec_debug_ops);
 
+			debugfs_poke = debugfs_create_file("swrslave_poke",
+					S_IFREG | S_IRUGO, debugfs_wsa881x_dent,
+					(void *) "swrslave_poke",
+					&codec_debug_ops);
+
+			debugfs_reg_dump = debugfs_create_file(
+						"swrslave_reg_dump",
+						S_IFREG | S_IRUGO,
+						debugfs_wsa881x_dent,
+						(void *) "swrslave_reg_dump",
+						&codec_debug_ops);
+		}
+	}
 	return 0;
 
 err:
@@ -540,6 +820,7 @@ static int wsa881x_swr_remove(struct swr_device *pdev)
 {
 	struct wsa881x_priv *wsa881x;
 	wsa881x = swr_get_dev_data(pdev);
+	debugfs_remove_recursive(debugfs_wsa881x_dent);
 	snd_soc_unregister_codec(&pdev->dev);
 	swr_set_dev_data(pdev, NULL);
 	return 0;

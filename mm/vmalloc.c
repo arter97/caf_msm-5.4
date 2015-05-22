@@ -20,6 +20,7 @@
 #include <linux/seq_file.h>
 #include <linux/debugobjects.h>
 #include <linux/kallsyms.h>
+#include <linux/kasan.h>
 #include <linux/list.h>
 #include <linux/rbtree.h>
 #include <linux/radix-tree.h>
@@ -1559,6 +1560,7 @@ struct vm_struct *remove_vm_area(const void *addr)
 		spin_unlock(&vmap_area_lock);
 
 		vmap_debug_free_range(va->va_start, va->va_end);
+		kasan_free_shadow(vm);
 		free_unmap_vmap_area(va);
 		vm->size -= PAGE_SIZE;
 
@@ -1761,6 +1763,7 @@ fail:
  *	@end:		vm area range end
  *	@gfp_mask:	flags for the page level allocator
  *	@prot:		protection mask for the allocated pages
+ *	@vm_flags:	additional vm area flags (e.g. %VM_NO_GUARD)
  *	@node:		node to use for allocation or NUMA_NO_NODE
  *	@caller:	caller's return address
  *
@@ -1770,7 +1773,8 @@ fail:
  */
 void *__vmalloc_node_range(unsigned long size, unsigned long align,
 			unsigned long start, unsigned long end, gfp_t gfp_mask,
-			pgprot_t prot, int node, const void *caller)
+			pgprot_t prot, unsigned long vm_flags, int node,
+			const void *caller)
 {
 	struct vm_struct *area;
 	void *addr;
@@ -1785,8 +1789,8 @@ void *__vmalloc_node_range(unsigned long size, unsigned long align,
 	if (!size || (size >> PAGE_SHIFT) > total_pages)
 		goto fail;
 
-	area = __get_vm_area_node(size, align, VM_ALLOC | VM_UNLIST,
-				  start, end, node, gfp_mask, caller);
+	area = __get_vm_area_node(size, align, VM_ALLOC | VM_UNLIST | vm_flags,
+			start, end, node, gfp_mask, caller);
 	if (!area)
 		goto fail;
 
@@ -1835,7 +1839,7 @@ static void *__vmalloc_node(unsigned long size, unsigned long align,
 			    int node, const void *caller)
 {
 	return __vmalloc_node_range(size, align, VMALLOC_START, VMALLOC_END,
-				gfp_mask, prot, node, caller);
+				gfp_mask, prot, 0, node, caller);
 }
 
 void *__vmalloc(unsigned long size, gfp_t gfp_mask, pgprot_t prot)

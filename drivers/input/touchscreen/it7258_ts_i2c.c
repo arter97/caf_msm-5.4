@@ -2,6 +2,8 @@
  *
  * Copyright (C) 2014 ITE Tech. Inc.
  *
+ * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
  * only version 2 as published by the Free Software Foundation.
@@ -21,7 +23,9 @@
 #include <linux/firmware.h>
 #include <linux/gpio.h>
 #include <linux/slab.h>
-#include <linux/wakelock.h>
+#include <linux/regulator/consumer.h>
+#include <linux/of_gpio.h>
+#include <linux/fb.h>
 
 #define MAX_BUFFER_SIZE			144
 #define DEVICE_NAME			"IT7260"
@@ -95,6 +99,11 @@
 /* use this to include integers in commands */
 #define CMD_UINT16(v)		((uint8_t)(v)) , ((uint8_t)((v) >> 8))
 
+/* Function declarations */
+static int fb_notifier_callback(struct notifier_block *self,
+			unsigned long event, void *data);
+static int IT7260_ts_resume(struct device *dev);
+static int IT7260_ts_suspend(struct device *dev);
 
 struct FingerData {
 	uint8_t xLo;
@@ -125,16 +134,33 @@ struct PointData {
 #define FD_PRESSURE_HIGH		0x08
 #define FD_PRESSURE_HEAVY		0x0F
 
+#define IT_VTG_MIN_UV		1800000
+#define IT_VTG_MAX_UV		1800000
+#define IT_I2C_VTG_MIN_UV	2600000
+#define IT_I2C_VTG_MAX_UV	3300000
+
+struct IT7260_ts_platform_data {
+	u32 irqflags;
+	u32 irq_gpio;
+	u32 irq_gpio_flags;
+	u32 reset_gpio;
+	u32 reset_gpio_flags;
+};
+
 struct IT7260_ts_data {
 	struct i2c_client *client;
 	struct input_dev *input_dev;
+	const struct IT7260_ts_platform_data *pdata;
+	struct regulator *vdd;
+	struct regulator *avdd;
+#ifdef CONFIG_FB
+	struct notifier_block fb_notif;
+#endif
 };
 
 static int8_t fwUploadResult;
 static int8_t calibrationWasSuccessful;
 static bool devicePresent;
-static DEFINE_MUTEX(sleepModeMutex);
-static bool chipAwake;
 static bool hadFingerDown;
 static bool isDeviceSuspend;
 static struct input_dev *input_dev;
@@ -391,6 +417,21 @@ static bool chipGetVersions(uint8_t *verFw, uint8_t *verCfg, bool logIt)
 	return ret;
 }
 
+static int IT7260_ts_chipLowPowerMode(bool low)
+{
+	static const uint8_t cmdGoSleep[] = {CMD_PWR_CTL,
+					0x00, PWR_CTL_SLEEP_MODE};
+	uint8_t dummy;
+
+	if (low)
+		i2cWriteNoReadyCheck(BUF_COMMAND, cmdGoSleep,
+					sizeof(cmdGoSleep));
+	else
+		i2cReadNoReadyCheck(BUF_QUERY, &dummy, sizeof(dummy));
+
+	return 0;
+}
+
 static ssize_t sysfsUpgradeStore(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -562,48 +603,33 @@ static ssize_t sysfsSleepShow(struct device *dev,
 	 * leaking a byte of kernel data (by claiming to return a byte but not
 	 * writing to buf. To fix this now we actually return the sleep status
 	 */
-	if (!mutex_lock_interruptible(&sleepModeMutex)) {
-		*buf = chipAwake ? '1' : '0';
-		mutex_unlock(&sleepModeMutex);
-		return 1;
-	} else {
-		return -EINTR;
-	}
+	*buf = isDeviceSuspend ? '1' : '0';
+	return 1;
 }
 
 static ssize_t sysfsSleepStore(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	static const uint8_t cmdGoSleep[] = {CMD_PWR_CTL,
-					0x00, PWR_CTL_SLEEP_MODE};
 	int goToSleepVal, ret;
-	bool goToWake;
-	uint8_t dummy;
 
 	ret = sscanf(buf, "%d", &goToSleepVal);
-	/* convert to bool of proper polarity */
-	goToWake = !goToSleepVal;
 
-	if (!mutex_lock_interruptible(&sleepModeMutex)) {
-		if ((chipAwake && goToWake) || (!chipAwake && !goToWake))
-			LOGE("duplicate request to %s chip\n",
-				goToWake ? "wake" : "sleep");
-		else if (goToWake) {
-			i2cReadNoReadyCheck(BUF_QUERY, &dummy, sizeof(dummy));
-			enable_irq(gl_ts->client->irq);
-			LOGI("touch is going to wake!\n");
-		} else {
-			disable_irq(gl_ts->client->irq);
-			i2cWriteNoReadyCheck(BUF_COMMAND, cmdGoSleep,
-						sizeof(cmdGoSleep));
-			LOGI("touch is going to sleep...\n");
-		}
-		chipAwake = goToWake;
-		mutex_unlock(&sleepModeMutex);
-		return count;
+	if ((isDeviceSuspend && goToSleepVal > 0) || (!isDeviceSuspend &&
+							goToSleepVal == 0))
+		dev_err(dev, "duplicate request to %s chip\n",
+			goToSleepVal ? "sleep" : "wake");
+	else if (goToSleepVal) {
+		disable_irq(gl_ts->client->irq);
+		IT7260_ts_chipLowPowerMode(true);
+		dev_dbg(dev, "touch is going to sleep...\n");
 	} else {
-		return -EINTR;
+		IT7260_ts_chipLowPowerMode(false);
+		enable_irq(gl_ts->client->irq);
+		dev_dbg(dev, "touch is going to wake!\n");
 	}
+	isDeviceSuspend = goToSleepVal;
+
+	return count;
 }
 
 
@@ -660,6 +686,13 @@ void sendCalibrationCmd(void)
 }
 EXPORT_SYMBOL(sendCalibrationCmd);
 
+static void IT7260_ts_release_all(void)
+{
+	input_report_key(gl_ts->input_dev, BTN_TOUCH, 0);
+	input_mt_sync(gl_ts->input_dev);
+	input_sync(gl_ts->input_dev);
+}
+
 static void readFingerData(uint16_t *xP, uint16_t *yP, uint8_t *pressureP,
 						const struct FingerData *fd)
 {
@@ -677,7 +710,7 @@ static void readFingerData(uint16_t *xP, uint16_t *yP, uint8_t *pressureP,
 		*pressureP = fd->pressure & FD_PRESSURE_BITS;
 }
 
-static void readTouchDataPoint(void)
+static irqreturn_t IT7260_ts_threaded_handler(int irq, void *devid)
 {
 	struct PointData pointData;
 	uint8_t devStatus;
@@ -687,49 +720,46 @@ static void readTouchDataPoint(void)
 	/* verify there is point data to read & it is readable and valid */
 	i2cReadNoReadyCheck(BUF_QUERY, &devStatus, sizeof(devStatus));
 	if (!((devStatus & PT_INFO_BITS) & PT_INFO_YES)) {
-		pr_err("readTouchDataPoint() called when no data available (0x%02X)\n",
-								devStatus);
-		return;
+		return IRQ_HANDLED;
 	}
 	if (!i2cReadNoReadyCheck(BUF_POINT_INFO, (void *)&pointData,
 						sizeof(pointData))) {
-		pr_err("readTouchDataPoint() failed to read point data buffer\n");
-		return;
+		dev_err(&gl_ts->client->dev,
+			"readTouchDataPoint() failed to read point data buffer\n");
+		return IRQ_HANDLED;
 	}
 	if ((pointData.flags & PD_FLAGS_DATA_TYPE_BITS) !=
 					PD_FLAGS_DATA_TYPE_TOUCH) {
-		pr_err("readTouchDataPoint() dropping non-point data of type 0x%02X\n",
+		dev_err(&gl_ts->client->dev,
+			"readTouchDataPoint() dropping non-point data of type 0x%02X\n",
 							pointData.flags);
-		return;
+		return IRQ_HANDLED;
 	}
 
 	if ((pointData.flags & PD_FLAGS_HAVE_FINGERS) & 1)
 		readFingerData(&x, &y, &pressure, pointData.fd);
 
 	if (pressure >= FD_PRESSURE_LIGHT) {
-
 		if (!hadFingerDown)
 			hadFingerDown = true;
 
 		readFingerData(&x, &y, &pressure, pointData.fd);
 
-		input_report_abs(gl_ts->input_dev, ABS_X, x);
-		input_report_abs(gl_ts->input_dev, ABS_Y, y);
 		input_report_key(gl_ts->input_dev, BTN_TOUCH, 1);
+		input_report_abs(gl_ts->input_dev, ABS_MT_POSITION_X, x);
+		input_report_abs(gl_ts->input_dev, ABS_MT_POSITION_Y, y);
+		input_mt_sync(gl_ts->input_dev);
 		input_sync(gl_ts->input_dev);
+
 
 	} else if (hadFingerDown) {
 		hadFingerDown = false;
 
 		input_report_key(gl_ts->input_dev, BTN_TOUCH, 0);
+		input_mt_sync(gl_ts->input_dev);
 		input_sync(gl_ts->input_dev);
 	}
 
-}
-
-static irqreturn_t IT7260_ts_threaded_handler(int irq, void *devid)
-{
-	readTouchDataPoint();
 	return IRQ_HANDLED;
 }
 
@@ -775,9 +805,10 @@ static int IT7260_ts_probe(struct i2c_client *client,
 				const struct i2c_device_id *id)
 {
 	static const uint8_t cmdStart[] = {CMD_UNKNOWN_7};
-	struct IT7260_i2c_platform_data *pdata;
+	struct IT7260_ts_platform_data *pdata;
 	uint8_t rsp[2];
 	int ret = -1;
+	int rc;
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		LOGE("need I2C_FUNC_I2C\n");
@@ -798,11 +829,96 @@ static int IT7260_ts_probe(struct i2c_client *client,
 
 	gl_ts->client = client;
 	i2c_set_clientdata(client, gl_ts);
-	pdata = client->dev.platform_data;
 
+	if (client->dev.of_node) {
+		pdata = devm_kzalloc(&client->dev,
+			sizeof(struct IT7260_ts_platform_data), GFP_KERNEL);
+		if (!pdata) {
+			dev_err(&client->dev, "Failed to allocate memory\n");
+			return -ENOMEM;
+		}
+	} else
+		pdata = client->dev.platform_data;
+
+	if (!pdata) {
+		dev_err(&client->dev, "Invalid pdata\n");
+		return -EINVAL;
+	}
+	gl_ts->pdata = pdata;
 	if (sysfs_create_group(&(client->dev.kobj), &it7260_attrstatus_group)) {
 		dev_err(&client->dev, "failed to register sysfs #1\n");
 		goto err_sysfs_grp_create_1;
+	}
+
+	gl_ts->vdd = regulator_get(&gl_ts->client->dev, "vdd");
+	if (IS_ERR(gl_ts->vdd)) {
+		dev_err(&gl_ts->client->dev,
+				"Regulator get failed vdd\n");
+		gl_ts->vdd = NULL;
+	} else {
+		rc = regulator_set_voltage(gl_ts->vdd,
+				IT_VTG_MIN_UV, IT_VTG_MAX_UV);
+		if (rc)
+			dev_err(&gl_ts->client->dev,
+				"Regulator set_vtg failed vdd\n");
+	}
+
+	gl_ts->avdd = regulator_get(&gl_ts->client->dev, "avdd");
+	if (IS_ERR(gl_ts->avdd)) {
+		dev_err(&gl_ts->client->dev,
+				"Regulator get failed avdd\n");
+		gl_ts->avdd = NULL;
+	} else {
+		rc = regulator_set_voltage(gl_ts->avdd, IT_I2C_VTG_MIN_UV,
+							IT_I2C_VTG_MAX_UV);
+		if (rc)
+			dev_err(&gl_ts->client->dev,
+				"Regulator get failed avdd\n");
+	}
+
+	if (gl_ts->vdd) {
+		rc = regulator_enable(gl_ts->vdd);
+		if (rc) {
+			dev_err(&gl_ts->client->dev,
+				"Regulator vdd enable failed rc=%d\n", rc);
+			return rc;
+		}
+	}
+
+	if (gl_ts->avdd) {
+		rc = regulator_enable(gl_ts->avdd);
+		if (rc) {
+			dev_err(&gl_ts->client->dev,
+				"Regulator avdd enable failed rc=%d\n", rc);
+			return rc;
+		}
+	}
+
+	/* reset gpio info */
+	pdata->reset_gpio = of_get_named_gpio_flags(client->dev.of_node,
+					"ite,reset-gpio", 0,
+					&pdata->reset_gpio_flags);
+	if (gpio_is_valid(pdata->reset_gpio)) {
+		if (gpio_request(pdata->reset_gpio, "ite_reset_gpio"))
+			dev_err(&gl_ts->client->dev,
+				"gpio_request failed for reset GPIO\n");
+		if (gpio_direction_output(pdata->reset_gpio, 0))
+			dev_err(&gl_ts->client->dev,
+				"gpio_direction_output for reset GPIO\n");
+		dev_dbg(&gl_ts->client->dev, "Reset GPIO %d\n",
+							pdata->reset_gpio);
+	} else {
+		return pdata->reset_gpio;
+	}
+
+	/* irq gpio info */
+	pdata->irq_gpio = of_get_named_gpio_flags(client->dev.of_node,
+				"ite,irq-gpio", 0, &pdata->irq_gpio_flags);
+	if (gpio_is_valid(pdata->irq_gpio)) {
+		dev_dbg(&gl_ts->client->dev, "IRQ GPIO %d, IRQ # %d\n",
+				pdata->irq_gpio, gpio_to_irq(pdata->irq_gpio));
+	} else {
+		return pdata->irq_gpio;
 	}
 
 	if (!chipIdentifyIT7260()) {
@@ -831,8 +947,11 @@ static int IT7260_ts_probe(struct i2c_client *client,
 	set_bit(KEY_SLEEP,input_dev->keybit);
 	set_bit(KEY_WAKEUP,input_dev->keybit);
 	set_bit(KEY_POWER,input_dev->keybit);
-	input_set_abs_params(input_dev, ABS_X, 0, SCREEN_X_RESOLUTION, 0, 0);
-	input_set_abs_params(input_dev, ABS_Y, 0, SCREEN_Y_RESOLUTION, 0, 0);
+	input_set_abs_params(input_dev, ABS_MT_POSITION_X, 0,
+				SCREEN_X_RESOLUTION, 0, 0);
+	input_set_abs_params(input_dev, ABS_MT_POSITION_Y, 0,
+				SCREEN_Y_RESOLUTION, 0, 0);
+	input_set_drvdata(gl_ts->input_dev, gl_ts);
 
 	if (input_register_device(input_dev)) {
 		LOGE("failed to register input device\n");
@@ -849,6 +968,15 @@ static int IT7260_ts_probe(struct i2c_client *client,
 		dev_err(&client->dev, "failed to register sysfs #2\n");
 		goto err_sysfs_grp_create_2;
 	}
+
+#if defined(CONFIG_FB)
+	gl_ts->fb_notif.notifier_call = fb_notifier_callback;
+
+	ret = fb_register_client(&gl_ts->fb_notif);
+	if (ret)
+		dev_err(&client->dev, "Unable to register fb_notifier: %d\n",
+									ret);
+#endif
 	
 	devicePresent = true;
 
@@ -882,9 +1010,85 @@ err_out:
 
 static int IT7260_ts_remove(struct i2c_client *client)
 {
+#if defined(CONFIG_FB)
+	if (fb_unregister_client(&gl_ts->fb_notif))
+		dev_err(&client->dev, "Error occurred while unregistering fb_notifier.\n");
+#endif
 	devicePresent = false;
 	return 0;
 }
+
+#if defined(CONFIG_FB)
+static int fb_notifier_callback(struct notifier_block *self,
+			unsigned long event, void *data)
+{
+	struct fb_event *evdata = data;
+	int *blank;
+
+	if (evdata && evdata->data && gl_ts && gl_ts->client) {
+		if (event == FB_EVENT_BLANK) {
+			blank = evdata->data;
+			if (*blank == FB_BLANK_UNBLANK)
+				IT7260_ts_resume(&(gl_ts->input_dev->dev));
+			else if (*blank == FB_BLANK_POWERDOWN ||
+					*blank == FB_BLANK_VSYNC_SUSPEND)
+				IT7260_ts_suspend(&(gl_ts->input_dev->dev));
+		}
+	}
+
+	return 0;
+}
+#endif
+
+#ifdef CONFIG_PM
+static int IT7260_ts_resume(struct device *dev)
+{
+	if (!isDeviceSuspend) {
+		dev_info(dev, "Already in resume state\n");
+		return 0;
+	}
+
+	/* put the device in active powr mode */
+	IT7260_ts_chipLowPowerMode(false);
+
+	enable_irq(gl_ts->client->irq);
+	isDeviceSuspend	= false;
+	return 0;
+}
+
+static int IT7260_ts_suspend(struct device *dev)
+{
+	if (isDeviceSuspend) {
+		dev_info(dev, "Already in suspend state\n");
+		return 0;
+	}
+
+	disable_irq(gl_ts->client->irq);
+
+	/* put the device in active powr mode */
+	IT7260_ts_chipLowPowerMode(true);
+
+	IT7260_ts_release_all();
+	isDeviceSuspend = true;
+
+	return 0;
+}
+
+static const struct dev_pm_ops IT7260_ts_dev_pm_ops = {
+	.suspend = IT7260_ts_suspend,
+	.resume  = IT7260_ts_resume,
+};
+#else
+static int IT7260_ts_resume(struct device *dev)
+{
+	return 0;
+}
+
+static int IT7260_ts_suspend(struct device *dev)
+{
+	return 0;
+}
+#endif
 
 static const struct i2c_device_id IT7260_ts_id[] = {
 	{ DEVICE_NAME, 0},
@@ -894,33 +1098,22 @@ static const struct i2c_device_id IT7260_ts_id[] = {
 MODULE_DEVICE_TABLE(i2c, IT7260_ts_id);
 
 static const struct of_device_id IT7260_match_table[] = {
-	{ .compatible = "ITE,IT7260_ts",},
+	{ .compatible = "ite,it7260_ts",},
 	{},
 };
-
-static int IT7260_ts_resume(struct i2c_client *i2cdev)
-{
-	isDeviceSuspend	= false;
-    return 0;
-}
-
-static int IT7260_ts_suspend(struct i2c_client *i2cdev, pm_message_t pmesg)
-{
-	isDeviceSuspend = true;
-    return 0;
-}
 
 static struct i2c_driver IT7260_ts_driver = {
 	.driver = {
 		.owner = THIS_MODULE,
 		.name = DEVICE_NAME,
 		.of_match_table = IT7260_match_table,
+#ifdef CONFIG_PM
+		.pm = &IT7260_ts_dev_pm_ops,
+#endif
 	},
 	.probe = IT7260_ts_probe,
 	.remove = IT7260_ts_remove,
 	.id_table = IT7260_ts_id,
-	.resume   = IT7260_ts_resume,
-	.suspend = IT7260_ts_suspend,
 };
 
 module_i2c_driver(IT7260_ts_driver);

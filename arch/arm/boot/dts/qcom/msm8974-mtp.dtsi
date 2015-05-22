@@ -24,8 +24,11 @@
 		status = "ok";
 	};
 
-	qcom,mdss_dsi@fd922800 {
-		qcom,dsi-pref-prim-pan = <&dsi_tosh_720_vid>;
+	qcom,mdss_dsi@0 {
+		hw-config = "single_dsi";
+		qcom,mdss_dsi_ctrl0@fd922800 {
+			qcom,dsi-pref-prim-pan = <&dsi_tosh_720_vid>;
+		};
 	};
 
 	qcom,mdss_mdp@fd900000 {
@@ -709,13 +712,16 @@
 };
 
 &dsi_tosh_720_vid {
-       qcom,cont-splash-enabled;
+	qcom,cont-splash-enabled;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
 
 &dsi_generic_720p_cmd {
-       qcom,cont-splash-enabled;
+	qcom,cont-splash-enabled;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
 
 &dsi_jdi_1080_vid {
-       qcom,cont-splash-enabled;
+	qcom,cont-splash-enabled;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };

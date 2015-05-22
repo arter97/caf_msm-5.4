@@ -13,7 +13,6 @@
 #include "msm8916.dtsi"
 #include "msm8916-pinctrl.dtsi"
 #include "apq8016-camera-sensor-sbc.dtsi"
-#include "dsi-panel-jdi-1080p-video.dtsi"
 
 / {
 	aliases {
@@ -156,7 +155,7 @@
 		qcom,model = "msm8x16-snd-card-sbc";
 		qcom,msm-snd-card-id = <0>;
 		qcom,msm-codec-type = "internal";
-		qcom,msm-ext-pa = "primary";
+		qcom,msm-ext-pa = "quaternary";
 		qcom,msm-mclk-freq = <9600000>;
 		qcom,msm-mbhc-hphl-swh = <0>;
 		qcom,msm-mbhc-gnd-swh = <0>;
@@ -181,7 +180,9 @@
 				"cdc_lines_sec_ext_act",
 				"cdc_lines_sec_ext_sus",
 				"cross_conn_det_act",
-				"cross_conn_det_sus";
+				"cross_conn_det_sus",
+				"cdc_lines_quat_ext_act",
+				"cdc_lines_quat_ext_sus";
 		pinctrl-0 = <&cdc_pdm_lines_act>;
 		pinctrl-1 = <&cdc_pdm_lines_sus>;
 		pinctrl-2 = <&cdc_pdm_lines_act &cdc_ext_pa_act
@@ -190,6 +191,10 @@
 						&cdc_ext_pa_ws_sus>;
 		pinctrl-4 = <&cross_conn_det_act>;
 		pinctrl-5 = <&cross_conn_det_sus>;
+		pinctrl-6 = <&ext_cdc_tlmm_lines_act &cdc_pdm_lines_act
+						&cross_conn_det_act>;
+		pinctrl-7 = <&ext_cdc_tlmm_lines_sus &cdc_pdm_lines_sus
+						&cross_conn_det_sus>;
 
 		asoc-platform = <&pcm0>, <&pcm1>, <&voip>, <&voice>,
 				<&loopback>, <&compress>, <&hostless>,
@@ -354,7 +359,8 @@
 	qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
 	qcom,mdss-dsi-bl-pmic-bank-select = <0>;
 	qcom,mdss-dsi-pwm-gpio = <&pm8916_mpps 4 0>;
-
+	qcom,cont-splash-enabled;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
 
 &mdss_mdp {
@@ -501,10 +507,6 @@
 			};
 	};
 
-};
-
-&dsi_jdi_1080_vid {
-       qcom,cont-splash-enabled;
 };
 
 &qcom_tzlog {
@@ -785,7 +787,7 @@
 				qcom,max-current = <40>;
 				qcom,id = <8>;
 				linux,default-trigger =
-						"none";
+						"boot-indication";
 				qcom,default-state = "on";
 				qcom,source-sel = <1>;
 				qcom,mode-ctrl = <0x10>;
@@ -831,6 +833,10 @@
 
 &pm8916_s3{
 	qcom,init-voltage = <1300000>;
+};
+
+&mdss_fb0 {
+	qcom,boot-indication-enabled;
 };
 
 &spmi_bus {

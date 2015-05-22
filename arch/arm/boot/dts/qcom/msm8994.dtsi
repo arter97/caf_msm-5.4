@@ -1906,10 +1906,10 @@
 		         <&clock_gcc clk_gpll0_out_mmsscc>,
 			 <&clock_rpm clk_mmssnoc_ahb_clk>,
 			 <&clock_rpm clk_oxili_gfx3d_clk_src>,
-			 <&mdss_dsi0_pll clk_mdss_pixel_clk_mux>,
-			 <&mdss_dsi0_pll clk_mdss_pixel_clk_mux>,
-			 <&mdss_dsi0_pll clk_mdss_byte_clk_mux>,
-			 <&mdss_dsi0_pll clk_mdss_byte_clk_mux>,
+			 <&mdss_dsi0_pll clk_dsi0pll_pixel_clk_mux>,
+			 <&mdss_dsi1_pll clk_dsi1pll_pixel_clk_mux>,
+			 <&mdss_dsi0_pll clk_dsi0pll_byte_clk_mux>,
+			 <&mdss_dsi1_pll clk_dsi1pll_byte_clk_mux>,
 			 <&mdss_hdmi_pll clk_hdmi_20nm_vco_clk>;
 		#clock-cells = <1>;
 	};
@@ -3621,8 +3621,6 @@
 #include "msm8994-camera.dtsi"
 #include "msm8994-gpu.dtsi"
 #include "dsi-panel-sim-video.dtsi"
-#include "dsi-panel-sim-dualmipi0-video.dtsi"
-#include "dsi-panel-sim-dualmipi1-video.dtsi"
+#include "dsi-panel-sim-dualmipi-video.dtsi"
 #include "dsi-panel-sim-cmd.dtsi"
-#include "dsi-panel-sim-dualmipi0-cmd.dtsi"
-#include "dsi-panel-sim-dualmipi1-cmd.dtsi"
+#include "dsi-panel-sim-dualmipi-cmd.dtsi"

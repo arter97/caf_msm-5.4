@@ -270,7 +270,6 @@ struct mipi_panel_info {
 	char data_lane1;
 	char data_lane2;
 	char data_lane3;
-	char dlane_swap;	/* data lane swap */
 	char rgb_swap;
 	char b_sel;
 	char g_sel;
@@ -567,7 +566,7 @@ static inline int mdss_panel_get_htotal(struct mdss_panel_info *pinfo, bool
 }
 
 int mdss_register_panel(struct platform_device *pdev,
-	struct mdss_panel_data *pdata);
+	struct mdss_panel_data *pdata, struct device_node *node);
 
 /*
  * mdss_panel_is_power_off: - checks if a panel is off

@@ -1561,6 +1561,7 @@ static void sdhci_pm_qos_remove_work(struct work_struct *work)
 		PM_QOS_DEFAULT_VALUE, host_qos[vote].pm_qos_req_dma.type,
 		sdhci_get_pm_qos_cpumask(host, vote),
 		host->power_policy, -EINVAL, vote);
+
 	host->last_qos_policy = -EINVAL;
 }
 

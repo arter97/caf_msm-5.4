@@ -11,6 +11,7 @@
  *
  */
 #include <linux/firmware.h>
+#include <soc/qcom/subsystem_restart.h>
 
 #include "adreno.h"
 #include "a5xx_reg.h"
@@ -23,6 +24,8 @@
 #include "kgsl_sharedmem.h"
 #include "kgsl_log.h"
 #include "kgsl.h"
+
+static int zap_ucode_loaded;
 
 void a5xx_snapshot(struct adreno_device *adreno_dev,
 		struct kgsl_snapshot *snapshot);
@@ -900,6 +903,9 @@ static void a5xx_gpmu_start(struct adreno_device *adreno_dev)
 	if (ret)
 		return;
 
+	/* GPMU clock gating setup */
+	kgsl_regwrite(device, A5XX_GPMU_WFI_CONFIG, 0x00004014);
+
 	/* Kick off GPMU firmware */
 	kgsl_regwrite(device, A5XX_GPMU_CM3_SYSRESET, 0);
 	/*
@@ -1060,10 +1066,6 @@ static void a5xx_start(struct adreno_device *adreno_dev)
 			ARRAY_SIZE(a510_hwcg_regs));
 
 	a5xx_protect_init(adreno_dev);
-
-	/* Set A5x specific power control bits to enable features. */
-	if (ADRENO_FEATURE(adreno_dev, ADRENO_SPTP_PC))
-		adreno_dev->pwrctrl_flag |= BIT(ADRENO_SPTP_PC_CTRL);
 }
 
 /*
@@ -1178,6 +1180,7 @@ int a5xx_microcode_read(struct adreno_device *adreno_dev)
 int a5xx_microcode_load(struct adreno_device *adreno_dev,
 						unsigned int start_type)
 {
+	void *ptr;
 	struct kgsl_device *device = &adreno_dev->dev;
 	uint64_t gpuaddr;
 
@@ -1192,6 +1195,17 @@ int a5xx_microcode_load(struct adreno_device *adreno_dev,
 				(uint)gpuaddr);
 	kgsl_regwrite(device, A5XX_CP_PFP_INSTR_BASE_HI,
 				((uint64_t)(gpuaddr) >> 32));
+
+	/* Load the zap shader firmware through PIL if its available */
+	if (adreno_dev->gpucore->zap_name && !zap_ucode_loaded) {
+		ptr = subsystem_get(adreno_dev->gpucore->zap_name);
+
+		/* Disable content protecttion if the above call fails */
+		if (IS_ERR_OR_NULL(ptr))
+			device->mmu.secured = false;
+
+		zap_ucode_loaded = 1;
+	}
 
 	return 0;
 }

@@ -887,7 +887,7 @@
 		};
 
 		qcom,smdpkt-apr-apps2 {
-			qcom,smdpkt-remote = "modem";
+			qcom,smdpkt-remote = "adsp";
 			qcom,smdpkt-port-name = "apr_apps2";
 			qcom,smdpkt-dev-name = "apr_apps2";
 		};
@@ -1115,8 +1115,10 @@
 		reg-names = "core_mem", "bam_mem";
 
 		interrupt-names = "core_irq", "bam_irq", "wakeup_irq";
+		#address-cells = <0>;
 		interrupt-parent = <&blsp1_uart0>;
 		interrupts = <0 1 2>;
+		#interrupt-cells = <1>;
 		interrupt-map-mask = <0xffffffff>;
 		interrupt-map = <0 &intc 0 107 0
 				1 &intc 0 238 0
@@ -1502,8 +1504,8 @@
 			<36000 133330000 0xf0fcfff>, /* decoder VGA 30 fps  */
 			<36000 133330000 0x01000414>; /* encoder VGA 30 fps   */
 		qcom,hfi = "venus";
-		qcom,reg-presets = <0xE0020 0x0aaaaaaa>,
-			<0xE0024 0x0aaaaaaa>,
+		qcom,reg-presets = <0xe0020 0x05555556>,
+			<0xe0024 0x05555556>,
 			<0x80124 0x00000003>;
 		qcom,qdss-presets = <0x825000 0x1000>,
 			<0x826000 0x1000>,

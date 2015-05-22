@@ -65,7 +65,7 @@
 						      <0x2b4 4 8>;
 		qcom,mdss-pipe-dma-clk-ctrl-offsets = <0x2ac 8 12>;
 
-		qcom,mdss-smp-data = <12 8192>;
+		qcom,mdss-smp-data = <8 8192>;
 
 		qcom,mdss-ctl-off = <0x00002000 0x00002200 0x00002400>;
 		qcom,mdss-mixer-intf-off = <0x00045000>;
@@ -89,17 +89,49 @@
 			 <&clock_gcc clk_gcc_mdss_vsync_clk>;
 		clock-names = "iface_clk", "bus_clk", "core_clk_src",
 				"core_clk", "vsync_clk";
-		qcom,mdp-settings = <0x000011e4 0x00000000>,
+		qcom,mdp-settings = <0x0000117C 0x0000FFFF>,
+				    <0x00001180 0x0000000F>,
+				    <0x00001184 0x0000FF00>,
+				    <0x000011e0 0x000000E4>,
+				    <0x000011e4 0x00000000>,
 				    <0x00065048 0x00000008>,
 				    <0x00065848 0x00000008>,
 				    <0x00066048 0x00000008>;
 
+		qcom,regs-dump-mdp = <0x01000 0x01424>,
+				     <0x02000 0x02030>,
+				     <0x02200 0x02230>,
+				     <0x02400 0x02430>,
+				     <0x05000 0x05130>,
+				     <0x05200 0x05230>,
+				     <0x15000 0x15130>,
+				     <0x17000 0x17130>,
+				     <0x25000 0x2512C>,
+				     <0x45000 0x4538c>,
+				     <0x48000 0x4838c>,
+				     <0x55000 0x5522c>,
+				     <0x65000 0x652b4>,
+				     <0x65800 0x65ab4>,
+				     <0x6b800 0x6ba54>,
+				     <0x71000 0x710d0>;
+
+		qcom,regs-dump-names-mdp = "MDP",
+			"CTL_0",     "CTL_1",  "CTL_2",
+			"VIG0_SSPP", "VIG0",
+			"RGB0_SSPP", "RGB1_SSPP",
+			"DMA0_SSPP",
+			"LAYER_0",   "LAYER_3",
+			"DSPP_0",
+			"WB_0",      "WB_1",
+			"INTF_1",
+			"PP_0";
+
 		/* buffer parameters to calculate prefill bandwidth */
-		qcom,mdss-prefill-outstanding-buffer-bytes = <1024>;
+		qcom,mdss-prefill-outstanding-buffer-bytes = <2048>;
 		qcom,mdss-prefill-y-buffer-bytes = <0>;
 		qcom,mdss-prefill-scaler-buffer-lines-bilinear = <2>;
 		qcom,mdss-prefill-scaler-buffer-lines-caf = <4>;
-		qcom,mdss-prefill-post-scaler-buffer-pixels = <0>;
+		qcom,mdss-prefill-post-scaler-buffer-pixels = <2048>;
 		qcom,mdss-prefill-pingpong-buffer-pixels = <4096>;
 		qcom,mdss-prefill-fbc-lines = <0>;
 
@@ -117,38 +149,24 @@
 		};
 	};
 
-	mdss_dsi0: qcom,mdss_dsi@1a98000 {
-		compatible = "qcom,mdss-dsi-ctrl";
-		label = "MDSS DSI CTRL->0";
-		cell-index = <0>;
-		reg = <0x1a98000 0x25c>,
-		      <0x1a98500 0x280>,
-		      <0x1a98780 0x30>,
-		      <0x193e000 0x30>;
-		reg-names = "dsi_ctrl", "dsi_phy",
-		      "dsi_phy_regulator", "mmss_misc_phys";
-		qcom,mdss-fb-map = <&mdss_fb0>;
-		qcom,mdss-mdp = <&mdss_mdp>;
+	mdss_dsi: qcom,mdss_dsi@0 {
+		compatible = "qcom,mdss-dsi";
+		hw-config = "single_dsi";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		qcom,mdss-fb-map-prim = <&mdss_fb0>;
 		gdsc-supply = <&gdsc_mdss>;
 		vdda-supply = <&pm8950_l2>;
-		vdd-supply = <&pm8950_l17>;
 		vddio-supply = <&pm8950_l6>;
+		ranges = <0x1a98000 0x1a98000 0x25c
+		      0x1a98500 0x1a98500 0x280
+		      0x1a98780 0x1a98780 0x30
+		      0x193e000 0x193e000 0x30>;
+
 		clocks = <&clock_gcc clk_gcc_mdss_mdp_clk>,
 			<&clock_gcc clk_gcc_mdss_ahb_clk>,
-			<&clock_gcc clk_gcc_mdss_axi_clk>,
-			<&clock_gcc_mdss clk_gcc_mdss_byte0_clk>,
-			<&clock_gcc_mdss clk_gcc_mdss_pclk0_clk>,
-			<&clock_gcc clk_gcc_mdss_esc0_clk>;
-		clock-names = "mdp_core_clk", "iface_clk", "bus_clk",
-				"byte_clk", "pixel_clk", "core_clk";
-		qcom,platform-strength-ctrl = [ff 06];
-		qcom,platform-bist-ctrl = [00 00 b1 ff 00 00];
-		qcom,platform-regulator-settings = [03 08 07 00 20 07 01];
-		qcom,platform-lane-config = [00 00 00 00 00 00 00 01 97
-			00 00 00 00 00 00 00 01 97
-			00 00 00 00 00 00 00 01 97
-			00 00 00 00 00 00 00 01 97
-			00 c0 00 00 00 00 00 01 bb];
+			<&clock_gcc clk_gcc_mdss_axi_clk>;
+		clock-names = "mdp_core_clk", "iface_clk", "bus_clk";
 
 		qcom,timing-db-mode;
 
@@ -181,27 +199,51 @@
 			};
 		};
 
-		qcom,panel-supply-entries {
+		qcom,phy-supply-entries {
 			#address-cells = <1>;
 			#size-cells = <0>;
 
-			qcom,panel-supply-entry@0 {
+			qcom,phy-supply-entry@0 {
 				reg = <0>;
-				qcom,supply-name = "vdd";
-				qcom,supply-min-voltage = <2850000>;
-				qcom,supply-max-voltage = <2850000>;
-				qcom,supply-enable-load = <100000>;
-				qcom,supply-disable-load = <100>;
-			};
-
-			qcom,panel-supply-entry@1 {
-				reg = <1>;
 				qcom,supply-name = "vddio";
 				qcom,supply-min-voltage = <1800000>;
 				qcom,supply-max-voltage = <1800000>;
 				qcom,supply-enable-load = <100000>;
 				qcom,supply-disable-load = <100>;
 			};
+		};
+
+		mdss_dsi0: qcom,mdss_dsi_ctrl0@1a98000 {
+			compatible = "qcom,mdss-dsi-ctrl";
+			label = "MDSS DSI CTRL->0";
+			cell-index = <0>;
+			reg = <0x1a98000 0x25c>,
+			      <0x1a98500 0x280>,
+			      <0x1a98780 0x30>,
+			      <0x193e000 0x30>;
+			reg-names = "dsi_ctrl", "dsi_phy",
+			      "dsi_phy_regulator", "mmss_misc_phys";
+
+			qcom,mdss-mdp = <&mdss_mdp>;
+			vdd-supply = <&pm8950_l17>;
+			vddio-supply = <&pm8950_l6>;
+			lab-supply = <&lab_regulator>;
+			ibb-supply = <&ibb_regulator>;
+
+			clocks = <&clock_gcc_mdss clk_gcc_mdss_byte0_clk>,
+				<&clock_gcc_mdss clk_gcc_mdss_pclk0_clk>,
+				<&clock_gcc clk_gcc_mdss_esc0_clk>;
+			clock-names = "byte_clk", "pixel_clk", "core_clk";
+
+			qcom,platform-strength-ctrl = [ff 06];
+			qcom,platform-bist-ctrl = [00 00 b1 ff 00 00];
+			qcom,platform-regulator-settings = [03 08 07 00 20 07 01];
+			qcom,platform-lane-config = [00 00 00 00 00 00 00 01 97
+				00 00 00 00 00 00 00 01 97
+				00 00 00 00 00 00 00 01 97
+				00 00 00 00 00 00 00 01 97
+				00 c0 00 00 00 00 00 01 bb];
+
 		};
 	};
 
@@ -212,3 +254,5 @@
 		qcom,mdss-fb-map = <&mdss_fb1>;
 	};
 };
+
+#include "msm8952-mdss-panels.dtsi"

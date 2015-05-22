@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -138,22 +138,16 @@
 	};
 };
 
-#include "apq8084-mdss-panels.dtsi"
-
-&dsi_dual_jdi_video_0 {
+&dsi_dual_jdi_video {
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_pwm";
 	qcom,mdss-dsi-bl-pmic-pwm-frequency = <50>;
 	qcom,mdss-dsi-bl-pmic-bank-select = <2>;
 	qcom,mdss-dsi-pwm-gpio = <&pma8084_gpios 7 0>;
 	qcom,cont-splash-enabled;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
 
-&dsi_dual_jdi_video_1 {
-	qcom,cont-splash-enabled;
-};
-
-
-&dsi_dual_jdi_cmd_0 {
+&dsi_dual_jdi_cmd {
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_pwm";
 	qcom,mdss-dsi-bl-pmic-pwm-frequency = <50>;
 	qcom,mdss-dsi-bl-pmic-bank-select = <2>;
@@ -162,16 +156,8 @@
 	/delete-property/ qcom,cmd-sync-wait-broadcast;
 	qcom,partial-update-enabled;
 	qcom,panel-roi-alignment = <4 4 2 2 20 20>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
-
-&dsi_dual_jdi_cmd_1 {
-	qcom,cont-splash-enabled;
-	/delete-property/ qcom,cmd-sync-wait-broadcast;
-	/delete-property/ qcom,cmd-sync-wait-trigger;
-	qcom,partial-update-enabled;
-	qcom,panel-roi-alignment = <4 4 2 2 20 20>;
-};
-
 
 &mdss_mdp {
 	qcom,mdss-pref-prim-intf = "dsi";
@@ -188,8 +174,12 @@
 	qcom,memory-reservation-size = <0x1C20000>;
 };
 
+&mdss_dsi {
+	hw-config = "split_dsi";
+};
+
 &mdss_dsi0 {
-	qcom,dsi-pref-prim-pan = <&dsi_dual_jdi_video_0>;
+	qcom,dsi-pref-prim-pan = <&dsi_dual_jdi_video>;
 	qcom,platform-te-gpio = <&msmgpio 12 0>;
 	qcom,platform-reset-gpio = <&msmgpio 96 0>;
 	qcom,platform-enable-gpio = <&msmgpio 137 0>;
@@ -197,7 +187,7 @@
 };
 
 &mdss_dsi1 {
-	qcom,dsi-pref-prim-pan = <&dsi_dual_jdi_video_1>;
+	qcom,dsi-pref-prim-pan = <&dsi_dual_jdi_video>;
 };
 
 &uart6 {

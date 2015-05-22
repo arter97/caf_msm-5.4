@@ -23,10 +23,10 @@
 /* clock_gcc controlled clocks */
 #define clk_gcc_blsp1_uart1_apps_clk            0xc7c62f90
 #define clk_gcc_blsp1_uart2_apps_clk            0xf8a61c96
-#define clk_gcc_blsp1_uart3_apps_clk            0xc3298bd7
 #define clk_gcc_blsp1_uart4_apps_clk            0x26be16c0
 #define clk_gcc_blsp1_qup2_i2c_apps_clk         0x1076f220
 #define clk_gcc_blsp1_ahb_clk                   0x8caa5b4f
+#define clk_blsp_sim_clk_src                    0x36377c55
 #define clk_gcc_sdcc1_ahb_clk                   0x691e0caa
 #define clk_gcc_sdcc1_apps_clk                  0x9ad6fb96
 #define clk_gcc_prng_ahb_clk                    0x397e7eaa
@@ -69,4 +69,13 @@
 
 /* DEBUG */
 #define clk_gcc_debug_mux			0x8121ac15
+#define clk_apss_debug_pri_mux			0xc691ff55
+#define clk_apss_debug_sec_mux			0xc0b680f9
+#define clk_apss_debug_ter_mux			0x32041c48
+#define clk_apc0_m_clk				0xce1e9473
+#define clk_apc1_m_clk				0x990fbaf7
+#define clk_apc2_m_clk				0x252cd4ae
+#define clk_apc3_m_clk				0x78c64486
+#define clk_l2_m_clk				0x4bedf4d0
+
 #endif

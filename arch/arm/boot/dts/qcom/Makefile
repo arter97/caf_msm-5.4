@@ -51,6 +51,7 @@ dtb-$(CONFIG_ARCH_MSM8909) += msm8909-sim.dtb \
 	msm8909-qhd-rcm.dtb \
 	msm8909-pm8916-1gb-qhd-rcm.dtb \
 	msm8909-pm8916-qhd-rcm.dtb \
+	msm8909-pm8916-qrd-skut.dtb \
 	msm8208-cdp.dtb \
 	msm8208-mtp.dtb \
 	msm8208-1gb-cdp.dtb \
@@ -206,10 +207,6 @@ dtb-$(CONFIG_ARCH_MDM9640) += mdm9640-sim.dtb \
 	mdm9640-nand-cdp.dtb \
 	mdm9640-mtp.dtb
 dtb-$(CONFIG_ARCH_MSMVPIPA) += msmvpipa-sim.dtb
-dtb-$(CONFIG_ARCH_MDMFERRUM) += mdmferrum-sim.dtb \
-	mdmferrum-rumi.dtb \
-	mdmferrum-cdp.dtb \
-	mdmferrum-mtp.dtb
 dtb-$(CONFIG_ARCH_APQ8084) += apq8084-v1.0-old-pwr-grid-liquid.dtb \
 	apq8084-v1.1-old-pwr-grid-liquid.dtb \
 	apq8084-v1.1-liquid.dtb \

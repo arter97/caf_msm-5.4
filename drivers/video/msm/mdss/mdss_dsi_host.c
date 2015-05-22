@@ -264,12 +264,15 @@ void mdss_dsi_cmd_test_pattern(struct mdss_dsi_ctrl_pdata *ctrl)
 
 void mdss_dsi_get_hw_revision(struct mdss_dsi_ctrl_pdata *ctrl)
 {
-	mdss_dsi_clk_ctrl(ctrl, DSI_ALL_CLKS, 1);
-	ctrl->hw_rev = MIPI_INP(ctrl->ctrl_base);
-	mdss_dsi_clk_ctrl(ctrl, DSI_ALL_CLKS, 0);
+	if (ctrl->shared_data->hw_rev)
+		return;
+
+	mdss_dsi_clk_ctrl(ctrl, DSI_CORE_CLKS, 1);
+	ctrl->shared_data->hw_rev = MIPI_INP(ctrl->ctrl_base);
+	mdss_dsi_clk_ctrl(ctrl, DSI_CORE_CLKS, 0);
 
 	pr_debug("%s: ndx=%d hw_rev=%x\n", __func__,
-				ctrl->ndx, ctrl->hw_rev);
+				ctrl->ndx, ctrl->shared_data->hw_rev);
 }
 
 void mdss_dsi_host_init(struct mdss_panel_data *pdata)
@@ -370,7 +373,7 @@ void mdss_dsi_host_init(struct mdss_panel_data *pdata)
 				data); /* DSI_TRIG_CTRL */
 
 	/* DSI_LAN_SWAP_CTRL */
-	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x00b0, pinfo->dlane_swap);
+	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x00b0, ctrl_pdata->dlane_swap);
 
 	/* clock out ctrl */
 	data = pinfo->t_clk_post & 0x3f;	/* 6 bits */
@@ -650,7 +653,7 @@ static void mdss_dsi_ctl_phy_reset(struct mdss_dsi_ctrl_pdata *ctrl, u32 event)
 		mask = BIT(20) | (data_lane_en << 16);
 	}
 
-	if (ctrl->panel_data.panel_info.is_split_display) {
+	if (mdss_dsi_is_hw_config_split(ctrl->shared_data)) {
 		pr_debug("%s: Split display enabled\n", __func__);
 		ctrl0 = mdss_dsi_get_ctrl_by_index(DSI_CTRL_0);
 		ctrl1 = mdss_dsi_get_ctrl_by_index(DSI_CTRL_1);
@@ -1081,7 +1084,7 @@ static void mdss_dsi_mode_setup(struct mdss_panel_data *pdata)
 
 	mipi = &pdata->panel_info.mipi;
 	if (pdata->panel_info.type == MIPI_VIDEO_PANEL) {
-		if (ctrl_pdata->timing_db_mode)
+		if (ctrl_pdata->shared_data->timing_db_mode)
 			MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x1e8, 0x1);
 		MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x24,
 			((hspw + hbp + width + dummy_xres) << 16 |
@@ -1096,7 +1099,7 @@ static void mdss_dsi_mode_setup(struct mdss_panel_data *pdata)
 		MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x30, (hspw << 16));
 		MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x34, 0);
 		MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x38, (vspw << 16));
-		if (ctrl_pdata->timing_db_mode)
+		if (ctrl_pdata->shared_data->timing_db_mode)
 			MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x1e4, 0x1);
 	} else {		/* command mode */
 		if (mipi->dst_format == DSI_CMD_DST_FORMAT_RGB888)
@@ -1236,7 +1239,7 @@ static int mdss_dsi_cmd_dma_tpg_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 					struct dsi_buf *tp)
 {
 	int len, i, ret = 0, data = 0;
-	u32 *bp, ctrl_rev;
+	u32 *bp;
 	struct mdss_dsi_ctrl_pdata *mctrl = NULL;
 
 	if (tp->len > DMA_TPG_FIFO_LEN) {
@@ -1244,9 +1247,9 @@ static int mdss_dsi_cmd_dma_tpg_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 		return -EINVAL;
 	}
 
-	ctrl_rev = MIPI_INP(ctrl->ctrl_base);
+	mdss_dsi_get_hw_revision(ctrl);
 
-	if (ctrl_rev < MDSS_DSI_HW_REV_103) {
+	if (ctrl->shared_data->hw_rev < MDSS_DSI_HW_REV_103) {
 		pr_err("CMD DMA TPG not supported for this DSI version\n");
 		return -EINVAL;
 	}
@@ -1603,7 +1606,7 @@ do_send:
 			goto end;
 		}
 
-		if (ctrl->hw_rev >= MDSS_DSI_HW_REV_101) {
+		if (ctrl->shared_data->hw_rev >= MDSS_DSI_HW_REV_101) {
 			/* clear the RDBK_DATA registers */
 			MIPI_OUTP(ctrl->ctrl_base + 0x01d4, 0x1);
 			wmb(); /* make sure the RDBK registers are cleared */
@@ -1852,7 +1855,7 @@ static int mdss_dsi_cmd_dma_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 	if (cnt > 4)
 		cnt = 4; /* 4 x 32 bits registers only */
 
-	if (ctrl->hw_rev >= MDSS_DSI_HW_REV_101) {
+	if (ctrl->shared_data->hw_rev >= MDSS_DSI_HW_REV_101) {
 		rp->read_cnt = (MIPI_INP((ctrl->ctrl_base) + 0x01d4) >> 16);
 		pr_debug("%s: bytes read:%d\n", __func__, rp->read_cnt);
 
@@ -2034,7 +2037,7 @@ static int mdss_dsi_mdp_busy_tout_check(struct mdss_dsi_ctrl_pdata *ctrl)
 		MIPI_OUTP(ctrl->ctrl_base + 0x0110, isr);
 		mdss_dsi_disable_irq_nosync(ctrl, DSI_MDP_TERM);
 		ctrl->mdp_busy = false;
-		if (ctrl->cmd_clk_ln_recovery_en &&
+		if (ctrl->shared_data->cmd_clk_ln_recovery_en &&
 			ctrl->panel_mode == DSI_CMD_MODE) {
 			/* has hs_lane_recovery do the work */
 			stop_hs_clk = true;
@@ -2143,7 +2146,6 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 	bool use_iommu = false;
 	int ret = -EINVAL;
 	int rc = 0;
-	u32 ctrl_rev;
 
 	if (mdss_get_sd_client_cnt())
 		return -EPERM;
@@ -2172,10 +2174,10 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 		return rc;
 	}
 
-	ctrl_rev = MIPI_INP(ctrl->ctrl_base);
+	mdss_dsi_get_hw_revision(ctrl);
 
 	/* For DSI versions less than 1.3.0, CMD DMA TPG is not supported */
-	if (ctrl_rev < MDSS_DSI_HW_REV_103)
+	if (ctrl->shared_data->hw_rev < MDSS_DSI_HW_REV_103)
 		req->flags &= ~CMD_REQ_DMA_TPG;
 
 	pr_debug("%s: ctrl=%d from_mdp=%d pid=%d\n", __func__,
@@ -2189,12 +2191,12 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 		 * will followed.
 		 */
 		if (!roi || (roi->w != 0 || roi->h != 0)) {
-			if (ctrl->cmd_clk_ln_recovery_en &&
+			if (ctrl->shared_data->cmd_clk_ln_recovery_en &&
 					ctrl->panel_mode == DSI_CMD_MODE)
 				mdss_dsi_start_hs_clk_lane(ctrl);
 		}
 	} else {	/* from dcs send */
-		if (ctrl->cmd_clk_ln_recovery_en &&
+		if (ctrl->shared_data->cmd_clk_ln_recovery_en &&
 				ctrl->panel_mode == DSI_CMD_MODE &&
 				(req->flags & CMD_REQ_HS_MODE))
 			mdss_dsi_cmd_start_hs_clk_lane(ctrl);
@@ -2266,7 +2268,7 @@ need_lock:
 
 		mutex_unlock(&ctrl->cmd_mutex);
 	} else {	/* from dcs send */
-		if (ctrl->cmd_clk_ln_recovery_en &&
+		if (ctrl->shared_data->cmd_clk_ln_recovery_en &&
 				ctrl->panel_mode == DSI_CMD_MODE &&
 				(req && (req->flags & CMD_REQ_HS_MODE)))
 			mdss_dsi_cmd_stop_hs_clk_lane(ctrl);
@@ -2305,7 +2307,6 @@ static int dsi_event_thread(void *data)
 	u32 todo = 0, ln_status, force_clk_ln_hs;
 	u32 arg;
 	int ret;
-	u32 ctrl_rev;
 
 	param.sched_priority = 16;
 	ret = sched_setscheduler_nocheck(current, SCHED_FIFO, &param);
@@ -2353,7 +2354,7 @@ static int dsi_event_thread(void *data)
 			mdss_dsi_sw_reset(ctrl, true);
 
 		if (todo & DSI_EV_DLNx_FIFO_OVERFLOW) {
-			ctrl_rev = MIPI_INP(ctrl->ctrl_base);
+			mdss_dsi_get_hw_revision(ctrl);
 			mutex_lock(&dsi_mtx);
 			/*
 			 * For targets other than msm8994,
@@ -2367,7 +2368,8 @@ static int dsi_event_thread(void *data)
 			pr_debug("%s: lane_status: 0x%x\n",
 				       __func__, ln_status);
 			if (ctrl->recovery
-					&& (ctrl_rev != MDSS_DSI_HW_REV_103)
+					&& (ctrl->shared_data->hw_rev
+						!= MDSS_DSI_HW_REV_103)
 					&& !(force_clk_ln_hs)
 					&& (ln_status
 						& DSI_DATA_LANES_STOP_STATE)
@@ -2382,7 +2384,7 @@ static int dsi_event_thread(void *data)
 						DSI_INTR_ERROR_MASK, 1);
 				mdss_dsi_clk_ctrl(ctrl, DSI_ALL_CLKS, 0);
 			} else if (ctrl->recovery
-					&& (ctrl_rev
+					&& (ctrl->shared_data->hw_rev
 					    == MDSS_DSI_HW_REV_103)) {
 				pr_debug("%s: Handle overflow->Rev_103\n",
 								__func__);
@@ -2496,7 +2498,16 @@ void mdss_dsi_fifo_status(struct mdss_dsi_ctrl_pdata *ctrl)
 	/* fifo underflow, overflow and empty*/
 	if (status & 0xcccc4489) {
 		MIPI_OUTP(base + 0x000c, status);
-		pr_err("%s: status=%x\n", __func__, status);
+
+		/*
+		 * During dynamic refresh rate update, DSI fifo errors are
+		 * expected, Check the dfps status and avoid the log. However,
+		 * FIFO errors needs to be cleared.
+		 */
+		if (!ctrl->dfps_status)
+			pr_err("%s: ctrl ndx=%d status=%x\n", __func__,
+					ctrl->ndx, status);
+
 		if (status & 0x44440000) {/* DLNx_HS_FIFO_OVERFLOW */
 			dsi_send_events(ctrl, DSI_EV_DLNx_FIFO_OVERFLOW, 0);
 			/* Ignore FIFO EMPTY when overflow happens */
@@ -2507,6 +2518,9 @@ void mdss_dsi_fifo_status(struct mdss_dsi_ctrl_pdata *ctrl)
 		if (status & 0x11110000) /* DLN_FIFO_EMPTY */
 			dsi_send_events(ctrl, DSI_EV_DSI_FIFO_EMPTY, 0);
 	}
+
+	if (ctrl->dfps_status)
+		ctrl->dfps_status = false;
 }
 
 void mdss_dsi_status(struct mdss_dsi_ctrl_pdata *ctrl)
@@ -2627,7 +2641,7 @@ irqreturn_t mdss_dsi_isr(int irq, void *ptr)
 		MDSS_XLOG(ctrl->ndx, ctrl->mdp_busy, isr, 0x99);
 		spin_lock(&ctrl->mdp_lock);
 		mdss_dsi_disable_irq_nosync(ctrl, DSI_MDP_TERM);
-		if (ctrl->cmd_clk_ln_recovery_en &&
+		if (ctrl->shared_data->cmd_clk_ln_recovery_en &&
 				ctrl->panel_mode == DSI_CMD_MODE) {
 			/* stop force clk lane hs */
 			mdss_dsi_cfg_lane_ctrl(ctrl, BIT(28), 0);
