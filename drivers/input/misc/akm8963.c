@@ -1761,6 +1761,8 @@ static void akm_dev_poll(struct work_struct *work)
 		dev_warn(&akm->i2c->dev, "Status error(0x%x). Reset...\n",
 				tmp);
 		AKECS_Reset(akm, 0);
+		AKECS_SetMode(akm,
+			AKM_MODE_SNG_MEASURE | AKM8963_BIT_OP_16);
 		goto exit;
 	}
 
