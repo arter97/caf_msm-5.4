@@ -55,14 +55,6 @@ static void __mdp_outp(uint32 port, uint32 value)
 static int first_pixel_start_x;
 static int first_pixel_start_y;
 
-void mdp4_dtv_base_swap(int cndx, struct mdp4_overlay_pipe *pipe)
-{
-#ifdef BYPASS4
-	if (hdmi_prim_display)
-		dtv_pipe = pipe;
-#endif
-}
-
 #define MAX_CONTROLLER	1
 
 static struct vsycn_ctrl {
@@ -790,6 +782,19 @@ static void mdp4_dtv_blt_dmae_update(struct mdp4_overlay_pipe *pipe)
 void mdp4_overlay_dtv_set_perf(struct msm_fb_data_type *mfd)
 {
 
+}
+
+void mdp4_dtv_base_swap(int cndx, struct mdp4_overlay_pipe *pipe)
+{
+	struct vsycn_ctrl *vctrl;
+
+	if (cndx >= MAX_CONTROLLER) {
+		pr_err("%s: out or range: cndx=%d\n", __func__, cndx);
+		return;
+	}
+
+	vctrl = &vsync_ctrl_db[cndx];
+	vctrl->base_pipe = pipe;
 }
 
 static void mdp4_overlay_dtv_alloc_pipe(struct msm_fb_data_type *mfd,
