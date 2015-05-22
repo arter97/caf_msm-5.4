@@ -1507,7 +1507,7 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 	 * calculate smem_len based on max size of two supplied modes.
 	 * Only fb0 has mem. fb1 and fb2 don't have mem.
 	 */
-	if (!mfd->bf_supported || mfd->index == 0)
+	if (!mfd->bf_supported || mfd->index == 0 || mfd->index == 1) {
 		fix->smem_len = MAX((msm_fb_line_length(mfd->index,
 							panel_info->xres,
 							bpp) *
@@ -1518,7 +1518,7 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 							bpp) *
 				     panel_info->mode2_yres + PAGE_SIZE -
 				     remainder_mode2) * mfd->fb_page);
-	else if (mfd->index == 1 || mfd->index == 2) {
+	} else if (mfd->index == 2) {
 		pr_debug("%s:%d no memory is allocated for fb%d!\n",
 			__func__, __LINE__, mfd->index);
 		fix->smem_len = 0;
@@ -1618,7 +1618,7 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 	} else
 		fbram_offset = 0;
 
-	if ((!mfd->bf_supported || mfd->index == 0) && fbram)
+	if ((!mfd->bf_supported || mfd->index == 0 || mfd->index == 1) && fbram)
 		if (fbram_size < fix->smem_len) {
 			pr_err("error: no more framebuffer memory!\n");
 			return -ENOMEM;
@@ -1653,7 +1653,8 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 					    &(mfd->rotator_iova));
 	}
 
-	if ((!mfd->bf_supported || mfd->index == 0) && fbi->screen_base)
+	if ((!mfd->bf_supported || mfd->index == 0 || mfd->index == 1) &&
+	    fbi->screen_base)
 		memset(fbi->screen_base, 0x0, fix->smem_len);
 
 	mfd->op_enable = TRUE;

@@ -223,6 +223,7 @@ struct msm_fb_data_type {
 	uint32 sec_active;
 	uint32 max_map_size;
 	boolean bf_supported;
+	uint32 base_layer;
 };
 struct msm_fb_backup_type {
 	struct fb_info info;

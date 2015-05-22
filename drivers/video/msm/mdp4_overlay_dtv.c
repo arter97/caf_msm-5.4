@@ -798,11 +798,21 @@ static void mdp4_overlay_dtv_alloc_pipe(struct msm_fb_data_type *mfd,
 	int ret = 0;
 	struct fb_info *fbi = mfd->fbi;
 	struct mdp4_overlay_pipe *pipe;
+	uint8 *buf;
+	unsigned int buf_offset;
+	int bpp;
+	uint32 pipe_id;
 
 	if (vctrl->base_pipe != NULL)
 		return;
 
-	pipe = mdp4_overlay_pipe_alloc(ptype, MDP4_MIXER1);
+	if (ptype == OVERLAY_TYPE_RGB) {
+		pipe_id = (mfd->base_layer < OVERLAY_PIPE_MAX) ?
+				mfd->base_layer : OVERLAY_PIPE_RGB2;
+		pipe = mdp4_pipe_alloc_by_id(pipe_id);
+	} else {
+		pipe = mdp4_overlay_pipe_alloc(ptype, MDP4_MIXER1);
+	}
 	if (pipe == NULL) {
 		pr_err("%s: pipe_alloc failed\n", __func__);
 		return;
@@ -842,8 +852,6 @@ static void mdp4_overlay_dtv_alloc_pipe(struct msm_fb_data_type *mfd,
 	pipe->src_width = fbi->var.xres;
 	pipe->src_h = fbi->var.yres;
 	pipe->src_w = fbi->var.xres;
-	pipe->dst_h = fbi->var.yres;
-	pipe->dst_w = fbi->var.xres;
 	pipe->src_y = 0;
 	pipe->src_x = 0;
 	pipe->dst_h = fbi->var.yres;
@@ -863,7 +871,14 @@ static void mdp4_overlay_dtv_alloc_pipe(struct msm_fb_data_type *mfd,
 	mdp4_overlayproc_cfg(pipe);
 
 	if (pipe->pipe_type == OVERLAY_TYPE_RGB) {
-		pipe->srcp0_addr = (uint32) mfd->ibuf.buf;
+		bpp = fbi->var.bits_per_pixel / 8;
+		buf = (uint8 *) fbi->fix.smem_start;
+		buf_offset = calc_fb_offset(mfd, fbi, bpp);
+		if (mfd->display_iova)
+			pipe->srcp0_addr = mfd->display_iova + buf_offset;
+		else
+			pipe->srcp0_addr = (uint32)(buf + buf_offset);
+		pipe->bpp = bpp;
 		mdp4_overlay_rgb_setup(pipe);
 	}
 
@@ -887,8 +902,6 @@ int mdp4_overlay_dtv_set(struct msm_fb_data_type *mfd,
 	if (pipe != NULL && pipe->mixer_stage == MDP4_MIXER_STAGE_BASE &&
 			pipe->pipe_type == OVERLAY_TYPE_RGB)
 		vctrl->base_pipe = pipe; /* keep it */
-	else if (!hdmi_prim_display && mdp4_overlay_borderfill_supported(mfd))
-		mdp4_overlay_dtv_alloc_pipe(mfd, OVERLAY_TYPE_BF, vctrl);
 	else
 		mdp4_overlay_dtv_alloc_pipe(mfd, OVERLAY_TYPE_RGB, vctrl);
 
