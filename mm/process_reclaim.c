@@ -88,16 +88,39 @@ static int test_task_flag(struct task_struct *p, int flag)
 {
 	struct task_struct *t = p;
 
-	do {
+	rcu_read_lock();
+	for_each_thread(p, t) {
 		task_lock(t);
 		if (test_tsk_thread_flag(t, flag)) {
 			task_unlock(t);
+			rcu_read_unlock();
 			return 1;
 		}
 		task_unlock(t);
-	} while_each_thread(p, t);
+	}
+	rcu_read_unlock();
 
 	return 0;
+}
+
+static void get_task_struct_group(struct task_struct *p)
+{
+	struct task_struct *t = p;
+
+	rcu_read_lock();
+	for_each_thread(p, t)
+		get_task_struct(t);
+	rcu_read_unlock();
+}
+
+static void put_task_struct_group(struct task_struct *p)
+{
+	struct task_struct *t = p;
+
+	rcu_read_lock();
+	for_each_thread(p, t)
+		put_task_struct(t);
+	rcu_read_unlock();
 }
 
 static void swap_fn(struct work_struct *work)
@@ -123,10 +146,6 @@ static void swap_fn(struct work_struct *work)
 		short oom_score_adj;
 
 		if (tsk->flags & PF_KTHREAD)
-			continue;
-
-		/* if task no longer has any memory ignore it */
-		if (test_task_flag(tsk, TIF_MM_RELEASED))
 			continue;
 
 		if (test_task_flag(tsk, TIF_MEMDIE))
@@ -165,19 +184,19 @@ static void swap_fn(struct work_struct *work)
 		}
 	}
 
-	for (i = 0; i < si; i++) {
-		get_task_struct(selected[i].p);
+	for (i = 0; i < si; i++)
 		total_sz += selected[i].tasksize;
-	}
-
-	rcu_read_unlock();
 
 	/* Skip reclaim if total size is too less */
 	if (total_sz < SWAP_CLUSTER_MAX) {
-		for (i = 0; i < si; i++)
-			put_task_struct(selected[i].p);
+		rcu_read_unlock();
 		return;
 	}
+
+	for (i = 0; i < si; i++)
+		get_task_struct_group(selected[i].p);
+
+	rcu_read_unlock();
 
 	while (si--) {
 		nr_to_reclaim =
@@ -186,9 +205,8 @@ static void swap_fn(struct work_struct *work)
 		if (!nr_to_reclaim)
 			nr_to_reclaim = 1;
 
-		if ((test_task_flag(selected[si].p, TIF_MM_RELEASED))
-			|| (test_task_flag(selected[si].p, TIF_MEMDIE))) {
-			put_task_struct(selected[si].p);
+		if (test_task_flag(selected[si].p, TIF_MEMDIE)) {
+			put_task_struct_group(selected[si].p);
 			continue;
 		}
 
@@ -200,7 +218,7 @@ static void swap_fn(struct work_struct *work)
 				nr_to_reclaim);
 		total_scan += rp.nr_scanned;
 		total_reclaimed += rp.nr_reclaimed;
-		put_task_struct(selected[si].p);
+		put_task_struct_group(selected[si].p);
 	}
 
 	if (total_scan) {
