@@ -13,7 +13,6 @@
 #include <linux/swapops.h>
 #include <linux/mm_inline.h>
 #include <linux/ctype.h>
-#include <linux/sched.h>
 
 #include <asm/elf.h>
 #include <asm/uaccess.h>
@@ -1233,26 +1232,6 @@ enum reclaim_type {
 	RECLAIM_RANGE,
 };
 
-struct mm_struct *find_get_task_mm(struct task_struct *p)
-{
-	struct task_struct *t;
-	struct mm_struct *mm;
-
-	rcu_read_lock();
-
-	for_each_thread(p, t) {
-		if (likely(t->mm)) {
-			mm = get_task_mm(t);
-			goto found;
-		}
-	}
-	mm = NULL;
-found:
-	rcu_read_unlock();
-
-	return mm;
-}
-
 struct reclaim_param reclaim_task_anon(struct task_struct *task,
 		int nr_to_reclaim)
 {
@@ -1264,7 +1243,7 @@ struct reclaim_param reclaim_task_anon(struct task_struct *task,
 	rp.nr_reclaimed = 0;
 	rp.nr_scanned = 0;
 	get_task_struct(task);
-	mm = find_get_task_mm(task);
+	mm = get_task_mm(task);
 	if (!mm)
 		goto out;
 
