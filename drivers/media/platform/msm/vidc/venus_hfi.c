@@ -2601,6 +2601,8 @@ static void __session_clean(struct hal_session *session)
 {
 	dprintk(VIDC_DBG, "deleted the session: %p\n", session);
 	list_del(&session->list);
+	/* Poison the session handle with zeros */
+	*session = (struct hal_session){ {0} };
 	kfree(session);
 }
 
@@ -2619,7 +2621,7 @@ static int venus_hfi_session_clean(void *session)
 	mutex_lock(&device->lock);
 
 	__session_clean(sess_close);
-	__flush_debug_queue(sess_close->device, NULL);
+	__flush_debug_queue(device, NULL);
 
 	mutex_unlock(&device->lock);
 	return 0;
