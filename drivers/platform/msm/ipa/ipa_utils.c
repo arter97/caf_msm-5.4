@@ -126,7 +126,7 @@ static const int ep_mapping[2][IPA_CLIENT_MAX] = {
 	[IPA_2_0][IPA_CLIENT_TEST_PROD]          = 19,
 	[IPA_2_0][IPA_CLIENT_TEST1_PROD]         = 19,
 	[IPA_2_0][IPA_CLIENT_TEST2_PROD]         = 12,
-	[IPA_2_0][IPA_CLIENT_TEST3_PROD]         = 13,
+	[IPA_2_0][IPA_CLIENT_TEST3_PROD]         = 11,
 	[IPA_2_0][IPA_CLIENT_TEST4_PROD]         =  0,
 
 	[IPA_2_0][IPA_CLIENT_HSIC1_CONS]         = 13,
@@ -159,11 +159,11 @@ static const int ep_mapping[2][IPA_CLIENT_MAX] = {
 	[IPA_2_0][IPA_CLIENT_MEMCPY_DMA_ASYNC_CONS]
 						 =  16,
 	/* Only for test purpose */
-	[IPA_2_0][IPA_CLIENT_TEST_CONS]          = 14,
-	[IPA_2_0][IPA_CLIENT_TEST1_CONS]         = 14,
+	[IPA_2_0][IPA_CLIENT_TEST_CONS]          = 1,
+	[IPA_2_0][IPA_CLIENT_TEST1_CONS]         = 1,
 	[IPA_2_0][IPA_CLIENT_TEST2_CONS]         = 16,
-	[IPA_2_0][IPA_CLIENT_TEST3_CONS]         = 17,
-	[IPA_2_0][IPA_CLIENT_TEST4_CONS]         = 18,
+	[IPA_2_0][IPA_CLIENT_TEST3_CONS]         = 13,
+	[IPA_2_0][IPA_CLIENT_TEST4_CONS]         = 15,
 };
 
 static struct msm_bus_vectors ipa_init_vectors_v1_1[]  = {
