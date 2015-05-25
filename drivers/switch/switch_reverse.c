@@ -442,6 +442,7 @@ static int switch_reverse_probe(struct platform_device *pdev)
 
 	/* set initial camera state */
 	reverse_set_state(g_reverse_platform_data.reverse_data[0], state);
+	mdp_arb_set_event(state);
 
 	/* enable interrupts */
 	for (index = 0; index < REVERSE_MAX_GPIO; index++)
