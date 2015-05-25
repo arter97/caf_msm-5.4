@@ -32,7 +32,6 @@
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <linux/irq.h>
-#include <linux/mmc/mmc.h>
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
 #include <linux/mmc/slot-gpio.h>
@@ -42,7 +41,8 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/msm-bus.h>
 
-#include "sdhci-pltfm.h"
+#include "sdhci-msm.h"
+#include "sdhci-msm-ice.h"
 
 enum sdc_mpm_pin_state {
 	SDC_DAT1_DISABLE,
@@ -238,140 +238,6 @@ static const u32 tuning_block_128[] = {
 static int disable_slots;
 /* root can write, others read */
 module_param(disable_slots, int, S_IRUGO|S_IWUSR);
-
-/* This structure keeps information per regulator */
-struct sdhci_msm_reg_data {
-	/* voltage regulator handle */
-	struct regulator *reg;
-	/* regulator name */
-	const char *name;
-	/* voltage level to be set */
-	u32 low_vol_level;
-	u32 high_vol_level;
-	/* Load values for low power and high power mode */
-	u32 lpm_uA;
-	u32 hpm_uA;
-
-	/* is this regulator enabled? */
-	bool is_enabled;
-	/* is this regulator needs to be always on? */
-	bool is_always_on;
-	/* is low power mode setting required for this regulator? */
-	bool lpm_sup;
-	bool set_voltage_sup;
-};
-
-/*
- * This structure keeps information for all the
- * regulators required for a SDCC slot.
- */
-struct sdhci_msm_slot_reg_data {
-	/* keeps VDD/VCC regulator info */
-	struct sdhci_msm_reg_data *vdd_data;
-	 /* keeps VDD IO regulator info */
-	struct sdhci_msm_reg_data *vdd_io_data;
-};
-
-struct sdhci_msm_gpio {
-	u32 no;
-	const char *name;
-	bool is_enabled;
-};
-
-struct sdhci_msm_gpio_data {
-	struct sdhci_msm_gpio *gpio;
-	u8 size;
-};
-
-struct sdhci_msm_pin_data {
-	/*
-	 * = 1 if controller pins are using gpios
-	 * = 0 if controller has dedicated MSM pads
-	 */
-	u8 is_gpio;
-	struct sdhci_msm_gpio_data *gpio_data;
-};
-
-struct sdhci_pinctrl_data {
-	struct pinctrl          *pctrl;
-	struct pinctrl_state    *pins_active;
-	struct pinctrl_state    *pins_sleep;
-};
-
-struct sdhci_msm_bus_voting_data {
-	struct msm_bus_scale_pdata *bus_pdata;
-	unsigned int *bw_vecs;
-	unsigned int bw_vecs_size;
-};
-
-struct sdhci_msm_pltfm_data {
-	/* Supported UHS-I Modes */
-	u32 caps;
-
-	/* More capabilities */
-	u32 caps2;
-
-	unsigned long mmc_bus_width;
-	struct sdhci_msm_slot_reg_data *vreg_data;
-	bool nonremovable;
-	bool use_mod_dynamic_qos;
-	bool nonhotplug;
-	bool no_1p8v;
-	bool pin_cfg_sts;
-	struct sdhci_msm_pin_data *pin_data;
-	struct sdhci_pinctrl_data *pctrl_data;
-	u32 *cpu_dma_latency_us;
-	unsigned int cpu_dma_latency_tbl_sz;
-	int status_gpio; /* card detection GPIO that is configured as IRQ */
-	struct sdhci_msm_bus_voting_data *voting_data;
-	u32 *sup_clk_table;
-	unsigned char sup_clk_cnt;
-	int mpm_sdiowakeup_int;
-	int sdiowakeup_irq;
-	enum pm_qos_req_type cpu_affinity_type;
-	cpumask_t cpu_affinity_mask;
-};
-
-struct sdhci_msm_bus_vote {
-	uint32_t client_handle;
-	uint32_t curr_vote;
-	int min_bw_vote;
-	int max_bw_vote;
-	bool is_max_bw_needed;
-	struct delayed_work vote_work;
-	struct device_attribute max_bus_bw;
-};
-
-struct sdhci_msm_host {
-	struct platform_device	*pdev;
-	void __iomem *core_mem;    /* MSM SDCC mapped address */
-	int	pwr_irq;	/* power irq */
-	struct clk	 *clk;     /* main SD/MMC bus clock */
-	struct clk	 *pclk;    /* SDHC peripheral bus clock */
-	struct clk	 *bus_clk; /* SDHC bus voter clock */
-	struct clk	 *ff_clk; /* CDC calibration fixed feedback clock */
-	struct clk	 *sleep_clk; /* CDC calibration sleep clock */
-	atomic_t clks_on; /* Set if clocks are enabled */
-	struct sdhci_msm_pltfm_data *pdata;
-	struct mmc_host  *mmc;
-	struct sdhci_pltfm_data sdhci_msm_pdata;
-	u32 curr_pwr_state;
-	u32 curr_io_level;
-	struct completion pwr_irq_completion;
-	struct sdhci_msm_bus_vote msm_bus_vote;
-	struct device_attribute	polling;
-	u32 clk_rate; /* Keeps track of current clock rate that is set */
-	bool tuning_done;
-	bool calibration_done;
-	u8 saved_tuning_phase;
-	bool en_auto_cmd21;
-	struct device_attribute auto_cmd21_attr;
-	bool is_sdiowakeup_enabled;
-	atomic_t controller_clock;
-	bool use_cdclp533;
-	bool use_updated_dll_reset;
-	u32 caps_0;
-};
 
 enum vdd_io_level {
 	/* set vdd_io_data->low_vol_level */
@@ -1713,11 +1579,15 @@ struct sdhci_msm_pltfm_data *sdhci_msm_populate_pdata(struct device *dev,
 						struct sdhci_host *host)
 {
 	struct sdhci_msm_pltfm_data *pdata = NULL;
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = pltfm_host->priv;
 	struct device_node *np = dev->of_node;
 	u32 bus_width = 0;
 	int len, i, mpm_int;
 	int clk_table_len;
 	u32 *clk_table = NULL;
+	int ice_clk_table_len;
+	u32 *ice_clk_table = NULL;
 	enum of_gpio_flags flags = OF_GPIO_ACTIVE_LOW;
 
 	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
@@ -1753,6 +1623,20 @@ struct sdhci_msm_pltfm_data *sdhci_msm_populate_pdata(struct device *dev,
 	}
 	pdata->sup_clk_table = clk_table;
 	pdata->sup_clk_cnt = clk_table_len;
+
+	if (msm_host->ice.pdev) {
+		if (sdhci_msm_dt_get_array(dev, "qcom,ice-clk-rates",
+				&ice_clk_table, &ice_clk_table_len, 0)) {
+			dev_err(dev, "failed parsing supported ice clock rates\n");
+			goto out;
+		}
+		if (!ice_clk_table || !ice_clk_table_len) {
+			dev_err(dev, "Invalid clock table\n");
+			goto out;
+		}
+		pdata->sup_ice_clk_table = ice_clk_table;
+		pdata->sup_ice_clk_cnt = ice_clk_table_len;
+	}
 
 	pdata->vreg_data = devm_kzalloc(dev, sizeof(struct
 						    sdhci_msm_slot_reg_data),
@@ -2688,11 +2572,22 @@ static int sdhci_msm_enable_controller_clock(struct sdhci_host *host)
 		goto disable_pclk;
 	}
 
+	if (!IS_ERR(msm_host->ice_clk)) {
+		rc = clk_prepare_enable(msm_host->ice_clk);
+		if (rc) {
+			pr_err("%s: %s: failed to enable the ice-clk with error %d\n",
+				mmc_hostname(host->mmc), __func__, rc);
+			goto disable_host_clk;
+		}
+	}
 	atomic_set(&msm_host->controller_clock, 1);
 	pr_debug("%s: %s: enabled controller clock\n",
 			mmc_hostname(host->mmc), __func__);
 	goto out;
 
+disable_host_clk:
+	if (!IS_ERR(msm_host->clk))
+		clk_disable_unprepare(msm_host->clk);
 disable_pclk:
 	if (!IS_ERR(msm_host->pclk))
 		clk_disable_unprepare(msm_host->pclk);
@@ -2771,6 +2666,8 @@ static int sdhci_msm_prepare_clocks(struct sdhci_host *host, bool enable)
 		if (!IS_ERR_OR_NULL(msm_host->ff_clk))
 			clk_disable_unprepare(msm_host->ff_clk);
 		clk_disable_unprepare(msm_host->clk);
+		if (!IS_ERR(msm_host->ice_clk))
+			clk_disable_unprepare(msm_host->ice_clk);
 		if (!IS_ERR(msm_host->pclk))
 			clk_disable_unprepare(msm_host->pclk);
 		if (!IS_ERR_OR_NULL(msm_host->bus_clk))
@@ -2790,6 +2687,8 @@ disable_bus_clk:
 disable_controller_clk:
 	if (!IS_ERR_OR_NULL(msm_host->clk))
 		clk_disable_unprepare(msm_host->clk);
+	if (!IS_ERR(msm_host->ice_clk))
+		clk_disable_unprepare(msm_host->ice_clk);
 	if (!IS_ERR_OR_NULL(msm_host->pclk))
 		clk_disable_unprepare(msm_host->pclk);
 	atomic_set(&msm_host->controller_clock, 0);
@@ -3086,6 +2985,7 @@ void sdhci_msm_dump_vendor_regs(struct sdhci_host *host)
 	int i, index = 0;
 	u32 test_bus_val = 0;
 	u32 debug_reg[MAX_TEST_BUS] = {0};
+	u32 sts = 0;
 
 	pr_info("----------- VENDOR REGISTER DUMP -----------\n");
 	pr_info("Data cnt: 0x%08x | Fifo cnt: 0x%08x | Int sts: 0x%08x\n",
@@ -3131,6 +3031,10 @@ void sdhci_msm_dump_vendor_regs(struct sdhci_host *host)
 	/* Disable test bus */
 	writel_relaxed(~CORE_TESTBUS_ENA, msm_host->core_mem +
 			CORE_TESTBUS_CONFIG);
+	if (host->is_crypto_en) {
+		sdhci_msm_ice_get_status(host, &sts);
+		pr_info("%s: ICE status %x\n", mmc_hostname(host->mmc), sts);
+	}
 }
 
 void sdhci_msm_reset_workaround(struct sdhci_host *host, u32 enable)
@@ -3175,7 +3079,20 @@ void sdhci_msm_reset_workaround(struct sdhci_host *host, u32 enable)
 	}
 }
 
+void sdhci_msm_reset_enter(struct sdhci_host *host, u8 mask)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = pltfm_host->priv;
+
+	/* Set ICE core to be reset in sync with SDHC core */
+	if (msm_host->ice.pdev)
+		writel_relaxed(1, host->ioaddr + CORE_VENDOR_SPEC_ICE_CTRL);
+}
+
 static struct sdhci_ops sdhci_msm_ops = {
+	.crypto_engine_cfg = sdhci_msm_ice_cfg,
+	.crypto_engine_reset = sdhci_msm_ice_reset,
+	.platform_reset_enter = sdhci_msm_reset_enter,
 	.set_uhs_signaling = sdhci_msm_set_uhs_signaling,
 	.check_power_status = sdhci_msm_check_power_status,
 	.execute_tuning = sdhci_msm_execute_tuning,
@@ -3319,13 +3236,38 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	host = sdhci_pltfm_init(pdev, &msm_host->sdhci_msm_pdata);
 	if (IS_ERR(host)) {
 		ret = PTR_ERR(host);
-		goto out;
+		goto out_host_free;
 	}
 
 	pltfm_host = sdhci_priv(host);
 	pltfm_host->priv = msm_host;
 	msm_host->mmc = host->mmc;
 	msm_host->pdev = pdev;
+
+	/* get the ice device vops if present */
+	ret = sdhci_msm_ice_get_dev(host);
+	if (ret == -EPROBE_DEFER) {
+		/*
+		 * SDHCI driver might be probed before ICE driver does.
+		 * In that case we would like to return EPROBE_DEFER code
+		 * in order to delay its probing.
+		 */
+		dev_err(&pdev->dev, "%s: required ICE device not probed yet err = %d\n",
+			__func__, ret);
+		goto out_host_free;
+
+	} else if (ret == -ENODEV) {
+		/*
+		 * ICE device is not enabled in DTS file. No need for further
+		 * initialization of ICE driver.
+		 */
+		dev_warn(&pdev->dev, "%s: ICE device is not enabled",
+			__func__);
+	} else if (ret) {
+		dev_err(&pdev->dev, "%s: sdhci_msm_ice_get_dev failed %d\n",
+			__func__, ret);
+		goto out_host_free;
+	}
 
 	/* Extract platform data */
 	if (pdev->dev.of_node) {
@@ -3374,6 +3316,28 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 			goto bus_clk_disable;
 	}
 	atomic_set(&msm_host->controller_clock, 1);
+
+	if (msm_host->ice.pdev) {
+		/* Setup SDC ICE clock */
+		msm_host->ice_clk = devm_clk_get(&pdev->dev, "ice_core_clk");
+		if (!IS_ERR(msm_host->ice_clk)) {
+			/* ICE core has only one clock frequency for now */
+			ret = clk_set_rate(msm_host->ice_clk,
+					msm_host->pdata->sup_ice_clk_table[0]);
+			if (ret) {
+				dev_err(&pdev->dev, "ICE_CLK rate set failed (%d) for %u\n",
+					ret,
+					msm_host->pdata->sup_ice_clk_table[0]);
+				goto pclk_disable;
+			}
+			ret = clk_prepare_enable(msm_host->ice_clk);
+			if (ret)
+				goto pclk_disable;
+
+			msm_host->ice_clk_rate =
+				msm_host->pdata->sup_clk_table[0];
+		}
+	}
 
 	/* Setup SDC MMC clock */
 	msm_host->clk = devm_clk_get(&pdev->dev, "core_clk");
@@ -3595,6 +3559,21 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	if (msm_host->pdata->nonhotplug)
 		msm_host->mmc->caps2 |= MMC_CAP2_NONHOTPLUG;
 
+	/* Initialize ICE if present */
+	if (msm_host->ice.pdev) {
+		ret = sdhci_msm_ice_init(host);
+		if (ret) {
+			dev_err(&pdev->dev, "%s: SDHCi ICE init failed (%d)\n",
+					mmc_hostname(host->mmc), ret);
+			ret = -EINVAL;
+			goto vreg_deinit;
+		}
+		host->is_crypto_en = true;
+		/* Packed commands cannot be encrypted/decrypted using ICE */
+		msm_host->mmc->caps2 &= ~(MMC_CAP2_PACKED_WR |
+				MMC_CAP2_PACKED_WR_CONTROL);
+	}
+
 	init_completion(&msm_host->pwr_irq_completion);
 
 	if (gpio_is_valid(msm_host->pdata->status_gpio)) {
@@ -3743,6 +3722,8 @@ bus_clk_disable:
 		clk_disable_unprepare(msm_host->bus_clk);
 pltfm_free:
 	sdhci_pltfm_free(pdev);
+out_host_free:
+	devm_kfree(&pdev->dev, msm_host);
 out:
 	pr_debug("%s: Exit %s\n", dev_name(&pdev->dev), __func__);
 	return ret;
@@ -3868,6 +3849,12 @@ skip_disable_host_irq:
 			sdhci_msm_bus_cancel_work_and_set_vote(host, 0);
 	}
 
+	if (host->is_crypto_en) {
+		ret = sdhci_msm_ice_suspend(host);
+		if (ret < 0)
+			pr_err("%s: failed to suspend crypto engine %d\n",
+					mmc_hostname(host->mmc), ret);
+	}
 	return 0;
 }
 
@@ -3878,6 +3865,19 @@ static int sdhci_msm_runtime_resume(struct device *dev)
 	struct sdhci_msm_host *msm_host = pltfm_host->priv;
 	int ret;
 
+	if (host->is_crypto_en) {
+		ret = sdhci_msm_enable_controller_clock(host);
+		if (ret) {
+			pr_err("%s: Failed to enable reqd clocks\n",
+					mmc_hostname(host->mmc));
+			goto skip_ice_resume;
+		}
+		ret = sdhci_msm_ice_resume(host);
+		if (ret)
+			pr_err("%s: failed to resume crypto engine %d\n",
+					mmc_hostname(host->mmc), ret);
+	}
+skip_ice_resume:
 	ret = sdhci_msm_cfg_sdio_wakeup(host, false);
 	if (!ret)
 		goto skip_enable_host_irq;

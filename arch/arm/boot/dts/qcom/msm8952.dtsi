@@ -33,6 +33,7 @@
 		i2c5 = &i2c_5;
 		i2c8 = &i2c_8;
 		i2c3 = &i2c_3;
+		qup10 = &test_pacman;
 	};
 
 	memory {
@@ -983,6 +984,7 @@
 			qcom,src-bam-pipe-index = <1>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
+			qcom,reset-bam-on-disconnect;
 		};
 		qcom,pipe1 {
 			label = "hsusb-ipa-in-0";
@@ -995,6 +997,7 @@
 			qcom,dst-bam-pipe-index = <0>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
+			qcom,reset-bam-on-disconnect;
 		};
 
 		qcom,pipe2 {
@@ -1012,6 +1015,7 @@
 			qcom,data-fifo-size = <0xe00>;
 			qcom,descriptor-fifo-offset = <0xe00>;
 			qcom,descriptor-fifo-size = <0x200>;
+			qcom,reset-bam-on-disconnect;
 		};
 
 		/* USB BAM pipe (consumer) configuration for accelerated DPL */
@@ -1026,6 +1030,7 @@
 			qcom,dst-bam-pipe-index = <3>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
+			qcom,reset-bam-on-disconnect;
 		};
 	};
 
@@ -1371,6 +1376,14 @@
 
 	qcom,msm-ssc-sensors {
 		compatible = "qcom,msm-ssc-sensors";
+	};
+
+	qcom,msm-pacman {
+		compatible = "qcom,msm-pacman";
+	};
+
+	test_pacman: test {
+		compatible = "qcom,msm-test-pacman";
 	};
 
 	qcom_rng: qrng@22000 {
@@ -2169,6 +2182,20 @@
 			reg = <0x45>;
 		};
 	};
+
+	mcd {
+		compatible = "qcom,mcd";
+		qcom,ce-hw-instance = <0>;
+		qcom,ce-device = <0>;
+		clocks = <&clock_gcc clk_crypto_clk_src>,
+			 <&clock_gcc clk_gcc_crypto_clk>,
+			 <&clock_gcc clk_gcc_crypto_ahb_clk>,
+			 <&clock_gcc clk_gcc_crypto_axi_clk>;
+		clock-names = "core_clk_src", "core_clk",
+				"iface_clk", "bus_clk";
+		qcom,ce-opp-freq = <100000000>;
+	};
+
 };
 
 &gdsc_venus {

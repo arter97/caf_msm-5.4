@@ -626,6 +626,7 @@
 	};
 
 	qcom,lmh@b1db000 {
+		status = "disabled";
 		compatible = "qcom,lmh";
 		interrupts = <0 264 4>;
 		reg = <0xb1db000 0x4>;
@@ -1267,7 +1268,7 @@
 		};
 
 		qcom,smdpkt-apr-apps2 {
-			qcom,smdpkt-remote = "modem";
+			qcom,smdpkt-remote = "adsp";
 			qcom,smdpkt-port-name = "apr_apps2";
 			qcom,smdpkt-dev-name = "apr_apps2";
 		};

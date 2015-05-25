@@ -240,7 +240,6 @@
 	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
 	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
 	qcom,dsi-pref-prim-pan = <&dsi_otm1906c_1080p_cmd>;
-	qcom,dsi-panel-bias-vreg;
 
 	qcom,platform-reset-gpio = <&msm_gpio 0 0>;
 };
@@ -251,5 +250,6 @@
 };
 
 &dsi_otm1906c_1080p_cmd {
+	qcom,cont-splash-enabled;
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };

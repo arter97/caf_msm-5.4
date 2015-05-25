@@ -286,7 +286,7 @@ EXPORT_SYMBOL(kgsl_pwrctrl_buslevel_update);
  * @wake_up: flag to check if device is active or waking up
  */
 void kgsl_pwrctrl_pwrlevel_change_settings(struct kgsl_device *device,
-						bool post, bool wake_up)
+			bool post)
 {
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	unsigned int old = pwr->previous_pwrlevel;
@@ -299,13 +299,7 @@ void kgsl_pwrctrl_pwrlevel_change_settings(struct kgsl_device *device,
 	if (!device->ftbl->pwrlevel_change_settings)
 		return;
 
-	if (((old == 0) && !post) || ((old == 0) && wake_up)) {
-		/* Going to Non-Turbo mode - mask the throttle and reset */
-		device->ftbl->pwrlevel_change_settings(device, 1);
-	} else if (((new == 0) && post) || ((new == 0) && wake_up)) {
-		/* Going to Turbo mode - unmask the throttle and reset */
-		device->ftbl->pwrlevel_change_settings(device, 0);
-	}
+	device->ftbl->pwrlevel_change_settings(device, old, new, post);
 }
 
 /**
@@ -404,12 +398,14 @@ void kgsl_pwrctrl_pwrlevel_change(struct kgsl_device *device,
 
 	pwrlevel = &pwr->pwrlevels[pwr->active_pwrlevel];
 	/* Change register settings if any  BEFORE pwrlevel change*/
-	kgsl_pwrctrl_pwrlevel_change_settings(device, 0, 0);
+	kgsl_pwrctrl_pwrlevel_change_settings(device, 0);
 	clk_set_rate(pwr->grp_clks[0], pwrlevel->gpu_freq);
-	trace_kgsl_pwrlevel(device, pwr->active_pwrlevel,
-			pwrlevel->gpu_freq);
+	trace_kgsl_pwrlevel(device,
+			pwr->active_pwrlevel, pwrlevel->gpu_freq,
+			pwr->previous_pwrlevel,
+			pwr->pwrlevels[old_level].gpu_freq);
 	/* Change register settings if any AFTER pwrlevel change*/
-	kgsl_pwrctrl_pwrlevel_change_settings(device, 1, 0);
+	kgsl_pwrctrl_pwrlevel_change_settings(device, 1);
 
 	/* Timestamp the frequency change */
 	device->pwrscale.freq_change_time = ktime_to_ms(ktime_get());
@@ -1199,7 +1195,8 @@ void kgsl_pwrctrl_clk(struct kgsl_device *device, int state,
 	if (state == KGSL_PWRFLAGS_OFF) {
 		if (test_and_clear_bit(KGSL_PWRFLAGS_CLK_ON,
 			&pwr->power_flags)) {
-			trace_kgsl_clk(device, state);
+			trace_kgsl_clk(device, state,
+					kgsl_pwrctrl_active_freq(pwr));
 			for (i = KGSL_MAX_CLKS - 1; i > 0; i--)
 				if (pwr->grp_clks[i])
 					clk_disable(pwr->grp_clks[i]);
@@ -1226,7 +1223,8 @@ void kgsl_pwrctrl_clk(struct kgsl_device *device, int state,
 	} else if (state == KGSL_PWRFLAGS_ON) {
 		if (!test_and_set_bit(KGSL_PWRFLAGS_CLK_ON,
 			&pwr->power_flags)) {
-			trace_kgsl_clk(device, state);
+			trace_kgsl_clk(device, state,
+					kgsl_pwrctrl_active_freq(pwr));
 			/* High latency clock maintenance. */
 			if (device->state != KGSL_STATE_NAP) {
 				if (pwr->pwrlevels[0].gpu_freq > 0)
@@ -1397,8 +1395,8 @@ void kgsl_thermal_timer(unsigned long data)
 
 int kgsl_pwrctrl_init(struct kgsl_device *device)
 {
-	int i, k, m, set_bus = 1, n = 0, result = 0;
-	unsigned int freq_i, rbbmtimer_freq;
+	int i, k, m, n = 0, result = 0;
+	unsigned int rbbmtimer_freq;
 	struct clk *clk;
 	struct platform_device *pdev = device->pdev;
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
@@ -1454,22 +1452,13 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 			pdata->pwrlevel[i].bus_min;
 		pwr->pwrlevels[i].bus_max =
 			pdata->pwrlevel[i].bus_max;
-		/*
-		 * If the bus min/max values are specified to be something
-		 * other than defaults, do not attempt to generate them
-		 * below.
-		 */
-		if (pwr->pwrlevels[i].bus_min != pwr->pwrlevels[i].bus_max)
-			set_bus = 0;
 	}
-	/* Do not set_rate for targets in sync with AXI */
-	if (pwr->pwrlevels[0].gpu_freq > 0) {
-		clk_set_rate(pwr->grp_clks[0], pwr->
-				pwrlevels[pwr->num_pwrlevels - 1].gpu_freq);
-		rbbmtimer_freq = clk_round_rate(pwr->grp_clks[6],
-						KGSL_RBBMTIMER_CLK_FREQ);
-		clk_set_rate(pwr->grp_clks[6], rbbmtimer_freq);
-	}
+
+	clk_set_rate(pwr->grp_clks[0], pwr->
+			pwrlevels[pwr->num_pwrlevels - 1].gpu_freq);
+	rbbmtimer_freq = clk_round_rate(pwr->grp_clks[6],
+					KGSL_RBBMTIMER_CLK_FREQ);
+	clk_set_rate(pwr->grp_clks[6], rbbmtimer_freq);
 
 	if (of_find_property(device->pdev->dev.of_node,
 				"regulator-names", NULL) && pwr->gpu_reg) {
@@ -1591,17 +1580,6 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 		}
 	}
 
-	/*
-	 * Set the range permitted for BIMC votes per-GPU frequency.
-	 * For the moment assume the BIMC votes are listed in order
-	 * per GPU frequency.  If this is no longer needed in the bus
-	 * table the min/max values can be explicitly set in the dtsi
-	 * file.
-	 */
-	freq_i = pwr->min_pwrlevel;
-	if (set_bus == 1)
-		pwr->pwrlevels[freq_i].bus_min = 1;
-
 	pwr->bus_ib = kzalloc(pdata->bus_scale_table->num_usecases *
 				sizeof(*pwr->bus_ib), GFP_KERNEL);
 	if (pwr->bus_ib == NULL) {
@@ -1630,24 +1608,11 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 					max_vote_buslevel = i;
 			}
 
+			/* check for duplicate values */
 			for (k = 0; k < n; k++)
-				if (vector->ib == pwr->bus_ib[k]) {
-					static uint64_t last_ib = 0xFFFFFFFF;
-					/*
-					 * if the bus min/max are already set
-					 * leave them alone.
-					 */
-					if (set_bus == 0)
-						break;
-					if (vector->ib <= last_ib) {
-						pwr->pwrlevels[freq_i--].
-							bus_max = i - 1;
-						pwr->pwrlevels[freq_i].
-							bus_min = i;
-					}
-					last_ib = vector->ib;
+				if (vector->ib == pwr->bus_ib[k])
 					break;
-				}
+
 			/* if this is a new ib value, save it */
 			if (k == n) {
 				pwr->bus_ib[k] = vector->ib;
@@ -1663,8 +1628,6 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 			}
 		}
 	}
-	if (set_bus == 1)
-		pwr->pwrlevels[0].bus_max = i - 1;
 
 	INIT_WORK(&pwr->thermal_cycle_ws, kgsl_thermal_cycle);
 	setup_timer(&pwr->thermal_timer, kgsl_thermal_timer,
@@ -1915,7 +1878,7 @@ static int _wake(struct kgsl_device *device)
 		kgsl_pwrctrl_set_state(device, KGSL_STATE_ACTIVE);
 
 		/* Change register settings if any after pwrlevel change*/
-		kgsl_pwrctrl_pwrlevel_change_settings(device, 1, 1);
+		kgsl_pwrctrl_pwrlevel_change_settings(device, 1);
 		/* All settings for power level transitions are complete*/
 		pwr->previous_pwrlevel = pwr->active_pwrlevel;
 		mod_timer(&device->idle_timer, jiffies +

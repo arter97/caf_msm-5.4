@@ -1522,6 +1522,7 @@
 
 		USB3_GDSC-supply = <&gdsc_usb30>;
 		vdda33-supply = <&pm8994_l24>;
+		vdda18-supply = <&pm8994_l6>;
 		vbus_dwc3-supply = <&smbcharger_charger_otg>;
 		qcom,dwc-usb3-msm-tx-fifo-size = <29696>;
 		qcom,dwc-usb3-msm-qdss-tx-fifo-size = <8192>;
@@ -3190,6 +3191,11 @@
 		sensor_information22: qcom,sensor-information-22 {
 			qcom,sensor-type =  "llm";
 			qcom,sensor-name = "LLM_IA57";
+		};
+
+		sensor_information23: qcom,sensor-information-23 {
+			qcom,sensor-type =  "adc";
+			qcom,sensor-name = "battery";
 		};
 	};
 
