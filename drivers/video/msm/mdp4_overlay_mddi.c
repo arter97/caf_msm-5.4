@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012, 2014 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2012, 2014-2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -234,7 +234,10 @@ void mdp4_overlay_update_lcd(struct msm_fb_data_type *mfd)
 
 	pipe->mixer_stage  = MDP4_MIXER_STAGE_BASE;
 
-	mdp4_overlay_rgb_setup(pipe);
+	if (pipe->pipe_type == OVERLAY_TYPE_VIDEO)
+		mdp4_overlay_vg_setup(pipe);	/* video/graphic pipe */
+	else
+		mdp4_overlay_rgb_setup(pipe);	/* rgb pipe */
 
 	mdp4_mixer_stage_up(pipe, 1);
 
