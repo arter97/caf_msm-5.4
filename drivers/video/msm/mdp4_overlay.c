@@ -2627,26 +2627,52 @@ struct mdp4_overlay_pipe *mdp4_pipe_alloc_by_id(uint32 id)
 	return NULL;
 }
 
-struct mdp4_overlay_pipe *mdp4_overlay_pipe_alloc(int ptype, int mixer)
+struct mdp4_overlay_pipe *mdp4_overlay_pipe_alloc(struct pipe_alloc *alloc)
 {
 	int i;
 	struct mdp4_overlay_pipe *pipe;
 
-	if (ptype == OVERLAY_TYPE_DMAS) {
+	if (!alloc) {
+		pr_err("%s alloc is NULL", __func__);
+		return NULL;
+	}
+
+	if (alloc->ptype == OVERLAY_TYPE_DMAS) {
 		pipe = &ctrl->plist[OVERLAY_PIPE_DMAS];
 		return (pipe->pipe_used) ? NULL : pipe;
 	}
 
-	if (ptype == OVERLAY_TYPE_BF && mixer == MDP4_MIXER_NONE)
+	if (alloc->ptype == OVERLAY_TYPE_BF && alloc->mixer == MDP4_MIXER_NONE)
 			return NULL;
+
+	if (alloc->kernel_client && alloc->ptype == OVERLAY_TYPE_RGB) {
+		/*
+		 * Try to use overlay layer if request is from kernel client
+		 * for RGB layer, in order to maximize the layer usage in
+		 * overall composition use cases.
+		 */
+		for (i = 0; i < OVERLAY_PIPE_MAX; i++) {
+			pipe = &ctrl->plist[i];
+			if ((pipe->pipe_used == 0) &&
+			    (pipe->pipe_type == OVERLAY_TYPE_VIDEO)) {
+				init_completion(&pipe->comp);
+				init_completion(&pipe->dmas_comp);
+				pr_debug("%s: pipe=%x ndx=%d num=%d\n",
+					__func__, (int)pipe, pipe->pipe_ndx,
+					pipe->pipe_num);
+				return pipe;
+			}
+		}
+	}
 
 	for (i = 0; i < OVERLAY_PIPE_MAX; i++) {
 		pipe = &ctrl->plist[i];
-		if ((pipe->pipe_used == 0) && ((pipe->pipe_type == ptype) ||
-		    (ptype == OVERLAY_TYPE_RGB &&
-		     pipe->pipe_type == OVERLAY_TYPE_VIDEO))) {
-			if (ptype == OVERLAY_TYPE_BF &&
-			    mixer != pipe->mixer_num)
+		if ((pipe->pipe_used == 0) &&
+		    ((pipe->pipe_type == alloc->ptype) ||
+		     (alloc->ptype == OVERLAY_TYPE_RGB &&
+		      pipe->pipe_type == OVERLAY_TYPE_VIDEO))) {
+			if (alloc->ptype == OVERLAY_TYPE_BF &&
+			    alloc->mixer != pipe->mixer_num)
 				continue;
 			init_completion(&pipe->comp);
 			init_completion(&pipe->dmas_comp);
@@ -2656,7 +2682,7 @@ struct mdp4_overlay_pipe *mdp4_overlay_pipe_alloc(int ptype, int mixer)
 		}
 	}
 
-	pr_err("%s: ptype=%d FAILED\n", __func__, ptype);
+	pr_err("%s: ptype=%d FAILED\n", __func__, alloc->ptype);
 
 	return NULL;
 }
@@ -2666,6 +2692,7 @@ struct mdp4_overlay_pipe *mdp4_alloc_base_primary(struct msm_fb_data_type
 {
 	struct mdp4_overlay_pipe *pipe = NULL;
 	int ret, ptype;
+	struct pipe_alloc alloc;
 
 	ptype = mdp4_overlay_format2type(mfd->fb_imgType);
 	if (ptype < 0) {
@@ -2673,7 +2700,10 @@ struct mdp4_overlay_pipe *mdp4_alloc_base_primary(struct msm_fb_data_type
 		goto p_err;
 	}
 
-	pipe = mdp4_overlay_pipe_alloc(ptype, MDP4_MIXER0);
+	memset(&alloc, 0, sizeof(alloc));
+	alloc.ptype = ptype;
+	alloc.mixer = MDP4_MIXER0;
+	pipe = mdp4_overlay_pipe_alloc(&alloc);
 	if (!pipe) {
 		pr_err("%s: pipe_alloc failed\n", __func__);
 		goto p_err;
@@ -2704,8 +2734,12 @@ struct mdp4_overlay_pipe *mdp4_alloc_base_secondary(struct msm_fb_data_type
 	*mfd)
 {
 	struct mdp4_overlay_pipe *pipe ;
+	struct pipe_alloc alloc;
 
-	pipe = mdp4_overlay_pipe_alloc(OVERLAY_TYPE_DMAS, MDP4_MIXER_NONE);
+	memset(&alloc, 0, sizeof(alloc));
+	alloc.ptype = OVERLAY_TYPE_DMAS;
+	alloc.mixer = MDP4_MIXER_NONE;
+	pipe = mdp4_overlay_pipe_alloc(&alloc);
 
 	if (!pipe) {
 		pr_err("%s: dmas pipe_alloc failed\n", __func__);
@@ -2778,11 +2812,12 @@ static struct mdp4_overlay_pipe *mdp4_overlay_alloc_base_pipe(
 
 
 static struct mdp4_overlay_pipe *mdp4_overlay_alloc_pipe(
-	struct mdp_overlay *req, struct msm_fb_data_type *mfd)
+	struct mdp_overlay *req, struct msm_fb_data_type *mfd, int user)
 {
 
 	struct mdp4_overlay_pipe *pipe = NULL;
 	int ret, ptype, mixer;
+	struct pipe_alloc alloc;
 
 	if (mfd == NULL) {
 		pr_err("%s: mfd == NULL, -ENODEV\n", __func__);
@@ -2811,10 +2846,16 @@ static struct mdp4_overlay_pipe *mdp4_overlay_alloc_pipe(
 	if (req->flags & MDP_OV_PIPE_SHARE)
 		ptype = OVERLAY_TYPE_VIDEO; /* VG pipe supports both RGB+YUV */
 
-	if (req->id == MSMFB_NEW_REQUEST) /* new request */
-		pipe = mdp4_overlay_pipe_alloc(ptype, mixer);
-	else
+	if (req->id == MSMFB_NEW_REQUEST) {
+		/* new request */
+		memset(&alloc, 0, sizeof(alloc));
+		alloc.ptype = ptype;
+		alloc.mixer = mixer;
+		alloc.kernel_client = (user) ? (false) : (true);
+		pipe = mdp4_overlay_pipe_alloc(&alloc);
+	} else {
 		pipe = mdp4_overlay_ndx2pipe(req->id);
+	}
 
 	if (IS_ERR_OR_NULL(pipe)) {
 		pr_err("%s: pipe == NULL! ptype=%d\n", __func__, ptype);
@@ -3846,7 +3887,7 @@ int mdp4_overlay_get(struct fb_info *info, struct mdp_overlay *req)
 	return 0;
 }
 
-int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
+int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req, int user)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 	int ret;
@@ -3888,7 +3929,7 @@ int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req)
 		return ret;
 	}
 
-	pipe = mdp4_overlay_alloc_pipe(req, mfd);
+	pipe = mdp4_overlay_alloc_pipe(req, mfd, user);
 	if (IS_ERR_OR_NULL(pipe)) {
 		mutex_unlock(&mfd->dma->ov_mutex);
 		return -ENODEV;
@@ -4493,7 +4534,7 @@ int mdp4_v4l2_overlay_set(struct fb_info *info, struct mdp_overlay *req,
 		return err;
 	}
 
-	pipe = mdp4_overlay_alloc_pipe(req, mfd);
+	pipe = mdp4_overlay_alloc_pipe(req, mfd, 0);
 	if (IS_ERR_OR_NULL(pipe)) {
 		pr_err("%s:Could not allocate MDP overlay pipe\n", __func__);
 		err = -ENODEV;

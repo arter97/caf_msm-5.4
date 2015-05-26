@@ -106,6 +106,7 @@ int mdp4_overlay_writeback_on(struct platform_device *pdev)
 	uint32 data;
 	struct vsycn_ctrl *vctrl;
 	int cndx = 0;
+	struct pipe_alloc alloc;
 
 	mfd = (struct msm_fb_data_type *)platform_get_drvdata(pdev);
 
@@ -130,7 +131,10 @@ int mdp4_overlay_writeback_on(struct platform_device *pdev)
 	mdp_clk_ctrl(1);
 
 	if (vctrl->base_pipe == NULL) {
-		pipe = mdp4_overlay_pipe_alloc(OVERLAY_TYPE_BF, MDP4_MIXER2);
+		memset(&alloc, 0, sizeof(alloc));
+		alloc.ptype = OVERLAY_TYPE_BF;
+		alloc.mixer = MDP4_MIXER2;
+		pipe = mdp4_overlay_pipe_alloc(&alloc);
 		if (pipe == NULL) {
 			pr_info("%s: pipe_alloc failed\n", __func__);
 			mdp_clk_ctrl(0);

@@ -43,6 +43,7 @@ int mdp4_atv_on(struct platform_device *pdev)
 	struct fb_var_screeninfo *var;
 	struct msm_fb_data_type *mfd;
 	struct mdp4_overlay_pipe *pipe;
+	struct pipe_alloc alloc;
 	int ret;
 
 	mfd = (struct msm_fb_data_type *)platform_get_drvdata(pdev);
@@ -62,7 +63,10 @@ int mdp4_atv_on(struct platform_device *pdev)
 
 	if (atv_pipe == NULL) {
 		ptype = mdp4_overlay_format2type(mfd->fb_imgType);
-		pipe = mdp4_overlay_pipe_alloc(ptype, MDP4_MIXER1);
+		memset(&alloc, 0, sizeof(alloc));
+		alloc.ptype = ptype;
+		alloc.mixer = MDP4_MIXER1;
+		pipe = mdp4_overlay_pipe_alloc(&alloc);
 		if (pipe == NULL)
 			return -EBUSY;
 		pipe->pipe_used++;

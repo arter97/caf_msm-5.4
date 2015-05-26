@@ -807,18 +807,22 @@ static void mdp4_overlay_dtv_alloc_pipe(struct msm_fb_data_type *mfd,
 	unsigned int buf_offset;
 	int bpp;
 	uint32 pipe_id;
+	struct pipe_alloc alloc;
 
 	if (vctrl->base_pipe != NULL)
 		return;
 
+	memset(&alloc, 0, sizeof(alloc));
+	alloc.ptype = ptype;
+	alloc.mixer = MDP4_MIXER1;
 	if (ptype == OVERLAY_TYPE_RGB) {
 		pipe_id = (mfd->base_layer < OVERLAY_PIPE_MAX) ?
 				mfd->base_layer : OVERLAY_PIPE_RGB2;
 		pipe = mdp4_pipe_alloc_by_id(pipe_id);
 		if (pipe == NULL)
-			pipe = mdp4_overlay_pipe_alloc(ptype, MDP4_MIXER1);
+			pipe = mdp4_overlay_pipe_alloc(&alloc);
 	} else {
-		pipe = mdp4_overlay_pipe_alloc(ptype, MDP4_MIXER1);
+		pipe = mdp4_overlay_pipe_alloc(&alloc);
 	}
 	if (pipe == NULL) {
 		pr_err("%s: pipe_alloc failed\n", __func__);

@@ -454,6 +454,12 @@ struct vsync_update {
 	struct mdp4_overlay_pipe plist[OVERLAY_PIPE_MAX];
 };
 
+struct pipe_alloc {
+	int ptype;
+	int mixer;
+	bool kernel_client;
+};
+
 struct mdp4_overlay_pipe *mdp4_overlay_ndx2pipe(int ndx);
 void mdp4_sw_reset(unsigned long bits);
 void mdp4_display_intf_sel(int output, unsigned long intf);
@@ -621,14 +627,14 @@ void mdp4_mddi_overlay(struct msm_fb_data_type *mfd);
 int mdp4_overlay_format2type(uint32 format);
 int mdp4_overlay_format2pipe(struct mdp4_overlay_pipe *pipe);
 int mdp4_overlay_get(struct fb_info *info, struct mdp_overlay *req);
-int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req);
+int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req, int user);
 int mdp4_overlay_vsync_ctrl(struct fb_info *info, int enable);
 int mdp4_overlay_unset(struct fb_info *info, int ndx);
 int mdp4_overlay_unset_mixer(int mixer);
 int mdp4_overlay_play_wait(struct fb_info *info,
 	struct msmfb_overlay_data *req);
 int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req);
-struct mdp4_overlay_pipe *mdp4_overlay_pipe_alloc(int ptype, int mixer);
+struct mdp4_overlay_pipe *mdp4_overlay_pipe_alloc(struct pipe_alloc *alloc);
 struct mdp4_overlay_pipe *mdp4_pipe_alloc_by_id(uint32 id);
 struct mdp4_overlay_pipe *mdp4_alloc_base_primary(struct msm_fb_data_type *mfd);
 struct mdp4_overlay_pipe *mdp4_alloc_base_secondary(struct msm_fb_data_type

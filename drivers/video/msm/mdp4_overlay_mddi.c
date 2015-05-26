@@ -98,6 +98,7 @@ void mdp4_overlay_update_lcd(struct msm_fb_data_type *mfd)
 	uint32 mddi_ld_param;
 	uint16 mddi_vdo_packet_reg;
 	struct mdp4_overlay_pipe *pipe;
+	struct pipe_alloc alloc;
 	int ret;
 
 	if (mfd->key != MFD_KEY)
@@ -112,7 +113,10 @@ void mdp4_overlay_update_lcd(struct msm_fb_data_type *mfd)
 		ptype = mdp4_overlay_format2type(mfd->fb_imgType);
 		if (ptype < 0)
 			printk(KERN_INFO "%s: format2type failed\n", __func__);
-		pipe = mdp4_overlay_pipe_alloc(ptype, MDP4_MIXER0);
+		memset(&alloc, 0, sizeof(alloc));
+		alloc.ptype = ptype;
+		alloc.mixer = MDP4_MIXER0;
+		pipe = mdp4_overlay_pipe_alloc(&alloc);
 		if (pipe == NULL)
 			printk(KERN_INFO "%s: pipe_alloc failed\n", __func__);
 		pipe->pipe_used++;

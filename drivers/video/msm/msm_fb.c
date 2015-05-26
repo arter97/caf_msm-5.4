@@ -3356,7 +3356,7 @@ static int msmfb_overlay_set(struct fb_info *info, void *p, int user)
 		memcpy(&req, p, sizeof(req));
 	}
 
-	ret = mdp4_overlay_set(info, &req);
+	ret = mdp4_overlay_set(info, &req, user);
 	if (ret) {
 		printk(KERN_ERR "%s: ioctl failed, rc=%d\n",
 			__func__, ret);
@@ -4788,7 +4788,7 @@ int mdpclient_overlay_set(int fb_idx, struct mdp_overlay *overlay)
 		return -ENODEV;
 	}
 
-	ret = mdp4_overlay_set(info, overlay);
+	ret = mdp4_overlay_set(info, overlay, 0);
 	if (ret)
 		pr_err(KERN_ERR "%s: ioctl failed, rc=%d\n",
 			__func__, ret);
