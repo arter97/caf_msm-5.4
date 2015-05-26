@@ -222,6 +222,7 @@
 			qcom,src-bam-pipe-index = <1>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
+			qcom,reset-bam-on-disconnect;
 		};
 		qcom,pipe1 {
 			label = "hsusb-ipa-in-0";
@@ -234,6 +235,7 @@
 			qcom,dst-bam-pipe-index = <0>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
+			qcom,reset-bam-on-disconnect;
 		};
 		qcom,pipe2 {
 			label = "hsusb-qdss-in-0";
@@ -250,6 +252,7 @@
 			qcom,data-fifo-size = <0x700>;
 			qcom,descriptor-fifo-offset = <0x4000>;
 			qcom,descriptor-fifo-size = <0x100>;
+			qcom,reset-bam-on-disconnect;
 		};
 		qcom,pipe3 {
 			label = "hsic-ipa-in-0";
@@ -328,6 +331,7 @@
 			qcom,src-bam-pipe-index = <5>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
+			qcom,reset-bam-on-disconnect;
 		};
 
 		qcom,pipe9 {
@@ -341,6 +345,7 @@
 			qcom,dst-bam-pipe-index = <4>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
+			qcom,reset-bam-on-disconnect;
 		};
 
 		qcom,pipe10 {
@@ -354,6 +359,7 @@
 			qcom,src-bam-pipe-index = <7>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
+			qcom,reset-bam-on-disconnect;
 		};
 
 		qcom,pipe11 {
@@ -367,6 +373,7 @@
 			qcom,dst-bam-pipe-index = <6>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
+			qcom,reset-bam-on-disconnect;
 		};
 
 		qcom,pipe12 {
@@ -380,6 +387,7 @@
 			qcom,src-bam-pipe-index = <8>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
+			qcom,reset-bam-on-disconnect;
 		};
 
 		qcom,pipe13 {
@@ -393,6 +401,7 @@
 			qcom,dst-bam-pipe-index = <9>;
 			qcom,data-fifo-size = <0x8000>;
 			qcom,descriptor-fifo-size = <0x2000>;
+			qcom,reset-bam-on-disconnect;
 		};
 	};
 
