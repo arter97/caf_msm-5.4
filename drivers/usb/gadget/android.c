@@ -1246,13 +1246,9 @@ static int serial_function_bind_config(struct android_usb_function *f,
 {
 	char *name;
 	char buf[32], *b;
-	int err = -1, i;
-	static int serial_initialized = 0, ports = 0;
+	int err = -1, i, ports = 0;
+	static int serial_initialized;
 
-	if (serial_initialized)
-		goto bind_config;
-
-	serial_initialized = 1;
 	strlcpy(buf, serial_transports, sizeof(buf));
 	b = strim(buf);
 
@@ -1260,19 +1256,27 @@ static int serial_function_bind_config(struct android_usb_function *f,
 		name = strsep(&b, ",");
 
 		if (name) {
-			err = gserial_init_port(ports, name);
-			if (err) {
-				pr_err("serial: Cannot open port '%s'", name);
-				goto out;
+			if (!serial_initialized) {
+				err = gserial_init_port(ports, name);
+				if (err) {
+					pr_err("serial: Cannot open port '%s'", name);
+					goto out;
+				}
 			}
 			ports++;
 		}
 	}
+
+	if (serial_initialized)
+		goto bind_config;
+
 	err = gport_setup(c);
 	if (err) {
 		pr_err("serial: Cannot setup transports");
 		goto out;
 	}
+
+	serial_initialized = 1;
 
 bind_config:
 	for (i = 0; i < ports; i++) {
