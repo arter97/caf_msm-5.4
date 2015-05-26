@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -39,7 +39,10 @@ module_param_named(
 	debug_mask, msm_spm_debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP
 );
 
-
+static int msm_spm_disable_svs;
+module_param_named(
+	disable_svs, msm_spm_disable_svs, int, S_IRUGO | S_IWUSR | S_IWGRP
+);
 static uint32_t msm_spm_reg_offsets_v1[MSM_SPM_REG_NR] = {
 	[MSM_SPM_REG_SAW2_SECURE]		= 0x00,
 	[MSM_SPM_REG_SAW2_ID]			= 0x04,
@@ -133,6 +136,9 @@ static inline void msm_spm_drv_set_vctl(struct msm_spm_driver_data *dev,
 {
 	dev->reg_shadow[MSM_SPM_REG_SAW2_VCTL] &= ~0xFF;
 	dev->reg_shadow[MSM_SPM_REG_SAW2_VCTL] |= vlevel;
+
+	if (dev->wakeup_nominal && (dev->nominal_voltage > vlevel))
+		vlevel = dev->nominal_voltage;
 
 	dev->reg_shadow[MSM_SPM_REG_SAW2_PMIC_DATA_0] &= ~0xFF;
 	dev->reg_shadow[MSM_SPM_REG_SAW2_PMIC_DATA_0] |= vlevel;
@@ -374,6 +380,9 @@ int msm_spm_drv_set_vdd(struct msm_spm_driver_data *dev, unsigned int vlevel)
 	if (avs_enabled)
 		msm_spm_drv_disable_avs(dev);
 
+	if (msm_spm_disable_svs && dev->nominal_voltage > vlevel)
+		vlevel = dev->nominal_voltage;
+
 	/* Kick the state machine back to idle */
 	dev->reg_shadow[MSM_SPM_REG_SAW2_RST] = 1;
 	msm_spm_drv_flush_shadow(dev, MSM_SPM_REG_SAW2_RST);
@@ -494,6 +503,9 @@ int __devinit msm_spm_drv_init(struct msm_spm_driver_data *dev,
 	dev->reg_base_addr = data->reg_base_addr;
 	memcpy(dev->reg_shadow, data->reg_init_values,
 			sizeof(data->reg_init_values));
+
+	dev->nominal_voltage = data->nominal_voltage;
+	dev->wakeup_nominal = data->wakeup_nominal;
 
 	dev->vctl_timeout_us = data->vctl_timeout_us;
 

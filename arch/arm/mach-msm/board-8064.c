@@ -2458,6 +2458,8 @@ static struct msm_spm_platform_data msm_spm_data[] __initdata = {
 		.vctl_timeout_us = 50,
 		.num_modes = ARRAY_SIZE(msm_spm_boot_cpu_seq_list),
 		.modes = msm_spm_boot_cpu_seq_list,
+		.nominal_voltage = 0x9c,
+		.wakeup_nominal = true,
 	},
 	[1] = {
 		.reg_base_addr = MSM_SAW1_BASE,
@@ -2473,6 +2475,8 @@ static struct msm_spm_platform_data msm_spm_data[] __initdata = {
 		.vctl_timeout_us = 50,
 		.num_modes = ARRAY_SIZE(msm_spm_nonboot_cpu_seq_list),
 		.modes = msm_spm_nonboot_cpu_seq_list,
+		.nominal_voltage = 0x9c,
+		.wakeup_nominal = true,
 	},
 	[2] = {
 		.reg_base_addr = MSM_SAW2_BASE,
@@ -2488,6 +2492,8 @@ static struct msm_spm_platform_data msm_spm_data[] __initdata = {
 		.vctl_timeout_us = 50,
 		.num_modes = ARRAY_SIZE(msm_spm_nonboot_cpu_seq_list),
 		.modes = msm_spm_nonboot_cpu_seq_list,
+		.nominal_voltage = 0x9c,
+		.wakeup_nominal = true,
 	},
 	[3] = {
 		.reg_base_addr = MSM_SAW3_BASE,
@@ -2503,6 +2509,8 @@ static struct msm_spm_platform_data msm_spm_data[] __initdata = {
 		.vctl_timeout_us = 50,
 		.num_modes = ARRAY_SIZE(msm_spm_nonboot_cpu_seq_list),
 		.modes = msm_spm_nonboot_cpu_seq_list,
+		.nominal_voltage = 0x9c,
+		.wakeup_nominal = true,
 	},
 };
 
