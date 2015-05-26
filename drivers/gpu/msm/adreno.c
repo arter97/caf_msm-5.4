@@ -277,7 +277,7 @@ static int kgsl_iommu_pdev_probe(struct platform_device *pdev)
 		++i;
 	}
 
-	/* if (of_property_read_bool(pdev->dev.of_node, "retention")) */
+	if (of_property_read_bool(pdev->dev.of_node, "retention"))
 		data->features |= KGSL_MMU_RETENTION;
 
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,global_pt"))
