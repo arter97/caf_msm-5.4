@@ -500,6 +500,7 @@ void bam_data_disconnect(struct data_port *gr, u8 port_num)
 {
 	struct bam_data_port	*port;
 	struct bam_data_ch_info	*d;
+	struct usb_gadget *gadget;
 	unsigned long flags;
 
 	pr_debug("dev:%p port#:%d\n", gr, port_num);
@@ -515,6 +516,13 @@ void bam_data_disconnect(struct data_port *gr, u8 port_num)
 	}
 
 	port = bam2bam_data_ports[port_num];
+
+	if (gr->cdev && gr->cdev->gadget) {
+		gadget = gr->cdev->gadget;
+	} else {
+		pr_err("usb_gadget is null\n");
+		gadget = NULL;
+	}
 
 	spin_lock_irqsave(&port->port_lock, flags);
 	if (!port) {
@@ -538,6 +546,12 @@ void bam_data_disconnect(struct data_port *gr, u8 port_num)
 
 	d = &port->data_ch;
 	if (d->trans == USB_GADGET_XPORT_BAM2BAM_IPA) {
+		/* Disable usb irq for CI gadget. It will be enabled in
+		 * usb_bam_disconnect_pipe() after disconnecting all pipes
+		 * and USB BAM reset is done.
+		 */
+		if (!gadget_is_dwc3(gadget))
+			msm_usb_irq_disable(true);
 		queue_work(bam_data_wq, &port->disconnect_w);
 	} else {
 		if (usb_bam_client_ready(false))

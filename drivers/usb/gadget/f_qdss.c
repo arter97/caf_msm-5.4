@@ -473,6 +473,12 @@ static void qdss_disable(struct usb_function *f)
 	if (status)
 		pr_err("%s: uninit_data error\n", __func__);
 
+	/* Disable usb irq for CI gadget. It will be enabled in
+	 * usb_bam_disconnect_pipe() after disconnecting all pipes
+	 * and USB BAM reset is done.
+	 */
+	if (!gadget_is_dwc3(qdss->cdev->gadget))
+		msm_usb_irq_disable(true);
 	schedule_work(&qdss->disconnect_w);
 }
 

@@ -166,6 +166,7 @@ struct msm_usb_bam_platform_data {
 	phys_addr_t usb_bam_fifo_baseaddr;
 	bool ignore_core_reset_ack;
 	bool reset_on_connect[MAX_BAMS];
+	bool reset_on_disconnect[MAX_BAMS];
 	bool disable_clk_gating;
 	bool enable_hsusb_bam_on_boot;
 };
