@@ -677,6 +677,7 @@
 		<90 512 100000 800000>,    /* SVS  - (ab=100Mbps, ib=800Mbps – 50MHz BIMC freq) */
 		<90 512 100000 1200000>;   /* PERF - (ab=100Mbps, ib=1200Mbps – 75MHz BIMC freq) */
 		qcom,bus-vector-names = "MIN", "SVS", "PERF";
+		qcom,msm-smmu;
 	};
 
 	qcom,rmnet-ipa {
@@ -1192,7 +1193,14 @@
 
 		qcom,bus-width = <8>;
 
-		qcom,cpu-dma-latency-us = <701>;
+		qcom,qos-planes = <3>;
+		qcom,cpu-dma-latency-us = <2 360 430>;
+		qcom,cpu-dma-latency-us-r = <2 360 430>;
+		qcom,cpu-dma-latency-us-w = <2 360 430>;
+		qcom,cpu-affinity-r = "affine_cores";
+		qcom,cpu-affinity-mask-r = <0xf0>;
+		qcom,modified-dynamic-qos;
+
 		qcom,msm-bus,name = "sdhc1";
 		qcom,msm-bus,num-cases = <9>;
 		qcom,msm-bus,num-paths = <1>;
