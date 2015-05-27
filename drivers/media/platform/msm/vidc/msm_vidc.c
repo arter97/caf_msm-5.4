@@ -251,8 +251,10 @@ struct buffer_info *get_registered_buf(struct msm_vidc_inst *inst,
 		dprintk(VIDC_ERR, "Invalid input\n");
 		goto err_invalid_input;
 	}
+
 	WARN(!mutex_is_locked(&inst->registeredbufs.lock),
-		"Regsitered buf lock is not acqruired for %s", __func__);
+		"Registered buf lock is not acquired for %s", __func__);
+
 	*plane = 0;
 	list_for_each_entry(temp, &inst->registeredbufs.list, list) {
 		for (i = 0; (i < temp->num_planes)
@@ -594,7 +596,7 @@ int unmap_and_deregister_buf(struct msm_vidc_inst *inst,
 	}
 
 	WARN(!mutex_is_locked(&inst->registeredbufs.lock),
-		"Regsitered buf lock is not acqruired for %s", __func__);
+		"Registered buf lock is not acquired for %s", __func__);
 
 	/*
 	* Make sure the buffer to be unmapped and deleted
