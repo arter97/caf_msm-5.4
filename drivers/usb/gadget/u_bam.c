@@ -1214,6 +1214,13 @@ static void gbam2bam_connect_work(struct work_struct *w)
 	}
 
 	gadget = port->port_usb->gadget;
+	if (!gadget) {
+		spin_unlock(&port->port_lock_dl);
+		spin_unlock_irqrestore(&port->port_lock_ul, flags_ul);
+		spin_unlock_irqrestore(&port->port_lock, flags);
+		pr_err("%s: port_usb.gadget is NULL, exiting\n", __func__);
+		return;
+	}
 	d = &port->data_ch;
 
 	d->rx_req = usb_ep_alloc_request(port->port_usb->out, GFP_ATOMIC);
@@ -1328,7 +1335,7 @@ static void gbam2bam_connect_work(struct work_struct *w)
 			return;
 		}
 
-		if (gadget && gadget_is_dwc3(gadget)) {
+		if (gadget_is_dwc3(gadget)) {
 			d->src_bam_idx = usb_bam_get_connection_idx(
 				gadget->name, IPA_P_BAM, USB_TO_PEER_PERIPHERAL,
 				USB_BAM_DEVICE, 0);
@@ -1377,7 +1384,7 @@ static void gbam2bam_connect_work(struct work_struct *w)
 			return;
 		}
 
-		if (gadget && gadget_is_dwc3(gadget)) {
+		if (gadget_is_dwc3(gadget)) {
 			d->dst_bam_idx = usb_bam_get_connection_idx(
 				gadget->name, IPA_P_BAM, PEER_PERIPHERAL_TO_USB,
 				USB_BAM_DEVICE, 0);
@@ -1422,7 +1429,7 @@ static void gbam2bam_connect_work(struct work_struct *w)
 		}
 	}
 	/* Update BAM specific attributes */
-	if (gadget && gadget_is_dwc3(gadget)) {
+	if (gadget_is_dwc3(gadget)) {
 		sps_params = MSM_SPS_MODE | MSM_DISABLE_WB | MSM_PRODUCER |
 			d->src_pipe_idx;
 		d->rx_req->length = 32*1024;
@@ -1432,7 +1439,7 @@ static void gbam2bam_connect_work(struct work_struct *w)
 	}
 	d->rx_req->udc_priv = sps_params;
 
-	if (gadget && gadget_is_dwc3(gadget)) {
+	if (gadget_is_dwc3(gadget)) {
 		sps_params = MSM_SPS_MODE | MSM_DISABLE_WB | d->dst_pipe_idx;
 		d->tx_req->length = 32*1024;
 	} else {
@@ -2069,6 +2076,10 @@ int gbam_connect(struct grmnet *gr, u8 port_num,
 	unsigned long		flags, flags_ul;
 
 	pr_debug("%s: grmnet:%p port#%d\n", __func__, gr, port_num);
+	if (!gr) {
+		pr_err("%s: grmnet port is null\n", __func__);
+		return -ENODEV;
+	}
 
 	if (!gr->gadget) {
 		pr_err("%s: gadget handle not passed\n", __func__);
@@ -2084,11 +2095,6 @@ int gbam_connect(struct grmnet *gr, u8 port_num,
 		trans == USB_GADGET_XPORT_BAM2BAM_IPA)
 		&& port_num >= n_bam2bam_ports) {
 		pr_err("%s: invalid portno#%d\n", __func__, port_num);
-		return -ENODEV;
-	}
-
-	if (!gr) {
-		pr_err("%s: grmnet port is null\n", __func__);
 		return -ENODEV;
 	}
 
