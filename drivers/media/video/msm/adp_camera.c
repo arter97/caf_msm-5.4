@@ -1120,7 +1120,7 @@ int disable_camera_preview(void)
 		break;
 	case CAMERA_PREVIEW_DISABLED:
 		pr_warn("%s - preview already disabled", __func__);
-		return 0;
+		goto exit;
 		break;
 	default:
 		pr_err("%s - cannot disable preview from uninitialized state",
@@ -1168,6 +1168,8 @@ int disable_camera_preview(void)
 	mdpclient_msm_fb_close(adp_cam_ctxt->fb_idx);
 
 	adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
+
+exit:
 	complete(&preview_disabled);
 	/* reset preview enable*/
 	init_completion(&preview_enabled);
@@ -1194,7 +1196,7 @@ int enable_camera_preview(void)
 		break;
 	case CAMERA_PREVIEW_ENABLED:
 		pr_warn("%s - preview already enabled", __func__);
-		return 0;
+		goto exit;
 		break;
 	default:
 		pr_err("%s - cannot enable preview from uninitialized state",
@@ -1254,6 +1256,8 @@ int enable_camera_preview(void)
 	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);
 
 	adp_cam_ctxt->state = CAMERA_PREVIEW_ENABLED;
+
+exit:
 	complete(&preview_enabled);
 
 	/* reset preview disable*/
@@ -1279,7 +1283,7 @@ int disable_camera_preview(void)
 		break;
 	case CAMERA_PREVIEW_DISABLED:
 		pr_warn("%s - preview already disabled", __func__);
-		return 0;
+		goto exit;
 		break;
 	default:
 		pr_err("%s - cannot disable preview from uninitialized state",
@@ -1314,6 +1318,8 @@ int disable_camera_preview(void)
 	mdpclient_msm_fb_close(adp_cam_ctxt->fb_idx);
 
 	adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
+
+exit:
 	complete(&preview_disabled);
 	/* reset preview enable*/
 	init_completion(&preview_enabled);
@@ -1343,7 +1349,7 @@ int enable_camera_preview(void)
 		break;
 	case CAMERA_PREVIEW_ENABLED:
 		pr_warn("%s - preview already enabled", __func__);
-		return 0;
+		goto exit;
 		break;
 	default:
 		pr_err("%s - cannot enable preview from uninitialized state",
@@ -1426,6 +1432,8 @@ int enable_camera_preview(void)
 	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);
 
 	adp_cam_ctxt->state = CAMERA_PREVIEW_ENABLED;
+
+exit:
 	complete(&preview_enabled);
 
 	/* reset preview disable*/
