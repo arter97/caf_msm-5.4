@@ -62,6 +62,8 @@ struct external_common_state_type {
 	boolean hpd_state;
 	boolean pre_suspend_hpd_state;
 	boolean skip_edid;
+	boolean edid_en;
+	boolean hpd_en;
 	struct kobject *uevent_kobj;
 	uint32 video_resolution;
 	struct device *dev;

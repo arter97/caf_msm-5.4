@@ -1,5 +1,5 @@
 
-/* Copyright (c) 2011, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011, 2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,12 +15,17 @@
 #define __MHL_API_H__
 
 #ifdef CONFIG_FB_MSM_HDMI_MHL_8334
-bool mhl_is_connected(void);
+inline bool mhl_is_connected(void);
+#endif
+#ifdef CONFIG_HDMI_MHL_ENABLED
+inline bool mhl_is_connected(void)
+{
+	return true;
+}
 #else
-static bool mhl_is_connected(void)
+inline bool mhl_is_connected(void)
 {
 	return false;
 }
 #endif
-
 #endif /* __MHL_API_H__ */

@@ -897,6 +897,44 @@ config FB_MSM_HDMI_MSM_PANEL_CEC_SUPPORT
 	  Support for HDMI CEC Feature
 	  Choose to enable CEC
 
+config HDMI_DDC_ENABLED
+	bool "DDC_ENABLED"
+	default n
+	---help---
+	HDMI slim driver flag
+	Support for enable/ disable DDC
+	When DDC disabled, will use default timing
+	DDC required for EDID and HDCP transactions
+
+config HDMI_EDID_ENABLED
+	depends on HDMI_DDC_ENABLED
+	bool "EDID_ENABLED"
+	default n
+	---help---
+	HDMI slim driver flag
+	Support for enable/ disable EDID
+	When EDID disabled, will use default timing
+	DDC required for EDID transactions
+
+config HDMI_MHL_ENABLED
+	depends on HDMI_EDID_ENABLED
+	bool "MHL_ENABLED"
+	default n
+	---help---
+	HDMI slim driver flag
+	Support for enable/ disable MHL
+	When enabled, needs EDID and DDC
+	When disabled no functionality
+
+config HDMI_HPD_ENABLED
+	bool "HPD_ENABLED"
+	default n
+	---help---
+	HDMI slim driver flag
+	Support for enable/ disable DDC
+	When DDC disabled, will use default timing
+	DDC required for EDID and HDCP transactions
+
 config FB_MSM_HDMI_MHL_9244
 	depends on FB_MSM_HDMI_MSM_PANEL
 	bool 'SI_MHL 9244 support'
