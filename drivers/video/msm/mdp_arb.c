@@ -179,6 +179,7 @@ static void mdp_arb_free_client(struct mdp_arb_client_db *client)
 				e = client->register_info.common.event + i;
 				kfree(e->event.register_state.down_state_value);
 				kfree(e->event.register_state.up_state_value);
+				kfree(e->event.register_state.opt_state_value);
 			}
 			kfree(client->register_info.common.event);
 		}
@@ -336,6 +337,34 @@ static int mdp_arb_register_sub(struct mdp_arb_device_info *arb,
 				memcpy(e->event.register_state.up_state_value,
 					e1->event.register_state.up_state_value,
 					sizeof(int) * num);
+			}
+		}
+		num = e->event.register_state.num_of_opt_state_value;
+		if (num) {
+			e->event.register_state.opt_state_value = kzalloc(
+				sizeof(int) * num, GFP_KERNEL);
+			if (!e->event.register_state.opt_state_value) {
+				pr_err("%s out of memory for opt value num=%d",
+					__func__, num);
+				rc = -ENOMEM;
+				goto out;
+			}
+			memset(e->event.register_state.opt_state_value, 0x00,
+				sizeof(int) * num);
+			if (user) {
+				if (copy_from_user(
+					e->event.register_state.opt_state_value,
+					e1->event.register_state.\
+					opt_state_value, sizeof(int) * num)) {
+					pr_err("%s register copy_from_user for"\
+						" opt failed", __func__);
+					rc = -EFAULT;
+					goto out;
+				}
+			} else {
+				memcpy(e->event.register_state.opt_state_value,
+					e1->event.register_state.\
+					opt_state_value, sizeof(int) * num);
 			}
 		}
 	}
@@ -638,7 +667,7 @@ static int mdp_arb_trigger_optimize_cb(struct mdp_arb_device_info *arb,
 	bool uevent = false;
 	char *envp[6];
 	int env_offset = 0;
-	unsigned long timeout = MDP_ARB_ACKNOWLEDGE_TIMEOUT_MS * HZ / 1000;
+	unsigned long timeout = msecs_to_jiffies(MDP_ARB_ACK_TIMEOUT_MS);
 
 	/* First triggers optimize list */
 	if (!list_empty(&notify->optimize_list)) {
@@ -755,7 +784,7 @@ static int mdp_arb_trigger_common_cb(struct mdp_arb_device_info *arb,
 	int env_offset = 0;
 	struct mdp_arb_notification *notification = NULL;
 	struct list_head *head = NULL;
-	unsigned long timeout = MDP_ARB_ACKNOWLEDGE_TIMEOUT_MS * HZ / 1000;
+	unsigned long timeout = msecs_to_jiffies(MDP_ARB_ACK_TIMEOUT_MS);
 	bool is_up = false, init = false;
 
 	switch (event) {
@@ -991,6 +1020,10 @@ static bool mdp_arb_client_support_notify(struct mdp_arb_event *event,
 		num = event->event.register_state.num_of_up_state_value;
 		state_list = event->event.register_state.up_state_value;
 		break;
+	case MDP_ARB_NOTIFICATION_OPTIMIZE:
+		num = event->event.register_state.num_of_opt_state_value;
+		state_list = event->event.register_state.opt_state_value;
+		break;
 	default:
 		pr_err("%s doesn't support notify=%d, event=%s", __func__,
 			notify, event->name);
@@ -1030,6 +1063,12 @@ static int mdp_arb_event_create_notify_list(struct mdp_arb_device_info *arb,
 				e = c->event + j;
 				if (!strcmp(e->name, event->event.name)) {
 					if (mdp_arb_client_support_notify(e,
+					event->cur_state_value,
+					MDP_ARB_NOTIFICATION_OPTIMIZE)) {
+						found = true;
+						list = &notify->optimize_list;
+					} else if (
+						mdp_arb_client_support_notify(e,
 						event->cur_state_value,
 						MDP_ARB_NOTIFICATION_DOWN)) {
 						found = true;
@@ -1320,9 +1359,13 @@ static int mdp_arb_find_new_pipe(struct mdp_arb_device_info *arb,
 			arb->pipe[i].support_by_hw &&
 			!arb->pipe[i].client->notified &&
 			IS_SAME_FB_IDX(arb->pipe[i].client, client)) {
+			/*
+			 * Even though client only has one layer at this moment,
+			 * it may acquire more later. We need to send
+			 * notification for client to enter optimization mode.
+			 */
 			if (IS_CLIENT_SUPPORT_OPTIMIZE(
-				arb->pipe[i].client) &&
-				arb->pipe[i].client->num_of_layer > 1) {
+				arb->pipe[i].client)) {
 				rc = mdp_arb_add_to_notify_list(
 					arb->pipe[i].client, NULL,
 					&notify->optimize_list);
@@ -1351,8 +1394,7 @@ static int mdp_arb_find_new_pipe(struct mdp_arb_device_info *arb,
 			!IS_SAME_FB_IDX(arb->pipe[i].client, client) &&
 			!IS_TERTIARY_FB(arb->pipe[i].client)) {
 			if (IS_CLIENT_SUPPORT_OPTIMIZE(
-				arb->pipe[i].client) &&
-				arb->pipe[i].client->num_of_layer > 1) {
+				arb->pipe[i].client)) {
 				rc = mdp_arb_add_to_notify_list(
 					arb->pipe[i].client, NULL,
 					&notify->optimize_list);
@@ -2139,7 +2181,7 @@ static ssize_t mdp_arb_rda_clients_attr(struct device *dev,
 	struct mdp_arb_client_db *temp;
 	struct mdp_arb_event *e;
 	int i = 0, j = 0, k = 0;
-	int num = 0, up_num = 0, down_num = 0;
+	int num = 0, up_num = 0, down_num = 0, opt_num = 0;
 	int *v = NULL;
 
 	if (!arb) {
@@ -2171,6 +2213,8 @@ static ssize_t mdp_arb_rda_clients_attr(struct device *dev,
 					num_of_up_state_value;
 				down_num = e->event.register_state.\
 					num_of_down_state_value;
+				opt_num = e->event.register_state.\
+					num_of_opt_state_value;
 				len += snprintf(buf + len, PAGE_SIZE - len,
 					"\t\tup=");
 				if (len >= PAGE_SIZE)
@@ -2192,6 +2236,21 @@ static ssize_t mdp_arb_rda_clients_attr(struct device *dev,
 					goto out;
 				v = e->event.register_state.down_state_value ;
 				for (k = 0; k < down_num; k++) {
+					len += snprintf(buf + len,
+						PAGE_SIZE - len, "%d,", v[k]);
+					if (len >= PAGE_SIZE)
+						goto out;
+				}
+				len += snprintf(buf + len, PAGE_SIZE - len,
+					"\n");
+				if (len >= PAGE_SIZE)
+					goto out;
+				len += snprintf(buf + len, PAGE_SIZE - len,
+					"\t\topt=");
+				if (len >= PAGE_SIZE)
+					goto out;
+				v = e->event.register_state.opt_state_value;
+				for (k = 0; k < opt_num; k++) {
 					len += snprintf(buf + len,
 						PAGE_SIZE - len, "%d,", v[k]);
 					if (len >= PAGE_SIZE)

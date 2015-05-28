@@ -21,7 +21,7 @@
 #include "msm_fb.h"
 
 #define MDP_ARB_UEVENT_LEN (128)
-#define MDP_ARB_ACKNOWLEDGE_TIMEOUT_MS (170) /*10 frames*/
+#define MDP_ARB_ACK_TIMEOUT_MS (170) /*10 frames*/
 #define MDP_ARB_UP_EVENT_STR "up="
 #define MDP_ARB_DOWN_EVENT_STR "down="
 #define MDP_ARB_OPTIMIZE_EVENT_STR "optimize="

@@ -666,12 +666,17 @@ enum mdp_arb_notification_event {
  * @up_state_value: pointer of event state values for up notification.
  * @num_of_down_state_value: number of event state values for down notification.
  * @down_state_value: pointer of event state values for down notification.
+ * @num_of_opt_state_value: number of event state values for optimize
+ *                          notification.
+ * @opt_state_value: pointer of event state values for optimize notification.
  */
 struct mdp_arb_event_register_state {
 	int num_of_up_state_value;
 	int *up_state_value;
 	int num_of_down_state_value;
 	int *down_state_value;
+	int num_of_opt_state_value;
+	int *opt_state_value;
 };
 
 /**
