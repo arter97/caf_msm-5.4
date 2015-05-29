@@ -982,6 +982,11 @@ static int adv7180_g_mbus_fmt(struct v4l2_subdev *sd,
 {
 	struct adv7180_state *state = to_state(sd);
 
+	if (!state || !fmt) {
+		pr_err("%s - null params %p, %p", __func__, sd, fmt);
+		return -EINVAL;
+	}
+
 	fmt->code = V4L2_MBUS_FMT_YUYV8_2X8;
 	fmt->colorspace = V4L2_COLORSPACE_SMPTE170M;
 	fmt->width = 720;
@@ -989,6 +994,10 @@ static int adv7180_g_mbus_fmt(struct v4l2_subdev *sd,
 		fmt->height = state->curr_norm & V4L2_STD_525_60 ? 507 : 576;
 	else
 		fmt->height = state->curr_norm & V4L2_STD_525_60 ? 254 : 288;
+
+	pr_debug("%s (%d) - %d x %d (%x)", __func__,
+			state->device_num, fmt->width, fmt->height,
+			(int)state->curr_norm);
 
 	return 0;
 }
@@ -1709,9 +1718,13 @@ static int adv7180_probe(struct i2c_client *client,
 
 	mutex_init(&state->mutex);
 
-	/* Default to NTSC for faster lock */
-	state->autodetect = false;
-	state->curr_norm = V4L2_STD_NTSC;
+	if (state->device_num == 0) {
+		/* Default to NTSC for faster lock */
+		state->autodetect = false;
+		state->curr_norm = V4L2_STD_NTSC;
+	} else {
+		state->autodetect = true;
+	}
 
 	if (state->chip_info->flags & ADV7180_FLAG_V2)
 		state->powered = false;
