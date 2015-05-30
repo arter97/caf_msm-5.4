@@ -291,6 +291,10 @@ static int perf_cpu_pm_notifier(struct notifier_block *self, unsigned long cmd,
 		void *v)
 {
 	struct pmu *pmu;
+
+	if (!cpu_pmu)
+		return NOTIFY_OK;
+
 	switch (cmd) {
 	case CPU_PM_ENTER:
 		if (cpu_pmu && cpu_pmu->save_pm_registers)
