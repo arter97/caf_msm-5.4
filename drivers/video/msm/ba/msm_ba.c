@@ -217,6 +217,7 @@ int msm_ba_s_input(void *instance, unsigned int index)
 	rc = v4l2_subdev_call(ba_input->sd, video, s_routing,
 			ba_input->bridge_chip_ip, 0, 0);
 	inst->sd_input.index = index;
+	inst->sd = ba_input->sd;
 	/* get current signal status */
 	rc = v4l2_subdev_call(
 		ba_input->sd, video, g_input_status, &ba_input->signal_status);
