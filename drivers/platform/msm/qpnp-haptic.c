@@ -79,6 +79,7 @@
 #define QPNP_HAP_DEF_SC_DEB_CYCLES	8
 #define QPNP_HAP_SC_DEB_CYCLES_MAX	32
 #define QPNP_HAP_SC_CLR			1
+#define QPNP_HAP_SC_IRQ_STATUS_DELAY	msecs_to_jiffies(1000)
 #define QPNP_HAP_INT_PWM_MASK		0xFC
 #define QPNP_HAP_INT_PWM_FREQ_253_KHZ	253
 #define QPNP_HAP_INT_PWM_FREQ_505_KHZ	505
@@ -120,6 +121,8 @@
 #define AUTO_RES_ENABLE			0x80
 #define AUTO_RES_DISABLE		0x00
 #define AUTO_RES_ERR_BIT		0x10
+#define SC_FOUND_BIT			0x08
+#define SC_MAX_DURATION			5
 
 #define QPNP_HAP_TIMEOUT_MS_MAX		15000
 #define QPNP_HAP_STR_SIZE		20
@@ -219,6 +222,7 @@ struct qpnp_pwm_info {
  *  @ reg_en_ctl - enable control register
  *  @ reg_play - play register
  *  @ lra_res_cal_period - period for resonance calibration
+ *  @ sc_duration - counter to determine the duration of short circuit condition
  *  @ state - current state of haptics
  *  @ use_play_irq - play irq usage state
  *  @ use_sc_irq - short circuit irq usage state
@@ -237,6 +241,7 @@ struct qpnp_hap {
 	struct timed_output_dev timed_dev;
 	struct work_struct work;
 	struct work_struct auto_res_err_work;
+	struct delayed_work sc_work;
 	struct qpnp_pwm_info pwm_info;
 	struct mutex lock;
 	struct mutex wf_lock;
@@ -263,6 +268,7 @@ struct qpnp_hap {
 	u8 reg_en_ctl;
 	u8 reg_play;
 	u8 lra_res_cal_period;
+	u8 sc_duration;
 	bool state;
 	bool use_play_irq;
 	bool use_sc_irq;
@@ -302,6 +308,21 @@ static int qpnp_hap_write_reg(struct qpnp_hap *hap, u8 *data, u16 addr)
 
 	dev_dbg(&hap->spmi->dev, "write: HAP_0x%x = 0x%x\n", addr, *data);
 	return rc;
+}
+
+static void qpnp_handle_sc_irq(struct work_struct *work)
+{
+	struct qpnp_hap *hap = container_of(work,
+				struct qpnp_hap, sc_work.work);
+	u8 val, reg;
+
+	qpnp_hap_read_reg(hap, &val, QPNP_HAP_STATUS(hap->base));
+
+	if (val & SC_FOUND_BIT) {
+		hap->sc_duration++;
+		reg = QPNP_HAP_SC_CLR;
+		qpnp_hap_write_reg(hap, &reg, QPNP_HAP_SC_CLR_REG(hap->base));
+	}
 }
 
 static int qpnp_hap_mod_enable(struct qpnp_hap *hap, int on)
@@ -419,12 +440,29 @@ unlock:
 static irqreturn_t qpnp_hap_sc_irq(int irq, void *_hap)
 {
 	struct qpnp_hap *hap = _hap;
-	u8 reg;
+	int rc;
+	u8 disable_haptics = 0x00;
+	u8 val;
 
 	/* clear short circuit register */
 	dev_dbg(&hap->spmi->dev, "Short circuit detected\n");
-	reg = QPNP_HAP_SC_CLR;
-	qpnp_hap_write_reg(hap, &reg, QPNP_HAP_SC_CLR_REG(hap->base));
+
+	if (hap->sc_duration < SC_MAX_DURATION) {
+		qpnp_hap_read_reg(hap, &val, QPNP_HAP_STATUS(hap->base));
+		if (val & SC_FOUND_BIT)
+			schedule_delayed_work(&hap->sc_work,
+					QPNP_HAP_SC_IRQ_STATUS_DELAY);
+		else
+			hap->sc_duration = 0;
+	} else {
+		/* Disable haptics module if the duration of short circuit
+		* exceeds the maximum limit (5 secs).
+		*/
+		rc = qpnp_hap_write_reg(hap, &disable_haptics,
+				QPNP_HAP_EN_CTL_REG(hap->base));
+		dev_err(&hap->spmi->dev,
+			"Haptics disabled permanently due to short circuit\n");
+	}
 
 	return IRQ_HANDLED;
 }
@@ -1327,7 +1365,18 @@ static void qpnp_hap_worker(struct work_struct *work)
 {
 	struct qpnp_hap *hap = container_of(work, struct qpnp_hap,
 					 work);
-	qpnp_hap_set(hap, hap->state);
+
+	u8 val = 0x00;
+	int rc;
+
+	/* Disable haptics module if the duration of short circuit
+	 * exceeds the maximum limit (5 secs).
+	 */
+	if (hap->sc_duration == SC_MAX_DURATION)
+		rc = qpnp_hap_write_reg(hap, &val,
+				QPNP_HAP_EN_CTL_REG(hap->base));
+	else
+		qpnp_hap_set(hap, hap->state);
 }
 
 /* get time api to know the remaining time */
@@ -1612,6 +1661,8 @@ static int qpnp_hap_config(struct qpnp_hap *hap)
 		}
 	}
 
+	hap->sc_duration = 0;
+
 	return rc;
 }
 
@@ -1869,6 +1920,7 @@ static int qpnp_haptic_probe(struct spmi_device *spmi)
 	mutex_init(&hap->lock);
 	mutex_init(&hap->wf_lock);
 	INIT_WORK(&hap->work, qpnp_hap_worker);
+	INIT_DELAYED_WORK(&hap->sc_work, qpnp_handle_sc_irq);
 
 	hrtimer_init(&hap->hap_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	hap->hap_timer.function = qpnp_hap_timer;
