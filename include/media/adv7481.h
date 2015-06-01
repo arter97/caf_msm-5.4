@@ -74,10 +74,14 @@ enum adv7481_output {
 	ADV7481_OP_CSIB,
 	ADV7481_OP_TTL
 };
-enum adv7481_csi_lane {
-	ADV7481_CSI_1LANE = 0x1,
-	ADV7481_CSI_2LANE = 0x2,
-	ADV7481_CSI_4LANE = 0x4,
+enum adv7481_csi_lane_en {
+	ADV7481_CSI_1LANE_EN = 0x1,
+	ADV7481_CSI_4LANE_EN = 0x2,
+};
+enum adv7481_mipi_lane {
+	ADV7481_MIPI_1LANE = 0x1,
+	ADV7481_MIPI_2LANE = 0x2,
+	ADV7481_MIPI_4LANE = 0x4,
 };
 enum adv7481_csi_params {
 	ADV7481_AUTO_PARAMS = 0x1,
