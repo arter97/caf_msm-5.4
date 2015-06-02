@@ -106,7 +106,7 @@ static struct lp5523_led_config lp5523_led_config[] = {
 	},
 	{
 		.chan_nr = 6,
-		.led_current = 0,
+		.led_current = 50,
 		.max_current = 130,
 	},
 	{
