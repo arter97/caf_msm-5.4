@@ -21,9 +21,6 @@
 #include <asm/mach-types.h>
 #include <media/msm_ba.h>
 #include "adp_camera.h"
-#include "background.h"
-#include "left_lane.h"
-#include "right_lane.h"
 #include <mach/board.h>
 #include <video/mdp_arb.h>
 #include <linux/reverse.h>
@@ -55,6 +52,12 @@ struct completion preview_disabled;
 
 static struct msm_camera_preview_data preview_data;
 static struct mdp_buf_queue s_mdp_buf_queue;
+
+static int g_preview_height = 507;
+static int g_preview_width = 720;
+static int g_preview_h_offset = 27;
+static int g_preview_buffer_length;
+static int g_preview_buffer_size;
 
 /* MDP buffer fifo */
 #define MDP_BUF_QUEUE_LENGTH (PREVIEW_BUFFER_COUNT+1)
@@ -110,8 +113,6 @@ static char *display_name[] = {
 #define MDP_ARB_EVENT_NAME "switch-reverse"
 #endif
 
-/* -------------------- Guidance Lane Data Structures ----------------------- */
-static struct msm_guidance_lane_data guidance_lane_data;
 int axi_vfe_config_cmd_para(struct vfe_axi_output_config_cmd_type *cmd)
 {
 	/* configure the axi bus parameters here */
@@ -121,8 +122,8 @@ int axi_vfe_config_cmd_para(struct vfe_axi_output_config_cmd_type *cmd)
 	int image_width;
 	int image_height;
 	int burst_length;
-	image_width = PREVIEW_WIDTH*2;
-	image_height = PREVIEW_HEIGHT;
+	image_width = g_preview_width*2;
+	image_height = g_preview_height;
 	cmd->busio_format = 0;
 	cmd->bus_cmd = 0;
 	cmd->bus_cfg = 0x2aaa771;
@@ -267,8 +268,7 @@ void preview_buffer_alloc(void)
 	}
 	/* ION_CP_MM_HEAP_ID size is 0x7800000 */
 	preview_data.ion_handle = ion_alloc(preview_data.ion_client,
-	/* add 32 to align with 8 for physical address align to 8 */
-				(PREVIEW_BUFFER_SIZE + 32),
+				(g_preview_buffer_size),
 				SZ_4K,
 				(0x1 << ION_CP_MM_HEAP_ID |
 				 0x1 << ION_IOMMU_HEAP_ID),
@@ -294,20 +294,13 @@ void preview_buffer_alloc(void)
 	overlay_fd[OVERLAY_CAMERA_PREVIEW] = (unsigned int) ion_share_dma_buf(
 						preview_data.ion_client,
 						preview_data.ion_handle);
-	paddr = ((paddr + 7) & 0xFFFFFFF8); /* to align with 8 */
 	/* Make all phys point to the correct address */
 	for (i = 0; i < PREVIEW_BUFFER_COUNT; i++) {
 		/* Y plane */
 		preview_data.preview_buffer[i].cam_preview.ch_paddr[0] =
 			(uint32_t)(paddr + offset);
-		/* add offset for display use */
-		/* if paddr last byte is 5, we need to add 3 to align to 8 */
-		preview_data.preview_buffer[i].offset =
-			offset + (8 - (paddr & 7));
-		offset += PREVIEW_BUFFER_LENGTH;
-		/* this the offset from start address ion_handle,
-		 * as align to 8
-		 */
+
+		offset += g_preview_buffer_length;
 	}
 	return;
 err_ion_handle:
@@ -459,13 +452,13 @@ static void preview_set_overlay_init(struct mdp_overlay *overlay,
 	struct fb_var_screeninfo *var)
 {
 	overlay->id = MSMFB_NEW_REQUEST;
-	overlay->src.width  = PREVIEW_WIDTH;
-	overlay->src.height = PREVIEW_HEIGHT;
+	overlay->src.width  = g_preview_width;
+	overlay->src.height = g_preview_height;
 	overlay->src.format = MDP_YCRYCB_H2V1;
 	overlay->src_rect.x = 0;
-	overlay->src_rect.y = 6;
-	overlay->src_rect.w = PREVIEW_WIDTH;
-	overlay->src_rect.h = 240;
+	overlay->src_rect.y = g_preview_h_offset;
+	overlay->src_rect.w = g_preview_width;
+	overlay->src_rect.h = g_preview_height - g_preview_h_offset;
 	overlay->dst_rect.x = 0;
 	overlay->dst_rect.y = 0;
 	overlay->dst_rect.w = var->xres;
@@ -485,8 +478,8 @@ void format_convert(int index)
 	int i;
 	int8 *data;
 	data = (int8 *)k_addr[OVERLAY_CAMERA_PREVIEW];
-	data += PREVIEW_WIDTH*PREVIEW_HEIGHT*2*index;
-	for (i = 0; i < PREVIEW_WIDTH*PREVIEW_HEIGHT/4 ; i++)
+	data += g_preview_width*g_preview_height*2*index;
+	for (i = 0; i < g_preview_width*g_preview_height/4 ; i++)
 		__swab32s((uint32 *)(data+4*i));
 }
 
@@ -508,37 +501,21 @@ static void mdp_queue_overlay_buffers(struct work_struct *work)
 			__func__, buffer_index);
 		return;
 	}
-
 	if (adp_cam_ctxt->state == CAMERA_PREVIEW_ENABLED) {
-		/* configure overlay data for guidance lane */
 		overlay_data[OVERLAY_CAMERA_PREVIEW].id =
 				overlay_req[OVERLAY_CAMERA_PREVIEW].id;
 		overlay_data[OVERLAY_CAMERA_PREVIEW].data.flags =
 			MSMFB_DATA_FLAG_ION_NOT_FD;
 		overlay_data[OVERLAY_CAMERA_PREVIEW].data.offset =
-			(buffer_index * PREVIEW_BUFFER_LENGTH);
+			(buffer_index * g_preview_buffer_length);
 		overlay_data[OVERLAY_CAMERA_PREVIEW].data.memory_id =
 				overlay_fd[OVERLAY_CAMERA_PREVIEW];
-
-		/* configure overlay data for guidance lane */
-		overlay_data[OVERLAY_GUIDANCE_LANE].id =
-				overlay_req[OVERLAY_GUIDANCE_LANE].id;
-		overlay_data[OVERLAY_GUIDANCE_LANE].data.flags =
-			MSMFB_DATA_FLAG_ION_NOT_FD;
-		overlay_data[OVERLAY_GUIDANCE_LANE].data.offset =
-			(buffer_index * GUIDANCE_LANE_BUFFER_LENGTH);
-		overlay_data[OVERLAY_GUIDANCE_LANE].data.memory_id =
-				overlay_fd[OVERLAY_GUIDANCE_LANE];
 
 		ret = mdp_arb_client_overlay_play(adp_cam_ctxt->mdp_arb_handle,
 			&overlay_data[OVERLAY_CAMERA_PREVIEW]);
 		if (ret)
 			pr_err("%s overlay play preview fails=%d", __func__,
 				ret);
-		ret = mdp_arb_client_overlay_play(adp_cam_ctxt->mdp_arb_handle,
-			&overlay_data[OVERLAY_GUIDANCE_LANE]);
-		if (ret)
-			pr_err("%s overlay play lane fails=%d", __func__, ret);
 
 		if (is_first_commit == true)
 			place_marker("FF RVC pre commit");
@@ -574,30 +551,14 @@ static void mdp_queue_overlay_buffers(struct work_struct *work)
 		return;
 	}
 
-	/* configure overlay data for guidance lane */
 	overlay_data[OVERLAY_CAMERA_PREVIEW].id =
 			overlay_req[OVERLAY_CAMERA_PREVIEW].id;
 	overlay_data[OVERLAY_CAMERA_PREVIEW].data.flags =
 		MSMFB_DATA_FLAG_ION_NOT_FD;
 	overlay_data[OVERLAY_CAMERA_PREVIEW].data.offset =
-		(buffer_index * PREVIEW_BUFFER_LENGTH);
+		(buffer_index * g_preview_buffer_length);
 	overlay_data[OVERLAY_CAMERA_PREVIEW].data.memory_id =
 			overlay_fd[OVERLAY_CAMERA_PREVIEW];
-
-	/* configure overlay data for guidance lane */
-	overlay_data[OVERLAY_GUIDANCE_LANE].id =
-			overlay_req[OVERLAY_GUIDANCE_LANE].id;
-	overlay_data[OVERLAY_GUIDANCE_LANE].data.flags =
-		MSMFB_DATA_FLAG_ION_NOT_FD;
-	overlay_data[OVERLAY_GUIDANCE_LANE].data.offset =
-		(buffer_index * GUIDANCE_LANE_BUFFER_LENGTH);
-	overlay_data[OVERLAY_GUIDANCE_LANE].data.memory_id =
-			overlay_fd[OVERLAY_GUIDANCE_LANE];
-
-	mdpclient_overlay_play(adp_cam_ctxt->fb_idx,
-		&overlay_data[OVERLAY_CAMERA_PREVIEW]);
-	mdpclient_overlay_play(adp_cam_ctxt->fb_idx,
-		&overlay_data[OVERLAY_GUIDANCE_LANE]);
 
 	if (is_first_commit == true)
 		place_marker("FF RVC pre commit");
@@ -694,192 +655,6 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 					__func__);
 		}
 	}
-}
-
-/* Guidance Bitmap Implememtation */
-void guidance_lane_buffer_alloc(void)
-{
-	int i, result;
-	int offset = 0;
-	int mem_len;
-	int cam_domain_num;
-	unsigned long paddr;
-	memset(&guidance_lane_data, 0, sizeof(struct msm_guidance_lane_data));
-	guidance_lane_data.ion_client = msm_ion_client_create(-1, "camera");
-	if (IS_ERR_OR_NULL((void *)guidance_lane_data.ion_client)) {
-		pr_err("%s: ION create client failed\n", __func__);
-		goto err;
-	}
-	/* ION_CP_MM_HEAP_ID size is 0x7800000 */
-	guidance_lane_data.ion_handle = ion_alloc(guidance_lane_data.ion_client,
-	/* add 32 to align with 8 for physical address align to 8 */
-			(GUIDANCE_LANE_BUFFER_SIZE + 32),
-			SZ_4K,
-			(0x1 << ION_CP_MM_HEAP_ID | 0x1 << ION_IOMMU_HEAP_ID),
-			0);
-	if (IS_ERR_OR_NULL((void *) guidance_lane_data.ion_handle)) {
-		pr_err("%s: ION memory allocation failed\n", __func__);
-		goto err_ion_client;
-	}
-	 k_addr[OVERLAY_GUIDANCE_LANE] =
-			ion_map_kernel(guidance_lane_data.ion_client,
-			guidance_lane_data.ion_handle);
-
-	cam_domain_num = msm_cam_server_get_domain_num();
-	pr_debug("%s cam domain num %d", __func__, cam_domain_num);
-
-	result = ion_map_iommu(guidance_lane_data.ion_client,
-			 guidance_lane_data.ion_handle,
-			 cam_domain_num, 0, SZ_4K, 0,
-			(unsigned long *)&paddr,
-			(unsigned long *)&mem_len, 0, 1);
-	if (result < 0) {
-			pr_err("%s Could not get  address\n", __func__);
-			goto err_ion_handle;
-	}
-	overlay_fd[OVERLAY_GUIDANCE_LANE] = (unsigned int)ion_share_dma_buf(
-			guidance_lane_data.ion_client,
-			guidance_lane_data.ion_handle);
-	paddr = ((paddr + 7) & 0xFFFFFFF8); /* to align with 8 */
-	/* Make all phys point to the correct address */
-	for (i = 0; i < GUIDANCE_LANE_BUFFER_COUNT; i++) {
-		/* Y plane */
-		guidance_lane_data.guidance_lane_buf[i].guidance_lane.\
-			ch_paddr[0] = (uint32_t)(paddr + offset);
-		/* add offset for display use */
-		/* if paddr last byte is 5, we need to add 3 to align to 8 */
-		guidance_lane_data.guidance_lane_buf[i].offset =
-						offset + (8 - (paddr & 7));
-		offset += GUIDANCE_LANE_BUFFER_LENGTH;
-		/* this offset from start address ion_handle, as align to 8 */
-	}
-	return;
-err_ion_handle:
-	ion_free(guidance_lane_data.ion_client, guidance_lane_data.ion_handle);
-err_ion_client:
-	ion_client_destroy(guidance_lane_data.ion_client);
-err:
-	return;
-}
-
-int guidance_lane_buffer_init(void)
-{
-	int i ;
-	/* initialized the list head and add all nodes */
-	pr_debug("%s begin to setup buffer list\n", __func__);
-
-	INIT_LIST_HEAD(&guidance_lane_data.guidance_lane_list);
-
-	for (i = 0; i < GUIDANCE_LANE_BUFFER_COUNT; i++) {
-		list_add(&(guidance_lane_data.guidance_lane_buf[i].list),
-		 &(guidance_lane_data.guidance_lane_list));
-		guidance_lane_data.guidance_lane_buf[i].state =
-					GUIDANCE_LANE_BUFFER_STATE_INITIALIZED;
-	}
-
-	pr_debug("%s setup buffer list\n", __func__);
-	return 0;
-}
-
-static int guidance_lane_buffer_free(void)
-{
-	int ret;
-	int cam_domain_num;
-	cam_domain_num = msm_cam_server_get_domain_num();
-	pr_debug("%s cam domain num %d", __func__, cam_domain_num);
-
-	ion_unmap_iommu(guidance_lane_data.ion_client,
-			guidance_lane_data.ion_handle,
-			cam_domain_num, 0);
-	ion_free(guidance_lane_data.ion_client, guidance_lane_data.ion_handle);
-	ion_client_destroy(guidance_lane_data.ion_client);
-	return ret = 0;
-}
-
-static void guidance_lane_configure_bufs()
-{
-	GUIDANCE_LANE_WIDTH = (*(background + 1) << 8) + *(background + 0);
-	GUIDANCE_LANE_HEIGHT = (*(background + 3) << 8) + *(background + 2);
-
-	GUIDANCE_LANE_BUFFER_LENGTH =
-		GUIDANCE_LANE_WIDTH * GUIDANCE_LANE_HEIGHT * 3;
-	GUIDANCE_LANE_BUFFER_SIZE =
-		GUIDANCE_LANE_BUFFER_COUNT * GUIDANCE_LANE_BUFFER_LENGTH;
-
-	/* step 1, alloc ION buffer */
-	guidance_lane_buffer_alloc();
-
-	/*step2, buffer linked list */
-	guidance_lane_buffer_init();
-}
-
-
-static void guidance_lane_set_overlay_init(struct mdp_overlay *overlay)
-{
-	overlay->id = MSMFB_NEW_REQUEST;
-	overlay->src.width  = GUIDANCE_LANE_WIDTH;
-	overlay->src.height = GUIDANCE_LANE_HEIGHT;
-	overlay->src.format = MDP_RGB_888;
-	overlay->src_rect.x = 0;
-	overlay->src_rect.y = 0;
-	overlay->src_rect.w = GUIDANCE_LANE_WIDTH;
-	overlay->src_rect.h = GUIDANCE_LANE_HEIGHT;
-	overlay->dst_rect.x = 0;
-	overlay->dst_rect.y = 0;
-	overlay->dst_rect.w = GUIDANCE_LANE_WIDTH;
-	overlay->dst_rect.h = GUIDANCE_LANE_HEIGHT;
-	overlay->z_order = 3;
-	overlay->alpha = 0x80;
-	overlay->transp_mask = 0x020202;
-	overlay->flags = MDP_ROT_NOP;
-	overlay->is_fg = 1;
-	return;
-}
-
-static void guidance_lane_pic_update(const unsigned char *pic,
-		unsigned int pos_x, unsigned int pos_y, unsigned int image_w,
-		unsigned int image_h, unsigned int buffer_index)
-{
-	int i;
-	unsigned int bpp = 3;
-	unsigned char *buffer = k_addr[OVERLAY_GUIDANCE_LANE];
-	buffer += (buffer_index * GUIDANCE_LANE_BUFFER_LENGTH);
-	for (i = 0; i < image_h; i++)
-		memcpy(buffer + GUIDANCE_LANE_WIDTH * bpp * i + pos_x*bpp +
-				pos_y * GUIDANCE_LANE_WIDTH * bpp,
-				pic + (image_w * bpp * i), (image_w * bpp));
-}
-
-static void guidance_lane_pic_update_all(void)
-{
-	const unsigned char *data = background + 4;
-	int i;
-	int w = (*(background + 1) << 8) + *(background + 0);
-	int h = (*(background + 3) << 8) + *(background + 2);
-
-	const unsigned char *data_a = left_lane + 4;
-	int w_a = (*(left_lane + 1) << 8) + *(left_lane + 0);
-	int h_a = (*(left_lane + 3) << 8) + *(left_lane + 2);
-
-	const unsigned char *data_b = right_lane + 4;
-	int w_b = (*(right_lane + 1) << 8) + *(right_lane + 0);
-	int h_b = (*(right_lane + 3) << 8) + *(right_lane + 2);
-
-	for (i = 0; i < GUIDANCE_LANE_BUFFER_COUNT; i++) {
-		/* bg */
-		guidance_lane_pic_update(data, 0, 0, w, h, i);
-		/* 'A' */
-		guidance_lane_pic_update(data_a, 170, 340, w_a, h_a, i);
-		/* 'B' */
-		guidance_lane_pic_update(data_b, 500, 340, w_b, h_b, i);
-	}
-}
-
-static void guidance_lane_set_data_pipeline(void)
-{
-	pr_debug("%s entry\n", __func__);
-	guidance_lane_pic_update_all();
-	pr_debug("%s exit\n", __func__);
 }
 
 static int find_fb_idx(int display_id, int *fb_idx)
@@ -1057,11 +832,16 @@ static int adp_rear_camera_enable(void)
 	pr_debug("%s: format: %dx%d\n", __func__, fmt.fmt.pix.width,
 			fmt.fmt.pix.height);
 
-	PREVIEW_HEIGHT = fmt.fmt.pix.height;
-	PREVIEW_WIDTH = fmt.fmt.pix.width;
-
-	PREVIEW_BUFFER_LENGTH =  PREVIEW_WIDTH * PREVIEW_HEIGHT*2;
-	PREVIEW_BUFFER_SIZE  =  PREVIEW_BUFFER_COUNT * PREVIEW_BUFFER_LENGTH;
+	g_preview_height = fmt.fmt.pix.height;
+	g_preview_width = fmt.fmt.pix.width;
+	/* 4k align buffers */
+	g_preview_buffer_length =  ALIGN(g_preview_width *
+					g_preview_height*2, 4096);
+	g_preview_buffer_size  =  PREVIEW_BUFFER_COUNT *
+				g_preview_buffer_length;
+	pr_debug("%s: width %d height %d length %d size %d\n", __func__,
+		g_preview_width, g_preview_height, g_preview_buffer_length,
+		g_preview_buffer_size);
 	preview_configure_bufs();
 	preview_set_data_pipeline();
 	/* step 1, find free buffer from the list, then use it to
@@ -1080,8 +860,6 @@ static int adp_rear_camera_enable(void)
 	/* init mdp buffer queue */
 	memset(&s_mdp_buf_queue, 0, sizeof(s_mdp_buf_queue));
 
-	guidance_lane_configure_bufs();
-	guidance_lane_set_data_pipeline();
 	my_axi_ctrl->share_ctrl->current_mode = 4096; /* BIT(12) */
 	my_axi_ctrl->share_ctrl->operation_mode = 4096;
 	pr_debug("%s: kpi exit\n", __func__);
@@ -1143,14 +921,7 @@ int disable_camera_preview(void)
 		&commit_data);
 	if (ret)
 		pr_err("%s overlay commit fails=%d", __func__, ret);
-	if (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] == 0) {
-		ret = mdp_arb_client_overlay_unset(adp_cam_ctxt->mdp_arb_handle,
-			overlay_req[OVERLAY_GUIDANCE_LANE].id);
-		if (ret)
-			pr_err("%s overlay unset fails=%d", __func__, ret);
-		pr_debug("%s: overlay_unset guidance lane free pipe !\n",
-			__func__);
-	}
+
 	if (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] == 0) {
 		ret = mdp_arb_client_overlay_unset(adp_cam_ctxt->mdp_arb_handle,
 			overlay_req[OVERLAY_CAMERA_PREVIEW].id);
@@ -1236,21 +1007,6 @@ int enable_camera_preview(void)
 		init_completion(&preview_disabled);
 		return -EBUSY;
 	}
-	/* configure pipe for guidance lane */
-	guidance_lane_set_overlay_init(&overlay_req[OVERLAY_GUIDANCE_LANE]);
-	alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] =
-		mdp_arb_client_overlay_set(adp_cam_ctxt->mdp_arb_handle,
-			&overlay_req[OVERLAY_GUIDANCE_LANE]);
-
-	if (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] != 0) {
-		pr_err("%s: mdpclient_overlay_set error!1\n",
-			__func__);
-		adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
-		complete(&preview_enabled);
-		/* reset preview disable*/
-		init_completion(&preview_disabled);
-		return -EBUSY;
-	}
 
 	msm_ba_streamon(adp_cam_ctxt->ba_inst_hdlr, 0);
 	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);
@@ -1300,12 +1056,7 @@ int disable_camera_preview(void)
 	usleep(FRAME_DELAY); /* delay to ensure sof for regupdate*/
 	msm_ba_streamoff(adp_cam_ctxt->ba_inst_hdlr, 0);
 	mdpclient_display_commit(adp_cam_ctxt->fb_idx);
-	if (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] == 0) {
-		mdpclient_overlay_unset(adp_cam_ctxt->fb_idx,
-			&overlay_req[OVERLAY_GUIDANCE_LANE]);
-		pr_debug("%s: overlay_unset guidance lane free pipe !\n",
-			__func__);
-	}
+
 	if (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] == 0) {
 		mdpclient_overlay_unset(adp_cam_ctxt->fb_idx,
 			&overlay_req[OVERLAY_CAMERA_PREVIEW]);
@@ -1332,7 +1083,6 @@ int enable_camera_preview(void)
 {
 	u64 mdp_max_bw_test = 2000000000;
 	int waitcounter_camera = 0;
-	int waitcounter_guidance = 0;
 	int max_wait_count = 15;
 	struct fb_var_screeninfo var;
 	pr_debug("%s: kpi entry\n", __func__);
@@ -1391,34 +1141,6 @@ int enable_camera_preview(void)
 			__func__, waitcounter_camera);
 
 	if (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] != 0) {
-		pr_err("%s: mdpclient_overlay_set error!1\n",
-			__func__);
-		adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
-		complete(&preview_enabled);
-		/* reset preview disable*/
-		init_completion(&preview_disabled);
-		return -EBUSY;
-	}
-	/* configure pipe for guidance lane */
-	guidance_lane_set_overlay_init(&overlay_req[OVERLAY_GUIDANCE_LANE]);
-	alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] =
-		mdpclient_overlay_set(adp_cam_ctxt->fb_idx,
-			&overlay_req[OVERLAY_GUIDANCE_LANE]);
-
-	while (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] != 0 &&
-				waitcounter_guidance < max_wait_count) {
-		msleep(100);
-		waitcounter_guidance++;
-		alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] =
-		mdpclient_overlay_set(adp_cam_ctxt->fb_idx,
-			&overlay_req[OVERLAY_GUIDANCE_LANE]);
-	}
-
-	if (waitcounter_guidance > 1)
-		pr_err("%s: mdpclient_overlay_set guidance lane wait counter"\
-			" value is: %d", __func__, waitcounter_guidance);
-
-	if (alloc_overlay_pipe_flag[OVERLAY_GUIDANCE_LANE] != 0) {
 		pr_err("%s: mdpclient_overlay_set error!1\n",
 			__func__);
 		adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
@@ -1626,7 +1348,6 @@ void  exit_camera_kthread(void)
 		disable_camera_preview();
 
 	wait_for_completion(&preview_disabled);
-	guidance_lane_buffer_free();
 	preview_buffer_free();
 	pr_debug("%s: begin axi release\n", __func__);
 

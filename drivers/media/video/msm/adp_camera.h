@@ -32,10 +32,6 @@
 #include "../../../video/msm/msm_fb.h"
 
 #define PREVIEW_BUFFER_COUNT 3
-int PREVIEW_HEIGHT = 507;
-int PREVIEW_WIDTH = 720;
-int PREVIEW_BUFFER_LENGTH;
-int PREVIEW_BUFFER_SIZE;
 enum camera_preview_buffer_state {
 	CAMERA_PREVIEW_BUFFER_STATE_UNUSED,
 	CAMERA_PREVIEW_BUFFER_STATE_INITIALIZED, /* free, can be used */
@@ -47,21 +43,8 @@ enum camera_preview_buffer_state {
 	CAMERA_PREVIEW_BUFFER_STATE_DEQUEUED_FROM_DISPLAY
 };
 
-/* Guidance lane variables */
-#define GUIDANCE_LANE_BUFFER_COUNT 3
-int GUIDANCE_LANE_HEIGHT;
-int GUIDANCE_LANE_WIDTH;
-int GUIDANCE_LANE_BUFFER_LENGTH;
-int GUIDANCE_LANE_BUFFER_SIZE;
-
-enum guidance_lane_buffer_state {
-	GUIDANCE_LANE_BUFFER_STATE_UNUSED,
-	GUIDANCE_LANE_BUFFER_STATE_INITIALIZED, /* free, can be used */
-};
-
 enum overlay_count {
 	OVERLAY_CAMERA_PREVIEW = 0,
-	OVERLAY_GUIDANCE_LANE,
 	OVERLAY_COUNT,
 };
 
@@ -182,20 +165,6 @@ struct vfe_axi_output_config_cmd_type {
 	struct vfe_rdi_cfg0 rdi_cfg0;
 	struct vfe_rdi_cfg1 rdi_cfg1;
 } __packed;
-/* Guidance Lane data structure */
-struct guidance_lane_mem {
-	struct msm_free_buf guidance_lane;
-	struct list_head list;
-	enum guidance_lane_buffer_state state;
-	uint32_t offset;
-};
-struct msm_guidance_lane_data {
-	struct ion_client *ion_client;
-	struct ion_handle *ion_handle;
-	struct guidance_lane_mem guidance_lane_buf[GUIDANCE_LANE_BUFFER_COUNT];
-	struct list_head guidance_lane_list;
-	struct mutex guidance_lane_lock;
-};
 
 extern struct csiphy_device *lsh_csiphy_dev[];
 extern struct csid_device *lsh_csid_dev[];
@@ -273,19 +242,8 @@ void preview_set_data_pipeline(void);
 struct preview_mem *preview_buffer_find_free_for_ping_pong(void);
 struct preview_mem *preview_buffer_find_free_for_ping_pong_mdp(void);
 static void preview_configure_bufs(void);
-static void guidance_lane_configure_bufs(void);
-static void guidance_lane_pic_update(const unsigned char *pic,
-					unsigned int pos_x,
-					unsigned int pos_y,
-					unsigned int image_w,
-					unsigned int image_h,
-					unsigned int buffer_index);
-static void guidance_lane_pic_update_all(void);
-static void guidance_lane_set_data_pipeline(void);
 static void mdp_queue_overlay_buffers(struct work_struct *work);
-static void guidance_lane_set_overlay_init(struct mdp_overlay *overlay);
 static int adp_rear_camera_enable(void);
-
 
 extern struct msm_camera_csiphy_params adp_rvc_csiphy_params;
 extern struct msm_camera_csi_lane_params adp_rvc_csi_lane_params;
