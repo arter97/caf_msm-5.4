@@ -23,6 +23,7 @@
 #include <linux/reverse.h>
 #include <linux/input.h>
 #include <video/mdp_arb.h>
+#include <mach/board.h>
 
 struct reverse_data {
 	struct switch_dev *sdev;
@@ -195,6 +196,7 @@ static void reverse_detection_work(struct work_struct *work)
 {
 	int state;
 	struct reverse_data *data;
+	static int is_first_switch_on = 1;
 
 	data = container_of(work, struct reverse_data,
 			detect_delayed_work.work);
@@ -203,6 +205,11 @@ static void reverse_detection_work(struct work_struct *work)
 	/* Invert the state if active low*/
 	if (data->active_low)
 		state = (state == 0) ? 1 : 0;
+
+	if (state && is_first_switch_on) {
+		place_marker("RVC sw_on");
+		is_first_switch_on = 0;
+	}
 
 	switch_set_state(data->sdev, state);
 
@@ -326,6 +333,7 @@ static int switch_reverse_probe(struct platform_device *pdev)
 	int ret = 0;
 	int index = 0;
 	int state = 0;
+	static int is_first_probe = 1;
 	struct reverse_switch_platform_data *pdata = pdev->dev.platform_data;
 
 	pr_debug("%s: kpi entry\n", __func__);
@@ -438,6 +446,11 @@ static int switch_reverse_probe(struct platform_device *pdev)
 		/* get initial states of gpios */
 		state |= reverse_get_gpio_state(
 				g_reverse_platform_data.reverse_data[index]);
+	}
+
+	if (is_first_probe) {
+		place_marker("RVC swprobe");
+		is_first_probe = 0;
 	}
 
 	/* set initial camera state */
