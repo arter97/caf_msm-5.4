@@ -29,9 +29,9 @@
 			<22 512 0 6400000>;
 
 		/* Fudge factors */
-		qcom,mdss-ab-factor = <1 1>;		/* 1 time    */
-		qcom,mdss-ib-factor = <2 1>;		/* 2 times  */
-		qcom,mdss-ib-factor-cmd = <10 6>;	/* 1.6 times */
+		qcom,mdss-ab-factor = <1 1>;		/* no fudge    */
+		qcom,mdss-ib-factor = <1 1>;		/* no fudge  */
+		qcom,mdss-ib-factor-cmd = <1 1>;	/* no fudge */
 		qcom,mdss-clk-factor = <105 100>;	/* 1.05 times */
 		qcom,max-bandwidth-low-kbps = <2000000>;
 		qcom,max-bandwidth-high-kbps = <2000000>;
@@ -174,6 +174,8 @@
 			<&clock_gcc clk_gcc_mdss_axi_clk>;
 		clock-names = "mdp_core_clk", "iface_clk", "bus_clk";
 
+		qcom,mmss-ulp-clamp-ctrl-offset = <0x20>;
+		qcom,mmss-phyreset-ctrl-offset = <0x24>;
 		qcom,timing-db-mode;
 
 		qcom,core-supply-entries {

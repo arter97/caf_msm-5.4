@@ -1483,9 +1483,13 @@ static ssize_t show_registers(struct device *dev,
 		return 0;
 	}
 
+	clk_prepare_enable(udc->system_clk);
+	clk_prepare_enable(udc->pclk);
 	spin_lock_irqsave(udc->lock, flags);
 	k = hw_register_read(dump, DUMP_ENTRIES);
 	spin_unlock_irqrestore(udc->lock, flags);
+	clk_disable_unprepare(udc->pclk);
+	clk_disable_unprepare(udc->system_clk);
 
 	for (i = 0; i < k; i++) {
 		n += scnprintf(buf + n, PAGE_SIZE - n,
@@ -1967,6 +1971,10 @@ static void ep_prime_timer_func(unsigned long data)
 		}
 		dbg_usb_op_fail(0xFF, "PRIMEF", mep);
 		mep->prime_fail_count++;
+		/* Notify to trigger h/w reset recovery later */
+		if (_udc->udc_driver->notify_event)
+			_udc->udc_driver->notify_event(_udc,
+					CI13XXX_CONTROLLER_ERROR_EVENT);
 	} else {
 		mod_timer(&mep->prime_timer, EP_PRIME_CHECK_DELAY);
 	}
@@ -2549,13 +2557,13 @@ static void isr_resume_handler(struct ci13xxx *udc)
 			  CI13XXX_CONTROLLER_RESUME_EVENT);
 		if (udc->transceiver)
 			usb_phy_set_suspend(udc->transceiver, 0);
+		udc->suspended = 0;
 		udc->driver->resume(&udc->gadget);
 		spin_lock(udc->lock);
 
 		if (udc->rw_pending)
 			purge_rw_queue(udc);
 
-		udc->suspended = 0;
 	}
 }
 

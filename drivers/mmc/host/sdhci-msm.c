@@ -43,6 +43,7 @@
 
 #include "sdhci-msm.h"
 #include "sdhci-msm-ice.h"
+#include "cmdq_hci.h"
 
 enum sdc_mpm_pin_state {
 	SDC_DAT1_DISABLE,
@@ -2967,15 +2968,11 @@ static void sdhci_msm_disable_data_xfer(struct sdhci_host *host)
 				mmc_hostname(host->mmc), __func__);
 		BUG();
 	}
-	/* Disable the test bus for device slot */
-	value = readl_relaxed(msm_host->core_mem + CORE_TESTBUS_CONFIG);
-	value &= ~CORE_TESTBUS_ENA;
-	writel_relaxed(value, msm_host->core_mem + CORE_TESTBUS_CONFIG);
 
 	udelay(CORE_AHB_DESC_DELAY_US);
 }
 
-#define MAX_TEST_BUS 20
+#define MAX_TEST_BUS 60
 
 void sdhci_msm_dump_vendor_regs(struct sdhci_host *host)
 {
@@ -3012,7 +3009,7 @@ void sdhci_msm_dump_vendor_regs(struct sdhci_host *host)
 	 * to select test bus 14, write 0x1E to CORE_TESTBUS_CONFIG register
 	 * i.e., tbsel2[7:4] = 0001, tbsel[2:0] = 110.
 	 */
-	for (tbsel2 = 0; tbsel2 < 3; tbsel2++) {
+	for (tbsel2 = 0; tbsel2 < 7; tbsel2++) {
 		for (tbsel = 0; tbsel < 8; tbsel++) {
 			if (index >= MAX_TEST_BUS)
 				break;
@@ -3028,9 +3025,6 @@ void sdhci_msm_dump_vendor_regs(struct sdhci_host *host)
 		pr_info(" Test bus[%d to %d]: 0x%08x 0x%08x 0x%08x 0x%08x\n",
 				i, i + 3, debug_reg[i], debug_reg[i+1],
 				debug_reg[i+2], debug_reg[i+3]);
-	/* Disable test bus */
-	writel_relaxed(~CORE_TESTBUS_ENA, msm_host->core_mem +
-			CORE_TESTBUS_CONFIG);
 	if (host->is_crypto_en) {
 		sdhci_msm_ice_get_status(host, &sts);
 		pr_info("%s: ICE status %x\n", mmc_hostname(host->mmc), sts);
@@ -3089,6 +3083,22 @@ void sdhci_msm_reset_enter(struct sdhci_host *host, u8 mask)
 		writel_relaxed(1, host->ioaddr + CORE_VENDOR_SPEC_ICE_CTRL);
 }
 
+static void sdhci_msm_clear_set_dumpregs(struct sdhci_host *host, bool set)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = pltfm_host->priv;
+
+	if (set) {
+		writel_relaxed(CORE_TESTBUS_ENA,
+			       msm_host->core_mem + CORE_TESTBUS_CONFIG);
+	} else {
+		u32 value;
+		value = readl_relaxed(msm_host->core_mem + CORE_TESTBUS_CONFIG);
+		value &= ~CORE_TESTBUS_ENA;
+		writel_relaxed(value, msm_host->core_mem + CORE_TESTBUS_CONFIG);
+	}
+}
+
 static struct sdhci_ops sdhci_msm_ops = {
 	.crypto_engine_cfg = sdhci_msm_ice_cfg,
 	.crypto_engine_reset = sdhci_msm_ice_reset,
@@ -3106,6 +3116,7 @@ static struct sdhci_ops sdhci_msm_ops = {
 	.config_auto_tuning_cmd = sdhci_msm_config_auto_tuning_cmd,
 	.enable_controller_clock = sdhci_msm_enable_controller_clock,
 	.reset_workaround = sdhci_msm_reset_workaround,
+	.clear_set_dumpregs = sdhci_msm_clear_set_dumpregs,
 };
 
 static int sdhci_msm_cfg_mpm_pin_wakeup(struct sdhci_host *host, unsigned mode)
@@ -3212,6 +3223,28 @@ static void sdhci_set_default_hw_caps(struct sdhci_msm_host *msm_host,
 	/* keep track of the value in SDHCI_CAPABILITIES */
 	msm_host->caps_0 = caps;
 }
+
+#ifdef CONFIG_MMC_CQ_HCI
+static void sdhci_msm_cmdq_init(struct sdhci_host *host,
+				struct platform_device *pdev)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = pltfm_host->priv;
+
+	host->cq_host = cmdq_pltfm_init(pdev);
+	if (IS_ERR(host->cq_host))
+		dev_dbg(&pdev->dev, "cmdq-pltfm init: failed: %ld\n",
+			PTR_ERR(host->cq_host));
+	else
+		msm_host->mmc->caps2 |= MMC_CAP2_CMD_QUEUE;
+}
+#else
+static void sdhci_msm_cmdq_init(struct sdhci_host *host,
+				struct platform_device *pdev)
+{
+
+}
+#endif
 
 static int sdhci_msm_probe(struct platform_device *pdev)
 {
@@ -3630,6 +3663,7 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 		}
 	}
 
+	sdhci_msm_cmdq_init(host, pdev);
 	ret = sdhci_add_host(host);
 	if (ret) {
 		dev_err(&pdev->dev, "Add host failed (%d)\n", ret);

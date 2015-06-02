@@ -4278,7 +4278,7 @@ static int fg_init_irqs(struct fg_chip *chip)
 				return rc;
 			}
 
-			rc |= devm_request_irq(chip->dev,
+			rc = devm_request_irq(chip->dev,
 				chip->soc_irq[FULL_SOC].irq,
 				fg_soc_irq_handler, IRQF_TRIGGER_RISING,
 				"full-soc", chip);
@@ -4287,7 +4287,7 @@ static int fg_init_irqs(struct fg_chip *chip)
 					chip->soc_irq[FULL_SOC].irq, rc);
 				return rc;
 			}
-			rc |= devm_request_irq(chip->dev,
+			rc = devm_request_irq(chip->dev,
 				chip->soc_irq[EMPTY_SOC].irq,
 				fg_empty_soc_irq_handler,
 				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
@@ -4297,7 +4297,7 @@ static int fg_init_irqs(struct fg_chip *chip)
 					chip->soc_irq[EMPTY_SOC].irq, rc);
 				return rc;
 			}
-			rc |= devm_request_irq(chip->dev,
+			rc = devm_request_irq(chip->dev,
 				chip->soc_irq[DELTA_SOC].irq,
 				fg_soc_irq_handler, IRQF_TRIGGER_RISING,
 				"delta-soc", chip);
@@ -4306,7 +4306,7 @@ static int fg_init_irqs(struct fg_chip *chip)
 					chip->soc_irq[DELTA_SOC].irq, rc);
 				return rc;
 			}
-			rc |= devm_request_irq(chip->dev,
+			rc = devm_request_irq(chip->dev,
 				chip->soc_irq[FIRST_EST_DONE].irq,
 				fg_first_soc_irq_handler, IRQF_TRIGGER_RISING,
 				"first-est-done", chip);
@@ -4327,7 +4327,7 @@ static int fg_init_irqs(struct fg_chip *chip)
 				pr_err("Unable to get mem-avail irq\n");
 				return rc;
 			}
-			rc |= devm_request_irq(chip->dev,
+			rc = devm_request_irq(chip->dev,
 					chip->mem_irq[FG_MEM_AVAIL].irq,
 					fg_mem_avail_irq_handler,
 					IRQF_TRIGGER_RISING |
@@ -4348,11 +4348,13 @@ static int fg_init_irqs(struct fg_chip *chip)
 				rc = -EINVAL;
 				return rc;
 			}
-			rc |= devm_request_irq(chip->dev,
+			rc = devm_request_threaded_irq(chip->dev,
 					chip->batt_irq[BATT_MISSING].irq,
+					NULL,
 					fg_batt_missing_irq_handler,
 					IRQF_TRIGGER_RISING |
-					IRQF_TRIGGER_FALLING,
+					IRQF_TRIGGER_FALLING |
+					IRQF_ONESHOT,
 					"batt-missing", chip);
 			if (rc < 0) {
 				pr_err("Can't request %d batt-missing: %d\n",
@@ -4367,7 +4369,7 @@ static int fg_init_irqs(struct fg_chip *chip)
 				rc = -EINVAL;
 				return rc;
 			}
-			rc |= devm_request_irq(chip->dev,
+			rc = devm_request_irq(chip->dev,
 					chip->batt_irq[VBATT_LOW].irq,
 					fg_vbatt_low_handler,
 					IRQF_TRIGGER_RISING |
@@ -5169,15 +5171,17 @@ static void delayed_init_work(struct work_struct *work)
 				init_work);
 
 	/* hold memory access until initialization finishes */
-	atomic_add_return(1, &chip->memif_user_cnt);
+	fg_mem_lock(chip);
 
 	rc = fg_hw_init(chip);
 	if (rc) {
 		pr_err("failed to hw init rc = %d\n", rc);
-		fg_release_access_if_necessary(chip);
+		fg_mem_release(chip);
 		fg_cleanup(chip);
 		return;
 	}
+	/* release memory access before update_sram_data is called */
+	fg_mem_release(chip);
 
 	schedule_delayed_work(
 		&chip->update_jeita_setting,
@@ -5188,9 +5192,6 @@ static void delayed_init_work(struct work_struct *work)
 
 	if (chip->last_temp_update_time == 0)
 		update_temp_data(&chip->update_temp_work.work);
-
-	/* release memory access if necessary */
-	fg_release_access_if_necessary(chip);
 
 	if (!chip->use_otp_profile)
 		schedule_work(&chip->batt_profile_init);

@@ -525,6 +525,8 @@ struct mdss_mdp_pipe {
 	struct mdp_scale_data scale;
 	u8 chroma_sample_h;
 	u8 chroma_sample_v;
+
+	wait_queue_head_t free_waitq;
 };
 
 struct mdss_mdp_writeback_arg {
@@ -549,6 +551,7 @@ struct mdss_overlay_private {
 	struct mutex list_lock;
 	struct list_head pipes_used;
 	struct list_head pipes_cleanup;
+	struct list_head pipes_destroy;
 	struct list_head rot_proc_list;
 	bool mixer_swap;
 
@@ -863,8 +866,6 @@ static inline u32 mdss_mdp_get_cursor_frame_size(struct mdss_data_type *mdata)
 }
 
 irqreturn_t mdss_mdp_isr(int irq, void *ptr);
-int mdss_iommu_attach(struct mdss_data_type *mdata);
-int mdss_iommu_dettach(struct mdss_data_type *mdata);
 void mdss_mdp_irq_clear(struct mdss_data_type *mdata,
 		u32 intr_type, u32 intf_num);
 int mdss_mdp_irq_enable(u32 intr_type, u32 intf_num);
@@ -1033,6 +1034,8 @@ struct mdss_mdp_pipe *mdss_mdp_pipe_search(struct mdss_data_type *mdata,
 int mdss_mdp_pipe_map(struct mdss_mdp_pipe *pipe);
 void mdss_mdp_pipe_unmap(struct mdss_mdp_pipe *pipe);
 struct mdss_mdp_pipe *mdss_mdp_pipe_alloc_dma(struct mdss_mdp_mixer *mixer);
+int mdss_mdp_get_pipe_info(struct mdss_data_type *mdata, u32 type,
+	struct mdss_mdp_pipe **pipe_pool);
 
 u32 mdss_mdp_smp_calc_num_blocks(struct mdss_mdp_pipe *pipe);
 u32 mdss_mdp_smp_get_size(struct mdss_mdp_pipe *pipe);

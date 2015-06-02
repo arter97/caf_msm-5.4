@@ -4265,10 +4265,14 @@ static int ufshcd_disable_tx_lcc(struct ufs_hba *hba, bool peer)
 	for (i = 0; i < tx_lanes; i++) {
 		if (!peer)
 			err = ufshcd_dme_set(hba,
-					UIC_ARG_MIB_SEL(TX_LCC_ENABLE, i), 0);
+				UIC_ARG_MIB_SEL(TX_LCC_ENABLE,
+					UIC_ARG_MPHY_TX_GEN_SEL_INDEX(i)),
+					0);
 		else
 			err = ufshcd_dme_peer_set(hba,
-					UIC_ARG_MIB_SEL(TX_LCC_ENABLE, i), 0);
+				UIC_ARG_MIB_SEL(TX_LCC_ENABLE,
+					UIC_ARG_MPHY_TX_GEN_SEL_INDEX(i)),
+					0);
 		if (err) {
 			dev_err(hba->dev, "%s: TX LCC Disable failed, peer = %d, lane = %d, err = %d",
 				__func__, peer, i, err);
@@ -6295,7 +6299,9 @@ static int ufshcd_tune_pa_tactivate(struct ufs_hba *hba)
 		return 0;
 
 	ret = ufshcd_dme_peer_get(hba,
-				  UIC_ARG_MIB(RX_MIN_ACTIVATETIME_CAPABILITY),
+				  UIC_ARG_MIB_SEL(
+					RX_MIN_ACTIVATETIME_CAPABILITY,
+					UIC_ARG_MPHY_RX_GEN_SEL_INDEX(0)),
 				  &peer_rx_min_activatetime);
 	if (ret)
 		goto out;
@@ -6328,12 +6334,16 @@ static int ufshcd_tune_pa_hibern8time(struct ufs_hba *hba)
 	u32 local_tx_hibern8_time_cap = 0, peer_rx_hibern8_time_cap = 0;
 	u32 max_hibern8_time, tuned_pa_hibern8time;
 
-	ret = ufshcd_dme_get(hba, UIC_ARG_MIB(TX_HIBERN8TIME_CAPABILITY),
+	ret = ufshcd_dme_get(hba,
+			     UIC_ARG_MIB_SEL(TX_HIBERN8TIME_CAPABILITY,
+					UIC_ARG_MPHY_TX_GEN_SEL_INDEX(0)),
 				  &local_tx_hibern8_time_cap);
 	if (ret)
 		goto out;
 
-	ret = ufshcd_dme_peer_get(hba, UIC_ARG_MIB(RX_HIBERN8TIME_CAPABILITY),
+	ret = ufshcd_dme_peer_get(hba,
+				  UIC_ARG_MIB_SEL(RX_HIBERN8TIME_CAPABILITY,
+					UIC_ARG_MPHY_RX_GEN_SEL_INDEX(0)),
 				  &peer_rx_hibern8_time_cap);
 	if (ret)
 		goto out;
@@ -7056,6 +7066,17 @@ static int __ufshcd_setup_clocks(struct ufs_hba *hba, bool on,
 	if (!head || list_empty(head))
 		goto out;
 
+	/*
+	 * vendor specific setup_clocks ops may depend on clocks managed by
+	 * this standard driver hence call the vendor specific setup_clocks
+	 * before disabling the clocks managed here.
+	 */
+	if (hba->vops && hba->vops->setup_clocks && !on) {
+		ret = hba->vops->setup_clocks(hba, on);
+		if (ret)
+			return ret;
+	}
+
 	list_for_each_entry(clki, head, list) {
 		if (!IS_ERR_OR_NULL(clki->clk)) {
 			if (skip_ref_clk && !strcmp(clki->name, "ref_clk"))
@@ -7078,8 +7099,14 @@ static int __ufshcd_setup_clocks(struct ufs_hba *hba, bool on,
 		}
 	}
 
-	if (hba->vops && hba->vops->setup_clocks)
+	/*
+	 * vendor specific setup_clocks ops may depend on clocks managed by
+	 * this standard driver hence call the vendor specific setup_clocks
+	 * after enabling the clocks managed here.
+	 */
+	if (hba->vops && hba->vops->setup_clocks && on)
 		ret = hba->vops->setup_clocks(hba, on);
+
 out:
 	if (ret) {
 		list_for_each_entry(clki, head, list) {
@@ -8322,7 +8349,7 @@ static void *gov_data;
 #endif
 
 static struct devfreq_dev_profile ufs_devfreq_profile = {
-	.polling_ms	= 100,
+	.polling_ms	= 40,
 	.target		= ufshcd_devfreq_target,
 	.get_dev_status	= ufshcd_devfreq_get_dev_status,
 };

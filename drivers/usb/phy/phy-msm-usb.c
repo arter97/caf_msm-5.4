@@ -562,7 +562,7 @@ static int msm_otg_link_clk_reset(struct msm_otg *motg, bool assert)
 	return ret;
 }
 
-static int msm_otg_phy_reset(struct msm_otg *motg)
+static int msm_otg_phy_block_reset(struct msm_otg *motg)
 {
 	u32 val;
 	int ret;
@@ -637,7 +637,7 @@ static int msm_otg_link_reset(struct msm_otg *motg)
 #define QUSB2PHY_PORT_POWERDOWN		0xB4
 #define QUSB2PHY_PORT_UTMI_CTRL2	0xC4
 
-static void msm_usb_phy_reset(struct msm_otg *motg)
+static void msm_usb_phy_only_reset(struct msm_otg *motg)
 {
 	u32 val;
 	int ret, *seq;
@@ -772,7 +772,7 @@ static int msm_otg_reset(struct usb_phy *phy)
 	}
 	motg->reset_counter++;
 
-	ret = msm_otg_phy_reset(motg);
+	ret = msm_otg_phy_block_reset(motg);
 	if (ret) {
 		dev_err(phy->dev, "phy_reset failed\n");
 		return ret;
@@ -788,7 +788,7 @@ static int msm_otg_reset(struct usb_phy *phy)
 	msleep(100);
 
 	/* Reset USB PHY after performing USB Link RESET */
-	msm_usb_phy_reset(motg);
+	msm_usb_phy_only_reset(motg);
 
 	/* Program USB PHY Override registers. */
 	ulpi_init(motg);
@@ -798,7 +798,7 @@ static int msm_otg_reset(struct usb_phy *phy)
 	 * the USB PHY Override registers to get the new
 	 * values into effect.
 	 */
-	msm_usb_phy_reset(motg);
+	msm_usb_phy_only_reset(motg);
 
 	if (pdata->otg_control == OTG_PHY_CONTROL) {
 		val = readl_relaxed(USB_OTGSC);
@@ -1313,7 +1313,7 @@ static void msm_otg_exit_phy_retention(struct msm_otg *motg)
 		 * Femto PHY must be POR reset to bring out
 		 * of retention.
 		 */
-		msm_usb_phy_reset(motg);
+		msm_otg_phy_block_reset(motg);
 		break;
 	default:
 		break;
@@ -5038,6 +5038,7 @@ static struct platform_device *msm_otg_add_pdev(
 		ci_pdata.enable_ahb2ahb_bypass =
 				otg_pdata->enable_ahb2ahb_bypass;
 		ci_pdata.system_clk = otg_pdata->system_clk;
+		ci_pdata.pclk = otg_pdata->pclk;
 		ci_pdata.enable_streaming = otg_pdata->enable_streaming;
 		ci_pdata.max_nominal_system_clk_rate =
 					motg->max_nominal_system_clk_rate;
@@ -5698,6 +5699,7 @@ static int msm_otg_probe(struct platform_device *pdev)
 	}
 
 	pdata->system_clk = motg->core_clk;
+	pdata->pclk = motg->pclk;
 
 	ret = msm_otg_bus_freq_get(motg->phy.dev, motg);
 	if (ret)

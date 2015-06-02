@@ -131,8 +131,8 @@ struct qseecom_send_svc_cmd_req {
 enum qseecom_key_management_usage_type {
 	QSEOS_KM_USAGE_DISK_ENCRYPTION = 0x01,
 	QSEOS_KM_USAGE_FILE_ENCRYPTION = 0x02,
-	QSEOS_KM_USAGE_ICE_DISK_ENCRYPTION = 0x03,
-	QSEOS_KM_USAGE_ICE_FILE_ENCRYPTION = 0x04,
+	QSEOS_KM_USAGE_UFS_ICE_DISK_ENCRYPTION = 0x03,
+	QSEOS_KM_USAGE_SDCC_ICE_DISK_ENCRYPTION = 0x04,
 	QSEOS_KM_USAGE_MAX
 };
 
@@ -327,5 +327,8 @@ extern long qseecom_ioctl(struct file *file,
 
 #define QSEECOM_IOCTL_MDTP_CIPHER_DIP_REQ \
 	_IOWR(QSEECOM_IOC_MAGIC, 34, struct qseecom_mdtp_cipher_dip_req)
+
+#define QSEECOM_IOCTL_SEND_MODFD_CMD_64_REQ \
+	_IOWR(QSEECOM_IOC_MAGIC, 35, struct qseecom_send_modfd_cmd_req)
 
 #endif /* _UAPI_QSEECOM_H_ */

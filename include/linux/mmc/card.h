@@ -15,6 +15,8 @@
 #include <linux/mod_devicetable.h>
 #include <linux/notifier.h>
 
+#define MMC_CARD_CMDQ_BLK_SIZE 512
+
 struct mmc_cid {
 	unsigned int		manfid;
 	char			prod_name[8];
@@ -107,6 +109,8 @@ struct mmc_ext_csd {
 	u8			raw_trim_mult;		/* 232 */
 	u8			raw_bkops_status;	/* 246 */
 	u8			raw_sectors[4];		/* 212 - 4 bytes */
+	u8			cmdq_depth;		/* 307 */
+	u8			cmdq_support;		/* 308 */
 
 	unsigned int            feature_support;
 #define MMC_DISCARD_FEATURE	BIT(0)                  /* CMD38 feature */
@@ -337,6 +341,7 @@ struct mmc_card {
 #define MMC_STATE_HIGHSPEED_400	(1<<9)		/* card is in HS400 mode */
 #define MMC_STATE_DOING_BKOPS	(1<<10)		/* card is doing BKOPS */
 #define MMC_STATE_NEED_BKOPS	(1<<11)		/* card needs to do BKOPS */
+#define MMC_STATE_CMDQ		(1<<12)         /* card is in cmd queue mode */
 	unsigned int		quirks; 	/* card quirks */
 #define MMC_QUIRK_LENIENT_FN0	(1<<0)		/* allow SDIO FN0 writes outside of the VS CCCR range */
 #define MMC_QUIRK_BLKSZ_FOR_BYTE_MODE (1<<1)	/* use func->cur_blksize */
@@ -399,6 +404,7 @@ struct mmc_card {
 	struct notifier_block        reboot_notify;
 	bool issue_long_pon;
 	u8 *cached_ext_csd;
+	bool cmdq_init;
 };
 
 /*
@@ -559,6 +565,7 @@ static inline void __maybe_unused remove_quirk(struct mmc_card *card, int data)
 #define mmc_card_removed(c)	((c) && ((c)->state & MMC_CARD_REMOVED))
 #define mmc_card_doing_bkops(c)	((c)->state & MMC_STATE_DOING_BKOPS)
 #define mmc_card_need_bkops(c)	((c)->state & MMC_STATE_NEED_BKOPS)
+#define mmc_card_cmdq(c)       ((c)->state & MMC_STATE_CMDQ)
 
 #define mmc_card_set_present(c)	((c)->state |= MMC_STATE_PRESENT)
 #define mmc_card_set_readonly(c) ((c)->state |= MMC_STATE_READONLY)
@@ -579,6 +586,8 @@ static inline void __maybe_unused remove_quirk(struct mmc_card *card, int data)
 #define mmc_card_clr_doing_bkops(c)	((c)->state &= ~MMC_STATE_DOING_BKOPS)
 #define mmc_card_set_need_bkops(c)	((c)->state |= MMC_STATE_NEED_BKOPS)
 #define mmc_card_clr_need_bkops(c)	((c)->state &= ~MMC_STATE_NEED_BKOPS)
+#define mmc_card_set_cmdq(c)           ((c)->state |= MMC_STATE_CMDQ)
+#define mmc_card_clr_cmdq(c)           ((c)->state &= ~MMC_STATE_CMDQ)
 /*
  * Quirk add/remove for MMC products.
  */
@@ -674,4 +683,5 @@ extern struct mmc_wr_pack_stats *mmc_blk_get_packed_statistics(
 extern void mmc_blk_init_packed_statistics(struct mmc_card *card);
 extern void mmc_blk_disable_wr_packing(struct mmc_queue *mq);
 extern int mmc_send_long_pon(struct mmc_card *card);
+extern void mmc_blk_cmdq_req_done(struct mmc_request *mrq);
 #endif /* LINUX_MMC_CARD_H */
