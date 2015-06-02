@@ -24,7 +24,7 @@ struct msm_ba_input_config msm_ba_inp_cfg[] = {
 	{BA_INPUT_CVBS, 0, "CVBS-0", BA_IP_CVBS_0, 0, "adv7180", 1},
 	{BA_INPUT_CVBS, 1, "CVBS-1", BA_IP_CVBS_0, 1, "adv7180", 1},
 	{BA_INPUT_CVBS, 2, "CVBS-2", BA_IP_CVBS_1, 1, "adv7180", 1},
-	{BA_INPUT_HDMI, 0, "HDMI-1", BA_IP_HDMI_1, 2, "adv7481", 1},
+	{BA_INPUT_HDMI, 1, "HDMI-1", BA_IP_HDMI_1, 2, "adv7481", 1},
 };
 
 static struct msm_ba_ctrl msm_ba_ctrls[] = {
@@ -129,14 +129,13 @@ void msm_ba_add_inputs(struct v4l2_subdev *sd)
 				dprintk(BA_ERR, "Failed to allocate memory");
 				break;
 			} else {
-				memset(input, 0x00, sizeof(*input));
 				input->inputType = msm_ba_inp_cfg[i].inputType;
 				input->name_index = msm_ba_inp_cfg[i].index;
 				strlcpy(input->name, msm_ba_inp_cfg[i].name,
 					sizeof(input->name));
 				input->bridge_chip_ip = msm_ba_inp_cfg[i].ba_ip;
 				input->ba_out = msm_ba_inp_cfg[i].ba_out;
-				input->ba_ip = i;
+				input->ba_ip_idx = i;
 				input->prio = V4L2_PRIORITY_DEFAULT;
 				input->sd = sd;
 				rc = v4l2_subdev_call(
@@ -172,7 +171,7 @@ void msm_ba_del_inputs(struct v4l2_subdev *sd)
 	}
 }
 
-struct msm_ba_input *msm_ba_find_input(int ba_input)
+struct msm_ba_input *msm_ba_find_input(int ba_input_idx)
 {
 	struct msm_ba_input *input = NULL;
 	struct msm_ba_input *input_out = NULL;
@@ -182,7 +181,7 @@ struct msm_ba_input *msm_ba_find_input(int ba_input)
 
 	if (!list_empty(&(dev_ctxt->inputs))) {
 		list_for_each_entry(input, &(dev_ctxt->inputs), list)
-			if (input->ba_ip == ba_input) {
+			if (input->ba_ip_idx == ba_input_idx) {
 				input_out = input;
 				break;
 			}

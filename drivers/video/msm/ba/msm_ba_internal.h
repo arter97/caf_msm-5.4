@@ -131,7 +131,7 @@ struct msm_ba_input {
 	int bridge_chip_ip;
 	int ba_node_addr;
 	int ba_out;
-	int ba_ip;
+	int ba_ip_idx;
 	struct v4l2_subdev *sd;
 	int signal_status;
 	int in_use;
