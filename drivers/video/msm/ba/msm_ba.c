@@ -650,7 +650,7 @@ void *msm_ba_open(void)
 	dev_ctxt->state = BA_DEV_INIT;
 	dev_ctxt->state = BA_DEV_INIT_DONE;
 	inst->state = MSM_BA_DEV_INIT_DONE;
-	inst->sd_input.index = BA_IP_CVBS_0;
+	inst->sd_input.index = 0;
 	inst->input_prio = V4L2_PRIORITY_DEFAULT;
 
 	inst->debugfs_root =
