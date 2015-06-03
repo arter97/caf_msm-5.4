@@ -1045,25 +1045,21 @@ static int adv7180_set_field_mode(struct adv7180_state *state)
 
 static int adv7180_set_irq_config(struct adv7180_state *state)
 {
-	int ret = 0;
+	adv7180_write(state, ADV7180_REG_ICONF1,
+			ADV7180_ICONF1_ACTIVE_LOW |
+			ADV7180_ICONF1_PSYNC_ONLY |
+			ADV7180_ICONF1_ACTIVE_TO_CLR);
+	adv7180_write(state, ADV7180_REG_IMR1,
+			ADV7180_IRQ1_LOCK |
+			ADV7180_IRQ1_UNLOCK |
+			ADV7180_IRQ1_MACROVISION);
+	adv7180_write(state, ADV7180_REG_IMR2, 0);
+	adv7180_write(state, ADV7180_REG_IMR3, ADV7180_IRQ3_AD_CHANGE);
+	adv7180_write(state, ADV7180_REG_IMR4, 0);
 
-	if (state->irq > 0) {
-		adv7180_write(state, ADV7180_REG_ICONF1,
-				ADV7180_ICONF1_ACTIVE_LOW |
-				ADV7180_ICONF1_PSYNC_ONLY |
-				ADV7180_ICONF1_ACTIVE_TO_CLR);
-		adv7180_write(state, ADV7180_REG_IMR1,
-				ADV7180_IRQ1_LOCK |
-				ADV7180_IRQ1_UNLOCK |
-				ADV7180_IRQ1_MACROVISION);
-		adv7180_write(state, ADV7180_REG_IMR2, 0);
-		adv7180_write(state, ADV7180_REG_IMR3, ADV7180_IRQ3_AD_CHANGE);
-		adv7180_write(state, ADV7180_REG_IMR4, 0);
+	enable_irq(state->irq);
 
-		enable_irq(state->irq);
-	}
-
-	return ret;
+	return 0;
 }
 
 static int adv7180_get_pad_format(struct v4l2_subdev *sd,
@@ -1799,6 +1795,8 @@ static int adv7180_probe(struct i2c_client *client,
 			}
 		} else {
 			pr_err("%s : Failed gpio_to_irq %x", __func__, ret);
+			ret = -EINVAL;
+			goto err_unregister_vpp_client;
 		}
 
 		/* disable irq until chip interrupts are programmed */
@@ -1869,11 +1867,7 @@ static int adv7180_remove(struct i2c_client *client)
 	struct adv7180_state *state = to_state(sd);
 	pr_debug("%s : entry\n", __func__);
 
-	if (state->device_num == 0) {
-		pr_debug("%s : deregister from ba dev_num %d\n",
-			__func__, state->device_num);
-		msm_ba_unregister_subdev_node(sd);
-	} else if (state->device_num == 1) {
+	if (state->device_num == 0 || state->device_num == 1) {
 		pr_debug("%s : deregister from ba dev_num %d\n",
 			__func__, state->device_num);
 		msm_ba_unregister_subdev_node(sd);
@@ -1882,8 +1876,9 @@ static int adv7180_remove(struct i2c_client *client)
 			__func__, state->device_num);
 		return -EIO;
 	}
+
 	if (state->irq > 0)
-		free_irq(client->irq, state);
+		free_irq(state->irq, state);
 
 	v4l2_device_unregister_subdev(sd);
 	media_entity_cleanup(&sd->entity);
