@@ -39,17 +39,33 @@
 	pr_err(TETH_BRIDGE_DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
 
 /**
+ * enum teth_init_status - bridge initialization state
+ *			(NOT_INITIALIZED / INITIALIZED/ ERROR)
+ */
+enum teth_init_status {
+	TETH_NOT_INITIALIZED,
+	TETH_INITIALIZED,
+	TETH_INITIALIZATION_ERROR,
+};
+
+/**
  * struct teth_bridge_ctx - Tethering bridge driver context information
  * @class: kernel class pointer
  * @dev_num: kernel device number
  * @dev: kernel device struct pointer
  * @cdev: kernel character device struct
+ * @ch_init_cnt: count the initialized channels
+ * @init_status: bridge initialization state
+ * @init_mutex: for the initialization synchronization
  */
 struct teth_bridge_ctx {
 	struct class *class;
 	dev_t dev_num;
 	struct device *dev;
 	struct cdev cdev;
+	u16 ch_init_cnt;
+	enum teth_init_status init_status;
+	struct mutex init_mutex;
 };
 static struct teth_bridge_ctx *teth_ctx;
 
@@ -112,12 +128,26 @@ int teth_bridge_init(struct teth_bridge_init_params *params)
 	params->private_data = NULL;
 	params->skip_ep_cfg = true;
 
+	mutex_lock(&teth_ctx->init_mutex);
+	if (teth_ctx->init_status == TETH_INITIALIZATION_ERROR) {
+		res = -EPERM;
+		goto bail;
+	}
+
+	TETH_DBG("Init with Current cid=%d\n", teth_ctx->ch_init_cnt);
+
+	if (teth_ctx->init_status == TETH_INITIALIZED) {
+		teth_ctx->ch_init_cnt++;
+		res = 0;
+		goto bail;
+	}
+
 	/* Build dependency graph */
 	res = ipa_rm_add_dependency(IPA_RM_RESOURCE_USB_PROD,
 				    IPA_RM_RESOURCE_Q6_CONS);
 	if (res < 0 && res != -EINPROGRESS) {
 		TETH_ERR("ipa_rm_add_dependency() failed.\n");
-		goto bail;
+		goto fail;
 	}
 	res = ipa_rm_add_dependency(IPA_RM_RESOURCE_Q6_PROD,
 				    IPA_RM_RESOURCE_USB_CONS);
@@ -125,14 +155,21 @@ int teth_bridge_init(struct teth_bridge_init_params *params)
 		ipa_rm_delete_dependency(IPA_RM_RESOURCE_USB_PROD,
 					IPA_RM_RESOURCE_Q6_CONS);
 		TETH_ERR("ipa_rm_add_dependency() failed.\n");
-		goto bail;
+		goto fail;
 	}
+
+	/* Return 0 as EINPROGRESS is a valid return value at this point */
+	teth_ctx->init_status = TETH_INITIALIZED;
+	teth_ctx->ch_init_cnt++;
 
 	res = 0;
 	goto bail;
 
+fail:
+	teth_ctx->init_status = TETH_INITIALIZATION_ERROR;
 bail:
 	TETH_DBG_FUNC_EXIT();
+	mutex_unlock(&teth_ctx->init_mutex);
 	return res;
 }
 EXPORT_SYMBOL(teth_bridge_init);
@@ -143,10 +180,16 @@ EXPORT_SYMBOL(teth_bridge_init);
 int teth_bridge_disconnect(enum ipa_client_type client)
 {
 	TETH_DBG_FUNC_ENTRY();
-	ipa_rm_delete_dependency(IPA_RM_RESOURCE_USB_PROD,
-				 IPA_RM_RESOURCE_Q6_CONS);
-	ipa_rm_delete_dependency(IPA_RM_RESOURCE_Q6_PROD,
-				 IPA_RM_RESOURCE_USB_CONS);
+	mutex_lock(&teth_ctx->init_mutex);
+	if (teth_ctx->init_status == TETH_INITIALIZED) {
+		ipa_rm_delete_dependency(IPA_RM_RESOURCE_USB_PROD,
+					 IPA_RM_RESOURCE_Q6_CONS);
+		ipa_rm_delete_dependency(IPA_RM_RESOURCE_Q6_PROD,
+					 IPA_RM_RESOURCE_USB_CONS);
+		teth_ctx->init_status = TETH_NOT_INITIALIZED;
+	}
+	teth_ctx->ch_init_cnt--;
+	mutex_unlock(&teth_ctx->init_mutex);
 	TETH_DBG_FUNC_EXIT();
 
 	return 0;
@@ -224,8 +267,11 @@ int teth_bridge_driver_init(void)
 		res = -ENODEV;
 		goto fail_cdev_add;
 	}
-	TETH_DBG("Tethering bridge driver init OK\n");
 
+	teth_ctx->ch_init_cnt = 0;
+	teth_ctx->init_status = TETH_NOT_INITIALIZED;
+	mutex_init(&teth_ctx->init_mutex);
+	TETH_DBG("Tethering bridge driver init OK\n");
 	return 0;
 fail_cdev_add:
 	device_destroy(teth_ctx->class, teth_ctx->dev_num);

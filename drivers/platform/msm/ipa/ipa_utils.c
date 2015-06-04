@@ -116,7 +116,7 @@ static const int ep_mapping[2][IPA_CLIENT_MAX] = {
 	[IPA_2_0][IPA_CLIENT_HSIC1_CONS]         = 13,
 	[IPA_2_0][IPA_CLIENT_WLAN1_CONS]         = 14,
 	[IPA_2_0][IPA_CLIENT_HSIC2_CONS]         = -1,
-	[IPA_2_0][IPA_CLIENT_USB2_CONS]          = -1,
+	[IPA_2_0][IPA_CLIENT_USB2_CONS]          = 13,
 	[IPA_2_0][IPA_CLIENT_WLAN2_CONS]         = 16,
 	[IPA_2_0][IPA_CLIENT_HSIC3_CONS]         = -1,
 	[IPA_2_0][IPA_CLIENT_USB3_CONS]          = -1,
@@ -313,6 +313,7 @@ int ipa_get_clients_from_rm_resource(
 	switch (resource) {
 	case IPA_RM_RESOURCE_USB_CONS:
 		clients->names[i++] = IPA_CLIENT_USB_CONS;
+		clients->names[i++] = IPA_CLIENT_USB2_CONS;
 		break;
 	case IPA_RM_RESOURCE_HSIC_CONS:
 		clients->names[i++] = IPA_CLIENT_HSIC1_CONS;
@@ -328,6 +329,7 @@ int ipa_get_clients_from_rm_resource(
 		break;
 	case IPA_RM_RESOURCE_USB_PROD:
 		clients->names[i++] = IPA_CLIENT_USB_PROD;
+		clients->names[i++] = IPA_CLIENT_USB2_PROD;
 		break;
 	case IPA_RM_RESOURCE_HSIC_PROD:
 		clients->names[i++] = IPA_CLIENT_HSIC1_PROD;
