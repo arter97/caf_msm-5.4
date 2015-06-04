@@ -1462,6 +1462,7 @@
 		qcom,bam-pipe-pair = <2>;
 		qcom,ce-hw-instance = <0>;
 		qcom,ce-device = <0>;
+		qcom,ce-hw-shared;
 		qcom,msm-bus,name = "qcrypto-noc";
 		qcom,msm-bus,num-cases = <2>;
 		qcom,msm-bus,num-paths = <1>;
@@ -1476,6 +1477,7 @@
 				"iface_clk", "bus_clk";
 		qcom,use-sw-aes-cbc-ecb-ctr-algo;
 		qcom,use-sw-aes-xts-algo;
+		qcom,use-sw-aes-ccm-algo;
 		qcom,use-sw-ahash-algo;
 		qcom,ce-opp-freq = <100000000>;
 	};
@@ -2193,53 +2195,6 @@
 			<0x0c0a3010 0x4>;
 		reg-names = "avtimer_lsb_addr", "avtimer_msb_addr";
 		qcom,clk_div = <27>;
-	};
-
-	i2c@7af8000 {
-		wsa881x-i2c-codec@e {
-			compatible = "qcom,wsa881x-i2c-codec";
-			reg = <0x0e>;
-			qcom,msm-gpios = "wsa_clk",
-					"wsa_reset";
-			qcom,pinctrl-names = "all_off",
-					"wsa_clk",
-					"wsa_active",
-					"wsa_clk_active";
-			pinctrl-names = "all_off",
-					"wsa_clk",
-					"wsa_active",
-					"wsa_clk_active";
-			pinctrl-0 = <&wsa_clk_off &wsa_suspend>;
-			pinctrl-1 = <&wsa_clk_on &wsa_suspend>;
-			pinctrl-2 = <&wsa_clk_off &wsa_active>;
-			pinctrl-3 = <&wsa_clk_on &wsa_active>;
-		};
-		wsa881x-i2c-codec@44 {
-			compatible = "qcom,wsa881x-i2c-codec";
-			reg = <0x44>;
-		};
-		wsa881x-i2c-codec@f {
-			compatible = "qcom,wsa881x-i2c-codec";
-			reg = <0x0f>;
-			qcom,msm-gpios = "wsa_clk",
-					"wsa_reset";
-			qcom,pinctrl-names = "all_off",
-					"wsa_clk",
-					"wsa_active",
-					"wsa_clk_active";
-			pinctrl-names = "all_off",
-					"wsa_clk",
-					"wsa_active",
-					"wsa_clk_active";
-			pinctrl-0 = <&wsa_clk_off &wsa_suspend>;
-			pinctrl-1 = <&wsa_clk_on &wsa_suspend>;
-			pinctrl-2 = <&wsa_clk_off &wsa_active>;
-			pinctrl-3 = <&wsa_clk_on &wsa_active>;
-		};
-		wsa881x-i2c-codec@45 {
-			compatible = "qcom,wsa881x-i2c-codec";
-			reg = <0x45>;
-		};
 	};
 
 	mcd {

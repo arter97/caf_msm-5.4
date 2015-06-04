@@ -386,18 +386,15 @@ struct mdss_mdp_data {
 struct pp_hist_col_info {
 	u32 col_state;
 	u32 col_en;
-	u32 read_request;
-	u32 hist_cnt_read;
-	u32 hist_cnt_sent;
-	u32 hist_cnt_time;
+	u32 intr_state;
 	u32 frame_cnt;
-	struct completion comp;
-	struct completion first_kick;
 	u32 data[HIST_V_SIZE];
 	struct mutex hist_mutex;
 	spinlock_t hist_lock;
 	char __iomem *base;
 	u32 intr_shift;
+	u32 disp_block;
+	struct msm_fb_data_type *mfd;
 };
 
 struct mdss_mdp_ad {
@@ -537,6 +534,7 @@ struct mdss_mdp_writeback_arg {
 struct mdss_overlay_private {
 	ktime_t vsync_time;
 	struct sysfs_dirent *vsync_event_sd;
+	struct sysfs_dirent *hist_event_sd;
 	int borderfill_enable;
 	int overlay_play_enable;
 	int hw_refresh;
@@ -577,6 +575,7 @@ struct mdss_overlay_private {
 	bool kickoff_released;
 	u32 cursor_ndx[2];
 	bool dyn_mode_switch; /* Used in prepare, bw calc for new mode */
+	u32 hist_events;
 };
 
 struct mdss_mdp_set_ot_params {
@@ -749,6 +748,19 @@ static inline u32 get_panel_width(struct mdss_mdp_ctl *ctl)
 	return width;
 }
 
+static inline bool mdss_mdp_req_init_restore_cfg(struct mdss_data_type *mdata)
+{
+	if (IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev,
+				MDSS_MDP_HW_REV_106) ||
+	    IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev,
+				MDSS_MDP_HW_REV_108) ||
+	    IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev,
+				MDSS_MDP_HW_REV_112))
+		return true;
+
+	return false;
+}
+
 static inline int mdss_mdp_panic_signal_support_mode(
 	struct mdss_data_type *mdata, struct mdss_mdp_pipe *pipe)
 {
@@ -872,6 +884,8 @@ int mdss_mdp_irq_enable(u32 intr_type, u32 intf_num);
 void mdss_mdp_irq_disable(u32 intr_type, u32 intf_num);
 int mdss_mdp_hist_irq_enable(u32 irq);
 void mdss_mdp_hist_irq_disable(u32 irq);
+void mdss_mdp_hist_irq_set_mask(u32 irq);
+void mdss_mdp_hist_irq_unset_mask(u32 irq);
 void mdss_mdp_irq_disable_nosync(u32 intr_type, u32 intf_num);
 int mdss_mdp_set_intr_callback(u32 intr_type, u32 intf_num,
 			       void (*fnc_ptr)(void *), void *arg);

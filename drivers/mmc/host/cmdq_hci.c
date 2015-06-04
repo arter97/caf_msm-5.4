@@ -508,7 +508,7 @@ static void cmdq_prep_dcmd_desc(struct mmc_host *mmc,
 		resp_type = 0x0;
 		timing = 0x1;
 	} else {
-		if (mrq->cmd->flags & MMC_RSP_R1B) {
+		if (mrq->cmd->flags & MMC_RSP_BUSY) {
 			resp_type = 0x3;
 			timing = 0x0;
 		} else {
@@ -557,6 +557,15 @@ static int cmdq_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		return 0;
 	}
 
+	if (cq_host->ops->crypto_cfg) {
+		err = cq_host->ops->crypto_cfg(mmc, mrq, tag);
+		if (err) {
+			pr_err("%s: failed to configure crypto: err %d tag %d\n",
+					mmc_hostname(mmc), err, tag);
+			goto out;
+		}
+	}
+
 	task_desc = (__le64 __force *)get_desc(cq_host, tag);
 
 	cmdq_prep_task_desc(mrq, &data, 1,
@@ -588,6 +597,9 @@ static void cmdq_finish_data(struct mmc_host *mmc, unsigned int tag)
 	struct cmdq_host *cq_host = (struct cmdq_host *)mmc_cmdq_private(mmc);
 
 	mrq = get_req_by_tag(cq_host, tag);
+	if (tag == cq_host->dcmd_slot)
+		mrq->cmd->resp[0] = cmdq_readl(cq_host, CQCRDCT);
+
 	mrq->done(mrq);
 }
 
