@@ -1130,6 +1130,10 @@ int mdss_hw_init(struct mdss_data_type *mdata)
 
 	mdss_hw_rev_init(mdata);
 
+        /* Restoring Secure configuration during boot-up */
+        if (mdss_mdp_req_init_restore_cfg(mdata))
+                __mdss_restore_sec_cfg(mdata);
+
 	/* disable hw underrun recovery */
 	writel_relaxed(0x0, mdata->mdp_base +
 			MDSS_MDP_REG_VIDEO_INTF_UNDERFLOW_CTL);
@@ -1572,14 +1576,6 @@ static int mdss_mdp_probe(struct platform_device *pdev)
 	if (rc)
 		pr_err("mdss_register_irq failed.\n");
 	mdss_res->mdss_util->mdp_probe_done = true;
-
-	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
-	mdata->mdp_rev = MDSS_REG_READ(mdata, MDSS_REG_HW_VERSION);
-	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
-
-	/* Restoring Secure configuration during boot-up */
-	if (mdss_mdp_req_init_restore_cfg(mdata))
-		__mdss_restore_sec_cfg(mdata);
 
 probe_done:
 	if (IS_ERR_VALUE(rc)) {
