@@ -224,7 +224,7 @@ static irqreturn_t gpio_irq_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static ssize_t switch_gpio_print_state(struct switch_dev *sdev, char *buf)
+static ssize_t switch_reverse_print_state(struct switch_dev *sdev, char *buf)
 {
 	struct reverse_data *data = g_reverse_platform_data.reverse_data[0];
 
@@ -237,6 +237,28 @@ static ssize_t switch_gpio_print_state(struct switch_dev *sdev, char *buf)
 	if (state)
 		return snprintf(buf, sizeof(char), "%s\n", state);
 	return -EPERM;
+}
+
+static ssize_t switch_reverse_set_state(struct switch_dev *sdev,
+	const char *buf, size_t count)
+{
+	int val = 0;
+	int rc;
+	struct reverse_data *data = g_reverse_platform_data.reverse_data[0];
+
+	rc = kstrtoint(buf, 0, &val);
+
+	if (rc == 0) {
+		switch_set_state(data->sdev, val);
+		mdp_arb_set_event(val);
+		reverse_trigger_camera(val);
+	} else {
+		pr_err("%s Failed to convert the buffer to int = %d\n",
+			__func__, rc);
+	}
+
+	pr_debug("%s: reverse state = %d\n", __func__, val);
+	return count;
 }
 
 static ssize_t continues_show(struct device *dev,
@@ -349,7 +371,8 @@ static int switch_reverse_probe(struct platform_device *pdev)
 	}
 
 	g_reverse_platform_data.sdev->name = pdata->name;
-	g_reverse_platform_data.sdev->print_state = switch_gpio_print_state;
+	g_reverse_platform_data.sdev->print_state = switch_reverse_print_state;
+	g_reverse_platform_data.sdev->set_state = switch_reverse_set_state;
 
 	ret = switch_dev_register(g_reverse_platform_data.sdev);
 	if (ret < 0) {
