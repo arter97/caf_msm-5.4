@@ -86,6 +86,8 @@ struct adp_camera_ctxt {
 
 	/* state */
 	enum camera_states state;
+	struct v4l2_cropcap crop_cap;
+	struct v4l2_rect    crop_set;
 
 #ifdef CONFIG_FB_MSM_MDP_ARB
 	/* MDP Arbitrator */
@@ -432,8 +434,7 @@ static void preview_configure_bufs(void)
 	preview_buffer_init();
 }
 
-static void preview_set_overlay_init(struct mdp_overlay *overlay,
-	struct fb_var_screeninfo *var)
+static void preview_set_overlay_init(struct mdp_overlay *overlay)
 {
 	overlay->id = MSMFB_NEW_REQUEST;
 	overlay->src.width  = g_preview_width;
@@ -443,10 +444,10 @@ static void preview_set_overlay_init(struct mdp_overlay *overlay,
 	overlay->src_rect.y = g_preview_h_offset;
 	overlay->src_rect.w = g_preview_width;
 	overlay->src_rect.h = g_preview_height - g_preview_h_offset;
-	overlay->dst_rect.x = 0;
-	overlay->dst_rect.y = 0;
-	overlay->dst_rect.w = var->xres;
-	overlay->dst_rect.h = var->yres;
+	overlay->dst_rect.x = adp_cam_ctxt->crop_set.left;
+	overlay->dst_rect.y = adp_cam_ctxt->crop_set.top;
+	overlay->dst_rect.w = adp_cam_ctxt->crop_set.width;
+	overlay->dst_rect.h = adp_cam_ctxt->crop_set.height;
 	overlay->z_order =  2;
 	overlay->alpha = MDP_ALPHA_NOP;
 	overlay->transp_mask = MDP_TRANSP_NOP;
@@ -854,6 +855,7 @@ static int adp_rear_camera_enable(void)
 	struct preview_mem *ping_buffer, *pong_buffer, *free_buffer;
 	struct v4l2_input input;
 	struct v4l2_format fmt;
+	struct fb_var_screeninfo screeninfo;
 	int index = BA_IP_CVBS_0;
 	enum v4l2_priority prio = V4L2_PRIORITY_RECORD;
 	int ret = 0;
@@ -863,6 +865,33 @@ static int adp_rear_camera_enable(void)
 		pr_err("%s mdp_init fails=%d", __func__, ret);
 		return ret;
 	}
+
+	ret = mdpclient_msm_fb_open(adp_cam_ctxt->fb_idx);
+	if (ret) {
+		pr_err("%s: can't open fb=%d ret=%d",
+				__func__, adp_cam_ctxt->fb_idx, ret);
+		return ret;
+	}
+
+	ret = mdpclient_msm_fb_get_vscreeninfo(adp_cam_ctxt->fb_idx,
+			&screeninfo);
+	mdpclient_msm_fb_close(adp_cam_ctxt->fb_idx);
+	if (ret) {
+		pr_err("%s: can't get vscreen_info %d\n", __func__, ret);
+		return ret;
+	}
+
+	adp_cam_ctxt->crop_cap.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+	adp_cam_ctxt->crop_cap.bounds.width = screeninfo.xres;
+	adp_cam_ctxt->crop_cap.bounds.height = screeninfo.yres;
+	adp_cam_ctxt->crop_cap.pixelaspect.numerator =
+			adp_cam_ctxt->crop_cap.bounds.width;
+	adp_cam_ctxt->crop_cap.pixelaspect.denominator =
+			adp_cam_ctxt->crop_cap.bounds.height;
+
+	/* set default rect and current region to fullscreen */
+	adp_cam_ctxt->crop_set = adp_cam_ctxt->crop_cap.bounds;
+	adp_cam_ctxt->crop_cap.defrect = adp_cam_ctxt->crop_cap.bounds;
 
 	pr_debug("%s: kpi entry\n", __func__);
 	my_axi_ctrl->share_ctrl->current_mode = 4096;
@@ -912,6 +941,7 @@ static int adp_rear_camera_enable(void)
 
 	my_axi_ctrl->share_ctrl->current_mode = 4096; /* BIT(12) */
 	my_axi_ctrl->share_ctrl->operation_mode = 4096;
+
 	pr_debug("%s: kpi exit\n", __func__);
 
 	return 0;
@@ -1002,7 +1032,7 @@ exit:
 static int enable_camera_preview(void)
 {
 	u64 mdp_max_bw_test = 2000000000;
-	struct fb_var_screeninfo var;
+
 	pr_debug("%s: kpi entry\n", __func__);
 
 	if (!adp_cam_ctxt) {
@@ -1036,14 +1066,11 @@ static int enable_camera_preview(void)
 		FB_BLANK_UNBLANK, true))
 		pr_err("%s: can't turn on display!\n", __func__);
 
-	if (mdpclient_msm_fb_get_vscreeninfo(adp_cam_ctxt->fb_idx, &var))
-		pr_err("%s: can't get vscreen_info\n", __func__);
-
 	mdp_bus_scale_update_request(mdp_max_bw_test, mdp_max_bw_test,
 		mdp_max_bw_test, mdp_max_bw_test);
 
 	/* configure pipe for reverse camera preview */
-	preview_set_overlay_init(&overlay_req[OVERLAY_CAMERA_PREVIEW], &var);
+	preview_set_overlay_init(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
 	alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] =
 		mdp_arb_client_overlay_set(adp_cam_ctxt->mdp_arb_handle,
 			&overlay_req[OVERLAY_CAMERA_PREVIEW]);
@@ -1134,7 +1161,7 @@ int enable_camera_preview(void)
 	u64 mdp_max_bw_test = 2000000000;
 	int waitcounter_camera = 0;
 	int max_wait_count = 15;
-	struct fb_var_screeninfo var;
+
 	pr_debug("%s: kpi entry\n", __func__);
 
 	if (!adp_cam_ctxt) {
@@ -1165,14 +1192,12 @@ int enable_camera_preview(void)
 	if (mdpclient_msm_fb_blank(adp_cam_ctxt->fb_idx,
 		FB_BLANK_UNBLANK, true))
 		pr_err("%s: can't turn on display!\n", __func__);
-	if (mdpclient_msm_fb_get_vscreeninfo(adp_cam_ctxt->fb_idx, &var))
-		pr_err("%s: can't get vscreen_info\n", __func__);
 
 	mdp_bus_scale_update_request(mdp_max_bw_test, mdp_max_bw_test,
 		mdp_max_bw_test, mdp_max_bw_test);
 
 	/* configure pipe for reverse camera preview */
-	preview_set_overlay_init(&overlay_req[OVERLAY_CAMERA_PREVIEW], &var);
+	preview_set_overlay_init(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
 	alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] =
 		mdpclient_overlay_set(adp_cam_ctxt->fb_idx,
 			&overlay_req[OVERLAY_CAMERA_PREVIEW]);
@@ -1230,23 +1255,81 @@ static int adp_camera_v4l2_close(struct file *filp)
 	return rc;
 }
 
+static int adp_camera_v4l2_querycap(struct file *filp, void *fh,
+					struct v4l2_capability *cap)
+{
+	pr_debug("%s - enter", __func__);
+
+	if (!cap) {
+		pr_err("Invalid input cap = 0x%p", cap);
+		return -EINVAL;
+	}
+
+	strlcpy(cap->driver, "adp_camera_driver", sizeof(cap->driver));
+	strlcpy(cap->card, "adp_camera_8064", sizeof(cap->card));
+	cap->bus_info[0] = 0;
+	cap->version = KERNEL_VERSION(0, 0, 1);
+	cap->capabilities = V4L2_CAP_VIDEO_CAPTURE |
+		V4L2_CAP_STREAMING;
+	memset(cap->reserved, 0x00, sizeof(cap->reserved));
+
+	pr_debug("%s - exit", __func__);
+
+	return 0;
+}
+
 static int adp_camera_v4l2_cropcap(struct file *file, void *fh,
 				struct v4l2_cropcap *a)
 {
-	pr_err("%s - NOT IMPLEMENTED", __func__);
-	return -EINVAL;
+	pr_debug("%s - enter", __func__);
+	if (!a || (a->type != V4L2_BUF_TYPE_VIDEO_OUTPUT)) {
+		pr_err("%s - invalid param", __func__);
+		return -EINVAL;
+	}
+
+	*a = adp_cam_ctxt->crop_cap;
+
+	pr_debug("%s - exit", __func__);
+	return 0;
 }
 static int adp_camera_v4l2_g_crop(struct file *file, void *fh,
 				struct v4l2_crop *a)
 {
-	pr_err("%s - NOT IMPLEMENTED", __func__);
-	return -EINVAL;
+	pr_debug("%s - enter", __func__);
+
+	if (!a) {
+		pr_err("%s - null param", __func__);
+		return -EINVAL;
+	}
+
+	a->c = adp_cam_ctxt->crop_set;
+
+	pr_debug("%s - exit", __func__);
+
+	return 0;
 }
 static int adp_camera_v4l2_s_crop(struct file *file, void *fh,
 				struct v4l2_crop *a)
 {
-	pr_err("%s - NOT IMPLEMENTED", __func__);
-	return -EINVAL;
+	pr_debug("%s - enter", __func__);
+
+	if (!a) {
+		pr_err("%s - null param", __func__);
+		return -EINVAL;
+	}
+
+	adp_cam_ctxt->crop_set = a->c;
+
+	pr_debug("%s - set t-%d,l-%d w-%d,h-%d",
+			__func__,
+			adp_cam_ctxt->crop_set.top,
+			adp_cam_ctxt->crop_set.left,
+			adp_cam_ctxt->crop_set.width,
+			adp_cam_ctxt->crop_set.height);
+
+	pr_debug("%s - exit", __func__);
+
+	return 0;
 }
 
 static int adp_camera_v4l2_streamon(struct file *file, void *fh,
@@ -1278,6 +1361,7 @@ static int adp_camera_v4l2_streamoff(struct file *file, void *fh,
 }
 
 static const struct v4l2_ioctl_ops adp_camera_v4l2_ioctl_ops = {
+	.vidioc_querycap = adp_camera_v4l2_querycap,
 	.vidioc_cropcap = adp_camera_v4l2_cropcap,
 	.vidioc_g_crop = adp_camera_v4l2_g_crop,
 	.vidioc_s_crop = adp_camera_v4l2_s_crop,
