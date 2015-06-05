@@ -1206,8 +1206,14 @@ static int msm_routing_ec_ref_rx_put(struct snd_kcontrol *kcontrol,
 	case 1:
 		msm_route_ec_ref_rx = PRIMARY_I2S_RX;
 		break;
+	case 2:
+		msm_route_ec_ref_rx = PCM_RX;
+		break;
+	case 3:
+		msm_route_ec_ref_rx = PRIMARY_I2S_TX;
+		break;
 	default:
-		msm_route_ec_ref_rx = 0;
+		msm_route_ec_ref_rx = AFE_PORT_INVALID;
 		break;
 	}
 	adm_ec_ref_rx_id(msm_route_ec_ref_rx);
@@ -1216,10 +1222,10 @@ static int msm_routing_ec_ref_rx_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static const char * const ec_ref_rx[] = {"SLIM_RX", "I2S_RX", "PROXY_RX",
-								"NONE"};
+static const char * const ec_ref_rx[] = {"SLIM_RX", "I2S_RX", "PCM_RX",
+					 "I2S_TX", "NONE"};
 static const struct soc_enum msm_route_ec_ref_rx_enum[] = {
-				SOC_ENUM_SINGLE_EXT(4, ec_ref_rx),
+				SOC_ENUM_SINGLE_EXT(5, ec_ref_rx),
 };
 
 static const struct snd_kcontrol_new ec_ref_rx_mixer_controls[] = {

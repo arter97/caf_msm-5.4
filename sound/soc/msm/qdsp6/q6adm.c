@@ -661,8 +661,9 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology)
 	int ret = 0;
 	int index;
 
-	pr_debug("%s: port %d path:%d rate:%d mode:%d\n", __func__,
-				port_id, path, rate, channel_mode);
+	pr_debug("%s: port %d path:%d rate:%d mode:%d ec_ref_rx %d topology 0x%x\n",
+		 __func__, port_id, path, rate, channel_mode,
+		 this_adm.ec_ref_rx, topology);
 
 	port_id = afe_convert_virtual_to_portid(port_id);
 
@@ -704,19 +705,20 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology)
 		open.mode = path;
 		open.endpoint_id1 = port_id;
 
-		if (this_adm.ec_ref_rx == 0) {
-			open.endpoint_id2 = 0xFFFF;
-		} else if (this_adm.ec_ref_rx && (path != 1)) {
-				open.endpoint_id2 = this_adm.ec_ref_rx;
-				this_adm.ec_ref_rx = 0;
+		if  ((this_adm.ec_ref_rx != AFE_PORT_INVALID) &&
+		     (path != ADM_PATH_PLAYBACK)) {
+			open.endpoint_id2 = this_adm.ec_ref_rx;
+			this_adm.ec_ref_rx = AFE_PORT_INVALID;
+		} else {
+			open.endpoint_id2 = AFE_PORT_INVALID;
 		}
 
 		pr_debug("%s open.endpoint_id1:%d open.endpoint_id2:%d",
 			__func__, open.endpoint_id1, open.endpoint_id2);
 		/* convert path to acdb path */
-		if (path == ADM_PATH_PLAYBACK)
+		if (path == ADM_PATH_PLAYBACK) {
 			open.topology_id = get_adm_rx_topology();
-		else {
+		} else {
 			open.topology_id = get_adm_tx_topology();
 			if ((open.topology_id ==
 				VPM_TX_SM_ECNS_COPP_TOPOLOGY) ||
@@ -725,16 +727,18 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology)
 				rate = 16000;
 		}
 
-        if ((open.topology_id  == 0) || (port_id == VOICE_RECORD_RX) || (port_id == VOICE_RECORD_TX))
-          open.topology_id = topology;
+		if ((open.topology_id  == 0) || (port_id == VOICE_RECORD_RX) ||
+		    (port_id == VOICE_RECORD_TX))
+			open.topology_id = topology;
 
 		open.channel_config = channel_mode & 0x00FF;
 		open.rate  = rate;
 
-		pr_debug("%s: channel_config=%d port_id=%d rate=%d"
-			"topology_id=0x%X\n", __func__, open.channel_config,\
+		pr_debug("%s: channel_config=%d port_id=%d rate=%d topology_id=0x%X, endpoint_id2=%d\n",
+			__func__,
+			open.channel_config,\
 			open.endpoint_id1, open.rate,\
-			open.topology_id);
+			open.topology_id, open.endpoint_id2);
 
 		atomic_set(&this_adm.copp_stat[index], 0);
 
@@ -772,9 +776,9 @@ int adm_multi_ch_copp_open(int port_id, int path, int rate, int channel_mode,
 	int ret = 0;
 	int index;
 
-	pr_debug("%s: port %d path:%d rate:%d channel :%d topology: 0x%X bit_width: %d\n",
+	pr_debug("%s: port %d path:%d rate:%d channel :%d topology: 0x%X bit_width: %d, ec_ref_rx %d\n",
 		 __func__, port_id, path, rate, channel_mode,
-		 topology, bit_width);
+		 topology, bit_width, this_adm.ec_ref_rx);
 
 	port_id = afe_convert_virtual_to_portid(port_id);
 
@@ -857,11 +861,12 @@ int adm_multi_ch_copp_open(int port_id, int path, int rate, int channel_mode,
 		open.mode = path;
 		open.endpoint_id1 = port_id;
 
-		if (this_adm.ec_ref_rx == 0) {
-			open.endpoint_id2 = 0xFFFF;
-		} else if (this_adm.ec_ref_rx && (path != 1)) {
-				open.endpoint_id2 = this_adm.ec_ref_rx;
-				this_adm.ec_ref_rx = 0;
+		if  ((this_adm.ec_ref_rx != AFE_PORT_INVALID) &&
+		     (path != ADM_PATH_PLAYBACK)) {
+			open.endpoint_id2 = this_adm.ec_ref_rx;
+			this_adm.ec_ref_rx = AFE_PORT_INVALID;
+		} else {
+			open.endpoint_id2 = AFE_PORT_INVALID;
 		}
 
 		pr_debug("%s open.endpoint_id1:%d open.endpoint_id2:%d",
@@ -885,12 +890,13 @@ int adm_multi_ch_copp_open(int port_id, int path, int rate, int channel_mode,
 		open.channel_config = channel_mode & 0x00FF;
 		open.rate  = rate;
 
-		pr_debug("%s: channel_config=%d port_id=%d rate=%d topology_id=0x%X bit_width=%d\n",
+		pr_debug("%s: channel_config=%d port_id=%d rate=%d topology_id=0x%X bit_width=%d, open.endpoint_id2=0x%x\n",
 			__func__,
 			open.channel_config,
 			open.endpoint_id1, open.rate,
 			open.topology_id,
-			bit_width);
+			bit_width,
+			open.endpoint_id2);
 
 		atomic_set(&this_adm.copp_stat[index], 0);
 
