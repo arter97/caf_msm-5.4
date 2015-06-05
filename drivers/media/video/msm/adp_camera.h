@@ -11,8 +11,8 @@
  *
  */
 
-#ifndef _MSM_CAMERA_TEST_H
-#define _MSM_CAMERA_TEST_H
+#ifndef _ADP_CAMERA_H
+#define _ADP_CAMERA_H
 
 #include <linux/kthread.h>
 #include <linux/sched.h>
@@ -238,16 +238,9 @@ void msm_sensor_detect_std_adv7481(struct msm_sensor_ctrl_t *s_ctrl);
 
 void msm_sensor_start_stream_adv7481(struct msm_sensor_ctrl_t *s_ctrl);
 
-void preview_set_data_pipeline(void);
-struct preview_mem *preview_buffer_find_free_for_ping_pong(void);
-struct preview_mem *preview_buffer_find_free_for_ping_pong_mdp(void);
-static void preview_configure_bufs(void);
-static void mdp_queue_overlay_buffers(struct work_struct *work);
-static int adp_rear_camera_enable(void);
-
 extern struct msm_camera_csiphy_params adp_rvc_csiphy_params;
 extern struct msm_camera_csi_lane_params adp_rvc_csi_lane_params;
 extern struct msm_camera_csid_params adp_rvc_csid_params;
 
 
-#endif /* _MSM_CAMERA_TEST_H */
+#endif /* _ADP_CAMERA_H */

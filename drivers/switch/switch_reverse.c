@@ -499,7 +499,9 @@ static int __devexit switch_reverse_remove(struct platform_device *pdev)
 			platform_get_drvdata(pdev);
 	int ret = 0;
 
-	disable_camera_preview();
+	/* Set state to off */
+	reverse_set_state(reverse_platform_data->reverse_data[0], 0);
+	mdp_arb_set_event(0);
 
 	for (index = 0;
 			index < REVERSE_MAX_GPIO &&
