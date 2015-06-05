@@ -477,6 +477,8 @@ static void kgsl_iommu_disable_clk(struct kgsl_mmu *mmu, int ctx_id)
 			 */
 			iommu_drvdata = dev_get_drvdata(
 					iommu_unit->dev[j].dev->parent);
+			if (iommu->gtbu_clk)
+				clk_disable_unprepare(iommu->gtbu_clk);
 			if (iommu->gtcu_iface_clk)
 				clk_disable_unprepare(iommu->gtcu_iface_clk);
 			if (iommu_drvdata->aclk)
@@ -597,6 +599,11 @@ static int kgsl_iommu_enable_clk(struct kgsl_mmu *mmu,
 			}
 			if (iommu->gtcu_iface_clk) {
 				ret = clk_prepare_enable(iommu->gtcu_iface_clk);
+				if (ret)
+					goto done;
+			}
+			if (iommu->gtbu_clk) {
+				ret = clk_prepare_enable(iommu->gtbu_clk);
 				if (ret)
 					goto done;
 			}
@@ -1390,7 +1397,7 @@ static int kgsl_iommu_init(struct kgsl_mmu *mmu)
 	struct kgsl_iommu *iommu;
 	struct platform_device *pdev = container_of(mmu->device->parentdev,
 						struct platform_device, dev);
-
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(mmu->device);
 	atomic_set(&mmu->fault, 0);
 	iommu = kzalloc(sizeof(struct kgsl_iommu), GFP_KERNEL);
 	if (!iommu)
@@ -1417,7 +1424,12 @@ static int kgsl_iommu_init(struct kgsl_mmu *mmu)
 		of_property_match_string(pdev->dev.of_node, "clock-names",
 						"gtcu_iface_clk") >= 0)
 		iommu->gtcu_iface_clk = clk_get(&pdev->dev, "gtcu_iface_clk");
-
+	/* TBU clk needs to be voted for TLB invalidate on A405 */
+	if (adreno_is_a405(adreno_dev)) {
+		iommu->gtbu_clk = clk_get(&pdev->dev, "gtbu_clk");
+		if (IS_ERR(iommu->gtbu_clk))
+			iommu->gtbu_clk = NULL;
+	}
 	/*
 	 * For IOMMU per-process pagetables, the allocatable range
 	 * and the kernel global range must both be outside
