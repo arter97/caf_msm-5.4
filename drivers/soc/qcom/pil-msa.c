@@ -374,8 +374,13 @@ int pil_mss_reset_load_mba(struct pil_desc *pil)
 	}
 
 	drv->mba_size = SZ_1M;
-	md->mba_mem_dev.coherent_dma_mask =
-		DMA_BIT_MASK(sizeof(dma_addr_t) * 8);
+
+	if (md->mba_mem_dev_fixed)
+		md->mba_mem_dev = *md->mba_mem_dev_fixed;
+	else
+		md->mba_mem_dev.coherent_dma_mask =
+			DMA_BIT_MASK(sizeof(dma_addr_t) * 8);
+
 	mba_virt = dma_alloc_coherent(&md->mba_mem_dev, drv->mba_size,
 					&mba_phys, GFP_KERNEL);
 	if (!mba_virt) {
@@ -420,8 +425,12 @@ static int pil_msa_auth_modem_mdt(struct pil_desc *pil, const u8 *metadata,
 	s32 status;
 	int ret;
 
-	drv->mba_mem_dev.coherent_dma_mask =
-		DMA_BIT_MASK(sizeof(dma_addr_t) * 8);
+	if (drv->mba_mem_dev_fixed)
+		drv->mba_mem_dev = *drv->mba_mem_dev_fixed;
+	else
+		drv->mba_mem_dev.coherent_dma_mask =
+			DMA_BIT_MASK(sizeof(dma_addr_t) * 8);
+
 	/* Make metadata physically contiguous and 4K aligned. */
 	mdata_virt = dma_alloc_coherent(&drv->mba_mem_dev, size, &mdata_phys,
 					GFP_KERNEL);
