@@ -1236,6 +1236,10 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 		mdp3_session->esd_recovery = false;
 	}
 
+	/* start vsync tick countdown for cmd mode if vsync isn't enabled */
+	if (mfd->panel.type == MIPI_CMD_PANEL && !mdp3_session->vsync_enabled)
+		mdp3_ctrl_vsync_enable(mdp3_session->mfd, 0);
+
 	mutex_unlock(&mdp3_session->lock);
 
 	mdss_fb_update_notify_update(mfd);
@@ -1486,6 +1490,12 @@ static int mdp3_histogram_start(struct mdp3_session_data *session,
 	int ret;
 	struct mdp3_dma_histogram_config histo_config;
 
+	mutex_lock(&session->lock);
+	if (!session->status) {
+		mutex_unlock(&session->lock);
+		return -EPERM;
+	}
+
 	pr_debug("mdp3_histogram_start\n");
 
 	ret = mdp3_validate_start_req(req);
@@ -1534,6 +1544,7 @@ static int mdp3_histogram_start(struct mdp3_session_data *session,
 histogram_start_err:
 	mdp3_res_update(0, 0, MDP3_CLIENT_DMA_P);
 	mutex_unlock(&session->histo_lock);
+	mutex_unlock(&session->lock);
 	return ret;
 }
 
