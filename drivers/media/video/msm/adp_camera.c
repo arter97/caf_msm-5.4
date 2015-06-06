@@ -33,22 +33,20 @@ static int alloc_overlay_pipe_flag[OVERLAY_COUNT];
 static struct mdp_overlay overlay_req[OVERLAY_COUNT];
 static unsigned int overlay_fd[OVERLAY_COUNT];
 static struct msmfb_overlay_data overlay_data[OVERLAY_COUNT];
-static int rc = -ENOIOCTLCMD;
 static uint8_t dual_enabled;
 static struct msm_sensor_ctrl_t *s_ctrl;
 static struct msm_ispif_params_list params_list;
 struct sensor_init_cfg *init_info;
 static uint32_t csid_version;
 static int rdi1_irq_count;
-struct mdp4_overlay_pipe *pipe[OVERLAY_COUNT];
 static struct vfe_axi_output_config_cmd_type vfe_axi_cmd_para;
 static struct msm_camera_vfe_params_t vfe_para;
 static struct work_struct wq_mdp_queue_overlay_buffers;
 
 static int adp_rear_camera_enable(void);
 
-struct completion preview_enabled;
-struct completion preview_disabled;
+static struct completion preview_enabled;
+static struct completion preview_disabled;
 
 static struct msm_camera_preview_data preview_data;
 static struct mdp_buf_queue s_mdp_buf_queue;
@@ -111,9 +109,13 @@ static char *display_name[] = {
 #ifdef CONFIG_FB_MSM_MDP_ARB
 #define MDP_ARB_CLIENT_NAME "adp_camera"
 #define MDP_ARB_EVENT_NAME "switch-reverse"
+#define MDP_ARB_NUM_OF_EVENT_STATE 2
+
+static int enable_camera_preview(void);
+static int disable_camera_preview(void);
 #endif
 
-int axi_vfe_config_cmd_para(struct vfe_axi_output_config_cmd_type *cmd)
+static int axi_vfe_config_cmd_para(struct vfe_axi_output_config_cmd_type *cmd)
 {
 	/* configure the axi bus parameters here */
 	int config;
@@ -166,7 +168,7 @@ int axi_vfe_config_cmd_para(struct vfe_axi_output_config_cmd_type *cmd)
 	return 0;
 }
 
-int mdp_buf_queue_enq(int buf_idx)
+static int mdp_buf_queue_enq(int buf_idx)
 {
 	int rc = 0;
 	int new_buf_idx = (s_mdp_buf_queue.write_idx+1)%MDP_BUF_QUEUE_LENGTH;
@@ -187,7 +189,7 @@ int mdp_buf_queue_enq(int buf_idx)
 	return rc;
 }
 
-int mdp_buf_queue_deq(void)
+static int mdp_buf_queue_deq(void)
 {
 	int buf_idx = -1;
 	if (s_mdp_buf_queue.read_idx != s_mdp_buf_queue.write_idx) {
@@ -200,11 +202,12 @@ int mdp_buf_queue_deq(void)
 	return buf_idx;
 }
 
-void preview_set_data_pipeline()
+static void preview_set_data_pipeline(void)
 {
 	int ispif_stream_enable;
 	u32 freq = 320000000;
 	u32 flags = 0;
+	int rc;
 
 	pr_debug("%s:  kpi entry!!!\n", __func__);
 	dual_enabled = 0; /* set according to log */
@@ -252,7 +255,7 @@ void preview_set_data_pipeline()
 	pr_debug("%s: kpi exit!!!\n", __func__);
 }
 
-void preview_buffer_alloc(void)
+static void preview_buffer_alloc(void)
 {
 	int i, result;
 	int offset = 0;
@@ -311,7 +314,7 @@ err:
 	return;
 }
 
-int preview_buffer_init(void)
+static int preview_buffer_init(void)
 {
 	int i ;
 	/* initialized the list head and add all nodes */
@@ -330,7 +333,7 @@ int preview_buffer_init(void)
 	return 0;
 }
 
-void preview_buffer_return_by_index(int i)
+static void preview_buffer_return_by_index(int i)
 {
 	preview_data.preview_buffer[i].state =
 			CAMERA_PREVIEW_BUFFER_STATE_INITIALIZED;
@@ -339,26 +342,7 @@ void preview_buffer_return_by_index(int i)
 	return;
 }
 
-struct preview_mem *preview_find_buffer_by_paddr(uint32_t paddr)
-{
-	/* search in the 4 buffer list, if the physical address matches,
-		set the buffer state as initialized and can be reused */
-	int i;
-	struct preview_mem *buf = NULL;
-	for (i = 0; i < PREVIEW_BUFFER_COUNT; i++) {
-		if (preview_data.preview_buffer[i].cam_preview.ch_paddr[0]
-				== (uint32_t)(paddr)) {
-			/* or we can return offset here directly
-			 * we need not to define buffer here
-			 */
-			buf = &(preview_data.preview_buffer[i]);
-			break;
-			}
-		}
-	return buf;
-}
-
-int preview_find_buffer_index_by_paddr(uint32_t paddr)
+static int preview_find_buffer_index_by_paddr(uint32_t paddr)
 {
 	/* search in the 4 buffer list, if the physical address matches,
 	   set the buffer state as initialized and can be reused */
@@ -374,7 +358,7 @@ int preview_find_buffer_index_by_paddr(uint32_t paddr)
 	return index;
 }
 
-struct preview_mem *preview_buffer_find_free_for_ping_pong()
+static struct preview_mem *preview_buffer_find_free_for_ping_pong(void)
 {
 	struct preview_mem *buf = NULL;
 	bool found_buff = false;
@@ -438,7 +422,7 @@ static int preview_buffer_free(void)
 	return ret = 0;
 }
 
-static void preview_configure_bufs()
+static void preview_configure_bufs(void)
 {
 	/* step 1, alloc ION buffer */
 	pr_debug("%s: preview buffer allocate\n", __func__);
@@ -471,16 +455,6 @@ static void preview_set_overlay_init(struct mdp_overlay *overlay,
 	overlay->is_fg = 0;
 
 	return;
-}
-
-void format_convert(int index)
-{
-	int i;
-	int8 *data;
-	data = (int8 *)k_addr[OVERLAY_CAMERA_PREVIEW];
-	data += g_preview_width*g_preview_height*2*index;
-	for (i = 0; i < g_preview_width*g_preview_height/4 ; i++)
-		__swab32s((uint32 *)(data+4*i));
 }
 
 #ifdef CONFIG_FB_MSM_MDP_ARB
@@ -695,6 +669,60 @@ static int find_fb_idx(int display_id, int *fb_idx)
 }
 
 #ifdef CONFIG_FB_MSM_MDP_ARB
+
+static int mdp_arb_set_event(int state)
+{
+	int rc = 0;
+	struct mdp_arb_event event;
+
+	memset(&event, 0, sizeof(event));
+	strlcpy(event.name, MDP_ARB_EVENT_NAME, MDP_ARB_NAME_LEN);
+	event.event.driver_set_event = state;
+	rc = mdp_arb_event_set(&event);
+	if (rc)
+		pr_err("%s mdp_arb_event_set fails=%d, event=%s, state=%d",
+			__func__, rc, event.name, state);
+
+	return rc;
+}
+
+static int mdp_arb_register_event(void)
+{
+	int rc = 0;
+	struct mdp_arb_event event;
+	struct mdp_arb_events events;
+	int state[MDP_ARB_NUM_OF_EVENT_STATE] = {0, 1};
+
+	/* Register to MDP arbitrator*/
+	strlcpy(event.name, MDP_ARB_EVENT_NAME, MDP_ARB_NAME_LEN);
+	event.event.driver_register.num_of_states = MDP_ARB_NUM_OF_EVENT_STATE;
+	event.event.driver_register.value = state;
+	events.num_of_events = 1;
+	events.event = &event;
+	rc = mdp_arb_event_register(&events);
+	if (rc) {
+		pr_err("%s mdp_arb_event_register fails=%d", __func__, rc);
+		return rc;
+	}
+	return rc;
+}
+
+static int mdp_arb_deregister_event(void)
+{
+	int rc = 0;
+	struct mdp_arb_event event;
+	struct mdp_arb_events events;
+
+	strlcpy(event.name, MDP_ARB_EVENT_NAME, MDP_ARB_NAME_LEN);
+	events.num_of_events = 1;
+	events.event = &event;
+	rc = mdp_arb_event_deregister(&events);
+	if (rc)
+		pr_err("%s mdp_arb_event_deregister fails=%d", __func__, rc);
+	return rc;
+}
+
+
 static int arb_cb(void *handle, struct mdp_arb_cb_info *info, int flag)
 {
 	int ret = 0;
@@ -782,6 +810,28 @@ static int mdp_exit(void)
 	return ret;
 }
 #else
+static int mdp_arb_set_event(int state)
+{
+	int rc;
+
+	if (state)
+		rc = enable_camera_preview();
+	else
+		rc = disable_camera_preview();
+
+	return rc;
+}
+
+static int mdp_arb_register_event(void)
+{
+	return 0;
+}
+
+static int mdp_arb_deregister_event(void)
+{
+	return 0;
+}
+
 static int mdp_init(void)
 {
 	int ret = 0;
@@ -880,7 +930,7 @@ static void adp_rear_camera_disable(void)
 }
 
 #ifdef CONFIG_FB_MSM_MDP_ARB
-int disable_camera_preview(void)
+static int disable_camera_preview(void)
 {
 	struct mdp_display_commit commit_data;
 	int ret = 0;
@@ -949,7 +999,7 @@ exit:
 	return ret;
 }
 
-int enable_camera_preview(void)
+static int enable_camera_preview(void)
 {
 	u64 mdp_max_bw_test = 2000000000;
 	struct fb_var_screeninfo var;
@@ -1199,15 +1249,44 @@ static int adp_camera_v4l2_s_crop(struct file *file, void *fh,
 	return -EINVAL;
 }
 
+static int adp_camera_v4l2_streamon(struct file *file, void *fh,
+					enum v4l2_buf_type i)
+{
+	int rc;
+
+	pr_debug("%s - enter", __func__);
+
+	rc = mdp_arb_set_event(1);
+
+	pr_debug("%s - exit", __func__);
+
+	return rc;
+}
+
+static int adp_camera_v4l2_streamoff(struct file *file, void *fh,
+					enum v4l2_buf_type i)
+{
+	int rc;
+
+	pr_debug("%s - enter", __func__);
+
+	rc = mdp_arb_set_event(0);
+
+	pr_debug("%s - exit", __func__);
+
+	return rc;
+}
 
 static const struct v4l2_ioctl_ops adp_camera_v4l2_ioctl_ops = {
 	.vidioc_cropcap = adp_camera_v4l2_cropcap,
 	.vidioc_g_crop = adp_camera_v4l2_g_crop,
 	.vidioc_s_crop = adp_camera_v4l2_s_crop,
+	.vidioc_streamon = adp_camera_v4l2_streamon,
+	.vidioc_streamoff = adp_camera_v4l2_streamoff,
 };
 
 
-void adp_camera_release_video_device(struct video_device *pvdev)
+static void adp_camera_release_video_device(struct video_device *pvdev)
 {
 }
 
@@ -1235,6 +1314,13 @@ static int adp_camera_device_init(struct platform_device *pdev)
 	}
 
 	adp_cam_ctxt->state = CAMERA_UNINITIALIZED;
+
+	rc = mdp_arb_register_event();
+	if (rc) {
+		pr_err("Failed mdp_arb_register_event %d\n", rc);
+		goto mdp_arb_register_event_failed;
+	}
+
 
 	strlcpy(adp_cam_ctxt->v4l2_dev.name, ADP_CAMERA_DRV_NAME,
 		sizeof(adp_cam_ctxt->v4l2_dev.name));
@@ -1315,12 +1401,27 @@ media_device_register_failed:
 video_device_alloc_failed:
 	v4l2_device_unregister(&adp_cam_ctxt->v4l2_dev);
 v4l2_device_register_failed:
+	mdp_arb_deregister_event();
+mdp_arb_register_event_failed:
 	kfree(adp_cam_ctxt);
 	adp_cam_ctxt = NULL;
 	return rc;
 }
 
-int  init_camera_kthread(void)
+static int adp_camera_destroy(void)
+{
+	media_entity_cleanup(&adp_cam_ctxt->vdev->entity);
+	media_device_unregister(&adp_cam_ctxt->mdev);
+	video_unregister_device(adp_cam_ctxt->vdev);
+	video_device_release(adp_cam_ctxt->vdev);
+	v4l2_device_unregister(&adp_cam_ctxt->v4l2_dev);
+	mdp_arb_deregister_event();
+	kfree(adp_cam_ctxt);
+
+	return 0;
+}
+
+static int init_camera_kthread(void)
 {
 	int ret;
 	pr_debug("%s: entry\n", __func__);
@@ -1340,7 +1441,7 @@ int  init_camera_kthread(void)
 	return 0;
 }
 
-void  exit_camera_kthread(void)
+static void exit_camera_kthread(void)
 {
 	pr_debug("%s: entry\n", __func__);
 
@@ -1375,7 +1476,8 @@ static int32_t adp_camera_platform_probe(struct platform_device *pdev)
 	}
 
 	rc = init_camera_kthread();
-	if (rc < 0) {
+	if (rc) {
+		adp_camera_destroy();
 		pr_err("%s: Failed to init the camera %d", __func__, rc);
 		return rc;
 	}
@@ -1388,37 +1490,13 @@ static int32_t adp_camera_platform_probe(struct platform_device *pdev)
 
 static int adp_camera_remove(struct platform_device *pdev)
 {
-	struct adp_camera_ctxt *dev_ctxt;
-	int rc = 0;
-
 	pr_debug("Enter %s\n", __func__);
-	if (!pdev) {
-		pr_err("%s invalid input 0x%p", __func__, pdev);
-		rc = -EINVAL;
-	} else {
-		dev_ctxt = pdev->dev.platform_data;
 
-		if (NULL == dev_ctxt) {
-			pr_err("%s invalid device", __func__);
-			rc = -EINVAL;
-		} else {
-			video_unregister_device(dev_ctxt->vdev);
-			v4l2_device_unregister(&dev_ctxt->v4l2_dev);
-		}
-	}
-	pr_debug("Exit %s with error %d\n", __func__, rc);
+	exit_camera_kthread();
+	adp_camera_destroy();
 
-	return rc;
-}
+	pr_debug("Exit %s\n", __func__);
 
-int adp_camera_destroy(void)
-{
-	media_entity_cleanup(&adp_cam_ctxt->vdev->entity);
-	media_device_unregister(&adp_cam_ctxt->mdev);
-	video_device_release(adp_cam_ctxt->vdev);
-	v4l2_device_unregister(&adp_cam_ctxt->v4l2_dev);
-	kfree(adp_cam_ctxt);
-	kfree(adp_cam_ctxt);
 	return 0;
 }
 
@@ -1511,8 +1589,6 @@ static int __init adp_camera_init_module(void)
 
 static void __exit adp_camera_exit_module(void)
 {
-	exit_camera_kthread();
-	adp_camera_destroy();
 	platform_driver_unregister(&adp_camera_platform_driver);
 	return;
 }

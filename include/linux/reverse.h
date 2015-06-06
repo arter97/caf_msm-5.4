@@ -50,8 +50,10 @@ struct reverse_struct {
 extern int camera_preview_ready;
 extern int camera_preview_exit;
 
+#ifndef CONFIG_FB_MSM_MDP_ARB
 int disable_camera_preview(void);
 int enable_camera_preview(void);
+#endif
 void show_pic(void);
 void shutdown_pic(void);
 void pic_update(unsigned char *pic, unsigned int pos_x, unsigned int pos_y,
