@@ -430,12 +430,12 @@ static struct msm_camera_device_platform_data msm_camera_csi_device_data[] = {
 		.cam_bus_scale_table = &cam_bus_client_pdata,
 	},
 	{
-		.csid_core = 2,
+		.csid_core = 0,
 		.is_vpe    = 0,
 		.cam_bus_scale_table = &cam_bus_client_pdata,
 	},
 	{
-		.csid_core = 0,
+		.csid_core = 2,
 		.is_vpe    = 0,
 		.cam_bus_scale_table = &cam_bus_client_pdata,
 	},
@@ -741,12 +741,12 @@ static struct msm_camera_csi_lane_params avdevice_csi_lane_params[] = {
 	{
 	.csi_lane_assign = 0xe4,
 	.csi_lane_mask = 0x1,
-	.csi_phy_sel = 2,
+	.csi_phy_sel = 0,
 	},
 	{
 	.csi_lane_assign = 0xe4,
 	.csi_lane_mask = 0x1,
-	.csi_phy_sel = 0,
+	.csi_phy_sel = 2,
 	}
 };
 
@@ -892,7 +892,7 @@ struct msm_camera_csiphy_params adp_rvc_csiphy_params = {
 struct msm_camera_csi_lane_params adp_rvc_csi_lane_params = {
 	.csi_lane_assign = 0xe4,
 	.csi_lane_mask = 0x1,
-	.csi_phy_sel = 0,
+	.csi_phy_sel = 2,
 };
 struct msm_camera_csid_vc_cfg adp_rvc_csid_cfg[] = {
 	{0, CSI_YUV422_8, CSI_DECODE_8BIT},
