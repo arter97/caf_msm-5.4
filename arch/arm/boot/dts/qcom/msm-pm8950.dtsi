@@ -191,6 +191,7 @@
 			qcom,adc-bit-resolution = <15>;
 			qcom,adc-vdd-reference = <1800>;
 			qcom,vadc-poll-eoc;
+			qcom,pmic-revid = <&pm8950_revid>;
 
 			chan@5 {
 				label = "vcoin";
@@ -263,7 +264,7 @@
 				reg = <0x36>;
 				qcom,decimation = <0>;
 				qcom,pre-div-channel-scaling = <0>;
-				qcom,calibration-type = "absolute";
+				qcom,calibration-type = "ratiometric";
 				qcom,scale-function = <2>;
 				qcom,hw-settle-time = <2>;
 				qcom,fast-avg-setup = <0>;
@@ -274,7 +275,7 @@
 				reg = <0x11>;
 				qcom,decimation = <0>;
 				qcom,pre-div-channel-scaling = <0>;
-				qcom,calibration-type = "absolute";
+				qcom,calibration-type = "ratiometric";
 				qcom,scale-function = <2>;
 				qcom,hw-settle-time = <2>;
 				qcom,fast-avg-setup = <0>;
@@ -286,7 +287,7 @@
 				reg = <0x32>;
 				qcom,decimation = <0>;
 				qcom,pre-div-channel-scaling = <0>;
-				qcom,calibration-type = "absolute";
+				qcom,calibration-type = "ratiometric";
 				qcom,scale-function = <4>;
 				qcom,hw-settle-time = <2>;
 				qcom,fast-avg-setup = <0>;
@@ -298,7 +299,7 @@
 				reg = <0x3c>;
 				qcom,decimation = <0>;
 				qcom,pre-div-channel-scaling = <0>;
-				qcom,calibration-type = "absolute";
+				qcom,calibration-type = "ratiometric";
 				qcom,scale-function = <4>;
 				qcom,hw-settle-time = <2>;
 				qcom,fast-avg-setup = <0>;
@@ -338,7 +339,7 @@
 				reg = <0x36>;
 				qcom,decimation = <0>;
 				qcom,pre-div-channel-scaling = <0>;
-				qcom,calibration-type = "absolute";
+				qcom,calibration-type = "ratiometric";
 				qcom,scale-function = <2>;
 				qcom,hw-settle-time = <2>;
 				qcom,fast-avg-setup = <0>;
