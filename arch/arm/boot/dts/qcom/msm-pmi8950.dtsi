@@ -194,7 +194,6 @@
 			#size-cells = <1>;
 
 			qcom,iterm-ma = <100>;
-			qcom,fastchg-current-ma = <2000>;
 			qcom,float-voltage-mv = <4200>;
 			qcom,resume-delta-mv = <200>;
 			qcom,chg-inhibit-fg;
@@ -204,6 +203,7 @@
 			qcom,parallel-usb-min-current-ma = <1400>;
 			qcom,parallel-usb-9v-min-current-ma = <900>;
 			qcom,parallel-allowed-lowering-ma = <500>;
+			qcom,autoadjust-vfloat;
 
 			qcom,chgr@1000 {
 				reg = <0x1000 0x100>;
@@ -308,6 +308,10 @@
 			qcom,fg-iterm-ma = <100>;
 			qcom,fg-chg-iterm-ma = <100>;
 			qcom,pmic-revid = <&pmi8950_revid>;
+			qcom,cycle-counter-en;
+			qcom,cycle-counter-low-soc = <15>;
+			qcom,cycle-counter-high-soc = <85>;
+			qcom,capacity-learning-on;
 
 			qcom,fg-soc@4000 {
 			status = "okay";

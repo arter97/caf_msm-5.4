@@ -524,6 +524,8 @@ struct mdss_mdp_pipe {
 	u8 chroma_sample_v;
 
 	wait_queue_head_t free_waitq;
+
+	u32 frame_rate;
 };
 
 struct mdss_mdp_writeback_arg {
@@ -705,7 +707,8 @@ static inline bool is_dynamic_ot_limit_required(u32 mdp_rev)
 {
 	return mdp_rev == MDSS_MDP_HW_REV_105 ||
 		mdp_rev == MDSS_MDP_HW_REV_109 ||
-		mdp_rev == MDSS_MDP_HW_REV_110;
+		mdp_rev == MDSS_MDP_HW_REV_110 ||
+		mdp_rev == MDSS_MDP_HW_REV_112;
 }
 
 static inline int mdss_mdp_iommu_dyn_attach_supported(

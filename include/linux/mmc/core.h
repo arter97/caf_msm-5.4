@@ -122,6 +122,11 @@ extern void mmc_cmdq_post_req(struct mmc_host *host, struct mmc_request *mrq,
 extern int mmc_cmdq_start_req(struct mmc_host *host,
 			      struct mmc_cmdq_req *cmdq_req);
 extern int mmc_cmdq_prepare_flush(struct mmc_command *cmd);
+extern int mmc_cmdq_wait_for_dcmd(struct mmc_host *host,
+			struct mmc_cmdq_req *cmdq_req);
+extern int mmc_cmdq_erase(struct mmc_cmdq_req *cmdq_req,
+	      struct mmc_card *card, unsigned int from, unsigned int nr,
+	      unsigned int arg);
 extern int mmc_stop_bkops(struct mmc_card *);
 extern int mmc_read_bkops_status(struct mmc_card *);
 extern bool mmc_card_is_prog_state(struct mmc_card *);
@@ -146,6 +151,8 @@ extern int mmc_switch(struct mmc_card *, u8, u8, u8, unsigned int);
 extern int mmc_switch_ignore_timeout(struct mmc_card *, u8, u8, u8,
 				     unsigned int);
 extern int mmc_send_ext_csd(struct mmc_card *card, u8 *ext_csd);
+extern void mmc_clk_scaling(struct mmc_host *host, bool from_wq);
+extern void mmc_update_clk_scaling(struct mmc_host *host, bool is_cmdq_dcmd);
 
 #define MMC_ERASE_ARG		0x00000000
 #define MMC_SECURE_ERASE_ARG	0x80000000

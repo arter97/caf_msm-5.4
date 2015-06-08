@@ -3404,9 +3404,20 @@ static const struct snd_soc_dapm_route audio_map[] = {
 static int msm8x16_wcd_startup(struct snd_pcm_substream *substream,
 		struct snd_soc_dai *dai)
 {
+	struct msm8x16_wcd_priv *msm8x16_wcd =
+		snd_soc_codec_get_drvdata(dai->codec);
+
 	dev_dbg(dai->codec->dev, "%s(): substream = %s  stream = %d\n",
 		__func__,
 		substream->name, substream->stream);
+	/*
+	 * If status_mask is BU_DOWN it means SSR is not complete.
+	 * So retun error.
+	 */
+	if (test_bit(BUS_DOWN, &msm8x16_wcd->status_mask)) {
+		dev_err(dai->codec->dev, "Error, Device is not up post SSR\n");
+		return -EINVAL;
+	}
 	return 0;
 }
 
@@ -4106,6 +4117,7 @@ static const struct msm8x16_wcd_reg_mask_val cajon_wcd_reg_defaults[] = {
 	MSM8X16_WCD_REG_VAL(MSM8X16_WCD_A_ANALOG_SPKR_DRV_CTL, 0x69),
 	MSM8X16_WCD_REG_VAL(MSM8X16_WCD_A_ANALOG_SPKR_DRV_DBG, 0x01),
 	MSM8X16_WCD_REG_VAL(MSM8X16_WCD_A_ANALOG_SPKR_OCP_CTL, 0xE1),
+	MSM8X16_WCD_REG_VAL(MSM8X16_WCD_A_ANALOG_SPKR_DAC_CTL, 0x03),
 };
 
 static void msm8x16_wcd_update_reg_defaults(struct snd_soc_codec *codec)

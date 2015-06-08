@@ -510,11 +510,9 @@ int mdss_mdp_irq_enable(u32 intr_type, u32 intf_num)
 }
 int mdss_mdp_hist_irq_enable(u32 irq)
 {
-	unsigned long irq_flags;
 	int ret = 0;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 
-	spin_lock_irqsave(&mdp_lock, irq_flags);
 	if (mdata->mdp_hist_irq_mask & irq) {
 		pr_warn("MDSS MDP Hist IRQ-0x%x is already set, mask=%x\n",
 				irq, mdata->mdp_hist_irq_mask);
@@ -525,7 +523,6 @@ int mdss_mdp_hist_irq_enable(u32 irq)
 		mdata->mdp_hist_irq_mask |= irq;
 		mdata->mdss_util->enable_irq(&mdss_mdp_hw);
 	}
-	spin_unlock_irqrestore(&mdp_lock, irq_flags);
 
 	return ret;
 }
@@ -556,10 +553,8 @@ void mdss_mdp_irq_disable(u32 intr_type, u32 intf_num)
 
 void mdss_mdp_hist_irq_disable(u32 irq)
 {
-	unsigned long irq_flags;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 
-	spin_lock_irqsave(&mdp_lock, irq_flags);
 	if (!(mdata->mdp_hist_irq_mask & irq)) {
 		pr_warn("MDSS MDP IRQ-%x is NOT set, mask=%x\n",
 				irq, mdata->mdp_hist_irq_mask);
@@ -571,7 +566,6 @@ void mdss_mdp_hist_irq_disable(u32 irq)
 			(mdata->mdp_hist_irq_mask == 0))
 			mdata->mdss_util->disable_irq(&mdss_mdp_hw);
 	}
-	spin_unlock_irqrestore(&mdp_lock, irq_flags);
 }
 
 /**
@@ -1200,6 +1194,11 @@ static void mdss_mdp_hw_rev_caps_init(struct mdss_data_type *mdata)
 		mdata->max_target_zorder = 4; /* excluding base layer */
 		mdata->max_cursor_size = 64;
 		mdata->min_prefill_lines = 21;
+		break;
+	case MDSS_MDP_HW_REV_112:
+		mdata->max_target_zorder = 4; /* excluding base layer */
+		mdata->max_cursor_size = 64;
+		mdata->min_prefill_lines = 12;
 		break;
 	default:
 		mdata->max_target_zorder = 4; /* excluding base layer */
@@ -3279,7 +3278,7 @@ static void apply_dynamic_ot_limit(u32 *ot_lim,
 
 	if ((params->is_rot && params->is_yuv) ||
 		params->is_wb) {
-		if (res <= 1080 * 1920) {
+		if (res <= 1088 * 1920) {
 			*ot_lim = 2;
 		} else if (res <= 3840 * 2160) {
 			if (params->is_rot && params->is_yuv)

@@ -44,10 +44,12 @@
 
 		reg = <0xc051000 0x4>,
 		    <0xc051004 0x4>,
-		    <0xc055000 0x4>;
+		    <0xc055000 0x4>,
+		    <0xc052000 0x4>;
 		reg-names = "csr_gp_io_mux_mic_ctl",
 			"csr_gp_io_mux_spkr_ctl",
-			"csr_gp_io_lpaif_pri_pcm_pri_mode_muxsel";
+			"csr_gp_io_lpaif_pri_pcm_pri_mode_muxsel",
+			"csr_gp_io_mux_quin_ctl";
 		qcom,msm-gpios =
 			"us_eu_gpio";
 		qcom,pinctrl-names =
@@ -88,7 +90,19 @@
 			"DMIC5", "MIC BIAS4 External",
 			"MIC BIAS4 External", "Digital Mic5",
 			"DMIC6", "MIC BIAS4 External",
-			"MIC BIAS4 External", "Digital Mic6";
+			"MIC BIAS4 External", "Digital Mic6",
+			"MIC BIAS1 Internal1", "MICBIAS_REGULATOR",
+			"MIC BIAS1 Internal2", "MICBIAS_REGULATOR",
+			"MIC BIAS1 External", "MICBIAS_REGULATOR",
+			"MIC BIAS2 Internal1", "MICBIAS_REGULATOR",
+			"MIC BIAS2 Internal2", "MICBIAS_REGULATOR",
+			"MIC BIAS2 Internal3", "MICBIAS_REGULATOR",
+			"MIC BIAS2 External", "MICBIAS_REGULATOR",
+			"MIC BIAS3 Internal1", "MICBIAS_REGULATOR",
+			"MIC BIAS3 Internal2", "MICBIAS_REGULATOR",
+			"MIC BIAS3 External", "MICBIAS_REGULATOR",
+			"MIC BIAS4 External", "MICBIAS_REGULATOR";
+
 		asoc-platform = <&pcm0>, <&pcm1>, <&pcm2>, <&voip>, <&voice>,
 				<&loopback>, <&compress>, <&hostless>,
 				<&afe>, <&lsm>, <&routing>, <&lpa>, <&cpe>;
@@ -97,8 +111,8 @@
 				"msm-compress-dsp", "msm-pcm-hostless", "msm-pcm-afe",
 				"msm-lsm-client", "msm-pcm-routing", "msm-pcm-lpa",
 				"msm-cpe-lsm";
-		asoc-cpu = <&dai_hdmi>, <&dai_mi2s0>, <&dai_mi2s1>,
-				<&dai_mi2s2>, <&dai_mi2s3>, <&sb_0_rx>, <&sb_0_tx>,
+		asoc-cpu = <&dai_hdmi>, <&dai_mi2s0>, <&dai_mi2s1>,<&dai_mi2s2>,
+				<&dai_mi2s3>, <&dai_mi2s5>, <&sb_0_rx>, <&sb_0_tx>,
 				<&sb_1_rx>, <&sb_1_tx>, <&sb_3_rx>, <&sb_3_tx>,
 				<&sb_4_rx>, <&sb_4_tx>, <&sb_5_tx>, <&bt_sco_rx>,
 				<&bt_sco_tx>, <&int_fm_rx>, <&int_fm_tx>, <&afe_pcm_rx>,
@@ -107,7 +121,8 @@
 				<&incall_music_2_rx>;
 		asoc-cpu-names = "msm-dai-q6-hdmi.8", "msm-dai-q6-mi2s.0",
 				"msm-dai-q6-mi2s.1", "msm-dai-q6-mi2s.2",
-				"msm-dai-q6-mi2s.3", "msm-dai-q6-dev.16384",
+				"msm-dai-q6-mi2s.3",
+				"msm-dai-q6-mi2s.5", "msm-dai-q6-dev.16384",
 				"msm-dai-q6-dev.16385", "msm-dai-q6-dev.16386",
 				"msm-dai-q6-dev.16387", "msm-dai-q6-dev.16390",
 				"msm-dai-q6-dev.16391", "msm-dai-q6-dev.16392",
@@ -172,12 +187,18 @@
 		qcom,cdc-vddcx-2-voltage = <1300000 1300000>;
 		qcom,cdc-vddcx-2-current = <20000>;
 
+		cdc-vdd-mic-bias-supply = <&pm8950_l13>;
+		qcom,cdc-vdd-mic-bias-voltage = <3075000 3075000>;
+		qcom,cdc-vdd-mic-bias-current = <15000>;
+
 		qcom,cdc-static-supplies = "cdc-vdd-buck",
 			"cdc-vdd-tx-h",
 			"cdc-vdd-rx-h",
 			"cdc-vdd-px",
 			"cdc-vddcx-1",
 			"cdc-vddcx-2";
+
+		qcom,cdc-on-demand-supplies = "cdc-vdd-mic-bias";
 
 		qcom,cdc-cp-supplies = "cdc-vdd-buck";
 		qcom,cdc-micbias-ldoh-v = <0x3>;
@@ -191,7 +212,7 @@
 		qcom,cdc-mclk-clk-rate = <9600000>;
 		qcom,cdc-slim-ifd = "tomtom-slim-ifd";
 		qcom,cdc-slim-ifd-elemental-addr = [00 00 30 01 17 02];
-		qcom,cdc-dmic-sample-rate = <4800000>;
+		qcom,cdc-dmic-sample-rate = <2400000>;
 		qcom,cdc-variant = "WCD9330";
 	};
 };

@@ -41,6 +41,26 @@
 	};
 };
 
+&i2c_5 { /* BLSP2 QUP1 */
+	nq@2b {
+		compatible = "qcom,nq-nci";
+		reg = <0x2b>;
+		qcom,nq-irq = <&msm_gpio 17 0x00>;
+		qcom,nq-ven = <&msm_gpio 16 0x00>;
+		qcom,nq-clkreq = <&pm8950_gpios 5 0x00>;
+		qcom,nq-firm = <&msm_gpio 129 0x00>;
+		interrupt-parent = <&msm_gpio>;
+		qcom,clk-src = "BBCLK2";
+		interrupts = <17 0>;
+		interrupt-names = "nfc_irq";
+		pinctrl-names = "nfc_active", "nfc_suspend";
+		pinctrl-0 = <&nfc_int_active &nfc_disable_active>;
+		pinctrl-1 = <&nfc_int_suspend &nfc_disable_suspend>;
+		clocks = <&clock_gcc clk_bb_clk2_pin>;
+		clock-names = "ref_clk";
+	};
+};
+
 &pm8950_gpios {
 	gpio@c000 {
 		status = "ok";
@@ -50,6 +70,16 @@
 		qcom,src-sel = <2>;
 		qcom,master-en = <1>;
 		qcom,out-strength = <2>;
+	};
+	gpio@c400 {
+		qcom,mode = <1>;
+		qcom,output-type = <0>;
+		qcom,pull = <0>;
+		qcom,vin-sel = <2>;
+		qcom,out-strength = <3>;
+		qcom,src-sel = <0>;
+		qcom,master-en = <1>;
+		status = "okay";
 	};
 	gpio@c600 {
 		status = "ok";
@@ -108,10 +138,12 @@
 		qcom,model = "msm8952-snd-card";
 		reg = <0xc051000 0x4>,
 		      <0xc051004 0x4>,
-		      <0xc055000 0x4>;
+		      <0xc055000 0x4>,
+		      <0xc052000 0x4>;
 		reg-names = "csr_gp_io_mux_mic_ctl",
 			    "csr_gp_io_mux_spkr_ctl",
-			    "csr_gp_io_lpaif_pri_pcm_pri_mode_muxsel";
+			    "csr_gp_io_lpaif_pri_pcm_pri_mode_muxsel",
+			    "csr_gp_io_mux_quin_ctl";
 
 		qcom,msm-ext-pa = "primary";
 		qcom,msm-mclk-freq = <9600000>;
@@ -159,6 +191,7 @@
 				"msm-voice-svc";
 		asoc-cpu = <&dai_pri_auxpcm>, <&dai_hdmi>,
 				<&dai_mi2s0>, <&dai_mi2s1>, <&dai_mi2s2>, <&dai_mi2s3>,
+				<&dai_mi2s5>,
 				<&sb_0_rx>, <&sb_0_tx>, <&sb_1_rx>, <&sb_1_tx>,
 				<&sb_3_rx>, <&sb_3_tx>, <&sb_4_rx>, <&sb_4_tx>,
 				<&bt_sco_rx>, <&bt_sco_tx>, <&int_fm_rx>, <&int_fm_tx>,
@@ -168,6 +201,7 @@
 		asoc-cpu-names = "msm-dai-q6-auxpcm.1", "msm-dai-q6-hdmi.8",
 				"msm-dai-q6-mi2s.0", "msm-dai-q6-mi2s.1",
 				"msm-dai-q6-mi2s.2", "msm-dai-q6-mi2s.3",
+				"msm-dai-q6-mi2s.5",
 				"msm-dai-q6-dev.16384", "msm-dai-q6-dev.16385",
 				"msm-dai-q6-dev.16386", "msm-dai-q6-dev.16387",
 				"msm-dai-q6-dev.16390", "msm-dai-q6-dev.16391",
@@ -332,6 +366,12 @@
 	qcom,mdss-dsi-pan-enable-dynamic-fps;
 	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+};
+
+&dsi_sharp_1080_cmd {
+	qcom,cont-splash-enabled;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,partial-update-enabled;
 };
 
 &pmx_mdss {

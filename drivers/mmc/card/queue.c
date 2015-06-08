@@ -58,16 +58,22 @@ static inline bool mmc_cmdq_should_pull_reqs(struct mmc_host *host,
 					struct request *req)
 
 {
-	if (((req->cmd_flags & (REQ_FLUSH | REQ_DISCARD)) &&
-			test_bit(CMDQ_STATE_DCMD_ACTIVE, &ctx->curr_state)) ||
-			(!host->card->part_curr && mmc_host_halt(host)) ||
-			test_bit(CMDQ_STATE_ERR, &ctx->curr_state)) {
-		pr_debug("%s: %s: skip pulling reqs: state: %lu\n",
-			 mmc_hostname(host), __func__, ctx->curr_state);
-		return false;
-	} else {
-		return true;
-	}
+	bool ret = true;
+
+	if ((req->cmd_flags & (REQ_FLUSH | REQ_DISCARD)) &&
+			test_bit(CMDQ_STATE_DCMD_ACTIVE, &ctx->curr_state))
+		ret = false;
+	else if (!host->card->part_curr &&
+			mmc_host_halt(host) && !mmc_card_suspended(host->card))
+		ret = false;
+	else if (test_bit(CMDQ_STATE_ERR, &ctx->curr_state))
+		ret = false;
+
+	if (!ret)
+		pr_debug("%s: %s: skip pulling reqs: state: %lu, cmd_flags: 0x%x\n",
+			 mmc_hostname(host), __func__,
+			 ctx->curr_state, req->cmd_flags);
+	return ret;
 }
 
 static int mmc_cmdq_thread(void *d)
@@ -654,6 +660,7 @@ int mmc_cmdq_init(struct mmc_queue *mq, struct mmc_card *card)
 		goto out;
 	}
 
+	init_waitqueue_head(&card->host->cmdq_ctx.queue_empty_wq);
 	mq->mqrq_cmdq = kzalloc(
 			sizeof(struct mmc_queue_req) * q_depth, GFP_KERNEL);
 	if (!mq->mqrq_cmdq) {

@@ -264,6 +264,7 @@ static void socket_flow_cntl(struct sock *sk_ptr)
 		return;
 	}
 
+	atomic_inc(&info->flow_cnt);
 	DIAG_LOG(DIAG_DEBUG_PERIPHERALS, "%s flow controlled\n", info->name);
 	pr_debug("diag: In %s, channel %s flow controlled\n",
 		 __func__, info->name);
@@ -437,6 +438,7 @@ static void __socket_close_channel(struct diag_socket_info *info)
 	if (!atomic_read(&info->opened))
 		return;
 
+	memset(&info->remote_addr, 0, sizeof(struct sockaddr_msm_ipc));
 	diagfwd_channel_close(info->fwd_ctxt);
 
 	atomic_set(&info->opened, 0);
@@ -658,6 +660,7 @@ static void __diag_socket_init(struct diag_socket_info *info)
 	info->hdl = NULL;
 	info->fwd_ctxt = NULL;
 	info->data_ready = 0;
+	atomic_set(&info->flow_cnt, 0);
 	spin_lock_init(&info->lock);
 	strlcpy(wq_name, "DIAG_SOCKET_", 10);
 	strlcat(wq_name, info->name, sizeof(info->name));

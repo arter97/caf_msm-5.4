@@ -339,17 +339,6 @@ static void msm_vfe47_process_input_irq(struct vfe_device *vfe_dev,
 			&vfe_dev->fetch_engine_info);
 	}
 
-	if (irq_status0 & (1 << 0)) {
-		if (vfe_dev->axi_data.src_info[VFE_PIX_0].raw_stream_count > 0
-			&& vfe_dev->axi_data.src_info[VFE_PIX_0].
-			pix_stream_count == 0) {
-			ISP_DBG("%s: SOF IRQ\n", __func__);
-			msm_isp_notify(vfe_dev, ISP_EVENT_SOF, VFE_PIX_0, ts);
-			if (vfe_dev->axi_data.stream_update[VFE_PIX_0])
-				msm_isp_axi_stream_update(vfe_dev, VFE_PIX_0);
-			msm_isp_update_framedrop_reg(vfe_dev, VFE_PIX_0);
-		}
-	}
 	if (irq_status0 & (1 << 1))
 		ISP_DBG("%s: EOF IRQ\n", __func__);
 }
@@ -525,6 +514,14 @@ static void msm_vfe47_process_epoch_irq(struct vfe_device *vfe_dev,
 		msm_isp_update_framedrop_reg(vfe_dev, VFE_PIX_0);
 		msm_isp_update_stats_framedrop_reg(vfe_dev);
 		msm_isp_update_error_frame_count(vfe_dev);
+		if (vfe_dev->axi_data.src_info[VFE_PIX_0].raw_stream_count > 0
+			&& vfe_dev->axi_data.src_info[VFE_PIX_0].
+			pix_stream_count == 0) {
+			msm_isp_notify(vfe_dev, ISP_EVENT_SOF, VFE_PIX_0, ts);
+			if (vfe_dev->axi_data.stream_update[VFE_PIX_0])
+				msm_isp_axi_stream_update(vfe_dev, VFE_PIX_0);
+			msm_isp_update_framedrop_reg(vfe_dev, VFE_PIX_0);
+		}
 	}
 }
 
@@ -1933,21 +1930,6 @@ static struct msm_vfe_stats_hardware_info msm_vfe47_stats_hw_info = {
 	.num_stats_comp_mask = VFE47_NUM_STATS_COMP,
 };
 
-static struct v4l2_subdev_core_ops msm_vfe47_subdev_core_ops = {
-	.ioctl = msm_isp_ioctl,
-	.subscribe_event = msm_isp_subscribe_event,
-	.unsubscribe_event = msm_isp_unsubscribe_event,
-};
-
-static struct v4l2_subdev_ops msm_vfe47_subdev_ops = {
-	.core = &msm_vfe47_subdev_core_ops,
-};
-
-static struct v4l2_subdev_internal_ops msm_vfe47_internal_ops = {
-	.open = msm_isp_open_node,
-	.close = msm_isp_close_node,
-};
-
 struct msm_vfe_hardware_info vfe47_hw_info = {
 	.num_iommu_ctx = 1,
 	.num_iommu_secure_ctx = 1,
@@ -2035,7 +2017,39 @@ struct msm_vfe_hardware_info vfe47_hw_info = {
 	.dmi_reg_offset = 0xC2C,
 	.axi_hw_info = &msm_vfe47_axi_hw_info,
 	.stats_hw_info = &msm_vfe47_stats_hw_info,
-	.subdev_ops = &msm_vfe47_subdev_ops,
-	.subdev_internal_ops = &msm_vfe47_internal_ops,
 };
+
+static const struct of_device_id msm_vfe47_dt_match[] = {
+	{
+		.compatible = "qcom,vfe47",
+		.data = &vfe47_hw_info,
+	},
+	{}
+};
+
+MODULE_DEVICE_TABLE(of, msm_vfe47_dt_match);
+
+static struct platform_driver vfe47_driver = {
+	.probe = vfe_hw_probe,
+	.driver = {
+		.name = "msm_vfe47",
+		.owner = THIS_MODULE,
+		.of_match_table = msm_vfe47_dt_match,
+	},
+};
+
+static int __init msm_vfe47_init_module(void)
+{
+	return platform_driver_register(&vfe47_driver);
+}
+
+static void __exit msm_vfe47_exit_module(void)
+{
+	platform_driver_unregister(&vfe47_driver);
+}
+
+module_init(msm_vfe47_init_module);
+module_exit(msm_vfe47_exit_module);
+MODULE_DESCRIPTION("MSM VFE47 driver");
+MODULE_LICENSE("GPL v2");
 EXPORT_SYMBOL(vfe47_hw_info);

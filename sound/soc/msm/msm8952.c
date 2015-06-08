@@ -39,10 +39,12 @@
 #define SEC_MI2S_ID	(1 << 1)
 #define TER_MI2S_ID	(1 << 2)
 #define QUAT_MI2S_ID	(1 << 3)
+#define QUIN_MI2S_ID	(1 << 4)
 
 #define DEFAULT_MCLK_RATE 9600000
 
 #define WCD_MBHC_DEF_RLOADS 5
+#define MAX_WSA_CODEC_NAME_LENGTH 80
 
 enum btsco_rates {
 	RATE_8KHZ_ID,
@@ -60,6 +62,7 @@ static int msm_proxy_rx_ch = 2;
 static int mi2s_rx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
 
 static atomic_t quat_mi2s_clk_ref;
+static atomic_t quin_mi2s_clk_ref;
 static atomic_t auxpcm_mi2s_clk_ref;
 
 static int msm8952_enable_dig_cdc_clk(struct snd_soc_codec *codec, int enable,
@@ -396,6 +399,59 @@ static int quat_mi2s_sclk_ctl(struct snd_pcm_substream *substream, bool enable)
 			ret = afe_set_lpass_clock(
 					AFE_PORT_ID_QUATERNARY_MI2S_RX,
 					&mi2s_rx_clk);
+		} else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
+			mi2s_tx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_DISABLE;
+			ret = afe_set_lpass_clock(
+					AFE_PORT_ID_QUATERNARY_MI2S_TX,
+					&mi2s_tx_clk);
+		} else {
+			pr_err("%s:Not valid substream.\n", __func__);
+		}
+
+		if (ret < 0)
+			pr_err("%s:afe_set_lpass_clock failed\n", __func__);
+	}
+	return ret;
+}
+
+static int quin_mi2s_sclk_ctl(struct snd_pcm_substream *substream, bool enable)
+{
+	int ret = 0;
+
+	if (enable) {
+		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+			if (mi2s_rx_bit_format == SNDRV_PCM_FORMAT_S24_LE)
+				mi2s_rx_clk.clk_val1 =
+					Q6AFE_LPASS_IBIT_CLK_3_P072_MHZ;
+			else
+				mi2s_rx_clk.clk_val1 =
+					Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
+			ret = afe_set_lpass_clock(
+					AFE_PORT_ID_QUINARY_MI2S_RX,
+					&mi2s_rx_clk);
+		} else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
+			mi2s_tx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
+			ret = afe_set_lpass_clock(
+					AFE_PORT_ID_QUINARY_MI2S_TX,
+					&mi2s_tx_clk);
+		} else {
+			pr_err("%s:Not valid substream.\n", __func__);
+		}
+
+		if (ret < 0)
+			pr_err("%s:afe_set_lpass_clock failed\n", __func__);
+
+	} else {
+		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+			mi2s_rx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_DISABLE;
+			ret = afe_set_lpass_clock(
+					AFE_PORT_ID_QUINARY_MI2S_RX,
+					&mi2s_rx_clk);
+		} else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
+			mi2s_tx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_DISABLE;
+			ret = afe_set_lpass_clock(
+					AFE_PORT_ID_QUINARY_MI2S_TX,
+					&mi2s_tx_clk);
 		} else {
 			pr_err("%s:Not valid substream.\n", __func__);
 		}
@@ -903,7 +959,7 @@ static void msm_prim_auxpcm_shutdown(struct snd_pcm_substream *substream)
 		(atomic_read(&pdata->mclk_rsc_ref) == 0)) {
 		msm8952_enable_dig_cdc_clk(codec, 0, true);
 	}
-	ret = msm_gpioset_suspend(CLIENT_WCD_INT, "pri_i2s");
+	ret = msm_gpioset_suspend(CLIENT_WCD_INT, "quat_i2s");
 	if (ret < 0)
 		pr_err("%s(): configure gpios failed = %s\n",
 				__func__, "quat_i2s");
@@ -1053,6 +1109,71 @@ static void msm_quat_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 	}
 }
 
+static int msm_quin_mi2s_snd_startup(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_card *card = rtd->card;
+	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	struct msm8916_asoc_mach_data *pdata =
+			snd_soc_card_get_drvdata(card);
+	int ret = 0, val = 0;
+
+	pr_debug("%s(): substream = %s  stream = %d\n", __func__,
+				substream->name, substream->stream);
+	if (pdata->vaddr_gpio_mux_quin_ctl) {
+		val = ioread32(pdata->vaddr_gpio_mux_quin_ctl);
+		val = val | 0x00000001;
+		iowrite32(val, pdata->vaddr_gpio_mux_quin_ctl);
+	} else {
+		return -EINVAL;
+	}
+	ret = quin_mi2s_sclk_ctl(substream, true);
+	if (ret < 0) {
+		pr_err("failed to enable sclk\n");
+		return ret;
+	}
+	ret = msm_gpioset_activate(CLIENT_WCD_INT, "quin_i2s");
+	if (ret < 0) {
+		pr_err("failed to enable codec gpios\n");
+		goto err;
+	}
+	if (atomic_inc_return(&quin_mi2s_clk_ref) == 1) {
+		ret = snd_soc_dai_set_fmt(cpu_dai, SND_SOC_DAIFMT_CBS_CFS);
+		if (ret < 0)
+			pr_debug("%s: set fmt cpu dai failed\n", __func__);
+	}
+	return ret;
+err:
+	ret = quin_mi2s_sclk_ctl(substream, false);
+	if (ret < 0)
+		pr_err("failed to disable sclk\n");
+	return ret;
+}
+
+static void msm_quin_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
+{
+	int ret;
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_card *card = rtd->card;
+	struct msm8916_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
+
+	pr_debug("%s(): substream = %s  stream = %d\n", __func__,
+				substream->name, substream->stream);
+	if ((pdata->ext_pa & QUIN_MI2S_ID) == QUIN_MI2S_ID) {
+		ret = quin_mi2s_sclk_ctl(substream, false);
+		if (ret < 0)
+			pr_err("%s:clock disable failed\n", __func__);
+		if (atomic_read(&quin_mi2s_clk_ref) > 0)
+			atomic_dec(&quin_mi2s_clk_ref);
+		ret = msm_gpioset_suspend(CLIENT_WCD_INT, "quin_i2s");
+		if (ret < 0) {
+			pr_err("%s: gpio set cannot be de-activated %sd",
+						__func__, "quin_i2s");
+			return;
+		}
+	}
+}
+
 static void *def_msm8952_wcd_mbhc_cal(void)
 {
 	void *msm8952_wcd_cal;
@@ -1156,6 +1277,12 @@ static struct snd_soc_ops msm8952_quat_mi2s_be_ops = {
 	.shutdown = msm_quat_mi2s_snd_shutdown,
 };
 
+static struct snd_soc_ops msm8952_quin_mi2s_be_ops = {
+	.startup = msm_quin_mi2s_snd_startup,
+	.hw_params = msm_mi2s_snd_hw_params,
+	.shutdown = msm_quin_mi2s_snd_shutdown,
+};
+
 static struct snd_soc_ops msm8952_sec_mi2s_be_ops = {
 	.startup = msm_sec_mi2s_snd_startup,
 	.hw_params = msm_mi2s_snd_hw_params,
@@ -1239,10 +1366,10 @@ static struct snd_soc_dai_link msm8952_dai[] = {
 		.be_id = MSM_FRONTEND_DAI_VOIP,
 	},
 	{/* hw:x,4 */
-		.name = "MSM8952 LPA",
-		.stream_name = "LPA",
+		.name = "MSM8X16 ULL",
+		.stream_name = "ULL",
 		.cpu_dai_name	= "MultiMedia3",
-		.platform_name  = "msm-pcm-lpa",
+		.platform_name  = "msm-pcm-dsp.2",
 		.dynamic = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
 			SND_SOC_DPCM_TRIGGER_POST},
@@ -1305,8 +1432,8 @@ static struct snd_soc_dai_link msm8952_dai[] = {
 		.ignore_suspend = 1,
 	},
 	{/* hw:x,9 */
-		.name = "MSM8952 Compr",
-		.stream_name = "COMPR",
+		.name = "MSM8952 Compress1",
+		.stream_name = "Compress1",
 		.cpu_dai_name	= "MultiMedia4",
 		.platform_name  = "msm-compress-dsp",
 		.dynamic = 1,
@@ -1533,10 +1660,10 @@ static struct snd_soc_dai_link msm8952_dai[] = {
 		.be_id = MSM_FRONTEND_DAI_LSM5,
 	},
 	{ /* hw:x,24 */
-		.name = "MSM8916 ULL",
-		.stream_name = "MultiMedia7",
+		.name = "MSM8X16 Compress2",
+		.stream_name = "Compress2",
 		.cpu_dai_name   = "MultiMedia7",
-		.platform_name  = "msm-pcm-dsp.1",
+		.platform_name  = "msm-compress-dsp",
 		.dynamic = 1,
 		.codec_dai_name = "snd-soc-dummy-dai",
 		.codec_name = "snd-soc-dummy",
@@ -1561,6 +1688,126 @@ static struct snd_soc_dai_link msm8952_dai[] = {
 		.ignore_pmdown_time = 1,
 		.codec_dai_name = "snd-soc-dummy-dai",
 		.codec_name = "snd-soc-dummy",
+	},
+	{/* hw:x,26 */
+		.name = "MSM8952 LPA",
+		.stream_name = "LPA",
+		.cpu_dai_name	= "MultiMedia3",
+		.platform_name  = "msm-pcm-lpa",
+		.dynamic = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			 SND_SOC_DPCM_TRIGGER_POST},
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		 /* this dai link has playback support */
+		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA3,
+	},
+	{/* hw:x,27 */
+		.name = "MSM8X16 Compress3",
+		.stream_name = "Compress3",
+		.cpu_dai_name	= "MultiMedia10",
+		.platform_name  = "msm-compress-dsp",
+		.dynamic = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			 SND_SOC_DPCM_TRIGGER_POST},
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		 /* this dai link has playback support */
+		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA10,
+	},
+	{/* hw:x,28 */
+		.name = "MSM8X16 Compress4",
+		.stream_name = "Compress4",
+		.cpu_dai_name	= "MultiMedia11",
+		.platform_name  = "msm-compress-dsp",
+		.dynamic = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			 SND_SOC_DPCM_TRIGGER_POST},
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		 /* this dai link has playback support */
+		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA11,
+	},
+	{/* hw:x,29 */
+		.name = "MSM8X16 Compress5",
+		.stream_name = "Compress5",
+		.cpu_dai_name	= "MultiMedia12",
+		.platform_name  = "msm-compress-dsp",
+		.dynamic = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			 SND_SOC_DPCM_TRIGGER_POST},
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		 /* this dai link has playback support */
+		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA12,
+	},
+	{/* hw:x,30 */
+		.name = "MSM8X16 Compress6",
+		.stream_name = "Compress6",
+		.cpu_dai_name	= "MultiMedia13",
+		.platform_name  = "msm-compress-dsp",
+		.dynamic = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			 SND_SOC_DPCM_TRIGGER_POST},
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		 /* this dai link has playback support */
+		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA13,
+	},
+	{/* hw:x,31 */
+		.name = "MSM8X16 Compress7",
+		.stream_name = "Compress7",
+		.cpu_dai_name	= "MultiMedia14",
+		.platform_name  = "msm-compress-dsp",
+		.dynamic = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			 SND_SOC_DPCM_TRIGGER_POST},
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		 /* this dai link has playback support */
+		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA14,
+	},
+	{/* hw:x,32 */
+		.name = "MSM8X16 Compress8",
+		.stream_name = "Compress8",
+		.cpu_dai_name	= "MultiMedia15",
+		.platform_name  = "msm-compress-dsp",
+		.dynamic = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			 SND_SOC_DPCM_TRIGGER_POST},
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		 /* this dai link has playback support */
+		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA15,
+	},
+	{/* hw:x,33 */
+		.name = "MSM8X16 Compress9",
+		.stream_name = "Compress9",
+		.cpu_dai_name	= "MultiMedia16",
+		.platform_name  = "msm-compress-dsp",
+		.dynamic = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			 SND_SOC_DPCM_TRIGGER_POST},
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		 /* this dai link has playback support */
+		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA16,
 	},
 	/* Backend Slimbus DAI Links */
 	{
@@ -1813,6 +2060,33 @@ static struct snd_soc_dai_link msm8952_dai[] = {
 		.be_hw_params_fixup = msm_be_hw_params_fixup,
 		.ignore_suspend = 1,
 	},
+	{
+		.name = LPASS_BE_QUIN_MI2S_RX,
+		.stream_name = "Quinary MI2S Playback",
+		.cpu_dai_name = "msm-dai-q6-mi2s.5",
+		.platform_name = "msm-pcm-routing",
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_QUINARY_MI2S_RX,
+		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.ops = &msm8952_quin_mi2s_be_ops,
+		.ignore_pmdown_time = 1, /* dai link has playback support */
+		.ignore_suspend = 1,
+	},
+	{
+		.name = LPASS_BE_QUIN_MI2S_TX,
+		.stream_name = "Quinary MI2S Capture",
+		.cpu_dai_name = "msm-dai-q6-mi2s.5",
+		.platform_name = "msm-pcm-routing",
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_QUINARY_MI2S_TX,
+		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.ops = &msm8952_quin_mi2s_be_ops,
+		.ignore_suspend = 1,
+	},
 };
 
 static int msm8952_wsa881x_init(struct snd_soc_dapm_context *dapm)
@@ -1823,30 +2097,24 @@ static int msm8952_wsa881x_init(struct snd_soc_dapm_context *dapm)
 static struct snd_soc_aux_dev msm8952_aux_dev[] = {
 	{
 		.name = "wsa881x.0",
-		.codec_name = "wsa881x-i2c-codec.8-000e",
+		.codec_name = NULL,
+		.init = msm8952_wsa881x_init,
+	},
+	{
+		.name = "wsa881x.0",
+		.codec_name = NULL,
 		.init = msm8952_wsa881x_init,
 	},
 };
 
 static struct snd_soc_codec_conf msm8952_codec_conf[] = {
 	{
-		.dev_name = "wsa881x-i2c-codec.8-000e",
-		.name_prefix = "SpkrMono",
+		.dev_name = NULL,
+		.name_prefix = NULL,
 	},
-};
-
-static struct snd_soc_aux_dev msm8952_aux_dev_1[] = {
 	{
-		.name = "wsa881x.0",
-		.codec_name = "wsa881x-i2c-codec.8-000f",
-		.init = msm8952_wsa881x_init,
-	},
-};
-
-static struct snd_soc_codec_conf msm8952_codec_conf_1[] = {
-	{
-		.dev_name = "wsa881x-i2c-codec.8-000f",
-		.name_prefix = "SpkrMono",
+		.dev_name = NULL,
+		.name_prefix = NULL,
 	},
 };
 
@@ -2027,11 +2295,16 @@ static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 	const char *hs_micbias_type = "qcom,msm-hs-micbias-type";
 	const char *ext_pa = "qcom,msm-ext-pa";
 	const char *mclk = "qcom,msm-mclk-freq";
+	const char *wsa = "asoc-wsa-codec-names";
+	const char *wsa_prefix = "asoc-wsa-codec-prefixes";
 	const char *type = NULL;
 	const char *ext_pa_str = NULL;
+	const char *wsa_str = NULL;
+	const char *wsa_prefix_str = NULL;
 	int num_strings;
 	int ret, id, i;
 	struct resource	*muxsel;
+	char *temp_str = NULL;
 
 	if (ext_codec == true) {
 		pr_err("%s: ext codec setprop is true\n", __func__);
@@ -2079,6 +2352,22 @@ static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 	}
 
 	muxsel = platform_get_resource_byname(pdev, IORESOURCE_MEM,
+			"csr_gp_io_mux_quin_ctl");
+	if (!muxsel) {
+		dev_err(&pdev->dev, "MUX addr invalid for MI2S\n");
+		ret = -ENODEV;
+		goto err;
+	}
+	pdata->vaddr_gpio_mux_quin_ctl =
+		ioremap(muxsel->start, resource_size(muxsel));
+	if (pdata->vaddr_gpio_mux_quin_ctl == NULL) {
+		pr_err("%s ioremap failure for muxsel virt addr\n",
+				__func__);
+		ret = -ENOMEM;
+		goto err;
+	}
+
+	muxsel = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 			"csr_gp_io_lpaif_pri_pcm_pri_mode_muxsel");
 	if (!muxsel) {
 		dev_err(&pdev->dev, "MUX addr invalid for MI2S\n");
@@ -2110,17 +2399,73 @@ static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	if (wsa881x_get_client_index() == WSA881X_I2C_SPK0_SLAVE0_ADDR) {
-		bear_card.aux_dev = msm8952_aux_dev;
-		bear_card.num_aux_devs = ARRAY_SIZE(msm8952_aux_dev);
-		bear_card.codec_conf = msm8952_codec_conf;
-		bear_card.num_configs = ARRAY_SIZE(msm8952_codec_conf);
-	} else if (wsa881x_get_client_index() == WSA881X_I2C_SPK1_SLAVE0_ADDR) {
-		bear_card.aux_dev = msm8952_aux_dev_1;
-		bear_card.num_aux_devs = ARRAY_SIZE(msm8952_aux_dev_1);
-		bear_card.codec_conf = msm8952_codec_conf_1;
-		bear_card.num_configs = ARRAY_SIZE(msm8952_codec_conf_1);
+	num_strings = of_property_count_strings(pdev->dev.of_node,
+			wsa);
+	if (num_strings > 0) {
+		if (wsa881x_get_probing_count() < 2) {
+			ret = -EPROBE_DEFER;
+			goto err;
+		} else if (wsa881x_get_presence_count() == num_strings) {
+			bear_card.aux_dev = msm8952_aux_dev;
+			bear_card.num_aux_devs = num_strings;
+			bear_card.codec_conf = msm8952_codec_conf;
+			bear_card.num_configs = num_strings;
+
+			for (i = 0; i < num_strings; i++) {
+				ret = of_property_read_string_index(
+						pdev->dev.of_node, wsa,
+						i, &wsa_str);
+				if (ret) {
+					dev_err(&pdev->dev,
+						"%s:of read string %s i %d error %d\n",
+						__func__, wsa, i, ret);
+					goto err;
+				}
+				temp_str = kstrdup(wsa_str, GFP_KERNEL);
+				if (!temp_str) {
+					dev_err(&pdev->dev,
+						"%s:can't allocate wsa codec name\n",
+						__func__);
+					ret = -ENOMEM;
+					goto err;
+				}
+				msm8952_aux_dev[i].codec_name = temp_str;
+				temp_str = NULL;
+
+				temp_str = kstrdup(wsa_str, GFP_KERNEL);
+				if (!temp_str) {
+					dev_err(&pdev->dev,
+						"%s:can't allocate codec dev name\n",
+						__func__);
+					ret = -ENOMEM;
+					goto err;
+				}
+				msm8952_codec_conf[i].dev_name = temp_str;
+				temp_str = NULL;
+
+				ret = of_property_read_string_index(
+						pdev->dev.of_node, wsa_prefix,
+						i, &wsa_prefix_str);
+				if (ret) {
+					dev_err(&pdev->dev,
+						"%s:of read string %s i %d error %d\n",
+						__func__, wsa_prefix, i, ret);
+					goto err;
+				}
+				temp_str = kstrdup(wsa_prefix_str, GFP_KERNEL);
+				if (!temp_str) {
+					dev_err(&pdev->dev,
+						"%s:can't allocate wsa prefix\n",
+						__func__);
+					ret = -ENOMEM;
+					goto err;
+				}
+				msm8952_codec_conf[i].name_prefix = temp_str;
+				temp_str = NULL;
+			}
+		}
 	}
+
 	card = &bear_card;
 	bear_card.name = dev_name(&pdev->dev);
 	card = &bear_card;
@@ -2149,6 +2494,8 @@ static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 			pdata->ext_pa = (pdata->ext_pa | TER_MI2S_ID);
 		else if (!strcmp(ext_pa_str, "quaternary"))
 			pdata->ext_pa = (pdata->ext_pa | QUAT_MI2S_ID);
+		else if (!strcmp(ext_pa_str, "quinary"))
+			pdata->ext_pa = (pdata->ext_pa | QUIN_MI2S_ID);
 	}
 	pr_debug("%s: ext_pa = %d\n", __func__, pdata->ext_pa);
 
@@ -2202,6 +2549,7 @@ static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 	atomic_set(&pdata->mclk_rsc_ref, 0);
 	atomic_set(&pdata->mclk_enabled, false);
 	atomic_set(&quat_mi2s_clk_ref, 0);
+	atomic_set(&quin_mi2s_clk_ref, 0);
 	atomic_set(&auxpcm_mi2s_clk_ref, 0);
 
 	ret = snd_soc_of_parse_audio_routing(card,
@@ -2229,6 +2577,15 @@ err:
 		iounmap(pdata->vaddr_gpio_mux_mic_ctl);
 	if (pdata->vaddr_gpio_mux_pcm_ctl)
 		iounmap(pdata->vaddr_gpio_mux_pcm_ctl);
+	if (pdata->vaddr_gpio_mux_quin_ctl)
+		iounmap(pdata->vaddr_gpio_mux_quin_ctl);
+	if (bear_card.num_aux_devs > 0) {
+		for (i = 0; i < bear_card.num_aux_devs; i++) {
+			kfree(msm8952_aux_dev[i].codec_name);
+			kfree(msm8952_codec_conf[i].dev_name);
+			kfree(msm8952_codec_conf[i].name_prefix);
+		}
+	}
 err1:
 	devm_kfree(&pdev->dev, pdata);
 	return ret;
@@ -2238,6 +2595,7 @@ static int msm8952_asoc_machine_remove(struct platform_device *pdev)
 {
 	struct snd_soc_card *card = platform_get_drvdata(pdev);
 	struct msm8916_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
+	int i;
 
 	if (pdata->vaddr_gpio_mux_spkr_ctl)
 		iounmap(pdata->vaddr_gpio_mux_spkr_ctl);
@@ -2245,6 +2603,15 @@ static int msm8952_asoc_machine_remove(struct platform_device *pdev)
 		iounmap(pdata->vaddr_gpio_mux_mic_ctl);
 	if (pdata->vaddr_gpio_mux_pcm_ctl)
 		iounmap(pdata->vaddr_gpio_mux_pcm_ctl);
+	if (pdata->vaddr_gpio_mux_quin_ctl)
+		iounmap(pdata->vaddr_gpio_mux_quin_ctl);
+	if (bear_card.num_aux_devs > 0) {
+		for (i = 0; i < bear_card.num_aux_devs; i++) {
+			kfree(msm8952_aux_dev[i].codec_name);
+			kfree(msm8952_codec_conf[i].dev_name);
+			kfree(msm8952_codec_conf[i].name_prefix);
+		}
+	}
 	snd_soc_unregister_card(card);
 	mutex_destroy(&pdata->cdc_mclk_mutex);
 	return 0;
