@@ -438,7 +438,7 @@ static void preview_set_overlay_init(struct mdp_overlay *overlay,
 	overlay->id = MSMFB_NEW_REQUEST;
 	overlay->src.width  = g_preview_width;
 	overlay->src.height = g_preview_height;
-	overlay->src.format = MDP_YCRYCB_H2V1;
+	overlay->src.format = MDP_CBYCRY_H2V1;
 	overlay->src_rect.x = 0;
 	overlay->src_rect.y = g_preview_h_offset;
 	overlay->src_rect.w = g_preview_width;
