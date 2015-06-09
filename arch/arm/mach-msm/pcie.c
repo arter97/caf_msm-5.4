@@ -559,9 +559,9 @@ int msm_pcie_enable(u32 options)
 	msm_pcie_write_mask(dev->parf + PCIE20_PARF_PHY_CTRL, BIT(0), 0);
 
 	/* PARF programming */
-	writel_relaxed(0x282828, dev->parf + PCIE20_PARF_PCS_DEEMPH);
-	writel_relaxed(0x7F7F, dev->parf + PCIE20_PARF_PCS_SWING);
-	writel_relaxed((4<<24), dev->parf + PCIE20_PARF_CONFIG_BITS);
+	writel_relaxed(0x181822, dev->parf + PCIE20_PARF_PCS_DEEMPH);
+	writel_relaxed(0x7878, dev->parf + PCIE20_PARF_PCS_SWING);
+	writel_relaxed(0x0, dev->parf + PCIE20_PARF_CONFIG_BITS);
 	/* ensure that hardware registers the PARF configuration */
 	wmb();
 
