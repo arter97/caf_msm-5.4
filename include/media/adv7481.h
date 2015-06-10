@@ -19,6 +19,9 @@
  * structure to pass board specific information to the ADV7481 driver
  * @rstb_gpio: put active low to hold chip in reset state
  * @pwdnb_gpio: put active low to allow chip to power-down and disable I2C
+ * @irq_gpio : active low to trigger IRQ1
+ * @irq2_gpio : active low to trigger IRQ2
+ * @irq3_gpio : active low to trigger IRQ3
  * @i2c_csi_txa: CSI TXA I2C Map Address
  * @i2c_csi_txb; CSI TXB I2C Map Address
  * @i2c_hdmi:   hdmi I2C Map Address
@@ -28,7 +31,9 @@
 struct adv7481_platform_data {
 		int rstb_gpio;
 		int pwdnb_gpio;
-		int irq_gpio;
+		int irq1_gpio;
+		int irq2_gpio;
+		int irq3_gpio;
 		int i2c_csi_txa;
 		int i2c_csi_txb;
 		int i2c_hdmi;

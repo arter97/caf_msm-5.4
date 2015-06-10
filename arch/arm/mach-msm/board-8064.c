@@ -1328,9 +1328,14 @@ static struct i2c_board_info adv7180_device_info[] __initdata = {
 static struct adv7481_platform_data adv7481_i2c_data __initdata = {
 #ifdef M_PLATFORM
 		.rstb_gpio		= PM8921_GPIO_PM_TO_SYS(27),
-		.irq_gpio		= PM8921_GPIO_PM_TO_SYS(7),
+		.irq1_gpio		= -1,
+		.irq2_gpio		= -1,
+		.irq3_gpio		= -1,
+#else
+		.irq1_gpio		= PM8921_MPP_PM_TO_SYS(3),
+		.irq2_gpio		= PM8921_MPP_PM_TO_SYS(6),
+		.irq3_gpio		= PM8921_MPP_PM_TO_SYS(11),
 #endif
-		.irq_gpio		= PM8921_GPIO_PM_TO_SYS(7),
 };
 
 static struct i2c_board_info adv7481_device_info[] __initdata = {

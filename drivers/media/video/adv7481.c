@@ -72,14 +72,21 @@ struct adv7481_state {
 	struct i2c_client *i2c_rep;
 
 	/* device status and Flags */
+	int irq;
+	int device_num;
 	int powerup;
+
 	/* routing configuration data */
 	int csia_src;
 	int csib_src;
 	int mode;
+
 	/* CSI configuration data */
 	int tx_auto_params;
 	enum adv7481_mipi_lane tx_lanes;
+
+	/* worker to handle interrupts */
+	struct delayed_work irq_delayed_work;
 };
 
 struct adv7481_hdmi_params {
@@ -217,7 +224,33 @@ static int adv7481_rd_byte(struct i2c_client *i2c_client, unsigned int reg)
 	return ret;
 }
 
-int adv7481_set_edid(struct adv7481_state *state)
+static int adv7481_set_irq(struct adv7481_state *state)
+{
+	int ret = 0;
+
+	ret = adv7481_wr_byte(state->client, IO_REG_PAD_CTRL_1_ADDR,
+			IO_REG_PAD_CTRL_1_IRQ1_ON);
+	ret |= adv7481_wr_byte(state->client, IO_REG_INT1_CONF_ADDR,
+			IO_REG_INT1_CONF_ACTIVE_UNTIL_CLEAR |
+			IO_REG_INT1_CONF_DRIVE_LOW);
+	ret |= adv7481_wr_byte(state->client, IO_REG_INT2_CONF_ADDR,
+			IO_REG_INT2_CONF_CP_LOCK_UNLOCK);
+	ret |= adv7481_wr_byte(state->client, IO_REG_DATAPATH_INT1_MASK_ADDR,
+			IO_REG_DATAPATH_INT1_CP_LOCK |
+			IO_REG_DATAPATH_INT1_CP_UNLOCK |
+			IO_REG_DATAPATH_INT1_VMUTE |
+			IO_REG_DATAPATH_INT1_SDP);
+
+	if (ret)
+		pr_err("%s - failed %d to setup interrupt regs",
+				__func__, ret);
+	else
+		enable_irq(state->irq);
+
+	return ret;
+}
+
+static int adv7481_set_edid(struct adv7481_state *state)
 {
 	int i;
 	int ret = 0;
@@ -237,6 +270,37 @@ int adv7481_set_edid(struct adv7481_state *state)
 	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x07, 0x01);
 
 	return ret;
+}
+
+static irqreturn_t adv7481_irq(int irq, void *dev)
+{
+	struct adv7481_state *state = dev;
+
+	schedule_delayed_work(&state->irq_delayed_work,
+						msecs_to_jiffies(0));
+	return IRQ_HANDLED;
+}
+
+static void adv7481_irq_delay_work(struct work_struct *work)
+{
+	struct adv7481_state *state;
+	int status;
+
+	state = container_of(work, struct adv7481_state,
+				irq_delayed_work.work);
+
+	mutex_lock(&state->mutex);
+
+	status = adv7481_rd_byte(state->client,
+			IO_REG_DATAPATH_INT1_STATUS_ADDR);
+
+	pr_debug("%s, dev %d got interrupt 0x%x", __func__,
+			state->device_num, status);
+
+	adv7481_wr_byte(state->client,
+			IO_REG_DATAPATH_INT1_CLEAR_ADDR, status);
+
+	mutex_unlock(&state->mutex);
 }
 
 /* Initialize adv7481 I2C Settings */
@@ -296,6 +360,10 @@ static int adv7481_dev_init(struct adv7481_state *state,
 	/* CSI-TXA Map Address */
 	ret |= adv7481_wr_byte(state->client, IO_REG_CSI_TXA_ADDR,
 				IO_REG_CSI_TXA_SADDR);
+	if (ret) {
+		pr_err("%s - failed dev init %d", __func__, ret);
+		goto  err_exit;
+	}
 
 	/* Configure i2c clients */
 	state->i2c_csi_txa = i2c_new_dummy(client->adapter,
@@ -317,9 +385,14 @@ static int adv7481_dev_init(struct adv7481_state *state,
 		!state->i2c_sdp || !state->i2c_hdmi || !state->i2c_edid ||
 		!state->i2c_rep) {
 		pr_err("Additional I2C Client Fail\n");
-		ret = EFAULT;
+		ret = -EFAULT;
+		goto err_exit;
 	}
-	adv7481_set_edid(state);
+
+	ret = adv7481_set_edid(state);
+	ret |= adv7481_set_irq(state);
+
+err_exit:
 	mutex_unlock(&state->mutex);
 
 	return ret;
@@ -337,11 +410,12 @@ static int adv7481_hw_init(struct adv7481_platform_data *pdata,
 	}
 
 	mutex_lock(&state->mutex);
+
 	if (gpio_is_valid(pdata->rstb_gpio)) {
 		ret = gpio_request(pdata->rstb_gpio, "rstb_gpio");
 		if (ret) {
 			pr_err("Request GPIO Fail\n");
-			return ret;
+			goto err_exit;
 		}
 		ret = gpio_direction_output(pdata->rstb_gpio, 0);
 		usleep(GPIO_HW_DELAY_LOW);
@@ -349,9 +423,50 @@ static int adv7481_hw_init(struct adv7481_platform_data *pdata,
 		usleep(GPIO_HW_DELAY_HI);
 		if (ret) {
 			pr_err("Set GPIO Fail\n");
-			return ret;
+			goto err_exit;
 		}
 	}
+
+	/* Only setup IRQ1 for now... */
+	if (gpio_is_valid(pdata->irq1_gpio)) {
+		ret = gpio_request(pdata->irq1_gpio, "irq_gpio");
+		if (ret) {
+			pr_err("%s : Failed to request irq_gpio %d",
+					__func__, ret);
+			goto err_exit;
+		}
+
+		ret = gpio_direction_input(pdata->irq1_gpio);
+		if (ret) {
+			pr_err("%s : Failed gpio_direction irq %d",
+					__func__, ret);
+			goto err_exit;
+		}
+
+		state->irq = gpio_to_irq(pdata->irq1_gpio);
+		if (state->irq) {
+			ret = request_irq(state->irq, adv7481_irq,
+					IRQF_ONESHOT | IRQF_TRIGGER_FALLING,
+					DRIVER_NAME, state);
+			if (ret) {
+				pr_err("%s : Failed request_irq %d",
+						__func__, ret);
+				goto err_exit;
+			}
+		} else {
+			pr_err("%s : Failed gpio_to_irq %d", __func__, ret);
+			ret = -EINVAL;
+			goto err_exit;
+		}
+
+		/* disable irq until chip interrupts are programmed */
+		disable_irq(state->irq);
+
+		INIT_DELAYED_WORK(&state->irq_delayed_work,
+				adv7481_irq_delay_work);
+	}
+
+err_exit:
 	mutex_unlock(&state->mutex);
 
 	return ret;
@@ -485,7 +600,7 @@ static int adv7481_get_sd_timings(struct adv7481_state *state, int *sd_standard)
 	return ret;
 }
 
-int adv7481_set_cvbs_mode(struct adv7481_state *state)
+static int adv7481_set_cvbs_mode(struct adv7481_state *state)
 {
 	int ret;
 	uint8_t val;
@@ -511,7 +626,7 @@ int adv7481_set_cvbs_mode(struct adv7481_state *state)
 	return ret;
 }
 
-int adv7481_set_hdmi_mode(struct adv7481_state *state)
+static int adv7481_set_hdmi_mode(struct adv7481_state *state)
 {
 	int ret;
 	int temp;
@@ -588,7 +703,7 @@ int adv7481_set_hdmi_mode(struct adv7481_state *state)
 	return ret;
 }
 
-int adv7481_set_analog_mux(struct adv7481_state *state, int input)
+static int adv7481_set_analog_mux(struct adv7481_state *state, int input)
 {
 	int ain_sel = 0x0;
 
@@ -1290,7 +1405,7 @@ static int adv7481_probe(struct i2c_client *client,
 	}
 
 	/* Initialize HW Config */
-	ret |= adv7481_hw_init(pdata, state);
+	ret = adv7481_hw_init(pdata, state);
 	if (ret) {
 		ret = -EIO;
 		pr_err("HW Initialisation Failed\n");
@@ -1307,7 +1422,7 @@ static int adv7481_probe(struct i2c_client *client,
 	state->tx_lanes = ADV7481_MIPI_1LANE;
 
 	/* Initialize SW Init Settings and I2C sub maps 7481 */
-	ret |= adv7481_dev_init(state, client);
+	ret = adv7481_dev_init(state, client);
 	if (ret) {
 		ret = -EIO;
 		pr_err("SW Initialisation Failed\n");
@@ -1315,7 +1430,7 @@ static int adv7481_probe(struct i2c_client *client,
 	}
 
 	/* Set cvbs settings */
-	ret |= adv7481_set_cvbs_mode(state);
+	ret = adv7481_set_cvbs_mode(state);
 
 	/* BA registration */
 	ret |= msm_ba_register_subdev_node(sd);
@@ -1348,6 +1463,9 @@ static int adv7481_remove(struct i2c_client *client)
 	media_entity_cleanup(&sd->entity);
 
 	v4l2_ctrl_handler_free(&state->ctrl_hdl);
+
+	if (state->irq > 0)
+		free_irq(state->irq, state);
 
 	i2c_unregister_device(state->i2c_csi_txa);
 	i2c_unregister_device(state->i2c_csi_txb);
