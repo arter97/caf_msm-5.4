@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -227,8 +227,8 @@ int diag_remote_dev_write_done(int id, unsigned char *buf, int len, int ctxt)
 		return -EINVAL;
 
 	if (bridge_info[id].type == DIAG_DATA_TYPE) {
-		if (buf == driver->cb_buf)
-			driver->cb_buf_len = 0;
+		if (buf == driver->hdlc_encode_buf)
+			driver->hdlc_encode_buf_len = 0;
 		if (buf == driver->user_space_data_buf)
 			driver->user_space_data_busy = 0;
 		err = diag_mux_queue_read(BRIDGE_TO_MUX(id));

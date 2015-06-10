@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -575,9 +575,18 @@ int diag_process_smd_dci_read_data(struct diag_smd_info *smd_info, void *buf,
 	uint16_t dci_pkt_len;
 	struct diag_dci_pkt_header_t *header = NULL;
 	uint8_t recv_pkt_cmd_code;
-
+	unsigned long flags;
+	int *in_busy_ptr = 0;
 	if (!buf)
 		return -EIO;
+
+	if (smd_info->buf_in_1 == buf) {
+		in_busy_ptr = &smd_info->in_busy_1;
+	} else {
+		pr_err("diag: In %s, no match for in_busy_1, peripheral: %d\n",
+			__func__, smd_info->peripheral);
+		return -EIO;
+	}
 
 	/*
 	 * Release wakeup source when there are no more clients to
@@ -620,6 +629,10 @@ int diag_process_smd_dci_read_data(struct diag_smd_info *smd_info, void *buf,
 		read_bytes += 5 + dci_pkt_len;
 		buf += 5 + dci_pkt_len; /* advance to next DCI pkt */
 	}
+
+	spin_lock_irqsave(&smd_info->in_busy_lock, flags);
+	*in_busy_ptr = 0;
+	spin_unlock_irqrestore(&smd_info->in_busy_lock, flags);
 
 	/* wake up all sleeping DCI clients which have some data */
 	diag_dci_wakeup_clients();
@@ -1024,15 +1037,6 @@ void extract_dci_pkt_rsp(unsigned char *buf, int len, int data_source,
 	memcpy(rsp_buf->data + rsp_buf->data_len, temp, rsp_len);
 	rsp_buf->data_len += rsp_len;
 	rsp_buf->data_source = data_source;
-
-	if (token == DCI_LOCAL_PROC && data_source < NUM_SMD_DCI_CHANNELS) {
-		if (driver->separate_cmdrsp[data_source] &&
-					data_source < NUM_SMD_DCI_CMD_CHANNELS)
-			driver->smd_dci_cmd[data_source].in_busy_1 = 1;
-		else
-			driver->smd_dci[data_source].in_busy_1 = 1;
-	}
-
 	mutex_unlock(&rsp_buf->data_mutex);
 
 	/*
@@ -2835,14 +2839,6 @@ int diag_dci_register_client(struct diag_dci_reg_tbl_t *reg_entry)
 	}
 
 	mutex_lock(&driver->dci_mutex);
-	if (!(driver->num_dci_client)) {
-		for (i = 0; i < NUM_SMD_DCI_CHANNELS; i++)
-			driver->smd_dci[i].in_busy_1 = 0;
-		if (driver->supports_separate_cmdrsp)
-			for (i = 0; i < NUM_SMD_DCI_CMD_CHANNELS; i++)
-				driver->smd_dci_cmd[i].in_busy_1 = 0;
-	}
-
 	new_entry->client = current;
 	new_entry->client_info.notification_list =
 				reg_entry->notification_list;
@@ -3026,7 +3022,6 @@ int diag_dci_deinit_client(struct diag_dci_client_tbl *entry)
 			smd_info = driver->separate_cmdrsp[peripheral] ?
 					&driver->smd_dci_cmd[peripheral] :
 					&driver->smd_dci[peripheral];
-			smd_info->in_busy_1 = 0;
 			mutex_unlock(&buf_entry->data_mutex);
 		}
 		/*
