@@ -90,6 +90,39 @@ void diag_cntl_stm_notify(struct diag_smd_info *smd_info, int action)
 	}
 }
 
+void diag_notify_md_client(uint16_t peripheral_mask, int data)
+{
+	int stat;
+	struct siginfo info;
+
+	memset(&info, 0, sizeof(struct siginfo));
+	info.si_code = SI_QUEUE;
+	info.si_int = (peripheral_mask | data);
+	info.si_signo = SIGCONT;
+	stat = send_sig_info(info.si_signo,
+					     &info, driver->md_client_info->client_process);
+	if (stat)
+		pr_err("diag: Err sending signal to memory device client, signal data: 0x%x, stat: %d\n",
+					info.si_int, stat);
+}
+
+static void process_pd_status(uint8_t *buf, uint32_t len,
+			 struct diag_smd_info *smd_info) {
+	struct diag_ctrl_msg_pd_status* pd_msg =
+			(struct diag_ctrl_msg_pd_status*)buf;
+	uint16_t pd;
+	uint8_t status;
+
+	if (!buf || !smd_info || len == 0)
+		return;
+
+	pd = pd_msg->pd_id;
+	status = pd_msg->status;
+	if (driver->logging_mode == MEMORY_DEVICE_MODE) {
+		diag_notify_md_client(smd_info->peripheral_mask, status);
+	}
+
+}
 static void enable_stm_feature(struct diag_smd_info *smd_info)
 {
 	driver->peripheral_supports_stm[smd_info->peripheral] = ENABLE_STM;
@@ -583,6 +616,10 @@ int diag_process_smd_cntl_read_data(struct diag_smd_info *smd_info, void *buf,
 		case DIAG_CTRL_MSG_BUILD_MASK_REPORT:
 			process_build_mask_report(ptr, ctrl_pkt->len,
 						  smd_info);
+			break;
+		case DIAG_CTRL_MSG_PD_STATUS:
+			process_pd_status(ptr, ctrl_pkt->len,
+                              smd_info);
 			break;
 		default:
 			pr_debug("diag: Control packet %d not supported\n",

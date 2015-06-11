@@ -1611,6 +1611,9 @@ void diag_smd_notify(void *ctxt, unsigned event)
 		} else if (smd_info->type == SMD_CNTL_TYPE) {
 			diag_cntl_stm_notify(smd_info,
 						CLEAR_PERIPHERAL_STM_STATE);
+			if (driver->logging_mode == MEMORY_DEVICE_MODE)
+				diag_notify_md_client(smd_info->peripheral_mask,
+						      DIAG_STATUS_CLOSED);
 		}
 		return;
 	} else if (event == SMD_EVENT_OPEN) {
@@ -1621,6 +1624,9 @@ void diag_smd_notify(void *ctxt, unsigned event)
 			smd_info->notify_context = event;
 			queue_work(driver->diag_cntl_wq,
 				&(smd_info->diag_notify_update_smd_work));
+			if (driver->logging_mode == MEMORY_DEVICE_MODE)
+                                diag_notify_md_client(smd_info->peripheral_mask,
+						      DIAG_STATUS_OPEN);
 		} else if (smd_info->type == SMD_DCI_TYPE) {
 			smd_info->notify_context = event;
 			queue_work(driver->diag_dci_wq,

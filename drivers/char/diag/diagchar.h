@@ -81,9 +81,15 @@
 #define DIAG_CMD_GET_EVENT_MASK	0x81
 #define DIAG_CMD_SET_EVENT_MASK	0x82
 #define DIAG_CMD_EVENT_TOGGLE	0x60
+#define DIAG_CMD_DIAG_SUBSYS_DELAY 0x80
 
 #define DIAG_SS_DIAG		0x12
 #define DIAG_SS_PARAMS		0x32
+#define DIAG_SS_FILE_READ_MODEM 0x0816
+#define DIAG_SS_FILE_READ_ADSP  0x0E10
+#define DIAG_SS_FILE_READ_WCNSS 0x141F
+#define DIAG_SS_FILE_READ_SLPI 0x01A18
+#define DIAG_SS_FILE_READ_APPS 0x020F
 
 #define DIAG_DIAG_MAX_PKT_SZ	0x55
 #define DIAG_DIAG_STM		0x214
@@ -345,6 +351,13 @@ struct diag_smd_info {
 						void *buf, int num_bytes);
 };
 
+struct diag_mdlog_client_info {
+	struct task_struct *client_process;
+	int client_id;
+	uint16_t notification_list;
+	int signal_type;
+};
+
 struct diagchar_dev {
 
 	/* State for the char driver */
@@ -452,6 +465,7 @@ struct diagchar_dev {
 	int logging_process_id;
 	struct task_struct *socket_process;
 	struct task_struct *callback_process;
+	struct diag_mdlog_client_info *md_client_info;
 	/* Power related variables */
 	struct diag_ws_ref_t dci_ws;
 	struct diag_ws_ref_t md_ws;
