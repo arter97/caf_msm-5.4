@@ -1308,6 +1308,34 @@ static struct snd_soc_dai_link msm_dai[] = {
 		.ops		= &msm_mi2s_be_ops,
 		.ignore_pmdown_time	= 1,
 	},
+	{
+		.name = "RES Playback",
+		.stream_name = "MultiMedia7",
+		.cpu_dai_name	= "MultiMedia7", /* hw:0,13 */
+		.platform_name  = "msm-pcm-dsp",
+		.dynamic = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1, /* playback support */
+		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA7,
+	},
+	{
+		.name = "RES Compr",
+		.stream_name = "MultiMedia8",
+		.cpu_dai_name	= "MultiMedia8", /* hw:0,14 */
+		.platform_name  = "msm-compress-dsp",
+		.dynamic = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1, /* playback support */
+		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA8,
+	},
 	/* Any new frondend DAIs have to be inserted after this point */
 	/* Backend DAI Links */
 	{
@@ -1394,6 +1422,45 @@ static struct snd_soc_dai_link msm_dai[] = {
 		.no_pcm = 1,
 		.be_id = MSM_BACKEND_DAI_MI2S_RX,
 		.init = &msm_mi2s_audrx_init,
+		.be_hw_params_fixup = msm_mi2s_rx_be_hw_params_fixup,
+		.ops = &msm_mi2s_be_ops,
+		.ignore_pmdown_time = 1, /* Playback support */
+	},
+	{
+		.name = LPASS_BE_MI2S_GROUP_RX_0,
+		.stream_name = "MI2S_GROUP_0 Playback",
+		.cpu_dai_name = "msm-dai-q6-mi2s-group.6",
+		.platform_name = "msm-pcm-routing",
+		.codec_name     = "msm-stub-codec.1",
+		.codec_dai_name	= "msm-stub-rx",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_MI2S_GROUP_RX_0,
+		.be_hw_params_fixup = msm_mi2s_rx_be_hw_params_fixup,
+		.ops = &msm_mi2s_be_ops,
+		.ignore_pmdown_time = 1, /* Playback support */
+	},
+	{
+		.name = LPASS_BE_MI2S_GROUP_RX_1,
+		.stream_name = "MI2S_GROUP_1 Playback",
+		.cpu_dai_name = "msm-dai-q6-mi2s-group.14",
+		.platform_name = "msm-pcm-routing",
+		.codec_name     = "msm-stub-codec.1",
+		.codec_dai_name	= "msm-stub-rx",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_MI2S_GROUP_RX_1,
+		.be_hw_params_fixup = msm_mi2s_rx_be_hw_params_fixup,
+		.ops = &msm_mi2s_be_ops,
+		.ignore_pmdown_time = 1, /* Playback support */
+	},
+	{
+		.name = LPASS_BE_MI2S_GROUP_RX_2,
+		.stream_name = "MI2S_GROUP_2 Playback",
+		.cpu_dai_name = "msm-dai-q6-mi2s-group.16",
+		.platform_name = "msm-pcm-routing",
+		.codec_name     = "msm-stub-codec.1",
+		.codec_dai_name	= "msm-stub-rx",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_MI2S_GROUP_RX_2,
 		.be_hw_params_fixup = msm_mi2s_rx_be_hw_params_fixup,
 		.ops = &msm_mi2s_be_ops,
 		.ignore_pmdown_time = 1, /* Playback support */

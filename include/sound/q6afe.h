@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2012, 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -70,6 +70,10 @@ enum {
 	IDX_RT_PROXY_PORT_001_TX = 31,
 	IDX_SECONDARY_PCM_RX = 32,
 	IDX_SECONDARY_PCM_TX = 33,
+	IDX_MI2S_RX_1 = 34,
+	IDX_MI2S_TX_1 = 35,
+	IDX_MI2S_RX_2 = 36,
+	IDX_MI2S_TX_2 = 37,
 	AFE_MAX_PORTS
 };
 
@@ -107,4 +111,12 @@ int afe_convert_virtual_to_portid(u16 port_id);
 
 int afe_pseudo_port_start_nowait(u16 port_id);
 int afe_pseudo_port_stop_nowait(u16 port_id);
+
+int afe_group_device_i2s_config(
+	struct afe_param_id_group_device_i2s_cfg_v1 *cfg);
+int afe_group_device_enable(u16 enable);
+int afe_group_dev_port_start(u16 port_id,
+	union afe_port_config *afe_config,
+	u32 rate,
+	struct afe_param_id_slot_mapping_cfg *slot_mapping_cfg);
 #endif /* __Q6AFE_H__ */

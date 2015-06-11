@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2013, 2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -35,6 +35,12 @@
 
 #define LPASS_BE_MI2S_RX "(Backend) MI2S_RX"
 #define LPASS_BE_MI2S_TX "(Backend) MI2S_TX"
+#define LPASS_BE_MI2S_GROUP_RX_0 "(Backend) MI2S_GROUP_RX_0"
+#define LPASS_BE_MI2S_GROUP_TX_0 "(Backend) MI2S_GROUP_TX_0"
+#define LPASS_BE_MI2S_GROUP_RX_1 "(Backend) MI2S_GROUP_RX_1"
+#define LPASS_BE_MI2S_GROUP_TX_1 "(Backend) MI2S_GROUP_TX_1"
+#define LPASS_BE_MI2S_GROUP_RX_2 "(Backend) MI2S_GROUP_RX_2"
+#define LPASS_BE_MI2S_GROUP_TX_2 "(Backend) MI2S_GROUP_TX_2"
 #define LPASS_BE_STUB_RX "(Backend) STUB_RX"
 #define LPASS_BE_STUB_TX "(Backend) STUB_TX"
 #define LPASS_BE_SLIMBUS_1_RX "(Backend) SLIMBUS_1_RX"
@@ -106,6 +112,12 @@ enum {
 	MSM_BACKEND_DAI_EXTPROC_EC_TX,
 	MSM_BACKEND_DAI_SEC_AUXPCM_RX,
 	MSM_BACKEND_DAI_SEC_AUXPCM_TX,
+	MSM_BACKEND_DAI_MI2S_GROUP_RX_0,
+	MSM_BACKEND_DAI_MI2S_GROUP_TX_0,
+	MSM_BACKEND_DAI_MI2S_GROUP_RX_1,
+	MSM_BACKEND_DAI_MI2S_GROUP_TX_1,
+	MSM_BACKEND_DAI_MI2S_GROUP_RX_2,
+	MSM_BACKEND_DAI_MI2S_GROUP_TX_2,
 	MSM_BACKEND_DAI_MAX,
 };
 

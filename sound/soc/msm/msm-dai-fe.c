@@ -281,6 +281,7 @@ static struct snd_soc_dai_driver msm_fe_dais[] = {
 			.rate_max = 48000,
 		},
 		.ops = &msm_fe_Multimedia_dai_ops,
+		.compress_dai = 1,
 		.name = "MultiMedia8",
 	},
 	/* FE DAIs created for hostless operation purpose */
