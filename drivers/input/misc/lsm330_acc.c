@@ -59,6 +59,7 @@ Version History.
 #include <linux/ktime.h>
 #include <linux/sensors.h>
 #include <linux/regulator/consumer.h>
+#include <linux/kthread.h>
 
 /* #include <linux/input/lsm330.h> */
 #include "lsm330.h"
@@ -309,9 +310,8 @@ Version History.
 #define LSM330_INT1_DIS_INT2_EN			(0x02)
 #define LSM330_INT1_EN_INT2_EN			(0x03)
 
-struct workqueue_struct *lsm330_workqueue = 0;
-
 #define LSM330_SENSOR_ACC_MIN_POLL_PERIOD_MS 10
+#define POLL_MS_100HZ 10
 
 struct {
 	unsigned int cutoff_ms;
@@ -353,7 +353,6 @@ struct lsm330_acc_data {
 	struct lsm330_acc_platform_data *pdata;
 
 	struct mutex lock;
-	struct work_struct input_work_acc;
 	struct hrtimer hr_timer_acc;
 	ktime_t ktime_acc;
 
@@ -389,6 +388,10 @@ struct lsm330_acc_data {
 	struct regulator *vdd;
 	struct regulator *vddio;
 	bool power_enabled;
+	int acc_wkp_flag;
+	bool acc_delay_change;
+	struct task_struct *acc_task;
+	wait_queue_head_t acc_wq;
 
 #ifdef DEBUG
 	u8 reg_addr;
@@ -413,6 +416,8 @@ static struct sensors_classdev lsm330_acc_cdev = {
 	.sensors_enable = NULL,
 	.sensors_poll_delay = NULL,
 };
+
+static int acc_poll_thread(void *data);
 
 /* sets default init values to be written in registers at probe stage */
 static void lsm330_acc_set_init_register_values(struct lsm330_acc_data *acc)
@@ -1228,9 +1233,16 @@ static int lsm330_acc_get_data(struct lsm330_acc_data *acc, int *xyz)
 static void lsm330_acc_report_values(struct lsm330_acc_data *acc,
 					int *xyz)
 {
+	ktime_t timestamp = ktime_get_boottime();
 	input_report_abs(acc->input_dev, ABS_X, xyz[0]);
 	input_report_abs(acc->input_dev, ABS_Y, xyz[1]);
 	input_report_abs(acc->input_dev, ABS_Z, xyz[2]);
+	input_event(acc->input_dev,
+			EV_SYN, SYN_TIME_SEC,
+			ktime_to_timespec(timestamp).tv_sec);
+	input_event(acc->input_dev, EV_SYN,
+			SYN_TIME_NSEC,
+			ktime_to_timespec(timestamp).tv_nsec);
 	input_sync(acc->input_dev);
 }
 
@@ -1262,7 +1274,6 @@ static int lsm330_acc_enable(struct lsm330_acc_data *acc)
 static int lsm330_acc_disable(struct lsm330_acc_data *acc)
 {
 	if (atomic_cmpxchg(&acc->enabled, 1, 0)) {
-		cancel_work_sync(&acc->input_work_acc);
 		lsm330_acc_polling_manage(acc);
 		lsm330_acc_device_power_off(acc);
 	}
@@ -1781,6 +1792,7 @@ static int lsm330_cdev_poll_delay(struct sensors_classdev *sensors_cdev,
 	err = lsm330_acc_update_odr(stat, interval_ms);
 	if (err >= 0)
 		stat->pdata->poll_interval = interval_ms;
+	stat->acc_delay_change = true;
 
 	if (atomic_read(&stat->enabled)) {
 		if (stat->enable_polling) {
@@ -1938,25 +1950,40 @@ static int lsm330_acc_power_off(struct i2c_client *client)
 }
 
 
-static void poll_function_work_acc(struct work_struct *input_work_acc)
+static int acc_poll_thread(void *data)
 {
-	struct lsm330_acc_data *acc;
 	int xyz[3] = { 0 };
 	int err;
+	struct lsm330_acc_data *acc = data;
 
-	acc = container_of((struct work_struct *)input_work_acc,
-					struct lsm330_acc_data, input_work_acc);
+	while (1) {
+		wait_event_interruptible(acc->acc_wq,
+					((acc->acc_wkp_flag != 0) ||
+					kthread_should_stop()));
+		acc->acc_wkp_flag = 0;
 
-	mutex_lock(&acc->lock);
-	err = lsm330_acc_get_data(acc, xyz);
-	if (err < 0)
-		dev_err(&acc->client->dev, "get_accelerometer_data failed\n");
-	else
-		lsm330_acc_report_values(acc, xyz);
+		if (kthread_should_stop())
+			break;
 
-	mutex_unlock(&acc->lock);
+		mutex_lock(&acc->lock);
+		if (acc->acc_delay_change) {
+			if (acc->pdata->poll_interval <= POLL_MS_100HZ)
+				set_wake_up_idle(true);
+			else
+				set_wake_up_idle(false);
+			acc->acc_delay_change = false;
+		}
 
-	lsm330_acc_polling_manage(acc);
+		err = lsm330_acc_get_data(acc, xyz);
+		if (err < 0)
+			dev_err(&acc->client->dev,
+				"get_accelerometer_data failed\n");
+		else
+			lsm330_acc_report_values(acc, xyz);
+
+		mutex_unlock(&acc->lock);
+	}
+	return 0;
 }
 
 enum hrtimer_restart poll_function_read_acc(struct hrtimer *timer)
@@ -1966,7 +1993,11 @@ enum hrtimer_restart poll_function_read_acc(struct hrtimer *timer)
 	acc = container_of((struct hrtimer *)timer,
 					struct lsm330_acc_data, hr_timer_acc);
 
-	queue_work(lsm330_workqueue, &acc->input_work_acc);
+	lsm330_acc_polling_manage(acc);
+
+	acc->acc_wkp_flag = 1;
+	wake_up_interruptible(&acc->acc_wq);
+
 	return HRTIMER_NORESTART;
 }
 
@@ -2008,11 +2039,12 @@ static int lsm330_acc_probe(struct i2c_client *client,
 		acc->use_smbus = 0;
 	}
 
-	if(lsm330_workqueue == 0)
-			lsm330_workqueue = create_workqueue("lsm330_workqueue");
+	init_waitqueue_head(&acc->acc_wq);
+	acc->acc_wkp_flag = 0;
 
 	hrtimer_init(&acc->hr_timer_acc, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	acc->hr_timer_acc.function = &poll_function_read_acc;
+	acc->acc_task = kthread_run(acc_poll_thread, acc, "lsm330_acc_sns");
 
 	mutex_init(&acc->lock);
 	mutex_lock(&acc->lock);
@@ -2176,7 +2208,6 @@ static int lsm330_acc_probe(struct i2c_client *client,
 		disable_irq_nosync(acc->irq2);
 	}
 
-	INIT_WORK(&acc->input_work_acc, poll_function_work_acc);
 	mutex_unlock(&acc->lock);
 
 	acc->accel_cdev = lsm330_acc_cdev;
@@ -2221,10 +2252,8 @@ exit_kfree_pdata:
 	kfree(acc->pdata);
 err_mutexunlock:
 	mutex_unlock(&acc->lock);
-	if(!lsm330_workqueue) {
-			flush_workqueue(lsm330_workqueue);
-			destroy_workqueue(lsm330_workqueue);
-	}
+	hrtimer_cancel(&acc->hr_timer_acc);
+	kthread_stop(acc->acc_task);
 //err_freedata:
 	kfree(acc);
 exit_check_functionality_failed:
@@ -2248,17 +2277,14 @@ static int __devexit lsm330_acc_remove(struct i2c_client *client)
 		destroy_workqueue(acc->irq2_work_queue);
 	}
 
+	hrtimer_cancel(&acc->hr_timer_acc);
+	kthread_stop(acc->acc_task);
 	lsm330_acc_device_power_off(acc);
 	lsm330_acc_input_cleanup(acc);
 	remove_sysfs_interfaces(&client->dev);
 
 	if (acc->pdata->exit)
 		acc->pdata->exit(client);
-
-	if(!lsm330_workqueue) {
-		flush_workqueue(lsm330_workqueue);
-		destroy_workqueue(lsm330_workqueue);
-	}
 
 	kfree(acc->pdata);
 	kfree(acc);

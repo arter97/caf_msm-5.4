@@ -71,6 +71,7 @@
 #include <linux/stat.h>
 #include <linux/sensors.h>
 #include <linux/regulator/consumer.h>
+#include <linux/kthread.h>
 
 #include <lsm330.h>
 /*#include "lsm330.h"*/
@@ -158,7 +159,7 @@
 #define WHOAMI_LSM330_GYR	(0xD4)  /* Expected content for WAI register*/
 
 
-
+#define POLL_MS_100HZ 10
 
 #define LSM330_GYRO_MIN_POLL_INTERVAL_MS	10
 #define LSM330_GYRO_MAX_POLL_INTERVAL_MS	5000
@@ -256,6 +257,10 @@ struct lsm330_gyr_status {
 	struct regulator *vdd;
 	struct regulator *vddio;
 	bool power_enabled;
+	int gyr_wkp_flag;
+	bool gyr_delay_change;
+	struct task_struct *gyr_task;
+	wait_queue_head_t gyr_wq;
 };
 
 
@@ -284,6 +289,7 @@ static struct sensors_classdev lsm330_gyr_cdev = {
 	.sensors_flush = NULL,
 };
 
+static int gyr_poll_thread(void *data);
 
 static int lsm330_gyr_i2c_read(struct lsm330_gyr_status *stat, u8 *buf,
 									int len)
@@ -1468,23 +1474,38 @@ static void lsm330_gyr_input_cleanup(struct lsm330_gyr_status *stat)
 	input_free_device(stat->input_dev);
 }
 
-static void poll_function_work(struct work_struct *polling_task)
+static int gyr_poll_thread(void *data)
 {
-	struct lsm330_gyr_status *stat;
 	struct lsm330_gyr_triple data_out;
 	int err;
+	struct lsm330_gyr_status *stat = data;
 
-	stat = container_of((struct work_struct *)polling_task,
-					struct lsm330_gyr_status, polling_task);
+	while (1) {
+		wait_event_interruptible(stat->gyr_wq,
+					((stat->gyr_wkp_flag != 0) ||
+					kthread_should_stop()));
+		stat->gyr_wkp_flag = 0;
 
-	err = lsm330_gyr_get_data(stat, &data_out);
-	if (err < 0)
-		dev_err(&stat->client->dev, "get_rotation_data failed.\n");
-	else
-		lsm330_gyr_report_values(stat, &data_out);
+		if (kthread_should_stop())
+			break;
 
-	if (atomic_read(&stat->enabled))
-		hrtimer_start(&stat->hr_timer, stat->ktime, HRTIMER_MODE_REL);
+		mutex_lock(&stat->lock);
+		if (stat->gyr_delay_change) {
+			if (stat->pdata->poll_interval <= POLL_MS_100HZ)
+				set_wake_up_idle(true);
+			else
+				set_wake_up_idle(false);
+			stat->gyr_delay_change = false;
+		}
+
+		err = lsm330_gyr_get_data(stat, &data_out);
+		if (err < 0)
+			dev_err(&stat->client->dev, "get_rotation_data failed.\n");
+		else
+			lsm330_gyr_report_values(stat, &data_out);
+		mutex_unlock(&stat->lock);
+	}
+	return 0;
 }
 
 enum hrtimer_restart poll_function_read(struct hrtimer *timer)
@@ -1494,7 +1515,10 @@ enum hrtimer_restart poll_function_read(struct hrtimer *timer)
 	stat = container_of((struct hrtimer *)timer,
 				struct lsm330_gyr_status, hr_timer);
 
-	queue_work(lsm330_gyr_workqueue, &stat->polling_task);
+	if (atomic_read(&stat->enabled))
+		hrtimer_start(&stat->hr_timer, stat->ktime, HRTIMER_MODE_REL);
+	stat->gyr_wkp_flag = 1;
+	wake_up_interruptible(&stat->gyr_wq);
 	return HRTIMER_NORESTART;
 }
 
@@ -1531,6 +1555,7 @@ static int lsm330_cdev_poll_delay(struct sensors_classdev *sensors_cdev,
 	err = lsm330_gyr_update_odr(stat, interval_ms);
 	if (err >= 0)
 		stat->pdata->poll_interval = interval_ms;
+	stat->gyr_delay_change = true;
 
 	stat->ktime = ktime_set(stat->pdata->poll_interval / 1000,
 				MS_TO_NS(stat->pdata->poll_interval % 1000));
@@ -1725,8 +1750,13 @@ static int lsm330_gyr_probe(struct i2c_client *client,
 	if(lsm330_gyr_workqueue == 0)
 		lsm330_gyr_workqueue = create_workqueue("lsm330_gyr_workqueue");
 
+	init_waitqueue_head(&stat->gyr_wq);
+	stat->gyr_wkp_flag = 0;
+
 	hrtimer_init(&stat->hr_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	stat->hr_timer.function = &poll_function_read;
+
+	stat->gyr_task = kthread_run(gyr_poll_thread, stat, "lsm330_gyr_sns");
 
 	mutex_init(&stat->lock);
 	mutex_lock(&stat->lock);
@@ -1856,7 +1886,6 @@ static int lsm330_gyr_probe(struct i2c_client *client,
 
 	mutex_unlock(&stat->lock);
 
-	INIT_WORK(&stat->polling_task, poll_function_work);
 	stat->gyro_cdev = lsm330_gyr_cdev;
 	stat->gyro_cdev.delay_msec =
 					LSM330_GYRO_DEFAULT_POLL_INTERVAL_MS;
@@ -1898,6 +1927,8 @@ err1_1:
 	mutex_unlock(&stat->lock);
 	kfree(stat->pdata);
 err1:
+	hrtimer_cancel(&stat->hr_timer);
+	kthread_stop(stat->gyr_task);
 	destroy_workqueue(lsm330_gyr_workqueue);
 	kfree(stat);
 err0:
@@ -1913,6 +1944,9 @@ static int lsm330_gyr_remove(struct i2c_client *client)
 	dev_info(&stat->client->dev, "driver removing\n");
 
 	lsm330_gyr_disable(stat);
+
+	hrtimer_cancel(&stat->hr_timer);
+	kthread_stop(stat->gyr_task);
 
 	if(!lsm330_gyr_workqueue) {
 		flush_workqueue(lsm330_gyr_workqueue);
