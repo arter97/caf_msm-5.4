@@ -688,4 +688,11 @@ config LSM330_GYRO
           If you say yes here you get support for STMicroelectronics's
           gyroscope sensors LSM330.
 
+config LSM303_ACC
+        tristate "STM LSM303 acceleration sensor support"
+        depends on I2C=y
+        help
+          If you say yes here you get support for STMicroelectronics's
+          acceleration sensors LSM303.
+
 endif

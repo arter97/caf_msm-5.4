@@ -65,3 +65,4 @@ obj-$(CONFIG_BMP18X)			+= bmp18x-core.o
 obj-$(CONFIG_BMP18X_I2C)		+= bmp18x-i2c.o
 obj-$(CONFIG_LSM330_ACCEL)		+= lsm330_acc.o
 obj-$(CONFIG_LSM330_GYRO)		+= lsm330_gyr.o
+obj-$(CONFIG_LSM303_ACC)		+= lsm303dlhc_acc.o
