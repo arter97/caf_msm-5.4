@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -25,6 +25,8 @@
 
 #include "a2xx_reg.h"
 #include "a3xx_reg.h"
+
+#include <mach/board.h>
 
 #define GSL_RB_NOP_SIZEDWORDS				2
 
@@ -1081,6 +1083,11 @@ adreno_ringbuffer_issueibcmds(struct kgsl_device_private *dev_priv,
 	}
 
 done:
+	if (device->first_submit == true) {
+		place_marker("KGSL first submit");
+		device->first_submit = false;
+	}
+
 	kgsl_trace_issueibcmds(device, context ? context->id : 0, ibdesc,
 		numibs, *timestamp, flags, ret,
 		drawctxt ? drawctxt->type : 0);

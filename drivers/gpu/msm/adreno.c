@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -122,6 +122,7 @@ static struct adreno_device device_3d0 = {
 		.pwr_log = KGSL_LOG_LEVEL_DEFAULT,
 		.ft_log = KGSL_LOG_LEVEL_DEFAULT,
 		.pm_dump_enable = 0,
+		.first_submit = true,
 	},
 	.gmem_base = 0,
 	.gmem_size = SZ_256K,
