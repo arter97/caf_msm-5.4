@@ -54,7 +54,6 @@ static struct mdp_buf_queue s_mdp_buf_queue;
 
 static int g_preview_height = 507;
 static int g_preview_width = 720;
-static int g_preview_h_offset = 27;
 static int g_preview_buffer_length;
 static int g_preview_buffer_size;
 
@@ -88,8 +87,12 @@ struct adp_camera_ctxt {
 
 	/* state */
 	enum camera_states state;
-	struct v4l2_cropcap crop_cap;
-	struct v4l2_rect    crop_set;
+
+	/* v4l2 overlay configs */
+	struct v4l2_cropcap crop_src_rect_cap;
+	struct v4l2_cropcap crop_dst_rect_cap;
+	struct v4l2_rect    crop_src_rect;
+	struct v4l2_rect    crop_dst_rect;
 	u32 z_order;
 
 #ifdef CONFIG_FB_MSM_MDP_ARB
@@ -442,14 +445,14 @@ static void preview_set_overlay_params(struct mdp_overlay *overlay)
 	overlay->src.width  = g_preview_width;
 	overlay->src.height = g_preview_height;
 	overlay->src.format = MDP_CBYCRY_H2V1;
-	overlay->src_rect.x = 0;
-	overlay->src_rect.y = g_preview_h_offset;
-	overlay->src_rect.w = g_preview_width;
-	overlay->src_rect.h = g_preview_height - g_preview_h_offset;
-	overlay->dst_rect.x = adp_cam_ctxt->crop_set.left;
-	overlay->dst_rect.y = adp_cam_ctxt->crop_set.top;
-	overlay->dst_rect.w = adp_cam_ctxt->crop_set.width;
-	overlay->dst_rect.h = adp_cam_ctxt->crop_set.height;
+	overlay->src_rect.x = adp_cam_ctxt->crop_src_rect.left;
+	overlay->src_rect.y = adp_cam_ctxt->crop_src_rect.top;
+	overlay->src_rect.w = adp_cam_ctxt->crop_src_rect.width;
+	overlay->src_rect.h = adp_cam_ctxt->crop_src_rect.height;
+	overlay->dst_rect.x = adp_cam_ctxt->crop_dst_rect.left;
+	overlay->dst_rect.y = adp_cam_ctxt->crop_dst_rect.top;
+	overlay->dst_rect.w = adp_cam_ctxt->crop_dst_rect.width;
+	overlay->dst_rect.h = adp_cam_ctxt->crop_dst_rect.height;
 	overlay->z_order =  adp_cam_ctxt->z_order;
 	overlay->alpha = MDP_ALPHA_NOP;
 	overlay->transp_mask = MDP_TRANSP_NOP;
@@ -942,17 +945,19 @@ static int adp_rear_camera_enable(void)
 		return ret;
 	}
 
-	adp_cam_ctxt->crop_cap.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-	adp_cam_ctxt->crop_cap.bounds.width = screeninfo.xres;
-	adp_cam_ctxt->crop_cap.bounds.height = screeninfo.yres;
-	adp_cam_ctxt->crop_cap.pixelaspect.numerator =
-			adp_cam_ctxt->crop_cap.bounds.width;
-	adp_cam_ctxt->crop_cap.pixelaspect.denominator =
-			adp_cam_ctxt->crop_cap.bounds.height;
+	adp_cam_ctxt->crop_dst_rect_cap.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+	adp_cam_ctxt->crop_dst_rect_cap.bounds.width = screeninfo.xres;
+	adp_cam_ctxt->crop_dst_rect_cap.bounds.height = screeninfo.yres;
+	adp_cam_ctxt->crop_dst_rect_cap.pixelaspect.numerator =
+			adp_cam_ctxt->crop_dst_rect_cap.bounds.width;
+	adp_cam_ctxt->crop_dst_rect_cap.pixelaspect.denominator =
+			adp_cam_ctxt->crop_dst_rect_cap.bounds.height;
 
 	/* set default rect and current region to fullscreen */
-	adp_cam_ctxt->crop_set = adp_cam_ctxt->crop_cap.bounds;
-	adp_cam_ctxt->crop_cap.defrect = adp_cam_ctxt->crop_cap.bounds;
+	adp_cam_ctxt->crop_dst_rect =
+			adp_cam_ctxt->crop_dst_rect_cap.bounds;
+	adp_cam_ctxt->crop_dst_rect_cap.defrect =
+			adp_cam_ctxt->crop_dst_rect_cap.bounds;
 
 	pr_debug("%s: kpi entry\n", __func__);
 	my_axi_ctrl->share_ctrl->current_mode = 4096;
@@ -974,6 +979,21 @@ static int adp_rear_camera_enable(void)
 
 	g_preview_height = fmt.fmt.pix.height;
 	g_preview_width = fmt.fmt.pix.width;
+
+	adp_cam_ctxt->crop_src_rect_cap.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	adp_cam_ctxt->crop_src_rect_cap.bounds.width = g_preview_width;
+	adp_cam_ctxt->crop_src_rect_cap.bounds.height = g_preview_height;
+	adp_cam_ctxt->crop_src_rect_cap.pixelaspect.numerator =
+			adp_cam_ctxt->crop_src_rect_cap.bounds.width;
+	adp_cam_ctxt->crop_src_rect_cap.pixelaspect.denominator =
+			adp_cam_ctxt->crop_src_rect_cap.bounds.height;
+
+	/* set default rect and current region to fullscreen */
+	adp_cam_ctxt->crop_src_rect =
+			adp_cam_ctxt->crop_src_rect_cap.bounds;
+	adp_cam_ctxt->crop_src_rect_cap.defrect =
+			adp_cam_ctxt->crop_src_rect_cap.bounds;
+
 	/* 4k align buffers */
 	g_preview_buffer_length =  ALIGN(g_preview_width *
 					g_preview_height*2, 4096);
@@ -1345,12 +1365,24 @@ static int adp_camera_v4l2_cropcap(struct file *file, void *fh,
 				struct v4l2_cropcap *a)
 {
 	pr_debug("%s - enter", __func__);
-	if (!a || (a->type != V4L2_BUF_TYPE_VIDEO_OUTPUT)) {
-		pr_err("%s - invalid param", __func__);
+
+	if (!a) {
+		pr_err("%s - null param", __func__);
 		return -EINVAL;
 	}
 
-	*a = adp_cam_ctxt->crop_cap;
+	switch (a->type) {
+	case V4L2_BUF_TYPE_VIDEO_CAPTURE:
+		*a = adp_cam_ctxt->crop_src_rect_cap;
+		break;
+	case V4L2_BUF_TYPE_VIDEO_OUTPUT:
+		*a = adp_cam_ctxt->crop_dst_rect_cap;
+		break;
+	default:
+		pr_err("%s - invalid type %d", __func__, a->type);
+		return -EINVAL;
+		break;
+	}
 
 	pr_debug("%s - exit", __func__);
 	return 0;
@@ -1365,7 +1397,19 @@ static int adp_camera_v4l2_g_crop(struct file *file, void *fh,
 		return -EINVAL;
 	}
 
-	a->c = adp_cam_ctxt->crop_set;
+	switch (a->type) {
+	case V4L2_BUF_TYPE_VIDEO_CAPTURE:
+		a->c = adp_cam_ctxt->crop_src_rect;
+		break;
+	case V4L2_BUF_TYPE_VIDEO_OUTPUT:
+		a->c = adp_cam_ctxt->crop_dst_rect;
+		break;
+	default:
+		pr_err("%s - invalid type %d", __func__, a->type);
+		return -EINVAL;
+		break;
+	}
+
 
 	pr_debug("%s - exit", __func__);
 
@@ -1383,14 +1427,30 @@ static int adp_camera_v4l2_s_crop(struct file *file, void *fh,
 		return -EINVAL;
 	}
 
-	adp_cam_ctxt->crop_set = a->c;
-
-	pr_debug("%s - set t-%d,l-%d w-%d,h-%d",
-			__func__,
-			adp_cam_ctxt->crop_set.top,
-			adp_cam_ctxt->crop_set.left,
-			adp_cam_ctxt->crop_set.width,
-			adp_cam_ctxt->crop_set.height);
+	switch (a->type) {
+	case V4L2_BUF_TYPE_VIDEO_CAPTURE:
+		adp_cam_ctxt->crop_src_rect = a->c;
+		pr_debug("%s - src_rect t-%d,l-%d w-%d,h-%d",
+				__func__,
+				a->c.top,
+				a->c.left,
+				a->c.width,
+				a->c.height);
+		break;
+	case V4L2_BUF_TYPE_VIDEO_OUTPUT:
+		adp_cam_ctxt->crop_dst_rect = a->c;
+		pr_debug("%s - dst_rect t-%d,l-%d w-%d,h-%d",
+				__func__,
+				a->c.top,
+				a->c.left,
+				a->c.width,
+				a->c.height);
+		break;
+	default:
+		pr_err("%s - invalid type %d", __func__, a->type);
+		return -EINVAL;
+		break;
+	}
 
 	rc = preview_overlay_update();
 	if (rc)
