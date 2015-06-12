@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2826,12 +2826,6 @@ static void a3xx_perfcounter_enable(struct adreno_device *adreno_dev,
 	unsigned int val = 0;
 	struct a3xx_perfcounter_register *reg;
 
-	if (group >= ARRAY_SIZE(a3xx_perfcounter_reglist))
-		return;
-
-	if (counter >= a3xx_perfcounter_reglist[group].count)
-		return;
-
 	/* Special cases */
 	if (group == KGSL_PERFCOUNTER_GROUP_PWR)
 		return a3xx_perfcounter_enable_pwr(device, countable);
@@ -2839,6 +2833,12 @@ static void a3xx_perfcounter_enable(struct adreno_device *adreno_dev,
 		return a3xx_perfcounter_enable_vbif(device, counter, countable);
 	else if (group == KGSL_PERFCOUNTER_GROUP_VBIF_PWR)
 		return a3xx_perfcounter_enable_vbif_pwr(device, countable);
+
+	if (group >= ARRAY_SIZE(a3xx_perfcounter_reglist))
+		return;
+
+	if (counter >= a3xx_perfcounter_reglist[group].count)
+		return;
 
 	reg = &(a3xx_perfcounter_reglist[group].regs[counter]);
 
