@@ -24,6 +24,7 @@
 #include <mach/board.h>
 #include <video/mdp_arb.h>
 #include <linux/reverse.h>
+#include <media/v4l2-ctrls.h>
 
 #define FRAME_DELAY 33333
 #define RDI1_USE_WM 4
@@ -81,6 +82,7 @@ struct adp_camera_ctxt {
 
 	/* V4L2 Framework */
 	struct v4l2_device v4l2_dev;
+	struct v4l2_ctrl_handler ctrl_handler;
 	struct video_device *vdev;
 	struct media_device mdev;
 
@@ -88,6 +90,7 @@ struct adp_camera_ctxt {
 	enum camera_states state;
 	struct v4l2_cropcap crop_cap;
 	struct v4l2_rect    crop_set;
+	u32 z_order;
 
 #ifdef CONFIG_FB_MSM_MDP_ARB
 	/* MDP Arbitrator */
@@ -448,7 +451,7 @@ static void preview_set_overlay_init(struct mdp_overlay *overlay)
 	overlay->dst_rect.y = adp_cam_ctxt->crop_set.top;
 	overlay->dst_rect.w = adp_cam_ctxt->crop_set.width;
 	overlay->dst_rect.h = adp_cam_ctxt->crop_set.height;
-	overlay->z_order =  2;
+	overlay->z_order =  adp_cam_ctxt->z_order;
 	overlay->alpha = MDP_ALPHA_NOP;
 	overlay->transp_mask = MDP_TRANSP_NOP;
 	overlay->blend_op = BLEND_OP_OPAQUE;
@@ -1384,6 +1387,82 @@ static const struct v4l2_file_operations adp_camera_v4l2_fops = {
 #define ADP_CAMERA_BASE_DEVICE_NUMBER 36
 #define ADP_CAMERA_DRV_NAME "adp_camera_driver"
 
+#define ADP_CAMERA_V4L2_CID_Z_ORDER ((V4L2_CID_USER_BASE | 0x7000)+1)
+
+static int adp_camera_s_ctrl(struct v4l2_ctrl *ctrl)
+{
+	pr_debug("%s - Enter", __func__);
+	switch (ctrl->id) {
+	case ADP_CAMERA_V4L2_CID_Z_ORDER:
+		adp_cam_ctxt->z_order = ctrl->val;
+		break;
+	}
+
+	pr_debug("%s - Exit", __func__);
+
+	return 0;
+}
+
+static const struct v4l2_ctrl_ops adp_camera_ctrl_ops = {
+	.s_ctrl = adp_camera_s_ctrl,
+};
+
+
+static const struct v4l2_ctrl_config adp_camera_ctrl_cfg = {
+	.ops = &adp_camera_ctrl_ops,
+	.id = ADP_CAMERA_V4L2_CID_Z_ORDER,
+	.name = "z_order",
+	.type = V4L2_CTRL_TYPE_INTEGER,
+	.flags = V4L2_CTRL_FLAG_SLIDER,
+	.min = 0,
+	.max = 3,
+	.def = 1,
+	.step = 1,
+	.is_private = 1,
+};
+
+#define ADP_CAMERA_NUM_CTRLS 1
+
+static int adp_camera_init_v4l2_ctrls(void)
+{
+	int rc;
+	struct v4l2_ctrl *ctrl = NULL;
+
+	pr_debug("%s - Enter", __func__);
+
+	rc = v4l2_ctrl_handler_init(&adp_cam_ctxt->ctrl_handler,
+			ADP_CAMERA_NUM_CTRLS);
+
+	if (rc || adp_cam_ctxt->ctrl_handler.error) {
+		pr_err("Failed v4l2_ctrl_handler_init %d", rc);
+		return rc;
+	}
+	adp_cam_ctxt->v4l2_dev.ctrl_handler = &adp_cam_ctxt->ctrl_handler;
+
+	ctrl = v4l2_ctrl_new_custom(&adp_cam_ctxt->ctrl_handler,
+			&adp_camera_ctrl_cfg, NULL);
+
+	if (adp_cam_ctxt->ctrl_handler.error) {
+		int err = adp_cam_ctxt->ctrl_handler.error;
+		pr_err("%s - failed to create custom ctrl %d %p",
+			__func__, err, ctrl);
+		v4l2_ctrl_handler_free(&adp_cam_ctxt->ctrl_handler);
+		return err;
+	}
+
+	/* set controls to default values */
+	v4l2_ctrl_handler_setup(&adp_cam_ctxt->ctrl_handler);
+
+	pr_debug("%s - Exit", __func__);
+
+	return rc;
+}
+
+static void adp_camera_deinit_v4l2_ctrls(void)
+{
+	v4l2_ctrl_handler_free(&adp_cam_ctxt->ctrl_handler);
+}
+
 static int adp_camera_device_init(struct platform_device *pdev)
 {
 	int nr = ADP_CAMERA_BASE_DEVICE_NUMBER;
@@ -1415,6 +1494,12 @@ static int adp_camera_device_init(struct platform_device *pdev)
 	if (rc) {
 		pr_err("Failed to register v4l2 device\n");
 		goto v4l2_device_register_failed;
+	}
+
+	rc = adp_camera_init_v4l2_ctrls();
+	if (rc) {
+		pr_err("adp_camera_init_v4l2_ctrls failed\n");
+		goto adp_camera_init_v4l2_ctrls_failed;
 	}
 
 	adp_cam_ctxt->vdev = video_device_alloc();
@@ -1483,6 +1568,8 @@ media_entity_init_failed:
 media_device_register_failed:
 	video_device_release(adp_cam_ctxt->vdev);
 video_device_alloc_failed:
+	adp_camera_deinit_v4l2_ctrls();
+adp_camera_init_v4l2_ctrls_failed:
 	v4l2_device_unregister(&adp_cam_ctxt->v4l2_dev);
 v4l2_device_register_failed:
 	mdp_arb_deregister_event();
@@ -1498,6 +1585,7 @@ static int adp_camera_destroy(void)
 	media_device_unregister(&adp_cam_ctxt->mdev);
 	video_unregister_device(adp_cam_ctxt->vdev);
 	video_device_release(adp_cam_ctxt->vdev);
+	adp_camera_deinit_v4l2_ctrls();
 	v4l2_device_unregister(&adp_cam_ctxt->v4l2_dev);
 	mdp_arb_deregister_event();
 	kfree(adp_cam_ctxt);
