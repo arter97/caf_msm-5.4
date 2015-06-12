@@ -175,7 +175,7 @@ static int __init lvds_chimei_wxga_init(void)
 		pinfo->wait_cycle = 0;
 		pinfo->bpp = 24;
 		pinfo->fb_num = 2;
-		pinfo->clk_rate = 79400000;
+		pinfo->clk_rate = 74958000;
 		pinfo->bl_max = 255;
 		pinfo->bl_min = 1;
 
@@ -184,11 +184,11 @@ static int __init lvds_chimei_wxga_init(void)
 		 * vsycn and hsync are ignored
 		 */
 		pinfo->lcdc.h_back_porch = 0;
-		pinfo->lcdc.h_front_porch = 194;
-		pinfo->lcdc.h_pulse_width = 40;
+		pinfo->lcdc.h_front_porch = 164;
+		pinfo->lcdc.h_pulse_width = 20;
 		pinfo->lcdc.v_back_porch = 0;
-		pinfo->lcdc.v_front_porch = 38;
-		pinfo->lcdc.v_pulse_width = 20;
+		pinfo->lcdc.v_front_porch = 28;
+		pinfo->lcdc.v_pulse_width = 10;
 		pinfo->lcdc.underflow_clr = 0xff;
 		pinfo->lcdc.hsync_skew = 0;
 		pinfo->lvds.channel_mode =
