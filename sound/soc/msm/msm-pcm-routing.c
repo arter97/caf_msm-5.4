@@ -2976,8 +2976,6 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"INT_FM_RX", NULL, "INTFM_DL_HL"},
 	{"INTFM_UL_HL", NULL, "INT_FM_TX"},
 
-	{"INTHFP_UL_HL", NULL, "INT_BT_SCO_TX"},
-	{"INT_BT_SCO_RX", NULL, "MM_DL6"},
 	{"INTHFP_UL_HL", NULL, "AUX_PCM_TX"},
 	{"AUX_PCM_RX", NULL, "MM_DL6"},
 	{"AUX_PCM_RX", NULL, "INTHFP_DL_HL"},
