@@ -67,6 +67,7 @@
 #include	<linux/device.h>
 #include	<linux/module.h>
 #include	<linux/moduleparam.h>
+#include	<linux/sensors.h>
 
 #include	<linux/input/lsm303dlhc.h>
 /* #include "lsm303dlhc.h" */
@@ -236,6 +237,7 @@ struct lsm303dlhc_acc_status {
 	struct delayed_work input_work;
 
 	struct input_dev *input_dev;
+	struct sensors_classdev accel_cdev;
 
 	int hw_initialized;
 	/* hw_working=-1 means not tested yet */
@@ -273,6 +275,25 @@ static struct lsm303dlhc_acc_platform_data
 	.min_interval = LSM303DLHC_ACC_MIN_POLL_PERIOD_MS,
 	.gpio_int1 = LSM303DLHC_ACC_DEFAULT_INT1_GPIO,
 	.gpio_int2 = LSM303DLHC_ACC_DEFAULT_INT2_GPIO,
+};
+
+/* Accelerometer information read by HAL */
+static struct sensors_classdev lsm303dlhc_acc_cdev = {
+	.name = LSM303DLHC_ACC_DEV_NAME,
+	.vendor = "STMicro",
+	.version = 1,
+	.handle = SENSORS_ACCELERATION_HANDLE,
+	.type = SENSOR_TYPE_ACCELEROMETER,
+	.max_range = "156.8",	/* m/s^2 */
+	.resolution = "0.000598144",	/* m/s^2 */
+	.sensor_power = "0.5",	/* 0.5 mA */
+	.min_delay = LSM303DLHC_ACC_MIN_POLL_PERIOD_MS,
+	.delay_msec = 100,
+	.fifo_reserved_event_count = 0,
+	.fifo_max_event_count = 0,
+	.enabled = 0,
+	.sensors_enable = NULL,
+	.sensors_poll_delay = NULL,
 };
 
 static int lsm303dlhc_acc_i2c_read(struct lsm303dlhc_acc_status *stat, u8 *buf,
@@ -1313,11 +1334,42 @@ static void lsm303dlhc_acc_input_cleanup(struct lsm303dlhc_acc_status *stat)
 	input_free_device(stat->input_dev);
 }
 
+static int lsm303dlhc_acc_cdev_enable(struct sensors_classdev *sensors_cdev,
+			unsigned int enable)
+{
+	struct lsm303dlhc_acc_status *sensor = container_of(sensors_cdev,
+			struct lsm303dlhc_acc_status, accel_cdev);
+
+	if (enable)
+		return lsm303dlhc_acc_enable(sensor);
+
+	return lsm303dlhc_acc_disable(sensor);
+}
+
+static int lsm303dlhc_acc_cdev_poll_delay(struct sensors_classdev *sensors_cdev,
+			unsigned int delay_ms)
+{
+	struct lsm303dlhc_acc_status *sensor = container_of(sensors_cdev,
+			struct lsm303dlhc_acc_status, accel_cdev);
+
+	unsigned int interval_ms = delay_ms;
+	int ret = -1;
+	interval_ms = max_t(unsigned int, (unsigned int)interval_ms,
+				 sensor->pdata->min_interval);
+	mutex_lock(&sensor->lock);
+	sensor->pdata->poll_interval = interval_ms;
+	ret = lsm303dlhc_acc_update_odr(sensor, interval_ms);
+	mutex_unlock(&sensor->lock);
+
+	return ret;
+}
+
 static int lsm303dlhc_acc_probe(struct i2c_client *client,
 		const struct i2c_device_id *id)
 {
 
 	struct lsm303dlhc_acc_status *stat;
+	int ret = -1;
 
 	u32 smbus_func = I2C_FUNC_SMBUS_BYTE_DATA | 
 			I2C_FUNC_SMBUS_WORD_DATA | I2C_FUNC_SMBUS_I2C_BLOCK ;
@@ -1467,6 +1519,19 @@ static int lsm303dlhc_acc_probe(struct i2c_client *client,
 		goto err_input_cleanup;
 	}
 
+
+	stat->accel_cdev = lsm303dlhc_acc_cdev;
+	stat->accel_cdev.delay_msec = LSM303DLHC_ACC_MIN_POLL_PERIOD_MS;
+	stat->accel_cdev.sensors_enable = lsm303dlhc_acc_cdev_enable;
+	stat->accel_cdev.sensors_poll_delay = lsm303dlhc_acc_cdev_poll_delay;
+
+	ret = sensors_classdev_register(&client->dev, &stat->accel_cdev);
+	if (ret) {
+		dev_err(&client->dev,
+			"create LSM303DLHC_ACC_DEV_NAME class device file failed!\n");
+		ret = -EINVAL;
+		goto err_input_cleanup;
+	}
 
 	lsm303dlhc_acc_device_power_off(stat);
 

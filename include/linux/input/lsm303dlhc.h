@@ -62,14 +62,14 @@ Revision 1-0-7 26/11/2010
 #define LSM303DLHC_MAG_DEV_NAME		"lsm303dlhc_mag"
 
 /************************************************/
-/* 	Accelerometer section defines	 	*/
+/*	Accelerometer section defines		*/
 /************************************************/
 
 #define	LSM303DLHC_ACC_MIN_POLL_PERIOD_MS	1
 
 
 /************************************************/
-/* 	Magnetometer section defines	 	*/
+/*	Magnetometer section defines		*/
 /************************************************/
 
 #define LSM303DLHC_MAG_MIN_POLL_PERIOD_MS	5
@@ -104,11 +104,11 @@ Revision 1-0-7 26/11/2010
 /* acc section */
 #define LSM303DLHC_ACC_I2C_SADROOT		(0x0C)
 /* I2C address if acc SA0 pin to GND */
-#define LSM303DLHC_ACC_I2C_SAD_L		((LSM303DLHC_ACC_I2C_SADROOT<<1)| \
-							LSM303DLHC_SAD0L)
+#define LSM303DLHC_ACC_I2C_SAD_L	((LSM303DLHC_ACC_I2C_SADROOT<<1)| \
+						LSM303DLHC_SAD0L)
 /* I2C address if acc SA0 pin to Vdd */
-#define LSM303DLHC_ACC_I2C_SAD_H		((LSM303DLHC_ACC_I2C_SADROOT<<1)| \
-							LSM303DLHC_SAD0H)
+#define LSM303DLHC_ACC_I2C_SAD_H	((LSM303DLHC_ACC_I2C_SADROOT<<1)| \
+						LSM303DLHC_SAD0H)
 
 /* to set gpios numb connected to gyro interrupt pins,
  * the unused ones havew to be set to -EINVAL
