@@ -945,9 +945,21 @@ static struct msm_bus_scale_pdata usb_bus_scale_pdata = {
 	.name = "usb",
 };
 
-static int phy_init_seq[] = {
-	0x38, 0x81, /* update DC voltage level */
-	0x24, 0x82, /* set pre-emphasis and rise/fall time */
+static int usb1_phy_init_seq[] = {
+	0x5F, 0x81, /* update DC voltage level */
+	0x34, 0x82, /* set pre-emphasis and rise/fall time */
+	-1
+};
+
+static int usb3_phy_init_seq[] = {
+	0x58, 0x81, /* update DC voltage level */
+	0x14, 0x82, /* set pre-emphasis and rise/fall time */
+	-1
+};
+
+static int usb4_phy_init_seq[] = {
+	0x58, 0x81, /* update DC voltage level */
+	0x14, 0x82, /* set pre-emphasis and rise/fall time */
 	-1
 };
 
@@ -964,7 +976,7 @@ static struct msm_otg_platform_data msm_otg_usb1_pdata = {
 	.pmic_id_irq		= PM8921_USB_ID_IN_IRQ(PM8921_IRQ_BASE),
 	.power_budget		= 750,
 	.bus_scale_table	= &usb_bus_scale_pdata,
-	.phy_init_seq		= phy_init_seq,
+	.phy_init_seq		= usb1_phy_init_seq,
 	.mpm_otgsessvld_int	= MSM_MPM_PIN_USB1_OTGSESSVLD,
 	.mpm_xo_wakeup_int	= MSM_MPM_XO_WAKEUP_INT,
 };
@@ -973,7 +985,7 @@ static struct msm_otg_platform_data msm_otg_usb3_pdata = {
 	.mode			= USB_HOST,
 	.phy_type		= SNPS_28NM_INTEGRATED_PHY,
 	.power_budget		= 750,
-	.phy_init_seq		= phy_init_seq,
+	.phy_init_seq		= usb3_phy_init_seq,
 	.ignore_wakeup_source	= true,
 	.mpm_xo_wakeup_int	= MSM_MPM_XO_WAKEUP_INT,
 };
@@ -982,7 +994,7 @@ static struct msm_otg_platform_data msm_otg_usb4_pdata = {
 	.mode			= USB_HOST,
 	.phy_type		= SNPS_28NM_INTEGRATED_PHY,
 	.power_budget		= 750,
-	.phy_init_seq		= phy_init_seq,
+	.phy_init_seq		= usb4_phy_init_seq,
 	.ignore_wakeup_source	= true,
 	.mpm_xo_wakeup_int	= MSM_MPM_XO_WAKEUP_INT,
 };
