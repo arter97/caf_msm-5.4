@@ -338,6 +338,13 @@ config CNSS_EOS
 	  The changes that are specific to CNSS EOS module. These are only
 	  needed for pre-si development.
 
+config CNSS_ADRASTEA
+	tristate "CNSS Adrastea specific changes"
+	depends on CNSS
+	---help---
+	  Changes that are specific to CNSS Adrastea module. These are only
+	  needed for pre-si development.
+
 config CNSS_SECURE_FW
 	bool "Enable/Disable Memory Allocation for Secure Firmware Feature"
 	depends on CNSS
