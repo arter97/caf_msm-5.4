@@ -159,7 +159,7 @@ int msm_csid_irq_routine(struct v4l2_subdev *sd, u32 status, bool *handled)
 	return 0;
 }
 
-static void msm_csid_reset(struct csid_device *csid_dev)
+void msm_csid_reset(struct csid_device *csid_dev)
 {
 	msm_camera_io_w(CSID_RST_STB_ALL, csid_dev->base + CSID_RST_CMD_ADDR);
 	wait_for_completion_interruptible(&csid_dev->reset_complete);

@@ -1088,6 +1088,10 @@ static int enable_camera_preview(void)
 		return -EBUSY;
 	}
 
+	msm_csid_reset(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel]);
+	msm_csid_config(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
+				&adp_rvc_csid_params);
+
 	msm_ba_streamon(adp_cam_ctxt->ba_inst_hdlr, 0);
 	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);
 
@@ -1227,6 +1231,10 @@ int enable_camera_preview(void)
 		init_completion(&preview_disabled);
 		return -EBUSY;
 	}
+
+	msm_csid_reset(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel]);
+	msm_csid_config(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
+				&adp_rvc_csid_params);
 
 	msm_ba_streamon(adp_cam_ctxt->ba_inst_hdlr, 0);
 	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);

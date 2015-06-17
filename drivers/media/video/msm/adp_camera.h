@@ -228,6 +228,8 @@ int mdpclient_msm_fb_get_vscreeninfo(int fb_idx, struct fb_var_screeninfo *var);
 int mdp_bus_scale_update_request(u64 ab_p0, u64 ib_p0, u64 ab_p1,
 					u64 ib_p1);
 int msm_csid_release(struct csid_device *csid_dev, uint32_t bypass);
+void msm_csid_reset(struct csid_device *csid_dev);
+
 int msm_csiphy_release(struct csiphy_device *csiphy_dev, void *arg);
 void msm_ispif_release_rdi(struct ispif_device *ispif);
 void msm_axi_subdev_release_rdi_only(struct v4l2_subdev *sd,

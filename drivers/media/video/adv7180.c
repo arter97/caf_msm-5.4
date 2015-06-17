@@ -814,22 +814,21 @@ static int adv7180_set_op_stream(struct adv7180_state *state, bool on)
 
 	if (state->chip_info->flags & ADV7180_FLAG_MIPI_CSI2) {
 		if (on) {
-				/*
-				 * Ensure signal lock before starting the
-				 * csi transmitter
-				 */
-				lock_status = adv7180_wait_for_lock(state);
+			/*
+			 * Ensure signal lock before starting the
+			 * csi transmitter
+			 */
+			lock_status = adv7180_wait_for_lock(state);
 
-				if (lock_status == true) {
-					usleep(FRAME_START_DELAY);
-					/* Enable the csi */
-					ret = adv7180_csi_write(state,
-								0x00, 0x00);
-				}
-				else
-					pr_err("%s: adv sd failed to lock lock_status %d\n",
+			if (lock_status == true) {
+				usleep(FRAME_START_DELAY);
+				/* Enable the csi */
+				ret = adv7180_csi_write(state,
+						0x00, 0x00);
+			} else {
+				pr_err("%s: adv sd failed to lock lock_status %d\n",
 						__func__, lock_status);
-				usleep(I2C_RETRY_DELAY);
+			}
 		} else {
 			/* Stop csi transmitter */
 			ret = adv7180_csi_write(state, 0x00, 0x80);
