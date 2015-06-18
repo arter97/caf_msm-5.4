@@ -220,6 +220,7 @@ struct kgsl_device {
 	struct list_head events;
 	struct list_head events_pending_list;
 	s64 on_time;
+	int first_submit;
 
 	/* Postmortem Control switches */
 	int pm_regs_enabled;
