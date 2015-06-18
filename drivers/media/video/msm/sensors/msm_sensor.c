@@ -1781,14 +1781,17 @@ int32_t msm_sensor_platform_dev_probe(struct platform_device *pdev,
 	struct msm_sensor_ctrl_t *s_ctrl;
 	CDBG("%s %s_pdev_probe called\n", __func__, pdev->name);
 	s_ctrl = (struct msm_sensor_ctrl_t *)(data);
+
 	if (s_ctrl == NULL) {
 		pr_err("%s %s NULL s_ctrl\n", __func__, pdev->name);
 		return -EFAULT;
 	}
+
 	if (s_ctrl->func_tbl == NULL) {
 		pr_err("%s %s NULL func_tbl\n", __func__, pdev->name);
 		return -EFAULT;
 	}
+
 	if (s_ctrl->func_tbl->sensor_power_up == NULL) {
 		pr_err("%s %s NULL sensor_power_up\n",
 			__func__, pdev->name);
@@ -1800,15 +1803,18 @@ int32_t msm_sensor_platform_dev_probe(struct platform_device *pdev,
 		pr_err("%s %s NULL sensor data\n", __func__, pdev->name);
 		return -EFAULT;
 	}
+
 	rc = s_ctrl->func_tbl->sensor_power_up(s_ctrl);
 	if (rc < 0) {
 		pr_err("%s %s power up failed\n", __func__, pdev->name);
 		return rc;
 	}
+
 	if (s_ctrl->func_tbl->sensor_match_id)
 		rc = s_ctrl->func_tbl->sensor_match_id(s_ctrl);
 	else
 		rc = msm_sensor_match_id(s_ctrl);
+
 	if (rc < 0) {
 		pr_err("%s %s_pdev_probe failed\n", __func__, pdev->name);
 		goto power_down;
@@ -1827,17 +1833,31 @@ int32_t msm_sensor_platform_dev_probe(struct platform_device *pdev,
 		s_ctrl->sensordata->sensor_name);
 	v4l2_set_subdevdata(&s_ctrl->sensor_v4l2_subdev, pdev);
 	s_ctrl->sensor_v4l2_subdev.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
-	media_entity_init(&s_ctrl->sensor_v4l2_subdev.entity, 0, NULL, 0);
+
+	rc = media_entity_init(&s_ctrl->sensor_v4l2_subdev.entity, 0, NULL, 0);
+	if (rc) {
+		pr_err("msm_sensor_register failed");
+		goto power_down;
+	}
+
 	s_ctrl->sensor_v4l2_subdev.entity.type = MEDIA_ENT_T_V4L2_SUBDEV;
 	s_ctrl->sensor_v4l2_subdev.entity.group_id = SENSOR_DEV;
 	s_ctrl->sensor_v4l2_subdev.entity.name =
 		s_ctrl->sensor_v4l2_subdev.name;
-	msm_sensor_register(&s_ctrl->sensor_v4l2_subdev);
+
+	rc = msm_sensor_register(&s_ctrl->sensor_v4l2_subdev);
+	if (rc) {
+		pr_err("msm_sensor_register failed");
+		goto msm_sensor_register_failed;
+	}
 	s_ctrl->sensor_v4l2_subdev.entity.revision =
 		s_ctrl->sensor_v4l2_subdev.devnode->num;
+
+	goto power_down;
+
+msm_sensor_register_failed:
+	media_entity_cleanup(&s_ctrl->sensor_v4l2_subdev.entity);
 power_down:
-	if (rc > 0)
-		rc = 0;
 	s_ctrl->func_tbl->sensor_power_down(s_ctrl);
 	s_ctrl->sensor_state = MSM_SENSOR_POWER_DOWN;
 	CDBG("%s %s exitn", __func__, pdev->name);

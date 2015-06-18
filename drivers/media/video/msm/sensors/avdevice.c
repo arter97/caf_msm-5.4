@@ -23,8 +23,8 @@ static void *ba_instance_handler_a[NUM_AV_DEVICES];
 
 static struct v4l2_subdev_info avdevice_subdev_info[] = {
 	{
-	.code		= V4L2_MBUS_FMT_YUYV8_2X8,
-	.colorspace	= V4L2_COLORSPACE_JPEG,
+	.code		= V4L2_MBUS_FMT_UYVY8_2X8,
+	.colorspace	= V4L2_COLORSPACE_SMPTE170M,
 	.fmt		= 1,
 	.order		= 0,
 	},
@@ -47,6 +47,31 @@ static struct msm_sensor_output_info_t avdevice_dimensions[] = {
 		.binning_factor = 0,
 	},
 };
+
+static enum v4l2_mbus_pixelcode avdevice_v4l2fmt_to_mbuspixfmt(u32 fmt)
+{
+	enum v4l2_mbus_pixelcode mbuspixfmt;
+	switch (fmt) {
+	case V4L2_PIX_FMT_YUYV:
+		mbuspixfmt = V4L2_MBUS_FMT_YUYV8_2X8;
+		break;
+	case V4L2_PIX_FMT_YVYU:
+		mbuspixfmt = V4L2_MBUS_FMT_YVYU8_2X8;
+		break;
+	case V4L2_PIX_FMT_VYUY:
+		mbuspixfmt = V4L2_MBUS_FMT_VYUY8_2X8;
+		break;
+	case V4L2_PIX_FMT_UYVY:
+		mbuspixfmt = V4L2_MBUS_FMT_UYVY8_2X8;
+		break;
+	default:
+		pr_err("%s: Unknown v4l2 fmt 0x%x", __func__, fmt);
+		mbuspixfmt = V4L2_PIX_FMT_UYVY;
+		break;
+	}
+
+	return mbuspixfmt;
+}
 
 static int32_t avdevice_ba_platform_probe(struct platform_device *pdev)
 {
@@ -101,6 +126,12 @@ static int32_t avdevice_ba_platform_probe(struct platform_device *pdev)
 				__func__, ctrl.id, rc);
 		goto ba_failed;
 	}
+
+	p_sensor_ctrl->sensor_v4l2_subdev_info->code =
+			avdevice_v4l2fmt_to_mbuspixfmt(
+					ba_fmt.fmt.pix.pixelformat);
+	p_sensor_ctrl->sensor_v4l2_subdev_info->colorspace =
+			ba_fmt.fmt.pix.colorspace;
 
 	p_sensor_ctrl->msm_sensor_reg->output_settings->x_output =
 			ba_fmt.fmt.pix.width;
@@ -301,6 +332,12 @@ static int32_t avdevice_get_output_info(struct msm_sensor_ctrl_t *s_ctrl,
 				__func__, rc);
 		return rc;
 	}
+
+	s_ctrl->sensor_v4l2_subdev_info->code =
+			avdevice_v4l2fmt_to_mbuspixfmt(
+					ba_fmt.fmt.pix.pixelformat);
+	s_ctrl->sensor_v4l2_subdev_info->colorspace =
+			ba_fmt.fmt.pix.colorspace;
 
 	s_ctrl->msm_sensor_reg->output_settings->x_output =
 			ba_fmt.fmt.pix.width;

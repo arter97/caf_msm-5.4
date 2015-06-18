@@ -972,7 +972,7 @@ static int adv7180_enum_mbus_code(struct v4l2_subdev *sd,
 	if (code->index != 0)
 		return -EINVAL;
 
-	code->code = V4L2_MBUS_FMT_YUYV8_2X8;
+	code->code = V4L2_MBUS_FMT_UYVY8_2X8;
 
 	return 0;
 }
@@ -987,7 +987,7 @@ static int adv7180_g_mbus_fmt(struct v4l2_subdev *sd,
 		return -EINVAL;
 	}
 
-	fmt->code = V4L2_MBUS_FMT_YUYV8_2X8;
+	fmt->code = V4L2_MBUS_FMT_UYVY8_2X8;
 	fmt->colorspace = V4L2_COLORSPACE_SMPTE170M;
 	fmt->width = 720;
 	if (state->chip_info->flags & ADV7180_FLAG_I2P)
