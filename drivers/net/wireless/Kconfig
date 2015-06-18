@@ -303,6 +303,11 @@ config WCNSS_CORE
 	---help---
 	  Core driver for the Qualcomm WCNSS triple play connectivity subsystem
 
+config WCNSS_MEM_PRE_ALLOC
+	tristate "WCNSS pre-alloc memory support"
+	---help---
+	  Pre-allocate memory for the WLAN driver module
+
 config CLD_HL_SDIO_CORE
 	tristate "Qualcomm CORE driver for QCA6174 with SDIO interface"
 	select WIRELESS_EXT
