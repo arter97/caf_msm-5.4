@@ -213,6 +213,11 @@ int ipa_connect(const struct ipa_connect_params *in, struct ipa_sps_params *sps,
 	unsigned long base;
 	struct iommu_domain *smmu_domain;
 
+	if (!ipa_ctx) {
+		IPAERR("IPA driver not initialized\n");
+		return -EFAULT;
+	}
+
 	IPADBG("connecting client\n");
 
 	if (in == NULL || sps == NULL || clnt_hdl == NULL ||
@@ -457,6 +462,11 @@ int ipa_disconnect(u32 clnt_hdl)
 	unsigned long base;
 	struct iommu_domain *smmu_domain;
 
+	if (!ipa_ctx) {
+		IPAERR("IPA driver not initialized\n");
+		return -EFAULT;
+	}
+
 	if (clnt_hdl >= ipa_ctx->ipa_num_pipes ||
 		ipa_ctx->ep[clnt_hdl].valid == 0) {
 		IPAERR("bad parm.\n");
@@ -573,6 +583,11 @@ int ipa_reset_endpoint(u32 clnt_hdl)
 {
 	int res;
 	struct ipa_ep_context *ep;
+
+	if (!ipa_ctx) {
+		IPAERR("IPA driver not initialized\n");
+		return -EFAULT;
+	}
 
 	if (clnt_hdl >= ipa_ctx->ipa_num_pipes) {
 		IPAERR("Bad parameters.\n");
