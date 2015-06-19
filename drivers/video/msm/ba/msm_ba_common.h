@@ -22,6 +22,8 @@
 
 struct msm_ba_dev *get_ba_dev(void);
 void msm_ba_queue_v4l2_event(struct msm_ba_inst *inst, int event_type);
+void msm_ba_signal_sessions_event(unsigned int msm_ba_event,
+		void *arg);
 struct v4l2_subdev *msm_ba_sd_find(const char *name);
 void msm_ba_add_inputs(struct v4l2_subdev *sd);
 void msm_ba_del_inputs(struct v4l2_subdev *sd);
