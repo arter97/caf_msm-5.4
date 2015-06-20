@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2012, 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -60,6 +60,8 @@ struct msm_spm_platform_data {
 	uint8_t collapse_mid_vlevel;
 
 	uint32_t vctl_timeout_us;
+	uint32_t nominal_voltage;
+	bool	 wakeup_at_nominal;
 };
 
 #elif defined(CONFIG_MSM_SPM_V2)
@@ -119,6 +121,8 @@ struct msm_spm_platform_data {
 
 	uint32_t num_modes;
 	struct msm_spm_seq_entry *modes;
+	uint32_t nominal_voltage;
+	bool wakeup_nominal;
 };
 #endif
 
