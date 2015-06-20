@@ -437,9 +437,8 @@ static void preview_configure_bufs(void)
 	preview_buffer_init();
 }
 
-static void preview_set_overlay_init(struct mdp_overlay *overlay)
+static void preview_set_overlay_params(struct mdp_overlay *overlay)
 {
-	overlay->id = MSMFB_NEW_REQUEST;
 	overlay->src.width  = g_preview_width;
 	overlay->src.height = g_preview_height;
 	overlay->src.format = MDP_CBYCRY_H2V1;
@@ -462,6 +461,39 @@ static void preview_set_overlay_init(struct mdp_overlay *overlay)
 }
 
 #ifdef CONFIG_FB_MSM_MDP_ARB
+static int preview_overlay_update(void)
+{
+	int rc;
+	struct mdp_display_commit commit_data;
+
+	/* skip if preview is not running */
+	if (CAMERA_PREVIEW_ENABLED != adp_cam_ctxt->state)
+		return 0;
+
+	preview_set_overlay_params(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
+
+	rc = mdp_arb_client_overlay_set(adp_cam_ctxt->mdp_arb_handle,
+				&overlay_req[OVERLAY_CAMERA_PREVIEW]);
+	if (rc) {
+		pr_err("%s - mdp_arb_client_overlay_set failed %d",
+				__func__, rc);
+		return rc;
+	}
+
+	memset(&commit_data, 0, sizeof(commit_data));
+	commit_data.wait_for_finish = true;
+	commit_data.flags = MDP_DISPLAY_COMMIT_OVERLAY;
+	rc = mdp_arb_client_overlay_commit(adp_cam_ctxt->\
+			mdp_arb_handle, &commit_data);
+	if (rc) {
+		pr_err("%s - mdp_arb_client_overlay_commit failed %d",
+				__func__, rc);
+		return rc;
+	}
+
+	return rc;
+}
+
 static void mdp_queue_overlay_buffers(struct work_struct *work)
 {
 	int buffer_index = 0;
@@ -513,6 +545,32 @@ static void mdp_queue_overlay_buffers(struct work_struct *work)
 	preview_buffer_return_by_index(buffer_index);
 }
 #else
+static int preview_overlay_update(void)
+{
+	int rc;
+
+	/* skip if preview is not running */
+	if (CAMERA_PREVIEW_ENABLED != adp_cam_ctxt->state)
+		return 0;
+
+	preview_set_overlay_params(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
+
+	rc = mdpclient_overlay_set(adp_cam_ctxt->fb_idx,
+				&overlay_req[OVERLAY_CAMERA_PREVIEW]);
+	if (rc) {
+		pr_err("%s - mdpclient_overlay_set failed %d", __func__, rc);
+		return rc;
+	}
+
+	rc = mdpclient_display_commit(adp_cam_ctxt->fb_idx);
+	if (rc) {
+		pr_err("%s - mdpclient_display_commit failed %d", __func__, rc);
+		return rc;
+	}
+
+	return rc;
+}
+
 static void mdp_queue_overlay_buffers(struct work_struct *work)
 {
 	int buffer_index = 0;
@@ -1073,13 +1131,14 @@ static int enable_camera_preview(void)
 		mdp_max_bw_test, mdp_max_bw_test);
 
 	/* configure pipe for reverse camera preview */
-	preview_set_overlay_init(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
+	overlay_req[OVERLAY_CAMERA_PREVIEW].id = MSMFB_NEW_REQUEST;
+	preview_set_overlay_params(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
 	alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] =
 		mdp_arb_client_overlay_set(adp_cam_ctxt->mdp_arb_handle,
 			&overlay_req[OVERLAY_CAMERA_PREVIEW]);
 
 	if (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] != 0) {
-		pr_err("%s: mdpclient_overlay_set error!1\n",
+		pr_err("%s: mdp_arb_client_overlay_set error!1\n",
 			__func__);
 		adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
 		complete(&preview_enabled);
@@ -1200,7 +1259,8 @@ int enable_camera_preview(void)
 		mdp_max_bw_test, mdp_max_bw_test);
 
 	/* configure pipe for reverse camera preview */
-	preview_set_overlay_init(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
+	overlay_req[OVERLAY_CAMERA_PREVIEW].id = MSMFB_NEW_REQUEST;
+	preview_set_overlay_params(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
 	alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] =
 		mdpclient_overlay_set(adp_cam_ctxt->fb_idx,
 			&overlay_req[OVERLAY_CAMERA_PREVIEW]);
@@ -1314,6 +1374,8 @@ static int adp_camera_v4l2_g_crop(struct file *file, void *fh,
 static int adp_camera_v4l2_s_crop(struct file *file, void *fh,
 				struct v4l2_crop *a)
 {
+	int rc = 0;
+
 	pr_debug("%s - enter", __func__);
 
 	if (!a) {
@@ -1330,9 +1392,14 @@ static int adp_camera_v4l2_s_crop(struct file *file, void *fh,
 			adp_cam_ctxt->crop_set.width,
 			adp_cam_ctxt->crop_set.height);
 
+	rc = preview_overlay_update();
+	if (rc)
+		pr_err("%s - preview_overlay_update failed", __func__);
+
+
 	pr_debug("%s - exit", __func__);
 
-	return 0;
+	return rc;
 }
 
 static int adp_camera_v4l2_streamon(struct file *file, void *fh,
@@ -1391,16 +1458,25 @@ static const struct v4l2_file_operations adp_camera_v4l2_fops = {
 
 static int adp_camera_s_ctrl(struct v4l2_ctrl *ctrl)
 {
+	int rc = 0;
+
 	pr_debug("%s - Enter", __func__);
 	switch (ctrl->id) {
 	case ADP_CAMERA_V4L2_CID_Z_ORDER:
 		adp_cam_ctxt->z_order = ctrl->val;
+		rc = preview_overlay_update();
+		if (rc)
+			pr_err("%s - preview_overlay_update failed", __func__);
+		break;
+	default:
+		pr_err("%s - non supported ctrl id %d", __func__, ctrl->id);
+		rc = -EINVAL;
 		break;
 	}
 
 	pr_debug("%s - Exit", __func__);
 
-	return 0;
+	return rc;
 }
 
 static const struct v4l2_ctrl_ops adp_camera_ctrl_ops = {
