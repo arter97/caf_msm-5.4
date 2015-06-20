@@ -95,6 +95,7 @@
 #include <linux/i2c/atmel_mxt_ts.h>
 #include <linux/bluetooth-power.h>
 #include <linux/reverse.h>
+#include <linux/lsm330.h>
 
 #define MSM_PMEM_ADSP_SIZE         0x7800000
 #define MSM_PMEM_AUDIO_SIZE        0x4CF000
@@ -1069,9 +1070,24 @@ static struct i2c_board_info mipi_dsi_i2c_device_info[] __initdata = {
 	},
 };
 
+static struct  lsm330_acc_platform_data lsm330_acc_data = {
+	.fs_range = LSM330_ACC_G_2G,
+	.axis_map_x = 0,
+	.axis_map_y = 1,
+	.axis_map_z = 2,
+	.negate_x = 0,
+	.negate_y = 0,
+	.negate_z = 0,
+	.poll_interval = 10,
+	.min_interval = LSM330_ACC_MIN_POLL_PERIOD_MS,
+	.gpio_int1 = 22,
+	.gpio_int2 = LSM330_ACC_DEFAULT_INT2_GPIO,
+};
+
 static struct i2c_board_info lsm330_acc_device_info[] __initdata = {
 	{
 		I2C_BOARD_INFO("lsm330_acc", 0x1d),
+		.platform_data = &lsm330_acc_data,
 	},
 };
 
