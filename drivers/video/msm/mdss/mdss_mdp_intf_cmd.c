@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -748,23 +748,26 @@ int mdss_mdp_cmd_stop(struct mdss_mdp_ctl *ctl, int panel_power_state)
 		return 0;
 	}
 
-	if (__mdss_mdp_cmd_is_panel_power_on_interactive(ctx)) {
-		if (mdss_panel_is_power_on_lp(panel_power_state)) {
-			/*
-			 * If we are transitioning from interactive to low
-			 * power, then we need to send events to the interface
-			 * so that the panel can be configured in low power
-			 * mode.
-			 */
-			send_panel_events = true;
-			if (mdss_panel_is_power_on_ulp(panel_power_state))
-				turn_off_clocks = true;
-		} else if (mdss_panel_is_power_off(panel_power_state)) {
-		    send_panel_events = true;
-		    turn_off_clocks = true;
-		    panel_off = true;
-		}
+	pr_debug("%s: transition from %d --> %d\n", __func__,
+		ctx->panel_power_state, panel_power_state);
+
+	if (mdss_panel_is_power_off(panel_power_state)) {
+		/* Transition to display off */
+		send_panel_events = true;
+		turn_off_clocks = true;
+		panel_off = true;
+	} else if (__mdss_mdp_cmd_is_panel_power_on_interactive(ctx)) {
+		/*
+		 * If we are transitioning from interactive to low
+		 * power, then we need to send events to the interface
+		 * so that the panel can be configured in low power
+		 * mode.
+		 */
+		send_panel_events = true;
+		if (mdss_panel_is_power_on_ulp(panel_power_state))
+			turn_off_clocks = true;
 	} else {
+		/* Transitions between low power and ultra low power */
 		if (mdss_panel_is_power_on_ulp(panel_power_state)) {
 			/*
 			 * If we are transitioning from low power to ultra low
@@ -774,13 +777,15 @@ int mdss_mdp_cmd_stop(struct mdss_mdp_ctl *ctl, int panel_power_state)
 			pr_debug("%s: turn off clocks\n", __func__);
     			turn_off_clocks = true;
 		} else {
-                        /*
-	                 * Transition from ultra low power to low power does
-	                 * not require any special handling. The clocks would
-	                 * get turned on when the first update comes.
-                         */
-			pr_debug("%s: nothing to be done.\n", __func__);
-			return 0;
+			/*
+			 * Transition from ultra low power to low power does
+			 * not require any special handling. Just rest the
+			 * intf_stopped flag so that the clocks would
+			 * get turned on when the first update comes.
+			 */
+			pr_debug("%s: reset intf_stopped flag.\n", __func__);
+			ctx->intf_stopped = 0;
+			goto end;
 		}
 	}
 
@@ -854,7 +859,6 @@ panel_events:
 		WARN(ret, "intf %d unblank error (%d)\n", ctl->intf_num, ret);
 	}
 
-	ctx->panel_power_state = panel_power_state;
 
 	if (!panel_off) {
 	    pr_debug("%s: cmd_stop with panel always on\n", __func__);
@@ -871,6 +875,8 @@ panel_events:
 	ctl->remove_vsync_handler = NULL;
 
 end:
+	if (!IS_ERR_VALUE(ret))
+		ctx->panel_power_state = panel_power_state;
 	MDSS_XLOG(ctl->num, ctx->koff_cnt, ctx->clk_enabled,
 				ctx->rdptr_enabled, XLOG_FUNC_EXIT);
 	pr_debug("%s:-\n", __func__);
