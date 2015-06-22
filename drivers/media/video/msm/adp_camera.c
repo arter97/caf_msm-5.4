@@ -56,6 +56,7 @@ static int g_preview_height = 507;
 static int g_preview_width = 720;
 static int g_preview_buffer_length;
 static int g_preview_buffer_size;
+#define DEFAULT_SRC_X_OFFSET 27
 
 /* MDP buffer fifo */
 #define MDP_BUF_QUEUE_LENGTH (PREVIEW_BUFFER_COUNT+1)
@@ -991,8 +992,10 @@ static int adp_rear_camera_enable(void)
 	/* set default rect and current region to fullscreen */
 	adp_cam_ctxt->crop_src_rect =
 			adp_cam_ctxt->crop_src_rect_cap.bounds;
+	adp_cam_ctxt->crop_src_rect.top = DEFAULT_SRC_X_OFFSET;
+	adp_cam_ctxt->crop_src_rect.height -= DEFAULT_SRC_X_OFFSET;
 	adp_cam_ctxt->crop_src_rect_cap.defrect =
-			adp_cam_ctxt->crop_src_rect_cap.bounds;
+			adp_cam_ctxt->crop_src_rect;
 
 	/* 4k align buffers */
 	g_preview_buffer_length =  ALIGN(g_preview_width *
