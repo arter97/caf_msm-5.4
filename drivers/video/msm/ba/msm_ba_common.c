@@ -84,6 +84,25 @@ void msm_ba_queue_v4l2_event(struct msm_ba_inst *inst, int event_type)
 	wake_up(&inst->kernel_event_queue);
 }
 
+void msm_ba_signal_sessions_event(unsigned int msm_ba_event,
+				void *arg)
+{
+	struct msm_ba_inst *inst = NULL;
+	struct msm_ba_dev *dev_ctxt = NULL;
+	struct list_head *ptr;
+	struct list_head *next;
+
+	dev_ctxt = get_ba_dev();
+
+	mutex_lock(&dev_ctxt->dev_cs);
+	list_for_each_safe(ptr, next, &dev_ctxt->instances) {
+		inst = list_entry(ptr, struct msm_ba_inst, list);
+		msm_ba_queue_v4l2_event(inst,
+			msm_ba_event);
+	}
+	mutex_unlock(&dev_ctxt->dev_cs);
+}
+
 struct v4l2_subdev *msm_ba_sd_find(const char *name)
 {
 	struct v4l2_subdev *sd = NULL;
