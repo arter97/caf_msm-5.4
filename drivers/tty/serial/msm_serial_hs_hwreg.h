@@ -1,6 +1,6 @@
 /* drivers/serial/msm_serial_hs_hwreg.h
  *
- * Copyright (c) 2007-2009, 2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2007-2015, The Linux Foundation. All rights reserved.
  * 
  * All source code in this file is licensed under the following license
  * except where indicated.
@@ -31,6 +31,9 @@
 #define TCSR_ADM_1_B_CRCI_MUX_SEL      0x7C
 #define ADM1_CRCI_GSBI6_RX_SEL         0x800
 #define ADM1_CRCI_GSBI6_TX_SEL         0x400
+
+#define MSM_ENABLE_UART_CLOCK 0x5441
+#define MSM_DISABLE_UART_CLOCK 0x5442
 
 enum msm_hsl_regs {
 	UARTDM_MR1,
