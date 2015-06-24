@@ -446,6 +446,9 @@ static struct alpha_pll_masks pll_masks_p = {
 	.output_mask = 0xf,
 	.update_mask = BIT(22),
 	.post_div_mask = BM(11, 8),
+	.config_ctl_mask = BM(31, 0),
+	.test_ctl_lo_mask = BM(31, 0),
+	.test_ctl_hi_mask = BM(31, 0),
 };
 
 /* Slewing plls won't allow to change vco_sel.
@@ -469,11 +472,14 @@ static struct alpha_pll_clk gpll3_clk_src = {
 	 */
 	.post_div_config = 1 << 8,
 	.slew = true,
+	.config_ctl_val = 0x4001055b,
+	.test_ctl_hi_val = 0x40000600,
 	.c = {
 		.rate = 1050000000,
 		.parent = &xo_clk_src.c,
 		.dbg_name = "gpll3_clk_src",
 		.ops = &clk_ops_dyna_alpha_pll,
+		VDD_DIG_FMAX_MAP1(NOMINAL, 1400000000),
 		CLK_INIT(gpll3_clk_src.c),
 	},
 };
@@ -489,6 +495,7 @@ static struct pll_vote_clk gpll4_clk_src = {
 		.parent = &xo_clk_src.c,
 		.dbg_name = "gpll4_clk_src",
 		.ops = &clk_ops_pll_vote,
+		VDD_DIG_FMAX_MAP1(NOMINAL, 1400000000),
 		CLK_INIT(gpll4_clk_src.c),
 	},
 };
