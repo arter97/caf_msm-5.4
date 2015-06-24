@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -138,6 +138,14 @@ static struct msm_isp_color_fmt msm_isp_formats[] = {
 	.fourcc	 = V4L2_PIX_FMT_YUYV,
 	.pxlcode	= V4L2_MBUS_FMT_YUYV8_2X8, /* YUV sensor */
 	.colorspace = V4L2_COLORSPACE_JPEG,
+	},
+	{
+	.name	   = "UYVY",
+	.depth	  = 16,
+	.bitsperpxl = 16,
+	.fourcc	 = V4L2_PIX_FMT_UYVY,
+	.pxlcode	= V4L2_MBUS_FMT_UYVY8_2X8, /* YUV sensor */
+	.colorspace = V4L2_COLORSPACE_SMPTE170M,
 	},
 	{
 	.name	   = "SAEC",
