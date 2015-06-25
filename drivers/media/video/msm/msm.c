@@ -366,8 +366,13 @@ static int msm_camera_v4l2_dqbuf(struct file *f, void *pctx,
 	}
 	rc = vb2_dqbuf(&pcam_inst->vid_bufq, pb,  f->f_flags & O_NONBLOCK);
 	if (rc < 0) {
-		pr_err("%s, videobuf_dqbuf returns %d, flags 0x%X\n",
-			__func__, rc, f->f_flags);
+		if (rc == -EAGAIN)
+			pr_debug(
+				"%s, videobuf_dqbuf queue empty %d, flags 0x%X\n",
+				__func__, rc, f->f_flags);
+		else
+			pr_err("%s, videobuf_dqbuf returns %d, flags 0x%X\n",
+				__func__, rc, f->f_flags);
 		mutex_unlock(&pcam_inst->inst_lock);
 		return rc;
 	}
