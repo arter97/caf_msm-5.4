@@ -787,6 +787,7 @@ int ubi_wl_scrub_all(struct ubi_device *ubi)
 
 	ubi_msg(ubi->ubi_num, "Scheduling all PEBs for scrub/erasure");
 
+#ifdef CONFIG_MTD_UBI_FASTMAP
 	/*
 	 * Flush the pools into the free list before erasing all the
 	 * PEBS in the free list.
@@ -795,6 +796,7 @@ int ubi_wl_scrub_all(struct ubi_device *ubi)
 	ubi->fm_wl_pool.used = ubi->fm_wl_pool.size = 0;
 	return_unused_pool_pebs(ubi, &ubi->fm_pool);
 	ubi->fm_pool.used = ubi->fm_pool.size = 0;
+#endif
 
 	/* PEBs in free list */
 	while ((node = rb_first(&ubi->free)) != NULL) {
@@ -821,7 +823,6 @@ int ubi_wl_scrub_all(struct ubi_device *ubi)
 			ubi_err(ubi->ubi_num,
 				"Failed to schedule erase for PEB %d (err=%d)",
 				wl_e->pnum, err);
-			ubi_ro_mode(ubi);
 			spin_unlock(&ubi->wl_lock);
 			goto out;
 		}
@@ -855,15 +856,17 @@ int ubi_wl_scrub_all(struct ubi_device *ubi)
 				wl_e->pnum, err);
 			err = schedule_erase(ubi, wl_e, UBI_UNKNOWN,
 					UBI_UNKNOWN, 0);
-			if (err)
-				ubi_err(ubi->ubi_num, "Failed to schedule scrub for PEB %d (err=%d)",
+			if (err) {
+				ubi_err(ubi->ubi_num, "Failed to schedule erase for PEB %d (err=%d)",
 					wl_e->pnum, err);
+				break;
+			}
+		} else {
+			spin_lock(&ubi->wl_lock);
+			wl_tree_add(wl_e, &ubi->free);
+			ubi->free_count++;
+			spin_unlock(&ubi->wl_lock);
 		}
-		/* even if have errors we still have to return those PEB's */
-		spin_lock(&ubi->wl_lock);
-		wl_tree_add(wl_e, &ubi->free);
-		ubi->free_count++;
-		spin_unlock(&ubi->wl_lock);
 	}
 
 out:
@@ -876,9 +879,13 @@ out:
 	if (!ubi_dbg_is_bgt_disabled(ubi))
 		wake_up_process(ubi->bgt_thread);
 
-	/* Make sure all PEBs are scrubed after reset */
-	err = ubi_update_fastmap(ubi);
-
+	if (err)
+		ubi_ro_mode(ubi);
+#ifdef CONFIG_MTD_UBI_FASTMAP
+	else
+		/* Make sure all PEBs are scrubed after reset */
+		err = ubi_update_fastmap(ubi);
+#endif
 	spin_lock(&ubi->wl_lock);
 	ubi->scrub_in_progress = false;
 	spin_unlock(&ubi->wl_lock);
