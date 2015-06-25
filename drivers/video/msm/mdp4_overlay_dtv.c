@@ -583,9 +583,10 @@ static int mdp4_dtv_start(struct msm_fb_data_type *mfd)
 
 	/* Test pattern 8 x 8 pixel */
 	/* MDP_OUTP(MDP_BASE + DTV_BASE + 0x4C, 0x80000808); */
+	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
 	/* enable DTV block */
-	MDP_OUTP(MDP_BASE + DTV_BASE, 1);
+	mdp4_overlay_dtv_start();
 
 	return 0;
 }
@@ -651,6 +652,8 @@ static void mdp4_dtv_tg_off(struct vsycn_ctrl *vctrl)
 
 	spin_lock_irqsave(&vctrl->spin_lock, flags);
 	MDP_OUTP(MDP_BASE + DTV_BASE, 0); /* turn off timing generator */
+	if (dtv_enabled)
+		dtv_enabled = 0;
 	spin_unlock_irqrestore(&vctrl->spin_lock, flags);
 	msleep(20);
 }
