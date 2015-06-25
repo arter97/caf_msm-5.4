@@ -44,6 +44,7 @@
 #define MAX_NUM_COMPOSITE_MASK 4
 #define MAX_NUM_STATS_COMP_MASK 2
 #define MAX_INIT_FRAME_DROP 31
+#define MAX_REG_UPDATE_THRESHOLD 10
 #define ISP_Q2 (1 << 2)
 
 #define VFE_PING_FLAG 0xFFFFFFFF
@@ -345,6 +346,8 @@ struct msm_vfe_axi_stream {
 	enum msm_vfe_frame_skip_pattern frame_skip_pattern;
 	uint32_t framedrop_period;
 	uint32_t framedrop_pattern;
+	uint32_t prev_framedrop_period;
+	uint32_t prev_framedrop_pattern;
 	uint32_t framedrop_altern_cnt;
 	uint32_t num_burst_capture;/*number of frame to capture*/
 	uint32_t init_frame_drop;
@@ -367,6 +370,7 @@ struct msm_vfe_axi_stream {
 	uint32_t runtime_output_format;
 	enum msm_stream_memory_input_t  memory_input;
 	struct msm_isp_sw_framskip sw_skip;
+	uint8_t sw_ping_pong_bit;
 };
 
 struct msm_vfe_axi_composite_info {
@@ -376,6 +380,8 @@ struct msm_vfe_axi_composite_info {
 
 struct msm_vfe_src_info {
 	uint32_t frame_id;
+	uint32_t camif_sof_frame_id;
+	uint32_t reg_update_frame_id;
 	uint8_t active;
 	uint8_t pix_stream_count;
 	uint8_t raw_stream_count;
@@ -387,6 +393,7 @@ struct msm_vfe_src_info {
 	uint32_t sof_counter_step;
 	enum msm_vfe_dual_hw_type dual_hw_type;
 	struct msm_vfe_dual_hw_ms_info dual_hw_ms_info;
+	struct timeval time_stamp;
 };
 
 struct msm_vfe_fetch_engine_info {
@@ -409,7 +416,6 @@ struct msm_vfe_axi_shared_data {
 	uint32_t free_wm[MAX_NUM_WM];
 	uint32_t wm_image_size[MAX_NUM_WM];
 	enum msm_wm_ub_cfg_type wm_ub_cfg_policy;
-	uint8_t reg_update_requested;
 	uint8_t num_used_wm;
 	uint8_t num_active_stream;
 	uint8_t num_rdi_stream;
@@ -630,8 +636,9 @@ struct vfe_device {
 
 	atomic_t irq_cnt;
 	uint8_t taskletq_idx;
-	spinlock_t  tasklet_lock;
-	spinlock_t  shared_data_lock;
+	spinlock_t tasklet_lock;
+	spinlock_t shared_data_lock;
+	spinlock_t reg_update_lock;
 	struct list_head tasklet_q;
 	struct tasklet_struct vfe_tasklet;
 	struct msm_vfe_tasklet_queue_cmd
@@ -661,6 +668,8 @@ struct vfe_device {
 	uint32_t isp_raw2_debug;
 	uint8_t reset_pending;
 	enum msm_vfe_hvx_streaming_cmd hvx_cmd;
+	uint8_t reg_update_requested;
+	uint8_t reg_updated;
 };
 
 struct vfe_parent_device {
