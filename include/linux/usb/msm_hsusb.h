@@ -220,6 +220,7 @@ struct msm_otg_platform_data {
 	const char *mhl_dev_name;
 	bool ignore_wakeup_source;
 	unsigned int mpm_xo_wakeup_int;
+	bool allow_host_vdd_min_wo_rework;
 };
 
 /* phy related flags */
@@ -341,6 +342,7 @@ struct msm_otg {
 	struct delayed_work chg_work;
 	struct delayed_work pmic_id_status_work;
 	struct delayed_work check_ta_work;
+	struct delayed_work restart_host_work;
 	enum usb_chg_state chg_state;
 	enum usb_chg_type chg_type;
 	unsigned dcd_time;
@@ -375,6 +377,10 @@ struct msm_otg {
 	 * interrupt pin is available.
 	 */
 #define ALLOW_XO_SHUTDOWN		BIT(3)
+	/*
+	 * Allow PHY_RETENTION in HOST mode
+	 */
+#define ALLOW_HOST_MODE_PHY_RETENTION	BIT(4)
 	unsigned long lpm_flags;
 #define PHY_PWR_COLLAPSED		BIT(0)
 #define PHY_RETENTIONED			BIT(1)
@@ -410,6 +416,7 @@ struct msm_usb_host_platform_data {
 	unsigned int power_budget;
 	int pmic_gpio_dp_irq;
 	unsigned int dock_connect_irq;
+	bool allow_host_vdd_min_wo_rework;
 };
 
 /**

@@ -368,6 +368,10 @@ struct usb_bus {
 	struct mon_bus *mon_bus;	/* non-null when associated */
 	int monitored;			/* non-zero when monitored */
 #endif
+	unsigned allow_pm_suspend:1;	/* It is desirable for some buses to
+					 * allow their devices in suspend state
+					 * during system suspend.
+					 */
 	unsigned skip_resume:1;		/* All USB devices are brought into full
 					 * power state after system resume. It
 					 * is desirable for some buses to keep

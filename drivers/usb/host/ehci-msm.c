@@ -104,6 +104,7 @@ static struct hc_driver msm_hc_driver = {
 
 static int ehci_msm_probe(struct platform_device *pdev)
 {
+	const struct msm_usb_host_platform_data *pdata;
 	struct usb_hcd *hcd;
 	struct ehci_hcd *ehci;
 	struct usb_phy *phy;
@@ -118,6 +119,13 @@ static int ehci_msm_probe(struct platform_device *pdev)
 		return  -ENOMEM;
 	}
 
+	pdata = pdev->dev.platform_data;
+	if (pdata) {
+		if (pdata->allow_host_vdd_min_wo_rework) {
+			hcd_to_bus(hcd)->allow_pm_suspend = true;
+			hcd_to_bus(hcd)->skip_resume = true;
+		}
+	}
 	hcd->irq = platform_get_irq(pdev, 0);
 	if (hcd->irq < 0) {
 		dev_err(&pdev->dev, "Unable to get IRQ resource\n");
@@ -255,24 +263,21 @@ static int ehci_msm_pm_suspend(struct device *dev)
 static int ehci_msm_pm_resume(struct device *dev)
 {
 	struct usb_hcd *hcd = dev_get_drvdata(dev);
-	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
-	int ret;
+	const struct msm_usb_host_platform_data *pdata;
 
 	dev_dbg(dev, "ehci-msm PM resume\n");
 
-	if (!hcd->rh_registered)
-		return 0;
-
-	/* Notify OTG to bring hw out of LPM before restoring wakeup flags */
-	ret = usb_phy_set_suspend(ehci->transceiver, 0);
-	if (ret)
-		return ret;
-
-	ehci_prepare_ports_for_controller_resume(hcd_to_ehci(hcd));
+	pdata = dev->platform_data;
+	if (pdata) {
+		if (pdata->allow_host_vdd_min_wo_rework)
+			return 0;
 	/* Resume root-hub to handle USB event if any else initiate LPM again */
-	usb_hcd_resume_root_hub(hcd);
+	} else {
+		usb_hcd_resume_root_hub(hcd);
+		return 0;
+	}
 
-	return ret;
+	return 0;
 }
 #endif
 

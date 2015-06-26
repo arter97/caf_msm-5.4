@@ -1362,7 +1362,10 @@ int usb_suspend(struct device *dev, pm_message_t msg)
 {
 	struct usb_device	*udev = to_usb_device(dev);
 
-	if (udev->bus->skip_resume) {
+	if (udev->bus->allow_pm_suspend) {
+		if (udev->state == USB_STATE_SUSPENDED)
+			return 0;
+	} else if (udev->bus->skip_resume) {
 		if (udev->state == USB_STATE_SUSPENDED) {
 			return 0;
 		} else {

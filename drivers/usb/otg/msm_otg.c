@@ -997,8 +997,10 @@ static int msm_otg_suspend(struct msm_otg *motg)
 	 * BC1.2 spec mandates PD to enable VDP_SRC when charging from DCP.
 	 * PHY retention and collapse can not happen with VDP_SRC enabled.
 	 */
-	if (motg->caps & ALLOW_PHY_RETENTION && !host_bus_suspend &&
-		!device_bus_suspend && !dcp) {
+	if ((motg->caps & ALLOW_PHY_RETENTION && !host_bus_suspend &&
+		!device_bus_suspend && !dcp) ||
+		(host_bus_suspend &&
+		motg->caps & ALLOW_HOST_MODE_PHY_RETENTION)) {
 		phy_ctrl_val = readl_relaxed(USB_PHY_CTRL);
 		if (motg->pdata->otg_control == OTG_PHY_CONTROL)
 			/* Enable PHY HV interrupts to wake MPM/Link */
@@ -1491,6 +1493,27 @@ static void msm_hsusb_vbus_power(struct msm_otg *motg, bool on)
 		msm_otg_notify_host_mode(motg, on);
 		motg->vbus_is_on = false;
 	}
+}
+
+static void msm_otg_restart_host_work(struct work_struct *w)
+{
+	struct msm_otg *motg =
+		container_of(w, struct msm_otg, restart_host_work.work);
+
+	set_bit(ID, &motg->inputs);
+	dev_dbg(motg->phy.dev, "restart_host_work: ID set\n");
+
+	schedule_work(&motg->sm_work);
+	flush_work(&motg->sm_work);
+	msleep(1000);
+
+	clear_bit(ID, &motg->inputs);
+	dev_dbg(motg->phy.dev, "restart_host_work: ID clear\n");
+
+	set_bit(A_BUS_REQ, &motg->inputs);
+	schedule_work(&motg->sm_work);
+	flush_work(&motg->sm_work);
+	enable_irq(motg->irq);
 }
 
 static int msm_otg_set_host(struct usb_otg *otg, struct usb_bus *host)
@@ -3773,6 +3796,7 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&motg->chg_work, msm_chg_detect_work);
 	INIT_DELAYED_WORK(&motg->pmic_id_status_work, msm_pmic_id_status_w);
 	INIT_DELAYED_WORK(&motg->check_ta_work, msm_ta_detect_work);
+	INIT_DELAYED_WORK(&motg->restart_host_work, msm_otg_restart_host_work);
 	setup_timer(&motg->id_timer, msm_otg_id_timer_func,
 				(unsigned long) motg);
 	ret = request_irq(motg->irq, msm_otg_irq, IRQF_SHARED,
@@ -3863,11 +3887,14 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 		pm8921_charger_register_vbus_sn(&msm_otg_set_vbus_state);
 
 	if (motg->pdata->phy_type == SNPS_28NM_INTEGRATED_PHY) {
-		if (motg->pdata->otg_control == OTG_PMIC_CONTROL &&
+		if ((motg->pdata->otg_control == OTG_PMIC_CONTROL &&
 			(!(motg->pdata->mode == USB_OTG) ||
-			 motg->pdata->pmic_id_irq))
+			 motg->pdata->pmic_id_irq)) ||
+			motg->pdata->otg_control == OTG_USER_CONTROL)
 			motg->caps = ALLOW_PHY_POWER_COLLAPSE |
 				ALLOW_PHY_RETENTION;
+		if (motg->pdata->allow_host_vdd_min_wo_rework)
+			motg->caps |= ALLOW_HOST_MODE_PHY_RETENTION;
 
 		if (motg->pdata->otg_control == OTG_PHY_CONTROL)
 			motg->caps = ALLOW_PHY_RETENTION;
@@ -3966,6 +3993,7 @@ static int __devexit msm_otg_remove(struct platform_device *pdev)
 	cancel_delayed_work_sync(&motg->chg_work);
 	cancel_delayed_work_sync(&motg->pmic_id_status_work);
 	cancel_delayed_work_sync(&motg->check_ta_work);
+	cancel_delayed_work_sync(&motg->restart_host_work);
 	cancel_work_sync(&motg->sm_work);
 
 	pm_runtime_resume(&pdev->dev);
@@ -4073,6 +4101,8 @@ static int msm_otg_pm_suspend(struct device *dev)
 	dev_dbg(dev, "OTG PM suspend\n");
 
 	atomic_set(&motg->pm_suspended, 1);
+	flush_delayed_work(&motg->restart_host_work);
+	clear_bit(A_BUS_REQ, &motg->inputs);
 	ret = msm_otg_suspend(motg);
 	if (ret)
 		atomic_set(&motg->pm_suspended, 0);
@@ -4084,12 +4114,18 @@ static int msm_otg_pm_resume(struct device *dev)
 {
 	int ret = 0;
 	struct msm_otg *motg = dev_get_drvdata(dev);
+	struct msm_otg_platform_data *pdata = motg->pdata;
 
 	dev_dbg(dev, "OTG PM resume\n");
 
+	disable_irq(motg->irq);
 	atomic_set(&motg->pm_suspended, 0);
-	if (motg->async_int || motg->sm_work_pending ||
-			motg->pdata->ignore_wakeup_source) {
+	if (pdata->allow_host_vdd_min_wo_rework &&
+		motg->pdata->mode == USB_HOST) {
+		queue_delayed_work(system_nrt_wq,
+			&motg->restart_host_work, msecs_to_jiffies((1000)));
+	} else if (motg->async_int || motg->sm_work_pending ||
+		motg->pdata->ignore_wakeup_source) {
 		pm_runtime_get_noresume(dev);
 		ret = msm_otg_resume(motg);
 
@@ -4102,6 +4138,9 @@ static int msm_otg_pm_resume(struct device *dev)
 			motg->sm_work_pending = false;
 			queue_work(system_nrt_wq, &motg->sm_work);
 		}
+		enable_irq(motg->irq);
+	} else {
+		enable_irq(motg->irq);
 	}
 
 	return ret;
