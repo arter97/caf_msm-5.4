@@ -91,7 +91,13 @@ static void msm_csid_set_debug_reg(void __iomem *csidbase,
 }
 #else
 static void msm_csid_set_debug_reg(void __iomem *csidbase,
-	struct msm_camera_csid_params *csid_params) {}
+	struct msm_camera_csid_params *csid_params)
+{
+	uint32_t val = 0;
+	val = ((1 << csid_params->lane_cnt) - 1) << 20;
+	msm_camera_io_w(0x33010800 | val, csidbase + CSID_IRQ_MASK_ADDR);
+	msm_camera_io_w(0x7f010800 | val, csidbase + CSID_IRQ_CLEAR_CMD_ADDR);
+}
 #endif
 
 int msm_csid_config(struct csid_device *csid_dev,
@@ -145,6 +151,43 @@ static irqreturn_t msm_csid_irq(int irq_num, void *data)
 		 __func__, csid_dev->pdev->id, irq);
 	if (irq & (0x1 << CSID_RST_DONE_IRQ_BITSHIFT))
 			complete(&csid_dev->reset_complete);
+
+	if (irq & CSID_IRQ_UNBOUNDED_FRAME_MASK) {
+		pr_err("%s - received CSID_IRQ_UNBOUNDED_FRAME_MASK!\n",
+				__func__);
+		v4l2_subdev_notify(&csid_dev->subdev,
+				NOTIFY_CSID_UNBOUNDED_FRAME_ERROR,
+				(void *)NULL);
+	}
+	if (irq & CSID_IRQ_STREAM_UNDERFLOW_MASK) {
+		pr_err("%s - received CSID_IRQ_STREAM_UNDERFLOW_MASK!\n",
+				__func__);
+		v4l2_subdev_notify(&csid_dev->subdev,
+				NOTIFY_CSID_STREAM_UNDERFLOW_ERROR,
+				(void *)NULL);
+	}
+	if (irq & CSID_IRQ_ECC_MASK) {
+		pr_err("%s - received CSID_IRQ_ECC_MASK!\n",
+				__func__);
+		v4l2_subdev_notify(&csid_dev->subdev,
+				NOTIFY_CSID_ECC_ERROR,
+				(void *)NULL);
+	}
+	if (irq & CSID_IRQ_CRC_MASK) {
+		pr_err("%s - received CSID_IRQ_CRC_MASK!\n",
+				__func__);
+		v4l2_subdev_notify(&csid_dev->subdev,
+				NOTIFY_CSID_CRC_ERROR,
+				(void *)NULL);
+	}
+	if (irq & CSID_IRQ_PHY_DL_OVERFLOW_MASK) {
+		pr_err("%s - received CSID_IRQ_PHY_DL_OVERFLOW_MASK!\n",
+				__func__);
+		v4l2_subdev_notify(&csid_dev->subdev,
+				NOTIFY_CSID_PHY_DL_OVERFLOW_ERROR,
+				(void *)NULL);
+	}
+
 	msm_camera_io_w(irq, csid_dev->base + CSID_IRQ_CLEAR_CMD_ADDR);
 	return IRQ_HANDLED;
 }

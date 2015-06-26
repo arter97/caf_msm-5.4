@@ -126,6 +126,9 @@ static irqreturn_t msm_csiphy_irq(int irq_num, void *data)
 		msm_camera_io_w(0x0,
 			csiphy_dev->base +
 			MIPI_CSIPHY_INTERRUPT_CLEAR0_ADDR + 0x4*i);
+
+		v4l2_subdev_notify(&csiphy_dev->subdev,
+				NOTIFY_CSIPHY_ERROR, (void *)NULL);
 	}
 	return IRQ_HANDLED;
 }
