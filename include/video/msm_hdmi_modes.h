@@ -202,7 +202,7 @@ struct msm_hdmi_mode_timing_info {
 	 2160, 8, 10, 72, false, 297000, 24000, false, true}
 #define HDMI_VFRMT_1280x800p60_16_9_TIMING				\
 	{HDMI_VFRMT_1280x800p60_16_9, 1280, 48, 32, 80, false,		\
-	 800, 3, 6, 14, false, 69300, 60000, false, true}
+	 800, 3, 6, 14, false, 71107, 60000, false, true}
 
 #define MSM_HDMI_MODES_SET_TIMING(LUT, MODE) do {		\
 	struct msm_hdmi_mode_timing_info mode = MODE##_TIMING;	\
