@@ -339,7 +339,7 @@ static int adv7180_read(struct adv7180_state *state, unsigned int reg)
 	adv7180_select_page(state, reg >> 8);
 	ret = i2c_smbus_read_byte_data(state->client, reg & 0xff);
 
-	/* Retry the write if it failed */
+	/* Retry the read if it failed */
 	while (ret < 0 && num_tries < 10) {
 		ret = i2c_smbus_read_byte_data(state->client,
 			reg & 0xff);
@@ -1196,8 +1196,29 @@ static void adv7180_irq_delay_work(struct work_struct *work)
 	adv7180_write(state, ADV7180_REG_ICR3, isr3);
 	adv7180_write(state, ADV7180_REG_ICR4, isr4);
 
-	if (isr3 & ADV7180_IRQ3_AD_CHANGE && state->autodetect)
+	if ((isr1 & ADV7180_IRQ1_LOCK) ||
+		(isr1 & ADV7180_IRQ1_UNLOCK)) {
+		int lock_status;
+		__adv7180_status(state, &lock_status, NULL);
+		v4l2_subdev_notify(&state->sd,
+			lock_status ?
+			V4L2_EVENT_MSM_BA_SIGNAL_LOST_LOCK :
+			V4L2_EVENT_MSM_BA_SIGNAL_IN_LOCK,
+			&lock_status);
+
+		if (lock_status)
+			goto cleanup;
+	}
+	if ((isr3 & ADV7180_IRQ3_AD_CHANGE) && state->autodetect) {
 		__adv7180_status(state, NULL, &state->curr_norm);
+		v4l2_subdev_notify(&state->sd,
+			V4L2_EVENT_MSM_BA_SOURCE_CHANGE, &state->curr_norm);
+	}
+	if (isr1 & ADV7180_IRQ1_MACROVISION)
+		v4l2_subdev_notify(&state->sd,
+			V4L2_EVENT_MSM_BA_CP, NULL);
+
+cleanup:
 	mutex_unlock(&state->mutex);
 
 	return;
