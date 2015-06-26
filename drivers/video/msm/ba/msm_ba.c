@@ -597,68 +597,6 @@ int msm_ba_unsubscribe_event(void *inst,
 }
 EXPORT_SYMBOL(msm_ba_unsubscribe_event);
 
-void msm_ba_subdev_event_hndlr(struct v4l2_subdev *sd,
-				unsigned int notification, void *arg)
-{
-	dprintk(BA_DBG, "Enter %s, event: 0x%x", __func__, notification);
-
-	if (!sd) {
-		dprintk(BA_ERR, "%s null v4l2 subdev", __func__);
-		return;
-	}
-
-	switch (notification) {
-	case V4L2_EVENT_MSM_BA_SIGNAL_IN_LOCK:
-		dprintk(BA_DBG, "%s signal in lock",
-				__func__);
-		msm_ba_signal_sessions_event(notification,
-			arg);
-		break;
-	case V4L2_EVENT_MSM_BA_SIGNAL_LOST_LOCK:
-		dprintk(BA_DBG, "%s signal lost lock",
-				__func__);
-		msm_ba_signal_sessions_event(notification,
-			arg);
-		break;
-	case V4L2_EVENT_MSM_BA_SOURCE_CHANGE:
-		dprintk(BA_DBG, "%s autodetect %d",
-				__func__, arg ? *(int *)arg : -1);
-		msm_ba_signal_sessions_event(notification,
-			arg);
-		break;
-	case V4L2_EVENT_MSM_BA_HDMI_HPD:
-		dprintk(BA_DBG, "%s HDMI hotplug detected!",
-				__func__);
-		msm_ba_signal_sessions_event(notification,
-			arg);
-		break;
-	case V4L2_EVENT_MSM_BA_HDMI_CEC_MESSAGE:
-		dprintk(BA_DBG, "%s HDMI CEC detected!",
-				__func__);
-		msm_ba_signal_sessions_event(notification,
-			arg);
-		break;
-	case V4L2_EVENT_MSM_BA_CP:
-		dprintk(BA_INFO, "%s content protection detected!",
-				__func__);
-		msm_ba_signal_sessions_event(notification,
-			arg);
-		break;
-	case V4L2_EVENT_MSM_BA_ERROR:
-		dprintk(BA_DBG, "%s subdev error %d!",
-				__func__, arg ? *(int *)arg : -1);
-		msm_ba_signal_sessions_event(notification,
-			arg);
-		break;
-	default:
-		dprintk(BA_ERR, "Unknown event: 0x%x received from sd: %s",
-				notification, sd->name);
-		break;
-	}
-
-	dprintk(BA_DBG, "Exit %s", __func__);
-}
-
 void *msm_ba_open(const struct msm_ba_ext_ops *ext_ops)
 {
 	struct msm_ba_inst *inst = NULL;
