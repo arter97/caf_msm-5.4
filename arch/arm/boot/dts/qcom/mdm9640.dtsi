@@ -34,11 +34,11 @@
 	};
 
 	memory {
-		peripheral1_mem: peripheral1_region@0x81c00000 {
+		peripheral1_mem: peripheral1_region@0x81800000 {
 			linux,reserve-contiguous-region;
 			linux,reserve-region;
 			linux,remove-completely;
-			reg = <0x81C00000 0x6000000>;
+			reg = <0x81800000 0x6400000>;
 			label = "peripheral1_mem";
 		};
 
