@@ -97,8 +97,10 @@ void msm_ba_signal_sessions_event(unsigned int msm_ba_event,
 	mutex_lock(&dev_ctxt->dev_cs);
 	list_for_each_safe(ptr, next, &dev_ctxt->instances) {
 		inst = list_entry(ptr, struct msm_ba_inst, list);
-		msm_ba_queue_v4l2_event(inst,
-			msm_ba_event);
+		if (inst->ext_ops && inst->ext_ops->msm_ba_cb)
+			inst->ext_ops->msm_ba_cb(inst, msm_ba_event, arg);
+		else
+			msm_ba_queue_v4l2_event(inst, msm_ba_event);
 	}
 	mutex_unlock(&dev_ctxt->dev_cs);
 }

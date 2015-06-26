@@ -914,6 +914,17 @@ static int mdp_exit(void)
 }
 #endif
 
+static void adp_camera_ba_callback(void *instance,
+					unsigned int event, void *arg)
+{
+	pr_debug("%s - %x", __func__, event);
+	return;
+}
+
+static const struct msm_ba_ext_ops adp_camera_ba_ext_ops = {
+	.msm_ba_cb = adp_camera_ba_callback,
+};
+
 static int adp_rear_camera_enable(void)
 {
 	struct preview_mem *ping_buffer, *pong_buffer, *free_buffer;
@@ -965,7 +976,8 @@ static int adp_rear_camera_enable(void)
 
 	/* Detect NTSC or PAL, get the preview width and height */
 
-	adp_cam_ctxt->ba_inst_hdlr = msm_ba_open();
+	adp_cam_ctxt->ba_inst_hdlr =
+			msm_ba_open(&adp_camera_ba_ext_ops);
 	pr_debug("%s: input index: %d\n", __func__, index);
 	msm_ba_s_input(adp_cam_ctxt->ba_inst_hdlr, index);
 	msm_ba_s_priority(adp_cam_ctxt->ba_inst_hdlr, prio);

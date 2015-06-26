@@ -180,6 +180,8 @@ struct msm_ba_inst {
 
 	struct msm_ba_debug debug;
 	struct dentry *debugfs_root;
+
+	const struct msm_ba_ext_ops *ext_ops;
 };
 
 struct msm_ba_ctrl {

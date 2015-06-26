@@ -659,7 +659,7 @@ void msm_ba_subdev_event_hndlr(struct v4l2_subdev *sd,
 	dprintk(BA_DBG, "Exit %s", __func__);
 }
 
-void *msm_ba_open(void)
+void *msm_ba_open(const struct msm_ba_ext_ops *ext_ops)
 {
 	struct msm_ba_inst *inst = NULL;
 	struct msm_ba_dev *dev_ctxt = NULL;
@@ -701,6 +701,8 @@ void *msm_ba_open(void)
 
 	inst->debugfs_root =
 		msm_ba_debugfs_init_inst(inst, dev_ctxt->debugfs_root);
+
+	inst->ext_ops = ext_ops;
 
 	setup_event_queue(inst, dev_ctxt->vdev);
 

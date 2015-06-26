@@ -38,7 +38,12 @@ enum msm_ba_ip {
 	BA_IP_MAX = 0xffffffff
 };
 
-void *msm_ba_open(void);
+struct msm_ba_ext_ops {
+	void (*msm_ba_cb)(void *instance,
+		unsigned int event_id, void *arg);
+};
+
+void *msm_ba_open(const struct msm_ba_ext_ops *ext_ops);
 int msm_ba_close(void *instance);
 int msm_ba_querycap(void *instance, struct v4l2_capability *cap);
 int msm_ba_g_priority(void *instance, enum v4l2_priority *prio);
