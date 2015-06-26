@@ -174,6 +174,7 @@ static DEFINE_SPINLOCK(pci_link_down_lock);
 #define SEG_NON_SECURE_DATA	(0x05)
 
 #define BMI_TEST_SETUP		(0x09)
+#define WLAN_INTR_ROUTING	(0x0a)
 
 #define SMEM_INTR_STATUS_BUFF_SIZE	12
 
@@ -304,6 +305,7 @@ static struct cnss_data {
 	int q6intr_gpio;
 	int linkup_gpio;
 	bool linkup_state;
+	int routing_enable_gpio;
 	bool q6_intr_state;
 	void *target_smem;
 	/* QMI related */
@@ -2051,6 +2053,14 @@ static int cnss_wlan_runtime_idle(struct device *dev)
 	return -EBUSY;
 }
 
+static void cnss_enable_wlan_intr_routing(void)
+{
+	if (penv->routing_enable_gpio > 0) {
+		pr_err("%s: enable interrupt routing to q6\n", __func__);
+		gpio_set_value(penv->routing_enable_gpio, 1);
+	}
+}
+
 static DECLARE_RWSEM(cnss_pm_sem);
 
 static int cnss_pm_notify(struct notifier_block *b,
@@ -2137,6 +2147,8 @@ static ssize_t fw_image_setup_store(struct device *dev,
 		print_allocated_image_table();
 	} else if (val == BMI_TEST_SETUP) {
 		penv->bmi_test = val;
+	} else if (val == WLAN_INTR_ROUTING) {
+		cnss_enable_wlan_intr_routing();
 	}
 
 	return count;
@@ -3269,6 +3281,12 @@ skip_ramdump:
 
 	if (penv->linkup_gpio < 0)
 		pr_err("cnss: q6 linkup GPIO invalid %d\n", penv->linkup_gpio);
+
+	penv->routing_enable_gpio = of_get_named_gpio((&pdev->dev)->of_node,
+	      "qcom,gpio-routing-en", 0);
+	if (penv->routing_enable_gpio < 0)
+		pr_err("cnss: q6 routing enable GPIO invalid %d\n",
+		       penv->routing_enable_gpio);
 
 	ret = pci_register_driver(&cnss_wlan_pci_driver);
 	if (ret)
