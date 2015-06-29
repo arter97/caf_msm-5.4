@@ -1072,6 +1072,7 @@ static void __init populate_soc_sysfs_files(struct device *msm_soc_device)
 	device_create_file(msm_soc_device, &select_image);
 
 	switch (socinfo_format) {
+	case SOCINFO_VERSION(0, 11):
 	case SOCINFO_VERSION(0, 10):
 		 device_create_file(msm_soc_device,
 					&msm_soc_attr_serial_number);
