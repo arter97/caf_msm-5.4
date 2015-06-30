@@ -564,6 +564,13 @@ int msm_ispif_subdev_video_s_stream_rdi_only(struct ispif_device *ispif,
 	return rc;
 }
 
+static void msm_ispif_overflow_notify(struct ispif_device *ispif,
+	enum msm_ispif_intftype interface)
+{
+	v4l2_subdev_notify(&ispif->subdev, NOTIFY_ISPIF_OVERFLOW_ERROR,
+					(void *)&interface);
+}
+
 static void send_rdi_sof(struct ispif_device *ispif,
 	enum msm_ispif_intftype interface, int count)
 {
@@ -683,14 +690,22 @@ static inline void msm_ispif_read_irq_status(struct ispif_irq_status *out,
 		out->ispifIrqStatus2 & ISPIF_IRQ_STATUS_2_MASK) {
 		if (out->ispifIrqStatus0 & (0x1 << RESET_DONE_IRQ))
 			complete(&ispif->reset_complete);
-		if (out->ispifIrqStatus0 & (0x1 << PIX_INTF_0_OVERFLOW_IRQ))
+		if (out->ispifIrqStatus0 & (0x1 << PIX_INTF_0_OVERFLOW_IRQ)) {
 			pr_err("%s: pix intf 0 overflow.\n", __func__);
-		if (out->ispifIrqStatus0 & (0x1 << RAW_INTF_0_OVERFLOW_IRQ))
+			msm_ispif_overflow_notify(ispif, PIX0);
+		}
+		if (out->ispifIrqStatus0 & (0x1 << RAW_INTF_0_OVERFLOW_IRQ)) {
 			pr_err("%s: rdi intf 0 overflow.\n", __func__);
-		if (out->ispifIrqStatus1 & (0x1 << RAW_INTF_1_OVERFLOW_IRQ))
+			msm_ispif_overflow_notify(ispif, RDI0);
+		}
+		if (out->ispifIrqStatus1 & (0x1 << RAW_INTF_1_OVERFLOW_IRQ)) {
 			pr_err("%s: rdi intf 1 overflow.\n", __func__);
-		if (out->ispifIrqStatus2 & (0x1 << RAW_INTF_2_OVERFLOW_IRQ))
+			msm_ispif_overflow_notify(ispif, RDI1);
+		}
+		if (out->ispifIrqStatus2 & (0x1 << RAW_INTF_2_OVERFLOW_IRQ)) {
 			pr_err("%s: rdi intf 2 overflow.\n", __func__);
+			msm_ispif_overflow_notify(ispif, RDI2);
+		}
 		if ((out->ispifIrqStatus0 & ISPIF_IRQ_STATUS_SOF_MASK) ||
 			(out->ispifIrqStatus1 &	ISPIF_IRQ_STATUS_SOF_MASK) ||
 			(out->ispifIrqStatus2 & ISPIF_IRQ_STATUS_RDI2_SOF_MASK))

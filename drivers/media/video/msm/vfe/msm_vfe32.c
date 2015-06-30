@@ -4427,6 +4427,9 @@ static void vfe32_process_error_irq(
 		reg_value = msm_camera_io_r(
 			axi_ctrl->share_ctrl->vfebase + VFE_VIOLATION_STATUS);
 		pr_err("%s: violationStatus  = 0x%x\n", __func__, reg_value);
+
+		v4l2_subdev_notify(&axi_ctrl->subdev,
+			NOTIFY_VFE_VIOLATION_ERROR, (void *)NULL);
 	}
 
 	if (errStatus & VFE32_IMASK_CAMIF_ERROR) {
@@ -4507,6 +4510,14 @@ static void vfe32_process_common_error_irq(
 
 	if (errStatus & VFE32_IMASK_AXI_ERROR)
 		pr_err("vfe32_irq: axi error\n");
+
+	if (errStatus & VFE32_IMASK_VFE_OVERFLOW_ERROR_ONLY_1)
+		v4l2_subdev_notify(&axi_ctrl->subdev,
+				NOTIFY_VFE_WM_OVERFLOW_ERROR, (void *)NULL);
+	else if (errStatus & VFE32_IMASK_AXI_ERROR)
+		v4l2_subdev_notify(&axi_ctrl->subdev,
+					NOTIFY_VFE_AXI_ERROR, (void *)NULL);
+
 }
 
 
