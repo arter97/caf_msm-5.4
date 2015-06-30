@@ -52,7 +52,7 @@ static int msm_v4l2_open(struct file *filp)
 	struct video_device *vdev = video_devdata(filp);
 	struct msm_ba_inst *ba_inst;
 
-	ba_inst = msm_ba_open();
+	ba_inst = msm_ba_open(NULL);
 	if (!ba_inst) {
 		dprintk(BA_ERR,
 					"Failed to create video instance\n");

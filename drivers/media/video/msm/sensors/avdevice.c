@@ -98,7 +98,7 @@ static int32_t avdevice_ba_platform_probe(struct platform_device *pdev)
 	p_sensor_ctrl = &avdevice_a_s_ctrl[pdev->id];
 	pr_debug("csi device %d %p...\n", pdev->id, p_sensor_ctrl);
 
-	ba_instance_handler_a[pdev->id] = msm_ba_open();
+	ba_instance_handler_a[pdev->id] = msm_ba_open(NULL);
 	if (!ba_instance_handler_a[pdev->id]) {
 		pr_err("%s - msm_ba_open(%d) failed",
 				__func__, pdev->id);

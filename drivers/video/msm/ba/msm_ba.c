@@ -154,8 +154,8 @@ int msm_ba_enum_input(void *instance, struct v4l2_input *input)
 		rc = v4l2_subdev_call(
 			ba_input->sd, video, g_input_status, &status);
 		if (rc) {
-			dprintk(BA_ERR, "g_input_status failed for sd: %s",
-				ba_input->sd->name);
+			dprintk(BA_ERR, "g_input_status failed (%d) for sd: %s",
+				rc, ba_input->sd->name);
 		} else {
 			input->status = status;
 			ba_input->signal_status = status;
@@ -597,64 +597,7 @@ int msm_ba_unsubscribe_event(void *inst,
 }
 EXPORT_SYMBOL(msm_ba_unsubscribe_event);
 
-void msm_ba_subdev_event_hndlr(struct v4l2_subdev *sd,
-				unsigned int notification, void *arg)
-{
-	int rc = 0;
-	int signal_status = 0;
-	unsigned int msm_ba_event = notification;
-
-	dprintk(BA_INFO, "Enter %s, event: 0x%x", __func__, notification);
-
-	if (!sd || !arg)
-		return;
-
-	switch (notification) {
-	case V4L2_EVENT_MSM_BA_SIGNAL_IN_LOCK:
-		msm_ba_signal_sessions_event(msm_ba_event,
-			arg);
-		break;
-	case V4L2_EVENT_MSM_BA_SIGNAL_LOST_LOCK:
-		msm_ba_signal_sessions_event(msm_ba_event,
-			arg);
-		break;
-	case V4L2_EVENT_MSM_BA_SOURCE_CHANGE:
-		/* get current signal status */
-		rc = v4l2_subdev_call(
-			sd, video, g_input_status, &signal_status);
-		dprintk(BA_DBG, "g_input_status: signal_status %d",
-			signal_status);
-		if (signal_status)
-			msm_ba_event = V4L2_EVENT_MSM_BA_SIGNAL_LOST_LOCK;
-		msm_ba_signal_sessions_event(msm_ba_event,
-			arg);
-		break;
-	case V4L2_EVENT_MSM_BA_HDMI_HPD:
-		msm_ba_signal_sessions_event(msm_ba_event,
-			arg);
-		break;
-	case V4L2_EVENT_MSM_BA_HDMI_CEC_MESSAGE:
-		msm_ba_signal_sessions_event(msm_ba_event,
-			arg);
-		break;
-	case V4L2_EVENT_MSM_BA_CP:
-		msm_ba_signal_sessions_event(msm_ba_event,
-			arg);
-		break;
-	case V4L2_EVENT_MSM_BA_ERROR:
-		msm_ba_signal_sessions_event(msm_ba_event,
-			arg);
-		break;
-	default:
-		dprintk(BA_ERR, "Unknown event: 0x%x received from sd: %s",
-			msm_ba_event, sd->name);
-		break;
-	}
-
-	dprintk(BA_INFO, "Exit %s", __func__);
-}
-
-void *msm_ba_open(void)
+void *msm_ba_open(const struct msm_ba_ext_ops *ext_ops)
 {
 	struct msm_ba_inst *inst = NULL;
 	struct msm_ba_dev *dev_ctxt = NULL;
@@ -696,6 +639,8 @@ void *msm_ba_open(void)
 
 	inst->debugfs_root =
 		msm_ba_debugfs_init_inst(inst, dev_ctxt->debugfs_root);
+
+	inst->ext_ops = ext_ops;
 
 	setup_event_queue(inst, dev_ctxt->vdev);
 

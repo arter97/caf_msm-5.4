@@ -123,6 +123,12 @@ struct msm_ba_input_config {
 	int signal_status;
 };
 
+struct msm_ba_event {
+	struct list_head list;
+	int event_id;
+	int arg;
+};
+
 struct msm_ba_input {
 	struct list_head list;
 	enum msm_ba_ip_type inputType;
@@ -136,6 +142,9 @@ struct msm_ba_input {
 	int signal_status;
 	int in_use;
 	enum v4l2_priority prio;
+
+	struct delayed_work events_work;
+	struct list_head events;
 };
 
 struct msm_ba_dev {
@@ -180,6 +189,8 @@ struct msm_ba_inst {
 
 	struct msm_ba_debug debug;
 	struct dentry *debugfs_root;
+
+	const struct msm_ba_ext_ops *ext_ops;
 };
 
 struct msm_ba_ctrl {
