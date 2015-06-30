@@ -919,12 +919,14 @@ static int mdp3_hw_init(void)
 	mdp3_res->intf[MDP3_DMA_OUTPUT_SEL_AHB].available = 0;
 	mdp3_res->intf[MDP3_DMA_OUTPUT_SEL_LCDC].available = 0;
 	mdp3_res->smart_blit_en = SMART_BLIT_RGB_EN | SMART_BLIT_YUV_EN;
+	mdp3_res->solid_fill_vote_en = false;
 	return 0;
 }
 
 int mdp3_dynamic_clock_gating_ctrl(int enable)
 {
 	int rc = 0;
+	int cgc_cfg = 0;
 	/*Disable dynamic auto clock gating*/
 	rc = mdp3_clk_update(MDP3_CLK_AHB, 1);
 	rc |= mdp3_clk_update(MDP3_CLK_AXI, 1);
@@ -933,12 +935,16 @@ int mdp3_dynamic_clock_gating_ctrl(int enable)
 		pr_err("fail to turn on MDP core clks\n");
 		return rc;
 	}
-
+	cgc_cfg = MDP3_REG_READ(MDP3_REG_CGC_EN);
 	if (enable) {
-		MDP3_REG_WRITE(MDP3_REG_CGC_EN, 0x7FFFF);
+		cgc_cfg |= (BIT(10));
+		cgc_cfg |= (BIT(18));
+		MDP3_REG_WRITE(MDP3_REG_CGC_EN, cgc_cfg);
 		VBIF_REG_WRITE(MDP3_VBIF_REG_FORCE_EN, 0x0);
 	} else {
-		MDP3_REG_WRITE(MDP3_REG_CGC_EN, 0x3FFFF);
+		cgc_cfg &= ~(BIT(10));
+		cgc_cfg &= ~(BIT(18));
+		MDP3_REG_WRITE(MDP3_REG_CGC_EN, cgc_cfg);
 		VBIF_REG_WRITE(MDP3_VBIF_REG_FORCE_EN, 0x3);
 	}
 
@@ -1988,6 +1994,14 @@ static int mdp3_alloc(struct msm_fb_data_type *mfd)
 		pr_err("fail to map to IOMMU %d\n", ret);
 		return ret;
 	}
+	ret = iommu_map(mdp3_res->domains[MDP3_IOMMU_DOMAIN_UNSECURE].domain,
+			phys, phys, size, IOMMU_READ);
+
+	if (ret) {
+		pr_err("fail to map phy addr to IOMMU %d\n", ret);
+		return ret;
+	}
+
 	pr_info("allocating %u bytes at %p (%lx phys) for fb %d\n",
 		size, virt, phys, mfd->index);
 
@@ -2000,6 +2014,7 @@ void mdp3_free(struct msm_fb_data_type *mfd)
 {
 	size_t size = 0;
 	int dom;
+	unsigned long phys;
 
 	if (!mfd->iova || !mfd->fbi->screen_base) {
 		pr_info("no fbmem allocated\n");
@@ -2007,7 +2022,10 @@ void mdp3_free(struct msm_fb_data_type *mfd)
 	}
 
 	size = mfd->fbi->fix.smem_len;
+	phys = mfd->fbi->fix.smem_start;
 	dom = mdp3_res->domains[MDP3_IOMMU_DOMAIN_UNSECURE].domain_idx;
+	iommu_unmap(mdp3_res->domains[MDP3_IOMMU_DOMAIN_UNSECURE].domain,
+			phys, size);
 	msm_iommu_unmap_contig_buffer(mfd->iova, dom, 0, size);
 
 	mfd->fbi->screen_base = NULL;
@@ -2256,6 +2274,7 @@ static void mdp3_dma_underrun_intr_handler(int type, void *arg)
 	mdp3_res->underrun_cnt++;
 	pr_err("display underrun detected count=%d\n",
 			mdp3_res->underrun_cnt);
+	ATRACE_INT("mdp3_dma_underrun_intr_handler", mdp3_res->underrun_cnt);
 }
 
 static ssize_t mdp3_show_capabilities(struct device *dev,
