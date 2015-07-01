@@ -26,6 +26,7 @@
 #include <linux/pm_qos.h>
 #include <linux/hrtimer.h>
 #include <linux/power_supply.h>
+#include <mach/usb_bam.h>
 /*
  * The following are bit fields describing the usb_request.udc_priv word.
  * These bit fields are set by function drivers that wish to queue
@@ -453,6 +454,7 @@ struct msm_otg {
 	unsigned int online;
 	unsigned int host_mode;
 	unsigned int current_max;
+	unsigned int vbus_state;
 };
 
 struct ci13xxx_platform_data {
@@ -553,6 +555,7 @@ bool msm_bam_hsic_lpm_ok(void);
 void msm_bam_hsic_notify_on_resume(void);
 void msm_bam_hsic_reset(void);
 bool msm_bam_hsic_host_pipe_empty(void);
+bool msm_usb_bam_enable(enum usb_bam bam, bool bam_enable);
 #else
 static inline bool msm_bam_lpm_ok(void) { return true; }
 static inline void msm_bam_notify_lpm_resume(void) {}
@@ -562,6 +565,10 @@ static inline bool msm_bam_hsic_lpm_ok(void) { return true; }
 static inline void msm_bam_hsic_notify_on_resume(void) {}
 static inline void msm_bam_hsic_reset(void) {}
 static inline bool msm_bam_hsic_host_pipe_empty(void) { return true; }
+static inline bool msm_usb_bam_enable(enum usb_bam ctrl, bool bam_enable)
+{
+	return true;
+}
 #endif
 #ifdef CONFIG_USB_CI13XXX_MSM
 void msm_hw_bam_disable(bool bam_disable);

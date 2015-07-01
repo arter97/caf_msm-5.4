@@ -243,6 +243,8 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 	struct teth_bridge_connect_params connect_params;
 	struct bam_data_ch_info *d = &port->data_ch;
 	ipa_notify_cb usb_notify_cb;
+	struct data_port *d_port = port->port_usb;
+	struct usb_gadget	*gadget;
 	void			*priv;
 	u32			sps_params;
 	int			ret;
@@ -267,6 +269,7 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 		pr_err("port_usb->out (bulk out ep) is NULL");
 		return;
 	}
+	gadget = d_port->cdev->gadget;
 
 	d->rx_req = usb_ep_alloc_request(port->port_usb->out, GFP_ATOMIC);
 	if (!d->rx_req) {
@@ -318,6 +321,7 @@ static void bam2bam_data_connect_work(struct work_struct *w)
 				__func__, ret);
 			return;
 		}
+		gadget->bam2bam_func_enabled = true;
 
 		d->ipa_params.dir = PEER_PERIPHERAL_TO_USB;
 		if (d->func_type == USB_FUNC_ECM) {

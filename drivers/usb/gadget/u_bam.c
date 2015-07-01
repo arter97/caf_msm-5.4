@@ -815,6 +815,8 @@ static void gbam2bam_connect_work(struct work_struct *w)
 	struct gbam_port *port = container_of(w, struct gbam_port, connect_w);
 	struct teth_bridge_connect_params connect_params;
 	struct bam_ch_info *d = &port->data_ch;
+	struct f_rmnet		*dev;
+	struct usb_gadget	*gadget;
 	u32 sps_params;
 	ipa_notify_cb usb_notify_cb;
 	void *priv;
@@ -839,6 +841,8 @@ static void gbam2bam_connect_work(struct work_struct *w)
 		return;
 	}
 
+	dev = port_to_rmnet(port->gr);
+	gadget = dev->cdev->gadget;
 	d->rx_req->context = port;
 	d->rx_req->complete = gbam_endless_rx_complete;
 	d->rx_req->length = 0;
@@ -865,6 +869,8 @@ static void gbam2bam_connect_work(struct work_struct *w)
 				__func__, ret);
 			return;
 		}
+		gadget->bam2bam_func_enabled = true;
+
 		ret = usb_bam_connect(d->dst_connection_idx, &d->dst_pipe_idx);
 		if (ret) {
 			pr_err("%s: usb_bam_connect (dst) failed: err:%d\n",
@@ -888,6 +894,8 @@ static void gbam2bam_connect_work(struct work_struct *w)
 				__func__, ret);
 			return;
 		}
+		gadget->bam2bam_func_enabled = true;
+
 		d->ipa_params.dir = PEER_PERIPHERAL_TO_USB;
 		ret = usb_bam_connect_ipa(&d->ipa_params);
 		if (ret) {
