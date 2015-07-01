@@ -1586,6 +1586,9 @@ static void mbim_unbind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct f_mbim	*mbim = func_to_mbim(f);
 
+	if (c->cdev->gadget->func_wq)
+		usb_gadget_flush_wq(c->cdev->gadget);
+
 	bam_data_destroy(mbim->port_num);
 	if (gadget_is_dualspeed(c->cdev->gadget))
 		usb_free_descriptors(f->hs_descriptors);

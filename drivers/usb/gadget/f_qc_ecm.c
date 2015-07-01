@@ -920,6 +920,9 @@ ecm_qc_unbind(struct usb_configuration *c, struct usb_function *f)
 
 	DBG(c->cdev, "ecm unbind\n");
 
+	if (c->cdev->gadget->func_wq)
+		usb_gadget_flush_wq(c->cdev->gadget);
+
 	bam_data_destroy(0);
 	if (gadget_is_dualspeed(c->cdev->gadget))
 		usb_free_descriptors(f->hs_descriptors);

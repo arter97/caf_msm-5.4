@@ -977,6 +977,10 @@ rndis_qc_unbind(struct usb_configuration *c, struct usb_function *f)
 	struct f_rndis_qc		*rndis = func_to_rndis_qc(f);
 
 	pr_debug("rndis_qc_unbind: free");
+
+	if (c->cdev->gadget->func_wq)
+		usb_gadget_flush_wq(c->cdev->gadget);
+
 	bam_data_destroy(0);
 	rndis_deregister(rndis->config);
 	rndis_exit();

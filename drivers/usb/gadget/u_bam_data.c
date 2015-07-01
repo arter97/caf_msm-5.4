@@ -28,7 +28,6 @@
 
 #define BAM2BAM_DATA_N_PORTS	1
 
-static struct workqueue_struct *bam_data_wq;
 static int n_bam2bam_data_ports;
 
 #define SPS_PARAMS_SPS_MODE		BIT(5)
@@ -552,7 +551,7 @@ void bam_data_disconnect(struct data_port *gr, u8 port_num)
 		 */
 		if (!gadget_is_dwc3(gadget))
 			msm_usb_irq_disable(true);
-		queue_work(bam_data_wq, &port->disconnect_w);
+		queue_work(gadget->func_wq, &port->disconnect_w);
 	} else {
 		if (usb_bam_client_ready(false))
 			pr_err("%s: usb_bam_client_ready failed\n",
@@ -618,7 +617,7 @@ int bam_data_connect(struct data_port *gr, u8 port_num,
 	if (func == USB_FUNC_ECM)
 		d->ecm_state = ECM_MDM_NOT_READY;
 
-	queue_work(bam_data_wq, &port->connect_w);
+	queue_work(gr->cdev->gadget->func_wq, &port->connect_w);
 	ret = 0;
 
 exit:
@@ -627,17 +626,8 @@ exit:
 
 int bam_data_destroy(unsigned int no_bam2bam_port)
 {
-	struct bam_data_ch_info	*d;
-	struct bam_data_port	*port;
-
-	port = bam2bam_data_ports[no_bam2bam_port];
-	d = &port->data_ch;
-
 	pr_debug("bam_data_destroy: Freeing ports\n");
 	bam2bam_data_port_free(no_bam2bam_port);
-	if (bam_data_wq)
-		destroy_workqueue(bam_data_wq);
-	bam_data_wq = NULL;
 
 	return 0;
 }
@@ -652,18 +642,6 @@ int bam_data_setup(unsigned int no_bam2bam_port)
 	if (!no_bam2bam_port || no_bam2bam_port > BAM2BAM_DATA_N_PORTS) {
 		pr_err("Invalid num of ports count:%d\n", no_bam2bam_port);
 		return -EINVAL;
-	}
-
-	if (bam_data_wq) {
-		pr_debug("bam_data is already setup");
-		return 0;
-	}
-
-	bam_data_wq = alloc_workqueue("k_bam_data",
-				      WQ_UNBOUND | WQ_MEM_RECLAIM, 1);
-	if (!bam_data_wq) {
-		pr_err("Failed to create workqueue\n");
-		return -ENOMEM;
 	}
 
 	for (i = 0; i < no_bam2bam_port; i++) {
@@ -681,7 +659,6 @@ int bam_data_setup(unsigned int no_bam2bam_port)
 free_bam_ports:
 	for (i = 0; i < n_bam2bam_data_ports; i++)
 		bam2bam_data_port_free(i);
-	destroy_workqueue(bam_data_wq);
 
 	return ret;
 }
@@ -735,13 +712,22 @@ void bam_data_suspend(u8 port_num)
 {
 	struct bam_data_port	*port;
 	struct bam_data_ch_info *d;
+	struct usb_gadget	*gadget;
+	struct data_port	*d_port;
 
 	port = bam2bam_data_ports[port_num];
 	d = &port->data_ch;
+	d_port = port->port_usb;
+	if (!d_port || !d_port->cdev || !d_port->cdev->gadget) {
+		pr_err("%s:FAILED: d_port->cdev->gadget == NULL\n", __func__);
+		return;
+	}
+
+	gadget = d_port->cdev->gadget;
 
 	pr_debug("%s: suspended port %d\n", __func__, port_num);
 
-	queue_work(bam_data_wq, &port->suspend_w);
+	queue_work(gadget->func_wq, &port->suspend_w);
 }
 
 void bam_data_resume(u8 port_num)
@@ -749,13 +735,22 @@ void bam_data_resume(u8 port_num)
 
 	struct bam_data_port	*port;
 	struct bam_data_ch_info *d;
+	struct usb_gadget	*gadget;
+	struct data_port	*d_port;
 
 	port = bam2bam_data_ports[port_num];
 	d = &port->data_ch;
+	d_port = port->port_usb;
+	if (!d_port || !d_port->cdev || !d_port->cdev->gadget) {
+		pr_err("%s:FAILED: d_port->cdev->gadget == NULL\n", __func__);
+		return;
+	}
+
+	gadget = d_port->cdev->gadget;
 
 	pr_debug("%s: resumed port %d\n", __func__, port_num);
 
-	queue_work(bam_data_wq, &port->resume_w);
+	queue_work(gadget->func_wq, &port->resume_w);
 }
 
 static void bam2bam_data_suspend_work(struct work_struct *w)
