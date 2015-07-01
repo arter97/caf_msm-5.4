@@ -37,45 +37,51 @@
 #include <linux/can/dev.h>
 #include <linux/can/error.h>
 
-#define DEBUG_SAM4E		0
+#define DEBUG_SAM4E	0
 #if DEBUG_SAM4E == 1
 #define LOGNI(...) dbg(__VA_ARGS__)
 #else
 #define LOGNI(...)
 #endif
 
-#define BULK_IN_EP		3
-#define BULK_OUT_EP		4
+#define BULK_IN_EP	3
+#define BULK_OUT_EP	4
 
-#define MAX_RX_URBS		10
-#define MAX_TX_URBS		10
-#define RX_BUFFER_SIZE		256
-#define RX_ASSEMBLY_BUFFER_SIZE	64
+#define MAX_RX_URBS			10
+#define MAX_TX_URBS			10
+#define RX_BUFFER_SIZE			256
+#define RX_ASSEMBLY_BUFFER_SIZE		64
 
-#define CMD_SYS_SET_BOARD_PWR	0x2
-#define CMD_SYS_GET_BOARD_PWR	0x3
+#define CMD_SYS_SET_BOARD_PWR		0x2
+#define CMD_SYS_GET_BOARD_PWR		0x3
 #define CMD_SYS_READ_U32		0x4
 #define CMD_SYS_WRITE_U32		0x5
-#define CMD_SYS_GET_FW_VERSION	0x6
+#define CMD_SYS_GET_FW_VERSION		0x6
 #define CMD_CAN_GET_MID			0x52
 #define CMD_CAN_SET_MID			0x53
 #define CMD_CAN_GET_FILTER		0x54
 #define CMD_CAN_SET_FILTER		0x55
-#define CMD_CAN_GET_PRIORITY	0x56
-#define CMD_CAN_SET_PRIORITY	0x57
+#define CMD_CAN_GET_PRIORITY		0x56
+#define CMD_CAN_SET_PRIORITY		0x57
 #define CMD_CAN_GET_MODE		0x58
 #define CMD_CAN_SET_MODE		0x59
-#define CMD_CAN_GET_TIMESTAMP	0x5A
+#define CMD_CAN_GET_TIMESTAMP		0x5A
 #define CMD_CAN_READ			0x5B
 #define CMD_CAN_WRITE			0x5C
 #define CMD_CAN_READ_ASYNC		0x5D
 #define CMD_CAN_FULL_WRITE		0x5E
 #define CMD_CAN_FULL_READ		0x5F
-#define CMD_CAN_TS_READ_ASYNC	0x60
-#define CMD_CAN_TS_FULL_READ	0x61
+#define CMD_CAN_TS_READ_ASYNC		0x60
+#define CMD_CAN_TS_FULL_READ		0x61
 #define MAX_CAN_INTF			0x02
 
+#define CMD_CAN_RELEASE_BUFFER		0x62
+#define CMD_CAN_ENABLE_BUFFERING	0x63
+#define CMD_CAN_DISABLE_BUFFERING	0X64
+#define CMD_CAN_DISABLE_ALL_BUFFERING	0x65
 
+#define IOCTL_RELEASE_CAN_BUFFER	(SIOCDEVPRIVATE + 0)
+#define IOCTL_ENABLE_BUFFERING		(SIOCDEVPRIVATE + 1)
 
 struct sam4e_usb {
 	struct can_priv can;
@@ -204,6 +210,17 @@ struct sam4e_can_unsl_ts_receive {
 	u8 data[8];
 } __packed;
 
+/* IOCTL messages */
+struct sam4e_release_can_buffer {
+	u8 enable;
+} __packed;
+
+struct sam4e_enable_buffering {
+	u8 can;
+	u32 mid;
+	u32 mask;
+} __packed;
+
 static void sam4e_usb_receive_frame(struct sam4e_usb *dev,
 		struct sam4e_can_unsl_ts_receive *frame)
 {
@@ -274,6 +291,10 @@ static void sam4e_process_response(struct sam4e_usb *dev,
 			netif_wake_queue(dev->netdev2);
 			atomic_dec(&dev->netif_queue_stop);
 		}
+	} else if (resp->cmd == CMD_CAN_RELEASE_BUFFER) {
+		LOGNI("Received CMD_CAN_RELEASE_BUFFER response\n");
+	} else if (resp->cmd == CMD_CAN_ENABLE_BUFFERING) {
+		LOGNI("Received CMD_CAN_ENABLE_BUFFERING response\n");
 	}
 }
 
@@ -563,10 +584,137 @@ nomem:
 	return NETDEV_TX_OK;
 }
 
+static int sam4e_send_release_can_buffer_cmd(struct net_device *netdev)
+{
+	struct urb *urb;
+	struct sam4e_req *req;
+	struct sam4e_release_can_buffer *release_can_buffer;
+	struct sam4e_usb_handle *sam4e_usb_hnd = netdev_priv(netdev);
+	struct sam4e_usb *dev = sam4e_usb_hnd->sam4e_dev;
+	size_t size = sizeof(struct sam4e_req) +
+			sizeof(struct sam4e_release_can_buffer);
+	int result;
+
+	urb = usb_alloc_urb(0, GFP_KERNEL);
+	if (!urb) {
+		netdev_err(netdev, "No memory left for URBs\n");
+		goto nomem;
+	}
+
+	req = usb_alloc_coherent(dev->udev, size, GFP_KERNEL,
+			&urb->transfer_dma);
+	if (!req) {
+		netdev_err(netdev, "No memory left for USB buffer\n");
+		usb_free_urb(urb);
+		goto nomem;
+	}
+
+	/* Fill message data */
+	req->cmd = CMD_CAN_RELEASE_BUFFER;
+	req->len = sizeof(struct sam4e_req) +
+			sizeof(struct sam4e_release_can_buffer);
+	req->seq = atomic_inc_return(&dev->msg_seq);
+
+	release_can_buffer = (struct sam4e_release_can_buffer *)&req->data;
+	release_can_buffer->enable = 1;
+
+	usb_fill_bulk_urb(urb, dev->udev,
+			usb_sndbulkpipe(dev->udev, BULK_OUT_EP), req,
+			size, sam4e_usb_write_bulk_callback, netdev);
+	urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
+	usb_anchor_urb(urb, &dev->tx_submitted);
+
+	result = usb_submit_urb(urb, GFP_KERNEL);
+	if (unlikely(result)) {
+		usb_unanchor_urb(urb);
+		usb_free_coherent(dev->udev, size, req, urb->transfer_dma);
+	}
+	usb_free_urb(urb);
+	return result;
+
+nomem:
+	return -ENOMEM;
+}
+
+static int sam4e_enable_buffering(struct net_device *netdev,
+		struct ifreq *ifr)
+{
+	struct sam4e_enable_buffering *add_request;
+	struct sam4e_enable_buffering *enable_buffering;
+	struct urb *urb;
+	struct sam4e_req *req;
+	struct sam4e_usb_handle *sam4e_usb_hnd = netdev_priv(netdev);
+	struct sam4e_usb *dev = sam4e_usb_hnd->sam4e_dev;
+	size_t size = sizeof(struct sam4e_req) +
+			sizeof(struct sam4e_enable_buffering);
+	int result;
+
+	urb = usb_alloc_urb(0, GFP_KERNEL);
+	if (!urb) {
+		netdev_err(netdev, "No memory left for URBs\n");
+		goto nomem;
+	}
+
+	req = usb_alloc_coherent(dev->udev, size, GFP_KERNEL,
+			&urb->transfer_dma);
+	if (!req) {
+		netdev_err(netdev, "No memory left for USB buffer\n");
+		usb_free_urb(urb);
+		goto nomem;
+	}
+
+	add_request = ifr->ifr_data;
+	/* Fill message data */
+	req->cmd = CMD_CAN_ENABLE_BUFFERING;
+	req->len = sizeof(struct sam4e_req) +
+			sizeof(struct sam4e_enable_buffering);
+	req->seq = atomic_inc_return(&dev->msg_seq);
+	enable_buffering = (struct sam4e_enable_buffering *)&req->data;
+	enable_buffering->can = add_request->can;
+	enable_buffering->mid = add_request->mid;
+	enable_buffering->mask = add_request->mask;
+
+	LOGNI("sam4e_send_enable_buffering %d %x %x", enable_buffering->can,
+			enable_buffering->mid,
+			enable_buffering->mask);
+
+	usb_fill_bulk_urb(urb, dev->udev,
+			usb_sndbulkpipe(dev->udev, BULK_OUT_EP), req,
+			size, sam4e_usb_write_bulk_callback, netdev);
+	urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
+	usb_anchor_urb(urb, &dev->tx_submitted);
+
+	result = usb_submit_urb(urb, GFP_KERNEL);
+	if (unlikely(result)) {
+		usb_unanchor_urb(urb);
+		usb_free_coherent(dev->udev, size, req, urb->transfer_dma);
+	}
+	usb_free_urb(urb);
+	return result;
+
+nomem:
+	return -ENOMEM;
+}
+
+static int sam4e_netdev_do_ioctl(struct net_device *netdev,
+		struct ifreq *ifr, int cmd)
+{
+	LOGNI("sam4e_netdev_do_ioctl %d", cmd);
+	if (cmd == IOCTL_RELEASE_CAN_BUFFER) {
+		LOGNI("IOCTL_RELEASE_CAN_BUFFER");
+		sam4e_send_release_can_buffer_cmd(netdev);
+	} else if (cmd == IOCTL_ENABLE_BUFFERING) {
+		LOGNI("IOCTL_ENABLE_BUFFERING");
+		sam4e_enable_buffering(netdev, ifr);
+	}
+	return 0;
+}
+
 static const struct net_device_ops sam4e_usb_netdev_ops = {
 		.ndo_open = sam4e_netdev_open,
 		.ndo_stop = sam4e_netdev_close,
 		.ndo_start_xmit = sam4e_netdev_start_xmit,
+		.ndo_do_ioctl = sam4e_netdev_do_ioctl,
 };
 
 static int sam4e_read_fw_version(struct sam4e_usb *dev)
