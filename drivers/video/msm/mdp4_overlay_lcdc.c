@@ -760,7 +760,7 @@ int mdp4_lcdc_on(struct platform_device *pdev)
 	hsync_polarity = 0;
 	vsync_polarity = 0;
 #endif
-	data_en_polarity = 0;
+	data_en_polarity = mfd->panel_info.lcdc.is_den_active_high ? 0 : 1;
 
 	ctrl_polarity =
 	    (data_en_polarity << 2) | (vsync_polarity << 1) | (hsync_polarity);

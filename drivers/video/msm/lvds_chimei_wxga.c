@@ -183,6 +183,8 @@ static int __init lvds_chimei_wxga_init(void)
 		 * this panel is operated by de,
 		 * vsycn and hsync are ignored
 		 */
+		pinfo->lcdc.is_den_active_high = TRUE;
+		pinfo->lcdc.is_sync_active_high = TRUE;
 		pinfo->lcdc.h_back_porch = 0;
 		pinfo->lcdc.h_front_porch = 164;
 		pinfo->lcdc.h_pulse_width = 20;

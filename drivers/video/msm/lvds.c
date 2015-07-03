@@ -277,7 +277,13 @@ static int lvds_off(struct platform_device *pdev)
 		clk_disable_unprepare(lvds_clk);
 
 	mdp_clk_ctrl(1);
-	MDP_OUTP(MDP_BASE +  0xc3100, 0x0);
+	if (mfd->panel_info.lvds.channel_mode == LVDS_DUAL_CHANNEL_MODE)
+		MDP_OUTP(MDP_BASE + 0xc2000, 0x0);
+	else
+		MDP_OUTP(MDP_BASE + 0xc2000, 0x4);
+	MDP_OUTP(MDP_BASE + 0xc3100, 0x0);
+	MDP_OUTP(MDP_BASE + 0xc3108, 0x0);
+	MDP_OUTP(MDP_BASE + 0xc2034, 0x0);
 	MDP_OUTP(MDP_BASE + 0xc3000, 0x0);
 	usleep(10);
 	mdp_clk_ctrl(0);
