@@ -21,6 +21,10 @@
 #include <linux/usb/composite.h>
 #include <asm/unaligned.h>
 
+static bool enable_l1_for_hs;
+module_param(enable_l1_for_hs, bool, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(enable_l1_for_hs, "Enable support for L1 LPM for HS devices");
+
 /*
  * The code in this file is utility code, used to build a gadget driver
  * from one or more "function" drivers, one or more "configuration"
@@ -1349,11 +1353,16 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 				if (gadget->speed >= USB_SPEED_SUPER) {
 					cdev->desc.bcdUSB = cpu_to_le16(0x0300);
 					cdev->desc.bMaxPacketSize0 = 9;
-				} else {
+				} else if (gadget->l1_supported ||
+						enable_l1_for_hs) {
 					cdev->desc.bcdUSB = cpu_to_le16(0x0210);
+					DBG(cdev,
+					"Config HS device with LPM(L1)\n");
+				} else {
+					cdev->desc.bcdUSB = cpu_to_le16(0x0200);
 				}
 			} else if (gadget->l1_supported) {
-				cdev->desc.bcdUSB = cpu_to_le16(0x0201);
+				cdev->desc.bcdUSB = cpu_to_le16(0x0210);
 				DBG(cdev, "Config HS device with LPM(L1)\n");
 			}
 
@@ -1396,8 +1405,9 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 				value = min(w_length, (u16) value);
 			break;
 		case USB_DT_BOS:
-			if (gadget_is_superspeed(gadget) ||
-				gadget->l1_supported) {
+			if ((gadget_is_superspeed(gadget) &&
+				(gadget->speed >= USB_SPEED_SUPER))
+				 || gadget->l1_supported) {
 				value = bos_desc(cdev);
 				value = min(w_length, (u16) value);
 			}
