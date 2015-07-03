@@ -393,8 +393,8 @@
 	mtp_batterydata: qcom,battery-data {
 		qcom,rpull-up-kohm = <100>;
 		qcom,vref-batt-therm = <1800000>;
-		/include/ "batterydata-palladium.dtsi"
-		/include/ "batterydata-mtp-3000mah.dtsi"
+		/include/ "batterydata-qm8626-palladium.dtsi"
+		/include/ "batterydata-qm8626-3000mah.dtsi"
 	};
 };
 
