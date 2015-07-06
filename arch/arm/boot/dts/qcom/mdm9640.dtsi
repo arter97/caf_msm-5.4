@@ -18,6 +18,7 @@
 	compatible = "qcom,mdm9640";
 	qcom,msm-id = <234 0x10000>, <235 0x10000>, <236 0x10000>,
 		      <237 0x10000>, <238 0x10000>;
+	qcom,pmic-id = <0x10108 0x0 0x0 0x0>;
 	interrupt-parent = <&intc>;
 
 	aliases {
