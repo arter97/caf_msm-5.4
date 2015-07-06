@@ -2332,6 +2332,8 @@ static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 			qpnp_lbc_set_appropriate_current(chip);
 			spin_unlock_irqrestore(&chip->ibat_change_lock,
 								flags);
+			if (chip->supported_feature_flag & VDD_TRIM_SUPPORTED)
+				alarm_try_to_cancel(&chip->vddtrim_alarm);
 		} else {
 			/*
 			 * Override VBAT_DET comparator to start charging
