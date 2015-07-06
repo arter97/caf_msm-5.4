@@ -235,7 +235,7 @@ struct sk_buff *wcnss_skb_prealloc_get(unsigned int size)
 	for (i = 0; i < ARRAY_SIZE(wcnss_skb_allocs); i++) {
 		if (wcnss_skb_allocs[i].occupied)
 			continue;
-		if (wcnss_skb_allocs[i].size > size) {
+		if (wcnss_skb_allocs[i].size >= size) {
 			wcnss_skb_allocs[i].occupied = 1;
 			spin_unlock_irqrestore(&alloc_lock, flags);
 			return wcnss_skb_allocs[i].skb_ptr;
