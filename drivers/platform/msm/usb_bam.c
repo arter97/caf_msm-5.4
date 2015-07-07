@@ -171,6 +171,7 @@ struct usb_bam_ipa_handshake_info {
 struct usb_bam_hsic_host_info {
 	struct device *dev;
 	bool in_lpm;
+	struct delayed_work hsic_resume_work;
 };
 
 static spinlock_t usb_bam_ipa_handshake_info_lock;
@@ -978,6 +979,8 @@ static void usb_prod_notify_cb(void *user_data, enum ipa_rm_event event,
 	return;
 }
 
+#define HSIC_BAM_PM_RESUME_RETRIES 20
+#define HSIC_BAM_PM_RESUME_DELAY   100
 /**
  * usb_bam_resume_hsic_host: vote for hsic host core resume.
  * In addition also resume all hsic pipes that are connected to
@@ -986,16 +989,33 @@ static void usb_prod_notify_cb(void *user_data, enum ipa_rm_event event,
  * NOTE: This function should be called in a context that hold
  *	 usb_bam_lock.
  */
-static void usb_bam_resume_hsic_host(void)
+static void usb_bam_resume_hsic_host(struct work_struct *w)
 {
-	int i;
+	int i, ret;
 	struct usb_bam_pipe_connect *pipe_iter;
+	static int retry_count;
 
 	/* Exit from "full suspend" in case of hsic host */
 	if (hsic_host_info.dev && info[HSIC_BAM].in_lpm) {
 		pr_debug("%s: Getting hsic device %x\n", __func__,
 			(int)hsic_host_info.dev);
-		pm_runtime_get(hsic_host_info.dev);
+		ret = pm_runtime_get(hsic_host_info.dev);
+		if (ret == -EACCES) {
+			pr_debug("%s: pm_runtime_get, ret:%d\n", __func__, ret);
+			pm_runtime_put_noidle(hsic_host_info.dev);
+			if (retry_count == HSIC_BAM_PM_RESUME_RETRIES) {
+				retry_count = 0;
+				pr_err("pm_runtime_get_sync timed out\n");
+				return;
+			}
+			retry_count++;
+			queue_delayed_work(ctx.usb_bam_wq,
+				&hsic_host_info.hsic_resume_work,
+				msecs_to_jiffies(HSIC_BAM_PM_RESUME_DELAY));
+			return;
+		}
+		retry_count = 0;
+
 		info[HSIC_BAM].in_lpm = false;
 
 		for (i = 0; i < ctx.max_connections; i++) {
@@ -1050,7 +1070,7 @@ static int cons_request_resource(enum usb_bam cur_bam)
 		 * by other driver, in this case we will just renew our
 		 * vote here.
 		 */
-		usb_bam_resume_hsic_host();
+		usb_bam_resume_hsic_host(&hsic_host_info.hsic_resume_work.work);
 
 		/*
 		 * Return sucess if there are pipes connected
@@ -1515,7 +1535,7 @@ void msm_bam_wait_for_hsic_prod_granted(void)
 	ctx.is_bam_inactivity[HSIC_BAM] = false;
 
 	/* Get back to resume state including wakeup ipa */
-	usb_bam_resume_hsic_host();
+	usb_bam_resume_hsic_host(&hsic_host_info.hsic_resume_work.work);
 
 	/* Ensure getting the producer resource */
 	wait_for_prod_granted(HSIC_BAM);
@@ -1898,7 +1918,8 @@ static void usb_bam_work(struct work_struct *w)
 		 */
 		spin_lock(&usb_bam_lock);
 		if (pipe_connect->bam_type == HSIC_BAM)
-			usb_bam_resume_hsic_host();
+			usb_bam_resume_hsic_host(
+					&hsic_host_info.hsic_resume_work.work);
 		spin_unlock(&usb_bam_lock);
 
 		/* Notify about wakeup / activity of the bam */
@@ -2992,6 +3013,8 @@ static int usb_bam_probe(struct platform_device *pdev)
 
 	spin_lock_init(&usb_bam_peer_handshake_info_lock);
 	INIT_WORK(&peer_handshake_info.reset_event.event_w, usb_bam_sm_work);
+	INIT_DELAYED_WORK(&hsic_host_info.hsic_resume_work,
+						usb_bam_resume_hsic_host);
 	init_completion(&ctx.reset_done);
 	complete(&ctx.reset_done);
 
