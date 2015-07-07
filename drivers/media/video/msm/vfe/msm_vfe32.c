@@ -1346,7 +1346,7 @@ static int axi_reset(struct axi_ctrl_t *axi_ctrl,
 int axi_reset_rdi1_only(struct axi_ctrl_t *axi_ctrl,
 	struct msm_camera_vfe_params_t vfe_params)
 {
-		axi_reset_internal_variables(axi_ctrl, vfe_params);
+	axi_reset_internal_variables(axi_ctrl, vfe_params);
 	axi_global_reset_internal_variables(axi_ctrl);
 	/* disable all interrupts.  vfeImaskLocal is also reset to 0
 	* to begin with. */
@@ -4486,6 +4486,9 @@ static void vfe32_process_error_irq(
 static void vfe32_process_common_error_irq(
 	struct axi_ctrl_t *axi_ctrl, uint32_t errStatus)
 {
+	uint32_t wm_overflowed =
+			(errStatus & VFE32_IMASK_IMG_MAST_OVFL_MASK) >>
+			VFE32_IMASK_IMG_MAST_OVFL_SHFT;
 
 	if (errStatus & VFE32_IMASK_IMG_MAST_0_BUS_OVFL)
 		pr_err("vfe32_irq: image master 0 bus overflow\n");
@@ -4511,9 +4514,60 @@ static void vfe32_process_common_error_irq(
 	if (errStatus & VFE32_IMASK_AXI_ERROR)
 		pr_err("vfe32_irq: axi error\n");
 
-	if (errStatus & VFE32_IMASK_VFE_OVERFLOW_ERROR_ONLY_1)
-		v4l2_subdev_notify(&axi_ctrl->subdev,
-				NOTIFY_VFE_WM_OVERFLOW_ERROR, (void *)NULL);
+	/* only care about WM overflows for now */
+	if ((errStatus & VFE32_IMASK_VFE_OVERFLOW_ERROR_ONLY_1) &&
+		wm_overflowed) {
+
+		uint32_t wm_ch;
+		enum msm_ispif_intftype interface = RDI0;
+
+		if (axi_ctrl->share_ctrl->outpath.output_mode &
+			VFE32_OUTPUT_MODE_TERTIARY1) {
+			interface = RDI0;
+			wm_ch = 1 << axi_ctrl->share_ctrl->outpath.out2.ch0;
+			if (wm_ch & wm_overflowed) {
+				pr_err("vfe32_irq: rdi0 overflowed!");
+				v4l2_subdev_notify(&axi_ctrl->subdev,
+						NOTIFY_VFE_WM_OVERFLOW_ERROR,
+						(void *)&interface);
+				wm_overflowed &= ~wm_ch;
+			}
+		}
+		if (axi_ctrl->share_ctrl->outpath.output_mode &
+			VFE32_OUTPUT_MODE_TERTIARY2) {
+			interface = RDI1;
+			wm_ch = 1 << axi_ctrl->share_ctrl->outpath.out3.ch0;
+			if (wm_ch & wm_overflowed) {
+				pr_err("vfe32_irq: rdi1 overflowed!");
+				v4l2_subdev_notify(&axi_ctrl->subdev,
+						NOTIFY_VFE_WM_OVERFLOW_ERROR,
+						(void *)&interface);
+				wm_overflowed &= ~wm_ch;
+			}
+		}
+		if (axi_ctrl->share_ctrl->outpath.output_mode &
+			VFE32_OUTPUT_MODE_TERTIARY2) {
+
+			interface = RDI2;
+			wm_ch = 1 << axi_ctrl->share_ctrl->outpath.out4.ch0;
+			if (wm_ch & wm_overflowed) {
+				pr_err("vfe32_irq: rdi2 overflowed!");
+				v4l2_subdev_notify(&axi_ctrl->subdev,
+						NOTIFY_VFE_WM_OVERFLOW_ERROR,
+						(void *)&interface);
+				wm_overflowed &= ~wm_ch;
+			}
+		}
+		if (wm_overflowed) {
+			/* any outstanding overflows send error to PIX */
+			interface = PIX0;
+			pr_err("vfe32_irq: PIX overflowed!");
+			v4l2_subdev_notify(&axi_ctrl->subdev,
+					NOTIFY_VFE_WM_OVERFLOW_ERROR,
+					(void *)&interface);
+		}
+
+	}
 	else if (errStatus & VFE32_IMASK_AXI_ERROR)
 		v4l2_subdev_notify(&axi_ctrl->subdev,
 					NOTIFY_VFE_AXI_ERROR, (void *)NULL);

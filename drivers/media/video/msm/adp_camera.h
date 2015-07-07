@@ -31,6 +31,10 @@
 #include "vfe/msm_vfe32.h"
 #include "../../../video/msm/msm_fb.h"
 
+#define ADP_CAMERA_EVENT_ERROR            (V4L2_EVENT_PRIVATE_START+1)
+#define ADP_CAMERA_EVENT_RECOVERY_SUCCESS (V4L2_EVENT_PRIVATE_START+2)
+#define ADP_CAMERA_EVENT_RECOVERY_FAILED  (V4L2_EVENT_PRIVATE_START+3)
+
 #define PREVIEW_BUFFER_COUNT 3
 enum camera_preview_buffer_state {
 	CAMERA_PREVIEW_BUFFER_STATE_UNUSED,
