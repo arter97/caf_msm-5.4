@@ -989,6 +989,7 @@ static struct msm_otg_platform_data msm_otg_usb3_pdata = {
 	.phy_init_seq		= usb3_phy_init_seq,
 	.ignore_wakeup_source	= true,
 	.mpm_xo_wakeup_int	= MSM_MPM_XO_WAKEUP_INT,
+	.allow_host_vdd_min_wo_rework = true,
 };
 
 static struct msm_otg_platform_data msm_otg_usb4_pdata = {
@@ -998,6 +999,7 @@ static struct msm_otg_platform_data msm_otg_usb4_pdata = {
 	.phy_init_seq		= usb4_phy_init_seq,
 	.ignore_wakeup_source	= true,
 	.mpm_xo_wakeup_int	= MSM_MPM_XO_WAKEUP_INT,
+	.allow_host_vdd_min_wo_rework = true,
 };
 
 static struct ci13xxx_platform_data msm_usb1_peripheral_pdata = {
@@ -1010,6 +1012,14 @@ static struct ci13xxx_platform_data msm_usb3_peripheral_pdata = {
 
 static struct ci13xxx_platform_data msm_usb4_peripheral_pdata = {
 	.usb_core_id = 2,
+};
+
+static struct msm_usb_host_platform_data msm_ehci_host_pdata3 = {
+	.allow_host_vdd_min_wo_rework = true,
+};
+
+static struct msm_usb_host_platform_data msm_ehci_host_pdata4 = {
+	.allow_host_vdd_min_wo_rework = true,
 };
 
 static struct platform_device *usb_common_devices[] __initdata = {
@@ -1038,6 +1048,10 @@ static void __init apq8064_usb_otg_init(void)
 			&msm_usb3_peripheral_pdata;
 	apq8064_device_gadget_usb4_peripheral.dev.platform_data =
 			&msm_usb4_peripheral_pdata;
+	apq8064_device_hsusb_usb3_host.dev.platform_data =
+			&msm_ehci_host_pdata3;
+	apq8064_device_hsusb_usb4_host.dev.platform_data =
+			&msm_ehci_host_pdata4;
 
 	if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2() ||
 		machine_is_apq8064_mplatform() ||
