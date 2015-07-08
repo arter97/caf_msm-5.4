@@ -55,7 +55,7 @@ static int msm_v4l2_open(struct file *filp)
 	ba_inst = msm_ba_open(NULL);
 	if (!ba_inst) {
 		dprintk(BA_ERR,
-					"Failed to create video instance\n");
+			"Failed to create video instance");
 		return -ENOMEM;
 	}
 	clear_bit(V4L2_FL_USES_V4L2_FH, &vdev->flags);
@@ -285,6 +285,9 @@ static int msm_ba_device_init(struct platform_device *pdev,
 
 	INIT_LIST_HEAD(&dev_ctxt->inputs);
 	INIT_LIST_HEAD(&dev_ctxt->instances);
+	INIT_LIST_HEAD(&dev_ctxt->sd_events);
+	INIT_DELAYED_WORK(&dev_ctxt->sd_events_work,
+		msm_ba_subdev_event_hndlr_delayed);
 	mutex_init(&dev_ctxt->dev_cs);
 
 	dev_ctxt->state = BA_DEV_UNINIT;
@@ -334,14 +337,14 @@ static int msm_ba_device_init(struct platform_device *pdev,
 			}
 		}
 	} else {
-	dprintk(BA_ERR, "Failed to register v4l2 device\n");
+	dprintk(BA_ERR, "Failed to register v4l2 device");
 	}
 
 	if (rc) {
 		kfree(dev_ctxt);
 	dev_ctxt = NULL;
 	}
-	dprintk(BA_INFO, "Exit %s with error %d\n", __func__, rc);
+	dprintk(BA_INFO, "Exit %s with error %d", __func__, rc);
 
 	return rc;
 }
@@ -351,23 +354,23 @@ static int msm_ba_probe(struct platform_device *pdev)
 	struct ba_ctxt *ba_ctxt;
 	int rc = 0;
 
-	dprintk(BA_INFO, "Enter %s: pdev 0x%p device id = %d\n",
+	dprintk(BA_INFO, "Enter %s: pdev 0x%p device id = %d",
 		__func__, pdev, pdev->id);
 	ba_ctxt = msm_ba_get_ba_context();
 
 	if (NULL == ba_ctxt) {
-		dprintk(BA_ERR, "BA context not yet created\n");
+		dprintk(BA_ERR, "BA context not yet created");
 		return -EINVAL;
 	}
 	rc = msm_ba_device_init(pdev, &ba_ctxt->dev_ctxt);
 	if (rc) {
-		dprintk(BA_ERR, "Failed to init device\n");
+		dprintk(BA_ERR, "Failed to init device");
 	} else {
 		ba_ctxt->dev_ctxt->debugfs_root = msm_ba_debugfs_init_dev(
 			ba_ctxt->dev_ctxt, ba_ctxt->debugfs_root);
 		pdev->dev.platform_data = ba_ctxt->dev_ctxt;
 	}
-	dprintk(BA_INFO, "Exit %s with error %d\n", __func__, rc);
+	dprintk(BA_INFO, "Exit %s with error %d", __func__, rc);
 
 	return rc;
 }
@@ -375,9 +378,11 @@ static int msm_ba_probe(struct platform_device *pdev)
 static int msm_ba_remove(struct platform_device *pdev)
 {
 	struct msm_ba_dev *dev_ctxt;
+	struct msm_ba_sd_event *ba_sd_event = NULL;
+	struct msm_ba_sd_event *ba_sd_event_tmp = NULL;
 	int rc = 0;
 
-	dprintk(BA_INFO, "Enter %s\n", __func__);
+	dprintk(BA_INFO, "Enter %s", __func__);
 	if (!pdev) {
 		dprintk(BA_ERR, "%s invalid input 0x%p", __func__, pdev);
 		rc = -EINVAL;
@@ -390,12 +395,18 @@ static int msm_ba_remove(struct platform_device *pdev)
 		} else {
 			video_unregister_device(dev_ctxt->vdev);
 			v4l2_device_unregister(&dev_ctxt->v4l2_dev);
+			cancel_delayed_work_sync(&dev_ctxt->sd_events_work);
+			list_for_each_entry_safe(ba_sd_event, ba_sd_event_tmp,
+					&dev_ctxt->sd_events, list) {
+				list_del(&ba_sd_event->list);
+				kfree(ba_sd_event);
+			}
 
 			kfree(dev_ctxt);
 			dev_ctxt = NULL;
 		}
 	}
-	dprintk(BA_INFO, "Exit %s with error %d\n", __func__, rc);
+	dprintk(BA_INFO, "Exit %s with error %d", __func__, rc);
 
 	return rc;
 }
@@ -422,7 +433,7 @@ int msm_ba_create(void)
 	ba_ctxt->debugfs_root = msm_ba_debugfs_init_drv();
 	if (!ba_ctxt->debugfs_root)
 		dprintk(BA_ERR,
-			"Failed to create debugfs for msm_ba\n");
+			"Failed to create debugfs for msm_ba");
 
 	msm_ba_set_ba_context(ba_ctxt);
 
@@ -478,17 +489,17 @@ static int __init msm_ba_mod_init(void)
 {
 	int rc = 0;
 
-	dprintk(BA_INFO, "Enter %s\n", __func__);
+	dprintk(BA_INFO, "Enter %s", __func__);
 	rc = msm_ba_create();
 	if (!rc) {
 		rc = platform_driver_register(&msm_ba_driver);
 		if (rc) {
 			dprintk(BA_ERR,
-				"Failed to register platform driver\n");
+				"Failed to register platform driver");
 			msm_ba_destroy();
 		}
 	}
-	dprintk(BA_INFO, "Exit %s with error 0x%x\n", __func__, rc);
+	dprintk(BA_INFO, "Exit %s with error %d", __func__, rc);
 
 	return rc;
 }
@@ -497,10 +508,10 @@ static void __exit msm_ba_mod_exit(void)
 {
 	int rc = 0;
 
-	dprintk(BA_INFO, "Enter %s\n", __func__);
+	dprintk(BA_INFO, "Enter %s", __func__);
 	platform_driver_unregister(&msm_ba_driver);
 	rc = msm_ba_destroy();
-	dprintk(BA_INFO, "Exit %s\n", __func__);
+	dprintk(BA_INFO, "Exit %s", __func__);
 }
 
 module_init(msm_ba_mod_init);

@@ -21,10 +21,13 @@
 		V4L2_CTRL_DRIVER_PRIV(idx))
 
 struct msm_ba_dev *get_ba_dev(void);
-void msm_ba_queue_v4l2_event(struct msm_ba_inst *inst, int event_type);
+void msm_ba_queue_v4l2_event(struct msm_ba_inst *inst,
+		struct v4l2_event *sd_event);
 struct v4l2_subdev *msm_ba_sd_find(const char *name);
 void msm_ba_add_inputs(struct v4l2_subdev *sd);
 void msm_ba_del_inputs(struct v4l2_subdev *sd);
+struct msm_ba_input *msm_ba_find_input_from_sd(struct v4l2_subdev *sd,
+		int bridge_chip_ip);
 struct msm_ba_input *msm_ba_find_input(int ba_input);
 struct msm_ba_input *msm_ba_find_output(int ba_output);
 int msm_ba_g_fps(void *instance, int *fps_q16);

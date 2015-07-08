@@ -560,11 +560,58 @@ static u32 ba_inp_to_adv7180(u32 input)
 	return adv_input;
 }
 
+static u32 adv7180_inp_to_ba(u32 input)
+{
+	u32 ba_input = BA_IP_CVBS_0;
+
+	switch (input) {
+	case ADV7180_INPUT_CVBS_AIN1:
+		ba_input = BA_IP_CVBS_0;
+		break;
+	case ADV7180_INPUT_CVBS_AIN2:
+		ba_input = BA_IP_CVBS_1;
+		break;
+	case ADV7180_INPUT_CVBS_AIN3:
+		ba_input = BA_IP_CVBS_2;
+		break;
+	case ADV7180_INPUT_CVBS_AIN4:
+		ba_input = BA_IP_CVBS_3;
+		break;
+	case ADV7180_INPUT_CVBS_AIN5:
+		ba_input = BA_IP_CVBS_4;
+		break;
+	case ADV7180_INPUT_CVBS_AIN6:
+		ba_input = BA_IP_CVBS_5;
+		break;
+	case ADV7180_INPUT_SVIDEO_AIN1_AIN2:
+		ba_input = BA_IP_SVIDEO_0;
+		break;
+	case ADV7180_INPUT_SVIDEO_AIN3_AIN4:
+		ba_input = BA_IP_SVIDEO_1;
+		break;
+	case ADV7180_INPUT_SVIDEO_AIN5_AIN6:
+		ba_input = BA_IP_SVIDEO_2;
+		break;
+	case ADV7180_INPUT_YPRPB_AIN1_AIN2_AIN3:
+		ba_input = BA_IP_COMPONENT_0;
+		break;
+	case ADV7180_INPUT_YPRPB_AIN4_AIN5_AIN6:
+		ba_input = BA_IP_COMPONENT_1;
+		break;
+	default:
+		ba_input = BA_IP_CVBS_0;
+		break;
+	}
+	return ba_input;
+}
+
 static int adv7180_s_routing(struct v4l2_subdev *sd, u32 input,
 				u32 output, u32 config)
 {
 	struct adv7180_state *state = to_state(sd);
 	u32 adv_input = ba_inp_to_adv7180(input);
+	struct v4l2_event event = {0};
+	int *ptr = (int *)event.u.data;
 	int ret = mutex_lock_interruptible(&state->mutex);
 
 	if (ret)
@@ -576,12 +623,23 @@ static int adv7180_s_routing(struct v4l2_subdev *sd, u32 input,
 		goto out;
 	}
 
+	ptr[0] = adv7180_inp_to_ba(state->input);
+
 	if (state->force_free_run) {
 		state->input = adv_input;
 	} else {
 		ret = state->chip_info->select_input(state, adv_input);
 		if (ret == 0)
 			state->input = adv_input;
+	}
+
+	/* On successful input switch and not same input
+	 * send signal lost on previous input */
+	if (ret == 0 &&
+		ptr[0] != input) {
+		event.type =  V4L2_EVENT_MSM_BA_SIGNAL_LOST_LOCK;
+		v4l2_subdev_notify(&state->sd,
+			event.type, &event);
 	}
 out:
 	mutex_unlock(&state->mutex);
@@ -1199,24 +1257,38 @@ static void adv7180_irq_delay_work(struct work_struct *work)
 	if ((isr1 & ADV7180_IRQ1_LOCK) ||
 		(isr1 & ADV7180_IRQ1_UNLOCK)) {
 		int lock_status;
-		__adv7180_status(state, &lock_status, NULL);
-		v4l2_subdev_notify(&state->sd,
-			lock_status ?
-			V4L2_EVENT_MSM_BA_SIGNAL_LOST_LOCK :
-			V4L2_EVENT_MSM_BA_SIGNAL_IN_LOCK,
-			&lock_status);
+		struct v4l2_event event = {0};
+		int *ptr = (int *)event.u.data;
 
+		__adv7180_status(state, &lock_status, NULL);
+		ptr[0] = adv7180_inp_to_ba(state->input);
+		ptr[1] = lock_status;
+		event.type = lock_status ?
+			V4L2_EVENT_MSM_BA_SIGNAL_LOST_LOCK :
+			V4L2_EVENT_MSM_BA_SIGNAL_IN_LOCK;
+		v4l2_subdev_notify(&state->sd,
+			event.type, &event);
 		if (lock_status)
 			goto cleanup;
 	}
 	if ((isr3 & ADV7180_IRQ3_AD_CHANGE) && state->autodetect) {
+		struct v4l2_event event = {0};
+		int *ptr = (int *)event.u.data;
 		__adv7180_status(state, NULL, &state->curr_norm);
+		ptr[0] = adv7180_inp_to_ba(state->input);
+		ptr[1] = state->curr_norm;
+		event.type = V4L2_EVENT_MSM_BA_SOURCE_CHANGE;
 		v4l2_subdev_notify(&state->sd,
-			V4L2_EVENT_MSM_BA_SOURCE_CHANGE, &state->curr_norm);
+			event.type, &event);
 	}
-	if (isr1 & ADV7180_IRQ1_MACROVISION)
+	if (isr1 & ADV7180_IRQ1_MACROVISION) {
+		struct v4l2_event event = {0};
+		int *ptr = (int *)event.u.data;
+		ptr[0] = adv7180_inp_to_ba(state->input);
+		event.type = V4L2_EVENT_MSM_BA_CP;
 		v4l2_subdev_notify(&state->sd,
-			V4L2_EVENT_MSM_BA_CP, NULL);
+			event.type, &event);
+	}
 
 cleanup:
 	mutex_unlock(&state->mutex);
