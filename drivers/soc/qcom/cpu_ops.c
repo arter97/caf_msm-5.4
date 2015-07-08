@@ -24,6 +24,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/smp.h>
+#include <linux/irqchip/arm-gic.h>
 
 #include <soc/qcom/cpu_pwr_ctl.h>
 #include <soc/qcom/scm-boot.h>
@@ -231,6 +232,7 @@ static void msm_wfi_cpu_die(unsigned int cpu)
 			/*Proper wake up */
 			break;
 		}
+		gic_show_pending_irq();
 		pr_debug("CPU%u: spurious wakeup call\n", cpu);
 		BUG();
 	}
