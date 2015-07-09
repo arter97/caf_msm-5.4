@@ -4837,3 +4837,19 @@ u32 ipa_get_num_pipes(void)
 		return IPA_MAX_NUM_PIPES;
 }
 EXPORT_SYMBOL(ipa_get_num_pipes);
+
+/**
+ * ipa_get_sys_yellow_wm()- Return yellow WM value for IPA SYS pipes.
+ *
+ * Return value: IPA_YELLOW_MARKER_SYS_CFG_OFST register if IPA_HW_v2.6L,
+ *               0 otherwise.
+ */
+u32 ipa_get_sys_yellow_wm(void)
+{
+	if (ipa_ctx->ipa_hw_type == IPA_HW_v2_6L)
+		return ipa_read_reg(ipa_ctx->mmio,
+			IPA_YELLOW_MARKER_SYS_CFG_OFST);
+	else
+		return 0;
+}
+EXPORT_SYMBOL(ipa_get_sys_yellow_wm);
