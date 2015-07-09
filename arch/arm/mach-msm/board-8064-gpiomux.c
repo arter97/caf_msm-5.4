@@ -2242,6 +2242,27 @@ static struct msm_gpiomux_config mpq8064_uartdm_configs[] __initdata = {
 	},
 };
 
+static struct gpiomux_setting bt_suspended_config = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_DOWN,
+};
+
+static struct gpiomux_setting bt_active_config = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_UP,
+};
+static struct msm_gpiomux_config apq8064_bt_configs[] __initdata = {
+	{
+		.gpio      = 17,		/* BT_EN */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &bt_suspended_config,
+			[GPIOMUX_ACTIVE] = &bt_active_config,
+		},
+	},
+};
+
 void __init apq8064_init_gpiomux(void)
 {
 	int rc;
@@ -2255,6 +2276,9 @@ void __init apq8064_init_gpiomux(void)
 
 	msm_gpiomux_install(wcnss_5wire_interface,
 			ARRAY_SIZE(wcnss_5wire_interface));
+
+	msm_gpiomux_install(apq8064_bt_configs,
+			ARRAY_SIZE(apq8064_bt_configs));
 
 	if (machine_is_mpq8064_cdp() || machine_is_mpq8064_hrd() ||
 		 machine_is_mpq8064_dtv()) {
