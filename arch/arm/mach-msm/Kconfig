@@ -2633,6 +2633,14 @@ config MSM_USE_USER_ACCESSIBLE_TIMERS
 	  Enables MSM-specific user accessible timers via a shared
 	  memory page containing the cycle counter.
 
+config MSM_S_PLATFORM
+	bool "Enables configuration for HDMI and CVBS"
+	help
+	  This config is used to enable HDMI-in and CVBS-in
+	  on the automotive platform.  This allows
+	  the input from a HDMI/cvbs bridge chip to be
+	  accessed by the tv input framework.
+
 config MSM_ROTARY_AS_REVERSE_GEAR
 	bool "Enables the use of rotary switch to trigger reverse camera."
 endif

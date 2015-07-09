@@ -26,6 +26,10 @@
 
 #ifdef CONFIG_MSM_CAMERA
 
+#define CSI_CORE_0 0
+#define CSI_CORE_1 1
+#define CSI_CORE_2 2
+
 static struct gpiomux_setting cam_settings[] = {
 	{
 		.func = GPIOMUX_FUNC_GPIO, /*suspend*/
@@ -747,7 +751,12 @@ static struct msm_camera_csi_lane_params avdevice_csi_lane_params[] = {
 	.csi_lane_assign = 0xe4,
 	.csi_lane_mask = 0x1,
 	.csi_phy_sel = 2,
-	}
+	},
+	{ /* 2 lane combo phy csi0 ln0/ln3 */
+	.csi_lane_assign = 0xc,
+	.csi_lane_mask = 0x9,
+	.csi_phy_sel = 0,
+	},
 };
 
 static struct msm_camera_sensor_platform_info sensor_board_info_avdevice[] = {
@@ -766,13 +775,39 @@ static struct msm_camera_sensor_platform_info sensor_board_info_avdevice[] = {
 	.gpio_conf = &apq8064_back_cam_gpio_conf,
 	.i2c_conf = &apq8064_back_cam_i2c_conf,
 	.csi_lane_params = &avdevice_csi_lane_params[1],
-	}
+	},
+	{
+	.mount_angle    = 0,
+	.cam_vreg = apq_8064_cam_vreg,
+	.num_vreg = ARRAY_SIZE(apq_8064_cam_vreg),
+	.gpio_conf = &apq8064_back_cam_gpio_conf,
+	.i2c_conf = &apq8064_back_cam_i2c_conf,
+	.csi_lane_params = &avdevice_csi_lane_params[2],
+	},
+};
+
+static struct msm_camera_device_platform_data msm_avdevice_csi_device_data[] = {
+	{
+		.csid_core = 0,
+		.is_vpe    = 0,
+		.cam_bus_scale_table = &cam_bus_client_pdata,
+	},
+	{
+		.csid_core = 1,
+		.is_vpe    = 0,
+		.cam_bus_scale_table = &cam_bus_client_pdata,
+	},
+	{
+		.csid_core = 2,
+		.is_vpe    = 0,
+		.cam_bus_scale_table = &cam_bus_client_pdata,
+	},
 };
 
 static struct msm_camera_sensor_info msm_camera_sensor_avdevice_data[] = {
 	{
 	.sensor_name    = "avdevcvbs",
-	.pdata  = &msm_camera_csi_device_data[2],
+	.pdata  = &msm_avdevice_csi_device_data[CSI_CORE_0],
 	.flash_data = &flash_none,
 	.sensor_platform_info = &sensor_board_info_avdevice[0],
 	.csi_if = 1,
@@ -783,7 +818,7 @@ static struct msm_camera_sensor_info msm_camera_sensor_avdevice_data[] = {
 	},
 	{
 	.sensor_name    = "avdevcvbs",
-	.pdata  = &msm_camera_csi_device_data[3],
+	.pdata  = &msm_avdevice_csi_device_data[CSI_CORE_2],
 	.flash_data = &flash_none,
 	.sensor_platform_info = &sensor_board_info_avdevice[1],
 	.csi_if = 1,
@@ -791,7 +826,29 @@ static struct msm_camera_sensor_info msm_camera_sensor_avdevice_data[] = {
 	.sensor_type = YUV_SENSOR,
 	.sensor_pwd  = PM8921_GPIO_PM_TO_SYS(41),
 	.ba_idx = 0,
-	}
+	},
+	{
+	.sensor_name    = "avdevcvbs",
+	.pdata  = &msm_avdevice_csi_device_data[CSI_CORE_2],
+	.flash_data = &flash_none,
+	.sensor_platform_info = &sensor_board_info_avdevice[1],
+	.csi_if = 1,
+	.camera_type = BACK_CAMERA_2D,
+	.sensor_type = YUV_SENSOR,
+	.sensor_pwd  = PM8921_GPIO_PM_TO_SYS(41),
+	.ba_idx = 0,
+	},
+	{
+	.sensor_name    = "avdevhdmi",
+	.pdata  = &msm_avdevice_csi_device_data[CSI_CORE_0],
+	.flash_data = &flash_none,
+	.sensor_platform_info = &sensor_board_info_avdevice[2],
+	.csi_if = 1,
+	.camera_type = FRONT_CAMERA_2D,
+	.sensor_type = YUV_SENSOR,
+	.sensor_pwd  = PM8921_GPIO_PM_TO_SYS(41),
+	.ba_idx = 2,
+	},
 };
 
 struct platform_device msm_camera_avdevice = {
@@ -809,6 +866,23 @@ struct platform_device msm_camera_avdevice2 = {
 	.resource      = 0,
 	.dev.platform_data = &msm_camera_sensor_avdevice_data[1],
 };
+
+struct platform_device msm_camera_avdevicecvbs = {
+	.name          = "avdevice",
+	.id            = 0,
+	.num_resources = 0,
+	.resource      = 0,
+	.dev.platform_data = &msm_camera_sensor_avdevice_data[2],
+};
+
+struct platform_device msm_camera_avdevicehdmi = {
+	.name          = "avdevice",
+	.id            = 1,
+	.num_resources = 0,
+	.resource      = 0,
+	.dev.platform_data = &msm_camera_sensor_avdevice_data[3],
+};
+
 
 void __init apq8064_init_cam(void)
 {
@@ -844,7 +918,13 @@ void __init apq8064_init_cam(void)
 	platform_device_register(&msm8960_device_ispif);
 	platform_device_register(&msm8960_device_vfe);
 	platform_device_register(&msm8960_device_vpe);
+
+#ifdef CONFIG_MSM_S_PLATFORM
+	platform_device_register(&msm_camera_avdevicecvbs);
+	platform_device_register(&msm_camera_avdevicehdmi);
+#else
 	platform_device_register(&msm_camera_avdevice);
+#endif
 }
 
 #ifdef CONFIG_I2C
