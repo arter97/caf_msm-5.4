@@ -680,8 +680,8 @@ static int adv7481_set_hdmi_mode(struct adv7481_state *state)
 	ret |= adv7481_wr_byte(state->i2c_hdmi, 0xCB, 0x09);
 	/* ADI RS */
 	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x3D, 0x10);
-	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x3E, 0x69);
-	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x3F, 0x46);
+	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x3E, 0x7B);
+	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x3F, 0x5E);
 	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x4E, 0xFE);
 	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x4F, 0x18);
 	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x57, 0xA3);
