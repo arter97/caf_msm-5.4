@@ -2208,6 +2208,7 @@ static struct clk_lookup msm_clocks_9630[] = {
 		"f9200000.ssusb"),
 	CLK_LOOKUP("core_clk", qpic_clk.c, "f9ac0000.qcom,nand"),
 	CLK_LOOKUP("core_a_clk", qpic_a_clk.c, "f9ac0000.qcom,msm_qpic"),
+	CLK_LOOKUP("core_clk", qpic_clk.c, "f9ac0000.qcom,msm_qpic"),
 	CLK_LOOKUP("pcie_0_slv_axi_clk", gcc_pcie_axi_clk.c,
 			"bfffd000.qcom,pcie"),
 	CLK_LOOKUP("pcie_0_mstr_axi_clk", gcc_pcie_axi_mstr_clk.c,
