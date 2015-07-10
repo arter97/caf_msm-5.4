@@ -77,135 +77,87 @@ struct msm_ba_dev *get_ba_dev(void)
 	return dev_ctxt;
 }
 
-void msm_ba_queue_v4l2_event(struct msm_ba_inst *inst, int event_type)
+void msm_ba_queue_v4l2_event(struct msm_ba_inst *inst,
+		struct v4l2_event *sd_event)
 {
-	struct v4l2_event event = {.id = 0, .type = event_type};
-	v4l2_event_queue_fh(&inst->event_handler, &event);
+	v4l2_event_queue_fh(&inst->event_handler, sd_event);
 	wake_up(&inst->kernel_event_queue);
 }
 
-static void msm_ba_signal_sessions_event(struct msm_ba_input *input,
-		unsigned int msm_ba_event, void *arg)
+static void msm_ba_print_event(struct v4l2_event *sd_event)
+{
+	switch (sd_event->type) {
+	case V4L2_EVENT_MSM_BA_SIGNAL_IN_LOCK:
+		dprintk(BA_DBG, "Signal in lock for ip_idx %d",
+			((int *)sd_event->u.data)[0]);
+		break;
+	case V4L2_EVENT_MSM_BA_SIGNAL_LOST_LOCK:
+		dprintk(BA_DBG, "Signal lost lock for ip_idx %d",
+			((int *)sd_event->u.data)[0]);
+		break;
+	case V4L2_EVENT_MSM_BA_SOURCE_CHANGE:
+		dprintk(BA_DBG, "Video source change %d",
+			((int *)sd_event->u.data)[1]);
+		break;
+	case V4L2_EVENT_MSM_BA_HDMI_HPD:
+		dprintk(BA_DBG, "HDMI hotplug detected!");
+		break;
+	case V4L2_EVENT_MSM_BA_HDMI_CEC_MESSAGE:
+		dprintk(BA_DBG, "HDMI CEC message!");
+		break;
+	case V4L2_EVENT_MSM_BA_CP:
+		dprintk(BA_DBG, "Content protection detected!");
+		break;
+	case V4L2_EVENT_MSM_BA_ERROR:
+		dprintk(BA_DBG, "Subdev error %d!",
+			((int *)sd_event->u.data)[1]);
+		break;
+	default:
+		dprintk(BA_ERR, "Unknown event: 0x%x", sd_event->type);
+		break;
+	}
+}
+
+static void msm_ba_signal_sessions_event(struct v4l2_event *sd_event)
 {
 	struct msm_ba_inst *inst = NULL;
 	struct msm_ba_dev *dev_ctxt = NULL;
+	int *ptr;
 
+	msm_ba_print_event(sd_event);
 	dev_ctxt = get_ba_dev();
+	ptr = (int *)sd_event->u.data;
 
 	mutex_lock(&dev_ctxt->dev_cs);
 	list_for_each_entry(inst, &(dev_ctxt->instances), list) {
-		if (inst->sd == input->sd) {
-			if (inst->ext_ops && inst->ext_ops->msm_ba_cb)
-				inst->ext_ops->msm_ba_cb(
-						inst, msm_ba_event, arg);
-			else
-				msm_ba_queue_v4l2_event(inst, msm_ba_event);
-		}
+		if (inst->ext_ops && inst->ext_ops->msm_ba_cb)
+			inst->ext_ops->msm_ba_cb(
+					inst, sd_event->id, (void *)ptr[1]);
+		else
+			msm_ba_queue_v4l2_event(inst, sd_event);
 	}
 	mutex_unlock(&dev_ctxt->dev_cs);
 }
 
-static void msm_ba_print_event(int event_id, int arg, const char *func_name)
+void msm_ba_subdev_event_hndlr_delayed(struct work_struct *work)
 {
-	switch (event_id) {
-	case V4L2_EVENT_MSM_BA_SIGNAL_IN_LOCK:
-		dprintk(BA_DBG, "%s signal in lock", func_name);
-		break;
-	case V4L2_EVENT_MSM_BA_SIGNAL_LOST_LOCK:
-		dprintk(BA_DBG, "%s signal lost lock", func_name);
-		break;
-	case V4L2_EVENT_MSM_BA_SOURCE_CHANGE:
-		dprintk(BA_DBG, "%s autodetect %d", func_name, arg);
-		break;
-	case V4L2_EVENT_MSM_BA_HDMI_HPD:
-		dprintk(BA_DBG, "%s HDMI hotplug detected!", func_name);
-		break;
-	case V4L2_EVENT_MSM_BA_HDMI_CEC_MESSAGE:
-		dprintk(BA_DBG, "%s HDMI CEC detected!", func_name);
-		break;
-	case V4L2_EVENT_MSM_BA_CP:
-		dprintk(BA_DBG, "%s content protection detected!", func_name);
-		break;
-	case V4L2_EVENT_MSM_BA_ERROR:
-		dprintk(BA_DBG, "%s subdev error %d!", func_name, arg);
-		break;
-	default:
-		dprintk(BA_ERR, "%s Unknown event: 0x%x", func_name, event_id);
-		break;
-	}
-}
+	struct msm_ba_dev *dev_ctxt = NULL;
+	struct msm_ba_sd_event *ba_sd_event = NULL;
+	struct msm_ba_sd_event *ba_sd_event_tmp = NULL;
 
-static void msm_ba_subdev_event_hndlr_delayed(struct work_struct *work)
-{
-	struct msm_ba_input *input;
-	struct msm_ba_event *event;
-	int event_id = 0, arg = 0;
+	dev_ctxt = get_ba_dev();
 
-	input = container_of(work, struct msm_ba_input,
-				events_work.work);
-
-	dprintk(BA_DBG, "%s input %s", __func__, input->name);
-
-	if (!list_empty(&input->events)) {
-		list_for_each_entry(event, &(input->events), list) {
-			list_del(&event->list);
-			event_id = event->event_id;
-			arg = event->arg;
-			kfree(event);
+	if (!list_empty(&dev_ctxt->sd_events)) {
+		list_for_each_entry_safe(ba_sd_event, ba_sd_event_tmp,
+				&(dev_ctxt->sd_events), list) {
+			list_del(&ba_sd_event->list);
+			msm_ba_signal_sessions_event(&ba_sd_event->sd_event);
+			kfree(ba_sd_event);
 			break;
 		}
 	} else {
 		dprintk(BA_ERR, "%s - queue empty!!!", __func__);
-		return;
 	}
-
-	msm_ba_print_event(event_id, arg, __func__);
-
-	msm_ba_signal_sessions_event(input, event_id, (void *)arg);
-}
-
-static struct msm_ba_input *get_ba_input_from_sd(struct v4l2_subdev *sd)
-{
-	struct msm_ba_input *input = NULL;
-	struct msm_ba_dev *dev_ctxt = NULL;
-
-	dev_ctxt = get_ba_dev();
-	list_for_each_entry(input, &(dev_ctxt->inputs), list) {
-		if (input->sd == sd)
-			return input;
-	}
-
-	return NULL;
-}
-
-void msm_ba_subdev_event_hndlr(struct v4l2_subdev *sd,
-		unsigned int event_id, void *arg)
-{
-	struct msm_ba_input *input;
-	struct msm_ba_event *event;
-
-	if (!sd) {
-		dprintk(BA_ERR, "%s null v4l2 subdev", __func__);
-		return;
-	}
-
-	input = get_ba_input_from_sd(sd);
-	if (!input) {
-		dprintk(BA_ERR, "%s unregistered sd %s", __func__, sd->name);
-		return;
-	}
-
-	event = kzalloc(sizeof(*event), GFP_KERNEL);
-	if (!event) {
-		dprintk(BA_ERR, "%s out of memory", __func__);
-		return;
-	}
-
-	event->event_id = event_id;
-	event->arg = arg ? *(int *)arg : 0;
-	list_add_tail(&event->list, &input->events);
-
-	schedule_delayed_work(&input->events_work, 0);
 }
 
 struct v4l2_subdev *msm_ba_sd_find(const char *name)
@@ -262,10 +214,6 @@ void msm_ba_add_inputs(struct v4l2_subdev *sd)
 				input->ba_ip_idx = i;
 				input->prio = V4L2_PRIORITY_DEFAULT;
 				input->sd = sd;
-				INIT_LIST_HEAD(&input->events);
-				INIT_DELAYED_WORK(&input->events_work,
-					msm_ba_subdev_event_hndlr_delayed);
-
 				rc = v4l2_subdev_call(
 					sd, video, g_input_status, &status);
 				if (rc)
@@ -284,28 +232,40 @@ void msm_ba_add_inputs(struct v4l2_subdev *sd)
 void msm_ba_del_inputs(struct v4l2_subdev *sd)
 {
 	struct msm_ba_input *input = NULL;
-	struct msm_ba_input *input_tmp = NULL;
+	struct list_head *ptr;
+	struct list_head *next;
 	struct msm_ba_dev *dev_ctxt = NULL;
-	struct msm_ba_event *event = NULL;
-	struct msm_ba_event *event_tmp = NULL;
 
 	dev_ctxt = get_ba_dev();
 
-	list_for_each_entry_safe(input, input_tmp, &(dev_ctxt->inputs), list) {
+	list_for_each_safe(ptr, next, &(dev_ctxt->inputs)) {
+		input = list_entry(ptr, struct msm_ba_input, list);
 		if (input->sd == sd) {
-			cancel_delayed_work_sync(&input->events_work);
-			list_for_each_entry_safe(event, event_tmp,
-					&input->events, list) {
-				list_del(&event->list);
-				kfree(event);
-			}
-
 			list_del(&input->list);
 			kfree(input);
 		}
 	}
 }
 
+struct msm_ba_input *msm_ba_find_input_from_sd(struct v4l2_subdev *sd,
+			int bridge_chip_ip)
+{
+	struct msm_ba_input *input = NULL;
+	struct msm_ba_input *input_out = NULL;
+	struct msm_ba_dev *dev_ctxt = NULL;
+
+	dev_ctxt = get_ba_dev();
+
+	if (!list_empty(&(dev_ctxt->inputs))) {
+		list_for_each_entry(input, &(dev_ctxt->inputs), list)
+			if (input->sd == sd &&
+				input->bridge_chip_ip == bridge_chip_ip) {
+				input_out = input;
+				break;
+			}
+	}
+	return input_out;
+}
 struct msm_ba_input *msm_ba_find_input(int ba_input_idx)
 {
 	struct msm_ba_input *input = NULL;

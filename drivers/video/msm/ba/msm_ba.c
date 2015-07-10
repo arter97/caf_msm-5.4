@@ -224,9 +224,14 @@ int msm_ba_s_input(void *instance, unsigned int index)
 	dprintk(BA_DBG, "msm_ba_queue_v4l2_event: ba_input->signal_status %d",
 		ba_input->signal_status);
 	if (!ba_input->signal_status) {
+		struct v4l2_event sd_event = {
+			.id = 0,
+			.type = V4L2_EVENT_MSM_BA_SIGNAL_IN_LOCK};
+		int *ptr = (int *)sd_event.u.data;
+		ptr[0] = index;
+		ptr[1] = ba_input->signal_status;
 		ba_input->in_use = 1;
-		msm_ba_queue_v4l2_event(inst,
-			V4L2_EVENT_MSM_BA_SIGNAL_IN_LOCK);
+		msm_ba_queue_v4l2_event(inst, &sd_event);
 	}
 	return rc;
 }
@@ -556,7 +561,7 @@ int msm_ba_unregister_subdev_node(struct v4l2_subdev *sub_dev)
 }
 EXPORT_SYMBOL(msm_ba_unregister_subdev_node);
 
-static int setup_event_queue(void *inst,
+static int msm_ba_setup_event_queue(void *inst,
 				struct video_device *pvdev)
 {
 	int rc = 0;
@@ -596,6 +601,42 @@ int msm_ba_unsubscribe_event(void *inst,
 	return rc;
 }
 EXPORT_SYMBOL(msm_ba_unsubscribe_event);
+
+void msm_ba_subdev_event_hndlr(struct v4l2_subdev *sd,
+				unsigned int notification, void *arg)
+{
+	struct msm_ba_dev *dev_ctxt = NULL;
+	struct msm_ba_input *ba_input;
+	struct msm_ba_sd_event *ba_sd_event;
+	int bridge_chip_ip;
+
+	if (!sd || !arg) {
+		dprintk(BA_ERR, "%s null v4l2 subdev or arg", __func__);
+		return;
+	}
+
+	bridge_chip_ip = ((int *)((struct v4l2_event *)arg)->u.data)[0];
+	ba_input = msm_ba_find_input_from_sd(sd, bridge_chip_ip);
+	if (!ba_input) {
+		dprintk(BA_ERR, "Could not find input %d from sd: %s",
+			bridge_chip_ip, sd->name);
+		return;
+	}
+
+	ba_sd_event = kzalloc(sizeof(*ba_sd_event), GFP_KERNEL);
+	if (!ba_sd_event) {
+		dprintk(BA_ERR, "%s out of memory", __func__);
+		return;
+	}
+
+	dev_ctxt = get_ba_dev();
+
+	ba_sd_event->sd_event = *(struct v4l2_event *)arg;
+	((int *)ba_sd_event->sd_event.u.data)[0] = ba_input->ba_ip_idx;
+	list_add_tail(&ba_sd_event->list, &dev_ctxt->sd_events);
+
+	schedule_delayed_work(&dev_ctxt->sd_events_work, 0);
+}
 
 void *msm_ba_open(const struct msm_ba_ext_ops *ext_ops)
 {
@@ -642,7 +683,7 @@ void *msm_ba_open(const struct msm_ba_ext_ops *ext_ops)
 
 	inst->ext_ops = ext_ops;
 
-	setup_event_queue(inst, dev_ctxt->vdev);
+	msm_ba_setup_event_queue(inst, dev_ctxt->vdev);
 
 	return inst;
 }

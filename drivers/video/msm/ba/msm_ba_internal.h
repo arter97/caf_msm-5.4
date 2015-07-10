@@ -123,10 +123,9 @@ struct msm_ba_input_config {
 	int signal_status;
 };
 
-struct msm_ba_event {
+struct msm_ba_sd_event {
 	struct list_head list;
-	int event_id;
-	int arg;
+	struct v4l2_event sd_event;
 };
 
 struct msm_ba_input {
@@ -142,9 +141,6 @@ struct msm_ba_input {
 	int signal_status;
 	int in_use;
 	enum v4l2_priority prio;
-
-	struct delayed_work events_work;
-	struct list_head events;
 };
 
 struct msm_ba_dev {
@@ -164,6 +160,8 @@ struct msm_ba_dev {
 
 	/* BA v4l2 sub devs */
 	uint32_t num_ba_subdevs;
+	struct list_head sd_events;
+	struct delayed_work sd_events_work;
 
 	struct dentry *debugfs_root;
 };
@@ -210,6 +208,6 @@ struct ba_ctxt *msm_ba_get_ba_context(void);
 
 void msm_ba_subdev_event_hndlr(struct v4l2_subdev *sd,
 					unsigned int notification, void *arg);
+void msm_ba_subdev_event_hndlr_delayed(struct work_struct *work);
 
 #endif
-
