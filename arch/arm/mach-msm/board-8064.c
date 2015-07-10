@@ -4275,11 +4275,11 @@ static int proc_write_response(struct file *file,
 	int value_len;
 	char value[BOOT_MARKER_MAX_LEN] = {0};
 
-	if (copy_from_user(value, buffer, count))
-		return -EFAULT;
-
 	value_len = (count < BOOT_MARKER_MAX_LEN) ? count :
 			 (BOOT_MARKER_MAX_LEN - 1);
+
+	if (copy_from_user(value, buffer, value_len))
+		return -EFAULT;
 
 	if (value_len > 0)
 		value[value_len] = '\0';
