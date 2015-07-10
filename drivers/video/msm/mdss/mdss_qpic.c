@@ -68,6 +68,21 @@ static struct platform_driver mdss_qpic_driver = {
 	},
 };
 
+static void mdss_qpic_clk_ctrl(bool enable)
+{
+	if (enable) {
+		if (qpic_res->qpic_clk)
+			clk_prepare_enable(qpic_res->qpic_clk);
+		if (qpic_res->qpic_a_clk)
+			clk_prepare_enable(qpic_res->qpic_a_clk);
+	} else {
+		if (qpic_res->qpic_a_clk)
+			clk_disable_unprepare(qpic_res->qpic_a_clk);
+		if (qpic_res->qpic_clk)
+			clk_disable_unprepare(qpic_res->qpic_clk);
+	}
+}
+
 int qpic_on(struct msm_fb_data_type *mfd)
 {
 	int ret;
@@ -78,8 +93,7 @@ int qpic_on(struct msm_fb_data_type *mfd)
 		qpic_res->panel_io.splash_screen_transition = true;
 	}
 
-	if (qpic_res->qpic_a_clk)
-		clk_prepare_enable(qpic_res->qpic_a_clk);
+	mdss_qpic_clk_ctrl(true);
 
 	ret = mdss_qpic_panel_on(qpic_res->panel_data, &qpic_res->panel_io);
 	qpic_res->qpic_is_on = true;
@@ -89,8 +103,7 @@ int qpic_on(struct msm_fb_data_type *mfd)
 		qpic_res->lk_transition_done = true;
 	}
 
-	if (qpic_res->qpic_a_clk)
-		clk_disable_unprepare(qpic_res->qpic_a_clk);
+	mdss_qpic_clk_ctrl(false);
 
 	return ret;
 }
@@ -99,15 +112,13 @@ int qpic_off(struct msm_fb_data_type *mfd)
 {
 	int ret;
 
-	if (qpic_res->qpic_a_clk)
-		clk_prepare_enable(qpic_res->qpic_a_clk);
+	mdss_qpic_clk_ctrl(true);
 
 	ret = mdss_qpic_panel_off(qpic_res->panel_data, &qpic_res->panel_io);
 	if (use_irq)
 		qpic_interrupt_en(false);
 
-	if (qpic_res->qpic_a_clk)
-		clk_disable_unprepare(qpic_res->qpic_a_clk);
+	mdss_qpic_clk_ctrl(false);
 
 	qpic_res->qpic_is_on = false;
 	return ret;
@@ -163,15 +174,12 @@ static void mdss_qpic_pan_display(struct msm_fb_data_type *mfd,
 
 	msm_qpic_bus_set_vote(1);
 	size = fbi->var.xres * fbi->var.yres * bpp;
-
-	if (qpic_res->qpic_a_clk)
-		clk_prepare_enable(qpic_res->qpic_a_clk);
+	mdss_qpic_clk_ctrl(true);
 
 	qpic_send_frame(0, 0, fbi->var.xres - 1, fbi->var.yres - 1,
 		(u32 *)fb_offset, size);
 
-	if (qpic_res->qpic_a_clk)
-		clk_disable_unprepare(qpic_res->qpic_a_clk);
+	mdss_qpic_clk_ctrl(false);
 
 	msm_qpic_bus_set_vote(0);
 }
@@ -784,6 +792,13 @@ static int mdss_qpic_probe(struct platform_device *pdev)
 		goto probe_done;
 	}
 
+	qpic_res->qpic_clk = clk_get(&pdev->dev, "core_clk");
+	if (IS_ERR(qpic_res->qpic_clk)) {
+		pr_err("%s: Can't find core_clk", __func__);
+		qpic_res->qpic_clk = NULL;
+		rc = -EPERM;
+		goto probe_done;
+	}
 	qpic_res->irq = res->start;
 	qpic_res->res_init = true;
 
