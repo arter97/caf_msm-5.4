@@ -25,6 +25,7 @@
 #include <video/mdp_arb.h>
 #include <linux/reverse.h>
 #include <media/v4l2-ctrls.h>
+#include <linux/videodev2.h>
 
 #define FRAME_DELAY 33333
 #define RDI1_USE_WM 4
@@ -74,6 +75,10 @@ enum camera_states {
 	CAMERA_TRANSITION_SUSPEND,
 	CAMERA_TRANSITION_PREVIEW,
 	CAMERA_TRANSITION_OFF,
+	CAMERA_RECOVERY_START,
+	CAMERA_RECOVERY_RETRY,
+	CAMERA_RECOVERY_IN_PROGRESS,
+	CAMERA_RECOVERY_FAILED,
 	CAMERA_UNKNOWN
 };
 
@@ -112,6 +117,10 @@ struct adp_camera_ctxt {
 #endif
 	int fb_idx[DISPLAY_ID_MAX];
 
+	/* recovery */
+	struct delayed_work recovery_work;
+	bool camera_stream_enabled;
+
 	/* debug */
 	struct dentry *debugfs_root;
 };
@@ -124,7 +133,23 @@ static struct adp_camera_ctxt *adp_cam_ctxt;
 
 static int enable_camera_preview(void);
 static int disable_camera_preview(void);
+static int adp_camera_enable_stream(void);
+static int adp_camera_disable_stream(void);
+static int mdp_enable_camera_preview(void);
+static int mdp_disable_camera_preview(void);
 #endif
+
+static void adp_camera_event_callback(void *instance,
+					unsigned int event, void *arg);
+
+static const struct msm_ba_ext_ops adp_camera_ba_ext_ops = {
+	.msm_ba_cb = adp_camera_event_callback,
+};
+
+static struct msm_cam_server_adp_cam adp_camera_msm_cam_ops = {
+	.adp_cam_cb = adp_camera_event_callback,
+};
+
 
 static int axi_vfe_config_cmd_para(struct vfe_axi_output_config_cmd_type *cmd)
 {
@@ -262,6 +287,13 @@ static void preview_set_data_pipeline(void)
 	axi_vfe_config_cmd_para(&vfe_axi_cmd_para);
 	rc = vfe32_config_axi_rdi_only(my_axi_ctrl, OUTPUT_TERT2,
 			(uint32_t *)&vfe_axi_cmd_para);
+
+	adp_camera_msm_cam_ops.interface = RDI1;
+	adp_camera_msm_cam_ops.csid_sd = &lsh_csid_dev
+			[adp_rvc_csi_lane_params.csi_phy_sel]->subdev;
+	adp_camera_msm_cam_ops.csiphy_sd = &lsh_csiphy_dev
+			[adp_rvc_csi_lane_params.csi_phy_sel]->subdev;
+	msm_cam_server_adp_cam_register(&adp_camera_msm_cam_ops);
 
 	pr_debug("%s: kpi exit!!!\n", __func__);
 }
@@ -977,16 +1009,158 @@ static int mdp_exit(display_id)
 }
 #endif
 
-static void adp_camera_ba_callback(void *instance,
-					unsigned int event, void *arg)
+static void adp_camera_v4l2_queue_event(int event)
 {
-	pr_debug("%s - %x", __func__, event);
+	struct v4l2_event v4l2_ev;
+	v4l2_ev.id = 0;
+	v4l2_ev.type = event;
+	ktime_get_ts(&v4l2_ev.timestamp);
+	v4l2_event_queue(adp_cam_ctxt->vdev, &v4l2_ev);
+}
+
+/* Wait times in ms for delayed work
+ * WAIT_RETRY : time to wait before retrying if we failed
+ *                   to restart camera right away
+ * WAIT_IN_PROGRESS : time to ensure no errors occur when we recovered
+ * WAIT_FAILED_RETRY : time to wait before retrying if we failed recovery
+ * */
+#define CAMERA_RECOVERY_WAIT_RETRY 1000
+#define CAMERA_RECOVERY_WAIT_IN_PROGRESS 1000
+#define CAMERA_RECOVERY_WAIT_FAILED_RETRY 5000
+
+static void adp_camera_recovery_work(struct work_struct *work)
+{
+	int rc;
+
+	switch (adp_cam_ctxt->state) {
+	case CAMERA_RECOVERY_START: {
+		/* reset adp camera */
+		pr_err("recover start");
+		adp_camera_disable_stream();
+		mdp_disable_camera_preview();
+
+		rc = adp_camera_enable_stream();
+		if (rc) {
+			pr_err("%s - restart failed %d! Will try again...",
+					__func__, rc);
+			adp_cam_ctxt->state = CAMERA_RECOVERY_RETRY;
+			schedule_delayed_work(&adp_cam_ctxt->recovery_work,
+				msecs_to_jiffies(CAMERA_RECOVERY_WAIT_RETRY));
+			goto cleanup;
+		}
+
+		adp_cam_ctxt->state = CAMERA_RECOVERY_IN_PROGRESS;
+		schedule_delayed_work(&adp_cam_ctxt->recovery_work,
+			msecs_to_jiffies(CAMERA_RECOVERY_WAIT_IN_PROGRESS));
+
+		break;
+	}
+	case CAMERA_RECOVERY_RETRY: {
+		rc = adp_camera_enable_stream();
+		if (rc) {
+			pr_err("%s - try restart failed %d!",
+					__func__, rc);
+			adp_cam_ctxt->state = CAMERA_RECOVERY_FAILED;
+			schedule_delayed_work(&adp_cam_ctxt->recovery_work, 0);
+		} else {
+			/* make sure no more errors after restarting */
+			pr_err("%s - restart success! Wait for clean pipe...",
+					__func__);
+			adp_cam_ctxt->state = CAMERA_RECOVERY_IN_PROGRESS;
+			schedule_delayed_work(&adp_cam_ctxt->recovery_work,
+				msecs_to_jiffies(
+					CAMERA_RECOVERY_WAIT_IN_PROGRESS));
+		}
+		break;
+	}
+	case CAMERA_RECOVERY_IN_PROGRESS: {
+		pr_err("%s - recovery success!", __func__);
+		adp_camera_disable_stream();
+		adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
+		disable_camera_preview();
+		adp_camera_v4l2_queue_event(ADP_CAMERA_EVENT_RECOVERY_SUCCESS);
+		break;
+	}
+	case CAMERA_RECOVERY_FAILED:
+		adp_camera_v4l2_queue_event(ADP_CAMERA_EVENT_RECOVERY_FAILED);
+		adp_camera_disable_stream();
+		msleep(CAMERA_RECOVERY_WAIT_FAILED_RETRY);
+
+		pr_err("%s - recovery retry...", __func__);
+		adp_cam_ctxt->state = CAMERA_RECOVERY_RETRY;
+		schedule_delayed_work(&adp_cam_ctxt->recovery_work, 0);
+		break;
+	default:
+		pr_err("%s - Invalid state %d",
+				__func__, adp_cam_ctxt->state);
+		break;
+	}
+
+cleanup:
 	return;
 }
 
-static const struct msm_ba_ext_ops adp_camera_ba_ext_ops = {
-	.msm_ba_cb = adp_camera_ba_callback,
-};
+static void adp_camera_event_callback(void *instance,
+					unsigned int event, void *arg)
+{
+	pr_debug("%s - %x", __func__, event);
+
+	switch (event) {
+	case NOTIFY_VFE_WM_OVERFLOW_ERROR:
+	case NOTIFY_ISPIF_OVERFLOW_ERROR:
+	case NOTIFY_CSID_UNBOUNDED_FRAME_ERROR:
+	case NOTIFY_CSID_STREAM_UNDERFLOW_ERROR:
+	case NOTIFY_CSID_ECC_ERROR:
+	case NOTIFY_CSID_CRC_ERROR:
+	case NOTIFY_CSID_PHY_DL_OVERFLOW_ERROR:
+	case NOTIFY_CSIPHY_ERROR:
+	case V4L2_EVENT_MSM_BA_SIGNAL_LOST_LOCK:
+	case V4L2_EVENT_MSM_BA_ERROR: {
+		switch (adp_cam_ctxt->state) {
+		case CAMERA_PREVIEW_ENABLED: {
+			pr_err("%s - error event %x, start recovery...",
+					__func__, event);
+			adp_cam_ctxt->state = CAMERA_RECOVERY_START;
+
+			adp_camera_v4l2_queue_event(ADP_CAMERA_EVENT_ERROR);
+
+			schedule_delayed_work(&adp_cam_ctxt->recovery_work, 0);
+			break;
+		}
+		case CAMERA_PREVIEW_DISABLED:
+			pr_debug("%s ignore event %x while preview off",
+					__func__, event);
+			break;
+		case CAMERA_RECOVERY_RETRY:
+		case CAMERA_RECOVERY_START: {
+			pr_debug("%s ignore event %x while starting recovery",
+					__func__, event);
+			break;
+		}
+		case CAMERA_RECOVERY_IN_PROGRESS:{
+			pr_err("%s error event %x while recovering. recovery failed!",
+					__func__, event);
+			adp_cam_ctxt->state = CAMERA_RECOVERY_FAILED;
+			cancel_delayed_work_sync(&adp_cam_ctxt->recovery_work);
+			schedule_delayed_work(&adp_cam_ctxt->recovery_work, 0);
+			break;
+		}
+		case CAMERA_RECOVERY_FAILED:
+			pr_debug("%s ignore error event while failed already...",
+					__func__);
+			break;
+		default:
+			pr_err("%s not suppose to be here with state %d...",
+					__func__, adp_cam_ctxt->state);
+			break;
+		}
+
+		break;
+	}
+	default:
+		break;
+	}
+}
 
 static int adp_rear_camera_enable(void)
 {
@@ -1096,6 +1270,7 @@ static int adp_rear_camera_enable(void)
 static void adp_rear_camera_disable(void)
 {
 	int i;
+	msm_cam_server_adp_cam_deregister();
 	msm_axi_subdev_release_rdi_only(lsh_axi_ctrl, s_ctrl);
 	msm_csid_release(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
 			MM_CAM_USE_BYPASS);
@@ -1108,49 +1283,64 @@ static void adp_rear_camera_disable(void)
 		mdp_exit(i);
 }
 
-#ifdef CONFIG_FB_MSM_MDP_ARB
-static int disable_camera_preview(void)
+static int adp_camera_disable_stream(void)
 {
-	struct mdp_display_commit commit_data;
-	int ret = 0;
-	pr_debug("%s: kpi entry\n", __func__);
-
-	if (!adp_cam_ctxt) {
-		pr_err("%s - context is invalid",
-						__func__);
-		return -EPERM;
+	if (!adp_cam_ctxt->camera_stream_enabled) {
+		pr_debug("%s - already disabled", __func__);
+		return 0;
 	}
-
-	switch (adp_cam_ctxt->state) {
-	case CAMERA_PREVIEW_ENABLED:
-	case CAMERA_TRANSITION_PREVIEW:
-		break;
-	case CAMERA_PREVIEW_DISABLED:
-		pr_warn("%s - preview already disabled", __func__);
-		goto exit;
-		break;
-	default:
-		pr_err("%s - cannot disable preview from uninitialized state",
-				__func__);
-		return -EPERM;
-		break;
-	}
-
-	wait_for_completion(&preview_enabled);
-	adp_cam_ctxt->state = CAMERA_TRANSITION_OFF;
 
 	axi_stop_rdi1_only(my_axi_ctrl);
 
-	usleep(FRAME_DELAY); /* delay to ensure sof for regupdate*/
+	/* delay to ensure sof for regupdate*/
+	usleep(FRAME_DELAY);
 	msm_ba_streamoff(adp_cam_ctxt->ba_inst_hdlr, 0);
+
+	adp_cam_ctxt->camera_stream_enabled = false;
+
+	return 0;
+}
+
+static int adp_camera_enable_stream(void)
+{
+	int rc = 0;
+
+	if (adp_cam_ctxt->camera_stream_enabled) {
+		pr_debug("%s - already enabled", __func__);
+		goto exit;
+	}
+
+	msm_csid_reset(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel]);
+	rc = msm_csid_config(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
+			&adp_rvc_csid_params);
+	if (rc) {
+		pr_err("%s - msm_csid_config failed %d", __func__, rc);
+		goto exit;
+	}
+
+	rc = msm_ba_streamon(adp_cam_ctxt->ba_inst_hdlr, 0);
+	if (rc) {
+		pr_err("%s - msm_ba_streamon failed %d", __func__, rc);
+		goto exit;
+	}
+
+	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);
+
+	adp_cam_ctxt->camera_stream_enabled = true;
+
+exit:
+	return rc;
+}
+
+#ifdef CONFIG_FB_MSM_MDP_ARB
+static int mdp_disable_camera_preview(void)
+{
+	int ret;
+	struct mdp_display_commit commit_data;
+
 	memset(&commit_data, 0, sizeof(commit_data));
 	commit_data.wait_for_finish = true;
 	commit_data.flags = MDP_DISPLAY_COMMIT_OVERLAY;
-	ret = mdp_arb_client_overlay_commit(
-			adp_cam_ctxt->mdp_arb_handle[adp_cam_ctxt->display_id],
-		&commit_data);
-	if (ret)
-		pr_err("%s overlay commit fails=%d", __func__, ret);
 
 	if (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] == 0) {
 		ret = mdp_arb_client_overlay_unset(
@@ -1159,13 +1349,13 @@ static int disable_camera_preview(void)
 				overlay_req[OVERLAY_CAMERA_PREVIEW].id);
 		if (ret)
 			pr_err("%s overlay unset fails=%d", __func__, ret);
+
 		pr_debug("%s: overlay_unset camera preview free pipe !\n",
 			__func__);
 	}
 
 	ret = mdp_arb_client_overlay_commit(
-			adp_cam_ctxt->
-				mdp_arb_handle[adp_cam_ctxt->display_id],
+			adp_cam_ctxt->mdp_arb_handle[adp_cam_ctxt->display_id],
 			&commit_data);
 	if (ret)
 		pr_err("%s overlay commit fails=%d", __func__, ret);
@@ -1173,135 +1363,58 @@ static int disable_camera_preview(void)
 	mdpclient_msm_fb_close(
 			adp_cam_ctxt->fb_idx[adp_cam_ctxt->display_id]);
 
-	adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
-
-exit:
-	complete(&preview_disabled);
-	/* reset preview enable*/
-	init_completion(&preview_enabled);
-
-	pr_debug("%s: kpi entry\n", __func__);
 	return ret;
 }
 
-static int enable_camera_preview(void)
+static int mdp_enable_camera_preview(void)
 {
 	u64 mdp_max_bw_test = 2000000000;
-
-	pr_debug("%s: kpi entry\n", __func__);
-
-	if (!adp_cam_ctxt) {
-		pr_err("%s - context is invalid",
-						__func__);
-		return -EPERM;
-	}
-
-	switch (adp_cam_ctxt->state) {
-	case CAMERA_PREVIEW_DISABLED:
-	case CAMERA_TRANSITION_OFF:
-		break;
-	case CAMERA_PREVIEW_ENABLED:
-		pr_warn("%s - preview already enabled", __func__);
-		goto exit;
-		break;
-	default:
-		pr_err("%s - cannot enable preview from uninitialized state",
-				__func__);
-		return -EPERM;
-		break;
-	}
-
-	if (adp_camera_query_display(adp_cam_ctxt->display_id))
-		return -EINVAL;
-
-	wait_for_completion(&preview_disabled);
-	adp_cam_ctxt->state = CAMERA_TRANSITION_PREVIEW;
-
-	if (mdpclient_msm_fb_open(
-			adp_cam_ctxt->fb_idx[adp_cam_ctxt->display_id]))
-		pr_err("%s: can't open fb=%d", __func__,
+	int ret;
+	ret = mdpclient_msm_fb_open(
+		adp_cam_ctxt->fb_idx[adp_cam_ctxt->display_id]);
+	if (ret) {
+		pr_err("%s: %d can't open fb=%d", __func__, ret,
 				adp_cam_ctxt->fb_idx[adp_cam_ctxt->display_id]);
+		return ret;
+	}
 
-	if (mdpclient_msm_fb_blank(
+	ret = mdpclient_msm_fb_blank(
 			adp_cam_ctxt->fb_idx[adp_cam_ctxt->display_id],
-			FB_BLANK_UNBLANK, true))
+			FB_BLANK_UNBLANK, true);
+	if (ret) {
 		pr_err("%s: can't turn on display!\n", __func__);
+		goto mdp_failed;
+	}
 
 	mdp_bus_scale_update_request(mdp_max_bw_test, mdp_max_bw_test,
-		mdp_max_bw_test, mdp_max_bw_test);
+			mdp_max_bw_test, mdp_max_bw_test);
 
 	/* configure pipe for reverse camera preview */
 	overlay_req[OVERLAY_CAMERA_PREVIEW].id = MSMFB_NEW_REQUEST;
 	preview_set_overlay_params(&overlay_req[OVERLAY_CAMERA_PREVIEW]);
 	alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] =
-		mdp_arb_client_overlay_set(
-				adp_cam_ctxt->mdp_arb_handle
-					[adp_cam_ctxt->display_id],
-				&overlay_req[OVERLAY_CAMERA_PREVIEW]);
+			mdp_arb_client_overlay_set(
+					adp_cam_ctxt->mdp_arb_handle
+						[adp_cam_ctxt->display_id],
+					&overlay_req[OVERLAY_CAMERA_PREVIEW]);
 
 	if (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] != 0) {
 		pr_err("%s: mdp_arb_client_overlay_set error!\n",
-			__func__);
-		adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
-		complete(&preview_enabled);
-		complete(&preview_disabled);
-		return -EBUSY;
-	}
-
-	msm_csid_reset(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel]);
-	msm_csid_config(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
-				&adp_rvc_csid_params);
-
-	msm_ba_streamon(adp_cam_ctxt->ba_inst_hdlr, 0);
-	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);
-
-	adp_cam_ctxt->state = CAMERA_PREVIEW_ENABLED;
-
-exit:
-	complete(&preview_enabled);
-
-	/* reset preview disable*/
-	init_completion(&preview_disabled);
-
-	pr_debug("%s: kpi exit\n", __func__);
-	return 0;
-}
-#else
-int disable_camera_preview(void)
-{
-	pr_debug("%s: kpi entry\n", __func__);
-
-	if (!adp_cam_ctxt) {
-		pr_err("%s - context is invalid",
-						__func__);
-		return -EPERM;
-	}
-
-	switch (adp_cam_ctxt->state) {
-	case CAMERA_PREVIEW_ENABLED:
-	case CAMERA_TRANSITION_PREVIEW:
-		break;
-	case CAMERA_PREVIEW_DISABLED:
-		pr_warn("%s - preview already disabled", __func__);
-		goto exit;
-		break;
-	default:
-		pr_err("%s - cannot disable preview from uninitialized state",
 				__func__);
-		return -EPERM;
-		break;
+		goto mdp_failed;
 	}
 
-	if (adp_camera_query_display(adp_cam_ctxt->display_id))
-		return -EINVAL;
+	return ret;
 
-	wait_for_completion(&preview_enabled);
-	adp_cam_ctxt->state = CAMERA_TRANSITION_OFF;
+mdp_failed:
+	mdpclient_msm_fb_close(
+				adp_cam_ctxt->fb_idx[adp_cam_ctxt->display_id]);
+	return ret;
+}
 
-	axi_stop_rdi1_only(my_axi_ctrl);
-
-	usleep(FRAME_DELAY); /* delay to ensure sof for regupdate*/
-	msm_ba_streamoff(adp_cam_ctxt->ba_inst_hdlr, 0);
+#else
+static int mdp_disable_camera_preview(void)
+{
 	mdpclient_display_commit(
 			adp_cam_ctxt->fb_idx[adp_cam_ctxt->display_id]);
 
@@ -1318,56 +1431,20 @@ int disable_camera_preview(void)
 
 	mdpclient_msm_fb_close(
 			adp_cam_ctxt->fb_idx[adp_cam_ctxt->display_id]);
-
-	adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
-
-exit:
-	complete(&preview_disabled);
-	/* reset preview enable*/
-	init_completion(&preview_enabled);
-
-	pr_debug("%s: kpi entry\n", __func__);
-	return 0;
 }
 
-int enable_camera_preview(void)
+static int mdp_enable_camera_preview(void)
 {
 	u64 mdp_max_bw_test = 2000000000;
-	int waitcounter_camera = 0;
-	int max_wait_count = 15;
-
-	pr_debug("%s: kpi entry\n", __func__);
-
-	if (!adp_cam_ctxt) {
-		pr_err("%s - context is invalid",
-						__func__);
-		return -EPERM;
-	}
-
-	switch (adp_cam_ctxt->state) {
-	case CAMERA_PREVIEW_DISABLED:
-	case CAMERA_TRANSITION_OFF:
-		break;
-	case CAMERA_PREVIEW_ENABLED:
-		pr_warn("%s - preview already enabled", __func__);
-		goto exit;
-		break;
-	default:
-		pr_err("%s - cannot enable preview from uninitialized state",
-				__func__);
-		return -EPERM;
-		break;
-	}
-
-	wait_for_completion(&preview_disabled);
-	adp_cam_ctxt->state = CAMERA_TRANSITION_PREVIEW;
 
 	mdpclient_msm_fb_open(
 			adp_cam_ctxt->fb_idx[adp_cam_ctxt->display_id]);
 	if (mdpclient_msm_fb_blank(
 			adp_cam_ctxt->fb_idx[adp_cam_ctxt->display_id],
-			FB_BLANK_UNBLANK, true))
+			FB_BLANK_UNBLANK, true)) {
 		pr_err("%s: can't turn on display!\n", __func__);
+		goto mdp_failed;
+	}
 
 	mdp_bus_scale_update_request(mdp_max_bw_test, mdp_max_bw_test,
 		mdp_max_bw_test, mdp_max_bw_test);
@@ -1397,18 +1474,101 @@ int enable_camera_preview(void)
 	if (alloc_overlay_pipe_flag[OVERLAY_CAMERA_PREVIEW] != 0) {
 		pr_err("%s: mdpclient_overlay_set error!\n",
 			__func__);
-		adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
-		complete(&preview_enabled);
-		complete(&preview_disabled);
-		return -EBUSY;
+		goto mdp_failed;
 	}
 
-	msm_csid_reset(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel]);
-	msm_csid_config(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
-				&adp_rvc_csid_params);
+	return ret;
 
-	msm_ba_streamon(adp_cam_ctxt->ba_inst_hdlr, 0);
-	axi_start_rdi1_only(my_axi_ctrl, s_ctrl);
+mdp_failed:
+	mdpclient_msm_fb_close(
+			adp_cam_ctxt->fb_idx[adp_cam_ctxt->display_id]);
+	return ret;
+}
+#endif
+
+static int disable_camera_preview(void)
+{
+	int ret = 0;
+	pr_debug("%s: kpi entry\n", __func__);
+
+	if (!adp_cam_ctxt) {
+		pr_err("%s - context is invalid",
+						__func__);
+		return -EPERM;
+	}
+
+	switch (adp_cam_ctxt->state) {
+	case CAMERA_PREVIEW_ENABLED:
+	case CAMERA_TRANSITION_PREVIEW:
+		break;
+	case CAMERA_PREVIEW_DISABLED:
+		pr_warn("%s - preview already disabled", __func__);
+		goto exit;
+		break;
+	default:
+		pr_err("%s - cannot disable preview from uninitialized state",
+				__func__);
+		return -EPERM;
+		break;
+	}
+
+	wait_for_completion(&preview_enabled);
+	adp_cam_ctxt->state = CAMERA_TRANSITION_OFF;
+
+	adp_camera_disable_stream();
+	mdp_disable_camera_preview();
+
+	adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
+
+exit:
+	complete(&preview_disabled);
+	/* reset preview enable*/
+	init_completion(&preview_enabled);
+
+	pr_debug("%s: kpi entry\n", __func__);
+	return ret;
+}
+
+static int enable_camera_preview(void)
+{
+	int rc = 0;
+
+	pr_debug("%s: kpi entry\n", __func__);
+
+	if (!adp_cam_ctxt) {
+		pr_err("%s - context is invalid",
+						__func__);
+		return -EPERM;
+	}
+
+	switch (adp_cam_ctxt->state) {
+	case CAMERA_PREVIEW_DISABLED:
+	case CAMERA_TRANSITION_OFF:
+		break;
+	case CAMERA_PREVIEW_ENABLED:
+		pr_warn("%s - preview already enabled", __func__);
+		goto exit;
+		break;
+	default:
+		pr_err("%s - cannot enable preview from uninitialized state",
+				__func__);
+		return -EPERM;
+		break;
+	}
+
+	if (adp_camera_query_display(adp_cam_ctxt->display_id))
+		return -EINVAL;
+
+	wait_for_completion(&preview_disabled);
+	adp_cam_ctxt->state = CAMERA_TRANSITION_PREVIEW;
+
+	rc = mdp_enable_camera_preview();
+	if (rc)
+		goto mdp_failed;
+
+	rc = adp_camera_enable_stream();
+	if (rc)
+		goto camera_failed;
 
 	adp_cam_ctxt->state = CAMERA_PREVIEW_ENABLED;
 
@@ -1419,9 +1579,17 @@ exit:
 	init_completion(&preview_disabled);
 
 	pr_debug("%s: kpi exit\n", __func__);
-	return 0;
+	return rc;
+
+camera_failed:
+	mdp_disable_camera_preview();
+mdp_failed:
+	adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
+	complete(&preview_enabled);
+	complete(&preview_disabled);
+	pr_debug("%s: kpi exit\n", __func__);
+	return rc;
 }
-#endif
 
 
 static int adp_camera_v4l2_open(struct file *filp)
@@ -1759,6 +1927,8 @@ static int adp_camera_device_init(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+	INIT_DELAYED_WORK(&adp_cam_ctxt->recovery_work,
+						adp_camera_recovery_work);
 	adp_cam_ctxt->state = CAMERA_UNINITIALIZED;
 
 	rc = mdp_arb_register_event();

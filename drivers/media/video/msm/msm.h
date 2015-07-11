@@ -600,6 +600,9 @@ struct msm_cam_server_dev {
 	struct v4l2_subdev *irqr_device;
 	struct v4l2_subdev *cci_device;
 
+	/* adp camera */
+	struct msm_cam_server_adp_cam *adp_cam;
+
 	spinlock_t  intr_table_lock;
 	struct irqmgr_intr_lkup_table irq_lkup_table;
 	/* Stores the pointer to the subdev when the individual

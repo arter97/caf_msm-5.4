@@ -150,15 +150,11 @@ static irqreturn_t msm_csid_irq(int irq_num, void *data)
 	CDBG("%s CSID%d_IRQ_STATUS_ADDR = 0x%x\n",
 		 __func__, csid_dev->pdev->id, irq);
 	if (irq & (0x1 << CSID_RST_DONE_IRQ_BITSHIFT))
-			complete(&csid_dev->reset_complete);
+		complete(&csid_dev->reset_complete);
 
-	if (irq & CSID_IRQ_UNBOUNDED_FRAME_MASK) {
+	if (irq & CSID_IRQ_UNBOUNDED_FRAME_MASK)
 		pr_err("%s - received CSID_IRQ_UNBOUNDED_FRAME_MASK!\n",
 				__func__);
-		v4l2_subdev_notify(&csid_dev->subdev,
-				NOTIFY_CSID_UNBOUNDED_FRAME_ERROR,
-				(void *)NULL);
-	}
 	if (irq & CSID_IRQ_STREAM_UNDERFLOW_MASK) {
 		pr_err("%s - received CSID_IRQ_STREAM_UNDERFLOW_MASK!\n",
 				__func__);
