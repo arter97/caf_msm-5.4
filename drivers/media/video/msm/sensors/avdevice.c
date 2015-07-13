@@ -105,7 +105,8 @@ static int32_t avdevice_ba_platform_probe(struct platform_device *pdev)
 		return -EFAULT;
 	}
 
-	rc = msm_ba_s_output(ba_instance_handler_a[0], p_sensor_info->ba_idx);
+	rc = msm_ba_s_output(ba_instance_handler_a[pdev->id],
+				p_sensor_info->ba_idx);
 	if (rc) {
 		pr_err("%s - msm_ba_s_output failed %d\n",
 				__func__, rc);
