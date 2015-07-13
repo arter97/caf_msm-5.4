@@ -868,11 +868,18 @@ static int vfe32_config_axi(
 	axi_ctrl->share_ctrl->outpath.out2.ch2 = 0x0000FFFF & *ch_info++;
 	axi_ctrl->share_ctrl->outpath.out2.inst_handle = *ch_info++;
 
-	axi_ctrl->share_ctrl->outpath.out3.ch0 = 0x0000FFFF & *ch_info;
-	axi_ctrl->share_ctrl->outpath.out3.ch1 =
-		0x0000FFFF & (*ch_info++ >> 16);
-	axi_ctrl->share_ctrl->outpath.out3.ch2 = 0x0000FFFF & *ch_info++;
-	axi_ctrl->share_ctrl->outpath.out3.inst_handle = *ch_info++;
+	if (rdi1_reserve_info.reserved) {
+		ch_info += 3;
+	} else {
+		axi_ctrl->share_ctrl->outpath.out3.ch0 =
+				0x0000FFFF & *ch_info;
+		axi_ctrl->share_ctrl->outpath.out3.ch1 =
+				0x0000FFFF & (*ch_info++ >> 16);
+		axi_ctrl->share_ctrl->outpath.out3.ch2 =
+				0x0000FFFF & *ch_info++;
+		axi_ctrl->share_ctrl->outpath.out3.inst_handle =
+				*ch_info++;
+	}
 
 	axi_ctrl->share_ctrl->outpath.out4.ch0 = 0x0000FFFF & *ch_info;
 	axi_ctrl->share_ctrl->outpath.out4.ch1 =
@@ -880,7 +887,8 @@ static int vfe32_config_axi(
 	axi_ctrl->share_ctrl->outpath.out4.ch2 = 0x0000FFFF & *ch_info++;
 	axi_ctrl->share_ctrl->outpath.out4.inst_handle = *ch_info++;
 
-	axi_ctrl->share_ctrl->outpath.output_mode = 0;
+	if (!rdi1_reserve_info.reserved)
+		axi_ctrl->share_ctrl->outpath.output_mode = 0;
 
 	if (mode & OUTPUT_TERT1)
 		axi_ctrl->share_ctrl->outpath.output_mode |=
@@ -969,10 +977,11 @@ bus_cfg:
 
 	msm_camera_io_w(pixel_if_cfg,
 		axi_ctrl->share_ctrl->vfebase + VFE_PIXEL_IF_CFG);
-	if (msm_camera_io_r(axi_ctrl->share_ctrl->vfebase +
-		V32_GET_HW_VERSION_OFF) ==
-		VFE33_HW_NUMBER) {
-		if (!rdi1_reserve_info.reserved) {
+
+	if (!rdi1_reserve_info.reserved) {
+		if (msm_camera_io_r(axi_ctrl->share_ctrl->vfebase +
+				V32_GET_HW_VERSION_OFF) ==
+				VFE33_HW_NUMBER) {
 			msm_camera_io_w(*ch_info++,
 				axi_ctrl->share_ctrl->vfebase + VFE_RDI0_CFG);
 			msm_camera_io_w(*ch_info++,
@@ -6259,14 +6268,17 @@ int msm_axi_subdev_init_rdi_only(struct v4l2_subdev *sd,
 	int cam_server_domain_num;
 	struct iommu_domain *camera_domain;
 #endif /* CONFIG_MSM_IOMMU */
-	axi_ctrl->share_ctrl->axi_ref_cnt++;
-	if (axi_ctrl->share_ctrl->axi_ref_cnt > 1)
-		return rc;
+
 	rdi1_reserve_info.reserved = 1;
 	rdi1_reserve_info.wm = RDI1_WM_DEFAULT;
 	rdi1_reserve_info.xbarcfg0 = 0;
 	rdi1_reserve_info.xbarcfg1 = 0;
 	rdi1_reserve_info.pixifcfg = 0;
+
+	axi_ctrl->share_ctrl->axi_ref_cnt++;
+	if (axi_ctrl->share_ctrl->axi_ref_cnt > 1)
+		return rc;
+
 	axi_ctrl->share_ctrl->dual_enabled = dual_enabled;
 	axi_ctrl->share_ctrl->lp_mode = 0;
 	spin_lock_init(&axi_ctrl->tasklet_lock);
@@ -6385,14 +6397,13 @@ int msm_axi_subdev_init(struct v4l2_subdev *sd,
 	}
 
 	axi_ctrl->share_ctrl->axi_ref_cnt++;
+	if (axi_ctrl->share_ctrl->axi_ref_cnt == 1) {
+		axi_ctrl->share_ctrl->dual_enabled = dual_enabled;
+		axi_ctrl->share_ctrl->lp_mode = 0;
+		spin_lock_init(&axi_ctrl->tasklet_lock);
+		INIT_LIST_HEAD(&axi_ctrl->tasklet_q);
+		spin_lock_init(&axi_ctrl->share_ctrl->sd_notify_lock);
 
-	axi_ctrl->share_ctrl->dual_enabled = dual_enabled;
-	axi_ctrl->share_ctrl->lp_mode = 0;
-	spin_lock_init(&axi_ctrl->tasklet_lock);
-	INIT_LIST_HEAD(&axi_ctrl->tasklet_q);
-	spin_lock_init(&axi_ctrl->share_ctrl->sd_notify_lock);
-
-	if (!rdi1_reserve_info.reserved) {
 		pr_debug("%s: vfe reset the vfe\n", __func__);
 		axi_ctrl->share_ctrl->vfebase = ioremap(axi_ctrl->vfemem->start,
 			resource_size(axi_ctrl->vfemem));
@@ -6416,10 +6427,8 @@ int msm_axi_subdev_init(struct v4l2_subdev *sd,
 				ARRAY_SIZE(vfe32_clk_info), 1);
 		if (rc < 0)
 			goto clk_enable_failed;
-	}
 
 #ifdef CONFIG_MSM_IOMMU
-	if (!rdi1_reserve_info.reserved) {
 		rc = iommu_attach_device(mctl->domain,
 			axi_ctrl->iommu_ctx_imgwr);
 		if (rc < 0) {
@@ -6436,8 +6445,8 @@ int msm_axi_subdev_init(struct v4l2_subdev *sd,
 			rc = -ENODEV;
 			goto device_misc_attach_failed;
 		}
-	}
 #endif
+	}
 
 	msm_camio_bus_scale_cfg(
 		mctl->sdata->pdata->cam_bus_scale_table, S_INIT);
@@ -6460,11 +6469,11 @@ int msm_axi_subdev_init(struct v4l2_subdev *sd,
 	else
 		axi_ctrl->share_ctrl->register_total = VFE33_REGISTER_TOTAL;
 
-	spin_lock_init(&axi_ctrl->share_ctrl->stop_flag_lock);
-	spin_lock_init(&axi_ctrl->share_ctrl->update_ack_lock);
-	spin_lock_init(&axi_ctrl->share_ctrl->start_ack_lock);
 
-	if (!rdi1_reserve_info.reserved) {
+	if (axi_ctrl->share_ctrl->axi_ref_cnt == 1) {
+		spin_lock_init(&axi_ctrl->share_ctrl->stop_flag_lock);
+		spin_lock_init(&axi_ctrl->share_ctrl->update_ack_lock);
+		spin_lock_init(&axi_ctrl->share_ctrl->start_ack_lock);
 		/* enable reset_ack interrupt.  */
 		enable_irq(axi_ctrl->vfeirq->start);
 	}
@@ -6521,6 +6530,13 @@ void msm_axi_subdev_release(struct v4l2_subdev *sd)
 
 	if (!axi_ctrl->share_ctrl->vfebase) {
 		pr_err("%s: base address unmapped\n", __func__);
+		return;
+	}
+
+	if (rdi1_reserve_info.reserved &&
+		axi_ctrl->share_ctrl->axi_ref_cnt == 1) {
+		pr_warn("%s: release called once too many",
+			__func__);
 		return;
 	}
 
@@ -7642,13 +7658,12 @@ static int msm_axi_config(struct v4l2_subdev *sd, void __user *arg)
 				return -EFAULT;
 		}
 
-		if (rdi1_reserve_info.reserved) {
+		if (rdi1_reserve_info.reserved)
 			pr_debug("%s rdi1 reserved, skipping reset %x ",
 				__func__,
 			cfgcmd.cmd_type);
-		} else {
+		else
 			axi_reset(axi_ctrl, vfe_params);
-		}
 		}
 		break;
 	case CMD_AXI_ABORT:
@@ -7657,7 +7672,13 @@ static int msm_axi_config(struct v4l2_subdev *sd, void __user *arg)
 				sizeof(uint8_t))) {
 				return -EFAULT;
 		}
-		axi_abort(axi_ctrl);
+
+		if (rdi1_reserve_info.reserved)
+			pr_debug("%s rdi1 reserved, skipping abort %x ",
+					__func__,
+					cfgcmd.cmd_type);
+		else
+			axi_abort(axi_ctrl);
 		break;
 	default:
 		pr_err("%s Unsupported AXI configuration %x ", __func__,
