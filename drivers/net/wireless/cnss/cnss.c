@@ -40,6 +40,7 @@
 #include <linux/crypto.h>
 #include <linux/scatterlist.h>
 #include <linux/log2.h>
+#include <linux/qmi_encdec.h>
 #ifdef CONFIG_PCI_MSM
 #include <linux/msm_pcie.h>
 #else
@@ -51,11 +52,16 @@
 #include <net/cfg80211.h>
 #include <soc/qcom/memory_dump.h>
 #include <soc/qcom/smem.h>
+#include <soc/qcom/msm_qmi_interface.h>
 #include <net/cnss.h>
 
 #ifdef CONFIG_WCNSS_MEM_PRE_ALLOC
 #include <net/cnss_prealloc.h>
 #endif
+#include "wlan_platform_service_v01.h"
+
+#define WPLS_TIMEOUT_MS            3000
+#define WPLS_SERVICE_INS_ID_V01    0
 
 #define subsys_to_drv(d) container_of(d, struct cnss_data, subsys_desc)
 
@@ -300,12 +306,431 @@ static struct cnss_data {
 	bool linkup_state;
 	bool q6_intr_state;
 	void *target_smem;
+	/* QMI related */
+	u32 wpls_qmi_connected;
+	u32 fw_ready;
+	struct qmi_handle *wpls_clnt;
+	struct workqueue_struct *wpls_clnt_workqueue;
+	struct workqueue_struct *wpls_clnt_workqueue_send;
+	struct workqueue_struct *wlan_probe_workqueue;
+	u32 board_id;
+	u32 num_peers;
+	u32 mac_version;
+	char fw_version[QMI_WPLS_MAX_STR_LEN_V01];
 } *penv;
 
 static unsigned int pcie_link_down_panic;
 module_param(pcie_link_down_panic, uint, S_IRUSR | S_IWUSR);
 MODULE_PARM_DESC(pcie_link_down_panic,
 		"Trigger kernel panic when PCIe link down is detected");
+struct wpls_send_work {
+	struct delayed_work send_work;
+	unsigned int msg_id;
+};
+
+static void wpls_clnt_recv_msg(struct work_struct *work);
+static DECLARE_DELAYED_WORK(work_recv_msg, wpls_clnt_recv_msg);
+static void wpls_clnt_svc_arrive(struct work_struct *work);
+static DECLARE_DELAYED_WORK(work_svc_arrive, wpls_clnt_svc_arrive);
+static void wpls_clnt_svc_exit(struct work_struct *work);
+static DECLARE_DELAYED_WORK(work_svc_exit, wpls_clnt_svc_exit);
+
+static void wlan_probe(struct work_struct *work);
+static DECLARE_DELAYED_WORK(work_wlan_probe, wlan_probe);
+
+static int wpls_handshake_send_sync_msg(void)
+{
+	int ret;
+	struct wpls_handshake_req_msg_v01 req;
+	struct wpls_handshake_resp_msg_v01 resp;
+	struct msg_desc req_desc, resp_desc;
+
+	if (!penv || !penv->wpls_clnt)
+		return -ENODEV;
+
+	pr_debug("%s\n", __func__);
+
+	memset(&req, 0, sizeof(req));
+	memset(&resp, 0, sizeof(resp));
+
+	req.msg_len = 1;
+	req.msg[0] = QMI_WPLS_FW_READY_IND_V01;
+
+	req_desc.max_msg_len = WPLS_HANDSHAKE_REQ_MSG_V01_MAX_MSG_LEN;
+	req_desc.msg_id = QMI_WPLS_HANDSHAKE_REQ_V01;
+	req_desc.ei_array = wpls_handshake_req_msg_v01_ei;
+
+	resp_desc.max_msg_len = WPLS_HANDSHAKE_RESP_MSG_V01_MAX_MSG_LEN;
+	resp_desc.msg_id = QMI_WPLS_HANDSHAKE_RESP_V01;
+	resp_desc.ei_array = wpls_handshake_resp_msg_v01_ei;
+
+	ret = qmi_send_req_wait(penv->wpls_clnt, &req_desc, &req, sizeof(req),
+			&resp_desc, &resp, sizeof(resp), WPLS_TIMEOUT_MS);
+	if (ret < 0) {
+		pr_err("%s: send req failed %d\n", __func__, ret);
+		return ret;
+	}
+
+	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+		pr_err("%s: QMI request failed %d %d\n",
+		       __func__, resp.resp.result, resp.resp.error);
+		ret = resp.resp.result;
+		return ret;
+	}
+
+	return ret;
+}
+
+static int wpls_cap_send_sync_msg(void)
+{
+	int ret;
+	struct wpls_cap_req_msg_v01 req;
+	struct wpls_cap_resp_msg_v01 resp;
+	struct msg_desc req_desc, resp_desc;
+
+	if (!penv || !penv->wpls_clnt)
+		return -ENODEV;
+
+	pr_debug("%s\n", __func__);
+
+	memset(&resp, 0, sizeof(resp));
+
+	req_desc.max_msg_len = WPLS_CAP_REQ_MSG_V01_MAX_MSG_LEN;
+	req_desc.msg_id = QMI_WPLS_CAP_REQ_V01;
+	req_desc.ei_array = wpls_cap_req_msg_v01_ei;
+
+	resp_desc.max_msg_len = WPLS_CAP_RESP_MSG_V01_MAX_MSG_LEN;
+	resp_desc.msg_id = QMI_WPLS_CAP_RESP_V01;
+	resp_desc.ei_array = wpls_cap_resp_msg_v01_ei;
+
+	ret = qmi_send_req_wait(penv->wpls_clnt, &req_desc, &req, sizeof(req),
+			&resp_desc, &resp, sizeof(resp), WPLS_TIMEOUT_MS);
+	if (ret < 0) {
+		pr_err("%s: send req failed %d\n", __func__, ret);
+		return ret;
+	}
+
+	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+		pr_err("%s: QMI request failed %d %d\n",
+		       __func__, resp.resp.result, resp.resp.error);
+		ret = resp.resp.result;
+		return ret;
+	}
+
+	/* store cap locally */
+	penv->board_id = resp.board_id;
+	penv->num_peers = resp.num_peers;
+	penv->mac_version = resp.mac_version;
+	strlcpy(penv->fw_version, resp.fw_version, QMI_WPLS_MAX_STR_LEN_V01);
+
+	return ret;
+}
+
+static int wpls_wlan_info_send_sync_msg(struct wpls_wlan_info_req_msg_v01 *data)
+{
+	int ret;
+	struct wpls_wlan_info_req_msg_v01 req;
+	struct wpls_wlan_info_resp_msg_v01 resp;
+	struct msg_desc req_desc, resp_desc;
+
+	if (!penv || !penv->wpls_clnt)
+		return -ENODEV;
+
+	pr_debug("%s\n", __func__);
+
+	memset(&req, 0, sizeof(req));
+	memset(&resp, 0, sizeof(resp));
+
+	memcpy(&req, data, sizeof(req));
+
+	req_desc.max_msg_len = WPLS_WLAN_INFO_REQ_MSG_V01_MAX_MSG_LEN;
+	req_desc.msg_id = QMI_WPLS_WLAN_INFO_REQ_V01;
+	req_desc.ei_array = wpls_wlan_info_req_msg_v01_ei;
+
+	resp_desc.max_msg_len = WPLS_WLAN_INFO_RESP_MSG_V01_MAX_MSG_LEN;
+	resp_desc.msg_id = QMI_WPLS_WLAN_INFO_RESP_V01;
+	resp_desc.ei_array = wpls_wlan_info_resp_msg_v01_ei;
+
+	ret = qmi_send_req_wait(penv->wpls_clnt, &req_desc, &req, sizeof(req),
+			&resp_desc, &resp, sizeof(resp), WPLS_TIMEOUT_MS);
+	if (ret < 0) {
+		pr_err("%s: send req failed %d\n", __func__, ret);
+		return ret;
+	}
+
+	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+		pr_err("%s: QMI request failed %d %d\n",
+		       __func__, resp.resp.result, resp.resp.error);
+		ret = resp.resp.result;
+		return ret;
+	}
+
+	return ret;
+}
+
+static void wpls_clnt_send_msg(struct work_struct *work)
+{
+	int rc;
+	struct wpls_send_work *p_work;
+
+	if (!penv || !penv->wpls_clnt)
+		return;
+
+	p_work = container_of(to_delayed_work(work),
+			      struct wpls_send_work, send_work);
+	if (!p_work) {
+		pr_err("%s: Fail to get data\n", __func__);
+		return;
+	}
+
+	pr_debug("%s: msg_id 0x%x\n", __func__, p_work->msg_id);
+
+	switch (p_work->msg_id) {
+	case QMI_WPLS_HANDSHAKE_REQ_V01:
+		rc = wpls_handshake_send_sync_msg();
+		if (rc != 0)
+			pr_err("%s: Fail to send handshake req %d\n",
+			       __func__, rc);
+		break;
+	case QMI_WPLS_CAP_REQ_V01:
+		rc = wpls_cap_send_sync_msg();
+		if (rc != 0)
+			pr_err("%s: Fail to send cap req %d\n",
+			       __func__, rc);
+		break;
+	default:
+		pr_err("%s: Unsupported msg 0x%x\n", __func__, p_work->msg_id);
+		break;
+	}
+
+	kfree(p_work);
+}
+
+static void queue_handshake_msg(void)
+{
+	struct wpls_send_work *work;
+
+	if (!penv || !penv->wpls_clnt_workqueue_send)
+		return;
+
+	work = kzalloc(sizeof(*work), GFP_KERNEL);
+	if (!work) {
+		pr_err("%s: Fail to alloc mem\n", __func__);
+		return;
+	}
+
+	pr_debug("%s\n", __func__);
+
+	work->msg_id = QMI_WPLS_HANDSHAKE_REQ_V01;
+	INIT_DELAYED_WORK(&work->send_work, wpls_clnt_send_msg);
+	queue_delayed_work(penv->wpls_clnt_workqueue_send,
+			   &work->send_work, 0);
+}
+
+static void wpls_clnt_recv_msg(struct work_struct *work)
+{
+	int ret;
+
+	if (!penv || !penv->wpls_clnt)
+		return;
+
+	do {
+		pr_debug("%s: Received Event\n", __func__);
+	} while ((ret = qmi_recv_msg(penv->wpls_clnt)) == 0);
+
+	if (ret != -ENOMSG)
+		pr_err("%s: Error receiving message\n", __func__);
+}
+
+static void wpls_clnt_notify(struct qmi_handle *handle,
+			    enum qmi_event_type event, void *notify_priv)
+{
+	if (!penv || !penv->wpls_clnt_workqueue)
+		return;
+
+	switch (event) {
+	case QMI_RECV_MSG:
+		queue_delayed_work(penv->wpls_clnt_workqueue,
+				   &work_recv_msg, 0);
+		break;
+	default:
+		break;
+	}
+}
+
+static void wlan_probe(struct work_struct *work)
+{
+	penv->driver->probe(penv->pdev, penv->id);
+}
+
+static void wpls_clnt_ind(struct qmi_handle *handle,
+			 unsigned int msg_id, void *msg,
+			 unsigned int msg_len, void *ind_cb_priv)
+{
+	if (!penv)
+		return;
+
+	pr_info("%s: Received Ind 0x%x\n", __func__, msg_id);
+
+	if (msg_id != QMI_WPLS_FW_READY_IND_V01) {
+		pr_err("%s: Invalid msg_id 0x%x\n", __func__, msg_id);
+		return;
+	}
+
+	penv->fw_ready = 1;
+
+	if (!penv->pdev) {
+		pr_err("%s: Device is not ready\n", __func__);
+		return;
+	}
+	if (!penv->driver || !penv->driver->probe) {
+		pr_info("%s: WLAN driver is not registed yet\n", __func__);
+		return;
+	}
+
+	/* create a workqueue for wlan probe */
+	penv->wlan_probe_workqueue =
+		create_singlethread_workqueue("wlan_probe");
+	if (!penv->wlan_probe_workqueue) {
+		pr_err("%s: Fail to create wlan probe workqueue\n", __func__);
+		return;
+	}
+
+	queue_delayed_work(penv->wlan_probe_workqueue,
+			   &work_wlan_probe, 0);
+
+	return;
+}
+
+static void wpls_clnt_svc_arrive(struct work_struct *work)
+{
+	int ret;
+
+	if (!penv)
+		return;
+
+	penv->wpls_clnt = qmi_handle_create(wpls_clnt_notify, NULL);
+	if (!penv->wpls_clnt) {
+		pr_err("%s: QMI client handle alloc failed\n", __func__);
+		return;
+	}
+
+	ret = qmi_connect_to_service(penv->wpls_clnt,
+				     WPLS_SERVICE_ID_V01,
+				     WPLS_SERVICE_VERS_V01,
+				     WPLS_SERVICE_INS_ID_V01);
+	if (ret < 0) {
+		pr_err("%s: Server not found\n", __func__);
+		goto out;
+	}
+
+	ret = qmi_register_ind_cb(penv->wpls_clnt, wpls_clnt_ind, NULL);
+	if (ret < 0) {
+		pr_err("%s: Failed to register indication callback\n",
+		       __func__);
+		goto out;
+	}
+
+	pr_info("%s: QMI Server Connected\n", __func__);
+	penv->wpls_qmi_connected = 1;
+
+	queue_handshake_msg();
+
+	return;
+
+out:
+	qmi_handle_destroy(penv->wpls_clnt);
+	penv->wpls_clnt = NULL;
+	return;
+
+}
+
+static void wpls_clnt_svc_exit(struct work_struct *work)
+{
+	if (!penv || !penv->wpls_clnt)
+		return;
+
+	pr_info("%s: QMI Service Disconnected\n", __func__);
+
+	qmi_handle_destroy(penv->wpls_clnt);
+	penv->fw_ready = 0;
+	penv->wpls_qmi_connected = 0;
+	penv->wpls_clnt = NULL;
+}
+
+static int wpls_clnt_svc_event_notify(struct notifier_block *this,
+				     unsigned long code,
+				     void *_cmd)
+{
+	if (!penv || !penv->wpls_clnt_workqueue)
+		return -ENODEV;
+
+	switch (code) {
+	case QMI_SERVER_ARRIVE:
+		queue_delayed_work(penv->wpls_clnt_workqueue,
+				   &work_svc_arrive, 0);
+		break;
+	case QMI_SERVER_EXIT:
+		queue_delayed_work(penv->wpls_clnt_workqueue,
+				   &work_svc_exit, 0);
+		break;
+	default:
+		break;
+	}
+	return 0;
+}
+
+static struct notifier_block wpls_clnt_nb = {
+	.notifier_call = wpls_clnt_svc_event_notify,
+};
+
+int cnss_wlan_enable(struct cnss_wlan_enable_cfg *config,
+		     enum cnss_driver_mode mode,
+		     const char *host_version)
+{
+	struct wpls_wlan_info_req_msg_v01 req;
+
+	memset(&req, 0, sizeof(req));
+
+	if (!config || !host_version) {
+		pr_err("%s: Invalid pointer\n", __func__);
+		return -EINVAL;
+	}
+
+	req.enable = 1;
+	req.tgt_cfg_valid = 1;
+	if (config->num_ce_tgt_cfg > QMI_WPLS_MAX_NUM_CE_V01)
+		req.tgt_cfg_len = QMI_WPLS_MAX_NUM_CE_V01;
+	else
+		req.tgt_cfg_len = config->num_ce_tgt_cfg;
+	memcpy(req.tgt_cfg, config->ce_tgt_cfg,
+	       sizeof(struct wpls_ce_tgt_pipe_cfg_s_v01) * req.tgt_cfg_len);
+	req.svc_cfg_valid = 1;
+	if (config->num_ce_svc_pipe_cfg > QMI_WPLS_MAX_NUM_SVC_V01)
+		req.svc_cfg_len = QMI_WPLS_MAX_NUM_SVC_V01;
+	else
+		req.svc_cfg_len = config->num_ce_svc_pipe_cfg;
+	memcpy(req.svc_cfg, config->ce_svc_cfg,
+	       sizeof(struct wpls_ce_svc_pipe_cfg_s_v01) * req.svc_cfg_len);
+	req.mode = mode;
+	req.host_version_valid = 1;
+	strlcpy(req.host_version, host_version, QMI_WPLS_MAX_STR_LEN_V01);
+
+	return wpls_wlan_info_send_sync_msg(&req);
+}
+EXPORT_SYMBOL(cnss_wlan_enable);
+
+int cnss_wlan_disable(enum cnss_driver_mode mode)
+{
+	struct wpls_wlan_info_req_msg_v01 req;
+
+	memset(&req, 0, sizeof(req));
+
+	req.mode = mode;
+
+	return wpls_wlan_info_send_sync_msg(&req);
+}
+EXPORT_SYMBOL(cnss_wlan_disable);
 
 static int cnss_wlan_vreg_on(struct cnss_wlan_vreg_info *vreg_info)
 {
@@ -1993,7 +2418,11 @@ again:
 	if (!cnss_wlan_is_codeswap_supported(penv->revision_id))
 		cnss_wlan_memory_expansion();
 
+#ifdef CONFIG_CNSS_ADRASTEA
+	if (wdrv->probe && penv->fw_ready) {
+#else
 	if (wdrv->probe) {
+#endif
 		if (penv->saved_state)
 			pci_load_and_free_saved_state(pdev, &penv->saved_state);
 
@@ -2875,8 +3304,39 @@ skip_ramdump:
 		pr_err("cnss: fw_image_setup sys file creation failed\n");
 		goto err_bus_reg;
 	}
+
+	penv->wpls_clnt_workqueue = create_singlethread_workqueue("wpls_clnt");
+	if (!penv->wpls_clnt_workqueue) {
+		ret = -EFAULT;
+		goto err_bus_reg;
+	}
+
+	penv->wpls_clnt_workqueue_send =
+		create_singlethread_workqueue("wpls_clnt_send");
+	if (!penv->wpls_clnt_workqueue_send) {
+		ret = -EFAULT;
+		goto err_workqueue_send;
+	}
+
+	ret = qmi_svc_event_notifier_register(WPLS_SERVICE_ID_V01,
+					      WPLS_SERVICE_VERS_V01,
+					      WPLS_SERVICE_INS_ID_V01,
+					      &wpls_clnt_nb);
+	if (ret < 0) {
+		pr_err("%s: notifier register failed\n", __func__);
+		goto err_register_notifier;
+	}
+
 	pr_info("cnss: Platform driver probed successfully.\n");
 	return ret;
+
+err_register_notifier:
+	if (penv->wpls_clnt_workqueue_send)
+		destroy_workqueue(penv->wpls_clnt_workqueue_send);
+
+err_workqueue_send:
+	if (penv->wpls_clnt_workqueue)
+		destroy_workqueue(penv->wpls_clnt_workqueue);
 
 err_bus_reg:
 	if (penv->bus_scale_table)
@@ -2926,6 +3386,17 @@ err_get_wlan_res:
 static int cnss_remove(struct platform_device *pdev)
 {
 	struct cnss_wlan_gpio_info *gpio_info = &penv->gpio_info;
+
+	qmi_svc_event_notifier_unregister(WPLS_SERVICE_ID_V01,
+					  WPLS_SERVICE_VERS_V01,
+					  WPLS_SERVICE_INS_ID_V01,
+					  &wpls_clnt_nb);
+	if (penv->wlan_probe_workqueue)
+		destroy_workqueue(penv->wlan_probe_workqueue);
+	if (penv->wpls_clnt_workqueue_send)
+		destroy_workqueue(penv->wpls_clnt_workqueue_send);
+	if (penv->wpls_clnt_workqueue)
+		destroy_workqueue(penv->wpls_clnt_workqueue);
 
 	unregister_pm_notifier(&cnss_pm_notifier);
 	device_remove_file(&pdev->dev, &dev_attr_fw_image_setup);
