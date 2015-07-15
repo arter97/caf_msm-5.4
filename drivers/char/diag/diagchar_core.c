@@ -263,7 +263,7 @@ void diag_add_client(int i, struct file *file)
 static void diag_mempool_init(void)
 {
 	uint32_t itemsize = DIAG_MAX_REQ_SIZE;
-	uint32_t itemsize_hdlc = DIAG_MAX_HDLC_BUF_SIZE;
+	uint32_t itemsize_hdlc = DIAG_MAX_HDLC_BUF_SIZE + APF_DIAG_PADDING;
 	uint32_t itemsize_dci = IN_BUF_SIZE;
 	uint32_t itemsize_user = DCI_REQ_BUF_SIZE;
 
@@ -1841,7 +1841,8 @@ static int diag_process_apps_data_hdlc(unsigned char *buf, int len,
 	send.terminate = 1;
 
 	if (!data->buf)
-		data->buf = diagmem_alloc(driver, DIAG_MAX_HDLC_BUF_SIZE,
+		data->buf = diagmem_alloc(driver, DIAG_MAX_HDLC_BUF_SIZE +
+					APF_DIAG_PADDING,
 					  POOL_TYPE_HDLC);
 	if (!data->buf) {
 		ret = PKT_DROP;
@@ -1857,7 +1858,8 @@ static int diag_process_apps_data_hdlc(unsigned char *buf, int len,
 		}
 		data->buf = NULL;
 		data->len = 0;
-		data->buf = diagmem_alloc(driver, DIAG_MAX_HDLC_BUF_SIZE,
+		data->buf = diagmem_alloc(driver, DIAG_MAX_HDLC_BUF_SIZE +
+					APF_DIAG_PADDING,
 					  POOL_TYPE_HDLC);
 		if (!data->buf) {
 			ret = PKT_DROP;
@@ -1885,7 +1887,8 @@ static int diag_process_apps_data_hdlc(unsigned char *buf, int len,
 		}
 		data->buf = NULL;
 		data->len = 0;
-		data->buf = diagmem_alloc(driver, DIAG_MAX_HDLC_BUF_SIZE,
+		data->buf = diagmem_alloc(driver, DIAG_MAX_HDLC_BUF_SIZE +
+					APF_DIAG_PADDING,
 					 POOL_TYPE_HDLC);
 		if (!data->buf) {
 			ret = PKT_DROP;
@@ -1946,7 +1949,8 @@ static int diag_process_apps_data_non_hdlc(unsigned char *buf, int len,
 	}
 
 	if (!data->buf) {
-		data->buf = diagmem_alloc(driver, DIAG_MAX_HDLC_BUF_SIZE,
+		data->buf = diagmem_alloc(driver, DIAG_MAX_HDLC_BUF_SIZE +
+					APF_DIAG_PADDING,
 					  POOL_TYPE_HDLC);
 		if (!data->buf) {
 			ret = PKT_DROP;
@@ -1963,7 +1967,8 @@ static int diag_process_apps_data_non_hdlc(unsigned char *buf, int len,
 		}
 		data->buf = NULL;
 		data->len = 0;
-		data->buf = diagmem_alloc(driver, DIAG_MAX_HDLC_BUF_SIZE,
+		data->buf = diagmem_alloc(driver, DIAG_MAX_HDLC_BUF_SIZE +
+					APF_DIAG_PADDING,
 					  POOL_TYPE_HDLC);
 		if (!data->buf) {
 			ret = PKT_DROP;
