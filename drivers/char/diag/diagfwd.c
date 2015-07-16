@@ -353,6 +353,28 @@ static int check_bufsize_for_encoding(struct diag_smd_info *smd_info, void *buf,
 	return buf_size;
 }
 
+static void diag_smd_reset_buf(struct diag_smd_info *smd_info, int num)
+{
+	unsigned long flags;
+	if (!smd_info)
+		return;
+
+	spin_lock_irqsave(&smd_info->in_busy_lock, flags);
+	if (num == 1)
+		smd_info->in_busy_1 = 0;
+	else if (num == 2)
+		smd_info->in_busy_2 = 0;
+	else
+		pr_err_ratelimited("diag: %s invalid buf %d\n", __func__, num);
+	spin_unlock_irqrestore(&smd_info->in_busy_lock, flags);
+
+	if (smd_info->type == SMD_DATA_TYPE)
+		queue_work(smd_info->wq, &(smd_info->diag_read_smd_work));
+	else
+		queue_work(driver->diag_wq, &(smd_info->diag_read_smd_work));
+
+}
+
 /* Process the data read from the smd data channel */
 int diag_process_smd_read_data(struct diag_smd_info *smd_info, void *buf,
 			       int total_recd)
@@ -364,7 +386,6 @@ int diag_process_smd_read_data(struct diag_smd_info *smd_info, void *buf,
 	int ctxt = 0;
 	unsigned char *write_buf = NULL;
 
-	unsigned long flags;
 
 	/*
 	 * Do not process data on command channel if the
@@ -419,22 +440,24 @@ int diag_process_smd_read_data(struct diag_smd_info *smd_info, void *buf,
 	if (!success) {
 		pr_err_ratelimited("diag: smd data write unsuccessful, success: %d\n",
 				   success);
-		return 0;
+		goto fail;
 	}
 
 	if (write_length > 0) {
-		spin_lock_irqsave(&smd_info->in_busy_lock, flags);
-		*in_busy_ptr = 1;
 		err = diag_mux_write(DIAG_LOCAL_PROC, write_buf, write_length,
 				     ctxt);
-		if (err) {
+		if (err && err != -ENODEV) {
 			pr_err_ratelimited("diag: In %s, diag_device_write error: %d\n",
 					   __func__, err);
+			goto fail;
 		}
-		spin_unlock_irqrestore(&smd_info->in_busy_lock, flags);
 	}
 
 	return 0;
+fail:
+	diag_smd_reset_buf(smd_info, GET_BUF_NUM(ctxt));
+	return 0;
+
 }
 
 static int diag_smd_resize_buf(struct diag_smd_info *smd_info, void **buf,
@@ -527,7 +550,8 @@ void diag_smd_send_req(struct diag_smd_info *smd_info)
 	int buf_size = 0;
 	int resize_success = 0;
 	int buf_full = 0;
-
+	int *in_busy_ptr = NULL;
+    	unsigned long flags;
 	if (!smd_info) {
 		pr_err("diag: In %s, no smd info. Not able to read.\n",
 			__func__);
@@ -541,17 +565,21 @@ void diag_smd_send_req(struct diag_smd_info *smd_info)
 			if (!smd_info->in_busy_1) {
 				buf = smd_info->buf_in_1_raw;
 				buf_size = smd_info->buf_in_1_raw_size;
+				in_busy_ptr = &smd_info->in_busy_1;
 			} else if (!smd_info->in_busy_2) {
 				buf = smd_info->buf_in_2_raw;
 				buf_size = smd_info->buf_in_2_raw_size;
+				in_busy_ptr = &smd_info->in_busy_2;
 			}
 		} else {
 			if (!smd_info->in_busy_1) {
 				buf = smd_info->buf_in_1;
 				buf_size = smd_info->buf_in_1_size;
+				in_busy_ptr = &smd_info->in_busy_1;
 			} else if (!smd_info->in_busy_2) {
 				buf = smd_info->buf_in_2;
 				buf_size = smd_info->buf_in_2_size;
+				in_busy_ptr = &smd_info->in_busy_2;
 			}
 		}
 	} else if (smd_info->type == SMD_CMD_TYPE) {
@@ -560,20 +588,27 @@ void diag_smd_send_req(struct diag_smd_info *smd_info)
 			if (!smd_info->in_busy_1) {
 				buf = smd_info->buf_in_1_raw;
 				buf_size = smd_info->buf_in_1_raw_size;
+				in_busy_ptr = &smd_info->in_busy_1;
 			}
 		} else {
 			if (!smd_info->in_busy_1) {
 				buf = smd_info->buf_in_1;
 				buf_size = smd_info->buf_in_1_size;
+				in_busy_ptr = &smd_info->in_busy_1;
 			}
 		}
 	} else if (!smd_info->in_busy_1) {
 		buf = smd_info->buf_in_1;
 		buf_size = smd_info->buf_in_1_size;
+		in_busy_ptr = &smd_info->in_busy_1;
 	}
 
 	if (!buf)
 		goto fail_return;
+
+	spin_lock_irqsave(&smd_info->in_busy_lock, flags);
+	*in_busy_ptr = 1;
+	spin_unlock_irqrestore(&smd_info->in_busy_lock, flags);
 
 	if (smd_info->ch && buf) {
 		int required_size = 0;
@@ -696,6 +731,11 @@ void diag_smd_send_req(struct diag_smd_info *smd_info)
 	return;
 
 fail_return:
+	if (in_busy_ptr) {
+		spin_lock_irqsave(&smd_info->in_busy_lock, flags);
+		*in_busy_ptr = 0;
+		spin_unlock_irqrestore(&smd_info->in_busy_lock, flags);
+	}
 	if (smd_info->type == SMD_DCI_TYPE ||
 	    smd_info->type == SMD_DCI_CMD_TYPE ||
 	    driver->logging_mode == MEMORY_DEVICE_MODE)
@@ -1226,20 +1266,20 @@ int diag_process_apps_pkt(unsigned char *buf, int len)
 }
 
 #ifdef CONFIG_DIAG_OVER_USB
-void diag_send_error_rsp(int index)
+void diag_send_error_rsp(unsigned char *buf, int len)
 {
 	int i;
 
 	/* -1 to accomodate the first byte 0x13 */
-	if (index > APPS_BUF_SIZE-1) {
-		pr_err("diag: cannot send err rsp, huge length: %d\n", index);
+	if (len > APPS_BUF_SIZE-1) {
+		pr_err("diag: cannot send err rsp, huge length: %d\n", len);
 		return;
 	}
 
 	driver->apps_rsp_buf[0] = 0x13; /* error code 13 */
-	for (i = 0; i < index; i++)
-		driver->apps_rsp_buf[i+1] = *(driver->hdlc_buf+i);
-	encode_rsp_and_send(index - 3);
+	for (i = 0; i < len; i++)
+		driver->apps_rsp_buf[i+1] = *(buf+i);
+	encode_rsp_and_send(len);
 }
 #else
 static inline void diag_send_error_rsp(int index) {}
@@ -1303,13 +1343,13 @@ void diag_process_hdlc(void *data, unsigned len)
 	}
 	/* send error responses from APPS for Central Routing */
 	if (type == 1 && chk_apps_only()) {
-		diag_send_error_rsp(hdlc.dest_idx);
+		diag_send_error_rsp(driver->hdlc_buf, (hdlc.dest_idx - 3));
 		type = 0;
 	}
 	/* implies this packet is NOT meant for apps */
 	if (!(driver->smd_data[MODEM_DATA].ch) && type == 1) {
 		if (chk_apps_only()) {
-			diag_send_error_rsp(hdlc.dest_idx);
+			diag_send_error_rsp(driver->hdlc_buf, (hdlc.dest_idx - 3));
 		} else { /* APQ 8060, Let Q6 respond */
 			err = diag_smd_write(&driver->smd_data[LPASS_DATA],
 					     driver->hdlc_buf,
@@ -1381,28 +1421,6 @@ void diag_reset_smd_data(int queue)
 						diag_read_smd_work));
 		}
 	}
-}
-
-static void diag_smd_reset_buf(struct diag_smd_info *smd_info, int num)
-{
-	unsigned long flags;
-	if (!smd_info)
-		return;
-
-	spin_lock_irqsave(&smd_info->in_busy_lock, flags);
-	if (num == 1)
-		smd_info->in_busy_1 = 0;
-	else if (num == 2)
-		smd_info->in_busy_2 = 0;
-	else
-		pr_err_ratelimited("diag: %s invalid buf %d\n", __func__, num);
-	spin_unlock_irqrestore(&smd_info->in_busy_lock, flags);
-
-	if (smd_info->type == SMD_DATA_TYPE)
-		queue_work(smd_info->wq, &(smd_info->diag_read_smd_work));
-	else
-		queue_work(driver->diag_wq, &(smd_info->diag_read_smd_work));
-
 }
 
 static int diagfwd_mux_open(int id, int mode)
@@ -1593,6 +1611,9 @@ void diag_smd_notify(void *ctxt, unsigned event)
 		} else if (smd_info->type == SMD_CNTL_TYPE) {
 			diag_cntl_stm_notify(smd_info,
 						CLEAR_PERIPHERAL_STM_STATE);
+			if (driver->logging_mode == MEMORY_DEVICE_MODE)
+				diag_notify_md_client(smd_info->peripheral_mask,
+						      DIAG_STATUS_CLOSED);
 		}
 		return;
 	} else if (event == SMD_EVENT_OPEN) {
@@ -1603,6 +1624,9 @@ void diag_smd_notify(void *ctxt, unsigned event)
 			smd_info->notify_context = event;
 			queue_work(driver->diag_cntl_wq,
 				&(smd_info->diag_notify_update_smd_work));
+			if (driver->logging_mode == MEMORY_DEVICE_MODE)
+                                diag_notify_md_client(smd_info->peripheral_mask,
+						      DIAG_STATUS_OPEN);
 		} else if (smd_info->type == SMD_DCI_TYPE) {
 			smd_info->notify_context = event;
 			queue_work(driver->diag_dci_wq,

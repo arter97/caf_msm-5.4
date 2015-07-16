@@ -131,6 +131,9 @@ MODULE_PARM_DESC(usb_lpm_override, "Override no_suspend_resume with USB");
 #define DWC3_3P3_VOL_MIN		3075000 /* uV */
 #define DWC3_3P3_VOL_MAX		3200000 /* uV */
 #define DWC3_3P3_HPM_LOAD		30000	/* uA */
+#define DWC3_1P8_VOL_MIN		1800000 /* uV */
+#define DWC3_1P8_VOL_MAX		1800000 /* uV */
+#define DWC3_1P8_HPM_LOAD		30000   /* uA */
 
 /* TZ SCM parameters */
 #define DWC3_MSM_RESTORE_SCM_CFG_CMD 0x2
@@ -171,6 +174,7 @@ struct dwc3_msm {
 	/* VBUS regulator if no OTG and running in host only mode */
 	struct regulator	*vbus_otg;
 	struct regulator	*vdda33;
+	struct regulator	*vdda18;
 	struct dwc3_ext_xceiv	ext_xceiv;
 	bool			resume_pending;
 	atomic_t                pm_suspended;
@@ -1504,7 +1508,6 @@ static void dwc3_msm_power_collapse_por(struct dwc3_msm *mdwc)
 
 static int dwc3_msm_prepare_suspend(struct dwc3_msm *mdwc)
 {
-	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 	unsigned long timeout;
 	u32 reg = 0;
 
@@ -1521,7 +1524,12 @@ static int dwc3_msm_prepare_suspend(struct dwc3_msm *mdwc)
 			PWR_EVNT_LPM_OUT_L2_MASK);
 
 		/* Prepare HSPHY for suspend */
-		dwc3_gadget_usb2_phy_suspend(dwc, true);
+		dwc3_msm_write_reg(mdwc->base,
+			DWC3_GUSB2PHYCFG(0),
+			dwc3_msm_read_reg(mdwc->base,
+			DWC3_GUSB2PHYCFG(0)) |
+			DWC3_GUSB2PHYCFG_ENBLSLPM |
+			DWC3_GUSB2PHYCFG_SUSPHY);
 
 		/* Wait for PHY to go into L2 */
 		timeout = jiffies + msecs_to_jiffies(5);
@@ -1547,27 +1555,23 @@ static int dwc3_msm_prepare_suspend(struct dwc3_msm *mdwc)
 
 static void dwc3_msm_wake_interrupt_enable(struct dwc3_msm *mdwc, bool on)
 {
-	u32 irq_mask;
+	u32 irq_mask, irq_stat;
+	u32 wakeup_events = PWR_EVNT_POWERDOWN_OUT_P3_MASK |
+		PWR_EVNT_LPM_OUT_L2_MASK;
 
-	if (on) {
-		/* Enable P3 and L2 OUT events */
-		irq_mask = dwc3_msm_read_reg(mdwc->base, PWR_EVNT_IRQ_MASK_REG);
-		irq_mask |= PWR_EVNT_LPM_OUT_L2_MASK |
-				PWR_EVNT_POWERDOWN_OUT_P3_MASK;
-		dwc3_msm_write_reg(mdwc->base, PWR_EVNT_IRQ_MASK_REG, irq_mask);
-	} else {
-		static const u32 pwr_events = PWR_EVNT_POWERDOWN_OUT_P3_MASK |
-					      PWR_EVNT_LPM_OUT_L2_MASK;
+	irq_stat = dwc3_msm_read_reg(mdwc->base, PWR_EVNT_IRQ_STAT_REG);
 
-		/* Disable P3 and L2 OUT events */
-		irq_mask = dwc3_msm_read_reg(mdwc->base, PWR_EVNT_IRQ_MASK_REG);
-		irq_mask &= ~pwr_events;
-		dwc3_msm_write_reg(mdwc->base, PWR_EVNT_IRQ_MASK_REG, irq_mask);
+	/* clear pending interrupts */
+	dwc3_msm_write_reg(mdwc->base, PWR_EVNT_IRQ_STAT_REG, irq_stat);
 
-		/* Clear the P3 and L2 OUT status */
-		dwc3_msm_write_reg(mdwc->base, PWR_EVNT_IRQ_STAT_REG,
-				   pwr_events);
-	}
+	irq_mask = dwc3_msm_read_reg(mdwc->base, PWR_EVNT_IRQ_MASK_REG);
+
+	if (on) /* Enable P3 and L2 OUT events */
+		irq_mask |= wakeup_events;
+	else /* Disable P3 and L2 OUT events */
+		irq_mask &= ~wakeup_events;
+
+	dwc3_msm_write_reg(mdwc->base, PWR_EVNT_IRQ_MASK_REG, irq_mask);
 }
 
 static void dwc3_msm_bus_vote_w(struct work_struct *w)
@@ -1705,15 +1709,10 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 
 	/* Enable wakeup from LPM */
 	if (mdwc->pwr_event_irq) {
+		disable_irq(mdwc->pwr_event_irq);
 		dwc3_msm_wake_interrupt_enable(mdwc, true);
 		enable_irq_wake(mdwc->pwr_event_irq);
 	}
-
-	/*
-	 * Marking in LPM before disabling the clocks in order to avoid a
-	 * potential race condition with pwr_event_irq.
-	 */
-	atomic_set(&dwc->in_lpm, 1);
 
 	usb_phy_set_suspend(mdwc->hs_phy, 1);
 
@@ -1776,6 +1775,10 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 			mdwc->lpm_flags |= MDWC3_ASYNC_IRQ_WAKE_CAPABILITY;
 		}
 	}
+
+	atomic_set(&dwc->in_lpm, 1);
+	if (mdwc->pwr_event_irq)
+		enable_irq(mdwc->pwr_event_irq);
 
 	dev_info(mdwc->dev, "DWC3 in low power mode\n");
 	return 0;
@@ -1904,7 +1907,10 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 	}
 
 	/* Disable HSPHY auto suspend */
-	dwc3_gadget_usb2_phy_suspend(dwc, false);
+	dwc3_msm_write_reg(mdwc->base, DWC3_GUSB2PHYCFG(0),
+		dwc3_msm_read_reg(mdwc->base, DWC3_GUSB2PHYCFG(0)) &
+				~(DWC3_GUSB2PHYCFG_ENBLSLPM |
+					DWC3_GUSB2PHYCFG_SUSPHY));
 
 	/* Disable wakeup capable for HS_PHY IRQ, if enabled */
 	if (mdwc->hs_phy_irq &&
@@ -1981,7 +1987,7 @@ static void dwc3_resume_work(struct work_struct *w)
 	}
 
 	dbg_event(0xFF, "RWrk", mdwc->otg_xceiv ? 1 : 0);
-	if (mdwc->otg_xceiv && (mdwc->ext_xceiv.otg_capability)) {
+	if (mdwc->otg_xceiv) {
 		dwc3_wait_for_ext_chg_done(mdwc);
 		mdwc->ext_xceiv.notify_ext_events(mdwc->otg_xceiv->otg);
 	} else if (mdwc->scope == POWER_SUPPLY_SCOPE_SYSTEM) {
@@ -2197,10 +2203,30 @@ static int dwc3_msm_remove_pulldown(struct dwc3_msm *mdwc, bool rm_pulldown)
 	if (!rm_pulldown)
 		goto disable_vdda33;
 
+	ret = regulator_set_optimum_mode(mdwc->vdda18, DWC3_1P8_HPM_LOAD);
+	if (ret < 0) {
+		dev_err(mdwc->dev, "Unable to set HPM of vdda18:%d\n", ret);
+		return ret;
+	}
+
+	ret = regulator_set_voltage(mdwc->vdda18, DWC3_1P8_VOL_MIN,
+						DWC3_1P8_VOL_MAX);
+	if (ret) {
+		dev_err(mdwc->dev,
+				"Unable to set voltage for vdda18:%d\n", ret);
+		goto put_vdda18_lpm;
+	}
+
+	ret = regulator_enable(mdwc->vdda18);
+	if (ret) {
+		dev_err(mdwc->dev, "Unable to enable vdda18:%d\n", ret);
+		goto unset_vdda18;
+	}
+
 	ret = regulator_set_optimum_mode(mdwc->vdda33, DWC3_3P3_HPM_LOAD);
 	if (ret < 0) {
 		dev_err(mdwc->dev, "Unable to set HPM of vdda33:%d\n", ret);
-		return ret;
+		goto disable_vdda18;
 	}
 
 	ret = regulator_set_voltage(mdwc->vdda33, DWC3_3P3_VOL_MIN,
@@ -2234,6 +2260,22 @@ put_vdda33_lpm:
 	ret = regulator_set_optimum_mode(mdwc->vdda33, 0);
 	if (ret < 0)
 		dev_err(mdwc->dev, "Unable to set (0) HPM of vdda33\n");
+
+disable_vdda18:
+	ret = regulator_disable(mdwc->vdda18);
+	if (ret)
+		dev_err(mdwc->dev, "Unable to disable vdda18:%d\n", ret);
+
+unset_vdda18:
+	ret = regulator_set_voltage(mdwc->vdda18, 0, DWC3_1P8_VOL_MAX);
+	if (ret)
+		dev_err(mdwc->dev,
+			"Unable to set (0) voltage for vdda18:%d\n", ret);
+
+put_vdda18_lpm:
+	ret = regulator_set_optimum_mode(mdwc->vdda18, 0);
+	if (ret < 0)
+		dev_err(mdwc->dev, "Unable to set LPM of vdda18\n");
 
 	return ret;
 }
@@ -2297,7 +2339,6 @@ static int dwc3_msm_power_set_property_usb(struct power_supply *psy,
 				  enum power_supply_property psp,
 				  const union power_supply_propval *val)
 {
-	static bool init;
 	struct dwc3_msm *mdwc = container_of(psy, struct dwc3_msm,
 								usb_psy);
 
@@ -2305,7 +2346,7 @@ static int dwc3_msm_power_set_property_usb(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_USB_OTG:
 		/* Let OTG know about ID detection */
 		mdwc->id_state = val->intval ? DWC3_ID_GROUND : DWC3_ID_FLOAT;
-		if (mdwc->otg_xceiv && mdwc->ext_xceiv.otg_capability)
+		if (mdwc->otg_xceiv)
 			queue_work(system_nrt_wq, &mdwc->id_work);
 
 		break;
@@ -2332,8 +2373,7 @@ static int dwc3_msm_power_set_property_usb(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_PRESENT:
 		dev_dbg(mdwc->dev, "%s: notify xceiv event\n", __func__);
 		mdwc->vbus_active = val->intval;
-		if (mdwc->otg_xceiv && !mdwc->ext_inuse && !mdwc->in_restart &&
-		    (mdwc->ext_xceiv.otg_capability || !init)) {
+		if (mdwc->otg_xceiv && !mdwc->ext_inuse && !mdwc->in_restart) {
 			if (mdwc->ext_xceiv.bsv == val->intval)
 				break;
 
@@ -2345,9 +2385,6 @@ static int dwc3_msm_power_set_property_usb(struct power_supply *psy,
 			dbg_event(0xFF, "Q RW (vbus)", val->intval);
 			queue_delayed_work(system_nrt_wq,
 							&mdwc->resume_work, 12);
-
-			if (!init)
-				init = true;
 		}
 		break;
 	case POWER_SUPPLY_PROP_ONLINE:
@@ -2893,6 +2930,12 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		return PTR_ERR(mdwc->vdda33);
 	}
 
+	mdwc->vdda18 = devm_regulator_get(dev, "vdda18");
+	if (IS_ERR(mdwc->vdda18)) {
+		dev_err(&pdev->dev, "unable to get vdda18 supply\n");
+		return PTR_ERR(mdwc->vdda18);
+	}
+
 	ret = dwc3_msm_config_gdsc(mdwc, 1);
 	if (ret) {
 		dev_err(&pdev->dev, "unable to configure usb3 gdsc\n");
@@ -2988,8 +3031,6 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	clk_prepare_enable(mdwc->ref_clk);
 
 	mdwc->id_state = mdwc->ext_xceiv.id = DWC3_ID_FLOAT;
-	mdwc->ext_xceiv.otg_capability = of_property_read_bool(node,
-				"qcom,otg-capability");
 	mdwc->charger.charging_disabled = of_property_read_bool(node,
 				"qcom,charging-disabled");
 
@@ -3073,46 +3114,42 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		}
 	}
 
-	if (mdwc->ext_xceiv.otg_capability) {
-		mdwc->pmic_id_irq =
-			platform_get_irq_byname(pdev, "pmic_id_irq");
-		if (mdwc->pmic_id_irq > 0) {
-			/* check if PMIC MISC module monitors usb ID */
-			if (of_get_property(pdev->dev.of_node, "qcom,misc-ref",
-						NULL))
-				/* check if PMIC ID IRQ is supported */
-				ret = qpnp_misc_irqs_available(&pdev->dev);
-			else
-				ret = mdwc->pmic_id_irq;
+	mdwc->pmic_id_irq = platform_get_irq_byname(pdev, "pmic_id_irq");
+	if (mdwc->pmic_id_irq > 0) {
+		/* check if PMIC MISC module monitors usb ID */
+		if (of_get_property(pdev->dev.of_node, "qcom,misc-ref", NULL))
+			/* check if PMIC ID IRQ is supported */
+			ret = qpnp_misc_irqs_available(&pdev->dev);
+		else
+			ret = mdwc->pmic_id_irq;
 
-			if (ret == -EPROBE_DEFER) {
-				/* qpnp hasn't probed yet; defer dwc probe */
+		if (ret == -EPROBE_DEFER) {
+			/* qpnp hasn't probed yet; defer dwc probe */
+			goto disable_ref_clk;
+		} else if (ret == 0) {
+			mdwc->pmic_id_irq = 0;
+		} else {
+			irq_set_status_flags(mdwc->pmic_id_irq,
+					IRQ_NOAUTOEN);
+			ret = devm_request_irq(&pdev->dev,
+					       mdwc->pmic_id_irq,
+					       dwc3_pmic_id_irq,
+					       IRQF_TRIGGER_RISING |
+					       IRQF_TRIGGER_FALLING,
+					       "dwc3_msm_pmic_id",
+					       mdwc);
+			if (ret) {
+				dev_err(&pdev->dev, "irqreq IDINT failed\n");
 				goto disable_ref_clk;
-			} else if (ret == 0) {
-				mdwc->pmic_id_irq = 0;
-			} else {
-				irq_set_status_flags(mdwc->pmic_id_irq,
-						IRQ_NOAUTOEN);
-				ret = devm_request_irq(&pdev->dev,
-						       mdwc->pmic_id_irq,
-						       dwc3_pmic_id_irq,
-						       IRQF_TRIGGER_RISING |
-						       IRQF_TRIGGER_FALLING,
-						       "dwc3_msm_pmic_id",
-						       mdwc);
-				if (ret) {
-					dev_err(&pdev->dev, "irqreq IDINT failed\n");
-					goto disable_ref_clk;
-				}
 			}
 		}
+	}
 
-		if (mdwc->pmic_id_irq <= 0) {
-			/* If no PMIC ID IRQ, use ADC for ID pin detection */
-			queue_work(system_nrt_wq, &mdwc->init_adc_work.work);
-			device_create_file(&pdev->dev, &dev_attr_adc_enable);
-			mdwc->pmic_id_irq = 0;
-		}
+	if (mdwc->pmic_id_irq <= 0) {
+		/* If no PMIC ID IRQ, use ADC for ID pin detection */
+		queue_work(system_nrt_wq, &mdwc->init_adc_work.work);
+		device_create_file(&pdev->dev, &dev_attr_adc_enable);
+		mdwc->pmic_id_irq = 0;
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
@@ -3189,32 +3226,6 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 			"unable to read platform data qdss tx fifo size\n");
 
 	dwc3_set_notifier(&dwc3_msm_notify_event);
-	/* usb_psy required only for vbus_notifications or charging support */
-	if (mdwc->ext_xceiv.otg_capability ||
-			!mdwc->charger.charging_disabled) {
-		mdwc->usb_psy.name = "usb";
-		mdwc->usb_psy.type = POWER_SUPPLY_TYPE_USB;
-		mdwc->usb_psy.supplied_to = dwc3_msm_pm_power_supplied_to;
-		mdwc->usb_psy.num_supplicants = ARRAY_SIZE(
-						dwc3_msm_pm_power_supplied_to);
-		mdwc->usb_psy.properties = dwc3_msm_pm_power_props_usb;
-		mdwc->usb_psy.num_properties =
-					ARRAY_SIZE(dwc3_msm_pm_power_props_usb);
-		mdwc->usb_psy.get_property = dwc3_msm_power_get_property_usb;
-		mdwc->usb_psy.set_property = dwc3_msm_power_set_property_usb;
-		mdwc->usb_psy.external_power_changed =
-					dwc3_msm_external_power_changed;
-		mdwc->usb_psy.property_is_writeable =
-				dwc3_msm_property_is_writeable;
-
-		ret = power_supply_register(&pdev->dev, &mdwc->usb_psy);
-		if (ret < 0) {
-			dev_err(&pdev->dev,
-					"%s:power_supply_register usb failed\n",
-						__func__);
-			goto disable_ref_clk;
-		}
-	}
 
 	/* Assumes dwc3 is the only DT child of dwc3-msm */
 	dwc3_node = of_get_next_available_child(node, NULL);
@@ -3239,6 +3250,32 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "Failed to enable vbus_otg\n");
 			of_node_put(dwc3_node);
 			goto put_psupply;
+		}
+	}
+
+	/* usb_psy required only for vbus_notifications */
+	if (!host_mode) {
+		mdwc->usb_psy.name = "usb";
+		mdwc->usb_psy.type = POWER_SUPPLY_TYPE_USB;
+		mdwc->usb_psy.supplied_to = dwc3_msm_pm_power_supplied_to;
+		mdwc->usb_psy.num_supplicants = ARRAY_SIZE(
+						dwc3_msm_pm_power_supplied_to);
+		mdwc->usb_psy.properties = dwc3_msm_pm_power_props_usb;
+		mdwc->usb_psy.num_properties =
+					ARRAY_SIZE(dwc3_msm_pm_power_props_usb);
+		mdwc->usb_psy.get_property = dwc3_msm_power_get_property_usb;
+		mdwc->usb_psy.set_property = dwc3_msm_power_set_property_usb;
+		mdwc->usb_psy.external_power_changed =
+					dwc3_msm_external_power_changed;
+		mdwc->usb_psy.property_is_writeable =
+				dwc3_msm_property_is_writeable;
+
+		ret = power_supply_register(&pdev->dev, &mdwc->usb_psy);
+		if (ret < 0) {
+			dev_err(&pdev->dev,
+					"%s:power_supply_register usb failed\n",
+						__func__);
+			goto disable_ref_clk;
 		}
 	}
 
@@ -3315,8 +3352,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 			}
 		}
 
-		if (mdwc->ext_xceiv.otg_capability)
-			mdwc->ext_xceiv.ext_block_reset = dwc3_msm_block_reset;
+		mdwc->ext_xceiv.ext_block_reset = dwc3_msm_block_reset;
 		ret = dwc3_set_ext_xceiv(mdwc->otg_xceiv->otg,
 						&mdwc->ext_xceiv);
 		if (ret || !mdwc->ext_xceiv.notify_ext_events) {
@@ -3335,7 +3371,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		goto put_dwc3;
 	}
 
-	if (mdwc->ext_xceiv.otg_capability && mdwc->charger.start_detection) {
+	if (mdwc->charger.start_detection) {
 		ret = dwc3_msm_setup_cdev(mdwc);
 		if (ret)
 			dev_err(&pdev->dev, "Fail to setup dwc3 setup cdev\n");

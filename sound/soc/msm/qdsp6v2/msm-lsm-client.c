@@ -37,6 +37,7 @@
 #define CAPTURE_MAX_NUM_PERIODS     8
 #define CAPTURE_MAX_PERIOD_SIZE     4096
 #define CAPTURE_MIN_PERIOD_SIZE     320
+#define LISTEN_MAX_STATUS_PAYLOAD_SIZE 256
 
 #define LAB_BUFFER_ALLOC 1
 #define LAB_BUFFER_DEALLOC 0
@@ -237,6 +238,12 @@ static void lsm_event_handler(uint32_t opcode, uint32_t token,
 		prtd->event_status = krealloc(prtd->event_status,
 					sizeof(struct snd_lsm_event_status) +
 					payload_size, GFP_ATOMIC);
+		if (!prtd->event_status) {
+			pr_err("%s: no memory for event status\n",
+				__func__);
+			return;
+		}
+
 		prtd->event_status->status = status;
 		prtd->event_status->payload_size = payload_size;
 		if (likely(prtd->event_status)) {
@@ -800,6 +807,15 @@ static int msm_lsm_ioctl_compat(struct snd_pcm_substream *substream,
 			__func__, "SNDRV_LSM_EVENT_STATUS32");
 			return -EFAULT;
 		}
+
+		if (userarg32.payload_size >
+		    LISTEN_MAX_STATUS_PAYLOAD_SIZE) {
+			pr_err("%s: payload_size %d is invalid, max allowed = %d\n",
+				__func__, userarg32.payload_size,
+				LISTEN_MAX_STATUS_PAYLOAD_SIZE);
+			return -EINVAL;
+		}
+
 		size = sizeof(*user) + userarg32.payload_size;
 		user = kmalloc(size, GFP_KERNEL);
 		if (!user) {
@@ -1014,6 +1030,15 @@ static int msm_lsm_ioctl(struct snd_pcm_substream *substream,
 			__func__);
 			return -EFAULT;
 		}
+
+		if (userarg.payload_size >
+		    LISTEN_MAX_STATUS_PAYLOAD_SIZE) {
+			pr_err("%s: payload_size %d is invalid, max allowed = %d\n",
+				__func__, userarg.payload_size,
+				LISTEN_MAX_STATUS_PAYLOAD_SIZE);
+			return -EINVAL;
+		}
+
 		size = sizeof(struct snd_lsm_event_status) +
 		userarg.payload_size;
 		user = kmalloc(size, GFP_KERNEL);

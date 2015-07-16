@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -57,9 +57,11 @@ void diag_smd_buffer_init(struct diag_smd_info *smd_info);
 void diag_smd_destructor(struct diag_smd_info *smd_info);
 void diag_cmp_logging_modes_diagfwd_bridge(int old_mode, int new_mode);
 int diag_process_apps_pkt(unsigned char *buf, int len);
+void diag_send_error_rsp(unsigned char *buf, int len);
 void diag_reset_smd_data(int queue);
 void diag_update_pkt_buffer(unsigned char *buf, int type);
 int diag_process_stm_cmd(unsigned char *buf, unsigned char *dest_buf);
+void diag_notify_md_client(uint16_t peripheral_mask, int data);
 extern int diag_debug_buf_idx;
 extern unsigned char diag_debug_buf[1024];
 extern struct platform_driver msm_diag_dci_driver;

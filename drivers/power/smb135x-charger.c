@@ -95,7 +95,8 @@
 #define EN_CHG_INHIBIT_BIT		BIT(0)
 
 #define CFG_16_REG			0x16
-#define SAFETY_TIME_EN_BIT		BIT(4)
+#define SAFETY_TIME_EN_BIT		BIT(5)
+#define SAFETY_TIME_EN_SHIFT		5
 #define SAFETY_TIME_MINUTES_MASK	SMB135X_MASK(3, 2)
 #define SAFETY_TIME_MINUTES_SHIFT	2
 
@@ -398,6 +399,7 @@ struct smb135x_chg {
 	struct pinctrl			*smb_pinctrl;
 
 	bool				apsd_rerun;
+	bool				id_line_not_connected;
 };
 
 #define RETRY_COUNT 5
@@ -586,6 +588,9 @@ static bool is_usb_slave_present(struct smb135x_chg *chip)
 	bool usb_slave_present;
 	u8 reg;
 	int rc;
+
+	if (chip->id_line_not_connected)
+		return false;
 
 	rc = smb135x_read(chip, STATUS_6_REG, &reg);
 	if (rc < 0) {
@@ -2660,7 +2665,8 @@ static int handle_usb_insertion(struct smb135x_chg *chip)
 	usb_supply_type = get_usb_supply_type(reg);
 	pr_debug("inserted %s, usb psy type = %d stat_5 = 0x%02x apsd_rerun = %d\n",
 			usb_type_name, usb_supply_type, reg, chip->apsd_rerun);
-	if (!chip->apsd_rerun && chip->usb_psy) {
+
+	if (chip->batt_present && !chip->apsd_rerun && chip->usb_psy) {
 		if (usb_supply_type == POWER_SUPPLY_TYPE_USB) {
 			pr_debug("setting usb psy allow detection 1 SDP and rerun\n");
 			power_supply_set_allow_detection(chip->usb_psy, 1);
@@ -3366,7 +3372,7 @@ static int determine_initial_status(struct smb135x_chg *chip)
 	}
 
 	chip->usb_slave_present = is_usb_slave_present(chip);
-	if (chip->usb_psy) {
+	if (chip->usb_psy && !chip->id_line_not_connected) {
 		pr_debug("setting usb psy usb_otg = %d\n",
 				chip->usb_slave_present);
 		power_supply_set_usb_otg(chip->usb_psy,
@@ -3537,8 +3543,9 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 	if (chip->safety_time != -EINVAL) {
 		if (chip->safety_time == 0) {
 			/* safety timer disabled */
+			reg = 1 << SAFETY_TIME_EN_SHIFT;
 			rc = smb135x_masked_write(chip, CFG_16_REG,
-							SAFETY_TIME_EN_BIT, 0);
+						SAFETY_TIME_EN_BIT, reg);
 			if (rc < 0) {
 				dev_err(chip->dev,
 				"Couldn't disable safety timer rc = %d\n",
@@ -3554,7 +3561,7 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 			}
 			rc = smb135x_masked_write(chip, CFG_16_REG,
 				SAFETY_TIME_EN_BIT | SAFETY_TIME_MINUTES_MASK,
-				SAFETY_TIME_EN_BIT | reg);
+				reg);
 			if (rc < 0) {
 				dev_err(chip->dev,
 					"Couldn't set safety timer rc = %d\n",
@@ -3841,6 +3848,8 @@ static int smb_parse_dt(struct smb135x_chg *chip)
 
 	chip->pinctrl_state_name = of_get_property(node, "pinctrl-names", NULL);
 
+	chip->id_line_not_connected = of_property_read_bool(node,
+						"qcom,id-line-not-connected");
 	return 0;
 }
 

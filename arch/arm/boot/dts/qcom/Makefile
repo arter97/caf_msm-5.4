@@ -178,8 +178,7 @@ dtb-$(CONFIG_ARCH_FSM9900) += fsm9900-rumi.dtb \
 dtb-$(CONFIG_ARCH_FSM9010) += fsm9010-rumi.dtb \
 	fsm9010-v1.0-mtp.dtb  \
 	fsm9010-v1.0-cdp.dtb
-dtb-$(CONFIG_ARCH_MDM9630) += mdm9630-sim.dtb \
-	mdm9630-v1-cdp.dtb \
+dtb-$(CONFIG_ARCH_MDM9630) += mdm9630-v1-cdp.dtb \
 	mdm9630-v1-mtp.dtb \
 	mdm9630-v2-cdp.dtb \
 	mdm9630-v2-mtp.dtb \
@@ -187,11 +186,12 @@ dtb-$(CONFIG_ARCH_MDM9630) += mdm9630-sim.dtb \
 	mdm9630-v2-gf-cdp.dtb  \
 	mdm9630-v2-tsmc-mtp.dtb \
 	mdm9630-v2-gf-mtp.dtb
-dtb-$(CONFIG_ARCH_MDM9640) += mdm9640-sim.dtb \
-	mdm9640-rumi.dtb \
-	mdm9640-emmc-cdp.dtb \
-	mdm9640-nand-cdp.dtb \
-	mdm9640-mtp.dtb
+dtb-$(CONFIG_ARCH_MDM9640) += mdm9640-v1-emmc-cdp.dtb \
+	mdm9640-v1-nand-cdp.dtb \
+	mdm9640-v1-mtp.dtb \
+	mdm9640-v2-emmc-cdp.dtb \
+	mdm9640-v2-nand-cdp.dtb \
+	mdm9640-v2-mtp.dtb
 dtb-$(CONFIG_ARCH_MSMVPIPA) += msmvpipa-sim.dtb
 dtb-$(CONFIG_ARCH_MDMFERRUM) += mdmferrum-sim.dtb \
 	mdmferrum-rumi.dtb \

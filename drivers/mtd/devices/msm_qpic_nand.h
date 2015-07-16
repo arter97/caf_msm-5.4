@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -134,6 +134,10 @@
 #define WR_RD_BSY_GAP		17
 #define ENABLE_BCH_ECC		27
 
+#define BYTES_512		512
+#define BYTES_516		516
+#define BYTES_517		517
+
 #define MSM_NAND_DEV0_ECC_CFG(info)	    MSM_NAND_REG(info, 0x30028)
 #define ECC_CFG_ECC_DISABLE	0
 #define ECC_SW_RESET	1
@@ -144,6 +148,8 @@
 
 #define MSM_NAND_READ_ID(info)              MSM_NAND_REG(info, 0x30040)
 #define MSM_NAND_READ_STATUS(info)          MSM_NAND_REG(info, 0x30044)
+#define MSM_NAND_READ_ID2(info)              MSM_NAND_REG(info, 0x30048)
+#define EXTENDED_FETCH_ID           BIT(19)
 #define MSM_NAND_DEV_CMD1(info)             MSM_NAND_REG(info, 0x300A4)
 #define MSM_NAND_DEV_CMD_VLD(info)          MSM_NAND_REG(info, 0x300AC)
 #define MSM_NAND_EBI2_ECC_BUF_CFG(info)     MSM_NAND_REG(info, 0x300F0)
@@ -255,6 +261,7 @@ struct msm_nand_chip {
 	uint32_t cfg0, cfg1, cfg0_raw, cfg1_raw;
 	uint32_t ecc_buf_cfg;
 	uint32_t ecc_bch_cfg;
+	uint32_t ecc_cfg_raw;
 };
 
 /* Structure that defines an SPS end point for a NANDc BAM pipe. */
@@ -289,6 +296,7 @@ struct flash_identification {
 	uint32_t blksize;
 	uint32_t oobsize;
 	uint32_t ecc_correctability;
+	uint32_t ecc_capability; /* Set based on the ECC capability selected. */
 };
 
 struct msm_nand_clk_data {
