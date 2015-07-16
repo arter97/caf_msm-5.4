@@ -128,6 +128,7 @@ struct nf_conn {
 	struct sip_length segment;
 	bool sip_original_dir;
 	bool sip_reply_dir;
+	void *sfe_entry;
 
 	/* Storage reserved for other modules, must be the last member */
 	union nf_conntrack_proto proto;
