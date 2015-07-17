@@ -3998,6 +3998,44 @@ static int msmfb_get_metadata(struct msm_fb_data_type *mfd,
 	return ret;
 }
 
+#ifdef CONFIG_FB_MSM_MDP_ARB
+int msm_fb_validate_overlay_ioctl(struct fb_info *info, unsigned int cmd,
+			unsigned long arg, int user)
+{
+	int ret = 0;
+	void *argp = (void *)arg;
+
+	if (!argp) {
+		pr_err("%s arg is NULL, cmd=0x%08x", __func__, cmd);
+		return -EFAULT;
+	}
+
+	switch (cmd) {
+	case MSMFB_OVERLAY_GET:
+	case MSMFB_OVERLAY_SET:
+	case MSMFB_OVERLAY_UNSET:
+	case MSMFB_OVERLAY_PLAY:
+	case MSMFB_OVERLAY_PLAY_ENABLE:
+	case MSMFB_OVERLAY_PLAY_WAIT:
+	case MSMFB_OVERLAY_BLT:
+	case MSMFB_OVERLAY_3D:
+		MSM_FB_INFO("MDP: overlay ioctl (cmd=%x) received!" \
+			"Use mdp_arb fd for overlay ioctls", cmd);
+		ret = -EINVAL;
+		break;
+	default:
+		break;
+	}
+	return ret;
+}
+#else
+int msm_fb_validate_overlay_ioctl(struct fb_info *info, unsigned int cmd,
+			unsigned long arg, int user)
+{
+	return 0;
+}
+#endif
+
 #ifdef CONFIG_FB_MSM_OVERLAY
 int msm_fb_overlay_ioctl(struct fb_info *info, unsigned int cmd,
 			unsigned long arg, int user)
@@ -4362,6 +4400,12 @@ static int msm_fb_ioctl(struct fb_info *info, unsigned int cmd,
 		break;
 
 	default:
+		ret = msm_fb_validate_overlay_ioctl(info, cmd, arg, true);
+		if (ret) {
+			MSM_FB_INFO("%s msm_fb_validate_overlay_ioctl error=%d",
+					__func__, ret);
+			break;
+		}
 		ret = msm_fb_overlay_ioctl(info, cmd, arg, true);
 		if (ret)
 			MSM_FB_INFO("%s msm_fb_overlay_ioctl error=%d",
