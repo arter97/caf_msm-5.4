@@ -1085,6 +1085,23 @@ static int apq8064_sec_i2s_rx_startup(struct snd_pcm_substream *substream)
 	return ret;
 }
 
+static int msm_hdmi_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+					struct snd_pcm_hw_params *params)
+{
+	struct snd_interval *rate = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_RATE);
+
+	struct snd_interval *channels = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	pr_debug("%s channels->min %u channels->max %u ()\n", __func__,
+			channels->min, channels->max);
+
+	rate->min = rate->max = 48000;
+	channels->min = channels->max = 2;
+	return 0;
+}
+
 static struct snd_soc_ops msm_mi2s_be_ops = {
 	.startup = msm_mi2s_startup,
 	.shutdown = msm_mi2s_shutdown,
@@ -1501,6 +1518,19 @@ static struct snd_soc_dai_link msm_dai[] = {
 		.be_id = MSM_BACKEND_DAI_SEC_I2S_RX,
 		.be_hw_params_fixup = msm_i2s_rx_be_hw_params_fixup,
 		.ops = &sec_i2s_rx_ops,
+		.ignore_pmdown_time = 1, /* playback support */
+	},
+	/* HDMI BACK END DAI Link */
+	{
+		.name = LPASS_BE_HDMI,
+		.stream_name = "HDMI Playback",
+		.cpu_dai_name = "msm-dai-q6-hdmi.8",
+		.platform_name = "msm-pcm-routing",
+		.codec_name	= "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-rx",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_HDMI_RX,
+		.be_hw_params_fixup = msm_hdmi_be_hw_params_fixup,
 		.ignore_pmdown_time = 1, /* playback support */
 	},
 };

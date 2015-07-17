@@ -61,8 +61,9 @@ obj-$(CONFIG_SND_SOC_MSM_QDSP6_INTF) += qdsp6/
 snd-soc-qdsp6-objs := msm-dai-q6.o msm-pcm-q6.o msm-multi-ch-pcm-q6.o \
 				       msm-lowlatency-pcm-q6.o msm-pcm-loopback.o \
 				       msm-pcm-routing.o msm-dai-fe.o msm-compr-q6.o  \
-				       msm-compress-q6.o msm-dai-stub.o
-obj-$(CONFIG_SND_SOC_MSM_QDSP6_HDMI_AUDIO) += msm-dai-q6-hdmi.o
+				       msm-compress-q6.o msm-dai-stub.o \
+				       msm-dai-q6-hdmi.o
+#obj-$(CONFIG_SND_SOC_MSM_QDSP6_HDMI_AUDIO) += msm-dai-q6-hdmi.o
 obj-$(CONFIG_SND_SOC_VOICE) += msm-pcm-voice.o msm-pcm-voip.o
 snd-soc-qdsp6-objs += msm-pcm-lpa.o msm-pcm-afe.o
 obj-$(CONFIG_SND_SOC_QDSP6) += snd-soc-qdsp6.o
