@@ -487,19 +487,7 @@ static int mdp_arb_get_state_sub(struct mdp_arb_device_info *arb,
 	list_for_each(pos, &arb->event_db_list) {
 		temp_event = list_entry(pos, struct mdp_arb_event_db, list);
 		if (!strcmp(temp_event->event.name, event->name)) {
-			if (user) {
-				if (copy_to_user(&event->event.get_state,
-					&temp_event->cur_state_value,
-					sizeof(int))) {
-					pr_err("%s get_state copy_to_user " \
-						"event failed", __func__);
-					rc = -EFAULT;
-					goto out;
-				}
-			} else {
-				event->event.get_state =
-					temp_event->cur_state_value;
-			}
+			event->event.get_state = temp_event->cur_state_value;
 			found = true;
 			break;
 		}
@@ -510,7 +498,6 @@ static int mdp_arb_get_state_sub(struct mdp_arb_device_info *arb,
 		rc = -EINVAL;
 	}
 
-out:
 	mutex_unlock(&arb->dev_mutex);
 	return rc;
 }
