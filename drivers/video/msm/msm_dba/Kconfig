@@ -13,3 +13,9 @@ config MSM_DBA
 	  bridge chip. The MSM DBA driver maintains a list of devices supported
 	  on the platform and allow clients to register and access these
 	  devices.
+
+config MSM_DBA_DS90UH92X
+	bool "DS90UH92X driver support through MSM DBA interface"
+	depends on MSM_DBA
+	---help---
+	  Support for DS90UH92X display bridge driver

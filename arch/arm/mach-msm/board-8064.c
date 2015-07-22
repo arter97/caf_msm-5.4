@@ -1117,6 +1117,21 @@ static struct i2c_board_info lsm303dlhc_device_info[] __initdata = {
 	},
 };
 
+static struct ds90uh92x_platform_data ds90uh927_data = {
+	.chip_id = "DS90UH927Q",
+	.instance_id = 0,
+	.reset_gpio = PM8921_GPIO_PM_TO_SYS(37),
+	.irq_gpio = 83,
+	.slave_addr = 0x0C,
+};
+
+static struct i2c_board_info ds90uh927_i2c_device_info[] __initdata = {
+	{
+		I2C_BOARD_INFO("ds90uh92x_i2c", 0x0c),
+		.platform_data = &ds90uh927_data,
+	},
+};
+
 struct sx150x_platform_data apq8064_sx150x_data[] = {
 	[SX150X_EPM] = {
 		.gpio_base	= GPIO_EPM_EXPANDER_BASE,
@@ -3630,6 +3645,12 @@ static struct i2c_registry apq8064_i2c_devices[] __initdata = {
 		APQ_8064_GSBI3_QUP_I2C_BUS_ID,
 		mipi_dsi_i2c_device_info,
 		ARRAY_SIZE(mipi_dsi_i2c_device_info),
+	},
+	{
+		I2C_SURF,
+		APQ_8064_GSBI1_QUP_I2C_BUS_ID,
+		ds90uh927_i2c_device_info,
+		ARRAY_SIZE(ds90uh927_i2c_device_info),
 	},
 	{
 		I2C_SURF,
