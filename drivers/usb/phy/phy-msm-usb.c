@@ -766,7 +766,6 @@ static int msm_otg_reset(struct usb_phy *phy)
 	 */
 	if (motg->err_event_seen) {
 		dev_info(phy->dev, "performing USB h/w reset for recovery\n");
-		motg->err_event_seen = false;
 	} else if (pdata->disable_reset_on_disconnect && motg->reset_counter) {
 		return 0;
 	}
@@ -832,6 +831,12 @@ static int msm_otg_reset(struct usb_phy *phy)
 	if (pdata->enable_axi_prefetch)
 		writel_relaxed(readl_relaxed(USB_HS_APF_CTRL) | (APF_CTRL_EN),
 							USB_HS_APF_CTRL);
+
+	/*
+	 * Enable USB BAM if USB BAM is enabled already before block reset as
+	 * block reset also resets USB BAM registers.
+	 */
+	msm_usb_bam_enable(CI_CTRL, phy->otg->gadget->bam2bam_func_enabled);
 
 	return 0;
 }
@@ -1349,6 +1354,8 @@ static irqreturn_t msm_otg_phy_irq_handler(int irq, void *data)
 
 #define PHY_SUSPEND_RETRIES_MAX 3
 
+static void msm_otg_set_vbus_state(int online);
+
 #ifdef CONFIG_PM_SLEEP
 static int msm_otg_suspend(struct msm_otg *motg)
 {
@@ -1382,7 +1389,6 @@ static int msm_otg_suspend(struct msm_otg *motg)
 		return -EBUSY;
 	}
 
-	motg->ui_enabled = 0;
 	disable_irq(motg->irq);
 lpm_start:
 	host_bus_suspend = !test_bit(MHL, &motg->inputs) && phy->otg->host &&
@@ -1397,6 +1403,10 @@ lpm_start:
 	/* !BSV, but its handling is in progress by otg sm_work */
 	sm_work_busy = !test_bit(B_SESS_VLD, &motg->inputs) &&
 			phy->state == OTG_STATE_B_PERIPHERAL;
+
+	/* Perform block reset to recover from UDC error events on disconnect */
+	if (!host_bus_suspend && !device_bus_suspend)
+		msm_otg_reset(phy);
 
 	/* Enable line state difference wakeup fix for only device and host
 	 * bus suspend scenarios.  Otherwise PHY can not be suspended when
@@ -1423,7 +1433,6 @@ lpm_start:
 				motg->inputs, motg->chg_type);
 		if (test_bit(A_BUS_REQ, &motg->inputs))
 			motg->pm_done = 1;
-		motg->ui_enabled = 1;
 		enable_irq(motg->irq);
 		return -EBUSY;
 	}
@@ -1641,10 +1650,8 @@ phcd_retry:
 	}
 
 	if (device_may_wakeup(phy->dev)) {
-		if (motg->async_irq)
-			enable_irq_wake(motg->async_irq);
-		else
-			enable_irq_wake(motg->irq);
+		enable_irq_wake(motg->async_irq);
+		enable_irq_wake(motg->irq);
 
 		if (motg->phy_irq)
 			enable_irq_wake(motg->phy_irq);
@@ -1670,15 +1677,10 @@ phcd_retry:
 	atomic_set(&motg->in_lpm, 1);
 	wake_up(&motg->host_suspend_wait);
 
-	/* Enable ASYNC IRQ (if present) during LPM */
-	if (motg->async_irq)
-		enable_irq(motg->async_irq);
+	/* Enable ASYNC IRQ during LPM */
+	enable_irq(motg->async_irq);
 
-	/* XO shutdown during idle , non wakeable irqs must be disabled */
-	if (device_bus_suspend || host_bus_suspend || !motg->async_irq) {
-		motg->ui_enabled = 1;
-		enable_irq(motg->irq);
-	}
+	enable_irq(motg->irq);
 	wake_unlock(&motg->wlock);
 
 	dev_dbg(phy->dev, "LPM caps = %lu flags = %lu\n",
@@ -1687,10 +1689,17 @@ phcd_retry:
 	msm_otg_dbg_log_event(phy, "LPM ENTER DONE",
 			motg->caps, motg->lpm_flags);
 
+	if (motg->err_event_seen) {
+		motg->err_event_seen = false;
+		if (motg->vbus_state != test_bit(B_SESS_VLD, &motg->inputs))
+			msm_otg_set_vbus_state(motg->vbus_state);
+		if (motg->id_state != test_bit(ID, &motg->inputs))
+			msm_id_status_w(&motg->id_status_work.work);
+	}
+
 	return 0;
 
 phy_suspend_fail:
-	motg->ui_enabled = 1;
 	enable_irq(motg->irq);
 	return ret;
 }
@@ -1718,10 +1727,7 @@ static int msm_otg_resume(struct msm_otg *motg)
 
 	msm_bam_notify_lpm_resume(CI_CTRL);
 
-	if (motg->ui_enabled) {
-		motg->ui_enabled = 0;
-		disable_irq(motg->irq);
-	}
+	disable_irq(motg->irq);
 	wake_lock(&motg->wlock);
 
 	/*
@@ -1844,10 +1850,8 @@ skip_phy_resume:
 	}
 
 	if (device_may_wakeup(phy->dev)) {
-		if (motg->async_irq)
-			disable_irq_wake(motg->async_irq);
-		else
-			disable_irq_wake(motg->irq);
+		disable_irq_wake(motg->async_irq);
+		disable_irq_wake(motg->irq);
 
 		if (motg->phy_irq)
 			disable_irq_wake(motg->phy_irq);
@@ -1877,12 +1881,10 @@ skip_phy_resume:
 		if (phy->state >= OTG_STATE_A_IDLE)
 			set_bit(A_BUS_REQ, &motg->inputs);
 	}
-	motg->ui_enabled = 1;
 	enable_irq(motg->irq);
 
-	/* If ASYNC IRQ is present then keep it enabled only during LPM */
-	if (motg->async_irq)
-		disable_irq(motg->async_irq);
+	/* Enable ASYNC_IRQ only during LPM */
+	disable_irq(motg->async_irq);
 
 	if (motg->phy_irq_pending) {
 		motg->phy_irq_pending = false;
@@ -3458,7 +3460,6 @@ static void msm_otg_sm_work(struct work_struct *w)
 				ulpi_write(otg->phy, 0x2, 0x86);
 			}
 			msm_chg_block_off(motg);
-			msm_otg_reset(otg->phy);
 			/*
 			 * There is a small window where ID interrupt
 			 * is not monitored during ID detection circuit
@@ -4065,6 +4066,10 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 		pr_debug("OTG IRQ: %d in LPM\n", irq);
 		msm_otg_dbg_log_event(&motg->phy, "OTG IRQ IS IN LPM",
 				irq, otg->phy->state);
+		/*Ignore interrupt if one interrupt already seen in LPM*/
+		if (motg->async_int)
+			return IRQ_HANDLED;
+
 		disable_irq_nosync(irq);
 		motg->async_int = irq;
 		if (!atomic_read(&motg->pm_suspended)) {
@@ -4241,6 +4246,11 @@ static void msm_otg_set_vbus_state(int online)
 	struct msm_otg *motg = the_msm_otg;
 	static bool init;
 
+	motg->vbus_state = online;
+
+	if (motg->err_event_seen)
+		return;
+
 	if (online) {
 		pr_debug("PMIC: BSV set\n");
 		msm_otg_dbg_log_event(&motg->phy, "PMIC: BSV SET",
@@ -4326,6 +4336,9 @@ static void msm_id_status_w(struct work_struct *w)
 		motg->id_state = gpio_get_value(motg->pdata->usb_id_gpio);
 	else if (motg->phy_irq)
 		motg->id_state = msm_otg_read_phy_id_state(motg);
+
+	if (motg->err_event_seen)
+		return;
 
 	if (motg->id_state) {
 		if (gpio_is_valid(motg->pdata->switch_sel_gpio))
@@ -5801,8 +5814,9 @@ static int msm_otg_probe(struct platform_device *pdev)
 
 	motg->async_irq = platform_get_irq_byname(pdev, "async_irq");
 	if (motg->async_irq < 0) {
-		dev_dbg(&pdev->dev, "platform_get_irq for async_int failed\n");
+		dev_err(&pdev->dev, "platform_get_irq for async_int failed\n");
 		motg->async_irq = 0;
+		goto free_regs;
 	}
 
 	if (motg->xo_clk) {
@@ -5956,15 +5970,13 @@ static int msm_otg_probe(struct platform_device *pdev)
 		}
 	}
 
-	if (motg->async_irq) {
-		ret = request_irq(motg->async_irq, msm_otg_irq,
-					IRQF_TRIGGER_RISING, "msm_otg", motg);
-		if (ret) {
-			dev_err(&pdev->dev, "request irq failed (ASYNC INT)\n");
-			goto free_phy_irq;
-		}
-		disable_irq(motg->async_irq);
+	ret = request_irq(motg->async_irq, msm_otg_irq,
+				IRQF_TRIGGER_RISING, "msm_otg", motg);
+	if (ret) {
+		dev_err(&pdev->dev, "request irq failed (ASYNC INT)\n");
+		goto free_phy_irq;
 	}
+	disable_irq(motg->async_irq);
 
 	if (pdata->otg_control == OTG_PHY_CONTROL && pdata->mpm_otgsessvld_int)
 		msm_mpm_enable_pin(pdata->mpm_otgsessvld_int, 1);
@@ -6177,8 +6189,7 @@ remove_cdev:
 remove_phy:
 	usb_remove_phy(&motg->phy);
 free_async_irq:
-	if (motg->async_irq)
-		free_irq(motg->async_irq, motg);
+	free_irq(motg->async_irq, motg);
 free_phy_irq:
 	if (motg->phy_irq)
 		free_irq(motg->phy_irq, motg);
