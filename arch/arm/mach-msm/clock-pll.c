@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012,2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -53,7 +53,7 @@
 
 static DEFINE_SPINLOCK(pll_reg_lock);
 
-#define ENABLE_WAIT_MAX_LOOPS 200
+#define ENABLE_WAIT_MAX_LOOPS 400
 
 int pll_vote_clk_enable(struct clk *c)
 {
@@ -231,7 +231,7 @@ int sr_pll_clk_enable(struct clk *c)
 
 	/* Wait until PLL is locked. */
 	mb();
-	udelay(60);
+	udelay(298);
 
 	/* Enable PLL output. */
 	mode |= PLL_OUTCTRL;
@@ -506,7 +506,7 @@ void __init configure_sr_pll(struct pll_config *config,
 {
 	__configure_pll(config, regs, ena_fsm_mode);
 	if (ena_fsm_mode)
-		__set_fsm_mode(PLL_MODE_REG(regs), 0x1, 0x8);
+		__set_fsm_mode(PLL_MODE_REG(regs), 0x8, 0x3F);
 }
 
 void __init configure_sr_hpm_lp_pll(struct pll_config *config,
