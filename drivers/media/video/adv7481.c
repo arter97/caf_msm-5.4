@@ -33,9 +33,9 @@
 #include "adv7481_reg.h"
 
 #define DRIVER_NAME "adv7481"
-#define I2C_RESET_DELAY		75000
+
 #define I2C_RW_DELAY		100
-#define I2C_SW_DELAY		10000
+#define I2C_SW_RST_DELAY	10000
 #define GPIO_HW_DELAY_LOW	100000
 #define GPIO_HW_DELAY_HI	10000
 #define SDP_MIN_SLEEP		5000
@@ -45,6 +45,7 @@
 #define LOCK_MAX_SLEEP		6000
 #define LOCK_NUM_TRIES		20
 
+#define ONE_MHZ_TO_HZ		1000000
 
 struct adv7481_state {
 	/* Platform Data */
@@ -91,7 +92,7 @@ struct adv7481_state {
 
 struct adv7481_hdmi_params {
 	uint16_t pll_lock;
-	uint16_t tmds_freq;
+	uint32_t tmds_freq;
 	uint16_t vert_lock;
 	uint16_t horz_lock;
 	uint16_t pix_rep;
@@ -99,12 +100,12 @@ struct adv7481_hdmi_params {
 };
 
 struct adv7481_vid_params {
-	uint16_t pix_clk;
+	uint32_t pix_clk;
 	uint16_t act_pix;
 	uint16_t act_lines;
 	uint16_t tot_pix;
 	uint16_t tot_lines;
-	uint16_t fr_rate;
+	uint32_t fr_rate;
 	uint16_t intrlcd;
 };
 
@@ -112,81 +113,85 @@ const uint8_t adv7481_default_edid_data[] = {
 /* Block 0 (EDID Base Block) */
 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00,
 /* Vendor Identification */
-0x45, 0x23, 0xDD, 0xDD, 0x01, 0x01, 0x01, 0x01, 0x01, 0x16,
+0x45, 0x23, 0xDD, 0xDD, 0x01, 0x01, 0x01, 0x01,
+/* Week of Manufacture */
+0x1E,
+/* Year of Manufacture */
+0x19,
 /* EDID Structure Version and Revision */
 0x01, 0x03,
 /* Display Parameters */
-0x80, 0x90, 0x51, 0x78, 0x0A,
+0x80, 0x10, 0x09, 0x78, 0x0A,
 /* Color characteristics */
 0x0D, 0xC9, 0xA0, 0x57, 0x47, 0x98, 0x27, 0x12, 0x48, 0x4C,
 /* Established Timings */
 0x21, 0x08, 0x00,
 /* Standard Timings */
-0x81, 0x80, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
-0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
-/* Detailed Descriptors */
-0x02, 0x3A, 0x80, 0x18, 0x71, 0x38, 0x2D, 0x40,
-0x58, 0x2C,
-0x45, 0x00, 0xA0, 0x2A, 0x53, 0x00, 0x00, 0x1E,
-/* Detailed Descriptors */
-0x01, 0x1D, 0x00, 0x72, 0x51, 0xD0, 0x1E, 0x20,
-0x6E, 0x28, 0x55, 0x00, 0xA0, 0x2A, 0x53, 0x00,
+0x81, 0xC0, 0x81, 0x40, 0x3B, 0xC0, 0x3B, 0x40,
+0x31, 0xC0, 0x31, 0x40, 0x01, 0x01, 0x01, 0x01,
+/* Detailed Timings Block */
+0x01, 0x1D, 0x00, 0xBC, 0x52, 0xD0, 0x1E, 0x20,
+0xB8, 0x28, 0x55, 0x40, 0xA0, 0x5A, 0x00, 0x00,
 0x00, 0x1E,
-/* Monitor Descriptor */
-0x00, 0x00, 0x00, 0xFD, 0x00, 0x3A, 0x3E, 0x0F,
+/* Monitor Descriptor Block 2 */
+0x8C, 0x0A, 0xD0, 0xB4, 0x20, 0xE0, 0x14, 0x10,
+0x12, 0x48, 0x3A, 0x00, 0xD8, 0xA2, 0x00, 0x00,
+0x00, 0x1E,
+/* Monitor Descriptor Block 3 */
+0x00, 0x00, 0x00, 0xFD, 0x00, 0x17, 0x4B, 0x0F,
 0x46, 0x0F, 0x00, 0x0A, 0x20, 0x20, 0x20, 0x20,
 0x20, 0x20,
-/* Monitor Descriptor */
+/* Monitor Descriptor Block 4 */
 0x00, 0x00, 0x00, 0xFC, 0x00, 0x54, 0x56, 0x0A,
 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
 0x20, 0x20,
-/* Extension Flag */
+/* Extension Flag CEA */
 0x01,
-/* checksum */
-0x9A,
+/* Checksum */
+0x5B,
 
 /* Block 1 (Extension Block) */
 /* Extension Header */
-0x02, 0x03, 0x37,
+0x02, 0x03, 0x1E,
 /* Display supports */
-0xF0,
+0x71,
 /* Video Data Bock */
-0x4A, 0x10, 0x04, 0x05, 0x03, 0x02, 0x07, 0x06,
-0x20, 0x01, 0x3C,
+0x48, 0x84, 0x13, 0x3C, 0x03, 0x02, 0x11, 0x12,
+0x01,
+/* HDMI VSDB */
+/* Deep color All, Max_TMDS_Clock = 150 MHz */
+0x68, 0x03, 0x0C, 0x00, 0x10, 0x00, 0x80,
+/* hdmi_video_present=0, 3d_present=0 */
+0x1E, 0x00,
 /* Audio Data Block */
-0x29,
+0x23,
 0x09, 0x07, 0x07, /* LPCM, max 2 ch, 48k, 44.1k, 32k */
-0x15, 0x07, 0x50, /* AC-3, max 6 ch, 48k, 44.1k, 32k, max bitrate 640 */
-0x3D, 0x07, 0x50, /* DTS, max 6ch, 48,44.1,32k, max br 640 */
 /* Speaker Allocation Data Block */
 0x83, 0x01, 0x00, 0x00,
-/* HDMI VSDB */
-/* no deep color, Max_TMDS_Clock = 165 MHz */
-0x76, 0x03, 0x0C, 0x00, 0x30, 0x00, 0x80, 0x21,
-/* hdmi_video_present=1, 3d_present=1, 3d_multi_present=0,
- * hdmi_vic_len=0, hdmi_3d_len=0xC */
-0x2F, 0x88, 0x0C, 0x20, 0x90, 0x08, 0x10, 0x18,
-0x10, 0x28, 0x10, 0x78, 0x10, 0x06, 0x26,
-/* VCDB */
-0xE2, 0x00, 0x7B,
-/* Detailed Descriptor */
-0x01, 0x1D, 0x80, 0x18, 0x71, 0x1C, 0x16, 0x20,
-0x58, 0x2C, 0x25, 0x00, 0xA0, 0x2A, 0x53, 0x00,
-0x00, 0x9E,
-/* Detailed Descriptor */
-0x8C, 0x0A, 0xD0, 0x8A, 0x20, 0xE0, 0x2D, 0x10,
-0x10, 0x3E, 0x96, 0x00, 0xA0, 0x2A, 0x53, 0x00,
-0x00, 0x18,
-/* Detailed Descriptor */
-0x8C, 0x0A, 0xD0, 0x8A, 0x20, 0xE0, 0x2D, 0x10,
-0x10, 0x3E, 0x96, 0x00, 0x38, 0x2A, 0x43, 0x00,
-0x00, 0x18,
-/* Detailed Descriptor */
-0x8C, 0x0A, 0xA0, 0x14, 0x51, 0xF0, 0x16, 0x00,
-0x26, 0x7C, 0x43, 0x00, 0x38, 0x2A, 0x43, 0x00,
-0x00, 0x98,
-/* checksum */
-0x38
+/* Detailed Timing Descriptor */
+0x01, 0x1D, 0x00, 0x72, 0x51, 0xD0, 0x1E, 0x20,
+0x6E, 0x28, 0x55, 0x00, 0xA0, 0x2A, 0x53, 0x00,
+0x00, 0x1E,
+/* Detailed Timing Descriptor */
+0x8C, 0x0A, 0xD0, 0xB4, 0x20, 0xE0, 0x14, 0x10,
+0x12, 0x48, 0x3A, 0x00, 0xD8, 0xA2, 0x00, 0x00,
+0x00, 0x1E,
+/* Detailed Timing Descriptor */
+0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+0x00, 0x00,
+/* Detailed Timing Descriptor */
+0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+0x00, 0x00,
+/* Detailed Timing Descriptor */
+0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+0x00, 0x00,
+/* DTD padding */
+0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+/* Checksum */
+0xC6
 };
 
 #define ADV7481_EDID_SIZE ARRAY_SIZE(adv7481_default_edid_data)
@@ -240,9 +245,12 @@ static int adv7481_set_irq(struct adv7481_state *state)
 			IO_REG_DATAPATH_INT1_CP_UNLOCK |
 			IO_REG_DATAPATH_INT1_VMUTE |
 			IO_REG_DATAPATH_INT1_SDP);
+	/* Set hpa */
+	ret |= adv7481_wr_byte(state->client, IO_HDMI_LVL_INT_MASKB_3_ADDR,
+			ADV_REG_SETFIELD(1, IO_CABLE_DET_A_MB1));
 
 	if (ret)
-		pr_err("%s - failed %d to setup interrupt regs",
+		pr_err("%s - failed %d to setup interrupt regs\n",
 				__func__, ret);
 	else
 		enable_irq(state->irq);
@@ -255,19 +263,17 @@ static int adv7481_set_edid(struct adv7481_state *state)
 	int i;
 	int ret = 0;
 
-	/* Enable Manual Control of EDID */
-	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x74, 0x01);
+	/* Enable Manual Control of EDID on Port A */
+	ret |= adv7481_wr_byte(state->i2c_rep, 0x74, 0x01);
 	/* Disable Auto Enable of EDID */
-	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x7A, 0x08);
+	ret |= adv7481_wr_byte(state->i2c_rep, 0x7A, 0x08);
 	/* Set Primary EDID Size to 256 Bytes */
-	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x70, 0x80);
+	ret |= adv7481_wr_byte(state->i2c_rep, 0x70, 0x20);
 
 	for (i = 0; i < ADV7481_EDID_SIZE; i++) {
 		ret |= adv7481_wr_byte(state->i2c_edid, i,
 						adv7481_default_edid_data[i]);
 	}
-	/* Manually Enable EDID on Port A */
-	ret |= adv7481_wr_byte(state->i2c_hdmi, 0x07, 0x01);
 
 	return ret;
 }
@@ -284,21 +290,40 @@ static irqreturn_t adv7481_irq(int irq, void *dev)
 static void adv7481_irq_delay_work(struct work_struct *work)
 {
 	struct adv7481_state *state;
-	int status;
+	uint8_t status;
 
 	state = container_of(work, struct adv7481_state,
 				irq_delayed_work.work);
 
 	mutex_lock(&state->mutex);
 
+	/* workaround for irq trigger */
 	status = adv7481_rd_byte(state->client,
-			IO_REG_DATAPATH_INT1_STATUS_ADDR);
+			IO_REG_INT_RAW_STATUS_ADDR);
 
-	pr_debug("%s, dev %d got interrupt 0x%x", __func__,
+	status = adv7481_rd_byte(state->client,
+			IO_REG_DATAPATH_INT_STATUS_ADDR);
+
+	pr_debug("%s, dev: %d got datapath int status: 0x%x\n", __func__,
 			state->device_num, status);
 
 	adv7481_wr_byte(state->client,
-			IO_REG_DATAPATH_INT1_CLEAR_ADDR, status);
+			IO_REG_DATAPATH_INT_CLEAR_ADDR, status);
+
+	status = adv7481_rd_byte(state->client,
+			IO_REG_DATAPATH_RAW_STATUS_ADDR);
+
+	pr_debug("%s, dev: %d got datapath rawstatus: 0x%x\n", __func__,
+			state->device_num, status);
+
+	status = adv7481_rd_byte(state->client,
+			IO_HDMI_LVL_INT_STATUS_3_ADDR);
+
+	pr_debug("%s, dev: %d got hdmi lvl int status 3: 0x%x\n", __func__,
+			state->device_num, status);
+
+	adv7481_wr_byte(state->client,
+			IO_HDMI_LVL_INT_CLEAR_3_ADDR, status);
 
 	mutex_unlock(&state->mutex);
 }
@@ -311,17 +336,18 @@ static int adv7481_dev_init(struct adv7481_state *state,
 
 	mutex_lock(&state->mutex);
 
-	/* Delay required following I2C reset and I2C transactions */
-	/* soft reset */
+	/* Soft reset */
 	ret = adv7481_wr_byte(state->client,
-					IO_REG_RST, IO_CTRL_MAIN_RST_REG_VALUE);
-	usleep(I2C_SW_DELAY);
+			IO_REG_MAIN_RST_ADDR, IO_REG_MAIN_RST_VALUE);
+	/* Delay required following I2C reset and I2C transactions */
+	usleep(I2C_SW_RST_DELAY);
 
-	/* power down controls */
+	/* Power down controls */
 	ret |= adv7481_wr_byte(state->client,
 				IO_REG_PWR_DN2_XTAL_HIGH_ADDR, 0x76);
+	/* Setting Vid_Std to 720x480p60 */
 	ret |= adv7481_wr_byte(state->client,
-				IO_REG_CP_VID_STD_ADDR, 0x4a);
+				IO_REG_CP_VID_STD_ADDR, 0x4A);
 
 	/* Configure I2C Maps and I2C Communication Settings */
 	/* io_reg_f2 I2C Auto Increment */
@@ -361,7 +387,7 @@ static int adv7481_dev_init(struct adv7481_state *state,
 	ret |= adv7481_wr_byte(state->client, IO_REG_CSI_TXA_ADDR,
 				IO_REG_CSI_TXA_SADDR);
 	if (ret) {
-		pr_err("%s - failed dev init %d", __func__, ret);
+		pr_err("%s - failed dev init %d\n", __func__, ret);
 		goto  err_exit;
 	}
 
@@ -431,14 +457,14 @@ static int adv7481_hw_init(struct adv7481_platform_data *pdata,
 	if (gpio_is_valid(pdata->irq1_gpio)) {
 		ret = gpio_request(pdata->irq1_gpio, "irq_gpio");
 		if (ret) {
-			pr_err("%s : Failed to request irq_gpio %d",
+			pr_err("%s : Failed to request irq_gpio %d\n",
 					__func__, ret);
 			goto err_exit;
 		}
 
 		ret = gpio_direction_input(pdata->irq1_gpio);
 		if (ret) {
-			pr_err("%s : Failed gpio_direction irq %d",
+			pr_err("%s : Failed gpio_direction irq %d\n",
 					__func__, ret);
 			goto err_exit;
 		}
@@ -449,12 +475,12 @@ static int adv7481_hw_init(struct adv7481_platform_data *pdata,
 					IRQF_ONESHOT | IRQF_TRIGGER_FALLING,
 					DRIVER_NAME, state);
 			if (ret) {
-				pr_err("%s : Failed request_irq %d",
+				pr_err("%s : Failed request_irq %d\n",
 						__func__, ret);
 				goto err_exit;
 			}
 		} else {
-			pr_err("%s : Failed gpio_to_irq %d", __func__, ret);
+			pr_err("%s : Failed gpio_to_irq %d\n", __func__, ret);
 			ret = -EINVAL;
 			goto err_exit;
 		}
@@ -550,25 +576,27 @@ static int adv7481_get_sd_timings(struct adv7481_state *state, int *sd_standard)
 		return -EINVAL;
 
 	do {
-		sdp_stat = adv7481_rd_byte(state->i2c_sdp, SDP_REG_STATUS1);
+		sdp_stat = adv7481_rd_byte(state->i2c_sdp,
+					SDP_RO_MAIN_STATUS1_ADDR);
 		usleep_range(SDP_MIN_SLEEP, SDP_MAX_SLEEP);
 		timeout++;
-		sdp_stat2 = adv7481_rd_byte(state->i2c_sdp, SDP_REG_STATUS1);
+		sdp_stat2 = adv7481_rd_byte(state->i2c_sdp,
+					SDP_RO_MAIN_STATUS1_ADDR);
 	} while ((sdp_stat != sdp_stat2) && (timeout < SDP_NUM_TRIES));
 
 	if (sdp_stat != sdp_stat2) {
-		pr_err("%s(%d), adv7481 SDP status unstable: 1",
+		pr_err("%s(%d), adv7481 SDP status unstable: 1\n",
 							__func__, __LINE__);
 		return -ETIMEDOUT;
 	}
 
-	if (!(sdp_stat & 0x01)) {
-		pr_err("%s(%d), adv7481 SD Input NOT Locked: 0x%x",
+	if (!ADV_REG_GETFIELD(sdp_stat, SDP_RO_MAIN_IN_LOCK)) {
+		pr_err("%s(%d), adv7481 SD Input NOT Locked: 0x%x\n",
 				__func__, __LINE__, sdp_stat);
 		return -EBUSY;
 	}
 
-	switch ((sdp_stat &= SDP_CTRL_ADRESLT) >> 4) {
+	switch (ADV_REG_GETFIELD(sdp_stat, SDP_RO_MAIN_AD_RESULT)) {
 	case AD_NTSM_M_J:
 		*sd_standard = V4L2_STD_NTSC;
 		break;
@@ -605,6 +633,7 @@ static int adv7481_set_cvbs_mode(struct adv7481_state *state)
 	int ret;
 	uint8_t val;
 
+	state->mode = ADV7481_IP_CVBS_1;
 	/* cvbs video settings ntsc etc */
 	ret = adv7481_wr_byte(state->client, 0x00, 0x30);
 	ret |= adv7481_wr_byte(state->i2c_sdp, 0x0f, 0x00);
@@ -632,6 +661,7 @@ static int adv7481_set_hdmi_mode(struct adv7481_state *state)
 	int temp;
 	uint8_t val;
 
+	state->mode = ADV7481_IP_HDMI;
 	/* Configure IO setting for HDMI in and
 	 * YUV 422 out via TxA CSI: 4-Lane
 	 */
@@ -653,18 +683,18 @@ static int adv7481_set_hdmi_mode(struct adv7481_state *state)
 	ret |= adv7481_wr_byte(state->client, 0x17, 0x80);
 	/* Set CP core to enable AV codes */
 	ret |= adv7481_wr_byte(state->client, 0x03, 0x86);
+	/* ADI RS CP Core: */
+	ret |= adv7481_wr_byte(state->i2c_cp, 0x7C, 0x00);
 	/* Set CP core Phase Adjustment */
 	ret |= adv7481_wr_byte(state->client, 0x0C, 0xE0);
-	/* Power down unused Interfaces */
-	ret |= adv7481_wr_byte(state->client, 0x0E, 0xFF);
+	/* LLC/PIX/SPI PINS TRISTATED AUD Outputs Enabled */
+	ret |= adv7481_wr_byte(state->client, IO_PAD_CTRLS_ADDR, 0xDD);
 	/* Enable Tx A CSI 4-Lane & data from CP core */
 	val = ADV_REG_SETFIELD(1, IO_CTRL_CSI4_EN) |
 		ADV_REG_SETFIELD(1, IO_CTRL_PIX_OUT_EN) |
 		ADV_REG_SETFIELD(0, IO_CTRL_CSI4_IN_SEL);
 	ret |= adv7481_wr_byte(state->client, IO_REG_CSI_PIX_EN_SEL_ADDR,
 		val);
-	/* ADI RS CP Core: */
-	ret |= adv7481_wr_byte(state->i2c_cp, 0x7C, 0x00);
 
 	/* start to configure HDMI Rx once io-map is configured */
 	/* Enable HDCP 1.1 */
@@ -813,14 +843,15 @@ static int adv7481_set_op_src(struct adv7481_state *state,
 			val = 0x00;
 			break;
 		case ADV7481_IP_TTL:
-			val = 0x1;
+			val = 0x01;
 			break;
 		default:
 			ret = -EINVAL;
 		}
-		temp = adv7481_rd_byte(state->client, 0x00);
+		temp = adv7481_rd_byte(state->client,
+				IO_REG_PWR_DOWN_CTRL_ADDR);
 		temp |= val;
-		adv7481_wr_byte(state->client, 0x00, temp);
+		adv7481_wr_byte(state->client, IO_REG_PWR_DOWN_CTRL_ADDR, temp);
 		state->csia_src = input;
 		break;
 	case ADV7481_OP_CSIB:
@@ -928,18 +959,24 @@ static int adv7481_get_hdmi_timings(struct adv7481_state *state,
 		hdmi_params->tmds_freq = (hdmi_params->tmds_freq << 1)
 				+ ADV_REG_GETFIELD(temp2,
 				HDMI_REG_TMDS_FREQ_0);
+		hdmi_params->tmds_freq *= ONE_MHZ_TO_HZ;
 		hdmi_params->tmds_freq += ADV_REG_GETFIELD(temp2,
-				HDMI_REG_TMDS_FREQ_FRAC)/128;
+				HDMI_REG_TMDS_FREQ_FRAC)*ONE_MHZ_TO_HZ/128;
 	} else {
 		return -EBUSY;
 	}
 
-	/* Check Timing Lock IO Map Status3:0x71[0] */
+	/* Check Timing Lock IO Map Status3:0x71[0] && 0x71[1] && 0x71[7] */
 	do {
 		temp1 = adv7481_rd_byte(state->client,
 				IO_HDMI_LVL_RAW_STATUS_3_ADDR);
+		temp2 = adv7481_rd_byte(state->i2c_cp,
+				CP_REG_STDI_CH_ADDR);
 
-		if (ADV_REG_GETFIELD(temp1, IO_DE_REGEN_LCK_RAW))
+		if (ADV_REG_GETFIELD(temp1, IO_DE_REGEN_LCK_RAW) &&
+			ADV_REG_GETFIELD(temp1, IO_V_LOCKED_RAW) &&
+			ADV_REG_GETFIELD(temp1, IO_TMDSPLL_LCK_A_RAW) &&
+			ADV_REG_GETFIELD(temp2, CP_STDI_DVALID_CH1))
 			break;
 		count++;
 		usleep_range(LOCK_MIN_SLEEP, LOCK_MAX_SLEEP);
@@ -964,7 +1001,7 @@ static int adv7481_get_hdmi_timings(struct adv7481_state *state,
 	} while (count < LOCK_NUM_TRIES);
 
 	if (count >= LOCK_NUM_TRIES) {
-		pr_err("%s(%d), adv7481 HDMI DE filter NOT Locked: 0x%x",
+		pr_err("%s(%d), adv7481 HDMI DE filter NOT Locked: 0x%x\n",
 				__func__, __LINE__, temp1);
 	}
 
@@ -972,14 +1009,15 @@ static int adv7481_get_hdmi_timings(struct adv7481_state *state,
 	temp1 = adv7481_rd_byte(state->i2c_hdmi, HDMI_REG_FIELD1_HEIGHT1_ADDR);
 	hdmi_params->color_depth = ADV_REG_GETFIELD(temp1,
 				HDMI_REG_DEEP_COLOR_MODE);
-	temp1 = adv7481_rd_byte(state->i2c_hdmi, HDMI_REG_HDMI_PARAM5_ADDR);
-	hdmi_params->pix_rep = ADV_REG_GETFIELD(temp1,
-				HDMI_REG_PIXEL_REPETITION);
 
 	/* Check Interlaced and Field Factor */
 	vid_params->intrlcd = ADV_REG_GETFIELD(temp1,
-				HDMI_REG_DVI_HSYNC_POLARITY);
+				HDMI_REG_HDMI_INTERLACED);
 	fieldfactor = (vid_params->intrlcd == 1) ? 2 : 1;
+
+	temp1 = adv7481_rd_byte(state->i2c_hdmi, HDMI_REG_HDMI_PARAM5_ADDR);
+	hdmi_params->pix_rep = ADV_REG_GETFIELD(temp1,
+				HDMI_REG_PIXEL_REPETITION);
 
 	/* Get Active Timing Data HDMI Map  H:0x07[4:0] + 0x08[7:0] */
 	temp1 = adv7481_rd_byte(state->i2c_hdmi, HDMI_REG_LINE_WIDTH_1_ADDR);
@@ -1005,7 +1043,7 @@ static int adv7481_get_hdmi_timings(struct adv7481_state *state,
 	temp2 = adv7481_rd_byte(state->i2c_hdmi,
 				HDMI_REG_FIELD0_HEIGHT_2_ADDR);
 	vid_params->act_lines = (((ADV_REG_GETFIELD(temp1,
-			HDMI_REG_FIELD0_HEIGHT_1) << 8) & 0x3F00) |
+			HDMI_REG_FIELD0_HEIGHT_1) << 8) & 0x1F00) |
 				ADV_REG_GETFIELD(temp2,
 					HDMI_REG_FIELD0_HEIGHT_2));
 
@@ -1018,10 +1056,13 @@ static int adv7481_get_hdmi_timings(struct adv7481_state *state,
 			HDMI_REG_FIELD0_TOT_HEIGHT_1) << 8) & 0x3F00) |
 				ADV_REG_GETFIELD(temp2,
 					HDMI_REG_FIELD0_TOT_HEIGHT_2));
+	vid_params->tot_lines /= 2;
+
+	vid_params->pix_clk = hdmi_params->tmds_freq;
 
 	switch (hdmi_params->color_depth) {
 	case CD_10BIT:
-		vid_params->pix_clk =  ((vid_params->pix_clk*4)/5);
+		vid_params->pix_clk = ((vid_params->pix_clk*4)/5);
 		break;
 	case CD_12BIT:
 		vid_params->pix_clk = ((vid_params->pix_clk*2)/3);
@@ -1042,9 +1083,9 @@ static int adv7481_get_hdmi_timings(struct adv7481_state *state,
 		vid_params->fr_rate /= (hdmi_params->pix_rep + 1);
 	}
 
-	pr_debug("%s(%d), adv7481 TMDS Resolution: %d : %d @ %d\n",
+	pr_debug("%s(%d), adv7481 TMDS Resolution: %d x %d @ %d\n",
 			__func__, __LINE__,
-			vid_params->act_lines, vid_params->act_pix,
+			vid_params->act_pix, vid_params->act_lines,
 			vid_params->fr_rate);
 	return ret;
 }
@@ -1094,11 +1135,12 @@ static int adv7481_query_sd_std(struct v4l2_subdev *sd, v4l2_std_id *std)
 	int ret = 0;
 	int temp = 0;
 	struct adv7481_state *state = to_state(sd);
-	int tStatus = 0x0;
+	uint8_t tStatus = 0x0;
 
-	tStatus = adv7481_rd_byte(state->i2c_sdp, SDP_VDEC_LOCK);
-	if (!(tStatus & 0x1))
-		pr_err("SIGNAL NOT LOCKED\n");
+	tStatus = adv7481_rd_byte(state->i2c_sdp, SDP_RO_MAIN_STATUS1_ADDR);
+	if (!ADV_REG_GETFIELD(tStatus, SDP_RO_MAIN_IN_LOCK))
+		pr_err("%s(%d), adv7481 SD Input NOT Locked: 0x%x\n",
+			__func__, __LINE__, tStatus);
 
 	if (!std)
 		return -EINVAL;
@@ -1174,8 +1216,76 @@ static int adv7481_g_mbus_fmt(struct v4l2_subdev *sd,
 		return -EINVAL;
 	}
 	mutex_unlock(&state->mutex);
-	fmt->code = V4L2_MBUS_FMT_YUYV8_2X8;
+	fmt->code = V4L2_MBUS_FMT_UYVY8_2X8;
 	fmt->colorspace = V4L2_COLORSPACE_SMPTE170M;
+	return ret;
+}
+
+static int adv7481_set_audio_spdif(struct adv7481_state *state,
+		bool on)
+{
+	int ret;
+	uint8_t val;
+
+	if (on) {
+		/* Configure I2S_SDATA output pin as an SPDIF output 0x6E[3] */
+		val = adv7481_rd_byte(state->i2c_hdmi,
+				HDMI_REG_MUX_SPDIF_TO_I2S_ADDR);
+		val |= ADV_REG_SETFIELD(1, HDMI_MUX_SPDIF_TO_I2S_EN);
+		ret = adv7481_wr_byte(state->i2c_hdmi,
+				HDMI_REG_MUX_SPDIF_TO_I2S_ADDR, val);
+	} else {
+		/* Configure I2S_SDATA output pin as an I2S output 0x6E[3] */
+		val = adv7481_rd_byte(state->i2c_hdmi,
+				HDMI_REG_MUX_SPDIF_TO_I2S_ADDR);
+		val &= ~ADV_REG_SETFIELD(1, HDMI_MUX_SPDIF_TO_I2S_EN);
+		ret = adv7481_wr_byte(state->i2c_hdmi,
+				HDMI_REG_MUX_SPDIF_TO_I2S_ADDR, val);
+	}
+	return ret;
+}
+
+static int adv7481_csi_powerdown(struct adv7481_state *state,
+		enum adv7481_output output)
+{
+	int ret;
+	struct i2c_client *csi_map;
+	uint8_t val = 0;
+
+	pr_debug("Enter %s for output: %d\n", __func__, output);
+	/* Select CSI TX to configure data */
+	if (output == ADV7481_OP_CSIA) {
+		csi_map = state->i2c_csi_txa;
+	} else if (output == ADV7481_OP_CSIB) {
+		csi_map = state->i2c_csi_txb;
+	} else if (output == ADV7481_OP_TTL) {
+		/* For now use TxA */
+		csi_map = state->i2c_csi_txa;
+	} else {
+		/* Default to TxA */
+		csi_map = state->i2c_csi_txa;
+	}
+	/* CSI Tx: power down DPHY */
+	ret = adv7481_wr_byte(csi_map, CSI_REG_TX_DPHY_PWDN_ADDR,
+			ADV_REG_SETFIELD(1, CSI_CTRL_DPHY_PWDN));
+	/* ADI Required Write */
+	ret |= adv7481_wr_byte(csi_map, 0x31, 0x82);
+	ret |= adv7481_wr_byte(csi_map, 0x1e, 0x00);
+	/* CSI TxA: # Lane : Power Off */
+	val = ADV_REG_SETFIELD(1, CSI_CTRL_TX_PWRDN) |
+			ADV_REG_SETFIELD(state->tx_lanes, CSI_CTRL_NUM_LANES);
+	ret |= adv7481_wr_byte(csi_map, CSI_REG_TX_CFG1_ADDR, val);
+	/*
+	 * ADI Recommended power down sequence
+	 * DPHY and CSI Tx A Power down Sequence
+	 * CSI TxA: MIPI PLL DIS
+	 */
+	ret |= adv7481_wr_byte(csi_map, 0xda, 0x00);
+	/* ADI Required Write */
+	ret |= adv7481_wr_byte(csi_map, 0xc1, 0x3b);
+
+	pr_debug("Exit %s, ret: %d\n", __func__, ret);
+
 	return ret;
 }
 
@@ -1187,6 +1297,7 @@ static int adv7481_csi_powerup(struct adv7481_state *state,
 	uint8_t val = 0;
 	uint8_t csi_sel = 0;
 
+	pr_debug("Enter %s for output: %d\n", __func__, output);
 	/* Select CSI TX to configure data */
 	if (output == ADV7481_OP_CSIA) {
 		csi_sel = ADV_REG_SETFIELD(1, IO_CTRL_CSI4_EN) |
@@ -1223,6 +1334,7 @@ static int adv7481_csi_powerup(struct adv7481_state *state,
 	ret |= adv7481_wr_byte(csi_map, CSI_REG_TX_CFG1_ADDR, val);
 
 	/* DPHY and CSI Tx A */
+	ret |= adv7481_wr_byte(csi_map, 0xdb, 0x10);
 	ret |= adv7481_wr_byte(csi_map, 0xd6, 0x07);
 	ret |= adv7481_wr_byte(csi_map, 0xc4, 0x0a);
 	ret |= adv7481_wr_byte(csi_map, 0x71, 0x33);
@@ -1249,17 +1361,20 @@ static int adv7481_csi_powerup(struct adv7481_state *state,
 	/* ADI Required Write */
 	ret |= adv7481_wr_byte(csi_map, 0x31, 0x80);
 
+	pr_debug("Exit %s, ret: %d\n", __func__, ret);
+
 	return ret;
 }
 
 static int adv7481_set_op_stream(struct adv7481_state *state, bool on)
 {
-	int ret;
+	int ret = 0;
 
 	if (on && state->csia_src != ADV7481_IP_NONE)
 		if (ADV7481_IP_HDMI == state->csia_src) {
 			state->tx_lanes = ADV7481_MIPI_2LANE;
-			ret = adv7481_csi_powerup(state, ADV7481_OP_CSIA);
+			ret = adv7481_set_audio_spdif(state, on);
+			ret |= adv7481_csi_powerup(state, ADV7481_OP_CSIA);
 		} else {
 			state->tx_lanes = ADV7481_MIPI_1LANE;
 			ret = adv7481_csi_powerup(state, ADV7481_OP_CSIA);
@@ -1269,11 +1384,28 @@ static int adv7481_set_op_stream(struct adv7481_state *state, bool on)
 		state->tx_lanes = ADV7481_MIPI_1LANE;
 		ret = adv7481_csi_powerup(state, ADV7481_OP_CSIB);
 	} else {
-		/* Default to 1 lane */
-		state->tx_lanes = ADV7481_MIPI_1LANE;
-		ret = adv7481_csi_powerup(state, ADV7481_OP_CSIA);
+		/* Turn off */
+		if (ADV7481_IP_NONE != state->csia_src) {
+			if (ADV7481_IP_HDMI == state->csia_src) {
+				state->tx_lanes = ADV7481_MIPI_1LANE;
+				ret = adv7481_set_audio_spdif(state, on);
+			} else {
+				state->tx_lanes = ADV7481_MIPI_1LANE;
+			}
+			ret |= adv7481_csi_powerdown(state, ADV7481_OP_CSIA);
+		} else if (ADV7481_IP_NONE != state->csib_src) {
+			/* CSI Tx B is always 1 lane */
+			state->tx_lanes = ADV7481_MIPI_1LANE;
+			ret = adv7481_csi_powerdown(state, ADV7481_OP_CSIB);
+		} else {
+			/* CSI TxA and all 4 lanes off */
+			state->tx_lanes = ADV7481_MIPI_4LANE;
+			ret = adv7481_csi_powerdown(state, ADV7481_OP_CSIA);
+			/* CSI Tx B is always 1 lane */
+			state->tx_lanes = ADV7481_MIPI_1LANE;
+			ret |= adv7481_csi_powerdown(state, ADV7481_OP_CSIB);
+		}
 	}
-
 	return ret;
 }
 
@@ -1281,12 +1413,44 @@ static int adv7481_g_input_status(struct v4l2_subdev *sd, u32 *status)
 {
 	int ret = 0;
 	struct adv7481_state *state = to_state(sd);
-	int signal_status = 0;
+	uint8_t val1 = 0;
+	uint8_t val2 = 0;
+	uint32_t count = 0;
 
-	signal_status = adv7481_rd_byte(state->i2c_sdp, SDP_VDEC_LOCK);
-	if (!(signal_status & 0x1)) {
-		pr_err("SIGNAL NOT LOCKED\n");
-		*status |= V4L2_IN_ST_NO_SIGNAL;
+	pr_debug("Enter %s\n", __func__);
+	if (ADV7481_IP_HDMI == state->csia_src) {
+		/*
+		 * Check Timing Lock IO Map Status3:0x71[0] &&
+		 * 0x71[1] && 0x71[7]
+		 */
+		do {
+			val1 = adv7481_rd_byte(state->client,
+					IO_HDMI_LVL_RAW_STATUS_3_ADDR);
+			val2 = adv7481_rd_byte(state->i2c_cp,
+					CP_REG_STDI_CH_ADDR);
+
+			if (ADV_REG_GETFIELD(val1, IO_DE_REGEN_LCK_RAW) &&
+				ADV_REG_GETFIELD(val1, IO_V_LOCKED_RAW) &&
+				ADV_REG_GETFIELD(val1, IO_TMDSPLL_LCK_A_RAW) &&
+				ADV_REG_GETFIELD(val2, CP_STDI_DVALID_CH1))
+				break;
+			count++;
+			usleep_range(LOCK_MIN_SLEEP, LOCK_MAX_SLEEP);
+		} while (count < LOCK_NUM_TRIES);
+
+		if (count >= LOCK_NUM_TRIES) {
+			pr_err("%s(%d), HDMI DE regeneration block NOT Locked: 0x%x, 0x%x",
+					__func__, __LINE__, val1, val2);
+			*status |= V4L2_IN_ST_NO_SIGNAL;
+		}
+	} else {
+		val1 = adv7481_rd_byte(state->i2c_sdp,
+						SDP_RO_MAIN_STATUS1_ADDR);
+		if (!ADV_REG_GETFIELD(val1, SDP_RO_MAIN_IN_LOCK)) {
+			pr_err("%s(%d), SD Input NOT Locked: 0x%x\n",
+					__func__, __LINE__, val1);
+			*status |= V4L2_IN_ST_NO_SIGNAL;
+		}
 	}
 	return ret;
 }
@@ -1419,7 +1583,7 @@ static int adv7481_probe(struct i2c_client *client,
 
 	/* Initials ADV7481 State Settings */
 	state->tx_auto_params = ADV7481_AUTO_PARAMS;
-	state->tx_lanes = ADV7481_MIPI_1LANE;
+	state->tx_lanes = ADV7481_MIPI_2LANE;
 
 	/* Initialize SW Init Settings and I2C sub maps 7481 */
 	ret = adv7481_dev_init(state, client);
@@ -1429,8 +1593,8 @@ static int adv7481_probe(struct i2c_client *client,
 		goto err_media_entity;
 	}
 
-	/* Set cvbs settings */
-	ret = adv7481_set_cvbs_mode(state);
+	/* Set hdmi settings */
+	ret = adv7481_set_hdmi_mode(state);
 
 	/* BA registration */
 	ret |= msm_ba_register_subdev_node(sd);

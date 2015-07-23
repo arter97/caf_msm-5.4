@@ -287,6 +287,7 @@ int msm_ba_s_output(void *instance, unsigned int index)
 			dprintk(BA_ERR, "No sd registered");
 			return -EINVAL;
 		}
+		ba_input->ba_node_addr = index;
 		ba_input->ba_out = index;
 		inst->sd_output.index = index;
 		inst->sd = ba_input->sd;
@@ -324,7 +325,9 @@ int msm_ba_g_fmt(void *instance, struct v4l2_format *f)
 {
 	struct msm_ba_inst *inst = instance;
 	struct v4l2_subdev *sd = NULL;
+	struct msm_ba_input *ba_input = NULL;
 	v4l2_std_id new_std = V4L2_STD_UNKNOWN;
+	struct v4l2_dv_timings sd_dv_timings;
 	struct v4l2_mbus_framefmt sd_mbus_fmt;
 	int rc = 0;
 
@@ -336,12 +339,26 @@ int msm_ba_g_fmt(void *instance, struct v4l2_format *f)
 		dprintk(BA_ERR, "No sd registered");
 		return -EINVAL;
 	}
-	rc = v4l2_subdev_call(sd, video, querystd, &new_std);
-	if (rc) {
-		dprintk(BA_ERR, "querystd failed %d for sd: %s", rc, sd->name);
+	ba_input = msm_ba_find_input(inst->sd_input.index);
+	if (!ba_input) {
+		dprintk(BA_ERR, "Could not find input index: %d",
+				inst->sd_input.index);
 		return -EINVAL;
+	}
+	if (BA_INPUT_HDMI != ba_input->inputType) {
+		rc = v4l2_subdev_call(sd, video, querystd, &new_std);
+		if (rc) {
+			dprintk(BA_ERR, "querystd failed %d for sd: %s",
+				rc, sd->name);
+			return -EINVAL;
+		} else {
+			inst->sd_input.std = new_std;
+		}
 	} else {
-		inst->sd_input.std = new_std;
+		rc = v4l2_subdev_call(sd, video, g_dv_timings, &sd_dv_timings);
+		if (rc)
+			dprintk(BA_ERR, "g_dv_timings failed %d for sd: %s",
+				rc, sd->name);
 	}
 
 	rc = v4l2_subdev_call(sd, video, g_mbus_fmt, &sd_mbus_fmt);
