@@ -83,12 +83,6 @@
 			label = "qseecom_mem";
 		};
 
-		ontario_mem:ontario_region@0 {
-			linux,reserve-contiguous-region;
-			reg = <0 0 0 0x1800000>;
-			label = "ontario_mem";
-		};
-
 		cont_splash_mem: splash_region@83000000 {
 			linux,reserve-contiguous-region;
 			linux,reserve-region;
@@ -1570,13 +1564,6 @@
 		clock-names = "core_clk_src", "core_clk",
 				"iface_clk", "bus_clk";
 		qcom,ce-opp-freq = <100000000>;
-	};
-
-	qcom,ontario@7000000 {
-		compatible = "qcom,ontario";
-		clocks = <&clock_gcc clk_gcc_blsp2_qup2_spi_apps_clk>,
-			 <&clock_gcc clk_gcc_blsp2_ahb_clk>;
-		clock-names = "spi_clk", "ahb_clk";
 	};
 
 	qcom_seecom: qseecom@85e00000 {
