@@ -1,5 +1,5 @@
 
-/* Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2012, 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -468,6 +468,8 @@ error:
 					0x46, MSM_CAMERA_I2C_BYTE_DATA);
 				flash_wq = alloc_workqueue("my_queue",WQ_MEM_RECLAIM,1);
 				work = (struct flash_work *)kmalloc(sizeof(struct flash_work), GFP_KERNEL);
+				if (!work)
+					return -ENOMEM;
 				INIT_WORK( (struct work_struct *)work, flash_wq_function );
 				setup_timer(&flash_timer, flash_timer_callback, 0);
 				mod_timer(&flash_timer, jiffies + msecs_to_jiffies(10000));
