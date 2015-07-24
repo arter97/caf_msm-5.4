@@ -13,7 +13,7 @@
  */
 
 #include <linux/uaccess.h>
-#include <mdp_arb_internal.h>
+#include "mdp_arb_internal.h"
 
 static struct mdp_arb_device_info *arb;
 static struct class *arb_class;
