@@ -784,6 +784,14 @@ int cnss_wlan_enable(struct cnss_wlan_enable_cfg *config,
 			req.svc_cfg[i].pipe_num =
 				config->ce_svc_cfg[i].pipe_num;
 		}
+		req.shadow_reg_valid = 1;
+		if (config->num_shadow_reg_cfg >
+		    QMI_WLFW_MAX_NUM_SHADOW_REG_V01)
+			req.shadow_reg_len = QMI_WLFW_MAX_NUM_SHADOW_REG_V01;
+		else
+			req.shadow_reg_len = config->num_shadow_reg_cfg;
+		memcpy(req.shadow_reg, config->shadow_reg_cfg,
+	       sizeof(struct wlfw_shadow_reg_cfg_s_v01) * req.shadow_reg_len);
 	}
 
 	ret = wlfw_wlan_cfg_send_sync_msg(&req);
