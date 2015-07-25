@@ -209,17 +209,30 @@ struct msm_hdmi_mode_timing_info {
 	LUT[MODE] = mode;\
 	} while (0)
 
+#ifdef CONFIG_HDMI_EDID_ENABLED
 static inline void MSM_HDMI_MODES_INIT_TIMINGS(
 	struct msm_hdmi_mode_timing_info *lut)
 {
-  uint32_t i;
+	uint32_t i;
 
 	for (i = 0; i < HDMI_VFRMT_MAX; i++) {
 		struct msm_hdmi_mode_timing_info mode = VFRMT_NOT_SUPPORTED(i);
 		lut[i] = mode;
 	}
 }
+#else
+static inline void MSM_HDMI_MODES_INIT_TIMINGS(
+	struct msm_hdmi_mode_timing_info *lut)
+{
+	uint32_t i;
 
+	for (i = 0; i < 1; i++) {
+		struct msm_hdmi_mode_timing_info mode = VFRMT_NOT_SUPPORTED(i);
+		lut[i] = mode;
+	}
+	MSM_HDMI_MODES_SET_TIMING(lut, HDMI_VFRMT_1280x800p60_16_9);
+}
+#endif
 static inline void MSM_HDMI_MODES_SET_SUPP_TIMINGS(
 	struct msm_hdmi_mode_timing_info *lut, int type)
 {
