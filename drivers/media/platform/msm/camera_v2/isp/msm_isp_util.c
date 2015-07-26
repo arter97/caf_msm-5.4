@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -601,19 +601,34 @@ static int msm_isp_set_clk_rate(struct vfe_device *vfe_dev, long *rate)
 	return 0;
 }
 
-
 static int msm_isp_start_fetch_engine(struct vfe_device *vfe_dev,
 	void *arg)
 {
 	struct msm_vfe_fetch_eng_start *fe_cfg = arg;
+	int rc = 0;
+	struct msm_isp_timestamp ts;
+
+
 	/*
 	 * For Offline VFE, HAL expects same frame id
 	 * for offline output which it requested in do_reprocess.
 	 */
-	vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id =
-		fe_cfg->frame_id;
-	return vfe_dev->hw_info->vfe_ops.core_ops.
-		start_fetch_eng(vfe_dev, arg);
+	vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id = fe_cfg->frame_id;
+
+	rc = vfe_dev->hw_info->vfe_ops.core_ops.start_fetch_eng(vfe_dev, arg);
+	if (rc) {
+		pr_err("%s: fe start fails\n", __func__);
+		return rc;
+	}
+
+	msm_isp_get_timestamp(&ts);
+	msm_isp_notify(vfe_dev, ISP_EVENT_SOF, VFE_PIX_0, &ts);
+
+	msm_isp_update_framedrop_reg(vfe_dev, VFE_PIX_0);
+	msm_isp_update_stats_framedrop_reg(vfe_dev);
+	msm_isp_update_error_frame_count(vfe_dev);
+
+	return rc;
 }
 
 void msm_isp_fetch_engine_done_notify(struct vfe_device *vfe_dev,
@@ -1848,6 +1863,66 @@ int msm_isp_get_bit_per_pixel(uint32_t output_format)
 			__func__, output_format);
 		return -EINVAL;
 	}
+}
+
+uint32_t msm_isp_get_fe_unpack_pattern(uint32_t input_format)
+{
+	uint32_t unpack_pattern = 0;
+
+	switch (input_format) {
+	case V4L2_PIX_FMT_P16BGGR8:
+	case V4L2_PIX_FMT_P16GBRG8:
+	case V4L2_PIX_FMT_P16GRBG8:
+	case V4L2_PIX_FMT_P16RGGB8:
+		unpack_pattern = 0x90;
+		break;
+	case V4L2_PIX_FMT_P16BGGR10:
+	case V4L2_PIX_FMT_P16GBRG10:
+	case V4L2_PIX_FMT_P16GRBG10:
+	case V4L2_PIX_FMT_P16RGGB10:
+		unpack_pattern = 0xB210;
+		break;
+	case V4L2_PIX_FMT_P16BGGR12:
+	case V4L2_PIX_FMT_P16GBRG12:
+	case V4L2_PIX_FMT_P16GRBG12:
+	case V4L2_PIX_FMT_P16RGGB12:
+		unpack_pattern = 0xB210;
+		break;
+	case V4L2_PIX_FMT_QBGGR8:
+	case V4L2_PIX_FMT_QGBRG8:
+	case V4L2_PIX_FMT_QGRBG8:
+	case V4L2_PIX_FMT_QRGGB8:
+	case V4L2_PIX_FMT_SBGGR8:
+	case V4L2_PIX_FMT_SGBRG8:
+	case V4L2_PIX_FMT_SGRBG8:
+	case V4L2_PIX_FMT_SRGGB8:
+	case V4L2_PIX_FMT_QBGGR10:
+	case V4L2_PIX_FMT_QGBRG10:
+	case V4L2_PIX_FMT_QGRBG10:
+	case V4L2_PIX_FMT_QRGGB10:
+	case V4L2_PIX_FMT_SBGGR10:
+	case V4L2_PIX_FMT_SGBRG10:
+	case V4L2_PIX_FMT_SGRBG10:
+	case V4L2_PIX_FMT_SRGGB10:
+	case V4L2_PIX_FMT_QBGGR12:
+	case V4L2_PIX_FMT_QGBRG12:
+	case V4L2_PIX_FMT_QGRBG12:
+	case V4L2_PIX_FMT_QRGGB12:
+	case V4L2_PIX_FMT_SBGGR12:
+	case V4L2_PIX_FMT_SGBRG12:
+	case V4L2_PIX_FMT_SGRBG12:
+	case V4L2_PIX_FMT_SRGGB12:
+		unpack_pattern = 0xF6543210;
+		break;
+	default:
+		pr_err("%s: Input format %x not supported", __func__,
+			input_format);
+		unpack_pattern = 0xF6543210;
+		break;
+	}
+
+
+	return unpack_pattern;
 }
 
 void msm_isp_update_error_frame_count(struct vfe_device *vfe_dev)

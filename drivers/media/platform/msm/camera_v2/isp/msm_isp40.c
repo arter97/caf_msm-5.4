@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1118,10 +1118,10 @@ static int msm_vfe40_start_fetch_engine(struct vfe_device *vfe_dev,
 	} else {
 		rc = vfe_dev->buf_mgr->ops->map_buf(vfe_dev->buf_mgr,
 			&mapped_info, fe_cfg->fd);
-	if (rc < 0) {
-			pr_err("%s: can not map buffer\n", __func__);
-		return -EINVAL;
-	}
+		if (rc < 0) {
+				pr_err("%s: can not map buffer\n", __func__);
+			return -EINVAL;
+		}
 	}
 	vfe_dev->fetch_engine_info.buf_idx = fe_cfg->buf_idx;
 	vfe_dev->fetch_engine_info.is_busy = 1;
@@ -1143,6 +1143,7 @@ static void msm_vfe40_cfg_fetch_engine(struct vfe_device *vfe_dev,
 {
 	uint32_t x_size_word;
 	uint32_t temp = 0;
+	uint32_t unpack_pattern = 0;
 	struct msm_vfe_fetch_engine_cfg *fe_cfg = NULL;
 
 	if (pix_cfg->input_mux != EXTERNAL_READ) {
@@ -1169,8 +1170,8 @@ static void msm_vfe40_cfg_fetch_engine(struct vfe_device *vfe_dev,
 	temp |= (1 << 24);
 	msm_camera_io_w(temp, vfe_dev->vfe_base + 0x28);
 
-	msm_camera_io_w((fe_cfg->fetch_height - 1),
-			vfe_dev->vfe_base + 0x238);
+	msm_camera_io_w((fe_cfg->fetch_height - 1) & 0xFFF,
+		vfe_dev->vfe_base + 0x238);
 
 	/* need to update to use formulae to calculate X_SIZE_WORD*/
 	x_size_word = msm_isp_cal_word_per_line(
@@ -1179,22 +1180,22 @@ static void msm_vfe40_cfg_fetch_engine(struct vfe_device *vfe_dev,
 
 	msm_camera_io_w((x_size_word - 1) << 16, vfe_dev->vfe_base + 0x23C);
 
-	temp = msm_camera_io_r(vfe_dev->vfe_base + 0x1C);
-	temp |= 2 << 16 | pix_cfg->pixel_pattern;
-	msm_camera_io_w(temp, vfe_dev->vfe_base + 0x1C);
-
-	msm_camera_io_w(x_size_word  << 16 |
-		(fe_cfg->buf_height-1) << 4 |
+	msm_camera_io_w(x_size_word << 16 | (fe_cfg->buf_height - 1) << 4 |
 		VFE40_FETCH_BURST_LEN, vfe_dev->vfe_base + 0x240);
 
 	msm_camera_io_w(0 << 28 | 2 << 25 |
-		(fe_cfg->buf_width - 1)  << 12 |
-		(fe_cfg->buf_height - 1)
-		, vfe_dev->vfe_base + 0x244);
+		((fe_cfg->buf_width - 1) & 0x1FFF) << 12 |
+		((fe_cfg->buf_height - 1) & 0xFFF), vfe_dev->vfe_base + 0x244);
 
-	/* need to use formulae to calculate MAIN_UNPACK_PATTERN*/
-	msm_camera_io_w(0xF6543210, vfe_dev->vfe_base + 0x248);
+	unpack_pattern = msm_isp_get_fe_unpack_pattern(
+		vfe_dev->axi_data.src_info[VFE_PIX_0].input_format);
+	msm_camera_io_w(unpack_pattern, vfe_dev->vfe_base + 0x248);
+
 	msm_camera_io_w(0xF, vfe_dev->vfe_base + 0x264);
+
+	temp = msm_camera_io_r(vfe_dev->vfe_base + 0x1C);
+	temp |= 2 << 16 | pix_cfg->pixel_pattern;
+	msm_camera_io_w(temp, vfe_dev->vfe_base + 0x1C);
 
 	return;
 }

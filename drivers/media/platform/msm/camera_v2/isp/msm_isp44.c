@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -983,57 +983,58 @@ static void msm_vfe44_cfg_fetch_engine(struct vfe_device *vfe_dev,
 	struct msm_vfe_pix_cfg *pix_cfg)
 {
 	uint32_t x_size_word;
-	struct msm_vfe_fetch_engine_cfg *fe_cfg = NULL;
 	uint32_t temp = 0;
+	uint32_t unpack_pattern = 0;
+	struct msm_vfe_fetch_engine_cfg *fe_cfg = NULL;
 
-	if (pix_cfg->input_mux == EXTERNAL_READ) {
-		fe_cfg = &pix_cfg->fetch_engine_cfg;
-		pr_debug("%s: fetch_dbg wd x ht buf = %d x %d, fe = %d x %d\n",
+	if (pix_cfg->input_mux != EXTERNAL_READ) {
+		pr_err("%s: Invalid mux configuration - mux: %d",
+			__func__, pix_cfg->input_mux);
+		return;
+	}
+
+	fe_cfg = &pix_cfg->fetch_engine_cfg;
+	pr_debug("%s: fetch_dbg wd x ht buf = %d x %d, fe = %d x %d\n",
 			__func__, fe_cfg->buf_width, fe_cfg->buf_height,
 			fe_cfg->fetch_width, fe_cfg->fetch_height);
 
-		vfe_dev->hw_info->vfe_ops.axi_ops.update_cgc_override(vfe_dev,
-			VFE44_BUS_RD_CGC_OVERRIDE_BIT, 1);
+	vfe_dev->hw_info->vfe_ops.axi_ops.update_cgc_override(vfe_dev,
+		VFE44_BUS_RD_CGC_OVERRIDE_BIT, 1);
 
-		temp = msm_camera_io_r(vfe_dev->vfe_base + 0x50);
-		temp &= 0xFFFFFFFD;
-		temp |= (1 << 1);
-		msm_camera_io_w(temp, vfe_dev->vfe_base + 0x50);
+	temp = msm_camera_io_r(vfe_dev->vfe_base + 0x50);
+	temp &= 0xFFFFFFFD;
+	temp |= (1 << 1);
+	msm_camera_io_w(temp, vfe_dev->vfe_base + 0x50);
 
-		temp = msm_camera_io_r(vfe_dev->vfe_base + 0x28);
-		temp &= 0xFEFFFFFF;
-		temp |= (1 << 24);
-		msm_camera_io_w(temp, vfe_dev->vfe_base + 0x28);
-		msm_camera_io_w((fe_cfg->fetch_height - 1) & 0xFFF,
-			vfe_dev->vfe_base + 0x238);
+	temp = msm_camera_io_r(vfe_dev->vfe_base + 0x28);
+	temp &= 0xFEFFFFFF;
+	temp |= (1 << 24);
+	msm_camera_io_w(temp, vfe_dev->vfe_base + 0x28);
 
-		x_size_word = msm_isp_cal_word_per_line(
-			vfe_dev->axi_data.src_info[VFE_PIX_0].input_format,
-			fe_cfg->fetch_width);
-		msm_camera_io_w((x_size_word - 1) << 16,
-			vfe_dev->vfe_base + 0x23C);
+	msm_camera_io_w((fe_cfg->fetch_height - 1) & 0xFFF,
+		vfe_dev->vfe_base + 0x238);
 
-		msm_camera_io_w(x_size_word << 16 |
-			(fe_cfg->buf_height - 1) << 4 | VFE44_FETCH_BURST_LEN,
-			vfe_dev->vfe_base + 0x240);
+	x_size_word = msm_isp_cal_word_per_line(
+		vfe_dev->axi_data.src_info[VFE_PIX_0].input_format,
+		fe_cfg->fetch_width);
+	msm_camera_io_w((x_size_word - 1) << 16, vfe_dev->vfe_base + 0x23C);
 
-		msm_camera_io_w(0 << 28 | 2 << 25 |
+	msm_camera_io_w(x_size_word << 16 | (fe_cfg->buf_height - 1) << 4 |
+		VFE44_FETCH_BURST_LEN, vfe_dev->vfe_base + 0x240);
+
+	msm_camera_io_w(0 << 28 | 2 << 25 |
 		((fe_cfg->buf_width - 1) & 0x1FFF) << 12 |
 		((fe_cfg->buf_height - 1) & 0xFFF), vfe_dev->vfe_base + 0x244);
 
-		/* need to use formulae to calculate MAIN_UNPACK_PATTERN*/
-		msm_camera_io_w(0xF6543210, vfe_dev->vfe_base + 0x248);
-		msm_camera_io_w(0xF, vfe_dev->vfe_base + 0x264);
+	unpack_pattern = msm_isp_get_fe_unpack_pattern(
+		vfe_dev->axi_data.src_info[VFE_PIX_0].input_format);
+	msm_camera_io_w(unpack_pattern, vfe_dev->vfe_base + 0x248);
 
-		temp = msm_camera_io_r(vfe_dev->vfe_base + 0x1C);
-		temp |= 2 << 16 | pix_cfg->pixel_pattern;
-		msm_camera_io_w(temp, vfe_dev->vfe_base + 0x1C);
+	msm_camera_io_w(0xF, vfe_dev->vfe_base + 0x264);
 
-	} else {
-		pr_err("%s: Invalid mux configuration - mux: %d", __func__,
-			pix_cfg->input_mux);
-		return;
-	}
+	temp = msm_camera_io_r(vfe_dev->vfe_base + 0x1C);
+	temp |= 2 << 16 | pix_cfg->pixel_pattern;
+	msm_camera_io_w(temp, vfe_dev->vfe_base + 0x1C);
 
 	return;
 }
