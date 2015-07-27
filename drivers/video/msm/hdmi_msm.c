@@ -641,7 +641,6 @@ uint32 hdmi_msm_get_io_base(void)
 }
 EXPORT_SYMBOL(hdmi_msm_get_io_base);
 
-#ifdef CONFIG_HDMI_EDID_ENABLED
 /* Table indicating the video format supported by the HDMI TX Core v1.0 */
 /* Valid Pixel-Clock rates: 25.2MHz, 27MHz, 27.03MHz, 74.25MHz, 148.5MHz */
 static void hdmi_msm_setup_video_mode_lut(void)
@@ -657,13 +656,6 @@ static void hdmi_msm_setup_video_mode_lut(void)
 	MSM_HDMI_MODES_SET_SUPP_TIMINGS(
 		hdmi_common_supported_video_mode_lut, MSM_HDMI_MODES_DVI);
 }
-#else
-static void hdmi_msm_setup_video_mode_lut(void)
-{
-	/* Init video mode timings */
-	MSM_HDMI_MODES_INIT_TIMINGS(hdmi_common_supported_video_mode_lut);
-}
-#endif
 
 #ifdef PORT_DEBUG
 const char *hdmi_msm_name(uint32 offset)
@@ -2130,12 +2122,6 @@ static int hdmi_msm_read_edid(void)
 	external_common_state->read_edid_block =
 				slimport_read_edid_block;
 #endif
-
-	/* Skip EDID if HDMI connected from boot and use default timing */
-	if (external_common_state->skip_edid == true) {
-		external_common_state->skip_edid = false;
-		return status;
-	}
 
 	status = hdmi_common_read_edid();
 	if (!status)
@@ -5234,7 +5220,6 @@ static int __init hdmi_msm_init(void)
 	}
 	external_common_state = &hdmi_msm_state->common;
 
-	external_common_state->skip_edid = true;
 	external_common_state->edid_en = edid_en;
 	external_common_state->hpd_en = hpd_en;
 
