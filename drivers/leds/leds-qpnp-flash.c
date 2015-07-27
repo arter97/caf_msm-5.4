@@ -48,6 +48,7 @@
 #define	FLASH_HDRM_SNS_ENABLE_CTRL0(base)			(base + 0x5C)
 #define	FLASH_HDRM_SNS_ENABLE_CTRL1(base)			(base + 0x5D)
 #define	FLASH_LED_UNLOCK_SECURE(base)				(base + 0xD0)
+#define FLASH_PERPH_RESET_CTRL(base)				(base + 0xDA)
 #define	FLASH_TORCH(base)					(base + 0xE4)
 
 #define FLASH_STATUS_REG_MASK					0xFF
@@ -75,6 +76,7 @@
 #define FLASH_VPH_PWR_DROOP_MASK				0xF3
 #define FLASH_LED_HDRM_SNS_ENABLE_MASK				0x81
 #define	FLASH_MASK_MODULE_CONTRL_MASK				0xE0
+#define FLASH_FOLLOW_OTST2_RB_MASK				0x08
 
 #define FLASH_LED_TRIGGER_DEFAULT				"none"
 #define FLASH_LED_HEADROOM_DEFAULT_MV				500
@@ -200,6 +202,7 @@ struct flash_led_platform_data {
 	bool				hdrm_sns_ch1_en;
 	bool				power_detect_en;
 	bool				mask3_en;
+	bool				follow_rb_disable;
 };
 
 struct qpnp_flash_led_buffer {
@@ -1584,6 +1587,29 @@ static int qpnp_flash_led_init_settings(struct qpnp_flash_led *led)
 		return rc;
 	}
 
+	if (led->pdata->mask3_en && led->pdata->follow_rb_disable) {
+		rc = spmi_ext_register_readl(led->spmi_dev->ctrl,
+				led->spmi_dev->sid,
+				FLASH_PERPH_RESET_CTRL(led->base),
+				&val, 1);
+		if (rc) {
+			dev_err(&led->spmi_dev->dev,
+				"Unable to read from address %x, rc(%d)\n",
+				FLASH_PERPH_RESET_CTRL(led->base), rc);
+			return -EINVAL;
+		}
+
+		val &= ~FLASH_FOLLOW_OTST2_RB_MASK;
+		rc = qpnp_led_masked_write(led->spmi_dev,
+				FLASH_PERPH_RESET_CTRL(led->base),
+				FLASH_FOLLOW_OTST2_RB_MASK, val);
+		if (rc) {
+			dev_err(&led->spmi_dev->dev,
+				"failed to reset OTST2_RB bit\n");
+			return rc;
+		}
+	}
+
 	if (!led->pdata->thermal_derate_en)
 		val = 0x0;
 	else {
@@ -1931,6 +1957,10 @@ static int qpnp_flash_led_parse_common_dt(
 
 	led->pdata->mask3_en = of_property_read_bool(node,
 						"qcom,otst2-module-enabled");
+
+	led->pdata->follow_rb_disable = of_property_read_bool(node,
+						"qcom,follow-otst2-rb-disabled");
+
 	led->pinctrl = devm_pinctrl_get(&led->spmi_dev->dev);
 	if (IS_ERR_OR_NULL(led->pinctrl)) {
 		dev_err(&led->spmi_dev->dev,

@@ -30,6 +30,7 @@
 #include "msm-audio-pinctrl.h"
 #include "../codecs/msm8x16-wcd.h"
 #include "../codecs/wsa881x-analog.h"
+#include <linux/regulator/consumer.h>
 #define DRV_NAME "msm8952-asoc-wcd"
 
 #define BTSCO_RATE_8KHZ 8000
@@ -45,6 +46,7 @@
 
 #define WCD_MBHC_DEF_RLOADS 5
 #define MAX_WSA_CODEC_NAME_LENGTH 80
+#define MSM_DT_MAX_PROP_SIZE 80
 
 enum btsco_rates {
 	RATE_8KHZ_ID,
@@ -69,6 +71,8 @@ static int msm8952_enable_dig_cdc_clk(struct snd_soc_codec *codec, int enable,
 					bool dapm);
 static bool msm8952_swap_gnd_mic(struct snd_soc_codec *codec);
 static int msm8952_mclk_event(struct snd_soc_dapm_widget *w,
+			      struct snd_kcontrol *kcontrol, int event);
+static int msm8952_wsa_switch_event(struct snd_soc_dapm_widget *w,
 			      struct snd_kcontrol *kcontrol, int event);
 
 static struct wcd_mbhc_config mbhc_cfg = {
@@ -97,6 +101,16 @@ static struct afe_clk_cfg mi2s_tx_clk = {
 	Q6AFE_LPASS_CLK_SRC_INTERNAL,
 	Q6AFE_LPASS_CLK_ROOT_DEFAULT,
 	Q6AFE_LPASS_MODE_CLK1_VALID,
+	0,
+};
+
+static struct afe_clk_cfg wsa_ana_clk = {
+	AFE_API_VERSION_I2S_CONFIG,
+	0,
+	Q6AFE_LPASS_OSR_CLK_9_P600_MHZ,
+	Q6AFE_LPASS_CLK_SRC_INTERNAL,
+	Q6AFE_LPASS_CLK_ROOT_DEFAULT,
+	Q6AFE_LPASS_MODE_CLK2_VALID,
 	0,
 };
 
@@ -138,6 +152,9 @@ static const struct snd_soc_dapm_widget msm8952_dapm_widgets[] = {
 	SND_SOC_DAPM_MIC("Secondary Mic", NULL),
 	SND_SOC_DAPM_MIC("Digital Mic1", NULL),
 	SND_SOC_DAPM_MIC("Digital Mic2", NULL),
+	SND_SOC_DAPM_SUPPLY("VDD_WSA_SWITCH", SND_SOC_NOPM, 0, 0,
+	msm8952_wsa_switch_event,
+	SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 };
 
 int is_ext_spk_gpio_support(struct platform_device *pdev,
@@ -831,6 +848,51 @@ static int msm8952_mclk_event(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
+static int msm8952_wsa_switch_event(struct snd_soc_dapm_widget *w,
+			      struct snd_kcontrol *kcontrol, int event)
+{
+	int ret = 0;
+	struct msm8916_asoc_mach_data *pdata = NULL;
+	struct on_demand_supply *supply;
+
+	pdata = snd_soc_card_get_drvdata(w->codec->card);
+	supply = &pdata->wsa_switch_supply;
+	if (!supply->supply) {
+		dev_err(w->codec->card->dev, "%s: no wsa switch supply",
+			__func__);
+		return ret;
+	}
+
+	switch (event) {
+	case SND_SOC_DAPM_PRE_PMU:
+		if (atomic_inc_return(&supply->ref) == 1)
+			ret = regulator_enable(supply->supply);
+		if (ret)
+			dev_err(w->codec->card->dev,
+				"%s: Failed to enable wsa switch supply\n",
+				__func__);
+		break;
+	case SND_SOC_DAPM_POST_PMD:
+		if (atomic_read(&supply->ref) == 0) {
+			dev_dbg(w->codec->card->dev,
+				"%s: wsa switch supply has been disabled.\n",
+				__func__);
+			return ret;
+		}
+		if (atomic_dec_return(&supply->ref) == 0)
+			ret = regulator_disable(supply->supply);
+			if (ret)
+				dev_err(w->codec->card->dev,
+					"%s: Failed to disable wsa switch supply\n",
+					__func__);
+		break;
+	default:
+		break;
+	}
+
+	return ret;
+}
+
 static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
@@ -865,6 +927,18 @@ static int msm_mi2s_snd_startup(struct snd_pcm_substream *substream)
 				__func__, ret);
 		return ret;
 	}
+	if (card->aux_dev && substream->stream ==
+			SNDRV_PCM_STREAM_PLAYBACK) {
+		wsa_ana_clk.clk_val2 =
+				Q6AFE_LPASS_OSR_CLK_9_P600_MHZ;
+		ret = afe_set_lpass_clock(AFE_PORT_ID_PRIMARY_MI2S_RX,
+					  &wsa_ana_clk);
+		if (ret < 0) {
+			pr_err("%s: failed to enable mclk for wsa %d\n",
+				__func__, ret);
+			return ret;
+		}
+	}
 	ret =  msm8952_enable_dig_cdc_clk(codec, 1, true);
 	if (ret < 0) {
 		pr_err("failed to enable mclk\n");
@@ -898,6 +972,17 @@ static void msm_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 	if (ret < 0)
 		pr_err("%s:clock disable failed; ret=%d\n", __func__,
 				ret);
+	if (card->aux_dev && substream->stream ==
+			SNDRV_PCM_STREAM_PLAYBACK) {
+		wsa_ana_clk.clk_val2 =
+				Q6AFE_LPASS_OSR_CLK_DISABLE;
+		ret = afe_set_lpass_clock(AFE_PORT_ID_PRIMARY_MI2S_RX,
+					  &wsa_ana_clk);
+		if (ret < 0) {
+			pr_err("%s: failed to disable mclk for wsa %d\n",
+				__func__, ret);
+		}
+	}
 	if (atomic_read(&pdata->mclk_rsc_ref) > 0) {
 		atomic_dec(&pdata->mclk_rsc_ref);
 		pr_debug("%s: decrementing mclk_res_ref %d\n",
@@ -2289,6 +2374,76 @@ err:
 	return ret;
 }
 
+int msm8952_init_wsa_switch_supply(struct platform_device *pdev,
+		struct msm8916_asoc_mach_data *pdata)
+{
+	const char *switch_supply_str = "msm-vdd-wsa-switch";
+	char prop_name[MSM_DT_MAX_PROP_SIZE];
+	struct device_node *regnode = NULL;
+	struct device *dev = &pdev->dev;
+	u32 prop_val;
+	int ret = 0;
+
+	snprintf(prop_name, MSM_DT_MAX_PROP_SIZE, "%s-supply",
+		switch_supply_str);
+	regnode = of_parse_phandle(dev->of_node, prop_name, 0);
+	if (!regnode) {
+		dev_err(dev, "Looking up %s property in node %s failed\n",
+			prop_name, dev->of_node->full_name);
+		return -ENODEV;
+	}
+
+	pdata->wsa_switch_supply.supply = regulator_get(dev,
+			switch_supply_str);
+	if (IS_ERR(pdata->wsa_switch_supply.supply)) {
+		ret = PTR_ERR(pdata->wsa_switch_supply.supply);
+		dev_err(dev, "Failed to get wsa switch supply: err = %d\n",
+					ret);
+		return ret;
+	}
+
+	snprintf(prop_name, MSM_DT_MAX_PROP_SIZE,
+		"qcom,%s-voltage", switch_supply_str);
+	ret = of_property_read_u32(dev->of_node, prop_name,
+			&prop_val);
+	if (ret) {
+		dev_err(dev, "Looking up %s property in node %s failed",
+			prop_name, dev->of_node->full_name);
+		return -EFAULT;
+	}
+	ret = regulator_set_voltage(pdata->wsa_switch_supply.supply,
+		prop_val, prop_val);
+	if (ret) {
+		dev_err(dev, "Setting voltage failed for regulator %s err = %d\n",
+			switch_supply_str, ret);
+		regulator_put(pdata->wsa_switch_supply.supply);
+		pdata->wsa_switch_supply.supply = NULL;
+		return ret;
+	}
+
+	snprintf(prop_name, MSM_DT_MAX_PROP_SIZE,
+		"qcom,%s-current", switch_supply_str);
+	ret = of_property_read_u32(dev->of_node, prop_name,
+			&prop_val);
+	if (ret) {
+		dev_err(dev, "Looking up %s property in node %s failed",
+			prop_name, dev->of_node->full_name);
+		return -EFAULT;
+	}
+	ret = regulator_set_optimum_mode(pdata->wsa_switch_supply.supply,
+		prop_val);
+	if (ret < 0) {
+		dev_err(dev, "Setting current failed for regulator %s err = %d\n",
+			switch_supply_str, ret);
+		regulator_put(pdata->wsa_switch_supply.supply);
+		pdata->wsa_switch_supply.supply = NULL;
+		return ret;
+	}
+
+	atomic_set(&pdata->wsa_switch_supply.ref, 0);
+	return ret;
+}
+
 static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card;
@@ -2316,8 +2471,7 @@ static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 			sizeof(struct msm8916_asoc_mach_data), GFP_KERNEL);
 	if (!pdata) {
 		dev_err(&pdev->dev, "Can't allocate msm8x16_asoc_mach_data\n");
-		ret = -ENOMEM;
-		goto err;
+		return -ENOMEM;
 	}
 
 	muxsel = platform_get_resource_byname(pdev, IORESOURCE_MEM,
@@ -2325,7 +2479,7 @@ static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 	if (!muxsel) {
 		dev_err(&pdev->dev, "MUX addr invalid for MI2S\n");
 		ret = -ENODEV;
-		goto err;
+		goto err1;
 	}
 	pdata->vaddr_gpio_mux_mic_ctl =
 		ioremap(muxsel->start, resource_size(muxsel));
@@ -2463,6 +2617,13 @@ static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 				}
 				msm8952_codec_conf[i].name_prefix = temp_str;
 				temp_str = NULL;
+			}
+
+			ret = msm8952_init_wsa_switch_supply(pdev, pdata);
+			if (ret < 0) {
+				pr_err("%s: failed to init wsa_switch vdd supply %d\n",
+						__func__, ret);
+				goto err;
 			}
 		}
 	}

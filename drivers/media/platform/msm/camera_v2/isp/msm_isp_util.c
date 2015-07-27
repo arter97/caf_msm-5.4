@@ -610,6 +610,70 @@ int msm_isp_cfg_input(struct vfe_device *vfe_dev, void *arg)
 	return rc;
 }
 
+static int msm_isp_set_dual_HW_master_slave_mode(struct vfe_device *vfe_dev,
+	void *arg)
+{
+	/*
+	 * This method assumes no 2 processes are accessing it simultaneously.
+	 * Currently this is guaranteed by mutex lock in ioctl.
+	 * If that changes, need to revisit this
+	 */
+	int rc = 0, j;
+	struct msm_isp_set_dual_hw_ms_cmd *dual_hw_ms_cmd = NULL;
+	struct msm_vfe_src_info *src_info = NULL;
+
+	if (!vfe_dev || !arg) {
+		pr_err("%s: Error! Invalid input vfe_dev %p arg %p\n",
+			__func__, vfe_dev, arg);
+		return -EINVAL;
+	}
+
+	dual_hw_ms_cmd = (struct msm_isp_set_dual_hw_ms_cmd *)arg;
+	vfe_dev->common_data->dual_hw_type = DUAL_HW_MASTER_SLAVE;
+
+	if (dual_hw_ms_cmd->input_src >= VFE_SRC_MAX) {
+		pr_err("%s: Error! Invalid SRC param %d\n", __func__,
+			dual_hw_ms_cmd->input_src);
+		return -EINVAL;
+	}
+
+	src_info = &vfe_dev->axi_data.
+		src_info[dual_hw_ms_cmd->input_src];
+
+	src_info->dual_hw_ms_info.dual_hw_ms_type =
+		dual_hw_ms_cmd->dual_hw_ms_type;
+
+	if (dual_hw_ms_cmd->dual_hw_ms_type == MS_TYPE_MASTER) {
+		src_info->dual_hw_type = DUAL_HW_MASTER_SLAVE;
+		src_info->dual_hw_ms_info.sof_info =
+			&vfe_dev->common_data->master_sof_info;
+	} else {
+		spin_lock(&vfe_dev->common_data->common_dev_data_lock);
+		src_info->dual_hw_type = DUAL_HW_MASTER_SLAVE;
+		for (j = 0; j < MS_NUM_SLAVE_MAX; j++) {
+			if (vfe_dev->common_data->reserved_slave_mask &
+				(1 << j))
+				continue;
+
+			vfe_dev->common_data->reserved_slave_mask |= (1 << j);
+			vfe_dev->common_data->num_slave++;
+			src_info->dual_hw_ms_info.sof_info =
+				&vfe_dev->common_data->slave_sof_info[j];
+			src_info->dual_hw_ms_info.slave_id = j;
+			break;
+		}
+		spin_unlock(&vfe_dev->common_data->common_dev_data_lock);
+
+		if (j == MS_NUM_SLAVE_MAX) {
+			pr_err("%s: Error! Cannot find free aux resource\n",
+				__func__);
+			return -EBUSY;
+		}
+	}
+
+	return rc;
+}
+
 static int msm_isp_proc_cmd_list_unlocked(struct vfe_device *vfe_dev, void *arg)
 {
 	int rc = 0;
@@ -806,17 +870,24 @@ static long msm_isp_ioctl_unlocked(struct v4l2_subdev *sd,
 		break;
 	case VIDIOC_MSM_ISP_AXI_RESET:
 		mutex_lock(&vfe_dev->core_mutex);
-		rc = msm_isp_axi_reset(vfe_dev, arg);
+		rc = msm_isp_stats_reset(vfe_dev);
+		rc |= msm_isp_axi_reset(vfe_dev, arg);
 		mutex_unlock(&vfe_dev->core_mutex);
 		break;
 	case VIDIOC_MSM_ISP_AXI_RESTART:
 		mutex_lock(&vfe_dev->core_mutex);
-		rc = msm_isp_axi_restart(vfe_dev, arg);
+		rc = msm_isp_stats_restart(vfe_dev);
+		rc |= msm_isp_axi_restart(vfe_dev, arg);
 		mutex_unlock(&vfe_dev->core_mutex);
 		break;
 	case VIDIOC_MSM_ISP_INPUT_CFG:
 		mutex_lock(&vfe_dev->core_mutex);
 		rc = msm_isp_cfg_input(vfe_dev, arg);
+		mutex_unlock(&vfe_dev->core_mutex);
+		break;
+	case VIDIOC_MSM_ISP_SET_DUAL_HW_MASTER_SLAVE:
+		mutex_lock(&vfe_dev->core_mutex);
+		rc = msm_isp_set_dual_HW_master_slave_mode(vfe_dev, arg);
 		mutex_unlock(&vfe_dev->core_mutex);
 		break;
 	case VIDIOC_MSM_ISP_FETCH_ENG_START:
@@ -1589,9 +1660,6 @@ void msm_isp_process_iommu_page_fault(struct vfe_device *vfe_dev)
 
 	msm_isp_axi_halt(vfe_dev, &halt_cmd);
 
-	for (i = 0; i < MAX_NUM_STREAM; i++)
-		vfe_dev->axi_data.stream_info[i].state = INACTIVE;
-
 	pr_err("%s:%d] vfe_dev %p id %d\n", __func__,
 		__LINE__, vfe_dev, vfe_dev->pdev->id);
 
@@ -1600,6 +1668,9 @@ void msm_isp_process_iommu_page_fault(struct vfe_device *vfe_dev)
 	vfe_dev->buf_mgr->ops->buf_mgr_debug(vfe_dev->buf_mgr);
 	msm_isp_print_ping_pong_address(vfe_dev);
 	vfe_dev->hw_info->vfe_ops.axi_ops.read_wm_ping_pong_addr(vfe_dev);
+
+	for (i = 0; i < MAX_NUM_STREAM; i++)
+		vfe_dev->axi_data.stream_info[i].state = INACTIVE;
 
 	msm_isp_send_event(vfe_dev, ISP_EVENT_IOMMU_P_FAULT, &error_event);
 }

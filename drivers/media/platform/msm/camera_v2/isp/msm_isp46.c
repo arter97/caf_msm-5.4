@@ -560,14 +560,13 @@ static void msm_vfe46_reg_update(struct vfe_device *vfe_dev,
 		vfe_dev->reg_update_requested;
 	if ((vfe_dev->is_split && vfe_dev->pdev->id == ISP_VFE1) &&
 		((frame_src == VFE_PIX_0) || (frame_src == VFE_SRC_MAX))) {
-		msm_camera_io_w_mb(
-			vfe_dev->dual_vfe_res->reg_update_mask[ISP_VFE0],
+		msm_camera_io_w_mb(update_mask,
 			vfe_dev->dual_vfe_res->vfe_base[ISP_VFE0] + 0x3D8);
-		msm_camera_io_w_mb(vfe_dev->reg_update_requested,
+		msm_camera_io_w_mb(update_mask,
 			vfe_dev->vfe_base + 0x3D8);
 	} else if (!vfe_dev->is_split ||
 		(frame_src >= VFE_RAW_0 && frame_src <= VFE_SRC_MAX)) {
-		msm_camera_io_w_mb(vfe_dev->reg_update_requested,
+		msm_camera_io_w_mb(update_mask,
 			vfe_dev->vfe_base + 0x3D8);
 	}
 	spin_unlock_irqrestore(&vfe_dev->reg_update_lock, flags);
@@ -1447,7 +1446,7 @@ static void msm_vfe46_read_wm_ping_pong_addr(
 	struct vfe_device *vfe_dev)
 {
 	msm_camera_io_dump_2(vfe_dev->vfe_base +
-		(VFE46_WM_BASE(0) & 0xFFFFFFF0), 0x100);
+		(VFE46_WM_BASE(0) & 0xFFFFFFF0), 0x200);
 }
 
 static void msm_vfe46_update_ping_pong_addr(

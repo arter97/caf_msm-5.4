@@ -21,8 +21,9 @@
 #define DIAG_DEBUG_MUX		0x0002
 #define DIAG_DEBUG_DCI		0x0004
 #define DIAG_DEBUG_PERIPHERALS	0x0008
-#define DIAG_DEBUG_MASKS	0x0016
-#define DIAG_DEBUG_POWER	0x0032
+#define DIAG_DEBUG_MASKS	0x0010
+#define DIAG_DEBUG_POWER	0x0020
+#define DIAG_DEBUG
 
 #ifdef DIAG_DEBUG
 extern uint16_t diag_debug_mask;
