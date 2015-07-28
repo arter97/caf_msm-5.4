@@ -1531,9 +1531,9 @@ static int disable_camera_preview(void)
 	adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
 
 exit:
-	complete(&preview_disabled);
+	complete_all(&preview_disabled);
 	/* reset preview enable*/
-	init_completion(&preview_enabled);
+	INIT_COMPLETION(preview_enabled);
 
 	pr_debug("%s: kpi entry\n", __func__);
 	return ret;
@@ -1583,10 +1583,10 @@ static int enable_camera_preview(void)
 	adp_cam_ctxt->state = CAMERA_PREVIEW_ENABLED;
 
 exit:
-	complete(&preview_enabled);
+	complete_all(&preview_enabled);
 
 	/* reset preview disable*/
-	init_completion(&preview_disabled);
+	INIT_COMPLETION(preview_disabled);
 
 	pr_debug("%s: kpi exit\n", __func__);
 	return rc;
@@ -1595,8 +1595,8 @@ camera_failed:
 	mdp_disable_camera_preview();
 mdp_failed:
 	adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
-	complete(&preview_enabled);
-	complete(&preview_disabled);
+	complete_all(&preview_enabled);
+	complete_all(&preview_disabled);
 	pr_debug("%s: kpi exit\n", __func__);
 	return rc;
 }
@@ -1758,13 +1758,13 @@ static int adp_camera_v4l2_streamon(struct file *file, void *fh,
 					enum v4l2_buf_type i)
 {
 	int rc;
-
-	pr_debug("%s - enter", __func__);
-
+	INIT_COMPLETION(preview_enabled);
 	rc = mdp_arb_set_event(1);
-
-	pr_debug("%s - exit", __func__);
-
+	if (!rc) {
+		wait_for_completion(&preview_enabled);
+		if (adp_cam_ctxt->state != CAMERA_PREVIEW_ENABLED)
+			rc = -EFAULT;
+	}
 	return rc;
 }
 
@@ -1772,13 +1772,13 @@ static int adp_camera_v4l2_streamoff(struct file *file, void *fh,
 					enum v4l2_buf_type i)
 {
 	int rc;
-
-	pr_debug("%s - enter", __func__);
-
+	INIT_COMPLETION(preview_disabled);
 	rc = mdp_arb_set_event(0);
-
-	pr_debug("%s - exit", __func__);
-
+	if (!rc) {
+		wait_for_completion(&preview_disabled);
+		if (adp_cam_ctxt->state != CAMERA_PREVIEW_DISABLED)
+			rc = -EFAULT;
+	}
 	return rc;
 }
 
@@ -2167,7 +2167,7 @@ static int adp_camera_suspend(struct platform_device *pdev,
 			&adp_rvc_csi_lane_params);
 	msm_ispif_release_rdi(lsh_ispif);
 
-	init_completion(&preview_disabled);
+	INIT_COMPLETION(preview_disabled);
 	adp_cam_ctxt->state = CAMERA_SUSPENDED;
 
 	pr_debug("exit %s", __func__);
