@@ -395,6 +395,7 @@ static int sam4e_init_urbs(struct net_device *netdev)
 
 		err = usb_submit_urb(urb, GFP_KERNEL);
 		if (err) {
+			netdev_err(netdev, "Failed to init RX urb %d\n", err);
 			usb_unanchor_urb(urb);
 			usb_free_coherent(dev->udev, RX_BUFFER_SIZE, buf,
 					urb->transfer_dma);
@@ -710,11 +711,13 @@ static int sam4e_usb_probe(struct usb_interface *intf,
 	err = sam4e_init_urbs(netdev);
 	if (err) {
 		netdev_err(netdev, "couldn't init urbs: %d\n", err);
-		goto cleanup_candev;
+		goto unregister_candev;
 	}
 
 	return 0; /*ok. it's ours */
 
+unregister_candev:
+	unregister_netdev(netdev);
 cleanup_candev:
 	kfree(dev->assembly_buffer);
 	free_candev(netdev);
