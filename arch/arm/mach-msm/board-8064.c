@@ -96,7 +96,6 @@
 #include <linux/bluetooth-power.h>
 #include <linux/reverse.h>
 #include <linux/lsm330.h>
-#include <video/msm_dba.h>
 
 #define MSM_PMEM_ADSP_SIZE         0x7800000
 #define MSM_PMEM_AUDIO_SIZE        0x4CF000
@@ -1517,13 +1516,6 @@ static struct i2c_board_info isa1200_board_info[] __initdata = {
 	},
 };
 
-static struct msm_dba_reg_info mxt_host_info = {
-	.client_name = "atmel_mxt_ts",
-	.chip_name = "DS90UH927Q",
-	.instance_id = 0,
-	.cb_data = NULL,
-};
-
 /* configuration data for mxt1386e using V2.1 firmware */
 static const u8 mxt1386e_config_data_v2_1[] = {
 	/* T6 Object */
@@ -1690,9 +1682,8 @@ static struct mxt_platform_data mxt_platform_data = {
 	.i2c_pull_up		= true,
 	.reset_gpio		= MXT_TS_RESET_GPIO,
 	.irq_gpio		= MXT_TS_GPIO_IRQ,
-	.dba_host		= NULL,
-	.iox_support		= false,
 };
+
 
 static struct i2c_board_info mxt_device_info[] __initdata = {
 	{
@@ -3709,8 +3700,6 @@ static struct mxt_platform_data mxt540e_platform_data = {
 	.reset_gpio		= MXT540E_TS_RESET_GPIO,
 	.irq_gpio		= MXT540E_TS_GPIO_IRQ,
 	.use_abs_reportid	= true,
-	.dba_host		= NULL,
-	.iox_support		= false,
 };
 
 static struct i2c_board_info mxt540e_device_info[] __initdata = {
@@ -4136,10 +4125,7 @@ static void __init apq8064_common_init(void)
 		|| machine_is_apq8064_adp2_es2p5()) {
 		mxt_platform_data.irq_gpio = MXT_ADP_TS_GPIO_IRQ;
 		mxt_platform_data.no_regulator_support = true;
-		mxt_platform_data.reset_gpio = -1;
-		mxt_platform_data.dba_host = &mxt_host_info;
-		mxt_platform_data.iox_support = true;
-		mxt_platform_data.iox_slave_id = 0x3e;
+		mxt_platform_data.no_reset_gpio = true;
 	}
 	platform_add_devices(early_common_devices,
 				ARRAY_SIZE(early_common_devices));
@@ -4166,6 +4152,7 @@ static void __init apq8064_common_init(void)
 		platform_add_devices(mplatform_common_devices,
 			ARRAY_SIZE(mplatform_common_devices));
 		mxt540e_platform_data.no_regulator_support = true;
+		mxt540e_platform_data.no_reset_gpio = false;
 	} else {
 		platform_add_devices(common_devices,
 				ARRAY_SIZE(common_devices));
