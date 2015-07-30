@@ -22,8 +22,12 @@
 struct msm_ba_input_config msm_ba_inp_cfg[] = {
 	/* type, index, name, adv inp, dev id, sd name, signal status */
 	{BA_INPUT_CVBS, 0, "CVBS-0", BA_IP_CVBS_0, 0, "adv7180", 1},
+#ifdef CONFIG_MSM_S_PLATFORM
+	{BA_INPUT_CVBS, 1, "CVBS-1", BA_IP_CVBS_0, 0, "adv7180", 1},
+#else
 	{BA_INPUT_CVBS, 1, "CVBS-1", BA_IP_CVBS_0, 1, "adv7180", 1},
 	{BA_INPUT_CVBS, 2, "CVBS-2", BA_IP_CVBS_1, 1, "adv7180", 1},
+#endif
 	{BA_INPUT_HDMI, 1, "HDMI-1", BA_IP_HDMI_1, 2, "adv7481", 1},
 };
 
