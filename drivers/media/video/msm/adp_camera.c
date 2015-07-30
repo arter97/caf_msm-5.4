@@ -244,7 +244,7 @@ static int mdp_buf_queue_deq(void)
 	return buf_idx;
 }
 
-static void preview_set_data_pipeline(void)
+static int preview_set_data_pipeline(void)
 {
 	int ispif_stream_enable;
 	u32 freq = 320000000;
@@ -256,37 +256,59 @@ static void preview_set_data_pipeline(void)
 	/* power on and enable  clock for vfe and axi, before csi */
 	rc = msm_axi_subdev_init_rdi_only(lsh_axi_ctrl, dual_enabled, s_ctrl);
 	if (rc < 0)
-		return;
+		return rc;
 
 	msm_axi_subdev_s_crystal_freq(lsh_axi_ctrl, freq,  flags);
 	csid_version = 1;
 	rc = msm_csid_init(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
 			&csid_version, MM_CAM_USE_BYPASS);
-	rc = msm_csiphy_init(
+	rc |= msm_csiphy_init(
 			lsh_csiphy_dev[adp_rvc_csi_lane_params.csi_phy_sel]);
-	rc = msm_ispif_init_rdi(lsh_ispif, &csid_version); /* ISPIF_INIT */
+	rc |= msm_ispif_init_rdi(lsh_ispif, &csid_version); /* ISPIF_INIT */
+	if (rc) {
+		pr_err("%s failed to initialize csid/phy/ispif", __func__);
+		return rc;
+	}
+
+	pr_debug("%s: config ispif\n", __func__);
 	params_list.params[0].intftype =  RDI1; /* RDI1 */
 	params_list.params[0].csid = adp_rvc_csi_lane_params.csi_phy_sel;
 	params_list.params[0].vfe_intf =  VFE0;
 	params_list.params[0].cid_mask = (1 << 0);
 	params_list.len = 1;
 
-	pr_debug("%s: config ispif\n", __func__);
-
 	/* ISPIF_CFG,use csid 1,rdi1 */
 	rc = msm_ispif_config(lsh_ispif, &params_list);
-	rc = msm_csid_config(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
-			&adp_rvc_csid_params); /* CSID_CFG */
+	if (rc) {
+		pr_err("%s failed to config ispif %d", __func__, rc);
+		return rc;
+	}
 
 	pr_debug("%s: config csid\n", __func__);
+	rc = msm_csid_config(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
+			&adp_rvc_csid_params); /* CSID_CFG */
+	if (rc) {
+		pr_err("%s failed to config csid %d", __func__, rc);
+		return rc;
+	}
 
 	/* CSIPHY_CFG */
 	rc = msm_csiphy_lane_config(
 			lsh_csiphy_dev[adp_rvc_csi_lane_params.csi_phy_sel],
 			&adp_rvc_csiphy_params);
+	if (rc) {
+		pr_err("%s failed to config csiphy %d", __func__, rc);
+		return rc;
+	}
+
 	ispif_stream_enable = 129;  /* configure to select RDI 1, VFE0 */
-	msm_ispif_subdev_video_s_stream_rdi_only(lsh_ispif,
+	rc = msm_ispif_subdev_video_s_stream_rdi_only(lsh_ispif,
 			ispif_stream_enable);
+	if (rc) {
+		pr_err("%s failed ispif s_stream_rdi_only %d", __func__, rc);
+		return rc;
+	}
+
 	pr_debug("%s: begin axi reset!!!\n", __func__);
 	axi_reset_rdi1_only(my_axi_ctrl, vfe_para);
 	pr_debug("%s: vfe32_config_axi now!!!\n", __func__);
@@ -302,9 +324,11 @@ static void preview_set_data_pipeline(void)
 	msm_cam_server_adp_cam_register(&adp_camera_msm_cam_ops);
 
 	pr_debug("%s: kpi exit!!!\n", __func__);
+
+	return 0;
 }
 
-static void preview_buffer_alloc(void)
+static int preview_buffer_alloc(void)
 {
 	int i, result;
 	int offset = 0;
@@ -354,13 +378,13 @@ static void preview_buffer_alloc(void)
 
 		offset += g_preview_buffer_length;
 	}
-	return;
+	return 0;
 err_ion_handle:
 	ion_free(preview_data.ion_client, preview_data.ion_handle);
 err_ion_client:
 	ion_client_destroy(preview_data.ion_client);
 err:
-	return;
+	return -EFAULT;
 }
 
 static int preview_buffer_init(void)
@@ -471,14 +495,19 @@ static int preview_buffer_free(void)
 	return ret = 0;
 }
 
-static void preview_configure_bufs(void)
+static int preview_configure_bufs(void)
 {
+	int ret;
+
 	/* step 1, alloc ION buffer */
 	pr_debug("%s: preview buffer allocate\n", __func__);
-	preview_buffer_alloc();
+	ret = preview_buffer_alloc();
 
 	/*step2, buffer linked list */
-	preview_buffer_init();
+	if (!ret)
+		preview_buffer_init();
+
+	return ret;
 }
 
 static void preview_set_overlay_params(struct mdp_overlay *overlay)
@@ -1168,6 +1197,22 @@ static void adp_camera_event_callback(void *instance,
 	}
 }
 
+static void adp_rear_camera_disable(void)
+{
+	int i;
+	msm_cam_server_adp_cam_deregister();
+	msm_axi_subdev_release_rdi_only(lsh_axi_ctrl, s_ctrl);
+	msm_csid_release(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
+			MM_CAM_USE_BYPASS);
+	msm_csiphy_release(lsh_csiphy_dev[adp_rvc_csi_lane_params.csi_phy_sel],
+			&adp_rvc_csi_lane_params);
+	msm_ispif_release_rdi(lsh_ispif);
+	msm_ba_close(adp_cam_ctxt->ba_inst_hdlr);
+
+	for (i = 0; i < DISPLAY_ID_MAX; i++)
+		mdp_exit(i);
+}
+
 static int adp_rear_camera_enable(void)
 {
 	struct preview_mem *ping_buffer, *pong_buffer, *free_buffer;
@@ -1211,12 +1256,20 @@ static int adp_rear_camera_enable(void)
 			msm_ba_open(&adp_camera_ba_ext_ops);
 	pr_debug("%s: input index: %d\n", __func__, index);
 	msm_ba_s_input(adp_cam_ctxt->ba_inst_hdlr, index);
-	msm_ba_s_priority(adp_cam_ctxt->ba_inst_hdlr, prio);
+	if (ret)
+		goto failure;
+
+	ret = msm_ba_s_priority(adp_cam_ctxt->ba_inst_hdlr, prio);
+	if (ret)
+		goto failure;
 	memset(&input, 0, sizeof(input));
 	input.index = index;
 	msm_ba_enum_input(adp_cam_ctxt->ba_inst_hdlr, &input);
 	pr_debug("%s: input info: %s\n", __func__, input.name);
-	msm_ba_g_fmt(adp_cam_ctxt->ba_inst_hdlr, &fmt);
+
+	ret = msm_ba_g_fmt(adp_cam_ctxt->ba_inst_hdlr, &fmt);
+	if (ret)
+		goto failure;
 	pr_debug("%s: format: %dx%d\n", __func__, fmt.fmt.pix.width,
 			fmt.fmt.pix.height);
 
@@ -1247,25 +1300,41 @@ static int adp_rear_camera_enable(void)
 	pr_debug("%s: width %d height %d length %d size %d\n", __func__,
 		g_preview_width, g_preview_height, g_preview_buffer_length,
 		g_preview_buffer_size);
-	preview_configure_bufs();
+
+	ret = preview_configure_bufs();
+	if (ret)
+		goto failure;
+
 	if (init_pipeline) {
-		preview_set_data_pipeline();
+		ret = preview_set_data_pipeline();
+		if (ret)
+			goto failure;
+
 		/* step 1, find free buffer from the list, then use it to
 		configure ping/pong */
 		ping_buffer = preview_buffer_find_free_for_ping_pong();
+		if (!ping_buffer)
+			goto failure;
 		ping_buffer->state =
 			CAMERA_PREVIEW_BUFFER_STATE_QUEUED_TO_PINGPONG;
-		pong_buffer =
-			preview_buffer_find_free_for_ping_pong();
+
+		pong_buffer = preview_buffer_find_free_for_ping_pong();
+		if (!ping_buffer)
+			goto failure;
 		pong_buffer->state =
 			CAMERA_PREVIEW_BUFFER_STATE_QUEUED_TO_PINGPONG;
+
 		free_buffer = preview_buffer_find_free_for_ping_pong();
+		if (!ping_buffer)
+			goto failure;
+
 		pr_debug("%s: find ping pong buffer end!!!\n", __func__);
 
 		/* step 2, configure the free buffer to ping pong buffer */
 		preview_configure_ping_pong_buffer(ping_buffer, pong_buffer,
 			free_buffer);
 	}
+
 	/* init mdp buffer queue */
 	memset(&s_mdp_buf_queue, 0, sizeof(s_mdp_buf_queue));
 
@@ -1275,22 +1344,10 @@ static int adp_rear_camera_enable(void)
 	pr_debug("%s: kpi exit\n", __func__);
 
 	return 0;
-}
 
-static void adp_rear_camera_disable(void)
-{
-	int i;
-	msm_cam_server_adp_cam_deregister();
-	msm_axi_subdev_release_rdi_only(lsh_axi_ctrl, s_ctrl);
-	msm_csid_release(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
-			MM_CAM_USE_BYPASS);
-	msm_csiphy_release(lsh_csiphy_dev[adp_rvc_csi_lane_params.csi_phy_sel],
-			&adp_rvc_csi_lane_params);
-	msm_ispif_release_rdi(lsh_ispif);
-	msm_ba_close(adp_cam_ctxt->ba_inst_hdlr);
-
-	for (i = 0; i < DISPLAY_ID_MAX; i++)
-		mdp_exit(i);
+failure:
+	adp_rear_camera_disable();
+	return -EFAULT;
 }
 
 static int adp_camera_disable_stream(void)
@@ -2196,7 +2253,11 @@ static int adp_camera_resume(struct platform_device *pdev)
 
 	adp_cam_ctxt->state = CAMERA_TRANSITION_OFF;
 
-	preview_set_data_pipeline();
+	rc = preview_set_data_pipeline();
+	if (rc) {
+		adp_cam_ctxt->state = CAMERA_SUSPENDED;
+		return rc;
+	}
 
 	adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
 	complete(&preview_disabled);
