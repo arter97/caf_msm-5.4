@@ -47,7 +47,7 @@
 #include <linux/kernel.h>
 #include <linux/pm_runtime.h>
 #include <linux/debugfs.h>
-
+#include <linux/types.h>
 #define DRIVER_VERSION		"22-Aug-2005"
 
 
@@ -326,17 +326,74 @@ static void __usbnet_status_stop_force(struct usbnet *dev)
  * Some link protocols batch packets, so their rx_fixup paths
  * can return clones as well as just modify the original skb.
  */
+/* Passes this packet up the stack, updating its accounting.
+ * Some link protocols batch packets, so their rx_fixup paths
+ * can return clones as well as just modify the original skb.
+ */
 void usbnet_skb_return (struct usbnet *dev, struct sk_buff *skb)
 {
 	int	status;
 	struct	ipa_tx_meta ipa_meta = {0x0};
-	u8	protocol_type = (skb->data[ETH_HLEN] & 0xf0);
+	struct	usbnet_ipa_rx_desc_node *node = NULL;
+	u8      protocol_type = (skb->data[ETH_HLEN] & 0xf0);
 
-	/* Pass IPv4 and IPv6 packets to IPA by peeking into the IP header */
+	/* Pass IPv4 packets to IPA by peeking into the IP header */
 	if (enable_ipa_bridge  &&
 		(protocol_type == 0x40 || protocol_type == 0x60)) {
-		dev->pusbnet_ipa->stats.rx_ipa_send++;
-		odu_bridge_tx_dp(skb, &ipa_meta);
+		/* Flow Control Checks */
+		spin_lock(&dev->flow_ctrl_lock);
+
+		/* Drop Packets if we cannot handle them */
+		if (dev->freeq_cnt == 0) {
+			dev->pusbnet_ipa->stats.flow_control_pkt_drop++;
+			pr_debug("Drop Pkt - Free desc count = %d",
+				dev->ipa_free_desc_cnt);
+			dev_kfree_skb(skb);
+			/* Schedule ipa_work task if IPA has desc left. This is
+			 * done since priority of softirq > IPA_WRITE_DONE Event
+			 * Which implies ipa_send_task will not be scheduled in
+			 * a timely manner
+			 */
+			if (dev->ipa_free_desc_cnt > 0 &&
+					!dev->schedule_ipa_work)
+				dev->schedule_ipa_work = true;
+			goto unlock_and_schedule;
+		}
+
+		/* Send Packet to IPA; if there are no pending packets
+		 * and ipa has available descriptors
+		 */
+		if ((dev->pendq_cnt == 0) && (dev->ipa_free_desc_cnt > 0)) {
+			ipa_meta.dma_address_valid = false;
+			/* Send Packet to ODU bridge Driver */
+			status = odu_bridge_tx_dp(skb, &ipa_meta);
+			if (status) {
+				pr_err("Send to IPA Failed!! %d Free SKB\n",
+					status);
+				kfree(skb);
+				dev->pusbnet_ipa->stats.rx_ipa_send_fail++;
+			} else {
+				dev->ipa_free_desc_cnt--;
+				dev->pusbnet_ipa->stats.rx_ipa_send++;
+			}
+		} else if (dev->pendq_cnt <= USBNET_IPA_SYS_PIPE_DNE_PKTS) {
+			/* If we have pending packets to send,
+			 * add the current packet to the end of the queue.
+			 */
+			node = list_first_entry(&dev->free_queue_head,
+				struct usbnet_ipa_rx_desc_node, link);
+			list_del(&node->link);
+			node->skb_ptr = skb;
+			list_add_tail(&node->link, &dev->pend_queue_head);
+			dev->freeq_cnt--;
+			dev->pendq_cnt++;
+			if (!dev->schedule_ipa_work)
+				dev->schedule_ipa_work = true;
+		}
+unlock_and_schedule:
+		spin_unlock(&dev->flow_ctrl_lock);
+		if (dev->schedule_ipa_work)
+			schedule_work(&dev->ipa_send_task);
 		return;
 	}
 
@@ -1501,6 +1558,8 @@ static ssize_t usbnet_ipa_debugfs_read_stats(struct file *file,
 	"IPA TX Send: ", usbnet_ipa->stats.tx_ipa_send);
 	len += scnprintf(buf + len, buf_len - len, "%25s %10llu\n",
 	"IPA TX Send Err: ", usbnet_ipa->stats.tx_ipa_send_err);
+	len += scnprintf(buf + len, buf_len - len, "%25s %10llu\n",
+	"IPA RX Packet Drops: ", usbnet_ipa->stats.flow_control_pkt_drop);
 
 	if (len > buf_len)
 		len = buf_len;
@@ -1550,6 +1609,69 @@ static void usbnet_ipa_cleanup_rm(void)
 			ret);
 }
 
+static int usbnet_alloc_flow_ctrl_desc(struct usbnet *dev)
+{
+	int i;
+	struct usbnet_ipa_rx_desc_node *node = NULL;
+
+	for (i = 0; i < USBNET_IPA_SYS_PIPE_DNE_PKTS; i++) {
+		node = (struct usbnet_ipa_rx_desc_node *)
+				kzalloc(sizeof(struct usbnet_ipa_rx_desc_node),
+					GFP_KERNEL);
+		if (!node) {
+			pr_err("%s -- Only able to allocate %d nodes\n"
+						, __func__, dev->freeq_cnt);
+			return -ENOMEM;
+		}
+		spin_lock(&dev->flow_ctrl_lock);
+		dev->freeq_cnt++;
+		list_add_tail(&node->link, &dev->free_queue_head);
+		spin_unlock(&dev->flow_ctrl_lock);
+	}
+	return 0;
+}
+
+static void usbnet_free_flow_ctrl_desc(struct usbnet *dev)
+{
+	struct usbnet_ipa_rx_desc_node *node, *tmp;
+
+	spin_lock_bh(&dev->flow_ctrl_lock);
+	list_for_each_entry_safe(node, tmp, &dev->free_queue_head, link) {
+		list_del(&node->link);
+		kfree(node);
+		dev->freeq_cnt--;
+	}
+	spin_unlock_bh(&dev->flow_ctrl_lock);
+	if (dev->freeq_cnt != 0) {
+		pr_err("%s - Memory Leak Detected\n", __func__);
+		BUG();
+	}
+}
+
+void usbnet_ipa_flush(struct usbnet *dev)
+{
+	struct usbnet_ipa_rx_desc_node *node = NULL;
+
+	/* Flush any pending packets */
+	pr_info("USBNET - Flush %d Pending Packets\n", dev->pendq_cnt);
+	spin_lock_bh(&dev->flow_ctrl_lock);
+	while (dev->pendq_cnt) {
+		node = list_first_entry(&dev->pend_queue_head,
+			struct usbnet_ipa_rx_desc_node, link);
+		list_del(&node->link);
+		list_add_tail(&node->link, &dev->free_queue_head);
+		dev->pendq_cnt--;
+		dev->freeq_cnt++;
+	}
+	spin_unlock_bh(&dev->flow_ctrl_lock);
+	if ((dev->freeq_cnt != USBNET_IPA_SYS_PIPE_DNE_PKTS) ||
+		(dev->pendq_cnt != 0)) {
+		pr_err("%s -- Memory leak detected freeq_cnt %d, pendq_cnt %d",
+			__func__, dev->freeq_cnt, dev->pendq_cnt);
+		BUG();
+	}
+	usbnet_free_flow_ctrl_desc(dev);
+}
 // precondition: never called in_interrupt
 
 void usbnet_disconnect (struct usb_interface *intf)
@@ -1577,6 +1699,7 @@ void usbnet_disconnect (struct usb_interface *intf)
 	cancel_work_sync(&dev->kevent);
 
 	if (enable_ipa_bridge) {
+		usbnet_ipa_flush(dev);
 		retval = odu_bridge_disconnect();
 		if (retval)
 			dev_dbg(&dev->udev->dev,
@@ -1708,6 +1831,19 @@ static void usbnet_ipa_tx_dp_cb(void *priv, enum ipa_dp_evt_type evt,
 		dev->net->stats.rx_packets++;
 		dev->net->stats.rx_bytes += skb->len;
 		dev_kfree_skb(skb);
+		spin_lock_bh(&dev->flow_ctrl_lock);
+		dev->ipa_free_desc_cnt++;
+		if ((dev->pendq_cnt > 0) &&
+			(dev->ipa_free_desc_cnt < dev->ipa_low_watermark))
+				usbnet_ipa->stats.ipa_low_watermark_cnt++;
+		else if ((dev->pendq_cnt > 0) &&
+			(dev->ipa_free_desc_cnt >= dev->ipa_low_watermark) &&
+			!dev->schedule_ipa_work)
+				dev->schedule_ipa_work = true;
+		spin_unlock_bh(&dev->flow_ctrl_lock);
+
+		if (dev->schedule_ipa_work)
+			schedule_work(&dev->ipa_send_task);
 		break;
 
 	default:
@@ -1763,6 +1899,57 @@ static int usbnet_ipa_set_perf_level(struct usbnet *dev)
 	}
 
 	return ret;
+}
+
+/*usbnet_ipa_send_routine - Sends packets to IPA/ODU bridge Driver
+ * Scheduled on RX of IPA_WRITE_DONE Event
+ */
+static void usbnet_ipa_send_routine(struct work_struct *work)
+{
+	struct usbnet *dev = container_of(work,
+				struct usbnet, ipa_send_task);
+	struct usbnet_ipa_rx_desc_node *node = NULL;
+	struct ipa_tx_meta ipa_meta = {0x0};
+	int ret = 0;
+
+	/* Send all pending packets to IPA.
+	 * Compute the number of desc left for HW and send packets accordingly
+	 */
+	spin_lock_bh(&dev->flow_ctrl_lock);
+	dev->schedule_ipa_work = false;
+	if (unlikely(!dev->pendq_cnt)) {
+		pr_err("%s - Error no pending packets in Queue %d\n",
+						__func__, dev->pendq_cnt);
+		spin_unlock_bh(&dev->flow_ctrl_lock);
+		return;
+	}
+	if (dev->ipa_free_desc_cnt < dev->ipa_low_watermark) {
+		dev->pusbnet_ipa->stats.ipa_low_watermark_cnt++;
+		spin_unlock_bh(&dev->flow_ctrl_lock);
+		return;
+	}
+
+	while (dev->ipa_free_desc_cnt && dev->pendq_cnt) {
+		node = list_first_entry(&dev->pend_queue_head,
+				struct usbnet_ipa_rx_desc_node, link);
+		list_del(&node->link);
+		list_add_tail(&node->link, &dev->free_queue_head);
+		dev->freeq_cnt++;
+		dev->pendq_cnt--;
+		ipa_meta.dma_address_valid = false;
+		/* Send Packet to ODU bridge Driver */
+		ret = odu_bridge_tx_dp(node->skb_ptr, &ipa_meta);
+		if (ret) {
+			pr_err("Send to IPA Failed in %s ret %d--Free SKB\n",
+				__func__, ret);
+			kfree(node->skb_ptr);
+			dev->pusbnet_ipa->stats.rx_ipa_send_fail++;
+		} else {
+			dev->pusbnet_ipa->stats.rx_ipa_send++;
+			dev->ipa_free_desc_cnt--;
+		}
+	}
+	spin_unlock_bh(&dev->flow_ctrl_lock);
 }
 
 int
@@ -1829,7 +2016,7 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	mutex_init (&dev->phy_mutex);
 	mutex_init(&dev->interrupt_mutex);
 	dev->interrupt_count = 0;
-
+	dev->schedule_ipa_work = false;
 	dev->net = net;
 	strcpy (net->name, "usb%d");
 	memcpy (net->dev_addr, node_id, sizeof node_id);
@@ -1930,6 +2117,15 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 		dev->ipa_free_desc_cnt = USBNET_IPA_SYS_PIPE_MAX_PKTS_DESC;
 		dev->ipa_high_watermark = USBNET_IPA_SYS_PIPE_MAX_PKTS_DESC;
 		dev->ipa_low_watermark = USBNET_IPA_SYS_PIPE_MIN_PKTS_DESC;
+
+		/* Initialize all the flow control variables */
+		dev->pendq_cnt = 0;
+		dev->freeq_cnt = 0;
+		spin_lock_init(&dev->flow_ctrl_lock);
+		INIT_LIST_HEAD(&dev->pend_queue_head);
+		INIT_LIST_HEAD(&dev->free_queue_head);
+		usbnet_alloc_flow_ctrl_desc(dev);
+		INIT_WORK(&dev->ipa_send_task, usbnet_ipa_send_routine);
 
 		status = usbnet_ipa_setup_rm(dev);
 		if (status) {

@@ -38,11 +38,20 @@ struct usbnet_ipa_stats {
 	/* TX Side*/
 	uint64_t tx_ipa_send;
 	uint64_t tx_ipa_send_err;
+
+	/* Flow Control stats */
+	uint64_t flow_control_pkt_drop;
+	uint64_t ipa_low_watermark_cnt;
 };
 
 struct usbnet_ipa_ctx {
 	struct usbnet_ipa_stats stats;
 	struct dentry *debugfs_dir;
+};
+
+struct usbnet_ipa_rx_desc_node {
+	struct list_head link;
+	struct sk_buff *skb_ptr;
 };
 
 /* interface from usbnet core to each USB networking link we handle */
@@ -104,6 +113,14 @@ struct usbnet {
 	u16 ipa_free_desc_cnt;
 	u16 ipa_high_watermark;
 	u16 ipa_low_watermark;
+
+	u16 pendq_cnt;
+	u16 freeq_cnt;
+	spinlock_t flow_ctrl_lock;
+	bool	schedule_ipa_work;
+	struct list_head pend_queue_head;
+	struct list_head free_queue_head;
+	struct work_struct ipa_send_task;
 };
 
 static inline struct usb_driver *driver_of(struct usb_interface *intf)
