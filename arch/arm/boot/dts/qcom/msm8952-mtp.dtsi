@@ -433,6 +433,7 @@
 	qcom,cont-splash-enabled;
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 	qcom,ulps-enabled;
+	qcom,panel-roi-alignment = <2 2 4 2 1080 2>;
 };
 
 &labibb {
