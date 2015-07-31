@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014, Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2015, Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -188,6 +188,7 @@ set_msm_otg_mode(struct device *dev, struct device_attribute *attr,
 		switch (phy->state) {
 		case OTG_STATE_B_IDLE:
 		case OTG_STATE_B_PERIPHERAL:
+			clear_bit(B_SESS_VLD, &motg->inputs);
 			clear_bit(ID, &motg->inputs);
 			break;
 		default:
