@@ -78,6 +78,9 @@
 // between wakeups
 #define UNLINK_TIMEOUT_MS	3
 
+/* timeout value for odu bridge resources */
+#define IPA_ODU_RM_TIMEOUT_MSEC 10000
+
 /*-------------------------------------------------------------------------*/
 
 // randomly generated ethernet address
@@ -1594,9 +1597,25 @@ void usbnet_debugfs_exit(struct usbnet *dev)
 	debugfs_remove_recursive(dev->pusbnet_ipa->debugfs_dir);
 }
 
-static void usbnet_ipa_cleanup_rm(void)
+static void usbnet_ipa_cleanup_rm(struct usbnet *dev)
 {
 	int ret;
+
+	INIT_COMPLETION(dev->rm_prod_release_comp);
+
+	ret =  ipa_rm_release_resource(IPA_RM_RESOURCE_ODU_ADAPT_PROD);
+	if (ret) {
+		if (ret != EINPROGRESS)
+			dev_err(&dev->udev->dev,
+				"Release ODU PROD resource failed:%d\n", ret);
+
+		ret = wait_for_completion_timeout(&dev->rm_prod_release_comp,
+						  msecs_to_jiffies(
+						  IPA_ODU_RM_TIMEOUT_MSEC));
+		if (ret == 0)
+			dev_err(&dev->udev->dev,
+				"Timeout releasing ODU prod resource\n");
+	}
 
 	ret = ipa_rm_delete_resource(IPA_RM_RESOURCE_ODU_ADAPT_PROD);
 	if (ret)
@@ -1710,7 +1729,7 @@ void usbnet_disconnect (struct usb_interface *intf)
 			dev_dbg(&dev->udev->dev,
 			"%s ODU bridge cleanup failed.\n",
 			__func__);
-		usbnet_ipa_cleanup_rm();
+		usbnet_ipa_cleanup_rm(dev);
 		usbnet_debugfs_exit(dev);
 		kfree(dev->pusbnet_ipa);
 	}
@@ -1751,7 +1770,22 @@ static struct device_type wwan_type = {
 static void usbnet_ipa_rm_notify(void *user_data, enum ipa_rm_event event,
 							unsigned long data)
 {
+	struct usbnet *dev = (struct usbnet *)user_data;
+
 	pr_debug(" %s IPA RM Evt: %d\n", __func__, event);
+
+	switch (event) {
+	case IPA_RM_RESOURCE_GRANTED:
+		complete(&dev->rm_prod_granted_comp);
+		break;
+	case  IPA_RM_RESOURCE_RELEASED:
+		complete(&dev->rm_prod_release_comp);
+		break;
+	default:
+		dev_dbg(&dev->udev->dev,
+			"Un-expected event %d\n", event);
+		break;
+	}
 }
 
 static int usbnet_ipa_rm_cons_request(void)
@@ -1778,7 +1812,7 @@ static int usbnet_ipa_setup_rm(struct usbnet *dev)
 
 	ret = ipa_rm_create_resource(&create_params);
 	if (ret) {
-		dev_dbg(&dev->udev->dev,
+		dev_err(&dev->udev->dev,
 			"Create ODU PROD RM resource failed: %d\n", ret);
 		goto prod_fail;
 	}
@@ -1791,16 +1825,37 @@ static int usbnet_ipa_setup_rm(struct usbnet *dev)
 
 	ret = ipa_rm_create_resource(&create_params);
 	if (ret) {
-		dev_dbg(&dev->udev->dev,
+		dev_err(&dev->udev->dev,
 			"Create ODU CONC RM resource failed: %d\n", ret);
 		goto delete_prod;
 	}
 
+	INIT_COMPLETION(dev->rm_prod_granted_comp);
+
+	ret =  ipa_rm_request_resource(IPA_RM_RESOURCE_ODU_ADAPT_PROD);
+	if (ret) {
+		if (ret != EINPROGRESS) {
+			dev_err(&dev->udev->dev,
+				"Request ODU PROD resource failed: %d\n", ret);
+			goto delete_cons;
+		}
+		ret = wait_for_completion_timeout(&dev->rm_prod_granted_comp,
+						  msecs_to_jiffies(
+						  IPA_ODU_RM_TIMEOUT_MSEC));
+		if (ret == 0) {
+			dev_err(&dev->udev->dev,
+				"timeout requesting ODU prod resource\n");
+			ret = -ETIMEDOUT;
+			goto delete_cons;
+		}
+	}
+
 	return ret;
 
+delete_cons:
+	ipa_rm_delete_resource(IPA_RM_RESOURCE_ODU_ADAPT_CONS);
 delete_prod:
 	ipa_rm_delete_resource(IPA_RM_RESOURCE_ODU_ADAPT_PROD);
-
 prod_fail:
 	return ret;
 
