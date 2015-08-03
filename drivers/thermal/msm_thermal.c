@@ -130,6 +130,7 @@ static bool therm_reset_enabled;
 static bool online_core;
 static bool cluster_info_probed;
 static bool cluster_info_nodes_called;
+static bool cpr_temp_band_enable;
 static int *tsens_id_map;
 static DEFINE_MUTEX(vdd_rstr_mutex);
 static DEFINE_MUTEX(psm_mutex);
@@ -157,6 +158,8 @@ static cpumask_t throttling_mask;
 
 static LIST_HEAD(devices_list);
 static LIST_HEAD(thresholds_list);
+static uint32_t curr_cpr_band;
+
 enum thermal_threshold {
 	HOTPLUG_THRESHOLD_HIGH,
 	HOTPLUG_THRESHOLD_LOW,
@@ -4727,6 +4730,86 @@ static int msm_thermal_add_sensor_info_nodes(void)
 	return ret;
 }
 
+static ssize_t msm_thermal_cpr_band_show(struct kobject *kobj,
+	struct kobj_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%u\n", curr_cpr_band);
+}
+
+static ssize_t msm_thermal_cpr_band_store(struct kobject *kobj,
+	struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	int ret = 0;
+	uint32_t val = 0;
+	struct msm_rpm_kvp cpr_kvp;
+
+	ret = kstrtouint(buf, 0, &val);
+	if (ret || val < MSM_COLD_CRITICAL || val > MSM_HOT_CRITICAL) {
+		pr_err("Invalid input %s\n", buf);
+		goto cpr_temp_store_exit;
+	}
+
+	if (curr_cpr_band == val)
+		goto cpr_temp_store_exit;
+	cpr_kvp.key = msm_thermal_str_to_int("temp");
+	cpr_kvp.data = (uint8_t *)&val;
+	cpr_kvp.length = sizeof(val);
+	ret = msm_rpm_send_message(MSM_RPM_CTX_ACTIVE_SET,
+		msm_thermal_str_to_int("cpr"), 0, &cpr_kvp, 1);
+	if (ret) {
+		pr_err("Temperature band send failed. old:%u new %u err:%d\n",
+			curr_cpr_band, val, ret);
+		goto cpr_temp_store_exit;
+	}
+	curr_cpr_band = val;
+	pr_debug("CPR notified for temperature band:%d\n", curr_cpr_band);
+
+cpr_temp_store_exit:
+	return count;
+}
+
+static struct kobj_attribute cpr_temp_attr =  __ATTR(curr_cpr_band, 0644,
+	msm_thermal_cpr_band_show, msm_thermal_cpr_band_store);
+
+static int msm_thermal_add_cpr_temp_nodes(void)
+{
+	struct kobject *module_kobj = NULL;
+	struct kobject *cpr_temp_kobj = NULL;
+	int ret = 0;
+
+	if (!cpr_temp_band_enable)
+		goto cpr_sysfs_add_exit;
+
+	/* By default send a cool temperature band */
+	msm_thermal_cpr_band_store(NULL, NULL, "3", 1);
+	module_kobj = kset_find_obj(module_kset, KBUILD_MODNAME);
+	if (!module_kobj) {
+		pr_err("cannot find kobject\n");
+		ret = -ENOENT;
+		goto cpr_sysfs_add_exit;
+	}
+
+	cpr_temp_kobj = kobject_create_and_add("cpr_band", module_kobj);
+	if (!cpr_temp_kobj) {
+		pr_err("cannot create curr_cpr_band kobject\n");
+		ret = -ENOMEM;
+		goto cpr_sysfs_add_exit;
+	}
+
+	sysfs_attr_init(&cpr_temp_attr.attr);
+	ret = sysfs_create_file(cpr_temp_kobj, &cpr_temp_attr.attr);
+	if (ret) {
+		pr_err("CPR temperature band sysfs create fail. err:%d\n",
+			ret);
+		goto cpr_sysfs_add_exit;
+	}
+
+cpr_sysfs_add_exit:
+	if (ret && cpr_temp_kobj)
+		kobject_del(cpr_temp_kobj);
+	return ret;
+}
+
 static int msm_thermal_add_vdd_rstr_nodes(void)
 {
 	struct kobject *module_kobj = NULL;
@@ -5775,6 +5858,11 @@ static int msm_thermal_dev_probe(struct platform_device *pdev)
 	ret = probe_ocr(node, &data, pdev);
 
 	update_cpu_topology(&pdev->dev);
+	if (of_property_read_bool(node, "qcom,cpr-temp-band-enable"))
+		cpr_temp_band_enable = 1;
+	else
+		pr_debug("CPR temperature band support disabled\n");
+
 
 	/*
 	 * In case sysfs add nodes get called before probe function.
@@ -5911,6 +5999,8 @@ int __init msm_thermal_late_init(void)
 	create_cpu_topology_sysfs();
 	create_thermal_debugfs();
 	msm_thermal_add_bucket_info_nodes();
+	msm_thermal_add_cpr_temp_nodes();
+
 	return 0;
 }
 late_initcall(msm_thermal_late_init);
