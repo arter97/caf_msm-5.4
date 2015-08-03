@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -425,14 +425,7 @@ fail:
 int msm_iommu_sec_program_iommu(struct msm_iommu_drvdata *drvdata,
 			struct msm_iommu_ctx_drvdata *ctx_drvdata)
 {
-	struct msm_scm_sec_cfg {
-		unsigned int id;
-		unsigned int spare;
-	} cfg;
 	int ret, scm_ret = 0;
-
-	cfg.id = drvdata->sec_id;
-	cfg.spare = ctx_drvdata->num;
 
 	if (drvdata->smmu_local_base) {
 		writel_relaxed(0xFFFFFFFF, drvdata->smmu_local_base +
@@ -440,8 +433,7 @@ int msm_iommu_sec_program_iommu(struct msm_iommu_drvdata *drvdata,
 		mb();
 	}
 
-	ret = scm_call(SCM_SVC_MP, IOMMU_SECURE_CFG, &cfg, sizeof(cfg),
-			&scm_ret, sizeof(scm_ret));
+	ret = scm_restore_sec_cfg(drvdata->sec_id, ctx_drvdata->num, &scm_ret);
 	if (ret || scm_ret) {
 		pr_err("scm call IOMMU_SECURE_CFG failed\n");
 		return ret ? ret : -EINVAL;
