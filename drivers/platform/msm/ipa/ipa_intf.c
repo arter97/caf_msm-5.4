@@ -55,9 +55,9 @@ struct ipa_pull_msg {
 int ipa_register_intf(const char *name, const struct ipa_tx_intf *tx,
 		       const struct ipa_rx_intf *rx)
 {
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
+		return -EINVAL;
 	}
 
 	return ipa_register_intf_ext(name, tx, rx, NULL);
@@ -187,9 +187,9 @@ int ipa_deregister_intf(const char *name)
 	struct ipa_intf *next;
 	int result = -EINVAL;
 
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
+		return -EINVAL;
 	}
 
 	if (name == NULL) {
@@ -371,9 +371,9 @@ int ipa_send_msg(struct ipa_msg_meta *meta, void *buff,
 {
 	struct ipa_push_msg *msg;
 
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
+		return -EINVAL;
 	}
 
 	if (meta == NULL || (buff == NULL && callback != NULL) ||

@@ -213,9 +213,9 @@ int ipa_connect(const struct ipa_connect_params *in, struct ipa_sps_params *sps,
 	unsigned long base;
 	struct iommu_domain *smmu_domain;
 
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
+		return -EINVAL;
 	}
 
 	IPADBG("connecting client\n");
@@ -462,9 +462,9 @@ int ipa_disconnect(u32 clnt_hdl)
 	unsigned long base;
 	struct iommu_domain *smmu_domain;
 
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
+		return -EINVAL;
 	}
 
 	if (clnt_hdl >= ipa_ctx->ipa_num_pipes ||
@@ -586,9 +586,9 @@ int ipa_reset_endpoint(u32 clnt_hdl)
 	int res;
 	struct ipa_ep_context *ep;
 
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
+		return -EINVAL;
 	}
 
 	if (clnt_hdl >= ipa_ctx->ipa_num_pipes) {

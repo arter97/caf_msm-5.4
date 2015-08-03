@@ -1099,9 +1099,9 @@ int ipa_mhi_start(struct ipa_mhi_start_params *params)
 		return -EINVAL;
 	}
 
-	if (!ipa_mhi_ctx) {
-		IPA_MHI_ERR("not initialized\n");
-		return -EPERM;
+	if (unlikely(!ipa_mhi_ctx)) {
+		IPA_MHI_ERR("IPA MHI was not initialized\n");
+		return -EINVAL;
 	}
 
 	if (ipa_uc_state_check()) {
@@ -1207,9 +1207,9 @@ int ipa_mhi_connect_pipe(struct ipa_mhi_connect_params *in, u32 *clnt_hdl)
 		return -EINVAL;
 	}
 
-	if (!ipa_mhi_ctx) {
-		IPA_MHI_ERR("not initialized\n");
-		return -EPERM;
+	if (unlikely(!ipa_mhi_ctx)) {
+		IPA_MHI_ERR("IPA MHI was not initialized\n");
+		return -EINVAL;
 	}
 
 	spin_lock_irqsave(&ipa_mhi_ctx->state_lock, flags);
@@ -1364,7 +1364,7 @@ int ipa_mhi_disconnect_pipe(u32 clnt_hdl)
 		return -EINVAL;
 	}
 
-	if (!ipa_mhi_ctx) {
+	if (unlikely(!ipa_mhi_ctx)) {
 		IPA_MHI_ERR("IPA MHI was not initialized\n");
 		return -EINVAL;
 	}
@@ -1599,9 +1599,9 @@ int ipa_mhi_suspend(bool force)
 
 	IPA_MHI_FUNC_ENTRY();
 
-	if (!ipa_mhi_ctx) {
-		IPA_MHI_ERR("not initialized\n");
-		return -EPERM;
+	if (unlikely(!ipa_mhi_ctx)) {
+		IPA_MHI_ERR("IPA MHI was not initialized\n");
+		return -EINVAL;
 	}
 
 	res = ipa_mhi_set_state(IPA_MHI_STATE_SUSPEND_IN_PROGRESS);
@@ -1742,9 +1742,9 @@ int ipa_mhi_resume(void)
 
 	IPA_MHI_FUNC_ENTRY();
 
-	if (!ipa_mhi_ctx) {
-		IPA_MHI_ERR("not initialized\n");
-		return -EPERM;
+	if (unlikely(!ipa_mhi_ctx)) {
+		IPA_MHI_ERR("IPA MHI was not initialized\n");
+		return -EINVAL;
 	}
 
 	res = ipa_mhi_set_state(IPA_MHI_STATE_RESUME_IN_PROGRESS);
@@ -1826,9 +1826,9 @@ int ipa_mhi_destroy(void)
 {
 	IPA_MHI_FUNC_ENTRY();
 
-	if (!ipa_mhi_ctx) {
-		IPA_MHI_ERR("not initialized\n");
-		return -EPERM;
+	if (unlikely(!ipa_mhi_ctx)) {
+		IPA_MHI_ERR("IPA MHI was not initialized\n");
+		return -EINVAL;
 	}
 
 	IPAERR("Not implemented Yet!\n");

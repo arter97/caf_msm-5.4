@@ -873,9 +873,9 @@ int ipa_get_ep_mapping(enum ipa_client_type client)
 {
 	u8 hw_type_index = IPA_1_1;
 
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
+		return INVALID_EP_MAPPING_INDEX;
 	}
 
 	if (client >= IPA_CLIENT_MAX || client < 0) {
@@ -917,9 +917,9 @@ enum ipa_rm_resource_name ipa_get_rm_resource_from_ep(int pipe_idx)
 	struct ipa_client_names clients;
 	bool found = false;
 
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
+		return -EINVAL;
 	}
 
 	if (pipe_idx >= ipa_ctx->ipa_num_pipes || pipe_idx < 0) {
@@ -956,9 +956,9 @@ enum ipa_rm_resource_name ipa_get_rm_resource_from_ep(int pipe_idx)
  */
 enum ipa_client_type ipa_get_client_mapping(int pipe_idx)
 {
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
+		return -EINVAL;
 	}
 
 	if (pipe_idx >= ipa_ctx->ipa_num_pipes || pipe_idx < 0) {
@@ -2308,9 +2308,9 @@ int ipa_cfg_ep(u32 clnt_hdl, const struct ipa_ep_cfg *ipa_ep_cfg)
 {
 	int result = -EINVAL;
 
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
+		return -EINVAL;
 	}
 
 	if (clnt_hdl >= ipa_ctx->ipa_num_pipes ||
@@ -3046,9 +3046,9 @@ int ipa_cfg_ep_mode(u32 clnt_hdl, const struct ipa_ep_cfg_mode *ep_mode)
 {
 	int ep;
 
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
+		return -EINVAL;
 	}
 
 	if (clnt_hdl >= ipa_ctx->ipa_num_pipes ||
@@ -3567,9 +3567,9 @@ int ipa_write_qmap_id(struct ipa_ioc_write_qmapid *param_in)
 	int ipa_ep_idx;
 	int result = -EINVAL;
 
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
+		return -EINVAL;
 	}
 
 	if (param_in->client  >= IPA_CLIENT_MAX) {
@@ -4744,8 +4744,8 @@ EXPORT_SYMBOL(ipa_is_ready);
  */
 bool ipa_is_client_handle_valid(u32 clnt_hdl)
 {
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
 		return false;
 	}
 
@@ -4807,7 +4807,7 @@ u16 ipa_get_smem_restr_bytes(void)
 	if (ipa_ctx) {
 		return ipa_ctx->smem_restricted_bytes;
 	} else {
-		IPAERR("IPA Driver not initialized\n");
+		IPAERR("IPA driver was not initialized\n");
 		return 0;
 	}
 }

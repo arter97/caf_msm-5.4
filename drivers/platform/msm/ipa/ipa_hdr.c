@@ -829,9 +829,9 @@ int ipa_add_hdr(struct ipa_ioc_add_hdr *hdrs)
 	int i;
 	int result = -EFAULT;
 
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
+		return -EINVAL;
 	}
 
 	if (hdrs == NULL || hdrs->num_hdrs == 0) {
@@ -879,9 +879,9 @@ int ipa_del_hdr(struct ipa_ioc_del_hdr *hdls)
 	int i;
 	int result = -EFAULT;
 
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
+		return -EINVAL;
 	}
 
 	if (hdls == NULL || hdls->num_hdls == 0) {
@@ -1206,9 +1206,9 @@ int ipa_get_hdr(struct ipa_ioc_get_hdr *lookup)
 	struct ipa_hdr_entry *entry;
 	int result = -1;
 
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
+		return -EINVAL;
 	}
 
 	if (lookup == NULL) {

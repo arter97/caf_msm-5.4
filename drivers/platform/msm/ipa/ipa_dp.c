@@ -892,9 +892,9 @@ int ipa_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 	char buff[IPA_RESOURCE_NAME_MAX];
 	struct iommu_domain *smmu_domain;
 
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
+		return -EINVAL;
 	}
 
 	if (sys_in == NULL || clnt_hdl == NULL) {
@@ -1180,9 +1180,9 @@ int ipa_teardown_sys_pipe(u32 clnt_hdl)
 	struct ipa_ep_context *ep;
 	int empty;
 
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
+		return -EINVAL;
 	}
 
 	if (clnt_hdl >= ipa_ctx->ipa_num_pipes ||
@@ -1312,9 +1312,9 @@ int ipa_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 	struct ipa_sys_context *sys;
 	int src_ep_idx;
 
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
+		return -EINVAL;
 	}
 
 	memset(desc, 0, 2 * sizeof(struct ipa_desc));
@@ -2784,9 +2784,9 @@ int ipa_tx_dp_mul(enum ipa_client_type src,
 	u32 num_desc, cnt;
 	int ep_idx;
 
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
+		return -EINVAL;
 	}
 
 	IPADBG("Received data desc anchor:%p\n", data_desc);
@@ -2873,8 +2873,8 @@ void ipa_free_skb(struct ipa_rx_data *data)
 {
 	struct ipa_rx_pkt_wrapper *rx_pkt;
 
-	if (!ipa_ctx) {
-		IPAERR("IPA driver not initialized\n");
+	if (unlikely(!ipa_ctx)) {
+		IPAERR("IPA driver was not initialized\n");
 		return;
 	}
 

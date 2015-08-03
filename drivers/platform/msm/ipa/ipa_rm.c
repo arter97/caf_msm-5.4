@@ -76,9 +76,9 @@ int ipa_rm_create_resource(struct ipa_rm_create_params *create_params)
 	unsigned long flags;
 	int result;
 
-	if (!ipa_rm_ctx) {
-		IPA_RM_ERR("IPA RM not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_rm_ctx)) {
+		IPA_RM_ERR("IPA RM was not initialized\n");
+		return -EINVAL;
 	}
 
 	if (!create_params) {
@@ -137,9 +137,9 @@ int ipa_rm_delete_resource(enum ipa_rm_resource_name resource_name)
 	unsigned long flags;
 	int result;
 
-	if (!ipa_rm_ctx) {
-		IPA_RM_ERR("IPA RM not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_rm_ctx)) {
+		IPA_RM_ERR("IPA RM was not initialized\n");
+		return -EINVAL;
 	}
 
 	IPA_RM_DBG("%s\n", ipa_rm_resource_str(resource_name));
@@ -187,9 +187,9 @@ int ipa_rm_add_dependency(enum ipa_rm_resource_name resource_name,
 	unsigned long flags;
 	int result;
 
-	if (!ipa_rm_ctx) {
-		IPA_RM_ERR("IPA RM not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_rm_ctx)) {
+		IPA_RM_ERR("IPA RM was not initialized\n");
+		return -EINVAL;
 	}
 
 	IPA_RM_DBG("%s -> %s\n", ipa_rm_resource_str(resource_name),
@@ -227,9 +227,9 @@ int ipa_rm_add_dependency_sync(enum ipa_rm_resource_name resource_name,
 	unsigned long time;
 	unsigned long flags;
 
-	if (!ipa_rm_ctx) {
-		IPA_RM_ERR("IPA RM not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_rm_ctx)) {
+		IPA_RM_ERR("IPA RM was not initialized\n");
+		return -EINVAL;
 	}
 
 	IPA_RM_DBG("%s -> %s\n", ipa_rm_resource_str(resource_name),
@@ -285,9 +285,9 @@ int ipa_rm_delete_dependency(enum ipa_rm_resource_name resource_name,
 	unsigned long flags;
 	int result;
 
-	if (!ipa_rm_ctx) {
-		IPA_RM_ERR("IPA RM not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_rm_ctx)) {
+		IPA_RM_ERR("IPA RM was not initialized\n");
+		return -EINVAL;
 	}
 
 	IPA_RM_DBG("%s -> %s\n", ipa_rm_resource_str(resource_name),
@@ -319,9 +319,9 @@ int ipa_rm_request_resource(enum ipa_rm_resource_name resource_name)
 	unsigned long flags;
 	int result;
 
-	if (!ipa_rm_ctx) {
-		IPA_RM_ERR("IPA RM not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_rm_ctx)) {
+		IPA_RM_ERR("IPA RM was not initialized\n");
+		return -EINVAL;
 	}
 
 	if (!IPA_RM_RESORCE_IS_PROD(resource_name)) {
@@ -445,9 +445,9 @@ int ipa_rm_release_resource(enum ipa_rm_resource_name resource_name)
 	struct ipa_rm_resource *resource;
 	int result;
 
-	if (!ipa_rm_ctx) {
-		IPA_RM_ERR("IPA RM not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_rm_ctx)) {
+		IPA_RM_ERR("IPA RM was not initialized\n");
+		return -EINVAL;
 	}
 
 	if (!IPA_RM_RESORCE_IS_PROD(resource_name)) {
@@ -574,9 +574,9 @@ int ipa_rm_set_perf_profile(enum ipa_rm_resource_name resource_name,
 	unsigned long flags;
 	struct ipa_rm_resource *resource;
 
-	if (!ipa_rm_ctx) {
-		IPA_RM_ERR("IPA RM not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_rm_ctx)) {
+		IPA_RM_ERR("IPA RM was not initialized\n");
+		return -EINVAL;
 	}
 
 	IPA_RM_DBG("%s\n", ipa_rm_resource_str(resource_name));
@@ -620,9 +620,9 @@ int ipa_rm_notify_completion(enum ipa_rm_event event,
 {
 	int result;
 
-	if (!ipa_rm_ctx) {
-		IPA_RM_ERR("IPA RM not initialized\n");
-		return -EFAULT;
+	if (unlikely(!ipa_rm_ctx)) {
+		IPA_RM_ERR("IPA RM was not initialized\n");
+		return -EINVAL;
 	}
 
 	IPA_RM_DBG("event %d on %s\n", event,
