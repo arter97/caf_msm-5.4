@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -395,7 +395,8 @@ static int msm_isp_buf_unprepare_all(struct msm_isp_buf_mgr *buf_mgr,
 			if (buf_info->state == MSM_ISP_BUFFER_STATE_DEQUEUED ||
 			buf_info->state == MSM_ISP_BUFFER_STATE_DIVERTED)
 				buf_mgr->vb2_ops->put_buf(buf_info->vb2_buf,
-					bufq->session_id, bufq->stream_id);
+					bufq->session_id,
+					GET_V4L2_STREAM_ID(bufq->stream_id));
 		}
 		msm_isp_unprepare_v4l2_buf(buf_mgr, buf_info);
 	}
@@ -467,7 +468,8 @@ static int msm_isp_buf_unprepare(struct msm_isp_buf_mgr *buf_mgr,
 		if (buf_info->state == MSM_ISP_BUFFER_STATE_DEQUEUED ||
 		buf_info->state == MSM_ISP_BUFFER_STATE_DIVERTED)
 			buf_mgr->vb2_ops->put_buf(buf_info->vb2_buf,
-				bufq->session_id, bufq->stream_id);
+				bufq->session_id,
+				GET_V4L2_STREAM_ID(bufq->stream_id));
 	}
 	msm_isp_unprepare_v4l2_buf(buf_mgr, buf_info);
 
@@ -573,7 +575,7 @@ static int msm_isp_get_buf(struct msm_isp_buf_mgr *buf_mgr, uint32_t id,
 		break;
 	case MSM_ISP_BUFFER_SRC_HAL:
 		vb2_buf = buf_mgr->vb2_ops->get_buf(
-			bufq->session_id, bufq->stream_id);
+			bufq->session_id, GET_V4L2_STREAM_ID(bufq->stream_id));
 		if (vb2_buf) {
 			if (vb2_buf->v4l2_buf.index < bufq->num_bufs) {
 						*buf_info =
@@ -586,7 +588,8 @@ static int msm_isp_get_buf(struct msm_isp_buf_mgr *buf_mgr, uint32_t id,
 			}
 			if ((*buf_info) == NULL) {
 				buf_mgr->vb2_ops->put_buf(vb2_buf,
-					bufq->session_id, bufq->stream_id);
+					bufq->session_id,
+					GET_V4L2_STREAM_ID(bufq->stream_id));
 				pr_err("%s: buf index %d not found!\n",
 					__func__, vb2_buf->v4l2_buf.index);
 				rc = -EINVAL;
@@ -718,7 +721,8 @@ static int msm_isp_put_buf(struct msm_isp_buf_mgr *buf_mgr,
 			list_add_tail(&buf_info->list, &bufq->head);
 		} else if (MSM_ISP_BUFFER_SRC_HAL == BUF_SRC(bufq->stream_id)) {
 			buf_mgr->vb2_ops->put_buf(buf_info->vb2_buf,
-				bufq->session_id, bufq->stream_id);
+				bufq->session_id,
+				GET_V4L2_STREAM_ID(bufq->stream_id));
 		}
 		buf_info->state = MSM_ISP_BUFFER_STATE_QUEUED;
 		rc = 0;
@@ -767,7 +771,8 @@ static int msm_isp_put_buf_unsafe(struct msm_isp_buf_mgr *buf_mgr,
 			list_add_tail(&buf_info->list, &bufq->head);
 		} else {
 			buf_mgr->vb2_ops->put_buf(buf_info->vb2_buf,
-				bufq->session_id, bufq->stream_id);
+				bufq->session_id,
+				GET_V4L2_STREAM_ID(bufq->stream_id));
 		}
 		buf_info->state = MSM_ISP_BUFFER_STATE_QUEUED;
 		rc = 0;
@@ -894,7 +899,8 @@ static int msm_isp_buf_done(struct msm_isp_buf_mgr *buf_mgr,
 			buf_info->vb2_buf->v4l2_buf.sequence  = frame_id;
 			buf_info->vb2_buf->v4l2_buf.reserved  = output_format;
 			buf_mgr->vb2_ops->buf_done(buf_info->vb2_buf,
-				bufq->session_id, bufq->stream_id);
+				bufq->session_id,
+				GET_V4L2_STREAM_ID(bufq->stream_id));
 		} else {
 			pr_err("%s: Error wrong buf done %d\n", __func__,
 				state);

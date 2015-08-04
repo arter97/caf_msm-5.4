@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -23,6 +23,8 @@
 		(id & ISP_SCRATCH_BUF_BIT) ? MSM_ISP_BUFFER_SRC_SCRATCH : \
 		(id & ISP_NATIVE_BUF_BIT) ? MSM_ISP_BUFFER_SRC_NATIVE : \
 				MSM_ISP_BUFFER_SRC_HAL)
+
+#define GET_V4L2_STREAM_ID(stream_id) (stream_id & 0x0FFF)
 
 #define ISP_SHARE_BUF_CLIENT 2
 #define BUF_MGR_NUM_BUF_Q 28
