@@ -122,6 +122,7 @@ static int msm_reset_pinctrl(struct msm_pinctrl_info *pinctrl_info);
 static int msm_set_pinctrl(struct msm_pinctrl_info *pinctrl_info);
 
 static void *def_codec_mbhc_cal(void);
+static void *adsp_state_notifier;
 
 static struct wcd9xxx_mbhc_config mbhc_cfg = {
 	.read_fw_bin = false,
@@ -1458,15 +1459,6 @@ static int mdm9640_asoc_machine_probe(struct platform_device *pdev)
 	int ret;
 	struct snd_soc_card *card = &snd_soc_card_mdm9640;
 	struct mdm9640_machine_data *pdata;
-	enum apr_subsys_state q6_mdsp_state;
-
-	q6_mdsp_state = apr_get_modem_state();
-	if (q6_mdsp_state != APR_SUBSYS_LOADED) {
-		dev_dbg(&pdev->dev, "Defering %s, q6_modem_state %d\n",
-			__func__, q6_mdsp_state);
-
-		return -EPROBE_DEFER;
-	}
 
 	if (!pdev->dev.of_node) {
 		dev_err(&pdev->dev,
@@ -1527,6 +1519,7 @@ static int mdm9640_asoc_machine_probe(struct platform_device *pdev)
 	ret = snd_soc_register_card(card);
 	if (ret) {
 		dev_err(&pdev->dev, "snd_soc_register_card failed (%d)\n", ret);
+		ret = -EPROBE_DEFER;
 		goto err;
 	}
 
@@ -1597,8 +1590,29 @@ static struct platform_driver mdm9640_asoc_machine_driver = {
 	.remove = mdm9640_asoc_machine_remove,
 };
 
+static int  mdm9640_adsp_state_callback(struct notifier_block *nb,
+					unsigned long value, void *priv)
+{
+	if (SUBSYS_AFTER_POWERUP == value)
+		platform_driver_register(&mdm9640_asoc_machine_driver);
 
-module_platform_driver(mdm9640_asoc_machine_driver);
+	return NOTIFY_OK;
+}
+
+
+static struct notifier_block adsp_state_notifier_block = {
+	.notifier_call = mdm9640_adsp_state_callback,
+	.priority = -INT_MAX,
+};
+
+static int __init mdm_soc_platform_init(void)
+{
+	adsp_state_notifier = subsys_notif_register_notifier("modem",
+					  &adsp_state_notifier_block);
+	return 0;
+}
+
+module_init(mdm_soc_platform_init);
 
 MODULE_DESCRIPTION("ALSA SoC msm");
 MODULE_LICENSE("GPL v2");
