@@ -751,7 +751,7 @@ static int msm_mi2s_startup(struct snd_pcm_substream *substream)
 				return ret;
 			}
 			ret = snd_soc_dai_set_fmt(cpu_dai,
-						  SND_SOC_DAIFMT_CBS_CFM);
+						  SND_SOC_DAIFMT_CBM_CFM);
 			if (IS_ERR_VALUE(ret))
 				pr_err("set format for CPU dai failed\n");
 
