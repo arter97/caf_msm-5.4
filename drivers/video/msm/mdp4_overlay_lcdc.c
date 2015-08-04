@@ -326,6 +326,7 @@ int mdp4_lcdc_pipe_commit(int cndx, int wait)
 	mdp4_stat.overlay_commit[pipe->mixer_num]++;
 
 	if (wait) {
+		mutex_unlock(&vctrl->mfd->dma->ov_mutex);
 		if (pipe->ov_blt_addr)
 			mdp4_lcdc_wait4ov(0);
 		else if (vctrl->base_pipe &&
@@ -334,6 +335,7 @@ int mdp4_lcdc_pipe_commit(int cndx, int wait)
 		else if (vctrl->base_pipe &&
 			(vctrl->base_pipe->mixer_num == MDP4_MIXER_NONE))
 			mdp4_lcdc_wait4vsync(0);
+		mutex_lock(&vctrl->mfd->dma->ov_mutex);
 	}
 
 	return cnt;

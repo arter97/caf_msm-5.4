@@ -415,8 +415,11 @@ int mdp4_dsi_cmd_pipe_commit(int cndx, int wait)
 
 	mdp4_stat.overlay_commit[pipe->mixer_num]++;
 
-	if (wait)
+	if (wait) {
+		mutex_unlock(&vctrl->mfd->dma->ov_mutex);
 		mdp4_dsi_cmd_wait4vsync(0);
+		mutex_lock(&vctrl->mfd->dma->ov_mutex);
+	}
 
 	return cnt;
 }
