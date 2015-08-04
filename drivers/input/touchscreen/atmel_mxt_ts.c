@@ -300,10 +300,11 @@ enum mxt_device_state { INIT, APPMODE, BOOTLOADER };
 #define MXT_DEBUGFS_DIR		"atmel_mxt_ts"
 #define MXT_DEBUGFS_FILE	"object"
 
-#define UH927_SLAVE_ADDR	0x0C
 #define UH928_SLAVE_ADDR	0x2C
 #define SX1509_SLAVE_ADDR	0x3E
 #define MXT_SLAVE_ADDR		0x5B
+
+#define	DISPLAY_NAME_LENGTH_MAX	16
 
 struct mxt_info {
 	u8 family_id;
@@ -360,7 +361,6 @@ struct mxt_data {
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	struct early_suspend early_suspend;
 #endif
-
 	u8 t7_data[T7_DATA_SIZE];
 	u16 t7_start_addr;
 	u32 keyarray_old;
@@ -377,6 +377,7 @@ struct mxt_data {
 	bool update_cfg;
 	const char *fw_name;
 	bool dev_on;
+	struct mxt_data_dba_aux *dba_aux;
 };
 
 static struct dentry *debug_base;
@@ -1051,17 +1052,7 @@ static int mxt_config_bit(struct i2c_client *client,
 static void mxt_clear_irq_s1509(struct i2c_client *client)
 {
 	client->addr = SX1509_SLAVE_ADDR;
-	mxt_write_byte(client, 0x19, 0xFF);
-	client->addr = MXT_SLAVE_ADDR;
-}
-
-static void mxt_clear_irq_uh927(struct i2c_client *client)
-{
-	u8 val = 0;
-
-	client->addr = UH927_SLAVE_ADDR;
-	mxt_read_byte(client, 0xC7, &val);
-	dev_dbg(&client->dev, "read uh927 isr %x\n", val);
+	mxt_write_byte(client, 0x19, 0xff);
 	client->addr = MXT_SLAVE_ADDR;
 }
 
@@ -1078,11 +1069,8 @@ static irqreturn_t mxt_interrupt(int irq, void *dev_id)
 		return IRQ_HANDLED;
 	}
 
-	if (data->pdata->no_regulator_support && data->pdata->no_reset_gpio) {
-		mxt_write_object(data, MXT_SPT_COMMSCONFIG_T18, 1, 0x03);
+	if (data->pdata->iox_support)
 		mxt_clear_irq_s1509(data->client);
-		mxt_clear_irq_uh927(data->client);
-	}
 
 	do {
 		if (mxt_read_message(data, &message)) {
@@ -1114,8 +1102,6 @@ static irqreturn_t mxt_interrupt(int irq, void *dev_id)
 	} while (reportid != 0xff);
 
 end:
-	if (data->pdata->no_regulator_support && data->pdata->no_reset_gpio)
-		mxt_write_object(data, MXT_SPT_COMMSCONFIG_T18, 1, 0x01);
 	return IRQ_HANDLED;
 }
 
@@ -1688,73 +1674,6 @@ static int mxt_reset_atmel(struct mxt_data *data)
 	return 0;
 }
 
-static int mxt_reconfig_fpdlink(struct mxt_data *data)
-{
-	int error = 0, i;
-	u8 val, addr_rw;
-	u8 addr[] = {0x03, 0x08, 0x07, 0x77, 0x70, 0x78, 0x71, 0xC6};
-	u8 val_array[] = {0xDA, 0x7C, 0x7C, 0xB6, 0xB6, 0xA0, 0xA0, 0x21};
-
-	data->client->addr = UH927_SLAVE_ADDR;
-
-	addr_rw = 0xF0;
-	error = mxt_read_byte(data->client, addr_rw, &val);
-	dev_dbg(&data->client->dev, "read 927 0x%2X = 0x%2X\n", addr_rw, val);
-	if (error) {
-		dev_err(&data->client->dev, "read 927 0x%2X failed\n", addr_rw);
-		return error;
-	}
-
-	addr_rw = 0x13;
-	error = mxt_read_byte(data->client, addr_rw, &val);
-	dev_dbg(&data->client->dev, "read 927 0x%2X = 0x%2X\n", addr_rw, val);
-	if (error) {
-		dev_err(&data->client->dev, "read 927 0x%2X failed\n", addr_rw);
-		return error;
-	}
-
-	val &= 0xDF;
-	error = mxt_write_byte(data->client, addr_rw, val);
-	dev_dbg(&data->client->dev, "write 927 0x%2X = 0x%2X\n", addr_rw, val);
-	if (error) {
-		dev_err(&data->client->dev,
-				"mxt reconfig writing 0x%2X failed\n", addr_rw);
-		return error;
-	}
-
-	val |= 0x40;
-	error = mxt_write_byte(data->client, addr_rw, val);
-	dev_dbg(&data->client->dev, "write 927 0x%2X = 0x%2X\n", addr_rw, val);
-	if (error) {
-		dev_err(&data->client->dev,
-				"mxt reconfig writing 0x%2X failed\n", addr_rw);
-		return error;
-	}
-
-	for (i = 0; i < 8; i++) {
-		error = mxt_write_byte(data->client, addr[i], val_array[i]);
-		dev_dbg(&data->client->dev,
-				"write 927 0x%2X = 0x%2X\n", addr[i],
-								val_array[i]);
-		if (error) {
-			dev_err(&data->client->dev,
-				"mxt reconfig writing 0x%2X failed\n", addr[i]);
-			return error;
-		}
-	}
-
-	addr_rw = 0x0C;
-	error = mxt_read_byte(data->client, addr_rw, &val);
-	dev_dbg(&data->client->dev, "read 927 0x%2X = 0x%2X\n", addr_rw, val);
-	if (error) {
-		dev_err(&data->client->dev, "read 927 0x%2X failed\n", addr_rw);
-		return error;
-	}
-
-	data->client->addr = MXT_SLAVE_ADDR;
-	return error;
-}
-
 static int mxt_uh928_config(struct mxt_data *data)
 {
 	int error;
@@ -1782,6 +1701,157 @@ static int mxt_uh928_config(struct mxt_data *data)
 
 	data->client->addr = MXT_SLAVE_ADDR;
 	return error;
+}
+
+static int mxt_config_dba_host(struct mxt_data *data)
+{
+	int error = 0;
+	int i;
+
+	error = data->dba_aux->ops.enable_remote_comm(data->dba_aux->handle,
+								true, 0x0);
+	if (error) {
+		dev_err(&data->client->dev, "failed to enable DBA remote\n");
+		return error;
+	}
+
+	error = data->dba_aux->ops.add_remote_device(data->dba_aux->handle,
+					(u32 *)&data->client->addr, 1, 0x0);
+	if (error) {
+		dev_err(&data->client->dev, "failed to add remote devices\n");
+		return error;
+	}
+
+	if (data->pdata->dba_host) {
+		for (i = 0; mxt_slave_addresses[i].application != 0;  i++) {
+			if (mxt_slave_addresses[i].application ==
+						data->client->addr) {
+				error =
+				data->dba_aux->ops.add_remote_device(
+				data->dba_aux->handle,
+				(u32 *)&mxt_slave_addresses[i].bootloader, 1,
+									0x0);
+				if (error) {
+					dev_err(&data->client->dev,
+					"failed to add remote devices\n");
+					return error;
+				}
+			}
+		}
+	}
+
+	if (data->pdata->iox_support) {
+		error =
+		data->dba_aux->ops.add_remote_device(data->dba_aux->handle,
+					(u32 *)&data->pdata->iox_slave_id,
+								1, 0x0);
+		if (error) {
+			dev_err(&data->client->dev,
+					"failed to add remote devices\n");
+			return error;
+		}
+	}
+
+
+
+	error = data->dba_aux->ops.interrupts_enable(data->dba_aux->handle,
+					true, MSM_DBA_CB_REMOTE_INT, 0x0);
+	if (error) {
+		dev_err(&data->client->dev,
+					"failed to enable remote interrupts\n");
+		return error;
+	}
+
+	return error;
+}
+
+static void mxt_interrupt_wrapper(void *data, enum msm_dba_callback_event e)
+{
+	mxt_interrupt(0, data);
+}
+
+static int mxt_config_dba_interface(struct mxt_data *data)
+{
+	int error;
+
+	error = mxt_config_dba_host(data);
+	if (error) {
+		dev_err(&data->client->dev,
+				"Failed to config DBA interface\n");
+		return error;
+	}
+
+	error = mxt_uh928_config(data);
+	if (error) {
+		dev_err(&data->client->dev,
+				"Failed to config deserializer\n");
+		return error;
+	}
+
+	if (data->pdata->iox_support) {
+		error = mxt_config_sx1509(data);
+		if (error) {
+			dev_err(&data->client->dev,
+				"Failed to config IO Expander\n");
+			return error;
+		}
+	}
+
+	error = mxt_reset_atmel(data);
+	if (error) {
+		dev_err(&data->client->dev, "Failed to reset atmel\n");
+		return error;
+	}
+
+	return 0;
+}
+
+static int mxt_dba_init(struct mxt_data *data, bool on)
+{
+	int rc = 0;
+
+	if (!on)
+		goto deinit;
+
+	data->pdata->dba_host->cb = mxt_interrupt_wrapper;
+	data->pdata->dba_host->cb_data = data;
+
+	data->dba_aux = devm_kzalloc(&data->client->dev,
+				sizeof(struct mxt_data_dba_aux), GFP_KERNEL);
+	if (!data->dba_aux) {
+		dev_err(&data->client->dev, "failed to get memory for DBA\n");
+		return -ENOMEM;
+	}
+
+	data->dba_aux->handle = msm_dba_register_client(data->pdata->dba_host,
+							&data->dba_aux->ops);
+	if (IS_ERR(data->dba_aux->handle)) {
+		rc = PTR_ERR(data->dba_aux->handle);
+		return rc;
+	}
+
+	rc = data->dba_aux->ops.power_on(data->dba_aux->handle, true, 0x0);
+	if (rc) {
+		dev_err(&data->client->dev, "failed to power on DBA host\n");
+		goto error_power_on;
+	}
+
+	data->dba_aux->mxt_info = data;
+
+	rc = mxt_config_dba_interface(data);
+	if (rc) {
+		dev_err(&data->client->dev, "failed to config DBA interface\n");
+		goto deinit;
+	}
+
+	return rc;
+
+deinit:
+	data->dba_aux->ops.power_on(data->dba_aux->handle, false, 0x0);
+error_power_on:
+	msm_dba_deregister_client(data->dba_aux->handle);
+
+	return rc;
 }
 
 static int mxt_initialize(struct mxt_data *data)
@@ -2562,7 +2632,8 @@ static int mxt_suspend(struct device *dev)
 		return error;
 	}
 
-	disable_irq(data->irq);
+	if (!data->pdata->dba_host)
+		disable_irq(data->irq);
 
 	mutex_lock(&input_dev->mutex);
 
@@ -2586,6 +2657,27 @@ static int mxt_suspend(struct device *dev)
 			dev_err(dev, "failed to enter low power mode\n");
 			return error;
 		}
+	} else {
+		if (!data->pdata->dba_host) {
+			data->dev_on = false;
+			return 0;
+		}
+
+		error =
+		data->dba_aux->ops.interrupts_enable(data->dba_aux->handle,
+					false, MSM_DBA_CB_REMOTE_INT, 0x0);
+		if (error) {
+			dev_err(&data->client->dev,
+						"failed to enable remote interrupts\n");
+			return error;
+		}
+
+		error = data->dba_aux->ops.power_on(data->dba_aux->handle,
+								false, 0x0);
+		if (error) {
+			dev_err(dev, "failed to power down device\n");
+			return error;
+		}
 	}
 
 	data->dev_on = false;
@@ -2605,22 +2697,33 @@ static int mxt_resume(struct device *dev)
 	}
 
 	if (data->pdata->no_regulator_support) {
-		if (data->pdata->no_reset_gpio) {
-			/* reconfig fpdlink as it may be reset during
-			 * suspend
-			 */
-			error = mxt_reconfig_fpdlink(data);
-			if (error) {
-				dev_err(&data->client->dev,
-						"failed to configure fpdlink\n");
-				enable_irq(data->irq);
+		if (data->pdata->dba_host) {
+			data->dba_aux->handle =
+				msm_dba_register_client(data->pdata->dba_host,
+							&data->dba_aux->ops);
+			if (IS_ERR(data->dba_aux->handle)) {
+				error = PTR_ERR(data->dba_aux->handle);
 				return error;
 			}
-			mxt_reset_delay(data);
-		}
-		enable_irq(data->irq);
-		data->dev_on = true;
 
+			error =
+			data->dba_aux->ops.power_on(data->dba_aux->handle,
+								true, 0x0);
+			if (error) {
+				dev_err(dev, "failed to power on device\n");
+				return error;
+			}
+
+			error = mxt_config_dba_interface(data);
+			if (error) {
+				dev_err(dev,
+					"failed to configure DBA interface\n");
+				return error;
+			}
+		} else
+			enable_irq(data->irq);
+
+		data->dev_on = true;
 		return error;
 	}
 
@@ -2676,16 +2779,31 @@ static int fb_notifier_callback(struct notifier_block *self,
 {
 	struct fb_event *evdata = data;
 	int *blank;
+	char display_name[DISPLAY_NAME_LENGTH_MAX];
 	struct mxt_data *mxt_dev_data =
 		container_of(self, struct mxt_data, fb_notif);
 
+	if (!mxt_dev_data || !evdata)
+		return 0;
+
+	mdpclient_msm_fb_get_id(evdata->info->node, display_name,
+						DISPLAY_NAME_LENGTH_MAX);
+	if (mxt_dev_data->pdata->attached_display_name &&
+		strcmp(display_name,
+				mxt_dev_data->pdata->attached_display_name)) {
+		dev_dbg(&mxt_dev_data->client->dev,
+						"event not for this touch\n");
+		return 0;
+	}
+
 	if (evdata && evdata->data && mxt_dev_data && mxt_dev_data->client) {
-		if (event == FB_EVENT_BLANK) {
-			blank = evdata->data;
+		blank = evdata->data;
+		if (event == FB_EARLY_EVENT_BLANK) {
+			if (*blank != FB_BLANK_UNBLANK)
+				mxt_suspend(&mxt_dev_data->client->dev);
+		} else if (event == FB_EVENT_BLANK) {
 			if (*blank == FB_BLANK_UNBLANK)
 				mxt_resume(&mxt_dev_data->client->dev);
-			else if (*blank == FB_BLANK_POWERDOWN)
-				mxt_suspend(&mxt_dev_data->client->dev);
 		}
 	}
 
@@ -2973,6 +3091,36 @@ static int mxt_parse_dt(struct device *dev, struct mxt_platform_data *pdata)
 }
 #endif
 
+#if defined(CONFIG_FB)
+static int mxt_pm_init(struct mxt_data *data)
+{
+	int error;
+
+	data->fb_notif.notifier_call = fb_notifier_callback;
+	error = fb_register_client(&data->fb_notif);
+	if (error)
+		dev_err(&data->client->dev,
+			"Unable to register fb_notifier: %d\n", error);
+	return error;
+}
+#elif defined(CONFIG_HAS_EARLYSUSPEND)
+static int mxt_pm_init(struct mxt_data *data)
+{
+	data->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN +
+							MXT_SUSPEND_LEVEL;
+	data->early_suspend.suspend = mxt_early_suspend;
+	data->early_suspend.resume = mxt_late_resume;
+	register_early_suspend(&data->early_suspend);
+
+	return 0;
+}
+#else
+static int mxt_pm_init(struct mxt_data *data)
+{
+	return 0;
+}
+#endif
+
 static void mxt_init_delay_work(struct work_struct *work)
 {
 	struct mxt_data *data = container_of(work,
@@ -2986,20 +3134,20 @@ static void mxt_init_delay_work(struct work_struct *work)
 		goto error_mxt_init;
 	}
 
-	error = request_threaded_irq(data->client->irq, NULL, mxt_interrupt,
-			data->pdata->irqflags, data->client->dev.driver->name,
-			data);
-	if (error) {
-		dev_err(&data->client->dev, "Failed to register interrupt\n");
-		goto error_request_irq;
+	if (!data->pdata->dba_host) {
+		error = request_threaded_irq(data->client->irq, NULL,
+				mxt_interrupt, data->pdata->irqflags,
+				data->client->dev.driver->name, data);
+		if (error) {
+			dev_err(&data->client->dev,
+					"Failed to register interrupt\n");
+			goto error_request_irq;
+		}
 	}
 
 	if (data->state == APPMODE) {
-		if (data->pdata->no_regulator_support &&
-			data->pdata->no_reset_gpio) {
-				mxt_clear_irq_s1509(data->client);
-				mxt_clear_irq_uh927(data->client);
-		}
+		if (data->pdata->iox_support)
+			mxt_clear_irq_s1509(data->client);
 
 		error = mxt_make_highchg(data);
 		if (error) {
@@ -3022,15 +3170,23 @@ static void mxt_init_delay_work(struct work_struct *work)
 
 	mxt_debugfs_init(data);
 
+	error = mxt_pm_init(data);
+	if (error)
+		goto error_pm_init;
+
 	return;
 
-error_create_sysfs:
+error_pm_init:
+	debugfs_remove_recursive(debug_base);
 	sysfs_remove_group(&data->client->dev.kobj, &mxt_attr_group);
-error_register_input_dev:
+error_create_sysfs:
 	input_unregister_device(data->input_dev);
+error_register_input_dev:
+	if (!data->pdata->dba_host)
+		free_irq(data->irq, data);
 error_request_irq:
-	free_irq(data->irq, data);
 error_mxt_init:
+	input_free_device(data->input_dev);
 	if (!data->pdata->no_regulator_support) {
 		if (data->pdata->power_on)
 			data->pdata->power_on(false);
@@ -3043,8 +3199,7 @@ error_mxt_init:
 			mxt_regulator_configure(data, false);
 	}
 
-	if (gpio_is_valid(data->pdata->reset_gpio)
-			&& !data->pdata->no_reset_gpio)
+	if (gpio_is_valid(data->pdata->reset_gpio))
 		gpio_free(data->pdata->reset_gpio);
 
 	if (gpio_is_valid(data->pdata->irq_gpio))
@@ -3054,6 +3209,101 @@ error_mxt_init:
 	kfree(data);
 
 	return;
+}
+
+static int mxt_platform_data_init(struct mxt_data *data, bool on)
+{
+	int error = 0;
+
+	if (!on)
+		goto err_reset_gpio_req;
+
+	if (data->pdata->init_hw)
+		error = data->pdata->init_hw(true);
+	else if (!data->pdata->no_regulator_support)
+		error = mxt_regulator_configure(data, true);
+	if (error) {
+		dev_err(&data->client->dev,
+			"Failed to intialize hardware\n");
+		return error;
+	}
+
+	if (data->pdata->power_on)
+		error = data->pdata->power_on(true);
+	else if (!data->pdata->no_regulator_support)
+		error = mxt_power_on(data, true);
+	if (error) {
+		dev_err(&data->client->dev, "Failed to power on hardware\n");
+		goto err_regulator_on;
+	}
+
+	if (gpio_is_valid(data->pdata->irq_gpio)) {
+		/* configure touchscreen irq gpio */
+		error = gpio_request(data->pdata->irq_gpio, "mxt_irq_gpio");
+		if (error) {
+			dev_err(&data->client->dev,
+				"unable to request gpio [%d]\n",
+				data->pdata->irq_gpio);
+			goto err_power_on;
+		}
+
+		error = gpio_direction_input(data->pdata->irq_gpio);
+		if (error) {
+			dev_err(&data->client->dev,
+				"unable to set direction for gpio [%d]\n",
+				data->pdata->irq_gpio);
+			goto err_irq_gpio_req;
+		}
+
+		data->irq = data->client->irq =
+					gpio_to_irq(data->pdata->irq_gpio);
+	} else {
+		dev_err(&data->client->dev, "irq gpio not provided\n");
+		goto err_power_on;
+	}
+
+	if (gpio_is_valid(data->pdata->reset_gpio)) {
+		/* configure touchscreen reset out gpio */
+		error = gpio_request(data->pdata->reset_gpio,
+						"mxt_reset_gpio");
+		if (error) {
+			dev_err(&data->client->dev,
+				"unable to request gpio [%d]\n",
+						data->pdata->reset_gpio);
+			goto err_irq_gpio_req;
+		}
+
+		error = gpio_direction_output(data->pdata->reset_gpio, 1);
+		if (error) {
+			dev_err(&data->client->dev,
+				"unable to set direction for gpio [%d]\n",
+				data->pdata->reset_gpio);
+			goto err_reset_gpio_req;
+		}
+	}
+
+	return 0;
+
+err_reset_gpio_req:
+	if (gpio_is_valid(data->pdata->reset_gpio))
+		gpio_free(data->pdata->reset_gpio);
+err_irq_gpio_req:
+	if (gpio_is_valid(data->pdata->irq_gpio))
+		gpio_free(data->pdata->irq_gpio);
+err_power_on:
+	if (data->pdata->power_on)
+		data->pdata->power_on(false);
+	else
+		mxt_power_on(data, false);
+err_regulator_on:
+	if (data->pdata->init_hw)
+		data->pdata->init_hw(false);
+	else {
+		if (!data->pdata->no_regulator_support)
+			mxt_regulator_configure(data, false);
+	}
+
+	return error;
 }
 
 static int __devinit mxt_probe(struct i2c_client *client,
@@ -3138,106 +3388,19 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	input_set_drvdata(input_dev, data);
 	i2c_set_clientdata(client, data);
 
-	if (pdata->init_hw)
-		error = pdata->init_hw(true);
-	else if (!pdata->no_regulator_support)
-		error = mxt_regulator_configure(data, true);
-	if (error) {
-		dev_err(&client->dev,
-			"Failed to intialize hardware\n");
-		goto err_free_mem;
-	}
-
-	if (pdata->power_on)
-		error = pdata->power_on(true);
-	else if (!pdata->no_regulator_support)
-		error = mxt_power_on(data, true);
-	if (error) {
-		dev_err(&client->dev, "Failed to power on hardware\n");
-		goto err_regulator_on;
-	}
-
-	if (gpio_is_valid(pdata->irq_gpio)) {
-		/* configure touchscreen irq gpio */
-		error = gpio_request(pdata->irq_gpio, "mxt_irq_gpio");
+	if (data->pdata->dba_host) {
+		error = mxt_dba_init(data, true);
 		if (error) {
-			dev_err(&client->dev, "unable to request gpio [%d]\n",
-						pdata->irq_gpio);
-			goto err_power_on;
+			dev_err(&client->dev, "Failed to init DBA\n");
+			goto err_free_mem;
 		}
-		error = gpio_direction_input(pdata->irq_gpio);
-		if (error) {
-			dev_err(&client->dev,
-				"unable to set direction for gpio [%d]\n",
-				pdata->irq_gpio);
-			goto err_irq_gpio_req;
-		}
-		data->irq = client->irq = gpio_to_irq(pdata->irq_gpio);
 	} else {
-		dev_err(&client->dev, "irq gpio not provided\n");
-		goto err_power_on;
-	}
-
-	if (gpio_is_valid(pdata->reset_gpio) &&
-			!pdata->no_reset_gpio) {
-		/* configure touchscreen reset out gpio */
-		error = gpio_request(pdata->reset_gpio, "mxt_reset_gpio");
+		error = mxt_platform_data_init(data, true);
 		if (error) {
-			dev_err(&client->dev, "unable to request gpio [%d]\n",
-						pdata->reset_gpio);
-			goto err_irq_gpio_req;
-		}
-
-		error = gpio_direction_output(pdata->reset_gpio, 1);
-		if (error) {
-			dev_err(&client->dev,
-				"unable to set direction for gpio [%d]\n",
-				pdata->reset_gpio);
-			goto err_reset_gpio_req;
+			dev_err(&client->dev, "Failed to init platform\n");
+			goto err_free_mem;
 		}
 	}
-
-	if (data->pdata->no_regulator_support && data->pdata->no_reset_gpio) {
-		error = mxt_reconfig_fpdlink(data);
-		if (error) {
-			dev_err(&client->dev, "Failed to reconfigu fpdlink\n");
-			goto err_irq_gpio_req;
-		}
-
-		error = mxt_config_sx1509(data);
-		if (error) {
-			dev_err(&data->client->dev, "failed to configure sx1509\n");
-			goto err_irq_gpio_req;
-		}
-
-		error = mxt_uh928_config(data);
-		if (error) {
-			dev_err(&client->dev, "Failed to config uh928\n");
-			goto err_irq_gpio_req;
-		}
-
-		error = mxt_reset_atmel(data);
-		if (error) {
-			dev_err(&client->dev, "Failed to reset atmel\n");
-			goto err_irq_gpio_req;
-		}
-	}
-
-#if defined(CONFIG_FB)
-	data->fb_notif.notifier_call = fb_notifier_callback;
-	error = fb_register_client(&data->fb_notif);
-	if (error) {
-		dev_err(&data->client->dev,
-			"Unable to register fb_notifier: %d\n", error);
-		goto err_irq_gpio_req;
-	}
-#elif defined(CONFIG_HAS_EARLYSUSPEND)
-	data->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN +
-							MXT_SUSPEND_LEVEL;
-	data->early_suspend.suspend = mxt_early_suspend;
-	data->early_suspend.resume = mxt_late_resume;
-	register_early_suspend(&data->early_suspend);
-#endif
 
 	schedule_delayed_work(&data->mxt_init_work, HZ/4);
 
@@ -3245,25 +3408,6 @@ static int __devinit mxt_probe(struct i2c_client *client,
 
 	return 0;
 
-err_reset_gpio_req:
-	if (gpio_is_valid(pdata->reset_gpio) &&
-				!data->pdata->no_reset_gpio)
-		gpio_free(pdata->reset_gpio);
-err_irq_gpio_req:
-	if (gpio_is_valid(pdata->irq_gpio))
-		gpio_free(pdata->irq_gpio);
-	if (pdata->no_regulator_support)
-		goto err_free_mem;
-err_power_on:
-	if (pdata->power_on)
-		pdata->power_on(false);
-	else
-		mxt_power_on(data, false);
-err_regulator_on:
-	if (pdata->init_hw)
-		pdata->init_hw(false);
-	else
-		mxt_regulator_configure(data, false);
 err_free_mem:
 	input_free_device(input_dev);
 	kfree(data);
@@ -3274,9 +3418,6 @@ static int __devexit mxt_remove(struct i2c_client *client)
 {
 	struct mxt_data *data = i2c_get_clientdata(client);
 
-	sysfs_remove_group(&client->dev.kobj, &mxt_attr_group);
-	free_irq(data->irq, data);
-	input_unregister_device(data->input_dev);
 #if defined(CONFIG_FB)
 	if (fb_unregister_client(&data->fb_notif))
 		dev_err(&client->dev,
@@ -3284,28 +3425,19 @@ static int __devexit mxt_remove(struct i2c_client *client)
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	unregister_early_suspend(&data->early_suspend);
 #endif
-
-	if (data->pdata->power_on)
-		data->pdata->power_on(false);
-	else if (data->pdata->no_regulator_support)
-		mxt_power_on(data, false);
-
-	if (data->pdata->init_hw)
-		data->pdata->init_hw(false);
-	else if (!data->pdata->no_regulator_support)
-		mxt_regulator_configure(data, false);
-
-	if (gpio_is_valid(data->pdata->reset_gpio)
-			&& !data->pdata->no_reset_gpio)
-		gpio_free(data->pdata->reset_gpio);
-
-	if (gpio_is_valid(data->pdata->irq_gpio))
-		gpio_free(data->pdata->irq_gpio);
+	debugfs_remove_recursive(debug_base);
+	sysfs_remove_group(&client->dev.kobj, &mxt_attr_group);
+	free_irq(data->irq, data);
+	input_unregister_device(data->input_dev);
+	input_free_device(data->input_dev);
+	if (data->pdata->dba_host)
+		mxt_dba_init(data, false);
+	else
+		mxt_platform_data_init(data, false);
 
 	kfree(data->object_table);
 	kfree(data);
 
-	debugfs_remove_recursive(debug_base);
 
 	return 0;
 }
@@ -3340,7 +3472,18 @@ static struct i2c_driver mxt_driver = {
 	.id_table	= mxt_id,
 };
 
-module_i2c_driver(mxt_driver);
+static int __init mxt_driver_init(void)
+{
+	return i2c_add_driver(&mxt_driver);
+}
+
+static void __exit mxt_driver_exit(void)
+{
+	return i2c_del_driver(&mxt_driver);
+}
+
+late_initcall(mxt_driver_init);
+module_exit(mxt_driver_exit);
 
 /* Module information */
 MODULE_AUTHOR("Joonyoung Shim <jy0922.shim@samsung.com>");
