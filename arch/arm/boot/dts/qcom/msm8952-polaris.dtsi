@@ -120,6 +120,10 @@
 	status = "disabled";
 };
 
+&i2c_5 {
+	status = "disabled";
+};
+
 &i2c_8 {
 	status = "disabled";
 };
@@ -148,4 +152,32 @@
 	qcom,nonremovable;
 
 	status = "ok";
+};
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&pmx_mdss {
+	qcom,num-grp-pins = <2>;
+	qcom,pins = <&gp 0>,<&gp 19>;
+};
+
+&pmx_mdss_te {
+	qcom,num-grp-pins = <1>;
+	qcom,pins = <&gp 24>;
+};
+
+&mdss_dsi0 {
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+	qcom,dsi-pref-prim-pan = <&dsi_byd_1200_vid>;
+	qcom,regulator-ldo-mode;
+	qcom,platform-enable-gpio = <&msm_gpio 19 0>;
+	qcom,platform-reset-gpio = <&msm_gpio 0 0>;
+};
+
+&dsi_byd_1200_vid {
+	qcom,cont-splash-enabled;
 };
