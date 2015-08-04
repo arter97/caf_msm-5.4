@@ -1406,7 +1406,7 @@ netdev_tx_t usbnet_start_xmit (struct sk_buff *skb,
 	case 0:
 		net->trans_start = jiffies;
 		__usbnet_queue_skb(&dev->txq, skb, tx_start);
-		if (dev->txq.qlen >= TX_QLEN (dev))
+		if (!enable_ipa_bridge && dev->txq.qlen >= TX_QLEN(dev))
 			netif_stop_queue (net);
 	}
 	spin_unlock_irqrestore (&dev->txq.lock, flags);
@@ -1508,7 +1508,7 @@ static void usbnet_bh (unsigned long param)
 			if (dev->rxq.qlen < RX_QLEN(dev))
 				queue_work(usbnet_wq, &dev->bh_w);
 		}
-		if (dev->txq.qlen < TX_QLEN (dev))
+		if (!enable_ipa_bridge && dev->txq.qlen < TX_QLEN(dev))
 			netif_wake_queue (dev->net);
 	}
 }
