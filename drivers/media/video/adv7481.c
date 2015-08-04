@@ -234,23 +234,27 @@ static int adv7481_set_irq(struct adv7481_state *state)
 	int ret = 0;
 
 	ret = adv7481_wr_byte(state->client, IO_REG_PAD_CTRL_1_ADDR,
-			IO_REG_PAD_CTRL_1_IRQ1_ON);
+			ADV_REG_SETFIELD(1, IO_PDN_INT2) |
+			ADV_REG_SETFIELD(1, IO_PDN_INT3) |
+			ADV_REG_SETFIELD(1, IO_INV_LLC) |
+			ADV_REG_SETFIELD(AD_MID_DRIVE_STRNGTH, IO_DRV_LLC_PAD));
 	ret |= adv7481_wr_byte(state->client, IO_REG_INT1_CONF_ADDR,
-			IO_REG_INT1_CONF_ACTIVE_UNTIL_CLEAR |
-			IO_REG_INT1_CONF_DRIVE_LOW);
+			ADV_REG_SETFIELD(AD_ACTIVE_UNTIL_CLR,
+				IO_INTRQ_DUR_SEL) |
+			ADV_REG_SETFIELD(AD_OP_DRIVE_LOW, IO_INTRQ_OP_SEL));
 	ret |= adv7481_wr_byte(state->client, IO_REG_INT2_CONF_ADDR,
-			IO_REG_INT2_CONF_CP_LOCK_UNLOCK);
-	ret |= adv7481_wr_byte(state->client, IO_REG_DATAPATH_INT1_MASK_ADDR,
-			IO_REG_DATAPATH_INT1_CP_LOCK |
-			IO_REG_DATAPATH_INT1_CP_UNLOCK |
-			IO_REG_DATAPATH_INT1_VMUTE |
-			IO_REG_DATAPATH_INT1_SDP);
+			ADV_REG_SETFIELD(1, IO_CP_LOCK_UNLOCK_EDGE_SEL));
+	ret |= adv7481_wr_byte(state->client, IO_REG_DATAPATH_INT_MASKB_ADDR,
+			ADV_REG_SETFIELD(1, IO_CP_LOCK_CP_MB1) |
+			ADV_REG_SETFIELD(1, IO_CP_UNLOCK_CP_MB1) |
+			ADV_REG_SETFIELD(1, IO_VMUTE_REQUEST_HDMI_MB1) |
+			ADV_REG_SETFIELD(1, IO_INT_SD_MB1));
 	/* Set hpa */
 	ret |= adv7481_wr_byte(state->client, IO_HDMI_LVL_INT_MASKB_3_ADDR,
 			ADV_REG_SETFIELD(1, IO_CABLE_DET_A_MB1));
 
 	if (ret)
-		pr_err("%s - failed %d to setup interrupt regs\n",
+		pr_err("%s: Failed %d to setup interrupt regs\n",
 				__func__, ret);
 	else
 		enable_irq(state->irq);
@@ -262,6 +266,7 @@ static int adv7481_set_edid(struct adv7481_state *state)
 {
 	int i;
 	int ret = 0;
+	uint8_t edid_state;
 
 	/* Enable Manual Control of EDID on Port A */
 	ret |= adv7481_wr_byte(state->i2c_rep, 0x74, 0x01);
@@ -269,6 +274,15 @@ static int adv7481_set_edid(struct adv7481_state *state)
 	ret |= adv7481_wr_byte(state->i2c_rep, 0x7A, 0x08);
 	/* Set Primary EDID Size to 256 Bytes */
 	ret |= adv7481_wr_byte(state->i2c_rep, 0x70, 0x20);
+
+	/*
+	 * Readback EDID enable state after a combination of manual
+	 * and automatic functions
+	 */
+	edid_state = adv7481_rd_byte(state->i2c_rep,
+					HDMI_REG_RO_EDID_DEBUG_2_ADDR);
+	pr_debug("%s: Readback EDID enable state: 0x%x\n", __func__,
+			edid_state);
 
 	for (i = 0; i < ADV7481_EDID_SIZE; i++) {
 		ret |= adv7481_wr_byte(state->i2c_edid, i,
@@ -301,10 +315,13 @@ static void adv7481_irq_delay_work(struct work_struct *work)
 	status = adv7481_rd_byte(state->client,
 			IO_REG_INT_RAW_STATUS_ADDR);
 
+	pr_debug("%s: dev: %d got int raw status: 0x%x\n", __func__,
+			state->device_num, status);
+
 	status = adv7481_rd_byte(state->client,
 			IO_REG_DATAPATH_INT_STATUS_ADDR);
 
-	pr_debug("%s, dev: %d got datapath int status: 0x%x\n", __func__,
+	pr_debug("%s: dev: %d got datapath int status: 0x%x\n", __func__,
 			state->device_num, status);
 
 	adv7481_wr_byte(state->client,
@@ -313,19 +330,36 @@ static void adv7481_irq_delay_work(struct work_struct *work)
 	status = adv7481_rd_byte(state->client,
 			IO_REG_DATAPATH_RAW_STATUS_ADDR);
 
-	pr_debug("%s, dev: %d got datapath rawstatus: 0x%x\n", __func__,
+	pr_debug("%s: dev: %d got datapath rawstatus: 0x%x\n", __func__,
 			state->device_num, status);
 
 	status = adv7481_rd_byte(state->client,
 			IO_HDMI_LVL_INT_STATUS_3_ADDR);
 
-	pr_debug("%s, dev: %d got hdmi lvl int status 3: 0x%x\n", __func__,
+	pr_debug("%s: dev: %d got hdmi lvl int status 3: 0x%x\n", __func__,
 			state->device_num, status);
 
 	adv7481_wr_byte(state->client,
 			IO_HDMI_LVL_INT_CLEAR_3_ADDR, status);
 
 	mutex_unlock(&state->mutex);
+}
+
+static int adv7481_cec_wakeup(struct adv7481_state *state, bool enable)
+{
+	int ret = 0;
+
+	if (enable) {
+		/* CEC wake up enabled in power-down mode */
+		ret = adv7481_wr_byte(state->client,
+					IO_REG_PWR_DN2_XTAL_HIGH_ADDR, 0xB6);
+	} else {
+		/* CEC wake up disabled in power-down mode */
+		ret = adv7481_wr_byte(state->client,
+					IO_REG_PWR_DN2_XTAL_HIGH_ADDR, 0x76);
+	}
+
+	return ret;
 }
 
 /* Initialize adv7481 I2C Settings */
@@ -342,9 +376,8 @@ static int adv7481_dev_init(struct adv7481_state *state,
 	/* Delay required following I2C reset and I2C transactions */
 	usleep(I2C_SW_RST_DELAY);
 
-	/* Power down controls */
-	ret |= adv7481_wr_byte(state->client,
-				IO_REG_PWR_DN2_XTAL_HIGH_ADDR, 0x76);
+	/* Disable CEC wake up in power-down mode */
+	ret |= adv7481_cec_wakeup(state, 0);
 	/* Setting Vid_Std to 720x480p60 */
 	ret |= adv7481_wr_byte(state->client,
 				IO_REG_CP_VID_STD_ADDR, 0x4A);
@@ -387,7 +420,7 @@ static int adv7481_dev_init(struct adv7481_state *state,
 	ret |= adv7481_wr_byte(state->client, IO_REG_CSI_TXA_ADDR,
 				IO_REG_CSI_TXA_SADDR);
 	if (ret) {
-		pr_err("%s - failed dev init %d\n", __func__, ret);
+		pr_err("%s: Failed dev init %d\n", __func__, ret);
 		goto  err_exit;
 	}
 
@@ -410,7 +443,7 @@ static int adv7481_dev_init(struct adv7481_state *state,
 	if (!state->i2c_csi_txa || !state->i2c_csi_txb || !state->i2c_cp ||
 		!state->i2c_sdp || !state->i2c_hdmi || !state->i2c_edid ||
 		!state->i2c_rep) {
-		pr_err("Additional I2C Client Fail\n");
+		pr_err("%s: Additional I2C Client Fail\n", __func__);
 		ret = -EFAULT;
 		goto err_exit;
 	}
@@ -428,10 +461,10 @@ err_exit:
 static int adv7481_hw_init(struct adv7481_platform_data *pdata,
 						struct adv7481_state *state)
 {
-	int ret;
+	int ret = 0;
 
 	if (!pdata) {
-		pr_err("PDATA is NULL\n");
+		pr_err("%s: PDATA is NULL\n", __func__);
 		return -EFAULT;
 	}
 
@@ -440,7 +473,7 @@ static int adv7481_hw_init(struct adv7481_platform_data *pdata,
 	if (gpio_is_valid(pdata->rstb_gpio)) {
 		ret = gpio_request(pdata->rstb_gpio, "rstb_gpio");
 		if (ret) {
-			pr_err("Request GPIO Fail\n");
+			pr_err("%s: Request GPIO Fail %d\n", __func__, ret);
 			goto err_exit;
 		}
 		ret = gpio_direction_output(pdata->rstb_gpio, 0);
@@ -448,7 +481,7 @@ static int adv7481_hw_init(struct adv7481_platform_data *pdata,
 		ret = gpio_direction_output(pdata->rstb_gpio, 1);
 		usleep(GPIO_HW_DELAY_HI);
 		if (ret) {
-			pr_err("Set GPIO Fail\n");
+			pr_err("%s: Set GPIO Fail %d\n", __func__, ret);
 			goto err_exit;
 		}
 	}
@@ -457,14 +490,14 @@ static int adv7481_hw_init(struct adv7481_platform_data *pdata,
 	if (gpio_is_valid(pdata->irq1_gpio)) {
 		ret = gpio_request(pdata->irq1_gpio, "irq_gpio");
 		if (ret) {
-			pr_err("%s : Failed to request irq_gpio %d\n",
+			pr_err("%s: Failed to request irq_gpio %d\n",
 					__func__, ret);
 			goto err_exit;
 		}
 
 		ret = gpio_direction_input(pdata->irq1_gpio);
 		if (ret) {
-			pr_err("%s : Failed gpio_direction irq %d\n",
+			pr_err("%s: Failed gpio_direction irq %d\n",
 					__func__, ret);
 			goto err_exit;
 		}
@@ -475,12 +508,12 @@ static int adv7481_hw_init(struct adv7481_platform_data *pdata,
 					IRQF_ONESHOT | IRQF_TRIGGER_FALLING,
 					DRIVER_NAME, state);
 			if (ret) {
-				pr_err("%s : Failed request_irq %d\n",
+				pr_err("%s: Failed request_irq %d\n",
 						__func__, ret);
 				goto err_exit;
 			}
 		} else {
-			pr_err("%s : Failed gpio_to_irq %d\n", __func__, ret);
+			pr_err("%s: Failed gpio_to_irq %d\n", __func__, ret);
 			ret = -EINVAL;
 			goto err_exit;
 		}
@@ -505,6 +538,7 @@ static int adv7481_s_ctrl(struct v4l2_ctrl *ctrl)
 	int temp = 0x0;
 	int ret = 0;
 
+	pr_debug("Enter %s: id = 0x%x\n", __func__, ctrl->id);
 	switch (ctrl->id) {
 	case V4L2_CID_BRIGHTNESS:
 		temp = adv7481_rd_byte(state->client, CP_REG_VID_ADJ);
@@ -554,6 +588,7 @@ static int adv7481_s_power(struct v4l2_subdev *sd, int on)
 	struct adv7481_state *state = to_state(sd);
 	int ret;
 
+	pr_debug("Enter %s\n", __func__);
 	ret = mutex_lock_interruptible(&state->mutex);
 	if (ret)
 		return -EBUSY;
@@ -615,7 +650,7 @@ static int adv7481_get_sd_timings(struct adv7481_state *state, int *sd_standard)
 	case AD_SECAM:
 		*sd_standard = V4L2_STD_SECAM;
 		break;
-	case AD_PAL_COMB:
+	case AD_PAL_COMB_N:
 		*sd_standard = V4L2_STD_PAL_Nc | V4L2_STD_PAL_N;
 		break;
 	case AD_SECAM_525:
@@ -633,6 +668,7 @@ static int adv7481_set_cvbs_mode(struct adv7481_state *state)
 	int ret;
 	uint8_t val;
 
+	pr_debug("Enter %s\n", __func__);
 	state->mode = ADV7481_IP_CVBS_1;
 	/* cvbs video settings ntsc etc */
 	ret = adv7481_wr_byte(state->client, 0x00, 0x30);
@@ -661,6 +697,7 @@ static int adv7481_set_hdmi_mode(struct adv7481_state *state)
 	int temp;
 	uint8_t val;
 
+	pr_debug("Enter %s\n", __func__);
 	state->mode = ADV7481_IP_HDMI;
 	/* Configure IO setting for HDMI in and
 	 * YUV 422 out via TxA CSI: 4-Lane
@@ -778,6 +815,7 @@ static int adv7481_set_ip_mode(struct adv7481_state *state, int input)
 {
 	int ret = 0;
 
+	pr_debug("Enter %s: input: %d\n", __func__, input);
 	switch (input) {
 	case ADV7481_IP_HDMI:
 		ret = adv7481_set_hdmi_mode(state);
@@ -818,6 +856,7 @@ static int adv7481_set_op_src(struct adv7481_state *state,
 	int temp = 0;
 	int val = 0;
 
+	pr_debug("Enter %s: output: %d, input: %d\n", __func__, output, input);
 	switch (output) {
 	case ADV7481_OP_CSIA:
 		switch (input) {
@@ -840,6 +879,7 @@ static int adv7481_set_op_src(struct adv7481_state *state,
 		case ADV7481_IP_CVBS_7_HDMI_SIM:
 		case ADV7481_IP_CVBS_8_HDMI_SIM:
 		case ADV7481_IP_HDMI:
+			ret = adv7481_cec_wakeup(state, 1);
 			val = 0x00;
 			break;
 		case ADV7481_IP_TTL:
@@ -915,16 +955,18 @@ static int adv7481_s_routing(struct v4l2_subdev *sd, u32 input,
 	if (ret)
 		return ret;
 
+	pr_debug("Enter %s\n", __func__);
 	ret = adv7481_set_op_src(state, output, adv_input);
 	if (ret) {
-		pr_err("Output SRC Routing Error: %d\n", ret);
+		pr_err("%s: Output SRC Routing Error: %d\n", __func__, ret);
 		goto unlock_exit;
 	}
 
 	if (state->mode != adv_input) {
 		ret = adv7481_set_ip_mode(state, adv_input);
 		if (ret)
-			pr_err("Set input mode failed: %d\n", ret);
+			pr_err("%s: Set input mode failed: %d\n",
+				__func__, ret);
 		else
 			state->mode = adv_input;
 	}
@@ -945,6 +987,7 @@ static int adv7481_get_hdmi_timings(struct adv7481_state *state,
 	int fieldfactor = 0;
 	uint32_t count = 0;
 
+	pr_debug("Enter %s\n", __func__);
 	/* Check TMDS PLL Lock and Frequency */
 	temp1 = adv7481_rd_byte(state->i2c_hdmi, HDMI_REG_HDMI_PARAM4_ADDR);
 	hdmi_params->pll_lock = ADV_REG_GETFIELD(temp1,
@@ -963,6 +1006,7 @@ static int adv7481_get_hdmi_timings(struct adv7481_state *state,
 		hdmi_params->tmds_freq += ADV_REG_GETFIELD(temp2,
 				HDMI_REG_TMDS_FREQ_FRAC)*ONE_MHZ_TO_HZ/128;
 	} else {
+		pr_err("%s: PLL not locked return EBUSY\n", __func__);
 		return -EBUSY;
 	}
 
@@ -1077,13 +1121,16 @@ static int adv7481_get_hdmi_timings(struct adv7481_state *state,
 	}
 
 	if ((vid_params->tot_pix != 0) && (vid_params->tot_lines != 0)) {
-		vid_params->fr_rate = vid_params->pix_clk * fieldfactor
-						/ vid_params->tot_lines;
-		vid_params->fr_rate /= vid_params->tot_pix;
-		vid_params->fr_rate /= (hdmi_params->pix_rep + 1);
+		vid_params->fr_rate =
+			DIV_ROUND_CLOSEST(vid_params->pix_clk * fieldfactor,
+				vid_params->tot_lines);
+		vid_params->fr_rate = DIV_ROUND_CLOSEST(vid_params->fr_rate,
+						vid_params->tot_pix);
+		vid_params->fr_rate = DIV_ROUND_CLOSEST(vid_params->fr_rate,
+						(hdmi_params->pix_rep + 1));
 	}
 
-	pr_debug("%s(%d), adv7481 TMDS Resolution: %d x %d @ %d\n",
+	pr_debug("%s(%d), adv7481 TMDS Resolution: %d x %d @ %d fps\n",
 			__func__, __LINE__,
 			vid_params->act_pix, vid_params->act_lines,
 			vid_params->fr_rate);
@@ -1102,6 +1149,7 @@ static int adv7481_query_dv_timings(struct v4l2_subdev *sd,
 	if (!timings)
 		return -EINVAL;
 
+	pr_debug("Enter %s\n", __func__);
 	ret = mutex_lock_interruptible(&state->mutex);
 	if (ret)
 		return ret;
@@ -1137,6 +1185,7 @@ static int adv7481_query_sd_std(struct v4l2_subdev *sd, v4l2_std_id *std)
 	struct adv7481_state *state = to_state(sd);
 	uint8_t tStatus = 0x0;
 
+	pr_debug("Enter %s\n", __func__);
 	tStatus = adv7481_rd_byte(state->i2c_sdp, SDP_RO_MAIN_STATUS1_ADDR);
 	if (!ADV_REG_GETFIELD(tStatus, SDP_RO_MAIN_IN_LOCK))
 		pr_err("%s(%d), adv7481 SD Input NOT Locked: 0x%x\n",
@@ -1179,6 +1228,8 @@ static int adv7481_query_sd_std(struct v4l2_subdev *sd, v4l2_std_id *std)
 static int adv7481_g_frame_interval(struct v4l2_subdev *sd,
 				struct v4l2_subdev_frame_interval *interval)
 {
+	pr_debug("Enter %s\n", __func__);
+
 	interval->interval.numerator = 1;
 	interval->interval.denominator = 60;
 
@@ -1196,6 +1247,7 @@ static int adv7481_g_mbus_fmt(struct v4l2_subdev *sd,
 	if (!fmt)
 		return -EINVAL;
 
+	pr_debug("Enter %s\n", __func__);
 	ret = mutex_lock_interruptible(&state->mutex);
 	if (ret)
 		return ret;
@@ -1321,14 +1373,14 @@ static int adv7481_csi_powerup(struct adv7481_state *state,
 		csi_map = state->i2c_csi_txa;
 	}
 
+	/* Enable Tx A/B CSI #-lane */
+	ret = adv7481_wr_byte(state->client,
+			IO_REG_CSI_PIX_EN_SEL_ADDR, csi_sel);
 	/* TXA MIPI lane settings for CSI */
 	/* CSI TxA: # Lane : Power Off */
 	val = ADV_REG_SETFIELD(1, CSI_CTRL_TX_PWRDN) |
 			ADV_REG_SETFIELD(state->tx_lanes, CSI_CTRL_NUM_LANES);
-	ret = adv7481_wr_byte(csi_map, CSI_REG_TX_CFG1_ADDR, val);
-	/* Enable Tx A/B CSI #-lane */
-	ret |= adv7481_wr_byte(state->client,
-			IO_REG_CSI_PIX_EN_SEL_ADDR, csi_sel);
+	ret |= adv7481_wr_byte(csi_map, CSI_REG_TX_CFG1_ADDR, val);
 	/* CSI TxA: Auto D-PHY Timing */
 	val |= ADV_REG_SETFIELD(1, CSI_CTRL_AUTO_PARAMS);
 	ret |= adv7481_wr_byte(csi_map, CSI_REG_TX_CFG1_ADDR, val);
@@ -1370,6 +1422,8 @@ static int adv7481_set_op_stream(struct adv7481_state *state, bool on)
 {
 	int ret = 0;
 
+	pr_debug("Enter %s: on: %d, a src: %d, b src: %d\n",
+			__func__, on, state->csia_src, state->csib_src);
 	if (on && state->csia_src != ADV7481_IP_NONE)
 		if (ADV7481_IP_HDMI == state->csia_src) {
 			state->tx_lanes = ADV7481_MIPI_2LANE;
@@ -1418,7 +1472,7 @@ static int adv7481_g_input_status(struct v4l2_subdev *sd, u32 *status)
 	uint32_t count = 0;
 
 	pr_debug("Enter %s\n", __func__);
-	if (ADV7481_IP_HDMI == state->csia_src) {
+	if (ADV7481_IP_HDMI == state->mode) {
 		/*
 		 * Check Timing Lock IO Map Status3:0x71[0] &&
 		 * 0x71[1] && 0x71[7]
