@@ -16,6 +16,7 @@
 #define __LINUX_ATMEL_MXT_TS_H
 
 #include <linux/types.h>
+#include <video/msm_dba.h>
 
 /* Orient */
 #define MXT_NORMAL		0x0
@@ -53,6 +54,7 @@ struct mxt_config_info {
 /* The platform data for the Atmel maXTouch touchscreen driver */
 struct mxt_platform_data {
 	const struct mxt_config_info *config_array;
+	const char *attached_display_name;
 	size_t config_array_size;
 
 	/* touch panel's minimum and maximum coordinates */
@@ -70,7 +72,6 @@ struct mxt_platform_data {
 	unsigned long irqflags;
 	bool	i2c_pull_up;
 	bool no_regulator_support;
-	bool no_reset_gpio;
 	bool use_abs_reportid;
 	bool	digital_pwr_regulator;
 	int reset_gpio;
@@ -82,6 +83,21 @@ struct mxt_platform_data {
 	u8(*read_chg) (void);
 	int (*init_hw) (bool);
 	int (*power_on) (bool);
+
+	bool iox_support;
+	int iox_slave_id;
+	struct msm_dba_reg_info *dba_host;
 };
+
+/* auxilary data to handle display abstraction layer */
+struct mxt_data_dba_aux {
+	void *handle;
+	struct msm_dba_ops ops;
+	void *mxt_info;
+};
+
+#if defined(CONFIG_FB)
+extern int mdpclient_msm_fb_get_id(int idx, char *buf, int len);
+#endif
 
 #endif /* __LINUX_ATMEL_MXT_TS_H */
