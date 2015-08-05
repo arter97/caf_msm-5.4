@@ -29,7 +29,7 @@
 #else
 #define CDBG(fmt, args...) do { } while (0)
 #endif
-
+#define VFE40_BURST_LEN_8916_VERSION 3
 /* STATS_SIZE (BE + BG + BF+ RS + CS + IHIST + BHIST ) = 392 */
 #define VFE40_STATS_SIZE 392
 #define VFE40_WM_BASE(idx) (0x6C + 0x24 * idx)
@@ -1090,7 +1090,8 @@ static void msm_vfe40_axi_cfg_wm_reg(
 	uint32_t burst_len = axi_data->burst_len;
 
 	uint32_t wm_base = VFE40_WM_BASE(stream_info->wm[plane_idx]);
-
+	if (vfe_dev->vfe_hw_version == VFE40_8916_VERSION)
+		burst_len = VFE40_BURST_LEN_8916_VERSION;
 	if (!stream_info->frame_based) {
 		msm_camera_io_w(0x0, vfe_dev->vfe_base + wm_base);
 		/*WR_IMAGE_SIZE*/
