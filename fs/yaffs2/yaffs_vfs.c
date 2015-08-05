@@ -1144,7 +1144,7 @@ static void yaffs_mark_sb_dirty(struct super_block *sb)
 	spin_lock(&lc->work_lock);
 	if (!lc->sb_dirty) {
 		delay = msecs_to_jiffies(dirty_writeback_interval * 10);
-		queue_delayed_work(system_long_wq, &lc->sync_work, delay);
+		queue_delayed_work(system_freezable_wq, &lc->sync_work, delay);
 		lc->sb_dirty = true;
 	}
 	spin_unlock(&lc->work_lock);
