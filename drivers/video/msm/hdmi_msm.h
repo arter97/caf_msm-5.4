@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,6 +15,9 @@
 
 #include <mach/msm_iomap.h>
 #include "external_common.h"
+
+#define HDMI_RESOLUTION_DEFAULT HDMI_VFRMT_1280x800p60_16_9
+
 /* #define PORT_DEBUG */
 
 #ifdef PORT_DEBUG

@@ -32,8 +32,6 @@
 #include "msm_fb.h"
 #include "hdmi_msm.h"
 
-#define HDMI_RESOLUTION_DEFAULT HDMI_VFRMT_1280x800p60_16_9;
-
 /* Supported HDMI Audio channels */
 #define MSM_HDMI_AUDIO_CHANNEL_2		0
 #define MSM_HDMI_AUDIO_CHANNEL_4		1
