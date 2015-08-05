@@ -1940,7 +1940,7 @@ err_media_entity_cleanup:
 err_free_ctrl:
 	adv7180_exit_controls(state);
 err_free_irq:
-	if (state->irq)
+	if (state->irq > 0)
 		free_irq(client->irq, state);
 err_unregister_vpp_client:
 	if (state->chip_info->flags & ADV7180_FLAG_I2P)

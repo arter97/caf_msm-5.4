@@ -6313,7 +6313,11 @@ int msm_axi_subdev_init_rdi_only(struct v4l2_subdev *sd,
 		__func__, cam_server_domain_num);
 
 	camera_domain = msm_get_iommu_domain(cam_server_domain_num);
-	pr_debug("%s cam domain %p", __func__, camera_domain);
+	if (!camera_domain) {
+		pr_err("%s: failed to get camera_domain", __func__);
+		rc = -ENODEV;
+		goto device_imgwr_attach_failed;
+	}
 
 	rc = iommu_attach_device(camera_domain, axi_ctrl->iommu_ctx_imgwr);
 	if (rc < 0) {
@@ -6598,8 +6602,12 @@ void msm_axi_subdev_release_rdi_only(struct v4l2_subdev *sd,
 	pr_debug("%s: cam_server_domain_num %d\n",
 		__func__, cam_server_domain_num);
 	camera_domain = msm_get_iommu_domain(cam_server_domain_num);
-	iommu_detach_device(camera_domain, axi_ctrl->iommu_ctx_misc);
-	iommu_detach_device(camera_domain, axi_ctrl->iommu_ctx_imgwr);
+	if (camera_domain) {
+		iommu_detach_device(camera_domain, axi_ctrl->iommu_ctx_misc);
+		iommu_detach_device(camera_domain, axi_ctrl->iommu_ctx_imgwr);
+	} else {
+		pr_err("%s: failed to get camera_domain!", __func__);
+	}
 #endif
 
 	msm_cam_clk_enable(&axi_ctrl->pdev->dev, vfe32_clk_info,
