@@ -345,6 +345,14 @@ static struct lsm330_acc_platform_data default_lsm330_acc_pdata = {
 	.min_interval = LSM330_ACC_MIN_POLL_PERIOD_MS,
 	.gpio_int1 = LSM330_ACC_DEFAULT_INT1_GPIO,
 	.gpio_int2 = LSM330_ACC_DEFAULT_INT2_GPIO,
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	/*
+		max_buffer_time - buffer sensor samples upto 10 seconds
+		report_evt_cnt - 5events(X,Y,Z,TS(sec),TS(Nsec))
+	 */
+	.max_buffer_time = 10,
+	.report_evt_cnt = 5,
+#endif
 };
 
 static int int1_gpio = LSM330_ACC_DEFAULT_INT1_GPIO;
@@ -353,6 +361,13 @@ module_param(int1_gpio, int, S_IRUGO);
 module_param(int2_gpio, int, S_IRUGO);
 MODULE_PARM_DESC(int1_gpio, "integer: gpio number being assined to interrupt PIN1");
 MODULE_PARM_DESC(int2_gpio, "integer: gpio number being assined to interrupt PIN2");
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+struct lsm330_sample {
+	int xyz[3];
+	unsigned int tsec;
+	unsigned long long tnsec;
+};
+#endif
 
 struct lsm330_acc_data {
 	struct i2c_client *client;
@@ -400,6 +415,14 @@ struct lsm330_acc_data {
 	struct task_struct *acc_task;
 	wait_queue_head_t acc_wq;
 	ktime_t timestamp;
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	struct input_dev *accbuf_dev;
+	struct kmem_cache *lsm330_cachepool;
+	struct lsm330_sample *lsm330_samplelist[LSM330_MAXSAMPLE];
+	int bufsample_cnt;
+	bool buffer_lsm330_samples;
+	bool report_at_pollrate;
+#endif
 #ifdef DEBUG
 	u8 reg_addr;
 #endif
@@ -422,6 +445,9 @@ static struct sensors_classdev lsm330_acc_cdev = {
 	.enabled = 0,
 	.sensors_enable = NULL,
 	.sensors_poll_delay = NULL,
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	.read_boot_samples = NULL;
+#endif
 };
 
 static int acc_poll_thread(void *data);
@@ -469,6 +495,51 @@ static void lsm330_acc_drdyint(struct lsm330_acc_data *acc)
 		dev_err(&acc->client->dev, "lsm330_acc_set_drdyint fail\n");
 
 }
+
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+/*Report buffered data to userspace*/
+static int lsm330_cdev_bootsampl(struct sensors_classdev *sensors_cdev,
+					unsigned int enable_read)
+{
+	int i = 0;
+	struct lsm330_acc_data *stat = container_of(sensors_cdev,
+					struct lsm330_acc_data, accel_cdev);
+
+	if (enable_read) {
+		stat->buffer_lsm330_samples = false;
+
+		for (i = 0; i < stat->bufsample_cnt; i++) {
+			input_report_abs(stat->accbuf_dev, ABS_X,
+			stat->lsm330_samplelist[i]->xyz[0]);
+			input_report_abs(stat->accbuf_dev, ABS_Y,
+			stat->lsm330_samplelist[i]->xyz[1]);
+			input_report_abs(stat->accbuf_dev, ABS_Z,
+			stat->lsm330_samplelist[i]->xyz[2]);
+			/*Report time stamp*/
+			input_event(stat->accbuf_dev, EV_SYN, SYN_TIME_SEC,
+					stat->lsm330_samplelist[i]->tsec);
+			input_event(stat->accbuf_dev, EV_SYN, SYN_TIME_NSEC,
+					stat->lsm330_samplelist[i]->tnsec);
+			input_sync(stat->accbuf_dev);
+		}
+	} else {
+		/* clean up */
+		if (0 != stat->bufsample_cnt) {
+			for (i = 0; i < LSM330_MAXSAMPLE; i++)
+				kmem_cache_free(stat->lsm330_cachepool,
+				stat->lsm330_samplelist[i]);
+			kmem_cache_destroy(stat->lsm330_cachepool);
+			stat->bufsample_cnt = 0;
+		}
+
+	}
+	/*SYN_CONFIG indicates end of data*/
+	input_event(stat->accbuf_dev, EV_SYN, SYN_CONFIG, 0xFFFFFFFF);
+	input_sync(stat->accbuf_dev);
+
+	return 0;
+}
+#endif
 
 /* sets default init values to be written in registers at probe stage */
 static void lsm330_acc_set_init_register_values(struct lsm330_acc_data *acc)
@@ -1291,7 +1362,11 @@ static void lsm330_acc_report_values(struct lsm330_acc_data *acc,
 
 static void lsm330_acc_polling_manage(struct lsm330_acc_data *acc)
 {
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	if ((acc->enable_polling) || acc->buffer_lsm330_samples) {
+#else
 	if ((acc->enable_polling)) {
+#endif
 		if (atomic_read(&acc->enabled)) {
 				hrtimer_start(&acc->hr_timer_acc,
 					acc->ktime_acc, HRTIMER_MODE_REL);
@@ -1506,6 +1581,10 @@ static ssize_t attr_set_enable(struct device *dev,
 
 	if (strict_strtoul(buf, 10, &val))
 		return -EINVAL;
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	if (true == acc->buffer_lsm330_samples)
+		return 0;
+#endif
 
 	if (val)
 		lsm330_acc_enable(acc);
@@ -1734,12 +1813,22 @@ int lsm330_acc_input_open(struct input_dev *input)
 {
 	struct lsm330_acc_data *acc = input_get_drvdata(input);
 
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	if (true == acc->buffer_lsm330_samples)
+		return 0;
+#endif
+
 	return lsm330_acc_enable(acc);
 }
 
 void lsm330_acc_input_close(struct input_dev *dev)
 {
 	struct lsm330_acc_data *acc = input_get_drvdata(dev);
+
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	if (true == acc->buffer_lsm330_samples)
+		return;
+#endif
 
 	lsm330_acc_disable(acc);
 }
@@ -1787,10 +1876,28 @@ static int lsm330_acc_input_init(struct lsm330_acc_data *acc)
 		goto err0;
 	}
 
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	acc->accbuf_dev = input_allocate_device();
+	if (!acc->accbuf_dev) {
+		err = -ENOMEM;
+		dev_err(&acc->client->dev, "input device allocation failed\n");
+		goto err0;
+	}
+	acc->accbuf_dev->name = LSM330_ACCBUF_DEV_NAME;
+	acc->accbuf_dev->id.bustype = BUS_I2C;
+	acc->accbuf_dev->dev.parent = &acc->client->dev;
+	input_set_events_per_packet(acc->accbuf_dev,
+				acc->pdata->report_evt_cnt * LSM330_MAXSAMPLE);
+	input_set_drvdata(acc->accbuf_dev, acc);
+	set_bit(EV_ABS, acc->accbuf_dev->evbit);
+	input_set_abs_params(acc->accbuf_dev, ABS_X, -G_MAX, G_MAX, 0, 0);
+	input_set_abs_params(acc->accbuf_dev, ABS_Y, -G_MAX, G_MAX, 0, 0);
+	input_set_abs_params(acc->accbuf_dev, ABS_Z, -G_MAX, G_MAX, 0, 0);
+#endif
+
 	acc->input_dev->open = lsm330_acc_input_open;
 	acc->input_dev->close = lsm330_acc_input_close;
 	acc->input_dev->name = LSM330_ACC_DEV_NAME;
-
 	acc->input_dev->id.bustype = BUS_I2C;
 	acc->input_dev->dev.parent = &acc->client->dev;
 
@@ -1818,8 +1925,22 @@ static int lsm330_acc_input_init(struct lsm330_acc_data *acc)
 		goto err1;
 	}
 
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	err = input_register_device(acc->accbuf_dev);
+	if (err) {
+		dev_err(&acc->client->dev,
+			"unable to register input device %s\n",
+		acc->accbuf_dev->name);
+		goto err2;
+	}
+#endif
+
 	return 0;
 
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+err2:
+	input_free_device(acc->accbuf_dev);
+#endif
 err1:
 	input_free_device(acc->input_dev);
 err0:
@@ -1830,6 +1951,10 @@ static void lsm330_acc_input_cleanup(struct lsm330_acc_data *acc)
 {
 	input_unregister_device(acc->input_dev);
 	input_free_device(acc->input_dev);
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	input_unregister_device(acc->accbuf_dev);
+	input_free_device(acc->accbuf_dev);
+#endif
 }
 
 static int lsm330_cdev_enable(struct sensors_classdev *sensors_cdev,
@@ -1842,6 +1967,11 @@ static int lsm330_cdev_enable(struct sensors_classdev *sensors_cdev,
 	dev_dbg(&stat->client->dev,
 				"enable %u client_data->enable %u\n",
 				enable, atomic_read(&stat->enabled));
+
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	if (true == stat->buffer_lsm330_samples)
+		return 0;
+#endif
 
 	mutex_lock(&stat->lock);
 	if (enable)
@@ -1866,6 +1996,14 @@ static int lsm330_cdev_poll_delay(struct sensors_classdev *sensors_cdev,
 
 	dev_dbg(&stat->client->dev, "%s sample_rate %u\n",
 					__func__, interval_ms);
+
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	if (true == stat->buffer_lsm330_samples) {
+		stat->ktime_acc = ktime_set(interval_ms / 1000,
+					MS_TO_NS(interval_ms % 1000));
+		return 0;
+	}
+#endif
 
 	mutex_lock(&stat->lock);
 	if (atomic_read(&stat->enabled)) {
@@ -2047,6 +2185,31 @@ static int lsm330_acc_power_off(struct i2c_client *client)
 	return ret;
 }
 
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+/*Store boot time sensor sample*/
+static void store_boot_sample(struct lsm330_acc_data *stat, int *xyz)
+{
+	if (false == stat->buffer_lsm330_samples)
+		return;
+
+	if (ktime_to_timespec(stat->timestamp).tv_sec >=
+					stat->pdata->max_buffer_time)
+		stat->buffer_lsm330_samples = false;
+
+	if (stat->bufsample_cnt < LSM330_MAXSAMPLE) {
+		memcpy(stat->lsm330_samplelist[stat->bufsample_cnt]->xyz, xyz,
+		sizeof(stat->lsm330_samplelist[stat->bufsample_cnt]->xyz));
+		stat->lsm330_samplelist[stat->bufsample_cnt]->tsec =
+				ktime_to_timespec(stat->timestamp).tv_sec;
+		stat->lsm330_samplelist[stat->bufsample_cnt++]->tnsec =
+				ktime_to_timespec(stat->timestamp).tv_nsec;
+	}
+}
+#else
+static void store_boot_sample(struct lsm330_acc_data *stat, int *xyz)
+{
+}
+#endif
 
 static int acc_poll_thread(void *data)
 {
@@ -2063,6 +2226,11 @@ static int acc_poll_thread(void *data)
 
 		if (kthread_should_stop())
 			break;
+
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+		if (false == acc->buffer_lsm330_samples)
+			acc->report_at_pollrate = true;
+#endif
 
 		mutex_lock(&acc->lock);
 		if (acc->acc_delay_change) {
@@ -2082,6 +2250,7 @@ static int acc_poll_thread(void *data)
 				lsm330_acc_report_values(acc, xyz);
 			dev_dbg(&acc->client->dev, "using the poll option\n");
 		} else {
+
 			int err = -1;
 			u8 rbuf[2];
 
@@ -2098,8 +2267,18 @@ static int acc_poll_thread(void *data)
 				if (err < 0)
 					dev_err(&acc->client->dev,
 						"get_accelerometer_data failed\n");
-				else
+				else {
+					store_boot_sample(acc, xyz);
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+					if (acc->report_at_pollrate) {
+						acc->report_at_pollrate = false;
+						lsm330_acc_report_values(acc,
+									xyz);
+					}
+#else
 					lsm330_acc_report_values(acc, xyz);
+#endif
+				}
 			} else {
 				enable_irq(acc->irq1);
 			}
@@ -2118,9 +2297,19 @@ enum hrtimer_restart poll_function_read_acc(struct hrtimer *timer)
 
 	lsm330_acc_polling_manage(acc);
 
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	acc->report_at_pollrate = true;
+
+	if (true == acc->buffer_lsm330_samples)
+		goto exit;
+#endif
+
 	acc->acc_wkp_flag = 1;
 	wake_up_interruptible(&acc->acc_wq);
 
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+exit:
+#endif
 	return HRTIMER_NORESTART;
 }
 
@@ -2129,6 +2318,9 @@ static int lsm330_acc_probe(struct i2c_client *client,
 {
 
 	struct lsm330_acc_data *acc;
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	int i;
+#endif
 
 	u32 smbus_func = I2C_FUNC_SMBUS_BYTE_DATA |
 			I2C_FUNC_SMBUS_WORD_DATA | I2C_FUNC_SMBUS_I2C_BLOCK ;
@@ -2171,6 +2363,25 @@ static int lsm330_acc_probe(struct i2c_client *client,
 
 	mutex_init(&acc->lock);
 	mutex_lock(&acc->lock);
+
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	acc->lsm330_cachepool = kmem_cache_create("sensor_sample",
+						sizeof(struct lsm330_sample),
+						0,
+						SLAB_HWCACHE_ALIGN, NULL);
+	for (i = 0; i < LSM330_MAXSAMPLE; i++) {
+		acc->lsm330_samplelist[i] =
+				 kmem_cache_alloc(acc->lsm330_cachepool,
+						GFP_KERNEL);
+		if (!acc->lsm330_samplelist[i])	{
+			err = -ENOMEM;
+			dev_err(&client->dev,
+				"slab:memory allocation failed: "
+				"%d\n", err);
+			goto exit_check_functionality_failed;
+		}
+	}
+#endif
 
 	acc->client = client;
 	i2c_set_clientdata(client, acc);
@@ -2339,6 +2550,9 @@ static int lsm330_acc_probe(struct i2c_client *client,
 	acc->accel_cdev.fifo_max_event_count = 0;
 	acc->accel_cdev.sensors_set_latency = lsm330_cdev_set_latency;
 	acc->accel_cdev.sensors_flush = lsm330_cdev_flush;
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	acc->accel_cdev.read_boot_samples = lsm330_cdev_bootsampl;
+#endif
 
 	err = sensors_classdev_register(&client->dev, &acc->accel_cdev);
 	if (err) {
@@ -2347,6 +2561,14 @@ static int lsm330_acc_probe(struct i2c_client *client,
 		err = -EINVAL;
 		goto err_destoyworkqueue2;
 	}
+
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	lsm330_acc_device_power_on(acc);
+	atomic_set(&acc->enabled, 1);
+	acc->buffer_lsm330_samples = true;
+	acc->report_at_pollrate = true;
+	lsm330_acc_polling_manage(acc);
+#endif
 
 	dev_info(&client->dev, "%s: probed\n", LSM330_ACC_DEV_NAME);
 

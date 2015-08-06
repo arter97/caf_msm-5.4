@@ -62,6 +62,9 @@ INPUT subsystem: NOTE-> output data INCLUDE the sensitivity in accelerometer,
 
 #define LSM330_ACC_DEV_NAME		"lsm330_acc"
 #define LSM330_GYR_DEV_NAME		"lsm330_gyr"
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+#define LSM330_ACCBUF_DEV_NAME		"lsm330_accbuf"
+#endif
 
 //#define CUSTOM_SYSFS_PATH
 #define CUSTOM_SYSFS_CLASS_NAME_GYR	"ST_gyr"
@@ -81,6 +84,9 @@ INPUT subsystem: NOTE-> output data INCLUDE the sensitivity in accelerometer,
 							LSM330_GYR_SAD0L)
 #define LSM330_GYR_I2C_SAD_H		((LSM330_GYR_I2C_SADROOT<<1)| \
 							LSM330_SAD0H)
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+#define LSM330_MAXSAMPLE       1000
+#endif
 
 /* Poll Interval */
 #define LSM330_ACC_MIN_POLL_PERIOD_MS		1
@@ -126,6 +132,10 @@ INPUT subsystem: NOTE-> output data INCLUDE the sensitivity in accelerometer,
 struct lsm330_acc_platform_data {
 	unsigned int poll_interval;
 	unsigned int min_interval;
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	unsigned int max_buffer_time;
+	unsigned int report_evt_cnt;
+#endif
 
 	u8 fs_range;
 
