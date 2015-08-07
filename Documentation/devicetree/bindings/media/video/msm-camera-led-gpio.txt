@@ -1,0 +1,30 @@
+* Qualcomm MSM CAMERA LED GPIO
+
+LED triggered by a single GPIO.
+
+Required properties:
+- cell-index : Should contain source index to diffentiate
+    between different LED devices. These indexes represent LED devices
+    for multiple LEDs.
+    - 0, 1, 2, 3
+- compatible :
+    - "qcom,led-gpio-flash"
+    - "qcom,led-gpio-ir"
+- gpios : should contain phandle to gpio controller node and one
+    #gpio-cells specifying specific gpio (controller specific)
+- qcom,gpio-req-tbl-num : should contain index to gpio specific to this LED
+- qcom,gpio-req-tbl-flags : should contain direction of gpio present in
+    qcom,gpio-req-tbl-num property
+- qcom,gpio-req-tbl-label : should contain name of gpio present in
+    qcom,gpio-req-tbl-num property
+
+Example:
+	qcom,led-ir {
+		cell-index = <0>;
+		compatible = "qcom,led-gpio-ir";
+		label = "led-ir-label";
+		gpios = <&msm_gpio 31 0>;
+		qcom,gpio-req-tbl-num = <0>;
+		qcom,gpio-req-tbl-flags = <0>;
+		qcom,gpio-req-tbl-label = "LED_IR_EN";
+	};
