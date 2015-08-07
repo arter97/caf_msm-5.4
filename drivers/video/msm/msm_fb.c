@@ -4704,6 +4704,11 @@ int mdpclient_msm_fb_get_id(int idx, char *buf, int len)
 	}
 
 	fbi = registered_fb[idx];
+	if (fbi == NULL) {
+		pr_err("%s Error! fb idx: %d is NULL!", __func__, idx);
+		return -EFAULT;
+	}
+
 	mfd = (struct msm_fb_data_type *)fbi->par;
 	if (!mfd) {
 		pr_err("%s fbi is NULL, idx=%d", __func__, idx);
