@@ -51,7 +51,9 @@ MODULE_PARM_DESC(sample_rate, "Sample rate for playback and capture");
 
 static struct gaudio *the_card;
 
-static bool audio_reinit;
+static bool audio_reinit_capture;
+static bool audio_reinit_playback;
+
 
 /*-------------------------------------------------------------------------*/
 
@@ -417,7 +419,7 @@ static int capture_default_hw_params(struct gaudio_snd_dev *snd)
 	return 0;
 }
 
-static int gaudio_open_streams(void)
+static int gaudio_open_playback_streams(void)
 {
 	struct gaudio_snd_dev *snd;
 	int res = 0;
@@ -439,6 +441,21 @@ static int gaudio_open_streams(void)
 
 	pr_debug("Initialized playback params");
 
+	return 0;
+}
+
+static int gaudio_open_capture_streams(void)
+{
+	struct gaudio_snd_dev *snd;
+	int res = 0;
+
+	if (!the_card) {
+		pr_err("%s: Card is NULL", __func__);
+		return -ENODEV;
+	}
+
+	pr_debug("Initialize hw params");
+
 	/* Open PCM capture device and setup substream */
 	snd = &the_card->capture;
 	res = capture_prepare_params(snd);
@@ -454,7 +471,8 @@ static int gaudio_open_streams(void)
 
 void u_audio_clear(void)
 {
-	audio_reinit = false;
+	audio_reinit_capture = false;
+	audio_reinit_playback = false;
 }
 
 /**
@@ -475,13 +493,13 @@ static size_t u_audio_playback(struct gaudio *card, void *buf, size_t count)
 		return 0;
 	}
 
-	if (!audio_reinit) {
-		err = gaudio_open_streams();
+	if (!audio_reinit_playback) {
+		err = gaudio_open_playback_streams();
 		if (err) {
 			pr_err("Failed to init audio streams");
 			return 0;
 		}
-		audio_reinit = 1;
+		audio_reinit_playback = 1;
 	}
 
 try_again:
@@ -532,13 +550,13 @@ static size_t u_audio_capture(struct gaudio *card, void *buf, size_t count)
 	struct snd_pcm_substream *substream = snd->substream;
 	struct snd_pcm_runtime   *runtime = substream->runtime;
 
-	if (!audio_reinit) {
-		err = gaudio_open_streams();
+	if (!audio_reinit_capture) {
+		err = gaudio_open_capture_streams();
 		if (err) {
 			pr_err("Failed to init audio streams: err %d", err);
 			return 0;
 		}
-		audio_reinit = 1;
+		audio_reinit_capture = 1;
 	}
 
 try_again:
