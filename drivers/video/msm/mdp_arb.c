@@ -237,9 +237,14 @@ static int mdp_arb_register_sub(struct mdp_arb_device_info *arb,
 			*handle = c;
 			goto out;
 		} else {
-			pr_err("%s client=%s has been registered.fb_idx=%d",
+			/*
+			 * If client already registered, we just return the
+			 * same handle to client. Because when user space client
+			 * crashes, it may not call deregister.
+			 */
+			pr_debug("%s client=%s has been registered.fb_idx=%d",
 				__func__, c->register_info.common.name, idx);
-			rc = -EFAULT;
+			*handle = c;
 		}
 		goto out;
 	}
@@ -895,6 +900,54 @@ static int mdp_arb_trigger_common_cb(struct mdp_arb_device_info *arb,
 	}
 out:
 	return rc;
+}
+
+static int mdp_arb_fb_notifier_callback(struct notifier_block *self,
+					unsigned long event, void *data)
+{
+	struct fb_event *evdata = data;
+	int *blank;
+	struct mdp_arb_device_info *arb =
+		container_of(self, struct mdp_arb_device_info, fb_notif);
+	struct mdp_arb_client_db *c = NULL;
+	struct list_head *pos;
+	struct mdp_arb_pipe *pipe;
+	int fb_idx = 0, i = 0;
+
+	if (evdata && evdata->data && evdata->info && arb &&
+		(event == FB_EVENT_BLANK)) {
+		blank = evdata->data;
+		if (*blank != FB_BLANK_UNBLANK) {
+			if (evdata->info->node >= FB_MAX ||
+				evdata->info->node < 0) {
+				pr_err("%s fb_index=%d is out of the bound",
+				__func__, evdata->info->node);
+				return -EINVAL;
+			}
+			fb_idx = evdata->info->node;
+			/*
+			 * Since FB Blank/Unblank event is sent to FB driver
+			 * directly, FB driver could reset all overlay
+			 * resources when BLANK happens. MDP arbitrator needs
+			 * to reset internal bookkeeping accordingly.
+			 */
+			mutex_lock(&arb->dev_mutex);
+			list_for_each(pos, &arb->client_db_list[fb_idx]) {
+				c = list_entry(pos, struct mdp_arb_client_db,
+					list);
+				for (i = 0; i < arb->num_of_pipes; i++) {
+					pipe = &arb->pipe[i];
+					if (pipe->client == c) {
+						pipe->client = NULL;
+						c->num_of_layer = 0;
+					}
+				}
+			}
+			mutex_unlock(&arb->dev_mutex);
+		}
+	}
+
+	return 0;
 }
 
 static int mdp_arb_trigger_cb(struct mdp_arb_device_info *arb,
@@ -2357,6 +2410,8 @@ static void mdp_arb_release(struct mdp_arb_device_info *arb)
 
 	if (arb) {
 		mutex_lock(&arb->dev_mutex);
+		if (arb->fb_notif_registered)
+			fb_unregister_client(&arb->fb_notif);
 		if (arb->event_queue)
 			destroy_workqueue(arb->event_queue);
 		list_for_each_safe(pos, q, &arb->event_list) {
@@ -2440,6 +2495,14 @@ static int __devinit mdp_arb_probe(struct platform_device *pdev)
 		mdp_arb->event_queue = NULL;
 		rc = -EFAULT;
 		goto err;
+	}
+	mdp_arb->fb_notif.notifier_call = mdp_arb_fb_notifier_callback;
+	rc = fb_register_client(&mdp_arb->fb_notif);
+	if (rc) {
+		pr_err("%s Unable to register fb_notifier: %d", __func__, rc);
+		goto err;
+	} else {
+		mdp_arb->fb_notif_registered = true;
 	}
 	platform_set_drvdata(&this_device, mdp_arb);
 	arb = mdp_arb;
