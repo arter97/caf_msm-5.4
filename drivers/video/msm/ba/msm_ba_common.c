@@ -561,7 +561,8 @@ int msm_ba_ctrl_init(struct msm_ba_inst *inst)
 		switch (msm_ba_ctrls[idx].id) {
 		case MSM_BA_PRIV_SD_NODE_ADDR:
 		case MSM_BA_PRIV_FPS:
-			ctrl->flags |= msm_ba_ctrls[idx].flags;
+			if (ctrl)
+				ctrl->flags |= msm_ba_ctrls[idx].flags;
 			break;
 		}
 
