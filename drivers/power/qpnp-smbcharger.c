@@ -196,7 +196,7 @@ struct smbchg_chip {
 	struct mutex			taper_irq_lock;
 	int				recharge_irq;
 	int				fastchg_irq;
-	int				safety_timeout_irq;
+	int				wdog_timeout_irq;
 	int				power_ok_irq;
 	int				dcin_uv_irq;
 	int				usbin_uv_irq;
@@ -1567,8 +1567,10 @@ static bool smbchg_is_parallel_usb_ok(struct smbchg_chip *chip)
 
 	kt_since_last_disable = ktime_sub(ktime_get_boottime(),
 					chip->parallel.last_disabled);
-	if (chip->parallel.enabled_once && ktime_to_ms(kt_since_last_disable)
-					< PARALLEL_REENABLE_TIMER_MS) {
+	if (chip->parallel.current_max_ma == 0
+		&& chip->parallel.enabled_once
+		&& ktime_to_ms(kt_since_last_disable)
+			< PARALLEL_REENABLE_TIMER_MS) {
 		pr_smb(PR_STATUS, "Only been %lld since disable, skipping\n",
 				ktime_to_ms(kt_since_last_disable));
 		return false;
@@ -3713,6 +3715,7 @@ static void smbchg_vfloat_adjust_work(struct work_struct *work)
 	int vbat_uv, vbat_mv, ibat_ua, rc, delta_vfloat_mv;
 	bool taper, enable;
 
+	smbchg_stay_awake(chip, PM_REASON_VFLOAT_ADJUST);
 	taper = (get_prop_charge_type(chip)
 		== POWER_SUPPLY_CHARGE_TYPE_TAPER);
 	enable = taper && (chip->parallel.current_max_ma == 0);
@@ -3726,7 +3729,7 @@ static void smbchg_vfloat_adjust_work(struct work_struct *work)
 
 	if (get_prop_batt_health(chip) != POWER_SUPPLY_HEALTH_GOOD) {
 		pr_smb(PR_STATUS, "JEITA active, skipping\n");
-		goto reschedule;
+		goto stop;
 	}
 
 	set_property_on_fg(chip, POWER_SUPPLY_PROP_UPDATE_NOW, 1);
@@ -3811,6 +3814,49 @@ static int smbchg_charging_status_change(struct smbchg_chip *chip)
 	return 0;
 }
 
+#define HVDCP_ADAPTER_SEL_MASK	SMB_MASK(5, 4)
+#define HVDCP_5V		0x00
+#define HVDCP_9V		0x10
+#define USB_CMD_HVDCP_1		0x42
+#define FORCE_HVDCP_2p0		BIT(3)
+static int force_9v_hvdcp(struct smbchg_chip *chip)
+{
+	int rc;
+
+	/* Force 5V HVDCP */
+	rc = smbchg_sec_masked_write(chip,
+			chip->usb_chgpth_base + CHGPTH_CFG,
+			HVDCP_ADAPTER_SEL_MASK, HVDCP_5V);
+	if (rc) {
+		pr_err("Couldn't set hvdcp config in chgpath_chg rc=%d\n", rc);
+		return rc;
+	}
+
+	/* Force QC2.0 */
+	rc = smbchg_masked_write(chip,
+			chip->usb_chgpth_base + USB_CMD_HVDCP_1,
+			FORCE_HVDCP_2p0, FORCE_HVDCP_2p0);
+	rc |= smbchg_masked_write(chip,
+			chip->usb_chgpth_base + USB_CMD_HVDCP_1,
+			FORCE_HVDCP_2p0, 0);
+	if (rc < 0) {
+		pr_err("Couldn't force QC2.0 rc=%d\n", rc);
+		return rc;
+	}
+
+	/* wait for QC2.0 */
+	msleep(500);
+
+	/* Force 9V HVDCP */
+	rc = smbchg_sec_masked_write(chip,
+			chip->usb_chgpth_base + CHGPTH_CFG,
+			HVDCP_ADAPTER_SEL_MASK, HVDCP_9V);
+	if (rc)
+		pr_err("Couldn't set hvdcp config in chgpath_chg rc=%d\n", rc);
+
+	return rc;
+}
+
 static void smbchg_hvdcp_det_work(struct work_struct *work)
 {
 	struct smbchg_chip *chip = container_of(work,
@@ -3837,6 +3883,14 @@ static void smbchg_hvdcp_det_work(struct work_struct *work)
 		hvdcp_sel = USBIN_HVDCP_SEL_BIT;
 
 	if ((reg & hvdcp_sel) && is_usb_present(chip)) {
+		if (chip->enable_hvdcp_9v
+				&& (chip->wa_flags & SMBCHG_HVDCP_9V_EN_WA)) {
+			/* force HVDCP 2.0 */
+			rc = force_9v_hvdcp(chip);
+			if (rc)
+				pr_err("could not force 9V HVDCP continuing rc=%d\n",
+						rc);
+		}
 		pr_smb(PR_MISC, "setting usb psy type = %d\n",
 				POWER_SUPPLY_TYPE_USB_HVDCP);
 		power_supply_set_supply_type(chip->usb_psy,
@@ -4466,11 +4520,26 @@ static irqreturn_t vbat_low_handler(int irq, void *_chip)
 	return IRQ_HANDLED;
 }
 
+#define CHG_COMP_SFT_BIT	BIT(3)
 static irqreturn_t chg_error_handler(int irq, void *_chip)
 {
 	struct smbchg_chip *chip = _chip;
+	int rc = 0;
+	u8 reg;
 
 	pr_smb(PR_INTERRUPT, "chg-error triggered\n");
+
+	rc = smbchg_read(chip, &reg, chip->chgr_base + RT_STS, 1);
+	if (rc < 0) {
+		dev_err(chip->dev, "Unable to read RT_STS rc = %d\n", rc);
+	} else {
+		pr_smb(PR_INTERRUPT, "triggered: 0x%02x\n", reg);
+		if (reg & CHG_COMP_SFT_BIT)
+			set_property_on_fg(chip,
+					POWER_SUPPLY_PROP_SAFETY_TIMER_EXPIRED,
+					1);
+	}
+
 	smbchg_parallel_usb_check_ok(chip);
 	if (chip->psy_registered)
 		power_supply_changed(&chip->batt_psy);
@@ -4544,13 +4613,13 @@ static irqreturn_t recharge_handler(int irq, void *_chip)
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t safety_timeout_handler(int irq, void *_chip)
+static irqreturn_t wdog_timeout_handler(int irq, void *_chip)
 {
 	struct smbchg_chip *chip = _chip;
 	u8 reg = 0;
 
 	smbchg_read(chip, &reg, chip->misc_base + RT_STS, 1);
-	pr_warn_ratelimited("safety timeout rt_stat = 0x%02x\n", reg);
+	pr_warn_ratelimited("wdog timeout rt_stat = 0x%02x\n", reg);
 	if (chip->psy_registered)
 		power_supply_changed(&chip->batt_psy);
 	smbchg_charging_status_change(chip);
@@ -5043,33 +5112,6 @@ static int smbchg_hw_init(struct smbchg_chip *chip)
 		return rc;
 	}
 
-	if (chip->enable_hvdcp_9v && (chip->wa_flags & SMBCHG_HVDCP_9V_EN_WA)) {
-		/* enable the 9V HVDCP configuration */
-		rc = smbchg_sec_masked_write(chip,
-			chip->usb_chgpth_base + TR_RID_REG,
-			HVDCP_AUTH_ALG_EN_BIT, HVDCP_AUTH_ALG_EN_BIT);
-		if (rc) {
-			dev_err(chip->dev, "Couldn't enable hvdcp_alg rc=%d\n",
-					rc);
-			return rc;
-		}
-
-		rc = smbchg_sec_masked_write(chip,
-			chip->usb_chgpth_base + CHGPTH_CFG,
-			HVDCP_ADAPTER_SEL_MASK, HVDCP_ADAPTER_SEL_9V_BIT);
-		if (rc) {
-			dev_err(chip->dev, "Couldn't set hvdcp config in chgpath_chg rc=%d\n",
-						rc);
-			return rc;
-		}
-		if (is_usb_present(chip)) {
-			rc = smbchg_masked_write(chip,
-				chip->usb_chgpth_base + CMD_APSD,
-				APSD_RERUN_BIT, APSD_RERUN_BIT);
-			if (rc)
-				pr_err("Unable to re-run APSD rc=%d\n", rc);
-		}
-	}
 	/*
 	 * set chg en by cmd register, set chg en by writing bit 1,
 	 * enable auto pre to fast, enable auto recharge by default.
@@ -5840,11 +5882,11 @@ static int smbchg_request_irqs(struct smbchg_chip *chip)
 			REQUEST_IRQ(chip, spmi_resource, chip->chg_hot_irq,
 				"temp-shutdown", chg_hot_handler, flags, rc);
 			REQUEST_IRQ(chip, spmi_resource,
-				chip->safety_timeout_irq,
-				"safety-timeout",
-				safety_timeout_handler, flags, rc);
+				chip->wdog_timeout_irq,
+				"wdog-timeout",
+				wdog_timeout_handler, flags, rc);
 			enable_irq_wake(chip->chg_hot_irq);
-			enable_irq_wake(chip->safety_timeout_irq);
+			enable_irq_wake(chip->wdog_timeout_irq);
 			break;
 		case SMBCHG_OTG_SUBTYPE:
 			break;

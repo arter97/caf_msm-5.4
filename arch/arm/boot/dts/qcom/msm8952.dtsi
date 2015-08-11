@@ -130,6 +130,7 @@
 #include "msm8952-iommu-domains.dtsi"
 #include "msm8952-mdss-pll.dtsi"
 #include "msm8952-gpu.dtsi"
+#include "msm-rdbg.dtsi"
 
 &soc {
 	#address-cells = <1>;
@@ -197,6 +198,7 @@
 		clock-names = "clk-c0-4", "clk-c0-5",
 				"clk-c1-4", "clk-c1-5",
 				"clk-cci-4", "clk-cci-5";
+		qcom,cpu-pcnoc-vote;
 		qcom,speed0-bin-v0-c0 =
 			<          0 0>,
 			<  400000000 1>,
@@ -345,13 +347,11 @@
 		cpubw-cpufreq {
 		target-dev = <&cpubw>;
 		cpu-to-dev-map-0 =
-			<  400000  2929 >,	/* SVS   */
 			< 1094400  5346 >,	/* SVS+  */
 			< 1344000  5712 >,	/* NOM   */
 			< 1440000  6152 >,	/* NOM+  */
 			< 1651200  7032 >;	/* TURBO */
 		cpu-to-dev-map-4 =
-			<  400000  2929 >,	/* SVS   */
 			<  800000  5346 >,	/* SVS+  */
 			<  998400  5712 >,	/* NOM   */
 			< 1094400  6152 >,	/* NOM+  */
@@ -371,12 +371,10 @@
 		cci-cpufreq {
 		target-dev = <&cci_cache>;
 		cpu-to-dev-map-0 =
-			<  500000  200000 >,
 			<  960000  307200 >,
 			< 1344000  400000 >,
 			< 1651200  600000 >;
 		cpu-to-dev-map-4 =
-			<  400000  200000 >,
 			<  800000  307200 >,
 			<  998400  400000 >,
 			< 1209600  600000 >;
@@ -402,10 +400,6 @@
 		qcom,governor-per-policy;
 
 		qcom,cpufreq-table-0 =
-			 <  200000 >,
-			 <  345600 >,
-			 <  499200 >,
-			 <  800000 >,
 			 <  960000 >,
 			 < 1094400 >,
 			 < 1344000 >,
@@ -413,9 +407,6 @@
 			 < 1516800 >,
 			 < 1651200 >;
 		qcom,cpufreq-table-4 =
-			 <  200000 >,
-			 <  400000 >,
-			 <  533330 >,
 			 <  800000 >,
 			 <  998400 >,
 			 < 1094400 >,
@@ -1151,7 +1142,6 @@
 		qcom,hsusb-otg-mode = <3>; /* OTG mode */
 		qcom,hsusb-otg-otg-control = <2>; /* PMIC */
 		qcom,dp-manual-pullup;
-		qcom,hsusb-otg-disable-reset;
 		qcom,hsusb-otg-mpm-dpsehv-int = <49>;
 		qcom,hsusb-otg-mpm-dmsehv-int = <58>;
 		qcom,phy-dvdd-always-on;
@@ -2112,6 +2102,13 @@
 		dai_mi2s2: qcom,msm-dai-q6-mi2s-tert {
 			compatible = "qcom,msm-dai-q6-mi2s";
 			qcom,msm-dai-q6-mi2s-dev-id = <2>;
+			qcom,msm-mi2s-rx-lines = <0>;
+			qcom,msm-mi2s-tx-lines = <3>;
+		};
+
+		dai_mi2s6: qcom,msm-dai-q6-mi2s-senary {
+			compatible = "qcom,msm-dai-q6-mi2s";
+			qcom,msm-dai-q6-mi2s-dev-id = <6>;
 			qcom,msm-mi2s-rx-lines = <0>;
 			qcom,msm-mi2s-tx-lines = <3>;
 		};
