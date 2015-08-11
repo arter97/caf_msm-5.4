@@ -1319,13 +1319,13 @@ static int adp_rear_camera_enable(void)
 			CAMERA_PREVIEW_BUFFER_STATE_QUEUED_TO_PINGPONG;
 
 		pong_buffer = preview_buffer_find_free_for_ping_pong();
-		if (!ping_buffer)
+		if (!pong_buffer)
 			goto failure;
 		pong_buffer->state =
 			CAMERA_PREVIEW_BUFFER_STATE_QUEUED_TO_PINGPONG;
 
 		free_buffer = preview_buffer_find_free_for_ping_pong();
-		if (!ping_buffer)
+		if (!free_buffer)
 			goto failure;
 
 		pr_debug("%s: find ping pong buffer end!!!\n", __func__);
