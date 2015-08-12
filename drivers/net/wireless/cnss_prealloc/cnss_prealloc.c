@@ -41,14 +41,18 @@ struct wncss_skb_prealloc {
 };
 
 static struct wncss_skb_prealloc wcnss_skb_allocs[] = {
-	{0, 32 * 1792, NULL},
-	{0, 32 * 1792, NULL},
-	{0, 32 * 1792, NULL},
-	{0, 32 * 1792, NULL},
-	{0, 32 * 1792, NULL},
-	{0, 32 * 1792, NULL},
-	{0, 64 * 1792, NULL},
-	{0, 64 * 1792, NULL},
+	{0, 60 * 1024, NULL},
+	{0, 60 * 1024, NULL},
+	{0, 60 * 1024, NULL},
+	{0, 60 * 1024, NULL},
+	{0, 60 * 1024, NULL},
+	{0, 60 * 1024, NULL},
+	{0, 116 * 1024, NULL},
+	{0, 116 * 1024, NULL},
+	{0, 116 * 1024, NULL},
+	{0, 116 * 1024, NULL},
+	{0, 116 * 1024, NULL},
+	{0, 116 * 1024, NULL},
 };
 
 /* pre-alloced mem for WLAN driver */
