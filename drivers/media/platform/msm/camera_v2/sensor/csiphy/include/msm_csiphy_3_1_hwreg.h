@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -25,7 +25,7 @@ struct csiphy_reg_parms_t csiphy_v3_1 = {
 	0x100,
 	0x104,
 	0x108,
-	0x10C,
+	0x1FC,
 	0x1C,
 	0x28,
 	0x140,
