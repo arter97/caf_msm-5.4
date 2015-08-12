@@ -725,6 +725,16 @@ struct platform_device apq_pcm = {
 	.id	= -1,
 };
 
+struct platform_device apq_pcm_dtmf = {
+	.name	= "msm-pcm-dsp-dtmf",
+	.id	= -1,
+};
+
+struct platform_device apq_dtmf_detection = {
+	.name	= "msm-dtmf-detect",
+	.id	= -1,
+};
+
 struct platform_device apq_pcm_routing = {
 	.name	= "msm-pcm-routing",
 	.id	= -1,

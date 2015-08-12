@@ -1319,6 +1319,11 @@ int q6asm_open_read(struct audio_client *ac,
 		open.uMode = BUFFER_META_ENABLE | STREAM_PRIORITY_HIGH;
 		open.format = AMRWB_FS;
 		break;
+	case FORMAT_DTMF_DETECTION:
+		open.uMode = STREAM_PRIORITY_HIGH;
+		open.format = DTMF_DETECTION;
+		break;
+
 	default:
 		pr_err("Invalid format[%d]\n", format);
 		goto fail_cmd;
