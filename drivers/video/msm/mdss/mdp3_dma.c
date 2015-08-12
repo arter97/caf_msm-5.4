@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -671,12 +671,15 @@ static int mdp3_dmap_update(struct mdp3_dma *dma, void *buf,
 		}
 		dma->update_src_cfg = false;
 	}
+	mutex_lock(&dma->pp_lock);
+	if (dma->ccs_config.ccs_dirty)
+		mdp3_ccs_update(dma, true);
+	mutex_unlock(&dma->pp_lock);
 	spin_lock_irqsave(&dma->dma_lock, flag);
 	MDP3_REG_WRITE(MDP3_REG_DMA_P_IBUF_ADDR, (u32)(buf +
 			dma->roi.y * dma->source_config.stride +
 			dma->roi.x * dma_bpp(dma->source_config.format)));
 	dma->source_config.buf = (int)buf;
-	mdp3_ccs_update(dma, true);
 	if (dma->output_config.out_sel == MDP3_DMA_OUTPUT_SEL_DSI_CMD) {
 		MDP3_REG_WRITE(MDP3_REG_DMA_P_START, 1);
 	}
@@ -914,6 +917,24 @@ static int mdp3_dmap_histo_op(struct mdp3_dma *dma, u32 op)
 	return ret;
 }
 
+static void mdp3_dmap_underrun_worker(struct work_struct *work)
+{
+	struct mdp3_dma *dma;
+
+	dma = container_of(work, struct mdp3_dma, underrun_work);
+	mutex_lock(&dma->pp_lock);
+	if (dma->ccs_config.ccs_enable && dma->ccs_config.ccs_dirty) {
+		dma->cc_vect_sel = (dma->cc_vect_sel + 1) % 2;
+		dma->ccs_config.ccs_sel = dma->cc_vect_sel;
+		dma->ccs_config.pre_limit_sel = dma->cc_vect_sel;
+		dma->ccs_config.post_limit_sel = dma->cc_vect_sel;
+		dma->ccs_config.pre_bias_sel = dma->cc_vect_sel;
+		dma->ccs_config.post_bias_sel = dma->cc_vect_sel;
+		mdp3_ccs_update(dma, true);
+	}
+	mutex_unlock(&dma->pp_lock);
+}
+
 static int mdp3_dma_start(struct mdp3_dma *dma, struct mdp3_intf *intf)
 {
 	unsigned long flag;
@@ -1007,6 +1028,7 @@ int mdp3_dma_init(struct mdp3_dma *dma)
 		dma->dma_done_notifier = mdp3_dma_done_notifier;
 		dma->start = mdp3_dma_start;
 		dma->stop = mdp3_dma_stop;
+		INIT_WORK(&dma->underrun_work, mdp3_dmap_underrun_worker);
 		break;
 	case MDP3_DMA_S:
 		dma->dma_config = mdp3_dmas_config;

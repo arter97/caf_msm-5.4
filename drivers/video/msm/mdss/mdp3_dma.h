@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -270,6 +270,10 @@ struct mdp3_dma {
 	struct mdp3_dma_cursor cursor;
 	struct mdp3_dma_color_correct_config ccs_config;
 	struct mdp_csc_cfg_data ccs_cache;
+	int cc_vect_sel;
+
+	struct work_struct underrun_work;
+	struct mutex pp_lock;
 
 	struct mdp3_dma_lut_config lut_config;
 	struct mdp3_dma_histogram_config histogram_config;
@@ -325,6 +329,7 @@ struct mdp3_dma {
 
 	void (*dma_done_notifier)(struct mdp3_dma *dma,
 			struct mdp3_notification *dma_client);
+
 };
 
 struct mdp3_video_intf_cfg {
