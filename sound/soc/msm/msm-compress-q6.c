@@ -977,7 +977,7 @@ static int msm_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 			atomic_set(&prtd->drain, 0);
 			atomic_set(&prtd->xrun, 1);
 			spin_unlock_irqrestore(&prtd->lock, flags);
-			q6asm_cmd_nowait(prtd->audio_client, CMD_FLUSH);
+			q6asm_cmd(prtd->audio_client, CMD_FLUSH);
 			q6asm_run_nowait(prtd->audio_client, 0, 0, 0);
 		}
 		prtd->cmd_interrupt = 0;
