@@ -2681,6 +2681,26 @@ struct mdp4_overlay_pipe *mdp4_overlay_pipe_alloc(struct pipe_alloc *alloc)
 		}
 	}
 
+	/*
+	 * For border color, even though it has been set for this display,
+	 * it could be set again for same display.
+	 */
+	if (alloc->ptype == OVERLAY_TYPE_BF) {
+		for (i = 0; i < OVERLAY_PIPE_MAX; i++) {
+			pipe = &ctrl->plist[i];
+			if (pipe->pipe_type == alloc->ptype) {
+				if (alloc->mixer != pipe->mixer_num)
+					continue;
+				init_completion(&pipe->comp);
+				init_completion(&pipe->dmas_comp);
+				pr_debug("%s: pipe=%x ndx=%d num=%d\n",
+					__func__, (int)pipe, pipe->pipe_ndx,
+					pipe->pipe_num);
+				return pipe;
+			}
+		}
+	}
+
 	for (i = 0; i < OVERLAY_PIPE_MAX; i++) {
 		pipe = &ctrl->plist[i];
 		if ((pipe->pipe_used == 0) &&
