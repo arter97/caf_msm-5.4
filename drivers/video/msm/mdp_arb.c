@@ -1287,7 +1287,7 @@ static int mdp_arb_set_event_state(struct mdp_arb_device_info *arb,
 {
 	int rc = 0;
 	struct list_head *pos;
-	struct mdp_arb_event_db *temp = NULL, *event_in_list = NULL;
+	struct mdp_arb_event_db *temp = NULL;
 	bool found = false;
 
 	mutex_lock(&arb->dev_mutex);
@@ -1296,7 +1296,7 @@ static int mdp_arb_set_event_state(struct mdp_arb_device_info *arb,
 		temp = list_entry(pos, struct mdp_arb_event_db, list);
 		if (!strcmp(temp->event.name, event->name)) {
 			found = true;
-			event_in_list = temp;
+			temp->cur_state_value = event->event.driver_set_event;
 			break;
 		}
 	}
@@ -1311,8 +1311,7 @@ static int mdp_arb_set_event_state(struct mdp_arb_device_info *arb,
 		temp = list_entry(pos, struct mdp_arb_event_db, list);
 		if (!strcmp(temp->event.name, event->name)) {
 			found = true;
-			event_in_list->cur_state_value =
-				event->event.driver_set_event;
+			temp->cur_state_value = event->event.driver_set_event;
 			break;
 		}
 	}
