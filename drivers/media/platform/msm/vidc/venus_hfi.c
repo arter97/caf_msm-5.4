@@ -1097,6 +1097,21 @@ static int venus_hfi_iface_cmdq_write(struct venus_hfi_device *device,
 		dprintk(VIDC_ERR, "Invalid Params");
 		return -EINVAL;
 	}
+
+	if (device->res->sw_power_collapsible) {
+		dprintk(VIDC_DBG,
+			"Cancel and queue delayed work from %s\n",
+			__func__);
+		cancel_delayed_work_sync(&venus_hfi_pm_work);
+		if (!queue_delayed_work(device->venus_pm_workq,
+				&venus_hfi_pm_work,
+				msecs_to_jiffies(
+					msm_vidc_pwr_collapse_delay))) {
+			dprintk(VIDC_DBG,
+				"PM work already scheduled\n");
+		}
+	}
+
 	mutex_lock(&device->write_lock);
 	result = venus_hfi_iface_cmdq_write_nolock(device, pkt);
 	mutex_unlock(&device->write_lock);
@@ -1626,6 +1641,13 @@ static inline int venus_hfi_power_on(struct venus_hfi_device *device)
 		return 0;
 
 	dprintk(VIDC_DBG, "Resuming from power collapse\n");
+
+	rc = __alloc_ocmem(device);
+	if (rc) {
+		dprintk(VIDC_ERR, "Failed to allocate OCMEM");
+		return -EINVAL;
+	}
+
 	rc = venus_hfi_vote_buses(device, device->bus_load.vote_data,
 			device->bus_load.vote_data_count);
 	if (rc) {
@@ -1696,27 +1718,10 @@ static inline int venus_hfi_power_on(struct venus_hfi_device *device)
 		goto err_reset_core;
 	}
 
-	/*
-	 * set the flag here to skip venus_hfi_power_on() which is
-	 * being called again via __alloc_set_ocmem() if ocmem is enabled
-	 */
 	device->power_enabled = true;
-
-	/*
-	 * write_lock is already acquired at this point, so to avoid
-	 * recursive lock in cmdq_write function, call nolock version
-	 * of alloc_ocmem
-	 */
-	WARN_ON(!mutex_is_locked(&device->write_lock));
-	rc = __alloc_set_ocmem(device, false);
-	if (rc) {
-		dprintk(VIDC_ERR, "Failed to allocate OCMEM");
-		goto err_alloc_ocmem;
-	}
 
 	dprintk(VIDC_INFO, "Resumed from power collapse\n");
 	return rc;
-err_alloc_ocmem:
 err_reset_core:
 	venus_hfi_tzbsp_set_video_state(TZBSP_VIDEO_STATE_SUSPEND);
 err_set_video_state:
@@ -1793,7 +1798,7 @@ static int venus_hfi_iface_cmdq_write_nolock(struct venus_hfi_device *device,
 		return -EINVAL;
 	}
 	WARN(!mutex_is_locked(&device->write_lock),
-			"Cmd queue write lock must be acquired");
+		"Cmd queue write lock must be acquired");
 	if (!venus_hfi_core_in_valid_state(device)) {
 		dprintk(VIDC_DBG, "%s - fw not in init state\n", __func__);
 		result = -EINVAL;
@@ -1832,18 +1837,6 @@ static int venus_hfi_iface_cmdq_write_nolock(struct venus_hfi_device *device,
 				device, VIDC_CPU_IC_SOFTINT,
 				1 << VIDC_CPU_IC_SOFTINT_H2A_SHFT);
 
-		if (device->res->sw_power_collapsible) {
-			dprintk(VIDC_DBG,
-				"Cancel and queue delayed work again\n");
-			cancel_delayed_work(&venus_hfi_pm_work);
-			if (!queue_delayed_work(device->venus_pm_workq,
-				&venus_hfi_pm_work,
-				msecs_to_jiffies(
-				msm_vidc_pwr_collapse_delay))) {
-				dprintk(VIDC_DBG,
-				"PM work already scheduled\n");
-			}
-		}
 		result = 0;
 	} else {
 		dprintk(VIDC_ERR, "venus_hfi_iface_cmdq_write:queue_full\n");
@@ -3070,13 +3063,13 @@ static int venus_hfi_check_core_registered(
 	return -EINVAL;
 }
 
-static void venus_hfi_process_sys_watchdog_timeout(
+static void __process_fatal_error(
 				struct venus_hfi_device *device)
 {
 	struct msm_vidc_cb_cmd_done cmd_done;
 	memset(&cmd_done, 0, sizeof(struct msm_vidc_cb_cmd_done));
 	cmd_done.device_id = device->device_id;
-	device->callback(SYS_WATCHDOG_TIMEOUT, &cmd_done);
+	device->callback(SYS_ERROR, &cmd_done);
 }
 
 static int venus_hfi_core_pc_prep(void *device)
@@ -3095,9 +3088,13 @@ static int venus_hfi_core_pc_prep(void *device)
 		dprintk(VIDC_ERR, "Failed to create sys pc prep pkt\n");
 		goto err_create_pkt;
 	}
-
-	if (venus_hfi_iface_cmdq_write(dev, &pkt))
+	/* Calling write_nolock() with write_lock instead of write()
+	*  because write() will cancel and rescheduling power collapse.
+	*/
+	mutex_lock(&dev->write_lock);
+	if (venus_hfi_iface_cmdq_write_nolock(dev, &pkt))
 		rc = -ENOTEMPTY;
+	mutex_unlock(&dev->write_lock);
 
 err_create_pkt:
 	return rc;
@@ -3137,6 +3134,7 @@ static void venus_hfi_pm_hndlr(struct work_struct *work)
 		dprintk(VIDC_ERR, "%s: NULL device\n", __func__);
 		return;
 	}
+
 	if (!device->power_enabled) {
 		dprintk(VIDC_DBG, "%s: Power already disabled\n",
 				__func__);
@@ -3157,22 +3155,14 @@ static void venus_hfi_pm_hndlr(struct work_struct *work)
 
 	dprintk(VIDC_DBG, "Prepare for power collapse\n");
 
-	mutex_lock(&device->resource_lock);
-	rc = __unset_free_ocmem(device);
-	mutex_unlock(&device->resource_lock);
-	if (rc) {
-		dprintk(VIDC_ERR,
-			"Failed to unset and free OCMEM for PC, rc : %d\n", rc);
-		return;
-	}
-
 	rc = venus_hfi_prepare_pc(device);
 	if (rc) {
 		dprintk(VIDC_ERR, "Failed to prepare for PC, rc : %d\n", rc);
-		rc = __alloc_set_ocmem(device, true);
-		if (rc)
+		if (venus_hfi_halt_axi(device))
 			dprintk(VIDC_WARN,
-				"Failed to re-allocate OCMEM. Performance will be impacted\n");
+				"Failed to halt AXI after SYS_ERROR\n");
+		venus_hfi_set_state(device, VENUS_STATE_DEINIT);
+		__process_fatal_error(device);
 		return;
 	}
 
@@ -3205,6 +3195,13 @@ static void venus_hfi_pm_hndlr(struct work_struct *work)
 		goto err_power_off;
 	}
 
+	mutex_lock(&device->resource_lock);
+	rc = __free_ocmem(device);
+	mutex_unlock(&device->resource_lock);
+	if (rc)
+		dprintk(VIDC_ERR,
+			"Failed to free OCMEM for PC, rc : %d\n", rc);
+
 	/* Cancel pending delayed works if any */
 	cancel_delayed_work(&venus_hfi_pm_work);
 
@@ -3227,10 +3224,6 @@ skip_power_off:
 		device->last_packet_type, ctrl_status);
 
 	mutex_unlock(&device->write_lock);
-	rc = __alloc_set_ocmem(device, true);
-	if (rc)
-		dprintk(VIDC_WARN,
-			"Failed to re-allocate OCMEM. Performance will be impacted\n");
 	return;
 }
 
@@ -3317,7 +3310,7 @@ static void venus_hfi_response_handler(struct venus_hfi_device *device)
 				dprintk(VIDC_ERR,
 					"SFR Message from FW : %s\n",
 						vsfr->rg_data);
-			venus_hfi_process_sys_watchdog_timeout(device);
+			__process_fatal_error(device);
 		}
 
 		while (!venus_hfi_iface_msgq_read(device, packet)) {
@@ -3368,7 +3361,8 @@ static void venus_hfi_core_work_handler(struct work_struct *work)
 		return;
 	}
 	if (device->res->sw_power_collapsible) {
-		dprintk(VIDC_DBG, "Cancel and queue delayed work again.\n");
+		dprintk(VIDC_DBG, "Cancel and queue delayed work from %s\n",
+			__func__);
 		cancel_delayed_work(&venus_hfi_pm_work);
 		if (!queue_delayed_work(device->venus_pm_workq,
 			&venus_hfi_pm_work,
@@ -4106,7 +4100,8 @@ static void venus_hfi_unload_fw(void *dev)
 	if (device->resources.fw.cookie) {
 		flush_workqueue(device->vidc_workq);
 		cancel_delayed_work(&venus_hfi_pm_work);
-		flush_workqueue(device->venus_pm_workq);
+		if (device->state != VENUS_STATE_DEINIT)
+			flush_workqueue(device->venus_pm_workq);
 		subsystem_put(device->resources.fw.cookie);
 		venus_hfi_interface_queues_release(dev);
 		/* Halt the AXI to make sure there are no pending transactions.

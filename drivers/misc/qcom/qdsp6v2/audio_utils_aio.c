@@ -1,6 +1,6 @@
 /* Copyright (C) 2008 Google, Inc.
  * Copyright (C) 2008 HTC Corporation
- * Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2015, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -1939,7 +1939,7 @@ static long audio_aio_compat_ioctl(struct file *file, unsigned int cmd,
 		struct msm_audio_buf_cfg cfg;
 		struct msm_audio_buf_cfg32 cfg_32;
 		mutex_lock(&audio->lock);
-		if (copy_from_user(&cfg, (void *)arg, sizeof(cfg))) {
+		if (copy_from_user(&cfg_32, (void *)arg, sizeof(cfg_32))) {
 			pr_err("%s: copy_from_user for AUDIO_SET_CONFIG_32 failed\n",
 				__func__);
 			rc = -EFAULT;
