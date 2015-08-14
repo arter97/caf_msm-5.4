@@ -347,18 +347,25 @@ static void adv7481_irq_delay_work(struct work_struct *work)
 
 static int adv7481_cec_wakeup(struct adv7481_state *state, bool enable)
 {
+	uint8_t val;
 	int ret = 0;
 
+	val = adv7481_rd_byte(state->client,
+			IO_REG_PWR_DN2_XTAL_HIGH_ADDR);
+	val = ADV_REG_GETFIELD(val, IO_PROG_XTAL_FREQ_HIGH);
 	if (enable) {
 		/* CEC wake up enabled in power-down mode */
+		val |= ADV_REG_SETFIELD(1, IO_CTRL_CEC_WAKE_UP_PWRDN2B) |
+			ADV_REG_SETFIELD(0, IO_CTRL_CEC_WAKE_UP_PWRDNB);
 		ret = adv7481_wr_byte(state->client,
-					IO_REG_PWR_DN2_XTAL_HIGH_ADDR, 0xB6);
+					IO_REG_PWR_DN2_XTAL_HIGH_ADDR, val);
 	} else {
 		/* CEC wake up disabled in power-down mode */
+		val |= ADV_REG_SETFIELD(0, IO_CTRL_CEC_WAKE_UP_PWRDN2B) |
+			ADV_REG_SETFIELD(1, IO_CTRL_CEC_WAKE_UP_PWRDNB);
 		ret = adv7481_wr_byte(state->client,
-					IO_REG_PWR_DN2_XTAL_HIGH_ADDR, 0x76);
+					IO_REG_PWR_DN2_XTAL_HIGH_ADDR, val);
 	}
-
 	return ret;
 }
 
@@ -575,12 +582,15 @@ static int adv7481_s_ctrl(struct v4l2_ctrl *ctrl)
 
 static int adv7481_powerup(struct adv7481_state *state, bool powerup)
 {
-	if (powerup)
-		pr_debug("powered up\n");
-	 else
-		pr_debug("powered off\n");
+	int ret = 0;
 
-	return 0;
+	if (powerup) {
+		pr_debug("%s: powered up\n", __func__);
+	} else {
+		pr_debug("%s: powered off\n", __func__);
+		ret = adv7481_cec_wakeup(state, !powerup);
+	}
+	return ret;
 }
 
 static int adv7481_s_power(struct v4l2_subdev *sd, int on)
@@ -879,7 +889,6 @@ static int adv7481_set_op_src(struct adv7481_state *state,
 		case ADV7481_IP_CVBS_7_HDMI_SIM:
 		case ADV7481_IP_CVBS_8_HDMI_SIM:
 		case ADV7481_IP_HDMI:
-			ret = adv7481_cec_wakeup(state, 1);
 			val = 0x00;
 			break;
 		case ADV7481_IP_TTL:
