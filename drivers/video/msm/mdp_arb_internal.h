@@ -16,6 +16,7 @@
 #define _MDP_ARB_INTERNAL_H
 
 #include <video/mdp_arb.h>
+#include <linux/notifier.h>
 #include "mdp.h"
 #include "mdp4.h"
 #include "msm_fb.h"
@@ -115,6 +116,8 @@ struct mdp_arb_notify_list {
  * @event_queue: event queue thread used to process event work.
  * @event_list: event list to queue the data.
  * @sysfs_created: if sysfs is successfully created.
+ * @fb_notif: callback to receive fb notification.
+ * @fb_notif_registered: if fb notification is successfully registered.
  */
 struct mdp_arb_device_info {
 	struct device *arb_dev;
@@ -129,6 +132,8 @@ struct mdp_arb_device_info {
 	struct workqueue_struct *event_queue;
 	struct list_head event_list;
 	bool sysfs_created;
+	struct notifier_block fb_notif;
+	bool fb_notif_registered;
 };
 
 #endif /*_MDP_ARB_INTERNAL_H*/
