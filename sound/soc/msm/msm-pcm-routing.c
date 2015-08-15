@@ -2172,6 +2172,33 @@ static const struct snd_kcontrol_new mi2s_rx_port_mixer_controls[] = {
 	msm_routing_put_port_mixer),
 };
 
+static const struct snd_kcontrol_new mi2s_group_rx_0_port_mixer_controls[] = {
+	SOC_SINGLE_EXT("AUX_PCM_UL_TX", MSM_BACKEND_DAI_MI2S_GROUP_RX_0,
+	MSM_BACKEND_DAI_AUXPCM_TX, 1, 0, msm_routing_get_port_mixer,
+	msm_routing_put_port_mixer),
+	SOC_SINGLE_EXT("PRI_TX", MSM_BACKEND_DAI_MI2S_GROUP_RX_0,
+	MSM_BACKEND_DAI_PRI_I2S_TX, 1, 0, msm_routing_get_port_mixer,
+	msm_routing_put_port_mixer),
+};
+
+static const struct snd_kcontrol_new mi2s_group_rx_1_port_mixer_controls[] = {
+	SOC_SINGLE_EXT("AUX_PCM_UL_TX", MSM_BACKEND_DAI_MI2S_GROUP_RX_1,
+	MSM_BACKEND_DAI_AUXPCM_TX, 1, 0, msm_routing_get_port_mixer,
+	msm_routing_put_port_mixer),
+	SOC_SINGLE_EXT("PRI_TX", MSM_BACKEND_DAI_MI2S_GROUP_RX_1,
+	MSM_BACKEND_DAI_PRI_I2S_TX, 1, 0, msm_routing_get_port_mixer,
+	msm_routing_put_port_mixer),
+};
+
+static const struct snd_kcontrol_new mi2s_group_rx_2_port_mixer_controls[] = {
+	SOC_SINGLE_EXT("AUX_PCM_UL_TX", MSM_BACKEND_DAI_MI2S_GROUP_RX_2,
+	MSM_BACKEND_DAI_AUXPCM_TX, 1, 0, msm_routing_get_port_mixer,
+	msm_routing_put_port_mixer),
+	SOC_SINGLE_EXT("PRI_TX", MSM_BACKEND_DAI_MI2S_GROUP_RX_2,
+	MSM_BACKEND_DAI_PRI_I2S_TX, 1, 0, msm_routing_get_port_mixer,
+	msm_routing_put_port_mixer),
+};
+
 static const struct snd_kcontrol_new pri_i2s_rx_port_mixer_controls[] = {
 	SOC_SINGLE_EXT("AUX_PCM_UL_TX", MSM_BACKEND_DAI_PRI_I2S_RX,
 	MSM_BACKEND_DAI_AUXPCM_TX, 1, 0, msm_routing_get_port_mixer,
@@ -2506,6 +2533,12 @@ static const struct snd_soc_dapm_widget msm_qdsp6_widgets[] = {
 		0, 0, 0, 0),
 	SND_SOC_DAPM_AIF_OUT("MI2S_RX_DL_HL", "MI2S_RX_HOSTLESS Playback",
 		0, 0, 0, 0),
+	SND_SOC_DAPM_AIF_OUT("MI2S_GROUP_RX_0_DL_HL",
+		"MI2S_GROUP_RX_0_HOSTLESS Playback", 0, 0, 0, 0),
+	SND_SOC_DAPM_AIF_OUT("MI2S_GROUP_RX_1_DL_HL",
+		"MI2S_GROUP_RX_1_HOSTLESS Playback", 0, 0, 0, 0),
+	SND_SOC_DAPM_AIF_OUT("MI2S_GROUP_RX_2_DL_HL",
+		"MI2S_GROUP_RX_2_HOSTLESS Playback", 0, 0, 0, 0),
 	SND_SOC_DAPM_AIF_OUT("PRI_I2S_TX_UL_HL", "PRI_I2S_TX_HOSTLESS Capture",
 		0, 0, 0, 0),
 	SND_SOC_DAPM_AIF_OUT("PRI_I2S_RX_DL_HL", "PRI_I2S_RX_HOSTLESS Playback",
@@ -2713,6 +2746,15 @@ static const struct snd_soc_dapm_widget msm_qdsp6_widgets[] = {
 	ARRAY_SIZE(sbus_3_rx_port_mixer_controls)),
 	SND_SOC_DAPM_MIXER("MI2S_RX Port Mixer", SND_SOC_NOPM, 0, 0,
 	mi2s_rx_port_mixer_controls, ARRAY_SIZE(mi2s_rx_port_mixer_controls)),
+	SND_SOC_DAPM_MIXER("MI2S_GROUP_RX_0 Port Mixer", SND_SOC_NOPM, 0, 0,
+	mi2s_group_rx_0_port_mixer_controls,
+	ARRAY_SIZE(mi2s_group_rx_0_port_mixer_controls)),
+	SND_SOC_DAPM_MIXER("MI2S_GROUP_RX_1 Port Mixer", SND_SOC_NOPM, 0, 0,
+	mi2s_group_rx_1_port_mixer_controls,
+	ARRAY_SIZE(mi2s_group_rx_1_port_mixer_controls)),
+	SND_SOC_DAPM_MIXER("MI2S_GROUP_RX_2 Port Mixer", SND_SOC_NOPM, 0, 0,
+	mi2s_group_rx_2_port_mixer_controls,
+	ARRAY_SIZE(mi2s_group_rx_2_port_mixer_controls)),
 	SND_SOC_DAPM_MIXER("PRI_I2S_RX Port Mixer", SND_SOC_NOPM, 0, 0,
 			   pri_i2s_rx_port_mixer_controls,
 			   ARRAY_SIZE(pri_i2s_rx_port_mixer_controls)),
@@ -2987,6 +3029,9 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"MI2S_UL_HL", NULL, "MI2S_TX"},
 	{"PRI_I2S_TX_UL_HL", NULL, "PRI_I2S_TX"},
 	{"MI2S_RX", NULL, "MI2S_RX_DL_HL"},
+	{"MI2S_GROUP_RX_0", NULL, "MI2S_GROUP_RX_0_DL_HL"},
+	{"MI2S_GROUP_RX_1", NULL, "MI2S_GROUP_RX_1_DL_HL"},
+	{"MI2S_GROUP_RX_2", NULL, "MI2S_GROUP_RX_2_DL_HL"},
 	{"PRI_I2S_RX", NULL, "PRI_I2S_RX_DL_HL"},
 	{"SEC_I2S_RX", NULL, "SEC_I2S_DL_HL"},
 	{"SLIMBUS_0_RX Port Mixer", "INTERNAL_FM_TX", "INT_FM_TX"},
@@ -3083,6 +3128,18 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"MI2S_RX Port Mixer", "AUX_PCM_UL_TX", "AUX_PCM_TX"},
 	{"MI2S_RX Port Mixer", "PRI_TX", "PRI_I2S_TX"},
 	{"MI2S_RX", NULL, "MI2S_RX Port Mixer"},
+
+	{"MI2S_GROUP_RX_0 Port Mixer", "AUX_PCM_UL_TX", "AUX_PCM_TX"},
+	{"MI2S_GROUP_RX_0 Port Mixer", "PRI_TX", "PRI_I2S_TX"},
+	{"MI2S_GROUP_RX_0", NULL, "MI2S_GROUP_RX_0 Port Mixer"},
+
+	{"MI2S_GROUP_RX_1 Port Mixer", "AUX_PCM_UL_TX", "AUX_PCM_TX"},
+	{"MI2S_GROUP_RX_1 Port Mixer", "PRI_TX", "PRI_I2S_TX"},
+	{"MI2S_GROUP_RX_1", NULL, "MI2S_GROUP_RX_1 Port Mixer"},
+
+	{"MI2S_GROUP_RX_2 Port Mixer", "AUX_PCM_UL_TX", "AUX_PCM_TX"},
+	{"MI2S_GROUP_RX_2 Port Mixer", "PRI_TX", "PRI_I2S_TX"},
+	{"MI2S_GROUP_RX_2", NULL, "MI2S_GROUP_RX_2 Port Mixer"},
 
 	{"PRI_I2S_RX Port Mixer", "AUX_PCM_UL_TX", "AUX_PCM_TX"},
 	{"PRI_I2S_RX Port Mixer", "PRI_TX", "PRI_I2S_TX"},

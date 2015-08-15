@@ -1353,6 +1353,51 @@ static struct snd_soc_dai_link msm_dai[] = {
 		.ignore_pmdown_time = 1, /* playback support */
 		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA8,
 	},
+	{
+		.name = "MI2S GROUP RX 0 Hostless", /* hw:0,15 */
+		.stream_name = "MI2S GROUP RX 0 Hostless",
+		.cpu_dai_name	= "MI2S_GROUP_RX_0_HOSTLESS",
+		.platform_name	= "msm-pcm-hostless",
+		.dynamic = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1, /* playback support */
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		/* .be_id = do not care */
+	},
+	{
+		.name = "MI2S GROUP RX 1 Hostless", /* hw:0,16 */
+		.stream_name = "MI2S GROUP RX 1 Hostless",
+		.cpu_dai_name	= "MI2S_GROUP_RX_1_HOSTLESS",
+		.platform_name	= "msm-pcm-hostless",
+		.dynamic = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1, /* playback support */
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		/* .be_id = do not care */
+	},
+	{
+		.name = "MI2S GROUP RX 2 Hostless", /* hw:0,17 */
+		.stream_name = "MI2S GROUP RX 2 Hostless",
+		.cpu_dai_name	= "MI2S_GROUP_RX_2_HOSTLESS",
+		.platform_name	= "msm-pcm-hostless",
+		.dynamic = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1, /* playback support */
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		/* .be_id = do not care */
+	},
 	/* Any new frondend DAIs have to be inserted after this point */
 	/* Backend DAI Links */
 	{

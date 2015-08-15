@@ -549,6 +549,48 @@ static struct snd_soc_dai_driver msm_fe_dais[] = {
 	},
 	{
 		.playback = {
+			.stream_name = "MI2S GROUP RX 0 Hostless Playback",
+			.aif_name = "MI2S_GROUP_RX_0_DL_HL",
+			.rates = SNDRV_PCM_RATE_8000_48000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+			.channels_min = 1,
+			.channels_max = 2,
+			.rate_min =     8000,
+			.rate_max =    48000,
+		},
+		.ops = &msm_fe_dai_ops,
+		.name = "MI2S_GROUP_RX_0_HOSTLESS",
+	},
+	{
+		.playback = {
+			.stream_name = "MI2S GROUP RX 1 Hostless Playback",
+			.aif_name = "MI2S_GROUP_RX_1_DL_HL",
+			.rates = SNDRV_PCM_RATE_8000_48000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+			.channels_min = 1,
+			.channels_max = 2,
+			.rate_min =     8000,
+			.rate_max =    48000,
+		},
+		.ops = &msm_fe_dai_ops,
+		.name = "MI2S_GROUP_RX_1_HOSTLESS",
+	},
+	{
+		.playback = {
+			.stream_name = "MI2S GROUP RX 2 Hostless Playback",
+			.aif_name = "MI2S_GROUP_RX_2_DL_HL",
+			.rates = SNDRV_PCM_RATE_8000_48000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+			.channels_min = 1,
+			.channels_max = 2,
+			.rate_min =     8000,
+			.rate_max =    48000,
+		},
+		.ops = &msm_fe_dai_ops,
+		.name = "MI2S_GROUP_RX_2_HOSTLESS",
+	},
+	{
+		.playback = {
 			.stream_name = "Voice2 Playback",
 			.aif_name = "VOICE2_DL",
 			.rates = SNDRV_PCM_RATE_8000_48000,
