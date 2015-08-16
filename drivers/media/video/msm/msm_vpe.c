@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012, 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -156,13 +156,14 @@ static int msm_vpe_cfg_update(void *pinfo)
 
 void vpe_update_scale_coef(uint32_t *p)
 {
-	uint32_t i, offset;
-	offset = *p;
-	for (i = offset; i < (VPE_SCALE_COEFF_NUM + offset); i++) {
+	uint32_t i;
+	uint32_t offset = *p;
+
+	for (i = 0; i < VPE_SCALE_COEFF_NUM; i++) {
 		msm_camera_io_w(*(++p),
-			vpe_ctrl->vpebase + VPE_SCALE_COEFF_LSBn(i));
+			vpe_ctrl->vpebase + VPE_SCALE_COEFF_LSBn(offset + i));
 		msm_camera_io_w(*(++p),
-			vpe_ctrl->vpebase + VPE_SCALE_COEFF_MSBn(i));
+			vpe_ctrl->vpebase + VPE_SCALE_COEFF_MSBn(offset + i));
 	}
 }
 
@@ -479,6 +480,11 @@ static void vpe_send_outmsg(void)
 		return;
 	}
 	event_qcmd = kzalloc(sizeof(struct msm_queue_cmd), GFP_ATOMIC);
+	if (!event_qcmd) {
+		pr_err("%s No memory for event q cmd", __func__);
+		spin_unlock_irqrestore(&vpe_ctrl->lock, flags);
+		return;
+	}
 	atomic_set(&event_qcmd->on_heap, 1);
 	event_qcmd->command = (void *)vpe_ctrl->pp_frame_info;
 	vpe_ctrl->pp_frame_info = NULL;
@@ -775,7 +781,7 @@ static int msm_vpe_process_vpe_cmd(struct msm_vpe_cfg_cmd *vpe_cmd,
 		break;
 		}
 
-	case VPE_CMD_SCALE_CFG_TYPE:{
+	case VPE_CMD_SCALE_CFG_TYPE: {
 		struct msm_vpe_scaler_cfg scaler_cfg;
 		if (sizeof(struct msm_vpe_scaler_cfg) != vpe_cmd->length) {
 			pr_err("%s: size mismatch cmd=%d, len=%d, expected=%d",
