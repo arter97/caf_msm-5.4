@@ -687,12 +687,15 @@ static inline void mbim_reset_values(struct f_mbim *mbim)
 	atomic_set(&mbim->online, 0);
 }
 
+static void mbim_clear_queues(struct f_mbim *mbim);
+
 static void mbim_reset_function_queue(struct f_mbim *dev)
 {
 	struct ctrl_pkt	*cpkt = NULL;
 
 	pr_debug("Queue empty packet for QBI\n");
 
+	mbim_clear_queues(dev);
 	spin_lock(&dev->lock);
 
 	cpkt = mbim_alloc_ctrl_pkt(0, GFP_ATOMIC);
@@ -826,7 +829,6 @@ static void mbim_notify_complete(struct usb_ep *ep, struct usb_request *req)
 		atomic_set(&mbim->not_port.notify_count, 0);
 		pr_info("ESHUTDOWN/ECONNRESET, connection gone\n");
 		spin_unlock(&mbim->lock);
-		mbim_clear_queues(mbim);
 		mbim_reset_function_queue(mbim);
 		spin_lock(&mbim->lock);
 		break;
@@ -1374,7 +1376,6 @@ static void mbim_disable(struct usb_function *f)
 	atomic_set(&mbim->not_port.notify_count, 0);
 	mbim->not_port.notify_state = MBIM_NOTIFY_NONE;
 
-	mbim_clear_queues(mbim);
 	mbim_reset_function_queue(mbim);
 
 	/* Disable Data Path  - only if it was initialized already (alt=1) */
