@@ -236,6 +236,7 @@ static void ipa_handle_tx(struct ipa_sys_context *sys)
 	int cnt;
 
 	ipa_inc_client_enable_clks();
+	pm_stay_awake(ipa_ctx->pdev);
 	do {
 		cnt = ipa_handle_tx_core(sys, true, true);
 		if (cnt == 0) {
@@ -248,6 +249,7 @@ static void ipa_handle_tx(struct ipa_sys_context *sys)
 	} while (inactive_cycles <= POLLING_INACTIVITY_TX);
 
 	ipa_tx_switch_to_intr_mode(sys);
+	pm_relax(ipa_ctx->pdev);
 	ipa_dec_client_disable_clks();
 }
 
@@ -843,6 +845,7 @@ static void ipa_handle_rx(struct ipa_sys_context *sys)
 	int cnt;
 
 	ipa_inc_client_enable_clks();
+	pm_stay_awake(ipa_ctx->pdev);
 	do {
 		cnt = ipa_handle_rx_core(sys, true, true);
 		if (cnt == 0) {
@@ -855,6 +858,7 @@ static void ipa_handle_rx(struct ipa_sys_context *sys)
 	} while (inactive_cycles <= POLLING_INACTIVITY_RX);
 
 	ipa_rx_switch_to_intr_mode(sys);
+	pm_relax(ipa_ctx->pdev);
 	ipa_dec_client_disable_clks();
 }
 
