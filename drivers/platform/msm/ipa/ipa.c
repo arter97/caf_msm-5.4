@@ -45,6 +45,7 @@
 #define IPA_BAM_CNFG_BITS_VALv2_0 (0xFFFFE004)
 #define IPA_STATUS_CLEAR_OFST (0x3f28)
 #define IPA_STATUS_CLEAR_SIZE (32)
+#define SPS_IPC_LOGLEVEL 2
 
 #define IPA_AGGR_MAX_STR_LENGTH (10)
 
@@ -3119,6 +3120,7 @@ static int ipa_init(const struct ipa_plat_drv_res *resource_p,
 		bam_props.manage |= SPS_BAM_MGR_DEVICE_REMOTE;
 	bam_props.ee = resource_p->ee;
 	bam_props.callback = sps_event_cb;
+	bam_props.ipc_loglevel = SPS_IPC_LOGLEVEL;
 
 	result = sps_register_bam_device(&bam_props, &ipa_ctx->bam_handle);
 	if (result) {
