@@ -100,10 +100,10 @@ static const int vdd_val[VDD_TYPE_MAX][VDD_VAL_MAX] = {
 
 struct usb_phy *msm_usb_get_transceiver(int id)
 {
-	if (!the_msm_otg[id])
+	if (id < 0 || id >= MAX_USB_CORE_NUM + 1)
 		return NULL;
 
-	if (id < 0 || id >= MAX_USB_CORE_NUM + 1)
+	if (!the_msm_otg[id])
 		return NULL;
 
 	if (&the_msm_otg[id]->phy)

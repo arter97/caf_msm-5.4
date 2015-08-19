@@ -2153,7 +2153,7 @@ __releases(mEp->lock)
 __acquires(mEp->lock)
 {
 	struct ci13xxx_ep *mEpTemp = mEp;
-	struct ci13xxx *udc = mEp->udc;
+	struct ci13xxx *udc;
 	unsigned val;
 
 	trace("%p", mEp);
@@ -2161,6 +2161,7 @@ __acquires(mEp->lock)
 	if (mEp == NULL)
 		return -EINVAL;
 
+	udc = mEp->udc;
 	hw_ep_flush(mEp, mEp->num, mEp->dir);
 
 	while (!list_empty(&mEp->qh.queue)) {
