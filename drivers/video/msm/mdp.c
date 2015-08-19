@@ -2699,6 +2699,9 @@ static void mdp_drv_init(void)
 		}
 	}
 #endif
+
+	mdp_recovery_initialize();
+
 }
 
 static int mdp_probe(struct platform_device *pdev);
@@ -3022,6 +3025,578 @@ void mdp_hw_version(void)
 
 	MSM_FB_DEBUG("%s: mdp_hw_revision=%x\n",
 				__func__, mdp_hw_revision);
+}
+
+#define MDP_RECOVERY_MAX_DISPLAY_NUM   (3)
+#define MDP_RECOVERY_ACK_TIMEOUT       (1 * HZ)
+#define MDP_RECOVERY_MAX_RETRY         (5)
+#define MDP_RECOVERY_MAX_RETRY_TIMEOUT (2 * HZ)
+
+struct mdp_recovery_data {
+	enum mdp_recovery_error_type error_type;
+	int display_id;
+	boolean error_state;
+	struct work_struct recovery_work;
+	struct timer_list ack_timer;
+	uint32 total_ack;
+	uint32 ack_count;
+	enum mdp_recovery_ack_type ack_type;
+	boolean waiting_ack;
+	uint32 retry_count;
+	struct timer_list retry_timer;
+	void *err_src_data;
+};
+
+struct mdp_recovery_client_info {
+	struct mdp_recovery_client_register_info register_info;
+	struct list_head list;
+};
+
+struct mdp_recovery_ctx {
+	struct list_head client_list;
+	struct workqueue_struct *work_queue;
+	struct mutex cli_mutex;
+	struct mutex ack_mutex;
+	struct mdp_recovery_data data
+		[MDP_RECOVERY_MAX_DISPLAY_NUM][MDP_RECOVERY_MAX_ERROR_TYPES];
+	int debug_flag;
+};
+
+static struct mdp_recovery_ctx *recovery_ctx;
+static boolean recovery_initialized;
+
+static int mdp_panel_error_cb(struct platform_device *pdev);
+static struct platform_device *mdp_get_dev(int display_id);
+static void mdp_recovery_process_ack(struct mdp_recovery_data *data);
+static boolean mdp_recovery_do(struct mdp_recovery_data *data);
+static int mdp_recovery_engine_reset(struct platform_device *pdev);
+static void mdp_recovery_work_handler(struct work_struct *work);
+static void mdp_recovery_retry_timer_handler(unsigned long param);
+static void mdp_recovery_ack_timer_handler(unsigned long param);
+static void mdp_recovery_send_notification(int display_id,
+				enum mdp_recovery_error_type err_type,
+				enum mdp_recovery_status_type status);
+static uint32 mdp_recovery_get_ack_num(int display_id,
+				enum mdp_recovery_error_type err_type);
+
+static int mdp_panel_error_cb(struct platform_device *pdev)
+{
+	int rc = 0;
+	struct msm_fb_panel_data *pdata = NULL;
+	if (!pdev) {
+		pr_err("%s NULL pointer: pdev", __func__);
+		return -ENODEV;
+	}
+	pdata = (struct msm_fb_panel_data *)pdev->dev.platform_data;
+	if (!pdata) {
+		pr_err("%s NULL pointer: pdata", __func__);
+		return -ENODEV;
+	}
+	rc = mdp_recovery_set_error(pdata->panel_info.disp_id,
+				MDP_RECOVERY_BRIDGE_CHIP_ERROR);
+	return rc;
+}
+
+static struct platform_device *mdp_get_dev(int display_id)
+{
+	struct platform_device *pdev = NULL;
+	struct msm_fb_panel_data *pdata = NULL;
+	int i = 0;
+	if ((display_id < 0) || (display_id >= MDP_RECOVERY_MAX_DISPLAY_NUM)) {
+		pr_err("%s invalid param: display_id=%d", __func__, display_id);
+		return NULL;
+	}
+	for (i = 0; i < pdev_list_cnt; i++) {
+		pdev = pdev_list[i];
+		if (pdev) {
+			pdata = (struct msm_fb_panel_data *)
+					pdev->dev.platform_data;
+			if (pdata && (pdata->panel_info.disp_id == display_id))
+				return pdev;
+		}
+	}
+	return NULL;
+}
+
+int mdp_recovery_initialize(void)
+{
+	int rc = 0;
+	if (recovery_initialized) {
+		pr_err("%s already initialized!", __func__);
+		rc = -EEXIST;
+		goto out;
+	}
+	recovery_ctx = kzalloc(sizeof(struct mdp_recovery_ctx), GFP_KERNEL);
+	if (!recovery_ctx) {
+		pr_err("%s out of memory!", __func__);
+		rc = -ENOMEM;
+		goto out;
+	}
+	mutex_init(&recovery_ctx->cli_mutex);
+	mutex_init(&recovery_ctx->ack_mutex);
+	memset(recovery_ctx->data, 0, sizeof(recovery_ctx->data));
+	INIT_LIST_HEAD(&recovery_ctx->client_list);
+	recovery_ctx->work_queue =
+		create_singlethread_workqueue("mdp_recovery");
+	if (IS_ERR_OR_NULL(recovery_ctx->work_queue)) {
+		pr_err("%s unable to create work queue; errno = %ld",
+			__func__, PTR_ERR(recovery_ctx->work_queue));
+		recovery_ctx->work_queue = NULL;
+		kfree(recovery_ctx);
+		recovery_ctx = NULL;
+		rc = -EFAULT;
+		goto out;
+	}
+	recovery_ctx->debug_flag = 0;
+	recovery_initialized = true;
+out:
+	return rc;
+}
+
+int mdp_recovery_register(struct mdp_recovery_client_register_info *info,
+			void **handle)
+{
+	struct mdp_recovery_client_info *c = NULL;
+	struct list_head *pos = NULL;
+	boolean found = false;
+	int rc = 0;
+
+	if (!recovery_initialized) {
+		pr_err("%s: Not initialized!", __func__);
+		return -ENODEV;
+	}
+	if (!info || !handle) {
+		pr_err("%s invalid parameters: NULL pointer!", __func__);
+		return -EINVAL;
+	}
+	if (info->cb == NULL) {
+		pr_err("%s no callback function!", __func__);
+		return -EINVAL;
+	}
+	mutex_lock(&recovery_ctx->cli_mutex);
+	list_for_each(pos, &recovery_ctx->client_list) {
+		c = list_entry(pos, struct mdp_recovery_client_info, list);
+		if (c == *handle) {
+			found = true;
+			break;
+		}
+	}
+	if (found) {
+		pr_err("%s client already registered!", __func__);
+		rc = -EFAULT;
+		goto out;
+	}
+	c = kzalloc(sizeof(struct mdp_recovery_client_info), GFP_KERNEL);
+	if (!c) {
+		pr_err("%s out of memory for client", __func__);
+		rc = -ENOMEM;
+		goto out;
+	}
+	memcpy(&c->register_info, info,
+		sizeof(struct mdp_recovery_client_register_info));
+	list_add_tail(&c->list, &recovery_ctx->client_list);
+	*handle = c;
+out:
+	mutex_unlock(&recovery_ctx->cli_mutex);
+	return rc;
+}
+
+int mdp_recovery_deregister(void *handle)
+{
+	struct list_head *pos = NULL, *q = NULL;
+	struct mdp_recovery_client_info *temp = NULL;
+	boolean found = false;
+	int rc = 0;
+
+	if (!recovery_initialized) {
+		pr_err("%s: Not initialized!", __func__);
+		return -ENODEV;
+	}
+	if (!handle) {
+		pr_err("%s invalid handle!", __func__);
+		return -EINVAL;
+	}
+	mutex_lock(&recovery_ctx->cli_mutex);
+	list_for_each_safe(pos, q, &recovery_ctx->client_list) {
+		temp = list_entry(pos, struct mdp_recovery_client_info, list);
+		if (temp == handle) {
+			found = true;
+			list_del(pos);
+			kfree(temp);
+			break;
+		}
+	}
+	if (!found) {
+		pr_err("%s can't find the client", __func__);
+		rc = -EFAULT;
+	}
+	mutex_unlock(&recovery_ctx->cli_mutex);
+	return rc;
+}
+
+int mdp_recovery_set_error(int display_id,
+			enum mdp_recovery_error_type err_type)
+{
+	struct mdp_recovery_data *data = NULL;
+	struct platform_device *pdev = NULL;
+
+	if (!recovery_initialized) {
+		pr_err("%s: Not initialized!", __func__);
+		return -ENODEV;
+	}
+	if ((display_id < 0) || (display_id >= MDP_RECOVERY_MAX_DISPLAY_NUM) ||
+	    (err_type < 0) || (err_type >= MDP_RECOVERY_MAX_ERROR_TYPES)) {
+		pr_err("%s invalid params: display_id=%d, err_type=%d",
+			__func__, display_id, err_type);
+		return -EINVAL;
+	}
+	pdev = mdp_get_dev(display_id);
+	if (!pdev) {
+		pr_err("%s cannot find device for display_id=%d",
+			__func__, display_id);
+		return -ENODEV;
+	}
+	data = &recovery_ctx->data[display_id][err_type];
+	if (data->error_state) {
+		pr_err("%s error state is already set. disp_id=%d, err_type=%d",
+			__func__, display_id, err_type);
+		return -EFAULT;
+	}
+	pr_info("%s Error detected: display_id=%d, err_type=%d", __func__,
+			display_id, err_type);
+	/* Note: DO NOT clear retry_timer and retry_count here. */
+	data->error_state = true;
+	data->error_type = err_type;
+	data->display_id = display_id;
+	data->err_src_data = pdev;
+
+	mutex_lock(&recovery_ctx->ack_mutex);
+	data->ack_count = 0;
+	data->ack_type = MDP_RECOVERY_ACK_IGNORE;
+	data->total_ack = mdp_recovery_get_ack_num(display_id, err_type);
+	if (data->total_ack == 0) {
+		pr_info("%s No clients subscribe this error. disp_id=%d," \
+			" err_type=%d", __func__, display_id, err_type);
+		data->error_state = false;
+		goto out;
+	}
+	data->waiting_ack = true;
+	mutex_unlock(&recovery_ctx->ack_mutex);
+	/* send notification */
+	mdp_recovery_send_notification(display_id, err_type,
+						MDP_RECOVERY_ERROR_DETECTED);
+	mutex_lock(&recovery_ctx->ack_mutex);
+	if (data->ack_count < data->total_ack) {
+		/* start the ack timer */
+		init_timer(&data->ack_timer);
+		data->ack_timer.data = (unsigned long)data;
+		data->ack_timer.function = mdp_recovery_ack_timer_handler;
+		data->ack_timer.expires = jiffies + MDP_RECOVERY_ACK_TIMEOUT;
+		add_timer(&data->ack_timer);
+	}
+out:
+	mutex_unlock(&recovery_ctx->ack_mutex);
+	return 0;
+}
+
+static uint32 mdp_recovery_get_ack_num(int display_id,
+				enum mdp_recovery_error_type err_type)
+{
+	struct list_head *pos = NULL;
+	struct mdp_recovery_client_info *c = NULL;
+	uint32 count = 0;
+
+	mutex_lock(&recovery_ctx->cli_mutex);
+	list_for_each(pos, &recovery_ctx->client_list) {
+		c = list_entry(pos, struct mdp_recovery_client_info, list);
+		if (c->register_info.error_mask & BIT(err_type))
+			count++;
+	}
+	mutex_unlock(&recovery_ctx->cli_mutex);
+	return count;
+}
+
+static void mdp_recovery_send_notification(int display_id,
+				enum mdp_recovery_error_type err_type,
+				enum mdp_recovery_status_type status)
+{
+	struct list_head *pos = NULL;
+	struct mdp_recovery_client_info *c = NULL;
+	struct mdp_recovery_callback_info cb_info;
+
+	mutex_lock(&recovery_ctx->cli_mutex);
+	list_for_each(pos, &recovery_ctx->client_list) {
+		c = list_entry(pos, struct mdp_recovery_client_info, list);
+		if (c->register_info.error_mask & BIT(err_type)) {
+			cb_info.display_id = display_id;
+			cb_info.err_type = err_type;
+			cb_info.data = c->register_info.cb_data;
+			cb_info.status = status;
+			c->register_info.cb(c, &cb_info);
+		}
+	}
+	mutex_unlock(&recovery_ctx->cli_mutex);
+}
+
+int mdp_recovery_acknowledge(void *handle,
+			struct mdp_recovery_ack_info *ack_info)
+{
+	struct mdp_recovery_client_info *c = NULL;
+	struct mdp_recovery_data *data = NULL;
+	struct list_head *pos = NULL;
+	boolean found = false;
+	int rc = 0;
+
+	if (!recovery_initialized) {
+		pr_err("%s: Not initialized!", __func__);
+		return -ENODEV;
+	}
+	if (!handle || !ack_info) {
+		pr_err("%s invalid params: NULL pointer!", __func__);
+		return -EINVAL;
+	}
+	if ((ack_info->display_id < 0) ||
+	    (ack_info->display_id >= MDP_RECOVERY_MAX_DISPLAY_NUM) ||
+	    (ack_info->err_type < 0) ||
+	    (ack_info->err_type >= MDP_RECOVERY_MAX_ERROR_TYPES)) {
+		pr_err("%s invalid ack info: display_id=%d, err_type=%d",
+			__func__, ack_info->display_id, ack_info->err_type);
+		return -EINVAL;
+	}
+	mutex_lock(&recovery_ctx->cli_mutex);
+	list_for_each(pos, &recovery_ctx->client_list) {
+		c = list_entry(pos, struct mdp_recovery_client_info, list);
+		if (c == handle) {
+			found = true;
+			break;
+		}
+	}
+	if (!found) {
+		pr_err("%s can't find the client", __func__);
+		rc = -EFAULT;
+		goto out;
+	}
+	if (!(c->register_info.error_mask & BIT(ack_info->err_type))) {
+		pr_err("%s the client doesn't subscribe error type %d",
+			__func__, ack_info->err_type);
+		rc = -EFAULT;
+		goto out;
+	}
+	data = &recovery_ctx->data[ack_info->display_id][ack_info->err_type];
+	mutex_lock(&recovery_ctx->ack_mutex);
+	if (!data->waiting_ack) {
+		pr_err("%s receiving ack in non-waiting-ack state! " \
+			"display_id=%d, err_type=%d", __func__,
+			ack_info->display_id, ack_info->err_type);
+		rc = -EFAULT;
+		goto out1;
+	}
+	if ((ack_info->ack_type < 0) ||
+	    (ack_info->ack_type >= MDP_RECOVERY_ACK_MAX_NUM)) {
+		pr_err("%s invalid ack_type=%d", __func__, ack_info->ack_type);
+		rc = -EINVAL;
+		goto out1;
+	}
+	if (data->ack_type < ack_info->ack_type)
+		data->ack_type = ack_info->ack_type;
+	data->ack_count++;
+	if (data->ack_count == data->total_ack) {
+		/* all acks collected */
+		if (timer_pending(&data->ack_timer)) {
+			pr_debug("%s Remove ack timer", __func__);
+			del_timer(&data->ack_timer);
+		}
+		data->waiting_ack = false;
+		mdp_recovery_process_ack(data);
+	}
+out1:
+	mutex_unlock(&recovery_ctx->ack_mutex);
+out:
+	mutex_unlock(&recovery_ctx->cli_mutex);
+	return rc;
+}
+
+static void mdp_recovery_ack_timer_handler(unsigned long param)
+{
+	struct mdp_recovery_data *data = (struct mdp_recovery_data *)param;
+	if (!data) {
+		pr_err("%s invalid param: NULL pointer!", __func__);
+		return;
+	}
+	mutex_lock(&recovery_ctx->ack_mutex);
+	if (data->waiting_ack) {
+		data->waiting_ack = false;
+		mdp_recovery_process_ack(data);
+	} else {
+		pr_warn("%s: not in waiting-ack state!", __func__);
+	}
+	mutex_unlock(&recovery_ctx->ack_mutex);
+}
+
+static void mdp_recovery_process_ack(struct mdp_recovery_data *data)
+{
+	if (!data)
+		return;
+	if (data->ack_type == MDP_RECOVERY_ACK_IGNORE) {
+		pr_info("%s Ignore the error: display_id=%d, err_type=%d",
+			__func__, data->display_id, data->error_type);
+		data->error_state = false;
+	} else {
+		INIT_WORK(&data->recovery_work, mdp_recovery_work_handler);
+		queue_work(recovery_ctx->work_queue, &data->recovery_work);
+	}
+}
+
+static void mdp_recovery_work_handler(struct work_struct *work)
+{
+	boolean success = false;
+	struct mdp_recovery_data *data =
+		container_of(work, struct mdp_recovery_data, recovery_work);
+	if (!data) {
+		pr_err("%s invalid param: NULL pointer!", __func__);
+		return;
+	}
+	while (!success && data->retry_count++ < MDP_RECOVERY_MAX_RETRY)
+		success = mdp_recovery_do(data);
+	if (success) {
+		/* notify success */
+		mdp_recovery_send_notification(data->display_id,
+						data->error_type,
+						MDP_RECOVERY_SUCCESS);
+		/* The retry timer provides a confirmation period.
+		 * The retry counter is reset when retry timer expired.
+		 * If same error happens again before the retry timer
+		 * timeouts, last recovery success is a fake success.
+		 */
+		if (!timer_pending(&data->retry_timer)) {
+			pr_debug("%s add retry timer", __func__);
+			init_timer(&data->retry_timer);
+			data->retry_timer.data = (unsigned long)data;
+			data->retry_timer.function =
+				mdp_recovery_retry_timer_handler;
+			data->retry_timer.expires =
+				jiffies + MDP_RECOVERY_MAX_RETRY_TIMEOUT;
+			add_timer(&data->retry_timer);
+		} else {
+			pr_debug("%s mod retry timer", __func__);
+			mod_timer(&data->retry_timer,
+				jiffies + MDP_RECOVERY_MAX_RETRY_TIMEOUT);
+		}
+	} else {
+		/* notify critical error */
+		mdp_recovery_send_notification(data->display_id,
+						data->error_type,
+						MDP_RECOVERY_CRITICAL_ERROR);
+		if (timer_pending(&data->retry_timer)) {
+			pr_debug("%s Remove retry timer", __func__);
+			del_timer(&data->retry_timer);
+		}
+		data->retry_count = 0;
+	}
+	data->error_state = false;
+}
+
+static int mdp_recovery_engine_reset(struct platform_device *pdev)
+{
+	int ret = 0;
+	struct msm_fb_data_type *mfd;
+	struct msm_fb_panel_data *pdata;
+
+	if (!pdev)
+		return -EINVAL;
+	mfd = platform_get_drvdata(pdev);
+	if (!mfd)
+		return -EINVAL;
+	pdata = (struct msm_fb_panel_data *)pdev->dev.platform_data;
+	if (!pdata)
+		return -EINVAL;
+	if (mfd->panel_power_on) {
+		mfd->op_enable = FALSE;
+		down(&mfd->sem);
+		mfd->panel_power_on = FALSE;
+		up(&mfd->sem);
+		cancel_delayed_work_sync(&mfd->backlight_worker);
+		if (mfd->msmfb_no_update_notify_timer.function)
+			del_timer(&mfd->msmfb_no_update_notify_timer);
+		complete(&mfd->msmfb_no_update_notify);
+		ret = pdata->off(mfd->pdev);
+		if (ret)
+			pr_err("%s: pdata->off err=%d, panel=%d",
+				__func__, ret, pdata->panel_info.type);
+		msm_fb_release_timeline(mfd);
+		mfd->op_enable = TRUE;
+	}
+	if (!ret && (!mfd->panel_power_on)) {
+		ret = pdata->on(mfd->pdev);
+		if (ret) {
+			pr_err("%s: pdata->on err=%d, panel=%d",
+				__func__, ret, pdata->panel_info.type);
+		} else {
+			down(&mfd->sem);
+			mfd->panel_power_on = TRUE;
+			up(&mfd->sem);
+			mfd->panel_driver_on = mfd->op_enable;
+		}
+	}
+	return ret;
+}
+
+static boolean mdp_recovery_do(struct mdp_recovery_data *data)
+{
+	boolean success = true;
+	int ret;
+	struct platform_device *pdev;
+
+	if (!data) {
+		pr_err("%s invalid param: NULL pointer!", __func__);
+		return false;
+	}
+	pdev = (struct platform_device *)data->err_src_data;
+	if (!pdev) {
+		pr_err("%s invalid param: NULL pointer pdev", __func__);
+		return false;
+	}
+	if (recovery_ctx->debug_flag) {
+		pr_info("%s Debug mode: display_id=%d, error_type=%d, " \
+			"ack_type=%d", __func__, data->display_id,
+			data->error_type, data->ack_type);
+		success = recovery_ctx->debug_flag > 0;
+		pr_info("%s Simulate recovery result: %s", __func__,
+			(success ? "Success" : "Failure"));
+		return success;
+	}
+	if ((data->error_type == MDP_RECOVERY_DISPLAY_ENGINE_ERROR) ||
+	    (data->ack_type == MDP_RECOVERY_ACK_RECOVER_ALL)) {
+		ret = mdp_recovery_engine_reset(pdev);
+		if (ret) {
+			pr_err("%s reset engine failed %d", __func__, ret);
+			success = false;
+		}
+	}
+	if ((data->error_type == MDP_RECOVERY_BRIDGE_CHIP_ERROR) ||
+	    (data->ack_type == MDP_RECOVERY_ACK_RECOVER_ALL)) {
+		ret = panel_next_dba_reset(pdev);
+		if (ret) {
+			pr_err("%s reset dba failed %d", __func__, ret);
+			success = false;
+		}
+	}
+	return success;
+}
+
+static void mdp_recovery_retry_timer_handler(unsigned long param)
+{
+	struct mdp_recovery_data *data = (struct mdp_recovery_data *)param;
+	if (!data)
+		return;
+	pr_info("%s Clear retry counter. display_id=%d, err_type=%d", __func__,
+		data->display_id, data->error_type);
+	data->retry_count = 0;
+}
+
+void mdp_recovery_debug(int debug_flag)
+{
+	recovery_ctx->debug_flag = debug_flag;
 }
 
 #ifdef CONFIG_MSM_BUS_SCALING
@@ -3797,6 +4372,8 @@ static int mdp_probe(struct platform_device *pdev)
 		mfd->cpu_pm_hdl = add_event_timer(NULL, (void *)mfd);
 	}
 	mdp_clk_ctrl(0);
+
+	panel_next_set_error_cb(pdev, mdp_panel_error_cb);
 
 #ifdef CONFIG_MSM_BUS_SCALING
 	if (mdp_bus_scale_register())
