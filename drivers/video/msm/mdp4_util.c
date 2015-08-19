@@ -534,6 +534,8 @@ irqreturn_t mdp4_isr(int irq, void *ptr)
 				continue;
 			mgmt->mdp_is_hist_valid = FALSE;
 		}
+		mdp_recovery_set_error(DISPLAY_PRIMARY,
+					MDP_RECOVERY_DISPLAY_ENGINE_ERROR);
 	}
 
 	if (isr & INTR_SECONDARY_INTF_UDERRUN) {
@@ -548,12 +550,32 @@ irqreturn_t mdp4_isr(int irq, void *ptr)
 				continue;
 			mgmt->mdp_is_hist_valid = FALSE;
 		}
+		mdp_recovery_set_error(DISPLAY_TERTIARY,
+					MDP_RECOVERY_DISPLAY_ENGINE_ERROR);
 	}
 
 	if (isr & INTR_EXTERNAL_INTF_UDERRUN) {
-			pr_debug("%s: UNDERRUN -- external\n", __func__);
-			mdp4_stat.intr_underrun_e++;
+		pr_debug("%s: UNDERRUN -- external\n", __func__);
+		mdp4_stat.intr_underrun_e++;
+		mdp_recovery_set_error(DISPLAY_SECONDARY,
+					MDP_RECOVERY_DISPLAY_ENGINE_ERROR);
 	}
+
+	if ((isr & INTR_AXI_PORT0_RW_ERROR) ||
+	    (isr & INTR_AXI_PORT1_RW_ERROR) ||
+	    (isr & INTR_AXI_PORT0_TIMEOUT) ||
+	    (isr & INTR_AXI_PORT1_TIMEOUT)) {
+		pr_info("%s AXI errors\n", __func__);
+		mdp_recovery_set_error(DISPLAY_PRIMARY,
+					MDP_RECOVERY_DISPLAY_ENGINE_ERROR);
+	}
+
+	if (isr & INTR_LVDS_PLL_UNLOCKS) {
+		pr_info("%s LVDS PLL Unlocks", __func__);
+		mdp_recovery_set_error(DISPLAY_PRIMARY,
+					MDP_RECOVERY_DISPLAY_ENGINE_ERROR);
+	}
+
 	isr &= mask;
 
 	if (isr == 0)

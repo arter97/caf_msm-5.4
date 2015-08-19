@@ -206,6 +206,8 @@ struct msm_panel_info {
 		(pinfo)->mode2_bpp = 0;		\
 	} while (0)
 
+typedef int (*panel_error_cb)(struct platform_device *pdev);
+
 struct msm_fb_panel_data {
 	struct msm_panel_info panel_info;
 	void (*set_rect) (int x, int y, int xres, int yres);
@@ -223,6 +225,8 @@ struct msm_fb_panel_data {
 	int (*clk_func) (int enable);
 	int (*fps_level_change) (struct platform_device *pdev,
 					u32 fps_level);
+	int (*dba_reset) (struct platform_device *pdev);
+	int (*set_error_cb) (struct platform_device *pdev, panel_error_cb cb);
 };
 
 /*===========================================================================
@@ -236,6 +240,8 @@ int panel_next_fps_level_change(struct platform_device *pdev,
 					u32 fps_level);
 int panel_next_late_init(struct platform_device *pdev);
 int panel_next_early_off(struct platform_device *pdev);
+int panel_next_dba_reset(struct platform_device *pdev);
+int panel_next_set_error_cb(struct platform_device *pdev, panel_error_cb cb);
 
 int lcdc_device_register(struct msm_panel_info *pinfo);
 

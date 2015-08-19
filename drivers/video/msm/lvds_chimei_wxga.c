@@ -16,17 +16,87 @@
 #include <linux/mfd/pm8xxx/pm8921.h>
 #include <mach/socinfo.h>
 #include "mach/board.h"
+#include <video/msm_dba.h>
 
 #define LVDS_CHIMEI_PWM_FREQ_HZ 300
 #define LVDS_CHIMEI_PWM_PERIOD_USEC (USEC_PER_SEC / LVDS_CHIMEI_PWM_FREQ_HZ)
 #define LVDS_CHIMEI_PWM_LEVEL 255
 #define LVDS_CHIMEI_PWM_DUTY_LEVEL \
 	(LVDS_CHIMEI_PWM_PERIOD_USEC / LVDS_CHIMEI_PWM_LEVEL)
-
+#define LVDS_CHIMEI_DBA_CLIENT_NAME "LVDS_CHIMEI_PANEL"
+#define LVDS_CHIMEI_DBA_CHIP_NAME   "DS90UH927Q"
 
 static struct lvds_panel_platform_data *cm_pdata;
 static struct platform_device *cm_fbpdev;
 static struct pwm_device *bl_lpm;
+static struct lvds_dba_info {
+	void *handle;
+	struct msm_dba_ops ops;
+} dba_info;
+static panel_error_cb err_cb;
+
+static void lvds_chimei_panel_dba_cb(void *data,
+				enum msm_dba_callback_event event)
+{
+	struct platform_device *pdev = (struct platform_device *)data;
+	boolean failure = false;
+	if (event & MSM_DBA_CB_VIDEO_FAILURE) {
+		pr_info("%s DBA error detected: video failure", __func__);
+		failure = true;
+	}
+	if (event & MSM_DBA_CB_AUDIO_FAILURE) {
+		pr_info("%s DBA error detected: audio failure", __func__);
+		failure = true;
+	}
+	/* callback to notify MDP */
+	if (failure && err_cb)
+		err_cb(pdev);
+}
+
+static int lvds_chimei_panel_register_dba(struct platform_device *pdev)
+{
+	int rc = 0;
+	struct msm_dba_reg_info info;
+
+	memset(&info, 0, sizeof(info));
+	strlcpy(info.client_name, LVDS_CHIMEI_DBA_CLIENT_NAME,
+		MSM_DBA_CLIENT_NAME_LEN);
+	strlcpy(info.chip_name, LVDS_CHIMEI_DBA_CHIP_NAME,
+		MSM_DBA_CHIP_NAME_MAX_LEN);
+	info.cb = lvds_chimei_panel_dba_cb;
+	info.cb_data = pdev;
+	dba_info.handle = msm_dba_register_client(&info, &dba_info.ops);
+	if (IS_ERR(dba_info.handle)) {
+		pr_err("%s dba register client failed!", __func__);
+		rc = PTR_ERR(dba_info.handle);
+	}
+	return rc;
+}
+
+static int lvds_chimei_panel_deregister_dba(struct platform_device *pdev)
+{
+	return msm_dba_deregister_client(dba_info.handle);
+}
+
+static int lvds_chimei_panel_reset(struct platform_device *pdev)
+{
+	if (dba_info.ops.force_reset)
+		return dba_info.ops.force_reset(dba_info.handle, 0);
+	else
+		return -EINVAL;
+}
+
+static int lvds_chimei_panel_set_cb(struct platform_device *pdev,
+				panel_error_cb cb)
+{
+	if (cb) {
+		err_cb = cb;
+		return 0;
+	} else {
+		pr_err("%s callback function is NULL!", __func__);
+		return -EINVAL;
+	}
+}
 
 static int lvds_chimei_panel_on(struct platform_device *pdev)
 {
@@ -90,13 +160,22 @@ static int __devinit lvds_chimei_probe(struct platform_device *pdev)
 		rc = -ENODEV;
 		goto probe_exit;
 	}
+	lvds_chimei_panel_register_dba(pdev);
 
 probe_exit:
 	return rc;
 }
 
+static int lvds_chimei_remove(struct platform_device *pdev)
+{
+	int rc = 0;
+	rc = lvds_chimei_panel_deregister_dba(pdev);
+	return rc;
+}
+
 static struct platform_driver this_driver = {
 	.probe  = lvds_chimei_probe,
+	.remove = lvds_chimei_remove,
 	.driver = {
 		.name   = "lvds_chimei_wxga",
 	},
@@ -106,6 +185,8 @@ static struct msm_fb_panel_data lvds_chimei_panel_data = {
 	.on = lvds_chimei_panel_on,
 	.off = lvds_chimei_panel_off,
 	.set_backlight = lvds_chimei_set_backlight,
+	.dba_reset = lvds_chimei_panel_reset,
+	.set_error_cb = lvds_chimei_panel_set_cb,
 };
 
 static struct platform_device this_device = {
