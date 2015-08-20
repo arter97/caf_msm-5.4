@@ -104,6 +104,7 @@ struct adp_camera_ctxt {
 	struct v4l2_ctrl_handler ctrl_handler;
 	struct video_device *vdev;
 	struct media_device mdev;
+	struct v4l2_fh event_handler;
 
 	/* state */
 	enum camera_states state;
@@ -1661,14 +1662,39 @@ mdp_failed:
 
 static int adp_camera_v4l2_open(struct file *filp)
 {
-	struct video_device *vdev = video_devdata(filp);
+	struct video_device *vdev;
+
+	if (!adp_cam_ctxt || !filp) {
+		pr_err("%s - NULL ptr adp_cam_ctxt 0x%p filp 0x%p",
+			__func__, adp_cam_ctxt, filp);
+		return -EINVAL;
+	}
+
+	vdev = video_devdata(filp);
+	if (!vdev) {
+		pr_err("%s - NULL ptr vdev", __func__);
+		return -EINVAL;
+	}
+
 	clear_bit(V4L2_FL_USES_V4L2_FH, &vdev->flags);
+
+	/* setup the event queue */
+	v4l2_fh_init(&adp_cam_ctxt->event_handler, vdev);
+	v4l2_fh_add(&adp_cam_ctxt->event_handler);
+	filp->private_data = &(adp_cam_ctxt->event_handler);
 	return 0;
 }
 
 static int adp_camera_v4l2_close(struct file *filp)
 {
 	int rc = 0;
+	if (!adp_cam_ctxt) {
+		pr_err("%s - NULL ptr adp_cam_ctxt", __func__);
+		return -EINVAL;
+	}
+
+	v4l2_fh_del(&adp_cam_ctxt->event_handler);
+
 	return rc;
 }
 
@@ -1839,6 +1865,38 @@ static int adp_camera_v4l2_streamoff(struct file *file, void *fh,
 	return rc;
 }
 
+static int adp_v4l2_subscribe_event(struct v4l2_fh *fh,
+			struct v4l2_event_subscription *sub)
+{
+	int rc = 0;
+	if (!fh || !sub) {
+		pr_err("%s: NULL pointer fh 0x%p sub 0x%p",
+			__func__, fh, sub);
+		return -EINVAL;
+	}
+	pr_debug("%s:fh = 0x%x, type = 0x%x",
+		__func__, (u32)fh, sub->type);
+	rc = v4l2_event_subscribe(fh, sub, 3);
+	if (rc < 0)
+		pr_err("%s: failed for evtType = 0x%x, rc = %d",
+						__func__, sub->type, rc);
+	return rc;
+}
+
+static int adp_v4l2_unsubscribe_event(struct v4l2_fh *fh,
+			struct v4l2_event_subscription *sub)
+{
+	int rc = 0;
+	if (!fh || !sub) {
+		pr_err("%s: NULL pointer fh 0x%p sub 0x%p",
+			__func__, fh, sub);
+		return -EINVAL;
+	}
+	rc = v4l2_event_unsubscribe(fh, sub);
+	pr_debug("%s: rc = %d", __func__, rc);
+	return rc;
+}
+
 static const struct v4l2_ioctl_ops adp_camera_v4l2_ioctl_ops = {
 	.vidioc_querycap = adp_camera_v4l2_querycap,
 	.vidioc_cropcap = adp_camera_v4l2_cropcap,
@@ -1846,6 +1904,8 @@ static const struct v4l2_ioctl_ops adp_camera_v4l2_ioctl_ops = {
 	.vidioc_s_crop = adp_camera_v4l2_s_crop,
 	.vidioc_streamon = adp_camera_v4l2_streamon,
 	.vidioc_streamoff = adp_camera_v4l2_streamoff,
+	.vidioc_subscribe_event = adp_v4l2_subscribe_event,
+	.vidioc_unsubscribe_event = adp_v4l2_unsubscribe_event,
 };
 
 
