@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014, Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2015, Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -188,6 +188,7 @@ set_msm_otg_mode(struct device *dev, struct device_attribute *attr,
 		switch (phy->state) {
 		case OTG_STATE_B_IDLE:
 		case OTG_STATE_B_PERIPHERAL:
+			clear_bit(B_SESS_VLD, &motg->inputs);
 			clear_bit(ID, &motg->inputs);
 			break;
 		default:
@@ -3837,16 +3838,6 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	phy->otg->start_hnp = msm_otg_start_hnp;
 	phy->otg->start_srp = msm_otg_start_srp;
 
-	/* Allow set_transceiver only for one USB controller with OTG dual role.
-	 * No transceiver logic is requires for host mode */
-	if (pdata->mode == USB_OTG) {
-		ret = usb_set_transceiver(&motg->phy);
-		if (ret) {
-			dev_err(&pdev->dev, "usb_set_transceiver failed\n");
-			goto free_async_irq;
-		}
-	}
-
 	if (motg->pdata->mode == USB_OTG &&
 		motg->pdata->otg_control == OTG_PMIC_CONTROL) {
 		if (motg->pdata->pmic_id_irq) {
@@ -3925,8 +3916,6 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	return 0;
 
 remove_phy:
-	usb_set_transceiver(NULL);
-free_async_irq:
 	if (motg->async_irq)
 		free_irq(motg->async_irq, motg);
 	if (pdata->mpm_xo_wakeup_int) {
@@ -4121,7 +4110,7 @@ static int msm_otg_pm_resume(struct device *dev)
 	disable_irq(motg->irq);
 	atomic_set(&motg->pm_suspended, 0);
 	if (pdata->allow_host_vdd_min_wo_rework &&
-		motg->pdata->mode == USB_HOST) {
+		!test_bit(ID, &motg->inputs)) {
 		queue_delayed_work(system_nrt_wq,
 			&motg->restart_host_work, msecs_to_jiffies((1000)));
 	} else if (motg->async_int || motg->sm_work_pending ||
