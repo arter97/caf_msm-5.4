@@ -74,8 +74,6 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8916-cdp.dtb \
 	msm8916-qrd-skuic.dtb \
 	msm8916-qrd-skuid.dtb \
 	msm8916-qrd-skut1.dtb \
-	apq8016-mtp.dtb \
-	apq8016-mtp-smb1360.dtb \
 	msm8939-qrd-skuk.dtb \
 	msm8939-qrd-skul.dtb \
 	msm8939-cdp.dtb \
@@ -100,8 +98,6 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8916-cdp.dtb \
 	msm8936-mtp.dtb \
 	msm8936-mtp-smb1360.dtb \
 	msm8936-mtp-wcd9306.dtb \
-	msmtellurium-sim.dtb \
-	msmtellurium-rumi.dtb \
 	msm8929-cdp.dtb \
 	msm8929-mtp.dtb \
 	msm8929-mtp-smb1360.dtb \
