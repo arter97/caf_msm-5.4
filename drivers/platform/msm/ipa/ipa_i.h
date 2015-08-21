@@ -989,6 +989,7 @@ union IpaHwMhiDlUlSyncCmdData_t {
  * @uc_sram_mmio: Pointer to uC mapped memory
  * @pending_cmd: The last command sent waiting to be ACKed
  * @uc_status: The last status provided by the uC
+ * @uc_error_type: error type from uC error event
  */
 struct ipa_uc_ctx {
 	bool uc_inited;
@@ -1001,6 +1002,7 @@ struct ipa_uc_ctx {
 	u32 uc_event_top_ofst;
 	u32 pending_cmd;
 	u32 uc_status;
+	u32 uc_error_type;
 };
 
 /**
