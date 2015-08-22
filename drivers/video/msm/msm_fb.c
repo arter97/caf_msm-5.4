@@ -1042,12 +1042,18 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 	struct msm_fb_panel_data *pdata = NULL;
 	int ret = 0;
+	struct fb_event event;
 
 	pdata = (struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
 	if ((!pdata) || (!pdata->on) || (!pdata->off)) {
 		printk(KERN_ERR "msm_fb_blank_sub: no panel operation detected!\n");
 		return -ENODEV;
 	}
+
+	/* Send notification */
+	event.info = info;
+	event.data = &blank_mode;
+	fb_notifier_call_chain(FB_EARLY_EVENT_BLANK, &event);
 
 	switch (blank_mode) {
 	case FB_BLANK_UNBLANK:
@@ -1094,6 +1100,17 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 			mfd->op_enable = TRUE;
 		}
 		break;
+	}
+
+	/* Send post notification */
+	if (ret) {
+		event.info = info;
+		event.data = &blank_mode;
+		fb_notifier_call_chain(FB_R_EARLY_EVENT_BLANK, &event);
+	} else {
+		event.info = info;
+		event.data = &blank_mode;
+		fb_notifier_call_chain(FB_EVENT_BLANK, &event);
 	}
 
 	return ret;

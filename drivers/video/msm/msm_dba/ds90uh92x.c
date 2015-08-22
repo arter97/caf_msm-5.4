@@ -27,6 +27,10 @@
 #include "msm_dba_internal.h"
 
 #define MAX_SLAVE_DEVICES 0x8
+#define SERIALIZER_REG_START_ADDR   0x00
+#define SERIALIZER_REG_END_ADDR     0xF5
+#define DESERIALIZER_REG_START_ADDR 0x00
+#define DESERIALIZER_REG_END_ADDR   0xF5
 
 struct ds90uh92x {
 	struct msm_dba_device_info dev;
@@ -731,8 +735,9 @@ static int ds90uh92x_force_reset(struct msm_dba_device_info *dev, u32 flags)
 static int ds90uh92x_dump_info(struct msm_dba_device_info *dev, u32 flags)
 {
 	struct ds90uh92x *ds90uh92x = container_of(dev, struct ds90uh92x, dev);
-	u8 reg_val = 0;
+	u8 reg_val = 0, deserial_addr = 0;
 	int rc = 0;
+	int i = 0;
 
 	mutex_lock(&dev->dev_mutex);
 	pr_info("------------%s:%d STATUS--------------\n", dev->chip_name,
@@ -760,6 +765,37 @@ static int ds90uh92x_dump_info(struct msm_dba_device_info *dev, u32 flags)
 		goto fail;
 
 	pr_info("HDCP_STS = 0x%x\n", reg_val);
+	pr_info("Serializer Reg Dump I2C=[0x%02x]:\n", ds90uh92x->i2c_addr);
+	for (i = SERIALIZER_REG_START_ADDR; i <= SERIALIZER_REG_END_ADDR; i++) {
+		rc = msm_dba_helper_i2c_read(ds90uh92x->i2c_client,
+					     ds90uh92x->i2c_addr,
+					     i,
+					     &reg_val,
+					     1);
+		if (rc)
+			goto fail;
+		pr_info("[0x%02x]=0x%02x\n", i, reg_val);
+	}
+	rc = msm_dba_helper_i2c_read(ds90uh92x->i2c_client,
+				     ds90uh92x->i2c_addr,
+				     0x06,
+				     &deserial_addr,
+				     1);
+	if (rc)
+		goto fail;
+	deserial_addr >>= 1;
+	pr_info("De-Serializer Reg Dump I2C=[0x%02x]:\n", deserial_addr);
+	for (i = DESERIALIZER_REG_START_ADDR;
+		i <= DESERIALIZER_REG_END_ADDR; i++) {
+		rc = msm_dba_helper_i2c_read(ds90uh92x->i2c_client,
+					     deserial_addr,
+					     i,
+					     &reg_val,
+					     1);
+		if (rc)
+			goto fail;
+		pr_info("[0x%02x]=0x%02x\n", i, reg_val);
+	}
 fail:
 	pr_info("---------------------------------------\n");
 	mutex_unlock(&dev->dev_mutex);
