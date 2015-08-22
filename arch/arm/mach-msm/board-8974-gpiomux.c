@@ -129,6 +129,13 @@ static struct gpiomux_setting gpio_uart_config = {
 	.dir = GPIOMUX_OUT_HIGH,
 };
 
+static struct gpiomux_setting gpio_uart_config_func3 = {
+	.func = GPIOMUX_FUNC_3,
+	.drv = GPIOMUX_DRV_16MA,
+	.pull = GPIOMUX_PULL_NONE,
+	.dir = GPIOMUX_OUT_HIGH,
+};
+
 static struct gpiomux_setting slimbus = {
 	.func = GPIOMUX_FUNC_1,
 	.drv = GPIOMUX_DRV_8MA,
@@ -704,6 +711,33 @@ static struct msm_gpiomux_config msm_blsp_configs[] __initdata = {
 	},
 };
 
+static struct msm_gpiomux_config msm_blsp_configs_eagle[] __initdata = {
+	{
+		.gpio      = 85,			/* BLSP12 UART TX */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gpio_uart_config,
+		},
+	},
+	{
+		.gpio      = 86,			/* BLSP12 UART RX */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gpio_uart_config,
+		},
+	},
+	{
+		.gpio      = 23,		/* BLSP2 UART TX */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gpio_uart_config_func3,
+		},
+	},
+	{
+		.gpio      = 24,		/* BLSP2 UART RX */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gpio_uart_config_func3,
+		},
+	},
+};
+
 static struct msm_gpiomux_config msm8974_slimbus_config[] __initdata = {
 	{
 		.gpio	= 70,		/* slimbus clk */
@@ -1031,6 +1065,107 @@ static struct msm_gpiomux_config msm_sensor_configs_dragonboard[] __initdata = {
 	},
 };
 
+static struct msm_gpiomux_config msm_camera_sensor_configs_eagle[] __initdata = {
+	{
+		.gpio = 15, /* CAM_MCLK0 */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_settings[0],
+			[GPIOMUX_SUSPENDED] = &cam_settings[1],
+		},
+	},
+	{
+		.gpio = 16, /* CAM_MCLK1 */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_settings[0],
+			[GPIOMUX_SUSPENDED] = &cam_settings[1],
+		},
+	},
+	{
+		.gpio = 17, /* CAM_MCLK2 */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_settings[0],
+			[GPIOMUX_SUSPENDED] = &cam_settings[1],
+		},
+	},
+	{
+		.gpio = 18, /* WEBCAM_RESET_N */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_settings[3],
+			[GPIOMUX_SUSPENDED] = &cam_settings[4],
+		},
+	},
+	{
+		.gpio = 19, /* CCI_I2C_SDA0 */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_settings[0],
+			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[0],
+		},
+	},
+	{
+		.gpio = 20, /* CCI_I2C_SCL0 */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_settings[0],
+			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[0],
+		},
+	},
+	{
+		.gpio = 21, /* CCI_I2C_SDA1 */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_settings[0],
+			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[0],
+		},
+	},
+	{
+		.gpio = 22, /* CCI_I2C_SCL1 */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_settings[0],
+			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[0],
+		},
+	},
+	{
+		.gpio = 89, /* CAM1_STANDBY_N */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_settings[3],
+			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[1],
+		},
+	},
+	{
+		.gpio = 90, /* CAM1_RST_N */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_settings[3],
+			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[1],
+		},
+	},
+	{
+		.gpio = 92, /* 3D_RIGHT_RST_N */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_settings[3],
+			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[1],
+		},
+	},
+	{
+		.gpio = 93, /* OPTIC_FSIN */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_settings[3],
+			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[1],
+		},
+	},
+	{
+		.gpio = 94, /* CAM2_RST_N */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_settings[3],
+			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[1],
+		},
+	},
+	{
+		.gpio = 102, /* 3D_RIGHT_FSIN */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cam_settings[3],
+			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[1],
+		},
+	},
+};
+
 static struct gpiomux_setting auxpcm_act_cfg = {
 	.func = GPIOMUX_FUNC_1,
 	.drv = GPIOMUX_DRV_8MA,
@@ -1217,7 +1352,8 @@ static struct msm_gpiomux_config wcnss_5gpio_interface[] = {
 
 static struct msm_gpiomux_config ath_gpio_configs[] = {
 	{
-		.gpio = 51,
+		/*.gpio = 51,*/
+		.gpio = 71,
 		.settings = {
 			[GPIOMUX_ACTIVE]    = &ath_gpio_active_cfg,
 			[GPIOMUX_SUSPENDED] = &ath_gpio_suspend_cfg,
@@ -1446,28 +1582,41 @@ void __init msm_8974_init_gpiomux(void)
 		msm_tlmm_misc_reg_write(TLMM_SPARE_REG, 0xf);
 
 #if defined(CONFIG_KS8851) || defined(CONFIG_KS8851_MODULE)
-	if (!(of_board_is_dragonboard() && machine_is_apq8074()))
+	if (!( (of_board_is_dragonboard() || of_board_is_eagle()) && machine_is_apq8074()))
 		msm_gpiomux_install(msm_eth_configs, \
 			ARRAY_SIZE(msm_eth_configs));
 #endif
-	msm_gpiomux_install(msm_blsp_configs, ARRAY_SIZE(msm_blsp_configs));
+	if (( of_board_is_eagle() && machine_is_apq8074()))
+		msm_gpiomux_install(msm_blsp_configs_eagle, ARRAY_SIZE(msm_blsp_configs_eagle));
+	else
+		msm_gpiomux_install(msm_blsp_configs, ARRAY_SIZE(msm_blsp_configs));
+
+	/* BT UART */
 	msm_gpiomux_install(msm_blsp2_uart7_configs,
 			 ARRAY_SIZE(msm_blsp2_uart7_configs));
 	msm_gpiomux_install(wcnss_5wire_interface,
 				ARRAY_SIZE(wcnss_5wire_interface));
-	if (of_board_is_liquid())
+	if (of_board_is_eagle())  /*of_board_is_liquid()*/ 
 		msm_gpiomux_install_nowrite(ath_gpio_configs,
 					ARRAY_SIZE(ath_gpio_configs));
-	msm_gpiomux_install(msm8974_slimbus_config,
-			ARRAY_SIZE(msm8974_slimbus_config));
 
-	msm_gpiomux_install(msm_touch_configs, ARRAY_SIZE(msm_touch_configs));
+	if (!( of_board_is_eagle() && machine_is_apq8074()))
+		msm_gpiomux_install(msm8974_slimbus_config,
+				ARRAY_SIZE(msm8974_slimbus_config));
+
+	if (!( of_board_is_eagle() && machine_is_apq8074()))
+		msm_gpiomux_install(msm_touch_configs, ARRAY_SIZE(msm_touch_configs));
+
+	if (!( of_board_is_eagle() && machine_is_apq8074()))
 		msm_gpiomux_install(hap_lvl_shft_config,
 				ARRAY_SIZE(hap_lvl_shft_config));
 
 	if (of_board_is_dragonboard() && machine_is_apq8074())
 		msm_gpiomux_install(msm_sensor_configs_dragonboard, \
 				ARRAY_SIZE(msm_sensor_configs_dragonboard));
+	else if (of_board_is_eagle() && machine_is_apq8074())
+		msm_gpiomux_install(msm_camera_sensor_configs_eagle, \
+				ARRAY_SIZE(msm_camera_sensor_configs_eagle));
 	else
 		msm_gpiomux_install(msm_sensor_configs, \
 				ARRAY_SIZE(msm_sensor_configs));
@@ -1475,19 +1624,25 @@ void __init msm_8974_init_gpiomux(void)
 	msm_gpiomux_install(&sd_card_det, 1);
 
 	if (machine_is_apq8074() && (of_board_is_liquid() || \
-	    of_board_is_dragonboard()))
+	    of_board_is_dragonboard() || \
+	    of_board_is_eagle()))
 		msm_gpiomux_sdc3_install();
 
-	if (!(of_board_is_dragonboard() && machine_is_apq8074()))
+	if (!( (of_board_is_dragonboard() || of_board_is_eagle()) && machine_is_apq8074()))
 		msm_gpiomux_sdc4_install();
 
-	msm_gpiomux_install(msm_taiko_config, ARRAY_SIZE(msm_taiko_config));
+	if (!( of_board_is_eagle() && machine_is_apq8074()))
+		msm_gpiomux_install(msm_taiko_config, ARRAY_SIZE(msm_taiko_config));
 
-	msm_gpiomux_install(msm_hsic_configs, ARRAY_SIZE(msm_hsic_configs));
-	msm_gpiomux_install(msm_hsic_hub_configs,
-				ARRAY_SIZE(msm_hsic_hub_configs));
+	if (!( of_board_is_eagle() && machine_is_apq8074())) {
+		msm_gpiomux_install(msm_hsic_configs, ARRAY_SIZE(msm_hsic_configs));
+		msm_gpiomux_install(msm_hsic_hub_configs,
+					ARRAY_SIZE(msm_hsic_hub_configs));
+	}
 
-	msm_gpiomux_install(msm_hdmi_configs, ARRAY_SIZE(msm_hdmi_configs));
+	if (!( of_board_is_eagle() && machine_is_apq8074()))
+		msm_gpiomux_install(msm_hdmi_configs, ARRAY_SIZE(msm_hdmi_configs));
+
 	if (of_board_is_fluid())
 		msm_gpiomux_install(msm_mhl_configs,
 				    ARRAY_SIZE(msm_mhl_configs));
@@ -1496,7 +1651,7 @@ void __init msm_8974_init_gpiomux(void)
 	    (of_board_is_dragonboard() && machine_is_apq8074()))
 		msm_gpiomux_install(msm8974_pri_ter_auxpcm_configs,
 				 ARRAY_SIZE(msm8974_pri_ter_auxpcm_configs));
-	else
+	else if (!(of_board_is_eagle()))
 		msm_gpiomux_install(msm8974_pri_pri_auxpcm_configs,
 				 ARRAY_SIZE(msm8974_pri_pri_auxpcm_configs));
 
@@ -1508,8 +1663,9 @@ void __init msm_8974_init_gpiomux(void)
 		msm_gpiomux_install(msm_epm_configs,
 				ARRAY_SIZE(msm_epm_configs));
 
-	msm_gpiomux_install_nowrite(msm_lcd_configs,
-			ARRAY_SIZE(msm_lcd_configs));
+	if (!( of_board_is_eagle() && machine_is_apq8074()))
+		msm_gpiomux_install_nowrite(msm_lcd_configs,
+				ARRAY_SIZE(msm_lcd_configs));
 
 	if (of_board_is_rumi())
 		msm_gpiomux_install(msm_rumi_blsp_configs,

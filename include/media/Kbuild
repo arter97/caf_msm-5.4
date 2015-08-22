@@ -16,3 +16,5 @@ header-y += msmb_isp.h
 header-y += msmb_ispif.h
 header-y += msmb_generic_buf_mgr.h
 header-y += msmb_pproc.h
+header-y += imx135_common.h
+header-y += ov7251_common.h

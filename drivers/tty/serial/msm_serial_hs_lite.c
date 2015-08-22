@@ -1008,6 +1008,10 @@ static int msm_hsl_startup(struct uart_port *port)
 		}
 	}
 
+	/* Reset DMEN to reset SC mode change from SBL1 */
+	if (is_console(port))
+		msm_hsl_write(port, 0, regmap[vid][UARTDM_DMEN]);
+
 	/*
 	 * Set RFR Level as 3/4 of UARTDM FIFO Size
 	 * i.e. 48 Words = 192 bytes as Rx FIFO is 64 words ( 256 bytes).
