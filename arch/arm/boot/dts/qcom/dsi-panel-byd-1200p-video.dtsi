@@ -41,15 +41,17 @@
 		qcom,mdss-dsi-lane-1-state;
 		qcom,mdss-dsi-lane-2-state;
 		qcom,mdss-dsi-lane-3-state;
-		qcom,mdss-dsi-panel-timings = [e3 38 26 00 6a 6e 2c 3c 2f 03 04 00];
+		qcom,mdss-dsi-panel-timings =
+			[e3 38 26 00 6a 6e 2c 3c 2f 03 04 00];
 		qcom,mdss-dsi-t-clk-post = <0x03>;
 		qcom,mdss-dsi-t-clk-pre = <0x23>;
 		qcom,mdss-dsi-bl-min-level = <1>;
 		qcom,mdss-dsi-bl-max-level = <4095>;
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
 		qcom,mdss-dsi-mdp-trigger = "none";
+		qcom,mdss-dsi-force-clock-lane-hs;
 		qcom,mdss-dsi-on-command = [
-		    23 01 00 00 00 00 02 8C 8E
+			23 01 00 00 00 00 02 8C 8E
 			23 01 00 00 00 00 02 C5 23
 			23 01 00 00 00 00 02 C7 23
 			23 01 00 00 00 00 02 FD 5C
@@ -263,6 +265,5 @@
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
 		qcom,mdss-dsi-reset-sequence = <0 200>, <1 200>, <0 200>;
 		qcom,mdss-dsi-tx-eot-append;
-		qcom,cont-splash-enabled;
 	};
 };

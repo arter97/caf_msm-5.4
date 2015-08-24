@@ -116,7 +116,50 @@
 	};
 };
 
+&i2c_3 { /* BLSP1 QUP3 */
+	focaltech@38 {
+		compatible = "focaltech,5x06";
+		reg = <0x38>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <65 0x2008>;
+		vdd-supply = <&pm8950_l17>;
+		vcc_i2c-supply = <&pm8950_l6>;
+		focaltech,name = "ft5x06";
+		focaltech,family-id = <0x55>;
+		focaltech,reset-gpio = <&msm_gpio 64 0x00>;
+		focaltech,irq-gpio = <&msm_gpio 65 0x00>;
+		focaltech,display-coords = <0 0 1200 1920>;
+		focaltech,panel-coords = <0 0 1200 2000>;
+		focaltech,no-force-update;
+		pinctrl-names = "pmx_ts_active",
+				"pmx_ts_suspend",
+				"pmx_ts_release";
+		pinctrl-0 = <&ts_int_active &ts_reset_active>;
+		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+		pinctrl-2 = <&ts_release>;
+		synaptics,irq-gpio = <&msm_gpio 65 0x2008>;
+		synaptics,reset-gpio = <&msm_gpio 64 0x0>;
+		focaltech,i2c-pull-up;
+		focaltech,group-id = <1>;
+		focaltech,hard-reset-delay-ms = <20>;
+		focaltech,soft-reset-delay-ms = <150>;
+		focaltech,num-max-touches = <5>;
+		focaltech,fw-name = "ft_fw.bin";
+		focaltech,fw-delay-aa-ms = <50>;
+		focaltech,fw-delay-55-ms = <30>;
+		focaltech,fw-upgrade-id1 = <0x79>;
+		focaltech,fw-upgrade-id2 = <0x03>;
+		focaltech,fw-delay-readid-ms = <10>;
+		focaltech,fw-delay-era-flsh-ms = <2000>;
+		focaltech,ignore-id-check = <1>;
+	};
+};
+
 &i2c_2 {
+	status = "disabled";
+};
+
+&i2c_5 {
 	status = "disabled";
 };
 
@@ -148,4 +191,32 @@
 	qcom,nonremovable;
 
 	status = "ok";
+};
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&pmx_mdss {
+	qcom,num-grp-pins = <2>;
+	qcom,pins = <&gp 0>,<&gp 19>;
+};
+
+&pmx_mdss_te {
+	qcom,num-grp-pins = <1>;
+	qcom,pins = <&gp 24>;
+};
+
+&mdss_dsi0 {
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+	qcom,dsi-pref-prim-pan = <&dsi_byd_1200_vid>;
+	qcom,regulator-ldo-mode;
+	qcom,platform-enable-gpio = <&msm_gpio 19 0>;
+	qcom,platform-reset-gpio = <&msm_gpio 0 0>;
+};
+
+&dsi_byd_1200_vid {
+	qcom,cont-splash-enabled;
 };
