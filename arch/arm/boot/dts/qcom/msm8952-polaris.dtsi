@@ -15,6 +15,32 @@
 #include "msm8952-camera-sensor-polaris.dtsi"
 
 &soc {
+	gpio_keys {
+		compatible = "gpio-keys";
+		input-name = "gpio-keys";
+		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
+		pinctrl-0 = <&gpio_key_active>;
+		pinctrl-1 = <&gpio_key_suspend>;
+
+		vol_up {
+			label = "volume_up";
+			gpios = <&msm_gpio 85 0x1>;
+			linux,input-type = <1>;
+			linux,code = <115>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+
+		home {
+			label = "home";
+			gpios = <&msm_gpio 93 0x1>;
+			linux,input-type = <1>;
+			linux,code = <102>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+	};
+
 	 sound {
 		compatible = "qcom,msm8952-audio-codec";
 		qcom,model = "msm8952-snd-card-polaris";
@@ -116,6 +142,26 @@
 	};
 };
 
+&spmi_bus {
+	qcom,pmi8950@2 {
+		qcom,leds@a100 {
+			status = "okay";
+			qcom,led_mpp_2 {
+				label = "mpp";
+				linux,name = "green";
+				linux,default-trigger = "none";
+				qcom,default-state = "off";
+				qcom,max-current = <40>;
+				qcom,current-setting = <5>;
+				qcom,id = <6>;
+				qcom,mode = "manual";
+				qcom,source-sel = <1>;
+				qcom,mode-ctrl = <0x60>;
+			};
+		};
+	};
+};
+
 &i2c_3 { /* BLSP1 QUP3 */
 	focaltech@38 {
 		compatible = "focaltech,5x06";
@@ -191,6 +237,13 @@
 	qcom,nonremovable;
 
 	status = "ok";
+};
+
+&tlmm_pinmux {
+	tlmm_gpio_key {
+		qcom,pins = <&gp 85>, <&gp 93>;
+		qcom,num-grp-pins = <2>;
+	};
 };
 
 &mdss_mdp {
