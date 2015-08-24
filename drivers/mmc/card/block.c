@@ -741,6 +741,16 @@ static int mmc_blk_ioctl_cmd(struct block_device *bdev,
 	mmc_rpm_hold(card->host, &card->dev);
 	mmc_claim_host(card->host);
 
+	if (mmc_card_cmdq(card)) {
+		err = mmc_cmdq_halt_on_empty_queue(card->host);
+		if (err) {
+			pr_err("%s: halt failed while doing %s err (%d)\n",
+					mmc_hostname(card->host),
+					__func__, err);
+			goto cmd_rel_host_halt;
+		}
+	}
+
 	err = mmc_blk_part_switch(card, md);
 	if (err)
 		goto cmd_rel_host;
@@ -797,9 +807,14 @@ static int mmc_blk_ioctl_cmd(struct block_device *bdev,
 	}
 
 cmd_rel_host:
+	if (mmc_card_cmdq(card)) {
+		if (mmc_cmdq_halt(card->host, false))
+			pr_err("%s: %s: cmdq unhalt failed\n",
+			       mmc_hostname(card->host), __func__);
+	}
+cmd_rel_host_halt:
 	mmc_release_host(card->host);
 	mmc_rpm_release(card->host, &card->dev);
-
 cmd_done:
 	mmc_blk_put(md);
 cmd_err:
@@ -3033,7 +3048,6 @@ static enum blk_eh_timer_return mmc_blk_cmdq_req_timed_out(struct request *req)
 	struct mmc_request *mrq = &mq_rq->cmdq_req.mrq;
 	struct mmc_cmdq_req *cmdq_req = &mq_rq->cmdq_req;
 
-	host->cmdq_ops->dumpstate(host);
 	if (cmdq_req->cmdq_req_flags & DCMD)
 		mrq->cmd->error = -ETIMEDOUT;
 	else
@@ -3058,6 +3072,10 @@ static void mmc_blk_cmdq_err(struct mmc_queue *mq)
 	struct mmc_cmdq_context_info *ctx_info = &host->cmdq_ctx;
 
 	mmc_rpm_hold(host, &card->dev);
+	mmc_host_clk_hold(host);
+	host->cmdq_ops->dumpstate(host);
+	mmc_host_clk_release(host);
+
 	err = mmc_cmdq_halt(host, true);
 	if (err) {
 		pr_err("halt: failed: %d\n", err);

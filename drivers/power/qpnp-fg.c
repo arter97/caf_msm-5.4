@@ -2932,7 +2932,7 @@ static void fg_cap_learning_load_data(struct fg_chip *chip)
 static void fg_cap_learning_save_data(struct fg_chip *chip)
 {
 	int16_t cc_mah;
-	int64_t cc_to_soc_coeff;
+	int64_t cc_to_soc_coeff, mah_to_soc;
 	int rc;
 	u8 data[2];
 
@@ -2957,7 +2957,9 @@ static void fg_cap_learning_save_data(struct fg_chip *chip)
 		if (rc) {
 			pr_err("Failed to read mah_to_soc_conv_cs: %d\n", rc);
 		} else {
-			cc_to_soc_coeff = div64_s64(half_float(data), cc_mah);
+			mah_to_soc = data[1] << 8 | data[0];
+			mah_to_soc *= MICRO_UNIT;
+			cc_to_soc_coeff = div64_s64(mah_to_soc, cc_mah);
 			half_float_to_buffer(cc_to_soc_coeff, data);
 			rc = fg_mem_write(chip, (u8 *)data,
 					ACTUAL_CAPACITY_REG, 2,
@@ -3832,7 +3834,7 @@ static irqreturn_t fg_soc_irq_handler(int irq, void *_chip)
 		schedule_work(&chip->charge_full_work);
 	if (chip->wa_flag & IADC_GAIN_COMP_WA
 			&& chip->iadc_comp_data.gain_active) {
-		fg_stay_awake(&chip->resume_soc_wakeup_source);
+		fg_stay_awake(&chip->gain_comp_wakeup_source);
 		schedule_work(&chip->gain_comp_work);
 	}
 

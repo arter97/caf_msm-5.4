@@ -1137,7 +1137,7 @@
 		qcom,vdd-voltage-level = <0 1200000 1200000>;
 
 		qcom,hsusb-otg-phy-init-seq =
-			<0x68 0x81 0x24 0x82 0xffffffff>;
+			<0x73 0x80 0x68 0x81 0x24 0x82 0xffffffff>;
 		qcom,hsusb-otg-phy-type = <3>; /* SNPS Femto PHY */
 		qcom,hsusb-otg-mode = <3>; /* OTG mode */
 		qcom,hsusb-otg-otg-control = <2>; /* PMIC */
@@ -1296,8 +1296,8 @@
 
 	sdhc_1: sdhci@7824000 {
 		compatible = "qcom,sdhci-msm";
-		reg = <0x7824900 0x500>, <0x7824000 0x800>;
-		reg-names = "hc_mem", "core_mem";
+		reg = <0x7824900 0x500>, <0x7824000 0x800>, <0x7824E00 0x200>;
+		reg-names = "hc_mem", "core_mem", "cmdq_mem";
 
 		interrupts = <0 123 0>, <0 138 0>;
 		interrupt-names = "hc_irq", "pwr_irq";
@@ -1321,7 +1321,7 @@
 			<78 512 52286 160000>, /* 20 MB/s */
 			<78 512 65360 200000>, /* 25 MB/s */
 			<78 512 130718 400000>, /* 50 MB/s */
-			<78 512 261438 800000>, /* 100 MB/s */
+			<78 512 130718 400000>, /* 100 MB/s */
 			<78 512 261438 800000>, /* 200 MB/s */
 			<78 512 261438 800000>, /* 400 MB/s */
 			<78 512 1338562 4096000>; /* Max. bandwidth */
@@ -1336,6 +1336,7 @@
 		qcom,clk-rates = <400000 25000000 50000000 100000000 192000000 384000000>;
 		qcom,ice-clk-rates = <200000000 100000000>;
 		qcom,bus-speed-mode = "HS400_1p8v", "HS200_1p8v", "DDR_1p8v";
+		qcom,scaling-lower-bus-speed-mode = "DDR52";
 		status = "disabled";
 	};
 

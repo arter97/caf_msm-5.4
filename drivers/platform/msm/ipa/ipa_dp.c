@@ -236,6 +236,7 @@ static void ipa_handle_tx(struct ipa_sys_context *sys)
 	int cnt;
 
 	ipa_inc_client_enable_clks();
+	pm_stay_awake(ipa_ctx->pdev);
 	do {
 		cnt = ipa_handle_tx_core(sys, true, true);
 		if (cnt == 0) {
@@ -248,6 +249,7 @@ static void ipa_handle_tx(struct ipa_sys_context *sys)
 	} while (inactive_cycles <= POLLING_INACTIVITY_TX);
 
 	ipa_tx_switch_to_intr_mode(sys);
+	pm_relax(ipa_ctx->pdev);
 	ipa_dec_client_disable_clks();
 }
 
@@ -843,6 +845,7 @@ static void ipa_handle_rx(struct ipa_sys_context *sys)
 	int cnt;
 
 	ipa_inc_client_enable_clks();
+	pm_stay_awake(ipa_ctx->pdev);
 	do {
 		cnt = ipa_handle_rx_core(sys, true, true);
 		if (cnt == 0) {
@@ -855,6 +858,7 @@ static void ipa_handle_rx(struct ipa_sys_context *sys)
 	} while (inactive_cycles <= POLLING_INACTIVITY_RX);
 
 	ipa_rx_switch_to_intr_mode(sys);
+	pm_relax(ipa_ctx->pdev);
 	ipa_dec_client_disable_clks();
 }
 
@@ -2299,13 +2303,13 @@ static int ipa_rx_pyld_hdlr(struct sk_buff *rx_skb, struct ipa_sys_context *sys)
 		src_pipe = WLAN_PROD_TX_EP;
 
 	ep = &ipa_ctx->ep[src_pipe];
-	spin_lock(&ipa_ctx->lan_rx_clnt_notify_lock);
+	spin_lock(&ipa_ctx->disconnect_lock);
 	if (unlikely(src_pipe >= ipa_ctx->ipa_num_pipes ||
 		!ep->valid || !ep->client_notify)) {
 		IPAERR("drop pipe=%d ep_valid=%d client_notify=%p\n",
 		  src_pipe, ep->valid, ep->client_notify);
 		dev_kfree_skb_any(rx_skb);
-		spin_unlock(&ipa_ctx->lan_rx_clnt_notify_lock);
+		spin_unlock(&ipa_ctx->disconnect_lock);
 		return 0;
 	}
 
@@ -2324,7 +2328,7 @@ static int ipa_rx_pyld_hdlr(struct sk_buff *rx_skb, struct ipa_sys_context *sys)
 	skb_pull(rx_skb, pull_len);
 	ep->client_notify(ep->priv, IPA_RECEIVE,
 			(unsigned long)(rx_skb));
-	spin_unlock(&ipa_ctx->lan_rx_clnt_notify_lock);
+	spin_unlock(&ipa_ctx->disconnect_lock);
 	return 0;
 }
 
