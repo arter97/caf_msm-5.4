@@ -244,4 +244,15 @@
 		interrupt-controller;
 		#interrupt-cells = <2>;
 	};
+
+	/* iHelium pre-si interrupts and notifications */
+	smp2pgpio_q6wlan_notify_1_out: qcom,smp2pgpio-q6wlan_notify-1-out {
+		compatible = "qcom,smp2pgpio";
+		qcom,entry-name = "q6wlan_notify";
+		qcom,remote-pid = <1>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+	};
 };

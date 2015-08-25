@@ -50,6 +50,7 @@
 #include <soc/qcom/ramdump.h>
 #include <net/cfg80211.h>
 #include <soc/qcom/memory_dump.h>
+#include <soc/qcom/smem.h>
 #include <net/cnss.h>
 
 #ifdef CONFIG_WCNSS_MEM_PRE_ALLOC
@@ -105,7 +106,11 @@ static struct cnss_fw_files FW_FILES_DEFAULT = {
 "utfbd.bin", "epping.bin", "evicted.bin"};
 
 #define QCA6180_VENDOR_ID	(0x168C)
-#define QCA6180_DEVICE_ID	(0x0041)
+#ifdef CONFIG_CNSS_ADRASTEA
+#define QCA6180_DEVICE_ID      (0xabcd)
+#else
+#define QCA6180_DEVICE_ID      (0x0041)
+#endif
 #define QCA6180_REV_ID_OFFSET	(0x08)
 
 #define WLAN_VREG_NAME		"vdd-wlan"
@@ -162,6 +167,8 @@ static DEFINE_SPINLOCK(pci_link_down_lock);
 #define SEG_NON_SECURE_DATA	(0x05)
 
 #define BMI_TEST_SETUP		(0x09)
+
+#define SMEM_INTR_STATUS_BUFF_SIZE	12
 
 struct cnss_wlan_gpio_info {
 	char *name;
@@ -287,6 +294,10 @@ static struct cnss_data {
 	int wlan_bootstrap_gpio;
 	atomic_t auto_suspended;
 	bool monitor_wake_intr;
+	int q6intr_gpio;
+	int linkup_gpio;
+	bool q6_intr_state;
+	void *target_smem;
 } *penv;
 
 static unsigned int pcie_link_down_panic;
@@ -2599,6 +2610,50 @@ static struct notifier_block mnb = {
 	.notifier_call = cnss_modem_notifier_nb,
 };
 
+#ifdef CONFIG_CNSS_ADRASTEA
+void cnss_pcie_notify_q6(void)
+{
+	if (penv->linkup_gpio > 0) {
+		pr_err("%s: smp2p trigger for link up to q6\n", __func__);
+		gpio_set_value(penv->linkup_gpio, 1);
+	}
+
+}
+EXPORT_SYMBOL(cnss_pcie_notify_q6);
+
+void cnss_intr_notify_q6(void)
+{
+	if (penv->q6intr_gpio < 0)
+		return;
+
+	penv->q6_intr_state = !penv->q6_intr_state;
+
+	pr_debug("%s: %d\n", __func__, penv->q6_intr_state);
+	gpio_set_value(penv->q6intr_gpio, penv->q6_intr_state);
+
+}
+EXPORT_SYMBOL(cnss_intr_notify_q6);
+
+void *cnss_get_target_smem(void)
+{
+	void *target_smem;
+
+	if (penv->target_smem)
+		return penv->target_smem;
+
+	target_smem = smem_find(SMEM_ID_VENDOR0,
+				SMEM_INTR_STATUS_BUFF_SIZE,
+				0,
+				SMEM_ANY_HOST_FLAG);
+	if (!target_smem)
+		pr_err("%s: Failed to get smem\n", __func__);
+
+	penv->target_smem = target_smem;
+	return target_smem;
+}
+EXPORT_SYMBOL(cnss_get_target_smem);
+#endif
+
 static int cnss_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -2761,6 +2816,22 @@ skip_ramdump:
 		penv->smmu_iova_start = smmu_iova_address[0];
 		penv->smmu_iova_len = smmu_iova_address[1];
 	}
+
+	penv->q6intr_gpio = of_get_named_gpio((&pdev->dev)->of_node,
+		"qcom,gpio-q6intr", 0);
+	if (penv->q6intr_gpio < 0)
+		pr_err("cnss: q6 interrupt GPIO invalid %d\n",
+			penv->q6intr_gpio);
+
+	if (rc_num == 0)
+		penv->linkup_gpio = of_get_named_gpio((&pdev->dev)->of_node,
+		"qcom,gpio-linkup-0", 0);
+	else
+		penv->linkup_gpio = of_get_named_gpio((&pdev->dev)->of_node,
+		"qcom,gpio-linkup-1", 0);
+
+	if (penv->linkup_gpio < 0)
+		pr_err("cnss: q6 linkup GPIO invalid %d\n", penv->linkup_gpio);
 
 	ret = pci_register_driver(&cnss_wlan_pci_driver);
 	if (ret)
