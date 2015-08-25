@@ -1551,8 +1551,16 @@ int sps_bam_pipe_inject_zlt(struct sps_bam *dev, u32 pipe_index)
 		return SPS_ERROR;
 	}
 
-	read_p = bam_pipe_get_desc_read_offset(&dev->base, pipe_index);
-	write_p = bam_pipe_get_desc_write_offset(&dev->base, pipe_index);
+	read_p = bam_pipe_get_desc_read_offset(dev->base, pipe_index);
+	write_p = bam_pipe_get_desc_write_offset(dev->base, pipe_index);
+
+	if ((write_p >= pipe->desc_size) || (read_p >= pipe->desc_size)) {
+		SPS_ERR("sps: BAM %pa pipe %d ,write_p:0x%x Out of range\n",
+					BAM_ID(dev), pipe_index, write_p);
+		print_bam_selected_reg(dev->base , dev->props.ee);
+		print_bam_pipe_selected_reg(dev->base , pipe_index);
+		return SPS_ERROR;
+	}
 
 	SPS_DBG2(
 		"sps: BAM %pa pipe %d: read pointer:0x%x; write pointer:0x%x.\n",
@@ -1578,13 +1586,13 @@ int sps_bam_pipe_inject_zlt(struct sps_bam *dev, u32 pipe_index)
 	desc->size = 0;
 	desc->flags = SPS_IOVEC_FLAG_EOT;
 
-	bam_pipe_set_desc_write_offset(&dev->base, pipe_index,
+	bam_pipe_set_desc_write_offset(dev->base, pipe_index,
 					       next_write);
 	wmb(); /* update write pointer in HW */
 	SPS_DBG2(
 		"sps: BAM %pa pipe %d: write pointer to tell HW: 0x%x; write pointer read from HW: 0x%x\n",
 		BAM_ID(dev), pipe_index, next_write,
-		bam_pipe_get_desc_write_offset(&dev->base, pipe_index));
+		bam_pipe_get_desc_write_offset(dev->base, pipe_index));
 
 	return 0;
 }
