@@ -50,7 +50,17 @@ static int ds90uh92x_write_reg(struct msm_dba_device_info *dev,
 			       u32 reg, u32 val)
 {
 	int rc = 0;
-	struct ds90uh92x *ds90uh92x = container_of(dev, struct ds90uh92x, dev);
+	struct ds90uh92x *ds90uh92x = NULL;
+
+	if (!dev) {
+		pr_err("%s: dev is NULL\n", __func__);
+		return -EINVAL;
+	}
+	ds90uh92x = container_of(dev, struct ds90uh92x, dev);
+	if (!ds90uh92x) {
+		pr_err("%s: ds90uh92x is NULL\n", __func__);
+		return -EINVAL;
+	}
 
 	rc = msm_dba_helper_i2c_write_byte(ds90uh92x->i2c_client,
 					   ds90uh92x->i2c_addr,
@@ -67,7 +77,17 @@ static int ds90uh92x_read_reg(struct msm_dba_device_info *dev,
 {
 	int rc = 0;
 	u8 byte_val = 0;
-	struct ds90uh92x *ds90uh92x = container_of(dev, struct ds90uh92x, dev);
+	struct ds90uh92x *ds90uh92x = NULL;
+
+	if (!dev) {
+		pr_err("%s: dev is NULL\n", __func__);
+		return -EINVAL;
+	}
+	ds90uh92x = container_of(dev, struct ds90uh92x, dev);
+	if (!ds90uh92x) {
+		pr_err("%s: ds90uh92x is NULL\n", __func__);
+		return -EINVAL;
+	}
 
 	rc = msm_dba_helper_i2c_read(ds90uh92x->i2c_client,
 				     ds90uh92x->i2c_addr,
@@ -102,7 +122,17 @@ static int ds90uh92x_toggle_pdb(struct ds90uh92x *ds90uh92x, bool on)
 static int ds90uh92x_power_on(struct msm_dba_device_info *dev, bool on)
 {
 	int rc = 0;
-	struct ds90uh92x *ds90uh92x = container_of(dev, struct ds90uh92x, dev);
+	struct ds90uh92x *ds90uh92x = NULL;
+
+	if (!dev) {
+		pr_err("%s: dev is NULL\n", __func__);
+		return -EINVAL;
+	}
+	ds90uh92x = container_of(dev, struct ds90uh92x, dev);
+	if (!ds90uh92x) {
+		pr_err("%s: ds90uh92x is NULL\n", __func__);
+		return -EINVAL;
+	}
 
 	if (!on)
 		disable_irq(ds90uh92x->irq);
@@ -139,6 +169,10 @@ static int ds90uh92x_power_on(struct msm_dba_device_info *dev, bool on)
 static int ds90uh92x_video_on(struct msm_dba_device_info *dev,
 			      struct msm_dba_video_cfg *cfg, bool on)
 {
+	if (!dev) {
+		pr_err("%s: dev is NULL\n", __func__);
+		return -EINVAL;
+	}
 	dev->video_status = on;
 	pr_debug("[%s:%d] Video status = %d", __func__, dev->instance_id,
 					      dev->video_status);
@@ -149,9 +183,19 @@ static int ds90uh92x_handle_interrupts(struct msm_dba_device_info *dev,
 				       u32 *mask)
 {
 	int rc = 0;
-	struct ds90uh92x *ds90uh92x = container_of(dev, struct ds90uh92x, dev);
+	struct ds90uh92x *ds90uh92x = NULL;
 	u32 int_mask = 0;
 	u8 val = 0;
+
+	if (!dev) {
+		pr_err("%s: dev is NULL\n", __func__);
+		return -EINVAL;
+	}
+	ds90uh92x = container_of(dev, struct ds90uh92x, dev);
+	if (!ds90uh92x) {
+		pr_err("%s: ds90uh92x is NULL\n", __func__);
+		return -EINVAL;
+	}
 
 	rc = msm_dba_helper_i2c_read(ds90uh92x->i2c_client,
 				     ds90uh92x->i2c_addr,
@@ -342,15 +386,19 @@ fail:
 static int ds90uh92x_hdcp_reset(struct msm_dba_device_info *dev)
 {
 	int rc = 0;
-	struct ds90uh92x *ds90uh92x;
+	struct ds90uh92x *ds90uh92x = NULL;
 	u8 reg_val;
 
+
 	if (!dev) {
-		pr_err("%s: Invalid params\n", __func__);
+		pr_err("%s: dev is NULL\n", __func__);
 		return -EINVAL;
 	}
-
 	ds90uh92x = container_of(dev, struct ds90uh92x, dev);
+	if (!ds90uh92x) {
+		pr_err("%s: ds90uh92x is NULL\n", __func__);
+		return -EINVAL;
+	}
 
 	reg_val = BIT(1) | BIT(3);
 
@@ -371,14 +419,17 @@ fail:
 static int ds90uh92x_hdcp_retry(struct msm_dba_device_info *dev, u32 flags)
 {
 	int rc = 0;
-	struct ds90uh92x *ds90uh92x;
+	struct ds90uh92x *ds90uh92x = NULL;
 
 	if (!dev) {
-		pr_err("%s: invalid params\n", __func__);
+		pr_err("%s: dev is NULL\n", __func__);
 		return -EINVAL;
 	}
-
 	ds90uh92x = container_of(dev, struct ds90uh92x, dev);
+	if (!ds90uh92x) {
+		pr_err("%s: ds90uh92x is NULL\n", __func__);
+		return -EINVAL;
+	}
 
 	rc = ds90uh92x_hdcp_kickoff(ds90uh92x, flags);
 	return rc;
@@ -455,6 +506,10 @@ static int hdcp_enable(void *client, bool hdcp_on, bool enc_on, u32 flags)
 	}
 
 	device = c->dev;
+	if (!device) {
+		pr_err("%s: deviceis NULL\n", __func__);
+		return -EINVAL;
+	}
 	mutex_lock(&device->dev_mutex);
 
 	pr_debug("[%s:%d] hdcp_en(%d), enc_on(%d)", __func__,
@@ -490,6 +545,10 @@ static int enable_remote_comm(void *client, bool on, u32 flags)
 	}
 
 	device = c->dev;
+	if (!device) {
+		pr_err("%s: deviceis NULL\n", __func__);
+		return -EINVAL;
+	}
 	mutex_lock(&device->dev_mutex);
 	pr_debug("[%s:%d] enable i2c bypass(%d)", __func__,
 						 device->instance_id, on);
@@ -543,6 +602,10 @@ static int add_remote_device(void *client, u32 *slave_ids, u32 count, u32 flags)
 	}
 
 	device = c->dev;
+	if (!device) {
+		pr_err("%s: deviceis NULL\n", __func__);
+		return -EINVAL;
+	}
 	mutex_lock(&device->dev_mutex);
 	pr_debug("[%s:%d] add (%d) remote devices", __func__,
 						   device->instance_id, count);
@@ -703,7 +766,7 @@ fail:
 
 static int ds90uh92x_force_reset(struct msm_dba_device_info *dev, u32 flags)
 {
-	struct ds90uh92x *ds90uh92x;
+	struct ds90uh92x *ds90uh92x = NULL;
 	int rc = 0;
 
 	if (!dev) {
@@ -712,6 +775,10 @@ static int ds90uh92x_force_reset(struct msm_dba_device_info *dev, u32 flags)
 	}
 
 	ds90uh92x = container_of(dev, struct ds90uh92x, dev);
+	if (!ds90uh92x) {
+		pr_err("%s: ds90uh92x is NULL\n", __func__);
+		return -EINVAL;
+	}
 
 	if (dev->power_status) {
 		rc = ds90uh92x_toggle_pdb(ds90uh92x, false);
@@ -734,10 +801,21 @@ static int ds90uh92x_force_reset(struct msm_dba_device_info *dev, u32 flags)
 
 static int ds90uh92x_dump_info(struct msm_dba_device_info *dev, u32 flags)
 {
-	struct ds90uh92x *ds90uh92x = container_of(dev, struct ds90uh92x, dev);
+	struct ds90uh92x *ds90uh92x = NULL;
 	u8 reg_val = 0, deserial_addr = 0;
 	int rc = 0;
 	int i = 0;
+
+	if (!dev) {
+		pr_err("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+
+	ds90uh92x = container_of(dev, struct ds90uh92x, dev);
+	if (!ds90uh92x) {
+		pr_err("%s: ds90uh92x is NULL\n", __func__);
+		return -EINVAL;
+	}
 
 	mutex_lock(&dev->dev_mutex);
 	pr_info("------------%s:%d STATUS--------------\n", dev->chip_name,
@@ -807,7 +885,7 @@ static int dump_debug_info(void *client, u32 flags)
 	int rc = 0;
 	struct msm_dba_client_info *c = client;
 
-	if (c) {
+	if (!c) {
 		pr_err("%s: invalid params\n", __func__);
 		return -EINVAL;
 	}
@@ -847,6 +925,11 @@ static int ds90uh92x_init_device_info(struct ds90uh92x *info,
 				   const struct ds90uh92x_platform_data *pdata)
 {
 	struct msm_dba_device_info *dev = &info->dev;
+
+	if (!dev) {
+		pr_err("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
 
 	strlcpy(dev->chip_name, pdata->chip_id, MSM_DBA_CHIP_NAME_MAX_LEN);
 	dev->instance_id = pdata->instance_id;
@@ -926,6 +1009,11 @@ static int __devinit ds90uh92x_i2c_probe(struct i2c_client *client,
 	struct ds90uh92x *ds90uh92x;
 	int rc = 0;
 
+	if (!client) {
+		pr_err("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+
 	pdata = client->dev.platform_data;
 	pr_debug("%s: probe called %s, %d\n", __func__, pdata->chip_id,
 		 pdata->instance_id);
@@ -983,6 +1071,11 @@ static int ds90uh92x_i2c_remove(struct i2c_client *client)
 {
 	struct msm_dba_device_info *dev;
 	struct ds90uh92x *ds90uh92x;
+
+	if (!client) {
+		pr_err("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
 
 	dev = dev_get_drvdata(&client->dev);
 	ds90uh92x = container_of(dev, struct ds90uh92x, dev);
