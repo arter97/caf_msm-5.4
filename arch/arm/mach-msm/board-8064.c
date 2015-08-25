@@ -2813,6 +2813,8 @@ static struct platform_device *common_devices[] __initdata = {
 	&apq8064_device_rng,
 #endif
 	&apq_pcm,
+	&apq_pcm_dtmf,
+	&apq_dtmf_detection,
 	&apq_pcm_routing,
 	&apq_cpudai0,
 	&apq_cpudai1,

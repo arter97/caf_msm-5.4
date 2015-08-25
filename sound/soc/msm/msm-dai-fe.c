@@ -424,6 +424,20 @@ static struct snd_soc_dai_driver msm_fe_dais[] = {
 		.name = "AUXPCM_HOSTLESS",
 	},
 	{
+		.capture = {
+			.stream_name = "DTMF_Detection Capture",
+			.aif_name = "DTMF_DETECT_UL",
+			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000,
+			.formats = SNDRV_PCM_FMTBIT_S16_LE,
+			.channels_min = 1,
+			.channels_max = 1,
+			.rate_min =     8000,
+			.rate_max =    16000,
+		},
+		.ops = &msm_fe_Multimedia_dai_ops,
+		.name = "DTMF_Detection",
+	},
+	{
 		.playback = {
 			.stream_name = "Voice Stub Playback",
 			.aif_name = "VOICE_STUB_DL",

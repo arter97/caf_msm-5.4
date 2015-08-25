@@ -1260,6 +1260,7 @@ struct asm_stream_cmd_open_read_v2_1 {
 #define US_POINT_EPOS_FORMAT 0x00012310
 #define US_RAW_FORMAT        0x0001127C
 #define MULTI_CHANNEL_PCM    0x00010C66
+#define DTMF_DETECTION       0x00010C2F
 
 #define ASM_ENCDEC_SBCRATE         0x00010C13
 #define ASM_ENCDEC_IMMDIATE_DECODE 0x00010C14
@@ -1615,6 +1616,12 @@ struct asm_data_event_sr_cm_change_notify {
 	u16	           no_of_channels;
 	u16            reserved;
 	u8             channel_map[8];
+} __packed;
+
+#define ASM_DATA_EVENT_DTMF_TONE_DETECTED                           0x00012f38
+struct asm_data_event_dtmf_tone_detected {
+	uint16_t       low_freq;
+	uint16_t       high_freq;
 } __packed;
 
 /* service level events */

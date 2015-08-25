@@ -51,6 +51,8 @@
 #define FORMAT_MAT     0x0019
 #define FORMAT_AAC     0x001a
 #define FORMAT_DTS_LBR 0x001b
+#define FORMAT_DTMF_DETECTION 0x001C
+
 
 
 #define ENCDEC_SBCBITRATE   0x0001
