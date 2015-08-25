@@ -40,6 +40,7 @@
 #include <linux/signal.h>
 #include <linux/ioctl.h>
 #include <linux/skbuff.h>
+#include <linux/spinlock.h>
 
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
@@ -47,6 +48,11 @@
 #include "hci_uart.h"
 
 #define VERSION "2.2"
+
+static DEFINE_SPINLOCK(hci_ldisc_lock);
+static unsigned long ldflags;
+#define hci_ldisc_lock()   spin_lock_irqsave(&hci_ldisc_lock, ldflags)
+#define hci_ldisc_unlock() spin_unlock_irqrestore(&hci_ldisc_lock, ldflags)
 
 static struct hci_uart_proto *hup[HCI_UART_MAX_PROTO];
 
@@ -323,16 +329,19 @@ static int hci_uart_tty_open(struct tty_struct *tty)
  */
 static void hci_uart_tty_close(struct tty_struct *tty)
 {
-	struct hci_uart *hu = (void *)tty->disc_data;
+	struct hci_uart *hu;
 	struct hci_dev *hdev;
 
 	BT_DBG("tty %p", tty);
+
+	hci_ldisc_lock();
+	hu = (struct hci_uart *)tty->disc_data;
 
 	/* Detach from the tty */
 	tty->disc_data = NULL;
 
 	if (!hu)
-		return;
+		goto out;
 
 	hdev = hu->hdev;
 	if (hdev)
@@ -349,6 +358,8 @@ static void hci_uart_tty_close(struct tty_struct *tty)
 	}
 
 	kfree(hu);
+out:
+	hci_ldisc_unlock();
 }
 
 /* hci_uart_tty_wakeup()
@@ -361,20 +372,25 @@ static void hci_uart_tty_close(struct tty_struct *tty)
  */
 static void hci_uart_tty_wakeup(struct tty_struct *tty)
 {
-	struct hci_uart *hu = (void *)tty->disc_data;
+	struct hci_uart *hu;
 
 	BT_DBG("");
 
+	hci_ldisc_lock();
+	hu = (void *)tty->disc_data;
+
 	if (!hu)
-		return;
+		goto out;
 
 	clear_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
 
 	if (tty != hu->tty)
-		return;
+		goto out;
 
 	if (test_bit(HCI_UART_PROTO_SET, &hu->flags))
 		hci_uart_tx_wakeup(hu);
+out:
+	hci_ldisc_unlock();
 }
 
 /* hci_uart_tty_receive()
@@ -391,24 +407,33 @@ static void hci_uart_tty_wakeup(struct tty_struct *tty)
  */
 static void hci_uart_tty_receive(struct tty_struct *tty, const u8 *data, char *flags, int count)
 {
-	struct hci_uart *hu = (void *)tty->disc_data;
+	struct hci_uart *hu;
 
-	if (!hu || tty != hu->tty || !data)
+	BT_DBG("");
+
+	hci_ldisc_lock();
+	hu = (struct hci_uart *)tty->disc_data;
+
+	if (!hu || tty != hu->tty || !data) {
+		hci_ldisc_unlock();
 		return;
+	}
 
-	if (!test_bit(HCI_UART_PROTO_SET, &hu->flags))
+	if (!test_bit(HCI_UART_PROTO_SET, &hu->flags)) {
+		hci_ldisc_unlock();
 		return;
+	}
 
-	if (!hu->proto)
+	if (!hu->proto) {
+		hci_ldisc_unlock();
 		return;
+	}
 
-	spin_lock(&hu->rx_lock);
 	hu->proto->recv(hu, (void *) data, count);
 
 	if (hu->hdev)
 		hu->hdev->stat.byte_rx += count;
-
-	spin_unlock(&hu->rx_lock);
+	hci_ldisc_unlock();
 
 	tty_unthrottle(tty);
 }
