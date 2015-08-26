@@ -310,6 +310,61 @@ static const struct file_operations msm_rpmstats_fops = {
 	.llseek   = no_llseek,
 };
 
+static char* sclk_kbuf = NULL;
+#define BUF_SIZE 10
+static int msm_rpmsclk_file_open(struct inode *inode, struct file *file)
+{
+	sclk_kbuf = kzalloc(sizeof(char) * BUF_SIZE, GFP_KERNEL);
+
+	return 0;
+}
+
+static int msm_rpmsclk_file_close(struct inode *inode, struct file *file)
+{
+	if (sclk_kbuf)
+		kfree(sclk_kbuf);
+	sclk_kbuf = NULL;
+	return 0;
+}
+
+/*
+CLK_freq = 19200000 : ( 1 / 19.2 ) = 0.052083 clks per uS 
+time_in_us = ticks * 0.052083
+0.052083 =  0.03125 + 0.015625 + 0.0078125 - 0.001953125 - 0.00048828125 - 0.0001220703125 - 0.00006103515625 + 0.0000152587890625
+	        1/32        1/64       1/128        1/512         1/2048           1/8192           1/16384            1/65536
+	         >>5          >>6        >>8         >>9           >>11              >>13             >>14               >>16
+*/
+#define QTIMER_TIMETICK_TO_US(ticks) \
+	(((uint64_t)(ticks)>>5)+((uint64_t)(ticks)>>6)+((uint64_t)(ticks)>>8)-((uint64_t)(ticks)>>9)-((uint64_t)(ticks)>>11)-((uint64_t)(ticks)>>13) - ((uint64_t)(ticks)>>14) + ((uint64_t)(ticks)>>16))
+static int msm_rpmsclk_file_read(struct file *file, char __user *bufu,
+				  size_t count, loff_t *ppos)
+{
+	uint64_t data = 0;
+	int ret = 0;
+	size_t c = 0;
+    uint64_t arch_counter_qtimer_value = 0;
+
+	if (!bufu || count < 0)
+		return -EINVAL;
+
+    arch_counter_qtimer_value = arch_counter_get_cntpct();
+	data = QTIMER_TIMETICK_TO_US(arch_counter_qtimer_value);
+	//pr_err("MPM_SCLK_COUNT_VAL: 0x%llx , 0x%llx\n", arch_counter_qtimer_value, data);
+	c = scnprintf(sclk_kbuf, BUF_SIZE, "%llx", data);
+	ret = simple_read_from_buffer(bufu, count, ppos, sclk_kbuf, c);
+
+	return ret;
+}
+
+static const struct file_operations msm_rpmsclkcount_fops = {
+	.owner	  = THIS_MODULE,
+	.open	  = msm_rpmsclk_file_open,
+	.read	  = msm_rpmsclk_file_read,
+	.release  = msm_rpmsclk_file_close,
+};
+
+static struct dentry *dent1;
+
 static  int __devinit msm_rpmstats_probe(struct platform_device *pdev)
 {
 	struct dentry *dent = NULL;
@@ -360,6 +415,15 @@ static  int __devinit msm_rpmstats_probe(struct platform_device *pdev)
 		kfree(pdata);
 		return -EINVAL;
 	}
+
+	dent1 = debugfs_create_file("rpm_mpm_sclk_count_val", S_IRUGO, NULL,
+			NULL, &msm_rpmsclkcount_fops);
+
+	if (!dent1) {
+		pr_err("%s: ERROR debugfs_create_file failed\n", __func__);
+		return -ENOMEM;
+	}
+
 	platform_set_drvdata(pdev, dent);
 	return 0;
 }
@@ -370,6 +434,7 @@ static int __devexit msm_rpmstats_remove(struct platform_device *pdev)
 
 	dent = platform_get_drvdata(pdev);
 	debugfs_remove(dent);
+	debugfs_remove(dent1);
 	platform_set_drvdata(pdev, NULL);
 	return 0;
 }

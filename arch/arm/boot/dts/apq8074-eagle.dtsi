@@ -573,3 +573,17 @@
 	qcom,charging-disabled;
 	qcom,otg-capability;
 };
+
+&rpm_bus { 
+
+	rpm-regulator-ldoa22 {  /* Regulator setting for ov7251 sensor on eagle*/
+ 		status = "okay";
+ 		pm8941_l22: regulator-l22 {
+			regulator-min-microvolt = <2800000>;
+ 			regulator-max-microvolt = <3000000>;
+			qcom,init-voltage = <2800000>;
+ 			status = "okay";
+ 		};
+ 	};
+
+};

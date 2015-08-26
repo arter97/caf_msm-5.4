@@ -142,7 +142,7 @@ static struct msm_cam_clk_info cpp_clk_info[] = {
 	{"vfe_clk_src", 266670000},
 	{"camss_vfe_vfe_clk", -1},
 	{"iface_clk", -1},
-	{"cpp_core_clk", 266670000},
+	{"cpp_core_clk", 465000000},
 	{"cpp_iface_clk", -1},
 	{"cpp_bus_clk", -1},
 	{"micro_iface_clk", -1},
