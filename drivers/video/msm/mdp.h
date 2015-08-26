@@ -1005,4 +1005,118 @@ int mdp_preset_lut_update_lcdc(struct fb_cmap *cmap, uint32_t *internal_lut);
 
 int mdp_disable_splash(struct msm_fb_data_type *mfd);
 
+/**
+ * enum mdp_recovery_error_type - all supported error types
+ * @MDP_RECOVERY_DISPLAY_ENGINE_ERROR: Display engine error
+ * @MDP_RECOVERY_BRIDGE_CHIP_ERROR: Bridge chip error
+ * @MDP_RECOVERY_MAX_ERROR_TYPES: total error type number
+ */
+enum mdp_recovery_error_type {
+	MDP_RECOVERY_DISPLAY_ENGINE_ERROR = 0,
+	MDP_RECOVERY_BRIDGE_CHIP_ERROR,
+	MDP_RECOVERY_MAX_ERROR_TYPES
+};
+
+/**
+ * enum mdp_recovery_status_type - error status types
+ * @MDP_RECOVERY_ERROR_DETECTED: the error is detected
+ * @MDP_RECOVERY_SUCCESS: the error is recovered successfully
+ * @MDP_RECOVERY_CRITICAL_ERROR: the error can't be recovered
+ */
+enum mdp_recovery_status_type {
+	MDP_RECOVERY_ERROR_DETECTED = 0,
+	MDP_RECOVERY_SUCCESS,
+	MDP_RECOVERY_CRITICAL_ERROR,
+};
+
+/**
+ * enum mdp_recovery_ack_type - ack type of client acknowledgement
+ * @MDP_RECOVERY_ACK_IGNORE: ignore the error
+ * @MDP_RECOVERY_ACK_RECOVER: do recovery of this error
+ * @MDP_RECOVERY_ACK_RECOVER_ALL: do recovery of the whole pipeline of the error
+ * @MDP_RECOVERY_ACK_MAX_NUM: total Ack type number
+ */
+enum mdp_recovery_ack_type {
+	MDP_RECOVERY_ACK_IGNORE = 0,
+	MDP_RECOVERY_ACK_RECOVER,
+	MDP_RECOVERY_ACK_RECOVER_ALL,
+	MDP_RECOVERY_ACK_MAX_NUM
+};
+
+/**
+ * struct mdp_recovery_callback_info - callback information used in callback
+ * function parameters.
+ * @err_type: error type
+ * @display_id: display ID of the error.
+ * @status: error status
+ * @data: the user data pointer provided by the client when registering
+ */
+struct mdp_recovery_callback_info {
+	enum mdp_recovery_error_type err_type;
+	int display_id;
+	enum mdp_recovery_status_type status;
+	void *data;
+};
+
+/**
+ * mdp_recovery_notification_cb() - Prototype of notification callback function
+ * @handle: client handle
+ * @info: Pointer to a data structure of callback information
+ */
+typedef void (*mdp_recovery_notification_cb)(void *handle,
+			struct mdp_recovery_callback_info *info);
+
+/**
+ * struct mdp_recovery_client_register_info - Client info used in register API
+ * @error_mask: A bit mask of error types that the client needs to be notified.
+		Error type value is bit number.
+ * @cb: notification callback function
+ * @cb_data: pointer to user data that will be returned with callback
+ */
+struct mdp_recovery_client_register_info {
+	uint32_t error_mask;
+	mdp_recovery_notification_cb cb;
+	void *cb_data;
+};
+
+/**
+ * struct mdp_recovery_ack_info - data structure for acknowledgement info
+ * @err_type: error type of the acknowledgement
+ * @display_id: display ID
+ * @ack_type: Acknowledgement type
+ */
+struct mdp_recovery_ack_info {
+	enum mdp_recovery_error_type err_type;
+	int display_id;
+	enum mdp_recovery_ack_type ack_type;
+};
+
+/**
+ * mdp_recovery_register() - for kernel client to register the notification
+ * callback.
+ * @info: information used for registering.
+ * @handle: handle returned by driver.
+ */
+int mdp_recovery_register(struct mdp_recovery_client_register_info *info,
+			void **handle);
+
+/**
+ * mdp_recovery_deregister() - for kernel client to deregister from the driver
+ * @handle: a valid client handle.
+ */
+int mdp_recovery_deregister(void *handle);
+
+/**
+ * mdp_recovery_acknowledge() - for client to acknowledge the notification
+ * @handle: a valid client handle.
+ * @ack_info: the information of this acknowledgement.
+ */
+int mdp_recovery_acknowledge(void *handle,
+			struct mdp_recovery_ack_info *ack_info);
+
+int mdp_recovery_initialize(void);
+int mdp_recovery_set_error(int display_id,
+			enum mdp_recovery_error_type err_type);
+void mdp_recovery_debug(int debug_flag);
+
 #endif /* MDP_H */
