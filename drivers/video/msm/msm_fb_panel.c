@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2013, 2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -141,6 +141,50 @@ int panel_next_early_off(struct platform_device *pdev)
 					next_pdev->dev.platform_data;
 			if ((next_pdata) && (next_pdata->early_off))
 				ret = next_pdata->early_off(next_pdev);
+		}
+	}
+
+	return ret;
+}
+
+int panel_next_dba_reset(struct platform_device *pdev)
+{
+	int ret = 0;
+	struct msm_fb_panel_data *pdata;
+	struct msm_fb_panel_data *next_pdata;
+	struct platform_device *next_pdev;
+
+	pdata = (struct msm_fb_panel_data *)pdev->dev.platform_data;
+
+	if (pdata) {
+		next_pdev = pdata->next;
+		if (next_pdev) {
+			next_pdata = (struct msm_fb_panel_data *)
+					next_pdev->dev.platform_data;
+			if ((next_pdata) && (next_pdata->dba_reset))
+				ret = next_pdata->dba_reset(next_pdev);
+		}
+	}
+
+	return ret;
+}
+
+int panel_next_set_error_cb(struct platform_device *pdev, panel_error_cb cb)
+{
+	int ret = 0;
+	struct msm_fb_panel_data *pdata;
+	struct msm_fb_panel_data *next_pdata;
+	struct platform_device *next_pdev;
+
+	pdata = (struct msm_fb_panel_data *)pdev->dev.platform_data;
+
+	if (pdata) {
+		next_pdev = pdata->next;
+		if (next_pdev) {
+			next_pdata = (struct msm_fb_panel_data *)
+					next_pdev->dev.platform_data;
+			if ((next_pdata) && (next_pdata->set_error_cb))
+				ret = next_pdata->set_error_cb(next_pdev, cb);
 		}
 	}
 

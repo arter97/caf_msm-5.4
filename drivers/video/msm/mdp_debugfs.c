@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -49,6 +49,8 @@ static uint32	mdp_count;
 static uint32	dsi_offset;
 static uint32	dsi_count;
 #endif
+static void *recovery_handle;
+static int recovery_debug_flag;
 
 static char	debug_buf[MDP_DEBUG_BUF];
 
@@ -1658,6 +1660,305 @@ static const struct file_operations hdmi_reg_fops = {
 };
 #endif
 
+
+static void mdp_recovery_test_cb(void *handle,
+				struct mdp_recovery_callback_info *info)
+{
+	printk(KERN_INFO "%s: enter callback! handle: %s, err_type=%d, " \
+			"display_id=%d, err_status=%d, data=%0X\n", __func__,
+			(handle == recovery_handle) ? "Valid" : "Invalid",
+			info->err_type, info->display_id, info->status,
+			(unsigned int)info->data);
+}
+
+static int recovery_reg_open(struct inode *inode, struct file *file)
+{
+	/* non-seekable */
+	file->f_mode &= ~(FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE);
+	return 0;
+}
+
+static int recovery_reg_release(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static ssize_t recovery_reg_write(
+	struct file *file,
+	const char __user *buff,
+	size_t count,
+	loff_t *ppos)
+{
+	uint32 err_mask = 0;
+	struct mdp_recovery_client_register_info reg_info;
+	int rc;
+
+	if (count >= sizeof(debug_buf))
+		return -EFAULT;
+
+	if (copy_from_user(debug_buf, buff, count))
+		return -EFAULT;
+
+	debug_buf[count] = 0;	/* end of string */
+
+	sscanf(debug_buf, "%d", &err_mask);
+
+	if (err_mask) {
+		reg_info.error_mask = err_mask;
+		reg_info.cb = mdp_recovery_test_cb;
+		reg_info.cb_data = (void *)0x1234ABCD;
+		rc = mdp_recovery_register(&reg_info, &recovery_handle);
+		printk(KERN_INFO "%s: mdp_recovery_register return %d\n",
+			__func__, rc);
+	} else {
+		rc = mdp_recovery_deregister(recovery_handle);
+		recovery_handle = NULL;
+		printk(KERN_INFO "%s: mdp_recovery_deregister return %d\n",
+			__func__, rc);
+	}
+
+	return count;
+}
+
+static ssize_t recovery_reg_read(
+	struct file *file,
+	char __user *buff,
+	size_t count,
+	loff_t *ppos)
+{
+	int len = 0;
+
+	if (*ppos)
+		return 0;	/* the end */
+
+	len = snprintf(debug_buf, sizeof(debug_buf), "registered: %d\n",
+					recovery_handle != NULL);
+	if (len < 0)
+		return 0;
+
+	if (copy_to_user(buff, debug_buf, len))
+		return -EFAULT;
+
+	*ppos += len;	/* increase offset */
+
+	return len;
+}
+
+static const struct file_operations recovery_reg_fops = {
+	.open = recovery_reg_open,
+	.release = recovery_reg_release,
+	.read = recovery_reg_read,
+	.write = recovery_reg_write,
+};
+
+
+static int recovery_err_open(struct inode *inode, struct file *file)
+{
+	/* non-seekable */
+	file->f_mode &= ~(FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE);
+	return 0;
+}
+
+static int recovery_err_release(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static ssize_t recovery_err_write(
+	struct file *file,
+	const char __user *buff,
+	size_t count,
+	loff_t *ppos)
+{
+	int disp_id, err_type;
+	int rc;
+
+	if (count >= sizeof(debug_buf))
+		return -EFAULT;
+
+	if (copy_from_user(debug_buf, buff, count))
+		return -EFAULT;
+
+	debug_buf[count] = 0;	/* end of string */
+
+	sscanf(debug_buf, "%d %d", &disp_id, &err_type);
+
+	rc = mdp_recovery_set_error(disp_id, err_type);
+	printk(KERN_INFO "%s: mdp_recovery_set_error return %d\n",
+		__func__, rc);
+
+	return count;
+}
+
+static ssize_t recovery_err_read(
+	struct file *file,
+	char __user *buff,
+	size_t count,
+	loff_t *ppos)
+{
+	int len = 0;
+
+	if (*ppos)
+		return 0;	/* the end */
+
+	len = snprintf(debug_buf, sizeof(debug_buf),
+			"<Display ID>: [0|1|2] <Error type>: [0|1]\n");
+	if (len < 0)
+		return 0;
+
+	if (copy_to_user(buff, debug_buf, len))
+		return -EFAULT;
+
+	*ppos += len;	/* increase offset */
+
+	return len;
+}
+
+static const struct file_operations recovery_err_fops = {
+	.open = recovery_err_open,
+	.release = recovery_err_release,
+	.read = recovery_err_read,
+	.write = recovery_err_write,
+};
+
+static int recovery_ack_open(struct inode *inode, struct file *file)
+{
+	/* non-seekable */
+	file->f_mode &= ~(FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE);
+	return 0;
+}
+
+static int recovery_ack_release(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static ssize_t recovery_ack_write(
+	struct file *file,
+	const char __user *buff,
+	size_t count,
+	loff_t *ppos)
+{
+	int disp_id, err_type, ack_type;
+	struct mdp_recovery_ack_info ack_info;
+	int rc;
+
+	if (count >= sizeof(debug_buf))
+		return -EFAULT;
+
+	if (copy_from_user(debug_buf, buff, count))
+		return -EFAULT;
+
+	debug_buf[count] = 0;	/* end of string */
+
+	sscanf(debug_buf, "%d %d %d", &disp_id, &err_type, &ack_type);
+
+	ack_info.display_id = disp_id;
+	ack_info.err_type = err_type;
+	ack_info.ack_type = ack_type;
+	rc = mdp_recovery_acknowledge(recovery_handle, &ack_info);
+	printk(KERN_INFO "%s: mdp_recovery_acknowledge return %d\n",
+		__func__, rc);
+
+	return count;
+}
+
+static ssize_t recovery_ack_read(
+	struct file *file,
+	char __user *buff,
+	size_t count,
+	loff_t *ppos)
+{
+	int len = 0;
+
+	if (*ppos)
+		return 0;	/* the end */
+
+	len = snprintf(debug_buf, sizeof(debug_buf),
+		"<Display ID>:[0|1|2] <Error type>:[0|1] <Ack type>:[0|1|2]\n");
+	if (len < 0)
+		return 0;
+
+	if (copy_to_user(buff, debug_buf, len))
+		return -EFAULT;
+
+	*ppos += len;	/* increase offset */
+
+	return len;
+}
+
+static const struct file_operations recovery_ack_fops = {
+	.open = recovery_ack_open,
+	.release = recovery_ack_release,
+	.read = recovery_ack_read,
+	.write = recovery_ack_write,
+};
+
+static int recovery_dbg_open(struct inode *inode, struct file *file)
+{
+	/* non-seekable */
+	file->f_mode &= ~(FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE);
+	return 0;
+}
+
+static int recovery_dbg_release(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static ssize_t recovery_dbg_write(
+	struct file *file,
+	const char __user *buff,
+	size_t count,
+	loff_t *ppos)
+{
+	if (count >= sizeof(debug_buf))
+		return -EFAULT;
+
+	if (copy_from_user(debug_buf, buff, count))
+		return -EFAULT;
+
+	debug_buf[count] = 0;	/* end of string */
+
+	sscanf(debug_buf, "%d", &recovery_debug_flag);
+
+	mdp_recovery_debug(recovery_debug_flag);
+
+	return count;
+}
+
+static ssize_t recovery_dbg_read(
+	struct file *file,
+	char __user *buff,
+	size_t count,
+	loff_t *ppos)
+{
+	int len = 0;
+
+	if (*ppos)
+		return 0;	/* the end */
+
+	len = snprintf(debug_buf, sizeof(debug_buf),
+		"debug_flag=%d\n", recovery_debug_flag);
+	if (len < 0)
+		return 0;
+
+	if (copy_to_user(buff, debug_buf, len))
+		return -EFAULT;
+
+	*ppos += len;	/* increase offset */
+
+	return len;
+}
+
+static const struct file_operations recovery_dbg_fops = {
+	.open = recovery_dbg_open,
+	.release = recovery_dbg_release,
+	.read = recovery_dbg_read,
+	.write = recovery_dbg_write,
+};
+
+
 /*
  * debugfs
  *
@@ -1811,6 +2112,42 @@ int mdp_debugfs_init(void)
 		return -ENOENT;
 	}
 #endif
+
+	dent = debugfs_create_dir("mdp-recovery-dbg", NULL);
+
+	if (IS_ERR(dent)) {
+		printk(KERN_ERR "%s(%d): debugfs_create_dir fail, error %ld\n",
+			__FILE__, __LINE__, PTR_ERR(dent));
+		return -ENOENT;
+	}
+
+	if (debugfs_create_file("register", 0644, dent, 0, &recovery_reg_fops)
+			== NULL) {
+		printk(KERN_ERR "%s(%d): debugfs_create_file 'register' fail\n",
+			__FILE__, __LINE__);
+		return -ENOENT;
+	}
+
+	if (debugfs_create_file("err", 0644, dent, 0, &recovery_err_fops)
+			== NULL) {
+		printk(KERN_ERR "%s(%d): debugfs_create_file 'err' fail\n",
+			__FILE__, __LINE__);
+		return -ENOENT;
+	}
+
+	if (debugfs_create_file("ack", 0644, dent, 0, &recovery_ack_fops)
+			== NULL) {
+		printk(KERN_ERR "%s(%d): debugfs_create_file 'ack' fail\n",
+			__FILE__, __LINE__);
+		return -ENOENT;
+	}
+
+	if (debugfs_create_file("dbg", 0644, dent, 0, &recovery_dbg_fops)
+			== NULL) {
+		printk(KERN_ERR "%s(%d): debugfs_create_file 'dbg' fail\n",
+			__FILE__, __LINE__);
+		return -ENOENT;
+	}
 
 	return 0;
 }
