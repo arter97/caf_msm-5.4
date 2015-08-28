@@ -516,6 +516,10 @@
 	};
 };
 
+&pm8941_bms {
+	status = "disabled";
+};
+
 &sdhc_1 {
 	vdd-supply = <&pm8941_l20>;
 	vdd-io-supply = <&pm8941_s3>;

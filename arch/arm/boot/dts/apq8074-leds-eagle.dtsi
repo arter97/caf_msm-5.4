@@ -21,29 +21,16 @@
 				qcom,mode = "lpg";
 				qcom,pwm-channel = <6>;
 				qcom,pwm-us = <200>;
-				qcom,duty-ms = <70>;
-				qcom,start-idx = <0>;
-				qcom,idx-len = <63>;
+				qcom,start-idx = <1>;
 				qcom,duty-pcts = [
-					 00 09 09 00 00
-					 00 00 00 15 2A
-					 3F 2A 15 00 00
-					 00 00 00 00 00
-					 00 00 2C 57 5E
-					 64 63 63 63 62
-					 60 5F 5D 5A 58
-					 53 4F 4A 41 37
-					 2D 17 00 00 00
-					 22 43 2C 16 00
-					 00 00 00 00 00
-					 09 10 21 31 21
-					 10 09 00
-					 ];
-				qcom,max-current = <12>;
+					0A 19 32 4B 64
+					64 4B 32 19 0A
+					];
+				qcom,max-current = <4>;
 				qcom,default-state = "off";
 				qcom,id = <3>;
 				linux,default-trigger = "none";
-				qcom,calibrated-max = <111>;
+				qcom,use-blink;
 			};
 
 			qcom,rgb_1 {
@@ -52,59 +39,34 @@
 				qcom,mode = "lpg";
 				qcom,pwm-channel = <5>;
 				qcom,pwm-us = <200>;
-				qcom,duty-ms = <70>;
-				qcom,start-idx = <0>;
-				qcom,idx-len = <63>;
-				qcom,duty-pcts = [
-					 00 09 09 00 00
-					 00 00 00 15 2A
-					 3F 2A 15 00 00
-					 00 00 00 00 00
-					 00 00 2C 57 5E
-					 64 63 63 63 62
-					 60 5F 5D 5A 58
-					 53 4F 4A 41 37
-					 2D 17 00 00 00
-					 22 43 2C 16 00
-					 00 00 00 00 00
-					 09 10 21 31 21
-					 10 09 00
-					 ];
-				qcom,max-current = <12>;
+                                qcom,start-idx = <1>;
+                                qcom,duty-pcts = [
+                                        0A 19 32 4B 64
+                                        64 4B 32 19 0A
+                                        ];
+				qcom,max-current = <4>;
 				qcom,default-state = "off";
 				qcom,id = <4>;
-				linux,default-trigger = "sleep";
-				qcom,calibrated-max = <239>;
+				linux,default-trigger = "none";
+				qcom,use-blink;
 			};
 
 			qcom,rgb_2 {
 				label = "rgb";
-				linux,name = "led_blue";
+				linux,name = "blue";
 				qcom,mode = "lpg";
 				qcom,pwm-channel = <4>;
 				qcom,pwm-us = <200>;
-				qcom,duty-ms = <70>;
-				qcom,start-idx = <0>;
-				qcom,idx-len = <63>;
-				qcom,duty-pcts = [
-					 00 00 00 00 00
-					 00 00 00 00 00
-					 0A 0C 0E 10 12
-					 15 18 1B 1E 22
-					 26 2A 2E 33 37
-					 40 48 50 55 5A
-					 5F 64 63 63 5F
-					 55 48 40 37 33
-					 2E 2A 26 22 1E
-					 1B 18 15 12 10
-					 0E 0C 0A 00 00
-					 00 00 00 00 00
-					 00 00 00
-					 ];
-				qcom,max-current = <12>;
+                                qcom,start-idx = <1>;
+                                qcom,duty-pcts = [
+                                        0A 19 32 4B 64
+                                        64 4B 32 19 0A
+                                        ];
+				qcom,max-current = <4>;
 				qcom,default-state = "on";
 				qcom,id = <5>;
-				linux,default-trigger = "backlight";
+				linux,default-trigger = "none";
+				qcom,use-blink;
 			};
 		};
 
