@@ -773,7 +773,8 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 			wcd_mbhc_calc_impedance(mbhc,
 					&mbhc->zl, &mbhc->zr);
 			if ((mbhc->zl > mbhc->mbhc_cfg->linein_th) &&
-				(mbhc->zr > mbhc->mbhc_cfg->linein_th)) {
+				(mbhc->zr > mbhc->mbhc_cfg->linein_th) &&
+				(jack_type == SND_JACK_HEADPHONE)) {
 				jack_type = SND_JACK_LINEOUT;
 				mbhc->current_plug = MBHC_PLUG_TYPE_HIGH_HPH;
 				if (mbhc->hph_status) {
