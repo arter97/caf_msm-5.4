@@ -565,6 +565,59 @@ static const struct net_device_ops sam4e_usb_netdev_ops = {
 		.ndo_start_xmit = sam4e_netdev_start_xmit,
 };
 
+static int sam4e_read_fw_version(struct sam4e_usb *dev)
+{
+	struct sam4e_req *req;
+	struct sam4e_resp *resp;
+	struct sam4e_fw_resp *fw;
+	int resp_size;
+	int actual_length;
+	int result;
+	struct net_device *netdev;
+
+	netdev = dev->netdev;
+	LOGNI("Querying firmware version");
+	req = kzalloc(sizeof(struct sam4e_req), GFP_KERNEL);
+	if (req == NULL)
+		return -ENOMEM;
+
+	req->cmd = CMD_SYS_GET_FW_VERSION;
+	req->len = sizeof(struct sam4e_req);
+	req->seq = atomic_inc_return(&dev->msg_seq);
+
+	result = usb_bulk_msg(dev->udev,
+			usb_sndbulkpipe(dev->udev, BULK_OUT_EP),
+			req,
+			sizeof(struct sam4e_req),
+			&actual_length, 1000);
+
+	LOGNI("sent %x result %d, actual_length %d",
+			req->cmd, result, actual_length);
+	kfree(req);
+
+	resp_size = sizeof(struct sam4e_resp) + sizeof(struct sam4e_fw_resp);
+	resp = kzalloc(resp_size, GFP_KERNEL);
+	if (resp == NULL)
+		return -ENOMEM;
+
+	result =  usb_bulk_msg(dev->udev,
+			usb_rcvbulkpipe(dev->udev, BULK_IN_EP),
+			resp,
+			resp_size,
+			&actual_length, 1000);
+
+	LOGNI("rcv? result %d, actual_length %d",
+		result, actual_length);
+	if (result == 0 && actual_length == resp_size) {
+		fw = (struct sam4e_fw_resp *)resp->data;
+		LOGNI("data %x %d %d %d\n", resp->cmd,
+				resp->len, resp->seq, resp->err);
+		netdev_info(netdev, "sam4e fw %d.%d", fw->maj, fw->min);
+		netdev_info(netdev, "sam4e fw string %s", fw->ver);
+	}
+	kfree(resp);
+	return 0;
+}
 /*
  * probe function for usb devices
  */
@@ -624,6 +677,8 @@ static int sam4e_usb_probe(struct usb_interface *intf,
 	udev = interface_to_usbdev(intf);
 
 	/* TODO: This is probe function! Don't do lengthy stuff here */
+	sam4e_read_fw_version(dev);
+
 	/* Set mailbox 7 to read all EFF msgs */
 	req = kzalloc(sizeof(struct sam4e_req) +
 			sizeof(struct sam4e_can_full_ts_read), GFP_KERNEL);
