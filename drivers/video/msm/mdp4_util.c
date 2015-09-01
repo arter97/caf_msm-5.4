@@ -698,13 +698,11 @@ irqreturn_t mdp4_isr(int irq, void *ptr)
 			(panel[MDP4_MIXER_NONE] & MDP4_PANEL_DSI_VIDEO_DMA_S))
 			mdp4_primary_vsync_dsi_video();
 	}
-#ifdef CONFIG_FB_MSM_DTV
 	if (isr & INTR_EXTERNAL_VSYNC) {
 		mdp4_stat.intr_vsync_e++;
 		if (panel[MDP4_MIXER1] & MDP4_PANEL_DTV)
 			mdp4_external_vsync_dtv();
 	}
-#endif
 	if (isr & INTR_DMA_P_HISTOGRAM) {
 		mdp4_stat.intr_histogram++;
 		ret = mdp_histogram_block2mgmt(MDP_BLOCK_DMA_P, &mgmt);
