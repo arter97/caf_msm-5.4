@@ -345,6 +345,9 @@ static struct pll_vote_clk pll8_activeonly_clk = {
 
 static struct pll_clk pll9_activeonly_clk = {
 	.mode_reg = SC_PLL0_MODE_REG,
+	.status_reg = SC_PLL0_STATUS_REG,
+	.test_ctl_reg = SC_PLL0_TEST_CTL_REG,
+	.test_ctl_val = 0x300,
 	.c = {
 		.dbg_name = "pll9_activeonly_clk",
 		.rate = 440000000,
