@@ -1214,6 +1214,8 @@ struct ipa_context {
 	struct ipa_uc_ctx uc_ctx;
 
 	struct ipa_uc_wdi_ctx uc_wdi_ctx;
+
+	bool tethered_flow_control;
 };
 
 /**
@@ -1261,6 +1263,7 @@ struct ipa_plat_drv_res {
 	u32 ee;
 	bool ipa_bam_remote_mode;
 	bool modem_cfg_emb_pipe_flt;
+	bool tethered_flow_control;
 };
 
 struct ipa_mem_partition {
