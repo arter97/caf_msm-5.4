@@ -48,7 +48,7 @@ static ssize_t defer_store(struct kobject *kobj, struct kobj_attribute *attr,
 }
 
 static struct kobj_attribute defer_attr = {
-	.attr = { .name = "release", .mode = 0222 },
+	.attr = { .name = "release", .mode = 0220 },
 	.store = defer_store,
 };
 
