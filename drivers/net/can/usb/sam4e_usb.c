@@ -39,7 +39,7 @@
 
 #define DEBUG_SAM4E		0
 #if DEBUG_SAM4E == 1
-#define LOGNI(...) netdev_info(netdev, __VA_ARGS__)
+#define LOGNI(...) dbg(__VA_ARGS__)
 #else
 #define LOGNI(...)
 #endif
@@ -73,13 +73,16 @@
 #define CMD_CAN_FULL_READ		0x5F
 #define CMD_CAN_TS_READ_ASYNC	0x60
 #define CMD_CAN_TS_FULL_READ	0x61
+#define MAX_CAN_INTF			0x02
+
 
 
 struct sam4e_usb {
 	struct can_priv can;
 
 	struct usb_device *udev;
-	struct net_device *netdev;
+	struct net_device *netdev1;
+	struct net_device *netdev2;
 
 	atomic_t active_tx_urbs;
 	atomic_t msg_seq;
@@ -87,6 +90,11 @@ struct sam4e_usb {
 	struct usb_anchor rx_submitted;
 	char *assembly_buffer;
 	u8 assembly_buffer_size;
+	atomic_t netif_queue_stop;
+};
+struct sam4e_usb_handle {
+	struct sam4e_usb *sam4e_dev;
+	u8 owner_netdev_index;
 };
 
 #define SAM4E_USB_VENDOR_ID 0x05C6
@@ -196,7 +204,7 @@ struct sam4e_can_unsl_ts_receive {
 	u8 data[8];
 } __packed;
 
-static void sam4e_usb_receive_frame(struct net_device *netdev,
+static void sam4e_usb_receive_frame(struct sam4e_usb *dev,
 		struct sam4e_can_unsl_ts_receive *frame)
 {
 	struct can_frame *cf;
@@ -205,10 +213,14 @@ static void sam4e_usb_receive_frame(struct net_device *netdev,
 	struct timeval tv;
 	static int msec;
 	int i;
-
-	skb = alloc_can_skb(netdev, &cf);
-	if (skb == NULL)
+	if (frame->can == 0)
+		skb = alloc_can_skb(dev->netdev1, &cf);
+	else
+		skb = alloc_can_skb(dev->netdev2, &cf);
+	if (skb == NULL) {
+		pr_err("skb failed..frame->can %d", frame->can);
 		return;
+	}
 
 	LOGNI(" rcv frame %d %x %d %x %x %x %x %x %x %x %x\n",
 			frame->ts, frame->mid, frame->dlc, frame->data[0],
@@ -234,7 +246,6 @@ static void sam4e_usb_receive_frame(struct net_device *netdev,
 static void sam4e_process_response(struct sam4e_usb *dev,
 				   struct sam4e_resp *resp, int length)
 {
-	struct net_device *netdev = dev->netdev;
 	LOGNI("<%x %2d [%d] %d buff:[%d]\n", resp->cmd,
 			resp->len, resp->seq, resp->err,
 			atomic_read(&dev->active_tx_urbs));
@@ -251,15 +262,17 @@ static void sam4e_process_response(struct sam4e_usb *dev,
 			memcpy(dev->assembly_buffer, (char *)resp, length);
 			dev->assembly_buffer_size = length;
 		} else {
-			sam4e_usb_receive_frame(netdev, frame);
+			sam4e_usb_receive_frame(dev, frame);
 		}
 	} else if (resp->cmd == CMD_CAN_FULL_WRITE) {
 		atomic_dec(&dev->active_tx_urbs);
-		if (netif_queue_stopped(netdev) &&
+		if ((atomic_read(&dev->netif_queue_stop) == 1) &&
 		    atomic_read(&dev->active_tx_urbs) < MAX_TX_URBS) {
 			LOGNI("Waking up queue. (%d)\n",
 			      atomic_read(&dev->active_tx_urbs));
-			netif_wake_queue(netdev);
+			netif_wake_queue(dev->netdev1);
+			netif_wake_queue(dev->netdev2);
+			atomic_dec(&dev->netif_queue_stop);
 		}
 	}
 }
@@ -267,12 +280,9 @@ static void sam4e_process_response(struct sam4e_usb *dev,
 static void sam4e_usb_read_bulk_callback(struct urb *urb)
 {
 	struct sam4e_usb *dev = urb->context;
-	struct net_device *netdev = dev->netdev;
 	int err, length_processed = 0;
 
 	LOGNI("sam4e_usb_read_bulk_callback length: %d\n", urb->actual_length);
-	if (!netif_device_present(netdev))
-		return;
 
 	switch (urb->status) {
 	case 0:
@@ -282,7 +292,7 @@ static void sam4e_usb_read_bulk_callback(struct urb *urb)
 		return;
 
 	default:
-		LOGNI("Rx URB aborted (%d)\n", urb->status);
+		pr_err("Rx URB aborted (%d)\n", urb->status);
 		goto resubmit_urb;
 	}
 
@@ -357,14 +367,13 @@ resubmit_urb:
 		usb_free_coherent(dev->udev, RX_BUFFER_SIZE,
 				urb->transfer_buffer,
 				urb->transfer_dma);
-		LOGNI("Failed to resubmit Rx Urb: %d\n", err);
+		pr_err("Failed to resubmit Rx Urb: %d\n", err);
 	}
 }
 
-static int sam4e_init_urbs(struct net_device *netdev)
+static int sam4e_init_urbs(struct sam4e_usb *dev)
 {
 	int err, i;
-	struct sam4e_usb *dev = netdev_priv(netdev);
 	for (i = 0; i < MAX_RX_URBS; i++) {
 		struct urb *urb = NULL;
 		u8 *buf = NULL;
@@ -372,7 +381,7 @@ static int sam4e_init_urbs(struct net_device *netdev)
 		/* create a URB, and a buffer for it */
 		urb = usb_alloc_urb(0, GFP_KERNEL);
 		if (!urb) {
-			netdev_err(netdev, "No memory left for URBs\n");
+			pr_err("No memory left for URBs\n");
 			err = -ENOMEM;
 			break;
 		}
@@ -380,7 +389,7 @@ static int sam4e_init_urbs(struct net_device *netdev)
 		buf = usb_alloc_coherent(dev->udev, RX_BUFFER_SIZE, GFP_KERNEL,
 				&urb->transfer_dma);
 		if (!buf) {
-			netdev_err(netdev, "No memory left for USB buffer\n");
+			pr_err("No memory left for USB buffer\n");
 			usb_free_urb(urb);
 			err = -ENOMEM;
 			break;
@@ -395,7 +404,7 @@ static int sam4e_init_urbs(struct net_device *netdev)
 
 		err = usb_submit_urb(urb, GFP_KERNEL);
 		if (err) {
-			netdev_err(netdev, "Failed to init RX urb %d\n", err);
+			pr_err("Failed to init RX urb %d\n", err);
 			usb_unanchor_urb(urb);
 			usb_free_coherent(dev->udev, RX_BUFFER_SIZE, buf,
 					urb->transfer_dma);
@@ -405,16 +414,6 @@ static int sam4e_init_urbs(struct net_device *netdev)
 		/* Drop reference, USB core will take care of freeing it */
 		usb_free_urb(urb);
 	}
-
-	if (err) {
-		if (err == -ENODEV)
-			netif_device_detach(netdev);
-
-		netdev_warn(netdev, "couldn't start device: %d\n", err);
-		close_candev(netdev);
-		return err;
-	}
-
 	return err;
 }
 
@@ -441,7 +440,8 @@ static void unlink_all_urbs(struct sam4e_usb *dev)
 
 static int sam4e_netdev_close(struct net_device *netdev)
 {
-	struct sam4e_usb *dev = netdev_priv(netdev);
+	struct sam4e_usb_handle *sam4e_usb_hnd = netdev_priv(netdev);
+	struct sam4e_usb *dev = sam4e_usb_hnd->sam4e_dev;
 	LOGNI("sam4e_close");
 
 	/* Stop polling */
@@ -454,14 +454,13 @@ static int sam4e_netdev_close(struct net_device *netdev)
 
 static void sam4e_usb_write_bulk_callback(struct urb *urb)
 {
-	struct sam4e_usb *dev = urb->context;
-	struct net_device *netdev = dev->netdev;
+	struct net_device *netdev = urb->context;
 	usb_unanchor_urb(urb);
 	usb_free_coherent(urb->dev, urb->transfer_buffer_length,
 			urb->transfer_buffer, urb->transfer_dma);
 
 	if (urb->status)
-		netdev_err(netdev, "Tx URB aborted (%d)\n", urb->status);
+		pr_err("Tx URB aborted (%d)\n", urb->status);
 
 	netdev->stats.tx_packets++;
 }
@@ -471,7 +470,8 @@ static netdev_tx_t sam4e_netdev_start_xmit(
 {
 	struct sam4e_req *req;
 	struct usb_device *udev;
-	struct sam4e_usb *dev = netdev_priv(netdev);
+	struct sam4e_usb_handle *sam4e_usb_hnd = netdev_priv(netdev);
+	struct sam4e_usb *dev = sam4e_usb_hnd->sam4e_dev;
 	struct net_device_stats *stats = &netdev->stats;
 	int result;
 	struct can_frame *cf = (struct can_frame *)skb->data;
@@ -481,21 +481,21 @@ static netdev_tx_t sam4e_netdev_start_xmit(
 	struct sam4e_can_full_write *cfw;
 
 	if (can_dropped_invalid_skb(netdev, skb)) {
-		netdev_err(netdev, "Dropping invalid can frame");
+		pr_err("Dropping invalid can frame");
 		return NETDEV_TX_OK;
 	}
 
 	udev = dev->udev;
 	urb = usb_alloc_urb(0, GFP_ATOMIC);
 	if (!urb) {
-		netdev_err(netdev, "No memory left for URBs\n");
+		pr_err("No memory left for URBs\n");
 		goto nomem;
 	}
 
 	req = usb_alloc_coherent(dev->udev, size, GFP_ATOMIC,
 			&urb->transfer_dma);
 	if (!req) {
-		netdev_err(netdev, "No memory left for USB buffer\n");
+		pr_err("No memory left for USB buffer\n");
 		usb_free_urb(urb);
 		goto nomem;
 	}
@@ -506,7 +506,7 @@ static netdev_tx_t sam4e_netdev_start_xmit(
 	req->len = sizeof(struct sam4e_req) +
 			sizeof(struct sam4e_can_full_write);
 	req->seq = atomic_inc_return(&dev->msg_seq);
-	cfw->can = 0;
+	cfw->can = sam4e_usb_hnd->owner_netdev_index;
 	cfw->mailbox = 0;
 	cfw->prio = 0;
 	cfw->mid = cf->can_id;
@@ -522,7 +522,7 @@ static netdev_tx_t sam4e_netdev_start_xmit(
 
 	usb_fill_bulk_urb(urb, dev->udev,
 			usb_sndbulkpipe(dev->udev, BULK_OUT_EP), req,
-			size, sam4e_usb_write_bulk_callback, dev);
+			size, sam4e_usb_write_bulk_callback, netdev);
 	urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
 	usb_anchor_urb(urb, &dev->tx_submitted);
 	atomic_inc(&dev->active_tx_urbs);
@@ -537,7 +537,7 @@ static netdev_tx_t sam4e_netdev_start_xmit(
 		if (result == -ENODEV) {
 			netif_device_detach(netdev);
 		} else {
-			netdev_err(netdev, "failed tx_urb %d\n", result);
+			pr_err("failed tx_urb %d\n", result);
 			stats->tx_dropped++;
 		}
 	} else {
@@ -545,7 +545,11 @@ static netdev_tx_t sam4e_netdev_start_xmit(
 		if (atomic_read(&dev->active_tx_urbs) >= MAX_TX_URBS) {
 			LOGNI("Too many outstanding requests (%d). Stop queue",
 					atomic_read(&dev->active_tx_urbs));
-			netif_stop_queue(netdev);
+			atomic_inc(&dev->netif_queue_stop);
+			if (dev->netdev1)
+				netif_stop_queue(dev->netdev1);
+			if (dev->netdev2)
+				netif_stop_queue(dev->netdev2);
 		}
 	}
 	dev_kfree_skb(skb);
@@ -575,7 +579,7 @@ static int sam4e_read_fw_version(struct sam4e_usb *dev)
 	int result;
 	struct net_device *netdev;
 
-	netdev = dev->netdev;
+	netdev = dev->netdev1;
 	LOGNI("Querying firmware version");
 	req = kzalloc(sizeof(struct sam4e_req), GFP_KERNEL);
 	if (req == NULL)
@@ -619,6 +623,55 @@ static int sam4e_read_fw_version(struct sam4e_usb *dev)
 	return 0;
 }
 /*
+ * set up mail box for can frames.
+ */
+static void setup_mailbox(u8 mailbox, u8 canid,
+		u32 filter, u32 mid,
+		struct usb_interface *intf,
+		struct usb_device *udev,
+		struct sam4e_usb *dev)
+{
+	struct sam4e_req *req;
+	struct sam4e_resp *resp;
+	int actual_length;
+	int result;
+	req = kzalloc(sizeof(struct sam4e_req) +
+			sizeof(struct sam4e_can_full_ts_read), GFP_KERNEL);
+	if (req != 0) {
+		struct sam4e_can_full_ts_read *cfr =
+				(struct sam4e_can_full_ts_read *)&req->data;
+		req->cmd = CMD_CAN_TS_FULL_READ;
+		req->len = sizeof(struct sam4e_req) +
+				sizeof(struct sam4e_can_full_ts_read);
+		req->seq = atomic_inc_return(&dev->msg_seq);
+		cfr->mailbox = mailbox;
+		cfr->can = canid;
+		/* Timestamping on */
+		cfr->ts_on = 1;
+		cfr->mid = mid;
+		cfr->filter = filter;
+		result = usb_bulk_msg(udev, usb_sndbulkpipe(udev, BULK_OUT_EP),
+					req,
+					sizeof(struct sam4e_req) +
+					sizeof(struct sam4e_can_full_ts_read),
+					&actual_length, 1000);
+		LOGNI("sent %x result %d, actual_length %d",
+				req->cmd, result, actual_length);
+		kfree(req);
+	}
+	resp = kzalloc(sizeof(struct sam4e_resp), GFP_KERNEL);
+	result =  usb_bulk_msg(udev, usb_rcvbulkpipe(udev, BULK_IN_EP),
+				resp,
+				sizeof(struct sam4e_resp),
+				&actual_length, 1000);
+	LOGNI("rcv? result %d, actual_length %d", result, actual_length);
+	if (result == 0 && DEBUG_SAM4E) {
+		dev_info(&intf->dev, "data %x %d %d %d\n", resp->cmd,
+			resp->len, resp->seq, resp->err);
+	}
+	kfree(resp);
+}
+/*
  * probe function for usb devices
  */
 static int sam4e_usb_probe(struct usb_interface *intf,
@@ -627,14 +680,12 @@ static int sam4e_usb_probe(struct usb_interface *intf,
 	struct usb_host_interface *usb_hi;
 	struct usb_interface_descriptor *usb_if_desc;
 	struct usb_device *udev;
-	struct sam4e_req *req;
-	struct sam4e_resp *resp;
-	int actual_length;
-	int result;
 	int err = 0;
 	u8 if_num;
 	struct net_device *netdev;
 	struct sam4e_usb *dev;
+	struct sam4e_usb_handle *sam4e_usb_hnd;
+	int cnt = 0;
 
 	usb_hi = intf->cur_altsetting;
 	usb_if_desc = &usb_hi->desc;
@@ -647,135 +698,90 @@ static int sam4e_usb_probe(struct usb_interface *intf,
 	if (if_num != 1)
 		return -ENODEV;
 
-	netdev = alloc_candev(sizeof(struct sam4e_usb), MAX_TX_URBS);
-	if (!netdev) {
-		dev_err(&intf->dev, "sam4e_usb: Couldn't alloc candev\n");
-		return -ENOMEM;
-	}
-
-	dev = netdev_priv(netdev);
-	dev->udev = interface_to_usbdev(intf);
-	dev->netdev = netdev;
-	dev->assembly_buffer = kzalloc(RX_ASSEMBLY_BUFFER_SIZE, GFP_KERNEL);
-
-	netdev->netdev_ops = &sam4e_usb_netdev_ops;
-
-	init_usb_anchor(&dev->rx_submitted);
-	init_usb_anchor(&dev->tx_submitted);
-	atomic_set(&dev->active_tx_urbs, 0);
-	atomic_set(&dev->msg_seq, 0);
-
-	usb_set_intfdata(intf, dev);
-	SET_NETDEV_DEV(netdev, &intf->dev);
-
-	err = register_candev(netdev);
-	if (err) {
-		netdev_err(netdev, "couldn't register CAN device: %d\n", err);
+	dev = kzalloc(sizeof(struct sam4e_usb), GFP_KERNEL);
+	if (!dev) {
+		dev_err(&intf->dev, "Couldn't alloc sam4e_usb\n");
+		err = -ENOMEM;
 		goto cleanup_candev;
 	}
+	atomic_set(&dev->netif_queue_stop, 0);
+	while (cnt < MAX_CAN_INTF) {
+		netdev = alloc_candev(sizeof(struct sam4e_usb_handle),
+				MAX_TX_URBS);
+		if (!netdev) {
+			dev_err(&intf->dev, "Couldn't alloc candev\n");
+			err = -ENOMEM;
+			goto cleanup_candev;
+		}
 
-	udev = interface_to_usbdev(intf);
+		sam4e_usb_hnd = netdev_priv(netdev);
+		sam4e_usb_hnd->sam4e_dev = dev;
+		sam4e_usb_hnd->owner_netdev_index = cnt;
+		dev->udev = interface_to_usbdev(intf);
+		if (cnt == 0)
+			dev->netdev1 = netdev;
+		else
+			dev->netdev2 = netdev;
 
-	/* TODO: This is probe function! Don't do lengthy stuff here */
+		dev->assembly_buffer = kzalloc(RX_ASSEMBLY_BUFFER_SIZE,
+				GFP_KERNEL);
+
+		netdev->netdev_ops = &sam4e_usb_netdev_ops;
+
+		init_usb_anchor(&dev->rx_submitted);
+		init_usb_anchor(&dev->tx_submitted);
+		atomic_set(&dev->active_tx_urbs, 0);
+		atomic_set(&dev->msg_seq, 0);
+
+		usb_set_intfdata(intf, dev);
+		SET_NETDEV_DEV(netdev, &intf->dev);
+
+		err = register_candev(netdev);
+		if (err) {
+			pr_err("fail reg.CAN device: %d", err);
+			goto cleanup_candev;
+		}
+
+		udev = interface_to_usbdev(intf);
+
+		if (cnt == 0) {
+			/*use mail box 7 and 6 for e/s frames on can0*/
+			setup_mailbox(7, 0, CAN_EFF_FLAG, CAN_EFF_FLAG,
+					intf, udev, dev);
+			setup_mailbox(6, 0, CAN_EFF_FLAG, 0,
+					intf, udev, dev);
+		} else {
+			/*use mail box 5 and 4 for e/s frames on can1*/
+			setup_mailbox(5, 1, CAN_EFF_FLAG, CAN_EFF_FLAG,
+					intf, udev, dev);
+			setup_mailbox(4, 1, CAN_EFF_FLAG, 0,
+					intf, udev, dev);
+		}
+		cnt++;
+	}
 	sam4e_read_fw_version(dev);
-
-	/* Set mailbox 7 to read all EFF msgs */
-	req = kzalloc(sizeof(struct sam4e_req) +
-			sizeof(struct sam4e_can_full_ts_read), GFP_KERNEL);
-	if (req != 0) {
-		struct sam4e_can_full_ts_read *cfr =
-				(struct sam4e_can_full_ts_read *)&req->data;
-		req->cmd = CMD_CAN_TS_FULL_READ;
-		req->len = sizeof(struct sam4e_req) +
-				sizeof(struct sam4e_can_full_ts_read);
-		req->seq = atomic_inc_return(&dev->msg_seq);
-		cfr->can = 0;
-		cfr->mailbox = 7;
-		/* Timestamping on */
-		cfr->ts_on = 1;
-		/* accept EFF frames here */
-		cfr->mid = CAN_EFF_FLAG;
-		cfr->filter = CAN_EFF_FLAG;
-
-		result = usb_bulk_msg(udev, usb_sndbulkpipe(udev, BULK_OUT_EP),
-				req,
-				sizeof(struct sam4e_req) +
-				sizeof(struct sam4e_can_full_ts_read),
-				&actual_length, 1000);
-
-		LOGNI("sent %x result %d, actual_length %d",
-				req->cmd, result, actual_length);
-		kfree(req);
-	}
-
-	resp = kzalloc(sizeof(struct sam4e_resp), GFP_KERNEL);
-	result =  usb_bulk_msg(udev, usb_rcvbulkpipe(udev, BULK_IN_EP),
-			resp,
-			sizeof(struct sam4e_resp),
-			&actual_length, 1000);
-
-	LOGNI("rcv? result %d, actual_length %d",
-			result, actual_length);
-	if (result == 0 && DEBUG_SAM4E) {
-		dev_info(&intf->dev, "data %x %d %d %d\n", resp->cmd,
-				resp->len, resp->seq, resp->err);
-	}
-	kfree(resp);
-
-	/* Set mailbox 6 to read all SFF msgs */
-	req = kzalloc(sizeof(struct sam4e_req) +
-			sizeof(struct sam4e_can_full_ts_read), GFP_KERNEL);
-	if (req != 0) {
-		struct sam4e_can_full_ts_read *cfr =
-				(struct sam4e_can_full_ts_read *)&req->data;
-		req->cmd = CMD_CAN_TS_FULL_READ;
-		req->len = sizeof(struct sam4e_req) +
-				sizeof(struct sam4e_can_full_ts_read);
-		req->seq = atomic_inc_return(&dev->msg_seq);
-		cfr->can = 0;
-		cfr->mailbox = 6;
-		/* Timestamping on */
-		cfr->ts_on = 1;
-		/* accept SFF frames here */
-		cfr->mid = 0;
-		cfr->filter = CAN_EFF_FLAG;
-
-		result =  usb_bulk_msg(udev, usb_sndbulkpipe(udev, BULK_OUT_EP),
-				req,
-				sizeof(struct sam4e_req) +
-				sizeof(struct sam4e_can_full_ts_read),
-				&actual_length, 1000);
-
-		LOGNI("sent %x result %d, actual_length %d",
-				req->cmd, result, actual_length);
-		kfree(req);
-	}
-
-	resp = kzalloc(sizeof(struct sam4e_resp), GFP_KERNEL);
-	result =  usb_bulk_msg(udev, usb_rcvbulkpipe(udev, BULK_IN_EP),
-			resp,
-			sizeof(struct sam4e_resp),
-			&actual_length, 1000);
-	LOGNI("rcv? result %d, actual_length %d",
-			result, actual_length);
-	if (result == 0)
-		LOGNI("data %x %d %d %d\n",
-				resp->cmd, resp->len, resp->seq, resp->err);
-	kfree(resp);
-
-	err = sam4e_init_urbs(netdev);
+	err = sam4e_init_urbs(dev);
 	if (err) {
-		netdev_err(netdev, "couldn't init urbs: %d\n", err);
-		goto unregister_candev;
+		if (err == -ENODEV) {
+			netif_device_detach(dev->netdev1);
+			netif_device_detach(dev->netdev2);
+		}
+		pr_err("couldn't start device: %d\n", err);
+		close_candev(dev->netdev1);
+		close_candev(dev->netdev2);
+		goto cleanup_candev;
 	}
-
 	return 0; /*ok. it's ours */
 
-unregister_candev:
-	unregister_netdev(netdev);
 cleanup_candev:
-	kfree(dev->assembly_buffer);
-	free_candev(netdev);
+	if (dev) {
+		kfree(dev->assembly_buffer);
+		if (dev->netdev1)
+			free_candev(dev->netdev1);
+		if (dev->netdev2)
+			free_candev(dev->netdev2);
+		kfree(dev);
+	}
 	return err;
 }
 
@@ -785,17 +791,22 @@ cleanup_candev:
 static void sam4e_usb_disconnect(struct usb_interface *intf)
 {
 	struct sam4e_usb *dev;
-	struct net_device *netdev;
 
 	dev = usb_get_intfdata(intf);
 	usb_set_intfdata(intf, NULL);
 	if (dev) {
-		netdev = dev->netdev;
 		LOGNI("Disconnect sam4e\n");
-		unregister_netdev(dev->netdev);
+		if (dev->netdev1) {
+			unregister_netdev(dev->netdev1);
+			free_candev(dev->netdev1);
+		}
+		if (dev->netdev2) {
+			unregister_netdev(dev->netdev2);
+			free_candev(dev->netdev2);
+		}
 		kfree(dev->assembly_buffer);
-		free_candev(dev->netdev);
 		unlink_all_urbs(dev);
+		kfree(dev);
 	}
 }
 
