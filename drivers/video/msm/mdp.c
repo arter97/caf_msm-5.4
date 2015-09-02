@@ -4281,6 +4281,8 @@ static int mdp_probe(struct platform_device *pdev)
 		if (mfd->panel.type == HDMI_PANEL) {
 			mfd->dma = &dma_e_data;
 			mdp4_display_intf_sel(EXTERNAL_INTF_SEL, LCDC_RGB_INTF);
+			mfd->vsync_init = mdp4_dtv_vsync_init;
+			mfd->vsync_show = mdp4_dtv_show_event;
 		} else {
 			mfd->dma = &dma2_data;
 			if (mfd->panel_info.pdest == DISPLAY_4)
