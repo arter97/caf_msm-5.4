@@ -1302,7 +1302,7 @@ static void lsm330_acc_polling_manage(struct lsm330_acc_data *acc)
 
 static int lsm330_acc_enable(struct lsm330_acc_data *acc)
 {
-	int err;
+	int err = 0;
 
 	if (!atomic_cmpxchg(&acc->enabled, 0, 1)) {
 		err = lsm330_acc_device_power_on(acc);
@@ -1310,10 +1310,18 @@ static int lsm330_acc_enable(struct lsm330_acc_data *acc)
 			atomic_set(&acc->enabled, 0);
 			return err;
 		}
-		lsm330_acc_polling_manage(acc);
+		if (atomic_read(&acc->enabled)) {
+			err = lsm330_acc_update_odr(acc,
+					acc->pdata->poll_interval);
+			if (err < 0)
+				dev_err(&acc->client->dev,
+					"enable:update odr fail,err=%d\n", err);
+			else
+				lsm330_acc_polling_manage(acc);
+		}
 	}
 
-	return 0;
+	return err;
 }
 
 static int lsm330_acc_disable(struct lsm330_acc_data *acc)
@@ -1851,7 +1859,7 @@ static int lsm330_cdev_poll_delay(struct sensors_classdev *sensors_cdev,
 {
 	struct lsm330_acc_data *stat = container_of(sensors_cdev,
 			struct lsm330_acc_data, accel_cdev);
-	int err;
+	int err = 0;
 
 	if (interval_ms < LSM330_SENSOR_ACC_MIN_POLL_PERIOD_MS)
 		interval_ms = LSM330_SENSOR_ACC_MIN_POLL_PERIOD_MS;
@@ -1869,22 +1877,26 @@ static int lsm330_cdev_poll_delay(struct sensors_classdev *sensors_cdev,
 		}
 	}
 
-	err = lsm330_acc_update_odr(stat, interval_ms);
-	if (err >= 0)
-		stat->pdata->poll_interval = interval_ms;
+	stat->pdata->poll_interval = interval_ms;
 	stat->acc_delay_change = true;
 
 	if (atomic_read(&stat->enabled)) {
-		if (stat->enable_polling) {
-			hrtimer_start(&stat->hr_timer_acc,
-				stat->ktime_acc, HRTIMER_MODE_REL);
-		} else {
-			lsm330_acc_set_drdyint_register_values(stat, 1);
-			lsm330_acc_drdyint(stat);
-			if (stat->pdata->gpio_int1 >= 0)
-				enable_irq(stat->irq1);
-			if (stat->pdata->gpio_int2 >= 0)
-				enable_irq(stat->irq2);
+		err = lsm330_acc_update_odr(stat, interval_ms);
+		if (err < 0)
+			dev_err(&stat->client->dev,
+				"poll_delay: update odr fail, err=%d\n", err);
+		else {
+			if (stat->enable_polling) {
+				hrtimer_start(&stat->hr_timer_acc,
+					stat->ktime_acc, HRTIMER_MODE_REL);
+			} else {
+				lsm330_acc_set_drdyint_register_values(stat, 1);
+				lsm330_acc_drdyint(stat);
+				if (stat->pdata->gpio_int1 >= 0)
+					enable_irq(stat->irq1);
+				if (stat->pdata->gpio_int2 >= 0)
+					enable_irq(stat->irq2);
+			}
 		}
 	}
 	mutex_unlock(&stat->lock);
