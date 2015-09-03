@@ -27,6 +27,9 @@
 #include <media/v4l2-ctrls.h>
 #include <linux/videodev2.h>
 
+#define ADP_RDI RDI1
+#define VID_RDI RDI0
+
 #define FRAME_DELAY 33333
 #define RDI1_USE_WM 4
 #define MM_CAM_USE_BYPASS 1
@@ -43,7 +46,7 @@ static unsigned int overlay_fd[OVERLAY_COUNT];
 static struct msmfb_overlay_data overlay_data[OVERLAY_COUNT];
 static uint8_t dual_enabled;
 static struct msm_sensor_ctrl_t *s_ctrl;
-static struct msm_ispif_params_list params_list;
+static struct msm_ispif_params_list ispif_config_params;
 struct sensor_init_cfg *init_info;
 static uint32_t csid_version;
 static int rdi1_irq_count;
@@ -106,8 +109,13 @@ struct adp_camera_ctxt {
 	struct media_device mdev;
 	struct v4l2_fh event_handler;
 
+	enum adp_camera_input input;
+	enum msm_ba_ip ba_input;
+	enum msm_ba_ip ba_input_tmp;
+
 	/* state */
 	enum camera_states state;
+	bool is_csi_shared;
 
 	/* v4l2 overlay configs */
 	bool display_init[DISPLAY_ID_MAX];
@@ -132,6 +140,17 @@ struct adp_camera_ctxt {
 	struct dentry *debugfs_root;
 };
 static struct adp_camera_ctxt *adp_cam_ctxt;
+
+struct adp_to_ba_input_struct {
+	enum adp_camera_input input;
+	enum msm_ba_ip ba_input;
+	const char *name;
+};
+
+static const struct adp_to_ba_input_struct adp_to_ba_input[] = {
+	{ADP_CAM_INPUT_RVC, BA_IP_CVBS_0, "RVC"},
+	{ADP_CAM_INPUT_LW, BA_IP_CVBS_1, "LaneWatch"},
+};
 
 #ifdef CONFIG_FB_MSM_MDP_ARB
 #define MDP_ARB_CLIENT_NAME "adp_camera"
@@ -247,7 +266,6 @@ static int mdp_buf_queue_deq(void)
 
 static int preview_set_data_pipeline(void)
 {
-	int ispif_stream_enable;
 	u32 freq = 320000000;
 	u32 flags = 0;
 	int rc;
@@ -263,7 +281,7 @@ static int preview_set_data_pipeline(void)
 	csid_version = 1;
 	rc = msm_csid_init(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
 			&csid_version, MM_CAM_USE_BYPASS);
-	rc |= msm_csiphy_init(
+	rc = msm_csiphy_init_adp(
 			lsh_csiphy_dev[adp_rvc_csi_lane_params.csi_phy_sel]);
 	rc |= msm_ispif_init_rdi(lsh_ispif, &csid_version); /* ISPIF_INIT */
 	if (rc) {
@@ -272,14 +290,15 @@ static int preview_set_data_pipeline(void)
 	}
 
 	pr_debug("%s: config ispif\n", __func__);
-	params_list.params[0].intftype =  RDI1; /* RDI1 */
-	params_list.params[0].csid = adp_rvc_csi_lane_params.csi_phy_sel;
-	params_list.params[0].vfe_intf =  VFE0;
-	params_list.params[0].cid_mask = (1 << 0);
-	params_list.len = 1;
+	ispif_config_params.params[0].intftype = ADP_RDI; /* RDI1 */
+	ispif_config_params.params[0].csid =
+		adp_rvc_csi_lane_params.csi_phy_sel;
+	ispif_config_params.params[0].vfe_intf =  VFE0;
+	ispif_config_params.params[0].cid_mask = (1 << 0);
+	ispif_config_params.len = 1;
 
 	/* ISPIF_CFG,use csid 1,rdi1 */
-	rc = msm_ispif_config(lsh_ispif, &params_list);
+	rc = msm_ispif_config(lsh_ispif, &ispif_config_params);
 	if (rc) {
 		pr_err("%s failed to config ispif %d", __func__, rc);
 		return rc;
@@ -302,14 +321,6 @@ static int preview_set_data_pipeline(void)
 		return rc;
 	}
 
-	ispif_stream_enable = 129;  /* configure to select RDI 1, VFE0 */
-	rc = msm_ispif_subdev_video_s_stream_rdi_only(lsh_ispif,
-			ispif_stream_enable);
-	if (rc) {
-		pr_err("%s failed ispif s_stream_rdi_only %d", __func__, rc);
-		return rc;
-	}
-
 	pr_debug("%s: begin axi reset!!!\n", __func__);
 	axi_reset_rdi1_only(my_axi_ctrl, vfe_para);
 	pr_debug("%s: vfe32_config_axi now!!!\n", __func__);
@@ -317,7 +328,7 @@ static int preview_set_data_pipeline(void)
 	rc = vfe32_config_axi_rdi_only(my_axi_ctrl, OUTPUT_TERT2,
 			(uint32_t *)&vfe_axi_cmd_para);
 
-	adp_camera_msm_cam_ops.interface = RDI1;
+	adp_camera_msm_cam_ops.interface = ADP_RDI;
 	adp_camera_msm_cam_ops.csid_sd = &lsh_csid_dev
 			[adp_rvc_csi_lane_params.csi_phy_sel]->subdev;
 	adp_camera_msm_cam_ops.csiphy_sd = &lsh_csiphy_dev
@@ -1205,8 +1216,9 @@ static void adp_rear_camera_disable(void)
 	msm_axi_subdev_release_rdi_only(lsh_axi_ctrl, s_ctrl);
 	msm_csid_release(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
 			MM_CAM_USE_BYPASS);
-	msm_csiphy_release(lsh_csiphy_dev[adp_rvc_csi_lane_params.csi_phy_sel],
-			&adp_rvc_csi_lane_params);
+	msm_csiphy_release_adp(
+		lsh_csiphy_dev[adp_rvc_csi_lane_params.csi_phy_sel],
+		&adp_rvc_csi_lane_params);
 	msm_ispif_release_rdi(lsh_ispif);
 	msm_ba_close(adp_cam_ctxt->ba_inst_hdlr);
 
@@ -1219,10 +1231,13 @@ static int adp_rear_camera_enable(void)
 	struct preview_mem *ping_buffer, *pong_buffer, *free_buffer;
 	struct v4l2_input input;
 	struct v4l2_format fmt;
-	int index = BA_IP_CVBS_0;
 	enum v4l2_priority prio = V4L2_PRIORITY_RECORD;
 	int ret = 0;
 	int i;
+
+	adp_cam_ctxt->input = ADP_CAM_INPUT_RVC;
+	adp_cam_ctxt->ba_input = adp_to_ba_input[adp_cam_ctxt->input].ba_input;
+	adp_cam_ctxt->ba_input_tmp = 1;
 
 	for (i = 0; i < DISPLAY_ID_MAX; i++) {
 
@@ -1252,11 +1267,11 @@ static int adp_rear_camera_enable(void)
 	vfe_para.operation_mode = VFE_OUTPUTS_RDI1;
 
 	/* Detect NTSC or PAL, get the preview width and height */
-
 	adp_cam_ctxt->ba_inst_hdlr =
 			msm_ba_open(&adp_camera_ba_ext_ops);
-	pr_debug("%s: input index: %d\n", __func__, index);
-	msm_ba_s_input(adp_cam_ctxt->ba_inst_hdlr, index);
+	pr_debug("%s: input index: %d\n", __func__, adp_cam_ctxt->ba_input);
+	ret = msm_ba_s_input(adp_cam_ctxt->ba_inst_hdlr,
+				adp_cam_ctxt->ba_input);
 	if (ret)
 		goto failure;
 
@@ -1264,7 +1279,7 @@ static int adp_rear_camera_enable(void)
 	if (ret)
 		goto failure;
 	memset(&input, 0, sizeof(input));
-	input.index = index;
+	input.index = adp_cam_ctxt->ba_input;
 	msm_ba_enum_input(adp_cam_ctxt->ba_inst_hdlr, &input);
 	pr_debug("%s: input info: %s\n", __func__, input.name);
 
@@ -1273,7 +1288,6 @@ static int adp_rear_camera_enable(void)
 		goto failure;
 	pr_debug("%s: format: %dx%d\n", __func__, fmt.fmt.pix.width,
 			fmt.fmt.pix.height);
-
 	g_preview_height = fmt.fmt.pix.height;
 	g_preview_width = fmt.fmt.pix.width;
 
@@ -1364,6 +1378,8 @@ static int adp_camera_disable_stream(void)
 	usleep(FRAME_DELAY);
 	msm_ba_streamoff(adp_cam_ctxt->ba_inst_hdlr, 0);
 
+	msm_csid_unreserve(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel]);
+
 	adp_cam_ctxt->camera_stream_enabled = false;
 
 	return 0;
@@ -1378,17 +1394,23 @@ static int adp_camera_enable_stream(void)
 		goto exit;
 	}
 
+	msm_csid_reserve(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel]);
 	msm_csid_reset(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel]);
-	rc = msm_csid_config(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
-			&adp_rvc_csid_params);
+	rc = msm_csid_config(
+		lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
+		&adp_rvc_csid_params);
 	if (rc) {
 		pr_err("%s - msm_csid_config failed %d", __func__, rc);
+		msm_csid_unreserve(
+			lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel]);
 		goto exit;
 	}
 
 	rc = msm_ba_streamon(adp_cam_ctxt->ba_inst_hdlr, 0);
 	if (rc) {
 		pr_err("%s - msm_ba_streamon failed %d", __func__, rc);
+		msm_csid_unreserve(
+			lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel]);
 		goto exit;
 	}
 
@@ -1584,6 +1606,34 @@ static int disable_camera_preview(void)
 	adp_cam_ctxt->state = CAMERA_TRANSITION_OFF;
 
 	adp_camera_disable_stream();
+
+	if (adp_cam_ctxt->is_csi_shared) {
+		pr_err("%s - %d and now %d", __func__,
+				adp_cam_ctxt->ba_input,
+				adp_cam_ctxt->ba_input_tmp);
+		/* TODO: check if other input was active then restart it. */
+		if (adp_cam_ctxt->ba_input_tmp != BA_IP_MAX) {
+			msm_ba_s_input(adp_cam_ctxt->ba_inst_hdlr,
+					adp_cam_ctxt->ba_input_tmp);
+
+			/* stop rdi1 and start rdi0 */
+			msm_ispif_subdev_video_s_stream_rdi_only(lsh_ispif,
+								0x84);
+			msm_ispif_subdev_video_s_stream_rdi_only(lsh_ispif,
+								0x21);
+
+			msm_csid_reset(lsh_csid_dev[
+					adp_rvc_csi_lane_params.csi_phy_sel]);
+			msm_csid_config(lsh_csid_dev[
+					adp_rvc_csi_lane_params.csi_phy_sel],
+					&adp_rvc_csid_params);
+
+			msm_ba_streamon(adp_cam_ctxt->ba_inst_hdlr, 0);
+
+			axi_start_rdi0_only(my_axi_ctrl, s_ctrl);
+		}
+	}
+
 	mdp_disable_camera_preview();
 
 	adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
@@ -1629,6 +1679,49 @@ static int enable_camera_preview(void)
 
 	wait_for_completion(&preview_disabled);
 	adp_cam_ctxt->state = CAMERA_TRANSITION_PREVIEW;
+
+	if (adp_cam_ctxt->is_csi_shared &&
+			msm_ispif_validate_intf_status(lsh_ispif,
+							VID_RDI, VFE0)) {
+		/* TODO: check that other input is active */
+		pr_err("%s: other input is ON!", __func__);
+		msm_ba_g_input(adp_cam_ctxt->ba_inst_hdlr,
+			&adp_cam_ctxt->ba_input_tmp);
+
+		/* stop rdi0 */
+		axi_stop_rdi0_only(my_axi_ctrl);
+
+		rc = msm_ispif_subdev_video_s_stream_rdi_only(lsh_ispif,
+								0x22);
+		if (rc) {
+			pr_err("%s failed ispif s_stream rdi0 %d",
+				__func__, rc);
+			goto mdp_failed;
+		}
+
+		usleep(FRAME_DELAY);
+		msm_ba_streamoff(adp_cam_ctxt->ba_inst_hdlr, 0);
+		msm_ba_s_input(adp_cam_ctxt->ba_inst_hdlr,
+				adp_cam_ctxt->ba_input);
+
+		/* start rdi1 */
+		rc = msm_ispif_subdev_video_s_stream_rdi_only(lsh_ispif,
+								0x81);
+		if (rc) {
+			pr_err("%s failed ispif s_stream rdi1 %d",
+				__func__, rc);
+			goto mdp_failed;
+		}
+	} else {
+		adp_cam_ctxt->ba_input_tmp = BA_IP_MAX;
+
+		rc = msm_ispif_subdev_video_s_stream_rdi_only(lsh_ispif, 0x81);
+		if (rc) {
+			pr_err("%s failed ispif s_stream rdi1 %d",
+				__func__, rc);
+			goto mdp_failed;
+		}
+	}
 
 	rc = mdp_enable_camera_preview();
 	if (rc)
@@ -1721,12 +1814,54 @@ static int adp_camera_v4l2_querycap(struct file *filp, void *fh,
 	return 0;
 }
 
+int adp_camera_v4l2_enum_input(struct file *file, void *fh,
+					struct v4l2_input *input)
+{
+	if (input->index >= ADP_CAM_INPUT_MAX)
+		return -EINVAL;
+
+	input->type = V4L2_INPUT_TYPE_CAMERA;
+	input->std = V4L2_STD_ALL;
+	strlcpy(input->name, adp_to_ba_input[input->index].name,
+		sizeof(input->name));
+	input->capabilities = 0;
+	input->status = 0;
+
+	return 0;
+}
+
+int adp_camera_v4l2_g_input(struct file *file, void *fh,
+					unsigned int *index)
+{
+	if (!index)
+		return -EINVAL;
+
+	*index = adp_cam_ctxt->input;
+	return 0;
+}
+
+int adp_camera_v4l2_s_input(struct file *file, void *fh,
+					unsigned int index)
+{
+	if (index >= ADP_CAM_INPUT_MAX)
+			return -EINVAL;
+
+	if (CAMERA_PREVIEW_DISABLED != adp_cam_ctxt->state) {
+		pr_err("%s - cannot set display id while preview running",
+				__func__);
+		return -EBUSY;
+	}
+
+	adp_cam_ctxt->input = index;
+	adp_cam_ctxt->ba_input = adp_to_ba_input[index].ba_input;
+
+	return 0;
+}
+
 static int adp_camera_v4l2_cropcap(struct file *file, void *fh,
 				struct v4l2_cropcap *a)
 {
 	int rc;
-
-	pr_debug("%s - enter", __func__);
 
 	if (!a) {
 		pr_err("%s - null param", __func__);
@@ -1750,14 +1885,12 @@ static int adp_camera_v4l2_cropcap(struct file *file, void *fh,
 		break;
 	}
 
-	pr_debug("%s - exit", __func__);
 	return 0;
 }
 static int adp_camera_v4l2_g_crop(struct file *file, void *fh,
 				struct v4l2_crop *a)
 {
 	int rc;
-	pr_debug("%s - enter", __func__);
 
 	if (!a) {
 		pr_err("%s - null param", __func__);
@@ -1781,17 +1914,12 @@ static int adp_camera_v4l2_g_crop(struct file *file, void *fh,
 		break;
 	}
 
-
-	pr_debug("%s - exit", __func__);
-
 	return 0;
 }
 static int adp_camera_v4l2_s_crop(struct file *file, void *fh,
 				struct v4l2_crop *a)
 {
 	int rc = 0;
-
-	pr_debug("%s - enter", __func__);
 
 	if (!a) {
 		pr_err("%s - null param", __func__);
@@ -1830,9 +1958,6 @@ static int adp_camera_v4l2_s_crop(struct file *file, void *fh,
 	rc = preview_overlay_update();
 	if (rc)
 		pr_err("%s - preview_overlay_update failed", __func__);
-
-
-	pr_debug("%s - exit", __func__);
 
 	return rc;
 }
@@ -1899,6 +2024,9 @@ static int adp_v4l2_unsubscribe_event(struct v4l2_fh *fh,
 
 static const struct v4l2_ioctl_ops adp_camera_v4l2_ioctl_ops = {
 	.vidioc_querycap = adp_camera_v4l2_querycap,
+	.vidioc_enum_input = adp_camera_v4l2_enum_input,
+	.vidioc_s_input = adp_camera_v4l2_s_input,
+	.vidioc_g_input = adp_camera_v4l2_g_input,
 	.vidioc_cropcap = adp_camera_v4l2_cropcap,
 	.vidioc_g_crop = adp_camera_v4l2_g_crop,
 	.vidioc_s_crop = adp_camera_v4l2_s_crop,
@@ -1940,7 +2068,7 @@ static int adp_camera_s_ctrl(struct v4l2_ctrl *ctrl)
 			pr_err("%s - preview_overlay_update failed", __func__);
 		break;
 	case ADP_CAMERA_V4L2_CID_DISPLAY_ID:
-		if (CAMERA_PREVIEW_ENABLED == adp_cam_ctxt->state) {
+		if (CAMERA_PREVIEW_DISABLED != adp_cam_ctxt->state) {
 			pr_err("%s - cannot set display id while preview running",
 					__func__);
 			return -EBUSY;
@@ -2006,8 +2134,6 @@ static int adp_camera_init_v4l2_ctrls(void)
 {
 	int rc, i;
 
-	pr_debug("%s - Enter", __func__);
-
 	rc = v4l2_ctrl_handler_init(&adp_cam_ctxt->ctrl_handler,
 			ADP_CAMERA_NUM_CTRLS);
 
@@ -2031,8 +2157,6 @@ static int adp_camera_init_v4l2_ctrls(void)
 	/* set controls to default values */
 	v4l2_ctrl_handler_setup(&adp_cam_ctxt->ctrl_handler);
 
-	pr_debug("%s - Exit", __func__);
-
 	return rc;
 }
 
@@ -2046,13 +2170,22 @@ static int adp_camera_device_init(struct platform_device *pdev)
 	int nr = ADP_CAMERA_BASE_DEVICE_NUMBER;
 	int rc = 0;
 
+	struct msm_adp_camera_platform_data *pdata =
+			pdev->dev.platform_data;
+
 	pr_debug("Enter %s\n", __func__);
+
 
 	adp_cam_ctxt = kzalloc(sizeof(struct adp_camera_ctxt), GFP_KERNEL);
 	if (NULL == adp_cam_ctxt) {
 		pr_err("Failed to allocate adp context\n");
 		return -ENOMEM;
 	}
+
+	if (!pdata)
+		adp_cam_ctxt->is_csi_shared = false;
+	else
+		adp_cam_ctxt->is_csi_shared = pdata->is_csi_shared;
 
 	INIT_DELAYED_WORK(&adp_cam_ctxt->recovery_work,
 						adp_camera_recovery_work);
@@ -2280,7 +2413,8 @@ static int adp_camera_suspend(struct platform_device *pdev,
 	msm_axi_subdev_release_rdi_only(lsh_axi_ctrl, s_ctrl);
 	msm_csid_release(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
 			MM_CAM_USE_BYPASS);
-	msm_csiphy_release(lsh_csiphy_dev[adp_rvc_csi_lane_params.csi_phy_sel],
+	msm_csiphy_release_adp(
+		lsh_csiphy_dev[adp_rvc_csi_lane_params.csi_phy_sel],
 			&adp_rvc_csi_lane_params);
 	msm_ispif_release_rdi(lsh_ispif);
 

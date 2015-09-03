@@ -40,6 +40,8 @@ struct csid_device {
 
 	struct clk *csid0_clk[6];
 	struct clk *csid_clk[6];
+	uint8_t refcnt;
+	bool reserved_adp;
 };
 
 #define VIDIOC_MSM_CSID_CFG \
