@@ -738,6 +738,22 @@ static struct msm_gpiomux_config msm_blsp_configs_eagle[] __initdata = {
 	},
 };
 
+static struct gpiomux_setting gpio_key_config = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_UP,
+	.dir = GPIOMUX_IN,
+};
+
+static struct msm_gpiomux_config msm_keys_configs_eagle[] __initdata = {
+	{
+		.gpio      = 141,		/* Factory reset key */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gpio_key_config,
+		},
+	},
+};
+
 static struct msm_gpiomux_config msm8974_slimbus_config[] __initdata = {
 	{
 		.gpio	= 70,		/* slimbus clk */
@@ -1586,10 +1602,12 @@ void __init msm_8974_init_gpiomux(void)
 		msm_gpiomux_install(msm_eth_configs, \
 			ARRAY_SIZE(msm_eth_configs));
 #endif
-	if (( of_board_is_eagle() && machine_is_apq8074()))
+	if (( of_board_is_eagle() && machine_is_apq8074())) {
 		msm_gpiomux_install(msm_blsp_configs_eagle, ARRAY_SIZE(msm_blsp_configs_eagle));
-	else
+		msm_gpiomux_install(msm_keys_configs_eagle, ARRAY_SIZE(msm_keys_configs_eagle));
+	} else {
 		msm_gpiomux_install(msm_blsp_configs, ARRAY_SIZE(msm_blsp_configs));
+	}
 
 	/* BT UART */
 	msm_gpiomux_install(msm_blsp2_uart7_configs,
