@@ -384,8 +384,10 @@ static int __devinit persistent_ram_buffer_init(const char *name,
 
 	list_for_each_entry(ram, &persistent_ram_list, node) {
 		start = ram->start;
+		printk("persistent_ram_buffer_init():  ram->num_descs = %d \r\n", ram->num_descs);
 		for (i = 0; i < ram->num_descs; i++) {
 			desc = &ram->descs[i];
+			printk("persistent_ram_buffer_init():  desc->name = %s ; name = %s \r\n", desc->name, name);
 			if (!strcmp(desc->name, name)) {
 				*ramp = ram;
 				return persistent_ram_buffer_map(start,
