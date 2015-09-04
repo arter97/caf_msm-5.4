@@ -1579,4 +1579,5 @@ u32 ipa_get_sys_yellow_wm(void);
 int ipa_smmu_map_peer_bam(unsigned long dev);
 int ipa_smmu_unmap_peer_bam(unsigned long dev);
 void ipa_flow_control(enum ipa_client_type ipa_client, bool enable, uint32_t qmap_id);
+void ipa_update_repl_threshold(enum ipa_client_type ipa_client);
 #endif /* _IPA_I_H_ */
