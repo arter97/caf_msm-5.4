@@ -4007,13 +4007,17 @@ static struct platform_device mplatform_reverse_pdev = {
 	},
 };
 
+static struct msm_adp_camera_platform_data adp_camera_pdata = {
+	.is_csi_shared = false,
+};
+
 static struct platform_device adp_camera_pdev = {
-		.name           = "adp_camera",
-		.id             = -1,
-		.dev            = {
-			.platform_data  = NULL,
-		},
-	};
+	.name           = "adp_camera",
+	.id             = -1,
+	.dev            = {
+		.platform_data  = &adp_camera_pdata,
+	},
+};
 
 struct bluetooth_power_platform_data *bt_power_pdata;
 

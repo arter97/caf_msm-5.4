@@ -4250,6 +4250,13 @@ static void vfe32_process_rdi0_reg_update_irq(
 		if (!vfe32_ctrl->share_ctrl->rdi0_capture_count)
 			axi_stop_rdi0(vfe32_ctrl->share_ctrl);
 	}
+
+	if (atomic_cmpxchg(
+		&vfe32_ctrl->share_ctrl->rdi0_update_ack_pending, 3, 0) == 3) {
+		pr_debug("rdi0 reset reg_update");
+		vfe32_ctrl->share_ctrl->comp_output_mode |=
+					VFE32_OUTPUT_MODE_TERTIARY1;
+	}
 }
 
 static void vfe32_process_rdi1_reg_update_irq(
@@ -4291,6 +4298,13 @@ static void vfe32_process_rdi1_reg_update_irq(
 		vfe32_ctrl->share_ctrl->rdi1_capture_count--;
 		if (!vfe32_ctrl->share_ctrl->rdi1_capture_count)
 			axi_stop_rdi1(vfe32_ctrl->share_ctrl);
+	}
+
+	if (atomic_cmpxchg(
+		&vfe32_ctrl->share_ctrl->rdi1_update_ack_pending, 3, 0) == 3) {
+		pr_debug("rdi1 reset reg_update");
+		vfe32_ctrl->share_ctrl->comp_output_mode |=
+						VFE32_OUTPUT_MODE_TERTIARY2;
 	}
 }
 
@@ -7263,12 +7277,36 @@ void axi_stop(struct msm_cam_media_controller *pmctl,
 		axi_ctrl->share_ctrl->vfebase + VFE_REG_UPDATE_CMD);
 }
 
+void axi_start_rdi0_only(struct axi_ctrl_t *axi_ctrl,
+		struct msm_sensor_ctrl_t *s_ctrl)
+{
+	uint32_t reg_update = 0;
+	pr_debug("%s", __func__);
+
+	/* turn on wm for rdi0 if it was on */
+	if (axi_ctrl->share_ctrl->operation_mode & VFE_OUTPUTS_RDI0) {
+		msm_camera_io_w(0x3 /*1*/, axi_ctrl->share_ctrl->vfebase +
+				vfe32_AXI_WM_CFG[axi_ctrl->share_ctrl->
+				outpath.out2.ch0]);
+		if (!atomic_cmpxchg(
+				&axi_ctrl->share_ctrl->rdi0_update_ack_pending,
+				0, 3))
+			reg_update |= 0x2;
+
+		msm_camera_io_w_mb(reg_update,
+				axi_ctrl->share_ctrl->vfebase +
+				VFE_REG_UPDATE_CMD);
+		axi_ctrl->share_ctrl->operation_mode |=
+				VFE_OUTPUTS_RDI0;
+	}
+
+}
+
 void axi_start_rdi1_only(struct axi_ctrl_t *axi_ctrl,
 		struct msm_sensor_ctrl_t *s_ctrl)
 {
 	uint32_t reg_update = 0;
 	uint32_t test;
-	uint32_t rdi1_ack_pending = 0;
 
 	pr_debug("%s : axi start = %d\n", __func__ ,
 		axi_ctrl->share_ctrl->current_mode);
@@ -7279,7 +7317,7 @@ void axi_start_rdi1_only(struct axi_ctrl_t *axi_ctrl,
 	else
 		pr_err("%s: Null sensor control info\n", __func__);
 
-	axi_ctrl->share_ctrl->current_mode |= VFE_OUTPUTS_RDI1;
+	axi_ctrl->share_ctrl->current_mode = VFE_OUTPUTS_RDI1;
 	axi_ctrl->share_ctrl->outpath.out3.ch0 = 4;
 	axi_ctrl->share_ctrl->outpath.output_mode |=
 		VFE32_OUTPUT_MODE_TERTIARY2;
@@ -7301,29 +7339,23 @@ void axi_start_rdi1_only(struct axi_ctrl_t *axi_ctrl,
 		msm_camera_io_w(3 /*1*/, axi_ctrl->share_ctrl->vfebase +
 			vfe32_AXI_WM_CFG[axi_ctrl->share_ctrl->
 			outpath.out3.ch0]);
-	}
 
-	axi_enable_irq(axi_ctrl->share_ctrl);
-
-	rdi1_ack_pending = atomic_read(
-		&axi_ctrl->share_ctrl->rdi1_update_ack_pending);
-	pr_debug("%s: rdi1_ack_pending 0x%x\n", __func__, rdi1_ack_pending);
-
-	if (axi_ctrl->share_ctrl->current_mode & VFE_OUTPUTS_RDI1) {
 		if (!atomic_cmpxchg(
 			&axi_ctrl->share_ctrl->rdi1_update_ack_pending,
-				0, 1)) {
+				0, 3)) {
 			reg_update |= 0x4;
 			pr_debug("%s: reg_update 0x%x\n",
 				__func__, reg_update);
 		}
 	}
 
+	axi_enable_irq(axi_ctrl->share_ctrl);
+
 	msm_camera_io_w_mb(reg_update,
 			axi_ctrl->share_ctrl->vfebase +
 			VFE_REG_UPDATE_CMD);
 	axi_ctrl->share_ctrl->operation_mode |=
-		axi_ctrl->share_ctrl->current_mode;
+			VFE_OUTPUTS_RDI1;
 
 	/* msm_camera_io_dump(axi_ctrl->share_ctrl->vfebase,
 			axi_ctrl->share_ctrl->register_total*4); */
@@ -7332,13 +7364,35 @@ void axi_start_rdi1_only(struct axi_ctrl_t *axi_ctrl,
 	pr_debug("%s: read bus cmd is  %x\n", __func__, test);
 }
 
+void axi_stop_rdi0_only(struct axi_ctrl_t *axi_ctrl)
+{
+	uint32_t reg_update = 0;
+
+	pr_debug("%s", __func__);
+
+	/* stop rdi0 */
+	if (axi_ctrl->share_ctrl->operation_mode & VFE_OUTPUTS_RDI0) {
+		msm_camera_io_w(0, axi_ctrl->share_ctrl->vfebase +
+				vfe32_AXI_WM_CFG[axi_ctrl->share_ctrl->
+							outpath.out2.ch0]);
+		if (!atomic_cmpxchg(
+				&axi_ctrl->share_ctrl->rdi0_update_ack_pending,
+				0, 3))
+			reg_update |= 0x2;
+	}
+
+	msm_camera_io_w_mb(reg_update,
+			axi_ctrl->share_ctrl->vfebase +
+			VFE_REG_UPDATE_CMD);
+}
+
 void axi_stop_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 {
 	uint32_t reg_update = 0;
 	pr_debug("%s: axi stop = %d\n", __func__,
 		axi_ctrl->share_ctrl->current_mode);
 
-	if (axi_ctrl->share_ctrl->current_mode & VFE_OUTPUTS_RDI1) {
+	if (axi_ctrl->share_ctrl->operation_mode & VFE_OUTPUTS_RDI1) {
 		pr_debug("%s enter rdi1 set\n", __func__);
 		axi_ctrl->share_ctrl->rdi1_capture_count = -1;
 		axi_ctrl->share_ctrl->outpath.out3.capture_cnt = -1;
@@ -7349,25 +7403,22 @@ void axi_stop_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 		msm_camera_io_w(0, axi_ctrl->share_ctrl->vfebase +
 			vfe32_AXI_WM_CFG[axi_ctrl->share_ctrl->
 			outpath.out3.ch0]);
-	}
 
-	if (axi_ctrl->share_ctrl->current_mode & VFE_OUTPUTS_RDI1) {
 		if (!atomic_cmpxchg(
 			&axi_ctrl->share_ctrl->rdi1_update_ack_pending,
-				0, 1))
+				0, 3))
 			reg_update |= 0x4;
 
 		pr_debug("%s update ack pending %d",
-			__func__,
-			atomic_read(
-			&axi_ctrl->share_ctrl->rdi1_update_ack_pending));
+				__func__,
+				atomic_read(
+					&axi_ctrl->share_ctrl->
+					rdi1_update_ack_pending));
 	}
 
 	msm_camera_io_w_mb(reg_update,
 			axi_ctrl->share_ctrl->vfebase +
 			VFE_REG_UPDATE_CMD);
-	axi_ctrl->share_ctrl->operation_mode |=
-		axi_ctrl->share_ctrl->current_mode;
 }
 
 static int msm_axi_config(struct v4l2_subdev *sd, void __user *arg)

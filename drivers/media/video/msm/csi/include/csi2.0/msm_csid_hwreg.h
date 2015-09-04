@@ -50,6 +50,7 @@
 #define CSID_IRQ_CRC_MASK                           0x01000000
 #define CSID_IRQ_PHY_DL_OVERFLOW_MASK               0x00F00000
 #define CSID_RST_STB_ALL                            0x7FFF
+#define CSID_RST_SOFT                               0x7FFB
 #define CSID_DL_INPUT_SEL_SHIFT                     0x2
 #define CSID_PHY_SEL_SHIFT                          17
 #define CSID_VERSION                                0x02000011

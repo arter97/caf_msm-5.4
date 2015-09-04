@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -47,6 +47,8 @@ struct ispif_device {
 	uint32_t global_intf_cmd_mask;
 	struct tasklet_struct ispif_tasklet;
 	enum msm_ispif_state_t ispif_state;
+	bool reserved_adp;
+	uint8_t refcnt;
 };
 
 struct ispif_isr_queue_cmd {

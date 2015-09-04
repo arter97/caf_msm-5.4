@@ -161,7 +161,7 @@ static struct msm_cam_clk_info csiphy_8974_clk_info[] = {
 	{"csiphy_timer_clk", -1},
 };
 
-int msm_csiphy_init(struct csiphy_device *csiphy_dev)
+static int msm_csiphy_init(struct csiphy_device *csiphy_dev)
 {
 	int rc = 0;
 	if (csiphy_dev == NULL) {
@@ -170,16 +170,18 @@ int msm_csiphy_init(struct csiphy_device *csiphy_dev)
 		return rc;
 	}
 
-	if (csiphy_dev->csiphy_state == CSIPHY_POWER_UP) {
-		pr_err("%s: csiphy invalid state %d\n", __func__,
-			csiphy_dev->csiphy_state);
-		rc = -EINVAL;
-		return rc;
-	}
+	pr_debug("%s - %d", __func__, csiphy_dev->ref_count+1);
 
 	if (csiphy_dev->ref_count++) {
 		CDBG("%s csiphy refcount = %d\n", __func__,
 			csiphy_dev->ref_count);
+		return rc;
+	}
+
+	if (csiphy_dev->csiphy_state == CSIPHY_POWER_UP) {
+		pr_err("%s: csiphy invalid state %d\n", __func__,
+			csiphy_dev->csiphy_state);
+		rc = -EINVAL;
 		return rc;
 	}
 
@@ -221,7 +223,7 @@ int msm_csiphy_init(struct csiphy_device *csiphy_dev)
 	return 0;
 }
 
-int msm_csiphy_release(struct csiphy_device *csiphy_dev, void *arg)
+static int msm_csiphy_release(struct csiphy_device *csiphy_dev, void *arg)
 {
 	int i = 0;
 	struct msm_camera_csi_lane_params *csi_lane_params;
@@ -229,10 +231,25 @@ int msm_csiphy_release(struct csiphy_device *csiphy_dev, void *arg)
 	csi_lane_params = (struct msm_camera_csi_lane_params *)arg;
 	csi_lane_mask = csi_lane_params->csi_lane_mask;
 
-	if (!csiphy_dev || !csiphy_dev->ref_count) {
-		pr_err("%s csiphy dev NULL / ref_count ZERO\n", __func__);
+	pr_debug("%s - %d", __func__, csiphy_dev->ref_count-1);
+
+	if (!csiphy_dev) {
+		pr_err("%s csiphy dev NULL\n", __func__);
 		return 0;
 	}
+
+	if (csiphy_dev->ref_count) {
+		if (--csiphy_dev->ref_count)
+			return 0;
+	} else {
+		pr_err("%s refcnt already 0!", __func__);
+	}
+
+	if (csiphy_dev->reserved_adp) {
+		pr_err("%s - csiphy reserved!", __func__);
+		return 0;
+	}
+
 
 	if (csiphy_dev->csiphy_state != CSIPHY_POWER_UP) {
 		pr_err("%s: csiphy invalid state %d\n", __func__,
@@ -264,12 +281,6 @@ int msm_csiphy_release(struct csiphy_device *csiphy_dev, void *arg)
 		}
 	}
 
-	if (--csiphy_dev->ref_count) {
-		CDBG("%s csiphy refcount = %d\n", __func__,
-			csiphy_dev->ref_count);
-		return 0;
-	}
-
 	msm_camera_io_w(0x0, csiphy_dev->base + MIPI_CSIPHY_LNCK_CFG2_ADDR);
 	msm_camera_io_w(0x0, csiphy_dev->base + MIPI_CSIPHY_GLBL_PWR_CFG_ADDR);
 
@@ -289,6 +300,23 @@ int msm_csiphy_release(struct csiphy_device *csiphy_dev, void *arg)
 	csiphy_dev->base = NULL;
 	csiphy_dev->csiphy_state = CSIPHY_POWER_DOWN;
 	return 0;
+}
+
+int msm_csiphy_init_adp(struct csiphy_device *csiphy_dev)
+{
+	int rc;
+	csiphy_dev->reserved_adp = true;
+	rc = msm_csiphy_init(csiphy_dev);
+	if (rc)
+		csiphy_dev->reserved_adp = false;
+
+	return rc;
+}
+
+int msm_csiphy_release_adp(struct csiphy_device *csiphy_dev, void *arg)
+{
+	csiphy_dev->reserved_adp = false;
+	return msm_csiphy_release(csiphy_dev, arg);
 }
 
 static long msm_csiphy_cmd(struct csiphy_device *csiphy_dev, void *arg)
@@ -311,6 +339,11 @@ static long msm_csiphy_cmd(struct csiphy_device *csiphy_dev, void *arg)
 		rc = msm_csiphy_init(csiphy_dev);
 		break;
 	case CSIPHY_CFG:
+		if (csiphy_dev->reserved_adp) {
+			pr_err("%s - CSIPHY reserved!", __func__);
+			return 0;
+		}
+
 		if (copy_from_user(&csiphy_params,
 			(void *)cdata.csiphy_params,
 			sizeof(struct msm_camera_csiphy_params))) {

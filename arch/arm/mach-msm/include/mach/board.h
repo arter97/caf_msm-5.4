@@ -79,6 +79,10 @@ struct msm_camera_device_platform_data {
 	struct msm_bus_scale_pdata *cam_bus_scale_table;
 };
 
+struct msm_adp_camera_platform_data {
+	bool is_csi_shared;
+};
+
 #ifdef CONFIG_SENSORS_MT9T013
 struct msm_camera_legacy_device_platform_data {
 	int sensor_reset;

@@ -35,6 +35,12 @@
 #define ADP_CAMERA_EVENT_RECOVERY_SUCCESS (V4L2_EVENT_PRIVATE_START+2)
 #define ADP_CAMERA_EVENT_RECOVERY_FAILED  (V4L2_EVENT_PRIVATE_START+3)
 
+enum adp_camera_input {
+	ADP_CAM_INPUT_RVC = 0,
+	ADP_CAM_INPUT_LW,
+	ADP_CAM_INPUT_MAX
+};
+
 #define PREVIEW_BUFFER_COUNT 3
 enum camera_preview_buffer_state {
 	CAMERA_PREVIEW_BUFFER_STATE_UNUSED,
@@ -179,15 +185,29 @@ extern struct mdp4_overlay_pipe *pipe[OVERLAY_COUNT];
 
 int msm_ispif_init_rdi(struct ispif_device *ispif,
 	const uint32_t *csid_version);
+void msm_ispif_release_rdi(struct ispif_device *ispif);
 int msm_ispif_config(struct ispif_device *ispif,
 	struct msm_ispif_params_list *params_list);
-int msm_csiphy_init(struct csiphy_device *csiphy_dev);
+int32_t msm_ispif_validate_intf_status(struct ispif_device *ispif,
+	uint8_t intftype, uint8_t vfe_intf);
+int msm_ispif_subdev_video_s_stream_rdi_only(
+	struct ispif_device *ispif,
+	int enable);
+
+int msm_csiphy_init_adp(struct csiphy_device *csiphy_dev);
+int msm_csiphy_release_adp(struct csiphy_device *csiphy_dev, void *arg);
 int msm_csiphy_lane_config(struct csiphy_device *csiphy_dev,
 	struct msm_camera_csiphy_params *csiphy_params);
+
 int msm_csid_init(struct csid_device *csid_dev,
 	uint32_t *csid_version, uint32_t bypass);
+int msm_csid_release(struct csid_device *csid_dev, uint32_t bypass);
+void msm_csid_reserve(struct csid_device *csid_dev);
+void msm_csid_unreserve(struct csid_device *csid_dev);
 int msm_csid_config(struct csid_device *csid_dev,
 	struct msm_camera_csid_params *csid_params);
+void msm_csid_reset(struct csid_device *csid_dev);
+
 int msm_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl);
 int msm_sensor_power_up_adv7481(struct msm_sensor_ctrl_t *s_ctrl);
 int msm_sensor_power_down_adv7481(struct msm_sensor_ctrl_t *s_ctrl);
@@ -198,6 +218,7 @@ int msm_sensor_set_sensor_mode(struct msm_sensor_ctrl_t *s_ctrl,
 void msm_sensor_start_stream(struct msm_sensor_ctrl_t *s_ctrl);
 void msm_sensor_stop_stream(struct msm_sensor_ctrl_t *s_ctrl);
 int msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl);
+
 void axi_start(struct msm_cam_media_controller *pmctl,
 	struct axi_ctrl_t *axi_ctrl,
 	struct msm_camera_vfe_params_t vfe_params);
@@ -205,18 +226,18 @@ int vfe32_config_axi(struct axi_ctrl_t *axi_ctrl, int mode,
 	uint32_t *ao);
 int msm_axi_subdev_init_rdi_only(struct v4l2_subdev *sd,
 uint8_t dual_enabled, struct msm_sensor_ctrl_t *s_ctrl);
-int msm_ispif_subdev_video_s_stream_rdi_only(
-	struct ispif_device *ispif,
-	int enable);
 int axi_reset_rdi1_only(struct axi_ctrl_t *axi_ctrl,
 	struct msm_camera_vfe_params_t vfe_params);
 int configure_pingpong_buffers_rdi1_only(int id, int path,
 	struct axi_ctrl_t *axi_ctrl);
 void msm_axi_process_irq(struct v4l2_subdev *sd, void *arg);
-void axi_start_rdi1_only(struct axi_ctrl_t *axi_ctrl,
-	struct msm_sensor_ctrl_t *s_ctrl);
 int vfe32_config_axi_rdi_only(struct axi_ctrl_t *axi_ctrl, int mode,
 	uint32_t *ao);
+void axi_start_rdi0_only(struct axi_ctrl_t *axi_ctrl,
+	struct msm_sensor_ctrl_t *s_ctrl);
+void axi_stop_rdi0_only(struct axi_ctrl_t *axi_ctrl);
+void axi_start_rdi1_only(struct axi_ctrl_t *axi_ctrl,
+	struct msm_sensor_ctrl_t *s_ctrl);
 void axi_stop_rdi1_only(struct axi_ctrl_t *axi_ctrl);
 
 int mdpclient_overlay_set(int fb_idx, struct mdp_overlay *ov);
@@ -231,11 +252,7 @@ int mdpclient_msm_fb_get_vscreeninfo(int fb_idx, struct fb_var_screeninfo *var);
 
 int mdp_bus_scale_update_request(u64 ab_p0, u64 ib_p0, u64 ab_p1,
 					u64 ib_p1);
-int msm_csid_release(struct csid_device *csid_dev, uint32_t bypass);
-void msm_csid_reset(struct csid_device *csid_dev);
 
-int msm_csiphy_release(struct csiphy_device *csiphy_dev, void *arg);
-void msm_ispif_release_rdi(struct ispif_device *ispif);
 void msm_axi_subdev_release_rdi_only(struct v4l2_subdev *sd,
 					struct msm_sensor_ctrl_t *s_ctrl);
 int msm_axi_subdev_s_crystal_freq(struct v4l2_subdev *sd,

@@ -205,6 +205,14 @@ void msm_csid_reset(struct csid_device *csid_dev)
 	return;
 }
 
+static void msm_csid_soft_reset(struct csid_device *csid_dev)
+{
+	pr_debug("%s", __func__);
+	msm_camera_io_w(CSID_RST_SOFT, csid_dev->base + CSID_RST_CMD_ADDR);
+	wait_for_completion_interruptible(&csid_dev->reset_complete);
+	return;
+}
+
 static int msm_csid_subdev_g_chip_ident(struct v4l2_subdev *sd,
 			struct v4l2_dbg_chip_ident *chip)
 {
@@ -283,6 +291,14 @@ int msm_csid_init(struct csid_device *csid_dev,
 		rc = -EINVAL;
 		return rc;
 	}
+
+	pr_debug("%s - %d", __func__, csid_dev->refcnt+1);
+
+	/* skip if reserved */
+	if (csid_dev->refcnt++) {
+		return 0;
+	}
+
 	if (!bypass) {
 		if (csid_dev->csid_state == CSID_POWER_UP) {
 			pr_err("%s: csid invalid state %d\n", __func__,
@@ -413,6 +429,15 @@ vreg_config_failed:
 	return rc;
 }
 
+void msm_csid_reserve(struct csid_device *csid_dev)
+{
+	csid_dev->reserved_adp = true;
+}
+void msm_csid_unreserve(struct csid_device *csid_dev)
+{
+	csid_dev->reserved_adp = false;
+}
+
 int msm_csid_release(struct csid_device *csid_dev, uint32_t bypass)
 {
 	uint32_t irq;
@@ -422,6 +447,26 @@ int msm_csid_release(struct csid_device *csid_dev, uint32_t bypass)
 		pr_err("%s: csid invalid state %d\n", __func__,
 			csid_dev->csid_state);
 		return -EINVAL;
+	}
+
+	pr_err("%s - %d", __func__, csid_dev->refcnt-1);
+
+	/* skip if reserved */
+	if (csid_dev->refcnt) {
+		if (!csid_dev->reserved_adp) {
+			msm_csid_soft_reset(csid_dev);
+			pr_err("%s - resetting csid", __func__);
+		}
+
+		if (--csid_dev->refcnt)
+			return 0;
+	} else {
+		pr_err("%s refcnt already 0!", __func__);
+	}
+
+	if (csid_dev->reserved_adp) {
+		pr_err("%s - csid reserved!", __func__);
+		return 0;
 	}
 
 	irq = msm_camera_io_r(csid_dev->base + CSID_IRQ_STATUS_ADDR);
@@ -504,6 +549,12 @@ static long msm_csid_cmd(struct csid_device *csid_dev, void *arg)
 	case CSID_CFG: {
 		struct msm_camera_csid_params csid_params;
 		struct msm_camera_csid_vc_cfg *vc_cfg = NULL;
+
+		if (csid_dev->reserved_adp) {
+			pr_err("CSID is reserved!");
+			return -EBUSY;
+		}
+
 		if (copy_from_user(&csid_params,
 			(void *)cdata.cfg.csid_params,
 			sizeof(struct msm_camera_csid_params))) {
