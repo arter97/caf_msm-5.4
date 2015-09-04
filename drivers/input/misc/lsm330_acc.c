@@ -1881,6 +1881,10 @@ static int lsm330_cdev_poll_delay(struct sensors_classdev *sensors_cdev,
 		} else {
 			lsm330_acc_set_drdyint_register_values(stat, 1);
 			lsm330_acc_drdyint(stat);
+			if (stat->pdata->gpio_int1 >= 0)
+				enable_irq(stat->irq1);
+			if (stat->pdata->gpio_int2 >= 0)
+				enable_irq(stat->irq2);
 		}
 	}
 	mutex_unlock(&stat->lock);
