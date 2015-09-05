@@ -425,6 +425,8 @@ static int msm_voice_tty_mode_put(struct snd_kcontrol *kcontrol,
 	pr_debug("%s: tty_mode=%d\n", __func__, tty_mode);
 
 	voc_set_tty_mode(voc_get_session_id(VOICE_SESSION_NAME), tty_mode);
+	voc_set_tty_mode(voc_get_session_id(VOLTE_SESSION_NAME), tty_mode);
+	voc_set_tty_mode(voc_get_session_id(VOIP_SESSION_NAME), tty_mode);
 
 	return 0;
 }
