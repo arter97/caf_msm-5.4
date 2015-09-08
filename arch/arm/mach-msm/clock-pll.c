@@ -36,6 +36,8 @@
 #define PLL_RESET_N BIT(2)
 #define PLL_MODE_MASK BM(3, 0)
 
+#define PLL_LOCKED_BIT BIT(16)
+
 #define PLL_EN_REG(x) ((x)->base ? (*(x)->base + (u32)((x)->en_reg)) : \
 				((x)->en_reg))
 #define PLL_STATUS_REG(x) ((x)->base ? (*(x)->base + (u32)((x)->status_reg)) : \
@@ -50,6 +52,8 @@
 				((x)->n_reg))
 #define PLL_CONFIG_REG(x) ((x)->base ? (*(x)->base + (u32)((x)->config_reg)) : \
 				((x)->config_reg))
+#define PLL_TEST_CTL_REG(x) ((x)->base ? (*(x)->base + (u32)((x)->test_ctl_reg)) : \
+				((x)->test_ctl_reg))
 
 static DEFINE_SPINLOCK(pll_reg_lock);
 
@@ -211,11 +215,17 @@ static struct clk *local_pll_clk_get_parent(struct clk *clk)
 
 int sr_pll_clk_enable(struct clk *clk)
 {
-	u32 mode;
+	u32 mode, regval, count;
 	unsigned long flags;
 	struct pll_clk *pll = to_pll_clk(clk);
 
 	spin_lock_irqsave(&pll_reg_lock, flags);
+	if (pll->test_ctl_reg) {
+		regval = readl_relaxed(PLL_TEST_CTL_REG(pll));
+		regval |= pll->test_ctl_val;
+		writel_relaxed(regval, PLL_TEST_CTL_REG(pll));
+	}
+
 	mode = readl_relaxed(PLL_MODE_REG(pll));
 	/* De-assert active-low PLL reset. */
 	mode |= PLL_RESET_N;
@@ -223,18 +233,31 @@ int sr_pll_clk_enable(struct clk *clk)
 
 	/*
 	 * H/W requires a 5us delay between disabling the bypass and
-	 * de-asserting the reset. Delay 10us just to be safe.
+	 * de-asserting the reset. Delay 20us just to be safe.
 	 */
 	mb();
-	udelay(10);
+	udelay(20);
 
 	/* Disable PLL bypass mode. */
 	mode |= PLL_BYPASSNL;
 	writel_relaxed(mode, PLL_MODE_REG(pll));
 
+	if (pll->test_ctl_reg) {
+		regval = readl_relaxed(PLL_TEST_CTL_REG(pll));
+		regval &= ~(pll->test_ctl_val);
+		writel_relaxed(regval, PLL_TEST_CTL_REG(pll));
+	}
+
 	/* Wait until PLL is locked. */
 	mb();
 	udelay(60);
+
+	/* Wait for pll to enable. */
+	for (count = ENABLE_WAIT_MAX_LOOPS; count > 0; count--) {
+		if (readl_relaxed(PLL_STATUS_REG(pll)) & PLL_LOCKED_BIT)
+			break;
+		udelay(1);
+	}
 
 	/* Enable PLL output. */
 	mode |= PLL_OUTCTRL;
@@ -247,8 +270,6 @@ int sr_pll_clk_enable(struct clk *clk)
 
 	return 0;
 }
-
-#define PLL_LOCKED_BIT BIT(16)
 
 int copper_pll_clk_enable(struct clk *clk)
 {
