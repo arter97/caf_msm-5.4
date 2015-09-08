@@ -621,7 +621,7 @@ asmlinkage void __init start_kernel(void)
 	pidmap_init();
 	anon_vma_init();
 #ifdef CONFIG_X86
-	if (efi_enabled)
+	if (efi_enabled(EFI_RUNTIME_SERVICES))
 		efi_enter_virtual_mode();
 #endif
 	thread_info_cache_init();
@@ -652,6 +652,9 @@ asmlinkage void __init start_kernel(void)
 #ifdef CONFIG_BOOT_TIME_MARKER
 	init_marker_proc_fs();
 #endif
+	if (efi_enabled(EFI_RUNTIME_SERVICES))
+		efi_free_boot_services();
+
 	ftrace_init();
 
 	/* Do the rest non-__init'ed, we're now alive */
