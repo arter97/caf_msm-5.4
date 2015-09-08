@@ -868,7 +868,8 @@ static int lsm330_gyr_device_power_on(struct lsm330_gyr_status *stat)
 
 static int lsm330_gyr_enable(struct lsm330_gyr_status *stat)
 {
-	int err;
+	int err = 0;
+	unsigned int poll_delay;
 
 	mutex_lock(&stat->lock);
 	if (!atomic_cmpxchg(&stat->enabled, 0, 1)) {
@@ -878,16 +879,24 @@ static int lsm330_gyr_enable(struct lsm330_gyr_status *stat)
 			mutex_unlock(&stat->lock);
 			return err;
 		}
-
+		poll_delay = stat->pdata->poll_interval;
 		if (stat->polling_enabled) {
-			stat->ktime = ktime_set(stat->pdata->poll_interval / 1000,
-					MS_TO_NS(stat->pdata->poll_interval % 1000));
-			hrtimer_start(&stat->hr_timer, stat->ktime, HRTIMER_MODE_REL);
+			err = lsm330_gyr_update_odr(stat, poll_delay);
+			if (err < 0)
+				dev_err(&stat->client->dev,
+					"enable:update odr fail,err=%d\n", err);
+			else {
+				stat->ktime =
+					ktime_set(poll_delay / 1000,
+						MS_TO_NS(poll_delay % 1000));
+				hrtimer_start(&stat->hr_timer, stat->ktime,
+							HRTIMER_MODE_REL);
+			}
 		}
 
 	}
 	mutex_unlock(&stat->lock);
-	return 0;
+	return err;
 }
 
 static int lsm330_gyr_disable(struct lsm330_gyr_status *stat)
@@ -1546,26 +1555,31 @@ static int lsm330_cdev_poll_delay(struct sensors_classdev *sensors_cdev,
 {
 	struct lsm330_gyr_status *stat = container_of(sensors_cdev,
 			struct lsm330_gyr_status, gyro_cdev);
-	int err;
+	int err = 0;
 
 	if (interval_ms < LSM330_GYRO_MIN_POLL_INTERVAL_MS)
 		interval_ms = LSM330_GYRO_MIN_POLL_INTERVAL_MS;
 
 	mutex_lock(&stat->lock);
-	err = lsm330_gyr_update_odr(stat, interval_ms);
-	if (err >= 0)
-		stat->pdata->poll_interval = interval_ms;
+	stat->pdata->poll_interval = interval_ms;
 	stat->gyr_delay_change = true;
 
 	stat->ktime = ktime_set(stat->pdata->poll_interval / 1000,
 				MS_TO_NS(stat->pdata->poll_interval % 1000));
 
 	if (atomic_read(&stat->enabled)) {
-		hrtimer_cancel(&stat->hr_timer);
-		hrtimer_start(&stat->hr_timer, stat->ktime, HRTIMER_MODE_REL);
+		err = lsm330_gyr_update_odr(stat, interval_ms);
+		if (err < 0)
+			dev_err(&stat->client->dev,
+				"update odr fail,err=%d\n", err);
+		else {
+			hrtimer_cancel(&stat->hr_timer);
+			hrtimer_start(&stat->hr_timer, stat->ktime,
+						HRTIMER_MODE_REL);
+		}
 	}
 	mutex_unlock(&stat->lock);
-	return 0;
+	return err;
 }
 
 static int lsm330_cdev_flush(struct sensors_classdev *sensors_cdev)
