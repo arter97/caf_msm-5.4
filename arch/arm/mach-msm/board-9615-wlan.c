@@ -148,7 +148,7 @@ static int msm9615_wlan_probe(struct platform_device *pdev)
 		goto pm_enable_failed;
 	}
 
-	mdelay(1);
+	mdelay(4);
 
 	rc = gpio_direction_output(GPIO_WLAN_RESET_N, 1);
 	if (rc) {
