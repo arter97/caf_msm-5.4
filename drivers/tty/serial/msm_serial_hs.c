@@ -902,6 +902,7 @@ static void msm_hs_set_termios(struct uart_port *uport,
 	unsigned long flags;
 	unsigned int c_cflag = termios->c_cflag;
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
+	struct msm_hs_rx *rx = &msm_uport->rx;
 	bool error_case = false;
 
 	mutex_lock(&msm_uport->clk_mutex);
@@ -946,6 +947,13 @@ static void msm_hs_set_termios(struct uart_port *uport,
 
 		spin_lock_irqsave(&uport->lock, flags);
 	}
+
+	/* Reset RX and TX
+	 * Resetting the RX enables it, therefore we must reset and disable
+	 */
+	msm_hs_write(uport, UARTDM_CR_ADDR, RESET_TX);
+	msm_hs_write(uport, UARTDM_CR_ADDR, RESET_RX);
+	msm_hs_write(uport, UARTDM_CR_ADDR, UARTDM_CR_RX_DISABLE_BMSK);
 
 	/*
 	 * Wait for queued Rx CMD to ADM driver to be programmed
@@ -1033,26 +1041,18 @@ static void msm_hs_set_termios(struct uart_port *uport,
 	/* Set Transmit software time out */
 	uart_update_timeout(uport, c_cflag, bps);
 
-	/* Enable previously enabled all UART interrupts. */
-	msm_hs_write(uport, UARTDM_IMR_ADDR, msm_uport->imr_reg);
-
-	/*
-	 * Invoke Force RxStale Interrupt
-	 * On receiving this interrupt, send discard flush request
-	 * to ADM driver and ignore all received data.
-	 */
-	__pm_stay_awake(&msm_uport->rx.ws);
-	msm_hs_write(uport, UARTDM_CR_ADDR, FORCE_STALE_EVENT);
-	mb();
-
-	msm_uport->rx_discard_flush_issued = true;
-
-	/*
-	 * Wait for above discard flush request for UART RX CMD to be
-	 * completed. completion would be signal from rx_tlet without
-	 * queueing any next UART RX CMD.
-	 */
 	if (msm_uport->rx.dma_in_flight) {
+		__pm_stay_awake(&msm_uport->rx.ws);
+
+		msm_uport->rx_discard_flush_issued = true;
+		rx->flush = FLUSH_IGNORE;
+		/* Discard Flush */
+		msm_dmov_flush(msm_uport->dma_rx_channel, 0);
+		/*
+		 * Wait for above discard flush request for UART RX CMD to be
+		 * completed. completion would be signal from rx_tlet without
+		 * queueing any next UART RX CMD.
+		 */
 		spin_unlock_irqrestore(&uport->lock, flags);
 		ret = wait_event_timeout(msm_uport->rx.wait,
 			msm_uport->rx_discard_flush_issued == false,
@@ -1066,13 +1066,12 @@ static void msm_hs_set_termios(struct uart_port *uport,
 			}
 		if (!error_case)
 			spin_lock_irqsave(&uport->lock, flags);
-	} else {
-		spin_unlock_irqrestore(&uport->lock, flags);
-		pr_err("%s(): called with rx.dma_in_flight:%d\n",
-				__func__, msm_uport->rx.dma_in_flight);
-		print_uart_registers(msm_uport);
-		spin_lock_irqsave(&uport->lock, flags);
 	}
+
+	/* Turn on Uart Receiver */
+	msm_hs_write(uport, UARTDM_CR_ADDR, UARTDM_CR_RX_EN_BMSK);
+	/* Enable previously enabled all UART interrupts. */
+	msm_hs_write(uport, UARTDM_IMR_ADDR, msm_uport->imr_reg);
 
 	/* Start Rx Transfer */
 	msm_hs_start_rx_locked(&msm_uport->uport);
@@ -2200,7 +2199,8 @@ static int msm_hs_startup(struct uart_port *uport)
 
 
 	/* Reset both RX and TX HW state machine */
-	msm_hs_write(uport, UARTDM_CR_ADDR, (RESET_RX | RESET_TX));
+	msm_hs_write(uport, UARTDM_CR_ADDR, RESET_RX);
+	msm_hs_write(uport, UARTDM_CR_ADDR, RESET_TX);
 	/*
 	 * Rx and Tx reset operation takes few clock cycles, hence as
 	 * safe side adding 10us delay.
