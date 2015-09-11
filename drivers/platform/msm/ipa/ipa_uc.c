@@ -316,6 +316,7 @@ static void ipa_uc_event_handler(enum ipa_irq_type interrupt,
 			ipa_hw_error_str(evt.params.errorType));
 		ipa_ctx->uc_ctx.uc_failed = true;
 		ipa_ctx->uc_ctx.uc_error_type = evt.params.errorType;
+		BUG();
 	} else if (ipa_ctx->uc_ctx.uc_sram_mmio->eventOp ==
 		IPA_HW_2_CPU_EVENT_LOG_INFO) {
 			IPADBG("uC evt log info ofst=0x%x\n",
