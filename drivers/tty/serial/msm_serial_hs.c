@@ -1109,15 +1109,19 @@ unsigned int msm_hs_tx_empty(struct uart_port *uport)
 	unsigned int data;
 	unsigned int ret = 0;
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
-	if (msm_uport->clk_state == MSM_HS_CLK_OFF) {
-		pr_err("%s: Failing GSBI clocks are OFF\n", __func__);
-		return 0;
+
+	if (msm_uport->is_shutdown) {
+		pr_err("%s:Failed.UART port was closed\n", __func__);
+		return -EPERM;
 	}
+	msm_hs_clock_vote(msm_uport);
+
 	data = msm_hs_read(uport, UARTDM_SR_ADDR);
 
 	if (data & UARTDM_SR_TXEMT_BMSK)
 		ret = TIOCSER_TEMT;
 
+	msm_hs_clock_unvote(msm_uport);
 	return ret;
 }
 EXPORT_SYMBOL(msm_hs_tx_empty);
@@ -1148,7 +1152,7 @@ static void msm_hs_stop_rx_locked(struct uart_port *uport)
 	unsigned long data;
 
 	if (msm_uport->clk_state == MSM_HS_CLK_OFF)
-		return;
+		msm_hs_clock_vote(msm_uport);
 
 	/* Disable RxStale Event Mechanism */
 	msm_hs_write(uport, UARTDM_CR_ADDR, STALE_EVENT_DISABLE);
@@ -1656,6 +1660,10 @@ void msm_hs_set_mctrl(struct uart_port *uport,
 	unsigned long flags;
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
 
+	if (msm_uport->is_shutdown) {
+		pr_err("%s:Failed.UART port was closed\n", __func__);
+		return;
+	}
 	if (msm_uport->clk_state == MSM_HS_CLK_OFF) {
 		pr_err("%s:Failing as GSBI clocks are OFF\n", __func__);
 		return;
@@ -2739,15 +2747,19 @@ static void msm_hs_shutdown(struct uart_port *uport)
 	 */
 	mb();
 
+	msm_hs_clock_unvote(msm_uport);
+	if (atomic_read(&msm_uport->clk_count) > 0) {
+		dev_err(msm_uport->uport.dev, "%s: Remove extra vote\n",
+								__func__);
+		atomic_set(&msm_uport->clk_count, 1);
+		msm_hs_clock_unvote(msm_uport);
+	}
 	if (ioctl_count) {
 		dev_err(msm_uport->uport.dev, "%s: Client kept clocks ON %d\n",
 						__func__, ioctl_count);
-	} else {
-		if (msm_uport->clk_state != MSM_HS_CLK_OFF) {
-			msm_hs_clock_unvote(msm_uport);
-			__pm_relax(&msm_uport->dma_ws);
-		}
+		atomic_set(&msm_uport->ioctl_count, 0);
 	}
+	__pm_relax(&msm_uport->dma_ws);
 	dma_unmap_single(uport->dev, msm_uport->tx.dma_base,
 			 UART_XMIT_SIZE, DMA_TO_DEVICE);
 
