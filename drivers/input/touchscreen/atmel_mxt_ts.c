@@ -1752,16 +1752,6 @@ static int mxt_config_dba_host(struct mxt_data *data)
 		}
 	}
 
-
-
-	error = data->dba_aux->ops.interrupts_enable(data->dba_aux->handle,
-					true, MSM_DBA_CB_REMOTE_INT, 0x0);
-	if (error) {
-		dev_err(&data->client->dev,
-					"failed to enable remote interrupts\n");
-		return error;
-	}
-
 	return error;
 }
 
@@ -2667,8 +2657,7 @@ static int mxt_suspend(struct device *dev)
 		data->dba_aux->ops.interrupts_enable(data->dba_aux->handle,
 					false, MSM_DBA_CB_REMOTE_INT, 0x0);
 		if (error) {
-			dev_err(&data->client->dev,
-						"failed to enable remote interrupts\n");
+			dev_err(dev, "failed to enable remote interrupts\n");
 			return error;
 		}
 
@@ -2698,14 +2687,6 @@ static int mxt_resume(struct device *dev)
 
 	if (data->pdata->no_regulator_support) {
 		if (data->pdata->dba_host) {
-			data->dba_aux->handle =
-				msm_dba_register_client(data->pdata->dba_host,
-							&data->dba_aux->ops);
-			if (IS_ERR(data->dba_aux->handle)) {
-				error = PTR_ERR(data->dba_aux->handle);
-				return error;
-			}
-
 			error =
 			data->dba_aux->ops.power_on(data->dba_aux->handle,
 								true, 0x0);
@@ -2720,8 +2701,18 @@ static int mxt_resume(struct device *dev)
 					"failed to configure DBA interface\n");
 				return error;
 			}
-		} else
+
+			error = data->dba_aux->ops.interrupts_enable(
+					data->dba_aux->handle,
+					true, MSM_DBA_CB_REMOTE_INT, 0x0);
+			if (error) {
+				dev_err(dev,
+					"failed to enable remote interrupts\n");
+				return error;
+			}
+		} else {
 			enable_irq(data->irq);
+		}
 
 		data->dev_on = true;
 		return error;
@@ -3143,6 +3134,15 @@ static void mxt_init_delay_work(struct work_struct *work)
 					"Failed to register interrupt\n");
 			goto error_request_irq;
 		}
+	} else {
+		error = data->dba_aux->ops.interrupts_enable(
+						data->dba_aux->handle, true,
+						MSM_DBA_CB_REMOTE_INT, 0x0);
+		if (error) {
+			dev_err(&data->client->dev,
+					"failed to enable remote interrupts\n");
+			goto error_request_irq;
+		}
 	}
 
 	if (data->state == APPMODE) {
@@ -3153,7 +3153,7 @@ static void mxt_init_delay_work(struct work_struct *work)
 		if (error) {
 			dev_err(&data->client->dev,
 						"Failed to make high CHG\n");
-			goto error_request_irq;
+			goto error_register_input_dev;
 		}
 	}
 
@@ -3184,6 +3184,10 @@ error_create_sysfs:
 error_register_input_dev:
 	if (!data->pdata->dba_host)
 		free_irq(data->irq, data);
+	else
+		data->dba_aux->ops.interrupts_enable(
+						data->dba_aux->handle, false,
+						MSM_DBA_CB_REMOTE_INT, 0x0);
 error_request_irq:
 error_mxt_init:
 	input_free_device(data->input_dev);
@@ -3427,7 +3431,8 @@ static int __devexit mxt_remove(struct i2c_client *client)
 #endif
 	debugfs_remove_recursive(debug_base);
 	sysfs_remove_group(&client->dev.kobj, &mxt_attr_group);
-	free_irq(data->irq, data);
+	if (!data->pdata->dba_host)
+		free_irq(data->irq, data);
 	input_unregister_device(data->input_dev);
 	input_free_device(data->input_dev);
 	if (data->pdata->dba_host)
