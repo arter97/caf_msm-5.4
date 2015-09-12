@@ -180,7 +180,7 @@ struct msm_vfe_axi_ops {
 	void (*read_wm_ping_pong_addr)(struct vfe_device *vfe_dev);
 
 	void (*update_ping_pong_addr)(void __iomem *vfe_base,
-		uint8_t wm_idx, uint32_t pingpong_status, dma_addr_t paddr);
+		uint8_t wm_idx, uint32_t pingpong_bit, dma_addr_t paddr);
 
 	uint32_t (*get_wm_mask) (uint32_t irq_status0, uint32_t irq_status1);
 	uint32_t (*get_comp_mask) (uint32_t irq_status0, uint32_t irq_status1);
@@ -387,9 +387,15 @@ struct msm_vfe_axi_composite_info {
 	uint32_t stream_composite_mask;
 };
 
+enum msm_vfe_camif_state {
+	CAMIF_STOPPED,
+	CAMIF_ENABLE,
+	CAMIF_DISABLE,
+	CAMIF_STOPPING,
+};
+
 struct msm_vfe_src_info {
 	uint32_t frame_id;
-	uint32_t camif_sof_frame_id;
 	uint32_t reg_update_frame_id;
 	uint8_t active;
 	uint8_t pix_stream_count;
@@ -430,7 +436,7 @@ struct msm_vfe_axi_shared_data {
 	uint8_t num_pix_stream;
 	uint32_t rdi_wm_mask;
 	struct msm_vfe_axi_composite_info
-	composite_info[MAX_NUM_COMPOSITE_MASK];
+		composite_info[MAX_NUM_COMPOSITE_MASK];
 	uint8_t num_used_composite_mask;
 	uint32_t stream_update[VFE_SRC_MAX];
 	atomic_t axi_cfg_update[VFE_SRC_MAX];
@@ -439,6 +445,7 @@ struct msm_vfe_axi_shared_data {
 	uint16_t stream_handle_cnt;
 	uint32_t event_mask;
 	uint8_t enable_frameid_recovery;
+	enum msm_vfe_camif_state camif_state;
 };
 
 struct msm_vfe_stats_hardware_info {
@@ -510,7 +517,7 @@ struct msm_vfe_error_info {
 	uint32_t error_mask1;
 	uint32_t violation_status;
 	uint32_t camif_status;
-	uint8_t stream_framedrop_count[VFE_AXI_SRC_MAX];
+	uint8_t stream_framedrop_count[BUF_MGR_NUM_BUF_Q];
 	uint8_t stats_framedrop_count[MSM_ISP_STATS_MAX];
 	uint32_t info_dump_frame_count;
 	uint32_t error_count;
