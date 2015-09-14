@@ -11,79 +11,26 @@
  */
 
 /include/ "apq8074-camera-sensor-eagle.dtsi"
-/include/ "msm8974-leds.dtsi"
 /include/ "msm-rdbg.dtsi"
 /include/ "apq8074-leds-eagle.dtsi"
 
 / {
 	aliases {
 		serial0 = &blsp2_uart5;
-        serial1 = &blsp1_uart4;
+		serial1 = &blsp1_uart4;
 	};
-};
-
-&mdss_dsi0 {
-    status = "disabled";
-};
-
-&mdss_dsi1 {
-    status = "disabled";
-};
-
-&mdss_edp {
-    status = "disabled";
-};
-
-&vph_pwr_vreg {
-	status = "ok";
 };
 
 &soc {
-
-    qcom,mdss_wb_panel {
-		status = "disabled";
-	};
-
-	qcom,mdss_dsi@fd922800 {
-		status = "disabled";
-	};
-
-	qcom,mdss_mdp@fd900000 {
-		status = "disabled";
-	};
-
-	qcom,hdmi_tx@fd922100 {
-		status = "disabled";
-	};
-
 	gpio_keys {
 		compatible = "gpio-keys";
 		input-name = "gpio-keys";
-
-		vol_up {
-			label = "volume_up";
-			gpios = <&pm8941_gpios 5 0x1>;
-			linux,input-type = <1>;
-			linux,code = <115>;
-			gpio-key,wakeup;
-			debounce-interval = <15>;
-		};
-
-		general {
-			label = "general";
-			gpios = <&pm8941_gpios 23 0x1>;
-			linux,input-type = <1>;
-			linux,code = <102>;
-			gpio-key,wakeup;
-			debounce-interval = <15>;
-		};
 
 		factory_reset {
 			label = "factory_reset";
 			gpios = <&msmgpio 141 0x1>;
 			linux,input-type = <1>;
 			linux,code = <766>;
-			gpio-key,wakeup;
 			debounce-interval = <15>;
 		};
 	};
@@ -93,50 +40,35 @@
 		qca,bt-reset-gpio = <&pm8941_gpios 12 0>;
 	};
 
-	sound {
-        status = "disabled";        
-	};
+	/delete-node/ qcom,mdss_mdp@fd900000;
+	/delete-node/ qcom,mdss_dsi@fd922800;
+	/delete-node/ qcom,mdss_dsi@fd922e00;
+	/delete-node/ qcom,mdss_edp@fd923400;
+	/delete-node/ qcom,hdmi_tx@fd922100;
+	/delete-node/ qcom,mdss_wb_panel;
+	/delete-node/ qcom,wfd;
+	/delete-node/ sound;
+	/delete-node/ qcom,pronto@fb21b000;
+	/delete-node/ qcom,iris-fm;
+	/delete-node/ qcom,wcnss-wlan@fb000000;
+	/delete-node/ qcom,smd-wcnss;
+	/delete-node/ qcom,smsm-wcnss;
+	/delete-node/ qcom,msm-voip-dsp;
+	/delete-node/ qcom,msm-pcm-voice;
+	/delete-node/ qcom,smd-wcnss;
+	/delete-node/ qcom,mss@fc880000;
 
-	qcom,pronto@fb21b000 {
-		status = "disabled";
-	};
-
-	qcom,iris-fm {
-		status = "disabled";
-	};
-
-	qcom,wcnss-wlan@fb000000 {
-		status = "disabled";
-	};
-
-	qcom,smd-wcnss {
-		status = "disabled";
-	};
-
-	qcom,smsm-wcnss {
-		status = "disabled";
-	};
-
-	qcom,msm-voip-dsp {
-		status = "disabled";
-	};
-
-	qcom,msm-pcm-voice {
-		status = "disabled";
-	};
-
-
-    /* blsp1 - qup i2c - na */
+	/* blsp1 - qup i2c - na */
 	i2c@f9923000 {
 		status = "disabled";
 	};
 
-    /* blsp1 - qup spi - na */
+	/* blsp1 - qup spi - na */
 	spi@f9923000 {
 		status = "disabled";
 	};
 
-    /* blsp2 - qup i2c - na */
+	/* blsp2 - qup i2c - na */
 	i2c@f9924000 {
 		status = "disabled";
 	};
@@ -159,42 +91,42 @@
 		status = "disabled";
 	};
 
-    /* blsp6 - qup i2c - na */
+	/* blsp6 - qup i2c - na */
 	i2c@f9928000 {
 		status = "disabled";
 	};
 
 	/* msm8974.dtsi */
-    /* blsp10 - qup spi - na */
+	/* blsp10 - qup spi - na */
 	spi@f9966000 {
 		status = "disabled";
 	};
 
 	/* msm8974.dtsi */
-    /* blsp11 - qup i2c - na */
+	/* blsp11 - qup i2c - na */
 	i2c@f9967000 {
 		status = "disabled";
 	};
 
 	/* msm8974.dtsi */
-    /* blsp2 - uart - na */
+	/* blsp2 - uart - na */
 	serial@f991e000 {
 		status = "disabled";
 	};
 
 	/* msm8974.dtsi */
-    /* blsp3 - uart - na */
+	/* blsp3 - uart - na */
 	serial@f991f000 {
 		status = "disabled";
 	};
 
 	/* Not defined */
-    /* blsp5 - uart - GPS */
+	/* blsp5 - uart - GPS */
 	blsp1_uart4: serial@f9921000 {
 		compatible = "qcom,msm-lsuart-v14";
 		reg = <0xf9921000 0x1000>;
 		interrupts = <0 111 0>;
-		status = "okay";
+		status = "disabled";
 
 		qcom,msm-bus,name = "serial_uart5";
 		qcom,msm-bus,num-cases = <2>;
@@ -204,7 +136,7 @@
 				<86 512 500 800>;
 	};
 
-    /* blsp12 - serial console */
+	/* blsp12 - serial console */
 	blsp2_uart5: serial@f9962000 {
 		compatible = "qcom,msm-lsuart-v14";
 		reg = <0xf9962000 0x1000>;
@@ -220,24 +152,15 @@
 	};
 };
 
-&mdss_fb0 {
-	qcom,memory-reservation-size = <0x1000000>; /* size 16MB */
-};
-
 &sdcc3 {
 	qcom,sup-voltages = <2000 2000>;
 	status = "ok";
 };
 
-&pm8941_lvs1 {
-	regulator-always-on;
-};
-
 &pm8941_l18 {
-    regulator-min-microvolt = <2850000>;
-    regulator-max-microvolt = <2850000>;
-    qcom,init-voltage = <2850000>;
-	regulator-always-on;
+	regulator-min-microvolt = <2850000>;
+	regulator-max-microvolt = <2850000>;
+	qcom,init-voltage = <2850000>;
 };
 
 
@@ -245,7 +168,6 @@
 	regulator-min-microvolt = <3300000>;
 	regulator-max-microvolt = <3300000>;
 	qcom,init-voltage = <3300000>;
-	regulator-always-on;
 };
 
 /* blsp7 - bt uart */
@@ -410,7 +332,6 @@
 };
 
 &pm8941_mpps {
-
 	mpp@a000 { /* MPP 1 */
 		status = "disabled";
 	};
@@ -438,7 +359,6 @@
 };
 
 &pm8841_mpps {
-
 	mpp@a000 { /* MPP 1 */
 	};
 
@@ -454,45 +374,6 @@
 
 &spi_epm {
 	status = "disabled";
-};
-
-&pm8941_lsid1 {
-
-    qcom,leds@d000 {
-        qcom,rgb_2 {
-            status = "ok";
-            qcom,default-state = "on";
-			#qcom,turn-off-delay-ms = <1000>;
-            qcom,idx-len = <1>;
-            qcom,duty-pcts = [40];
-        };
-		/*
-        qcom,rgb_1 {
-            status = "ok";
-            qcom,default-state = "on";
-            qcom,idx-len = <1>;
-            qcom,duty-pcts = [40];
-        };*/
-    };
-
-	/* channel 1 */
-	pwm@b200 {
-		status = "disabled";
-		compatible = "qcom,qpnp-pwm";
-		reg = <0xb200 0x100>,
-		      <0xb042 0x7e>;
-		reg-names = "qpnp-lpg-channel-base", "qpnp-lpg-lut-base";
-		qcom,channel-id = <1>;
-
-        /* override */
-		qcom,mode-select = <0>; /* pwm */
-		qcom,period = <10>; /* 10 microseconds */
-		qcom,force-pwm-size = <9>;
-		qcom,pwm {
-			qcom,duty = <5>; /* 5 microseconds */
-			label = "pwm";
-		};
-	};
 };
 
 &pm8941_chg {
@@ -533,12 +414,10 @@
 	vdd-supply = <&pm8941_l20>;
 	vdd-io-supply = <&pm8941_s3>;
 
-	qcom,vdd-always-on;
 	qcom,vdd-lpm-sup;
 	qcom,vdd-voltage-level = <2950000 2950000>;
 	qcom,vdd-current-level = <800 500000>;
 
-	qcom,vdd-io-always-on;
 	qcom,vdd-io-voltage-level = <1800000 1800000>;
 	qcom,vdd-io-current-level = <250 154000>;
 
@@ -563,9 +442,6 @@
 	interrupt-names = "hc_irq", "pwr_irq", "status_irq";
 	cd-gpios = <&msmgpio 62 0x1>;
 
-	qcom,vdd-always-on;
-	qcom,vdd-lpm-sup;
-
 	vdd-supply = <&pm8941_l21>;
 	vdd-io-supply = <&pm8941_l13>;
 
@@ -588,7 +464,6 @@
 };
 
 &rpm_bus { 
-
 	rpm-regulator-ldoa22 {  /* Regulator setting for ov7251 sensor on eagle*/
  		status = "okay";
  		pm8941_l22: regulator-l22 {
@@ -598,5 +473,4 @@
  			status = "okay";
  		};
  	};
-
 };
