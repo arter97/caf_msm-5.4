@@ -17,7 +17,7 @@
 #include <linux/delay.h>
 #include "msm_ba_internal.h"
 
-#define BA_DBG_TAG "msm_ba: %4s: "
+#define BA_DBG_TAG "msm_ba(%d): %4s: "
 
 /* To enable messages OR these values and
  * echo the result to debugfs file.
@@ -72,11 +72,13 @@ extern int msm_ba_debug_out;
 	do { \
 		if (msm_ba_debug & __level) { \
 			if (msm_ba_debug_out == BA_OUT_PRINTK) { \
-				pr_info(BA_DBG_TAG __fmt, \
+				pr_info(BA_DBG_TAG __fmt "\n", \
+						__LINE__, \
 						BA_MSG_PRIO2STRING(__level), \
 						## arg); \
 			} else if (msm_ba_debug_out == BA_OUT_FTRACE) { \
-				trace_printk(KERN_DEBUG BA_DBG_TAG __fmt, \
+				trace_printk(KERN_DEBUG BA_DBG_TAG __fmt "\n", \
+						__LINE__, \
 						BA_MSG_PRIO2STRING(__level), \
 						## arg); \
 			} \

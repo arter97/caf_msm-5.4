@@ -193,6 +193,7 @@ int msm_ba_s_input(void *instance, unsigned int index)
 	struct msm_ba_inst *inst = instance;
 	struct msm_ba_input *ba_input = NULL;
 	int rc = 0;
+	int rc_sig = 0;
 
 	if (!inst)
 		return -EINVAL;
@@ -210,27 +211,49 @@ int msm_ba_s_input(void *instance, unsigned int index)
 		return -EINVAL;
 	}
 	if (ba_input->in_use &&
-		ba_input->prio == V4L2_PRIORITY_RECORD) {
+		ba_input->prio == V4L2_PRIORITY_RECORD &&
+		ba_input->prio != inst->input_prio) {
 		dprintk(BA_WARN, "Input %d in use", index);
 		return -EBUSY;
 	}
+	if (ba_input->ba_out_in_use) {
+		if (inst->ext_ops) {
+			if (inst->restore) {
+				dprintk(BA_DBG, "Stream off in set input: %d",
+					ba_input->bridge_chip_ip);
+				rc_sig = v4l2_subdev_call(ba_input->sd,
+							video, s_stream, 0);
+			}
+		} else {
+			dprintk(BA_WARN, "Sd %d in use", ba_input->ba_out);
+			return -EBUSY;
+		}
+	}
 	rc = v4l2_subdev_call(ba_input->sd, video, s_routing,
 			ba_input->bridge_chip_ip, 0, 0);
+	if (rc) {
+		dprintk(BA_ERR, "Error: %d setting input: %d",
+			rc, ba_input->bridge_chip_ip);
+		return rc;
+	}
+	msm_ba_reset_ip_in_use_from_sd(ba_input->sd);
 	inst->sd_input.index = index;
+	strlcpy(inst->sd_input.name, ba_input->name,
+		sizeof(inst->sd_input.name));
 	inst->sd = ba_input->sd;
+	ba_input->in_use = 1;
 	/* get current signal status */
-	rc = v4l2_subdev_call(
+	rc_sig = v4l2_subdev_call(
 		ba_input->sd, video, g_input_status, &ba_input->signal_status);
-	dprintk(BA_DBG, "msm_ba_queue_v4l2_event: ba_input->signal_status %d",
-		ba_input->signal_status);
-	if (!ba_input->signal_status) {
+	dprintk(BA_DBG, "Set input %s : %d - signal status: %d",
+		ba_input->name, index, ba_input->signal_status);
+	if (!rc_sig && !ba_input->signal_status) {
 		struct v4l2_event sd_event = {
 			.id = 0,
 			.type = V4L2_EVENT_MSM_BA_SIGNAL_IN_LOCK};
 		int *ptr = (int *)sd_event.u.data;
 		ptr[0] = index;
 		ptr[1] = ba_input->signal_status;
-		ba_input->in_use = 1;
 		msm_ba_queue_v4l2_event(inst, &sd_event);
 	}
 	return rc;
@@ -442,8 +465,13 @@ int msm_ba_streamon(void *instance, enum v4l2_buf_type i)
 	}
 	rc = v4l2_subdev_call(sd, video, s_stream, 1);
 	if (rc)
-		dprintk(BA_ERR, "streamon failed on input: %d",
+		dprintk(BA_ERR, "Stream on failed on input: %d",
 			inst->sd_input.index);
+	else
+		msm_ba_set_out_in_use(sd, 1);
+
+	dprintk(BA_DBG, "Stream on: %s : %d",
+		inst->sd_input.name, inst->sd_input.index);
 
 	return rc;
 }
@@ -465,12 +493,62 @@ int msm_ba_streamoff(void *instance, enum v4l2_buf_type i)
 	}
 	rc = v4l2_subdev_call(sd, video, s_stream, 0);
 	if (rc)
-		dprintk(BA_ERR, "streamoff failed on input: %d",
+		dprintk(BA_ERR, "Stream off failed on input: %d",
 			inst->sd_input.index);
 
+	dprintk(BA_DBG, "Stream off: %s : %d",
+		inst->sd_input.name, inst->sd_input.index);
+	msm_ba_set_out_in_use(sd, 0);
 	return rc;
 }
 EXPORT_SYMBOL(msm_ba_streamoff);
+
+int msm_ba_save_restore_input(void *instance, enum msm_ba_save_restore_ip sr)
+{
+	struct msm_ba_inst *inst = instance;
+	struct msm_ba_input *ba_input = NULL;
+	int rc = 0;
+
+	if (!inst)
+		return -EINVAL;
+
+	if (BA_SR_RESTORE_IP == sr &&
+		inst->restore) {
+		dprintk(BA_DBG, "Restoring input: %d",
+			inst->saved_input);
+		rc = v4l2_subdev_call(inst->sd, video, s_routing,
+				inst->saved_input, 0, 0);
+		if (rc)
+			dprintk(BA_ERR, "Failed to restore input: %d",
+				inst->saved_input);
+		msm_ba_reset_ip_in_use_from_sd(inst->sd);
+		ba_input = msm_ba_find_input_from_sd(inst->sd,
+					inst->saved_input);
+		ba_input->in_use = 1;
+		inst->restore = 0;
+		inst->saved_input = BA_IP_MAX;
+		dprintk(BA_DBG, "Stream on from save restore");
+		rc = msm_ba_streamon(inst, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
+	} else if (BA_SR_SAVE_IP == sr) {
+		ba_input = msm_ba_find_input(inst->sd_input.index);
+		if (ba_input->ba_out_in_use) {
+			inst->restore = 1;
+			inst->saved_input =
+				msm_ba_find_ip_in_use_from_sd(inst->sd);
+			if (inst->saved_input == BA_IP_MAX) {
+				dprintk(BA_ERR, "Could not find input to save");
+				inst->restore = 0;
+			}
+			dprintk(BA_DBG, "Saving input: %d",
+				inst->saved_input);
+			rc = -EBUSY;
+		}
+	} else {
+		dprintk(BA_DBG, "Nothing to do in save and restore");
+	}
+	return rc;
+}
+EXPORT_SYMBOL(msm_ba_save_restore_input);
 
 void msm_ba_release_subdev_node(struct video_device *vdev)
 {
@@ -636,7 +714,7 @@ void msm_ba_subdev_event_hndlr(struct v4l2_subdev *sd,
 	bridge_chip_ip = ((int *)((struct v4l2_event *)arg)->u.data)[0];
 	ba_input = msm_ba_find_input_from_sd(sd, bridge_chip_ip);
 	if (!ba_input) {
-		dprintk(BA_ERR, "Could not find input %d from sd: %s",
+		dprintk(BA_WARN, "Could not find input %d from sd: %s",
 			bridge_chip_ip, sd->name);
 		return;
 	}

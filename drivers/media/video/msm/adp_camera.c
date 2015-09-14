@@ -111,7 +111,7 @@ struct adp_camera_ctxt {
 
 	enum adp_camera_input input;
 	enum msm_ba_ip ba_input;
-	enum msm_ba_ip ba_input_tmp;
+	int restore_ba_input;
 
 	/* state */
 	enum camera_states state;
@@ -1237,7 +1237,7 @@ static int adp_rear_camera_enable(void)
 
 	adp_cam_ctxt->input = ADP_CAM_INPUT_RVC;
 	adp_cam_ctxt->ba_input = adp_to_ba_input[adp_cam_ctxt->input].ba_input;
-	adp_cam_ctxt->ba_input_tmp = 1;
+	adp_cam_ctxt->restore_ba_input = 0;
 
 	for (i = 0; i < DISPLAY_ID_MAX; i++) {
 
@@ -1579,6 +1579,7 @@ mdp_failed:
 static int disable_camera_preview(void)
 {
 	int ret = 0;
+	int rc = 0;
 	pr_debug("%s: kpi entry\n", __func__);
 
 	if (!adp_cam_ctxt) {
@@ -1608,14 +1609,7 @@ static int disable_camera_preview(void)
 	adp_camera_disable_stream();
 
 	if (adp_cam_ctxt->is_csi_shared) {
-		pr_err("%s - %d and now %d", __func__,
-				adp_cam_ctxt->ba_input,
-				adp_cam_ctxt->ba_input_tmp);
-		/* TODO: check if other input was active then restart it. */
-		if (adp_cam_ctxt->ba_input_tmp != BA_IP_MAX) {
-			msm_ba_s_input(adp_cam_ctxt->ba_inst_hdlr,
-					adp_cam_ctxt->ba_input_tmp);
-
+		if (adp_cam_ctxt->restore_ba_input) {
 			/* stop rdi1 and start rdi0 */
 			msm_ispif_subdev_video_s_stream_rdi_only(lsh_ispif,
 								0x84);
@@ -1628,7 +1622,10 @@ static int disable_camera_preview(void)
 					adp_rvc_csi_lane_params.csi_phy_sel],
 					&adp_rvc_csid_params);
 
-			msm_ba_streamon(adp_cam_ctxt->ba_inst_hdlr, 0);
+			rc = msm_ba_save_restore_input(
+					adp_cam_ctxt->ba_inst_hdlr,
+					BA_SR_RESTORE_IP);
+			adp_cam_ctxt->restore_ba_input = 0;
 
 			axi_start_rdi0_only(my_axi_ctrl, s_ctrl);
 		}
@@ -1650,6 +1647,7 @@ exit:
 static int enable_camera_preview(void)
 {
 	int rc = 0;
+	int rc_ba = 0;
 
 	pr_debug("%s: kpi entry\n", __func__);
 
@@ -1680,14 +1678,13 @@ static int enable_camera_preview(void)
 	wait_for_completion(&preview_disabled);
 	adp_cam_ctxt->state = CAMERA_TRANSITION_PREVIEW;
 
-	if (adp_cam_ctxt->is_csi_shared &&
-			msm_ispif_validate_intf_status(lsh_ispif,
-							VID_RDI, VFE0)) {
-		/* TODO: check that other input is active */
-		pr_err("%s: other input is ON!", __func__);
-		msm_ba_g_input(adp_cam_ctxt->ba_inst_hdlr,
-			&adp_cam_ctxt->ba_input_tmp);
+	rc_ba = msm_ba_save_restore_input(adp_cam_ctxt->ba_inst_hdlr,
+			BA_SR_SAVE_IP);
 
+	if (adp_cam_ctxt->is_csi_shared &&
+			rc_ba == -EBUSY) {
+
+		adp_cam_ctxt->restore_ba_input = 1;
 		/* stop rdi0 */
 		axi_stop_rdi0_only(my_axi_ctrl);
 
@@ -1700,7 +1697,6 @@ static int enable_camera_preview(void)
 		}
 
 		usleep(FRAME_DELAY);
-		msm_ba_streamoff(adp_cam_ctxt->ba_inst_hdlr, 0);
 		msm_ba_s_input(adp_cam_ctxt->ba_inst_hdlr,
 				adp_cam_ctxt->ba_input);
 
@@ -1713,7 +1709,7 @@ static int enable_camera_preview(void)
 			goto mdp_failed;
 		}
 	} else {
-		adp_cam_ctxt->ba_input_tmp = BA_IP_MAX;
+		adp_cam_ctxt->restore_ba_input = 0;
 
 		rc = msm_ispif_subdev_video_s_stream_rdi_only(lsh_ispif, 0x81);
 		if (rc) {
