@@ -100,7 +100,7 @@ static void msm_ba_print_event(struct v4l2_event *sd_event)
 			((int *)sd_event->u.data)[0]);
 		break;
 	case V4L2_EVENT_MSM_BA_SOURCE_CHANGE:
-		dprintk(BA_DBG, "Video source change %d",
+		dprintk(BA_DBG, "Video source change 0x%x",
 			((int *)sd_event->u.data)[1]);
 		break;
 	case V4L2_EVENT_MSM_BA_HDMI_HPD:
@@ -228,6 +228,8 @@ void msm_ba_add_inputs(struct v4l2_subdev *sd)
 					input->signal_status = status;
 				list_add_tail(&input->list, &dev_ctxt->inputs);
 				dev_ctxt->num_inputs++;
+				dprintk(BA_DBG, "Add input: name %s on %d",
+					input->name, input->ba_out);
 			}
 		}
 	}
@@ -251,6 +253,56 @@ void msm_ba_del_inputs(struct v4l2_subdev *sd)
 	}
 }
 
+void msm_ba_set_out_in_use(struct v4l2_subdev *sd, int on)
+{
+	struct msm_ba_input *input = NULL;
+	struct msm_ba_dev *dev_ctxt = NULL;
+
+	dev_ctxt = get_ba_dev();
+
+	if (!list_empty(&(dev_ctxt->inputs))) {
+		list_for_each_entry(input, &(dev_ctxt->inputs), list)
+			if (input->sd == sd)
+				input->ba_out_in_use = on;
+	}
+}
+
+int msm_ba_find_ip_in_use_from_sd(struct v4l2_subdev *sd)
+{
+	struct msm_ba_input *input = NULL;
+	struct msm_ba_dev *dev_ctxt = NULL;
+	int ba_ip = BA_IP_MAX;
+
+	dev_ctxt = get_ba_dev();
+
+	if (!list_empty(&(dev_ctxt->inputs))) {
+		list_for_each_entry(input, &(dev_ctxt->inputs), list)
+			if (input->sd == sd &&
+				input->in_use) {
+				ba_ip = input->bridge_chip_ip;
+				break;
+			}
+	}
+	return ba_ip;
+}
+
+void msm_ba_reset_ip_in_use_from_sd(struct v4l2_subdev *sd)
+{
+	struct msm_ba_input *input = NULL;
+	struct msm_ba_dev *dev_ctxt = NULL;
+
+	dev_ctxt = get_ba_dev();
+
+	if (!list_empty(&(dev_ctxt->inputs))) {
+		list_for_each_entry(input, &(dev_ctxt->inputs), list)
+			if (input->sd == sd &&
+				input->in_use) {
+				input->in_use = 0;
+				break;
+			}
+	}
+}
+
 struct msm_ba_input *msm_ba_find_input_from_sd(struct v4l2_subdev *sd,
 			int bridge_chip_ip)
 {
@@ -270,6 +322,7 @@ struct msm_ba_input *msm_ba_find_input_from_sd(struct v4l2_subdev *sd,
 	}
 	return input_out;
 }
+
 struct msm_ba_input *msm_ba_find_input(int ba_input_idx)
 {
 	struct msm_ba_input *input = NULL;
