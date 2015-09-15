@@ -657,6 +657,10 @@ static int msm_otg_reset(struct usb_phy *phy)
 		/* Enable PMIC pull-up */
 		pm8xxx_usb_id_pullup(1);
 	} else if (pdata->otg_control == OTG_USER_CONTROL) {
+		/* Disable ID_GND interrupt from PHY */
+		ulpi_write(phy, 0x10, 0x0f);
+		ulpi_write(phy, 0x10, 0x12);
+
 		val = readl_relaxed(USB_OTGSC);
 		val &= ~OTGSC_INTR_MASK;
 		writel_relaxed(val, USB_OTGSC);
