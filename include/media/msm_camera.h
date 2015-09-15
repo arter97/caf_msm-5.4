@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2013, 2015, The Linux Foundation. All rights reserved.
 *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2298,5 +2298,30 @@ struct intf_mctl_mapping_cfg {
 	((handle & 0x80) ? (handle & 0x7F) : 0xFF)
 #define SET_VIDEO_INST_IDX(handle, data)	\
 	(handle |= (0x1 << 7) | (data & 0x7F))
+
+/* ADP Camera defines */
+enum adp_camera_input {
+	ADP_CAM_INPUT_RVC = 0,
+	ADP_CAM_INPUT_LW,
+	ADP_CAM_INPUT_MAX
+};
+
+struct adp_display_recovery {
+	uint32_t err_type;
+	uint32_t display_id;
+	uint32_t ack_type;
+};
+
+#define ADP_CAMERA_EVENT_ERROR            (V4L2_EVENT_PRIVATE_START+1)
+#define ADP_CAMERA_EVENT_RECOVERY_SUCCESS (V4L2_EVENT_PRIVATE_START+2)
+#define ADP_CAMERA_EVENT_RECOVERY_FAILED  (V4L2_EVENT_PRIVATE_START+3)
+#define ADP_CAMERA_EVENT_RECOVERY_ABORTED (V4L2_EVENT_PRIVATE_START+4)
+#define ADP_DISPLAY_EVENT_ERROR_RECOVERY  (V4L2_EVENT_PRIVATE_START+5)
+
+#define ADP_CAMERA_V4L2_CID_DISPLAY_RECOVERY \
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 1, struct adp_display_recovery)
+
+#define ADP_CAMERA_V4L2_CID_Z_ORDER ((V4L2_CID_USER_BASE | 0x7000)+1)
+#define ADP_CAMERA_V4L2_CID_DISPLAY_ID ((V4L2_CID_USER_BASE | 0x7000)+2)
 
 #endif /* __LINUX_MSM_CAMERA_H */

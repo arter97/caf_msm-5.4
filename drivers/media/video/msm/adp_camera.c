@@ -172,6 +172,18 @@ static struct msm_cam_server_adp_cam adp_camera_msm_cam_ops = {
 };
 
 
+static void *adp_mdp_recovery_handle;
+#define ADP_MDP_RECOVERY_FLAGS 0xFFFFFFFF
+#define ADP_MDP_RECOVERY_DATA 0xABD0ABD0
+
+static void adp_mdp_recovery_notification_cb(void *handle,
+			struct mdp_recovery_callback_info *info);
+static struct mdp_recovery_client_register_info adp_mdp_recovery = {
+	ADP_MDP_RECOVERY_FLAGS,
+	&adp_mdp_recovery_notification_cb,
+	(void *)ADP_MDP_RECOVERY_DATA,
+};
+
 static int axi_vfe_config_cmd_para(struct vfe_axi_output_config_cmd_type *cmd)
 {
 	/* configure the axi bus parameters here */
@@ -1051,6 +1063,47 @@ static int mdp_exit(display_id)
 }
 #endif
 
+static void adp_mdp_recovery_notification_cb(void *handle,
+			struct mdp_recovery_callback_info *info){
+
+	if (!handle || !info ||
+		handle != adp_mdp_recovery_handle ||
+		(unsigned int)info->data != ADP_MDP_RECOVERY_DATA) {
+		pr_err("%s - invalid handle %p or info %p passed in",
+				__func__, handle, info);
+		return;
+	}
+
+	pr_debug("%s: - handle: %p, err_type=%d, " \
+				"display_id=%d, status=%d, data=%0X",
+				__func__, handle,
+				info->err_type, info->display_id, info->status,
+				(unsigned int)info->data);
+
+	/* only send event if adp is enabled on the affected display */
+	if (info->display_id == adp_cam_ctxt->display_id &&
+			adp_cam_ctxt->state != CAMERA_PREVIEW_DISABLED) {
+		struct v4l2_event v4l2_ev;
+		v4l2_ev.id = 0;
+		v4l2_ev.type = ADP_DISPLAY_EVENT_ERROR_RECOVERY;
+		v4l2_ev.u.data[0] = (__u8)info->err_type;
+		v4l2_ev.u.data[1] = (__u8)info->status;
+		ktime_get_ts(&v4l2_ev.timestamp);
+		v4l2_event_queue(adp_cam_ctxt->vdev, &v4l2_ev);
+	}
+}
+
+static int mdp_init_recovery(void)
+{
+	return mdp_recovery_register(&adp_mdp_recovery,
+			&adp_mdp_recovery_handle);
+}
+
+static int mdp_deinit_recovery(void)
+{
+	return mdp_recovery_deregister(adp_mdp_recovery_handle);
+}
+
 static void adp_camera_v4l2_queue_event(int event)
 {
 	struct v4l2_event v4l2_ev;
@@ -1131,6 +1184,8 @@ static void adp_camera_recovery_work(struct work_struct *work)
 		adp_camera_v4l2_queue_event(ADP_CAMERA_EVENT_RECOVERY_FAILED);
 		adp_camera_disable_stream();
 		if (adp_cam_ctxt->recovery_abort) {
+			pr_err("%s - Camera recovery attempt has been aborted",
+				__func__);
 			adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
 			complete(&adp_cam_ctxt->recovery_done);
 			adp_camera_v4l2_queue_event(
@@ -1227,7 +1282,7 @@ static void adp_rear_camera_disable(void)
 		&adp_rvc_csi_lane_params);
 	msm_ispif_release_rdi(lsh_ispif);
 	msm_ba_close(adp_cam_ctxt->ba_inst_hdlr);
-
+	mdp_deinit_recovery();
 	for (i = 0; i < DISPLAY_ID_MAX; i++)
 		mdp_exit(i);
 }
@@ -1266,6 +1321,12 @@ static int adp_rear_camera_enable(void)
 			pr_err("%s mdp_init fails=%d", __func__, ret);
 			return ret;
 		}
+	}
+
+	ret = mdp_init_recovery();
+	if (ret) {
+		pr_err("%s mdp_init fails=%d", __func__, ret);
+		goto failure;
 	}
 
 	pr_debug("%s: kpi entry\n", __func__);
@@ -2032,6 +2093,37 @@ static int adp_v4l2_unsubscribe_event(struct v4l2_fh *fh,
 	return rc;
 }
 
+static long adp_camera_v4l2_private_ioctl(struct file *file, void *fh,
+					  bool valid_prio, int cmd,
+					  void *arg)
+{
+	int rc = -EINVAL;
+	struct mdp_recovery_ack_info *ack_info = arg;
+	pr_debug("%s: cmd %d\n", __func__, _IOC_NR(cmd));
+
+	switch (cmd) {
+	case ADP_CAMERA_V4L2_CID_DISPLAY_RECOVERY:
+	{
+		if (ack_info->ack_type >= MDP_RECOVERY_ACK_MAX_NUM ||
+				ack_info->display_id !=
+				adp_cam_ctxt->display_id ||
+				ack_info->err_type >=
+				MDP_RECOVERY_MAX_ERROR_TYPES) {
+			rc = -EINVAL;
+			break;
+		}
+
+		rc = mdp_recovery_acknowledge(adp_mdp_recovery_handle,
+			ack_info);
+	}
+		break;
+	default:
+		pr_err("%s Unsupported ioctl cmd %d", __func__, cmd);
+		break;
+	}
+	return rc;
+}
+
 static const struct v4l2_ioctl_ops adp_camera_v4l2_ioctl_ops = {
 	.vidioc_querycap = adp_camera_v4l2_querycap,
 	.vidioc_enum_input = adp_camera_v4l2_enum_input,
@@ -2044,6 +2136,7 @@ static const struct v4l2_ioctl_ops adp_camera_v4l2_ioctl_ops = {
 	.vidioc_streamoff = adp_camera_v4l2_streamoff,
 	.vidioc_subscribe_event = adp_v4l2_subscribe_event,
 	.vidioc_unsubscribe_event = adp_v4l2_unsubscribe_event,
+	.vidioc_default = adp_camera_v4l2_private_ioctl,
 };
 
 
@@ -2060,9 +2153,6 @@ static const struct v4l2_file_operations adp_camera_v4l2_fops = {
 
 #define ADP_CAMERA_BASE_DEVICE_NUMBER 36
 #define ADP_CAMERA_DRV_NAME "adp_camera_driver"
-
-#define ADP_CAMERA_V4L2_CID_Z_ORDER ((V4L2_CID_USER_BASE | 0x7000)+1)
-#define ADP_CAMERA_V4L2_CID_DISPLAY_ID ((V4L2_CID_USER_BASE | 0x7000)+2)
 
 static int adp_camera_s_ctrl(struct v4l2_ctrl *ctrl)
 {
@@ -2135,7 +2225,7 @@ static const struct v4l2_ctrl_config adp_camera_ctrl_cfg[] = {
 		.def = 0,
 		.step = 1,
 		.is_private = 1,
-	}
+	},
 };
 
 #define ADP_CAMERA_NUM_CTRLS ARRAY_SIZE(adp_camera_ctrl_cfg)
