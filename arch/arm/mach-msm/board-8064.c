@@ -4008,7 +4008,11 @@ static struct platform_device mplatform_reverse_pdev = {
 };
 
 static struct msm_adp_camera_platform_data adp_camera_pdata = {
+#ifndef CONFIG_MSM_S_PLATFORM
 	.is_csi_shared = false,
+#else
+	.is_csi_shared = true,
+#endif
 };
 
 static struct platform_device adp_camera_pdev = {

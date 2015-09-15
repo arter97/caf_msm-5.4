@@ -33,12 +33,6 @@
 #define FRAME_DELAY 33333
 #define RDI1_USE_WM 4
 #define MM_CAM_USE_BYPASS 1
-#ifdef CONFIG_MSM_S_PLATFORM
-#define INIT_PIPELINE 0
-#else
-#define INIT_PIPELINE 1
-#endif
-static int init_pipeline;
 static void *k_addr[OVERLAY_COUNT];
 static int alloc_overlay_pipe_flag[OVERLAY_COUNT];
 static struct mdp_overlay overlay_req[OVERLAY_COUNT];
@@ -1320,35 +1314,33 @@ static int adp_rear_camera_enable(void)
 	if (ret)
 		goto failure;
 
-	if (init_pipeline) {
-		ret = preview_set_data_pipeline();
-		if (ret)
-			goto failure;
+	ret = preview_set_data_pipeline();
+	if (ret)
+		goto failure;
 
-		/* step 1, find free buffer from the list, then use it to
-		configure ping/pong */
-		ping_buffer = preview_buffer_find_free_for_ping_pong();
-		if (!ping_buffer)
-			goto failure;
-		ping_buffer->state =
-			CAMERA_PREVIEW_BUFFER_STATE_QUEUED_TO_PINGPONG;
+	/* step 1, find free buffer from the list, then use it to
+	configure ping/pong */
+	ping_buffer = preview_buffer_find_free_for_ping_pong();
+	if (!ping_buffer)
+		goto failure;
+	ping_buffer->state =
+		CAMERA_PREVIEW_BUFFER_STATE_QUEUED_TO_PINGPONG;
 
-		pong_buffer = preview_buffer_find_free_for_ping_pong();
-		if (!pong_buffer)
-			goto failure;
-		pong_buffer->state =
-			CAMERA_PREVIEW_BUFFER_STATE_QUEUED_TO_PINGPONG;
+	pong_buffer = preview_buffer_find_free_for_ping_pong();
+	if (!pong_buffer)
+		goto failure;
+	pong_buffer->state =
+		CAMERA_PREVIEW_BUFFER_STATE_QUEUED_TO_PINGPONG;
 
-		free_buffer = preview_buffer_find_free_for_ping_pong();
-		if (!free_buffer)
-			goto failure;
+	free_buffer = preview_buffer_find_free_for_ping_pong();
+	if (!free_buffer)
+		goto failure;
 
-		pr_debug("%s: find ping pong buffer end!!!\n", __func__);
+	pr_debug("%s: find ping pong buffer end!!!\n", __func__);
 
-		/* step 2, configure the free buffer to ping pong buffer */
-		preview_configure_ping_pong_buffer(ping_buffer, pong_buffer,
-			free_buffer);
-	}
+	/* step 2, configure the free buffer to ping pong buffer */
+	preview_configure_ping_pong_buffer(ping_buffer, pong_buffer,
+		free_buffer);
 
 	/* init mdp buffer queue */
 	memset(&s_mdp_buf_queue, 0, sizeof(s_mdp_buf_queue));
@@ -2353,8 +2345,6 @@ static int32_t adp_camera_platform_probe(struct platform_device *pdev)
 	int32_t rc = 0;
 
 	pr_debug("adp_camera platform platform probe...\n");
-
-	init_pipeline = INIT_PIPELINE;
 
 	rc = adp_camera_device_init(pdev);
 	if (rc < 0) {
