@@ -586,6 +586,16 @@ static int msm_ispif_config(struct ispif_device *ispif,
 		return rc;
 	}
 
+	/* we need to validate number of CIDs before register configuration */
+	for (i = 0; i < params->num; i++) {
+		if ((params->entries[i].num_cids == 0) ||
+		    (params->entries[i].num_cids > MAX_CID_CH))  {
+			pr_err("%s: out of range of cid_num %d\n",
+				__func__, params->entries[i].num_cids);
+			return  -EINVAL;
+		}
+	}
+
 	for (i = 0; i < params->num; i++) {
 		vfe_intf = params->entries[i].vfe_intf;
 		if (vfe_intf >= VFE_MAX) {
@@ -690,7 +700,8 @@ static void msm_ispif_intf_cmd(struct ispif_device *ispif, uint32_t cmd_bits,
 			pr_err("%s: invalid interface type\n", __func__);
 			return;
 		}
-		if (params->entries[i].num_cids > MAX_CID_CH) {
+		if ((params->entries[i].num_cids == 0) ||
+		    (params->entries[i].num_cids > MAX_CID_CH)) {
 			pr_err("%s: out of range of cid_num %d\n",
 				__func__, params->entries[i].num_cids);
 			return;
