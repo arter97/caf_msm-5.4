@@ -415,14 +415,51 @@ static int i2c_msm_dbg_qup_reg_dump(struct i2c_msm_ctrl *ctrl)
 	return 0;
 }
 
-static void i2c_msm_dbg_xfer_dump(struct i2c_msm_ctrl *ctrl)
+static void i2c_msm_dbg_dump_diag(struct i2c_msm_ctrl *ctrl,
+				bool use_param_vals, u32 status, u32 qup_op)
 {
 	struct i2c_msm_xfer_mode_fifo *fifo = i2c_msm_fifo_get_struct(ctrl);
 	struct i2c_msm_xfer *xfer = &ctrl->xfer;
+	const char *str = "DEBUG";
+	char buf[I2C_MSM_REG_2_STR_BUF_SZ];
 
-	if (!xfer->msgs) {
-		dev_info(ctrl->dev, "No active transfer\n");
-		return;
+	if (!use_param_vals) {
+		void __iomem        *base = ctrl->rsrcs.base;
+		status = readl_relaxed(base + QUP_I2C_STATUS);
+		qup_op = readl_relaxed(base + QUP_OPERATIONAL);
+	}
+
+	 /* In case of NACK, bus and controller are in a good state */
+	if (xfer->err & I2C_MSM_ERR_NACK) {
+		str = "NACK: slave not responding, ensure its powered "
+			"and out of reset";
+	/* clock off may be the root cause of all errors below */
+	} else if (xfer->err & I2C_MSM_ERR_CORE_CLK) {
+		str = "CLOCK OFF: Check Core Clock";
+	/* on arb lost we cant control the bus. root cause may be gpios or slv*/
+	} else if (xfer->err & I2C_MSM_ERR_ARB_LOST) {
+		str = "ARB LOST";
+	} else if (xfer->err & I2C_MSM_ERR_TIMEOUT) {
+		/*
+		 * if we are not the bus master or SDA/SCL is low then it may be
+		 * that slave is pulling the lines low. Otherwise it is likely a
+		 * GPIO issue
+		 */
+		if (!(status & QUP_BUS_MASTER))
+			snprintf(buf, I2C_MSM_REG_2_STR_BUF_SZ,
+				"TIMEOUT(val:%dmsec) check GPIO config if SDA/SCL line(s) low",
+				jiffies_to_msecs(xfer->timeout));
+		 else
+			snprintf(buf, I2C_MSM_REG_2_STR_BUF_SZ,
+			"TIMEOUT(val:%dmsec)", jiffies_to_msecs(xfer->timeout));
+
+		str = buf;
+	/* invalid electric signal on the bus, may be noise or bad slave */
+	} else if (xfer->err & I2C_MSM_ERR_BUS_ERR) {
+		str = "BUS ERROR: noisy bus or unexpected start/stop tag";
+	/* error occur due to INPUT/OUTPUT over or under run */
+	} else if (xfer->err & I2C_MSM_ERR_OVR_UNDR_RUN) {
+		str = "OVER_UNDER_RUN_ERROR";
 	}
 
 	dev_info(ctrl->dev,
@@ -866,44 +903,12 @@ static struct i2c_msm_tag i2c_msm_tag_create(bool is_high_speed,
 	return tag;
 }
 
-static void i2c_msm_dbg_inp_fifo_dump(struct i2c_msm_ctrl *ctrl)
-{
-	void __iomem * const base = ctrl->rsrcs.base;
-	u32  qup_op;
-	u32  data;
-	bool fifo_empty;
-	char str[256] = {0};
-	int len = 0;
-	int cnt;
-	int ret;
-
-	for (cnt = 0; ; ++cnt) {
-		qup_op     = readl_relaxed(base + QUP_OPERATIONAL);
-		fifo_empty = !(qup_op & QUP_INPUT_FIFO_NOT_EMPTY);
-
-		if (fifo_empty)
-			break;
-
-		data = readl_relaxed(base + QUP_IN_FIFO_BASE);
-		ret  = snprintf(str + len, sizeof(str) - len, "0x%08x\n", data);
-		udelay(USEC_PER_MSEC);
-		if (ret > (sizeof(str) - len))
-			break;
-
-		len += ret;
-	}
-	dev_info(ctrl->dev, "INPUT FIFO: cnt:%d\n%s\n", cnt, str);
-}
-
 static int
 i2c_msm_qup_state_wait_valid(struct i2c_msm_ctrl *ctrl,
 			enum i2c_msm_qup_state state, bool only_valid)
 {
 	u32 status;
 	void __iomem  *base     = ctrl->rsrcs.base;
-	unsigned long  start   = jiffies;
-	unsigned long  timeout = start +
-				 msecs_to_jiffies(I2C_MSM_MAX_POLL_MSEC);
 	int ret      = 0;
 	int read_cnt = 0;
 
@@ -925,7 +930,14 @@ i2c_msm_qup_state_wait_valid(struct i2c_msm_ctrl *ctrl,
 				goto poll_valid_end;
 		}
 
-	} while (time_before_eq(jiffies, timeout));
+		/*
+		 * Sleeping for 1-1.5 ms for every 100 iterations and break if
+		 * iterations crosses the 1500 marks allows roughly 10-15 msec
+		 * of time to get the core to valid state.
+		 */
+		if (!(read_cnt % 100))
+			usleep_range(1000, 1500);
+	} while (read_cnt <= 1500);
 
 	ret = -ETIMEDOUT;
 	dev_err(ctrl->dev,
@@ -2649,6 +2661,7 @@ static irqreturn_t i2c_msm_qup_isr(int irq, void *devid)
 	bool dump_details    = false;
 	bool log_event       = false;
 	bool signal_complete = false;
+	bool need_wmb        = false;
 
 	i2c_msm_prof_evnt_add(ctrl, MSM_PROF, i2c_msm_prof_dump_irq_begn,
 								irq, 0, 0);
@@ -2664,27 +2677,6 @@ static irqreturn_t i2c_msm_qup_isr(int irq, void *devid)
 	i2c_msm_dbg(ctrl, MSM_DBG,
 	    "IRQ MASTER_STATUS:0x%08x ERROR_FLAGS:0x%08x OPERATIONAL:0x%08x\n",
 	    i2c_status, err_flags, qup_op);
-
-	/* clear interrupts fields */
-	clr_flds = i2c_status & QUP_MSTR_STTS_ERR_MASK;
-	if (clr_flds)
-		writel_relaxed(clr_flds, base + QUP_I2C_STATUS);
-
-	clr_flds = err_flags & QUP_ERR_FLGS_MASK;
-	if (clr_flds)
-		writel_relaxed(clr_flds,  base + QUP_ERROR_FLAGS);
-
-	clr_flds = qup_op & (QUP_OUTPUT_SERVICE_FLAG | QUP_INPUT_SERVICE_FLAG);
-
-	if (clr_flds)
-		writel_relaxed(clr_flds, base + QUP_OPERATIONAL);
-	mb();
-
-	if (err_flags & QUP_ERR_FLGS_MASK) {
-		dump_details    = true;
-		signal_complete = true;
-		log_event       = true;
-	}
 
 	if (i2c_status & QUP_MSTR_STTS_ERR_MASK) {
 		signal_complete = true;
@@ -2708,6 +2700,80 @@ static irqreturn_t i2c_msm_qup_isr(int irq, void *devid)
 			ctrl->xfer.err |= I2C_MSM_ERR_BUS_ERR;
 	}
 
+	/* check for FIFO over/under runs error */
+	if (err_flags & QUP_ERR_FLGS_MASK)
+		ctrl->xfer.err |= I2C_MSM_ERR_OVR_UNDR_RUN;
+
+	/* Reset and bail out on error */
+	if (ctrl->xfer.err) {
+		/* Dump the register values before reset the core */
+		if (ctrl->dbgfs.dbg_lvl >= MSM_DBG)
+			i2c_msm_dbg_qup_reg_dump(ctrl);
+		/*
+		 * HW workaround: when interrupt is level triggerd, more than
+		 * one interrupt may fire in error cases. Thus we reset the
+		 * core immidiatly in the ISR to ward off the next interrupt.
+		 */
+		writel_relaxed(1, ctrl->rsrcs.base + QUP_SW_RESET);
+
+		need_wmb        = true;
+		signal_complete = true;
+		log_event       = true;
+		goto isr_end;
+	}
+
+	/* clear interrupts fields */
+	clr_flds = i2c_status & QUP_MSTR_STTS_ERR_MASK;
+	if (clr_flds) {
+		writel_relaxed(clr_flds, base + QUP_I2C_STATUS);
+		need_wmb = true;
+	}
+
+	clr_flds = err_flags & QUP_ERR_FLGS_MASK;
+	if (clr_flds) {
+		writel_relaxed(clr_flds,  base + QUP_ERROR_FLAGS);
+		need_wmb = true;
+	}
+
+	clr_flds = qup_op & (QUP_OUTPUT_SERVICE_FLAG | QUP_INPUT_SERVICE_FLAG);
+	if (clr_flds) {
+		writel_relaxed(clr_flds, base + QUP_OPERATIONAL);
+		need_wmb = true;
+	}
+
+	if (need_wmb)
+		/*
+		 * flush writes that clear the interrupt flags before changing
+		 * state to reset.
+		 */
+		wmb();
+
+	/* Reset and bail out on error */
+	if (ctrl->xfer.err) {
+		/* Flush for the tags in case of an error and BAM Mode*/
+		if (ctrl->xfer.mode_id == I2C_MSM_XFER_MODE_BAM) {
+			writel_relaxed(QUP_I2C_FLUSH, ctrl->rsrcs.base
+								+ QUP_STATE);
+			/*
+			 * Ensure that QUP_I2C_FLUSH is written before
+			 * State reset
+			 */
+			wmb();
+		}
+
+		/* HW workaround: when interrupt is level triggerd, more
+		 * than one interrupt may fire in error cases. Thus we
+		 * change the QUP core state to Reset immediately in the
+		 * ISR to ward off the next interrupt.
+		 */
+		writel_relaxed(QUP_STATE_RESET, ctrl->rsrcs.base + QUP_STATE);
+
+		signal_complete = true;
+		log_event       = true;
+		goto isr_end;
+	}
+
+	/* handle data completion */
 	if (xfer->mode_id == I2C_MSM_XFER_MODE_BLOCK) {
 		/*For Block Mode */
 		blk = i2c_msm_blk_get_struct(ctrl);
@@ -2761,14 +2827,15 @@ static irqreturn_t i2c_msm_qup_isr(int irq, void *devid)
 		}
 	}
 
-	if (dump_details && (ctrl->dbgfs.dbg_lvl >= MSM_DBG)) {
-		dev_info(ctrl->dev,
-				"irq:%d transfer details and reg dump\n", irq);
-		i2c_msm_dbg_xfer_dump(ctrl);
-		i2c_msm_dbg_qup_reg_dump(ctrl);
-	}
+isr_end:
+	/* Ensure that QUP configuration is written before leaving this func */
+	if (need_wmb)
+		wmb();
 
-	if (dump_details || log_event || (ctrl->dbgfs.dbg_lvl >= MSM_DBG))
+	if (ctrl->xfer.err || (ctrl->dbgfs.dbg_lvl >= MSM_DBG))
+		i2c_msm_dbg_dump_diag(ctrl, true, i2c_status, qup_op);
+
+	if (log_event || (ctrl->dbgfs.dbg_lvl >= MSM_DBG))
 		i2c_msm_prof_evnt_add(ctrl, MSM_PROF,
 					i2c_msm_prof_dump_irq_end,
 					i2c_status, qup_op, err_flags);
@@ -2814,9 +2881,7 @@ static int i2c_msm_qup_init(struct i2c_msm_ctrl *ctrl)
 	i2c_msm_qup_sw_reset(ctrl);
 	i2c_msm_qup_state_set(ctrl, QUP_STATE_RESET);
 
-	writel_relaxed(QUP_APP_CLK_ON_EN | QUP_CORE_CLK_ON_EN |
-				QUP_FIFO_CLK_GATE_EN,
-				base + QUP_CONFIG);
+	writel_relaxed(QUP_N_VAL | QUP_MINI_CORE_I2C_VAL, base + QUP_CONFIG);
 
 	writel_relaxed(QUP_OUTPUT_OVER_RUN_ERR_EN | QUP_INPUT_UNDER_RUN_ERR_EN
 		     | QUP_OUTPUT_UNDER_RUN_ERR_EN | QUP_INPUT_OVER_RUN_ERR_EN,
@@ -2903,13 +2968,37 @@ static int i2c_msm_qup_post_xfer(struct i2c_msm_ctrl *ctrl, int err)
 			if (i2c_msm_qup_slv_holds_bus(ctrl))
 				i2c_msm_qup_do_bus_clear(ctrl);
 
+			/* do not generalize error to EIO if its already set */
 			if (!err)
 				err = -EIO;
 		}
 	}
 
+	/*
+	 * Disable the IRQ before change to reset state to avoid
+	 * spurious interrupts.
+	 *
+	 */
+	disable_irq(ctrl->rsrcs.irq);
+
+	/* flush bam data and reset the qup core in timeout error.
+	 * for other error case, its handled by the ISR
+	 */
 	if (ctrl->xfer.err & I2C_MSM_ERR_TIMEOUT) {
+		/* Flush for the DMA registers */
+		if (ctrl->xfer.mode_id == I2C_MSM_XFER_MODE_BAM)
+			writel_relaxed(QUP_I2C_FLUSH, ctrl->rsrcs.base
+								+ QUP_STATE);
+
+		/* reset the qup core */
+		i2c_msm_qup_state_set(ctrl, QUP_STATE_RESET);
 		err = -ETIMEDOUT;
+		need_reset = true;
+	}
+
+	if (ctrl->xfer.err & I2C_MSM_ERR_BUS_ERR) {
+		if (!err)
+			err = -EIO;
 		need_reset = true;
 	}
 
@@ -3025,14 +3114,12 @@ static int i2c_msm_xfer_wait_for_completion(struct i2c_msm_ctrl *ctrl,
 
 	time_left = wait_for_completion_timeout(complete, xfer->timeout);
 	if (!time_left) {
+		xfer->err |= I2C_MSM_ERR_TIMEOUT;
+		i2c_msm_dbg_dump_diag(ctrl, false, 0, 0);
+		ret = -EIO;
 		i2c_msm_prof_evnt_add(ctrl, MSM_ERR, i2c_msm_prof_dump_cmplt_fl,
 					xfer->timeout, time_left, 0);
 
-		i2c_msm_dbg_xfer_dump(ctrl);
-		i2c_msm_dbg_qup_reg_dump(ctrl);
-		i2c_msm_dbg_inp_fifo_dump(ctrl);
-		xfer->err |= I2C_MSM_ERR_TIMEOUT;
-		ret = -EIO;
 	} else {
 		i2c_msm_prof_evnt_add(ctrl, MSM_DBG, i2c_msm_prof_dump_cmplt_ok,
 					xfer->timeout, time_left, 0);
@@ -3221,7 +3308,6 @@ static void i2c_msm_pm_xfer_end(struct i2c_msm_ctrl *ctrl)
 	struct i2c_msm_bam_pipe      *prod = &bam->pipe[I2C_MSM_BAM_PROD];
 	struct i2c_msm_bam_pipe      *cons = &bam->pipe[I2C_MSM_BAM_CONS];
 
-	/* efectively disabling our ISR */
 	atomic_set(&ctrl->xfer.is_active, 0);
 
 	if (cons->is_init)
@@ -3236,7 +3322,6 @@ static void i2c_msm_pm_xfer_end(struct i2c_msm_ctrl *ctrl)
 	} else {
 		i2c_msm_pm_suspend(ctrl->dev);
 	}
-	disable_irq(ctrl->rsrcs.irq);
 	mutex_unlock(&ctrl->xfer.mtx);
 }
 
