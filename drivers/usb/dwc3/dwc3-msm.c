@@ -1190,6 +1190,33 @@ static void dwc3_msm_notify_event(struct dwc3 *dwc, unsigned event)
 	case DWC3_CONTROLLER_POST_RESET_EVENT:
 		dev_dbg(mdwc->dev,
 				"DWC3_CONTROLLER_POST_RESET_EVENT received\n");
+
+		/*
+		 * Below sequence is used when controller is working without
+		 * having ssphy and only USB high speed is supported.
+		 */
+		if (dwc->maximum_speed == USB_SPEED_HIGH) {
+			dwc3_msm_write_reg(mdwc->base, QSCRATCH_GENERAL_CFG,
+				dwc3_msm_read_reg(mdwc->base,
+				QSCRATCH_GENERAL_CFG)
+				| PIPE_UTMI_CLK_DIS);
+
+			usleep_range(2, 5);
+
+			dwc3_msm_write_reg(mdwc->base, QSCRATCH_GENERAL_CFG,
+				dwc3_msm_read_reg(mdwc->base,
+				QSCRATCH_GENERAL_CFG)
+				| PIPE_UTMI_CLK_SEL
+				| PIPE3_PHYSTATUS_SW);
+
+			usleep_range(2, 5);
+
+			dwc3_msm_write_reg(mdwc->base, QSCRATCH_GENERAL_CFG,
+				dwc3_msm_read_reg(mdwc->base,
+				QSCRATCH_GENERAL_CFG)
+				& ~PIPE_UTMI_CLK_DIS);
+		}
+
 		/* Re-initialize SSPHY after reset */
 		usb_phy_set_params(mdwc->ss_phy);
 		dwc3_msm_update_ref_clk(mdwc);
