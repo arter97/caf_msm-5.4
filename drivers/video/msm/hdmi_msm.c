@@ -4391,10 +4391,7 @@ static int hdmi_msm_hpd_on(void)
 		/* Set up HPD state variables */
 		mutex_lock(&external_common_state_hpd_mutex);
 
-		if (hdmi_msm_state->is_splash_enabled)
-			external_common_state->hpd_state = 1;
-		else
-			external_common_state->hpd_state = 0;
+		external_common_state->hpd_state = 0;
 
 		mutex_unlock(&external_common_state_hpd_mutex);
 
@@ -5139,6 +5136,38 @@ static int __devexit hdmi_msm_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_HDMI_HPD_ENABLED
+static int hdmi_msm_hpd_feature(int on)
+{
+	int rc = 0;
+
+	DEV_INFO("%s: %d\n", __func__, on);
+	if (on) {
+		rc = hdmi_msm_hpd_on();
+	} else {
+		if (external_common_state->hpd_state) {
+			/* Send offline event to switch OFF HDMI and HAL FD */
+			hdmi_msm_send_event(HPD_EVENT_OFFLINE);
+
+			/* Wait for HDMI and FD to close */
+			INIT_COMPLETION(hdmi_msm_state->hpd_event_processed);
+			wait_for_completion_interruptible_timeout(
+				&hdmi_msm_state->hpd_event_processed, HZ);
+
+			external_common_state->hpd_state = 0;
+		}
+
+		hdmi_msm_hpd_off();
+
+		/* Set HDMI switch node to 0 on HPD feature disable */
+		switch_set_state(&external_common_state->sdev, 0);
+		DEV_INFO("%s: hdmi state switched to %d\n", __func__,
+				external_common_state->sdev.state);
+	}
+
+	return rc;
+}
+#else
 static int hdmi_msm_hpd_feature(int on)
 {
 	int rc = 0;
@@ -5175,6 +5204,7 @@ static int hdmi_msm_hpd_feature(int on)
 
 	return rc;
 }
+#endif
 
 static struct platform_driver this_driver = {
 	.probe = hdmi_msm_probe,
