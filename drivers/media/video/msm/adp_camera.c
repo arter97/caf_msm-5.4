@@ -14,7 +14,6 @@
 #include <linux/msm_ion.h>
 #include <linux/mutex.h>
 #include <linux/io.h>
-#include <linux/mutex.h>
 #include <linux/workqueue.h>
 #include <linux/delay.h>
 #include <linux/swab.h>
@@ -129,6 +128,8 @@ struct adp_camera_ctxt {
 	/* recovery */
 	struct delayed_work recovery_work;
 	bool camera_stream_enabled;
+	bool recovery_abort;
+	struct completion recovery_done;
 
 	/* debug */
 	struct dentry *debugfs_root;
@@ -1080,6 +1081,9 @@ static void adp_camera_recovery_work(struct work_struct *work)
 		adp_camera_disable_stream();
 		mdp_disable_camera_preview();
 
+		/*wait to flush events in pipe*/
+		usleep(FRAME_DELAY);
+
 		rc = adp_camera_enable_stream();
 		if (rc) {
 			pr_err("%s - restart failed %d! Will try again...",
@@ -1119,12 +1123,20 @@ static void adp_camera_recovery_work(struct work_struct *work)
 		adp_camera_disable_stream();
 		adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
 		disable_camera_preview();
+		complete(&adp_cam_ctxt->recovery_done);
 		adp_camera_v4l2_queue_event(ADP_CAMERA_EVENT_RECOVERY_SUCCESS);
 		break;
 	}
 	case CAMERA_RECOVERY_FAILED:
 		adp_camera_v4l2_queue_event(ADP_CAMERA_EVENT_RECOVERY_FAILED);
 		adp_camera_disable_stream();
+		if (adp_cam_ctxt->recovery_abort) {
+			adp_cam_ctxt->state = CAMERA_PREVIEW_DISABLED;
+			complete(&adp_cam_ctxt->recovery_done);
+			adp_camera_v4l2_queue_event(
+					ADP_CAMERA_EVENT_RECOVERY_ABORTED);
+			break;
+		}
 		msleep(CAMERA_RECOVERY_WAIT_FAILED_RETRY);
 
 		pr_err("%s - recovery retry...", __func__);
@@ -1585,6 +1597,16 @@ static int disable_camera_preview(void)
 		break;
 	case CAMERA_PREVIEW_DISABLED:
 		pr_warn("%s - preview already disabled", __func__);
+		goto exit;
+		break;
+	case CAMERA_RECOVERY_START:
+	case CAMERA_RECOVERY_RETRY:
+	case CAMERA_RECOVERY_IN_PROGRESS:
+	case CAMERA_RECOVERY_FAILED:
+		INIT_COMPLETION(adp_cam_ctxt->recovery_done);
+		adp_cam_ctxt->recovery_abort = true;
+		wait_for_completion(&adp_cam_ctxt->recovery_done);
+		adp_cam_ctxt->recovery_abort = false;
 		goto exit;
 		break;
 	default:
@@ -2178,7 +2200,7 @@ static int adp_camera_device_init(struct platform_device *pdev)
 		adp_cam_ctxt->is_csi_shared = false;
 	else
 		adp_cam_ctxt->is_csi_shared = pdata->is_csi_shared;
-
+	init_completion(&adp_cam_ctxt->recovery_done);
 	INIT_DELAYED_WORK(&adp_cam_ctxt->recovery_work,
 						adp_camera_recovery_work);
 	adp_cam_ctxt->state = CAMERA_UNINITIALIZED;
