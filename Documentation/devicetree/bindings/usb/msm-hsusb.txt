@@ -89,6 +89,11 @@ Optional properties :
 	to supply voltage to the D+ line during VDD minimization and peripheral
 	bus suspend. If not exists, then VDD minimization will not be allowed
 	during peripheral bus suspend.
+- qcom,ahb-async-bridge-bypass: If present, indicates that enable AHB2AHB By Pass
+	mode with device controller for better throughput. With this mode, USB Core
+	runs using PNOC clock and synchronous to it. Hence it is must to have proper
+	"qcom,msm_bus,vectors" to have high bus frequency. User shouldn't try to
+	enable this feature without proper bus voting.
 
 Example HSUSB OTG controller device node :
 	usb@f9690000 {
