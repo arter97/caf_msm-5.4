@@ -257,6 +257,13 @@ int msm_ispif_config(struct ispif_device *ispif,
 	int rc = 0, i = 0;
 	uint8_t intftype;
 	uint8_t vfe_intf;
+
+	if (ispif->ispif_state != ISPIF_POWER_UP) {
+		pr_err("%s: ispif not initialized %d\n", __func__,
+				ispif->ispif_state);
+		return -ENODEV;
+	}
+
 	params_len = params_list->len;
 	ispif_params = params_list->params;
 	CDBG("Enable interface\n");
@@ -515,6 +522,13 @@ static int msm_ispif_subdev_video_s_stream(struct v4l2_subdev *sd,
 	int rc = -EINVAL;
 	CDBG("%s enable %x, cmd %x, intf %x\n", __func__, enable, cmd, intf);
 	BUG_ON(!ispif);
+
+	if (ispif->ispif_state != ISPIF_POWER_UP) {
+		pr_err("%s: ispif not initialized %d\n", __func__,
+				ispif->ispif_state);
+		return -ENODEV;
+	}
+
 	if ((ispif->csid_version <= CSID_VERSION_V2 && vfe_intf > VFE0) ||
 		(ispif->csid_version == CSID_VERSION_V3 &&
 		vfe_intf >= VFE_MAX)) {
@@ -766,7 +780,14 @@ int msm_ispif_init(struct ispif_device *ispif,
 	if (ispif->ispif_state == ISPIF_POWER_UP) {
 		pr_err("%s: ispif already initialized %d\n", __func__,
 			ispif->ispif_state);
-		return rc;
+		return 0;
+	}
+
+	if (*csid_version > CSID_VERSION_V2 &&
+			*csid_version != CSID_VERSION_V3) {
+		pr_err("%s: unsupported CSID version %x",
+				__func__, *csid_version);
+		return -EFAULT;
 	}
 
 	spin_lock_init(&ispif_tasklet_lock);
