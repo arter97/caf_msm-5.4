@@ -51,7 +51,7 @@ static int req_capture_buf_size = CAPTURE_EP_MAX_PACKET_SIZE;
 module_param(req_capture_buf_size, int, S_IRUGO);
 MODULE_PARM_DESC(req_capture_buf_size, "ISO IN endpoint (capture) request buffer size");
 
-static int req_capture_count = 48;
+static int req_capture_count = 4;
 module_param(req_capture_count, int, S_IRUGO);
 MODULE_PARM_DESC(req_capture_count, "ISO IN endpoint (capture) request count");
 
@@ -1038,28 +1038,28 @@ static int f_audio_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 			in_ep->driver_data = audio;
 			audio->capture_copy_buf = 0;
 
-			/* Allocate a write buffer */
-			req = usb_ep_alloc_request(in_ep, GFP_ATOMIC);
-			if (!req) {
-				pr_err("request allocation failed\n");
-				return -ENOMEM;
-			}
-			req->buf = kzalloc(req_capture_buf_size,
-						GFP_ATOMIC);
-			if (!req->buf) {
-				pr_err("request buffer allocation failed\n");
-				return -ENOMEM;
-			}
-
-			req->length = req_capture_buf_size;
-			req->context = audio;
-			req->complete =	f_audio_complete;
-			audio->capture_req = req;
-			err = usb_ep_queue(in_ep, req, GFP_ATOMIC);
-			if (err)
-				pr_err("Failed to queue %s req: err %d\n",
-				 in_ep->name, err);
 			schedule_work(&audio->capture_work);
+			for (i = 0; i < req_capture_count && err == 0; i++) {
+				/* Allocate a write buffer */
+				req = usb_ep_alloc_request(in_ep, GFP_ATOMIC);
+				if (!req) {
+					pr_err("request allocation failed\n");
+					return -ENOMEM;
+				}
+				req->buf = kzalloc(req_capture_buf_size,
+							GFP_ATOMIC);
+				if (!req->buf)
+					return -ENOMEM;
+
+				req->length = req_capture_buf_size;
+				req->context = audio;
+				req->complete =	f_audio_complete;
+				audio->capture_req = req;
+				err = usb_ep_queue(in_ep, req, GFP_ATOMIC);
+				if (err)
+					pr_err("Failed to queue %s req,err%d\n",
+						 in_ep->name, err);
+			}
 		} else {
 			struct f_audio_buf *capture_buf;
 			usb_ep_disable(in_ep);
