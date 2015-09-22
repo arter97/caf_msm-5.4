@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -75,6 +75,7 @@ static DEFINE_MUTEX(hlist_mut);
 static int check_pmem_info(struct msm_pmem_info *info, int len)
 {
 	if (info->offset < len &&
+		info->offset <= (UINT_MAX - info->len) &&
 		info->offset + info->len <= len &&
 		info->planar0_off < len &&
 		info->planar1_off < len)
