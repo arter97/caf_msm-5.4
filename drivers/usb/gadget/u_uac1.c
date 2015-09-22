@@ -705,6 +705,12 @@ int gaudio_setup(struct gaudio *card)
 {
 	int	ret;
 
+	if (the_card) {
+		pr_debug("snd devices already opened\n");
+		return 0;
+	}
+
+	pr_debug("trying to open snd devices\n");
 	ret = gaudio_open_snd_dev(card);
 	if (ret)
 		pr_err("Failed to open snd devices\n");
