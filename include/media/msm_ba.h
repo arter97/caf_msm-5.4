@@ -38,6 +38,12 @@ enum msm_ba_ip {
 	BA_IP_MAX = 0xffffffff
 };
 
+enum msm_ba_save_restore_ip {
+	BA_SR_RESTORE_IP = 0,
+	BA_SR_SAVE_IP,
+	BA_SR_MAX = 0xffffffff
+};
+
 struct msm_ba_ext_ops {
 	void (*msm_ba_cb)(void *instance,
 		unsigned int event_id, void *arg);
@@ -62,6 +68,7 @@ int msm_ba_s_ext_ctrl(void *instance, struct v4l2_ext_controls *a);
 int msm_ba_g_ctrl(void *instance, struct v4l2_control *a);
 int msm_ba_streamon(void *instance, enum v4l2_buf_type i);
 int msm_ba_streamoff(void *instance, enum v4l2_buf_type i);
+int msm_ba_save_restore_input(void *instance, enum msm_ba_save_restore_ip sr);
 int msm_ba_poll(void *instance, struct file *filp,
 		struct poll_table_struct *pt);
 int msm_ba_subscribe_event(void *instance,

@@ -26,9 +26,12 @@ void msm_ba_queue_v4l2_event(struct msm_ba_inst *inst,
 struct v4l2_subdev *msm_ba_sd_find(const char *name);
 void msm_ba_add_inputs(struct v4l2_subdev *sd);
 void msm_ba_del_inputs(struct v4l2_subdev *sd);
+void msm_ba_set_out_in_use(struct v4l2_subdev *sd, int on);
+int msm_ba_find_ip_in_use_from_sd(struct v4l2_subdev *sd);
+void msm_ba_reset_ip_in_use_from_sd(struct v4l2_subdev *sd);
 struct msm_ba_input *msm_ba_find_input_from_sd(struct v4l2_subdev *sd,
 		int bridge_chip_ip);
-struct msm_ba_input *msm_ba_find_input(int ba_input);
+struct msm_ba_input *msm_ba_find_input(int ba_input_idx);
 struct msm_ba_input *msm_ba_find_output(int ba_output);
 int msm_ba_g_fps(void *instance, int *fps_q16);
 int msm_ba_ctrl_init(struct msm_ba_inst *inst);

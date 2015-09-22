@@ -140,6 +140,7 @@ struct msm_ba_input {
 	struct v4l2_subdev *sd;
 	int signal_status;
 	int in_use;
+	int ba_out_in_use;
 	enum v4l2_priority prio;
 };
 
@@ -177,6 +178,8 @@ struct msm_ba_inst {
 	struct v4l2_output sd_output;
 	struct v4l2_subdev *sd;
 	int state;
+	int saved_input;
+	int restore;
 
 	struct v4l2_fh event_handler;
 	wait_queue_head_t kernel_event_queue;
