@@ -1380,6 +1380,14 @@ static inline int ipa_reset_endpoint(u32 clnt_hdl)
 }
 
 /*
+ * Remove ep delay
+ */
+static inline int ipa_clear_endpoint_delay(u32 clnt_hdl)
+{
+	return -EPERM;
+}
+
+/*
  * Configuration
  */
 static inline int ipa_cfg_ep(u32 clnt_hdl,
