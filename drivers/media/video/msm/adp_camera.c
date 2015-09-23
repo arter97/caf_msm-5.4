@@ -26,6 +26,8 @@
 #include <media/v4l2-ctrls.h>
 #include <linux/videodev2.h>
 
+#define ADP_MAX_EVENTS 10
+
 #define ADP_RDI RDI1
 #define VID_RDI RDI0
 
@@ -1089,7 +1091,7 @@ static void adp_mdp_recovery_notification_cb(void *handle,
 		v4l2_ev.u.data[0] = (__u8)info->err_type;
 		v4l2_ev.u.data[1] = (__u8)info->status;
 		ktime_get_ts(&v4l2_ev.timestamp);
-		v4l2_event_queue(adp_cam_ctxt->vdev, &v4l2_ev);
+		v4l2_event_queue_fh(&adp_cam_ctxt->event_handler, &v4l2_ev);
 	}
 }
 
@@ -1107,10 +1109,11 @@ static int mdp_deinit_recovery(void)
 static void adp_camera_v4l2_queue_event(int event)
 {
 	struct v4l2_event v4l2_ev;
+	pr_debug("%s : %x", __func__, event);
 	v4l2_ev.id = 0;
 	v4l2_ev.type = event;
 	ktime_get_ts(&v4l2_ev.timestamp);
-	v4l2_event_queue(adp_cam_ctxt->vdev, &v4l2_ev);
+	v4l2_event_queue_fh(&adp_cam_ctxt->event_handler, &v4l2_ev);
 }
 
 /* Wait times in ms for delayed work
@@ -2072,7 +2075,8 @@ static int adp_v4l2_subscribe_event(struct v4l2_fh *fh,
 	}
 	pr_debug("%s:fh = 0x%x, type = 0x%x",
 		__func__, (u32)fh, sub->type);
-	rc = v4l2_event_subscribe(fh, sub, 3);
+	rc = v4l2_event_subscribe(&adp_cam_ctxt->event_handler,
+			sub, ADP_MAX_EVENTS);
 	if (rc < 0)
 		pr_err("%s: failed for evtType = 0x%x, rc = %d",
 						__func__, sub->type, rc);
@@ -2088,7 +2092,7 @@ static int adp_v4l2_unsubscribe_event(struct v4l2_fh *fh,
 			__func__, fh, sub);
 		return -EINVAL;
 	}
-	rc = v4l2_event_unsubscribe(fh, sub);
+	rc = v4l2_event_unsubscribe(&adp_cam_ctxt->event_handler, sub);
 	pr_debug("%s: rc = %d", __func__, rc);
 	return rc;
 }
@@ -2124,6 +2128,18 @@ static long adp_camera_v4l2_private_ioctl(struct file *file, void *fh,
 	return rc;
 }
 
+static unsigned int adp_camera_v4l2_poll(struct file *filp,
+		struct poll_table_struct *pt)
+{
+	int rc = 0;
+
+	poll_wait(filp, &adp_cam_ctxt->event_handler.wait, pt);
+	if (v4l2_event_pending(&adp_cam_ctxt->event_handler))
+		rc |= POLLPRI;
+
+	return rc;
+}
+
 static const struct v4l2_ioctl_ops adp_camera_v4l2_ioctl_ops = {
 	.vidioc_querycap = adp_camera_v4l2_querycap,
 	.vidioc_enum_input = adp_camera_v4l2_enum_input,
@@ -2149,6 +2165,7 @@ static const struct v4l2_file_operations adp_camera_v4l2_fops = {
 	.open = adp_camera_v4l2_open,
 	.release = adp_camera_v4l2_close,
 	.ioctl = video_ioctl2,
+	.poll = adp_camera_v4l2_poll,
 };
 
 #define ADP_CAMERA_BASE_DEVICE_NUMBER 36
