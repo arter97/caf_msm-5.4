@@ -144,8 +144,12 @@ static struct device_attribute dev_bgt_enabled =
 static struct device_attribute dev_mtd_num =
 	__ATTR(mtd_num, S_IRUGO, dev_attribute_show, NULL);
 static struct device_attribute dev_mtd_trigger_scrub =
-	__ATTR(peb_scrub, S_IRUGO | S_IWUSR,
+	__ATTR(scrub_all, S_IRUGO | S_IWUSR,
 		dev_attribute_show, dev_attribute_store);
+static struct device_attribute dev_mtd_max_scrub_sqnum =
+	__ATTR(scrub_max_sqnum, S_IRUGO, dev_attribute_show, NULL);
+static struct device_attribute dev_mtd_min_scrub_sqnum =
+	__ATTR(scrub_min_sqnum, S_IRUGO, dev_attribute_show, NULL);
 
 /**
  * ubi_volume_notify - send a volume change notification.
@@ -339,6 +343,17 @@ int ubi_major2num(int major)
 	return ubi_num;
 }
 
+static unsigned long long get_max_sqnum(struct ubi_device *ubi)
+{
+	unsigned long long max_sqnum;
+
+	spin_lock(&ubi->ltree_lock);
+	max_sqnum = ubi->global_sqnum - 1;
+	spin_unlock(&ubi->ltree_lock);
+
+	return max_sqnum;
+}
+
 /* "Show" method for files in '/<sysfs>/class/ubi/ubiX/' */
 static ssize_t dev_attribute_show(struct device *dev,
 				  struct device_attribute *attr, char *buf)
@@ -384,7 +399,11 @@ static ssize_t dev_attribute_show(struct device *dev,
 	else if (attr == &dev_mtd_num)
 		ret = sprintf(buf, "%d\n", ubi->mtd->index);
 	else if (attr == &dev_mtd_trigger_scrub)
-		ret = snprintf(buf, 3, "%d\n", ubi->scrub_in_progress);
+		ret = sprintf(buf, "%d\n", atomic_read(&ubi->scrub_work_count));
+	else if (attr == &dev_mtd_max_scrub_sqnum)
+		ret = sprintf(buf, "%llu\n", get_max_sqnum(ubi));
+	else if (attr == &dev_mtd_min_scrub_sqnum)
+		ret = sprintf(buf, "%llu\n", ubi_wl_scrub_get_min_sqnum(ubi));
 	else
 		ret = -EINVAL;
 
@@ -396,33 +415,30 @@ static ssize_t dev_attribute_store(struct device *dev,
 			   struct device_attribute *attr,
 			   const char *buf, size_t count)
 {
-	int value, ret;
+	int ret;
 	struct ubi_device *ubi;
+	unsigned long long scrub_sqnum;
 
 	ubi = container_of(dev, struct ubi_device, dev);
 	ubi = ubi_get_device(ubi->ubi_num);
 	if (!ubi)
 		return -ENODEV;
 
-	ret = count;
-	if (kstrtos32(buf, 10, &value)) {
-		ret = -EINVAL;
-		goto out;
-	} else if (attr == &dev_mtd_trigger_scrub) {
-		if (value != 1) {
-			pr_err("Invalid input. Echo 1 to start trigger");
+	if (attr == &dev_mtd_trigger_scrub) {
+		if (kstrtoull(buf, 10, &scrub_sqnum)) {
+			ret = -EINVAL;
 			goto out;
 		}
 		if (!ubi->lookuptbl) {
 			pr_err("lookuptbl is null");
 			goto out;
 		}
-		ret = ubi_wl_scrub_all(ubi);
+		ret = ubi_wl_scrub_all(ubi, scrub_sqnum);
+		if (ret == 0)
+			ret = count;
 	}
 
 out:
-	if (ret == 0)
-		ret = count;
 	ubi_put_device(ubi);
 	return ret;
 }
@@ -490,6 +506,12 @@ static int ubi_sysfs_init(struct ubi_device *ubi, int *ref)
 	if (err)
 		return err;
 	err = device_create_file(&ubi->dev, &dev_mtd_trigger_scrub);
+	if (err)
+		return err;
+	err = device_create_file(&ubi->dev, &dev_mtd_max_scrub_sqnum);
+	if (err)
+		return err;
+	err = device_create_file(&ubi->dev, &dev_mtd_min_scrub_sqnum);
 	return err;
 }
 
@@ -499,6 +521,8 @@ static int ubi_sysfs_init(struct ubi_device *ubi, int *ref)
  */
 static void ubi_sysfs_close(struct ubi_device *ubi)
 {
+	device_remove_file(&ubi->dev, &dev_mtd_min_scrub_sqnum);
+	device_remove_file(&ubi->dev, &dev_mtd_max_scrub_sqnum);
 	device_remove_file(&ubi->dev, &dev_mtd_trigger_scrub);
 	device_remove_file(&ubi->dev, &dev_mtd_num);
 	device_remove_file(&ubi->dev, &dev_bgt_enabled);
