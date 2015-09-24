@@ -682,7 +682,7 @@ static int ds90uh92x_reprogram_device(struct ds90uh92x *ds90uh92x)
 	rc = msm_dba_helper_i2c_write_byte(ds90uh92x->i2c_client,
 					   ds90uh92x->i2c_addr,
 					   0xc6,
-					   0x1F);
+					   0x3F);
 
 	if (rc) {
 		pr_err("%s: i2c write failed for int enable\n", __func__);
@@ -720,7 +720,7 @@ static int ds90uh92x_reprogram_device(struct ds90uh92x *ds90uh92x)
 			if (i == 0)
 				reg = 0x07;
 			else
-				reg = 0x69 + i;
+				reg = 0x6F + i;
 
 			rc = msm_dba_helper_i2c_write_byte(
 							ds90uh92x->i2c_client,
