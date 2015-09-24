@@ -1471,8 +1471,7 @@ long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 		return -EINVAL;
 	}
 
-	if ((ioctl_ptr->ioctl_ptr == NULL) || (ioctl_ptr->len == 0) ||
-		(ioctl_ptr->len >= MSM_CPP_MAX_FW_NAME_LEN)) {
+	if ((ioctl_ptr->ioctl_ptr == NULL) || (ioctl_ptr->len == 0)) {
 		pr_err("Wrong ioctl_ptr %p\n", ioctl_ptr);
 		return -EINVAL;
 	}
