@@ -77,6 +77,15 @@
 			gpio-key,wakeup;
 			debounce-interval = <15>;
 		};
+
+		factory_reset {
+			label = "factory_reset";
+			gpios = <&msmgpio 141 0x1>;
+			linux,input-type = <1>;
+			linux,code = <766>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
 	};
 
 	bt_ar3002 {
