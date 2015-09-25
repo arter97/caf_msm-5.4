@@ -22,8 +22,79 @@
 #include <linux/of_device.h>
 #include <linux/sysfs.h>
 
+#include <asm/arch_timer.h>
+#include <linux/of_irq.h>
+#include <linux/of_address.h>
+#include <linux/io.h>
+#include <linux/irq.h>
+
 #define Q6_PIL_GET_DELAY_MS 100
 #define BOOT_CMD 1
+
+#define LPASS_QDSP6SS_QTMR_V1_BASE		0xFE2A1000
+#define LPASS_QDSP6SS_QTMR_V1_CNTPCT_HI_0	0x00000004
+#define LPASS_QDSP6SS_QTMR_V1_CNTPCT_LO_0	0x00000000
+#define BUF_SIZE 10
+
+static void __iomem *qdsp6ss_qtmr_base;
+static char* qdsp_clk_kbuf = NULL;
+
+static inline uint64_t qdsp6_get_counter_value(void)
+{
+	uint32_t cvall = 0;
+	uint32_t cvalh = 0;
+	uint32_t thigh = 0;
+
+	if (qdsp6ss_qtmr_base != NULL)
+		do {
+			cvalh = __raw_readl(qdsp6ss_qtmr_base + LPASS_QDSP6SS_QTMR_V1_CNTPCT_HI_0);
+			cvall = __raw_readl(qdsp6ss_qtmr_base + LPASS_QDSP6SS_QTMR_V1_CNTPCT_LO_0);
+			thigh = __raw_readl(qdsp6ss_qtmr_base + LPASS_QDSP6SS_QTMR_V1_CNTPCT_HI_0);
+		} while (cvalh != thigh);
+	else
+		pr_err("qdsp6ss_qtmr_base is NULL \n");
+
+	return ((uint64_t) cvalh << 32) | cvall;
+}
+
+static ssize_t qdsp_qtimer_show(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	uint64_t qdsp_qtimer_value = 0;
+	qdsp_qtimer_value = qdsp6_get_counter_value();
+
+	return sprintf(buf, "%llx\n",qdsp_qtimer_value);
+}
+
+static ssize_t qdsp_qtimer_set(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	dev_err(dev, "%s: Cannot write to qdsp qtimer register\n", __func__);
+	return -1;
+}
+
+static DEVICE_ATTR(qdsp_qtimer, S_IRUGO , qdsp_qtimer_show, qdsp_qtimer_set);
+
+static ssize_t arch_qtimer_show(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	uint64_t arch_qtimer_value = 0;
+	arch_qtimer_value = arch_counter_get_cntpct();
+	return sprintf(buf, "%llx\n",arch_qtimer_value);
+}
+
+static ssize_t arch_qtimer_set(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+    dev_err(dev, "%s: Cannot write to arch qtimer register\n", __func__);
+    return -1;
+}
+
+static DEVICE_ATTR(arch_qtimer, S_IRUGO , arch_qtimer_show, arch_qtimer_set);
 
 static ssize_t adsp_boot_store(struct kobject *kobj,
 	struct kobj_attribute *attr,
@@ -40,6 +111,8 @@ static struct kobj_attribute adsp_boot_attribute =
 
 static struct attribute *attrs[] = {
 	&adsp_boot_attribute.attr,
+	&dev_attr_qdsp_qtimer.attr,
+	&dev_attr_arch_qtimer.attr,
 	NULL,
 };
 
@@ -158,6 +231,15 @@ static int adsp_loader_init_sysfs(struct platform_device *pdev)
 		goto error_return;
 	}
 
+	qdsp_clk_kbuf = devm_kzalloc(&pdev->dev, sizeof(char) * BUF_SIZE,
+		GFP_KERNEL);
+	qdsp6ss_qtmr_base = ioremap(0xFE2A1000 , 0x32);
+	if (qdsp6ss_qtmr_base == NULL) {
+		dev_err(&pdev->dev, "%s: qdsp timer ioremap fail\n",
+			__func__);
+		goto error_return;
+	}
+
 	ret = sysfs_create_group(priv->boot_adsp_obj, priv->attr_group);
 	if (ret) {
 		dev_err(&pdev->dev, "%s: sysfs create group failed %d\n", \
@@ -197,6 +279,11 @@ static int adsp_loader_remove(struct platform_device *pdev)
 		sysfs_remove_group(priv->boot_adsp_obj, priv->attr_group);
 		kobject_del(priv->boot_adsp_obj);
 		priv->boot_adsp_obj = NULL;
+	}
+
+	if (qdsp_clk_kbuf != NULL) {
+		devm_kfree(&pdev->dev,qdsp_clk_kbuf);
+		qdsp_clk_kbuf = NULL;
 	}
 
 	return 0;
