@@ -177,7 +177,8 @@ static int dun_bt_read(struct file *file, char __user *buf,
 	struct dun_dev *dev = (struct dun_dev *)file->private_data;
 	struct sk_buff *skb;
 	int ret = 0;
-	int len = 0;
+	unsigned int size = 0;
+	int read = 0;
 
 	if (!dev)
 		return -ENODEV;
@@ -195,12 +196,9 @@ static int dun_bt_read(struct file *file, char __user *buf,
 		skb = skb_dequeue(&dev->rxq);
 		mutex_unlock(&dev->rx_lock);
 
-		len = skb->len;
-		if (count < len)
-			len = count;
-
-		BT_DBG("skb data %p len %d", skb->data, len);
-		if (copy_to_user(buf, skb->data, len)) {
+		BT_DBG("skb data %p len %d", skb->data, skb->len);
+		size = min_t(uint, count, skb->len);
+		if (copy_to_user(buf, skb->data, size)) {
 			if (mutex_lock_interruptible(&dev->rx_lock))
 				return -ERESTARTSYS;
 
@@ -210,8 +208,24 @@ static int dun_bt_read(struct file *file, char __user *buf,
 			break;
 		}
 
+		if (skb->len > count) {
+			skb->data += count;
+			skb->len -= count;
+
+			if (mutex_lock_interruptible(&dev->rx_lock))
+				return -ERESTARTSYS;
+
+			skb_queue_head(&dev->rxq, skb);
+			mutex_unlock(&dev->rx_lock);
+		} else {
+			kfree_skb(skb);
+		}
+
+		read += size;
+		buf += size;
+		count -= size;
 	}
-	return len;
+	return read ? read : ret;
 }
 
 static int dun_bt_write(struct file *file, const char __user *buf,
