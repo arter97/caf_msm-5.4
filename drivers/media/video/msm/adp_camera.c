@@ -1846,8 +1846,6 @@ static int adp_camera_v4l2_open(struct file *filp)
 	clear_bit(V4L2_FL_USES_V4L2_FH, &vdev->flags);
 
 	/* setup the event queue */
-	v4l2_fh_init(&adp_cam_ctxt->event_handler, vdev);
-	v4l2_fh_add(&adp_cam_ctxt->event_handler);
 	filp->private_data = &(adp_cam_ctxt->event_handler);
 	return 0;
 }
@@ -2387,6 +2385,9 @@ static int adp_camera_device_init(struct platform_device *pdev)
 
 	adp_cam_ctxt->vdev->entity.name =
 			video_device_node_name(adp_cam_ctxt->vdev);
+	/* setup the event queue */
+	v4l2_fh_init(&adp_cam_ctxt->event_handler, adp_cam_ctxt->vdev);
+	v4l2_fh_add(&adp_cam_ctxt->event_handler);
 
 	pr_debug("Exit %s with error %d\n", __func__, rc);
 	return 0;
