@@ -1218,6 +1218,8 @@ struct ipa_context {
 	u32 peer_bam_map_size;
 	unsigned long peer_bam_dev;
 	u32 peer_bam_map_cnt;
+
+	bool tethered_flow_control;
 };
 
 /**
@@ -1267,6 +1269,7 @@ struct ipa_plat_drv_res {
 	bool modem_cfg_emb_pipe_flt;
 	u32 wan_rx_ring_size;
 	bool skip_uc_pipe_reset;
+	bool tethered_flow_control;
 };
 
 struct ipa_mem_partition {
