@@ -251,7 +251,25 @@ static struct vfe32_cmd_type vfe32_cmd[] = {
 		{VFE_CMD_STATS_BHIST_START, V32_STATS_BHIST_LEN,
 			V32_STATS_BHIST_OFF},
 		{VFE_CMD_STATS_BHIST_STOP},
-/*149*/	{VFE_CMD_SELECT_RDI},
+		{VFE_CMD_RESET_2},
+/*150*/	{VFE_CMD_FOV_ENC_CFG},
+		{VFE_CMD_FOV_VIEW_CFG},
+		{VFE_CMD_FOV_ENC_UPDATE},
+		{VFE_CMD_FOV_VIEW_UPDATE},
+		{VFE_CMD_SCALER_ENC_CFG},
+/*155*/ {VFE_CMD_SCALER_VIEW_CFG},
+		{VFE_CMD_SCALER_ENC_UPDATE},
+		{VFE_CMD_SCALER_VIEW_UPDATE},
+		{VFE_CMD_COLORXFORM_ENC_CFG},
+		{VFE_CMD_COLORXFORM_VIEW_CFG},
+/*160*/ {VFE_CMD_COLORXFORM_ENC_UPDATE},
+		{VFE_CMD_COLORXFORM_VIEW_UPDATE},
+		{VFE_CMD_TEST_GEN_CFG},
+		{VFE_CMD_SELECT_RDI},
+		{VFE_CMD_SET_STATS_VER},
+/*165*/ {VFE_CMD_RGB_ALL_CFG},
+		{VFE_CMD_RGB_ALL_UPDATE},
+
 };
 
 uint32_t vfe32_AXI_WM_CFG[] = {
@@ -414,7 +432,24 @@ static const char * const vfe32_general_cmd[] = {
 	"STATS_BF_STOP",
 	"STATS_BHIST_START",
 	"STATS_BHIST_STOP",
-	"RDI_SEL" /*150*/
+	"VFE_CMD_RESET_2",
+	"VFE_CMD_FOV_ENC_CFG", /*150*/
+	"VFE_CMD_FOV_VIEW_CFG",
+	"VFE_CMD_FOV_ENC_UPDATE",
+	"VFE_CMD_FOV_VIEW_UPDATE",
+	"VFE_CMD_SCALER_ENC_CFG",
+	"VFE_CMD_SCALER_VIEW_CFG", /*155*/
+	"VFE_CMD_SCALER_ENC_UPDATE",
+	"VFE_CMD_SCALER_VIEW_UPDATE",
+	"VFE_CMD_COLORXFORM_ENC_CFG",
+	"VFE_CMD_COLORXFORM_VIEW_CFG",
+	"VFE_CMD_COLORXFORM_ENC_UPDATE", /*160*/
+	"VFE_CMD_COLORXFORM_VIEW_UPDATE",
+	"VFE_CMD_TEST_GEN_CFG",
+	"VFE_CMD_SELECT_RDI",
+	"VFE_CMD_SET_STATS_VER",
+	"VFE_CMD_RGB_ALL_CFG",
+	"VFE_CMD_RGB_ALL_UPDATE",
 };
 
 uint8_t vfe32_use_bayer_stats(struct vfe32_ctrl_type *vfe32_ctrl)
@@ -2242,8 +2277,6 @@ static int vfe32_proc_general(
 	uint32_t temp1 = 0, temp2 = 0;
 	struct msm_camera_vfe_params_t vfe_params;
 
-	CDBG("vfe32_proc_general: cmdID = %s, length = %d\n",
-		vfe32_general_cmd[cmd->id], cmd->length);
 	switch (cmd->id) {
 	case VFE_CMD_RESET:
 		pr_info("vfe32_proc_general: cmdID = %s\n",
@@ -3740,7 +3773,7 @@ static int vfe32_proc_general(
 
 		break;
 	default:
-		if (cmd->id < 0 || cmd->id > VFE_CMD_MAX)
+		if (cmd->id < 0 || cmd->id >= ARRAY_SIZE(vfe32_cmd))
 			return -EINVAL;
 
 		if (cmd->length != vfe32_cmd[cmd->id].length)
