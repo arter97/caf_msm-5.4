@@ -196,6 +196,9 @@ clean_from_lists(struct nf_conn *ct)
 	nf_ct_remove_expectations(ct);
 }
 
+void (*delete_sfe_entry)(struct nf_conn *ct) __rcu __read_mostly;
+EXPORT_SYMBOL(delete_sfe_entry);
+
 static void
 destroy_conntrack(struct nf_conntrack *nfct)
 {
@@ -205,10 +208,17 @@ destroy_conntrack(struct nf_conntrack *nfct)
 	struct sip_list *sip_node = NULL;
 	struct list_head *sip_node_list;
 	struct list_head *sip_node_save_list;
+	void (*delete_entry)(struct nf_conn *ct);
 
 	pr_debug("destroy_conntrack(%p)\n", ct);
 	NF_CT_ASSERT(atomic_read(&nfct->use) == 0);
 	NF_CT_ASSERT(!timer_pending(&ct->timeout));
+
+	if (ct->sfe_entry != NULL) {
+		delete_entry = rcu_dereference(delete_sfe_entry);
+		if (delete_entry)
+			delete_entry(ct);
+	}
 
 	/* To make sure we don't get any weird locking issues here:
 	 * destroy_conntrack() MUST NOT be called with a write lock
