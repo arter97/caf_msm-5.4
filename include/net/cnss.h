@@ -141,6 +141,13 @@ struct cnss_wlan_enable_cfg {
 	struct cnss_shadow_reg_cfg *shadow_reg_cfg;
 };
 
+/* MSA Memory Regions Infomation */
+struct cnss_mem_region_info {
+	uint64_t reg_addr;
+	uint32_t size;
+	uint8_t secure_flag;
+};
+
 /* driver modes */
 enum cnss_driver_mode {
 	CNSS_MISSION,
