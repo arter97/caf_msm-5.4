@@ -43,6 +43,7 @@
 #define SMEM_IMAGE_VERSION_OEM_SIZE 32
 #define SMEM_IMAGE_VERSION_OEM_OFFSET 96
 #define SMEM_IMAGE_VERSION_PARTITION_APPS 10
+#define BOARD_MODEL_SIZE 128
 
 enum {
 	HW_PLATFORM_UNKNOWN = 0,
@@ -57,7 +58,7 @@ enum {
 	HW_PLATFORM_QRD	= 11,
 	HW_PLATFORM_HRD	= 13,
 	HW_PLATFORM_DTV	= 14,
-	HW_PLATFORM_NPC_EAGLE = 23,
+	HW_PLATFORM_RRP = 28,
 	HW_PLATFORM_INVALID
 };
 
@@ -74,7 +75,7 @@ const char *hw_platform[] = {
 	[HW_PLATFORM_QRD] = "QRD",
 	[HW_PLATFORM_HRD] = "HRD",
 	[HW_PLATFORM_DTV] = "DTV",
-        [HW_PLATFORM_NPC_EAGLE] = "NPC Eagle",
+	[HW_PLATFORM_RRP] = "RRP",
 };
 
 enum {
@@ -995,6 +996,25 @@ msm_get_image_crm_version(struct device *dev,
 			string_address);
 }
 
+static ssize_t
+msm_get_board_model(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	struct device_node *dt_node;
+	const u8 *property;
+	int len;
+
+	dt_node = of_find_node_by_path("/");
+	if (!dt_node) {
+		pr_err("%s : Failed to get base device tree node",
+				__func__);
+		return snprintf(buf, BOARD_MODEL_SIZE, "Unknown");
+	}
+	property = of_get_property(dt_node, "model", &len);
+	return snprintf(buf, BOARD_MODEL_SIZE, "%-.32s\n", property);
+}
+
 static struct sysdev_attribute socinfo_v1_files[] = {
 	_SYSDEV_ATTR(id, 0444, socinfo_show_id, NULL),
 	_SYSDEV_ATTR(version, 0444, socinfo_show_version, NULL),
@@ -1136,6 +1156,10 @@ static struct device_attribute select_image =
 	__ATTR(select_image, S_IRUGO | S_IWUSR,
 			msm_get_image_number, msm_select_image);
 
+static struct device_attribute board_model =
+	__ATTR(board_model, S_IRUGO,
+			msm_get_board_model, NULL);
+
 static struct sysdev_class soc_sysdev_class = {
 	.name = "soc",
 };
@@ -1194,6 +1218,7 @@ static void __init populate_soc_sysfs_files(struct device *msm_soc_device)
 	device_create_file(msm_soc_device, &image_variant);
 	device_create_file(msm_soc_device, &image_crm_version);
 	device_create_file(msm_soc_device, &select_image);
+	device_create_file(msm_soc_device, &board_model);
 
 	switch (legacy_format) {
 	case 9:

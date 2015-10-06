@@ -76,6 +76,8 @@ endif
         dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ac-pm8941-liquid.dtb
         dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ac-pm8941-mtp.dtb
         dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974pro-ac-pma8084-pm8941-mtp.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= apq8074pro-ab-eagle.dtb
+        dtb-$(CONFIG_ARCH_MSM8974)	+= apq8074pro-ab-eagle-p2.dtb
 
 # APQ8084
    zreladdr-$(CONFIG_ARCH_APQ8084)	:= 0x00008000

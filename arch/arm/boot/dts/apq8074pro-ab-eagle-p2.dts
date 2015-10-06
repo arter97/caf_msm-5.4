@@ -16,9 +16,9 @@
 /include/ "apq8074-eagle.dtsi"
 
 / {
-	model = "Qualcomm Technologies APQ 8074Pro-AB EAGLE";
+	model = "Qualcomm Technologies APQ 8074Pro-AB EAGLE P2";
 	compatible = "qcom,apq8074-eagle", "qcom,apq8074", "qcom,eagle";
-	qcom,board-id = <28 0>;
+	qcom,board-id = <0x2001c 0>;
 };
 
 &sdhc_1 {
