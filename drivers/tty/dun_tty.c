@@ -271,12 +271,19 @@ static unsigned int dun_bt_poll(struct file *file,
 	if (!dev)
 		return POLLERR;
 
+	if (!skb_queue_empty(&dev->rxq))
+		goto done;
+
 	poll_wait(file, &dev->wait, wait);
 
 	/* TODO: return error masks as well like POLLHUP */
 	if (!skb_queue_empty(&dev->rxq))
-		mask |= POLLIN | POLLRDNORM;
+		goto done;
 
+	return mask;
+
+done:
+	mask |= POLLIN | POLLRDNORM;
 	return mask;
 }
 
