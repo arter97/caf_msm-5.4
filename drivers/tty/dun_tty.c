@@ -184,15 +184,19 @@ static int dun_bt_read(struct file *file, char __user *buf,
 		return -ENODEV;
 
 	while (count) {
-		/* TODO: do we need to lock to check empty */
-		if (mutex_lock_interruptible(&dev->rx_lock))
-			return -ERESTARTSYS;
-
+		/*
+		 * Lock is not required for empty check as skb_dequeue() on
+		 * rxq is performed only in this execution context. We need to
+		 * acquire lock if empty check and dequeue operations can be
+		 * performed concurrently on rxq.
+		 */
 		if (skb_queue_empty(&dev->rxq)) {
-			mutex_unlock(&dev->rx_lock);
 			ret = -ENODATA;
 			break;
 		}
+		if (mutex_lock_interruptible(&dev->rx_lock))
+			return -ERESTARTSYS;
+
 		skb = skb_dequeue(&dev->rxq);
 		mutex_unlock(&dev->rx_lock);
 
