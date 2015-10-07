@@ -325,11 +325,28 @@ static struct miscdevice dun_bt = {
 /* ---- DUN TTY driver operations ---- */
 static int dun_tty_open(struct tty_struct *tty, struct file *filp)
 {
+	struct tty_port *port;
+	struct dun_dev *dev = dun_dev_get(0);
+
+	if (!dev)
+		return -ENODEV;
+
+	port = &dev->port;
+	tty_port_tty_set(port, tty);
+
 	return 0;
 }
 
 static void dun_tty_close(struct tty_struct *tty, struct file *filp)
 {
+	struct tty_port *port;
+	struct dun_dev *dev = dun_dev_get(0);
+
+	if (!dev)
+		return;
+
+	port = &dev->port;
+	tty_port_tty_set(port, NULL);
 }
 
 static int dun_tty_write(struct tty_struct *tty, const unsigned char *buf,
