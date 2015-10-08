@@ -460,13 +460,13 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 	if (phy->ahb2phy)
 		writel_relaxed(0x11, phy->ahb2phy + PERIPH_SS_AHB2PHY_TOP_CFG);
 
+	clk_set_rate(phy->pipe_clk, 125000000);
+	clk_prepare_enable(phy->pipe_clk);
+
 	writel_relaxed(0x01, phy->base + PCIE_USB3_PHY_POWER_DOWN_CONTROL);
 
 	/* Make sure that above write completed to get PHY into POWER DOWN */
 	mb();
-
-	clk_set_rate(phy->pipe_clk, 125000000);
-	clk_prepare_enable(phy->pipe_clk);
 
 	/* Main configuration */
 	if (configure_phy_regs(uphy, reg)) {
