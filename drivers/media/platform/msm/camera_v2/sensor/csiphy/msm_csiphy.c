@@ -71,10 +71,11 @@ static int msm_csiphy_lane_config(struct csiphy_device *csiphy_dev,
 
 	if (csiphy_dev->hw_version >= CSIPHY_VERSION_V30) {
 		val = msm_camera_io_r(csiphy_dev->clk_mux_base);
+		CDBG("%s:%d lane_mask = 0x%X, combo_mode = %d",__func__, __LINE__,  csiphy_params->lane_mask, csiphy_params->combo_mode);
 		if (csiphy_params->combo_mode &&
 			(csiphy_params->lane_mask & 0x18)) {
 			val &= ~0xf0;
-			val |= csiphy_params->csid_core << 4;
+			val |= csiphy_params->csid_core << 4 | 1 ;  /* Stereo Mode Config */
 		} else {
 			val &= ~0xf;
 			val |= csiphy_params->csid_core;

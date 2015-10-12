@@ -276,6 +276,112 @@ static int32_t msm_cci_data_queue(struct cci_device *cci_dev,
 	return rc;
 }
 
+static int32_t msm_cci_data_queue_dual(struct cci_device *cci_dev,
+	struct msm_camera_cci_ctrl *c_ctrl, enum cci_i2c_queue_t queue)
+{
+	uint16_t i = 0, j = 0, k = 0, h = 0, len = 0;
+	int32_t rc = 0;
+	uint32_t cmd = 0, delay = 0;
+	uint8_t data[11];
+	uint16_t reg_addr = 0;
+	struct msm_camera_i2c_reg_setting *i2c_msg =
+		&c_ctrl->cfg.cci_i2c_write_cfg;
+	uint16_t cmd_size = i2c_msg->size;
+	struct msm_camera_i2c_reg_array *i2c_cmd = i2c_msg->reg_setting;
+
+	if (i2c_cmd == NULL) {
+		pr_err("%s:%d Failed line\n", __func__,
+			__LINE__);
+		return -EINVAL;
+	}
+
+	if ((!cmd_size) || (cmd_size > CCI_I2C_MAX_WRITE)) {
+		pr_err("%s:%d Failed line\n", __func__, __LINE__);
+		return -EINVAL;
+	}
+
+	CDBG("%s addr type %d data type %d\n", __func__,
+		i2c_msg->addr_type, i2c_msg->data_type);
+
+	if (i2c_msg->addr_type >= MSM_CAMERA_I2C_ADDR_TYPE_MAX) {
+		pr_err("%s failed line %d\n", __func__, __LINE__);
+		return -EINVAL;
+	}
+	if (i2c_msg->data_type >= MSM_CAMERA_I2C_DATA_TYPE_MAX) {
+		pr_err("%s failed line %d\n", __func__, __LINE__);
+		return -EINVAL;
+	}
+	/* assume total size within the max queue */
+	while (cmd_size) {
+		CDBG("%s cmd_size %d addr 0x%x data 0x%x", __func__,
+			cmd_size, i2c_cmd->reg_addr, i2c_cmd->reg_data);
+		delay = i2c_cmd->delay;
+		data[i++] = CCI_I2C_WRITE_CMD;
+		if (i2c_cmd->reg_addr)
+			reg_addr = i2c_cmd->reg_addr;
+		/* either byte or word addr */
+		if (i2c_msg->addr_type == MSM_CAMERA_I2C_BYTE_ADDR)
+			data[i++] = reg_addr;
+		else {
+			data[i++] = (reg_addr & 0xFF00) >> 8;
+			data[i++] = reg_addr & 0x00FF;
+		}
+		/* max of 10 data bytes */
+		do {
+			if (i2c_msg->data_type == MSM_CAMERA_I2C_BYTE_DATA) {
+				data[i++] = i2c_cmd->reg_data;
+				reg_addr++;
+			} else {
+				if ((i + 1) <= 10) {
+					data[i++] = (i2c_cmd->reg_data &
+						0xFF00) >> 8; /* MSB */
+					data[i++] = i2c_cmd->reg_data &
+						0x00FF; /* LSB */
+					reg_addr += 2;
+				} else
+					break;
+			}
+			i2c_cmd++;
+		} while (--cmd_size && !i2c_cmd->reg_addr && (i <= 10));
+		data[0] |= ((i-1) << 4);
+		len = ((i-1)/4) + 1;
+		rc = msm_cci_validate_queue(cci_dev, len, MASTER_0, queue);
+		rc = msm_cci_validate_queue(cci_dev, len, MASTER_1, queue);
+		if (rc < 0) {
+			pr_err("%s: failed %d", __func__, __LINE__);
+			return rc;
+		}
+		for (h = 0, k = 0; h < len; h++) {
+			cmd = 0;
+			for (j = 0; (j < 4 && k < i); j++)
+				cmd |= (data[k++] << (j * 8));
+			CDBG("%s CCI_I2C_M0_Q0_LOAD_DATA_ADDR 0x%x\n",
+				__func__, cmd);
+			msm_camera_io_w(cmd, cci_dev->base +
+				CCI_I2C_M0_Q0_LOAD_DATA_ADDR +
+				MASTER_0 * 0x200 + queue * 0x100);
+			msm_camera_io_w(cmd, cci_dev->base +
+				CCI_I2C_M0_Q0_LOAD_DATA_ADDR +
+				MASTER_1 * 0x200 + queue * 0x100);
+		}
+		if ((delay > 0) && (delay < CCI_MAX_DELAY)) {
+			cmd = (uint32_t)((delay * CYCLES_PER_MICRO_SEC) /
+				0x100);
+			cmd <<= 4;
+			cmd |= CCI_I2C_WAIT_CMD;
+			CDBG("%s CCI_I2C_M0_Q0_LOAD_DATA_ADDR 0x%x\n",
+				__func__, cmd);
+			msm_camera_io_w(cmd, cci_dev->base +
+				CCI_I2C_M0_Q0_LOAD_DATA_ADDR +
+				MASTER_0 * 0x200 + queue * 0x100);
+			msm_camera_io_w(cmd, cci_dev->base +
+				CCI_I2C_M0_Q0_LOAD_DATA_ADDR +
+				MASTER_1 * 0x200 + queue * 0x100);
+		}
+		i = 0;
+	}
+	return rc;
+}
 static int32_t msm_cci_write_i2c_queue(struct cci_device *cci_dev,
 	uint32_t val,
 	enum cci_i2c_master_t master,
@@ -627,6 +733,134 @@ ERROR:
 	mutex_unlock(&cci_dev->cci_master_info[master].mutex);
 	return rc;
 }
+static int32_t msm_cci_i2c_write_dual(struct v4l2_subdev *sd,
+	struct msm_camera_cci_ctrl *c_ctrl)
+{
+	int32_t rc = 0;
+	struct cci_device *cci_dev;
+	uint32_t val;
+	enum cci_i2c_queue_t queue = QUEUE_0;
+	cci_dev = v4l2_get_subdevdata(sd);
+	if (c_ctrl->cci_info->cci_i2c_master > MASTER_MAX
+			|| c_ctrl->cci_info->cci_i2c_master < 0) {
+		pr_err("%s:%d Invalid I2C master addr\n", __func__, __LINE__);
+		return -EINVAL;
+	}
+	CDBG("%s set param sid 0x%x retries %d id_map %d\n", __func__,
+		c_ctrl->cci_info->sid, c_ctrl->cci_info->retries,
+		c_ctrl->cci_info->id_map);
+	mutex_lock(&cci_dev->cci_master_info[MASTER_0].mutex);
+	mutex_lock(&cci_dev->cci_master_info[MASTER_1].mutex);
+
+	/*
+	 * Call validate queue to make sure queue is empty before starting.
+	 * If this call fails, don't proceed with i2c_write call. This is to
+	 * avoid overflow / underflow of queue
+	 */
+	rc = msm_cci_validate_queue(cci_dev,
+		cci_dev->cci_i2c_queue_info[MASTER_0][queue].max_queue_size - 1,
+		MASTER_0, queue);
+	rc = msm_cci_validate_queue(cci_dev,
+		cci_dev->cci_i2c_queue_info[MASTER_1][queue].max_queue_size - 1,
+		MASTER_1, queue);
+	if (rc < 0) {
+		CDBG("%s:%d Initial validataion failed rc %d\n", __func__,
+			__LINE__, rc);
+		goto ERROR;
+	}
+	if (c_ctrl->cci_info->retries > CCI_I2C_READ_MAX_RETRIES) {
+		CDBG("%s:%d More than max retries\n", __func__,
+			__LINE__);
+		goto ERROR;
+	}
+
+	val = CCI_I2C_SET_PARAM_CMD | c_ctrl->cci_info->sid << 4 |
+		c_ctrl->cci_info->retries << 16 |
+		c_ctrl->cci_info->id_map << 18;
+	CDBG("%s:%d CCI_I2C_SET_PARAM_CMD\n", __func__, __LINE__);
+	rc = msm_cci_write_i2c_queue(cci_dev, val, MASTER_0, queue);
+	rc = msm_cci_write_i2c_queue(cci_dev, val, MASTER_1, queue);
+	if (rc < 0) {
+		CDBG("%s failed line %d\n", __func__, __LINE__);
+		goto ERROR;
+	}
+
+	val = CCI_I2C_LOCK_CMD;
+	CDBG("%s:%d CCI_I2C_LOCK_CMD\n", __func__, __LINE__);
+	rc = msm_cci_write_i2c_queue(cci_dev, val, MASTER_0, queue);
+	rc = msm_cci_write_i2c_queue(cci_dev, val, MASTER_1, queue);
+	if (rc < 0) {
+		CDBG("%s failed line %d\n", __func__, __LINE__);
+		goto ERROR;
+	}
+
+	rc = msm_cci_data_queue_dual(cci_dev, c_ctrl, queue);
+	if (rc < 0) {
+		CDBG("%s failed line %d\n", __func__, __LINE__);
+		goto ERROR;
+	}
+	val = CCI_I2C_UNLOCK_CMD;
+	CDBG("%s:%d CCI_I2C_UNLOCK_CMD\n", __func__, __LINE__);
+	rc = msm_cci_write_i2c_queue(cci_dev, val, MASTER_0, queue);
+	rc = msm_cci_write_i2c_queue(cci_dev, val, MASTER_1, queue);
+	if (rc < 0) {
+		CDBG("%s failed line %d\n", __func__, __LINE__);
+		goto ERROR;
+	}
+
+	val = CCI_I2C_REPORT_CMD | (1 << 8);
+	CDBG("%s:%d CCI_I2C_REPORT_CMD\n", __func__, __LINE__);
+	rc = msm_cci_write_i2c_queue(cci_dev, val, MASTER_0, queue);
+	rc = msm_cci_write_i2c_queue(cci_dev, val, MASTER_1, queue);
+	if (rc < 0) {
+		CDBG("%s failed line %d\n", __func__, __LINE__);
+		goto ERROR;
+	}
+
+	val = msm_camera_io_r(cci_dev->base + CCI_I2C_M0_Q0_CUR_WORD_CNT_ADDR +
+		MASTER_0 * 0x200 + queue * 0x100);
+	CDBG("%s:%d cur word count %d\n", __func__, __LINE__, val);
+	CDBG("%s:%d CCI_I2C_M0_Q0_EXEC_WORD_CNT_ADDR\n", __func__, __LINE__);
+	msm_camera_io_w(val, cci_dev->base + CCI_I2C_M0_Q0_EXEC_WORD_CNT_ADDR +
+		MASTER_0 * 0x200 + queue * 0x100);
+
+	val = msm_camera_io_r(cci_dev->base + CCI_I2C_M0_Q0_CUR_WORD_CNT_ADDR +
+		MASTER_1 * 0x200 + queue * 0x100);
+	CDBG("%s:%d cur word count %d\n", __func__, __LINE__, val);
+	CDBG("%s:%d CCI_I2C_M1_Q0_EXEC_WORD_CNT_ADDR\n", __func__, __LINE__);
+	msm_camera_io_w(val, cci_dev->base + CCI_I2C_M0_Q0_EXEC_WORD_CNT_ADDR +
+		MASTER_1 * 0x200 + queue * 0x100);
+
+	val = (1 << ((MASTER_1 * 2) + queue)) | (1 << ((MASTER_0 * 2) + queue));
+	CDBG("%s:%d CCI_QUEUE_START_ADDR\n", __func__, __LINE__);
+	msm_camera_io_w(val, cci_dev->base + CCI_QUEUE_START_ADDR);
+
+	CDBG("%s:%d E wait_for_completion_interruptible\n",
+		__func__, __LINE__);
+	rc = wait_for_completion_interruptible_timeout(&cci_dev->
+		cci_master_info[MASTER_0].reset_complete, CCI_TIMEOUT);
+	rc = wait_for_completion_interruptible_timeout(&cci_dev->
+		cci_master_info[MASTER_1].reset_complete, CCI_TIMEOUT);
+	if (rc <= 0) {
+		CDBG("%s: wait_for_completion_interruptible_timeout %d\n",
+			 __func__, __LINE__);
+		if (rc == 0)
+			rc = -ETIMEDOUT;
+		msm_cci_flush_queue(cci_dev, MASTER_0);
+		msm_cci_flush_queue(cci_dev, MASTER_1);
+		goto ERROR;
+	} else {
+	   rc = cci_dev->cci_master_info[MASTER_0].status;
+		rc = cci_dev->cci_master_info[MASTER_1].status;
+	}
+	CDBG("%s:%d X wait_for_completion_interruptible\n", __func__,
+		__LINE__);
+
+ERROR:
+	mutex_unlock(&cci_dev->cci_master_info[MASTER_0].mutex);
+	mutex_unlock(&cci_dev->cci_master_info[MASTER_1].mutex);
+	return rc;
+}
 
 static int msm_cci_subdev_g_chip_ident(struct v4l2_subdev *sd,
 			struct v4l2_dbg_chip_ident *chip)
@@ -792,6 +1026,9 @@ static int32_t msm_cci_config(struct v4l2_subdev *sd,
 		break;
 	case MSM_CCI_I2C_WRITE:
 		rc = msm_cci_i2c_write(sd, cci_ctrl);
+		break;
+	case MSM_CCI_I2C_WRITE_DUAL:
+		rc = msm_cci_i2c_write_dual(sd, cci_ctrl);
 		break;
 	case MSM_CCI_GPIO_WRITE:
 		break;

@@ -38,6 +38,12 @@
 #define CDBG(fmt, args...) do { } while (0)
 #endif
 
+static uint32_t default_csid_irq_cnt_mod = 10000;
+static uint32_t csid_vir_base_array[4] = {0};
+static uint32_t csid_irq_cnt_array[4] = {0};
+
+static uint32_t csid_vir_base = 0;
+static uint8_t csid_instance = 0;
 static int msm_csid_cid_lut(
 	struct msm_camera_csid_lut_params *csid_lut_params,
 	void __iomem *csidbase)
@@ -68,10 +74,12 @@ static int msm_csid_cid_lut(
 			8));
 		val |= (csid_lut_params->vc_cfg[i]->dt <<
 			((csid_lut_params->vc_cfg[i]->cid % 4) * 8));
+		CDBG("CSID_CID_LUT_VC_%d_ADDR = 0x%X", i, val);
 		msm_camera_io_w(val, csidbase + CSID_CID_LUT_VC_0_ADDR +
 			(csid_lut_params->vc_cfg[i]->cid >> 2) * 4);
 
 		val = (csid_lut_params->vc_cfg[i]->decode_format << 4) | 0x3;
+		CDBG("CSID_CID_%d_CFG_ADDR = 0x%X", i, val);
 		msm_camera_io_w(val, csidbase + CSID_CID_n_CFG_ADDR +
 			(csid_lut_params->vc_cfg[i]->cid * 4));
 	}

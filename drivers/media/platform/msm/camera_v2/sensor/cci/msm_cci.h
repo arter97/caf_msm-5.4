@@ -52,6 +52,7 @@ enum msm_cci_cmd_type {
 	MSM_CCI_I2C_READ,
 	MSM_CCI_I2C_WRITE,
 	MSM_CCI_GPIO_WRITE,
+	MSM_CCI_I2C_WRITE_DUAL,
 };
 
 struct msm_camera_cci_wait_sync_cfg {

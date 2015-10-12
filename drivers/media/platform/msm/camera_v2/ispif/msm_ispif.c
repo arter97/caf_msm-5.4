@@ -50,6 +50,9 @@
 #define CDBG(fmt, args...) do { } while (0)
 #endif
 
+#define STEREO_CSID CSID3
+#define STEREO_DEFAULT_3D_THRESHOLD 0x1B
+
 static void msm_ispif_io_dump_reg(struct ispif_device *ispif)
 {
 	if (!ispif->enb_dump_reg)
@@ -303,8 +306,17 @@ static void msm_ispif_sel_csid_core(struct ispif_device *ispif,
 	data = msm_camera_io_r(ispif->base + ISPIF_VFE_m_INPUT_SEL(vfe_intf));
 	switch (intftype) {
 	case PIX0:
+	   if (!(csid == STEREO_CSID)) {
 		data &= ~(BIT(1) | BIT(0));
 		data |= csid;
+	   }
+		else {
+		   data &= ~(BIT(1) | BIT(0));   /* Enable PIX0 input to VFE */
+		   data |= csid;
+		   data &= ~(BIT(9) | BIT(8));   /* Enable PIX1 input to VFE */
+		   data |= (csid << 8);
+		   CDBG("3D: Enable PIX1 INPUT_SEL = 0x%X", data);
+		}
 		break;
 	case RDI0:
 		data &= ~(BIT(5) | BIT(4));
@@ -324,6 +336,7 @@ static void msm_ispif_sel_csid_core(struct ispif_device *ispif,
 		break;
 	}
 
+	CDBG("ISPIF_VFE_m_INPUT_SEL = 0x%X", data);
 	msm_camera_io_w_mb(data, ispif->base +
 		ISPIF_VFE_m_INPUT_SEL(vfe_intf));
 }
@@ -489,6 +502,7 @@ static void msm_ispif_select_clk_mux(struct ispif_device *ispif,
 			ISPIF_RDI_CLK_MUX_SEL_ADDR);
 		break;
 	}
+	CDBG("MMSS_A_CAMSS_CSI_PIX_CLK_MUX_SEL 0xFDA00020 = 0x%X", data);
 	CDBG("%s intftype %d data %x\n", __func__, intftype, data);
 	mb();
 	return;
@@ -569,9 +583,14 @@ static int msm_ispif_config(struct ispif_device *ispif,
 			return -EINVAL;
 		}
 
-		if (ispif->csid_version >= CSID_VERSION_V30)
+		if (ispif->csid_version >= CSID_VERSION_V30){
 				msm_ispif_select_clk_mux(ispif, intftype,
 				params->entries[i].csid, vfe_intf);
+			 if ( params->entries[i].csid == STEREO_CSID ) {
+				CDBG("3D: Enable clk mux for PIX1");
+				msm_ispif_select_clk_mux(ispif, PIX1, params->entries[i].csid, vfe_intf);
+			 }
+		}
 
 		rc = msm_ispif_validate_intf_status(ispif, intftype, vfe_intf);
 		if (rc) {
@@ -586,6 +605,10 @@ static int msm_ispif_config(struct ispif_device *ispif,
 				&params->entries[i]);
 		msm_ispif_enable_intf_cids(ispif, intftype,
 			cid_mask, vfe_intf, 1);
+		if (params->entries[i].csid == STEREO_CSID) {
+			CDBG("3D: Enable intf_csid for PIX1");
+			msm_ispif_enable_intf_cids(ispif, PIX1, cid_mask, vfe_intf, 1);
+		}
 		if (params->entries[i].crop_enable)
 			msm_ispif_enable_crop(ispif, intftype, vfe_intf,
 				params->entries[i].crop_start_pixel,
@@ -673,20 +696,33 @@ static void msm_ispif_intf_cmd(struct ispif_device *ispif, uint32_t cmd_bits,
 				/* set cmd bits */
 				ispif->applied_intf_cmd[vfe_intf].intf_cmd |=
 					(cmd_bits << (vc * 2 + intf_type * 8));
+				if (params->entries[i].csid == STEREO_CSID) {
+				CDBG("%s:%d 3D mode : vc = %d , cid = %d ", __func__, __LINE__ , vc, cid);
+					///Add PIX1 interface
+					/* zero 2 bits */
+					ispif->applied_intf_cmd[vfe_intf].intf_cmd &=
+						~(0x3 << (vc * 2 + PIX1 * 8));
+					 /* set cmd bits */
+					ispif->applied_intf_cmd[vfe_intf].intf_cmd |=
+						(cmd_bits << (vc * 2 + PIX1 * 8));
+				}
 			}
 		}
 
 		/* cmd for PIX0, PIX1, RDI0, RDI1 */
-		if (ispif->applied_intf_cmd[vfe_intf].intf_cmd != 0xFFFFFFFF)
+		if (ispif->applied_intf_cmd[vfe_intf].intf_cmd != 0xFFFFFFFF){
+			CDBG("ISPIF_VFE_m_INTF_CMD_0 = 0x%X", ispif->applied_intf_cmd[vfe_intf].intf_cmd);
 			msm_camera_io_w_mb(
 				ispif->applied_intf_cmd[vfe_intf].intf_cmd,
 				ispif->base + ISPIF_VFE_m_INTF_CMD_0(vfe_intf));
+		}
 
 		/* cmd for RDI2 */
-		if (ispif->applied_intf_cmd[vfe_intf].intf_cmd1 != 0xFFFFFFFF)
+		if (ispif->applied_intf_cmd[vfe_intf].intf_cmd1 != 0xFFFFFFFF){
 			msm_camera_io_w_mb(
 				ispif->applied_intf_cmd[vfe_intf].intf_cmd1,
 				ispif->base + ISPIF_VFE_m_INTF_CMD_1(vfe_intf));
+		}
 	}
 }
 
@@ -721,10 +757,73 @@ static int msm_ispif_stop_immediately(struct ispif_device *ispif,
 		msm_ispif_enable_intf_cids(ispif, params->entries[i].intftype,
 			cid_mask, params->entries[i].vfe_intf, 0);
 	}
-
+	if (params->entries[i].csid == STEREO_CSID) {
+		CDBG("%s:%d   3D: Disable intf_csid for PIX1", __func__, __LINE__);
+		msm_ispif_enable_intf_cids(ispif, PIX1, cid_mask, params->entries[i].vfe_intf, 0);
+	}
 	return rc;
 }
 
+static int msm_ispif_config_3d_output(struct ispif_device *ispif,
+			struct msm_ispif_param_data *params)
+{
+	int i,j, rc = 0;
+	int entry_index=-1;
+	int csid_index=-1;
+	enum msm_ispif_csid csid;
+	enum msm_ispif_intftype intf_type;
+	enum msm_ispif_vfe_intf vfe_intf;
+
+	if (ispif->ispif_state != ISPIF_POWER_UP) {
+		pr_err("%s: ispif invalid state %d\n", __func__,
+			ispif->ispif_state);
+		rc = -EPERM;
+		return rc;
+	}
+	if (params->num > MAX_PARAM_ENTRIES) {
+		pr_err("%s: invalid param entries %d\n", __func__,
+			params->num);
+		rc = -EINVAL;
+		return rc;
+	}
+	BUG_ON(!ispif);
+	BUG_ON(!params);
+	CDBG("%s:%d - number of entries : %d \n",__func__, __LINE__, params->num);
+	for (i = 0; i < params->num; i++) {
+		 vfe_intf = params->entries[i].vfe_intf;
+		 if (!msm_ispif_is_intf_valid(ispif->csid_version, vfe_intf)) {
+			 pr_err("%s: invalid interface type\n", __func__);
+			 return -EPERM;;
+		 }
+		 if (params->entries[i].num_cids > MAX_CID_CH) {
+			 pr_err("%s: out of range of cid_num %d\n",
+				 __func__, params->entries[i].num_cids);
+			 return -EINVAL;
+		}
+		if (params->entries[i].csid == STEREO_CSID )
+		{
+			 entry_index =  i;
+			 csid = STEREO_CSID;
+		}
+		CDBG("%s:%d - number of cids : %d , csid = %d \n", __func__, __LINE__, params->entries[i].num_cids, params->entries[i].csid);
+		for (j = 0; j < params->entries[i].num_cids;j++)
+		{
+			CDBG("%s:%d - cids value =  %d \n",__func__, __LINE__, params->entries[i].cids[j]);
+		}
+	}
+
+	/* 3D mode if csid 3 */
+	if (entry_index != -1 && csid == STEREO_CSID ) {
+		intf_type = params->entries[entry_index].intftype;
+		vfe_intf = params->entries[entry_index].vfe_intf;
+		CDBG("%s:%d configure ISPIF for stereo mode", __func__, __LINE__);
+		msm_camera_io_w_mb(0x0, ispif->base + ISPIF_VFE_m_INTF_CMD_1(vfe_intf));
+		msm_camera_io_w_mb(0x3, ispif->base + ISPIF_VFE_m_OUTPUT_SEL(vfe_intf));
+		msm_camera_io_w_mb(STEREO_DEFAULT_3D_THRESHOLD, ispif->base + ISPIF_VFE_m_3D_THRESHOLD(vfe_intf));
+		msm_camera_io_w_mb(0x301, ispif->base + ISPIF_VFE_m_INPUT_SEL(vfe_intf));
+	}
+	return 0;
+}
 static int msm_ispif_start_frame_boundary(struct ispif_device *ispif,
 	struct msm_ispif_param_data *params)
 {
@@ -825,6 +924,10 @@ static int msm_ispif_stop_frame_boundary(struct ispif_device *ispif,
 		/* disable CIDs in CID_MASK register */
 		msm_ispif_enable_intf_cids(ispif, params->entries[i].intftype,
 			cid_mask, vfe_intf, 0);
+		if (params->entries[i].csid == STEREO_CSID) {
+			 CDBG("%s:%d - 3D: Disable intf_csid for PIX1", __func__ , __LINE__ );
+			 msm_ispif_enable_intf_cids(ispif, PIX1, cid_mask, vfe_intf, 0);
+		}
 	}
 
 end:
@@ -1082,6 +1185,7 @@ static long msm_ispif_cmd(struct v4l2_subdev *sd, void *arg)
 		msm_ispif_io_dump_reg(ispif);
 		break;
 	case ISPIF_START_FRAME_BOUNDARY:
+		rc = msm_ispif_config_3d_output(ispif, &pcdata->params);
 		rc = msm_ispif_start_frame_boundary(ispif, &pcdata->params);
 		msm_ispif_io_dump_reg(ispif);
 		break;
@@ -1156,6 +1260,7 @@ static int ispif_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 		goto end;
 	}
 	ispif->open_cnt--;
+	CDBG("Calling msm_ispif_release()");
 	if (ispif->open_cnt == 0)
 		msm_ispif_release(ispif);
 end:

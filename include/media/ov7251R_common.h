@@ -12,12 +12,12 @@
 *	GNU General Public License for more details.
 *
 */
-#ifndef __OV7251_COMMON_H____
-#define __OV7251_COMMON_H____
+#ifndef __OV7251R_COMMON_H____
+#define __OV7251R_COMMON_H____
 
 #include <media/msm_cam_sensor.h>
 
-static struct msm_sensor_power_setting ov7251_power_setting[] = {
+static struct msm_sensor_power_setting ov7251R_power_setting[] = {
     {
             .seq_type = SENSOR_VREG,
             .seq_val = CAM_VIO,

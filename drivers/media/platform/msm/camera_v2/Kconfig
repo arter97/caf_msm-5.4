@@ -118,6 +118,24 @@ config OV7251
 		preview and snapshot config at 640 * 480. This sensor driver
 		does not support auto focus.
 
+config OV7251L
+	bool "Sensor OV7251L (BAYER VGA)"
+	depends on MSMB_CAMERA
+	---help---
+		OmniVision VGA 640 * 480 Bayer Sensor, supports 1 mipi lane,
+		preview and snapshot config at 640 * 480 at 100 fps,
+		hfr video at 100 and 200 (320x240) fps. This sensor driver does
+		not support auto focus.
+
+config OV7251R
+	bool "Sensor OV7251R (BAYER VGA)"
+	depends on MSMB_CAMERA
+	---help---
+		OmniVision VGA 640 * 480 Bayer Sensor, supports 1 mipi lane,
+		preview and snapshot config at 640 * 480 at 100 fps,
+		hfr video at 100 and 200 (320x240) fps. This sensor driver does
+		not support auto focus.
+
 config IMX214
 	bool "Sensor IMX214 (BAYER 13M)"
 	depends on MSMB_CAMERA

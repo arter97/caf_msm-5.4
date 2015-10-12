@@ -761,8 +761,14 @@ int msm_sensor_config(struct msm_sensor_ctrl_t *s_ctrl, void __user *argp)
 		}
 
 		conf_array.reg_setting = reg_setting;
-		rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write_table(
-			s_ctrl->sensor_i2c_client, &conf_array);
+		if ( strcmp(s_ctrl->sensordata->sensor_name, "ov7251R") == 0 )
+		{
+			rc = msm_camera_cci_i2c_write_table_dual(s_ctrl->sensor_i2c_client, &conf_array);
+		}
+		else {
+			rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write_table(
+				s_ctrl->sensor_i2c_client, &conf_array);
+		}
 		kfree(reg_setting);
 		break;
 	}
