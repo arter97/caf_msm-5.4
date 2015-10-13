@@ -4983,7 +4983,7 @@ qpnp_chg_hwinit(struct qpnp_chg_chip *chip, u8 subtype,
 			rc = qpnp_chg_masked_write(chip,
 				chip->usb_chgpth_base + USB_OCP_THR,
 				OCP_THR_MASK,
-				OCP_THR_900_MA, 1);
+				OCP_THR_500_MA, 1);
 			if (rc)
 				pr_err("Failed to configure OCP rc = %d\n", rc);
 		}
