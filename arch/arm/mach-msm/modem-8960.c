@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -21,6 +21,10 @@
 #include <linux/module.h>
 #include <linux/debugfs.h>
 #include <mach/mdm2.h>
+#include <linux/fs.h>
+#include <linux/syscalls.h>
+#include <linux/uaccess.h>
+#include <linux/tty.h>
 
 #include <mach/irqs.h>
 #include <mach/scm.h>
@@ -34,6 +38,9 @@
 #include "smd_private.h"
 #include "modem_notifier.h"
 #include "ramdump.h"
+#include <linux/fdtable.h>
+#include "../../../fs/internal.h"
+#include <linux/namei.h>
 
 static int crash_shutdown;
 
@@ -69,6 +76,101 @@ static void restart_modem(void)
 {
 	log_modem_sfr();
 	subsystem_restart_dev(modem_8960_dev);
+}
+
+#define MODEM_WAIT_BEFORE_OFF  3000
+
+static inline int build_open_flags(int flags, umode_t mode,
+				   struct open_flags *op)
+{
+	int lookup_flags = 0;
+	int acc_mode;
+
+	if (!(flags & O_CREAT))
+		mode = 0;
+	op->mode = mode;
+	flags &= ~FMODE_NONOTIFY;
+	if (flags & __O_SYNC)
+		flags |= O_DSYNC;
+	if (flags & O_PATH) {
+		flags &= O_DIRECTORY | O_NOFOLLOW | O_PATH;
+		acc_mode = 0;
+	} else {
+		acc_mode = MAY_OPEN | ACC_MODE(flags);
+	}
+	op->open_flag = flags;
+	if (flags & O_TRUNC)
+		acc_mode |= MAY_WRITE;
+	if (flags & O_APPEND)
+		acc_mode |= MAY_APPEND;
+	op->acc_mode = acc_mode;
+	op->intent = flags & O_PATH ? 0 : LOOKUP_OPEN;
+	if (flags & O_CREAT) {
+		op->intent |= LOOKUP_CREATE;
+		if (flags & O_EXCL)
+			op->intent |= LOOKUP_EXCL;
+	}
+	if (flags & O_DIRECTORY)
+		lookup_flags |= LOOKUP_DIRECTORY;
+	if (!(flags & O_NOFOLLOW))
+		lookup_flags |= LOOKUP_FOLLOW;
+	return lookup_flags;
+}
+
+static void modem_off(void)
+{
+	struct file *serial_fd;
+	mm_segment_t oldfs;
+	unsigned char cmd[] = "AT^SMSO\r";
+	int i = 0, n;
+	struct open_flags op;
+	int lookup = build_open_flags(O_RDWR | O_NOCTTY, 0, &op);
+	serial_fd = do_filp_open(AT_FDCWD, "/dev/ttyUSB0", &op, lookup);
+	if (IS_ERR(serial_fd)) {
+		pr_err("%s: Unable To Open File ttyUSB0, err %d\n", __func__,
+		       (int)PTR_ERR(serial_fd));
+		return;
+	}
+	oldfs = get_fs();
+	set_fs(KERNEL_DS);
+	serial_fd->f_pos = 0;
+	{
+		/*  Set speed */
+		struct termios settings;
+
+		serial_fd->f_op->unlocked_ioctl(serial_fd, TCGETS,
+						(unsigned long)&settings);
+		settings.c_iflag = 0;
+		settings.c_oflag = 0;
+		settings.c_lflag = 0;
+		settings.c_cflag = CLOCAL | CS8 | CREAD;
+		settings.c_cflag &= ~(PARENB | PARODD);
+		settings.c_cflag &= ~CRTSCTS;
+		settings.c_iflag = IGNBRK;
+		settings.c_cflag &= ~CSTOPB;
+		settings.c_cflag &= ~CSIZE;
+		settings.c_cc[VMIN] = 0;
+		settings.c_cc[VTIME] = 2;
+		settings.c_cflag |= B115200;
+		/* raw */
+		settings.c_iflag &=
+		    ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL
+		      | IXON);
+		settings.c_oflag &= ~OPOST;
+		settings.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
+		settings.c_cflag &= ~(CSIZE | PARENB);
+		settings.c_cflag |= CS8;
+		serial_fd->f_op->unlocked_ioctl(serial_fd, TCSETS,
+						(unsigned long)&settings);
+	}
+	do {
+		n = serial_fd->f_op->write(serial_fd, &cmd[i], 1,
+					   &serial_fd->f_pos);
+		i += n;
+	} while (cmd[i - 1] != '\r' && n > 0);
+	set_fs(oldfs);
+	filp_close(serial_fd, NULL);
+	msleep(MODEM_WAIT_BEFORE_OFF);
 }
 
 static void smsm_state_cb(void *data, uint32_t old_state, uint32_t new_state)
@@ -255,6 +357,15 @@ static int modem_debugfs_init(void)
 		&modem_debug_fops);
 	return 0;
 }
+
+int system_reboot_notifier(struct notifier_block *this,
+			   unsigned long code, void *x)
+{
+	pil_force_shutdown("gss");
+	modem_off();
+	return NOTIFY_DONE;
+}
+
 int system_shutdown_notifier(struct notifier_block *this,
 		unsigned long code, void *x)
 {
@@ -263,6 +374,12 @@ int system_shutdown_notifier(struct notifier_block *this,
 			SUBSYS_BEFORE_SHUTDOWN);
 	return NOTIFY_DONE;
 }
+
+static struct notifier_block reboot_notifier = {
+	.notifier_call = system_reboot_notifier,
+	.next = NULL,
+	.priority = INT_MAX,
+};
 
 static struct notifier_block shutdown_notifier = {
 	.notifier_call = system_shutdown_notifier,
@@ -295,10 +412,14 @@ static struct notifier_block qsc_powerup_notifier = {
 
 static int __init modem_8960_init(void)
 {
-	int ret;
+	int ret = 0;
 
-	if (soc_class_is_apq8064())
-		return -ENODEV;
+	if (soc_class_is_apq8064()) {
+		if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2()
+		    || machine_is_apq8064_adp2_es2p5())
+			register_reboot_notifier(&reboot_notifier);
+		goto out;
+	}
 
 	ret = smsm_state_cb_register(SMSM_MODEM_STATE, SMSM_RESET,
 		smsm_state_cb, 0);
