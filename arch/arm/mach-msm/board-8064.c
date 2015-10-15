@@ -1100,6 +1100,14 @@ static struct  lsm330_acc_platform_data lsm330_acc_data = {
 	.min_interval = LSM330_ACC_MIN_POLL_PERIOD_MS,
 	.gpio_int1 = 22,
 	.gpio_int2 = LSM330_ACC_DEFAULT_INT2_GPIO,
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	/*
+		max_buffer_time - buffer sensor samples upto 10 seconds
+		report_evt_cnt - Each sample has five events(X,Y,Z,TS(s),TS(ns))
+	 */
+	.max_buffer_time = 10,
+	.report_evt_cnt = 5,
+#endif
 };
 
 static struct i2c_board_info lsm330_acc_device_info[] __initdata = {

@@ -142,11 +142,18 @@ struct sensors_classdev {
 	unsigned int		delay_msec;
 	unsigned int		wakeup;
 	unsigned int		max_latency;
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	unsigned int            read_bootsampl;
+#endif
 	char			*params;
 	struct cal_result_t	cal_result;
 	/* enable and disable the sensor handle*/
 	int	(*sensors_enable)(struct sensors_classdev *sensors_cdev,
 					unsigned int enabled);
+#ifdef CONFIG_ENABLE_ACC_BUFFERING
+	int     (*read_boot_samples)(struct sensors_classdev *sensors_cdev,
+					unsigned int enable_read);
+#endif
 	int	(*sensors_poll_delay)(struct sensors_classdev *sensors_cdev,
 					unsigned int delay_msec);
 	int	(*sensors_self_test)(struct sensors_classdev *sensors_cdev);
