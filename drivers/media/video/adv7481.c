@@ -71,11 +71,14 @@ struct adv7481_state {
 	struct i2c_client *i2c_cp;
 	struct i2c_client *i2c_sdp;
 	struct i2c_client *i2c_rep;
+	struct i2c_client *i2c_cec;
 
 	/* device status and Flags */
 	int irq;
 	int device_num;
 	int powerup;
+
+	int cec_detected;
 
 	/* routing configuration data */
 	int csia_src;
@@ -317,6 +320,7 @@ static void adv7481_irq_delay_work(struct work_struct *work)
 
 	pr_debug("%s: dev: %d got int raw status: 0x%x\n", __func__,
 			state->device_num, status);
+	state->cec_detected = ADV_REG_GETFIELD(status, IO_INT_CEC_ST);
 
 	status = adv7481_rd_byte(state->client,
 			IO_REG_DATAPATH_INT_STATUS_ADDR);
@@ -446,10 +450,12 @@ static int adv7481_dev_init(struct adv7481_state *state,
 				IO_REG_SDP_SADDR >> 1);
 	state->i2c_rep = i2c_new_dummy(client->adapter,
 				IO_REG_HDMI_REP_SADDR >> 1);
+	state->i2c_cec = i2c_new_dummy(client->adapter,
+				IO_REG_CEC_SADDR >> 1);
 
 	if (!state->i2c_csi_txa || !state->i2c_csi_txb || !state->i2c_cp ||
 		!state->i2c_sdp || !state->i2c_hdmi || !state->i2c_edid ||
-		!state->i2c_rep) {
+		!state->i2c_rep || !state->i2c_cec) {
 		pr_err("%s: Additional I2C Client Fail\n", __func__);
 		ret = -EFAULT;
 		goto err_exit;
@@ -608,6 +614,107 @@ static int adv7481_s_power(struct v4l2_subdev *sd, int on)
 		state->powerup = on;
 
 	mutex_unlock(&state->mutex);
+	return ret;
+}
+
+static int adv7481_set_cec_logical_addr(struct adv7481_state *state, int *la)
+{
+	int rc = 0;
+	uint8_t val;
+
+	if (!la) {
+		pr_err("%s: NULL pointer provided\n", __func__);
+		return -EINVAL;
+	}
+
+	val = adv7481_rd_byte(state->i2c_cec, CEC_REG_LOG_ADDR_MASK_ADDR);
+	if (ADV_REG_GETFIELD(val, CEC_REG_LOG_ADDR_MASK0)) {
+		val = adv7481_rd_byte(state->i2c_cec,
+			CEC_REG_LOGICAL_ADDRESS0_1_ADDR);
+		val = ADV_REG_RSTFIELD(val, CEC_REG_LOGICAL_ADDRESS0);
+		val |= ADV_REG_SETFIELD(*la, CEC_REG_LOGICAL_ADDRESS0);
+		rc = adv7481_wr_byte(state->i2c_cec,
+			CEC_REG_LOGICAL_ADDRESS0_1_ADDR, val);
+	} else if (ADV_REG_GETFIELD(val, CEC_REG_LOG_ADDR_MASK1)) {
+		val = adv7481_rd_byte(state->i2c_cec,
+			CEC_REG_LOGICAL_ADDRESS0_1_ADDR);
+		val = ADV_REG_RSTFIELD(val, CEC_REG_LOGICAL_ADDRESS1);
+		val |= ADV_REG_SETFIELD(*la, CEC_REG_LOGICAL_ADDRESS1);
+		rc = adv7481_wr_byte(state->i2c_cec,
+			CEC_REG_LOGICAL_ADDRESS0_1_ADDR, val);
+	} else if (ADV_REG_GETFIELD(val, CEC_REG_LOG_ADDR_MASK2)) {
+		val = ADV_REG_SETFIELD(*la, CEC_REG_LOGICAL_ADDRESS2);
+		rc = adv7481_wr_byte(state->i2c_cec,
+			CEC_REG_LOGICAL_ADDRESS2_ADDR, val);
+	} else {
+		pr_err("No cec logical address mask set\n");
+	}
+
+	return rc;
+}
+
+static int adv7481_cec_powerup(struct adv7481_state *state, int *powerup)
+{
+	int rc = 0;
+	uint8_t val = 0;
+
+	if (!powerup) {
+		pr_err("%s: NULL pointer provided\n", __func__);
+		return -EINVAL;
+	}
+
+	pr_debug("%s: set power %d\n", __func__, *powerup);
+
+	val = ADV_REG_SETFIELD(*powerup, CEC_REG_CEC_POWER_UP);
+	rc = adv7481_wr_byte(state->i2c_cec,
+		CEC_REG_CEC_POWER_UP_ADDR, val);
+
+	return rc;
+}
+
+static long adv7481_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
+{
+	struct adv7481_state *state = to_state(sd);
+	int *ret_val = arg;
+	long ret = 0;
+	int param = 0;
+
+	pr_debug("Enter %s with command: 0x%x", __func__, cmd);
+
+	if (!sd)
+		return -EINVAL;
+
+	switch (cmd) {
+	case VIDIOC_HDMI_RX_CEC_S_LOGICAL:
+		ret = adv7481_set_cec_logical_addr(state, arg);
+		break;
+	case VIDIOC_HDMI_RX_CEC_CLEAR_LOGICAL:
+		ret = adv7481_set_cec_logical_addr(state, &param);
+		break;
+	case VIDIOC_HDMI_RX_CEC_G_PHYSICAL:
+		if (ret_val) {
+			*ret_val = 0;
+		} else {
+			pr_err("%s: NULL pointer provided\n", __func__);
+			ret = -EINVAL;
+		}
+		break;
+	case VIDIOC_HDMI_RX_CEC_G_CONNECTED:
+		if (ret_val) {
+			*ret_val = state->cec_detected;
+		} else {
+			pr_err("%s: NULL pointer provided\n", __func__);
+			ret = -EINVAL;
+		}
+		break;
+	case VIDIOC_HDMI_RX_CEC_S_ENABLE:
+		ret = adv7481_cec_powerup(state, arg);
+		break;
+	default:
+		pr_err("Not a typewriter! Command: 0x%x", cmd);
+		ret = -ENOTTY;
+		break;
+	}
 	return ret;
 }
 
@@ -1539,6 +1646,7 @@ static const struct v4l2_subdev_video_ops adv7481_video_ops = {
 
 static const struct v4l2_subdev_core_ops adv7481_core_ops = {
 	.s_power = adv7481_s_power,
+	.ioctl = adv7481_ioctl,
 };
 
 static const struct v4l2_ctrl_ops adv7481_ctrl_ops = {
@@ -1701,6 +1809,7 @@ static int adv7481_remove(struct i2c_client *client)
 	i2c_unregister_device(state->i2c_cp);
 	i2c_unregister_device(state->i2c_sdp);
 	i2c_unregister_device(state->i2c_rep);
+	i2c_unregister_device(state->i2c_cec);
 	mutex_destroy(&state->mutex);
 	kfree(state);
 

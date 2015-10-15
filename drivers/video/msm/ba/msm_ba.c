@@ -503,6 +503,113 @@ int msm_ba_streamoff(void *instance, enum v4l2_buf_type i)
 }
 EXPORT_SYMBOL(msm_ba_streamoff);
 
+long msm_ba_private_ioctl(void *instance, int cmd, void *arg)
+{
+	long rc = 0;
+	struct msm_ba_inst *inst = instance;
+	struct v4l2_subdev *sd = NULL;
+	int *s_ioctl = arg;
+
+	dprintk(BA_DBG, "Enter %s with command: 0x%x", __func__, cmd);
+
+	if (!inst)
+		return -EINVAL;
+
+	switch (cmd) {
+	case VIDIOC_HDMI_RX_CEC_S_LOGICAL: {
+		dprintk(BA_DBG, "VIDIOC_HDMI_RX_CEC_CLEAR_LOGICAL");
+		sd = inst->sd;
+		if (!sd) {
+			dprintk(BA_ERR, "No sd registered");
+			return -EINVAL;
+		}
+		if (s_ioctl) {
+			rc = v4l2_subdev_call(sd, core, ioctl, cmd, s_ioctl);
+			if (rc)
+				dprintk(BA_ERR, "%s failed on cmd: %d",
+					__func__, cmd);
+		} else {
+			dprintk(BA_ERR, "%s: NULL argument provided", __func__);
+			rc = -EINVAL;
+		}
+	}
+		break;
+	case VIDIOC_HDMI_RX_CEC_CLEAR_LOGICAL: {
+		dprintk(BA_DBG, "VIDIOC_HDMI_RX_CEC_CLEAR_LOGICAL");
+		sd = inst->sd;
+		if (!sd) {
+			dprintk(BA_ERR, "No sd registered");
+			return -EINVAL;
+		}
+		rc = v4l2_subdev_call(sd, core, ioctl, cmd, s_ioctl);
+		if (rc)
+			dprintk(BA_ERR, "%s failed on cmd: %d",
+				__func__, cmd);
+	}
+		break;
+	case VIDIOC_HDMI_RX_CEC_G_PHYSICAL: {
+		dprintk(BA_DBG, "VIDIOC_HDMI_RX_CEC_G_PHYSICAL");
+		sd = inst->sd;
+		if (!sd) {
+			dprintk(BA_ERR, "No sd registered");
+			return -EINVAL;
+		}
+		if (s_ioctl) {
+			rc = v4l2_subdev_call(sd, core, ioctl, cmd, s_ioctl);
+			if (rc)
+				dprintk(BA_ERR, "%s failed on cmd: %d",
+					__func__, cmd);
+		} else {
+			dprintk(BA_ERR, "%s: NULL argument provided", __func__);
+			rc = -EINVAL;
+		}
+	}
+		break;
+	case VIDIOC_HDMI_RX_CEC_G_CONNECTED: {
+		dprintk(BA_DBG, "VIDIOC_HDMI_RX_CEC_G_CONNECTED");
+		sd = inst->sd;
+		if (!sd) {
+			dprintk(BA_ERR, "No sd registered");
+			return -EINVAL;
+		}
+		if (s_ioctl) {
+			rc = v4l2_subdev_call(sd, core, ioctl, cmd, s_ioctl);
+			if (rc)
+				dprintk(BA_ERR, "%s failed on cmd: %d",
+					__func__, cmd);
+		} else {
+			dprintk(BA_ERR, "%s: NULL argument provided", __func__);
+			rc = -EINVAL;
+		}
+	}
+		break;
+	case VIDIOC_HDMI_RX_CEC_S_ENABLE: {
+		dprintk(BA_DBG, "VIDIOC_HDMI_RX_CEC_S_ENABLE");
+		sd = inst->sd;
+		if (!sd) {
+			dprintk(BA_ERR, "No sd registered");
+			return -EINVAL;
+		}
+		if (s_ioctl) {
+			rc = v4l2_subdev_call(sd, core, ioctl, cmd, s_ioctl);
+			if (rc)
+				dprintk(BA_ERR, "%s failed on cmd: %d",
+					__func__, cmd);
+		} else {
+			dprintk(BA_ERR, "%s: NULL argument provided", __func__);
+			rc = -EINVAL;
+		}
+	}
+		break;
+	default:
+		dprintk(BA_WARN, "Not a typewriter! Command: 0x%x", cmd);
+		rc = -ENOTTY;
+		break;
+	}
+	return rc;
+}
+EXPORT_SYMBOL(msm_ba_private_ioctl);
+
 int msm_ba_save_restore_input(void *instance, enum msm_ba_save_restore_ip sr)
 {
 	struct msm_ba_inst *inst = instance;

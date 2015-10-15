@@ -27,20 +27,22 @@
  * @i2c_hdmi:   hdmi I2C Map Address
  * @i2c_cp:     cp I2C Map Address
  * @i2c_sdp:    sdp I2C Map Address
+ * @i2c_rep:    hdmi repeater I2C Map Address
+ * @i2c_cec:    cec I2C Map Address
  */
 struct adv7481_platform_data {
-		int rstb_gpio;
-		int pwdnb_gpio;
-		int irq1_gpio;
-		int irq2_gpio;
-		int irq3_gpio;
-		int i2c_csi_txa;
-		int i2c_csi_txb;
-		int i2c_hdmi;
-		int i2c_cp;
-		int i2c_sdp;
-		int i2c_rep;
-
+	int rstb_gpio;
+	int pwdnb_gpio;
+	int irq1_gpio;
+	int irq2_gpio;
+	int irq3_gpio;
+	int i2c_csi_txa;
+	int i2c_csi_txb;
+	int i2c_hdmi;
+	int i2c_cp;
+	int i2c_sdp;
+	int i2c_rep;
+	int i2c_cec;
 };
 
 
