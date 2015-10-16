@@ -509,6 +509,7 @@ struct usb_gadget_ops {
  * @usb_core_id: Identifies the usb core controlled by this usb_gadget.
  *		 Used in case of more then one core operates concurrently.
  * @streaming_enabled: Enable streaming mode with usb core.
+ * @bam2bam_func_enabled; Indicates function using bam2bam is enabled or not.
  *
  * Gadgets have a mostly-portable "gadget driver" implementing device
  * functions, handling all usb configurations and interfaces.  Gadget
@@ -550,6 +551,7 @@ struct usb_gadget {
 	bool                remote_wakeup;
 	struct workqueue_struct         *func_wq;
 	bool				streaming_enabled;
+	bool				bam2bam_func_enabled;
 };
 
 static inline void set_gadget_data(struct usb_gadget *gadget, void *data)

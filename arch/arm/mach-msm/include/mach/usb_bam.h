@@ -14,7 +14,6 @@
 #define _USB_BAM_H_
 #include "sps.h"
 #include <mach/ipa.h>
-#include <linux/usb/msm_hsusb.h>
 
 enum usb_bam {
 	SSUSB_BAM = 0,

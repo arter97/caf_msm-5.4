@@ -581,7 +581,6 @@ static int msm_otg_reset(struct usb_phy *phy)
 	 */
 	if (motg->err_event_seen) {
 		dev_info(phy->dev, "performing USB h/w reset for recovery\n");
-		motg->err_event_seen = false;
 	} else if (pdata->disable_reset_on_disconnect && motg->reset_counter) {
 		return 0;
 	}
@@ -629,6 +628,12 @@ static int msm_otg_reset(struct usb_phy *phy)
 		/* Enable PMIC pull-up */
 		pm8xxx_usb_id_pullup(1);
 	}
+
+	/*
+	 * Enable USB BAM if USB BAM is enabled already before block reset as
+	 * block reset also resets USB BAM registers.
+	 */
+	msm_usb_bam_enable(HSUSB_BAM, phy->otg->gadget->bam2bam_func_enabled);
 
 	return 0;
 }
@@ -877,6 +882,8 @@ static void msm_otg_bus_vote(struct msm_otg *motg, enum usb_bus_vote vote)
 #define PHY_SUSPEND_TIMEOUT_USEC	(500 * 1000)
 #define PHY_RESUME_TIMEOUT_USEC	(100 * 1000)
 
+static void msm_otg_set_vbus_state(int online);
+
 #ifdef CONFIG_PM_SLEEP
 static int msm_otg_suspend(struct msm_otg *motg)
 {
@@ -908,6 +915,10 @@ static int msm_otg_suspend(struct msm_otg *motg)
 	/* !BSV, but its handling is in progress by otg sm_work */
 	sm_work_busy = !test_bit(B_SESS_VLD, &motg->inputs) &&
 			phy->state != OTG_STATE_B_IDLE;
+
+	/* Perform block reset to recover from UDC error events on disconnect */
+	if (motg->err_event_seen)
+		msm_otg_reset(phy);
 
 	/*
 	 * Abort suspend when,
@@ -1114,6 +1125,12 @@ static int msm_otg_suspend(struct msm_otg *motg)
 	wake_unlock(&motg->wlock);
 
 	dev_info(phy->dev, "USB in low power mode\n");
+
+	if (motg->err_event_seen) {
+		motg->err_event_seen = false;
+		if (motg->vbus_state != test_bit(B_SESS_VLD, &motg->inputs))
+			msm_otg_set_vbus_state(motg->vbus_state);
+	}
 
 	return 0;
 }
@@ -2671,7 +2688,6 @@ static void msm_otg_sm_work(struct work_struct *w)
 			motg->chg_state = USB_CHG_STATE_UNDEFINED;
 			motg->chg_type = USB_INVALID_CHARGER;
 			msm_otg_notify_charger(motg, 0);
-			msm_otg_reset(otg->phy);
 			/*
 			 * There is a small window where ID interrupt
 			 * is not monitored during ID detection circuit
@@ -3320,6 +3336,11 @@ static void msm_otg_set_vbus_state(int online)
 {
 	static bool init;
 	struct msm_otg *motg = the_msm_otg;
+
+	motg->vbus_state = online;
+
+	if (motg->err_event_seen)
+		return;
 
 	if (online) {
 		pr_debug("PMIC: BSV set\n");

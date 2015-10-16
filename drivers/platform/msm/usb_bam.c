@@ -3136,6 +3136,25 @@ void msm_bam_notify_lpm_resume()
 }
 EXPORT_SYMBOL(msm_bam_notify_lpm_resume);
 
+bool msm_usb_bam_enable(enum usb_bam bam, bool bam_enable)
+{
+	struct msm_usb_bam_platform_data *pdata;
+
+	if (!ctx.usb_bam_pdev)
+		return 0;
+
+	pdata = ctx.usb_bam_pdev->dev.platform_data;
+	if ((bam != HSUSB_BAM) || !(bam_enable ||
+					pdata->enable_hsusb_bam_on_boot))
+		return 0;
+
+	msm_hw_bam_disable(1);
+	sps_device_reset(ctx.h_bam[bam]);
+	msm_hw_bam_disable(0);
+
+	return 0;
+}
+EXPORT_SYMBOL(msm_usb_bam_enable);
 
 void msm_bam_hsic_reset(void)
 {
