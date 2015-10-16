@@ -70,6 +70,13 @@ static void ci13xxx_msm_disconnect(void)
 				ULPI_MISC_A_VBUSVLDEXT |
 				ULPI_MISC_A_VBUSVLDEXTSEL,
 				ULPI_CLR(ULPI_MISC_A));
+
+	/* Clear BIT(31) to disable AHB2AHB Bypass functionality */
+	if (udc->udc_driver->flags & CI13XXX_ENABLE_AHB2AHB_BYPASS) {
+		hw_awrite(ABS_AHBMODE, AHB2AHB_BYPASS, 0);
+		pr_debug("%s(): ByPass Mode is disabled. AHBMODE:%x\n",
+				__func__, hw_aread(ABS_AHBMODE, ~0));
+	}
 }
 
 /* Link power management will reduce power consumption by
@@ -131,6 +138,13 @@ static void ci13xxx_msm_reset(void)
 
 	writel_relaxed(0, USB_AHBBURST);
 	writel_relaxed(0x08, USB_AHBMODE);
+
+	/* Set BIT(31) to enable AHB2AHB Bypass functionality */
+	if (udc->udc_driver->flags & CI13XXX_ENABLE_AHB2AHB_BYPASS) {
+		hw_awrite(ABS_AHBMODE, AHB2AHB_BYPASS, AHB2AHB_BYPASS);
+		pr_debug("%s(): ByPass Mode is enabled. AHBMODE:%x\n",
+				__func__, hw_aread(ABS_AHBMODE, ~0));
+	}
 
 	if (udc->gadget.l1_supported)
 		ci13xxx_msm_set_l1(udc);
@@ -343,6 +357,10 @@ static int ci13xxx_msm_probe(struct platform_device *pdev)
 				1 << (pdata->log2_itc-1);
 
 		is_l1_supported = pdata->l1_supported;
+		/* Set ahb2ahb bypass flag if it is requested. */
+		if (pdata->enable_ahb2ahb_bypass)
+			ci13xxx_msm_udc_driver.flags |=
+				CI13XXX_ENABLE_AHB2AHB_BYPASS;
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);

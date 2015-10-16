@@ -483,6 +483,20 @@ static int msm_otg_phy_reset(struct msm_otg *motg)
 	int retries;
 	struct msm_otg_platform_data *pdata = motg->pdata;
 
+	/*
+	 * AHB2AHB Bypass mode shouldn't be enable before doing
+	 * async clock reset. If it is enable, disable the same.
+	 */
+	val = readl_relaxed(USB_AHBMODE);
+	if (val & AHB2AHB_BYPASS) {
+		pr_err("%s(): AHB2AHB_BYPASS SET: AHBMODE:%x\n",
+						__func__, val);
+		val &= ~AHB2AHB_BYPASS_BIT_MASK;
+		writel_relaxed(val | AHB2AHB_BYPASS_CLEAR, USB_AHBMODE);
+		pr_err("%s(): AHBMODE: %x\n", __func__,
+				readl_relaxed(USB_AHBMODE));
+	}
+
 	ret = msm_otg_link_clk_reset(motg, 1);
 	if (ret)
 		return ret;
@@ -1157,8 +1171,15 @@ static int msm_otg_resume(struct msm_otg *motg)
 	disable_irq(motg->irq);
 	wake_lock(&motg->wlock);
 
-	/* Some platforms require BUS vote to enable/disable clocks */
-	msm_otg_bus_vote(motg, USB_MIN_PERF_VOTE);
+	/*
+	 * If we are resuming from the device bus suspend, restore
+	 * the max performance bus vote. Otherwise put a minimum
+	 * bus vote to satisfy the requirement for enabling clocks.
+	 */
+	if (motg->device_bus_suspend && debug_bus_voting_enabled)
+		msm_otg_bus_vote(motg, USB_MAX_PERF_VOTE);
+	else
+		msm_otg_bus_vote(motg, USB_MIN_PERF_VOTE);
 
 	/* Vote for TCXO when waking up the phy */
 	if (motg->lpm_flags & XO_SHUTDOWN) {
@@ -1477,6 +1498,13 @@ static void msm_otg_start_host(struct usb_otg *otg, int on)
 			ulpi_write(otg->phy, OTG_COMP_DISABLE,
 				ULPI_SET(ULPI_PWR_CLK_MNG_REG));
 
+		/* AHB2AHB bypass requires USB RESET for DEVICE <--> HOST */
+		if (pdata->enable_ahb2ahb_bypass) {
+			/* mark err_event to force reset */
+			motg->err_event_seen = true;
+			msm_otg_reset(otg->phy);
+			motg->err_event_seen = false;
+		}
 		/*
 		 * Some boards have a switch cotrolled by gpio
 		 * to enable/disable internal HUB. Enable internal
@@ -1509,6 +1537,13 @@ static void msm_otg_start_host(struct usb_otg *otg, int on)
 			ulpi_write(otg->phy, OTG_COMP_DISABLE,
 				ULPI_CLR(ULPI_PWR_CLK_MNG_REG));
 
+		/* AHB2AHB bypass requires USB RESET for DEVICE <--> HOST */
+		if (pdata->enable_ahb2ahb_bypass) {
+			/* mark err_event to force reset */
+			motg->err_event_seen = true;
+			msm_otg_reset(otg->phy);
+			motg->err_event_seen = false;
+		}
 		/* Configure BUS performance parameters to default */
 		if (motg->bus_perf_client) {
 			ret = msm_bus_scale_client_update_request(
@@ -3903,6 +3938,8 @@ static struct platform_device *msm_otg_add_pdev(
 		ci_pdata.log2_itc = otg_pdata->log2_itc;
 		ci_pdata.usb_core_id = 0;
 		ci_pdata.l1_supported = otg_pdata->l1_supported;
+		ci_pdata.enable_ahb2ahb_bypass =
+				otg_pdata->enable_ahb2ahb_bypass;
 		retval = platform_device_add_data(pdev, &ci_pdata,
 			sizeof(ci_pdata));
 		if (retval)
@@ -4072,6 +4109,8 @@ struct msm_otg_platform_data *msm_otg_dt_to_pdata(struct platform_device *pdev)
 
 	pdata->l1_supported = of_property_read_bool(node,
 				"qcom,hsusb-l1-supported");
+	pdata->enable_ahb2ahb_bypass = of_property_read_bool(node,
+				"qcom,ahb-async-bridge-bypass");
 
 	res_gpio = of_get_named_gpio(node, "qcom,hsusb-otg-vddmin-gpio", 0);
 	if (res_gpio < 0)
