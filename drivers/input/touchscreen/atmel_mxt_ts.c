@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2010 Samsung Electronics Co.Ltd
  * Author: Joonyoung Shim <jy0922.shim@samsung.com>
- * Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -303,6 +303,8 @@ enum mxt_device_state { INIT, APPMODE, BOOTLOADER };
 #define UH928_SLAVE_ADDR	0x2C
 #define SX1509_SLAVE_ADDR	0x3E
 #define MXT_SLAVE_ADDR		0x5B
+#define MXT_ISR_IN_SERVICE	0x03
+#define MXT_ISR_DONE		0x01
 
 #define	DISPLAY_NAME_LENGTH_MAX	16
 
@@ -1069,8 +1071,11 @@ static irqreturn_t mxt_interrupt(int irq, void *dev_id)
 		return IRQ_HANDLED;
 	}
 
-	if (data->pdata->iox_support)
+	if (data->pdata->iox_support) {
+		mxt_write_object(data, MXT_SPT_COMMSCONFIG_T18, 1,
+							MXT_ISR_IN_SERVICE);
 		mxt_clear_irq_s1509(data->client);
+	}
 
 	do {
 		if (mxt_read_message(data, &message)) {
@@ -1102,6 +1107,9 @@ static irqreturn_t mxt_interrupt(int irq, void *dev_id)
 	} while (reportid != 0xff);
 
 end:
+	if (data->pdata->iox_support)
+		mxt_write_object(data, MXT_SPT_COMMSCONFIG_T18, 1,
+							MXT_ISR_DONE);
 	return IRQ_HANDLED;
 }
 
