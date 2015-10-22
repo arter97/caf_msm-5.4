@@ -1549,7 +1549,7 @@ static int wfd_dev_setup(struct wfd_device *wfd_dev, int dev_num,
 	video_set_drvdata(wfd_dev->pvdev, wfd_dev);
 
 	v4l2_subdev_init(&wfd_dev->mdp_sdev, &mdp_subdev_ops);
-	strncpy(wfd_dev->mdp_sdev.name, "wfd-mdp", V4L2_SUBDEV_NAME_SIZE);
+	strlcpy(wfd_dev->mdp_sdev.name, "wfd-mdp", V4L2_SUBDEV_NAME_SIZE);
 	rc = v4l2_device_register_subdev(&wfd_dev->v4l2_dev,
 			&wfd_dev->mdp_sdev);
 	if (rc) {
@@ -1558,7 +1558,7 @@ static int wfd_dev_setup(struct wfd_device *wfd_dev, int dev_num,
 	}
 
 	v4l2_subdev_init(&wfd_dev->enc_sdev, &enc_subdev_ops);
-	strncpy(wfd_dev->enc_sdev.name, "wfd-venc", V4L2_SUBDEV_NAME_SIZE);
+	strlcpy(wfd_dev->enc_sdev.name, "wfd-venc", V4L2_SUBDEV_NAME_SIZE);
 	rc = v4l2_device_register_subdev(&wfd_dev->v4l2_dev,
 			&wfd_dev->enc_sdev);
 	if (rc) {
@@ -1572,7 +1572,7 @@ static int wfd_dev_setup(struct wfd_device *wfd_dev, int dev_num,
 	}
 
 	v4l2_subdev_init(&wfd_dev->vsg_sdev, &vsg_subdev_ops);
-	strncpy(wfd_dev->vsg_sdev.name, "wfd-vsg", V4L2_SUBDEV_NAME_SIZE);
+	strlcpy(wfd_dev->vsg_sdev.name, "wfd-vsg", V4L2_SUBDEV_NAME_SIZE);
 	rc = v4l2_device_register_subdev(&wfd_dev->v4l2_dev,
 			&wfd_dev->vsg_sdev);
 	if (rc) {
