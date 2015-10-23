@@ -78,4 +78,5 @@ int msm_ba_unsubscribe_event(void *instance,
 int msm_ba_s_parm(void *instance, struct v4l2_streamparm *a);
 int msm_ba_register_subdev_node(struct v4l2_subdev *sd);
 int msm_ba_unregister_subdev_node(struct v4l2_subdev *sd);
+long msm_ba_private_ioctl(void *instance, int cmd, void *s_ioctl);
 #endif
