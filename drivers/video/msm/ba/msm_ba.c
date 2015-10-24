@@ -631,7 +631,11 @@ int msm_ba_save_restore_input(void *instance, enum msm_ba_save_restore_ip sr)
 		msm_ba_reset_ip_in_use_from_sd(inst->sd);
 		ba_input = msm_ba_find_input_from_sd(inst->sd,
 					inst->saved_input);
-		ba_input->in_use = 1;
+		if (ba_input)
+			ba_input->in_use = 1;
+		else
+			dprintk(BA_WARN, "Could not find input %d from sd: %s",
+				inst->saved_input, inst->sd->name);
 		inst->restore = 0;
 		inst->saved_input = BA_IP_MAX;
 		dprintk(BA_DBG, "Stream on from save restore");
