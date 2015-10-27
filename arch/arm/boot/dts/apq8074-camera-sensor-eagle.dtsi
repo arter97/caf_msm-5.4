@@ -212,10 +212,10 @@
 		status = "ok";
 	};
 
-	qcom,camera@e0 {
+	qcom,camera@c0 {
 		compatible = "qcom,ov7251";
-		reg = <0xe0>;
-		qcom,slave-id = <0xe0 0x300A 0x7750>;
+		reg = <0xc0>;
+		qcom,slave-id = <0xc0 0x300A 0x7750>;
 		qcom,csiphy-sd-index = <1>;
 		qcom,csid-sd-index = <2>;
 		qcom,mount-angle = <0>;
@@ -246,10 +246,10 @@
 		qcom,cci-master = <0>;
 		status = "ok";
 	};
-qcom,camera@c0 {
+qcom,camera@e0 {
 		compatible = "qcom,ov7251L";
-		reg = <0xc0>;
-		qcom,slave-id = <0xc0 0x300A 0x7750>;
+		reg = <0xe0>;
+		qcom,slave-id = <0xe0 0x300A 0x7750>;
 		qcom,csiphy-sd-index = <2>;
 		qcom,csid-sd-index = <1>;
 		qcom,mount-angle = <270>;

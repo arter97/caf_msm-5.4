@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2013,2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -45,6 +45,9 @@ struct csiphy_device {
 	struct clk *csiphy_clk[4];
 	uint8_t ref_count;
 	uint16_t lane_mask[MAX_CSIPHY];
+
+	uint32_t irq_enable_ref_count;
+	uint32_t clk_start_cnt;
 };
 
 #define VIDIOC_MSM_CSIPHY_RELEASE \

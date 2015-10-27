@@ -30,6 +30,10 @@
 #define CSIPHY_VERSION_V30                        0x10
 #define MSM_CSIPHY_DRV_NAME                      "msm_csiphy"
 
+#define MIPI_CSIPHY_INTERRUPT_MASK6_ADDR         (MIPI_CSIPHY_INTERRUPT_MASK_ADDR + 0x4*6)
+#define LN1_CLK_START                            0x1
+#define LN3_CLK_START                            0x10
+#define CSIPHY2                                  2
 #undef CDBG
 #ifdef CONFIG_MSMB_CAMERA_DEBUG
 #define CDBG(fmt, args...) pr_err(fmt, ##args)
@@ -139,18 +143,26 @@ static irqreturn_t msm_csiphy_irq(int irq_num, void *data)
 		irq = msm_camera_io_r(
 			csiphy_dev->base +
 			MIPI_CSIPHY_INTERRUPT_STATUS0_ADDR + 0x4*i);
-		msm_camera_io_w(irq,
-			csiphy_dev->base +
-			MIPI_CSIPHY_INTERRUPT_CLEAR0_ADDR + 0x4*i);
-		pr_err("%s MIPI_CSIPHY%d_INTERRUPT_STATUS%d = 0x%x\n",
-			 __func__, csiphy_dev->pdev->id, i, irq);
-		msm_camera_io_w(0x1, csiphy_dev->base +
-			MIPI_CSIPHY_GLBL_IRQ_CMD_ADDR);
-		msm_camera_io_w(0x0, csiphy_dev->base +
-			MIPI_CSIPHY_GLBL_IRQ_CMD_ADDR);
-		msm_camera_io_w(0x0,
-			csiphy_dev->base +
-			MIPI_CSIPHY_INTERRUPT_CLEAR0_ADDR + 0x4*i);
+		if (irq != 0){
+			if (i == 6 ){
+				if ( ((irq & LN1_CLK_START) == LN1_CLK_START) && ((irq & LN3_CLK_START) == LN3_CLK_START) )
+					csiphy_dev->clk_start_cnt = 1;
+				else
+					csiphy_dev->clk_start_cnt = 0;
+			}
+			msm_camera_io_w(irq,
+				csiphy_dev->base +
+				MIPI_CSIPHY_INTERRUPT_CLEAR0_ADDR + 0x4*i);
+			pr_err("%s MIPI_CSIPHY%d_INTERRUPT_STATUS%d = 0x%x\n",
+				 __func__, csiphy_dev->pdev->id, i, irq);
+			msm_camera_io_w(0x1, csiphy_dev->base +
+				MIPI_CSIPHY_GLBL_IRQ_CMD_ADDR);
+			msm_camera_io_w(0x0, csiphy_dev->base +
+				MIPI_CSIPHY_GLBL_IRQ_CMD_ADDR);
+			msm_camera_io_w(0x0,
+				csiphy_dev->base +
+				MIPI_CSIPHY_INTERRUPT_CLEAR0_ADDR + 0x4*i);
+		}
 	}
 	return IRQ_HANDLED;
 }
@@ -188,6 +200,23 @@ static struct msm_cam_clk_info csiphy_8974_clk_info[] = {
 	{"csiphy_timer_src_clk", 200000000},
 	{"csiphy_timer_clk", -1},
 };
+
+static void msm_csiphy_enable_irq(struct csiphy_device *csiphy_dev)
+{
+	CDBG("%s %p %d\n", __func__, csiphy_dev, csiphy_dev->irq_enable_ref_count);
+	if (csiphy_dev->irq_enable_ref_count++)
+		return;
+	enable_irq(csiphy_dev->irq->start);
+}
+static void msm_csiphy_disable_irq(struct csiphy_device *csiphy_dev)
+{
+	CDBG("%s %p %d\n", __func__, csiphy_dev, csiphy_dev->irq_enable_ref_count);
+	if (!csiphy_dev->irq_enable_ref_count)
+		return;
+	if (--csiphy_dev->irq_enable_ref_count)
+		return;
+	disable_irq(csiphy_dev->irq->start);
+}
 
 #if DBG_CSIPHY
 static int msm_csiphy_init(struct csiphy_device *csiphy_dev)
@@ -273,7 +302,15 @@ static int msm_csiphy_init(struct csiphy_device *csiphy_dev)
 	}
 	CDBG("%s:%d called\n", __func__, __LINE__);
 
-	enable_irq(csiphy_dev->irq->start);
+	if ( csiphy_dev->pdev->id == CSIPHY2 ){
+		csiphy_dev->irq_enable_ref_count = 0;
+		csiphy_dev->clk_start_cnt = 0;
+		msm_csiphy_enable_irq(csiphy_dev);
+		CDBG("%s:%d csiphy dev id = %d , clk cnt = %d", __func__, __LINE__, csiphy_dev->pdev->id,csiphy_dev->clk_start_cnt);
+	}
+	else{
+		CDBG("%s:%d csiphy dev id = %d , clk cnt = %d", __func__, __LINE__, csiphy_dev->pdev->id,csiphy_dev->clk_start_cnt);
+	}
 
 	msm_csiphy_reset(csiphy_dev);
 
@@ -377,6 +414,16 @@ static int msm_csiphy_init(struct csiphy_device *csiphy_dev)
 	}
 	CDBG("%s:%d called\n", __func__, __LINE__);
 
+	if ( csiphy_dev->pdev->id == CSIPHY2 ){
+		csiphy_dev->irq_enable_ref_count = 0;
+		csiphy_dev->clk_start_cnt = 0;
+		msm_csiphy_enable_irq(csiphy_dev);
+		CDBG("%s:%d csiphy dev id = %d , clk cnt = %d", __func__, __LINE__, csiphy_dev->pdev->id,csiphy_dev->clk_start_cnt);
+	}
+	else{
+		CDBG("%s:%d csiphy dev id = %d , clk cnt = %d", __func__, __LINE__, csiphy_dev->pdev->id,csiphy_dev->clk_start_cnt);
+	}
+
 	msm_csiphy_reset(csiphy_dev);
 
 	CDBG("%s:%d called\n", __func__, __LINE__);
@@ -457,7 +504,12 @@ static int msm_csiphy_release(struct csiphy_device *csiphy_dev, void *arg)
 	msm_camera_io_w(0x0, csiphy_dev->base + MIPI_CSIPHY_LNCK_CFG2_ADDR);
 	msm_camera_io_w(0x0, csiphy_dev->base + MIPI_CSIPHY_GLBL_PWR_CFG_ADDR);
 
-	disable_irq(csiphy_dev->irq->start);
+	if ( csiphy_dev->pdev->id == CSIPHY2 )
+	{
+		msm_csiphy_disable_irq(csiphy_dev);
+	}else{
+		disable_irq(csiphy_dev->irq->start);
+	}
 
 	if (CSIPHY_VERSION == CSIPHY_VERSION_V20) {
 		msm_cam_clk_enable(&csiphy_dev->pdev->dev,
@@ -621,6 +673,54 @@ static int32_t msm_csiphy_get_subdev_id(struct csiphy_device *csiphy_dev,
 	return 0;
 }
 
+static int msm_csiphy_get_clk_start_count(struct csiphy_device *csiphy_dev, void *arg)
+{
+	uint32_t *clk_start_cnt = (uint32_t *)arg;
+	if (!clk_start_cnt) {
+		pr_err("%s:%d failed\n", __func__, __LINE__);
+		return -EINVAL;
+	}
+	*clk_start_cnt = csiphy_dev->clk_start_cnt;
+	CDBG("%s:%d clk_start_cnt %d\n", __func__, __LINE__, *clk_start_cnt);
+	return 0;
+}
+
+static int msm_csiphy_enable_clk_start_count(struct csiphy_device *csiphy_dev, void *arg)
+{
+	void __iomem *csiphybase = csiphy_dev->base;
+	uint32_t enable = *(uint32_t*)arg;
+	uint32_t val;
+
+	CDBG("%s\n", __func__);
+
+	if (!csiphybase) {
+		CDBG("%s: csiphybase NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	if (CSIPHY_VERSION != CSIPHY_VERSION_V30) {
+		CDBG("%s: invalid PHY version\n", __func__);
+		return -EINVAL;
+	}
+
+	val = msm_camera_io_r(csiphybase + MIPI_CSIPHY_INTERRUPT_MASK6_ADDR);
+    if (enable)
+    {
+        val |= (LN1_CLK_START | LN3_CLK_START);
+    } else
+    {
+        val &= ~(LN1_CLK_START | LN3_CLK_START);
+    }
+    msm_camera_io_w(val, csiphybase + MIPI_CSIPHY_INTERRUPT_MASK6_ADDR);
+
+	if (enable)
+		msm_csiphy_enable_irq(csiphy_dev);
+	else
+		msm_csiphy_disable_irq(csiphy_dev);
+
+	return 0;
+}
+
 static long msm_csiphy_subdev_ioctl(struct v4l2_subdev *sd,
 			unsigned int cmd, void *arg)
 {
@@ -634,6 +734,12 @@ static long msm_csiphy_subdev_ioctl(struct v4l2_subdev *sd,
 		break;
 	case VIDIOC_MSM_CSIPHY_IO_CFG:
 		rc = msm_csiphy_cmd(csiphy_dev, arg);
+		break;
+	case VIDIOC_MSM_CSIPHY_ENABLE_CLK_START_COUNT:
+		rc = msm_csiphy_enable_clk_start_count(csiphy_dev, arg);
+		break;
+	case VIDIOC_MSM_CSIPHY_GET_CLK_START_COUNT:
+		rc = msm_csiphy_get_clk_start_count(csiphy_dev, arg);
 		break;
 	case VIDIOC_MSM_CSIPHY_RELEASE:
 	case MSM_SD_SHUTDOWN:

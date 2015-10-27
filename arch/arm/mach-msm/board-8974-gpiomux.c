@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2013, 2015 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -194,6 +194,12 @@ static struct gpiomux_setting gpio_suspend_config[] = {
 		.drv = GPIOMUX_DRV_2MA,
 		.pull = GPIOMUX_PULL_NONE,
 		.dir = GPIOMUX_OUT_LOW,
+	},
+	{
+		.func = GPIOMUX_FUNC_GPIO,  /* Input-Pull Down */
+		.drv = GPIOMUX_DRV_2MA,
+		.pull = GPIOMUX_PULL_DOWN,
+		.dir = GPIOMUX_IN,
 	},
 };
 
@@ -737,6 +743,20 @@ static struct msm_gpiomux_config msm_blsp_configs_eagle[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &gpio_uart_config_func3,
 		},
 	},
+	{
+	.gpio = 80, /* 3D_LEFT_FSIN */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &gpio_suspend_config[2],
+			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[2],
+		},
+	},
+	{
+	.gpio = 102, /* 3D_RIGHT_FSIN */
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &gpio_suspend_config[2],
+			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[2],
+		},
+	},
 };
 
 static struct gpiomux_setting gpio_key_config = {
@@ -1169,13 +1189,6 @@ static struct msm_gpiomux_config msm_camera_sensor_configs_eagle[] __initdata = 
 	},
 	{
 		.gpio = 94, /* CAM2_RST_N */
-		.settings = {
-			[GPIOMUX_ACTIVE]    = &cam_settings[3],
-			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[1],
-		},
-	},
-	{
-		.gpio = 102, /* 3D_RIGHT_FSIN */
 		.settings = {
 			[GPIOMUX_ACTIVE]    = &cam_settings[3],
 			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[1],
