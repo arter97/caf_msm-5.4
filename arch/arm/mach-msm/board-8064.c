@@ -953,6 +953,12 @@ static int usb1_phy_init_seq[] = {
 	-1
 };
 
+static int usb1_adp_phy_init_seq[] = {
+	0x58, 0x81, /* update DC voltage level */
+	0x34, 0x82, /* set pre-emphasis and rise/fall time */
+	-1
+};
+
 static int usb3_phy_init_seq[] = {
 	0x58, 0x81, /* update DC voltage level */
 	0x14, 0x82, /* set pre-emphasis and rise/fall time */
@@ -1056,6 +1062,10 @@ static void __init apq8064_usb_otg_init(void)
 			&msm_ehci_host_pdata3;
 	apq8064_device_hsusb_usb4_host.dev.platform_data =
 			&msm_ehci_host_pdata4;
+
+	if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2() ||
+			machine_is_apq8064_adp2_es2p5())
+		msm_otg_usb1_pdata.phy_init_seq = usb1_adp_phy_init_seq;
 
 	if (machine_is_apq8064_adp_2() || machine_is_apq8064_adp2_es2() ||
 		machine_is_apq8064_mplatform() ||
