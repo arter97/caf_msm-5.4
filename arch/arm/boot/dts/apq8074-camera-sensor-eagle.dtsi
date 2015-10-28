@@ -45,8 +45,8 @@
 		qcom,cam-vreg-name = "cam_vdig", "cam_vio", "cam_vana",
 				     "cam_vaf";
 		qcom,cam-vreg-type = <0 1 0 0>;
-		qcom,cam-vreg-min-voltage = <1225000 0 2850000 3000000>;
-		qcom,cam-vreg-max-voltage = <1225000 0 2850000 3000000>;
+		qcom,cam-vreg-min-voltage = <1050000 0 2850000 2800000>;
+		qcom,cam-vreg-max-voltage = <1050000 0 2850000 2800000>;
 		qcom,cam-vreg-op-mode = <105000 0 80000 100000>;
 		qcom,gpio-no-mux = <0>;
 		gpios = <&msmgpio 15 0>,
@@ -88,8 +88,8 @@
 		qcom,cam-vreg-name = "cam_vdig", "cam_vio", "cam_vana",
 				     "cam_vaf";
 		qcom,cam-vreg-type = <0 1 0 0>;
-		qcom,cam-vreg-min-voltage = <1225000 0 2850000 3000000>;
-		qcom,cam-vreg-max-voltage = <1225000 0 2850000 3000000>;
+		qcom,cam-vreg-min-voltage = <1050000 0 2850000 2800000>;
+		qcom,cam-vreg-max-voltage = <1050000 0 2850000 2800000>;
 		qcom,cam-vreg-op-mode = <105000 0 80000 100000>;
 		qcom,gpio-no-mux = <0>;
 		gpios = <&msmgpio 15 0>,
@@ -131,8 +131,8 @@
 		qcom,cam-vreg-name = "cam_vdig", "cam_vio", "cam_vana",
 				     "cam_vaf";
 		qcom,cam-vreg-type = <0 1 0 0>;
-		qcom,cam-vreg-min-voltage = <1225000 0 2850000 3000000>;
-		qcom,cam-vreg-max-voltage = <1225000 0 2850000 3000000>;
+		qcom,cam-vreg-min-voltage = <1050000 0 2850000 2800000>;
+		qcom,cam-vreg-max-voltage = <1050000 0 2850000 2800000>;
 		qcom,cam-vreg-op-mode = <105000 0 80000 100000>;
 		gpios = <&msmgpio 15 0>,
 			<&msmgpio 90 0>,
@@ -164,8 +164,8 @@
 		qcom,cam-vreg-name = "cam_vdig", "cam_vio", "cam_vana",
 				     "cam_vaf";
 		qcom,cam-vreg-type = <0 1 0 0>;
-		qcom,cam-vreg-min-voltage = <1225000 0 2850000 3000000>;
-		qcom,cam-vreg-max-voltage = <1225000 0 2850000 3000000>;
+		qcom,cam-vreg-min-voltage = <1050000 0 2850000 2800000>;
+		qcom,cam-vreg-max-voltage = <1050000 0 2850000 2800000>;
 		qcom,cam-vreg-op-mode = <105000 0 80000 100000>;
 		gpios = <&msmgpio 16 0>,
 			<&msmgpio 92 0>,
@@ -196,8 +196,8 @@
 		qcom,cam-vreg-name = "cam_vdig", "cam_vio", "cam_vana",
 				     "cam_vaf";
 		qcom,cam-vreg-type = <0 1 0 0>;
-		qcom,cam-vreg-min-voltage = <1225000 0 2850000 3000000>;
-		qcom,cam-vreg-max-voltage = <1225000 0 2850000 3000000>;
+		qcom,cam-vreg-min-voltage = <1050000 0 2850000 2800000>;
+		qcom,cam-vreg-max-voltage = <1050000 0 2850000 2800000>;
 		qcom,cam-vreg-op-mode = <105000 0 80000 100000>;
 		qcom,gpio-no-mux = <0>;
 		gpios = <&msmgpio 17 0>,
@@ -225,8 +225,8 @@
 		cam_vio-supply = <&pm8941_lvs3>;
 		qcom,cam-vreg-name =  "cam_vana", "cam_vdig", "cam_vio";
 		qcom,cam-vreg-type = <0 0 1>;
-		qcom,cam-vreg-min-voltage = <2800000 1225000 0>;
-		qcom,cam-vreg-max-voltage = <2800000 1225000 0>;
+		qcom,cam-vreg-min-voltage = <2800000 1050000 0>;
+		qcom,cam-vreg-max-voltage = <2800000 1050000 0>;
 		qcom,cam-vreg-op-mode = <80000 105000 0>;
 		qcom,gpio-no-mux = <0>;
 		gpios = <&msmgpio 16 0>,
@@ -259,8 +259,8 @@ qcom,camera@c0 {
 		cam_vio-supply = <&pm8941_lvs3>;
 		qcom,cam-vreg-name =  "cam_vana", "cam_vdig", "cam_vio";
 		qcom,cam-vreg-type = <0 0 1>;
-		qcom,cam-vreg-min-voltage = <2800000 1225000 0>;
-		qcom,cam-vreg-max-voltage = <2800000 1225000 0>;
+		qcom,cam-vreg-min-voltage = <2800000 1050000 0>;
+		qcom,cam-vreg-max-voltage = <2800000 1050000 0>;
 		qcom,cam-vreg-op-mode = <80000 105000 0>;
 		qcom,gpio-no-mux = <0>;
 		gpios = <&msmgpio 17 0>,
@@ -294,8 +294,8 @@ qcom,camera@c0 {
 		cam_vio-supply = <&pm8941_lvs3>;
 		qcom,cam-vreg-name =  "cam_vana", "cam_vdig", "cam_vio";
 		qcom,cam-vreg-type = <0 0 1>;
-		qcom,cam-vreg-min-voltage = <2800000 1225000 0>;
-		qcom,cam-vreg-max-voltage = <2800000 1225000 0>;
+		qcom,cam-vreg-min-voltage = <2800000 1050000 0>;
+		qcom,cam-vreg-max-voltage = <2800000 1050000 0>;
 		qcom,cam-vreg-op-mode = <80000 105000 0>;
 		qcom,gpio-no-mux = <0>;
 		gpios = <&msmgpio 17 0>,
