@@ -33,7 +33,7 @@
 #include <asm/uaccess.h>
 #define TIMER_KHZ 32768
 
-int init_marker_proc_fs(void);
+int init_marker_sys_fs(void);
 void place_marker(char *name);
 extern char lk_splash_val[];
 extern unsigned long kernel_start_marker;

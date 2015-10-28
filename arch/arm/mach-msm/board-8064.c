@@ -4308,104 +4308,101 @@ struct boot_marker {
 
 static struct boot_marker boot_marker_list;
 
-static int print_boot_markers(char *page, char **start,
-			off_t off, int count,
-			int *eof, void *data)
+static ssize_t print_boot_markers(struct kobject *kobj,
+				struct kobj_attribute *attr,
+				char *buf)
 {
-	char *p = page;
+	char *p = buf;
 	struct boot_marker *marker;
 
 	list_for_each_entry(marker, &boot_marker_list.list, list) {
-		p += snprintf(p, MAX_PRINT_LEN, "%-22s:%ld.%03ld seconds\n",
+		p += scnprintf(p, MAX_PRINT_LEN, "%-22s:%ld.%03ld seconds\n",
 			marker->marker_name,
 			marker->timer_value/TIMER_KHZ,
 			(((marker->timer_value % TIMER_KHZ)
 			* 1000) / TIMER_KHZ));
 	}
-
-	return p-page;
+	return p-buf;
 }
 
-static int proc_write_response(struct file *file,
-				const char *buffer,
-				unsigned long count,
-				void *data)
+static ssize_t sys_write_response(struct kobject *kobj,
+				struct kobj_attribute *attr,
+				const char *buf, size_t count)
 {
-	int value_len;
-	char value[BOOT_MARKER_MAX_LEN] = {0};
-
-	value_len = (count < BOOT_MARKER_MAX_LEN) ? count :
-			 (BOOT_MARKER_MAX_LEN - 1);
-
-	if (copy_from_user(value, buffer, value_len))
-		return -EFAULT;
-
-	if (value_len > 0)
-		value[value_len] = '\0';
-
-	place_marker(value);
-	return value_len;
+	place_marker((char *) buf);
+	return count;
 }
 
-int init_marker_proc_fs(void)
-{
-	static struct proc_dir_entry *proc_parent;
-	static struct proc_dir_entry *proc_write_entry;
-	static struct proc_dir_entry *proc_read_entry;
+static struct kobj_attribute bootkpi_kpi_attr = {
+	.attr = {
+		.mode = S_IRUGO,
+		.name = "kpi_values",
+	},
+	.show = &print_boot_markers,
+};
 
+static struct kobj_attribute bootkpi_marker_attr = {
+	.attr = {
+		.mode = S_IWUGO,
+		.name = "marker_entry",
+	},
+	.store = &sys_write_response,
+};
+
+static struct attribute *bootkpi_entries[] = {
+	&bootkpi_kpi_attr.attr,
+	&bootkpi_marker_attr.attr,
+	NULL,
+};
+
+static struct attribute_group bootkpi_group = {
+	.attrs = bootkpi_entries,
+};
+
+int init_marker_sys_fs(void)
+{
+	struct kobject *bootkpi_obj;
 	struct boot_marker *new_boot_marker;
 	unsigned long int timer_value;
+	int ret = 0;
 
-	proc_parent = proc_mkdir("bootkpi", NULL);
-	if (!proc_parent) {
-		pr_err("Error creating proc entry\n");
-		return -ENOMEM;
-	}
+	bootkpi_obj = kobject_create_and_add("bootkpi", NULL);
+	if (bootkpi_obj) {
+		ret = sysfs_create_group(bootkpi_obj, &bootkpi_group);
+		if (ret >= 0) {
+			INIT_LIST_HEAD(&boot_marker_list.list);
 
-	proc_write_entry = create_proc_read_entry("kpi_values", 0666,
-						proc_parent,
-						print_boot_markers, NULL);
-	if (!proc_write_entry) {
-		pr_err("Error creating proc write entry\n");
-		return -ENOMEM;
-	}
-
-	/*
-	* create proc entry marker-entry for
-	* reading a init marker keyword
-	*/
-	proc_read_entry = create_proc_entry("marker_entry", 0666, proc_parent);
-	if (!proc_read_entry) {
-		pr_err("Error creating proc read entry\n");
-		return -ENOMEM;
-	}
-
-	proc_read_entry->read_proc = NULL;
-	proc_read_entry->write_proc = proc_write_response;
-
-	INIT_LIST_HEAD(&boot_marker_list.list);
-
-	if (strcmp(lk_splash_val, "0") == 0) {
-		pr_info("no splash screen marker value from LK\n");
+			if (strcmp(lk_splash_val, "0") == 0) {
+				pr_info(
+				"no splash screen marker value from LK\n");
+			} else {
+				new_boot_marker = kmalloc(
+						sizeof(*new_boot_marker),
+						GFP_KERNEL);
+				strlcpy(new_boot_marker->marker_name,
+					"Splash Screen",
+				sizeof(new_boot_marker->marker_name));
+				if (kstrtol(lk_splash_val, 10, &timer_value))
+					return -EINVAL;
+				new_boot_marker->timer_value = timer_value;
+				INIT_LIST_HEAD(&new_boot_marker->list);
+				list_add_tail(&(new_boot_marker->list),
+						&(boot_marker_list.list));
+			}
+			new_boot_marker = kmalloc(sizeof(*new_boot_marker),
+								GFP_KERNEL);
+			strlcpy(new_boot_marker->marker_name,
+					"Linux_Kernel-Start",
+					BOOT_MARKER_MAX_LEN);
+			new_boot_marker->timer_value = kernel_start_marker;
+			INIT_LIST_HEAD(&new_boot_marker->list);
+			list_add_tail(&(new_boot_marker->list),
+						&(boot_marker_list.list));
+		}
 	} else {
-		new_boot_marker = kmalloc(sizeof(*new_boot_marker),
-							 GFP_KERNEL);
-		strlcpy(new_boot_marker->marker_name, "Splash Screen",
-			sizeof(new_boot_marker->marker_name));
-		if (kstrtol(lk_splash_val, 10, &timer_value))
-			return -EINVAL;
-		new_boot_marker->timer_value = timer_value;
-		INIT_LIST_HEAD(&new_boot_marker->list);
-		list_add_tail(&(new_boot_marker->list),
-				&(boot_marker_list.list));
+		pr_err("Error creating sysfs entry\n");
+		return -ENOMEM;
 	}
-	new_boot_marker = kmalloc(sizeof(*new_boot_marker), GFP_KERNEL);
-	strlcpy(new_boot_marker->marker_name, "Linux_Kernel-Start",
-			BOOT_MARKER_MAX_LEN);
-	new_boot_marker->timer_value = kernel_start_marker;
-	INIT_LIST_HEAD(&new_boot_marker->list);
-	list_add_tail(&(new_boot_marker->list), &(boot_marker_list.list));
-
 	return 0;
 }
 
