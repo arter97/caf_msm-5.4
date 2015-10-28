@@ -374,8 +374,8 @@ static __be16 rmnet_ip_type_trans(struct sk_buff *skb)
 		protocol = htons(ETH_P_IPV6);
 		break;
 	default:
-		pr_err("[%s] rmnet_recv() L3 protocol decode error: 0x%02x",
-		       dev->name, skb->data[0] & 0xf0);
+                pr_err("rmnet_recv() L3 protocol decode error: 0x%02x",
+                        skb->data[0] & 0xf0);
 	}
 
 	return protocol;
