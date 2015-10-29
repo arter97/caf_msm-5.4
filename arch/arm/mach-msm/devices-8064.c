@@ -49,6 +49,7 @@
 #include <mach/mpm.h>
 #include <mach/iommu_domains.h>
 #include <mach/msm_cache_dump.h>
+#include <linux/pps-gpio.h>
 
 /* Address of GSBI blocks */
 #define MSM_GSBI1_PHYS		0x12440000
@@ -3803,3 +3804,23 @@ struct platform_device apq8064_cache_dump_device = {
 		.platform_data = &apq8064_cache_dump_pdata,
 	},
 };
+
+static struct pps_gpio_platform_data pps_platform_data = {
+	.assert_falling_edge = false,
+	.capture_clear = false,
+	.gpio_pin = 77,
+	.gpio_label = "pps",
+};
+
+struct platform_device pps_boottime = {
+	.name = "pps-gpio",
+	.id = 1,
+	.dev = {
+		.platform_data = &pps_platform_data
+	},
+};
+
+int __init add_pps_boottime()
+{
+	return platform_device_register(&pps_boottime);
+}

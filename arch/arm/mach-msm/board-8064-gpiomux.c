@@ -2263,6 +2263,22 @@ static struct msm_gpiomux_config apq8064_bt_configs[] __initdata = {
 	},
 };
 
+static struct gpiomux_setting gpio_pps_config = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+
+static struct msm_gpiomux_config pps_config[] __initdata = {
+	{
+		.gpio = 77,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &gpio_pps_config,
+			[GPIOMUX_SUSPENDED] = &gpio_pps_config,
+		},
+	},
+};
+
 void __init apq8064_init_gpiomux(void)
 {
 	int rc;
@@ -2497,4 +2513,6 @@ void __init apq8064_init_gpiomux(void)
 			msm_gpiomux_install(apq8064_uartdm_gsbi4_configs,
 				ARRAY_SIZE(apq8064_uartdm_gsbi4_configs));
 	}
+	msm_gpiomux_install(pps_config,
+			ARRAY_SIZE(pps_config));
 }
