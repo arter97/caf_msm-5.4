@@ -157,10 +157,15 @@
 	status = "ok";
 };
 
+&pm8941_lvs1 {
+	regulator-always-on;
+};
+
 &pm8941_l18 {
 	regulator-min-microvolt = <2850000>;
 	regulator-max-microvolt = <2850000>;
 	qcom,init-voltage = <2850000>;
+	regulator-always-on;
 };
 
 
