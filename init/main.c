@@ -655,7 +655,7 @@ asmlinkage void __init start_kernel(void)
 	sfi_init_late();
 
 #ifdef CONFIG_BOOT_TIME_MARKER
-	init_marker_proc_fs();
+	init_marker_sys_fs();
 #endif
 	if (efi_enabled(EFI_RUNTIME_SERVICES))
 		efi_free_boot_services();
@@ -837,9 +837,9 @@ static noinline int init_post(void)
 
 
 	current->signal->flags |= SIGNAL_UNKILLABLE;
-
+#ifdef CONFIG_BOOT_TIME_MARKER
 	place_marker("Linux_Kernel - End");
-
+#endif
 	if (ramdisk_execute_command) {
 		run_init_process(ramdisk_execute_command);
 		printk(KERN_WARNING "Failed to execute %s\n",
