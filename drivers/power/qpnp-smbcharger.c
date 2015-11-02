@@ -1838,20 +1838,6 @@ done:
 	mutex_unlock(&chip->parallel.lock);
 }
 
-static bool smbchg_is_aicl_complete(struct smbchg_chip *chip)
-{
-	int rc;
-	u8 reg;
-
-	rc = smbchg_read(chip, &reg,
-			chip->usb_chgpth_base + ICL_STS_1_REG, 1);
-	if (rc) {
-		dev_err(chip->dev, "Could not read usb icl sts 1: %d\n", rc);
-		return true;
-	}
-	return (reg & AICL_STS_BIT) != 0;
-}
-
 static int smbchg_get_aicl_level_ma(struct smbchg_chip *chip)
 {
 	int rc;
@@ -2381,7 +2367,7 @@ static int smbchg_set_thermal_limited_usb_current_max(struct smbchg_chip *chip,
 
 	pr_smb(PR_STATUS, "AICL = %d, ICL = %d\n",
 			aicl_ma, chip->usb_max_current_ma);
-	if (chip->usb_max_current_ma > aicl_ma && smbchg_is_aicl_complete(chip))
+	if (chip->usb_max_current_ma > aicl_ma)
 		smbchg_rerun_aicl(chip);
 	smbchg_parallel_usb_check_ok(chip);
 	return rc;
