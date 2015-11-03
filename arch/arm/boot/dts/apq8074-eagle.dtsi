@@ -126,7 +126,7 @@
 		compatible = "qcom,msm-lsuart-v14";
 		reg = <0xf9921000 0x1000>;
 		interrupts = <0 111 0>;
-		status = "disabled";
+		status = "okay";
 
 		qcom,msm-bus,name = "serial_uart5";
 		qcom,msm-bus,num-cases = <2>;
