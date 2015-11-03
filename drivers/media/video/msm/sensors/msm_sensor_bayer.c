@@ -191,11 +191,13 @@ int32_t msm_sensor_bayer_config(struct msm_sensor_ctrl_t *s_ctrl,
 			(void *)cdata.cfg.setting,
 			sizeof(struct msm_cam_gpio_operation))) {
 			pr_err("%s:%d failed\n", __func__, __LINE__);
+			rc = -EFAULT;
+			break;
 		}
 		switch (gop.op_type) {
 		case GPIO_GET_VALUE:
 			gop.value = gpio_get_value(gop.address);
-			if (copy_from_user((void *)cdata.cfg.setting,
+			if (copy_to_user((void *)cdata.cfg.setting,
 				&gop,
 				sizeof(struct msm_cam_gpio_operation))) {
 				pr_err("%s:%d failed\n", __func__, __LINE__);
