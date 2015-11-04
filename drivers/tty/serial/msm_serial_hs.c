@@ -184,7 +184,7 @@ struct msm_hs_port {
 	bool tty_flush_receive;
 	bool rx_discard_flush_issued;
 	enum uart_func_mode func_mode;
-	bool is_shutdown;
+	atomic_t is_shutdown;
 	bool termios_in_progress;
 	int rx_buf_size;
 };
@@ -1109,7 +1109,7 @@ unsigned int msm_hs_tx_empty(struct uart_port *uport)
 	unsigned int ret = 0;
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
 
-	if (msm_uport->is_shutdown) {
+	if (atomic_read(&msm_uport->is_shutdown)) {
 		pr_err("%s:Failed.UART port was closed\n", __func__);
 		return -EPERM;
 	}
@@ -1196,7 +1196,7 @@ static void msm_hs_submit_tx_locked(struct uart_port *uport)
 	struct msm_hs_tx *tx = &msm_uport->tx;
 	struct circ_buf *tx_buf = &msm_uport->uport.state->xmit;
 
-	if (tx->dma_in_flight || msm_uport->is_shutdown)
+	if (tx->dma_in_flight || atomic_read(&msm_uport->is_shutdown))
 		return;
 
 	if (uart_circ_empty(tx_buf) || uport->state->port.tty->stopped) {
@@ -1498,7 +1498,7 @@ static void msm_hs_start_tx_locked(struct uart_port *uport )
 {
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
 
-	if (msm_uport->is_shutdown)
+	if (atomic_read(&msm_uport->is_shutdown))
 		return;
 
 	if (msm_uport->clk_state == MSM_HS_CLK_OFF) {
@@ -1659,7 +1659,7 @@ void msm_hs_set_mctrl(struct uart_port *uport,
 	unsigned long flags;
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
 
-	if (msm_uport->is_shutdown) {
+	if (atomic_read(&msm_uport->is_shutdown)) {
 		pr_err("%s:Failed.UART port was closed\n", __func__);
 		return;
 	}
@@ -1893,14 +1893,12 @@ static irqreturn_t msm_hs_isr(int irq, void *dev)
 	struct msm_hs_tx *tx = &msm_uport->tx;
 	struct msm_hs_rx *rx = &msm_uport->rx;
 
-	spin_lock_irqsave(&uport->lock, flags);
-
-	if (msm_uport->is_shutdown) {
+	if (atomic_read(&msm_uport->is_shutdown)) {
 		pr_err("%s(): Received UART interrupt after shutdown.\n",
 								__func__);
-		spin_unlock_irqrestore(&uport->lock, flags);
 		return IRQ_HANDLED;
 	}
+	spin_lock_irqsave(&uport->lock, flags);
 
 	isr_status = msm_hs_read(uport, UARTDM_MISR_ADDR);
 
@@ -2007,12 +2005,11 @@ void msm_hs_request_clock_off(struct uart_port *uport) {
 	unsigned long flags;
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
 
-	spin_lock_irqsave(&uport->lock, flags);
-	if (msm_uport->is_shutdown) {
+	if (atomic_read(&msm_uport->is_shutdown)) {
 		pr_err("%s:Clock OFF fail.UART port is closed\n", __func__);
-		spin_unlock_irqrestore(&uport->lock, flags);
 		return;
 	}
+	spin_lock_irqsave(&uport->lock, flags);
 
 	if (msm_uport->clk_state == MSM_HS_CLK_ON) {
 		msm_uport->clk_state = MSM_HS_CLK_REQUEST_OFF;
@@ -2036,15 +2033,12 @@ void msm_hs_request_clock_on(struct uart_port *uport)
 	unsigned int data;
 	int ret = 0;
 
-	mutex_lock(&msm_uport->clk_mutex);
-	spin_lock_irqsave(&uport->lock, flags);
-
-	if (msm_uport->is_shutdown) {
+	if (atomic_read(&msm_uport->is_shutdown)) {
 		pr_err("%s:Clock ON fail.UART port is closed\n", __func__);
-		spin_unlock_irqrestore(&uport->lock, flags);
-		mutex_unlock(&msm_uport->clk_mutex);
 		return;
 	}
+	mutex_lock(&msm_uport->clk_mutex);
+	spin_lock_irqsave(&uport->lock, flags);
 
 	switch (msm_uport->clk_state) {
 	case MSM_HS_CLK_OFF:
@@ -2155,7 +2149,6 @@ static int msm_hs_startup(struct uart_port *uport)
 	struct msm_hs_tx *tx = &msm_uport->tx;
 	struct msm_hs_rx *rx = &msm_uport->rx;
 
-	msm_uport->is_shutdown = false;
 	msm_uport->termios_in_progress = false;
 
 	rfr_level = uport->fifosize;
@@ -2282,6 +2275,7 @@ static int msm_hs_startup(struct uart_port *uport)
 		}
 		disable_irq(msm_uport->wakeup.irq);
 	}
+	atomic_set(&msm_uport->is_shutdown, 0);
 
 	spin_lock_irqsave(&uport->lock, flags);
 
@@ -2539,7 +2533,7 @@ static int __devinit msm_hs_probe(struct platform_device *pdev)
 	uport->flags = UPF_BOOT_AUTOCONF;
 	uport->uartclk = 7372800;
 	msm_uport->imr_reg = 0x0;
-	msm_uport->is_shutdown = true;
+	atomic_set(&msm_uport->is_shutdown, 1);
 
 	msm_uport->clk = clk_get(&pdev->dev, "core_clk");
 	if (IS_ERR(msm_uport->clk))
@@ -2672,6 +2666,11 @@ static void msm_hs_shutdown(struct uart_port *uport)
 	if (msm_uport->clk_state == MSM_HS_CLK_OFF)
 		msm_hs_clock_vote(msm_uport);
 
+	/* Set to true immediately.This prevents processing
+	 * any requests after port close operation.
+	*/
+	atomic_set(&msm_uport->is_shutdown, 1);
+
 	spin_lock_irqsave(&uport->lock, flags);
 	/* disable UART TX interface to DM */
 	data = msm_hs_read(uport, UARTDM_DMEN_ADDR);
@@ -2724,7 +2723,6 @@ static void msm_hs_shutdown(struct uart_port *uport)
 	/* Free the UART IRQ line */
 	free_irq(uport->irq, msm_uport);
 
-	msm_uport->is_shutdown = true;
 	spin_unlock_irqrestore(&uport->lock, flags);
 
 	/* disable UART RX interface to DM */
