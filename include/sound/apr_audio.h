@@ -70,6 +70,9 @@
 #define MI2S_RX_2 16			/* index = 36 */
 #define MI2S_TX_2 17			/* index = 37 */
 
+#define PRIMARY_I2S_TX_0 PRIMARY_I2S_TX	/* index = 1 */
+#define PRIMARY_I2S_TX_1 29		/* index = 38 */
+
 #define AFE_PORT_INVALID 0xFFFF
 #define SLIMBUS_EXTPROC_RX AFE_PORT_INVALID
 
@@ -78,6 +81,9 @@
 
 /** Multichannel I2S Tx group device ID. */
 #define AFE_GROUP_DEVICE_ID_MI2S_TX			(MI2S_TX + 0x100)
+
+/** Primary I2S Tx group device ID. */
+#define AFE_GROUP_DEVICE_ID_PRIMARY_TX		(PRIMARY_I2S_TX + 0x100)
 
 #define AFE_PORT_CMD_START 0x000100ca
 

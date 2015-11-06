@@ -1412,6 +1412,49 @@ static struct snd_soc_dai_link msm_dai[] = {
 		.ignore_pmdown_time = 1, /* playback support */
 		.be_id = MSM_FRONTEND_DAI_DTMF_DETECTION
 	},
+	{
+		.name = "HDMI_Rx Hostless", /* hw:0,19 */
+		.stream_name = "HDMI_Rx Hostless",
+		.cpu_dai_name	= "HDMI_HOSTLESS",
+		.platform_name	= "msm-pcm-hostless",
+		.dynamic = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1, /* playback support */
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		/* .be_id = do not care */
+	},
+	{
+		.name = "I2S GROUP TX 0 Hostless", /* hw:0,20 */
+		.stream_name = "I2S GROUP TX 0 Hostless",
+		.cpu_dai_name	= "I2S_GROUP_TX_0_HOSTLESS",
+		.platform_name	= "msm-pcm-hostless",
+		.dynamic = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+	},
+	{
+		.name = "I2S GROUP TX 1 Hostless", /* hw:0,21 */
+		.stream_name = "I2S GROUP TX 1 Hostless",
+		.cpu_dai_name	= "I2S_GROUP_TX_1_HOSTLESS",
+		.platform_name	= "msm-pcm-hostless",
+		.dynamic = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+	},
 	/* Any new frondend DAIs have to be inserted after this point */
 	/* Backend DAI Links */
 	{
@@ -1563,6 +1606,30 @@ static struct snd_soc_dai_link msm_dai[] = {
 		.codec_dai_name = "msm-stub-tx",
 		.no_pcm = 1,
 		.be_id = MSM_BACKEND_DAI_PRI_I2S_TX,
+		.be_hw_params_fixup = msm_i2s_tx_be_hw_params_fixup,
+		.ops = &msm_i2s_be_ops,
+	},
+	{
+		.name = LPASS_BE_PRI_I2S_GROUP_TX_0,
+		.stream_name = "PRI_I2S_GROUP_0 Capture",
+		.cpu_dai_name = "msm-dai-q6-mi2s-group.1",
+		.platform_name = "msm-pcm-routing",
+		.codec_name     = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-tx",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_PRI_I2S_GROUP_TX_0,
+		.be_hw_params_fixup = msm_i2s_tx_be_hw_params_fixup,
+		.ops = &msm_i2s_be_ops,
+	},
+	{
+		.name = LPASS_BE_PRI_I2S_GROUP_TX_1,
+		.stream_name = "PRI_I2S_GROUP_1 Capture",
+		.cpu_dai_name = "msm-dai-q6-mi2s-group.29",
+		.platform_name = "msm-pcm-routing",
+		.codec_name     = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-tx",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_PRI_I2S_GROUP_TX_1,
 		.be_hw_params_fixup = msm_i2s_tx_be_hw_params_fixup,
 		.ops = &msm_i2s_be_ops,
 	},

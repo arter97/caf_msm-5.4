@@ -166,6 +166,7 @@ int afe_get_port_type(u16 port_id)
 		break;
 
 	case PRIMARY_I2S_TX:
+	case PRIMARY_I2S_TX_1:
 	case PCM_TX:
 	case SECONDARY_PCM_TX:
 	case SECONDARY_I2S_TX:
@@ -201,6 +202,7 @@ int afe_validate_port(u16 port_id)
 	switch (port_id) {
 	case PRIMARY_I2S_RX:
 	case PRIMARY_I2S_TX:
+	case PRIMARY_I2S_TX_1:
 	case PCM_RX:
 	case PCM_TX:
 	case SECONDARY_PCM_RX:
@@ -275,6 +277,7 @@ int afe_get_port_index(u16 port_id)
 	switch (port_id) {
 	case PRIMARY_I2S_RX: return IDX_PRIMARY_I2S_RX;
 	case PRIMARY_I2S_TX: return IDX_PRIMARY_I2S_TX;
+	case PRIMARY_I2S_TX_1: return IDX_PRIMARY_I2S_TX_1;
 	case PCM_RX: return IDX_PCM_RX;
 	case PCM_TX: return IDX_PCM_TX;
 	case SECONDARY_PCM_RX: return IDX_SECONDARY_PCM_RX;
@@ -322,6 +325,7 @@ int afe_sizeof_cfg_cmd(u16 port_id)
 	switch (port_id) {
 	case PRIMARY_I2S_RX:
 	case PRIMARY_I2S_TX:
+	case PRIMARY_I2S_TX_1:
 	case SECONDARY_I2S_RX:
 	case SECONDARY_I2S_TX:
 	case MI2S_RX:
@@ -819,6 +823,8 @@ int afe_group_dev_port_start(u16 port_id, union afe_port_config *afe_config,
 	case MI2S_TX_1:
 	case MI2S_RX_2:
 	case MI2S_TX_2:
+	case PRIMARY_I2S_TX_0:
+	case PRIMARY_I2S_TX_1:
 		/* AFE_PORT_CMD_I2S_CONFIG command is not supported
 		 * in the LPASS EL 1.0. So we have to distiguish
 		 * which AFE command, AFE_PORT_CMD_I2S_CONFIG or
@@ -1900,7 +1906,7 @@ done:
 	return ret;
 }
 
-int afe_group_device_enable(u16 enable)
+int afe_group_device_enable(u16 group_id, u16 enable)
 {
 	struct afe_service_cmd_set_param config;
 	int ret = 0;
@@ -1930,7 +1936,7 @@ int afe_group_device_enable(u16 enable)
 	config.payload.base.reserved = 0;
 
 	config.payload.param.group_device_enable.group_id =
-		AFE_GROUP_DEVICE_ID_MI2S_RX;
+		group_id;
 	config.payload.param.group_device_enable.enable = enable;
 
 	atomic_set(&this_afe.state, 1);
