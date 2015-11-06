@@ -4288,6 +4288,7 @@ static void __init apq8064_common_init(void)
 		ARRAY_SIZE(apq8064_slim_devices));
 	BUG_ON(msm_pm_boot_init(&msm_pm_boot_pdata));
 	apq8064_epm_adc_init();
+	add_pps_boottime();
 }
 
 static void __init apq8064_allocate_memory_regions(void)
