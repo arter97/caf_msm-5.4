@@ -182,7 +182,6 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_UPDATE_NOW,
 	POWER_SUPPLY_PROP_ESR_COUNT,
 	POWER_SUPPLY_PROP_SAFETY_TIMER_ENABLE,
-	POWER_SUPPLY_PROP_ALLOW_DETECTION,
 	POWER_SUPPLY_PROP_DP_DM,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED,
 	POWER_SUPPLY_PROP_RERUN_AICL,
@@ -307,8 +306,6 @@ extern int power_supply_set_supply_type(struct power_supply *psy,
 					enum power_supply_type supply_type);
 extern int power_supply_set_hi_power_state(struct power_supply *psy, int value);
 extern int power_supply_set_low_power_state(struct power_supply *psy,
-							int value);
-extern int power_supply_set_allow_detection(struct power_supply *psy,
 							int value);
 extern int power_supply_set_dp_dm(struct power_supply *psy,
 							int value);
