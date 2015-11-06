@@ -52,6 +52,8 @@
 
 #define STEREO_CSID CSID3
 #define STEREO_DEFAULT_3D_THRESHOLD 0x1B
+#define MAX_PIX_OVERFLOW_ERROR_COUNT 10
+static int pix_overflow_error_count[VFE_MAX] = { 0 };
 
 static void msm_ispif_io_dump_reg(struct ispif_device *ispif)
 {
@@ -764,12 +766,42 @@ static int msm_ispif_stop_immediately(struct ispif_device *ispif,
 	return rc;
 }
 
+static int msm_ispif_reconfig_3d_output(struct ispif_device *ispif,enum msm_ispif_vfe_intf vfe_id)
+{
+	uint32_t reg_data, input_sel_data;
+	BUG_ON(!ispif);
+
+	if (!( (vfe_id == VFE0) ||  (vfe_id == VFE1))){
+		pr_err("%s;%d Cannot reconfigure 3D mode for VFE%d",__func__ , __LINE__ , vfe_id);
+		return -EINVAL;
+	}
+	pr_err("%s;%d Reconfiguring 3D mode for VFE%d",__func__ , __LINE__ , vfe_id);
+	reg_data =  0xFFFCFFFC;
+	msm_camera_io_w_mb( reg_data , ispif->base + ISPIF_VFE_m_INTF_CMD_0(vfe_id));
+	msm_camera_io_w_mb(reg_data, ispif->base + ISPIF_IRQ_GLOBAL_CLEAR_CMD_ADDR);
+
+	if (vfe_id == VFE0){
+		reg_data = msm_camera_io_r(ispif->base + ISPIF_RST_CMD_ADDR );
+		reg_data |= ( PIX_0_VFE_RST_STB | PIX_1_VFE_RST_STB | STROBED_RST_EN |
+					 PIX_0_CSID_RST_STB | PIX_1_CSID_RST_STB | PIX_OUTPUT_0_MISR_RST_STB );
+		msm_camera_io_w_mb(reg_data, ispif->base + ISPIF_RST_CMD_ADDR);
+	}else{
+		reg_data = msm_camera_io_r(ispif->base + ISPIF_RST_CMD_1_ADDR );
+		reg_data |= ( PIX_0_VFE_RST_STB | PIX_1_VFE_RST_STB | STROBED_RST_EN |
+					 PIX_0_CSID_RST_STB | PIX_1_CSID_RST_STB | PIX_OUTPUT_0_MISR_RST_STB );
+		msm_camera_io_w_mb(reg_data, ispif->base + ISPIF_RST_CMD_1_ADDR);
+	}
+
+	reg_data =  0xFFFDFFFD;
+	msm_camera_io_w_mb( reg_data , ispif->base + ISPIF_VFE_m_INTF_CMD_0(vfe_id));
+	return 0;
+}
+
 static int msm_ispif_config_3d_output(struct ispif_device *ispif,
 			struct msm_ispif_param_data *params)
 {
 	int i,j, rc = 0;
 	int entry_index=-1;
-	int csid_index=-1;
 	enum msm_ispif_csid csid;
 	enum msm_ispif_intftype intf_type;
 	enum msm_ispif_vfe_intf vfe_intf;
@@ -817,7 +849,6 @@ static int msm_ispif_config_3d_output(struct ispif_device *ispif,
 		intf_type = params->entries[entry_index].intftype;
 		vfe_intf = params->entries[entry_index].vfe_intf;
 		CDBG("%s:%d configure ISPIF for stereo mode", __func__, __LINE__);
-		msm_camera_io_w_mb(0x0, ispif->base + ISPIF_VFE_m_INTF_CMD_1(vfe_intf));
 		msm_camera_io_w_mb(0x3, ispif->base + ISPIF_VFE_m_OUTPUT_SEL(vfe_intf));
 		msm_camera_io_w_mb(STEREO_DEFAULT_3D_THRESHOLD, ispif->base + ISPIF_VFE_m_3D_THRESHOLD(vfe_intf));
 		msm_camera_io_w_mb(0x301, ispif->base + ISPIF_VFE_m_INPUT_SEL(vfe_intf));
@@ -962,6 +993,7 @@ static inline void msm_ispif_read_irq_status(struct ispif_irq_status *out,
 	void *data)
 {
 	struct ispif_device *ispif = (struct ispif_device *)data;
+	uint32_t reg_data;
 
 	BUG_ON(!ispif);
 	BUG_ON(!out);
@@ -1035,6 +1067,34 @@ static inline void msm_ispif_read_irq_status(struct ispif_irq_status *out,
 			pr_err("%s: VFE1 rdi2 overflow.\n", __func__);
 
 		ispif_process_irq(ispif, out, VFE1);
+	}
+
+	if((out[VFE0].ispifIrqStatus0 &  PIX_INTF_0_OVERFLOW_IRQ ) ||
+	   (out[VFE0].ispifIrqStatus1 &  PIX_INTF_0_OVERFLOW_IRQ ) ||
+	   (out[VFE0].ispifIrqStatus2 &  ( L_R_SOF_MISMATCH_ERR_IRQ | L_R_EOF_MISMATCH_ERR_IRQ | L_R_SOL_MISMATCH_ERR_IRQ ) )){
+		reg_data = msm_camera_io_r(ispif->base + ISPIF_VFE_m_OUTPUT_SEL(VFE0));
+		if ( (reg_data & 0x03) == VFE_PIX_INTF_SEL_3D ){
+			pix_overflow_error_count[VFE0]++;
+			if ( pix_overflow_error_count[VFE0] >= MAX_PIX_OVERFLOW_ERROR_COUNT ){
+				msm_ispif_reconfig_3d_output(ispif,VFE0);
+				pix_overflow_error_count[VFE0] = 0;
+			}
+		}
+	}
+
+	if (ispif->vfe_info.num_vfe > 1){
+		if((out[VFE1].ispifIrqStatus0 &  PIX_INTF_0_OVERFLOW_IRQ ) ||
+		   (out[VFE1].ispifIrqStatus1 &  PIX_INTF_0_OVERFLOW_IRQ ) ||
+		   (out[VFE1].ispifIrqStatus2 &  ( L_R_SOF_MISMATCH_ERR_IRQ | L_R_EOF_MISMATCH_ERR_IRQ | L_R_SOL_MISMATCH_ERR_IRQ ) )){
+			reg_data = msm_camera_io_r(ispif->base + ISPIF_VFE_m_OUTPUT_SEL(VFE1));
+			if ( (reg_data & 0x03) == VFE_PIX_INTF_SEL_3D ){
+				pix_overflow_error_count[VFE1]++;
+				if ( pix_overflow_error_count[VFE1] >= MAX_PIX_OVERFLOW_ERROR_COUNT ){
+					msm_ispif_reconfig_3d_output(ispif,VFE1);
+					pix_overflow_error_count[VFE1] = 0;
+				}
+			}
+		}
 	}
 }
 
