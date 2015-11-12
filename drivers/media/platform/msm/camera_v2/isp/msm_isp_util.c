@@ -2093,6 +2093,13 @@ int msm_isp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 	vfe_dev->hw_info->vfe_ops.core_ops.
 		update_camif_state(vfe_dev, DISABLE_CAMIF_IMMEDIATELY);
 
+
+	rc = msm_isp_release_dual_HW_resource_all(
+		vfe_dev);
+	if (rc < 0)
+		pr_err("%s: msm_isp_release_dual_HW_resource_all rc=%ld\n",
+			__func__, rc);
+
 	vfe_dev->hw_info->vfe_ops.core_ops.release_hw(vfe_dev);
 	vfe_dev->buf_mgr->ops->buf_mgr_deinit(vfe_dev->buf_mgr);
 	if (vfe_dev->vt_enable) {
