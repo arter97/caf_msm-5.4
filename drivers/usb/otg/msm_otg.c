@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2015, Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2016, Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -223,10 +223,13 @@ set_msm_otg_keep_vbus(struct device *dev, struct device_attribute *attr,
 {
 	struct msm_otg *motg = dev_get_drvdata(dev);
 
-	if (!strnicmp(buf, "enable", 6))
+	if (!strnicmp(buf, "enable", 6)) {
 		motg->keep_vbus = true;
-	else
+		motg->chg_type = USB_SDP_CHARGER;
+		motg->chg_state = USB_CHG_STATE_DETECTED;
+	} else {
 		motg->keep_vbus = false;
+	}
 
 	return count;
 }
