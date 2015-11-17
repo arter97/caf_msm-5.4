@@ -155,8 +155,7 @@ static int bt_configure_gpios(int on)
 	int bt_reset_gpio = bt_power_pdata->bt_gpio_sys_rst;
 
 	BT_PWR_DBG("%s  bt_gpio= %d on: %d", __func__, bt_reset_gpio, on);
-
-	if (on) {
+	if (!on) {
 		rc = gpio_request(bt_reset_gpio, "bt_sys_rst_n");
 		if (rc) {
 			BT_PWR_ERR("unable to request gpio %d (%d)\n",
@@ -169,16 +168,13 @@ static int bt_configure_gpios(int on)
 			BT_PWR_ERR("Unable to set direction\n");
 			return rc;
 		}
-		msleep(50);
+		msleep(100);
 		rc = gpio_direction_output(bt_reset_gpio, 1);
 		if (rc) {
 			BT_PWR_ERR("Unable to set direction\n");
 			return rc;
 		}
 		msleep(50);
-	} else {
-		gpio_set_value(bt_reset_gpio, 0);
-		msleep(100);
 	}
 	return rc;
 }
