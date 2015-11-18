@@ -44,6 +44,54 @@ static uint32_t csid_irq_cnt_array[4] = {0};
 
 static uint32_t csid_vir_base = 0;
 static uint8_t csid_instance = 0;
+
+static struct msm_cam_clk_info csid_8960_clk_info[] = {
+	{"csi_src_clk", 177780000},
+	{"csi_clk", -1},
+	{"csi_phy_clk", -1},
+	{"csi_pclk", -1},
+};
+
+static struct msm_cam_clk_info csid_8974_clk_info[] = {
+	{"camss_top_ahb_clk", -1},
+	{"ispif_ahb_clk", -1},
+	{"csi_ahb_clk", -1},
+	{"csi_src_clk", 200000000},
+	{"csi_clk", -1},
+	{"csi_phy_clk", -1},
+	{"csi_pix_clk", -1},
+	{"csi_rdi_clk", -1},
+};
+
+static struct msm_cam_clk_info csid_8610_clk_info[] = {
+	{"csi_ahb_clk", -1},
+	{"csi_src_clk", 200000000},
+	{"csi_clk", -1},
+	{"csi0phy_mux_clk", -1},
+	{"csi1phy_mux_clk", -1},
+	{"csi0pix_mux_clk", -1},
+	{"csi0rdi_mux_clk", -1},
+	{"csi1rdi_mux_clk", -1},
+	{"csi2rdi_mux_clk", -1},
+};
+
+static struct msm_cam_clk_info csid_8610_clk_src_info[] = {
+	{"csi_phy_src_clk", 0},
+	{"csi_phy_src_clk", 0},
+	{"csi_pix_src_clk", 0},
+	{"csi_rdi_src_clk", 0},
+	{"csi_rdi_src_clk", 0},
+	{"csi_rdi_src_clk", 0},
+};
+
+static struct camera_vreg_t csid_8960_vreg_info[] = {
+	{"mipi_csi_vdd", REG_LDO, 1200000, 1200000, 20000},
+};
+
+static struct camera_vreg_t csid_vreg_info[] = {
+	{"qcom,mipi-csi-vdd", REG_LDO, 0, 0, 12000},
+};
+
 static int msm_csid_cid_lut(
 	struct msm_camera_csid_lut_params *csid_lut_params,
 	void __iomem *csidbase)
@@ -144,10 +192,51 @@ static int msm_csid_config(struct csid_device *csid_dev,
 	if (rc < 0)
 		return rc;
 
+	if (csid_params->csid_clk >= 100000000 && csid_params->csid_clk <= 200000000 )
+	{
+		disable_irq(csid_dev->irq->start);
+		msm_cam_clk_enable(&csid_dev->pdev->dev, csid_8974_clk_info,
+							csid_dev->csid_clk, ARRAY_SIZE(csid_8974_clk_info), 0);
+		csid_8974_clk_info[3].clk_rate = csid_params->csid_clk;
+		rc = msm_cam_clk_enable(&csid_dev->pdev->dev,
+								csid_8974_clk_info, csid_dev->csid_clk,
+								ARRAY_SIZE(csid_8974_clk_info), 1);
+		csid_8974_clk_info[3].clk_rate = 200000000;
+		if (rc < 0) {
+			pr_err("%s: clock enable failed\n", __func__);
+			goto clk_enable_failed;
+		}
+		enable_irq(csid_dev->irq->start);
+	}
+
 	msm_csid_set_debug_reg(csidbase, csid_params);
 	return rc;
-}
 
+clk_enable_failed:
+	if (CSID_VERSION < CSID_VERSION_V30) {
+		msm_camera_enable_vreg(&csid_dev->pdev->dev,
+			csid_vreg_info, ARRAY_SIZE(csid_vreg_info),
+			NULL, 0, &csid_dev->csi_vdd, 0);
+	} else if (CSID_VERSION >= CSID_VERSION_V30) {
+		msm_camera_enable_vreg(&csid_dev->pdev->dev,
+			csid_vreg_info, ARRAY_SIZE(csid_vreg_info),
+			NULL, 0, &csid_dev->csi_vdd, 0);
+	}
+vreg_enable_failed:
+	if (CSID_VERSION < CSID_VERSION_V30) {
+		msm_camera_config_vreg(&csid_dev->pdev->dev,
+			csid_vreg_info, ARRAY_SIZE(csid_vreg_info),
+			NULL, 0, &csid_dev->csi_vdd, 0);
+	} else if (CSID_VERSION >= CSID_VERSION_V30) {
+		msm_camera_config_vreg(&csid_dev->pdev->dev,
+			csid_vreg_info, ARRAY_SIZE(csid_vreg_info),
+			NULL, 0, &csid_dev->csi_vdd, 0);
+	}
+vreg_config_failed:
+	iounmap(csid_dev->base);
+	csid_dev->base = NULL;
+	return rc;
+}
 static irqreturn_t msm_csid_irq(int irq_num, void *data)
 {
 	uint32_t irq;
@@ -187,53 +276,6 @@ static int msm_csid_subdev_g_chip_ident(struct v4l2_subdev *sd,
 	chip->revision = 0;
 	return 0;
 }
-
-static struct msm_cam_clk_info csid_8960_clk_info[] = {
-	{"csi_src_clk", 177780000},
-	{"csi_clk", -1},
-	{"csi_phy_clk", -1},
-	{"csi_pclk", -1},
-};
-
-static struct msm_cam_clk_info csid_8974_clk_info[] = {
-	{"camss_top_ahb_clk", -1},
-	{"ispif_ahb_clk", -1},
-	{"csi_ahb_clk", -1},
-	{"csi_src_clk", 200000000},
-	{"csi_clk", -1},
-	{"csi_phy_clk", -1},
-	{"csi_pix_clk", -1},
-	{"csi_rdi_clk", -1},
-};
-
-static struct msm_cam_clk_info csid_8610_clk_info[] = {
-	{"csi_ahb_clk", -1},
-	{"csi_src_clk", 200000000},
-	{"csi_clk", -1},
-	{"csi0phy_mux_clk", -1},
-	{"csi1phy_mux_clk", -1},
-	{"csi0pix_mux_clk", -1},
-	{"csi0rdi_mux_clk", -1},
-	{"csi1rdi_mux_clk", -1},
-	{"csi2rdi_mux_clk", -1},
-};
-
-static struct msm_cam_clk_info csid_8610_clk_src_info[] = {
-	{"csi_phy_src_clk", 0},
-	{"csi_phy_src_clk", 0},
-	{"csi_pix_src_clk", 0},
-	{"csi_rdi_src_clk", 0},
-	{"csi_rdi_src_clk", 0},
-	{"csi_rdi_src_clk", 0},
-};
-
-static struct camera_vreg_t csid_8960_vreg_info[] = {
-	{"mipi_csi_vdd", REG_LDO, 1200000, 1200000, 20000},
-};
-
-static struct camera_vreg_t csid_vreg_info[] = {
-	{"qcom,mipi-csi-vdd", REG_LDO, 0, 0, 12000},
-};
 
 static int msm_csid_init(struct csid_device *csid_dev, uint32_t *csid_version)
 {
