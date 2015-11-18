@@ -51,6 +51,7 @@
 #endif
 
 #define STEREO_CSID CSID3
+#define LEFT_CSID CSID1
 #define STEREO_DEFAULT_3D_THRESHOLD 0x1B
 #define MAX_PIX_OVERFLOW_ERROR_COUNT 10
 static int pix_overflow_error_count[VFE_MAX] = { 0 };
@@ -805,6 +806,7 @@ static int msm_ispif_config_3d_output(struct ispif_device *ispif,
 	enum msm_ispif_csid csid;
 	enum msm_ispif_intftype intf_type;
 	enum msm_ispif_vfe_intf vfe_intf;
+	uint32_t reg_data = 0;
 
 	if (ispif->ispif_state != ISPIF_POWER_UP) {
 		pr_err("%s: ispif invalid state %d\n", __func__,
@@ -851,7 +853,8 @@ static int msm_ispif_config_3d_output(struct ispif_device *ispif,
 		CDBG("%s:%d configure ISPIF for stereo mode", __func__, __LINE__);
 		msm_camera_io_w_mb(0x3, ispif->base + ISPIF_VFE_m_OUTPUT_SEL(vfe_intf));
 		msm_camera_io_w_mb(STEREO_DEFAULT_3D_THRESHOLD, ispif->base + ISPIF_VFE_m_3D_THRESHOLD(vfe_intf));
-		msm_camera_io_w_mb(0x301, ispif->base + ISPIF_VFE_m_INPUT_SEL(vfe_intf));
+		reg_data = (LEFT_CSID << 8) | STEREO_CSID;
+		msm_camera_io_w_mb(reg_data, ispif->base + ISPIF_VFE_m_INPUT_SEL(vfe_intf));
 	}
 	return 0;
 }
