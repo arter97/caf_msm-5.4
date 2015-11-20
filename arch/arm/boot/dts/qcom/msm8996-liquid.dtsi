@@ -480,6 +480,7 @@
 	sound-9335 {
 		qcom,model = "msm8996-tasha-mtp-snd-card";
 		qcom,hdmi-audio-rx;
+		qcom,cherokee-btfm;
 		asoc-codec = <&stub_codec>, <&hdmi_audio>;
 		asoc-codec-names = "msm-stub-codec.1", "msm-hdmi-audio-codec-rx";
 		qcom,wsa-max-devs = <2>;
