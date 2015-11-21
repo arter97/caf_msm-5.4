@@ -3014,12 +3014,13 @@ int afe_dtmf_generate_rx(int64_t duration_in_ms,
 		duration_in_ms, high_freq, low_freq, gain,
 		this_afe.dtmf_gen_rx_portid);
 
+	index = q6audio_get_port_index(this_afe.dtmf_gen_rx_portid);
 	cmd_dtmf.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
 				APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
 	cmd_dtmf.hdr.pkt_size = sizeof(cmd_dtmf);
 	cmd_dtmf.hdr.src_port = 0;
 	cmd_dtmf.hdr.dest_port = 0;
-	cmd_dtmf.hdr.token = 0;
+	cmd_dtmf.hdr.token = index;
 	cmd_dtmf.hdr.opcode = AFE_PORTS_CMD_DTMF_CTL;
 	cmd_dtmf.duration_in_ms = duration_in_ms;
 	cmd_dtmf.high_freq = high_freq;
@@ -3036,7 +3037,6 @@ int afe_dtmf_generate_rx(int64_t duration_in_ms,
 		ret = -EINVAL;
 		goto fail_cmd;
 	}
-	index = q6audio_get_port_index(this_afe.dtmf_gen_rx_portid);
 	ret = wait_event_timeout(this_afe.wait[index],
 		(atomic_read(&this_afe.state) == 0),
 			msecs_to_jiffies(TIMEOUT_MS));
