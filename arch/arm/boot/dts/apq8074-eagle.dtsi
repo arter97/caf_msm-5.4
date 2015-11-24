@@ -150,6 +150,16 @@
 				<84 512 0 0>,
 				<84 512 500 800>;
 	};
+
+	usb2_vbus: usb2_vbus {
+		compatible = "regulator-fixed";
+		status = "ok";
+		regulator-name = "usb2_vbus";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		gpio = <&msmgpio 142 0>;
+		enable-active-high;
+	};
 };
 
 &sdcc3 {
@@ -162,9 +172,9 @@
 };
 
 &pm8941_l3 {
-        regulator-min-microvolt = <1050000>;
-        regulator-max-microvolt = <1050000>;
-        qcom,init-voltage = <1050000>;
+	regulator-min-microvolt = <1050000>;
+	regulator-max-microvolt = <1050000>;
+	qcom,init-voltage = <1050000>;
 };
 
 &pm8941_l18 {
@@ -502,14 +512,19 @@
 	qcom,otg-capability;
 };
 
+&ehci {
+	status = "ok";
+	vbus-supply = <&usb2_vbus>;
+};
+
 &rpm_bus { 
 	rpm-regulator-ldoa22 {  /* Regulator setting for ov7251 sensor on eagle*/
- 		status = "okay";
- 		pm8941_l22: regulator-l22 {
+		status = "okay";
+		pm8941_l22: regulator-l22 {
 			regulator-min-microvolt = <2800000>;
- 			regulator-max-microvolt = <3000000>;
+			regulator-max-microvolt = <3000000>;
 			qcom,init-voltage = <2800000>;
- 			status = "okay";
- 		};
- 	};
+			status = "okay";
+		};
+	};
 };

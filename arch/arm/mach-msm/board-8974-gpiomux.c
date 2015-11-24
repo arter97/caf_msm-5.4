@@ -766,11 +766,17 @@ static struct gpiomux_setting gpio_key_config = {
 	.dir = GPIOMUX_IN,
 };
 
-static struct msm_gpiomux_config msm_keys_configs_eagle[] __initdata = {
+static struct msm_gpiomux_config msm_configs_eagle[] __initdata = {
 	{
 		.gpio      = 141,		/* Factory reset key */
 		.settings = {
 			[GPIOMUX_SUSPENDED] = &gpio_key_config,
+		},
+	},
+	{
+		.gpio      = 142,		/* USB2_VBUS_EN */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gpio_suspend_config[1],
 		},
 	},
 };
@@ -1618,7 +1624,7 @@ void __init msm_8974_init_gpiomux(void)
 #endif
 	if (( of_board_is_eagle() && machine_is_apq8074())) {
 		msm_gpiomux_install(msm_blsp_configs_eagle, ARRAY_SIZE(msm_blsp_configs_eagle));
-		msm_gpiomux_install(msm_keys_configs_eagle, ARRAY_SIZE(msm_keys_configs_eagle));
+		msm_gpiomux_install(msm_configs_eagle, ARRAY_SIZE(msm_configs_eagle));
 	} else {
 		msm_gpiomux_install(msm_blsp_configs, ARRAY_SIZE(msm_blsp_configs));
 	}
