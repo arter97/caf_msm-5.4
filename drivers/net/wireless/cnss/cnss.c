@@ -356,10 +356,10 @@ static struct cnss_data {
 	uint32_t msa_mem_size;
 	void *msa_addr;
 	uint32_t state;
-	u32 board_id;
-	u32 num_peers;
-	u32 mac_version;
-	char fw_version[QMI_WLFW_MAX_STR_LEN_V01 + 1];
+	struct wlfw_rf_chip_info_s_v01 chip_info;
+	struct wlfw_rf_board_info_s_v01 board_info;
+	struct wlfw_soc_info_s_v01 soc_info;
+	struct wlfw_fw_version_info_s_v01 fw_version_info;
 	u32 pwr_pin_result;
 	u32 phy_io_pin_result;
 	u32 rf_pin_result;
@@ -632,20 +632,27 @@ static int wlfw_cap_send_sync_msg(void)
 	}
 
 	/* store cap locally */
-	if (resp.board_id_valid)
-		penv->board_id = resp.board_id;
-	if (resp.num_peers_valid)
-		penv->num_peers = resp.num_peers;
-	if (resp.mac_version_valid)
-		penv->mac_version = resp.mac_version;
-	if (resp.fw_version_valid)
-		strlcpy(penv->fw_version, resp.fw_version,
-				QMI_WLFW_MAX_STR_LEN_V01 + 1);
+	if (resp.chip_info_valid)
+		penv->chip_info = resp.chip_info;
+	if (resp.board_info_valid)
+		penv->board_info = resp.board_info;
+	else
+		penv->board_info.board_id = 0xFF;
+	if (resp.soc_info_valid)
+		penv->soc_info = resp.soc_info;
+	if (resp.fw_version_info_valid)
+		penv->fw_version_info = resp.fw_version_info;
 
-	pr_info("%s: board_id:0x%0x num_peers: %d mac_version: 0x%0x fw_version: %s",
-		__func__, penv->board_id,
-		penv->num_peers, penv->mac_version,
-		penv->fw_version);
+	pr_info("%s: chip_id: 0x%0x, chip_family: 0x%0x,"
+		" board_id: 0x%0x, soc_id: 0x%0x,"
+		" fw_version: 0x%0x, fw_build_timestamp: %s",
+		__func__,
+		penv->chip_info.chip_id,
+		penv->chip_info.chip_family,
+		penv->board_info.board_id,
+		penv->soc_info.soc_id,
+		penv->fw_version_info.fw_version,
+		penv->fw_version_info.fw_build_timestamp);
 out:
 	return ret;
 }
@@ -721,6 +728,51 @@ static int wlfw_wlan_cfg_send_sync_msg(struct wlfw_wlan_cfg_req_msg_v01 *data)
 	resp_desc.max_msg_len = WLFW_WLAN_CFG_RESP_MSG_V01_MAX_MSG_LEN;
 	resp_desc.msg_id = QMI_WLFW_WLAN_CFG_RESP_V01;
 	resp_desc.ei_array = wlfw_wlan_cfg_resp_msg_v01_ei;
+
+	ret = qmi_send_req_wait(penv->wlfw_clnt, &req_desc, &req, sizeof(req),
+			&resp_desc, &resp, sizeof(resp), WLFW_TIMEOUT_MS);
+	if (ret < 0) {
+		pr_err("%s: send req failed %d\n", __func__, ret);
+		goto out;
+	}
+
+	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+		pr_err("%s: QMI request failed %d %d\n",
+		       __func__, resp.resp.result, resp.resp.error);
+		ret = resp.resp.result;
+		goto out;
+	}
+out:
+	return ret;
+}
+
+static int wlfw_ini_send_sync_msg(bool enablefwlog)
+{
+	int ret;
+	struct wlfw_ini_req_msg_v01 req;
+	struct wlfw_ini_resp_msg_v01 resp;
+	struct msg_desc req_desc, resp_desc;
+
+	if (!penv || !penv->wlfw_clnt) {
+		ret = -ENODEV;
+		goto out;
+	}
+
+	pr_debug("%s\n", __func__);
+
+	memset(&req, 0, sizeof(req));
+	memset(&resp, 0, sizeof(resp));
+
+	req.enablefwlog_valid = 1;
+	req.enablefwlog = enablefwlog;
+
+	req_desc.max_msg_len = WLFW_INI_REQ_MSG_V01_MAX_MSG_LEN;
+	req_desc.msg_id = QMI_WLFW_INI_REQ_V01;
+	req_desc.ei_array = wlfw_ini_req_msg_v01_ei;
+
+	resp_desc.max_msg_len = WLFW_INI_RESP_MSG_V01_MAX_MSG_LEN;
+	resp_desc.msg_id = QMI_WLFW_INI_RESP_V01;
+	resp_desc.ei_array = wlfw_ini_resp_msg_v01_ei;
 
 	ret = qmi_send_req_wait(penv->wlfw_clnt, &req_desc, &req, sizeof(req),
 			&resp_desc, &resp, sizeof(resp), WLFW_TIMEOUT_MS);
@@ -1005,6 +1057,18 @@ static void cnss_qmi_wlfw_event_work(struct work_struct *work)
 static struct notifier_block wlfw_clnt_nb = {
 	.notifier_call = cnss_qmi_wlfw_clnt_svc_event_notify,
 };
+
+int cnss_set_fw_debug_mode(bool enablefwlog)
+{
+	int ret;
+
+	ret = wlfw_ini_send_sync_msg(enablefwlog);
+	if (ret)
+		pr_err("%s: Failed to send ini, ret = %d\n", __func__, ret);
+
+	return ret;
+}
+EXPORT_SYMBOL(cnss_set_fw_debug_mode);
 
 int cnss_wlan_enable(struct cnss_wlan_enable_cfg *config,
 		     enum cnss_driver_mode mode,
@@ -2144,11 +2208,11 @@ static ssize_t cnss_wlan_pin_connect_show(struct device *dev,
 		return -ENODEV;
 
 	return scnprintf(buf, PAGE_SIZE, "Pin Connect Result:\n"
-					"FW Version: %s\n"
+					"FW Version: 0x%x\n"
 					"pwr_pin: 0x%x\n"
 					"phy_io_pin: 0x%x\n"
 					"rf_io_pin: 0x%x\n",
-					penv->fw_version,
+					penv->fw_version_info.fw_version,
 					penv->pwr_pin_result,
 					penv->phy_io_pin_result,
 					penv->rf_pin_result);
