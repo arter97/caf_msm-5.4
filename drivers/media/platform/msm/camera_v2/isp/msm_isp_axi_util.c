@@ -238,7 +238,7 @@ static uint32_t msm_isp_axi_get_plane_size(
 	return size;
 }
 
-static void msm_isp_get_buffer_ts(struct vfe_device *vfe_dev,
+void msm_isp_get_buffer_ts(struct vfe_device *vfe_dev,
 	struct msm_isp_timestamp *irq_ts, struct msm_isp_timestamp *ts)
 {
 	struct msm_vfe_frame_ts *frame_ts = &vfe_dev->frame_ts;

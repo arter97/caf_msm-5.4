@@ -553,6 +553,7 @@ static void msm_vfe40_process_reg_update(struct vfe_device *vfe_dev,
 	uint32_t irq_status0, uint32_t irq_status1,
 	struct msm_isp_timestamp *ts)
 {
+	struct msm_isp_timestamp buf_ts;
 	if (!(irq_status0 & 0xF0))
 		return;
 
@@ -575,6 +576,7 @@ static void msm_vfe40_process_reg_update(struct vfe_device *vfe_dev,
 	msm_isp_update_error_frame_count(vfe_dev);
 
 	vfe_dev->hw_info->vfe_ops.core_ops.reg_update(vfe_dev);
+	msm_isp_get_buffer_ts(vfe_dev, ts, &buf_ts);
 	return;
 }
 
