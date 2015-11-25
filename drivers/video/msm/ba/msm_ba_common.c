@@ -611,12 +611,9 @@ int msm_ba_ctrl_init(struct msm_ba_inst *inst)
 			}
 		}
 
-		switch (msm_ba_ctrls[idx].id) {
-		case MSM_BA_PRIV_SD_NODE_ADDR:
-		case MSM_BA_PRIV_FPS:
-			if (ctrl)
-				ctrl->flags |= msm_ba_ctrls[idx].flags;
-			break;
+		if (!ctrl) {
+			dprintk(BA_ERR, "%s - invalid ctrl", __func__);
+			return -EINVAL;
 		}
 
 		rc = inst->ctrl_handler.error;
@@ -626,6 +623,13 @@ int msm_ba_ctrl_init(struct msm_ba_inst *inst)
 					msm_ba_ctrls[idx].name,
 					inst->ctrl_handler.error);
 			return rc;
+		}
+
+		switch (msm_ba_ctrls[idx].id) {
+		case MSM_BA_PRIV_SD_NODE_ADDR:
+		case MSM_BA_PRIV_FPS:
+			ctrl->flags |= msm_ba_ctrls[idx].flags;
+			break;
 		}
 
 		inst->ctrls[idx] = ctrl;
