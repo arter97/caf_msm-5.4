@@ -4937,10 +4937,13 @@ static int determine_initial_status(struct smbchg_chip *chip)
 	chip->usb_present = is_usb_present(chip);
 	chip->dc_present = is_dc_present(chip);
 
-	if (chip->usb_present)
+	if (chip->usb_present) {
+		pr_smb(PR_MISC, "setting usb psy allow detection 1\n");
+		power_supply_set_allow_detection(chip->usb_psy, 1);
 		handle_usb_insertion(chip);
-	else
+	} else {
 		handle_usb_removal(chip);
+	}
 
 	return 0;
 }
