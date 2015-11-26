@@ -1149,6 +1149,7 @@ static void msm_hs_stop_rx_locked(struct uart_port *uport)
 {
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
 	unsigned long data;
+	struct msm_hs_rx *rx = &msm_uport->rx;
 
 	if (msm_uport->clk_state == MSM_HS_CLK_OFF)
 		msm_hs_clock_vote(msm_uport);
@@ -1165,19 +1166,14 @@ static void msm_hs_stop_rx_locked(struct uart_port *uport)
 
 	/* Allow to receive all pending data from UART RX FIFO */
 	udelay(100);
-
+	msm_hs_write(uport, UARTDM_CR_ADDR, RESET_RX);
 	if (msm_uport->rx.flush == FLUSH_NONE) {
 		__pm_stay_awake(&msm_uport->rx.ws);
 
 		msm_uport->rx_discard_flush_issued = true;
-
-		/*
-		 * Invoke Force RxStale Interrupt
-		 * On receiving this interrupt, send discard flush request
-		 * to ADM driver and ignore all received data.
-		 */
-		msm_hs_write(uport, UARTDM_CR_ADDR, FORCE_STALE_EVENT);
-		mb();
+		rx->flush = FLUSH_IGNORE;
+		/* Discard Flush */
+		msm_dmov_flush(msm_uport->dma_rx_channel, 0);
 	}
 
 	if (msm_uport->rx.flush != FLUSH_SHUTDOWN)
@@ -1757,6 +1753,7 @@ static int msm_hs_check_clock_off(struct uart_port *uport)
 	int ret;
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
 	struct circ_buf *tx_buf = &uport->state->xmit;
+	struct msm_hs_rx *rx = &msm_uport->rx;
 
 	mutex_lock(&msm_uport->clk_mutex);
 	spin_lock_irqsave(&uport->lock, flags);
@@ -1797,14 +1794,11 @@ static int msm_hs_check_clock_off(struct uart_port *uport)
 		/* set RFR_N to high */
 		msm_hs_write(uport, UARTDM_CR_ADDR, RFR_HIGH);
 
-		msm_uport->clk_req_off_state = CLK_REQ_OFF_RXSTALE_ISSUED;
+		msm_uport->clk_req_off_state = CLK_REQ_OFF_FLUSH_ISSUED;
 		__pm_stay_awake(&msm_uport->rx.ws);
-		msm_hs_write(uport, UARTDM_CR_ADDR, FORCE_STALE_EVENT);
-		/*
-		 * Before returning make sure that device writel completed.
-		 * Hence mb() requires here.
-		 */
-		mb();
+		rx->flush = FLUSH_IGNORE;
+		/* Discard Flush */
+		msm_dmov_flush(msm_uport->dma_rx_channel, 0);
 		spin_unlock_irqrestore(&uport->lock, flags);
 		mutex_unlock(&msm_uport->clk_mutex);
 		return 0;  /* RXSTALE flush not complete - retry */
