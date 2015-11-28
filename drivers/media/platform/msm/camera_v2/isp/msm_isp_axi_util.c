@@ -2592,8 +2592,7 @@ static int msm_isp_stop_axi_stream(struct vfe_device *vfe_dev,
 		vfe_dev->hw_info->vfe_ops.core_ops.
 			update_camif_state(vfe_dev, DISABLE_CAMIF);
 		vfe_dev->axi_data.camif_state = CAMIF_DISABLE;
-	} else if (((camif_update == DISABLE_CAMIF_IMMEDIATELY) ||
-					(ext_read)) && !halt) {
+	} else if (camif_update == DISABLE_CAMIF_IMMEDIATELY) {
 		vfe_dev->ignore_error = 1;
 		vfe_dev->hw_info->vfe_ops.axi_ops.halt(vfe_dev, 1);
 		if (!ext_read)
