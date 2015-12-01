@@ -770,12 +770,20 @@ static int ehset_single_step_set_feature(struct usb_hcd *hcd, int port)
 	struct usb_device_descriptor *buf;
 	DECLARE_COMPLETION_ONSTACK(done);
 
-	/*Obtain udev of the rhub's child port */
-	udev = hcd->self.root_hub->children[port];
+	/* Obtain udev of the rhub's child port */
+	udev = hcd->self.root_hub->children[0];
+
+	/*
+	 * If DUT is external HUB connected to root-hub port then
+	 * obtain udev of the hubs's child port.
+	 */
+	if (udev->maxchild)
+		udev = udev->children[port];
 	if (!udev) {
-		ehci_err(ehci, "No device attached to the RootHub\n");
+		ehci_err(ehci, "No device attached to the Hub port under test\n");
 		return -ENODEV;
 	}
+
 	buf = kmalloc(USB_DT_DEVICE_SIZE, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
@@ -1139,7 +1147,13 @@ static int ehci_hub_control (
 				goto error_exit;
 			}
 		}
-		if (!wIndex || wIndex > ports)
+		/*
+		 * If single step setfeature is for external HUB connected to
+		 * root-hub port then external hub ports are
+		 * greater than HC ports.
+		 */
+		if (!wIndex || (wIndex > ports &&
+			selector != EHSET_TEST_SINGLE_STEP_SET_FEATURE))
 			goto error;
 		wIndex--;
 		temp = ehci_readl(ehci, status_reg);

@@ -71,6 +71,14 @@
 #define USB_PHY_VDD_DIG_VOL_MIN	1045000 /* uV */
 #define USB_PHY_VDD_DIG_VOL_MAX	1320000 /* uV */
 
+#define USB_TEST_SE0_NAK_PID			1
+#define USB_TEST_J_PID				2
+#define USB_TEST_K_PID				3
+#define USB_TEST_PACKET_PID			4
+#define USB_TEST_HS_HOST_PORT_SUSPEND_RESUME	5
+#define USB_TEST_SINGLE_STEP_GET_DEV_DESC	6
+#define USB_TEST_SINGLE_STEP_SET_FEATURE	7
+
 #define MAX_USB_CORE_NUM	4
 
 /* device index 1 is used for USB1, 3 for USB3 and id 4 for USB4, similarly
@@ -1405,6 +1413,11 @@ static int msm_otg_usbdev_notify(struct notifier_block *self,
 
 	switch (action) {
 	case USB_DEVICE_ADD:
+		if (udev->parent && udev->maxchild) {
+			dev_dbg(motg->phy.dev, "Save HUB usb_dev for test mode later- %p\n",
+				udev);
+			motg->hub_udev = udev;
+		}
 		if (aca_enabled())
 			usb_disable_autosuspend(udev);
 		if (otg->phy->state == OTG_STATE_A_WAIT_BCON) {
@@ -1430,6 +1443,8 @@ static int msm_otg_usbdev_notify(struct notifier_block *self,
 			msm_otg_del_timer(motg);
 		break;
 	case USB_DEVICE_REMOVE:
+		if (udev == motg->hub_udev)
+			motg->hub_udev = NULL;
 		if ((otg->phy->state == OTG_STATE_A_HOST) ||
 			(otg->phy->state == OTG_STATE_A_SUSPEND)) {
 			pr_debug("B_CONN clear\n");
@@ -3327,6 +3342,193 @@ const struct file_operations msm_otg_chg_fops = {
 	.release = single_release,
 };
 
+static ssize_t
+port_num_get(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+
+	struct msm_otg *motg = dev_get_drvdata(dev);
+	if (attr == NULL || buf == NULL) {
+		dev_err(dev, "[%s] EINVAL\n", __func__);
+		return 0;
+	}
+
+	return scnprintf(buf, PAGE_SIZE, "port_num = %u\n",
+			motg->test_port_num);
+}
+
+static ssize_t
+port_num_set(struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct msm_otg *motg = dev_get_drvdata(dev);
+	int port;
+
+	if (!motg->hub_udev) {
+		dev_err(motg->phy.dev, " %s: Hub_dev is NULL\n", __func__);
+		return -ENODEV;
+	}
+	if (sscanf(buf, "%u", &port) != 1) {
+		dev_err(dev, "set port error");
+		goto done;
+	} else {
+		if (port > motg->hub_udev->maxchild)
+			dev_err(dev, "%s: entered invalid port number",
+				__func__);
+		else
+			motg->test_port_num = port;
+	}
+	dev_dbg(motg->phy.dev, " %s: port_num:%d\n", __func__,
+			motg->test_port_num);
+done:
+	return count;
+}
+
+static ssize_t
+test_mode_get(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct msm_otg *motg = dev_get_drvdata(dev);
+
+	if (attr == NULL || buf == NULL) {
+		dev_err(dev, "[%s] EINVAL\n", __func__);
+		return 0;
+	}
+
+	return scnprintf(buf, PAGE_SIZE, "test_mode = %u\n",
+			motg->test_mode);
+}
+
+static ssize_t
+test_mode_set(struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct msm_otg *motg = dev_get_drvdata(dev);
+	int status = -1;
+	int port = motg->test_port_num;
+	struct usb_device *rh_udev;
+	struct usb_device *udev;
+	int test_mode;
+
+	if (!motg->hub_udev) {
+		dev_err(motg->phy.dev, " %s: Hub_dev is NULL\n", __func__);
+		return -ENODEV;
+	}
+
+	rh_udev = motg->hub_udev->bus->root_hub;
+	udev = motg->hub_udev->children[port-1];
+
+	if (sscanf(buf, "%u", &test_mode) == 1) {
+		dev_info(dev, "%s: setting test mode\n", __func__);
+		motg->test_mode = test_mode;
+	}
+
+	pm_runtime_get_sync(&motg->hub_udev->dev);
+
+	switch (test_mode) {
+	case USB_TEST_SE0_NAK_PID:
+		status = usb_control_msg(motg->hub_udev,
+				usb_sndctrlpipe(motg->hub_udev, 0),
+				USB_REQ_SET_FEATURE, USB_RT_PORT,
+				USB_PORT_FEAT_TEST, (3 << 8) | port,
+				NULL, 0, 1000);
+		if (status < 0)
+			dev_err(motg->phy.dev, "%s: TEST_SE0_NAK_PID fail status:%d\n",
+				__func__, status);
+		break;
+	case USB_TEST_J_PID:
+		status = usb_control_msg(motg->hub_udev,
+				usb_sndctrlpipe(motg->hub_udev, 0),
+				USB_REQ_SET_FEATURE, USB_RT_PORT,
+				USB_PORT_FEAT_TEST,
+				(1 << 8) | port, NULL, 0, 1000);
+		if (status < 0)
+			dev_err(motg->phy.dev, "%s: TEST_J_PID fail status:%d\n",
+				__func__, status);
+		break;
+	case USB_TEST_K_PID:
+		status = usb_control_msg(motg->hub_udev,
+				usb_sndctrlpipe(motg->hub_udev, 0),
+				USB_REQ_SET_FEATURE, USB_RT_PORT,
+				USB_PORT_FEAT_TEST,
+				(2 << 8) | port, NULL, 0, 1000);
+		if (status < 0)
+			dev_err(motg->phy.dev, "%s: TEST_K_PID fail status:%d\n",
+				__func__, status);
+		break;
+	case USB_TEST_PACKET_PID:
+		status = usb_control_msg(motg->hub_udev,
+				usb_sndctrlpipe(motg->hub_udev, 0),
+				USB_REQ_SET_FEATURE, USB_RT_PORT,
+				USB_PORT_FEAT_TEST,
+				(4 << 8) | port, NULL, 0, 1000);
+		if (status < 0)
+			dev_err(motg->phy.dev, "%s: TEST_PACKET_PID fail status:%d\n",
+				__func__, status);
+		break;
+	case USB_TEST_HS_HOST_PORT_SUSPEND_RESUME:
+		/* Test: wait for 15secs -> suspend -> 15secs delay -> resume */
+		msleep(15 * 1000);
+		status = usb_control_msg(motg->hub_udev,
+				usb_sndctrlpipe(motg->hub_udev, 0),
+				USB_REQ_SET_FEATURE, USB_RT_PORT,
+				USB_PORT_FEAT_SUSPEND, port, NULL, 0, 1000);
+		if (status < 0)
+			break;
+		msleep(15 * 1000);
+		status = usb_control_msg(motg->hub_udev,
+				usb_sndctrlpipe(motg->hub_udev, 0),
+				USB_REQ_CLEAR_FEATURE, USB_RT_PORT,
+				USB_PORT_FEAT_SUSPEND, port, NULL, 0, 1000);
+		if (status < 0)
+			dev_err(motg->phy.dev, "%s: TEST_HS_HOST_PORT_SUSPEND_RESUME fail status:%d\n",
+				__func__, status);
+		break;
+	case USB_TEST_SINGLE_STEP_GET_DEV_DESC:
+		/* Test: wait for 15secs -> GetDescriptor request */
+		if (!udev) {
+			dev_err(motg->phy.dev, " %s: udev is NULL\n", __func__);
+			return -ENODEV;
+		}
+		msleep(15 * 1000);
+		{
+			struct usb_device_descriptor *buf;
+			buf = kmalloc(USB_DT_DEVICE_SIZE, GFP_KERNEL);
+			if (!buf)
+				return -ENOMEM;
+
+			status = usb_control_msg(udev, usb_rcvctrlpipe(udev, 0),
+				USB_REQ_GET_DESCRIPTOR, USB_DIR_IN,
+				USB_DT_DEVICE << 8, 0,
+				buf, USB_DT_DEVICE_SIZE,
+				USB_CTRL_GET_TIMEOUT);
+			if (status < 0)
+				dev_err(motg->phy.dev, "%s: TEST_SINGLE_STEP_GET_DEV_DESC fail status:%d\n",
+					__func__, status);
+			kfree(buf);
+		}
+		break;
+	case USB_TEST_SINGLE_STEP_SET_FEATURE:
+		/* GetDescriptor's SETUP request -> 15secs delay -> IN & STATUS
+		 * Issue request to ehci root hub driver with portnum
+		 */
+		status = usb_control_msg(rh_udev, usb_sndctrlpipe(rh_udev, 0),
+			USB_REQ_SET_FEATURE, USB_RT_PORT, USB_PORT_FEAT_TEST,
+			(6 << 8) | port, NULL, 0, 60 * 1000);
+		if (status < 0)
+			dev_err(motg->phy.dev, "%s: TEST_SINGLE_STEP_SET_FEATURE fail status:%d\n",
+				__func__, status);
+		break;
+	default:
+		pr_err("%s: undefined test mode ( %X )\n", __func__, test_mode);
+		return -EINVAL;
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR(port_num, S_IRUGO | S_IWUSR, port_num_get, port_num_set);
+static DEVICE_ATTR(test_mode, S_IRUGO | S_IWUSR, test_mode_get, test_mode_set);
+
 static int msm_otg_aca_show(struct seq_file *s, void *unused)
 {
 	struct msm_otg *motg = s->private;
@@ -3876,6 +4078,10 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 		if (device_create_file(&pdev->dev, &dev_attr_keep_vbus))
 			dev_err(&pdev->dev, "could not create keep_vbus sysfs file\n");
 	}
+	if (device_create_file(&pdev->dev, &dev_attr_port_num))
+		dev_err(&pdev->dev, "could not create port_num sysfs file\n");
+	if (device_create_file(&pdev->dev, &dev_attr_test_mode))
+		dev_err(&pdev->dev, "could not create test_mode sysfs file\n");
 
 	ret = msm_otg_debugfs_init(motg);
 	if (ret)
@@ -3984,6 +4190,8 @@ static int __devexit msm_otg_remove(struct platform_device *pdev)
 	if (motg->pdata->otg_control == OTG_USER_CONTROL) {
 		device_remove_file(&pdev->dev, &dev_attr_mode);
 		device_remove_file(&pdev->dev, &dev_attr_keep_vbus);
+		device_remove_file(&pdev->dev, &dev_attr_port_num);
+		device_remove_file(&pdev->dev, &dev_attr_test_mode);
 	}
 	msm_otg_debugfs_cleanup(motg);
 	cancel_delayed_work_sync(&motg->chg_work);

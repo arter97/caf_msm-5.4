@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2008 Google, Inc.
  * Author: Brian Swetland <swetland@google.com>
- * Copyright (c) 2009-2012, 2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2012, 2014, 2016 The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -270,6 +270,9 @@ struct msm_otg_platform_data {
  * struct msm_otg: OTG driver data. Shared by HCD and DCD.
  * @otg: USB OTG Transceiver structure.
  * @pdata: otg device platform data.
+ * @hub_udev: HUB device pointer.
+ * @test_port_num: port number of the hub to test.
+ * @test_mode: test packet mode to generate test signals.
  * @irq: IRQ number assigned for HSUSB controller.
  * @async_irq: IRQ number used by some controllers during low power state
  * @clk: clock struct of alt_core_clk.
@@ -301,6 +304,9 @@ struct msm_otg_platform_data {
 struct msm_otg {
 	struct usb_phy phy;
 	struct msm_otg_platform_data *pdata;
+	struct usb_device *hub_udev;
+	int test_port_num;
+	int test_mode;
 	int irq;
 	int async_irq;
 	struct clk *clk;
