@@ -1808,14 +1808,16 @@ static int msm_vfe40_axi_halt(struct vfe_device *vfe_dev,
 }
 
 static int msm_vfe40_axi_restart(struct vfe_device *vfe_dev,
-	uint32_t blocking, uint32_t enable_camif)
+	uint32_t blocking, uint32_t enable_camif, uint32_t enable_ext_read)
 {
 	vfe_dev->hw_info->vfe_ops.core_ops.restore_irq_mask(vfe_dev);
 	/* Clear IRQ Status */
 	msm_camera_io_w(0x7FFFFFFF, vfe_dev->vfe_base + 0x30);
 	msm_camera_io_w(0xFEFFFEFF, vfe_dev->vfe_base + 0x34);
 	msm_camera_io_w(0x1, vfe_dev->vfe_base + 0x24);
-	msm_camera_io_w_mb(0x140000, vfe_dev->vfe_base + 0x318);
+
+	if (enable_camif)
+		msm_camera_io_w_mb(0x140000, vfe_dev->vfe_base + 0x318);
 
 	/* Start AXI */
 	msm_camera_io_w(0x0, vfe_dev->vfe_base + 0x2C0);
@@ -1825,8 +1827,11 @@ static int msm_vfe40_axi_restart(struct vfe_device *vfe_dev,
 	atomic_set(&vfe_dev->error_info.overflow_state, NO_OVERFLOW);
 
 	if (enable_camif) {
-		vfe_dev->hw_info->vfe_ops.core_ops.
-		update_camif_state(vfe_dev, ENABLE_CAMIF);
+		vfe_dev->hw_info->vfe_ops.core_ops.update_camif_state(vfe_dev,
+			ENABLE_CAMIF);
+	} else if (enable_ext_read) {
+		msm_camera_io_w_mb(0x10000, vfe_dev->vfe_base + 0x4C);
+		msm_camera_io_w_mb(0x20000, vfe_dev->vfe_base + 0x4C);
 	}
 
 	return 0;

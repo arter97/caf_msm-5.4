@@ -349,6 +349,7 @@ struct msm_vfe_axi_reset_cmd {
 
 struct msm_vfe_axi_restart_cmd {
 	uint32_t enable_camif;
+	uint32_t enable_ext_read;
 };
 
 struct msm_vfe_axi_stream_update_cmd {

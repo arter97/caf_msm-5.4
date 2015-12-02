@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1546,13 +1546,15 @@ static int msm_vfe46_axi_halt(struct vfe_device *vfe_dev,
 }
 
 static int msm_vfe46_axi_restart(struct vfe_device *vfe_dev,
-	uint32_t blocking, uint32_t enable_camif)
+	uint32_t blocking, uint32_t enable_camif, uint32_t enable_ext_read)
 {
 	vfe_dev->hw_info->vfe_ops.core_ops.restore_irq_mask(vfe_dev);
 	msm_camera_io_w(0x7FFFFFFF, vfe_dev->vfe_base + 0x64);
 	msm_camera_io_w(0xFFFFFEFF, vfe_dev->vfe_base + 0x68);
 	msm_camera_io_w(0x1, vfe_dev->vfe_base + 0x58);
-	msm_camera_io_w_mb(0x140000, vfe_dev->vfe_base + 0x3CC);
+
+	if (enable_camif)
+		msm_camera_io_w_mb(0x140000, vfe_dev->vfe_base + 0x3CC);
 
 	/* Start AXI */
 	msm_camera_io_w(0x0, vfe_dev->vfe_base + 0x374);
@@ -1562,8 +1564,11 @@ static int msm_vfe46_axi_restart(struct vfe_device *vfe_dev,
 	atomic_set(&vfe_dev->error_info.overflow_state, NO_OVERFLOW);
 
 	if (enable_camif) {
-		vfe_dev->hw_info->vfe_ops.core_ops.
-		update_camif_state(vfe_dev, ENABLE_CAMIF);
+		vfe_dev->hw_info->vfe_ops.core_ops.update_camif_state(vfe_dev,
+			ENABLE_CAMIF);
+	} else if (enable_ext_read) {
+		msm_camera_io_w_mb(0x10000, vfe_dev->vfe_base + 0x80);
+		msm_camera_io_w_mb(0x20000, vfe_dev->vfe_base + 0x80);
 	}
 
 	return 0;

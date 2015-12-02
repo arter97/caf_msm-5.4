@@ -2156,7 +2156,7 @@ int msm_isp_axi_restart(struct vfe_device *vfe_dev,
 		vfe_dev->vfe_base, wm_reload_mask);
 
 	rc = vfe_dev->hw_info->vfe_ops.axi_ops.restart(vfe_dev, 0,
-		restart_cmd->enable_camif);
+		restart_cmd->enable_camif, restart_cmd->enable_ext_read);
 	if (rc < 0)
 		pr_err("%s Error restarting HW\n", __func__);
 
