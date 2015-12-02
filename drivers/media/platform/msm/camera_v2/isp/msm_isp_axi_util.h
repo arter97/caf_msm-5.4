@@ -80,4 +80,7 @@ int msm_isp_drop_frame(struct vfe_device *vfe_dev,
 	struct msm_vfe_axi_stream *stream_info, struct msm_isp_timestamp *ts,
 	struct msm_isp_sof_info *sof_info);
 
+int msm_isp_release_dual_HW_resource_all(
+	struct vfe_device *vfe_dev);
+
 #endif /* __MSM_ISP_AXI_UTIL_H__ */

@@ -2176,17 +2176,80 @@ static int msm_isp_update_dual_HW_ms_info_at_start(
 	return rc;
 }
 
+static int msm_isp_release_dual_HW_resource(
+	struct vfe_device *vfe_dev,
+	enum msm_vfe_input_src stream_src)
+{
+	int rc = 0;
+	uint8_t slave_id;
+	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
+	struct msm_vfe_src_info *src_info = NULL;
+	unsigned long flags;
+
+	/* Remove PIX if DISABLE CAMIF */
+	src_info = &axi_data->src_info[stream_src];
+
+	if (src_info->dual_hw_type != DUAL_HW_MASTER_SLAVE)
+		return rc;
+
+	if (src_info->dual_hw_ms_info.dual_hw_ms_type ==
+		MS_TYPE_NONE)
+		return rc;
+
+	spin_lock_irqsave(&vfe_dev->common_data->common_dev_data_lock, flags);
+	if (src_info->dual_hw_ms_info.dual_hw_ms_type ==
+		MS_TYPE_MASTER) {
+		/*
+		 * Once Master is inactive, slave will increment
+		 * its own frame_id
+		 */
+		vfe_dev->common_data->ms_resource.master_active = 0;
+	} else {
+		/*only primary slave need to reset the resource*/
+		if (src_info->dual_hw_ms_info.sof_info != NULL) {
+			slave_id = src_info->dual_hw_ms_info.slave_id;
+			vfe_dev->common_data->ms_resource.reserved_slave_mask &=
+				~(1 << slave_id);
+			vfe_dev->common_data->ms_resource.slave_active_mask &=
+				~(1 << slave_id);
+			if (vfe_dev->common_data->ms_resource.num_slave)
+				vfe_dev->common_data->ms_resource.num_slave--;
+		}
+	}
+
+	src_info->dual_hw_ms_info.dual_hw_ms_type = MS_TYPE_NONE;
+	src_info->dual_hw_ms_info.sof_info = NULL;
+	spin_unlock_irqrestore(&vfe_dev->common_data->common_dev_data_lock, flags);
+	vfe_dev->vfe_ub_policy = 0;
+
+	return rc;
+}
+
+int msm_isp_release_dual_HW_resource_all(
+	struct vfe_device *vfe_dev)
+{
+	int i, rc = 0;
+
+	for (i = 0; i < VFE_SRC_MAX; i++) {
+		rc = msm_isp_release_dual_HW_resource(
+			vfe_dev, i);
+		if (rc < 0)
+			pr_err("%s:  rc = %d\n",
+				__func__, rc);
+	}
+
+	return rc;
+}
+
 static int msm_isp_update_dual_HW_ms_info_at_stop(
 	struct vfe_device *vfe_dev,
 	struct msm_vfe_axi_stream_cfg_cmd *stream_cfg_cmd,
 	enum msm_isp_camif_update_state camif_update)
 {
 	int i, rc = 0;
-	uint8_t slave_id;
 	struct msm_vfe_axi_stream *stream_info = NULL;
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
 	enum msm_vfe_input_src stream_src = VFE_SRC_MAX;
-	struct msm_vfe_src_info *src_info = NULL;
 
 	if (stream_cfg_cmd->num_streams > MAX_NUM_STREAM ||
 		stream_cfg_cmd->num_streams == 0)
@@ -2206,29 +2269,11 @@ static int msm_isp_update_dual_HW_ms_info_at_stop(
 			|| (camif_update == DISABLE_CAMIF_IMMEDIATELY)))
 			continue;
 
-		src_info = &axi_data->src_info[stream_src];
-		if (src_info->dual_hw_type != DUAL_HW_MASTER_SLAVE)
-			continue;
-
-		spin_lock(&vfe_dev->common_data->common_dev_data_lock);
-		if (src_info->dual_hw_ms_info.dual_hw_ms_type ==
-			MS_TYPE_MASTER) {
-			/*
-			 * Once Master is inactive, slave will increment
-			 * its own frame_id
-			 */
-			vfe_dev->common_data->ms_resource.master_active = 0;
-		} else {
-			slave_id = src_info->dual_hw_ms_info.slave_id;
-			vfe_dev->common_data->ms_resource.reserved_slave_mask &=
-				~(1 << slave_id);
-			vfe_dev->common_data->ms_resource.slave_active_mask &=
-				~(1 << slave_id);
-			vfe_dev->common_data->ms_resource.num_slave--;
-		}
-		src_info->dual_hw_ms_info.sof_info = NULL;
-		spin_unlock(&vfe_dev->common_data->common_dev_data_lock);
-		vfe_dev->vfe_ub_policy = 0;
+		rc = msm_isp_release_dual_HW_resource(
+			vfe_dev, stream_src);
+		if (rc < 0)
+			pr_err("%s: msm_isp_release_dual_HW_resource rc = %d\n",
+				__func__, rc);
 	}
 
 	return rc;
