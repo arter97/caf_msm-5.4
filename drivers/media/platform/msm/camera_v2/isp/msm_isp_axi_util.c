@@ -2416,8 +2416,11 @@ static int msm_isp_stop_axi_stream(struct vfe_device *vfe_dev,
 			!vfe_dev->axi_data.src_info[intf].active) {
 			msm_isp_axi_stream_enable_cfg(vfe_dev, stream_info);
 			stream_info->state = INACTIVE;
-			vfe_dev->hw_info->vfe_ops.core_ops.reg_update(vfe_dev,
-				SRC_TO_INTF(stream_info->stream_src));
+			if (!vfe_dev->axi_data.src_info[intf].active) {
+				vfe_dev->hw_info->vfe_ops.core_ops.reg_update(
+					vfe_dev,
+					SRC_TO_INTF(stream_info->stream_src));
+			}
 
 			/*
 			 * Active bit is reset in disble_camif for PIX.
