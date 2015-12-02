@@ -74,6 +74,9 @@ static struct msm_dai_auxpcm_pdata *sec_auxpcm_plat_data;
 static DEFINE_MUTEX(mi2s_mutex);
 static int mi2s_non_group_count;
 static int mi2s_group_count;
+static DEFINE_MUTEX(i2s_mutex);
+static int i2s_non_group_count;
+static int i2s_group_count;
 
 static int msm_mi2s_group_enable(
 		struct afe_param_id_group_device_i2s_cfg_v1 *cfg,
@@ -83,7 +86,12 @@ static int msm_mi2s_group_enable(
 
 	pr_debug("%s\n", __func__);
 
-	if (enable && cfg) {
+	if (cfg == NULL) {
+		pr_err("%s: NULL i2s config pointer\n", __func__);
+		goto err;
+	}
+
+	if (enable) {
 		rc = afe_group_device_i2s_config(cfg);
 		if (IS_ERR_VALUE(rc)) {
 			pr_err("%s: Failed to configure i2s group device\n",
@@ -91,7 +99,7 @@ static int msm_mi2s_group_enable(
 			goto err;
 		}
 	}
-	rc = afe_group_device_enable(enable);
+	rc = afe_group_device_enable(cfg->group_id, enable);
 	if (IS_ERR_VALUE(rc)) {
 		pr_err("%s: Failed to enable group device\n",
 			__func__);
@@ -645,6 +653,11 @@ static int msm_dai_q6_mi2s_group_prepare(struct snd_pcm_substream *substream,
 
 		mi2s_group_data->slot_mapping_cfg.num_channel =
 			 dai_data->channels;
+		/* validate the setting against hw params */
+		if (dai_data->channels == 1) {
+			mi2s_group_data->slot_mapping_cfg.offset[1] =
+				AFE_SLOT_MAPPING_OFFSET_INVALID;
+		}
 		switch (dai_data->bitwidth) {
 		case 16:
 			mi2s_group_data->slot_mapping_cfg.bitwidth = 16;
@@ -666,7 +679,7 @@ static int msm_dai_q6_mi2s_group_prepare(struct snd_pcm_substream *substream,
 			 &mi2s_group_data->slot_mapping_cfg);
 
 		if (IS_ERR_VALUE(rc)) {
-			msm_mi2s_group_enable(NULL, 0);
+			msm_mi2s_group_enable(&mi2s_group_data->group_cfg, 0);
 			dev_err(dai->dev, "%s: fail to open AFE port %x\n",
 				__func__, dai->id);
 			goto rtn;
@@ -681,6 +694,84 @@ rtn:
 	return rc;
 }
 
+static int msm_dai_q6_i2s_group_prepare(struct snd_pcm_substream *substream,
+		struct snd_soc_dai *dai)
+{
+	struct msm_dai_q6_mi2s_group_dai_data *mi2s_dai_data =
+		dev_get_drvdata(dai->dev);
+	struct msm_dai_q6_dai_data *dai_data =
+		(substream->stream == SNDRV_PCM_STREAM_PLAYBACK ?
+		 &mi2s_dai_data->rx_dai.mi2s_dai_data :
+		 &mi2s_dai_data->tx_dai.mi2s_dai_data);
+	struct msm_dai_q6_mi2s_group_data *mi2s_group_data =
+		 &mi2s_dai_data->pdata_group;
+	int rc = 0;
+
+	mutex_lock(&i2s_mutex);
+
+	if (i2s_non_group_count) {
+		dev_err(dai->dev,
+			 "%s: can't start group when non-group dev in use\n",
+			 __func__);
+		rc = -EBUSY;
+		goto rtn;
+	}
+
+	if (!test_bit(STATUS_PORT_STARTED, dai_data->status_mask)) {
+		/*
+		 * PORT START should be set
+		 * if prepare called in active state
+		 */
+		if (i2s_group_count == 0) {
+
+			rc = msm_mi2s_group_enable(
+				&mi2s_group_data->group_cfg, 1);
+			if (IS_ERR_VALUE(rc)) {
+				pr_err("%s: group enable failed\n",
+					 __func__);
+				goto rtn;
+			}
+
+		}
+
+		mi2s_group_data->slot_mapping_cfg.num_channel =
+			 dai_data->channels;
+		switch (dai_data->bitwidth) {
+		case 16:
+			mi2s_group_data->slot_mapping_cfg.bitwidth = 16;
+			break;
+		case 24:
+		case 32:
+			mi2s_group_data->slot_mapping_cfg.bitwidth = 32;
+			break;
+		default:
+			dev_err(dai->dev, "%s: invalid bitwidth %d\n",
+				__func__, dai_data->bitwidth);
+			rc = -EINVAL;
+			goto rtn;
+		}
+
+		rc = afe_group_dev_port_start(dai->id,
+			 &dai_data->port_config,
+			 dai_data->rate,
+			 &mi2s_group_data->slot_mapping_cfg);
+
+		if (IS_ERR_VALUE(rc)) {
+			msm_mi2s_group_enable(&mi2s_group_data->group_cfg, 0);
+			dev_err(dai->dev, "%s: fail to open AFE port %x\n",
+				__func__, dai->id);
+			goto rtn;
+		}
+
+		set_bit(STATUS_PORT_STARTED,
+			dai_data->status_mask);
+		i2s_group_count++;
+	}
+
+rtn:
+	mutex_unlock(&i2s_mutex);
+	return rc;
+}
 
 static void msm_dai_q6_mi2s_shutdown(struct snd_pcm_substream *substream,
 				     struct snd_soc_dai *dai)
@@ -729,6 +820,8 @@ static void msm_dai_q6_mi2s_group_shutdown(struct snd_pcm_substream *substream,
 		(substream->stream == SNDRV_PCM_STREAM_PLAYBACK ?
 		 &mi2s_dai_data->rx_dai.mi2s_dai_data :
 		 &mi2s_dai_data->tx_dai.mi2s_dai_data);
+	struct msm_dai_q6_mi2s_group_data *mi2s_group_data =
+		 &mi2s_dai_data->pdata_group;
 	int rc = 0;
 
 	mutex_lock(&mi2s_mutex);
@@ -752,13 +845,56 @@ static void msm_dai_q6_mi2s_group_shutdown(struct snd_pcm_substream *substream,
 	}
 
 	if (mi2s_group_count == 0) {
-		rc = msm_mi2s_group_enable(NULL, 0);
+		rc = msm_mi2s_group_enable(&mi2s_group_data->group_cfg, 0);
 		if (IS_ERR_VALUE(rc))
 			pr_err("%s: mi2s group disable failed\n", __func__);
 	}
 
 rtn:
 	mutex_unlock(&mi2s_mutex);
+}
+
+static void msm_dai_q6_i2s_group_shutdown(struct snd_pcm_substream *substream,
+				     struct snd_soc_dai *dai)
+{
+	struct msm_dai_q6_mi2s_group_dai_data *mi2s_dai_data =
+		dev_get_drvdata(dai->dev);
+	struct msm_dai_q6_dai_data *dai_data =
+		(substream->stream == SNDRV_PCM_STREAM_PLAYBACK ?
+		 &mi2s_dai_data->rx_dai.mi2s_dai_data :
+		 &mi2s_dai_data->tx_dai.mi2s_dai_data);
+	struct msm_dai_q6_mi2s_group_data *mi2s_group_data =
+		 &mi2s_dai_data->pdata_group;
+	int rc = 0;
+
+	mutex_lock(&i2s_mutex);
+
+	if (test_bit(STATUS_PORT_STARTED, dai_data->status_mask)) {
+		rc = afe_close(dai->id);
+		if (IS_ERR_VALUE(rc)) {
+			dev_err(dai->dev, "fail to close AFE port\n");
+			goto rtn;
+		}
+		i2s_group_count--;
+		clear_bit(STATUS_PORT_STARTED, dai_data->status_mask);
+	}
+
+	if (!test_bit(STATUS_PORT_STARTED,
+			mi2s_dai_data->rx_dai.mi2s_dai_data.status_mask) &&
+	    !test_bit(STATUS_PORT_STARTED,
+			mi2s_dai_data->rx_dai.mi2s_dai_data.status_mask)) {
+		mi2s_dai_data->rate_constraint.list = NULL;
+		mi2s_dai_data->bitwidth_constraint.list = NULL;
+	}
+
+	if (i2s_group_count == 0) {
+		rc = msm_mi2s_group_enable(&mi2s_group_data->group_cfg, 0);
+		if (IS_ERR_VALUE(rc))
+			pr_err("%s: i2s group disable failed\n", __func__);
+	}
+
+rtn:
+	mutex_unlock(&i2s_mutex);
 }
 
 static int msm_dai_q6_cdc_hw_params(struct snd_pcm_hw_params *params,
@@ -1128,6 +1264,7 @@ static void msm_dai_q6_shutdown(struct snd_pcm_substream *substream,
 	struct msm_dai_q6_dai_data *dai_data = dev_get_drvdata(dai->dev);
 	int rc = 0;
 
+	mutex_lock(&i2s_mutex);
 	if (test_bit(STATUS_PORT_STARTED, dai_data->status_mask)) {
 		switch (dai->id) {
 		case VOICE_PLAYBACK_TX:
@@ -1141,12 +1278,18 @@ static void msm_dai_q6_shutdown(struct snd_pcm_substream *substream,
 			rc = afe_close(dai->id); /* can block */
 			break;
 		}
-		if (IS_ERR_VALUE(rc))
+		if (IS_ERR_VALUE(rc)) {
 			dev_err(dai->dev, "fail to close AFE port\n");
+			goto rtn;
+		}
+		if (dai->id == PRIMARY_I2S_RX || dai->id == PRIMARY_I2S_TX)
+			i2s_non_group_count--;
 		pr_debug("%s: dai_data->status_mask = %ld\n", __func__,
 			*dai_data->status_mask);
 		clear_bit(STATUS_PORT_STARTED, dai_data->status_mask);
 	}
+rtn:
+	mutex_unlock(&i2s_mutex);
 }
 
 static int msm_dai_q6_auxpcm_prepare(struct snd_pcm_substream *substream,
@@ -1317,6 +1460,17 @@ static int msm_dai_q6_prepare(struct snd_pcm_substream *substream,
 	struct msm_dai_q6_dai_data *dai_data = dev_get_drvdata(dai->dev);
 	int rc = 0;
 
+	mutex_lock(&i2s_mutex);
+
+	if (dai->id == PRIMARY_I2S_RX || dai->id == PRIMARY_I2S_TX) {
+		if (i2s_group_count) {
+			dev_err(dai->dev, "%s: can't start I2S when using as group dev\n",
+				__func__);
+			rc = -EBUSY;
+			goto rtn;
+		}
+	}
+
 	if (!test_bit(STATUS_PORT_STARTED, dai_data->status_mask)) {
 		switch (dai->id) {
 		case VOICE_PLAYBACK_TX:
@@ -1329,14 +1483,19 @@ static int msm_dai_q6_prepare(struct snd_pcm_substream *substream,
 					    dai_data->rate);
 		}
 
-		if (IS_ERR_VALUE(rc))
+		if (IS_ERR_VALUE(rc)) {
 			dev_err(dai->dev, "fail to open AFE port %x\n",
 				dai->id);
-		else
-			set_bit(STATUS_PORT_STARTED,
-				dai_data->status_mask);
+			goto rtn;
+		}
+		set_bit(STATUS_PORT_STARTED,
+			dai_data->status_mask);
+		if (dai->id == PRIMARY_I2S_RX || dai->id == PRIMARY_I2S_TX)
+			i2s_non_group_count++;
 	}
 
+rtn:
+	mutex_unlock(&i2s_mutex);
 	return rc;
 }
 
@@ -1706,6 +1865,8 @@ static int msm_dai_q6_dai_mi2s_group_remove(struct snd_soc_dai *dai)
 	case MI2S_TX_0:
 	case MI2S_TX_1:
 	case MI2S_TX_2:
+	case PRIMARY_I2S_TX_0:
+	case PRIMARY_I2S_TX_1:
 		if (!test_bit(STATUS_PORT_STARTED,
 			mi2s_dai_data->tx_dai.mi2s_dai_data.status_mask))
 			goto rtn;
@@ -1885,6 +2046,14 @@ static struct snd_soc_dai_ops msm_dai_q6_mi2s_group_ops = {
 	.prepare	= msm_dai_q6_mi2s_group_prepare,
 	.hw_params	= msm_dai_q6_mi2s_hw_params,
 	.shutdown	= msm_dai_q6_mi2s_group_shutdown,
+	.set_fmt	= msm_dai_q6_mi2s_set_fmt,
+};
+
+static struct snd_soc_dai_ops msm_dai_q6_i2s_group_ops = {
+	.startup	= msm_dai_q6_mi2s_startup,
+	.prepare	= msm_dai_q6_i2s_group_prepare,
+	.hw_params	= msm_dai_q6_mi2s_hw_params,
+	.shutdown	= msm_dai_q6_i2s_group_shutdown,
 	.set_fmt	= msm_dai_q6_mi2s_set_fmt,
 };
 
@@ -2206,6 +2375,46 @@ static struct snd_soc_dai_driver msm_dai_q6_mi2s_group_1_dai = {
 	.remove = msm_dai_q6_dai_mi2s_group_remove,
 };
 
+static struct snd_soc_dai_driver msm_dai_q6_i2s_group_0_dai = {
+	.playback = {
+		.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+		SNDRV_PCM_RATE_16000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE,
+		.rate_min =     8000,
+		.rate_max =	48000,
+	},
+	.capture = {
+		.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+		SNDRV_PCM_RATE_16000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE,
+		.rate_min =     8000,
+		.rate_max =     48000,
+	},
+	.ops = &msm_dai_q6_i2s_group_ops,
+	.probe = msm_dai_q6_dai_mi2s_group_probe,
+	.remove = msm_dai_q6_dai_mi2s_group_remove,
+};
+
+static struct snd_soc_dai_driver msm_dai_q6_i2s_group_1_dai = {
+	.playback = {
+		.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+		SNDRV_PCM_RATE_16000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE,
+		.rate_min =     8000,
+		.rate_max =	48000,
+	},
+	.capture = {
+		.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+		SNDRV_PCM_RATE_16000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE,
+		.rate_min =     8000,
+		.rate_max =     48000,
+	},
+	.ops = &msm_dai_q6_i2s_group_ops,
+	.probe = msm_dai_q6_dai_mi2s_group_probe,
+	.remove = msm_dai_q6_dai_mi2s_group_remove,
+};
+
 static struct snd_soc_dai_driver msm_dai_q6_mi2s_group_2_dai = {
 	.playback = {
 		.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
@@ -2520,6 +2729,35 @@ static __devinit int msm_dai_q6_mi2s_group_dev_probe(
 		if (IS_ERR_VALUE(rc))
 			goto err_pdata;
 		break;
+	case PRIMARY_I2S_TX_0:
+		rc = msm_dai_q6_mi2s_group_platform_data_validation(pdev,
+			 &msm_dai_q6_i2s_group_0_dai);
+		if (IS_ERR_VALUE(rc))
+			goto err_pdata;
+
+		dai_data->rate_constraint.count = 1;
+		dai_data->bitwidth_constraint.count = 1;
+		rc = snd_soc_register_dai(&pdev->dev,
+			 &msm_dai_q6_i2s_group_0_dai);
+
+		if (IS_ERR_VALUE(rc))
+			goto err_pdata;
+		break;
+	case PRIMARY_I2S_TX_1:
+		rc = msm_dai_q6_mi2s_group_platform_data_validation(pdev,
+			 &msm_dai_q6_i2s_group_1_dai);
+		if (IS_ERR_VALUE(rc))
+			goto err_pdata;
+
+		dai_data->rate_constraint.count = 1;
+		dai_data->bitwidth_constraint.count = 1;
+		rc = snd_soc_register_dai(&pdev->dev,
+			 &msm_dai_q6_i2s_group_1_dai);
+
+		if (IS_ERR_VALUE(rc))
+			goto err_pdata;
+		break;
+
 	default:
 		rc = -ENODEV;
 		goto err_pdata;

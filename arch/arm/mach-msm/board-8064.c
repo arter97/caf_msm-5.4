@@ -4214,6 +4214,10 @@ static void __init apq8064_common_init(void)
 				&apq_adp_cpudai_mi2s_group_rx_1);
 			platform_device_register(
 				&apq_adp_cpudai_mi2s_group_rx_2);
+			platform_device_register(
+				&apq_adp_cpudai_pri_i2s_group_tx_0);
+			platform_device_register(
+				&apq_adp_cpudai_pri_i2s_group_tx_1);
 			platform_device_register(&apq_cpudai_mi2s);
 			platform_device_register(&apq_pcm_lpa);
 		} else {

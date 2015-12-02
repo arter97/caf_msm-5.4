@@ -74,6 +74,7 @@ enum {
 	IDX_MI2S_TX_1 = 35,
 	IDX_MI2S_RX_2 = 36,
 	IDX_MI2S_TX_2 = 37,
+	IDX_PRIMARY_I2S_TX_1 = 38,
 	AFE_MAX_PORTS
 };
 
@@ -114,7 +115,7 @@ int afe_pseudo_port_stop_nowait(u16 port_id);
 
 int afe_group_device_i2s_config(
 	struct afe_param_id_group_device_i2s_cfg_v1 *cfg);
-int afe_group_device_enable(u16 enable);
+int afe_group_device_enable(u16 group_id, u16 enable);
 int afe_group_dev_port_start(u16 port_id,
 	union afe_port_config *afe_config,
 	u32 rate,

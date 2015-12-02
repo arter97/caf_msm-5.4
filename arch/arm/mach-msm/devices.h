@@ -289,6 +289,8 @@ extern struct platform_device apq_adp_cpudai_mi2s_rx;
 extern struct platform_device apq_adp_cpudai_mi2s_group_rx_0;
 extern struct platform_device apq_adp_cpudai_mi2s_group_rx_1;
 extern struct platform_device apq_adp_cpudai_mi2s_group_rx_2;
+extern struct platform_device apq_adp_cpudai_pri_i2s_group_tx_0;
+extern struct platform_device apq_adp_cpudai_pri_i2s_group_tx_1;
 extern struct platform_device apq_mplatform_cpudai_mi2s_rx;
 extern struct platform_device mpq_cpudai_mi2s_tx;
 extern struct platform_device apq_cpudai_hdmi_rx;
