@@ -99,6 +99,8 @@ int msm_ba_s_priority(void *instance, enum v4l2_priority prio)
 	struct msm_ba_input *ba_input = NULL;
 	int rc = 0;
 
+	dprintk(BA_DBG, "Enter %s, prio: %d", __func__, prio);
+
 	if (!inst)
 		return -EINVAL;
 
@@ -907,7 +909,6 @@ int msm_ba_close(void *instance)
 
 	if (!inst)
 		return -EINVAL;
-	v4l2_fh_del(&inst->event_handler);
 
 	dev_ctxt = inst->dev_ctxt;
 	mutex_lock(&dev_ctxt->dev_cs);
@@ -920,6 +921,10 @@ int msm_ba_close(void *instance)
 	mutex_unlock(&dev_ctxt->dev_cs);
 
 	msm_ba_ctrl_deinit(inst);
+
+	v4l2_fh_del(&inst->event_handler);
+	v4l2_fh_exit(&inst->event_handler);
+
 	debugfs_remove_recursive(inst->debugfs_root);
 
 	dprintk(BA_DBG, "Closed BA instance: %p", inst);
