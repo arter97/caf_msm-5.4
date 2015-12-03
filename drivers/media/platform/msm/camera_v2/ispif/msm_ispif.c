@@ -782,12 +782,12 @@ static int msm_ispif_reconfig_3d_output(struct ispif_device *ispif,enum msm_ispi
 	msm_camera_io_w_mb(reg_data, ispif->base + ISPIF_IRQ_GLOBAL_CLEAR_CMD_ADDR);
 
 	if (vfe_id == VFE0){
-		reg_data = msm_camera_io_r(ispif->base + ISPIF_RST_CMD_ADDR );
+        	reg_data = 0;
 		reg_data |= ( PIX_0_VFE_RST_STB | PIX_1_VFE_RST_STB | STROBED_RST_EN |
 					 PIX_0_CSID_RST_STB | PIX_1_CSID_RST_STB | PIX_OUTPUT_0_MISR_RST_STB );
 		msm_camera_io_w_mb(reg_data, ispif->base + ISPIF_RST_CMD_ADDR);
 	}else{
-		reg_data = msm_camera_io_r(ispif->base + ISPIF_RST_CMD_1_ADDR );
+	        reg_data = 0;
 		reg_data |= ( PIX_0_VFE_RST_STB | PIX_1_VFE_RST_STB | STROBED_RST_EN |
 					 PIX_0_CSID_RST_STB | PIX_1_CSID_RST_STB | PIX_OUTPUT_0_MISR_RST_STB );
 		msm_camera_io_w_mb(reg_data, ispif->base + ISPIF_RST_CMD_1_ADDR);
