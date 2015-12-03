@@ -109,6 +109,25 @@ static struct mdp_arb_pipe mdp_pipe[OVERLAY_PIPE_MAX] = {
 		e->event.register_state.num_of_down_state_value); \
 	}
 
+static void mdp_arb_dump_layers(void)
+{
+	struct mdp_arb_pipe *p;
+	int i = 0;
+
+	for (i = 0; i < arb->num_of_pipes; i++) {
+		p = arb->pipe + i;
+		pr_err("%s:%d id=%d,type=%d,support=%d,client=%s,fb=%d\n",
+			__func__, __LINE__,
+			i, p->type, p->support_by_hw,
+			(p->client) ? (p->client->register_info.common.name) : \
+			("NULL"),
+			(p->client) ? \
+			(p->client->register_info.common.fb_index) : \
+			0);
+	}
+
+}
+
 static int mdp_arb_get_event_sub(struct mdp_arb_device_info *arb,
 				struct mdp_arb_events *events, int user)
 {
@@ -1589,9 +1608,11 @@ static int mdp_arb_overlay_set_sub(struct mdp_arb_device_info *arb,
 		} while (loop);
 		if (!loop) {
 			pr_err("%s can't find overlay resource for client=%s"\
-				" id=%d, fb_idx=%d", __func__,
-				client_db->register_info.common.name, pipe_id,
-				client_db->register_info.common.fb_index);
+				" id=%d, fb_idx=%d, format=%d, flag=0x%08x",
+				__func__, client_db->register_info.common.name,
+				pipe_id, client_db->register_info.common.\
+				fb_index, req.src.format, req.flags);
+			mdp_arb_dump_layers();
 			rc = -EFAULT;
 			goto out;
 		}
@@ -1620,11 +1641,13 @@ call_fb:
 		if (!pipe) {
 			pr_err("%s pipe is NULL after set, id=%d", __func__,
 				req.id);
+			mdp_arb_dump_layers();
 			goto out;
 		} else if (pipe->pipe_num >= OVERLAY_PIPE_MAX) {
 			pr_err("%s pipe num=%d is out of bound=%d, id=%d",
 				__func__, pipe->pipe_num, OVERLAY_PIPE_MAX,
 				req.id);
+			mdp_arb_dump_layers();
 			goto out;
 		} else {
 			if ((pipe_id == MSMFB_NEW_REQUEST) &&
