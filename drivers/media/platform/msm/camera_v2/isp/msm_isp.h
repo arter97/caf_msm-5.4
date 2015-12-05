@@ -612,6 +612,7 @@ struct master_slave_resource_info {
 
 struct msm_vfe_common_dev_data {
 	spinlock_t common_dev_data_lock;
+	spinlock_t common_dev_axi_lock;
 	struct dual_vfe_resource *dual_vfe_res;
 	struct master_slave_resource_info ms_resource;
 };
@@ -631,6 +632,7 @@ struct msm_vfe_common_subdev {
 };
 
 struct dual_vfe_resource {
+	struct vfe_device *vfe_dev[MAX_VFE];
 	void __iomem *vfe_base[MAX_VFE];
 	uint32_t reg_update_mask[MAX_VFE];
 	struct msm_vfe_stats_shared_data *stats_data[MAX_VFE];
