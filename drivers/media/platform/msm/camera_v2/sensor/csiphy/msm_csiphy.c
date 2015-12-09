@@ -33,6 +33,7 @@
 #define MIPI_CSIPHY_INTERRUPT_MASK6_ADDR         (MIPI_CSIPHY_INTERRUPT_MASK_ADDR + 0x4*6)
 #define LN1_CLK_START                            0x1
 #define LN3_CLK_START                            0x10
+#define CSIPHY1                                  1
 #define CSIPHY2                                  2
 #undef CDBG
 #ifdef CONFIG_MSMB_CAMERA_DEBUG
@@ -145,10 +146,18 @@ static irqreturn_t msm_csiphy_irq(int irq_num, void *data)
 			MIPI_CSIPHY_INTERRUPT_STATUS0_ADDR + 0x4*i);
 		if (irq != 0){
 			if (i == 6 ){
-				if ( ((irq & LN1_CLK_START) == LN1_CLK_START) && ((irq & LN3_CLK_START) == LN3_CLK_START) )
-					csiphy_dev->clk_start_cnt = 1;
-				else
-					csiphy_dev->clk_start_cnt = 0;
+				if (csiphy_dev->pdev->id == CSIPHY2) {
+					if (((irq & LN1_CLK_START) == LN1_CLK_START) &&
+						((irq & LN3_CLK_START) == LN3_CLK_START))
+						csiphy_dev->clk_start_cnt = 1;
+					else
+						csiphy_dev->clk_start_cnt = 0;
+				} else if (csiphy_dev->pdev->id == CSIPHY1) {
+					if (((irq & LN1_CLK_START) == LN1_CLK_START))
+						csiphy_dev->clk_start_cnt = 1;
+					else
+						csiphy_dev->clk_start_cnt = 0;
+				}
 			}
 			msm_camera_io_w(irq,
 				csiphy_dev->base +
@@ -302,13 +311,13 @@ static int msm_csiphy_init(struct csiphy_device *csiphy_dev)
 	}
 	CDBG("%s:%d called\n", __func__, __LINE__);
 
-	if ( csiphy_dev->pdev->id == CSIPHY2 ){
+	if (csiphy_dev->pdev->id == CSIPHY2 ||
+		csiphy_dev->pdev->id == CSIPHY1) {
 		csiphy_dev->irq_enable_ref_count = 0;
 		csiphy_dev->clk_start_cnt = 0;
 		msm_csiphy_enable_irq(csiphy_dev);
 		CDBG("%s:%d csiphy dev id = %d , clk cnt = %d", __func__, __LINE__, csiphy_dev->pdev->id,csiphy_dev->clk_start_cnt);
-	}
-	else{
+	} else {
 		CDBG("%s:%d csiphy dev id = %d , clk cnt = %d", __func__, __LINE__, csiphy_dev->pdev->id,csiphy_dev->clk_start_cnt);
 	}
 
@@ -414,13 +423,13 @@ static int msm_csiphy_init(struct csiphy_device *csiphy_dev)
 	}
 	CDBG("%s:%d called\n", __func__, __LINE__);
 
-	if ( csiphy_dev->pdev->id == CSIPHY2 ){
+	if (csiphy_dev->pdev->id == CSIPHY2 ||
+			csiphy_dev->pdev->id == CSIPHY1) {
 		csiphy_dev->irq_enable_ref_count = 0;
 		csiphy_dev->clk_start_cnt = 0;
 		msm_csiphy_enable_irq(csiphy_dev);
 		CDBG("%s:%d csiphy dev id = %d , clk cnt = %d", __func__, __LINE__, csiphy_dev->pdev->id,csiphy_dev->clk_start_cnt);
-	}
-	else{
+	} else {
 		CDBG("%s:%d csiphy dev id = %d , clk cnt = %d", __func__, __LINE__, csiphy_dev->pdev->id,csiphy_dev->clk_start_cnt);
 	}
 
@@ -504,10 +513,10 @@ static int msm_csiphy_release(struct csiphy_device *csiphy_dev, void *arg)
 	msm_camera_io_w(0x0, csiphy_dev->base + MIPI_CSIPHY_LNCK_CFG2_ADDR);
 	msm_camera_io_w(0x0, csiphy_dev->base + MIPI_CSIPHY_GLBL_PWR_CFG_ADDR);
 
-	if ( csiphy_dev->pdev->id == CSIPHY2 )
-	{
+	if (csiphy_dev->pdev->id == CSIPHY2 ||
+			csiphy_dev->pdev->id  == CSIPHY1) {
 		msm_csiphy_disable_irq(csiphy_dev);
-	}else{
+	} else {
 		disable_irq(csiphy_dev->irq->start);
 	}
 
