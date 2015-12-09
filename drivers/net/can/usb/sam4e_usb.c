@@ -84,8 +84,6 @@
 #define IOCTL_ENABLE_BUFFERING		(SIOCDEVPRIVATE + 1)
 
 struct sam4e_usb {
-	struct can_priv can;
-
 	struct usb_device *udev;
 	struct net_device *netdev1;
 	struct net_device *netdev2;
@@ -99,6 +97,7 @@ struct sam4e_usb {
 	atomic_t netif_queue_stop;
 };
 struct sam4e_usb_handle {
+	struct can_priv can;
 	struct sam4e_usb *sam4e_dev;
 	u8 owner_netdev_index;
 };
@@ -910,17 +909,17 @@ static int sam4e_usb_probe(struct usb_interface *intf,
 	sam4e_read_fw_version(dev);
 	err = sam4e_init_urbs(dev);
 	if (err) {
-		if (err == -ENODEV) {
-			netif_device_detach(dev->netdev1);
-			netif_device_detach(dev->netdev2);
-		}
 		pr_err("couldn't start device: %d\n", err);
-		close_candev(dev->netdev1);
-		close_candev(dev->netdev2);
-		goto cleanup_candev;
+		goto unregister_candev;
 	}
 	return 0; /*ok. it's ours */
-
+unregister_candev:
+	if (dev) {
+		if (dev->netdev1)
+			unregister_netdev(dev->netdev1);
+		if (dev->netdev2)
+			unregister_netdev(dev->netdev2);
+	}
 cleanup_candev:
 	if (dev) {
 		kfree(dev->assembly_buffer);
