@@ -18,7 +18,7 @@ end of this file.
 			limiting configuration.
 - qcom,dc-chgpth:	DC charge path detection and input current
 			limiting configuration.
-- qcom,chg-misc:	Miscellaneous features such as safety timers
+- qcom,chg-misc:	Miscellaneous features such as watchdog timers
 			and SYSOK pin control
 - qcom,chg-otg:		OTG configuration control.
 
@@ -86,7 +86,7 @@ Sub node required properties:
 						valid threshold.
 
 			qcom,chgr-misc:
-			 - safety-timeout-mins:	Charger watchdog timer
+			 - wdog-timeout-mins:	Charger watchdog timer
 						interrupt.
 			 - temp-shutdown:	Triggers when charger goes
 						overtemp and causes a shutdown.
@@ -257,6 +257,11 @@ Optional Properties:
 					charger current reduces beyond this threshold
 					parallel charger is disabled. Must be specified
 					if parallel charger is used.
+- qcom,parallel-main-chg-fcc-percent	Percentage of the fast charge current allotted to the
+					main charger when parallel charging is enabled and
+					operational. If this property is not defined, the
+					driver defaults to a 40%/60% split between the main
+					and parallel charger.
 - qcom,battery-data			Points to the phandle of node which
 					contains the battery-profiles supported
 					by the charger/FG.
@@ -369,7 +374,7 @@ Example:
 
 			interrupt-names =	"power-ok",
 						"temp-shutdown",
-						"safety-timeout",
+						"wdog-timeout",
 						"flash-fail",
 						"otst2",
 						"otst3";
