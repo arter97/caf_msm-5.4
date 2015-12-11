@@ -139,6 +139,7 @@ struct msm_vfe_irq_ops {
 	void (*process_stats_irq) (struct vfe_device *vfe_dev,
 		uint32_t irq_status0, uint32_t irq_status1,
 		struct msm_isp_timestamp *ts);
+	void (*enable_camif_err)(struct vfe_device *vfe_dev, int enable);
 };
 
 struct msm_vfe_axi_ops {
@@ -507,6 +508,7 @@ enum msm_vfe_overflow_state {
 	OVERFLOW_DETECTED,
 	HALT_REQUESTED,
 	RESTART_REQUESTED,
+	HALT_ENFORCED,
 };
 
 struct msm_vfe_error_info {
@@ -610,6 +612,7 @@ struct master_slave_resource_info {
 
 struct msm_vfe_common_dev_data {
 	spinlock_t common_dev_data_lock;
+	spinlock_t common_dev_axi_lock;
 	struct dual_vfe_resource *dual_vfe_res;
 	struct master_slave_resource_info ms_resource;
 };
@@ -629,6 +632,7 @@ struct msm_vfe_common_subdev {
 };
 
 struct dual_vfe_resource {
+	struct vfe_device *vfe_dev[MAX_VFE];
 	void __iomem *vfe_base[MAX_VFE];
 	uint32_t reg_update_mask[MAX_VFE];
 	struct msm_vfe_stats_shared_data *stats_data[MAX_VFE];

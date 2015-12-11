@@ -14,6 +14,7 @@
 #include <media/v4l2-subdev.h>
 #include <media/msmb_isp.h>
 #include "msm_isp_util.h"
+#include "msm_isp_axi_util.h"
 #include "msm_isp_stats_util.h"
 
 static int msm_isp_stats_cfg_ping_pong_address(struct vfe_device *vfe_dev,
@@ -42,7 +43,12 @@ static int msm_isp_stats_cfg_ping_pong_address(struct vfe_device *vfe_dev,
 
 	pingpong_bit = (~(pingpong_status >> stats_pingpong_offset) & 0x1);
 	rc = vfe_dev->buf_mgr->ops->get_buf(vfe_dev->buf_mgr,
-			vfe_dev->pdev->id, bufq_handle, &buf, &buf_cnt);
+			vfe_dev->pdev->id, bufq_handle, &buf, &buf_cnt,
+			pingpong_bit);
+	if (rc == -EFAULT) {
+		msm_isp_halt_send_error(vfe_dev, ISP_EVENT_BUF_FATAL_ERROR);
+		return rc;
+	}
 	if (rc < 0) {
 		vfe_dev->error_info.stats_framedrop_count[stats_idx]++;
 		return rc;

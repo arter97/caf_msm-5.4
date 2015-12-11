@@ -898,14 +898,24 @@ static long msm_isp_ioctl_unlocked(struct v4l2_subdev *sd,
 		break;
 	case VIDIOC_MSM_ISP_AXI_RESET:
 		mutex_lock(&vfe_dev->core_mutex);
-		rc = msm_isp_stats_reset(vfe_dev);
-		rc |= msm_isp_axi_reset(vfe_dev, arg);
+		if (atomic_read(&vfe_dev->error_info.overflow_state)
+			!= HALT_ENFORCED) {
+			rc = msm_isp_stats_reset(vfe_dev);
+			rc |= msm_isp_axi_reset(vfe_dev, arg);
+		} else {
+				pr_err_ratelimited("Halt Enforced");
+		}
 		mutex_unlock(&vfe_dev->core_mutex);
 		break;
 	case VIDIOC_MSM_ISP_AXI_RESTART:
-		mutex_lock(&vfe_dev->core_mutex);
-		rc = msm_isp_stats_restart(vfe_dev);
-		rc |= msm_isp_axi_restart(vfe_dev, arg);
+		if (atomic_read(&vfe_dev->error_info.overflow_state)
+			!= HALT_ENFORCED) {
+			mutex_lock(&vfe_dev->core_mutex);
+			rc = msm_isp_stats_restart(vfe_dev);
+			rc |= msm_isp_axi_restart(vfe_dev, arg);
+		} else {
+				pr_err_ratelimited("Halt Enforced");
+		}
 		mutex_unlock(&vfe_dev->core_mutex);
 		break;
 	case VIDIOC_MSM_ISP_INPUT_CFG:
@@ -1679,14 +1689,24 @@ void msm_isp_process_iommu_page_fault(struct vfe_device *vfe_dev)
 {
 	struct msm_isp_event_data error_event;
 	struct msm_vfe_axi_halt_cmd halt_cmd;
-	uint32_t i;
+	uint32_t i, vfe_id;
+	struct dual_vfe_resource *dual_vfe_res = NULL;
 
 	memset(&halt_cmd, 0, sizeof(struct msm_vfe_axi_halt_cmd));
 	halt_cmd.stop_camif = 1;
 	halt_cmd.overflow_detected = 0;
 	halt_cmd.blocking_halt = 0;
 
-	msm_isp_axi_halt(vfe_dev, &halt_cmd);
+	dual_vfe_res = vfe_dev->common_data->dual_vfe_res;
+	if (vfe_dev->is_split) {
+		for (vfe_id = 0; vfe_id < MAX_VFE; vfe_id++) {
+			msm_isp_axi_halt(vfe_dev->common_data->dual_vfe_res->
+				vfe_dev[vfe_id] , &halt_cmd);
+		}
+	} else {
+		msm_isp_axi_halt(vfe_dev, &halt_cmd);
+	}
+
 
 	pr_err_ratelimited("%s:%d] vfe_dev %p id %d\n", __func__,
 		__LINE__, vfe_dev, vfe_dev->pdev->id);
@@ -1696,9 +1716,19 @@ void msm_isp_process_iommu_page_fault(struct vfe_device *vfe_dev)
 	vfe_dev->buf_mgr->ops->buf_mgr_debug(vfe_dev->buf_mgr);
 	msm_isp_print_ping_pong_address(vfe_dev);
 	vfe_dev->hw_info->vfe_ops.axi_ops.read_wm_ping_pong_addr(vfe_dev);
-
-	for (i = 0; i < VFE_AXI_SRC_MAX; i++)
-		vfe_dev->axi_data.stream_info[i].state = INACTIVE;
+	dual_vfe_res = vfe_dev->common_data->dual_vfe_res;
+	if (vfe_dev->is_split) {
+		for (i = 0; i < VFE_AXI_SRC_MAX; i++) {
+			dual_vfe_res->axi_data[ISP_VFE0]->stream_info[i].
+				state = INACTIVE;
+			dual_vfe_res->axi_data[ISP_VFE1]->stream_info[i].
+				state = INACTIVE;
+		}
+	} else  {
+		for (i = 0; i < VFE_AXI_SRC_MAX; i++)
+			vfe_dev->axi_data.stream_info[i].state =
+				INACTIVE;
+	}
 
 	msm_isp_send_event(vfe_dev, ISP_EVENT_IOMMU_P_FAULT, &error_event);
 }
@@ -1730,7 +1760,8 @@ static void msm_isp_process_overflow_irq(
 	struct vfe_device *vfe_dev,
 	uint32_t *irq_status0, uint32_t *irq_status1)
 {
-	uint32_t overflow_mask;
+	uint32_t overflow_mask, vfe_id;
+	struct dual_vfe_resource *dual_vfe_res = NULL;
 
 	/* if there are no active streams - do not start recovery */
 	if (!vfe_dev->axi_data.num_active_stream)
@@ -1772,8 +1803,14 @@ static void msm_isp_process_overflow_irq(
 		halt_cmd.stop_camif = 1;
 		halt_cmd.blocking_halt = 0;
 
-		msm_isp_axi_halt(vfe_dev, &halt_cmd);
-
+		dual_vfe_res = vfe_dev->common_data->dual_vfe_res;
+		if (vfe_dev->is_split) {
+			for (vfe_id = 0; vfe_id < MAX_VFE; vfe_id++) {
+				msm_isp_axi_halt(vfe_dev->common_data->dual_vfe_res->vfe_dev[vfe_id], &halt_cmd);
+			}
+		} else {
+			msm_isp_axi_halt(vfe_dev, &halt_cmd);
+		}
 		/*Update overflow state*/
 		*irq_status0 = 0;
 		*irq_status1 = 0;
@@ -1955,7 +1992,16 @@ static int msm_vfe_iommu_fault_handler(struct iommu_domain *domain,
 		}
 		if (!vfe_dev->buf_mgr->pagefault_debug) {
 			vfe_dev->buf_mgr->pagefault_debug = 1;
-			msm_isp_enqueue_tasklet_cmd(vfe_dev, 0, 0, 1);
+			mutex_lock(&vfe_dev->core_mutex);
+			if (vfe_dev->vfe_open_cnt > 0) {
+				atomic_set(&vfe_dev->error_info.overflow_state,
+				HALT_ENFORCED);
+				msm_isp_enqueue_tasklet_cmd(vfe_dev, 0, 0, 1);
+			} else {
+				pr_err("%s cannot handle vfe_cnt %d",__func__,
+				vfe_dev->vfe_open_cnt);
+			}
+			mutex_unlock(&vfe_dev->core_mutex);
 		} else {
 			/* Page fault previously handled, avoid flooding logs*/
 			rc = 0;
@@ -2092,6 +2138,13 @@ int msm_isp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 	/*Stop CAMIF Immediately*/
 	vfe_dev->hw_info->vfe_ops.core_ops.
 		update_camif_state(vfe_dev, DISABLE_CAMIF_IMMEDIATELY);
+
+
+	rc = msm_isp_release_dual_HW_resource_all(
+		vfe_dev);
+	if (rc < 0)
+		pr_err("%s: msm_isp_release_dual_HW_resource_all rc=%ld\n",
+			__func__, rc);
 
 	vfe_dev->hw_info->vfe_ops.core_ops.release_hw(vfe_dev);
 	vfe_dev->buf_mgr->ops->buf_mgr_deinit(vfe_dev->buf_mgr);
