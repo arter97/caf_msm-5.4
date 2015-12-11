@@ -202,6 +202,45 @@ static int lpm_cpu_callback(struct notifier_block *cpu_nb,
 	return NOTIFY_OK;
 }
 
+void lpm_cluster_mode_disable(unsigned int mode)
+{
+	struct lpm_cluster *pwr_cluster =  per_cpu(cpu_cluster, 0);
+	struct lpm_cluster *perf_cluster =  per_cpu(cpu_cluster, 4);
+	struct lpm_level_avail *pwr_avail;
+	struct lpm_level_avail *perf_avail;
+
+	if (mode > NR_LPM_LEVELS)
+		return;
+
+	if (!pwr_avail || !perf_avail)
+		return;
+
+	pwr_avail = &pwr_cluster->levels[mode].available;
+	perf_avail = &perf_cluster->levels[mode].available;
+
+	pwr_avail->idle_enabled = 0;
+	perf_avail->idle_enabled = 0;
+}
+
+void lpm_cluster_mode_enable(unsigned int mode)
+{
+	struct lpm_cluster *pwr_cluster = per_cpu(cpu_cluster, 0);
+	struct lpm_cluster *perf_cluster = per_cpu(cpu_cluster, 4);
+	struct lpm_level_avail *pwr_avail;
+	struct lpm_level_avail *perf_avail;
+
+	if (mode > NR_LPM_LEVELS)
+		return;
+	if (!pwr_avail || !perf_avail)
+		return;
+
+	pwr_avail = &pwr_cluster->levels[mode].available;
+	perf_avail = &perf_cluster->levels[mode].available;
+
+	pwr_avail->idle_enabled = 1;
+	perf_avail->idle_enabled = 1;
+}
+
 static enum hrtimer_restart lpm_hrtimer_cb(struct hrtimer *h)
 {
 	return HRTIMER_NORESTART;
