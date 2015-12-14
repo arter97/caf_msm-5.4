@@ -120,7 +120,7 @@ struct msm_ba_input_config {
 	int ba_ip;
 	int ba_out;
 	const char *sd_name;
-	int signal_status;
+	int ba_node;
 };
 
 struct msm_ba_sd_event {

@@ -20,15 +20,15 @@
 #include "msm_ba_common.h"
 
 struct msm_ba_input_config msm_ba_inp_cfg[] = {
-	/* type, index, name, adv inp, dev id, sd name, signal status */
-	{BA_INPUT_CVBS, 0, "CVBS-0", BA_IP_CVBS_0, 0, "adv7180", 1},
+	/* type, index, name, adv inp, dev id, sd name, dev node */
+	{BA_INPUT_CVBS, 0, "CVBS-0", BA_IP_CVBS_0, 0, "adv7180", -1},
 #ifdef CONFIG_MSM_S_PLATFORM
-	{BA_INPUT_CVBS, 1, "CVBS-1", BA_IP_CVBS_0, 0, "adv7180", 1},
+	{BA_INPUT_CVBS, 1, "CVBS-1", BA_IP_CVBS_0, 0, "adv7180", 0},
 #else
-	{BA_INPUT_CVBS, 1, "CVBS-1", BA_IP_CVBS_0, 1, "adv7180", 1},
-	{BA_INPUT_CVBS, 2, "CVBS-2", BA_IP_CVBS_1, 1, "adv7180", 1},
+	{BA_INPUT_CVBS, 1, "CVBS-1", BA_IP_CVBS_0, 1, "adv7180", 0},
+	{BA_INPUT_CVBS, 2, "CVBS-2", BA_IP_CVBS_1, 1, "adv7180", 0},
 #endif
-	{BA_INPUT_HDMI, 1, "HDMI-1", BA_IP_HDMI_1, 2, "adv7481", 1},
+	{BA_INPUT_HDMI, 1, "HDMI-1", BA_IP_HDMI_1, 2, "adv7481", 2},
 };
 
 static struct msm_ba_ctrl msm_ba_ctrls[] = {
@@ -215,6 +215,7 @@ void msm_ba_add_inputs(struct v4l2_subdev *sd)
 					sizeof(input->name));
 				input->bridge_chip_ip = msm_ba_inp_cfg[i].ba_ip;
 				input->ba_out = msm_ba_inp_cfg[i].ba_out;
+				input->ba_node_addr = msm_ba_inp_cfg[i].ba_node;
 				input->ba_ip_idx = i;
 				input->prio = V4L2_PRIORITY_DEFAULT;
 				input->sd = sd;
