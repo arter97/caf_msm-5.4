@@ -989,7 +989,7 @@ static int msm_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 		break;
 	}
 
-	return 0;
+	return rc;
 }
 
 static int msm_compr_pointer(struct snd_compr_stream *cstream,
