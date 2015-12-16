@@ -312,7 +312,6 @@ int msm_ba_s_output(void *instance, unsigned int index)
 			dprintk(BA_ERR, "No sd registered");
 			return -EINVAL;
 		}
-		ba_input->ba_node_addr = index;
 		ba_input->ba_out = index;
 		inst->sd_output.index = index;
 		inst->sd = ba_input->sd;
