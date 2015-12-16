@@ -57,4 +57,5 @@
 		"tune2_efuse_addr";
 	qcom,tune2-efuse-bit-pos = <20>;
 	qcom,tune2-efuse-num-bits = <4>;
+	qcom,tune2-efuse-correction = <(-2)>;
 };
