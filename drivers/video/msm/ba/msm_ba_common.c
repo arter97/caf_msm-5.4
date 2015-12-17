@@ -132,7 +132,6 @@ static void msm_ba_signal_sessions_event(struct v4l2_event *sd_event)
 	dev_ctxt = get_ba_dev();
 	ptr = (int *)sd_event->u.data;
 
-	mutex_lock(&dev_ctxt->dev_cs);
 	list_for_each_entry(inst, &(dev_ctxt->instances), list) {
 		if (inst->ext_ops && inst->ext_ops->msm_ba_cb)
 			inst->ext_ops->msm_ba_cb(
@@ -140,7 +139,6 @@ static void msm_ba_signal_sessions_event(struct v4l2_event *sd_event)
 		else
 			msm_ba_queue_v4l2_event(inst, sd_event);
 	}
-	mutex_unlock(&dev_ctxt->dev_cs);
 }
 
 void msm_ba_subdev_event_hndlr_delayed(struct work_struct *work)
@@ -151,17 +149,19 @@ void msm_ba_subdev_event_hndlr_delayed(struct work_struct *work)
 
 	dev_ctxt = get_ba_dev();
 
+	mutex_lock(&dev_ctxt->dev_cs);
 	if (!list_empty(&dev_ctxt->sd_events)) {
 		list_for_each_entry_safe(ba_sd_event, ba_sd_event_tmp,
 				&(dev_ctxt->sd_events), list) {
-			list_del(&ba_sd_event->list);
 			msm_ba_signal_sessions_event(&ba_sd_event->sd_event);
+			list_del(&ba_sd_event->list);
 			kfree(ba_sd_event);
 			break;
 		}
 	} else {
 		dprintk(BA_ERR, "%s - queue empty!!!", __func__);
 	}
+	mutex_unlock(&dev_ctxt->dev_cs);
 }
 
 struct v4l2_subdev *msm_ba_sd_find(const char *name)
