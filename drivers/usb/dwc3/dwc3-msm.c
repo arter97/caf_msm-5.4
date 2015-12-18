@@ -1525,6 +1525,7 @@ static int dwc3_msm_prepare_suspend(struct dwc3_msm *mdwc)
 	unsigned long timeout;
 	u32 reg = 0;
 	bool host_mode, device_mode;
+	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 
 	host_mode = mdwc->scope == POWER_SUPPLY_SCOPE_SYSTEM;
 	device_mode = mdwc->otg_xceiv &&
@@ -1555,7 +1556,9 @@ static int dwc3_msm_prepare_suspend(struct dwc3_msm *mdwc)
 	}
 	if (!(reg & PWR_EVNT_LPM_IN_L2_MASK)) {
 		dev_err(mdwc->dev, "could not transition HS PHY to L2\n");
-		return -EBUSY;
+		/* Ignore this if recovering from ERRATIC_ERROR */
+		if (!dwc->err_evt_seen)
+			return -EBUSY;
 	}
 
 	/* Clear L2 event bit */
