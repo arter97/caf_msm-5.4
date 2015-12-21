@@ -85,6 +85,8 @@ void gsdio_disconnect(struct gserial *, u8 portno);
 int gsmd_setup(struct usb_gadget *g, unsigned n_ports);
 int gsmd_connect(struct gserial *, u8 port_num);
 void gsmd_disconnect(struct gserial *, u8 portno);
+void gsmd_suspend(struct gserial *, u8 port_num);
+void gsmd_resume(struct gserial *, u8 port_num);
 int gsmd_write(u8 portno, char *buf, unsigned int size);
 
 

@@ -92,6 +92,7 @@ struct gsmd_port {
 	/* pkt counters */
 	unsigned long		nbytes_tomodem;
 	unsigned long		nbytes_tolaptop;
+	bool			is_suspended;
 };
 
 static struct smd_portmaster {
@@ -298,7 +299,10 @@ static void gsmd_tx_pull(struct work_struct *w)
 	struct gsmd_port *port = container_of(w, struct gsmd_port, pull);
 	struct list_head *pool = &port->write_pool;
 	struct smd_port_info *pi = port->pi;
+	struct usb_function *func;
+	struct usb_gadget	*gadget;
 	struct usb_ep *in;
+	int ret;
 
 	pr_debug("%s: port:%p port#%d pool:%p\n", __func__,
 			port, port->port_num, pool);
@@ -313,6 +317,27 @@ static void gsmd_tx_pull(struct work_struct *w)
 	}
 
 	in = port->port_usb->in;
+	func = &port->port_usb->func;
+	gadget = func->config->cdev->gadget;
+	if (port->is_suspended) {
+		spin_unlock_irq(&port->port_lock);
+		ret = usb_gadget_wakeup(gadget);
+		spin_lock_irq(&port->port_lock);
+
+		if (ret)
+			pr_err("Failed to wake up the USB core. ret=%d.\n",
+				ret);
+
+		if (!port->port_usb) {
+			pr_debug("%s: USB disconnected\n", __func__);
+			spin_unlock_irq(&port->port_lock);
+			gsmd_read_pending(port);
+			return;
+		}
+		spin_unlock_irq(&port->port_lock);
+		return;
+	}
+
 	while (pi->ch && !list_empty(pool)) {
 		struct usb_request *req;
 		int avail;
@@ -333,7 +358,7 @@ static void gsmd_tx_pull(struct work_struct *w)
 		ret = usb_ep_queue(in, req, GFP_KERNEL);
 		spin_lock_irq(&port->port_lock);
 		if (ret) {
-			pr_err("%s: usb ep out queue failed"
+			pr_err("%s: usb ep in queue failed"
 					"port:%p, port#%d err:%d\n",
 					__func__, port, port->port_num, ret);
 			/* could be usb disconnected */
@@ -990,6 +1015,31 @@ free_smd_ports:
 	destroy_workqueue(gsmd_wq);
 
 	return ret;
+}
+
+void gsmd_suspend(struct gserial *gser, u8 portno)
+{
+	struct gsmd_port *port;
+
+	pr_debug("%s: gserial:%p portno:%u\n", __func__, gser, portno);
+
+	port = smd_ports[portno].port;
+	spin_lock(&port->port_lock);
+	port->is_suspended = true;
+	spin_unlock(&port->port_lock);
+}
+
+void gsmd_resume(struct gserial *gser, u8 portno)
+{
+	struct gsmd_port *port;
+
+	pr_debug("%s: gserial:%p portno:%u\n", __func__, gser, portno);
+
+	port = smd_ports[portno].port;
+	spin_lock(&port->port_lock);
+	port->is_suspended = false;
+	spin_unlock(&port->port_lock);
+	queue_work(gsmd_wq, &port->pull);
 }
 
 void gsmd_cleanup(struct usb_gadget *g, unsigned count)
