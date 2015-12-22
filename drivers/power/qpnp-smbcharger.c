@@ -196,7 +196,7 @@ struct smbchg_chip {
 	struct mutex			taper_irq_lock;
 	int				recharge_irq;
 	int				fastchg_irq;
-	int				safety_timeout_irq;
+	int				wdog_timeout_irq;
 	int				power_ok_irq;
 	int				dcin_uv_irq;
 	int				usbin_uv_irq;
@@ -4188,11 +4188,24 @@ static int otg_oc_reset(struct smbchg_chip *chip)
 		pr_err("Failed to disable OTG rc=%d\n", rc);
 
 	msleep(20);
+
+	/*
+	 * There is a possibility that an USBID interrupt might have
+	 * occurred notifying USB power supply to disable OTG. We
+	 * should not enable OTG in such cases.
+	 */
+	if (!is_otg_present(chip)) {
+		pr_smb(PR_STATUS,
+			"OTG is not present, not enabling OTG_EN_BIT\n");
+		goto out;
+	}
+
 	rc = smbchg_masked_write(chip, chip->bat_if_base + CMD_CHG_REG,
 						OTG_EN_BIT, OTG_EN_BIT);
 	if (rc)
 		pr_err("Failed to re-enable OTG rc=%d\n", rc);
 
+out:
 	return rc;
 }
 
@@ -5306,11 +5319,26 @@ static irqreturn_t vbat_low_handler(int irq, void *_chip)
 	return IRQ_HANDLED;
 }
 
+#define CHG_COMP_SFT_BIT	BIT(3)
 static irqreturn_t chg_error_handler(int irq, void *_chip)
 {
 	struct smbchg_chip *chip = _chip;
+	int rc = 0;
+	u8 reg;
 
 	pr_smb(PR_INTERRUPT, "chg-error triggered\n");
+
+	rc = smbchg_read(chip, &reg, chip->chgr_base + RT_STS, 1);
+	if (rc < 0) {
+		dev_err(chip->dev, "Unable to read RT_STS rc = %d\n", rc);
+	} else {
+		pr_smb(PR_INTERRUPT, "triggered: 0x%02x\n", reg);
+		if (reg & CHG_COMP_SFT_BIT)
+			set_property_on_fg(chip,
+					POWER_SUPPLY_PROP_SAFETY_TIMER_EXPIRED,
+					1);
+	}
+
 	smbchg_parallel_usb_check_ok(chip);
 	if (chip->psy_registered)
 		power_supply_changed(&chip->batt_psy);
@@ -5384,13 +5412,13 @@ static irqreturn_t recharge_handler(int irq, void *_chip)
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t safety_timeout_handler(int irq, void *_chip)
+static irqreturn_t wdog_timeout_handler(int irq, void *_chip)
 {
 	struct smbchg_chip *chip = _chip;
 	u8 reg = 0;
 
 	smbchg_read(chip, &reg, chip->misc_base + RT_STS, 1);
-	pr_warn_ratelimited("safety timeout rt_stat = 0x%02x\n", reg);
+	pr_warn_ratelimited("wdog timeout rt_stat = 0x%02x\n", reg);
 	if (chip->psy_registered)
 		power_supply_changed(&chip->batt_psy);
 	smbchg_charging_status_change(chip);
@@ -6744,11 +6772,11 @@ static int smbchg_request_irqs(struct smbchg_chip *chip)
 			REQUEST_IRQ(chip, spmi_resource, chip->chg_hot_irq,
 				"temp-shutdown", chg_hot_handler, flags, rc);
 			REQUEST_IRQ(chip, spmi_resource,
-				chip->safety_timeout_irq,
-				"safety-timeout",
-				safety_timeout_handler, flags, rc);
+				chip->wdog_timeout_irq,
+				"wdog-timeout",
+				wdog_timeout_handler, flags, rc);
 			enable_irq_wake(chip->chg_hot_irq);
-			enable_irq_wake(chip->safety_timeout_irq);
+			enable_irq_wake(chip->wdog_timeout_irq);
 			break;
 		case SMBCHG_OTG_SUBTYPE:
 			break;
@@ -6936,6 +6964,7 @@ static int smbchg_wa_config(struct smbchg_chip *chip)
 	case PMI8994:
 		chip->wa_flags |= SMBCHG_AICL_DEGLITCH_WA
 				| SMBCHG_BATT_OV_WA;
+		break;
 	case PMI8950:
 		chip->wa_flags |= SMBCHG_BATT_OV_WA;
 		if (pmic_rev_id->rev4 < 2) /* PMI8950 1.0 */ {
