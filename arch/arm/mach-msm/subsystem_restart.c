@@ -45,6 +45,8 @@
 static int enable_debug;
 module_param(enable_debug, int, S_IRUGO | S_IWUSR);
 
+int adsp_keep_alive;
+
 /**
  * enum p_subsys_state - state of a subsystem (private)
  * @SUBSYS_NORMAL: subsystem is operating normally
@@ -1220,6 +1222,13 @@ static int subsys_panic(struct device *dev, void *data)
 {
 	struct subsys_device *subsys = to_subsys(dev);
 
+	/* Keeping ADSP alive during panic */
+	if (!panic_timeout && adsp_keep_alive &&
+	    !strcmp(subsys->desc->name, "adsp")) {
+		dev_warn(dev, "keeping adsp alive\n");
+		return 0;
+	}
+
 	if (subsys->desc->crash_shutdown)
 		subsys->desc->crash_shutdown(subsys->desc);
 	return 0;
@@ -1274,6 +1283,8 @@ static int __init ssr_init_soc_restart_orders(void)
 static int __init subsys_restart_init(void)
 {
 	int ret;
+
+	adsp_keep_alive = 0;
 
 	ssr_wq = alloc_workqueue("ssr_wq", WQ_CPU_INTENSIVE, 0);
 	BUG_ON(!ssr_wq);

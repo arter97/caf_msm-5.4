@@ -364,6 +364,7 @@ extern void add_taint(unsigned flag);
 extern int test_taint(unsigned flag);
 extern unsigned long get_taint(void);
 extern int root_mountflags;
+extern int adsp_keep_alive;
 
 extern bool early_boot_irqs_disabled;
 
