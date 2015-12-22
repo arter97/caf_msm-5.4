@@ -1392,6 +1392,8 @@ static int cnss_wlan_pci_probe(struct pci_dev *pdev,
 		return 0;
 	}
 
+	pr_err("%s: device_id 0x%x\n", __func__, pdev->device);
+
 	switch (pdev->device) {
 	case QCA6180_DEVICE_ID:
 		pci_read_config_word(pdev, QCA6180_REV_ID_OFFSET,
@@ -1410,7 +1412,7 @@ static int cnss_wlan_pci_probe(struct pci_dev *pdev,
 		goto err_unknown;
 	}
 
-
+#ifndef CONFIG_CNSS_EOS
 	if (penv->pcie_link_state) {
 		pci_save_state(pdev);
 		penv->saved_state = pci_store_saved_state(pdev);
@@ -1424,7 +1426,7 @@ static int cnss_wlan_pci_probe(struct pci_dev *pdev,
 		}
 		penv->pcie_link_state = PCIE_LINK_DOWN;
 	}
-
+#endif
 	cnss_wlan_gpio_set(gpio_info, WLAN_EN_LOW);
 	ret = cnss_wlan_vreg_set(vreg_info, VREG_OFF);
 
