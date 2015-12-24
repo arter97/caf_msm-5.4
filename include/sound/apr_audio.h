@@ -1496,6 +1496,34 @@ struct asm_stream_cmd_run{
 	u32            lsw_ts;
 } __attribute__((packed));
 
+#define ASM_SESSION_CMD_SET_MTMX_STRTR_PARAMS            0x00010DC3
+#define ASM_SESSION_MTMX_STRTR_MODULE_ID_AVSYNC          0x00010DC6
+#define ASM_SESSION_MTMX_STRTR_PARAM_RENDER_WINDOW_START 0x00010DC7
+#define ASM_SESSION_MTMX_STRTR_PARAM_RENDER_WINDOW_END   0x00010DC8
+struct asm_mtmx_strtr_param_hdr {
+	u32	module_id;
+	u32	param_id;
+	u16	param_size;
+	u16	reserved;
+} __packed;
+
+struct asm_mtmx_strtr_window_param_data {
+	u32	window_msw;
+	u32	window_lsw;
+} __packed;
+
+struct asm_mtmx_strtr_window_params {
+	struct asm_mtmx_strtr_param_hdr	param_hdr;
+	struct asm_mtmx_strtr_window_param_data	param_data;
+} __packed;
+
+struct asm_stream_cmd_set_mtmx_strtr_params {
+	struct apr_hdr	hdr;
+	u32	payload_address;
+	u32	payload_size;
+	u32	direction;
+} __packed;
+
 /* Session level events */
 #define ASM_SESSION_CMD_REGISTER_FOR_RX_UNDERFLOW_EVENTS 0x00010BD5
 struct asm_stream_cmd_reg_rx_underflow_event{

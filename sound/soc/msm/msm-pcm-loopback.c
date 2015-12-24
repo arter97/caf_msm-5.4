@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
 
 * This program is free software; you can redistribute it and/or modify
 * it under the terms of the GNU General Public License version 2 and
@@ -195,6 +195,11 @@ static int msm_pcm_open(struct snd_pcm_substream *substream)
 				dev_err(rtd->platform->dev,
 					"Error %d setting volume", ret);
 		}
+		ret = q6asm_set_max_rx_mtmx_render_window(pcm->audio_client);
+		if (ret < 0)
+			dev_err(rtd->platform->dev,
+				"%s: Error %d setting mtmx window\n",
+				__func__, ret);
 	}
 	dev_info(rtd->platform->dev, "%s: Instance = %d, Stream ID = %s\n",
 			__func__ , pcm->instance, substream->pcm->id);

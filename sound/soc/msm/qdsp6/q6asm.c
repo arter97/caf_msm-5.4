@@ -908,6 +908,7 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 		case ASM_SESSION_CMD_RUN:
 		case ASM_SESSION_CMD_REGISTER_FOR_TX_OVERFLOW_EVENTS:
 		case ASM_STREAM_CMD_FLUSH_READBUFS:
+		case ASM_SESSION_CMD_SET_MTMX_STRTR_PARAMS:
 		pr_debug("%s:Payload = [0x%x]\n", __func__, payload[0]);
 		if (token != ac->session) {
 			pr_err("%s:Invalid session[%d] rxed expected[%d]",
@@ -4097,6 +4098,90 @@ int q6asm_get_session_time(struct audio_client *ac, uint64_t *tstamp)
 
 fail_cmd:
 	return -EINVAL;
+}
+
+int q6asm_set_max_rx_mtmx_render_window(struct audio_client *ac)
+{
+	void *cmd_buf = NULL;
+	void *payload = NULL;
+	struct asm_stream_cmd_set_mtmx_strtr_params *cmd = NULL;
+	struct asm_mtmx_strtr_window_params *window_start_param = NULL;
+	struct asm_mtmx_strtr_window_params *window_end_param = NULL;
+	int cmd_size = 0;
+	int rc = 0;
+
+	if (ac == NULL) {
+		pr_err("%s: AC handle NULL", __func__);
+		return -EINVAL;
+	}
+	if (ac->apr == NULL) {
+		pr_err("%s: AC APR handle NULL", __func__);
+		return -EINVAL;
+	}
+
+	cmd_size = sizeof(struct asm_stream_cmd_set_mtmx_strtr_params) +
+		2*sizeof(struct asm_mtmx_strtr_window_params);
+
+	cmd_buf = kzalloc(cmd_size, GFP_KERNEL);
+	if (cmd_buf == NULL) {
+		pr_err("%s[%d]: Mem alloc failed\n", __func__, ac->session);
+		rc = -EINVAL;
+		return rc;
+	}
+
+	cmd = (struct asm_stream_cmd_set_mtmx_strtr_params *)cmd_buf;
+	q6asm_add_hdr_async(ac, &cmd->hdr, cmd_size, TRUE);
+	cmd->hdr.opcode = ASM_SESSION_CMD_SET_MTMX_STRTR_PARAMS;
+	cmd->payload_address = 0;
+	cmd->payload_size = 2*sizeof(struct asm_mtmx_strtr_window_params);
+	cmd->direction = 0; /* Rx */
+
+	payload = (u8 *)(cmd_buf +
+		sizeof(struct asm_stream_cmd_set_mtmx_strtr_params));
+	window_start_param = (struct asm_mtmx_strtr_window_params *)payload;
+	window_start_param->param_hdr.module_id =
+		ASM_SESSION_MTMX_STRTR_MODULE_ID_AVSYNC;
+	window_start_param->param_hdr.param_id =
+		ASM_SESSION_MTMX_STRTR_PARAM_RENDER_WINDOW_START;
+	window_start_param->param_hdr.param_size =
+		sizeof(struct asm_mtmx_strtr_window_param_data);
+	window_start_param->param_hdr.reserved = 0;
+	window_start_param->param_data.window_msw = 0x80000000;
+	window_start_param->param_data.window_lsw = 0x00000000;
+
+	payload = (u8 *)(cmd_buf +
+		sizeof(struct asm_stream_cmd_set_mtmx_strtr_params) +
+		sizeof(struct asm_mtmx_strtr_window_params));
+	window_end_param = (struct asm_mtmx_strtr_window_params *)payload;
+	window_end_param->param_hdr.module_id =
+		ASM_SESSION_MTMX_STRTR_MODULE_ID_AVSYNC;
+	window_end_param->param_hdr.param_id =
+		ASM_SESSION_MTMX_STRTR_PARAM_RENDER_WINDOW_END;
+	window_end_param->param_hdr.param_size =
+		sizeof(struct asm_mtmx_strtr_window_param_data);
+	window_end_param->param_hdr.reserved = 0;
+	window_end_param->param_data.window_msw = 0x7FFFFFFF;
+	window_end_param->param_data.window_lsw = 0xFFFFFFFF;
+
+	rc = apr_send_pkt(ac->apr, (uint32_t *) cmd_buf);
+	if (rc < 0) {
+		pr_err("%s: Set mtmx window command failed\n", __func__);
+		rc = -EINVAL;
+		goto fail_cmd;
+	}
+
+	rc = wait_event_timeout(ac->cmd_wait,
+		(atomic_read(&ac->cmd_state) == 0), 5*HZ);
+	if (!rc) {
+		pr_err("%s: timeout in sending set mtmx window command to apr\n",
+			__func__);
+		rc = -EINVAL;
+		goto fail_cmd;
+	}
+	rc = 0;
+fail_cmd:
+	kfree(cmd_buf);
+	return rc;
 }
 
 int q6asm_cmd(struct audio_client *ac, int cmd)

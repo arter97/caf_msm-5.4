@@ -377,4 +377,7 @@ int q6asm_get_apr_service_id(int session_id);
 */
 int q6asm_media_format_block(struct audio_client *ac, uint32_t format);
 
+/* Set the render window on the Rx matrix mixer to maximum range */
+int q6asm_set_max_rx_mtmx_render_window(struct audio_client *ac);
+
 #endif /* __Q6_ASM_H__ */
