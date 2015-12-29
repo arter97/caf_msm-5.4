@@ -1428,7 +1428,8 @@ int msm_ep_unconfig(struct usb_ep *ep)
 	return 0;
 }
 EXPORT_SYMBOL(msm_ep_unconfig);
-static void dwc3_resume_work(struct work_struct *w);
+
+static void dwc3_otg_sm_work(struct work_struct *w);
 
 static void dwc3_restart_usb_work(struct work_struct *w)
 {
@@ -1458,8 +1459,8 @@ static void dwc3_restart_usb_work(struct work_struct *w)
 	dbg_event(0xFF, "RestartUSB", 0);
 	chg_type = mdwc->chg_type;
 
-	/* Reset active USB connection */
-	dwc3_resume_work(&mdwc->resume_work.work);
+	/* Run state machine to reset active USB connection */
+	dwc3_otg_sm_work(&mdwc->sm_work.work);
 
 	/* Make sure disconnect is processed before sending connect */
 	while (--timeout && !pm_runtime_suspended(mdwc->dev))
@@ -1477,11 +1478,10 @@ static void dwc3_restart_usb_work(struct work_struct *w)
 	if (mdwc->vbus_active) {
 		mdwc->chg_type = chg_type;
 		mdwc->in_restart = false;
-		dwc3_resume_work(&mdwc->resume_work.work);
+		dwc3_otg_sm_work(&mdwc->sm_work.work);
 	}
 
 	dwc->err_evt_seen = false;
-	flush_delayed_work(&mdwc->sm_work);
 }
 
 /*
@@ -1638,7 +1638,7 @@ static void dwc3_msm_notify_event(struct dwc3 *dwc, unsigned event)
 		dwc3_msm_write_reg(mdwc->base, DWC3_GCTL, reg);
 
 		/* restart USB which performs full reset and reconnect */
-		schedule_work(&mdwc->restart_usb_work);
+		queue_work(mdwc->dwc3_wq, &mdwc->restart_usb_work);
 		break;
 	case DWC3_CONTROLLER_RESET_EVENT:
 		dev_dbg(mdwc->dev, "DWC3_CONTROLLER_RESET_EVENT received\n");
@@ -2101,10 +2101,6 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
  */
 static void dwc3_ext_event_notify(struct dwc3_msm *mdwc)
 {
-	/* Flush processing any pending events before handling new ones */
-	if (mdwc->init)
-		flush_delayed_work(&mdwc->sm_work);
-
 	if (mdwc->id_state == DWC3_ID_FLOAT) {
 		dev_dbg(mdwc->dev, "XCVR: ID set\n");
 		set_bit(ID, &mdwc->inputs);
@@ -2134,15 +2130,14 @@ static void dwc3_ext_event_notify(struct dwc3_msm *mdwc)
 		pm_runtime_set_autosuspend_delay(mdwc->dev, 1000);
 		pm_runtime_use_autosuspend(mdwc->dev);
 		if (!work_busy(&mdwc->sm_work.work))
-			schedule_delayed_work(&mdwc->sm_work, 0);
+			queue_delayed_work(mdwc->dwc3_wq, &mdwc->sm_work, 0);
 
 		complete(&mdwc->dwc3_xcvr_vbus_init);
 		dev_dbg(mdwc->dev, "XCVR: BSV init complete\n");
 		return;
 	}
 
-
-	schedule_delayed_work(&mdwc->sm_work, 0);
+	queue_delayed_work(mdwc->dwc3_wq, &mdwc->sm_work, 0);
 }
 
 static void dwc3_resume_work(struct work_struct *w)
@@ -2471,7 +2466,7 @@ static irqreturn_t dwc3_pmic_id_irq(int irq, void *data)
 	id = !!irq_read_line(irq);
 	if (mdwc->id_state != id) {
 		mdwc->id_state = id;
-		schedule_work(&mdwc->resume_work.work);
+		queue_work(mdwc->dwc3_wq, &mdwc->resume_work.work);
 	}
 
 	return IRQ_HANDLED;
@@ -2492,8 +2487,6 @@ static int dwc3_cpu_notifier_cb(struct notifier_block *nfb,
 
 	return NOTIFY_OK;
 }
-
-static void dwc3_otg_sm_work(struct work_struct *w);
 
 static int dwc3_msm_get_clk_gdsc(struct dwc3_msm *mdwc)
 {
@@ -2923,8 +2916,6 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	if (of_property_read_bool(node, "qcom,disable-dev-mode-pm"))
 		pm_runtime_get_noresume(mdwc->dev);
 
-	schedule_delayed_work(&mdwc->sm_work, 0);
-
 	/* Update initial ID state */
 	if (mdwc->pmic_id_irq) {
 		enable_irq(mdwc->pmic_id_irq);
@@ -2944,6 +2935,8 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		mdwc->id_state = DWC3_ID_GROUND;
 		dwc3_ext_event_notify(mdwc);
 	}
+
+	queue_delayed_work(mdwc->dwc3_wq, &mdwc->sm_work, 0);
 
 	return 0;
 
@@ -3604,7 +3597,7 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 	}
 
 	if (work)
-		schedule_delayed_work(&mdwc->sm_work, delay);
+		queue_delayed_work(mdwc->dwc3_wq, &mdwc->sm_work, delay);
 
 ret:
 	return;
