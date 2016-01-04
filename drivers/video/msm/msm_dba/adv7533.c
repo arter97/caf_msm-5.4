@@ -1,4 +1,4 @@
-/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1810,8 +1810,6 @@ static int adv7533_register_dba(struct adv7533 *pdata)
 
 	strlcpy(pdata->dev_info.chip_name, "adv7533",
 		sizeof(pdata->dev_info.chip_name));
-
-	pdata->dev_info.instance_id = 0;
 
 	mutex_init(&pdata->dev_info.dev_mutex);
 
