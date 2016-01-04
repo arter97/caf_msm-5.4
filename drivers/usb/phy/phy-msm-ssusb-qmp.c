@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -176,6 +176,7 @@ static const struct qmp_reg_val qmp_settings_rev1[] = {
 	{0x66C, 0xFF}, /* PCIE_USB3_PHY_LOCK_DETECT_CONFIG1 */
 	{0x674, 0x17}, /* PCIE_USB3_PHY_LOCK_DETECT_CONFIG3 */
 	{0x6AC, 0x06}, /* PCIE_USB3_PHY_FLL_CNTRL2 */
+	{0x6B0, 0x90}, /* PCIE_USB3_PHY_FLL_CNT_VAL_L */
 
 	{-1, -1} /* terminating entry */
 };
