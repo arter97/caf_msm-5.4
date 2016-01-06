@@ -26,7 +26,12 @@
 		compatible = "qcom,actuator";
 		qcom,cci-master = <0>;
 	};
-
+	actuator2: qcom,actuator@48 {
+		cell-index = <2>;
+		reg = <0x48>;
+		compatible = "qcom,actuator";
+		qcom,cci-master = <0>;
+	};
 	qcom,camera@20 {
 		compatible = "qcom,imx135";
 		reg = <0x20>;
@@ -80,7 +85,7 @@
 		qcom,sensor-name = "imx214";
 		qcom,vdd-cx-supply = <&pm8841_s2>;
 		qcom,vdd-cx-name = "qcom,vdd-cx";
-		/* qcom,actuator-src = <&actuator0>; */
+		qcom,actuator-src = <&actuator2>;
 		cam_vdig-supply = <&pm8941_l3>;
 		cam_vana-supply = <&pm8941_l17>;
 		cam_vio-supply = <&pm8941_lvs3>;

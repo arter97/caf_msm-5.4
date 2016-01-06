@@ -133,8 +133,25 @@ static int32_t msm_actuator_init_focus(struct msm_actuator_ctrl_t *a_ctrl,
 	int32_t rc = -EFAULT;
 	int32_t i = 0;
 	CDBG("Enter\n");
+	CDBG("init_focus %d, data_type %d", size, type);
+
+	if (size == 12) //for IMX214
+		type = MSM_CAMERA_I2C_BYTE_DATA;	
 
 	for (i = 0; i < size; i++) {
+
+		if (i == 10) //for IMX214
+		{
+			rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_write(
+				&a_ctrl->i2c_client,
+				settings[i].reg_addr,
+				0x0400, MSM_CAMERA_I2C_WORD_DATA);
+			i ++;
+			pr_err("IMX214: 0x%x, 0x%x\n", 0x0304, 0x0400);
+			break;
+
+		}
+
 		switch (type) {
 		case MSM_ACTUATOR_BYTE_DATA:
 			rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_write(
@@ -592,8 +609,7 @@ static int32_t msm_actuator_init(struct msm_actuator_ctrl_t *a_ctrl,
 	}
 
 	if (set_info->actuator_params.init_setting_size &&
-		set_info->actuator_params.init_setting_size
-		<= MAX_ACTUATOR_REG_TBL_SIZE) {
+		(set_info->actuator_params.init_setting_size <= MAX_ACTUATOR_INIT_SET)) {
 		if (a_ctrl->func_tbl->actuator_init_focus) {
 			init_settings = kmalloc(sizeof(struct reg_settings_t) *
 				(set_info->actuator_params.init_setting_size),
