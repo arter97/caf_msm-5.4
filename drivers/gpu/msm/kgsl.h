@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2014,2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -143,6 +143,7 @@ struct kgsl_memdesc {
 	unsigned int physaddr;
 	unsigned int size;
 	unsigned int priv; /* Internal flags and settings */
+	unsigned int mapsize;
 	struct scatterlist *sg;
 	unsigned int sglen; /* Active entries in the sglist */
 	unsigned int sglen_alloc;  /* Allocated entries in the sglist */

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2008-2012,2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2008-2012,2014,2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -213,11 +213,12 @@ static void print_mem_entry(struct seq_file *s, struct kgsl_mem_entry *entry)
 
 	kgsl_get_memory_usage(usage, sizeof(usage), m->flags);
 
-	seq_printf(s, "%pK %pK %8zd %5d %6s %10s %16s %5d\n",
+	seq_printf(s, "%pK %pK %8zd %5d %6s %10s %16s %5d %8zd\n",
 			(unsigned long *) m->gpuaddr,
 			(unsigned long *) m->useraddr,
 			m->size, entry->id, flags,
-			memtype_str(entry->memtype), usage, m->sglen);
+			memtype_str(entry->memtype), usage, m->sglen,
+			m->mapsize);
 }
 
 static int process_mem_print(struct seq_file *s, void *unused)
@@ -227,9 +228,9 @@ static int process_mem_print(struct seq_file *s, void *unused)
 	struct kgsl_process_private *private = s->private;
 	int next = 0;
 
-	seq_printf(s, "%8s %8s %8s %5s %6s %10s %16s %5s\n",
+	seq_printf(s, "%8s %8s %8s %5s %6s %10s %16s %5s %8s\n",
 		   "gpuaddr", "useraddr", "size", "id", "flags", "type",
-		   "usage", "sglen");
+		   "usage", "sglen", "mapsize");
 
 	/* print all entries with a GPU address */
 	spin_lock(&private->mem_lock);
