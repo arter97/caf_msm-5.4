@@ -4077,6 +4077,7 @@ EXPORT_SYMBOL(mmc_cache_ctrl);
 int mmc_suspend_host(struct mmc_host *host)
 {
 	int err = 0;
+	bool remove_pm_vote = false;
 	ktime_t start = ktime_get();
 
 	if (mmc_bus_needs_resume(host))
@@ -4084,6 +4085,8 @@ int mmc_suspend_host(struct mmc_host *host)
 
 	mmc_bus_get(host);
 	if (host->bus_ops && !host->bus_dead) {
+		if (host->ops->notify_pm_status)
+			host->ops->notify_pm_status(host, DEV_SUSPENDING);
 		/*
 		 * A long response time is not acceptable for device drivers
 		 * when doing suspend. Prevent mmc_claim_host in the suspend
@@ -4097,17 +4100,23 @@ int mmc_suspend_host(struct mmc_host *host)
 		 * causing deadlock.
 		 */
 		if (!(host->card && mmc_card_sdio(host->card)))
-			if (!mmc_try_claim_host(host))
+			if (!mmc_try_claim_host(host)) {
 				err = -EBUSY;
+				remove_pm_vote = true;
+			}
 
 		if (!err) {
 			if (host->bus_ops->suspend) {
 				if (host->card) {
 					err = mmc_stop_bkops(host->card);
-					if (err)
+					if (err) {
+						remove_pm_vote = true;
 						goto out;
+					}
 				}
 				err = host->bus_ops->suspend(host);
+				if (err)
+					remove_pm_vote = true;
 				if (host->card)
 					MMC_UPDATE_BKOPS_STATS_SUSPEND(host->
 						card->bkops_info.bkops_stats);
@@ -4143,10 +4152,17 @@ int mmc_suspend_host(struct mmc_host *host)
 
 	trace_mmc_suspend_host(mmc_hostname(host), err,
 			ktime_to_us(ktime_sub(ktime_get(), start)));
+	if (host->ops->notify_pm_status)
+		host->ops->notify_pm_status(host,
+			remove_pm_vote ? DEV_ERROR : DEV_SUSPENDED);
+
 	return err;
 out:
 	if (!(host->card && mmc_card_sdio(host->card)))
 		mmc_release_host(host);
+	if (host->ops->notify_pm_status)
+		host->ops->notify_pm_status(host,
+			remove_pm_vote ? DEV_ERROR : DEV_SUSPENDED);
 
 	return err;
 }
@@ -4160,6 +4176,7 @@ EXPORT_SYMBOL(mmc_suspend_host);
 int mmc_resume_host(struct mmc_host *host)
 {
 	int err = 0;
+	bool remove_pm_vote = false;
 	ktime_t start = ktime_get();
 
 	mmc_bus_get(host);
@@ -4170,6 +4187,8 @@ int mmc_resume_host(struct mmc_host *host)
 	}
 
 	if (host->bus_ops && !host->bus_dead) {
+		if (host->ops->notify_pm_status)
+			host->ops->notify_pm_status(host, DEV_RESUMING);
 		if (!mmc_card_keep_power(host)) {
 			mmc_claim_host(host);
 			mmc_power_up(host);
@@ -4194,6 +4213,7 @@ int mmc_resume_host(struct mmc_host *host)
 			pr_warning("%s: error %d during resume "
 					    "(card was removed?)\n",
 					    mmc_hostname(host), err);
+			remove_pm_vote = true;
 			err = 0;
 		}
 	}
@@ -4202,6 +4222,10 @@ int mmc_resume_host(struct mmc_host *host)
 
 	trace_mmc_resume_host(mmc_hostname(host), err,
 			ktime_to_us(ktime_sub(ktime_get(), start)));
+	if (host->ops->notify_pm_status)
+		host->ops->notify_pm_status(host,
+			remove_pm_vote ? DEV_ERROR : DEV_RESUMED);
+
 	return err;
 }
 EXPORT_SYMBOL(mmc_resume_host);
