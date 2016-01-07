@@ -159,6 +159,8 @@
 		vdd_sr2_pll-supply = <&pm8950_l7_ao>;
 		vdd_hf_dig-supply = <&pm8950_s2_level_ao>;
 		vdd_hf_pll-supply = <&pm8950_l7_ao>;
+		qcom,pll-enable-threshold = <(-10)>;
+		qcom,pll-disable-threshold = <15>;
 		#clock-cells = <1>;
 	};
 
