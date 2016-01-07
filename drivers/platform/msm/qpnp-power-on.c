@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -515,6 +515,33 @@ int qpnp_pon_wd_config(bool enable)
 }
 EXPORT_SYMBOL(qpnp_pon_wd_config);
 
+static int qpnp_pon_get_trigger_config(enum pon_trigger_source pon_src,
+							bool *enabled)
+{
+	struct qpnp_pon *pon = sys_reset_dev;
+	int rc;
+	u8 val;
+
+	if (!pon)
+		return -ENODEV;
+
+	if (pon_src < PON_SMPL || pon_src > PON_KPDPWR_N) {
+		dev_err(&pon->spmi->dev, "Invalid PON source\n");
+		return -EINVAL;
+	}
+
+
+	rc = spmi_ext_register_readl(pon->spmi->ctrl, pon->spmi->sid,
+				QPNP_PON_TRIGGER_EN(pon->base), &val, 1);
+	if (rc)
+		dev_err(&pon->spmi->dev,
+			"Unable to read from addr=%hx, rc(%d)\n",
+			QPNP_PON_TRIGGER_EN(pon->base), rc);
+	else
+		*enabled = !!(val & BIT(pon_src));
+
+	return rc;
+}
 
 /**
  * qpnp_pon_trigger_config - Configures (enable/disable) the PON trigger source
@@ -1432,6 +1459,42 @@ free_input_dev:
 		input_free_device(pon->pon_input);
 	return rc;
 }
+
+static bool smpl_en;
+
+static int qpnp_pon_smpl_en_get(char *buf, const struct kernel_param *kp)
+{
+	bool enabled = false;
+	int rc;
+
+	rc = qpnp_pon_get_trigger_config(PON_SMPL, &enabled);
+	if (rc < 0)
+		return rc;
+
+	return snprintf(buf, QPNP_PON_BUFFER_SIZE, "%d", enabled);
+}
+
+static int qpnp_pon_smpl_en_set(const char *val,
+					const struct kernel_param *kp)
+{
+	int rc;
+
+	rc = param_set_bool(val, kp);
+	if (rc < 0) {
+		pr_err("Unable to set smpl_en rc=%d\n", rc);
+		return rc;
+	}
+
+	rc = qpnp_pon_trigger_config(PON_SMPL, *(bool *)kp->arg);
+	return rc;
+}
+
+static struct kernel_param_ops smpl_en_ops = {
+	.set = qpnp_pon_smpl_en_set,
+	.get = qpnp_pon_smpl_en_get,
+};
+
+module_param_cb(smpl_en, &smpl_en_ops, &smpl_en, 0644);
 
 static bool dload_on_uvlo;
 
