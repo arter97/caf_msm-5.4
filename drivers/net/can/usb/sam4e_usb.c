@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -79,9 +79,17 @@
 #define CMD_CAN_ENABLE_BUFFERING	0x63
 #define CMD_CAN_DISABLE_BUFFERING	0X64
 #define CMD_CAN_DISABLE_ALL_BUFFERING	0x65
+#define CMD_CAN_ADD_FRAME_FILTER	0x66
+#define CMD_CAN_REMOVE_FRAME_FILTER	0x67
+
 
 #define IOCTL_RELEASE_CAN_BUFFER	(SIOCDEVPRIVATE + 0)
 #define IOCTL_ENABLE_BUFFERING		(SIOCDEVPRIVATE + 1)
+#define IOCTL_ADD_FRAME_FILTER		(SIOCDEVPRIVATE + 2)
+#define IOCTL_REMOVE_FRAME_FILTER	(SIOCDEVPRIVATE + 3)
+
+#define FRAME_FILTER_TYPE_ON_REFRESH    0
+#define FRAME_FILTER_TYPE_ON_CHANGE     1
 
 struct sam4e_usb {
 	struct usb_device *udev;
@@ -218,6 +226,13 @@ struct sam4e_enable_buffering {
 	u8 can;
 	u32 mid;
 	u32 mask;
+} __packed;
+
+struct sam4e_frame_filter {
+	u8 can;
+	u32 mid;
+	u32 mask;
+	u8 type;
 } __packed;
 
 static void sam4e_usb_receive_frame(struct sam4e_usb *dev,
@@ -695,6 +710,68 @@ nomem:
 	return -ENOMEM;
 }
 
+static int sam4e_frame_filter(struct net_device *netdev,
+		struct ifreq *ifr, int cmd)
+{
+	struct sam4e_frame_filter *add_request;
+	struct sam4e_frame_filter *frame_filter;
+	struct urb *urb;
+	struct sam4e_req *req;
+	struct sam4e_usb_handle *sam4e_usb_hnd = netdev_priv(netdev);
+	struct sam4e_usb *dev = sam4e_usb_hnd->sam4e_dev;
+	size_t size = sizeof(struct sam4e_req) +
+			sizeof(struct sam4e_frame_filter);
+	int result;
+
+	urb = usb_alloc_urb(0, GFP_KERNEL);
+	if (!urb) {
+		netdev_err(netdev, "No memory left for URBs\n");
+		goto nomem;
+	}
+
+	req = usb_alloc_coherent(dev->udev, size, GFP_KERNEL,
+			&urb->transfer_dma);
+	if (!req) {
+		netdev_err(netdev, "No memory left for USB buffer\n");
+		usb_free_urb(urb);
+		goto nomem;
+	}
+
+	add_request = ifr->ifr_data;
+	/* Fill message data */
+	req->cmd = cmd;
+	req->len = sizeof(struct sam4e_req) +
+			sizeof(struct sam4e_frame_filter);
+	req->seq = atomic_inc_return(&dev->msg_seq);
+	frame_filter = (struct sam4e_frame_filter *)&req->data;
+	frame_filter->can = add_request->can;
+	frame_filter->mid = add_request->mid;
+	frame_filter->mask = add_request->mask;
+	frame_filter->type = add_request->type;
+
+	LOGNI("sam4e_send_frame_filter %d %x %x %d", frame_filter->can,
+			frame_filter->mid,
+			frame_filter->mask,
+			frame_filter->type);
+
+	usb_fill_bulk_urb(urb, dev->udev,
+			usb_sndbulkpipe(dev->udev, BULK_OUT_EP), req,
+			size, sam4e_usb_write_bulk_callback, netdev);
+	urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
+	usb_anchor_urb(urb, &dev->tx_submitted);
+
+	result = usb_submit_urb(urb, GFP_KERNEL);
+	if (unlikely(result)) {
+		usb_unanchor_urb(urb);
+		usb_free_coherent(dev->udev, size, req, urb->transfer_dma);
+	}
+	usb_free_urb(urb);
+	return result;
+
+nomem:
+	return -ENOMEM;
+}
+
 static int sam4e_netdev_do_ioctl(struct net_device *netdev,
 		struct ifreq *ifr, int cmd)
 {
@@ -705,7 +782,12 @@ static int sam4e_netdev_do_ioctl(struct net_device *netdev,
 	} else if (cmd == IOCTL_ENABLE_BUFFERING) {
 		LOGNI("IOCTL_ENABLE_BUFFERING");
 		sam4e_enable_buffering(netdev, ifr);
+	} else if (cmd == IOCTL_ADD_FRAME_FILTER ||
+			cmd == IOCTL_REMOVE_FRAME_FILTER) {
+		LOGNI("IOCTL_ADD/REMOVE_FRAME_FILTER");
+		sam4e_frame_filter(netdev, ifr, cmd);
 	}
+
 	return 0;
 }
 
