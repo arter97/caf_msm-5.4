@@ -271,6 +271,8 @@ struct msm_otg_platform_data {
  * @otg: USB OTG Transceiver structure.
  * @pdata: otg device platform data.
  * @hub_udev: HUB device pointer.
+ * @flex_device_udev: Bridge device usb device pointer.
+ *                    Useful for flexconnect.
  * @test_port_num: port number of the hub to test.
  * @test_mode: test packet mode to generate test signals.
  * @irq: IRQ number assigned for HSUSB controller.
@@ -305,6 +307,7 @@ struct msm_otg {
 	struct usb_phy phy;
 	struct msm_otg_platform_data *pdata;
 	struct usb_device *hub_udev;
+	struct usb_device *flex_device_udev;
 	int test_port_num;
 	int test_mode;
 	int irq;
