@@ -24,6 +24,7 @@
 #include <linux/regulator/machine.h>
 #include <linux/of.h>
 #include <linux/mutex.h>
+#include <linux/delay.h>
 
 /* Mask/Bit helpers */
 #define _SMB1351_MASK(BITS, POS) \
@@ -417,6 +418,7 @@ struct smb1351_charger {
 	const char		*bms_psy_name;
 	bool			resume_completed;
 	bool			irq_waiting;
+	struct delayed_work	hvdcp_det_work;
 
 	/* status tracking */
 	bool			batt_full;
@@ -1471,6 +1473,31 @@ static int smb1351_parallel_get_property(struct power_supply *psy,
 	return 0;
 }
 
+static void smb1351_hvdcp_det_work(struct work_struct *work)
+{
+	int rc;
+	u8 reg;
+	struct smb1351_charger *chip = container_of(work,
+						struct smb1351_charger,
+						hvdcp_det_work.work);
+
+	rc = smb1351_read_reg(chip, STATUS_7_REG, &reg);
+	if (rc) {
+		pr_err("Couldn't read STATUS_7_REG rc == %d\n", rc);
+		goto end;
+	}
+	pr_debug("STATUS_7_REG = 0x%02X\n", reg);
+
+	if (reg) {
+		pr_debug("HVDCP detected; notifying USB PSY\n");
+		power_supply_set_supply_type(chip->usb_psy,
+			POWER_SUPPLY_TYPE_USB_HVDCP);
+	}
+end:
+	pm_relax(chip->dev);
+}
+
+#define HVDCP_NOTIFY_MS 2500
 static int smb1351_apsd_complete_handler(struct smb1351_charger *chip,
 						u8 status)
 {
@@ -1508,6 +1535,10 @@ static int smb1351_apsd_complete_handler(struct smb1351_charger *chip,
 		break;
 	case STATUS_PORT_DCP:
 		type = POWER_SUPPLY_TYPE_USB_DCP;
+		pr_debug("schedule hvdcp detection worker\n");
+		pm_stay_awake(chip->dev);
+		schedule_delayed_work(&chip->hvdcp_det_work,
+					msecs_to_jiffies(HVDCP_NOTIFY_MS));
 		break;
 	case STATUS_PORT_SDP:
 		type = POWER_SUPPLY_TYPE_USB;
@@ -1551,6 +1582,8 @@ static int smb1351_usbin_uv_handler(struct smb1351_charger *chip, u8 status)
 		power_supply_set_supply_type(chip->usb_psy,
 						POWER_SUPPLY_TYPE_UNKNOWN);
 		power_supply_set_present(chip->usb_psy, chip->chg_present);
+		cancel_delayed_work_sync(&chip->hvdcp_det_work);
+		pm_relax(chip->dev);
 	}
 
 	pr_debug("chip->chg_present = %d\n", chip->chg_present);
@@ -2270,6 +2303,8 @@ static int smb1351_main_charger_probe(struct i2c_client *client,
 	chip->dev = &client->dev;
 	chip->usb_psy = usb_psy;
 	chip->fake_battery_soc = -EINVAL;
+
+	INIT_DELAYED_WORK(&chip->hvdcp_det_work, smb1351_hvdcp_det_work);
 
 	/* probe the device to check if its actually connected */
 	rc = smb1351_read_reg(chip, CHG_REVISION_REG, &reg);
