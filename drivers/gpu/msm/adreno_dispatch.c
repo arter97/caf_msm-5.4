@@ -1413,6 +1413,26 @@ static void __adreno_dispatcher_schedule_preempt(
 	mutex_unlock(&device->mutex);
 }
 
+#define BIG_CLUSTER_QOS_ACTIVE_PERIOD_MS	80
+
+static void _track_pm_qos_big_cluster_vote(struct adreno_device *adreno_dev)
+{
+	struct kgsl_device *device = &adreno_dev->dev;
+	int cpu;
+
+	cpu = get_cpu();
+	put_cpu();
+
+	/* 4.5.6.7 are big clustore cpus */
+	if (cpu >= 4) {
+		pm_qos_update_request_timeout(&device->pwrctrl.pm_qos_req_dma_big_cluster,
+				device->pwrctrl.pm_qos_active_latency,
+				(BIG_CLUSTER_QOS_ACTIVE_PERIOD_MS * 1000));
+		trace_adreno_pm_qos_big_c(0, BIG_CLUSTER_QOS_ACTIVE_PERIOD_MS);
+	}
+}
+
+
 /**
  * adreno_dispactcher_queue_cmd() - Queue a new command in the context
  * @adreno_dev: Pointer to the adreno device struct
@@ -1596,6 +1616,8 @@ int adreno_dispatcher_queue_cmd(struct adreno_device *adreno_dev,
 	_track_context(dispatch_q, drawctxt->base.id);
 
 	spin_unlock(&drawctxt->lock);
+
+	_track_pm_qos_big_cluster_vote(adreno_dev);
 
 	/* Add the context to the dispatcher pending list */
 	dispatcher_queue_context(adreno_dev, drawctxt);

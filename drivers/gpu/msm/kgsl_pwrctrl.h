@@ -151,6 +151,9 @@ struct kgsl_pwrctrl {
 	struct pm_qos_request pm_qos_req_dma;
 	unsigned int pm_qos_active_latency;
 	unsigned int pm_qos_wakeup_latency;
+
+	struct pm_qos_request pm_qos_req_dma_big_cluster;
+
 	bool bus_control;
 	int bus_mod;
 	unsigned int bus_percent_ab;

@@ -4138,6 +4138,16 @@ int kgsl_device_platform_probe(struct kgsl_device *device)
 				PM_QOS_DEFAULT_VALUE);
 
 
+	device->pwrctrl.pm_qos_req_dma_big_cluster.type = PM_QOS_REQ_AFFINE_CORES;
+	cpumask_empty(&device->pwrctrl.pm_qos_req_dma_big_cluster.cpus_affine);
+	cpumask_set_cpu(4, &device->pwrctrl.pm_qos_req_dma_big_cluster.cpus_affine);
+	cpumask_set_cpu(5, &device->pwrctrl.pm_qos_req_dma_big_cluster.cpus_affine);
+	cpumask_set_cpu(6, &device->pwrctrl.pm_qos_req_dma_big_cluster.cpus_affine);
+	cpumask_set_cpu(7, &device->pwrctrl.pm_qos_req_dma_big_cluster.cpus_affine);
+	pm_qos_add_request(&device->pwrctrl.pm_qos_req_dma_big_cluster,
+				PM_QOS_CPU_DMA_LATENCY,
+				PM_QOS_DEFAULT_VALUE);
+
 	device->events_wq = create_workqueue("kgsl-events");
 
 	/* Initalize the snapshot engine */
@@ -4173,6 +4183,7 @@ void kgsl_device_platform_remove(struct kgsl_device *device)
 	kgsl_pwrctrl_uninit_sysfs(device);
 
 	pm_qos_remove_request(&device->pwrctrl.pm_qos_req_dma);
+	pm_qos_remove_request(&device->pwrctrl.pm_qos_req_dma_big_cluster);
 
 	idr_destroy(&device->context_idr);
 

@@ -23,6 +23,23 @@
 
 #include <linux/tracepoint.h>
 
+TRACE_EVENT(adreno_pm_qos_big_c,
+	TP_PROTO(int p1, int p2),
+	TP_ARGS(p1, p2),
+	TP_STRUCT__entry(
+		__field(unsigned int, p1)
+		__field(unsigned int, p2)
+	),
+	TP_fast_assign(
+		__entry->p1= p1;
+		__entry->p2 = p2;
+	),
+	TP_printk(
+		"p1=%u p2=%u",
+			__entry->p1, __entry->p2
+	)
+);
+
 TRACE_EVENT(adreno_cmdbatch_queued,
 	TP_PROTO(struct kgsl_cmdbatch *cmdbatch, unsigned int queued),
 	TP_ARGS(cmdbatch, queued),
