@@ -45,7 +45,7 @@
 #include <linux/efi.h>
 #include <linux/personality.h>
 #include <linux/dma-mapping.h>
-
+#include <linux/slab.h>
 #include <asm/fixmap.h>
 #include <asm/cpu.h>
 #include <asm/cputype.h>
@@ -585,3 +585,171 @@ void arch_setup_pdev_archdata(struct platform_device *pdev)
 	pdev->archdata.dma_mask = DMA_BIT_MASK(32);
 	pdev->dev.dma_mask = &pdev->archdata.dma_mask;
 }
+
+#ifdef CONFIG_BOOT_TIME_MARKER
+struct boot_marker {
+	char marker_name[BOOT_MARKER_MAX_LEN];
+	unsigned long int timer_value;
+	struct list_head list;
+};
+uint32_t msm_timer_get_sclk_ticks(void)
+{
+	uint32_t t1, t2;
+	int loop_count = 10;
+	int loop_zero_count = 3;
+	unsigned int sclk_hz = 32768;
+	int tmp = USEC_PER_SEC;
+	void __iomem *sclk_tick;
+
+	do_div(tmp, sclk_hz);
+	tmp /= (loop_zero_count-1);
+	sclk_tick = ioremap(0x4A3000, 4);
+	if (!sclk_tick)
+		pr_err("address failed for ioremap\n");
+	while (loop_zero_count--) {
+		t1 = __raw_readl_no_log(sclk_tick);
+		do {
+			udelay(1);
+			t2 = t1;
+			t1 = __raw_readl_no_log(sclk_tick);
+		} while ((t2 != t1) && --loop_count);
+		if (!loop_count) {
+			pr_err("SCLK  did not stabilize\n");
+			return 0;
+		}
+
+		if (t1)
+			break;
+
+		udelay(tmp);
+	}
+
+	if (!loop_zero_count) {
+		pr_err("SCLK reads zero\n");
+		return 0;
+	}
+	return t1;
+}
+
+static struct boot_marker boot_marker_list;
+
+static ssize_t print_boot_markers(struct kobject *kobj,
+				struct kobj_attribute *attr,
+				char *buf)
+{
+	char *p = buf;
+	struct boot_marker *marker;
+
+	list_for_each_entry(marker, &boot_marker_list.list, list) {
+		p += scnprintf(p, MAX_PRINT_LEN, "%-22s:%ld.%03ld seconds\n",
+			marker->marker_name,
+			marker->timer_value/TIMER_KHZ,
+			(((marker->timer_value % TIMER_KHZ)
+			* 1000) / TIMER_KHZ));
+	}
+	return p-buf;
+}
+
+static ssize_t sys_write_response(struct kobject *kobj,
+				struct kobj_attribute *attr,
+				const char *buf, size_t count)
+{
+	place_marker((char *) buf);
+	return count;
+}
+
+static struct kobj_attribute bootkpi_kpi_attr = {
+	.attr = {
+		.mode = S_IRUGO,
+		.name = "kpi_values",
+	},
+	.show = &print_boot_markers,
+};
+
+static struct kobj_attribute bootkpi_marker_attr = {
+	.attr = {
+		.mode = S_IWUGO,
+		.name = "marker_entry",
+	},
+	.store = &sys_write_response,
+};
+
+static struct attribute *bootkpi_entries[] = {
+	&bootkpi_kpi_attr.attr,
+	&bootkpi_marker_attr.attr,
+	NULL,
+};
+
+static struct attribute_group bootkpi_group = {
+	.attrs = bootkpi_entries,
+};
+
+int init_marker_sys_fs(void)
+{
+	struct kobject *bootkpi_obj;
+	struct boot_marker *new_boot_marker;
+	unsigned long int timer_value;
+	int ret = 0;
+
+	bootkpi_obj = kobject_create_and_add("bootkpi", NULL);
+	if (bootkpi_obj) {
+		ret = sysfs_create_group(bootkpi_obj, &bootkpi_group);
+		if (ret >= 0) {
+			INIT_LIST_HEAD(&boot_marker_list.list);
+
+			if (strcmp(lk_splash_val, "0") == 0) {
+				pr_info(
+				"no splash screen marker value from LK\n");
+			} else {
+				new_boot_marker = kmalloc(
+						sizeof(*new_boot_marker),
+						GFP_KERNEL);
+				strlcpy(new_boot_marker->marker_name,
+					"Splash Screen",
+				sizeof(new_boot_marker->marker_name));
+				if (kstrtol(lk_splash_val, 10, &timer_value))
+					return -EINVAL;
+				new_boot_marker->timer_value = timer_value;
+				INIT_LIST_HEAD(&new_boot_marker->list);
+				list_add_tail(&(new_boot_marker->list),
+						&(boot_marker_list.list));
+			}
+			new_boot_marker = kmalloc(sizeof(*new_boot_marker),
+								GFP_KERNEL);
+			strlcpy(new_boot_marker->marker_name,
+					"Linux_Kernel-Start",
+					BOOT_MARKER_MAX_LEN);
+			new_boot_marker->timer_value = kernel_start_marker;
+			INIT_LIST_HEAD(&new_boot_marker->list);
+			list_add_tail(&(new_boot_marker->list),
+						&(boot_marker_list.list));
+		}
+	} else {
+		pr_err("Error creating sysfs entry\n");
+		return -ENOMEM;
+	}
+	return 0;
+}
+
+void place_marker(char *name)
+{
+	struct boot_marker *new_boot_marker;
+	unsigned long int timer_value = msm_timer_get_sclk_ticks();
+
+	pr_debug("%-22s:%ld.%03ld seconds\n", name,
+			timer_value/TIMER_KHZ,
+			((timer_value % TIMER_KHZ)
+			* 1000) / TIMER_KHZ);
+
+	new_boot_marker = kmalloc(sizeof(*new_boot_marker), GFP_KERNEL);
+	strlcpy(new_boot_marker->marker_name, name,
+		sizeof(new_boot_marker->marker_name));
+	new_boot_marker->timer_value = timer_value;
+	INIT_LIST_HEAD(&new_boot_marker->list);
+	list_add_tail(&(new_boot_marker->list), &(boot_marker_list.list));
+}
+#else
+void place_marker(char *name)
+{
+}
+#endif
