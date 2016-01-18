@@ -45,7 +45,7 @@
 #include <linux/efi.h>
 #include <linux/personality.h>
 #include <linux/dma-mapping.h>
-#include<linux/slab.h>
+#include <linux/slab.h>
 #include <asm/fixmap.h>
 #include <asm/cpu.h>
 #include <asm/cputype.h>
@@ -597,16 +597,15 @@ uint32_t msm_timer_get_sclk_ticks(void)
 	uint32_t t1, t2;
 	int loop_count = 10;
 	int loop_zero_count = 3;
-        unsigned int sclk_hz = 32768;
+	unsigned int sclk_hz = 32768;
 	int tmp = USEC_PER_SEC;
 	void __iomem *sclk_tick;
+
 	do_div(tmp, sclk_hz);
 	tmp /= (loop_zero_count-1);
-        sclk_tick = ioremap(0x4A3000, 4);
-        if (!sclk_tick){
+	sclk_tick = ioremap(0x4A3000, 4);
+	if (!sclk_tick)
 		pr_err("address failed for ioremap\n");
-	}
-
 	while (loop_zero_count--) {
 		t1 = __raw_readl_no_log(sclk_tick);
 		do {
@@ -620,7 +619,7 @@ uint32_t msm_timer_get_sclk_ticks(void)
 		}
 
 		if (t1)
-		break;
+			break;
 
 		udelay(tmp);
 	}
@@ -640,6 +639,7 @@ static ssize_t print_boot_markers(struct kobject *kobj,
 {
 	char *p = buf;
 	struct boot_marker *marker;
+
 	list_for_each_entry(marker, &boot_marker_list.list, list) {
 		p += scnprintf(p, MAX_PRINT_LEN, "%-22s:%ld.%03ld seconds\n",
 			marker->marker_name,
