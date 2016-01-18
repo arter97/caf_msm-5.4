@@ -3,7 +3,7 @@
  * MSM 7k High speed uart driver
  *
  * Copyright (c) 2008 Google Inc.
- * Copyright (c) 2007-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2007-2016, The Linux Foundation. All rights reserved.
  * Modified: Nick Pelly <npelly@google.com>
  *
  * All source code in this file is licensed under the following license
@@ -1149,7 +1149,6 @@ static void msm_hs_stop_rx_locked(struct uart_port *uport)
 {
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
 	unsigned long data;
-	struct msm_hs_rx *rx = &msm_uport->rx;
 
 	if (msm_uport->clk_state == MSM_HS_CLK_OFF)
 		msm_hs_clock_vote(msm_uport);
@@ -1167,13 +1166,16 @@ static void msm_hs_stop_rx_locked(struct uart_port *uport)
 	/* Allow to receive all pending data from UART RX FIFO */
 	udelay(100);
 	msm_hs_write(uport, UARTDM_CR_ADDR, RESET_RX);
+	mb();
 	if (msm_uport->rx.flush == FLUSH_NONE) {
 		__pm_stay_awake(&msm_uport->rx.ws);
 
 		msm_uport->rx_discard_flush_issued = true;
-		rx->flush = FLUSH_IGNORE;
+		if (msm_uport->rx.flush != FLUSH_SHUTDOWN)
+			msm_uport->rx.flush = FLUSH_STOP;
 		/* Discard Flush */
 		msm_dmov_flush(msm_uport->dma_rx_channel, 0);
+		return;
 	}
 
 	if (msm_uport->rx.flush != FLUSH_SHUTDOWN)
@@ -1754,7 +1756,6 @@ static int msm_hs_check_clock_off(struct uart_port *uport)
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
 	struct circ_buf *tx_buf = &uport->state->xmit;
 	struct msm_hs_rx *rx = &msm_uport->rx;
-
 	mutex_lock(&msm_uport->clk_mutex);
 	spin_lock_irqsave(&uport->lock, flags);
 
@@ -1786,22 +1787,27 @@ static int msm_hs_check_clock_off(struct uart_port *uport)
 	/* Make sure forced RXSTALE flush complete */
 	switch (msm_uport->clk_req_off_state) {
 	case CLK_REQ_OFF_START:
-		data = msm_hs_read(uport, UARTDM_MR1_ADDR);
-		/*disable auto ready-for-receiving */
-		data &= ~UARTDM_MR1_RX_RDY_CTL_BMSK;
-		msm_hs_write(uport, UARTDM_MR1_ADDR, data);
-		mb();
-		/* set RFR_N to high */
-		msm_hs_write(uport, UARTDM_CR_ADDR, RFR_HIGH);
+		if (rx->flush < FLUSH_STOP) {
+			data = msm_hs_read(uport, UARTDM_MR1_ADDR);
+			/*disable auto ready-for-receiving */
+			data &= ~UARTDM_MR1_RX_RDY_CTL_BMSK;
+			msm_hs_write(uport, UARTDM_MR1_ADDR, data);
+			mb();
+			/* set RFR_N to high */
+			msm_hs_write(uport, UARTDM_CR_ADDR, RFR_HIGH);
 
-		msm_uport->clk_req_off_state = CLK_REQ_OFF_FLUSH_ISSUED;
-		__pm_stay_awake(&msm_uport->rx.ws);
-		rx->flush = FLUSH_IGNORE;
-		/* Discard Flush */
-		msm_dmov_flush(msm_uport->dma_rx_channel, 0);
-		spin_unlock_irqrestore(&uport->lock, flags);
-		mutex_unlock(&msm_uport->clk_mutex);
-		return 0;  /* RXSTALE flush not complete - retry */
+			msm_uport->clk_req_off_state = CLK_REQ_OFF_FLUSH_ISSUED;
+			__pm_stay_awake(&msm_uport->rx.ws);
+			rx->flush = FLUSH_IGNORE;
+			/* Discard Flush */
+			msm_dmov_flush(msm_uport->dma_rx_channel, 0);
+			spin_unlock_irqrestore(&uport->lock, flags);
+			mutex_unlock(&msm_uport->clk_mutex);
+			return 0;  /* RXSTALE flush not complete - retry */
+		} else {
+			msm_uport->clk_req_off_state = CLK_REQ_OFF_FLUSH_ISSUED;
+			break;
+		}
 	case CLK_REQ_OFF_RXSTALE_ISSUED:
 	case CLK_REQ_OFF_FLUSH_ISSUED:
 		spin_unlock_irqrestore(&uport->lock, flags);
@@ -2653,7 +2659,6 @@ static void msm_hs_shutdown(struct uart_port *uport)
 				pdev->dev.platform_data;
 	int ioctl_count = atomic_read(&msm_uport->ioctl_count);
 
-
 	/* deactivate if any clock off hrtimer is active. */
 	hrtimer_try_to_cancel(&msm_uport->clk_off_timer);
 
@@ -2692,8 +2697,8 @@ static void msm_hs_shutdown(struct uart_port *uport)
 	if (msm_uport->rx.dma_in_flight) {
 
 		if (msm_uport->rx.flush < FLUSH_STOP) {
-			pr_err("%s(): rx.flush is not correct.\n",
-							__func__);
+			pr_err("%s(): rx.flush is not correct. = %d\n",
+						__func__, msm_uport->rx.flush);
 			print_uart_registers(msm_uport);
 			BUG_ON(1);
 		}
