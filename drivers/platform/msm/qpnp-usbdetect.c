@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -34,6 +34,13 @@ static irqreturn_t qpnp_usbdetect_vbus_irq(int irq, void *data)
 	int vbus;
 
 	vbus = !!irq_read_line(irq);
+	if (vbus)
+		power_supply_set_supply_type(usb->usb_psy,
+				POWER_SUPPLY_TYPE_USB);
+	else
+		power_supply_set_supply_type(usb->usb_psy,
+				POWER_SUPPLY_TYPE_UNKNOWN);
+
 	power_supply_set_present(usb->usb_psy, vbus);
 
 	return IRQ_HANDLED;
