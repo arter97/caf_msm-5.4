@@ -77,6 +77,15 @@ config FORCE_PAGES
 
           If unsure say N.
 
+config BOOT_TIME_MARKER
+	bool "Timer based boot time markers"
+	default n
+	help
+	    Say Y here if timer based boot markers are required.
+	    Boot markers are displayed at "/sys/bootkpi/kpi_values".
+	    To create an entry, call "place_marker" function.
+	    At userspace, write marker name to "/sys/bootkpi/marker_entry"
+
 config FREE_PAGES_RDONLY
         bool "Set pages as read only while on the buddy list"
         select FORCE_PAGES
