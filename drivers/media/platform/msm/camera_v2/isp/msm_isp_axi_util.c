@@ -338,6 +338,9 @@ int msm_isp_axi_check_stream_state(
 		}
 		stream_info = &axi_data->stream_info[
 			HANDLE_TO_IDX(stream_cfg_cmd->stream_handle[i])];
+		ISP_DBG("VFE%d  session_id  = 0x%x , stream_id = 0x%x , handle = 0x%x",
+			vfe_dev->pdev->id,  stream_info->session_id,
+			stream_info->stream_id , stream_info->stream_handle );
 		spin_lock_irqsave(&stream_info->lock, flags);
 		if (stream_info->state != valid_state) {
 			if ((stream_info->state == PAUSING ||
@@ -575,6 +578,7 @@ int msm_isp_request_axi_stream(struct vfe_device *vfe_dev, void *arg)
 
 	msm_isp_calculate_framedrop(&vfe_dev->axi_data, stream_cfg_cmd);
 	stream_info->vt_enable = stream_cfg_cmd->vt_enable;
+	stream_info->frame_rate = stream_cfg_cmd->frame_rate;
 	if (stream_info->vt_enable) {
 		vfe_dev->vt_enable = stream_info->vt_enable;
 	#ifdef CONFIG_MSM_AVTIMER
@@ -1225,6 +1229,10 @@ static int msm_isp_start_axi_stream(struct vfe_device *vfe_dev,
 		src_state = axi_data->src_info[
 			SRC_TO_INTF(stream_info->stream_src)].active;
 
+		/* Configure UB for this stream only */
+		vfe_dev->hw_info->vfe_ops.axi_ops.cfg_ub(vfe_dev,
+			stream_info, 1);
+
 		msm_isp_calculate_bandwidth(axi_data, stream_info);
 		msm_isp_reset_framedrop(vfe_dev, stream_info);
 		msm_isp_get_stream_wm_mask(stream_info, &wm_reload_mask);
@@ -1296,6 +1304,10 @@ static int msm_isp_stop_axi_stream(struct vfe_device *vfe_dev,
 		}
 		stream_info = &axi_data->stream_info[
 			HANDLE_TO_IDX(stream_cfg_cmd->stream_handle[i])];
+
+		/* Un configure UB for this stream only */
+		vfe_dev->hw_info->vfe_ops.axi_ops.cfg_ub(vfe_dev,
+			stream_info, 0);
 
 		stream_info->state = STOP_PENDING;
 		if (stream_info->stream_src == CAMIF_RAW ||
@@ -1377,12 +1389,10 @@ int msm_isp_cfg_axi_stream(struct vfe_device *vfe_dev, void *arg)
 		return rc;
 	}
 
-	if (axi_data->num_active_stream == 0) {
-		/*Configure UB*/
-		vfe_dev->hw_info->vfe_ops.axi_ops.cfg_ub(vfe_dev);
-	}
 	camif_update = msm_isp_get_camif_update_state(vfe_dev, stream_cfg_cmd);
 
+	ISP_DBG(" VFE%d  cfg axi stream cmd  = %d camif_update = %d \n",
+		vfe_dev->pdev->id, stream_cfg_cmd->cmd, camif_update );
 	if (stream_cfg_cmd->cmd == START_STREAM)
 		rc = msm_isp_start_axi_stream(
 		   vfe_dev, stream_cfg_cmd, camif_update);

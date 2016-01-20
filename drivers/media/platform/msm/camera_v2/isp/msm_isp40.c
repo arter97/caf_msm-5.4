@@ -39,6 +39,10 @@
 #define VFE40_BURST_LEN 1
 #define VFE40_STATS_BURST_LEN 1
 #define VFE40_UB_SIZE 1536
+#define VFE40_UB_STATS_SIZE (64 + 128 + 128 + 16 + 8 + 16 + 16 + 16)
+#define MSM_ISP40_TOTAL_WM_UB (VFE40_UB_SIZE - VFE40_UB_STATS_SIZE)
+#define VFE40_UB_CALC_LIMIT ((21800000 * 30) / MSM_ISP40_TOTAL_WM_UB)
+
 #define VFE40_EQUAL_SLICE_UB 228
 #define VFE40_WM_BASE(idx) (0x6C + 0x24 * idx)
 #define VFE40_RDI_BASE(idx) (0x2E8 + 0x4 * idx)
@@ -1068,42 +1072,58 @@ static void msm_vfe40_axi_clear_wm_xbar_reg(
 		vfe_dev->vfe_base + VFE40_XBAR_BASE(wm));
 }
 
-#define MSM_ISP40_TOTAL_WM_UB 819
-
 static void msm_vfe40_cfg_axi_ub_equal_default(
-	struct vfe_device *vfe_dev)
+	struct vfe_device *vfe_dev, struct msm_vfe_axi_stream *stream_info,
+	uint32_t reserve)
 {
 	int i;
-	uint32_t ub_offset = 0;
-	struct msm_vfe_axi_shared_data *axi_data =
-		&vfe_dev->axi_data;
-	uint32_t total_image_size = 0;
-	uint8_t num_used_wms = 0;
-	uint32_t prop_size = 0;
+	struct   msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
+	uint32_t wm_num;
+	struct   msm_isp_ub_list *entry;
 	uint32_t wm_ub_size;
 
-	for (i = 0; i < axi_data->hw_info->num_wm; i++) {
-		if (axi_data->free_wm[i] > 0) {
-			num_used_wms++;
-			total_image_size += axi_data->wm_image_size[i];
+	wm_num = vfe_dev->hw_info->axi_hw_info->num_wm;
+	ISP_DBG(" VFE%d wm_num = %d\n", vfe_dev->pdev->id, wm_num);
+
+	if (reserve) {
+		for (i = 0; i < axi_data->hw_info->num_wm; i++) {
+			if (axi_data->free_wm[i] ==
+				stream_info->stream_handle) {
+
+				wm_ub_size = (axi_data->wm_image_size[i] *
+					stream_info->frame_rate) /
+					VFE40_UB_CALC_LIMIT;
+				if (wm_ub_size < axi_data->hw_info->min_wm_ub)
+					/* fit min ub size */
+					wm_ub_size =
+						axi_data->hw_info->min_wm_ub;
+
+				/* Allocate free chunk from ub buffer */
+				entry = msm_isp_ub_list_alloc(
+						&axi_data->isp_ub_free_list,
+						&axi_data->isp_ub_used_list,
+						axi_data->free_wm[i],
+						wm_ub_size);
+				if (entry)
+					msm_camera_io_w(entry->start << 16 |
+							(wm_ub_size - 1),
+						vfe_dev->vfe_base +
+						VFE40_WM_BASE(i) + 0x10);
+				else
+					pr_err("No free UB buffer chunk image %d frame rate %d, size %d\n",
+						axi_data->wm_image_size[i], stream_info->frame_rate, wm_ub_size);
+			}
 		}
-	}
-	prop_size = MSM_ISP40_TOTAL_WM_UB -
-		axi_data->hw_info->min_wm_ub * num_used_wms;
-	for (i = 0; i < axi_data->hw_info->num_wm; i++) {
-		if (axi_data->free_wm[i]) {
-			uint64_t delta = 0;
-			uint64_t temp = (uint64_t)axi_data->wm_image_size[i] *
-					(uint64_t)prop_size;
-			do_div(temp, total_image_size);
-			delta = temp;
-			wm_ub_size = axi_data->hw_info->min_wm_ub + delta;
-			msm_camera_io_w(ub_offset << 16 | (wm_ub_size - 1),
-				vfe_dev->vfe_base + VFE40_WM_BASE(i) + 0x10);
-			ub_offset += wm_ub_size;
-		} else
-			msm_camera_io_w(0,
-				vfe_dev->vfe_base + VFE40_WM_BASE(i) + 0x10);
+	} else {
+		for (i = 0; i < axi_data->hw_info->num_wm; i++) {
+			if (axi_data->free_wm[i] == stream_info->stream_handle) {
+				/* Frees used ub buffer chunk(s) */
+				msm_isp_ub_list_free(
+						&axi_data->isp_ub_free_list,
+						&axi_data->isp_ub_used_list,
+						axi_data->free_wm[i]);
+			}
+		}
 	}
 }
 
@@ -1120,14 +1140,15 @@ static void msm_vfe40_cfg_axi_ub_equal_slicing(
 	}
 }
 
-static void msm_vfe40_cfg_axi_ub(struct vfe_device *vfe_dev)
+static void msm_vfe40_cfg_axi_ub(struct vfe_device *vfe_dev,
+	struct msm_vfe_axi_stream *stream_info, uint32_t reserve)
 {
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
 	axi_data->wm_ub_cfg_policy = MSM_WM_UB_CFG_DEFAULT;
 	if (axi_data->wm_ub_cfg_policy == MSM_WM_UB_EQUAL_SLICING)
 		msm_vfe40_cfg_axi_ub_equal_slicing(vfe_dev);
 	else
-		msm_vfe40_cfg_axi_ub_equal_default(vfe_dev);
+		msm_vfe40_cfg_axi_ub_equal_default(vfe_dev, stream_info, reserve);
 }
 
 static void msm_vfe40_update_ping_pong_addr(
@@ -1417,7 +1438,8 @@ static struct msm_vfe_axi_hardware_info msm_vfe40_axi_hw_info = {
 	.num_comp_mask = 3,
 	.num_rdi = 3,
 	.num_rdi_master = 3,
-	.min_wm_ub = 64,
+	.min_wm_ub = 128,
+	.max_img_wm_ub = MSM_ISP40_TOTAL_WM_UB,
 };
 
 static struct msm_vfe_stats_hardware_info msm_vfe40_stats_hw_info = {
