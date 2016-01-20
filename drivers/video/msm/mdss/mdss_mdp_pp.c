@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2603,6 +2603,26 @@ int mdss_mdp_pp_default_overlay_config(struct msm_fb_data_type *mfd,
 	return ret;
 }
 
+static bool pp_ad_bl_threshold_check(int al_thresh, int base, int prev_bl,
+					 int curr_bl)
+{
+	int bl_thresh = 0, diff = 0;
+	bool ret = false;
+
+	pr_debug("al_thresh = %d, base = %d\n", al_thresh, base);
+	if (base <= 0) {
+		pr_debug("Invalid base for threshold calculation %d\n", base);
+		return ret;
+	}
+	bl_thresh = (curr_bl * al_thresh) / (base * 4);
+	diff = (curr_bl > prev_bl) ? (curr_bl - prev_bl) : (prev_bl - curr_bl);
+	ret = (diff > bl_thresh) ? true : false;
+	pr_debug("prev_bl =%d, curr_bl = %d, bl_thresh = %d, diff = %d, ret = %d\n",
+		prev_bl, curr_bl, bl_thresh, diff, ret);
+
+	return ret;
+}
+
 static int pp_ad_calc_bl(struct msm_fb_data_type *mfd, int bl_in, int *bl_out,
 	bool *bl_out_notify)
 {
@@ -2663,15 +2683,16 @@ static int pp_ad_calc_bl(struct msm_fb_data_type *mfd, int bl_in, int *bl_out,
 		mutex_unlock(&ad->lock);
 		return ret;
 	}
-	*bl_out = temp;
 
-	if (ad_bl_out != mfd->ad_bl_level) {
+	*bl_out = temp;
+	if (pp_ad_bl_threshold_check(ad->init.al_thresh, ad->init.alpha_base,
+					mfd->ad_bl_level, ad_bl_out)) {
 		mfd->ad_bl_level = ad_bl_out;
+		pr_debug("backlight send to AD block: %d\n", mfd->ad_bl_level);
 		*bl_out_notify = true;
+		pp_ad_invalidate_input(mfd);
 	}
 
-	if (*bl_out_notify)
-		pp_ad_invalidate_input(mfd);
 	mutex_unlock(&ad->lock);
 	return 0;
 }
@@ -5890,11 +5911,17 @@ static int  pp_ad_attenuate_bl(struct mdss_ad_info *ad, u32 bl, u32 *bl_out)
 	u32 shift = 0, ratio_temp = 0;
 	u32 n, lut_interval, bl_att;
 
-	if (bl < 0) {
-		pr_err("Invalid backlight input\n");
+	if (bl < 0 || ad->init.alpha < 0) {
+		pr_err("Invalid input: backlight = %d, alpha = %d\n", bl,
+			ad->init.alpha);
 		return -EINVAL;
 	}
 
+	if (ad->init.alpha == 0) {
+		pr_debug("alpha = %d, hence no attenuation needed\n",
+			ad->init.alpha);
+		return 0;
+	}
 	pr_debug("bl_in = %d\n", bl);
 	/* map panel backlight range to AD backlight range */
 	linear_map(bl, &bl, ad->bl_mfd->panel_info->bl_max,
@@ -5917,12 +5944,9 @@ static int  pp_ad_attenuate_bl(struct mdss_ad_info *ad, u32 bl, u32 *bl_out)
 		lut_interval;
 	pr_debug("n = %u, bl_att_lut[%u] = %u, bl_att_lut[%u] = %u, bl_att = %u\n",
 		n, n, ad->bl_att_lut[n], n + 1, ad->bl_att_lut[n + 1], bl_att);
-	if (ad->init.alpha_base)
-		*bl_out = (ad->init.alpha * bl_att +
-			(ad->init.alpha_base - ad->init.alpha) * bl) /
-			ad->init.alpha_base;
-	else
-		*bl_out = bl;
+	*bl_out = (ad->init.alpha * bl_att +
+		(ad->init.alpha_base - ad->init.alpha) * bl) /
+		ad->init.alpha_base;
 
 	pr_debug("After attenuation = %d\n", *bl_out);
 	/* map AD backlight range back to panel backlight range */
@@ -5938,7 +5962,7 @@ static int pp_ad_linearize_bl(struct mdss_ad_info *ad, u32 bl, u32 *bl_out,
 	int inv)
 {
 
-	u32 n;
+	u32 n, bl_lut_max_index = AD_BL_LIN_LEN - 1;
 	uint32_t *bl_lut = NULL;
 	int ret = -EINVAL;
 
@@ -5963,20 +5987,24 @@ static int pp_ad_linearize_bl(struct mdss_ad_info *ad, u32 bl, u32 *bl_out,
 		MDSS_MDP_AD_BL_SCALE);
 
 	pr_debug("Before linearization = %d\n", bl);
-	n = bl * (AD_BL_LIN_LEN - 1) / MDSS_MDP_AD_BL_SCALE;
+	n = bl * bl_lut_max_index / MDSS_MDP_AD_BL_SCALE;
 	pr_debug("n = %u\n", n);
-	if (n > (AD_BL_LIN_LEN - 1)) {
+	if (n > bl_lut_max_index) {
 		pr_err("Invalid index for BL linearization: %d.\n", n);
 		return ret;
-	} else if (n == (AD_BL_LIN_LEN - 1)) {
+	} else if (n == bl_lut_max_index) {
 		*bl_out = bl_lut[n];
+	} else if (bl == n * MDSS_MDP_AD_BL_SCALE / bl_lut_max_index) {
+		*bl_out = bl_lut[n];
+	} else if (bl == (n + 1) * MDSS_MDP_AD_BL_SCALE / bl_lut_max_index) {
+		*bl_out = bl_lut[n + 1];
 	} else {
 		/* linear piece-wise interpolation */
 		*bl_out = ((bl_lut[n + 1] - bl_lut[n]) *
 			(bl - n * MDSS_MDP_AD_BL_SCALE /
-			(AD_BL_LIN_LEN  - 1)) + bl_lut[n] *
-			MDSS_MDP_AD_BL_SCALE / (AD_BL_LIN_LEN  - 1)) *
-			(AD_BL_LIN_LEN  - 1) / MDSS_MDP_AD_BL_SCALE;
+			bl_lut_max_index) + bl_lut[n] *
+			MDSS_MDP_AD_BL_SCALE / bl_lut_max_index) *
+			bl_lut_max_index / MDSS_MDP_AD_BL_SCALE;
 	}
 	pr_debug("After linearization = %d\n", *bl_out);
 
