@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -29,8 +29,9 @@
 		vdd-supply = <&pmd9635_l6>;
 		avdd-supply = <&pmd9635_l12>;
 
-		clock-names = "core_a_clk";
-		clocks = <&clock_gcc clk_qpic_a_clk>;
+		clock-names = "core_a_clk", "core_clk";
+		clocks = <&clock_gcc clk_qpic_a_clk>,
+				<&clock_gcc clk_qpic_clk>;
 
 	};
 };
