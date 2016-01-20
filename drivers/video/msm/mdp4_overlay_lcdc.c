@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -511,7 +511,7 @@ void mdp4_lcdc_vsync_init(int cndx)
 	init_waitqueue_head(&vctrl->wait_queue);
 }
 
-struct mdp4_overlay_pipe *mdp4_lcdc_alloc_base_pipe(void)
+struct mdp4_overlay_pipe *mdp4_lcdc_alloc_base_pipe(bool retrieve)
 {
 	struct vsycn_ctrl *vctrl = &vsync_ctrl_db[0];
 	struct mdp4_overlay_pipe *pipe = NULL;
@@ -535,7 +535,9 @@ struct mdp4_overlay_pipe *mdp4_lcdc_alloc_base_pipe(void)
 	}
 
 	pipe = vctrl->base_pipe;
-	vctrl->base_ref_cnt++;
+	/* Only increase cnt when allocates base pipe */
+	if (!retrieve)
+		vctrl->base_ref_cnt++;
 
 alloc_err:
 	return pipe;
@@ -646,7 +648,7 @@ int mdp4_lcdc_on(struct platform_device *pdev)
 	fbi = mfd->fbi;
 	var = &fbi->var;
 
-	pipe = mdp4_lcdc_alloc_base_pipe();
+	pipe = mdp4_lcdc_alloc_base_pipe(false);
 	if (IS_ERR_OR_NULL(pipe))
 		return -EPERM;
 

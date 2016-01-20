@@ -1904,6 +1904,38 @@ int mdp4_overlay_pipe_staged(struct mdp4_overlay_pipe *pipe)
 	return data;
 }
 
+static void mdp4_overlay_base_swap(int mixer, struct mdp4_overlay_pipe *pipe)
+{
+	if (mixer >= MDP4_MIXER_MAX) {
+		pr_err("%s,%d mixer=%d out of range\n",
+			__func__, __LINE__, mixer);
+		return;
+	}
+
+	if (ctrl->panel_mode[mixer] & MDP4_PANEL_DSI_VIDEO)
+		mdp4_dsi_video_base_swap(0, pipe);
+	else if (ctrl->panel_mode[mixer] & MDP4_PANEL_DSI_CMD)
+		mdp4_dsi_cmd_base_swap(0, pipe);
+	else if (ctrl->panel_mode[mixer] & MDP4_PANEL_LCDC)
+		mdp4_lcdc_base_swap(0, pipe);
+	else if (ctrl->panel_mode[mixer] & MDP4_PANEL_DTV)
+		mdp4_dtv_base_swap(0, pipe);
+}
+
+void mdp4_overlay_store_base_pipe(struct mdp4_overlay_pipe *pipe)
+{
+	int mixer;
+	if (pipe) {
+		mixer = pipe->mixer_num;
+		if (mixer >= MDP4_MIXER_MAX) {
+			pr_err("%s,%d mixer=%d out of range\n",
+				__func__, __LINE__, mixer);
+			return;
+		}
+		ctrl->baselayer[mixer] = *pipe;
+	}
+}
+
 int mdp4_mixer_info(int mixer_num, struct mdp_mixer_info *info)
 {
 
@@ -2045,7 +2077,6 @@ void mdp4_mixer_stage_commit(int mixer)
 	mdp_clk_ctrl(0);
 }
 
-
 void mdp4_mixer_stage_up(struct mdp4_overlay_pipe *pipe, int commit)
 {
 	struct mdp4_overlay_pipe *pp;
@@ -2151,17 +2182,7 @@ void mdp4_overlay_borderfill_stage_up(struct mdp4_overlay_pipe *pipe)
 	/* free original base layer pipe to be sued as normal pipe */
 	bspipe->pipe_used = 0;
 
-	if (ctrl->panel_mode[mixer] & MDP4_PANEL_DSI_VIDEO)
-		mdp4_dsi_video_base_swap(0, pipe);
-	else if (ctrl->panel_mode[mixer] & MDP4_PANEL_DSI_CMD)
-		mdp4_dsi_cmd_base_swap(0, pipe);
-	else if (ctrl->panel_mode[mixer] & MDP4_PANEL_LCDC)
-		mdp4_lcdc_base_swap(0, pipe);
-#ifdef CONFIG_FB_MSM_DTV
-	else if (ctrl->panel_mode[mixer] & MDP4_PANEL_DTV)
-		mdp4_dtv_base_swap(0, pipe);
-#endif
-
+	mdp4_overlay_base_swap(mixer, pipe);
 	mdp4_overlay_reg_flush(bspipe, 1);
 	/* borderfill pipe as base layer */
 	mdp4_mixer_stage_up(pipe, 0);
@@ -2199,14 +2220,7 @@ void mdp4_overlay_borderfill_stage_down(struct mdp4_overlay_pipe *pipe)
 	/* free borderfill pipe */
 	pipe->pipe_used = 0;
 
-	if (ctrl->panel_mode[mixer] & MDP4_PANEL_DSI_VIDEO)
-		mdp4_dsi_video_base_swap(0, bspipe);
-	else if (ctrl->panel_mode[mixer] & MDP4_PANEL_DSI_CMD)
-		mdp4_dsi_cmd_base_swap(0, bspipe);
-	else if (ctrl->panel_mode[mixer] & MDP4_PANEL_LCDC)
-		mdp4_lcdc_base_swap(0, bspipe);
-	else if (ctrl->panel_mode[mixer] & MDP4_PANEL_DTV)
-		mdp4_dtv_base_swap(0, bspipe);
+	mdp4_overlay_base_swap(mixer, bspipe);
 
 	/* free borderfill pipe */
 	mdp4_overlay_reg_flush(pipe, 1);
@@ -2810,18 +2824,18 @@ void mdp4_overlay_pipe_free(struct mdp4_overlay_pipe *pipe, int all)
 		orgpipe->pipe_used = 0;
 }
 
-static struct mdp4_overlay_pipe *mdp4_overlay_alloc_base_pipe(
+static struct mdp4_overlay_pipe *mdp4_overlay_retrieve_base_pipe(
 	struct msm_fb_data_type *mfd)
 {
 	struct mdp4_overlay_pipe *pipe = NULL;
 
 	switch (mfd->panel.type) {
 	case MIPI_VIDEO_PANEL:
-		pipe = mdp4_dsi_video_alloc_base_pipe();
+		pipe = mdp4_dsi_video_alloc_base_pipe(true);
 		break;
 	case LVDS_PANEL:
 	case LCDC_PANEL:
-		pipe = mdp4_lcdc_alloc_base_pipe();
+		pipe = mdp4_lcdc_alloc_base_pipe(true);
 		break;
 	default:
 		pr_err("No base pipe alloc\n");
@@ -2829,7 +2843,6 @@ static struct mdp4_overlay_pipe *mdp4_overlay_alloc_base_pipe(
 
 	return pipe;
 }
-
 
 static struct mdp4_overlay_pipe *mdp4_overlay_alloc_pipe(
 	struct mdp_overlay *req, struct msm_fb_data_type *mfd, int user)
@@ -2845,7 +2858,7 @@ static struct mdp4_overlay_pipe *mdp4_overlay_alloc_pipe(
 	}
 
 	if (mfd->panel_info.pdest == DISPLAY_4) {
-		pipe = mdp4_overlay_alloc_base_pipe(mfd);
+		pipe = mdp4_overlay_retrieve_base_pipe(mfd);
 		goto alloc_err;
 	}
 
@@ -3924,8 +3937,12 @@ int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req, int user)
 	}
 
 	if (info->node != 0 || mfd->cont_splash_done)	/* primary */
-		if (!mfd->panel_power_on)		/* suspended */
+		if (!mfd->panel_power_on) {		/* suspended */
+			pr_err("%s,%d node=%d, panel=%d is still off\n",
+				__func__, __LINE__, info->node,
+				mfd->panel.type);
 			return -EPERM;
+		}
 
 	if (req->src.format == MDP_FB_FORMAT)
 		req->src.format = mfd->fb_imgType;
@@ -4027,7 +4044,7 @@ int mdp4_overlay_unset_mixer(int mixer)
 int mdp4_overlay_unset(struct fb_info *info, int ndx)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
-	struct mdp4_overlay_pipe *pipe = NULL;
+	struct mdp4_overlay_pipe *pipe = NULL, *bspipe;
 	uint32 mixer = 0;
 
 	if (mfd == NULL) {
@@ -4064,7 +4081,16 @@ int mdp4_overlay_unset(struct fb_info *info, int ndx)
 
 	if (pipe->mixer_num == MDP4_MIXER_NONE) {
 		ctrl->mixer3_played = 0;
-		mdp4_overlay_free_base_pipe(mfd);
+		/*
+		 * When display is connecting to DMA directly, base pipe is
+		 * DMA pipe, and there is no mixer could be used for this pipe.
+		 * So, when unset is called, driver shouldn't free the base
+		 * pipe. Display on/off will allocate/free it.
+		 */
+		bspipe = &ctrl->baselayer[mixer];
+		mdp4_overlay_base_swap(mixer, bspipe);
+		mdp4_overlay_vsync_commit(bspipe);
+		mdp4_overlay_reg_flush(bspipe, 1);
 		mutex_unlock(&mfd->dma->ov_mutex);
 		return 0;
 	} else if (pipe->mixer_num == MDP4_MIXER2)

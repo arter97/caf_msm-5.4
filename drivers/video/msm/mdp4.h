@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -671,6 +671,7 @@ void mdp4_overlay_lcdc_vsync_push(struct msm_fb_data_type *mfd,
 				struct mdp4_overlay_pipe *pipe);
 void mdp4_mddi_overlay_dmas_restore(void);
 void mdp4_overlay_solidfill_init(struct mdp4_overlay_pipe *pipe);
+void mdp4_overlay_store_base_pipe(struct mdp4_overlay_pipe *pipe);
 
 #ifndef CONFIG_FB_MSM_MIPI_DSI
 void mdp4_mddi_dma_busy_wait(struct msm_fb_data_type *mfd);
@@ -734,10 +735,10 @@ void mdp4_dsi_cmd_overlay_blt(struct msm_fb_data_type *mfd,
 void mdp4_dsi_video_overlay_blt(struct msm_fb_data_type *mfd,
 					struct msmfb_overlay_blt *req);
 void mdp4_dsi_video_base_swap(int cndx, struct mdp4_overlay_pipe *pipe);
-struct mdp4_overlay_pipe *mdp4_dsi_video_alloc_base_pipe(void);
+struct mdp4_overlay_pipe *mdp4_dsi_video_alloc_base_pipe(bool retrieve);
 void mdp4_dsi_video_free_base_pipe(struct msm_fb_data_type *mfd);
 void mdp4_dsi_cmd_free_base_pipe(struct msm_fb_data_type *mfd);
-struct mdp4_overlay_pipe *mdp4_lcdc_alloc_base_pipe(void);
+struct mdp4_overlay_pipe *mdp4_lcdc_alloc_base_pipe(bool retrieve);
 void mdp4_lcdc_free_base_pipe(struct msm_fb_data_type *mfd);
 void mdp4_dtv_free_base_pipe(struct msm_fb_data_type *mfd);
 

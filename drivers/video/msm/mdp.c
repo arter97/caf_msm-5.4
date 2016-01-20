@@ -2,7 +2,7 @@
  *
  * MSM MDP Interface (used by framebuffer core)
  *
- * Copyright (c) 2007-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2007-2016, The Linux Foundation. All rights reserved.
  * Copyright (C) 2007 Google Incorporated
  *
  * This software is licensed under the terms of the GNU General Public
@@ -2860,7 +2860,7 @@ static int mdp_off(struct platform_device *pdev)
 	int ret = 0;
 	struct msm_fb_data_type *mfd = platform_get_drvdata(pdev);
 
-	pr_debug("%s:+\n", __func__);
+	pr_debug("%s:+ type=%d\n", __func__, mfd->panel.type);
 	atomic_set(&vsync_cntrl.suspend, 1);
 	atomic_set(&vsync_cntrl.vsync_resume, 0);
 	complete_all(&vsync_cntrl.vsync_wait);
@@ -2900,7 +2900,7 @@ static int mdp_off(struct platform_device *pdev)
 #ifdef CONFIG_MSM_BUS_SCALING
 	mdp_bus_scale_update_request(0, 0, 0, 0);
 #endif
-	pr_debug("%s:-\n", __func__);
+	pr_debug("%s:- type=%d\n", __func__, mfd->panel.type);
 	return ret;
 }
 
@@ -2925,7 +2925,7 @@ static int mdp_on(struct platform_device *pdev)
 	int i;
 	mfd = platform_get_drvdata(pdev);
 
-	pr_debug("%s:+\n", __func__);
+	pr_debug("%s:+ type=%d\n", __func__, mfd->panel.type);
 
 	if (mdp_pdata == NULL) {
 		pr_err("%s,%d mdp_pdata is NULL", __func__, __LINE__);
@@ -2986,7 +2986,7 @@ static int mdp_on(struct platform_device *pdev)
 	if (ret == 0)
 		ret = panel_next_late_init(pdev);
 
-	pr_debug("%s:-\n", __func__);
+	pr_debug("%s:- type=%d\n", __func__, mfd->panel.type);
 
 	return ret;
 }
