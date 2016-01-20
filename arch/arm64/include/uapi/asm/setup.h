@@ -20,7 +20,20 @@
 #define __ASM_SETUP_H
 
 #include <linux/types.h>
-
+#include <linux/slab.h>
+#include <linux/delay.h>
 #define COMMAND_LINE_SIZE	2048
+#ifdef CONFIG_BOOT_TIME_MARKER
+#define BOOT_MARKER_MAX_LEN 20
+#define TIMER_KHZ 32768
+#define MAX_PRINT_LEN 50
+#define MAX_SS_LK_MARKER_SIZE 16
+#define MPM2_MPM_SLEEP_TIMETICK_COUNT_VAL  0x4A3000
+extern char lk_splash_val[MAX_SS_LK_MARKER_SIZE];
+uint32_t msm_timer_get_sclk_ticks(void);
+extern unsigned long kernel_start_marker;
+void place_marker(char *name);
+int init_marker_sys_fs(void);
+#endif
 
 #endif
