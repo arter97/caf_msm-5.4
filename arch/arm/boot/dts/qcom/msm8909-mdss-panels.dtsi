@@ -19,6 +19,9 @@
 #include "dsi-panel-hx8379a-fwvga-skua-video.dtsi"
 #include "dsi-panel-ili9806e-fwvga-video.dtsi"
 #include "dsi-panel-hx8379c-fwvga-video.dtsi"
+#include "dsi-panel-hx8394d-480p-video.dtsi"
+#include "dsi-panel-auo-qvga-cmd.dtsi"
+#include "dsi-panel-auo-cx-qvga-cmd.dtsi"
 
 &soc {
 	dsi_panel_pwr_supply: dsi_panel_pwr_supply {

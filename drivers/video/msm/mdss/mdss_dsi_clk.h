@@ -235,4 +235,6 @@ int mdss_dsi_clk_set_link_rate(void *client, enum mdss_dsi_link_clk_type clk,
  * @return:error code.
  */
 int mdss_dsi_clk_force_toggle(void *client, u32 clk);
+
+void mdss_dsi_clk_init_reg_bus_ctl(void *clk_mngr, void *bus_ctl);
 #endif /* _MDSS_DSI_CLK_H_ */

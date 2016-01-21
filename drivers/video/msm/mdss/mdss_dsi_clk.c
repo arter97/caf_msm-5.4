@@ -872,17 +872,25 @@ void *mdss_dsi_clk_init(struct mdss_dsi_clk_info *info)
 	mngr->pre_clkoff_cb = info->pre_clkoff_cb;
 	mngr->post_clkoff_cb = info->post_clkoff_cb;
 	mngr->priv_data = info->priv_data;
-	mngr->reg_bus_clt = mdss_reg_bus_vote_client_create(info->name);
-	if (IS_ERR_OR_NULL(mngr->reg_bus_clt)) {
-		pr_err("Unable to get handle for reg bus vote\n");
-		kfree(mngr);
-		mngr = ERR_PTR(-EINVAL);
-		goto error;
-	}
 	memcpy(mngr->name, info->name, DSI_CLK_NAME_LEN);
 error:
-	pr_debug("EXIT %s, rc = %ld\n", mngr->name, PTR_ERR(mngr));
+	pr_debug("EXIT %s, rc = %ld\n", info->name, PTR_ERR(mngr));
 	return mngr;
+}
+
+void mdss_dsi_clk_init_reg_bus_ctl(void *clk_mngr, void *bus_ctl)
+{
+	struct mdss_dsi_clk_mngr *mngr = clk_mngr;
+	if (IS_ERR_OR_NULL(bus_ctl)) {
+		pr_err("Unable to get handle for reg bus vote\n");
+		goto error;
+	}
+	mngr->reg_bus_clt = bus_ctl;
+	return;
+error:
+	kfree(mngr);
+	mngr = ERR_PTR(-EINVAL);
+	pr_err("EXIT rc = %ld\n", PTR_ERR(mngr));
 }
 
 int mdss_dsi_clk_deinit(void *clk_mngr)
