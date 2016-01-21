@@ -65,5 +65,8 @@ struct ispif_device {
 	uint32_t num_ahb_clk;
 	uint32_t clk_idx;
 	uint32_t ispif_sof_debug;
+	struct regulator *fs_vfe0;
+	struct regulator *fs_mmagic_camss;
+	struct regulator *fs_camss;
 };
 #endif
