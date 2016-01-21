@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1374,16 +1374,6 @@ static int cnss_wlan_pci_resume(struct device *dev)
 	if (!wdriver)
 		goto out;
 
-	if (!penv->pcie_link_down_ind) {
-		if (msm_pcie_pm_control(MSM_PCIE_RESUME,
-			cnss_get_pci_dev_bus_number(pdev),
-			pdev, NULL, PM_OPTIONS)) {
-			pr_err("%s: Failed to resume PCIe link\n", __func__);
-			ret = -EAGAIN;
-			goto out;
-		}
-		penv->pcie_link_state = PCIE_LINK_UP;
-	}
 	if (wdriver->resume && !penv->pcie_link_down_ind) {
 		if (penv->saved_state)
 			pci_load_and_free_saved_state(pdev,
