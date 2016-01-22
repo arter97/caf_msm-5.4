@@ -18,6 +18,7 @@
 #include "msm8909-pm8916.dtsi"
 #include "msm8909-pm8916-mtp.dtsi"
 #include "msm8909w.dtsi"
+#include "msm-gdsc-8916.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. MSM8909W-PM8916 MTP";
@@ -98,4 +99,12 @@
 	status = "ok";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart_console_sleep>;
+};
+
+&gdsc_oxili_gx {
+	clock-names = "core_root_clk";
+	clocks =<&clock_gcc clk_gfx3d_clk_src>;
+	qcom,enable-root-clk;
+	qcom,clk-dis-wait-val = <0x5>;
+	status = "okay";
 };
