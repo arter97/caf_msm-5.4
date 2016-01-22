@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2013, 2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -859,7 +859,11 @@ int adm_multi_ch_copp_open(int port_id, int path, int rate, int channel_mode,
 		open.hdr.token = port_id;
 
 		open.mode = path;
-		open.endpoint_id1 = port_id;
+
+		if (port_id == RX_PSEUDO_CAPTURE)
+			open.endpoint_id1 = PSEUDO_RX;
+		else
+			open.endpoint_id1 = port_id;
 
 		if  ((this_adm.ec_ref_rx != AFE_PORT_INVALID) &&
 		     (path != ADM_PATH_PLAYBACK)) {

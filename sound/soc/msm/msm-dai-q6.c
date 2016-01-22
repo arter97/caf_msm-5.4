@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, 2015 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1156,6 +1156,8 @@ static int msm_dai_q6_hw_params(struct snd_pcm_substream *substream,
 	case VOICE_PLAYBACK_TX:
 	case VOICE_RECORD_RX:
 	case VOICE_RECORD_TX:
+	case PSEUDO_RX:
+	case RX_PSEUDO_CAPTURE:
 		rc = 0;
 		break;
 	default:
@@ -1270,9 +1272,12 @@ static void msm_dai_q6_shutdown(struct snd_pcm_substream *substream,
 		case VOICE_PLAYBACK_TX:
 		case VOICE_RECORD_TX:
 		case VOICE_RECORD_RX:
+		case PSEUDO_RX:
 			pr_debug("%s, stop pseudo port:%d\n",
 						__func__,  dai->id);
 			rc = afe_stop_pseudo_port(dai->id);
+			break;
+		case RX_PSEUDO_CAPTURE:
 			break;
 		default:
 			rc = afe_close(dai->id); /* can block */
@@ -1476,7 +1481,10 @@ static int msm_dai_q6_prepare(struct snd_pcm_substream *substream,
 		case VOICE_PLAYBACK_TX:
 		case VOICE_RECORD_TX:
 		case VOICE_RECORD_RX:
+		case PSEUDO_RX:
 			rc = afe_start_pseudo_port(dai->id);
+			break;
+		case RX_PSEUDO_CAPTURE:
 			break;
 		default:
 			rc = afe_port_start(dai->id, &dai_data->port_config,
@@ -1917,7 +1925,7 @@ static int msm_dai_q6_dai_probe(struct snd_soc_dai *dai)
 static int msm_dai_q6_dai_remove(struct snd_soc_dai *dai)
 {
 	struct msm_dai_q6_dai_data *dai_data;
-	int rc;
+	int rc = 0;
 
 	dai_data = dev_get_drvdata(dai->dev);
 
@@ -1927,9 +1935,12 @@ static int msm_dai_q6_dai_remove(struct snd_soc_dai *dai)
 		case VOICE_PLAYBACK_TX:
 		case VOICE_RECORD_TX:
 		case VOICE_RECORD_RX:
+		case PSEUDO_RX:
 			pr_debug("%s, stop pseudo port:%d\n",
 						__func__,  dai->id);
 			rc = afe_stop_pseudo_port(dai->id);
+			break;
+		case RX_PSEUDO_CAPTURE:
 			break;
 		default:
 			rc = afe_close(dai->id); /* can block */
@@ -2510,6 +2521,45 @@ static struct snd_soc_dai_driver msm_dai_q6_slimbus_3_rx_dai = {
 	.remove = msm_dai_q6_dai_remove,
 };
 
+static struct snd_soc_dai_driver msm_dai_q6_pseudo_rx_dai = {
+	.playback = {
+		.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+		SNDRV_PCM_RATE_16000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		.channels_min = 1,
+		.channels_max = 2,
+		.rate_max =     48000,
+		.rate_min =     8000,
+	},
+	.capture = {
+		.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+		SNDRV_PCM_RATE_16000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		.channels_min = 1,
+		.channels_max = 2,
+		.rate_min =     8000,
+		.rate_max =     48000,
+	},
+	.ops = &msm_dai_q6_ops,
+	.probe = msm_dai_q6_dai_probe,
+	.remove = msm_dai_q6_dai_remove,
+};
+
+static struct snd_soc_dai_driver msm_dai_q6_rx_pseudo_capture_dai = {
+	.capture = {
+		.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
+		SNDRV_PCM_RATE_16000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		.channels_min = 1,
+		.channels_max = 2,
+		.rate_min =     8000,
+		.rate_max =     48000,
+	},
+	.ops = &msm_dai_q6_ops,
+	.probe = msm_dai_q6_dai_probe,
+	.remove = msm_dai_q6_dai_remove,
+};
+
 /* To do: change to register DAIs as batch */
 static __devinit int msm_dai_q6_dev_probe(struct platform_device *pdev)
 {
@@ -2603,6 +2653,14 @@ static __devinit int msm_dai_q6_dev_probe(struct platform_device *pdev)
 	case VOICE_RECORD_TX:
 		rc = snd_soc_register_dai(&pdev->dev,
 						&msm_dai_q6_incall_record_dai);
+		break;
+	case PSEUDO_RX:
+		rc = snd_soc_register_dai(&pdev->dev,
+						&msm_dai_q6_pseudo_rx_dai);
+		break;
+	case RX_PSEUDO_CAPTURE:
+		rc = snd_soc_register_dai(&pdev->dev,
+					&msm_dai_q6_rx_pseudo_capture_dai);
 		break;
 	default:
 		rc = -ENODEV;

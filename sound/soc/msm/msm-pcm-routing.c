@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -212,6 +212,8 @@ static struct msm_pcm_routing_bdai_data msm_bedais[MSM_BACKEND_DAI_MAX] = {
 	{ MI2S_TX_2, 0, 0, 0, 0, 0},
 	{ PRIMARY_I2S_TX_0, 0, 0, 0, 0, 0},
 	{ PRIMARY_I2S_TX_1, 0, 0, 0, 0, 0},
+	{ PSEUDO_RX, 0, 0, 0, 0, 0},
+	{ RX_PSEUDO_CAPTURE, 0, 0, 0, 0, 0},
 };
 
 
@@ -1720,6 +1722,21 @@ static const struct snd_kcontrol_new dtmf_detection_mixer_controls[] = {
 	SOC_SINGLE_EXT("AUX_PCM_UL_TX", MSM_BACKEND_DAI_AUXPCM_TX,
 		MSM_FRONTEND_DAI_DTMF_DETECTION, 1, 0,
 		msm_routing_get_audio_mixer, msm_routing_put_audio_mixer),
+	SOC_SINGLE_EXT("RX_PSEUDO_CAP", MSM_BACKEND_DAI_RX_PSEUDO_CAPTURE,
+		MSM_FRONTEND_DAI_DTMF_DETECTION, 1, 0,
+		msm_routing_get_audio_mixer, msm_routing_put_audio_mixer),
+};
+
+static const struct snd_kcontrol_new pseudo_rx_mixer_controls[] = {
+	SOC_SINGLE_EXT("MultiMedia1", MSM_BACKEND_DAI_PSEUDO_RX,
+	MSM_FRONTEND_DAI_MULTIMEDIA1, 1, 0, msm_routing_get_audio_mixer,
+	msm_routing_put_audio_mixer),
+	SOC_SINGLE_EXT("MultiMedia4", MSM_BACKEND_DAI_PSEUDO_RX,
+	MSM_FRONTEND_DAI_MULTIMEDIA4, 1, 0, msm_routing_get_audio_mixer,
+	msm_routing_put_audio_mixer),
+	SOC_SINGLE_EXT("MultiMedia5", MSM_BACKEND_DAI_PSEUDO_RX,
+	MSM_FRONTEND_DAI_MULTIMEDIA5, 1, 0, msm_routing_get_audio_mixer,
+	msm_routing_put_audio_mixer),
 };
 
 static const struct snd_kcontrol_new pri_rx_voice_mixer_controls[] = {
@@ -2686,6 +2703,9 @@ static const struct snd_soc_dapm_widget msm_qdsp6_widgets[] = {
 	SND_SOC_DAPM_AIF_IN("STUB_1_TX", "Stub1 Capture", 0, 0, 0, 0),
 	SND_SOC_DAPM_AIF_OUT("SLIMBUS_3_RX", "Slimbus3 Playback", 0, 0, 0, 0),
 	SND_SOC_DAPM_AIF_IN("SLIMBUS_3_TX", "Slimbus3 Capture", 0, 0, 0, 0),
+	SND_SOC_DAPM_AIF_OUT("PSEUDO_RX", "Pseudoport Playback", 0, 0, 0, 0),
+	SND_SOC_DAPM_AIF_IN("RX_PSEUDO_CAPTURE", "Rx Pseudoport Capture",
+			     0, 0, 0, 0),
 
 	/* Switch Definitions */
 	SND_SOC_DAPM_SWITCH("SLIMBUS_DL_HL", SND_SOC_NOPM, 0, 0,
@@ -2729,6 +2749,8 @@ static const struct snd_soc_dapm_widget msm_qdsp6_widgets[] = {
 	auxpcm_rx_mixer_controls, ARRAY_SIZE(auxpcm_rx_mixer_controls)),
 	SND_SOC_DAPM_MIXER("SEC_AUX_PCM_RX Audio Mixer", SND_SOC_NOPM, 0, 0,
 	sec_auxpcm_rx_mixer_controls, ARRAY_SIZE(sec_auxpcm_rx_mixer_controls)),
+	SND_SOC_DAPM_MIXER("PSEUDO_RX Audio Mixer", SND_SOC_NOPM, 0, 0,
+	pseudo_rx_mixer_controls, ARRAY_SIZE(pseudo_rx_mixer_controls)),
 	/* incall */
 	SND_SOC_DAPM_MIXER("Incall_Music Audio Mixer", SND_SOC_NOPM, 0, 0,
 			incall_music_delivery_mixer_controls,
@@ -2957,6 +2979,7 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"MultiMedia6 Mixer", "PRI_GROUP_TX_0", "PRI_I2S_GROUP_TX_0"},
 	{"MultiMedia6 Mixer", "PRI_GROUP_TX_1", "PRI_I2S_GROUP_TX_1"},
 	{"DTMF_Detection Mixer", "AUX_PCM_UL_TX", "AUX_PCM_TX" },
+	{"DTMF_Detection Mixer", "RX_PSEUDO_CAP", "RX_PSEUDO_CAPTURE" },
 
 	{"INTERNAL_BT_SCO_RX Audio Mixer", "MultiMedia1", "MM_DL1"},
 	{"INTERNAL_BT_SCO_RX Audio Mixer", "MultiMedia2", "MM_DL2"},
@@ -3243,6 +3266,12 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"PRI_I2S_RX Port Mixer", "AUX_PCM_UL_TX", "AUX_PCM_TX"},
 	{"PRI_I2S_RX Port Mixer", "PRI_TX", "PRI_I2S_TX"},
 	{"PRI_I2S_RX", NULL, "PRI_I2S_RX Port Mixer"},
+
+	{"PSEUDO_RX Audio Mixer", "MultiMedia1", "MM_DL1" },
+	{"PSEUDO_RX Audio Mixer", "MultiMedia4", "MM_DL4" },
+	{"PSEUDO_RX Audio Mixer", "MultiMedia5", "MM_DL5" },
+	{"PSEUDO_RX", NULL, "PSEUDO_RX Audio Mixer"},
+
 	/* Backend Enablement */
 
 	{"BE_OUT", NULL, "PRI_I2S_RX"},
@@ -3280,6 +3309,8 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"INCALL_RECORD_TX", NULL, "BE_IN"},
 	{"INCALL_RECORD_RX", NULL, "BE_IN"},
 	{"BE_OUT", NULL, "VOICE_PLAYBACK_TX"},
+	{"BE_OUT", NULL, "PSEUDO_RX"},
+	{"RX_PSEUDO_CAPTURE", NULL, "BE_IN"},
 };
 
 static int msm_pcm_routing_hw_params(struct snd_pcm_substream *substream,

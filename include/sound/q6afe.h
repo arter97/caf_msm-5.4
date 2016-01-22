@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, 2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -75,6 +75,8 @@ enum {
 	IDX_MI2S_RX_2 = 36,
 	IDX_MI2S_TX_2 = 37,
 	IDX_PRIMARY_I2S_TX_1 = 38,
+	IDX_PSEUDO_RX = 39,
+	IDX_RX_PSEUDO_CAPTURE = 40,
 	AFE_MAX_PORTS
 };
 

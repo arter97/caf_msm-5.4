@@ -1,6 +1,6 @@
 /*
  *
- * Copyright (c) 2010-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2010-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -72,6 +72,9 @@
 
 #define PRIMARY_I2S_TX_0 PRIMARY_I2S_TX	/* index = 1 */
 #define PRIMARY_I2S_TX_1 29		/* index = 38 */
+
+#define PSEUDO_RX	0x8001	/* index = 39 */
+#define RX_PSEUDO_CAPTURE 0x9001 /* index = 40 */
 
 #define AFE_PORT_INVALID 0xFFFF
 #define SLIMBUS_EXTPROC_RX AFE_PORT_INVALID

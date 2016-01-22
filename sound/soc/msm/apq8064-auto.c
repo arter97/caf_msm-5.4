@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1102,6 +1102,23 @@ static int msm_hdmi_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	return 0;
 }
 
+static int msm_pseudo_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+					struct snd_pcm_hw_params *params)
+{
+	struct snd_interval *rate = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_RATE);
+
+	struct snd_interval *channels = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	pr_debug("%s channels->min %u channels->max %u ()\n", __func__,
+			channels->min, channels->max);
+
+	rate->min = rate->max = 48000;
+	channels->min = channels->max = 1;
+	return 0;
+}
+
 static struct snd_soc_ops msm_mi2s_be_ops = {
 	.startup = msm_mi2s_startup,
 	.shutdown = msm_mi2s_shutdown,
@@ -1658,6 +1675,30 @@ static struct snd_soc_dai_link msm_dai[] = {
 		.be_id = MSM_BACKEND_DAI_HDMI_RX,
 		.be_hw_params_fixup = msm_hdmi_be_hw_params_fixup,
 		.ignore_pmdown_time = 1, /* playback support */
+	},
+	/* Pseudoport Back End Dai Links */
+	{
+		.name = LPASS_BE_PSEUDO_RX,
+		.stream_name = "Pseudoport Playback",
+		.cpu_dai_name = "msm-dai-q6.32769",
+		.platform_name = "msm-pcm-routing",
+		.codec_name	= "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-rx",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_PSEUDO_RX,
+		.be_hw_params_fixup = msm_pseudo_be_hw_params_fixup,
+		.ignore_pmdown_time = 1, /* playback support */
+	},
+	{
+		.name = LPASS_BE_RX_PSEUDO_CAPTURE,
+		.stream_name = "Rx Pseudoport Capture",
+		.cpu_dai_name = "msm-dai-q6.36865",
+		.platform_name = "msm-pcm-routing",
+		.codec_name	= "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-tx",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_RX_PSEUDO_CAPTURE,
+		.be_hw_params_fixup = msm_pseudo_be_hw_params_fixup,
 	},
 };
 
