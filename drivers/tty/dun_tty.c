@@ -1,7 +1,7 @@
 /*
  * TTY driver for Bluetooth DUN terminal
  *
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015, 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -198,6 +198,11 @@ static int dun_bt_read(struct file *file, char __user *buf,
 			return -ERESTARTSYS;
 
 		skb = skb_dequeue(&dev->rxq);
+		if (skb  == NULL) {
+			ret = -ENODATA;
+			mutex_unlock(&dev->rx_lock);
+			break;
+		}
 		mutex_unlock(&dev->rx_lock);
 
 		BT_DBG("skb data %p len %d", skb->data, skb->len);

@@ -1769,7 +1769,9 @@ static int mdp_misr_read_captured(uint32_t type, uint32_t *value)
 			break;
 		}
 	}
-	pr_debug("%s panel type = %d, crc = %08X\n", __func__, type, *value);
+	if (value)
+		pr_debug("%s panel type = %d, crc = %08X\n",
+				__func__, type, *value);
 	return ret;
 }
 
