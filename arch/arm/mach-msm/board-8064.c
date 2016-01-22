@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -4220,6 +4220,8 @@ static void __init apq8064_common_init(void)
 				&apq_adp_cpudai_pri_i2s_group_tx_1);
 			platform_device_register(&apq_cpudai_mi2s);
 			platform_device_register(&apq_pcm_lpa);
+			platform_device_register(&apq_cpudai_pseudoport_rx);
+			platform_device_register(&apq_cpudai_capture_port_rx);
 		} else {
 			platform_device_register(&apq_mplatform_cpudai_mi2s_rx);
 		}

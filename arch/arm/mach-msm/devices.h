@@ -1,7 +1,7 @@
 /* linux/arch/arm/mach-msm/devices.h
  *
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2009-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2016, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -333,6 +333,9 @@ extern struct platform_device apq_cpudai_slimbus_3_rx;
 extern struct platform_device apq_cpudai_slimbus_3_tx;
 extern struct platform_device apq_cpudai_slim_4_rx;
 extern struct platform_device apq_cpudai_slim_4_tx;
+
+extern struct platform_device apq_cpudai_pseudoport_rx;
+extern struct platform_device apq_cpudai_capture_port_rx;
 
 extern struct platform_device *msm_footswitch_devices[];
 extern unsigned msm_num_footswitch_devices;
