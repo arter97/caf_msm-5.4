@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1281,7 +1281,7 @@ static struct snd_soc_dai_link msm_dai[] = {
 		.codec_dai_name = "snd-soc-dummy-dai",
 		.codec_name = "snd-soc-dummy",
 	},
-	/* Dai for ASM loopback */
+	/* Dai for ASM loopback from car_microphone to bt_uplink (HFP TX) */
 	{
 		.name = "HFP TX",
 		.stream_name = "MultiMedia6", /* hw:0,10 */
@@ -1454,6 +1454,23 @@ static struct snd_soc_dai_link msm_dai[] = {
 		.ignore_pmdown_time = 1,
 		.codec_dai_name = "snd-soc-dummy-dai",
 		.codec_name = "snd-soc-dummy",
+	},
+	/* Dai for ASM loopback from bt_downlink to car_speakers (HFP RX) */
+	{
+		.name = "HFP RX",
+		.stream_name = "MultiMedia9", /* hw:0,22 */
+		.cpu_dai_name = "MultiMedia9",
+		.platform_name = "msm-pcm-loopback",
+		.dynamic = 1,
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+		SND_SOC_DPCM_TRIGGER_POST},
+		.ignore_suspend = 1,
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		/* this dainlink has playback support */
+		.ignore_pmdown_time = 1,
+		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA9,
 	},
 	/* Any new frondend DAIs have to be inserted after this point */
 	/* Backend DAI Links */

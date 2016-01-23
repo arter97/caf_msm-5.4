@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
 
 * This program is free software; you can redistribute it and/or modify
 * it under the terms of the GNU General Public License version 2 and
@@ -33,6 +33,14 @@
 static const DECLARE_TLV_DB_LINEAR(loopback_rx_vol_gain, 0,
 				LOOPBACK_VOL_MAX_STEPS);
 
+static const char * const TX_LOOPBACK_STREAM_ID = "MultiMedia6";
+static const char * const RX_LOOPBACK_STREAM_ID = "MultiMedia9";
+
+enum LOOPBACK_TYPE {
+	LOOPBACK_TYPE_HFP_TX,
+	LOOPBACK_TYPE_HFP_RX
+};
+
 struct msm_pcm_loopback {
 	struct snd_pcm_substream *playback_substream;
 	struct snd_pcm_substream *capture_substream;
@@ -49,6 +57,11 @@ struct msm_pcm_loopback {
 	int session_id;
 	struct audio_client *audio_client;
 	int volume;
+};
+
+struct msm_pcm_loopback_dual {
+	struct msm_pcm_loopback tx_loopback;
+	struct msm_pcm_loopback rx_loopback;
 };
 
 static void stop_pcm(struct msm_pcm_loopback *pcm);
@@ -72,6 +85,22 @@ enum {
 	BITS_PER_SAMPLE_8 = 8,
 	BITS_PER_SAMPLE_16 = 16
 };
+
+static struct msm_pcm_loopback *get_loopback_pcm(
+	struct msm_pcm_loopback_dual *pcm_dual,
+	const char *id)
+{
+	struct msm_pcm_loopback *pcm = NULL;
+	char *in_str = NULL;
+
+	in_str = strnstr(id, RX_LOOPBACK_STREAM_ID, strlen(id));
+	if (NULL != in_str)
+		pcm = &pcm_dual->rx_loopback;
+	else
+		pcm = &pcm_dual->tx_loopback;
+
+	return pcm;
+}
 
 static void msm_pcm_route_event_handler(enum msm_pcm_routing_event event,
 					void *priv_data)
@@ -133,12 +162,15 @@ static int msm_pcm_open(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct snd_soc_pcm_runtime *rtd = snd_pcm_substream_chip(substream);
-	struct msm_pcm_loopback *pcm;
+	struct msm_pcm_loopback_dual *pcm_dual = NULL;
+	struct msm_pcm_loopback *pcm = NULL;
 	int ret = 0;
 	uint16_t bits_per_sample = BITS_PER_SAMPLE_16;
 	struct msm_pcm_routing_evt event;
 
-	pcm = dev_get_drvdata(rtd->platform->dev);
+	pcm_dual = dev_get_drvdata(rtd->platform->dev);
+	pcm = get_loopback_pcm(pcm_dual, substream->pcm->id);
+
 	mutex_lock(&pcm->lock);
 
 	snd_soc_set_runtime_hwparams(substream, &dummy_pcm_hardware);
@@ -314,26 +346,8 @@ static int msm_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	return 0;
 }
 
-static int msm_pcm_hw_params(struct snd_pcm_substream *substream,
-				struct snd_pcm_hw_params *params)
-{
-	struct snd_soc_pcm_runtime *rtd = snd_pcm_substream_chip(substream);
-
-	dev_dbg(rtd->platform->dev, "%s: ASM loopback\n", __func__);
-
-	return snd_pcm_lib_alloc_vmalloc_buffer(substream,
-		params_buffer_bytes(params));
-}
-
-static int msm_pcm_hw_free(struct snd_pcm_substream *substream)
-{
-	return snd_pcm_lib_free_vmalloc_buffer(substream);
-}
-
 static struct snd_pcm_ops msm_pcm_ops = {
 	.open           = msm_pcm_open,
-	.hw_params	= msm_pcm_hw_params,
-	.hw_free	= msm_pcm_hw_free,
 	.close          = msm_pcm_close,
 	.prepare        = msm_pcm_prepare,
 	.trigger        = msm_pcm_trigger,
@@ -393,19 +407,20 @@ static struct snd_soc_platform_driver msm_soc_platform = {
 
 static __devinit int msm_pcm_probe(struct platform_device *pdev)
 {
-	struct msm_pcm_loopback *pcm;
+	struct msm_pcm_loopback_dual *pcm_dual;
 
 	dev_dbg(&pdev->dev, "%s: dev name %s\n",
 		__func__, dev_name(&pdev->dev));
 
-	pcm = kzalloc(sizeof(struct msm_pcm_loopback), GFP_KERNEL);
-	if (!pcm) {
+	pcm_dual = kzalloc(sizeof(struct msm_pcm_loopback_dual), GFP_KERNEL);
+	if (!pcm_dual) {
 		dev_err(&pdev->dev, "%s Failed to allocate memory for pcm\n",
 			__func__);
 		return -ENOMEM;
 	} else {
-		mutex_init(&pcm->lock);
-		dev_set_drvdata(&pdev->dev, pcm);
+		mutex_init(&pcm_dual->tx_loopback.lock);
+		mutex_init(&pcm_dual->rx_loopback.lock);
+		dev_set_drvdata(&pdev->dev, pcm_dual);
 	}
 	return snd_soc_register_platform(&pdev->dev,
 				   &msm_soc_platform);
@@ -413,11 +428,12 @@ static __devinit int msm_pcm_probe(struct platform_device *pdev)
 
 static int msm_pcm_remove(struct platform_device *pdev)
 {
-	struct msm_pcm_loopback *pcm;
+	struct msm_pcm_loopback_dual *pcm_dual;
 
-	pcm = dev_get_drvdata(&pdev->dev);
-	mutex_destroy(&pcm->lock);
-	kfree(pcm);
+	pcm_dual = dev_get_drvdata(&pdev->dev);
+	mutex_destroy(&pcm_dual->tx_loopback.lock);
+	mutex_destroy(&pcm_dual->rx_loopback.lock);
+	kfree(pcm_dual);
 
 	snd_soc_unregister_platform(&pdev->dev);
 	return 0;
