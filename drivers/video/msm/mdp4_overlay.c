@@ -4472,6 +4472,56 @@ int mdp4_overlay_commit(struct fb_info *info)
 	return ret;
 }
 
+#define MDP4_IOMMU_FAULT_REPORT_INTERVAL_MS 1000
+static ktime_t mdp4_iommu_fault_time;
+static int mdp4_iommu_fault_handler(struct iommu_domain *domain,
+	struct device *dev, unsigned long iova, int flag)
+{
+	ktime_t cur_time = ktime_get();
+	int ret = -ENOSYS;
+
+	/* Return -ENOSYS to print out IOMMU registers info */
+	if (ktime_to_ms(ktime_sub(cur_time, mdp4_iommu_fault_time)) <
+		MDP4_IOMMU_FAULT_REPORT_INTERVAL_MS) {
+		pr_debug("%s,%d cur_time=%llu,pre_time=%llu\n",
+			__func__, __LINE__, ktime_to_ms(cur_time),
+			ktime_to_ms(mdp4_iommu_fault_time));
+		return 0;
+	}
+
+	mdp4_iommu_fault_time = cur_time;
+
+	pr_info("IOMMU Fault @ %lld iova=0x%08lx\n" \
+		"INTR=0x%08x,LM=0x%08x,LCDC=%d,DTV=%d,DSI0=%d\n" \
+		"RGB1=0x%08x,0x%08x,0x%08x,0x%08x,0x%08x,0x%08x,0x%08x\n" \
+		"RGB2=0x%08x,0x%08x,0x%08x,0x%08x,0x%08x,0x%08x,0x%08x\n" \
+		"ViG1=0x%08x,0x%08x,0x%08x,0x%08x,0x%08x,0x%08x,0x%08x\n" \
+		"ViG2=0x%08x,0x%08x,0x%08x,0x%08x,0x%08x,0x%08x,0x%08x\n" \
+		"DMAS=0x%08x,0x%08x,0x%08x,0x%08x,0x%08x\n",
+		ktime_to_ms(cur_time), iova,
+		inpdw(MDP_INTR_STATUS), inpdw(MDP_BASE + 0x10100),
+		inpdw(MDP_BASE + 0xC0000), inpdw(MDP_BASE + 0xD0000),
+		inpdw(MDP_BASE + 0xE0000), inpdw(MDP_BASE + 0x40000),
+		inpdw(MDP_BASE + 0x40004), inpdw(MDP_BASE + 0x40008),
+		inpdw(MDP_BASE + 0x4000C), inpdw(MDP_BASE + 0x40010),
+		inpdw(MDP_BASE + 0x40040), inpdw(MDP_BASE + 0x40050),
+		inpdw(MDP_BASE + 0x50000), inpdw(MDP_BASE + 0x50004),
+		inpdw(MDP_BASE + 0x50008), inpdw(MDP_BASE + 0x5000C),
+		inpdw(MDP_BASE + 0x50010), inpdw(MDP_BASE + 0x50040),
+		inpdw(MDP_BASE + 0x50050), inpdw(MDP_BASE + 0x20000),
+		inpdw(MDP_BASE + 0x20004), inpdw(MDP_BASE + 0x20008),
+		inpdw(MDP_BASE + 0x2000C), inpdw(MDP_BASE + 0x20010),
+		inpdw(MDP_BASE + 0x20040), inpdw(MDP_BASE + 0x20050),
+		inpdw(MDP_BASE + 0x30000), inpdw(MDP_BASE + 0x30004),
+		inpdw(MDP_BASE + 0x30008), inpdw(MDP_BASE + 0x3000C),
+		inpdw(MDP_BASE + 0x30010), inpdw(MDP_BASE + 0x30040),
+		inpdw(MDP_BASE + 0x30050), inpdw(MDP_BASE + 0xA0004),
+		inpdw(MDP_BASE + 0xA0010), inpdw(MDP_BASE + 0xA0008),
+		inpdw(MDP_BASE + 0xA000C), inpdw(MDP_BASE + 0xA0000));
+
+	return ret;
+}
+
 struct msm_iommu_ctx {
 	char *name;
 	int  domain;
@@ -4560,6 +4610,9 @@ void mdp4_iommu_attach(void)
 					ctx_names[i].name);
 				continue;
 			}
+
+			iommu_set_fault_handler(domain,
+				mdp4_iommu_fault_handler);
 		}
 		done = 1;
 	}
