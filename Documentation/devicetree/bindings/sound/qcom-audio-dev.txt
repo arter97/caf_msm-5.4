@@ -1123,6 +1123,7 @@ Optional properties:
 - qcom,wsa-max-devs : Maximum number of WSA881x devices present in the target
 - qcom,wsa-devs : List of phandles for all possible WSA881x devices supported for the target
 - qcom,wsa-aux-dev-prefix : Name prefix with Left/Right configuration for WSA881x device
+- qcom,cherokee-btfm : Property to specify if Cherokee BT/FM chip is used for the target
 
 Example:
 

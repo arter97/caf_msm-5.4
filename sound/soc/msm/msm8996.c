@@ -84,6 +84,7 @@ static int msm_vi_feed_tx_ch = 2;
 static int msm_hdmi_rx_ch = 2;
 static int msm_proxy_rx_ch = 2;
 static int hdmi_rx_sample_rate = SAMPLING_RATE_48KHZ;
+static int msm_slim7_rate = SAMPLING_RATE_8KHZ;
 static int msm_tert_mi2s_tx_ch = 2;
 
 static bool codec_reg_done;
@@ -115,6 +116,10 @@ static char const *hdmi_rx_sample_rate_text[] = {"KHZ_48", "KHZ_96",
 static const char *const auxpcm_rate_text[] = {"8000", "16000"};
 static const struct soc_enum msm8996_auxpcm_enum[] = {
 		SOC_ENUM_SINGLE_EXT(2, auxpcm_rate_text),
+};
+static const char *const slim7_rate_text[] = {"8000", "16000"};
+static const struct soc_enum msm_slim7_enum[] = {
+	SOC_ENUM_SINGLE_EXT(2, slim7_rate_text),
 };
 
 static struct afe_clk_set mi2s_tx_clk = {
@@ -1118,6 +1123,77 @@ static int msm_auxpcm_be_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	return 0;
 }
 
+static int msm_slim7_rate_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: msm_slim7_rate  = %d", __func__, msm_slim7_rate);
+	ucontrol->value.integer.value[0] = msm_slim7_rate;
+	return 0;
+}
+
+static int msm_slim7_rate_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	switch (ucontrol->value.integer.value[0]) {
+	case 1:
+		msm_slim7_rate = SAMPLING_RATE_16KHZ;
+		break;
+	case 0:
+	default:
+		msm_slim7_rate = SAMPLING_RATE_8KHZ;
+		break;
+	}
+	pr_debug("%s: msm_slim7_rate = %d\n", __func__, msm_slim7_rate);
+	return 0;
+}
+
+static int msm_slim_7_rx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+					    struct snd_pcm_hw_params *params)
+{
+	struct snd_interval *rate = hw_param_interval(params,
+			SNDRV_PCM_HW_PARAM_RATE);
+
+	struct snd_interval *channels = hw_param_interval(params,
+			SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	pr_debug("%s(): msm_slim7_rate = %d\n", __func__, msm_slim7_rate);
+	rate->min = rate->max = msm_slim7_rate;
+	channels->min = channels->max = 1;
+
+	return 0;
+}
+
+static int msm_slim_7_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+					    struct snd_pcm_hw_params *params)
+{
+	struct snd_interval *rate = hw_param_interval(params,
+			SNDRV_PCM_HW_PARAM_RATE);
+
+	struct snd_interval *channels = hw_param_interval(params,
+			SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	pr_debug("%s(): msm_slim7_rate = %d\n", __func__, msm_slim7_rate);
+	rate->min = rate->max = msm_slim7_rate;
+	channels->min = channels->max = 1;
+
+	return 0;
+}
+
+static int msm_slim_8_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+					    struct snd_pcm_hw_params *params)
+{
+	struct snd_interval *rate = hw_param_interval(params,
+			SNDRV_PCM_HW_PARAM_RATE);
+
+	struct snd_interval *channels = hw_param_interval(params,
+			SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	rate->min = rate->max = 48000;
+	channels->min = channels->max = 2;
+
+	return 0;
+}
+
 static int msm_proxy_rx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 					   struct snd_pcm_hw_params *params)
 {
@@ -1408,6 +1484,8 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 			msm8996_hifi_put),
 	SOC_ENUM_EXT("VI_FEED_TX Channels", msm_snd_enum[12],
 			msm_vi_feed_tx_ch_get, msm_vi_feed_tx_ch_put),
+	SOC_ENUM_EXT("SLIMBUS_7 SampleRate", msm_slim7_enum[0],
+		     msm_slim7_rate_get, msm_slim7_rate_put),
 };
 
 static bool msm8996_swap_gnd_mic(struct snd_soc_codec *codec)
@@ -1560,6 +1638,57 @@ static int msm8996_config_hph_en0_gpio(struct snd_soc_codec *codec, bool high)
 
 	return 1;
 }
+
+static int msm8996_btfmcdc_init(struct snd_soc_pcm_runtime *rtd)
+{
+	unsigned int rx_ch[2] = {157, 158};
+	unsigned int tx_ch[3]  = {159, 160, 161};
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+
+	snd_soc_dai_set_channel_map(codec_dai, ARRAY_SIZE(tx_ch),
+				    tx_ch, ARRAY_SIZE(rx_ch), rx_ch);
+
+	return 0;
+}
+
+static int msm8996_btfmcdc_hw_params(struct snd_pcm_substream *substream,
+			     struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	struct snd_soc_dai_link *dai_link = rtd->dai_link;
+	u32 rx_ch[2], tx_ch[3];
+	u32 rx_ch_cnt = 0, tx_ch_cnt = 0;
+	int ret = 0;
+
+	pr_info("%s: %s_tx_dai_id_%d\n", __func__,
+		 codec_dai->name, codec_dai->id);
+	ret = snd_soc_dai_get_channel_map(codec_dai,
+				 &tx_ch_cnt, tx_ch, &rx_ch_cnt, rx_ch);
+	if (ret < 0) {
+		pr_err("%s: failed to get BTFM codec chan map\n, err:%d\n",
+			__func__, ret);
+		goto end;
+	}
+
+	pr_info("%s: tx_ch_cnt(%d) be_id %d\n", __func__, tx_ch_cnt,
+		dai_link->be_id);
+
+	ret = snd_soc_dai_set_channel_map(cpu_dai,
+					  tx_ch_cnt, tx_ch, rx_ch_cnt, rx_ch);
+	if (ret < 0) {
+		pr_err("%s: failed to set cpu chan map, err:%d\n",
+			__func__, ret);
+	}
+
+end:
+	return 0;
+}
+
+static struct snd_soc_ops msm8996_btfmcdc_ops = {
+	.hw_params = msm8996_btfmcdc_hw_params,
+};
 
 static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 {
@@ -2780,6 +2909,24 @@ static struct snd_soc_dai_link msm8996_tasha_fe_dai_links[] = {
 	},
 };
 
+static struct snd_soc_dai_link msm8996_cherokee_fe_dai_links[] = {
+	{
+		.name = "SLIMBUS_8 Hostless",
+		.stream_name = "SLIMBUS_8 Hostless Capture",
+		.cpu_dai_name = "SLIMBUS8_HOSTLESS",
+		.platform_name = "msm-pcm-hostless",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+	},
+};
+
 static struct snd_soc_dai_link msm8996_common_be_dai_links[] = {
 	/* Backend AFE DAI Links */
 	{
@@ -3053,6 +3200,54 @@ static struct snd_soc_dai_link msm8996_tasha_be_dai_links[] = {
 	},
 };
 
+static struct snd_soc_dai_link msm8996_cherokee_be_dai_links[] = {
+	{
+		.name = LPASS_BE_SLIMBUS_7_RX,
+		.stream_name = "Slimbus7 Playback",
+		.cpu_dai_name = "msm-dai-q6-dev.16398",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "btfmslim_slave",
+		.codec_dai_name = "btfm_bt_sco_slim_rx",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.be_id = MSM_BACKEND_DAI_SLIMBUS_7_RX,
+		.be_hw_params_fixup = msm_slim_7_rx_be_hw_params_fixup,
+		.ops = &msm8996_btfmcdc_ops,
+		/* dai link has playback support */
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+	},
+	{
+		.name = LPASS_BE_SLIMBUS_7_TX,
+		.stream_name = "Slimbus7 Capture",
+		.cpu_dai_name = "msm-dai-q6-dev.16399",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "btfmslim_slave",
+		.codec_dai_name = "btfm_bt_sco_slim_tx",
+		.no_pcm = 1,
+		.dpcm_capture = 1,
+		.be_id = MSM_BACKEND_DAI_SLIMBUS_7_TX,
+		.be_hw_params_fixup = msm_slim_7_tx_be_hw_params_fixup,
+		.ops = &msm8996_btfmcdc_ops,
+		.ignore_suspend = 1,
+	},
+	{
+		.name = LPASS_BE_SLIMBUS_8_TX,
+		.stream_name = "Slimbus8 Capture",
+		.cpu_dai_name = "msm-dai-q6-dev.16401",
+		.platform_name = "msm-pcm-hostless",
+		.codec_name = "btfmslim_slave",
+		.codec_dai_name = "btfm_fm_slim_tx",
+		.dpcm_capture = 1,
+		.be_id = MSM_BACKEND_DAI_SLIMBUS_8_TX,
+		.be_hw_params_fixup = msm_slim_8_tx_be_hw_params_fixup,
+		.init = &msm8996_btfmcdc_init,
+		.ops = &msm8996_btfmcdc_ops,
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+	},
+};
+
 static struct snd_soc_dai_link msm8996_hdmi_dai_link[] = {
 	/* HDMI BACK END DAI Link */
 	{
@@ -3074,8 +3269,10 @@ static struct snd_soc_dai_link msm8996_hdmi_dai_link[] = {
 static struct snd_soc_dai_link msm8996_tasha_dai_links[
 			 ARRAY_SIZE(msm8996_common_dai_links) +
 			 ARRAY_SIZE(msm8996_tasha_fe_dai_links) +
+			 ARRAY_SIZE(msm8996_cherokee_fe_dai_links) +
 			 ARRAY_SIZE(msm8996_common_be_dai_links) +
 			 ARRAY_SIZE(msm8996_tasha_be_dai_links) +
+			 ARRAY_SIZE(msm8996_cherokee_be_dai_links) +
 			 ARRAY_SIZE(msm8996_hdmi_dai_link)];
 
 static int msm8996_wsa881x_init(struct snd_soc_component *component)
@@ -3279,8 +3476,10 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 {
 	struct snd_soc_card *card = NULL;
 	struct snd_soc_dai_link *dailink;
-	int len_1, len_2, len_3, len_4;
+	int len_1, len_2, len_3, len_4, total_link;
+	int len_btfm_fe, len_btfm_be;
 	const struct of_device_id *match;
+	bool use_cherokee_btfm = false;
 
 	match = of_match_node(msm8996_asoc_machine_of_match, dev->of_node);
 	if (!match) {
@@ -3289,11 +3488,34 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		return NULL;
 	}
 
+	if (of_property_read_bool(dev->of_node, "qcom,cherokee-btfm")) {
+		use_cherokee_btfm = true;
+		dev_dbg(dev, "%s(): Cherokee BTFM support present\n",
+				__func__);
+	} else {
+		dev_dbg(dev, "%s(): No Cherokee BTFM support\n",
+			__func__);
+	}
+
 	if (!strcmp(match->data, "tasha_codec")) {
 		card = &snd_soc_card_tasha_msm8996;
 		len_1 = ARRAY_SIZE(msm8996_common_dai_links);
 		len_2 = len_1 + ARRAY_SIZE(msm8996_tasha_fe_dai_links);
-		len_3 = len_2 + ARRAY_SIZE(msm8996_common_be_dai_links);
+		if (use_cherokee_btfm) {
+			len_btfm_fe = len_2 +
+				ARRAY_SIZE(msm8996_cherokee_fe_dai_links);
+			len_3 = len_btfm_fe +
+				ARRAY_SIZE(msm8996_common_be_dai_links);
+			len_4 = len_3 + ARRAY_SIZE(msm8996_tasha_be_dai_links);
+			len_btfm_be = len_4 +
+				ARRAY_SIZE(msm8996_cherokee_be_dai_links);
+			total_link = len_btfm_be;
+		} else {
+			len_3 = len_2 +
+				ARRAY_SIZE(msm8996_common_be_dai_links);
+			len_4 = len_3 + ARRAY_SIZE(msm8996_tasha_be_dai_links);
+			total_link = len_4;
+		}
 
 		memcpy(msm8996_tasha_dai_links,
 		       msm8996_common_dai_links,
@@ -3301,30 +3523,42 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		memcpy(msm8996_tasha_dai_links + len_1,
 		       msm8996_tasha_fe_dai_links,
 		       sizeof(msm8996_tasha_fe_dai_links));
-		memcpy(msm8996_tasha_dai_links + len_2,
-		       msm8996_common_be_dai_links,
-		       sizeof(msm8996_common_be_dai_links));
+		if (use_cherokee_btfm) {
+			memcpy(msm8996_tasha_dai_links + len_2,
+			       msm8996_cherokee_fe_dai_links,
+			       sizeof(msm8996_cherokee_fe_dai_links));
+			memcpy(msm8996_tasha_dai_links + len_btfm_fe,
+			       msm8996_common_be_dai_links,
+			       sizeof(msm8996_common_be_dai_links));
+		} else {
+			memcpy(msm8996_tasha_dai_links + len_2,
+			       msm8996_common_be_dai_links,
+			       sizeof(msm8996_common_be_dai_links));
+		}
 		memcpy(msm8996_tasha_dai_links + len_3,
 		       msm8996_tasha_be_dai_links,
 		       sizeof(msm8996_tasha_be_dai_links));
+		if (use_cherokee_btfm)
+			memcpy(msm8996_tasha_dai_links + len_4,
+			       msm8996_cherokee_be_dai_links,
+			       sizeof(msm8996_cherokee_be_dai_links));
 
 		dailink = msm8996_tasha_dai_links;
-		len_4 = len_3 + ARRAY_SIZE(msm8996_tasha_be_dai_links);
 	}
 
 	if (of_property_read_bool(dev->of_node, "qcom,hdmi-audio-rx")) {
 		dev_dbg(dev, "%s(): hdmi audio support present\n",
 				__func__);
-		memcpy(dailink + len_4, msm8996_hdmi_dai_link,
+		memcpy(dailink + total_link, msm8996_hdmi_dai_link,
 			sizeof(msm8996_hdmi_dai_link));
-		len_4 += ARRAY_SIZE(msm8996_hdmi_dai_link);
+		total_link += ARRAY_SIZE(msm8996_hdmi_dai_link);
 	} else {
 		dev_dbg(dev, "%s(): No hdmi audio support\n", __func__);
 	}
 
 	if (card) {
 		card->dai_link = dailink;
-		card->num_links = len_4;
+		card->num_links = total_link;
 	}
 
 	return card;
