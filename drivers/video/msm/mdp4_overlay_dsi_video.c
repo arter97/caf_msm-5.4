@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -305,6 +305,11 @@ static void mdp4_video_vsync_irq_ctrl(int cndx, int enable)
 
 	vctrl = &vsync_ctrl_db[cndx];
 
+	if (!vctrl->base_pipe) {
+		pr_err("%s,%d base_pipe is NULL, cndx=%d, enable=%d\n",
+			__func__, __LINE__, cndx, enable);
+		return;
+	}
 	mutex_lock(&vctrl->update_lock);
 	if (vctrl->base_pipe->mixer_num == MDP4_MIXER0) {
 		intr = INTR_PRIMARY_VSYNC;
@@ -498,7 +503,15 @@ void mdp4_dsi_vsync_init(int cndx)
 	init_waitqueue_head(&vctrl->wait_queue);
 }
 
-struct mdp4_overlay_pipe *mdp4_dsi_video_alloc_base_pipe(void)
+/* timing generator off */
+static void mdp4_dsi_video_tg_off(struct vsycn_ctrl *vctrl)
+{
+	MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE, 0); /* turn off timing generator */
+	/* some delay after turning off the tg */
+	msleep(20);
+}
+
+struct mdp4_overlay_pipe *mdp4_dsi_video_alloc_base_pipe(bool retrieve)
 {
 	struct vsycn_ctrl *vctrl = &vsync_ctrl_db[0];
 	struct mdp4_overlay_pipe *pipe = NULL;
@@ -522,7 +535,9 @@ struct mdp4_overlay_pipe *mdp4_dsi_video_alloc_base_pipe(void)
 	}
 
 	pipe = vctrl->base_pipe;
-	vctrl->base_ref_cnt++;
+	/* Only increase cnt when allocates base pipe */
+	if (!retrieve)
+		vctrl->base_ref_cnt++;
 
 alloc_b_err:
 	return pipe;
@@ -548,6 +563,10 @@ void mdp4_dsi_video_free_base_pipe(struct msm_fb_data_type *mfd)
 		if (pipe->pipe_type == OVERLAY_TYPE_BF)
 			mdp4_overlay_borderfill_stage_down(pipe);
 
+		/* Need to shutdown timing engine if display has no mixer */
+		if (pipe->mixer_num == MDP4_MIXER_NONE)
+			mdp4_dsi_video_tg_off(vctrl);
+
 		/* base pipe may change after borderfill_stage_down */
 		pipe = vctrl->base_pipe;
 		mdp4_mixer_stage_down(pipe, 1);
@@ -567,14 +586,6 @@ void mdp4_dsi_video_base_swap(int cndx, struct mdp4_overlay_pipe *pipe)
 
 	vctrl = &vsync_ctrl_db[cndx];
 	vctrl->base_pipe = pipe;
-}
-
-/* timing generator off */
-static void mdp4_dsi_video_tg_off(struct vsycn_ctrl *vctrl)
-{
-	MDP_OUTP(MDP_BASE + DSI_VIDEO_BASE, 0); /* turn off timing generator */
-	/* some delay after turning off the tg */
-	msleep(20);
 }
 
 int mdp4_dsi_video_splash_done(void)
@@ -658,7 +669,7 @@ int mdp4_dsi_video_on(struct platform_device *pdev)
 	fbi = mfd->fbi;
 	var = &fbi->var;
 
-	pipe = mdp4_dsi_video_alloc_base_pipe();
+	pipe = mdp4_dsi_video_alloc_base_pipe(false);
 	if (IS_ERR_OR_NULL(pipe)) {
 		mutex_unlock(&mfd->dma->ov_mutex);
 		return -EPERM;
@@ -709,6 +720,13 @@ int mdp4_dsi_video_on(struct platform_device *pdev)
 	mdp4_overlayproc_cfg(pipe);
 
 	mdp4_overlay_reg_flush(pipe, 1);
+
+	if (pipe->mixer_num == MDP4_MIXER_NONE)
+		/*
+		 * For displays that directly connected to DMA pipe, when
+		 * display is on, driver need to store the base pipe
+		 */
+		mdp4_overlay_store_base_pipe(pipe);
 
 	mdp4_mixer_stage_up(pipe, 0);
 	mdp4_mixer_stage_commit(pipe->mixer_num);
@@ -829,6 +847,8 @@ int mdp4_dsi_video_off(struct platform_device *pdev)
 
 	dsi_video_enabled = 0;
 
+	mdp4_dsi_video_tg_off(vctrl);
+
 	undx =  vctrl->update_ndx;
 	vp = &vctrl->vlist[undx];
 	if (vp->update_cnt) {
@@ -853,8 +873,6 @@ int mdp4_dsi_video_off(struct platform_device *pdev)
 				vctrl->base_pipe->pipe_ndx, 1);
 		}
 	}
-
-	mdp4_dsi_video_tg_off(vctrl);
 
 	atomic_set(&vctrl->suspend, 1);
 
