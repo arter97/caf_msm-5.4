@@ -262,4 +262,15 @@ config MSM_BT_POWER
 	  Provides a parameter to switch on/off power from PMIC
 	  to Bluetooth device.
 
+config BTFM_SLIM
+	tristate "MSM Bluetooth/FM Slimbus Driver"
+	help
+	  This enables BT/FM slimbus driver to get multiple audio channel
+
+config BTFM_CHEROKEE
+	tristate "MSM Bluetooth/FM Cherokee Device"
+	depends on BTFM_SLIM
+	help
+	  This enables specific driver handle for Cherokee device
+
 endmenu
