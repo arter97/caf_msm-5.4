@@ -4091,6 +4091,7 @@ int mdp4_overlay_unset(struct fb_info *info, int ndx)
 		mdp4_overlay_base_swap(mixer, bspipe);
 		mdp4_overlay_vsync_commit(bspipe);
 		mdp4_overlay_reg_flush(bspipe, 1);
+		msm_fb_signal_timeline(mfd);
 		mutex_unlock(&mfd->dma->ov_mutex);
 		return 0;
 	} else if (pipe->mixer_num == MDP4_MIXER2)
