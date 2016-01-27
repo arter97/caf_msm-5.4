@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, 2015 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -34,6 +34,8 @@
 #define LPASS_BE_INCALL_RECORD_RX "INCALL_RECORD_TX"
 #define LPASS_BE_INCALL_RECORD_TX "INCALL_RECORD_RX"
 #define LPASS_BE_SEC_I2S_RX "SECONDARY_I2S_RX"
+#define LPASS_BE_PSEUDO_RX "PSEUDO_RX"
+#define LPASS_BE_RX_PSEUDO_CAPTURE "RX_PSEUDO_CAPTURE"
 
 #define LPASS_BE_MI2S_RX "(Backend) MI2S_RX"
 #define LPASS_BE_MI2S_TX "(Backend) MI2S_TX"
@@ -123,6 +125,8 @@ enum {
 	MSM_BACKEND_DAI_MI2S_GROUP_TX_2,
 	MSM_BACKEND_DAI_PRI_I2S_GROUP_TX_0,
 	MSM_BACKEND_DAI_PRI_I2S_GROUP_TX_1,
+	MSM_BACKEND_DAI_PSEUDO_RX,
+	MSM_BACKEND_DAI_RX_PSEUDO_CAPTURE,
 	MSM_BACKEND_DAI_MAX,
 };
 
