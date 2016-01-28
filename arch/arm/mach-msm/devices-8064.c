@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1303,6 +1303,16 @@ struct platform_device apq_cpudai_slimbus_3_tx = {
 struct platform_device apq_pcm_loopback = {
 	.name	= "msm-pcm-loopback",
 	.id	= -1,
+};
+
+struct platform_device apq_cpudai_pseudoport_rx = {
+	.name	= "msm-dai-q6",
+	.id	= 0x8001,
+};
+
+struct platform_device apq_cpudai_capture_port_rx = {
+	.name	= "msm-dai-q6",
+	.id	= 0x9001,
 };
 
 static struct resource resources_ssbi_pmic1[] = {
