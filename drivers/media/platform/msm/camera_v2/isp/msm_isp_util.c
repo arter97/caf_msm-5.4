@@ -1108,9 +1108,9 @@ static long msm_isp_ioctl_unlocked(struct v4l2_subdev *sd,
 		break;
 	case VIDIOC_MSM_ISP_FETCH_ENG_START:
 	case VIDIOC_MSM_ISP_MAP_BUF_START_FE:
-		mutex_lock(&vfe_dev->core_mutex);
+		mutex_lock(&vfe_dev->buf_mgr_mutex);
 		rc = msm_isp_start_fetch_engine(vfe_dev, arg);
-		mutex_unlock(&vfe_dev->core_mutex);
+		mutex_unlock(&vfe_dev->buf_mgr_mutex);
 		break;
 	case VIDIOC_MSM_ISP_REG_UPDATE_CMD:
 		if (arg) {
