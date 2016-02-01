@@ -1,0 +1,6 @@
+config CNSS_SDIO
+	tristate "CNSS driver for wifi module"
+	---help---
+	This module specifies whether CNSS Platform Driver supports SDIO.
+	This flag needs to be disabled if CNSS platform Driver need to be
+	supported for other buses.
