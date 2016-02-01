@@ -678,6 +678,7 @@ static void gser_suspend(struct usb_function *f)
 static void gser_resume(struct usb_function *f)
 {
 	struct f_gser	*gser = func_to_gser(f);
+	struct usb_composite_dev *cdev = gser->port.func.config->cdev;
 	unsigned port_num;
 
 	port_num = gserial_ports[gser->port_num].client_port_num;
@@ -685,6 +686,13 @@ static void gser_resume(struct usb_function *f)
 	pr_debug("%s: transport: %s f_gser: %p gserial: %p port_num: %d\n",
 			__func__, xport_to_str(gser->transport),
 			gser, &gser->port, gser->port_num);
+	/*
+	 * If the function is in USB3 Function Suspend state, resume is
+	 * canceled. In this case resume is done by a Function Resume request.
+	 */
+	if ((cdev->gadget->speed == USB_SPEED_SUPER) &&
+		f->func_is_suspended)
+		return;
 
 	switch (gser->transport) {
 	case USB_GADGET_XPORT_SMD:
@@ -694,6 +702,40 @@ static void gser_resume(struct usb_function *f)
 		pr_err("%s: Un-supported transport: %s\n", __func__,
 			xport_to_str(gser->transport));
 	}
+}
+
+static int gser_func_suspend(struct usb_function *f, u8 options)
+{
+	bool func_wakeup_allowed;
+
+	pr_debug("func susp %u cmd for %s", options, f->name ? f->name : "");
+
+	func_wakeup_allowed =
+		((options & FUNC_SUSPEND_OPT_RW_EN_MASK) != 0);
+
+	if (options & FUNC_SUSPEND_OPT_SUSP_MASK) {
+		f->func_wakeup_allowed = func_wakeup_allowed;
+		if (!f->func_is_suspended) {
+			gser_suspend(f);
+			f->func_is_suspended = true;
+		}
+	} else {
+		if (f->func_is_suspended) {
+			f->func_is_suspended = false;
+			gser_resume(f);
+		}
+		f->func_wakeup_allowed = func_wakeup_allowed;
+	}
+
+	return 0;
+}
+
+static int gser_get_status(struct usb_function *f)
+{
+	unsigned remote_wakeup_en_status = f->func_wakeup_allowed ? 1 : 0;
+
+	return (remote_wakeup_en_status << FUNC_WAKEUP_ENABLE_SHIFT) |
+		(1 << FUNC_WAKEUP_CAPABLE_SHIFT);
 }
 
 #ifdef CONFIG_MODEM_SUPPORT
@@ -1150,6 +1192,8 @@ struct usb_function *gser_alloc(struct usb_function_instance *fi)
 	gser->port.func.setup = gser_setup;
 	gser->port.func.suspend = gser_suspend;
 	gser->port.func.resume = gser_resume;
+	gser->port.func.func_suspend = gser_func_suspend;
+	gser->port.func.get_status = gser_get_status;
 	gser->port.connect = gser_connect;
 	gser->port.get_dtr = gser_get_dtr;
 	gser->port.get_rts = gser_get_rts;

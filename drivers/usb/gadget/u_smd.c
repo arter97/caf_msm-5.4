@@ -321,13 +321,18 @@ static void gsmd_tx_pull(struct work_struct *w)
 	gadget = func->config->cdev->gadget;
 	if (port->is_suspended) {
 		spin_unlock_irq(&port->port_lock);
-		ret = usb_gadget_wakeup(gadget);
+		if ((gadget->speed == USB_SPEED_SUPER) &&
+		    (func->func_is_suspended))
+			ret = usb_func_wakeup(func);
+		else
+			ret = usb_gadget_wakeup(gadget);
+
+		if ((ret == -EBUSY) || (ret == -EAGAIN))
+			pr_debug("Remote wakeup is delayed due to LPM exit\n");
+		else if (ret)
+			pr_err("Failed to wake up the USB core. ret=%d\n", ret);
+
 		spin_lock_irq(&port->port_lock);
-
-		if (ret)
-			pr_err("Failed to wake up the USB core. ret=%d.\n",
-				ret);
-
 		if (!port->port_usb) {
 			pr_debug("%s: USB disconnected\n", __func__);
 			spin_unlock_irq(&port->port_lock);
