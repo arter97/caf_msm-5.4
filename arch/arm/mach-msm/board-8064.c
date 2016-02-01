@@ -1877,6 +1877,11 @@ static struct platform_device msm_device_wcnss_wlan = {
 	.dev		= {.platform_data = &qcom_wcnss_pdata},
 };
 
+static struct platform_device msm_cnss_sdio_wlan __devinitdata = {
+	.name	= "cnss_sdio",
+	.id	= 0,
+};
+
 static struct platform_device msm_device_iris_fm __devinitdata = {
 	.name = "iris_fm",
 	.id   = -1,
@@ -2803,6 +2808,7 @@ static struct platform_device *pm8917_common_devices[] __initdata = {
 static struct platform_device *common_devices[] __initdata = {
 	&msm_device_smd_apq8064,
 	&msm_device_wcnss_wlan,
+	&msm_cnss_sdio_wlan,
 	&msm_device_iris_fm,
 	&apq8064_fmem_device,
 #ifdef CONFIG_ANDROID_PMEM
@@ -2926,6 +2932,7 @@ static struct platform_device *common_devices[] __initdata = {
 static struct platform_device *mplatform_common_devices[] __initdata = {
 	&msm_device_smd_apq8064,
 	&msm_device_wcnss_wlan,
+	&msm_cnss_sdio_wlan,
 	&msm_device_iris_fm,
 	&apq8064_fmem_device,
 #ifdef CONFIG_ANDROID_PMEM
