@@ -701,9 +701,7 @@ static void gbam2bam_connect_work(struct work_struct *w)
 {
 	struct gbam_port *port = container_of(w, struct gbam_port, connect_w);
 	struct bam_ch_info *d = &port->data_ch;
-	u32 sps_params;
 	int ret;
-	unsigned long flags;
 
 	pr_debug("%s: Connect workqueue started", __func__);
 	if (d->trans == USB_GADGET_XPORT_BAM2BAM) {
@@ -740,44 +738,6 @@ static void gbam2bam_connect_work(struct work_struct *w)
 		rmnet_bridge_connect(d->ipa_params.prod_clnt_hdl,
 				d->ipa_params.cons_clnt_hdl, 0);
 	}
-
-	spin_lock_irqsave(&port->port_lock_ul, flags);
-	spin_lock(&port->port_lock_dl);
-	if (!port->port_usb) {
-		pr_debug("%s: usb cable is disconnected, exiting\n", __func__);
-		spin_unlock(&port->port_lock_dl);
-		spin_unlock_irqrestore(&port->port_lock_ul, flags);
-		return;
-	}
-	d->rx_req = usb_ep_alloc_request(port->port_usb->out, GFP_ATOMIC);
-	if (!d->rx_req) {
-		spin_unlock(&port->port_lock_dl);
-		spin_unlock_irqrestore(&port->port_lock_ul, flags);
-		pr_err("%s: out of memory\n", __func__);
-		return;
-	}
-
-	d->rx_req->context = port;
-	d->rx_req->complete = gbam_endless_rx_complete;
-	d->rx_req->length = 0;
-	sps_params = (MSM_SPS_MODE | d->src_pipe_idx |
-				 MSM_VENDOR_ID) & ~MSM_IS_FINITE_TRANSFER;
-	d->rx_req->udc_priv = sps_params;
-
-	d->tx_req = usb_ep_alloc_request(port->port_usb->in, GFP_ATOMIC);
-	spin_unlock(&port->port_lock_dl);
-	spin_unlock_irqrestore(&port->port_lock_ul, flags);
-	if (!d->tx_req) {
-		pr_err("%s: out of memory\n", __func__);
-		return;
-	}
-
-	d->tx_req->context = port;
-	d->tx_req->complete = gbam_endless_tx_complete;
-	d->tx_req->length = 0;
-	sps_params = (MSM_SPS_MODE | d->dst_pipe_idx |
-				 MSM_VENDOR_ID) & ~MSM_IS_FINITE_TRANSFER;
-	d->tx_req->udc_priv = sps_params;
 
 	/* queue in & out requests */
 	gbam_start_endless_rx(port);
@@ -1112,7 +1072,7 @@ static void gam_debugfs_init(void) { }
 void gbam_disconnect(struct grmnet *gr, u8 port_num, enum transport_type trans)
 {
 	struct gbam_port	*port;
-	unsigned long		flags;
+	unsigned long		flags, flags_dl;
 	struct bam_ch_info	*d;
 
 	pr_debug("%s: grmnet:%p port#%d\n", __func__, gr, port_num);
@@ -1156,7 +1116,25 @@ void gbam_disconnect(struct grmnet *gr, u8 port_num, enum transport_type trans)
 
 	/* disable endpoints */
 	usb_ep_disable(gr->out);
+	if (trans == USB_GADGET_XPORT_BAM2BAM ||
+		trans == USB_GADGET_XPORT_BAM2BAM_IPA) {
+		spin_lock_irqsave(&port->port_lock_ul, flags);
+		if (d->rx_req) {
+			usb_ep_free_request(gr->out, d->rx_req);
+			d->rx_req = NULL;
+		}
+		spin_unlock_irqrestore(&port->port_lock_ul, flags);
+	}
 	usb_ep_disable(gr->in);
+	if (trans == USB_GADGET_XPORT_BAM2BAM ||
+		trans == USB_GADGET_XPORT_BAM2BAM_IPA) {
+		spin_lock_irqsave(&port->port_lock_dl, flags_dl);
+		if (d->tx_req) {
+			usb_ep_free_request(gr->in, d->tx_req);
+			d->tx_req = NULL;
+		}
+		spin_unlock_irqrestore(&port->port_lock_dl, flags_dl);
+	}
 
 	gr->in->driver_data = NULL;
 	gr->out->driver_data = NULL;
@@ -1181,6 +1159,7 @@ int gbam_connect(struct grmnet *gr, u8 port_num,
 	struct bam_ch_info	*d;
 	int			ret;
 	unsigned long		flags;
+	u32 sps_params;
 
 	pr_debug("%s: grmnet:%p port#%d\n", __func__, gr, port_num);
 
@@ -1207,6 +1186,58 @@ int gbam_connect(struct grmnet *gr, u8 port_num,
 		port = bam2bam_ports[port_num];
 
 	d = &port->data_ch;
+	d->trans = trans;
+
+	spin_lock_irqsave(&port->port_lock_ul, flags);
+	spin_lock(&port->port_lock_dl);
+	port->port_usb = gr;
+
+	if (trans == USB_GADGET_XPORT_BAM2BAM ||
+		 trans == USB_GADGET_XPORT_BAM2BAM_IPA) {
+		d->rx_req = usb_ep_alloc_request(port->port_usb->out,
+								GFP_ATOMIC);
+		if (!d->rx_req) {
+			pr_err("%s: out of memory\n", __func__);
+			d->rx_req = NULL;
+			spin_unlock(&port->port_lock_dl);
+			spin_unlock_irqrestore(&port->port_lock_ul, flags);
+			return -ENOMEM;
+		}
+
+		d->rx_req->context = port;
+		d->rx_req->complete = gbam_endless_rx_complete;
+		d->rx_req->length = 0;
+		sps_params = (MSM_SPS_MODE | d->src_pipe_idx |
+				 MSM_VENDOR_ID) & ~MSM_IS_FINITE_TRANSFER;
+		d->rx_req->udc_priv = sps_params;
+
+		d->tx_req = usb_ep_alloc_request(port->port_usb->in,
+								GFP_ATOMIC);
+		if (!d->tx_req) {
+			pr_err("%s: out of memory\n", __func__);
+			d->tx_req = NULL;
+			spin_unlock(&port->port_lock_dl);
+			spin_unlock_irqrestore(&port->port_lock_ul, flags);
+			return -ENOMEM;
+		}
+
+		d->tx_req->context = port;
+		d->tx_req->complete = gbam_endless_tx_complete;
+		d->tx_req->length = 0;
+		sps_params = (MSM_SPS_MODE | d->dst_pipe_idx |
+				 MSM_VENDOR_ID) & ~MSM_IS_FINITE_TRANSFER;
+		d->tx_req->udc_priv = sps_params;
+	}
+	if (trans == USB_GADGET_XPORT_BAM) {
+		d->to_host = 0;
+		d->to_modem = 0;
+		d->pending_with_bam = 0;
+		d->tohost_drp_cnt = 0;
+		d->tomodem_drp_cnt = 0;
+	}
+
+	spin_unlock(&port->port_lock_dl);
+	spin_unlock_irqrestore(&port->port_lock_ul, flags);
 
 	ret = usb_ep_enable(gr->in);
 	if (ret) {
@@ -1225,21 +1256,6 @@ int gbam_connect(struct grmnet *gr, u8 port_num,
 	}
 	gr->out->driver_data = port;
 
-	spin_lock_irqsave(&port->port_lock_ul, flags);
-	spin_lock(&port->port_lock_dl);
-	port->port_usb = gr;
-
-	if (trans == USB_GADGET_XPORT_BAM) {
-		d->to_host = 0;
-		d->to_modem = 0;
-		d->pending_with_bam = 0;
-		d->tohost_drp_cnt = 0;
-		d->tomodem_drp_cnt = 0;
-	}
-
-	spin_unlock(&port->port_lock_dl);
-	spin_unlock_irqrestore(&port->port_lock_ul, flags);
-
 	if (trans == USB_GADGET_XPORT_BAM2BAM) {
 		port->gr = gr;
 		d->connection_idx = connection_idx;
@@ -1250,7 +1266,6 @@ int gbam_connect(struct grmnet *gr, u8 port_num,
 		d->ipa_params.idx = connection_idx;
 	}
 
-	d->trans = trans;
 	queue_work(gbam_wq, &port->connect_w);
 
 	return 0;
