@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -243,13 +243,20 @@ static int mdp_arb_register_sub(struct mdp_arb_device_info *arb,
 		}
 	}
 	if (!found) {
-		c = kzalloc(sizeof(*c), GFP_KERNEL);
-		if (!c) {
-			pr_err("%s out of memory for client", __func__);
-			rc = -ENOMEM;
+		if (!bind) {
+			c = kzalloc(sizeof(*c), GFP_KERNEL);
+			if (!c) {
+				pr_err("%s out of memory for client", __func__);
+				rc = -ENOMEM;
+				goto out;
+			}
+		} else {
+			pr_err("%s client=%s hasn't registered yet,"\
+				" cannot bind.\n",
+				__func__, client->common.name);
+			rc = -EFAULT;
 			goto out;
 		}
-		memset(c, 0x00, sizeof(*c));
 	} else {
 		if (bind) {
 			c->num_of_client++;
@@ -446,8 +453,7 @@ static int mdp_arb_deregister_sub(struct mdp_arb_device_info *arb,
 				temp_client->num_of_client--;
 			} else {
 				list_del(pos);
-				kfree(temp_client->register_info.common.event);
-				kfree(temp_client);
+				mdp_arb_free_client(temp_client);
 			}
 			break;
 		}
@@ -563,10 +569,18 @@ static int mdp_arb_ioctl_register(struct mdp_arb_device_info *arb,
 		return -EINVAL;
 	}
 	memset(&arb_register, 0x00, sizeof(arb_register));
-	if (copy_from_user(&arb_register.common, p,
-				sizeof(struct mdp_arb_register))) {
-		pr_err("%s register copy_from_user failed", __func__);
-		return -EFAULT;
+	if (!bind) {
+		if (copy_from_user(&arb_register.common, p,
+					sizeof(struct mdp_arb_register))) {
+			pr_err("%s register copy_from_user failed", __func__);
+			return -EFAULT;
+		}
+	} else {
+		if (copy_from_user(&arb_register.common, p,
+					sizeof(struct mdp_arb_bind))) {
+			pr_err("%s bind copy_from_user failed", __func__);
+			return -EFAULT;
+		}
 	}
 
 	rc = mdp_arb_register_sub(arb, &arb_register, true, bind, &handle);
@@ -713,7 +727,7 @@ static int mdp_arb_trigger_optimize_cb(struct mdp_arb_device_info *arb,
 			info.info.optimize.common.fb_index =
 				temp->client->register_info.common.fb_index;
 			if (temp->event) {
-				strlcpy(info.info.optimize.common.client_name,
+				strlcpy(info.info.optimize.common.event_name,
 					temp->event->event.name,
 					MDP_ARB_NAME_LEN);
 				info.info.optimize.common.value =
@@ -1650,11 +1664,11 @@ call_fb:
 			mdp_arb_dump_layers();
 			goto out;
 		} else {
-			if ((pipe_id == MSMFB_NEW_REQUEST) &&
-				(req.src.format != MDP_RGB_BORDERFILL)) {
+			if (pipe_id == MSMFB_NEW_REQUEST) {
 				mutex_lock(&arb->dev_mutex);
 				arb->pipe[pipe->pipe_num].client = client_db;
-				client_db->num_of_layer++;
+				if (req.src.format != MDP_RGB_BORDERFILL)
+					client_db->num_of_layer++;
 				mutex_unlock(&arb->dev_mutex);
 			}
 		}
@@ -1723,12 +1737,13 @@ static int mdp_arb_overlay_unset_sub(struct mdp_arb_device_info *arb,
 					"hasn't set yet!", __func__,
 					pipe->pipe_num);
 			arb->pipe[pipe->pipe_num].client = NULL;
-			if (!client_db->num_of_layer)
-				pr_warning("%s num_of_layer is 0 already",
-					__func__);
-			if ((client_db->num_of_layer) &&
-				(pipe->pipe_type != OVERLAY_TYPE_BF))
-				client_db->num_of_layer--;
+			if (pipe->pipe_type != OVERLAY_TYPE_BF) {
+				if (!client_db->num_of_layer)
+					pr_warning("%s num_of_layer is 0"\
+						" already\n", __func__);
+				else
+					client_db->num_of_layer--;
+			}
 			mutex_unlock(&arb->dev_mutex);
 		}
 	}
