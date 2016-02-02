@@ -855,6 +855,8 @@ int mdp4_lcdc_off(struct platform_device *pdev)
 		mdp4_lcdc_pipe_clean(vp);
 	}
 
+	mdp4_lcdc_tg_off(vctrl);
+
 	if (pipe) {
 		/* sanity check, free pipes besides base layer */
 		mixer = pipe->mixer_num;
@@ -868,8 +870,6 @@ int mdp4_lcdc_off(struct platform_device *pdev)
 				vctrl->base_pipe->pipe_ndx, 1);
 		}
 	}
-
-	mdp4_lcdc_tg_off(vctrl);
 
 	atomic_set(&vctrl->suspend, 1);
 

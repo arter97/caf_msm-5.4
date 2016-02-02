@@ -682,6 +682,8 @@ int mdp4_dtv_off(struct platform_device *pdev)
 
 	wake_up_interruptible_all(&vctrl->wait_queue);
 
+	mdp4_dtv_tg_off(vctrl);
+
 	pipe = vctrl->base_pipe;
 	if (pipe != NULL) {
 		mixer = pipe->mixer_num;
@@ -700,8 +702,6 @@ int mdp4_dtv_off(struct platform_device *pdev)
 			vctrl->base_pipe = NULL;
 		}
 	}
-
-	mdp4_dtv_tg_off(vctrl);
 
 	atomic_set(&vctrl->suspend, 1);
 
@@ -926,8 +926,10 @@ int mdp4_overlay_dtv_set(struct msm_fb_data_type *mfd,
 		mdp4_overlay_dtv_alloc_pipe(mfd, OVERLAY_TYPE_RGB, vctrl);
 
 
-	if (vctrl->base_pipe == NULL)
+	if (vctrl->base_pipe == NULL) {
+		pr_err("%s base pipe is NULL\n", __func__);
 		return -ENODEV;
+	}
 
 	mdp4_init_writeback_buf(mfd, MDP4_MIXER1);
 	vctrl->base_pipe->ov_blt_addr = 0;

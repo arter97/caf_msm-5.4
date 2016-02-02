@@ -286,8 +286,10 @@ void mdp4_overlay_iommu_pipe_free(int ndx, int all)
 	int plane, mixer;
 
 	pipe = mdp4_overlay_ndx2pipe(ndx);
-	if (pipe == NULL)
+	if (pipe == NULL) {
+		pr_err("%s pipe is NULL for ndx=%d\n", __func__, ndx);
 		return;
+	}
 
 	if (pipe->flags & MDP_MEMORY_ID_TYPE_FB) {
 		pipe->flags &= ~MDP_MEMORY_ID_TYPE_FB;
@@ -2192,6 +2194,7 @@ void mdp4_overlay_borderfill_stage_down(struct mdp4_overlay_pipe *pipe)
 {
 	struct mdp4_overlay_pipe *bspipe, *bspipe_backup;
 	int mixer, i;
+	struct mdp4_iommu_pipe_info iom;
 
 	if (pipe->pipe_type != OVERLAY_TYPE_BF)
 		return;
@@ -2214,8 +2217,11 @@ void mdp4_overlay_borderfill_stage_down(struct mdp4_overlay_pipe *pipe)
 			bspipe_backup->pipe_num);
 		return;
 	}
+	iom = bspipe->iommu;
 	/* Restore the base pipe configuration */
 	*bspipe = *bspipe_backup;
+	/* Need to restore iommu handles after base layer swap */
+	bspipe->iommu = iom;
 
 	/* free borderfill pipe */
 	pipe->pipe_used = 0;
@@ -4088,6 +4094,9 @@ int mdp4_overlay_unset(struct fb_info *info, int ndx)
 		 * pipe. Display on/off will allocate/free it.
 		 */
 		bspipe = &ctrl->baselayer[mixer];
+		/* Need to restore iommu handles after base layer swap */
+		memcpy(&bspipe->iommu, &pipe->iommu,
+			sizeof(struct mdp4_iommu_pipe_info));
 		mdp4_overlay_base_swap(mixer, bspipe);
 		mdp4_overlay_vsync_commit(bspipe);
 		mdp4_overlay_reg_flush(bspipe, 1);
@@ -4280,9 +4289,10 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
 	img = &req->data;
 	get_img(img, info, pipe, 0, &start, &len, &pipe->srcp0_file,
 		&pipe->put0_need, &srcp0_ihdl);
-	if (len == 0) {
-		pr_err("%s: pmem Error\n", __func__);
-		ret = -1;
+	if ((len == 0) || (start == 0)) {
+		pr_err("%s: get_img Error len=%lx, start=%lx\n", __func__,
+			len, start);
+		ret = -EINVAL;
 		goto end;
 	}
 
