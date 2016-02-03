@@ -2332,6 +2332,33 @@ static ssize_t cnss_wlan_pin_connect_show(struct device *dev,
 static DEVICE_ATTR(cnss_wlan_pin_connect, S_IRUSR,
 			cnss_wlan_pin_connect_show, NULL);
 
+static ssize_t cnss_wlan_mode_store(struct device *dev,
+	    struct device_attribute *attr, const char *buf, size_t count)
+{
+	int val;
+	int ret;
+
+	if (!penv)
+		return -ENODEV;
+
+	if (sscanf(buf, "%d", &val) != 1)
+		return -EINVAL;
+
+	if (val == CNSS_WALTEST) {
+		pr_info("%s: Setting WLAN Test Mode %d\n", __func__, val);
+		ret = cnss_wlan_enable(NULL, val, NULL);
+		if (ret != 0) {
+			pr_err("%s: Set WLAN Test Mode failed %d\n",
+			       __func__, ret);
+			return ret;
+		}
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR(cnss_wlan_mode, S_IWUSR, NULL, cnss_wlan_mode_store);
+
 static int cnss_wlan_pci_probe(struct pci_dev *pdev,
 			       const struct pci_device_id *id)
 {
@@ -3895,6 +3922,12 @@ skip_ramdump:
 		goto err_fw_image_setup;
 	}
 
+	ret = device_create_file(dev, &dev_attr_cnss_wlan_mode);
+	if (ret) {
+		pr_err("cnss: wlan_mode sys file creation failed\n");
+		goto err_wlan_mode;
+	}
+
 	penv->qmi_event_wq = alloc_workqueue("cnss_qmi_event", 0, 0);
 	if (!penv->qmi_event_wq) {
 		pr_err("%s: workqueue creation failed\n", __func__);
@@ -3923,6 +3956,9 @@ err_register_notifier:
 		destroy_workqueue(penv->qmi_event_wq);
 
 err_wlan_pin_connect:
+	device_remove_file(&pdev->dev, &dev_attr_cnss_wlan_mode);
+
+err_wlan_mode:
 	device_remove_file(&pdev->dev, &dev_attr_cnss_wlan_pin_connect);
 
 err_fw_image_setup:
@@ -3986,6 +4022,7 @@ static int cnss_remove(struct platform_device *pdev)
 		destroy_workqueue(penv->qmi_event_wq);
 
 	unregister_pm_notifier(&cnss_pm_notifier);
+	device_remove_file(&pdev->dev, &dev_attr_cnss_wlan_mode);
 	device_remove_file(&pdev->dev, &dev_attr_cnss_wlan_pin_connect);
 	device_remove_file(&pdev->dev, &dev_attr_fw_image_setup);
 
