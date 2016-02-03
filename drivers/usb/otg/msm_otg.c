@@ -972,7 +972,7 @@ static int msm_otg_resume(struct msm_otg *motg)
 	struct msm_otg_platform_data *pdata = motg->pdata;
 	int cnt = 0;
 	unsigned temp;
-	u32 phy_ctrl_val = 0;
+	u32 otgsc = 0, phy_ctrl_val = 0;
 	unsigned ret;
 	bool in_device_mode;
 	bool bus_is_suspended;
@@ -1094,6 +1094,15 @@ skip_phy_resume:
 	}
 
 	dev_info(otg->dev, "USB exited from low power mode\n");
+
+	/* After enbling the irq wait 5msec for vbus */
+	msleep(5);
+	otgsc = readl_relaxed(USB_OTGSC);
+
+	if (!(otgsc & OTGSC_BSV) && !atomic_read(&motg->pm_suspended)) {
+		dev_info(motg->otg.dev, "OTG Resume QUEUE work\n");
+		queue_work(system_nrt_wq, &motg->sm_work);
+	}
 
 	return 0;
 }
@@ -2157,6 +2166,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 	struct msm_otg *motg = container_of(w, struct msm_otg, sm_work);
 	struct otg_transceiver *otg = &motg->otg;
 	bool work = 0, srp_reqd;
+	int ret;
 
 	pm_runtime_resume(otg->dev);
 	pr_debug("%s work\n", otg_state_string(otg->state));
@@ -2255,7 +2265,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 			 * used here. Otherwise, no delay will be used.
 			 */
 			pm_runtime_mark_last_busy(otg->dev);
-			pm_runtime_autosuspend(otg->dev);
+			ret = pm_runtime_autosuspend(otg->dev);
 		}
 		break;
 	case OTG_STATE_B_SRP_INIT:
@@ -2944,6 +2954,38 @@ static irqreturn_t msm_pmic_id_irq(int irq, void *data)
 
 	return IRQ_HANDLED;
 }
+
+int msm_otg_pm_notify(struct notifier_block *notify_block,
+					unsigned long mode, void *unused)
+{
+	struct msm_otg *motg = container_of(
+		notify_block, struct msm_otg, pm_notify);
+
+
+	dev_err(motg->otg.dev, "OTG PM notify:%lx, sm_pending:%u\n", mode,
+					motg->sm_work_pending);
+
+	switch (mode) {
+	case PM_POST_SUSPEND:
+		/* OTG sm_work can be armed now */
+		atomic_set(&motg->pm_suspended, 0);
+
+		/* Handle any deferred wakeup events from USB during suspend */
+		if (motg->sm_work_pending) {
+			motg->sm_work_pending = false;
+			dev_err(motg->otg.dev, "OTG PM notify QUEUE work\n");
+			queue_work(system_nrt_wq, &motg->sm_work);
+		}
+		break;
+
+	default:
+		dev_err(motg->otg.dev, "OTG PM notify:1 %lx, sm_pending:%u\n",
+					mode, motg->sm_work_pending);
+		break;
+	}
+	return NOTIFY_OK;
+}
+
 
 static int msm_otg_mode_show(struct seq_file *s, void *unused)
 {
@@ -3648,6 +3690,9 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 			debug_bus_voting_enabled = true;
 	}
 
+	motg->pm_notify.notifier_call = msm_otg_pm_notify;
+	register_pm_notifier(&motg->pm_notify);
+
 	return 0;
 
 remove_otg:
@@ -3695,6 +3740,8 @@ static int __devexit msm_otg_remove(struct platform_device *pdev)
 
 	if (otg->host || otg->gadget)
 		return -EBUSY;
+
+	unregister_pm_notifier(&motg->pm_notify);
 
 	if (pdev->dev.of_node)
 		msm_otg_setup_devices(pdev, motg->pdata->mode, false);
@@ -3820,7 +3867,6 @@ static int msm_otg_pm_resume(struct device *dev)
 
 	dev_dbg(dev, "OTG PM resume\n");
 
-	atomic_set(&motg->pm_suspended, 0);
 	if (motg->async_int || motg->sm_work_pending) {
 		pm_runtime_get_noresume(dev);
 		ret = msm_otg_resume(motg);
@@ -3830,10 +3876,8 @@ static int msm_otg_pm_resume(struct device *dev)
 		pm_runtime_set_active(dev);
 		pm_runtime_enable(dev);
 
-		if (motg->sm_work_pending) {
-			motg->sm_work_pending = false;
-			queue_work(system_nrt_wq, &motg->sm_work);
-		}
+		/* Let pm_notify kick sm_work to put USB back in LPM */
+		motg->sm_work_pending = true;
 	}
 
 	return ret;
