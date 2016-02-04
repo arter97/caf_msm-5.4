@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -50,6 +50,7 @@ static struct msm_camera_vfe_params_t vfe_para;
 static struct work_struct wq_mdp_queue_overlay_buffers;
 
 static int adp_rear_camera_enable(void);
+static void preview_buffer_return_by_index(int i);
 
 static struct completion preview_enabled;
 static struct completion preview_disabled;
@@ -271,6 +272,25 @@ static int mdp_buf_queue_deq(void)
 			(s_mdp_buf_queue.read_idx+1)%MDP_BUF_QUEUE_LENGTH;
 	}
 	return buf_idx;
+}
+
+static void mdp_queue_flush(void)
+{
+	int buf_idx = -1;
+	int i;
+	pr_debug("%s\n", __func__);
+	for (i = 0; i < MDP_BUF_QUEUE_LENGTH; i++) {
+		/* dequeue buffer */
+		buf_idx = mdp_buf_queue_deq();
+
+		if (buf_idx < 0) {
+			/* queue is empty */
+			break;
+		} else {
+			pr_debug("%s free buf_idx %d\n", __func__, buf_idx);
+			preview_buffer_return_by_index(buf_idx);
+		}
+	}
 }
 
 static int preview_set_data_pipeline(void)
@@ -514,21 +534,6 @@ static int preview_buffer_free(void)
 	ion_free(preview_data.ion_client, preview_data.ion_handle);
 	ion_client_destroy(preview_data.ion_client);
 	return ret = 0;
-}
-
-static int preview_configure_bufs(void)
-{
-	int ret;
-
-	/* step 1, alloc ION buffer */
-	pr_debug("%s: preview buffer allocate\n", __func__);
-	ret = preview_buffer_alloc();
-
-	/*step2, buffer linked list */
-	if (!ret)
-		preview_buffer_init();
-
-	return ret;
 }
 
 static void preview_set_overlay_params(struct mdp_overlay *overlay)
@@ -1273,10 +1278,8 @@ static void adp_camera_event_callback(void *instance,
 	}
 }
 
-static void adp_rear_camera_disable(void)
+static void preview_release_data_pipeline(void)
 {
-	int i;
-	msm_cam_server_adp_cam_deregister();
 	msm_axi_subdev_release_rdi_only(lsh_axi_ctrl, s_ctrl);
 	msm_csid_release(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
 			MM_CAM_USE_BYPASS);
@@ -1284,6 +1287,47 @@ static void adp_rear_camera_disable(void)
 		lsh_csiphy_dev[adp_rvc_csi_lane_params.csi_phy_sel],
 		&adp_rvc_csi_lane_params);
 	msm_ispif_release_rdi(lsh_ispif);
+}
+
+static int adp_camera_setup_pipeline_buffers(void)
+{
+	struct preview_mem *ping_buffer, *pong_buffer, *free_buffer;
+	int ret = 0;
+
+	/* step 1, find free buffer from the list, then use it to
+	configure ping/pong */
+	ping_buffer = preview_buffer_find_free_for_ping_pong();
+	if (!ping_buffer)
+		return ret;
+	ping_buffer->state =
+		CAMERA_PREVIEW_BUFFER_STATE_QUEUED_TO_PINGPONG;
+
+	pong_buffer = preview_buffer_find_free_for_ping_pong();
+	if (!pong_buffer)
+		return ret;
+	pong_buffer->state =
+		CAMERA_PREVIEW_BUFFER_STATE_QUEUED_TO_PINGPONG;
+
+	free_buffer = preview_buffer_find_free_for_ping_pong();
+	if (!free_buffer)
+		return ret;
+
+	pr_debug("%s: find ping pong buffer end!!!\n", __func__);
+
+	/* step 2, configure the free buffer to ping pong buffer */
+	preview_configure_ping_pong_buffer(ping_buffer, pong_buffer,
+		free_buffer);
+
+	return ret;
+}
+
+static void adp_rear_camera_disable(void)
+{
+	int i;
+	msm_cam_server_adp_cam_deregister();
+
+	preview_release_data_pipeline();
+
 	msm_ba_close(adp_cam_ctxt->ba_inst_hdlr);
 	mdp_deinit_recovery();
 	for (i = 0; i < DISPLAY_ID_MAX; i++)
@@ -1292,7 +1336,6 @@ static void adp_rear_camera_disable(void)
 
 static int adp_rear_camera_enable(void)
 {
-	struct preview_mem *ping_buffer, *pong_buffer, *free_buffer;
 	struct v4l2_input input;
 	struct v4l2_format fmt;
 	enum v4l2_priority prio = V4L2_PRIORITY_RECORD;
@@ -1386,37 +1429,23 @@ static int adp_rear_camera_enable(void)
 		g_preview_width, g_preview_height, g_preview_buffer_length,
 		g_preview_buffer_size);
 
-	ret = preview_configure_bufs();
+	/* step 1, alloc ION buffer */
+	pr_debug("%s: preview buffer allocate\n", __func__);
+	ret = preview_buffer_alloc();
 	if (ret)
 		goto failure;
+
+	/*step2, buffer init queue */
+	if (!ret)
+		preview_buffer_init();
 
 	ret = preview_set_data_pipeline();
 	if (ret)
 		goto failure;
 
-	/* step 1, find free buffer from the list, then use it to
-	configure ping/pong */
-	ping_buffer = preview_buffer_find_free_for_ping_pong();
-	if (!ping_buffer)
+	ret = adp_camera_setup_pipeline_buffers();
+	if (ret)
 		goto failure;
-	ping_buffer->state =
-		CAMERA_PREVIEW_BUFFER_STATE_QUEUED_TO_PINGPONG;
-
-	pong_buffer = preview_buffer_find_free_for_ping_pong();
-	if (!pong_buffer)
-		goto failure;
-	pong_buffer->state =
-		CAMERA_PREVIEW_BUFFER_STATE_QUEUED_TO_PINGPONG;
-
-	free_buffer = preview_buffer_find_free_for_ping_pong();
-	if (!free_buffer)
-		goto failure;
-
-	pr_debug("%s: find ping pong buffer end!!!\n", __func__);
-
-	/* step 2, configure the free buffer to ping pong buffer */
-	preview_configure_ping_pong_buffer(ping_buffer, pong_buffer,
-		free_buffer);
 
 	/* init mdp buffer queue */
 	memset(&s_mdp_buf_queue, 0, sizeof(s_mdp_buf_queue));
@@ -1521,6 +1550,8 @@ static int mdp_disable_camera_preview(void)
 	mdpclient_msm_fb_close(
 			adp_cam_ctxt->fb_idx[adp_cam_ctxt->display_id]);
 
+	mdp_queue_flush();
+
 	return ret;
 }
 
@@ -1589,6 +1620,8 @@ static int mdp_disable_camera_preview(void)
 
 	mdpclient_msm_fb_close(
 			adp_cam_ctxt->fb_idx[adp_cam_ctxt->display_id]);
+
+	mdp_queue_flush();
 }
 
 static int mdp_enable_camera_preview(void)
@@ -2526,13 +2559,7 @@ static int adp_camera_suspend(struct platform_device *pdev,
 	wait_for_completion(&preview_disabled);
 	adp_cam_ctxt->state = CAMERA_TRANSITION_SUSPEND;
 
-	msm_axi_subdev_release_rdi_only(lsh_axi_ctrl, s_ctrl);
-	msm_csid_release(lsh_csid_dev[adp_rvc_csi_lane_params.csi_phy_sel],
-			MM_CAM_USE_BYPASS);
-	msm_csiphy_release_adp(
-		lsh_csiphy_dev[adp_rvc_csi_lane_params.csi_phy_sel],
-			&adp_rvc_csi_lane_params);
-	msm_ispif_release_rdi(lsh_ispif);
+	preview_release_data_pipeline();
 
 	INIT_COMPLETION(preview_disabled);
 	adp_cam_ctxt->state = CAMERA_SUSPENDED;
@@ -2563,7 +2590,17 @@ static int adp_camera_resume(struct platform_device *pdev)
 
 	adp_cam_ctxt->state = CAMERA_TRANSITION_OFF;
 
+	/* re-initialize the buffer queue */
+	preview_buffer_init();
+
+	/* init mdp buffer queue */
+	memset(&s_mdp_buf_queue, 0, sizeof(s_mdp_buf_queue));
+
 	rc = preview_set_data_pipeline();
+	if (rc)
+		return rc;
+
+	rc = adp_camera_setup_pipeline_buffers();
 	if (rc) {
 		adp_cam_ctxt->state = CAMERA_SUSPENDED;
 		return rc;
