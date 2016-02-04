@@ -1191,7 +1191,7 @@ int cnss_wlan_enable(struct cnss_wlan_enable_cfg *config,
 
 	memset(&req, 0, sizeof(req));
 
-	if (mode == CNSS_WALTEST)
+	if (mode == CNSS_WALTEST || mode == CNSS_CCPM)
 		goto skip;
 	else if (!config || !host_version) {
 		pr_err("%s: Invalid cfg pointer\n", __func__);
@@ -2344,7 +2344,7 @@ static ssize_t cnss_wlan_mode_store(struct device *dev,
 	if (sscanf(buf, "%d", &val) != 1)
 		return -EINVAL;
 
-	if (val == CNSS_WALTEST) {
+	if (val == CNSS_WALTEST || val == CNSS_CCPM) {
 		pr_info("%s: Setting WLAN Test Mode %d\n", __func__, val);
 		ret = cnss_wlan_enable(NULL, val, NULL);
 		if (ret != 0) {
