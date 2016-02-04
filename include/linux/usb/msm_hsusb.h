@@ -221,6 +221,14 @@ struct msm_otg_platform_data {
 	bool ignore_wakeup_source;
 	unsigned int mpm_xo_wakeup_int;
 	bool allow_host_vdd_min_wo_rework;
+	bool is_ext_hub;
+	int hub_rst_gpio;
+	int hub_vdd_gpio;
+	int hub_vbus_en_gpio;
+	int hub_vbus_ok_gpio;
+	int hub_vbus_ok_gpio_irq;
+	int flex_en_gpio;
+	int flex_out_gpio;
 };
 
 /* phy related flags */
