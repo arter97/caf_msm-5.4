@@ -98,7 +98,8 @@ static void msm_cci_flush_queue(struct cci_device *cci_dev,
 	int32_t rc = 0;
 
 	msm_camera_io_w(1 << master, cci_dev->base + CCI_HALT_REQ_ADDR);
-	rc = wait_for_completion_interruptible_timeout(
+	rc = wait_for_completion_timeout(
+
 		&cci_dev->cci_master_info[master].reset_complete, CCI_TIMEOUT);
 	if (rc < 0) {
 		pr_err("%s:%d wait failed\n", __func__, __LINE__);
@@ -117,7 +118,7 @@ static void msm_cci_flush_queue(struct cci_device *cci_dev,
 				cci_dev->base + CCI_RESET_CMD_ADDR);
 
 		/* wait for reset done irq */
-		rc = wait_for_completion_interruptible_timeout(
+		rc = wait_for_completion_timeout(
 			&cci_dev->cci_master_info[master].reset_complete,
 			CCI_TIMEOUT);
 		if (rc <= 0)
@@ -158,10 +159,10 @@ static int32_t msm_cci_validate_queue(struct cci_device *cci_dev,
 		msm_camera_io_w(reg_val, cci_dev->base + CCI_QUEUE_START_ADDR);
 		CDBG("%s line %d wait_for_completion_interruptible\n",
 			__func__, __LINE__);
-		rc = wait_for_completion_interruptible_timeout(&cci_dev->
+		rc = wait_for_completion_timeout(&cci_dev->
 			cci_master_info[master].reset_complete, CCI_TIMEOUT);
 		if (rc <= 0) {
-			pr_err("%s: wait_for_completion_interruptible_timeout %d\n",
+			pr_err("%s: wait_for_completion_timeout %d\n",
 				 __func__, __LINE__);
 			if (rc == 0)
 				rc = -ETIMEDOUT;
@@ -509,10 +510,10 @@ static int32_t msm_cci_i2c_read(struct v4l2_subdev *sd,
 	msm_camera_io_w(val, cci_dev->base + CCI_QUEUE_START_ADDR);
 	CDBG("%s:%d E wait_for_completion_interruptible_timeout\n", __func__,
 		__LINE__);
-	rc = wait_for_completion_interruptible_timeout(&cci_dev->
+	rc = wait_for_completion_timeout(&cci_dev->
 		cci_master_info[master].reset_complete, CCI_TIMEOUT);
 	if (rc <= 0) {
-		pr_err("%s: wait_for_completion_interruptible_timeout %d\n",
+		pr_err("%s: wait_for_completion_timeout %d\n",
 			 __func__, __LINE__);
 		if (rc == 0)
 			rc = -ETIMEDOUT;
@@ -714,10 +715,10 @@ static int32_t msm_cci_i2c_write(struct v4l2_subdev *sd,
 
 	CDBG("%s:%d E wait_for_completion_interruptible\n",
 		__func__, __LINE__);
-	rc = wait_for_completion_interruptible_timeout(&cci_dev->
+	rc = wait_for_completion_timeout(&cci_dev->
 		cci_master_info[master].reset_complete, CCI_TIMEOUT);
 	if (rc <= 0) {
-		pr_err("%s: wait_for_completion_interruptible_timeout %d\n",
+		pr_err("%s: wait_for_completion_timeout %d\n",
 			 __func__, __LINE__);
 		if (rc == 0)
 			rc = -ETIMEDOUT;
