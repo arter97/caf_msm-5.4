@@ -287,7 +287,7 @@ void mdp4_overlay_iommu_pipe_free(int ndx, int all)
 
 	pipe = mdp4_overlay_ndx2pipe(ndx);
 	if (pipe == NULL) {
-		pr_err("%s pipe is NULL for ndx=%d\n", __func__, ndx);
+		pr_debug("%s pipe is NULL for ndx=%d\n", __func__, ndx);
 		return;
 	}
 
