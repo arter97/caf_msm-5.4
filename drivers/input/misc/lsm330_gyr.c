@@ -907,7 +907,7 @@ static int lsm330_gyr_disable(struct lsm330_gyr_status *stat)
 	mutex_lock(&stat->lock);
 	if (atomic_cmpxchg(&stat->enabled, 1, 0)) {
 		lsm330_gyr_device_power_off(stat);
-		hrtimer_cancel(&stat->hr_timer);
+		hrtimer_try_to_cancel(&stat->hr_timer);
 		dev_dbg(&stat->client->dev, "%s: cancel_hrtimer ", __func__);
 	}
 	mutex_unlock(&stat->lock);
@@ -1067,9 +1067,9 @@ static ssize_t attr_polling_mode_store(struct device *dev,
 			hrtimer_start(&(stat->hr_timer), stat->ktime, HRTIMER_MODE_REL);
 		}
 	} else {
-		if (stat->polling_enabled) {
-			hrtimer_cancel(&stat->hr_timer);
-		}
+		if (stat->polling_enabled)
+			hrtimer_try_to_cancel(&stat->hr_timer);
+
 		stat->polling_enabled = false;
 		lsm330_gyr_manage_int2settings(stat, stat->fifomode);
 		dev_info(dev, "polling mode disabled\n");
@@ -1573,7 +1573,7 @@ static int lsm330_cdev_poll_delay(struct sensors_classdev *sensors_cdev,
 			dev_err(&stat->client->dev,
 				"update odr fail,err=%d\n", err);
 		else {
-			hrtimer_cancel(&stat->hr_timer);
+			hrtimer_try_to_cancel(&stat->hr_timer);
 			hrtimer_start(&stat->hr_timer, stat->ktime,
 						HRTIMER_MODE_REL);
 		}
@@ -1941,7 +1941,7 @@ err1_1:
 	mutex_unlock(&stat->lock);
 	kfree(stat->pdata);
 err1:
-	hrtimer_cancel(&stat->hr_timer);
+	hrtimer_try_to_cancel(&stat->hr_timer);
 	kthread_stop(stat->gyr_task);
 	destroy_workqueue(lsm330_gyr_workqueue);
 	kfree(stat);
@@ -1959,7 +1959,7 @@ static int lsm330_gyr_remove(struct i2c_client *client)
 
 	lsm330_gyr_disable(stat);
 
-	hrtimer_cancel(&stat->hr_timer);
+	hrtimer_try_to_cancel(&stat->hr_timer);
 	kthread_stop(stat->gyr_task);
 
 	if(!lsm330_gyr_workqueue) {

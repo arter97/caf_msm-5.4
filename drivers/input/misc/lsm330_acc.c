@@ -415,6 +415,7 @@ struct lsm330_acc_data {
 	struct task_struct *acc_task;
 	wait_queue_head_t acc_wq;
 	ktime_t timestamp;
+	ktime_t prev_timestamp;
 #ifdef CONFIG_ENABLE_ACC_BUFFERING
 	struct input_dev *accbuf_dev;
 	struct kmem_cache *lsm330_cachepool;
@@ -438,7 +439,7 @@ static struct sensors_classdev lsm330_acc_cdev = {
 	.max_range = "156.8",	/* m/s^2 */
 	.resolution = "0.000598144",	/* m/s^2 */
 	.sensor_power = "0.5",	/* 0.5 mA */
-	.min_delay = LSM330_SENSOR_ACC_MIN_POLL_PERIOD_MS,
+	.min_delay = LSM330_SENSOR_ACC_MIN_POLL_PERIOD_MS * 1000,
 	.delay_msec = 100,
 	.fifo_reserved_event_count = 0,
 	.fifo_max_event_count = 0,
@@ -1350,6 +1351,16 @@ static int lsm330_acc_get_data(struct lsm330_acc_data *acc, int *xyz)
 static void lsm330_acc_report_values(struct lsm330_acc_data *acc,
 					int *xyz)
 {
+	int64_t tcur, tprev;
+
+	tcur = (ktime_to_timespec(acc->timestamp).tv_sec * 1000000000LL) +
+				ktime_to_timespec(acc->timestamp).tv_nsec;
+	tprev = (ktime_to_timespec(acc->prev_timestamp).tv_sec * 1000000000LL) +
+				ktime_to_timespec(acc->prev_timestamp).tv_nsec;
+	if (tcur <= tprev) {
+		pr_debug("Event timestamp error\n");
+		return;
+	}
 	input_report_abs(acc->input_dev, ABS_X, xyz[0]);
 	input_report_abs(acc->input_dev, ABS_Y, xyz[1]);
 	input_report_abs(acc->input_dev, ABS_Z, xyz[2]);
@@ -1357,6 +1368,7 @@ static void lsm330_acc_report_values(struct lsm330_acc_data *acc,
 				ktime_to_timespec(acc->timestamp).tv_sec);
 	input_event(acc->input_dev, EV_SYN, SYN_TIME_NSEC,
 				ktime_to_timespec(acc->timestamp).tv_nsec);
+	acc->prev_timestamp = acc->timestamp;
 	input_sync(acc->input_dev);
 }
 
@@ -1368,10 +1380,13 @@ static void lsm330_acc_polling_manage(struct lsm330_acc_data *acc)
 	if ((acc->enable_polling)) {
 #endif
 		if (atomic_read(&acc->enabled)) {
-				hrtimer_start(&acc->hr_timer_acc,
-					acc->ktime_acc, HRTIMER_MODE_REL);
-		} else
-			hrtimer_cancel(&acc->hr_timer_acc);
+			hrtimer_try_to_cancel(&acc->hr_timer_acc);
+			hrtimer_start(&acc->hr_timer_acc,
+					acc->ktime_acc,
+					HRTIMER_MODE_REL);
+		} else {
+			hrtimer_try_to_cancel(&acc->hr_timer_acc);
+		}
 	}
 }
 
@@ -1964,6 +1979,7 @@ static int lsm330_cdev_enable(struct sensors_classdev *sensors_cdev,
 			struct lsm330_acc_data, accel_cdev);
 	int err;
 
+	stat->prev_timestamp = ktime_get_boottime();
 	dev_dbg(&stat->client->dev,
 				"enable %u client_data->enable %u\n",
 				enable, atomic_read(&stat->enabled));
@@ -1994,6 +2010,7 @@ static int lsm330_cdev_poll_delay(struct sensors_classdev *sensors_cdev,
 	if (interval_ms < LSM330_SENSOR_ACC_MIN_POLL_PERIOD_MS)
 		interval_ms = LSM330_SENSOR_ACC_MIN_POLL_PERIOD_MS;
 
+	stat->prev_timestamp = ktime_get_boottime();
 	dev_dbg(&stat->client->dev, "%s sample_rate %u\n",
 					__func__, interval_ms);
 
@@ -2008,7 +2025,7 @@ static int lsm330_cdev_poll_delay(struct sensors_classdev *sensors_cdev,
 	mutex_lock(&stat->lock);
 	if (atomic_read(&stat->enabled)) {
 		if (stat->enable_polling) {
-				hrtimer_cancel(&stat->hr_timer_acc);
+			hrtimer_try_to_cancel(&stat->hr_timer_acc);
 		} else {
 			lsm330_acc_set_drdyint_register_values(stat, 0);
 			lsm330_acc_drdyint(stat);
@@ -2595,7 +2612,7 @@ exit_kfree_pdata:
 	kfree(acc->pdata);
 err_mutexunlock:
 	mutex_unlock(&acc->lock);
-	hrtimer_cancel(&acc->hr_timer_acc);
+	hrtimer_try_to_cancel(&acc->hr_timer_acc);
 	kthread_stop(acc->acc_task);
 //err_freedata:
 	kfree(acc);
@@ -2620,7 +2637,7 @@ static int __devexit lsm330_acc_remove(struct i2c_client *client)
 		destroy_workqueue(acc->irq2_work_queue);
 	}
 
-	hrtimer_cancel(&acc->hr_timer_acc);
+	hrtimer_try_to_cancel(&acc->hr_timer_acc);
 	kthread_stop(acc->acc_task);
 	lsm330_acc_device_power_off(acc);
 	lsm330_acc_input_cleanup(acc);
