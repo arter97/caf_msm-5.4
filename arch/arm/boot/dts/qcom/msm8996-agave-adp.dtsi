@@ -645,8 +645,12 @@
 	qcom,msm-dai-mi2s {
 		dai_mi2s_quat: qcom,msm-dai-q6-mi2s-quat {
 			pinctrl-names = "default", "sleep";
-			pinctrl-0 = <&quat_mi2s_active &quat_mi2s_sd0_active>;
-			pinctrl-1 = <&quat_mi2s_sleep &quat_mi2s_sd0_sleep>;
+			pinctrl-0 = <&quat_mi2s_active &quat_mi2s_sd0_active
+				&sec_mi2s_active &sec_mi2s_sd0_active
+				&sec_mi2s_sd1_active>;
+			pinctrl-1 = <&quat_mi2s_sleep &quat_mi2s_sd0_sleep
+				&sec_mi2s_sleep &sec_mi2s_sd0_sleep
+				&sec_mi2s_sd1_sleep>;
 		};
 	};
 
