@@ -2543,6 +2543,9 @@ int l2cap_resegment_queue(struct sock *sk, struct sk_buff_head *queue)
 		iv.iov_len = 0;
 
 		skb = skb_peek(&old_frames);
+		if (skb == NULL)
+			break;
+
 		original_sar = bt_cb(skb)->control.sar;
 
 		__skb_unlink(skb, &old_frames);
@@ -2571,7 +2574,7 @@ int l2cap_resegment_queue(struct sock *sk, struct sk_buff_head *queue)
 			/* Check next frame */
 			skb = skb_peek(&old_frames);
 
-			if (is_initial_frame(bt_cb(skb)->control.sar))
+			if (!skb || is_initial_frame(bt_cb(skb)->control.sar))
 				break;
 
 			__skb_unlink(skb, &old_frames);
@@ -8046,7 +8049,7 @@ int __init l2cap_init(void)
 	_l2cap_wq = create_singlethread_workqueue("l2cap");
 	if (!_l2cap_wq) {
 		err = -ENOMEM;
-		goto error;
+		goto error0;
 	}
 
 	err = hci_register_proto(&l2cap_hci_proto);
@@ -8072,6 +8075,7 @@ int __init l2cap_init(void)
 
 error:
 	destroy_workqueue(_l2cap_wq);
+error0:
 	l2cap_cleanup_sockets();
 	return err;
 }
