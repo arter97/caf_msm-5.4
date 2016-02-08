@@ -989,6 +989,7 @@ static struct msm_otg_platform_data msm_otg_usb1_pdata = {
 	.bus_scale_table	= &usb_bus_scale_pdata,
 	.phy_init_seq		= usb1_phy_init_seq,
 	.mpm_otgsessvld_int	= MSM_MPM_PIN_USB1_OTGSESSVLD,
+	.ignore_wakeup_source	= true,
 	.mpm_xo_wakeup_int	= MSM_MPM_XO_WAKEUP_INT,
 };
 
