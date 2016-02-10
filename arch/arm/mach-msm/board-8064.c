@@ -668,9 +668,12 @@ static void __init reserve_ion_memory(void)
 						0xa0000000);
 					WARN_ON(ret);
 				}
-				pdata->secure_base = fixed_middle_start
-								- HOLE_SIZE;
-				pdata->secure_size = HOLE_SIZE + heap->size;
+				if (pdata) {
+					pdata->secure_base = fixed_middle_start
+					    - HOLE_SIZE;
+					pdata->secure_size =
+					    HOLE_SIZE + heap->size;
+				}
 				break;
 			case FIXED_HIGH:
 				heap->base = fixed_high_start;
@@ -4403,6 +4406,9 @@ int init_marker_sys_fs(void)
 				new_boot_marker = kmalloc(
 						sizeof(*new_boot_marker),
 						GFP_KERNEL);
+				if (new_boot_marker == NULL)
+					return -ENOMEM;
+
 				strlcpy(new_boot_marker->marker_name,
 					"Splash Screen",
 				sizeof(new_boot_marker->marker_name));
@@ -4415,6 +4421,9 @@ int init_marker_sys_fs(void)
 			}
 			new_boot_marker = kmalloc(sizeof(*new_boot_marker),
 								GFP_KERNEL);
+			if (new_boot_marker == NULL)
+				return -ENOMEM;
+
 			strlcpy(new_boot_marker->marker_name,
 					"Linux_Kernel-Start",
 					BOOT_MARKER_MAX_LEN);
@@ -4441,11 +4450,14 @@ void place_marker(char *name)
 			* 1000) / TIMER_KHZ);
 
 	new_boot_marker = kmalloc(sizeof(*new_boot_marker), GFP_KERNEL);
-	strlcpy(new_boot_marker->marker_name, name,
-		sizeof(new_boot_marker->marker_name));
-	new_boot_marker->timer_value = timer_value;
-	INIT_LIST_HEAD(&new_boot_marker->list);
-	list_add_tail(&(new_boot_marker->list), &(boot_marker_list.list));
+	if (new_boot_marker) {
+		strlcpy(new_boot_marker->marker_name, name,
+			sizeof(new_boot_marker->marker_name));
+		new_boot_marker->timer_value = timer_value;
+		INIT_LIST_HEAD(&new_boot_marker->list);
+		list_add_tail(&(new_boot_marker->list),
+			      &(boot_marker_list.list));
+	}
 }
 #else
 void place_marker(char *name)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -505,6 +505,7 @@ int diag_process_dci_transaction(unsigned char *buf, int len)
 
 	if (!temp) {
 		pr_err("diag: Invalid buffer in %s\n", __func__);
+		goto end;
 	}
 
 	/* This is Pkt request/response transaction */
@@ -735,6 +736,7 @@ int diag_process_dci_transaction(unsigned char *buf, int len)
 	} else {
 		pr_alert("diag: Incorrect DCI transaction\n");
 	}
+end:
 	return ret;
 }
 
