@@ -1,4 +1,5 @@
-/* Copyright (c) 2011-2013, 2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2013, 2015-2016, The Linux Foundation.
+ * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -290,7 +291,46 @@ static int msm_vb2_ops_start_streaming(struct vb2_queue *q, unsigned int count)
 
 static int msm_vb2_ops_stop_streaming(struct vb2_queue *q)
 {
-	return 0;
+	struct msm_cam_v4l2_dev_inst *pcam_inst = NULL;
+	unsigned long flags = 0;
+	struct msm_frame_buffer *buf, *tmp;
+	int rc = 0;
+
+	D("%s\n", __func__);
+	if (NULL == q) {
+		pr_err("%s error : input is NULL\n", __func__);
+		return -EINVAL;
+	}
+	pcam_inst = vb2_get_drv_priv(q);
+
+	if (NULL == pcam_inst) {
+		pr_err("%s error : pcam_inst is NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	D("%s pcam_inst=%p\n", __func__, pcam_inst);
+	spin_lock_irqsave(&pcam_inst->vq_irqlock, flags);
+
+	list_for_each_entry_safe(buf, tmp,
+			&pcam_inst->free_vq, list) {
+
+		if (buf == NULL) {
+			D("%s Inst %p NULL buffer ptr",
+				__func__, pcam_inst);
+			break;
+		}
+
+		D("%s buf state %d idx %d\n", __func__,
+			buf->state, buf->vidbuf.v4l2_buf.index);
+		list_del_init(&buf->list);
+		buf->state = MSM_BUFFER_STATE_UNUSED;
+	}
+
+	/*Empty free q */
+	INIT_LIST_HEAD(&pcam_inst->free_vq);
+
+	spin_unlock_irqrestore(&pcam_inst->vq_irqlock, flags);
+	return rc;
 }
 
 static void msm_vb2_ops_buf_queue(struct vb2_buffer *vb)
