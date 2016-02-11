@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -878,6 +878,8 @@ void *msm_ba_open(const struct msm_ba_ext_ops *ext_ops)
 		inst->sd = list_first_entry(&(inst->dev_ctxt->v4l2_dev.subdevs),
 			struct v4l2_subdev, list);
 
+	msm_ba_setup_event_queue(inst, dev_ctxt->vdev);
+
 	mutex_lock(&dev_ctxt->dev_cs);
 	list_add_tail(&inst->list, &dev_ctxt->instances);
 	mutex_unlock(&dev_ctxt->dev_cs);
@@ -892,8 +894,6 @@ void *msm_ba_open(const struct msm_ba_ext_ops *ext_ops)
 		msm_ba_debugfs_init_inst(inst, dev_ctxt->debugfs_root);
 
 	inst->ext_ops = ext_ops;
-
-	msm_ba_setup_event_queue(inst, dev_ctxt->vdev);
 
 	return inst;
 }
