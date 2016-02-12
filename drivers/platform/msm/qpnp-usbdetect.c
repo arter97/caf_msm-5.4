@@ -50,7 +50,7 @@ static int qpnp_usbdetect_probe(struct platform_device *pdev)
 {
 	struct qpnp_usbdetect *usb;
 	struct power_supply *usb_psy;
-	int rc, vbus;
+	int rc;
 	unsigned long flags;
 
 	usb_psy = power_supply_get_by_name("usb");
@@ -108,10 +108,8 @@ static int qpnp_usbdetect_probe(struct platform_device *pdev)
 
 	/* Read and report initial VBUS state */
 	local_irq_save(flags);
-	vbus = !!irq_read_line(usb->vbus_det_irq);
+	qpnp_usbdetect_vbus_irq(usb->vbus_det_irq, usb);
 	local_irq_restore(flags);
-
-	power_supply_set_present(usb->usb_psy, vbus);
 
 	return 0;
 }
