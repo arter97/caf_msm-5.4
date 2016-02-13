@@ -643,7 +643,10 @@ int msm_ba_save_restore_input(void *instance, enum msm_ba_save_restore_ip sr)
 		rc = msm_ba_streamon(inst, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
 	} else if (BA_SR_SAVE_IP == sr) {
 		ba_input = msm_ba_find_input(inst->sd_input.index);
-		if (ba_input->ba_out_in_use) {
+		if (ba_input == NULL) {
+			dprintk(BA_ERR, "Could not find input %d",
+				inst->sd_input.index);
+		} else if (ba_input->ba_out_in_use) {
 			inst->restore = 1;
 			inst->saved_input =
 				msm_ba_find_ip_in_use_from_sd(inst->sd);

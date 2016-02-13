@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012,2014-2015 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012,2014-2016 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -258,6 +258,12 @@ int msm_ispif_config(struct ispif_device *ispif,
 	uint8_t intftype;
 	uint8_t vfe_intf;
 
+	if (!ispif || !params_list ||
+		(params_list->len > ARRAY_SIZE(params_list->params))) {
+		pr_err("%s: null param or out of range length", __func__);
+		return -EINVAL;
+	}
+
 	if (ispif->ispif_state != ISPIF_POWER_UP) {
 		pr_err("%s: ispif not initialized %d\n", __func__,
 				ispif->ispif_state);
@@ -267,12 +273,6 @@ int msm_ispif_config(struct ispif_device *ispif,
 	params_len = params_list->len;
 	ispif_params = params_list->params;
 	CDBG("Enable interface\n");
-
-	if (!ispif || !params_list ||
-		(params_len > ARRAY_SIZE(params_list->params))) {
-		pr_err("%s: null param or out of range length", __func__);
-		return -EINVAL;
-	}
 
 	msm_camera_io_w(0x00000000, ispif->base + ISPIF_IRQ_MASK_ADDR);
 	msm_camera_io_w(0x00000000, ispif->base + ISPIF_IRQ_MASK_1_ADDR);
