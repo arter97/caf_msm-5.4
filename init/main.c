@@ -64,6 +64,7 @@
 #include <linux/idr.h>
 #include <linux/kgdb.h>
 #include <linux/ftrace.h>
+
 #include <linux/async.h>
 #include <linux/kmemcheck.h>
 #include <linux/sfi.h>
@@ -109,7 +110,11 @@ bool early_boot_irqs_disabled __read_mostly;
 
 enum system_states system_state __read_mostly;
 EXPORT_SYMBOL(system_state);
-
+#ifdef CONFIG_BOOT_TIME_MARKER
+#define MAX_SS_LK_MARKER_SIZE 16
+char lk_splash_val[MAX_SS_LK_MARKER_SIZE];
+unsigned long kernel_start_marker;
+#endif
 /*
  * Boot command-line arguments
  */
@@ -560,6 +565,9 @@ asmlinkage __visible void __init start_kernel(void)
 	sort_main_extable();
 	trap_init();
 	mm_init();
+#ifdef CONFIG_BOOT_TIME_MARKER
+	kernel_start_marker = msm_timer_get_sclk_ticks();
+#endif
 
 	/*
 	 * Set up the scheduler prior starting any interrupts (such as the
@@ -668,6 +676,9 @@ asmlinkage __visible void __init start_kernel(void)
 	check_bugs();
 
 	sfi_init_late();
+#ifdef CONFIG_BOOT_TIME_MARKER
+	init_marker_sys_fs();
+ #endif
 
 	if (efi_enabled(EFI_RUNTIME_SERVICES)) {
 		efi_late_init();
@@ -940,7 +951,9 @@ static int __ref kernel_init(void *unused)
 	numa_default_policy();
 
 	flush_delayed_fput();
-
+#ifdef CONFIG_BOOT_TIME_MARKER
+	place_marker("Linux_Kernel - End");
+#endif
 	if (ramdisk_execute_command) {
 		ret = run_init_process(ramdisk_execute_command);
 		if (!ret)
