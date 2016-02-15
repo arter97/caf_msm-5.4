@@ -1,4 +1,4 @@
-/* Copyright (c) 2011, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011,2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -20,6 +20,13 @@
 #define SCM_IO_READ	0x1
 #define SCM_IO_WRITE	0x2
 
+#define MSM_EBI1_CH0_ERP_BASE IOMEM(0x00A40000)
+#define MSM_EBI1_CH0_ERP_PHYS 0x00A40000
+#define MSM_EBI1_CH0_ERP_SIZE SZ_4K
+#define MSM_EBI1_CH1_ERP_BASE IOMEM(0x00D40000)
+#define MSM_EBI1_CH1_ERP_PHYS 0x00D40000
+#define MSM_EBI1_CH1_ERP_SIZE SZ_4K
+
 #define BETWEEN(p, st, sz) ((p) >= (void __iomem *)(st) && \
 				(p) < ((void __iomem *)(st) + (sz)))
 #define XLATE(p, pst, vst) ((u32)((p) - (vst)) + (pst))
@@ -34,11 +41,12 @@ static u32 __secure_readl(u32 addr)
 
 u32 secure_readl(void __iomem *c)
 {
-	if (BETWEEN(c, MSM_MMSS_CLK_CTL_BASE, MSM_MMSS_CLK_CTL_SIZE))
-		return __secure_readl(XLATE(c, MSM_MMSS_CLK_CTL_PHYS,
-					MSM_MMSS_CLK_CTL_BASE));
-	else if (BETWEEN(c, MSM_TCSR_BASE, MSM_TCSR_SIZE))
-		return __secure_readl(XLATE(c, MSM_TCSR_PHYS, MSM_TCSR_BASE));
+	if (BETWEEN(c, MSM_EBI1_CH0_ERP_BASE, MSM_EBI1_CH0_ERP_SIZE))
+		__secure_readl(XLATE(c, MSM_EBI1_CH0_ERP_PHYS,
+					 MSM_EBI1_CH0_ERP_BASE));
+	else if (BETWEEN(c, MSM_EBI1_CH1_ERP_BASE, MSM_EBI1_CH1_ERP_SIZE))
+		__secure_readl(XLATE(c, MSM_EBI1_CH1_ERP_PHYS,
+					 MSM_EBI1_CH1_ERP_BASE));
 	return readl(c);
 }
 EXPORT_SYMBOL(secure_readl);
@@ -51,11 +59,12 @@ static void __secure_writel(u32 v, u32 addr)
 
 void secure_writel(u32 v, void __iomem *c)
 {
-	if (BETWEEN(c, MSM_MMSS_CLK_CTL_BASE, MSM_MMSS_CLK_CTL_SIZE))
-		__secure_writel(v, XLATE(c, MSM_MMSS_CLK_CTL_PHYS,
-					MSM_MMSS_CLK_CTL_BASE));
-	else if (BETWEEN(c, MSM_TCSR_BASE, MSM_TCSR_SIZE))
-		__secure_writel(v, XLATE(c, MSM_TCSR_PHYS, MSM_TCSR_BASE));
+	if (BETWEEN(c, MSM_EBI1_CH0_ERP_BASE, MSM_EBI1_CH0_ERP_SIZE))
+		__secure_writel(v, XLATE(c, MSM_EBI1_CH0_ERP_PHYS,
+					 MSM_EBI1_CH0_ERP_BASE));
+	else if (BETWEEN(c, MSM_EBI1_CH1_ERP_BASE, MSM_EBI1_CH1_ERP_SIZE))
+		__secure_writel(v, XLATE(c, MSM_EBI1_CH1_ERP_PHYS,
+					 MSM_EBI1_CH1_ERP_BASE));
 	else
 		writel(v, c);
 }
