@@ -1277,7 +1277,7 @@ static void adv7180_irq_delay_work(struct work_struct *work)
 		__adv7180_status(state, NULL, &state->curr_norm);
 		ptr[0] = adv7180_inp_to_ba(state->input);
 		ptr[1] = state->curr_norm;
-		event.type = V4L2_EVENT_MSM_BA_SOURCE_CHANGE;
+		event.type = V4L2_EVENT_MSM_BA_PORT_SETTINGS_CHANGED;
 		v4l2_subdev_notify(&state->sd,
 			event.type, &event);
 	}
