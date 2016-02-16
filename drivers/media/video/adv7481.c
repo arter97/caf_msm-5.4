@@ -240,7 +240,6 @@ static int adv7481_set_irq(struct adv7481_state *state)
 	int ret = 0;
 
 	ret = adv7481_wr_byte(state->client, IO_REG_PAD_CTRL_1_ADDR,
-			ADV_REG_SETFIELD(1, IO_PDN_INT2) |
 			ADV_REG_SETFIELD(1, IO_PDN_INT3) |
 			ADV_REG_SETFIELD(1, IO_INV_LLC) |
 			ADV_REG_SETFIELD(AD_MID_DRIVE_STRNGTH,
@@ -249,8 +248,6 @@ static int adv7481_set_irq(struct adv7481_state *state)
 			ADV_REG_SETFIELD(AD_ACTIVE_UNTIL_CLR,
 				IO_INTRQ_DUR_SEL) |
 			ADV_REG_SETFIELD(AD_OP_DRIVE_LOW, IO_INTRQ_OP_SEL));
-	ret |= adv7481_wr_byte(state->client, IO_REG_INT2_CONF_ADDR,
-			ADV_REG_SETFIELD(1, IO_CP_LOCK_UNLOCK_EDGE_SEL));
 	ret |= adv7481_wr_byte(state->client, IO_REG_DATAPATH_INT_MASKB_ADDR,
 			ADV_REG_SETFIELD(1, IO_CP_LOCK_CP_MB1) |
 			ADV_REG_SETFIELD(1, IO_CP_UNLOCK_CP_MB1) |
@@ -262,6 +259,10 @@ static int adv7481_set_irq(struct adv7481_state *state)
 			ADV_REG_SETFIELD(1, IO_V_LOCKED_MB1) |
 			ADV_REG_SETFIELD(1, IO_DE_REGEN_LCK_MB1));
 
+	ret |= adv7481_wr_byte(state->client, IO_HDMI_EDG_INT2_MASKB_1_ADDR,
+			ADV_REG_SETFIELD(1, IO_NEW_AVI_INFO_MB2));
+	ret |= adv7481_wr_byte(state->client, IO_HDMI_LVL_INT_MASKB_1_ADDR,
+			ADV_REG_SETFIELD(1, IO_AVI_INFO_MB1));
 	if (ret)
 		pr_err("%s: Failed %d to setup interrupt regs\n",
 				__func__, ret);
@@ -344,7 +345,7 @@ static void adv7481_irq_delay_work(struct work_struct *work)
 				IO_REG_DATAPATH_RAW_STATUS_ADDR);
 
 		adv7481_wr_byte(state->client,
-			IO_REG_DATAPATH_INT_CLEAR_ADDR, int_status);
+			IO_REG_DATAPATH_INT_CLEAR_ADDR, 0xFF);
 
 		pr_debug("%s: dev: %d got datapath int status: 0x%x\n",
 			__func__, state->device_num, int_status);
@@ -393,7 +394,7 @@ static void adv7481_irq_delay_work(struct work_struct *work)
 		raw_status = adv7481_rd_byte(state->client,
 				IO_HDMI_LVL_RAW_STATUS_3_ADDR);
 		adv7481_wr_byte(state->client,
-				IO_HDMI_LVL_INT_CLEAR_3_ADDR, int_status);
+				IO_HDMI_LVL_INT_CLEAR_3_ADDR, 0xFF);
 
 		pr_debug("%s: dev: %d got hdmi lvl int status 3: 0x%x\n",
 				__func__, state->device_num, int_status);
@@ -414,7 +415,12 @@ static void adv7481_irq_delay_work(struct work_struct *work)
 		/* Assumption is that vertical sync int
 		 * is the last one to come */
 		if (ADV_REG_GETFIELD(int_status, IO_V_LOCKED_ST)) {
-			if (adv7481_is_timing_locked(state)) {
+			if (ADV_REG_GETFIELD(raw_status,
+				IO_TMDSPLL_LCK_A_RAW) &&
+				ADV_REG_GETFIELD(raw_status,
+				IO_V_LOCKED_RAW) &&
+				ADV_REG_GETFIELD(raw_status,
+				IO_DE_REGEN_LCK_RAW)) {
 				pr_debug("%s: port settings changed\n",
 					__func__);
 				event.type =
@@ -424,6 +430,12 @@ static void adv7481_irq_delay_work(struct work_struct *work)
 			}
 		}
 	}
+	/* Clear all other interrupts */
+	adv7481_wr_byte(state->client, IO_HDMI_LVL_INT_CLEAR_1_ADDR, 0xFF);
+	adv7481_wr_byte(state->client, IO_HDMI_EDG_INT_CLEAR_1_ADDR, 0xFF);
+	adv7481_wr_byte(state->client, IO_HDMI_EDG_INT_CLEAR_2_ADDR, 0xFF);
+	adv7481_wr_byte(state->client, IO_HDMI_EDG_INT_CLEAR_3_ADDR, 0xFF);
+
 	mutex_unlock(&state->mutex);
 }
 

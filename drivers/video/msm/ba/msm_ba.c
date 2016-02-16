@@ -253,7 +253,7 @@ int msm_ba_s_input(void *instance, unsigned int index)
 		ba_input->sd, video, g_input_status, &ba_input->signal_status);
 	dprintk(BA_DBG, "Set input %s : %d - signal status: %d",
 		ba_input->name, index, ba_input->signal_status);
-	if (!rc_sig && !ba_input->signal_status) {
+	if (!rc_sig) {
 		struct v4l2_event sd_event = {
 			.id = 0,
 			.type = V4L2_EVENT_MSM_BA_SIGNAL_IN_LOCK};
