@@ -2395,8 +2395,10 @@ struct v4l2_streamparm {
 		(V4L2_EVENT_MSM_BA_START + 8)
 #define V4L2_EVENT_MSM_BA_CP	\
 		(V4L2_EVENT_MSM_BA_START + 9)
-#define V4L2_EVENT_MSM_BA_ERROR	\
+#define V4L2_EVENT_MSM_BA_CABLE_DETECT	\
 		(V4L2_EVENT_MSM_BA_START + 10)
+#define V4L2_EVENT_MSM_BA_ERROR	\
+		(V4L2_EVENT_MSM_BA_START + 11)
 
 /* Payload for V4L2_EVENT_VSYNC */
 struct v4l2_event_vsync {
