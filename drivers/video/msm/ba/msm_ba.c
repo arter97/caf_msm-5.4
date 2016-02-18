@@ -225,6 +225,10 @@ int msm_ba_s_input(void *instance, unsigned int index)
 					ba_input->bridge_chip_ip);
 				rc_sig = v4l2_subdev_call(ba_input->sd,
 							video, s_stream, 0);
+				if (rc_sig)
+					dprintk(BA_ERR,
+					"%s: Error in stream off. rc_sig %d",
+					__func__, rc_sig);
 			}
 		} else {
 			dprintk(BA_WARN, "Sd %d in use", ba_input->ba_out);
@@ -249,7 +253,7 @@ int msm_ba_s_input(void *instance, unsigned int index)
 		ba_input->sd, video, g_input_status, &ba_input->signal_status);
 	dprintk(BA_DBG, "Set input %s : %d - signal status: %d",
 		ba_input->name, index, ba_input->signal_status);
-	if (!rc_sig && !ba_input->signal_status) {
+	if (!rc_sig) {
 		struct v4l2_event sd_event = {
 			.id = 0,
 			.type = V4L2_EVENT_MSM_BA_SIGNAL_IN_LOCK};
@@ -381,9 +385,11 @@ int msm_ba_g_fmt(void *instance, struct v4l2_format *f)
 		}
 	} else {
 		rc = v4l2_subdev_call(sd, video, g_dv_timings, &sd_dv_timings);
-		if (rc)
+		if (rc) {
 			dprintk(BA_ERR, "g_dv_timings failed %d for sd: %s",
 				rc, sd->name);
+			return -EINVAL;
+		}
 	}
 
 	rc = v4l2_subdev_call(sd, video, g_mbus_fmt, &sd_mbus_fmt);
@@ -518,7 +524,7 @@ long msm_ba_private_ioctl(void *instance, int cmd, void *arg)
 
 	switch (cmd) {
 	case VIDIOC_HDMI_RX_CEC_S_LOGICAL: {
-		dprintk(BA_DBG, "VIDIOC_HDMI_RX_CEC_CLEAR_LOGICAL");
+		dprintk(BA_DBG, "VIDIOC_HDMI_RX_CEC_S_LOGICAL");
 		sd = inst->sd;
 		if (!sd) {
 			dprintk(BA_ERR, "No sd registered");
@@ -527,8 +533,8 @@ long msm_ba_private_ioctl(void *instance, int cmd, void *arg)
 		if (s_ioctl) {
 			rc = v4l2_subdev_call(sd, core, ioctl, cmd, s_ioctl);
 			if (rc)
-				dprintk(BA_ERR, "%s failed on cmd: %d",
-					__func__, cmd);
+				dprintk(BA_ERR, "%s failed: %ld on cmd: 0x%x",
+					__func__, rc, cmd);
 		} else {
 			dprintk(BA_ERR, "%s: NULL argument provided", __func__);
 			rc = -EINVAL;
@@ -544,8 +550,8 @@ long msm_ba_private_ioctl(void *instance, int cmd, void *arg)
 		}
 		rc = v4l2_subdev_call(sd, core, ioctl, cmd, s_ioctl);
 		if (rc)
-			dprintk(BA_ERR, "%s failed on cmd: %d",
-				__func__, cmd);
+			dprintk(BA_ERR, "%s failed: %ld on cmd: 0x%x",
+				__func__, rc, cmd);
 	}
 		break;
 	case VIDIOC_HDMI_RX_CEC_G_PHYSICAL: {
@@ -558,8 +564,8 @@ long msm_ba_private_ioctl(void *instance, int cmd, void *arg)
 		if (s_ioctl) {
 			rc = v4l2_subdev_call(sd, core, ioctl, cmd, s_ioctl);
 			if (rc)
-				dprintk(BA_ERR, "%s failed on cmd: %d",
-					__func__, cmd);
+				dprintk(BA_ERR, "%s failed: %ld on cmd: 0x%x",
+					__func__, rc, cmd);
 		} else {
 			dprintk(BA_ERR, "%s: NULL argument provided", __func__);
 			rc = -EINVAL;
@@ -576,8 +582,8 @@ long msm_ba_private_ioctl(void *instance, int cmd, void *arg)
 		if (s_ioctl) {
 			rc = v4l2_subdev_call(sd, core, ioctl, cmd, s_ioctl);
 			if (rc)
-				dprintk(BA_ERR, "%s failed on cmd: %d",
-					__func__, cmd);
+				dprintk(BA_ERR, "%s failed: %ld on cmd: 0x%x",
+					__func__, rc, cmd);
 		} else {
 			dprintk(BA_ERR, "%s: NULL argument provided", __func__);
 			rc = -EINVAL;
@@ -594,8 +600,8 @@ long msm_ba_private_ioctl(void *instance, int cmd, void *arg)
 		if (s_ioctl) {
 			rc = v4l2_subdev_call(sd, core, ioctl, cmd, s_ioctl);
 			if (rc)
-				dprintk(BA_ERR, "%s failed on cmd: %d",
-					__func__, cmd);
+				dprintk(BA_ERR, "%s failed: %ld on cmd: 0x%x",
+					__func__, rc, cmd);
 		} else {
 			dprintk(BA_ERR, "%s: NULL argument provided", __func__);
 			rc = -EINVAL;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -91,6 +91,10 @@ void msm_ba_queue_v4l2_event(struct msm_ba_inst *inst,
 static void msm_ba_print_event(struct v4l2_event *sd_event)
 {
 	switch (sd_event->type) {
+	case V4L2_EVENT_MSM_BA_PORT_SETTINGS_CHANGED:
+		dprintk(BA_DBG, "Port settings changed for ip_idx %d",
+			((int *)sd_event->u.data)[0]);
+		break;
 	case V4L2_EVENT_MSM_BA_SIGNAL_IN_LOCK:
 		dprintk(BA_DBG, "Signal in lock for ip_idx %d",
 			((int *)sd_event->u.data)[0]);
@@ -111,6 +115,11 @@ static void msm_ba_print_event(struct v4l2_event *sd_event)
 		break;
 	case V4L2_EVENT_MSM_BA_CP:
 		dprintk(BA_DBG, "Content protection detected!");
+		break;
+	case V4L2_EVENT_MSM_BA_CABLE_DETECT:
+		dprintk(BA_DBG, "Cable detected: %d on ip_idx %d",
+			((int *)sd_event->u.data)[1],
+			((int *)sd_event->u.data)[0]);
 		break;
 	case V4L2_EVENT_MSM_BA_ERROR:
 		dprintk(BA_DBG, "Subdev error %d!",
