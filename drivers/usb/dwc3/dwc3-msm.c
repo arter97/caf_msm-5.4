@@ -1595,6 +1595,8 @@ static void dwc3_ext_event_notify(struct dwc3_msm *mdwc)
 
 	if (!mdwc->init) {
 		mdwc->init = true;
+		pm_runtime_set_autosuspend_delay(mdwc->dev, 1000);
+		pm_runtime_use_autosuspend(mdwc->dev);
 		if (!work_busy(&mdwc->sm_work.work))
 			schedule_delayed_work(&mdwc->sm_work, 0);
 
@@ -2570,16 +2572,16 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 	if (on) {
 		dev_dbg(mdwc->dev, "%s: turn on host\n", __func__);
 
-		pm_runtime_get_sync(dwc->dev);
+		pm_runtime_get_sync(mdwc->dev);
 		dbg_event(0xFF, "StrtHost gync",
-			atomic_read(&dwc->dev->power.usage_count));
+			atomic_read(&mdwc->dev->power.usage_count));
 		usb_phy_notify_connect(mdwc->hs_phy, USB_SPEED_HIGH);
 		ret = regulator_enable(mdwc->vbus_reg);
 		if (ret) {
 			dev_err(dwc->dev, "unable to enable vbus_reg\n");
-			pm_runtime_put_sync(dwc->dev);
+			pm_runtime_put_sync(mdwc->dev);
 			dbg_event(0xFF, "vregerr psync",
-				atomic_read(&dwc->dev->power.usage_count));
+				atomic_read(&mdwc->dev->power.usage_count));
 			return ret;
 		}
 
@@ -2599,9 +2601,9 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 				"%s: failed to add XHCI pdev ret=%d\n",
 				__func__, ret);
 			regulator_disable(mdwc->vbus_reg);
-			pm_runtime_put_sync(dwc->dev);
+			pm_runtime_put_sync(mdwc->dev);
 			dbg_event(0xFF, "pdeverr psync",
-				atomic_read(&dwc->dev->power.usage_count));
+				atomic_read(&mdwc->dev->power.usage_count));
 			return ret;
 		}
 
@@ -2618,21 +2620,22 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 		mdwc->in_host_mode = true;
 
 		/* xHCI should have incremented child count as necessary */
-		pm_runtime_put_sync(dwc->dev);
+		pm_runtime_mark_last_busy(mdwc->dev);
+		pm_runtime_put_sync_autosuspend(mdwc->dev);
 		dbg_event(0xFF, "StrtHost psync",
-			atomic_read(&dwc->dev->power.usage_count));
+			atomic_read(&mdwc->dev->power.usage_count));
 	} else {
 		dev_dbg(dwc->dev, "%s: turn off host\n", __func__);
 
 		ret = regulator_disable(mdwc->vbus_reg);
 		if (ret) {
-			dev_err(dwc->dev, "unable to disable vbus_reg\n");
+			dev_err(mdwc->dev, "unable to disable vbus_reg\n");
 			return ret;
 		}
 
-		pm_runtime_get_sync(dwc->dev);
+		pm_runtime_get_sync(mdwc->dev);
 		dbg_event(0xFF, "StopHost gsync",
-			atomic_read(&dwc->dev->power.usage_count));
+			atomic_read(&mdwc->dev->power.usage_count));
 		usb_phy_notify_disconnect(mdwc->hs_phy, USB_SPEED_HIGH);
 		platform_device_del(dwc->xhci);
 
@@ -2650,7 +2653,8 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 
 		/* re-init core and OTG registers as block reset clears these */
 		dwc3_post_host_reset_core_init(dwc);
-		pm_runtime_put_sync(dwc->dev);
+		pm_runtime_mark_last_busy(mdwc->dev);
+		pm_runtime_put_sync_autosuspend(mdwc->dev);
 		dbg_event(0xFF, "StopHost psync",
 			atomic_read(&dwc->dev->power.usage_count));
 	}
@@ -2670,9 +2674,9 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 {
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 
-	pm_runtime_get_sync(dwc->dev);
+	pm_runtime_get_sync(mdwc->dev);
 	dbg_event(0xFF, "StrtGdgt gsync",
-		atomic_read(&dwc->dev->power.usage_count));
+		atomic_read(&mdwc->dev->power.usage_count));
 
 	if (on) {
 		dev_dbg(mdwc->dev, "%s: turn on gadget %s\n",
@@ -2696,9 +2700,9 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 		dwc3_gadget_usb3_phy_suspend(dwc, false);
 	}
 
-	pm_runtime_put_sync(dwc->dev);
+	pm_runtime_put_sync(mdwc->dev);
 	dbg_event(0xFF, "StopGdgt psync",
-		atomic_read(&dwc->dev->power.usage_count));
+		atomic_read(&mdwc->dev->power.usage_count));
 
 	return 0;
 }
@@ -3067,15 +3071,6 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 				dev_err(mdwc->dev, "unable to start host\n");
 				mdwc->otg_state = OTG_STATE_A_IDLE;
 				goto ret;
-			} else {
-				/*
-				 * delay 1s to allow for xHCI to detect
-				 * just-attached devices before allowing
-				 * runtime suspend
-				 */
-				dev_dbg(mdwc->dev, "a_host state entered\n");
-				delay = VBUS_REG_CHECK_DELAY;
-				work = 1;
 			}
 		}
 		break;
