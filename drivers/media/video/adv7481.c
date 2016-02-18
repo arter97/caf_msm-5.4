@@ -45,6 +45,11 @@
 #define LOCK_MAX_SLEEP		6000
 #define LOCK_NUM_TRIES		20
 
+#define MAX_DEFAULT_WIDTH       1280
+#define MAX_DEFAULT_HEIGHT      720
+#define MAX_DEFAULT_FRAME_RATE  60
+#define MAX_DEFAULT_PIX_CLK_HZ  74240000
+
 #define ONE_MHZ_TO_HZ		1000000
 
 struct adv7481_state {
@@ -1270,7 +1275,8 @@ static int adv7481_get_hdmi_timings(struct adv7481_state *state,
 	} else {
 		pr_err("%s(%d): PLL not locked return EBUSY\n",
 				__func__, __LINE__);
-		return -EBUSY;
+		ret = -EBUSY;
+		goto set_default;
 	}
 
 	/* Check Timing Lock */
@@ -1383,6 +1389,18 @@ static int adv7481_get_hdmi_timings(struct adv7481_state *state,
 						vid_params->tot_pix);
 		vid_params->fr_rate = DIV_ROUND_CLOSEST(vid_params->fr_rate,
 						(hdmi_params->pix_rep + 1));
+	}
+
+set_default:
+	if (ret) {
+		pr_debug("%s(%d), error %d resort to default fmt\n",
+			__func__, __LINE__, ret);
+		vid_params->act_pix = MAX_DEFAULT_WIDTH;
+		vid_params->act_lines = MAX_DEFAULT_HEIGHT;
+		vid_params->fr_rate = MAX_DEFAULT_FRAME_RATE;
+		vid_params->pix_clk = MAX_DEFAULT_PIX_CLK_HZ;
+		vid_params->intrlcd = 0;
+		ret = 0;
 	}
 
 	pr_debug("%s(%d), adv7481 TMDS Resolution: %d x %d @ %d fps\n",
