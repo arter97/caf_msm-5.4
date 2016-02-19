@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012, 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -21,6 +21,8 @@
 #include <linux/platform_device.h>
 #include <linux/clk.h>
 #include <linux/smp.h>
+#include <linux/miscdevice.h>
+#include <linux/ioctl.h>
 
 #include <mach/msm_iomap.h>
 #include <mach/msm_xo.h>
@@ -30,6 +32,7 @@
 
 #include "peripheral-loader.h"
 #include "scm-pas.h"
+#include "sysmon.h"
 
 #define GSS_CSR_AHB_CLK_SEL	0x0
 #define GSS_CSR_RESET		0x4
@@ -56,6 +59,9 @@
 #define XO_CLK_BRANCH_ENA	BIT(0)
 #define SLP_CLK_BRANCH_ENA	BIT(4)
 #define A5_RESET		BIT(0)
+
+#define GPS_IOCTL_MAGIC 0xDD
+#define SHUTDOWN_GPS         _IOW(GPS_IOCTL_MAGIC, 1, int)
 
 struct gss_data {
 	void __iomem *base;
@@ -308,6 +314,33 @@ static struct pil_reset_ops pil_gss_ops_trusted = {
 	.proxy_unvote = remove_gss_proxy_votes,
 };
 
+static long gps_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+	int ret = 0;
+	switch (cmd) {
+
+	case SHUTDOWN_GPS:
+		sysmon_send_shutdown(SYSMON_SS_MODEM);
+		break;
+	default:
+		pr_err("%s: invalid ioctl cmd = %d\n", __func__, _IOC_NR(cmd));
+		ret = -EINVAL;
+		break;
+	}
+	return ret;
+}
+
+static const struct file_operations gps_fops = {
+	.owner = THIS_MODULE,
+	.unlocked_ioctl = gps_ioctl,
+};
+
+static struct miscdevice gps_dev = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "gps",
+	.fops = &gps_fops,
+};
+
 static int __devinit pil_gss_probe(struct platform_device *pdev)
 {
 	struct gss_data *drv;
@@ -363,6 +396,7 @@ static int __devinit pil_gss_probe(struct platform_device *pdev)
 	if (IS_ERR(drv->pil)) {
 		return PTR_ERR(drv->pil);
 	}
+	misc_register(&gps_dev);
 	return 0;
 }
 
@@ -391,6 +425,7 @@ module_init(pil_gss_init);
 static void __exit pil_gss_exit(void)
 {
 	platform_driver_unregister(&pil_gss_driver);
+	misc_deregister(&gps_dev);
 }
 module_exit(pil_gss_exit);
 
