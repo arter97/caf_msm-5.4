@@ -1764,6 +1764,13 @@ static int lsm330_gyr_probe(struct i2c_client *client,
 	if(lsm330_gyr_workqueue == 0)
 		lsm330_gyr_workqueue = create_workqueue("lsm330_gyr_workqueue");
 
+	if (lsm330_gyr_workqueue == NULL) {
+		err = -ENOMEM;
+		dev_err(&client->dev,
+			"failed to create lsm330_gyr_workqueue\n");
+		goto err0_1;
+	}
+
 	init_waitqueue_head(&stat->gyr_wq);
 	stat->gyr_wkp_flag = 0;
 
@@ -1944,11 +1951,12 @@ err1:
 	hrtimer_try_to_cancel(&stat->hr_timer);
 	kthread_stop(stat->gyr_task);
 	destroy_workqueue(lsm330_gyr_workqueue);
+err0_1:
 	kfree(stat);
 err0:
-		pr_err("%s: Driver Initialization failed\n",
-							LSM330_GYR_DEV_NAME);
-		return err;
+	pr_err("%s: Driver Initialization failed\n",
+				LSM330_GYR_DEV_NAME);
+	return err;
 }
 
 static int lsm330_gyr_remove(struct i2c_client *client)
@@ -1962,7 +1970,7 @@ static int lsm330_gyr_remove(struct i2c_client *client)
 	hrtimer_try_to_cancel(&stat->hr_timer);
 	kthread_stop(stat->gyr_task);
 
-	if(!lsm330_gyr_workqueue) {
+	if (lsm330_gyr_workqueue) {
 		flush_workqueue(lsm330_gyr_workqueue);
 		destroy_workqueue(lsm330_gyr_workqueue);
 	}
