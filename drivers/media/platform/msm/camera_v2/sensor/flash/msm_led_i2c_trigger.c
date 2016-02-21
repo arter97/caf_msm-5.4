@@ -882,7 +882,8 @@ int msm_flash_probe(struct platform_device *pdev,
 		fctrl->flash_i2c_client->i2c_func_tbl =
 			&msm_sensor_cci_func_tbl;
 
-	rc = msm_led_flash_create_v4lsubdev(pdev, fctrl);
+	rc = msm_led_flash_create_v4lsubdev(pdev, fctrl,
+					    MSM_CAMERA_SUBDEV_LED_FLASH);
 
 	/* Assign Global flash control sturcture for local usage */
 	g_fctrl = (void *)fctrl;
