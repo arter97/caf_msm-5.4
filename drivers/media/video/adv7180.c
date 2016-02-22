@@ -1848,7 +1848,7 @@ static int adv7180_probe(struct i2c_client *client,
 		ret |= gpio_direction_output(pdata->pwdnb_gpio, 1);
 		usleep(5000);
 		ret |= gpio_direction_output(pdata->rstb_gpio, 1);
-
+		usleep(5000);
 		if (ret) {
 			pr_err("%s : Failed gpio_direction %x", __func__, ret);
 			goto err_unregister_vpp_client;
