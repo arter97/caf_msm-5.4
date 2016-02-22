@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -4594,7 +4594,7 @@ static int hdmi_msm_hpd_on(void)
 	int rc = 0;
 
 	if (hdmi_msm_state->hpd_initialized) {
-		DEV_DBG("%s: HPD is already ON\n", __func__);
+		pr_debug("%s: HPD is already ON\n", __func__);
 	} else {
 		rc = hdmi_msm_state->pd->gpio_config(1);
 		if (rc) {
@@ -4624,6 +4624,14 @@ static int hdmi_msm_hpd_on(void)
 				phy_reset_done = 1;
 			}
 			hdmi_msm_set_mode(TRUE);
+		} else {
+			/*
+			 * If splash has been enabled in LK, then we don't need
+			 * to reset phy either.
+			 */
+			if (!phy_reset_done)
+				phy_reset_done = 1;
+			hdmi_msm_set_mode(TRUE);
 		}
 
 		/* HDMI_USEC_REFTIMER[0x0208] */
@@ -4631,13 +4639,8 @@ static int hdmi_msm_hpd_on(void)
 
 		/* Set up HPD state variables */
 		mutex_lock(&external_common_state_hpd_mutex);
-		if (hdmi_msm_state->is_splash_enabled)
-			external_common_state->hpd_state = 1;
-		else
-			external_common_state->hpd_state = 0;
+		external_common_state->hpd_state = 1;
 		mutex_unlock(&external_common_state_hpd_mutex);
-
-		enable_irq(hdmi_msm_state->irq);
 
 		hdmi_msm_state->hpd_initialized = TRUE;
 
@@ -4684,28 +4687,18 @@ int hdmi_msm_power_ctrl(boolean enable)
 
 	if (enable) {
 		/*
-		 * Enable HPD only if the UI option is on or if
-		 * HDMI is configured as the primary display
+		 * When disable HPD feature, always enable hpd when power_ctrl
+		 * is called.
 		 */
-		if (hdmi_prim_display ||
-			external_common_state->hpd_feature_on) {
-			DEV_DBG("%s: Turning HPD ciruitry on\n", __func__);
+		pr_debug("%s: Turning HPD ciruitry on\n", __func__);
 
-			if (external_common_state->pre_suspend_hpd_state) {
-				external_common_state->pre_suspend_hpd_state =
-					 false;
-
-				hdmi_msm_send_event(HPD_EVENT_OFFLINE);
-			}
-
-			rc = hdmi_msm_hpd_on();
-			if (rc) {
-				DEV_ERR("%s: HPD ON FAILED\n", __func__);
-				return rc;
-			}
+		rc = hdmi_msm_hpd_on();
+		if (rc) {
+			pr_err("%s: HPD ON FAILED\n", __func__);
+			return rc;
 		}
 	} else {
-		DEV_DBG("%s: Turning HPD ciruitry off\n", __func__);
+		pr_debug("%s: Turning HPD ciruitry off\n", __func__);
 
 		external_common_state->pre_suspend_hpd_state =
 			external_common_state->hpd_state;
@@ -4722,12 +4715,12 @@ static int hdmi_msm_power_on(struct platform_device *pdev)
 	int ret = 0;
 
 	if (!hdmi_ready()) {
-		DEV_ERR("%s: HDMI/HPD not initialized\n", __func__);
+		pr_warn("%s: HDMI/HPD not initialized\n", __func__);
 		return ret;
 	}
 
 	if (!external_common_state->hpd_state) {
-		DEV_DBG("%s:HDMI cable not connected\n", __func__);
+		pr_warn("%s:HDMI cable not connected\n", __func__);
 		return ret;
 	}
 
@@ -4776,12 +4769,12 @@ static int hdmi_msm_power_off(struct platform_device *pdev)
 	*/
 	if (!(MSM_HDMI_BASE && hdmi_msm_state &&
 			hdmi_msm_state->hdmi_app_clk)) {
-		DEV_ERR("%s: HDMI not initialized\n", __func__);
+		pr_warn("%s: HDMI not initialized\n", __func__);
 		return ret;
 	}
 
 	if (!hdmi_msm_state->panel_power_on) {
-		DEV_DBG("%s: panel not ON\n", __func__);
+		pr_warn("%s: panel not ON\n", __func__);
 		goto error;
 	}
 
