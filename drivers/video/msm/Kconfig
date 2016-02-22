@@ -232,6 +232,12 @@ config FB_MSM_MIPI_DSI_TC358764_DSI2LVDS
 	  and up to WUXGA 1920x1200 18-bit
 	  using a dual LVDS link.
 
+config FB_MSM_MIPI_DSI_I2C
+	bool
+	select FB_MSM_MIPI_DSI
+	---help---
+	  Support for MIPI DSI bridge chip using I2C.
+
 config FB_MSM_LCDC_ST15_WXGA
     bool
     select FB_MSM_LCDC_PANEL
@@ -656,6 +662,7 @@ config FB_MSM_LVDS_MIPI_PANEL_DETECT
 	select FB_MSM_MIPI_SIMULATOR_VIDEO
 	select FB_MSM_MIPI_CHIMEI_WXGA
 	select FB_MSM_MIPI_CHIMEI_WUXGA
+	select FB_MSM_MIPI_DSI_I2C
 	---help---
 	  Support for LVDS + MIPI panel auto detect
 
@@ -1060,6 +1067,12 @@ config FB_MSM_MDP_ARB
 	---help---
 	Support for MDP arbitrator driver.
 	This driver is used to manage overlay resources and events.
+
+config FB_MSM_DMA_S_PANEL
+	bool "Config DMA_S panel"
+	select FB_MSM_MIPI_DSI_I2C
+	---help---
+	  Support for DMA S panel.
 
 if FB_MSM_MDSS
 	source "drivers/video/msm/mdss/Kconfig"
