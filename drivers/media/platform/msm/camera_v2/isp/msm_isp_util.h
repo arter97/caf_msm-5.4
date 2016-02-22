@@ -75,8 +75,9 @@ void msm_isp_flush_tasklet(struct vfe_device *vfe_dev);
 long msm_isp_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg);
 int msm_isp_get_clk_info(struct vfe_device *vfe_dev,
 	struct platform_device *pdev, struct msm_cam_clk_info *vfe_clk_info);
-void msm_isp_fetch_engine_done_notify(struct vfe_device *vfe_dev,
-	struct msm_vfe_fetch_engine_info *fetch_engine_info);
+void msm_isp_fetch_engine_irq(struct vfe_device *vfe_dev,
+	uint32_t irq_status0, uint32_t irq_status1,
+	struct msm_isp_timestamp *ts);
 void msm_camera_io_dump_2(void __iomem *addr, int size);
 void msm_isp_print_fourcc_error(const char *origin, uint32_t fourcc_format);
 void msm_isp_get_timestamp(struct msm_isp_timestamp *time_stamp);

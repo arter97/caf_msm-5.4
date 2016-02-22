@@ -357,11 +357,8 @@ static void msm_vfe47_process_input_irq(struct vfe_device *vfe_dev,
 		msm_isp_increment_frame_id(vfe_dev, VFE_PIX_0, ts);
 	}
 
-	if (irq_status0 & (1 << 24)) {
+	if (irq_status0 & (1 << 24))
 		ISP_DBG("%s: Fetch Engine Read IRQ\n", __func__);
-		msm_isp_fetch_engine_done_notify(vfe_dev,
-			&vfe_dev->fetch_engine_info);
-	}
 
 	if (irq_status0 & (1 << 1))
 		ISP_DBG("%s: EOF IRQ\n", __func__);
@@ -1014,6 +1011,7 @@ static void msm_vfe47_cfg_fetch_engine(struct vfe_device *vfe_dev,
 		temp |= (pix_cfg->pixel_pattern & 0x3);
 		msm_camera_io_w(temp, vfe_dev->vfe_base + 0x50);
 
+		vfe_dev->fe_done_mask |= (1 << 24);
 	} else {
 		pr_err("%s: Invalid mux configuration - mux: %d", __func__,
 			pix_cfg->input_mux);
@@ -1614,6 +1612,11 @@ static void msm_vfe47_stats_cfg_comp_mask(
 
 	msm_camera_io_w(comp_mask_reg, vfe_dev->vfe_base + 0x78);
 
+	if (enable && stats_mask)
+		vfe_dev->fe_done_mask |=  ((1 << 29) << request_comp_index);
+	else
+		vfe_dev->fe_done_mask &= ~((1 << 29) << request_comp_index);
+
 	ISP_DBG("%s: comp_mask_reg: %x comp mask0 %x mask1: %x\n",
 		__func__, comp_mask_reg,
 		atomic_read(&stats_data->stats_comp_mask[0]),
@@ -1668,6 +1671,8 @@ static void msm_vfe47_stats_cfg_wm_irq_mask(
 
 	msm_camera_io_w(irq_mask, vfe_dev->vfe_base + 0x5C);
 	msm_camera_io_w(irq_mask_1, vfe_dev->vfe_base + 0x60);
+
+	vfe_dev->fe_done_mask |= irq_mask;
 }
 
 static void msm_vfe47_stats_clear_wm_irq_mask(
@@ -1715,6 +1720,8 @@ static void msm_vfe47_stats_clear_wm_irq_mask(
 
 	msm_camera_io_w(irq_mask, vfe_dev->vfe_base + 0x5C);
 	msm_camera_io_w(irq_mask_1, vfe_dev->vfe_base + 0x60);
+
+	vfe_dev->fe_done_mask &= irq_mask;
 }
 
 static void msm_vfe47_stats_cfg_wm_reg(
@@ -2061,6 +2068,7 @@ struct msm_vfe_hardware_info vfe47_hw_info = {
 			.process_axi_irq = msm_isp_process_axi_irq,
 			.process_stats_irq = msm_isp_process_stats_irq,
 			.process_epoch_irq = msm_vfe47_process_epoch_irq,
+			.process_fe_irq = msm_isp_fetch_engine_irq,
 		},
 		.axi_ops = {
 			.reload_wm = msm_vfe47_axi_reload_wm,

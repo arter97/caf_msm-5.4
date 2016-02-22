@@ -316,6 +316,15 @@ int msm_isp_stats_create_stream(struct vfe_device *vfe_dev,
 		return -EINVAL;
 	}
 
+	if (vfe_dev->axi_data.src_info[VFE_PIX_0].input_mux == EXTERNAL_READ &&
+		(stream_req_cmd->init_frame_drop > 0 ||
+			stream_req_cmd->framedrop_pattern != NO_SKIP)) {
+		pr_err("%s:%d: Frame drop not supported %d %d\n", __func__,
+			__LINE__, stream_req_cmd->init_frame_drop,
+			stream_req_cmd->framedrop_pattern);
+		return -EINVAL;
+	}
+
 	stream_info = &stats_data->stream_info[stats_idx];
 	if (stream_info->state != STATS_AVALIABLE) {
 		pr_err("%s: Stats already requested\n", __func__);
@@ -804,6 +813,7 @@ int msm_isp_update_stats_stream(struct vfe_device *vfe_dev, void *arg)
 	struct msm_vfe_axi_stream_update_cmd *update_cmd = arg;
 	struct msm_vfe_axi_stream_cfg_update_info *update_info = NULL;
 	struct msm_isp_sw_framskip *sw_skip_info = NULL;
+	uint32_t framedrop_period;
 
 	/*validate request*/
 	for (i = 0; i < update_cmd->num_streams; i++) {
@@ -831,8 +841,14 @@ int msm_isp_update_stats_stream(struct vfe_device *vfe_dev, void *arg)
 
 		switch (update_cmd->update_type) {
 		case UPDATE_STREAM_STATS_FRAMEDROP_PATTERN: {
-			uint32_t framedrop_period =
-				msm_isp_get_framedrop_period(
+			if (vfe_dev->axi_data.src_info[VFE_PIX_0].input_mux ==
+					EXTERNAL_READ &&
+					update_info->skip_pattern != NO_SKIP) {
+				pr_err("%s:%d: Frame drop not supported\n",
+					__func__, __LINE__);
+				return -EINVAL;
+			}
+			framedrop_period = msm_isp_get_framedrop_period(
 				   update_info->skip_pattern);
 			if (update_info->skip_pattern == SKIP_ALL)
 				stream_info->framedrop_pattern = 0x0;
