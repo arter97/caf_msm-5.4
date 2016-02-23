@@ -42,11 +42,11 @@ static u32 __secure_readl(u32 addr)
 u32 secure_readl(void __iomem *c)
 {
 	if (BETWEEN(c, MSM_EBI1_CH0_ERP_BASE, MSM_EBI1_CH0_ERP_SIZE))
-		__secure_readl(XLATE(c, MSM_EBI1_CH0_ERP_PHYS,
-					 MSM_EBI1_CH0_ERP_BASE));
+		return __secure_readl(XLATE(c, MSM_EBI1_CH0_ERP_PHYS,
+					    MSM_EBI1_CH0_ERP_BASE));
 	else if (BETWEEN(c, MSM_EBI1_CH1_ERP_BASE, MSM_EBI1_CH1_ERP_SIZE))
-		__secure_readl(XLATE(c, MSM_EBI1_CH1_ERP_PHYS,
-					 MSM_EBI1_CH1_ERP_BASE));
+		return __secure_readl(XLATE(c, MSM_EBI1_CH1_ERP_PHYS,
+					    MSM_EBI1_CH1_ERP_BASE));
 	return readl(c);
 }
 EXPORT_SYMBOL(secure_readl);
