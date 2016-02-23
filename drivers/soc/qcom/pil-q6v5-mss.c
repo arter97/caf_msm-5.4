@@ -330,7 +330,6 @@ static int pil_mss_loadable_init(struct modem_data *drv,
 					"qcom,pas-id", &drv->pas_id);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to find the pas_id.\n");
-		return ret;
 	}
 
 	drv->subsys_desc.pil_mss_memsetup =
