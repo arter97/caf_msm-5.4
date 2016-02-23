@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2013, 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -179,7 +179,7 @@ out:
 int sysmon_send_shutdown(enum subsys_id dest_ss)
 {
 	struct sysmon_subsys *ss = &subsys[dest_ss];
-	const char tx_buf[] = "system:shutdown";
+	const char tx_buf[] = "ssr:shutdown";
 	const char expect[] = "system:ack";
 	size_t prefix_len = ARRAY_SIZE(expect) - 1;
 	int ret;
