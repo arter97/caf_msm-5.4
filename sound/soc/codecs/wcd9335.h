@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -84,6 +84,20 @@ enum {
 
 enum wcd9335_codec_event {
 	WCD9335_CODEC_EVENT_CODEC_UP = 0,
+};
+
+enum tasha_on_demand_supply {
+	ON_DEMAND_MICBIAS = 0,
+	ON_DEMAND_SUPPLIES_MAX,
+};
+
+/* structure used to put the defined
+ * ondemand supply for codec
+ * and count being used.
+ */
+struct on_demand_supply {
+	struct regulator *supply;
+	int ondemand_supply_count;
 };
 
 /* Dai data structure holds the
