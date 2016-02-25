@@ -81,12 +81,14 @@
 #define CMD_CAN_DISABLE_ALL_BUFFERING	0x65
 #define CMD_CAN_ADD_FRAME_FILTER	0x66
 #define CMD_CAN_REMOVE_FRAME_FILTER	0x67
+#define CMD_CAN_UPDATE_FRAME_FILTER	0x68
 
 
 #define IOCTL_RELEASE_CAN_BUFFER	(SIOCDEVPRIVATE + 0)
 #define IOCTL_ENABLE_BUFFERING		(SIOCDEVPRIVATE + 1)
 #define IOCTL_ADD_FRAME_FILTER		(SIOCDEVPRIVATE + 2)
 #define IOCTL_REMOVE_FRAME_FILTER	(SIOCDEVPRIVATE + 3)
+#define IOCTL_UPDATE_FRAME_FILTER	(SIOCDEVPRIVATE + 4)
 
 #define FRAME_FILTER_TYPE_ON_REFRESH    0
 #define FRAME_FILTER_TYPE_ON_CHANGE     1
@@ -739,7 +741,17 @@ static int sam4e_frame_filter(struct net_device *netdev,
 
 	add_request = ifr->ifr_data;
 	/* Fill message data */
-	req->cmd = cmd;
+	switch (cmd) {
+	case IOCTL_ADD_FRAME_FILTER:
+		req->cmd = CMD_CAN_ADD_FRAME_FILTER;
+		break;
+	case IOCTL_REMOVE_FRAME_FILTER:
+		req->cmd = CMD_CAN_REMOVE_FRAME_FILTER;
+		break;
+	case IOCTL_UPDATE_FRAME_FILTER:
+		req->cmd = CMD_CAN_UPDATE_FRAME_FILTER;
+		break;
+	}
 	req->len = sizeof(struct sam4e_req) +
 			sizeof(struct sam4e_frame_filter);
 	req->seq = atomic_inc_return(&dev->msg_seq);
@@ -749,7 +761,8 @@ static int sam4e_frame_filter(struct net_device *netdev,
 	frame_filter->mask = add_request->mask;
 	frame_filter->type = add_request->type;
 
-	LOGNI("sam4e_send_frame_filter %d %x %x %d", frame_filter->can,
+	LOGNI("sam4e_send_frame_filter cmd:%d %d %x %x %d", req->cmd,
+			frame_filter->can,
 			frame_filter->mid,
 			frame_filter->mask,
 			frame_filter->type);
@@ -783,8 +796,9 @@ static int sam4e_netdev_do_ioctl(struct net_device *netdev,
 		LOGNI("IOCTL_ENABLE_BUFFERING");
 		sam4e_enable_buffering(netdev, ifr);
 	} else if (cmd == IOCTL_ADD_FRAME_FILTER ||
-			cmd == IOCTL_REMOVE_FRAME_FILTER) {
-		LOGNI("IOCTL_ADD/REMOVE_FRAME_FILTER");
+			cmd == IOCTL_REMOVE_FRAME_FILTER ||
+			cmd == IOCTL_UPDATE_FRAME_FILTER) {
+		LOGNI("IOCTL_ADD/REMOVE/UPDATE_FRAME_FILTER");
 		sam4e_frame_filter(netdev, ifr, cmd);
 	}
 
