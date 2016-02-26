@@ -96,6 +96,7 @@
 		reg-names = "ispif", "csi_clk_mux";
 		interrupts = <0 51 0>;
 		interrupt-names = "ispif";
+		vdd-supply = <&gdsc_vfe>;
 		clocks = <&clock_gcc clk_gcc_camss_ispif_ahb_clk>,
 			<&clock_gcc clk_gcc_camss_ahb_clk>,
 			<&clock_gcc clk_csi0_clk_src>,
