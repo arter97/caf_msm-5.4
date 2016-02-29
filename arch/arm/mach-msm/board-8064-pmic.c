@@ -537,6 +537,7 @@ apq8064_pm8921_chg_pdata __devinitdata = {
 	.thermal_levels		= ARRAY_SIZE(apq8064_pm8921_therm_mitigation),
 	.rconn_mohm		= 18,
 	.enable_tcxo_warmup_delay = true,
+	.disable_charger	= false,
 };
 
 static struct pm8xxx_ccadc_platform_data
@@ -648,6 +649,7 @@ void __init apq8064_init_pmic(void)
 			|| machine_is_apq8064_adp2_es2p5()) {
 		apq8064_pm8921_chg_pdata.has_dc_supply = true;
                 apq8064_pm8921_chg_pdata.disable_chg_rmvl_wrkarnd = 1;
+		apq8064_pm8921_chg_pdata.disable_charger = true;
 		apq8064_pm8921_bms_pdata.disable_bms = 1;
 	}
 
