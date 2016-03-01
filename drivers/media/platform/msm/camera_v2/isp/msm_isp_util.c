@@ -631,12 +631,24 @@ static int msm_isp_start_fetch_engine(struct vfe_device *vfe_dev,
 	return rc;
 }
 
-void msm_isp_fetch_engine_done_notify(struct vfe_device *vfe_dev,
-	struct msm_vfe_fetch_engine_info *fetch_engine_info)
+void msm_isp_fetch_engine_irq(struct vfe_device *vfe_dev,
+	uint32_t irq_status0, uint32_t irq_status1,
+	struct msm_isp_timestamp *ts)
 {
 	struct msm_isp_event_data fe_rd_done_event;
+	struct msm_vfe_fetch_engine_info *fetch_engine_info =
+		&vfe_dev->fetch_engine_info;
+
 	if (!fetch_engine_info->is_busy)
 		return;
+
+	vfe_dev->fe_curr_mask |= irq_status0;
+	vfe_dev->fe_curr_mask &= vfe_dev->fe_done_mask;
+	if (vfe_dev->fe_curr_mask != vfe_dev->fe_done_mask)
+		return;
+
+	vfe_dev->fe_curr_mask = 0;
+	fetch_engine_info->is_busy = 0;
 
 	memset(&fe_rd_done_event, 0, sizeof(struct msm_isp_event_data));
 	fe_rd_done_event.frame_id =
@@ -652,7 +664,6 @@ void msm_isp_fetch_engine_done_notify(struct vfe_device *vfe_dev,
 
 	ISP_DBG("%s:VFE%d ISP_EVENT_FE_READ_DONE buf_idx %d\n",
 		__func__, vfe_dev->pdev->id, fetch_engine_info->buf_idx);
-	fetch_engine_info->is_busy = 0;
 	msm_isp_send_event(vfe_dev, ISP_EVENT_FE_READ_DONE, &fe_rd_done_event);
 }
 
@@ -2230,6 +2241,8 @@ void msm_isp_do_tasklet(unsigned long data)
 		irq_ops->process_reg_update(vfe_dev,
 			irq_status0, irq_status1, &ts);
 		irq_ops->process_epoch_irq(vfe_dev,
+			irq_status0, irq_status1, &ts);
+		irq_ops->process_fe_irq(vfe_dev,
 			irq_status0, irq_status1, &ts);
 	}
 }

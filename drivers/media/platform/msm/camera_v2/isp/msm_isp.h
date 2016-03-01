@@ -139,6 +139,9 @@ struct msm_vfe_irq_ops {
 	void (*process_stats_irq) (struct vfe_device *vfe_dev,
 		uint32_t irq_status0, uint32_t irq_status1,
 		struct msm_isp_timestamp *ts);
+	void (*process_fe_irq) (struct vfe_device *vfe_dev,
+		uint32_t irq_status0, uint32_t irq_status1,
+		struct msm_isp_timestamp *ts);
 };
 
 struct msm_vfe_axi_ops {
@@ -716,6 +719,8 @@ struct vfe_device {
 	uint32_t isp_raw0_debug;
 	uint32_t isp_raw1_debug;
 	uint32_t isp_raw2_debug;
+	uint32_t fe_curr_mask;
+	uint32_t fe_done_mask;
 };
 
 struct vfe_parent_device {
