@@ -54,6 +54,8 @@ static int msm_quat_mi2s_rx_ch = 2;
 static int msm_tert_mi2s_tx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
 static int msm_quat_mi2s_rx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
 
+static int msm_tdm_rate = SAMPLING_RATE_48KHZ;
+
 /* TDM default channels */
 static int msm_tert_tdm_rx_0_ch = 2; /* ICC STREAM */
 static int msm_tert_tdm_rx_1_ch = 2;
@@ -242,6 +244,8 @@ static char const *tdm_bit_format_text[] = {"S16_LE", "S24_LE"};
 
 static char const *mi2s_bit_format_text[] = {"S16_LE", "S24_LE"};
 
+static const char *const tdm_rate_text[] = {"16000", "48000"};
+
 static struct afe_clk_set mi2s_tx_clk = {
 	AFE_API_VERSION_I2S_CONFIG,
 	Q6AFE_LPASS_CLK_ID_TER_MI2S_EBIT,
@@ -419,6 +423,30 @@ static int msm_auxpcm_rate_put(struct snd_kcontrol *kcontrol,
 		break;
 	default:
 		msm_auxpcm_rate = SAMPLING_RATE_8KHZ;
+		break;
+	}
+	return 0;
+}
+
+static int msm_tdm_rate_get(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = msm_tdm_rate;
+	return 0;
+}
+
+static int msm_tdm_rate_put(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	switch (ucontrol->value.integer.value[0]) {
+	case 0:
+		msm_tdm_rate = SAMPLING_RATE_16KHZ;
+		break;
+	case 1:
+		msm_tdm_rate = SAMPLING_RATE_48KHZ;
+		break;
+	default:
+		msm_tdm_rate = SAMPLING_RATE_48KHZ;
 		break;
 	}
 	return 0;
@@ -1543,7 +1571,7 @@ static int msm_tdm_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 			__func__, cpu_dai->id);
 		return -EINVAL;
 	}
-	rate->min = rate->max = SAMPLING_RATE_48KHZ;
+	rate->min = rate->max = msm_tdm_rate;
 
 	pr_debug("%s: dai id = 0x%x channels = %d rate = %d format = 0x%x\n",
 		__func__, cpu_dai->id, channels->max, rate->max,
@@ -1880,6 +1908,7 @@ static const struct soc_enum msm_snd_enum[] = {
 	SOC_ENUM_SINGLE_EXT(8, tdm_ch_text),
 	SOC_ENUM_SINGLE_EXT(2, tdm_bit_format_text),
 	SOC_ENUM_SINGLE_EXT(2, mi2s_bit_format_text),
+	SOC_ENUM_SINGLE_EXT(2, tdm_rate_text),
 };
 
 static const struct snd_kcontrol_new msm_snd_controls[] = {
@@ -1979,6 +2008,8 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 	SOC_ENUM_EXT("TERT_MI2S_TX Bit Format", msm_snd_enum[7],
 			msm_tert_mi2s_tx_bit_format_get,
 			msm_tert_mi2s_tx_bit_format_put),
+	SOC_ENUM_EXT("TDM SampleRate", msm_snd_enum[8],
+			msm_tdm_rate_get, msm_tdm_rate_put),
 };
 
 static int apq8096_get_ll_qos_val(struct snd_pcm_runtime *runtime)
