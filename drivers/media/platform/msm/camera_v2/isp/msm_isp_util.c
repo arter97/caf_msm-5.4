@@ -387,6 +387,9 @@ static inline u32 msm_isp_evt_mask_to_isp_event(u32 evt_mask)
 	case ISP_EVENT_MASK_INDEX_BUF_FATAL_ERROR:
 		evt_id = ISP_EVENT_BUF_FATAL_ERROR;
 		break;
+	case ISP_EVENT_MASK_INDEX_BUF_DONE:
+		evt_id = ISP_EVENT_BUF_DONE;
+		break;
 	default:
 		evt_id = ISP_EVENT_SUBS_MASK_NONE;
 		break;
