@@ -435,6 +435,109 @@ static int cnss_qmi_pin_connect_result_ind(void *msg, unsigned int msg_len)
 out:
 	return ret;
 }
+
+#define BAR_NUM 0
+static void __iomem *mem;
+static int cold_boot_pcie_enable;
+static int cnss_bus_enable(struct pci_dev *pdev,
+		const struct pci_device_id *id)
+{
+	int ret = 0;
+	uint16_t device_id;
+	uint32_t tmp;
+
+	pr_info("%s\n", __func__);
+
+	pci_read_config_word(pdev,PCI_DEVICE_ID,&device_id);
+	if(device_id != id->device)  {
+		pr_err("%s: dev id mismatch, config id: 0x%x, probing id: 0x%x",
+		   __func__, device_id, id->device);
+		/* pci link is down, so returing with error code */
+		return -EIO;
+	}
+	ret = pci_assign_resource(pdev, BAR_NUM);
+	if (ret < 0) {
+		pr_err("%s: pci_assign_resource error = %d", __func__, ret);
+		return ret;
+	}
+	ret = pci_enable_device(pdev);
+	if (ret < 0) {
+		pr_err("%s: pci_enable_device error = %d", __func__, ret);
+		return ret;
+	}
+	ret = pci_request_region(pdev, BAR_NUM, "ath");
+	if (ret) {
+		pr_err("%s: PCI MMIO reservation error", __func__);
+		ret = -EIO;
+		goto err_region;
+	}
+	ret = pci_set_dma_mask(pdev, DMA_BIT_MASK(32));
+	if (ret) {
+		pr_err("%s: Cannot enable 32-bit pci DMA", __func__);
+		goto err_dma;
+	}
+	ret = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(32));
+	if (ret) {
+		pr_err("%s: Cannot enable 32-bit consistent DMA!", __func__);
+		goto err_dma;
+	}
+	pci_set_master(pdev);
+	mem = pci_iomap(pdev, BAR_NUM, 0);
+	if (!mem) {
+		pr_err("%s: PCI iomap error", __func__);
+		ret = -EIO;
+		goto err_iomap;
+	}
+	pci_read_config_dword(pdev, 0x80, &tmp);
+	pci_write_config_dword(pdev, 0x80, (tmp & 0xffffff00));
+	device_disable_async_suspend(&pdev->dev);
+
+	cold_boot_pcie_enable = 1;
+	return ret;
+err_iomap:
+	pci_clear_master(pdev);
+err_dma:
+	pci_release_region(pdev, BAR_NUM);
+err_region:
+	pci_disable_device(pdev);
+	return ret;
+}
+
+void cnss_bus_disable(struct pci_dev *pdev)
+{
+	pr_info("%s\n", __func__);
+
+	if (!cold_boot_pcie_enable) {
+		pr_err("%s: pcie is not enabled in cold boot, ignore!\n",
+			__func__);
+		return;
+	}
+	cold_boot_pcie_enable= 0;
+	pci_set_drvdata(pdev, NULL);
+	pci_iounmap(pdev, mem);
+	pci_clear_master(pdev);
+	pci_release_region(pdev, BAR_NUM);
+	pci_disable_device(pdev);
+}
+
+static int cnss_adrastea_power_on(void)
+{
+	int ret = 0;
+
+	if (penv && penv->pdev && penv->id)
+		ret = cnss_bus_enable(penv->pdev, penv->id);
+	else
+		ret = -ENODEV;
+
+	return ret;
+}
+
+void cnss_adrastea_power_off(void)
+{
+	if (penv && penv->pdev)
+		cnss_bus_disable(penv->pdev);
+}
+
 static int wlfw_msa_mem_info_send_sync_msg(void)
 {
 	int ret = 0;
@@ -885,6 +988,13 @@ static int cnss_qmi_event_server_arrive(void *data)
 
 	pr_info("%s: QMI Server Connected\n", __func__);
 
+	ret = cnss_adrastea_power_on();
+	if (ret < 0) {
+		pr_err("Failed to power on hardware: %d\n",
+		       ret);
+		goto fail;
+	}
+
 	ret = wlfw_ind_register_send_sync_msg();
 	if (ret < 0) {
 		pr_err("Failed to send indication message: %d\n",
@@ -979,6 +1089,7 @@ static int cnss_qmi_event_fw_ready_ind(void *data)
 		ret = -ENODEV;
 		goto out;
 	}
+	cnss_adrastea_power_off();
 	if (!penv->driver || !penv->driver->probe) {
 		pr_info("%s: WLAN driver is not registed yet\n", __func__);
 		ret = -ENODEV;
