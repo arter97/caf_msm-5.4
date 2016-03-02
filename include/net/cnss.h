@@ -161,6 +161,7 @@ extern int cnss_wlan_enable(struct cnss_wlan_enable_cfg *config,
 			    enum cnss_driver_mode mode,
 			    const char *host_version);
 extern int cnss_wlan_disable(enum cnss_driver_mode mode);
+extern int cnss_set_fw_debug_mode(bool enablefwlog);
 /* End of QMI */
 
 
