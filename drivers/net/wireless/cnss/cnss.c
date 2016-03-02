@@ -3580,6 +3580,44 @@ static int cnss_probe(struct platform_device *pdev)
 		goto err_get_rc;
 	}
 
+	ret = of_get_named_gpio((&pdev->dev)->of_node,
+				"qcom,gpio-q6intr", 0);
+	if (ret == -EPROBE_DEFER) {
+		goto err_gpio;
+	} else if (ret < 0) {
+		pr_err("cnss: q6 interrupt GPIO invalid %d\n",
+                       ret);
+		goto err_gpio;
+	}
+
+	penv->q6intr_gpio = ret;
+
+	if (rc_num == 0)
+		ret = of_get_named_gpio((&pdev->dev)->of_node,
+					"qcom,gpio-linkup-0", 0);
+	else
+		ret = of_get_named_gpio((&pdev->dev)->of_node,
+					"qcom,gpio-linkup-1", 0);
+
+	if (ret == -EPROBE_DEFER) {
+		goto err_gpio;
+	} else if (ret < 0) {
+		pr_err("cnss: q6 linkup GPIO invalid %d\n", ret);
+		goto err_gpio;
+	}
+
+	penv->linkup_gpio = ret;
+
+	ret = of_get_named_gpio((&pdev->dev)->of_node,
+	      "qcom,gpio-routing-en", 0);
+	if (ret == -EPROBE_DEFER) {
+		goto err_gpio;
+	} else if (ret < 0)
+		pr_err("cnss: q6 routing enable GPIO invalid %d\n",
+		       ret);
+
+	penv->routing_enable_gpio = ret;
+
 	ret = msm_pcie_enumerate(rc_num);
 	if (ret) {
 		pr_err("%s: Failed to enable PCIe RC%x!\n", __func__, rc_num);
@@ -3705,28 +3743,6 @@ skip_ramdump:
 		penv->smmu_iova_len = smmu_iova_address[1];
 	}
 
-	penv->q6intr_gpio = of_get_named_gpio((&pdev->dev)->of_node,
-		"qcom,gpio-q6intr", 0);
-	if (penv->q6intr_gpio < 0)
-		pr_err("cnss: q6 interrupt GPIO invalid %d\n",
-			penv->q6intr_gpio);
-
-	if (rc_num == 0)
-		penv->linkup_gpio = of_get_named_gpio((&pdev->dev)->of_node,
-		"qcom,gpio-linkup-0", 0);
-	else
-		penv->linkup_gpio = of_get_named_gpio((&pdev->dev)->of_node,
-		"qcom,gpio-linkup-1", 0);
-
-	if (penv->linkup_gpio < 0)
-		pr_err("cnss: q6 linkup GPIO invalid %d\n", penv->linkup_gpio);
-
-	penv->routing_enable_gpio = of_get_named_gpio((&pdev->dev)->of_node,
-	      "qcom,gpio-routing-en", 0);
-	if (penv->routing_enable_gpio < 0)
-		pr_err("cnss: q6 routing enable GPIO invalid %d\n",
-		       penv->routing_enable_gpio);
-
 	ret = pci_register_driver(&cnss_wlan_pci_driver);
 	if (ret)
 		goto err_pci_reg;
@@ -3836,6 +3852,7 @@ err_subsys_reg:
 
 err_esoc_reg:
 err_pcie_enumerate:
+err_gpio:
 err_get_rc:
 	cnss_wlan_gpio_set(&penv->gpio_info, WLAN_EN_LOW);
 	cnss_wlan_release_resources();
