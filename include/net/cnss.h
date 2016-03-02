@@ -110,6 +110,45 @@ enum cnss_runtime_request {
 	CNSS_PM_REQUEST_RESUME,
 	CNSS_PM_RUNTIME_PUT_AUTO,
 };
+/* QMI related */
+struct cnss_ce_tgt_pipe_cfg {
+	u32 pipe_num;
+	u32 pipe_dir;
+	u32 nentries;
+	u32 nbytes_max;
+	u32 flags;
+	u32 reserved;
+};
+
+struct cnss_ce_svc_pipe_cfg {
+	u32 service_id;
+	u32 pipe_dir;
+	u32 pipe_num;
+};
+
+/* CE configuration to target */
+struct cnss_wlan_enable_cfg {
+	u32 num_ce_tgt_cfg;
+	struct cnss_ce_tgt_pipe_cfg *ce_tgt_cfg;
+	u32 num_ce_svc_pipe_cfg;
+	struct cnss_ce_svc_pipe_cfg *ce_svc_cfg;
+};
+
+/* driver modes */
+enum cnss_driver_mode {
+	CNSS_MISSION,
+	CNSS_FTM,
+	CNSS_EPPING,
+};
+
+extern int cnss_wlan_enable(struct cnss_wlan_enable_cfg *config,
+			    enum cnss_driver_mode mode,
+			    const char *host_version);
+extern int cnss_wlan_disable(enum cnss_driver_mode mode);
+/* End of QMI */
+
+
+extern int cnss_get_fw_image(struct image_desc_info *image_desc_info);
 
 extern int cnss_get_fw_image(struct image_desc_info *image_desc_info);
 extern void cnss_runtime_init(struct device *dev, int auto_delay);
