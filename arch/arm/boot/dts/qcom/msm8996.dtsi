@@ -2219,6 +2219,9 @@
 		pinctrl-0 = <&cnss_default>;
 		qcom,wlan-rc-num = <0>;
 		qcom,wlan-ramdump-dynamic = <0x200000>;
+		qcom,gpio-linkup-0 = <&smp2pgpio_q6wlan_notify_1_out 0 0>;
+		qcom,gpio-linkup-1 = <&smp2pgpio_q6wlan_notify_1_out 1 0>;
+		qcom,gpio-q6intr = <&smp2pgpio_q6wlan_notify_1_out 2 0>;
 
 		qcom,msm-bus,name = "msm-cnss";
 		qcom,msm-bus,num-cases = <4>;

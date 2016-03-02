@@ -172,6 +172,11 @@ static inline int wcnss_pre_alloc_reset(void) { return 0; }
 static inline void wcnss_prealloc_check_memory_leak(void) {}
 #endif
 
+#ifdef CONFIG_CNSS_ADRASTEA
+extern void cnss_pcie_notify_q6(void);
+extern void cnss_intr_notify_q6(void);
+extern void *cnss_get_target_smem(void);
+#endif
 
 extern int msm_pcie_enumerate(u32 rc_idx);
 extern int cnss_auto_suspend(void);
