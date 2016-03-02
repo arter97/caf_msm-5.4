@@ -60,7 +60,7 @@
 #endif
 #include "wlan_firmware_service_v01.h"
 
-#define WLFW_TIMEOUT_MS            3000
+#define WLFW_TIMEOUT_MS            0
 #define WLFW_SERVICE_INS_ID_V01    0
 
 #define subsys_to_drv(d) container_of(d, struct cnss_data, subsys_desc)
@@ -233,6 +233,42 @@ struct index_file {
 	u8 file_name[13];
 };
 
+enum cnss_qmi_event_type {
+	CNSS_QMI_EVENT_SERVER_ARRIVE,
+	CNSS_QMI_EVENT_SERVER_EXIT,
+	CNSS_QMI_EVENT_FW_READY_IND,
+};
+
+struct cnss_qmi_event {
+	struct list_head list;
+	enum cnss_qmi_event_type type;
+	void *data;
+};
+
+#define CNSS_PANIC			1
+#define CNSS_WLFW_QMI_CONNECTED		BIT(0)
+#define CNSS_FW_READY			BIT(1)
+#define CNSS_IS_WLFW_QMI_CONNECTED(_state) ((_state) & CNSS_WLFW_QMI_CONNECTED)
+#define CNSS_IS_FW_READY(_state) ((_state) & CNSS_FW_READY)
+
+#ifdef CNSS_PANIC
+#define CNSS_ASSERT(_condition) do {			\
+		if (!(_condition)) {				\
+			pr_err("CNSS ASSERT in %s Line %d\n",	\
+				__func__, __LINE__);		\
+			BUG_ON(1);				\
+		}						\
+	} while (0)
+#else
+#define CNSS_ASSERT(_condition) do {			\
+		if (!(_condition)) {				\
+			pr_err("CNSS ASSERT in %s Line %d\n",	\
+				__func__, __LINE__);		\
+			WARN_ON(1);				\
+		}						\
+	} while (0)
+#endif
+
 /* device_info is expected to be fully populated after cnss_config is invoked.
  * The function pointer callbacks are expected to be non null as well.
  */
@@ -309,12 +345,14 @@ static struct cnss_data {
 	bool q6_intr_state;
 	void *target_smem;
 	/* QMI related */
-	u32 wlfw_qmi_connected;
-	u32 fw_ready;
 	struct qmi_handle *wlfw_clnt;
-	struct workqueue_struct *wlfw_clnt_workqueue;
-	struct workqueue_struct *wlfw_clnt_workqueue_send;
-	struct workqueue_struct *wlan_probe_workqueue;
+	struct list_head qmi_event_list;
+	spinlock_t qmi_event_lock;
+	struct mutex mutex;
+	struct work_struct qmi_event_work;
+	struct work_struct qmi_recv_msg_work;
+	struct workqueue_struct *qmi_event_wq;
+	uint32_t state;
 	u32 board_id;
 	u32 num_peers;
 	u32 mac_version;
@@ -326,20 +364,31 @@ module_param(pcie_link_down_panic, uint, S_IRUSR | S_IWUSR);
 MODULE_PARM_DESC(pcie_link_down_panic,
 		"Trigger kernel panic when PCIe link down is detected");
 
-struct wlfw_send_work {
-	struct delayed_work send_work;
-	unsigned int msg_id;
-};
+static int cnss_qmi_event_post(enum cnss_qmi_event_type type, void *data)
+{
+	struct cnss_qmi_event *event = NULL;
+	unsigned long flags;
+	int gfp = GFP_KERNEL;
 
-static void wlfw_clnt_recv_msg(struct work_struct *work);
-static DECLARE_DELAYED_WORK(work_recv_msg, wlfw_clnt_recv_msg);
-static void wlfw_clnt_svc_arrive(struct work_struct *work);
-static DECLARE_DELAYED_WORK(work_svc_arrive, wlfw_clnt_svc_arrive);
-static void wlfw_clnt_svc_exit(struct work_struct *work);
-static DECLARE_DELAYED_WORK(work_svc_exit, wlfw_clnt_svc_exit);
+	if (in_interrupt() || irqs_disabled())
+		gfp = GFP_ATOMIC;
 
-static void wlan_probe(struct work_struct *work);
-static DECLARE_DELAYED_WORK(work_wlan_probe, wlan_probe);
+	event = kzalloc(sizeof(*event), gfp);
+	if (event == NULL) {
+		pr_err("Allocation failed for event: %d\n", type);
+		return -ENOMEM;
+	}
+
+	event->type = type;
+	event->data = data;
+	spin_lock_irqsave(&penv->qmi_event_lock, flags);
+	list_add_tail(&event->list, &penv->qmi_event_list);
+	spin_unlock_irqrestore(&penv->qmi_event_lock, flags);
+
+	queue_work(penv->qmi_event_wq, &penv->qmi_event_work);
+
+	return 0;
+}
 
 static int wlfw_ind_register_send_sync_msg(void)
 {
@@ -348,8 +397,10 @@ static int wlfw_ind_register_send_sync_msg(void)
 	struct wlfw_ind_register_resp_msg_v01 resp;
 	struct msg_desc req_desc, resp_desc;
 
-	if (!penv || !penv->wlfw_clnt)
-		return -ENODEV;
+	if (!penv || !penv->wlfw_clnt) {
+		ret = -ENODEV;
+		goto out;
+	}
 
 	pr_debug("%s\n", __func__);
 
@@ -371,16 +422,16 @@ static int wlfw_ind_register_send_sync_msg(void)
 			&resp_desc, &resp, sizeof(resp), WLFW_TIMEOUT_MS);
 	if (ret < 0) {
 		pr_err("%s: send req failed %d\n", __func__, ret);
-		return ret;
+		goto out;
 	}
 
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
 		pr_err("%s: QMI request failed %d %d\n",
 		       __func__, resp.resp.result, resp.resp.error);
 		ret = resp.resp.result;
-		return ret;
+		goto out;
 	}
-
+out:
 	return ret;
 }
 
@@ -391,8 +442,10 @@ static int wlfw_cap_send_sync_msg(void)
 	struct wlfw_cap_resp_msg_v01 resp;
 	struct msg_desc req_desc, resp_desc;
 
-	if (!penv || !penv->wlfw_clnt)
-		return -ENODEV;
+	if (!penv || !penv->wlfw_clnt) {
+		ret = -ENODEV;
+		goto out;
+	}
 
 	pr_debug("%s\n", __func__);
 
@@ -410,14 +463,14 @@ static int wlfw_cap_send_sync_msg(void)
 			&resp_desc, &resp, sizeof(resp), WLFW_TIMEOUT_MS);
 	if (ret < 0) {
 		pr_err("%s: send req failed %d\n", __func__, ret);
-		return ret;
+		goto out;
 	}
 
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
 		pr_err("%s: QMI request failed %d %d\n",
-		       __func__, resp.resp.result, resp.resp.error);
+			__func__, resp.resp.result, resp.resp.error);
 		ret = resp.resp.result;
-		return ret;
+		goto out;
 	}
 
 	/* store cap locally */
@@ -429,10 +482,16 @@ static int wlfw_cap_send_sync_msg(void)
 		penv->mac_version = resp.mac_version;
 	if (resp.fw_version_valid)
 		strlcpy(penv->fw_version, resp.fw_version,
-			QMI_WLFW_MAX_STR_LEN_V01 + 1);
+				QMI_WLFW_MAX_STR_LEN_V01 + 1);
 
+	pr_info("%s: board_id:0x%0x num_peers: %d mac_version: 0x%0x fw_version: %s",
+		__func__, penv->board_id,
+		penv->num_peers, penv->mac_version,
+		penv->fw_version);
+out:
 	return ret;
 }
+
 
 static int wlfw_wlan_mode_send_sync_msg(enum wlfw_driver_mode_enum_v01 mode)
 {
@@ -441,8 +500,10 @@ static int wlfw_wlan_mode_send_sync_msg(enum wlfw_driver_mode_enum_v01 mode)
 	struct wlfw_wlan_mode_resp_msg_v01 resp;
 	struct msg_desc req_desc, resp_desc;
 
-	if (!penv || !penv->wlfw_clnt)
-		return -ENODEV;
+	if (!penv || !penv->wlfw_clnt) {
+		ret = -ENODEV;
+		goto out;
+	}
 
 	pr_debug("%s\n", __func__);
 
@@ -463,16 +524,16 @@ static int wlfw_wlan_mode_send_sync_msg(enum wlfw_driver_mode_enum_v01 mode)
 			&resp_desc, &resp, sizeof(resp), WLFW_TIMEOUT_MS);
 	if (ret < 0) {
 		pr_err("%s: send req failed %d\n", __func__, ret);
-		return ret;
+		goto out;
 	}
 
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
 		pr_err("%s: QMI request failed %d %d\n",
 		       __func__, resp.resp.result, resp.resp.error);
 		ret = resp.resp.result;
-		return ret;
+		goto out;
 	}
-
+out:
 	return ret;
 }
 
@@ -483,8 +544,10 @@ static int wlfw_wlan_cfg_send_sync_msg(struct wlfw_wlan_cfg_req_msg_v01 *data)
 	struct wlfw_wlan_cfg_resp_msg_v01 resp;
 	struct msg_desc req_desc, resp_desc;
 
-	if (!penv || !penv->wlfw_clnt)
-		return -ENODEV;
+	if (!penv || !penv->wlfw_clnt) {
+		ret = -ENODEV;
+		goto out;
+	}
 
 	pr_debug("%s\n", __func__);
 
@@ -505,79 +568,20 @@ static int wlfw_wlan_cfg_send_sync_msg(struct wlfw_wlan_cfg_req_msg_v01 *data)
 			&resp_desc, &resp, sizeof(resp), WLFW_TIMEOUT_MS);
 	if (ret < 0) {
 		pr_err("%s: send req failed %d\n", __func__, ret);
-		return ret;
+		goto out;
 	}
 
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
 		pr_err("%s: QMI request failed %d %d\n",
 		       __func__, resp.resp.result, resp.resp.error);
 		ret = resp.resp.result;
-		return ret;
+		goto out;
 	}
-
+out:
 	return ret;
 }
 
-static void wlfw_clnt_send_msg(struct work_struct *work)
-{
-	int rc;
-	struct wlfw_send_work *p_work;
-
-	if (!penv || !penv->wlfw_clnt)
-		return;
-
-	p_work = container_of(to_delayed_work(work),
-			      struct wlfw_send_work, send_work);
-	if (!p_work) {
-		pr_err("%s: Fail to get data\n", __func__);
-		return;
-	}
-
-	pr_debug("%s: msg_id 0x%x\n", __func__, p_work->msg_id);
-
-	switch (p_work->msg_id) {
-	case QMI_WLFW_IND_REGISTER_REQ_V01:
-		rc = wlfw_ind_register_send_sync_msg();
-		if (rc != 0)
-			pr_err("%s: Fail to send ind register req %d\n",
-			       __func__, rc);
-		break;
-	case QMI_WLFW_CAP_REQ_V01:
-		rc = wlfw_cap_send_sync_msg();
-		if (rc != 0)
-			pr_err("%s: Fail to send cap req %d\n",
-			       __func__, rc);
-		break;
-	default:
-		pr_err("%s: Unsupported msg 0x%x\n", __func__, p_work->msg_id);
-		break;
-	}
-
-	kfree(p_work);
-}
-
-static void queue_ind_register_msg(void)
-{
-	struct wlfw_send_work *work;
-
-	if (!penv || !penv->wlfw_clnt_workqueue_send)
-		return;
-
-	work = kzalloc(sizeof(*work), GFP_KERNEL);
-	if (!work) {
-		pr_err("%s: Fail to alloc mem\n", __func__);
-		return;
-	}
-
-	pr_debug("%s\n", __func__);
-
-	work->msg_id = QMI_WLFW_IND_REGISTER_REQ_V01;
-	INIT_DELAYED_WORK(&work->send_work, wlfw_clnt_send_msg);
-	queue_delayed_work(penv->wlfw_clnt_workqueue_send,
-			   &work->send_work, 0);
-}
-
-static void wlfw_clnt_recv_msg(struct work_struct *work)
+static void cnss_qmi_wlfw_clnt_notify_work(struct work_struct *work)
 {
 	int ret;
 
@@ -592,28 +596,23 @@ static void wlfw_clnt_recv_msg(struct work_struct *work)
 		pr_err("%s: Error receiving message\n", __func__);
 }
 
-static void wlfw_clnt_notify(struct qmi_handle *handle,
+static void cnss_qmi_wlfw_clnt_notify(struct qmi_handle *handle,
 			    enum qmi_event_type event, void *notify_priv)
 {
-	if (!penv || !penv->wlfw_clnt_workqueue)
+	if (!penv || !penv->wlfw_clnt)
 		return;
 
 	switch (event) {
 	case QMI_RECV_MSG:
-		queue_delayed_work(penv->wlfw_clnt_workqueue,
-				   &work_recv_msg, 0);
+		schedule_work(&penv->qmi_recv_msg_work);
 		break;
 	default:
+		pr_debug("%s: Received Event:  %d\n", __func__, event);
 		break;
 	}
 }
 
-static void wlan_probe(struct work_struct *work)
-{
-	penv->driver->probe(penv->pdev, penv->id);
-}
-
-static void wlfw_clnt_ind(struct qmi_handle *handle,
+static void cnss_qmi_wlfw_clnt_ind(struct qmi_handle *handle,
 			 unsigned int msg_id, void *msg,
 			 unsigned int msg_len, void *ind_cb_priv)
 {
@@ -622,47 +621,28 @@ static void wlfw_clnt_ind(struct qmi_handle *handle,
 
 	pr_info("%s: Received Ind 0x%x\n", __func__, msg_id);
 
-	if (msg_id != QMI_WLFW_FW_READY_IND_V01) {
+	switch (msg_id) {
+	case QMI_WLFW_FW_READY_IND_V01:
+		cnss_qmi_event_post(CNSS_QMI_EVENT_FW_READY_IND, NULL);
+		break;
+	default:
 		pr_err("%s: Invalid msg_id 0x%x\n", __func__, msg_id);
-		return;
+		break;
 	}
-
-	penv->fw_ready = 1;
-
-	if (!penv->pdev) {
-		pr_err("%s: Device is not ready\n", __func__);
-		return;
-	}
-	if (!penv->driver || !penv->driver->probe) {
-		pr_info("%s: WLAN driver is not registed yet\n", __func__);
-		return;
-	}
-
-	/* create a workqueue for wlan probe */
-	penv->wlan_probe_workqueue =
-		create_singlethread_workqueue("wlan_probe");
-	if (!penv->wlan_probe_workqueue) {
-		pr_err("%s: Fail to create wlan probe workqueue\n", __func__);
-		return;
-	}
-
-	queue_delayed_work(penv->wlan_probe_workqueue,
-			   &work_wlan_probe, 0);
-
-	return;
 }
 
-static void wlfw_clnt_svc_arrive(struct work_struct *work)
+static int cnss_qmi_event_server_arrive(void *data)
 {
-	int ret;
+	int ret = 0;
 
 	if (!penv)
-		return;
+		return -ENODEV;
 
-	penv->wlfw_clnt = qmi_handle_create(wlfw_clnt_notify, NULL);
+	penv->wlfw_clnt = qmi_handle_create(cnss_qmi_wlfw_clnt_notify, penv);
 	if (!penv->wlfw_clnt) {
 		pr_err("%s: QMI client handle alloc failed\n", __func__);
-		return;
+		ret = -ENOMEM;
+		goto out;
 	}
 
 	ret = qmi_connect_to_service(penv->wlfw_clnt,
@@ -670,68 +650,151 @@ static void wlfw_clnt_svc_arrive(struct work_struct *work)
 				     WLFW_SERVICE_VERS_V01,
 				     WLFW_SERVICE_INS_ID_V01);
 	if (ret < 0) {
-		pr_err("%s: Server not found\n", __func__);
-		goto out;
+		pr_err("Server not found : %d\n", ret);
+		goto fail;
 	}
 
-	ret = qmi_register_ind_cb(penv->wlfw_clnt, wlfw_clnt_ind, NULL);
+	ret = qmi_register_ind_cb(penv->wlfw_clnt,
+					cnss_qmi_wlfw_clnt_ind, penv);
 	if (ret < 0) {
-		pr_err("%s: Failed to register indication callback\n",
-		       __func__);
-		goto out;
+		pr_err("Failed to register indication callback: %d\n",
+		       ret);
+		goto fail;
 	}
+
+	penv->state |= CNSS_WLFW_QMI_CONNECTED;
 
 	pr_info("%s: QMI Server Connected\n", __func__);
-	penv->wlfw_qmi_connected = 1;
 
-	queue_ind_register_msg();
+	ret = wlfw_ind_register_send_sync_msg();
+	if (ret < 0) {
+		pr_err("Failed to send indication message: %d\n",
+			ret);
+		goto out;
+	}
 
-	return;
+	ret = wlfw_cap_send_sync_msg();
+	if (ret < 0) {
+		pr_err("Failed to get capability: %d\n",
+			ret);
+		goto out;
+	}
 
-out:
+	return ret;
+fail:
 	qmi_handle_destroy(penv->wlfw_clnt);
 	penv->wlfw_clnt = NULL;
-	return;
+out:
+	CNSS_ASSERT(0);
+	return ret;
 
 }
 
-static void wlfw_clnt_svc_exit(struct work_struct *work)
+static int cnss_qmi_event_server_exit(void *data)
 {
 	if (!penv || !penv->wlfw_clnt)
-		return;
+		return -ENODEV;
 
 	pr_info("%s: QMI Service Disconnected\n", __func__);
 
 	qmi_handle_destroy(penv->wlfw_clnt);
-	penv->fw_ready = 0;
-	penv->wlfw_qmi_connected = 0;
+	penv->state = 0;
 	penv->wlfw_clnt = NULL;
-}
 
-static int wlfw_clnt_svc_event_notify(struct notifier_block *this,
-				     unsigned long code,
-				     void *_cmd)
-{
-	if (!penv || !penv->wlfw_clnt_workqueue)
-		return -ENODEV;
-
-	switch (code) {
-	case QMI_SERVER_ARRIVE:
-		queue_delayed_work(penv->wlfw_clnt_workqueue,
-				   &work_svc_arrive, 0);
-		break;
-	case QMI_SERVER_EXIT:
-		queue_delayed_work(penv->wlfw_clnt_workqueue,
-				   &work_svc_exit, 0);
-		break;
-	default:
-		break;
-	}
 	return 0;
 }
 
+static int cnss_qmi_event_fw_ready_ind(void *data)
+{
+	int ret = 0;
+
+	if (!penv)
+		return -ENODEV;
+
+	penv->state |= CNSS_FW_READY;
+
+	if (!penv->pdev) {
+		pr_err("%s: Device is not ready\n", __func__);
+		ret = -ENODEV;
+		goto out;
+	}
+	if (!penv->driver || !penv->driver->probe) {
+		pr_info("%s: WLAN driver is not registed yet\n", __func__);
+		ret = -ENODEV;
+		goto out;
+	}
+
+	ret = penv->driver->probe(penv->pdev, penv->id);
+	if (ret < 0)
+		pr_err("%s: Driver probe failed: %d\n", __func__, ret);
+out:
+	return ret;
+}
+
+static int cnss_qmi_wlfw_clnt_svc_event_notify(struct notifier_block *this,
+				     unsigned long code,
+				     void *_cmd)
+{
+	int ret = 0;
+
+	if (!penv)
+		return -ENODEV;
+
+	pr_debug("Event Notify: code: %ld", code);
+
+	switch (code) {
+	case QMI_SERVER_ARRIVE:
+		ret = cnss_qmi_event_post(CNSS_QMI_EVENT_SERVER_ARRIVE, NULL);
+		break;
+
+	case QMI_SERVER_EXIT:
+		ret = cnss_qmi_event_post(CNSS_QMI_EVENT_SERVER_EXIT, NULL);
+		break;
+
+	default:
+		pr_info("Invalid code: %ld", code);
+		break;
+	}
+
+	return ret;
+}
+
+static void cnss_qmi_wlfw_event_work(struct work_struct *work)
+{
+	struct cnss_qmi_event *event;
+	unsigned long flags;
+
+	spin_lock_irqsave(&penv->qmi_event_lock, flags);
+
+	while (!list_empty(&penv->qmi_event_list)) {
+		event = list_first_entry(&penv->qmi_event_list,
+				struct cnss_qmi_event, list);
+		list_del(&event->list);
+		spin_unlock_irqrestore(&penv->qmi_event_lock, flags);
+
+		switch (event->type) {
+		case CNSS_QMI_EVENT_SERVER_ARRIVE:
+			cnss_qmi_event_server_arrive(event->data);
+			break;
+		case CNSS_QMI_EVENT_SERVER_EXIT:
+			cnss_qmi_event_server_exit(event->data);
+			break;
+		case CNSS_QMI_EVENT_FW_READY_IND:
+			cnss_qmi_event_fw_ready_ind(event->data);
+			break;
+		default:
+			pr_info("Invalid Event type: %d", event->type);
+			break;
+		}
+		kfree(event);
+		spin_lock_irqsave(&penv->qmi_event_lock, flags);
+	}
+
+	spin_unlock_irqrestore(&penv->qmi_event_lock, flags);
+}
+
 static struct notifier_block wlfw_clnt_nb = {
-	.notifier_call = wlfw_clnt_svc_event_notify,
+	.notifier_call = cnss_qmi_wlfw_clnt_svc_event_notify,
 };
 
 int cnss_wlan_enable(struct cnss_wlan_enable_cfg *config,
@@ -744,67 +807,61 @@ int cnss_wlan_enable(struct cnss_wlan_enable_cfg *config,
 
 	memset(&req, 0, sizeof(req));
 
-	if (mode != CNSS_WALTEST) {
-		if (!config || !host_version) {
-			pr_err("%s: Invalid cfg pointer\n", __func__);
-			ret = -EINVAL;
-			goto out;
-		}
-
-		req.host_version_valid = 1;
-		strlcpy(req.host_version, host_version,
-			QMI_WLFW_MAX_STR_LEN_V01 + 1);
-		req.tgt_cfg_valid = 1;
-		if (config->num_ce_tgt_cfg > QMI_WLFW_MAX_NUM_CE_V01)
-			req.tgt_cfg_len = QMI_WLFW_MAX_NUM_CE_V01;
-		else
-			req.tgt_cfg_len = config->num_ce_tgt_cfg;
-		for (i = 0; i < req.tgt_cfg_len; i++) {
-			req.tgt_cfg[i].pipe_num =
-				config->ce_tgt_cfg[i].pipe_num;
-			req.tgt_cfg[i].pipe_dir =
-				config->ce_tgt_cfg[i].pipe_dir;
-			req.tgt_cfg[i].nentries =
-				config->ce_tgt_cfg[i].nentries;
-			req.tgt_cfg[i].nbytes_max =
-				config->ce_tgt_cfg[i].nbytes_max;
-			req.tgt_cfg[i].flags =
-				config->ce_tgt_cfg[i].flags;
-		}
-		req.svc_cfg_valid = 1;
-		if (config->num_ce_svc_pipe_cfg > QMI_WLFW_MAX_NUM_SVC_V01)
-			req.svc_cfg_len = QMI_WLFW_MAX_NUM_SVC_V01;
-		else
-			req.svc_cfg_len = config->num_ce_svc_pipe_cfg;
-		for (i = 0; i < req.svc_cfg_len; i++) {
-			req.svc_cfg[i].service_id =
-				config->ce_svc_cfg[i].service_id;
-			req.svc_cfg[i].pipe_dir =
-				config->ce_svc_cfg[i].pipe_dir;
-			req.svc_cfg[i].pipe_num =
-				config->ce_svc_cfg[i].pipe_num;
-		}
-		req.shadow_reg_valid = 1;
-		if (config->num_shadow_reg_cfg >
-		    QMI_WLFW_MAX_NUM_SHADOW_REG_V01)
-			req.shadow_reg_len = QMI_WLFW_MAX_NUM_SHADOW_REG_V01;
-		else
-			req.shadow_reg_len = config->num_shadow_reg_cfg;
-		memcpy(req.shadow_reg, config->shadow_reg_cfg,
-	       sizeof(struct wlfw_shadow_reg_cfg_s_v01) * req.shadow_reg_len);
+	if (mode == CNSS_WALTEST)
+		goto skip;
+	else if (!config || !host_version) {
+		pr_err("%s: Invalid cfg pointer\n", __func__);
+		ret = -EINVAL;
+		goto out;
 	}
+
+	req.host_version_valid = 1;
+	strlcpy(req.host_version, host_version,
+		QMI_WLFW_MAX_STR_LEN_V01 + 1);
+
+	req.tgt_cfg_valid = 1;
+	if (config->num_ce_tgt_cfg > QMI_WLFW_MAX_NUM_CE_V01)
+		req.tgt_cfg_len = QMI_WLFW_MAX_NUM_CE_V01;
+	else
+		req.tgt_cfg_len = config->num_ce_tgt_cfg;
+	for (i = 0; i < req.tgt_cfg_len; i++) {
+		req.tgt_cfg[i].pipe_num = config->ce_tgt_cfg[i].pipe_num;
+		req.tgt_cfg[i].pipe_dir = config->ce_tgt_cfg[i].pipe_dir;
+		req.tgt_cfg[i].nentries = config->ce_tgt_cfg[i].nentries;
+		req.tgt_cfg[i].nbytes_max = config->ce_tgt_cfg[i].nbytes_max;
+		req.tgt_cfg[i].flags = config->ce_tgt_cfg[i].flags;
+	}
+
+	req.svc_cfg_valid = 1;
+	if (config->num_ce_svc_pipe_cfg > QMI_WLFW_MAX_NUM_SVC_V01)
+		req.svc_cfg_len = QMI_WLFW_MAX_NUM_SVC_V01;
+	else
+		req.svc_cfg_len = config->num_ce_svc_pipe_cfg;
+	for (i = 0; i < req.svc_cfg_len; i++) {
+		req.svc_cfg[i].service_id = config->ce_svc_cfg[i].service_id;
+		req.svc_cfg[i].pipe_dir = config->ce_svc_cfg[i].pipe_dir;
+		req.svc_cfg[i].pipe_num = config->ce_svc_cfg[i].pipe_num;
+	}
+
+	req.shadow_reg_valid = 1;
+	if (config->num_shadow_reg_cfg >
+	    QMI_WLFW_MAX_NUM_SHADOW_REG_V01)
+		req.shadow_reg_len = QMI_WLFW_MAX_NUM_SHADOW_REG_V01;
+	else
+		req.shadow_reg_len = config->num_shadow_reg_cfg;
+
+	memcpy(req.shadow_reg, config->shadow_reg_cfg,
+	       sizeof(struct wlfw_shadow_reg_cfg_s_v01) * req.shadow_reg_len);
 
 	ret = wlfw_wlan_cfg_send_sync_msg(&req);
 	if (ret) {
 		pr_err("%s: Failed to send cfg, ret = %d\n", __func__, ret);
 		goto out;
 	}
+skip:
 	ret = wlfw_wlan_mode_send_sync_msg(mode);
-	if (ret) {
+	if (ret)
 		pr_err("%s: Failed to send mode, ret = %d\n", __func__, ret);
-		goto out;
-	}
-
 out:
 	return ret;
 }
@@ -2513,7 +2570,7 @@ again:
 		cnss_wlan_memory_expansion();
 
 #ifdef CONFIG_CNSS_ADRASTEA
-	if (wdrv->probe && penv->fw_ready) {
+	if (wdrv->probe && CNSS_IS_FW_READY(penv->state)) {
 #else
 	if (wdrv->probe) {
 #endif
@@ -3405,18 +3462,16 @@ skip_ramdump:
 		goto err_bus_reg;
 	}
 
-	penv->wlfw_clnt_workqueue = create_singlethread_workqueue("wlfw_clnt");
-	if (!penv->wlfw_clnt_workqueue) {
+	penv->qmi_event_wq = alloc_workqueue("cnss_qmi_event", 0, 0);
+	if (!penv->qmi_event_wq) {
+		pr_err("%s: workqueue creation failed\n", __func__);
 		ret = -EFAULT;
 		goto err_bus_reg;
 	}
 
-	penv->wlfw_clnt_workqueue_send =
-		create_singlethread_workqueue("wlfw_clnt_send");
-	if (!penv->wlfw_clnt_workqueue_send) {
-		ret = -EFAULT;
-		goto err_workqueue_send;
-	}
+	INIT_WORK(&penv->qmi_event_work, cnss_qmi_wlfw_event_work);
+	INIT_WORK(&penv->qmi_recv_msg_work, cnss_qmi_wlfw_clnt_notify_work);
+	INIT_LIST_HEAD(&penv->qmi_event_list);
 
 	ret = qmi_svc_event_notifier_register(WLFW_SERVICE_ID_V01,
 					      WLFW_SERVICE_VERS_V01,
@@ -3431,12 +3486,8 @@ skip_ramdump:
 	return ret;
 
 err_register_notifier:
-	if (penv->wlfw_clnt_workqueue_send)
-		destroy_workqueue(penv->wlfw_clnt_workqueue_send);
-
-err_workqueue_send:
-	if (penv->wlfw_clnt_workqueue)
-		destroy_workqueue(penv->wlfw_clnt_workqueue);
+	if (penv->qmi_event_wq)
+		destroy_workqueue(penv->qmi_event_wq);
 
 err_bus_reg:
 	if (penv->bus_scale_table)
@@ -3491,12 +3542,8 @@ static int cnss_remove(struct platform_device *pdev)
 					  WLFW_SERVICE_VERS_V01,
 					  WLFW_SERVICE_INS_ID_V01,
 					  &wlfw_clnt_nb);
-	if (penv->wlan_probe_workqueue)
-		destroy_workqueue(penv->wlan_probe_workqueue);
-	if (penv->wlfw_clnt_workqueue_send)
-		destroy_workqueue(penv->wlfw_clnt_workqueue_send);
-	if (penv->wlfw_clnt_workqueue)
-		destroy_workqueue(penv->wlfw_clnt_workqueue);
+	if (penv->qmi_event_wq)
+		destroy_workqueue(penv->qmi_event_wq);
 
 	unregister_pm_notifier(&cnss_pm_notifier);
 	device_remove_file(&pdev->dev, &dev_attr_fw_image_setup);
