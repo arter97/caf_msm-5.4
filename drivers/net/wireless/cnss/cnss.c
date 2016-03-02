@@ -112,6 +112,7 @@ static struct cnss_fw_files FW_FILES_DEFAULT = {
 #define QCA6180_DEVICE_ID      (0x0041)
 #endif
 #define QCA6180_REV_ID_OFFSET	(0x08)
+#define QCA6180_DEVICE_ID_P2_E12 (0x7021)
 
 #define WLAN_VREG_NAME		"vdd-wlan"
 #define WLAN_VREG_IO_NAME	"vdd-wlan-io"
@@ -1396,6 +1397,7 @@ static int cnss_wlan_pci_probe(struct pci_dev *pdev,
 
 	switch (pdev->device) {
 	case QCA6180_DEVICE_ID:
+	case QCA6180_DEVICE_ID_P2_E12:
 		pci_read_config_word(pdev, QCA6180_REV_ID_OFFSET,
 				&penv->revision_id);
 		break;
@@ -1650,6 +1652,7 @@ static DEFINE_PCI_DEVICE_TABLE(cnss_wlan_pci_id_table) = {
 	{ QCA6174_VENDOR_ID, QCA6174_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
 	{ QCA6174_VENDOR_ID, BEELINER_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
 	{ QCA6180_VENDOR_ID, QCA6180_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
+	{ QCA6180_VENDOR_ID, QCA6180_DEVICE_ID_P2_E12, PCI_ANY_ID, PCI_ANY_ID},
 	{ 0 }
 };
 MODULE_DEVICE_TABLE(pci, cnss_wlan_pci_id_table);
