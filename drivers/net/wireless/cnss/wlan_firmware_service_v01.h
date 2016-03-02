@@ -1,4 +1,4 @@
- /* Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ /* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -60,6 +60,7 @@ enum wlfw_driver_mode_enum_v01 {
 	QMI_WLFW_EPPING_V01 = 2,
 	QMI_WLFW_WALTEST_V01 = 3,
 	QMI_WLFW_OFF_V01 = 4,
+	QMI_WLFW_CCPM_V01 = 5,
 	WLFW_DRIVER_MODE_ENUM_MAX_VAL_V01 = INT_MAX,
 };
 

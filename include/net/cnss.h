@@ -155,6 +155,7 @@ enum cnss_driver_mode {
 	CNSS_EPPING,
 	CNSS_WALTEST,
 	CNSS_OFF,
+	CNSS_CCPM,
 };
 
 extern int cnss_wlan_enable(struct cnss_wlan_enable_cfg *config,

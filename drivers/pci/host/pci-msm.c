@@ -5484,6 +5484,11 @@ static int msm_pcie_pm_suspend(struct pci_dev *dev,
 	unsigned long irqsave_flags;
 	struct msm_pcie_dev_t *pcie_dev = PCIE_BUS_PRIV_DATA(dev);
 
+#ifdef CONFIG_CNSS_EOS
+	PCIE_ERR(pcie_dev, "PCIe: RC%d: Rejecting suspend\n", pcie_dev->rc_idx);
+	return 0;
+#endif
+
 	PCIE_DBG(pcie_dev, "RC%d: entry\n", pcie_dev->rc_idx);
 
 	spin_lock_irqsave(&pcie_dev->aer_lock, irqsave_flags);
