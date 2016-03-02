@@ -651,6 +651,7 @@ void __init apq8064_init_pmic(void)
                 apq8064_pm8921_chg_pdata.disable_chg_rmvl_wrkarnd = 1;
 		apq8064_pm8921_chg_pdata.disable_charger = true;
 		apq8064_pm8921_bms_pdata.disable_bms = 1;
+		apq8064_pm8921_platform_data.leds_pdata = NULL;
 	}
 
 	if (!machine_is_apq8064_mtp() && !machine_is_apq8064_liquid())
