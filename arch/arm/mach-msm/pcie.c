@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -152,6 +152,29 @@ static int msm_pcie_is_link_up(void)
 {
 	return readl_relaxed(msm_pcie_dev.pcie20 + PCIE20_CAP_LINKCTRLSTATUS) &
 				BIT(29);
+}
+
+static inline int msm_pcie_xo_voter(enum msm_xo_modes xo_mode)
+{
+	static struct msm_xo_voter *xo_handle_a0;
+	int rc = 0;
+
+	xo_handle_a0 = msm_xo_get(MSM_XO_TCXO_A0, "msm_pcie");
+	if (IS_ERR(xo_handle_a0)) {
+		rc = PTR_ERR(xo_handle_a0);
+		pr_err("%s: failed to get the handle for a0 for PCIe:%d\n",
+			__func__, rc);
+	} else {
+		PCIE_DBG("%s for MSM_XO_TCXO_A0.\n", (xo_mode == MSM_XO_MODE_ON)
+			 ? "Vote" : "Relinquish the vote");
+		rc = msm_xo_mode_vote(xo_handle_a0, xo_mode);
+		if (!rc)
+			pr_err(
+				"%s: failed to vote for TCXO a0 buffer for PCIe:%d\n",
+				__func__, rc);
+	}
+
+	return rc;
 }
 
 static inline int msm_pcie_oper_conf(struct pci_bus *bus, u32 devfn, int oper,
@@ -331,6 +354,8 @@ static int msm_pcie_vreg_init(struct device *dev)
 		info->hdl = vreg;
 	}
 
+	rc = msm_pcie_xo_voter(MSM_XO_MODE_ON);
+
 	if (rc)
 		while (i--) {
 			regulator_disable(msm_pcie_dev.vreg[i].hdl);
@@ -350,6 +375,8 @@ static void msm_pcie_vreg_deinit(void)
 		regulator_put(msm_pcie_dev.vreg[i].hdl);
 		msm_pcie_dev.vreg[i].hdl = NULL;
 	}
+
+	msm_pcie_xo_voter(MSM_XO_MODE_OFF);
 }
 
 static int msm_pcie_clk_init(struct device *dev)
