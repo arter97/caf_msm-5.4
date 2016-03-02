@@ -296,6 +296,7 @@ static struct cnss_data {
 	bool monitor_wake_intr;
 	int q6intr_gpio;
 	int linkup_gpio;
+	bool linkup_state;
 	bool q6_intr_state;
 	void *target_smem;
 } *penv;
@@ -2613,11 +2614,13 @@ static struct notifier_block mnb = {
 #ifdef CONFIG_CNSS_ADRASTEA
 void cnss_pcie_notify_q6(void)
 {
-	if (penv->linkup_gpio > 0) {
-		pr_err("%s: smp2p trigger for link up to q6\n", __func__);
-		gpio_set_value(penv->linkup_gpio, 1);
-	}
+	if (penv->linkup_gpio < 0)
+		return;
 
+	penv->linkup_state = !penv->linkup_state;
+
+	pr_err("%s: %d\n", __func__, penv->linkup_state);
+	gpio_set_value(penv->linkup_gpio, penv->linkup_state);
 }
 EXPORT_SYMBOL(cnss_pcie_notify_q6);
 
