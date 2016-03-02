@@ -126,12 +126,19 @@ struct cnss_ce_svc_pipe_cfg {
 	u32 pipe_num;
 };
 
+struct cnss_shadow_reg_cfg {
+	u16 ce_id;
+	u16 reg_offset;
+};
+
 /* CE configuration to target */
 struct cnss_wlan_enable_cfg {
 	u32 num_ce_tgt_cfg;
 	struct cnss_ce_tgt_pipe_cfg *ce_tgt_cfg;
 	u32 num_ce_svc_pipe_cfg;
 	struct cnss_ce_svc_pipe_cfg *ce_svc_cfg;
+	u32 num_shadow_reg_cfg;
+	struct cnss_shadow_reg_cfg *shadow_reg_cfg;
 };
 
 /* driver modes */
