@@ -352,11 +352,19 @@ static struct cnss_data {
 	struct work_struct qmi_event_work;
 	struct work_struct qmi_recv_msg_work;
 	struct workqueue_struct *qmi_event_wq;
+	phys_addr_t msa_phys;
+	uint32_t msa_mem_size;
+	void *msa_addr;
 	uint32_t state;
 	u32 board_id;
 	u32 num_peers;
 	u32 mac_version;
 	char fw_version[QMI_WLFW_MAX_STR_LEN_V01 + 1];
+	u32 pwr_pin_result;
+	u32 phy_io_pin_result;
+	u32 rf_pin_result;
+	struct cnss_mem_region_info
+		cnss_mem_region[QMI_WLFW_MAX_NUM_MEMORY_REGIONS_V01];
 } *penv;
 
 static unsigned int pcie_link_down_panic;
@@ -390,6 +398,152 @@ static int cnss_qmi_event_post(enum cnss_qmi_event_type type, void *data)
 	return 0;
 }
 
+static int cnss_qmi_pin_connect_result_ind(void *msg, unsigned int msg_len)
+{
+	struct msg_desc ind_desc;
+	struct wlfw_pin_connect_result_ind_msg_v01 ind_msg;
+	int ret = 0;
+
+	if (!penv || !penv->wlfw_clnt) {
+		ret = -ENODEV;
+		goto out;
+	}
+
+	pr_debug("%s: Received Pin Connect Result\n", __func__);
+
+	ind_desc.msg_id = QMI_WLFW_PIN_CONNECT_RESULT_IND_V01;
+	ind_desc.max_msg_len = WLFW_PIN_CONNECT_RESULT_IND_MSG_V01_MAX_MSG_LEN;
+	ind_desc.ei_array = wlfw_pin_connect_result_ind_msg_v01_ei;
+
+	ret = qmi_kernel_decode(&ind_desc, &ind_msg, msg, msg_len);
+	if (ret < 0) {
+		pr_err("%s: Failed to decode message!\n", __func__);
+		goto out;
+	}
+
+	/* store pin result locally */
+	if (ind_msg.pwr_pin_result_valid)
+		penv->pwr_pin_result = ind_msg.pwr_pin_result;
+	if (ind_msg.phy_io_pin_result_valid)
+		penv->phy_io_pin_result = ind_msg.phy_io_pin_result;
+	if (ind_msg.rf_pin_result_valid)
+		penv->rf_pin_result = ind_msg.rf_pin_result;
+
+	pr_info("%s: Pin connect Result: pwr_pin: 0x%x phy_io_pin: 0x%x rf_io_pin: 0x%x\n",
+		__func__, ind_msg.pwr_pin_result, ind_msg.phy_io_pin_result,
+		ind_msg.rf_pin_result);
+out:
+	return ret;
+}
+static int wlfw_msa_mem_info_send_sync_msg(void)
+{
+	int ret = 0;
+	int i;
+	struct wlfw_msa_info_req_msg_v01 req;
+	struct wlfw_msa_info_resp_msg_v01 resp;
+	struct msg_desc req_desc, resp_desc;
+
+	if (!penv || !penv->wlfw_clnt) {
+		ret = -ENODEV;
+		goto out;
+	}
+
+	pr_debug("%s\n", __func__);
+
+	memset(&req, 0, sizeof(req));
+	memset(&resp, 0, sizeof(resp));
+
+	req.msa_addr = penv->msa_phys;
+	req.size = penv->msa_mem_size;
+
+	req_desc.max_msg_len = WLFW_MSA_INFO_REQ_MSG_V01_MAX_MSG_LEN;
+	req_desc.msg_id = QMI_WLFW_MSA_INFO_REQ_V01;
+	req_desc.ei_array = wlfw_msa_info_req_msg_v01_ei;
+
+	resp_desc.max_msg_len = WLFW_MSA_INFO_RESP_MSG_V01_MAX_MSG_LEN;
+	resp_desc.msg_id = QMI_WLFW_MSA_INFO_RESP_V01;
+	resp_desc.ei_array = wlfw_msa_info_resp_msg_v01_ei;
+
+	ret = qmi_send_req_wait(penv->wlfw_clnt, &req_desc, &req, sizeof(req),
+			&resp_desc, &resp, sizeof(resp), WLFW_TIMEOUT_MS);
+	if (ret < 0) {
+		pr_err("%s: send req failed %d\n", __func__, ret);
+		goto out;
+	}
+
+	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+		pr_err("%s: QMI request failed %d %d\n",
+			__func__, resp.resp.result, resp.resp.error);
+		ret = resp.resp.result;
+		goto out;
+	}
+
+	pr_debug("%s: Receive mem_region_info_len: %d\n",
+			__func__, resp.mem_region_info_len);
+
+	if (resp.mem_region_info_len <= 2) {
+		for (i = 0; i < resp.mem_region_info_len; i++) {
+			penv->cnss_mem_region[i].reg_addr =
+				resp.mem_region_info[i].region_addr;
+			penv->cnss_mem_region[i].size =
+				resp.mem_region_info[i].size;
+			penv->cnss_mem_region[i].secure_flag =
+				resp.mem_region_info[i].secure_flag;
+			pr_debug("%s : Memory Region: %d  Addr:0x%x Size : %d Flag: %d\n",
+				__func__, i,
+				(unsigned int)penv->cnss_mem_region[i].reg_addr,
+				penv->cnss_mem_region[i].size,
+				penv->cnss_mem_region[i].secure_flag);
+		}
+	} else
+		pr_err("%s : Invalid memory region length received\n",
+			__func__);
+out:
+	return ret;
+}
+
+static int wlfw_msa_ready_send_sync_msg(void)
+{
+	int ret;
+	struct wlfw_msa_ready_req_msg_v01 req;
+	struct wlfw_msa_ready_resp_msg_v01 resp;
+	struct msg_desc req_desc, resp_desc;
+
+	if (!penv || !penv->wlfw_clnt) {
+		ret = -ENODEV;
+		goto out;
+	}
+
+	pr_debug("%s\n", __func__);
+
+	memset(&req, 0, sizeof(req));
+	memset(&resp, 0, sizeof(resp));
+
+	req_desc.max_msg_len = WLFW_MSA_READY_REQ_MSG_V01_MAX_MSG_LEN;
+	req_desc.msg_id = QMI_WLFW_MSA_READY_REQ_V01;
+	req_desc.ei_array = wlfw_msa_ready_req_msg_v01_ei;
+
+	resp_desc.max_msg_len = WLFW_MSA_READY_RESP_MSG_V01_MAX_MSG_LEN;
+	resp_desc.msg_id = QMI_WLFW_MSA_READY_RESP_V01;
+	resp_desc.ei_array = wlfw_msa_ready_resp_msg_v01_ei;
+
+	ret = qmi_send_req_wait(penv->wlfw_clnt, &req_desc, &req, sizeof(req),
+			&resp_desc, &resp, sizeof(resp), WLFW_TIMEOUT_MS);
+	if (ret < 0) {
+		pr_err("%s: send req failed %d\n", __func__, ret);
+		goto out;
+	}
+
+	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+		pr_err("%s: QMI request failed %d %d\n",
+			__func__, resp.resp.result, resp.resp.error);
+		ret = resp.resp.result;
+		goto out;
+	}
+out:
+	return ret;
+}
+
 static int wlfw_ind_register_send_sync_msg(void)
 {
 	int ret;
@@ -409,6 +563,10 @@ static int wlfw_ind_register_send_sync_msg(void)
 
 	req.fw_ready_enable_valid = 1;
 	req.fw_ready_enable = 1;
+	req.msa_ready_enable_valid = 1;
+	req.msa_ready_enable = 1;
+	req.pin_connect_result_enable_valid = 1;
+	req.pin_connect_result_enable = 1;
 
 	req_desc.max_msg_len = WLFW_IND_REGISTER_REQ_MSG_V01_MAX_MSG_LEN;
 	req_desc.msg_id = QMI_WLFW_IND_REGISTER_REQ_V01;
@@ -625,6 +783,15 @@ static void cnss_qmi_wlfw_clnt_ind(struct qmi_handle *handle,
 	case QMI_WLFW_FW_READY_IND_V01:
 		cnss_qmi_event_post(CNSS_QMI_EVENT_FW_READY_IND, NULL);
 		break;
+	case QMI_WLFW_MSA_READY_IND_V01:
+		pr_debug("%s: Received MSA Ready Indication msg_id 0x%x\n",
+			 __func__, msg_id);
+		break;
+	case QMI_WLFW_PIN_CONNECT_RESULT_IND_V01:
+		pr_debug("%s: Received Pin Connect Test Result msg_id 0x%x\n",
+			 __func__, msg_id);
+		cnss_qmi_pin_connect_result_ind(msg, msg_len);
+		break;
 	default:
 		pr_err("%s: Invalid msg_id 0x%x\n", __func__, msg_id);
 		break;
@@ -673,6 +840,40 @@ static int cnss_qmi_event_server_arrive(void *data)
 		goto out;
 	}
 
+	if (penv->msa_mem_size) {
+		ret = dma_set_mask(&penv->pldev->dev, DMA_BIT_MASK(32));
+		if (ret) {
+			pr_err("%s: Cannot enable 32-bit pci DMA", __func__);
+		}
+		ret = dma_set_coherent_mask(&penv->pldev->dev,
+					    DMA_BIT_MASK(32));
+		if (ret) {
+			pr_err("%s: Cannot enable 32-bit consistent DMA!",
+			       __func__);
+		}
+		penv->msa_addr = dma_alloc_coherent(&penv->pldev->dev,
+				    penv->msa_mem_size, &penv->msa_phys,
+				    GFP_KERNEL);
+
+		pr_info("%s: MSA addr: %p, MSA phys: %pa\n", __func__,
+			penv->msa_addr, &penv->msa_phys);
+
+		if (penv->msa_addr) {
+			ret = wlfw_msa_mem_info_send_sync_msg();
+			if (ret < 0) {
+				pr_err("Failed to send MSA info: %d\n",
+				       ret);
+				goto out;
+			}
+			ret = wlfw_msa_ready_send_sync_msg();
+			if (ret < 0) {
+				pr_err("Failed to send MSA ready : %d\n",
+				       ret);
+				goto out;
+			}
+		}
+	}
+
 	ret = wlfw_cap_send_sync_msg();
 	if (ret < 0) {
 		pr_err("Failed to get capability: %d\n",
@@ -685,6 +886,10 @@ fail:
 	qmi_handle_destroy(penv->wlfw_clnt);
 	penv->wlfw_clnt = NULL;
 out:
+	if (penv->msa_addr) {
+		dma_free_coherent(&penv->pldev->dev, penv->msa_mem_size,
+				  penv->msa_addr, penv->msa_phys);
+	}
 	CNSS_ASSERT(0);
 	return ret;
 
@@ -698,6 +903,10 @@ static int cnss_qmi_event_server_exit(void *data)
 	pr_info("%s: QMI Service Disconnected\n", __func__);
 
 	qmi_handle_destroy(penv->wlfw_clnt);
+	if (penv->msa_addr) {
+		dma_free_coherent(&penv->pldev->dev, penv->msa_mem_size,
+				  penv->msa_addr, penv->msa_phys);
+	}
 	penv->state = 0;
 	penv->wlfw_clnt = NULL;
 
@@ -1927,6 +2136,26 @@ static void cnss_smmu_remove(struct device *dev)
 
 	penv->smmu_mapping = NULL;
 }
+
+static ssize_t cnss_wlan_pin_connect_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	if (!penv)
+		return -ENODEV;
+
+	return scnprintf(buf, PAGE_SIZE, "Pin Connect Result:\n"
+					"FW Version: %s\n"
+					"pwr_pin: 0x%x\n"
+					"phy_io_pin: 0x%x\n"
+					"rf_io_pin: 0x%x\n",
+					penv->fw_version,
+					penv->pwr_pin_result,
+					penv->phy_io_pin_result,
+					penv->rf_pin_result);
+}
+
+static DEVICE_ATTR(cnss_wlan_pin_connect, S_IRUSR,
+			cnss_wlan_pin_connect_show, NULL);
 
 static int cnss_wlan_pci_probe(struct pci_dev *pdev,
 			       const struct pci_device_id *id)
@@ -3253,6 +3482,7 @@ static int cnss_probe(struct platform_device *pdev)
 	struct resource *res;
 	u32 ramdump_size = 0;
 	u32 smmu_iova_address[2];
+	u32 msa_mem_size = 0;
 
 	if (penv)
 		return -ENODEV;
@@ -3329,6 +3559,12 @@ static int cnss_probe(struct platform_device *pdev)
 	}
 
 	penv->subsys_handle = subsystem_get(penv->subsysdesc.name);
+
+	if (of_property_read_u32(dev->of_node, "qcom,wlan-msa-memory",
+				&msa_mem_size) == 0) {
+		penv->msa_mem_size = msa_mem_size;
+	} else
+		pr_err("%s: Fail to get the MSA Memory Size\n", __func__);
 
 	if (of_property_read_u32(dev->of_node, "qcom,wlan-ramdump-dynamic",
 				&ramdump_size) == 0) {
@@ -3462,11 +3698,17 @@ skip_ramdump:
 		goto err_bus_reg;
 	}
 
+	ret = device_create_file(dev, &dev_attr_cnss_wlan_pin_connect);
+	if (ret) {
+		pr_err("cnss: wlan_pin_connect sys file creation failed\n");
+		goto err_fw_image_setup;
+	}
+
 	penv->qmi_event_wq = alloc_workqueue("cnss_qmi_event", 0, 0);
 	if (!penv->qmi_event_wq) {
 		pr_err("%s: workqueue creation failed\n", __func__);
 		ret = -EFAULT;
-		goto err_bus_reg;
+		goto err_wlan_pin_connect;
 	}
 
 	INIT_WORK(&penv->qmi_event_work, cnss_qmi_wlfw_event_work);
@@ -3488,6 +3730,12 @@ skip_ramdump:
 err_register_notifier:
 	if (penv->qmi_event_wq)
 		destroy_workqueue(penv->qmi_event_wq);
+
+err_wlan_pin_connect:
+	device_remove_file(&pdev->dev, &dev_attr_cnss_wlan_pin_connect);
+
+err_fw_image_setup:
+	device_remove_file(&pdev->dev, &dev_attr_fw_image_setup);
 
 err_bus_reg:
 	if (penv->bus_scale_table)
@@ -3546,6 +3794,7 @@ static int cnss_remove(struct platform_device *pdev)
 		destroy_workqueue(penv->qmi_event_wq);
 
 	unregister_pm_notifier(&cnss_pm_notifier);
+	device_remove_file(&pdev->dev, &dev_attr_cnss_wlan_pin_connect);
 	device_remove_file(&pdev->dev, &dev_attr_fw_image_setup);
 
 	cnss_pm_wake_lock_destroy(&penv->ws);
