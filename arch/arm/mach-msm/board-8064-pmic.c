@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, 2014-2015, The Linux Foundation.
+/* Copyright (c) 2011-2012, 2014-2016, The Linux Foundation.
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -566,6 +566,7 @@ apq8064_pm8921_bms_pdata __devinitdata = {
 	.min_fcc_learning_soc		= 20,
 	.min_fcc_ocv_pc			= 30,
 	.min_fcc_learning_samples	= 5,
+	.disable_bms			= 0,
 };
 
 static struct pm8921_platform_data
@@ -647,6 +648,7 @@ void __init apq8064_init_pmic(void)
 			|| machine_is_apq8064_adp2_es2p5()) {
 		apq8064_pm8921_chg_pdata.has_dc_supply = true;
                 apq8064_pm8921_chg_pdata.disable_chg_rmvl_wrkarnd = 1;
+		apq8064_pm8921_bms_pdata.disable_bms = 1;
 	}
 
 	if (!machine_is_apq8064_mtp() && !machine_is_apq8064_liquid())

@@ -1,4 +1,5 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2013, 2016, The Linux Foundation. All rights
+ * reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3111,6 +3112,21 @@ err_out:
 
 #define EN_BMS_BIT	BIT(7)
 #define EN_PON_HS_BIT	BIT(0)
+
+static int __devinit pm8921_bms_hw_deinit(struct pm8921_bms_chip *chip)
+{
+	int rc;
+
+	rc = pm_bms_masked_write(chip, BMS_CONTROL,
+			EN_BMS_BIT | EN_PON_HS_BIT, 0);
+	if (rc) {
+		pr_err("failed to enable bms addr = %d %d",
+				BMS_CONTROL, rc);
+	}
+
+	return rc;
+}
+
 static int __devinit pm8921_bms_hw_init(struct pm8921_bms_chip *chip)
 {
 	int rc;
@@ -3688,6 +3704,16 @@ static int __devinit pm8921_bms_probe(struct platform_device *pdev)
 	if (!chip) {
 		pr_err("Cannot allocate pm_bms_chip\n");
 		return -ENOMEM;
+	}
+
+	if (pdata->disable_bms) {
+		chip->dev = &pdev->dev;
+		rc = pm8921_bms_hw_deinit(chip);
+		if (rc)
+			pr_err("couldn't deinit hardware rc = %d\n", rc);
+
+		rc = -ENODEV;
+		goto free_chip;
 	}
 
 	mutex_init(&chip->bms_output_lock);
