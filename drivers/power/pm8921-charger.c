@@ -1,4 +1,5 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2013, 2016, The Linux Foundation. All rights
+ * reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -4145,6 +4146,19 @@ static void detect_battery_removal(struct pm8921_chg_chip *chip)
 		pm8921_bms_invalidate_shutdown_soc();
 }
 
+static int __devinit pm8921_chg_hw_deinit(struct pm8921_chg_chip *chip)
+{
+	int rc;
+
+	rc = pm8921_chg_set_lpm(chip, 1);
+	if (rc)
+		pr_err("Failed to set lpm rc=%d\n", rc);
+
+	pm8921_chg_set_hw_clk_switching(chip);
+
+	return rc;
+}
+
 #define ENUM_TIMER_STOP_BIT	BIT(1)
 #define BOOT_DONE_BIT		BIT(6)
 #define CHG_BATFET_ON_BIT	BIT(3)
@@ -4154,6 +4168,7 @@ static void detect_battery_removal(struct pm8921_chg_chip *chip)
 #define PM_SUB_REV		0x001
 #define MIN_CHARGE_CURRENT_MA	350
 #define DEFAULT_SAFETY_MINUTES	500
+
 static int __devinit pm8921_chg_hw_init(struct pm8921_chg_chip *chip)
 {
 	u8 subrev;
@@ -4742,6 +4757,7 @@ static int __devinit pm8921_charger_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+
 	chip->dev = &pdev->dev;
 	chip->ttrkl_time = pdata->ttrkl_time;
 	chip->update_time = pdata->update_time;
@@ -4816,6 +4832,17 @@ static int __devinit pm8921_charger_probe(struct platform_device *pdev)
 					chip->max_bat_chg_current);
 
 	chip->voter = msm_xo_get(MSM_XO_TCXO_D0, "pm8921_charger");
+
+	if (pdata->disable_charger) {
+		rc = pm8921_chg_hw_deinit(chip);
+		if (rc)
+			pr_err("couldn't deinit hardware rc = %d\n", rc);
+
+		rc = -ENODEV;
+
+		goto free_chip;
+	}
+
 	rc = pm8921_chg_hw_init(chip);
 	if (rc) {
 		pr_err("couldn't init hardware rc=%d\n", rc);
