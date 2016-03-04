@@ -1525,7 +1525,8 @@ static int lsm303dlhc_acc_probe(struct i2c_client *client,
 	stat->accel_cdev.sensors_enable = lsm303dlhc_acc_cdev_enable;
 	stat->accel_cdev.sensors_poll_delay = lsm303dlhc_acc_cdev_poll_delay;
 
-	ret = sensors_classdev_register(&client->dev, &stat->accel_cdev);
+	ret = sensors_classdev_register(&stat->input_dev->dev,
+						&stat->accel_cdev);
 	if (ret) {
 		dev_err(&client->dev,
 			"create LSM303DLHC_ACC_DEV_NAME class device file failed!\n");

@@ -1917,7 +1917,8 @@ static int lsm330_gyr_probe(struct i2c_client *client,
 	stat->gyro_cdev.sensors_set_latency = lsm330_cdev_set_latency;
 	stat->gyro_cdev.sensors_flush = lsm330_cdev_flush;
 
-	err = sensors_classdev_register(&client->dev, &stat->gyro_cdev);
+	err = sensors_classdev_register(&stat->input_dev->dev,
+						&stat->gyro_cdev);
 	if (err) {
 		dev_err(&client->dev, "create class device file failed!\n");
 		goto err6;
