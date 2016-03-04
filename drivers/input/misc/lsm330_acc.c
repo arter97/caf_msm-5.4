@@ -2554,7 +2554,7 @@ static int lsm330_acc_probe(struct i2c_client *client,
 	acc->accel_cdev.read_boot_samples = lsm330_cdev_bootsampl;
 #endif
 
-	err = sensors_classdev_register(&client->dev, &acc->accel_cdev);
+	err = sensors_classdev_register(&acc->input_dev->dev, &acc->accel_cdev);
 	if (err) {
 		dev_err(&client->dev,
 			"create lsm330_acc class device file failed!\n");
