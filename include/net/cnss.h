@@ -273,4 +273,7 @@ extern int cnss_is_auto_suspend_allowed(const char *caller_func);
 extern int cnss_pm_runtime_request(struct device *dev, enum
 		cnss_runtime_request request);
 
+extern int cnss_pcie_set_wlan_mac_address(const u8 *in, uint32_t len);
+extern u8 *cnss_common_get_wlan_mac_address(struct device *dev, uint32_t *num);
+extern u8 *cnss_pci_get_wlan_mac_address(uint32_t *num);
 #endif /* _NET_CNSS_H_ */

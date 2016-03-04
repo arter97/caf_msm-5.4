@@ -205,3 +205,12 @@ void *cnss_common_get_virt_ramdump_mem(struct device *dev, unsigned long *size)
 	}
 }
 EXPORT_SYMBOL(cnss_common_get_virt_ramdump_mem);
+
+u8 *cnss_common_get_wlan_mac_address(struct device *dev, uint32_t *num)
+{
+	if (CNSS_BUS_PCI == cnss_get_dev_bus_type(dev))
+		return cnss_pci_get_wlan_mac_address(num);
+	else
+		return NULL;
+}
+EXPORT_SYMBOL(cnss_common_get_wlan_mac_address);
