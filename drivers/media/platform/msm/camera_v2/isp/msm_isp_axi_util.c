@@ -2711,7 +2711,7 @@ static int msm_isp_return_empty_buffer(struct vfe_device *vfe_dev,
 		return rc;
 	}
 
-	if (user_stream_id == stream_info->stream_id)
+	if (user_stream_id == GET_V4L2_STREAM_ID(stream_info->stream_id))
 		bufq_handle = stream_info->bufq_handle[VFE_BUF_QUEUE_DEFAULT];
 	else
 		bufq_handle = stream_info->bufq_handle[VFE_BUF_QUEUE_SHARED];
@@ -2821,7 +2821,7 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 		return -EINVAL;
 	}
 
-	if (user_stream_id == stream_info->stream_id)
+	if (user_stream_id == GET_V4L2_STREAM_ID(stream_info->stream_id))
 		queue_req->buff_queue_id = VFE_BUF_QUEUE_DEFAULT;
 	else
 		queue_req->buff_queue_id = VFE_BUF_QUEUE_SHARED;
