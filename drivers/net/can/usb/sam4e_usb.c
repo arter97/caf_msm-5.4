@@ -39,10 +39,14 @@
 
 #define DEBUG_SAM4E	0
 #if DEBUG_SAM4E == 1
-#define LOGNI(...) dbg(__VA_ARGS__)
+#define LOGDI(...) dev_info(&dev->udev->dev, __VA_ARGS__)
+#define LOGNI(...) netdev_info(netdev, __VA_ARGS__)
 #else
+#define LOGDI(...)
 #define LOGNI(...)
 #endif
+#define LOGDE(...) dev_err(&dev->udev->dev, __VA_ARGS__)
+#define LOGNE(...) netdev_err(netdev, __VA_ARGS__)
 
 #define BULK_IN_EP	3
 #define BULK_OUT_EP	4
@@ -255,7 +259,7 @@ static void sam4e_usb_receive_frame(struct sam4e_usb *dev,
 		return;
 	}
 
-	LOGNI(" rcv frame %d %x %d %x %x %x %x %x %x %x %x\n",
+	LOGDI(" rcv frame %d %x %d %x %x %x %x %x %x %x %x\n",
 			frame->ts, frame->mid, frame->dlc, frame->data[0],
 			frame->data[1], frame->data[2], frame->data[3],
 			frame->data[4], frame->data[5], frame->data[6],
@@ -271,7 +275,7 @@ static void sam4e_usb_receive_frame(struct sam4e_usb *dev,
 	tv.tv_usec = (msec - tv.tv_sec * 1000) * 1000;
 	skt = skb_hwtstamps(skb);
 	skt->hwtstamp = timeval_to_ktime(tv);
-	LOGNI("   hwtstamp %lld\n", ktime_to_ms(skt->hwtstamp));
+	LOGDI("   hwtstamp %lld\n", ktime_to_ms(skt->hwtstamp));
 	skb->tstamp = timeval_to_ktime(tv);
 	netif_rx(skb);
 }
@@ -279,7 +283,7 @@ static void sam4e_usb_receive_frame(struct sam4e_usb *dev,
 static void sam4e_process_response(struct sam4e_usb *dev,
 				   struct sam4e_resp *resp, int length)
 {
-	LOGNI("<%x %2d [%d] %d buff:[%d]\n", resp->cmd,
+	LOGDI("<%x %2d [%d] %d buff:[%d]\n", resp->cmd,
 			resp->len, resp->seq, resp->err,
 			atomic_read(&dev->active_tx_urbs));
 	if (resp->cmd == CMD_CAN_TS_READ_ASYNC) {
@@ -290,7 +294,7 @@ static void sam4e_process_response(struct sam4e_usb *dev,
 		struct sam4e_can_unsl_ts_receive *frame =
 				(struct sam4e_can_unsl_ts_receive *)&msg->data;
 		if (msg->len > length) {
-			LOGNI("process_response: Saving %d bytes of response\n",
+			LOGDI("process_response: Saving %d bytes of response\n",
 					length);
 			memcpy(dev->assembly_buffer, (char *)resp, length);
 			dev->assembly_buffer_size = length;
@@ -301,16 +305,24 @@ static void sam4e_process_response(struct sam4e_usb *dev,
 		atomic_dec(&dev->active_tx_urbs);
 		if ((atomic_read(&dev->netif_queue_stop) == 1) &&
 		    atomic_read(&dev->active_tx_urbs) < MAX_TX_URBS) {
-			LOGNI("Waking up queue. (%d)\n",
+			LOGDI("Waking up queue. (%d)\n",
 			      atomic_read(&dev->active_tx_urbs));
 			netif_wake_queue(dev->netdev1);
 			netif_wake_queue(dev->netdev2);
 			atomic_dec(&dev->netif_queue_stop);
 		}
 	} else if (resp->cmd == CMD_CAN_RELEASE_BUFFER) {
-		LOGNI("Received CMD_CAN_RELEASE_BUFFER response\n");
+		LOGDI("Received CMD_CAN_RELEASE_BUFFER response\n");
 	} else if (resp->cmd == CMD_CAN_ENABLE_BUFFERING) {
-		LOGNI("Received CMD_CAN_ENABLE_BUFFERING response\n");
+		LOGDI("Received CMD_CAN_ENABLE_BUFFERING response\n");
+	} else if (resp->cmd == CMD_SYS_GET_FW_VERSION) {
+		struct sam4e_fw_resp *fw;
+		LOGDI("Received CMD_SYS_GET_FW_VERSION response\n");
+		fw = (struct sam4e_fw_resp *)resp->data;
+		dev_info(&dev->udev->dev, "sam4e fw %d.%d", fw->maj, fw->min);
+		dev_info(&dev->udev->dev, "sam4e fw string %s", fw->ver);
+	} else {
+		LOGDI("Received unknown response %x\n", resp->cmd);
 	}
 }
 
@@ -319,7 +331,7 @@ static void sam4e_usb_read_bulk_callback(struct urb *urb)
 	struct sam4e_usb *dev = urb->context;
 	int err, length_processed = 0;
 
-	LOGNI("sam4e_usb_read_bulk_callback length: %d\n", urb->actual_length);
+	LOGDI("sam4e_usb_read_bulk_callback length: %d\n", urb->actual_length);
 
 	switch (urb->status) {
 	case 0:
@@ -339,7 +351,7 @@ static void sam4e_usb_read_bulk_callback(struct urb *urb)
 		void *data;
 		if (dev->assembly_buffer_size > 0) {
 			struct sam4e_resp *resp;
-			LOGNI("callback: Reassembling %d bytes of response\n",
+			LOGDI("callback: Reassembling %d bytes of response\n",
 					dev->assembly_buffer_size);
 			memcpy(dev->assembly_buffer + dev->assembly_buffer_size,
 					urb->transfer_buffer, 2);
@@ -359,7 +371,7 @@ static void sam4e_usb_read_bulk_callback(struct urb *urb)
 			resp = (struct sam4e_resp *)data;
 			length = resp->len;
 		}
-		LOGNI("processing. p %d -> l %d (t %d)\n",
+		LOGDI("processing. p %d -> l %d (t %d)\n",
 				length_processed, length_left,
 				urb->actual_length);
 		length_processed += length;
@@ -367,7 +379,7 @@ static void sam4e_usb_read_bulk_callback(struct urb *urb)
 			struct sam4e_resp *resp =
 					(struct sam4e_resp *)data;
 			if (resp->len < sizeof(struct sam4e_resp)) {
-				LOGNI("Error resp->len is %d). Abort.\n",
+				LOGDE("Error resp->len is %d). Abort.\n",
 						resp->len);
 				break;
 			}
@@ -375,7 +387,7 @@ static void sam4e_usb_read_bulk_callback(struct urb *urb)
 		} else if (length_left > 0) {
 			/* Not full message. Store however much we have for
 			   later assembly */
-			LOGNI("callback: Storing %d bytes of response\n",
+			LOGDI("callback: Storing %d bytes of response\n",
 					length_left);
 			memcpy(dev->assembly_buffer, data, length_left);
 			dev->assembly_buffer_size = length_left;
@@ -386,13 +398,13 @@ static void sam4e_usb_read_bulk_callback(struct urb *urb)
 	}
 
 	if (urb->actual_length > length_processed) {
-		LOGNI("Error length > length_processed: %d > %d (needed: %d)\n",
+		LOGDE("Error length > length_processed: %d > %d (needed: %d)\n",
 				urb->actual_length, length_processed,
 				sizeof(struct sam4e_resp));
 	}
 
 resubmit_urb:
-	LOGNI("Resubmitting Rx Urb\n");
+	LOGDI("Resubmitting Rx Urb\n");
 	usb_fill_bulk_urb(urb, dev->udev,
 			usb_rcvbulkpipe(dev->udev, BULK_IN_EP),
 			urb->transfer_buffer, RX_BUFFER_SIZE,
@@ -550,7 +562,7 @@ static netdev_tx_t sam4e_netdev_start_xmit(
 	cfw->dlc = cf->can_dlc;
 	memcpy(cfw->data, cf->data, 8);
 
-	LOGNI(">%x %2d [%d] send frame [%d] %x %d %x %x %x %x %x %x %x %x\n",
+	LOGDI(">%x %2d [%d] send frame [%d] %x %d %x %x %x %x %x %x %x %x\n",
 			req->cmd, req->len, req->seq,
 			atomic_read(&dev->active_tx_urbs), cfw->mid,
 			cfw->dlc, cfw->data[0], cfw->data[1], cfw->data[2],
@@ -580,7 +592,7 @@ static netdev_tx_t sam4e_netdev_start_xmit(
 	} else {
 		/* Put on hold tx path */
 		if (atomic_read(&dev->active_tx_urbs) >= MAX_TX_URBS) {
-			LOGNI("Too many outstanding requests (%d). Stop queue",
+			LOGDI("Too many outstanding requests (%d). Stop queue",
 					atomic_read(&dev->active_tx_urbs));
 			atomic_inc(&dev->netif_queue_stop);
 			if (dev->netdev1)
@@ -690,7 +702,7 @@ static int sam4e_enable_buffering(struct net_device *netdev,
 	enable_buffering->mid = add_request->mid;
 	enable_buffering->mask = add_request->mask;
 
-	LOGNI("sam4e_send_enable_buffering %d %x %x", enable_buffering->can,
+	LOGDI("sam4e_send_enable_buffering %d %x %x", enable_buffering->can,
 			enable_buffering->mid,
 			enable_buffering->mask);
 
@@ -761,7 +773,7 @@ static int sam4e_frame_filter(struct net_device *netdev,
 	frame_filter->mask = add_request->mask;
 	frame_filter->type = add_request->type;
 
-	LOGNI("sam4e_send_frame_filter cmd:%d %d %x %x %d", req->cmd,
+	LOGDI("sam4e_send_frame_filter cmd:%d %d %x %x %d", req->cmd,
 			frame_filter->can,
 			frame_filter->mid,
 			frame_filter->mask,
@@ -815,15 +827,12 @@ static const struct net_device_ops sam4e_usb_netdev_ops = {
 static int sam4e_read_fw_version(struct sam4e_usb *dev)
 {
 	struct sam4e_req *req;
-	struct sam4e_resp *resp;
-	struct sam4e_fw_resp *fw;
-	int resp_size;
 	int actual_length;
 	int result;
 	struct net_device *netdev;
 
 	netdev = dev->netdev1;
-	LOGNI("Querying firmware version");
+	LOGDI("Querying firmware version");
 	req = kzalloc(sizeof(struct sam4e_req), GFP_KERNEL);
 	if (req == NULL)
 		return -ENOMEM;
@@ -838,31 +847,9 @@ static int sam4e_read_fw_version(struct sam4e_usb *dev)
 			sizeof(struct sam4e_req),
 			&actual_length, 1000);
 
-	LOGNI("sent %x result %d, actual_length %d",
+	LOGDI("sent %x result %d, actual_length %d",
 			req->cmd, result, actual_length);
 	kfree(req);
-
-	resp_size = sizeof(struct sam4e_resp) + sizeof(struct sam4e_fw_resp);
-	resp = kzalloc(resp_size, GFP_KERNEL);
-	if (resp == NULL)
-		return -ENOMEM;
-
-	result =  usb_bulk_msg(dev->udev,
-			usb_rcvbulkpipe(dev->udev, BULK_IN_EP),
-			resp,
-			resp_size,
-			&actual_length, 1000);
-
-	LOGNI("rcv? result %d, actual_length %d",
-		result, actual_length);
-	if (result == 0 && actual_length == resp_size) {
-		fw = (struct sam4e_fw_resp *)resp->data;
-		LOGNI("data %x %d %d %d\n", resp->cmd,
-				resp->len, resp->seq, resp->err);
-		netdev_info(netdev, "sam4e fw %d.%d", fw->maj, fw->min);
-		netdev_info(netdev, "sam4e fw string %s", fw->ver);
-	}
-	kfree(resp);
 	return 0;
 }
 /*
@@ -898,7 +885,7 @@ static void setup_mailbox(u8 mailbox, u8 canid,
 					sizeof(struct sam4e_req) +
 					sizeof(struct sam4e_can_full_ts_read),
 					&actual_length, 1000);
-		LOGNI("sent %x result %d, actual_length %d",
+		LOGDI("sent %x result %d, actual_length %d",
 				req->cmd, result, actual_length);
 		kfree(req);
 	}
@@ -907,7 +894,7 @@ static void setup_mailbox(u8 mailbox, u8 canid,
 				resp,
 				sizeof(struct sam4e_resp),
 				&actual_length, 1000);
-	LOGNI("rcv? result %d, actual_length %d", result, actual_length);
+	LOGDI("rcv? result %d, actual_length %d", result, actual_length);
 	if (result == 0 && DEBUG_SAM4E) {
 		dev_info(&intf->dev, "data %x %d %d %d\n", resp->cmd,
 			resp->len, resp->seq, resp->err);
@@ -1038,7 +1025,7 @@ static void sam4e_usb_disconnect(struct usb_interface *intf)
 	dev = usb_get_intfdata(intf);
 	usb_set_intfdata(intf, NULL);
 	if (dev) {
-		LOGNI("Disconnect sam4e\n");
+		LOGDI("Disconnect sam4e\n");
 		if (dev->netdev1) {
 			unregister_netdev(dev->netdev1);
 			free_candev(dev->netdev1);
