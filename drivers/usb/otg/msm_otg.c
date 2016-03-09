@@ -79,6 +79,12 @@
 #define USB_TEST_SINGLE_STEP_GET_DEV_DESC	6
 #define USB_TEST_SINGLE_STEP_SET_FEATURE	7
 
+#define USB_FLEXCONNECT_COMMAND		(0x08)
+#define USB_FLEXCONNECT_REQUEST_TYPE	(0x41)
+#define USB_FLEXCONNECT_WVALUE		(0x8540)
+#define USB_VENDOR_ID_FLEX_BRIDGE	(0x0424)
+#define USB_PRODUCT_ID_FLEX_BRIDGE	(0x2530)
+
 #define MAX_USB_CORE_NUM	4
 
 /* device index 1 is used for USB1, 3 for USB3 and id 4 for USB4, similarly
@@ -185,6 +191,21 @@ set_msm_otg_mode(struct device *dev, struct device_attribute *attr,
 		case OTG_STATE_A_WAIT_BCON:
 		case OTG_STATE_A_HOST:
 		case OTG_STATE_A_SUSPEND:
+			if (motg->flex_device_udev && motg->keep_vbus) {
+				int ret;
+
+				pm_runtime_get_sync(&motg->hub_udev->dev);
+				ret = usb_control_msg(motg->flex_device_udev,
+				     usb_sndctrlpipe(motg->flex_device_udev, 0),
+				     USB_FLEXCONNECT_COMMAND,
+				     USB_FLEXCONNECT_REQUEST_TYPE,
+				     USB_FLEXCONNECT_WVALUE, 0,
+				     NULL, 0, 2000);
+				dev_dbg(motg->phy.dev, "FlexConnect message sent to HUB, ret:%d\n",
+					ret);
+				motg->flex_device_udev = NULL;
+				pm_runtime_put_noidle(&motg->hub_udev->dev);
+			}
 			set_bit(ID, &motg->inputs);
 			set_bit(B_SESS_VLD, &motg->inputs);
 			break;
@@ -1402,6 +1423,18 @@ static int msm_otg_usbdev_notify(struct notifier_block *self,
 
 	if (udev->bus != otg->host)
 		goto out;
+	if (udev->parent &&
+		udev->descriptor.idProduct == USB_PRODUCT_ID_FLEX_BRIDGE &&
+		udev->descriptor.idVendor == USB_VENDOR_ID_FLEX_BRIDGE) {
+		if (action == USB_DEVICE_ADD) {
+			dev_dbg(motg->phy.dev, "Save microchip HUB usb_dev for flexconnect later- %p\n",
+				udev);
+			motg->flex_device_udev = udev;
+		} else if (action == USB_DEVICE_REMOVE &&
+				udev == motg->flex_device_udev) {
+			motg->flex_device_udev = NULL;
+		}
+	}
 	/*
 	 * Interested in devices connected directly to the root hub.
 	 * ACA dock can supply IDEV_CHG irrespective devices connected
