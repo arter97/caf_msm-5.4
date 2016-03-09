@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
 *
 * This program is free software; you can redistribute it and/or modify
 * it under the terms of the GNU General Public License version 2 and
@@ -3018,6 +3018,22 @@ struct asm_aac_enc_cfg_v2 {
  * Native mode indicates that encoding must be performed with the
  * sampling rate at the input.
  * The sampling rate must not change during encoding.
+ */
+
+} __packed;
+
+#define ASM_MEDIA_FMT_G711_ALAW_FS 0x00010BF7
+#define ASM_MEDIA_FMT_G711_MLAW_FS 0x00010C2E
+
+struct asm_g711_enc_cfg_v2 {
+	struct apr_hdr hdr;
+	struct asm_stream_cmd_set_encdec_param encdec;
+	struct asm_enc_cfg_blk_param_v2 encblk;
+
+	u32          sample_rate;
+/*
+ * Number of samples per second.
+ * Supported values: 8000, 16000 Hz
  */
 
 } __packed;
