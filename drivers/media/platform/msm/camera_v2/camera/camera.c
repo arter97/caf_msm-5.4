@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -262,7 +262,9 @@ static int camera_v4l2_streamon(struct file *filep, void *fh,
 	int rc;
 	struct camera_v4l2_private *sp = fh_to_private(fh);
 
+	mutex_lock(&sp->lock);
 	rc = vb2_streamon(&sp->vb2_q, buf_type);
+	mutex_unlock(&sp->lock);
 	camera_pack_event(filep, MSM_CAMERA_SET_PARM,
 		MSM_CAMERA_PRIV_STREAM_ON, -1, &event);
 
@@ -289,7 +291,9 @@ static int camera_v4l2_streamoff(struct file *filep, void *fh,
 		return rc;
 
 	rc = camera_check_event_status(&event);
+	mutex_lock(&sp->lock);
 	vb2_streamoff(&sp->vb2_q, buf_type);
+	mutex_unlock(&sp->lock);
 	return rc;
 }
 
