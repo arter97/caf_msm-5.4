@@ -927,27 +927,14 @@ int mdss_iommu_ctrl(int enable)
 		if (!mdata->iommu_attached && !mdata->handoff_pending) {
 			MDSS_REG_WRITE(mdata, MDSS_HW_MDSS_SCRATCH_REGISTER_0,
 				0xFEFEFEFE);
+			MDSS_REG_WRITE(mdata, MDSS_HW_MDSS_SCRATCH_REGISTER_1,
+				0xFEFEFEFE);
 			msleep(50);
 
 			if (mdss_has_quirk(mdata, MDSS_QUIRK_MIN_BUS_VOTE))
 				mdss_bus_scale_set_quota(MDSS_HW_RT,
 					 SZ_1M, SZ_1M);
 			rc = mdss_smmu_attach(mdata);
-			if (!rc) {
-				rc = mdss_smmu_map(MDSS_IOMMU_DOMAIN_UNSECURE,
-					(phys_addr_t)0x83401000,
-					(phys_addr_t)0x83401000,
-					(size_t)0x23ff000,
-				IOMMU_READ | IOMMU_NOEXEC);
-				if (rc)
-					pr_err("Error in mapping\n");
-				else {
-					pr_debug("Successful mapping\n");
-					MDSS_REG_WRITE(mdata,
-						MDSS_HW_MDSS_SCRATCH_REGISTER_1,
-						0xFEFEFEFE);
-				}
-			}
 			pr_debug("Unset scratch register\n");
 			MDSS_REG_WRITE(mdata, MDSS_HW_MDSS_SCRATCH_REGISTER_0,
 				0);
