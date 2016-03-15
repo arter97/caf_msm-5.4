@@ -13,7 +13,7 @@ obj-y += mdp.o
 # MDP Arbitrator
 obj-$(CONFIG_FB_MSM_MDP_ARB) += mdp_arb.o
 
-obj-$(CONFIG_DEBUG_FS) += mdp_debugfs.o
+obj-$(CONFIG_MDP_DEBUG_FS) += mdp_debugfs.o
 
 ifeq ($(CONFIG_FB_MSM_MDP40),y)
 obj-y += mdp4_util.o
