@@ -39,8 +39,8 @@ DECLARE_EVENT_CLASS(rmnet_handler_template,
 		__assign_str(name, skb->dev->name);
 	),
 
-	TP_printk("dev=%s skbaddr=%p len=%u",
-		__get_str(name), __entry->skbaddr, __entry->len)
+	TP_printk("dev=%s skbaddr=%pK len=%u",
+		  __get_str(name), __entry->skbaddr, __entry->len)
 )
 
 DEFINE_EVENT(rmnet_handler_template, rmnet_egress_handler,
