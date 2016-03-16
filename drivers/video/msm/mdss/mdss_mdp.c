@@ -909,10 +909,13 @@ static void mdss_mdp_vbif_axi_halt(struct mdss_data_type *mdata)
 	__mdss_mdp_reg_access_clk_enable(mdata, false);
 }
 
+int count = 0;
+int written = 0;
 int mdss_iommu_ctrl(int enable)
 {
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	int rc = 0;
+	uint32_t reg;
 
 	mutex_lock(&mdp_iommu_ref_cnt_lock);
 	pr_debug("%pS: enable:%d ref_cnt:%d attach:%d hoff:%d\n",
@@ -925,11 +928,38 @@ int mdss_iommu_ctrl(int enable)
 		 * finished handoff, as it may still be working with phys addr
 		 */
 		if (!mdata->iommu_attached && !mdata->handoff_pending) {
-			MDSS_REG_WRITE(mdata, MDSS_HW_MDSS_SCRATCH_REGISTER_0,
-				0xFEFEFEFE);
-			MDSS_REG_WRITE(mdata, MDSS_HW_MDSS_SCRATCH_REGISTER_1,
-				0xFEFEFEFE);
-			msleep(50);
+			if (count == 0) {
+				count++;
+			} else {
+				if (written == 0) {
+					MDSS_REG_WRITE(mdata, 0x2000,
+						0x1000000);
+					MDSS_REG_WRITE(mdata, 0x2408,
+						0x1000000);
+					MDSS_REG_WRITE(mdata, 0x2204,
+						0x1000000);
+
+					MDSS_REG_WRITE(mdata, 0x2018, 0x260C3);
+					MDSS_REG_WRITE(mdata, 0x2218, 0x24082);
+					MDSS_REG_WRITE(mdata, 0x2418, 0x28108);
+					reg = readl_relaxed(mdata->mdss_io.base
+						+ 0x2000);
+					reg = readl_relaxed(mdata->mdss_io.base
+						+ 0x2204);
+					reg = readl_relaxed(mdata->mdss_io.base
+						+ 0x2408);
+					MDSS_REG_WRITE(mdata,
+						MDSS_HW_MDSS_SCRATCH_REGISTER_0,
+						0xFEFEFEFE);
+					MDSS_REG_WRITE(mdata,
+						MDSS_HW_MDSS_SCRATCH_REGISTER_1,
+						0xFEFEFEFE);
+					written++;
+					msleep(50);
+					written++;
+				}
+
+			}
 
 			if (mdss_has_quirk(mdata, MDSS_QUIRK_MIN_BUS_VOTE))
 				mdss_bus_scale_set_quota(MDSS_HW_RT,
@@ -1956,7 +1986,9 @@ static int mdss_mdp_probe(struct platform_device *pdev)
 	struct resource *res;
 	int rc;
 	struct mdss_data_type *mdata;
-	bool display_on;
+	int intf_sel = 0;
+	int num_of_display_on = 0;
+	int i = 0;
 
 	if (!pdev->dev.of_node) {
 		pr_err("MDP driver only supports device tree probe\n");
@@ -2140,15 +2172,27 @@ static int mdss_mdp_probe(struct platform_device *pdev)
 			MMSS_MDP_ROBUST_LUT);
 	}
 
-	display_on = (bool)readl_relaxed(mdata->mdp_base +
+	intf_sel = readl_relaxed(mdata->mdp_base +
 		MDSS_MDP_REG_DISP_INTF_SEL);
-	if (!display_on)
+	if (intf_sel != 0) {
+		for (i = 0; i < 4; i++)
+			num_of_display_on += ((intf_sel >> i*8) & 0x000000FF);
+	}
+	if (!num_of_display_on)
 		mdss_mdp_footswitch_ctrl_splash(false);
-	else
+	else {
 		mdata->handoff_pending = true;
+		/*
+		 * If multiple displays are enabled in LK, ctrl_splash off will
+		 * be called multiple times during splash_cleanup. Need to
+		 * enable it symmetrically*/
+		for (i = 1; i < num_of_display_on; i++)
+			mdss_mdp_footswitch_ctrl_splash(true);
+	}
 
-	pr_info("mdss version = 0x%x, bootloader display is %s\n",
-		mdata->mdp_rev, display_on ? "on" : "off");
+	pr_info("mdss version = 0x%x, bootloader display is %s, num %d, intf_sel=0x%08x\n",
+		mdata->mdp_rev, num_of_display_on ? "on" : "off",
+		num_of_display_on, intf_sel);
 
 probe_done:
 	if (IS_ERR_VALUE(rc)) {

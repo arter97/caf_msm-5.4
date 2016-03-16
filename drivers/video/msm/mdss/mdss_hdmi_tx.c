@@ -39,7 +39,7 @@
 #define DRV_NAME "hdmi-tx"
 #define COMPATIBLE_NAME "qcom,hdmi-tx"
 
-#define DEFAULT_VIDEO_RESOLUTION HDMI_VFRMT_640x480p60_4_3
+#define DEFAULT_VIDEO_RESOLUTION HDMI_VFRMT_1920x1080p60_16_9
 #define DEFAULT_HDMI_PRIMARY_RESOLUTION HDMI_VFRMT_1920x1080p60_16_9
 
 /* HDMI PHY/PLL bit field macros */
@@ -5391,6 +5391,10 @@ static int hdmi_tx_probe(struct platform_device *pdev)
 			hdmi_ctrl->mdss_util->panel_intf_status(DISPLAY_1,
 					MDSS_PANEL_INTF_HDMI) ? true : false;
 	}
+
+	hdmi_ctrl->panel_data.panel_info.cont_splash_enabled =
+		hdmi_ctrl->mdss_util->panel_intf_status(DISPLAY_1,
+			MDSS_PANEL_INTF_HDMI) ? true : false;
 
 	hdmi_tx_hw.irq_info = mdss_intr_line();
 	if (hdmi_tx_hw.irq_info == NULL) {
