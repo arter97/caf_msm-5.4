@@ -1034,6 +1034,11 @@ enum v4l2_mpeg_vidc_video_venc_bitrate_type_enable {
 	V4L2_CID_MPEG_VIDC_VIDEO_VENC_BITRATE_ENABLE	= 1
 };
 
+#define V4L2_CID_MPEG_VIDEO_MIN_QP_PACKED \
+		(V4L2_CID_MPEG_MSM_VIDC_BASE + 80)
+#define V4L2_CID_MPEG_VIDEO_MAX_QP_PACKED \
+		(V4L2_CID_MPEG_MSM_VIDC_BASE + 81)
+
 /*  Camera class control IDs */
 
 #define V4L2_CID_CAMERA_CLASS_BASE 	(V4L2_CTRL_CLASS_CAMERA | 0x900)
