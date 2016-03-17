@@ -739,6 +739,11 @@ static void gbam2bam_connect_work(struct work_struct *w)
 				d->ipa_params.cons_clnt_hdl, 0);
 	}
 
+	d->rx_req->udc_priv = (MSM_SPS_MODE | d->src_pipe_idx |
+			 MSM_VENDOR_ID) & ~MSM_IS_FINITE_TRANSFER;
+	d->tx_req->udc_priv = (MSM_SPS_MODE | d->dst_pipe_idx |
+			 MSM_VENDOR_ID) & ~MSM_IS_FINITE_TRANSFER;
+
 	/* queue in & out requests */
 	gbam_start_endless_rx(port);
 	gbam_start_endless_tx(port);
@@ -1159,7 +1164,6 @@ int gbam_connect(struct grmnet *gr, u8 port_num,
 	struct bam_ch_info	*d;
 	int			ret;
 	unsigned long		flags;
-	u32 sps_params;
 
 	pr_debug("%s: grmnet:%p port#%d\n", __func__, gr, port_num);
 
@@ -1207,9 +1211,6 @@ int gbam_connect(struct grmnet *gr, u8 port_num,
 		d->rx_req->context = port;
 		d->rx_req->complete = gbam_endless_rx_complete;
 		d->rx_req->length = 0;
-		sps_params = (MSM_SPS_MODE | d->src_pipe_idx |
-				 MSM_VENDOR_ID) & ~MSM_IS_FINITE_TRANSFER;
-		d->rx_req->udc_priv = sps_params;
 
 		d->tx_req = usb_ep_alloc_request(port->port_usb->in,
 								GFP_ATOMIC);
@@ -1224,9 +1225,6 @@ int gbam_connect(struct grmnet *gr, u8 port_num,
 		d->tx_req->context = port;
 		d->tx_req->complete = gbam_endless_tx_complete;
 		d->tx_req->length = 0;
-		sps_params = (MSM_SPS_MODE | d->dst_pipe_idx |
-				 MSM_VENDOR_ID) & ~MSM_IS_FINITE_TRANSFER;
-		d->tx_req->udc_priv = sps_params;
 	}
 	if (trans == USB_GADGET_XPORT_BAM) {
 		d->to_host = 0;
