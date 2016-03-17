@@ -36,8 +36,8 @@
 
 #define I2C_RW_DELAY		1
 #define I2C_SW_RST_DELAY	5000
-#define GPIO_HW_DELAY_LOW	100000
-#define GPIO_HW_DELAY_HI	10000
+#define GPIO_HW_RST_DELAY_HI	10000
+#define GPIO_HW_RST_DELAY_LOW	10000
 #define SDP_MIN_SLEEP		5000
 #define SDP_MAX_SLEEP		6000
 #define SDP_NUM_TRIES		30
@@ -249,7 +249,7 @@ static int adv7481_set_irq(struct adv7481_state *state)
 			ADV_REG_SETFIELD(1, IO_PDN_INT3) |
 			ADV_REG_SETFIELD(1, IO_INV_LLC) |
 			ADV_REG_SETFIELD(AD_MID_DRIVE_STRNGTH,
-			IO_DRV_LLC_PAD));
+				IO_DRV_LLC_PAD));
 	ret |= adv7481_wr_byte(state->client, IO_REG_INT1_CONF_ADDR,
 			ADV_REG_SETFIELD(AD_ACTIVE_UNTIL_CLR,
 				IO_INTRQ_DUR_SEL) |
@@ -397,8 +397,6 @@ static void adv7481_irq_delay_work(struct work_struct *work)
 
 		raw_status = adv7481_rd_byte(state->client,
 				IO_HDMI_LVL_RAW_STATUS_3_ADDR);
-		adv7481_wr_byte(state->client,
-				IO_HDMI_LVL_INT_CLEAR_3_ADDR, int_status);
 
 		pr_debug("%s: dev: %d got hdmi lvl int status 3: 0x%x\n",
 				__func__, state->device_num, int_status);
@@ -419,7 +417,12 @@ static void adv7481_irq_delay_work(struct work_struct *work)
 		/* Assumption is that vertical sync int
 		 * is the last one to come */
 		if (ADV_REG_GETFIELD(int_status, IO_V_LOCKED_ST)) {
-			if (adv7481_is_timing_locked(state)) {
+			if (ADV_REG_GETFIELD(raw_status,
+				IO_TMDSPLL_LCK_A_RAW) &&
+				ADV_REG_GETFIELD(raw_status,
+				IO_V_LOCKED_RAW) &&
+				ADV_REG_GETFIELD(raw_status,
+				IO_DE_REGEN_LCK_RAW)) {
 				pr_debug("%s: port settings changed\n",
 					__func__);
 				event.type =
@@ -429,6 +432,11 @@ static void adv7481_irq_delay_work(struct work_struct *work)
 			}
 		}
 	}
+	/* Clear all other interrupts */
+	adv7481_wr_byte(state->client, IO_HDMI_LVL_INT_CLEAR_1_ADDR, 0xFF);
+	adv7481_wr_byte(state->client, IO_HDMI_LVL_INT_CLEAR_2_ADDR, 0xFF);
+	adv7481_wr_byte(state->client, IO_HDMI_LVL_INT_CLEAR_3_ADDR, 0xFF);
+
 	mutex_unlock(&state->mutex);
 }
 
@@ -572,9 +580,9 @@ static int adv7481_hw_init(struct adv7481_platform_data *pdata,
 			goto err_exit;
 		}
 		ret = gpio_direction_output(pdata->rstb_gpio, 0);
-		usleep(GPIO_HW_DELAY_LOW);
+		usleep(GPIO_HW_RST_DELAY_LOW);
 		ret = gpio_direction_output(pdata->rstb_gpio, 1);
-		usleep(GPIO_HW_DELAY_HI);
+		usleep(GPIO_HW_RST_DELAY_HI);
 		if (ret) {
 			pr_err("%s: Set GPIO Fail %d\n", __func__, ret);
 			goto err_exit;
@@ -1745,6 +1753,7 @@ static int adv7481_g_input_status(struct v4l2_subdev *sd, u32 *status)
 	uint32_t count = 0;
 
 	pr_debug("Enter %s\n", __func__);
+	*status = 0;
 	if (ADV7481_IP_HDMI == state->mode) {
 		/* Check Timing Lock */
 		do {
