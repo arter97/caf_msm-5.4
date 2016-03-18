@@ -134,7 +134,6 @@ get_msm_otg_mode(struct device *dev, struct device_attribute *attr, char *buf)
 	case OTG_STATE_A_SUSPEND:
 		mode = "host";
 		break;
-	case OTG_STATE_B_IDLE:
 	case OTG_STATE_B_PERIPHERAL:
 		mode = "peripheral";
 		break;
