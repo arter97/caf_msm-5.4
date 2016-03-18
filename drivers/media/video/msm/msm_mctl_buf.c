@@ -67,11 +67,13 @@ static int msm_vb2_ops_queue_setup(struct vb2_queue *vq,
 
 static void msm_vb2_ops_wait_prepare(struct vb2_queue *q)
 {
-	/* we use polling so do not use this fn now */
+	struct msm_cam_v4l2_dev_inst *pcam_inst = vb2_get_drv_priv(q);
+	mutex_unlock(&pcam_inst->inst_lock);
 }
 static void msm_vb2_ops_wait_finish(struct vb2_queue *q)
 {
-	/* we use polling so do not use this fn now */
+	struct msm_cam_v4l2_dev_inst *pcam_inst = vb2_get_drv_priv(q);
+	mutex_lock(&pcam_inst->inst_lock);
 }
 
 static int msm_vb2_ops_buf_init(struct vb2_buffer *vb)
