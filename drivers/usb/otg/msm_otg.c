@@ -16,6 +16,7 @@
 #include <linux/platform_device.h>
 #include <linux/clk.h>
 #include <linux/slab.h>
+#include <linux/gpio.h>
 #include <linux/interrupt.h>
 #include <linux/err.h>
 #include <linux/delay.h>
@@ -126,6 +127,209 @@ struct usb_phy *msm_usb_get_transceiver(int id)
 	return &the_msm_otg[id]->phy;
 }
 EXPORT_SYMBOL(msm_usb_get_transceiver);
+
+static void hub_vbus_enable(struct msm_otg *motg, bool on)
+{
+	struct msm_otg_platform_data *pdata = motg->pdata;
+
+	if (pdata->hub_vbus_en_gpio)
+		gpio_set_value(pdata->hub_vbus_en_gpio, on);
+}
+
+static irqreturn_t msm_hub_vbus_change_irq_handler(int irq, void *data)
+{
+	struct msm_otg *motg = data;
+
+	pr_debug("OTG IRQ: %d in LPM\n", irq);
+	hub_vbus_enable(motg, 0);
+
+	return IRQ_HANDLED;
+}
+
+static int msm_otg_hub_gpio_init(struct msm_otg *motg, bool init)
+{
+	struct msm_otg_platform_data *pdata = motg->pdata;
+	int ret = 0;
+
+	if (init) {
+		if (pdata->hub_rst_gpio) {
+			ret = gpio_request(pdata->hub_rst_gpio,
+					"EXT_HUB_RESET_GPIO");
+			if (ret < 0) {
+				dev_err(motg->phy.dev, "gpio request failed for  %d ret=%d\n",
+					pdata->hub_rst_gpio, ret);
+				goto out;
+			}
+		} else {
+			dev_err(motg->phy.dev, "hub_rst gpio is not present");
+		}
+
+		if (pdata->flex_en_gpio) {
+			ret = gpio_request(pdata->flex_en_gpio,
+					"EXT_HUB_FLEX_EN_GPIO");
+			if (ret < 0) {
+				dev_err(motg->phy.dev, "gpio request failed for %d ret=%d\n",
+					pdata->flex_en_gpio, ret);
+				goto out;
+			}
+		} else {
+			dev_err(motg->phy.dev, "flex_en gpio is not present");
+		}
+
+		if (pdata->flex_out_gpio) {
+			ret = gpio_request(pdata->flex_out_gpio,
+					"EXT_HUB_FLEX_OUT_GPIO");
+			if (ret < 0) {
+				dev_err(motg->phy.dev, "gpio request failed for %d ret=%d\n",
+					pdata->flex_en_gpio, ret);
+				goto out;
+			}
+		} else {
+			dev_err(motg->phy.dev, "flex_out gpio is not present");
+		}
+		if (pdata->hub_vdd_gpio) {
+			ret = gpio_request(pdata->hub_vdd_gpio,
+					"EXT_HUB_VBUS_SUPLY_GPIO");
+			if (ret < 0) {
+				dev_err(motg->phy.dev, "gpio request failed for %d ret=%d\n",
+					pdata->hub_vdd_gpio, ret);
+				goto out;
+			}
+		} else {
+			dev_err(motg->phy.dev, "hub_vdd gpio is not present");
+		}
+
+		if (pdata->hub_vbus_ok_gpio) {
+			ret = gpio_request(pdata->hub_vbus_ok_gpio,
+					"EXT_HUB_VBUS_OK_GPIO");
+			if (ret < 0) {
+				dev_err(motg->phy.dev, "gpio request failed for %d ret=%d\n",
+					pdata->hub_vbus_ok_gpio, ret);
+				goto out;
+			}
+		} else {
+			dev_err(motg->phy.dev, "hub_vbus_ok gpio is not present");
+		}
+
+		if (pdata->hub_vbus_en_gpio) {
+			ret = gpio_request(pdata->hub_vbus_en_gpio,
+					"EXT_HUB_VBUS_EN_GPIO");
+			if (ret < 0) {
+				dev_err(motg->phy.dev, "gpio request failed for %d ret=%d\n",
+						pdata->hub_vbus_en_gpio, ret);
+				goto out;
+			}
+		} else {
+			dev_err(motg->phy.dev, "hub_vbus_en gpio is not present");
+		}
+	} else {
+		if (pdata->hub_rst_gpio)
+			gpio_free(pdata->hub_rst_gpio);
+		if (pdata->flex_en_gpio)
+			gpio_free(pdata->flex_en_gpio);
+		if (pdata->flex_out_gpio)
+			gpio_free(pdata->flex_out_gpio);
+		if (pdata->hub_vdd_gpio)
+			gpio_free(pdata->hub_vdd_gpio);
+		if (pdata->hub_vbus_ok_gpio)
+			gpio_free(pdata->hub_vbus_ok_gpio);
+		if (pdata->hub_vbus_en_gpio)
+			gpio_free(pdata->hub_vbus_en_gpio);
+	}
+out:
+	pr_debug("%s gpio request:%d returning %d\n",
+			__func__, init, ret);
+	return ret;
+}
+
+static int msm_otg_hub_gpio_config(struct msm_otg *motg, bool enable)
+{
+	struct msm_otg_platform_data *pdata = motg->pdata;
+	int ret = 0;
+
+	if (enable) {
+		if (pdata->hub_rst_gpio) {
+			ret = gpio_direction_output(pdata->hub_rst_gpio, 0);
+			if (ret < 0) {
+				dev_err(motg->phy.dev, "gpio configuration failed for %d ret=%d\n",
+					pdata->hub_rst_gpio, ret);
+				goto out;
+			}
+		}
+		if (pdata->flex_en_gpio) {
+			ret = gpio_direction_output(pdata->flex_en_gpio, 0);
+			if (ret < 0) {
+				dev_err(motg->phy.dev, "gpio configuration failed for %d ret=%d\n",
+					pdata->flex_en_gpio, ret);
+				goto out;
+			}
+		}
+		if (pdata->flex_out_gpio) {
+			ret = gpio_direction_output(pdata->flex_out_gpio, 1);
+			if (ret < 0) {
+				dev_err(motg->phy.dev, "gpio configuration failed for %d ret=%d\n",
+					pdata->flex_out_gpio, ret);
+				goto out;
+			}
+		}
+		if (pdata->hub_vdd_gpio) {
+			ret = gpio_direction_output(pdata->hub_vdd_gpio, 1);
+			if (ret < 0) {
+				dev_err(motg->phy.dev, "gpio configuration failed for %d ret=%d\n",
+					pdata->hub_vdd_gpio, ret);
+			goto out;
+			}
+		}
+		if (pdata->hub_vbus_en_gpio) {
+			ret = gpio_direction_output(pdata->hub_vbus_en_gpio, 1);
+			if (ret < 0) {
+				dev_err(motg->phy.dev, "gpio configuration failed for %d ret=%d\n",
+					pdata->hub_vbus_en_gpio, ret);
+				goto out;
+			}
+		}
+		if (pdata->hub_vbus_ok_gpio) {
+			if (pdata->hub_vbus_ok_gpio_irq) {
+				ret = request_irq(pdata->hub_vbus_ok_gpio_irq,
+					msm_hub_vbus_change_irq_handler,
+					IRQF_TRIGGER_FALLING, "hub_vbus", motg);
+				if (ret) {
+					dev_err(motg->phy.dev, "request irq failed for hub VBUS change\n");
+					goto out;
+				}
+			}
+		}
+	} else {
+		if (pdata->hub_rst_gpio) {
+			ret = gpio_direction_output(pdata->hub_rst_gpio, 0);
+			if (ret < 0) {
+				dev_err(motg->phy.dev, "gpio configuration failed for %d ret=%d\n",
+					pdata->hub_rst_gpio, ret);
+				goto out;
+			}
+		}
+		if (pdata->hub_vbus_en_gpio) {
+			ret = gpio_direction_output(pdata->hub_vbus_en_gpio, 0);
+			if (ret < 0) {
+				dev_err(motg->phy.dev, "gpio configuration failed for %d ret=%d\n",
+					pdata->hub_vbus_en_gpio, ret);
+				goto out;
+			}
+		}
+		if (pdata->hub_vdd_gpio) {
+			ret = gpio_direction_output(pdata->hub_vdd_gpio, 0);
+			if (ret < 0) {
+				dev_err(motg->phy.dev, "gpio configuration failed for %d ret=%d\n",
+					pdata->hub_vdd_gpio, ret);
+			goto out;
+			}
+		}
+	}
+out:
+	pr_debug("%s gpio configuration %d returning %d\n",
+			__func__, enable, ret);
+	return ret;
+}
 
 static ssize_t
 get_msm_otg_mode(struct device *dev, struct device_attribute *attr, char *buf)
@@ -1387,6 +1591,20 @@ static void msm_otg_start_host(struct usb_otg *otg, int on)
 				USB_PHY_3P3_VOL_MAX);
 		if (rc)
 			dev_dbg(otg->phy->dev, "unable to increase 3.3V rail\n");
+		/*
+		 * Some boards have a switch cotrolled by gpio
+		 * to reset the extenall HUB. reset the
+		 * HUB before kicking the host.
+		 */
+		if (pdata->hub_rst_gpio) {
+			gpio_set_value(pdata->hub_vbus_en_gpio, 1);
+			/*
+			 * Hub reset should be asserted for minimum
+			 * 5msec before deasserting.
+			 */
+			usleep_range(5000, 7000);
+			gpio_set_value(pdata->hub_vbus_en_gpio, 0);
+		}
 
 		usb_add_hcd(hcd, hcd->irq, IRQF_SHARED);
 	} else {
@@ -4166,6 +4384,20 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 		else
 			motg->debug_bus_voting_enabled = true;
 	}
+	if (pdata->is_ext_hub) {
+		pr_info("%s: EXT_HUB is enabled\n", __func__);
+		ret = msm_otg_hub_gpio_init(motg, 1);
+		if (ret) {
+			dev_err(&pdev->dev, "can't request gpio err:%d\n", ret);
+			return ret;
+		}
+		ret = msm_otg_hub_gpio_config(motg, 1);
+		if (ret) {
+			dev_err(&pdev->dev, "failed to configure gpio err:%d\n",
+					ret);
+			return ret;
+		}
+	}
 
 	return 0;
 
@@ -4252,6 +4484,8 @@ static int __devexit msm_otg_remove(struct platform_device *pdev)
 		free_irq(motg->pdata->pmic_id_irq, motg);
 	usb_set_transceiver(NULL);
 	free_irq(motg->irq, motg);
+	if (pdata->is_ext_hub)
+		msm_otg_hub_gpio_init(motg, 0);
 
 	if (motg->pdata->otg_control == OTG_PHY_CONTROL &&
 		motg->pdata->mpm_otgsessvld_int)
@@ -4303,6 +4537,18 @@ static int __devexit msm_otg_remove(struct platform_device *pdev)
 	kfree(motg->phy.otg);
 	kfree(motg);
 	return 0;
+}
+
+static void msm_otg_shutdown(struct platform_device *pdev)
+{
+	struct msm_otg *motg = platform_get_drvdata(pdev);
+	int ret;
+
+	dev_dbg(&pdev->dev, "OTG shutdown\n");
+	ret = msm_otg_hub_gpio_config(motg, 0);
+	if (ret) {
+		dev_err(&pdev->dev, "failed to configure gpio err:%d\n", ret);
+	}
 }
 
 #ifdef CONFIG_PM_RUNTIME
@@ -4408,6 +4654,7 @@ static struct of_device_id msm_otg_dt_match[] = {
 
 static struct platform_driver msm_otg_driver = {
 	.remove = __devexit_p(msm_otg_remove),
+	.shutdown = msm_otg_shutdown,
 	.driver = {
 		.name = DRIVER_NAME,
 		.owner = THIS_MODULE,
