@@ -176,15 +176,23 @@ int msm_ba_g_input(void *instance, unsigned int *index)
 	if (!inst || !index)
 		return -EINVAL;
 
-	/* First find current input */
-	ba_input = msm_ba_find_input(inst->sd_input.index);
-	if (ba_input) {
-		if (V4L2_PRIORITY_RECORD == ba_input->prio &&
-			inst->input_prio != ba_input->prio) {
-			inst->sd_input.index++;
+	do {
+		/* First find current input */
+		ba_input = msm_ba_find_input(inst->sd_input.index);
+		if (ba_input) {
+			if (BA_INPUT_USERTYPE_KERNEL ==
+				ba_input->input_user_type) {
+				inst->sd_input.index++;
+				continue;
+			}
+			break;
 		}
-	}
-	*index = inst->sd_input.index;
+	} while (ba_input);
+
+	if (ba_input)
+		*index = inst->sd_input.index;
+	else
+		rc = -ENOENT;
 
 	return rc;
 }

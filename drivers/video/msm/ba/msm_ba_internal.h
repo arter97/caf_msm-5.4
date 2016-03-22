@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -113,6 +113,12 @@ enum msm_ba_ip_type {
 	BA_INPUT_MAX = 0xffffffff
 };
 
+enum msm_ba_input_usr_type {
+	BA_INPUT_USERTYPE_KERNEL = 0,
+	BA_INPUT_USERTYPE_USER,
+	BA_INPUT_USERTYPE_MAX = 0xffffffff
+};
+
 struct msm_ba_input_config {
 	enum msm_ba_ip_type inputType;
 	unsigned int index;
@@ -121,6 +127,7 @@ struct msm_ba_input_config {
 	int ba_out;
 	const char *sd_name;
 	int ba_node;
+	enum msm_ba_input_usr_type input_user_type;
 };
 
 struct msm_ba_sd_event {
@@ -142,6 +149,7 @@ struct msm_ba_input {
 	int in_use;
 	int ba_out_in_use;
 	enum v4l2_priority prio;
+	enum msm_ba_input_usr_type input_user_type;
 };
 
 struct msm_ba_dev {
