@@ -684,6 +684,7 @@
 			"SpkrRight IN", "SPK2 OUT";
 
 		qcom,hdmi-audio-rx;
+		qcom,cherokee-btfm;
 		asoc-codec = <&stub_codec>, <&hdmi_audio>;
 		asoc-codec-names = "msm-stub-codec.1", "msm-hdmi-audio-codec-rx";
 		qcom,hph-en1-gpio = <&pmi8994_gpios 10 0>;
