@@ -276,6 +276,20 @@ static int adv7481_set_irq(struct adv7481_state *state)
 	return ret;
 }
 
+static int adv7481_reset_irq(struct adv7481_state *state)
+{
+	int ret = 0;
+
+	disable_irq(state->irq);
+
+	ret = adv7481_wr_byte(state->client,
+			IO_REG_DATAPATH_INT_MASKB_ADDR, 0x00);
+	ret |= adv7481_wr_byte(state->client,
+			IO_HDMI_LVL_INT_MASKB_3_ADDR, 0x00);
+
+	return ret;
+}
+
 static int adv7481_set_edid(struct adv7481_state *state)
 {
 	int i;
@@ -1962,6 +1976,7 @@ static int adv7481_remove(struct i2c_client *client)
 
 	v4l2_ctrl_handler_free(&state->ctrl_hdl);
 
+	adv7481_reset_irq(state);
 	if (state->irq > 0)
 		free_irq(state->irq, state);
 
@@ -1973,6 +1988,9 @@ static int adv7481_remove(struct i2c_client *client)
 	i2c_unregister_device(state->i2c_sdp);
 	i2c_unregister_device(state->i2c_rep);
 	i2c_unregister_device(state->i2c_cec);
+
+	cancel_delayed_work(&state->irq_delayed_work);
+
 	mutex_destroy(&state->mutex);
 	kfree(state);
 
