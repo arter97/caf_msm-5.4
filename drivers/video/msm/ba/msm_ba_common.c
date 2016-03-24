@@ -20,15 +20,22 @@
 #include "msm_ba_common.h"
 
 struct msm_ba_input_config msm_ba_inp_cfg[] = {
-	/* type, index, name, adv inp, dev id, sd name, dev node */
-	{BA_INPUT_CVBS, 0, "CVBS-0", BA_IP_CVBS_0, 0, "adv7180", -1},
+	/* type, index, name, adv inp, dev id, sd name, dev node,
+	   input user type
+	*/
+	{BA_INPUT_CVBS, 0, "CVBS-0", BA_IP_CVBS_0, 0, "adv7180", -1,
+		BA_INPUT_USERTYPE_KERNEL},
 #ifdef CONFIG_MSM_S_PLATFORM
-	{BA_INPUT_CVBS, 1, "CVBS-1", BA_IP_CVBS_0, 0, "adv7180", 0},
+	{BA_INPUT_CVBS, 1, "CVBS-1", BA_IP_CVBS_0, 0, "adv7180", 0,
+		BA_INPUT_USERTYPE_USER},
 #else
-	{BA_INPUT_CVBS, 1, "CVBS-1", BA_IP_CVBS_0, 1, "adv7180", 0},
-	{BA_INPUT_CVBS, 2, "CVBS-2", BA_IP_CVBS_1, 1, "adv7180", 0},
+	{BA_INPUT_CVBS, 1, "CVBS-1", BA_IP_CVBS_0, 1, "adv7180", 0,
+		BA_INPUT_USERTYPE_USER},
+	{BA_INPUT_CVBS, 2, "CVBS-2", BA_IP_CVBS_1, 1, "adv7180", 0,
+		BA_INPUT_USERTYPE_USER},
 #endif
-	{BA_INPUT_HDMI, 1, "HDMI-1", BA_IP_HDMI_1, 2, "adv7481", 2},
+	{BA_INPUT_HDMI, 1, "HDMI-1", BA_IP_HDMI_1, 2, "adv7481", 2,
+		BA_INPUT_USERTYPE_USER},
 };
 
 static struct msm_ba_ctrl msm_ba_ctrls[] = {
@@ -227,6 +234,8 @@ void msm_ba_add_inputs(struct v4l2_subdev *sd)
 				input->ba_node_addr = msm_ba_inp_cfg[i].ba_node;
 				input->ba_ip_idx = i;
 				input->prio = V4L2_PRIORITY_DEFAULT;
+				input->input_user_type =
+					msm_ba_inp_cfg[i].input_user_type;
 				input->sd = sd;
 				rc = v4l2_subdev_call(
 					sd, video, g_input_status, &status);
