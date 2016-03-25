@@ -586,7 +586,7 @@ static int32_t msm_cci_i2c_read_bytes(struct v4l2_subdev *sd,
 		return -EINVAL;
 	}
 
-	if (c_ctrl->cci_info->cci_i2c_master > MASTER_MAX
+	if (c_ctrl->cci_info->cci_i2c_master >= MASTER_MAX
 			|| c_ctrl->cci_info->cci_i2c_master < 0) {
 		pr_err("%s:%d Invalid I2C master addr\n", __func__, __LINE__);
 		return -EINVAL;
@@ -632,7 +632,7 @@ static int32_t msm_cci_i2c_write(struct v4l2_subdev *sd,
 	enum cci_i2c_master_t master;
 	enum cci_i2c_queue_t queue = QUEUE_0;
 	cci_dev = v4l2_get_subdevdata(sd);
-	if (c_ctrl->cci_info->cci_i2c_master > MASTER_MAX
+	if (c_ctrl->cci_info->cci_i2c_master >= MASTER_MAX
 			|| c_ctrl->cci_info->cci_i2c_master < 0) {
 		pr_err("%s:%d Invalid I2C master addr\n", __func__, __LINE__);
 		return -EINVAL;
@@ -742,7 +742,7 @@ static int32_t msm_cci_i2c_write_dual(struct v4l2_subdev *sd,
 	uint32_t val;
 	enum cci_i2c_queue_t queue = QUEUE_0;
 	cci_dev = v4l2_get_subdevdata(sd);
-	if (c_ctrl->cci_info->cci_i2c_master > MASTER_MAX
+	if (c_ctrl->cci_info->cci_i2c_master >= MASTER_MAX
 			|| c_ctrl->cci_info->cci_i2c_master < 0) {
 		pr_err("%s:%d Invalid I2C master addr\n", __func__, __LINE__);
 		return -EINVAL;
@@ -898,10 +898,63 @@ static int32_t msm_cci_init(struct v4l2_subdev *sd,
 		return rc;
 	}
 
-	if (cci_dev->ref_count++) {
-		CDBG("%s ref_count %d\n", __func__, cci_dev->ref_count);
+	if (!cci_dev->ref_count++) {
+
+		rc = msm_camera_request_gpio_table(cci_dev->cci_gpio_tbl,
+			cci_dev->cci_gpio_tbl_size, 1);
+		if (rc < 0) {
+			CDBG("%s: request gpio failed\n", __func__);
+			goto request_gpio_failed;
+		}
+
+		rc = msm_cam_clk_enable(&cci_dev->pdev->dev, cci_clk_info,
+			cci_dev->cci_clk, ARRAY_SIZE(cci_clk_info), 1);
+		if (rc < 0) {
+			CDBG("%s: clk enable failed\n", __func__);
+			goto clk_enable_failed;
+		}
+
+		enable_irq(cci_dev->irq->start);
+
+		cci_dev->hw_version = msm_camera_io_r(cci_dev->base +
+			CCI_HW_VERSION_ADDR);
+
+		mutex_lock(&cci_dev->cci_master_info[MASTER_0].mutex);
+		cci_dev->cci_master_info[MASTER_0].reset_pending = TRUE;
+
+		msm_camera_io_w(CCI_RESET_CMD_RMSK, cci_dev->base +
+				CCI_RESET_CMD_ADDR);
+		msm_camera_io_w(0x1, cci_dev->base + CCI_RESET_CMD_ADDR);
+
+		rc = wait_for_completion_timeout(
+			&cci_dev->cci_master_info[MASTER_0].reset_complete,
+			CCI_TIMEOUT);
+
+		mutex_unlock(&cci_dev->cci_master_info[MASTER_0].mutex);
+		if (rc <= 0) {
+			pr_err("%s: wait for completion timeout %d\n",
+			       __func__, __LINE__);
+			if (rc == 0)
+				rc = -ETIMEDOUT;
+			goto reset_complete_failed;
+		}
+
+		msm_cci_set_clk_param(cci_dev);
+		msm_camera_io_w(CCI_IRQ_MASK_0_RMSK,
+			cci_dev->base + CCI_IRQ_MASK_0_ADDR);
+		msm_camera_io_w(CCI_IRQ_MASK_0_RMSK,
+			cci_dev->base + CCI_IRQ_CLEAR_0_ADDR);
+
+		msm_camera_io_w(0x1, cci_dev->base +
+				CCI_IRQ_GLOBAL_CLEAR_CMD_ADDR);
+
+		cci_dev->cci_state = CCI_STATE_ENABLED;
+
+	} else {
+
 		master = c_ctrl->cci_info->cci_i2c_master;
-		CDBG("%s:%d master %d\n", __func__, __LINE__, master);
+		CDBG("%s:%d master %d ref_count %d\n", __func__, __LINE__,
+		     master, cci_dev->ref_count);
 		if (master < MASTER_MAX && master >= 0) {
 			mutex_lock(&cci_dev->cci_master_info[master].mutex);
 			/* Set reset pending flag to TRUE */
@@ -914,7 +967,7 @@ static int32_t msm_cci_init(struct v4l2_subdev *sd,
 				msm_camera_io_w(CCI_M1_RESET_RMSK,
 					cci_dev->base + CCI_RESET_CMD_ADDR);
 			/* wait for reset done irq */
-			rc = wait_for_completion_interruptible_timeout(
+			rc = wait_for_completion_timeout(
 				&cci_dev->cci_master_info[master].
 				reset_complete,
 				CCI_TIMEOUT);
@@ -923,48 +976,7 @@ static int32_t msm_cci_init(struct v4l2_subdev *sd,
 					__LINE__, rc);
 			mutex_unlock(&cci_dev->cci_master_info[master].mutex);
 		}
-		return 0;
 	}
-
-	rc = msm_camera_request_gpio_table(cci_dev->cci_gpio_tbl,
-		cci_dev->cci_gpio_tbl_size, 1);
-	if (rc < 0) {
-		cci_dev->ref_count--;
-		CDBG("%s: request gpio failed\n", __func__);
-		goto request_gpio_failed;
-	}
-
-	rc = msm_cam_clk_enable(&cci_dev->pdev->dev, cci_clk_info,
-		cci_dev->cci_clk, ARRAY_SIZE(cci_clk_info), 1);
-	if (rc < 0) {
-		cci_dev->ref_count--;
-		CDBG("%s: clk enable failed\n", __func__);
-		goto clk_enable_failed;
-	}
-
-	enable_irq(cci_dev->irq->start);
-	cci_dev->hw_version = msm_camera_io_r(cci_dev->base +
-		CCI_HW_VERSION_ADDR);
-	cci_dev->cci_master_info[MASTER_0].reset_pending = TRUE;
-	msm_camera_io_w(CCI_RESET_CMD_RMSK, cci_dev->base + CCI_RESET_CMD_ADDR);
-	msm_camera_io_w(0x1, cci_dev->base + CCI_RESET_CMD_ADDR);
-	rc = wait_for_completion_interruptible_timeout(
-		&cci_dev->cci_master_info[MASTER_0].reset_complete,
-		CCI_TIMEOUT);
-	if (rc <= 0) {
-		pr_err("%s: wait_for_completion_interruptible_timeout %d\n",
-			 __func__, __LINE__);
-		if (rc == 0)
-			rc = -ETIMEDOUT;
-		goto reset_complete_failed;
-	}
-	msm_cci_set_clk_param(cci_dev);
-	msm_camera_io_w(CCI_IRQ_MASK_0_RMSK,
-		cci_dev->base + CCI_IRQ_MASK_0_ADDR);
-	msm_camera_io_w(CCI_IRQ_MASK_0_RMSK,
-		cci_dev->base + CCI_IRQ_CLEAR_0_ADDR);
-	msm_camera_io_w(0x1, cci_dev->base + CCI_IRQ_GLOBAL_CLEAR_CMD_ADDR);
-	cci_dev->cci_state = CCI_STATE_ENABLED;
 
 	return 0;
 
@@ -1050,18 +1062,22 @@ static irqreturn_t msm_cci_irq(int irq_num, void *data)
 	msm_camera_io_w(0x1, cci_dev->base + CCI_IRQ_GLOBAL_CLEAR_CMD_ADDR);
 	msm_camera_io_w(0x0, cci_dev->base + CCI_IRQ_GLOBAL_CLEAR_CMD_ADDR);
 	CDBG("%s CCI_I2C_M0_STATUS_ADDR = 0x%x\n", __func__, irq);
+
 	if (irq & CCI_IRQ_STATUS_0_RST_DONE_ACK_BMSK) {
 		if (cci_dev->cci_master_info[MASTER_0].reset_pending == TRUE) {
 			cci_dev->cci_master_info[MASTER_0].reset_pending =
 				FALSE;
 			complete(&cci_dev->cci_master_info[MASTER_0].
-				reset_complete);
-		}
-		if (cci_dev->cci_master_info[MASTER_1].reset_pending == TRUE) {
+				 reset_complete);
+		} else if (cci_dev->cci_master_info[MASTER_1].
+			   reset_pending == TRUE) {
 			cci_dev->cci_master_info[MASTER_1].reset_pending =
 				FALSE;
 			complete(&cci_dev->cci_master_info[MASTER_1].
 				reset_complete);
+		} else {
+			pr_err("%s:%d Unexpected RST acknowledge!!!\n",
+			       __func__, __LINE__);
 		}
 	}
 	if ((irq & CCI_IRQ_STATUS_0_I2C_M0_RD_DONE_BMSK) ||

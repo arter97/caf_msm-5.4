@@ -88,7 +88,9 @@ static long msm_sensor_driver_cmd(struct msm_sensor_init_t *s_init, void *arg)
 		break;
 
 	case CFG_SINIT_PROBE_DONE:
+		mutex_lock(&s_init->imutex);
 		s_init->module_init_status = 1;
+		mutex_unlock(&s_init->imutex);
 		wake_up(&s_init->state_wait);
 		break;
 
