@@ -160,6 +160,7 @@ struct dentry_operations {
 	char *(*d_dname)(struct dentry *, char *, int);
 	struct vfsmount *(*d_automount)(struct path *);
 	int (*d_manage)(struct dentry *, bool);
+	struct dentry *(*d_real)(struct dentry *, struct inode *);
 } ____cacheline_aligned;
 
 /*
@@ -222,6 +223,8 @@ struct dentry_operations {
 #define DCACHE_FILE_TYPE		0x00400000 /* Other file type */
 
 #define DCACHE_MAY_FREE			0x00800000
+
+#define DCACHE_OP_REAL			0x08000000
 
 extern seqlock_t rename_lock;
 
@@ -468,4 +471,13 @@ static inline unsigned long vfs_pressure_ratio(unsigned long val)
 {
 	return mult_frac(val, sysctl_vfs_cache_pressure, 100);
 }
+
+static inline struct dentry *d_real(struct dentry *dentry)
+{
+	if (unlikely(dentry->d_flags & DCACHE_OP_REAL))
+		return dentry->d_op->d_real(dentry, NULL);
+	else
+		return dentry;
+}
+
 #endif	/* __LINUX_DCACHE_H */
