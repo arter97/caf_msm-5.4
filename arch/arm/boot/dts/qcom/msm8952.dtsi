@@ -1853,6 +1853,8 @@
 		qcom,active-clock-names = "iface_clk", "bus_clk", "mem_clk";
 
 		qcom,firmware-name = "modem";
+		qcom,pas-id = <5>;
+		qcom,pil-mss-memsetup;
 		qcom,pil-self-auth;
 		qcom,sysmon-id = <0>;
 		qcom,ssctl-instance-id = <0x12>;
