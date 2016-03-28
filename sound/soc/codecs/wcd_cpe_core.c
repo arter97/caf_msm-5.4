@@ -889,7 +889,14 @@ static int wcd_cpe_enable(struct wcd_cpe_core *core,
 			 * instead SSR handler will control CPE.
 			 */
 			wcd_cpe_enable_cpe_clks(core, false);
-			wcd_cpe_cleanup_irqs(core);
+			/*
+			 * During BUS_DOWN event, possibly the
+			 * irq driver is under cleanup, do not request
+			 * cleanup of irqs here, rather cleanup irqs
+			 * once BUS_UP event is received.
+			 */
+			if (core->ssr_type != WCD_CPE_BUS_DOWN_EVENT)
+				wcd_cpe_cleanup_irqs(core);
 			goto done;
 		}
 
@@ -1140,6 +1147,7 @@ int wcd_cpe_ssr_event(void *core_handle,
 		break;
 
 	case WCD_CPE_BUS_UP_EVENT:
+		wcd_cpe_cleanup_irqs(core);
 		wcd_cpe_set_and_complete(core, WCD_CPE_BUS_READY);
 		/*
 		 * In case of bus up event ssr_type will be changed
@@ -2698,7 +2706,7 @@ static int wcd_cpe_send_param_epd_thres(struct wcd_cpe_core *core,
 			       CPE_EPD_THRES_PARAM_SIZE,
 			       CPE_LSM_SESSION_CMD_SET_PARAMS_V2);
 
-	epd_cmd.minor_version = 0;
+	epd_cmd.minor_version = 1;
 	epd_cmd.epd_begin = ep_det_data->epd_begin;
 	epd_cmd.epd_end = ep_det_data->epd_end;
 
@@ -2738,7 +2746,7 @@ static int wcd_cpe_send_param_opmode(struct wcd_cpe_core *core,
 			       CPE_OPMODE_PARAM_SIZE,
 			       CPE_LSM_SESSION_CMD_SET_PARAMS_V2);
 
-	opmode_cmd.minor_version = 0;
+	opmode_cmd.minor_version = 1;
 	if (opmode_d->mode == LSM_MODE_KEYWORD_ONLY_DETECTION)
 		opmode_cmd.mode = 1;
 	else
@@ -2785,7 +2793,7 @@ static int wcd_cpe_send_param_gain(struct wcd_cpe_core *core,
 			       CPE_GAIN_PARAM_SIZE,
 			       CPE_LSM_SESSION_CMD_SET_PARAMS_V2);
 
-	gain_cmd.minor_version = 0;
+	gain_cmd.minor_version = 1;
 	gain_cmd.gain = gain_d->gain;
 	gain_cmd.reserved = 0;
 
