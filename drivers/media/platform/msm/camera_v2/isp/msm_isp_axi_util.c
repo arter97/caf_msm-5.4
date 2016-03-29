@@ -2513,7 +2513,7 @@ static int msm_isp_stop_axi_stream(struct vfe_device *vfe_dev,
 				wait_for_complete_for_this_stream = 1;
 		} else {
 			if  ((camif_update != DISABLE_CAMIF_IMMEDIATELY) &&
-				!halt && (!ext_read))
+				!halt)
 				wait_for_complete_for_this_stream = 1;
 		}
 		ISP_DBG("%s: vfe_dev %d camif_update %d halt %d wait %d\n",
