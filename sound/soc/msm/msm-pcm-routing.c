@@ -968,7 +968,7 @@ static int msm_routing_get_hfp_vol_mixer(struct snd_kcontrol *kcontrol,
 static int msm_routing_set_hfp_vol_mixer(struct snd_kcontrol *kcontrol,
 					 struct snd_ctl_elem_value *ucontrol)
 {
-	afe_loopback_gain(PCM_TX , ucontrol->value.integer.value[0]);
+	afe_apply_gain(PCM_TX , ucontrol->value.integer.value[0]);
 	msm_route_hfp_vol_control = ucontrol->value.integer.value[0];
 
 	return 0;
