@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -143,7 +143,7 @@ static void enable_emergency_dload_mode(void)
 		mb();
 	}
 
-	ret = scm_set_dload_mode(SCM_EDLOAD_MODE, 0);
+	ret = scm_set_dload_mode(SCM_EDLOAD_MODE, 1);
 	if (ret)
 		pr_err("Failed to set secure EDLOAD mode: %d\n", ret);
 }
