@@ -1400,6 +1400,9 @@ int create_pkt_cmd_session_set_property(
 		case HAL_RATE_CONTROL_VBR_VFR:
 			pkt->rg_property_data[1] = HFI_RATE_CONTROL_VBR_VFR;
 			break;
+		case HAL_RATE_CONTROL_MBR:
+			pkt->rg_property_data[1] = HFI_RATE_CONTROL_MBR_RC;
+			break;
 		default:
 			dprintk(VIDC_ERR,
 					"Invalid Rate control setting: 0x%p\n",
