@@ -22,6 +22,12 @@
 #include <net/cnss.h>
 #include <net/cfg80211.h>
 
+enum cnss_dev_bus_type {
+	CNSS_BUS_NONE = -1,
+	CNSS_BUS_PCI,
+	CNSS_BUS_SDIO
+};
+
 void cnss_init_work(struct work_struct *work, work_func_t func)
 {
 	INIT_WORK(work, func);
@@ -103,3 +109,37 @@ int cnss_set_cpus_allowed_ptr(struct task_struct *task, ulong cpu)
 	return set_cpus_allowed_ptr(task, cpumask_of(cpu));
 }
 EXPORT_SYMBOL(cnss_set_cpus_allowed_ptr);
+
+enum cnss_dev_bus_type cnss_get_dev_bus_type(struct device *dev)
+{
+	if (!dev && !dev->bus)
+		return CNSS_BUS_NONE;
+
+	if (memcmp(dev->bus->name, "sdio", 4) == 0)
+		return CNSS_BUS_SDIO;
+	else if (memcmp(dev->bus->name, "pci", 3) == 0)
+		return CNSS_BUS_PCI;
+	else
+		return CNSS_BUS_NONE;
+}
+
+int cnss_common_request_bus_bandwidth(struct device *dev, int bandwidth)
+{
+	int ret;
+
+	switch (cnss_get_dev_bus_type(dev)) {
+	case CNSS_BUS_SDIO:
+		ret = cnss_sdio_request_bus_bandwidth(bandwidth);
+		break;
+	case CNSS_BUS_PCI:
+		ret = cnss_pci_request_bus_bandwidth(bandwidth);
+		break;
+	default:
+		pr_debug("%s: Invalid device type\n", __func__);
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(cnss_common_request_bus_bandwidth);

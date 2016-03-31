@@ -4092,6 +4092,27 @@ static void __exit cnss_exit(void)
 	platform_driver_unregister(&cnss_driver);
 }
 
+void cnss_pci_request_pm_qos(u32 qos_val)
+{
+	if (!penv) {
+		pr_err("%s: penv is NULL!\n", __func__);
+		return;
+	}
+
+	pm_qos_add_request(&penv->qos_request, PM_QOS_CPU_DMA_LATENCY, qos_val);
+}
+EXPORT_SYMBOL(cnss_pci_request_pm_qos);
+
+void cnss_pci_remove_pm_qos(void)
+{
+	if (!penv) {
+		pr_err("%s: penv is NULL!\n", __func__);
+		return;
+	}
+	pm_qos_remove_request(&penv->qos_request);
+}
+EXPORT_SYMBOL(cnss_pci_remove_pm_qos);
+
 void cnss_request_pm_qos(u32 qos_val)
 {
 	if (!penv) {
@@ -4113,6 +4134,39 @@ void cnss_remove_pm_qos(void)
 	pm_qos_remove_request(&penv->qos_request);
 }
 EXPORT_SYMBOL(cnss_remove_pm_qos);
+
+int cnss_pci_request_bus_bandwidth(int bandwidth)
+{
+	int ret = 0;
+
+	if (!penv)
+		return -ENODEV;
+
+	if (!penv->bus_client)
+		return -ENOSYS;
+
+	switch (bandwidth) {
+	case CNSS_BUS_WIDTH_NONE:
+	case CNSS_BUS_WIDTH_LOW:
+	case CNSS_BUS_WIDTH_MEDIUM:
+	case CNSS_BUS_WIDTH_HIGH:
+		ret = msm_bus_scale_client_update_request(
+				penv->bus_client, bandwidth);
+		if (!ret) {
+			penv->current_bandwidth_vote = bandwidth;
+		} else {
+			pr_err("%s: could not set bus bandwidth %d, ret = %d\n",
+			       __func__, bandwidth, ret);
+		}
+		break;
+
+	default:
+		pr_err("%s: Invalid request %d", __func__, bandwidth);
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
 
 int cnss_request_bus_bandwidth(int bandwidth)
 {

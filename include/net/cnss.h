@@ -221,8 +221,16 @@ extern void cnss_release_pm_sem(void);
 extern int cnss_set_cpus_allowed_ptr(struct task_struct *task, ulong cpu);
 extern void cnss_request_pm_qos(u32 qos_val);
 extern void cnss_remove_pm_qos(void);
+extern void cnss_sdio_request_pm_qos(int val);
+extern void cnss_sdio_remove_pm_qos(void);
+extern void cnss_pci_request_pm_qos(u32 qos_val);
+extern void cnss_pci_remove_pm_qos(void);
 extern int cnss_get_platform_cap(struct cnss_platform_cap *cap);
 extern void cnss_set_driver_status(enum cnss_driver_status driver_status);
+int cnss_pci_request_bus_bandwidth(int bandwidth);
+int cnss_sdio_request_bus_bandwidth(int bandwidth);
+extern int cnss_common_request_bus_bandwidth(
+			struct device *dev, int bandwidth);
 
 #ifndef CONFIG_WCNSS_MEM_PRE_ALLOC
 static inline int wcnss_pre_alloc_reset(void) { return 0; }

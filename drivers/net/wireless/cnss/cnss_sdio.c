@@ -42,6 +42,17 @@ static struct cnss_sdio_data {
 	struct cnss_sdio_wlan_gpio_info pmic_gpio;
 } *cnss_pdata;
 
+void cnss_sdio_request_pm_qos(int val) { return; }
+EXPORT_SYMBOL(cnss_sdio_request_pm_qos);
+
+void cnss_sdio_remove_pm_qos(void) { return; }
+EXPORT_SYMBOL(cnss_sdio_remove_pm_qos);
+
+int cnss_sdio_request_bus_bandwidth(int bandwidth)
+{
+	return -ENODEV;
+}
+
 static int cnss_sdio_configure_gpio(void)
 {
 	int error;
