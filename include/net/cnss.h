@@ -232,6 +232,23 @@ int cnss_sdio_request_bus_bandwidth(int bandwidth);
 extern int cnss_common_request_bus_bandwidth(
 			struct device *dev, int bandwidth);
 
+void cnss_sdio_device_self_recovery(void);
+void cnss_pci_device_self_recovery(void);
+extern void cnss_common_device_self_recovery(struct device *dev);
+
+void cnss_sdio_schedule_recovery_work(void);
+void cnss_pci_schedule_recovery_work(void);
+extern void cnss_common_schedule_recovery_work(struct device *dev);
+
+void cnss_sdio_device_crashed(void);
+void cnss_pci_device_crashed(void);
+extern void cnss_common_device_crashed(struct device *dev);
+
+void *cnss_pci_get_virt_ramdump_mem(unsigned long *size);
+void *cnss_sdio_get_virt_ramdump_mem(unsigned long *size);
+extern void *cnss_common_get_virt_ramdump_mem(
+		struct device *dev, unsigned long *size);
+
 #ifndef CONFIG_WCNSS_MEM_PRE_ALLOC
 static inline int wcnss_pre_alloc_reset(void) { return 0; }
 #endif

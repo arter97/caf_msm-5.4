@@ -143,3 +143,65 @@ int cnss_common_request_bus_bandwidth(struct device *dev, int bandwidth)
 	return ret;
 }
 EXPORT_SYMBOL(cnss_common_request_bus_bandwidth);
+
+void cnss_common_device_self_recovery(struct device *dev)
+{
+	switch (cnss_get_dev_bus_type(dev)) {
+	case CNSS_BUS_SDIO:
+		cnss_sdio_device_self_recovery();
+		break;
+	case CNSS_BUS_PCI:
+		cnss_pci_device_self_recovery();
+		break;
+	default:
+		pr_debug("%s: Invalid device type\n", __func__);
+		break;
+	}
+}
+EXPORT_SYMBOL(cnss_common_device_self_recovery);
+
+void cnss_common_schedule_recovery_work(struct device *dev)
+{
+	switch (cnss_get_dev_bus_type(dev)) {
+	case CNSS_BUS_SDIO:
+		cnss_sdio_schedule_recovery_work();
+		break;
+	case CNSS_BUS_PCI:
+		cnss_pci_schedule_recovery_work();
+		break;
+	default:
+		pr_debug("%s: Invalid device type\n", __func__);
+		break;
+	}
+}
+EXPORT_SYMBOL(cnss_common_schedule_recovery_work);
+
+void cnss_common_device_crashed(struct device *dev)
+{
+	switch (cnss_get_dev_bus_type(dev)) {
+	case CNSS_BUS_SDIO:
+		cnss_sdio_device_crashed();
+		break;
+	case CNSS_BUS_PCI:
+		cnss_pci_device_crashed();
+		break;
+	default:
+		pr_debug("%s: Invalid device type\n", __func__);
+		break;
+	}
+}
+EXPORT_SYMBOL(cnss_common_device_crashed);
+
+void *cnss_common_get_virt_ramdump_mem(struct device *dev, unsigned long *size)
+{
+	switch (cnss_get_dev_bus_type(dev)) {
+	case CNSS_BUS_SDIO:
+		return cnss_sdio_get_virt_ramdump_mem(size);
+	case CNSS_BUS_PCI:
+		return cnss_pci_get_virt_ramdump_mem(size);
+	default:
+		pr_debug("%s: Invalid device type\n", __func__);
+		return NULL;
+	}
+}
+EXPORT_SYMBOL(cnss_common_get_virt_ramdump_mem);

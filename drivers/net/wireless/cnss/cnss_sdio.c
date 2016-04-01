@@ -48,10 +48,11 @@ EXPORT_SYMBOL(cnss_sdio_request_pm_qos);
 void cnss_sdio_remove_pm_qos(void) { return; }
 EXPORT_SYMBOL(cnss_sdio_remove_pm_qos);
 
-int cnss_sdio_request_bus_bandwidth(int bandwidth)
-{
-	return -ENODEV;
-}
+int cnss_sdio_request_bus_bandwidth(int bandwidth) { return -ENODEV; }
+void cnss_sdio_device_self_recovery(void) { return; }
+void cnss_sdio_schedule_recovery_work(void) { return; }
+void cnss_sdio_device_crashed(void) { return; }
+void *cnss_sdio_get_virt_ramdump_mem(unsigned long *size) { return NULL; }
 
 static int cnss_sdio_configure_gpio(void)
 {
