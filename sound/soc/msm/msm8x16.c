@@ -990,13 +990,25 @@ static int msm8x16_enable_extcodec_ext_clk(struct snd_soc_codec *codec,
 		if (atomic_inc_return(&pdata->mclk_rsc_ref) == 1) {
 			mutex_lock(&pdata->cdc_mclk_mutex);
 			pdata->digital_cdc_clk.clk_val = 9600000;
-			afe_set_digital_codec_core_clock(
+			ret = afe_set_digital_codec_core_clock(
 					AFE_PORT_ID_PRIMARY_MI2S_RX,
 					&pdata->digital_cdc_clk);
+                        if (ret < 0) {
+                                pr_err("%s: failed to enable MCLK\n",
+                                                        __func__);
+                                mutex_unlock(&pdata->cdc_mclk_mutex);
+                                return ret;
+                        }
 			pdata->digital_cdc_clk.clk_val = 9600000;
-			afe_set_digital_codec_core_clock(
+			ret = afe_set_digital_codec_core_clock(
 					AFE_PORT_ID_QUATERNARY_MI2S_RX,
 					&pdata->digital_cdc_clk);
+                        if (ret < 0) {
+                                pr_err("%s: failed to enable MCLK\n",
+                                                        __func__);
+                                mutex_unlock(&pdata->cdc_mclk_mutex);
+                                return ret;
+                        }
 			mutex_unlock(&pdata->cdc_mclk_mutex);
 			tasha_cdc_mclk_enable(codec, 1, dapm);
 		}
@@ -1004,13 +1016,19 @@ static int msm8x16_enable_extcodec_ext_clk(struct snd_soc_codec *codec,
 		if (atomic_dec_return(&pdata->mclk_rsc_ref) == 0) {
 			mutex_lock(&pdata->cdc_mclk_mutex);
 			pdata->digital_cdc_clk.clk_val = 0;
-			afe_set_digital_codec_core_clock(
+			ret = afe_set_digital_codec_core_clock(
 					AFE_PORT_ID_PRIMARY_MI2S_RX,
 					&pdata->digital_cdc_clk);
+                        if (ret < 0)
+                                pr_err("%s: failed to disable MCLK\n",
+                                                __func__);
 			pdata->digital_cdc_clk.clk_val = 0;
-			afe_set_digital_codec_core_clock(
+			ret = afe_set_digital_codec_core_clock(
 					AFE_PORT_ID_QUATERNARY_MI2S_RX,
 					&pdata->digital_cdc_clk);
+                        if (ret < 0)
+                                pr_err("%s: failed to disable MCLK\n",
+                                                __func__);
 			mutex_unlock(&pdata->cdc_mclk_mutex);
 			tasha_cdc_mclk_enable(codec, 0, dapm);
 		}
@@ -1098,6 +1116,13 @@ static int msm8x16_mclk_event(struct snd_soc_dapm_widget *w,
 							__func__);
 			}
 		}
+		else {
+			ret =  msm8x16_enable_extcodec_ext_clk(w->codec, 0, false);
+		        if (ret < 0) {
+				pr_err("%s: failed to enable mclk; ret=%d\n",
+					__func__, ret);
+		        }
+                }
 		break;
 	default:
 		pr_err("%s: invalid DAPM event %d\n", __func__, event);
@@ -1111,7 +1136,6 @@ static void msm_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 	int ret;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_card *card = rtd->card;
-	struct snd_soc_codec *codec = rtd->codec;
 	struct msm8916_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
 
 	pr_debug("%s(): substream = %s  stream = %d\n", __func__,
@@ -1135,12 +1159,6 @@ static void msm_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
 						__func__, "quin_i2s");
 				return;
 			}
-		ret =  msm8x16_enable_extcodec_ext_clk(codec, 0, false);
-		if (ret < 0) {
-			pr_err("%s: failed to enable mclk; ret=%d\n",
-					__func__, ret);
-			return;
-		}
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 			ret = ext_mi2s_clk_ctl(substream, false,
 					AFE_PORT_ID_PRIMARY_MI2S_RX);
