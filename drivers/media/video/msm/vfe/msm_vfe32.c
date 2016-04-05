@@ -8033,30 +8033,23 @@ static long msm_axi_subdev_ioctl(struct v4l2_subdev *sd,
 		rc = 0;
 		break;
 	case VIDIOC_MSM_AXI_RDI_COUNT_UPDATE: {
-		struct rdi_count_msg msg;
+		struct rdi_count_msg *msg = (struct rdi_count_msg *)arg;
 		struct axi_ctrl_t *axi_ctrl = v4l2_get_subdevdata(sd);
-		if (copy_from_user(&msg, arg, sizeof(struct rdi_count_msg))) {
-			pr_err("%s:%d copy from user failed",
-						__func__, __LINE__);
-			rc = -EFAULT;
-			break;
-		}
-		switch (msg.rdi_interface) {
+		switch (msg->rdi_interface) {
 		case RDI_0:
-			axi_ctrl->share_ctrl->rdi0FrameId = msg.count;
+			axi_ctrl->share_ctrl->rdi0FrameId = msg->count;
 			rc = 0;
 			break;
 		case RDI_1:
-			axi_ctrl->share_ctrl->rdi1FrameId = msg.count;
+			axi_ctrl->share_ctrl->rdi1FrameId = msg->count;
 			rc = 0;
 			break;
 		case RDI_2:
-			axi_ctrl->share_ctrl->rdi2FrameId = msg.count;
+			axi_ctrl->share_ctrl->rdi2FrameId = msg->count;
 			rc = 0;
 			break;
 		default:
-			pr_err("%s: Incorrect interface sent %d\n",
-					__func__, msg.rdi_interface);
+			pr_err("%s: Incorrect interface sent\n", __func__);
 			rc = -EINVAL;
 			break;
 		}
