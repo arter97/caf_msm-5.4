@@ -13,7 +13,7 @@
 
 #include "msm8976-pinctrl.dtsi"
 #include "msm8976-camera-sensor-ipc.dtsi"
-#include "msm8976-mdss-mtp.dtsi"
+#include "msm8976-mdss-ipc.dtsi"
 #include "msm8976-wsa881x.dtsi"
 
 &i2c_4 { /* BLSP1 QUP4 */
@@ -42,6 +42,12 @@
 			synaptics,display-coords = <0 0 1439 2559>;
 			synaptics,panel-coords = <0 0 1439 2559>;
 		};
+	};
+
+	lt8912@48 {
+		compatible = "lontium,lt8912";
+		reg = <0x48>;
+		qcom,hdmi-reset = <&msm_gpio 13 0x0>;
 	};
 };
 

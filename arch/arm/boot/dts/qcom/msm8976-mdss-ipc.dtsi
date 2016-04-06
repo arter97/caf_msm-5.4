@@ -1,0 +1,142 @@
+/*
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&mdss_mdp {
+	qcom,mdss-pref-prim-intf = "dsi";
+};
+
+&dsi_hx8399a_1080p_video {
+	qcom,cont-splash-enabled;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+
+	qcom,mdss-dsi-panel-destination = "display_1";
+	qcom,mdss-dsi-color-order = "rgb_swap_rgb";
+	qcom,mdss-dsi-lane-map = "lane_map_0123";
+
+	/delete-property/ qcom,mdss-dsi-panel-clockrate;
+	qcom,mdss-dsi-panel-width = <640>;
+	qcom,mdss-dsi-panel-height = <480>;
+	qcom,mdss-dsi-h-front-porch = <16>;
+	qcom,mdss-dsi-h-back-porch = <48>;
+	qcom,mdss-dsi-h-pulse-width = <96>;
+	qcom,mdss-dsi-v-back-porch = <32>;
+	qcom,mdss-dsi-v-front-porch = <10>;
+	qcom,mdss-dsi-v-pulse-width = <2>;
+	qcom,mdss-dsi-on-command = [
+		05 01 00 00 a0 00 02 11 00
+		05 01 00 00 a0 00 02 29 00];
+	qcom,mdss-dsi-off-command = [05 01 00 00 78 00 02 28 00
+			 05 01 00 00 78 00 02 10 00];
+	qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+	qcom,mdss-dsi-h-sync-pulse = <0>;
+	qcom,mdss-dsi-traffic-mode = "non_burst_sync_event";
+	/delete-property/ qcom,mdss-dsi-lane-2-state;
+	/delete-property/ qcom,mdss-dsi-lane-3-state;
+
+	qcom,mdss-dsi-panel-timings = [E6 38 26 00 68 6C 2A 3A 2C 03 04 00];
+	qcom,mdss-dsi-t-clk-post = <0x02>;
+	qcom,mdss-dsi-t-clk-pre = <0x2B>;
+	/delete-property/ qcom,mdss-dsi-panel-status-check-mode;
+	/delete-property/ qcom,mdss-dsi-panel-status-command;
+	/delete-property/ qcom,mdss-dsi-panel-status-command-state;
+	/delete-property/ qcom,mdss-dsi-panel-status-read-length;
+	/delete-property/ qcom,mdss-dsi-panel-status-value;
+	/delete-property/ qcom,mdss-dsi-bl-min-level;
+	/delete-property/ qcom,mdss-dsi-bl-max-level;
+	qcom,mdss-dsi-dma-trigger = "trigger_sw";
+	qcom,mdss-dsi-mdp-trigger = "none";
+	/delete-property/ qcom,mdss-dsi-bl-pmic-control-type;
+	qcom,mdss-dsi-reset-sequence = <1 20>, <0 2>, <1 20>;
+	qcom,mdss-dsi-post-init-delay = <1>;
+};
+
+&dsi_dual_nt35597_video {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-dsi-pan-enable-dynamic-fps;
+	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_hfp";
+};
+
+&dsi_dual_nt35597_cmd {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,partial-update-enabled;
+	qcom,panel-roi-alignment = <720 128 720 128 720 128>;
+};
+
+&dsi_nt35597_dsc_video {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-dsi-mode-sel-gpio-state = "dsc_mode";
+	qcom,mdss-dsi-pan-enable-dynamic-fps;
+	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_hfp";
+};
+
+&dsi_nt35597_dsc_cmd {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-dsi-mode-sel-gpio-state = "dsc_mode";
+};
+
+&pmx_mdss {
+	qcom,num-grp-pins = <3>;
+	qcom,pins = <&gp 25>, <&gp 66>, <&gp 107>;
+};
+
+&pmx_mdss_te {
+	qcom,num-grp-pins = <1>;
+	qcom,pins = <&gp 24>;
+};
+
+&mdss_dsi {
+	hw-config = "single_dsi";
+};
+
+&mdss_dsi0 {
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+	qcom,dsi-pref-prim-pan = <&dsi_hx8399a_1080p_video>;
+
+	qcom,platform-bklight-en-gpio = <&msm_gpio 66 0>;
+	qcom,panel-mode-gpio = <&msm_gpio 107 0>;
+};
+
+&mdss_dsi1 {
+	pinctrl-names = "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
+	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
+	qcom,dsi-pref-prim-pan = <&dsi_dual_nt35597_video>;
+
+	qcom,platform-bklight-en-gpio = <&msm_gpio 66 0>;
+	qcom,panel-mode-gpio = <&msm_gpio 107 0>;
+};
+
+&labibb {
+	status = "ok";
+	qpnp,qpnp-labibb-mode = "lcd";
+};
+
+&ibb_regulator {
+	qcom,qpnp-ibb-discharge-resistor = <32>;
+};
