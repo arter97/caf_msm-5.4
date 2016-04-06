@@ -147,6 +147,20 @@
 	qcom,vidc@1d00000 {
 		qcom,max-hw-load = <1011840>; /* 3840 x 2176 @ 30 fps + 3840 x 2176 @ 1 fps */
 	};
+
+	alert {
+		compatible = "alert_ctrl";
+		reg = <0x01>;
+		status = "disabled";
+		data,gpio_out = <&msm_gpio 10 0>;
+
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <16 0>, <17 0>;
+		interrupt-names = "irq_reset", "irq_in";
+
+		data,gpio_reset = <&msm_gpio 16 0x00>;
+		data,gpio_in = <&msm_gpio 17 0x00>;
+	};
 };
 
 &blsp1_uart2 {
