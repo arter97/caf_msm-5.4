@@ -100,6 +100,7 @@ static const int wcd9xxx_cdc_types[] = {
 	[WCD9XXX] = WCD9XXX,
 	[WCD9330] = WCD9330,
 	[WCD9335] = WCD9335,
+	[WCD9306] = WCD9306,
 };
 
 static const struct of_device_id wcd9xxx_of_match[] = {
@@ -109,6 +110,8 @@ static const struct of_device_id wcd9xxx_of_match[] = {
 	  .data = (void *)&wcd9xxx_cdc_types[WCD9335]},
 	{ .compatible = "qcom,tasha-i2c-pgd",
 	  .data = (void *)&wcd9xxx_cdc_types[WCD9335]},
+	{ .compatible = "qcom,wcd9xxx-i2c",
+	  .data = (void *)&wcd9xxx_cdc_types[WCD9306]},
 	{ .compatible = "qcom,wcd9xxx-i2c",
 	  .data = (void *)&wcd9xxx_cdc_types[WCD9330]},
 	{ }
@@ -1235,6 +1238,7 @@ static void wcd9xxx_chip_version_ctrl_reg(struct wcd9xxx *wcd9xxx,
 		*byte_2 = WCD9335_CHIP_TIER_CTRL_CHIP_ID_BYTE2;
 		break;
 	case WCD9330:
+	case WCD9306:
 	case WCD9XXX:
 	default:
 		*byte_0 = WCD9XXX_A_CHIP_ID_BYTE_0;
@@ -2207,6 +2211,10 @@ static int wcd9xxx_i2c_probe(struct i2c_client *client,
 				 __func__);
 			wcd9xxx->type = WCD9XXX;
 		}
+
+		if (pdata->cdc_variant == WCD9330)
+			wcd9xxx->type = WCD9330;
+
 		wcd9xxx_set_codec_specific_param(wcd9xxx);
 		if (wcd9xxx->using_regmap) {
 			wcd9xxx->regmap = devm_regmap_init_i2c_bus(client,
