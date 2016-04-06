@@ -1993,7 +1993,7 @@ static int mdss_panel_parse_dt(struct device_node *np,
 		"qcom,mdss-dsi-bllp-power-mode");
 	pinfo->mipi.eof_bllp_power_stop = of_property_read_bool(
 		np, "qcom,mdss-dsi-bllp-eof-power-mode");
-	pinfo->mipi.traffic_mode = DSI_NON_BURST_SYNCH_PULSE;
+	pinfo->mipi.traffic_mode = DSI_NON_BURST_SYNCH_EVENT;
 	data = of_get_property(np, "qcom,mdss-dsi-traffic-mode", NULL);
 	if (data) {
 		if (!strcmp(data, "non_burst_sync_event"))
@@ -2118,9 +2118,6 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->off_cmds,
 		"qcom,mdss-dsi-off-command", "qcom,mdss-dsi-off-command-state");
 
-	pinfo->mipi.force_clk_lane_hs = of_property_read_bool(np,
-		"qcom,mdss-dsi-force-clock-lane-hs");
-
 	rc = mdss_dsi_parse_panel_features(np, ctrl_pdata);
 	if (rc) {
 		pr_err("%s: failed to parse panel features\n", __func__);
@@ -2130,6 +2127,7 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	mdss_dsi_parse_panel_horizintal_line_idle(np, ctrl_pdata);
 
 	mdss_dsi_parse_dfps_config(np, ctrl_pdata);
+	pinfo->mipi.force_clk_lane_hs = 1;
 
 	pinfo->is_dba_panel = of_property_read_bool(np,
 			"qcom,dba-panel");

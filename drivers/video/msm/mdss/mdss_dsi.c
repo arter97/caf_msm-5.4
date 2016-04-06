@@ -1231,6 +1231,7 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 	struct mipi_panel_info *mipi;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	int cur_power_state;
+	u32 tmp;
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -1317,14 +1318,10 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 	if (mipi->init_delay)
 		usleep(mipi->init_delay);
 
-	if (mipi->force_clk_lane_hs) {
-		u32 tmp;
-
-		tmp = MIPI_INP((ctrl_pdata->ctrl_base) + 0xac);
-		tmp |= (1<<28);
-		MIPI_OUTP((ctrl_pdata->ctrl_base) + 0xac, tmp);
-		wmb();
-	}
+	tmp = MIPI_INP((ctrl_pdata->ctrl_base) + 0xac);
+	tmp |= (1<<28);
+	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0xac, tmp);
+	wmb();
 
 	if (pdata->panel_info.type == MIPI_CMD_PANEL)
 		mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 0);
@@ -1683,10 +1680,9 @@ static void __mdss_dsi_calc_dfps_delay(struct mdss_panel_data *pdata)
 			((pd->timing[1] >> 1) + 1) +
 			((pd->timing[4] >> 1) + 1)) / hr_bit_to_esc_ratio);
 
-	if (pinfo->mipi.force_clk_lane_hs)
-		pipe_delay2 = (6 / byte_to_esc_ratio) +
-			((((pd->timing[1] >> 1) + 1) +
-			((pd->timing[4] >> 1) + 1)) / hr_bit_to_esc_ratio);
+	pipe_delay2 = (6 / byte_to_esc_ratio) +
+		((((pd->timing[1] >> 1) + 1) +
+		  ((pd->timing[4] >> 1) + 1)) / hr_bit_to_esc_ratio);
 
 	/* 130 us pll delay recommended by h/w doc */
 	pll_delay = ((130 * esc_clk_rate) / 1000000) * 2;
