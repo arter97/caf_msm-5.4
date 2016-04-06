@@ -143,6 +143,7 @@ struct msm_hs_wakeup {
 	/* bool: inject char into rx tty on wakeup */
 	unsigned char inject_rx;
 	char rx_to_inject;
+	bool enabled;
 };
 
 /*
@@ -1853,7 +1854,9 @@ static int msm_hs_check_clock_off(struct uart_port *uport)
 	spin_lock_irqsave(&uport->lock, flags);
 	if (use_low_power_wakeup(msm_uport)) {
 		msm_uport->wakeup.ignore = 1;
+		disable_irq(uport->irq);
 		enable_irq(msm_uport->wakeup.irq);
+		msm_uport->wakeup.enabled = true;
 	}
 	__pm_relax(&msm_uport->dma_ws);
 	spin_unlock_irqrestore(&uport->lock, flags);
@@ -1893,9 +1896,10 @@ static irqreturn_t msm_hs_isr(int irq, void *dev)
 	struct msm_hs_tx *tx = &msm_uport->tx;
 	struct msm_hs_rx *rx = &msm_uport->rx;
 
+	isr_status = msm_hs_read(uport, UARTDM_MISR_ADDR);
 	if (atomic_read(&msm_uport->is_shutdown)) {
-		pr_err("%s(): Received UART interrupt after shutdown.\n",
-								__func__);
+		/* Disable interrupts as port close initated */
+		 msm_hs_write(uport, UARTDM_IMR_ADDR, msm_uport->imr_reg);
 		return IRQ_HANDLED;
 	}
 	spin_lock_irqsave(&uport->lock, flags);
@@ -2044,6 +2048,8 @@ void msm_hs_request_clock_on(struct uart_port *uport)
 	case MSM_HS_CLK_OFF:
 		__pm_stay_awake(&msm_uport->dma_ws);
 		disable_irq_nosync(msm_uport->wakeup.irq);
+		enable_irq(uport->irq);
+		msm_uport->wakeup.enabled = false;
 		spin_unlock_irqrestore(&uport->lock, flags);
 		ret = msm_hs_clock_vote(msm_uport);
 		if (ret) {
@@ -2274,6 +2280,7 @@ static int msm_hs_startup(struct uart_port *uport)
 			goto free_uart_irq;
 		}
 		disable_irq(msm_uport->wakeup.irq);
+		msm_uport->wakeup.enabled = false;
 	}
 	atomic_set(&msm_uport->is_shutdown, 0);
 
@@ -2470,6 +2477,7 @@ static int __devinit msm_hs_probe(struct platform_device *pdev)
 		msm_uport->wakeup.ignore = 1;
 		msm_uport->wakeup.inject_rx = pdata->inject_rx_on_wakeup;
 		msm_uport->wakeup.rx_to_inject = pdata->rx_to_inject;
+		msm_uport->wakeup.enabled = false;
 
 		if (unlikely(msm_uport->wakeup.irq < 0))
 			return -ENXIO;
@@ -2671,6 +2679,21 @@ static void msm_hs_shutdown(struct uart_port *uport)
 	atomic_set(&msm_uport->is_shutdown, 1);
 
 	spin_lock_irqsave(&uport->lock, flags);
+
+	if (msm_uport->wakeup.enabled) {
+		disable_irq_nosync(msm_uport->wakeup.irq);
+		msm_uport->wakeup.enabled = false;
+	} else {
+		disable_irq(uport->irq);
+	}
+
+	/* Disable all UART interrupts */
+	msm_uport->imr_reg = 0;
+	msm_hs_write(uport, UARTDM_IMR_ADDR, msm_uport->imr_reg);
+
+	/* Free the UART IRQ line */
+	free_irq(uport->irq, msm_uport);
+
 	/* disable UART TX interface to DM */
 	data = msm_hs_read(uport, UARTDM_DMEN_ADDR);
 	data &= ~UARTDM_TX_DM_EN_BMSK;
@@ -2713,16 +2736,6 @@ static void msm_hs_shutdown(struct uart_port *uport)
 	}
 
 	tasklet_kill(&msm_uport->rx.tlet);
-
-	spin_lock_irqsave(&uport->lock, flags);
-	/* Disable all UART interrupts */
-	msm_uport->imr_reg = 0;
-	msm_hs_write(uport, UARTDM_IMR_ADDR, msm_uport->imr_reg);
-
-	/* Free the UART IRQ line */
-	free_irq(uport->irq, msm_uport);
-
-	spin_unlock_irqrestore(&uport->lock, flags);
 
 	/* disable UART RX interface to DM */
 	data = msm_hs_read(uport, UARTDM_DMEN_ADDR);
