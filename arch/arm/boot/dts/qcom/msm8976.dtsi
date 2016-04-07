@@ -1225,7 +1225,6 @@
 	slim_msm: slim@c140000{
 		cell-index = <1>;
 		compatible = "qcom,slim-ngd";
-		status = "disabled";
 		reg = <0xc140000 0x2c000>,
 			<0xc104000 0x2a000>;
 		reg-names = "slimbus_physical", "slimbus_bam_physical";
@@ -2174,7 +2173,6 @@
 
 	ext_codec: sound-9335 {
 		compatible = "qcom,msm8952-audio-slim-codec";
-		status = "disabled";
 		qcom,model = "msm8976-tasha-snd-card";
 
 		reg = <0xc051000 0x4>,
@@ -2738,13 +2736,11 @@
 &slim_msm {
 	msm_dai_slim {
 		compatible = "qcom,msm-dai-slim";
-		status = "disabled";
 		elemental-addr = [ff ff ff fe 17 02];
 	};
 
 	tasha_codec {
 		compatible = "qcom,tasha-slim-pgd";
-		status = "disabled";
 		elemental-addr = [00 01 A0 01 17 02];
 
 		interrupt-parent = <&wcd9xxx_intc>;

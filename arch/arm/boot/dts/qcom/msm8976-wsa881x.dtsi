@@ -14,7 +14,6 @@
 	tasha_codec {
 		swr_master {
 			compatible = "qcom,swr-wcd";
-                        status = "disabled";
 			#address-cells = <2>;
 			#size-cells = <0>;
 
