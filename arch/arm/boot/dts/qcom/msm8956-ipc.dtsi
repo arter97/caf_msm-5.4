@@ -148,6 +148,29 @@
 		qcom,max-hw-load = <1011840>; /* 3840 x 2176 @ 30 fps + 3840 x 2176 @ 1 fps */
 	};
 
+	usb_detect {
+		compatible = "usb_id,usb_detect";
+		qcom,usb-id= <&msm_gpio 56 0x0>;
+		qcom,switch= <&msm_gpio 102 0x0>;
+		qcom,pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&switch_active>;
+		pinctrl-1 = <&switch_sleep>;
+		qcom,pins = <&gp 102>;
+		qcom,num-grp-pins = <1>;
+		qcom,pin-func = <0>;
+		label = "switch";
+		/* active state */
+		switch_active: switch_active{
+			drive-strength = <2>; /* 2 MA */
+			bias-pull-up; /* PULL UP */
+		};
+		/* suspended state */
+		switch_sleep: switch_sleep {
+			drive-strength = <2>; /* 2 MA */
+			bias-pull-up; /* PULL UP */
+		};
+	};
+
 	alert {
 		compatible = "alert_ctrl";
 		reg = <0x01>;
@@ -169,6 +192,10 @@
 	pinctrl-0 = <&uart_console_sleep>;
 };
 
+&usb_otg {
+	compatible = "qcom,ipc-hsusb-otg";
+	qcom,hsusb-otg-otg-control = <3>; /* USER */
+};
 
 &spmi_bus {
 	qcom,pmi8950@3 {
