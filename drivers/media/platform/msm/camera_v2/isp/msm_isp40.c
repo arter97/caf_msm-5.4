@@ -660,7 +660,6 @@ static void msm_vfe40_process_reg_update(struct vfe_device *vfe_dev,
 {
 	enum msm_vfe_input_src i;
 	uint32_t shift_irq;
-	uint8_t reg_updated = 0;
 	unsigned long flags;
 	struct msm_vfe_axi_stream *stream_info = NULL;
 	uint32_t j = 0;
@@ -670,9 +669,15 @@ static void msm_vfe40_process_reg_update(struct vfe_device *vfe_dev,
 	/* Shift status bits so that PIX REG UPDATE is 1st bit */
 	shift_irq = ((irq_status0 & 0xF0) >> 4);
 
+	spin_lock_irqsave(&vfe_dev->reg_update_lock, flags);
+	if (shift_irq & BIT(VFE_PIX_0))
+		vfe_dev->reg_updated = 1;
+
+	vfe_dev->reg_update_requested &= ~shift_irq;
+	spin_unlock_irqrestore(&vfe_dev->reg_update_lock, flags);
+
 	for (i = VFE_PIX_0; i <= VFE_RAW_2; i++) {
 		if (shift_irq & BIT(i)) {
-			reg_updated |= BIT(i);
 			ISP_DBG("%s REG_UPDATE IRQ %x\n", __func__,
 				(uint32_t)BIT(i));
 			switch (i) {
@@ -695,6 +700,15 @@ static void msm_vfe40_process_reg_update(struct vfe_device *vfe_dev,
 					CAMIF_STOPPING)
 					vfe_dev->hw_info->vfe_ops.core_ops.
 						reg_update(vfe_dev, i);
+
+				if (vfe_dev->axi_data.src_info[i].input_mux !=
+					EXTERNAL_READ)
+					break;
+
+				msm_isp_notify(vfe_dev, ISP_EVENT_SOF, i, ts);
+				msm_isp_update_framedrop_reg(vfe_dev, i);
+				msm_isp_update_stats_framedrop_reg(vfe_dev);
+				msm_isp_update_error_frame_count(vfe_dev);
 				break;
 			case VFE_RAW_0:
 			case VFE_RAW_1:
@@ -726,13 +740,6 @@ static void msm_vfe40_process_reg_update(struct vfe_device *vfe_dev,
 			}
 		}
 	}
-
-	spin_lock_irqsave(&vfe_dev->reg_update_lock, flags);
-	if (reg_updated & BIT(VFE_PIX_0))
-		vfe_dev->reg_updated = 1;
-
-	vfe_dev->reg_update_requested &= ~reg_updated;
-	spin_unlock_irqrestore(&vfe_dev->reg_update_lock, flags);
 }
 
 static void msm_vfe40_reg_update(struct vfe_device *vfe_dev,
@@ -1121,6 +1128,8 @@ static int msm_vfe40_start_fetch_engine(struct vfe_device *vfe_dev,
 	vfe_dev->fetch_engine_info.is_busy = 1;
 
 	msm_camera_io_w(mapped_info.paddr, vfe_dev->vfe_base + 0x228);
+
+	vfe_dev->hw_info->vfe_ops.core_ops.reg_update(vfe_dev, VFE_PIX_0);
 
 	msm_camera_io_w_mb(0x10000, vfe_dev->vfe_base + 0x4C);
 	msm_camera_io_w_mb(0x20000, vfe_dev->vfe_base + 0x4C);
