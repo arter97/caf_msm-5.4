@@ -1,0 +1,8 @@
+#
+# Kconfig for usb detect
+#
+config USB_DETECT
+	tristate "usb detect driver"
+	default y
+	help
+		The driver of usb_detect is used to report the usb ID status.
