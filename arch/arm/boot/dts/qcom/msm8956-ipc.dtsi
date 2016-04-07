@@ -197,6 +197,16 @@
 	qcom,hsusb-otg-otg-control = <3>; /* USER */
 };
 
+&spi_0 {
+	spi-max-frequency = <3000000>;
+	ms41908-spi@0 {
+		compatible = "spidev";
+		spi-max-frequency = <3000000>;
+		reg = <0>;
+		ms-gpio = <&msm_gpio 135 0>;
+	};
+};
+
 &spmi_bus {
 	qcom,pmi8950@3 {
 		qcom,leds@d800 {
