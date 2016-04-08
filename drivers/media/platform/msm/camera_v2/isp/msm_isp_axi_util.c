@@ -2682,13 +2682,14 @@ int msm_isp_cfg_axi_stream(struct vfe_device *vfe_dev, void *arg)
 
 static int msm_isp_return_empty_buffer(struct vfe_device *vfe_dev,
 	struct msm_vfe_axi_stream *stream_info, uint32_t user_stream_id,
-	uint32_t frame_id, enum msm_vfe_input_src frame_src)
+	uint32_t frame_id, uint32_t is_error)
 {
 	int rc = -1;
 	struct msm_isp_buffer *buf = NULL;
 	uint32_t bufq_handle = 0, buf_cnt = 0;
 	uint32_t stream_idx;
 	struct msm_isp_event_data error_event;
+	struct msm_isp_event_data buf_event;
 	struct msm_isp_timestamp timestamp;
 
 	if (!vfe_dev || !stream_info) {
@@ -2700,11 +2701,6 @@ static int msm_isp_return_empty_buffer(struct vfe_device *vfe_dev,
 	stream_idx = HANDLE_TO_IDX(stream_info->stream_handle);
 	if (!stream_info->controllable_output)
 		return -EINVAL;
-
-	if (frame_src >= VFE_SRC_MAX) {
-		pr_err("%s: Invalid frame_src %d", __func__, frame_src);
-		return -EINVAL;
-	}
 
 	if (stream_idx >= VFE_AXI_SRC_MAX) {
 		pr_err("%s: Invalid stream_idx", __func__);
@@ -2739,12 +2735,24 @@ static int msm_isp_return_empty_buffer(struct vfe_device *vfe_dev,
 			stream_info->runtime_output_format);
 	}
 
-	error_event.frame_id = frame_id;
-	error_event.u.error_info.err_type = ISP_ERROR_RETURN_EMPTY_BUFFER;
-	error_event.u.error_info.session_id = stream_info->session_id;
-	error_event.u.error_info.stream_id_mask =
-		1 << (bufq_handle & 0xFF);
-	msm_isp_send_event(vfe_dev, ISP_EVENT_ERROR, &error_event);
+	if (is_error) {
+		error_event.frame_id = frame_id;
+		error_event.u.error_info.err_type = ISP_ERROR_RETURN_EMPTY_BUFFER;
+		error_event.u.error_info.session_id = stream_info->session_id;
+		error_event.u.error_info.stream_id_mask =
+			1 << (bufq_handle & 0xFF);
+		msm_isp_send_event(vfe_dev, ISP_EVENT_ERROR, &error_event);
+	} else {
+		buf_event.frame_id = frame_id;
+		buf_event.timestamp = timestamp.buf_time;
+		buf_event.u.buf_done.session_id = stream_info->session_id;
+		buf_event.u.buf_done.stream_id = stream_info->stream_id;
+		buf_event.u.buf_done.handle = buf->bufq_handle;
+		buf_event.u.buf_done.buf_idx = buf->buf_idx;
+		buf_event.u.buf_done.output_format =
+			stream_info->runtime_output_format;
+		msm_isp_send_event(vfe_dev, ISP_EVENT_BUF_DONE, &buf_event);
+	}
 
 	return 0;
 }
@@ -2788,7 +2796,16 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 			vfe_dev->axi_data.src_info[frame_src].
 				frame_id);
 		rc = msm_isp_return_empty_buffer(vfe_dev, stream_info,
-			user_stream_id, frame_id, frame_src);
+			user_stream_id, frame_id, 1);
+		if (rc < 0)
+			pr_err("%s:%d failed: return_empty_buffer src %d\n",
+				__func__, __LINE__, frame_src);
+		return 0;
+	}
+	if ((frame_src == VFE_PIX_0) && (frame_id >
+		vfe_dev->axi_data.src_info[frame_src].frame_id)) {
+		rc = msm_isp_return_empty_buffer(vfe_dev, stream_info,
+			user_stream_id, frame_id, 0);
 		if (rc < 0)
 			pr_err("%s:%d failed: return_empty_buffer src %d\n",
 				__func__, __LINE__, frame_src);
@@ -2802,7 +2819,7 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 			stream_info->stream_id);
 
 		rc = msm_isp_return_empty_buffer(vfe_dev, stream_info,
-			user_stream_id, frame_id, frame_src);
+			user_stream_id, frame_id, 1);
 		if (rc < 0)
 			pr_err("%s:%d failed: return_empty_buffer src %d\n",
 				__func__, __LINE__, frame_src);
