@@ -25,12 +25,16 @@
 #include <sound/tlv.h>
 #include <btfm_slim.h>
 #include <btfm_slim_cherokee.h>
+#include <linux/bluetooth-power.h>
 
 /* Global Structure Pointer */
 static struct btfmslim *btfm_slim = NULL;
 
 /* Register codec driver in slimbus device node */
 extern int btfm_slim_register_codec(struct device *dev);
+
+/* Register BT platform driver in slimbus device node */
+extern int bt_register_slimdev(struct device *dev);
 
 int btfm_slim_write(struct btfmslim *btfmslim,
 		u16 reg, int bytes, void *src, u8 pgd)
@@ -492,6 +496,7 @@ static int btfm_slim_probe(struct slim_device *slim)
 	/* Driver specific data allocation */
 	btfm_slim->dev = &slim->dev;
 	ret = btfm_slim_register_codec(&slim->dev);
+	ret = bt_register_slimdev(&slim->dev);
 	return ret;
 
 dealloc:
