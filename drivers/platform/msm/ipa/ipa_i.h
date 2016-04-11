@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1069,10 +1069,12 @@ struct ipa_uc_wdi_ctx {
  * @dec_clients: true if need to decrease active clients count
  * @eot_activity: represent EOT interrupt activity to determine to reset
  *  the inactivity timer
+ * @sps_pm_lock: Lock to protect the sps_pm functionality.
  */
 struct ipa_sps_pm {
 	atomic_t dec_clients;
 	atomic_t eot_activity;
+	struct mutex sps_pm_lock;
 };
 
 /**
