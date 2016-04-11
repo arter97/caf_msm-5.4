@@ -412,6 +412,7 @@ static DEFINE_VDD_REGS_INIT(vdd_gfx, 1);
 #define RPM_MEM_CLK_TYPE	0x326b6c63
 #define RPM_IPA_CLK_TYPE	0x00617069
 #define RPM_SMD_KEY_ENABLE	0x62616E45
+#define RPM_CE_CLK_TYPE		0x6563
 
 #define XO_ID			0x0
 #define QDSS_ID			0x1
@@ -422,6 +423,7 @@ static DEFINE_VDD_REGS_INIT(vdd_gfx, 1);
 #define SYSMMNOC_ID		0x2
 #define BIMC_ID			0x0
 #define IPA_ID			0x0
+#define CE_CLK_ID		0x0
 
 #define BB_CLK1_ID		0x1
 #define BB_CLK2_ID		0x2

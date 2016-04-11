@@ -92,6 +92,17 @@ static DEFINE_CLK_BRANCH_VOTER(xo_pil_mss_clk, &xo_clk_src.c);
 static DEFINE_CLK_BRANCH_VOTER(xo_pil_pronto_clk, &xo_clk_src.c);
 static DEFINE_CLK_BRANCH_VOTER(xo_wlan_clk, &xo_clk_src.c);
 
+/* Crypto Clocks */
+DEFINE_CLK_RPM_SMD(ce_clk, ce_a_clk, RPM_CE_CLK_TYPE, CE_CLK_ID, NULL);
+DEFINE_CLK_DUMMY(gcc_ce_ahb_m_clk, 0);
+DEFINE_CLK_DUMMY(gcc_ce_axi_m_clk, 0);
+
+static DEFINE_CLK_VOTER(mcd_ce_clk, &ce_clk.c, 100000000);
+static DEFINE_CLK_VOTER(qseecom_ce_clk, &ce_clk.c, 100000000);
+static DEFINE_CLK_VOTER(scm_ce_clk, &ce_clk.c, 80000000);
+static DEFINE_CLK_VOTER(qcedev_ce_clk, &ce_clk.c, 100000000);
+static DEFINE_CLK_VOTER(qcrypto_ce_clk, &ce_clk.c, 100000000);
+
 DEFINE_CLK_DUMMY(wcnss_m_clk, 0);
 DEFINE_EXT_CLK(debug_cpu_clk, NULL);
 
@@ -3249,9 +3260,9 @@ static struct mux_clk gcc_debug_mux = {
 		{ &gcc_usb_fs_ahb_clk.c, 0x00f1 },
 		{ &gcc_usb_fs_ic_clk.c, 0x00f4 },
 		{ &gcc_boot_rom_ahb_clk.c, 0x00f8 },
-		{ &gcc_crypto_clk.c, 0x0138 },
-		{ &gcc_crypto_axi_clk.c, 0x0139 },
-		{ &gcc_crypto_ahb_clk.c, 0x013a },
+		{ &ce_clk.c, 0x0138 },
+		{ &gcc_ce_axi_m_clk.c, 0x0139 },
+		{ &gcc_ce_ahb_m_clk.c, 0x013a },
 		{ &gcc_camss_csi_vfe1_clk.c, 0x01b4 },
 		{ &gcc_camss_cpp_axi_clk.c, 0x01b5 },
 		{ &gcc_venus0_core0_vcodec0_clk.c, 0x01b8 },
@@ -3348,6 +3359,17 @@ static struct clk_lookup msm_clocks_lookup[] = {
 	 CLK_LIST(xo_pil_mss_clk),
 	 CLK_LIST(xo_pil_pronto_clk),
 	 CLK_LIST(xo_wlan_clk),
+
+	/*Crypto Clocks */
+	 CLK_LIST(ce_clk),
+	 CLK_LIST(ce_a_clk),
+	 CLK_LIST(gcc_ce_ahb_m_clk),
+	 CLK_LIST(gcc_ce_axi_m_clk),
+	 CLK_LIST(mcd_ce_clk),
+	 CLK_LIST(scm_ce_clk),
+	 CLK_LIST(qcedev_ce_clk),
+	 CLK_LIST(qseecom_ce_clk),
+	 CLK_LIST(qcrypto_ce_clk),
 
 	 /* XO buffers */
 	 CLK_LIST(bb_clk1),

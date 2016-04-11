@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -285,6 +285,15 @@
 #define clk_ln_bb_clk				0x3ab0b36d
 #define clk_ln_bb_a_clk				0xc7257ea8
 
+#define clk_gcc_ce_ahb_m_clk			0xcdfdb3fa
+#define clk_gcc_ce_axi_m_clk			0xa749490b
+#define clk_ce_clk				0xd8bc64e1
+#define clk_ce_a_clk				0x4dfefd47
+#define clk_qcrypto_ce_clk			0xd8cd060b
+#define clk_qcedev_ce_clk			0x2e7f9cee
+#define clk_qseecom_ce_clk			0xea036e4b
+#define clk_mcd_ce_clk				0x7ad13979
+#define clk_scm_ce_clk				0xfd35bb87
 
 /* DEBUG */
 #define clk_gcc_debug_mux			0x8121ac15
