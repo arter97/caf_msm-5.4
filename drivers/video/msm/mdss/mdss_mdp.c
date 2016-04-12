@@ -945,10 +945,13 @@ static void mdss_mdp_vbif_axi_halt(struct mdss_data_type *mdata)
 	__mdss_mdp_reg_access_clk_enable(mdata, false);
 }
 
+int count = 0;
+int written = 0;
 int mdss_iommu_ctrl(int enable)
 {
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	int rc = 0;
+	uint32_t reg;
 
 	mutex_lock(&mdp_iommu_ref_cnt_lock);
 	pr_debug("%pS: enable:%d ref_cnt:%d attach:%d hoff:%d\n",
@@ -961,10 +964,60 @@ int mdss_iommu_ctrl(int enable)
 		 * finished handoff, as it may still be working with phys addr
 		 */
 		if (!mdata->iommu_attached && !mdata->handoff_pending) {
+			if (count == 0) {
+				count++;
+			} else {
+				if (written == 0) {
+					MDSS_REG_WRITE(mdata, 0x2000,
+						0x1000000);
+					MDSS_REG_WRITE(mdata, 0x2408,
+						0x1000000);
+					MDSS_REG_WRITE(mdata, 0x2204,
+						0x1000000);
+
+					MDSS_REG_WRITE(mdata, 0x2018, 0x260C3);
+					MDSS_REG_WRITE(mdata, 0x2218, 0x24082);
+					MDSS_REG_WRITE(mdata, 0x2418, 0x28108);
+					reg = readl_relaxed(mdata->mdss_io.base
+						+ 0x2000);
+					reg = readl_relaxed(mdata->mdss_io.base
+						+ 0x2204);
+					reg = readl_relaxed(mdata->mdss_io.base
+						+ 0x2408);
+					MDSS_REG_WRITE(mdata,
+						MDSS_HW_MDSS_SCRATCH_REGISTER_0,
+						0xFEFEFEFE);
+					MDSS_REG_WRITE(mdata,
+						MDSS_HW_MDSS_SCRATCH_REGISTER_1,
+						0xFEFEFEFE);
+					msleep(50);
+				}
+
+			}
+
 			if (mdss_has_quirk(mdata, MDSS_QUIRK_MIN_BUS_VOTE))
 				mdss_bus_scale_set_quota(MDSS_HW_RT,
 					 SZ_1M, SZ_1M);
 			rc = mdss_smmu_attach(mdata);
+			if (rc == 0) {
+				if (written == 0) {
+					written++;
+					rc = mdss_smmu_map(
+						MDSS_IOMMU_DOMAIN_UNSECURE,
+						(phys_addr_t)0x83401000,
+						(phys_addr_t)0x83401000,
+						(size_t)0x23ff000,
+						IOMMU_READ | IOMMU_NOEXEC);
+					if (rc) {
+						pr_err("Error in mapping\n");
+					} else {
+						pr_err("Successful mapping\n");
+						MDSS_REG_WRITE(mdata,
+						MDSS_HW_MDSS_SCRATCH_REGISTER_0,
+						0x0);
+					}
+				}
+			}
 		}
 		mdata->iommu_ref_cnt++;
 	} else {
