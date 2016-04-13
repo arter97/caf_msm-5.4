@@ -246,7 +246,7 @@ static int pil_mss_loadable_init(struct modem_data *drv,
 	int ret;
 
 	q6 = pil_q6v5_init(pdev);
-	if (IS_ERR(q6))
+	if (IS_ERR_OR_NULL(q6))
 		return PTR_ERR(q6);
 	drv->q6 = q6;
 	drv->xo = q6->xo;
