@@ -609,8 +609,6 @@ static int msm_isp_start_fetch_engine(struct vfe_device *vfe_dev,
 {
 	struct msm_vfe_fetch_eng_start *fe_cfg = arg;
 	int rc = 0;
-	struct msm_isp_timestamp ts;
-
 
 	/*
 	 * For Offline VFE, HAL expects same frame id
@@ -623,13 +621,6 @@ static int msm_isp_start_fetch_engine(struct vfe_device *vfe_dev,
 		pr_err("%s: fe start fails\n", __func__);
 		return rc;
 	}
-
-	msm_isp_get_timestamp(&ts);
-	msm_isp_notify(vfe_dev, ISP_EVENT_SOF, VFE_PIX_0, &ts);
-
-	msm_isp_update_framedrop_reg(vfe_dev, VFE_PIX_0);
-	msm_isp_update_stats_framedrop_reg(vfe_dev);
-	msm_isp_update_error_frame_count(vfe_dev);
 
 	return rc;
 }
