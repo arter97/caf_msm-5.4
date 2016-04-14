@@ -209,3 +209,11 @@
 &pm8950_cajon_analog {
 	status = "ok";
 };
+
+&spi_0 {
+	status = "disabled";
+};
+
+&ipa_hw {
+	status = "disabled";
+};
