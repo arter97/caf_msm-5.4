@@ -62,6 +62,21 @@
 
 #include "af_can.h"
 
+
+#ifdef CONFIG_ANDROID_PARANOID_NETWORK
+#include <linux/android_aid.h>
+
+static inline int current_has_can(void)
+{
+	return (in_egroup_p(AID_CAN) || current_cred()->uid == 0);
+}
+#else
+static inline int current_has_can(void)
+{
+	return 1;
+}
+#endif
+
 static __initdata const char banner[] = KERN_INFO
 	"can: controller area network core (" CAN_VERSION_STRING ")\n";
 
@@ -138,6 +153,9 @@ static int can_create(struct net *net, struct socket *sock, int protocol,
 	struct sock *sk;
 	const struct can_proto *cp;
 	int err = 0;
+
+	if (!current_has_can())
+		return -EACCES;
 
 	sock->state = SS_UNCONNECTED;
 
