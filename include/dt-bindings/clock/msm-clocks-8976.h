@@ -171,9 +171,6 @@
 #define clk_gcc_blsp1_ahb_clk			0x8caa5b4f
 #define clk_gcc_blsp2_ahb_clk			0x8f283c1d
 #define clk_gcc_boot_rom_ahb_clk		0xde2adeb1
-#define clk_gcc_crypto_ahb_clk			0x94de4919
-#define clk_gcc_crypto_axi_clk			0xd4415c9b
-#define clk_gcc_crypto_clk			0x00d390d2
 #define clk_gcc_apss_tcu_clk			0xaf56a329
 #define clk_gcc_cpp_tbu_clk			0xab6f19ab
 #define clk_gcc_gfx_1_tbu_clk			0xe66048ad
@@ -229,7 +226,6 @@
 #define clk_camss_top_ahb_clk_src		0xf92304fb
 #define clk_vfe0_clk_src			0xa0c2bd8f
 #define clk_vfe1_clk_src			0x4e357366
-#define clk_crypto_clk_src			0x37a21414
 #define clk_gp1_clk_src				0xad85b97a
 #define clk_gp2_clk_src				0xfb1f0065
 #define clk_gp3_clk_src				0x63b693d6

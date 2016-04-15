@@ -983,28 +983,6 @@ static struct rcg_clk vfe1_clk_src = {
 	},
 };
 
-static struct clk_freq_tbl ftbl_crypto_clk_src[] = {
-	F(  50000000,          gpll0,   16,    0,     0),
-	F(  80000000,          gpll0,   10,    0,     0),
-	F( 100000000,          gpll0,    8,    0,     0),
-	F( 160000000,          gpll0,    5,    0,     0),
-	F_END
-};
-
-static struct rcg_clk crypto_clk_src = {
-	.cmd_rcgr_reg = CRYPTO_CMD_RCGR,
-	.set_rate = set_rate_hid,
-	.freq_tbl = ftbl_crypto_clk_src,
-	.current_freq = &rcg_dummy_freq,
-	.base = &virt_bases[GCC_BASE],
-	.c = {
-		.dbg_name = "crypto_clk_src",
-		.ops = &clk_ops_rcg,
-		VDD_DIG_FMAX_MAP2(LOWER, 80000000, NOMINAL, 160000000),
-		CLK_INIT(crypto_clk_src.c),
-	},
-};
-
 static struct clk_freq_tbl ftbl_gp1_clk_src[] = {
 	F(  19200000,             xo,    1,    0,     0),
 	F_END
@@ -2922,43 +2900,6 @@ static struct local_vote_clk gcc_boot_rom_ahb_clk = {
 	},
 };
 
-static struct local_vote_clk gcc_crypto_ahb_clk = {
-	.cbcr_reg = CRYPTO_AHB_CBCR,
-	.vote_reg = APCS_CLOCK_BRANCH_ENA_VOTE,
-	.en_mask = BIT(0),
-	.base = &virt_bases[GCC_BASE],
-	.c = {
-		.dbg_name = "gcc_crypto_ahb_clk",
-		.ops = &clk_ops_vote,
-		CLK_INIT(gcc_crypto_ahb_clk.c),
-	},
-};
-
-static struct local_vote_clk gcc_crypto_axi_clk = {
-	.cbcr_reg = CRYPTO_AXI_CBCR,
-	.vote_reg = APCS_CLOCK_BRANCH_ENA_VOTE,
-	.en_mask = BIT(1),
-	.base = &virt_bases[GCC_BASE],
-	.c = {
-		.dbg_name = "gcc_crypto_axi_clk",
-		.ops = &clk_ops_vote,
-		CLK_INIT(gcc_crypto_axi_clk.c),
-	},
-};
-
-static struct local_vote_clk gcc_crypto_clk = {
-	.cbcr_reg = CRYPTO_CBCR,
-	.vote_reg = APCS_CLOCK_BRANCH_ENA_VOTE,
-	.en_mask = BIT(2),
-	.base = &virt_bases[GCC_BASE],
-	.c = {
-		.dbg_name = "gcc_crypto_clk",
-		.parent = &crypto_clk_src.c,
-		.ops = &clk_ops_vote,
-		CLK_INIT(gcc_crypto_clk.c),
-	},
-};
-
 static struct local_vote_clk gcc_cpp_tbu_clk = {
 	.cbcr_reg = CPP_TBU_CBCR,
 	.vote_reg = APCS_SMMU_CLOCK_BRANCH_ENA_VOTE,
@@ -3481,9 +3422,6 @@ static struct clk_lookup msm_clocks_lookup[] = {
 	 CLK_LIST(gcc_blsp1_ahb_clk),
 	 CLK_LIST(gcc_blsp2_ahb_clk),
 	 CLK_LIST(gcc_boot_rom_ahb_clk),
-	 CLK_LIST(gcc_crypto_ahb_clk),
-	 CLK_LIST(gcc_crypto_axi_clk),
-	 CLK_LIST(gcc_crypto_clk),
 	 CLK_LIST(gcc_cpp_tbu_clk),
 	 CLK_LIST(gcc_apss_tcu_clk),
 	 CLK_LIST(gcc_jpeg_tbu_clk),
@@ -3535,7 +3473,6 @@ static struct clk_lookup msm_clocks_lookup[] = {
 	 CLK_LIST(camss_top_ahb_clk_src),
 	 CLK_LIST(vfe0_clk_src),
 	 CLK_LIST(vfe1_clk_src),
-	 CLK_LIST(crypto_clk_src),
 	 CLK_LIST(gp1_clk_src),
 	 CLK_LIST(gp2_clk_src),
 	 CLK_LIST(gp3_clk_src),
