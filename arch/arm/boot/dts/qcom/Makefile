@@ -131,6 +131,7 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
 	msm8976-v1.1-qrd-skun-dvt.dtb \
 	msm8976-cdp.dtb \
 	msm8976-mtp.dtb \
+	msm8956-internal-codec-ipc.dtb \
 	msm8976-rcm.dtb \
 	msm8976-internal-codec-cdp.dtb \
 	msm8976-polaris.dtb \
