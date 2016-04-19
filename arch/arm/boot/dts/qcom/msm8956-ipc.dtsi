@@ -13,7 +13,7 @@
 
 #include "msm8976-pinctrl.dtsi"
 #include "msm8976-camera-sensor-ipc.dtsi"
-#include "msm8976-mdss-mtp.dtsi"
+#include "msm8976-mdss-ipc.dtsi"
 #include "msm8976-wsa881x.dtsi"
 
 &i2c_4 { /* BLSP1 QUP4 */
@@ -42,6 +42,12 @@
 			synaptics,display-coords = <0 0 1439 2559>;
 			synaptics,panel-coords = <0 0 1439 2559>;
 		};
+	};
+
+	lt8912@48 {
+		compatible = "lontium,lt8912";
+		reg = <0x48>;
+		qcom,hdmi-reset = <&msm_gpio 13 0x0>;
 	};
 };
 
@@ -141,6 +147,43 @@
 	qcom,vidc@1d00000 {
 		qcom,max-hw-load = <1011840>; /* 3840 x 2176 @ 30 fps + 3840 x 2176 @ 1 fps */
 	};
+
+	usb_detect {
+		compatible = "usb_id,usb_detect";
+		qcom,usb-id= <&msm_gpio 56 0x0>;
+		qcom,switch= <&msm_gpio 102 0x0>;
+		qcom,pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&switch_active>;
+		pinctrl-1 = <&switch_sleep>;
+		qcom,pins = <&gp 102>;
+		qcom,num-grp-pins = <1>;
+		qcom,pin-func = <0>;
+		label = "switch";
+		/* active state */
+		switch_active: switch_active{
+			drive-strength = <2>; /* 2 MA */
+			bias-pull-up; /* PULL UP */
+		};
+		/* suspended state */
+		switch_sleep: switch_sleep {
+			drive-strength = <2>; /* 2 MA */
+			bias-pull-up; /* PULL UP */
+		};
+	};
+
+	alert {
+		compatible = "alert_ctrl";
+		reg = <0x01>;
+		status = "disabled";
+		data,gpio_out = <&msm_gpio 10 0>;
+
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <16 0>, <17 0>;
+		interrupt-names = "irq_reset", "irq_in";
+
+		data,gpio_reset = <&msm_gpio 16 0x00>;
+		data,gpio_in = <&msm_gpio 17 0x00>;
+	};
 };
 
 &blsp1_uart2 {
@@ -149,6 +192,20 @@
 	pinctrl-0 = <&uart_console_sleep>;
 };
 
+&usb_otg {
+	compatible = "qcom,ipc-hsusb-otg";
+	qcom,hsusb-otg-otg-control = <3>; /* USER */
+};
+
+&spi_0 {
+	spi-max-frequency = <3000000>;
+	ms41908-spi@0 {
+		compatible = "spidev";
+		spi-max-frequency = <3000000>;
+		reg = <0>;
+		ms-gpio = <&msm_gpio 135 0>;
+	};
+};
 
 &spmi_bus {
 	qcom,pmi8950@3 {
