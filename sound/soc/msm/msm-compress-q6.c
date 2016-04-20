@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -358,10 +358,11 @@ static int msm_compr_send_media_format_block(
 		pr_debug("SND_AUDIOCODEC_PCM\n");
 		if (prtd->codec_param.codec.format == SNDRV_PCM_FORMAT_S24_LE)
 			bit_width = 24;
-		ret = q6asm_media_format_block_pcm_v2(prtd->audio_client,
-						      prtd->sample_rate,
-						      prtd->num_channels,
-						      bit_width);
+			ret = q6asm_media_format_block_multi_ch_pcm_v2(
+							prtd->audio_client,
+							prtd->sample_rate,
+							prtd->num_channels,
+							bit_width);
 		if (ret < 0)
 			pr_err("%s: CMD Format block failed\n", __func__);
 
