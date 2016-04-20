@@ -34,7 +34,6 @@
 
 #define DRIVER_NAME "adv7481"
 
-#define I2C_RW_DELAY		1
 #define I2C_SW_RST_DELAY	5000
 #define GPIO_HW_RST_DELAY_HI	10000
 #define GPIO_HW_RST_DELAY_LOW	10000
@@ -222,22 +221,12 @@ static inline struct adv7481_state *to_state(struct v4l2_subdev *sd)
 static int adv7481_wr_byte(struct i2c_client *i2c_client, unsigned int reg,
 	unsigned int value)
 {
-	int ret;
-
-	ret = i2c_smbus_write_byte_data(i2c_client, reg & 0xFF, value);
-	usleep(I2C_RW_DELAY);
-
-	return ret;
+	return i2c_smbus_write_byte_data(i2c_client, reg & 0xFF, value);
 }
 
 static int adv7481_rd_byte(struct i2c_client *i2c_client, unsigned int reg)
 {
-	int ret;
-
-	ret = i2c_smbus_read_byte_data(i2c_client, reg & 0xFF);
-	usleep(I2C_RW_DELAY);
-
-	return ret;
+	return i2c_smbus_read_byte_data(i2c_client, reg & 0xFF);
 }
 
 static int adv7481_set_irq(struct adv7481_state *state)
