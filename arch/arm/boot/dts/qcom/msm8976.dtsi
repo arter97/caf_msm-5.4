@@ -1492,10 +1492,10 @@
 		qcom,msm-bus,vectors-KBps =
 			<55 512 0 0>,
 			<55 512 393600 393600>;
-		clocks = <&clock_gcc clk_crypto_clk_src>,
-			 <&clock_gcc clk_gcc_crypto_clk>,
-			 <&clock_gcc clk_gcc_crypto_ahb_clk>,
-			 <&clock_gcc clk_gcc_crypto_axi_clk>;
+		clocks = <&clock_gcc clk_qcrypto_ce_clk>,
+			 <&clock_gcc clk_qcrypto_ce_clk>,
+			 <&clock_gcc clk_gcc_ce_ahb_m_clk>,
+			 <&clock_gcc clk_gcc_ce_axi_m_clk>;
 		clock-names = "core_clk_src", "core_clk",
 				"iface_clk", "bus_clk";
 		qcom,use-sw-aes-cbc-ecb-ctr-algo;
@@ -1521,10 +1521,10 @@
 		qcom,msm-bus,vectors-KBps =
 			<55 512 0 0>,
 			<55 512 393600 393600>;
-		clocks = <&clock_gcc clk_crypto_clk_src>,
-			 <&clock_gcc clk_gcc_crypto_clk>,
-			 <&clock_gcc clk_gcc_crypto_ahb_clk>,
-			 <&clock_gcc clk_gcc_crypto_axi_clk>;
+		clocks = <&clock_gcc clk_qcedev_ce_clk>,
+			 <&clock_gcc clk_qcedev_ce_clk>,
+			 <&clock_gcc clk_gcc_ce_ahb_m_clk>,
+			 <&clock_gcc clk_gcc_ce_axi_m_clk>;
 		clock-names = "core_clk_src", "core_clk",
 				"iface_clk", "bus_clk";
 		qcom,ce-opp-freq = <100000000>;
@@ -1542,16 +1542,16 @@
 		qcom,support-fde;
 		qcom,msm-bus,num-cases = <4>;
 		qcom,msm-bus,num-paths = <1>;
-		qcom,support-bus-scaling;
+		qcom,no-clock-support;
 		qcom,msm-bus,vectors-KBps =
 			<55 512 0 0>,
 			<55 512 0 0>,
 			<55 512 120000 1200000>,
 			<55 512 393600 3936000>;
-		clocks = <&clock_gcc clk_crypto_clk_src>,
-			 <&clock_gcc clk_gcc_crypto_clk>,
-			 <&clock_gcc clk_gcc_crypto_ahb_clk>,
-			 <&clock_gcc clk_gcc_crypto_axi_clk>;
+		clocks = <&clock_gcc clk_qseecom_ce_clk>,
+			 <&clock_gcc clk_qseecom_ce_clk>,
+			 <&clock_gcc clk_gcc_ce_ahb_m_clk>,
+			 <&clock_gcc clk_gcc_ce_axi_m_clk>;
 		clock-names = "core_clk_src", "core_clk",
 				"iface_clk", "bus_clk";
 		qcom,ce-opp-freq = <100000000>;
