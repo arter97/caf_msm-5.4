@@ -1252,8 +1252,7 @@ static int msm_otg_suspend(struct msm_otg *motg)
 	device_bus_suspend = phy->otg->gadget && test_bit(ID, &motg->inputs) &&
 		test_bit(A_BUS_SUSPEND, &motg->inputs);
 
-	if (motg->pdata->mode == USB_OTG &&
-		motg->pdata->default_mode == USB_PERIPHERAL) {
+	if (motg->phy.state == OTG_STATE_B_PERIPHERAL) {
 		dev_dbg(motg->phy.dev, "stop peripheral\n");
 		msm_otg_start_peripheral(motg->phy.otg, 0);
 	}
@@ -1515,8 +1514,7 @@ skip_phy_resume:
 	if (motg->async_irq)
 		disable_irq(motg->async_irq);
 
-	if (motg->pdata->mode == USB_OTG &&
-		 motg->pdata->default_mode == USB_PERIPHERAL) {
+	if (motg->phy.state == OTG_STATE_B_PERIPHERAL) {
 		dev_dbg(motg->phy.dev, "starting peripheral\n");
 		msm_otg_start_peripheral(motg->phy.otg, 1);
 	}
@@ -4427,9 +4425,11 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	if (motg->pdata->enable_lpm_on_dev_suspend)
 		motg->caps |= ALLOW_LPM_ON_DEV_SUSPEND;
 
-	if (!motg->pdata->ignore_wakeup_source)
+	if (!motg->pdata->ignore_wakeup_source) {
 		wake_lock(&motg->wlock);
-
+		pm_runtime_set_active(&pdev->dev);
+		pm_runtime_enable(&pdev->dev);
+	}
 	if (motg->pdata->mpm_xo_wakeup_int)
 		motg->caps |= ALLOW_XO_SHUTDOWN;
 
