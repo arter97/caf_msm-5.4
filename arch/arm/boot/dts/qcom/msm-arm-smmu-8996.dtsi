@@ -122,6 +122,7 @@
 	status = "ok";
 	qcom,register-save;
 	qcom,skip-init;
+	qcom,no-smr-check;
 	qcom,fatal-asf;
 	#global-interrupts = <1>;
 	interrupts = <GIC_SPI 76 IRQ_TYPE_LEVEL_HIGH>,
