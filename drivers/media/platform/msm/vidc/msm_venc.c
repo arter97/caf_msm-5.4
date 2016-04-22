@@ -769,7 +769,16 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.default_value = 0,
 		.step = 1,
 		.qmenu = NULL,
-	}
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_CONSTRAINED_INTRA_PRED,
+		.name = "Enable constrained intra prediction for H264/HEVC",
+		.type = V4L2_CTRL_TYPE_BOOLEAN,
+		.minimum = V4L2_CID_MPEG_VIDC_VIDEO_CONSTRAINED_INTRA_PRED_DISABLE,
+		.maximum = V4L2_CID_MPEG_VIDC_VIDEO_CONSTRAINED_INTRA_PRED_ENABLE,
+		.default_value = V4L2_CID_MPEG_VIDC_VIDEO_CONSTRAINED_INTRA_PRED_DISABLE,
+		.step = 1,
+	},
 };
 
 #define NUM_CTRLS ARRAY_SIZE(msm_venc_ctrls)
@@ -2147,6 +2156,13 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		}
 		pdata = &hier_p_layers;
 		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_CONSTRAINED_INTRA_PRED:
+	{
+		property_id = HAL_PARAM_VENC_CONSTRAINED_INTRA_PRED;
+		enable.enable = ctrl->val;
+		pdata = &enable;
+		break;
+	}
 	default:
 		dprintk(VIDC_ERR, "Unsupported index: %x\n", ctrl->id);
 		rc = -ENOTSUPP;
