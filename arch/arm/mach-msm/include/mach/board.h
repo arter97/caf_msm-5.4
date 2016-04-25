@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/include/mach/board.h
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2016 The Linux Foundation. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -27,18 +27,18 @@
 #include <linux/msm_ssbi.h>
 #include <mach/msm_bus.h>
 
-#ifdef CONFIG_BOOT_TIME_MARKER
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
 #include "../mach-msm/timer.h"
-#include <linux/proc_fs.h>
-#include <asm/uaccess.h>
-#define TIMER_KHZ 32768
 
-int init_marker_sys_fs(void);
-void place_marker(char *name);
-extern char lk_splash_val[];
-extern unsigned long kernel_start_marker;
+enum Lk_marker {
+	LK_SPLASH_SCREEN = 0,
+	LK_KERNEL_START = 1,
+	LK_INVALID,
+};
+
+void place_marker(const char *name);
 #else
-void place_marker(char *name);
+static inline void place_marker(char *name) { return; }
 #endif
 
 struct msm_camera_io_ext {

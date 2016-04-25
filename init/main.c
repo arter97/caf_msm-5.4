@@ -80,10 +80,6 @@
 #include <asm/smp.h>
 #endif
 
-#ifdef CONFIG_BOOT_TIME_MARKER
-#include <mach/board.h>
-#endif
-
 static int kernel_init(void *);
 
 extern void init_IRQ(void);
@@ -391,13 +387,6 @@ static noinline void __init_refok rest_init(void)
 	cpu_idle();
 }
 
-/* Splash screen Boot marker value from LK */
-#ifdef CONFIG_BOOT_TIME_MARKER
-#define MAX_SS_LK_MARKER_SIZE 16
-char lk_splash_val[MAX_SS_LK_MARKER_SIZE] = "0";
-unsigned long kernel_start_marker;
-#endif
-
 /* Check for early params. */
 static int __init do_early_param(char *param, char *val)
 {
@@ -412,10 +401,6 @@ static int __init do_early_param(char *param, char *val)
 				printk(KERN_WARNING
 				       "Malformed early option '%s'\n", param);
 		}
-#ifdef CONFIG_BOOT_TIME_MARKER
-		if (strcmp(param, "LK_splash") == 0)
-			strlcpy(lk_splash_val, val, sizeof(lk_splash_val));
-#endif
 	}
 	/* We accept everything at this stage. */
 	return 0;
@@ -507,9 +492,6 @@ asmlinkage void __init start_kernel(void)
 	page_address_init();
 	printk(KERN_NOTICE "%s", linux_banner);
 	setup_arch(&command_line);
-#ifdef CONFIG_BOOT_TIME_MARKER
-	kernel_start_marker = msm_timer_get_sclk_ticks();
-#endif
 	/*
 	 * Set up the the initial canary ASAP:
 	 */
@@ -654,9 +636,6 @@ asmlinkage void __init start_kernel(void)
 	acpi_early_init(); /* before LAPIC and SMP init */
 	sfi_init_late();
 
-#ifdef CONFIG_BOOT_TIME_MARKER
-	init_marker_sys_fs();
-#endif
 	if (efi_enabled(EFI_RUNTIME_SERVICES))
 		efi_free_boot_services();
 
@@ -837,9 +816,6 @@ static noinline int init_post(void)
 
 
 	current->signal->flags |= SIGNAL_UNKILLABLE;
-#ifdef CONFIG_BOOT_TIME_MARKER
-	place_marker("Linux_Kernel - End");
-#endif
 	if (ramdisk_execute_command) {
 		run_init_process(ramdisk_execute_command);
 		printk(KERN_WARNING "Failed to execute %s\n",
