@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -229,7 +229,11 @@ void mdss_mdp_release_splash_pipe(struct msm_fb_data_type *mfd)
  */
 void mdss_free_bootmem(u32 mem_addr, u32 size)
 {
-		return;
+	unsigned long pfn_start, pfn_end, pfn_idx;
+	pfn_start = mem_addr >> PAGE_SHIFT;
+	pfn_end = (mem_addr + size) >> PAGE_SHIFT;
+	for (pfn_idx = pfn_start; pfn_idx < pfn_end; pfn_idx++)
+		free_reserved_page(pfn_to_page(pfn_idx));
 }
 
 int mdss_mdp_splash_cleanup(struct msm_fb_data_type *mfd,
