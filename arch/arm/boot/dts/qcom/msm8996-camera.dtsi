@@ -212,8 +212,8 @@
 		qcom,num-isps = <0x2>;
 		camss-vdd-supply = <&gdsc_camss_top>;
 		mmagic-vdd-supply = <&gdsc_mmagic_camss>;
-		//vfe0-vdd-supply = <&gdsc_vfe0>;
-		//vfe1-vdd-supply = <&gdsc_vfe1>;
+		vfe0-vdd-supply = <&gdsc_vfe0>;
+		vfe1-vdd-supply = <&gdsc_vfe1>;
 		qcom,vdd-names = "camss-vdd", "mmagic-vdd", "vfe0-vdd",
 				"vfe1-vdd";
 		clocks = <&clock_mmss clk_mmss_mmagic_ahb_clk>,
@@ -285,7 +285,7 @@
 		reg-names = "vfe", "vfe_vbif";
 		interrupts = <0 314 0>;
 		interrupt-names = "vfe";
-		//vdd-supply = <&gdsc_vfe0>;
+		vdd-supply = <&gdsc_vfe0>;
 		mmagic-vdd-supply = <&gdsc_mmagic_camss>;
 		camss-vdd-supply = <&gdsc_camss_top>;
 		clocks = <&clock_mmss clk_mmss_mmagic_ahb_clk>,
@@ -357,7 +357,7 @@
 		reg-names = "vfe", "vfe_vbif";
 		interrupts = <0 315 0>;
 		interrupt-names = "vfe";
-		//vdd-supply = <&gdsc_vfe1>;
+		vdd-supply = <&gdsc_vfe1>;
 		mmagic-vdd-supply = <&gdsc_mmagic_camss>;
 		camss-vdd-supply = <&gdsc_camss_top>;
 		clocks = <&clock_mmss clk_mmss_mmagic_ahb_clk>,
