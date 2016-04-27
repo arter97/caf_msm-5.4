@@ -50,6 +50,7 @@
 #define MAX_DEFAULT_PIX_CLK_HZ  74240000
 
 #define ONE_MHZ_TO_HZ		1000000
+#define I2C_BLOCK_WRITE_SIZE    32
 
 struct adv7481_state {
 	/* Platform Data */
@@ -224,6 +225,13 @@ static int adv7481_wr_byte(struct i2c_client *i2c_client, unsigned int reg,
 	return i2c_smbus_write_byte_data(i2c_client, reg & 0xFF, value);
 }
 
+static int adv7481_wr_block_data(struct i2c_client *i2c_client,
+		uint8_t reg, uint8_t size, const uint8_t *value)
+{
+	return i2c_smbus_write_i2c_block_data(i2c_client, reg & 0xFF, size,
+			value);
+}
+
 static int adv7481_rd_byte(struct i2c_client *i2c_client, unsigned int reg)
 {
 	return i2c_smbus_read_byte_data(i2c_client, reg & 0xFF);
@@ -284,6 +292,7 @@ static int adv7481_set_edid(struct adv7481_state *state)
 	int i;
 	int ret = 0;
 	uint8_t edid_state;
+	uint32_t data_left = 0;
 
 	/* Enable Manual Control of EDID on Port A */
 	ret |= adv7481_wr_byte(state->i2c_rep, 0x74, 0x01);
@@ -301,10 +310,16 @@ static int adv7481_set_edid(struct adv7481_state *state)
 	pr_debug("%s: Readback EDID enable state: 0x%x\n", __func__,
 			edid_state);
 
-	for (i = 0; i < ADV7481_EDID_SIZE; i++) {
-		ret |= adv7481_wr_byte(state->i2c_edid, i,
-						adv7481_default_edid_data[i]);
-	}
+	for (i = 0; i < ADV7481_EDID_SIZE && !ret; i += I2C_BLOCK_WRITE_SIZE)
+		ret = adv7481_wr_block_data(state->i2c_edid, i,
+			I2C_BLOCK_WRITE_SIZE, &adv7481_default_edid_data[i]);
+
+	data_left = ADV7481_EDID_SIZE % I2C_BLOCK_WRITE_SIZE;
+	if (data_left && !ret)
+		ret = adv7481_wr_block_data(state->i2c_edid,
+			ADV7481_EDID_SIZE - data_left, data_left,
+			&adv7481_default_edid_data[
+			ADV7481_EDID_SIZE - data_left]);
 
 	return ret;
 }
