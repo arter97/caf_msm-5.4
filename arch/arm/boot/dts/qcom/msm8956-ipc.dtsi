@@ -144,10 +144,6 @@
 		pinctrl-0 = <&lsuart_default>;
 	};
 
-	qcom,vidc@1d00000 {
-		qcom,max-hw-load = <1011840>; /* 3840 x 2176 @ 30 fps + 3840 x 2176 @ 1 fps */
-	};
-
 	usb_detect {
 		compatible = "usb_id,usb_detect";
 		qcom,usb-id= <&msm_gpio 56 0x0>;
