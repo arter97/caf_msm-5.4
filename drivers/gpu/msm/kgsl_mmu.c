@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -863,7 +863,7 @@ kgsl_mmu_put_gpuaddr(struct kgsl_pagetable *pagetable,
 	if (memdesc->size == 0 || memdesc->gpuaddr == 0)
 		return 0;
 
-	if (kgsl_mmu_type == KGSL_MMU_TYPE_NONE)
+	if (kgsl_mmu_type == KGSL_MMU_TYPE_NONE || pagetable == NULL)
 		goto done;
 
 	/* Add space for the guard page when freeing the mmu VA. */
@@ -904,7 +904,7 @@ kgsl_mmu_unmap(struct kgsl_pagetable *pagetable,
 		!(KGSL_MEMDESC_MAPPED & memdesc->priv))
 		return -EINVAL;
 
-	if (kgsl_mmu_type == KGSL_MMU_TYPE_NONE)
+	if (kgsl_mmu_type == KGSL_MMU_TYPE_NONE || pagetable == NULL)
 		return 0;
 
 	/* Add space for the guard page when freeing the mmu VA. */
