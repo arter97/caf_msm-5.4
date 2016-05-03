@@ -199,8 +199,7 @@ static void msmsdcc_pm_qos_update_latency(struct msmsdcc_host *host, int vote)
 		pm_qos_update_request(&host->pm_qos_req_dma,
 				host->cpu_dma_latency);
 	else
-		pm_qos_update_request(&host->pm_qos_req_dma,
-					PM_QOS_DEFAULT_VALUE);
+		pm_qos_update_request_timeout(&host->pm_qos_req_dma, host->cpu_dma_latency, 40000);
 }
 
 #ifdef CONFIG_MMC_MSM_SPS_SUPPORT
@@ -2265,7 +2264,7 @@ msmsdcc_request(struct mmc_host *mmc, struct mmc_request *mrq)
 					       MMC_SEND_TUNING_BLOCK);
 		else if (host->mmc->ios.timing == MMC_TIMING_MMC_HS200)
 			msmsdcc_execute_tuning(mmc,
-					       MMC_SEND_TUNING_BLOCK_HS200);
+			       MMC_SEND_TUNING_BLOCK_HS200);
 	}
 
 	if (host->eject) {
@@ -6070,7 +6069,7 @@ msmsdcc_probe(struct platform_device *pdev)
 	/* Apply Hard reset to SDCC to put it in power on default state */
 	msmsdcc_hard_reset(host);
 
-#define MSM_MMC_DEFAULT_CPUDMA_LATENCY 200 /* usecs */
+#define MSM_MMC_DEFAULT_CPUDMA_LATENCY 2 /* usecs */
 	/* pm qos request to prevent apps idle power collapse */
 	if (host->plat->cpu_dma_latency)
 		host->cpu_dma_latency = host->plat->cpu_dma_latency;
