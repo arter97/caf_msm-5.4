@@ -195,6 +195,7 @@ static struct pm8xxx_gpio_init pm8921_apq8064_adp_2_gpios[] __initdata = {
 		0, 0),
 	PM8921_GPIO_INPUT(14, PM_GPIO_PULL_DN),
 	PM8921_GPIO_INPUT(19, PM_GPIO_PULL_DN),
+	PM8921_GPIO_INPUT(25, PM_GPIO_PULL_DN),
 	PM8921_GPIO_INPUT(41, PM_GPIO_PULL_DN),
 };
 
