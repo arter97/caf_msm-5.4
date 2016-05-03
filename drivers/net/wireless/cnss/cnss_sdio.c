@@ -229,6 +229,18 @@ static int cnss_sdio_remove(struct platform_device *pdev)
 	return 0;
 }
 
+int cnss_sdio_power_down(struct device *dev)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_sdio_power_down);
+
+int cnss_sdio_power_up(struct device *dev)
+{
+	return 0;
+}
+EXPORT_SYMBOL(cnss_sdio_power_up);
+
 static const struct of_device_id cnss_sdio_dt_match[] = {
 	{.compatible = "qcom,cnss_sdio"},
 	{}
