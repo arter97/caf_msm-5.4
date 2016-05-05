@@ -824,11 +824,15 @@ static ssize_t environ_read(struct file *file, char __user *buf,
 	if (!page)
 		goto out;
 
-
 	mm = mm_for_maps(task);
 	ret = PTR_ERR(mm);
+
 	if (!mm || IS_ERR(mm))
 		goto out_free;
+
+	/* Ensure the process spawned far enough to have an environment. */
+	if (!mm->env_end)
+		goto out_free_ref;
 
 	ret = 0;
 	while (count > 0) {
@@ -861,7 +865,7 @@ static ssize_t environ_read(struct file *file, char __user *buf,
 		count -= retval;
 	}
 	*ppos = src;
-
+out_free_ref:
 	mmput(mm);
 out_free:
 	free_page((unsigned long) page);
