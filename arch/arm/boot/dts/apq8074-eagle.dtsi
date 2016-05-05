@@ -56,7 +56,6 @@
 	/delete-node/ qcom,msm-voip-dsp;
 	/delete-node/ qcom,msm-pcm-voice;
 	/delete-node/ qcom,smd-wcnss;
-	/delete-node/ qcom,mss@fc880000;
 
 	/* blsp1 - qup i2c - na */
 	i2c@f9923000 {
