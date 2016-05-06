@@ -2755,6 +2755,7 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 {
 	struct msm_vfe_axi_stream_request_cmd stream_cfg_cmd;
 	struct msm_vfe_frame_request_queue *queue_req;
+	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
 	uint32_t pingpong_status;
 	unsigned long flags;
 	int rc = 0;
@@ -2781,7 +2782,7 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 	frame_src = SRC_TO_INTF(stream_info->stream_src);
 
 	if (((frame_src == VFE_PIX_0) && (frame_id <=
-		vfe_dev->axi_data.src_info[frame_src].frame_id)) ||
+		axi_data->src_info[frame_src].frame_id)) ||
 		stream_info->undelivered_request_cnt >= 2) {
 		pr_debug("%s:%d invalid request_frame %d cur frame id %d\n",
 			__func__, __LINE__, frame_id,
@@ -2795,7 +2796,8 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 		return 0;
 	}
 	if ((frame_src == VFE_PIX_0) && !stream_info->undelivered_request_cnt &&
-		stream_info->prev_framedrop_pattern) {
+		stream_info->prev_framedrop_pattern &&
+		(axi_data->src_info[VFE_PIX_0].input_mux != EXTERNAL_READ)) {
 		pr_err("%s:%d vfe %d frame_id %d prev_pattern %x stream_id %x\n",
 			__func__, __LINE__, vfe_dev->pdev->id, frame_id,
 			stream_info->prev_framedrop_pattern,
@@ -2893,7 +2895,7 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 		}
 	}
 
-	msm_isp_calculate_framedrop(&vfe_dev->axi_data, &stream_cfg_cmd);
+	msm_isp_calculate_framedrop(axi_data, &stream_cfg_cmd);
 	msm_isp_reset_framedrop(vfe_dev, stream_info);
 
 	spin_unlock_irqrestore(&stream_info->lock, flags);
