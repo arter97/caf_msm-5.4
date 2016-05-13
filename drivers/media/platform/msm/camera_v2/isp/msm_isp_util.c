@@ -1155,6 +1155,9 @@ static long msm_isp_ioctl_unlocked(struct v4l2_subdev *sd,
 		rc = msm_isp_update_axi_stream(vfe_dev, arg);
 		mutex_unlock(&vfe_dev->core_mutex);
 		break;
+	case VIDIOC_MSM_ISP_FRAME_REQUEST:
+		rc = msm_isp_request_frame(vfe_dev, arg);
+		break;
 	case VIDIOC_MSM_ISP_SMMU_ATTACH:
 		mutex_lock(&vfe_dev->core_mutex);
 		rc = msm_isp_smmu_attach(vfe_dev->buf_mgr, arg);
