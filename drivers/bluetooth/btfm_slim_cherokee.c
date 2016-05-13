@@ -15,7 +15,7 @@
 
 /* Cherokee Port assignment */
 struct btfmslim_ch cherokee_rxport[] = {
-	{.id = BTFM_BT_SCO_SLIM_RX, .name = "SCO_Rx", .port = CHRK_SB_PGD_PORT_RX_SCO},
+	{.id = BTFM_BT_SCO_A2DP_SLIM_RX, .name = "SCO_A2P_Rx", .port = CHRK_SB_PGD_PORT_RX_SCO},
 	{.id = BTFM_BT_SPLIT_A2DP_SLIM_RX, .name = "A2P_Rx",	.port = CHRK_SB_PGD_PORT_RX_A2P},
 	{.id = BTFM_SLIM_NUM_CODEC_DAIS, .name = "", .port = BTFM_SLIM_PGD_PORT_LAST},
 };
