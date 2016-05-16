@@ -736,7 +736,8 @@
 		status = "ok";
 		mmagic-supply = <&gdsc_mmagic_camss>;
 		gdscr-supply = <&gdsc_camss_top>;
-		qcom,cam-vreg-name = "mmagic", "gdscr";
+		vfe0-vdd-supply = <&gdsc_vfe0>;
+		qcom,cam-vreg-name = "mmagic", "gdscr", "vfe0-vdd";
 		clocks = <&clock_mmss clk_mmss_mmagic_ahb_clk>,
 			<&clock_mmss clk_camss_top_ahb_clk>,
 			<&clock_mmss clk_cci_clk_src>,
