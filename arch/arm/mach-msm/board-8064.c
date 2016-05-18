@@ -988,6 +988,7 @@ static struct msm_otg_platform_data msm_otg_usb1_pdata = {
 	.power_budget		= 750,
 	.bus_scale_table	= &usb_bus_scale_pdata,
 	.phy_init_seq		= usb1_phy_init_seq,
+	.wakelock_in_peripheral_mode = true,
 	.mpm_otgsessvld_int	= MSM_MPM_PIN_USB1_OTGSESSVLD,
 	.mpm_xo_wakeup_int	= MSM_MPM_XO_WAKEUP_INT,
 	.allow_host_vdd_min_wo_rework = true,
@@ -1001,7 +1002,7 @@ static struct msm_otg_platform_data msm_otg_usb3_pdata = {
 	.power_budget		= 750,
 	.bus_scale_table	= &usb_bus_scale_pdata,
 	.phy_init_seq		= usb3_phy_init_seq,
-	.ignore_wakeup_source	= true,
+	.wakelock_in_peripheral_mode = true,
 	.mpm_xo_wakeup_int	= MSM_MPM_XO_WAKEUP_INT,
 	.allow_host_vdd_min_wo_rework = true,
 };
@@ -1014,7 +1015,7 @@ static struct msm_otg_platform_data msm_otg_usb4_pdata = {
 	.power_budget		= 750,
 	.bus_scale_table	= &usb_bus_scale_pdata,
 	.phy_init_seq		= usb4_phy_init_seq,
-	.ignore_wakeup_source	= true,
+	.wakelock_in_peripheral_mode = true,
 	.mpm_xo_wakeup_int	= MSM_MPM_XO_WAKEUP_INT,
 	.allow_host_vdd_min_wo_rework = true,
 };

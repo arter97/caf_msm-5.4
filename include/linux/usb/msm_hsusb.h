@@ -200,6 +200,7 @@ enum usb_vdd_value {
  * @bus_scale_table: parameters for bus bandwidth requirements
  * @mhl_dev_name: MHL device name used to register with MHL driver.
  * @mpm_xo_wakeup_int: MPM to KRAIT interrupt for remote wakeup
+ * @wakelock_in_peripheral_mode: Acquire wake lock in peripheral mode.
  */
 struct msm_otg_platform_data {
 	int *phy_init_seq;
@@ -218,7 +219,7 @@ struct msm_otg_platform_data {
 	bool core_clk_always_on_workaround;
 	struct msm_bus_scale_pdata *bus_scale_table;
 	const char *mhl_dev_name;
-	bool ignore_wakeup_source;
+	bool wakelock_in_peripheral_mode;
 	unsigned int mpm_xo_wakeup_int;
 	bool allow_host_vdd_min_wo_rework;
 	bool is_ext_hub;
