@@ -17,10 +17,13 @@
 #include "msm_sensor_driver.h"
 #include "msm_sensor.h"
 #include "msm_sd.h"
+#include "msm_camera_io_util.h"
 
 /* Logging macro */
 #undef CDBG
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
+
+#define EARLY_CAMERA_SIGNAL 0xa5a5a5a5
 
 static struct msm_sensor_init_t *s_init;
 static struct v4l2_file_operations msm_sensor_init_v4l2_subdev_fops;
@@ -57,11 +60,16 @@ static int msm_sensor_wait_for_probe_done(struct msm_sensor_init_t *s_init)
 	return rc;
 }
 
+#define MMSS_A_VFE_0_SPARE 0xC84
+
 /* Static function definition */
 static int32_t msm_sensor_driver_cmd(struct msm_sensor_init_t *s_init,
 	void *arg)
 {
 	int32_t                      rc = 0;
+	u32 val = 0;
+	void __iomem *base;
+
 	struct sensor_init_cfg_data *cfg = (struct sensor_init_cfg_data *)arg;
 
 	/* Validate input parameters */
@@ -72,6 +80,17 @@ static int32_t msm_sensor_driver_cmd(struct msm_sensor_init_t *s_init,
 
 	switch (cfg->cfgtype) {
 	case CFG_SINIT_PROBE:
+		base = ioremap(0x00A10000, 0x1000);
+		val = msm_camera_io_r_mb(base + MMSS_A_VFE_0_SPARE);
+
+		while (val != EARLY_CAMERA_SIGNAL) {
+			msleep(1000);
+			val = msm_camera_io_r_mb(base + MMSS_A_VFE_0_SPARE);
+			pr_err("Waiting for signal from LK val = %u\n", val);
+		}
+
+		pr_err("Received early camera signal from LK val = %u\n", val);
+
 		mutex_lock(&s_init->imutex);
 		s_init->module_init_status = 0;
 		rc = msm_sensor_driver_probe(cfg->cfg.setting,
@@ -79,7 +98,7 @@ static int32_t msm_sensor_driver_cmd(struct msm_sensor_init_t *s_init,
 			cfg->entity_name);
 		mutex_unlock(&s_init->imutex);
 		if (rc < 0)
-			pr_err("%s failed (non-fatal) rc %d", __func__, rc);
+			pr_err("%s failed (non-fatal) rc %d\n", __func__, rc);
 		break;
 
 	case CFG_SINIT_PROBE_DONE:
@@ -92,7 +111,7 @@ static int32_t msm_sensor_driver_cmd(struct msm_sensor_init_t *s_init,
 		break;
 
 	default:
-		pr_err("default");
+		pr_err("default\n");
 		break;
 	}
 
