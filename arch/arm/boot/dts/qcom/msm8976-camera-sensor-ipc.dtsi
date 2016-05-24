@@ -158,12 +158,12 @@
 		qcom,eeprom-src = <&eeprom0>;
 		qcom,actuator-src = <&actuator0>;
 		qcom,led-flash-src = <&led_flash0>;
-		cam_vdig-supply = <&pm8950_l3>;
+		cam_vdig-supply = <&pm8950_l23>;
 		cam_vio-supply = <&pm8950_l6>;
-		cam_vaf-supply = <&pm8950_l17>;
-		qcom,cam-vreg-name = "cam_vdig", "cam_vio", "cam_vaf";
-		qcom,cam-vreg-min-voltage = <1100000 0 2850000>;
-		qcom,cam-vreg-max-voltage = <1100000 0 2850000>;
+		cam_vana-supply = <&pm8950_l17>;
+		qcom,cam-vreg-name = "cam_vdig", "cam_vio", "cam_vana";
+		qcom,cam-vreg-min-voltage = <1200000 0 2850000>;
+		qcom,cam-vreg-max-voltage = <1200000 0 2850000>;
 		qcom,cam-vreg-op-mode = <200000 0 100000>;
 		pinctrl-names = "cam_default", "cam_suspend";
 		pinctrl-0 = <&cam_sensor_mclk0_default
@@ -173,7 +173,7 @@
 				&cam_sensor_rear_vana_sleep>;
 		gpios = <&msm_gpio 26 0>,
 			<&msm_gpio 129 0>,
-			<&msm_gpio 35 0>,
+			<&msm_gpio 131 0>,
 			<&msm_gpio 63 0>;
 		qcom,gpio-reset = <1>;
 		qcom,gpio-standby = <2>;
