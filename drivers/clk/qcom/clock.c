@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/clock.c
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2007-2014, 2016, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -820,6 +820,19 @@ int clk_set_flags(struct clk *clk, unsigned long flags)
 	return clk->ops->set_flags(clk, flags);
 }
 EXPORT_SYMBOL(clk_set_flags);
+
+int clk_set_duty_cycle(struct clk *clk, u32 high, u32 period)
+{
+	if (IS_ERR_OR_NULL(clk))
+		return -EINVAL;
+	if (high > period)
+		return -EINVAL;
+	if (!clk->ops->set_duty_cycle)
+		return -ENOSYS;
+
+	return clk->ops->set_duty_cycle(clk, high, period);
+}
+EXPORT_SYMBOL(clk_set_duty_cycle);
 
 static LIST_HEAD(initdata_list);
 
