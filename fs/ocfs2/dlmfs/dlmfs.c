@@ -202,7 +202,7 @@ static int dlmfs_file_release(struct inode *inode,
 }
 
 /*
- * We do ->setattr() just to override size changes.  Our size is the size
+ * We do ->netattr() just to override size changes.  Our size is the size
  * of the LVB and nothing else.
  */
 static int dlmfs_file_setattr(struct dentry *dentry, struct iattr *attr)
@@ -211,7 +211,7 @@ static int dlmfs_file_setattr(struct dentry *dentry, struct iattr *attr)
 	struct inode *inode = dentry->d_inode;
 
 	attr->ia_valid &= ~ATTR_SIZE;
-	error = inode_change_ok(inode, attr);
+	error = setattr_prepare(dentry, attr);
 	if (error)
 		return error;
 
