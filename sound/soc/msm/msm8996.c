@@ -70,6 +70,8 @@ static int hdmi_rx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
 static int msm8996_auxpcm_rate = SAMPLING_RATE_8KHZ;
 static int slim5_rx_sample_rate = SAMPLING_RATE_48KHZ;
 static int slim5_rx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
+static int slim7_rx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
+
 
 static struct platform_device *spdev;
 static int ext_us_amp_gpio = -1;
@@ -84,7 +86,7 @@ static int msm_vi_feed_tx_ch = 2;
 static int msm_hdmi_rx_ch = 2;
 static int msm_proxy_rx_ch = 2;
 static int hdmi_rx_sample_rate = SAMPLING_RATE_48KHZ;
-static int msm_slim7_rate = SAMPLING_RATE_8KHZ;
+static int msm_slim7_rate = SAMPLING_RATE_48KHZ;
 static int msm_tert_mi2s_tx_ch = 2;
 
 static bool codec_reg_done;
@@ -117,9 +119,9 @@ static const char *const auxpcm_rate_text[] = {"8000", "16000"};
 static const struct soc_enum msm8996_auxpcm_enum[] = {
 		SOC_ENUM_SINGLE_EXT(2, auxpcm_rate_text),
 };
-static const char *const slim7_rate_text[] = {"8000", "16000"};
+static const char *const slim7_rate_text[] = {"8000", "16000","48000"};
 static const struct soc_enum msm_slim7_enum[] = {
-	SOC_ENUM_SINGLE_EXT(2, slim7_rate_text),
+	SOC_ENUM_SINGLE_EXT(3, slim7_rate_text),
 };
 
 static struct afe_clk_set mi2s_tx_clk = {
@@ -1135,12 +1137,15 @@ static int msm_slim7_rate_put(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
 	switch (ucontrol->value.integer.value[0]) {
+	case 0:
+		msm_slim7_rate = SAMPLING_RATE_8KHZ;
+		break;
 	case 1:
 		msm_slim7_rate = SAMPLING_RATE_16KHZ;
 		break;
-	case 0:
+	case 2:
 	default:
-		msm_slim7_rate = SAMPLING_RATE_8KHZ;
+		msm_slim7_rate = SAMPLING_RATE_48KHZ;
 		break;
 	}
 	pr_debug("%s: msm_slim7_rate = %d\n", __func__, msm_slim7_rate);
@@ -1155,6 +1160,9 @@ static int msm_slim_7_rx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 
 	struct snd_interval *channels = hw_param_interval(params,
 			SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
+				   slim7_rx_bit_format);
 
 	pr_debug("%s(): msm_slim7_rate = %d\n", __func__, msm_slim7_rate);
 	rate->min = rate->max = msm_slim7_rate;
@@ -3207,7 +3215,7 @@ static struct snd_soc_dai_link msm8996_cherokee_be_dai_links[] = {
 		.cpu_dai_name = "msm-dai-q6-dev.16398",
 		.platform_name = "msm-pcm-routing",
 		.codec_name = "btfmslim_slave",
-		.codec_dai_name = "btfm_bt_sco_slim_rx",
+		.codec_dai_name = "btfm_bt_sco_a2dp_slim_rx",
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.be_id = MSM_BACKEND_DAI_SLIMBUS_7_RX,
