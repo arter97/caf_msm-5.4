@@ -2609,10 +2609,6 @@ TRACE_EVENT(cfg80211_authorization_event,
 		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->auth_status)
 );
 
-DEFINE_EVENT(wiphy_wdev_evt, rdev_abort_scan,
-	TP_PROTO(struct wiphy *wiphy, struct wireless_dev *wdev),
-	TP_ARGS(wiphy, wdev)
-);
 #endif /* !__RDEV_OPS_TRACE || TRACE_HEADER_MULTI_READ */
 
 #undef TRACE_INCLUDE_PATH
