@@ -57,7 +57,7 @@ struct priv_data usb_data = {
 
 static irqreturn_t irq_handler(int irq, void *_data)
 {
-	schedule_delayed_work(&mode_set_work, 2 * HZ);
+	schedule_delayed_work(&mode_set_work, HZ);
 
 	return IRQ_HANDLED;
 }
@@ -130,7 +130,7 @@ static int usb_detect_probe(struct platform_device *dev)
 		goto ERR1;
 	}
 
-	schedule_delayed_work(&mode_set_work, 10 * HZ);
+	schedule_delayed_work(&mode_set_work, HZ);
 
 	return ret;
 
