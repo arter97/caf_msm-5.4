@@ -558,18 +558,20 @@ void msm_isp_update_framedrop_reg(struct vfe_device *vfe_dev,
 void msm_isp_reset_framedrop(struct vfe_device *vfe_dev,
 	struct msm_vfe_axi_stream *stream_info)
 {
+	enum msm_vfe_input_src stream_src = VFE_SRC_MAX;
 	/*
 	 * While deriving burst_frame_count, Initial frame skip
 	 * is taken into consideration But if skip frame has already
 	 * passed, burst count has to be updated accordingly
 	 */
-	if (vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id >
+	stream_src = SRC_TO_INTF(stream_info->stream_src);
+	if (vfe_dev->axi_data.src_info[stream_src].frame_id >
 		stream_info->init_frame_drop)
 		stream_info->runtime_init_frame_drop = 0;
 	else
 		stream_info->runtime_init_frame_drop =
 			stream_info->init_frame_drop -
-			vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id;
+			vfe_dev->axi_data.src_info[stream_src].frame_id;
 
 	stream_info->runtime_num_burst_capture =
 		stream_info->num_burst_capture;
@@ -2343,6 +2345,7 @@ static int msm_isp_start_axi_stream(struct vfe_device *vfe_dev,
 	uint32_t wm_reload_mask = 0x0;
 	struct msm_vfe_axi_stream *stream_info;
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
+	enum msm_vfe_input_src stream_src = VFE_SRC_MAX;
 	uint32_t src_mask = 0;
 
 	if (stream_cfg_cmd->num_streams > MAX_NUM_STREAM)
@@ -2351,8 +2354,7 @@ static int msm_isp_start_axi_stream(struct vfe_device *vfe_dev,
 	if (camif_update == ENABLE_CAMIF) {
 		ISP_DBG("%s: vfe %d camif enable\n", __func__,
 			vfe_dev->pdev->id);
-		atomic_set(&vfe_dev->error_info.overflow_state,
-				NO_OVERFLOW);
+		atomic_set(&vfe_dev->error_info.overflow_state, NO_OVERFLOW);
 		vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id = 0;
 	}
 
@@ -2363,12 +2365,24 @@ static int msm_isp_start_axi_stream(struct vfe_device *vfe_dev,
 		}
 		stream_info = &axi_data->stream_info[
 			HANDLE_TO_IDX(stream_cfg_cmd->stream_handle[i])];
-		if (SRC_TO_INTF(stream_info->stream_src) < VFE_SRC_MAX)
-			src_state = axi_data->src_info[
-				SRC_TO_INTF(stream_info->stream_src)].active;
-		else {
+		stream_src = SRC_TO_INTF(stream_info->stream_src);
+		if (stream_src >= VFE_SRC_MAX) {
 			ISP_DBG("%s: invalid src info index\n", __func__);
 			return -EINVAL;
+		}
+		src_state = axi_data->src_info[stream_src].active;
+
+		/* In case of PIX and RDI streams are part of same
+		 * session, this will ensure RDI stream will
+		 * have same frame id as of PIX stream.
+		 * Frame id must be set before frame drop calculations.
+		 */
+		if (stream_src >= VFE_RAW_0 && stream_src < VFE_SRC_MAX) {
+			if (stream_cfg_cmd->sync_frame_id_src)
+				axi_data->src_info[stream_src].frame_id =
+					axi_data->src_info[VFE_PIX_0].frame_id;
+			else
+				axi_data->src_info[stream_src].frame_id = 0;
 		}
 
 		msm_isp_calculate_bandwidth(axi_data, stream_info);
@@ -2388,40 +2402,24 @@ static int msm_isp_start_axi_stream(struct vfe_device *vfe_dev,
 			HANDLE_TO_IDX(stream_cfg_cmd->stream_handle[i]),
 			src_state);
 		if (src_state) {
-			src_mask |= (1 << SRC_TO_INTF(stream_info->stream_src));
+			src_mask |= (1 << stream_src);
 			wait_for_complete = 1;
 		} else {
 			if (vfe_dev->dump_reg)
 				msm_camera_io_dump_2(vfe_dev->vfe_base, 0x900);
 
-			/*Configure AXI start bits to start immediately*/
+			/* Configure AXI start bits to start immediately */
 			msm_isp_axi_stream_enable_cfg(vfe_dev, stream_info);
 			stream_info->state = ACTIVE;
 			vfe_dev->hw_info->vfe_ops.core_ops.reg_update(vfe_dev,
-				SRC_TO_INTF(stream_info->stream_src));
+				stream_src);
 
 			/*
 			 * Active bit is set in enable_camif for PIX.
 			 * For RDI, set it here
 			 */
-			if (SRC_TO_INTF(stream_info->stream_src) >= VFE_RAW_0 &&
-				SRC_TO_INTF(stream_info->stream_src) <
-				VFE_SRC_MAX) {
-				/* Incase PIX and RDI streams are part of same
-				 * session, this will ensure RDI stream will
-				 * have same frame id as of PIX stream
-				 */
-				if (stream_cfg_cmd->sync_frame_id_src)
-					vfe_dev->axi_data.src_info[SRC_TO_INTF(
-					stream_info->stream_src)].frame_id =
-					vfe_dev->axi_data.src_info[VFE_PIX_0]
-					.frame_id;
-				else
-					vfe_dev->axi_data.src_info[SRC_TO_INTF(
-					stream_info->stream_src)].frame_id = 0;
-				vfe_dev->axi_data.src_info[SRC_TO_INTF(
-					stream_info->stream_src)].active = 1;
-			}
+			if (stream_src >= VFE_RAW_0 && stream_src < VFE_SRC_MAX)
+				axi_data->src_info[stream_src].active = 1;
 		}
 	}
 	msm_isp_update_stream_bandwidth(vfe_dev);
