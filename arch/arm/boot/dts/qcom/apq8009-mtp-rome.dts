@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -20,8 +20,8 @@
 
 / {
 	model = "Qualcomm Technologies, Inc. APQ8009+Rome Board MTP";
-	compatible = "qcom,msm8009-mtp", "qcom,msm8909", "qcom,mtp";
-	qcom,msm-id = <245 2>;
+	compatible = "qcom,apq8009-mtp", "qcom,apq8009", "qcom,mtp";
+	qcom,msm-id = <265 2>;
 	qcom,board-id= <8 0x9>;
 };
 
@@ -57,18 +57,27 @@
 	};
 
 	cnss_sdio: qcom,cnss_sdio {
-        compatible = "qcom,cnss_sdio";
-        subsys-name = "AR6320";
-        qcom,wlan-ramdump-dynamic = <0x200000>;
-        qcom,msm-bus,name = "msm-cnss";
-        qcom,msm-bus,num-cases = <4>;
-        qcom,msm-bus,num-paths = <1>;
-        qcom,msm-bus,vectors-KBps =
-                <79 512 0 0>,           /* No vote */
-                <79 512 6250 200000>,       /* 50 Mbps */
-                <79 512 25000 200000>,      /* 200 Mbps */
-                <79 512 2048000 4096000>;   /* MAX */
-    };
+                compatible = "qcom,cnss_sdio";
+                subsys-name = "AR6320";
+                qcom,wlan-ramdump-dynamic = <0x200000>;
+                qcom,msm-bus,name = "msm-cnss";
+                qcom,msm-bus,num-cases = <4>;
+                qcom,msm-bus,num-paths = <1>;
+                qcom,msm-bus,vectors-KBps =
+                        <79 512 0 0>,           /* No vote */
+                        <79 512 6250 200000>,       /* 50 Mbps */
+                        <79 512 25000 200000>,      /* 200 Mbps */
+                        <79 512 2048000 4096000>;   /* MAX */
+    	};
+
+};
+
+&modem_adsp_mem {
+	reg = <0x0 0x88000000 0x0 0x02400000>;
+};
+
+&peripheral_mem {
+	reg = <0x0 0x8a400000 0x0 0x0500000>;
 };
 
 &tlmm_pinmux {
@@ -86,8 +95,8 @@
 };
 
 &sdhc_2 {
-	/delete-property/ cd-gpios;
-	 #address-cells = <0>;
+	/delete-property/cd-gpios;
+	#address-cells = <0>;
 	interrupt-parent = <&sdhc_2>;
 	interrupts = <0 1 2>;
 	#interrupt-cells = <1>;
@@ -114,3 +123,32 @@
 	status = "ok";
 };
 
+
+&i2c_4 {
+	smb1360_otg_supply: smb1360-chg-fg@14 {
+		compatible = "qcom,smb1360-chg-fg";
+		reg = <0x14>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <58 8>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&smb_int_default>;
+		qcom,charging-disabled;
+		qcom,empty-soc-disabled;
+		qcom,chg-inhibit-disabled;
+		qcom,float-voltage-mv = <4200>;
+		qcom,iterm-ma = <200>;
+		qcom,recharge-thresh-mv = <100>;
+		qcom,thermal-mitigation = <1500 700 600 0>;
+		regulator-name = "smb1360_otg_vreg";
+	};
+};
+
+&pm8916_chg {
+	status = "ok";
+	qcom,use-external-charger;
+};
+
+&pm8916_bms {
+	status = "ok";
+	qcom,disable-bms;
+};
