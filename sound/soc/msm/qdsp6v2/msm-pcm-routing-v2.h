@@ -215,6 +215,7 @@ struct msm_pcm_routing_bdai_data {
 	unsigned int  sample_rate;
 	unsigned int  channel;
 	unsigned int  format;
+	unsigned int  adm_channel;
 	u32 compr_passthr_mode;
 	char *name;
 };
