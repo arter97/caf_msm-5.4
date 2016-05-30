@@ -2799,6 +2799,12 @@ int msm_isp_request_frame(struct vfe_device *vfe_dev, void *arg)
 			continue;
 		}
 
+		if (stream_info->state != ACTIVE) {
+			pr_err("%s:%d stream not active. current state %d\n",
+				__func__, __LINE__, stream_info->state);
+			spin_unlock_irqrestore(&stream_info->lock, flags);
+			continue;
+		}
 
 		if (stream_info->stream_src >= VFE_AXI_SRC_MAX) {
 			spin_unlock_irqrestore(&stream_info->lock, flags);
