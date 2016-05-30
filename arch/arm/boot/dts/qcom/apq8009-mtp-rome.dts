@@ -21,7 +21,7 @@
 / {
 	model = "Qualcomm Technologies, Inc. APQ8009+Rome Board MTP";
 	compatible = "qcom,apq8009-mtp", "qcom,apq8009", "qcom,mtp";
-	qcom,msm-id = <265 2>;
+	qcom,msm-id = <265 2>, <245 2>;
 	qcom,board-id= <8 0x9>;
 };
 
