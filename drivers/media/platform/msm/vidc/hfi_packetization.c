@@ -636,6 +636,9 @@ static int get_hfi_extradata_index(enum hal_extradata_id index)
 	case HAL_EXTRADATA_METADATA_MBI:
 		ret = HFI_PROPERTY_PARAM_VENC_MBI_DUMPING;
 		break;
+	case HAL_EXTRADATA_PERCEPTUAL_QP:
+		ret = HFI_PROPERTY_PARAM_VENC_OVERRIDE_QP_EXTRADATA;
+		break;
 	default:
 		dprintk(VIDC_WARN, "Extradata index not found: %d\n", index);
 		break;
