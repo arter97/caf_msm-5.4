@@ -192,6 +192,10 @@
 		qcom,ipa-loaduC;
 		qcom,ipa-advertise-sg-support;
 	};
+
+	qcom,rmtfs_sharedmem@00000000 {
+		reg = <0x00000000 0x00180000>;
+	};
 };
 
 &apc_vreg_corner {
@@ -216,7 +220,6 @@
 /* MSS_SCL */
 &modem_etm0 {
 	coresight-child-ports = <2>;
-	qcom,inst-id = <11>;
 };
 
 &soc {
@@ -245,7 +248,7 @@
 		coresight-child-list = <&funnel_right>;
 		coresight-child-ports = <1>;
 
-		qcom,inst-id = <2>;
+		qcom,inst-id = <11>;
 	};
 };
 
