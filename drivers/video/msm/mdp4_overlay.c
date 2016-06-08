@@ -3946,13 +3946,6 @@ int mdp4_overlay_set(struct fb_info *info, struct mdp_overlay *req, int user)
 		return -ENODEV;
 	}
 
-	if (!mfd->panel_power_on) {
-		/* suspended */
-		pr_err("%s,%d fb_%d panel type %d is suspended\n", __func__,
-			__LINE__, mfd->index, mfd->panel.type);
-		return -EINVAL;
-	}
-
 	if (!mfd->bf_supported && req->src.format == MDP_RGB_BORDERFILL) {
 		pr_err("boardfill not supported!\n");
 		return -EPERM;
@@ -4453,13 +4446,6 @@ int mdp4_overlay_commit(struct fb_info *info)
 	if (mfd == NULL) {
 		pr_err("%s: mfd == NULL, -ENODEV\n", __func__);
 		return -ENODEV;
-	}
-
-	if (!mfd->panel_power_on) {
-		/* suspended */
-		pr_err("%s,%d fb_%d panel type %d is suspended\n", __func__,
-			__LINE__, mfd->index, mfd->panel.type);
-		return -EINVAL;
 	}
 
 	mixer = mfd->panel_info.pdest;	/* DISPLAY_1 or DISPLAY_2 */
