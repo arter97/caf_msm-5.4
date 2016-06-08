@@ -2099,7 +2099,12 @@ void msm_isp_reset_burst_count_and_frame_drop(
 		stream_info->stream_type != BURST_STREAM) {
 		return;
 	}
-	if (stream_info->stream_type == BURST_STREAM &&
+
+	if (stream_info->controllable_output) {
+		msm_isp_update_fr_framedrop(stream_info,
+			stream_info->request_q_cnt);
+		msm_isp_reset_framedrop(vfe_dev, stream_info);
+	} else if (stream_info->stream_type == BURST_STREAM &&
 		stream_info->num_burst_capture != 0) {
 		framedrop_period = msm_isp_get_framedrop_period(
 		   stream_info->frame_skip_pattern);

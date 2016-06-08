@@ -82,4 +82,7 @@ int msm_isp_drop_frame(struct vfe_device *vfe_dev,
 	struct msm_vfe_axi_stream *stream_info, struct msm_isp_timestamp *ts,
 	struct msm_isp_sof_info *sof_info);
 
+void msm_isp_update_fr_framedrop(struct msm_vfe_axi_stream *stream_info,
+	uint32_t burst_count);
+
 #endif /* __MSM_ISP_AXI_UTIL_H__ */
