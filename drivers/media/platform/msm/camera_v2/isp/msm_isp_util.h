@@ -43,6 +43,13 @@ struct msm_isp_bandwidth_mgr {
 	struct msm_isp_bandwidth_info client_info[MAX_ISP_CLIENT];
 };
 
+struct msm_isp_ub_list {
+	uint32_t start;
+	uint32_t size;
+	uint32_t used_wm;
+	struct list_head list;
+};
+
 uint32_t msm_isp_get_framedrop_period(
 	enum msm_vfe_frame_skip_pattern frame_skip_pattern);
 
@@ -69,6 +76,17 @@ int msm_isp_set_src_state(struct vfe_device *vfe_dev, void *arg);
 void msm_isp_do_tasklet(unsigned long data);
 void msm_isp_update_error_frame_count(struct vfe_device *vfe_dev);
 void msm_isp_process_error_info(struct vfe_device *vfe_dev);
+int msm_isp_ub_list_create(struct list_head *ub_free_list,
+		struct list_head *ub_used_list, uint32_t max_size);
+int msm_isp_ub_list_destroy(struct list_head *ub_free_list,
+		struct list_head *ub_used_list);
+struct msm_isp_ub_list *msm_isp_ub_list_alloc(struct list_head *ub_free_list,
+		struct list_head *ub_used_list, uint32_t used_wm,
+		uint32_t size);
+int msm_isp_ub_list_free(struct list_head *ub_free_list,
+		struct list_head *ub_used_list, uint32_t used_wm);
+void msm_isp_ub_list_debug(struct list_head *ub_free_list,
+		struct list_head *ub_used_list);
 int msm_isp_open_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh);
 int msm_isp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh);
 long msm_isp_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg);

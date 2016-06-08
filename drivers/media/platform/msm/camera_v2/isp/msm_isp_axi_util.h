@@ -53,4 +53,5 @@ void msm_isp_process_axi_irq(struct vfe_device *vfe_dev,
 	struct msm_isp_timestamp *ts);
 void msm_isp_get_buffer_ts(struct vfe_device *vfe_dev,
 	struct msm_isp_timestamp *irq_ts, struct msm_isp_timestamp *ts);
+
 #endif /* __MSM_ISP_AXI_UTIL_H__ */

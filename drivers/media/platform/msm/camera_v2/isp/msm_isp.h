@@ -140,7 +140,8 @@ struct msm_vfe_axi_ops {
 	void (*clear_wm_xbar_reg) (struct vfe_device *vfe_dev,
 		struct msm_vfe_axi_stream *stream_info, uint8_t plane_idx);
 
-	void (*cfg_ub) (struct vfe_device *vfe_dev);
+	void (*cfg_ub) (struct vfe_device *vfe_dev,
+		struct msm_vfe_axi_stream *stream_info, uint32_t reserve);
 
 	void (*update_ping_pong_addr) (struct vfe_device *vfe_dev,
 		uint8_t wm_idx, uint32_t pingpong_status, unsigned long paddr);
@@ -226,6 +227,7 @@ struct msm_vfe_axi_hardware_info {
 	uint8_t num_rdi_master;
 	uint8_t num_comp_mask;
 	uint32_t min_wm_ub;
+	uint32_t max_img_wm_ub;
 };
 
 enum msm_vfe_axi_state {
@@ -299,6 +301,7 @@ struct msm_vfe_axi_stream {
 	uint32_t runtime_num_burst_capture;
 	uint8_t runtime_framedrop_update;
 	uint32_t runtime_output_format;
+	uint32_t frame_rate;
 };
 
 struct msm_vfe_axi_composite_info {
@@ -341,6 +344,8 @@ struct msm_vfe_axi_shared_data {
 	struct msm_vfe_src_info src_info[VFE_SRC_MAX];
 	uint16_t stream_handle_cnt;
 	unsigned long event_mask;
+	struct list_head isp_ub_free_list;
+	struct list_head isp_ub_used_list;
 };
 
 struct msm_vfe_stats_hardware_info {

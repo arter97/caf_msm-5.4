@@ -1173,6 +1173,189 @@ int msm_isp_set_src_state(struct vfe_device *vfe_dev, void *arg)
 	return 0;
 }
 
+int msm_isp_ub_list_create(struct list_head *ub_free_list,
+		struct list_head *ub_used_list, uint32_t max_size)
+{
+	struct msm_isp_ub_list *init_chunk;
+
+	INIT_LIST_HEAD(ub_free_list);
+	INIT_LIST_HEAD(ub_used_list);
+	init_chunk = kzalloc(sizeof(struct msm_isp_ub_list), GFP_ATOMIC);
+	if (!init_chunk) {
+		pr_err("error: No memory for UB list chunk\n");
+		return -ENOMEM;
+	}
+	init_chunk->start = 0;
+	init_chunk->size = max_size;
+	list_add_tail(&init_chunk->list, ub_free_list);
+	msm_isp_ub_list_debug(ub_free_list, ub_used_list);
+	return 0;
+}
+
+int msm_isp_ub_list_destroy(struct list_head *ub_free_list,
+		struct list_head *ub_used_list)
+{
+	int rc = 0;
+	struct msm_isp_ub_list *entry;
+	struct msm_isp_ub_list *next;
+
+	if (!list_is_singular(ub_free_list) || !list_empty(ub_used_list)) {
+		pr_err("unexpected: not all ub buffers are freed\n");
+		rc = -EINVAL;
+	}
+
+	list_for_each_entry_safe(entry, next, ub_free_list, list) {
+		list_del_init(&entry->list);
+		kfree(entry);
+	}
+	list_for_each_entry_safe(entry, next, ub_used_list, list) {
+		list_del_init(&entry->list);
+		kfree(entry);
+	}
+
+	return rc;
+}
+
+struct msm_isp_ub_list *msm_isp_ub_list_alloc(struct list_head *ub_free_list,
+		struct list_head *ub_used_list, uint32_t used_wm, uint32_t size)
+{
+	struct msm_isp_ub_list *entry;
+	struct msm_isp_ub_list *centry = NULL;
+
+	list_for_each_entry(entry, ub_free_list, list) {
+		if (entry->size == size) {
+			centry = entry;
+			break;
+		} else if ((entry->size > size) &&
+				((centry == NULL) ||
+				 (entry->size < centry->size)))
+			centry = entry;
+	}
+	if (centry == NULL) {
+		pr_err("error: Cannot find free UB chunk - req size %d\n",
+			size);
+		return NULL;
+	}
+	if (centry->size == size) {
+		list_del_init(&centry->list);
+		centry->used_wm = used_wm;
+		list_add_tail(&centry->list, ub_used_list);
+		msm_isp_ub_list_debug(ub_free_list, ub_used_list);
+		return(centry);
+	} else {
+		entry = kzalloc(sizeof(struct msm_isp_ub_list), GFP_ATOMIC);
+		if (!entry) {
+			pr_err("error: No memory for UB list chunk\n");
+			return NULL;
+		}
+		centry->size -= size;
+		entry->start = centry->start;
+		centry->start += size;
+		entry->size  = size;
+		entry->used_wm = used_wm;
+		list_add_tail(&entry->list, ub_used_list);
+		msm_isp_ub_list_debug(ub_free_list, ub_used_list);
+		return(entry);
+	}
+}
+
+int msm_isp_ub_list_free(struct list_head *ub_free_list,
+		struct list_head *ub_used_list, uint32_t used_wm)
+{
+	struct msm_isp_ub_list *entry = NULL;
+	struct msm_isp_ub_list *centry;
+	struct msm_isp_ub_list *next_entry;
+
+	list_for_each_entry(entry, ub_used_list, list)
+		if (entry->used_wm == used_wm)
+			break;
+	if (!entry) {
+		pr_err("error: used UB list is empty\n");
+		return -EINVAL;
+	}
+	if (entry->used_wm != used_wm) {
+		pr_err("error: Invalid WM provided\n");
+		return -EINVAL;
+	}
+	list_del_init(&entry->list);
+	entry->used_wm = 0;
+	if (list_empty(ub_free_list)) {
+		list_add_tail(&entry->list, ub_free_list);
+	} else if (list_is_singular(ub_free_list)) {
+		centry = list_first_entry(ub_free_list, struct msm_isp_ub_list,
+						list);
+		if (centry->start < entry->start) {
+			if (centry->start + centry->size == entry->start) {
+				centry->size += entry->size;
+				kfree(entry);
+			} else
+				list_add_tail(&entry->list, ub_free_list);
+		} else {
+			if (entry->start + entry->size == centry->start) {
+				centry->start = entry->start;
+				centry->size += entry->size;
+				kfree(entry);
+			} else
+				list_add(&entry->list, ub_free_list);
+		}
+	} else {
+		list_for_each_entry_reverse(centry, ub_free_list, list) {
+			if (centry->start < entry->start)
+				break;
+		}
+		if (centry->start < entry->start) {
+			next_entry = list_next_entry(centry, list);
+			if (centry->start + centry->size == entry->start) {
+				centry->size += entry->size;
+				if (entry->start + entry->size ==
+						next_entry->start) {
+					centry->size += next_entry->size;
+					list_del_init(&next_entry->list);
+					kfree(next_entry);
+				}
+				kfree(entry);
+			} else if (entry->start + entry->size ==
+					next_entry->start) {
+				next_entry->start = entry->start;
+				next_entry->size += entry->size;
+				kfree(entry);
+			} else
+				list_add(&entry->list, &centry->list);
+		} else {
+			centry = list_first_entry(ub_free_list,
+					struct msm_isp_ub_list, list);
+			if (entry->start + entry->size == centry->start) {
+				centry->start = entry->start;
+				centry->size += entry->size;
+				kfree(entry);
+			} else
+				list_add(&entry->list, ub_free_list);
+		}
+	}
+	msm_isp_ub_list_debug(ub_free_list, ub_used_list);
+	return 0;
+}
+
+void msm_isp_ub_list_debug(struct list_head *ub_free_list,
+		struct list_head *ub_used_list)
+{
+	struct msm_isp_ub_list *entry;
+	list_for_each_entry(entry, ub_free_list, list) {
+		pr_err("UB free chunk start %4d, end %4d, size %4d\n",
+			entry->start,
+			entry->start+entry->size-1,
+			entry->size);
+	}
+	list_for_each_entry(entry, ub_used_list, list) {
+		pr_err("UB used chunk start %4d, end %4d, size %4d from %x\n",
+			entry->start,
+			entry->start+entry->size-1,
+			entry->size,
+			entry->used_wm);
+	}
+}
+
+
 int msm_isp_open_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 {
 	struct vfe_device *vfe_dev = v4l2_get_subdevdata(sd);
@@ -1223,6 +1406,12 @@ int msm_isp_open_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 		sizeof(struct msm_vfe_stats_shared_data));
 	memset(&vfe_dev->error_info, 0, sizeof(vfe_dev->error_info));
 	vfe_dev->axi_data.hw_info = vfe_dev->hw_info->axi_hw_info;
+	ISP_DBG("VFE%d vfe_dev->axi_data.hw_info->num_wm = %d\n",
+		vfe_dev->pdev->id , vfe_dev->axi_data.hw_info->num_wm );
+	msm_isp_ub_list_create(&vfe_dev->axi_data.isp_ub_free_list,
+		&vfe_dev->axi_data.isp_ub_used_list,
+		vfe_dev->axi_data.hw_info->max_img_wm_ub);
+
 	vfe_dev->vfe_open_cnt++;
 	vfe_dev->taskletq_idx = 0;
 	vfe_dev->vt_enable = 0;
@@ -1250,7 +1439,8 @@ int msm_isp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 	rc = vfe_dev->hw_info->vfe_ops.axi_ops.halt(vfe_dev);
 	if (rc <= 0)
 		pr_err("%s: halt timeout rc=%ld\n", __func__, rc);
-
+	msm_isp_ub_list_destroy(&vfe_dev->axi_data.isp_ub_free_list,
+		&vfe_dev->axi_data.isp_ub_used_list);
 	vfe_dev->buf_mgr->ops->buf_mgr_deinit(vfe_dev->buf_mgr);
 	vfe_dev->hw_info->vfe_ops.core_ops.release_hw(vfe_dev);
 	vfe_dev->vfe_open_cnt--;

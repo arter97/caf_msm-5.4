@@ -309,16 +309,15 @@ static void msm_ispif_sel_csid_core(struct ispif_device *ispif,
 	data = msm_camera_io_r(ispif->base + ISPIF_VFE_m_INPUT_SEL(vfe_intf));
 	switch (intftype) {
 	case PIX0:
-	   if (!(csid == STEREO_CSID)) {
-		data &= ~(BIT(1) | BIT(0));
-		data |= csid;
-	   }
-		else {
-		   data &= ~(BIT(1) | BIT(0));   /* Enable PIX0 input to VFE */
-		   data |= csid;
-		   data &= ~(BIT(9) | BIT(8));   /* Enable PIX1 input to VFE */
-		   data |= (csid << 8);
-		   CDBG("3D: Enable PIX1 INPUT_SEL = 0x%X", data);
+		if (!(csid == STEREO_CSID)) {
+			data &= ~(BIT(1) | BIT(0));
+			data |= csid;
+		} else {
+			data &= ~(BIT(1) | BIT(0));   /* Enable PIX0 input to VFE */
+			data |= csid;
+			data &= ~(BIT(9) | BIT(8));   /* Enable PIX1 input to VFE */
+			data |= (csid << 8);
+			CDBG("3D: Enable PIX1 INPUT_SEL = 0x%X", data);
 		}
 		break;
 	case RDI0:
@@ -853,7 +852,9 @@ static int msm_ispif_config_3d_output(struct ispif_device *ispif,
 		CDBG("%s:%d configure ISPIF for stereo mode", __func__, __LINE__);
 		msm_camera_io_w_mb(0x3, ispif->base + ISPIF_VFE_m_OUTPUT_SEL(vfe_intf));
 		msm_camera_io_w_mb(STEREO_DEFAULT_3D_THRESHOLD, ispif->base + ISPIF_VFE_m_3D_THRESHOLD(vfe_intf));
-		reg_data = (LEFT_CSID << 8) | STEREO_CSID;
+		reg_data = msm_camera_io_r(ispif->base + ISPIF_VFE_m_INPUT_SEL(vfe_intf));
+		reg_data &= ~(0xF0F);
+		reg_data |= (LEFT_CSID << 8) | STEREO_CSID;
 		msm_camera_io_w_mb(reg_data, ispif->base + ISPIF_VFE_m_INPUT_SEL(vfe_intf));
 	}
 	return 0;
