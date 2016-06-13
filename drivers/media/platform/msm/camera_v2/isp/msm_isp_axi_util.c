@@ -2604,7 +2604,8 @@ static int msm_isp_stop_axi_stream(struct vfe_device *vfe_dev,
 				wait_for_complete_for_this_stream = 1;
 
 		} else if (stream_info->stream_type == BURST_STREAM &&
-				stream_info->runtime_num_burst_capture == 0) {
+				stream_info->runtime_num_burst_capture == 0 &&
+				stream_info->undelivered_request_cnt == 0) {
 			/* Configure AXI writemasters to stop immediately
 			 * since for burst case, write masters already skip
 			 * all frames.
