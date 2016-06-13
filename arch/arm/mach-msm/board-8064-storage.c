@@ -201,6 +201,7 @@ static struct msm_mmc_gpio sdc4_gpio[] = {
 	{65, "sdc4_dat_1"},
 	{64, "sdc4_dat_2"},
 	{63, "sdc4_dat_3"},
+	{21, "sdc4_wlan_en"},
 };
 
 static struct msm_mmc_gpio_data mmc_gpio_data[MAX_SDCC_CONTROLLER] = {
