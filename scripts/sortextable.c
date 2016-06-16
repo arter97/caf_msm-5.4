@@ -20,7 +20,6 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <getopt.h>
-#include <elf.h>
 #include <fcntl.h>
 #include <setjmp.h>
 #include <stdio.h>
@@ -30,6 +29,7 @@
 
 #include <tools/be_byteshift.h>
 #include <tools/le_byteshift.h>
+#include "elf.h"
 
 #ifndef EM_AARCH64
 #define EM_AARCH64	183

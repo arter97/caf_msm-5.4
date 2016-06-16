@@ -1,7 +1,16 @@
 #ifndef _TOOLS_BE_BYTESHIFT_H
 #define _TOOLS_BE_BYTESHIFT_H
 
+//Assuming that we only build on Mac and Linux.
+#ifdef __APPLE__
+#include <inttypes.h>
+#define __u16 uint16_t
+#define __u8 uint8_t
+#define __u32 uint32_t
+#define __u64 uint64_t
+#else
 #include <linux/types.h>
+#endif
 
 static inline __u16 __get_unaligned_be16(const __u8 *p)
 {
