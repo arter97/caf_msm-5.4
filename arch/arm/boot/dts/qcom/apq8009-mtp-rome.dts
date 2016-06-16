@@ -71,6 +71,14 @@
     };
 };
 
+&modem_adsp_mem {
+	reg = <0x0 0x88000000 0x0 0x02400000>;
+};
+
+&peripheral_mem {
+	reg = <0x0 0x8a400000 0x0 0x0500000>;
+};
+
 &tlmm_pinmux {
 	sdc2_wlan_gpio {
 		qcom,pins = <&gp 43>;
@@ -114,3 +122,21 @@
 	status = "ok";
 };
 
+&i2c_4 {
+	smb1360_otg_supply: smb1360-chg-fg@14 {
+		compatible = "qcom,smb1360-chg-fg";
+		reg = <0x14>;
+		interrupt-parent = <&msm_gpio>;
+		interrupts = <58 8>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&smb_int_default>;
+		qcom,charging-disabled;
+		qcom,empty-soc-disabled;
+		qcom,chg-inhibit-disabled;
+		qcom,float-voltage-mv = <4200>;
+		qcom,iterm-ma = <200>;
+		qcom,recharge-thresh-mv = <100>;
+		qcom,thermal-mitigation = <1500 700 600 0>;
+		regulator-name = "smb1360_otg_vreg";
+	};
+};
