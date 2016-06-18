@@ -825,7 +825,7 @@
 
 &clock_gpu {
 	compatible = "qcom,gpucc-8996-pro";
-	qcom,gfxfreq-speedbin0 =
+	qcom,gfxfreq-speedbin1 =
 		<	   0  0  0 >,
 		<  133000000  2  4 >,
 		<  214000000  3  4 >,
@@ -835,7 +835,7 @@
 		<  560000000  7  7 >,
 		<  624000000  8  7 >,
 		<  652800000  9  7 >;
-	qcom,gfxfreq-mx-speedbin0 =
+	qcom,gfxfreq-mx-speedbin1 =
 		<	   0  0 >,
 		<  133000000  4 >,
 		<  214000000  4 >,
@@ -846,19 +846,15 @@
 		<  624000000  7 >,
 		<  652800000  7 >;
 
-	qcom,gfxfreq-speedbin1 =
+	qcom,gfxfreq-speedbin0 =
 		<	   0  0  0 >,
-		<  133000000  2  4 >,
-		<  214000000  3  4 >,
 		<  315000000  4  4 >,
 		<  401800000  5  5 >,
 		<  510000000  6  5 >,
 		<  560000000  7  7 >,
 		<  624000000  8  7 >;
-	qcom,gfxfreq-mx-speedbin1 =
+	qcom,gfxfreq-mx-speedbin0 =
 		<	   0  0 >,
-		<  133000000  4 >,
-		<  214000000  4 >,
 		<  315000000  4 >,
 		<  401800000  5 >,
 		<  510000000  5 >,
