@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -779,7 +779,9 @@ static void mbim_do_notify(struct f_mbim *mbim)
 				req, GFP_ATOMIC);
 		spin_lock(&mbim->lock);
 		if (status) {
-			atomic_dec(&mbim->not_port.notify_count);
+			/* ignore if request already queued before bus_resume */
+			if (status != -EBUSY)
+				atomic_dec(&mbim->not_port.notify_count);
 			pr_err("Queue notify request failed, err: %d\n",
 					status);
 		}
