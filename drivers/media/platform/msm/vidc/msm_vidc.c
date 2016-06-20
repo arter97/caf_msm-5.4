@@ -1250,6 +1250,7 @@ void *msm_vidc_open(int core_id, int session_type)
 	struct msm_vidc_core *core = NULL;
 	int rc = 0;
 	int i = 0;
+    printk(KERN_INFO "enter into msm_vidc_open\n");
 	if (core_id >= MSM_VIDC_CORES_MAX ||
 			session_type >= MSM_VIDC_MAX_DEVICES) {
 		dprintk(VIDC_ERR, "Invalid input, core_id = %d, session = %d\n",

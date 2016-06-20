@@ -52,7 +52,7 @@ static int msm_v4l2_open(struct file *filp)
 		container_of(vdev, struct msm_video_device, vdev);
 	struct msm_vidc_core *core = video_drvdata(filp);
 	struct msm_vidc_inst *vidc_inst;
-
+        printk(KERN_INFO "enter into msm_v4l2_open\n");
 	trace_msm_v4l2_vidc_open_start("msm_v4l2_open start");
 	vidc_inst = msm_vidc_open(core->id, vid_dev->type);
 	if (!vidc_inst) {
