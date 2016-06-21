@@ -2064,10 +2064,18 @@ static struct gpiomux_setting sdc4_cmd_data_0_3_active_cfg = {
 	.pull = GPIOMUX_PULL_UP,
 };
 
+static struct gpiomux_setting sdc4_wlan_en_active_cfg = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_UP,
+	.dir = GPIOMUX_OUT_HIGH,
+};
+
 static struct gpiomux_setting sdc4_suspended_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
 	.pull = GPIOMUX_PULL_DOWN,
+	.dir = GPIOMUX_IN,
 };
 
 static struct gpiomux_setting sdc4_data_1_suspended_cfg = {
@@ -2120,6 +2128,14 @@ static struct msm_gpiomux_config apq8064_sdc4_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &sdc4_suspended_cfg,
 		},
 	},
+	{
+		.gpio      = 21,
+		.settings = {
+			[GPIOMUX_ACTIVE] = &sdc4_wlan_en_active_cfg,
+			[GPIOMUX_SUSPENDED] = &sdc4_suspended_cfg,
+		},
+	},
+
 };
 #endif
 
