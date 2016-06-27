@@ -2074,7 +2074,7 @@ static struct gpiomux_setting sdc4_wlan_en_active_cfg = {
 static struct gpiomux_setting sdc4_suspended_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
-	.pull = GPIOMUX_PULL_DOWN,
+	.pull = GPIOMUX_PULL_NONE,
 	.dir = GPIOMUX_IN,
 };
 
