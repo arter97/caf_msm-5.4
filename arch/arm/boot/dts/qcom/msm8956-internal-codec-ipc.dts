@@ -19,7 +19,7 @@
 / {
 	model = "Qualcomm Technologies, Inc. MSM8956v1.1 IPC";
 	compatible = "qcom,msm8956-mtp", "qcom,msm8956", "qcom,mtp";
-	qcom,board-id= <9 0>;
+	qcom,board-id= <12 0>;
 };
 
 &soc {
