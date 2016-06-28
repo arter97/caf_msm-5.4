@@ -247,6 +247,7 @@
 			<0xff 157>,  /* sdcc_irq[0] */
 			<0xff 159>,  /* sdcc_irq[0] */
 			<0xff 163>,  /* usb30_ee1_irq */
+			<0xff 166>,  /* msm_ehci_host */
 			<0xff 170>,  /* sdcc_pwr_cmd_irq */
 			<0xff 173>, /* o_wcss_apss_smd_hi */
 			<0xff 174>, /* o_wcss_apss_smd_med */
