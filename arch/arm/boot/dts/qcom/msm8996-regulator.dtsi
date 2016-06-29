@@ -604,7 +604,6 @@
 		vdd-thread1-ldo-ret-supply = <&kryo1_retention_vreg>;
 		proxy-supply = <&apc0_cbf_vreg>;
 
-		qcom,cpr-enable;
 		qcom,cpr-clock-throttling = <0x20>;
 
 		qcom,cpr-aging-ref-voltage = <905000>;
