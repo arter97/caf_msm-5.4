@@ -4327,12 +4327,13 @@ static int msm_gcc_probe(struct platform_device *pdev)
 		if (compat_bin3) {
 			gfx3d_clk_src.freq_tbl =
 					ftbl_gcc_oxili_gfx3d_clk_8937_475MHz;
-			gcc_oxili_gfx3d_clk.c.fmax[VDD_DIG_SUPER_TUR] =
-								475000000;
+			gfx3d_clk_src.c.fmax[VDD_DIG_SUPER_TUR] = 475000000;
 		}
 	} else if (compat_bin2) {
 		gpll0_clk_src.c.parent = &gpll0_clk_src_8937.c;
 		gpll0_ao_clk_src.c.parent = &gpll0_ao_clk_src_8937.c;
+		vdd_dig.num_levels = VDD_DIG_NUM_8917;
+		vdd_hf_pll.num_levels = VDD_HF_PLL_NUM_8917;
 		override_for_8917();
 	} else {
 		gpll0_clk_src.c.parent = &gpll0_clk_src_8952.c;
