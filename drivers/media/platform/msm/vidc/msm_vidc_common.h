@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -18,6 +18,14 @@ struct vb2_buf_entry {
 	struct list_head list;
 	struct vb2_buffer *vb;
 };
+
+enum load_calc_quirks {
+	LOAD_CALC_NO_QUIRKS = 0,
+	LOAD_CALC_IGNORE_TURBO_LOAD = 1 << 0,
+	LOAD_CALC_IGNORE_THUMBNAIL_LOAD = 1 << 1,
+	LOAD_CALC_IGNORE_NON_REALTIME_LOAD = 1 << 2,
+};
+
 struct msm_vidc_core *get_vidc_core(int core_id);
 const struct msm_vidc_format *msm_comm_get_pixel_fmt_index(
 	const struct msm_vidc_format fmt[], int size, int index, int fmt_type);
@@ -52,6 +60,8 @@ enum hal_buffer_layout_type msm_comm_get_hal_buffer_layout(
 	enum v4l2_mpeg_vidc_video_mvc_layout index);
 int msm_comm_get_domain_partition(struct msm_vidc_inst *inst, u32 flags,
 	enum v4l2_buf_type buf_type, int *domain, int *partition);
+int msm_comm_get_inst_load(struct msm_vidc_inst *inst,
+			enum load_calc_quirks quirks);
 struct hal_buffer_requirements *get_buff_req_buffer(
 			struct msm_vidc_inst *inst, u32 buffer_type);
 #define IS_PRIV_CTRL(idx) (\
