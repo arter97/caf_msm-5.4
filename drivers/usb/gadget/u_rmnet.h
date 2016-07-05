@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -25,7 +25,8 @@ struct rmnet_ctrl_pkt {
 };
 
 struct grmnet {
-	struct usb_function		func;
+	struct usb_function		func; /* Used only by f_gps */
+	struct usb_function		*f;
 
 	struct usb_gadget		*gadget;
 	struct usb_ep			*in;
