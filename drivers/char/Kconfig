@@ -639,6 +639,13 @@ config MSM_ADSPRPC
 	  applications DSP processor. Say M if you want to enable this
 	  module.
 
+config MSM_MDSP_TS
+	tristate "Qualcomm Technologies Inc MDSP TimeStamp driver"
+	depends on MSM_SMD
+	help
+	  Provides a high response mechanism that allows for AP to get
+	  timestamp from mDSP
+
 config CSDIO_VENDOR_ID
 	hex "Card VendorId"
 	depends on MMC_GENERIC_CSDIO
