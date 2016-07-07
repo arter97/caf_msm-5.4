@@ -61,12 +61,12 @@
 #define USB_PHY_3P3_VOL_MIN	3050000 /* uV */
 #define USB_PHY_3P3_VOL_MAX	3300000 /* uV */
 #define USB_PHY_3P3_HPM_LOAD	50000	/* uA */
-#define USB_PHY_3P3_LPM_LOAD	4000	/* uA */
+#define USB_PHY_3P3_LPM_LOAD	3000	/* uA */
 
 #define USB_PHY_1P8_VOL_MIN	1800000 /* uV */
 #define USB_PHY_1P8_VOL_MAX	1800000 /* uV */
 #define USB_PHY_1P8_HPM_LOAD	50000	/* uA */
-#define USB_PHY_1P8_LPM_LOAD	4000	/* uA */
+#define USB_PHY_1P8_LPM_LOAD	3000	/* uA */
 
 #define USB_PHY_VDD_DIG_VOL_NONE	0 /*uV */
 #define USB_PHY_VDD_DIG_VOL_MIN	1045000 /* uV */
