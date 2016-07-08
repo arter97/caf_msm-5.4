@@ -1,2 +1,5 @@
 header-y += if_pppolac.h
 header-y += if_pppopns.h
+header-y += sync.h
+header-y += sw_sync.h
+
