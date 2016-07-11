@@ -109,6 +109,9 @@ static struct mdp_arb_pipe mdp_pipe[OVERLAY_PIPE_MAX] = {
 		e->event.register_state.num_of_down_state_value); \
 	}
 
+static int mdp_arb_remove_all_from_notify_list(struct mdp_arb_client_db *client,
+	struct mdp_arb_event_db *event, struct mdp_arb_notify_list *list);
+
 static void mdp_arb_dump_layers(void)
 {
 	struct mdp_arb_pipe *p;
@@ -424,8 +427,9 @@ static int mdp_arb_deregister_sub(struct mdp_arb_device_info *arb,
 {
 	int rc = 0;
 	struct mdp_arb_client_register_info *client = &client_db->register_info;
-	struct list_head *pos, *q;
+	struct list_head *pos, *q, *pos1;
 	struct mdp_arb_client_db *temp_client = NULL;
+	struct mdp_arb_event_db *temp_event;
 	bool found = false;
 	int idx = 0;
 
@@ -452,6 +456,18 @@ static int mdp_arb_deregister_sub(struct mdp_arb_device_info *arb,
 					temp_client->num_of_client);
 				temp_client->num_of_client--;
 			} else {
+				list_for_each(pos1, &arb->event_db_list) {
+					temp_event = list_entry(pos1,
+						struct mdp_arb_event_db, list);
+					mdp_arb_remove_all_from_notify_list(
+						temp_client,
+						temp_event,
+						&arb->event_work_notify_list);
+					mdp_arb_remove_all_from_notify_list(
+						temp_client,
+						temp_event,
+						&arb->overlay_set_notify_list);
+				}
 				list_del(pos);
 				mdp_arb_free_client(temp_client);
 			}
@@ -734,7 +750,9 @@ static int mdp_arb_trigger_optimize_cb(struct mdp_arb_device_info *arb,
 					temp->event->cur_state_value;
 			}
 			temp->client->ack = false;
+			mutex_unlock(&arb->dev_mutex);
 			cb_rc = cb((void *)temp->client, &info, 0);
+			mutex_lock(&arb->dev_mutex);
 			if (cb_rc)
 				pr_warning("%s cb returns error=%d for " \
 					"client %s", __func__, cb_rc,
@@ -769,9 +787,7 @@ static int mdp_arb_trigger_optimize_cb(struct mdp_arb_device_info *arb,
 		envp[env_offset++] = uevent_state_str;
 		envp[env_offset++] = uevent_layer_str;
 		envp[env_offset] = NULL;
-		mutex_lock(&arb->dev_mutex);
 		kobject_uevent_env(&arb->arb_dev->kobj, KOBJ_CHANGE, envp);
-		mutex_unlock(&arb->dev_mutex);
 	}
 	if (wait) {
 		list_for_each(pos, &notify->optimize_list) {
@@ -780,8 +796,10 @@ static int mdp_arb_trigger_optimize_cb(struct mdp_arb_device_info *arb,
 			if (!temp->client->ack) {
 				/* Wait for client's acknowledgement */
 				INIT_COMPLETION(temp->client->ack_comp);
+				mutex_unlock(&arb->dev_mutex);
 				comp_rc = wait_for_completion_killable_timeout(
 					&temp->client->ack_comp, timeout);
+				mutex_lock(&arb->dev_mutex);
 				if (comp_rc <= 0) {
 					pr_err("%s waiting ack for client=%s " \
 					"timeout or killed! timeout=%lu, rc=%d",
@@ -853,7 +871,9 @@ static int mdp_arb_trigger_common_cb(struct mdp_arb_device_info *arb,
 					temp->event->cur_state_value;
 			}
 			temp->client->ack = false;
+			mutex_unlock(&arb->dev_mutex);
 			cb_rc = cb((void *)temp->client, &info, 0);
+			mutex_lock(&arb->dev_mutex);
 			if (cb_rc)
 				pr_warning("%s cb returns error=%d for " \
 					"client %s", __func__, cb_rc,
@@ -905,9 +925,7 @@ static int mdp_arb_trigger_common_cb(struct mdp_arb_device_info *arb,
 		envp[env_offset++] = uevent_event_str;
 		envp[env_offset++] = uevent_state_str;
 		envp[env_offset] = NULL;
-		mutex_lock(&arb->dev_mutex);
 		kobject_uevent_env(&arb->arb_dev->kobj, KOBJ_CHANGE, envp);
-		mutex_unlock(&arb->dev_mutex);
 	}
 	if (wait) {
 		list_for_each(pos, head) {
@@ -916,8 +934,10 @@ static int mdp_arb_trigger_common_cb(struct mdp_arb_device_info *arb,
 			if (!temp->client->ack) {
 				/* Wait for client's acknowledgement */
 				INIT_COMPLETION(temp->client->ack_comp);
+				mutex_unlock(&arb->dev_mutex);
 				comp_rc = wait_for_completion_killable_timeout(
 					&temp->client->ack_comp, timeout);
+				mutex_lock(&arb->dev_mutex);
 				if (comp_rc <= 0) {
 					pr_err("%s waiting ack for client=%s " \
 					"timeout or killed! timeout=%lu, rc=%d"\
@@ -983,6 +1003,7 @@ static int mdp_arb_fb_notifier_callback(struct notifier_block *self,
 	return 0;
 }
 
+/* This function requires caller has to obtain dev_mutex first. */
 static int mdp_arb_trigger_cb(struct mdp_arb_device_info *arb,
 	struct mdp_arb_notify_list *notify, bool wait)
 {
@@ -1045,6 +1066,56 @@ static int mdp_arb_add_to_notify_list(struct mdp_arb_client_db *client,
 		temp->num_of_layers = 1;
 		temp->event = event;
 		list_add_tail(&temp->list, list);
+	}
+
+	return rc;
+}
+
+static int mdp_arb_remove_from_notify_list(struct mdp_arb_client_db *client,
+	struct mdp_arb_event_db *event, struct list_head *list)
+{
+	int rc = 0;
+	struct list_head *pos, *q;
+	struct mdp_arb_notify_info *temp;
+
+	list_for_each_safe(pos, q, list) {
+		temp = list_entry(pos, struct mdp_arb_notify_info, list);
+		if (!strcmp(client->register_info.common.name,
+			temp->client->register_info.common.name) &&
+			client->register_info.common.fb_index ==
+			temp->client->register_info.common.fb_index) {
+			list_del(pos);
+			kfree(temp);
+			break;
+		}
+	}
+
+	return rc;
+}
+
+static int mdp_arb_remove_all_from_notify_list(struct mdp_arb_client_db *client,
+	struct mdp_arb_event_db *event, struct mdp_arb_notify_list *list)
+{
+	int rc = 0;
+
+	rc = mdp_arb_remove_from_notify_list(client, event, &list->up_list);
+	if (rc) {
+		pr_warn("%s remove client=%s event=%s up list failed rc=%d\n",
+			__func__, client->register_info.common.name,
+			event->event.name, rc);
+	}
+	rc = mdp_arb_remove_from_notify_list(client, event, &list->down_list);
+	if (rc) {
+		pr_warn("%s remove client=%s event=%s down list failed rc=%d\n",
+			__func__, client->register_info.common.name,
+			event->event.name, rc);
+	}
+	rc = mdp_arb_remove_from_notify_list(client, event,
+		&list->optimize_list);
+	if (rc) {
+		pr_warn("%s remove client=%s event=%s opt list failed rc=%d\n",
+			__func__, client->register_info.common.name,
+			event->event.name, rc);
 	}
 
 	return rc;
@@ -1180,7 +1251,7 @@ static void mdp_arb_event_work(struct work_struct *work)
 	int rc = 0;
 	struct list_head *pos, *q;
 	struct mdp_arb_event_db *temp = NULL;
-	struct mdp_arb_notify_list notify;
+	struct mdp_arb_notify_list *notify;
 
 	if (!arb) {
 		pr_err("%s arb is NULL", __func__);
@@ -1188,38 +1259,37 @@ static void mdp_arb_event_work(struct work_struct *work)
 	}
 
 	mutex_lock(&arb->dev_mutex);
-	memset(&notify, 0x00, sizeof(notify));
-	INIT_LIST_HEAD(&notify.optimize_list);
-	INIT_LIST_HEAD(&notify.down_list);
-	INIT_LIST_HEAD(&notify.up_list);
+	notify = &(arb->event_work_notify_list);
+	memset(notify, 0x00, sizeof(*notify));
+	INIT_LIST_HEAD(&notify->optimize_list);
+	INIT_LIST_HEAD(&notify->down_list);
+	INIT_LIST_HEAD(&notify->up_list);
 	list_for_each_safe(pos, q, &arb->event_list) {
 		temp = list_entry(pos, struct mdp_arb_event_db, list);
-		rc = mdp_arb_event_create_notify_list(arb, temp, &notify);
+		rc = mdp_arb_event_create_notify_list(arb, temp, notify);
 		if (rc) {
 			pr_err("%s create_notify_list fails=%d, event=%s,%d",
 				__func__, rc, temp->event.name,
 				temp->cur_state_value);
 			goto out;
 		}
-		mutex_unlock(&arb->dev_mutex);
 
-		rc = mdp_arb_trigger_cb(arb, &notify, true);
-		mutex_lock(&arb->dev_mutex);
+		rc = mdp_arb_trigger_cb(arb, notify, true);
 		if (rc) {
 			pr_err("%s trigger_cb fails=%d", __func__, rc);
 			goto out;
 		}
-		mdp_arb_clear_notify_list(&notify);
-		memset(&notify, 0x00, sizeof(notify));
-		INIT_LIST_HEAD(&notify.optimize_list);
-		INIT_LIST_HEAD(&notify.down_list);
-		INIT_LIST_HEAD(&notify.up_list);
+		mdp_arb_clear_notify_list(notify);
+		memset(notify, 0x00, sizeof(*notify));
+		INIT_LIST_HEAD(&notify->optimize_list);
+		INIT_LIST_HEAD(&notify->down_list);
+		INIT_LIST_HEAD(&notify->up_list);
 		list_del(pos);
 		kfree(temp);
 	}
 
 out:
-	mdp_arb_clear_notify_list(&notify);
+	mdp_arb_clear_notify_list(notify);
 	mutex_unlock(&arb->dev_mutex);
 	return;
 }
@@ -1376,7 +1446,6 @@ static int mdp_arb_find_new_pipe(struct mdp_arb_device_info *arb,
 	int i = 0;
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fb->par;
 
-	mutex_lock(&arb->dev_mutex);
 	/* This condition check needs to be revisited when query API is
 	 * available from the mdp driver */
 	if (arb->num_of_pipes != OVERLAY_PIPE_MAX) {
@@ -1547,7 +1616,6 @@ static int mdp_arb_find_new_pipe(struct mdp_arb_device_info *arb,
 		req->src.height);
 
 out:
-	mutex_unlock(&arb->dev_mutex);
 	return rc;
 }
 
@@ -1560,7 +1628,7 @@ static int mdp_arb_overlay_set_sub(struct mdp_arb_device_info *arb,
 	struct mdp_overlay req;
 	int pipe_id = 0;
 	bool found = false, loop = false;
-	struct mdp_arb_notify_list notify;
+	struct mdp_arb_notify_list *notify;
 	struct mdp4_overlay_pipe *pipe = NULL;
 	int cmd = MSMFB_OVERLAY_SET;
 	struct list_head *pos;
@@ -1585,37 +1653,39 @@ static int mdp_arb_overlay_set_sub(struct mdp_arb_device_info *arb,
 	}
 
 	pipe_id = req.id;
-	memset(&notify, 0x00, sizeof(notify));
-	INIT_LIST_HEAD(&notify.optimize_list);
-	INIT_LIST_HEAD(&notify.down_list);
-	INIT_LIST_HEAD(&notify.up_list);
+	mutex_lock(&arb->dev_mutex);
+	notify = &(arb->overlay_set_notify_list);
+	memset(notify, 0x00, sizeof(*notify));
+	INIT_LIST_HEAD(&notify->optimize_list);
+	INIT_LIST_HEAD(&notify->down_list);
+	INIT_LIST_HEAD(&notify->up_list);
 	if (pipe_id == MSMFB_NEW_REQUEST) {
 		do {
 			loop = false;
 			rc = mdp_arb_find_new_pipe(arb, client_db, fb, &req,
-				&found, &notify);
+				&found, notify);
 			if (rc) {
 				pr_err("%s find_new_pipe falils=%d", __func__,
 					rc);
 				goto out;
 			}
 			if (!found) {
-				if (!list_empty(&notify.optimize_list) ||
-					!list_empty(&notify.down_list))
+				if (!list_empty(&notify->optimize_list) ||
+					!list_empty(&notify->down_list))
 					loop = true;
 				else
 					break;
-				rc = mdp_arb_trigger_cb(arb, &notify, true);
+				rc = mdp_arb_trigger_cb(arb, notify, true);
 				if (rc) {
 					pr_err("%s trigger_cb fails=%d",
 						__func__, rc);
 					goto out;
 				}
-				mdp_arb_clear_notify_list(&notify);
-				memset(&notify, 0x00, sizeof(notify));
-				INIT_LIST_HEAD(&notify.optimize_list);
-				INIT_LIST_HEAD(&notify.down_list);
-				INIT_LIST_HEAD(&notify.up_list);
+				mdp_arb_clear_notify_list(notify);
+				memset(notify, 0x00, sizeof(*notify));
+				INIT_LIST_HEAD(&notify->optimize_list);
+				INIT_LIST_HEAD(&notify->down_list);
+				INIT_LIST_HEAD(&notify->up_list);
 			} else {
 				goto call_fb;
 			}
@@ -1665,11 +1735,9 @@ call_fb:
 			goto out;
 		} else {
 			if (pipe_id == MSMFB_NEW_REQUEST) {
-				mutex_lock(&arb->dev_mutex);
 				arb->pipe[pipe->pipe_num].client = client_db;
 				if (req.src.format != MDP_RGB_BORDERFILL)
 					client_db->num_of_layer++;
-				mutex_unlock(&arb->dev_mutex);
 			}
 		}
 	}
@@ -1683,7 +1751,8 @@ out:
 			client->notified = false;
 		}
 	}
-	mdp_arb_clear_notify_list(&notify);
+	mdp_arb_clear_notify_list(notify);
+	mutex_unlock(&arb->dev_mutex);
 	return rc;
 }
 
@@ -2524,6 +2593,12 @@ static int __devinit mdp_arb_probe(struct platform_device *pdev)
 		INIT_LIST_HEAD(&mdp_arb->client_db_list[i]);
 	INIT_LIST_HEAD(&mdp_arb->event_db_list);
 	INIT_LIST_HEAD(&mdp_arb->event_list);
+	INIT_LIST_HEAD(&mdp_arb->event_work_notify_list.optimize_list);
+	INIT_LIST_HEAD(&mdp_arb->event_work_notify_list.down_list);
+	INIT_LIST_HEAD(&mdp_arb->event_work_notify_list.up_list);
+	INIT_LIST_HEAD(&mdp_arb->overlay_set_notify_list.optimize_list);
+	INIT_LIST_HEAD(&mdp_arb->overlay_set_notify_list.down_list);
+	INIT_LIST_HEAD(&mdp_arb->overlay_set_notify_list.up_list);
 	INIT_WORK(&mdp_arb->event_work, mdp_arb_event_work);
 	mdp_arb->event_queue = create_workqueue("arb_event");
 	if (IS_ERR_OR_NULL(mdp_arb->event_queue)) {
