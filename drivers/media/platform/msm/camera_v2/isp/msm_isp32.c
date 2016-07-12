@@ -100,6 +100,8 @@ static int msm_vfe32_init_hardware(struct vfe_device *vfe_dev)
 		goto vfe_remap_failed;
 	}
 
+	vfe_dev->dual_vfe_res->vfe_base[vfe_dev->pdev->id] = vfe_dev->vfe_base;
+
 	rc = request_irq(vfe_dev->vfe_irq->start, msm_isp_process_irq,
 					 IRQF_TRIGGER_RISING, "vfe", vfe_dev);
 	if (rc < 0) {
@@ -131,6 +133,7 @@ static void msm_vfe32_release_hardware(struct vfe_device *vfe_dev)
 {
 	free_irq(vfe_dev->vfe_irq->start, vfe_dev);
 	tasklet_kill(&vfe_dev->vfe_tasklet);
+	vfe_dev->dual_vfe_res->vfe_base[vfe_dev->pdev->id] = NULL;
 	iounmap(vfe_dev->vfe_base);
 	if (vfe_dev->vfe_clk_idx == 1)
 		msm_cam_clk_enable(&vfe_dev->pdev->dev,
@@ -395,7 +398,13 @@ static void msm_vfe32_process_reg_update(struct vfe_device *vfe_dev,
 static void msm_vfe32_reg_update(
 	struct vfe_device *vfe_dev, uint32_t input_src)
 {
-	msm_camera_io_w_mb(input_src, vfe_dev->vfe_base + 0x260);
+	if (vfe_dev->is_split && vfe_dev->pdev->id == ISP_VFE1) {
+		msm_camera_io_w_mb(input_src,
+			vfe_dev->dual_vfe_res->vfe_base[ISP_VFE0] + 0x260);
+		msm_camera_io_w_mb(input_src, vfe_dev->vfe_base + 0x260);
+	} else if (!vfe_dev->is_split) {
+		msm_camera_io_w_mb(input_src, vfe_dev->vfe_base + 0x260);
+	}
 }
 
 static uint32_t msm_vfe32_reset_values[ISP_RST_MAX] =
@@ -421,18 +430,19 @@ static long msm_vfe32_reset_hardware(struct vfe_device *vfe_dev ,
 }
 
 static void msm_vfe32_axi_reload_wm(
-	struct vfe_device *vfe_dev, uint32_t reload_mask)
+	struct vfe_device *vfe_dev, void __iomem *vfe_base,
+	uint32_t reload_mask)
 {
 	if (!vfe_dev->pdev->dev.of_node) {
 		/*vfe32 A-family: 8960*/
-		msm_camera_io_w_mb(reload_mask, vfe_dev->vfe_base + 0x38);
+		msm_camera_io_w_mb(reload_mask, vfe_base + 0x38);
 	} else {
 		/*vfe32 B-family: 8610*/
-		msm_camera_io_w(0x0, vfe_dev->vfe_base + 0x28);
-		msm_camera_io_w(0x1C800000, vfe_dev->vfe_base + 0x20);
-		msm_camera_io_w_mb(0x1, vfe_dev->vfe_base + 0x18);
-		msm_camera_io_w(0x9AAAAAAA , vfe_dev->vfe_base + 0x600);
-		msm_camera_io_w(reload_mask, vfe_dev->vfe_base + 0x38);
+		msm_camera_io_w(0x0, vfe_base + 0x28);
+		msm_camera_io_w(0x1C800000, vfe_base + 0x20);
+		msm_camera_io_w_mb(0x1, vfe_base + 0x18);
+		msm_camera_io_w(0x9AAAAAAA , vfe_base + 0x600);
+		msm_camera_io_w(reload_mask, vfe_base + 0x38);
 	}
 }
 
@@ -661,6 +671,7 @@ static void msm_vfe32_update_camif_state(
 		return;
 
 	if (update_state == ENABLE_CAMIF) {
+		vfe_dev->is_split = vfe_dev->dual_vfe_mode;
 		val = msm_camera_io_r(vfe_dev->vfe_base + 0x1C);
 		val |= 0x19;
 		msm_camera_io_w_mb(val, vfe_dev->vfe_base + 0x1C);
@@ -679,9 +690,11 @@ static void msm_vfe32_update_camif_state(
 		msm_camera_io_w_mb(0x1, vfe_dev->vfe_base + 0x1E0);
 		vfe_dev->axi_data.src_info[VFE_PIX_0].active = 1;
 	} else if (update_state == DISABLE_CAMIF) {
+		vfe_dev->is_split = 0;
 		msm_camera_io_w_mb(0x0, vfe_dev->vfe_base + 0x1E0);
 		vfe_dev->axi_data.src_info[VFE_PIX_0].active = 0;
 	} else if (update_state == DISABLE_CAMIF_IMMEDIATELY) {
+		vfe_dev->is_split = 0;
 		msm_camera_io_w_mb(0x6, vfe_dev->vfe_base + 0x1E0);
 		vfe_dev->axi_data.src_info[VFE_PIX_0].active = 0;
 	}
@@ -901,10 +914,11 @@ static void msm_vfe32_cfg_axi_ub(struct vfe_device *vfe_dev)
 		msm_vfe32_cfg_axi_ub_equal_default(vfe_dev);
 }
 
-static void msm_vfe32_update_ping_pong_addr(struct vfe_device *vfe_dev,
-		uint8_t wm_idx, uint32_t pingpong_status, unsigned long paddr)
+static void msm_vfe32_update_ping_pong_addr(void __iomem *vfe_base,
+		uint8_t wm_idx, uint32_t pingpong_status, dma_addr_t paddr)
 {
-	msm_camera_io_w(paddr, vfe_dev->vfe_base +
+	uint32_t paddr32 = (paddr & 0xFFFFFFFF);
+	msm_camera_io_w(paddr32, vfe_base +
 		VFE32_PING_PONG_BASE(wm_idx, pingpong_status));
 }
 
@@ -1069,12 +1083,12 @@ static void msm_vfe32_stats_enable_module(struct vfe_device *vfe_dev,
 	msm_camera_io_w(module_cfg, vfe_dev->vfe_base + 0x10);
 }
 
-static void msm_vfe32_stats_update_ping_pong_addr(struct vfe_device *vfe_dev,
+static void msm_vfe32_stats_update_ping_pong_addr(void __iomem *vfe_base,
 	struct msm_vfe_stats_stream *stream_info, uint32_t pingpong_status,
 	unsigned long paddr)
 {
 	int stats_idx = STATS_IDX(stream_info->stream_handle);
-	msm_camera_io_w(paddr, vfe_dev->vfe_base +
+	msm_camera_io_w(paddr, vfe_base +
 		VFE32_STATS_PING_PONG_BASE(stats_idx, pingpong_status));
 }
 

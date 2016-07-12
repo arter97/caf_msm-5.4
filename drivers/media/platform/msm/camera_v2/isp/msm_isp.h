@@ -45,6 +45,8 @@
 
 #define VFE_MAX_CFG_TIMEOUT 3000
 
+#define MAX_VFE 2
+
 struct vfe_device;
 struct msm_vfe_axi_stream;
 struct msm_vfe_stats_stream;
@@ -111,7 +113,7 @@ struct msm_vfe_irq_ops {
 };
 
 struct msm_vfe_axi_ops {
-	void (*reload_wm) (struct vfe_device *vfe_dev,
+	void (*reload_wm)(struct vfe_device *vfe_dev, void __iomem *vfe_base,
 		uint32_t reload_mask);
 	void (*enable_wm) (struct vfe_device *vfe_dev,
 		uint8_t wm_idx, uint8_t enable);
@@ -146,8 +148,8 @@ struct msm_vfe_axi_ops {
 	void (*cfg_ub) (struct vfe_device *vfe_dev,
 		struct msm_vfe_axi_stream *stream_info, uint32_t reserve);
 
-	void (*update_ping_pong_addr) (struct vfe_device *vfe_dev,
-		uint8_t wm_idx, uint32_t pingpong_status, unsigned long paddr);
+	void (*update_ping_pong_addr) (void __iomem *vfe_base,
+		uint8_t wm_idx, uint32_t pingpong_status, dma_addr_t paddr);
 
 	uint32_t (*get_wm_mask) (uint32_t irq_status0, uint32_t irq_status1);
 	uint32_t (*get_comp_mask) (uint32_t irq_status0, uint32_t irq_status1);
@@ -196,7 +198,7 @@ struct msm_vfe_stats_ops {
 	void (*enable_module) (struct vfe_device *vfe_dev,
 		uint32_t stats_mask, uint8_t enable);
 
-	void (*update_ping_pong_addr) (struct vfe_device *vfe_dev,
+	void (*update_ping_pong_addr) (void __iomem *vfe_base,
 		struct msm_vfe_stats_stream *stream_info,
 		uint32_t pingpong_status, unsigned long paddr);
 
@@ -234,7 +236,7 @@ struct msm_vfe_axi_hardware_info {
 };
 
 enum msm_vfe_axi_state {
-	AVALIABLE,
+	AVAILABLE,
 	INACTIVE,
 	ACTIVE,
 	PAUSED,
@@ -419,6 +421,14 @@ struct msm_vfe_frame_ts {
 	uint32_t frame_id;
 };
 
+struct dual_vfe_resource {
+	void __iomem *vfe_base[MAX_VFE];
+	uint32_t reg_update_mask[MAX_VFE];
+	struct msm_vfe_stats_shared_data *stats_data[MAX_VFE];
+	struct msm_vfe_axi_shared_data *axi_data[MAX_VFE];
+	uint32_t wm_reload_mask[MAX_VFE];
+};
+
 struct vfe_device {
 	struct platform_device *pdev;
 	struct msm_sd_subdev subdev;
@@ -469,6 +479,9 @@ struct vfe_device {
 	uint8_t vt_enable;
 	void __iomem *p_avtimer_msw;
 	void __iomem *p_avtimer_lsw;
+	struct dual_vfe_resource *dual_vfe_res;
+	uint32_t is_split;
+	uint32_t dual_vfe_mode;
 };
 
 #endif
