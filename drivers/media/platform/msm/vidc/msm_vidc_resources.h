@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -120,6 +120,7 @@ struct msm_vidc_platform_resources {
 	struct buffer_usage_set buffer_usage_set;
 	uint32_t ocmem_size;
 	uint32_t max_load;
+	uint32_t low_power_threshold;
 	struct platform_device *pdev;
 	struct regulator_set regulator_set;
 	struct clock_set clock_set;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -734,6 +734,11 @@ int read_platform_resources_from_dt(
 			"Failed to determine max load supported: %d\n", rc);
 		goto err_load_max_hw_load;
 	}
+
+	of_property_read_u32(pdev->dev.of_node, "qcom,low-power-threshold",
+			&res->low_power_threshold);
+	dprintk(VIDC_DBG,
+		"Low power threshold = %d\n", res->low_power_threshold);
 
 	res->use_non_secure_pil = of_property_read_bool(pdev->dev.of_node,
 			"qcom,use-non-secure-pil");

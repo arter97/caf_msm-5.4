@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1892,9 +1892,23 @@ int create_pkt_cmd_session_set_property(
 	}
 	case HAL_CONFIG_VENC_PERF_MODE:
 	{
-		pkt->rg_property_data[0] =
-			HFI_PROPERTY_CONFIG_VENC_PERF_MODE;
-		pkt->rg_property_data[1] = *(u32 *)pdata;
+		u32 hfi_perf_mode = 0;
+		enum hal_venc_perf_mode hal_perf_mode =
+			*(enum hal_venc_perf_mode *)pdata;
+
+		switch (hal_perf_mode) {
+		case HAL_PERF_MODE_POWER_SAVE:
+			hfi_perf_mode = HFI_VENC_PERFMODE_POWER_SAVE;
+			break;
+		case HAL_PERF_MODE_POWER_MAX_QUALITY:
+			hfi_perf_mode = HFI_VENC_PERFMODE_MAX_QUALITY;
+			break;
+		default:
+			return -ENOTSUPP;
+		}
+
+		pkt->rg_property_data[0] = HFI_PROPERTY_CONFIG_VENC_PERF_MODE;
+		pkt->rg_property_data[1] = hfi_perf_mode;
 		pkt->size += sizeof(u32) * 2;
 		break;
 	}

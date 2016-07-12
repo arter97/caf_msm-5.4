@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1437,6 +1437,40 @@ static int set_bitrate_for_each_layer(struct msm_vidc_inst *inst,
 	return rc;
 }
 
+static inline int msm_venc_power_save_mode_enable(struct msm_vidc_inst *inst)
+{
+	u32 rc = 0;
+	u32 prop_id = 0, inst_load = 0;
+	void *pdata = NULL;
+	struct hfi_device *hdev = NULL;
+	enum hal_venc_perf_mode venc_mode;
+
+	if (!inst || !inst->core || !inst->core->device) {
+		dprintk(VIDC_ERR, "%s invalid parameters\n", __func__);
+		return -EINVAL;
+	}
+
+	inst_load = msm_comm_get_inst_load(inst, LOAD_CALC_NO_QUIRKS);
+	hdev = inst->core->device;
+	if (inst_load > inst->core->resources.low_power_threshold) {
+		prop_id = HAL_CONFIG_VENC_PERF_MODE;
+		venc_mode = HAL_PERF_MODE_POWER_SAVE;
+		pdata = &venc_mode;
+		rc = call_hfi_op(hdev, session_set_property,
+				(void *)inst->session, prop_id, pdata);
+		if (rc) {
+			dprintk(VIDC_ERR,
+				"%s: Failed to set power save mode for inst: %p\n",
+				__func__, inst);
+			goto fail_power_mode_set;
+		}
+		dprintk(VIDC_INFO, "Power Save Mode set for inst: %p\n", inst);
+	}
+
+fail_power_mode_set:
+	return rc;
+}
+
 static inline int start_streaming(struct msm_vidc_inst *inst)
 {
 	int rc = 0;
@@ -1448,6 +1482,7 @@ static inline int start_streaming(struct msm_vidc_inst *inst)
 		return -EINVAL;
 	}
 
+	msm_venc_power_save_mode_enable(inst);
 	if (inst->capability.pixelprocess_capabilities &
 		HAL_VIDEO_ENCODER_SCALING_CAPABILITY)
 		rc = msm_vidc_check_scaling_supported(inst);
@@ -1889,7 +1924,7 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 	struct hal_ltr_mark mark_ltr;
 	struct hal_hybrid_hierp hyb_hierp;
 	u32 hier_p_layers = 0, hier_b_layers = 0;
-	struct hal_venc_perf_mode venc_mode;
+	enum hal_venc_perf_mode venc_mode;
 
 	if (!inst || !inst->core || !inst->core->device) {
 		dprintk(VIDC_ERR, "%s invalid parameters\n", __func__);
@@ -2766,7 +2801,20 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		break;
 	case V4L2_CID_MPEG_VIDC_VIDEO_PERF_MODE:
 		property_id = HAL_CONFIG_VENC_PERF_MODE;
-		venc_mode.mode = ctrl->val;
+		switch (ctrl->val) {
+		case V4L2_MPEG_VIDC_VIDEO_PERF_POWER_SAVE:
+			venc_mode = HAL_PERF_MODE_POWER_SAVE;
+			break;
+		case V4L2_MPEG_VIDC_VIDEO_PERF_MAX_QUALITY:
+			venc_mode = HAL_PERF_MODE_POWER_MAX_QUALITY;
+			break;
+		default:
+			dprintk(VIDC_ERR, "Power save mode %x not supported\n",
+					ctrl->val);
+			rc = -ENOTSUPP;
+			property_id = 0;
+			break;
+		}
 		pdata = &venc_mode;
 		break;
 	case V4L2_CID_MPEG_VIDC_VIDEO_HIER_B_NUM_LAYERS:
