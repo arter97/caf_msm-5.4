@@ -37,6 +37,13 @@
 #include <linux/can/dev.h>
 #include <linux/can/error.h>
 
+#define ENABLE_TESTS	0
+#if ENABLE_TESTS == 1
+#define LOGTEST(...) dev_info(&dev->udev->dev, __VA_ARGS__)
+#else
+#define LOGTEST(...)
+#endif
+
 #define DEBUG_SAM4E	0
 #if DEBUG_SAM4E == 1
 #define LOGDI(...) dev_info(&dev->udev->dev, __VA_ARGS__)
@@ -778,6 +785,10 @@ static int sam4e_frame_filter(struct net_device *netdev,
 			frame_filter->mid,
 			frame_filter->mask,
 			frame_filter->type);
+
+	LOGTEST("sam4e_send_frame_filter cmd:%d %d %x %x %d",
+			req->cmd, frame_filter->can, frame_filter->mid,
+			frame_filter->mask, frame_filter->type);
 
 	usb_fill_bulk_urb(urb, dev->udev,
 			usb_sndbulkpipe(dev->udev, BULK_OUT_EP), req,
