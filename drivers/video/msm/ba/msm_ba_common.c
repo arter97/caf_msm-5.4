@@ -151,7 +151,7 @@ static void msm_ba_signal_sessions_event(struct v4l2_event *sd_event)
 	list_for_each_entry(inst, &(dev_ctxt->instances), list) {
 		if (inst->ext_ops && inst->ext_ops->msm_ba_cb)
 			inst->ext_ops->msm_ba_cb(
-					inst, sd_event->id, (void *)ptr[1]);
+					inst, sd_event->type, (void *)ptr[1]);
 		else
 			msm_ba_queue_v4l2_event(inst, sd_event);
 	}
