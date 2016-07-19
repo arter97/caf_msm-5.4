@@ -2107,8 +2107,10 @@ static int ipa3_wwan_remove(struct platform_device *pdev)
 		IPA_RM_RESOURCE_WWAN_0_PROD, ret);
 	cancel_work_sync(&ipa3_tx_wakequeue_work);
 	cancel_delayed_work(&ipa_tether_stats_poll_wakequeue_work);
-	free_netdev(ipa3_netdevs[0]);
-	ipa3_netdevs[0] = NULL;
+	if (ipa3_netdevs[0]) {
+		free_netdev(ipa3_netdevs[0]);
+		ipa3_netdevs[0] = NULL;
+	}
 	/* No need to remove wwan_ioctl during SSR */
 	if (!atomic_read(&is_ssr))
 		ipa3_wan_ioctl_deinit();
@@ -2141,9 +2143,20 @@ static int ipa3_wwan_remove(struct platform_device *pdev)
 static int rmnet_ipa_ap_suspend(struct device *dev)
 {
 	struct net_device *netdev = ipa3_netdevs[0];
-	struct ipa3_wwan_private *wwan_ptr = netdev_priv(netdev);
+	struct ipa3_wwan_private *wwan_ptr;
 
 	IPAWANDBG("Enter...\n");
+	if (netdev == NULL) {
+		IPAWANERR("netdev is NULL.\n");
+		return 0;
+	}
+
+	wwan_ptr = netdev_priv(netdev);
+	if (wwan_ptr == NULL) {
+		IPAWANERR("wwan_ptr is NULL.\n");
+		return 0;
+	}
+
 	/* Do not allow A7 to suspend in case there are oustanding packets */
 	if (atomic_read(&wwan_ptr->outstanding_pkts) != 0) {
 		IPAWANDBG("Outstanding packets, postponing AP suspend.\n");
@@ -2174,7 +2187,8 @@ static int rmnet_ipa_ap_resume(struct device *dev)
 	struct net_device *netdev = ipa3_netdevs[0];
 
 	IPAWANDBG("Enter...\n");
-	netif_wake_queue(netdev);
+	if (netdev)
+		netif_wake_queue(netdev);
 	IPAWANDBG("Exit\n");
 
 	return 0;
@@ -2217,7 +2231,8 @@ static int ipa3_ssr_notifier_cb(struct notifier_block *this,
 			pr_info("IPA received MPSS BEFORE_SHUTDOWN\n");
 			atomic_set(&is_ssr, 1);
 			ipa3_q6_cleanup();
-			netif_stop_queue(ipa3_netdevs[0]);
+			if (ipa3_netdevs[0])
+				netif_stop_queue(ipa3_netdevs[0]);
 			ipa3_qmi_stop_workqueues();
 			ipa3_wan_ioctl_stop_qmi_messages();
 			ipa_stop_polling_stats();
