@@ -1103,7 +1103,7 @@ static int msm_ds2_dap_send_end_point(int dev_map_idx, int endp_idx)
 	ds2_ap_params_obj = &ds2_dap_params[cache_device];
 	pr_debug("%s: cache dev %d, dev_map_idx %d\n", __func__,
 		 cache_device, dev_map_idx);
-	pr_debug("%s: endp - %p %p\n",  __func__,
+	pr_debug("%s: endp - %pK %pK\n",  __func__,
 		 &ds2_dap_params[cache_device], ds2_ap_params_obj);
 
 	params_value = kzalloc(params_length, GFP_KERNEL);
@@ -1189,7 +1189,7 @@ static int msm_ds2_dap_send_cached_params(int dev_map_idx,
 	}
 
 	ds2_ap_params_obj = &ds2_dap_params[cache_device];
-	pr_debug("%s: cached param - %p %p, cache_device %d\n", __func__,
+	pr_debug("%s: cached param - %pK %pK, cache_device %d\n", __func__,
 		 &ds2_dap_params[cache_device], ds2_ap_params_obj,
 		 cache_device);
 	params_value = kzalloc(params_length, GFP_KERNEL);
@@ -1518,6 +1518,14 @@ static int msm_ds2_dap_get_param(u32 cmd, void *arg)
 		pr_err("%s: called in bypass_type %d bypass %d\n", __func__,
 			ds2_dap_params_states.dap_bypass_type,
 			ds2_dap_params_states.dap_bypass);
+		rc = -EINVAL;
+		goto end;
+	}
+
+	/* Return if invalid length */
+	if (dolby_data->length >
+	       (DOLBY_MAX_LENGTH_INDIVIDUAL_PARAM - DOLBY_PARAM_PAYLOAD_SIZE)) {
+		pr_err("Invalid length %d", dolby_data->length);
 		rc = -EINVAL;
 		goto end;
 	}
