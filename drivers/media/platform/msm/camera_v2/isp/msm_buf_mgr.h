@@ -20,6 +20,7 @@
 /*Buffer source can be from userspace / HAL*/
 #define BUF_SRC(id) (id & ISP_NATIVE_BUF_BIT)
 #define ISP_SHARE_BUF_CLIENT 2
+#define BUF_MGR_NUM_BUF_Q 28
 
 #ifndef BUF_MGR_NUM_BUF_Q
 #define BUF_MGR_NUM_BUF_Q 28
@@ -127,11 +128,15 @@ struct msm_isp_buf_ops {
 	int (*buf_mgr_init) (struct msm_isp_buf_mgr *buf_mgr,
 		const char *ctx_name, uint16_t num_buf_q);
 	int (*buf_mgr_deinit) (struct msm_isp_buf_mgr *buf_mgr);
+	int (*buf_mgr_debug) (struct msm_isp_buf_mgr *buf_mgr);
+	struct msm_isp_bufq * (*get_bufq)(struct msm_isp_buf_mgr *buf_mgr,
+		uint32_t bufq_handle);
 };
 
 struct msm_isp_buf_mgr {
 	int init_done;
 	uint32_t open_count;
+	uint32_t pagefault_debug;
 	spinlock_t lock;
 	uint16_t num_buf_q;
 	struct msm_isp_bufq *bufq;
