@@ -401,7 +401,7 @@ static void msm_vfe40_process_camif_irq(struct vfe_device *vfe_dev,
 			if (vfe_dev->axi_data.stream_update)
 				msm_isp_axi_stream_update(vfe_dev,
 								1 << VFE_PIX_0);
-			msm_isp_update_framedrop_reg(vfe_dev);
+			msm_isp_update_framedrop_reg(vfe_dev, 1 << VFE_PIX_0);
 		}
 	}
 	if (irq_status0 & (1 << 1))
@@ -606,7 +606,7 @@ static void msm_vfe40_process_reg_update(struct vfe_device *vfe_dev,
 			reg_update(vfe_dev, (1 << VFE_PIX_0));
 		}
 	}
-	msm_isp_update_framedrop_reg(vfe_dev);
+	msm_isp_update_framedrop_reg(vfe_dev, input_src);
 	msm_isp_update_error_frame_count(vfe_dev);
 
 	if ((input_src & (1 << VFE_RAW_0)) ||
@@ -620,11 +620,12 @@ static void msm_vfe40_process_reg_update(struct vfe_device *vfe_dev,
 
 static void msm_vfe40_reg_update(struct vfe_device *vfe_dev, uint32_t input_src)
 {
-	if (vfe_dev->is_split && vfe_dev->pdev->id == ISP_VFE1) {
+	if (vfe_dev->is_split && vfe_dev->pdev->id == ISP_VFE1 &&
+		input_src == VFE_PIX_0) {
 		msm_camera_io_w_mb(input_src,
 			vfe_dev->dual_vfe_res->vfe_base[ISP_VFE0] + 0x378);
 		msm_camera_io_w_mb(input_src, vfe_dev->vfe_base + 0x378);
-	} else if (!vfe_dev->is_split) {
+	} else if (!vfe_dev->is_split || input_src != VFE_PIX_0) {
 		msm_camera_io_w_mb(input_src, vfe_dev->vfe_base + 0x378);
 	}
 }

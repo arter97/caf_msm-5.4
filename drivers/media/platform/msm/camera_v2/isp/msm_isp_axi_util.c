@@ -23,19 +23,25 @@
 #define MSM_ISP_MIN_AB 450000000
 #define MSM_ISP_MIN_IB 900000000
 
-int msm_isp_axi_create_stream(
-	struct msm_vfe_axi_shared_data *axi_data,
+static int msm_isp_axi_create_stream(
+	struct vfe_device *vfe_dev,
 	struct msm_vfe_axi_stream_request_cmd *stream_cfg_cmd)
 {
-	int i, rc = -1;
-	for (i = 0; i < MAX_NUM_STREAM; i++) {
-		if (axi_data->stream_info[i].state == AVAILABLE)
-			break;
+	int rc = -1;
+	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
+	int i = stream_cfg_cmd->stream_src;
+
+	if (i >= VFE_AXI_SRC_MAX) {
+		pr_err("%s:%d invalid stream_src %d\n", __func__, __LINE__,
+		stream_cfg_cmd->stream_src);
+		return -EINVAL;
 	}
 
-	if (i == MAX_NUM_STREAM) {
-		pr_err("%s: No free stream\n", __func__);
-		return rc;
+	if (axi_data->stream_info[i].state != AVAILABLE) {
+		pr_err("%s:%d invalid state %d expected %d for src %d\n",
+		__func__, __LINE__, axi_data->stream_info[i].state,
+		AVAILABLE, i);
+		return -EINVAL;
 	}
 
 	if ((axi_data->stream_handle_cnt << 8) == 0)
@@ -258,18 +264,33 @@ void msm_isp_axi_reserve_wm(struct msm_vfe_axi_shared_data *axi_data,
 {
 	int i, j;
 	for (i = 0; i < stream_info->num_planes; i++) {
-		for (j = 0; j < axi_data->hw_info->num_wm; j++) {
-			if (!axi_data->free_wm[j]) {
-				axi_data->free_wm[j] =
-					stream_info->stream_handle;
-				axi_data->wm_image_size[j] =
-					msm_isp_axi_get_plane_size(
-						stream_info, i);
-				axi_data->num_used_wm++;
-				break;
+		if (stream_info->stream_src < RDI_INTF_0) {
+			for (j = 0; j < axi_data->hw_info->num_wm; j++) {
+				if (!axi_data->free_wm[j]) {
+					axi_data->free_wm[j] =
+						stream_info->stream_handle;
+					axi_data->wm_image_size[j] =
+						msm_isp_axi_get_plane_size(
+							stream_info, i);
+					axi_data->num_used_wm++;
+					break;
+				}
 			}
+			stream_info->wm[i] = j;
+		} else {
+			for (j = axi_data->hw_info->num_wm - 1; j >= 0 ; j--) {
+				if (!axi_data->free_wm[j]) {
+					axi_data->free_wm[j] =
+						stream_info->stream_handle;
+					axi_data->wm_image_size[j] =
+						msm_isp_axi_get_plane_size(
+							stream_info, i);
+					axi_data->num_used_wm++;
+					break;
+				}
+			}
+			stream_info->wm[i] = j;
 		}
-		stream_info->wm[i] = j;
 	}
 }
 
@@ -377,14 +398,15 @@ int msm_isp_axi_check_stream_state(
 	return rc;
 }
 
-void msm_isp_update_framedrop_reg(struct vfe_device *vfe_dev)
+void msm_isp_update_framedrop_reg(struct vfe_device *vfe_dev, uint8_t input_src)
 {
 	int i;
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
 	struct msm_vfe_axi_stream *stream_info;
 	for (i = 0; i < MAX_NUM_STREAM; i++) {
 		stream_info = &axi_data->stream_info[i];
-		if (stream_info->state != ACTIVE)
+		if ((stream_info->state != ACTIVE) || !(input_src &
+			(1 <<SRC_TO_INTF(stream_info->stream_src))))
 			continue;
 
 		if (stream_info->runtime_framedrop_update) {
@@ -517,7 +539,7 @@ int msm_isp_request_axi_stream(struct vfe_device *vfe_dev, void *arg)
 	struct msm_vfe_axi_stream *stream_info;
 
 	rc = msm_isp_axi_create_stream(
-		&vfe_dev->axi_data, stream_cfg_cmd);
+		vfe_dev, stream_cfg_cmd);
 	if (rc) {
 		pr_err("%s: create stream failed\n", __func__);
 		return rc;
