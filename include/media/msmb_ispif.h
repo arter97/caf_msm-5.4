@@ -1,9 +1,5 @@
-#ifndef UAPI_MSMB_ISPIF_H
-#define UAPI_MSMB_ISPIF_H
-
-#include <linux/types.h>
-#include <linux/ioctl.h>
-#include <linux/videodev2.h>
+#ifndef MSM_CAM_ISPIF_H
+#define MSM_CAM_ISPIF_H
 
 #define CSID_VERSION_V20                      0x02000011
 #define CSID_VERSION_V22                      0x02001000
@@ -126,5 +122,4 @@ struct ispif_cfg_data {
 #define VIDIOC_MSM_ISPIF_CFG \
 	_IOWR('V', BASE_VIDIOC_PRIVATE, struct ispif_cfg_data)
 
-#endif
-
+#endif /* MSM_CAM_ISPIF_H */
