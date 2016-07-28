@@ -124,6 +124,7 @@ void wcnss_suspend_notify(void);
 void wcnss_resume_notify(void);
 void wcnss_riva_log_debug_regs(void);
 void wcnss_pronto_log_debug_regs(void);
+void wcnss_pronto_log_debug_regs_ssr(void);
 int wcnss_is_hw_pronto_ver3(void);
 int wcnss_device_ready(void);
 bool wcnss_cbc_complete(void);
