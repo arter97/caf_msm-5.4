@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, 2014-2015 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2014-2016 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2181,7 +2181,8 @@ static struct gpiomux_setting gsbi4_uartdm_active = {
 static struct gpiomux_setting gsbi4_uartdm_suspended = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
-	.pull = GPIOMUX_PULL_DOWN,
+	.pull = GPIOMUX_PULL_NONE,
+	.dir = GPIOMUX_IN,
 };
 
 static struct gpiomux_setting gsbi6_uartdm_active = {
