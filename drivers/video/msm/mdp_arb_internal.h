@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -118,6 +118,8 @@ struct mdp_arb_notify_list {
  * @sysfs_created: if sysfs is successfully created.
  * @fb_notif: callback to receive fb notification.
  * @fb_notif_registered: if fb notification is successfully registered.
+ * @event_work_notify_list: notify list for event work thread.
+ * @overlay_set_notify_list: notify list when during overlay set.
  */
 struct mdp_arb_device_info {
 	struct device *arb_dev;
@@ -134,6 +136,8 @@ struct mdp_arb_device_info {
 	bool sysfs_created;
 	struct notifier_block fb_notif;
 	bool fb_notif_registered;
+	struct mdp_arb_notify_list event_work_notify_list;
+	struct mdp_arb_notify_list overlay_set_notify_list;
 };
 
 #endif /*_MDP_ARB_INTERNAL_H*/
