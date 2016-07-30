@@ -200,6 +200,8 @@ enum usb_vdd_value {
  * @bus_scale_table: parameters for bus bandwidth requirements
  * @mhl_dev_name: MHL device name used to register with MHL driver.
  * @mpm_xo_wakeup_int: MPM to KRAIT interrupt for remote wakeup
+ * @allow_phy_regulators_lpm: Put USB PHY 1P8 and 3P3 regulators
+ *              in LPM mode during LPM.
  * @wakelock_in_peripheral_mode: Acquire wake lock in peripheral mode.
  */
 struct msm_otg_platform_data {
@@ -222,6 +224,7 @@ struct msm_otg_platform_data {
 	bool wakelock_in_peripheral_mode;
 	unsigned int mpm_xo_wakeup_int;
 	bool allow_host_vdd_min_wo_rework;
+	bool allow_phy_regulators_lpm;
 	bool is_ext_hub;
 	int hub_rst_gpio;
 	int hub_vdd_gpio;
@@ -399,6 +402,12 @@ struct msm_otg {
 	 * Allow PHY_RETENTION in HOST mode
 	 */
 #define ALLOW_HOST_MODE_PHY_RETENTION	BIT(4)
+	/*
+	 * Allowing HSUSB 3.3v and 1.8v analog regulators
+	 * into LPM while going to USB low power mode.
+	 */
+#define ALLOW_PHY_REGULATORS_LPM       BIT(5)
+
 	unsigned long lpm_flags;
 #define PHY_PWR_COLLAPSED		BIT(0)
 #define PHY_RETENTIONED			BIT(1)

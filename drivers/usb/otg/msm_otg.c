@@ -61,12 +61,12 @@
 #define USB_PHY_3P3_VOL_MIN	3050000 /* uV */
 #define USB_PHY_3P3_VOL_MAX	3300000 /* uV */
 #define USB_PHY_3P3_HPM_LOAD	50000	/* uA */
-#define USB_PHY_3P3_LPM_LOAD	4000	/* uA */
+#define USB_PHY_3P3_LPM_LOAD	3000	/* uA */
 
 #define USB_PHY_1P8_VOL_MIN	1800000 /* uV */
 #define USB_PHY_1P8_VOL_MAX	1800000 /* uV */
 #define USB_PHY_1P8_HPM_LOAD	50000	/* uA */
-#define USB_PHY_1P8_LPM_LOAD	4000	/* uA */
+#define USB_PHY_1P8_LPM_LOAD	3000	/* uA */
 
 #define USB_PHY_VDD_DIG_VOL_NONE	0 /*uV */
 #define USB_PHY_VDD_DIG_VOL_MIN	1045000 /* uV */
@@ -1378,8 +1378,13 @@ static int msm_otg_suspend(struct msm_otg *motg)
 
 	if (motg->lpm_flags & PHY_RETENTIONED &&
 			motg->caps & ALLOW_PHY_POWER_COLLAPSE) {
-		dev_err(motg->phy.dev, "USB vote for PHY LDO's enable and LPM ON\n");
-		msm_hsusb_ldo_enable(motg, USB_PHY_REG_LPM_ON);
+		if (motg->caps & ALLOW_PHY_REGULATORS_LPM) {
+			dev_err(motg->phy.dev, "USB vote for PHY LDO's enable and LPM ON\n");
+			msm_hsusb_ldo_enable(motg, USB_PHY_REG_LPM_ON);
+		} else {
+			dev_err(motg->phy.dev, "USB vote for PHY LDO's OFF\n");
+			msm_hsusb_ldo_enable(motg, USB_PHY_REG_OFF);
+		}
 		motg->lpm_flags |= PHY_PWR_COLLAPSED;
 		msm_hsusb_config_vddcx(motg, 0);
 		msm_hsusb_mhl_switch_enable(motg, 0);
@@ -1438,8 +1443,13 @@ static int msm_otg_resume(struct msm_otg *motg)
 	}
 
 	if (motg->lpm_flags & PHY_PWR_COLLAPSED) {
-		dev_dbg(motg->phy.dev, "USB vote for PHY LDO's enable and LPM OFF\n");
-		msm_hsusb_ldo_enable(motg, USB_PHY_REG_LPM_OFF);
+		if (motg->caps & ALLOW_PHY_REGULATORS_LPM) {
+			dev_dbg(motg->phy.dev, "USB vote for PHY LDO's enable and LPM OFF\n");
+			msm_hsusb_ldo_enable(motg, USB_PHY_REG_LPM_OFF);
+		} else {
+			dev_dbg(motg->phy.dev, "USB vote for PHY LDO's ON\n");
+			msm_hsusb_ldo_enable(motg, USB_PHY_REG_ON);
+		}
 		motg->lpm_flags &= ~PHY_PWR_COLLAPSED;
 	}
 
@@ -4452,6 +4462,9 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 
 	if (motg->pdata->mpm_xo_wakeup_int)
 		motg->caps |= ALLOW_XO_SHUTDOWN;
+
+	if (motg->pdata->allow_phy_regulators_lpm)
+		motg->caps |= ALLOW_PHY_REGULATORS_LPM;
 
 	if (motg->pdata->bus_scale_table) {
 		motg->bus_perf_client =
