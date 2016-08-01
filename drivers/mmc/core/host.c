@@ -116,9 +116,11 @@ static int mmc_host_suspend(struct device *dev)
 	spin_unlock_irqrestore(&host->clk_lock, flags);
 	if (!pm_runtime_suspended(dev)) {
 		ret = mmc_suspend_host(host);
-		if (ret < 0)
+		if (ret < 0) {
 			pr_err("%s: %s: failed: ret: %d\n", mmc_hostname(host),
-			       __func__, ret);
+					__func__, ret);
+			goto out;
+		}
 	}
 	/*
 	 * If SDIO function driver doesn't want to power off the card,
@@ -133,8 +135,13 @@ static int mmc_host_suspend(struct device *dev)
 		spin_unlock_irqrestore(&host->clk_lock, flags);
 		mmc_set_ios(host);
 	}
+
+out:
 	spin_lock_irqsave(&host->clk_lock, flags);
-	host->dev_status = DEV_SUSPENDED;
+	if (ret)
+		host->dev_status = DEV_RESUMED;
+	else
+		host->dev_status = DEV_SUSPENDED;
 	spin_unlock_irqrestore(&host->clk_lock, flags);
 	return ret;
 }
