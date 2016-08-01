@@ -1,4 +1,5 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, 2018, The Linux Foundation.
+ * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -355,6 +356,14 @@ int msm_spm_set_low_power_mode(unsigned int mode, bool notify_rpm)
 	return msm_spm_dev_set_low_power_mode(dev, mode, notify_rpm);
 }
 EXPORT_SYMBOL(msm_spm_set_low_power_mode);
+
+void msm_spm_set_rpm_hs(bool allow_rpm_hs)
+{
+	struct msm_spm_device *dev = &__get_cpu_var(msm_cpu_spm_device);
+
+	dev->allow_rpm_hs = allow_rpm_hs;
+}
+EXPORT_SYMBOL(msm_spm_set_rpm_hs);
 
 /**
  * msm_spm_init(): Board initalization function
