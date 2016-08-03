@@ -1341,13 +1341,13 @@ void msm_isp_ub_list_debug(struct list_head *ub_free_list,
 {
 	struct msm_isp_ub_list *entry;
 	list_for_each_entry(entry, ub_free_list, list) {
-		pr_err("UB free chunk start %4d, end %4d, size %4d\n",
+		ISP_DBG("UB free chunk start %4d, end %4d, size %4d\n",
 			entry->start,
 			entry->start+entry->size-1,
 			entry->size);
 	}
 	list_for_each_entry(entry, ub_used_list, list) {
-		pr_err("UB used chunk start %4d, end %4d, size %4d from %x\n",
+		ISP_DBG("UB used chunk start %4d, end %4d, size %4d from %x\n",
 			entry->start,
 			entry->start+entry->size-1,
 			entry->size,
