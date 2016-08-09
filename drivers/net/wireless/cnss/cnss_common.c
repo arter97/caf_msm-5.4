@@ -25,7 +25,8 @@
 enum cnss_dev_bus_type {
 	CNSS_BUS_NONE = -1,
 	CNSS_BUS_PCI,
-	CNSS_BUS_SDIO
+	CNSS_BUS_SDIO,
+	CNSS_BUS_DONE
 };
 
 void cnss_init_work(struct work_struct *work, work_func_t func)
@@ -112,7 +113,10 @@ EXPORT_SYMBOL(cnss_set_cpus_allowed_ptr);
 
 enum cnss_dev_bus_type cnss_get_dev_bus_type(struct device *dev)
 {
-	if (!dev && !dev->bus)
+	if (!dev)
+		return CNSS_BUS_DONE;
+
+	if (!dev->bus)
 		return CNSS_BUS_NONE;
 
 	if (memcmp(dev->bus->name, "sdio", 4) == 0)
