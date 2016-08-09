@@ -2144,10 +2144,10 @@ static void rcu_prepare_for_idle(int cpu)
 		per_cpu(rcu_dyntick_holdoff, cpu) = jiffies;
 		if (rcu_cpu_has_nonlazy_callbacks(cpu))
 			hrtimer_start(&per_cpu(rcu_idle_gp_timer, cpu),
-				      rcu_idle_gp_wait, HRTIMER_MODE_REL);
+				      rcu_idle_gp_wait, HRTIMER_MODE_REL | HRTIMER_MODE_PINNED);
 		else
 			hrtimer_start(&per_cpu(rcu_idle_gp_timer, cpu),
-				      rcu_idle_lazy_gp_wait, HRTIMER_MODE_REL);
+				      rcu_idle_lazy_gp_wait, HRTIMER_MODE_REL | HRTIMER_MODE_PINNED);
 		return; /* Nothing more to do immediately. */
 	} else if (--per_cpu(rcu_dyntick_drain, cpu) <= 0) {
 		/* We have hit the limit, so time to give up. */
