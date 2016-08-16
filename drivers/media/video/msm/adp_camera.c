@@ -34,6 +34,7 @@
 #define FRAME_DELAY 33333
 #define RDI1_USE_WM 4
 #define MM_CAM_USE_BYPASS 1
+
 static void *k_addr[OVERLAY_COUNT];
 static int alloc_overlay_pipe_flag[OVERLAY_COUNT];
 static struct mdp_overlay overlay_req[OVERLAY_COUNT];
@@ -47,7 +48,8 @@ static uint32_t csid_version;
 static int rdi1_irq_count;
 static struct vfe_axi_output_config_cmd_type vfe_axi_cmd_para;
 static struct msm_camera_vfe_params_t vfe_para;
-static struct work_struct wq_mdp_queue_overlay_buffers;
+static struct work_struct w_mdp_queue_overlay_buffers;
+static struct workqueue_struct *wq_mdp_queue_overlay_buffers;
 
 static int adp_rear_camera_enable(void);
 static void preview_buffer_return_by_index(int i);
@@ -62,10 +64,12 @@ static int g_preview_height = 507;
 static int g_preview_width = 720;
 static int g_preview_buffer_length;
 static int g_preview_buffer_size;
-#define DEFAULT_SRC_X_OFFSET 27
 
+#define DEFAULT_SRC_X_OFFSET 27
+#define EVEN_FIELD 0x10
 /* MDP buffer fifo */
 #define MDP_BUF_QUEUE_LENGTH (PREVIEW_BUFFER_COUNT+1)
+
 struct mdp_buf_queue {
 	int read_idx;
 	int write_idx;
@@ -136,6 +140,13 @@ struct adp_camera_ctxt {
 
 	/* debug */
 	struct dentry *debugfs_root;
+
+	/*Interweave and Commit once in 2 frames: 30fps*/
+	unsigned char commit_count;
+	bool even_field;
+	bool first_commit;
+	/*Maintains previous frame drop status*/
+	bool prev_frame_dropped;
 };
 static struct adp_camera_ctxt *adp_cam_ctxt;
 
@@ -598,15 +609,93 @@ static int preview_overlay_update(void)
 	return rc;
 }
 
+static void interweave_frame(int srcidx,int destidx, bool even_field)
+{
+	unsigned char* preview_base_addr = k_addr[OVERLAY_CAMERA_PREVIEW];
+	unsigned char* dest = (unsigned char*)(preview_base_addr +
+				(destidx * g_preview_buffer_length));
+	unsigned char* src = (unsigned char*)(preview_base_addr +
+				(srcidx * g_preview_buffer_length));
+	int i = 0;
+	int buffer_stride = (g_preview_width * 2);
+	int buffer_stride_double = (g_preview_width * 2 * 2);
+	if(!even_field) {
+		dest += buffer_stride;
+		src += buffer_stride;
+	}
+	for (i = 0; i < (g_preview_height >> 1); i++)
+	{
+		memcpy(dest, src, buffer_stride);
+		dest += buffer_stride_double;
+		src += buffer_stride_double;
+	}
+
+	if(even_field) {
+		/* copy last line */
+		memcpy(dest, src, buffer_stride);
+	}
+}
 static void mdp_queue_overlay_buffers(struct work_struct *work)
 {
-	int buffer_index = 0;
+	int buffer_index = 0, buffer_index2 = 0;
+	unsigned int status = 0;
 	static int is_first_commit = true;
 	int ret = 0;
 	struct mdp_display_commit commit_data;
+
+	adp_cam_ctxt->commit_count++;
+	/*Read the status of the field register from the bridge chip*/
+	if ( adp_cam_ctxt->first_commit == false) {
+		status = V4L2_IN_ST_NO_SIGNAL;
+		ret = msm_ba_g_input_field_status(
+			adp_cam_ctxt->ba_inst_hdlr, &status);
+		if (ret) {
+			pr_err("%s getting field status failed =%d", __func__,
+				ret);
+			return;
+		}
+		adp_cam_ctxt->even_field =
+			((status & EVEN_FIELD) == EVEN_FIELD)?true:false;
+		pr_debug("%s getting field status VALUE =%d", __func__,
+				status);
+		adp_cam_ctxt->first_commit = true;
+		if(adp_cam_ctxt->even_field == false) {
+			/*Skip first frame if ODD*/
+			adp_cam_ctxt->commit_count = 0;
+			adp_cam_ctxt->even_field = true;
+
+			buffer_index = mdp_buf_queue_deq();
+			if (buffer_index < 0) {
+				pr_err("%s: mdp buf queue empty\n", __func__);
+				return;
+			} else if (buffer_index > PREVIEW_BUFFER_COUNT - 1) {
+				pr_err("%s: mdp buf queue invalid buffer %d/n",
+					__func__, buffer_index);
+				return;
+			}
+			preview_buffer_return_by_index(buffer_index);
+		}
+		pr_debug("%s: ret = %d, Field = %d, Commit_cnt = %d\n",
+	__func__, ret, adp_cam_ctxt->even_field, adp_cam_ctxt->commit_count);
+	}
+
+	if(adp_cam_ctxt->commit_count == 2) {
+	adp_cam_ctxt->commit_count = 0;
+
+
+	/* dequeue next buffer to display */
+	buffer_index2 = mdp_buf_queue_deq();
+	if (buffer_index2 < 0) {
+		pr_err("%s: mdp buf queue empty\n", __func__);
+		return;
+	} else if (buffer_index2 > PREVIEW_BUFFER_COUNT - 1) {
+		pr_err("%s: mdp buf queue invalid buffer %d/n",
+			__func__, buffer_index2);
+		return;
+	}
+
 	/* dequeue next buffer to display */
 	buffer_index = mdp_buf_queue_deq();
-
 	if (buffer_index < 0) {
 		pr_err("%s: mdp buf queue empty\n", __func__);
 		return;
@@ -615,6 +704,10 @@ static void mdp_queue_overlay_buffers(struct work_struct *work)
 			__func__, buffer_index);
 		return;
 	}
+	/*Interweave the frames together */
+	interweave_frame(buffer_index2, buffer_index,
+				adp_cam_ctxt->even_field);
+
 	if (adp_cam_ctxt->state == CAMERA_PREVIEW_ENABLED) {
 		overlay_data[OVERLAY_CAMERA_PREVIEW].id =
 				overlay_req[OVERLAY_CAMERA_PREVIEW].id;
@@ -648,6 +741,8 @@ static void mdp_queue_overlay_buffers(struct work_struct *work)
 		}
 	}
 	preview_buffer_return_by_index(buffer_index);
+	preview_buffer_return_by_index(buffer_index2);
+    }
 }
 #else
 static int preview_overlay_update(void)
@@ -737,6 +832,11 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 	rdi1_irq_count++;
 	/*RDI1*/
 	if (axi_ctrl->share_ctrl->operation_mode & VFE_OUTPUTS_RDI1) {
+		if (adp_cam_ctxt->prev_frame_dropped == true) {
+			adp_cam_ctxt->prev_frame_dropped = false;
+			pr_err("Frame skipped\n");
+		}
+		else {
 		/* check if there is free buffer,
 		 * if there is, then put it to ping pong
 		 */
@@ -764,6 +864,7 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 				preview_buffer_return_by_index(buffer_index);
 				pr_err("Failed to enq buf %d, dropped frame",
 				      buffer_index);
+				adp_cam_ctxt->prev_frame_dropped = true;
 			}
 
 			/* Only log once for early camera kpi */
@@ -775,7 +876,8 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 				is_camera_first_frame = false;
 			}
 
-			schedule_work(&wq_mdp_queue_overlay_buffers);
+			queue_work(wq_mdp_queue_overlay_buffers, &w_mdp_queue_overlay_buffers);
+
 			if (free_buf) {
 				vfe32_put_ch_addr(ping_pong,
 					axi_ctrl->share_ctrl->vfebase,
@@ -795,8 +897,11 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 				outpath.out3.capture_cnt = 0;
 		} else {
 			axi_ctrl->share_ctrl->outpath.out3.frame_drop_cnt++;
-			pr_debug("%s: no free buffer for rdi1!\n",
-					__func__);
+			pr_err("%s: no free buffer for rdi1! Frame Drop #%d\n",
+				__func__,
+			axi_ctrl->share_ctrl->outpath.out3.frame_drop_cnt);
+			adp_cam_ctxt->prev_frame_dropped = true;
+		}
 		}
 	}
 }
@@ -1479,6 +1584,10 @@ static int adp_camera_disable_stream(void)
 
 	adp_cam_ctxt->camera_stream_enabled = false;
 
+	adp_cam_ctxt->commit_count = 0;
+	adp_cam_ctxt->even_field = false;
+	adp_cam_ctxt->first_commit = false;
+	adp_cam_ctxt->prev_frame_dropped = false;
 	return 0;
 }
 
@@ -1515,6 +1624,10 @@ static int adp_camera_enable_stream(void)
 
 	adp_cam_ctxt->camera_stream_enabled = true;
 
+	adp_cam_ctxt->commit_count = 0;
+	adp_cam_ctxt->even_field = false;
+	adp_cam_ctxt->first_commit = false;
+	adp_cam_ctxt->prev_frame_dropped = false;
 exit:
 	return rc;
 }
@@ -2463,7 +2576,14 @@ static int init_camera_kthread(void)
 	pr_debug("%s: entry\n", __func__);
 	init_completion(&preview_enabled);
 	init_completion(&preview_disabled);
-	INIT_WORK(&wq_mdp_queue_overlay_buffers, mdp_queue_overlay_buffers);
+	INIT_WORK(&w_mdp_queue_overlay_buffers, mdp_queue_overlay_buffers);
+	wq_mdp_queue_overlay_buffers = alloc_workqueue("mdp_queue_overlay_buffers", WQ_MEM_RECLAIM|
+		WQ_HIGHPRI, 1);
+	if ((!wq_mdp_queue_overlay_buffers)) {
+		pr_err(" Work Queue Creation failed");
+	return -ENOMEM;
+	}
+	pr_debug("Work Queue Created with priority set");
 	ret = adp_rear_camera_enable();
 	if (ret)
 		return ret;
@@ -2489,9 +2609,10 @@ static void exit_camera_kthread(void)
 	pr_debug("%s: begin axi release\n", __func__);
 
 	adp_rear_camera_disable();
-	cancel_work_sync(&wq_mdp_queue_overlay_buffers);
+	cancel_work_sync(&w_mdp_queue_overlay_buffers);
 
 	adp_cam_ctxt->state = CAMERA_UNINITIALIZED;
+	destroy_workqueue(wq_mdp_queue_overlay_buffers);
 
 	place_marker("rvc thread disabled");
 

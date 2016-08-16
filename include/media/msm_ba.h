@@ -18,6 +18,9 @@
 #include <media/v4l2-device.h>
 #include <linux/poll.h>
 
+/*  Control ID to fetch register Values */
+#define MSM_BA_CID_FIELD_STATUS		0x0001
+
 enum msm_ba_ip {
 	BA_IP_CVBS_0 = 0,
 	BA_IP_CVBS_1,
@@ -57,6 +60,7 @@ int msm_ba_s_priority(void *instance, enum v4l2_priority prio);
 int msm_ba_enum_input(void *instance, struct v4l2_input *input);
 int msm_ba_g_input(void *instance, unsigned int *index);
 int msm_ba_s_input(void *instance, unsigned int index);
+int msm_ba_g_input_field_status(void *instance, unsigned int *status);
 int msm_ba_enum_output(void *instance, struct v4l2_output *output);
 int msm_ba_g_output(void *instance, unsigned int *index);
 int msm_ba_s_output(void *instance, unsigned int index);

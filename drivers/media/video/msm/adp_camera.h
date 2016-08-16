@@ -31,7 +31,7 @@
 #include "vfe/msm_vfe32.h"
 #include "../../../video/msm/msm_fb.h"
 
-#define PREVIEW_BUFFER_COUNT 3
+#define PREVIEW_BUFFER_COUNT 6
 enum camera_preview_buffer_state {
 	CAMERA_PREVIEW_BUFFER_STATE_UNUSED,
 	CAMERA_PREVIEW_BUFFER_STATE_INITIALIZED, /* free, can be used */

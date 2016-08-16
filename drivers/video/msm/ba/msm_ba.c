@@ -198,6 +198,30 @@ int msm_ba_g_input(void *instance, unsigned int *index)
 }
 EXPORT_SYMBOL(msm_ba_g_input);
 
+int msm_ba_g_input_field_status(void *instance, unsigned int *status)
+{
+	struct msm_ba_inst *inst = instance;
+	struct v4l2_subdev *sd = NULL;
+	int rc = 0;
+	struct v4l2_control ba_field_status;
+	if ((!inst) || (!status))
+		return -EINVAL;
+	sd = inst->sd;
+	if (!sd) {
+		dprintk(BA_ERR, "No sd registered");
+		return -EINVAL;
+	}
+	/* get current field status */
+	ba_field_status.id = MSM_BA_CID_FIELD_STATUS;
+	ba_field_status.value = -EINVAL;
+	rc = v4l2_subdev_call(
+		inst->sd, core, g_ctrl, &ba_field_status);
+	(*status) = (unsigned int)ba_field_status.value;
+	return (rc);
+
+}
+EXPORT_SYMBOL(msm_ba_g_input_field_status);
+
 int msm_ba_s_input(void *instance, unsigned int index)
 {
 	struct msm_ba_inst *inst = instance;

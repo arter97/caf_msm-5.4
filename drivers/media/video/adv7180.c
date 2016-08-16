@@ -140,6 +140,7 @@
 #define ADV7180_REG_ICR1	0x2043
 #define ADV7180_REG_IMR1	0x2044
 
+#define ADV7180_REG_RAW2	0x2045
 #define ADV7180_REG_ISR2	0x2046
 #define ADV7180_REG_ICR2	0x2047
 #define ADV7180_REG_IMR2	0x2048
@@ -654,6 +655,28 @@ static int adv7180_g_input_status(struct v4l2_subdev *sd, u32 *status)
 		return ret;
 
 	ret = __adv7180_status(state, status, NULL);
+	mutex_unlock(&state->mutex);
+	return ret;
+}
+
+static int adv7180_g_crtl(struct v4l2_subdev *sd, struct v4l2_control * ba_field_status)
+{
+	struct adv7180_state *state = to_state(sd);
+	int ret = 0;
+	if(!ba_field_status)
+		return -EINVAL;
+	ret = mutex_lock_interruptible(&state->mutex);
+	if (ret)
+		return ret;
+
+	switch (ba_field_status->id) {
+	case MSM_BA_CID_FIELD_STATUS:
+		ba_field_status->value = adv7180_read(state, ADV7180_REG_RAW2);
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
 	mutex_unlock(&state->mutex);
 	return ret;
 }
@@ -1202,6 +1225,7 @@ static const struct v4l2_subdev_video_ops adv7180_video_ops = {
 
 
 static const struct v4l2_subdev_core_ops adv7180_core_ops = {
+	.g_ctrl = adv7180_g_crtl,
 	.s_std = adv7180_s_std,
 	.s_power = adv7180_s_power,
 };
