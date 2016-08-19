@@ -38,6 +38,7 @@
 static struct of_device_id bt_power_match_table[] = {
 	{	.compatible = "qca,ar3002" },
 	{	.compatible = "qca,qca6174" },
+	{	.compatible = "qca,qca6290" },
 	{}
 };
 
@@ -156,9 +157,6 @@ static int bt_configure_vreg(struct bt_power_vreg_data *vreg)
 static int bt_configure_gpios(int on)
 {
 	int rc = 0;
-#ifdef CONFIG_BTFM_CHEROKEE
-	BT_PWR_DBG("%s Skip gpio control for Cherokee ( %d)", __func__, on);
-#else
 	int bt_reset_gpio = bt_power_pdata->bt_gpio_sys_rst;
 
 	BT_PWR_DBG("%s bt_gpio= %d on: %d", __func__, bt_reset_gpio, on);
@@ -176,6 +174,7 @@ static int bt_configure_gpios(int on)
 			return rc;
 		}
 		msleep(50);
+
 		rc = gpio_direction_output(bt_reset_gpio, 1);
 		if (rc) {
 			BT_PWR_ERR("Unable to set direction\n");
@@ -186,7 +185,6 @@ static int bt_configure_gpios(int on)
 		gpio_set_value(bt_reset_gpio, 0);
 		msleep(100);
 	}
-#endif
 	return rc;
 }
 
@@ -240,7 +238,7 @@ static int bluetooth_power(int on)
 				goto chip_pwd_fail;
 			}
 		}
-		if (bt_power_pdata->bt_gpio_sys_rst) {
+		if (bt_power_pdata->bt_gpio_sys_rst > 0) {
 			rc = bt_configure_gpios(on);
 			if (rc < 0) {
 				BT_PWR_ERR("bt_power gpio config failed");
@@ -250,7 +248,7 @@ static int bluetooth_power(int on)
 	} else {
 		bt_configure_gpios(on);
 gpio_fail:
-		if (bt_power_pdata->bt_gpio_sys_rst)
+		if (bt_power_pdata->bt_gpio_sys_rst > 0)
 			gpio_free(bt_power_pdata->bt_gpio_sys_rst);
 		bt_vreg_disable(bt_power_pdata->bt_chip_pwd);
 chip_pwd_fail:
@@ -420,46 +418,44 @@ static int bt_power_populate_dt_pinfo(struct platform_device *pdev)
 		bt_power_pdata->bt_gpio_sys_rst =
 			of_get_named_gpio(pdev->dev.of_node,
 						"qca,bt-reset-gpio", 0);
-		if (bt_power_pdata->bt_gpio_sys_rst < 0) {
+		if (bt_power_pdata->bt_gpio_sys_rst < 0)
 			BT_PWR_ERR("bt-reset-gpio not provided in device tree");
-			return bt_power_pdata->bt_gpio_sys_rst;
-		}
+
 		rc = bt_dt_parse_vreg_info(&pdev->dev,
 					&bt_power_pdata->bt_vdd_core,
 					"qca,bt-vdd-core");
 		if (rc < 0)
-			return rc;
+			BT_PWR_ERR("bt-vdd-core not provided in device tree");
 
 		rc = bt_dt_parse_vreg_info(&pdev->dev,
 					&bt_power_pdata->bt_vdd_io,
 					"qca,bt-vdd-io");
 		if (rc < 0)
-			return rc;
+			BT_PWR_ERR("bt-vdd-io not provided in device tree");
 
 		rc = bt_dt_parse_vreg_info(&pdev->dev,
 					&bt_power_pdata->bt_vdd_xtal,
 					"qca,bt-vdd-xtal");
 		if (rc < 0)
-			return rc;
+			BT_PWR_ERR("bt-vdd-xtal not provided in device tree");
 
 		rc = bt_dt_parse_vreg_info(&pdev->dev,
 					&bt_power_pdata->bt_vdd_pa,
 					"qca,bt-vdd-pa");
 		if (rc < 0)
-			return rc;
+			BT_PWR_ERR("bt-vdd-pa not provided in device tree");
 
 		rc = bt_dt_parse_vreg_info(&pdev->dev,
 					&bt_power_pdata->bt_vdd_ldo,
 					"qca,bt-vdd-ldo");
 		if (rc < 0)
-			return rc;
+			BT_PWR_ERR("bt-vdd-ldo not provided in device tree");
 
 		rc = bt_dt_parse_vreg_info(&pdev->dev,
 					&bt_power_pdata->bt_chip_pwd,
 					"qca,bt-chip-pwd");
 		if (rc < 0)
-			return rc;
-
+			BT_PWR_ERR("bt-chip-pwd not provided in device tree");
 	}
 
 	bt_power_pdata->bt_power_setup = bluetooth_power;
