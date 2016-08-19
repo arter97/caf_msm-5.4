@@ -197,7 +197,7 @@ static void msm_vfe32_process_camif_irq(struct vfe_device *vfe_dev,
 			if (vfe_dev->axi_data.stream_update)
 				msm_isp_axi_stream_update(vfe_dev,
 								1 << VFE_PIX_0);
-			msm_isp_update_framedrop_reg(vfe_dev);
+			msm_isp_update_framedrop_reg(vfe_dev, 1<<VFE_PIX_0);
 		}
 	}
 }
@@ -362,7 +362,7 @@ static void msm_vfe32_process_reg_update(struct vfe_device *vfe_dev,
 		msm_isp_axi_stream_update(vfe_dev, input_src);
 	if (atomic_read(&vfe_dev->stats_data.stats_update))
 		msm_isp_stats_stream_update(vfe_dev);
-	msm_isp_update_framedrop_reg(vfe_dev);
+	msm_isp_update_framedrop_reg(vfe_dev, input_src);
 	msm_isp_update_error_frame_count(vfe_dev);
 
 	vfe_dev->hw_info->vfe_ops.core_ops.
