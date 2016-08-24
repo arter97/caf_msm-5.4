@@ -749,6 +749,10 @@ static int msm_audio_smmu_init(struct device *dev)
 					   MSM_AUDIO_ION_VA_LEN);
 	if (IS_ERR(mapping))
 		return PTR_ERR(mapping);
+	else if (!mapping) {
+		pr_err("%s: mapping is NULL\n", __func__);
+		return -EINVAL;
+	}
 
 	iommu_domain_set_attr(mapping->domain,
 				DOMAIN_ATTR_COHERENT_HTW_DISABLE,
