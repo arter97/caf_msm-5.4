@@ -752,6 +752,8 @@ static ssize_t vsync_reg_write(
 	debug_buf[count] = 0;	/* end of string */
 
 	cnt = sscanf(debug_buf, "%x", &enable);
+	if (cnt != 1)
+		return -EFAULT;
 
 	mdp_dmap_vsync_set(enable);
 
