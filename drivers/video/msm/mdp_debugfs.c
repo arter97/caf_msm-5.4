@@ -971,12 +971,18 @@ static int mddi_reg_release(struct inode *inode, struct file *file)
 
 static void mddi_reg_write(int ndx, uint32 off, uint32 data)
 {
-	char *base = NULL;
+	char *base;
 
 	if (ndx)
 		base = (char *)msm_emdh_base;
 	else
 		base = (char *)msm_pmdh_base;
+
+	if (base == NULL) {
+		printk(KERN_INFO "%s: base offset is not set properly. \
+			Please check if MDDI enables correctly\n", __func__);
+		return;
+	}
 
 	if (off > MDDI_MAX_OFFSET) {
 		printk(KERN_INFO "%s: Invalid offset=%x > %x\n", __func__,
@@ -1190,8 +1196,8 @@ static ssize_t emdh_reg_write(
 	size_t count,
 	loff_t *ppos)
 {
-	uint32 off = 0, data = 0;
-	int cnt = 0;
+	uint32 off, data;
+	int cnt;
 
 	if (count >= sizeof(debug_buf))
 		return -EFAULT;
@@ -1202,6 +1208,14 @@ static ssize_t emdh_reg_write(
 	debug_buf[count] = 0;	/* end of string */
 
 	cnt = sscanf(debug_buf, "%x %x", &off, &data);
+	if (cnt != 2)
+		return -EFAULT;
+
+	if (off > MDDI_MAX_OFFSET) {
+		printk(KERN_INFO "%s: Invalid offset=%x > %x\n", __func__,
+				off, MDDI_MAX_OFFSET);
+		return -EFAULT;
+	}
 
 	mddi_reg_write(1, off, data);
 
