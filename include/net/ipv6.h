@@ -203,7 +203,6 @@ extern rwlock_t ip6_ra_lock;
  */
 
 struct ipv6_txoptions {
-	atomic_t		refcnt;
 	/* Length of this structure */
 	int			tot_len;
 
@@ -216,7 +215,7 @@ struct ipv6_txoptions {
 	struct ipv6_opt_hdr	*dst0opt;
 	struct ipv6_rt_hdr	*srcrt;	/* Routing Header */
 	struct ipv6_opt_hdr	*dst1opt;
-	struct rcu_head		rcu;
+
 	/* Option buffer, as read by IPV6_PKTOPTIONS, starts here. */
 };
 
