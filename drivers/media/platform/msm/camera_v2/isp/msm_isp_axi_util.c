@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014,2016 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -25,15 +25,11 @@ int msm_isp_axi_create_stream(
 	struct msm_vfe_axi_shared_data *axi_data,
 	struct msm_vfe_axi_stream_request_cmd *stream_cfg_cmd)
 {
-	int i, rc = -1;
-	for (i = 0; i < MAX_NUM_STREAM; i++) {
-		if (axi_data->stream_info[i].state == AVALIABLE)
-			break;
-	}
-
-	if (i == MAX_NUM_STREAM) {
-		pr_err("%s: No free stream\n", __func__);
-		return rc;
+	uint32_t i = stream_cfg_cmd->stream_src;
+	if (i >= MAX_NUM_STREAM) {
+		pr_err("%s:%d invalid stream_src %d\n", __func__, __LINE__,
+			stream_cfg_cmd->stream_src);
+		return -EINVAL;
 	}
 
 	if ((axi_data->stream_handle_cnt << 8) == 0)
@@ -308,11 +304,10 @@ void msm_isp_axi_free_wm(struct msm_vfe_axi_shared_data *axi_data,
 		axi_data->free_wm[stream_info->wm[i]] = 0;
 		axi_data->num_used_wm--;
 	}
-	if (stream_info->stream_src <= IDEAL_RAW) {
+	if (stream_info->stream_src <= IDEAL_RAW)
 		axi_data->num_pix_stream++;
-	} else if (stream_info->stream_src < VFE_AXI_SRC_MAX) {
+	else if (stream_info->stream_src < VFE_AXI_SRC_MAX)
 		axi_data->num_rdi_stream++;
-	}
 }
 
 void msm_isp_axi_reserve_comp_mask(
@@ -1053,8 +1048,7 @@ static void msm_isp_process_done_buf(struct vfe_device *vfe_dev,
 		if (vfe_dev->vt_enable) {
 			msm_isp_get_avtimer_ts(ts);
 			time_stamp = &ts->vt_time;
-		}
-		else
+		} else
 			time_stamp = &ts->buf_time;
 
 		rc = vfe_dev->buf_mgr->ops->get_buf_src(vfe_dev->buf_mgr,
