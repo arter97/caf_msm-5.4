@@ -10,7 +10,8 @@
  * GNU General Public License for more details.
  */
 
-#include "mdm9640.dtsi"
+#include "mdm9640-v2.dtsi"
+
 #include "mdm9640-pinctrl.dtsi"
 #include "mdm9640-display.dtsi"
 #include "qpic-panel-ili-hvga.dtsi"
