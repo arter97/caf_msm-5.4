@@ -21,6 +21,10 @@
 #define BUF_SRC(id) (id & ISP_NATIVE_BUF_BIT)
 #define ISP_SHARE_BUF_CLIENT 2
 
+#ifndef BUF_MGR_NUM_BUF_Q
+#define BUF_MGR_NUM_BUF_Q 28
+#endif
+
 struct msm_isp_buf_mgr;
 
 enum msm_isp_buffer_state {
