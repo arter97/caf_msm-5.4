@@ -22,6 +22,7 @@
 #include <linux/of_address.h>
 #include <linux/fb.h>
 #include <linux/dma-buf.h>
+#include <linux/delay.h>
 
 #include "mdss_fb.h"
 #include "mdss_mdp.h"
@@ -236,13 +237,25 @@ void mdss_free_bootmem(u32 mem_addr, u32 size)
 		free_reserved_page(pfn_to_page(pfn_idx));
 }
 
+static bool mdss_mdp_splash_lk_check(void)
+{
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+	if (mdata->program_scratch_regs) {
+		if (0xC001CAFE == 
+		MDSS_REG_READ(mdata, MDSS_HW_MDSS_SCRATCH_REGISTER_1)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 int mdss_mdp_splash_cleanup(struct msm_fb_data_type *mfd,
 					bool use_borderfill)
 {
 	struct mdss_overlay_private *mdp5_data;
 	struct mdss_mdp_ctl *ctl;
 	int rc = 0;
-
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	if (!mfd)
 		return -EINVAL;
 
@@ -265,6 +278,16 @@ int mdss_mdp_splash_cleanup(struct msm_fb_data_type *mfd,
 					mdp5_data->splash_mem_size);
 		}
 		goto end;
+	}
+
+	if (mdss_mdp_splash_lk_check() == true) {
+		MDSS_REG_WRITE(mdata, MDSS_HW_MDSS_SCRATCH_REGISTER_1,
+				0xDEADDEAD);
+		while (0xDEADBEEF !=
+			MDSS_REG_READ(mdata, MDSS_HW_MDSS_SCRATCH_REGISTER_1)) {
+			pr_err("waiting for LK to exit\n");
+			msleep(200);
+		}
 	}
 
 	/* 1-to-1 mapping */
