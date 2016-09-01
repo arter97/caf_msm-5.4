@@ -988,7 +988,7 @@ static void handle_session_close(enum command_response cmd, void *data)
 		hdev = inst->core->device;
 		mutex_lock(&inst->lock);
 		if (inst->session) {
-			dprintk(VIDC_DBG, "cleaning up inst: 0x%p", inst);
+			dprintk(VIDC_DBG, "cleaning up inst: 0x%pK", inst);
 			call_hfi_op(hdev, session_clean,
 				(void *) inst->session);
 		}
@@ -1353,7 +1353,7 @@ static void handle_fbd(enum command_response cmd, void *data)
 
 		if (extra_idx && (extra_idx < VIDEO_MAX_PLANES)) {
 			dprintk(VIDC_DBG,
-			"extradata: userptr = %p;  bytesused = %d; length = %d\n",
+			"extradata: userptr = %pK;  bytesused = %d; length = %d\n",
 			(u8 *)vb->v4l2_planes[extra_idx].m.userptr,
 			vb->v4l2_planes[extra_idx].bytesused,
 			vb->v4l2_planes[extra_idx].length);
@@ -1500,13 +1500,13 @@ static int msm_comm_scale_clocks(struct msm_vidc_core *core)
 	int rc = 0;
 	struct hfi_device *hdev;
 	if (!core) {
-		dprintk(VIDC_ERR, "%s Invalid args: %p\n", __func__, core);
+		dprintk(VIDC_ERR, "%s Invalid args: %pK\n", __func__, core);
 		return -EINVAL;
 	}
 
 	hdev = core->device;
 	if (!hdev) {
-		dprintk(VIDC_ERR, "%s Invalid device handle: %p\n",
+		dprintk(VIDC_ERR, "%s Invalid device handle: %pK\n",
 			__func__, hdev);
 		return -EINVAL;
 	}
