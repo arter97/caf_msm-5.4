@@ -629,8 +629,10 @@ int mdp4_dtv_on(struct platform_device *pdev)
 		}
 	}
 
-	if (IS_ERR_OR_NULL(vctrl->base_pipe))
+	if (IS_ERR_OR_NULL(vctrl->base_pipe)) {
+		mutex_unlock(&mfd->dma->ov_mutex);
 		return -EPERM;
+	}
 
 	mdp4_overlay_panel_mode(MDP4_PANEL_DTV, vctrl->base_pipe->mixer_num);
 

@@ -649,8 +649,10 @@ int mdp4_lcdc_on(struct platform_device *pdev)
 	var = &fbi->var;
 
 	pipe = mdp4_lcdc_alloc_base_pipe(false);
-	if (IS_ERR_OR_NULL(pipe))
+	if (IS_ERR_OR_NULL(pipe)) {
+		mutex_unlock(&mfd->dma->ov_mutex);
 		return -EPERM;
+	}
 
 	mdp4_overlay_panel_mode(MDP4_PANEL_LCDC, pipe->mixer_num);
 
