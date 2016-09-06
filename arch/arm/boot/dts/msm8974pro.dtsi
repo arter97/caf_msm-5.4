@@ -1756,7 +1756,9 @@
 
 &memory_hole {
 	qcom,memblock-remove = <0x05a00000 0x7800000
-				0x0fa00000 0x500000>; /* Address and size of the hole */
+				0x0fa00000 0x500000
+                                0x20000000 0x10000000>; /* Address and size of the hole */
+	qcom,memblock-reserve = <0x20000000 0x10000000>; /* Address and size of the hole */
 };
 
 &gdsc_venus {

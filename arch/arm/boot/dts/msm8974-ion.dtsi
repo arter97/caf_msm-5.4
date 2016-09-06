@@ -39,8 +39,8 @@
 			compatible = "qcom,msm-ion-reserve";
 			reg = <22>;
 			qcom,heap-align = <0x1000>;
-			linux,contiguous-region = <&adsp_mem>;
-			qcom,ion-heap-type = "DMA";
+			qcom,memory-fixed = <0x20000000 0x10000000>;
+			qcom,ion-heap-type = "CARVEOUT";
 		};
 
 		qcom,ion-heap@27 { /* QSECOM HEAP */

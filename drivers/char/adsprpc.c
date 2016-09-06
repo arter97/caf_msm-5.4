@@ -284,7 +284,7 @@ static int alloc_mem(struct fastrpc_buf *buf, int cid)
 	buf->virt = 0;
 	buf->phys = 0;
 	heap = me->channel[cid].smmu.enabled ? ION_HEAP(ION_IOMMU_HEAP_ID) :
-		ION_HEAP(ION_ADSP_HEAP_ID) | ION_HEAP(ION_AUDIO_HEAP_ID);
+		ION_HEAP(ION_ADSP_HEAP_ID);
 	buf->handle = ion_alloc(clnt, buf->size, SZ_4K, heap, ION_FLAG_CACHED);
 	VERIFY(err, 0 == IS_ERR_OR_NULL(buf->handle));
 	if (err)
