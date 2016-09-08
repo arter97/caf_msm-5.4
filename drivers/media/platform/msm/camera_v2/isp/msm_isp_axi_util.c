@@ -373,7 +373,7 @@ int msm_isp_axi_check_stream_state(
 	return rc;
 }
 
-void msm_isp_update_framedrop_reg(struct vfe_device *vfe_dev, uint8_t input_src)
+void msm_isp_update_framedrop_reg(struct vfe_device *vfe_dev)
 {
 	int i;
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
@@ -381,8 +381,6 @@ void msm_isp_update_framedrop_reg(struct vfe_device *vfe_dev, uint8_t input_src)
 	for (i = 0; i < MAX_NUM_STREAM; i++) {
 		stream_info = &axi_data->stream_info[i];
 		if (stream_info->state != ACTIVE)
-			continue;
-		if (!((1 << SRC_TO_INTF(stream_info->stream_src)) & input_src))
 			continue;
 
 		if (stream_info->runtime_framedrop_update) {
@@ -394,8 +392,7 @@ void msm_isp_update_framedrop_reg(struct vfe_device *vfe_dev, uint8_t input_src)
 			}
 		}
 		if (stream_info->stream_type == BURST_STREAM) {
-			if (stream_info->runtime_burst_frame_count > 0)
-				stream_info->runtime_burst_frame_count--;
+			stream_info->runtime_burst_frame_count--;
 			if (stream_info->runtime_burst_frame_count == 0) {
 				vfe_dev->hw_info->vfe_ops.axi_ops.
 				cfg_framedrop(vfe_dev, stream_info);
@@ -1557,10 +1554,7 @@ void msm_isp_process_axi_irq(struct vfe_device *vfe_dev,
 					stream_idx, stream_info->frame_id);
 				stream_info->frame_id++;
 
-				if ((stream_info->stream_type ==
-					BURST_STREAM) &&
-				    (stream_info->
-					runtime_num_burst_capture > 0))
+				if (stream_info->stream_type == BURST_STREAM)
 					stream_info->
 						runtime_num_burst_capture--;
 
@@ -1597,8 +1591,7 @@ void msm_isp_process_axi_irq(struct vfe_device *vfe_dev,
 				stream_idx, stream_info->frame_id);
 			stream_info->frame_id++;
 
-			if ((stream_info->stream_type == BURST_STREAM) &&
-			    (stream_info->runtime_num_burst_capture > 0))
+			if (stream_info->stream_type == BURST_STREAM)
 				stream_info->runtime_num_burst_capture--;
 
 			msm_isp_get_done_buf(vfe_dev, stream_info,
