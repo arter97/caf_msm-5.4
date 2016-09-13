@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -34,6 +34,7 @@
 #include <linux/of_device.h>
 #include <sound/tlv.h>
 #include <sound/pcm_params.h>
+#include <sound/dtmf_detect.h>
 
 #include "msm-pcm-q6-v2.h"
 #include "msm-pcm-routing-v2.h"
@@ -139,6 +140,8 @@ static void event_handler(uint32_t opcode,
 	struct msm_audio *prtd = priv;
 	struct snd_pcm_substream *substream = prtd->substream;
 	uint32_t *ptrmem = (uint32_t *)payload;
+	struct dtmf_detect_cmd_response dtmf_tone_rsp;
+	struct asm_data_event_dtmf_tone_detected *dtmf_tone;
 	uint32_t idx = 0;
 	uint32_t size = 0;
 
@@ -262,6 +265,12 @@ static void event_handler(uint32_t opcode,
 		wake_up(&the_locks.write_wait);
 		wake_up(&the_locks.read_wait);
 		break;
+	case ASM_DATA_EVENT_DTMF_TONE_DETECTED:
+		dtmf_tone = (struct asm_data_event_dtmf_tone_detected *)payload;
+		dtmf_tone_rsp.low_freq = dtmf_tone->low_freq;
+		dtmf_tone_rsp.high_freq = dtmf_tone->high_freq;
+		dtmf_detection_event_process(dtmf_tone_rsp);
+		break;
 	default:
 		pr_debug("Not Supported Event opcode[0x%x]\n", opcode);
 		break;
@@ -354,6 +363,81 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 	prtd->cmd_interrupt = 0;
 
 	return 0;
+}
+
+static int msm_pcm_dtmf_capture_prepare(struct snd_pcm_substream *substream)
+{
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct msm_audio *prtd = runtime->private_data;
+	struct snd_soc_pcm_runtime *soc_prtd = substream->private_data;
+	struct snd_pcm_hw_params *params;
+	struct msm_pcm_routing_evt event;
+	int ret = 0;
+	uint16_t bits_per_sample = 16;
+	uint16_t sample_word_size;
+
+	if (!prtd || !prtd->audio_client) {
+		pr_err("%s: private data null or audio client freed\n",
+			__func__);
+		return -EINVAL;
+	}
+
+	if (prtd->enabled == IDLE) {
+		pr_debug("%s: periods=%d\n", __func__, runtime->periods);
+		params = &soc_prtd->dpcm[substream->stream].hw_params;
+		if ((params_format(params) == SNDRV_PCM_FORMAT_S24_LE) ||
+			(params_format(params) == SNDRV_PCM_FORMAT_S24_3LE))
+			bits_per_sample = 24;
+
+		prtd->audio_client->perf_mode = false;
+
+		pr_debug("%s Opening %d-ch PCM read stream, perf_mode %d\n",
+				__func__, params_channels(params),
+				prtd->audio_client->perf_mode);
+
+		ret = q6asm_open_read_v2(prtd->audio_client,
+				FORMAT_DTMF_DETECTION, bits_per_sample);
+		if (ret < 0) {
+			pr_err("%s: q6asm_open_read failed\n", __func__);
+			q6asm_audio_client_free(prtd->audio_client);
+			prtd->audio_client = NULL;
+			return -ENOMEM;
+		}
+
+		ret = q6asm_send_cal(prtd->audio_client);
+		if (ret < 0)
+			pr_debug("%s : Send cal failed : %d", __func__, ret);
+
+		pr_debug("%s: session ID %d\n",
+				__func__, prtd->audio_client->session);
+		prtd->session_id = prtd->audio_client->session;
+		event.event_func = msm_pcm_route_event_handler;
+		event.priv_data = (void *) prtd;
+		ret = msm_pcm_routing_reg_phy_stream_v2(
+				soc_prtd->dai_link->be_id,
+				prtd->audio_client->perf_mode,
+				prtd->session_id, substream->stream,
+				event);
+		if (ret) {
+			pr_err("%s: stream reg failed ret:%d\n", __func__, ret);
+			return ret;
+		}
+	}
+	prtd->pcm_size = snd_pcm_lib_buffer_bytes(substream);
+	prtd->pcm_count = snd_pcm_lib_period_bytes(substream);
+	prtd->pcm_irq_pos = 0;
+	/* rate and channels are sent to audio driver */
+	prtd->samp_rate = runtime->rate;
+	prtd->channel_mode = runtime->channels;
+
+	if (prtd->enabled == IDLE || prtd->enabled == STOPPED)
+		q6asm_run(prtd->audio_client, 0, 0, 0);
+
+	if (prtd->enabled != IDLE)
+		return 0;
+
+	prtd->enabled = RUNNING;
+	return ret;
 }
 
 static int msm_pcm_capture_prepare(struct snd_pcm_substream *substream)
@@ -566,6 +650,81 @@ static int msm_pcm_open(struct snd_pcm_substream *substream)
 			SNDRV_PCM_HW_PARAM_BUFFER_BYTES,
 			CAPTURE_MIN_NUM_PERIODS * CAPTURE_MIN_PERIOD_SIZE,
 			CAPTURE_MAX_NUM_PERIODS * CAPTURE_MAX_PERIOD_SIZE);
+		if (ret < 0) {
+			pr_err("constraint for buffer bytes min max ret = %d\n",
+									ret);
+		}
+	}
+	ret = snd_pcm_hw_constraint_step(runtime, 0,
+		SNDRV_PCM_HW_PARAM_PERIOD_BYTES, 32);
+	if (ret < 0) {
+		pr_err("constraint for period bytes step ret = %d\n",
+								ret);
+	}
+	ret = snd_pcm_hw_constraint_step(runtime, 0,
+		SNDRV_PCM_HW_PARAM_BUFFER_BYTES, 32);
+	if (ret < 0) {
+		pr_err("constraint for buffer bytes step ret = %d\n",
+								ret);
+	}
+
+	prtd->enabled = IDLE;
+	prtd->dsp_cnt = 0;
+	prtd->set_channel_map = false;
+	prtd->reset_event = false;
+	runtime->private_data = prtd;
+
+	return 0;
+}
+
+static int msm_pcm_open_dtmf(struct snd_pcm_substream *substream)
+{
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct snd_soc_pcm_runtime *soc_prtd = substream->private_data;
+	struct msm_audio *prtd;
+	int ret = 0;
+
+	prtd = kzalloc(sizeof(struct msm_audio), GFP_KERNEL);
+	if (prtd == NULL)
+		return -ENOMEM;
+
+	prtd->substream = substream;
+	prtd->audio_client = q6asm_audio_client_alloc(
+				(app_cb)event_handler, prtd);
+	if (!prtd->audio_client) {
+		pr_info("%s: Could not allocate memory\n", __func__);
+		kfree(prtd);
+		return -ENOMEM;
+	}
+
+	prtd->audio_client->dev = soc_prtd->platform->dev;
+
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+		return -EINVAL;
+	/* Capture path */
+	else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
+		runtime->hw = msm_pcm_hardware_capture;
+	else {
+		pr_err("Invalid Stream type %d\n", substream->stream);
+		return -EINVAL;
+	}
+
+	ret = snd_pcm_hw_constraint_list(runtime, 0,
+				SNDRV_PCM_HW_PARAM_RATE,
+				&constraints_sample_rates);
+	if (ret < 0)
+		pr_info("snd_pcm_hw_constraint_list failed\n");
+	/* Ensure that buffer size is a multiple of period size */
+	ret = snd_pcm_hw_constraint_integer(runtime,
+					SNDRV_PCM_HW_PARAM_PERIODS);
+	if (ret < 0)
+		pr_info("snd_pcm_hw_constraint_integer failed\n");
+
+	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
+		ret = snd_pcm_hw_constraint_minmax(runtime,
+		SNDRV_PCM_HW_PARAM_BUFFER_BYTES,
+		CAPTURE_MIN_NUM_PERIODS * CAPTURE_MIN_PERIOD_SIZE,
+		CAPTURE_MAX_NUM_PERIODS * CAPTURE_MAX_PERIOD_SIZE);
 		if (ret < 0) {
 			pr_err("constraint for buffer bytes min max ret = %d\n",
 									ret);
@@ -857,6 +1016,17 @@ static int msm_pcm_prepare(struct snd_pcm_substream *substream)
 	return ret;
 }
 
+static int msm_pcm_dtmf_prepare(struct snd_pcm_substream *substream)
+{
+	int ret = 0;
+
+	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
+		ret = msm_pcm_dtmf_capture_prepare(substream);
+	else
+		pr_debug("unable to prepare stream for playback path");
+	return ret;
+}
+
 static snd_pcm_uframes_t msm_pcm_pointer(struct snd_pcm_substream *substream)
 {
 
@@ -941,6 +1111,18 @@ static struct snd_pcm_ops msm_pcm_ops = {
 	.trigger        = msm_pcm_trigger,
 	.pointer        = msm_pcm_pointer,
 	.mmap		= msm_pcm_mmap,
+};
+
+static struct snd_pcm_ops msm_pcm_dtmf_ops = {
+	.open           = msm_pcm_open_dtmf,
+	.copy           = msm_pcm_copy,
+	.hw_params      = msm_pcm_hw_params,
+	.close          = msm_pcm_close,
+	.ioctl          = snd_pcm_lib_ioctl,
+	.prepare        = msm_pcm_dtmf_prepare,
+	.trigger        = msm_pcm_trigger,
+	.pointer        = msm_pcm_pointer,
+	.mmap           = msm_pcm_mmap,
 };
 
 static int msm_pcm_set_volume(struct msm_audio *prtd, uint32_t volume)
@@ -1250,6 +1432,11 @@ static struct snd_soc_platform_driver msm_soc_platform = {
 	.delay_blk      = msm_pcm_delay_blk,
 };
 
+static struct snd_soc_platform_driver msm_soc_platform_dtmf = {
+	.ops		= &msm_pcm_dtmf_ops,
+	.pcm_new	= msm_asoc_pcm_new,
+};
+
 static int msm_pcm_probe(struct platform_device *pdev)
 {
 	int rc;
@@ -1297,6 +1484,12 @@ static int msm_pcm_probe(struct platform_device *pdev)
 				   &msm_soc_platform);
 }
 
+static int msm_pcm_dtmf_probe(struct platform_device *pdev)
+{
+	return snd_soc_register_platform(&pdev->dev,
+				&msm_soc_platform_dtmf);
+}
+
 static int msm_pcm_remove(struct platform_device *pdev)
 {
 	struct msm_plat_data *pdata;
@@ -1306,11 +1499,25 @@ static int msm_pcm_remove(struct platform_device *pdev)
 	snd_soc_unregister_platform(&pdev->dev);
 	return 0;
 }
+
+static int msm_pcm_dtmf_remove(struct platform_device *pdev)
+{
+	snd_soc_unregister_platform(&pdev->dev);
+	return 0;
+}
+
+
 static const struct of_device_id msm_pcm_dt_match[] = {
 	{.compatible = "qcom,msm-pcm-dsp"},
 	{}
 };
+
+static const struct of_device_id msm_pcm_dtmf_dt_match[] = {
+	{.compatible = "qcom,msm-pcm-dsp-dtmf"},
+	{}
+};
 MODULE_DEVICE_TABLE(of, msm_pcm_dt_match);
+MODULE_DEVICE_TABLE(of, msm_pcm_dtmf_dt_match);
 
 static struct platform_driver msm_pcm_driver = {
 	.driver = {
@@ -1322,14 +1529,27 @@ static struct platform_driver msm_pcm_driver = {
 	.remove = msm_pcm_remove,
 };
 
+static struct platform_driver msm_pcm_dtmf_driver = {
+	.driver = {
+		.name = "msm-pcm-dsp-dtmf",
+		.owner = THIS_MODULE,
+		.of_match_table = msm_pcm_dtmf_dt_match,
+	},
+	.probe = msm_pcm_dtmf_probe,
+	.remove = msm_pcm_dtmf_remove,
+};
+
 static int __init msm_soc_platform_init(void)
 {
+	int rc = 0;
 	init_waitqueue_head(&the_locks.enable_wait);
 	init_waitqueue_head(&the_locks.eos_wait);
 	init_waitqueue_head(&the_locks.write_wait);
 	init_waitqueue_head(&the_locks.read_wait);
-
-	return platform_driver_register(&msm_pcm_driver);
+	rc = platform_driver_register(&msm_pcm_driver);
+	if (rc == 0)
+		rc = platform_driver_register(&msm_pcm_dtmf_driver);
+	return rc;
 }
 module_init(msm_soc_platform_init);
 

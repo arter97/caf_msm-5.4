@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
 *
 * This program is free software; you can redistribute it and/or modify
 * it under the terms of the GNU General Public License version 2 and
@@ -4425,6 +4425,16 @@ struct asm_data_event_enc_sr_cm_change_notify {
 	u8                   channel_mapping[8];
 
 } __packed;
+
+#define ASM_MEDIA_FMT_DTMF 0x00010C2F
+
+#define ASM_DATA_EVENT_DTMF_TONE_DETECTED 0x00012f38
+
+struct asm_data_event_dtmf_tone_detected {
+	uint16_t       low_freq;
+	uint16_t       high_freq;
+} __packed;
+
 #define ASM_DATA_CMD_IEC_60958_FRAME_RATE 0x00010D87
 
 
