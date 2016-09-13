@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -152,6 +152,7 @@ enum {
 	MSM_FRONTEND_DAI_MULTIMEDIA14,
 	MSM_FRONTEND_DAI_MULTIMEDIA15,
 	MSM_FRONTEND_DAI_MULTIMEDIA16,
+	MSM_FRONTEND_DAI_DTMF_DETECTION,
 	MSM_FRONTEND_DAI_CS_VOICE,
 	MSM_FRONTEND_DAI_VOIP,
 	MSM_FRONTEND_DAI_AFE_RX,
@@ -177,8 +178,8 @@ enum {
 	MSM_FRONTEND_DAI_MAX,
 };
 
-#define MSM_FRONTEND_DAI_MM_SIZE (MSM_FRONTEND_DAI_MULTIMEDIA16 + 1)
-#define MSM_FRONTEND_DAI_MM_MAX_ID MSM_FRONTEND_DAI_MULTIMEDIA16
+#define MSM_FRONTEND_DAI_MM_SIZE (MSM_FRONTEND_DAI_DTMF_DETECTION + 1)
+#define MSM_FRONTEND_DAI_MM_MAX_ID MSM_FRONTEND_DAI_DTMF_DETECTION
 
 enum {
 	MSM_BACKEND_DAI_PRI_I2S_RX = 0,
