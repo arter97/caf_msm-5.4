@@ -23,7 +23,9 @@
 #undef CDBG
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
 
-#define EARLY_CAMERA_SIGNAL 0xa5a5a5a5
+#define EARLY_CAMERA_SIGNAL_DONE 0xa5a5a5a5
+#define EARLY_CAMERA_SIGNAL_DISABLED 0x5a5a5a5a
+
 
 static struct msm_sensor_init_t *s_init;
 static struct v4l2_file_operations msm_sensor_init_v4l2_subdev_fops;
@@ -83,7 +85,9 @@ static int32_t msm_sensor_driver_cmd(struct msm_sensor_init_t *s_init,
 		base = ioremap(0x00A10000, 0x1000);
 		val = msm_camera_io_r_mb(base + MMSS_A_VFE_0_SPARE);
 
-		while (val != EARLY_CAMERA_SIGNAL) {
+		while (val != EARLY_CAMERA_SIGNAL_DONE ) {
+			if (val == EARLY_CAMERA_SIGNAL_DISABLED)
+				break;
 			msleep(1000);
 			val = msm_camera_io_r_mb(base + MMSS_A_VFE_0_SPARE);
 			pr_err("Waiting for signal from LK val = %u\n", val);
