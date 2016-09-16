@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -446,7 +446,7 @@ static int __configure_pipe_params(struct msm_fb_data_type *mfd,
 	mixer = mdss_mdp_mixer_get(mdp5_data->ctl, mixer_mux);
 	pipe->src_fmt = mdss_mdp_get_format_params(layer->buffer.format);
 	if (!pipe->src_fmt || !mixer) {
-		pr_err("invalid layer format:%d or mixer:%p\n",
+		pr_err("invalid layer format:%d or mixer:%pK\n",
 				layer->buffer.format, pipe->mixer_left);
 		ret = -EINVAL;
 		goto end;
@@ -1347,7 +1347,7 @@ validate_exit:
 			}
 		} else {
 			pipe->file = file;
-			pr_debug("file pointer attached with pipe is %p\n",
+			pr_debug("file pointer attached with pipe is %pK\n",
 				file);
 		}
 	}
