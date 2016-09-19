@@ -1308,3 +1308,7 @@
 		spi-cpha;
 	};
 };
+
+&vfe_smmu {
+	qcom,no-smr-check;
+};
