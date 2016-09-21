@@ -49,4 +49,5 @@ struct early_cam_device {
 	int32_t regulator_count;
 };
 
+int msm_early_cam_disable_clocks(void);
 #endif
