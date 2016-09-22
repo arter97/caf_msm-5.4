@@ -73,11 +73,11 @@
 #define CHRK_SB_PGD_PORT_TX_NUM				16
 
 /* PGD Port Map */
-#define CHRK_SB_PGD_PORT_TX_SCO				0
-#define CHRK_SB_PGD_PORT_TX1_FM				1
-#define CHRK_SB_PGD_PORT_TX2_FM				2
+#define CHRK_SB_PGD_PORT_TX_SCO				2
+#define CHRK_SB_PGD_PORT_TX1_FM				0
+#define CHRK_SB_PGD_PORT_TX2_FM				1
 #define CHRK_SB_PGD_PORT_RX_SCO				16
-#define CHRK_SB_PGD_PORT_RX_A2P				17
+#define CHRK_SB_PGD_PORT_RX_A2P				16
 
 
 /* Function Prototype */
