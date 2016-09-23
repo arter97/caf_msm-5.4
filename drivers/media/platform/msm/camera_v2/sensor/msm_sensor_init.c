@@ -18,6 +18,7 @@
 #include "msm_sensor.h"
 #include "msm_sd.h"
 #include "msm_camera_io_util.h"
+#include "msm_early_cam.h"
 
 /* Logging macro */
 #undef CDBG
@@ -26,7 +27,7 @@
 #define EARLY_CAMERA_SIGNAL_DONE 0xa5a5a5a5
 #define EARLY_CAMERA_SIGNAL_DISABLED 0x5a5a5a5a
 
-
+static bool early_camera_clock_off;
 static struct msm_sensor_init_t *s_init;
 static struct v4l2_file_operations msm_sensor_init_v4l2_subdev_fops;
 /* Static function declaration */
@@ -82,18 +83,25 @@ static int32_t msm_sensor_driver_cmd(struct msm_sensor_init_t *s_init,
 
 	switch (cfg->cfgtype) {
 	case CFG_SINIT_PROBE:
-		base = ioremap(0x00A10000, 0x1000);
-		val = msm_camera_io_r_mb(base + MMSS_A_VFE_0_SPARE);
-
-		while (val != EARLY_CAMERA_SIGNAL_DONE ) {
-			if (val == EARLY_CAMERA_SIGNAL_DISABLED)
-				break;
-			msleep(1000);
+		if(early_camera_clock_off == false) {
+			base = ioremap(0x00A10000, 0x1000);
 			val = msm_camera_io_r_mb(base + MMSS_A_VFE_0_SPARE);
-			pr_err("Waiting for signal from LK val = %u\n", val);
+			while (val != EARLY_CAMERA_SIGNAL_DONE ) {
+				if (val == EARLY_CAMERA_SIGNAL_DISABLED)
+					break;
+				msleep(1000);
+				val = msm_camera_io_r_mb(base + MMSS_A_VFE_0_SPARE);
+				pr_err("Waiting for signal from LK val = %u\n", val);
+			}
+			rc = msm_early_cam_disable_clocks();
+			if (rc < 0) {
+				pr_err("Failed to disable early camera clocks :%d \n",rc);
+			}
+			else {
+				early_camera_clock_off = true;
+				pr_debug("Voted OFF on early camera clocks");
+			}
 		}
-
-		pr_err("Received early camera signal from LK val = %u\n", val);
 
 		mutex_lock(&s_init->imutex);
 		s_init->module_init_status = 0;
@@ -226,7 +234,7 @@ static int __init msm_sensor_init_module(void)
 		&msm_sensor_init_v4l2_subdev_fops;
 
 	init_waitqueue_head(&s_init->state_wait);
-
+	early_camera_clock_off = false;
 	return 0;
 error:
 	mutex_destroy(&s_init->imutex);

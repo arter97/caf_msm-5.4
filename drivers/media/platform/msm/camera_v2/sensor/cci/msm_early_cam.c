@@ -36,10 +36,84 @@
 
 #define MSM_EARLY_CAM_DRV_NAME "msm_early_cam"
 static struct platform_driver msm_early_camera_driver;
+static struct early_cam_device *new_early_cam_dev;
 
+int msm_early_cam_disable_clocks(void)
+{
+	int rc = 0;
+	CDBG("%s: \n", __func__);
+	//Vote OFF for clocks
+	if (new_early_cam_dev == NULL) {
+		rc = -EINVAL;
+		pr_err("%s: clock structure uninitialised %d\n", __func__,
+			rc);
+		return rc;
+	}
+
+	if ((new_early_cam_dev->pdev == NULL) ||
+		(new_early_cam_dev->early_cam_clk_info == NULL) ||
+		(new_early_cam_dev->early_cam_clk == NULL) ||
+		(new_early_cam_dev->num_clk == 0)) {
+		rc = -EINVAL;
+		pr_err("%s: Clock details uninitialised %d\n",__func__,
+			rc);
+		return rc;
+	}
+
+	rc = msm_camera_clk_enable(&new_early_cam_dev->pdev->dev,
+		new_early_cam_dev->early_cam_clk_info,
+		new_early_cam_dev->early_cam_clk,
+		new_early_cam_dev->num_clk, false);
+	if (rc < 0) {
+		pr_err("%s: clk disable failed %d\n", __func__, rc);
+		return rc;
+	}
+
+	rc = cam_config_ahb_clk(NULL, 0, CAM_AHB_CLIENT_CSIPHY,
+		CAM_AHB_SUSPEND_VOTE);
+	if (rc < 0) {
+		pr_err("%s: failed to vote OFF AHB_CLIENT_CSIPHY %d\n",
+			__func__,rc);
+		return rc;
+	}
+
+	rc = cam_config_ahb_clk(NULL, 0, CAM_AHB_CLIENT_CSID,
+		CAM_AHB_SUSPEND_VOTE);
+	if (rc < 0) {
+		pr_err("%s: failed to vote OFF AHB_CLIENT_CSID %d\n",
+			__func__,rc);
+		return rc;
+	}
+
+	rc = cam_config_ahb_clk(NULL, 0, CAM_AHB_CLIENT_CCI,
+		CAM_AHB_SUSPEND_VOTE);
+	if (rc < 0) {
+		pr_err("%s: failed to vote OFF AHB_CLIENT_CCI %d\n",
+			__func__,rc);
+		return rc;
+	}
+
+	rc = cam_config_ahb_clk(NULL, 0, CAM_AHB_CLIENT_ISPIF,
+		CAM_AHB_SUSPEND_VOTE);
+	if (rc < 0) {
+		pr_err("%s: failed to vote OFF AHB_CLIENT_ISPIF %d\n",
+			__func__,rc);
+		return rc;
+	}
+
+	rc = cam_config_ahb_clk(NULL, 0, CAM_AHB_CLIENT_VFE0,
+			CAM_AHB_SUSPEND_VOTE);
+	if (rc < 0) {
+		pr_err("%s: failed to vote OFF AHB_CLIENT_VFE0 %d\n",
+			__func__,rc);
+		return rc;
+	}
+	pr_debug("Turned OFF camera clocks\n");
+	return 0;
+
+}
 static int msm_early_cam_probe(struct platform_device *pdev)
 {
-	struct early_cam_device *new_early_cam_dev;
 	int rc = 0;
 
 	CDBG("%s: pdev %p device id = %d\n", __func__, pdev, pdev->id);
@@ -159,6 +233,7 @@ early_cam_invalid_vreg_data:
 	kfree(new_early_cam_dev->early_cam_vreg);
 early_cam_release_mem:
 	kfree(new_early_cam_dev);
+	new_early_cam_dev = NULL;
 	return rc;
 }
 
@@ -174,6 +249,7 @@ static int __init msm_early_cam_init_module(void)
 
 static void __exit msm_early_cam_exit_module(void)
 {
+	kfree(new_early_cam_dev);
 	platform_driver_unregister(&msm_early_camera_driver);
 }
 
