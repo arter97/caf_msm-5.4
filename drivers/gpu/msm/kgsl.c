@@ -30,7 +30,6 @@
 #include <linux/security.h>
 #include <linux/compat.h>
 #include <linux/ctype.h>
-#include <soc/qcom/boot_stats.h>
 
 #include "kgsl.h"
 #include "kgsl_debugfs.h"
@@ -4038,7 +4037,6 @@ static int __init kgsl_core_init(void)
 {
 	int result = 0;
 	/* alloc major and minor device numbers */
-	place_marker("KGSL_Init - Start");
 	result = alloc_chrdev_region(&kgsl_driver.major, 0, KGSL_DEVICE_MAX,
 		"kgsl");
 
@@ -4115,7 +4113,6 @@ static int __init kgsl_core_init(void)
 
 err:
 	kgsl_core_exit();
-	place_marker("KGSL_Init - End");
 	return result;
 }
 
