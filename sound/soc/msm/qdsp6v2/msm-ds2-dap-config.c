@@ -1522,6 +1522,14 @@ static int msm_ds2_dap_get_param(u32 cmd, void *arg)
 		goto end;
 	}
 
+	/* Return if invalid length */
+	if (dolby_data->length >
+	       (DOLBY_MAX_LENGTH_INDIVIDUAL_PARAM - DOLBY_PARAM_PAYLOAD_SIZE)) {
+		pr_err("Invalid length %d", dolby_data->length);
+		rc = -EINVAL;
+		goto end;
+	}
+
 	for (i = 0; i < DS2_DEVICES_ALL; i++) {
 		if ((dev_map[i].active) &&
 			(dev_map[i].device_id & dolby_data->device_id)) {
@@ -1627,6 +1635,13 @@ static int msm_ds2_dap_param_visualizer_control_get(u32 cmd, void *arg)
 	}
 
 	length = ds2_dap_params[cache_dev].params_val[DOLBY_PARAM_VCNB_OFFSET];
+
+	if (length > DOLBY_PARAM_VCNB_MAX_LENGTH || length <= 0) {
+		ret = 0;
+		dolby_data->length = 0;
+		pr_err("%s Incorrect VCNB length", __func__);
+	}
+
 	params_length = (2*length + DOLBY_VIS_PARAM_HEADER_SIZE) *
 							 sizeof(uint32_t);
 
