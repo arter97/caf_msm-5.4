@@ -524,6 +524,7 @@ struct mdp_layer_commit_v1_32 {
 	compat_caddr_t		output_layer;
 	int			retire_fence;
 	uint32_t		reserved[6];
+	compat_caddr_t		frc_info;
 };
 
 struct mdp_layer_commit32 {
