@@ -954,10 +954,10 @@
 		/* Slimbus Slave DT for Cherokee */
 		btfmslim_codec: cherokee {
 			compatible = "qcom,btfmslim_slave";
-			elemental-addr = [00 01 20 02 17 02];
+			elemental-addr = [00 01 80 02 17 02];
 
 			qcom,btfm-slim-ifd = "btfmslim_slave_ifd";
-			qcom,btfm-slim-ifd-elemental-addr = [00 00 20 02 17 02];
+			qcom,btfm-slim-ifd-elemental-addr = [00 00 80 02 17 02];
 		};
 	};
 
