@@ -245,6 +245,7 @@ static int msm_compr_set_volume(struct snd_compr_stream *cstream,
 		 */
 		switch (q6core_get_avs_version()) {
 		case Q6_SUBSYS_AVS2_7:
+		case Q6_SUBSYS_AVS2_8:
 			avg_vol = (volume_l + volume_r) / 2;
 			for (i = 0; i < prtd->num_channels; i++)
 				gain_list[i] = avg_vol;
@@ -263,6 +264,7 @@ static int msm_compr_set_volume(struct snd_compr_stream *cstream,
 	} else {
 		switch (q6core_get_avs_version()) {
 		case Q6_SUBSYS_AVS2_7:
+		case Q6_SUBSYS_AVS2_8:
 			gain_list[0] = volume_l;
 			gain_list[1] = volume_r;
 			/* force sending FR/FL/FC volume for mono */
@@ -1733,6 +1735,7 @@ static int msm_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 			 */
 			switch (q6core_get_avs_version()) {
 			case (Q6_SUBSYS_AVS2_7):
+			case (Q6_SUBSYS_AVS2_8):
 			{
 				q6asm_get_session_time(prtd->audio_client,
 					       &prtd->marker_timestamp);
@@ -1912,6 +1915,7 @@ static int msm_compr_pointer(struct snd_compr_stream *cstream,
 
 		switch (q6core_get_avs_version()) {
 		case (Q6_SUBSYS_AVS2_7):
+		case (Q6_SUBSYS_AVS2_8):
 		{
 			rc = q6asm_get_session_time(prtd->audio_client,
 				       &timestamp);
