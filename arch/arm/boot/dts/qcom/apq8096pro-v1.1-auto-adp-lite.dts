@@ -13,28 +13,20 @@
 /dts-v1/;
 
 #include <dt-bindings/gpio/gpio.h>
-#include "msm8996pro.dtsi"
-#include "apq8096pro-v1.1.dtsi"
+#include "apq8096pro.dtsi"
 #include "msm8996-pm8994.dtsi"
 #include "msm8996-agave-adp.dtsi"
 #include "msm8996pro-auto.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. MSM 8996pro AUTO ADP";
+	model = "Qualcomm Technologies, Inc. APQ 8096pro V1.1 AUTO ADP LITE";
 	compatible = "qcom,apq8096-adp", "qcom,msm8996", "qcom,adp";
 	qcom,msm-id = <316 0x10001>;
-	qcom,board-id = <0x02010019 0>;
+	qcom,board-id = <0x03010019 0>;
 };
 
 &spi_9 {
-	status = "ok";
-	can-controller@0 {
-		compatible = "renesas,rh850";
-		reg = <0>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <122 0>;
-		spi-max-frequency = <5000000>;
-	};
+	status = "disabled";
 };
 
 &soc {
@@ -48,9 +40,14 @@
 		qcom,therm-reset-temp = <119>;
 	};
 
-	qcom,adv7481@70 {
-		qcom,cam-vreg-min-voltage = <1300000 0 1800000>;
-		qcom,cam-vreg-max-voltage = <1300000 0 1800000>;
+	i2c@75b6000 { /* BLSP8 */
+		/* ADV7533 HDMI Bridge Chip removed on ADP Lite */
+		adv7533@3d {
+			status = "disabled";
+		};
+		adv7533@39 {
+			status = "disabled";
+		};
 	};
 };
 

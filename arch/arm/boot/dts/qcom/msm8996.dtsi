@@ -40,6 +40,7 @@
 		i2c8 = &i2c_8;
 		i2c12 = &i2c_12;
 		spi0 = &spi_0;
+		mhi_rmnet0 = &mhi_rmnet_0;
 	};
 
 	psci {
@@ -1693,6 +1694,14 @@
 
 	mhi: qcom,mhi {
 		compatible = "qcom,mhi";
+	};
+
+	mhi_rmnet_0: qcom,mhi-rmnet@0 {
+		compatible = "qcom,mhi-rmnet";
+		qcom,mhi-rx-channel = <101>;
+		qcom,mhi-tx-channel = <100>;
+		qcom,mhi-mru = <8000>;
+		status = "disabled";
 	};
 
         qcom,ipc-spinlock@740000 {
@@ -3765,6 +3774,14 @@
 		compatible = "qcom,msm-power";
 		clock-names = "gpu_clk";
 		clocks = <&clock_gpu clk_gpu_gx_gfx3d_clk>;
+	};
+
+	pps {
+		compatible = "pps-gpio";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_pps>;
+		gpios = <&tlmm 128 0>;
+		status = "okay";
 	};
 };
 
