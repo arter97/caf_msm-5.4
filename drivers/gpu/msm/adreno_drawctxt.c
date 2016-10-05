@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2013,2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -316,7 +316,7 @@ void adreno_drawctxt_switch(struct adreno_device *adreno_dev,
 		return;
 	}
 
-	KGSL_CTXT_INFO(device, "from %p to %p flags %d\n",
+	KGSL_CTXT_INFO(device, "from %pK to %pK flags %d\n",
 			adreno_dev->drawctxt_active, drawctxt, flags);
 
 	/* Save the old context */
