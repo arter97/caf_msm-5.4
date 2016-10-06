@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014,2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -292,7 +292,7 @@ static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 		goto done;
 	iommu_dev = get_iommu_device(iommu_unit, dev);
 	if (!iommu_dev) {
-		KGSL_CORE_ERR("Invalid IOMMU device %p\n", dev);
+		KGSL_CORE_ERR("Invalid IOMMU device %pK\n", dev);
 		ret = -ENOSYS;
 		goto done;
 	}
@@ -681,8 +681,8 @@ static void kgsl_detach_pagetable_iommu_domain(struct kgsl_mmu *mmu)
 				iommu_detach_device(iommu_pt->domain,
 						iommu_unit->dev[j].dev);
 				iommu_unit->dev[j].attached = false;
-				KGSL_MEM_INFO(mmu->device, "iommu %p detached "
-					"from user dev of MMU: %p\n",
+				KGSL_MEM_INFO(mmu->device, "iommu %pK detached "
+					"from user dev of MMU: %pK\n",
 					iommu_pt->domain, mmu);
 			}
 		}
@@ -734,7 +734,7 @@ static int kgsl_attach_pagetable_iommu_domain(struct kgsl_mmu *mmu)
 				}
 				iommu_unit->dev[j].attached = true;
 				KGSL_MEM_INFO(mmu->device,
-				"iommu pt %p attached to dev %p, ctx_id %d\n",
+				"iommu pt %pK attached to dev %pK, ctx_id %d\n",
 				iommu_pt->domain, iommu_unit->dev[j].dev,
 				iommu_unit->dev[j].ctx_id);
 			}
@@ -790,7 +790,7 @@ static int _get_iommu_ctxs(struct kgsl_mmu *mmu,
 		iommu_unit->dev[iommu_unit->dev_count].kgsldev = mmu->device;
 
 		KGSL_DRV_INFO(mmu->device,
-				"Obtained dev handle %p for iommu context %s\n",
+				"Obtained dev handle %pK for iommu context %s\n",
 				iommu_unit->dev[iommu_unit->dev_count].dev,
 				data->iommu_ctxs[i].iommu_ctx_name);
 
@@ -1575,7 +1575,7 @@ kgsl_iommu_unmap(void *mmu_specific_pt,
 
 	ret = iommu_unmap_range(iommu_pt->domain, gpuaddr, range);
 	if (ret)
-		KGSL_CORE_ERR("iommu_unmap_range(%p, %x, %d) failed "
+		KGSL_CORE_ERR("iommu_unmap_range(%pK, %x, %d) failed "
 			"with err: %d\n", iommu_pt->domain, gpuaddr,
 			range, ret);
 
@@ -1606,7 +1606,7 @@ kgsl_iommu_map(void *mmu_specific_pt,
 	ret = iommu_map_range(iommu_pt->domain, iommu_virt_addr, memdesc->sg,
 				size, protflags);
 	if (ret) {
-		KGSL_CORE_ERR("iommu_map_range(%p, %x, %p, %d, %x) err: %d\n",
+		KGSL_CORE_ERR("iommu_map_range(%pK, %x, %pK, %d, %x) err: %d\n",
 			iommu_pt->domain, iommu_virt_addr, memdesc->sg, size,
 			protflags, ret);
 		return ret;
@@ -1616,7 +1616,7 @@ kgsl_iommu_map(void *mmu_specific_pt,
 				page_to_phys(kgsl_guard_page), PAGE_SIZE,
 				protflags & ~IOMMU_WRITE);
 		if (ret) {
-			KGSL_CORE_ERR("iommu_map(%p, %x, %x, %x) err: %d\n",
+			KGSL_CORE_ERR("iommu_map(%pK, %x, %x, %x) err: %d\n",
 				iommu_pt->domain, iommu_virt_addr + size,
 				page_to_phys(kgsl_guard_page),
 				protflags & ~IOMMU_WRITE,

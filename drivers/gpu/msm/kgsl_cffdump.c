@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2012,2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -434,7 +434,7 @@ void kgsl_cffdump_syncmem(struct kgsl_device_private *dev_priv,
 	src = (uint *)kgsl_gpuaddr_to_vaddr(memdesc, gpuaddr);
 	if (memdesc->hostptr == NULL) {
 		KGSL_CORE_ERR("no kernel mapping for "
-			"gpuaddr: 0x%08x, m->host: 0x%p, phys: 0x%08x\n",
+			"gpuaddr: 0x%08x, m->host: 0x%pK, phys: 0x%08x\n",
 			gpuaddr, memdesc->hostptr, memdesc->physaddr);
 		return;
 	}
@@ -521,9 +521,6 @@ EXPORT_SYMBOL(kgsl_cffdump_waitirq);
 static int subbuf_start_handler(struct rchan_buf *buf,
 	void *subbuf, void *prev_subbuf, uint prev_padding)
 {
-	pr_debug("kgsl: cffdump: subbuf_start_handler(subbuf=%p, prev_subbuf"
-		"=%p, prev_padding=%08x)\n", subbuf, prev_subbuf, prev_padding);
-
 	if (relay_buf_full(buf)) {
 		if (!suspended) {
 			suspended = 1;
@@ -579,9 +576,6 @@ static struct rchan_callbacks relay_callbacks = {
 static struct rchan *create_channel(unsigned subbuf_size, unsigned n_subbufs)
 {
 	struct rchan *chan;
-
-	pr_info("kgsl: cffdump: relay: create_channel: subbuf_size %u, "
-		"n_subbufs %u, dir 0x%p\n", subbuf_size, n_subbufs, dir);
 
 	chan = relay_open("cpu", dir, subbuf_size,
 			  n_subbufs, &relay_callbacks, NULL);
