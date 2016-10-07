@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -2253,6 +2253,10 @@ static int __q6asm_open_read(struct audio_client *ac,
 	case FORMAT_AMRWB:
 		open.mode_flags |= BUFFER_META_ENABLE ;
 		open.enc_cfg_id = ASM_MEDIA_FMT_AMRWB_FS;
+		break;
+	case FORMAT_DTMF_DETECTION:
+		open.mode_flags |= STREAM_PRIORITY_HIGH;
+		open.enc_cfg_id = ASM_MEDIA_FMT_DTMF;
 		break;
 	default:
 		pr_err("%s: Invalid format 0x%x\n",

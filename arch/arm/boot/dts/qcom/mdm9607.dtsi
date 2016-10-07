@@ -853,12 +853,13 @@
 		qcom,auxpcm-interface-mode = "pri_pcm_master", "sec_pcm_master";
 		asoc-platform = <&pcm0>, <&pcm1>, <&voip>, <&voice>,
 				<&loopback>, <&hostless>, <&afe>, <&routing>,
-				<&pcm_dtmf>, <&host_pcm>;
+				<&pcm_dtmf>, <&pcm_dsp_dtmf>, <&host_pcm>;
 		asoc-platform-names = "msm-pcm-dsp.0", "msm-pcm-dsp.1",
 				"msm-voip-dsp", "msm-pcm-voice",
 				"msm-pcm-loopback", "msm-pcm-hostless",
 				"msm-pcm-afe", "msm-pcm-routing",
-				"msm-pcm-dtmf", "msm-voice-host-pcm";
+				"msm-pcm-dtmf", "msm-pcm-dsp-dtmf",
+				"msm-voice-host-pcm";
 		asoc-cpu = <&dai_pri_auxpcm>, <&dai_sec_auxpcm>,
 				<&mi2s_prim>, <&mi2s_sec>, <&dtmf_tx>,
 				<&rx_capture_tx>, <&rx_playback_rx>,
@@ -909,12 +910,13 @@
 		qcom,auxpcm-interface-mode = "pri_pcm_master", "sec_pcm_master";
 		asoc-platform = <&pcm0>, <&pcm1>, <&voip>, <&voice>,
 				<&loopback>, <&hostless>, <&afe>, <&routing>,
-				<&pcm_dtmf>, <&host_pcm>;
+				<&pcm_dtmf>, <&pcm_dsp_dtmf>, <&host_pcm>;
 		asoc-platform-names = "msm-pcm-dsp.0", "msm-pcm-dsp.1",
 				"msm-voip-dsp", "msm-pcm-voice",
 				"msm-pcm-loopback", "msm-pcm-hostless",
 				"msm-pcm-afe", "msm-pcm-routing",
-				"msm-pcm-dtmf", "msm-voice-host-pcm";
+				"msm-pcm-dtmf", "msm-pcm-dsp-dtmf",
+				"msm-voice-host-pcm";
 		asoc-cpu = <&dai_pri_auxpcm>, <&dai_sec_auxpcm>,
 				<&mi2s_prim>, <&mi2s_sec>, <&dtmf_tx>,
 				<&rx_capture_tx>, <&rx_playback_rx>,
@@ -1065,6 +1067,14 @@
 
 	pcm_dtmf: qcom,msm-pcm-dtmf {
 		compatible = "qcom,msm-pcm-dtmf";
+	};
+
+	pcm_dsp_dtmf: qcom,msm-pcm-dsp-dtmf {
+		compatible = "qcom,msm-pcm-dsp-dtmf";
+	};
+
+	pcm_dtmf_detect: qcom,msm-dtmf-detect {
+		compatible = "qcom,msm-dtmf-detect";
 	};
 
 	dai_pri_auxpcm: qcom,msm-pri-auxpcm {
