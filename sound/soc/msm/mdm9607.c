@@ -1637,6 +1637,21 @@ static struct snd_soc_dai_link mdm_dai[] = {
 		.ignore_suspend = 1,
 		 .ignore_pmdown_time = 1,
 	},
+	{
+		.name = "DTMF Detection",
+		.stream_name = "DTMF_Detection",
+		.cpu_dai_name = "DTMF_Detection",
+		.platform_name  = "msm-pcm-dsp-dtmf",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		.be_id = MSM_FRONTEND_DAI_DTMF_DETECTION
+	},
 	/* Backend DAI Links */
 	{
 		.name = LPASS_BE_AFE_PCM_RX,
