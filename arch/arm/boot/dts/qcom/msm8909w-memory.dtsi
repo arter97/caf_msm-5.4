@@ -11,6 +11,7 @@
  * GNU General Public License for more details.
  */
 
+
 &external_image_mem {
 	reg = <0x0 0x87a00000 0x0 0x0600000>;
 };
@@ -20,5 +21,5 @@
 };
 
 &peripheral_mem {
-	reg = <0x0 0x8d200000 0x0 0x0500000>;
+	reg = <0x0 0x8d200000 0x0 0x0600000>;
 };
