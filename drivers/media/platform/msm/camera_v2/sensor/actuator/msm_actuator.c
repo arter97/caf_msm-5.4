@@ -278,6 +278,11 @@ static int32_t msm_actuator_move_focus(
 	int32_t num_steps = move_params->num_steps;
 	struct msm_camera_i2c_reg_setting reg_setting;
 
+	if (a_ctrl->actuator_state != ACTUATOR_POWER_UP) {
+		pr_err("actuator is down, fail to focus\n");
+		return -EINVAL;
+	}
+
 	curr_lens_pos = a_ctrl->step_position_table[a_ctrl->curr_step_pos];
 	move_params->curr_lens_pos = curr_lens_pos;
 
@@ -547,6 +552,7 @@ static int32_t msm_actuator_init(struct msm_actuator_ctrl_t *a_ctrl,
 	struct msm_camera_cci_client *cci_client = NULL;
 	CDBG("Enter\n");
 
+	a_ctrl->actuator_state = ACTUATOR_POWER_DOWN;
 	for (i = 0; i < ARRAY_SIZE(actuators); i++) {
 		if (set_info->actuator_params.act_type ==
 			actuators[i]->act_type) {
@@ -944,6 +950,7 @@ static int32_t msm_actuator_i2c_probe(struct i2c_client *client,
 	act_ctrl_t->msm_sd.sd.entity.type = MEDIA_ENT_T_V4L2_SUBDEV;
 	act_ctrl_t->msm_sd.sd.entity.group_id = MSM_CAMERA_SUBDEV_ACTUATOR;
 	act_ctrl_t->msm_sd.close_seq = MSM_SD_CLOSE_2ND_CATEGORY | 0x2;
+	act_ctrl_t->actuator_state = ACTUATOR_POWER_DOWN;
 	msm_sd_register(&act_ctrl_t->msm_sd);
 	pr_info("msm_actuator_i2c_probe: succeeded\n");
 	CDBG("Exit\n");
