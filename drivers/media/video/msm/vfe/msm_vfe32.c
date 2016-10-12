@@ -4339,6 +4339,14 @@ static void vfe32_process_rdi1_reg_update_irq(
 		vfe32_ctrl->share_ctrl->comp_output_mode |=
 						VFE32_OUTPUT_MODE_TERTIARY2;
 	}
+
+	/* This is called only in case of adp camera */
+	if (machine_is_apq8064_adp_2()
+		|| machine_is_apq8064_mplatform()
+		|| machine_is_apq8064_adp2_es2()
+		|| machine_is_apq8064_adp2_es2p5()) {
+			vfe32_reg_update_irq_rdi1_only();
+	}
 }
 
 static void vfe32_process_rdi2_reg_update_irq(

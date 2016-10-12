@@ -25,6 +25,8 @@
 #include <linux/reverse.h>
 #include <media/v4l2-ctrls.h>
 #include <linux/videodev2.h>
+#include <linux/kthread.h>
+#include <linux/sched.h>
 
 #define ADP_MAX_EVENTS 10
 
@@ -50,6 +52,7 @@ static struct vfe_axi_output_config_cmd_type vfe_axi_cmd_para;
 static struct msm_camera_vfe_params_t vfe_para;
 static struct work_struct w_mdp_queue_overlay_buffers;
 static struct workqueue_struct *wq_mdp_queue_overlay_buffers;
+static int reg_status;
 
 static int adp_rear_camera_enable(void);
 static void preview_buffer_return_by_index(int i);
@@ -64,6 +67,12 @@ static int g_preview_height = 507;
 static int g_preview_width = 720;
 static int g_preview_buffer_length;
 static int g_preview_buffer_size;
+
+static void frame_type_read_thread(void *data);
+static int init_frame_type_kthread(void);
+static struct task_struct *frametype_read_id;
+static wait_queue_head_t thread_waitqueue;
+static bool wakeupflag;
 
 #define DEFAULT_SRC_X_OFFSET 27
 #define EVEN_FIELD 0x10
@@ -638,7 +647,6 @@ static void interweave_frame(int srcidx,int destidx, bool even_field)
 static void mdp_queue_overlay_buffers(struct work_struct *work)
 {
 	int buffer_index = 0, buffer_index2 = 0;
-	unsigned int status = 0;
 	static int is_first_commit = true;
 	int ret = 0;
 	struct mdp_display_commit commit_data;
@@ -646,18 +654,11 @@ static void mdp_queue_overlay_buffers(struct work_struct *work)
 	adp_cam_ctxt->commit_count++;
 	/*Read the status of the field register from the bridge chip*/
 	if ( adp_cam_ctxt->first_commit == false) {
-		status = V4L2_IN_ST_NO_SIGNAL;
-		ret = msm_ba_g_input_field_status(
-			adp_cam_ctxt->ba_inst_hdlr, &status);
-		if (ret) {
-			pr_err("%s getting field status failed =%d", __func__,
-				ret);
-			return;
-		}
 		adp_cam_ctxt->even_field =
-			((status & EVEN_FIELD) == EVEN_FIELD)?true:false;
+			((reg_status & EVEN_FIELD) == EVEN_FIELD) ? true : false;
+			adp_cam_ctxt->even_field = (!adp_cam_ctxt->even_field);
 		pr_debug("%s getting field status VALUE =%d", __func__,
-				status);
+				adp_cam_ctxt->even_field);
 		adp_cam_ctxt->first_commit = true;
 		if(adp_cam_ctxt->even_field == false) {
 			/*Skip first frame if ODD*/
@@ -811,6 +812,24 @@ static void mdp_queue_overlay_buffers(struct work_struct *work)
 }
 #endif
 
+
+void vfe32_reg_update_irq_rdi1_only(void)
+{
+	static bool schedule_read_status;
+	pr_debug("Entered %s:\n",
+		__func__);
+	/* Reg update interrupt occurs at the start
+	   and end of session. The field register needs
+	   to be read only at the start of session. So,
+	   thread is woken up only at the start of
+	   the session. */
+	schedule_read_status = !schedule_read_status;
+	if (schedule_read_status) {
+		wakeupflag = true;
+		wake_up_interruptible(&thread_waitqueue);
+	}
+}
+
 void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 {
 	uint32_t ping_pong;
@@ -820,7 +839,6 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 	struct preview_mem *free_buf = NULL;
 	int buffer_index;
 	static bool is_camera_first_frame = true;
-
 	pr_debug("%s:  enter into rdi1 irq now, rdi1_irq_count is %d!!!\n",
 			__func__, rdi1_irq_count);
 
@@ -2570,6 +2588,21 @@ static int adp_camera_destroy(void)
 	return 0;
 }
 
+static int init_frame_type_kthread()
+{
+	char  frametypekthread[] = "frametypekthread";
+	init_waitqueue_head(&thread_waitqueue);
+	pr_debug("Queue initialized\n");
+	frametype_read_id = kthread_run((void *)frame_type_read_thread,
+		(void *)NULL, frametypekthread);
+	if (IS_ERR(frametype_read_id)) {
+		pr_err("Unable to run the thread\n");
+		return -ENOMEM;
+	}
+	pr_debug("%s woken up for first time\n", __func__);
+	return 0;
+}
+
 static int init_camera_kthread(void)
 {
 	int ret;
@@ -2584,6 +2617,11 @@ static int init_camera_kthread(void)
 	return -ENOMEM;
 	}
 	pr_debug("Work Queue Created with priority set");
+	ret = init_frame_type_kthread();
+	if (ret) {
+		pr_err("%s could not be created\n", __func__);
+		return ret;
+	}
 	ret = adp_rear_camera_enable();
 	if (ret)
 		return ret;
@@ -2613,7 +2651,7 @@ static void exit_camera_kthread(void)
 
 	adp_cam_ctxt->state = CAMERA_UNINITIALIZED;
 	destroy_workqueue(wq_mdp_queue_overlay_buffers);
-
+	kthread_stop(frametype_read_id);
 	place_marker("rvc thread disabled");
 
 	pr_debug("%s: exit\n", __func__);
@@ -2743,6 +2781,48 @@ static struct platform_driver adp_camera_platform_driver = {
 		.owner = THIS_MODULE,
 	},
 };
+
+static void frame_type_read_thread(void *data)
+{
+	struct sched_param sp;
+	int ret = 0;
+	unsigned int status = 0;
+	sp.sched_priority = 1;
+	if (sched_setscheduler(current, SCHED_FIFO, &sp) < 0) {
+		pr_err("Thread priority scheduling failed\n");
+		return;
+	}
+	while (!kthread_should_stop()) {
+		ret = 0;
+		wait_event_interruptible (thread_waitqueue, wakeupflag != false);
+		if (kthread_should_stop()) {
+			pr_debug("Frame_type_read_thread has stopped\n");
+			return;
+		}
+		pr_debug("frame_type_read_thread woken up--The thread priority is %d",
+				sp.sched_priority);
+		status = V4L2_IN_ST_NO_SIGNAL;
+		ret = msm_ba_g_input_field_status(adp_cam_ctxt->ba_inst_hdlr,
+					&status);
+		if (ret) {
+			/* Normally this wouldn't fail so
+			   Attempt to read status once more. */
+			status = V4L2_IN_ST_NO_SIGNAL;
+			ret = msm_ba_g_input_field_status(adp_cam_ctxt->ba_inst_hdlr,
+						&status);
+			if (ret) {
+				pr_err("%s getting field status failed =%d", __func__,
+						ret);
+				return;
+			}
+		}
+		pr_debug("%s reg_update_read_status: getting field status VALUE =%d",
+				__func__, status);
+		reg_status = status;
+		wakeupflag = false;
+	}
+	return;
+}
 
 static int __init adp_camera_init_module(void)
 {
