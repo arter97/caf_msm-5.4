@@ -375,6 +375,16 @@ static void msm_ispif_enable_crop(struct ispif_device *ispif,
 	}
 }
 
+static void msm_ispif_disable_crop(struct ispif_device *ispif,
+	uint8_t intftype, uint8_t vfe_intf)
+{
+	uint32_t data;
+	data = msm_camera_io_r(ispif->base + ISPIF_VFE_m_CTRL_0(vfe_intf));
+	data &= ~(1 << (intftype + 7));
+	msm_camera_io_w(data,
+		ispif->base + ISPIF_VFE_m_CTRL_0(vfe_intf));
+}
+
 static void msm_ispif_enable_intf_cids(struct ispif_device *ispif,
 	uint8_t intftype, uint16_t cid_mask, uint8_t vfe_intf, uint8_t enable)
 {
@@ -615,6 +625,8 @@ static int msm_ispif_config(struct ispif_device *ispif,
 			msm_ispif_enable_crop(ispif, intftype, vfe_intf,
 				params->entries[i].crop_start_pixel,
 				params->entries[i].crop_end_pixel);
+		else
+			msm_ispif_disable_crop(ispif, intftype, vfe_intf);
 	}
 
 	for (vfe_intf = 0; vfe_intf < 2; vfe_intf++) {
