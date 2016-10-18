@@ -1110,6 +1110,9 @@ struct vfe_cmd_stats_ack {
 extern
 void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl);
 
+extern
+void vfe32_reg_update_irq_rdi1_only(void);
+
 struct vfe_cmd_stats_buf {
 	uint32_t statsBuf[VFE_STATS_BUFFER_COUNT];
 };
