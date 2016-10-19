@@ -1956,7 +1956,7 @@ void bam_data_resume(struct data_port *port_usb, u8 dev_port_num,
 {
 	struct bam_data_port *port;
 	unsigned long flags;
-	int port_num;
+	int port_num, ret;
 
 	port_num = u_bam_data_func_to_port(func, dev_port_num);
 	if (port_num < 0 || port_num >= n_bam2bam_data_ports) {
@@ -1982,8 +1982,13 @@ void bam_data_resume(struct data_port *port_usb, u8 dev_port_num,
 			port_usb->in_ep_desc_backup,
 			port_usb->out_ep_desc_backup);
 
-		bam_data_connect(port_usb, port->data_ch.trans,
+		ret = bam_data_connect(port_usb, port->data_ch.trans,
 			dev_port_num, func);
+		if (ret) {
+			port_usb->in->desc = NULL;
+			port_usb->out->desc = NULL;
+		}
+
 		return;
 	}
 
