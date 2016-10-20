@@ -115,6 +115,18 @@ Required properties:
    used for generation and detection of DTMF tones, when user is in
    active voice call. APR commands are sent from DTMF driver to ADSP.
 
+* msm-pcm-dsp-dtmf
+
+Required properties:
+
+ - compatible : "qcom,msm-pcm-dsp-dtmf";
+
+* msm-dtmf-detect
+
+Required properties:
+
+ - compatible : "qcom,msm-dtmf-detect";
+
 * msm-dai-stub
 
 [First Level Nodes]
