@@ -1396,3 +1396,18 @@
 &vfe_smmu {
 	qcom,no-smr-check;
 };
+
+/ {
+	reserved-memory {
+		lk_mem: lk_pool@0x91600000 {
+			no-map;
+			reg = <0 0x91600000 0 0x00600000>;
+			label = "lk_pool";
+		};
+
+		early_camera_mem: early_camera_mem@b3fff000 {
+			reg = <0 0xb3fff000 0 0x800000>;
+			label = "early_camera_mem";
+		};
+	};
+};
