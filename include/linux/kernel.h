@@ -36,6 +36,8 @@
 #define LLONG_MIN	(-LLONG_MAX - 1)
 #define ULLONG_MAX	(~0ULL)
 
+#define U32_MAX         ((u32)~0U)
+
 #define STACK_MAGIC	0xdeadbeef
 
 #define ALIGN(x, a)		__ALIGN_KERNEL((x), (a))
