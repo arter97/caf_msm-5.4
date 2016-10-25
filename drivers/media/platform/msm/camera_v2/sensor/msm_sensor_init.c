@@ -25,7 +25,7 @@
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
 
 #define EARLY_CAMERA_SIGNAL_DONE 0xa5a5a5a5
-#define EARLY_CAMERA_SIGNAL_DISABLED 0x5a5a5a5a
+#define EARLY_CAMERA_SIGNAL_DISABLED 0
 
 static bool early_camera_clock_off;
 static struct msm_sensor_init_t *s_init;
@@ -83,6 +83,17 @@ static int32_t msm_sensor_driver_cmd(struct msm_sensor_init_t *s_init,
 
 	switch (cfg->cfgtype) {
 	case CFG_SINIT_PROBE:
+		mutex_lock(&s_init->imutex);
+		s_init->module_init_status = 0;
+		rc = msm_sensor_driver_probe(cfg->cfg.setting,
+			&cfg->probed_info,
+			cfg->entity_name);
+		mutex_unlock(&s_init->imutex);
+		if (rc < 0)
+			pr_err("%s failed (non-fatal) rc %d\n", __func__, rc);
+		break;
+
+	case CFG_SINIT_PROBE_DONE:
 		if(early_camera_clock_off == false) {
 			base = ioremap(0x00A10000, 0x1000);
 			val = msm_camera_io_r_mb(base + MMSS_A_VFE_0_SPARE);
@@ -99,21 +110,10 @@ static int32_t msm_sensor_driver_cmd(struct msm_sensor_init_t *s_init,
 			}
 			else {
 				early_camera_clock_off = true;
-				pr_debug("Voted OFF on early camera clocks");
+				pr_debug("Voted OFF early camera clocks\n");
 			}
 		}
 
-		mutex_lock(&s_init->imutex);
-		s_init->module_init_status = 0;
-		rc = msm_sensor_driver_probe(cfg->cfg.setting,
-			&cfg->probed_info,
-			cfg->entity_name);
-		mutex_unlock(&s_init->imutex);
-		if (rc < 0)
-			pr_err("%s failed (non-fatal) rc %d\n", __func__, rc);
-		break;
-
-	case CFG_SINIT_PROBE_DONE:
 		s_init->module_init_status = 1;
 		wake_up(&s_init->state_wait);
 		break;
