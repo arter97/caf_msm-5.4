@@ -454,6 +454,8 @@
 	qcom,gfxfreq-mx-speedbin2 =
 		<          0  0 >,
 		<  315000000  4 >;
+};
+
 &msm_gpu {
 	qcom,gpu-pwrlevel-bins {
 		#address-cells = <1>;
