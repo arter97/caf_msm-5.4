@@ -78,6 +78,18 @@
 
 #define USB_DEFAULT_SYSTEM_CLOCK 80000000	/* 80 MHz */
 
+#ifndef CONFIG_USB_EHCI_HCD
+void usb_hcd_resume_root_hub(struct usb_hcd *hcd)
+{
+}
+#endif
+
+#ifndef CONFIG_USB
+void usb_disable_autosuspend(struct usb_device *udev)
+{
+}
+#endif
+
 enum msm_otg_phy_reg_mode {
 	USB_PHY_REG_OFF,
 	USB_PHY_REG_ON,

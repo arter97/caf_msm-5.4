@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2013, 2016 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -91,4 +91,12 @@ static inline void usb_qdss_close(struct usb_qdss_ch *ch) { }
 static inline void usb_qdss_free_req(struct usb_qdss_ch *ch) { }
 #endif
 
+#ifndef CONFIG_USB_F_QDSS
+struct usb_qdss_ch *usb_qdss_open(const char *name, void *priv,
+	void (*n)(void *, u32, struct qdss_request *, struct usb_qdss_ch *))
+{
+	return ERR_PTR(-ENODEV);
+}
+void usb_qdss_close(struct usb_qdss_ch *ch) { }
+#endif
 #endif
