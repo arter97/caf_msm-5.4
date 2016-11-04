@@ -632,6 +632,8 @@ static void diag_socket_queue_read(void *ctxt)
 		return;
 
 	info = (struct diag_socket_info *)ctxt;
+	if (info->peripheral != PERIPHERAL_MODEM)
+		return;
 	if (info->hdl && info->wq)
 		queue_work(info->wq, &(info->read_work));
 }
