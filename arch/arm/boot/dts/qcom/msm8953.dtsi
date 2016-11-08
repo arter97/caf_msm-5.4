@@ -2099,12 +2099,15 @@
 		reg = <0x079000 0x180>,
 			<0x070f8800 0x400>,
 			<0x01841030 0x4>,
-			<0x0193f044 0x4>;
+			<0x0193f044 0x4>,
+			<0x0193f020 0x4>;
 		reg-names = "qusb_phy_base",
 			"qscratch_base",
 			"ref_clk_addr",
-			"tcsr_phy_clk_scheme_sel";
+			"tcsr_phy_clk_scheme_sel",
+			"tcsr_phy_level_shift_keeper";
 
+		USB3_GDSC-supply = <&gdsc_usb30>;
 		vdd-supply = <&pm8953_l3>;
 		vdda18-supply = <&pm8953_l7>;
 		vdda33-supply = <&pm8953_l13>;
@@ -2126,10 +2129,12 @@
 		clocks = <&clock_gcc clk_bb_clk1>,
 			 <&clock_gcc clk_gcc_qusb_ref_clk>,
 			 <&clock_gcc clk_gcc_usb_phy_cfg_ahb_clk>,
-			 <&clock_gcc clk_gcc_qusb2_phy_reset>;
+			 <&clock_gcc clk_gcc_qusb2_phy_reset>,
+			 <&clock_gcc clk_gcc_pcnoc_usb3_axi_clk>,
+			 <&clock_gcc clk_gcc_usb30_master_clk>;
 
 		clock-names = "ref_clk_src", "ref_clk", "cfg_ahb_clk",
-			      "phy_reset";
+			      "phy_reset", "iface_clk", "core_clk";
 
 	};
 
