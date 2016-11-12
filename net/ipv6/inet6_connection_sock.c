@@ -66,7 +66,9 @@ struct dst_entry *inet6_csk_route_req(struct sock *sk,
 	memset(&fl6, 0, sizeof(fl6));
 	fl6.flowi6_proto = IPPROTO_TCP;
 	ipv6_addr_copy(&fl6.daddr, &treq->rmt_addr);
-	final_p = fl6_update_dst(&fl6, np->opt, &final);
+	rcu_read_lock();
+	final_p = fl6_update_dst(&fl6, rcu_dereference(np->opt), &final);
+	rcu_read_unlock();
 	ipv6_addr_copy(&fl6.saddr, &treq->loc_addr);
 	fl6.flowi6_oif = sk->sk_bound_dev_if;
 	fl6.flowi6_mark = sk->sk_mark;
@@ -211,6 +213,7 @@ int inet6_csk_xmit(struct sk_buff *skb, struct flowi *fl_unused)
 	struct flowi6 fl6;
 	struct dst_entry *dst;
 	struct in6_addr *final_p, final;
+	int res;
 
 	memset(&fl6, 0, sizeof(fl6));
 	fl6.flowi6_proto = sk->sk_protocol;
@@ -241,12 +244,15 @@ int inet6_csk_xmit(struct sk_buff *skb, struct flowi *fl_unused)
 		__inet6_csk_dst_store(sk, dst, NULL, NULL);
 	}
 
+	rcu_read_lock();
 	skb_dst_set(skb, dst_clone(dst));
 
 	/* Restore final destination back after routing done */
 	ipv6_addr_copy(&fl6.daddr, &np->daddr);
 
-	return ip6_xmit(sk, skb, &fl6, np->opt);
+	res = ip6_xmit(sk, skb, &fl6, rcu_dereference(np->opt));
+	rcu_read_unlock();
+	return res;
 }
 
 EXPORT_SYMBOL_GPL(inet6_csk_xmit);
