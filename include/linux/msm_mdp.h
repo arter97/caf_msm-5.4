@@ -89,6 +89,7 @@
 #define MSMFB_ARB_ACKNOWLEDGE  _IOW(MSMFB_IOCTL_MAGIC, 175, unsigned int)
 #define MSMFB_ARB_GET_STATE    _IOWR(MSMFB_IOCTL_MAGIC, 176, \
 					struct mdp_arb_event)
+#define MSMFB_ARB_CLIENT_READY  _IOW(MSMFB_IOCTL_MAGIC, 177, unsigned int)
 
 #define FB_TYPE_3D_PANEL 0x10101010
 #define MDP_IMGTYPE2_START 0x10000
@@ -731,6 +732,7 @@ struct mdp_arb_event {
  * @event: pointer of event information client registers.
  * @priority: priority of this client.
  * @notification_support_mask: mask of notifications this client supports.
+ * @delay_events: delay the events till client is ready to process it.
  */
 struct mdp_arb_register {
 	char name[MDP_ARB_NAME_LEN];
@@ -739,6 +741,7 @@ struct mdp_arb_register {
 	struct mdp_arb_event *event;
 	int priority;
 	int notification_support_mask;
+	int delay_events;
 };
 
 /**

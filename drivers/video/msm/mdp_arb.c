@@ -697,6 +697,55 @@ static int mdp_arb_ioctl_get_state(struct mdp_arb_device_info *arb,
 	return rc;
 }
 
+static int mdp_arb_client_ready_sub(struct mdp_arb_device_info *arb,
+	struct mdp_arb_client_db *client_db, int mask, int user)
+{
+	int rc = 0;
+	struct mdp_arb_client_register_info *client = &client_db->register_info;
+
+	if (!strlen(client->common.name)) {
+		pr_err("%s client name is empty", __func__);
+		return -EINVAL;
+	} else if (client->common.fb_index >= FB_MAX) {
+		pr_err("%s fb_index=%d is out of the bound, name=%s, user=%d",
+		__func__, client->common.fb_index, client->common.name, user);
+		return -EINVAL;
+	}
+
+	mutex_lock(&arb->dev_mutex);
+	if (client_db->register_info.common.delay_events)
+		client_db->register_info.common.delay_events = false;
+	mutex_unlock(&arb->dev_mutex);
+
+	return rc;
+}
+
+static int mdp_arb_ioctl_client_ready(struct mdp_arb_device_info *arb,
+					struct file *file, void __user *p)
+{
+	int rc = 0;
+	struct mdp_arb_client_db *client_db;
+	unsigned int val = 0;
+
+	if (!file) {
+		pr_err("%s file is NULL", __func__);
+		return -EINVAL;
+	} else if (!file->private_data) {
+		pr_err("%s private_data in file is NULL", __func__);
+		return -EINVAL;
+	}
+	client_db = file->private_data;
+	if (copy_from_user(&val, p, sizeof(val))) {
+		pr_err("%s copy_from_user failed", __func__);
+		return -EFAULT;
+	}
+
+	rc = mdp_arb_client_ready_sub(arb, client_db, val, true);
+	if (rc)
+		pr_err("%s failed", __func__);
+
+	return rc;
+}
 static int mdp_arb_trigger_optimize_cb(struct mdp_arb_device_info *arb,
 	struct mdp_arb_notify_list *notify, bool wait)
 {
@@ -729,6 +778,10 @@ static int mdp_arb_trigger_optimize_cb(struct mdp_arb_device_info *arb,
 			pr_err("%s temp->client is NULL", __func__);
 			rc = -EFAULT;
 			goto out;
+		}
+		if (temp->client->register_info.common.delay_events) {
+			temp->client->ack = true;
+			continue;
 		}
 		if (temp->client->register_info.cb) {
 			/* Kernel clients */
@@ -852,6 +905,10 @@ static int mdp_arb_trigger_common_cb(struct mdp_arb_device_info *arb,
 			pr_err("%s temp->client is NULL", __func__);
 			rc = -EFAULT;
 			goto out;
+		}
+		if (temp->client->register_info.common.delay_events) {
+			temp->client->ack = true;
+			continue;
 		}
 		if (temp->client->register_info.cb) {
 			/* Kernel clients */
@@ -1935,6 +1992,9 @@ static int mdp_arb_do_ioctl(struct file *file, unsigned int cmd,
 		break;
 	case MSMFB_ARB_GET_STATE:
 		rc = mdp_arb_ioctl_get_state(arb, file, argp);
+		break;
+	case MSMFB_ARB_CLIENT_READY:
+		rc = mdp_arb_ioctl_client_ready(arb, file, argp);
 		break;
 	default:
 		rc = mdp_arb_overlay_ioctl(file, cmd, arg);
