@@ -665,6 +665,7 @@
 
 		max-clock-frequency-hz = <125000000>, <0>, <1010000>,
 					 <0>, <0>, <0>, <0>, <0>, <0>;
+		status = "disabled";
 	};
 
 	dma_blsp1: qcom,sps-dma@7884000 { /* BLSP1 */
@@ -933,6 +934,7 @@
 			<45 512 98572 655360>, <1 512 98572 1600000>,
 			/* Upto 800 Mbps */
 			<45 512 207108 1146880>, <1 512 207108 3124992>;
+		status = "disabled";
 	};
 
 	qcom,msm-thermal {
