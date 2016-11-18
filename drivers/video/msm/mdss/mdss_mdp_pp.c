@@ -4948,9 +4948,6 @@ static int is_valid_calib_addr(void *addr, u32 operation)
 	int ret = 0;
 	char __iomem *ptr = addr;
 	char __iomem *mixer_base = mdss_res->mixer_intf->base;
-	char __iomem *rgb_base   = mdss_res->rgb_pipes->base;
-	char __iomem *dma_base   = mdss_res->dma_pipes->base;
-	char __iomem *vig_base   = mdss_res->vig_pipes->base;
 	char __iomem *ctl_base   = mdss_res->ctl_off->base;
 	char __iomem *dspp_base  = mdss_res->mixer_intf->dspp_base;
 
@@ -4975,13 +4972,16 @@ static int is_valid_calib_addr(void *addr, u32 operation)
 	} else if (ptr >= ctl_base && ptr < (ctl_base + (mdss_res->nctl
 					* MDSS_MDP_CTL_ADDRESS_OFFSET))) {
 		ret = is_valid_calib_ctrl_addr(ptr);
-	} else if (ptr >= vig_base && ptr < (vig_base + (mdss_res->nvig_pipes
+	} else if (mdss_res->vig_pipes &&
+			ptr >= mdss_res->vig_pipes->base && ptr < (mdss_res->vig_pipes->base + (mdss_res->nvig_pipes
 					* MDSS_MDP_SSPP_ADDRESS_OFFSET))) {
 		ret = is_valid_calib_vig_addr(ptr);
-	} else if (ptr >= rgb_base && ptr < (rgb_base + (mdss_res->nrgb_pipes
+	} else if (mdss_res->rgb_pipes &&
+			ptr >= mdss_res->rgb_pipes->base && ptr < (mdss_res->rgb_pipes->base + (mdss_res->nrgb_pipes
 					* MDSS_MDP_SSPP_ADDRESS_OFFSET))) {
 		ret = is_valid_calib_rgb_addr(ptr);
-	} else if (ptr >= dma_base && ptr < (dma_base + (mdss_res->ndma_pipes
+	} else if (mdss_res->dma_pipes &&
+			ptr >= mdss_res->dma_pipes->base && ptr < (mdss_res->dma_pipes->base + (mdss_res->ndma_pipes
 					* MDSS_MDP_SSPP_ADDRESS_OFFSET))) {
 		ret = is_valid_calib_dma_addr(ptr);
 	} else if (ptr >= mixer_base && ptr < (mixer_base +
