@@ -62,6 +62,7 @@ static struct completion preview_disabled;
 
 static struct msm_camera_preview_data preview_data;
 static struct mdp_buf_queue s_mdp_buf_queue;
+static atomic_t mdp_buf_enq_num = ATOMIC_INIT(0);
 
 static int g_preview_height = 507;
 static int g_preview_width = 720;
@@ -151,7 +152,6 @@ struct adp_camera_ctxt {
 	struct dentry *debugfs_root;
 
 	/*Interweave and Commit once in 2 frames: 30fps*/
-	unsigned char commit_count;
 	bool even_field;
 	bool first_commit;
 	/*Maintains previous frame drop status*/
@@ -277,6 +277,7 @@ static int mdp_buf_queue_enq(int buf_idx)
 		pr_debug("enq buf_idx %d write_idx %d",
 			buf_idx, s_mdp_buf_queue.write_idx);
 		s_mdp_buf_queue.write_idx = new_buf_idx;
+		atomic_inc(&mdp_buf_enq_num);
 	}
 	return rc;
 }
@@ -290,8 +291,13 @@ static int mdp_buf_queue_deq(void)
 			buf_idx, s_mdp_buf_queue.read_idx);
 		s_mdp_buf_queue.read_idx =
 			(s_mdp_buf_queue.read_idx+1)%MDP_BUF_QUEUE_LENGTH;
+			atomic_dec(&mdp_buf_enq_num);
 	}
 	return buf_idx;
+}
+static int mdp_buf_queue_g_num(void)
+{
+	return atomic_read(&mdp_buf_enq_num);
 }
 
 static void mdp_queue_flush(void)
@@ -650,8 +656,8 @@ static void mdp_queue_overlay_buffers(struct work_struct *work)
 	static int is_first_commit = true;
 	int ret = 0;
 	struct mdp_display_commit commit_data;
+	int enq_num = 0;
 
-	adp_cam_ctxt->commit_count++;
 	/*Read the status of the field register from the bridge chip*/
 	if ( adp_cam_ctxt->first_commit == false) {
 		adp_cam_ctxt->even_field =
@@ -662,7 +668,6 @@ static void mdp_queue_overlay_buffers(struct work_struct *work)
 		adp_cam_ctxt->first_commit = true;
 		if(adp_cam_ctxt->even_field == false) {
 			/*Skip first frame if ODD*/
-			adp_cam_ctxt->commit_count = 0;
 			adp_cam_ctxt->even_field = true;
 
 			buffer_index = mdp_buf_queue_deq();
@@ -676,12 +681,12 @@ static void mdp_queue_overlay_buffers(struct work_struct *work)
 			}
 			preview_buffer_return_by_index(buffer_index);
 		}
-		pr_debug("%s: ret = %d, Field = %d, Commit_cnt = %d\n",
-	__func__, ret, adp_cam_ctxt->even_field, adp_cam_ctxt->commit_count);
+		pr_debug("%s: ret = %d, Field = %d\n",
+	__func__, ret, adp_cam_ctxt->even_field);
 	}
 
-	if(adp_cam_ctxt->commit_count == 2) {
-	adp_cam_ctxt->commit_count = 0;
+	enq_num = mdp_buf_queue_g_num();
+	if(enq_num >= 2) {
 
 
 	/* dequeue next buffer to display */
@@ -853,6 +858,7 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 		if (adp_cam_ctxt->prev_frame_dropped == true) {
 			adp_cam_ctxt->prev_frame_dropped = false;
 			pr_err("Frame skipped\n");
+			queue_work(wq_mdp_queue_overlay_buffers, &w_mdp_queue_overlay_buffers);
 		}
 		else {
 		/* check if there is free buffer,
@@ -874,7 +880,6 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 			 */
 			buffer_index =
 				preview_find_buffer_index_by_paddr(ch0_paddr);
-
 			/* enq buffer to mdp buffers */
 			rc = mdp_buf_queue_enq(buffer_index);
 			if (rc) {
@@ -893,7 +898,6 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 				place_marker("First Camera Frame");
 				is_camera_first_frame = false;
 			}
-
 			queue_work(wq_mdp_queue_overlay_buffers, &w_mdp_queue_overlay_buffers);
 
 			if (free_buf) {
@@ -919,6 +923,7 @@ void vfe32_process_output_path_irq_rdi1_only(struct axi_ctrl_t *axi_ctrl)
 				__func__,
 			axi_ctrl->share_ctrl->outpath.out3.frame_drop_cnt);
 			adp_cam_ctxt->prev_frame_dropped = true;
+			queue_work(wq_mdp_queue_overlay_buffers, &w_mdp_queue_overlay_buffers);
 		}
 		}
 	}
@@ -1572,6 +1577,7 @@ static int adp_rear_camera_enable(void)
 
 	/* init mdp buffer queue */
 	memset(&s_mdp_buf_queue, 0, sizeof(s_mdp_buf_queue));
+	atomic_set(&mdp_buf_enq_num, 0);
 
 	my_axi_ctrl->share_ctrl->current_mode = 4096; /* BIT(12) */
 	my_axi_ctrl->share_ctrl->operation_mode = 4096;
@@ -1602,7 +1608,6 @@ static int adp_camera_disable_stream(void)
 
 	adp_cam_ctxt->camera_stream_enabled = false;
 
-	adp_cam_ctxt->commit_count = 0;
 	adp_cam_ctxt->even_field = false;
 	adp_cam_ctxt->first_commit = false;
 	adp_cam_ctxt->prev_frame_dropped = false;
@@ -1642,7 +1647,6 @@ static int adp_camera_enable_stream(void)
 
 	adp_cam_ctxt->camera_stream_enabled = true;
 
-	adp_cam_ctxt->commit_count = 0;
 	adp_cam_ctxt->even_field = false;
 	adp_cam_ctxt->first_commit = false;
 	adp_cam_ctxt->prev_frame_dropped = false;
@@ -2754,7 +2758,7 @@ static int adp_camera_resume(struct platform_device *pdev)
 
 	/* init mdp buffer queue */
 	memset(&s_mdp_buf_queue, 0, sizeof(s_mdp_buf_queue));
-
+	atomic_set(&mdp_buf_enq_num, 0);
 	rc = preview_set_data_pipeline();
 	if (rc)
 		return rc;
@@ -2808,6 +2812,7 @@ static void frame_type_read_thread(void *data)
 			/* Normally this wouldn't fail so
 			   Attempt to read status once more. */
 			status = V4L2_IN_ST_NO_SIGNAL;
+			pr_debug("Reading the status again\n");
 			ret = msm_ba_g_input_field_status(adp_cam_ctxt->ba_inst_hdlr,
 						&status);
 			if (ret) {
