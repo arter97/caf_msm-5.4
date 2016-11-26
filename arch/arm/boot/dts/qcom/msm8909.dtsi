@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -113,10 +113,10 @@
 			label = "venus_qseecom_mem";
 		};
 
-		audio_mem: audio_region@0 {
+		audio_qseecom_mem: audio_qseecom_region@0 {
 			linux,reserve-contiguous-region;
-			reg = <0 0 0 0x314000>;
-			label = "audio_mem";
+			reg = <0 0 0 0x400000>;
+			label = "audio_qseecom_mem";
 		};
 
 		cont_splash_mem: splash_region@83000000 {
