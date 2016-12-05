@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -87,8 +87,7 @@ int pil_q6v5_make_proxy_votes(struct pil_desc *pil)
 	}
 
 	ret = regulator_set_voltage(drv->vreg_cx,
-				    RPM_REGULATOR_CORNER_SUPER_TURBO,
-				    RPM_REGULATOR_CORNER_SUPER_TURBO);
+				    RPM_REGULATOR_CORNER_SUPER_TURBO, INT_MAX);
 	if (ret) {
 		dev_err(pil->dev, "Failed to request vdd_cx voltage.\n");
 		goto err_cx_voltage;
@@ -121,8 +120,7 @@ err_vreg_pll:
 err_cx_enable:
 	regulator_set_optimum_mode(drv->vreg_cx, 0);
 err_cx_mode:
-	regulator_set_voltage(drv->vreg_cx, RPM_REGULATOR_CORNER_NONE,
-			      RPM_REGULATOR_CORNER_SUPER_TURBO);
+	regulator_set_voltage(drv->vreg_cx, RPM_REGULATOR_CORNER_NONE, INT_MAX);
 err_cx_voltage:
 	clk_disable_unprepare(drv->xo);
 out:
@@ -137,8 +135,7 @@ void pil_q6v5_remove_proxy_votes(struct pil_desc *pil)
 		regulator_disable(drv->vreg_pll);
 	regulator_disable(drv->vreg_cx);
 	regulator_set_optimum_mode(drv->vreg_cx, 0);
-	regulator_set_voltage(drv->vreg_cx, RPM_REGULATOR_CORNER_NONE,
-			      RPM_REGULATOR_CORNER_SUPER_TURBO);
+	regulator_set_voltage(drv->vreg_cx, RPM_REGULATOR_CORNER_NONE, INT_MAX);
 	clk_disable_unprepare(drv->xo);
 }
 EXPORT_SYMBOL(pil_q6v5_remove_proxy_votes);
