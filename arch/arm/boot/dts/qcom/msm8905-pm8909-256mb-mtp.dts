@@ -24,3 +24,11 @@
 		bootargs = "boot_cpus=0,1 sched_enable_hmp=1";
 	};
 };
+
+&modem_adsp_mem {
+	reg = <0x0 0x88000000 0x0 0x03900000>;
+};
+
+&peripheral_mem {
+	reg = <0x0 0x8b900000 0x0 0x0500000>;
+};
