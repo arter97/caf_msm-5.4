@@ -783,7 +783,6 @@ static void handle_event_change(enum command_response cmd, void *data)
 
 	switch (event_notify->hal_event_type) {
 	case HAL_EVENT_SEQ_CHANGED_SUFFICIENT_RESOURCES:
-		inst->sufficient_res_event_change_count++;
 		event = V4L2_EVENT_SEQ_CHANGED_INSUFFICIENT;
 		control.id =
 			V4L2_CID_MPEG_VIDC_VIDEO_CONTINUE_DATA_TRANSFER;
@@ -791,10 +790,7 @@ static void handle_event_change(enum command_response cmd, void *data)
 		if (rc)
 			dprintk(VIDC_WARN,
 					"Failed to get Smooth streamng flag\n");
-		if (!rc && control.value == true &&
-			inst->sufficient_res_event_change_count > 1 &&
-			msm_comm_get_stream_output_mode(inst) ==
-			HAL_VIDEO_DECODER_PRIMARY) {
+		if (!rc && control.value == true) {
 			event = V4L2_EVENT_SEQ_CHANGED_SUFFICIENT;
 			dprintk(VIDC_DBG,
 				"send session_continue after sufficient event\n");
