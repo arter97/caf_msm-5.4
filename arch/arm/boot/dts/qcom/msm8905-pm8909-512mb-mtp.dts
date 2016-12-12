@@ -17,9 +17,9 @@
 #include "msm8909-pm8909.dtsi"
 #include "msm8909-pm8909-mtp.dtsi"
 / {
-	model = "Qualcomm Technologies, Inc. MSM8909-PM8909 256MB MTP";
+	model = "Qualcomm Technologies, Inc. MSM8905-PM8909 512MB MTP";
 	compatible = "qcom,msm8909-mtp", "qcom,msm8909", "qcom,mtp";
-	qcom,board-id= <8 0x200>;
+	qcom,board-id= <8 0x100>;
 	chosen {
 		bootargs = "boot_cpus=0,1 sched_enable_hmp=1";
 	};
