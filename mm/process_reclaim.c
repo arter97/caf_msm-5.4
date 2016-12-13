@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -114,7 +114,7 @@ static void swap_fn(struct work_struct *work)
 	int i;
 	int tasksize;
 	int total_sz = 0;
-	short min_score_adj = 360;
+	short min_score_adj = 0;
 	int total_scan = 0;
 	int total_reclaimed = 0;
 	int nr_to_reclaim;
@@ -136,7 +136,7 @@ static void swap_fn(struct work_struct *work)
 			continue;
 
 		oom_score_adj = p->signal->oom_score_adj;
-		if (oom_score_adj < min_score_adj) {
+		if (oom_score_adj == min_score_adj) {
 			task_unlock(p);
 			continue;
 		}
