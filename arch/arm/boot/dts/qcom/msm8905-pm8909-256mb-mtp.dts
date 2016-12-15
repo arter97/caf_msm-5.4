@@ -19,7 +19,8 @@
 / {
 	model = "Qualcomm Technologies, Inc. MSM8905-PM8909 256MB MTP";
 	compatible = "qcom,msm8909-mtp", "qcom,msm8909", "qcom,mtp";
-	qcom,board-id= <8 0x200>;
+	qcom,msm-id = <331 0>;
+	qcom,board-id = <8 0x200>;
 	chosen {
 		bootargs = "boot_cpus=0,1 sched_enable_hmp=1";
 	};
