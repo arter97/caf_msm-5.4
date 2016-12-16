@@ -70,6 +70,10 @@
 		lpass_mclk0_mode_muxsel_reg = <0x0c034018>;
 		lpass_rcg_ref_clk_src_sel_reg = <0x0c037000>;
 	};
+
+	gpio_keys {
+		/delete-node/ home;
+	};
 };
 
 &wcd9335 {
