@@ -37,3 +37,11 @@
 	/delete-node/ etm@84e000;
 	/delete-node/ etm@84f000;
 };
+
+&modem_adsp_mem {
+	reg = <0x0 0x88000000 0x0 0x04900000>;
+};
+
+&peripheral_mem {
+	reg = <0x0 0x8c900000 0x0 0x0500000>;
+};
