@@ -777,6 +777,8 @@ static int32_t msm_actuator_config(struct msm_actuator_ctrl_t *a_ctrl,
 		rc = msm_actuator_init(a_ctrl);
 		if (rc < 0)
 			pr_err("msm_actuator_init failed %d\n", rc);
+		else
+			a_ctrl->actuator_state = ACTUATOR_POWER_UP;
 		break;
 	case CFG_GET_ACTUATOR_INFO:
 		cdata->is_af_supported = 1;
