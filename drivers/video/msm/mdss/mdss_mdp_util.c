@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -629,7 +629,8 @@ static int mdss_mdp_map_buffer(struct mdss_mdp_img_data *data)
 						mdss_get_iommu_domain(domain),
 						0, SZ_4K, 0, &data->addr,
 						&data->len, 0, 0);
-			data->mapped = true;
+			if (!IS_ERR_VALUE(ret))
+				data->mapped = true;
 		} else {
 			ret = ion_phys(iclient, data->srcp_ihdl,
 					&data->addr, (size_t *) &data->len);
