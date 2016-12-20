@@ -26,3 +26,14 @@
 		bootargs = "boot_cpus=0,1 sched_enable_hmp=1";
 	};
 };
+
+&soc {
+	/delete-node/ jtagmm@84e000;
+	/delete-node/ jtagmm@84f000;
+	/delete-node/ qcom,spm@b0a9000;
+	/delete-node/ qcom,spm@b0b9000;
+	/delete-node/ cti@853000;
+	/delete-node/ cti@854000;
+	/delete-node/ etm@84e000;
+	/delete-node/ etm@84f000;
+};
