@@ -78,7 +78,7 @@
 			synaptics,irq-gpio = <&msm_gpio 13 0x2008>;
 			synaptics,reset-gpio = <&msm_gpio 12 0x0>;
 			synaptics,disable-gpios;
-			synaptics,display-coords = <0 0 719 1279>;
+			synaptics,display-coords = <0 0 479 479>;
 			synaptics,panel-coords = <0 0 719 1405>;
 		};
 	};
