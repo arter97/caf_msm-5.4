@@ -1278,6 +1278,10 @@ static int32_t msm_cci_init(struct v4l2_subdev *sd,
 		CDBG("%s:%d master %d\n", __func__, __LINE__, master);
 		if (master < MASTER_MAX && master >= 0) {
 			mutex_lock(&cci_dev->cci_master_info[master].mutex);
+			mutex_lock(&cci_dev->
+				cci_master_info[master].mutex_q[PRIORITY_QUEUE]);
+			mutex_lock(&cci_dev->
+				cci_master_info[master].mutex_q[SYNC_QUEUE]);
 			flush_workqueue(cci_dev->write_wq[master]);
 			/* Re-initialize the completion */
 			reinit_completion(&cci_dev->
@@ -1302,6 +1306,10 @@ static int32_t msm_cci_init(struct v4l2_subdev *sd,
 			if (rc <= 0)
 				pr_err("%s:%d wait failed %d\n", __func__,
 					__LINE__, rc);
+			mutex_unlock(&cci_dev->
+				cci_master_info[master].mutex_q[SYNC_QUEUE]);
+			mutex_unlock(&cci_dev->
+				cci_master_info[master].mutex_q[PRIORITY_QUEUE]);
 			mutex_unlock(&cci_dev->cci_master_info[master].mutex);
 		}
 		return 0;
