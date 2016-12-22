@@ -1,0 +1,47 @@
+/*
+ * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&modem_adsp_mem {
+	reg = <0x0 0x88000000 0x0 0x03900000>;
+};
+
+&peripheral_mem {
+	reg = <0x0 0x8b900000 0x0 0x0500000>;
+};
+
+&soc {
+	i2c@78b9000 { /* BLSP1 QUP5 */
+		synaptics@20 {
+			synaptics,display-coords = <0 0 479 479>;
+		};
+	};
+
+	gen-vkeys {
+		compatible = "qcom,gen-vkeys";
+		label = "synaptics_dsx";
+		qcom,disp-maxx = <440>;
+		qcom,disp-maxy = <854>;
+		qcom,panel-maxx = <440>;
+		qcom,panel-maxy = <935>;
+		qcom,key-codes = <158 139 172 217>;
+	};
+
+	/delete-node/ jtagmm@84e000;
+	/delete-node/ jtagmm@84f000;
+	/delete-node/ qcom,spm@b0a9000;
+	/delete-node/ qcom,spm@b0b9000;
+	/delete-node/ cti@853000;
+	/delete-node/ cti@854000;
+	/delete-node/ etm@84e000;
+	/delete-node/ etm@84f000;
+};
