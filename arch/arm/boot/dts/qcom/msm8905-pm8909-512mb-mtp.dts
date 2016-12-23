@@ -38,6 +38,10 @@
 	/delete-node/ etm@84f000;
 };
 
+&mem_client_1_size {
+	qcom,peripheral-size = <2097152>;
+};
+
 &modem_adsp_mem {
 	reg = <0x0 0x88000000 0x0 0x04900000>;
 };
