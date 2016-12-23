@@ -35,6 +35,10 @@
 	reg = <0x0 0x8b900000 0x0 0x0500000>;
 };
 
+&venus_qseecom_mem {
+	reg = <0 0 0 0x400000>;
+};
+
 &soc {
 	i2c@78b9000 { /* BLSP1 QUP5 */
 		synaptics@20 {
