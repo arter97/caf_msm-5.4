@@ -204,6 +204,7 @@ struct sensorb_cfg_data32 {
 		struct msm_sensor_init_params sensor_init_params;
 		compat_uptr_t                 setting;
 		struct msm_sensor_i2c_sync_params sensor_i2c_sync_params;
+		uint8_t                       alternative_slave_addr;
 	} cfg;
 };
 

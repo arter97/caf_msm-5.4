@@ -214,6 +214,7 @@ struct msm_sensor_info_t {
 	uint32_t sensor_mount_angle;
 	int modes_supported;
 	enum camb_position_t position;
+	uint8_t  alt_slave_addr;
 };
 
 struct camera_vreg_t {
@@ -233,6 +234,7 @@ struct sensorb_cfg_data {
 		struct msm_sensor_init_params sensor_init_params;
 		void                         *setting;
 		struct msm_sensor_i2c_sync_params sensor_i2c_sync_params;
+		uint8_t alternative_slave_addr;
 	} cfg;
 };
 
@@ -342,6 +344,7 @@ enum msm_sensor_cfg_type_t {
 	CFG_WRITE_I2C_ARRAY_ASYNC,
 	CFG_WRITE_I2C_ARRAY_SYNC,
 	CFG_WRITE_I2C_ARRAY_SYNC_BLOCK,
+	CFG_ALTERNATIVE_SLAVE,
 };
 
 enum msm_actuator_cfg_type_t {

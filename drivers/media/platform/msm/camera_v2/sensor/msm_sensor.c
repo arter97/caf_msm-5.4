@@ -894,7 +894,19 @@ static int msm_sensor_config32(struct msm_sensor_ctrl_t *s_ctrl,
 		}
 		break;
 	}
+	case CFG_ALTERNATIVE_SLAVE:
+    if (s_ctrl->sensor_i2c_client->cci_client) {
+      s_ctrl->sensor_i2c_client->cci_client->sid =
+        cdata->cfg.alternative_slave_addr >> 1;
+    } else if (s_ctrl->sensor_i2c_client->client) {
+      s_ctrl->sensor_i2c_client->client->addr =
+        cdata->cfg.alternative_slave_addr >> 1;
+    }
 
+    CDBG("%s:%d Alternative slave addr: 0x%x\n", __func__,
+            __LINE__, cdata->cfg.alternative_slave_addr);
+
+	  break;
 	default:
 		rc = -EFAULT;
 		break;
