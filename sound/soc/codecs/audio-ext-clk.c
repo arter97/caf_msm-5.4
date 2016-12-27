@@ -57,8 +57,11 @@ struct audio_ext_ap_clk2 {
 struct audio_ext_lpass_mclk {
 	struct pinctrl_info pnctrl_info;
 	struct clk c;
+	bool has_external_clk_src;
 	u32 lpass_clock;
 	void __iomem *lpass_csr_gpio_mux_spkrctl_vaddr;
+	void __iomem *lpass_mclk0_mode_muxsel_vaddr;
+	void __iomem *lpass_rcg_ref_clk_src_sel_vaddr;
 };
 
 static struct afe_clk_set clk2_config = {
@@ -212,6 +215,24 @@ static int audio_ext_lpass_mclk_prepare(struct clk *clk)
 			val = val | 0x00000002;
 			iowrite32(val, audio_lpass_mclk->
 					lpass_csr_gpio_mux_spkrctl_vaddr);
+		}
+
+		if (audio_lpass_mclk->lpass_mclk0_mode_muxsel_vaddr &&
+			audio_lpass_mclk->has_external_clk_src) {
+			val = ioread32(audio_lpass_mclk->
+					lpass_mclk0_mode_muxsel_vaddr);
+			val |= 0x00000001;
+			iowrite32(val, audio_lpass_mclk->
+					lpass_mclk0_mode_muxsel_vaddr);
+		}
+
+		if (audio_lpass_mclk->has_external_clk_src &&
+			audio_lpass_mclk->lpass_rcg_ref_clk_src_sel_vaddr) {
+			val = ioread32(audio_lpass_mclk->
+					lpass_rcg_ref_clk_src_sel_vaddr);
+			val &= 0xfffffffe;
+			iowrite32(val, audio_lpass_mclk->
+					lpass_rcg_ref_clk_src_sel_vaddr);
 		}
 
 		digital_cdc_core_clk.enable = 1;
@@ -454,20 +475,38 @@ err:
 	return -EINVAL;
 }
 
-static void audio_ref_update_afe_mclk_id(const char *ptr)
+static int audio_ref_update_afe_mclk_id(const char *ptr, enum clk_mux mux)
 {
+	uint32_t *clk_id;
+
+	switch (mux) {
+	case AP_CLK2:
+		clk_id = &clk2_config.clk_id;
+		break;
+	case LPASS_MCLK:
+		clk_id = &digital_cdc_core_clk.clk_id;
+		break;
+	case LPASS_MCLK2:
+		clk_id = &lpass_default2.clk_id;
+		break;
+	default:
+		pr_err("%s Not a valid MUX ID: %d\n", __func__, mux);
+		return -EINVAL;
+	}
+
 	if (!strcmp(ptr, "pri_mclk")) {
 		pr_debug("%s: updating the mclk id with primary mclk\n",
 				__func__);
-		clk2_config.clk_id = Q6AFE_LPASS_CLK_ID_MCLK_1;
+		*clk_id = Q6AFE_LPASS_CLK_ID_MCLK_1;
 	} else if (!strcmp(ptr, "sec_mclk")) {
 		pr_debug("%s: updating the mclk id with secondary mclk\n",
 				__func__);
-		clk2_config.clk_id = Q6AFE_LPASS_CLK_ID_MCLK_2;
+		*clk_id = Q6AFE_LPASS_CLK_ID_MCLK_2;
 	} else {
 		pr_debug("%s: updating the mclk id with default\n", __func__);
 	}
-	pr_debug("%s: clk_id = 0x%x\n", __func__, clk2_config.clk_id);
+	pr_debug("%s: clk_id = 0x%x\n", __func__, *clk_id);
+	return 0;
 }
 
 static int audio_ref_clk_probe(struct platform_device *pdev)
@@ -479,6 +518,8 @@ static int audio_ref_clk_probe(struct platform_device *pdev)
 	const char *mclk_id = "qcom,lpass-mclk-id";
 	const char *mclk_str = NULL;
 	u32 lpass_csr_gpio_mux_spkrctl_reg = 0;
+	u32 lpass_mclk0_mode_muxsel_reg = 0;
+	u32 lpass_rcg_ref_clk_src_sel_reg = 0;
 
 	ret = of_property_read_u32(pdev->dev.of_node,
 			"qcom,lpass-clock",
@@ -487,15 +528,49 @@ static int audio_ref_clk_probe(struct platform_device *pdev)
 		dev_dbg(&pdev->dev, "%s: qcom,lpass-clock is undefined\n",
 				__func__);
 
+
+	ret = of_property_read_string(pdev->dev.of_node,
+				mclk_id, &mclk_str);
+	if (ret)
+		dev_dbg(&pdev->dev, "%s:of read string %s not present %d\n",
+				__func__, mclk_id, ret);
+
 	ret = of_property_read_u32(pdev->dev.of_node,
 			"qcom,codec-mclk-clk-freq",
 			&mclk_freq);
 	if (!ret && (mclk_freq == 12288000 || audio_lpass_mclk.lpass_clock)) {
+		digital_cdc_core_clk.clk_freq_in_hz = mclk_freq;
+
 		ret = of_property_read_u32(pdev->dev.of_node, "reg",
 				&lpass_csr_gpio_mux_spkrctl_reg);
 		if (!ret) {
 			audio_lpass_mclk.lpass_csr_gpio_mux_spkrctl_vaddr =
 				ioremap(lpass_csr_gpio_mux_spkrctl_reg, 4);
+		}
+
+		ret = of_property_read_u32(pdev->dev.of_node,
+					"lpass_mclk0_mode_muxsel_reg",
+					&lpass_mclk0_mode_muxsel_reg);
+		if (!ret) {
+			audio_lpass_mclk.lpass_mclk0_mode_muxsel_vaddr =
+				ioremap(lpass_mclk0_mode_muxsel_reg, 4);
+		}
+
+		ret = of_property_read_u32(pdev->dev.of_node,
+					"lpass_rcg_ref_clk_src_sel_reg",
+					&lpass_rcg_ref_clk_src_sel_reg);
+		if (!ret) {
+			audio_lpass_mclk.lpass_rcg_ref_clk_src_sel_vaddr =
+				ioremap(lpass_rcg_ref_clk_src_sel_reg, 4);
+		}
+
+		audio_lpass_mclk.has_external_clk_src =
+				of_property_read_bool(pdev->dev.of_node,
+						"qcom,has_external_clk");
+
+		if (mclk_str) {
+			audio_ref_update_afe_mclk_id(mclk_str, LPASS_MCLK);
+			audio_ref_update_afe_mclk_id(mclk_str, LPASS_MCLK2);
 		}
 
 		ret = audio_get_pinctrl(pdev, LPASS_MCLK);
@@ -516,14 +591,8 @@ static int audio_ref_clk_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	ret = of_property_read_string(pdev->dev.of_node,
-				mclk_id, &mclk_str);
-	if (ret)
-		dev_dbg(&pdev->dev, "%s:of read string %s not present %d\n",
-				__func__, mclk_id, ret);
-
 	if (mclk_str)
-		audio_ref_update_afe_mclk_id(mclk_str);
+		audio_ref_update_afe_mclk_id(mclk_str, AP_CLK2);
 
 	clk_gpio = of_get_named_gpio(pdev->dev.of_node,
 				     "qcom,audio-ref-clk-gpio", 0);
@@ -606,6 +675,12 @@ static int audio_ref_clk_remove(struct platform_device *pdev)
 
 	if (audio_lpass_mclk.lpass_csr_gpio_mux_spkrctl_vaddr)
 		iounmap(audio_lpass_mclk.lpass_csr_gpio_mux_spkrctl_vaddr);
+
+	if (audio_lpass_mclk.lpass_mclk0_mode_muxsel_vaddr)
+		iounmap(audio_lpass_mclk.lpass_mclk0_mode_muxsel_vaddr);
+
+	if (audio_lpass_mclk.lpass_rcg_ref_clk_src_sel_vaddr)
+		iounmap(audio_lpass_mclk.lpass_rcg_ref_clk_src_sel_vaddr);
 
 	return 0;
 }
