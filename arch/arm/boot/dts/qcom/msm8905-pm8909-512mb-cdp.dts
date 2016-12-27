@@ -1,0 +1,30 @@
+/*
+ * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+
+#include "msm8909-cdp.dtsi"
+#include "msm8909-pm8909.dtsi"
+#include "msm8909-pm8909-cdp.dtsi"
+#include "msm8909-gpu-qhd.dtsi"
+#include "msm8905-pm8909-512mb-cdp.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. MSM8905-PM8909 512MB CDP";
+	compatible = "qcom,msm8909-cdp", "qcom,msm8909", "qcom,cdp";
+	qcom,msm-id = <331 0>;
+	qcom,board-id = <1 0x100>;
+	chosen {
+		bootargs = "boot_cpus=0,1 sched_enable_hmp=1";
+	};
+};
