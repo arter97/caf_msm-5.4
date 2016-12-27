@@ -38,3 +38,126 @@
 		status = "disabled";
 	};
 };
+
+&wsa881x_211 {
+	qcom,spkr-sd-n-gpio = <&tlmm 92 0>;
+};
+
+&wsa881x_212 {
+	qcom,spkr-sd-n-gpio = <&tlmm 92 0>;
+};
+
+&wsa881x_213 {
+	qcom,spkr-sd-n-gpio = <&tlmm 92 0>;
+};
+
+&wsa881x_214 {
+	qcom,spkr-sd-n-gpio = <&tlmm 92 0>;
+};
+
+&soc {
+	clock_audio: audio_ext_clk {
+		compatible = "qcom,audio-ref-clk";
+		status = "okay";
+		qcom,lpass-clock = <1>;
+		qcom,has_external_clk;
+		qcom,lpass-mclk-id = "sec_mclk";
+		qcom,codec-mclk-clk-freq = <12288000>;
+		pinctrl-names = "sleep", "active";
+		pinctrl-0 = <&pri_mi2s_mclk_b_sleep &sec_mi2s_mclk_a_sleep>;
+		pinctrl-1 = <&pri_mi2s_mclk_b_active &sec_mi2s_mclk_a_active>;
+		lpass_mclk0_mode_muxsel_reg = <0x0c034018>;
+		lpass_rcg_ref_clk_src_sel_reg = <0x0c037000>;
+	};
+};
+
+&wcd9335 {
+	status = "okay";
+	qcom,cdc-mclk-clk-rate = <12288000>;
+	clock-names = "wcd_clk";
+	clocks = <&clock_audio clk_audio_lpass_mclk>;
+};
+
+&int_codec {
+	status = "disabled";
+};
+
+&pm8937_cajon_dig {
+	status = "disabled";
+};
+
+&pm8937_cajon_analog {
+	status = "disabled";
+};
+
+&wsa881x_i2c_e {
+	status = "disabled";
+};
+
+&wsa881x_i2c_f {
+	status = "disabled";
+};
+
+&wsa881x_i2c_44 {
+	status = "disabled";
+};
+
+&wsa881x_i2c_45 {
+	status = "disabled";
+};
+
+&ext_codec {
+	status = "okay";
+	qcom,msm-mbhc-hphl-swh = <1>;
+	qcom,msm-mbhc-gnd-swh = <1>;
+	qcom,audio-routing =
+		"AIF4 VI", "MCLK",
+		"AIF4 VI", "MICBIAS_REGULATOR",
+		"RX_BIAS", "MCLK",
+		"MADINPUT", "MCLK",
+		"AIF4 MAD", "MICBIAS_REGULATOR",
+		"AMIC1", "MIC BIAS3",
+		"MIC BIAS3", "Handset Mic",
+		"AMIC2", "MIC BIAS2",
+		"MIC BIAS2", "Headset Mic",
+		"AMIC3", "MIC BIAS3",
+		"MIC BIAS3", "Secondary Mic",
+		"AMIC4", "MIC BIAS3",
+		"MIC BIAS3", "Analog Mic4",
+		"AMIC5", "MIC BIAS4",
+		"MIC BIAS4", "Analog Mic7",
+		"AMIC6", "MIC BIAS4",
+		"MIC BIAS4", "Analog Mic6",
+		"DMIC0", "MIC BIAS1",
+		"MIC BIAS1", "Digital Mic0",
+		"DMIC1", "MIC BIAS1",
+		"MIC BIAS1", "Digital Mic1",
+		"DMIC2", "MIC BIAS3",
+		"MIC BIAS3", "Digital Mic2",
+		"DMIC3", "MIC BIAS3",
+		"MIC BIAS3", "Digital Mic3",
+		"DMIC4", "MIC BIAS4",
+		"MIC BIAS4", "Digital Mic4",
+		"DMIC5", "MIC BIAS4",
+		"MIC BIAS4", "Digital Mic5",
+		"MIC BIAS3", "MICBIAS_REGULATOR",
+		"MIC BIAS4", "MICBIAS_REGULATOR",
+		"SpkrLeft IN", "SPK1 OUT",
+		"SpkrRight IN", "SPK2 OUT";
+};
+
+&slim_msm {
+	status = "okay";
+};
+
+&dai_slim {
+	status = "okay";
+};
+
+&wcd9xxx_intc {
+	status = "okay";
+};
+
+&wcd_rst_gpio {
+	status = "okay";
+};
