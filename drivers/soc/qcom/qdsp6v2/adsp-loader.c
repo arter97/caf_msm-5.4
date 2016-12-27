@@ -16,6 +16,7 @@
 #include <linux/module.h>
 #include <linux/err.h>
 #include <linux/delay.h>
+#include <linux/gpio.h>
 #include <linux/platform_device.h>
 #include <linux/qdsp6v2/apr.h>
 #include <linux/of_device.h>
@@ -49,7 +50,8 @@ static void adsp_loader_unload(struct platform_device *pdev);
 
 static void adsp_loader_do(struct platform_device *pdev)
 {
-
+	void __iomem *lpass_mclk0_mode_muxsel_vaddr;
+	void __iomem *lpass_rcg_ref_clk_src_sel_vaddr;
 	struct adsp_loader_private *priv = NULL;
 
 	const char *adsp_dt = "qcom,adsp-state";
@@ -67,6 +69,9 @@ static void adsp_loader_do(struct platform_device *pdev)
 			"%s: Device tree information missing\n", __func__);
 		goto fail;
 	}
+
+	lpass_mclk0_mode_muxsel_vaddr = ioremap(0x0c034018, 4);
+	lpass_rcg_ref_clk_src_sel_vaddr = ioremap(0x0c037000, 4);
 
 	rc = of_property_read_u32(pdev->dev.of_node, adsp_dt, &adsp_state);
 	if (rc) {
@@ -131,6 +136,8 @@ load_adsp:
 				goto fail;
 			}
 
+			iowrite32(0x1, lpass_mclk0_mode_muxsel_vaddr);
+			iowrite32(0x0, lpass_rcg_ref_clk_src_sel_vaddr);
 			/* Set the state of the ADSP in APR driver */
 			apr_set_q6_state(APR_SUBSYS_LOADED);
 		} else if (adsp_state == APR_SUBSYS_LOADED) {
