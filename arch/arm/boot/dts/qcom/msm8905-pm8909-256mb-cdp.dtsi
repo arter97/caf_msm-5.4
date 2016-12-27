@@ -45,3 +45,7 @@
 	/delete-node/ etm@84e000;
 	/delete-node/ etm@84f000;
 };
+
+&audio_codec {
+	qcom,model = "msm8909-256mb-snd-card";
+};
