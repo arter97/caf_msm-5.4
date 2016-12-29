@@ -1282,6 +1282,22 @@
 		mem_client_1_size: qcom,client_1 {
 			compatible = "qcom,memshare-peripheral";
 			qcom,peripheral-size = <0x0>;
+			qcom,client-id = <0>;
+			qcom,allocate-boot-time;
+			label = "modem";
+		};
+
+		qcom,client_2 {
+			compatible = "qcom,memshare-peripheral";
+			qcom,peripheral-size = <0x0>;
+			qcom,client-id = <2>;
+			label = "modem";
+		};
+
+		qcom,client_3 {
+			compatible = "qcom,memshare-peripheral";
+			qcom,peripheral-size = <0x0>;
+			qcom,client-id = <1>;
 			label = "modem";
 		};
 	};
