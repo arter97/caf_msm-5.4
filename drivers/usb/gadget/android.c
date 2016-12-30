@@ -42,6 +42,7 @@
 #include "u_bam.c"
 #include "u_rmnet_ctrl_smd.c"
 #include "u_ctrl_qti.c"
+#include "f_accessory.c"
 
 MODULE_AUTHOR("Mike Lockwood");
 MODULE_DESCRIPTION("Android Composite USB Driver");
@@ -860,10 +861,42 @@ static struct android_usb_function diag_function = {
 	.attributes	= diag_function_attributes,
 };
 
+static int accessory_function_init(struct android_usb_function *f,
+					struct usb_composite_dev *cdev)
+{
+	return acc_setup();
+}
+static void accessory_function_cleanup(struct android_usb_function *f)
+{
+	acc_cleanup();
+}
+
+static int accessory_function_bind_config(struct android_usb_function *f,
+						struct usb_configuration *c)
+{
+	return acc_bind_config(c);
+}
+
+static int accessory_function_ctrlrequest(struct android_usb_function *f,
+						struct usb_composite_dev *cdev,
+						const struct usb_ctrlrequest *c)
+{
+	return acc_ctrlrequest(cdev, c);
+}
+
+static struct android_usb_function accessory_function = {
+		.name		= "accessory",
+		.init		= accessory_function_init,
+		.cleanup	= accessory_function_cleanup,
+		.bind_config	= accessory_function_bind_config,
+		.ctrlrequest	= accessory_function_ctrlrequest,
+};
+
 static struct android_usb_function *supported_functions[] = {
 	&ffs_function,
 	&rmnet_function,
 	&diag_function,
+	&accessory_function,
 	NULL
 };
 
@@ -1617,10 +1650,8 @@ android_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *c)
 	/* Special case the accessory function.
 	 * It needs to handle control requests before it is enabled.
 	 */
-#ifdef CONFIG_USB_F_ACC
 	if (value < 0)
 		value = acc_ctrlrequest(cdev, c);
-#endif
 
 	if (value < 0)
 		value = composite_setup_func(gadget, c);
@@ -1648,9 +1679,7 @@ static void android_disconnect(struct usb_composite_dev *cdev)
 	   accessory function is not actually enabled,
 	   so we need to inform it when we are disconnected.
 	 */
-#ifdef CONFIG_USB_F_ACC
 	acc_disconnect();
-#endif
 
 	dev->connected = 0;
 	schedule_work(&dev->work);
