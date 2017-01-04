@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3171,10 +3171,12 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 	unsigned long flags;
 	int rc = 0;
 	enum msm_vfe_input_src frame_src = 0;
+	enum msm_vfe_input_src sof_frame_src = 0;
 	struct dual_vfe_resource *dual_vfe_res =
 			vfe_dev->common_data->dual_vfe_res;
 	uint32_t vfe_id = 0;
 	bool dual_vfe = false;
+	int i;
 
 	if (!vfe_dev || !stream_info) {
 		pr_err("%s %d failed: vfe_dev %pK stream_info %pK\n", __func__,
@@ -3204,21 +3206,38 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 		vfe_dev->hw_info->vfe_ops.axi_ops.get_pingpong_status(
 			vfe_dev);
 	/*
-	 * If PIX stream is active then RDI path uses SOF frame ID of PIX
-	 * In case of standalone RDI streaming, SOF are used from
-	 * individual intf.
+	 * If PIX stream is active in same session then RDI path uses SOF frame
+	 * ID of PIX.
+	 * In case of standalone RDI streaming or concurrent RDI from different
+	 * session, SOF are used from individual intf.
 	 */
+	sof_frame_src = frame_src;
+	if (vfe_dev->axi_data.src_info[VFE_PIX_0].active &&
+		frame_src != VFE_PIX_0)
+		for (i = 0; i < VFE_AXI_SRC_MAX; i++) {
+			struct msm_vfe_axi_stream *tmp_stream_info =
+					&vfe_dev->axi_data.stream_info[i];
+			if (tmp_stream_info->state != ACTIVE)
+				continue;
+			if (SRC_TO_INTF(tmp_stream_info->stream_src) !=
+					VFE_PIX_0)
+				continue;
+			if (tmp_stream_info->session_id !=
+					stream_info->session_id)
+				continue;
+			sof_frame_src = VFE_PIX_0;
+		}
 	/*
 	 * If frame_id = 1 then no eof check is needed
 	 */
-	if (((vfe_dev->axi_data.src_info[VFE_PIX_0].active) && ((frame_id !=
+	if (((sof_frame_src == VFE_PIX_0) && ((frame_id !=
 		vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id + vfe_dev->
 		axi_data.src_info[VFE_PIX_0].sof_counter_step) ||
 		(frame_id <= vfe_dev->
 		axi_data.src_info[VFE_PIX_0].eof_id + 1))) ||
-		((!vfe_dev->axi_data.src_info[VFE_PIX_0].active) && (frame_id !=
-		vfe_dev->axi_data.src_info[frame_src].frame_id + vfe_dev->
-		axi_data.src_info[frame_src].sof_counter_step)) ||
+		((sof_frame_src != VFE_PIX_0) && (frame_id !=
+		vfe_dev->axi_data.src_info[sof_frame_src].frame_id + vfe_dev->
+		axi_data.src_info[sof_frame_src].sof_counter_step)) ||
 		stream_info->undelivered_request_cnt >= MAX_BUFFERS_IN_HW) {
 		pr_debug("%s:%d invalid request_frame %d cur frame id %d pix %d\n",
 			__func__, __LINE__, frame_id,
