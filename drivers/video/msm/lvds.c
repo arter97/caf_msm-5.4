@@ -68,9 +68,9 @@ static void lvds_init(struct msm_fb_data_type *mfd)
 	MDP_OUTP(MDP_BASE + 0xc2034, 0x33);
 	usleep(1000);
 
+	MDP_OUTP(MDP_BASE + 0xc3000, 0x08);
 	/* LVDS PHY PLL configuration */
 	if (mfd->panel_info.clk_rate == 74250000) {
-		MDP_OUTP(MDP_BASE + 0xc3000, 0x08);
 		MDP_OUTP(MDP_BASE + 0xc3004, 0x4c);
 		MDP_OUTP(MDP_BASE + 0xc3008, 0x30);
 		if (machine_is_apq8064_mplatform())
@@ -82,19 +82,22 @@ static void lvds_init(struct msm_fb_data_type *mfd)
 		MDP_OUTP(MDP_BASE + 0xc301c, 0x62);
 		MDP_OUTP(MDP_BASE + 0xc3020, 0x41);
 		MDP_OUTP(MDP_BASE + 0xc3024, 0x0d);
-		MDP_OUTP(MDP_BASE + 0xc3028, 0x07);
-		MDP_OUTP(MDP_BASE + 0xc302c, 0x00);
-		MDP_OUTP(MDP_BASE + 0xc3030, 0x1c);
-		MDP_OUTP(MDP_BASE + 0xc3034, 0x01);
-		MDP_OUTP(MDP_BASE + 0xc3038, 0x00);
-		MDP_OUTP(MDP_BASE + 0xc3040, 0xC0);
-		MDP_OUTP(MDP_BASE + 0xc3044, 0x00);
-		MDP_OUTP(MDP_BASE + 0xc3048, 0x30);
-		MDP_OUTP(MDP_BASE + 0xc304c, 0x00);
 
-		MDP_OUTP(MDP_BASE + 0xc3000, 0x11);
-		MDP_OUTP(MDP_BASE + 0xc3064, 0x05);
-		MDP_OUTP(MDP_BASE + 0xc3050, 0x20);
+		if (machine_is_apq8064_mplatform()) {
+			MDP_OUTP(MDP_BASE + 0xc3028, 0x07);
+			MDP_OUTP(MDP_BASE + 0xc302c, 0x00);
+			MDP_OUTP(MDP_BASE + 0xc3030, 0x1c);
+			MDP_OUTP(MDP_BASE + 0xc3034, 0x01);
+			MDP_OUTP(MDP_BASE + 0xc3038, 0x00);
+			MDP_OUTP(MDP_BASE + 0xc3040, 0xC0);
+			MDP_OUTP(MDP_BASE + 0xc3044, 0x00);
+			MDP_OUTP(MDP_BASE + 0xc3048, 0x30);
+			MDP_OUTP(MDP_BASE + 0xc304c, 0x00);
+
+			MDP_OUTP(MDP_BASE + 0xc3000, 0x11);
+			MDP_OUTP(MDP_BASE + 0xc3064, 0x05);
+			MDP_OUTP(MDP_BASE + 0xc3050, 0x20);
+		}
 	} else if (mfd->panel_info.clk_rate == 79400000) {
 		MDP_OUTP(MDP_BASE + 0xc3004, 0x87);
 		MDP_OUTP(MDP_BASE + 0xc3008, 0x30);
@@ -133,7 +136,21 @@ static void lvds_init(struct msm_fb_data_type *mfd)
 		MDP_OUTP(MDP_BASE + 0xc3024, 0x0d);
 	}
 
-	MDP_OUTP(MDP_BASE + 0xc3000, 0x01);
+	if (machine_is_apq8064_mplatform()) {
+		MDP_OUTP(MDP_BASE + 0xc3000, 0x01);
+	} else {
+		MDP_OUTP(MDP_BASE + 0xc3028, 0x06);
+		MDP_OUTP(MDP_BASE + 0xc302c, 0x00);
+		MDP_OUTP(MDP_BASE + 0xc3038, 0x00);
+		MDP_OUTP(MDP_BASE + 0xc3040, 0xC0);
+		MDP_OUTP(MDP_BASE + 0xc3044, 0x00);
+		MDP_OUTP(MDP_BASE + 0xc3048, 0x30);
+		MDP_OUTP(MDP_BASE + 0xc304c, 0x00);
+
+		MDP_OUTP(MDP_BASE + 0xc3064, 0x05);
+		MDP_OUTP(MDP_BASE + 0xc3050, 0x20);
+		MDP_OUTP(MDP_BASE + 0xc3000, 0x01);
+	}
 	/* Wait until LVDS PLL is locked and ready */
 	while (!readl_relaxed(MDP_BASE + 0xc3080))
 		cpu_relax();
