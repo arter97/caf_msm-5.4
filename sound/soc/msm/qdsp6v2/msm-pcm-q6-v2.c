@@ -458,23 +458,8 @@ static int msm_pcm_capture_prepare(struct snd_pcm_substream *substream)
 				__func__, params_channels(params),
 				prtd->audio_client->perf_mode);
 
-		switch (q6core_get_avs_version()) {
-		case (Q6_SUBSYS_AVS2_7):
-			ret = q6asm_open_read_v3(prtd->audio_client,
-					FORMAT_LINEAR_PCM,
-					bits_per_sample);
-			break;
-		case (Q6_SUBSYS_AVS2_8):
-			ret = q6asm_open_read_v4(prtd->audio_client,
-					FORMAT_LINEAR_PCM,
-					bits_per_sample);
-
-			break;
-		case (Q6_SUBSYS_INVALID):
-		default:
-			pr_err("%s: INVALID AVS IMAGE\n", __func__);
-			break;
-		}
+		ret = q6asm_open_read_v4(prtd->audio_client, FORMAT_LINEAR_PCM,
+				bits_per_sample, false);
 		if (ret < 0) {
 			pr_err("%s: q6asm_open_read failed\n", __func__);
 			q6asm_audio_client_free(prtd->audio_client);
