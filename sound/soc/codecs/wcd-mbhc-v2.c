@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1388,6 +1388,12 @@ static void wcd_mbhc_swch_irq_handler(struct wcd_mbhc *mbhc)
 		/* Disable HW FSM */
 		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_FSM_EN, 0);
 		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_BTN_ISRC_CTL, 0);
+		mbhc->mbhc_cb->irq_control(codec,
+				mbhc->intr_ids->mbhc_hs_ins_intr,
+				false);
+		mbhc->mbhc_cb->irq_control(codec,
+				mbhc->intr_ids->mbhc_hs_rem_intr,
+				false);
 	}
 
 	mbhc->in_swch_irq_handler = false;
