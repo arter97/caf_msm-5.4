@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -36,6 +36,7 @@
 
 static int dtv_enabled;
 
+static void mdp4_dtv_dmae_irq_ctrl(int enable);
 /*#define DEBUG*/
 #ifdef DEBUG
 static void __mdp_outp(uint32 port, uint32 value)
@@ -289,7 +290,7 @@ int mdp4_dtv_pipe_commit(int cndx, int wait)
 	} else {
 		/* schedule second phase update  at dmap */
 		INIT_COMPLETION(vctrl->dmae_comp);
-		vsync_irq_enable(INTR_DMA_E_DONE, MDP_DMA_E_TERM);
+		mdp4_dtv_dmae_irq_ctrl(1);
 	}
 	spin_unlock_irqrestore(&vctrl->spin_lock, flags);
 	mdp4_stat.overlay_commit[pipe->mixer_num]++;
@@ -301,6 +302,24 @@ int mdp4_dtv_pipe_commit(int cndx, int wait)
 	}
 
 	return cnt;
+}
+
+static void mdp4_dtv_dmae_irq_ctrl(int enable)
+{
+	static int dmae_irq_cnt;
+
+	if (enable) {
+		if (dmae_irq_cnt == 0)
+			vsync_irq_enable(INTR_DMA_E_DONE, MDP_DMA_E_TERM);
+		dmae_irq_cnt++;
+	} else {
+		if (dmae_irq_cnt) {
+			dmae_irq_cnt--;
+			if (dmae_irq_cnt == 0)
+				vsync_irq_disable(INTR_DMA_E_DONE, MDP_DMA_E_TERM);
+		}
+	}
+	pr_debug("%s: enable=%d cnt=%d\n", __func__, enable, dmae_irq_cnt);
 }
 
 static void mdp4_dtv_vsync_irq_ctrl(int cndx, int enable)
@@ -1016,7 +1035,7 @@ void mdp4_dmae_done_dtv(void)
 	complete_all(&vctrl->dmae_comp);
 	mdp4_overlay_dma_commit(MDP4_MIXER1);
 
-	vsync_irq_disable(INTR_DMA_E_DONE, MDP_DMA_E_TERM);
+	mdp4_dtv_dmae_irq_ctrl(0);
 	spin_unlock(&vctrl->spin_lock);
 }
 
