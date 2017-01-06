@@ -523,6 +523,7 @@ void __cfg80211_connect_result(struct net_device *dev, const u8 *bssid,
 		wdev->connect_keys = NULL;
 		wdev->ssid_len = 0;
 		cfg80211_put_bss(wdev->wiphy, bss);
+		wdev->conn_owner_nlportid = 0;
 		return;
 	}
 
@@ -754,6 +755,7 @@ void __cfg80211_disconnected(struct net_device *dev, const u8 *ie,
 	wdev->current_bss = NULL;
 	wdev->sme_state = CFG80211_SME_IDLE;
 	wdev->ssid_len = 0;
+	wdev->conn_owner_nlportid = 0;
 
 	if (wdev->conn) {
 		kfree(wdev->conn->ie);
@@ -998,7 +1000,7 @@ int __cfg80211_disconnect(struct cfg80211_registered_device *rdev,
 
 	kfree(wdev->connect_keys);
 	wdev->connect_keys = NULL;
-
+	wdev->conn_owner_nlportid = 0;
 	if (!rdev->ops->disconnect) {
 		if (!rdev->ops->deauth)
 			return -EOPNOTSUPP;
@@ -1080,4 +1082,35 @@ void cfg80211_sme_disassoc(struct net_device *dev,
 
 	__cfg80211_mlme_deauth(rdev, dev, bssid, NULL, 0,
 			       WLAN_REASON_DEAUTH_LEAVING, false);
+}
+
+/*
+ * Used to clean up after the connection / connection attempt owner socket
+ * disconnects
+ */
+void cfg80211_autodisconnect_wk(struct work_struct *work)
+{
+	struct wireless_dev *wdev =
+		container_of(work, struct wireless_dev, disconnect_wk);
+	struct cfg80211_registered_device *rdev = wiphy_to_dev(wdev->wiphy);
+
+	wdev_lock(wdev);
+
+	if (wdev->conn_owner_nlportid) {
+		/*
+		 * Use disconnect_bssid if still connecting and ops->disconnect
+		 * not implemented.  Otherwise we can use cfg80211_disconnect.
+		 */
+		if (rdev->ops->disconnect || wdev->current_bss)
+			__cfg80211_disconnect(rdev, wdev->netdev,
+					      WLAN_REASON_DEAUTH_LEAVING,
+					      true);
+		else
+			__cfg80211_mlme_deauth(rdev, wdev->netdev,
+					       wdev->disconnect_bssid, NULL, 0,
+					       WLAN_REASON_DEAUTH_LEAVING,
+					       false);
+	}
+
+	wdev_unlock(wdev);
 }
