@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, 2017, The Linux Foundation. All rights reserved.
  * Copyright (C) 2007 Google Incorporated
  *
  * This software is licensed under the terms of the GNU General Public
@@ -429,21 +429,16 @@ static int mdp3_clk_update(u32 clk_idx, u32 enable)
 	count = mdp3_res->clock_ref_count[clk_idx];
 	if (count == 1 && enable) {
 		pr_debug("clk=%d en=%d\n", clk_idx, enable);
-		ret = clk_prepare(clk);
+		ret = clk_prepare_enable(clk);
 		if (ret) {
-			pr_err("%s: Failed to prepare clock %d",
+			pr_err("%s: Failed to Enable clock %d",
 						__func__, clk_idx);
 			mdp3_res->clock_ref_count[clk_idx]--;
 			return ret;
 		}
-		ret = clk_enable(clk);
-		if (ret)
-			pr_err("%s: clock enable failed %d\n", __func__,
-					clk_idx);
 	} else if (count == 0) {
 		pr_debug("clk=%d disable\n", clk_idx);
-		clk_disable(clk);
-		clk_unprepare(clk);
+		clk_disable_unprepare(clk);
 		ret = 0;
 	} else if (count < 0) {
 		pr_err("clk=%d count=%d\n", clk_idx, count);
