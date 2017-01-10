@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1677,9 +1677,9 @@ static int mdp3_csc_config(struct mdp3_session_data *session,
 	session->dma->ccs_cache = *data;
 
 	mutex_lock(&session->lock);
-	mdp3_clk_enable(1, 0);
+	mdp3_res_update(1, 0, MDP3_CLIENT_DMA_P);
 	ret = session->dma->config_ccs(session->dma, &config, &ccs);
-	mdp3_clk_enable(0, 0);
+	mdp3_res_update(0, 0, MDP3_CLIENT_DMA_P);
 	mutex_unlock(&session->lock);
 	return ret;
 }
