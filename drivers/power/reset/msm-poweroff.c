@@ -172,7 +172,7 @@ static void enable_emergency_dload_mode(void)
 		mb();
 	}
 
-	ret = scm_set_dload_mode(SCM_EDLOAD_MODE, 0);
+	ret = scm_set_dload_mode(SCM_EDLOAD_MODE, 1);
 	if (ret)
 		pr_err("Failed to set secure EDLOAD mode: %d\n", ret);
 }
