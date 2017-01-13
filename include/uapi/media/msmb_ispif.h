@@ -96,7 +96,9 @@ struct msm_ispif_params_entry {
 	enum msm_ispif_intftype intftype;
 	int num_cids;
 	enum msm_ispif_cid cids[MAX_CID_CH_v2];
+	enum msm_ispif_cid right_cids[MAX_CID_CH_v2];
 	enum msm_ispif_csid csid;
+	enum msm_ispif_csid right_csid;
 	int crop_enable;
 	uint16_t crop_start_pixel;
 	uint16_t crop_end_pixel;
@@ -106,11 +108,13 @@ struct msm_ispif_param_data_ext {
 	uint32_t num;
 	struct msm_ispif_params_entry entries[MAX_PARAM_ENTRIES];
 	struct msm_ispif_pack_cfg pack_cfg[CID_MAX];
+	int stereo_enable;
 };
 
 struct msm_ispif_param_data {
 	uint32_t num;
 	struct msm_ispif_params_entry entries[MAX_PARAM_ENTRIES];
+	int stereo_enable;
 };
 
 struct msm_isp_info {
