@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -225,7 +225,8 @@ struct ipa_rt_tbl {
  * @is_partial: flag indicating if header table entry is partial
  * @offset_entry: entry's offset
  * @cookie: cookie used for validity check
- * @ref_cnt: reference counter of raouting table
+ * @ref_cnt: reference counter of routing table
+ * @user_deleted: is the header deleted by the user?
  */
 struct ipa_hdr_entry {
 	struct list_head link;
@@ -236,6 +237,7 @@ struct ipa_hdr_entry {
 	struct ipa_hdr_offset_entry *offset_entry;
 	u32 cookie;
 	u32 ref_cnt;
+	bool user_deleted;
 };
 
 /**
@@ -825,8 +827,9 @@ void ipa_enable_clks(void);
 void ipa_disable_clks(void);
 void ipa_inc_client_enable_clks(void);
 void ipa_dec_client_disable_clks(void);
+int ipa_del_hdr_by_user(struct ipa_ioc_del_hdr *hdls, bool by_user);
 int __ipa_del_rt_rule(u32 rule_hdl);
-int __ipa_del_hdr(u32 hdr_hdl);
+int __ipa_del_hdr(u32 hdr_hdl, bool by_user);
 int __ipa_release_hdr(u32 hdr_hdl);
 
 static inline u32 ipa_read_reg(void *base, u32 offset)
