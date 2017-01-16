@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -889,6 +889,26 @@ static void ipareg_construct_qsb_max_reads(enum ipahal_reg_name reg,
 			    IPA_QSB_MAX_READS_GEN_QMB_1_MAX_READS_BMSK);
 }
 
+static void ipareg_parse_tx_cfg(enum ipahal_reg_name reg,
+	void *fields, u32 val)
+{
+	struct ipahal_reg_tx_cfg *tx_cfg;
+
+	tx_cfg = (struct ipahal_reg_tx_cfg *)fields;
+
+	tx_cfg->tx0_prefetch_disable = IPA_GETFIELD_FROM_REG(val,
+		IPA_TX_CFG_TX0_PREFETCH_DISABLE_SHFT_V3_5,
+		IPA_TX_CFG_TX0_PREFETCH_DISABLE_BMSK_V3_5);
+
+	tx_cfg->tx1_prefetch_disable = IPA_GETFIELD_FROM_REG(val,
+		IPA_TX_CFG_TX1_PREFETCH_DISABLE_SHFT_V3_5,
+		IPA_TX_CFG_TX1_PREFETCH_DISABLE_BMSK_V3_5);
+
+	tx_cfg->prefetch_almost_empty_size = IPA_GETFIELD_FROM_REG(val,
+		IPA_TX_CFG_PREFETCH_ALMOST_EMPTY_SIZE_SHFT_V3_5,
+		IPA_TX_CFG_PREFETCH_ALMOST_EMPTY_SIZE_BMSK_V3_5);
+}
+
 static void ipareg_construct_tx_cfg(enum ipahal_reg_name reg,
 	const void *fields, u32 *val)
 {
@@ -907,6 +927,24 @@ static void ipareg_construct_tx_cfg(enum ipahal_reg_name reg,
 	IPA_SETFIELD_IN_REG(*val, tx_cfg->prefetch_almost_empty_size,
 		IPA_TX_CFG_PREFETCH_ALMOST_EMPTY_SIZE_SHFT_V3_5,
 		IPA_TX_CFG_PREFETCH_ALMOST_EMPTY_SIZE_BMSK_V3_5);
+}
+
+static void ipareg_construct_idle_indication_cfg(enum ipahal_reg_name reg,
+	const void *fields, u32 *val)
+{
+	struct ipahal_reg_idle_indication_cfg *idle_indication_cfg;
+
+	idle_indication_cfg = (struct ipahal_reg_idle_indication_cfg *)fields;
+
+	IPA_SETFIELD_IN_REG(*val,
+		idle_indication_cfg->enter_idle_debounce_thresh,
+		IPA_IDLE_INDICATION_CFG_ENTER_IDLE_DEBOUNCE_THRESH_SHFT_V3_5,
+		IPA_IDLE_INDICATION_CFG_ENTER_IDLE_DEBOUNCE_THRESH_BMSK_V3_5);
+
+	IPA_SETFIELD_IN_REG(*val,
+		idle_indication_cfg->const_non_idle_enable,
+		IPA_IDLE_INDICATION_CFG_CONST_NON_IDLE_ENABLE_SHFT_V3_5,
+		IPA_IDLE_INDICATION_CFG_CONST_NON_IDLE_ENABLE_BMSK_V3_5);
 }
 
 /*
@@ -1135,7 +1173,7 @@ static struct ipahal_reg_obj ipahal_reg_objs[IPA_HW_MAX][IPA_REG_MAX] = {
 
 	/* IPAv3.5 */
 	[IPA_HW_v3_5][IPA_TX_CFG] = {
-		ipareg_construct_tx_cfg, ipareg_parse_dummy,
+		ipareg_construct_tx_cfg, ipareg_parse_tx_cfg,
 		0x000001FC, 0},
 	[IPA_HW_v3_5][IPA_SRC_RSRC_GRP_01_RSRC_TYPE_n] = {
 		ipareg_construct_rsrg_grp_xy_v3_5, ipareg_parse_dummy,
@@ -1185,6 +1223,9 @@ static struct ipahal_reg_obj ipahal_reg_objs[IPA_HW_MAX][IPA_REG_MAX] = {
 	[IPA_HW_v3_5][IPA_SPARE_REG_2] = {
 		ipareg_construct_dummy, ipareg_parse_dummy,
 		0x00002784, 0},
+	[IPA_HW_v3_5][IPA_IDLE_INDICATION_CFG] = {
+		ipareg_construct_idle_indication_cfg, ipareg_parse_dummy,
+		0x00000220, 0},
 };
 
 /*

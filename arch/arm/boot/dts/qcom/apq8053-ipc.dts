@@ -1,4 +1,5 @@
-/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
+/*
+ * Copyright (c) 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,11 +11,13 @@
  * GNU General Public License for more details.
  */
 
-#ifndef _EMAC_SGMII_V2_H_
-#define _EMAC_SGMII_V2_H_
+/dts-v1/;
 
-#include "emac_sgmii.h"
+#include "apq8053.dtsi"
+#include "msm8953-ipc.dtsi"
 
-extern struct emac_phy_ops emac_sgmii_v2_ops;
-
-#endif /*_EMAC_SGMII_V2_H_*/
+/ {
+	model = "Qualcomm Technologies, Inc. APQ8053 IPC";
+	compatible = "qcom,apq8053-ipc", "qcom,apq8053", "qcom,ipc";
+	qcom,board-id= <12 0>;
+};

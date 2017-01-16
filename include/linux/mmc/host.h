@@ -20,6 +20,7 @@
 #include <linux/mmc/core.h>
 #include <linux/mmc/card.h>
 #include <linux/mmc/pm.h>
+#include <linux/mmc/ring_buffer.h>
 
 #define MMC_AUTOSUSPEND_DELAY_MS	3000
 
@@ -517,6 +518,8 @@ struct mmc_host {
 
 	struct dentry		*debugfs_root;
 
+	bool			err_occurred;
+
 	struct mmc_async_req	*areq;		/* active async req */
 	struct mmc_context_info	context_info;	/* async synchronization info */
 
@@ -557,6 +560,7 @@ struct mmc_host {
 	} perf;
 	bool perf_enable;
 #endif
+	struct mmc_trace_buffer trace_buf;
 	enum dev_state dev_status;
 	bool			wakeup_on_idle;
 	struct mmc_cmdq_context_info	cmdq_ctx;

@@ -446,8 +446,15 @@ static void gsi_handle_ieob(int ee)
 				GSIERR("invalid event %d\n", i);
 				break;
 			}
-
 			ctx = &gsi_ctx->evtr[i];
+
+			/*
+			* Don't handle MSI interrupts, only handle IEOB
+			* IRQs
+			*/
+			if (ctx->props.intr == GSI_INTR_MSI)
+				continue;
+
 			BUG_ON(ctx->props.intf != GSI_EVT_CHTYPE_GPI_EV);
 			spin_lock_irqsave(&ctx->ring.slock, flags);
 check_again:
@@ -1155,7 +1162,10 @@ int gsi_alloc_evt_ring(struct gsi_evt_ring_props *props, unsigned long dev_hdl,
 	spin_lock_irqsave(&gsi_ctx->slock, flags);
 	gsi_writel(1 << evt_id, gsi_ctx->base +
 			GSI_EE_n_CNTXT_SRC_IEOB_IRQ_CLR_OFFS(ee));
-	if (props->intf != GSI_EVT_CHTYPE_GPI_EV)
+
+	/* enable ieob interrupts for GPI, enable MSI interrupts */
+	if ((props->intf != GSI_EVT_CHTYPE_GPI_EV) &&
+		(props->intr != GSI_INTR_MSI))
 		__gsi_config_ieob_irq(gsi_ctx->per.ee, 1 << evt_id, 0);
 	else
 		__gsi_config_ieob_irq(gsi_ctx->per.ee, 1 << ctx->id, ~0);
@@ -2673,10 +2683,15 @@ int gsi_configure_regs(phys_addr_t gsi_base_addr, u32 gsi_size,
 }
 EXPORT_SYMBOL(gsi_configure_regs);
 
-int gsi_enable_fw(phys_addr_t gsi_base_addr, u32 gsi_size)
+int gsi_enable_fw(phys_addr_t gsi_base_addr, u32 gsi_size, enum gsi_ver ver)
 {
 	void __iomem *gsi_base;
 	uint32_t value;
+
+	if (ver <= GSI_VER_ERR || ver >= GSI_VER_MAX) {
+		GSIERR("Incorrect version %d\n", ver);
+		return -GSI_STATUS_ERROR;
+	}
 
 	gsi_base = ioremap_nocache(gsi_base_addr, gsi_size);
 	if (!gsi_base) {
@@ -2685,7 +2700,7 @@ int gsi_enable_fw(phys_addr_t gsi_base_addr, u32 gsi_size)
 	}
 
 	/* Enable the MCS and set to x2 clocks */
-	if (gsi_ctx->per.ver >= GSI_VER_1_2) {
+	if (ver >= GSI_VER_1_2) {
 		value = ((1 << GSI_GSI_MCS_CFG_MCS_ENABLE_SHFT) &
 				GSI_GSI_MCS_CFG_MCS_ENABLE_BMSK);
 		gsi_writel(value, gsi_base + GSI_GSI_MCS_CFG_OFFS);

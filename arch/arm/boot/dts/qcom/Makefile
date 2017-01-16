@@ -159,7 +159,8 @@ dtb-$(CONFIG_ARCH_MDMCALIFORNIUM) += mdmcalifornium-sim.dtb \
 	mdmcalifornium-v1.1-nand-cdp.dtb \
 	mdmcalifornium-v1.1-emmc-mtp.dtb \
 	mdmcalifornium-v1.1-nand-mtp.dtb \
-	mdmcalifornium-v1.1-nand-dualwifi-mtp.dtb
+	mdmcalifornium-v1.1-nand-dualwifi-mtp.dtb \
+	mdmcalifornium-v1.1-nand-ccard.dtb
 
 dtb-$(CONFIG_ARCH_SDXHEDGEHOG) += sdxhedgehog-emmc-cdp.dtb \
 	sdxhedgehog-emmc-mtp.dtb \
@@ -170,11 +171,14 @@ dtb-$(CONFIG_ARCH_SDXHEDGEHOG) += sdxhedgehog-emmc-cdp.dtb \
 dtb-$(CONFIG_ARCH_MSM8937) += msm8937-rumi.dtb \
 	msm8937-pmi8950-cdp.dtb \
 	msm8937-pmi8937-cdp.dtb \
+	msm8937-pmi8940-cdp.dtb \
 	msm8937-pmi8950-ext-codec-cdp.dtb \
 	msm8937-pmi8950-mtp.dtb \
 	msm8937-pmi8937-mtp.dtb \
+	msm8937-pmi8940-mtp.dtb \
 	msm8937-pmi8950-rcm.dtb \
 	msm8937-pmi8937-rcm.dtb \
+	msm8937-pmi8940-rcm.dtb \
 	msm8937-pmi8950-qrd-sku1.dtb \
 	msm8937-pmi8937-qrd-sku2.dtb \
 	msm8937-pmi8950-qrd-sku1-dvt1.dtb \
@@ -199,7 +203,8 @@ dtb-$(CONFIG_ARCH_MSM8917) += msm8917-rumi.dtb \
 	msm8917-qgp-tmo.dtb \
 	msm8917-pmi8937-qrd-sku5.dtb \
 	apq8017-pmi8937-cdp-wcd-rome.dtb \
-	apq8017-pmi8950-cdp-wcd-rome.dtb
+	apq8017-pmi8950-cdp-wcd-rome.dtb \
+	apq8017-no-pmi-wcd-rome-cdp.dtb
 
 dtb-$(CONFIG_ARCH_MSM8920) += msm8920-pmi8937-cdp.dtb \
 	msm8920-pmi8937-mtp.dtb \
@@ -234,6 +239,8 @@ dtb-$(CONFIG_ARCH_MSM8953) += msm8953-sim.dtb \
 	apq8053-rcm.dtb \
 	msm8953-ext-codec-rcm.dtb \
 	apq8053-cdp.dtb \
+	apq8053-ipc.dtb \
+	msm8953-ipc.dtb \
 	apq8053-mtp.dtb \
 	apq8053-ext-audio-mtp.dtb \
 	apq8053-ext-codec-rcm.dtb \

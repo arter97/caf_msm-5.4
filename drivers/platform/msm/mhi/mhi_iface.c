@@ -196,7 +196,7 @@ static int mhi_pci_probe(struct pci_dev *pcie_device,
 	tasklet_init(&mhi_dev_ctxt->ev_task,
 		     mhi_ctrl_ev_task,
 		     (unsigned long)mhi_dev_ctxt);
-
+	init_completion(&mhi_dev_ctxt->cmd_complete);
 	mhi_dev_ctxt->flags.link_up = 1;
 
 	/* Setup bus scale */
@@ -277,8 +277,8 @@ static int mhi_pci_probe(struct pci_dev *pcie_device,
 	/* setup shadow pm functions */
 	mhi_dev_ctxt->assert_wake = mhi_assert_device_wake;
 	mhi_dev_ctxt->deassert_wake = mhi_deassert_device_wake;
-	mhi_dev_ctxt->runtime_get = mhi_runtime_get;
-	mhi_dev_ctxt->runtime_put = mhi_runtime_put;
+	mhi_dev_ctxt->runtime_get = mhi_master_mode_runtime_get;
+	mhi_dev_ctxt->runtime_put = mhi_master_mode_runtime_put;
 
 	mutex_lock(&mhi_dev_ctxt->pm_lock);
 	write_lock_irq(&mhi_dev_ctxt->pm_xfer_lock);
@@ -414,6 +414,47 @@ static int mhi_plat_probe(struct platform_device *pdev)
 		"Start Addr:0x%llx End_Addr:0x%llx\n",
 		mhi_dev_ctxt->dev_space.start_win_addr,
 		mhi_dev_ctxt->dev_space.end_win_addr);
+
+	r = of_property_read_u32(of_node, "qcom,bhi-alignment",
+				 &mhi_dev_ctxt->bhi_ctxt.alignment);
+	if (r)
+		mhi_dev_ctxt->bhi_ctxt.alignment = BHI_DEFAULT_ALIGNMENT;
+
+	r = of_property_read_u32(of_node, "qcom,bhi-poll-timeout",
+				 &mhi_dev_ctxt->bhi_ctxt.poll_timeout);
+	if (r)
+		mhi_dev_ctxt->bhi_ctxt.poll_timeout = BHI_POLL_TIMEOUT_MS;
+
+	mhi_dev_ctxt->bhi_ctxt.manage_boot =
+		of_property_read_bool(pdev->dev.of_node,
+				      "qcom,mhi-manage-boot");
+	if (mhi_dev_ctxt->bhi_ctxt.manage_boot) {
+		struct bhi_ctxt_t *bhi_ctxt = &mhi_dev_ctxt->bhi_ctxt;
+		struct firmware_info *fw_info = &bhi_ctxt->firmware_info;
+
+		r = of_property_read_string(of_node, "qcom,mhi-fw-image",
+					    &fw_info->fw_image);
+		if (r) {
+			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+				"Error reading DT node 'qcom,mhi-fw-image'\n");
+			return r;
+		}
+		r = of_property_read_u32(of_node, "qcom,mhi-max-sbl",
+					 (u32 *)&fw_info->max_sbl_len);
+		if (r) {
+			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+				"Error reading DT node 'qcom,mhi-max-sbl'\n");
+			return r;
+		}
+		r = of_property_read_u32(of_node, "qcom,mhi-sg-size",
+					 (u32 *)&fw_info->segment_size);
+		if (r) {
+			mhi_log(mhi_dev_ctxt, MHI_MSG_ERROR,
+				"Error reading DT node 'qcom,mhi-sg-size'\n");
+			return r;
+		}
+		INIT_WORK(&bhi_ctxt->fw_load_work, bhi_firmware_download);
+	}
 
 	mhi_dev_ctxt->plat_dev = pdev;
 	platform_set_drvdata(pdev, mhi_dev_ctxt);

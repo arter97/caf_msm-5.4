@@ -1,4 +1,5 @@
-/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
+/*
+ * Copyright (c) 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,11 +11,25 @@
  * GNU General Public License for more details.
  */
 
-#ifndef _EMAC_SGMII_V1_H_
-#define _EMAC_SGMII_V1_H_
+/dts-v1/;
 
-#include "emac_sgmii.h"
+#include "apq8017.dtsi"
+#include "apq8017-no-pmi-cdp.dtsi"
 
-extern struct emac_phy_ops emac_sgmii_v1_ops;
+/ {
+	model = "Qualcomm Technologies, Inc. APQ8017 CDP no-PMI \
+					with WCD codec/Rome card";
+	compatible = "qcom,apq8017-cdp", "qcom,apq8017", "qcom,cdp";
+	qcom,board-id = <1 3>;
+	qcom,pmic-id = <0x10019 0x000000 0x0 0x0>;
+};
 
-#endif /*_EMAC_SGMII_V1_H_*/
+&blsp1_uart1 {
+	status = "ok";
+};
+
+&soc {
+	gpio_keys {
+		/delete-node/ home;
+	};
+};

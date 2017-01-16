@@ -473,8 +473,7 @@ int ipa3_send(struct ipa3_sys_context *sys,
 	int fail_dma_wrap = 0;
 	uint size;
 	u32 mem_flag = GFP_ATOMIC;
-	int ipa_ep_idx;
-	struct ipa_gsi_ep_config *gsi_ep_cfg;
+	const struct ipa_gsi_ep_config *gsi_ep_cfg;
 
 	if (unlikely(!in_atomic))
 		mem_flag = GFP_KERNEL;
@@ -482,16 +481,10 @@ int ipa3_send(struct ipa3_sys_context *sys,
 	size = num_desc * sizeof(struct sps_iovec);
 
 	if (ipa3_ctx->transport_prototype == IPA_TRANSPORT_TYPE_GSI) {
-		ipa_ep_idx = ipa3_get_ep_mapping(sys->ep->client);
-		if (unlikely(ipa_ep_idx < 0)) {
-			IPAERR("invalid ep_index of client = %d\n",
-				sys->ep->client);
-			return -EFAULT;
-		}
-		gsi_ep_cfg = ipa3_get_gsi_ep_info(ipa_ep_idx);
+		gsi_ep_cfg = ipa3_get_gsi_ep_info(sys->ep->client);
 		if (unlikely(!gsi_ep_cfg)) {
-			IPAERR("failed to get gsi EP config of ep_idx=%d\n",
-				ipa_ep_idx);
+			IPAERR("failed to get gsi EP config for client=%d\n",
+				sys->ep->client);
 			return -EFAULT;
 		}
 		if (unlikely(num_desc > gsi_ep_cfg->ipa_if_tlv)) {
@@ -1701,7 +1694,7 @@ int ipa3_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 	struct ipa3_sys_context *sys;
 	int src_ep_idx;
 	int num_frags, f;
-	struct ipa_gsi_ep_config *gsi_ep;
+	const struct ipa_gsi_ep_config *gsi_ep;
 
 	if (unlikely(!ipa3_ctx)) {
 		IPAERR("IPA3 driver was not initialized\n");
@@ -1755,7 +1748,7 @@ int ipa3_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 	 * 2 descriptors are needed for IP_PACKET_INIT and TAG_STATUS.
 	 * 1 descriptor needed for the linear portion of skb.
 	 */
-	gsi_ep = ipa3_get_gsi_ep_info(src_ep_idx);
+	gsi_ep = ipa3_get_gsi_ep_info(ipa3_ctx->ep[src_ep_idx].client);
 	if (gsi_ep && (num_frags + 3 > gsi_ep->ipa_if_tlv)) {
 		if (skb_linearize(skb)) {
 			IPAERR("Failed to linear skb with %d frags\n",
@@ -3894,7 +3887,7 @@ static int ipa_gsi_setup_channel(struct ipa_sys_connect_params *in,
 	struct gsi_evt_ring_props gsi_evt_ring_props;
 	struct gsi_chan_props gsi_channel_props;
 	union __packed gsi_channel_scratch ch_scratch;
-	struct ipa_gsi_ep_config *gsi_ep_info;
+	const struct ipa_gsi_ep_config *gsi_ep_info;
 	dma_addr_t dma_addr;
 	dma_addr_t evt_dma_addr;
 	int result;
@@ -3904,6 +3897,7 @@ static int ipa_gsi_setup_channel(struct ipa_sys_connect_params *in,
 		return -EINVAL;
 	}
 
+	evt_dma_addr = 0;
 	ep->gsi_evt_ring_hdl = ~0;
 	memset(&gsi_evt_ring_props, 0, sizeof(gsi_evt_ring_props));
 	/*
@@ -3917,13 +3911,14 @@ static int ipa_gsi_setup_channel(struct ipa_sys_connect_params *in,
 		gsi_evt_ring_props.re_size =
 			GSI_EVT_RING_RE_SIZE_16B;
 
-		gsi_evt_ring_props.ring_len = IPA_GSI_EVT_RING_LEN;
+		gsi_evt_ring_props.ring_len = 2 * in->desc_fifo_sz;
 		gsi_evt_ring_props.ring_base_vaddr =
-			dma_alloc_coherent(ipa3_ctx->pdev, IPA_GSI_EVT_RING_LEN,
+			dma_alloc_coherent(ipa3_ctx->pdev,
+			gsi_evt_ring_props.ring_len,
 			&evt_dma_addr, GFP_KERNEL);
 		if (!gsi_evt_ring_props.ring_base_vaddr) {
 			IPAERR("fail to dma alloc %u bytes\n",
-				IPA_GSI_EVT_RING_LEN);
+				gsi_evt_ring_props.ring_len);
 			return -ENOMEM;
 		}
 		gsi_evt_ring_props.ring_base_addr = evt_dma_addr;
@@ -3957,9 +3952,10 @@ static int ipa_gsi_setup_channel(struct ipa_sys_connect_params *in,
 		gsi_channel_props.max_re_expected = ep->sys->rx_pool_sz;
 	}
 
-	gsi_ep_info = ipa3_get_gsi_ep_info(ipa3_get_ep_mapping(ep->client));
+	gsi_ep_info = ipa3_get_gsi_ep_info(ep->client);
 	if (!gsi_ep_info) {
-		IPAERR("Invalid ep number\n");
+		IPAERR("Failed getting GSI EP info for client=%d\n",
+		       ep->client);
 		result = -EINVAL;
 		goto fail_get_gsi_ep_info;
 	} else
@@ -4050,7 +4046,7 @@ fail_get_gsi_ep_info:
 	}
 fail_alloc_evt_ring:
 	if (gsi_evt_ring_props.ring_base_vaddr)
-		dma_free_coherent(ipa3_ctx->pdev, IPA_GSI_EVT_RING_LEN,
+		dma_free_coherent(ipa3_ctx->pdev, gsi_evt_ring_props.ring_len,
 			gsi_evt_ring_props.ring_base_vaddr, evt_dma_addr);
 	IPAERR("Return with err: %d\n", result);
 	return result;

@@ -1122,6 +1122,7 @@ static int fg_conventional_mem_write(struct fg_chip *chip, u8 *val, u16 address,
 	int rc = 0, user_cnt = 0, sublen;
 	bool access_configured = false;
 	u8 *wr_data = val, word[4];
+	u16 orig_address = address;
 	char str[DEBUG_PRINT_BUFFER_SIZE];
 
 	if (address < RAM_OFFSET)
@@ -1130,8 +1131,8 @@ static int fg_conventional_mem_write(struct fg_chip *chip, u8 *val, u16 address,
 	if (offset > 3)
 		return -EINVAL;
 
-	address = ((address + offset) / 4) * 4;
-	offset = (address + offset) % 4;
+	address = ((orig_address + offset) / 4) * 4;
+	offset = (orig_address + offset) % 4;
 
 	user_cnt = atomic_add_return(1, &chip->memif_user_cnt);
 	if (fg_debug_mask & FG_MEM_DEBUG_WRITES)
@@ -2451,8 +2452,7 @@ static int fg_is_batt_id_valid(struct fg_chip *chip)
 		return rc;
 	}
 
-	if (fg_debug_mask & FG_IRQS)
-		pr_info("fg batt sts 0x%x\n", fg_batt_sts);
+	pr_debug("fg batt sts 0x%x\n", fg_batt_sts);
 
 	return (fg_batt_sts & BATT_IDED) ? 1 : 0;
 }
@@ -2898,6 +2898,9 @@ static int fg_inc_store_cycle_ctr(struct fg_chip *chip, int bucket)
 			bucket, rc);
 	else
 		chip->cyc_ctr.count[bucket] = cyc_count;
+
+	if (fg_debug_mask & FG_POWER_SUPPLY)
+		pr_info("Stored bucket %d cyc_count: %d\n", bucket, cyc_count);
 	return rc;
 }
 
@@ -3432,13 +3435,11 @@ fail:
 
 #define CC_SOC_BASE_REG		0x5BC
 #define CC_SOC_OFFSET		3
-#define CC_SOC_MAGNITUDE_MASK	0x1FFFFFFF
-#define CC_SOC_NEGATIVE_BIT	BIT(29)
 static int fg_get_cc_soc(struct fg_chip *chip, int *cc_soc)
 {
 	int rc;
 	u8 reg[4];
-	unsigned int temp, magnitude;
+	int temp;
 
 	rc = fg_mem_read(chip, reg, CC_SOC_BASE_REG, 4, CC_SOC_OFFSET, 0);
 	if (rc) {
@@ -3447,13 +3448,30 @@ static int fg_get_cc_soc(struct fg_chip *chip, int *cc_soc)
 	}
 
 	temp = reg[3] << 24 | reg[2] << 16 | reg[1] << 8 | reg[0];
-	magnitude = temp & CC_SOC_MAGNITUDE_MASK;
-	if (temp & CC_SOC_NEGATIVE_BIT)
-		*cc_soc = -1 * (~magnitude + 1);
-	else
-		*cc_soc = magnitude;
-
+	*cc_soc = sign_extend32(temp, 29);
 	return 0;
+}
+
+static int fg_get_current_cc(struct fg_chip *chip)
+{
+	int cc_soc, rc;
+	int64_t current_capacity;
+
+	if (!(chip->wa_flag & USE_CC_SOC_REG))
+		return chip->learning_data.cc_uah;
+
+	if (!chip->learning_data.learned_cc_uah)
+		return -EINVAL;
+
+	rc = fg_get_cc_soc(chip, &cc_soc);
+	if (rc < 0) {
+		pr_err("Failed to get cc_soc, rc=%d\n", rc);
+		return rc;
+	}
+
+	current_capacity = cc_soc * chip->learning_data.learned_cc_uah;
+	do_div(current_capacity, FULL_PERCENT_28BIT);
+	return current_capacity;
 }
 
 #define BATT_MISSING_STS BIT(6)
@@ -3829,6 +3847,17 @@ static int fg_cap_learning_check(struct fg_chip *chip)
 		}
 
 		fg_cap_learning_stop(chip);
+	} else if (chip->status == POWER_SUPPLY_STATUS_FULL) {
+		if (chip->wa_flag & USE_CC_SOC_REG) {
+			/* reset SW_CC_SOC register to 100% upon charge_full */
+			rc = fg_mem_write(chip, (u8 *)&cc_pc_100,
+				CC_SOC_BASE_REG, 4, CC_SOC_OFFSET, 0);
+			if (rc)
+				pr_err("Failed to reset CC_SOC_REG rc=%d\n",
+								rc);
+			else if (fg_debug_mask & FG_STATUS)
+				pr_info("Reset SW_CC_SOC to full value\n");
+		}
 	}
 
 fail:
@@ -3924,7 +3953,7 @@ static void status_change_work(struct work_struct *work)
 				struct fg_chip,
 				status_change_work);
 	unsigned long current_time = 0;
-	int cc_soc, rc, capacity = get_prop_capacity(chip);
+	int cc_soc, batt_soc, rc, capacity = get_prop_capacity(chip);
 	bool batt_missing = is_battery_missing(chip);
 
 	if (batt_missing) {
@@ -3992,6 +4021,26 @@ static void status_change_work(struct work_struct *work)
 
 	if (chip->prev_status != chip->status && chip->last_sram_update_time) {
 		/*
+		 * Reset SW_CC_SOC to a value based off battery SOC when
+		 * the device is discharging.
+		 */
+		if (chip->status == POWER_SUPPLY_STATUS_DISCHARGING) {
+			batt_soc = get_battery_soc_raw(chip);
+			if (!batt_soc)
+				return;
+
+			batt_soc = div64_s64((int64_t)batt_soc *
+					FULL_PERCENT_28BIT, FULL_PERCENT_3B);
+			rc = fg_mem_write(chip, (u8 *)&batt_soc,
+				CC_SOC_BASE_REG, 4, CC_SOC_OFFSET, 0);
+			if (rc)
+				pr_err("Failed to reset CC_SOC_REG rc=%d\n",
+									rc);
+			else if (fg_debug_mask & FG_STATUS)
+				pr_info("Reset SW_CC_SOC to %x\n", batt_soc);
+		}
+
+		/*
 		 * Schedule the update_temp_work whenever there is a status
 		 * change. This is essential for applying the slope limiter
 		 * coefficients when that feature is enabled.
@@ -4032,6 +4081,7 @@ static void status_change_work(struct work_struct *work)
 					chip->sw_cc_soc_data.init_cc_soc);
 		}
 	}
+
 	if ((chip->wa_flag & USE_CC_SOC_REG) && chip->bad_batt_detection_en
 			&& chip->safety_timer_expired) {
 		chip->sw_cc_soc_data.delta_soc =
@@ -4431,6 +4481,7 @@ static enum power_supply_property fg_power_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_VOLTAGE_OCV,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
+	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 	POWER_SUPPLY_PROP_CHARGE_NOW,
 	POWER_SUPPLY_PROP_CHARGE_NOW_RAW,
 	POWER_SUPPLY_PROP_CHARGE_NOW_ERROR,
@@ -4536,6 +4587,9 @@ static int fg_power_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_NOW_RAW:
 		val->intval = get_sram_prop_now(chip, FG_DATA_CC_CHARGE);
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+		val->intval = fg_get_current_cc(chip);
 		break;
 	case POWER_SUPPLY_PROP_HI_POWER:
 		val->intval = !!chip->bcl_lpm_disabled;
