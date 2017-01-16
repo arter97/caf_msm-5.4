@@ -1964,6 +1964,7 @@ static int msm_nand_read_partial_page(struct mtd_info *mtd,
 		if (err < 0) {
 			/* Clear previously set EUCLEAN / EBADMSG */
 			is_euclean = 0;
+			is_ebadmsg = 0;
 			ret_len = ops->retlen;
 			break;
 		}
@@ -2003,6 +2004,7 @@ static int msm_nand_read(struct mtd_info *mtd, loff_t from, size_t len,
 {
 	int ret;
 	int is_euclean = 0;
+	int is_ebadmsg = 0;
 	struct mtd_oob_ops ops;
 	unsigned char *bounce_buf = NULL;
 
@@ -2043,9 +2045,14 @@ static int msm_nand_read(struct mtd_info *mtd, loff_t from, size_t len,
 					is_euclean = 1;
 					ret = 0;
 				}
+				if (ret == -EBADMSG) {
+					is_ebadmsg = 1;
+					ret = 0;
+				}
 				if (ret < 0) {
-					/* Clear previously set EUCLEAN */
+					/* Clear previously set errors */
 					is_euclean = 0;
+					is_ebadmsg = 0;
 					break;
 				}
 
@@ -2085,6 +2092,11 @@ static int msm_nand_read(struct mtd_info *mtd, loff_t from, size_t len,
 out:
 	if (is_euclean == 1)
 		ret = -EUCLEAN;
+
+	/* Snub EUCLEAN if we also have EBADMSG */
+	if (is_ebadmsg == 1)
+		ret = -EBADMSG;
+
 	return ret;
 }
 
