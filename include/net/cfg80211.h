@@ -1778,6 +1778,33 @@ struct cfg80211_ibss_params {
 };
 
 /**
+ * struct cfg80211_bss_select_adjust - BSS selection with RSSI adjustment.
+ *
+ * @band: band of BSS which should match for RSSI level adjustment.
+ * @delta: value of RSSI level adjustment.
+ */
+struct cfg80211_bss_select_adjust {
+	enum ieee80211_band band;
+	s8 delta;
+};
+
+/**
+ * struct cfg80211_bss_selection - connection parameters for BSS selection.
+ *
+ * @behaviour: requested BSS selection behaviour.
+ * @param: parameters for requestion behaviour.
+ * @band_pref: preferred band for %NL80211_BSS_SELECT_ATTR_BAND_PREF.
+ * @adjust: parameters for %NL80211_BSS_SELECT_ATTR_RSSI_ADJUST.
+ */
+struct cfg80211_bss_selection {
+	enum nl80211_bss_select_attr behaviour;
+	union {
+		enum ieee80211_band band_pref;
+		struct cfg80211_bss_select_adjust adjust;
+	} param;
+};
+
+/**
  * struct cfg80211_connect_params - Connection parameters
  *
  * This structure provides information needed to complete IEEE 802.11
@@ -1812,6 +1839,10 @@ struct cfg80211_ibss_params {
  * @ht_capa_mask:  The bits of ht_capa which are to be used.
  * @vht_capa:  VHT Capability overrides
  * @vht_capa_mask: The bits of vht_capa which are to be used.
+ * @pbss: if set, connect to a PCP instead of AP. Valid for DMG
+ *	networks.
+ * @bss_select: criteria to be used for BSS selection.
+ * @prev_bssid: previous BSSID, if not %NULL use reassociate frame
  */
 struct cfg80211_connect_params {
 	struct ieee80211_channel *channel;
@@ -1834,6 +1865,9 @@ struct cfg80211_connect_params {
 	struct ieee80211_ht_cap ht_capa_mask;
 	struct ieee80211_vht_cap vht_capa;
 	struct ieee80211_vht_cap vht_capa_mask;
+	bool pbss;
+	struct cfg80211_bss_selection bss_select;
+	const u8 *prev_bssid;
 };
 
 /**
@@ -3051,6 +3085,9 @@ struct wiphy_iftype_ext_capab {
  *	low rssi when a frame is heard on different channel, then it should set
  *	this variable to the maximal offset for which it can compensate.
  *	This value should be set in MHz.
+ * @bss_select_support: bitmask indicating the BSS selection criteria supported
+ *	by the driver in the .connect() callback. The bit position maps to the
+ *	attribute indices defined in &enum nl80211_bss_select_attr.
  */
 struct wiphy {
 	/* assign these fields before you register the wiphy */
@@ -3174,6 +3211,8 @@ struct wiphy {
 
 	u8 max_num_csa_counters;
 	u8 max_adj_channel_rssi_comp;
+
+	u32 bss_select_support;
 
 	char priv[0] __aligned(NETDEV_ALIGN);
 };
