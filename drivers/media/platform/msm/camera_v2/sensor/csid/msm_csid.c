@@ -1104,6 +1104,12 @@ static int csid_probe(struct platform_device *pdev)
 	}
 
 	if (of_device_is_compatible(new_csid_dev->pdev->dev.of_node,
+		"qcom,csid-v3.5.1")) {
+		new_csid_dev->ctrl_reg->csid_reg = csid_v3_5_1;
+		new_csid_dev->ctrl_reg->csid_lane_assign =
+			csid_lane_assign_v3_5_1;
+		new_csid_dev->hw_dts_version = CSID_VERSION_V35_1;
+	} else if (of_device_is_compatible(new_csid_dev->pdev->dev.of_node,
 		"qcom,csid-v2.0")) {
 		new_csid_dev->ctrl_reg->csid_reg = csid_v2_0;
 		new_csid_dev->ctrl_reg->csid_lane_assign =
@@ -1169,12 +1175,6 @@ static int csid_probe(struct platform_device *pdev)
 		new_csid_dev->ctrl_reg->csid_lane_assign =
 			csid_lane_assign_v3_5;
 		new_csid_dev->hw_dts_version = CSID_VERSION_V35;
-	} else if (of_device_is_compatible(new_csid_dev->pdev->dev.of_node,
-		"qcom,csid-v3.5.1")) {
-		new_csid_dev->ctrl_reg->csid_reg = csid_v3_5_1;
-		new_csid_dev->ctrl_reg->csid_lane_assign =
-			csid_lane_assign_v3_5_1;
-		new_csid_dev->hw_dts_version = CSID_VERSION_V35_1;
 	} else {
 		pr_err("%s:%d, invalid hw version : 0x%x", __func__, __LINE__,
 			new_csid_dev->hw_dts_version);
