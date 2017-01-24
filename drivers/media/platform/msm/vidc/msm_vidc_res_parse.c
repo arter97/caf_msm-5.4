@@ -392,6 +392,52 @@ static int msm_vidc_load_platform_version_table(
 	return 0;
 }
 
+static void clock_override(struct platform_device *pdev,
+	struct allowed_clock_rates_table *clk_table)
+{
+	struct resource *res;
+	void __iomem *base;
+	u32 config_efuse, bin;
+	u32 venus_uplift_freq;
+	u32 is_speed_bin = 7;
+	int rc = 0;
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
+			"venus-uplift-efuse");
+	if (!res) {
+		dprintk(VIDC_ERR,
+			"No Venus speed binning available. Defaulting to 0.\n");
+		return;
+	}
+
+	rc = of_property_read_u32(pdev->dev.of_node, "qcom,venus-uplift-freq",
+			&venus_uplift_freq);
+	if (rc) {
+		dprintk(VIDC_ERR,
+			"Failed to determine venus-uplift-freq: %d\n", rc);
+		return;
+	}
+
+	base = devm_ioremap(&pdev->dev, res->start, resource_size(res));
+	if (!base) {
+		dev_warn(&pdev->dev,
+			"Unable to ioremap efuse reg address. Defaulting to 0.\n");
+		return;
+	}
+
+	config_efuse = readl_relaxed(base);
+	devm_iounmap(&pdev->dev, base);
+
+	bin = (config_efuse >> 8) & 0x7;
+
+	if (bin == is_speed_bin) {
+		dprintk(VIDC_ERR,
+			"Venus speed binning available overwriting %d to %d\n",
+			clk_table[0].clock_rate, venus_uplift_freq);
+		clk_table[0].clock_rate = venus_uplift_freq;
+	}
+}
+
 static int msm_vidc_load_allowed_clocks_table(
 		struct msm_vidc_platform_resources *res)
 {
@@ -415,6 +461,7 @@ static int msm_vidc_load_allowed_clocks_table(
 		return rc;
 	}
 
+	clock_override(pdev, res->allowed_clks_tbl);
 	return 0;
 }
 
