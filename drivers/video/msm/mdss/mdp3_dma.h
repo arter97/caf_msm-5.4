@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -347,6 +347,7 @@ struct mdp3_video_intf_cfg {
 	int vsync_polarity;
 	int de_polarity;
 	int underflow_color;
+	int border_color;
 };
 
 struct mdp3_dsi_cmd_intf_cfg {

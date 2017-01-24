@@ -502,7 +502,7 @@
 		qcom,buffer-type-tz-usage-table = <0x241 0x1>,
 			<0x106 0x2>,
 			<0x480 0x3>;
-		qcom,max-hw-load = <110400>; /*720p @30fps */
+		qcom,max-hw-load = <110400>; /* 720p @30fps */
 		qcom,enable-thermal-mitigation;
 		qcom,vidc-iommu-domains {
 			qcom,domain-ns {
@@ -1282,6 +1282,22 @@
 		mem_client_1_size: qcom,client_1 {
 			compatible = "qcom,memshare-peripheral";
 			qcom,peripheral-size = <0x0>;
+			qcom,client-id = <0>;
+			qcom,allocate-boot-time;
+			label = "modem";
+		};
+
+		qcom,client_2 {
+			compatible = "qcom,memshare-peripheral";
+			qcom,peripheral-size = <0x0>;
+			qcom,client-id = <2>;
+			label = "modem";
+		};
+
+		qcom,client_3 {
+			compatible = "qcom,memshare-peripheral";
+			qcom,peripheral-size = <0x0>;
+			qcom,client-id = <1>;
 			label = "modem";
 		};
 	};
