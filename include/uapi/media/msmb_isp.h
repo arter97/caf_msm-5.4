@@ -292,9 +292,10 @@ struct msm_vfe_axi_plane_cfg {
 	uint8_t rdi_cid;/*CID 1-16*/
 };
 
-enum msm_stream_memory_input_t {
-	MEMORY_INPUT_DISABLED,
-	MEMORY_INPUT_ENABLED
+enum msm_stream_rdi_input_type {
+	MSM_CAMERA_RDI_MIN,
+	MSM_CAMERA_RDI_PDAF,
+	MSM_CAMERA_RDI_MAX,
 };
 
 struct msm_vfe_axi_stream_request_cmd {
@@ -317,7 +318,7 @@ struct msm_vfe_axi_stream_request_cmd {
 	uint32_t controllable_output;
 	uint32_t burst_len;
 	/* Flag indicating memory input stream */
-	enum msm_stream_memory_input_t memory_input;
+	enum msm_stream_rdi_input_type rdi_input_type;
 };
 
 struct msm_vfe_axi_stream_release_cmd {
@@ -330,11 +331,18 @@ enum msm_vfe_axi_stream_cmd {
 	STOP_IMMEDIATELY,
 };
 
+enum msm_vfe_hw_state {
+	HW_STATE_NONE,
+	HW_STATE_SLEEP,
+	HW_STATE_AWAKE,
+};
+
 struct msm_vfe_axi_stream_cfg_cmd {
 	uint8_t num_streams;
 	uint32_t stream_handle[VFE_AXI_SRC_MAX];
 	enum msm_vfe_axi_stream_cmd cmd;
 	uint8_t sync_frame_id_src;
+	enum msm_vfe_hw_state hw_state;
 };
 
 enum msm_vfe_axi_stream_update_type {
@@ -715,6 +723,7 @@ struct msm_isp_fetch_eng_event {
 struct msm_isp_stats_event {
 	uint32_t stats_mask;                        /* 4 bytes */
 	uint8_t stats_buf_idxs[MSM_ISP_STATS_MAX];  /* 11 bytes */
+	uint8_t pd_stats_idx;
 };
 
 struct msm_isp_stream_ack {
@@ -876,6 +885,7 @@ enum msm_isp_ioctl_cmd_code {
 	MSM_ISP_UNMAP_BUF,
 	MSM_ISP_FETCH_ENG_MULTI_PASS_START,
 	MSM_ISP_MAP_BUF_START_MULTI_PASS_FE,
+	MSM_ISP_CFG_HW_STATE,
 };
 
 #define VIDIOC_MSM_VFE_REG_CFG \
@@ -988,4 +998,8 @@ enum msm_isp_ioctl_cmd_code {
 #define VIDIOC_MSM_ISP_MAP_BUF_START_MULTI_PASS_FE \
 	_IOWR('V', MSM_ISP_MAP_BUF_START_MULTI_PASS_FE, \
 		struct msm_vfe_fetch_eng_multi_pass_start)
+
+#define VIDIOC_MSM_ISP_CFG_HW_STATE \
+	_IOWR('V', MSM_ISP_CFG_HW_STATE, \
+		struct msm_vfe_axi_stream_cfg_cmd)
 #endif /* __MSMB_ISP__ */

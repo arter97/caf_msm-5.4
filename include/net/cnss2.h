@@ -1,4 +1,4 @@
-/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -70,6 +70,7 @@ struct cnss_wlan_driver {
 	int  (*suspend)(struct pci_dev *pdev, pm_message_t state);
 	int  (*resume)(struct pci_dev *pdev);
 	void (*modem_status)(struct pci_dev *, int state);
+	void (*update_status)(struct pci_dev *pdev, uint32_t status);
 	struct cnss_wlan_runtime_ops *runtime_ops;
 	const struct pci_device_id *id_table;
 };
@@ -101,6 +102,10 @@ struct cnss_shadow_reg_cfg {
 	u16 reg_offset;
 };
 
+struct cnss_shadow_reg_v2_cfg {
+	u32 addr;
+};
+
 struct cnss_wlan_enable_cfg {
 	u32 num_ce_tgt_cfg;
 	struct cnss_ce_tgt_pipe_cfg *ce_tgt_cfg;
@@ -108,6 +113,8 @@ struct cnss_wlan_enable_cfg {
 	struct cnss_ce_svc_pipe_cfg *ce_svc_cfg;
 	u32 num_shadow_reg_cfg;
 	struct cnss_shadow_reg_cfg *shadow_reg_cfg;
+	u32 num_shadow_reg_v2_cfg;
+	struct cnss_shadow_reg_v2_cfg *shadow_reg_v2_cfg;
 };
 
 enum cnss_driver_mode {
@@ -121,12 +128,19 @@ enum cnss_driver_mode {
 	CNSS_CALIBRATION,
 };
 
+enum cnss_recovery_reason {
+	CNSS_REASON_DEFAULT,
+	CNSS_REASON_LINK_DOWN,
+};
+
 extern int cnss_wlan_register_driver(struct cnss_wlan_driver *driver);
 extern void cnss_wlan_unregister_driver(struct cnss_wlan_driver *driver);
-extern void cnss_wlan_pci_link_down(void);
-extern void cnss_schedule_recovery_work(void);
 extern void cnss_device_crashed(void);
-extern void cnss_device_self_recovery(void);
+extern int cnss_pci_link_down(struct device *dev);
+extern void cnss_schedule_recovery(struct device *dev,
+				   enum cnss_recovery_reason reason);
+extern int cnss_self_recovery(struct device *dev,
+			      enum cnss_recovery_reason reason);
 extern void *cnss_get_virt_ramdump_mem(unsigned long *size);
 extern int cnss_get_fw_files_for_target(struct cnss_fw_files *pfw_files,
 					u32 target_type, u32 target_version);

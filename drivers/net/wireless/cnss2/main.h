@@ -1,4 +1,4 @@
-/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -108,6 +108,12 @@ enum cnss_driver_state {
 	CNSS_DRIVER_PROBED,
 };
 
+struct cnss_recovery_work_t {
+	struct work_struct work;
+	struct device *dev;
+	enum cnss_recovery_reason reason;
+};
+
 struct cnss_plat_data {
 	struct platform_device *plat_dev;
 	void *bus_priv;
@@ -131,6 +137,7 @@ struct cnss_plat_data {
 	spinlock_t event_lock; /* spinlock for driver work event handling */
 	struct work_struct event_work;
 	struct workqueue_struct *event_wq;
+	struct cnss_recovery_work_t cnss_recovery_work;
 	struct qmi_handle *qmi_wlfw_clnt;
 	struct work_struct qmi_recv_msg_work;
 	struct notifier_block qmi_wlfw_clnt_nb;
@@ -150,5 +157,9 @@ int cnss_get_vreg(struct cnss_plat_data *plat_priv);
 int cnss_get_pinctrl(struct cnss_plat_data *plat_priv);
 int cnss_power_on_device(struct cnss_plat_data *plat_priv);
 void cnss_power_off_device(struct cnss_plat_data *plat_priv);
+int cnss_register_subsys(struct cnss_plat_data *plat_priv);
+void cnss_unregister_subsys(struct cnss_plat_data *plat_priv);
+int cnss_register_ramdump(struct cnss_plat_data *plat_priv);
+void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv);
 
 #endif /* _CNSS_MAIN_H */
