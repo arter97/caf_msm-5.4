@@ -29,6 +29,12 @@
 	status = "ok";
 };
 
+&soc {
+	gpio_keys {
+		/delete-node/ home;
+	};
+};
+
 &usb_otg {
 	qcom,vbus-low-as-hostmode;
 	vbus_otg-supply = <0>;

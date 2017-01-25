@@ -1,4 +1,4 @@
-/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -168,21 +168,21 @@ out:
 	return ret;
 }
 
-void cnss_wlan_pci_link_down(void)
+int cnss_pci_link_down(struct device *dev)
 {
 	unsigned long flags;
-	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(NULL);
-	struct cnss_pci_data *pci_priv;
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 
 	if (!plat_priv) {
 		cnss_pr_err("plat_priv is NULL!\n");
-		return;
+		return -EINVAL;
 	}
 
-	pci_priv = plat_priv->bus_priv;
 	if (!pci_priv) {
 		cnss_pr_err("pci_priv is NULL!\n");
-		return;
+		return -EINVAL;
 	}
 
 	if (pci_link_down_panic)
@@ -192,15 +192,16 @@ void cnss_wlan_pci_link_down(void)
 	if (pci_priv->pci_link_down_ind) {
 		cnss_pr_dbg("PCI link down recovery is in progress, ignore!\n");
 		spin_unlock_irqrestore(&pci_link_down_lock, flags);
-		return;
+		return -EINVAL;
 	}
 	pci_priv->pci_link_down_ind = true;
 	spin_unlock_irqrestore(&pci_link_down_lock, flags);
 
 	cnss_pr_err("PCI link down is detected by host driver, schedule recovery!\n");
-	cnss_schedule_recovery_work();
+	cnss_schedule_recovery(dev, CNSS_REASON_LINK_DOWN);
+	return 0;
 }
-EXPORT_SYMBOL(cnss_wlan_pci_link_down);
+EXPORT_SYMBOL(cnss_pci_link_down);
 
 static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 {
@@ -295,7 +296,7 @@ static void cnss_pci_event_cb(struct msm_pcie_notify *notify)
 
 		cnss_pr_err("PCI link down, schedule recovery!\n");
 		disable_irq(pci_dev->irq);
-		cnss_schedule_recovery_work();
+		cnss_schedule_recovery(&pci_dev->dev, CNSS_REASON_LINK_DOWN);
 		break;
 	case MSM_PCIE_EVENT_WAKEUP:
 		if (cnss_pci_get_monitor_wake_intr(pci_priv) &&
@@ -1062,6 +1063,14 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	plat_priv->device_id = pci_dev->device;
 	plat_priv->bus_priv = pci_priv;
 
+	ret = cnss_register_subsys(plat_priv);
+	if (ret)
+		goto reset_ctx;
+
+	ret = cnss_register_ramdump(plat_priv);
+	if (ret)
+		goto unregister_subsys;
+
 	res = platform_get_resource_byname(plat_priv->plat_dev, IORESOURCE_MEM,
 					   "smmu_iova_base");
 	if (res) {
@@ -1074,7 +1083,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 		ret = cnss_pci_init_smmu(pci_priv);
 		if (ret) {
 			cnss_pr_err("Failed to init SMMU, err = %d\n", ret);
-			goto reset_ctx;
+			goto unregister_ramdump;
 		}
 	}
 
@@ -1124,6 +1133,10 @@ dereg_pci_event:
 deinit_smmu:
 	if (pci_priv->smmu_mapping)
 		cnss_pci_deinit_smmu(pci_priv);
+unregister_ramdump:
+	cnss_unregister_ramdump(plat_priv);
+unregister_subsys:
+	cnss_unregister_subsys(plat_priv);
 reset_ctx:
 	plat_priv->bus_priv = NULL;
 out:
@@ -1144,6 +1157,8 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 	cnss_dereg_pci_event(pci_priv);
 	if (pci_priv->smmu_mapping)
 		cnss_pci_deinit_smmu(pci_priv);
+	cnss_unregister_ramdump(plat_priv);
+	cnss_unregister_subsys(plat_priv);
 	plat_priv->bus_priv = NULL;
 }
 

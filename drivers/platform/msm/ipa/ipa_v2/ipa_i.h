@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -54,10 +54,37 @@
 
 #define IPA_MAX_STATUS_STAT_NUM 30
 
+#define IPA_IPC_LOG_PAGES 50
+
 #define IPADBG(fmt, args...) \
-	pr_debug(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
+	do { \
+		pr_debug(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args);\
+		if (ipa_ctx) { \
+			IPA_IPC_LOGGING(ipa_ctx->logbuf, \
+				DRV_NAME " %s:%d " fmt, ## args); \
+			IPA_IPC_LOGGING(ipa_ctx->logbuf_low, \
+				DRV_NAME " %s:%d " fmt, ## args); \
+			} \
+	} while (0)
+
+#define IPADBG_LOW(fmt, args...) \
+	do { \
+		pr_debug(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args);\
+		if (ipa_ctx) \
+			IPA_IPC_LOGGING(ipa_ctx->logbuf_low, \
+				DRV_NAME " %s:%d " fmt, ## args); \
+	} while (0)
+
 #define IPAERR(fmt, args...) \
-	pr_err(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
+	do { \
+		pr_err(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args);\
+		if (ipa_ctx) { \
+			IPA_IPC_LOGGING(ipa_ctx->logbuf, \
+				DRV_NAME " %s:%d " fmt, ## args); \
+			IPA_IPC_LOGGING(ipa_ctx->logbuf_low, \
+				DRV_NAME " %s:%d " fmt, ## args); \
+		} \
+	} while (0)
 
 #define WLAN_AMPDU_TX_EP 15
 #define WLAN_PROD_TX_EP  19
@@ -254,6 +281,7 @@ struct ipa_rt_tbl {
  * @id: header entry id
  * @is_eth2_ofst_valid: is eth2_ofst field valid?
  * @eth2_ofst: offset to start of Ethernet-II/802.3 header
+ * @user_deleted: is the header deleted by the user?
  */
 struct ipa_hdr_entry {
 	struct list_head link;
@@ -271,6 +299,7 @@ struct ipa_hdr_entry {
 	int id;
 	u8 is_eth2_ofst_valid;
 	u16 eth2_ofst;
+	bool user_deleted;
 };
 
 /**
@@ -334,6 +363,7 @@ struct ipa_hdr_proc_ctx_add_hdr_cmd_seq {
  * @cookie: cookie used for validity check
  * @ref_cnt: reference counter of routing table
  * @id: processing context header entry id
+ * @user_deleted: is the hdr processing context deleted by the user?
  */
 struct ipa_hdr_proc_ctx_entry {
 	struct list_head link;
@@ -343,6 +373,7 @@ struct ipa_hdr_proc_ctx_entry {
 	u32 cookie;
 	u32 ref_cnt;
 	int id;
+	bool user_deleted;
 };
 
 /**
@@ -999,6 +1030,8 @@ struct ipacm_client_info {
  * @use_ipa_teth_bridge: use tethering bridge driver
  * @ipa_bam_remote_mode: ipa bam is in remote mode
  * @modem_cfg_emb_pipe_flt: modem configure embedded pipe filtering rules
+ * @logbuf: ipc log buffer for high priority messages
+ * @logbuf_low: ipc log buffer for low priority messages
  * @ipa_wdi2: using wdi-2.0
  * @ipa_bus_hdl: msm driver handle for the data path bus
  * @ctrl: holds the core specific operations based on
@@ -1091,6 +1124,8 @@ struct ipa_context {
 	/* featurize if memory footprint becomes a concern */
 	struct ipa_stats stats;
 	void *smem_pipe_mem;
+	void *logbuf;
+	void *logbuf_low;
 	u32 ipa_bus_hdl;
 	struct ipa_controller *ctrl;
 	struct idr ipa_idr;
@@ -1361,6 +1396,8 @@ int ipa2_add_hdr(struct ipa_ioc_add_hdr *hdrs);
 
 int ipa2_del_hdr(struct ipa_ioc_del_hdr *hdls);
 
+int ipa2_del_hdr_by_user(struct ipa_ioc_del_hdr *hdls, bool by_user);
+
 int ipa2_commit_hdr(void);
 
 int ipa2_reset_hdr(void);
@@ -1377,6 +1414,9 @@ int ipa2_copy_hdr(struct ipa_ioc_copy_hdr *copy);
 int ipa2_add_hdr_proc_ctx(struct ipa_ioc_add_hdr_proc_ctx *proc_ctxs);
 
 int ipa2_del_hdr_proc_ctx(struct ipa_ioc_del_hdr_proc_ctx *hdls);
+
+int ipa2_del_hdr_proc_ctx_by_user(struct ipa_ioc_del_hdr_proc_ctx *hdls,
+	bool by_user);
 
 /*
  * Routing
@@ -1669,7 +1709,7 @@ int ipa2_active_clients_log_print_table(char *buf, int size);
 void ipa2_active_clients_log_clear(void);
 int ipa_interrupts_init(u32 ipa_irq, u32 ee, struct device *ipa_dev);
 int __ipa_del_rt_rule(u32 rule_hdl);
-int __ipa_del_hdr(u32 hdr_hdl);
+int __ipa_del_hdr(u32 hdr_hdl, bool by_user);
 int __ipa_release_hdr(u32 hdr_hdl);
 int __ipa_release_hdr_proc_ctx(u32 proc_ctx_hdl);
 int _ipa_read_gen_reg_v1_1(char *buff, int max_len);
