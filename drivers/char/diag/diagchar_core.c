@@ -2742,7 +2742,8 @@ static int diag_user_process_raw_data(const char __user *buf, int len)
 		ret = diag_process_apps_pkt(user_space_data, len,
 			current->tgid);
 		if (ret == 1)
-			diag_send_error_rsp((void *)(user_space_data), len);
+			diag_send_error_rsp((void *)(user_space_data), len,
+						current->tgid);
 	}
 fail:
 	diagmem_free(driver, user_space_data, mempool);
