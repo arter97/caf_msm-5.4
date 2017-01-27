@@ -106,6 +106,9 @@
 
 &wcd9335 {
 	status = "okay";
+	cdc-vdd-mic-bias-supply = <&pm8917_l9>;
+	qcom,cdc-vdd-mic-bias-voltage = <3300000 3300000>;
+	qcom,cdc-vdd-mic-bias-current = <15000>;
 	qcom,cdc-mclk-clk-rate = <12288000>;
 	clock-names = "wcd_clk";
 	clocks = <&clock_audio clk_audio_lpass_mclk>;
