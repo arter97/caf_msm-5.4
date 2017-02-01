@@ -1,4 +1,4 @@
- /* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+ /* Copyright (c) 2014-2015, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -260,6 +260,7 @@ static const struct snd_soc_dapm_widget msm8x16_dapm_widgets[] = {
 static char const *rx_bit_format_text[] = {"S16_LE", "S24_LE"};
 static const char *const ter_mi2s_tx_ch_text[] = {"One", "Two"};
 static const char *const loopback_mclk_text[] = {"DISABLE", "ENABLE"};
+static char const *spk_hph_switch[] = {"SPK", "HPH", "SPKHPH" , "OFF"};
 
 static int msm_auxpcm_be_params_fixup(struct snd_soc_pcm_runtime *rtd,
 					struct snd_pcm_hw_params *params)
@@ -367,6 +368,78 @@ static int mi2s_rx_bit_format_put(struct snd_kcontrol *kcontrol,
 static int loopback_mclk_get(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
+	return 0;
+}
+
+static int speaker_switch_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	return 0;
+}
+
+static int speaker_switch_set(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct msm8916_asoc_mach_data *pdata = NULL;
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+
+	pdata = snd_soc_card_get_drvdata(codec->card);
+	if (!pdata) {
+		pr_err(" %s\n", __func__);
+		return -EINVAL;
+	}
+
+	switch (ucontrol->value.integer.value[0]) {
+	case 0:
+		if (pdata != NULL && pdata->vdd != NULL) {
+			if (regulator_enable(pdata->vdd)) {
+				dev_err(codec->dev,
+						"Regulator vdd enable failed.\n");
+			}
+		}
+		if (pdata->audio_sw >= 0)
+			gpio_direction_output(pdata->audio_sw, 0);
+		if (pdata->audio_pa_en >= 0)
+			gpio_direction_output(pdata->audio_pa_en, 1);
+		if (pdata->audio_pa_en_1 >= 0)
+			gpio_direction_output(pdata->audio_pa_en_1, 1);
+		break;
+	case 1:
+		if (pdata != NULL && pdata->vdd != NULL) {
+			if (regulator_enable(pdata->vdd)) {
+				dev_err(codec->dev,
+						"Regulator vdd enable failed.\n");
+			}
+		}
+		if (pdata->audio_sw >= 0)
+			gpio_direction_output(pdata->audio_sw, 1);
+		break;
+	case 2:
+		if (pdata != NULL && pdata->vdd != NULL) {
+			if (regulator_enable(pdata->vdd)) {
+				dev_err(codec->dev,
+						"Regulator vdd enable failed.\n");
+			}
+		}
+		if (pdata->audio_sw >= 0)
+			gpio_direction_output(pdata->audio_sw, 1);
+		if (pdata->audio_pa_en >= 0)
+			gpio_direction_output(pdata->audio_pa_en, 1);
+		if (pdata->audio_pa_en_1 >= 0)
+			gpio_direction_output(pdata->audio_pa_en_1, 1);
+		break;
+	case 3:
+		if (pdata->audio_sw >= 0)
+			gpio_direction_output(pdata->audio_sw, 0);
+		if (pdata->audio_pa_en >= 0)
+			gpio_direction_output(pdata->audio_pa_en, 0);
+		if (pdata->audio_pa_en_1 >= 0)
+			gpio_direction_output(pdata->audio_pa_en_1, 0);
+		break;
+	default:
+		pr_err("%s: Unexpected input value\n", __func__);
+		break;
+	}
 	return 0;
 }
 
@@ -834,6 +907,7 @@ static const struct soc_enum msm_snd_enum[] = {
 	SOC_ENUM_SINGLE_EXT(2, rx_bit_format_text),
 	SOC_ENUM_SINGLE_EXT(2, ter_mi2s_tx_ch_text),
 	SOC_ENUM_SINGLE_EXT(2, loopback_mclk_text),
+	SOC_ENUM_SINGLE_EXT(4, spk_hph_switch),
 };
 
 static const char *const btsco_rate_text[] = {"8000", "16000"};
@@ -852,6 +926,8 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 			loopback_mclk_get, loopback_mclk_put),
 	SOC_ENUM_EXT("Internal BTSCO SampleRate", msm_btsco_enum[0],
 		     msm_btsco_rate_get, msm_btsco_rate_put),
+	SOC_ENUM_EXT("Speaker HP Switch", msm_snd_enum[3],
+			speaker_switch_get, speaker_switch_set),
 
 };
 
@@ -2568,6 +2644,11 @@ static int msm8x16_asoc_machine_probe(struct platform_device *pdev)
 		ret = -EINVAL;
 		goto err;
 	}
+	ret = of_property_read_u32(pdev->dev.of_node, "qcom,product-id",
+			&pdata->product_id);
+	if (ret)
+		pr_err("%s: Unable to get product-id. rc:%d\n",
+				__func__, ret);
 
 	ret = of_property_read_u32(pdev->dev.of_node, mclk, &id);
 	if (ret) {
@@ -2720,6 +2801,63 @@ static int msm8x16_asoc_machine_probe(struct platform_device *pdev)
 			ret);
 		goto err;
 	}
+
+	if (pdata->product_id == 1) {
+		pdata->vdd = regulator_get(&pdev->dev, "vdd");
+		if (IS_ERR(pdata->vdd)) {
+			ret = PTR_ERR(pdata->vdd);
+			dev_err(&pdev->dev,
+					"Regulator get failed vdd ret=%d\n", ret);
+		}
+		if (regulator_count_voltages(pdata->vdd) > 0) {
+			ret = regulator_set_voltage(pdata->vdd, 2850000, 2850000);
+			if (ret) {
+				dev_err(&pdev->dev,
+						"Regulator set failed vdd ret=%d\n", ret);
+				return ret;
+			}
+		}
+
+		pdata->audio_sw = of_get_named_gpio(pdev->dev.of_node,
+				"qcom,audio-sw", 0);
+		if (pdata->audio_sw < 0)
+			dev_err(&pdev->dev, "property qcom,audio-sw not found");
+		else {
+			ret = gpio_request(pdata->audio_sw, "audio_sw");
+			if (ret) {
+				pr_err("request audio_sw failed, rc=%d\n", ret);
+				return ret;
+			} else
+				gpio_direction_output(pdata->audio_sw, 0);
+		}
+
+		pdata->audio_pa_en = of_get_named_gpio(pdev->dev.of_node,
+				"qcom,audio-pa-en", 0);
+		if (pdata->audio_pa_en < 0)
+			dev_err(&pdev->dev, "property qcom,audio-pa-en not found");
+		else {
+			ret = gpio_request(pdata->audio_pa_en, "audio_pa_en");
+			if (ret) {
+				pr_err("request audio_pa_en failed, rc=%d\n", ret);
+				return ret;
+			} else
+				gpio_direction_output(pdata->audio_pa_en, 0);
+		}
+
+		pdata->audio_pa_en_1 = of_get_named_gpio(pdev->dev.of_node,
+				"qcom,audio-pa-en_1", 0);
+		if (pdata->audio_pa_en_1 < 0)
+			dev_err(&pdev->dev, "property qcom,audio-pa-en_1 not found");
+		else {
+			ret = gpio_request(pdata->audio_pa_en_1, "audio_pa_en_1");
+			if (ret) {
+				pr_err("request audio_pa_en_1 failed, rc=%d\n", ret);
+				return ret;
+			} else
+				gpio_direction_output(pdata->audio_pa_en_1, 0);
+		}
+	}
+
 	return 0;
 err:
 	if (pdata->vaddr_gpio_mux_spkr_ctl)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -204,6 +204,80 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 }
 
+static int thirdparty_bl_set(struct mdss_dsi_ctrl_pdata *ctrl, int level)
+{
+	static int prev_bl;
+	static int bl_ctl_num;
+	static int pulse;
+	static int pre_pulse;
+	static int menu_flag;
+	static int bl_array[] = {0, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 195, 210, 225, 240, 255};
+	int ret = 0, i;
+	static int boot_flag;
+	unsigned long flags;
+	int  min, max;
+
+	min = ctrl->panel_data.panel_info.bl_min;
+	max = ctrl->panel_data.panel_info.bl_max;
+
+	if (boot_flag == 0) {
+		boot_flag = 1;
+		bl_ctl_num = ctrl->bklt_en_gpio;
+		pr_debug("@@ backlight gpio is %d", bl_ctl_num);
+		ret = gpio_request(bl_ctl_num, "gpio3");
+		if (ret)
+			pr_err("@@ gpio3 request error!");
+		ret = gpio_direction_output(bl_ctl_num, 0);
+		if (ret)
+			pr_err("@@ gpio3 set direction output error!");
+	}
+	if (level > max)
+		level = max;
+	if (level < min)
+		level = min;
+	if (level == 0) {
+		gpio_set_value(bl_ctl_num, 0);
+		msleep(3);
+		prev_bl = level;
+		menu_flag = 0;
+		return 0;
+	} else if ((prev_bl == 0) || (prev_bl != level)) {
+		for (i = 1 ; i < 17 ; i++) {
+			if ((level > bl_array[i-1]) && (level <= bl_array[i])) {
+				i = 17-i;
+				if (menu_flag == 0) {
+					pulse = i;
+				} else {
+					if (i > pre_pulse) {
+					    pulse = i-pre_pulse;
+					} else {
+					    pulse = 16-pre_pulse+i;
+					}
+				}
+			msleep(1);
+			if ((pre_pulse == i) && (menu_flag == 1))
+				break;
+			local_irq_save(flags);
+			while (pulse) {
+				gpio_set_value(bl_ctl_num, 0);
+				mb();
+				udelay(1);
+				gpio_set_value(bl_ctl_num, 1);
+				mb();
+				udelay(35);
+				pulse--;
+			}
+			pre_pulse = i;
+			menu_flag = 1;
+			local_irq_restore(flags);
+			break;
+			}
+		}
+	}
+	prev_bl = level;
+	return ret;
+}
+
 static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
 	int rc = 0;
@@ -298,10 +372,11 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 				if (pdata->panel_info.rst_seq[++i])
 					usleep(pinfo->rst_seq[i] * 1000);
 			}
-
-			if (gpio_is_valid(ctrl_pdata->bklt_en_gpio))
-				gpio_set_value((ctrl_pdata->bklt_en_gpio), 1);
-		}
+			if (ctrl_pdata->bklt_ctrl != BL_THIRDPARTY) {
+				if (gpio_is_valid(ctrl_pdata->bklt_en_gpio))
+					gpio_set_value((ctrl_pdata->bklt_en_gpio), 1);
+				}
+			}
 
 		if (gpio_is_valid(ctrl_pdata->mode_gpio)) {
 			if (pinfo->mode_gpio_state == MODE_GPIO_HIGH)
@@ -587,6 +662,10 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 				mdss_dsi_panel_bklt_dcs(sctrl, bl_level);
 		}
 		break;
+	case BL_THIRDPARTY:
+		thirdparty_bl_set(ctrl_pdata, bl_level);
+		break;
+
 	default:
 		pr_err("%s: Unknown bl_ctrl configuration\n",
 			__func__);
@@ -1469,7 +1548,10 @@ static int mdss_panel_parse_dt(struct device_node *np,
 			ctrl_pdata->bklt_ctrl = BL_DCS_CMD;
 			pr_debug("%s: Configured DCS_CMD bklt ctrl\n",
 								__func__);
+		} else if (!strncmp(data, "bl_thirdparty_ctrl", 18)) {
+			ctrl_pdata->bklt_ctrl = BL_THIRDPARTY;
 		}
+
 	}
 	rc = of_property_read_u32(np, "qcom,mdss-brightness-max-level", &tmp);
 	pinfo->brightness_max = (!rc ? tmp : MDSS_MAX_BL_BRIGHTNESS);

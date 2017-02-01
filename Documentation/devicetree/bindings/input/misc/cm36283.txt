@@ -15,6 +15,10 @@ Required properties:
  - capella,ls_cmd	: The initial value to configure cm36283 ALS_CONF register.
  - capella,ps_conf1_val	: The initial value to configure cm36283 PS_CONF1 register.
  - capella,ps_conf3_val	: The initial value to configure cm36283 PS_CONF3 register.
+ - capella,ls_poll_delay	: The initial value to configure polling delay for light sensor.
+ - capella,ps_poll_delay	: The initial value to configure polling delay for proximity sensor.
+ - capella,use-polling		: Flag to configure polling.
+ - capella,ps_away_cali_param	: adc calibration value.
 
 Optional properties:
 
@@ -37,4 +41,8 @@ Example:
 				capella,ls_cmd = <0x44>;  /* PS_IT=160ms, INT_PERS=2*/
 				capella,ps_conf1_val = <0x0006>;  /*CM36283_PS_ITB_1_2 | CM36283_PS_DR_1_40| CM36283_PS_IT_1T | CM36283_PS_PERS_2 | CM36283_PS_RES_1*/
 				capella,ps_conf3_val = <0x3010>;  /* CM36283_PS_MS_NORMAL | CM36283_PS_PROL_255 | CM36283_PS_SMART_PERS_ENABLE, */
+				capella,ls_poll_delay = <200>;
+				capella,ps_poll_delay = <200>;
+				capella,use-polling = <0>;
+				capella,ps_away_cali_param = <1>;
 		};

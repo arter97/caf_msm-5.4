@@ -73,6 +73,7 @@ struct matrix_keypad_platform_data {
 	bool		active_low;
 	bool		wakeup;
 	bool		no_autorepeat;
+	int product_id;
 };
 
 int matrix_keypad_build_keymap(const struct matrix_keymap_data *keymap_data,
