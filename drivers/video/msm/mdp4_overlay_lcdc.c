@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -44,6 +44,7 @@ int first_pixel_start_y;
 
 static int lcdc_enabled;
 
+static void mdp4_lcdc_dmap_irq_ctrl(int enable);
 #define MAX_CONTROLLER	1
 
 static struct vsycn_ctrl {
@@ -249,7 +250,7 @@ int mdp4_lcdc_pipe_commit(int cndx, int wait)
 		spin_lock_irqsave(&vctrl->spin_lock, flags);
 		INIT_COMPLETION(vctrl->dmap_comp);
 		INIT_COMPLETION(vctrl->ov_comp);
-		vsync_irq_enable(INTR_DMA_P_DONE, MDP_DMAP_TERM);
+		mdp4_lcdc_dmap_irq_ctrl(1);
 		spin_unlock_irqrestore(&vctrl->spin_lock, flags);
 		mdp4_lcdc_wait4dmap(0);
 		if (pipe->ov_blt_addr)
@@ -319,7 +320,7 @@ int mdp4_lcdc_pipe_commit(int cndx, int wait)
 		(vctrl->base_pipe->mixer_num == MDP4_MIXER0)) {
 		/* schedule second phase update  at dmap */
 		INIT_COMPLETION(vctrl->dmap_comp);
-		vsync_irq_enable(INTR_DMA_P_DONE, MDP_DMAP_TERM);
+		mdp4_lcdc_dmap_irq_ctrl(1);
 	}
 	spin_unlock_irqrestore(&vctrl->spin_lock, flags);
 
@@ -339,6 +340,24 @@ int mdp4_lcdc_pipe_commit(int cndx, int wait)
 	}
 
 	return cnt;
+}
+
+static void mdp4_lcdc_dmap_irq_ctrl(int enable)
+{
+	static int dmap_irq_cnt;
+
+	if (enable) {
+		if (dmap_irq_cnt == 0)
+			vsync_irq_enable(INTR_DMA_P_DONE, MDP_DMAP_TERM);
+		dmap_irq_cnt++;
+	} else {
+		if (dmap_irq_cnt) {
+			dmap_irq_cnt--;
+			if (dmap_irq_cnt == 0)
+				vsync_irq_disable(INTR_DMA_P_DONE, MDP_DMAP_TERM);
+		}
+	}
+	pr_debug("%s: enable=%d cnt=%d\n", __func__, enable, dmap_irq_cnt);
 }
 
 static void mdp4_lcdc_vsync_irq_ctrl(int cndx, int enable)
@@ -439,7 +458,7 @@ static void mdp4_lcdc_wait4dmap_done(int cndx)
 	vctrl = &vsync_ctrl_db[cndx];
 	spin_lock_irqsave(&vctrl->spin_lock, flags);
 	INIT_COMPLETION(vctrl->dmap_comp);
-	vsync_irq_enable(INTR_DMA_P_DONE, MDP_DMAP_TERM);
+	mdp4_lcdc_dmap_irq_ctrl(1);
 	spin_unlock_irqrestore(&vctrl->spin_lock, flags);
 	mdp4_lcdc_wait4dmap(cndx);
 }
@@ -975,7 +994,7 @@ void mdp4_dmap_done_lcdc(int cndx)
 	pipe = vctrl->base_pipe;
 
 	spin_lock(&vctrl->spin_lock);
-	vsync_irq_disable(INTR_DMA_P_DONE, MDP_DMAP_TERM);
+	mdp4_lcdc_dmap_irq_ctrl(0);
 	if (vctrl->blt_change) {
 		mdp4_overlayproc_cfg(pipe);
 		mdp4_overlay_dmap_xy(pipe);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -297,6 +297,24 @@ int mdp4_dsi_video_pipe_commit(int cndx, int wait)
 	return cnt;
 }
 
+static void mdp4_video_dmap_irq_ctrl(int enable)
+{
+	static int dmap_irq_cnt;
+
+	if (enable) {
+		if (dmap_irq_cnt == 0)
+			vsync_irq_enable(INTR_DMA_P_DONE, MDP_DMAP_TERM);
+		dmap_irq_cnt++;
+	} else {
+		if (dmap_irq_cnt) {
+			dmap_irq_cnt--;
+			if (dmap_irq_cnt == 0)
+				vsync_irq_disable(INTR_DMA_P_DONE, MDP_DMAP_TERM);
+		}
+	}
+	pr_debug("%s: enable=%d cnt=%d\n", __func__, enable, dmap_irq_cnt);
+}
+
 static void mdp4_video_vsync_irq_ctrl(int cndx, int enable)
 {
 	struct vsycn_ctrl *vctrl = NULL;
@@ -422,7 +440,7 @@ static void mdp4_dsi_video_wait4dmap_done(int cndx)
 
 	spin_lock_irqsave(&vctrl->spin_lock, flags);
 	INIT_COMPLETION(vctrl->dmap_comp);
-	vsync_irq_enable(INTR_DMA_P_DONE, MDP_DMAP_TERM);
+	mdp4_video_dmap_irq_ctrl(1);
 	spin_unlock_irqrestore(&vctrl->spin_lock, flags);
 	mdp4_dsi_video_wait4dmap(cndx);
 }
@@ -1080,7 +1098,7 @@ void mdp4_dmap_done_dsi_video(int cndx)
 	pipe = vctrl->base_pipe;
 
 	spin_lock(&vctrl->spin_lock);
-	vsync_irq_disable(INTR_DMA_P_DONE, MDP_DMAP_TERM);
+	mdp4_video_dmap_irq_ctrl(0);
 
 	if (pipe == NULL) {
 		spin_unlock(&vctrl->spin_lock);
