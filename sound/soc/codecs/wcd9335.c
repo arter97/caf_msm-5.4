@@ -847,8 +847,8 @@ static const struct tasha_reg_mask_val tasha_spkr_mode1[] = {
 	{WCD9335_CDC_COMPANDER8_CTL3, 0x80, 0x00},
 	{WCD9335_CDC_COMPANDER7_CTL7, 0x01, 0x00},
 	{WCD9335_CDC_COMPANDER8_CTL7, 0x01, 0x00},
-	{WCD9335_CDC_BOOST0_BOOST_CTL, 0x7C, 0x44},
-	{WCD9335_CDC_BOOST1_BOOST_CTL, 0x7C, 0x44},
+	{WCD9335_CDC_BOOST0_BOOST_CTL, 0x7C, 0x48},
+	{WCD9335_CDC_BOOST1_BOOST_CTL, 0x7C, 0x48},
 };
 
 /**
@@ -5223,13 +5223,7 @@ static int tasha_codec_enable_mix_path(struct snd_soc_dapm_widget *w,
 		     gain_reg == WCD9335_CDC_RX8_RX_VOL_MIX_CTL)) {
 			snd_soc_update_bits(codec, WCD9335_CDC_RX7_RX_PATH_SEC1,
 					    0x01, 0x01);
-			snd_soc_update_bits(codec,
-					    WCD9335_CDC_RX7_RX_PATH_MIX_SEC0,
-					    0x01, 0x01);
 			snd_soc_update_bits(codec, WCD9335_CDC_RX8_RX_PATH_SEC1,
-					    0x01, 0x01);
-			snd_soc_update_bits(codec,
-					    WCD9335_CDC_RX8_RX_PATH_MIX_SEC0,
 					    0x01, 0x01);
 			offset_val = -2;
 		}
@@ -5245,13 +5239,7 @@ static int tasha_codec_enable_mix_path(struct snd_soc_dapm_widget *w,
 		     gain_reg == WCD9335_CDC_RX8_RX_VOL_MIX_CTL)) {
 			snd_soc_update_bits(codec, WCD9335_CDC_RX7_RX_PATH_SEC1,
 					    0x01, 0x00);
-			snd_soc_update_bits(codec,
-					    WCD9335_CDC_RX7_RX_PATH_MIX_SEC0,
-					    0x01, 0x00);
 			snd_soc_update_bits(codec, WCD9335_CDC_RX8_RX_PATH_SEC1,
-					    0x01, 0x00);
-			snd_soc_update_bits(codec,
-					    WCD9335_CDC_RX8_RX_PATH_MIX_SEC0,
 					    0x01, 0x00);
 			offset_val = 2;
 			val = snd_soc_read(codec, gain_reg);
@@ -5494,13 +5482,7 @@ static int tasha_codec_enable_interpolator(struct snd_soc_dapm_widget *w,
 		     gain_reg == WCD9335_CDC_RX8_RX_VOL_CTL)) {
 			snd_soc_update_bits(codec, WCD9335_CDC_RX7_RX_PATH_SEC1,
 					    0x01, 0x01);
-			snd_soc_update_bits(codec,
-					    WCD9335_CDC_RX7_RX_PATH_MIX_SEC0,
-					    0x01, 0x01);
 			snd_soc_update_bits(codec, WCD9335_CDC_RX8_RX_PATH_SEC1,
-					    0x01, 0x01);
-			snd_soc_update_bits(codec,
-					    WCD9335_CDC_RX8_RX_PATH_MIX_SEC0,
 					    0x01, 0x01);
 			offset_val = -2;
 		}
@@ -5518,13 +5500,7 @@ static int tasha_codec_enable_interpolator(struct snd_soc_dapm_widget *w,
 		     gain_reg == WCD9335_CDC_RX8_RX_VOL_CTL)) {
 			snd_soc_update_bits(codec, WCD9335_CDC_RX7_RX_PATH_SEC1,
 					    0x01, 0x00);
-			snd_soc_update_bits(codec,
-					    WCD9335_CDC_RX7_RX_PATH_MIX_SEC0,
-					    0x01, 0x00);
 			snd_soc_update_bits(codec, WCD9335_CDC_RX8_RX_PATH_SEC1,
-					    0x01, 0x00);
-			snd_soc_update_bits(codec,
-					    WCD9335_CDC_RX8_RX_PATH_MIX_SEC0,
 					    0x01, 0x00);
 			offset_val = 2;
 			val = snd_soc_read(codec, gain_reg);
