@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, 2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -129,9 +129,9 @@ static struct msm_camera_i2c_reg_conf ov7695_recommend_settings[] = {
 	{0x530e, 0xde,},
 	{0x530f, 0xef,},
 	{0x5310, 0x16,},
-	{0x520a, 0x74,}, //f4
-	{0x520b, 0x64,}, //f4
-	{0x520c, 0xd4,}, //f4
+	{0x520a, 0x74,}, /* f4 */
+	{0x520b, 0x64,}, /* f4 */
+	{0x520c, 0xd4,}, /* f4 */
 	{0x5504, 0x08,},
 	{0x5505, 0x48,},
 	{0x5506, 0x07,},
@@ -164,33 +164,33 @@ static struct msm_camera_i2c_reg_conf ov7695_recommend_settings[] = {
 	{0x3a0d, 0x04,},
 	{0x5000, 0xff,},
 	{0x5001, 0x3f,},
-	{0x5100, 0x1 ,}, //01
-	{0x5101, 0x25,}, //48
-	{0x5102, 0x0 ,}, //00
-	{0x5103, 0xf3,}, //f8
-	{0x5104, 0x7f,}, //04
-	{0x5105, 0x5 ,}, //00
-	{0x5106, 0xff,}, //00
-	{0x5107, 0xf ,}, //00
-	{0x5108, 0x1 ,}, //01
-	{0x5109, 0x1f,}, //48
-	{0x510a, 0x0 ,}, //00
-	{0x510b, 0xde,}, //f8
-	{0x510c, 0x56,}, //03
-	{0x510d, 0x5 ,}, //00
-	{0x510e, 0xff,}, //00
-	{0x510f, 0xf ,}, //00
-	{0x5110, 0x1 ,}, //01
-	{0x5111, 0x23,}, //48
-	{0x5112, 0x0 ,}, //00
-	{0x5113, 0xe3,}, //f8
-	{0x5114, 0x5c,}, //03
-	{0x5115, 0x5 ,}, //00
-	{0x5116, 0xff,}, //00
-	{0x5117, 0xf ,}, //00
-	{0x520a, 0x74,}, //f4
-	{0x520b, 0x64,}, //f4
-	{0x520c, 0xd4,}, //f4
+	{0x5100, 0x1 ,}, /* 01 */
+	{0x5101, 0x25,}, /* 48 */
+	{0x5102, 0x0 ,}, /* 00 */
+	{0x5103, 0xf3,}, /* f8 */
+	{0x5104, 0x7f,}, /* 04 */
+	{0x5105, 0x5 ,}, /* 00 */
+	{0x5106, 0xff,}, /* 00 */
+	{0x5107, 0xf ,}, /* 00 */
+	{0x5108, 0x1 ,}, /* 01 */
+	{0x5109, 0x1f,}, /* 48 */
+	{0x510a, 0x0 ,}, /* 00 */
+	{0x510b, 0xde,}, /* f8 */
+	{0x510c, 0x56,}, /* 03 */
+	{0x510d, 0x5 ,}, /* 00 */
+	{0x510e, 0xff,}, /* 00 */
+	{0x510f, 0xf ,}, /* 00 */
+	{0x5110, 0x1 ,}, /* 01 */
+	{0x5111, 0x23,}, /* 48 */
+	{0x5112, 0x0 ,}, /* 00 */
+	{0x5113, 0xe3,}, /* f8 */
+	{0x5114, 0x5c,}, /* 03 */
+	{0x5115, 0x5 ,}, /* 00 */
+	{0x5116, 0xff,}, /* 00 */
+	{0x5117, 0xf ,}, /* 00 */
+	{0x520a, 0x74,}, /* f4 */
+	{0x520b, 0x64,}, /* f4 */
+	{0x520c, 0xd4,}, /* f4 */
 	{0x5004, 0x41,},
 	{0x5006, 0x41,},
 	{0x5301, 0x05,},
@@ -445,6 +445,13 @@ int32_t ov7695_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
 			break;
 		}
 
+		if (!conf_array.size ||
+			conf_array.size > I2C_REG_DATA_MAX) {
+			pr_err("%s:%d failed\n", __func__, __LINE__);
+			rc = -EFAULT;
+			break;
+		}
+
 		reg_setting = kzalloc(conf_array.size *
 			(sizeof(struct msm_camera_i2c_reg_array)), GFP_KERNEL);
 		if (!reg_setting) {
@@ -680,6 +687,13 @@ int32_t ov7695_sensor_config32(struct msm_sensor_ctrl_t *s_ctrl,
 		conf_array.size = conf_array32.size;
 		conf_array.reg_setting = compat_ptr(conf_array32.reg_setting);
 		conf_array.qup_i2c_batch = conf_array32.qup_i2c_batch;
+
+		if (!conf_array.size ||
+			conf_array.size > I2C_REG_DATA_MAX) {
+			pr_err("%s:%d failed\n", __func__, __LINE__);
+			rc = -EFAULT;
+			break;
+		}
 
 		reg_setting = kzalloc(conf_array.size *
 			(sizeof(struct msm_camera_i2c_reg_array)), GFP_KERNEL);
