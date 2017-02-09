@@ -1677,6 +1677,11 @@ static int mdp3_csc_config(struct mdp3_session_data *session,
 	session->dma->ccs_cache = *data;
 
 	mutex_lock(&session->lock);
+	if (!session->status) {
+		pr_err("Display off!\n");
+		mutex_unlock(&session->lock);
+		return -EPERM;
+	}
 	mdp3_res_update(1, 0, MDP3_CLIENT_DMA_P);
 	ret = session->dma->config_ccs(session->dma, &config, &ccs);
 	mdp3_res_update(0, 0, MDP3_CLIENT_DMA_P);
