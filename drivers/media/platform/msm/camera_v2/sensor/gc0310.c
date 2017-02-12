@@ -720,8 +720,7 @@ int32_t gc0310_sensor_config(struct msm_sensor_ctrl_t *s_ctrl,
 		}
 
 		reg_setting = kzalloc(conf_array.size *
-			(sizeof(struct msm_camera_i2c_seq_reg_array)),
-			GFP_KERNEL);
+		   (sizeof(struct msm_camera_i2c_seq_reg_array)), GFP_KERNEL);
 		if (!reg_setting) {
 			pr_err("%s:%d failed\n", __func__, __LINE__);
 			rc = -ENOMEM;
@@ -1054,8 +1053,7 @@ int32_t gc0310_sensor_config32(struct msm_sensor_ctrl_t *s_ctrl,
 		}
 
 		reg_setting = kzalloc(conf_array.size *
-			(sizeof(struct msm_camera_i2c_seq_reg_array)),
-			GFP_KERNEL);
+		  (sizeof(struct msm_camera_i2c_seq_reg_array)), GFP_KERNEL);
 		if (!reg_setting) {
 			pr_err("%s:%d failed\n", __func__, __LINE__);
 			rc = -ENOMEM;
