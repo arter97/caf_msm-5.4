@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2014, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -70,6 +70,7 @@ static const struct qmp_reg_val qmp_settings_rev0[] = {
 	{0xFC, 0xAA}, /* QSERDES_COM_DIV_FRAC_START2 */
 	{0x100, 0x4D}, /* QSERDES_COM_DIV_FRAC_START3 */
 	{0x94, 0x11}, /* QSERDES_COM_PLLLOCK_CMP_EN */
+	{0x98, 0xFF}, /* USB3PHY_QSERDES_COM_BGTC */
 	{0x88, 0x2B}, /* QSERDES_COM_PLLLOCK_CMP1 */
 	{0x8C, 0x68}, /* QSERDES_COM_PLLLOCK_CMP2 */
 	{0x10C, 0x7C}, /* QSERDES_COM_PLL_CRCTRL */
