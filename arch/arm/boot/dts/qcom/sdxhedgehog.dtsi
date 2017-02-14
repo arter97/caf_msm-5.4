@@ -22,6 +22,11 @@
 			<1 10 0xf08>,
 			<1 11 0xf08>;
 		clock-frequency = <19200000>;
+		status = "disabled";
+	};
+
+	aliases {
+		sdhc1 = &sdhc_1; /* SDC1 eMMC/SD/SDIO slot */
 	};
 
 };
@@ -31,6 +36,15 @@
 };
 
 &soc {
+	/* SD card 2.95 V supply */
+	sdc_vreg: sdc_vreg {
+		compatible = "regulator-fixed";
+		regulator-name = "sdc_vreg";
+		startup-delay-us = <4000>;
+		enable-active-high;
+		gpio = <&tlmm_pinmux 80 0>;
+	};
+
 	ipa_hw: qcom,ipa@07B00000 {
 		qcom,ipa-hw-ver = <12>; /* IPA core version = IPAv3.5 */
 		/delete-property/qcom,use-rg10-limitation-mitigation;
@@ -49,6 +63,17 @@
 		interrupt-parent = <&spmi_bus>;
 		interrupts = <0x0 0x0d 0x0>;
 		interrupt-names = "vbus_det_irq";
+	};
+
+	cnss_sdio: qcom,cnss_sdio {
+		compatible = "qcom,cnss_sdio";
+		subsys-name = "AR6320_SDIO";
+		vdd-wlan-supply = <&rome_vreg>;
+		vdd-wlan-xtal-supply = <&pmdcalifornium_l5>;
+		vdd-wlan-io-supply = <&pmdcalifornium_l6>;
+		qcom,wlan-ramdump-dynamic = <0x200000>;
+		qcom,is-antenna-shared;
+		status = "disabled";
 	};
 };
 
@@ -170,7 +195,7 @@
 };
 
 &cnss_pcie {
-	wlan-en-gpio = <&pmdcalifornium_gpios 8 0>;
+	wlan-en-gpio = <&tlmm_pinmux 74 0>;
 };
 
 &pmdcalifornium_gpios {
