@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,39 +13,9 @@
 
 /dts-v1/;
 
-#include "msm8909-mtp.dtsi"
-#include "msm8909-pm8909.dtsi"
-#include "msm8909-pm8909-mtp.dtsi"
-#include "msm8909-gpu-qhd.dtsi"
+#include "msm8905-pm8909-512mb-mtp.dtsi"
 / {
 	model = "Qualcomm Technologies, Inc. MSM8905-PM8909 512MB MTP";
 	compatible = "qcom,msm8909-mtp", "qcom,msm8909", "qcom,mtp";
-	qcom,msm-id = <331 0>;
 	qcom,board-id = <8 0x100>;
-	chosen {
-		bootargs = "boot_cpus=0,1 sched_enable_hmp=1";
-	};
-};
-
-&soc {
-	/delete-node/ jtagmm@84e000;
-	/delete-node/ jtagmm@84f000;
-	/delete-node/ qcom,spm@b0a9000;
-	/delete-node/ qcom,spm@b0b9000;
-	/delete-node/ cti@853000;
-	/delete-node/ cti@854000;
-	/delete-node/ etm@84e000;
-	/delete-node/ etm@84f000;
-};
-
-&mem_client_1_size {
-	qcom,peripheral-size = <2097152>;
-};
-
-&modem_adsp_mem {
-	reg = <0x0 0x88000000 0x0 0x04900000>;
-};
-
-&peripheral_mem {
-	reg = <0x0 0x8c900000 0x0 0x0500000>;
 };
