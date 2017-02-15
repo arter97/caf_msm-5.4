@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -4750,7 +4750,7 @@ static void charge_full_work(struct work_struct *work)
 	int rc;
 	u8 buffer[3];
 	int bsoc;
-	int resume_soc_raw = FULL_SOC_RAW - settings[FG_MEM_RESUME_SOC].value;
+	int resume_soc_raw = settings[FG_MEM_RESUME_SOC].value;
 	bool disable = false;
 	u8 reg;
 
