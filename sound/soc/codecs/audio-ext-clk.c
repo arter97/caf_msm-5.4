@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -475,7 +475,7 @@ err:
 	return -EINVAL;
 }
 
-static int audio_ref_update_afe_mclk_id(const char *ptr, enum clk_mux mux)
+static void audio_ref_update_afe_mclk_id(const char *ptr, enum clk_mux mux)
 {
 	uint32_t *clk_id;
 
@@ -491,7 +491,7 @@ static int audio_ref_update_afe_mclk_id(const char *ptr, enum clk_mux mux)
 		break;
 	default:
 		pr_err("%s Not a valid MUX ID: %d\n", __func__, mux);
-		return -EINVAL;
+		return;
 	}
 
 	if (!strcmp(ptr, "pri_mclk")) {
@@ -506,7 +506,6 @@ static int audio_ref_update_afe_mclk_id(const char *ptr, enum clk_mux mux)
 		pr_debug("%s: updating the mclk id with default\n", __func__);
 	}
 	pr_debug("%s: clk_id = 0x%x\n", __func__, *clk_id);
-	return 0;
 }
 
 static int audio_ref_clk_probe(struct platform_device *pdev)
@@ -547,26 +546,6 @@ static int audio_ref_clk_probe(struct platform_device *pdev)
 			audio_lpass_mclk.lpass_csr_gpio_mux_spkrctl_vaddr =
 				ioremap(lpass_csr_gpio_mux_spkrctl_reg, 4);
 		}
-
-		ret = of_property_read_u32(pdev->dev.of_node,
-					"lpass_mclk0_mode_muxsel_reg",
-					&lpass_mclk0_mode_muxsel_reg);
-		if (!ret) {
-			audio_lpass_mclk.lpass_mclk0_mode_muxsel_vaddr =
-				ioremap(lpass_mclk0_mode_muxsel_reg, 4);
-		}
-
-		ret = of_property_read_u32(pdev->dev.of_node,
-					"lpass_rcg_ref_clk_src_sel_reg",
-					&lpass_rcg_ref_clk_src_sel_reg);
-		if (!ret) {
-			audio_lpass_mclk.lpass_rcg_ref_clk_src_sel_vaddr =
-				ioremap(lpass_rcg_ref_clk_src_sel_reg, 4);
-		}
-
-		audio_lpass_mclk.has_external_clk_src =
-				of_property_read_bool(pdev->dev.of_node,
-						"qcom,has_external_clk");
 
 		if (mclk_str) {
 			audio_ref_update_afe_mclk_id(mclk_str, LPASS_MCLK);
