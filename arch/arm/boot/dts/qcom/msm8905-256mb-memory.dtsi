@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,12 +11,14 @@
  * GNU General Public License for more details.
  */
 
-/dts-v1/;
+&modem_adsp_mem {
+	reg = <0x0 0x88000000 0x0 0x03900000>;
+};
 
-#include "msm8905-pm8909-256mb-cdp.dtsi"
+&peripheral_mem {
+	reg = <0x0 0x8b900000 0x0 0x0500000>;
+};
 
-/ {
-	model = "Qualcomm Technologies, Inc. MSM8905-PM8909 256MB CDP";
-	compatible = "qcom,msm8909-cdp", "qcom,msm8909", "qcom,cdp";
-	qcom,board-id = <1 0x200>;
+&venus_qseecom_mem {
+	reg = <0 0 0 0x400000>;
 };
