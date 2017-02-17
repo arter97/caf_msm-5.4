@@ -24,6 +24,14 @@
 	};
 };
 
+&modem_adsp_mem {
+	reg = <0x0 0x88000000 0x0 0x04400000>;
+};
+
+&peripheral_mem {
+	reg = <0x0 0x8c400000 0x0 0x0500000>;
+};
+
 &i2c_4 {
 smb1360_otg_supply: smb1360-chg-fg@14 {
 		compatible = "qcom,smb1360-chg-fg";
