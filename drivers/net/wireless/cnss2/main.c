@@ -420,6 +420,14 @@ static int cnss_fw_mem_ready_hdlr(struct cnss_plat_data *plat_priv)
 	if (ret)
 		goto out;
 
+	ret = cnss_pci_load_m3(plat_priv->bus_priv);
+	if (ret)
+		goto out;
+
+	ret = cnss_wlfw_m3_dnld_send_sync(plat_priv);
+	if (ret)
+		goto out;
+
 	return 0;
 out:
 	return ret;
@@ -523,6 +531,9 @@ static void cnss_driver_event_work(struct work_struct *work)
 			ret = cnss_wlfw_server_exit(plat_priv);
 			break;
 		case CNSS_DRIVER_EVENT_REQUEST_MEM:
+			ret = cnss_pci_alloc_fw_mem(plat_priv->bus_priv);
+			if (ret)
+				break;
 			ret = cnss_wlfw_respond_mem_send_sync(plat_priv);
 			break;
 		case CNSS_DRIVER_EVENT_FW_MEM_READY:

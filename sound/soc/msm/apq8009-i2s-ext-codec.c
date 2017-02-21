@@ -1,4 +1,4 @@
- /* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+ /* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
   *
   * This program is free software; you can redistribute it and/or modify
   * it under the terms of the GNU General Public License version 2 and
@@ -66,6 +66,9 @@
 
 #define DEV_NAME_STR_LEN	32
 
+#define WSA8810_NAME_1 "wsa881x.20170211"
+#define WSA8810_NAME_2 "wsa881x.20170212"
+
 enum btsco_rates {
 	RATE_8KHZ_ID,
 	RATE_16KHZ_ID,
@@ -95,6 +98,7 @@ static int msm_btsco_ch = 1;
 static int msm_mi2s_tx_ch = 2;
 static int msm_pri_mi2s_rx_ch = 2;
 static int pri_rx_sample_rate = SAMPLING_RATE_48KHZ;
+static int pri_tx_sample_rate = SAMPLING_RATE_48KHZ;
 
 static int msm_proxy_rx_ch = 2;
 static int apq8009_auxpcm_rate = 8000;
@@ -183,6 +187,7 @@ static struct afe_clk_set mi2s_rx_clk = {
 };
 
 static int mi2s_rx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
+static int mi2s_tx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
 static int bits_per_sample = 16;
 
 static inline int param_is_mask(int p)
@@ -381,6 +386,53 @@ static int mi2s_rx_bit_format_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int mi2s_tx_bit_format_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+
+	switch (mi2s_tx_bit_format) {
+	case SNDRV_PCM_FORMAT_S24_LE:
+		ucontrol->value.integer.value[0] = 2;
+		break;
+
+	case SNDRV_PCM_FORMAT_S24_3LE:
+		ucontrol->value.integer.value[0] = 1;
+		break;
+
+	case SNDRV_PCM_FORMAT_S16_LE:
+	default:
+		ucontrol->value.integer.value[0] = 0;
+		break;
+	}
+
+	pr_debug("%s: mi2s_tx_bit_format = %d, ucontrol value = %ld\n",
+			__func__, mi2s_tx_bit_format,
+			ucontrol->value.integer.value[0]);
+
+	return 0;
+}
+
+static int mi2s_tx_bit_format_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	switch (ucontrol->value.integer.value[0]) {
+	case 2:
+		mi2s_tx_bit_format = SNDRV_PCM_FORMAT_S24_LE;
+		bits_per_sample = 32;
+		break;
+	case 1:
+		mi2s_tx_bit_format = SNDRV_PCM_FORMAT_S24_3LE;
+		bits_per_sample = 32;
+		break;
+	case 0:
+	default:
+		mi2s_tx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
+		bits_per_sample = 16;
+		break;
+	}
+	return 0;
+}
+
 static int msm_btsco_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 					struct snd_pcm_hw_params *params)
 {
@@ -547,6 +599,15 @@ static int msm_mi2s_snd_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
+static int msm_quat_snd_hw_params(struct snd_pcm_substream *substream,
+			     struct snd_pcm_hw_params *params)
+{
+	pr_debug("%s(): substream = %s  stream = %d\n", __func__,
+		 substream->name, substream->stream);
+	param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT, mi2s_tx_bit_format);
+	return 0;
+}
+
 static int apq8009_get_port_id(int be_id)
 {
 	switch (be_id) {
@@ -604,6 +665,15 @@ static uint32_t get_mi2s_rx_clk_val(void)
 	return clk_val;
 }
 
+static uint32_t get_mi2s_tx_clk_val(void)
+{
+	uint32_t clk_val;
+
+	clk_val = pri_tx_sample_rate * bits_per_sample * 2;
+
+	return clk_val;
+}
+
 static int ext_mi2s_clk_ctl(struct snd_pcm_substream *substream, bool enable)
 {
 	int ret = 0;
@@ -627,7 +697,7 @@ static int ext_mi2s_clk_ctl(struct snd_pcm_substream *substream, bool enable)
 			mi2s_tx_clk.enable = enable;
 			mi2s_tx_clk.clk_id = apq8009_get_clk_id(port_id);
 			mi2s_tx_clk.clk_freq_in_hz =
-				Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
+				get_mi2s_tx_clk_val();
 			ret = afe_set_lpass_clock_v2(port_id, &mi2s_tx_clk);
 		} else
 			pr_err("%s:Not valid substream.\n", __func__);
@@ -692,7 +762,7 @@ static int msm_btsco_rate_put(struct snd_kcontrol *kcontrol,
 }
 
 static const struct soc_enum msm_snd_enum[] = {
-	SOC_ENUM_SINGLE_EXT(2, rx_bit_format_text),
+	SOC_ENUM_SINGLE_EXT(3, rx_bit_format_text),
 	SOC_ENUM_SINGLE_EXT(4, mi2s_tx_ch_text),
 	SOC_ENUM_SINGLE_EXT(6, pri_rx_sample_rate_text),
 };
@@ -706,13 +776,15 @@ static const struct soc_enum msm_btsco_enum[] = {
 static const struct snd_kcontrol_new msm_snd_controls[] = {
 	SOC_ENUM_EXT("MI2S_RX Format", msm_snd_enum[0],
 			mi2s_rx_bit_format_get, mi2s_rx_bit_format_put),
+	SOC_ENUM_EXT("MI2S_TX Format", msm_snd_enum[0],
+			mi2s_tx_bit_format_get, mi2s_tx_bit_format_put),
 	SOC_ENUM_EXT("MI2S_TX Channels", msm_snd_enum[1],
 			msm_mi2s_tx_ch_get, msm_mi2s_tx_ch_put),
 	SOC_ENUM_EXT("MI2S_RX Channels", msm_snd_enum[1],
 			msm_pri_mi2s_rx_ch_get, msm_pri_mi2s_rx_ch_put),
 	SOC_ENUM_EXT("Internal BTSCO SampleRate", msm_btsco_enum[0],
 		     msm_btsco_rate_get, msm_btsco_rate_put),
-	SOC_ENUM_EXT("RX SampleRate", msm_snd_enum[2],
+	SOC_ENUM_EXT("MI2S_RX SampleRate", msm_snd_enum[2],
 			pri_rx_sample_rate_get, pri_rx_sample_rate_put),
 };
 
@@ -894,6 +966,7 @@ static int msm_audrx_init_wcd(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_codec *codec = rtd->codec;
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	struct snd_soc_pcm_runtime *rtd_aux = rtd->card->rtd_aux;
 	struct snd_card *card;
 	struct snd_info_entry *entry;
 	struct apq8009_asoc_mach_data *pdata =
@@ -935,8 +1008,18 @@ static int msm_audrx_init_wcd(struct snd_soc_pcm_runtime *rtd)
 				__func__);
 		return  -ENOMEM;
 	}
-	tasha_set_spkr_mode(rtd->codec, SPKR_MODE_1);
-	tasha_set_spkr_gain_offset(rtd->codec, RX_GAIN_OFFSET_M1P5_DB);
+
+	/*
+	 * Send speaker configuration only for WSA8810.
+	 * Defalut configuration is for WSA8815.
+	 */
+	if (rtd_aux && rtd_aux->component)
+		if (!strcmp(rtd_aux->component->name, WSA8810_NAME_1) ||
+		    !strcmp(rtd_aux->component->name, WSA8810_NAME_2)) {
+			tasha_set_spkr_mode(rtd->codec, SPKR_MODE_1);
+			tasha_set_spkr_gain_offset(rtd->codec,
+						   RX_GAIN_OFFSET_M1P5_DB);
+	}
 	card = rtd->card->snd_card;
 	entry = snd_register_module_info(card->module,
 						"codecs",
@@ -955,7 +1038,7 @@ static int msm_audrx_init_wcd(struct snd_soc_pcm_runtime *rtd)
 
 static struct snd_soc_ops apq8009_quat_mi2s_be_ops = {
 	.startup = msm_quat_mi2s_snd_startup,
-	.hw_params = msm_mi2s_snd_hw_params,
+	.hw_params = msm_quat_snd_hw_params,
 	.shutdown = msm_quat_mi2s_snd_shutdown,
 };
 

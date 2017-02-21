@@ -1255,6 +1255,7 @@ int gsi_dealloc_evt_ring(unsigned long evt_ring_hdl)
 	}
 
 	mutex_lock(&gsi_ctx->mlock);
+	reinit_completion(&ctx->compl);
 	val = (((evt_ring_hdl << GSI_EE_n_EV_CH_CMD_CHID_SHFT) &
 			GSI_EE_n_EV_CH_CMD_CHID_BMSK) |
 		((op << GSI_EE_n_EV_CH_CMD_OPCODE_SHFT) &
@@ -1349,6 +1350,7 @@ int gsi_reset_evt_ring(unsigned long evt_ring_hdl)
 	}
 
 	mutex_lock(&gsi_ctx->mlock);
+	reinit_completion(&ctx->compl);
 	val = (((evt_ring_hdl << GSI_EE_n_EV_CH_CMD_CHID_SHFT) &
 			GSI_EE_n_EV_CH_CMD_CHID_BMSK) |
 		((op << GSI_EE_n_EV_CH_CMD_OPCODE_SHFT) &
@@ -1601,14 +1603,20 @@ int gsi_alloc_channel(struct gsi_chan_props *props, unsigned long dev_hdl,
 		return -GSI_STATUS_INVALID_PARAMS;
 	}
 
-	if (props->evt_ring_hdl != ~0 &&
-		atomic_read(&gsi_ctx->evtr[props->evt_ring_hdl].chan_ref_cnt) &&
-		gsi_ctx->evtr[props->evt_ring_hdl].props.exclusive) {
-		GSIERR("evt ring=%lu already in exclusive use chan_hdl=%p\n",
-				props->evt_ring_hdl, chan_hdl);
-		return -GSI_STATUS_UNSUPPORTED_OP;
-	}
+	if (props->evt_ring_hdl != ~0) {
+		if (props->evt_ring_hdl >= GSI_EVT_RING_MAX) {
+			GSIERR("invalid evt ring=%lu\n", props->evt_ring_hdl);
+			return -GSI_STATUS_INVALID_PARAMS;
+		}
 
+		if (atomic_read(
+			&gsi_ctx->evtr[props->evt_ring_hdl].chan_ref_cnt) &&
+			gsi_ctx->evtr[props->evt_ring_hdl].props.exclusive) {
+			GSIERR("evt ring=%lu exclusively used by chan_hdl=%p\n",
+				props->evt_ring_hdl, chan_hdl);
+			return -GSI_STATUS_UNSUPPORTED_OP;
+		}
+	}
 
 	ctx = &gsi_ctx->chan[props->ch_id];
 	if (ctx->allocated) {
@@ -1800,7 +1808,7 @@ int gsi_start_channel(unsigned long chan_hdl)
 	}
 
 	mutex_lock(&gsi_ctx->mlock);
-	init_completion(&ctx->compl);
+	reinit_completion(&ctx->compl);
 
 	gsi_ctx->ch_dbg[chan_hdl].ch_start++;
 	val = (((chan_hdl << GSI_EE_n_GSI_CH_CMD_CHID_SHFT) &
@@ -1858,7 +1866,7 @@ int gsi_stop_channel(unsigned long chan_hdl)
 	}
 
 	mutex_lock(&gsi_ctx->mlock);
-	init_completion(&ctx->compl);
+	reinit_completion(&ctx->compl);
 
 	gsi_ctx->ch_dbg[chan_hdl].ch_stop++;
 	val = (((chan_hdl << GSI_EE_n_GSI_CH_CMD_CHID_SHFT) &
@@ -1927,7 +1935,7 @@ int gsi_stop_db_channel(unsigned long chan_hdl)
 	}
 
 	mutex_lock(&gsi_ctx->mlock);
-	init_completion(&ctx->compl);
+	reinit_completion(&ctx->compl);
 
 	gsi_ctx->ch_dbg[chan_hdl].ch_db_stop++;
 	val = (((chan_hdl << GSI_EE_n_GSI_CH_CMD_CHID_SHFT) &
@@ -1993,7 +2001,7 @@ int gsi_reset_channel(unsigned long chan_hdl)
 	mutex_lock(&gsi_ctx->mlock);
 
 reset:
-	init_completion(&ctx->compl);
+	reinit_completion(&ctx->compl);
 	gsi_ctx->ch_dbg[chan_hdl].ch_reset++;
 	val = (((chan_hdl << GSI_EE_n_GSI_CH_CMD_CHID_SHFT) &
 			GSI_EE_n_GSI_CH_CMD_CHID_BMSK) |
@@ -2059,7 +2067,7 @@ int gsi_dealloc_channel(unsigned long chan_hdl)
 	}
 
 	mutex_lock(&gsi_ctx->mlock);
-	init_completion(&ctx->compl);
+	reinit_completion(&ctx->compl);
 
 	gsi_ctx->ch_dbg[chan_hdl].ch_de_alloc++;
 	val = (((chan_hdl << GSI_EE_n_GSI_CH_CMD_CHID_SHFT) &
@@ -2741,6 +2749,16 @@ int gsi_enable_fw(phys_addr_t gsi_base_addr, u32 gsi_size, enum gsi_ver ver)
 
 }
 EXPORT_SYMBOL(gsi_enable_fw);
+
+void gsi_get_inst_ram_offset_and_size(unsigned long *base_offset,
+		unsigned long *size)
+{
+	if (base_offset)
+		*base_offset = GSI_GSI_INST_RAM_BASE_OFFS;
+	if (size)
+		*size = GSI_GSI_INST_RAM_SIZE;
+}
+EXPORT_SYMBOL(gsi_get_inst_ram_offset_and_size);
 
 static int msm_gsi_probe(struct platform_device *pdev)
 {

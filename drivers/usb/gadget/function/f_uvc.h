@@ -58,15 +58,16 @@ static const struct uvc_camera_terminal_descriptor uvc_camera_terminal = {
 };
 
 static const struct uvc_processing_unit_descriptor uvc_processing = {
-	.bLength		= UVC_DT_PROCESSING_UNIT_SIZE(2),
+	.bLength		= UVC_DT_PROCESSING_UNIT_SIZE(3),
 	.bDescriptorType	= USB_DT_CS_INTERFACE,
 	.bDescriptorSubType	= UVC_VC_PROCESSING_UNIT,
 	.bUnitID		= 2,
 	.bSourceID		= 1,
 	.wMaxMultiplier		= cpu_to_le16(16*1024),
-	.bControlSize		= 2,
+	.bControlSize		= 3,
 	.bmControls[0]		= 64,
 	.bmControls[1]		= 16,
+	.bmControls[2]		= 1,
 	.iProcessing		= 0,
 };
 
@@ -242,7 +243,6 @@ static const struct uvc_format_h264 uvc_fmt_h264 = {
 };
 
 DECLARE_UVC_FRAME_H264(1);
-DECLARE_UVC_FRAME_H264(3);
 
 static const struct UVC_FRAME_H264(1) uvc_frame_h264_1920p = {
 	.bLength		= UVC_DT_FRAME_H264_SIZE(1),
@@ -251,8 +251,8 @@ static const struct UVC_FRAME_H264(1) uvc_frame_h264_1920p = {
 	.bFrameIndex		= 1,
 	.wWidth			= cpu_to_le16(3840),
 	.wHeight		= cpu_to_le16(1920),
-	.wSARwidth		= 0,
-	.wSARheight		= 0,
+	.wSARwidth		= 1,
+	.wSARheight		= 1,
 	.wProfile		= 0x6400,
 	.bLevelIDC		= 0x33,
 	.bmSupportedUsages	= 0x70003,
@@ -260,22 +260,22 @@ static const struct UVC_FRAME_H264(1) uvc_frame_h264_1920p = {
 	.bmCapabilities		= 0x47,
 	.bmSVCCapabilities	= 0x4,
 	.bmMVCCapabilities	= 0,
-	.dwMinBitRate		= cpu_to_le16(29491200),
-	.dwMaxBitRate		= cpu_to_le16(100000000),
-	.dwDefaultFrameInterval	= cpu_to_le16(333667),
+	.dwMinBitRate		= cpu_to_le32(29491200),
+	.dwMaxBitRate		= cpu_to_le32(100000000),
+	.dwDefaultFrameInterval	= cpu_to_le32(333667),
 	.bNumFrameIntervals	= 1,
-	.dwFrameInterval[0]	= cpu_to_le16(333667),
+	.dwFrameInterval[0]	= cpu_to_le32(333667),
 };
 
-static const struct UVC_FRAME_H264(3) uvc_frame_h264_960p = {
-	.bLength		= UVC_DT_FRAME_H264_SIZE(3),
+static const struct UVC_FRAME_H264(1) uvc_frame_h264_960p = {
+	.bLength		= UVC_DT_FRAME_H264_SIZE(1),
 	.bDescriptorType	= USB_DT_CS_INTERFACE,
 	.bDescriptorSubType	= UVC_VS_FRAME_H264,
 	.bFrameIndex		= 2,
 	.wWidth			= cpu_to_le16(1920),
 	.wHeight		= cpu_to_le16(960),
-	.wSARwidth		= 0,
-	.wSARheight		= 0,
+	.wSARwidth		= 1,
+	.wSARheight		= 1,
 	.wProfile		= 0x6400,
 	.bLevelIDC		= 0x28,
 	.bmSupportedUsages	= 0x70003,
@@ -283,11 +283,11 @@ static const struct UVC_FRAME_H264(3) uvc_frame_h264_960p = {
 	.bmCapabilities		= 0x47,
 	.bmSVCCapabilities	= 0x4,
 	.bmMVCCapabilities	= 0,
-	.dwMinBitRate		= cpu_to_le16(29491200),
-	.dwMaxBitRate		= cpu_to_le16(100000000),
-	.dwDefaultFrameInterval	= cpu_to_le16(333667),
+	.dwMinBitRate		= cpu_to_le32(29491200),
+	.dwMaxBitRate		= cpu_to_le32(100000000),
+	.dwDefaultFrameInterval	= cpu_to_le32(333667),
 	.bNumFrameIntervals	= 1,
-	.dwFrameInterval[0]	= cpu_to_le16(333667),
+	.dwFrameInterval[0]	= cpu_to_le32(333667),
 };
 
 static const struct uvc_color_matching_descriptor uvc_color_matching = {
