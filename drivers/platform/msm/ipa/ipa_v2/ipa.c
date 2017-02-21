@@ -768,6 +768,15 @@ static long ipa_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			retval = -EFAULT;
 			break;
 		}
+		/* add check in case user-space module compromised */
+		if (unlikely(((struct ipa_ioc_del_hdr *)param)->num_hdls
+			!= pre_entry)) {
+			IPAERR(" prevent memory corruption(%d not match %d)\n",
+				((struct ipa_ioc_del_hdr *)param)->num_hdls,
+				pre_entry);
+			retval = -EINVAL;
+			break;
+		}
 		if (ipa2_del_hdr_by_user((struct ipa_ioc_del_hdr *)param,
 			true)) {
 			retval = -EFAULT;
@@ -1441,6 +1450,16 @@ static long ipa_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		}
 		if (copy_from_user(param, (u8 *)arg, pyld_sz)) {
 			retval = -EFAULT;
+			break;
+		}
+		/* add check in case user-space module compromised */
+		if (unlikely(((struct ipa_ioc_del_hdr_proc_ctx *)
+			param)->num_hdls != pre_entry)) {
+			IPAERR(" prevent memory corruption( %d not match %d)\n",
+				((struct ipa_ioc_del_hdr_proc_ctx *)param)->
+				num_hdls,
+				pre_entry);
+			retval = -EINVAL;
 			break;
 		}
 		if (ipa2_del_hdr_proc_ctx_by_user(
