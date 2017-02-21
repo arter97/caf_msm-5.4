@@ -13,21 +13,3 @@
 
 #include "msm8905-pm8909-mtp.dtsi"
 #include "msm8905-512mb-memory.dtsi"
-
-&soc {
-	i2c@78b9000 { /* BLSP1 QUP5 */
-		synaptics@20 {
-			synaptics,display-coords = <0 0 479 479>;
-		};
-	};
-
-	gen-vkeys {
-		compatible = "qcom,gen-vkeys";
-		label = "synaptics_dsx";
-		qcom,disp-maxx = <440>;
-		qcom,disp-maxy = <854>;
-		qcom,panel-maxx = <440>;
-		qcom,panel-maxy = <935>;
-		qcom,key-codes = <158 139 172 217>;
-	};
-};
