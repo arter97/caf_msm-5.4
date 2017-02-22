@@ -11,11 +11,23 @@
  * GNU General Public License for more details.
  */
 
-/dts-v1/;
-
-#include "msm8905-pm8909-512mb-mtp.dtsi"
 / {
-	model = "Qualcomm Technologies, Inc. MSM8905-PM8909 512MB MTP";
-	compatible = "qcom,msm8909-mtp", "qcom,msm8909", "qcom,mtp";
-	qcom,board-id = <8 0x100>;
+	model = "Qualcomm Technologies, Inc. MSM8905";
+	qcom,msm-id = <331 0>;
+
+	cpus {
+		/delete-node/ cpu@2;
+		/delete-node/ cpu@3;
+	};
+};
+
+&soc {
+	/delete-node/ jtagmm@84e000;
+	/delete-node/ jtagmm@84f000;
+	/delete-node/ qcom,spm@b0a9000;
+	/delete-node/ qcom,spm@b0b9000;
+	/delete-node/ cti@853000;
+	/delete-node/ cti@854000;
+	/delete-node/ etm@84e000;
+	/delete-node/ etm@84f000;
 };
