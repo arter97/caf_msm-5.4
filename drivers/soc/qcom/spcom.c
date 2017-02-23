@@ -1535,7 +1535,50 @@ static int spcom_handle_reset_command(struct spcom_channel *ch,
 	ret = spcom_tx(ch, tx_buf, tx_buf_size, TX_DONE_TIMEOUT_MSEC);
 	if (ret < 0) {
 		pr_err("tx error %d.\n", ret);
-		goto exit_err;
+
+	kfree(tx_buf);
+
+	return ret;
+}
+
+/**
+ * modify_ion_addr() - replace the ION buffer virtual address with physical
+ * address in a request or response buffer.
+ *
+ * @buf: buffer to modify
+ * @buf_size: buffer size
+ * @ion_info: ION buffer info such as FD and offset in buffer.
+ *
+ * Return: 0 on successful operation, negative value otherwise.
+ */
+static int modify_ion_addr(void *buf,
+			    uint32_t buf_size,
+			    struct spcom_ion_info ion_info)
+{
+	struct ion_handle *handle = NULL;
+	ion_phys_addr_t ion_phys_addr;
+	size_t len;
+	int fd;
+	uint32_t buf_offset;
+	uint64_t *addr;
+	int ret;
+
+	fd = ion_info.fd;
+	buf_offset = ion_info.buf_offset;
+
+	if (fd < 0) {
+		pr_err("invalid fd [%d].\n", fd);
+		return -ENODEV;
+	}
+
+	if (buf_size < sizeof(uint64_t)) {
+		pr_err("buf size too small [%d].\n", buf_size);
+		return -ENODEV;
+	}
+
+	if (buf_offset > buf_size - sizeof(uint64_t)) {
+		pr_err("invalid buf_offset [%d].\n", buf_offset);
+		return -ENODEV;
 	}
 
 	pr_debug("get response.\n");
@@ -1607,6 +1650,18 @@ static int spcom_handle_send_command(struct spcom_channel *ch,
 	buf = &cmd->buf;
 	buf_size = cmd->buf_size;
 	timeout_msec = cmd->timeout_msec;
+
+	/* Check param validity */
+	if (buf_size > SPCOM_MAX_RESPONSE_SIZE) {
+		pr_err("ch [%s] invalid buf size [%d].\n",
+			ch->name, buf_size);
+		return -EINVAL;
+	}
+	if (size != sizeof(*cmd) + buf_size) {
+		pr_err("ch [%s] invalid cmd size [%d].\n",
+			ch->name, size);
+		return -EINVAL;
+	}
 
 	/* Check param validity */
 	if (buf_size > SPCOM_MAX_RESPONSE_SIZE) {
@@ -1770,6 +1825,13 @@ static int spcom_handle_read_req_resp(struct spcom_channel *ch,
 	if (!spcom_is_channel_connected(ch)) {
 		pr_err("ch [%s] remote side not connect.\n", ch->name);
 		return -ENOTCONN;
+	}
+
+	/* Check param validity */
+	if (size > SPCOM_MAX_RESPONSE_SIZE) {
+		pr_err("ch [%s] inavlid size [%d].\n",
+			ch->name, size);
+		return -EINVAL;
 	}
 
 	/* Allocate Buffers*/
