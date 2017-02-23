@@ -97,7 +97,7 @@
 		qcom,slave-id = <0x6c 0x300a 0x5648>;
 		qcom,csiphy-sd-index = <0>;
 		qcom,csid-sd-index = <0>;
-		qcom,sensor-name = "ov5648_oty5f03";
+		qcom,sensor-name = "ov5648_oty5f03_b256";
 		qcom,mount-angle = <90>;
 		qcom,actuator-src = <&actuator0>;
 		qcom,eeprom-src = <&eeprom0>;
