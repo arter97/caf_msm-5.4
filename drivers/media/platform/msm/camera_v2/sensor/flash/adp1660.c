@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014,2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -46,10 +46,11 @@ static struct msm_camera_i2c_reg_array adp1660_low_array[] = {
 
 static struct msm_camera_i2c_reg_array adp1660_high_array[] = {
 	{0x02, 0x4F},
-	{0x06, 0x3C},
+	{0x06, 0x3f},
+	{0x08, 0x04},
 	{0x09, 0x3C},
+	{0x01, 0xBD},
 	{0x0f, 0x01},
-	{0x01, 0xBB},
 };
 
 static void __exit msm_flash_adp1660_i2c_remove(void)
