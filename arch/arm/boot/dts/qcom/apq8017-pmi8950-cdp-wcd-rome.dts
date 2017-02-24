@@ -504,3 +504,9 @@
 &dsi_adv7533_720p {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
+
+&mdss_fb0 {
+	/delete-node/ qcom,cont-splash-memory;
+};
+
+/delete-node/ &cont_splash_mem;
