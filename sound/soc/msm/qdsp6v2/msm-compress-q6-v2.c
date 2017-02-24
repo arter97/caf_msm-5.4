@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, 2020 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1215,8 +1215,80 @@ static int msm_compr_free(struct snd_compr_stream *cstream)
 	kfree(pdata->dec_params[soc_prtd->dai_link->be_id]);
 	pdata->dec_params[soc_prtd->dai_link->be_id] = NULL;
 	kfree(prtd);
+	runtime->private_data = NULL;
 
 	return 0;
+}
+
+static int msm_compr_capture_free(struct snd_compr_stream *cstream)
+{
+	struct snd_compr_runtime *runtime;
+	struct msm_compr_audio *prtd;
+	struct snd_soc_pcm_runtime *soc_prtd;
+	struct msm_compr_pdata *pdata;
+	struct audio_client *ac;
+	int dir = OUT, stream_id;
+	unsigned long flags;
+	uint32_t stream_index;
+
+	if (!cstream) {
+		pr_err("%s cstream is null\n", __func__);
+		return 0;
+	}
+	runtime = cstream->runtime;
+	soc_prtd = cstream->private_data;
+	if (!runtime || !soc_prtd || !(soc_prtd->platform)) {
+		pr_err("%s runtime or soc_prtd or platform is null\n",
+			__func__);
+		return 0;
+	}
+	prtd = runtime->private_data;
+	if (!prtd) {
+		pr_err("%s prtd is null\n", __func__);
+		return 0;
+	}
+	pdata = snd_soc_platform_get_drvdata(soc_prtd->platform);
+	ac = prtd->audio_client;
+	if (!pdata || !ac) {
+		pr_err("%s pdata or ac is null\n", __func__);
+		return 0;
+	}
+
+	spin_lock_irqsave(&prtd->lock, flags);
+	stream_id = ac->stream_id;
+
+	stream_index = STREAM_ARRAY_INDEX(stream_id);
+	if ((stream_index < MAX_NUMBER_OF_STREAMS && stream_index >= 0)) {
+		spin_unlock_irqrestore(&prtd->lock, flags);
+		pr_debug("close stream %d", stream_id);
+		q6asm_stream_cmd(ac, CMD_CLOSE, stream_id);
+		spin_lock_irqsave(&prtd->lock, flags);
+	}
+	spin_unlock_irqrestore(&prtd->lock, flags);
+
+	pdata->cstream[soc_prtd->dai_link->be_id] = NULL;
+	msm_pcm_routing_dereg_phy_stream(soc_prtd->dai_link->be_id,
+					SNDRV_PCM_STREAM_CAPTURE);
+
+	q6asm_audio_client_buf_free_contiguous(dir, ac);
+
+	q6asm_audio_client_free(ac);
+
+	kfree(prtd);
+	runtime->private_data = NULL;
+
+	return 0;
+}
+
+static int msm_compr_free(struct snd_compr_stream *cstream)
+{
+	int ret = 0;
+
+	if (cstream->direction == SND_COMPRESS_PLAYBACK)
+		ret = msm_compr_playback_free(cstream);
+	else if (cstream->direction == SND_COMPRESS_CAPTURE)
+		ret = msm_compr_capture_free(cstream);
+	return ret;
 }
 
 static bool msm_compr_validate_codec_compr(__u32 codec_id)
