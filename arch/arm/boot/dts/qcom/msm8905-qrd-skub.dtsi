@@ -124,6 +124,7 @@
 };
 
 &pm8909_chg {
+	qcom,chgr-led-support;
 	status = "okay";
 };
 
