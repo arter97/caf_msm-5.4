@@ -595,6 +595,9 @@ normally open.
 Optional Properties:
 - qcom,us-euro-gpios : GPIO on which gnd/mic swap signal is coming.
 - qcom,msm-micbias1-ext-cap : Boolean. Enable micbias1 external
+- qcom,audio-sw: GPIO to switches between audio speaker or audio headphone.
+- qcom,audio-pa-en: GPIO to enable audio power amplifier.
+- qcom,audio-pa-en_1: GPIO to enable audio power amplifier 1.
 capacitor mode.
 - qcom,msm-micbias2-ext-cap : Boolean. Enable micbias2 external
 capacitor mode.
@@ -613,6 +616,10 @@ Example:
 		qcom,msm-mbhc-gnd-swh = <0>;
 		qcom,msm-hs-micbias-type = "internal";
 		qcom,cdc-us-euro-gpios = <&msmgpio 120 0>;
+		qcom,audio-sw = <&msm_gpio 17 0>;
+		qcom,audio-pa-en = <&msm_gpio 93 0>;
+		qcom,audio-pa-en_1 = <&msm_gpio 9 0>;
+
 		qcom,msm-spk-ext-pa = <&msm_gpio 0 0>;
 		qcom,audio-routing =
 			"RX_BIAS", "MCLK",

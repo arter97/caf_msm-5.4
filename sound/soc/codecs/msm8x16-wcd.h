@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -160,6 +160,11 @@ struct msm8916_asoc_mach_data {
 	int codec_type;
 	int ext_pa;
 	int us_euro_gpio;
+	int product_id;
+	int audio_sw;
+	int audio_pa_en;
+	int audio_pa_en_1;
+	struct regulator *vdd;
 	int spk_ext_pa_gpio;
 	int mclk_freq;
 	int lb_mode;

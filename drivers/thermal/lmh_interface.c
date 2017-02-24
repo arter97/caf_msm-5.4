@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -880,7 +880,8 @@ static int lmh_mon_init_driver(void)
 {
 	int ret = 0;
 
-	lmh_mon_data = kzalloc(sizeof(lmh_mon_data), GFP_KERNEL);
+	lmh_mon_data = kzalloc(sizeof(struct lmh_mon_driver_data),
+				GFP_KERNEL);
 	if (!lmh_mon_data) {
 		pr_err("No memory\n");
 		return -ENOMEM;

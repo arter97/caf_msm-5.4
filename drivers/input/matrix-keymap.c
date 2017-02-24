@@ -36,7 +36,7 @@ static bool matrix_keypad_map_key(struct input_dev *input_dev,
 	unsigned int col = KEY_COL(key);
 	unsigned short code = KEY_VAL(key);
 
-	if (row >= rows || col >= cols) {
+	if (row > rows || col > cols) {
 		dev_err(input_dev->dev.parent,
 			"%s: invalid keymap entry 0x%x (row: %d, col: %d, rows: %d, cols: %d)\n",
 			__func__, key, row, col, rows, cols);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,59 +13,9 @@
 
 /dts-v1/;
 
-#include "msm8909-mtp.dtsi"
-#include "msm8909-pm8909.dtsi"
-#include "msm8909-pm8909-mtp.dtsi"
-#include "msm8909-gpu-qhd.dtsi"
+#include "msm8905-pm8909-256mb-mtp.dtsi"
 / {
 	model = "Qualcomm Technologies, Inc. MSM8905-PM8909 256MB MTP";
 	compatible = "qcom,msm8909-mtp", "qcom,msm8909", "qcom,mtp";
-	qcom,msm-id = <331 0>;
 	qcom,board-id = <8 0x200>;
-	chosen {
-		bootargs = "boot_cpus=0,1 sched_enable_hmp=1";
-	};
-};
-
-&modem_adsp_mem {
-	reg = <0x0 0x88000000 0x0 0x03900000>;
-};
-
-&peripheral_mem {
-	reg = <0x0 0x8b900000 0x0 0x0500000>;
-};
-
-&venus_qseecom_mem {
-	reg = <0 0 0 0x400000>;
-};
-
-&soc {
-	i2c@78b9000 { /* BLSP1 QUP5 */
-		synaptics@20 {
-			synaptics,display-coords = <0 0 479 479>;
-		};
-	};
-
-	gen-vkeys {
-		compatible = "qcom,gen-vkeys";
-		label = "synaptics_dsx";
-		qcom,disp-maxx = <440>;
-		qcom,disp-maxy = <854>;
-		qcom,panel-maxx = <440>;
-		qcom,panel-maxy = <935>;
-		qcom,key-codes = <158 139 172 217>;
-	};
-
-	/delete-node/ jtagmm@84e000;
-	/delete-node/ jtagmm@84f000;
-	/delete-node/ qcom,spm@b0a9000;
-	/delete-node/ qcom,spm@b0b9000;
-	/delete-node/ cti@853000;
-	/delete-node/ cti@854000;
-	/delete-node/ etm@84e000;
-	/delete-node/ etm@84f000;
-};
-
-&audio_codec_mtp {
-	qcom,model = "msm8909-256mb-snd-card";
 };

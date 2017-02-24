@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, 2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -501,7 +501,7 @@ int msm_jpeg_hw_exec_cmds(struct msm_jpeg_hw_cmd *hw_cmd_p, uint32_t m_cmds,
 	uint32_t data;
 
 	while (m_cmds--) {
-		if (hw_cmd_p->offset > max_size) {
+		if (hw_cmd_p->offset >= max_size) {
 			JPEG_PR_ERR("%s:%d] %d exceed hw region %d\n", __func__,
 				__LINE__, hw_cmd_p->offset, max_size);
 			return -EFAULT;

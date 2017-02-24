@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -343,7 +343,7 @@ struct mdss_pp_res_type {
 	struct mdp_gamut_cfg_data gamut_disp_cfg[MDSS_BLOCK_DISP_NUM];
 	uint16_t gamut_tbl[MDSS_BLOCK_DISP_NUM][GAMUT_TOTAL_TABLE_SIZE];
 	u32 hist_data[MDSS_BLOCK_DISP_NUM][HIST_V_SIZE];
-	struct pp_sts_type pp_disp_sts[MDSS_BLOCK_DISP_NUM];
+	struct pp_sts_type pp_disp_sts[MDSS_MAX_MIXER_DISP_NUM];
 	/* physical info */
 	struct pp_hist_col_info *dspp_hist;
 };
@@ -1709,6 +1709,11 @@ static int pp_dspp_setup(u32 disp_num, struct mdss_mdp_mixer *mixer)
 
 	pp_sts = &mdss_pp_res->pp_disp_sts[disp_num];
 
+	if (!flags) {
+		pr_debug("skip configuring dspp features\n");
+		goto opmode_config;
+	}
+
 	if (mdata->mdp_rev >= MDSS_MDP_HW_REV_103) {
 		pp_pa_v2_config(flags, base + MDSS_MDP_REG_DSPP_PA_BASE, pp_sts,
 				&mdss_pp_res->pa_v2_disp_cfg[disp_num],
@@ -1757,7 +1762,7 @@ static int pp_dspp_setup(u32 disp_num, struct mdss_mdp_mixer *mixer)
 			pp_sts->pgc_sts |= PP_STS_ENABLE;
 		pp_sts_set_split_bits(&pp_sts->pgc_sts, pgc_config->flags);
 	}
-
+opmode_config:
 	pp_dspp_opmode_config(ctl, dspp_num, pp_sts, mdata->mdp_rev, &opmode);
 
 flush_exit:
@@ -5497,9 +5502,6 @@ static int is_valid_calib_addr(void *addr, u32 operation)
 	int ret = 0;
 	char __iomem *ptr = addr;
 	char __iomem *mixer_base = mdss_res->mixer_intf->base;
-	char __iomem *rgb_base   = mdss_res->rgb_pipes->base;
-	char __iomem *dma_base   = mdss_res->dma_pipes->base;
-	char __iomem *vig_base   = mdss_res->vig_pipes->base;
 	char __iomem *ctl_base   = mdss_res->ctl_off->base;
 	char __iomem *dspp_base  = mdss_res->mixer_intf->dspp_base;
 
@@ -5531,17 +5533,20 @@ static int is_valid_calib_addr(void *addr, u32 operation)
 			if (ret)
 				goto valid_addr;
 		}
-		if (ptr >= vig_base) {
+		if (mdss_res->vig_pipes &&
+		    ptr >= mdss_res->vig_pipes->base) {
 			ret = is_valid_calib_vig_addr(ptr);
 			if (ret)
 				goto valid_addr;
 		}
-		if (ptr >= rgb_base) {
+		if (mdss_res->rgb_pipes &&
+		    ptr >= mdss_res->rgb_pipes->base) {
 			ret = is_valid_calib_rgb_addr(ptr);
 			if (ret)
 				goto valid_addr;
 		}
-		if (ptr >= dma_base) {
+		if (mdss_res->dma_pipes &&
+		    ptr >= mdss_res->dma_pipes->base) {
 			ret = is_valid_calib_dma_addr(ptr);
 			if (ret)
 				goto valid_addr;

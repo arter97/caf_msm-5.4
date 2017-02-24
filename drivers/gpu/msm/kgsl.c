@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2936,7 +2936,8 @@ static int kgsl_setup_useraddr(struct kgsl_mem_entry *entry,
 	struct vm_area_struct *vma = NULL;
 	int ret;
 
-	if (param->offset != 0 || param->hostptr == 0
+	if (param->len == 0 || param->offset != 0
+		|| param->hostptr == 0
 		|| !KGSL_IS_PAGE_ALIGNED(param->hostptr)
 		|| !KGSL_IS_PAGE_ALIGNED(param->len))
 		return -EINVAL;

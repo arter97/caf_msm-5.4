@@ -482,6 +482,8 @@ Subnode properties:
 			- "rgba8888"
 			- "rgb888"
 			- "rgb565"
+- qcom,product-id: 	An integer to select the vendor specific
+			display configuration changes.
 
 Example:
 	mdss_mdp: qcom,mdss_mdp@fd900000 {
