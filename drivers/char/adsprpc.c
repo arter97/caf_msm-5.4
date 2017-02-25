@@ -791,9 +791,9 @@ static int get_args(uint32_t kernel, struct smq_invoke_ctx *ctx,
 	void *args;
 	remote_arg_t *pra = ctx->pra;
 	remote_arg_t *rpra = ctx->rpra;
-	ssize_t rlen, used, size;
+	ssize_t rlen, used, size, copylen = 0;
 	uint32_t sc = ctx->sc, start;
-	int i, inh, bufs = 0, err = 0, oix, copylen = 0;
+	int i, inh, bufs = 0, err = 0, oix;
 	int inbufs = REMOTE_SCALARS_INBUFS(sc);
 	int outbufs = REMOTE_SCALARS_OUTBUFS(sc);
 	int cid = ctx->fdata->cid;
@@ -883,7 +883,8 @@ static int get_args(uint32_t kernel, struct smq_invoke_ctx *ctx,
 	/* copy non ion buffers */
 	for (oix = 0; oix < inbufs + outbufs; ++oix) {
 		int i = ctx->overps[oix]->raix;
-		ssize_t mlen;
+		ssize_t mlen = ctx->overps[oix]->mend -
+				 ctx->overps[oix]->mstart;
 		if (!pra[i].buf.len)
 			continue;
 		if (list[i].num)
@@ -894,7 +895,6 @@ static int get_args(uint32_t kernel, struct smq_invoke_ctx *ctx,
 				(uintptr_t)args;
 			args = (void *)ALIGN((uintptr_t)args, BALIGN);
 		}
-		mlen = ctx->overps[oix]->mend - ctx->overps[oix]->mstart;
 		VERIFY(err, rlen >= mlen);
 		if (err)
 			goto bail;
