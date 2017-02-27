@@ -11,11 +11,14 @@
  * GNU General Public License for more details.
  */
 
-/dts-v1/;
+&modem_adsp_mem {
+	reg = <0x0 0x88000000 0x0 0x03900000>;
+};
 
-#include "msm8905-pm8909-512mb-mtp.dtsi"
-/ {
-	model = "Qualcomm Technologies, Inc. MSM8905-PM8909 512MB MTP";
-	compatible = "qcom,msm8909-mtp", "qcom,msm8909", "qcom,mtp";
-	qcom,board-id = <8 0x100>;
+&peripheral_mem {
+	reg = <0x0 0x8b900000 0x0 0x0500000>;
+};
+
+&venus_qseecom_mem {
+	reg = <0 0 0 0x400000>;
 };

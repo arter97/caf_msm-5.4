@@ -1,0 +1,53 @@
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "msm8909-qrd.dtsi"
+#include "msm8905.dtsi"
+#include "msm8905-pm8909.dtsi"
+#include "msm8905-512mb-memory.dtsi"
+
+&pm8909_vadc {
+	chan@30 {
+		qcom,scale-function = <6>;
+	};
+};
+
+&pm8909_chg {
+	status = "okay";
+};
+
+/ {
+	qrd_batterydata: qcom,battery-data {
+		qcom,rpull-up-kohm = <0>;
+		qcom,vref-batt-therm = <1800000>;
+
+		#include "batterydata-qrd-skuc-4v2-2000mah.dtsi"
+	};
+};
+
+&pm8909_bms {
+	status = "okay";
+	qcom,resume-soc = <95>;
+	qcom,use-reported-soc;
+	qcom,force-bms-active-on-charger;
+	qcom,battery-data = <&qrd_batterydata>;
+};
+
+&sdhc_2 {
+        qcom,nonremovable;
+
+        interrupts = <0 1>;
+        interrupt-map = <0 &intc 0 125 0
+                1 &intc 0 221 0>;
+        interrupt-names = "hc_irq", "pwr_irq";
+        /delete-property/ cd-gpios;
+};

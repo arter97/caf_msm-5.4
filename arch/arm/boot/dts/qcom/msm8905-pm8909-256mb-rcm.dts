@@ -13,9 +13,10 @@
 
 /dts-v1/;
 
-#include "msm8905-pm8909-512mb-mtp.dtsi"
+#include "msm8905-pm8909-256mb-cdp.dtsi"
+
 / {
-	model = "Qualcomm Technologies, Inc. MSM8905-PM8909 512MB MTP";
-	compatible = "qcom,msm8909-mtp", "qcom,msm8909", "qcom,mtp";
-	qcom,board-id = <8 0x100>;
+	model = "Qualcomm Technologies, Inc. MSM8905-PM8909 256MB RCM";
+	compatible = "qcom,msm8909-cdp", "qcom,msm8909", "qcom,cdp";
+	qcom,board-id = <21 0x200>;
 };
