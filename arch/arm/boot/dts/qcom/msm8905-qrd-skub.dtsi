@@ -123,6 +123,28 @@
 	};
 };
 
+&spmi_bus {
+	qcom,pm8909@0 {
+		qcom,leds@c000 {
+			compatible = "qcom,leds-qpnp";
+			reg = <0xc000 0x100>;
+			status = "okay";
+			qcom,led_gpio_1 {
+				label = "gpio";
+				linux,name = "button-backlight";
+				qcom,max-current = <40>;
+				qcom,id = <8>;
+				linux,default-trigger = "none";
+				qcom,default-state = "on";
+				qcom,turn-off-delay-ms = <1000>;
+				qcom,source-sel = <1>;
+				qcom,mode-ctrl = <0x10>;
+				qcom,vin-ctrl = <0x02>;
+			};
+		};
+	};
+};
+
 &pm8909_chg {
 	qcom,cool-bat-mv = <4000>;
 	qcom,warm-bat-mv = <4000>;
