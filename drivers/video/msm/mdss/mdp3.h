@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, 2017, The Linux Foundation. All rights reserved.
  * Copyright (C) 2007 Google Incorporated
  *
  * This program is free software; you can redistribute it and/or modify
@@ -70,6 +70,7 @@ enum {
 	MDP3_CLIENT_DSI = 1,
 	MDP3_CLIENT_PPP,
 	MDP3_CLIENT_IOMMU,
+	MDP3_CLINET_SPI,
 	MDP3_CLIENT_MAX,
 };
 

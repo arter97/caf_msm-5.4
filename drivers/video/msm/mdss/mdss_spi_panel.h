@@ -1,0 +1,116 @@
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
+
+
+#ifndef __MDSS_SPI_PANEL_H__
+#define __MDSS_SPI_PANEL_H__
+
+#if defined(CONFIG_FB_MSM_MDSS_SPI_PANEL) && defined(CONFIG_SPI_QUP)
+#include <linux/list.h>
+#include <linux/mdss_io_util.h>
+#include <linux/irqreturn.h>
+#include <linux/pinctrl/consumer.h>
+#include <linux/gpio.h>
+
+#include "mdss_panel.h"
+
+#define MDSS_MAX_BL_BRIGHTNESS 255
+
+#define MDSS_SPI_RST_SEQ_LEN	10
+
+#define NONE_PANEL "none"
+
+#define CTRL_STATE_UNKNOWN		0x00
+#define CTRL_STATE_PANEL_INIT		BIT(0)
+#define CTRL_STATE_MDP_ACTIVE		BIT(1)
+
+#define MDSS_PINCTRL_STATE_DEFAULT "mdss_default"
+#define MDSS_PINCTRL_STATE_SLEEP  "mdss_sleep"
+#define SPI_PANEL_TE_TIMEOUT	400
+
+enum spi_panel_data_type {
+	panel_cmd,
+	panel_parameter,
+	panel_pixel,
+	UNKNOWN_FORMAT,
+};
+
+
+enum spi_panel_bl_ctrl {
+	BL_PWM,
+	BL_WLED,
+	BL_DCS_CMD,
+	UNKNOWN_CTRL,
+};
+
+struct spi_pinctrl_res {
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *gpio_state_active;
+	struct pinctrl_state *gpio_state_suspend;
+};
+#define SPI_PANEL_DST_FORMAT_RGB565		0
+
+struct spi_ctrl_hdr {
+	char wait;	/* ms */
+	char dlen;	/* 8 bits */
+};
+
+struct spi_cmd_desc {
+	struct spi_ctrl_hdr dchdr;
+	char *command;
+	char *parameter;
+};
+
+struct spi_panel_cmds {
+	char *buf;
+	int blen;
+	struct spi_cmd_desc *cmds;
+	int cmd_cnt;
+};
+
+struct spi_panel_data {
+	struct mdss_panel_data panel_data;
+	struct mdss_util_intf *mdss_util;
+	struct spi_pinctrl_res pin_res;
+	struct dss_module_power panel_power_data;
+	struct completion spi_panel_te;
+	int byte_pre_frame;
+	char *tx_buf;
+	u8 ctrl_state;
+	int disp_te_gpio;
+	int rst_gpio;
+	struct spi_panel_cmds on_cmds;
+	struct spi_panel_cmds off_cmds;
+	int (*on)(struct mdss_panel_data *pdata);
+	int (*off)(struct mdss_panel_data *pdata);
+	struct pwm_device *pwm_bl;
+	int bklt_ctrl;	/* backlight ctrl */
+	bool pwm_pmi;
+	int pwm_period;
+	int pwm_pmic_gpio;
+	int pwm_lpg_chan;
+	int pwm_enabled;
+	int bklt_max;
+};
+int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
+				char *buf, int len, int stride);
+#else
+
+int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
+				char *buf, int len, int stride){
+	return 0;
+}
+
+#endif/* End of CONFIG_FB_MSM_MDSS_SPI_PANEL && ONFIG_SPI_QUP */
+
+#endif /* End of __MDSS_SPI_PANEL_H__ */

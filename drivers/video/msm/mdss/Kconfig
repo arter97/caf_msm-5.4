@@ -12,6 +12,16 @@ config FB_MSM_MDSS_HDMI_PANEL
 	The MDSS HDMI Panel provides support for transmitting TMDS signals of
 	MDSS frame buffer data to connected hdmi compliant TVs, monitors etc.
 
+config FB_MSM_MDSS_SPI_PANEL
+	depends on FB_MSM_MDSS
+	bool "Support SPI panel feature"
+	default n
+	---help---
+	The MDSS SPI Panel provides support for transmitting SPI signals of
+	MDSS frame buffer data to connected panel. Limited by SPI rate, the
+	current max fps only reach to 27fps, and limited by MDP hardware
+	architecture only supply on MDP3.
+
 config FB_MSM_MDSS_HDMI_MHL_SII8334
 	depends on FB_MSM_MDSS_HDMI_PANEL
 	bool 'MHL SII8334 support '

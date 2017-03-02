@@ -794,9 +794,12 @@ static int mdss_fb_probe(struct platform_device *pdev)
 	mfd->ad_bl_level = 0;
 	mfd->fb_imgType = MDP_RGBA_8888;
 	mfd->calib_mode_bl = 0;
+	if (mfd->panel.type == SPI_PANEL)
+		mfd->fb_imgType = MDP_RGB_565;
 
-	if (mfd->panel.type == MIPI_VIDEO_PANEL ||
-				mfd->panel.type == MIPI_CMD_PANEL) {
+	if (mfd->panel.type == MIPI_VIDEO_PANEL   ||
+		mfd->panel.type == MIPI_CMD_PANEL ||
+		mfd->panel.type == SPI_PANEL) {
 		rc = of_property_read_string(pdev->dev.of_node,
 				"qcom,mdss-fb-format", &data);
 		if (!rc) {
