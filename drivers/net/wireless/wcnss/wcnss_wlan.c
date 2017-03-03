@@ -39,7 +39,7 @@
 #include <linux/mfd/pm8xxx/misc.h>
 #include <mach/subsystem_notif.h>
 #ifdef CONFIG_WCNSS_MEM_PRE_ALLOC
-#include "wcnss_prealloc.h"
+#include <net/wcnss_prealloc.h>
 #endif
 
 #define DEVICE "wcnss_wlan"
