@@ -46,7 +46,7 @@
 #include <linux/kthread.h>
 #include <linux/regmap.h>
 
-#define MIPI_480P
+#define MIPI_1080P
 #define device_name	"lt8912"
 
 /**
@@ -291,6 +291,68 @@ static int mipi_basic_set(struct lt8912_data *data)
 		return rc;
 	return 0;
 }
+
+#ifdef MIPI_1080P
+static int mipi_dig_1080p(struct lt8912_data *data)
+{
+	int rc = 0;
+
+	data->lt8912_client->addr = 0x49;
+	rc = lt8912_i2c_write_byte(data, 0x18, 0x2c);
+	if (rc)
+		return rc;
+	rc = lt8912_i2c_write_byte(data, 0x19, 0x05);
+	if (rc)
+		return rc;
+	rc = lt8912_i2c_write_byte(data, 0x1c, 0x80);
+	if (rc)
+		return rc;
+	rc = lt8912_i2c_write_byte(data, 0x1d, 0x07);
+	if (rc)
+		return rc;
+	rc = lt8912_i2c_write_byte(data, 0x2f, 0x0c);
+	if (rc)
+		return rc;
+	rc = lt8912_i2c_write_byte(data, 0x34, 0x98);
+	if (rc)
+		return rc;
+	rc = lt8912_i2c_write_byte(data, 0x35, 0x08);
+	if (rc)
+		return rc;
+	rc = lt8912_i2c_write_byte(data, 0x36, 0x65);
+	if (rc)
+		return rc;
+	rc = lt8912_i2c_write_byte(data, 0x37, 0x04);
+	if (rc)
+		return rc;
+	rc = lt8912_i2c_write_byte(data, 0x38, 0x24);
+	if (rc)
+		return rc;
+	rc = lt8912_i2c_write_byte(data, 0x39, 0x00);
+	if (rc)
+		return rc;
+	rc = lt8912_i2c_write_byte(data, 0x3a, 0x04);
+	if (rc)
+		return rc;
+	rc = lt8912_i2c_write_byte(data, 0x3b, 0x00);
+	if (rc)
+		return rc;
+	rc = lt8912_i2c_write_byte(data, 0x3c, 0x94);
+	if (rc)
+		return rc;
+	rc = lt8912_i2c_write_byte(data, 0x3d, 0x00);
+	if (rc)
+		return rc;
+	rc = lt8912_i2c_write_byte(data, 0x3e, 0x58);
+	if (rc)
+		return rc;
+	rc = lt8912_i2c_write_byte(data, 0x3f, 0x00);
+	if (rc)
+		return rc;
+	return 0;
+}
+
+#endif
 
 #ifdef MIPI_720P
 static int mipi_dig_720p(struct lt8912_data *data)
@@ -772,6 +834,12 @@ static int lontium_i2c_probe(struct i2c_client *client,
 	ret = mipi_basic_set(data);
 	if (ret)
 		goto free_reset_gpio;
+
+#ifdef MIPI_1080P
+	ret = mipi_dig_1080p(data);
+	if (ret)
+		goto free_reset_gpio;
+#endif
 
 #ifdef MIPI_720P
 	ret = mipi_dig_720p(data);
