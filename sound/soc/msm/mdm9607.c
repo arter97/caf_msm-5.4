@@ -2027,6 +2027,12 @@ static int mdm_asoc_machine_probe(struct platform_device *pdev)
 		return -EPROBE_DEFER;
 	}
 
+	if (!q6core_is_adsp_ready()) {
+		dev_err(&pdev->dev, "ADSP Audio isn't ready, Defering %s,\n",
+							__func__);
+		return -EPROBE_DEFER;
+	}
+
 	if (!pdev->dev.of_node) {
 		dev_err(&pdev->dev,
 			"%s No platform supplied from device tree\n", __func__);
