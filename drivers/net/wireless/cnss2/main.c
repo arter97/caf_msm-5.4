@@ -20,8 +20,8 @@
 #include <soc/qcom/ramdump.h>
 #include <soc/qcom/subsystem_notif.h>
 
-#include "debug.h"
 #include "main.h"
+#include "debug.h"
 #include "pci.h"
 
 #define CNSS_DUMP_FORMAT_VER		0x11
@@ -150,6 +150,32 @@ static int cnss_pm_notify(struct notifier_block *b,
 static struct notifier_block cnss_pm_notifier = {
 	.notifier_call = cnss_pm_notify,
 };
+
+static void cnss_pm_stay_awake(struct cnss_plat_data *plat_priv)
+{
+	if (atomic_inc_return(&plat_priv->pm_count) != 1)
+		return;
+
+	cnss_pr_dbg("PM stay awake, state: 0x%lx, count: %d\n",
+		    plat_priv->driver_state,
+		    atomic_read(&plat_priv->pm_count));
+	pm_stay_awake(&plat_priv->plat_dev->dev);
+}
+
+static void cnss_pm_relax(struct cnss_plat_data *plat_priv)
+{
+	int r = atomic_dec_return(&plat_priv->pm_count);
+
+	WARN_ON(r < 0);
+
+	if (r != 0)
+		return;
+
+	cnss_pr_dbg("PM relax, state: 0x%lx, count: %d\n",
+		    plat_priv->driver_state,
+		    atomic_read(&plat_priv->pm_count));
+	pm_relax(&plat_priv->plat_dev->dev);
+}
 
 void cnss_lock_pm_sem(void)
 {
@@ -510,6 +536,8 @@ static void cnss_driver_event_work(struct work_struct *work)
 	if (!plat_priv)
 		return;
 
+	cnss_pm_stay_awake(plat_priv);
+
 	spin_lock_irqsave(&plat_priv->event_lock, flags);
 
 	while (!list_empty(&plat_priv->event_list)) {
@@ -565,6 +593,8 @@ static void cnss_driver_event_work(struct work_struct *work)
 		spin_lock_irqsave(&plat_priv->event_lock, flags);
 	}
 	spin_unlock_irqrestore(&plat_priv->event_lock, flags);
+
+	cnss_pm_relax(plat_priv);
 }
 
 static void cnss_recovery_work_func(struct work_struct *work)
@@ -603,6 +633,8 @@ int cnss_driver_event_post(struct cnss_plat_data *plat_priv,
 	if (!event)
 		return -ENOMEM;
 
+	cnss_pm_stay_awake(plat_priv);
+
 	event->type = type;
 	event->data = data;
 	init_completion(&event->complete);
@@ -616,7 +648,7 @@ int cnss_driver_event_post(struct cnss_plat_data *plat_priv,
 	queue_work(plat_priv->event_wq, &plat_priv->event_work);
 
 	if (!sync)
-		return ret;
+		goto out;
 
 	ret = wait_for_completion_interruptible(&event->complete);
 
@@ -628,13 +660,16 @@ int cnss_driver_event_post(struct cnss_plat_data *plat_priv,
 	if (ret == -ERESTARTSYS && event->ret == CNSS_EVENT_PENDING) {
 		event->sync = false;
 		spin_unlock_irqrestore(&plat_priv->event_lock, flags);
-		return ret;
+		ret = -EINTR;
+		goto out;
 	}
 	spin_unlock_irqrestore(&plat_priv->event_lock, flags);
 
 	ret = event->ret;
 	kfree(event);
 
+out:
+	cnss_pm_relax(plat_priv);
 	return ret;
 }
 
@@ -1013,6 +1048,7 @@ static int cnss_qca6290_powerup(struct cnss_plat_data *plat_priv)
 		cnss_pr_err("Failed to start MHI, err = %d\n", ret);
 		goto suspend_link;
 	}
+	cnss_set_pin_connect_status(plat_priv);
 
 bypass_fbc:
 	if (qmi_bypass)
@@ -1164,31 +1200,40 @@ static int cnss_shutdown(const struct subsys_desc *subsys_desc, bool force_stop)
 	return ret;
 }
 
+static int cnss_qca6174_ramdump(struct cnss_plat_data *plat_priv)
+{
+	int ret = 0;
+	struct cnss_ramdump_info *ramdump_info;
+	struct ramdump_segment segment;
+
+	ramdump_info = &plat_priv->ramdump_info;
+	if (!ramdump_info->ramdump_size)
+		return -EINVAL;
+
+	memset(&segment, 0, sizeof(segment));
+	segment.v_address = ramdump_info->ramdump_va;
+	segment.size = ramdump_info->ramdump_size;
+	ret = do_ramdump(ramdump_info->ramdump_dev, &segment, 1);
+
+	return ret;
+}
+
 static int cnss_ramdump(int enable, const struct subsys_desc *subsys_desc)
 {
 	int ret = 0;
 	struct cnss_plat_data *plat_priv = dev_get_drvdata(subsys_desc->dev);
-	struct cnss_ramdump_info *ramdump_info;
-	struct ramdump_segment segment;
 
 	if (!plat_priv) {
 		cnss_pr_err("plat_priv is NULL!\n");
 		return -ENODEV;
 	}
 
-	ramdump_info = &plat_priv->ramdump_info;
-	if (!ramdump_info->ramdump_size)
-		return -EINVAL;
-
 	if (!enable)
 		return 0;
 
 	switch (plat_priv->device_id) {
 	case QCA6174_DEVICE_ID:
-		memset(&segment, 0, sizeof(segment));
-		segment.v_address = ramdump_info->ramdump_va;
-		segment.size = ramdump_info->ramdump_size;
-		ret = do_ramdump(ramdump_info->ramdump_dev, &segment, 1);
+		ret = cnss_qca6174_ramdump(plat_priv);
 		break;
 	case QCA6290_DEVICE_ID:
 		break;
@@ -1678,12 +1723,18 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret)
 		goto deinit_event_work;
 
+	ret = cnss_debugfs_create(plat_priv);
+	if (ret)
+		goto deinit_qmi;
+
 	register_pm_notifier(&cnss_pm_notifier);
 
 	cnss_pr_info("Platform driver probed successfully.\n");
 
 	return 0;
 
+deinit_qmi:
+	cnss_qmi_deinit(plat_priv);
 deinit_event_work:
 	cnss_event_work_deinit(plat_priv);
 remove_sysfs:
@@ -1710,6 +1761,7 @@ static int cnss_remove(struct platform_device *plat_dev)
 	struct cnss_plat_data *plat_priv = platform_get_drvdata(plat_dev);
 
 	unregister_pm_notifier(&cnss_pm_notifier);
+	cnss_debugfs_destroy(plat_priv);
 	cnss_qmi_deinit(plat_priv);
 	cnss_event_work_deinit(plat_priv);
 	cnss_remove_sysfs(plat_priv);

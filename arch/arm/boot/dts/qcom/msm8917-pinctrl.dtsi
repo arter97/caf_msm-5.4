@@ -722,6 +722,21 @@
 			};
 		};
 
+		pri_mi2s_mclk_b_lines {
+			pri_mi2s_mclk_b_default: pri_mi2s_mclk_default {
+				mux {
+					pins = "gpio69";
+					function = "pri_mi2s_mclk_b";
+				};
+				config {
+					pins = "gpio69";
+					drive-strength = <8>;
+					bias-disable;
+					input-enable;
+				};
+			};
+		};
+
 		sec_mi2s_mclk_a_lines {
 			sec_mi2s_mclk_a_active: sec_mi2s_mclk_a_active {
 				mux {
@@ -1208,6 +1223,37 @@
 
 				config {
 					pins = "gpio10", "gpio11";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+		};
+
+		/* IO Expander SX150xq */
+		i2c_4 {
+			i2c_4_active: i2c_4_active {
+				/* active state */
+				mux {
+					pins = "gpio14", "gpio15";
+					function = "blsp_i2c4";
+				};
+
+				config {
+					pins = "gpio14", "gpio15";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+
+			i2c_4_sleep: i2c_4_sleep {
+				/* suspended state */
+				mux {
+					pins = "gpio14", "gpio15";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio14", "gpio15";
 					drive-strength = <2>;
 					bias-disable;
 				};
