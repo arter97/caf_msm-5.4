@@ -7059,7 +7059,6 @@ SYSCALL_DEFINE5(perf_event_open,
 		 */
 		mutex_lock_double(&gctx->mutex, &ctx->mutex);
 
-		mutex_lock(&gctx->mutex);
 		perf_remove_from_context(group_leader, false);
 
 		/*
