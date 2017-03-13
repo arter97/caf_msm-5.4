@@ -23,7 +23,7 @@
 
 &sdhc_1 {
 	vdd-supply = <&sdc_vreg>;
-	vdd-io-supply = <&pmdcalifornium_l6>;
+	vdd-io-supply = <&pmd9650_l6>;
 	qcom,vdd-io-voltage-level = <1800000 1800000>;
 	qcom,vdd-io-always-on;
 	qcom,vdd-io-current-level = <200 10000>;
@@ -47,5 +47,13 @@
 			2 &tlmm_pinmux 81 0x4>;
 	interrupt-names = "hc_irq", "pwr_irq", "sdiowakeup_irq";
 
+	status = "ok";
+};
+
+&cnss_pcie {
+	qcom,is-dual-wifi-enabled;
+};
+
+&cnss_sdio {
 	status = "ok";
 };

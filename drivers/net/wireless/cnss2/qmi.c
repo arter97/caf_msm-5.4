@@ -15,8 +15,8 @@
 #include <linux/qmi_encdec.h>
 #include <soc/qcom/msm_qmi_interface.h>
 
-#include "debug.h"
 #include "main.h"
+#include "debug.h"
 #include "qmi.h"
 
 #define WLFW_SERVICE_INS_ID_V01		1
@@ -246,6 +246,38 @@ static int cnss_wlfw_request_mem_ind_hdlr(struct cnss_plat_data *plat_priv,
 	return 0;
 }
 
+static int cnss_qmi_pin_result_ind_hdlr(struct cnss_plat_data *plat_priv,
+					void *msg, unsigned int msg_len)
+{
+	struct msg_desc ind_desc;
+	struct wlfw_pin_connect_result_ind_msg_v01 ind_msg;
+	int ret = 0;
+
+	ind_desc.msg_id = QMI_WLFW_PIN_CONNECT_RESULT_IND_V01;
+	ind_desc.max_msg_len = WLFW_PIN_CONNECT_RESULT_IND_MSG_V01_MAX_MSG_LEN;
+	ind_desc.ei_array = wlfw_pin_connect_result_ind_msg_v01_ei;
+
+	ret = qmi_kernel_decode(&ind_desc, &ind_msg, msg, msg_len);
+	if (ret < 0) {
+		cnss_pr_err("Failed to decode pin connect result indication, msg_len: %u, err = %d\n",
+			    msg_len, ret);
+		return ret;
+	}
+	if (ind_msg.pwr_pin_result_valid)
+		plat_priv->pin_result.fw_pwr_pin_result =
+		    ind_msg.pwr_pin_result;
+	if (ind_msg.phy_io_pin_result_valid)
+		plat_priv->pin_result.fw_phy_io_pin_result =
+		    ind_msg.phy_io_pin_result;
+	if (ind_msg.rf_pin_result_valid)
+		plat_priv->pin_result.fw_rf_pin_result = ind_msg.rf_pin_result;
+
+	cnss_pr_dbg("Pin connect Result: pwr_pin: 0x%x phy_io_pin: 0x%x rf_io_pin: 0x%x\n",
+		    ind_msg.pwr_pin_result, ind_msg.phy_io_pin_result,
+		    ind_msg.rf_pin_result);
+	return ret;
+}
+
 int cnss_wlfw_respond_mem_send_sync(struct cnss_plat_data *plat_priv)
 {
 	struct wlfw_respond_mem_req_msg_v01 req;
@@ -470,6 +502,63 @@ out:
 	return ret;
 }
 
+int cnss_wlfw_m3_dnld_send_sync(struct cnss_plat_data *plat_priv)
+{
+	struct wlfw_m3_info_req_msg_v01 req;
+	struct wlfw_m3_info_resp_msg_v01 resp;
+	struct msg_desc req_desc, resp_desc;
+	struct cnss_fw_mem *m3_mem = &plat_priv->m3_mem;
+	int ret = 0;
+
+	cnss_pr_dbg("Sending M3 information message, state: 0x%lx\n",
+		    plat_priv->driver_state);
+
+	if (!m3_mem->pa || !m3_mem->size) {
+		cnss_pr_err("Memory for M3 is not available!\n");
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	cnss_pr_dbg("M3 memory, va: 0x%pK, pa: %pa, size: 0x%zx\n",
+		    m3_mem->va, &m3_mem->pa, m3_mem->size);
+
+	memset(&req, 0, sizeof(req));
+	memset(&resp, 0, sizeof(resp));
+
+	req.addr = plat_priv->m3_mem.pa;
+	req.size = plat_priv->m3_mem.size;
+
+	req_desc.max_msg_len = WLFW_M3_INFO_REQ_MSG_V01_MAX_MSG_LEN;
+	req_desc.msg_id = QMI_WLFW_M3_INFO_REQ_V01;
+	req_desc.ei_array = wlfw_m3_info_req_msg_v01_ei;
+
+	resp_desc.max_msg_len = WLFW_M3_INFO_RESP_MSG_V01_MAX_MSG_LEN;
+	resp_desc.msg_id = QMI_WLFW_M3_INFO_RESP_V01;
+	resp_desc.ei_array = wlfw_m3_info_resp_msg_v01_ei;
+
+	ret = qmi_send_req_wait(plat_priv->qmi_wlfw_clnt, &req_desc, &req,
+				sizeof(req), &resp_desc, &resp, sizeof(resp),
+				QMI_WLFW_TIMEOUT_MS);
+	if (ret < 0) {
+		cnss_pr_err("Failed to send M3 information request, err = %d\n",
+			    ret);
+		goto out;
+	}
+
+	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+		cnss_pr_err("M3 information request failed, result: %d, err: %d\n",
+			    resp.resp.result, resp.resp.error);
+		ret = resp.resp.result;
+		goto out;
+	}
+
+	return 0;
+
+out:
+	CNSS_ASSERT(0);
+	return ret;
+}
+
 int cnss_wlfw_wlan_mode_send_sync(struct cnss_plat_data *plat_priv,
 				  enum wlfw_driver_mode_enum_v01 mode)
 {
@@ -607,6 +696,9 @@ static void cnss_wlfw_clnt_ind(struct qmi_handle *handle,
 		cnss_driver_event_post(plat_priv,
 				       CNSS_DRIVER_EVENT_FW_READY,
 				       false, NULL);
+		break;
+	case QMI_WLFW_PIN_CONNECT_RESULT_IND_V01:
+		cnss_qmi_pin_result_ind_hdlr(plat_priv, msg, msg_len);
 		break;
 	default:
 		cnss_pr_err("Invalid QMI WLFW indication, msg_id: 0x%x\n",

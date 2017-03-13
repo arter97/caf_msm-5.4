@@ -967,6 +967,7 @@ void msm_isp_notify(struct vfe_device *vfe_dev, uint32_t event_type,
 	struct msm_isp_event_data event_data;
 	struct msm_vfe_sof_info *sof_info = NULL, *self_sof = NULL;
 	enum msm_vfe_dual_hw_ms_type ms_type;
+	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
 	int i, j;
 	unsigned long flags;
 
@@ -974,6 +975,15 @@ void msm_isp_notify(struct vfe_device *vfe_dev, uint32_t event_type,
 
 	switch (event_type) {
 	case ISP_EVENT_SOF:
+		for (i = 0; i < VFE_AXI_SRC_MAX; i++) {
+			if (SRC_TO_INTF(axi_data->stream_info[i].stream_src) ==
+				frame_src) {
+				/* update ping pong bit for controllable */
+				/* output */
+				axi_data->stream_info[i].sw_sof_ping_pong_bit =
+				      axi_data->stream_info[i].sw_ping_pong_bit;
+			}
+		}
 		if (frame_src == VFE_PIX_0) {
 			if (vfe_dev->isp_sof_debug < ISP_SOF_DEBUG_COUNT)
 				pr_err("%s: PIX0 frame id: %u\n", __func__,
@@ -2262,8 +2272,10 @@ int msm_isp_update_stream_bandwidth(struct vfe_device *vfe_dev,
 	struct msm_vfe_axi_stream *stream_info;
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
 	uint64_t total_pix_bandwidth = 0, total_rdi_bandwidth = 0;
+	uint64_t total_fe_bandwidth = 0;
 	uint32_t num_pix_streams = 0;
 	uint64_t total_bandwidth = 0;
+	int bpp = 0;
 
 	for (i = 0; i < VFE_AXI_SRC_MAX; i++) {
 		stream_info = &axi_data->stream_info[i];
@@ -2287,7 +2299,16 @@ int msm_isp_update_stream_bandwidth(struct vfe_device *vfe_dev,
 		}
 	}
 
-	total_bandwidth = total_pix_bandwidth + total_rdi_bandwidth;
+	if (axi_data->src_info[VFE_PIX_0].input_mux == EXTERNAL_READ
+		&& num_pix_streams){
+			bpp = msm_isp_get_bit_per_pixel(axi_data->
+			src_info[VFE_PIX_0].input_format);
+			total_fe_bandwidth =
+			(axi_data->src_info[VFE_PIX_0].pixel_clock / 8) * bpp;
+	}
+
+	total_bandwidth = total_pix_bandwidth + total_rdi_bandwidth +
+			total_fe_bandwidth;
 		rc = msm_isp_update_bandwidth(ISP_VFE0 + vfe_dev->pdev->id,
 			(total_bandwidth + vfe_dev->hw_info->min_ab),
 			(total_bandwidth + vfe_dev->hw_info->min_ib));
@@ -3272,11 +3293,6 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 	}
 
 	frame_src = SRC_TO_INTF(stream_info->stream_src);
-
-	pingpong_status =
-		vfe_dev->hw_info->vfe_ops.axi_ops.get_pingpong_status(
-			vfe_dev);
-
 	trace_msm_cam_isp_bufcount("msm_isp_request_frame:",
 		vfe_dev->pdev->id, frame_id, frame_src);
 
@@ -3396,7 +3412,12 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 			dual_vfe_res->wm_reload_mask[vfe_id] = 0;
 		}
 		stream_info->sw_ping_pong_bit = 0;
+		stream_info->sw_sof_ping_pong_bit = 0;
 	} else if (stream_info->undelivered_request_cnt == 2) {
+		if (stream_info->sw_sof_ping_pong_bit)
+			pingpong_status = VFE_PING_FLAG;
+		else
+			pingpong_status = VFE_PONG_FLAG;
 		rc = msm_isp_cfg_ping_pong_address(vfe_dev,
 				stream_info, pingpong_status, 0);
 		if (rc) {

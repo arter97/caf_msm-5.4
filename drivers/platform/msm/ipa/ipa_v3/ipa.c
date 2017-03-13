@@ -1878,6 +1878,45 @@ static void ipa3_q6_avoid_holb(void)
 	}
 }
 
+static void ipa3_halt_q6_cons_gsi_channels(void)
+{
+	int ep_idx;
+	int client_idx;
+	const struct ipa_gsi_ep_config *gsi_ep_cfg;
+	int ret;
+	int code = 0;
+
+	for (client_idx = 0; client_idx < IPA_CLIENT_MAX; client_idx++) {
+		if (IPA_CLIENT_IS_Q6_CONS(client_idx)) {
+			ep_idx = ipa3_get_ep_mapping(client_idx);
+			if (ep_idx == -1)
+				continue;
+
+			gsi_ep_cfg = ipa3_get_gsi_ep_info(ep_idx);
+			if (!gsi_ep_cfg) {
+				IPAERR("failed to get GSI config\n");
+				ipa_assert();
+				return;
+			}
+
+			ret = gsi_halt_channel_ee(
+				gsi_ep_cfg->ipa_gsi_chan_num, gsi_ep_cfg->ee,
+				&code);
+			if (ret == GSI_STATUS_SUCCESS)
+				IPADBG("halted gsi ch %d ee %d with code %d\n",
+				gsi_ep_cfg->ipa_gsi_chan_num,
+				gsi_ep_cfg->ee,
+				code);
+			else
+				IPAERR("failed to halt ch %d ee %d code %d\n",
+				gsi_ep_cfg->ipa_gsi_chan_num,
+				gsi_ep_cfg->ee,
+				code);
+		}
+	}
+}
+
+
 static int ipa3_q6_clean_q6_flt_tbls(enum ipa_ip_type ip,
 	enum ipa_rule_type rlt, const struct ipa_mem_buffer *mem)
 {
@@ -2308,12 +2347,17 @@ void ipa3_q6_post_shutdown_cleanup(void)
 	int client_idx;
 
 	IPADBG_LOW("ENTER\n");
-	IPA_ACTIVE_CLIENTS_INC_SIMPLE();
 
 	if (!ipa3_ctx->uc_ctx.uc_loaded) {
 		IPAERR("uC is not loaded. Skipping\n");
 		return;
 	}
+
+	IPA_ACTIVE_CLIENTS_INC_SIMPLE();
+
+	/* Handle the issue where SUSPEND was removed for some reason */
+	ipa3_q6_avoid_holb();
+	ipa3_halt_q6_cons_gsi_channels();
 
 	for (client_idx = 0; client_idx < IPA_CLIENT_MAX; client_idx++)
 		if (IPA_CLIENT_IS_Q6_PROD(client_idx)) {
@@ -3818,30 +3862,49 @@ static void ipa3_destroy_flt_tbl_idrs(void)
 static void ipa3_freeze_clock_vote_and_notify_modem(void)
 {
 	int res;
-	u32 ipa_clk_state;
 	struct ipa_active_client_logging_info log_info;
 
 	if (ipa3_ctx->smp2p_info.res_sent)
 		return;
 
+	if (ipa3_ctx->smp2p_info.out_base_id == 0) {
+		IPAERR("smp2p out gpio not assigned\n");
+		return;
+	}
+
 	IPA_ACTIVE_CLIENTS_PREP_SPECIAL(log_info, "FREEZE_VOTE");
 	res = ipa3_inc_client_enable_clks_no_block(&log_info);
 	if (res)
-		ipa_clk_state = 0;
+		ipa3_ctx->smp2p_info.ipa_clk_on = false;
 	else
-		ipa_clk_state = 1;
+		ipa3_ctx->smp2p_info.ipa_clk_on = true;
 
-	if (ipa3_ctx->smp2p_info.out_base_id) {
-		gpio_set_value(ipa3_ctx->smp2p_info.out_base_id +
-			IPA_GPIO_OUT_CLK_VOTE_IDX, ipa_clk_state);
-		gpio_set_value(ipa3_ctx->smp2p_info.out_base_id +
-			IPA_GPIO_OUT_CLK_RSP_CMPLT_IDX, 1);
-		ipa3_ctx->smp2p_info.res_sent = true;
-	} else {
-		IPAERR("smp2p out gpio not assigned\n");
-	}
+	gpio_set_value(ipa3_ctx->smp2p_info.out_base_id +
+		IPA_GPIO_OUT_CLK_VOTE_IDX,
+		ipa3_ctx->smp2p_info.ipa_clk_on);
+	gpio_set_value(ipa3_ctx->smp2p_info.out_base_id +
+		IPA_GPIO_OUT_CLK_RSP_CMPLT_IDX, 1);
 
-	IPADBG("IPA clocks are %s\n", ipa_clk_state ? "ON" : "OFF");
+	ipa3_ctx->smp2p_info.res_sent = true;
+	IPADBG("IPA clocks are %s\n",
+		ipa3_ctx->smp2p_info.ipa_clk_on ? "ON" : "OFF");
+}
+
+void ipa3_reset_freeze_vote(void)
+{
+	if (ipa3_ctx->smp2p_info.res_sent == false)
+		return;
+
+	if (ipa3_ctx->smp2p_info.ipa_clk_on)
+		IPA_ACTIVE_CLIENTS_DEC_SPECIAL("FREEZE_VOTE");
+
+	gpio_set_value(ipa3_ctx->smp2p_info.out_base_id +
+		IPA_GPIO_OUT_CLK_VOTE_IDX, 0);
+	gpio_set_value(ipa3_ctx->smp2p_info.out_base_id +
+		IPA_GPIO_OUT_CLK_RSP_CMPLT_IDX, 0);
+
+	ipa3_ctx->smp2p_info.res_sent = false;
+	ipa3_ctx->smp2p_info.ipa_clk_on = false;
 }
 
 static int ipa3_panic_notifier(struct notifier_block *this,
@@ -4273,7 +4336,7 @@ static ssize_t ipa3_write(struct file *file, const char __user *buf,
 
 		if (result) {
 			IPAERR("FW loading process has failed\n");
-			BUG();
+			return result;
 		} else
 			ipa3_post_init(&ipa3_res, ipa3_ctx->dev);
 	}

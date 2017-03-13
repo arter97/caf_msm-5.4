@@ -10,10 +10,12 @@
  * GNU General Public License for more details.
  */
 
+#include <linux/firmware.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/pm_runtime.h>
 
+#include "main.h"
 #include "debug.h"
 #include "pci.h"
 
@@ -36,6 +38,9 @@
 #endif
 
 #define MHI_NODE_NAME			"qcom,mhi"
+
+#define MAX_M3_FILE_NAME_LENGTH		13
+#define DEFAULT_M3_FILE_NAME		"m3.bin"
 
 static DEFINE_SPINLOCK(pci_link_down_lock);
 
@@ -75,9 +80,8 @@ static int cnss_set_pci_config_space(struct cnss_pci_data *pci_priv, bool save)
 		} else if (pci_priv->saved_state) {
 			pci_load_and_free_saved_state(pci_dev,
 						      &pci_priv->saved_state);
+			pci_restore_state(pci_dev);
 		}
-
-		pci_restore_state(pci_dev);
 	}
 
 	return 0;
@@ -162,6 +166,9 @@ int cnss_resume_pci_link(struct cnss_pci_data *pci_priv)
 	ret = cnss_set_pci_config_space(pci_priv, RESTORE_PCI_CONFIG_SPACE);
 	if (ret)
 		goto out;
+
+	if (pci_priv->pci_link_down_ind)
+		pci_priv->pci_link_down_ind = false;
 
 	return 0;
 out:
@@ -295,7 +302,8 @@ static void cnss_pci_event_cb(struct msm_pcie_notify *notify)
 		spin_unlock_irqrestore(&pci_link_down_lock, flags);
 
 		cnss_pr_err("PCI link down, schedule recovery!\n");
-		disable_irq(pci_dev->irq);
+		if (pci_dev->device == QCA6174_DEVICE_ID)
+			disable_irq(pci_dev->irq);
 		cnss_schedule_recovery(&pci_dev->dev, CNSS_REASON_LINK_DOWN);
 		break;
 	case MSM_PCIE_EVENT_WAKEUP:
@@ -356,9 +364,11 @@ static int cnss_pci_suspend(struct device *dev)
 	driver_ops = plat_priv->driver_ops;
 	if (driver_ops && driver_ops->suspend) {
 		ret = driver_ops->suspend(pci_dev, state);
-		if (pci_priv->pci_link_state)
+		if (pci_priv->pci_link_state) {
 			cnss_set_pci_config_space(pci_priv,
 						  SAVE_PCI_CONFIG_SPACE);
+			cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_SUSPEND);
+		}
 	}
 
 	cnss_pci_set_monitor_wake_intr(pci_priv, false);
@@ -387,6 +397,7 @@ static int cnss_pci_resume(struct device *dev)
 		if (pci_priv->saved_state)
 			cnss_set_pci_config_space(pci_priv,
 						  RESTORE_PCI_CONFIG_SPACE);
+		cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_RESUME);
 		ret = driver_ops->resume(pci_dev);
 	}
 
@@ -554,6 +565,11 @@ int cnss_auto_suspend(void)
 	pci_dev = pci_priv->pci_dev;
 
 	if (pci_priv->pci_link_state) {
+		if (cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_SUSPEND)) {
+			ret = -EAGAIN;
+			goto out;
+		}
+
 		cnss_set_pci_config_space(pci_priv, SAVE_PCI_CONFIG_SPACE);
 		pci_disable_device(pci_dev);
 
@@ -563,7 +579,7 @@ int cnss_auto_suspend(void)
 		if (cnss_set_pci_link(pci_priv, PCI_LINK_DOWN)) {
 			cnss_pr_err("Failed to shutdown PCI link!\n");
 			ret = -EAGAIN;
-			goto out;
+			goto resume_mhi;
 		}
 	}
 
@@ -574,6 +590,13 @@ int cnss_auto_suspend(void)
 	bus_bw_info = &plat_priv->bus_bw_info;
 	msm_bus_scale_client_update_request(bus_bw_info->bus_client,
 					    CNSS_BUS_WIDTH_NONE);
+
+	return 0;
+
+resume_mhi:
+	if (pci_enable_device(pci_dev))
+		cnss_pr_err("Failed to enable PCI device!\n");
+	cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_RESUME);
 out:
 	return ret;
 }
@@ -606,6 +629,7 @@ int cnss_auto_resume(void)
 		if (ret)
 			cnss_pr_err("Failed to enable PCI device, err = %d\n",
 				    ret);
+		cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_RESUME);
 	}
 
 	cnss_set_pci_config_space(pci_priv, RESTORE_PCI_CONFIG_SPACE);
@@ -655,6 +679,59 @@ static void cnss_pci_free_fw_mem(struct cnss_pci_data *pci_priv)
 		fw_mem->pa = 0;
 		fw_mem->size = 0;
 	}
+}
+
+int cnss_pci_load_m3(struct cnss_pci_data *pci_priv)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_fw_mem *m3_mem = &plat_priv->m3_mem;
+	char filename[MAX_M3_FILE_NAME_LENGTH];
+	const struct firmware *fw_entry;
+	int ret = 0;
+
+	if (!m3_mem->va && !m3_mem->size) {
+		snprintf(filename, sizeof(filename), DEFAULT_M3_FILE_NAME);
+
+		ret = request_firmware(&fw_entry, filename,
+				       &pci_priv->pci_dev->dev);
+		if (ret) {
+			cnss_pr_err("Failed to load M3 image: %s\n", filename);
+			return ret;
+		}
+
+		m3_mem->va = dma_alloc_coherent(&pci_priv->pci_dev->dev,
+						fw_entry->size, &m3_mem->pa,
+						GFP_KERNEL);
+		if (!m3_mem->va) {
+			cnss_pr_err("Failed to allocate memory for M3, size: 0x%zx\n",
+				    fw_entry->size);
+			release_firmware(fw_entry);
+			return -ENOMEM;
+		}
+
+		memcpy(m3_mem->va, fw_entry->data, fw_entry->size);
+		m3_mem->size = fw_entry->size;
+		release_firmware(fw_entry);
+	}
+
+	return 0;
+}
+
+static void cnss_pci_free_m3_mem(struct cnss_pci_data *pci_priv)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_fw_mem *m3_mem = &plat_priv->m3_mem;
+
+	if (m3_mem->va && m3_mem->size) {
+		cnss_pr_dbg("Freeing memory for M3, va: 0x%pK, pa: %pa, size: 0x%zx\n",
+			    m3_mem->va, &m3_mem->pa, m3_mem->size);
+		dma_free_coherent(&pci_priv->pci_dev->dev, m3_mem->size,
+				  m3_mem->va, m3_mem->pa);
+	}
+
+	m3_mem->va = NULL;
+	m3_mem->pa = 0;
+	m3_mem->size = 0;
 }
 
 int cnss_pci_get_bar_info(struct cnss_pci_data *pci_priv, void __iomem **va,
@@ -1081,6 +1158,9 @@ int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
 		return -ENODEV;
 	}
 
+	if (pci_priv->device_id == QCA6174_DEVICE_ID)
+		return 0;
+
 	if (mhi_dev_state < 0) {
 		cnss_pr_err("Invalid MHI DEV state (%d)\n", mhi_dev_state);
 		return -EINVAL;
@@ -1261,6 +1341,7 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 	struct cnss_plat_data *plat_priv =
 		cnss_bus_dev_to_plat_priv(&pci_dev->dev);
 
+	cnss_pci_free_m3_mem(pci_priv);
 	cnss_pci_free_fw_mem(pci_priv);
 
 	if (pci_dev->device == QCA6290_DEVICE_ID) {
