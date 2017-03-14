@@ -55,7 +55,6 @@
 #include "mdp3_ctrl.h"
 #include "mdp3_ppp.h"
 #include "mdss_debug.h"
-#include "mdss_spi.h"
 
 #define MISR_POLL_SLEEP                 2000
 #define MISR_POLL_TIMEOUT               32000
@@ -1670,15 +1669,16 @@ out:
 int mdp3_put_img(struct mdp3_img_data *data, int client)
 {
 	struct ion_client *iclient = mdp3_res->ion_client;
-	//int dom;
+	int dom;
 
 	 if (data->flags & MDP_MEMORY_ID_TYPE_FB) {
+		pr_info("mdp3_put_img fb mem buf=0x%pa\n", &data->addr);
 		fput_light(data->srcp_file, data->p_need);
 		data->srcp_file = NULL;
 	} else if (!IS_ERR_OR_NULL(data->srcp_ihdl)) {
 		if (client == MDP3_CLIENT_DMA_P) {
-			//dom = (mdp3_res->domains + MDP3_IOMMU_DOMAIN_UNSECURE)->domain_idx;
-			//ion_unmap_iommu(iclient, data->srcp_ihdl, dom, 0);
+			dom = (mdp3_res->domains + MDP3_IOMMU_DOMAIN_UNSECURE)->domain_idx;
+			ion_unmap_iommu(iclient, data->srcp_ihdl, dom, 0);
 		} else {
 			mdp3_unmap_iommu(iclient, data->srcp_ihdl);
 		}
@@ -1698,7 +1698,7 @@ int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data, int client)
 	unsigned long *len;
 	dma_addr_t *start;
 	struct ion_client *iclient = mdp3_res->ion_client;
-//	int dom;
+	int dom;
 
 	start = &data->addr;
 	len = (unsigned long *) &data->len;
@@ -1732,6 +1732,7 @@ int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data, int client)
 	} else if (iclient) {
 		data->srcp_ihdl = ion_import_dma_buf(iclient, img->memory_id);
 		if (IS_ERR_OR_NULL(data->srcp_ihdl)) {
+			pr_err("error on ion_import_fd\n");
 			if (!data->srcp_ihdl)
 				ret = -EINVAL;
 			else
@@ -1740,16 +1741,9 @@ int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data, int client)
 			return ret;
 		}
 		if (client == MDP3_CLIENT_DMA_P) {
-			{
-				char *tx_buf2;
-				tx_buf2 = ion_map_kernel(iclient,data->srcp_ihdl);
-				 *start = (dma_addr_t )tx_buf2;
-				 *len = 320*320*2;
-				 return 0;
-			}
-			//dom = (mdp3_res->domains + MDP3_IOMMU_DOMAIN_UNSECURE)->domain_idx;
-			//ret = ion_map_iommu(iclient, data->srcp_ihdl, dom,
-			//		0, SZ_4K, 0, start, len, 0, 0);
+			dom = (mdp3_res->domains + MDP3_IOMMU_DOMAIN_UNSECURE)->domain_idx;
+			ret = ion_map_iommu(iclient, data->srcp_ihdl, dom,
+					0, SZ_4K, 0, start, len, 0, 0);
 		} else {
 			ret = mdp3_self_map_iommu(iclient, data->srcp_ihdl,
 				SZ_4K, data->padding, start, len, 0, 0);
@@ -1764,6 +1758,9 @@ done:
 	if (!ret && (img->offset < data->len)) {
 		data->addr += img->offset;
 		data->len -= img->offset;
+
+		pr_debug("mem=%d ihdl=%p buf=0x%pa len=0x%x\n", img->memory_id,
+			 data->srcp_ihdl, &data->addr, data->len);
 	} else {
 		mdp3_put_img(data, client);
 		return -EINVAL;
@@ -2254,7 +2251,8 @@ static void mdp3_debug_deinit(struct platform_device *pdev)
 static void mdp3_dma_underrun_intr_handler(int type, void *arg)
 {
 	mdp3_res->underrun_cnt++;
-	pr_err("display underrun detected count=%d\n",mdp3_res->underrun_cnt);
+	pr_err("display underrun detected count=%d\n",
+			mdp3_res->underrun_cnt);
 	ATRACE_INT("mdp3_dma_underrun_intr_handler", mdp3_res->underrun_cnt);
 }
 

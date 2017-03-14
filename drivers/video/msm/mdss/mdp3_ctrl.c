@@ -25,7 +25,6 @@
 #include "mdp3_ctrl.h"
 #include "mdp3.h"
 #include "mdp3_ppp.h"
-#include "mdss_spi.h"
 
 #define VSYNC_EXPIRE_TICK	4
 
@@ -1071,6 +1070,9 @@ static int mdp3_overlay_play(struct msm_fb_data_type *mfd,
 	struct mdp3_session_data *mdp3_session = mfd->mdp.private1;
 	int rc = 0;
 
+	pr_debug("mdp3_overlay_play req id=%x mem_id=%d\n",
+		req->id, req->data.memory_id);
+
 	mutex_lock(&mdp3_session->lock);
 
 	if (mdp3_session->overlay.id == MSMFB_NEW_REQUEST) {
@@ -1175,11 +1177,9 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 					(void *)(int)data->addr,
 					mdp3_session->intf, (void *)panel);
 		} else {
-			rc = mdss_spi_transfer_data((void *)data->addr,240*320*2);
-	//		rc = mdp3_session->dma->update(mdp3_session->dma,
-	//				(void *)(int)data->addr,
-	//				mdp3_session->intf, NULL);
-			//pr_err("lei:addr = %x,len = %d\n",data->addr,data->len);
+			rc = mdp3_session->dma->update(mdp3_session->dma,
+					(void *)(int)data->addr,
+					mdp3_session->intf, NULL);
 		}
 		/* This is for the previous frame */
 		if (rc < 0) {
@@ -2349,7 +2349,6 @@ static int mdp3_ctrl_ioctl_handler(struct msm_fb_data_type *mfd,
 			pr_err("mdp3_get_metadata failed (%d)\n", rc);
 		break;
 	case MSMFB_METADATA_SET:
-
 		rc = copy_from_user(&metadata, argp, sizeof(metadata));
 		if (!rc)
 			rc = mdp3_set_metadata(mfd, &metadata);

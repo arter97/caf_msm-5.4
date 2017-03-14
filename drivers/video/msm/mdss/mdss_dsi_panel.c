@@ -23,7 +23,6 @@
 #include <linux/err.h>
 
 #include "mdss_dsi.h"
-#include "mdss_spi.h"
 
 #define DT_CMD_HDR 6
 
@@ -694,7 +693,6 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 		if (ctrl->ndx != DSI_CTRL_LEFT)
 			goto end;
 	}
-	mdss_spi_panel_init();
 
 	if (ctrl->on_cmds.cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);
