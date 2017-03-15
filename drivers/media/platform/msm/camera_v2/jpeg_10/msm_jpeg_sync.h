@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -67,7 +67,7 @@ struct msm_jpeg_device {
 	struct msm_cam_clk_info *jpeg_clk_info;
 	size_t num_clk;
 	int num_reg;
-	struct msm_cam_regulator *jpeg_vdd;
+	struct regulator **jpeg_vdd;
 	uint32_t hw_version;
 
 	struct device *device;
