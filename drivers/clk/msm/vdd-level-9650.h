@@ -11,8 +11,8 @@
  * GNU General Public License for more details.
  */
 
-#ifndef __DRIVERS_CLK_QCOM_VDD_LEVEL_CALIFORNIUM_H
-#define __DRIVERS_CLK_QCOM_VDD_LEVEL_CALIFORNIUM_H
+#ifndef __DRIVERS_CLK_QCOM_VDD_LEVEL_9650_H
+#define __DRIVERS_CLK_QCOM_VDD_LEVEL_9650_H
 
 #include <linux/clk/msm-clock-generic.h>
 #include <linux/regulator/rpm-smd-regulator.h>

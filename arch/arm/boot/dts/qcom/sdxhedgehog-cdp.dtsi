@@ -11,6 +11,6 @@
  */
 
 #include <dt-bindings/interrupt-controller/irq.h>
-#include "mdmcalifornium-v1.1-cdp.dtsi"
+#include "mdm9650-v1.1-cdp.dtsi"
 #include "sdxhedgehog.dtsi"
 #include "sdxhedgehog-pinctrl.dtsi"

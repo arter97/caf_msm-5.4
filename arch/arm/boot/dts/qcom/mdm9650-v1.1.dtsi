@@ -1,4 +1,4 @@
-/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,22 +10,11 @@
  * GNU General Public License for more details.
  */
 
-/dts-v1/;
-
-#include "mdmcalifornium.dtsi"
-#include "mdmcalifornium-pinctrl.dtsi"
+#include "mdm9650.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. MDM Californium SIM";
-	compatible = "qcom,mdmcalifornium-sim",
-		   "qcom,mdmcalifornium", "qcom,sim";
-	qcom,board-id = <16 0>;
-};
-
-&blsp1_uart1 {
-	status = "ok";
-};
-
-&qnand_1 {
-	status = "ok";
+	model = "Qualcomm Technologies, Inc. MDM 9650 v1.1";
+	compatible = "qcom,mdm9650";
+	qcom,msm-id = <279 0x10001>, <284 0x10001>, <285 0x10001>,
+		      <286 0x10001>, <283 0x10001>;
 };

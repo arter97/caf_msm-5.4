@@ -11,7 +11,7 @@
  */
 
 &spmi_bus {
-	qcom,pmdcalifornium@0 {
+	qcom,pmd9650@0 {
 		spmi-slave-container;
 		reg = <0x0>;
 		#address-cells = <1>;
@@ -22,26 +22,26 @@
 			reg = <0x100 0x100>;
 		};
 
-		pmdcalifornium_pon: qcom,power-on@800 {
+		pmd9650_pon: qcom,power-on@800 {
 			compatible = "qcom,qpnp-power-on";
 			reg = <0x800 0x100>;
 			qcom,pon-dbc-delay = <15625>;
 
 		};
 
-		pmdcalifornium_misc: qcom,misc@900 {
+		pmd9650_misc: qcom,misc@900 {
 			compatible = "qcom,qpnp-misc";
 			reg = <0x900 0x100>;
 		};
 
-		pmdcalifornium_gpios: gpios {
+		pmd9650_gpios: gpios {
 			spmi-dev-container;
 			compatible = "qcom,qpnp-pin";
 			gpio-controller;
 			#gpio-cells = <2>;
 			#address-cells = <1>;
 			#size-cells = <1>;
-			label = "pmdcalifornium-gpio";
+			label = "pmd9650-gpio";
 
 			gpio@c000 {
 				reg = <0xc000 0x100>;
@@ -116,7 +116,7 @@
 			};
 		};
 
-		pmdcalifornium_vadc: vadc@3100 {
+		pmd9650_vadc: vadc@3100 {
 			compatible = "qcom,qpnp-vadc-hc";
 			reg = <0x3100 0x100>;
 			#address-cells = <1>;
@@ -163,7 +163,7 @@
 			};
 		};
 
-		qcom,pmdcalifornium_rtc {
+		qcom,pmd9650_rtc {
 			spmi-dev-container;
 			compatible = "qcom,qpnp-rtc";
 			#address-cells = <1>;
@@ -171,24 +171,24 @@
 			qcom,qpnp-rtc-write = <0>;
 			qcom,qpnp-rtc-alarm-pwrup = <0>;
 
-			qcom,pmdcalifornium_rtc_rw@6000 {
+			qcom,pmd9650_rtc_rw@6000 {
 				reg = <0x6000 0x100>;
 			};
 
-			qcom,pmdcalifornium_rtc_alarm@6100 {
+			qcom,pmd9650_rtc_alarm@6100 {
 				reg = <0x6100 0x100>;
 				interrupts = <0x0 0x61 0x1>;
 			};
 		};
 	};
 
-	qcom,pmdcalifornium@1 {
+	qcom,pmd9650@1 {
 		spmi-slave-container;
 		reg = <0x1>;
 		#address-cells = <1>;
 		#size-cells = <1>;
 
-		pmdcalifornium_pwm_1: pwm@bc00 {
+		pmd9650_pwm_1: pwm@bc00 {
 			compatible = "qcom,qpnp-pwm";
 			reg = <0xbc00 0x100>;
 			reg-names = "qpnp-lpg-channel-base";
@@ -198,7 +198,7 @@
 			status = "disabled";
 		};
 
-		pmdcalifornium_pwm_2: pwm@bd00 {
+		pmd9650_pwm_2: pwm@bd00 {
 			compatible = "qcom,qpnp-pwm";
 			reg = <0xbd00 0x100>;
 			reg-names = "qpnp-lpg-channel-base";
@@ -210,7 +210,7 @@
 
 		regulator@1400 {
 			compatible = "qcom,qpnp-regulator";
-			regulator-name = "californium_s1";
+			regulator-name = "9650_s1";
 			spmi-dev-container;
 			#address-cells = <1>;
 			#size-cells = <1>;
@@ -230,7 +230,7 @@
 
 		regulator@1700 {
 			compatible = "qcom,qpnp-regulator";
-			regulator-name = "californium_s2";
+			regulator-name = "9650_s2";
 			spmi-dev-container;
 			#address-cells = <1>;
 			#size-cells = <1>;
@@ -250,7 +250,7 @@
 
 		regulator@1a00 {
 			compatible = "qcom,qpnp-regulator";
-			regulator-name = "californium_s3";
+			regulator-name = "9650_s3";
 			spmi-dev-container;
 			#address-cells = <1>;
 			#size-cells = <1>;
@@ -270,7 +270,7 @@
 
 		regulator@1d00 {
 			compatible = "qcom,qpnp-regulator";
-			regulator-name = "californium_s4";
+			regulator-name = "9650_s4";
 			spmi-dev-container;
 			#address-cells = <1>;
 			#size-cells = <1>;
@@ -290,7 +290,7 @@
 
 		regulator@2000 {
 			compatible = "qcom,qpnp-regulator";
-			regulator-name = "californium_s5";
+			regulator-name = "9650_s5";
 			spmi-dev-container;
 			#address-cells = <1>;
 			#size-cells = <1>;
@@ -310,91 +310,91 @@
 
 		regulator@4000 {
 			compatible = "qcom,qpnp-regulator";
-			regulator-name = "californium_l1";
+			regulator-name = "9650_l1";
 			reg = <0x4000 0x100>;
 			status = "disabled";
 		};
 
 		regulator@4100 {
 			compatible = "qcom,qpnp-regulator";
-			regulator-name = "californium_l2";
+			regulator-name = "9650_l2";
 			reg = <0x4100 0x100>;
 			status = "disabled";
 		};
 
 		regulator@4200 {
 			compatible = "qcom,qpnp-regulator";
-			regulator-name = "californium_l3";
+			regulator-name = "9650_l3";
 			reg = <0x4200 0x100>;
 			status = "disabled";
 		};
 
 		regulator@4300 {
 			compatible = "qcom,qpnp-regulator";
-			regulator-name = "californium_l4";
+			regulator-name = "9650_l4";
 			reg = <0x4300 0x100>;
 			status = "disabled";
 		};
 
 		regulator@4400 {
 			compatible = "qcom,qpnp-regulator";
-			regulator-name = "californium_l5";
+			regulator-name = "9650_l5";
 			reg = <0x4400 0x100>;
 			status = "disabled";
 		};
 
 		regulator@4500 {
 			compatible = "qcom,qpnp-regulator";
-			regulator-name = "californium_l6";
+			regulator-name = "9650_l6";
 			reg = <0x4500 0x100>;
 			status = "disabled";
 		};
 
 		regulator@4600 {
 			compatible = "qcom,qpnp-regulator";
-			regulator-name = "californium_l7";
+			regulator-name = "9650_l7";
 			reg = <0x4600 0x100>;
 			status = "disabled";
 		};
 
 		regulator@4700 {
 			compatible = "qcom,qpnp-regulator";
-			regulator-name = "californium_l8";
+			regulator-name = "9650_l8";
 			reg = <0x4700 0x100>;
 			status = "disabled";
 		};
 
 		regulator@4800 {
 			compatible = "qcom,qpnp-regulator";
-			regulator-name = "californium_l9";
+			regulator-name = "9650_l9";
 			reg = <0x4800 0x100>;
 			status = "disabled";
 		};
 
 		regulator@4900 {
 			compatible = "qcom,qpnp-regulator";
-			regulator-name = "californium_l10";
+			regulator-name = "9650_l10";
 			reg = <0x4900 0x100>;
 			status = "disabled";
 		};
 
 		regulator@4a00 {
 			compatible = "qcom,qpnp-regulator";
-			regulator-name = "californium_l11";
+			regulator-name = "9650_l11";
 			reg = <0x4a00 0x100>;
 			status = "disabled";
 		};
 
 		regulator@4b00 {
 			compatible = "qcom,qpnp-regulator";
-			regulator-name = "californium_l12";
+			regulator-name = "9650_l12";
 			reg = <0x4b00 0x100>;
 			status = "disabled";
 		};
 
 		regulator@4c00 {
 			compatible = "qcom,qpnp-regulator";
-			regulator-name = "californium_l13";
+			regulator-name = "9650_l13";
 			reg = <0x4c00 0x100>;
 			status = "disabled";
 		};
