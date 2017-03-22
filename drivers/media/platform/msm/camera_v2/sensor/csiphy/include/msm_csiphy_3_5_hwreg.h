@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -81,7 +81,7 @@ struct csiphy_reg_3ph_parms_t csiphy_v3_5_3ph = {
 	{0x4, 0x8},
 	{0x8, 0x0},
 	{0xC, 0xA5},
-	{0x10, 0x50},
+	{0x10, 0x52},
 	{0x2C, 0x1},
 	{0x30, 0x2},
 	{0x34, 0x3},

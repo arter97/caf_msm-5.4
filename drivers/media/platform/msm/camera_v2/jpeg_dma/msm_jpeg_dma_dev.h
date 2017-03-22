@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -334,7 +334,7 @@ struct msm_jpegdma_device {
 	void __iomem *iomem_base[MSM_JPEGDMA_IOMEM_LAST];
 
 	struct resource *irq;
-	struct msm_cam_regulator *dma_vdd;
+	struct regulator **vdd;
 	int num_reg;
 
 	struct clk **clk;
