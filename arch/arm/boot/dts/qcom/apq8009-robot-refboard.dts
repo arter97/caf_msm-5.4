@@ -147,4 +147,16 @@
 		qcom,no-rt-suspend;
 		status = "ok";
 	};
+
+	qcom,mcu_time_sync {
+		compatible = "qcom,mcu-time-sync";
+		qcom,mcu-link-gpio = <&msm_gpio 90 1>;
+		status = "ok";
+	};
+
+	gpio_keys {
+		status = "disabled";
+	};
+
 };
+
