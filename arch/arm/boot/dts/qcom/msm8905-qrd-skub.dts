@@ -13,6 +13,7 @@
 /dts-v1/;
 
 #include "msm8905-qrd-skub.dtsi"
+#include "msm8909-gpu-qhd.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. MSM8905 QRD SKUB";
