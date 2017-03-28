@@ -252,6 +252,7 @@
 	qcom,mdss-spi-bl-pmic-pwm-frequency = <100>;
 	qcom,mdss-spi-bl-pmic-bank-select = <0>;
 	qcom,mdss-spi-pwm-gpio = <&pm8909_mpps 2 0>;
+	qcom,cont-splash-enabled;
 };
 
 &pmx_mdss_te {
