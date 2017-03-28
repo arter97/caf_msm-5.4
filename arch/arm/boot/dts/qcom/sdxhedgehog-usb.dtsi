@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -32,8 +32,8 @@
 		interrupt-names = "hs_phy_irq", "ss_phy_irq", "pwr_event_irq",
 				"pmic_id_irq";
 		USB3_GDSC-supply = <&gdsc_usb30>;
-		vdda33-supply = <&pmdcalifornium_l10>;
-		vdda18-supply = <&pmdcalifornium_l5>;
+		vdda33-supply = <&pmd9650_l10>;
+		vdda18-supply = <&pmd9650_l5>;
 		qcom,usb-dbm = <&dbm_1p5>;
 
 		qcom,msm-bus,name = "usb3";
@@ -122,13 +122,13 @@
 		reg-names = "qusb_phy_base";
 		qcom,efuse-bit-pos = <16>;
 		qcom,efuse-num-bits = <4>;
-		vdd-supply = <&pmdcalifornium_l4>;
-		vdda18-supply = <&pmdcalifornium_l5>;
-		vdda33-supply = <&pmdcalifornium_l10>;
+		vdd-supply = <&pmd9650_l4>;
+		vdda18-supply = <&pmd9650_l5>;
+		vdda33-supply = <&pmd9650_l10>;
 		qcom,vdd-voltage-level = <0 928000 928000>;
 		qcom,qusb-phy-init-seq =
 			/* <value reg_offset> */
-				<0x13 0x04 /* analog_controls_two */
+				<0x03 0x04 /* analog_controls_two */
 				0x7c 0x18c /* pll_clock_inverter */
 				0x80 0x2c /* pll_cmode */
 				0x0a 0x184 /* pll_lock_delay */
@@ -223,7 +223,8 @@
 			 0x408 0x0a 0x0a 0x00
 			 0x414 0x06 0x06 0x00
 			 0x500 0x00 0x00 0x00
-			 0x244 0x00 0x00 0x00
+			 0x244 0x0d 0x0d 0x00
+			 0x248 0x09 0x09 0x00
 			 0x80c 0x9f 0x9f 0x00
 			 0x810 0x9f 0x9f 0x00
 			 0x814 0xb5 0xb5 0x00
@@ -264,8 +265,8 @@
 		qcom,qmp-phy-reg-offset = <0x988 0x98c 0x990 0x994
 					0x974 0x8d8 0x8dc 0x804 0x800
 					0x808>;
-		vdd-supply = <&pmdcalifornium_l4>;
-		core-supply = <&pmdcalifornium_l1>;
+		vdd-supply = <&pmd9650_l4>;
+		core-supply = <&pmd9650_l1>;
 		qcom,vdd-voltage-level = <0 928000 928000>;
 		qcom,core-voltage-level = <0 1224000 1224000>;
 		qcom,vbus-valid-override;

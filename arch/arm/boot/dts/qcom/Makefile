@@ -148,19 +148,19 @@ dtb-$(CONFIG_ARCH_MDM9640) += mdm9640-sim.dtb \
 	mdm9640-v2-pmk8001-mtp.dtb \
 
 
-dtb-$(CONFIG_ARCH_MDMCALIFORNIUM) += mdmcalifornium-sim.dtb \
-	mdmcalifornium-rumi.dtb \
-	mdmcalifornium-emmc-cdp.dtb \
-	mdmcalifornium-nand-cdp.dtb \
-	mdmcalifornium-emmc-mtp.dtb \
-	mdmcalifornium-nand-mtp.dtb \
-	mdmcalifornium-nand-dualwifi-mtp.dtb \
-	mdmcalifornium-v1.1-emmc-cdp.dtb \
-	mdmcalifornium-v1.1-nand-cdp.dtb \
-	mdmcalifornium-v1.1-emmc-mtp.dtb \
-	mdmcalifornium-v1.1-nand-mtp.dtb \
-	mdmcalifornium-v1.1-nand-dualwifi-mtp.dtb \
-	mdmcalifornium-v1.1-nand-ccard.dtb
+dtb-$(CONFIG_ARCH_MDM9650) += mdm9650-sim.dtb \
+	mdm9650-rumi.dtb \
+	mdm9650-emmc-cdp.dtb \
+	mdm9650-nand-cdp.dtb \
+	mdm9650-emmc-mtp.dtb \
+	mdm9650-nand-mtp.dtb \
+	mdm9650-nand-dualwifi-mtp.dtb \
+	mdm9650-v1.1-emmc-cdp.dtb \
+	mdm9650-v1.1-nand-cdp.dtb \
+	mdm9650-v1.1-emmc-mtp.dtb \
+	mdm9650-v1.1-nand-mtp.dtb \
+	mdm9650-v1.1-nand-dualwifi-mtp.dtb \
+	mdm9650-v1.1-nand-ccard.dtb
 
 dtb-$(CONFIG_ARCH_SDXHEDGEHOG) += sdxhedgehog-emmc-cdp.dtb \
 	sdxhedgehog-emmc-mtp.dtb \
@@ -299,6 +299,7 @@ dtb-$(CONFIG_ARCH_MSM8909) += msm8909-pm8916-mtp.dtb \
 	apq8009-512mb-rcm-wcd9326-refboard.dtb \
 	apq8009-cdp-wcd9326-refboard.dtb \
 	apq8009-rcm-wcd9326-refboard.dtb \
+	apq8009-robot-refboard.dtb \
 	apq8009-mtp-drone.dtb \
 	msm8909-mtp.dtb \
 	msm8909-1gb-mtp.dtb

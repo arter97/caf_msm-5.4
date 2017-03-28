@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -336,7 +336,7 @@ int ipa3_send_one(struct ipa3_sys_context *sys, struct ipa3_desc *desc,
 	int result;
 	u16 sps_flags = SPS_IOVEC_FLAG_EOT;
 	dma_addr_t dma_address;
-	u16 len;
+	u16 len = 0;
 	u32 mem_flag = GFP_ATOMIC;
 
 	if (unlikely(!in_atomic))
@@ -1337,13 +1337,6 @@ int ipa3_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 		}
 	}
 
-	result = ipa3_enable_data_path(ipa_ep_idx);
-	if (result) {
-		IPAERR("enable data path failed res=%d clnt=%d.\n", result,
-				ipa_ep_idx);
-		goto fail_gen2;
-	}
-
 	if (!ep->skip_ep_cfg) {
 		if (ipa3_cfg_ep(ipa_ep_idx, &sys_in->ipa_ep_cfg)) {
 			IPAERR("fail to configure EP.\n");
@@ -1473,6 +1466,13 @@ int ipa3_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 			IPADBG("modem cfg emb pipe flt\n");
 		else
 			ipa3_install_dflt_flt_rules(ipa_ep_idx);
+	}
+
+	result = ipa3_enable_data_path(ipa_ep_idx);
+	if (result) {
+		IPAERR("enable data path failed res=%d ep=%d.\n", result,
+			ipa_ep_idx);
+		goto fail_gen2;
 	}
 
 	if (!ep->keep_ipa_awake)
