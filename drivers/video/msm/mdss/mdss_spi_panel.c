@@ -346,6 +346,30 @@ static int mdss_spi_panel_event_handler(struct mdss_panel_data *pdata,
 	return rc;
 }
 
+int is_spi_panel_continuous_splash_on(struct mdss_panel_data *pdata)
+{
+	int i = 0, voltage = 0;
+	struct dss_vreg *vreg;
+	int num_vreg;
+	struct spi_panel_data *ctrl_pdata = NULL;
+
+	ctrl_pdata = container_of(pdata, struct spi_panel_data,
+			panel_data);
+	vreg = ctrl_pdata->panel_power_data.vreg_config;
+	num_vreg = ctrl_pdata->panel_power_data.num_vreg;
+
+	for (i = 0; i < num_vreg; i++) {
+		if (regulator_is_enabled(vreg[i].vreg) <= 0)
+			return false;
+		voltage = regulator_get_voltage(vreg[i].vreg);
+		if (!(voltage >= vreg[i].min_voltage &&
+			 voltage <= vreg[i].max_voltage))
+			return false;
+	}
+
+	return true;
+}
+
 int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
 			char *buf, int len, int dma_stride)
 {
@@ -732,6 +756,9 @@ static int mdss_spi_panel_parse_dt(struct device_node *np,
 	int rc;
 	const char *data;
 	struct mdss_panel_info *pinfo = &(ctrl_pdata->panel_data.panel_info);
+
+	pinfo->cont_splash_enabled = of_property_read_bool(np,
+					"qcom,cont-splash-enabled");
 
 	rc = of_property_read_u32(np, "qcom,mdss-spi-panel-width", &tmp);
 	if (rc) {
