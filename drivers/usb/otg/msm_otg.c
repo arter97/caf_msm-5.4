@@ -1834,6 +1834,34 @@ out:
 	return NOTIFY_OK;
 }
 
+static int msm_otg_usbdev_atomic_notify(struct notifier_block *self,
+			unsigned long action, void *priv)
+{
+	struct msm_otg *motg = container_of(self, struct msm_otg,
+				usbdev_atomic_nb);
+	struct usb_otg *otg = motg->phy.otg;
+	struct usb_bus *ubus = priv;
+
+	/* Interested only in recovery when HC dies */
+	if (action != USB_BUS_DIED)
+		return 0;
+
+	pr_info("%s: Initiate recovery from hc_died\n", __func__);
+	/* Recovery already under process */
+	if (motg->hc_died)
+		return 0;
+
+	if (ubus != otg->host) {
+		pr_debug("%s: event for diff HCD\n", __func__);
+		return 0;
+	}
+
+	motg->hc_died = true;
+	queue_work(system_nrt_freezable_wq, &motg->sm_work);
+
+	return 0;
+}
+
 static void msm_hsusb_vbus_power(struct msm_otg *motg, bool on)
 {
 	int ret;
@@ -1931,6 +1959,7 @@ static int msm_otg_set_host(struct usb_otg *otg, struct usb_bus *host)
 		if (otg->phy->state == OTG_STATE_A_HOST) {
 			pm_runtime_get_sync(otg->phy->dev);
 			usb_unregister_notify(&motg->usbdev_nb);
+			usb_unregister_atomic_notify(&motg->usbdev_atomic_nb);
 			msm_otg_start_host(otg, 0);
 			msm_hsusb_vbus_power(motg, 0);
 			otg->host = NULL;
@@ -1951,6 +1980,8 @@ static int msm_otg_set_host(struct usb_otg *otg, struct usb_bus *host)
 #endif
 	motg->usbdev_nb.notifier_call = msm_otg_usbdev_notify;
 	usb_register_notify(&motg->usbdev_nb);
+	motg->usbdev_atomic_nb.notifier_call = msm_otg_usbdev_atomic_notify;
+	usb_register_atomic_notify(&motg->usbdev_atomic_nb);
 	otg->host = host;
 	dev_dbg(otg->phy->dev, "host driver registered w/ tranceiver\n");
 
@@ -3140,6 +3171,10 @@ static void msm_otg_sm_work(struct work_struct *w)
 			else
 				msm_hsusb_vbus_power(motg, 1);
 			msm_otg_start_timer(motg, TA_WAIT_VRISE, A_WAIT_VRISE);
+		} else if (motg->hc_died) {
+			motg->hc_died = false;
+			otg->phy->state = OTG_STATE_A_WAIT_VRISE;
+			msm_otg_start_timer(motg, TA_WAIT_VRISE, A_WAIT_VRISE);
 		} else {
 			pr_debug("No session requested\n");
 			clear_bit(A_BUS_DROP, &motg->inputs);
@@ -3233,8 +3268,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 	case OTG_STATE_A_HOST:
 		if ((test_bit(ID, &motg->inputs) &&
 				!test_bit(ID_A, &motg->inputs)) ||
-				test_bit(A_BUS_DROP, &motg->inputs)) {
-			pr_debug("id_a/b/c || a_bus_drop\n");
+				test_bit(A_BUS_DROP, &motg->inputs) ||
+				motg->hc_died) {
+			pr_debug("id_a/b/c || a_bus_drop || hc_died\n");
 			clear_bit(B_CONN, &motg->inputs);
 			clear_bit(A_BUS_REQ, &motg->inputs);
 			msm_otg_del_timer(motg);

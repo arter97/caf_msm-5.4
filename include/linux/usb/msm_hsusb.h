@@ -370,6 +370,8 @@ struct msm_otg {
 	struct wake_lock wlock;
 	struct notifier_block usbdev_nb;
 	unsigned mA_port;
+	struct notifier_block usbdev_atomic_nb;
+	bool hc_died;
 	struct timer_list id_timer;
 	unsigned long caps;
 	struct msm_xo_voter *xo_handle;

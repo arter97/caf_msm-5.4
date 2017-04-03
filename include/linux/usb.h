@@ -1739,6 +1739,7 @@ static inline int usb_translate_errors(int error_code)
 #define USB_BUS_ADD		0x0003
 #define USB_BUS_REMOVE		0x0004
 #define USB_DEVICE_CONFIG	0x0005
+#define USB_BUS_DIED		0x0006
 
 #ifdef CONFIG_USB
 extern void usb_register_notify(struct notifier_block *nb);
@@ -1747,6 +1748,9 @@ extern void usb_unregister_notify(struct notifier_block *nb);
 static inline void usb_register_notify(struct notifier_block *nb) {}
 static inline void usb_unregister_notify(struct notifier_block *nb) {}
 #endif
+
+extern void usb_register_atomic_notify(struct notifier_block *nb);
+extern void usb_unregister_atomic_notify(struct notifier_block *nb);
 
 #ifdef DEBUG
 #define dbg(format, arg...)						\

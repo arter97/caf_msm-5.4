@@ -46,6 +46,7 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/unaligned.h>
+#include "../core/usb.h"
 
 #if defined(CONFIG_PPC_PS3)
 #include <asm/firmware.h>
@@ -439,6 +440,11 @@ static void ehci_iaa_watchdog(unsigned long param)
 	}
 
 	spin_unlock_irqrestore(&ehci->lock, flags);
+	if (ehci_to_hcd(ehci)->rh_registered) {
+		ehci_vdbg(ehci, "Calling usb_hc_died()\n");
+		usb_atomic_notify_dead_bus(&ehci_to_hcd(ehci)->self);
+		ehci_vdbg(ehci, "eHCI Host Controller is dead.\n");
+	}
 }
 
 static void ehci_watchdog(unsigned long param)
