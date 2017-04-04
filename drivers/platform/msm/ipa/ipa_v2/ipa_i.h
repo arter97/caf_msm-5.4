@@ -333,9 +333,36 @@ struct ipa_hdr_proc_ctx_add_hdr_cmd_seq {
 };
 
 /**
+ * struct ipa_hw_hdr_proc_ctx_add_l2tp_hdr_cmd_seq -
+ * IPA processing context header - process command sequence
+ * @hdr_add: add header command
+ * @l2tp_params: l2tp params for header addition
+ * @end: tlv end command (cmd.type must be 0)
+ */
+struct ipa_hw_hdr_proc_ctx_add_l2tp_hdr_cmd_seq {
+	struct ipa_hdr_proc_ctx_hdr_add hdr_add;
+	struct ipa_hw_hdr_proc_ctx_l2tp_add_hdr l2tp_params;
+	struct ipa_hdr_proc_ctx_tlv end;
+};
+
+/**
+ * struct ipa_hw_hdr_proc_ctx_remove_l2tp_hdr_cmd_seq -
+ * IPA processing context header - process command sequence
+ * @hdr_add: add header command
+ * @l2tp_params: l2tp params for header removal
+ * @end: tlv end command (cmd.type must be 0)
+ */
+struct ipa_hw_hdr_proc_ctx_remove_l2tp_hdr_cmd_seq {
+	struct ipa_hdr_proc_ctx_hdr_add hdr_add;
+	struct ipa_hw_hdr_proc_ctx_l2tp_remove_hdr l2tp_params;
+	struct ipa_hdr_proc_ctx_tlv end;
+};
+
+/**
  struct ipa_hdr_proc_ctx_entry - IPA processing context header table entry
  * @link: entry's link in global header table entries list
- * @type:
+ * @type: header processing context type
+ * @l2tp_params: L2TP parameters
  * @offset_entry: entry's offset
  * @hdr: the header
  * @cookie: cookie used for validity check
@@ -347,6 +374,7 @@ struct ipa_hdr_proc_ctx_entry {
 	struct list_head link;
 	u32 cookie;
 	enum ipa_hdr_proc_type type;
+	union ipa_l2tp_hdr_proc_ctx_params l2tp_params;
 	struct ipa_hdr_proc_ctx_offset_entry *offset_entry;
 	struct ipa_hdr_entry *hdr;
 	u32 ref_cnt;

@@ -212,6 +212,28 @@ struct ipa_hdr_proc_ctx_hdr_add {
 	u32 hdr_addr;
 };
 
+/**
+ * struct ipa_hw_hdr_proc_ctx_l2tp_add_hdr -
+ * HW structure of IPA processing context - add l2tp header tlv
+ * @tlv: IPA processing context TLV
+ * @l2tp_params: l2tp parameters
+ */
+struct ipa_hw_hdr_proc_ctx_l2tp_add_hdr {
+	struct ipa_hdr_proc_ctx_tlv tlv;
+	struct ipa_l2tp_header_add_procparams l2tp_params;
+};
+
+/**
+ * struct ipa_hw_hdr_proc_ctx_l2tp_remove_hdr -
+ * HW structure of IPA processing context - remove l2tp header tlv
+ * @tlv: IPA processing context TLV
+ * @l2tp_params: l2tp parameters
+ */
+struct ipa_hw_hdr_proc_ctx_l2tp_remove_hdr {
+	struct ipa_hdr_proc_ctx_tlv tlv;
+	struct ipa_l2tp_header_remove_procparams l2tp_params;
+};
+
 #define IPA_A5_MUX_HDR_EXCP_FLAG_IP		BIT(7)
 #define IPA_A5_MUX_HDR_EXCP_FLAG_NAT		BIT(6)
 #define IPA_A5_MUX_HDR_EXCP_FLAG_SW_FLT	BIT(5)

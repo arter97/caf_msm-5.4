@@ -12,7 +12,7 @@
 
 #include "ipa_i.h"
 
-static const u32 ipa_hdr_bin_sz[IPA_HDR_BIN_MAX] = { 8, 16, 24, 36, 60};
+static const u32 ipa_hdr_bin_sz[IPA_HDR_BIN_MAX] = { 8, 16, 24, 36, 64};
 static const u32 ipa_hdr_proc_ctx_bin_sz[IPA_HDR_PROC_CTX_BIN_MAX] = { 32, 64};
 
 #define HDR_TYPE_IS_VALID(type) \
@@ -26,6 +26,8 @@ static const u32 ipa_hdr_proc_ctx_bin_sz[IPA_HDR_PROC_CTX_BIN_MAX] = { 32, 64};
 #define IPA_HDR_UCP_802_3_TO_ETHII 7
 #define IPA_HDR_UCP_ETHII_TO_802_3 8
 #define IPA_HDR_UCP_ETHII_TO_ETHII 9
+#define IPA_HDR_UCP_L2TP_HEADER_ADD 10
+#define IPA_HDR_UCP_L2TP_HEADER_REMOVE 11
 
 /**
  * ipa_generate_hdr_hw_tbl() - generates the headers table
@@ -90,6 +92,62 @@ static void ipa_hdr_proc_ctx_to_hw_format(struct ipa_mem_buffer *mem,
 				entry->hdr->offset_entry->offset;
 			IPADBG("header address 0x%x\n",
 				ctx->hdr_add.hdr_addr);
+			ctx->end.type = IPA_PROC_CTX_TLV_TYPE_END;
+			ctx->end.length = 0;
+			ctx->end.value = 0;
+		} else if (entry->type == IPA_HDR_PROC_L2TP_HEADER_ADD) {
+			struct ipa_hw_hdr_proc_ctx_add_l2tp_hdr_cmd_seq *ctx;
+
+			ctx = (struct ipa_hw_hdr_proc_ctx_add_l2tp_hdr_cmd_seq *)
+				(mem->base + entry->offset_entry->offset);
+			ctx->hdr_add.tlv.type = IPA_PROC_CTX_TLV_TYPE_HDR_ADD;
+			ctx->hdr_add.tlv.length = 1;
+			ctx->hdr_add.tlv.value = entry->hdr->hdr_len;
+			ctx->hdr_add.hdr_addr = (entry->hdr->is_hdr_proc_ctx) ?
+				entry->hdr->phys_base :
+				hdr_base_addr +
+				entry->hdr->offset_entry->offset;
+			IPADBG("header address 0x%x\n",
+				ctx->hdr_add.hdr_addr);
+			ctx->l2tp_params.tlv.type = IPA_PROC_CTX_TLV_TYPE_PROC_CMD;
+			ctx->l2tp_params.tlv.length = 1;
+			ctx->l2tp_params.tlv.value =
+					IPA_HDR_UCP_L2TP_HEADER_ADD;
+			ctx->l2tp_params.l2tp_params.eth_hdr_retained =
+				entry->l2tp_params.hdr_add_param.eth_hdr_retained;
+			ctx->l2tp_params.l2tp_params.input_ip_version =
+				entry->l2tp_params.hdr_add_param.input_ip_version;
+			ctx->l2tp_params.l2tp_params.output_ip_version =
+				entry->l2tp_params.hdr_add_param.output_ip_version;
+
+			IPADBG("command id %d\n", ctx->l2tp_params.tlv.value);
+			ctx->end.type = IPA_PROC_CTX_TLV_TYPE_END;
+			ctx->end.length = 0;
+			ctx->end.value = 0;
+		} else if (entry->type == IPA_HDR_PROC_L2TP_HEADER_REMOVE) {
+			struct ipa_hw_hdr_proc_ctx_remove_l2tp_hdr_cmd_seq *ctx;
+
+			ctx = (struct ipa_hw_hdr_proc_ctx_remove_l2tp_hdr_cmd_seq *)
+				(mem->base + entry->offset_entry->offset);
+			ctx->hdr_add.tlv.type = IPA_PROC_CTX_TLV_TYPE_HDR_ADD;
+			ctx->hdr_add.tlv.length = 1;
+			ctx->hdr_add.tlv.value = entry->hdr->hdr_len;
+			ctx->hdr_add.hdr_addr = (entry->hdr->is_hdr_proc_ctx) ?
+				entry->hdr->phys_base :
+				hdr_base_addr +
+				entry->hdr->offset_entry->offset;
+			IPADBG("header address 0x%x length %d\n",
+				ctx->hdr_add.hdr_addr, ctx->hdr_add.tlv.value);
+			ctx->l2tp_params.tlv.type = IPA_PROC_CTX_TLV_TYPE_PROC_CMD;
+			ctx->l2tp_params.tlv.length = 1;
+			ctx->l2tp_params.tlv.value =
+					IPA_HDR_UCP_L2TP_HEADER_REMOVE;
+			ctx->l2tp_params.l2tp_params.hdr_len_remove =
+				entry->l2tp_params.hdr_remove_param.hdr_len_remove;
+			ctx->l2tp_params.l2tp_params.eth_hdr_retained =
+				entry->l2tp_params.hdr_remove_param.eth_hdr_retained;
+
+			IPADBG("command id %d\n", ctx->l2tp_params.tlv.value);
 			ctx->end.type = IPA_PROC_CTX_TLV_TYPE_END;
 			ctx->end.length = 0;
 			ctx->end.value = 0;
@@ -575,6 +633,7 @@ static int __ipa_add_hdr_proc_ctx(struct ipa_hdr_proc_ctx_add *proc_ctx,
 
 	entry->type = proc_ctx->type;
 	entry->hdr = hdr_entry;
+	entry->l2tp_params = proc_ctx->l2tp_params;
 	if (add_ref_hdr)
 		hdr_entry->ref_cnt++;
 	entry->cookie = IPA_PROC_HDR_COOKIE;
