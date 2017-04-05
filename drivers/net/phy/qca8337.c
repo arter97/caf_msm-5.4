@@ -191,20 +191,17 @@ void qca8337_vlan_config(struct qca8337_priv *priv)
 static int qca8337_hw_init(struct qca8337_priv *priv)
 {
 	int i;
-	u32 val;
 
 	/* set pad control for cpu port */
-	qca8337_write(priv, QCA8337_REG_PAD0_CTRL,
-		      (QCA8337_PAD_RGMII_EN | QCA8337_PAD_RGMII_TXCLK_DELAY_EN |
-		      (0x1 << QCA8337_PAD_RGMII_TXCLK_DELAY_SEL_S) |
-		      (0x3 << QCA8337_PAD_RGMII_RXCLK_DELAY_SEL_S)));
+	qca8337_write(priv, QCA8337_REG_PAD0_CTRL, QCA8337_PAD_SGMII_EN);
 
 	qca8337_write(priv, QCA8337_REG_PAD5_CTRL,
 		      QCA8337_PAD_RGMII_RXCLK_DELAY_EN);
 
-	val = qca8337_read(priv, QCA8337_REG_PAD6_CTRL);
 	qca8337_write(priv, QCA8337_REG_PAD6_CTRL,
-		      (val | QCA8337_PAD_SGMII_EN));
+		      (QCA8337_PAD_RGMII_EN | QCA8337_PAD_RGMII_RXCLK_DELAY_EN |
+		      (0x1 << QCA8337_PAD_RGMII_TXCLK_DELAY_SEL_S) |
+		      (0x2 << QCA8337_PAD_RGMII_RXCLK_DELAY_SEL_S)));
 
 	/* Enable CPU Port */
 	qca8337_reg_set(priv, QCA8337_REG_GLOBAL_FW_CTRL0,
@@ -237,25 +234,12 @@ static int qca8337_hw_init(struct qca8337_priv *priv)
 
 void qca8337_reg_init_lan(struct qca8337_priv *priv)
 {
-	uint32_t val;
-
-	val = qca8337_read(priv, QCA8337_REG_POWER_ON_STRIP);
 	priv->ops->write(priv, QCA8337_REG_POWER_ON_STRIP,
-			 (val | QCA8337_PWS_SERDES_AEN));
-
+			 QCA8337_REG_POS_VAL);
+	priv->ops->write(priv, QCA8337_MAC_PWR_SEL ,
+			 QCA8337_MAC_PWR_SEL_VAL);
 	priv->ops->write(priv, QCA8337_SGMII_CTRL_REG,
-			 (QCA8337_SGMII_EN_PLL | QCA8337_SGMII_EN_RX |
-			 QCA8337_SGMII_EN_TX | QCA8337_SGMII_EN_SD |
-			 QCA8337_SGMII_BW_HIGH | QCA8337_SGMII_SEL_CLK125M |
-			 QCA8337_SGMII_TXDR_CTRL_600mV |
-			 QCA8337_SGMII_CDR_BW_8 |
-			 QCA8337_SGMII_DIS_AUTO_LPI_25M |
-			 QCA8337_SGMII_MODE_CTRL_SGMII_PHY |
-			 QCA8337_SGMII_PAUSE_SG_TX_EN_25M |
-			 QCA8337_SGMII_ASYM_PAUSE_25M |
-			 QCA8337_SGMII_PAUSE_25M |
-			 QCA8337_SGMII_HALF_DUPLEX_25M |
-			 QCA8337_SGMII_FULL_DUPLEX_25M));
+			 QCA8337_SGMII_CTRL_VAL);
 }
 
 static void
@@ -371,14 +355,18 @@ static void qca8337_phy_enable(struct phy_device *phydev)
 				      status);
 		}
 
-		phydev->pause = 0;
-		phydev->asym_pause = 0;
-
 		for (phyid = 0; phyid < priv->num_phy ; phyid++) {
 			phydev->addr = phyid;
 			genphy_setup_forced(phydev);
 		}
-		phydev->addr = addr;
+
+		for (phyid = 0; phyid < priv->num_phy ; phyid++) {
+			phydev->addr = phyid;
+			genphy_update_link(phydev);
+
+			if (phydev->link)
+				break;
+		}
 	}
 }
 
@@ -409,7 +397,7 @@ static int qca8337_read_status(struct phy_device *phydev)
 		}
 	}
 
-	qca8337_read_port_link(priv, phydev->addr, &port_link);
+	qca8337_read_port_link(priv, priv->cpu_port, &port_link);
 	phydev->link = (port_status) ? !!port_link.link : 0;
 	phydev->speed = speed;
 	phydev->duplex = duplex;
@@ -427,7 +415,7 @@ static int qca8337_aneg_done(struct phy_device *phydev)
 
 	for (phyid = 0; phyid < priv->num_phy ; phyid++) {
 		retval = mdiobus_read(bus, phyid, MII_BMSR);
-		if (retval)
+		if (retval < 0)
 			return retval;
 
 		(retval & BMSR_ANEGCOMPLETE) ?
@@ -562,7 +550,7 @@ static int qca8337_probe(struct phy_device *phydev)
 	}
 
 	dev_dbg(dev, "qca8337: Switch probed successfully ");
-	dev_err(dev, "[ver=%d, rev=%d, phy_id=%04x%04x]\n",
+	dev_dbg(dev, "[ver=%d, rev=%d, phy_id=%04x%04x]\n",
 		priv->chip_ver, priv->chip_rev,
 		mdiobus_read(priv->phy->bus, priv->phy->addr, 2),
 		mdiobus_read(priv->phy->bus, priv->phy->addr, 3));

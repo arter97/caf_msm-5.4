@@ -226,6 +226,8 @@
 #define QCA8337_REG_ATU_DATA1			0x604
 #define QCA8337_REG_ATU_DATA2			0x608
 
+#define QCA8337_GLOBAL_INT1	0x0024
+#define QCA8337_GLOBAL_INT1_MASK 0x002c
 
 /* port speed */
 enum {
