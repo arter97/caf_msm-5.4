@@ -90,6 +90,8 @@
 
 #define SESSION_MAX	0x08
 
+#define ASM_SHIFT_GAPLESS_MODE_FLAG	31
+#define ASM_SHIFT_LAST_BUFFER_FLAG	30
 #define SOFT_PAUSE_PERIOD       30   /* ramp up/down for 30ms */
 #define SOFT_PAUSE_STEP_LINEAR  0    /* Step value 0ms or 0us */
 #define SOFT_PAUSE_STEP         0    /* Step value 0ms or 0us */
@@ -132,6 +134,7 @@ struct audio_aio_write_param {
 	uint32_t msw_ts;
 	uint32_t lsw_ts;
 	uint32_t flags;
+	uint32_t last_buffer;
 };
 
 struct audio_aio_read_param {
@@ -170,7 +173,9 @@ struct audio_client {
 	uint32_t         io_mode;
 	uint64_t         time_stamp;
 	atomic_t         cmd_response;
+	struct apr_svc         *apr2;
 	bool             perf_mode;
+	int              stream_id;
 };
 
 void q6asm_audio_client_free(struct audio_client *ac);
@@ -204,6 +209,9 @@ int q6asm_open_write(struct audio_client *ac, uint32_t format);
 int q6asm_open_write_v2(struct audio_client *ac, uint32_t format,
 			uint16_t bits_per_sample);
 
+int q6asm_stream_open_write_v2(struct audio_client *ac, uint32_t format,
+				uint16_t bits_per_sample, int32_t stream_id,
+				bool is_gapless_mode);
 int q6asm_open_write_compressed(struct audio_client *ac,
 					 uint32_t format);
 
@@ -247,11 +255,17 @@ int q6asm_run(struct audio_client *ac, uint32_t flags,
 int q6asm_run_nowait(struct audio_client *ac, uint32_t flags,
 		uint32_t msw_ts, uint32_t lsw_ts);
 
+int q6asm_stream_run_nowait(struct audio_client *ac, uint32_t flags,
+		uint32_t msw_ts, uint32_t lsw_ts, uint32_t stream_id);
 int q6asm_reg_tx_overflow(struct audio_client *ac, uint16_t enable);
 
 int q6asm_cmd(struct audio_client *ac, int cmd);
 
+int q6asm_stream_cmd(struct audio_client *ac, int cmd, uint32_t stream_id);
+
 int q6asm_cmd_nowait(struct audio_client *ac, int cmd);
+int q6asm_stream_cmd_nowait(struct audio_client *ac, int cmd,
+			    uint32_t stream_id);
 
 void *q6asm_is_cpu_buf_avail(int dir, struct audio_client *ac,
 				uint32_t *size, uint32_t *idx);
@@ -317,6 +331,12 @@ int q6asm_media_format_block_pcm_v2(struct audio_client *ac,
 int q6asm_media_format_block_multi_ch_pcm(struct audio_client *ac,
 				uint32_t rate, uint32_t channels);
 
+int q6asm_stream_media_format_block_multi_ch_pcm_v2(struct audio_client *ac,
+						uint32_t rate,
+						uint32_t channels,
+						uint16_t bits_per_sample,
+						int stream_id);
+
 int q6asm_media_format_block_multi_ch_pcm_v2(struct audio_client *ac,
 					     uint32_t rate,
 					     uint32_t channels,
@@ -328,17 +348,33 @@ int q6asm_media_format_block_aac(struct audio_client *ac,
 int q6asm_media_format_block_amrwbplus(struct audio_client *ac,
 					struct asm_amrwbplus_cfg *cfg);
 
+int q6asm_stream_media_format_block_aac(struct audio_client *ac,
+			struct asm_aac_cfg *cfg);
+
 int q6asm_media_format_block_multi_aac(struct audio_client *ac,
 			struct asm_aac_cfg *cfg);
+
+int q6asm_stream_media_format_block_multi_aac(struct audio_client *ac,
+			struct asm_aac_cfg *cfg, int stream_id);
 
 int q6asm_media_format_block_wma(struct audio_client *ac,
 			void *cfg);
 
+int q6asm_stream_media_format_block_wma(struct audio_client *ac,
+			void *cfg, int stream_id);
+
 int q6asm_media_format_block_wmapro(struct audio_client *ac,
 			void *cfg);
 
+int q6asm_stream_media_format_block_wmapro(struct audio_client *ac,
+			void *cfg, int stream_id);
+
 int q6asm_media_format_block_flac(struct audio_client *ac,
 			struct asm_flac_cfg *cfg);
+
+
+int q6asm_stream_media_format_block_flac(struct audio_client *ac,
+			struct asm_flac_cfg *cfg, int stream_id);
 
 /* PP specific */
 int q6asm_equalizer(struct audio_client *ac, void *eq);
