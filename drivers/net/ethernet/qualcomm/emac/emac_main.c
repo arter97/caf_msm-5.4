@@ -598,6 +598,8 @@ static void emac_poll_hwtxtstamp(struct emac_adapter *adpt)
 				 */
 				while ((pskb = __skb_dequeue(pending_q))
 				       != skb) {
+					if (!pskb)
+						break;
 					EMAC_HWTXTSTAMP_CB(pskb)->sec = 0;
 					EMAC_HWTXTSTAMP_CB(pskb)->ns = 0;
 					__skb_queue_tail(q, pskb);
@@ -1055,7 +1057,8 @@ static void emac_tx_map(struct emac_adapter *adpt,
 	/* The last buffer info contain the skb address,
 	 * so it will be freed after unmap
 	 */
-	tpbuf->skb = skb;
+	if (tpbuf)
+		tpbuf->skb = skb;
 }
 
 /* Transmit the packet using specified transmit queue */
@@ -1152,7 +1155,8 @@ static irqreturn_t emac_wol_isr(int irq, void *data)
 	pm_runtime_get_sync(netdev->dev.parent);
 
 	/* read switch interrupt status reg */
-	ret = qca8337_read(adpt->phydev->priv, 0x0024);
+	if (QCA8337_PHY_ID == adpt->phydev->phy_id)
+		ret = qca8337_read(adpt->phydev->priv, QCA8337_GLOBAL_INT1);
 
 	for (i = 0; i < QCA8337_NUM_PHYS ; i++) {
 		ret = mdiobus_read(adpt->phydev->bus, i, MII_INT_STATUS);
@@ -2837,7 +2841,9 @@ static int emac_pm_suspend(struct device *device, bool wol_enable)
 		}
 
 		/* enable switch interrupts */
-		qca8337_write(adpt->phydev->priv, 0x002c, 0x8000);
+		if (QCA8337_PHY_ID == adpt->phydev->phy_id)
+			qca8337_write(adpt->phydev->priv,
+				      QCA8337_GLOBAL_INT1_MASK, 0x8000);
 
 		if (wol_enable && phy->is_wol_irq_reg)
 			emac_wol_gpio_irq(adpt, true);
@@ -2871,7 +2877,8 @@ static int emac_pm_resume(struct device *device)
 	}
 
 	/* disable switch interrupts */
-	qca8337_write(adpt->phydev->priv, 0x0024, 0x8000);
+	if (QCA8337_PHY_ID == adpt->phydev->phy_id)
+		qca8337_write(adpt->phydev->priv, QCA8337_GLOBAL_INT1, 0x8000);
 
 	phy_resume(adpt->phydev);
 
