@@ -12,11 +12,11 @@
 
 /dts-v1/;
 
-#include "sdxhedgehog-cdp.dtsi"
+#include "sdx20-cdp.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. SDX HEDGEHOG CDP - DWIFI";
-	compatible = "qcom,sdxhedgehog-cdp", "qcom,sdxhedgehog",
+	model = "Qualcomm Technologies, Inc. SDX20 CDP - DWIFI";
+	compatible = "qcom,sdx20-cdp", "qcom,sdx20",
 		     "qcom,cdp";
 	qcom,board-id = <1 0x2>, <1 0x102>;
 };
@@ -38,6 +38,7 @@
 
 	qcom,clk-rates = <400000 20000000 25000000 50000000>;
 	qcom,bus-width = <4>;
+	qcom,core_3_0v_support;
 	qcom,nonremovable;
 
 	pinctrl-names = "active", "sleep";

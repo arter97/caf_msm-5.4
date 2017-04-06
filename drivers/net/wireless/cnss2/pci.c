@@ -11,7 +11,9 @@
  */
 
 #include <linux/firmware.h>
+#include <linux/irq.h>
 #include <linux/module.h>
+#include <linux/msi.h>
 #include <linux/of.h>
 #include <linux/pm_runtime.h>
 
@@ -49,6 +51,13 @@ module_param(pci_link_down_panic, uint, S_IRUSR | S_IWUSR);
 MODULE_PARM_DESC(pci_link_down_panic,
 		 "Trigger kernel panic when PCI link down is detected");
 
+static bool fbc_bypass;
+#ifdef CONFIG_CNSS2_DEBUG
+module_param(fbc_bypass, bool, S_IRUSR | S_IWUSR);
+MODULE_PARM_DESC(fbc_bypass,
+		 "Bypass firmware download when loading WLAN driver");
+#endif
+
 static int cnss_set_pci_config_space(struct cnss_pci_data *pci_priv, bool save)
 {
 	int ret = 0;
@@ -60,7 +69,7 @@ static int cnss_set_pci_config_space(struct cnss_pci_data *pci_priv, bool save)
 		return -ENODEV;
 
 	link_down_or_recovery = pci_priv->pci_link_down_ind ||
-		(plat_priv->driver_status == CNSS_RECOVERY);
+		(test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state));
 
 	if (save) {
 		if (link_down_or_recovery) {
@@ -98,7 +107,7 @@ static int cnss_set_pci_link(struct cnss_pci_data *pci_priv, bool link_up)
 		return -ENODEV;
 
 	link_down_or_recovery = pci_priv->pci_link_down_ind ||
-		(plat_priv->driver_status == CNSS_RECOVERY);
+		(test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state));
 
 	ret = msm_pcie_pm_control(link_up ? MSM_PCIE_RESUME :
 				  MSM_PCIE_SUSPEND,
@@ -365,9 +374,15 @@ static int cnss_pci_suspend(struct device *dev)
 	if (driver_ops && driver_ops->suspend) {
 		ret = driver_ops->suspend(pci_dev, state);
 		if (pci_priv->pci_link_state) {
+			if (cnss_pci_set_mhi_state(pci_priv,
+						   CNSS_MHI_SUSPEND)) {
+				driver_ops->resume(pci_dev);
+				ret = -EAGAIN;
+				goto out;
+			}
+
 			cnss_set_pci_config_space(pci_priv,
 						  SAVE_PCI_CONFIG_SPACE);
-			cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_SUSPEND);
 		}
 	}
 
@@ -799,7 +814,7 @@ static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	int num_vectors;
 	struct cnss_msi_config *msi_config;
-	uint32_t ep_base_data;
+	struct msi_desc *msi_desc;
 
 	ret = cnss_pci_get_msi_assignment(pci_priv);
 	if (ret) {
@@ -824,12 +839,25 @@ static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 		goto reset_msi_config;
 	}
 
-	pci_read_config_dword(pci_dev, pci_dev->msi_cap + PCI_MSI_DATA_64,
-			      &ep_base_data);
-	pci_priv->msi_ep_base_data = ep_base_data & 0xFFFF;
+	msi_desc = irq_get_msi_desc(pci_dev->irq);
+	if (!msi_desc) {
+		cnss_pr_err("msi_desc is NULL!\n");
+		ret = -EINVAL;
+		goto disable_msi;
+	}
+
+	pci_priv->msi_ep_base_data = msi_desc->msg.data;
+	if (!pci_priv->msi_ep_base_data) {
+		cnss_pr_err("Got 0 MSI base data!\n");
+		CNSS_ASSERT(0);
+	}
+
+	cnss_pr_dbg("MSI base data is %d\n", pci_priv->msi_ep_base_data);
 
 	return 0;
 
+disable_msi:
+	pci_disable_msi(pci_priv->pci_dev);
 reset_msi_config:
 	pci_priv->msi_config = NULL;
 out:
@@ -1194,6 +1222,9 @@ int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 		return -ENODEV;
 	}
 
+	if (fbc_bypass)
+		return 0;
+
 	ret = cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_INIT);
 	if (ret)
 		goto out;
@@ -1216,6 +1247,9 @@ void cnss_pci_stop_mhi(struct cnss_pci_data *pci_priv)
 		cnss_pr_err("pci_priv is NULL!\n");
 		return;
 	}
+
+	if (fbc_bypass)
+		return;
 
 	cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_POWER_OFF);
 	cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_DEINIT);

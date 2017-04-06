@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -490,11 +490,6 @@ static ssize_t gsi_enable_dp_stats(struct file *file,
 		goto error;
 	}
 
-	if (gsi_ctx->chan[ch_id].props.prot == GSI_CHAN_PROT_GPI) {
-		TERR("valid for non GPI channels only\n");
-		goto error;
-	}
-
 	if (gsi_ctx->chan[ch_id].enable_dp_stats == enable) {
 		TERR("ch_%d: already enabled/disabled\n", ch_id);
 		return -EFAULT;
@@ -631,7 +626,7 @@ static void gsi_dbg_update_ch_dp_stats(struct gsi_chan_ctx *ctx)
 	else
 		used_hw = ctx->ring.max_num_elem + 1 - (start_hw - end_hw);
 
-	TERR("ch %d used %d\n", ctx->props.ch_id, used_hw);
+	TDBG("ch %d used %d\n", ctx->props.ch_id, used_hw);
 	gsi_update_ch_dp_stats(ctx, used_hw);
 }
 
@@ -641,7 +636,6 @@ static void gsi_wq_update_dp_stats(struct work_struct *work)
 
 	for (ch_id = 0; ch_id < gsi_ctx->max_ch; ch_id++) {
 		if (gsi_ctx->chan[ch_id].allocated &&
-		    gsi_ctx->chan[ch_id].props.prot != GSI_CHAN_PROT_GPI &&
 		    gsi_ctx->chan[ch_id].enable_dp_stats)
 			gsi_dbg_update_ch_dp_stats(&gsi_ctx->chan[ch_id]);
 	}
@@ -747,6 +741,45 @@ error:
 	return -EFAULT;
 }
 
+static ssize_t gsi_enable_ipc_low(struct file *file,
+	const char __user *ubuf, size_t count, loff_t *ppos)
+{
+	unsigned long missing;
+	s8 option = 0;
+
+	if (sizeof(dbg_buff) < count + 1)
+		return -EFAULT;
+
+	missing = copy_from_user(dbg_buff, ubuf, count);
+	if (missing)
+		return -EFAULT;
+
+	dbg_buff[count] = '\0';
+	if (kstrtos8(dbg_buff, 0, &option))
+		return -EFAULT;
+
+	if (option) {
+		if (!gsi_ctx->ipc_logbuf_low) {
+			gsi_ctx->ipc_logbuf_low =
+				ipc_log_context_create(GSI_IPC_LOG_PAGES,
+					"gsi_low", 0);
+		}
+
+		if (gsi_ctx->ipc_logbuf_low == NULL) {
+			TERR("failed to get ipc_logbuf_low\n");
+			return -EFAULT;
+		}
+	} else {
+		if (gsi_ctx->ipc_logbuf_low)
+			ipc_log_context_destroy(gsi_ctx->ipc_logbuf_low);
+		gsi_ctx->ipc_logbuf_low = NULL;
+	}
+
+	return count;
+}
+
+
+
 const struct file_operations gsi_ev_dump_ops = {
 	.write = gsi_dump_evt,
 };
@@ -781,6 +814,10 @@ const struct file_operations gsi_rst_stats_ops = {
 
 const struct file_operations gsi_print_dp_stats_ops = {
 	.write = gsi_print_dp_stats,
+};
+
+const struct file_operations gsi_ipc_low_ops = {
+	.write = gsi_enable_ipc_low,
 };
 
 void gsi_debugfs_init(void)
@@ -855,6 +892,13 @@ void gsi_debugfs_init(void)
 		write_only_mode, dent, 0, &gsi_print_dp_stats_ops);
 	if (!dfile || IS_ERR(dfile)) {
 		TERR("fail to create stats file\n");
+		goto fail;
+	}
+
+	dfile = debugfs_create_file("ipc_low", write_only_mode,
+		dent, 0, &gsi_ipc_low_ops);
+	if (!dfile || IS_ERR(dfile)) {
+		TERR("could not create ipc_low\n");
 		goto fail;
 	}
 
