@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, 2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -717,6 +717,25 @@ static int msm_csiphy_init(struct csiphy_device *csiphy_dev)
 		return rc;
 	}
 
+	rc = msm_camera_config_vreg(&csiphy_dev->pdev->dev,
+		csiphy_dev->csiphy_vreg,
+		csiphy_dev->regulator_count, NULL, 0,
+		&csiphy_dev->csiphy_reg_ptr[0], 1);
+	if (rc < 0) {
+		pr_err("%s:%d csiphy config_vreg failed\n",
+			__func__, __LINE__);
+		goto csiphy_vreg_config_fail;
+	}
+	rc = msm_camera_enable_vreg(&csiphy_dev->pdev->dev,
+		csiphy_dev->csiphy_vreg,
+		csiphy_dev->regulator_count, NULL, 0,
+		&csiphy_dev->csiphy_reg_ptr[0], 1);
+	if (rc < 0) {
+		pr_err("%s:%d csiphy enable_vreg failed\n",
+			__func__, __LINE__);
+		goto top_vreg_enable_failed;
+	}
+
 	csiphy_dev->base = ioremap(csiphy_dev->mem->start,
 		resource_size(csiphy_dev->mem));
 	if (!csiphy_dev->base) {
@@ -796,6 +815,16 @@ csiphy_base_fail:
 	iounmap(csiphy_dev->base);
 	csiphy_dev->base = NULL;
 ioremap_fail:
+	msm_camera_enable_vreg(&csiphy_dev->pdev->dev,
+		csiphy_dev->csiphy_vreg,
+		csiphy_dev->regulator_count, NULL, 0,
+		&csiphy_dev->csiphy_reg_ptr[0], 0);
+top_vreg_enable_failed:
+	msm_camera_config_vreg(&csiphy_dev->pdev->dev,
+		csiphy_dev->csiphy_vreg,
+		csiphy_dev->regulator_count, NULL, 0,
+		&csiphy_dev->csiphy_reg_ptr[0], 0);
+csiphy_vreg_config_fail:
 	if (cam_config_ahb_clk(CAM_AHB_CLIENT_CSIPHY,
 		CAMERA_AHB_SUSPEND_VOTE) < 0)
 		pr_err("%s: failed to vote for AHB\n", __func__);
@@ -830,6 +859,25 @@ static int msm_csiphy_init(struct csiphy_device *csiphy_dev)
 	if (rc < 0) {
 		pr_err("%s: failed to vote for AHB\n", __func__);
 		return rc;
+	}
+
+	rc = msm_camera_config_vreg(&csiphy_dev->pdev->dev,
+		csiphy_dev->csiphy_vreg,
+		csiphy_dev->regulator_count, NULL, 0,
+		&csiphy_dev->csiphy_reg_ptr[0], 1);
+	if (rc < 0) {
+		pr_err("%s:%d csiphy config_vreg failed\n",
+			__func__, __LINE__);
+		goto csiphy_vreg_config_fail;
+	}
+	rc = msm_camera_enable_vreg(&csiphy_dev->pdev->dev,
+		csiphy_dev->csiphy_vreg,
+		csiphy_dev->regulator_count, NULL, 0,
+		&csiphy_dev->csiphy_reg_ptr[0], 1);
+	if (rc < 0) {
+		pr_err("%s:%d csiphy enable_vreg failed\n",
+			__func__, __LINE__);
+		goto top_vreg_enable_failed;
 	}
 
 	csiphy_dev->base = ioremap(csiphy_dev->mem->start,
@@ -908,6 +956,16 @@ csiphy_base_fail:
 	iounmap(csiphy_dev->base);
 	csiphy_dev->base = NULL;
 ioremap_fail:
+	msm_camera_enable_vreg(&csiphy_dev->pdev->dev,
+		csiphy_dev->csiphy_vreg,
+		csiphy_dev->regulator_count, NULL, 0,
+		&csiphy_dev->csiphy_reg_ptr[0], 0);
+top_vreg_enable_failed:
+	msm_camera_config_vreg(&csiphy_dev->pdev->dev,
+		csiphy_dev->csiphy_vreg,
+		csiphy_dev->regulator_count, NULL, 0,
+		&csiphy_dev->csiphy_reg_ptr[0], 0);
+csiphy_vreg_config_fail:
 	if (cam_config_ahb_clk(CAM_AHB_CLIENT_CSIPHY,
 		CAMERA_AHB_SUSPEND_VOTE) < 0)
 		pr_err("%s: failed to vote for AHB\n", __func__);
@@ -1020,6 +1078,15 @@ static int msm_csiphy_release(struct csiphy_device *csiphy_dev, void *arg)
 	}
 	iounmap(csiphy_dev->base);
 	csiphy_dev->base = NULL;
+
+	msm_camera_enable_vreg(&csiphy_dev->pdev->dev,
+		csiphy_dev->csiphy_vreg,
+		csiphy_dev->regulator_count, NULL, 0,
+		&csiphy_dev->csiphy_reg_ptr[0], 0);
+	msm_camera_config_vreg(&csiphy_dev->pdev->dev,
+		csiphy_dev->csiphy_vreg, csiphy_dev->regulator_count,
+		NULL, 0, &csiphy_dev->csiphy_reg_ptr[0], 0);
+
 	csiphy_dev->csiphy_state = CSIPHY_POWER_DOWN;
 
 	rc = cam_config_ahb_clk(CAM_AHB_CLIENT_CSIPHY, CAMERA_AHB_SUSPEND_VOTE);
@@ -1132,6 +1199,15 @@ static int msm_csiphy_release(struct csiphy_device *csiphy_dev, void *arg)
 
 	iounmap(csiphy_dev->base);
 	csiphy_dev->base = NULL;
+
+	msm_camera_enable_vreg(&csiphy_dev->pdev->dev,
+		csiphy_dev->csiphy_vreg,
+		csiphy_dev->regulator_count, NULL, 0,
+		&csiphy_dev->csiphy_reg_ptr[0], 0);
+	msm_camera_config_vreg(&csiphy_dev->pdev->dev,
+		csiphy_dev->csiphy_vreg, csiphy_dev->regulator_count,
+		NULL, 0, &csiphy_dev->csiphy_reg_ptr[0], 0);
+
 	csiphy_dev->csiphy_state = CSIPHY_POWER_DOWN;
 	if (cam_config_ahb_clk(CAM_AHB_CLIENT_CSIPHY,
 		 CAMERA_AHB_SUSPEND_VOTE) < 0)
@@ -1378,6 +1454,15 @@ static int csiphy_probe(struct platform_device *pdev)
 		of_property_read_u32((&pdev->dev)->of_node,
 			"cell-index", &pdev->id);
 		CDBG("%s: device id = %d\n", __func__, pdev->id);
+	}
+
+	rc = msm_camera_get_dt_vreg_data(pdev->dev.of_node,
+		&(new_csiphy_dev->csiphy_vreg),
+		&(new_csiphy_dev->regulator_count));
+	if (rc < 0) {
+		pr_err("%s: get vreg data from dtsi fail\n", __func__);
+		rc = -EFAULT;
+		goto csiphy_no_resource;
 	}
 
 	rc = msm_csiphy_get_clk_info(new_csiphy_dev, pdev);
