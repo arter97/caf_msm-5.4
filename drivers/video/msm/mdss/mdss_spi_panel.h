@@ -11,7 +11,6 @@
  *
  */
 
-
 #ifndef __MDSS_SPI_PANEL_H__
 #define __MDSS_SPI_PANEL_H__
 
@@ -102,15 +101,20 @@ struct spi_panel_data {
 	int pwm_enabled;
 	int bklt_max;
 };
-int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
-				char *buf, int len, int stride);
-#else
 
 int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
+				char *buf, int len, int stride);
+int is_spi_panel_continuous_splash_on(struct mdss_panel_data *pdata);
+#else
+static inline int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
 				char *buf, int len, int stride){
 	return 0;
 }
-
+static inline int is_spi_panel_continuous_splash_on(
+				struct mdss_panel_data *pdata)
+{
+	return 0;
+}
 #endif/* End of CONFIG_FB_MSM_MDSS_SPI_PANEL && ONFIG_SPI_QUP */
 
 #endif /* End of __MDSS_SPI_PANEL_H__ */

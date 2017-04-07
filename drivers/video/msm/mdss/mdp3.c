@@ -55,6 +55,7 @@
 #include "mdp3_ctrl.h"
 #include "mdp3_ppp.h"
 #include "mdss_debug.h"
+#include "mdss_spi_panel.h"
 
 #define MISR_POLL_SLEEP                 2000
 #define MISR_POLL_TIMEOUT               32000
@@ -2094,6 +2095,8 @@ static int mdp3_is_display_on(struct mdss_panel_data *pdata)
 	if (pdata->panel_info.type == MIPI_VIDEO_PANEL) {
 		status = MDP3_REG_READ(MDP3_REG_DSI_VIDEO_EN);
 		rc = status & 0x1;
+	} else if (pdata->panel_info.type == SPI_PANEL) {
+		rc = is_spi_panel_continuous_splash_on(pdata);
 	} else {
 		status = MDP3_REG_READ(MDP3_REG_DMA_P_CONFIG);
 		status &= 0x180000;
