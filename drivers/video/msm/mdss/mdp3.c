@@ -1860,6 +1860,11 @@ int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data, int client)
 		} else if (client == MDP3_CLINET_SPI) {
 			void *vaddr;
 
+			if (ion_handle_get_size(iclient, data->srcp_ihdl, len)
+				< 0) {
+				pr_err("%s: get ion size failed\n", __func__);
+				return -EINVAL;
+			}
 			vaddr = ion_map_kernel(iclient, data->srcp_ihdl);
 			if (IS_ERR_OR_NULL(vaddr)) {
 				pr_err("%s: ION memory mapping failed\n",
