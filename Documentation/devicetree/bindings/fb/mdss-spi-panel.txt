@@ -134,6 +134,8 @@ Required properties:
 			    with the supply entry index. For a detailed description of
 			    fields in the supply entry, refer to the qcom,ctrl-supply-entries
 			    binding above.
+- qcom,platform-spi-dc-gpio: Pull down this gpio indicate current package is command,
+	Pull up this gpio indicate current package is parameter or pixel.
 
 Optional properties:
 - label:A string used to describe the controller used.
@@ -156,6 +158,7 @@ Example:
 		qcom,mdss-mdp = <&mdss_mdp>;
 		vdd-supply = <&pm8909_l17>;
 		vddio-supply = <&pm8909_l6>;
+		qcom,platform-spi-dc-gpio = <&msm_gpio 110 0>;
 
 		qcom,panel-supply-entries {
 		#address-cells = <1>;

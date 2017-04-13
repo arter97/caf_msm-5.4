@@ -220,7 +220,6 @@
 			reg = <0>;
 			compatible = "qcom,mdss-spi-client";
 			label = "MDSS SPI QUP5 CLIENT";
-			dc-gpio = <&msm_gpio 110 0>;
 			spi-max-frequency = <50000000>;
 		};
 	};
@@ -269,4 +268,5 @@
 
 	qcom,platform-te-gpio = <&msm_gpio 24 0>;
 	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
+	qcom,platform-spi-dc-gpio = <&msm_gpio 110 0>;
 };
