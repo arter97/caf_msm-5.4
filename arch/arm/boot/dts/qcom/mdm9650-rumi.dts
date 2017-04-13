@@ -12,13 +12,13 @@
 
 /dts-v1/;
 
-#include "mdmcalifornium.dtsi"
-#include "mdmcalifornium-pinctrl.dtsi"
+#include "mdm9650.dtsi"
+#include "mdm9650-pinctrl.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. MDM Californium RUMI";
-	compatible = "qcom,mdmcalifornium-rumi",
-		   "qcom,mdmcalifornium", "qcom,rumi";
+	model = "Qualcomm Technologies, Inc. MDM 9650 RUMI";
+	compatible = "qcom,mdm9650-rumi",
+		   "qcom,mdm9650", "qcom,rumi";
 	qcom,board-id = <15 0>;
 };
 

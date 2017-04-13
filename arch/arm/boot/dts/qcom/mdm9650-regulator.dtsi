@@ -14,11 +14,11 @@
 #include <dt-bindings/regulator/qcom,rpm-smd-regulator.h>
 
 &rpm_bus {
-	/* PMDCALIFORNIUM S1 = VDD_MSS supply */
+	/* PMD9650 S1 = VDD_MSS supply */
 	rpm-regulator-smpa1 {
 		status = "okay";
-		pmdcalifornium_s1: regulator-s1 {
-			regulator-name = "pmdcalifornium_s1";
+		pmd9650_s1: regulator-s1 {
+			regulator-name = "pmd9650_s1";
 			regulator-min-microvolt = <800000>;
 			regulator-max-microvolt = <800000>;
 			qcom,init-voltage = <800000>;
@@ -28,8 +28,8 @@
 
 	rpm-regulator-smpa2 {
 		status = "okay";
-		pmdcalifornium_s2: regulator-s2 {
-			regulator-name = "pmdcalifornium_s2";
+		pmd9650_s2: regulator-s2 {
+			regulator-name = "pmd9650_s2";
 			regulator-min-microvolt = <1256000>;
 			regulator-max-microvolt = <1256000>;
 			qcom,init-voltage = <1256000>;
@@ -39,8 +39,8 @@
 
 	rpm-regulator-smpa3 {
 		status = "okay";
-		pmdcalifornium_s3: regulator-s3 {
-			regulator-name = "pmdcalifornium_s3";
+		pmd9650_s3: regulator-s3 {
+			regulator-name = "pmd9650_s3";
 			regulator-min-microvolt = <1024000>;
 			regulator-max-microvolt = <1024000>;
 			qcom,init-voltage = <1024000>;
@@ -50,8 +50,8 @@
 
 	rpm-regulator-smpa4 {
 		status = "okay";
-		pmdcalifornium_s4: regulator-s4 {
-			regulator-name = "pmdcalifornium_s4";
+		pmd9650_s4: regulator-s4 {
+			regulator-name = "pmd9650_s4";
 			regulator-min-microvolt = <1856000>;
 			regulator-max-microvolt = <1856000>;
 			qcom,init-voltage = <1856000>;
@@ -59,12 +59,12 @@
 		};
 	};
 
-	/* PMDCALIFORNIUM S5 = VDD_CX supply */
+	/* PMD9650 S5 = VDD_CX supply */
 	rpm-regulator-smpa5 {
 		status = "okay";
-		pmdcalifornium_s5_level: regulator-s5-level {
+		pmd9650_s5_level: regulator-s5-level {
 			compatible = "qcom,rpm-smd-regulator";
-			regulator-name = "pmdcalifornium_s5_level";
+			regulator-name = "pmd9650_s5_level";
 			qcom,set = <3>;
 			regulator-min-microvolt =
 					<RPM_SMD_REGULATOR_LEVEL_RETENTION>;
@@ -73,9 +73,9 @@
 			qcom,use-voltage-level;
 		};
 
-		pmdcalifornium_s5_level_ao: regulator-s5-level-ao {
+		pmd9650_s5_level_ao: regulator-s5-level-ao {
 			compatible = "qcom,rpm-smd-regulator";
-			regulator-name = "pmdcalifornium_s5_level_ao";
+			regulator-name = "pmd9650_s5_level_ao";
 			qcom,set = <1>;
 			regulator-min-microvolt =
 					<RPM_SMD_REGULATOR_LEVEL_RETENTION>;
@@ -84,9 +84,9 @@
 			qcom,use-voltage-level;
 		};
 
-		pmdcalifornium_s5_floor_level: regulator-s5-floor-level {
+		pmd9650_s5_floor_level: regulator-s5-floor-level {
 			compatible = "qcom,rpm-smd-regulator";
-			regulator-name = "pmdcalifornium_s5_floor_level";
+			regulator-name = "pmd9650_s5_floor_level";
 			qcom,set = <3>;
 			regulator-min-microvolt =
 					<RPM_SMD_REGULATOR_LEVEL_RETENTION>;
@@ -98,8 +98,8 @@
 
 	rpm-regulator-ldoa1 {
 		status = "okay";
-		pmdcalifornium_l1: regulator-l1 {
-			regulator-name = "pmdcalifornium_l1";
+		pmd9650_l1: regulator-l1 {
+			regulator-name = "pmd9650_l1";
 			regulator-min-microvolt = <1224000>;
 			regulator-max-microvolt = <1224000>;
 			qcom,init-voltage = <1224000>;
@@ -109,8 +109,8 @@
 
 	rpm-regulator-ldoa2 {
 		status = "okay";
-		pmdcalifornium_l2: regulator-l2 {
-			regulator-name = "pmdcalifornium_l2";
+		pmd9650_l2: regulator-l2 {
+			regulator-name = "pmd9650_l2";
 			regulator-min-microvolt = <1200000>;
 			regulator-max-microvolt = <1200000>;
 			qcom,init-voltage = <1200000>;
@@ -120,8 +120,8 @@
 
 	rpm-regulator-ldoa3 {
 		status = "okay";
-		pmdcalifornium_l3: regulator-l3 {
-			regulator-name = "pmdcalifornium_l3";
+		pmd9650_l3: regulator-l3 {
+			regulator-name = "pmd9650_l3";
 			regulator-min-microvolt = <1000000>;
 			regulator-max-microvolt = <1000000>;
 			qcom,init-voltage = <1000000>;
@@ -131,8 +131,8 @@
 
 	rpm-regulator-ldoa4 {
 		status = "okay";
-		pmdcalifornium_l4: regulator-l4 {
-			regulator-name = "pmdcalifornium_l4";
+		pmd9650_l4: regulator-l4 {
+			regulator-name = "pmd9650_l4";
 			regulator-min-microvolt = <928000>;
 			regulator-max-microvolt = <928000>;
 			qcom,init-voltage = <928000>;
@@ -142,8 +142,8 @@
 
 	rpm-regulator-ldoa5 {
 		status = "okay";
-		pmdcalifornium_l5: regulator-l5 {
-			regulator-name = "pmdcalifornium_l5";
+		pmd9650_l5: regulator-l5 {
+			regulator-name = "pmd9650_l5";
 			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <1800000>;
 			qcom,init-voltage = <1800000>;
@@ -153,8 +153,8 @@
 
 	rpm-regulator-ldoa6 {
 		status = "okay";
-		pmdcalifornium_l6: regulator-l6 {
-			regulator-name = "pmdcalifornium_l6";
+		pmd9650_l6: regulator-l6 {
+			regulator-name = "pmd9650_l6";
 			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <1800000>;
 			qcom,init-voltage = <1800000>;
@@ -164,8 +164,8 @@
 
 	rpm-regulator-ldoa7 {
 		status = "okay";
-		pmdcalifornium_l7: regulator-l7 {
-			regulator-name = "pmdcalifornium_l7";
+		pmd9650_l7: regulator-l7 {
+			regulator-name = "pmd9650_l7";
 			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <2848000>;
 			qcom,init-voltage = <1800000>;
@@ -175,8 +175,8 @@
 
 	rpm-regulator-ldoa8 {
 		status = "okay";
-		pmdcalifornium_l8: regulator-l8 {
-			regulator-name = "pmdcalifornium_l8";
+		pmd9650_l8: regulator-l8 {
+			regulator-name = "pmd9650_l8";
 			regulator-min-microvolt = <1000000>;
 			regulator-max-microvolt = <1000000>;
 			qcom,init-voltage = <1000000>;
@@ -184,12 +184,12 @@
 		};
 	};
 
-	/* PMDCALIFORNIUM L9 = VDD_MX supply */
+	/* PMD9650 L9 = VDD_MX supply */
 	rpm-regulator-ldoa9 {
 		status = "okay";
-		pmdcalifornium_l9_level: regulator-l9-level {
+		pmd9650_l9_level: regulator-l9-level {
 			compatible = "qcom,rpm-smd-regulator";
-			regulator-name = "pmdcalifornium_l9_level";
+			regulator-name = "pmd9650_l9_level";
 			qcom,set = <3>;
 			regulator-min-microvolt =
 					<RPM_SMD_REGULATOR_LEVEL_RETENTION>;
@@ -201,8 +201,8 @@
 
 	rpm-regulator-ldoa10 {
 		status = "okay";
-		pmdcalifornium_l10: regulator-l10 {
-			regulator-name = "pmdcalifornium_l10";
+		pmd9650_l10: regulator-l10 {
+			regulator-name = "pmd9650_l10";
 			regulator-min-microvolt = <3088000>;
 			regulator-max-microvolt = <3088000>;
 			qcom,init-voltage = <3088000>;
@@ -212,8 +212,8 @@
 
 	rpm-regulator-ldoa11 {
 		status = "okay";
-		pmdcalifornium_l11: regulator-l11 {
-			regulator-name = "pmdcalifornium_l11";
+		pmd9650_l11: regulator-l11 {
+			regulator-name = "pmd9650_l11";
 			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <2848000>;
 			qcom,init-voltage = <1800000>;
@@ -223,8 +223,8 @@
 
 	rpm-regulator-ldoa12 {
 		status = "okay";
-		pmdcalifornium_l12: regulator-l12 {
-			regulator-name = "pmdcalifornium_l12";
+		pmd9650_l12: regulator-l12 {
+			regulator-name = "pmd9650_l12";
 			regulator-min-microvolt = <2704000>;
 			regulator-max-microvolt = <2704000>;
 			qcom,init-voltage = <2704000>;
@@ -234,8 +234,8 @@
 
 	rpm-regulator-ldoa13 {
 		status = "okay";
-		pmdcalifornium_l13: regulator-l13 {
-			regulator-name = "pmdcalifornium_l13";
+		pmd9650_l13: regulator-l13 {
+			regulator-name = "pmd9650_l13";
 			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <2848000>;
 			qcom,init-voltage = <1800000>;
@@ -257,7 +257,7 @@
 		regulator-name = "rome_vreg";
 		startup-delay-us = <4000>;
 		enable-active-high;
-		gpio = <&pmdcalifornium_gpios 6 0>;
+		gpio = <&pmd9650_gpios 6 0>;
 	};
 
 	/* SD card 2.95 V supply */

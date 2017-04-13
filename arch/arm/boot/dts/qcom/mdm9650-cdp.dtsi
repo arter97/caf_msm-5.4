@@ -1,4 +1,4 @@
-/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,8 +11,10 @@
  */
 
 #include <dt-bindings/interrupt-controller/irq.h>
-#include "mdmcalifornium-v1.1.dtsi"
-#include "mdmcalifornium-pinctrl.dtsi"
+#include "mdm9650.dtsi"
+#include "mdm9650-pinctrl.dtsi"
+#include "mdm9650-display.dtsi"
+#include "qpic-panel-ili-hvga.dtsi"
 
 &blsp1_uart3 {
 	status = "ok";
@@ -36,25 +38,18 @@
 		qcom,recharge-thresh-mv = <200>;
 		qcom,iterm-ma = <100>;
 		regulator-name = "smb1351_otg_supply";
-		pinctrl-names = "default";
-		pinctrl-0 = <&smb_stat_active>;
+		qcom,charging-disabled;
 		qcom,id-line-not-connected;
-		qcom,switch-freq = <2>;
 	};
 };
 
-&pmdcalifornium_gpios {
+&pmd9650_gpios {
 	gpio@c100 { /* GPIO 2 - VADC */
 		/* GPIO should be left off, and in the high
 		 * impedance state when the pin is used with the VADC
 		 */
 		status = "ok";
 		qcom,master-en = <0>;	/* DISABLE GPIO */
-	};
-
-	gpio@c200 { /* GPIO 3 - LED */
-		status = "ok";
-		qcom,master-en = <0>;    /* Disable GPIO */
 	};
 
 	gpio@c400 { /* GPIO 5 - USB_ID */
@@ -87,29 +82,11 @@
 	};
 };
 
-&pmdcalifornium_misc {
-	qcom,pwm-sel = <2>;		/* PWM2 */
-	qcom,enable-gp-driver;		/* Enable GP */
-};
-
-&pmdcalifornium_pwm_1 {
-	status = "ok";
-};
-
-&pmdcalifornium_pwm_2 {
-	status = "ok";
-};
-
-&qnand_1 {
-	status = "ok";
-};
-
 &usb3 {
 	vbus_dwc3-supply = <&smb1351_otg_supply>;
-	cpe-gpio = <&tlmm_pinmux 87 0>;
 };
 
-&pmdcalifornium_vadc {
+&pmd9650_vadc {
 	chan@83 {
 		label = "vph_pwr";
 		reg = <0x83>;
@@ -180,4 +157,14 @@
 		qcom,fast-avg-setup = <0>;
 		qcom,vadc-thermal-node;
 	};
+};
+
+/* Display */
+&mdss_qpic {
+	pinctrl-names= "mdss_default", "mdss_sleep";
+	pinctrl-0 = <&mdss_cs_active &mdss_te_active &mdss_rs_active
+		&mdss_ad_active &mdss_bl_active>;
+	pinctrl-1 = <&mdss_cs_sleep &mdss_te_sleep
+		&mdss_rs_sleep &mdss_ad_sleep &mdss_bl_sleep>;
+	status = "ok";
 };

@@ -26,8 +26,8 @@
 			/* Voting for max b/w on PNOC bus for now */
 			<91 512 400000 800000>;
 
-		vdd-supply = <&pmdcalifornium_l6>;
-		avdd-supply = <&pmdcalifornium_l12>;
+		vdd-supply = <&pmd9650_l6>;
+		avdd-supply = <&pmd9650_l12>;
 
 		clock-names = "core_clk", "core_a_clk";
 		clocks = <&clock_gcc clk_qpic_clk>,

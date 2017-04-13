@@ -12,12 +12,12 @@
 
 #include "skeleton.dtsi"
 #include <dt-bindings/clock/msm-clocks-a7.h>
-#include <dt-bindings/clock/msm-clocks-californium.h>
+#include <dt-bindings/clock/msm-clocks-9650.h>
 #include <dt-bindings/regulator/qcom,rpm-smd-regulator.h>
 
 / {
-	model = "Qualcomm Technologies, Inc. MDM CALIFORNIUM";
-	compatible = "qcom,mdmcalifornium";
+	model = "Qualcomm Technologies, Inc. MDM 9650";
+	compatible = "qcom,mdm9650";
 	qcom,msm-id = <279 0x10000>, <284 0x10000>, <285 0x10000>,
 		      <286 0x10000>, <283 0x10000>;
 	interrupt-parent = <&intc>;
@@ -67,13 +67,13 @@
 	soc: soc { };
 };
 
-#include "mdmcalifornium-smp2p.dtsi"
+#include "mdm9650-smp2p.dtsi"
 #include "msm-gdsc.dtsi"
-#include "mdmcalifornium-blsp.dtsi"
-#include "mdmcalifornium-bus.dtsi"
-#include "mdmcalifornium-coresight.dtsi"
-#include "mdmcalifornium-ion.dtsi"
-#include "mdmcalifornium-pm.dtsi"
+#include "mdm9650-blsp.dtsi"
+#include "mdm9650-bus.dtsi"
+#include "mdm9650-coresight.dtsi"
+#include "mdm9650-ion.dtsi"
+#include "mdm9650-pm.dtsi"
 
 &soc {
 	#address-cells = <1>;
@@ -142,11 +142,11 @@
 		qcom,active-clock-names = "iface_clk", "bus_clk", "mem_clk",
 					"gpll0_mss_clk";
 
-		vdd_cx-supply = <&pmdcalifornium_s5_level>;
+		vdd_cx-supply = <&pmd9650_s5_level>;
 		vdd_cx-voltage = <RPM_SMD_REGULATOR_LEVEL_TURBO>;
-		vdd_mx-supply = <&pmdcalifornium_l9_level>;
+		vdd_mx-supply = <&pmd9650_l9_level>;
 		vdd_mx-uV = <RPM_SMD_REGULATOR_LEVEL_TURBO>;
-		vdd_pll-supply = <&pmdcalifornium_l5>;
+		vdd_pll-supply = <&pmd9650_l5>;
 		qcom,vdd_pll = <1800000>;
 		qcom,firmware-name = "modem";
 		qcom,pil-self-auth;
@@ -168,26 +168,26 @@
 	};
 
 	clock_gcc: qcom,gcc@1800000 {
-		compatible = "qcom,gcc-californium";
+		compatible = "qcom,gcc-9650";
 		reg = <0x1800000 0x80000>,
 		      <0xb008018 0x1c>;
 		reg-names = "cc_base", "apcs_base";
 		#clock-cells = <1>;
 
 		qcom,regulator-names = "vdd_dig", "vdd_dig_ao";
-		vdd_dig-supply = <&pmdcalifornium_s5_level>;
-		vdd_dig_ao-supply = <&pmdcalifornium_s5_level_ao>;
+		vdd_dig-supply = <&pmd9650_s5_level>;
+		vdd_dig_ao-supply = <&pmd9650_s5_level_ao>;
 	};
 
 	clock_debug: qcom,cc-debug@1874000 {
-		compatible = "qcom,cc-debug-californium";
+		compatible = "qcom,cc-debug-9650";
 		reg = <0x1874000 0x4>;
 		reg-names = "cc_base";
 		#clock-cells = <1>;
 	};
 
 	clock_cpu: qcom,clock-a7@0b010008 {
-		compatible = "qcom,clock-a7-californium";
+		compatible = "qcom,clock-a7-9650";
 		reg = <0x0b010008 0x8>;
 		reg-names = "rcg-base";
 		#clock-cells = <1>;
@@ -203,7 +203,7 @@
 			< 787200000 RPM_SMD_REGULATOR_LEVEL_NOM>,
 			<1286400000 RPM_SMD_REGULATOR_LEVEL_TURBO>;
 
-		cpu-vdd-supply = <&pmdcalifornium_s5_level_ao>;
+		cpu-vdd-supply = <&pmd9650_s5_level_ao>;
 		qcom,a7ssmux-opp-store-vcorner = <&CPU0>;
 	};
 
@@ -383,8 +383,8 @@
 		wake-gpio = <&tlmm_pinmux 61 0>;
 
 		gdsc-vdd-supply = <&gdsc_pcie>;
-		vreg-1.8-supply = <&pmdcalifornium_l5>;
-		vreg-0.9-supply = <&pmdcalifornium_l4>;
+		vreg-1.8-supply = <&pmd9650_l5>;
+		vreg-0.9-supply = <&pmd9650_l4>;
 
 		qcom,vreg-0.9-voltage-level = <928000 928000 24000>;
 
@@ -440,10 +440,10 @@
 
 	 bt_qca6174 {
 		compatible = "qca,qca6174";
-		qca,bt-reset-gpio = <&pmdcalifornium_gpios 8 0>; /* BT_EN */
+		qca,bt-reset-gpio = <&pmd9650_gpios 8 0>; /* BT_EN */
 		qca,bt-vdd-pa-supply = <&rome_vreg>;
-		qca,bt-vdd-xtal-supply = <&pmdcalifornium_l4>;
-		qca,bt-vdd-core-supply = <&pmdcalifornium_l5>;
+		qca,bt-vdd-xtal-supply = <&pmd9650_l4>;
+		qca,bt-vdd-core-supply = <&pmd9650_l5>;
 	};
 
 	qcom,sps {
@@ -480,8 +480,8 @@
 		mdm2apstatus-gpio = <&tlmm_pinmux 16 0>;
 
 		gdsc-vdd-supply = <&gdsc_pcie>;
-		vreg-1.8-supply = <&pmdcalifornium_l5>;
-		vreg-0.9-supply = <&pmdcalifornium_l4>;
+		vreg-1.8-supply = <&pmd9650_l5>;
+		vreg-0.9-supply = <&pmd9650_l4>;
 
 		qcom,vreg-0.9-voltage-level = <928000 928000 24000>;
 
@@ -899,9 +899,9 @@
 		compatible = "qcom,cnss";
 		wlan-en-gpio = <&tlmm_pinmux 95 0>;
 		vdd-wlan-supply = <&rome_vreg>;
-		vdd-wlan-xtal-supply = <&pmdcalifornium_l5>;
-		vdd-wlan-io-supply = <&pmdcalifornium_l6>;
-		vdd-wlan-xtal-aon-supply = <&pmdcalifornium_l4>;
+		vdd-wlan-xtal-supply = <&pmd9650_l5>;
+		vdd-wlan-io-supply = <&pmd9650_l6>;
+		vdd-wlan-xtal-aon-supply = <&pmd9650_l4>;
 		qcom,notify-modem-status;
 		pinctrl-names = "wlan_en_active", "wlan_en_sleep";
 		pinctrl-0 = <&cnss_wlan_en_active>;
@@ -926,8 +926,8 @@
 		compatible = "qcom,cnss_sdio";
 		subsys-name = "AR6320_SDIO";
 		vdd-wlan-supply = <&rome_vreg>;
-		vdd-wlan-xtal-supply = <&pmdcalifornium_l5>;
-		vdd-wlan-io-supply = <&pmdcalifornium_l6>;
+		vdd-wlan-xtal-supply = <&pmd9650_l5>;
+		vdd-wlan-io-supply = <&pmd9650_l6>;
 		qcom,wlan-ramdump-dynamic = <0x200000>;
 		pinctrl-names = "active", "sleep";
 		pinctrl-0 = <&cnss_sdio_active>;
@@ -945,7 +945,7 @@
 		qcom,freq-step = <2>;
 		qcom,vdd-restriction-temp = <5>;
 		qcom,vdd-restriction-temp-hysteresis = <10>;
-		vdd-dig-supply = <&pmdcalifornium_s5_floor_level>;
+		vdd-dig-supply = <&pmd9650_s5_floor_level>;
 		qcom,disable-cx-phase-ctrl;
 		qcom,disable-gfx-phase-ctrl;
 		qcom,disable-vdd-mx;
@@ -1340,12 +1340,12 @@
 	status = "ok";
 };
 
-#include "msm-pmdcalifornium-rpm-regulator.dtsi"
-#include "msm-pmdcalifornium.dtsi"
-#include "mdmcalifornium-regulator.dtsi"
-#include "mdmcalifornium-usb.dtsi"
+#include "msm-pmd9650-rpm-regulator.dtsi"
+#include "msm-pmd9650.dtsi"
+#include "mdm9650-regulator.dtsi"
+#include "mdm9650-usb.dtsi"
 
-&pmdcalifornium_pon {
+&pmd9650_pon {
 	interrupts = <0x0 0x8 0x0>;
 	interrupt-names = "kpdpwr";
 	qcom,system-reset;

@@ -12,11 +12,11 @@
 
 /dts-v1/;
 
-#include "mdmcalifornium-mtp.dtsi"
+#include "mdm9650-mtp.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. MDMCALIFORNIUM MTP - DWIFI(NAND)";
-	compatible = "qcom,mdmcalifornium-mtp", "qcom,mdmcalifornium",
+	model = "Qualcomm Technologies, Inc. MDM9650 MTP - DWIFI(NAND)";
+	compatible = "qcom,mdm9650-mtp", "qcom,mdm9650",
 		     "qcom,mtp";
 	qcom,board-id = <8 3>, <8 0x103>;
 };
@@ -31,7 +31,7 @@
 
 &sdhc_1 {
 	vdd-supply = <&sdc_vreg>;
-	vdd-io-supply = <&pmdcalifornium_l7>;
+	vdd-io-supply = <&pmd9650_l7>;
 	qcom,vdd-io-voltage-level = <1800000 1800000>;
 	qcom,vdd-io-always-on;
 	qcom,vdd-io-current-level = <200 10000>;
