@@ -88,6 +88,7 @@ struct spi_panel_data {
 	u8 ctrl_state;
 	int disp_te_gpio;
 	int rst_gpio;
+	int disp_dc_gpio;	/* command or data */
 	struct spi_panel_cmds on_cmds;
 	struct spi_panel_cmds off_cmds;
 	int (*on)(struct mdss_panel_data *pdata);
