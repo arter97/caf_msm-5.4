@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,9 +11,9 @@
  */
 
 #include <dt-bindings/interrupt-controller/irq.h>
-#include "mdmcalifornium.dtsi"
-#include "mdmcalifornium-pinctrl.dtsi"
-#include "mdmcalifornium-display.dtsi"
+#include "mdm9650-v1.1.dtsi"
+#include "mdm9650-pinctrl.dtsi"
+#include "mdm9650-display.dtsi"
 #include "qpic-panel-ili-hvga.dtsi"
 
 &blsp1_uart3 {
@@ -43,7 +43,7 @@
 	};
 };
 
-&pmdcalifornium_gpios {
+&pmd9650_gpios {
 	gpio@c100 { /* GPIO 2 - VADC */
 		/* GPIO should be left off, and in the high
 		 * impedance state when the pin is used with the VADC
@@ -86,7 +86,7 @@
 	vbus_dwc3-supply = <&smb1351_otg_supply>;
 };
 
-&pmdcalifornium_vadc {
+&pmd9650_vadc {
 	chan@83 {
 		label = "vph_pwr";
 		reg = <0x83>;

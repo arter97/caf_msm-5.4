@@ -12,11 +12,11 @@
 
 /dts-v1/;
 
-#include "mdmcalifornium-v1.1-mtp.dtsi"
+#include "mdm9650-v1.1-mtp.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. MDM CALIFORNIUM v1.1 MTP (eMMC)";
-	compatible = "qcom,mdmcalifornium-mtp", "qcom,mdmcalifornium",
+	model = "Qualcomm Technologies, Inc. MDM 9650 v1.1 MTP (eMMC)";
+	compatible = "qcom,mdm9650-mtp", "qcom,mdm9650",
 		     "qcom,mtp";
 	qcom,board-id = <8 0x00030000>, <8 0x00030100>;
 
@@ -29,7 +29,7 @@
 };
 
 &sdhc_1 {
-	vdd-io-supply = <&pmdcalifornium_l6>;
+	vdd-io-supply = <&pmd9650_l6>;
 	qcom,vdd-io-voltage-level = <1800000 1800000>;
 	qcom,vdd-io-current-level = <100 200000>;
 

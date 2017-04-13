@@ -21,7 +21,7 @@
 #include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/clk/msm-clock-generic.h>
-#include <dt-bindings/clock/msm-clocks-californium.h>
+#include <dt-bindings/clock/msm-clocks-9650.h>
 #include <soc/qcom/clock-rpm.h>
 #include <soc/qcom/clock-local2.h>
 #include <soc/qcom/clock-voter.h>
@@ -29,7 +29,7 @@
 #include <soc/qcom/clock-alpha-pll.h>
 #include <soc/qcom/rpm-smd.h>
 
-#include "vdd-level-californium.h"
+#include "vdd-level-9650.h"
 
 #define RPM_MISC_CLK_TYPE	0x306b6c63
 #define RPM_BUS_CLK_TYPE	0x316b6c63
@@ -1401,7 +1401,7 @@ static struct mux_clk gcc_debug_mux = {
 	},
 };
 
-static struct clk_lookup msm_clocks_rpm_californium[] = {
+static struct clk_lookup msm_clocks_rpm_9650[] = {
 	CLK_LIST(a7pll_clk),
 	CLK_LIST(xo),
 	CLK_LIST(xo_a_clk),
@@ -1454,7 +1454,7 @@ static struct clk_lookup msm_clocks_rpm_californium[] = {
 	CLK_LIST(rf_clk3_pin_ao),
 };
 
-static struct clk_lookup msm_clocks_gcc_californium[] = {
+static struct clk_lookup msm_clocks_gcc_9650[] = {
 	CLK_LIST(gpll0),
 	CLK_LIST(gpll0_ao),
 	CLK_LIST(gpll0_out_main_cgc),
@@ -1532,7 +1532,7 @@ static struct clk_lookup msm_clocks_gcc_californium[] = {
 	CLK_LIST(gcc_mss_cfg_ahb_clk),
 };
 
-static int msm_gcc_californium_probe(struct platform_device *pdev)
+static int msm_gcc_9650_probe(struct platform_device *pdev)
 {
 	struct resource *res;
 	int ret;
@@ -1579,8 +1579,8 @@ static int msm_gcc_californium_probe(struct platform_device *pdev)
 	}
 
 	ret = of_msm_clock_register(pdev->dev.of_node,
-				    msm_clocks_rpm_californium,
-				    ARRAY_SIZE(msm_clocks_rpm_californium));
+				    msm_clocks_rpm_9650,
+				    ARRAY_SIZE(msm_clocks_rpm_9650));
 	if (ret)
 		return ret;
 
@@ -1591,8 +1591,8 @@ static int msm_gcc_californium_probe(struct platform_device *pdev)
 	dev_info(&pdev->dev, "Registered RPM clocks.\n");
 
 	ret = of_msm_clock_register(pdev->dev.of_node,
-				    msm_clocks_gcc_californium,
-				    ARRAY_SIZE(msm_clocks_gcc_californium));
+				    msm_clocks_gcc_9650,
+				    ARRAY_SIZE(msm_clocks_gcc_9650));
 	if (ret)
 		return ret;
 
@@ -1611,36 +1611,36 @@ static int msm_gcc_californium_probe(struct platform_device *pdev)
 }
 
 static struct of_device_id msm_clock_gcc_match_table[] = {
-	{ .compatible = "qcom,gcc-californium" },
+	{ .compatible = "qcom,gcc-9650" },
 	{}
 };
 
 static struct platform_driver msm_clock_gcc_driver = {
-	.probe = msm_gcc_californium_probe,
+	.probe = msm_gcc_9650_probe,
 	.driver = {
-		.name = "qcom,gcc-californium",
+		.name = "qcom,gcc-9650",
 		.of_match_table = msm_clock_gcc_match_table,
 		.owner = THIS_MODULE,
 	},
 };
 
-int __init msm_gcc_californium_init(void)
+int __init msm_gcc_9650_init(void)
 {
 	return platform_driver_register(&msm_clock_gcc_driver);
 }
-arch_initcall(msm_gcc_californium_init);
+arch_initcall(msm_gcc_9650_init);
 
 /* ======== Clock Debug Controller ======== */
-static struct clk_lookup msm_clocks_measure_californium[] = {
+static struct clk_lookup msm_clocks_measure_9650[] = {
 	CLK_LOOKUP_OF("measure", gcc_debug_mux, "debug"),
 };
 
 static struct of_device_id msm_clock_debug_match_table[] = {
-	{ .compatible = "qcom,cc-debug-californium" },
+	{ .compatible = "qcom,cc-debug-9650" },
 	{}
 };
 
-static int msm_clock_debug_californium_probe(struct platform_device *pdev)
+static int msm_clock_debug_9650_probe(struct platform_device *pdev)
 {
 	struct resource *res;
 	int ret;
@@ -1662,8 +1662,8 @@ static int msm_clock_debug_californium_probe(struct platform_device *pdev)
 	}
 
 	ret = of_msm_clock_register(pdev->dev.of_node,
-				    msm_clocks_measure_californium,
-				    ARRAY_SIZE(msm_clocks_measure_californium));
+				    msm_clocks_measure_9650,
+				    ARRAY_SIZE(msm_clocks_measure_9650));
 	if (ret)
 		return ret;
 
@@ -1672,16 +1672,16 @@ static int msm_clock_debug_californium_probe(struct platform_device *pdev)
 }
 
 static struct platform_driver msm_clock_debug_driver = {
-	.probe = msm_clock_debug_californium_probe,
+	.probe = msm_clock_debug_9650_probe,
 	.driver = {
-		.name = "qcom,cc-debug-californium",
+		.name = "qcom,cc-debug-9650",
 		.of_match_table = msm_clock_debug_match_table,
 		.owner = THIS_MODULE,
 	},
 };
 
-int __init msm_clock_debug_californium_init(void)
+int __init msm_clock_debug_9650_init(void)
 {
 	return platform_driver_register(&msm_clock_debug_driver);
 }
-late_initcall(msm_clock_debug_californium_init);
+late_initcall(msm_clock_debug_9650_init);

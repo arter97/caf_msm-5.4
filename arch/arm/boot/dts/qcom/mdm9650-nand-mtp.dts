@@ -1,4 +1,4 @@
-/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -12,23 +12,19 @@
 
 /dts-v1/;
 
-#include "mdmcalifornium-v1.1-cdp.dtsi"
+#include "mdm9650-mtp.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. MDM CALIFORNIUM v1.1 CDP (NAND)";
-	compatible = "qcom,mdmcalifornium-cdp", "qcom,mdmcalifornium",
-		     "qcom,cdp";
-	qcom,board-id = <1 0x0>, <1 0x100>;
-};
-
-&qnand_1 {
-	status = "ok";
+	model = "Qualcomm Technologies, Inc. MDM 9650 MTP (NAND)";
+	compatible = "qcom,mdm9650-mtp", "qcom,mdm9650",
+		     "qcom,mtp";
+	qcom,board-id = <8 0>, <8 0x100>;
 };
 
 &sdhc_1 {
 	vdd-supply = <&sdc_vreg>;
 
-	vdd-io-supply = <&pmdcalifornium_l7>;
+	vdd-io-supply = <&pmd9650_l7>;
 	qcom,vdd-io-voltage-level = <1800000 2848000>;
 	qcom,vdd-io-current-level = <200 10000>;
 
@@ -37,8 +33,7 @@
 	pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off>;
 
 	qcom,bus-width = <4>;
-	qcom,clk-rates = <400000 20000000 25000000
-			50000000 100000000 200000000>;
+	qcom,clk-rates = <400000 20000000 25000000 50000000 100000000 200000000>;
 
 	status = "ok";
 };

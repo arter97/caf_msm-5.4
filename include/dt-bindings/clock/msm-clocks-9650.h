@@ -11,8 +11,8 @@
  * GNU General Public License for more details.
  */
 
-#ifndef __MSM_CLOCKS_CALIFORNIUM_H
-#define __MSM_CLOCKS_CALIFORNIUM_H
+#ifndef __MSM_CLOCKS_9650_H
+#define __MSM_CLOCKS_9650_H
 
 /* RPM controlled clocks */
 #define clk_xo 0xf13dfee3

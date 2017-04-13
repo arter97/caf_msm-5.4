@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -12,13 +12,13 @@
 
 /dts-v1/;
 
-#include "mdmcalifornium-mtp.dtsi"
+#include "mdm9650-v1.1-cdp.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. MDM CALIFORNIUM MTP (eMMC)";
-	compatible = "qcom,mdmcalifornium-mtp", "qcom,mdmcalifornium",
-		     "qcom,mtp";
-	qcom,board-id = <8 0x00030000>, <8 0x00030100>;
+	model = "Qualcomm Technologies, Inc. MDM 9650 v1.1 CDP (eMMC)";
+	compatible = "qcom,mdm9650-cdp", "qcom,mdm9650",
+		     "qcom,cdp";
+	qcom,board-id = <1 0x00030000>, <1 0x00030100>;
 
 	qcom,rmtfs_sharedmem@0 {
 		compatible = "qcom,sharedmem-uio";
@@ -29,7 +29,7 @@
 };
 
 &sdhc_1 {
-	vdd-io-supply = <&pmdcalifornium_l6>;
+	vdd-io-supply = <&pmd9650_l6>;
 	qcom,vdd-io-voltage-level = <1800000 1800000>;
 	qcom,vdd-io-current-level = <100 200000>;
 

@@ -29,7 +29,7 @@
 #include <dt-bindings/clock/msm-clocks-cobalt.h>
 #include <dt-bindings/clock/msm-clocks-hwio-cobalt.h>
 
-#include "vdd-level-californium.h"
+#include "vdd-level-9650.h"
 
 static void __iomem *virt_base;
 

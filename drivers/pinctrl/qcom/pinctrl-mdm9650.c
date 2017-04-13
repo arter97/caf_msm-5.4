@@ -90,7 +90,7 @@
 		.intr_detection_bit = -1,		\
 		.intr_detection_width = -1,		\
 	}
-static const struct pinctrl_pin_desc mdmcalifornium_pins[] = {
+static const struct pinctrl_pin_desc mdm9650_pins[] = {
 	PINCTRL_PIN(0, "GPIO_0"),
 	PINCTRL_PIN(1, "GPIO_1"),
 	PINCTRL_PIN(2, "GPIO_2"),
@@ -321,7 +321,7 @@ static const unsigned int qdsd_data1_pins[] = { 109 };
 static const unsigned int qdsd_data2_pins[] = { 110 };
 static const unsigned int qdsd_data3_pins[] = { 111 };
 
-enum mdmcalifornium_functions {
+enum mdm9650_functions {
 	msm_mux_uim2_data,
 	msm_mux_qdss_stm31,
 	msm_mux_ebi0_wrcdc,
@@ -888,7 +888,7 @@ static const char * const uim1_clk_groups[] = {
 	"gpio79",
 };
 
-static const struct msm_function mdmcalifornium_functions[] = {
+static const struct msm_function mdm9650_functions[] = {
 	FUNCTION(gpio),
 	FUNCTION(uim2_data),
 	FUNCTION(qdss_stm31),
@@ -1027,7 +1027,7 @@ static const struct msm_function mdmcalifornium_functions[] = {
 	FUNCTION(uim1_clk),
 };
 
-static const struct msm_pingroup mdmcalifornium_groups[] = {
+static const struct msm_pingroup mdm9650_groups[] = {
 	PINGROUP(0, uim2_data, blsp_spi1, blsp_uart1, qdss_stm31,
 		 ebi0_wrcdc, NA, NA, NA, NA),
 	PINGROUP(1, uim2_present, blsp_spi1, blsp_uart1, qdss_stm30, NA,
@@ -1177,48 +1177,48 @@ static const struct msm_pingroup mdmcalifornium_groups[] = {
 	SDC_QDSD_PINGROUP(qdsd_data3, 0x19c000, 28, 25),
 };
 
-static const struct msm_pinctrl_soc_data mdmcalifornium_pinctrl = {
-	.pins = mdmcalifornium_pins,
-	.npins = ARRAY_SIZE(mdmcalifornium_pins),
-	.functions = mdmcalifornium_functions,
-	.nfunctions = ARRAY_SIZE(mdmcalifornium_functions),
-	.groups = mdmcalifornium_groups,
-	.ngroups = ARRAY_SIZE(mdmcalifornium_groups),
+static const struct msm_pinctrl_soc_data mdm9650_pinctrl = {
+	.pins = mdm9650_pins,
+	.npins = ARRAY_SIZE(mdm9650_pins),
+	.functions = mdm9650_functions,
+	.nfunctions = ARRAY_SIZE(mdm9650_functions),
+	.groups = mdm9650_groups,
+	.ngroups = ARRAY_SIZE(mdm9650_groups),
 	.ngpios = 100,
 };
 
-static int mdmcalifornium_pinctrl_probe(struct platform_device *pdev)
+static int mdm9650_pinctrl_probe(struct platform_device *pdev)
 {
-	return msm_pinctrl_probe(pdev, &mdmcalifornium_pinctrl);
+	return msm_pinctrl_probe(pdev, &mdm9650_pinctrl);
 }
 
-static const struct of_device_id mdmcalifornium_pinctrl_of_match[] = {
-	{ .compatible = "qcom,mdmcalifornium-pinctrl", },
+static const struct of_device_id mdm9650_pinctrl_of_match[] = {
+	{ .compatible = "qcom,mdm9650-pinctrl", },
 	{ },
 };
 
-static struct platform_driver mdmcalifornium_pinctrl_driver = {
+static struct platform_driver mdm9650_pinctrl_driver = {
 	.driver = {
-		.name = "mdmcalifornium-pinctrl",
+		.name = "mdm9650-pinctrl",
 		.owner = THIS_MODULE,
-		.of_match_table = mdmcalifornium_pinctrl_of_match,
+		.of_match_table = mdm9650_pinctrl_of_match,
 	},
-	.probe = mdmcalifornium_pinctrl_probe,
+	.probe = mdm9650_pinctrl_probe,
 	.remove = msm_pinctrl_remove,
 };
 
-static int __init mdmcalifornium_pinctrl_init(void)
+static int __init mdm9650_pinctrl_init(void)
 {
-	return platform_driver_register(&mdmcalifornium_pinctrl_driver);
+	return platform_driver_register(&mdm9650_pinctrl_driver);
 }
-arch_initcall(mdmcalifornium_pinctrl_init);
+arch_initcall(mdm9650_pinctrl_init);
 
-static void __exit mdmcalifornium_pinctrl_exit(void)
+static void __exit mdm9650_pinctrl_exit(void)
 {
-	platform_driver_unregister(&mdmcalifornium_pinctrl_driver);
+	platform_driver_unregister(&mdm9650_pinctrl_driver);
 }
-module_exit(mdmcalifornium_pinctrl_exit);
+module_exit(mdm9650_pinctrl_exit);
 
-MODULE_DESCRIPTION("Qualcomm Technologies, Inc. MDMcalifornium pinctrl driver");
+MODULE_DESCRIPTION("Qualcomm Technologies, Inc. MDM9650 pinctrl driver");
 MODULE_LICENSE("GPL v2");
-MODULE_DEVICE_TABLE(of, mdmcalifornium_pinctrl_of_match);
+MODULE_DEVICE_TABLE(of, mdm9650_pinctrl_of_match);
