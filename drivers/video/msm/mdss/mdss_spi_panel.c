@@ -46,15 +46,28 @@ int mdss_spi_panel_reset(struct mdss_panel_data *pdata, int enable)
 		return rc;
 	}
 
+	if (!gpio_is_valid(ctrl_pdata->disp_dc_gpio)) {
+		pr_debug("%s:%d, dc line not configured\n",
+			   __func__, __LINE__);
+		return rc;
+	}
+
 	pr_debug("%s: enable = %d\n", __func__, enable);
 	pinfo = &(ctrl_pdata->panel_data.panel_info);
 
 	if (enable) {
 		rc = gpio_request(ctrl_pdata->rst_gpio, "disp_rst_n");
 		if (rc) {
-			pr_err("gpio request failed\n");
+			pr_err("display reset gpio request failed\n");
 			return rc;
 		}
+
+		rc = gpio_request(ctrl_pdata->disp_dc_gpio, "disp_dc");
+		if (rc) {
+			pr_err("display dc gpio request failed\n");
+			return rc;
+		}
+
 		if (!pinfo->cont_splash_enabled) {
 			for (i = 0; i < pdata->panel_info.rst_seq_len; ++i) {
 				gpio_set_value((ctrl_pdata->rst_gpio),
@@ -73,6 +86,9 @@ int mdss_spi_panel_reset(struct mdss_panel_data *pdata, int enable)
 	} else {
 		gpio_set_value((ctrl_pdata->rst_gpio), 0);
 		gpio_free(ctrl_pdata->rst_gpio);
+
+		gpio_set_value(ctrl_pdata->disp_dc_gpio, 0);
+		gpio_free(ctrl_pdata->disp_dc_gpio);
 	}
 	return rc;
 }
@@ -435,7 +451,10 @@ int mdss_spi_panel_on(struct mdss_panel_data *pdata)
 				panel_data);
 
 	for (i = 0; i < ctrl->on_cmds.cmd_cnt; i++) {
+		/* pull down dc gpio indicate this is command */
+		gpio_set_value(ctrl->disp_dc_gpio, 0);
 		mdss_spi_tx_command(ctrl->on_cmds.cmds[i].command);
+		gpio_set_value((ctrl->disp_dc_gpio), 1);
 
 		if (ctrl->on_cmds.cmds[i].dchdr.dlen > 1) {
 			mdss_spi_tx_parameter(ctrl->on_cmds.cmds[i].parameter,
@@ -468,7 +487,10 @@ static int mdss_spi_panel_off(struct mdss_panel_data *pdata)
 				panel_data);
 
 	for (i = 0; i < ctrl->off_cmds.cmd_cnt; i++) {
+		/* pull down dc gpio indicate this is command */
+		gpio_set_value(ctrl->disp_dc_gpio, 0);
 		mdss_spi_tx_command(ctrl->off_cmds.cmds[i].command);
+		gpio_set_value((ctrl->disp_dc_gpio), 1);
 
 		if (ctrl->off_cmds.cmds[i].dchdr.dlen > 1) {
 			mdss_spi_tx_parameter(ctrl->off_cmds.cmds[i].parameter,
@@ -1151,9 +1173,14 @@ int spi_panel_device_register(struct device_node *pan_node,
 
 	ctrl_pdata->disp_te_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
 		"qcom,platform-te-gpio", 0);
-
 	if (!gpio_is_valid(ctrl_pdata->disp_te_gpio))
 		pr_err("%s:%d, TE gpio not specified\n",
+						__func__, __LINE__);
+
+	ctrl_pdata->disp_dc_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+		"qcom,platform-spi-dc-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->disp_dc_gpio))
+		pr_err("%s:%d, SPI DC gpio not specified\n",
 						__func__, __LINE__);
 
 	ctrl_pdata->rst_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,

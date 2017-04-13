@@ -20,7 +20,6 @@
 
 #define SPI_PANEL_COMMAND_LEN 1
 static struct spi_device *mdss_spi_client;
-static int dc_gpio;
 
 int mdss_spi_tx_command(const void *buf)
 {
@@ -40,11 +39,7 @@ int mdss_spi_tx_command(const void *buf)
 
 	spi_message_init(&m);
 	spi_message_add_tail(&t, &m);
-
-	/*pull down dc gpio indicate this is command*/
-	gpio_set_value(dc_gpio, 0);
 	rc = spi_sync(mdss_spi_client, &m);
-	gpio_set_value(dc_gpio, 1);
 
 	return rc;
 }
@@ -112,23 +107,8 @@ static int mdss_spi_client_probe(struct spi_device *spidev)
 	np = spidev->dev.of_node;
 	pr_debug("cs[%x] CPHA[%x] CPOL[%x] CS_HIGH[%x] Max_speed[%d]\n",
 		cs, cpha, cpol, cs_high, max_speed);
-
-	dc_gpio = of_get_named_gpio(np, "dc-gpio", 0);
-	if (!gpio_is_valid(dc_gpio))
-		pr_err("%s %d,spi panel dc gpio is not valid\n",
-						__func__, __LINE__);
-
-
-	if (gpio_request(dc_gpio, "dc-gpios"))
-		pr_err("%s %d spi panel dc gpio_request failed\n",
-						__func__, __LINE__);
-
-
-	if (gpio_direction_output(dc_gpio, 1))
-		pr_err("%s %d set spi panel dc gpio direction failed\n",
-						__func__, __LINE__);
-
 	mdss_spi_client = spidev;
+
 	return 0;
 }
 
