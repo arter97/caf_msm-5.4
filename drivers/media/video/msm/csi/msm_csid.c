@@ -138,6 +138,26 @@ int msm_csid_config(struct csid_device *csid_dev,
 	return rc;
 }
 
+static void msm_csid_irq_config(struct csid_device *csid_dev,
+	uint32_t bit, bool flg)
+{
+	uint32_t val = 0;
+	CDBG("%s bit = 0x%x  flg = %d\n", __func__, bit, flg);
+
+	val = msm_camera_io_r(csid_dev->base + CSID_IRQ_MASK_ADDR);
+
+	/* Enable interrupt */
+	if (flg == 1) {
+		val |= bit;
+	} else {
+	/* Disable interrupt */
+		val &= ~bit;
+	}
+	msm_camera_io_w(val, csid_dev->base + CSID_IRQ_MASK_ADDR);
+
+	return;
+}
+
 static irqreturn_t msm_csid_irq(int irq_num, void *data)
 {
 	uint32_t irq;
@@ -182,6 +202,9 @@ static irqreturn_t msm_csid_irq(int irq_num, void *data)
 		v4l2_subdev_notify(&csid_dev->subdev,
 				NOTIFY_CSID_PHY_DL_OVERFLOW_ERROR,
 				(void *)NULL);
+		if (csid_dev == lsh_csid_dev[0])
+			msm_csid_irq_config(csid_dev,
+				CSID_IRQ_PHY_DL_OVERFLOW_MASK, 0);
 	}
 
 	msm_camera_io_w(irq, csid_dev->base + CSID_IRQ_CLEAR_CMD_ADDR);
