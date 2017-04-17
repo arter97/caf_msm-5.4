@@ -772,10 +772,9 @@ void subsystem_put(void *subsystem)
 		subsys_stop(subsys);
 		if (subsys->do_ramdump_on_put)
 			subsystem_ramdump(subsys, NULL);
+		subsystem_free_memory(subsys, NULL);
 	}
 	mutex_unlock(&track->lock);
-
-	subsystem_free_memory(subsys, NULL);
 
 	subsys_d = find_subsys(subsys->desc->depends_on);
 	if (subsys_d) {
