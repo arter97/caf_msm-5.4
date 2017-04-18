@@ -144,69 +144,6 @@
 	qcom,battery-data = <&qrd_batterydata>;
 };
 
-&spi_0{
-	qcom,mdss_spi@0 {
-		compatible = "qcom,mdss-spi-ctrl";
-		label = "MDSS SPI CTRL->0";
-		reg = <0>;
-		//spi-cs-high;
-		spi-max-frequency = <50000000>;
-		panel-reset-gpio = <&msm_gpio 25 0>;
-		panel-dc-gpio = <&msm_gpio 110 0>;
-		panel-te-gpio = <&msm_gpio 24 0>;
-	};
-};
-
-#include "dsi-panel-hx8394d-480p-video.dtsi"
-#include "dsi-panel-hx8394d-720p-video.dtsi"
-#include "dsi-panel-hx8394d-qhd-video.dtsi"
-
-&mdss_mdp {
-	qcom,mdss-pref-prim-intf = "dsi";
-};
-
-
-&dsi_hx8394d_480_vid {
-	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_pwm";
-	qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
-	qcom,mdss-dsi-bl-pmic-bank-select = <0>;
-	qcom,mdss-dsi-pwm-gpio = <&pm8909_mpps 2 0>;
-};
-
-&dsi_hx8394d_720_vid {
-	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_pwm";
-	qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
-	qcom,mdss-dsi-bl-pmic-bank-select = <0>;
-	qcom,mdss-dsi-pwm-gpio = <&pm8909_mpps 2 0>;
-};
-
-&dsi_hx8394d_qhd_vid {
-	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_pwm";
-	qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
-	qcom,mdss-dsi-bl-pmic-bank-select = <0>;
-	qcom,mdss-dsi-pwm-gpio = <&pm8909_mpps 2 0>;
-};
-
-&pmx_mdss {
-	qcom,num-grp-pins = <2>;
-	qcom,pins = <&gp 25>, <&gp 37>;
-};
-
-&pmx_mdss_te {
-	qcom,num-grp-pins = <1>;
-	qcom,pins = <&gp 24>;
-};
-
-&mdss_dsi0 {
-	qcom,dsi-pref-prim-pan = <&dsi_hx8394d_720_vid>;
-	pinctrl-names = "mdss_default", "mdss_sleep";
-	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
-	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
-
-	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
-	qcom,platform-bklight-en-gpio = <&msm_gpio 37 0>;
-};
-
 &sdhc_2 {
         qcom,nonremovable;
         interrupts = <0 1>;

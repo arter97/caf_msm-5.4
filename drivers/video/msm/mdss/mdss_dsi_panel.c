@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -23,7 +23,6 @@
 #include <linux/err.h>
 
 #include "mdss_dsi.h"
-#include "mdss_spi.h"
 
 #define DT_CMD_HDR 6
 
@@ -618,10 +617,9 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 		if (ctrl->ndx != DSI_CTRL_LEFT)
 			goto end;
 	}
-	mdss_spi_panel_init();
 
-	//if (ctrl->on_cmds.cmd_cnt)
-	//	mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);
+	if (ctrl->on_cmds.cmd_cnt)
+		mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);
 
 end:
 	pinfo->blank_state = MDSS_PANEL_BLANK_UNBLANK;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015,2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,7 +26,6 @@
 #include "mdp3_ctrl.h"
 #include "mdp3.h"
 #include "mdp3_ppp.h"
-#include "mdss_spi.h"
 
 #define VSYNC_EXPIRE_TICK	4
 
@@ -1146,7 +1145,7 @@ static int mdp3_overlay_queue_buffer(struct msm_fb_data_type *mfd,
 	struct mdp3_session_data *mdp3_session = mfd->mdp.private1;
 	struct msmfb_data *img = &req->data;
 	struct mdp3_img_data data;
-	//struct mdp3_dma *dma = mdp3_session->dma;
+	struct mdp3_dma *dma = mdp3_session->dma;
 
 	rc = mdp3_get_img(img, &data, MDP3_CLIENT_DMA_P);
 	if (rc) {
@@ -1154,11 +1153,11 @@ static int mdp3_overlay_queue_buffer(struct msm_fb_data_type *mfd,
 		return rc;
 	}
 
-	//if (data.len < dma->source_config.stride * dma->source_config.height) {
-	//	pr_err("buf length is smaller than required by dma configuration\n");
-	//	mdp3_put_img(&data, MDP3_CLIENT_DMA_P);
-	//	return -EINVAL;
-	//}
+	if (data.len < dma->source_config.stride * dma->source_config.height) {
+		pr_err("buf length is smaller than required by dma configuration\n");
+		mdp3_put_img(&data, MDP3_CLIENT_DMA_P);
+		return -EINVAL;
+	}
 
 	rc = mdp3_bufq_push(&mdp3_session->bufq_in, &data);
 	if (rc) {
@@ -1284,12 +1283,9 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 					(void *)(int)data->addr,
 					mdp3_session->intf, (void *)panel);
 		} else {
-			pr_err("spi display kickoff");
-			mdss_spi_transfer_data((void *)data->addr,240*320*2);
-	//		rc = mdp3_session->dma->update(mdp3_session->dma,
-	//				(void *)(int)data->addr,
-	//				mdp3_session->intf, NULL);
-			//pr_err("lei:addr = %x,len = %d\n",data->addr,data->len);
+			rc = mdp3_session->dma->update(mdp3_session->dma,
+					(void *)(int)data->addr,
+					mdp3_session->intf, NULL);
 		}
 		/* This is for the previous frame */
 		if (rc < 0) {
