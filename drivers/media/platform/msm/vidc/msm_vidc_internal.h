@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -149,6 +149,7 @@ struct msm_vidc_drv {
 	struct dentry *debugfs_root;
 	int thermal_level;
 	u32 platform_version;
+	u32 capability_version;
 };
 
 struct msm_video_device {
@@ -292,6 +293,7 @@ struct msm_vidc_inst {
 	u32 buffers_held_in_driver;
 	atomic_t in_flush;
 	u32 pic_struct;
+	u32 colour_space;
 };
 
 extern struct msm_vidc_drv *vidc_driver;

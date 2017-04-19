@@ -805,15 +805,9 @@ static int msm_otg_reset(struct usb_phy *phy)
 							USB_HS_APF_CTRL);
 
 	/*
-	 * Enable USB BAM if USB BAM is enabled already before block reset as
-	 * block reset also resets USB BAM registers.
+	 * Disable USB BAM as block reset resets USB BAM registers.
 	 */
-	if (test_bit(ID, &motg->inputs)) {
-		msm_usb_bam_enable(CI_CTRL,
-				   phy->otg->gadget->bam2bam_func_enabled);
-	} else {
-		dev_dbg(phy->dev, "host mode BAM not enabled\n");
-	}
+	msm_usb_bam_enable(CI_CTRL, false);
 
 	return 0;
 }
@@ -4522,7 +4516,7 @@ static int msm_otg_probe(struct platform_device *pdev)
 		ret = -ENOMEM;
 		goto devote_bus_bw;
 	}
-	dev_info(&pdev->dev, "OTG regs = %p\n", motg->regs);
+	dev_info(&pdev->dev, "OTG regs = %pK\n", motg->regs);
 
 	if (pdata->enable_sec_phy) {
 		res = platform_get_resource_byname(pdev,

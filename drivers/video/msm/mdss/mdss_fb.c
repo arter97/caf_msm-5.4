@@ -2,7 +2,7 @@
  * Core MDSS framebuffer driver.
  *
  * Copyright (C) 2007 Google Incorporated
- * Copyright (c) 2008-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2017, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -550,7 +550,13 @@ static ssize_t mdss_fb_get_panel_info(struct device *dev,
 			"min_w=%d\nmin_h=%d\nroi_merge=%d\ndyn_fps_en=%d\n"
 			"min_fps=%d\nmax_fps=%d\npanel_name=%s\n"
 			"primary_panel=%d\nis_pluggable=%d\ndisplay_id=%s\n"
-			"is_cec_supported=%d\nis_pingpong_split=%d\n",
+			"is_cec_supported=%d\nis_pingpong_split=%d\n"
+			"is_hdr_enabled=%d\n"
+			"peak_brightness=%d\nblackness_level=%d\n"
+			"white_chromaticity_x=%d\nwhite_chromaticity_y=%d\n"
+			"red_chromaticity_x=%d\nred_chromaticity_y=%d\n"
+			"green_chromaticity_x=%d\ngreen_chromaticity_y=%d\n"
+			"blue_chromaticity_x=%d\nblue_chromaticity_y=%d\n",
 			pinfo->partial_update_enabled,
 			pinfo->roi_alignment.xstart_pix_align,
 			pinfo->roi_alignment.width_pix_align,
@@ -562,7 +568,18 @@ static ssize_t mdss_fb_get_panel_info(struct device *dev,
 			pinfo->dynamic_fps, pinfo->min_fps, pinfo->max_fps,
 			pinfo->panel_name, pinfo->is_prim_panel,
 			pinfo->is_pluggable, pinfo->display_id,
-			pinfo->is_cec_supported, is_pingpong_split(mfd));
+			pinfo->is_cec_supported, is_pingpong_split(mfd),
+			pinfo->hdr_properties.hdr_enabled,
+			pinfo->hdr_properties.peak_brightness,
+			pinfo->hdr_properties.blackness_level,
+			pinfo->hdr_properties.display_primaries[0],
+			pinfo->hdr_properties.display_primaries[1],
+			pinfo->hdr_properties.display_primaries[2],
+			pinfo->hdr_properties.display_primaries[3],
+			pinfo->hdr_properties.display_primaries[4],
+			pinfo->hdr_properties.display_primaries[5],
+			pinfo->hdr_properties.display_primaries[6],
+			pinfo->hdr_properties.display_primaries[7]);
 
 	return ret;
 }
@@ -2059,6 +2076,10 @@ err_put:
 	dma_buf_put(mfd->fbmem_buf);
 fb_mmap_failed:
 	ion_free(mfd->fb_ion_client, mfd->fb_ion_handle);
+	mfd->fb_attachment = NULL;
+	mfd->fb_table = NULL;
+	mfd->fb_ion_handle = NULL;
+	mfd->fbmem_buf = NULL;
 	return rc;
 }
 
@@ -4114,8 +4135,6 @@ static int mdss_fb_handle_buf_sync_ioctl(struct msm_sync_pt_data *sync_pt_data,
 		goto buf_sync_err_2;
 	}
 
-	sync_fence_install(rel_fence, rel_fen_fd);
-
 	ret = copy_to_user(buf_sync->rel_fen_fd, &rel_fen_fd, sizeof(int));
 	if (ret) {
 		pr_err("%s: copy_to_user failed\n", sync_pt_data->fence_name);
@@ -4152,8 +4171,6 @@ static int mdss_fb_handle_buf_sync_ioctl(struct msm_sync_pt_data *sync_pt_data,
 		goto buf_sync_err_3;
 	}
 
-	sync_fence_install(retire_fence, retire_fen_fd);
-
 	ret = copy_to_user(buf_sync->retire_fen_fd, &retire_fen_fd,
 			sizeof(int));
 	if (ret) {
@@ -4163,6 +4180,9 @@ static int mdss_fb_handle_buf_sync_ioctl(struct msm_sync_pt_data *sync_pt_data,
 		sync_fence_put(retire_fence);
 		goto buf_sync_err_3;
 	}
+
+	sync_fence_install(rel_fence, rel_fen_fd);
+	sync_fence_install(retire_fence, retire_fen_fd);
 
 skip_retire_fence:
 	mutex_unlock(&sync_pt_data->sync_mutex);

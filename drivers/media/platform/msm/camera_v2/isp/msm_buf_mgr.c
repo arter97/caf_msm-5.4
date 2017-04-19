@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -189,6 +189,12 @@ static int msm_isp_prepare_v4l2_buf(struct msm_isp_buf_mgr *buf_mgr,
 	struct msm_isp_buffer_mapped_info *mapped_info;
 	uint32_t accu_length = 0;
 
+	if (qbuf_buf->num_planes > MAX_PLANES_PER_STREAM) {
+		pr_err("%s: Invalid num_planes %d , stream id %x\n",
+			__func__, qbuf_buf->num_planes, stream_id);
+		return -EINVAL;
+	}
+
 	for (i = 0; i < qbuf_buf->num_planes; i++) {
 		mapped_info = &buf_info->mapped_info[i];
 		mapped_info->buf_fd = qbuf_buf->planes[i].addr;
@@ -230,6 +236,12 @@ static void msm_isp_unprepare_v4l2_buf(
 	if (!buf_mgr || !buf_info) {
 		pr_err("%s: NULL ptr %pK %pK\n", __func__,
 			buf_mgr, buf_info);
+		return;
+	}
+
+	if (buf_info->num_planes > VIDEO_MAX_PLANES) {
+		pr_err("%s: Invalid num_planes %d , stream id %x\n",
+			__func__, buf_info->num_planes, stream_id);
 		return;
 	}
 
@@ -461,7 +473,8 @@ static int msm_isp_buf_unprepare(struct msm_isp_buf_mgr *buf_mgr,
 
 
 static int msm_isp_get_buf(struct msm_isp_buf_mgr *buf_mgr, uint32_t id,
-	uint32_t bufq_handle, struct msm_isp_buffer **buf_info)
+	uint32_t bufq_handle, uint32_t buf_index,
+	struct msm_isp_buffer **buf_info)
 {
 	int rc = -1;
 	unsigned long flags;
@@ -511,8 +524,12 @@ static int msm_isp_get_buf(struct msm_isp_buf_mgr *buf_mgr, uint32_t id,
 		}
 		break;
 	case MSM_ISP_BUFFER_SRC_HAL:
-		vb2_buf = buf_mgr->vb2_ops->get_buf(
-			bufq->session_id, bufq->stream_id);
+		if (MSM_ISP_INVALID_BUF_INDEX == buf_index)
+			vb2_buf = buf_mgr->vb2_ops->get_buf(
+				bufq->session_id, bufq->stream_id);
+		else
+			vb2_buf = buf_mgr->vb2_ops->get_buf_by_idx(
+				bufq->session_id, bufq->stream_id,  buf_index);
 		if (vb2_buf) {
 			if (vb2_buf->v4l2_buf.index < bufq->num_bufs) {
 				*buf_info = &bufq->bufs[vb2_buf

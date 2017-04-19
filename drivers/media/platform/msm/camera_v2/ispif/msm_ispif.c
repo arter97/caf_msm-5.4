@@ -73,7 +73,7 @@ static void msm_ispif_io_dump_reg(struct ispif_device *ispif)
 
 
 static inline int msm_ispif_is_intf_valid(uint32_t csid_version,
-	uint8_t intf_type)
+	enum msm_ispif_vfe_intf intf_type)
 {
 	return ((csid_version <= CSID_VERSION_V22 && intf_type != VFE0) ||
 		(intf_type >= VFE_MAX)) ? false : true;
@@ -1323,6 +1323,12 @@ static inline void msm_ispif_read_irq_status(struct ispif_irq_status *out,
 		pr_err_ratelimited("%s: fatal error, stop ispif immediately\n",
 			__func__);
 		for (i = 0; i < ispif->vfe_info.num_vfe; i++) {
+			msm_camera_io_w(0x0,
+				ispif->base + ISPIF_VFE_m_IRQ_MASK_0(i));
+			msm_camera_io_w(0x0,
+				ispif->base + ISPIF_VFE_m_IRQ_MASK_1(i));
+			msm_camera_io_w(0x0,
+				ispif->base + ISPIF_VFE_m_IRQ_MASK_2(i));
 			msm_camera_io_w(ISPIF_STOP_INTF_IMMEDIATELY,
 				ispif->base + ISPIF_VFE_m_INTF_CMD_0(i));
 			msm_camera_io_w(ISPIF_STOP_INTF_IMMEDIATELY,
