@@ -1003,6 +1003,57 @@
                                 bias-disable = <0>;
                         };
                 };
+
+		spi5_active {
+			/* MOSI, MISO, CLK */
+			qcom,pins = <&gp 16>, <&gp 17>, <&gp 19>;
+			qcom,num-grp-pins = <3>;
+			qcom,pin-func = <1>;
+			label = "spi5-active";
+			/* active state */
+			spi5_default: spi5_default {
+				drive-strength = <12>; /* 12 MA */
+				bias-disable = <0>; /* No PULL */
+			};
+		};
+
+		spi5_suspend {
+			/* MOSI, MISO, CLK */
+			qcom,pins = <&gp 16>, <&gp 17>, <&gp 19>;
+			qcom,num-grp-pins = <3>;
+			qcom,pin-func = <0>;
+			label = "spi5-suspend";
+			/* suspended state */
+			spi5_sleep: spi5_sleep {
+				drive-strength = <2>; /* 2 MA */
+				bias-pull-down; /* pull down */
+			};
+		};
+
+		spi5_cs0_active {
+			/* CS */
+			qcom,pins = <&gp 18>;
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <1>;
+			label = "spi5-cs0-active";
+			spi5_cs0_active: cs0_active {
+				drive-strength = <2>;
+				bias-disable = <0>;
+			};
+		};
+
+		spi5_cs0_suspend {
+			/* CS */
+			qcom,pins = <&gp 18>;
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <0>;
+			label = "spi5-cs0-suspend";
+			spi5_cs0_sleep: cs0_sleep {
+				drive-strength = <2>;
+				bias-disable = <0>;
+			};
+		};
+
 		pmx_mdss: pmx_mdss {
 			label = "mdss-pins";
 			qcom,pin-func = <0>;
