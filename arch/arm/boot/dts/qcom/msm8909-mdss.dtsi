@@ -31,7 +31,6 @@
                 mdss_fb0: qcom,mdss_fb_primary {
 			cell-index = <0>;
 			compatible = "qcom,mdss-fb";
-			qcom,mdss-fb-format = "rgba8888";
 			qcom,cont-splash-memory {
 				linux,contiguous-region = <&cont_splash_mem>;
 			};
