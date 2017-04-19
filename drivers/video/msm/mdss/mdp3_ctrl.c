@@ -1383,6 +1383,7 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 		mdp3_session->first_commit = false;
 		rc |= panel->event_handler(panel,
 					MDSS_EVENT_POST_PANEL_ON, NULL);
+
 	}
 
 	mdp3_session->vsync_before_commit = 0;
@@ -1391,6 +1392,8 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 			panel->set_backlight(panel, panel->panel_info.bl_max);
 		splash_done = true;
 		mdp3_session->esd_recovery = false;
+	} else {
+		mdss_spi_panel_bl_ctrl_update(panel, mdp3_res->bklt_level);
 	}
 
 	/* start vsync tick countdown for cmd mode if vsync isn't enabled */
