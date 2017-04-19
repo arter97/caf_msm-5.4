@@ -1318,6 +1318,7 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 		stride = mdp3_session->dma->source_config.stride;
 		if (mdp3_ctrl_get_intf_type(mfd) ==
 				MDP3_DMA_OUTPUT_SEL_SPI_CMD) {
+			mdp3_session->intf->active = false;
 			rc = mdss_spi_panel_kickoff(mdp3_session->panel,
 						(void *)(int)data->addr,
 						(int)data->len,
