@@ -1414,8 +1414,7 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 	static bool splash_done;
 	struct mdss_panel_data *panel;
 	int frame_rate = DEFAULT_FRAME_RATE;
-
-	int rc;
+	int stride, rc;
 
 	pr_debug("mdp3_ctrl_pan_display\n");
 	if (!mfd || !mfd->mdp.private1)
@@ -1461,9 +1460,21 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 		mdp3_ctrl_reset_countdown(mdp3_session, mfd);
 		mdp3_ctrl_notify(mdp3_session, MDP_NOTIFY_FRAME_BEGIN);
 		mdp3_ctrl_clk_enable(mfd, 1);
-		rc = mdp3_session->dma->update(mdp3_session->dma,
-				(void *)(int)(mfd->iova + offset),
-				mdp3_session->intf, NULL);
+		if (mdp3_ctrl_get_intf_type(mfd) ==
+				MDP3_DMA_OUTPUT_SEL_SPI_CMD) {
+			stride = fbi->fix.line_length;
+			pr_debug("addr = %x, smemlen = %d, stride = %d, offset = %x\n",
+				(int)mfd->iova, (int)fbi->fix.smem_len,
+					stride, (int)offset);
+			rc = mdss_spi_panel_kickoff(mdp3_session->panel,
+				(void *)(int)(mfd->fbi->screen_base + offset),
+				(int)fbi->fix.smem_len,
+				stride);
+		} else {
+			rc = mdp3_session->dma->update(mdp3_session->dma,
+					(void *)(int)(mfd->iova + offset),
+					mdp3_session->intf, NULL);
+		}
 		/* This is for the previous frame */
 		if (rc < 0) {
 			mdp3_ctrl_notify(mdp3_session,
