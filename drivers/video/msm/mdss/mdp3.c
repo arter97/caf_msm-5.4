@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  * Copyright (C) 2007 Google Incorporated
  *
  * This software is licensed under the terms of the GNU General Public
@@ -56,7 +56,7 @@
 #include "mdp3_ctrl.h"
 #include "mdp3_ppp.h"
 #include "mdss_debug.h"
-#include "mdss_spi.h"
+#include "mdss_spi_panel.h"
 
 #define AUTOSUSPEND_TIMEOUT_MS	100
 #define MISR_POLL_SLEEP                 2000
@@ -99,6 +99,7 @@ struct mdp3_bus_handle_map mdp3_bus_handle[MDP3_BUS_HANDLE_MAX] = {
 
 static struct mdss_panel_intf pan_types[] = {
 	{"dsi", MDSS_PANEL_INTF_DSI},
+	{"spi", MDSS_PANEL_INTF_SPI},
 };
 static char mdss_mdp3_panel[MDSS_MAX_PANEL_LEN];
 
@@ -1773,15 +1774,21 @@ out:
 int mdp3_put_img(struct mdp3_img_data *data, int client)
 {
 	struct ion_client *iclient = mdp3_res->ion_client;
-	//int dom;
+	int dom;
 
 	 if (data->flags & MDP_MEMORY_ID_TYPE_FB) {
+		pr_info("mdp3_put_img fb mem buf=0x%pa\n", &data->addr);
 		fput_light(data->srcp_file, data->p_need);
 		data->srcp_file = NULL;
 	} else if (!IS_ERR_OR_NULL(data->srcp_ihdl)) {
 		if (client == MDP3_CLIENT_DMA_P) {
-			//dom = (mdp3_res->domains + MDP3_IOMMU_DOMAIN_UNSECURE)->domain_idx;
-			//ion_unmap_iommu(iclient, data->srcp_ihdl, dom, 0);
+			dom = (mdp3_res->domains + MDP3_IOMMU_DOMAIN_UNSECURE)->domain_idx;
+			ion_unmap_iommu(iclient, data->srcp_ihdl, dom, 0);
+			pr_debug("%s DMA_P unmap Addr Start %llx End %llx\n",
+				__func__, (u64)data->addr,
+				(u64)(data->addr + data->len));
+		} else if (client == MDP3_CLINET_SPI) {
+			ion_unmap_kernel(iclient, data->srcp_ihdl);
 		} else {
 			mdp3_unmap_iommu(iclient, data->srcp_ihdl);
 		}
@@ -1801,7 +1808,7 @@ int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data, int client)
 	unsigned long *len;
 	dma_addr_t *start;
 	struct ion_client *iclient = mdp3_res->ion_client;
-//	int dom;
+	int dom;
 
 	start = &data->addr;
 	len = (unsigned long *) &data->len;
@@ -1844,16 +1851,30 @@ int mdp3_get_img(struct msmfb_data *img, struct mdp3_img_data *data, int client)
 			return ret;
 		}
 		if (client == MDP3_CLIENT_DMA_P) {
-			{
-				char *tx_buf2;
-				tx_buf2 = ion_map_kernel(iclient,data->srcp_ihdl);
-				 *start = (dma_addr_t )tx_buf2;
-				 *len = 320*320*2;
-				 return 0;
+			dom = (mdp3_res->domains + MDP3_IOMMU_DOMAIN_UNSECURE)->domain_idx;
+			ret = ion_map_iommu(iclient, data->srcp_ihdl, dom,
+					0, SZ_4K, 0, start, len, 0, 0);
+			pr_debug("%s DMA_P map Addr Start %llx End %llx\n",
+				__func__, (u64)data->addr,
+				(u64)(data->addr + data->len));
+		} else if (client == MDP3_CLINET_SPI) {
+			void *vaddr;
+
+			if (ion_handle_get_size(iclient, data->srcp_ihdl, len)
+				< 0) {
+				pr_err("%s: get ion size failed\n", __func__);
+				return -EINVAL;
 			}
-			//dom = (mdp3_res->domains + MDP3_IOMMU_DOMAIN_UNSECURE)->domain_idx;
-			//ret = ion_map_iommu(iclient, data->srcp_ihdl, dom,
-			//		0, SZ_4K, 0, start, len, 0, 0);
+			vaddr = ion_map_kernel(iclient, data->srcp_ihdl);
+			if (IS_ERR_OR_NULL(vaddr)) {
+				pr_err("%s: ION memory mapping failed\n",
+					__func__);
+				mdp3_put_img(data, client);
+				return -EINVAL;
+			}
+			data->addr = (dma_addr_t) vaddr;
+			data->len -= img->offset;
+			return 0;
 		} else {
 			ret = mdp3_self_map_iommu(iclient, data->srcp_ihdl,
 				SZ_4K, data->padding, start, len, 0, 0);
@@ -2199,6 +2220,8 @@ static int mdp3_is_display_on(struct mdss_panel_data *pdata)
 	if (pdata->panel_info.type == MIPI_VIDEO_PANEL) {
 		status = MDP3_REG_READ(MDP3_REG_DSI_VIDEO_EN);
 		rc = status & 0x1;
+	} else if (pdata->panel_info.type == SPI_PANEL) {
+		rc = is_spi_panel_continuous_splash_on(pdata);
 	} else {
 		status = MDP3_REG_READ(MDP3_REG_DMA_P_CONFIG);
 		status &= 0x180000;
@@ -2217,11 +2240,14 @@ static int mdp3_continuous_splash_on(struct mdss_panel_data *pdata)
 {
 	struct mdss_panel_info *panel_info = &pdata->panel_info;
 	struct mdp3_bus_handle_map *bus_handle;
+	int frame_rate = DEFAULT_FRAME_RATE;
 	u64 ab, ib;
 	u32 vtotal;
 	int rc;
 
 	pr_debug("mdp3__continuous_splash_on\n");
+
+	frame_rate = mdss_panel_get_framerate(panel_info);
 
 	mdp3_clk_set_rate(MDP3_CLK_VSYNC, MDP_VSYNC_CLK_RATE,
 			MDP3_CLIENT_DMA_P);
@@ -2239,9 +2265,13 @@ static int mdp3_continuous_splash_on(struct mdss_panel_data *pdata)
 		panel_info->lcdc.v_pulse_width;
 
 	ab = panel_info->xres * vtotal * 4;
-	ab *= panel_info->mipi.frame_rate;
+	ab *= frame_rate;
 	ib = ab;
-	rc = mdp3_bus_scale_set_quota(MDP3_CLIENT_DMA_P, ab, ib);
+	/* DMA not used on SPI interface, remove DMA bus voting  */
+	if (panel_info->type == SPI_PANEL)
+		rc = mdp3_bus_scale_set_quota(MDP3_CLIENT_DMA_P, 0, 0);
+	else
+		rc = mdp3_bus_scale_set_quota(MDP3_CLIENT_DMA_P, ab, ib);
 	bus_handle->restore_ab[MDP3_CLIENT_DMA_P] = ab;
 	bus_handle->restore_ib[MDP3_CLIENT_DMA_P] = ib;
 
@@ -2259,6 +2289,8 @@ static int mdp3_continuous_splash_on(struct mdss_panel_data *pdata)
 
 	if (panel_info->type == MIPI_VIDEO_PANEL)
 		mdp3_res->intf[MDP3_DMA_OUTPUT_SEL_DSI_VIDEO].active = 1;
+	else if (panel_info->type == SPI_PANEL)
+		mdp3_res->intf[MDP3_DMA_OUTPUT_SEL_SPI_CMD].active = 1;
 	else
 		mdp3_res->intf[MDP3_DMA_OUTPUT_SEL_DSI_CMD].active = 1;
 

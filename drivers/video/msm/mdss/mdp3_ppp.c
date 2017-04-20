@@ -1,4 +1,4 @@
-/* Copyright (c) 2007, 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2007, 2013-2017, The Linux Foundation. All rights reserved.
  * Copyright (C) 2007 Google Incorporated
  *
  * This software is licensed under the terms of the GNU General Public
@@ -536,6 +536,7 @@ u64 mdp3_adjust_scale_factor(struct mdp_blit_req *req, u32 bw_req, int bpp)
 int mdp3_calc_ppp_res(struct msm_fb_data_type *mfd,  struct blit_req_list *lreq)
 {
 	struct mdss_panel_info *panel_info = mfd->panel_info;
+	int frame_rate = DEFAULT_FRAME_RATE;
 	int i, lcount = 0;
 	struct mdp_blit_req *req;
 	struct bpp_info bpp;
@@ -551,6 +552,7 @@ int mdp3_calc_ppp_res(struct msm_fb_data_type *mfd,  struct blit_req_list *lreq)
 
 	ATRACE_BEGIN(__func__);
 	lcount = lreq->count;
+	frame_rate = mdss_panel_get_framerate(panel_info);
 	if (lcount == 0) {
 		pr_err("Blit with request count 0, continue to recover!!!\n");
 		ATRACE_END(__func__);
@@ -578,11 +580,11 @@ int mdp3_calc_ppp_res(struct msm_fb_data_type *mfd,  struct blit_req_list *lreq)
 		is_blit_optimization_possible(lreq, i);
 		req = &(lreq->req_list[i]);
 
-		if (req->fps > 0 && req->fps <= panel_info->mipi.frame_rate) {
+		if (req->fps > 0 && req->fps <= frame_rate) {
 			if (fps == 0)
 				fps = req->fps;
 			else
-				fps = panel_info->mipi.frame_rate;
+				fps = frame_rate;
 		}
 
 		mdp3_get_bpp_info(req->src.format, &bpp);
@@ -637,7 +639,7 @@ int mdp3_calc_ppp_res(struct msm_fb_data_type *mfd,  struct blit_req_list *lreq)
 	}
 
 	if (fps == 0)
-		fps = panel_info->mipi.frame_rate;
+		fps = frame_rate;
 
 	if (lreq->req_list[0].flags & MDP_SOLID_FILL) {
 		honest_ppp_ab = ppp_res.solid_fill_byte * 4;
