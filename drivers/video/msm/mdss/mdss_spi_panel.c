@@ -24,6 +24,7 @@
 #include "mdss_panel.h"
 #include "mdss_spi_panel.h"
 #include "mdss_spi_client.h"
+#include "mdp3.h"
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
 int mdss_spi_panel_reset(struct mdss_panel_data *pdata, int enable)
@@ -972,8 +973,16 @@ static void mdss_spi_panel_bklt_pwm(struct spi_panel_data *ctrl, int level)
 	}
 }
 
-
 static void mdss_spi_panel_bl_ctrl(struct mdss_panel_data *pdata,
+							u32 bl_level)
+{
+	if (bl_level)
+		mdp3_res->bklt_level = bl_level;
+	else
+		mdss_spi_panel_bl_ctrl_update(pdata, bl_level);
+}
+
+void mdss_spi_panel_bl_ctrl_update(struct mdss_panel_data *pdata,
 							u32 bl_level)
 {
 	struct spi_panel_data *ctrl_pdata = NULL;

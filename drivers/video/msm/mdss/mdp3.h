@@ -193,6 +193,7 @@ struct mdp3_hw_resource {
 	atomic_t active_intf_cnt;
 	u8 smart_blit_en;
 	bool solid_fill_vote_en;
+	int bklt_level;
 };
 
 struct mdp3_img_data {
@@ -246,6 +247,8 @@ int mdp3_autorefresh_disable(struct mdss_panel_info *panel_info);
 void mdp3_calc_dma_res(struct mdss_panel_info *panel_info, u64 *clk_rate,
 		u64 *ab, u64 *ib, uint32_t bpp);
 
+void mdss_spi_panel_bl_ctrl_update(struct mdss_panel_data *pdata,
+							u32 bl_level);
 
 #define MDP3_REG_WRITE(addr, val) writel_relaxed(val, mdp3_res->mdp_base + addr)
 #define MDP3_REG_READ(addr) readl_relaxed(mdp3_res->mdp_base + addr)
