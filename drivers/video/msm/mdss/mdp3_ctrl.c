@@ -29,6 +29,7 @@
 #include "mdss_spi_panel.h"
 
 #define VSYNC_EXPIRE_TICK	4
+#define SPI_PANEL_INIT_DELAY 40
 
 static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd);
 static int mdp3_overlay_unset(struct msm_fb_data_type *mfd, int ndx);
@@ -1390,10 +1391,16 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 	if (!splash_done || mdp3_session->esd_recovery == true) {
 		if(panel && panel->set_backlight)
 			panel->set_backlight(panel, panel->panel_info.bl_max);
+		mdp3_res->bklt_update = true;
 		splash_done = true;
 		mdp3_session->esd_recovery = false;
-	} else {
-		mdss_spi_panel_bl_ctrl_update(panel, mdp3_res->bklt_level);
+	}
+
+	/* Update backlight only if its changed */
+	if (mdp3_res->bklt_level && mdp3_res->bklt_update) {
+		mdss_spi_panel_bl_ctrl_update(panel,
+				mdp3_res->bklt_level);
+		mdp3_res->bklt_update = false;
 	}
 
 	/* start vsync tick countdown for cmd mode if vsync isn't enabled */
@@ -1513,15 +1520,27 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 					MDSS_EVENT_POST_PANEL_ON,
 					NULL);
 		}
+	} else if (mdp3_session->first_commit && mdp3_ctrl_get_intf_type(mfd)
+			== MDP3_DMA_OUTPUT_SEL_SPI_CMD) {
+		/* Ensure pixel data transfer is complete */
+		msleep(SPI_PANEL_INIT_DELAY);
 	}
+
 	mdp3_session->vsync_before_commit = 0;
 	if (!splash_done || mdp3_session->esd_recovery == true) {
 		if(panel && panel->set_backlight)
 			panel->set_backlight(panel, panel->panel_info.bl_max);
+		mdp3_res->bklt_update = true;
 		splash_done = true;
 		mdp3_session->esd_recovery = false;
 	}
 
+	/* Update backlight only if its changed */
+	if (mdp3_res->bklt_level && mdp3_res->bklt_update) {
+		mdss_spi_panel_bl_ctrl_update(panel,
+				mdp3_res->bklt_level);
+		mdp3_res->bklt_update = false;
+	}
 
 pan_error:
 	mutex_unlock(&mdp3_session->lock);

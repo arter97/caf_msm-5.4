@@ -194,6 +194,7 @@ struct mdp3_hw_resource {
 	u8 smart_blit_en;
 	bool solid_fill_vote_en;
 	int bklt_level;
+	int bklt_update;
 };
 
 struct mdp3_img_data {
