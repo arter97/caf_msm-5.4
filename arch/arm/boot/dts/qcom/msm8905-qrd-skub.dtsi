@@ -153,6 +153,35 @@
         /delete-property/ cd-gpios;
 };
 
+&pm8909_mpps {
+	mpp@a300 { /* MPP 4 */
+		 /* CASE_THERM config */
+		 qcom,mode = <4>; /* AIN input */
+		 qcom,invert = <1>; /* Enable MPP */
+		 qcom,ain-route = <3>; /* AMUX 8 */
+		 qcom,master-en = <1>;
+		 qcom,src-sel = <0>; /* Function constant */
+	};
+};
+
+&pm8909_vadc {
+	chan@30 {
+		qcom,scale-function = <12>;
+	};
+
+	chan@13 {
+		label = "case_therm";
+		reg = <0x13>;
+		qcom,decimation = <0>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <2>;
+		qcom,hw-settle-time = <2>;
+		qcom,fast-avg-setup = <0>;
+		qcom,vadc-thermal-node;
+	};
+};
+
 &soc {
 	sound {
 		compatible = "qcom,msm8x16-audio-codec";
