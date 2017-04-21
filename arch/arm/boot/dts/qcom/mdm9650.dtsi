@@ -396,7 +396,7 @@
 
 		qcom,cpl-timeout = <0x2>;
 
-		qcom,ep-wakeirq;
+		qcom,boot-option = <0x1>;
 
 		linux,pci-domain = <0>;
 
@@ -511,6 +511,7 @@
 		qcom,pcie-phy-ver = <4>;
 		qcom,pcie-active-config;
 		qcom,pcie-aggregated-irq;
+		qcom,pcie-perst-enum;
 	};
 
 	qcom,msm_gsi {

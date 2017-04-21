@@ -873,6 +873,7 @@ static void ipa_data_path_enable(struct gsi_data_port *d_port)
 	usb_gsi_ep_op(d_port->in_ep, (void *)&block_db,
 				GSI_EP_OP_SET_CLR_BLOCK_DBL);
 
+	/* GSI channel DBL address for USB IN endpoint */
 	dbl_register_addr = gsi->d_port.in_db_reg_phs_addr_msb;
 	dbl_register_addr = dbl_register_addr << 32;
 	dbl_register_addr =
@@ -882,11 +883,18 @@ static void ipa_data_path_enable(struct gsi_data_port *d_port)
 	req.buf_base_addr = &dbl_register_addr;
 
 	req.num_bufs = gsi->d_port.in_request.num_bufs;
-	usb_gsi_ep_op(gsi->d_port.in_ep, &req, GSI_EP_OP_RING_IN_DB);
+	usb_gsi_ep_op(gsi->d_port.in_ep, &req, GSI_EP_OP_RING_DB);
 
 	if (gsi->d_port.out_ep) {
-		usb_gsi_ep_op(gsi->d_port.out_ep, &gsi->d_port.out_request,
-			GSI_EP_OP_UPDATEXFER);
+		/* GSI channel DBL address for USB OUT endpoint */
+		dbl_register_addr = gsi->d_port.out_db_reg_phs_addr_msb;
+		dbl_register_addr = dbl_register_addr << 32;
+		dbl_register_addr = dbl_register_addr |
+					gsi->d_port.out_db_reg_phs_addr_lsb;
+		/* use temp request to pass 64 bit dbl reg addr and num_bufs */
+		req.buf_base_addr = &dbl_register_addr;
+		req.num_bufs = gsi->d_port.out_request.num_bufs;
+		usb_gsi_ep_op(gsi->d_port.out_ep, &req, GSI_EP_OP_RING_DB);
 	}
 }
 
@@ -2014,13 +2022,6 @@ static void gsi_ctrl_notify_resp_complete(struct usb_ep *ep,
 			event->bNotificationType, req->status);
 		/* FALLTHROUGH */
 	case 0:
-		/*
-		  * handle multiple pending resp available
-		  * notifications by queuing same until we're done,
-		  * rest of the notification require queuing new
-		  * request.
-		  */
-		gsi_ctrl_send_notification(gsi);
 		break;
 	}
 }
@@ -2115,6 +2116,14 @@ static void gsi_ctrl_reset_cmd_complete(struct usb_ep *ep,
 	gsi_ctrl_send_cpkt_tomodem(gsi, req->buf, 0);
 }
 
+static void gsi_ctrl_send_response_complete(struct usb_ep *ep,
+		struct usb_request *req)
+{
+	struct f_gsi *gsi = req->context;
+
+	gsi_ctrl_send_notification(gsi);
+}
+
 static int
 gsi_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 {
@@ -2200,6 +2209,8 @@ gsi_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 		memcpy(req->buf, cpkt->buf, value);
 		gsi_ctrl_pkt_free(cpkt);
 
+		req->complete = gsi_ctrl_send_response_complete;
+		req->context = gsi;
 		log_event_dbg("copied encap_resp %d bytes",
 			value);
 		break;
@@ -3077,7 +3088,7 @@ static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 		info.in_req_num_buf = num_in_bufs;
 		gsi->d_port.out_aggr_size = GSI_ECM_AGGR_SIZE;
 		info.out_req_buf_len = GSI_OUT_ECM_BUF_LEN;
-		info.out_req_num_buf = GSI_ECM_NUM_OUT_BUFFERS;
+		info.out_req_num_buf = num_out_bufs;
 		info.notify_buf_len = GSI_CTRL_NOTIFY_BUFF_LEN;
 
 		/* export host's Ethernet address in CDC format */
