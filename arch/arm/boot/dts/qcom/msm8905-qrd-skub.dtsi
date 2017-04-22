@@ -328,3 +328,36 @@
 	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
 	qcom,platform-spi-dc-gpio = <&msm_gpio 110 0>;
 };
+
+&pm8909_gpios {
+        /* GPIO 2 (NFC_CLK_REQ) */
+        gpio@c100 {
+                qcom,mode = <0>;
+                qcom,vin-sel = <1>;
+                qcom,src-sel = <0>;
+                qcom,master-en = <1>;
+                status = "okay";
+        };
+};
+
+&i2c_2 {
+        status = "okay";
+        nq@28 {
+                compatible = "qcom,nq-nci";
+                reg = <0x28>;
+                qcom,nq-irq = <&msm_gpio 21 0x00>;
+                qcom,nq-ven = <&msm_gpio 20 0x00>;
+                qcom,nq-firm = <&msm_gpio 23 0x00>;
+                qcom,nq-clkreq = <&pm8909_gpios 2 0x00>;
+                qcom,nq-esepwr = <&msm_gpio 31 0x00>;
+                interrupt-parent = <&msm_gpio>;
+                qcom,clk-src = "BBCLK2";
+                interrupts = <21 0>;
+                interrupt-names = "nfc_irq";
+                pinctrl-names = "nfc_active", "nfc_suspend";
+                pinctrl-0 = <&nfc_int_active &nfc_disable_active>;
+                pinctrl-1 = <&nfc_int_suspend &nfc_disable_suspend>;
+                clocks = <&clock_rpm clk_bb_clk2_pin>;
+                clock-names = "ref_clk";
+        };
+};
