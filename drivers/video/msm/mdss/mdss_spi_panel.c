@@ -976,10 +976,12 @@ static void mdss_spi_panel_bklt_pwm(struct spi_panel_data *ctrl, int level)
 static void mdss_spi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 							u32 bl_level)
 {
-	if (bl_level)
+	if (bl_level) {
 		mdp3_res->bklt_level = bl_level;
-	else
+		mdp3_res->bklt_update = true;
+	} else {
 		mdss_spi_panel_bl_ctrl_update(pdata, bl_level);
+	}
 }
 
 void mdss_spi_panel_bl_ctrl_update(struct mdss_panel_data *pdata,
