@@ -2856,6 +2856,11 @@ struct msm_serial_hs_platform_data
 	if (pdata->obs)
 		pr_err("%s:Out of Band sleep flag is set\n", __func__);
 
+	pdata->no_rt_suspend = of_property_read_bool(node,
+				"qcom,no-rt-suspend");
+	if (pdata->no_rt_suspend)
+		pr_err("%s:Run time suspend disabled\n", __func__);
+
 	pdata->inject_rx_on_wakeup = of_property_read_bool(node,
 				"qcom,inject-rx-on-wakeup");
 
@@ -3302,12 +3307,30 @@ static void  msm_serial_hs_rt_init(struct uart_port *uport)
 
 static int msm_hs_runtime_suspend(struct device *dev)
 {
+	struct platform_device *pdev = to_platform_device(dev);
+	const struct msm_serial_hs_platform_data *pdata =
+					pdev->dev.platform_data;
+
+	if(pdata->no_rt_suspend){
+		dev_info(&pdev->dev, "hs-uart disabled run time suspend/resume");
+		return 0;
+	}
+
 	msm_hs_pm_suspend(dev);
 	return 0;
 }
 
 static int msm_hs_runtime_resume(struct device *dev)
 {
+	struct platform_device *pdev = to_platform_device(dev);
+	const struct msm_serial_hs_platform_data *pdata =
+					pdev->dev.platform_data;
+
+	if(pdata->no_rt_suspend){
+		dev_info(&pdev->dev, "hs-uart disabled run time suspend/resume");
+		return 0;
+	}
+
 	return msm_hs_pm_resume(dev);
 }
 #else
@@ -3584,8 +3607,10 @@ static int msm_hs_probe(struct platform_device *pdev)
 		uport->line = pdata->userid;
 	ret = uart_add_one_port(&msm_hs_driver, uport);
 	if (!ret) {
-		msm_hs_clk_bus_unvote(msm_uport);
-		msm_serial_hs_rt_init(uport);
+		if(!pdata->no_rt_suspend){
+			msm_hs_clk_bus_unvote(msm_uport);
+			msm_serial_hs_rt_init(uport);
+		}
 		return ret;
 	}
 
