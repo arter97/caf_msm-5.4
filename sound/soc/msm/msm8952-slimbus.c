@@ -1091,6 +1091,33 @@ static int msm_btsco_rate_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int msm_auxpcm_rate_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: msm_auxpcm_rate  = %d", __func__, msm8952_auxpcm_rate);
+	ucontrol->value.integer.value[0] = msm8952_auxpcm_rate;
+	return 0;
+}
+
+static int msm_auxpcm_rate_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	switch (ucontrol->value.integer.value[0]) {
+	case RATE_8KHZ_ID:
+		msm8952_auxpcm_rate = SAMPLING_RATE_8KHZ;
+		break;
+	case RATE_16KHZ_ID:
+		msm8952_auxpcm_rate = SAMPLING_RATE_16KHZ;
+		break;
+	default:
+		msm8952_auxpcm_rate = SAMPLING_RATE_8KHZ;
+		break;
+	}
+
+	pr_debug("%s: msm_auxpcm_rate = %d\n", __func__, msm8952_auxpcm_rate);
+	return 0;
+}
+
 static int msm_proxy_rx_ch_get(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
@@ -1560,6 +1587,12 @@ static const struct soc_enum msm_btsco_enum[] = {
 	SOC_ENUM_SINGLE_EXT(2, btsco_rate_text),
 };
 
+static const char *const auxpcm_rate_text[] = {"SAMPLING_RATE_8KHZ",
+	"SAMPLING_RATE_16KHZ"};
+static const struct soc_enum msm_auxpcm_enum[] = {
+		SOC_ENUM_SINGLE_EXT(2, auxpcm_rate_text),
+};
+
 static const struct snd_kcontrol_new msm_snd_controls[] = {
 	SOC_ENUM_EXT("Speaker Function", msm_snd_enum[0], msm8952_get_spk,
 			msm8952_set_spk),
@@ -1594,7 +1627,9 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 	SOC_ENUM_EXT("SLIM_0_TX Format", msm_snd_enum[3],
 			slim0_tx_bit_format_get, slim0_tx_bit_format_put),
 	SOC_ENUM_EXT("Internal BTSCO SampleRate", msm_btsco_enum[0],
-		     msm_btsco_rate_get, msm_btsco_rate_put),
+			msm_btsco_rate_get, msm_btsco_rate_put),
+	SOC_ENUM_EXT("AUXPCM SampleRate", msm_auxpcm_enum[0],
+			msm_auxpcm_rate_get, msm_auxpcm_rate_put),
 	SOC_ENUM_EXT("PROXY_RX Channels", msm_snd_enum[9],
 			msm_proxy_rx_ch_get, msm_proxy_rx_ch_put),
 	SOC_ENUM_EXT("PRI_TDM_RX_0 Channels", msm_snd_enum[13],
@@ -2758,7 +2793,7 @@ int msm_tdm_startup(struct snd_pcm_substream *substream)
 			return -EINVAL;
 		}
 
-		ret = msm_gpioset_activate(CLIENT_WCD_EXT, "pri_tdm");
+		ret = msm_gpioset_activate(CLIENT_WCD_EXT, "quat_i2s");
 		if (ret < 0)
 			pr_err("%s: failed to activate primary TDM gpio set\n",
 				   __func__);
@@ -2821,7 +2856,7 @@ int msm_tdm_startup(struct snd_pcm_substream *substream)
 		} else {
 			return -EINVAL;
 		}
-		ret = msm_gpioset_activate(CLIENT_WCD_EXT, "sec_tdm");
+		ret = msm_gpioset_activate(CLIENT_WCD_EXT, "quin_i2s");
 		if (ret < 0)
 			pr_err("%s: failed to activate secondary TDM gpio set\n",
 				   __func__);
@@ -2858,7 +2893,7 @@ void msm_tdm_shutdown(struct snd_pcm_substream *substream)
 	case AFE_PORT_ID_PRIMARY_TDM_TX_5:
 	case AFE_PORT_ID_PRIMARY_TDM_TX_6:
 	case AFE_PORT_ID_PRIMARY_TDM_TX_7:
-		ret = msm_gpioset_suspend(CLIENT_WCD_EXT, "pri_tdm");
+		ret = msm_gpioset_suspend(CLIENT_WCD_EXT, "quat_i2s");
 		if (ret < 0) {
 			pr_err("%s: gpio set cannot be de-activated %s\n",
 					__func__, "pri_tdm");
@@ -2881,7 +2916,7 @@ void msm_tdm_shutdown(struct snd_pcm_substream *substream)
 	case AFE_PORT_ID_SECONDARY_TDM_TX_5:
 	case AFE_PORT_ID_SECONDARY_TDM_TX_6:
 	case AFE_PORT_ID_SECONDARY_TDM_TX_7:
-		ret = msm_gpioset_suspend(CLIENT_WCD_EXT, "sec_tdm");
+		ret = msm_gpioset_suspend(CLIENT_WCD_EXT, "quin_i2s");
 		if (ret < 0) {
 			pr_err("%s: gpio set cannot be de-activated %s\n",
 				   __func__, "sec_tdm");
