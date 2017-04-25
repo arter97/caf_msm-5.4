@@ -781,7 +781,6 @@ static void ks8851_wrpkts3(struct ks8851_net *ks)
 	u16 len32;
 	u32 *buf32;
 	bool last;
-	struct skb_shared_hwtstamps hwtstamps;
 
 	last = skb_queue_empty(&ks->txq);
 	opc[0] = KS_SPIOP_TXFIFO;
@@ -825,13 +824,7 @@ static void ks8851_wrpkts3(struct ks8851_net *ks)
 			dev->stats.tx_bytes += txb->len;
 			dev->stats.tx_packets++;
 			txb->tstamp = ktime_get();
-			/* create clone for us to return on the Tx path */
-			clone = skb_clone_sk(txb);
-			if (clone) {
-				memset(&hwtstamps, 0,
-				       sizeof(struct skb_shared_hwtstamps));
-				skb_complete_tx_timestamp(clone, &hwtstamps);
-			}
+			skb_tx_timestamp(txb);
 			dev_kfree_skb(txb);
 		}
 	}
