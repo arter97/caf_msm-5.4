@@ -19,6 +19,7 @@
 &soc {
 	matrix_keypad: matrix_keypad@0 {
 		       compatible = "gpio-matrix-keypad";
+		       input-name = "matrix_keypad";
 		       debounce-delay-ms = <5>;
 		       col-scan-delay-us = <2>;
 		       pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
