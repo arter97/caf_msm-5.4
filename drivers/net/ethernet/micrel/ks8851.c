@@ -1348,6 +1348,7 @@ static const struct ethtool_ops ks8851_ethtool_ops = {
 	.get_eeprom_len	= ks8851_get_eeprom_len,
 	.get_eeprom	= ks8851_get_eeprom,
 	.set_eeprom	= ks8851_set_eeprom,
+	.get_ts_info = ethtool_op_get_ts_info,
 };
 
 /* MII interface controls */
@@ -1560,7 +1561,9 @@ static int ks8851_probe(struct spi_device *spi)
 	if (gpio_is_valid(gpio)) {
 		pr_debug("eth: spi reset GPIO set to 1\n");
 		usleep_range(10000, 11000);
-		gpio_direction_output(gpio, 0x1);
+		ret = gpio_direction_output(gpio, 0x1);
+		msleep(2000);
+		pr_debug("ks8851:return value for reset is %d\n", ret);
 	} else {
 		pr_debug("[%s:]eth: spi reset GPIO is invalid\n", __func__);
 	}
