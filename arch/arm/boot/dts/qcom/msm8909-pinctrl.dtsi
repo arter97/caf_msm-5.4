@@ -1192,9 +1192,9 @@
 		};
 
 		pmx_nfc_reset{
-			qcom,pins = <&gp 20>;
+			qcom,pins = <&gp 20 &gp 31>;
 			qcom,pin-func = <0>;
-			qcom,num-grp-pins = <1>;
+			qcom,num-grp-pins = <2>;
 			label = "pmx_nfc_disable";
 
 			nfc_disable_active: active {
