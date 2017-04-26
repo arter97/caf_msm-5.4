@@ -22,6 +22,7 @@
 #include <linux/gpio.h>
 
 #include "mdss_panel.h"
+#include "mdp3_dma.h"
 
 #define MDSS_MAX_BL_BRIGHTNESS 255
 
@@ -83,6 +84,8 @@ struct spi_panel_data {
 	struct spi_pinctrl_res pin_res;
 	struct dss_module_power panel_power_data;
 	struct completion spi_panel_te;
+	struct mdp3_notification vsync_client;
+	unsigned int vsync_status;
 	int byte_pre_frame;
 	char *tx_buf;
 	u8 ctrl_state;
@@ -106,6 +109,8 @@ struct spi_panel_data {
 int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
 				char *buf, int len, int stride);
 int is_spi_panel_continuous_splash_on(struct mdss_panel_data *pdata);
+void mdp3_spi_vsync_enable(struct mdss_panel_data *pdata,
+				struct mdp3_notification *vsync_client);
 #else
 static inline int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
 				char *buf, int len, int stride){
@@ -116,6 +121,11 @@ static inline int is_spi_panel_continuous_splash_on(
 {
 	return 0;
 }
+static inline int mdp3_spi_vsync_enable(struct mdss_panel_data *pdata,
+				struct mdp3_notification *vsync_client){
+	return 0;
+}
+
 #endif/* End of CONFIG_FB_MSM_MDSS_SPI_PANEL && ONFIG_SPI_QUP */
 
 #endif /* End of __MDSS_SPI_PANEL_H__ */

@@ -15,7 +15,7 @@
 		qcom,mdss-spi-panel-name = "gc9305 qvga command mode spi panel";
 		qcom,mdss-spi-panel-destination = "display_1";
 		qcom,mdss-spi-panel-controller = <&mdss_spi>;
-		qcom,mdss-spi-panel-framerate = <30>;
+		qcom,mdss-spi-panel-framerate = <27>;
 		qcom,mdss-spi-panel-width = <240>;
 		qcom,mdss-spi-panel-height = <320>;
 		qcom,mdss-spi-h-front-porch = <79>;

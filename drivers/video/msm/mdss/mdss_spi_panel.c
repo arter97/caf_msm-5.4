@@ -386,6 +386,28 @@ int is_spi_panel_continuous_splash_on(struct mdss_panel_data *pdata)
 	return true;
 }
 
+static void enable_spi_panel_te_irq(struct spi_panel_data *ctrl_pdata,
+							bool enable)
+{
+	static bool is_enabled = true;
+
+	if (is_enabled == enable)
+		return;
+
+	if (!gpio_is_valid(ctrl_pdata->disp_te_gpio)) {
+		pr_err("%s:%d,SPI panel TE GPIO not configured\n",
+			   __func__, __LINE__);
+		return;
+	}
+
+	if (enable)
+		enable_irq(gpio_to_irq(ctrl_pdata->disp_te_gpio));
+	else
+		disable_irq(gpio_to_irq(ctrl_pdata->disp_te_gpio));
+
+	is_enabled = enable;
+}
+
 int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
 			char *buf, int len, int dma_stride)
 {
@@ -422,6 +444,8 @@ int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
 				actual_stride);
 		scan_count++;
 	}
+
+	enable_spi_panel_te_irq(ctrl_pdata, true);
 
 	INIT_COMPLETION(ctrl_pdata->spi_panel_te);
 
@@ -1113,19 +1137,60 @@ static int mdss_spi_panel_regulator_init(struct platform_device *pdev)
 	return rc;
 
 }
+
 irqreturn_t spi_panel_te_handler(int irq, void *data)
 {
-	struct spi_panel_data *ctrl_pdata =
-		(struct spi_panel_data *)data;
+	struct spi_panel_data *ctrl_pdata = (struct spi_panel_data *)data;
+	static int count = 2;
 
 	if (!ctrl_pdata) {
 		pr_err("%s: SPI display not available\n", __func__);
 		return IRQ_HANDLED;
 	}
 	complete(&ctrl_pdata->spi_panel_te);
+
+	if (ctrl_pdata->vsync_client.handler && !(--count)) {
+		ctrl_pdata->vsync_client.handler(ctrl_pdata->vsync_client.arg);
+		count = 2;
+	}
+
 	return IRQ_HANDLED;
 }
 
+void mdp3_spi_vsync_enable(struct mdss_panel_data *pdata,
+				struct mdp3_notification *vsync_client)
+{
+	int updated = 0;
+	struct spi_panel_data *ctrl_pdata = NULL;
+
+	if (pdata == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return;
+	}
+
+	ctrl_pdata = container_of(pdata, struct spi_panel_data,
+				panel_data);
+
+	if (vsync_client) {
+		if (ctrl_pdata->vsync_client.handler != vsync_client->handler) {
+			ctrl_pdata->vsync_client = *vsync_client;
+			updated = 1;
+		}
+	} else {
+		if (ctrl_pdata->vsync_client.handler) {
+			ctrl_pdata->vsync_client.handler = NULL;
+			ctrl_pdata->vsync_client.arg = NULL;
+			updated = 1;
+		}
+	}
+
+	if (updated) {
+		if (vsync_client && vsync_client->handler)
+			enable_spi_panel_te_irq(ctrl_pdata, true);
+		else
+			enable_spi_panel_te_irq(ctrl_pdata, false);
+	}
+}
 
 static struct device_node *mdss_spi_pref_prim_panel(
 		struct platform_device *pdev)
