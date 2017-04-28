@@ -448,6 +448,7 @@ int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
 
 	enable_spi_panel_te_irq(ctrl_pdata, true);
 
+	mutex_lock(&ctrl_pdata->spi_tx_mutex);
 	INIT_COMPLETION(ctrl_pdata->spi_panel_te);
 
 	rc = wait_for_completion_timeout(&ctrl_pdata->spi_panel_te,
@@ -457,6 +458,25 @@ int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
 		pr_err("wait panel TE time out\n");
 
 	rc = mdss_spi_tx_pixel(tx_buf, ctrl_pdata->byte_pre_frame);
+	mutex_unlock(&ctrl_pdata->spi_tx_mutex);
+
+	return rc;
+}
+
+int mdss_spi_read_panel_data(struct mdss_panel_data *pdata,
+		u8 reg_addr, u8 *data, u8 len)
+{
+	int rc = 0;
+	struct spi_panel_data *ctrl_pdata = NULL;
+
+	ctrl_pdata = container_of(pdata, struct spi_panel_data,
+		panel_data);
+
+	mutex_lock(&ctrl_pdata->spi_tx_mutex);
+	gpio_set_value(ctrl_pdata->disp_dc_gpio, 0);
+	rc = mdss_spi_read_data(reg_addr, data,  len);
+	gpio_set_value(ctrl_pdata->disp_dc_gpio, 1);
+	mutex_unlock(&ctrl_pdata->spi_tx_mutex);
 
 	return rc;
 }
@@ -1492,6 +1512,7 @@ static int mdss_spi_panel_probe(struct platform_device *pdev)
 
 
 	init_completion(&ctrl_pdata->spi_panel_te);
+	mutex_init(&ctrl_pdata->spi_tx_mutex);
 
 	rc = devm_request_irq(&pdev->dev,
 		gpio_to_irq(ctrl_pdata->disp_te_gpio),

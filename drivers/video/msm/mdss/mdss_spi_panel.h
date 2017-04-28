@@ -45,7 +45,6 @@ enum spi_panel_data_type {
 	UNKNOWN_FORMAT,
 };
 
-
 enum spi_panel_bl_ctrl {
 	BL_PWM,
 	BL_WLED,
@@ -96,6 +95,7 @@ struct spi_panel_data {
 	struct spi_panel_cmds off_cmds;
 	int (*on)(struct mdss_panel_data *pdata);
 	int (*off)(struct mdss_panel_data *pdata);
+	struct mutex spi_tx_mutex;
 	struct pwm_device *pwm_bl;
 	int bklt_ctrl;	/* backlight ctrl */
 	bool pwm_pmi;
