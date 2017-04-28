@@ -18,8 +18,44 @@
 #include <linux/qpnp/pin.h>
 #include <linux/delay.h>
 
-#define SPI_PANEL_COMMAND_LEN 1
+#define MAX_READ_SPEED_HZ	9600000
+#define SPI_PANEL_COMMAND_LEN	1
 static struct spi_device *mdss_spi_client;
+
+int mdss_spi_read_data(u8 reg_addr, u8 *data, u8 len)
+{
+	int rc = 0;
+	u32 max_speed_hz;
+	struct spi_transfer t[2] = {
+		[0] = {
+			.tx_buf = &reg_addr,
+			.len = 1,
+		},
+		[1] = {
+			.rx_buf = data,
+			.len = len,
+		}
+	};
+	struct spi_message m;
+
+	if (!mdss_spi_client) {
+		pr_err("%s: spi client not available\n", __func__);
+		return -EINVAL;
+	}
+
+	mdss_spi_client->bits_per_word = 8;
+	max_speed_hz = mdss_spi_client->max_speed_hz;
+	mdss_spi_client->max_speed_hz = MAX_READ_SPEED_HZ;
+
+	spi_message_init(&m);
+	spi_message_add_tail(&t[0], &m);
+	spi_message_add_tail(&t[1], &m);
+	rc = spi_sync(mdss_spi_client, &m);
+
+	mdss_spi_client->max_speed_hz = max_speed_hz;
+
+	return rc;
+}
 
 int mdss_spi_tx_command(const void *buf)
 {
