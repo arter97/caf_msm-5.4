@@ -1,7 +1,4 @@
-#ifndef	__LINUX_USBNET_ASIX_H
 #define	__LINUX_USBNET_ASIX_H
-
-//#define RX_SKB_COPY
 
 #define AX88179_PHY_ID			0x03
 #define AX_MCAST_FILTER_SIZE		8
@@ -31,28 +28,35 @@
 /* Check AX88179 version. UA1:Bit2 = 0,  UA2:Bit2 = 1 */
 	#define	AX_SECLD		0x04
 
-
-
 #define AX_SROM_ADDR			0x07
 #define AX_SROM_CMD			0x0a
 	#define EEP_RD			0x04	/* EEprom read command */
 	#define EEP_WR			0x08	/* EEprom write command */
 	#define EEP_BUSY		0x10	/* EEprom access module busy */
 
-
 #define AX_SROM_DATA_LOW		0x08
 #define AX_SROM_DATA_HIGH		0x09
 
 #define AX_RX_CTL			0x0b
-	#define AX_RX_CTL_DROPCRCERR		0x0100 /* Drop CRC error packet */
-	#define AX_RX_CTL_IPE			0x0200 /* Enable IP header in receive buffer aligned on 32-bit aligment */
-	#define AX_RX_CTL_TXPADCRC		0x0400 /* checksum value in rx header 3 */
-	#define AX_RX_CTL_START			0x0080 /* Ethernet MAC start */
-	#define AX_RX_CTL_AP			0x0020 /* Accept physcial address from Multicast array */
-	#define AX_RX_CTL_AM			0x0010 /* Accetp Brocadcast frames*/
-	#define AX_RX_CTL_AB			0x0008 /* HW auto-added 8-bytes data when meet USB bulk in transfer boundary (1024/512/64)*/
+	/* Drop CRC error packet */
+	#define AX_RX_CTL_DROPCRCERR		0x0100
+	/* Enable IP header in receive buffer aligned on 32-bit aligment */
+	#define AX_RX_CTL_IPE			0x0200
+	/* checksum value in rx header 3 */
+	#define AX_RX_CTL_TXPADCRC		0x0400
+	/* Ethernet MAC start */
+	#define AX_RX_CTL_START			0x0080
+	/* Accept physcial address from Multicast array */
+	#define AX_RX_CTL_AP			0x0020
+	/* Accetp Brocadcast frames*/
+	#define AX_RX_CTL_AM			0x0010
+	/* HW auto-added 8-bytes data when meet
+	 * USB bulk in transfer boundary (1024/512/64)
+	 */
+	#define AX_RX_CTL_AB			0x0008
 	#define AX_RX_CTL_HA8B			0x0004
-	#define AX_RX_CTL_AMALL			0x0002 /* Accetp all multicast frames */
+	/* Accept all multicast frames */
+	#define AX_RX_CTL_AMALL			0x0002
 	#define AX_RX_CTL_PRO			0x0001 /* Promiscuous Mode */
 	#define AX_RX_CTL_STOP			0x0000 /* Stop MAC */
 
@@ -62,7 +66,6 @@
 #define AX_MEDIUM_STATUS_MODE			0x22
 	#define AX_MEDIUM_GIGAMODE	0x01
 	#define AX_MEDIUM_FULL_DUPLEX	0x02
-//	#define AX_MEDIUM_ALWAYS_ONE	0x04
 	#define AX_MEDIUM_EN_125MHZ	0x08
 	#define AX_MEDIUM_RXFLOW_CTRLEN	0x10
 	#define AX_MEDIUM_TXFLOW_CTRLEN	0x20
@@ -114,14 +117,9 @@
 	#define AX_RXCOE_UDPV6			0x40
 	#define AX_RXCOE_ICMV6			0x80
 
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 22)
 	#define AX_RXCOE_DEF_CSUM	(AX_RXCOE_IP	| AX_RXCOE_TCP  | \
 					 AX_RXCOE_UDP	| AX_RXCOE_ICMV6 | \
 					 AX_RXCOE_TCPV6	| AX_RXCOE_UDPV6)
-#else
-	#define AX_RXCOE_DEF_CSUM	(AX_RXCOE_IP	| AX_RXCOE_TCP | \
-					 AX_RXCOE_UDP)
-#endif
 
 #define AX_TXCOE_CTL			0x35
 	#define AX_TXCOE_IP			0x01
@@ -132,20 +130,14 @@
 	#define AX_TXCOE_TCPV6			0x20
 	#define AX_TXCOE_UDPV6			0x40
 	#define AX_TXCOE_ICMV6			0x80
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 22)
 	#define AX_TXCOE_DEF_CSUM	(AX_TXCOE_TCP   | AX_TXCOE_UDP | \
 					 AX_TXCOE_TCPV6 | AX_TXCOE_UDPV6)
-#else
-	#define AX_TXCOE_DEF_CSUM	(AX_TXCOE_TCP	| AX_TXCOE_UDP)
-#endif
 
 #define AX_PAUSE_WATERLVL_HIGH		0x54
 #define AX_PAUSE_WATERLVL_LOW		0x55
 
-
 #define AX_EEP_EFUSE_CORRECT		0x00
 #define AX88179_EEPROM_MAGIC			0x17900b95
-
 
 /*****************************************************************************/
 /* GMII register definitions */
@@ -293,9 +285,9 @@ struct ax88179_data {
 } __attribute__ ((packed));
 
 struct ax88179_async_handle {
-  	struct usb_ctrlrequest *req;
-  	u8 m_filter[8];
-  	u16 rxctl;
+	struct usb_ctrlrequest *req;
+	u8 m_filter[8];
+	u16 rxctl;
 } __attribute__ ((packed));
 
 struct ax88179_int_data {
@@ -312,7 +304,6 @@ struct ax88179_int_data {
 #define AX_RXHDR_L4_ERR		(1 << 8)
 #define AX_RXHDR_L3_ERR		(1 << 9)
 
-
 #define AX_RXHDR_L4_TYPE_ICMP		2
 #define AX_RXHDR_L4_TYPE_IGMP		3
 #define AX_RXHDR_L4_TYPE_TCMPV6		5
@@ -328,27 +319,7 @@ struct ax88179_int_data {
 #define AX_RXHDR_CRC_ERR			0x20000000
 #define AX_RXHDR_MII_ERR			0x40000000
 #define AX_RXHDR_DROP_ERR			0x80000000
-#if 0
-struct ax88179_rx_pkt_header {
 
-	u8	l4_csum_err:1,
-		l3_csum_err:1,
-		l4_type:3,
-		l3_type:2,
-		ce:1;
-
-	u8	vlan_ind:3,
-		rx_ok:1,
-		pri:3,
-		bmc:1;
-
-	u16	len:13,
-		crc:1,
-		mii:1,
-		drop:1;
-
-} __attribute__ ((packed));
-#endif
 static struct {unsigned char ctrl, timer_l, timer_h, size, ifg; }
 AX88179_BULKIN_SIZE[] =	{
 	{7, 0x4f, 0,	0x12, 0xff},
@@ -357,9 +328,4 @@ AX88179_BULKIN_SIZE[] =	{
 	{7, 0xcc, 0x4c, 0x18, 8},
 };
 
-static int ax88179_reset(struct usbnet *dev);
-static int ax88179_link_reset(struct usbnet *dev);
 static int ax88179_AutoDetach(struct usbnet *dev, int in_pm);
-
-#endif /* __LINUX_USBNET_ASIX_H */
-
