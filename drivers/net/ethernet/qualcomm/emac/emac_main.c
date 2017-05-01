@@ -196,9 +196,12 @@ static int emac_acpi_get_resources(struct platform_device *pdev,
 static int emac_clk_prepare_enable(struct emac_adapter *adpt,
 				   enum emac_clk_id id)
 {
-	int ret;
+	int ret = 0;
 
 	if (ACPI_HANDLE(adpt->netdev->dev.parent))
+		return 0;
+
+	if (adpt->clk[id].enabled)
 		return 0;
 
 	ret = clk_prepare_enable(adpt->clk[id].clk);
@@ -1909,11 +1912,14 @@ int emac_mac_up(struct emac_adapter *adpt)
 	for (i = 0; i < adpt->num_rxques; i++)
 		emac_refresh_rx_buffer(&adpt->rx_queue[i]);
 
-	ret = phy_connect_direct(netdev, adpt->phydev, emac_adjust_link,
-				 phy->phy_interface);
-	if (ret) {
-		netdev_err(adpt->netdev, "could not connect phy\n");
-		goto err_request_irq;
+	if (!adpt->phy.is_ext_phy_connect) {
+		ret = phy_connect_direct(netdev, adpt->phydev, emac_adjust_link,
+					 phy->phy_interface);
+		if (ret) {
+			netdev_err(adpt->netdev, "could not connect phy\n");
+			goto err_request_irq;
+		}
+		adpt->phy.is_ext_phy_connect = 1;
 	}
 
 	/* enable mac irq */
@@ -1979,7 +1985,11 @@ void emac_mac_down(struct emac_adapter *adpt, u32 ctrl)
 		if (adpt->irq[i].irq)
 			free_irq(adpt->irq[i].irq, &adpt->irq[i]);
 
-	phy_disconnect(adpt->phydev);
+	if ((ATH8030_PHY_ID == adpt->phydev->phy_id) &&
+	    (adpt->phy.is_ext_phy_connect)) {
+		phy_disconnect(adpt->phydev);
+		adpt->phy.is_ext_phy_connect = 0;
+	}
 
 	CLR_FLAG(adpt, ADPT_TASK_LSC_REQ);
 	CLR_FLAG(adpt, ADPT_TASK_REINIT_REQ);
@@ -2442,6 +2452,8 @@ static void emac_init_adapter(struct emac_adapter *adpt)
 	/* others */
 	hw->preamble = EMAC_PREAMBLE_DEF;
 	adpt->wol = EMAC_WOL_MAGIC | EMAC_WOL_PHY;
+
+	adpt->phy.is_ext_phy_connect = 0;
 }
 
 /* Get the clock */
@@ -2728,6 +2740,9 @@ static int emac_enable_regulator(struct emac_adapter *adpt, u8 start, u8 end)
 	u8 i;
 
 	for (i = start; i <= end; i++) {
+		if (adpt->vreg[i].enabled)
+			continue;
+
 		if (adpt->vreg[i].voltage_uv) {
 			retval = emac_set_voltage(adpt, i,
 						  adpt->vreg[i].voltage_uv,
@@ -2757,10 +2772,11 @@ static void emac_disable_regulator(struct emac_adapter *adpt, u8 start, u8 end)
 	for (i = start; i <= end; i++) {
 		struct emac_regulator *vreg = &adpt->vreg[i];
 
-		if (vreg->enabled) {
-			regulator_disable(vreg->vreg);
-			vreg->enabled = false;
-		}
+		if (!vreg->enabled)
+			continue;
+
+		regulator_disable(vreg->vreg);
+		vreg->enabled = false;
 
 		if (adpt->vreg[i].voltage_uv) {
 			emac_set_voltage(adpt, i,
@@ -2815,8 +2831,9 @@ static int emac_pm_suspend(struct device *device, bool wol_enable)
 
 	phy_suspend(adpt->phydev);
 	flush_delayed_work(&adpt->phydev->state_queue);
-	emac_hw_config_pow_save(hw, adpt->phydev->speed, !!wufc,
-				!!(wufc & EMAC_WOL_MAGIC));
+	if (QCA8337_PHY_ID != adpt->phydev->phy_id)
+		emac_hw_config_pow_save(hw, adpt->phydev->speed, !!wufc,
+					!!(wufc & EMAC_WOL_MAGIC));
 
 	if (!adpt->phydev->link && phy->is_wol_irq_reg) {
 		int value, i;
@@ -2829,9 +2846,6 @@ static int emac_pm_suspend(struct device *device, bool wol_enable)
 			value = mdiobus_read(adpt->phydev->bus, i, MII_BMCR);
 			value &= ~BMCR_PDOWN;
 			mdiobus_write(adpt->phydev->bus, i, MII_BMCR, value);
-
-			/* Clear EPHY interrupts */
-			mdiobus_read(adpt->phydev->bus, i, MII_INT_STATUS);
 
 			/* Enable EPHY Link UP interrupt */
 			mdiobus_write(adpt->phydev->bus, i, MII_INT_ENABLE,
@@ -2847,8 +2861,6 @@ static int emac_pm_suspend(struct device *device, bool wol_enable)
 	}
 
 	adpt->gpio_off(adpt, true, false);
-	emac_disable_clks(adpt);
-	emac_disable_regulator(adpt, EMAC_VREG1, EMAC_VREG2);
 	return 0;
 }
 
@@ -2862,9 +2874,6 @@ static int emac_pm_resume(struct device *device)
 	int retval = 0, i;
 
 	adpt->gpio_on(adpt, true, false);
-	emac_enable_regulator(adpt, EMAC_VREG1, EMAC_VREG2);
-	emac_clks_phase1_init(pdev, adpt);
-	emac_clks_phase2_init(adpt);
 	emac_hw_reset_mac(hw);
 
 	/* Disable EPHY Link UP interrupt */
@@ -2935,6 +2944,8 @@ static int emac_pm_sys_suspend(struct device *device)
 	}
 
 	netif_device_detach(netdev);
+	emac_disable_clks(adpt);
+	emac_disable_regulator(adpt, EMAC_VREG1, EMAC_VREG2);
 	return 0;
 }
 
@@ -2945,6 +2956,9 @@ static int emac_pm_sys_resume(struct device *device)
 	struct emac_adapter *adpt = netdev_priv(netdev);
 	struct emac_phy *phy = &adpt->phy;
 
+	emac_enable_regulator(adpt, EMAC_VREG1, EMAC_VREG2);
+	emac_clks_phase1_init(pdev, adpt);
+	emac_clks_phase2_init(adpt);
 	netif_device_attach(netdev);
 
 	if (!pm_runtime_enabled(device) || !pm_runtime_suspended(device)) {
@@ -3071,9 +3085,6 @@ static int emac_probe(struct platform_device *pdev)
 	/* reset mac */
 	emac_hw_reset_mac(hw);
 
-	/* disable emac core and phy regulator */
-	emac_disable_clks(adpt);
-	emac_disable_regulator(adpt, EMAC_VREG1, EMAC_VREG2);
 
 	/* set hw features */
 	netdev->features = NETIF_F_SG | NETIF_F_HW_CSUM | NETIF_F_RXCSUM |
@@ -3148,9 +3159,11 @@ err_undo_napi:
 err_init_mdio_gpio:
 	adpt->gpio_off(adpt, true, true);
 err_clk_init:
-	emac_disable_clks(adpt);
+	if (ATH8030_PHY_ID == adpt->phydev->phy_id)
+		emac_disable_clks(adpt);
 err_ldo_init:
-	emac_disable_regulator(adpt, EMAC_VREG1, EMAC_VREG5);
+	if (ATH8030_PHY_ID == adpt->phydev->phy_id)
+		emac_disable_regulator(adpt, EMAC_VREG1, EMAC_VREG5);
 err_get_resource:
 	free_netdev(netdev);
 
