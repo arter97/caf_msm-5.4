@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -113,7 +113,8 @@ const char *ipa_clients_strings[IPA_CLIENT_MAX] = {
 	__stringify(IPA_CLIENT_A5_WLAN_AMPDU_PROD),
 	__stringify(IPA_CLIENT_A2_EMBEDDED_PROD),
 	__stringify(IPA_CLIENT_A2_TETHERED_PROD),
-	__stringify(IPA_CLIENT_APPS_LAN_WAN_PROD),
+	__stringify(IPA_CLIENT_APPS_LAN_PROD),
+	__stringify(IPA_CLIENT_APPS_WAN_PROD),
 	__stringify(IPA_CLIENT_APPS_CMD_PROD),
 	__stringify(IPA_CLIENT_ODU_PROD),
 	__stringify(IPA_CLIENT_MHI_PROD),
@@ -2785,6 +2786,25 @@ struct device *ipa_get_pdev(void)
 	return ret;
 }
 EXPORT_SYMBOL(ipa_get_pdev);
+
+int ipa_ntn_uc_reg_rdyCB(void (*ipauc_ready_cb)(void *user_data),
+			      void *user_data)
+{
+	int ret;
+
+	IPA_API_DISPATCH_RETURN(ipa_ntn_uc_reg_rdyCB,
+				ipauc_ready_cb, user_data);
+
+	return ret;
+}
+EXPORT_SYMBOL(ipa_ntn_uc_reg_rdyCB);
+
+void ipa_ntn_uc_dereg_rdyCB(void)
+{
+	IPA_API_DISPATCH(ipa_ntn_uc_dereg_rdyCB);
+}
+EXPORT_SYMBOL(ipa_ntn_uc_dereg_rdyCB);
+
 
 static const struct dev_pm_ops ipa_pm_ops = {
 	.suspend_noirq = ipa_ap_suspend,

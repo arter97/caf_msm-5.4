@@ -44,6 +44,22 @@
 	};
 };
 
+&i2c_1 {
+	status = "disabled";
+};
+
+&i2c_2 {
+	status = "disabled";
+};
+
+&i2c_5 {
+	status = "disabled";
+};
+
+&spi_0 {
+	status = "disabled";
+};
+
 &pm8916_chg {
 	status = "ok";
 	qcom,use-external-charger;
@@ -128,6 +144,7 @@
 		qcom,msm-bus,vectors-KBps =
 				<86 512 0 0>,
 				<86 512 500 800>;
+		qcom,no-rt-suspend;
 		status = "ok";
 	};
 };

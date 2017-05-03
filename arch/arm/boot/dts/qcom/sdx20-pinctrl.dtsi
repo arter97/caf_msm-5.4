@@ -12,7 +12,7 @@
 
 &soc {
 	tlmm_pinmux: pinctrl@1000000 {
-		compatible = "qcom,sdxhedgehog-pinctrl";
+		compatible = "qcom,sdx20-pinctrl";
 		reg = <0x1000000 0x300000>;
 		interrupts = <0 208 0>;
 		gpio-controller;
@@ -406,11 +406,11 @@
 
 			pcie_ep_perst_default: pcie_ep_perst_default {
 				mux {
-					pins = "gpio65";
+					pins = "gpio61";
 					function = "gpio";
 				};
 				config {
-					pins = "gpio65";
+					pins = "gpio61";
 					drive-strength = <2>;
 					bias-pull-down;
 				};
@@ -418,13 +418,13 @@
 
 			pcie_ep_wake_default: pcie_ep_wake_default {
 				mux {
-					pins = "gpio61";
+					pins = "gpio58";
 					function = "gpio";
 				};
 				config {
-					pins = "gpio61";
+					pins = "gpio58";
 					drive-strength = <2>;
-					bias-pull-down;
+					bias-disable;
 				};
 			};
 		};
