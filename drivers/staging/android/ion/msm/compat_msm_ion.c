@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -58,7 +58,7 @@ static int compat_get_ion_flush_data(
 	err |= put_user(i, &data->fd);
 	err |= get_user(u, &data32->vaddr);
 	/* upper bits won't get set, zero them */
-	data->vaddr = NULL;
+	err |= put_user(NULL, &data->vaddr);
 	err |= put_user(u, (compat_uptr_t *)&data->vaddr);
 	err |= get_user(l, &data32->offset);
 	err |= put_user(l, &data->offset);
