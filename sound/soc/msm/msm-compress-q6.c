@@ -1642,7 +1642,7 @@ static int msm_compr_set_metadata(struct snd_compr_stream *cstream,
 				struct snd_compr_metadata *metadata)
 {
 	pr_debug("%s\n", __func__);
-	return -ENXIO;
+	return 0;
 }
 
 static int msm_compr_volume_put(struct snd_kcontrol *kcontrol,
