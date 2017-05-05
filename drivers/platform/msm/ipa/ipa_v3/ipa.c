@@ -2282,6 +2282,36 @@ static int ipa3_q6_set_ex_path_to_apps(void)
 			desc[num_descs].len = cmd_pyld->len;
 			num_descs++;
 		}
+
+		/* disable statuses for modem producers */
+		if (IPA_CLIENT_IS_Q6_PROD(client_idx)) {
+			ipa_assert_on(num_descs >= ipa3_ctx->ipa_num_pipes);
+
+			reg_write.skip_pipeline_clear = false;
+			reg_write.pipeline_clear_options =
+				IPAHAL_HPS_CLEAR;
+			reg_write.offset =
+				ipahal_get_reg_n_ofst(IPA_ENDP_STATUS_n,
+					ep_idx);
+			reg_write.value = 0;
+			reg_write.value_mask = ~0;
+			cmd_pyld = ipahal_construct_imm_cmd(
+				IPA_IMM_CMD_REGISTER_WRITE, &reg_write, false);
+			if (!cmd_pyld) {
+				IPAERR("fail construct register_write cmd\n");
+				ipa_assert();
+				return -EFAULT;
+			}
+
+			desc[num_descs].opcode = ipahal_imm_cmd_get_opcode(
+				IPA_IMM_CMD_REGISTER_WRITE);
+			desc[num_descs].type = IPA_IMM_CMD_DESC;
+			desc[num_descs].callback = ipa3_destroy_imm;
+			desc[num_descs].user1 = cmd_pyld;
+			desc[num_descs].pyld = cmd_pyld->data;
+			desc[num_descs].len = cmd_pyld->len;
+			num_descs++;
+		}
 	}
 
 	/* Will wait 500msecs for IPA tag process completion */
@@ -2380,12 +2410,7 @@ static inline void ipa3_sram_set_canary(u32 *sram_mmio, int offset)
 	sram_mmio[(offset - 4) / 4] = IPA_MEM_CANARY_VAL;
 }
 
-/**
- * _ipa_init_sram_v3_0() - Initialize IPA local SRAM.
- *
- * Return codes: 0 for success, negative value for failure
- */
-int _ipa_init_sram_v3_0(void)
+static int _ipa_init_sram_v3(int last_canary_offset)
 {
 	u32 *ipa_sram_mmio;
 	unsigned long phys_addr;
@@ -2428,11 +2453,31 @@ int _ipa_init_sram_v3_0(void)
 		IPA_MEM_PART(modem_hdr_proc_ctx_ofst));
 	ipa3_sram_set_canary(ipa_sram_mmio, IPA_MEM_PART(modem_ofst) - 4);
 	ipa3_sram_set_canary(ipa_sram_mmio, IPA_MEM_PART(modem_ofst));
-	ipa3_sram_set_canary(ipa_sram_mmio, IPA_MEM_PART(end_ofst));
+	ipa3_sram_set_canary(ipa_sram_mmio, last_canary_offset);
 
 	iounmap(ipa_sram_mmio);
 
 	return 0;
+}
+
+/**
+ * _ipa_init_sram_v3_0() - Initialize IPA 3.0 local SRAM.
+ *
+ * Return codes: 0 for success, negative value for failure
+ */
+int _ipa_init_sram_v3_0(void)
+{
+	return _ipa_init_sram_v3(IPA_MEM_PART(end_ofst));
+}
+
+/**
+* _ipa_init_sram_v3_5() - Initialize IPA 3.5 local SRAM.
+*
+* Return codes: 0 for success, negative value for failure
+*/
+int _ipa_init_sram_v3_5(void)
+{
+	return _ipa_init_sram_v3(IPA_MEM_PART(uc_event_ring_ofst));
 }
 
 /**
@@ -4217,6 +4262,7 @@ fail_register_device:
 		ipa3_ctx->empty_rt_tbl_mem.size,
 		ipa3_ctx->empty_rt_tbl_mem.base,
 		ipa3_ctx->empty_rt_tbl_mem.phys_base);
+	ipa3_free_dma_task_for_gsi();
 	ipa3_destroy_flt_tbl_idrs();
 	idr_destroy(&ipa3_ctx->ipa_idr);
 	kmem_cache_destroy(ipa3_ctx->rx_pkt_wrapper_cache);
@@ -4786,6 +4832,13 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 		goto fail_dma_pool;
 	}
 
+	/* allocate memory for DMA_TASK workaround */
+	result = ipa3_allocate_dma_task_for_gsi();
+	if (result) {
+		IPAERR("failed to allocate dma task\n");
+		goto fail_dma_task;
+	}
+
 	/* init the various list heads */
 	INIT_LIST_HEAD(&ipa3_ctx->hdr_tbl.head_hdr_entry_list);
 	for (i = 0; i < IPA_HDR_BIN_MAX; i++) {
@@ -4964,6 +5017,8 @@ fail_cdev_add:
 fail_device_create:
 	unregister_chrdev_region(ipa3_ctx->dev_num, 1);
 fail_alloc_chrdev_region:
+	ipa3_free_dma_task_for_gsi();
+fail_dma_task:
 	if (ipa3_ctx->pipe_mem_pool)
 		gen_pool_destroy(ipa3_ctx->pipe_mem_pool);
 fail_empty_rt_tbl:
