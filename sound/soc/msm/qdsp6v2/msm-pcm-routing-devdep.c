@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014, 2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -132,7 +132,6 @@ int msm_pcm_routing_hwdep_new(struct snd_soc_pcm_runtime *runtime,
 #ifdef CONFIG_COMPAT
 	hwdep->ops.ioctl_compat = msm_pcm_routing_hwdep_compat_ioctl;
 #endif
-
-	return 0;
+	return rc;
 }
 #endif
