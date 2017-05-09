@@ -11,7 +11,6 @@
  *
  */
 
-
 #ifndef __MDSS_SPI_PANEL_H__
 #define __MDSS_SPI_PANEL_H__
 
@@ -23,6 +22,7 @@
 #include <linux/gpio.h>
 
 #include "mdss_panel.h"
+#include "mdp3_dma.h"
 
 #define MDSS_MAX_BL_BRIGHTNESS 255
 
@@ -44,7 +44,6 @@ enum spi_panel_data_type {
 	panel_pixel,
 	UNKNOWN_FORMAT,
 };
-
 
 enum spi_panel_bl_ctrl {
 	BL_PWM,
@@ -84,15 +83,19 @@ struct spi_panel_data {
 	struct spi_pinctrl_res pin_res;
 	struct dss_module_power panel_power_data;
 	struct completion spi_panel_te;
+	struct mdp3_notification vsync_client;
+	unsigned int vsync_status;
 	int byte_pre_frame;
 	char *tx_buf;
 	u8 ctrl_state;
 	int disp_te_gpio;
 	int rst_gpio;
+	int disp_dc_gpio;	/* command or data */
 	struct spi_panel_cmds on_cmds;
 	struct spi_panel_cmds off_cmds;
 	int (*on)(struct mdss_panel_data *pdata);
 	int (*off)(struct mdss_panel_data *pdata);
+	struct mutex spi_tx_mutex;
 	struct pwm_device *pwm_bl;
 	int bklt_ctrl;	/* backlight ctrl */
 	bool pwm_pmi;
@@ -102,12 +105,24 @@ struct spi_panel_data {
 	int pwm_enabled;
 	int bklt_max;
 };
-int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
-				char *buf, int len, int stride);
-#else
 
 int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
+				char *buf, int len, int stride);
+int is_spi_panel_continuous_splash_on(struct mdss_panel_data *pdata);
+void mdp3_spi_vsync_enable(struct mdss_panel_data *pdata,
+				struct mdp3_notification *vsync_client);
+#else
+static inline int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
 				char *buf, int len, int stride){
+	return 0;
+}
+static inline int is_spi_panel_continuous_splash_on(
+				struct mdss_panel_data *pdata)
+{
+	return 0;
+}
+static inline int mdp3_spi_vsync_enable(struct mdss_panel_data *pdata,
+				struct mdp3_notification *vsync_client){
 	return 0;
 }
 

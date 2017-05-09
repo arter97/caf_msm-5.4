@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, 2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -928,12 +928,9 @@ static int venus_hfi_vote_active_buses(void *dev,
 		return -EINVAL;
 	}
 
-	/* (Re-)alloc memory to store the new votes (in case we internally
-	 * re-vote after power collapse, which is transparent to client) */
-	cached_vote_data = krealloc(device->bus_load.vote_data, num_data *
-			sizeof(*cached_vote_data), GFP_KERNEL);
+	cached_vote_data = device->bus_load.vote_data;
 	if (!cached_vote_data) {
-		dprintk(VIDC_ERR, "Can't alloc memory to cache bus votes\n");
+		dprintk(VIDC_ERR, "Invalid bus load vote data\n");
 		rc = -ENOMEM;
 		goto err_no_mem;
 	}
@@ -3785,9 +3782,15 @@ static int venus_hfi_init_bus(struct venus_hfi_device *device)
 		dprintk(VIDC_DBG, "Registered bus client %s\n", name);
 	}
 
-	device->bus_load.vote_data = NULL;
-	device->bus_load.vote_data_count = 0;
+	device->bus_load.vote_data = kzalloc(
+		sizeof(struct vidc_bus_vote_data)*MAX_SUPPORTED_INSTANCES_COUNT,
+		GFP_KERNEL);
 
+	if (device->bus_load.vote_data == NULL) {
+		rc = -ENOMEM;
+		goto err_init_bus;
+	}
+	device->bus_load.vote_data_count = 0;
 	return rc;
 err_init_bus:
 	venus_hfi_deinit_bus(device);

@@ -76,6 +76,12 @@
 };
 
 &pm8909_chg {
+	qcom,cool-bat-mv = <4000>;
+	qcom,warm-bat-mv = <4000>;
+	qcom,ibatmax-warm-ma = <500>;
+	qcom,ibatmax-cool-ma = <500>;
+	qcom,batt-hot-percentage = <35>;
+	qcom,batt-cold-percentage = <70>;
 	qcom,chgr-led-support;
 	status = "okay";
 };
@@ -85,7 +91,7 @@
 		qcom,rpull-up-kohm = <0>;
 		qcom,vref-batt-therm = <1800000>;
 
-		#include "batterydata-qrd-skuc-4v2-2000mah.dtsi"
+		#include "batterydata-qrd-skub-4v2-2000mah.dtsi"
 	};
 };
 
@@ -104,6 +110,35 @@
                 1 &intc 0 221 0>;
         interrupt-names = "hc_irq", "pwr_irq";
         /delete-property/ cd-gpios;
+};
+
+&pm8909_mpps {
+	mpp@a300 { /* MPP 4 */
+		 /* CASE_THERM config */
+		 qcom,mode = <4>; /* AIN input */
+		 qcom,invert = <1>; /* Enable MPP */
+		 qcom,ain-route = <3>; /* AMUX 8 */
+		 qcom,master-en = <1>;
+		 qcom,src-sel = <0>; /* Function constant */
+	};
+};
+
+&pm8909_vadc {
+	chan@30 {
+		qcom,scale-function = <12>;
+	};
+
+	chan@13 {
+		label = "case_therm";
+		reg = <0x13>;
+		qcom,decimation = <0>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <2>;
+		qcom,hw-settle-time = <2>;
+		qcom,fast-avg-setup = <0>;
+		qcom,vadc-thermal-node;
+	};
 };
 
 &soc {
@@ -171,7 +206,6 @@
 			reg = <0>;
 			compatible = "qcom,mdss-spi-client";
 			label = "MDSS SPI QUP5 CLIENT";
-			dc-gpio = <&msm_gpio 110 0>;
 			spi-max-frequency = <50000000>;
 		};
 	};
@@ -263,6 +297,7 @@
 	qcom,mdss-spi-bl-pmic-pwm-frequency = <100>;
 	qcom,mdss-spi-bl-pmic-bank-select = <0>;
 	qcom,mdss-spi-pwm-gpio = <&pm8909_mpps 2 0>;
+	qcom,cont-splash-enabled;
 };
 
 &pmx_mdss_te {
@@ -279,4 +314,5 @@
 
 	qcom,platform-te-gpio = <&msm_gpio 24 0>;
 	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
+	qcom,platform-spi-dc-gpio = <&msm_gpio 110 0>;
 };

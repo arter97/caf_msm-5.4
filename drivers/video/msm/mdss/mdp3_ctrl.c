@@ -217,7 +217,8 @@ void vsync_count_down(void *arg)
 void mdp3_ctrl_reset_countdown(struct mdp3_session_data *session,
 		struct msm_fb_data_type *mfd)
 {
-	if (mdp3_ctrl_get_intf_type(mfd) == MDP3_DMA_OUTPUT_SEL_DSI_CMD)
+	if (mdp3_ctrl_get_intf_type(mfd) == MDP3_DMA_OUTPUT_SEL_DSI_CMD ||
+		mdp3_ctrl_get_intf_type(mfd) == MDP3_DMA_OUTPUT_SEL_SPI_CMD)
 		atomic_set(&session->vsync_countdown, VSYNC_EXPIRE_TICK);
 }
 
@@ -226,8 +227,11 @@ static int mdp3_ctrl_vsync_enable(struct msm_fb_data_type *mfd, int enable)
 	struct mdp3_session_data *mdp3_session;
 	struct mdp3_notification vsync_client;
 	struct mdp3_notification *arg = NULL;
+	int intf_type;
 
 	pr_debug("mdp3_ctrl_vsync_enable =%d\n", enable);
+
+	intf_type = mdp3_ctrl_get_intf_type(mfd);
 	mdp3_session = (struct mdp3_session_data *)mfd->mdp.private1;
 	if (!mdp3_session || !mdp3_session->panel || !mdp3_session->dma ||
 		!mdp3_session->intf)
@@ -252,16 +256,19 @@ static int mdp3_ctrl_vsync_enable(struct msm_fb_data_type *mfd, int enable)
 		arg = &vsync_client;
 		enable = 1;
 	}
-
-	mdp3_clk_enable(1, 0);
-	mdp3_session->dma->vsync_enable(mdp3_session->dma, arg);
-	mdp3_clk_enable(0, 0);
-
+	if (intf_type == MDP3_DMA_OUTPUT_SEL_SPI_CMD) {
+		mdp3_spi_vsync_enable(mdp3_session->panel, arg);
+	} else {
+		mdp3_clk_enable(1, 0);
+		mdp3_session->dma->vsync_enable(mdp3_session->dma, arg);
+		mdp3_clk_enable(0, 0);
+	}
 	/*
 	 * Need to fake vsync whenever dsi interface is not
 	 * active or when dsi clocks are currently off
 	 */
 	if (enable && mdp3_session->status == 1
+			&& (intf_type != MDP3_DMA_OUTPUT_SEL_SPI_CMD)
 			&& (mdp3_session->vsync_before_commit ||
 			!mdp3_session->intf->active)) {
 		mod_timer(&mdp3_session->vsync_timer,
@@ -269,7 +276,7 @@ static int mdp3_ctrl_vsync_enable(struct msm_fb_data_type *mfd, int enable)
 	} else if (enable && !mdp3_session->clk_on) {
 		mdp3_ctrl_reset_countdown(mdp3_session, mfd);
 		mdp3_ctrl_clk_enable(mfd, 1);
-	} else if (!enable) {
+	} else if (!enable && (intf_type != MDP3_DMA_OUTPUT_SEL_SPI_CMD)) {
 		del_timer(&mdp3_session->vsync_timer);
 	}
 

@@ -46,15 +46,28 @@ int mdss_spi_panel_reset(struct mdss_panel_data *pdata, int enable)
 		return rc;
 	}
 
+	if (!gpio_is_valid(ctrl_pdata->disp_dc_gpio)) {
+		pr_debug("%s:%d, dc line not configured\n",
+			   __func__, __LINE__);
+		return rc;
+	}
+
 	pr_debug("%s: enable = %d\n", __func__, enable);
 	pinfo = &(ctrl_pdata->panel_data.panel_info);
 
 	if (enable) {
 		rc = gpio_request(ctrl_pdata->rst_gpio, "disp_rst_n");
 		if (rc) {
-			pr_err("gpio request failed\n");
+			pr_err("display reset gpio request failed\n");
 			return rc;
 		}
+
+		rc = gpio_request(ctrl_pdata->disp_dc_gpio, "disp_dc");
+		if (rc) {
+			pr_err("display dc gpio request failed\n");
+			return rc;
+		}
+
 		if (!pinfo->cont_splash_enabled) {
 			for (i = 0; i < pdata->panel_info.rst_seq_len; ++i) {
 				gpio_set_value((ctrl_pdata->rst_gpio),
@@ -73,6 +86,9 @@ int mdss_spi_panel_reset(struct mdss_panel_data *pdata, int enable)
 	} else {
 		gpio_set_value((ctrl_pdata->rst_gpio), 0);
 		gpio_free(ctrl_pdata->rst_gpio);
+
+		gpio_set_value(ctrl_pdata->disp_dc_gpio, 0);
+		gpio_free(ctrl_pdata->disp_dc_gpio);
 	}
 	return rc;
 }
@@ -346,6 +362,52 @@ static int mdss_spi_panel_event_handler(struct mdss_panel_data *pdata,
 	return rc;
 }
 
+int is_spi_panel_continuous_splash_on(struct mdss_panel_data *pdata)
+{
+	int i = 0, voltage = 0;
+	struct dss_vreg *vreg;
+	int num_vreg;
+	struct spi_panel_data *ctrl_pdata = NULL;
+
+	ctrl_pdata = container_of(pdata, struct spi_panel_data,
+			panel_data);
+	vreg = ctrl_pdata->panel_power_data.vreg_config;
+	num_vreg = ctrl_pdata->panel_power_data.num_vreg;
+
+	for (i = 0; i < num_vreg; i++) {
+		if (regulator_is_enabled(vreg[i].vreg) <= 0)
+			return false;
+		voltage = regulator_get_voltage(vreg[i].vreg);
+		if (!(voltage >= vreg[i].min_voltage &&
+			 voltage <= vreg[i].max_voltage))
+			return false;
+	}
+
+	return true;
+}
+
+static void enable_spi_panel_te_irq(struct spi_panel_data *ctrl_pdata,
+							bool enable)
+{
+	static bool is_enabled = true;
+
+	if (is_enabled == enable)
+		return;
+
+	if (!gpio_is_valid(ctrl_pdata->disp_te_gpio)) {
+		pr_err("%s:%d,SPI panel TE GPIO not configured\n",
+			   __func__, __LINE__);
+		return;
+	}
+
+	if (enable)
+		enable_irq(gpio_to_irq(ctrl_pdata->disp_te_gpio));
+	else
+		disable_irq(gpio_to_irq(ctrl_pdata->disp_te_gpio));
+
+	is_enabled = enable;
+}
+
 int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
 			char *buf, int len, int dma_stride)
 {
@@ -383,6 +445,9 @@ int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
 		scan_count++;
 	}
 
+	enable_spi_panel_te_irq(ctrl_pdata, true);
+
+	mutex_lock(&ctrl_pdata->spi_tx_mutex);
 	INIT_COMPLETION(ctrl_pdata->spi_panel_te);
 
 	rc = wait_for_completion_timeout(&ctrl_pdata->spi_panel_te,
@@ -392,6 +457,25 @@ int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
 		pr_err("wait panel TE time out\n");
 
 	rc = mdss_spi_tx_pixel(tx_buf, ctrl_pdata->byte_pre_frame);
+	mutex_unlock(&ctrl_pdata->spi_tx_mutex);
+
+	return rc;
+}
+
+int mdss_spi_read_panel_data(struct mdss_panel_data *pdata,
+		u8 reg_addr, u8 *data, u8 len)
+{
+	int rc = 0;
+	struct spi_panel_data *ctrl_pdata = NULL;
+
+	ctrl_pdata = container_of(pdata, struct spi_panel_data,
+		panel_data);
+
+	mutex_lock(&ctrl_pdata->spi_tx_mutex);
+	gpio_set_value(ctrl_pdata->disp_dc_gpio, 0);
+	rc = mdss_spi_read_data(reg_addr, data,  len);
+	gpio_set_value(ctrl_pdata->disp_dc_gpio, 1);
+	mutex_unlock(&ctrl_pdata->spi_tx_mutex);
 
 	return rc;
 }
@@ -411,7 +495,10 @@ int mdss_spi_panel_on(struct mdss_panel_data *pdata)
 				panel_data);
 
 	for (i = 0; i < ctrl->on_cmds.cmd_cnt; i++) {
+		/* pull down dc gpio indicate this is command */
+		gpio_set_value(ctrl->disp_dc_gpio, 0);
 		mdss_spi_tx_command(ctrl->on_cmds.cmds[i].command);
+		gpio_set_value((ctrl->disp_dc_gpio), 1);
 
 		if (ctrl->on_cmds.cmds[i].dchdr.dlen > 1) {
 			mdss_spi_tx_parameter(ctrl->on_cmds.cmds[i].parameter,
@@ -444,7 +531,10 @@ static int mdss_spi_panel_off(struct mdss_panel_data *pdata)
 				panel_data);
 
 	for (i = 0; i < ctrl->off_cmds.cmd_cnt; i++) {
+		/* pull down dc gpio indicate this is command */
+		gpio_set_value(ctrl->disp_dc_gpio, 0);
 		mdss_spi_tx_command(ctrl->off_cmds.cmds[i].command);
+		gpio_set_value((ctrl->disp_dc_gpio), 1);
 
 		if (ctrl->off_cmds.cmds[i].dchdr.dlen > 1) {
 			mdss_spi_tx_parameter(ctrl->off_cmds.cmds[i].parameter,
@@ -732,6 +822,9 @@ static int mdss_spi_panel_parse_dt(struct device_node *np,
 	int rc;
 	const char *data;
 	struct mdss_panel_info *pinfo = &(ctrl_pdata->panel_data.panel_info);
+
+	pinfo->cont_splash_enabled = of_property_read_bool(np,
+					"qcom,cont-splash-enabled");
 
 	rc = of_property_read_u32(np, "qcom,mdss-spi-panel-width", &tmp);
 	if (rc) {
@@ -1064,19 +1157,60 @@ static int mdss_spi_panel_regulator_init(struct platform_device *pdev)
 	return rc;
 
 }
+
 irqreturn_t spi_panel_te_handler(int irq, void *data)
 {
-	struct spi_panel_data *ctrl_pdata =
-		(struct spi_panel_data *)data;
+	struct spi_panel_data *ctrl_pdata = (struct spi_panel_data *)data;
+	static int count = 2;
 
 	if (!ctrl_pdata) {
 		pr_err("%s: SPI display not available\n", __func__);
 		return IRQ_HANDLED;
 	}
 	complete(&ctrl_pdata->spi_panel_te);
+
+	if (ctrl_pdata->vsync_client.handler && !(--count)) {
+		ctrl_pdata->vsync_client.handler(ctrl_pdata->vsync_client.arg);
+		count = 2;
+	}
+
 	return IRQ_HANDLED;
 }
 
+void mdp3_spi_vsync_enable(struct mdss_panel_data *pdata,
+				struct mdp3_notification *vsync_client)
+{
+	int updated = 0;
+	struct spi_panel_data *ctrl_pdata = NULL;
+
+	if (pdata == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return;
+	}
+
+	ctrl_pdata = container_of(pdata, struct spi_panel_data,
+				panel_data);
+
+	if (vsync_client) {
+		if (ctrl_pdata->vsync_client.handler != vsync_client->handler) {
+			ctrl_pdata->vsync_client = *vsync_client;
+			updated = 1;
+		}
+	} else {
+		if (ctrl_pdata->vsync_client.handler) {
+			ctrl_pdata->vsync_client.handler = NULL;
+			ctrl_pdata->vsync_client.arg = NULL;
+			updated = 1;
+		}
+	}
+
+	if (updated) {
+		if (vsync_client && vsync_client->handler)
+			enable_spi_panel_te_irq(ctrl_pdata, true);
+		else
+			enable_spi_panel_te_irq(ctrl_pdata, false);
+	}
+}
 
 static struct device_node *mdss_spi_pref_prim_panel(
 		struct platform_device *pdev)
@@ -1124,9 +1258,14 @@ int spi_panel_device_register(struct device_node *pan_node,
 
 	ctrl_pdata->disp_te_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
 		"qcom,platform-te-gpio", 0);
-
 	if (!gpio_is_valid(ctrl_pdata->disp_te_gpio))
 		pr_err("%s:%d, TE gpio not specified\n",
+						__func__, __LINE__);
+
+	ctrl_pdata->disp_dc_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+		"qcom,platform-spi-dc-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->disp_dc_gpio))
+		pr_err("%s:%d, SPI DC gpio not specified\n",
 						__func__, __LINE__);
 
 	ctrl_pdata->rst_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
@@ -1362,6 +1501,7 @@ static int mdss_spi_panel_probe(struct platform_device *pdev)
 
 
 	init_completion(&ctrl_pdata->spi_panel_te);
+	mutex_init(&ctrl_pdata->spi_tx_mutex);
 
 	rc = devm_request_irq(&pdev->dev,
 		gpio_to_irq(ctrl_pdata->disp_te_gpio),
