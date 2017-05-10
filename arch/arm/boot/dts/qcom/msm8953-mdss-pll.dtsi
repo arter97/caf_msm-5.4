@@ -33,6 +33,8 @@
 		/* Memory region for passing dynamic refresh pll codes */
 		memory-region = <&dfps_data_mem>;
 
+		status = "disabled";
+
 		qcom,platform-supply-entries {
 			#address-cells = <1>;
 			#size-cells = <0>;
@@ -66,6 +68,8 @@
 		clocks = <&clock_gcc clk_gcc_mdss_ahb_clk>;
 		clock-names = "iface_clk";
 		clock-rate = <0>;
+
+		status = "disabled";
 
 		qcom,platform-supply-entries {
 			#address-cells = <1>;
