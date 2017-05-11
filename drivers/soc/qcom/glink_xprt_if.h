@@ -141,6 +141,8 @@ struct glink_transport_if {
 			struct glink_transport_if *if_ptr, uint32_t state);
 	int (*power_vote)(struct glink_transport_if *if_ptr, uint32_t state);
 	int (*power_unvote)(struct glink_transport_if *if_ptr);
+	int (*rx_rt_vote)(struct glink_transport_if *if_ptr);
+	int (*rx_rt_unvote)(struct glink_transport_if *if_ptr);
 	/*
 	 * Keep data pointers at the end of the structure after all function
 	 * pointer to allow for in-place initialization.
