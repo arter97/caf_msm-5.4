@@ -139,11 +139,6 @@ extern u8 print_limit_option;
 		SPS_IPC(4, sps, msg, args); \
 		pr_info(msg, ##args);	\
 	} while (0)
-#define SPS_DEBUGFS(msg, args...) do {					\
-		char buf[MAX_MSG_LEN];		\
-		snprintf(buf, MAX_MSG_LEN, msg"\n", ##args);	\
-		sps_debugfs_record(buf);	\
-	} while (0)
 #define SPS_ERR(dev, msg, args...) do {					\
 		if (logging_option != 1) {	\
 			if (unlikely(print_limit_option > 2))	\
@@ -151,8 +146,6 @@ extern u8 print_limit_option;
 			else	\
 				pr_err(msg, ##args);	\
 		}	\
-		if (unlikely(debugfs_record_enabled))	\
-			SPS_DEBUGFS(msg, ##args);	\
 		SPS_IPC(3, dev, msg, args); \
 	} while (0)
 #define SPS_INFO(dev, msg, args...) do {				\
@@ -162,8 +155,6 @@ extern u8 print_limit_option;
 			else	\
 				pr_info(msg, ##args);	\
 		}	\
-		if (unlikely(debugfs_record_enabled))	\
-			SPS_DEBUGFS(msg, ##args);	\
 		SPS_IPC(3, dev, msg, args); \
 	} while (0)
 #define SPS_DBG(dev, msg, args...) do {					\
@@ -175,8 +166,6 @@ extern u8 print_limit_option;
 				pr_info(msg, ##args);	\
 		} else	\
 			pr_debug(msg, ##args);	\
-		if (unlikely(debugfs_record_enabled))	\
-			SPS_DEBUGFS(msg, ##args);	\
 		if (dev) { \
 			if ((dev)->ipc_loglevel <= 0)	\
 				SPS_IPC(0, dev, msg, args); \
@@ -191,8 +180,6 @@ extern u8 print_limit_option;
 				pr_info(msg, ##args);	\
 		} else	\
 			pr_debug(msg, ##args);	\
-		if (unlikely(debugfs_record_enabled))	\
-			SPS_DEBUGFS(msg, ##args);	\
 		if (dev) { \
 			if ((dev)->ipc_loglevel <= 1)	\
 				SPS_IPC(1, dev, msg, args);	\
@@ -207,8 +194,6 @@ extern u8 print_limit_option;
 				pr_info(msg, ##args);	\
 		} else	\
 			pr_debug(msg, ##args);	\
-		if (unlikely(debugfs_record_enabled))	\
-			SPS_DEBUGFS(msg, ##args);	\
 		if (dev) { \
 			if ((dev)->ipc_loglevel <= 2)	\
 				SPS_IPC(2, dev, msg, args); \
@@ -223,8 +208,6 @@ extern u8 print_limit_option;
 				pr_info(msg, ##args);	\
 		} else	\
 			pr_debug(msg, ##args);	\
-		if (unlikely(debugfs_record_enabled))	\
-			SPS_DEBUGFS(msg, ##args);	\
 		if (dev) { \
 			if ((dev)->ipc_loglevel <= 3)	\
 				SPS_IPC(3, dev, msg, args); \
