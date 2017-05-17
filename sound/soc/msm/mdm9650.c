@@ -872,7 +872,7 @@ static void mdm_ext_control(struct snd_soc_codec *codec)
 static int mdm_mi2s_set_spk(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 
 	pr_debug("%s()\n", __func__);
 
@@ -1455,6 +1455,23 @@ static struct snd_soc_dai_link mdm_dai[] = {
 		.codec_name = "msm-stub-codec.1",
 		.codec_dai_name = "msm-stub-tx",
 		.ignore_suspend = 1,
+	},
+	{
+		.name = "MDM Compress1",
+		.stream_name = "COMPR",
+		.cpu_dai_name = "MultiMedia4",
+		.platform_name = "msm-compress-dsp",
+		.dynamic = 1,
+		.async_ops = ASYNC_DPCM_SND_SOC_HW_PARAMS,
+		.dpcm_playback = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA4,
 	},
 	{
 		.name = "CS-VOICE HOST RX CAPTURE",

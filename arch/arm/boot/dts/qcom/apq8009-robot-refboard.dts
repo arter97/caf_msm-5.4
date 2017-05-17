@@ -156,7 +156,6 @@
 	gpio_keys {
 		status = "disabled";
 	};
-
 };
 
 &external_image_mem {
@@ -170,3 +169,4 @@
 &peripheral_mem {
 	reg = <0x0 0x89f00000 0x0 0x0700000>;
 };
+

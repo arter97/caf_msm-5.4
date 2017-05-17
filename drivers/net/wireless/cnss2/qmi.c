@@ -421,7 +421,7 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv)
 		snprintf(filename, sizeof(filename), DEFAULT_BDF_FILE_NAME);
 	else
 		snprintf(filename, sizeof(filename),
-			 BDF_FILE_NAME_PREFIX "%02d",
+			 BDF_FILE_NAME_PREFIX "%02x",
 			 plat_priv->board_info.board_id);
 
 	ret = request_firmware(&fw_entry, filename, &plat_priv->plat_dev->dev);
@@ -669,6 +669,130 @@ int cnss_wlfw_wlan_cfg_send_sync(struct cnss_plat_data *plat_priv,
 	return 0;
 out:
 	CNSS_ASSERT(0);
+	return ret;
+}
+
+int cnss_wlfw_athdiag_read_send_sync(struct cnss_plat_data *plat_priv,
+				     uint32_t offset, uint32_t mem_type,
+				     uint32_t data_len, uint8_t *data)
+{
+	struct wlfw_athdiag_read_req_msg_v01 req;
+	struct wlfw_athdiag_read_resp_msg_v01 *resp;
+	struct msg_desc req_desc, resp_desc;
+	int ret = 0;
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	if (!plat_priv->qmi_wlfw_clnt)
+		return -EINVAL;
+
+	cnss_pr_dbg("athdiag read: state 0x%lx, offset %x, mem_type %x, data_len %u\n",
+		    plat_priv->driver_state, offset, mem_type, data_len);
+
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
+	if (!resp)
+		return -ENOMEM;
+
+	memset(&req, 0, sizeof(req));
+
+	req.offset = offset;
+	req.mem_type = mem_type;
+	req.data_len = data_len;
+
+	req_desc.max_msg_len = WLFW_ATHDIAG_READ_REQ_MSG_V01_MAX_MSG_LEN;
+	req_desc.msg_id = QMI_WLFW_ATHDIAG_READ_REQ_V01;
+	req_desc.ei_array = wlfw_athdiag_read_req_msg_v01_ei;
+
+	resp_desc.max_msg_len = WLFW_ATHDIAG_READ_RESP_MSG_V01_MAX_MSG_LEN;
+	resp_desc.msg_id = QMI_WLFW_ATHDIAG_READ_RESP_V01;
+	resp_desc.ei_array = wlfw_athdiag_read_resp_msg_v01_ei;
+
+	ret = qmi_send_req_wait(plat_priv->qmi_wlfw_clnt, &req_desc, &req,
+				sizeof(req), &resp_desc, resp, sizeof(*resp),
+				QMI_WLFW_TIMEOUT_MS);
+	if (ret < 0) {
+		cnss_pr_err("Failed to send athdiag read request, err = %d\n",
+			    ret);
+		goto out;
+	}
+
+	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
+		cnss_pr_err("athdiag read request failed, result: %d, err: %d\n",
+			    resp->resp.result, resp->resp.error);
+		ret = resp->resp.result;
+		goto out;
+	}
+
+	if (!resp->data_valid || resp->data_len <= data_len) {
+		cnss_pr_err("athdiag read data is invalid, data_valid = %u, data_len = %u\n",
+			    resp->data_valid, resp->data_len);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	memcpy(data, resp->data, resp->data_len);
+
+out:
+	kfree(resp);
+	return ret;
+}
+
+int cnss_wlfw_athdiag_write_send_sync(struct cnss_plat_data *plat_priv,
+				      uint32_t offset, uint32_t mem_type,
+				      uint32_t data_len, uint8_t *data)
+{
+	struct wlfw_athdiag_write_req_msg_v01 *req;
+	struct wlfw_athdiag_write_resp_msg_v01 resp;
+	struct msg_desc req_desc, resp_desc;
+	int ret = 0;
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	if (!plat_priv->qmi_wlfw_clnt)
+		return -EINVAL;
+
+	cnss_pr_dbg("athdiag write: state 0x%lx, offset %x, mem_type %x, data_len %u, data %p\n",
+		    plat_priv->driver_state, offset, mem_type, data_len, data);
+
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
+
+	memset(&resp, 0, sizeof(resp));
+
+	req->offset = offset;
+	req->mem_type = mem_type;
+	req->data_len = data_len;
+	memcpy(req->data, data, data_len);
+
+	req_desc.max_msg_len = WLFW_ATHDIAG_WRITE_REQ_MSG_V01_MAX_MSG_LEN;
+	req_desc.msg_id = QMI_WLFW_ATHDIAG_WRITE_REQ_V01;
+	req_desc.ei_array = wlfw_athdiag_write_req_msg_v01_ei;
+
+	resp_desc.max_msg_len = WLFW_ATHDIAG_WRITE_RESP_MSG_V01_MAX_MSG_LEN;
+	resp_desc.msg_id = QMI_WLFW_ATHDIAG_WRITE_RESP_V01;
+	resp_desc.ei_array = wlfw_athdiag_write_resp_msg_v01_ei;
+
+	ret = qmi_send_req_wait(plat_priv->qmi_wlfw_clnt, &req_desc, req,
+				sizeof(*req), &resp_desc, &resp, sizeof(resp),
+				QMI_WLFW_TIMEOUT_MS);
+	if (ret < 0) {
+		cnss_pr_err("Failed to send athdiag write request, err = %d\n",
+			    ret);
+		goto out;
+	}
+
+	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+		cnss_pr_err("athdiag write request failed, result: %d, err: %d\n",
+			    resp.resp.result, resp.resp.error);
+		ret = resp.resp.result;
+		goto out;
+	}
+
+out:
+	kfree(req);
 	return ret;
 }
 
