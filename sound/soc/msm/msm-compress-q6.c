@@ -699,18 +699,12 @@ static int msm_compr_set_params(struct snd_compr_stream *cstream,
 	case SNDRV_PCM_RATE_11025:
 		prtd->sample_rate = 11025;
 		break;
-	case SNDRV_PCM_RATE_12000:
-		prtd->sample_rate = 12000;
-		break;
 	/* ToDo: What about 12K and 24K sample rates ? */
 	case SNDRV_PCM_RATE_16000:
 		prtd->sample_rate = 16000;
 		break;
 	case SNDRV_PCM_RATE_22050:
 		prtd->sample_rate = 22050;
-		break;
-	case SNDRV_PCM_RATE_24000:
-		prtd->sample_rate = 24000;
 		break;
 	case SNDRV_PCM_RATE_32000:
 		prtd->sample_rate = 32000;
