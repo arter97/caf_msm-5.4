@@ -239,6 +239,8 @@ int mdp3_misr_get(struct mdp_misr *misr_resp);
 void mdp3_enable_regulator(int enable);
 void mdp3_check_dsi_ctrl_status(struct work_struct *work,
 				uint32_t interval);
+void mdp3_check_spi_panel_status(struct work_struct *work,
+				uint32_t interval);
 int mdp3_dynamic_clock_gating_ctrl(int enable);
 int mdp3_footswitch_ctrl(int enable);
 int mdp3_qos_remapper_setup(struct mdss_panel_data *panel);

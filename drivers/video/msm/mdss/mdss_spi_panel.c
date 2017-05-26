@@ -474,7 +474,7 @@ int mdss_spi_read_panel_data(struct mdss_panel_data *pdata,
 
 	mutex_lock(&ctrl_pdata->spi_tx_mutex);
 	gpio_set_value(ctrl_pdata->disp_dc_gpio, 0);
-	rc = mdss_spi_read_data(reg_addr, data,  len);
+	rc = mdss_spi_read_data(reg_addr, data, len);
 	gpio_set_value(ctrl_pdata->disp_dc_gpio, 1);
 	mutex_unlock(&ctrl_pdata->spi_tx_mutex);
 
@@ -815,6 +815,140 @@ static int mdss_spi_panel_parse_reset_seq(struct device_node *np,
 	return 0;
 }
 
+bool mdss_send_panel_cmd_for_esd(struct spi_panel_data *ctrl_pdata)
+{
+
+	if (ctrl_pdata == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return false;
+	}
+
+	mutex_lock(&ctrl_pdata->spi_tx_mutex);
+	mdss_spi_panel_on(&ctrl_pdata->panel_data);
+	mutex_unlock(&ctrl_pdata->spi_tx_mutex);
+
+	return true;
+}
+
+bool mdss_spi_reg_status_check(struct spi_panel_data *ctrl_pdata)
+{
+	int ret = 0;
+	int i = 0;
+
+	if (ctrl_pdata == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return false;
+	}
+
+	pr_debug("%s: Checking Register status\n", __func__);
+
+	ret = mdss_spi_read_panel_data(&ctrl_pdata->panel_data,
+					ctrl_pdata->panel_status_reg,
+					ctrl_pdata->act_status_value,
+					ctrl_pdata->status_cmds_rlen);
+	if (ret < 0) {
+		pr_err("%s: Read status register returned error\n", __func__);
+	} else {
+		for (i = 0; i < ctrl_pdata->status_cmds_rlen; i++) {
+			pr_debug("act_value[%d] = %x, exp_value[%d] = %x\n",
+					i, ctrl_pdata->act_status_value[i],
+					i, ctrl_pdata->exp_status_value[i]);
+			if (ctrl_pdata->act_status_value[i] !=
+					ctrl_pdata->exp_status_value[i])
+				return false;
+		}
+	}
+
+	return true;
+}
+
+static void mdss_spi_parse_esd_params(struct device_node *np,
+		struct spi_panel_data	*ctrl)
+{
+	u32 tmp;
+	int rc;
+	struct property *data;
+	const char *string;
+	struct mdss_panel_info *pinfo = &ctrl->panel_data.panel_info;
+
+	pinfo->esd_check_enabled = of_property_read_bool(np,
+		"qcom,esd-check-enabled");
+
+	if (!pinfo->esd_check_enabled)
+		return;
+
+	ctrl->status_mode = SPI_ESD_MAX;
+
+	rc = of_property_read_string(np,
+			"qcom,mdss-spi-panel-status-check-mode", &string);
+	if (!rc) {
+		if (!strcmp(string, "reg_read")) {
+			ctrl->status_mode = SPI_ESD_REG;
+			ctrl->check_status =
+				mdss_spi_reg_status_check;
+		} else if (!strcmp(string, "send_init_command")) {
+			ctrl->status_mode = SPI_SEND_PANEL_COMMAND;
+			ctrl->check_status =
+				mdss_send_panel_cmd_for_esd;
+				return;
+		} else {
+			pr_err("No valid panel-status-check-mode string\n");
+			pinfo->esd_check_enabled = false;
+			return;
+		}
+	}
+
+	rc = of_property_read_u8(np, "qcom,mdss-spi-panel-status-reg",
+				&ctrl->panel_status_reg);
+	if (rc) {
+		pr_warn("%s:%d, Read status reg failed, disable ESD check\n",
+				__func__, __LINE__);
+		pinfo->esd_check_enabled = false;
+		return;
+	}
+
+	rc = of_property_read_u32(np, "qcom,mdss-spi-panel-status-read-length",
+					&tmp);
+	if (rc) {
+		pr_warn("%s:%d, Read reg length failed, disable ESD check\n",
+				__func__, __LINE__);
+		pinfo->esd_check_enabled = false;
+		return;
+	}
+
+	ctrl->status_cmds_rlen = (!rc ? tmp : 1);
+
+	ctrl->exp_status_value = kzalloc(sizeof(u8) *
+				 (ctrl->status_cmds_rlen + 1), GFP_KERNEL);
+	ctrl->act_status_value = kzalloc(sizeof(u8) *
+				(ctrl->status_cmds_rlen + 1), GFP_KERNEL);
+
+	if (!ctrl->exp_status_value || !ctrl->act_status_value) {
+		pr_err("%s: Error allocating memory for status buffer\n",
+						__func__);
+		pinfo->esd_check_enabled = false;
+		return;
+	}
+
+	data = of_find_property(np, "qcom,mdss-spi-panel-status-value", &tmp);
+	tmp /= sizeof(u8);
+	if (!data || (tmp != ctrl->status_cmds_rlen)) {
+		pr_err("%s: Panel status values not found\n", __func__);
+		pinfo->esd_check_enabled = false;
+		memset(ctrl->exp_status_value, 0, ctrl->status_cmds_rlen);
+	} else {
+		rc = of_property_read_u8_array(np,
+			"qcom,mdss-spi-panel-status-value",
+			ctrl->exp_status_value, tmp);
+		if (rc) {
+			pr_err("%s: Error reading panel status values\n",
+				__func__);
+			pinfo->esd_check_enabled = false;
+			memset(ctrl->exp_status_value, 0,
+				ctrl->status_cmds_rlen);
+		}
+	}
+}
 
 static int mdss_spi_panel_parse_dt(struct device_node *np,
 		struct spi_panel_data	*ctrl_pdata)
@@ -876,7 +1010,7 @@ static int mdss_spi_panel_parse_dt(struct device_node *np,
 
 	pinfo->pdest = DISPLAY_1;
 
-	ctrl_pdata->bklt_ctrl = UNKNOWN_CTRL;
+	ctrl_pdata->bklt_ctrl = SPI_UNKNOWN_CTRL;
 	data = of_get_property(np, "qcom,mdss-spi-bl-pmic-control-type", NULL);
 	if (data) {
 		if (!strcmp(data, "bl_ctrl_wled")) {
@@ -884,9 +1018,9 @@ static int mdss_spi_panel_parse_dt(struct device_node *np,
 				&bl_led_trigger);
 			pr_debug("%s: SUCCESS-> WLED TRIGGER register\n",
 				__func__);
-			ctrl_pdata->bklt_ctrl = BL_WLED;
+			ctrl_pdata->bklt_ctrl = SPI_BL_WLED;
 		} else if (!strcmp(data, "bl_ctrl_pwm")) {
-			ctrl_pdata->bklt_ctrl = BL_PWM;
+			ctrl_pdata->bklt_ctrl = SPI_BL_PWM;
 			ctrl_pdata->pwm_pmi = of_property_read_bool(np,
 					"qcom,mdss-spi-bl-pwm-pmi");
 			rc = of_property_read_u32(np,
@@ -941,6 +1075,9 @@ static int mdss_spi_panel_parse_dt(struct device_node *np,
 
 	mdss_spi_panel_parse_cmds(np, &ctrl_pdata->off_cmds,
 		"qcom,mdss-spi-off-command");
+
+	mdss_spi_parse_esd_params(np, ctrl_pdata);
+
 
 	return 0;
 }
@@ -1045,10 +1182,10 @@ void mdss_spi_panel_bl_ctrl_update(struct mdss_panel_data *pdata,
 		bl_level = pdata->panel_info.bl_min;
 
 	switch (ctrl_pdata->bklt_ctrl) {
-	case BL_WLED:
+	case SPI_BL_WLED:
 		led_trigger_event(bl_led_trigger, bl_level);
 		break;
-	case BL_PWM:
+	case SPI_BL_PWM:
 		mdss_spi_panel_bklt_pwm(ctrl_pdata, bl_level);
 		break;
 	default:
@@ -1287,7 +1424,7 @@ int spi_panel_device_register(struct device_node *pan_node,
 
 	ctrl_pdata->panel_data.event_handler = mdss_spi_panel_event_handler;
 
-	if (ctrl_pdata->bklt_ctrl == BL_PWM)
+	if (ctrl_pdata->bklt_ctrl == SPI_BL_PWM)
 		mdss_spi_panel_pwm_cfg(ctrl_pdata);
 
 	ctrl_pdata->ctrl_state = CTRL_STATE_UNKNOWN;
@@ -1299,7 +1436,7 @@ int spi_panel_device_register(struct device_node *pan_node,
 			pr_err("%s: Panel power on failed\n", __func__);
 			return rc;
 		}
-		if (ctrl_pdata->bklt_ctrl == BL_PWM)
+		if (ctrl_pdata->bklt_ctrl == SPI_BL_PWM)
 			ctrl_pdata->pwm_enabled = 1;
 		pinfo->blank_state = MDSS_PANEL_BLANK_UNBLANK;
 		ctrl_pdata->ctrl_state |=

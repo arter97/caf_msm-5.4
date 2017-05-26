@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -127,14 +127,19 @@ static int fb_event_callback(struct notifier_block *self,
 	}
 
 	mfd = evdata->info->par;
-	ctrl_pdata = container_of(dev_get_platdata(&mfd->pdev->dev),
-				struct mdss_dsi_ctrl_pdata, panel_data);
-	if (!ctrl_pdata) {
-		pr_err("%s: DSI ctrl not available\n", __func__);
-		return NOTIFY_BAD;
+	if (mfd->panel_info->type == SPI_PANEL) {
+		pinfo = mfd->panel_info;
+
+	} else {
+		ctrl_pdata = container_of(dev_get_platdata(&mfd->pdev->dev),
+					struct mdss_dsi_ctrl_pdata, panel_data);
+		if (!ctrl_pdata) {
+			pr_err("%s: DSI ctrl not available\n", __func__);
+			return NOTIFY_BAD;
+		}
+		pinfo = &ctrl_pdata->panel_data.panel_info;
 	}
 
-	pinfo = &ctrl_pdata->panel_data.panel_info;
 
 	if ((!(pinfo->esd_check_enabled) &&
 			dsi_status_disable) ||

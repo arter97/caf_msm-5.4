@@ -2787,6 +2787,9 @@ static int mdp3_probe(struct platform_device *pdev)
 		pr_err("unable to configure interrupt callback\n");
 	mdp3_res->mdss_util->mdp_probe_done = true;
 
+	if (mdp3_res->pan_cfg.pan_intf == MDSS_PANEL_INTF_SPI)
+		mdp3_interface.check_dsi_status = mdp3_check_spi_panel_status;
+
 probe_done:
 	if (IS_ERR_VALUE(rc))
 		kfree(mdp3_res->mdp3_hw.irq_info);

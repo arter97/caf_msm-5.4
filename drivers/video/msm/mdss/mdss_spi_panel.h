@@ -46,10 +46,10 @@ enum spi_panel_data_type {
 };
 
 enum spi_panel_bl_ctrl {
-	BL_PWM,
-	BL_WLED,
-	BL_DCS_CMD,
-	UNKNOWN_CTRL,
+	SPI_BL_PWM,
+	SPI_BL_WLED,
+	SPI_BL_DCS_CMD,
+	SPI_UNKNOWN_CTRL,
 };
 
 struct spi_pinctrl_res {
@@ -77,6 +77,13 @@ struct spi_panel_cmds {
 	int cmd_cnt;
 };
 
+enum spi_panel_status_mode {
+	SPI_ESD_REG,
+	SPI_SEND_PANEL_COMMAND,
+	SPI_ESD_MAX,
+};
+
+
 struct spi_panel_data {
 	struct mdss_panel_data panel_data;
 	struct mdss_util_intf *mdss_util;
@@ -93,6 +100,7 @@ struct spi_panel_data {
 	int disp_dc_gpio;	/* command or data */
 	struct spi_panel_cmds on_cmds;
 	struct spi_panel_cmds off_cmds;
+	bool (*check_status)(struct spi_panel_data *pdata);
 	int (*on)(struct mdss_panel_data *pdata);
 	int (*off)(struct mdss_panel_data *pdata);
 	struct mutex spi_tx_mutex;
@@ -104,6 +112,12 @@ struct spi_panel_data {
 	int pwm_lpg_chan;
 	int pwm_enabled;
 	int bklt_max;
+	int status_mode;
+	u32 status_cmds_rlen;
+	u8 panel_status_reg;
+	u8 *exp_status_value;
+	u8 *act_status_value;
+	unsigned char *return_buf;
 };
 
 int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
@@ -111,6 +125,8 @@ int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
 int is_spi_panel_continuous_splash_on(struct mdss_panel_data *pdata);
 void mdp3_spi_vsync_enable(struct mdss_panel_data *pdata,
 				struct mdp3_notification *vsync_client);
+void mdp3_check_spi_panel_status(struct work_struct *work,
+				uint32_t interval);
 #else
 static inline int mdss_spi_panel_kickoff(struct mdss_panel_data *pdata,
 				char *buf, int len, int stride){

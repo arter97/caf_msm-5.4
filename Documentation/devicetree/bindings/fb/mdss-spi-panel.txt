@@ -59,7 +59,18 @@ Optional properties:
 - qcom,mdss-spi-bl-max-level:		Specifies the max backlight level supported by the panel.
 					255 = default value.
 - qcom,mdss-spi-panel-framerate:	Specifies the frame rate for the panel.
-
+- qcom,esd-check-enabled:		Boolean used to enable ESD recovery feature.
+- qcom,mdss-spi-panel-status-check-mode:Specifies the panel status check method for ESD recovery.
+					"send_init_command" = Regardless of panel status, direct send the panel
+					initial code to recover panel status
+					"reg_read" = Reads panel status register to check the panel status
+- qcom,mdss-spi-panel-status-reg:	Unsigned 8bits integer value that specifies the value of panel status register address.
+- qcom,mdss-spi-panel-status-read-length:
+					Unsigned 8bits integer value that specifies the expected read-back length of the
+					panel register.
+- qcom,mdss-spi-panel-status-value:	An unsigned 8bits integer araray that specifies the values of the panel status register
+					which is used to check the panel status. The size of this array
+					is specified by qcom,mdss-dsi-panel-status-read-length.
 Example:
 &mdss_mdp {
 	spi_gc9305_qvga_cmd: qcom,mdss_spi_gc9305_qvga_cmd {
@@ -115,6 +126,11 @@ Example:
 			20 01 10];
 		qcom,mdss-spi-bl-min-level = <1>;
 		qcom,mdss-spi-bl-max-level = <4095>;
+		qcom,esd-check-enabled;
+		qcom,mdss-spi-panel-status-check-mode = "reg_read";
+		qcom,mdss-spi-panel-status-reg = /bits/ 8 <0x09>;
+		qcom,mdss-spi-panel-status-read-length = <4>;
+		qcom,mdss-spi-panel-status-value = /bits/ 8 <0x52 0x29 0x83 0x00>;
 	};
 };
 

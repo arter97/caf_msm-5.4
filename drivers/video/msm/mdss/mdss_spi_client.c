@@ -26,7 +26,9 @@ int mdss_spi_read_data(u8 reg_addr, u8 *data, u8 len)
 {
 	int rc = 0;
 	u32 max_speed_hz;
-	struct spi_transfer t[2] = {
+	u8 memory_write_reg = 0x2c;
+	u8 empty_pack[] = {0x29, 0x29, 0x29};
+	struct spi_transfer t[4] = {
 		[0] = {
 			.tx_buf = &reg_addr,
 			.len = 1,
@@ -34,6 +36,14 @@ int mdss_spi_read_data(u8 reg_addr, u8 *data, u8 len)
 		[1] = {
 			.rx_buf = data,
 			.len = len,
+		},
+		[2] = {
+			.tx_buf = &empty_pack,
+			.len = 3,
+		},
+		[3] = {
+			.tx_buf = &memory_write_reg,
+			.len = 1,
 		}
 	};
 	struct spi_message m;
@@ -52,6 +62,12 @@ int mdss_spi_read_data(u8 reg_addr, u8 *data, u8 len)
 	spi_message_add_tail(&t[1], &m);
 	rc = spi_sync(mdss_spi_client, &m);
 
+	spi_message_init(&m);
+	spi_message_add_tail(&t[2], &m);
+	rc = spi_sync(mdss_spi_client, &m);
+	spi_message_init(&m);
+	spi_message_add_tail(&t[3], &m);
+	rc = spi_sync(mdss_spi_client, &m);
 	mdss_spi_client->max_speed_hz = max_speed_hz;
 
 	return rc;
@@ -118,7 +134,6 @@ int mdss_spi_tx_pixel(const void *buf, size_t len)
 	}
 
 	mdss_spi_client->bits_per_word = 16;
-
 	spi_message_init(&m);
 	spi_message_add_tail(&t, &m);
 	rc = spi_sync(mdss_spi_client, &m);
