@@ -390,8 +390,7 @@ static void process_ssid_range_report(uint8_t *buf, uint32_t len,
 	ptr += header_len;
 	/* Don't account for pkt_id and length */
 	read_len += header_len - (2 * sizeof(uint32_t));
-
-	mutex_lock(&msg_mask.lock);
+	mutex_lock(&driver->msg_mask_lock);
 	driver->max_ssid_count[smd_info->peripheral] = header->count;
 	for (i = 0; i < header->count && read_len < len; i++) {
 		ssid_range = (struct diag_ssid_range_t *)ptr;
@@ -440,7 +439,7 @@ static void process_ssid_range_report(uint8_t *buf, uint32_t len,
 		}
 		driver->msg_mask_tbl_count += 1;
 	}
-	mutex_unlock(&msg_mask.lock);
+	mutex_unlock(&driver->msg_mask_lock);
 }
 
 static void diag_build_time_mask_update(uint8_t *buf,
@@ -469,8 +468,7 @@ static void diag_build_time_mask_update(uint8_t *buf,
 	build_mask = (struct diag_msg_mask_t *)(driver->build_time_mask->ptr);
 	num_items = range->ssid_last - range->ssid_first + 1;
 
-	mutex_lock(&driver->build_time_mask->lock);
-	for (i = 0; i < driver->msg_mask_tbl_count; i++, build_mask++) {
+	for (i = 0; i < driver->bt_msg_mask_tbl_count; i++, build_mask++) {
 		if (!build_mask) {
 			found = 1;
 			break;
@@ -492,7 +490,7 @@ static void diag_build_time_mask_update(uint8_t *buf,
 
 	if (found)
 		goto end;
-	new_size = (driver->msg_mask_tbl_count + 1) *
+	new_size = (driver->bt_msg_mask_tbl_count + 1) *
 		   sizeof(struct diag_msg_mask_t);
 	pr_debug("diag: %s: receiving build time mask size more that Apps can handle\n",
 		__func__);
@@ -511,9 +509,10 @@ static void diag_build_time_mask_update(uint8_t *buf,
 		       __func__, err);
 		goto end;
 	}
-	driver->msg_mask_tbl_count += 1;
+	driver->bt_msg_mask_tbl_count += 1;
 end:
-	mutex_unlock(&driver->build_time_mask->lock);
+	mutex_unlock(&driver->msg_mask_lock);
+	return;
 }
 
 static void process_build_mask_report(uint8_t *buf, uint32_t len,
