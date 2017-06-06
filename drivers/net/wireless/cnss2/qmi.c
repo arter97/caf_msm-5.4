@@ -26,8 +26,8 @@
 #define BDF_FILE_NAME_PREFIX		"bdwlan.b"
 
 #ifdef CONFIG_CNSS2_DEBUG
-static unsigned long qmi_timeout = 10000;
-module_param(qmi_timeout, ulong, S_IRUSR | S_IWUSR);
+static unsigned int qmi_timeout = 10000;
+module_param(qmi_timeout, uint, S_IRUSR | S_IWUSR);
 MODULE_PARM_DESC(qmi_timeout, "Timeout for QMI message in milliseconds");
 
 #define QMI_WLFW_TIMEOUT_MS		qmi_timeout
@@ -796,6 +796,57 @@ out:
 	return ret;
 }
 
+int cnss_wlfw_ini_send_sync(struct cnss_plat_data *plat_priv,
+			    uint8_t fw_log_mode)
+{
+	int ret;
+	struct wlfw_ini_req_msg_v01 req;
+	struct wlfw_ini_resp_msg_v01 resp;
+	struct msg_desc req_desc, resp_desc;
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	cnss_pr_dbg("Sending ini sync request, state: 0x%lx, fw_log_mode: %d\n",
+		    plat_priv->driver_state, fw_log_mode);
+
+	memset(&req, 0, sizeof(req));
+	memset(&resp, 0, sizeof(resp));
+
+	req.enablefwlog_valid = 1;
+	req.enablefwlog = fw_log_mode;
+
+	req_desc.max_msg_len = WLFW_INI_REQ_MSG_V01_MAX_MSG_LEN;
+	req_desc.msg_id = QMI_WLFW_INI_REQ_V01;
+	req_desc.ei_array = wlfw_ini_req_msg_v01_ei;
+
+	resp_desc.max_msg_len = WLFW_INI_RESP_MSG_V01_MAX_MSG_LEN;
+	resp_desc.msg_id = QMI_WLFW_INI_RESP_V01;
+	resp_desc.ei_array = wlfw_ini_resp_msg_v01_ei;
+
+	ret = qmi_send_req_wait(plat_priv->qmi_wlfw_clnt,
+				&req_desc, &req, sizeof(req),
+				&resp_desc, &resp, sizeof(resp),
+				QMI_WLFW_TIMEOUT_MS);
+	if (ret < 0) {
+		cnss_pr_err("Send INI req failed fw_log_mode: %d, ret: %d\n",
+			    fw_log_mode, ret);
+		goto out;
+	}
+
+	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+		cnss_pr_err("QMI INI request rejected, fw_log_mode:%d result:%d error:%d\n",
+			    fw_log_mode, resp.resp.result, resp.resp.error);
+		ret = resp.resp.result;
+		goto out;
+	}
+
+	return 0;
+
+out:
+	return ret;
+}
+
 static void cnss_wlfw_clnt_ind(struct qmi_handle *handle,
 			       unsigned int msg_id, void *msg,
 			       unsigned int msg_len, void *ind_cb_priv)
@@ -841,7 +892,9 @@ static void cnss_wlfw_clnt_ind(struct qmi_handle *handle,
 
 unsigned int cnss_get_qmi_timeout(void)
 {
-	return qmi_timeout;
+	cnss_pr_dbg("QMI timeout is %u ms\n", QMI_WLFW_TIMEOUT_MS);
+
+	return QMI_WLFW_TIMEOUT_MS;
 }
 EXPORT_SYMBOL(cnss_get_qmi_timeout);
 

@@ -28,6 +28,7 @@ struct msm_isp_event_data32 {
 		struct msm_isp_sof_info sof_info;
 	} u;
 };
+
 #endif
 
 #endif
