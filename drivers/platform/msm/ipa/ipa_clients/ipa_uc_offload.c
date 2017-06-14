@@ -58,7 +58,6 @@ enum ipa_uc_offload_state {
 	IPA_UC_OFFLOAD_STATE_INVALID,
 	IPA_UC_OFFLOAD_STATE_INITIALIZED,
 	IPA_UC_OFFLOAD_STATE_UP,
-	IPA_UC_OFFLOAD_STATE_DOWN,
 };
 
 struct ipa_uc_offload_ctx {
@@ -455,7 +454,7 @@ static int ipa_uc_ntn_disconn_pipes(struct ipa_uc_offload_ctx *ntn_ctx)
 {
 	int ipa_ep_idx_ul, ipa_ep_idx_dl;
 
-	ntn_ctx->state = IPA_UC_OFFLOAD_STATE_DOWN;
+	ntn_ctx->state = IPA_UC_OFFLOAD_STATE_INITIALIZED;
 	if (ipa_rm_delete_dependency(IPA_RM_RESOURCE_ODU_ADAPT_PROD,
 				IPA_RM_RESOURCE_APPS_CONS)) {
 		IPA_UC_OFFLOAD_ERR("fail to delete rm dependency\n");
@@ -570,7 +569,7 @@ int ipa_uc_offload_cleanup(u32 clnt_hdl)
 		return -EINVAL;
 	}
 
-	if (offload_ctx->state != IPA_UC_OFFLOAD_STATE_DOWN) {
+	if (offload_ctx->state != IPA_UC_OFFLOAD_STATE_INITIALIZED) {
 		IPA_UC_OFFLOAD_ERR("Invalid State %d\n", offload_ctx->state);
 		return -EINVAL;
 	}
