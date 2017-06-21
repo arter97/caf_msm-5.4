@@ -309,7 +309,6 @@ static ssize_t goodix_tool_write(struct file *filp, const char __user *userbuf,
 						size_t count, loff_t *ppos)
 {
 	s32 ret = 0;
-	u8 *dataptr = NULL;
 
 	mutex_lock(&lock);
 	ret = copy_from_user(&cmd_head, userbuf, CMD_HEAD_LENGTH);
