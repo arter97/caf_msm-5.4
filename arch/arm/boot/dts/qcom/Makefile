@@ -159,7 +159,9 @@ dtb-$(CONFIG_ARCH_MDM9650) += mdm9650-sim.dtb \
 	mdm9650-v1.1-nand-cdp.dtb \
 	mdm9650-v1.1-emmc-mtp.dtb \
 	mdm9650-v1.1-nand-mtp.dtb \
-	mdm9650-v1.1-nand-dualwifi-mtp.dtb
+	mdm9650-v1.1-nand-dualwifi-mtp.dtb \
+	mdm9650-v1.1-emmc-pcie-ep-mtp.dtb \
+	mdm9650-v1.1-nand-pcie-ep-mtp.dtb
 
 dtb-$(CONFIG_ARCH_SDXHEDGEHOG) += sdxhedgehog-emmc-cdp.dtb \
 	sdxhedgehog-emmc-mtp.dtb \
