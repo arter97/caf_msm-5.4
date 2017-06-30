@@ -65,6 +65,7 @@ static struct platform_driver msm_sensor_platform_driver = {
 		.name = "qcom,camera",
 		.owner = THIS_MODULE,
 		.of_match_table = msm_sensor_driver_dt_match,
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 	.remove = msm_sensor_platform_remove,
 };
@@ -1298,6 +1299,7 @@ static struct i2c_driver msm_sensor_driver_i2c = {
 	.remove = msm_sensor_driver_i2c_remove,
 	.driver = {
 		.name = SENSOR_DRIVER_I2C,
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 };
 
