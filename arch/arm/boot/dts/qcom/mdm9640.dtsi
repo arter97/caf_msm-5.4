@@ -586,7 +586,7 @@
 		qcom,pcie-phy-ver = <0x90>;
 
 		qcom,ep-latency = <10>;
-
+		qcom,switch-latency = <100>;
 		qcom,msm-bus,name = "pcie0";
 		qcom,msm-bus,num-cases = <2>;
 		qcom,msm-bus,num-paths = <1>;

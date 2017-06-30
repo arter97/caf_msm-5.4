@@ -91,6 +91,9 @@ Optional Properties:
   - qcom,smmu-exist: PCIe uses a SMMU.
   - qcom,ep-latency: The time (unit: ms) to wait for the PCIe endpoint to become
     stable after power on, before de-assert the PERST to the endpoint.
+  - qcom,switch-latency: The time (unit: ms) to wait for the PCIe endpoint's link
+    training with switch downstream port after the link between switch upstream
+    port and RC is up.
   - qcom,cpl-timeout: Completion timeout value. This value specifies the time range
     which the root complex will send out a completion packet if there is no response
     from the endpoint.
@@ -255,6 +258,7 @@ Example:
 		qcom,common-phy;
 		qcom,smmu-exist;
 		qcom,ep-latency = <100>;
+		qcom,switch-latency = <100>;
 		qcom,cpl-timeout = <0x2>;
 
 		iommus = <&anoc0_smmu>;
