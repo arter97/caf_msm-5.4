@@ -78,6 +78,12 @@ static int emac_mdio_read(struct mii_bus *bus, int addr, int regnum)
 	u32 reg = 0;
 	int ret = 0;
 
+	if (pm_runtime_enabled(adpt->netdev->dev.parent) &&
+	    pm_runtime_status_suspended(adpt->netdev->dev.parent)) {
+		emac_dbg(adpt, hw, "EMAC in suspended state\n");
+		return ret;
+	}
+
 	if (phy->external) {
 		ret = emac_phy_mdio_autopoll_disable(hw);
 		if (ret) {
@@ -94,7 +100,7 @@ static int emac_mdio_read(struct mii_bus *bus, int addr, int regnum)
 	reg = reg & ~(MDIO_REG_ADDR_BMSK | MDIO_CLK_SEL_BMSK |
 			MDIO_MODE | MDIO_PR);
 	reg = SUP_PREAMBLE |
-	      ((MDIO_CLK_25_4 << MDIO_CLK_SEL_SHFT) & MDIO_CLK_SEL_BMSK) |
+	      ((MDIO_CLK_25_8 << MDIO_CLK_SEL_SHFT) & MDIO_CLK_SEL_BMSK) |
 	      ((regnum << MDIO_REG_ADDR_SHFT) & MDIO_REG_ADDR_BMSK) |
 	      MDIO_START | MDIO_RD_NWR;
 
@@ -128,6 +134,12 @@ static int emac_mdio_write(struct mii_bus *bus, int addr, int regnum, u16 val)
 	u32 reg = 0;
 	int ret = 0;
 
+	if (pm_runtime_enabled(adpt->netdev->dev.parent) &&
+	    pm_runtime_status_suspended(adpt->netdev->dev.parent)) {
+		emac_dbg(adpt, hw, "EMAC in suspended state\n");
+		return ret;
+	}
+
 	if (phy->external) {
 		ret = emac_phy_mdio_autopoll_disable(hw);
 		if (ret) {
@@ -144,7 +156,7 @@ static int emac_mdio_write(struct mii_bus *bus, int addr, int regnum, u16 val)
 	reg = reg & ~(MDIO_REG_ADDR_BMSK | MDIO_CLK_SEL_BMSK |
 		MDIO_DATA_BMSK | MDIO_MODE | MDIO_PR);
 	reg = SUP_PREAMBLE |
-	((MDIO_CLK_25_4 << MDIO_CLK_SEL_SHFT) & MDIO_CLK_SEL_BMSK) |
+	((MDIO_CLK_25_8 << MDIO_CLK_SEL_SHFT) & MDIO_CLK_SEL_BMSK) |
 	((regnum << MDIO_REG_ADDR_SHFT) & MDIO_REG_ADDR_BMSK) |
 	((val << MDIO_DATA_SHFT) & MDIO_DATA_BMSK) |
 	MDIO_START;
