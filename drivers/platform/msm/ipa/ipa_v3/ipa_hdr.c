@@ -13,7 +13,7 @@
 #include "ipa_i.h"
 #include "ipahal/ipahal.h"
 
-static const u32 ipa_hdr_bin_sz[IPA_HDR_BIN_MAX] = { 8, 16, 24, 36, 60};
+static const u32 ipa_hdr_bin_sz[IPA_HDR_BIN_MAX] = { 8, 16, 24, 36, 64};
 static const u32 ipa_hdr_proc_ctx_bin_sz[IPA_HDR_PROC_CTX_BIN_MAX] = { 32, 64};
 
 #define HDR_TYPE_IS_VALID(type) \
@@ -77,7 +77,8 @@ static void ipa3_hdr_proc_ctx_to_hw_format(struct ipa_mem_buffer *mem,
 				entry->hdr->is_hdr_proc_ctx,
 				entry->hdr->phys_base,
 				hdr_base_addr,
-				entry->hdr->offset_entry);
+				entry->hdr->offset_entry,
+				entry->l2tp_params);
 	}
 }
 
@@ -354,6 +355,7 @@ static int __ipa_add_hdr_proc_ctx(struct ipa_hdr_proc_ctx_add *proc_ctx,
 
 	entry->type = proc_ctx->type;
 	entry->hdr = hdr_entry;
+	entry->l2tp_params = proc_ctx->l2tp_params;
 	if (add_ref_hdr)
 		hdr_entry->ref_cnt++;
 	entry->cookie = IPA_COOKIE;
@@ -374,12 +376,12 @@ static int __ipa_add_hdr_proc_ctx(struct ipa_hdr_proc_ctx_add *proc_ctx,
 	mem_size = (ipa3_ctx->hdr_proc_ctx_tbl_lcl) ?
 		IPA_MEM_PART(apps_hdr_proc_ctx_size) :
 		IPA_MEM_PART(apps_hdr_proc_ctx_size_ddr);
-	if (htbl->end + ipa_hdr_proc_ctx_bin_sz[bin] > mem_size) {
-		IPAERR("hdr proc ctx table overflow\n");
-		goto bad_len;
-	}
-
 	if (list_empty(&htbl->head_free_offset_list[bin])) {
+		if (htbl->end + ipa_hdr_proc_ctx_bin_sz[bin] > mem_size) {
+			IPAERR("hdr proc ctx table overflow\n");
+			goto bad_len;
+		}
+
 		offset = kmem_cache_zalloc(ipa3_ctx->hdr_proc_ctx_offset_cache,
 					   GFP_KERNEL);
 		if (!offset) {
@@ -484,16 +486,21 @@ static int __ipa_add_hdr(struct ipa_hdr_add *hdr)
 	mem_size = (ipa3_ctx->hdr_tbl_lcl) ? IPA_MEM_PART(apps_hdr_size) :
 		IPA_MEM_PART(apps_hdr_size_ddr);
 
-	/* if header does not fit to table, place it in DDR */
-	if (htbl->end + ipa_hdr_bin_sz[bin] > mem_size) {
-		entry->is_hdr_proc_ctx = true;
-		entry->phys_base = dma_map_single(ipa3_ctx->pdev,
-			entry->hdr,
-			entry->hdr_len,
-			DMA_TO_DEVICE);
-	} else {
-		entry->is_hdr_proc_ctx = false;
-		if (list_empty(&htbl->head_free_offset_list[bin])) {
+	if (list_empty(&htbl->head_free_offset_list[bin])) {
+		/* if header does not fit to table, place it in DDR */
+		if (htbl->end + ipa_hdr_bin_sz[bin] > mem_size) {
+			entry->is_hdr_proc_ctx = true;
+			entry->phys_base = dma_map_single(ipa3_ctx->pdev,
+				entry->hdr,
+				entry->hdr_len,
+				DMA_TO_DEVICE);
+			if (dma_mapping_error(ipa3_ctx->pdev,
+				entry->phys_base)) {
+				IPAERR("dma_map_single failure for entry\n");
+				goto fail_dma_mapping;
+			}
+		} else {
+			entry->is_hdr_proc_ctx = false;
 			offset = kmem_cache_zalloc(ipa3_ctx->hdr_offset_cache,
 						   GFP_KERNEL);
 			if (!offset) {
@@ -510,14 +517,14 @@ static int __ipa_add_hdr(struct ipa_hdr_add *hdr)
 			htbl->end += ipa_hdr_bin_sz[bin];
 			list_add(&offset->link,
 					&htbl->head_offset_list[bin]);
-		} else {
-			/* get the first free slot */
-			offset =
-			list_first_entry(&htbl->head_free_offset_list[bin],
-					struct ipa_hdr_offset_entry, link);
-			list_move(&offset->link, &htbl->head_offset_list[bin]);
+			entry->offset_entry = offset;
 		}
-
+	} else {
+		entry->is_hdr_proc_ctx = false;
+		/* get the first free slot */
+		offset = list_first_entry(&htbl->head_free_offset_list[bin],
+			struct ipa_hdr_offset_entry, link);
+		list_move(&offset->link, &htbl->head_offset_list[bin]);
 		entry->offset_entry = offset;
 	}
 
@@ -566,6 +573,9 @@ fail_add_proc_ctx:
 	list_del(&entry->link);
 	dma_unmap_single(ipa3_ctx->pdev, entry->phys_base,
 			entry->hdr_len, DMA_TO_DEVICE);
+fail_dma_mapping:
+	entry->is_hdr_proc_ctx = false;
+
 bad_hdr_len:
 	entry->cookie = 0;
 	kmem_cache_free(ipa3_ctx->hdr_cache, entry);

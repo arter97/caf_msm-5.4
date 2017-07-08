@@ -791,10 +791,11 @@ static void __iomem *cnss_pci_iomap(struct pci_dev *dev, int bar,
 
 static struct cnss_msi_config msi_config = {
 	.total_vectors = 32,
-	.total_users = 3,
+	.total_users = 4,
 	.users = (struct cnss_msi_user[]) {
 		{ .name = "MHI", .num_vectors = 2, .base_vector = 0 },
-		{ .name = "CE", .num_vectors = 12, .base_vector = 2 },
+		{ .name = "CE", .num_vectors = 11, .base_vector = 2 },
+		{ .name = "WAKE", .num_vectors = 1, .base_vector = 13 },
 		{ .name = "DP", .num_vectors = 18, .base_vector = 14 },
 	},
 };
@@ -1031,6 +1032,8 @@ static char *cnss_mhi_state_to_str(enum cnss_mhi_state mhi_state)
 		return "SUSPEND";
 	case CNSS_MHI_RESUME:
 		return "RESUME";
+	case CNSS_MHI_TRIGGER_RDDM:
+		return "TRIGGER_RDDM";
 	case CNSS_MHI_RDDM:
 		return "RDDM";
 	case CNSS_MHI_RDDM_KERNEL_PANIC:
@@ -1192,6 +1195,8 @@ static enum mhi_dev_ctrl cnss_to_mhi_dev_state(enum cnss_mhi_state state)
 		return MHI_DEV_CTRL_SUSPEND;
 	case CNSS_MHI_RESUME:
 		return MHI_DEV_CTRL_RESUME;
+	case CNSS_MHI_TRIGGER_RDDM:
+		return MHI_DEV_CTRL_TRIGGER_RDDM;
 	case CNSS_MHI_RDDM:
 		return MHI_DEV_CTRL_RDDM;
 	case CNSS_MHI_RDDM_KERNEL_PANIC:
@@ -1228,6 +1233,7 @@ static int cnss_pci_check_mhi_state_bit(struct cnss_pci_data *pci_priv,
 		if (test_bit(CNSS_MHI_SUSPEND, &pci_priv->mhi_state))
 			return 0;
 		break;
+	case CNSS_MHI_TRIGGER_RDDM:
 	case CNSS_MHI_RDDM:
 	case CNSS_MHI_RDDM_KERNEL_PANIC:
 	case CNSS_MHI_NOTIFY_LINK_ERROR:
@@ -1266,6 +1272,7 @@ static void cnss_pci_set_mhi_state_bit(struct cnss_pci_data *pci_priv,
 	case CNSS_MHI_RESUME:
 		clear_bit(CNSS_MHI_SUSPEND, &pci_priv->mhi_state);
 		break;
+	case CNSS_MHI_TRIGGER_RDDM:
 	case CNSS_MHI_RDDM:
 	case CNSS_MHI_RDDM_KERNEL_PANIC:
 	case CNSS_MHI_NOTIFY_LINK_ERROR:
@@ -1355,6 +1362,7 @@ void cnss_pci_stop_mhi(struct cnss_pci_data *pci_priv)
 
 	plat_priv = pci_priv->plat_priv;
 
+	cnss_pci_set_mhi_state_bit(pci_priv, CNSS_MHI_RESUME);
 	cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_POWER_OFF);
 	if (!plat_priv->ramdump_info_v2.dump_data_valid)
 		cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_DEINIT);
