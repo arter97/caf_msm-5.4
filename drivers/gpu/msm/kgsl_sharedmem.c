@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -526,16 +526,35 @@ static inline unsigned int _fixup_cache_range_op(unsigned int op)
 }
 #endif
 
+static void kgsl_do_cache_op(struct page *page, void *addr,
+		size_t offset, size_t size,
+		void (*cache_op)(const void *, const void *))
+{
+	if (page == NULL) {
+		cache_op(addr + offset, addr + offset + (size_t) size);
+		return;
+	}
+
+	offset &= ~PAGE_MASK;
+
+	while (size) {
+		unsigned int len = size;
+
+		if ((len + offset) > PAGE_SIZE)
+			len = PAGE_SIZE - offset;
+
+		addr = kmap_atomic(page++);
+		cache_op(addr + offset, addr + offset + len);
+		kunmap_atomic(addr);
+		size -= len;
+		offset = 0;
+	}
+}
+
 int kgsl_cache_range_op(struct kgsl_memdesc *memdesc, size_t offset,
 			size_t size, unsigned int op)
 {
-	/*
-	 * If the buffer is mapped in the kernel operate on that address
-	 * otherwise use the user address
-	 */
-
-	void *addr = (memdesc->hostptr) ?
-		memdesc->hostptr : (void *) memdesc->useraddr;
+	void (*cache_op)(const void *, const void *);
 
 	if (size == 0 || size > UINT_MAX)
 		return -EINVAL;
@@ -544,37 +563,68 @@ int kgsl_cache_range_op(struct kgsl_memdesc *memdesc, size_t offset,
 	if ((offset + size < offset) || (offset + size < size))
 		return -ERANGE;
 
-	/* Make sure the offset + size do not overflow the address */
-	if ((addr + offset + size) < addr)
-		return -ERANGE;
-
 	/* Check that offset+length does not exceed memdesc->size */
 	if ((offset + size) > memdesc->size)
 		return -ERANGE;
-
-	/* Return quietly if the buffer isn't mapped on the CPU */
-	if (addr == NULL)
-		return 0;
-
-	addr = addr + offset;
 
 	/*
 	 * The dmac_xxx_range functions handle addresses and sizes that
 	 * are not aligned to the cacheline size correctly.
 	 */
-
 	switch (_fixup_cache_range_op(op)) {
 	case KGSL_CACHE_OP_FLUSH:
-		dmac_flush_range(addr, addr + size);
+		cache_op = dmac_flush_range;
 		break;
 	case KGSL_CACHE_OP_CLEAN:
-		dmac_clean_range(addr, addr + size);
+		cache_op = dmac_clean_range;
 		break;
 	case KGSL_CACHE_OP_INV:
-		dmac_inv_range(addr, addr + size);
+		cache_op = dmac_inv_range;
 		break;
+	default:
+		return -EINVAL;
 	}
 
+	if (memdesc->hostptr) {
+		void *addr = memdesc->hostptr;
+
+		/* Make sure the offset + size do not overflow the address */
+		if (addr + (offset + size) < addr)
+			return -ERANGE;
+
+		kgsl_do_cache_op(NULL, addr, offset, size, cache_op);
+		return 0;
+	}
+
+	/*
+	 * If the buffer is not to mapped to kernel, perform cache
+	 * operations after mapping to kernel.
+	 */
+	if (memdesc->sg != NULL) {
+		struct scatterlist *sg;
+		unsigned int i, pos = 0;
+		struct page *page;
+
+		for_each_sg(memdesc->sg, sg, memdesc->sglen, i) {
+			size_t sg_offset, sg_left;
+
+			if (offset >= (pos + sg->length)) {
+				pos += sg->length;
+				continue;
+			}
+
+			sg_offset = offset > pos ? offset - pos : 0;
+			sg_left = (sg->length - sg_offset > size) ? size :
+					sg->length - sg_offset;
+			page = sg_page(sg) + sg_offset / PAGE_SIZE;
+			kgsl_do_cache_op(page, NULL, sg_offset,
+					sg_left, cache_op);
+			size -= sg_left;
+			if (size == 0)
+				break;
+			pos += sg->length;
+		}
+	}
 	return 0;
 }
 EXPORT_SYMBOL(kgsl_cache_range_op);
