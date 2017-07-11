@@ -123,7 +123,7 @@ static void matrix_keypad_scan(struct work_struct *work)
 	const unsigned short *keycodes = input_dev->keycode;
 	const struct matrix_keypad_platform_data *pdata = keypad->pdata;
 	uint32_t new_state[MATRIX_MAX_COLS];
-	int row, col, code;
+	int row, col, code, count_state = 0;
 
 	/* de-activate all columns for scanning */
 	activate_all_cols(pdata, false);
@@ -139,8 +139,13 @@ static void matrix_keypad_scan(struct work_struct *work)
 			new_state[col] |=
 				row_asserted(pdata, row) ? (1 << row) : 0;
 
+			if (new_state[col])
+				count_state++;
 		activate_col(pdata, col, false);
 	}
+
+	if (count_state == 5)
+		goto out;
 
 	for (col = 0; col < pdata->num_col_gpios; col++) {
 		uint32_t bits_changed;
@@ -164,6 +169,7 @@ static void matrix_keypad_scan(struct work_struct *work)
 
 	memcpy(keypad->last_key_state, new_state, sizeof(new_state));
 
+out:
 	activate_all_cols(pdata, true);
 
 	mutex_lock(&keypad->lock);
