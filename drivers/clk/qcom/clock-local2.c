@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -156,6 +156,48 @@ static int rcg_clk_prepare(struct clk *c)
 	WARN(rcg->current_freq == &rcg_dummy_freq,
 		"Attempting to prepare %s before setting its rate. "
 		"Set the rate first!\n", rcg->c.dbg_name);
+
+	return 0;
+}
+
+static int rcg_clk_set_duty_cycle(struct clk *c, u32 numerator,
+				u32 denominator)
+{
+	struct rcg_clk *rcg = to_rcg_clk(c);
+	u32 notn_m_val, n_val, m_val, d_val, not2d_val;
+	u32 max_n_value;
+
+	if (!numerator || numerator == denominator)
+		return -EINVAL;
+
+	if (!rcg->mnd_reg_width)
+		rcg->mnd_reg_width = 8;
+
+	max_n_value = 1 << (rcg->mnd_reg_width - 1);
+
+	notn_m_val = readl_relaxed(N_REG(rcg));
+	m_val = readl_relaxed(M_REG(rcg));
+	n_val = ((~notn_m_val) + m_val) & BM((rcg->mnd_reg_width - 1), 0);
+
+	if (n_val > max_n_value) {
+		pr_warn("%s duty-cycle cannot be set for required frequency %ld\n",
+				c->dbg_name, clk_get_rate(c));
+		return -EINVAL;
+	}
+
+	/* Calculate the 2d value */
+	d_val = DIV_ROUND_CLOSEST((numerator * n_val * 2),  denominator);
+
+	/* Check BIT WIDTHS OF 2d.  If D is too big reduce Duty cycle. */
+	if (d_val > (BIT(rcg->mnd_reg_width) - 1)) {
+		d_val = (BIT(rcg->mnd_reg_width) - 1) / 2;
+		d_val *= 2;
+	}
+
+	not2d_val = (~d_val) & BM((rcg->mnd_reg_width - 1), 0);
+
+	writel_relaxed(not2d_val, D_REG(rcg));
+	rcg_update_config(rcg);
 
 	return 0;
 }
@@ -1442,6 +1484,7 @@ struct clk_ops clk_ops_rcg = {
 struct clk_ops clk_ops_rcg_mnd = {
 	.enable = rcg_clk_prepare,
 	.set_rate = rcg_clk_set_rate,
+	.set_duty_cycle = rcg_clk_set_duty_cycle,
 	.list_rate = rcg_clk_list_rate,
 	.round_rate = rcg_clk_round_rate,
 	.handoff = rcg_mnd_clk_handoff,

@@ -14,7 +14,7 @@
 	SY7807_pins {
 		qcom,pins = <&gp 32>;
 		qcom,num-grp-pins = <1>;
-		qcom,pin-func = <0>;
+		qcom,pin-func = <2>;
 		label = "SY7807_pins";
 		SY7807_default: en_default {
 		drive-strength = <2>;
@@ -31,9 +31,14 @@
 		pinctrl-0 = <&SY7807_default>;
 		qcom,flash-en = <&pm8909_gpios 4 0>;
 		qcom,flash-now = <&msm_gpio 32 0>;
+		clocks = <&clock_gcc clk_gcc_camss_gp1_clk>,
+				<&clock_gcc clk_camss_gp1_clk_src>;
+		clock-names = "flash_now_clk", "flash_now_duty_cycle_clk";
 		qcom,op-seq = "flash_en", "flash_now";
 		qcom,torch-seq-val = <1 0>;
-		qcom,flash-seq-val = <1 0>;
+		qcom,flash-seq-val = <0 1>;
+		qcom,duty-cycle = <0 30>;
+		qcom,clk-freq = <0 150000>;
 		linux,name = "flashlight";
 		linux,default-trigger = "flashlight-trigger";
 	};
