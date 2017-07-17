@@ -119,6 +119,7 @@
 #define MSI_EXIT_L1SS_WAIT	              10
 #define MSI_EXIT_L1SS_WAIT_MAX_COUNT          100
 #define XMLH_LINK_UP                          0x400
+#define PARF_XMLH_LINK_UP                     0x40000000
 
 #define MAX_PROP_SIZE 32
 #define MAX_MSG_LEN 80
@@ -346,14 +347,14 @@ static inline void ep_pcie_write_mask(void __iomem *addr,
 	wmb();
 }
 
-static inline void ep_pcie_write_reg(void *base, u32 offset, u32 value)
+static inline void ep_pcie_write_reg(void __iomem *base, u32 offset, u32 value)
 {
 	writel_relaxed(value, base + offset);
 	/* ensure register write goes through before next regiser operation */
 	wmb();
 }
 
-static inline void ep_pcie_write_reg_field(void *base, u32 offset,
+static inline void ep_pcie_write_reg_field(void __iomem *base, u32 offset,
 	const u32 mask, u32 val)
 {
 	u32 shift = find_first_bit((void *)&mask, 32);
