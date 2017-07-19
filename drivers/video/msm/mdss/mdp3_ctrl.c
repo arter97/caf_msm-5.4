@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015,2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -22,7 +22,7 @@
 #include <linux/delay.h>
 #include <linux/dma-buf.h>
 #include <linux/pm_runtime.h>
-
+#include <linux/msm_ion.h>
 #include "mdp3_ctrl.h"
 #include "mdp3.h"
 #include "mdp3_ppp.h"
@@ -1327,6 +1327,8 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 		if (mdp3_ctrl_get_intf_type(mfd) ==
 				MDP3_DMA_OUTPUT_SEL_SPI_CMD) {
 			mdp3_session->intf->active = false;
+			msm_ion_do_cache_op(mdp3_res->ion_client, data->srcp_ihdl,
+					(void*)(int)data->addr, data->len, ION_IOC_INV_CACHES);
 			rc = mdss_spi_panel_kickoff(mdp3_session->panel,
 						(void *)(int)data->addr,
 						(int)data->len,
