@@ -105,6 +105,9 @@ Optional properties
 - qcom,disable-cx-phase-ctrl: If this property is defined, the feature
 			cx phase control will be disabled. All other properties
 			corresponding to this feature will be ignored.
+- qcom,cpr-temp-band-enable: If this property is defined, enable support in
+			KTM to send the temperature band for CPR using RPM
+			message.
 
 Optional child nodes
 - qcom,pmic-opt-curr-temp: Threshold temperature for requesting optimum current (request
@@ -279,6 +282,7 @@ Example:
 		vdd-mx-supply = <&pma8084_s1>;
 		qcom,cx-retention-min = <RPM_SMD_REGULATOR_LEVEL_RETENTION_PLUS>;
 		vdd-cx-supply = <&pmd9635_s5_level>;
+		qcom,cpr-temp-band-enable;
 		qcom,online-hotplug-core;
 		qcom,synchronous-cluster-id = <0 1>; /* Indicates cluster 0 and 1 are synchronous */
 		qcom,synchronous-cluster-map =  <0 2 &CPU0 &CPU1>,
