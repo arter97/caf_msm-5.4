@@ -189,7 +189,7 @@ static void cam_smmu_print_table(void);
 
 static int cam_smmu_probe(struct platform_device *pdev);
 
-static void cam_smmu_check_vaddr_in_range(int idx, void *vaddr);
+static int cam_smmu_check_vaddr_in_range(int idx, void *vaddr);
 
 static void cam_smmu_page_fault_work(struct work_struct *work)
 {
@@ -207,7 +207,9 @@ static void cam_smmu_page_fault_work(struct work_struct *work)
 	/* Dereference the payload to call the handler */
 	idx = payload->idx;
 	mutex_lock(&iommu_cb_set.cb_info[idx].lock);
-	cam_smmu_check_vaddr_in_range(idx, (void *)payload->iova);
+	if(cam_smmu_check_vaddr_in_range(idx, (void *)payload->iova) < 0){
+            goto check_failed;
+        }
 	for (j = 0; j < CAM_SMMU_CB_MAX; j++) {
 		if ((iommu_cb_set.cb_info[idx].handler[j])) {
 			iommu_cb_set.cb_info[idx].handler[j](
@@ -218,6 +220,7 @@ static void cam_smmu_page_fault_work(struct work_struct *work)
 				iommu_cb_set.cb_info[idx].token[j]);
 		}
 	}
+check_failed:
 	mutex_unlock(&iommu_cb_set.cb_info[idx].lock);
 	kfree(payload);
 }
@@ -294,7 +297,8 @@ int cam_smmu_query_vaddr_in_range(int handle,
 }
 EXPORT_SYMBOL(cam_smmu_query_vaddr_in_range);
 
-static void cam_smmu_check_vaddr_in_range(int idx, void *vaddr)
+
+static int cam_smmu_check_vaddr_in_range(int idx, void *vaddr)
 {
 	struct cam_dma_buff_info *mapping;
 	unsigned long start_addr, end_addr, current_addr;
@@ -310,16 +314,15 @@ static void cam_smmu_check_vaddr_in_range(int idx, void *vaddr)
 				vaddr, (void *)start_addr, (void *)end_addr,
 				mapping->ion_fd,
 				iommu_cb_set.cb_info[idx].name);
-			return;
+			return 1;
 		} else {
 			CDBG("va %pK is not in this range: %pK-%pK, fd = %d\n",
 				vaddr, (void *)start_addr, (void *)end_addr,
 				mapping->ion_fd);
 		}
 	}
-	pr_err("Cannot find vaddr:%pK in SMMU. %s uses invalid virtual address\n",
-		vaddr, iommu_cb_set.cb_info[idx].name);
-	return;
+
+	return -1;
 }
 
 void cam_smmu_reg_client_page_fault_handler(int handle,

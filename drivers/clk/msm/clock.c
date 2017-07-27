@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/clock.c
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2007-2017, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -31,6 +31,7 @@
 
 #include <trace/events/power.h>
 #include "clock.h"
+#include <linux/delay.h>
 
 struct handoff_clk {
 	struct list_head list;
@@ -892,6 +893,50 @@ static void vdd_class_init(struct clk_vdd_class *vdd)
 	list_add_tail(&v->list, &handoff_vdd_list);
 }
 
+
+static char earlycamera_clk_name[][30] = {
+    {"gpll6_clk_src"},\
+    {"gcc_camss_mclk2_clk"},\
+    {"mclk2_clk_src"},\
+    {"camss_top_ahb_clk_src"},\
+    {"gcc_camss_top_ahb_clk"},\
+    {"gcc_camss_ispif_ahb_clk"},\
+    {"gcc_camss_ahb_clk"},\
+    {"csi1phytimer_clk_src"},\
+    {"gcc_camss_csi1phytimer_clk"},\
+    {"csi1_clk_src"},\
+    {"gcc_camss_csi1phy_clk"},\
+    {"gcc_camss_csi1_ahb_clk"},\
+    {"gcc_camss_csi1_clk"},\
+    {"gcc_camss_csi1pix_clk"},\
+    {"gcc_camss_csi1rdi_clk"},\
+    {"cci_clk_src"},\
+    {"gcc_camss_cci_ahb_clk"},\
+    {"gcc_camss_cci_clk"},\
+    {"vfe1_clk_src"},\
+    {"gcc_camss_vfe1_clk"},\
+    {"gcc_camss_csi_vfe1_clk"},\
+    {"gcc_camss_vfe1_ahb_clk"},\
+    {"gcc_camss_vfe1_axi_clk"},\
+    {"gcc_camss_micro_ahb_clk"},\
+    {"gcc_smmu_cfg_clk"},\
+    {"gcc_apss_tcu_clk"},
+};
+
+#define EARLY_CAMERA_CLK_NUM sizeof(earlycamera_clk_name)/sizeof(earlycamera_clk_name[0])
+
+static int check_earlycamera_clk_is_enable(const char* name){
+     int i;
+     for(i = 0; i < EARLY_CAMERA_CLK_NUM; i++){
+         if(strlen(name) == strlen(earlycamera_clk_name[i])){
+             if(strcmp(earlycamera_clk_name[i],name) == 0){
+                 return 1;
+             }
+         }
+     }
+     return -1;
+}
+
 static int __handoff_clk(struct clk *clk)
 {
 	enum handoff state = HANDOFF_DISABLED_CLK;
@@ -1390,7 +1435,9 @@ static int __init clock_late_init(void)
 	}
 
 	list_for_each_entry_safe(h, h_temp, &handoff_list, list) {
-		clk_disable_unprepare(h->clk);
+                if(check_earlycamera_clk_is_enable(h->clk->dbg_name) < 0){
+                    clk_disable_unprepare(h->clk);
+                }
 		list_del(&h->list);
 		kfree(h);
 	}

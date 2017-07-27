@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1677,7 +1677,7 @@ static int msm_eeprom_platform_probe(struct platform_device *pdev)
 	rc = msm_eeprom_get_dt_data(e_ctrl);
 	if (rc < 0)
 		goto board_free;
-
+        e_ctrl->userspace_probe = 1;
 	if (e_ctrl->userspace_probe == 0) {
 		rc = of_property_read_u32(of_node, "qcom,slave-addr",
 			&temp);

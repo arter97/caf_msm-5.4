@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015,2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -24,6 +24,7 @@
 #include <linux/slab.h>
 #include <linux/clk.h>
 #include <linux/clk/msm-clk.h>
+#include <asm/io.h>
 
 #define PWR_ON_MASK		BIT(31)
 #define EN_REST_WAIT_MASK	(0xF << 20)
@@ -289,6 +290,20 @@ static int gdsc_disable(struct regulator_dev *rdev)
 	int i, ret = 0;
 
 	mutex_lock(&gdsc_seq_lock);
+        if(!strcmp(sc->rdesc.name,"gdsc_vfe1")){
+            void __iomem *frvc_camera_status_base = NULL;
+            frvc_camera_status_base = ioremap(0x08600680UL, 4);
+            if(frvc_camera_status_base != NULL){
+                if(readl(frvc_camera_status_base) == 0xF5F5F5F5){
+                   printk("early camera is working ,cant disable :%s\n",sc->rdesc.name);
+                   iounmap(frvc_camera_status_base);
+	           sc->is_gdsc_enabled = false;
+	           mutex_unlock(&gdsc_seq_lock);
+                   return 0;
+                }
+                iounmap(frvc_camera_status_base);
+            }
+        }
 
 	if (sc->force_root_en)
 		clk_prepare_enable(sc->clocks[sc->root_clk_idx]);

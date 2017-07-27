@@ -87,8 +87,15 @@
 		cont_splash_mem: splash_region@83000000 {
 			reg = <0x0 0x90000000 0x0 0x1400000>;
 		};
+               	lk_pool_mem: lk_pool@8f600000 {
+			reg = <0x0 0x8F600000 0x0 0x00A00000>;
+		};
 
+                lk_camera_mem: lk_camera@A400102f {
+			reg = <0x0 0xA400102f 0x0 0x1A000000>;
+		};
 	};
+
 
 	aliases {
 		/* smdtty devices */
@@ -1225,6 +1232,11 @@
 		restart_reason@65c {
 			compatible = "qcom,msm-imem-restart_reason";
 			reg = <0x65c 4>;
+		};
+
+                fastrvc_share_mem@680 {
+			compatible = "qcom,msm-imem-fastrvc_share_mem";
+			reg = <0x680 16>;
 		};
 
 		boot_stats@6b0 {
