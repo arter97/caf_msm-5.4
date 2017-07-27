@@ -590,7 +590,7 @@
 		vdd-supply = <&pmd9635_l3_corner>;
 		vdda18-supply = <&pmd9635_l8>;
 		vdda33-supply = <&pmd9635_l10>;
-		qcom,vdd-voltage-level = <1 5 7>;
+		qcom,vdd-voltage-level = <1 5 9>;
 		qcom,ext-vbus-id;
 		qcom,vbus-valid-override;
 		qcom,set-pllbtune;
