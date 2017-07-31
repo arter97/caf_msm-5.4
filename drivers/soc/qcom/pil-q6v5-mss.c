@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -263,8 +263,7 @@ static int pil_mss_loadable_init(struct modem_data *drv,
 		if (IS_ERR(q6->vreg))
 			return PTR_ERR(q6->vreg);
 
-		ret = regulator_set_voltage(q6->vreg, VDD_MSS_UV,
-						MAX_VDD_MSS_UV);
+		ret = regulator_set_voltage(q6->vreg, VDD_MSS_UV, INT_MAX);
 		if (ret)
 			dev_err(&pdev->dev, "Failed to set vreg voltage.\n");
 
