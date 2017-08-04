@@ -1864,19 +1864,25 @@ int cnss_get_codeswap_struct(struct codeswap_codeseg_info *swap_seg)
 {
 	struct codeswap_codeseg_info *cnss_seg_info = penv->cnss_seg_info;
 
+	mutex_lock(&penv->fw_setup_stat_lock);
 	if (!cnss_seg_info) {
 		swap_seg = NULL;
+		mutex_unlock(&penv->fw_setup_stat_lock);
 		return -ENOENT;
 	}
+
 	if (!atomic_read(&penv->fw_available)) {
 		pr_debug("%s: fw is not available\n", __func__);
+		mutex_unlock(&penv->fw_setup_stat_lock);
 		return -ENOENT;
 	}
 
 	*swap_seg = *cnss_seg_info;
+	mutex_unlock(&penv->fw_setup_stat_lock);
 
 	return 0;
 }
+
 EXPORT_SYMBOL(cnss_get_codeswap_struct);
 
 static void cnss_wlan_memory_expansion(void)
