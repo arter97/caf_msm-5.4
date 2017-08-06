@@ -1735,6 +1735,11 @@ static int fastrpc_file_free(struct fastrpc_file *fl)
 	hlist_del_init(&fl->hn);
 	spin_unlock(&fl->apps->hlock);
 
+	if (!fl->sctx) {
+		kfree(fl);
+		return 0;
+	}
+
 	(void)fastrpc_release_current_dsp_process(fl);
 	fastrpc_context_list_dtor(fl);
 	fastrpc_buf_list_free(fl);
@@ -2054,7 +2059,8 @@ static int fastrpc_get_info(struct fastrpc_file *fl, uint32_t *info)
 	VERIFY(err, fl && fl->sctx);
 	if (err)
 		goto bail;
-	*info = (fl->sctx->smmu.enabled ? 1 : 0);
+	if (fl->sctx)
+		*info = (fl->sctx->smmu.enabled ? 1 : 0);
 bail:
 	return err;
 }
