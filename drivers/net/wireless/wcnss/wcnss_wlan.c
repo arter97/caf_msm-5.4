@@ -401,7 +401,7 @@ static struct {
 	int	user_cal_read;
 	int	user_cal_available;
 	u32	user_cal_rcvd;
-	int	user_cal_exp_size;
+	u32	user_cal_exp_size;
 	int	iris_xo_mode_set;
 	int	fw_vbatt_state;
 	char	wlan_nv_macAddr[WLAN_MAC_ADDR_SIZE];
@@ -2810,25 +2810,6 @@ wcnss_trigger_config(struct platform_device *pdev)
 
 	wlan_cfg->wcn_external_gpio_support =
 		of_property_read_bool(node, "qcom,wcn-external-gpio-support");
-	if (wlan_cfg->wcn_external_gpio_support) {
-		if (of_find_property(node, WCNSS_EXTERNAL_GPIO_NAME, NULL)) {
-			wlan_cfg->wcn_external_gpio =
-					of_get_named_gpio(
-						pdev->dev.of_node,
-						WCNSS_EXTERNAL_GPIO_NAME,
-						0);
-			if (!gpio_is_valid(wlan_cfg->wcn_external_gpio)) {
-				pr_err("%s: Invalid %s num defined in DT\n",
-				       __func__, WCNSS_EXTERNAL_GPIO_NAME);
-				ret = -EINVAL;
-				goto fail;
-			}
-		} else {
-			pr_err("%s: %s prop not defined in DT node\n",
-			       __func__, WCNSS_EXTERNAL_GPIO_NAME);
-			goto fail;
-		}
-	}
 
 	if (of_property_read_u32(node, "qcom,wlan-rx-buff-count",
 				 &penv->wlan_rx_buff_count)) {
