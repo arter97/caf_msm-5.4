@@ -373,6 +373,15 @@ static bool mdss_rotator_is_work_pending(struct mdss_rot_mgr *mgr,
 	return false;
 }
 
+static void mdss_rotator_install_fence_fd(struct mdss_rot_entry_container *req)
+{
+	int i = 0;
+
+	for (i = 0; i < req->count; i++)
+		sync_fence_install(req->entries[i].output_fence,
+				req->entries[i].output_fence_fd);
+}
+
 static int mdss_rotator_create_fence(struct mdss_rot_entry *entry)
 {
 	int ret = 0, fd;
@@ -411,7 +420,6 @@ static int mdss_rotator_create_fence(struct mdss_rot_entry *entry)
 		goto get_fd_err;
 	}
 
-	sync_fence_install(fence, fd);
 	rot_timeline->next_value++;
 	mutex_unlock(&rot_timeline->lock);
 
@@ -1043,11 +1051,13 @@ static int mdss_rotator_calc_perf(struct mdss_rot_perf *perf)
 	if (!config->input.width ||
 		(0xffffffff/config->input.width < config->input.height))
 		return -EINVAL;
+
+	perf->clk_rate = config->input.width * config->input.height;
+
 	if (!perf->clk_rate ||
 		(0xffffffff/perf->clk_rate < config->frame_rate))
 		return -EINVAL;
 
-	perf->clk_rate = config->input.width * config->input.height;
 	perf->clk_rate *= config->frame_rate;
 	/* rotator processes 4 pixels per clock */
 	perf->clk_rate /= 4;
@@ -2240,6 +2250,7 @@ static int mdss_rotator_handle_request(struct mdss_rot_mgr *mgr,
 		goto handle_request_err1;
 	}
 
+	mdss_rotator_install_fence_fd(req);
 	mdss_rotator_queue_request(mgr, private, req);
 
 	mutex_unlock(&mgr->lock);
@@ -2400,6 +2411,7 @@ static int mdss_rotator_handle_request32(struct mdss_rot_mgr *mgr,
 		goto handle_request32_err1;
 	}
 
+	mdss_rotator_install_fence_fd(req);
 	mdss_rotator_queue_request(mgr, private, req);
 
 	mutex_unlock(&mgr->lock);

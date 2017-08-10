@@ -33,6 +33,8 @@
 
 &qcom_seecom {
 	reg = <0x87900000 0x280000>;
+	qcom,appsbl-qseecom-support;
+	qcom,appsbl-not-loaded-cmnlib;
 	status = "okay";
 };
 
