@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -54,6 +54,7 @@ static bool egress_set, a7_ul_flt_set;
 static struct workqueue_struct *ipa_rm_q6_workqueue; /* IPA_RM workqueue*/
 
 u32 apps_to_ipa_hdl, ipa_to_apps_hdl; /* get handler from ipa */
+static struct mutex add_mux_channel_lock;
 static int wwan_add_ul_flt_rule_to_ipa(void);
 static int wwan_del_ul_flt_rule_to_ipa(void);
 
@@ -244,12 +245,15 @@ int copy_ul_filter_rule_to_ipa(struct ipa_install_fltr_rule_req_msg_v01
 {
 	int rc = 0, i, j;
 
+	/* prevent multi-threads accessing num_q6_rule */
+	mutex_lock(&add_mux_channel_lock);
 	if (rule_req->filter_spec_list_valid == true) {
 		num_q6_rule = rule_req->filter_spec_list_len;
 		IPAWANDBG("Received (%d) install_flt_req\n", num_q6_rule);
 	} else {
 		num_q6_rule = 0;
 		IPAWANERR("got no UL rules from modem\n");
+		mutex_unlock(&add_mux_channel_lock);
 		return -EINVAL;
 	}
 	/* copy UL filter rules from Modem*/
@@ -401,6 +405,7 @@ int copy_ul_filter_rule_to_ipa(struct ipa_install_fltr_rule_req_msg_v01
 			rule_req->filter_spec_list[i].filter_rule.
 			ipv4_frag_eq_present;
 	}
+	mutex_unlock(&add_mux_channel_lock);
 	return rc;
 }
 
@@ -1160,8 +1165,11 @@ static int ipa_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 				IPAWANERR("failed to config egress endpoint\n");
 
 			if (num_q6_rule != 0) {
+				/* protect num_q6_rule */
+				mutex_lock(&add_mux_channel_lock);
 				/* already got Q6 UL filter rules*/
 				rc = wwan_add_ul_flt_rule_to_ipa();
+				mutex_unlock(&add_mux_channel_lock);
 				egress_set = true;
 				if (rc)
 					IPAWANERR("install UL rules failed\n");
@@ -1664,11 +1672,13 @@ static struct platform_driver rmnet_ipa_driver = {
 
 static int __init ipa_wwan_init(void)
 {
+	mutex_init(&add_mux_channel_lock);
 	return platform_driver_register(&rmnet_ipa_driver);
 }
 
 static void __exit ipa_wwan_cleanup(void)
 {
+	mutex_destroy(&add_mux_channel_lock);
 	platform_driver_unregister(&rmnet_ipa_driver);
 }
 
