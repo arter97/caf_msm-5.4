@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -71,6 +71,7 @@ static void *subsys_notify_handle;
 
 u32 apps_to_ipa_hdl, ipa_to_apps_hdl; /* get handler from ipa */
 static struct mutex ipa_to_apps_pipe_handle_guard;
+static struct mutex add_mux_channel_lock;
 static int wwan_add_ul_flt_rule_to_ipa(void);
 static int wwan_del_ul_flt_rule_to_ipa(void);
 static void ipa_wwan_msg_free_cb(void*, u32, u32);
@@ -394,12 +395,15 @@ int copy_ul_filter_rule_to_ipa(struct ipa_install_fltr_rule_req_msg_v01
 {
 	int i, j;
 
+	/* prevent multi-threads accessing num_q6_rule */
+	mutex_lock(&add_mux_channel_lock);
 	if (rule_req->filter_spec_list_valid == true) {
 		num_q6_rule = rule_req->filter_spec_list_len;
 		IPAWANDBG("Received (%d) install_flt_req\n", num_q6_rule);
 	} else {
 		num_q6_rule = 0;
 		IPAWANERR("got no UL rules from modem\n");
+		mutex_unlock(&add_mux_channel_lock);
 		return -EINVAL;
 	}
 
@@ -593,9 +597,11 @@ failure:
 	num_q6_rule = 0;
 	memset(ipa_qmi_ctx->q6_ul_filter_rule, 0,
 		sizeof(ipa_qmi_ctx->q6_ul_filter_rule));
+	mutex_unlock(&add_mux_channel_lock);
 	return -EINVAL;
 
 success:
+	mutex_unlock(&add_mux_channel_lock);
 	return 0;
 }
 
@@ -1449,10 +1455,14 @@ static int ipa_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 
 			if (num_q6_rule != 0) {
 				/* already got Q6 UL filter rules*/
-				if (ipa_qmi_ctx->modem_cfg_emb_pipe_flt
-					== false)
+				if (ipa_qmi_ctx &&
+					ipa_qmi_ctx->modem_cfg_emb_pipe_flt
+					== false) {
+					/* protect num_q6_rule */
+					mutex_lock(&add_mux_channel_lock);
 					rc = wwan_add_ul_flt_rule_to_ipa();
-				else
+					mutex_unlock(&add_mux_channel_lock);
+				} else
 					rc = 0;
 				egress_set = true;
 				if (rc)
@@ -2745,6 +2755,7 @@ static int __init ipa_wwan_init(void)
 	atomic_set(&is_ssr, 0);
 
 	mutex_init(&ipa_to_apps_pipe_handle_guard);
+	mutex_init(&add_mux_channel_lock);
 	ipa_to_apps_hdl = -1;
 	/* Register for Modem SSR */
 	subsys_notify_handle = subsys_notif_register_notifier(SUBSYS_MODEM,
@@ -2759,6 +2770,7 @@ static void __exit ipa_wwan_cleanup(void)
 {
 	int ret;
 	mutex_destroy(&ipa_to_apps_pipe_handle_guard);
+	mutex_destroy(&add_mux_channel_lock);
 	ret = subsys_notif_unregister_notifier(subsys_notify_handle,
 					&ssr_notifier);
 	if (ret)
