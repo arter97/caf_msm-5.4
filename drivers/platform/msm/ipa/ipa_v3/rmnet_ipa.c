@@ -394,12 +394,16 @@ int ipa3_copy_ul_filter_rule_to_ipa(struct ipa_install_fltr_rule_req_msg_v01
 {
 	int i, j;
 
+	/* prevent multi-threads accessing rmnet_ipa3_ctx->num_q6_rules */
+	mutex_lock(&rmnet_ipa3_ctx->add_mux_channel_lock);
 	if (rule_req->filter_spec_ex_list_valid == true) {
 		ipa3_num_q6_rule = rule_req->filter_spec_ex_list_len;
 		IPAWANDBG("Received (%d) install_flt_req\n", ipa3_num_q6_rule);
 	} else {
 		ipa3_num_q6_rule = 0;
 		IPAWANERR("got no UL rules from modem\n");
+		mutex_unlock(&rmnet_ipa3_ctx->
+					add_mux_channel_lock);
 		return -EINVAL;
 	}
 
@@ -601,9 +605,13 @@ failure:
 	ipa3_num_q6_rule = 0;
 	memset(ipa3_qmi_ctx->q6_ul_filter_rule, 0,
 		sizeof(ipa3_qmi_ctx->q6_ul_filter_rule));
+	mutex_unlock(&rmnet_ipa3_ctx->
+		add_mux_channel_lock);
 	return -EINVAL;
 
 success:
+	mutex_unlock(&rmnet_ipa3_ctx->
+		add_mux_channel_lock);
 	return 0;
 }
 
@@ -1461,9 +1469,13 @@ static int ipa3_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 
 			if (ipa3_num_q6_rule != 0) {
 				/* already got Q6 UL filter rules*/
-				if (ipa3_qmi_ctx->modem_cfg_emb_pipe_flt
-					== false)
+				if (ipa3_qmi_ctx->modem_cfg_emb_pipe_flt == false){
+					/* prevent multi-threads accessing num_q6_rules */
+					mutex_lock(&rmnet_ipa3_ctx->add_mux_channel_lock);
 					rc = ipa3_wwan_add_ul_flt_rule_to_ipa();
+					mutex_unlock(&rmnet_ipa3_ctx->
+						add_mux_channel_lock);
+				}
 				else
 					rc = 0;
 				ipa3_egress_set = true;
