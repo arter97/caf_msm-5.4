@@ -1,0 +1,34 @@
+Qualcomm Technologies, Inc NQ-ESE SPI device
+
+QTI Secure Element Driver for Secure transactions
+
+Required properties:
+
+- compatible: "qcom,ese"
+- pinctrl-names, pinctrl-0, pincntrl-1: references to our pincntrl settings
+
+Optional properties:
+- spi-max-frequency : Frequency to be set according to the ese specification.
+- spi-cpol : clock polarity to be set according to the ese specification.
+- spi-cpha : clock phase to be set according to the ese specification.
+- qcom,ese_intr : gpio for ese interrupt
+- qcom,ese_pwr_req : gpio for ese power
+
+Example:
+
+		ese@0 {
+			compatible = "qcom,ese";
+			reg = <0>;
+			spi-max-frequency = <960000>;
+			spi-cpol = <0>;
+			spi-cpha =<0>;
+			/* if no pwr req this must be 0 else 1*/
+			qcom,use_pwr_req = <1>;
+			qcom,ese_pwr_req = <&msm_gpio 31 0x00>;
+			/* if no intr req this must be 0 else 1*/
+			qcom,use_interrupt = <1>;
+			qcom,ese_intr = <&msm_gpio 35 0x00>;
+			pinctrl-names = "ese_active", "ese_suspend";
+			pinctrl-0 = <&ese_int_active>;
+			pinctrl-1 = <&ese_int_suspend>;
+		};

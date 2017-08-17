@@ -58,3 +58,12 @@ config NFC_NQ
 	  This enables the NFC driver for NQx based devices.
 	  This is for i2c connected version. NCI protocol logic
 	  resides in the usermode and it has no other NFC dependencies.
+
+config NFC_NQ_ESE
+       bool "QTI Embedded Secure Element Driver for Secure transactions"
+       depends on SPI
+       select CRC_CCITT
+       help
+         This enables the Embedded Secure Element driver for P7x based devices.
+         This is for SPI connected version. To be used to communicate with the
+         secure element through SPI.
