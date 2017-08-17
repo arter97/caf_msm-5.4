@@ -28,6 +28,7 @@
 #include <linux/msm_ep_pcie.h>
 #include <linux/ipa_mhi.h>
 #include <linux/vmalloc.h>
+#include <linux/wakelock.h>
 
 #include "mhi.h"
 #include "mhi_hwio.h"
@@ -95,9 +96,6 @@ void mhi_dev_read_from_host(struct mhi_dev *mhi, struct mhi_addr *transfer)
 					host_addr_pa, (int) transfer->size);
 		if (rc)
 			pr_err("error while reading from host:%d\n", rc);
-	} else {
-		memcpy(transfer->virt_addr, (void *) &transfer->device_va,
-					(int) transfer->size);
 	}
 }
 EXPORT_SYMBOL(mhi_dev_read_from_host);
@@ -133,11 +131,6 @@ void mhi_dev_write_to_host(struct mhi_dev *mhi,
 			(u64) mhi->cache_dma_handle, (int) transfer->size);
 		if (rc)
 			pr_err("error while reading from host:%d\n", rc);
-	} else {
-		memcpy((void *) &transfer->device_va, transfer->virt_addr,
-							transfer->size);
-		/* Update state before sending events */
-		wmb();
 	}
 }
 EXPORT_SYMBOL(mhi_dev_write_to_host);
@@ -471,12 +464,8 @@ static void mhi_dev_fetch_ch_ctx(struct mhi_dev *mhi, uint32_t ch_id)
 					sizeof(struct mhi_dev_ch_ctx) * ch_id;
 		data_transfer.phy_addr = mhi->ch_ctx_cache_dma_handle +
 					sizeof(struct mhi_dev_ch_ctx) * ch_id;
-	} else {
-		data_transfer.device_va = mhi->ch_ctx_shadow.device_va +
-					sizeof(struct mhi_dev_ch_ctx) * ch_id;
-		data_transfer.virt_addr = mhi->cmd_ctx_cache +
-					sizeof(struct mhi_dev_ch_ctx) * ch_id;
 	}
+
 	data_transfer.size  = sizeof(struct mhi_dev_ch_ctx);
 	/* Fetch the channel ctx (*dst, *src, size) */
 	mhi_dev_read_from_host(mhi, &data_transfer);
@@ -509,6 +498,7 @@ int mhi_dev_send_event(struct mhi_dev *mhi, int evnt_ring,
 	struct mhi_addr transfer_addr;
 	uint32_t data_buffer = 0;
 
+	memset(&msi_addr, 0, sizeof(msi_addr));
 	rc = ep_pcie_get_msi_config(mhi->phandle, &cfg);
 	if (rc) {
 		pr_err("Error retrieving pcie msi logic\n");
@@ -1129,6 +1119,13 @@ static void mhi_dev_scheduler(struct work_struct *work)
 
 void mhi_dev_notify_a7_event(struct mhi_dev *mhi)
 {
+
+	if (!atomic_read(&mhi->mhi_dev_wake)) {
+		pm_stay_awake(mhi->dev);
+		atomic_set(&mhi->mhi_dev_wake, 1);
+	}
+	mhi_log(MHI_MSG_VERBOSE, "acquiring mhi wakelock\n");
+
 	schedule_work(&mhi->chdb_ctrl_work);
 	mhi_log(MHI_MSG_VERBOSE, "mhi irq triggered\n");
 }
@@ -1294,10 +1291,8 @@ static int mhi_dev_cache_host_cfg(struct mhi_dev *mhi)
 	if (mhi->use_ipa) {
 		data_transfer.phy_addr = mhi->cmd_ctx_cache_dma_handle;
 		data_transfer.host_pa = mhi->cmd_ctx_shadow.host_pa;
-	} else {
-		data_transfer.device_va = mhi->cmd_ctx_shadow.device_va;
-		data_transfer.virt_addr = mhi->cmd_ctx_cache;
 	}
+
 	data_transfer.size = mhi->cmd_ctx_shadow.size;
 
 	/* Cache the command and event context */
@@ -1306,10 +1301,8 @@ static int mhi_dev_cache_host_cfg(struct mhi_dev *mhi)
 	if (mhi->use_ipa) {
 		data_transfer.phy_addr = mhi->ev_ctx_cache_dma_handle;
 		data_transfer.host_pa = mhi->ev_ctx_shadow.host_pa;
-	} else {
-		data_transfer.device_va = mhi->ev_ctx_shadow.device_va;
-		data_transfer.virt_addr = mhi->ev_ctx_cache;
 	}
+
 	data_transfer.size = mhi->ev_ctx_shadow.size;
 
 	mhi_dev_read_from_host(mhi, &data_transfer);
@@ -1367,6 +1360,10 @@ int mhi_dev_suspend(struct mhi_dev *mhi)
 		mhi_dev_write_to_host(mhi, &data_transfer);
 
 	}
+
+	atomic_set(&mhi->mhi_dev_wake, 0);
+	pm_relax(mhi->dev);
+	mhi_log(MHI_MSG_VERBOSE, "releasing mhi wakelock\n");
 
 	mutex_unlock(&mhi_ctx->mhi_write_test);
 
@@ -2028,6 +2025,14 @@ static int get_device_tree_data(struct platform_device *pdev)
 		}
 	}
 
+	device_init_wakeup(mhi->dev, true);
+	/* MHI device will be woken up from PCIe event */
+	device_set_wakeup_capable(mhi->dev, false);
+	/* Hold a wakelock until completion of M0 */
+	pm_stay_awake(mhi->dev);
+	atomic_set(&mhi->mhi_dev_wake, 1);
+
+	mhi_log(MHI_MSG_VERBOSE, "acquiring wakelock\n");
 
 	return 0;
 }
