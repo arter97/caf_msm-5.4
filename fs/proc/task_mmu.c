@@ -1232,8 +1232,8 @@ enum reclaim_type {
 	RECLAIM_RANGE,
 };
 
-struct reclaim_param reclaim_task_anon(struct task_struct *task,
-		int nr_to_reclaim)
+struct reclaim_param reclaim_task(struct task_struct *task,
+		int nr_to_reclaim, int anon)
 {
 	struct mm_struct *mm;
 	struct vm_area_struct *vma;
@@ -1258,7 +1258,10 @@ struct reclaim_param reclaim_task_anon(struct task_struct *task,
 		if (is_vm_hugetlb_page(vma))
 			continue;
 
-		if (vma->vm_file)
+		if (vma->vm_file && anon)
+			continue;
+
+		if (!vma->vm_file && !anon)
 			continue;
 
 		if (!rp.nr_to_reclaim)
@@ -1351,7 +1354,7 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 	reclaim_walk.mm = mm;
 	reclaim_walk.pmd_entry = reclaim_pte_range;
 
-	rp.nr_to_reclaim = ~0;
+	rp.nr_to_reclaim = INT_MAX;
 	rp.nr_reclaimed = 0;
 	reclaim_walk.private = &rp;
 
