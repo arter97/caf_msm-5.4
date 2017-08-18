@@ -72,4 +72,54 @@ int gsmd_ctrl_connect(struct grmnet *gr, int port_num);
 void gsmd_ctrl_disconnect(struct grmnet *gr, u8 port_num);
 int gsmd_ctrl_setup(enum ctrl_client client_num, unsigned int count,
 					u8 *first_port_idx);
+void ghsic_ctrl_set_port_name(const char *name, const char *xport_type)
+{
+}
+void ghsic_data_set_port_name(const char *name, const char *xport_type)
+{
+}
+int ghsic_data_setup(unsigned num_ports, enum gadget_type gtype)
+{
+return 0;
+}
+int ghsic_ctrl_setup(unsigned int num_ports, enum gadget_type gtype)
+{
+return 0;
+}
+int ghsic_data_connect(void *gptr, int port_num)
+{
+return 0;
+}
+void ghsic_ctrl_disconnect(void *gptr, int port_num)
+{
+}
+void ghsic_data_disconnect(void *gptr, int port_num)
+{
+}
+int ghsuart_data_setup(unsigned num_ports, enum gadget_type gtype)
+{
+return 0;
+}
+int ghsuart_ctrl_setup(unsigned int num_ports, enum gadget_type gtype)
+{
+return 0;
+}
+int ghsic_ctrl_connect(void *gptr, int port_num)
+{
+return 0;
+}
+void ghsuart_ctrl_disconnect(void *gptr, int port_num)
+{
+}
+int ghsuart_data_connect(void *gptr, int port_num)
+{
+return 0;
+}
+int ghsuart_ctrl_connect(void *gptr, int port_num)
+{
+return 0;
+}
+void ghsuart_data_disconnect(void *gptr, int port_num)
+{
+}
 #endif /* __U_RMNET_H*/

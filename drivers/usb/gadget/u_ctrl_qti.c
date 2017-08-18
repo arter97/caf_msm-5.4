@@ -222,8 +222,10 @@ int gqti_ctrl_connect(void *gr, u8 port_num, unsigned intf,
 	} else if (gr && port->gtype == USB_GADGET_DPL) {
 		port->port_usb = gr;
 		g_dpl = (struct gqdss *)gr;
+#ifdef CONFIG_USB_F_QDSS
 		g_dpl->send_encap_cmd = gqti_ctrl_send_cpkt_tomodem;
 		g_dpl->notify_modem = gqti_ctrl_notify_modem;
+#endif
 		atomic_set(&port->line_state, 1);
 	} else {
 		spin_unlock_irqrestore(&port->lock, flags);
@@ -284,10 +286,12 @@ void gqti_ctrl_disconnect(void *gr, u8 port_num)
 		g_rmnet->notify_modem = NULL;
 	}
 
+#ifdef CONFIG_USB_F_QDSS
 	if (g_dpl) {
 		g_dpl->send_encap_cmd = NULL;
 		g_dpl->notify_modem = NULL;
 	}
+#endif
 
 	while (!list_empty(&port->cpkt_req_q)) {
 		cpkt = list_first_entry(&port->cpkt_req_q,
