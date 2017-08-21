@@ -63,6 +63,7 @@ static u32 ipa3_qmap_hdr_hdl, ipa3_dflt_v4_wan_rt_hdl, ipa3_dflt_v6_wan_rt_hdl;
 static struct ipa3_rmnet_mux_val ipa3_mux_channel[MAX_NUM_OF_MUX_CHANNEL];
 static int ipa3_num_q6_rule, ipa3_old_num_q6_rule;
 static int ipa3_rmnet_index;
+static struct mutex add_mux_channel_lock;
 static bool ipa3_egress_set, ipa3_a7_ul_flt_set;
 static struct workqueue_struct *ipa_rm_q6_workqueue; /* IPA_RM workqueue*/
 static atomic_t is_initialized;
@@ -1360,10 +1361,12 @@ static int ipa3_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 					rmnet_mux_val.mux_id);
 				return rc;
 			}
+			mutex_lock(&add_mux_channel_lock);
 			if (rmnet_ipa3_ctx->rmnet_index
 				>= MAX_NUM_OF_MUX_CHANNEL) {
 				IPAWANERR("Exceed mux_channel limit(%d)\n",
 				rmnet_ipa3_ctx->rmnet_index);
+				mutex_unlock(&add_mux_channel_lock);
 				return -EFAULT;
 			}
 			IPAWANDBG("ADD_MUX_CHANNEL(%d, name: %s)\n",
@@ -1392,6 +1395,7 @@ static int ipa3_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 					IPAWANERR("device %s reg IPA failed\n",
 						extend_ioctl_data.u.
 						rmnet_mux_val.vchannel_name);
+					mutex_unlock(&add_mux_channel_lock);
 					return -ENODEV;
 				}
 				ipa3_mux_channel[ipa3_rmnet_index].
@@ -1408,6 +1412,7 @@ static int ipa3_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 					ul_flt_reg = false;
 			}
 			ipa3_rmnet_index++;
+			mutex_unlock(&add_mux_channel_lock);
 			break;
 		case RMNET_IOCTL_SET_EGRESS_DATA_FORMAT:
 			IPAWANDBG("get RMNET_IOCTL_SET_EGRESS_DATA_FORMAT\n");
@@ -2752,6 +2757,7 @@ static int __init ipa3_wwan_init(void)
 	atomic_set(&is_ssr, 0);
 
 	mutex_init(&ipa_to_apps_pipe_handle_guard);
+	mutex_init(&add_mux_channel_lock);
 	ipa3_to_apps_hdl = -1;
 	/* Register for Modem SSR */
 	ipa3_subsys_notify_handle = subsys_notif_register_notifier(
@@ -2766,7 +2772,9 @@ static int __init ipa3_wwan_init(void)
 static void __exit ipa3_wwan_cleanup(void)
 {
 	int ret;
+
 	mutex_destroy(&ipa_to_apps_pipe_handle_guard);
+	mutex_destroy(&add_mux_channel_lock);
 	ret = subsys_notif_unregister_notifier(ipa3_subsys_notify_handle,
 					&ipa3_ssr_notifier);
 	if (ret)
