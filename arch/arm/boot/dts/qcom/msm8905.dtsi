@@ -31,3 +31,8 @@
 	/delete-node/ etm@84e000;
 	/delete-node/ etm@84f000;
 };
+
+&msm_gpu {
+	/* Disable GPU snapshot dumping */
+	qcom,snapshot-size = <0>;
+};
