@@ -43,7 +43,7 @@
     }while(0);
 #endif
 
-#define  EARLYCAMERA_IS_OPEN_ON_LK              1
+#define  EARLYCAMERA_IS_OPEN_ON_LK              0
 
 #define  ARRIVAL_SIGNAL_GPIO                    37
 
