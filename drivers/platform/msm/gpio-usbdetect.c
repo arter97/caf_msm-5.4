@@ -21,28 +21,46 @@
 #include <linux/power_supply.h>
 #include <linux/regulator/consumer.h>
 
+#define VBUS_ON_DEBOUNCE_MS	400
+#define WAKEUP_SRC_TIMEOUT_MS	1000
+
 struct gpio_usbdetect {
 	struct platform_device	*pdev;
 	struct regulator	*vin;
 	struct power_supply	*usb_psy;
 	int			vbus_det_irq;
+	struct delayed_work	chg_work;
+	int			vbus;
 };
 
 static irqreturn_t gpio_usbdetect_vbus_irq(int irq, void *data)
 {
 	struct gpio_usbdetect *usb = data;
-	int vbus;
 
-	vbus = !!irq_read_line(irq);
-	if (vbus)
+	usb->vbus = !!irq_read_line(irq);
+	pm_wakeup_event(&usb->pdev->dev, WAKEUP_SRC_TIMEOUT_MS);
+	if (!usb->vbus)
+		schedule_delayed_work(&usb->chg_work, 0);
+	else
+		schedule_delayed_work(&usb->chg_work,
+					msecs_to_jiffies(VBUS_ON_DEBOUNCE_MS));
+
+	return IRQ_HANDLED;
+}
+
+static void gpio_usbdetect_chg_work(struct work_struct *w)
+{
+	struct gpio_usbdetect *usb = container_of(w, struct gpio_usbdetect,
+								chg_work.work);
+
+	if (usb->vbus)
 		power_supply_set_supply_type(usb->usb_psy,
 				POWER_SUPPLY_TYPE_USB);
 	else
 		power_supply_set_supply_type(usb->usb_psy,
 				POWER_SUPPLY_TYPE_UNKNOWN);
 
-	power_supply_set_present(usb->usb_psy, vbus);
-	return IRQ_HANDLED;
+	power_supply_set_present(usb->usb_psy, usb->vbus);
 }
 
 static int gpio_usbdetect_probe(struct platform_device *pdev)
@@ -64,6 +82,8 @@ static int gpio_usbdetect_probe(struct platform_device *pdev)
 
 	usb->pdev = pdev;
 	usb->usb_psy = usb_psy;
+
+	INIT_DELAYED_WORK(&usb->chg_work, gpio_usbdetect_chg_work);
 
 	if (of_get_property(pdev->dev.of_node, "vin-supply", NULL)) {
 		usb->vin = devm_regulator_get(&pdev->dev, "vin");
@@ -102,6 +122,7 @@ static int gpio_usbdetect_probe(struct platform_device *pdev)
 		return rc;
 	}
 
+	device_init_wakeup(&pdev->dev, 1);
 	enable_irq_wake(usb->vbus_det_irq);
 	dev_set_drvdata(&pdev->dev, usb);
 
@@ -117,10 +138,13 @@ static int gpio_usbdetect_remove(struct platform_device *pdev)
 {
 	struct gpio_usbdetect *usb = dev_get_drvdata(&pdev->dev);
 
+	device_wakeup_disable(&usb->pdev->dev);
 	disable_irq_wake(usb->vbus_det_irq);
 	disable_irq(usb->vbus_det_irq);
 	if (usb->vin)
 		regulator_disable(usb->vin);
+
+	cancel_delayed_work_sync(&usb->chg_work);
 
 	return 0;
 }
