@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015,2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -43,6 +43,9 @@
 #define CLK_DIS_WAIT_VAL	(0x2 << 12)
 
 #define TIMEOUT_US		100
+
+#define FRVC_CAMERA_STATUS_REG       0x08600688UL
+#define FRVC_CAMERA_IS_WORKING                0x22
 
 struct gdsc {
 	struct regulator_dev	*rdev;
@@ -287,14 +290,18 @@ static int gdsc_disable(struct regulator_dev *rdev)
 {
 	struct gdsc *sc = rdev_get_drvdata(rdev);
 	uint32_t regval;
+        uint32_t reg_value = 0;
+        unsigned char earlycamera_stautus;
 	int i, ret = 0;
 
 	mutex_lock(&gdsc_seq_lock);
         if(!strcmp(sc->rdesc.name,"gdsc_vfe1")){
             void __iomem *frvc_camera_status_base = NULL;
-            frvc_camera_status_base = ioremap(0x08600680UL, 4);
+            frvc_camera_status_base = ioremap(FRVC_CAMERA_STATUS_REG, 4);
             if(frvc_camera_status_base != NULL){
-                if(readl(frvc_camera_status_base) == 0xF5F5F5F5){
+                reg_value = readl(frvc_camera_status_base);
+                earlycamera_stautus = reg_value & 0xFF;
+                if(earlycamera_stautus == FRVC_CAMERA_IS_WORKING){
                    printk("early camera is working ,cant disable :%s\n",sc->rdesc.name);
                    iounmap(frvc_camera_status_base);
 	           sc->is_gdsc_enabled = false;

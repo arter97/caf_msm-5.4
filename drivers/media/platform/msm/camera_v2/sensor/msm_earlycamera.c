@@ -56,23 +56,34 @@
 
 #define MSM_EARLYCAMERA_DRV_NAME     "earlycamera"
 
-#define FRVC_CAMERA_STATUS_REG       0x08600680UL
-#define FRVC_CAMERA_IS_ENABLED       0x5a5a5a5a
-#define FRVC_CAMERA_IS_WORKING       0xF5F5F5F5
-#define FRVC_CAMERA_IS_DONE          0xa5a5a5a5
+#define FRVC_CAMERA_STATUS_REG       0x08600688UL//0x08600680UL
+// #define FRVC_CAMERA_IS_ENABLED       0x5a5a5a5a
+// #define FRVC_CAMERA_IS_WORKING       0xF5F5F5F5
+// #define FRVC_CAMERA_IS_DONE          0xa5a5a5a5
+#define FRVC_CAMERA_IS_ENABLED                0x10
+#define FRVC_CAMERA_IS_WORKING                0x22
+#define FRVC_CAMERA_IS_DONE                   0x34
 
-#define FRVC_CAMERA_NOTIFY_LK_REG      0x08600688UL
-#define KERNEL_REQUSET_STOP_FRVC       0xFEFEFEFE
-#define KERNEL_REQUEST_PAUSE_FRVC      0xF0F0F0F0
-#define FRVC_NOTIFY_KERNEL_WAIT_EXIT   0x8D8D8D8D
-#define FRVC_NOTIFY_KERNEL_EXIT_DONE   0x7C7C7C7C
+// #define FRVC_CAMERA_NOTIFY_LK_REG      0x08600688UL
+// #define KERNEL_REQUSET_STOP_FRVC       0xFEFEFEFE
+// #define KERNEL_REQUEST_PAUSE_FRVC      0xF0F0F0F0
+// #define FRVC_NOTIFY_KERNEL_WAIT_EXIT   0x8D8D8D8D
+// #define FRVC_NOTIFY_KERNEL_EXIT_DONE   0x7C7C7C7C
+#define KERNEL_REQUSET_STOP_FRVC              0x9e
+#define FRVC_NOTIFY_KERNEL_WAIT_EXIT          0xaf
+#define FRVC_NOTIFY_KERNEL_EXIT_DONE          0xb0
+#define KERNEL_REQUEST_PAUSE_FRVC             0xc2
 
-#define FRVC_DISPLAY_STATUS_REG              0x08600684UL
-#define FRVC_DISPLAY_IS_ENABLED              0x5a5a5a5a
-#define FRVC_DISPLAY_IS_WORKING              0xF5F5F5F5
-#define FRVC_DISPLAY_IS_DONE                 0xa5a5a5a5
-#define FRVC_NOTIFY_ANDROID_SHOW_CAMERA      0x8B8B8B8B
-#define FRVC_NOTIFY_ANDROID_NOT_SHOW_CAMERA  0x7D7D7D7D
+// #define FRVC_DISPLAY_STATUS_REG              0x08600684UL
+// #define FRVC_DISPLAY_IS_ENABLED              0x5a5a5a5a
+// #define FRVC_DISPLAY_IS_WORKING              0xF5F5F5F5
+// #define FRVC_DISPLAY_IS_DONE                 0xa5a5a5a5
+// #define FRVC_NOTIFY_ANDROID_SHOW_CAMERA      0x8B8B8B8B
+// #define FRVC_NOTIFY_ANDROID_NOT_SHOW_CAMERA  0x7D7D7D7D
+#define FRVC_DISPLAY_IS_ENABLED               0x46
+#define FRVC_DISPLAY_IS_WORKING               0x58
+#define FRVC_DISPLAY_IS_DONE                  0x6a
+#define FRVC_NOTIFY_ANDROID_SHOW_CAMERA       0x7c
 
 #define VFE_BASE                     0x01b14000UL
 #define FRVC_CAMERA_PING_ADDR_0      (VFE_BASE + 0x70)
@@ -82,6 +93,9 @@
 
 #define frvc_read(addr)             readl(addr)
 #define frvc_write(value,addr)      writel((value), addr)
+
+#define READ_REG_LK_STATUS(addr)          readb(addr)
+#define WRITE_REG_LK_STATUS(value,addr)   writeb((value), addr)
 
 static void __iomem *vfe_irq0_base = NULL;
 static void __iomem *vfe_irq1_base = NULL;
@@ -95,8 +109,8 @@ static void __iomem *vfe_ping_addr_1_base = NULL;
 static void __iomem *vfe_pong_addr_1_base = NULL;
 static void __iomem *frvc_camera_status_base = NULL;
 
-static void __iomem *frvc_camera_notify_lk_base = NULL;
-static void __iomem *frvc_display_status_base = NULL;
+//static void __iomem *frvc_camera_notify_lk_base = NULL;
+//static void __iomem *frvc_display_status_base = NULL;
 
 struct earlycamera_hal_buffer_cfg{
   int fd;
@@ -142,7 +156,6 @@ enum earlycamera_buffer_status {
   MSM_BUFFER_IDLE,
 };
 
-struct earlycamera_kernel_buffer_cfg* buffe_cfg = NULL;
 struct earlycamera_isp_bufq isp_bufq;
 
 void __iomem *phy_addrchangetovirtual_addr(unsigned long phy_addr);
@@ -161,7 +174,7 @@ unsigned long Notify_display_pause = 0;
 #define EARLYCAMERA_OPEN   1
 #define EARLYCAMERA_CLOSE  0
 
-int check_earlycamera_is_open(unsigned int frvc_camera_status){
+int check_earlycamera_is_open(unsigned char frvc_camera_status){
   if(frvc_camera_status != FRVC_CAMERA_IS_ENABLED &&
      frvc_camera_status != FRVC_CAMERA_IS_WORKING &&
      frvc_camera_status != FRVC_CAMERA_IS_DONE){
@@ -178,13 +191,14 @@ static ssize_t msm_earlycamera_status_show(struct device *dev,struct device_attr
 
 static ssize_t msm_earlycamera_status_store(struct device *dev,struct device_attribute *attr, const char *buf, size_t count)
 {
-
+  uint32_t reg_value = 0;
   Android_launcher_status = simple_strtoul(buf, NULL, 10);
   if(Android_launcher_status == 1){
     printk("Android init done,notify stop frvc\n");
-    if (frvc_camera_notify_lk_base != NULL) {
-       frvc_write(KERNEL_REQUSET_STOP_FRVC,frvc_camera_notify_lk_base);
-    }
+    reg_value = readl(frvc_camera_status_base);
+    reg_value &= 0xFF00FFFF;
+    reg_value |= (KERNEL_REQUSET_STOP_FRVC << 16);
+    writel(reg_value,frvc_camera_status_base);
   }
   return count;
 }
@@ -197,29 +211,36 @@ static ssize_t msm_earlycamera_lk_notify_display_pause_show(struct device *dev,s
 static ssize_t msm_earlycamera_lk_notify_display_pause_store(struct device *dev,struct device_attribute *attr, const char *buf, size_t count)
 {
   unsigned long pause = 0;
-  unsigned int display_status = 0;
+  unsigned char display_status = 0;
   int wait_time = 0;
-  unsigned int camera_status = 0;
+  unsigned char camera_status = 0;
+
+  unsigned int reg_value;
 
   pause = simple_strtoul(buf, NULL, 10);
 
   if(pause == 1){
     printk("Android init done,notify pause frvc display\n");
-    frvc_write(KERNEL_REQUEST_PAUSE_FRVC,frvc_camera_notify_lk_base);
 
-    camera_status = frvc_read(frvc_camera_status_base);
+    reg_value = frvc_read(frvc_camera_status_base);
+    camera_status = reg_value & 0xFF;
+
     if(check_earlycamera_is_open(camera_status) == EARLYCAMERA_CLOSE){
       printk("earlycamera is not open\n");
       Notify_display_pause = pause;
       return count;
     }
 
+    reg_value &= 0xFF00FFFF;
+    reg_value |= (KERNEL_REQUEST_PAUSE_FRVC << 16);
+    frvc_write(reg_value,frvc_camera_status_base);
+
     do{
-      display_status = frvc_read(frvc_display_status_base);
+      reg_value = frvc_read(frvc_camera_status_base);
+      display_status = (reg_value >> 8) & 0xFF;
       wait_time++;
       mdelay(20);
     }while(((display_status != FRVC_NOTIFY_ANDROID_SHOW_CAMERA) &&
-            (display_status != FRVC_NOTIFY_ANDROID_NOT_SHOW_CAMERA) &&
             (display_status != FRVC_DISPLAY_IS_ENABLED)) && wait_time < 100);
     Notify_display_pause = pause;
   }
@@ -234,22 +255,6 @@ static ssize_t msm_earlycamera_lk_notify_display_pause_store(struct device *dev,
 
 static ssize_t msm_earlycamera_lk_notify_show_camera_show(struct device *dev,struct device_attribute *attr, char *buf)
 {
-      uint32_t display_status = 0;
-      unsigned int rc = 0;
-
-      if(frvc_display_status_base == NULL){
-        printk(" get earlycamera display status ioremap failed\n");
-        return -1;
-      }
-      display_status = frvc_read(frvc_display_status_base);
-
-      if(display_status == FRVC_NOTIFY_ANDROID_SHOW_CAMERA){
-        rc = 1;
-      }
-      else if(display_status == FRVC_NOTIFY_ANDROID_NOT_SHOW_CAMERA){
-        rc = 0;
-      }
-      sprintf(buf,"%d\n", rc);
       return 0;
 }
 
@@ -540,12 +545,9 @@ static long earlycamera_ioctl(struct file* filp, unsigned int cmd,unsigned long 
     break;
     case VIDIOC_MSM_EARLYCAMERA_QBUF:
     {
-      uint32_t notify_camera_status;
       struct earlycamera_hal_buffer_cfg* cfg = (struct earlycamera_hal_buffer_cfg*)arg;
 
       mutex_lock(&isp_bufq.mutex);
-      notify_camera_status = frvc_read(frvc_camera_notify_lk_base);
-
       if(isp_bufq.bufs  == NULL){
         mutex_unlock(&isp_bufq.mutex);
         return -1;
@@ -568,10 +570,8 @@ static long earlycamera_ioctl(struct file* filp, unsigned int cmd,unsigned long 
     case  VIDIOC_MSM_EARLYCAMERA_DQBUF:
     {
       int i;
-      uint32_t notify_camera_status;
       struct earlycamera_hal_buffer_cfg* cfg = (struct earlycamera_hal_buffer_cfg*)arg;
       mutex_lock(&isp_bufq.mutex);
-      notify_camera_status = frvc_read(frvc_camera_notify_lk_base);
 
       if(isp_bufq.bufs  == NULL){
         mutex_unlock(&isp_bufq.mutex);
@@ -596,10 +596,10 @@ static long earlycamera_ioctl(struct file* filp, unsigned int cmd,unsigned long 
     break;
     case VIDIOC_MSM_EARLYCAMERA_GET_SHOW_CAMERA:
     {
-      uint32_t display_status = 0;
-
-      display_status = frvc_read(frvc_display_status_base);
-
+      unsigned char display_status = 0;
+      uint32_t reg_value = 0;
+      reg_value = frvc_read(frvc_camera_status_base);
+      display_status = (reg_value >> 8) & 0xFF;
       if(display_status == FRVC_NOTIFY_ANDROID_SHOW_CAMERA){
         rc = 1;
       }
@@ -706,7 +706,6 @@ static int earlycamera_process_irq(void){
     mutex_unlock(&isp_bufq.mutex);
     return 0;
   }
-
   earlycamera_check_buffer_status(pingpong & 0x1);
   mutex_unlock(&isp_bufq.mutex);
   return pingpong;
@@ -714,15 +713,17 @@ static int earlycamera_process_irq(void){
 
 static int thead_earlycamera_LK_status(void *arg)
 {
-  unsigned int frvc_camera_status = 0;
+  unsigned char frvc_camera_status = 0;
   char* s_c[2];
   uint32_t pingpong = 0;
-  unsigned int notify_camera_status = 0;
+  unsigned char notify_camera_status = 0;
+  uint32_t reg_value = 0;
   struct device *earlycamera_uevent_device = (struct device *)arg;
 
   while(1){
-    frvc_camera_status = frvc_read(frvc_camera_status_base);
-    notify_camera_status = frvc_read(frvc_camera_notify_lk_base);
+    reg_value = frvc_read(frvc_camera_status_base);
+    frvc_camera_status = reg_value & 0xFF;
+    notify_camera_status = (reg_value >> 16) & 0xFF;
     if(check_earlycamera_is_open(frvc_camera_status) == EARLYCAMERA_CLOSE ||
       EARLYCAMERA_IS_OPEN_ON_LK == 0){
       if(KERNEL_REQUSET_STOP_FRVC == notify_camera_status ||
@@ -744,14 +745,16 @@ static int thead_earlycamera_LK_status(void *arg)
   }
 
   printk("thead_earlycamera_LK_status wait stop camera ......\n");
-  if(frvc_camera_notify_lk_base != NULL){
-    frvc_write(FRVC_NOTIFY_KERNEL_EXIT_DONE,frvc_camera_notify_lk_base);
-  }
+
+  reg_value &= 0xFF00FFFF;
+  reg_value |= (FRVC_NOTIFY_KERNEL_EXIT_DONE << 16);
+  frvc_write(reg_value,frvc_camera_status_base);
 
   while(1){
     if(EARLYCAMERA_IS_OPEN_ON_LK == 0)
       break;
-    frvc_camera_status = frvc_read(frvc_camera_status_base);
+    reg_value = frvc_read(frvc_camera_status_base);
+    frvc_camera_status = reg_value & 0xFF;
     if(frvc_camera_status == FRVC_CAMERA_IS_DONE){
       break;
     }
@@ -846,17 +849,35 @@ static int earlycamera_probe(struct platform_device *pdev)
     return -ENOMEM;
   }
 
-  frvc_camera_notify_lk_base = phy_addrchangetovirtual_addr(FRVC_CAMERA_NOTIFY_LK_REG);
-  if (frvc_camera_notify_lk_base == NULL) {
-    printk("frvc_camera_notify_lk_base ioremap failed \n");
-    return -ENOMEM;
-  }
+  // frvc_camera_notify_lk_base = phy_addrchangetovirtual_addr(FRVC_CAMERA_NOTIFY_LK_REG);
+  // if (frvc_camera_notify_lk_base == NULL) {
+  //   printk("frvc_camera_notify_lk_base ioremap failed \n");
+  //   return -ENOMEM;
+  // }
 
+  // frvc_camera_status_base = ioremap(FRVC_CAMERA_STATUS_REG, 1);
+  // if(frvc_camera_status_base == NULL){
+  //   printk("frvc_camera_status_base ioremap failed \n");
+  //   return -ENOMEM;
+  // }
 
-  frvc_display_status_base = phy_addrchangetovirtual_addr(FRVC_DISPLAY_STATUS_REG);
-  if(frvc_display_status_base == NULL) {
-     return -ENOMEM;
-  }
+  // frvc_display_status_base = ioremap(FRVC_CAMERA_STATUS_REG + 1, 1);
+  // if(frvc_display_status_base == NULL){
+  //   printk("frvc_display_status_base ioremap failed \n");
+  //   return -ENOMEM;
+  // }
+
+  // frvc_camera_notify_lk_base = ioremap(FRVC_CAMERA_STATUS_REG + 2, 1);
+  // if(frvc_camera_notify_lk_base == NULL){
+  //   printk("frvc_camera_notify_lk_base ioremap failed \n");
+  //   return -ENOMEM;
+  // }
+
+  // frvc_display_status_base = phy_addrchangetovirtual_addr(FRVC_DISPLAY_STATUS_REG);
+  // if(frvc_display_status_base == NULL) {
+  //    return -ENOMEM;
+  // }
+  //frvc_display_status_base = frvc_camera_status_base + 1;
 
   retval = register_chrdev(major, MSM_EARLYCAMERA_DRV_NAME, &earlycamera_fops);
   if (retval < 0) {
@@ -923,15 +944,15 @@ static int earlycamera_exit(struct platform_device *pdev)
     frvc_camera_status_base = NULL;
   }
 
-  if(frvc_camera_notify_lk_base != NULL){
-    iounmap(frvc_camera_notify_lk_base);
-    frvc_camera_notify_lk_base = NULL;
-  }
+  // if(frvc_camera_notify_lk_base != NULL){
+  //   iounmap(frvc_camera_notify_lk_base);
+  //   frvc_camera_notify_lk_base = NULL;
+  // }
 
-  if(frvc_display_status_base != NULL){
-    iounmap(frvc_display_status_base);
-    frvc_display_status_base = NULL;
-  }
+  // if(frvc_display_status_base != NULL){
+  //   iounmap(frvc_display_status_base);
+  //   frvc_display_status_base = NULL;
+  // }
 
   gpio_free(ARRIVAL_SIGNAL_GPIO);
   free_irq(isp_bufq.gpio_irq_handle, earlycamera_device);
