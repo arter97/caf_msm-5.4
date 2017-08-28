@@ -5705,9 +5705,16 @@ static int qseecom_probe(struct platform_device *pdev)
 				rc = -EINVAL;
 				goto exit_deinit_clock;
 			}
+			rc = __qseecom_enable_clk(CLK_QSEE);
+			if (rc) {
+				pr_err("CLK_QSEE enabling failed (%d)\n", rc);
+				rc = -EIO;
+				goto exit_deinit_clock;
+			}
 			rc = qseecom_scm_call(SCM_SVC_TZSCHEDULER, 1,
 					&req, sizeof(req),
 					&resp, sizeof(resp));
+			__qseecom_disable_clk(CLK_QSEE);
 			if (rc || (resp.result != QSEOS_RESULT_SUCCESS)) {
 				pr_err("send secapp reg fail %d resp.res %d\n",
 							rc, resp.result);
