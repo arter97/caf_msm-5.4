@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1342,6 +1342,10 @@ void ipahal_get_aggr_force_close_valmask(int ep_idx,
 {
 	if (!valmask) {
 		IPAHAL_ERR("Input error\n");
+		return;
+	}
+	if (ep_idx > (sizeof(valmask->val) * 8 - 1)) {
+		IPAHAL_ERR("too big ep_idx %d\n", ep_idx);
 		return;
 	}
 
