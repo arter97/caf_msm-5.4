@@ -27,6 +27,9 @@
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 #include <linux/of_platform.h>
+#include <linux/sysfs.h>
+#include <linux/device.h>
+#include <linux/kobject.h>
 
 struct matrix_keypad {
 	const struct matrix_keypad_platform_data *pdata;
@@ -43,6 +46,7 @@ struct matrix_keypad {
 	bool gpio_all_disabled;
 };
 
+int scr_mod;
 /*
  * NOTE: normally the GPIO has to be put into HiZ when de-activated to cause
  * minmal side effect when scanning other columns, here it is configured to
@@ -473,6 +477,46 @@ matrix_keypad_parse_dt(struct device *dev)
 }
 #endif
 
+static ssize_t scr_mod_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", scr_mod);
+}
+
+static ssize_t scr_mod_store(struct device *dev,
+		struct device_attribute *attr, char *buf, size_t count)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct matrix_keypad *keypad = platform_get_drvdata(pdev);
+
+	int err;
+	int old_val = scr_mod;
+
+	if (sscanf(buf, "%du", &scr_mod) != 1)
+		return -EINVAL;
+
+	if (old_val != scr_mod && (scr_mod == 1 || scr_mod == 0)) {
+		if (scr_mod)
+			matrix_keypad_free_gpio(keypad);
+		else {
+			err = matrix_keypad_init_gpio(pdev, keypad);
+				if (err) {
+					dev_err(dev, "error in initilization of gpio feeing memory\n");
+					return err;
+				}
+		mutex_lock(&keypad->lock);
+		keypad->scan_pending = false;
+		enable_row_irqs(keypad);
+		mutex_unlock(&keypad->lock);
+		}
+	}
+	return count;
+}
+
+static struct kobj_attribute scr_mod_attribute = __ATTR(scr_mod,
+	S_IRUGO | S_IWUGO, (void *)scr_mod_show, (void *) scr_mod_store);
+
+
 static int matrix_keypad_probe(struct platform_device *pdev)
 {
 	const struct matrix_keypad_platform_data *pdata;
@@ -536,6 +580,12 @@ static int matrix_keypad_probe(struct platform_device *pdev)
 
 	device_init_wakeup(&pdev->dev, pdata->wakeup);
 	platform_set_drvdata(pdev, keypad);
+
+	err = sysfs_create_file(&pdev->dev.kobj, &scr_mod_attribute.attr);
+	if (err) {
+		dev_err(&pdev->dev, "failed to create the scr_mod file\n");
+		return err;
+	}
 
 	return 0;
 
