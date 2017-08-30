@@ -14,3 +14,4 @@
 #include "msm8905.dtsi"
 #include "msm8905-256mb-memory.dtsi"
 #include "msm8905-pm8909.dtsi"
+#include "msm8905-camera-sensor-sku3.dtsi"
