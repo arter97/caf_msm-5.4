@@ -272,7 +272,8 @@ struct mhi_config {
 #define HW_CHANNEL_END			107
 #define MHI_ENV_VALUE			2
 #define MHI_MASK_ROWS_CH_EV_DB		4
-#define TRB_MAX_DATA_SIZE		4096
+#define TRB_MAX_DATA_SIZE		8192
+#define MHI_CTRL_STATE			25
 
 /* Possible ring element types */
 union mhi_dev_ring_element_type {
@@ -350,6 +351,13 @@ enum mhi_dev_ch_operation {
 	MHI_DEV_POLL,
 };
 
+enum mhi_ctrl_info {
+	MHI_STATE_CONFIGURED = 0,
+	MHI_STATE_CONNECTED = 1,
+	MHI_STATE_DISCONNECTED = 2,
+	MHI_STATE_INVAL,
+};
+
 struct mhi_dev_channel;
 
 struct mhi_dev_ring {
@@ -395,6 +403,7 @@ static inline void mhi_dev_ring_inc_index(struct mhi_dev_ring *ring,
 
 enum cb_reason {
 	MHI_DEV_TRE_AVAILABLE = 0,
+	MHI_DEV_CTRL_UPDATE,
 };
 
 struct mhi_dev_client_cb_reason {
@@ -545,6 +554,9 @@ struct mhi_dev {
 
 	/* iATU is required to map control and data region */
 	bool				config_iatu;
+
+	/* MHI state info */
+	enum mhi_ctrl_info		ctrl_info;
 };
 
 enum mhi_msg_level {
@@ -1133,5 +1145,9 @@ int mhi_pcie_config_db_routing(struct mhi_dev *mhi);
 int mhi_uci_init(void);
 
 void mhi_dev_notify_a7_event(struct mhi_dev *mhi);
+
+int mhi_ctrl_state_info(uint32_t *info);
+
+void uci_ctrl_update(struct mhi_dev_client_cb_reason *reason);
 
 #endif /* _MHI_H_ */
