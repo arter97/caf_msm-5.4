@@ -1076,6 +1076,16 @@ static void dwc3_ep0_xfernotready(struct dwc3 *dwc,
 		dep->dbg_ep_events.control_data++;
 
 		/*
+		 * When we issue a STALL and RESTART of EP0 OUT, then
+		 * ep0_next_event is set as DWC3_EP0_COMPLETE and we wait for
+		 * the next setup packet. We will ignore a XferNotReady (DATA)
+		 * event until setup packet arrives, so as to avoid HW latency
+		 * issues.
+		 */
+		if (dwc->ep0_next_event == DWC3_EP0_COMPLETE)
+			return;
+
+		/*
 		 * We already have a DATA transfer in the controller's cache,
 		 * if we receive a XferNotReady(DATA) we will ignore it, unless
 		 * it's for the wrong direction.
