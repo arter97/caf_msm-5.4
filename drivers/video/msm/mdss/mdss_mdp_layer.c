@@ -839,6 +839,9 @@ static int __handle_buffer_fences(struct msm_fb_data_type *mfd,
 	sync_fence_install(release_fence, commit->release_fence);
 	sync_fence_install(retire_fence, commit->retire_fence);
 
+	sync_fence_install(release_fence, commit->release_fence);
+	sync_fence_install(retire_fence, commit->retire_fence);
+
 	mutex_unlock(&sync_pt_data->sync_mutex);
 	return ret;
 
