@@ -93,8 +93,9 @@ static int msm8x16_enable_extcodec_ext_clk(struct snd_soc_codec *codec,
 					int enable,	bool dapm);
 
 static int conf_int_codec_mux(struct msm8916_asoc_mach_data *pdata);
-
+#ifdef CONFIG_WCD9335
 static void *def_tasha_mbhc_cal(void);
+#endif
 /*
  * Android L spec
  * Need to report LINEIN
@@ -118,6 +119,7 @@ static struct wcd_mbhc_config mbhc_cfg = {
 	.linein_th = 5000,
 };
 
+#ifdef CONFIG_WCD9335
 static struct wcd_mbhc_config wcd_mbhc_cfg = {
 	.read_fw_bin = false,
 	.calibration = NULL,
@@ -162,6 +164,7 @@ static void *def_tasha_mbhc_cal(void)
 
 	return tasha_wcd_cal;
 }
+#endif
 
 void *def_tapan_mbhc_cal(void)
 {
@@ -316,6 +319,7 @@ static inline struct snd_mask *param_to_mask(struct snd_pcm_hw_params *p, int n)
 
 int msm8909_wsa881x_init(struct snd_soc_dapm_context *dapm)
 {
+#ifdef CONFIG_SND_SOC_WSA881X
 	u8 spkleft_ports[WSA881X_MAX_SWR_PORTS] = {100, 101, 102, 106};
 	u8 spkright_ports[WSA881X_MAX_SWR_PORTS] = {103, 104, 105, 107};
 	unsigned int ch_rate[WSA881X_MAX_SWR_PORTS] = {2400, 600, 300, 1200};
@@ -367,6 +371,7 @@ int msm8909_wsa881x_init(struct snd_soc_dapm_context *dapm)
 		snd_soc_dapm_ignore_suspend(dapm, "SpkrRight IN");
 		snd_soc_dapm_ignore_suspend(dapm, "SpkrRight SPKR");
 	}
+#endif
 	return 0;
 }
 
@@ -397,12 +402,14 @@ static const struct snd_soc_dapm_widget msm8x16_dapm_widgets[] = {
 	SND_SOC_DAPM_MIC("Digital Mic3", NULL),
 };
 
+#ifdef CONFIG_WCD9335
 static struct snd_soc_dapm_route wcd9335_audio_paths[] = {
 	{"MIC BIAS1", NULL, "MCLK"},
 	{"MIC BIAS2", NULL, "MCLK"},
 	{"MIC BIAS3", NULL, "MCLK"},
 	{"MIC BIAS4", NULL, "MCLK"},
 };
+#endif
 
 static char const *rx_bit_format_text[] = {"S16_LE", "S24_LE"};
 static const char *const mi2s_tx_ch_text[] = {"One", "Two", "Three", "Four"};
@@ -1079,7 +1086,9 @@ static int msm8x16_enable_codec_ext_clk(struct snd_soc_codec *codec,
 static int msm8x16_enable_extcodec_ext_clk(struct snd_soc_codec *codec,
 					int enable,	bool dapm)
 {
+#ifdef CONFIG_WCD9335
 	tasha_cdc_mclk_enable(codec, enable, dapm);
+#endif
 	return 0;
 }
 
@@ -1721,6 +1730,7 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	return msm8x16_wcd_hs_detect(codec, &mbhc_cfg);
 }
 
+#ifdef CONFIG_WCD9335
 static int msm_audrx_init_wcd(struct snd_soc_pcm_runtime *rtd)
 {
 
@@ -1777,9 +1787,9 @@ static int msm_audrx_init_wcd(struct snd_soc_pcm_runtime *rtd)
 	pdata->codec_root = entry;
 	tasha_codec_info_create_codec_entry(pdata->codec_root,
 							codec);
-
 	return ret;
 }
+#endif
 
 static struct snd_soc_ops msm8x16_quat_mi2s_be_ops = {
 	.startup = msm_quat_mi2s_snd_startup,
@@ -1804,6 +1814,7 @@ static struct snd_soc_ops msm_pri_auxpcm_be_ops = {
 	.shutdown = msm_prim_auxpcm_shutdown,
 };
 
+#ifdef CONFIG_WCD9335
 static struct snd_soc_dai_link msm8x16_9326_dai[] = {
 	/* Backend DAI Links */
 	{
@@ -1861,6 +1872,7 @@ static struct snd_soc_dai_link msm8x16_9326_dai[] = {
 		.codec_name = "tasha_codec",
 	},
 };
+#endif
 
 static struct snd_soc_aux_dev msm8909_aux_dev[] = {
 	{
@@ -2569,10 +2581,11 @@ static struct snd_soc_dai_link msm8x16_wcd_dai_links[
 				ARRAY_SIZE(msm8x16_dai) +
 				ARRAY_SIZE(msm8x16_wcd_dai)];
 
-
+#ifdef CONFIG_WCD9335
 static struct snd_soc_dai_link msm8x16_9326_dai_links[
 				ARRAY_SIZE(msm8x16_dai) +
 				ARRAY_SIZE(msm8x16_9326_dai)];
+#endif
 
 struct snd_soc_card snd_soc_card_msm8916 = {
 	.name		= "msm8x16-snd-card",
@@ -2580,11 +2593,13 @@ struct snd_soc_card snd_soc_card_msm8916 = {
 	.num_links	= ARRAY_SIZE(msm8x16_wcd_dai_links),
 };
 
+#ifdef CONFIG_WCD9335
 struct snd_soc_card snd_soc_card_9326_msm8916 = {
 	.name		= "msm8x09-tasha9326-snd-card",
 	.dai_link	= msm8x16_9326_dai_links,
 	.num_links	= ARRAY_SIZE(msm8x16_9326_dai_links),
 };
+#endif
 
 static struct snd_soc_card bear_cards[MAX_SND_CARDS] = {
 	/* snd_soc_card_msm8x16 */
@@ -2593,11 +2608,13 @@ static struct snd_soc_card bear_cards[MAX_SND_CARDS] = {
 		.dai_link	= msm8x16_wcd_dai_links,
 		.num_links	= ARRAY_SIZE(msm8x16_wcd_dai_links),
 	},
+#ifdef CONFIG_WCD9335
 	{
 		.name		= "msm8x16-tapan-snd-card",
 		.dai_link	= msm8x16_9326_dai_links,
 		.num_links	= ARRAY_SIZE(msm8x16_9326_dai_links),
 	},
+#endif
 };
 
 void disable_mclk(struct work_struct *work)
@@ -2813,6 +2830,7 @@ static struct snd_soc_card *populate_ext_snd_card_dailinks(
 {
 	struct snd_soc_dai_link *msm8909_dai_links = NULL;
 	struct snd_soc_card *card;
+#ifdef CONFIG_WCD9335
 	const char *wsa = "qcom,aux-codec";
 	const char *wsa_prefix = "qcom,aux-codec-prefix";
 	int num_strings;
@@ -2820,13 +2838,18 @@ static struct snd_soc_card *populate_ext_snd_card_dailinks(
 	const char *wsa_str = NULL;
 	const char *wsa_prefix_str = NULL;
 	u32 *index = NULL;
+#endif
 	u32 max_aux_dev = 0;
+#ifdef CONFIG_WCD9335
 	int found = 0;
 	int num_links, i, ret;
-
+#else
+	int num_links, i;
+#endif
 	if (pdev->id == 1) {
 		pr_debug("%s: CARD is 9326\n", __func__);
 
+#ifdef CONFIG_WCD9335
 		card = &bear_cards[pdev->id];
 		num_links = ARRAY_SIZE(msm8x16_9326_dai_links);
 
@@ -2914,8 +2937,9 @@ static struct snd_soc_card *populate_ext_snd_card_dailinks(
 
 			temp_str = NULL;
 		}
+#endif
 	} else {
-		pr_debug("%s: CARD is 8x16 wcd internal card\n", __func__);
+		pr_info("%s: CARD is 8x16 wcd internal card\n", __func__);
 		card = &bear_cards[pdev->id];
 		num_links = ARRAY_SIZE(msm8x16_wcd_dai_links);
 		memcpy(msm8x16_wcd_dai_links, msm8x16_dai,
@@ -2927,14 +2951,18 @@ static struct snd_soc_card *populate_ext_snd_card_dailinks(
 	}
 	card->aux_dev = msm8909_aux_dev;
 	card->codec_conf = msm8909_codec_conf;
+#ifdef CONFIG_WCD9335
 ret_card:
+#endif
 	card->num_configs = max_aux_dev;
 	card->num_aux_devs = max_aux_dev;
 	card->dai_link = msm8909_dai_links;
 	card->num_links = num_links;
 	card->dev = &pdev->dev;
 	return card;
+#ifdef CONFIG_WCD9335
 err:
+#endif
 	if (max_aux_dev > 0) {
 		for (i = 0; i < max_aux_dev; i++) {
 			kfree(msm8909_aux_dev[i].codec_name);
@@ -3047,7 +3075,6 @@ static int msm8x16_asoc_machine_probe(struct platform_device *pdev)
 	const char *ext_pa_str = NULL;
 	int num_strings;
 	int ret, id, i;
-
 	pdata = devm_kzalloc(&pdev->dev,
 			sizeof(struct msm8916_asoc_mach_data), GFP_KERNEL);
 	if (!pdata) {
@@ -3082,6 +3109,7 @@ static int msm8x16_asoc_machine_probe(struct platform_device *pdev)
 		ret = -ENOMEM;
 		goto err;
 	}
+
 	ret = of_property_read_u32(pdev->dev.of_node, card_dev_id, &id);
 	if (ret) {
 		dev_err(&pdev->dev,
@@ -3182,7 +3210,7 @@ static int msm8x16_asoc_machine_probe(struct platform_device *pdev)
 			else if (!strcmp(ext_pa_str, "quaternary"))
 				pdata->ext_pa = (pdata->ext_pa | QUAT_MI2S_ID);
 		}
-		pr_debug("%s: ext_pa = %d\n", __func__, pdata->ext_pa);
+		pr_info("%s: ext_pa = %d\n", __func__, pdata->ext_pa);
 		pinctrl = devm_pinctrl_get(&pdev->dev);
 		if (IS_ERR(pinctrl)) {
 			pr_err("%s: Unable to get pinctrl handle\n",
@@ -3206,10 +3234,10 @@ static int msm8x16_asoc_machine_probe(struct platform_device *pdev)
 		goto err;
 	}
 	if (!strcmp(type, "external")) {
-		dev_dbg(&pdev->dev, "Headset is using external micbias\n");
+		dev_info(&pdev->dev, "Headset is using external micbias\n");
 		mbhc_cfg.hs_ext_micbias = true;
 	} else {
-		dev_dbg(&pdev->dev, "Headset is using internal micbias\n");
+		dev_info(&pdev->dev, "Headset is using internal micbias\n");
 		mbhc_cfg.hs_ext_micbias = false;
 	}
 
@@ -3272,7 +3300,7 @@ static int msm8x16_asoc_machine_probe(struct platform_device *pdev)
 	ret = core_get_adsp_ver();
 	if (ret < 0) {
 		ret = -EPROBE_DEFER;
-		dev_info(&pdev->dev, "%s: Get adsp version failed (%d)\n",
+		dev_err(&pdev->dev, "%s: Get adsp version failed (%d)\n",
 				__func__, ret);
 		goto err;
 	}
