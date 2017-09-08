@@ -12,6 +12,7 @@
 
 #include <linux/ipa_mhi.h>
 #include <linux/ipa_uc_offload.h>
+#include <linux/ipa_wdi3.h>
 #include "ipa_common_i.h"
 
 #ifndef _IPA_API_H_
@@ -318,6 +319,8 @@ struct ipa_api_controller {
 
 	int (*ipa_stop_gsi_channel)(u32 clnt_hdl);
 
+	int (*ipa_start_gsi_channel)(u32 clnt_hdl);
+
 	struct iommu_domain *(*ipa_get_smmu_domain)(void);
 
 	int (*ipa_disable_apps_wan_cons_deaggr)(uint32_t agg_size,
@@ -376,6 +379,18 @@ struct ipa_api_controller {
 		void *user_data);
 
 	void (*ipa_ntn_uc_dereg_rdyCB)(void);
+
+	int (*ipa_conn_wdi3_pipes)(struct ipa_wdi3_conn_in_params *in,
+		struct ipa_wdi3_conn_out_params *out);
+
+	int (*ipa_disconn_wdi3_pipes)(int ipa_ep_idx_tx,
+		int ipa_ep_idx_rx);
+
+	int (*ipa_enable_wdi3_pipes)(int ipa_ep_idx_tx,
+		int ipa_ep_idx_rx);
+
+	int (*ipa_disable_wdi3_pipes)(int ipa_ep_idx_tx,
+		int ipa_ep_idx_rx);
 };
 
 #ifdef CONFIG_IPA

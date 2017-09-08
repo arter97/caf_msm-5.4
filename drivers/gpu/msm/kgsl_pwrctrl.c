@@ -1004,6 +1004,8 @@ static void __force_on(struct kgsl_device *device, int flag, int on)
 	if (on) {
 		switch (flag) {
 		case KGSL_PWRFLAGS_CLK_ON:
+			/* make sure pwrrail is ON before enabling clocks */
+			kgsl_pwrctrl_pwrrail(device, KGSL_PWRFLAGS_ON);
 			kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_ON,
 				KGSL_STATE_ACTIVE);
 			break;
@@ -1830,7 +1832,12 @@ static int kgsl_pwrctrl_pwrrail(struct kgsl_device *device, int state)
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	int status = 0;
 
-	if (test_bit(KGSL_PWRFLAGS_POWER_ON, &pwr->ctrl_flags))
+	/*
+	 * Disabling the regulator means also disabling dependent clocks.
+	 * Hence don't disable it if force clock ON is set.
+	 */
+	if (test_bit(KGSL_PWRFLAGS_POWER_ON, &pwr->ctrl_flags) ||
+		test_bit(KGSL_PWRFLAGS_CLK_ON, &pwr->ctrl_flags))
 		return 0;
 
 	if (state == KGSL_PWRFLAGS_OFF) {
@@ -2035,7 +2042,9 @@ static void _gpu_clk_prepare_enable(struct kgsl_device *device,
 {
 	int ret;
 
-	if (device->state == KGSL_STATE_NAP) {
+	if (device->state == KGSL_STATE_NAP ||
+		device->state == KGSL_STATE_DEEP_NAP) {
+
 		ret = clk_enable(clk);
 		if (ret)
 			goto err;

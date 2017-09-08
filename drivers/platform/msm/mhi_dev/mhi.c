@@ -28,6 +28,7 @@
 #include <linux/msm_ep_pcie.h>
 #include <linux/ipa_mhi.h>
 #include <linux/vmalloc.h>
+#include <linux/wakelock.h>
 
 #include "mhi.h"
 #include "mhi_hwio.h"
@@ -66,6 +67,7 @@ static struct mhi_dev *mhi_ctx;
 static void mhi_hwc_cb(void *priv, enum ipa_mhi_event_type event,
 	unsigned long data);
 static void mhi_ring_init_cb(void *user_data);
+static void mhi_update_state_info(uint32_t info);
 
 void mhi_dev_read_from_host(struct mhi_dev *mhi, struct mhi_addr *transfer)
 {
@@ -95,9 +97,6 @@ void mhi_dev_read_from_host(struct mhi_dev *mhi, struct mhi_addr *transfer)
 					host_addr_pa, (int) transfer->size);
 		if (rc)
 			pr_err("error while reading from host:%d\n", rc);
-	} else {
-		memcpy(transfer->virt_addr, (void *) &transfer->device_va,
-					(int) transfer->size);
 	}
 }
 EXPORT_SYMBOL(mhi_dev_read_from_host);
@@ -133,11 +132,6 @@ void mhi_dev_write_to_host(struct mhi_dev *mhi,
 			(u64) mhi->cache_dma_handle, (int) transfer->size);
 		if (rc)
 			pr_err("error while reading from host:%d\n", rc);
-	} else {
-		memcpy((void *) &transfer->device_va, transfer->virt_addr,
-							transfer->size);
-		/* Update state before sending events */
-		wmb();
 	}
 }
 EXPORT_SYMBOL(mhi_dev_write_to_host);
@@ -390,6 +384,8 @@ static void mhi_hwc_cb(void *priv, enum ipa_mhi_event_type event,
 			pr_err("Failed to enable command db\n");
 			return;
 		}
+
+		mhi_update_state_info(MHI_STATE_CONNECTED);
 		break;
 	case IPA_MHI_EVENT_DATA_AVAILABLE:
 		rc = mhi_dev_notify_sm_event(MHI_DEV_EVENT_HW_ACC_WAKEUP);
@@ -471,12 +467,8 @@ static void mhi_dev_fetch_ch_ctx(struct mhi_dev *mhi, uint32_t ch_id)
 					sizeof(struct mhi_dev_ch_ctx) * ch_id;
 		data_transfer.phy_addr = mhi->ch_ctx_cache_dma_handle +
 					sizeof(struct mhi_dev_ch_ctx) * ch_id;
-	} else {
-		data_transfer.device_va = mhi->ch_ctx_shadow.device_va +
-					sizeof(struct mhi_dev_ch_ctx) * ch_id;
-		data_transfer.virt_addr = mhi->cmd_ctx_cache +
-					sizeof(struct mhi_dev_ch_ctx) * ch_id;
 	}
+
 	data_transfer.size  = sizeof(struct mhi_dev_ch_ctx);
 	/* Fetch the channel ctx (*dst, *src, size) */
 	mhi_dev_read_from_host(mhi, &data_transfer);
@@ -509,6 +501,7 @@ int mhi_dev_send_event(struct mhi_dev *mhi, int evnt_ring,
 	struct mhi_addr transfer_addr;
 	uint32_t data_buffer = 0;
 
+	memset(&msi_addr, 0, sizeof(msi_addr));
 	rc = ep_pcie_get_msi_config(mhi->phandle, &cfg);
 	if (rc) {
 		pr_err("Error retrieving pcie msi logic\n");
@@ -697,16 +690,18 @@ static int mhi_dev_process_stop_cmd(struct mhi_dev_ring *ring, uint32_t ch_id,
 	if (ring->rd_offset != ring->wr_offset &&
 		mhi->ch_ctx_cache[ch_id].ch_type ==
 				MHI_DEV_CH_TYPE_OUTBOUND_CHANNEL) {
-		mhi_log(MHI_MSG_INFO, "Pending transaction to be processed\n");
+		mhi_log(MHI_MSG_INFO, "Pending outbound transaction\n");
 		return 0;
 	} else if (mhi->ch_ctx_cache[ch_id].ch_type ==
 			MHI_DEV_CH_TYPE_INBOUND_CHANNEL &&
 			mhi->ch[ch_id].wr_request_active) {
+		mhi_log(MHI_MSG_INFO, "Pending inbound transaction\n");
 		return 0;
 	}
 
 	/* set the channel to stop */
 	mhi->ch_ctx_cache[ch_id].ch_state = MHI_DEV_CH_STATE_STOP;
+	mhi->ch[ch_id].state = MHI_DEV_CH_STOPPED;
 
 	if (mhi->use_ipa) {
 		data_transfer.host_pa = mhi->ch_ctx_shadow.host_pa +
@@ -738,6 +733,8 @@ static void mhi_dev_process_cmd_ring(struct mhi_dev *mhi,
 	uint32_t ch_id = 0;
 	union mhi_dev_ring_element_type event;
 	struct mhi_addr host_addr;
+	struct mhi_dev_channel *ch;
+	struct mhi_dev_ring *ring;
 
 	ch_id = el->generic.chid;
 	mhi_log(MHI_MSG_VERBOSE, "for channel:%d and cmd:%d\n",
@@ -838,14 +835,24 @@ send_start_completion_event:
 			 * channel command to check if one can suspend the
 			 * command.
 			 */
+			ring = &mhi->ring[ch_id + mhi->ch_ring_start];
+			if (ring->state == RING_STATE_UINT) {
+				pr_err("Channel not opened for %d\n", ch_id);
+				return;
+			}
+
+			ch = &mhi->ch[ch_id];
+
+			mutex_lock(&ch->ch_lock);
+
 			mhi->ch[ch_id].state = MHI_DEV_CH_PENDING_STOP;
 			rc = mhi_dev_process_stop_cmd(
 				&mhi->ring[mhi->ch_ring_start + ch_id],
 				ch_id, mhi);
-			if (rc) {
+			if (rc)
 				pr_err("stop event send failed\n");
-				return;
-			}
+
+			mutex_unlock(&ch->ch_lock);
 		}
 		break;
 	case MHI_DEV_RING_EL_RESET:
@@ -883,9 +890,20 @@ send_start_completion_event:
 					"received reset cmd for channel %d\n",
 					ch_id);
 
+			ring = &mhi->ring[ch_id + mhi->ch_ring_start];
+			if (ring->state == RING_STATE_UINT) {
+				pr_err("Channel not opened for %d\n", ch_id);
+				return;
+			}
+
+			ch = &mhi->ch[ch_id];
+
+			mutex_lock(&ch->ch_lock);
+
 			/* hard stop and set the channel to stop */
 			mhi->ch_ctx_cache[ch_id].ch_state =
-						MHI_DEV_CH_STATE_STOP;
+						MHI_DEV_CH_STATE_DISABLED;
+			mhi->ch[ch_id].state = MHI_DEV_CH_STOPPED;
 			if (mhi->use_ipa)
 				host_addr.host_pa =
 					mhi->ch_ctx_shadow.host_pa +
@@ -906,6 +924,7 @@ send_start_completion_event:
 			rc = mhi_dev_send_cmd_comp_event(mhi);
 			if (rc)
 				pr_err("Error sending command completion event\n");
+			mutex_unlock(&ch->ch_lock);
 		}
 		break;
 	default:
@@ -1129,6 +1148,13 @@ static void mhi_dev_scheduler(struct work_struct *work)
 
 void mhi_dev_notify_a7_event(struct mhi_dev *mhi)
 {
+
+	if (!atomic_read(&mhi->mhi_dev_wake)) {
+		pm_stay_awake(mhi->dev);
+		atomic_set(&mhi->mhi_dev_wake, 1);
+	}
+	mhi_log(MHI_MSG_VERBOSE, "acquiring mhi wakelock\n");
+
 	schedule_work(&mhi->chdb_ctrl_work);
 	mhi_log(MHI_MSG_VERBOSE, "mhi irq triggered\n");
 }
@@ -1294,10 +1320,8 @@ static int mhi_dev_cache_host_cfg(struct mhi_dev *mhi)
 	if (mhi->use_ipa) {
 		data_transfer.phy_addr = mhi->cmd_ctx_cache_dma_handle;
 		data_transfer.host_pa = mhi->cmd_ctx_shadow.host_pa;
-	} else {
-		data_transfer.device_va = mhi->cmd_ctx_shadow.device_va;
-		data_transfer.virt_addr = mhi->cmd_ctx_cache;
 	}
+
 	data_transfer.size = mhi->cmd_ctx_shadow.size;
 
 	/* Cache the command and event context */
@@ -1306,10 +1330,8 @@ static int mhi_dev_cache_host_cfg(struct mhi_dev *mhi)
 	if (mhi->use_ipa) {
 		data_transfer.phy_addr = mhi->ev_ctx_cache_dma_handle;
 		data_transfer.host_pa = mhi->ev_ctx_shadow.host_pa;
-	} else {
-		data_transfer.device_va = mhi->ev_ctx_shadow.device_va;
-		data_transfer.virt_addr = mhi->ev_ctx_cache;
 	}
+
 	data_transfer.size = mhi->ev_ctx_shadow.size;
 
 	mhi_dev_read_from_host(mhi, &data_transfer);
@@ -1367,6 +1389,11 @@ int mhi_dev_suspend(struct mhi_dev *mhi)
 		mhi_dev_write_to_host(mhi, &data_transfer);
 
 	}
+	mhi_update_state_info(MHI_STATE_DISCONNECTED);
+
+	atomic_set(&mhi->mhi_dev_wake, 0);
+	pm_relax(mhi->dev);
+	mhi_log(MHI_MSG_VERBOSE, "releasing mhi wakelock\n");
 
 	mutex_unlock(&mhi_ctx->mhi_write_test);
 
@@ -1401,6 +1428,7 @@ int mhi_dev_resume(struct mhi_dev *mhi)
 		/* update the channel state in the host */
 		mhi_dev_write_to_host(mhi, &data_transfer);
 	}
+	mhi_update_state_info(MHI_STATE_CONNECTED);
 
 	atomic_set(&mhi->is_suspended, 0);
 
@@ -1808,6 +1836,7 @@ int mhi_dev_write_channel(struct mhi_dev_client *handle_client,
 		}
 	}
 exit:
+	ch->wr_request_active = false;
 	mutex_unlock(&ch->ch_lock);
 	atomic_dec(&mhi_ctx->write_active);
 	mutex_unlock(&mhi_ctx->mhi_write_test);
@@ -1846,7 +1875,6 @@ static void mhi_dev_enable(struct work_struct *work)
 		return;
 	}
 
-	mhi_uci_init();
 	/*Enable MHI dev network stack Interface*/
 	rc = mhi_dev_net_interface_init();
 	if (rc)
@@ -1859,15 +1887,14 @@ static void mhi_dev_enable(struct work_struct *work)
 	if (bhi_intvec != 0xffffffff) {
 		/* Indicate the host that the device is ready */
 		rc = ep_pcie_get_msi_config(mhi->phandle, &msi_cfg);
-		if (rc) {
+		if (!rc) {
+			rc = ep_pcie_trigger_msi(mhi_ctx->phandle, bhi_intvec);
+			if (rc) {
+				pr_err("%s: error sending msi\n", __func__);
+				return;
+			}
+		} else {
 			pr_err("MHI: error geting msi configs\n");
-			return;
-		}
-
-		rc = ep_pcie_trigger_msi(mhi_ctx->phandle, bhi_intvec);
-		if (rc) {
-			pr_err("%s: error sending msi\n", __func__);
-			return;
 		}
 	}
 
@@ -1915,6 +1942,8 @@ static void mhi_dev_enable(struct work_struct *work)
 
 	if (mhi_ctx->config_iatu)
 		enable_irq(mhi_ctx->mhi_irq);
+
+	mhi_update_state_info(MHI_STATE_CONNECTED);
 }
 
 static void mhi_ring_init_cb(void *data)
@@ -1928,6 +1957,30 @@ static void mhi_ring_init_cb(void *data)
 
 	queue_work(mhi->ring_init_wq, &mhi->ring_init_cb_work);
 }
+
+static void mhi_update_state_info(uint32_t info)
+{
+	struct mhi_dev_client_cb_reason reason;
+
+	mhi_ctx->ctrl_info = info;
+
+	reason.reason = MHI_DEV_CTRL_UPDATE;
+	uci_ctrl_update(&reason);
+}
+
+int mhi_ctrl_state_info(uint32_t *info)
+{
+	if (!info) {
+		pr_err("Invalid info\n");
+		return -EINVAL;
+	}
+
+	*info = mhi_ctx->ctrl_info;
+	mhi_log(MHI_MSG_VERBOSE, "ctrl:%d", mhi_ctx->ctrl_info);
+
+	return 0;
+}
+EXPORT_SYMBOL(mhi_ctrl_state_info);
 
 static int get_device_tree_data(struct platform_device *pdev)
 {
@@ -2028,6 +2081,14 @@ static int get_device_tree_data(struct platform_device *pdev)
 		}
 	}
 
+	device_init_wakeup(mhi->dev, true);
+	/* MHI device will be woken up from PCIe event */
+	device_set_wakeup_capable(mhi->dev, false);
+	/* Hold a wakelock until completion of M0 */
+	pm_stay_awake(mhi->dev);
+	atomic_set(&mhi->mhi_dev_wake, 1);
+
+	mhi_log(MHI_MSG_VERBOSE, "acquiring wakelock\n");
 
 	return 0;
 }
@@ -2234,6 +2295,8 @@ static int mhi_dev_probe(struct platform_device *pdev)
 			pr_err("Error reading MHI Dev DT\n");
 			return rc;
 		}
+		mhi_uci_init();
+		mhi_update_state_info(MHI_STATE_CONFIGURED);
 	}
 
 	mhi_ctx->phandle = ep_pcie_get_phandle(mhi_ctx->ifc_id);
