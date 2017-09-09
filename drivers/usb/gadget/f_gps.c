@@ -23,7 +23,7 @@
 
 #define GPS_NOTIFY_INTERVAL	5
 #define GPS_MAX_NOTIFY_SIZE	64
-
+#define GPS_RESP_Q_LENGTH	100
 
 #define ACM_CTRL_DTR	(1 << 0)
 
@@ -47,11 +47,14 @@ struct f_gps {
 	/* control info */
 	struct list_head		cpkt_resp_q;
 	atomic_t			notify_count;
+	atomic_t			resp_q_count;
 	unsigned long			cpkts_len;
 
 	/* remote wakeup info */
 	bool				is_suspended;
 	bool				is_rw_allowed;
+
+	struct delayed_work		wakeup_work;
 };
 
 static struct gps_ports {
@@ -146,6 +149,10 @@ static struct usb_gadget_strings *gps_strings[] = {
 };
 
 static void gps_ctrl_response_available(struct f_gps *dev);
+
+static void gps_queue_notify_request(struct f_gps *dev);
+
+static int gps_wakeup_host(struct f_gps *dev);
 
 /* ------- misc functions --------------------*/
 
@@ -246,7 +253,16 @@ static void gps_unbind(struct usb_configuration *c, struct usb_function *f)
 
 	gps_free_req(dev->notify, dev->notify_req);
 
+	cancel_delayed_work_sync(&dev->wakeup_work);
 	kfree(f->name);
+}
+
+static void gps_remote_wakeup_work(struct work_struct *data)
+{
+	struct f_gps *dev = container_of(data, struct f_gps, wakeup_work.work);
+
+	pr_debug("%s: wakeup host\n", __func__);
+	gps_wakeup_host(dev);
 }
 
 static void gps_purge_responses(struct f_gps *dev)
@@ -266,12 +282,16 @@ static void gps_purge_responses(struct f_gps *dev)
 		rmnet_free_ctrl_pkt(cpkt);
 	}
 	atomic_set(&dev->notify_count, 0);
+	atomic_set(&dev->resp_q_count, 0);
 	spin_unlock_irqrestore(&dev->lock, flags);
 }
+
+#define GPS_WAKEUP_HOST_DELAY msecs_to_jiffies(100)
 
 static void gps_suspend(struct usb_function *f)
 {
 	struct f_gps *dev = func_to_gps(f);
+	unsigned long flags;
 
 	pr_debug("%s: suspending gps function\n", __func__);
 	if (f->config->cdev->gadget->speed == USB_SPEED_SUPER)
@@ -279,13 +299,26 @@ static void gps_suspend(struct usb_function *f)
 	else
 		dev->is_rw_allowed = f->config->cdev->gadget->remote_wakeup;
 
-	gps_purge_responses(dev);
 	dev->is_suspended = true;
+	spin_lock_irqsave(&dev->lock, flags);
+	/*
+	 * The notify count is set to zero and the correct count of
+	 * notifications for responses received (before suspend + during
+	 * suspend) will be handled during resume
+	 */
+	atomic_set(&dev->notify_count, 0);
+	if (dev->is_rw_allowed && (atomic_read(&dev->notify_count) > 0)) {
+		pr_debug("%s: queue not empty; wakeup host\n", __func__);
+		schedule_delayed_work(&dev->wakeup_work,
+					GPS_WAKEUP_HOST_DELAY);
+	}
+	spin_unlock_irqrestore(&dev->lock, flags);
 }
 
 static void gps_resume(struct usb_function *f)
 {
 	struct f_gps *dev = func_to_gps(f);
+	struct list_head *cpkt;
 
 	pr_debug("%s: resume gps function, func_is_supended:%d\n",
 			__func__, f->func_is_suspended);
@@ -305,7 +338,9 @@ static void gps_resume(struct usb_function *f)
 		return;
 	}
 	spin_unlock(&dev->lock);
-	gps_ctrl_response_available(dev);
+
+	list_for_each(cpkt, &dev->cpkt_resp_q)
+		gps_ctrl_response_available(dev);
 }
 
 static int gps_get_status(struct usb_function *f)
@@ -382,6 +417,8 @@ static void gps_disable(struct usb_function *f)
 
 	atomic_set(&dev->online, 0);
 
+	cancel_delayed_work(&dev->wakeup_work);
+
 	gps_purge_responses(dev);
 
 	gport_gps_disconnect(dev);
@@ -420,6 +457,7 @@ gps_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 
 	atomic_set(&dev->online, 1);
 
+	cancel_delayed_work(&dev->wakeup_work);
 	/* In case notifications were aborted, but there are pending control
 	   packets in the response queue, re-add the notifications */
 	list_for_each(cpkt, &dev->cpkt_resp_q)
@@ -428,13 +466,32 @@ gps_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 	return ret;
 }
 
+static void gps_queue_notify_request(struct f_gps *dev)
+{
+	int ret;
+
+	pr_debug("%s: queue new notification[%d]\n",
+			__func__, atomic_read(&dev->notify_count));
+	ret = usb_ep_queue(dev->notify, dev->notify_req, GFP_ATOMIC);
+	if (ret) {
+		/*
+		 * The modem response thread and the response completion
+		 * thread can try to queue the same notification and may
+		 * result in EBUSY error
+		 */
+		if (ret == -EBUSY) {
+			pr_debug("%s: notify_count:%u\n",
+				__func__, atomic_read(&dev->notify_count));
+		}
+		pr_debug("ep enqueue error %d\n", ret);
+	}
+}
+
 static void gps_ctrl_response_available(struct f_gps *dev)
 {
 	struct usb_request		*req = dev->notify_req;
 	struct usb_cdc_notification	*event;
 	unsigned long			flags;
-	int				ret;
-	struct rmnet_ctrl_pkt	*cpkt;
 
 	pr_debug("%s:dev:%p\n", __func__, dev);
 
@@ -458,24 +515,8 @@ static void gps_ctrl_response_available(struct f_gps *dev)
 	event->wLength = cpu_to_le16(0);
 	spin_unlock_irqrestore(&dev->lock, flags);
 
-	ret = usb_ep_queue(dev->notify, dev->notify_req, GFP_ATOMIC);
-	if (ret) {
-		if (ret == -EBUSY) {
-			pr_err("%s: notify_count:%u\n",
-				__func__, atomic_read(&dev->notify_count));
-			WARN_ON(1);
-		}
-		spin_lock_irqsave(&dev->lock, flags);
-		if (!list_empty(&dev->cpkt_resp_q)) {
-			atomic_dec(&dev->notify_count);
-			cpkt = list_first_entry(&dev->cpkt_resp_q,
-					struct rmnet_ctrl_pkt, list);
-			list_del(&cpkt->list);
-			gps_free_ctrl_pkt(cpkt);
-		}
-		spin_unlock_irqrestore(&dev->lock, flags);
-		pr_debug("ep enqueue error %d\n", ret);
-	}
+	gps_queue_notify_request(dev);
+
 }
 
 static void gps_connect(struct grmnet *gr)
@@ -544,19 +585,27 @@ gps_send_cpkt_response(void *gr, void *buf, size_t len)
 		return 0;
 	}
 
+	if (atomic_read(&dev->resp_q_count) >= GPS_RESP_Q_LENGTH) {
+		pr_err_ratelimited("%s: dropping packets as queue is full\n",
+					__func__);
+		gps_free_ctrl_pkt(cpkt);
+		return 0;
+	}
+
 	spin_lock_irqsave(&dev->lock, flags);
 	list_add_tail(&cpkt->list, &dev->cpkt_resp_q);
+	atomic_inc(&dev->resp_q_count);
 	spin_unlock_irqrestore(&dev->lock, flags);
 
-	if (dev->is_suspended && dev->is_rw_allowed) {
-		pr_debug("%s: calling gps_wakeup_host\n", __func__);
-		gps_wakeup_host(dev);
-		goto end;
+	if (dev->is_suspended) {
+		if (dev->is_rw_allowed) {
+			pr_debug("%s: calling gps_wakeup_host\n", __func__);
+			gps_wakeup_host(dev);
+		}
+		return 0;
 	}
 
 	gps_ctrl_response_available(dev);
-
-end:
 	return 0;
 }
 
@@ -583,8 +632,6 @@ static void gps_notify_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct f_gps *dev = req->context;
 	int status = req->status;
-	unsigned long		flags;
-	struct rmnet_ctrl_pkt	*cpkt;
 
 	pr_debug("%s: dev:%p port#%d\n", __func__, dev, dev->port_num);
 
@@ -606,26 +653,7 @@ static void gps_notify_complete(struct usb_ep *ep, struct usb_request *req)
 		if (atomic_dec_and_test(&dev->notify_count))
 			break;
 
-		status = usb_ep_queue(dev->notify, req, GFP_ATOMIC);
-		if (status) {
-			if (status == -EBUSY) {
-				pr_err("%s: notify_count:%u\n",
-					__func__,
-					atomic_read(&dev->notify_count));
-				WARN_ON(1);
-			}
-
-			spin_lock_irqsave(&dev->lock, flags);
-			if (!list_empty(&dev->cpkt_resp_q)) {
-				atomic_dec(&dev->notify_count);
-				cpkt = list_first_entry(&dev->cpkt_resp_q,
-						struct rmnet_ctrl_pkt, list);
-				list_del(&cpkt->list);
-				gps_free_ctrl_pkt(cpkt);
-			}
-			spin_unlock_irqrestore(&dev->lock, flags);
-			pr_debug("ep enqueue error %d\n", status);
-		}
+		gps_queue_notify_request(dev);
 		break;
 	}
 }
@@ -675,6 +703,7 @@ gps_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 			cpkt = list_first_entry(&dev->cpkt_resp_q,
 					struct rmnet_ctrl_pkt, list);
 			list_del(&cpkt->list);
+			atomic_dec(&dev->resp_q_count);
 			spin_unlock(&dev->lock);
 
 			len = min_t(unsigned, w_length, cpkt->len);
@@ -786,6 +815,8 @@ static int gps_bind(struct usb_configuration *c, struct usb_function *f)
 	pr_info("%s: GPS(%d) %s Speed\n",
 			__func__, dev->port_num,
 			gadget_is_dualspeed(cdev->gadget) ? "dual" : "full");
+
+	INIT_DELAYED_WORK(&dev->wakeup_work, gps_remote_wakeup_work);
 
 	return 0;
 
