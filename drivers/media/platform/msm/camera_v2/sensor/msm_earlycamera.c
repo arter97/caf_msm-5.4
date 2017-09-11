@@ -56,7 +56,8 @@
 
 #define MSM_EARLYCAMERA_DRV_NAME     "earlycamera"
 
-#define FRVC_CAMERA_STATUS_REG       0x08600688UL//0x08600680UL
+#define FRVC_CAMERA_STATUS_REG                0x08600688UL
+
 #define FRVC_CAMERA_IS_ENABLED                0x10
 #define FRVC_CAMERA_IS_WORKING                0x22
 #define FRVC_CAMERA_IS_DONE                   0x34
@@ -66,11 +67,17 @@
 #define FRVC_NOTIFY_KERNEL_EXIT_DONE          0xb0
 #define KERNEL_REQUEST_PAUSE_FRVC             0xc2
 
+#define FRVC_DISPLAY_IS_ENABLED               0x01
+#define FRVC_DISPLAY_IS_WORKING               0x02
+#define FRVC_DISPLAY_IS_DONE                  0x03
+#define FRVC_NOTIFY_ANDROID_SHOW_CAMERA       0x10
 
-#define FRVC_DISPLAY_IS_ENABLED               0x46
-#define FRVC_DISPLAY_IS_WORKING               0x58
-#define FRVC_DISPLAY_IS_DONE                  0x6a
-#define FRVC_NOTIFY_ANDROID_SHOW_CAMERA       0x7c
+#define PING_SET                              0x01
+#define PONG_SET                              0x10
+#define PINGPONG_ALREADY_SET                  0x11
+
+#define VFE_PING_ADDR_FROM_KERNEL             0x08600680UL
+#define VFE_PONG_ADDR_FROM_KERNEL             0x08600684UL
 
 #define VFE_BASE                     0x01b14000UL
 #define FRVC_CAMERA_PING_ADDR_0      (VFE_BASE + 0x70)
@@ -96,7 +103,8 @@ static void __iomem *vfe_ping_addr_1_base = NULL;
 static void __iomem *vfe_pong_addr_1_base = NULL;
 static void __iomem *frvc_camera_status_base = NULL;
 
-
+static void __iomem *frvc_put_kernel_vfe_ping_addr_to_lk_base = NULL;
+static void __iomem *frvc_put_kernel_vfe_pong_addr_to_lk_base = NULL;
 
 struct earlycamera_hal_buffer_cfg{
   int fd;
@@ -197,11 +205,9 @@ static ssize_t msm_earlycamera_lk_notify_display_pause_show(struct device *dev,s
 static ssize_t msm_earlycamera_lk_notify_display_pause_store(struct device *dev,struct device_attribute *attr, const char *buf, size_t count)
 {
   unsigned long pause = 0;
-  unsigned char display_status = 0;
-  int wait_time = 0;
   unsigned char camera_status = 0;
-
   unsigned int reg_value;
+  uint32_t ping_addr,pong_addr;
 
   pause = simple_strtoul(buf, NULL, 10);
 
@@ -221,20 +227,23 @@ static ssize_t msm_earlycamera_lk_notify_display_pause_store(struct device *dev,
     reg_value |= (KERNEL_REQUEST_PAUSE_FRVC << 16);
     frvc_write(reg_value,frvc_camera_status_base);
 
-    do{
-      reg_value = frvc_read(frvc_camera_status_base);
-      display_status = (reg_value >> 8) & 0xFF;
-      wait_time++;
-      mdelay(20);
-    }while(((display_status != FRVC_NOTIFY_ANDROID_SHOW_CAMERA) &&
-            (display_status != FRVC_DISPLAY_IS_ENABLED)) && wait_time < 100);
+    if(isp_bufq.bufs != NULL){
+      ping_addr = isp_bufq.bufs[0].mapped_info[0].paddr & 0xFFFFFFFF;
+      pong_addr = isp_bufq.bufs[1].mapped_info[0].paddr & 0xFFFFFFFF;
+
+      frvc_write(ping_addr,frvc_put_kernel_vfe_ping_addr_to_lk_base);
+      frvc_write(pong_addr,frvc_put_kernel_vfe_pong_addr_to_lk_base);
+
+      isp_bufq.bufs[0].status = MSM_BUFFER_PING_SET;
+      isp_bufq.ping_status = MSM_BUFFER_SET;
+
+      isp_bufq.bufs[1].status = MSM_BUFFER_PONG_SET;
+      isp_bufq.ping_status = MSM_BUFFER_SET;
+    }
     Notify_display_pause = pause;
   }
 
-  if(wait_time > 100){
-    Notify_display_pause = 0;
-    count = 0;
-  }
+  wake_up_process(thead_earlycamera_LK_status_task);
 
   return count;
 }
@@ -540,16 +549,6 @@ static long earlycamera_ioctl(struct file* filp, unsigned int cmd,unsigned long 
       }
 
       isp_bufq.bufs[cfg->idx].status = MSM_BUFFER_EMPTY;
-      if(isp_bufq.ping_status == MSM_BUFFER_EMPTY){
-        earlycamera_update_pingpong_addr(isp_bufq.bufs[cfg->idx].mapped_info[0].paddr,1);
-        isp_bufq.bufs[cfg->idx].status = MSM_BUFFER_PING_SET;
-        isp_bufq.ping_status = MSM_BUFFER_SET;
-      }
-      else if(isp_bufq.pong_status == MSM_BUFFER_EMPTY){
-        earlycamera_update_pingpong_addr(isp_bufq.bufs[cfg->idx].mapped_info[0].paddr,0);
-        isp_bufq.bufs[cfg->idx].status = MSM_BUFFER_PONG_SET;
-        isp_bufq.pong_status = MSM_BUFFER_SET;
-      }
       mutex_unlock(&isp_bufq.mutex);
     }
     break;
@@ -563,7 +562,6 @@ static long earlycamera_ioctl(struct file* filp, unsigned int cmd,unsigned long 
         mutex_unlock(&isp_bufq.mutex);
         return -1;
       }
-
       for(i = 0; i < isp_bufq.num_bufs; i++){
         if(isp_bufq.bufs[i].status == MSM_BUFFER_DATA_FULL){
           isp_bufq.bufs[i].status = MSM_BUFFER_BUSY;
@@ -586,7 +584,8 @@ static long earlycamera_ioctl(struct file* filp, unsigned int cmd,unsigned long 
       uint32_t reg_value = 0;
       reg_value = frvc_read(frvc_camera_status_base);
       display_status = (reg_value >> 8) & 0xFF;
-      if(display_status == FRVC_NOTIFY_ANDROID_SHOW_CAMERA){
+
+      if(display_status & FRVC_NOTIFY_ANDROID_SHOW_CAMERA){
         rc = 1;
       }
       else{
@@ -698,6 +697,7 @@ static int thead_earlycamera_LK_status(void *arg)
   char* s_c[2];
   uint32_t pingpong = 0;
   unsigned char notify_camera_status = 0;
+  unsigned char kernel_notify_lk_set_pingpong_status = 0;
   uint32_t reg_value = 0;
   struct device *earlycamera_uevent_device = (struct device *)arg;
 
@@ -705,6 +705,8 @@ static int thead_earlycamera_LK_status(void *arg)
     reg_value = frvc_read(frvc_camera_status_base);
     frvc_camera_status = reg_value & 0xFF;
     notify_camera_status = (reg_value >> 16) & 0xFF;
+    kernel_notify_lk_set_pingpong_status = (reg_value >> 24) & 0xFF;
+
     if(check_earlycamera_is_open(frvc_camera_status) == EARLYCAMERA_CLOSE ||
       EARLYCAMERA_IS_OPEN_ON_LK == 0){
       if(KERNEL_REQUSET_STOP_FRVC == notify_camera_status ||
@@ -720,6 +722,11 @@ static int thead_earlycamera_LK_status(void *arg)
     if(FRVC_NOTIFY_KERNEL_WAIT_EXIT == notify_camera_status ||
        FRVC_CAMERA_IS_DONE == frvc_camera_status){
       break;
+    }
+
+    if(kernel_notify_lk_set_pingpong_status != PINGPONG_ALREADY_SET){
+      mdelay(5);
+      continue;
     }
 
     pingpong = earlycamera_process_irq();
@@ -830,6 +837,18 @@ static int earlycamera_probe(struct platform_device *pdev)
     return -ENOMEM;
   }
 
+  frvc_put_kernel_vfe_ping_addr_to_lk_base = phy_addrchangetovirtual_addr(VFE_PING_ADDR_FROM_KERNEL);
+  if(frvc_put_kernel_vfe_ping_addr_to_lk_base == NULL){
+    printk("frvc_put_kernel_vfe_ping_addr_to_lk_base ioremap failed \n");
+    return -ENOMEM;
+  }
+
+  frvc_put_kernel_vfe_pong_addr_to_lk_base = phy_addrchangetovirtual_addr(VFE_PONG_ADDR_FROM_KERNEL);
+  if(frvc_put_kernel_vfe_pong_addr_to_lk_base == NULL){
+    printk("frvc_put_kernel_vfe_pong_addr_to_lk_base ioremap failed \n");
+    return -ENOMEM;
+  }
+
 
   retval = register_chrdev(major, MSM_EARLYCAMERA_DRV_NAME, &earlycamera_fops);
   if (retval < 0) {
@@ -885,7 +904,6 @@ static int earlycamera_probe(struct platform_device *pdev)
     thead_earlycamera_LK_status_task = NULL;
     return err;
   }
-  wake_up_process(thead_earlycamera_LK_status_task);
   return 0;
 }
 
@@ -896,6 +914,15 @@ static int earlycamera_exit(struct platform_device *pdev)
     frvc_camera_status_base = NULL;
   }
 
+  if(frvc_put_kernel_vfe_ping_addr_to_lk_base != NULL){
+    iounmap(frvc_put_kernel_vfe_ping_addr_to_lk_base);
+    frvc_put_kernel_vfe_ping_addr_to_lk_base = NULL;
+  }
+
+  if(frvc_put_kernel_vfe_pong_addr_to_lk_base != NULL){
+    iounmap(frvc_put_kernel_vfe_pong_addr_to_lk_base);
+    frvc_put_kernel_vfe_pong_addr_to_lk_base = NULL;
+  }
 
   gpio_free(ARRIVAL_SIGNAL_GPIO);
   free_irq(isp_bufq.gpio_irq_handle, earlycamera_device);
