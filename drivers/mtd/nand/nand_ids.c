@@ -55,6 +55,9 @@ struct nand_flash_dev nand_flash_ids[] = {
 	{"TC58NVG6D2 64G 3.3V 8-bit",
 		{ .id = {0x98, 0xde, 0x94, 0x82, 0x76, 0x56, 0x04, 0x20} },
 		  SZ_8K, SZ_8K, SZ_2M, 0, 8, 640},
+	{"TC58NYG2S0HBAI4 512M 1.8V 8-bit",
+		{ .id = {0x98, 0xac, 0x90, 0x26, 0x76, 0x16, 0x00, 0x00} },
+		  SZ_4K, SZ_512, SZ_256K, 0, 6, 256, 8},
 
 	LEGACY_ID_NAND("NAND 4MiB 5V 8-bit",   0x6B, 4, SZ_8K, SP_OPTIONS),
 	LEGACY_ID_NAND("NAND 4MiB 3,3V 8-bit", 0xE3, 4, SZ_8K, SP_OPTIONS),
