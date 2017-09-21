@@ -4634,6 +4634,8 @@ static int __qseecom_qteec_issue_cmd(struct qseecom_dev_handle *data,
 	int ret = 0;
 	uint32_t reqd_len_sb_in = 0;
 	struct sglist_info *table = data->sglistinfo_ptr;
+	void *req_ptr = NULL;
+	void *resp_ptr = NULL;
 
 	if (!data || !data->client.ihandle) {
 		pr_err("Client or client handle is not initialized\n");
@@ -4668,6 +4670,14 @@ static int __qseecom_qteec_issue_cmd(struct qseecom_dev_handle *data,
 	ireq.sglistinfo_len = SGLISTINFO_TABLE_SIZE;
 	dmac_flush_range((void *)table,
 				(void *)table + SGLISTINFO_TABLE_SIZE);
+
+	req_ptr = req->req_ptr;
+	resp_ptr = req->resp_ptr;
+
+	req->req_ptr = (void *)__qseecom_uvirt_to_kvirt(data,
+						(uintptr_t)req->req_ptr);
+	req->resp_ptr = (void *)__qseecom_uvirt_to_kvirt(data,
+						(uintptr_t)req->resp_ptr);
 
 	reqd_len_sb_in = req->req_len + req->resp_len;
 	msm_ion_do_cache_op(qseecom.ion_clnt, data->client.ihandle,
