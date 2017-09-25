@@ -1405,6 +1405,8 @@ int ipa2_mdfy_rt_rule(struct ipa_ioc_mdfy_rt_rule *rules);
  */
 int ipa2_add_flt_rule(struct ipa_ioc_add_flt_rule *rules);
 
+int ipa2_add_flt_rule_after(struct ipa_ioc_add_flt_rule_after *rules);
+
 int ipa2_del_flt_rule(struct ipa_ioc_del_flt_rule *hdls);
 
 int ipa2_mdfy_flt_rule(struct ipa_ioc_mdfy_flt_rule *rules);
