@@ -1,4 +1,4 @@
-/* Copyright (c) 2015, 2016 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -182,6 +182,18 @@ static int ipa_mhi_read_write_host(enum ipa_mhi_dma_dir dir, void *dev_addr,
 			return -ENOMEM;
 		}
 
+		res = ipa_dma_init();
+		if (res) {
+			IPA_MHI_ERR("failed to init IPA DMA rc=%d\n", res);
+			return res;
+		}
+		res = ipa_dma_enable();
+		if (res) {
+			IPA_MHI_ERR("failed to enable IPA DMA rc=%d\n", res);
+			ipa_dma_destroy();
+			return res;
+		}
+
 		if (dir == IPA_MHI_DMA_FROM_HOST) {
 			res = ipa_dma_sync_memcpy(mem.phys_base, host_addr,
 				size);
@@ -205,6 +217,11 @@ static int ipa_mhi_read_write_host(enum ipa_mhi_dma_dir dir, void *dev_addr,
 		}
 		dma_free_coherent(pdev, mem.size, mem.base,
 			mem.phys_base);
+
+		res = ipa_dma_disable();
+		if (res)
+			IPA_MHI_ERR("failed to disable IPA DMA rc=%d\n", res);
+		ipa_dma_destroy();
 	} else {
 		void *host_ptr;
 
