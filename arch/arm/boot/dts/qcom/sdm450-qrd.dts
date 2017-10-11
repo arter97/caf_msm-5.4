@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,14 +13,13 @@
 
 /dts-v1/;
 
-#include "msm8953.dtsi"
+#include "sdm450.dtsi"
 #include "msm-pmi8950.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. MSM8953 + PMI8950 QRD SKU3";
-	compatible = "qcom,msm8953-qrd-sku3",
-		   "qcom,msm8953-qrd", "qcom,msm8953", "qcom,qrd";
-	qcom,board-id= <0x2000b 0>;
+	model = "Qualcomm Technologies, Inc. SDM450 + PMI8950 QRD";
+	compatible = "qcom,sdm450-qrd", "qcom,sdm450", "qcom,qrd";
+	qcom,board-id = <0x0005000b 0>;
 };
 
 &soc {
