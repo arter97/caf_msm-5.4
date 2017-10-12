@@ -80,7 +80,7 @@
 		};
 	};
 
-	memory {
+	memory: memory {
 		#address-cells = <2>;
 		#size-cells = <2>;
 
