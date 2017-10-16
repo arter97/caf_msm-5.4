@@ -122,3 +122,7 @@
 	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
 	qcom,platform-spi-dc-gpio = <&msm_gpio 110 0>;
 };
+
+&qnand_1 {
+	status = "ok";
+};
