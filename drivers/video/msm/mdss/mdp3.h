@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, 2017-2018, The Linux Foundation. All rights reserved.
  * Copyright (C) 2007 Google Incorporated
  *
  * This program is free software; you can redistribute it and/or modify
@@ -195,6 +195,8 @@ struct mdp3_hw_resource {
 	bool solid_fill_vote_en;
 	int bklt_level;
 	int bklt_update;
+	bool secure_update_bl;
+	bool secure_reg_on;
 };
 
 struct mdp3_img_data {

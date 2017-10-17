@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, 2018, The Linux Foundation. All rights reserved.
  * Copyright (C) 2007 Google Incorporated
  *
  * This software is licensed under the terms of the GNU General Public
@@ -2726,6 +2726,7 @@ static int mdp3_probe(struct platform_device *pdev)
 	mdp3_res->mdss_util->panel_intf_type = mdp3_panel_intf_type;
 	mdp3_res->mdss_util->dyn_clk_gating_ctrl =
 		mdp3_dynamic_clock_gating_ctrl;
+	mdp3_res->secure_reg_on = false;
 
 	rc = mdp3_parse_dt(pdev);
 	if (rc)
