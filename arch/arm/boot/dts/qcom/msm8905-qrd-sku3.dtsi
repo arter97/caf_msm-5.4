@@ -90,6 +90,51 @@
 	i2c@78b9000 {/* BLSP1 QUP5 */
 		status = "disabled";
 	};
+
+	matrix_keypad: matrix_keypad@0 {
+		compatible = "gpio-matrix-keypad";
+		input-name = "matrix_keypad";
+		debounce-delay-ms = <5>;
+		col-scan-delay-us = <2>;
+		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
+		pinctrl-0 = <&gpio_key_active>;
+		pinctrl-1 = <&gpio_key_suspend>;
+
+		row-gpios = <&msm_gpio 97 0
+			&msm_gpio 96 0
+			&msm_gpio 95 0
+			&msm_gpio 94 0>;
+
+		col-gpios = <&msm_gpio 52 0
+			&msm_gpio 56 0
+			&msm_gpio 7 0
+			&msm_gpio 99 0
+			&msm_gpio 6 0>;
+		linux,keymap = <0x000000e7      /* (0,0) KEY_DIAL */
+			0x00010004      /* (1,0) KEY_3 */
+			0x00020007      /* (2,0) KEY_6 */
+			0x0003000a      /* (3,0) KEY_9 */
+			0x0004020b      /* (4,0) KEY_NUMERIC_POUND */
+
+			0x01000069      /* (0,1) KEY_LEFT */
+			0x01010003      /* (1,1) KEY_2 */
+			0x01020006      /* (2,1) KEY_5 */
+			0x01030009      /* (3,1) KEY_8 */
+			0x0104000b      /* (4,1) KEY_0 */
+
+			0x0200008b      /* (0,2) KEY_MENU */
+			0x02010002      /* (1,2) KEY_1 */
+			0x02020005      /* (2,2) KEY_4 */
+			0x02030008      /* (3,2) KEY_7 */
+			0x0204020a      /* (4,2) KEY_NUMERIC_STAR */
+
+			0x03000160      /* (0,3) KEY_OK */
+			0x0301006a      /* (1,3) KEY_RIGHT */
+			0x0302009e      /* (3,3) KEY_BACK */
+			0x03030067      /* (3,3) KEY_UP */
+			0x0304006c>;    /* (3,4) KEY_DOWN */
+
+	};
 };
 
 #include "spi-panel-st7789v2-qvga-cmd.dtsi"
