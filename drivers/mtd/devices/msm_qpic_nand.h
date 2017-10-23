@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016, 2018 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -321,6 +321,7 @@ struct msm_nand_info {
 	struct flash_identification flash_dev;
 	struct msm_nand_clk_data clk_data;
 	u64 dma_mask;
+	struct work_struct	tout_work;
 };
 
 /* Structure that defines an ONFI parameter page (512B) */
