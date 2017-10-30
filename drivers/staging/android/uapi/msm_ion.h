@@ -25,6 +25,7 @@ enum msm_ion_heap_types {
 enum ion_heap_ids {
 	INVALID_HEAP_ID = -1,
 	ION_CP_MM_HEAP_ID = 8,
+	ION_SECURE_DISPLAY_HEAP_ID = 10,
 	ION_CP_MFC_HEAP_ID = 12,
 	ION_CP_WB_HEAP_ID = 16, /* 8660 only */
 	ION_CAMERA_HEAP_ID = 20, /* 8660 only */
@@ -110,6 +111,7 @@ enum cp_mem_usage {
 #define ION_PIL1_HEAP_NAME  "pil_1"
 #define ION_PIL2_HEAP_NAME  "pil_2"
 #define ION_QSECOM_HEAP_NAME	"qsecom"
+#define ION_SECURE_DISPLAY_HEAP_NAME "secure_display"
 
 #define ION_SET_CACHED(__cache)		(__cache | ION_FLAG_CACHED)
 #define ION_SET_UNCACHED(__cache)	(__cache & ~ION_FLAG_CACHED)

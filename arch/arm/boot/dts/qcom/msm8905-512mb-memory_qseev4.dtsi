@@ -26,3 +26,21 @@
 &peripheral_mem {
 	reg = <0x0 0x8D500000 0x0 0x0500000>;
 };
+
+&memory {
+	secure_display_memory: secure_region {
+		linux,reserve-contiguous-region;
+		reg = <0 0 0 0x400000>;
+		label = "secure_display_mem";
+	};
+};
+
+&ion {
+	secure_display_heap: qcom,ion-heap@10 { /* SECURE DISPLAY HEAP */
+		compatible = "qcom,msm-ion-reserve";
+		reg = <10>;
+		qcom,heap-align = <0x1000>;
+		linux,contiguous-region = <&secure_display_memory>;
+		qcom,ion-heap-type = "SECURE_DMA";
+	};
+};
