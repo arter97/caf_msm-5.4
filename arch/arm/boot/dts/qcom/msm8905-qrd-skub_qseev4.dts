@@ -13,11 +13,11 @@
 /dts-v1/;
 
 #include "msm8905-qrd-skub.dtsi"
-#include "msm8905-512mb-memory.dtsi"
+#include "msm8905-512mb-memory_qseev4.dtsi"
 #include "msm8909-gpu-qhd.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. MSM8905 QRD SKUB";
+	model = "Qualcomm Technologies, Inc. MSM8905 QRD SKUB QSEEV4";
 	compatible = "qcom,msm8909-qrd", "qcom,msm8909", "qcom,qrd";
-	qcom,board-id = <0x1000b 0x100>;
+	qcom,board-id = <0x1010b 0x100>;
 };
