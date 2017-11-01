@@ -44,3 +44,7 @@
 		qcom,ion-heap-type = "SECURE_DMA";
 	};
 };
+
+&qcom_seecom {
+	reg = <0x87900000 0x300000>;
+};
