@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -67,6 +67,7 @@ static struct mhi_dev *mhi_ctx;
 static void mhi_hwc_cb(void *priv, enum ipa_mhi_event_type event,
 	unsigned long data);
 static void mhi_ring_init_cb(void *user_data);
+static void mhi_update_state_info(uint32_t info);
 
 void mhi_dev_read_from_host(struct mhi_addr *host, dma_addr_t dev, size_t size)
 {
@@ -329,6 +330,8 @@ static void mhi_hwc_cb(void *priv, enum ipa_mhi_event_type event,
 			pr_err("Failed to enable command db\n");
 			return;
 		}
+
+		mhi_update_state_info(MHI_STATE_CONNECTED);
 		break;
 	case IPA_MHI_EVENT_DATA_AVAILABLE:
 		rc = mhi_dev_notify_sm_event(MHI_DEV_EVENT_HW_ACC_WAKEUP);
@@ -1115,6 +1118,8 @@ int mhi_dev_suspend(struct mhi_dev *mhi)
 	mutex_lock(&mhi_ctx->mhi_write_test);
 	atomic_set(&mhi->is_suspended, 1);
 
+	mhi_update_state_info(MHI_STATE_DISCONNECTED);
+
 	for (ch_id = 0; ch_id < mhi->cfg.channels; ch_id++) {
 		if (mhi->ch_ctx_cache[ch_id].ch_state !=
 						MHI_DEV_CH_STATE_RUNNING)
@@ -1168,6 +1173,7 @@ int mhi_dev_resume(struct mhi_dev *mhi)
 				sizeof(enum mhi_dev_ch_ctx_state), mhi);
 	}
 
+	mhi_update_state_info(MHI_STATE_CONNECTED);
 	atomic_set(&mhi->is_suspended, 0);
 
 	return rc;
@@ -1619,7 +1625,6 @@ static void mhi_dev_enable(struct work_struct *work)
 		pr_err("%s: env setting failed\n", __func__);
 		return;
 	}
-	mhi_uci_init();
 
 	/* All set...let's notify the host */
 	mhi_dev_sm_set_ready();
@@ -1674,6 +1679,8 @@ static void mhi_dev_enable(struct work_struct *work)
 		pr_err("error during hwc_init\n");
 		return;
 	}
+
+	mhi_update_state_info(MHI_STATE_CONNECTED);
 }
 
 static void mhi_ring_init_cb(void *data)
@@ -1687,6 +1694,30 @@ static void mhi_ring_init_cb(void *data)
 
 	queue_work(mhi->ring_init_wq, &mhi->ring_init_cb_work);
 }
+
+static void mhi_update_state_info(uint32_t info)
+{
+	struct mhi_dev_client_cb_reason reason;
+
+	mhi_ctx->ctrl_info = info;
+
+	reason.reason = MHI_DEV_CTRL_UPDATE;
+	uci_ctrl_update(&reason);
+}
+
+int mhi_ctrl_state_info(uint32_t *info)
+{
+	if (!info) {
+		pr_err("Invalid info\n");
+		return -EINVAL;
+	}
+
+	*info = mhi_ctx->ctrl_info;
+	mhi_log(MHI_MSG_VERBOSE, "ctrl:%d", mhi_ctx->ctrl_info);
+
+	return 0;
+}
+EXPORT_SYMBOL(mhi_ctrl_state_info);
 
 static int get_device_tree_data(struct platform_device *pdev)
 {
@@ -1820,6 +1851,8 @@ static int mhi_dev_probe(struct platform_device *pdev)
 			pr_err("Error reading MHI Dev DT\n");
 			return rc;
 		}
+		mhi_uci_init();
+		mhi_update_state_info(MHI_STATE_CONFIGURED);
 	}
 
 	mhi_ctx->phandle = ep_pcie_get_phandle(mhi_ctx->ifc_id);
