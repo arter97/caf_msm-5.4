@@ -36,6 +36,7 @@
 
 #include "gadget_chips.h"
 
+#define USB_ETH_RNDIS y
 #include "f_fs.c"
 #ifdef CONFIG_SND_PCM
 #include "f_audio_source.c"
@@ -46,37 +47,16 @@
 #include "f_mass_storage.c"
 #define USB_ETH_RNDIS y
 #include "f_diag.c"
-#include "f_qdss.c"
-#include "f_rmnet_smd.c"
 #include "f_rmnet.c"
-#include "f_gps.c"
 #include "u_smd.c"
 #include "u_bam.c"
 #include "u_rmnet_ctrl_smd.c"
 #include "u_ctrl_qti.c"
-#include "u_ctrl_hsic.c"
-#include "u_data_hsic.c"
-#include "u_ctrl_hsuart.c"
-#include "u_data_hsuart.c"
-#include "f_ccid.c"
 #include "f_mtp.c"
 #include "f_accessory.c"
 #include "f_rndis.c"
 #include "rndis.c"
-#include "f_qc_ecm.c"
-#include "f_mbim.c"
-#include "f_qc_rndis.c"
-#include "u_data_ipa.c"
-#include "u_bam_data.c"
-#include "f_ecm.c"
 #include "u_ether.c"
-#include "u_qc_ether.c"
-#ifdef CONFIG_TARGET_CORE
-#endif
-#ifdef CONFIG_SND_PCM
-#include "u_uac1.c"
-#include "f_uac1.c"
-#endif
 #include "f_ncm.c"
 #include "f_charger.c"
 
@@ -860,33 +840,12 @@ static struct android_usb_function acm_function = {
 	.attributes	= acm_function_attributes,
 };
 
-/* RMNET_SMD */
-static int rmnet_smd_function_bind_config(struct android_usb_function *f,
-					  struct usb_configuration *c)
-{
-	return rmnet_smd_bind_config(c);
-}
-
-static struct android_usb_function rmnet_smd_function = {
-	.name		= "rmnet_smd",
-	.bind_config	= rmnet_smd_function_bind_config,
-};
-
 /*rmnet transport string format(per port):"ctrl0,data0,ctrl1,data1..." */
 #define MAX_XPORT_STR_LEN 50
 static char rmnet_transports[MAX_XPORT_STR_LEN];
 
 /*rmnet transport name string - "rmnet_hsic[,rmnet_hsusb]" */
 static char rmnet_xport_names[MAX_XPORT_STR_LEN];
-
-/*qdss transport string format(per port):"bam [, hsic]" */
-static char qdss_transports[MAX_XPORT_STR_LEN];
-
-/*qdss transport name string - "qdss_bam [, qdss_hsic]" */
-static char qdss_xport_names[MAX_XPORT_STR_LEN];
-
-/*qdss debug interface setting 0: disable   1:enable */
-static bool qdss_debug_intf;
 
 static void rmnet_function_cleanup(struct android_usb_function *f)
 {
@@ -1009,46 +968,6 @@ static struct android_usb_function rmnet_function = {
 	.attributes	= rmnet_function_attributes,
 };
 
-static void gps_function_cleanup(struct android_usb_function *f)
-{
-	gps_cleanup();
-}
-
-static int gps_function_bind_config(struct android_usb_function *f,
-					 struct usb_configuration *c)
-{
-	int err;
-	static int gps_initialized;
-
-	if (!gps_initialized) {
-		gps_initialized = 1;
-		err = gps_init_port();
-		if (err) {
-			pr_err("gps: Cannot init gps port");
-			return err;
-		}
-	}
-
-	err = gps_gport_setup();
-	if (err) {
-		pr_err("gps: Cannot setup transports");
-		return err;
-	}
-	err = gps_bind_config(c);
-	if (err) {
-		pr_err("Could not bind gps config\n");
-		return err;
-	}
-
-	return 0;
-}
-
-static struct android_usb_function gps_function = {
-	.name		= "gps",
-	.cleanup	= gps_function_cleanup,
-	.bind_config	= gps_function_bind_config,
-};
-
 /* ncm */
 struct ncm_function_config {
 	u8      ethaddr[ETH_ALEN];
@@ -1151,251 +1070,6 @@ static struct android_usb_function ncm_function = {
 	.unbind_config	= ncm_function_unbind_config,
 	.attributes	= ncm_function_attributes,
 };
-/* ecm transport string */
-static char ecm_transports[MAX_XPORT_STR_LEN];
-
-struct ecm_function_config {
-	u8      ethaddr[ETH_ALEN];
-	struct eth_dev *dev;
-};
-
-static int ecm_function_init(struct android_usb_function *f,
-				struct usb_composite_dev *cdev)
-{
-	f->config = kzalloc(sizeof(struct ecm_function_config), GFP_KERNEL);
-	if (!f->config)
-		return -ENOMEM;
-	return 0;
-}
-
-static int ecm_qc_function_init(struct android_usb_function *f,
-				struct usb_composite_dev *cdev)
-{
-	f->config = kzalloc(sizeof(struct ecm_function_config), GFP_KERNEL);
-	if (!f->config)
-		return -ENOMEM;
-	return ecm_qc_init();
-}
-static void ecm_function_cleanup(struct android_usb_function *f)
-{
-	kfree(f->config);
-	f->config = NULL;
-}
-
-static int ecm_qc_function_bind_config(struct android_usb_function *f,
-					struct usb_configuration *c)
-{
-	int ret;
-	char *trans;
-	struct ecm_function_config *ecm = f->config;
-
-	if (!ecm) {
-		pr_err("%s: ecm_pdata\n", __func__);
-		return -EINVAL;
-	}
-
-	pr_info("%s MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", __func__,
-		ecm->ethaddr[0], ecm->ethaddr[1], ecm->ethaddr[2],
-		ecm->ethaddr[3], ecm->ethaddr[4], ecm->ethaddr[5]);
-
-	pr_debug("%s: ecm_transport is %s", __func__, ecm_transports);
-
-	trans = strim(ecm_transports);
-	if (strcmp("BAM2BAM_IPA", trans)) {
-		ret = gether_qc_setup_name(c->cdev->gadget,
-						ecm->ethaddr, "ecm");
-		if (ret) {
-			pr_err("%s: gether_setup failed\n", __func__);
-			return ret;
-		}
-	}
-
-	return ecm_qc_bind_config(c, ecm->ethaddr, trans);
-}
-
-static void ecm_qc_function_unbind_config(struct android_usb_function *f,
-						struct usb_configuration *c)
-{
-	char *trans = strim(ecm_transports);
-
-	if (strcmp("BAM2BAM_IPA", trans)) {
-		bam_data_flush_workqueue();
-		gether_qc_cleanup_name("ecm0");
-	}
-}
-
-static ssize_t ecm_ethaddr_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct android_usb_function *f = dev_get_drvdata(dev);
-	struct ecm_function_config *ecm = f->config;
-	return snprintf(buf, PAGE_SIZE, "%02x:%02x:%02x:%02x:%02x:%02x\n",
-		ecm->ethaddr[0], ecm->ethaddr[1], ecm->ethaddr[2],
-		ecm->ethaddr[3], ecm->ethaddr[4], ecm->ethaddr[5]);
-}
-
-static ssize_t ecm_ethaddr_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size)
-{
-	struct android_usb_function *f = dev_get_drvdata(dev);
-	struct ecm_function_config *ecm = f->config;
-
-	if (sscanf(buf, "%02x:%02x:%02x:%02x:%02x:%02x\n",
-		    (int *)&ecm->ethaddr[0], (int *)&ecm->ethaddr[1],
-		    (int *)&ecm->ethaddr[2], (int *)&ecm->ethaddr[3],
-		    (int *)&ecm->ethaddr[4], (int *)&ecm->ethaddr[5]) == 6)
-		return size;
-	return -EINVAL;
-}
-
-static DEVICE_ATTR(ecm_ethaddr, S_IRUGO | S_IWUSR, ecm_ethaddr_show,
-					       ecm_ethaddr_store);
-
-static ssize_t ecm_transports_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%s\n", ecm_transports);
-}
-
-static ssize_t ecm_transports_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size)
-{
-	strlcpy(ecm_transports, buf, sizeof(ecm_transports));
-	return size;
-}
-
-static DEVICE_ATTR(ecm_transports, S_IRUGO | S_IWUSR, ecm_transports_show,
-					       ecm_transports_store);
-
-static struct device_attribute *ecm_function_attributes[] = {
-	&dev_attr_ecm_transports,
-	&dev_attr_ecm_ethaddr,
-	NULL
-};
-
-static struct android_usb_function ecm_qc_function = {
-	.name		= "ecm_qc",
-	.init		= ecm_qc_function_init,
-	.cleanup	= ecm_function_cleanup,
-	.bind_config	= ecm_qc_function_bind_config,
-	.unbind_config	= ecm_qc_function_unbind_config,
-	.attributes	= ecm_function_attributes,
-};
-
-/* MBIM - used with BAM */
-#define MAX_MBIM_INSTANCES 1
-
-static int mbim_function_init(struct android_usb_function *f,
-					 struct usb_composite_dev *cdev)
-{
-	return mbim_init(MAX_MBIM_INSTANCES);
-}
-
-static void mbim_function_cleanup(struct android_usb_function *f)
-{
-	fmbim_cleanup();
-}
-
-
-/* mbim transport string */
-static char mbim_transports[MAX_XPORT_STR_LEN];
-
-static int mbim_function_bind_config(struct android_usb_function *f,
-					  struct usb_configuration *c)
-{
-	char *trans;
-
-	pr_debug("%s: mbim transport is %s", __func__, mbim_transports);
-	trans = strim(mbim_transports);
-	return mbim_bind_config(c, 0, trans);
-}
-
-static void mbim_function_unbind_config(struct android_usb_function *f,
-						struct usb_configuration *c)
-{
-	char *trans = strim(mbim_transports);
-
-	if (strcmp("BAM2BAM_IPA", trans))
-		bam_data_flush_workqueue();
-}
-
-static int mbim_function_ctrlrequest(struct android_usb_function *f,
-					struct usb_composite_dev *cdev,
-					const struct usb_ctrlrequest *c)
-{
-	return mbim_ctrlrequest(cdev, c);
-}
-
-static ssize_t mbim_transports_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%s\n", mbim_transports);
-}
-
-static ssize_t mbim_transports_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size)
-{
-	strlcpy(mbim_transports, buf, sizeof(mbim_transports));
-	return size;
-}
-
-static DEVICE_ATTR(mbim_transports, S_IRUGO | S_IWUSR, mbim_transports_show,
-				mbim_transports_store);
-
-static ssize_t wMTU_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%d\n", ext_mbb_desc.wMTU);
-}
-
-static ssize_t wMTU_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size)
-{
-	int value;
-	if (sscanf(buf, "%d", &value) == 1) {
-		if (value < 0 || value > USHRT_MAX)
-			pr_err("illegal MTU %d, enter unsigned 16 bits\n",
-				value);
-		else
-			ext_mbb_desc.wMTU = cpu_to_le16(value);
-		return size;
-	}
-	return -EINVAL;
-}
-
-static DEVICE_ATTR(wMTU, S_IRUGO | S_IWUSR, wMTU_show,
-				wMTU_store);
-
-static struct device_attribute *mbim_function_attributes[] = {
-	&dev_attr_mbim_transports,
-	&dev_attr_wMTU,
-	NULL
-};
-
-static struct android_usb_function mbim_function = {
-	.name		= "usb_mbim",
-	.cleanup	= mbim_function_cleanup,
-	.bind_config	= mbim_function_bind_config,
-	.unbind_config	= mbim_function_unbind_config,
-	.init		= mbim_function_init,
-	.ctrlrequest	= mbim_function_ctrlrequest,
-	.attributes		= mbim_function_attributes,
-};
-
-#ifdef CONFIG_SND_PCM
-/* PERIPHERAL AUDIO */
-static int audio_function_bind_config(struct android_usb_function *f,
-					  struct usb_configuration *c)
-{
-	return audio_bind_config(c);
-}
-
-static struct android_usb_function audio_function = {
-	.name		= "audio",
-	.bind_config	= audio_function_bind_config,
-};
-#endif
-
 
 /* DIAG */
 static char diag_clients[32];	    /*enabled DIAG clients- "diag[,diag_mdm]" */
@@ -1462,187 +1136,6 @@ static struct android_usb_function diag_function = {
 	.cleanup	= diag_function_cleanup,
 	.bind_config	= diag_function_bind_config,
 	.attributes	= diag_function_attributes,
-};
-
-/* DEBUG */
-static int qdss_function_init(struct android_usb_function *f,
-	struct usb_composite_dev *cdev)
-{
-	return qdss_setup();
-}
-
-static void qdss_function_cleanup(struct android_usb_function *f)
-{
-	qdss_cleanup();
-}
-
-static int qdss_init_transports(int *portnum)
-{
-	char *ts_port;
-	char *tname = NULL;
-	char *ctrl_name = NULL;
-	char buf[MAX_XPORT_STR_LEN], *type;
-	char xport_name_buf[MAX_XPORT_STR_LEN], *tn;
-	int err = 0;
-
-	strlcpy(buf, qdss_transports, sizeof(buf));
-	type = strim(buf);
-
-	strlcpy(xport_name_buf, qdss_xport_names,
-			sizeof(xport_name_buf));
-	tn = strim(xport_name_buf);
-
-	pr_debug("%s: qdss_debug_intf = %d\n",
-		__func__, qdss_debug_intf);
-
-	/*
-	 * QDSS function driver is being used for QDSS and DPL
-	 * functionality. ctrl_name (i.e. ctrl xport) is optional
-	 * whereas data transport name is mandatory to provide
-	 * while using QDSS/DPL as part of USB composition.
-	 */
-	while (type) {
-		ctrl_name = strsep(&type, ",");
-		ts_port = strsep(&type, ",");
-		if (!ts_port) {
-			pr_debug("%s:ctrl transport is not provided.\n",
-								__func__);
-			ts_port = ctrl_name;
-			ctrl_name = NULL;
-		}
-
-		if (ts_port) {
-			if (tn)
-				tname = strsep(&tn, ",");
-
-			err = qdss_init_port(
-				ctrl_name,
-				ts_port,
-				tname,
-				qdss_debug_intf);
-
-			if (err) {
-				pr_err("%s: Cannot open transport port:'%s'\n",
-					__func__, ts_port);
-				return err;
-			}
-			(*portnum)++;
-		} else {
-			pr_err("%s: No data transport name for QDSS port.\n",
-								__func__);
-			err = -ENODEV;
-		}
-	}
-	return err;
-}
-
-static int qdss_function_bind_config(struct android_usb_function *f,
-					struct usb_configuration *c)
-{
-	int i;
-	int err = 0;
-	static int qdss_initialized = 0, portsnum;
-
-	if (!qdss_initialized) {
-		qdss_initialized = 1;
-
-		err = qdss_init_transports(&portsnum);
-		if (err) {
-			pr_err("qdss: Cannot init transports");
-			goto out;
-		}
-
-		err = qdss_gport_setup();
-		if (err) {
-			pr_err("qdss: Cannot setup transports");
-			goto out;
-		}
-	}
-
-	pr_debug("%s: port number is %d\n", __func__, portsnum);
-
-	for (i = 0; i < portsnum; i++) {
-		err = qdss_bind_config(c, i);
-		if (err) {
-			pr_err("Could not bind qdss%u config\n", i);
-			break;
-		}
-	}
-out:
-	return err;
-}
-
-static ssize_t qdss_transports_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%s\n", qdss_transports);
-}
-
-static ssize_t qdss_transports_store(
-		struct device *device, struct device_attribute *attr,
-		const char *buff, size_t size)
-{
-	strlcpy(qdss_transports, buff, sizeof(qdss_transports));
-
-	return size;
-}
-
-static ssize_t qdss_xport_names_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%s\n", qdss_xport_names);
-}
-
-static ssize_t qdss_xport_names_store(
-		struct device *device, struct device_attribute *attr,
-		const char *buff, size_t size)
-{
-	strlcpy(qdss_xport_names, buff, sizeof(qdss_xport_names));
-	return size;
-}
-
-static ssize_t qdss_debug_intf_store(
-		struct device *device, struct device_attribute *attr,
-		const char *buff, size_t size)
-{
-	strtobool(buff, &qdss_debug_intf);
-	return size;
-}
-
-static ssize_t qdss_debug_intf_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%d\n", qdss_debug_intf);
-}
-
-static struct device_attribute dev_attr_qdss_transports =
-					__ATTR(transports, S_IRUGO | S_IWUSR,
-						qdss_transports_show,
-						qdss_transports_store);
-
-static struct device_attribute dev_attr_qdss_xport_names =
-				__ATTR(transport_names, S_IRUGO | S_IWUSR,
-				qdss_xport_names_show,
-				qdss_xport_names_store);
-
-/* 1(enable)/0(disable) the qdss debug interface */
-static struct device_attribute dev_attr_qdss_debug_intf =
-				__ATTR(debug_intf, S_IRUGO | S_IWUSR,
-				qdss_debug_intf_show,
-				qdss_debug_intf_store);
-
-static struct device_attribute *qdss_function_attributes[] = {
-					&dev_attr_qdss_transports,
-					&dev_attr_qdss_xport_names,
-					&dev_attr_qdss_debug_intf,
-					NULL };
-
-static struct android_usb_function qdss_function = {
-	.name		= "qdss",
-	.init		= qdss_function_init,
-	.cleanup	= qdss_function_cleanup,
-	.bind_config	= qdss_function_bind_config,
-	.attributes	= qdss_function_attributes,
 };
 
 /* SERIAL */
@@ -1861,31 +1354,6 @@ static struct android_usb_function serial_function = {
 	.attributes	= serial_function_attributes,
 };
 
-/* CCID */
-static int ccid_function_init(struct android_usb_function *f,
-					struct usb_composite_dev *cdev)
-{
-	return ccid_setup();
-}
-
-static void ccid_function_cleanup(struct android_usb_function *f)
-{
-	ccid_cleanup();
-}
-
-static int ccid_function_bind_config(struct android_usb_function *f,
-						struct usb_configuration *c)
-{
-	return ccid_bind_config(c);
-}
-
-static struct android_usb_function ccid_function = {
-	.name		= "ccid",
-	.init		= ccid_function_init,
-	.cleanup	= ccid_function_cleanup,
-	.bind_config	= ccid_function_bind_config,
-};
-
 /* Charger */
 static int charger_function_bind_config(struct android_usb_function *f,
 						struct usb_configuration *c)
@@ -1970,9 +1438,6 @@ static struct android_usb_function ptp_function = {
 	.ctrlrequest	= ptp_function_ctrlrequest,
 };
 
-/* rndis transport string */
-static char rndis_transports[MAX_XPORT_STR_LEN];
-
 struct rndis_function_config {
 	u8      ethaddr[ETH_ALEN];
 	u32     vendorID;
@@ -1998,27 +1463,6 @@ static void rndis_function_cleanup(struct android_usb_function *f)
 {
 	kfree(f->config);
 	f->config = NULL;
-}
-
-static int rndis_qc_function_init(struct android_usb_function *f,
-					struct usb_composite_dev *cdev)
-{
-	struct rndis_function_config *rndis;
-
-	rndis = kzalloc(sizeof(struct rndis_function_config), GFP_KERNEL);
-	if (!rndis)
-		return -ENOMEM;
-
-	rndis->wceis = true;
-
-	f->config = rndis;
-	return rndis_qc_init();
-}
-
-static void rndis_qc_function_cleanup(struct android_usb_function *f)
-{
-	rndis_qc_cleanup();
-	kfree(f->config);
 }
 
 static int
@@ -2066,67 +1510,11 @@ rndis_function_bind_config(struct android_usb_function *f,
 					   rndis->manufacturer, rndis->dev);
 }
 
-static int rndis_qc_function_bind_config(struct android_usb_function *f,
-					struct usb_configuration *c)
-{
-	int ret;
-	char *trans;
-	struct rndis_function_config *rndis = f->config;
-
-	if (!rndis) {
-		pr_err("%s: rndis_pdata\n", __func__);
-		return -EINVAL;
-	}
-
-	pr_info("%s MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", __func__,
-		rndis->ethaddr[0], rndis->ethaddr[1], rndis->ethaddr[2],
-		rndis->ethaddr[3], rndis->ethaddr[4], rndis->ethaddr[5]);
-
-	pr_debug("%s: rndis_transport is %s", __func__, rndis_transports);
-
-	trans = strim(rndis_transports);
-	if (strcmp("BAM2BAM_IPA", trans)) {
-		ret = gether_qc_setup_name(c->cdev->gadget,
-					rndis->ethaddr, "rndis");
-		if (ret) {
-			pr_err("%s: gether_setup failed\n", __func__);
-			return ret;
-		}
-	}
-
-	if (rndis->wceis) {
-		/* "Wireless" RNDIS; auto-detected by Windows */
-		rndis_qc_iad_descriptor.bFunctionClass =
-						USB_CLASS_WIRELESS_CONTROLLER;
-		rndis_qc_iad_descriptor.bFunctionSubClass = 0x01;
-		rndis_qc_iad_descriptor.bFunctionProtocol = 0x03;
-		rndis_qc_control_intf.bInterfaceClass =
-						USB_CLASS_WIRELESS_CONTROLLER;
-		rndis_qc_control_intf.bInterfaceSubClass =	 0x01;
-		rndis_qc_control_intf.bInterfaceProtocol =	 0x03;
-	}
-
-	return rndis_qc_bind_config_vendor(c, rndis->ethaddr, rndis->vendorID,
-			rndis->manufacturer, rndis->max_pkt_per_xfer,
-			rndis->pkt_alignment_factor, trans);
-}
-
 static void rndis_function_unbind_config(struct android_usb_function *f,
 						struct usb_configuration *c)
 {
 	struct rndis_function_config *rndis = f->config;
 	gether_cleanup(rndis->dev);
-}
-
-static void rndis_qc_function_unbind_config(struct android_usb_function *f,
-						struct usb_configuration *c)
-{
-	char *trans = strim(rndis_transports);
-
-	if (strcmp("BAM2BAM_IPA", trans)) {
-		bam_data_flush_workqueue();
-		gether_qc_cleanup_name("rndis0");
-	}
 }
 
 static ssize_t rndis_manufacturer_show(struct device *dev,
@@ -2260,21 +1648,6 @@ static ssize_t rndis_max_pkt_per_xfer_store(struct device *dev,
 static DEVICE_ATTR(max_pkt_per_xfer, S_IRUGO | S_IWUSR,
 				   rndis_max_pkt_per_xfer_show,
 				   rndis_max_pkt_per_xfer_store);
-static ssize_t rndis_transports_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%s\n", rndis_transports);
-}
-
-static ssize_t rndis_transports_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size)
-{
-	strlcpy(rndis_transports, buf, sizeof(rndis_transports));
-	return size;
-}
-
-static DEVICE_ATTR(rndis_transports, S_IRUGO | S_IWUSR, rndis_transports_show,
-					       rndis_transports_store);
 
 static ssize_t rndis_rx_trigger_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
@@ -2325,7 +1698,6 @@ static struct device_attribute *rndis_function_attributes[] = {
 	&dev_attr_ethaddr,
 	&dev_attr_vendorID,
 	&dev_attr_max_pkt_per_xfer,
-	&dev_attr_rndis_transports,
 	&dev_attr_rx_trigger,
 	&dev_attr_pkt_alignment_factor,
 	NULL
@@ -2338,63 +1710,6 @@ static struct android_usb_function rndis_function = {
 	.bind_config	= rndis_function_bind_config,
 	.unbind_config	= rndis_function_unbind_config,
 	.attributes	= rndis_function_attributes,
-};
-
-static struct android_usb_function rndis_qc_function = {
-	.name		= "rndis_qc",
-	.init		= rndis_qc_function_init,
-	.cleanup	= rndis_qc_function_cleanup,
-	.bind_config	= rndis_qc_function_bind_config,
-	.unbind_config	= rndis_qc_function_unbind_config,
-	.attributes	= rndis_function_attributes,
-};
-
-static int ecm_function_bind_config(struct android_usb_function *f,
-					struct usb_configuration *c)
-{
-	int ret;
-	struct eth_dev *dev;
-	struct ecm_function_config *ecm = f->config;
-
-	if (!ecm) {
-		pr_err("%s: ecm_pdata\n", __func__);
-		return -EINVAL;
-	}
-
-	pr_info("%s MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", __func__,
-		ecm->ethaddr[0], ecm->ethaddr[1], ecm->ethaddr[2],
-		ecm->ethaddr[3], ecm->ethaddr[4], ecm->ethaddr[5]);
-
-	dev = gether_setup_name(c->cdev->gadget, ecm->ethaddr, "ecm");
-	if (IS_ERR(dev)) {
-		ret = PTR_ERR(dev);
-		pr_err("%s: gether_setup failed\n", __func__);
-		return ret;
-	}
-	ecm->dev = dev;
-
-	ret = ecm_bind_config(c, ecm->ethaddr, dev);
-	if (ret) {
-		pr_err("%s: ecm_bind_config failed\n", __func__);
-		gether_cleanup(dev);
-	}
-	return ret;
-}
-
-static void ecm_function_unbind_config(struct android_usb_function *f,
-						struct usb_configuration *c)
-{
-	struct ecm_function_config *ecm = f->config;
-	gether_cleanup(ecm->dev);
-}
-
-static struct android_usb_function ecm_function = {
-	.name		= "ecm",
-	.init		= ecm_function_init,
-	.cleanup	= ecm_function_cleanup,
-	.bind_config	= ecm_function_bind_config,
-	.unbind_config	= ecm_function_unbind_config,
-	.attributes	= ecm_function_attributes,
 };
 
 #define MAX_LUN_STR_LEN 25
@@ -2745,52 +2060,6 @@ static struct android_usb_function audio_source_function = {
 };
 #endif
 
-static int android_uasp_connect_cb(bool connect)
-{
-	/*
-	 * TODO
-	 * We may have to disable gadget till UASP configfs nodes
-	 * are configured which includes mapping LUN with the
-	 * backing file. It is a fundamental difference between
-	 * f_mass_storage and f_tcp. That means UASP can not be
-	 * in default composition.
-	 *
-	 * For now, assume that UASP configfs nodes are configured
-	 * before enabling android gadget. Or cable should be
-	 * reconnected after mapping the LUN.
-	 *
-	 * Also consider making UASP to respond to Host requests when
-	 * Lun is not mapped.
-	 */
-	pr_debug("UASP %s\n", connect ? "connect" : "disconnect");
-
-	return 0;
-}
-
-static int uasp_function_init(struct android_usb_function *f,
-					struct usb_composite_dev *cdev)
-{
-	return f_tcm_init(&android_uasp_connect_cb);
-}
-
-static void uasp_function_cleanup(struct android_usb_function *f)
-{
-	f_tcm_exit();
-}
-
-static int uasp_function_bind_config(struct android_usb_function *f,
-						struct usb_configuration *c)
-{
-	return tcm_bind_config(c);
-}
-
-static struct android_usb_function uasp_function = {
-	.name		= "uasp",
-	.init		= uasp_function_init,
-	.cleanup	= uasp_function_cleanup,
-	.bind_config	= uasp_function_bind_config,
-};
-
 #ifdef CONFIG_SND_RAWMIDI
 static int midi_function_init(struct android_usb_function *f,
 					struct usb_composite_dev *cdev)
@@ -2848,31 +2117,19 @@ static struct android_usb_function midi_function = {
 #endif
 static struct android_usb_function *supported_functions[] = {
 	&ffs_function,
-	&mbim_function,
-	&ecm_qc_function,
-#ifdef CONFIG_SND_PCM
-	&audio_function,
-#endif
-	&rmnet_smd_function,
 	&rmnet_function,
-	&gps_function,
 	&diag_function,
-	&qdss_function,
 	&serial_function,
-	&ccid_function,
 	&acm_function,
 	&mtp_function,
 	&ptp_function,
 	&rndis_function,
-	&rndis_qc_function,
-	&ecm_function,
 	&ncm_function,
 	&mass_storage_function,
 	&accessory_function,
 #ifdef CONFIG_SND_PCM
 	&audio_source_function,
 #endif
-	&uasp_function,
 	&charger_function,
 #ifdef CONFIG_SND_RAWMIDI
 	&midi_function,
@@ -3221,10 +2478,6 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 					ffs_enabled = 1;
 				continue;
 			}
-
-			if (!strcmp(name, "rndis") &&
-				!strcmp(strim(rndis_transports), "BAM2BAM_IPA"))
-				name = "rndis_qc";
 
 			err = android_enable_function(dev, conf, name);
 			if (err)

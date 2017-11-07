@@ -91,4 +91,14 @@ static inline void usb_qdss_close(struct usb_qdss_ch *ch) { }
 static inline void usb_qdss_free_req(struct usb_qdss_ch *ch) { }
 #endif
 
+#ifndef CONFIG_USB_F_QDSS
+struct usb_qdss_ch *usb_qdss_open(const char *name, void *priv,
+		void(*n)(void *, u32, struct qdss_request *, struct usb_qdss_ch *))
+{
+	return ERR_PTR(-ENODEV);
+}
+
+void usb_qdss_close(struct usb_qdss_ch *ch) {}
+#endif
+
 #endif

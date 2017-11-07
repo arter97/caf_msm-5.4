@@ -1,0 +1,63 @@
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ */
+
+&mdss_mdp {
+	spi_st7789v2_qvga_cmd: qcom,mdss_spi_st7789v2_qvga_cmd {
+		qcom,mdss-spi-panel-name = "st7789v2 qvga command mode spi panel";
+		qcom,mdss-spi-panel-destination = "display_1";
+		qcom,mdss-spi-panel-controller = <&mdss_spi>;
+		qcom,mdss-spi-panel-framerate = <27>;
+		qcom,mdss-spi-panel-width = <240>;
+		qcom,mdss-spi-panel-height = <320>;
+		qcom,mdss-spi-h-front-porch = <79>;
+		qcom,mdss-spi-h-back-porch = <59>;
+		qcom,mdss-spi-h-pulse-width = <60>;
+		qcom,mdss-spi-v-back-porch = <10>;
+		qcom,mdss-spi-v-front-porch = <7>;
+		qcom,mdss-spi-v-pulse-width = <2>;
+		qcom,mdss-spi-h-left-border = <0>;
+		qcom,mdss-spi-h-right-border = <0>;
+		qcom,mdss-spi-v-top-border = <0>;
+		qcom,mdss-spi-v-bottom-border = <0>;
+		qcom,mdss-spi-bpp = <16>;
+		qcom,mdss-spi-on-command = [
+				96 01 11
+				00 02 36 00
+				00 02 3A 05
+				00 06 B2 0C 0C 00 33 33
+				00 02 B7 35
+				00 02 BB 14
+				00 02 C0 2C
+				00 02 C2 01
+				00 02 C3 1A
+				00 02 04 20
+				00 02 C6 0F
+				00 03 D0 A4 A1
+				00 0F 0E D0 04 10 13 14 2A 41 54 4E 18 0C 07 1E 25
+				00 0F E1 D0 04 0F 13 15 2A 40 44 52 2D 1D 1E 20 23
+				00 01 35
+				00 01 29
+				00 01 2C];
+		qcom,mdss-spi-off-command = [20 01 28
+				20 01 10];
+		qcom,mdss-spi-bl-min-level = <1>;
+		qcom,mdss-spi-bl-max-level = <4095>;
+		qcom,mdss-spi-bl-pmic-control-type = "bl_ctrl_wled";
+		qcom,mdss-spi-reset-sequence = <1 20>, <0 1>, <1 20>;
+		qcom,esd-check-enabled;
+		qcom,mdss-spi-panel-status-check-mode = "reg_read";
+		qcom,mdss-spi-panel-status-reg = /bits/ 8 <0x0A>;
+		qcom,mdss-spi-panel-status-read-length = <1>;
+		qcom,mdss-spi-panel-max-error-count = <1>;
+		qcom,mdss-spi-panel-status-value = /bits/ 8 <0x9C>;
+	};
+};

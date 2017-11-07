@@ -225,7 +225,25 @@ int  rndis_signal_connect (int configNr);
 int  rndis_signal_disconnect (int configNr);
 int  rndis_state (int configNr);
 extern void rndis_set_host_mac (int configNr, const u8 *addr);
+#ifndef USB_ETH_RNDIS
 extern bool is_rndis_ipa_supported(void);
+#else
+static bool is_rndis_ipa_supported(void)
+{
+	return false;
+}
+
+static void u_bam_data_start_rndis_ipa(void)
+{
+	return;
+}
+
+static void u_bam_data_stop_rndis_ipa(void)
+{
+	return;
+}
+#endif
+
 int rndis_init(void);
 void rndis_exit (void);
 

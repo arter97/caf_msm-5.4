@@ -74,6 +74,8 @@ struct gether {
 
 };
 
+#ifdef USB_ETH_RNDIS
+
 #define	DEFAULT_FILTER	(USB_CDC_PACKET_TYPE_BROADCAST \
 			|USB_CDC_PACKET_TYPE_ALL_MULTICAST \
 			|USB_CDC_PACKET_TYPE_PROMISCUOUS \
@@ -110,6 +112,35 @@ void gether_disconnect(struct gether *);
 int gether_up(struct gether *);
 void gether_update_dl_max_pkts_per_xfer(struct gether *link, uint32_t n);
 void gether_update_dl_max_xfer_size(struct gether *link, uint32_t s);
+
+#else
+struct eth_dev *gether_setup_name(struct usb_gadget *g, u8 ethaddr[ETH_ALEN],
+		const char *netname)
+{
+	return 0;
+}
+
+struct net_device *gether_connect(struct gether *link)
+{
+	return 0;
+}
+
+void gether_update_dl_max_pkts_per_xfer(struct gether *link, uint32_t n)
+{
+}
+
+void gether_update_dl_max_xfer_size(struct gether *link, uint32_t s)
+{
+}
+
+void gether_cleanup(struct eth_dev *dev)
+{
+}
+
+void gether_disconnect(struct gether *link)
+{
+}
+#endif
 
 /* Some controllers can't support CDC Ethernet (ECM) ... */
 static inline bool can_support_ecm(struct usb_gadget *gadget)

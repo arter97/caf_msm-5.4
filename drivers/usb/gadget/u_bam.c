@@ -63,12 +63,12 @@ static const enum ipa_client_type usb_cons[BAM2BAM_N_PORTS] = {
 
 #define BAM_MUX_HDR				8
 
-#define BAM_MUX_RX_Q_SIZE			128
-#define BAM_MUX_TX_Q_SIZE			200
+#define BAM_MUX_RX_Q_SIZE			20
+#define BAM_MUX_TX_Q_SIZE			20
 #define BAM_MUX_RX_REQ_SIZE			2048   /* Must be 1KB aligned */
 
 #define DL_INTR_THRESHOLD			20
-#define BAM_PENDING_BYTES_LIMIT			(50 * BAM_MUX_RX_REQ_SIZE)
+#define BAM_PENDING_BYTES_LIMIT			(20 * BAM_MUX_RX_REQ_SIZE)
 #define BAM_PENDING_BYTES_FCTRL_EN_TSHOLD	(BAM_PENDING_BYTES_LIMIT / 3)
 
 static unsigned int bam_pending_pkts_limit = BAM_PENDING_PKTS_LIMIT;

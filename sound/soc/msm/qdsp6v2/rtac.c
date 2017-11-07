@@ -708,6 +708,16 @@ u32 send_adm_apr(void *buf, u32 opcode)
 	struct apr_hdr	adm_params;
 	pr_debug("%s\n", __func__);
 
+	if (rtac_adm_buffer == NULL) {
+		rtac_adm_buffer = kzalloc(
+		rtac_cal[ADM_RTAC_CAL].map_data.map_size, GFP_KERNEL);
+		if (rtac_adm_buffer == NULL) {
+			pr_err("%s: Could not allocate payload of size = %d\n",
+			__func__, rtac_cal[ADM_RTAC_CAL].map_data.map_size);
+			goto err;
+		}
+	}
+
 	if (rtac_cal[ADM_RTAC_CAL].map_data.ion_handle == NULL) {
 		result = rtac_allocate_cal_buffer(ADM_RTAC_CAL);
 		if (result < 0) {
@@ -913,7 +923,16 @@ u32 send_rtac_asm_apr(void *buf, u32 opcode)
 	u32	data_size = 0;
 	struct apr_hdr		asm_params;
 	pr_debug("%s\n", __func__);
-
+	if (rtac_asm_buffer == NULL) {
+		rtac_asm_buffer = kzalloc(
+			rtac_cal[ASM_RTAC_CAL].map_data.map_size, GFP_KERNEL);
+		if (rtac_asm_buffer == NULL) {
+			pr_err("%s: Could not allocate payload of size = %d\n",
+				__func__,
+				rtac_cal[ASM_RTAC_CAL].map_data.map_size);
+			goto done;
+		}
+	}
 	if (rtac_cal[ASM_RTAC_CAL].map_data.ion_handle == NULL) {
 		result = rtac_allocate_cal_buffer(ASM_RTAC_CAL);
 		if (result < 0) {
@@ -1141,6 +1160,16 @@ static u32 send_rtac_afe_apr(void *buf, uint32_t opcode)
 
 	pr_debug("%s\n", __func__);
 
+	if (rtac_afe_buffer == NULL) {
+		rtac_afe_buffer = kzalloc(
+		rtac_cal[AFE_RTAC_CAL].map_data.map_size, GFP_KERNEL);
+		if (rtac_afe_buffer == NULL) {
+			pr_err("%s: Could not allocate payload of size = %d\n",
+			__func__, rtac_cal[AFE_RTAC_CAL].map_data.map_size);
+			goto done;
+		}
+	}
+
 	if (rtac_cal[AFE_RTAC_CAL].map_data.ion_handle == NULL) {
 		result = rtac_allocate_cal_buffer(AFE_RTAC_CAL);
 		if (result < 0) {
@@ -1364,6 +1393,16 @@ u32 send_voice_apr(u32 mode, void *buf, u32 opcode)
 	u32	data_size = 0;
 	struct apr_hdr		voice_params;
 	pr_debug("%s\n", __func__);
+
+	if (rtac_voice_buffer == NULL) {
+		rtac_voice_buffer = kzalloc(
+		rtac_cal[VOICE_RTAC_CAL].map_data.map_size, GFP_KERNEL);
+		if (rtac_voice_buffer == NULL) {
+			pr_err("%s: Could not allocate payload of size = %d\n",
+			__func__, rtac_cal[VOICE_RTAC_CAL].map_data.map_size);
+			goto done;
+		}
+	}
 
 	if (rtac_cal[VOICE_RTAC_CAL].map_data.ion_handle == NULL) {
 		result = rtac_allocate_cal_buffer(VOICE_RTAC_CAL);
@@ -1739,14 +1778,6 @@ static int __init rtac_init(void)
 	mutex_init(&rtac_adm_mutex);
 	mutex_init(&rtac_adm_apr_mutex);
 
-	rtac_adm_buffer = kzalloc(
-		rtac_cal[ADM_RTAC_CAL].map_data.map_size, GFP_KERNEL);
-	if (rtac_adm_buffer == NULL) {
-		pr_err("%s: Could not allocate payload of size = %d\n",
-			__func__, rtac_cal[ADM_RTAC_CAL].map_data.map_size);
-		goto nomem;
-	}
-
 	/* ASM */
 	for (i = 0; i < SESSION_MAX+1; i++) {
 		rtac_asm_apr_data[i].apr_handle = NULL;
@@ -1755,30 +1786,11 @@ static int __init rtac_init(void)
 	}
 	mutex_init(&rtac_asm_apr_mutex);
 
-	rtac_asm_buffer = kzalloc(
-		rtac_cal[ASM_RTAC_CAL].map_data.map_size, GFP_KERNEL);
-	if (rtac_asm_buffer == NULL) {
-		pr_err("%s: Could not allocate payload of size = %d\n",
-			__func__, rtac_cal[ASM_RTAC_CAL].map_data.map_size);
-		kzfree(rtac_adm_buffer);
-		goto nomem;
-	}
-
 	/* AFE */
 	rtac_afe_apr_data.apr_handle = NULL;
 	atomic_set(&rtac_afe_apr_data.cmd_state, 0);
 	init_waitqueue_head(&rtac_afe_apr_data.cmd_wait);
 	mutex_init(&rtac_afe_apr_mutex);
-
-	rtac_afe_buffer = kzalloc(
-		rtac_cal[AFE_RTAC_CAL].map_data.map_size, GFP_KERNEL);
-	if (rtac_afe_buffer == NULL) {
-		pr_err("%s: Could not allocate payload of size = %d\n",
-			__func__, rtac_cal[AFE_RTAC_CAL].map_data.map_size);
-		kzfree(rtac_adm_buffer);
-		kzfree(rtac_asm_buffer);
-		goto nomem;
-	}
 
 	/* Voice */
 	memset(&rtac_voice_data, 0, sizeof(rtac_voice_data));
@@ -1790,20 +1802,7 @@ static int __init rtac_init(void)
 	mutex_init(&rtac_voice_mutex);
 	mutex_init(&rtac_voice_apr_mutex);
 
-	rtac_voice_buffer = kzalloc(
-		rtac_cal[VOICE_RTAC_CAL].map_data.map_size, GFP_KERNEL);
-	if (rtac_voice_buffer == NULL) {
-		pr_err("%s: Could not allocate payload of size = %d\n",
-			__func__, rtac_cal[VOICE_RTAC_CAL].map_data.map_size);
-		kzfree(rtac_adm_buffer);
-		kzfree(rtac_asm_buffer);
-		kzfree(rtac_afe_buffer);
-		goto nomem;
-	}
-
 	return misc_register(&rtac_misc);
-nomem:
-	return -ENOMEM;
 }
 
 module_init(rtac_init);
