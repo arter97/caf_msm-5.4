@@ -206,6 +206,7 @@ struct venus_hfi_device {
 	enum venus_hfi_state state;
 	struct hfi_packetization_ops *pkt_ops;
 	enum hfi_packetization_type packetization_type;
+	u32 efuse_monitor;
 	struct pm_qos_request qos;
 };
 

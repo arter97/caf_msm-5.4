@@ -19,6 +19,10 @@
 #define MAX_BUFFER_TYPES 32
 #define IDLE_TIME_WINDOW_SIZE 30
 
+struct version_table {
+	u32 version_mask;
+	u32 version_shift;
+};
 
 struct load_freq_table {
 	u32 load;
@@ -112,6 +116,7 @@ struct msm_vidc_platform_resources {
 	phys_addr_t register_base;
 	uint32_t register_size;
 	uint32_t irq;
+	struct version_table *pf_cap_tbl;
 	struct load_freq_table *load_freq_tbl;
 	uint32_t load_freq_tbl_size;
 	struct reg_set reg_set;

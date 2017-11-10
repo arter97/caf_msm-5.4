@@ -1014,6 +1014,9 @@ struct hal_fw_info {
 	int register_size;
 	int irq;
 };
+struct hal_efuse_info {
+	u32 efuse_monitor_value;
+};
 
 enum hal_flush {
 	HAL_FLUSH_INPUT,
@@ -1371,6 +1374,7 @@ struct hfi_device {
 	void (*unload_fw)(void *dev);
 	int (*resurrect_fw)(void *dev);
 	int (*get_fw_info)(void *dev, struct hal_fw_info *fw_info);
+	int (*get_efuse_info)(void *dev,struct hal_efuse_info *efuse_info);
 	int (*get_stride_scanline)(int color_fmt, int width,
 		int height,	int *stride, int *scanlines);
 	int (*session_clean)(void *sess);

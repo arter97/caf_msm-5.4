@@ -4268,7 +4268,17 @@ static int venus_hfi_get_fw_info(void *dev, struct hal_fw_info *fw_info)
 	fw_info->irq = device->hal_data->irq;
 	return rc;
 }
+static int venus_hfi_get_efuse_info(void *dev, struct hal_efuse_info *efuse_info)
+{
+	struct venus_hfi_device *device = dev;
 
+	if (!device) {
+		dprintk(VIDC_ERR, "%s - invalid param\n", __func__);
+		return -EINVAL;
+	}
+	efuse_info->efuse_monitor_value = device->efuse_monitor;
+	return 0;
+}
 int venus_hfi_get_stride_scanline(int color_fmt,
 	int width, int height, int *stride, int *scanlines) {
 	*stride = VENUS_Y_STRIDE(color_fmt, width);
@@ -4312,6 +4322,8 @@ static int venus_hfi_initialize_packetization(struct venus_hfi_device *device)
 	rc = venus_hfi_read_register(device, VIDC_WRAPPER_HW_VERSION);
 	major_version = (rc & VIDC_WRAPPER_HW_VERSION_MAJOR_VERSION_MASK) >>
 			VIDC_WRAPPER_HW_VERSION_MAJOR_VERSION_SHIFT;
+
+	device->efuse_monitor = venus_hfi_read_register(device, VIDC_WRAPEER_EFUSE_VERSION);
 
 	venus_hfi_disable_unprepare_clks(device);
 
@@ -4497,6 +4509,7 @@ static void venus_init_hfi_callbacks(struct hfi_device *hdev)
 	hdev->unload_fw = venus_hfi_unload_fw;
 	hdev->resurrect_fw = venus_hfi_resurrect_fw;
 	hdev->get_fw_info = venus_hfi_get_fw_info;
+	hdev->get_efuse_info = venus_hfi_get_efuse_info;
 	hdev->get_stride_scanline = venus_hfi_get_stride_scanline;
 	hdev->get_core_capabilities = venus_hfi_get_core_capabilities;
 	hdev->power_enable = venus_hfi_power_enable;
