@@ -1189,6 +1189,11 @@ int ep_pcie_core_enable_endpoint(enum ep_pcie_options opt)
 			"PCIe V%d: PCIe link is up and BME is enabled after %d checkings (%d ms).\n",
 			dev->rev, retries,
 			BME_TIMEOUT_US_MIN * retries / 1000);
+		/* expose BAR to user space to identify modem */
+		ep_pcie_bar0_address =
+			readl_relaxed(dev->dm_core + PCIE20_BAR0);
+		EP_PCIE_DBG(dev, "PCIe V%d: BAR0 address 0x%x \n",
+				dev->rev,ep_pcie_bar0_address);
 
 		if (dev->gpio[EP_PCIE_GPIO_MDM2AP].num) {
 			/* assert MDM2AP Status GPIO */
@@ -1206,8 +1211,6 @@ int ep_pcie_core_enable_endpoint(enum ep_pcie_options opt)
 				dev->rev,
 				gpio_get_value(
 					dev->gpio[EP_PCIE_GPIO_MDM2AP].num));
-			/* expose BAR to user space to identify modem */
-			ep_pcie_bar0_address = readl_relaxed(dev->dm_core + PCIE20_BAR0);
 		}
 	} else {
 		EP_PCIE_ERR(dev,
