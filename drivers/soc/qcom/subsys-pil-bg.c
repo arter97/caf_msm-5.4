@@ -36,6 +36,7 @@
 #define desc_to_data(d)	container_of(d, struct pil_bg_data, desc)
 #define subsys_to_data(d) container_of(d, struct pil_bg_data, subsys_desc)
 #define BG_RAMDUMP_SZ	0x00102000
+#define BG_CRASH_IN_TWM	2
 /**
  * struct pil_bg_data
  * @qseecom_handle: handle of TZ app
@@ -264,6 +265,7 @@ static int bg_powerup(const struct subsys_desc *subsys)
 		return ret;
 	}
 	enable_irq(bg_data->status_irq);
+	enable_irq(bg_data->errfatal_irq);
 	ret = wait_for_err_ready(bg_data);
 	if (ret) {
 		dev_err(bg_data->desc.dev,
@@ -303,7 +305,8 @@ static int bg_shutdown(const struct subsys_desc *subsys, bool force_stop)
  * Return: 0 on success. Error code on failure.
  */
 static int bg_auth_metadata(struct pil_desc *pil,
-	const u8 *metadata, size_t size)
+	const u8 *metadata, size_t size,
+	phys_addr_t addr, size_t sz)
 {
 	struct pil_bg_data *bg_data = desc_to_data(pil);
 	struct tzapp_bg_req bg_tz_req;
@@ -375,6 +378,12 @@ static int bg_auth_and_xfer(struct pil_desc *pil)
 	bg_tz_req.size_fw = bg_data->size_fw;
 
 	ret = bgpil_tzapp_comm(bg_data, &bg_tz_req);
+	if (bg_data->cmd_status == BG_CRASH_IN_TWM) {
+		/* Do ramdump and resend boot cmd */
+		bg_data->subsys_desc.ramdump(true, &bg_data->subsys_desc);
+		bg_tz_req.tzapp_bg_cmd = BGPIL_DLOAD_CONT;
+		ret = bgpil_tzapp_comm(bg_data, &bg_tz_req);
+	}
 	if (ret || bg_data->cmd_status) {
 		dev_err(pil->dev,
 			"%s: BGPIL_IMAGE_LOAD qseecom call failed\n",
