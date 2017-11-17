@@ -57,6 +57,7 @@ dtb-$(CONFIG_ARCH_MSM8909) += msm8909-sim.dtb \
 	msm8905-pm8909-512mb-mtp.dtb \
 	msm8905-pm8909-256mb-mtp.dtb \
 	msm8905-pm8909-512mb-cdp.dtb \
+	msm8905-pm8909-512mb-cdp_qseev4.dtb \
 	msm8905-pm8909-256mb-cdp.dtb \
 	msm8905-pm8909-512mb-rcm.dtb \
 	msm8905-pm8909-256mb-rcm.dtb \
