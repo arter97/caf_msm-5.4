@@ -1661,8 +1661,10 @@ static int diag_ioctl_lsm_deinit(void)
 	if (i == driver->num_clients)
 		return -EINVAL;
 
-	driver->data_ready[i] |= DEINIT_TYPE;
-	atomic_inc(&driver->data_ready_notif[i]);
+	if (!(driver->data_ready[i] & DEINIT_TYPE)) {
+		driver->data_ready[i] |= DEINIT_TYPE;
+		atomic_inc(&driver->data_ready_notif[i]);
+	}
 	wake_up_interruptible(&driver->wait_q);
 
 	return 1;
