@@ -45,7 +45,59 @@ static size_t get_u32_array_num_elements(struct platform_device *pdev,
 fail_read:
 	return 0;
 }
+/**
+ * msm_vidc_load_u32_table() - load dtsi table entries
+ * @pdev: A pointer to the platform device.
+ * @of_node:      A pointer to the device node.
+ * @table_name:   A pointer to the dtsi table entry name.
+ * @struct_size:  The size of the structure which is nothing but
+ *                a single entry in the dtsi table.
+ * @table:        A pointer to the table pointer which needs to be
+ *                filled by the dtsi table entries.
+ * @num_elements: Number of elements pointer which needs to be filled
+ *                with the number of elements in the table.
+ *
+ * This is a generic implementation to load single or multiple array
+ * table from dtsi. The array elements should be of size equal to u32.
+ *
+ * Return:        Return '0' for success else appropriate error value.
+ */
+int msm_vidc_load_u32_table(struct platform_device *pdev,
+				struct device_node *of_node, char *table_name, int struct_size,
+				u32 **table, u32 *num_elements)
+{
+	int rc = 0, num_elemts = 0;
+	u32 *ptbl = NULL;
 
+	if (!of_find_property(of_node, table_name, NULL)) {
+		dprintk(VIDC_DBG, "%s not found\n", table_name);
+		return 0;
+	}
+	num_elemts = get_u32_array_num_elements(pdev, table_name);
+	if (!num_elemts) {
+		dprintk(VIDC_ERR, "no elements in %s\n", table_name);
+		return 0;
+	}
+	num_elemts /= struct_size / sizeof(u32);
+
+	ptbl = devm_kzalloc(&pdev->dev, num_elemts * struct_size, GFP_KERNEL);
+	if (!ptbl) {
+		dprintk(VIDC_ERR, "Failed to alloc table %s\n", table_name);
+		return -ENOMEM;
+	}
+
+	if (of_property_read_u32_array(of_node, table_name, ptbl,
+						num_elemts * struct_size / sizeof(u32))) {
+		dprintk(VIDC_ERR, "Failed to read %s\n", table_name);
+		return -EINVAL;
+	}
+	*table = ptbl;
+
+	if (num_elements)
+		*num_elements = num_elemts;
+
+	return rc;
+}
 int read_hfi_type(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -71,7 +123,11 @@ int read_hfi_type(struct platform_device *pdev)
 err_hfi_read:
 	return rc;
 }
-
+static inline void msm_vidc_free_capability_version_table(
+		struct msm_vidc_platform_resources *res)
+{
+	res->pf_cap_tbl = NULL;
+}
 static inline void msm_vidc_free_freq_table(
 		struct msm_vidc_platform_resources *res)
 {
@@ -135,6 +191,7 @@ void msm_vidc_free_platform_resources(
 	msm_vidc_free_regulator_table(res);
 	msm_vidc_free_freq_table(res);
 	msm_vidc_free_reg_table(res);
+	msm_vidc_free_capability_version_table(res);
 	msm_vidc_free_qdss_addr_table(res);
 	msm_vidc_free_bus_vectors(res);
 	msm_vidc_free_iommu_groups(res);
@@ -277,6 +334,48 @@ static int msm_vidc_load_freq_table(struct msm_vidc_platform_resources *res)
 
 	res->load_freq_tbl_size = num_elements;
 	return rc;
+}
+int msm_vidc_update_load(struct msm_vidc_platform_resources *res)
+{
+	int rc = 0;
+	int max_load_8905 = 0;
+	struct platform_device *pdev = res->pdev;
+
+	rc = of_property_read_u32(pdev->dev.of_node, "qcom,max-hw-load-8905",
+						&max_load_8905);
+	if (rc) {
+		dprintk(VIDC_DBG, "qcom,max-hw-load-8905 not found\n");
+		return rc;
+	}
+	if (max_load_8905)
+		res->max_load = max_load_8905;
+
+	return 0;
+
+}
+static int msm_vidc_load_capability_version_table(
+                 struct msm_vidc_platform_resources *res)
+{
+	int rc = 0;
+	struct platform_device *pdev = res->pdev;
+
+	if (!of_find_property(pdev->dev.of_node,
+			"qcom,capability-version", NULL)) {
+		dprintk(VIDC_DBG, "qcom,capability-version not found\n");
+		return 0;
+	}
+	rc = msm_vidc_load_u32_table(pdev, pdev->dev.of_node,
+				"qcom,capability-version",
+				sizeof(*res->pf_cap_tbl),
+				(u32 **)&res->pf_cap_tbl,
+				NULL);
+	if (rc) {
+		dprintk(VIDC_ERR,
+				"%s: failed to read platform version table\n",
+				__func__);
+		return rc;
+	}
+	return 0;
 }
 
 static int msm_vidc_load_bus_vectors(struct msm_vidc_platform_resources *res)
@@ -692,6 +791,11 @@ int read_platform_resources_from_dt(
 		dprintk(VIDC_ERR, "Failed to load freq table: %d\n", rc);
 		goto err_load_freq_table;
 	}
+
+	rc = msm_vidc_load_capability_version_table(res);
+	if (rc)
+		dprintk(VIDC_ERR,
+				"Failed to load pf capability table: %d\n", rc);
 
 	rc = msm_vidc_load_qdss_table(res);
 	if (rc)

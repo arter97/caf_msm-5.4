@@ -14,6 +14,8 @@ Required properties:
 Optional properties:
 - reg : offset and length of the register set for the device.
 - interrupts : should contain the vidc interrupt.
+- qcom,capability-version : mask and shift of the capability version bits
+                            in efuse register.
 - qcom,load-freq-tbl : load (in macroblocks/sec) and corresponding vcodec
   clock required along with codec's config (same as qcom,bus-configs mentioned below)
   for optimal performance in descending order.

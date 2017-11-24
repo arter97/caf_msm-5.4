@@ -22,6 +22,7 @@
 #include <linux/slab.h>
 #include <linux/qcom_iommu.h>
 #include <linux/msm_iommu_domains.h>
+#include <linux/io.h>
 #include <media/msm_vidc.h>
 #include "msm_vidc_common.h"
 #include "msm_vidc_debug.h"
@@ -424,9 +425,28 @@ static ssize_t store_thermal_level(struct device *dev,
 static DEVICE_ATTR(thermal_level, S_IRUGO | S_IWUSR, show_thermal_level,
 		store_thermal_level);
 
+static ssize_t show_capability_version(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d",
+				vidc_driver->capability_version);
+}
+
+static ssize_t store_capability_version(struct device *dev,
+				struct device_attribute *attr, const char *buf,
+				size_t count)
+{
+	dprintk(VIDC_WARN, "store capability version is not allowed\n");
+	return count;
+}
+
+static DEVICE_ATTR(capability_version, S_IRUGO, show_capability_version,
+                 store_capability_version);
+
 static struct attribute *msm_vidc_core_attrs[] = {
 		&dev_attr_pwr_collapse_delay.attr,
 		&dev_attr_thermal_level.attr,
+		&dev_attr_capability_version.attr,
 		NULL
 };
 
@@ -488,12 +508,29 @@ static void load_firmware(struct msm_vidc_core *core)
 	schedule_delayed_work(&handler->work,
 			msecs_to_jiffies(EARLY_FIRMWARE_LOAD_DELAY));
 }
+static u32 msm_vidc_read_efuse_version(struct hfi_device * hdev,
+					struct version_table *table,
+					struct hal_efuse_info *efuse_info)
+{
+	u32 ret = 0;
 
+	ret = call_hfi_op(hdev, get_efuse_info,
+		        hdev->hfi_device_data, efuse_info);
+	if (ret) {
+		dprintk(VIDC_WARN, "Failed to read efuse info\n");
+		goto exit;
+	}
+	return (efuse_info->efuse_monitor_value & table->version_mask) >>
+			table->version_shift;
+exit:
+	return ret;
+}
 static int msm_vidc_probe(struct platform_device *pdev)
 {
 	int rc = 0;
 	struct msm_vidc_core *core;
 	struct device *dev;
+	struct hal_efuse_info efuse_info;
 	int nr = BASE_DEVICE_NUMBER;
 
 	core = kzalloc(sizeof(*core), GFP_KERNEL);
@@ -599,6 +636,16 @@ static int msm_vidc_probe(struct platform_device *pdev)
 			dprintk(VIDC_ERR,
 				"Failed to init non-secure PIL %d\n", rc);
 			goto err_non_sec_pil_init;
+		}
+	}
+	vidc_driver->capability_version =
+			msm_vidc_read_efuse_version((struct hfi_device *)core->device,
+				core->resources.pf_cap_tbl,&efuse_info);
+
+	if (vidc_driver->capability_version) {
+		rc = msm_vidc_update_load(&core->resources);
+		if (rc) {
+			dprintk(VIDC_ERR,"Failed to update max-load \n");
 		}
 	}
 
