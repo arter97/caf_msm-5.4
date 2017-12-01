@@ -56,6 +56,7 @@
 				up_read(&current->mm->mmap_sem);\
 		} while (0)
 
+#define FASTRPC_CTX_MAGIC (0xbeeddeed)
 
 #define IS_CACHE_ALIGNED(x) (((x) & ((L1_CACHE_BYTES)-1)) == 0)
 
@@ -153,6 +154,9 @@ struct smq_invoke_ctx {
 	int nbufs;
 	bool smmu;
 	uint32_t sc;
+	struct overlap *overs;
+	struct overlap **overps;
+	unsigned int magic;
 };
 
 struct smq_context_list {
@@ -396,6 +400,8 @@ static int context_alloc(struct fastrpc_apps *me, uint32_t kernel,
 	ctx->tgid = current->tgid;
 	ctx->apps = me;
 	init_completion(&ctx->work);
+	ctx->magic = FASTRPC_CTX_MAGIC;
+
 	spin_lock(&clst->hlock);
 	hlist_add_head(&ctx->hn, &clst->pending);
 	spin_unlock(&clst->hlock);
@@ -453,6 +459,10 @@ static void context_free(struct smq_invoke_ctx *ctx, bool lock)
 	hlist_del(&ctx->hn);
 	if (lock)
 		spin_unlock(&clst->hlock);
+	}
+	kfree(ctx->overps);
+	kfree(ctx->overs);
+	ctx->magic = 0;
 	kfree(ctx);
 }
 
