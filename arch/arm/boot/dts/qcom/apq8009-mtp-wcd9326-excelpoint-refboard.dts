@@ -59,6 +59,7 @@
 };
 
 &soc {
+/*
 	sound-9335 {
 		qcom,audio-routing =
 			"AIF4 VI", "MCLK",
@@ -77,10 +78,19 @@
 			"SpkrLeft IN", "SPK1 OUT",
 			"SpkrRight IN", "SPK2 OUT";
 	};
-
+*/
 	i2c@78b8000 {
 		wcd9xxx_codec@d {
-			qcom,cdc-reset-gpio = <&msm_gpio 27 0>;
+			qcom,cdc-reset-gpio = <&msm_gpio 23 0>;
+
+
+			cdc-vdd-buck-supply = <&wcd_vdd_buck_1p8>;
+			qcom,cdc-vdd-buck-voltage = <0 0>;
+			qcom,cdc-vdd-buck-current = <250000>;
+
+			cdc-buck-sido-supply = <&wcd_vdd_buck_1p8>;
+			qcom,cdc-buck-sido-voltage = <0 0>;
+			qcom,cdc-buck-sido-current = <250000>;
 		};
 	};
 
@@ -88,6 +98,32 @@
 		synaptics@20 {
 			status = "disabled";
 		};
+	};
+
+
+	vph_pwr_vreg: vph_pwr_vreg {
+		compatible = "regulator-fixed";
+		regulator-name = "vph_pwr";
+		status = "ok";
+		regulator-always-on;
+		enable-active-high;
+	};
+	sbc_vreg_1p8: sbc_vreg_1p8 {
+		compatible = "regulator-fixed";
+		regulator-name = "sbc_vreg_1p8";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		status = "ok";
+		enable-active-high;
+		vin-supply = <&pm8916_s4>;
+	};
+
+	wcd_vdd_buck_1p8: wcd_vdd_buck_1p8 {
+		compatible = "regulator-fixed";
+		regulator-name = "wcd_vdd_buck_1p8";
+		enable-active-high;
+		gpio = <&pm8916_gpios 4 0>;
+		vin-supply = <&sbc_vreg_1p8>;
 	};
 
 	blsp1_uart2_hs: uart@78b0000 {
@@ -266,6 +302,17 @@
 
 &mdss_dsi0 {
 	status = "disabled";
+};
+
+&pm8916_gpios {
+	gpio@c300 {
+		qcom,mode = <1>;        /* DIGITAL OUT */
+		qcom,pull = <1>;        /* No Pull */
+		qcom,vin-sel = <2>;     /* 1.8 */
+		qcom,src-sel = <0>;     /* CONSTANT */
+		qcom,master-en = <1>;   /* ENABLE GPIO */
+		status = "okay";
+	};
 };
 
 &i2c_1 {
