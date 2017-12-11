@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -35,7 +35,7 @@
 
 struct compat_remote_buf {
 	compat_uptr_t pv;	/* buffer pointer */
-	compat_ssize_t len;	/* length of buffer */
+	compat_size_t len;	/* length of buffer */
 };
 
 union compat_remote_arg {
@@ -58,13 +58,13 @@ struct compat_fastrpc_ioctl_mmap {
 	compat_int_t fd;	/* ion fd */
 	compat_uint_t flags;	/* flags for dsp to map with */
 	compat_uptr_t vaddrin;	/* optional virtual address */
-	compat_ssize_t size;	/* size */
+	compat_size_t size;	/* size */
 	compat_uptr_t vaddrout;	/* dsps virtual address */
 };
 
 struct compat_fastrpc_ioctl_munmap {
 	compat_uptr_t vaddrout;	/* address to unmap */
-	compat_ssize_t size;	/* size */
+	compat_size_t size;	/* size */
 };
 
 struct compat_fastrpc_ioctl_init {
@@ -95,7 +95,7 @@ static int compat_get_fastrpc_ioctl_invoke(
 			unsigned int cmd)
 {
 	compat_uint_t u, sc;
-	compat_ssize_t s;
+	compat_size_t s;
 	compat_uptr_t p;
 	struct fastrpc_ioctl_invoke_fd *inv;
 	union compat_remote_arg *pra32;
@@ -178,7 +178,7 @@ static int compat_get_fastrpc_ioctl_mmap(
 {
 	compat_uint_t u;
 	compat_int_t i;
-	compat_ssize_t s;
+	compat_size_t s;
 	compat_uptr_t p;
 	int err;
 
@@ -212,7 +212,7 @@ static int compat_get_fastrpc_ioctl_munmap(
 			struct fastrpc_ioctl_munmap __user *unmap)
 {
 	compat_uptr_t p;
-	compat_ssize_t s;
+	compat_size_t s;
 	int err;
 
 	err = get_user(p, &unmap32->vaddrout);
