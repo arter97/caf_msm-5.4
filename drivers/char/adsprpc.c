@@ -838,13 +838,22 @@ static int get_args(uint32_t kernel, struct smq_invoke_ctx *ctx,
 	/* calculate len requreed for copying */
 	for (oix = 0; oix < inbufs + outbufs; ++oix) {
 		int i = ctx->overps[oix]->raix;
+		uintptr_t mstart, mend;
 		if (!pra[i].buf.len)
 			continue;
 		if (list[i].num)
 			continue;
 		if (ctx->overps[oix]->offset == 0)
 			copylen = ALIGN(copylen, BALIGN);
-		copylen += ctx->overps[oix]->mend - ctx->overps[oix]->mstart;
+		mstart = ctx->overps[oix]->mstart;
+		mend = ctx->overps[oix]->mend;
+		VERIFY(err, (mend - mstart) <= LONG_MAX);
+		if (err)
+			goto bail;
+		copylen += mend - mstart;
+		VERIFY(err, copylen >= 0);
+		if (err)
+			goto bail;
 	}
 
 	/* alocate new buffer */
@@ -870,7 +879,8 @@ static int get_args(uint32_t kernel, struct smq_invoke_ctx *ctx,
 	/* copy non ion buffers */
 	for (oix = 0; oix < inbufs + outbufs; ++oix) {
 		int i = ctx->overps[oix]->raix;
-		int mlen = ctx->overps[oix]->mend - ctx->overps[oix]->mstart;
+		ssize_t mlen = ctx->overps[oix]->mend -
+				ctx->overps[oix]->mstart;
 		if (!pra[i].buf.len)
 			continue;
 		if (list[i].num)
