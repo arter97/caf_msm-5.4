@@ -625,6 +625,7 @@ static void mbim_reset_function_queue(struct f_mbim *dev)
 
 	pr_debug("Queue empty packet for QBI\n");
 
+	atomic_set(&dev->not_port.notify_count, 0);
 	spin_lock(&dev->lock);
 
 	cpkt = mbim_alloc_ctrl_pkt(0, GFP_ATOMIC);
@@ -646,6 +647,14 @@ static void fmbim_reset_cmd_complete(struct usb_ep *ep, struct usb_request *req)
 	struct f_mbim		*dev = req->context;
 
 	mbim_reset_function_queue(dev);
+}
+
+static void fmbim_cmd_complete_noop(struct usb_ep *ep, struct usb_request *req)
+{
+	/*
+	 * As part of dequeuing notification request the queues are reset
+	 * so there is no need for a reset here again.
+	 */
 }
 
 static void mbim_clear_queues(struct f_mbim *mbim)
@@ -751,11 +760,16 @@ static void mbim_notify_complete(struct usb_ep *ep, struct usb_request *req)
 			atomic_read(&mbim->not_port.notify_count));
 		break;
 
-	case -ECONNRESET:
 	case -ESHUTDOWN:
 		/* connection gone */
 		mbim->not_port.notify_state = MBIM_NOTIFY_NONE;
-		atomic_set(&mbim->not_port.notify_count, 0);
+		/*
+		 * -ECONNRESET is returned when the notification request
+		 * is dequeued. If the notify_state is set to
+		 * MBIM_NOTIFY_NONE on dequeue_request, no new
+		 * notifications will not be queued as part of mbim_write.
+		 */
+	case -ECONNRESET:
 		pr_info("ESHUTDOWN/ECONNRESET, connection gone\n");
 		spin_unlock(&mbim->lock);
 		mbim_clear_queues(mbim);
@@ -872,7 +886,7 @@ mbim_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	struct usb_composite_dev	*cdev = mbim->cdev;
 	struct usb_request		*req = cdev->req;
 	struct ctrl_pkt		*cpkt = NULL;
-	int	value = -EOPNOTSUPP;
+	int	status, value = -EOPNOTSUPP;
 	u16	w_index = le16_to_cpu(ctrl->wIndex);
 	u16	w_value = le16_to_cpu(ctrl->wValue);
 	u16	w_length = le16_to_cpu(ctrl->wLength);
@@ -893,7 +907,13 @@ mbim_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 
 		pr_debug("USB_CDC_RESET_FUNCTION\n");
 		value = 0;
-		req->complete = fmbim_reset_cmd_complete;
+		status = usb_ep_dequeue(mbim->not_port.notify,
+				mbim->not_port.notify_req);
+		if (status < 0)
+			req->complete = fmbim_reset_cmd_complete;
+		else
+			req->complete = fmbim_cmd_complete_noop;
+
 		req->context = mbim;
 		break;
 
