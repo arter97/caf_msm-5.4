@@ -793,9 +793,9 @@ static int get_args(uint32_t kernel, struct smq_invoke_ctx *ctx,
 	void *args;
 	remote_arg_t *pra = ctx->pra;
 	remote_arg_t *rpra = ctx->rpra;
-	ssize_t rlen, used, size;
+	ssize_t rlen, used, size, copylen = 0;
 	uint32_t sc = ctx->sc, start;
-	int i, inh, bufs = 0, err = 0, oix, copylen = 0;
+	int i, inh, bufs = 0, err = 0, oix;
 	int inbufs = REMOTE_SCALARS_INBUFS(sc);
 	int outbufs = REMOTE_SCALARS_OUTBUFS(sc);
 	int cid = ctx->fdata->cid;
