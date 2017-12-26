@@ -3055,8 +3055,6 @@ static int emac_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_clk_init;
 
-	hw_ver = emac_reg_r32(hw, EMAC, EMAC_CORE_HW_VERSION);
-
 	netdev->watchdog_timeo = EMAC_WATCHDOG_TIME;
 	netdev->irq = adpt->irq[0].irq;
 
@@ -3076,9 +3074,6 @@ static int emac_probe(struct platform_device *pdev)
 
 	emac_set_ethtool_ops(netdev);
 
-	/* init adapter */
-	emac_init_adapter(adpt);
-
 	/* init internal phy */
 	ret = emac_phy_config_internal(pdev, adpt);
 	if (ret)
@@ -3088,6 +3083,11 @@ static int emac_probe(struct platform_device *pdev)
 	ret = emac_clks_phase2_init(adpt);
 	if (ret)
 		goto err_clk_init;
+
+	hw_ver = emac_reg_r32(hw, EMAC, EMAC_CORE_HW_VERSION);
+
+	/* init adapter */
+	emac_init_adapter(adpt);
 
 	/* Configure MDIO lines */
 	ret = adpt->gpio_on(adpt, true, true);
