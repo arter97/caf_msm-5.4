@@ -2184,6 +2184,12 @@ void mdp3_release_splash_memory(struct msm_fb_data_type *mfd)
 {
 	/* Give back the reserved memory to the system */
 	if (mdp3_res->splash_mem_addr) {
+		if ((mfd->panel.type == MIPI_VIDEO_PANEL) &&
+				(mdp3_res->cont_splash_en)) {
+			mdss_smmu_unmap(MDSS_IOMMU_DOMAIN_UNSECURE,
+				mdp3_res->splash_mem_addr,
+				mdp3_res->splash_mem_size);
+		}
 		mdp3_free(mfd);
 		pr_debug("mdp3_release_splash_memory\n");
 		memblock_free(mdp3_res->splash_mem_addr,
@@ -2276,7 +2282,8 @@ static int mdp3_continuous_splash_on(struct mdss_panel_data *pdata)
 		pr_err("invalid bus handle %d\n", bus_handle->handle);
 		return -EINVAL;
 	}
-	mdp3_calc_dma_res(panel_info, &mdp_clk_rate, &ab, &ib, panel_info->bpp);
+	mdp3_calc_dma_res(panel_info, &mdp_clk_rate, &ab,
+					&ib, MAX_BPP_SUPPORTED);
 
 	mdp3_clk_set_rate(MDP3_CLK_VSYNC, MDP_VSYNC_CLK_RATE,
 			MDP3_CLIENT_DMA_P);
