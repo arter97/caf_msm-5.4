@@ -131,6 +131,7 @@ struct rmnet_ipa3_context {
 	u32 apps_to_ipa3_hdl;
 	u32 ipa3_to_apps_hdl;
 	struct mutex ipa_to_apps_pipe_handle_guard;
+	struct mutex add_mux_channel_lock;
 };
 
 static struct rmnet_ipa3_context *rmnet_ipa3_ctx;
@@ -411,6 +412,8 @@ int ipa3_copy_ul_filter_rule_to_ipa(struct ipa_install_fltr_rule_req_msg_v01
 {
 	int i, j;
 
+	/* prevent multi-threads accessing rmnet_ipa3_ctx->num_q6_rules */
+	mutex_lock(&rmnet_ipa3_ctx->add_mux_channel_lock);
 	if (rule_req->filter_spec_ex_list_valid == true) {
 		rmnet_ipa3_ctx->num_q6_rules =
 			rule_req->filter_spec_ex_list_len;
@@ -419,6 +422,8 @@ int ipa3_copy_ul_filter_rule_to_ipa(struct ipa_install_fltr_rule_req_msg_v01
 	} else {
 		rmnet_ipa3_ctx->num_q6_rules = 0;
 		IPAWANERR("got no UL rules from modem\n");
+		mutex_unlock(&rmnet_ipa3_ctx->
+					add_mux_channel_lock);
 		return -EINVAL;
 	}
 
@@ -621,9 +626,13 @@ failure:
 	rmnet_ipa3_ctx->num_q6_rules = 0;
 	memset(ipa3_qmi_ctx->q6_ul_filter_rule, 0,
 		sizeof(ipa3_qmi_ctx->q6_ul_filter_rule));
+	mutex_unlock(&rmnet_ipa3_ctx->
+		add_mux_channel_lock);
 	return -EINVAL;
 
 success:
+	mutex_unlock(&rmnet_ipa3_ctx->
+		add_mux_channel_lock);
 	return 0;
 }
 
@@ -1423,12 +1432,17 @@ static int ipa3_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 					rmnet_mux_val.mux_id);
 				return rc;
 			}
+			mutex_lock(&rmnet_ipa3_ctx->add_mux_channel_lock);
 			if (rmnet_ipa3_ctx->rmnet_index
 				>= MAX_NUM_OF_MUX_CHANNEL) {
 				IPAWANERR("Exceed mux_channel limit(%d)\n",
 				rmnet_ipa3_ctx->rmnet_index);
+				mutex_unlock(&rmnet_ipa3_ctx->
+					add_mux_channel_lock);
 				return -EFAULT;
 			}
+			extend_ioctl_data.u.rmnet_mux_val.vchannel_name
+				[IFNAMSIZ-1] = '\0';
 			IPAWANDBG("ADD_MUX_CHANNEL(%d, name: %s)\n",
 			extend_ioctl_data.u.rmnet_mux_val.mux_id,
 			extend_ioctl_data.u.rmnet_mux_val.vchannel_name);
@@ -1460,6 +1474,8 @@ static int ipa3_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 					IPAWANERR("device %s reg IPA failed\n",
 						extend_ioctl_data.u.
 						rmnet_mux_val.vchannel_name);
+					mutex_unlock(&rmnet_ipa3_ctx->
+						add_mux_channel_lock);
 					return -ENODEV;
 				}
 				mux_channel[rmnet_index].mux_channel_set = true;
@@ -1472,6 +1488,7 @@ static int ipa3_wwan_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 				mux_channel[rmnet_index].ul_flt_reg = false;
 			}
 			rmnet_ipa3_ctx->rmnet_index++;
+			mutex_unlock(&rmnet_ipa3_ctx->add_mux_channel_lock);
 			break;
 		case RMNET_IOCTL_SET_EGRESS_DATA_FORMAT:
 			IPAWANDBG("get RMNET_IOCTL_SET_EGRESS_DATA_FORMAT\n");
@@ -2562,6 +2579,9 @@ int rmnet_ipa3_set_data_quota(struct wan_ioctl_set_data_quota *data)
 	int index;
 	struct ipa_set_data_usage_quota_req_msg_v01 req;
 
+	/* prevent string buffer overflows */
+	data->interface_name[IFNAMSIZ-1] = '\0';
+
 	index = find_vchannel_name_index(data->interface_name);
 	IPAWANERR("iface name %s, quota %lu\n",
 		  data->interface_name,
@@ -2655,6 +2675,11 @@ int rmnet_ipa3_query_tethering_stats(struct wan_ioctl_query_tether_stats *data,
 	struct ipa_get_data_stats_req_msg_v01 *req;
 	struct ipa_get_data_stats_resp_msg_v01 *resp;
 	int pipe_len, rc;
+
+	if (data != NULL) {
+		data->upstreamIface[IFNAMSIZ-1] = '\0';
+		data->tetherIface[IFNAMSIZ-1] = '\0';
+	}
 
 	req = kzalloc(sizeof(struct ipa_get_data_stats_req_msg_v01),
 			GFP_KERNEL);
@@ -2892,6 +2917,7 @@ static int __init ipa3_wwan_init(void)
 	atomic_set(&rmnet_ipa3_ctx->is_ssr, 0);
 
 	mutex_init(&rmnet_ipa3_ctx->ipa_to_apps_pipe_handle_guard);
+	mutex_init(&rmnet_ipa3_ctx->add_mux_channel_lock);
 	rmnet_ipa3_ctx->ipa3_to_apps_hdl = -1;
 
 	ipa3_qmi_init();
@@ -2909,8 +2935,10 @@ static int __init ipa3_wwan_init(void)
 static void __exit ipa3_wwan_cleanup(void)
 {
 	int ret;
+
 	ipa3_qmi_cleanup();
 	mutex_destroy(&rmnet_ipa3_ctx->ipa_to_apps_pipe_handle_guard);
+	mutex_destroy(&rmnet_ipa3_ctx->add_mux_channel_lock);
 	ret = subsys_notif_unregister_notifier(
 		rmnet_ipa3_ctx->subsys_notify_handle, &ipa3_ssr_notifier);
 	if (ret)
