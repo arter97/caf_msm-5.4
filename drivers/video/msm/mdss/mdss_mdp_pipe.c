@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1337,7 +1337,7 @@ int mdss_mdp_pipe_queue_data(struct mdss_mdp_pipe *pipe,
 
 	if ((pipe->flags & MDP_VPU_PIPE) && (src_data == NULL ||
 			!pipe->has_buf)) {
-		pr_debug("%s src_data=%p has_buf=%d pipe num=%dx",
+		pr_debug("%s src_data=%pK has_buf=%d pipe num=%dx",
 				__func__, src_data, pipe->has_buf, pipe->num);
 		goto update_nobuf;
 	}
