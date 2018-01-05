@@ -319,9 +319,6 @@ static void arch_counter_set_user_access(void)
 			| ARCH_TIMER_VIRT_EVT_EN
 			| ARCH_TIMER_USR_PCT_ACCESS_EN);
 
-        /* Enable user access to the physical counter */
-        cntkctl |= ARCH_TIMER_USR_PCT_ACCESS_EN;
-
 	/* Enable user access to the virtual counter */
         if (IS_ENABLED(CONFIG_ARM_ARCH_TIMER_VCT_ACCESS))
 	        cntkctl |= ARCH_TIMER_USR_VCT_ACCESS_EN;
