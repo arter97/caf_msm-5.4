@@ -1919,6 +1919,9 @@ static int sip_help_tcp(struct sk_buff *skb, unsigned int protoff,
 	if (dataoff >= skb->len)
 		return NF_ACCEPT;
 
+	if (!ct)
+		return NF_DROP;
+
 	nf_ct_refresh(ct, skb, sip_timeout * HZ);
 
 	if (unlikely(skb_linearize(skb)))
@@ -1936,9 +1939,6 @@ static int sip_help_tcp(struct sk_buff *skb, unsigned int protoff,
 	 */
 	oldlen1 = skb->len - protoff;
 	dataoff_orig = dataoff;
-
-	if (!ct)
-		return NF_DROP;
 
 	dir = CTINFO2DIR(ctinfo);
 
