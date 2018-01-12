@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2018 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -274,7 +274,8 @@
 
 	spi@78b9000 { /* BLSP1 QUP5 */
 		status = "okay";
-		qcom,mdss_spi_client {
+		qcom,shared;
+		mdss_spi_client {
 			reg = <0>;
 			compatible = "qcom,mdss-spi-client";
 			label = "MDSS SPI QUP5 CLIENT";
