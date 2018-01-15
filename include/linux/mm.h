@@ -1900,8 +1900,8 @@ struct reclaim_param {
 	/* pages reclaimed */
 	int nr_reclaimed;
 };
-extern struct reclaim_param reclaim_task_anon(struct task_struct *task,
-		int nr_to_reclaim);
+extern struct reclaim_param reclaim_task(struct task_struct *task,
+		int nr_to_reclaim, int anon);
 #endif
 
 #endif /* __KERNEL__ */
