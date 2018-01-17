@@ -2,7 +2,7 @@
  * Core MDSS framebuffer driver.
  *
  * Copyright (C) 2007 Google Incorporated
- * Copyright (c) 2008-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2018, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -1178,11 +1178,12 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 	}
 
 	if ((((mdss_fb_is_power_off(mfd) && mfd->dcm_state != DCM_ENTER)
-		|| !mfd->bl_updated) && !IS_CALIB_MODE_BL(mfd)) ||
+		|| !mfd->bl_updated) && !IS_CALIB_MODE_BL(mfd) &&
+		!mfd->allow_secure_bl_update) ||
 		mfd->panel_info->cont_splash_enabled) {
 		mfd->unset_bl_level = bkl_lvl;
 		return;
-	} else {
+	} else if (!mfd->allow_secure_bl_update && bkl_lvl) {
 		mfd->unset_bl_level = 0;
 	}
 
@@ -1194,6 +1195,9 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 							&bl_notify_needed);
 		if (!IS_CALIB_MODE_BL(mfd))
 			mdss_fb_scale_bl(mfd, &temp);
+
+		if (!temp && !mfd->allow_secure_bl_update && mfd->bl_level)
+			mfd->unset_bl_level =  mfd->bl_level;
 		/*
 		 * Even though backlight has been scaled, want to show that
 		 * backlight has been set to bkl_lvl to those that read from
@@ -1344,7 +1348,8 @@ static int mdss_fb_blank_blank(struct msm_fb_data_type *mfd,
 		mutex_lock(&mfd->bl_lock);
 		mdss_fb_set_backlight(mfd, 0);
 		mfd->bl_updated = 0;
-		mfd->unset_bl_level = current_bl;
+		if (current_bl)
+			mfd->unset_bl_level = current_bl;
 		mutex_unlock(&mfd->bl_lock);
 	}
 	mfd->panel_power_state = req_power_state;
@@ -1386,6 +1391,8 @@ static int mdss_fb_blank_unblank(struct msm_fb_data_type *mfd)
 		pr_debug("No change in power state\n");
 		return 0;
 	}
+
+	mfd->allow_secure_bl_update = false;
 
 	if (mfd->mdp.on_fnc) {
 		ret = mfd->mdp.on_fnc(mfd);
