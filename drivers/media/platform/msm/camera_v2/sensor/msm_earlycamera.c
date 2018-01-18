@@ -207,7 +207,9 @@ static ssize_t msm_earlycamera_lk_notify_display_pause_store(struct device *dev,
   unsigned long pause = 0;
   unsigned char camera_status = 0;
   unsigned int reg_value;
+#if EARLYCAMERA_IS_OPEN_ON_LK
   uint32_t ping_addr,pong_addr;
+#endif
 
   pause = simple_strtoul(buf, NULL, 10);
 
@@ -217,16 +219,16 @@ static ssize_t msm_earlycamera_lk_notify_display_pause_store(struct device *dev,
     reg_value = frvc_read(frvc_camera_status_base);
     camera_status = reg_value & 0xFF;
 
-    if(check_earlycamera_is_open(camera_status) == EARLYCAMERA_CLOSE){
+    if(check_earlycamera_is_open(camera_status) == EARLYCAMERA_CLOSE  || EARLYCAMERA_IS_OPEN_ON_LK == 0){
       printk("earlycamera is not open\n");
       Notify_display_pause = pause;
-      return count;
     }
 
     reg_value &= 0xFF00FFFF;
     reg_value |= (KERNEL_REQUEST_PAUSE_FRVC << 16);
     frvc_write(reg_value,frvc_camera_status_base);
 
+#if EARLYCAMERA_IS_OPEN_ON_LK
     if(isp_bufq.bufs != NULL){
       ping_addr = isp_bufq.bufs[0].mapped_info[0].paddr & 0xFFFFFFFF;
       pong_addr = isp_bufq.bufs[1].mapped_info[0].paddr & 0xFFFFFFFF;
@@ -240,6 +242,7 @@ static ssize_t msm_earlycamera_lk_notify_display_pause_store(struct device *dev,
       isp_bufq.bufs[1].status = MSM_BUFFER_PONG_SET;
       isp_bufq.ping_status = MSM_BUFFER_SET;
     }
+#endif
     Notify_display_pause = pause;
   }
 
@@ -756,7 +759,7 @@ static int thead_earlycamera_LK_status(void *arg)
       mdelay(5);
     }
   }
-
+  frvc_write(0xAAAAAAAA,frvc_camera_status_base);
   printk("thead_earlycamera_LK_status camera is exit......\n");
 
   s_c[0] = "CAMERA_STATUS=frvc_camera_exit";
@@ -810,8 +813,10 @@ void earlycamera_check_arrival_gpio_work_func(struct work_struct *work)
   char* s_c[2];
   gpio_value = gpio_get_value(ARRIVAL_SIGNAL_GPIO);
   if(gpio_value == 1){
+    gpio_set_value(47,1);
     s_c[0] = "REVERSE=1";
   }else{
+    gpio_set_value(47,0);
     s_c[0] = "REVERSE=0";
   }
   s_c[1] = NULL;
