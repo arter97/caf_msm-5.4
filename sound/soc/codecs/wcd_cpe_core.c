@@ -1500,6 +1500,7 @@ struct wcd_cpe_core *wcd_cpe_init(const char *img_fname,
 	init_completion(&core->online_compl);
 	init_waitqueue_head(&core->ssr_entry.offline_poll_wait);
 	mutex_init(&core->ssr_lock);
+	mutex_init(&core->session_lock);
 	core->cpe_users = 0;
 
 	/*
@@ -2442,6 +2443,7 @@ static struct cpe_lsm_session *wcd_cpe_alloc_lsm_session(
 	 * If this is the first session to be allocated,
 	 * only then register the afe service.
 	 */
+	WCD_CPE_GRAB_LOCK(&core->session_lock, "session_lock");
 	if (!wcd_cpe_lsm_session_active())
 		afe_register_service = true;
 
@@ -2453,6 +2455,7 @@ static struct cpe_lsm_session *wcd_cpe_alloc_lsm_session(
 		dev_err(core->dev,
 			"%s: max allowed sessions already allocated\n",
 			__func__);
+		WCD_CPE_REL_LOCK(&core->session_lock, "session_lock");
 		return NULL;
 	}
 
@@ -2461,6 +2464,7 @@ static struct cpe_lsm_session *wcd_cpe_alloc_lsm_session(
 		dev_err(core->dev,
 			"%s: Failed to enable cpe, err = %d\n",
 			__func__, ret);
+		WCD_CPE_REL_LOCK(&core->session_lock, "session_lock");
 		return NULL;
 	}
 
@@ -2501,6 +2505,8 @@ static struct cpe_lsm_session *wcd_cpe_alloc_lsm_session(
 	init_completion(&session->cmd_comp);
 
 	lsm_sessions[session_id] = session;
+
+	WCD_CPE_REL_LOCK(&core->session_lock, "session_lock");
 	return session;
 
 err_afe_svc_reg:
@@ -2512,6 +2518,7 @@ err_ret:
 
 err_session_alloc:
 	wcd_cpe_vote(core, false);
+	WCD_CPE_REL_LOCK(&core->session_lock, "session_lock");
 	return NULL;
 }
 
@@ -2827,9 +2834,11 @@ static int wcd_cpe_dealloc_lsm_session(void *core_handle,
 	struct wcd_cpe_core *core = core_handle;
 	int ret = 0;
 
+	WCD_CPE_GRAB_LOCK(&core->session_lock, "session_lock");
 	if (!session) {
 		dev_err(core->dev,
 			"%s: Invalid lsm session\n", __func__);
+		WCD_CPE_REL_LOCK(&core->session_lock, "session_lock");
 		return -EINVAL;
 	}
 
@@ -2840,6 +2849,7 @@ static int wcd_cpe_dealloc_lsm_session(void *core_handle,
 			"%s: Wrong session id %d max allowed = %d\n",
 			__func__, session->id,
 			WCD_CPE_LSM_MAX_SESSIONS);
+		WCD_CPE_REL_LOCK(&core->session_lock, "session_lock");
 		return -EINVAL;
 	}
 
@@ -2860,6 +2870,7 @@ static int wcd_cpe_dealloc_lsm_session(void *core_handle,
 		wcd_cpe_deinitialize_afe_port_data();
 	}
 
+	WCD_CPE_REL_LOCK(&core->session_lock, "session_lock");
 	return ret;
 }
 
