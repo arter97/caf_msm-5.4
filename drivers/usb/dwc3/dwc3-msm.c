@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1322,6 +1322,13 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 		}
 	}
 
+	if (!msm_bam_usb_lpm_ok(DWC3_CTRL)) {
+		dev_dbg(mdwc->dev, "%s: IPA handshake not finished, will suspend when done\n",
+				__func__);
+		pm_schedule_suspend(mdwc->dev, 1000);
+		return -EBUSY;
+	}
+
 	if (!mdwc->vbus_active && dwc->is_drd &&
 		mdwc->otg_state == OTG_STATE_B_PERIPHERAL) {
 		/*
@@ -1520,6 +1527,8 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 	}
 
 	atomic_set(&dwc->in_lpm, 0);
+	msm_bam_notify_lpm_resume(DWC3_CTRL);
+
 
 	/* disable wakeup from LPM */
 	if (mdwc->pwr_event_irq) {
@@ -2445,6 +2454,8 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		local_irq_restore(flags);
 		enable_irq_wake(mdwc->pmic_id_irq);
 	}
+
+	msm_bam_set_usb_dev(mdwc->dev);
 
 	if (!dwc->is_drd && host_mode) {
 		dev_dbg(&pdev->dev, "DWC3 in host only mode\n");
