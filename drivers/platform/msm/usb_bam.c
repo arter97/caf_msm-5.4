@@ -1305,6 +1305,7 @@ static void usb_bam_finish_suspend(enum usb_ctrl cur_bam)
 	u32 cons_empty, idx, dst_idx;
 	struct sps_pipe *cons_pipe;
 	struct usb_bam_pipe_connect *pipe_connect;
+	bool allow_lpm_in_suspend = true;
 
 	mutex_lock(&info[cur_bam].suspend_resume_mutex);
 
@@ -1320,7 +1321,7 @@ static void usb_bam_finish_suspend(enum usb_ctrl cur_bam)
 	/* If resume was called don't finish this work */
 	if (!info[cur_bam].bus_suspend) {
 		spin_unlock(&usb_bam_ipa_handshake_info_lock);
-		pr_debug("%s: Bus resume in progress\n", __func__);
+		pr_err("%s: interrupted by bus resume\n", __func__);
 		goto no_lpm;
 	}
 
@@ -1339,7 +1340,7 @@ static void usb_bam_finish_suspend(enum usb_ctrl cur_bam)
 		if (ret) {
 			pr_err("%s: sps_is_pipe_empty failed with %d\n",
 				__func__, ret);
-			goto no_lpm;
+			allow_lpm_in_suspend = false;
 		}
 
 		spin_lock(&usb_bam_ipa_handshake_info_lock);
@@ -1351,28 +1352,25 @@ static void usb_bam_finish_suspend(enum usb_ctrl cur_bam)
 			pr_debug("%s: Stopping CONS transfers on dst_idx=%d "
 				, __func__, dst_idx);
 			stop_cons_transfers(pipe_connect);
-
-			spin_unlock(&usb_bam_ipa_handshake_info_lock);
-			pr_debug("%s: Suspending pipe\n", __func__);
-			spin_lock(&usb_bam_ipa_handshake_info_lock);
-			info[cur_bam].resume_src_idx[idx] =
-				info[cur_bam].suspend_src_idx[idx];
-			info[cur_bam].resume_dst_idx[idx] =
-				info[cur_bam].suspend_dst_idx[idx];
-			info[cur_bam].pipes_suspended++;
 		} else {
 			pr_debug("%s: Pipe is not empty, not going to LPM",
 				 __func__);
-			spin_unlock(&usb_bam_ipa_handshake_info_lock);
-			goto no_lpm;
+			allow_lpm_in_suspend = false;
 		}
+
+		pr_debug("%s: Suspending pipe\n", __func__);
+		info[cur_bam].resume_src_idx[idx] =
+				info[cur_bam].suspend_src_idx[idx];
+		info[cur_bam].resume_dst_idx[idx] =
+				info[cur_bam].suspend_dst_idx[idx];
+		info[cur_bam].pipes_suspended++;
 	}
 	info[cur_bam].pipes_to_suspend = 0;
 	info[cur_bam].pipes_resumed = 0;
 	spin_unlock(&usb_bam_ipa_handshake_info_lock);
 
 	/* ACK on the last pipe */
-	if (info[cur_bam].pipes_suspended ==
+	if (cons_empty && info[cur_bam].pipes_suspended ==
 	     ctx.pipes_enabled_per_bam[cur_bam] &&
 	     info[cur_bam].cur_cons_state ==
 	     IPA_RM_RESOURCE_RELEASED) {
@@ -1381,9 +1379,11 @@ static void usb_bam_finish_suspend(enum usb_ctrl cur_bam)
 			ipa_rm_resource_cons[cur_bam]);
 	}
 
-	pr_debug("%s: Starting LPM on Bus Suspend\n", __func__);
-
-	usb_bam_suspend_core(cur_bam, USB_BAM_DEVICE, 0);
+	/* If suspend wasn't interrupted by IPA then proceed to LPM */
+	if (allow_lpm_in_suspend) {
+		pr_debug("%s: Starting LPM on Bus Suspend\n", __func__);
+		usb_bam_suspend_core(cur_bam, USB_BAM_DEVICE, 0);
+	}
 
 	mutex_unlock(&info[cur_bam].suspend_resume_mutex);
 	return;
@@ -1486,7 +1486,12 @@ static int cons_request_resource(enum usb_ctrl cur_bam)
 				pr_debug("%s: ACK on cons_request", __func__);
 				ret = 0;
 			} else if (info[cur_bam].bus_suspend) {
-				info[cur_bam].bus_suspend = 0;
+				/* If suspend is not yet finished then let it */
+				if (!info[cur_bam].pipes_to_suspend) {
+					info[cur_bam].bus_suspend = 0;
+				} else {
+					pr_debug("suspend in progress\n");
+				}
 				pr_debug("%s: Wake up host", __func__);
 				if (info[cur_bam].wake_cb)
 					info[cur_bam].wake_cb(
@@ -1853,21 +1858,19 @@ static void usb_bam_start_suspend(struct usb_bam_ipa_handshake_info *info_ptr)
 	dst_idx = info[cur_bam].suspend_dst_idx[pipes_to_suspend - 1];
 
 	pipe_connect = &usb_bam_connections[dst_idx];
-	stop_prod_transfers(pipe_connect);
-
 	spin_unlock(&usb_bam_ipa_handshake_info_lock);
 
+	info[cur_bam].lpm_wait_handshake = true;
 	/* Don't start LPM seq if data in the pipes */
 	if (!check_pipes_empty(src_idx, dst_idx)) {
-		start_prod_transfers(pipe_connect);
 		info[cur_bam].pipes_to_suspend = 0;
 		info[cur_bam].bus_suspend = 0;
 		mutex_unlock(&info[cur_bam].suspend_resume_mutex);
 		return;
 	}
+	stop_prod_transfers(pipe_connect);
 
 	spin_lock(&usb_bam_ipa_handshake_info_lock);
-	info[cur_bam].lpm_wait_handshake = true;
 
 	/* Start release handshake on the last pipe */
 	if (info[cur_bam].pipes_to_suspend * 2 ==
@@ -1918,7 +1921,9 @@ static void usb_bam_finish_resume(struct work_struct *w)
 		dst_idx = info[cur_bam].resume_dst_idx[idx];
 		pipe_connect = &usb_bam_connections[dst_idx];
 		spin_unlock(&usb_bam_ipa_handshake_info_lock);
-		reset_pipe_for_resume(pipe_connect);
+		/* ep_dequeue and dbm_reset might not have happened */
+		if (pipe_connect->cons_stopped)
+			reset_pipe_for_resume(pipe_connect);
 		spin_lock(&usb_bam_ipa_handshake_info_lock);
 		if (pipe_connect->cons_stopped) {
 			pr_debug("%s: Starting CONS on %d", __func__, dst_idx);
@@ -2436,17 +2441,6 @@ static void usb_bam_work(struct work_struct *w)
 		if (ctx.inactivity_timer_ms[pipe_connect->bam_type])
 			usb_bam_set_inactivity_timer(pipe_connect->bam_type);
 		spin_unlock(&usb_bam_lock);
-
-		if (pipe_connect->bam_mode == USB_BAM_DEVICE) {
-			/* A2 wakeup not from LPM (CONS was up) */
-			wait_for_prod_granted(pipe_connect->bam_type);
-			if (pipe_connect->start) {
-				pr_debug("%s: Enqueue PROD transfer", __func__);
-				pipe_connect->start(
-					pipe_connect->start_stop_param,
-					USB_TO_PEER_PERIPHERAL);
-			}
-		}
 
 		break;
 
