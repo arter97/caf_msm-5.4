@@ -595,7 +595,6 @@ static void bam_data_start_endless_rx(struct bam_data_port *port)
 		return;
 	}
 	ep = port->port_usb->out;
-	d->rx_req_dequeued = false;
 	spin_unlock_irqrestore(&port->port_lock, flags);
 
 	pr_debug("%s: enqueue\n", __func__);
@@ -617,7 +616,6 @@ static void bam_data_start_endless_tx(struct bam_data_port *port)
 		return;
 	}
 	ep = port->port_usb->in;
-	d->tx_req_dequeued = false;
 	spin_unlock_irqrestore(&port->port_lock, flags);
 
 	pr_debug("%s: enqueue\n", __func__);
@@ -1850,16 +1848,9 @@ static void bam_data_start(void *param, enum usb_bam_pipe_dir dir)
 		pr_err("%s:d_port,cdev or gadget is  NULL\n", __func__);
 		return;
 	}
-	/*
-	 * Bail out if USB got reconnected/reset by the time BAM/IPA driver
-	 * completed resume processing.
-	 * Also handle case where BAM driver might want to restart EPs as
-	 * part of aborting ongoing suspend.
-	 */
-	if (port->last_event != U_BAM_DATA_RESUME_E &&
-	    port->last_event != U_BAM_DATA_SUSPEND_E) {
-		pr_err("%s: Port state (%u) changed since resume. Bail out.\n",
-			__func__, port->last_event);
+	if (port->last_event != U_BAM_DATA_RESUME_E) {
+		pr_err("%s: Port state changed since resume. Bail out.\n",
+			__func__);
 		return;
 	}
 
