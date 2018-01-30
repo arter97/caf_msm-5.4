@@ -2820,6 +2820,12 @@ static int apq8009_asoc_machine_probe(struct platform_device *pdev)
 				ret);
 		goto err;
 	}
+	ret = gpio_request(88, "TDM_RESET");
+	if (ret) {
+		pr_err("%s: Failed to request gpio\n", __func__);
+		return ret;
+	}
+	gpio_direction_output(88, 1);
 	return 0;
 err:
 	if (pdata->vaddr_gpio_mux_spkr_ctl)
