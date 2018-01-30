@@ -5559,12 +5559,9 @@ static int msm_dai_q6_tdm_hw_params(struct snd_pcm_substream *substream,
 			custom_tdm_header->header[7]);
 	}
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		group_cfg_tx.tdm_cfg.num_channels =
-			dai_data->group_cfg.tdm_cfg.num_channels;
-		group_cfg_tx.tdm_cfg.sample_rate =
-			dai_data->group_cfg.tdm_cfg.sample_rate;
-		group_cfg_tx.tdm_cfg.bit_width =
-			dai_data->group_cfg.tdm_cfg.bit_width;
+		group_cfg_tx.tdm_cfg.num_channels = dai_data->channels;
+		group_cfg_tx.tdm_cfg.sample_rate = dai_data->rate;
+		group_cfg_tx.tdm_cfg.bit_width = dai_data->bitwidth;
 		group_cfg_tx.tdm_cfg.nslots_per_frame =
 			dai_data->group_cfg.tdm_cfg.nslots_per_frame;
 		group_cfg_tx.tdm_cfg.slot_width =
@@ -5572,12 +5569,9 @@ static int msm_dai_q6_tdm_hw_params(struct snd_pcm_substream *substream,
 		group_cfg_tx.tdm_cfg.slot_mask =
 			dai_data->group_cfg.tdm_cfg.slot_mask;
 	} else {
-		group_cfg_rx.tdm_cfg.num_channels =
-			dai_data->group_cfg.tdm_cfg.num_channels;
-		group_cfg_rx.tdm_cfg.sample_rate =
-			dai_data->group_cfg.tdm_cfg.sample_rate;
-		group_cfg_rx.tdm_cfg.bit_width =
-			dai_data->group_cfg.tdm_cfg.bit_width;
+		group_cfg_rx.tdm_cfg.num_channels = dai_data->channels;
+		group_cfg_rx.tdm_cfg.sample_rate = dai_data->rate;
+		group_cfg_rx.tdm_cfg.bit_width = dai_data->bitwidth;
 		group_cfg_rx.tdm_cfg.nslots_per_frame =
 			dai_data->group_cfg.tdm_cfg.nslots_per_frame;
 		group_cfg_rx.tdm_cfg.slot_width =
