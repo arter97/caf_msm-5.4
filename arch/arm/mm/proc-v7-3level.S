@@ -44,7 +44,30 @@
  *
  * Set the translation table base pointer to be pgd_phys (physical address of
  * the new TTB).
+ *
+ * Krait processors - require bp invalidation
  */
+ENTRY(cpu_krait_switch_mm)
+/* Sanitize link stack
+ * The below instrucitons will cause lr to be loaded with a value
+ * which will never be used, thus nullyfying branch prediction based
+ * attacks
+ */
+#ifdef CONFIG_MMU
+	mov	r2, lr
+	bl	1f
+1:	bl	1f
+1:	bl	1f
+1:	bl	1f
+1:	bl	1f
+1:	bl	1f
+1:	bl	1f
+1:	bl	1f
+1:	mov     lr, #0
+	mcr     p15, 0, lr, c7, c5, 6   @ BPIALL
+	isb
+	mov	lr, r2
+#endif
 ENTRY(cpu_v7_switch_mm)
 #ifdef CONFIG_MMU
 	ldr	r1, [r1, #MM_CONTEXT_ID]	@ get mm->context.id
@@ -55,6 +78,7 @@ ENTRY(cpu_v7_switch_mm)
 #endif
 	mov	pc, lr
 ENDPROC(cpu_v7_switch_mm)
+ENDPROC(cpu_krait_switch_mm)
 
 /*
  * cpu_v7_set_pte_ext(ptep, pte)

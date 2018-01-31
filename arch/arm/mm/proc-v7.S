@@ -143,6 +143,22 @@ ENTRY(cpu_v7_do_resume)
 ENDPROC(cpu_v7_do_resume)
 #endif
 
+/*
+ * Krait processors. - need to invalidate Branch prediction
+ * on switch_mm
+ */
+	globl_equ	cpu_krait_proc_init,	cpu_v7_proc_init
+	globl_equ	cpu_krait_proc_fin,	cpu_v7_proc_fin
+	globl_equ	cpu_krait_reset,		cpu_v7_reset
+	globl_equ	cpu_krait_do_idle,	cpu_v7_do_idle
+	globl_equ	cpu_krait_dcache_clean_area, cpu_v7_dcache_clean_area
+	globl_equ	cpu_krait_set_pte_ext,	cpu_v7_set_pte_ext
+	globl_equ	cpu_krait_suspend_size,	cpu_v7_suspend_size
+#ifdef CONFIG_ARM_CPU_SUSPEND
+	globl_equ	cpu_krait_do_suspend,	cpu_v7_do_suspend
+	globl_equ	cpu_krait_do_resume,	cpu_v7_do_resume
+#endif
+
 	__CPUINIT
 
 /*
@@ -319,6 +335,7 @@ __v7_setup_stack:
 
 	@ define struct processor (see <asm/proc-fns.h> and proc-macros.S)
 	define_processor_functions v7, dabort=v7_early_abort, pabort=v7_pabort, suspend=1
+	define_processor_functions krait, dabort=v7_early_abort, pabort=v7_pabort, suspend=1
 
 	.section ".rodata"
 
@@ -399,7 +416,7 @@ __v7_ca15mp_proc_info:
 __krait_proc_info:
 	.long	0x510f0400		@ Required ID value
 	.long	0xff0ffc00		@ Mask for ID
-	__v7_proc __v7_setup, hwcaps = HWCAP_IDIV
+	__v7_proc __v7_setup, hwcaps = HWCAP_IDIV, proc_fns = krait_processor_functions
 	.size	__krait_proc_info, . - __krait_proc_info
 
 	/*
