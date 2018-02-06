@@ -3058,6 +3058,11 @@ static int __qseecom_send_cmd(struct qseecom_dev_handle *data,
 	size_t cmd_len;
 	struct sglist_info *table = data->sglistinfo_ptr;
 
+	if (req->cmd_req_len > UINT_MAX - req->resp_len) {
+		pr_err("Integer overflow detected in req_len & rsp_len, exiting now\n");
+		return -EINVAL;
+	}
+
 	reqd_len_sb_in = req->cmd_req_len + req->resp_len;
 	/* find app_id & img_name from list */
 	spin_lock_irqsave(&qseecom.registered_app_list_lock, flags);
