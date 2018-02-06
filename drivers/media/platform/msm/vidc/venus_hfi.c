@@ -927,13 +927,15 @@ static int venus_hfi_vote_active_buses(void *dev,
 	} else if (!data) {
 		dprintk(VIDC_ERR, "Invalid voting data\n");
 		return -EINVAL;
+        } else if (num_data > MAX_SUPPORTED_INSTANCES_COUNT) {
+               dprintk(VIDC_ERR, "Invalid number of instances.\n");
+               return -EINVAL;
 	}
 
         cached_vote_data = device->bus_load.vote_data;
         if (!cached_vote_data) {
                 dprintk(VIDC_ERR,"Invalid bus load vote data\n");
-                rc = -ENOMEM;
-                goto err_no_mem;
+                return -EINVAL;
         }
 
 	/* Alloc & init the load table */
@@ -3728,7 +3730,7 @@ static void venus_hfi_deinit_bus(struct venus_hfi_device *device)
 
 	kfree(device->bus_load.vote_data);
 	device->bus_load.vote_data = NULL;
-	device->bus_load.vote_data_count = 0;
+        device->bus_load.vote_data_count = 0;
 }
 
 static int venus_hfi_init_bus(struct venus_hfi_device *device)
