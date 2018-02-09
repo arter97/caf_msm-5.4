@@ -130,7 +130,7 @@
 
 #define IPA_HW_TABLE_ALIGNMENT(start_ofst) \
 	(((start_ofst) + 127) & ~127)
-#define IPA_RT_FLT_HW_RULE_BUF_SIZE	(128)
+#define IPA_RT_FLT_HW_RULE_BUF_SIZE	(256)
 
 #define MAX_RESOURCE_TO_CLIENTS (IPA_CLIENT_MAX)
 struct ipa_client_names {
