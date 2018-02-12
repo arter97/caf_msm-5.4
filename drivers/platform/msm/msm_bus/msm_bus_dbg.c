@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, 2014-2015, 2017 The Linux Foundation. All rights
+/* Copyright (c) 2010-2012, 2014, 2020 The Linux Foundation. All rights
  * reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -612,7 +612,6 @@ static ssize_t  msm_bus_dbg_update_request_write(struct file *file,
 
 	if (found)
 		msm_bus_scale_client_update_request(clid, index);
-
 out:
 	kfree(buf);
 	return res;
