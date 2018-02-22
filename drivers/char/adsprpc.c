@@ -1160,6 +1160,7 @@ static int fastrpc_init(void)
 
 	spin_lock_init(&me->hlock);
 	spin_lock_init(&me->wrlock);
+	spin_lock_init(&me->ctxlock);
 	mutex_init(&me->smd_mutex);
 	context_list_ctor(&me->clst);
 	for (i = 0; i < RPC_HASH_SZ; ++i)
@@ -1269,7 +1270,6 @@ static void add_dev(struct fastrpc_apps *me, struct fastrpc_device *dev)
 	head = &me->htbl[h];
 	hlist_add_head(&dev->hn, head);
 	spin_unlock(&me->hlock);
-	spin_lock_init(&me->ctxlock);
 	return;
 }
 
