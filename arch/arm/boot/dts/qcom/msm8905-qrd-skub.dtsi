@@ -216,8 +216,8 @@
 
 	matrix_keypad: matrix_keypad@0 {
 		compatible = "gpio-matrix-keypad";
-		debounce-delay-ms = <10>;
-		col-scan-delay-us = <7>;
+		debounce-delay-ms = <5>;
+		col-scan-delay-us = <2>;
 		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
 		pinctrl-0 = <&gpio_key_active>;
 		pinctrl-1 = <&gpio_key_suspend>;
