@@ -20,5 +20,5 @@
 };
 
 &venus_qseecom_mem {
-	reg = <0 0 0 0x400000>;
+	reg = <0 0 0 0x800000>;
 };
