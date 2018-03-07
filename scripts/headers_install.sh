@@ -25,13 +25,20 @@ shift
 
 # Iterate through files listed on command line
 
+HOST_OS=$(uname -s)
+if [ "$HOST_OS" == "Darwin" ]; then
+  ARG_C="-E"
+else
+  ARG_C="-r"
+fi
+
 FILE=
 trap 'rm -f "$OUTDIR/$FILE" "$OUTDIR/$FILE.sed"' EXIT
 for i in "$@"
 do
 	FILE="$(basename "$i")"
-	sed -r \
-		-e 's/([ \t(])(__user|__force|__iomem)[ \t]/\1/g' \
+	sed $ARG_C \
+		-e 's/([[:blank:](])(__user|__force|__iomem)[ \t]/\1/g' \
 		-e 's/__attribute_const__([ \t]|$)/\1/g' \
 		-e 's@^#include <linux/compiler.h>@@' \
 		-e 's/(^|[^a-zA-Z0-9])__packed([^a-zA-Z0-9_]|$)/\1__attribute__((packed))\2/g' \

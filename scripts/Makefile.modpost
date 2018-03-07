@@ -59,8 +59,16 @@ include scripts/Makefile.lib
 kernelsymfile := $(objtree)/Module.symvers
 modulesymfile := $(firstword $(KBUILD_EXTMOD))/Module.symvers
 
+HOST_ARCH := $(shell uname -s)
+ifeq ($(HOST_ARCH),Darwin)
+	ARG_C :=
+else
+	ARG_C := "-r"
+endif
+
 # Step 1), find all modules listed in $(MODVERDIR)/
-MODLISTCMD := find $(MODVERDIR) -name '*.mod' | xargs -r grep -h '\.ko$$' | sort -u
+MODLISTCMD := find $(MODVERDIR) -name '*.mod' | xargs $(ARG_C) grep -h '\.ko$$' | sort -u
+
 __modules := $(shell $(MODLISTCMD))
 modules   := $(patsubst %.o,%.ko, $(wildcard $(__modules:.ko=.o)))
 
