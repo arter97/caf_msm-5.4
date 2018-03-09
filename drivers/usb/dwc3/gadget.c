@@ -1451,7 +1451,7 @@ static int dwc3_gadget_ep_queue(struct usb_ep *ep, struct usb_request *request,
 	 * API should not be allowed.
 	 */
 	if (dep->endpoint.endless) {
-		dev_dbg(dwc->dev, "trying to queue endless request %p to %s\n",
+		dev_dbg(dwc->dev, "trying to queue endless request %pK to %s\n",
 				request, ep->name);
 		spin_unlock_irqrestore(&dwc->lock, flags);
 		return -EPERM;
