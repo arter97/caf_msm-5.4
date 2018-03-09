@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, 2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -215,6 +215,7 @@ static struct cpe_info *cpe_default_handle;
 static void (*cpe_irq_control_callback)(u32 enable);
 static u32 cpe_msg_buffer;
 static struct mutex cpe_api_mutex;
+static struct mutex cpe_svc_mutex;
 static struct cpe_svc_boot_event cpe_debug_vector;
 
 static enum cpe_svc_result
@@ -462,8 +463,10 @@ static enum cpe_svc_result cpe_deregister_generic(struct cpe_info *t_info,
 		return CPE_SVC_INVALID_HANDLE;
 	}
 
+	CPE_SVC_GRAB_LOCK(&cpe_svc_mutex, "cpe_svc");
 	list_del(&(n->list));
 	kfree(reg_handle);
+	CPE_SVC_REL_LOCK(&cpe_svc_mutex, "cpe_svc");
 
 	return CPE_SVC_SUCCESS;
 }
@@ -1099,6 +1102,7 @@ void *cpe_svc_initialize(
 	t_info->cpe_cmd_validate = cpe_mt_validate_cmd;
 	t_info->cpe_start_notification = broadcast_boot_event;
 	mutex_init(&cpe_api_mutex);
+	mutex_init(&cpe_svc_mutex);
 	pr_debug("%s: cpe services initialized\n", __func__);
 	t_info->state = CPE_STATE_INITIALIZED;
 	t_info->initialized = true;
@@ -1139,6 +1143,7 @@ enum cpe_svc_result cpe_svc_deinitialize(void *cpe_handle)
 	kfree(t_info->tgt);
 	kfree(t_info);
 	mutex_destroy(&cpe_api_mutex);
+	mutex_destroy(&cpe_svc_mutex);
 
 	return rc;
 }
