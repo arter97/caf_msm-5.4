@@ -494,9 +494,11 @@ int ipa_sps_connect_safe(struct sps_pipe *h, struct sps_connect *connect,
 {
 	int res;
 
-	res = ipa_uc_reset_pipe(ipa_client);
-	if (res)
-		return res;
+	if (ipa_client != IPA_CLIENT_USB_PROD) { /* The uC reset cmd will work only for BAM2SYS */
+		res = ipa_uc_reset_pipe(ipa_client);
+		if (res)
+			return res;
+	}
 
 	return sps_connect(h, connect);
 }
