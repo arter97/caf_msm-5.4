@@ -73,6 +73,8 @@ struct pll_vco {
  * @offset: base address of registers
  * @vco_table: array of VCO settings
  * @regs: alpha pll register map (see @clk_alpha_pll_regs)
+ * @soft_vote: soft voting variable for multiple PLL software instances
+ * @soft_vote_mask: soft voting mask for multiple PLL software instances
  * @vco_data: array of VCO data settings like post div
  * @clkr: regmap clock handle
  */
@@ -82,6 +84,13 @@ struct clk_alpha_pll {
 	struct alpha_pll_config *config;
 	const struct pll_vco *vco_table;
 	size_t num_vco;
+
+	u32 *soft_vote;
+	u32 soft_vote_mask;
+	/* Soft voting values */
+#define PLL_SOFT_VOTE_PRIMARY	BIT(0)
+#define PLL_SOFT_VOTE_CPU	BIT(1)
+#define PLL_SOFT_VOTE_AUX	BIT(2)
 
 	const struct pll_vco_data *vco_data;
 	size_t num_vco_data;
@@ -98,6 +107,8 @@ struct clk_alpha_pll {
 #define SUPPORTS_SLEW           BIT(4)
 #define BYPASS_LATCH		BIT(6)
 #define SUPPORTS_NO_PLL_LATCH	BIT(7)
+	/* Associated with soft_vote for multiple PLL software instances */
+#define SUPPORTS_FSM_VOTE	BIT(5)
 	u8 flags;
 
 	struct clk_regmap clkr;
