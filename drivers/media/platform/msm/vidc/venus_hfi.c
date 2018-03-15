@@ -3511,7 +3511,7 @@ static int venus_hfi_disable_regulator(struct regulator_info *rinfo)
 disable_regulator_failed:
 
 	/* Bring attention to this issue */
-	WARN_ON(1);
+	WARN_ON(msm_vidc_debug & VIDC_INFO);
 	return rc;
 }
 
