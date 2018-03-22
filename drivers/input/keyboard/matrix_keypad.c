@@ -503,8 +503,10 @@ static ssize_t scr_mod_store(struct device *dev,
 		return -EINVAL;
 
 	if (old_val != scr_mod && (scr_mod == 1 || scr_mod == 0)) {
-		if (scr_mod)
+		if (scr_mod) {
 			matrix_keypad_free_gpio(keypad);
+			scr_mod = 2;
+                }
 		else {
 			err = matrix_keypad_init_gpio(pdev, keypad);
 				if (err) {
@@ -515,6 +517,7 @@ static ssize_t scr_mod_store(struct device *dev,
 		keypad->scan_pending = false;
 		enable_row_irqs(keypad);
 		mutex_unlock(&keypad->lock);
+		scr_mod = 2;
 		}
 	}
 	return count;
