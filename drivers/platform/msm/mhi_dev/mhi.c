@@ -823,9 +823,12 @@ send_start_completion_event:
 			pr_err("Error sending command completion event\n");
 
 		mhi_update_state_info(ch_id, MHI_STATE_CONNECTED);
-		if (ch_id == MHI_CLIENT_MBIM_OUT)
-			kobject_uevent_env(&mhi_ctx->dev->kobj,
+		if (ch_id == MHI_CLIENT_MBIM_OUT) {
+			rc = kobject_uevent_env(&mhi_ctx->dev->kobj,
 						KOBJ_CHANGE, connected);
+			if (rc)
+				pr_err("Error sending uevent %d\n", rc);
+		}
 		break;
 	case MHI_DEV_RING_EL_STOP:
 		if (ch_id >= HW_CHANNEL_BASE) {
@@ -881,9 +884,12 @@ send_start_completion_event:
 
 			mutex_unlock(&ch->ch_lock);
 			mhi_update_state_info(ch_id, MHI_STATE_DISCONNECTED);
-			if (ch_id == MHI_CLIENT_MBIM_OUT)
-				kobject_uevent_env(&mhi_ctx->dev->kobj,
+			if (ch_id == MHI_CLIENT_MBIM_OUT) {
+				rc = kobject_uevent_env(&mhi_ctx->dev->kobj,
 						KOBJ_CHANGE, disconnected);
+				if (rc)
+					pr_err("Error sending uevent %d\n", rc);
+			}
 		}
 		break;
 	case MHI_DEV_RING_EL_RESET:
@@ -957,9 +963,12 @@ send_start_completion_event:
 				pr_err("Error sending command completion event\n");
 			mutex_unlock(&ch->ch_lock);
 			mhi_update_state_info(ch_id, MHI_STATE_DISCONNECTED);
-			if (ch_id == MHI_CLIENT_MBIM_OUT)
-				kobject_uevent_env(&mhi_ctx->dev->kobj,
+			if (ch_id == MHI_CLIENT_MBIM_OUT) {
+				rc = kobject_uevent_env(&mhi_ctx->dev->kobj,
 						KOBJ_CHANGE, disconnected);
+				if (rc)
+					pr_err("Error sending uevent %d\n", rc);
+			}
 		}
 		break;
 	default:
