@@ -1,6 +1,6 @@
 /* Qualcomm Crypto Engine driver API
  *
- * Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2010-2014, 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -124,6 +124,8 @@ struct ce_hw_support {
 	bool use_sw_aes_ccm_algo;
 	bool clk_mgmt_sus_res;
 	unsigned int ce_device;
+	unsigned int ce_hw_instance;
+	unsigned int max_request;
 };
 
 /* Sha operation parameters */
@@ -148,7 +150,8 @@ struct qce_req {
 	void *areq;
 	enum qce_cipher_alg_enum   alg;	/* cipher algorithms*/
 	enum qce_cipher_dir_enum dir;	/* encryption? decryption? */
-	enum qce_cipher_mode_enum mode;	/* algorithm mode */
+	enum qce_cipher_mode_enum mode;	/* algorithm mode  */
+	enum qce_hash_alg_enum auth_alg;/* authentication algorithm for aead */
 	unsigned char *authkey;		/* authentication key  */
 	unsigned int authklen;		/* authentication key kength */
 	unsigned int authsize;		/* authentication key kength */
@@ -166,6 +169,13 @@ struct qce_req {
 	unsigned int  flags;
 };
 
+struct qce_pm_table {
+	int (*suspend)(void *handle);
+	int (*resume)(void *handle);
+};
+
+extern struct qce_pm_table qce_pm_table;
+
 void *qce_open(struct platform_device *pdev, int *rc);
 int qce_close(void *handle);
 int qce_aead_req(void *handle, struct qce_req *req);
@@ -174,5 +184,7 @@ int qce_hw_support(void *handle, struct ce_hw_support *support);
 int qce_process_sha_req(void *handle, struct qce_sha_req *s_req);
 int qce_enable_clk(void *handle);
 int qce_disable_clk(void *handle);
+void qce_get_driver_stats(void *handle);
+void qce_clear_driver_stats(void *handle);
 
 #endif /* __CRYPTO_MSM_QCE_H */
