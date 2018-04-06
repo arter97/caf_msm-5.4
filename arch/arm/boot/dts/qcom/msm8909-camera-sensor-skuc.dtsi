@@ -97,7 +97,7 @@
 		reg = <0x2>;
 		qcom,csiphy-sd-index = <0>;
 		qcom,csid-sd-index = <0>;
-		qcom,mount-angle = <90>;
+		qcom,mount-angle = <270>;
 		qcom,led-flash-src = <&led_flash0>;
 		cam_vana-supply = <&pm8909_l17>;
 		cam_vio-supply = <&pm8909_l6>;
@@ -135,7 +135,7 @@
 		reg = <0x1>;
 		qcom,csiphy-sd-index = <0>;
 		qcom,csid-sd-index = <0>;
-		qcom,mount-angle = <90>;
+		qcom,mount-angle = <270>;
 		cam_vana-supply = <&pm8909_l17>;
 		cam_vio-supply = <&pm8909_l6>;
 		qcom,cam-vreg-name = "cam_vio", "cam_vana";
