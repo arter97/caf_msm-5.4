@@ -807,7 +807,6 @@ static ssize_t ipa3_read_rt_hw(struct file *file, char __user *ubuf,
 			}
 		}
 	}
-
 bail:
 	mutex_unlock(&ipa3_ctx->lock);
 	kfree(entry);
