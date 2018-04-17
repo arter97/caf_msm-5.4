@@ -2027,7 +2027,6 @@ static int fastrpc_device_release(struct inode *inode, struct file *file)
 		}
 		me->pending_free++;
 		mutex_unlock(&me->flfree_mutex);
-		mutex_destroy(&fl->map_mutex);
 		file->private_data = NULL;
 	}
 bail:
