@@ -833,7 +833,17 @@ static void wake_up_worker(struct worker_pool *pool)
  */
 void wq_worker_waking_up(struct task_struct *task, int cpu)
 {
-	struct worker *worker = kthread_data(task);
+	struct worker *worker;
+
+	if (task->flags & PF_EXITING) {
+		/*
+		 * Careful here, t->vfork_done is zeroed out for
+		 * almost dead tasks, do not touch kthread_data().
+		 */
+		return;
+	}
+
+	worker = kthread_data(task);
 
 	if (!(worker->flags & WORKER_NOT_RUNNING)) {
 		WARN_ON_ONCE(worker->pool->cpu != cpu);
@@ -858,8 +868,18 @@ void wq_worker_waking_up(struct task_struct *task, int cpu)
  */
 struct task_struct *wq_worker_sleeping(struct task_struct *task, int cpu)
 {
-	struct worker *worker = kthread_data(task), *to_wakeup = NULL;
+	struct worker *worker, *to_wakeup = NULL;
 	struct worker_pool *pool;
+
+	if (task->flags & PF_EXITING) {
+		/*
+		 * Careful here, t->vfork_done is zeroed out for
+		 * almost dead tasks, do not touch kthread_data().
+		 */
+		return NULL;
+	}
+
+	worker = kthread_data(task);
 
 	/*
 	 * Rescuers, which may not have all the fields set up like normal
