@@ -1375,7 +1375,6 @@
 		compatible = "qcom,msm-pcm-dsp";
 		qcom,msm-pcm-dsp-id = <1>;
 		qcom,msm-pcm-low-latency;
-		qcom,latency-level = "ultra";
 	};
 
 	lpa: qcom,msm-pcm-lpa {
