@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1802,6 +1802,15 @@ int diag_copy_to_user_msg_mask(char __user *buf, size_t count,
 	mask_info = (!info) ? &msg_mask : info->msg_mask;
 	if (!mask_info)
 		return -EIO;
+
+	mutex_lock(&driver->diag_maskclear_mutex);
+	if (driver->mask_clear) {
+		DIAG_LOG(DIAG_DEBUG_PERIPHERALS,
+		"diag:%s: count = %zu\n", __func__, count);
+		mutex_unlock(&driver->diag_maskclear_mutex);
+		return -EIO;
+	}
+	mutex_unlock(&driver->diag_maskclear_mutex);
 
 	mutex_lock(&driver->msg_mask_lock);
 	mutex_lock(&mask_info->lock);
