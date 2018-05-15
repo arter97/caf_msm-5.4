@@ -402,6 +402,11 @@ struct diag_logging_mode_param_t {
 	uint8_t mode_param;
 } __packed;
 
+struct diag_con_all_param_t {
+	uint32_t diag_con_all;
+	uint32_t num_peripherals;
+};
+
 struct diag_md_session_t {
 	int pid;
 	int peripheral_mask;
@@ -628,7 +633,7 @@ void diag_cmd_remove_reg_by_pid(int pid);
 void diag_cmd_remove_reg_by_proc(int proc);
 int diag_cmd_chk_polling(struct diag_cmd_reg_entry_t *entry);
 int diag_mask_param(void);
-void diag_clear_masks(struct diag_md_session_t *info);
+void diag_clear_masks(int pid);
 
 void diag_record_stats(int type, int flag);
 
