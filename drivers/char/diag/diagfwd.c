@@ -247,14 +247,16 @@ void chk_logging_wakeup(void)
 	}
 }
 
-static void pack_rsp_and_send(unsigned char *buf, int len)
+static void pack_rsp_and_send(unsigned char *buf, int len,
+				int pid)
 {
 	int err;
-	int retry_count = 0;
+	int retry_count = 0, i, rsp_ctxt;
 	uint32_t write_len = 0;
 	unsigned long flags;
 	unsigned char *rsp_ptr = driver->encoded_rsp_buf;
 	struct diag_pkt_frame_t header;
+	struct diag_md_session_t *session_info = NULL, *info = NULL;
 
 	if (!rsp_ptr || !buf)
 		return;
@@ -264,6 +266,27 @@ static void pack_rsp_and_send(unsigned char *buf, int len)
 		       __func__, len, DIAG_MAX_RSP_SIZE);
 		return;
 	}
+
+	mutex_lock(&driver->md_session_lock);
+	session_info = diag_md_session_get_pid(pid);
+	info = (session_info) ? session_info :
+				diag_md_session_get_peripheral(APPS_DATA);
+	info = diag_md_session_get_pid(pid);
+	if (info && info->peripheral_mask) {
+		if (info->peripheral_mask == DIAG_CON_ALL ||
+			(info->peripheral_mask & (1 << APPS_DATA)) ||
+			(info->peripheral_mask & (1 << PERIPHERAL_MODEM))) {
+			rsp_ctxt = SET_BUF_CTXT(APPS_DATA, TYPE_CMD, 1);
+		} else {
+			for (i = 0; i <= NUM_PERIPHERALS; i++) {
+				if (info->peripheral_mask & (1 << i))
+					break;
+			}
+			rsp_ctxt = SET_BUF_CTXT(i, TYPE_CMD, 1);
+		}
+	} else
+		rsp_ctxt = driver->rsp_buf_ctxt;
+	mutex_unlock(&driver->md_session_lock);
 
 	/*
 	 * Keep trying till we get the buffer back. It should probably
@@ -309,8 +332,7 @@ static void pack_rsp_and_send(unsigned char *buf, int len)
 	*(uint8_t *)(rsp_ptr + write_len) = CONTROL_CHAR;
 	write_len += sizeof(uint8_t);
 
-	err = diag_mux_write(DIAG_LOCAL_PROC, rsp_ptr, write_len,
-			     driver->rsp_buf_ctxt);
+	err = diag_mux_write(DIAG_LOCAL_PROC, rsp_ptr, write_len, rsp_ctxt);
 	if (err) {
 		pr_err("diag: In %s, unable to write to mux, err: %d\n",
 		       __func__, err);
@@ -320,13 +342,15 @@ static void pack_rsp_and_send(unsigned char *buf, int len)
 	}
 }
 
-static void encode_rsp_and_send(unsigned char *buf, int len)
+static void encode_rsp_and_send(unsigned char *buf, int len,
+				int pid)
 {
 	struct diag_send_desc_type send = { NULL, NULL, DIAG_STATE_START, 0 };
 	struct diag_hdlc_dest_type enc = { NULL, NULL, 0 };
 	unsigned char *rsp_ptr = driver->encoded_rsp_buf;
-	int err, retry_count = 0;
+	int err, i, rsp_ctxt, retry_count = 0;
 	unsigned long flags;
+	struct diag_md_session_t *session_info = NULL, *info = NULL;
 
 	if (!rsp_ptr || !buf)
 		return;
@@ -336,6 +360,27 @@ static void encode_rsp_and_send(unsigned char *buf, int len)
 		       __func__, len, DIAG_MAX_RSP_SIZE);
 		return;
 	}
+
+	mutex_lock(&driver->md_session_lock);
+	session_info = diag_md_session_get_pid(pid);
+	info = (session_info) ? session_info :
+				diag_md_session_get_peripheral(APPS_DATA);
+	info = diag_md_session_get_pid(pid);
+	if (info && info->peripheral_mask) {
+		if (info->peripheral_mask == DIAG_CON_ALL ||
+			(info->peripheral_mask & (1 << APPS_DATA)) ||
+			(info->peripheral_mask & (1 << PERIPHERAL_MODEM))) {
+			rsp_ctxt = SET_BUF_CTXT(APPS_DATA, TYPE_CMD, 1);
+		} else {
+			for (i = 0; i <= NUM_PERIPHERALS; i++) {
+				if (info->peripheral_mask & (1 << i))
+					break;
+			}
+			rsp_ctxt = SET_BUF_CTXT(i, TYPE_CMD, 1);
+		}
+	} else
+		rsp_ctxt = driver->rsp_buf_ctxt;
+	mutex_unlock(&driver->md_session_lock);
 
 	/*
 	 * Keep trying till we get the buffer back. It should probably
@@ -383,7 +428,7 @@ static void encode_rsp_and_send(unsigned char *buf, int len)
 	diag_hdlc_encode(&send, &enc);
 	driver->encoded_rsp_len = (int)(enc.dest - (void *)rsp_ptr);
 	err = diag_mux_write(DIAG_LOCAL_PROC, rsp_ptr, driver->encoded_rsp_len,
-			     driver->rsp_buf_ctxt);
+			     rsp_ctxt);
 	if (err) {
 		pr_err("diag: In %s, Unable to write to device, err: %d\n",
 			__func__, err);
@@ -394,13 +439,14 @@ static void encode_rsp_and_send(unsigned char *buf, int len)
 	memset(buf, '\0', DIAG_MAX_RSP_SIZE);
 }
 
-void diag_send_rsp(unsigned char *buf, int len)
+static void diag_send_rsp(unsigned char *buf, int len, int pid)
 {
-	struct diag_md_session_t *session_info = NULL;
+	struct diag_md_session_t *session_info = NULL, *info = NULL;
 	uint8_t hdlc_disabled;
-
 	mutex_lock(&driver->md_session_lock);
-	session_info = diag_md_session_get_peripheral(APPS_DATA);
+	info = diag_md_session_get_pid(pid);
+	session_info = (info) ? info :
+				diag_md_session_get_peripheral(APPS_DATA);
 	if (session_info)
 		hdlc_disabled = session_info->hdlc_disabled;
 	else
@@ -408,9 +454,9 @@ void diag_send_rsp(unsigned char *buf, int len)
 	mutex_unlock(&driver->md_session_lock);
 
 	if (hdlc_disabled)
-		pack_rsp_and_send(buf, len);
+		pack_rsp_and_send(buf, len, pid);
 	else
-		encode_rsp_and_send(buf, len);
+		encode_rsp_and_send(buf, len, pid);
 }
 
 void diag_update_pkt_buffer(unsigned char *buf, uint32_t len, int type)
@@ -874,7 +920,8 @@ static int diag_cmd_disable_hdlc(unsigned char *src_buf, int src_len,
 	return write_len;
 }
 
-void diag_send_error_rsp(unsigned char *buf, int len)
+void diag_send_error_rsp(unsigned char *buf, int len,
+			int pid)
 {
 	/* -1 to accomodate the first byte 0x13 */
 	if (len > (DIAG_MAX_RSP_SIZE - 1)) {
@@ -884,7 +931,7 @@ void diag_send_error_rsp(unsigned char *buf, int len)
 
 	*(uint8_t *)driver->apps_rsp_buf = DIAG_CMD_ERROR;
 	memcpy((driver->apps_rsp_buf + sizeof(uint8_t)), buf, len);
-	diag_send_rsp(driver->apps_rsp_buf, len + 1);
+	diag_send_rsp(driver->apps_rsp_buf, len + 1, pid);
 }
 
 int diag_process_apps_pkt(unsigned char *buf, int len, int pid)
@@ -904,7 +951,7 @@ int diag_process_apps_pkt(unsigned char *buf, int len, int pid)
 	/* Check if the command is a supported mask command */
 	mask_ret = diag_process_apps_masks(buf, len, pid);
 	if (mask_ret > 0) {
-		diag_send_rsp(driver->apps_rsp_buf, mask_ret);
+		diag_send_rsp(driver->apps_rsp_buf, mask_ret, pid);
 		return 0;
 	}
 
@@ -926,7 +973,7 @@ int diag_process_apps_pkt(unsigned char *buf, int len, int pid)
 						   driver->apps_rsp_buf,
 						   DIAG_MAX_RSP_SIZE);
 		if (write_len > 0)
-			diag_send_rsp(driver->apps_rsp_buf, write_len);
+			diag_send_rsp(driver->apps_rsp_buf, write_len, pid);
 		return 0;
 	}
 
@@ -945,8 +992,11 @@ int diag_process_apps_pkt(unsigned char *buf, int len, int pid)
 		} else {
 			mutex_unlock(&driver->md_session_lock);
 			if (MD_PERIPHERAL_MASK(reg_item->proc) &
-				driver->logging_mask)
-				diag_send_error_rsp(buf, len);
+				driver->logging_mask) {
+				mutex_unlock(&driver->cmd_reg_mutex);
+				diag_send_error_rsp(buf, len, pid);
+				return write_len;
+			}
 			else
 				write_len = diag_send_data(reg_item, buf, len);
 		}
@@ -962,13 +1012,13 @@ int diag_process_apps_pkt(unsigned char *buf, int len, int pid)
 		for (i = 0; i < 4; i++)
 			*(driver->apps_rsp_buf+i) = *(buf+i);
 		*(uint32_t *)(driver->apps_rsp_buf+4) = DIAG_MAX_REQ_SIZE;
-		diag_send_rsp(driver->apps_rsp_buf, 8);
+		diag_send_rsp(driver->apps_rsp_buf, 8, pid);
 		return 0;
 	} else if ((*buf == 0x4b) && (*(buf+1) == 0x12) &&
 		(*(uint16_t *)(buf+2) == DIAG_DIAG_STM)) {
 		len = diag_process_stm_cmd(buf, driver->apps_rsp_buf);
 		if (len > 0) {
-			diag_send_rsp(driver->apps_rsp_buf, len);
+			diag_send_rsp(driver->apps_rsp_buf, len, pid);
 			return 0;
 		}
 		return len;
@@ -981,7 +1031,7 @@ int diag_process_apps_pkt(unsigned char *buf, int len, int pid)
 							driver->apps_rsp_buf,
 							DIAG_MAX_RSP_SIZE);
 		if (write_len > 0)
-			diag_send_rsp(driver->apps_rsp_buf, write_len);
+			diag_send_rsp(driver->apps_rsp_buf, write_len, pid);
 		return 0;
 	}
 	/* Check for time sync switch command */
@@ -992,14 +1042,14 @@ int diag_process_apps_pkt(unsigned char *buf, int len, int pid)
 							driver->apps_rsp_buf,
 							DIAG_MAX_RSP_SIZE);
 		if (write_len > 0)
-			diag_send_rsp(driver->apps_rsp_buf, write_len);
+			diag_send_rsp(driver->apps_rsp_buf, write_len, pid);
 		return 0;
 	}
 	/* Check for download command */
 	else if ((chk_apps_master()) && (*buf == 0x3A)) {
 		/* send response back */
 		driver->apps_rsp_buf[0] = *buf;
-		diag_send_rsp(driver->apps_rsp_buf, 1);
+		diag_send_rsp(driver->apps_rsp_buf, 1, pid);
 		msleep(5000);
 		/* call download API */
 		msm_set_restart_mode(RESTART_DLOAD);
@@ -1019,7 +1069,7 @@ int diag_process_apps_pkt(unsigned char *buf, int len, int pid)
 			for (i = 0; i < 13; i++)
 				driver->apps_rsp_buf[i+3] = 0;
 
-			diag_send_rsp(driver->apps_rsp_buf, 16);
+			diag_send_rsp(driver->apps_rsp_buf, 16, pid);
 			return 0;
 		}
 	}
@@ -1028,7 +1078,7 @@ int diag_process_apps_pkt(unsigned char *buf, int len, int pid)
 		(*(buf+2) == 0x04) && (*(buf+3) == 0x0)) {
 		memcpy(driver->apps_rsp_buf, buf, 4);
 		driver->apps_rsp_buf[4] = wrap_enabled;
-		diag_send_rsp(driver->apps_rsp_buf, 5);
+		diag_send_rsp(driver->apps_rsp_buf, 5, pid);
 		return 0;
 	}
 	/* Wrap the Delayed Rsp ID */
@@ -1037,7 +1087,7 @@ int diag_process_apps_pkt(unsigned char *buf, int len, int pid)
 		wrap_enabled = true;
 		memcpy(driver->apps_rsp_buf, buf, 4);
 		driver->apps_rsp_buf[4] = wrap_count;
-		diag_send_rsp(driver->apps_rsp_buf, 6);
+		diag_send_rsp(driver->apps_rsp_buf, 6, pid);
 		return 0;
 	}
 	/* Mobile ID Rsp */
@@ -1048,7 +1098,7 @@ int diag_process_apps_pkt(unsigned char *buf, int len, int pid)
 						   driver->apps_rsp_buf,
 						   DIAG_MAX_RSP_SIZE);
 		if (write_len > 0) {
-			diag_send_rsp(driver->apps_rsp_buf, write_len);
+			diag_send_rsp(driver->apps_rsp_buf, write_len, pid);
 			return 0;
 		}
 	}
@@ -1068,7 +1118,7 @@ int diag_process_apps_pkt(unsigned char *buf, int len, int pid)
 			for (i = 0; i < 55; i++)
 				driver->apps_rsp_buf[i] = 0;
 
-			diag_send_rsp(driver->apps_rsp_buf, 55);
+			diag_send_rsp(driver->apps_rsp_buf, 55, pid);
 			return 0;
 		}
 		/* respond to 0x7c command */
@@ -1081,14 +1131,14 @@ int diag_process_apps_pkt(unsigned char *buf, int len, int pid)
 							 chk_config_get_id();
 			*(unsigned char *)(driver->apps_rsp_buf + 12) = '\0';
 			*(unsigned char *)(driver->apps_rsp_buf + 13) = '\0';
-			diag_send_rsp(driver->apps_rsp_buf, 14);
+			diag_send_rsp(driver->apps_rsp_buf, 14, pid);
 			return 0;
 		}
 	}
 	write_len = diag_cmd_chk_stats(buf, len, driver->apps_rsp_buf,
 				       DIAG_MAX_RSP_SIZE);
 	if (write_len > 0) {
-		diag_send_rsp(driver->apps_rsp_buf, write_len);
+		diag_send_rsp(driver->apps_rsp_buf, write_len, pid);
 		return 0;
 	}
 	write_len = diag_cmd_disable_hdlc(buf, len, driver->apps_rsp_buf,
@@ -1100,7 +1150,7 @@ int diag_process_apps_pkt(unsigned char *buf, int len, int pid)
 		 * before disabling HDLC encoding on Apps processor.
 		 */
 		mutex_lock(&driver->hdlc_disable_mutex);
-		diag_send_rsp(driver->apps_rsp_buf, write_len);
+		diag_send_rsp(driver->apps_rsp_buf, write_len, pid);
 		/*
 		 * Set the value of hdlc_disabled after sending the response to
 		 * the tools. This is required since the tools is expecting a
@@ -1139,7 +1189,7 @@ int diag_process_apps_pkt(unsigned char *buf, int len, int pid)
 
 	/* We have now come to the end of the function. */
 	if (chk_apps_only())
-		diag_send_error_rsp(buf, len);
+		diag_send_error_rsp(buf, len, pid);
 
 	return 0;
 }
@@ -1221,7 +1271,7 @@ fail:
 	 * recovery algorithm. Send an error response if the
 	 * packet is not in expected format.
 	 */
-	diag_send_error_rsp(driver->hdlc_buf, driver->hdlc_buf_len);
+	diag_send_error_rsp(driver->hdlc_buf, driver->hdlc_buf_len, pid);
 	driver->hdlc_buf_len = 0;
 end:
 	mutex_unlock(&driver->diag_hdlc_mutex);
@@ -1595,7 +1645,7 @@ start:
 
 		if (actual_pkt->start != CONTROL_CHAR) {
 			diag_hdlc_start_recovery(buf, len, pid);
-			diag_send_error_rsp(buf, len);
+			diag_send_error_rsp(buf, len, pid);
 			goto end;
 		}
 		mutex_lock(&driver->hdlc_recovery_mutex);
@@ -1685,15 +1735,14 @@ static int diagfwd_mux_write_done(unsigned char *buf, int len, int buf_ctxt,
 	case TYPE_CMD:
 		if (peripheral >= 0 && peripheral < NUM_PERIPHERALS) {
 			diagfwd_write_done(peripheral, type, num);
-		} else if (peripheral == APPS_DATA) {
+		}
+		if (peripheral == APPS_DATA ||
+				ctxt == DIAG_MEMORY_DEVICE_MODE) {
 			spin_lock_irqsave(&driver->rsp_buf_busy_lock, flags);
 			driver->rsp_buf_busy = 0;
 			driver->encoded_rsp_len = 0;
 			spin_unlock_irqrestore(&driver->rsp_buf_busy_lock,
 					       flags);
-		} else {
-			pr_err_ratelimited("diag: Invalid peripheral %d in %s, type: %d\n",
-					   peripheral, __func__, type);
 		}
 		break;
 	default:
