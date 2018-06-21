@@ -236,6 +236,7 @@ struct file_data {
 	int cid;
 	int tgid;
 	int ssrcount;
+	struct mutex map_mutex;
 };
 
 struct fastrpc_device {
@@ -1528,12 +1529,14 @@ static int fastrpc_internal_munmap(struct fastrpc_apps *me,
 		}
 	}
 	spin_unlock(&fdata->hlock);
+	mutex_lock(&fdata->map_mutex);
 	if (mapfree) {
 		VERIFY(err, 0 == (err = fastrpc_munmap_on_dsp(me, munmap,
 								fdata)));
 		free_map(mapfree, fdata);
 		kfree(mapfree);
 	}
+	mutex_unlock(&fdata->map_mutex);
 	return err;
 }
 
@@ -1626,9 +1629,11 @@ static int fastrpc_internal_mmap(struct fastrpc_apps *me,
 	struct smq_phy_page *pages = 0;
 	int num = 0;
 	int err = 0;
+	mutex_lock(&fdata->map_mutex);
 	VERIFY(err, 0 == map_buffer(me, fdata, mmap->fd, (char *)mmap->vaddrin,
 					mmap->size, &map, &pages, &num));
 	VERIFY(err, 0 == fastrpc_mmap_on_dsp(me, mmap, pages, fdata, num));
+	mutex_unlock(&fdata->map_mutex);
 	if (err)
 		goto bail;
 	map->vaddrout = mmap->vaddrout;
@@ -1636,11 +1641,13 @@ static int fastrpc_internal_mmap(struct fastrpc_apps *me,
 	hlist_add_head(&map->hn, &fdata->hlst);
 	spin_unlock(&fdata->hlock);
  bail:
+	mutex_lock(&fdata->map_mutex);
 	if (err && map) {
 		free_map(map, fdata);
 		kfree(map);
 	}
 	kfree(pages);
+	mutex_unlock(&fdata->map_mutex);
 	return err;
 }
 
@@ -1668,6 +1675,7 @@ static void cleanup_current_dev(struct file_data *fdata)
 		free_dev(devfree, fdata);
 		goto rnext;
 	}
+	mutex_destroy(&fl->map_mutex);
 	return;
 }
 
@@ -1768,7 +1776,7 @@ static int fastrpc_device_open(struct inode *inode, struct file *filp)
 		VERIFY(err, 0 != (fdata = kzalloc(sizeof(*fdata), GFP_KERNEL)));
 		if (err)
 			goto bail;
-
+		mutex_init(&fdata->map_mutex);
 		spin_lock_init(&fdata->hlock);
 		INIT_HLIST_HEAD(&fdata->hlst);
 		fdata->cid = cid;
