@@ -171,6 +171,7 @@ static void diag_send_log_mask_update(uint8_t peripheral, int equip_id)
 			}
 			mask_info->update_buf = temp;
 			mask_info->update_buf_len = header_len + mask_size;
+			buf = temp;
 		}
 
 		memcpy(buf, &ctrl_pkt, header_len);
@@ -258,9 +259,16 @@ static void diag_send_event_mask_update(uint8_t peripheral)
 			} else {
 				mask_info->update_buf = temp;
 				mask_info->update_buf_len = temp_len;
+				buf = temp;
 			}
 		}
-		memcpy(buf + sizeof(header), mask_info->ptr, num_bytes);
+		if (num_bytes > 0)
+			memcpy(buf + sizeof(header), mask_info->ptr, num_bytes);
+		else {
+			pr_err("diag: num_bytes(%d) is not satisfying length condition\n",
+				num_bytes);
+			goto err;
+		}
 		write_len += num_bytes;
 		break;
 	default:
@@ -370,6 +378,7 @@ static void diag_send_msg_mask_update(uint8_t peripheral, int first, int last)
 			} else {
 				mask_info->update_buf = temp;
 				mask_info->update_buf_len = temp_len;
+				buf = temp;
 				pr_debug("diag: In %s, successfully reallocated msg_mask update buffer to len: %d\n",
 					 __func__, mask_info->update_buf_len);
 			}
