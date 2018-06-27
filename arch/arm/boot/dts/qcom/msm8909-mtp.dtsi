@@ -215,7 +215,7 @@
 };
 
 &blsp1_uart1 {
-	status = "disabled";
+	status = "ok";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart_console_sleep>;
 };
