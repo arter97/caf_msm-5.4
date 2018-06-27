@@ -137,7 +137,7 @@ int msm_fb_debugfs_file_index;
 struct dentry *msm_fb_debugfs_root;
 struct dentry *msm_fb_debugfs_file[MSM_FB_MAX_DBGFS];
 static int bl_scale, bl_min_lvl;
-
+struct mutex mdp_panel_power_on_mutex;
 DEFINE_MUTEX(msm_fb_notify_update_sem);
 void msmfb_no_update_notify_timer_cb(unsigned long data)
 {
@@ -1064,6 +1064,7 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 
 	switch (blank_mode) {
 	case FB_BLANK_UNBLANK:
+                mutex_lock(&mdp_panel_power_on_mutex);
 		if (!mfd->panel_power_on) {
 			ret = pdata->on(mfd->pdev);
 			if (ret == 0) {
@@ -1073,6 +1074,7 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 				mfd->panel_driver_on = mfd->op_enable;
 			}
 		}
+                mutex_unlock(&mdp_panel_power_on_mutex);
 		break;
 
 	case FB_BLANK_VSYNC_SUSPEND:
@@ -1080,6 +1082,7 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 	case FB_BLANK_NORMAL:
 	case FB_BLANK_POWERDOWN:
 	default:
+               mutex_lock(&mdp_panel_power_on_mutex);
 		if (mfd->panel_power_on) {
 			mfd->op_enable = FALSE;
 			down(&mfd->sem);
@@ -1106,6 +1109,7 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 			msm_fb_release_timeline(mfd);
 			mfd->op_enable = TRUE;
 		}
+                mutex_unlock(&mdp_panel_power_on_mutex);
 		break;
 	}
 
@@ -1620,6 +1624,7 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 	init_completion(&mfd->msmfb_no_update_notify);
 	init_completion(&mfd->commit_comp);
 	mutex_init(&mfd->sync_mutex);
+        mutex_init(&mdp_panel_power_on_mutex);
 	INIT_WORK(&mfd->commit_work, msm_fb_commit_wq_handler);
 	mfd->msm_fb_backup = kzalloc(sizeof(struct msm_fb_backup_type),
 		GFP_KERNEL);
