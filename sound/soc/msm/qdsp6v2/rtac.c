@@ -146,6 +146,11 @@ struct mutex			rtac_voice_mutex;
 struct mutex			rtac_voice_apr_mutex;
 struct mutex			rtac_afe_apr_mutex;
 
+static struct mutex			rtac_asm_cal_mutex;
+static struct mutex			rtac_adm_cal_mutex;
+static struct mutex			rtac_afe_cal_mutex;
+static struct mutex			rtac_voice_cal_mutex;
+
 int rtac_clear_mapping(uint32_t cal_type)
 {
 	int result = 0;
@@ -1610,42 +1615,62 @@ static long rtac_ioctl_shared(struct file *f,
 	}
 
 	case AUDIO_GET_RTAC_ADM_CAL:
+		mutex_lock(&rtac_adm_cal_mutex);
 		result = send_adm_apr((void *)arg, ADM_CMD_GET_PP_PARAMS_V5);
+		mutex_unlock(&rtac_adm_cal_mutex);
 		break;
 	case AUDIO_SET_RTAC_ADM_CAL:
+		mutex_lock(&rtac_adm_cal_mutex);
 		result = send_adm_apr((void *)arg, ADM_CMD_SET_PP_PARAMS_V5);
+		mutex_unlock(&rtac_adm_cal_mutex);
 		break;
 	case AUDIO_GET_RTAC_ASM_CAL:
+		mutex_lock(&rtac_asm_cal_mutex);
 		result = send_rtac_asm_apr((void *)arg,
 			ASM_STREAM_CMD_GET_PP_PARAMS_V2);
+		mutex_unlock(&rtac_asm_cal_mutex);
 		break;
 	case AUDIO_SET_RTAC_ASM_CAL:
+		mutex_lock(&rtac_asm_cal_mutex);
 		result = send_rtac_asm_apr((void *)arg,
 			ASM_STREAM_CMD_SET_PP_PARAMS_V2);
+		mutex_unlock(&rtac_asm_cal_mutex);
 		break;
 	case AUDIO_GET_RTAC_CVS_CAL:
+		mutex_lock(&rtac_voice_cal_mutex);
 		result = send_voice_apr(RTAC_CVS, (void *)arg,
 			VOICE_CMD_GET_PARAM);
+		mutex_unlock(&rtac_voice_cal_mutex);
 		break;
 	case AUDIO_SET_RTAC_CVS_CAL:
+		mutex_lock(&rtac_voice_cal_mutex);
 		result = send_voice_apr(RTAC_CVS, (void *)arg,
 			VOICE_CMD_SET_PARAM);
+		mutex_unlock(&rtac_voice_cal_mutex);
 		break;
 	case AUDIO_GET_RTAC_CVP_CAL:
+		mutex_lock(&rtac_voice_cal_mutex);
 		result = send_voice_apr(RTAC_CVP, (void *)arg,
 			VOICE_CMD_GET_PARAM);
+		mutex_unlock(&rtac_voice_cal_mutex);
 		break;
 	case AUDIO_SET_RTAC_CVP_CAL:
+		mutex_lock(&rtac_voice_cal_mutex);
 		result = send_voice_apr(RTAC_CVP, (void *)arg,
 			VOICE_CMD_SET_PARAM);
+		mutex_unlock(&rtac_voice_cal_mutex);
 		break;
 	case AUDIO_GET_RTAC_AFE_CAL:
+		mutex_lock(&rtac_afe_cal_mutex);
 		result = send_rtac_afe_apr((void *)arg,
 			AFE_PORT_CMD_GET_PARAM_V2);
+		mutex_unlock(&rtac_afe_cal_mutex);
 		break;
 	case AUDIO_SET_RTAC_AFE_CAL:
+		mutex_lock(&rtac_afe_cal_mutex);
 		result = send_rtac_afe_apr((void *)arg,
 			AFE_PORT_CMD_SET_PARAM_V2);
+		mutex_unlock(&rtac_afe_cal_mutex);
 		break;
 	default:
 		pr_err("%s: Invalid IOCTL, command = %d!\n",
@@ -1777,6 +1802,7 @@ static int __init rtac_init(void)
 	init_waitqueue_head(&rtac_adm_apr_data.cmd_wait);
 	mutex_init(&rtac_adm_mutex);
 	mutex_init(&rtac_adm_apr_mutex);
+	mutex_init(&rtac_adm_cal_mutex);
 
 	/* ASM */
 	for (i = 0; i < SESSION_MAX+1; i++) {
@@ -1785,12 +1811,14 @@ static int __init rtac_init(void)
 		init_waitqueue_head(&rtac_asm_apr_data[i].cmd_wait);
 	}
 	mutex_init(&rtac_asm_apr_mutex);
+	mutex_init(&rtac_asm_cal_mutex);
 
 	/* AFE */
 	rtac_afe_apr_data.apr_handle = NULL;
 	atomic_set(&rtac_afe_apr_data.cmd_state, 0);
 	init_waitqueue_head(&rtac_afe_apr_data.cmd_wait);
 	mutex_init(&rtac_afe_apr_mutex);
+	mutex_init(&rtac_afe_cal_mutex);
 
 	/* Voice */
 	memset(&rtac_voice_data, 0, sizeof(rtac_voice_data));
@@ -1801,6 +1829,7 @@ static int __init rtac_init(void)
 	}
 	mutex_init(&rtac_voice_mutex);
 	mutex_init(&rtac_voice_apr_mutex);
+	mutex_init(&rtac_voice_cal_mutex);
 
 	return misc_register(&rtac_misc);
 }
