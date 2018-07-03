@@ -140,7 +140,7 @@
 
 		cdc-vdd-digital-supply = <&pm660_l11>;
 		qcom,cdc-vdd-digital-voltage = <1800000 1800000>;
-		qcom,cdc-vdd-digital-current = <5000>;
+		qcom,cdc-vdd-digital-current = <10000>;
 		qcom,cdc-on-demand-supplies = "cdc-vdd-digital";
 
 		qcom,subsys-name = "modem";
