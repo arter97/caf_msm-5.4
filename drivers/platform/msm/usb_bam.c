@@ -1921,8 +1921,9 @@ static void usb_bam_finish_resume(struct work_struct *w)
 		dst_idx = info[cur_bam].resume_dst_idx[idx];
 		pipe_connect = &usb_bam_connections[dst_idx];
 		spin_unlock(&usb_bam_ipa_handshake_info_lock);
-		/* ep_dequeue and dbm_reset might not have happened */
-		if (pipe_connect->cons_stopped)
+		/* ep_dequeue and dbm_reset might not have happened for CONS */
+		if (pipe_connect->dir == USB_TO_PEER_PERIPHERAL ||
+					pipe_connect->cons_stopped)
 			reset_pipe_for_resume(pipe_connect);
 		spin_lock(&usb_bam_ipa_handshake_info_lock);
 		if (pipe_connect->cons_stopped) {
