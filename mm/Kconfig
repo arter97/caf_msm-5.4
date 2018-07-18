@@ -556,3 +556,10 @@ config PROCESS_RECLAIM
 	 (addr, addr + size-bytes) of the process.
 
 	 Any other vaule is ignored.
+
+config CMA_ALLOW_PAGE_CACHE
+	bool "Allow pagecache in cma"
+	default n
+	help
+	 Allow pagecache pages to be allocated from cma
+	 region to increase cma utilization.
