@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -408,7 +408,7 @@ static int32_t msm_led_get_dt_data(struct device_node *of_node,
 		return -EINVAL;
 	}
 
-	fctrl->flashdata = kzalloc(sizeof(fctrl->flashdata),
+	fctrl->flashdata = kzalloc(sizeof(struct msm_camera_sensor_board_info),
 				GFP_KERNEL);
 	if (!fctrl->flashdata)
 		return -ENOMEM;
@@ -442,7 +442,7 @@ static int32_t msm_led_get_dt_data(struct device_node *of_node,
 		fctrl->cci_i2c_master = MASTER_0;
 		rc = 0;
 	}
-
+	fctrl->pinctrl_info.use_pinctrl = false;
 	fctrl->pinctrl_info.use_pinctrl = of_property_read_bool(of_node,
 						"qcom,enable_pinctrl");
 	if (of_get_property(of_node, "qcom,flash-source", &count)) {
@@ -503,7 +503,7 @@ static int32_t msm_led_get_dt_data(struct device_node *of_node,
 
 		if (gpio_array_size) {
 			gpio_array =
-				kcalloc(gpio_array_size, sizeof(uint16_t),
+				kzalloc(gpio_array_size * sizeof(uint16_t),
 					 GFP_KERNEL);
 			if (!gpio_array) {
 				rc = -ENOMEM;
