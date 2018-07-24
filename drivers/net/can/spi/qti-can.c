@@ -121,6 +121,8 @@ struct spi_miso { /* TLV for MISO line */
 #define CMD_END_BOOT_ROM_UPGRADE	0x9B
 #define CMD_END_FW_UPDATE_FILE		0x9C
 #define CMD_UPDATE_TIME_INFO		0x9D
+#define CMD_SUSPEND_EVENT		0x9E
+#define CMD_RESUME_EVENT		0x9F
 
 #define IOCTL_RELEASE_CAN_BUFFER	(SIOCDEVPRIVATE + 0)
 #define IOCTL_ENABLE_BUFFERING		(SIOCDEVPRIVATE + 1)
@@ -576,6 +578,30 @@ static int qti_can_query_firmware_version(struct qti_can *priv_data)
 				msecs_to_jiffies(QUERY_FIRMWARE_TIMEOUT_MS));
 		ret = priv_data->cmd_result;
 	}
+
+	return ret;
+}
+
+static int qti_can_notify_power_events(struct qti_can *priv_data, u8 event_type)
+{
+	char *tx_buf, *rx_buf;
+	int ret;
+	struct spi_mosi *req;
+
+	mutex_lock(&priv_data->spi_lock);
+	tx_buf = priv_data->tx_buf;
+	rx_buf = priv_data->rx_buf;
+	memset(tx_buf, 0, XFER_BUFFER_SIZE);
+	memset(rx_buf, 0, XFER_BUFFER_SIZE);
+	priv_data->xfer_length = XFER_BUFFER_SIZE;
+
+	req = (struct spi_mosi *)tx_buf;
+	req->cmd = event_type;
+	req->len = 0;
+	req->seq = atomic_inc_return(&priv_data->msg_seq);
+
+	ret = qti_can_do_spi_transaction(priv_data);
+	mutex_unlock(&priv_data->spi_lock);
 
 	return ret;
 }
@@ -1263,6 +1289,7 @@ static int qti_can_probe(struct spi_device *spi)
 	int err, retry = 0, query_err = -1, i;
 	struct qti_can *priv_data = NULL;
 	struct device *dev;
+	u32 irq_type;
 
 	dev = &spi->dev;
 	dev_info(dev, "qti_can_probe");
@@ -1339,7 +1366,7 @@ static int qti_can_probe(struct spi_device *spi)
 	}
 
 	priv_data->support_can_fd = of_property_read_bool(spi->dev.of_node,
-							  "support-can-fd");
+							  "qcom,support-can-fd");
 
 	if (of_device_is_compatible(spi->dev.of_node, "qcom,nxp,mpc5746c"))
 		qti_can_bittiming_const = flexcan_bittiming_const;
@@ -1369,8 +1396,11 @@ static int qti_can_probe(struct spi_device *spi)
 		}
 	}
 
+	irq_type = irq_get_trigger_type(spi->irq);
+	if (irq_type == IRQ_TYPE_NONE)
+		irq_type = IRQ_TYPE_EDGE_FALLING;
 	err = request_threaded_irq(spi->irq, NULL, qti_can_irq,
-				   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+				   irq_type | IRQF_ONESHOT,
 				   "qti-can", priv_data);
 	if (err) {
 		LOGDE("Failed to request irq: %d", err);
@@ -1436,6 +1466,10 @@ static int qti_can_remove(struct spi_device *spi)
 static int qti_can_suspend(struct device *dev)
 {
 	struct spi_device *spi = to_spi_device(dev);
+	struct qti_can *priv_data = spi_get_drvdata(spi);
+	u8 power_event = CMD_SUSPEND_EVENT;
+
+	qti_can_notify_power_events(priv_data, power_event);
 
 	enable_irq_wake(spi->irq);
 	return 0;
@@ -1445,9 +1479,10 @@ static int qti_can_resume(struct device *dev)
 {
 	struct spi_device *spi = to_spi_device(dev);
 	struct qti_can *priv_data = spi_get_drvdata(spi);
+	u8 power_event = CMD_RESUME_EVENT;
 
 	disable_irq_wake(spi->irq);
-	qti_can_rx_message(priv_data);
+	qti_can_notify_power_events(priv_data, power_event);
 	return 0;
 }
 
