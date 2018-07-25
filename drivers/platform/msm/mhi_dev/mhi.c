@@ -1231,6 +1231,7 @@ static void mhi_dev_scheduler(struct work_struct *work)
 	enum mhi_dev_state state;
 	enum mhi_dev_event event = 0;
 	bool mhi_reset = false;
+	uint32_t bhi_imgtxdb = 0;
 
 	mutex_lock(&mhi_ctx->mhi_lock);
 	/* Check for interrupts */
@@ -1268,6 +1269,10 @@ static void mhi_dev_scheduler(struct work_struct *work)
 			pr_err("error sending SM event\n");
 			goto fail;
 		}
+
+		rc = mhi_dev_mmio_read(mhi, BHI_IMGTXDB, &bhi_imgtxdb);
+		mhi_log(MHI_MSG_VERBOSE,
+			"BHI_IMGTXDB = 0x%x\n", bhi_imgtxdb);
 	}
 
 	if (int_value & MHI_MMIO_CTRL_CRDB_STATUS_MSK) {
@@ -1308,6 +1313,12 @@ EXPORT_SYMBOL(mhi_dev_notify_a7_event);
 static irqreturn_t mhi_dev_isr(int irq, void *dev_id)
 {
 	struct mhi_dev *mhi = dev_id;
+
+	if (!atomic_read(&mhi->mhi_dev_wake)) {
+		pm_stay_awake(mhi->dev);
+		atomic_set(&mhi->mhi_dev_wake, 1);
+		mhi_log(MHI_MSG_VERBOSE, "acquiring mhi wakelock in ISR\n");
+	}
 
 	disable_irq_nosync(mhi->mhi_irq);
 	schedule_work(&mhi->chdb_ctrl_work);
