@@ -2112,8 +2112,10 @@ static void mhi_dev_enable(struct work_struct *work)
 		return;
 	}
 
-	if (mhi_ctx->config_iatu || mhi_ctx->mhi_int)
+	if (mhi_ctx->config_iatu || mhi_ctx->mhi_int) {
+		mhi_ctx->mhi_int_en = true;
 		enable_irq(mhi_ctx->mhi_irq);
+	}
 
 	mhi_update_state_info(MHI_DEV_UEVENT_CTRL,
 						MHI_STATE_CONFIGURED);
@@ -2341,6 +2343,7 @@ static int mhi_init(struct mhi_dev *mhi)
 	for (i = 0; i < mhi->cfg.channels; i++)
 		mutex_init(&mhi->ch[i].ch_lock);
 
+	spin_lock_init(&mhi->lock);
 	mhi->mmio_backup = devm_kzalloc(&pdev->dev, MHI_DEV_MMIO_RANGE,
 								GFP_KERNEL);
 	if (!mhi->mmio_backup)
