@@ -476,6 +476,7 @@ struct mhi_dev {
 	struct mhi_config		cfg;
 	bool				mmio_initialized;
 
+	spinlock_t                      lock;
 	/* Host control base information */
 	struct mhi_host_addr		host_addr;
 	struct mhi_addr			ctrl_base;
@@ -564,6 +565,7 @@ struct mhi_dev {
 
 	/*Register for interrupt*/
 	bool				mhi_int;
+	bool				mhi_int_en;
 
 	struct kobj_uevent_env		kobj_env;
 };
