@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3229,8 +3229,6 @@ static int qpnp_adc_tm_probe(struct spmi_device *spmi)
 			chip->sensor[sen_idx].thermal_node = true;
 			snprintf(name, sizeof(name), "%s",
 				chip->adc->adc_channels[sen_idx].name);
-			chip->sensor[sen_idx].meas_interval =
-				QPNP_ADC_TM_MEAS_INTERVAL;
 			chip->sensor[sen_idx].low_thr =
 						QPNP_ADC_TM_M0_LOW_THR;
 			chip->sensor[sen_idx].high_thr =
