@@ -1,4 +1,5 @@
-/* Copyright (c) 2014-2015, 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, 2017-2018, The Linux Foundation.
+ * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -451,12 +452,20 @@ static int __msm8x16_wcd_reg_read(struct snd_soc_codec *codec,
 	else if (MSM8X16_WCD_IS_DIGITAL_REG(reg)) {
 		mutex_lock(&pdata->cdc_mclk_mutex);
 		if (atomic_read(&pdata->mclk_enabled) == false) {
-			pdata->digital_cdc_clk.clk_val = pdata->mclk_freq;
-			ret = afe_set_digital_codec_core_clock(
+			if (pdata->afe_clk_ver == AFE_CLK_VERSION_V2) {
+				pdata->digital_cdc_core_clk.enable = 1;
+				ret = afe_set_lpass_clock_v2(
+					AFE_PORT_ID_PRIMARY_MI2S_RX,
+					&pdata->digital_cdc_core_clk);
+			} else {
+				pdata->digital_cdc_clk.clk_val =
+						pdata->mclk_freq;
+				ret = afe_set_digital_codec_core_clock(
 					AFE_PORT_ID_PRIMARY_MI2S_RX,
 					&pdata->digital_cdc_clk);
+			}
 			if (ret < 0) {
-				pr_err("failed to enable the MCLK\n");
+				pr_err("%s:failed to enable the MCLK\n", __func__);
 				goto err;
 			}
 			pr_debug("%s: MCLK not enabled\n", __func__);
@@ -502,12 +511,20 @@ static int __msm8x16_wcd_reg_write(struct snd_soc_codec *codec,
 		mutex_lock(&pdata->cdc_mclk_mutex);
 		if (atomic_read(&pdata->mclk_enabled) == false) {
 			pr_debug("MCLK not enabled %s:\n", __func__);
-			pdata->digital_cdc_clk.clk_val = pdata->mclk_freq;
-			ret = afe_set_digital_codec_core_clock(
+			if (pdata->afe_clk_ver == AFE_CLK_VERSION_V2) {
+                                pdata->digital_cdc_core_clk.enable = 1;
+                                ret = afe_set_lpass_clock_v2(
+                                        AFE_PORT_ID_PRIMARY_MI2S_RX,
+                                        &pdata->digital_cdc_core_clk);
+                        } else {
+				pdata->digital_cdc_clk.clk_val =
+						pdata->mclk_freq;
+				ret = afe_set_digital_codec_core_clock(
 					AFE_PORT_ID_PRIMARY_MI2S_RX,
 					&pdata->digital_cdc_clk);
+			}
 			if (ret < 0) {
-				pr_err("failed to enable the MCLK\n");
+				pr_err("%s: failed to enable the MCLK\n", __func__);
 				ret = 0;
 				goto err;
 			}
@@ -4429,10 +4446,17 @@ int msm8x16_wcd_suspend(struct snd_soc_codec *codec)
 				&pdata->disable_mclk_work);
 		mutex_lock(&pdata->cdc_mclk_mutex);
 		if (atomic_read(&pdata->mclk_enabled) == true) {
-			pdata->digital_cdc_clk.clk_val = 0;
-			afe_set_digital_codec_core_clock(
+			if (pdata->afe_clk_ver == AFE_CLK_VERSION_V2) {
+                                pdata->digital_cdc_core_clk.enable = 0;
+                                afe_set_lpass_clock_v2(
+                                        AFE_PORT_ID_PRIMARY_MI2S_RX,
+                                        &pdata->digital_cdc_core_clk);
+                        } else {
+				pdata->digital_cdc_clk.clk_val = 0;
+				afe_set_digital_codec_core_clock(
 					AFE_PORT_ID_PRIMARY_MI2S_RX,
 					&pdata->digital_cdc_clk);
+			}
 			atomic_set(&pdata->mclk_enabled, false);
 		}
 		mutex_unlock(&pdata->cdc_mclk_mutex);
