@@ -2163,7 +2163,8 @@ static int qpnp_adc_tm_disable_rearm_high_thresholds(
 						ADC_TM_HIGH_THR_DISABLE;
 		}
 	}
-	qpnp_adc_tm_manage_thresholds(chip, sensor_num, btm_chan_num);
+	if(!chip->sensor[sensor_num].thermal_node)
+		qpnp_adc_tm_manage_thresholds(chip, sensor_num, btm_chan_num);
 
 	if (!chip->adc_tm_hc) {
 		rc = qpnp_adc_tm_reg_update(chip,
@@ -2262,7 +2263,8 @@ static int qpnp_adc_tm_disable_rearm_low_thresholds(
 						ADC_TM_LOW_THR_DISABLE;
 		}
 	}
-	qpnp_adc_tm_manage_thresholds(chip, sensor_num, btm_chan_num);
+	if(!chip->sensor[sensor_num].thermal_node)
+		qpnp_adc_tm_manage_thresholds(chip, sensor_num, btm_chan_num);
 
 	if (!chip->adc_tm_hc) {
 		rc = qpnp_adc_tm_reg_update(chip,
@@ -3302,7 +3304,7 @@ static int qpnp_adc_tm_probe(struct spmi_device *spmi)
 	} else {
 		rc = devm_request_irq(&spmi->dev, chip->adc->adc_irq_eoc,
 				qpnp_adc_tm_rc_thr_isr,
-			IRQF_TRIGGER_RISING, "qpnp_adc_tm_interrupt", chip);
+			IRQF_TRIGGER_HIGH, "qpnp_adc_tm_interrupt", chip);
 		if (rc)
 			dev_err(&spmi->dev, "failed to request adc irq\n");
 		else
