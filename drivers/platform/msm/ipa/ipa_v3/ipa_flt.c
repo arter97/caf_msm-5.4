@@ -1099,9 +1099,9 @@ static int __ipa_validate_flt_rule(const struct ipa_flt_rule *rule,
 	}
 
 	if (rule->rule_id) {
-		if (rule->rule_id >= IPA_RULE_ID_MIN_VAL &&
-		    rule->rule_id <= IPA_RULE_ID_MAX_VAL) {
-			IPAERR("invalid rule_id provided 0x%x\n"
+		if (rule->rule_id < IPA_RULE_ID_MIN ||
+		    rule->rule_id >= IPA_RULE_ID_MAX) {
+			IPAERR_RL("invalid rule_id provided 0x%x\n"
 				"rule_id 0x%x - 0x%x  are auto generated\n",
 				rule->rule_id,
 				IPA_RULE_ID_MIN_VAL,
