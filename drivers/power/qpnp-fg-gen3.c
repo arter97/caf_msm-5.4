@@ -3388,6 +3388,7 @@ static enum power_supply_property fg_psy_props[] = {
 
 #define DEFAULT_ESR_CHG_TIMER_RETRY	8
 #define DEFAULT_ESR_CHG_TIMER_MAX	16
+#define VOLTAGE_MODE_SAT_CLEAR_BIT	BIT(3)
 static int fg_hw_init(struct fg_chip *chip)
 {
 	int rc;
@@ -3607,6 +3608,14 @@ static int fg_hw_init(struct fg_chip *chip)
 		pr_err("Error in configuring Rconn, rc=%d\n", rc);
 		return rc;
 	}
+
+	rc = fg_sram_masked_write(chip, ESR_EXTRACTION_ENABLE_WORD,
+				ESR_EXTRACTION_ENABLE_OFFSET,
+				VOLTAGE_MODE_SAT_CLEAR_BIT,
+				VOLTAGE_MODE_SAT_CLEAR_BIT,
+				FG_IMA_DEFAULT);
+	if (rc < 0)
+		return rc;
 
 	fg_encode(chip->sp, FG_SRAM_ESR_TIGHT_FILTER,
 		chip->dt.esr_tight_flt_upct, buf);
