@@ -457,7 +457,12 @@ int usb_func_ep_queue(struct usb_function *func, struct usb_ep *ep,
 
 	if (func->func_is_suspended && func->func_wakeup_allowed) {
 		ret = usb_gadget_func_wakeup(gadget, func->intf_id);
-		if (ret == -EAGAIN) {
+		if (ret == -EACCES) {
+			pr_debug("bus suspended func wakeup for %s delayed until bus resume.\n",
+				func->name ? func->name : "");
+			func->func_wakeup_pending = 1;
+			ret = -EAGAIN;
+		} else if (ret == -EAGAIN) {
 			pr_debug("bus suspended func wakeup for %s delayed until bus resume.\n",
 				func->name ? func->name : "");
 		} else if (ret < 0 && ret != -ENOTSUPP) {
