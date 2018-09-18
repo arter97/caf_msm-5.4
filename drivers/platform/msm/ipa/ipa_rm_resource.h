@@ -65,6 +65,7 @@ struct ipa_rm_resource {
 	u32				needed_bw;
 	enum ipa_rm_resource_state	state;
 	struct ipa_rm_peers_list	*peers_list;
+	struct ipa_rm_delayed_release_work_type *release_work;
 };
 
 /**
