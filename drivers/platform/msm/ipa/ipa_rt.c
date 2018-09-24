@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014,2019 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1057,6 +1057,7 @@ int ipa_reset_rt(enum ipa_ip_type ip)
 	struct ipa_rt_tbl_set *rset;
 	u32 apps_start_idx;
 	int id;
+	struct ipa_hdr_entry *hdr_entry;
 
 	if (ip >= IPA_IP_MAX) {
 		IPAERR("bad parm\n");
@@ -1100,6 +1101,16 @@ int ipa_reset_rt(enum ipa_ip_type ip)
 				continue;
 
 			list_del(&rule->link);
+			if (rule->hdr) {
+				hdr_entry = ipa_id_find(
+					rule->rule.hdr_hdl);
+				if (!hdr_entry ||
+					hdr_entry->cookie != IPA_HDR_COOKIE) {
+					IPAERR(
+					"Header already deleted\n");
+					return -EINVAL;
+				}
+			}
 			tbl->rule_cnt--;
 			if (rule->hdr)
 				__ipa_release_hdr(rule->hdr->id);
