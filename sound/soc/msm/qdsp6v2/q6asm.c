@@ -898,7 +898,7 @@ int q6asm_unmap_rtac_block(uint32_t *mem_map_handle)
 			__func__, result2);
 		result = result2;
 	} else {
-		mem_map_handle = 0;
+		*mem_map_handle = 0;
 	}
 
 	result2 = q6asm_mmap_apr_dereg();
@@ -1337,6 +1337,12 @@ int q6asm_audio_client_buf_alloc_contiguous(unsigned int dir,
 		pr_err("%s: buffer already allocated\n", __func__);
 		return 0;
 	}
+
+	if (bufcnt == 0) {
+		pr_err("%s: invalid buffer count\n", __func__);
+		return -EINVAL;
+	}
+
 	mutex_lock(&ac->cmd_lock);
 	buf = kzalloc(((sizeof(struct audio_buffer))*bufcnt),
 			GFP_KERNEL);
