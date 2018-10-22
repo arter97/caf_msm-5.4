@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2014, 2018 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -21,9 +21,14 @@
 #include <linux/of_device.h>
 #include <linux/msm_audio_ion.h>
 #include <soc/qcom/subsystem_restart.h>
+#include <linux/dma-contiguous.h>
+#include <soc/qcom/scm.h>
+#include <asm/dma-contiguous.h>
 
 #include <linux/iommu.h>
 #include <linux/msm_iommu_domains.h>
+
+#define TZBSP_MEM_PROTECT_AUDIO_CMD_ID 0x00000005
 
 struct msm_audio_ion_private {
 	bool smmu_enabled;
@@ -31,6 +36,15 @@ struct msm_audio_ion_private {
 	struct iommu_group *group;
 	int32_t domain_id;
 	struct iommu_domain *domain;
+};
+
+struct tz_mem_protect_cmd_buf {
+	phys_addr_t phys_addr;
+	unsigned long size;
+};
+
+struct tz_resp {
+	int32_t ret;
 };
 
 static struct msm_audio_ion_private msm_audio_ion_data = {0,};
@@ -472,20 +486,54 @@ static int msm_audio_ion_get_phys(struct ion_client *client,
 	return rc;
 }
 
+static void msm_audio_protect_memory_region(struct device *dev)
+{
+	int ret = 0;
+	unsigned long size = 0;
+	phys_addr_t phys_addr = 0;
+	struct tz_mem_protect_cmd_buf desc = {0};
+	struct tz_resp resp = {0};
+
+	phys_addr = cma_get_base(dev);
+	size = cma_get_size(dev);
+
+	pr_debug("%s: cma_audio_mem_addr %pK with size %lu\n",
+		__func__, &phys_addr, size);
+
+	desc.phys_addr = phys_addr;
+	desc.size = size;
+	ret = scm_call(SCM_SVC_MP, TZBSP_MEM_PROTECT_AUDIO_CMD_ID,
+			(void *)&desc , sizeof(desc),
+			 (void *)&resp, sizeof(resp));
+	if (ret < 0)
+		pr_err("%s: SCM call failed, scm_call_ret %d tz_resp %d\n",
+			__func__, ret, resp.ret);
+
+}
+
 static int msm_audio_ion_probe(struct platform_device *pdev)
 {
 	int rc = 0;
 	const char *msm_audio_ion_dt = "qcom,smmu-enabled";
+	const char *mdm_audio_ion_scm = "qcom,scm-mp-enabled";
 	bool smmu_enabled;
+	bool scm_mp_enabled;
 	enum apr_subsys_state q6_state;
+	struct device *dev = &pdev->dev;
 
-	if (pdev->dev.of_node == NULL) {
+	if (dev->of_node == NULL) {
 		pr_err("%s: device tree is not found\n", __func__);
 		msm_audio_ion_data.smmu_enabled = 0;
 		return 0;
 	}
 
-	smmu_enabled = of_property_read_bool(pdev->dev.of_node,
+	scm_mp_enabled = of_property_read_bool(dev->of_node,
+						mdm_audio_ion_scm);
+
+	if (scm_mp_enabled)
+		msm_audio_protect_memory_region(dev);
+
+	smmu_enabled = of_property_read_bool(dev->of_node,
 					     msm_audio_ion_dt);
 	msm_audio_ion_data.smmu_enabled = smmu_enabled;
 

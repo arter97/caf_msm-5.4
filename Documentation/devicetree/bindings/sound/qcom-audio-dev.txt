@@ -963,11 +963,23 @@ Optional properties:
         presence of SMMU in ADSP to handle ION APIs differently.
         Presence of this property means ADSP has SMMU in it.
 
+ - qcom,scm-mp-enabled:
+	It is possible that some MDMs need audio memory protection enabled
+	through SMC ID in TZ. To enable this functionality, this flag
+	should be present. Presence of this flag makes the msm-audio-ion
+	driver call SCM driver API for memory protection.
+
+-  linux,contiguous-region:
+	Provide reference to memory region allocated for audio in
+	reserved-memory node.
+
 Example:
 
 qcom,msm-audio-ion {
 	compatible = "qcom,msm-audio-ion;
 	qcom,smmu-enabled;
+	qcom,scm-mp-enabled;
+	linux,contiguous-region = <&audio_mem>;
 };
 
 * MSM8226 ASoC Machine driver
