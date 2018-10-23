@@ -786,17 +786,21 @@ int ipa_query_rt_index(struct ipa_ioc_get_rt_tbl_indx *in)
 {
 	struct ipa_rt_tbl *entry;
 
+	mutex_lock(&ipa_ctx->lock);
 	if (in->ip >= IPA_IP_MAX) {
 		IPAERR("bad parm\n");
 		return -EINVAL;
 	}
-
+	
 	/* check if this table exists */
 	entry = __ipa_find_rt_tbl(in->ip, in->name);
-	if (!entry)
+	if (!entry) {
+		mutex_unlock(&ipa_ctx->lock);
 		return -EFAULT;
+	}
 
 	in->idx  = entry->idx;
+	mutex_unlock(&ipa_ctx->lock);
 	return 0;
 }
 
