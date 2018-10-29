@@ -1,4 +1,5 @@
-/* Copyright (c) 2012,2014-2016, 2018 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012, 2014-2016, 2018 The Linux Foundation. All rights
+ * reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -20,6 +21,7 @@
 #include <linux/skbuff.h>
 #endif
 #include <linux/debugfs.h>
+#include <net/cnss_prealloc.h>
 
 static DEFINE_SPINLOCK(alloc_lock);
 
@@ -234,7 +236,6 @@ void *wcnss_prealloc_get(size_t size)
 
 	pr_err("wcnss: %s: prealloc not available for size: %zu\n",
 	       __func__, size);
-	WARN_ON(1);
 
 	return NULL;
 }
