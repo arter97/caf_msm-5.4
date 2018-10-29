@@ -39,11 +39,15 @@
 #ifdef CONFIG_WCNSS_MEM_PRE_ALLOC
 #include <net/cnss_prealloc.h>
 #endif
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
 
 #define WLAN_VREG_NAME		"vdd-wlan"
 #define WLAN_VREG_DSRC_NAME	"vdd-wlan-dsrc"
 #define WLAN_VREG_IO_NAME	"vdd-wlan-io"
 #define WLAN_VREG_XTAL_NAME	"vdd-wlan-xtal"
+#define WLAN_GPIO_CAPTSF_NAME	"qcom,cap-tsf-gpio"
+
 
 #define WLAN_VREG_IO_MAX	1800000
 #define WLAN_VREG_IO_MIN	1800000
@@ -77,6 +81,7 @@ struct cnss_sdio_info {
 	const struct sdio_device_id *id;
 	bool skip_wlan_en_toggle;
 	bool cnss_hw_state;
+	struct cnss_cap_tsf_info cap_tsf_info;
 };
 
 struct cnss_ssr_info {
@@ -274,11 +279,6 @@ static int cnss_put_hw_resources(struct device *dev)
 		return ret;
 	}
 
-	if (!cnss_pdata->regulator.wlan_vreg) {
-		pr_debug("wlan_vreg regulator is invalid\n");
-		return 0;
-	}
-
 	ret = mmc_power_save_host(host);
 	if (ret) {
 		pr_err("Failed to Power Save Host err:%d\n",
@@ -286,7 +286,11 @@ static int cnss_put_hw_resources(struct device *dev)
 		return ret;
 	}
 
-	regulator_disable(cnss_pdata->regulator.wlan_vreg);
+	if (cnss_pdata->regulator.wlan_vreg)
+		regulator_disable(cnss_pdata->regulator.wlan_vreg);
+	else
+		pr_debug("wlan_vreg regulator is invalid\n");
+
 	info->cnss_hw_state = CNSS_HW_SLEEP;
 
 	return ret;
@@ -320,22 +324,23 @@ static int cnss_get_hw_resources(struct device *dev)
 		return ret;
 	}
 
-	if (!cnss_pdata->regulator.wlan_vreg) {
+	if (cnss_pdata->regulator.wlan_vreg) {
+		ret = regulator_enable(cnss_pdata->regulator.wlan_vreg);
+		if (ret) {
+			pr_err("Failed to enable wlan vreg\n");
+			return ret;
+		}
+	} else {
 		pr_debug("wlan_vreg regulator is invalid\n");
-		return 0;
 	}
 
-	ret = regulator_enable(cnss_pdata->regulator.wlan_vreg);
-	if (ret) {
-		pr_err("Failed to enable wlan vreg\n");
-		return ret;
-	}
 
 	ret = mmc_power_restore_host(host);
 	if (ret) {
 		pr_err("Failed to restore host power ret:%d\n",
 		       ret);
-		regulator_disable(cnss_pdata->regulator.wlan_vreg);
+		if (cnss_pdata->regulator.wlan_vreg)
+			regulator_disable(cnss_pdata->regulator.wlan_vreg);
 		return ret;
 	}
 
@@ -704,6 +709,109 @@ int cnss_get_restart_level(void)
 }
 EXPORT_SYMBOL(cnss_get_restart_level);
 
+static inline int cnss_get_tsf_cap_irq(struct device *dev)
+{
+	int irq = -EINVAL;
+	int gpio;
+
+	if (!dev)
+		return -ENODEV;
+
+	gpio = of_get_named_gpio(dev->of_node, WLAN_GPIO_CAPTSF_NAME, 0);
+	if (gpio >= 0)
+		irq = gpio_to_irq(gpio);
+
+	return irq;
+}
+
+static int cnss_sdio_register_tsf_captured_handler(irq_handler_t handler,
+						   void *ctx)
+{
+	struct cnss_cap_tsf_info *tsf_info;
+
+	if (!cnss_pdata)
+		return -ENODEV;
+
+	tsf_info = &cnss_pdata->cnss_sdio_info.cap_tsf_info;
+	if (tsf_info->irq_num < 0)
+		return -ENOTSUPP;
+
+	tsf_info->irq_handler = handler;
+	tsf_info->context = ctx;
+	return 0;
+}
+
+static int cnss_sdio_unregister_tsf_captured_handler(void *ctx)
+{
+	struct cnss_cap_tsf_info *tsf_info;
+
+	if (!cnss_pdata)
+		return -ENODEV;
+
+	tsf_info = &cnss_pdata->cnss_sdio_info.cap_tsf_info;
+	if (tsf_info->irq_num < 0)
+		return -ENOTSUPP;
+
+	if (ctx == tsf_info->context) {
+		tsf_info->irq_handler = NULL;
+		tsf_info->context = NULL;
+	}
+	return 0;
+}
+
+static irqreturn_t cnss_sdio_tsf_captured_handler(int irq, void *ctx)
+{
+	struct cnss_cap_tsf_info *tsf_info;
+
+	if (!cnss_pdata)
+		return IRQ_HANDLED;
+
+	tsf_info = &cnss_pdata->cnss_sdio_info.cap_tsf_info;
+	if (tsf_info->irq_num < 0 || tsf_info->irq_num != irq ||
+	    !tsf_info->irq_handler || !tsf_info->context)
+		return IRQ_HANDLED;
+
+	return tsf_info->irq_handler(irq, tsf_info->context);
+}
+
+static void cnss_sdio_tsf_init(struct device *dev,
+			       struct cnss_cap_tsf_info *tsf_info)
+{
+	int ret, irq;
+
+	tsf_info->irq_num = -EINVAL;
+	tsf_info->irq_handler = NULL;
+	tsf_info->context = NULL;
+
+	irq = cnss_get_tsf_cap_irq(dev);
+	if (irq < 0) {
+		dev_err(dev, "%s: fail to get irq: %d\n", __func__, irq);
+		return;
+	}
+
+	ret = request_irq(irq, cnss_sdio_tsf_captured_handler,
+			  IRQF_SHARED | IRQF_TRIGGER_RISING, dev_name(dev),
+			  (void *)tsf_info);
+	dev_err(dev, "%s: request irq[%d] for dev: %s, result: %d\n",
+		__func__, irq, dev_name(dev), ret);
+	if (!ret)
+		tsf_info->irq_num = irq;
+}
+
+static void cnss_sdio_tsf_deinit(struct cnss_cap_tsf_info *tsf_info)
+{
+	int irq = tsf_info->irq_num;
+
+	if (irq < 0)
+		return;
+
+	free_irq(irq, (void *)tsf_info);
+
+	tsf_info->irq_num = -EINVAL;
+	tsf_info->irq_handler = NULL;
+	tsf_info->context = NULL;
+}
+
 static void cnss_sdio_set_platform_ops(struct device *dev)
 {
 	struct cnss_dev_platform_ops *pf_ops = &cnss_pdata->platform_ops;
@@ -717,7 +825,10 @@ static void cnss_sdio_set_platform_ops(struct device *dev)
 	pf_ops->set_wlan_mac_address = cnss_sdio_set_wlan_mac_address;
 	pf_ops->schedule_recovery_work = cnss_sdio_schedule_recovery_work;
 	pf_ops->request_bus_bandwidth = cnss_sdio_request_bus_bandwidth;
-
+	pf_ops->register_tsf_captured_handler =
+		cnss_sdio_register_tsf_captured_handler;
+	pf_ops->unregister_tsf_captured_handler =
+		cnss_sdio_unregister_tsf_captured_handler;
 	dev->platform_data = pf_ops;
 }
 
@@ -896,8 +1007,6 @@ int cnss_sdio_wlan_register_driver(struct cnss_sdio_wlan_driver *driver)
 		pr_debug("wdrv already exists wdrv(%p)\n",
 			 cnss_info->wdrv);
 
-	cnss_info->wdrv = driver;
-
 	if (!driver)
 		return error;
 
@@ -927,6 +1036,8 @@ int cnss_sdio_wlan_register_driver(struct cnss_sdio_wlan_driver *driver)
 		wcnss_skb_pre_alloc_reset();
 		goto pinctrl_sleep;
 	}
+
+	cnss_info->wdrv = driver;
 
 	return error;
 
@@ -1356,6 +1467,8 @@ static int cnss_sdio_probe(struct platform_device *pdev)
 							  "qcom,skip-wlan-en-toggle");
 	info->cnss_hw_state = CNSS_HW_ACTIVE;
 
+	cnss_sdio_tsf_init(dev, &info->cap_tsf_info);
+
 	error = cnss_sdio_wlan_init();
 	if (error) {
 		dev_err(&pdev->dev, "cnss wlan init failed error=%d\n", error);
@@ -1407,12 +1520,15 @@ err_wlan_enable_regulator:
 static int cnss_sdio_remove(struct platform_device *pdev)
 {
 	struct cnss_sdio_info *info;
+	struct cnss_cap_tsf_info *tsf_info;
 
 	if (!cnss_pdata)
 		return -ENODEV;
 
 	info = &cnss_pdata->cnss_sdio_info;
+	tsf_info = &info->cap_tsf_info;
 
+	cnss_sdio_tsf_deinit(tsf_info);
 	cnss_sdio_deinit_bus_bandwidth();
 	cnss_sdio_wlan_exit();
 	cnss_subsys_exit();
