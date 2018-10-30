@@ -13,7 +13,6 @@
 #include "msm8909-qrd.dtsi"
 #include "msm8905.dtsi"
 #include "msm8905-camera-sensor-skub.dtsi"
-#include "msm8905-pm8909.dtsi"
 
 &soc {
 	matrix_keypad: matrix_keypad@0 {
