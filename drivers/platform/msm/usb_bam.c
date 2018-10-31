@@ -2795,6 +2795,7 @@ int usb_bam_disconnect_ipa(struct usb_bam_connect_ipa_params *ipa_params)
 
 	/* Ensure USB device is not in low power mode while disconnecting */
 	if (bam_mode == USB_BAM_DEVICE) {
+		info[cur_bam].lpm_wait_handshake = true;
 		info[cur_bam].pending_lpm = 1;
 		usb_bam_resume_core(cur_bam, bam_mode);
 	} else {
