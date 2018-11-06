@@ -295,11 +295,12 @@ static void diag_send_msg_mask_update(uint8_t peripheral, int first, int last)
 	int temp_len = 0;
 	uint8_t *buf = NULL;
 	uint8_t *temp = NULL;
+	uint8_t msg_mask_tbl_count_local = 0;
 	uint32_t mask_size = 0;
 	struct diag_mask_info *mask_info = NULL;
 	struct diag_msg_mask_t *mask = NULL;
 	struct diag_ctrl_msg_mask header;
-	uint8_t msg_mask_tbl_count_local;
+	struct diag_md_session_t *md_session_info = NULL;
 
 	if (peripheral >= NUM_PERIPHERALS)
 		return;
@@ -312,9 +313,10 @@ static void diag_send_msg_mask_update(uint8_t peripheral, int first, int last)
 	}
 
 	if (driver->md_session_mask != 0 &&
-	    (driver->md_session_mask & MD_PERIPHERAL_MASK(peripheral)))
+	    (driver->md_session_mask & MD_PERIPHERAL_MASK(peripheral))) {
+	    md_session_info = driver->md_session_map[peripheral];
 		mask_info = driver->md_session_map[peripheral]->msg_mask;
-	else
+	} else
 		mask_info = &msg_mask;
 
 	if (!mask_info)
@@ -327,7 +329,10 @@ static void diag_send_msg_mask_update(uint8_t peripheral, int first, int last)
 		return;
 	}
 	buf = mask_info->update_buf;
-	msg_mask_tbl_count_local = driver->msg_mask_tbl_count;
+	if (md_session_info)
+		msg_mask_tbl_count_local = md_session_info->msg_mask_tbl_count;
+	else
+		msg_mask_tbl_count_local = driver->msg_mask_tbl_count;
 	mutex_unlock(&driver->msg_mask_lock);
 	mutex_lock(&mask_info->lock);
 	switch (mask_info->status) {
@@ -501,6 +506,7 @@ static int diag_cmd_get_ssid_range(unsigned char *src_buf, int src_len,
 {
 	int i;
 	int write_len = 0;
+	uint8_t msg_mask_tbl_count = 0;
 	struct diag_msg_mask_t *mask_ptr = NULL;
 	struct diag_msg_ssid_query_t rsp;
 	struct diag_ssid_range_t ssid_range;
@@ -519,15 +525,17 @@ static int diag_cmd_get_ssid_range(unsigned char *src_buf, int src_len,
 		return 0;
 
 	mutex_lock(&driver->msg_mask_lock);
+	msg_mask_tbl_count = (info) ? info->msg_mask_tbl_count :
+		driver->msg_mask_tbl_count;
 	rsp.cmd_code = DIAG_CMD_MSG_CONFIG;
 	rsp.sub_cmd = DIAG_CMD_OP_GET_SSID_RANGE;
 	rsp.status = MSG_STATUS_SUCCESS;
 	rsp.padding = 0;
-	rsp.count = driver->msg_mask_tbl_count;
+	rsp.count = msg_mask_tbl_count;
 	memcpy(dest_buf, &rsp, sizeof(rsp));
 	write_len += sizeof(rsp);
 	mask_ptr = (struct diag_msg_mask_t *)mask_info->ptr;
-	for (i = 0; i <  driver->msg_mask_tbl_count; i++, mask_ptr++) {
+	for (i = 0; i < msg_mask_tbl_count; i++, mask_ptr++) {
 		if (write_len + sizeof(ssid_range) > dest_len) {
 			pr_err("diag: In %s, Truncating response due to size limitations of rsp buffer\n",
 			       __func__);
@@ -608,6 +616,7 @@ static int diag_cmd_get_msg_mask(unsigned char *src_buf, int src_len,
 	int i;
 	int write_len = 0;
 	uint32_t mask_size = 0;
+	uint8_t msg_mask_tbl_count = 0;
 	struct diag_msg_mask_t *mask = NULL;
 	struct diag_build_mask_req_t *req = NULL;
 	struct diag_msg_build_mask_t rsp;
@@ -626,6 +635,8 @@ static int diag_cmd_get_msg_mask(unsigned char *src_buf, int src_len,
 		return 0;
 
 	mutex_lock(&driver->msg_mask_lock);
+	msg_mask_tbl_count = (info) ? info->msg_mask_tbl_count :
+			driver->msg_mask_tbl_count;
 	req = (struct diag_build_mask_req_t *)src_buf;
 	rsp.cmd_code = DIAG_CMD_MSG_CONFIG;
 	rsp.sub_cmd = DIAG_CMD_OP_GET_MSG_MASK;
@@ -634,7 +645,7 @@ static int diag_cmd_get_msg_mask(unsigned char *src_buf, int src_len,
 	rsp.status = MSG_STATUS_FAIL;
 	rsp.padding = 0;
 	mask = (struct diag_msg_mask_t *)mask_info->ptr;
-	for (i = 0; i < driver->msg_mask_tbl_count; i++, mask++) {
+	for (i = 0; i < msg_mask_tbl_count; i++, mask++) {
 		if (!mask->ptr)
 			continue;
 		if ((req->ssid_first < mask->ssid_first) ||
@@ -673,6 +684,7 @@ static int diag_cmd_set_msg_mask(unsigned char *src_buf, int src_len,
 	struct diag_mask_info *mask_info = NULL;
 	struct diag_msg_mask_t *mask_next = NULL;
 	uint32_t *temp = NULL;
+	uint8_t msg_mask_tbl_count = 0;
 
 	mask_info = (!info) ? &msg_mask : info->msg_mask;
 	if (!src_buf || !dest_buf || src_len <= 0 || dest_len <= 0 ||
@@ -687,10 +699,13 @@ static int diag_cmd_set_msg_mask(unsigned char *src_buf, int src_len,
 	mutex_lock(&mask_info->lock);
 	mutex_lock(&driver->msg_mask_lock);
 	mask = (struct diag_msg_mask_t *)mask_info->ptr;
-	for (i = 0; i < driver->msg_mask_tbl_count; i++, mask++) {
+
+	msg_mask_tbl_count = (info) ? info->msg_mask_tbl_count :
+			driver->msg_mask_tbl_count;
+	for (i = 0; i < msg_mask_tbl_count; i++, mask++) {
 		if (!mask->ptr)
 			continue;
-		if (i < (driver->msg_mask_tbl_count - 1)) {
+		if (i < (msg_mask_tbl_count - 1)) {
 			mask_next = mask;
 			mask_next++;
 		} else
@@ -790,6 +805,7 @@ static int diag_cmd_set_all_msg_mask(unsigned char *src_buf, int src_len,
 	struct diag_msg_config_rsp_t *req = NULL;
 	struct diag_msg_mask_t *mask = NULL;
 	struct diag_mask_info *mask_info = NULL;
+	uint8_t msg_mask_tbl_count = 0;
 
 	mask_info = (!info) ? &msg_mask : info->msg_mask;
 	if (!src_buf || !dest_buf || src_len <= 0 || dest_len <= 0 ||
@@ -806,9 +822,11 @@ static int diag_cmd_set_all_msg_mask(unsigned char *src_buf, int src_len,
 	mutex_lock(&driver->msg_mask_lock);
 
 	mask = (struct diag_msg_mask_t *)mask_info->ptr;
+	msg_mask_tbl_count = (info) ? info->msg_mask_tbl_count :
+			driver->msg_mask_tbl_count;
 	mask_info->status = (req->rt_mask) ? DIAG_CTRL_MASK_ALL_ENABLED :
 					   DIAG_CTRL_MASK_ALL_DISABLED;
-	for (i = 0; i < driver->msg_mask_tbl_count; i++, mask++) {
+	for (i = 0; i < msg_mask_tbl_count; i++, mask++) {
 		if (mask && mask->ptr) {
 			mutex_lock(&mask->lock);
 			memset(mask->ptr, req->rt_mask,
@@ -1522,7 +1540,6 @@ static int __diag_mask_init(struct diag_mask_info *mask_info, int mask_len,
 		}
 		kmemleak_not_leak(mask_info->update_buf);
 	}
-	mutex_init(&mask_info->lock);
 	return 0;
 }
 
@@ -1546,9 +1563,10 @@ int diag_log_mask_copy(struct diag_mask_info *dest, struct diag_mask_info *src)
 	struct diag_log_mask_t *src_mask = NULL;
 	struct diag_log_mask_t *dest_mask = NULL;
 
-	if (!src)
+	if (!src || !dest)
 		return -EINVAL;
 
+	mutex_init(&dest->lock);
 	err = __diag_mask_init(dest, LOG_MASK_SIZE, APPS_BUF_SIZE);
 	if (err)
 		return err;
@@ -1605,9 +1623,11 @@ static int diag_msg_mask_init(void)
 	int err = 0;
 	int i;
 
+	mutex_init(&msg_mask.lock);
 	err = __diag_mask_init(&msg_mask, MSG_MASK_SIZE, APPS_BUF_SIZE);
 	if (err)
 		return err;
+
 	err = diag_create_msg_mask_table();
 	if (err) {
 		pr_err("diag: Unable to create msg masks, err: %d\n", err);
@@ -1622,7 +1642,8 @@ static int diag_msg_mask_init(void)
 	return 0;
 }
 
-int diag_msg_mask_copy(struct diag_mask_info *dest, struct diag_mask_info *src)
+int diag_msg_mask_copy(struct diag_md_session_t *new_session,
+	struct diag_mask_info *dest, struct diag_mask_info *src)
 {
 	int i;
 	int err = 0;
@@ -1633,17 +1654,25 @@ int diag_msg_mask_copy(struct diag_mask_info *dest, struct diag_mask_info *src)
 	if (!src || !dest)
 		return -EINVAL;
 
-	err = __diag_mask_init(dest, MSG_MASK_SIZE, APPS_BUF_SIZE);
-	if (err)
-		return err;
+	mutex_init(&dest->lock);
 	mutex_lock(&dest->lock);
 	mutex_lock(&driver->msg_mask_lock);
+	new_session->msg_mask_tbl_count =
+		driver->msg_mask_tbl_count;
+	err = __diag_mask_init(dest,
+		(new_session->msg_mask_tbl_count *
+		sizeof(struct diag_msg_mask_t)), APPS_BUF_SIZE);
+	if (err) {
+		mutex_unlock(&driver->msg_mask_lock);
+		mutex_unlock(&dest->lock);
+		return err;
+	}
 	src_mask = (struct diag_msg_mask_t *)src->ptr;
 	dest_mask = (struct diag_msg_mask_t *)dest->ptr;
 
 	dest->mask_len = src->mask_len;
 	dest->status = src->status;
-	for (i = 0; i < driver->msg_mask_tbl_count; i++) {
+	for (i = 0; i < new_session->msg_mask_tbl_count; i++) {
 		range.ssid_first = src_mask->ssid_first;
 		range.ssid_last = src_mask->ssid_last;
 		err = diag_create_msg_mask_table_entry(dest_mask, &range);
@@ -1659,17 +1688,22 @@ int diag_msg_mask_copy(struct diag_mask_info *dest, struct diag_mask_info *src)
 	return err;
 }
 
-void diag_msg_mask_free(struct diag_mask_info *mask_info)
+void diag_msg_mask_free(struct diag_mask_info *mask_info,
+	struct diag_md_session_t *session_info)
 {
 	int i;
 	struct diag_msg_mask_t *mask = NULL;
+	uint8_t msg_mask_tbl_count = 0;
 
 	if (!mask_info)
 		return;
 	mutex_lock(&mask_info->lock);
 	mutex_lock(&driver->msg_mask_lock);
 	mask = (struct diag_msg_mask_t *)mask_info->ptr;
-	for (i = 0; i < driver->msg_mask_tbl_count; i++, mask++) {
+	msg_mask_tbl_count = (session_info) ?
+		session_info->msg_mask_tbl_count :
+		driver->msg_mask_tbl_count;
+	for (i = 0; i < msg_mask_tbl_count; i++, mask++) {
 		kfree(mask->ptr);
 		mask->ptr = NULL;
 	}
@@ -1700,6 +1734,7 @@ static int diag_build_time_mask_init(void)
 	int err = 0;
 
 	/* There is no need for update buffer for Build Time masks */
+	mutex_init(&msg_bt_mask.lock);
 	err = __diag_mask_init(&msg_bt_mask, MSG_MASK_SIZE, 0);
 	if (err)
 		return err;
@@ -1733,6 +1768,7 @@ static int diag_log_mask_init(void)
 	int err = 0;
 	int i;
 
+	mutex_init(&log_mask.lock);
 	err = __diag_mask_init(&log_mask, LOG_MASK_SIZE, APPS_BUF_SIZE);
 	if (err)
 		return err;
@@ -1767,6 +1803,7 @@ static int diag_event_mask_init(void)
 	int err = 0;
 	int i;
 
+	mutex_init(&event_mask.lock);
 	err = __diag_mask_init(&event_mask, EVENT_MASK_SIZE, APPS_BUF_SIZE);
 	if (err)
 		return err;
@@ -1788,6 +1825,7 @@ int diag_event_mask_copy(struct diag_mask_info *dest,
 	if (!src || !dest)
 		return -EINVAL;
 
+	mutex_init(&dest->lock);
 	err = __diag_mask_init(dest, EVENT_MASK_SIZE, APPS_BUF_SIZE);
 	if (err)
 		return err;
@@ -1827,6 +1865,7 @@ int diag_copy_to_user_msg_mask(char __user *buf, size_t count,
 	struct diag_mask_info *mask_info = NULL;
 	struct diag_msg_mask_t *mask = NULL;
 	unsigned char *ptr = NULL;
+	uint8_t msg_mask_tbl_count = 0;
 
 	if (!buf || count == 0)
 		return -EINVAL;
@@ -1847,7 +1886,9 @@ int diag_copy_to_user_msg_mask(char __user *buf, size_t count,
 	mutex_lock(&driver->msg_mask_lock);
 
 	mask = (struct diag_msg_mask_t *)(mask_info->ptr);
-	for (i = 0; i < driver->msg_mask_tbl_count; i++, mask++) {
+	msg_mask_tbl_count = (info) ? info->msg_mask_tbl_count :
+			driver->msg_mask_tbl_count;
+	for (i = 0; i < msg_mask_tbl_count; i++, mask++) {
 		if (!mask->ptr)
 			continue;
 		ptr = mask_info->update_buf;
