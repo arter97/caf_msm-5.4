@@ -467,20 +467,20 @@ static struct msm_spm_device *msm_spm_get_device(struct platform_device *pdev)
 	char *key = "qcom,name";
 	int cpu = get_cpu_id(pdev->dev.of_node);
 
+	if (of_property_read_string(pdev->dev.of_node, key, &val)) {
+		pr_err("%s(): Cannot find a required node key:%s\n",
+				__func__, key);
+		return NULL;
+	}
 	if ((cpu >= 0) && cpu < num_possible_cpus())
 		dev = &per_cpu(msm_cpu_spm_device, cpu);
-	else if (cpu == 0xffff)
+	else if (cpu == 0xffff || strncmp(val, "cpu", 3))
 		dev = devm_kzalloc(&pdev->dev, sizeof(struct msm_spm_device),
 					GFP_KERNEL);
 
 	if (!dev)
 		return NULL;
 
-	if (of_property_read_string(pdev->dev.of_node, key, &val)) {
-		pr_err("%s(): Cannot find a required node key:%s\n",
-				__func__, key);
-		return NULL;
-	}
 	dev->name = val;
 	list_add(&dev->list, &spm_list);
 
