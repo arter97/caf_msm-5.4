@@ -37,6 +37,7 @@ static struct of_device_id bt_power_match_table[] = {
 	{	.compatible = "qca,ar3002" },
 	{	.compatible = "qca,qca6174" },
 	{	.compatible = "qca,wcn3990" },
+	{	.compatible = "qca,qca9379" },
 	{}
 };
 
