@@ -1125,6 +1125,7 @@ correct_plug_type:
 				no_gnd_mic_swap_cnt++;
 				pt_gnd_mic_swap_cnt = 0;
 				plug_type = MBHC_PLUG_TYPE_HEADSET;
+				wrk_complete = false;
 				if (no_gnd_mic_swap_cnt <
 						GND_MIC_SWAP_THRESHOLD) {
 					continue;
