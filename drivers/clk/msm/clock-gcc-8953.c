@@ -1194,7 +1194,7 @@ static struct rcg_clk mclk0_clk_src = {
 	.c = {
 		.dbg_name = "mclk0_clk_src",
 		.ops = &clk_ops_rcg_mnd,
-		VDD_DIG_FMAX_MAP2(LOW_SVS, 33330000, SVS, 66670000),
+		VDD_DIG_FMAX_MAP2(LOW_SVS, 12000000, SVS, 66670000),
 		CLK_INIT(mclk0_clk_src.c),
 	},
 };
@@ -1217,7 +1217,7 @@ static struct rcg_clk mclk1_clk_src = {
 	.c = {
 		.dbg_name = "mclk1_clk_src",
 		.ops = &clk_ops_rcg_mnd,
-		VDD_DIG_FMAX_MAP2(LOW_SVS, 33330000, SVS, 66670000),
+		VDD_DIG_FMAX_MAP2(LOW_SVS, 12000000, SVS, 66670000),
 		CLK_INIT(mclk1_clk_src.c),
 	},
 };
@@ -1240,7 +1240,7 @@ static struct rcg_clk mclk2_clk_src = {
 	.c = {
 		.dbg_name = "mclk2_clk_src",
 		.ops = &clk_ops_rcg_mnd,
-		VDD_DIG_FMAX_MAP2(LOW_SVS, 33330000, SVS, 66670000),
+		VDD_DIG_FMAX_MAP2(LOW_SVS, 12000000, SVS, 66670000),
 		CLK_INIT(mclk2_clk_src.c),
 	},
 };
@@ -1263,7 +1263,7 @@ static struct rcg_clk mclk3_clk_src = {
 	.c = {
 		.dbg_name = "mclk3_clk_src",
 		.ops = &clk_ops_rcg_mnd,
-		VDD_DIG_FMAX_MAP2(LOW_SVS, 33330000, SVS, 66670000),
+		VDD_DIG_FMAX_MAP2(LOW_SVS, 12000000, SVS, 66670000),
 		CLK_INIT(mclk3_clk_src.c),
 	},
 };

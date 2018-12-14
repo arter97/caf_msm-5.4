@@ -4035,8 +4035,18 @@ static int qpnp_leds_probe(struct spmi_device *spmi)
 		}
 
 		if (led->id == QPNP_ID_LED_MPP) {
-			if (!led->mpp_cfg->pwm_cfg)
+			if (!led->mpp_cfg->pwm_cfg) {
+				if (led->default_on) {
+					led->cdev.brightness = led->mpp_cfg->current_setting;
+
+					if (led->turn_off_delay_ms > 0)
+						qpnp_led_turn_off(led);
+				} else
+					led->cdev.brightness = LED_OFF;
+				__qpnp_led_work(led, led->cdev.brightness);
 				break;
+			}
+
 			if (led->mpp_cfg->pwm_cfg->mode == PWM_MODE) {
 				rc = sysfs_create_group(&led->cdev.dev->kobj,
 					&pwm_attr_group);

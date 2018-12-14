@@ -1,0 +1,13 @@
+#
+# BUZZER configuration
+#
+
+menu "Buzzer support"
+
+config BUZZER
+	bool "GPIO Driven Buzzer"
+	help
+	  Buzzer support
+
+endmenu
+

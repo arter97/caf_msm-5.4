@@ -80,6 +80,7 @@ static irqreturn_t ft5x06_ts_interrupt(int irq, void *data);
 #define FT_REG_PMODE		0xA5
 #define FT_REG_FW_VER		0xA6
 #define FT_REG_FW_VENDOR_ID	0xA8
+#define FT_REG_CTRL		0x86 
 #define FT_REG_POINT_RATE	0x88
 #define FT_REG_THGROUP		0x80
 #define FT_REG_ECC		0xCC
@@ -107,6 +108,10 @@ static irqreturn_t ft5x06_ts_interrupt(int irq, void *data);
 #define FT_GESTURE_DATA_HEADER	(FT_GESTURE_ID_FLAG_SIZE + \
 				FT_GESTURE_POINTER_NUM_FLAG_SIZE + \
 				FT_GESTURE_SET_FLAG_SIZE)
+
+/*CTRL register bits */
+#define FT_CTRL_ACTIVE 				0x00
+#define FT_CTRL_MONITOR 			0X01
 
 /* power register bits*/
 #define FT_PMODE_ACTIVE		0x00
@@ -1390,10 +1395,10 @@ static int ft5x06_ts_resume(struct device *dev)
 }
 
 static const struct dev_pm_ops ft5x06_ts_pm_ops = {
-#if (!defined(CONFIG_FB) && !defined(CONFIG_HAS_EARLYSUSPEND))
+//#if (!defined(CONFIG_FB) && !defined(CONFIG_HAS_EARLYSUSPEND))
 	.suspend = ft5x06_ts_suspend,
 	.resume = ft5x06_ts_resume,
-#endif
+//#endif
 };
 
 #else
@@ -2528,6 +2533,10 @@ static int ft5x06_ts_probe(struct i2c_client *client,
 				FT_INFO_MAX_LEN, GFP_KERNEL);
 	if (!data->ts_info)
 		goto free_debug_dir;
+	
+	/* stop switching to monitor mode */
+	dev_info(&client->dev, "Stop switching to monitor mode\n");
+        ft5x0x_write_reg(client, FT_REG_CTRL, FT_CTRL_ACTIVE);
 
 	/*get some register information */
 	reg_addr = FT_REG_POINT_RATE;
@@ -2589,7 +2598,7 @@ static int ft5x06_ts_probe(struct i2c_client *client,
 			data->fw_ver[1], data->fw_ver[2]);
 	FT_STORE_TS_INFO(ts_info_buff, data->family_id, data->fw_ver[0],
 			 data->fw_ver[1], data->fw_ver[2]);
-#if defined(CONFIG_FB)
+#if 0
 	INIT_WORK(&data->fb_notify_work, fb_notify_resume_work);
 	data->fb_notif.notifier_call = fb_notifier_callback;
 
@@ -2598,7 +2607,9 @@ static int ft5x06_ts_probe(struct i2c_client *client,
 	if (err)
 		dev_err(&client->dev, "Unable to register fb_notifier: %d\n",
 			err);
-#elif defined(CONFIG_HAS_EARLYSUSPEND)
+#endif
+
+#if defined(CONFIG_HAS_EARLYSUSPEND)
 	data->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN +
 						    FT_SUSPEND_LEVEL;
 	data->early_suspend.suspend = ft5x06_ts_early_suspend;
@@ -2758,9 +2769,9 @@ static struct i2c_driver ft5x06_ts_driver = {
 		   .name = "ft5x06_ts",
 		   .owner = THIS_MODULE,
 		.of_match_table = ft5x06_match_table,
-#ifdef CONFIG_PM
+//#ifdef CONFIG_PM
 		   .pm = &ft5x06_ts_pm_ops,
-#endif
+//#endif
 		   },
 	.id_table = ft5x06_ts_id,
 };

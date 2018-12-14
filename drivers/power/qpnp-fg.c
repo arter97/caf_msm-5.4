@@ -639,6 +639,7 @@ struct fg_chip {
 	bool			*batt_range_ocv;
 	int			*batt_range_pct;
 };
+static struct fg_chip *chip;
 
 /* FG_MEMIF DEBUGFS structures */
 #define ADDR_LEN	4	/* 3 byte address + 1 space character */
@@ -2335,6 +2336,31 @@ static int get_sram_prop_now(struct fg_chip *chip, unsigned int type)
 
 	return fg_data[type].value;
 }
+
+/* To get get the battery capacity to userspace application */
+uint32_t gopro_get_batt_capacity(void)
+{
+	return (uint32_t)get_prop_capacity(chip);
+}
+EXPORT_SYMBOL_GPL(gopro_get_batt_capacity);
+
+uint32_t gopro_get_batt_temp(void)
+{
+	return (uint32_t)get_sram_prop_now(chip, FG_DATA_BATT_TEMP);
+}
+EXPORT_SYMBOL_GPL(gopro_get_batt_temp);
+
+uint32_t gopro_get_batt_current(void)
+{
+	return (uint32_t)get_sram_prop_now(chip, FG_DATA_CURRENT);
+}
+EXPORT_SYMBOL_GPL(gopro_get_batt_current);
+
+uint32_t gopro_get_batt_volt(void)
+{
+	return (uint32_t)get_sram_prop_now(chip, FG_DATA_VOLTAGE);
+}
+EXPORT_SYMBOL_GPL(gopro_get_batt_volt);
 
 #define MIN_TEMP_DEGC	-300
 #define MAX_TEMP_DEGC	970
@@ -7330,7 +7356,7 @@ static int fg_init_irqs(struct fg_chip *chip)
 				return rc;
 			}
 
-			enable_irq_wake(chip->soc_irq[DELTA_SOC].irq);
+			enable_irq(chip->soc_irq[DELTA_SOC].irq);
 			if (!chip->use_vbat_low_empty_soc)
 				enable_irq_wake(chip->soc_irq[EMPTY_SOC].irq);
 			break;
@@ -8566,7 +8592,7 @@ static int fg_memif_init(struct fg_chip *chip)
 
 		/* check for error condition */
 		rc = fg_check_ima_exception(chip, true);
-		if (rc) {
+		if (rc && (rc != -EAGAIN) ) {
 			pr_err("Error in clearing IMA exception rc=%d", rc);
 			return rc;
 		}
@@ -8684,7 +8710,6 @@ done:
 static int fg_probe(struct spmi_device *spmi)
 {
 	struct device *dev = &(spmi->dev);
-	struct fg_chip *chip;
 	struct spmi_resource *spmi_resource;
 	struct resource *resource;
 	u8 subtype, reg;

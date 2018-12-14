@@ -1,0 +1,48 @@
+
+&pm8953_gpios {
+	gpio@c100 {
+		qcom,direction = <0>;
+		qcom,output-type = <1>;
+		qcom,mode = <0>; /* IN input */
+		qcom,invert = <0>; /* Enable MPP */
+		qcom,pull = <5>; /* no pull */
+		qcom,master-en = <1>;
+		qcom,src-sel = <0>; /* Function constant */		
+		status = "okay";
+	};
+
+	gpio@c700 {
+		qcom,direction = <0>;
+		qcom,output-type = <1>;
+		qcom,mode = <0>; /* AIN input */
+		qcom,invert = <0>; /* Enable MPP */
+		qcom,pull = <5>; /* no pull */
+		qcom,master-en = <1>;
+		qcom,src-sel = <0>; /* Function constant */
+		status = "okay";
+	};
+};
+
+&spmi_bus {
+	qcom,pm8953@0 {
+		qcom,power-on@800 {
+			  interrupts = <0x0 0x8 0x0>,
+                                <0x0 0x8 0x1>,
+				<0x0 0x8 0x2>,
+                                <0x0 0x8 0x4>,
+                                <0x0 0x8 0x5>;
+                        interrupt-names = "kpdpwr", "resin", "cblpwr",
+                                "resin-bark", "kpdpwr-resin-bark";
+			qcom,pon_1 {
+                                linux,code = <0x2e9>;
+                        };
+	
+			qcom,pon_3 {
+				qcom,pon-type = <2>;
+				qcom,pull-up = <1>;
+				linux,code = <0x2e8>; 
+			};
+		};
+		/delete-node/qcom,pm8953_typec@bf00;
+	};
+};

@@ -1,0 +1,4 @@
+/* Disable external smb charger */
+&i2c_2 {
+    /delete-node/ smb135x-charger@1c;
+};

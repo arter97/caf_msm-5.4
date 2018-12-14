@@ -1,0 +1,12 @@
+&mdss_dsi0 {
+	vdd-supply = <&pm8953_l8>;
+	vddio-supply = <&pm8953_l5>;
+	/delete-property/lab-supply;
+	/delete-property/ibb-supply;
+};
+
+&soc {
+	qcom,mdss_wb_panel {
+		status = "disabled";
+	};
+};

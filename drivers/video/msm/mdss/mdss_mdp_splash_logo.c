@@ -22,6 +22,7 @@
 #include <linux/of_address.h>
 #include <linux/fb.h>
 #include <linux/dma-buf.h>
+#include <linux/delay.h>
 
 #include "mdss_fb.h"
 #include "mdss_mdp.h"
@@ -29,8 +30,21 @@
 #include "mdss_mdp_splash_logo.h"
 #include "mdss_smmu.h"
 
+#include "linux/gpio.h"
+
 #define INVALID_PIPE_INDEX 0xFFFF
 #define MAX_FRAME_DONE_COUNT_WAIT 2
+
+#define GP_GPIO_PRODUCT_ID_MSB 50
+#define GP_GPIO_PRODUCT_ID_LSB 51
+
+enum gp_product_id
+{
+   PRODUCT_BADGER = 0,
+   PRODUCT_BOOMER,
+   PRODUCT_RESERVED
+};
+
 
 static int mdss_mdp_splash_alloc_memory(struct msm_fb_data_type *mfd,
 							uint32_t size)
@@ -79,13 +93,6 @@ static int mdss_mdp_splash_alloc_memory(struct msm_fb_data_type *mfd,
 		goto err_detach;
 	}
 
-	rc = mdss_smmu_map_dma_buf(sinfo->dma_buf, sinfo->table,
-			MDSS_IOMMU_DOMAIN_UNSECURE, &sinfo->iova,
-			&buf_size, DMA_BIDIRECTIONAL);
-	if (rc) {
-		pr_err("mdss smmu map dma buf failed!\n");
-		goto err_unmap;
-	}
 	sinfo->size = buf_size;
 
 	dma_buf_begin_cpu_access(sinfo->dma_buf, 0, size, DMA_BIDIRECTIONAL);
@@ -93,7 +100,7 @@ static int mdss_mdp_splash_alloc_memory(struct msm_fb_data_type *mfd,
 	if (IS_ERR(sinfo->splash_buffer)) {
 		pr_err("ion kernel memory mapping failed\n");
 		rc = IS_ERR(sinfo->splash_buffer);
-		goto kmap_err;
+		goto imap_err;
 	}
 
 	/**
@@ -102,10 +109,8 @@ static int mdss_mdp_splash_alloc_memory(struct msm_fb_data_type *mfd,
 	ion_free(mdata->iclient, handle);
 
 	return rc;
-kmap_err:
-	mdss_smmu_unmap_dma_buf(sinfo->table, MDSS_IOMMU_DOMAIN_UNSECURE,
-			DMA_BIDIRECTIONAL, sinfo->dma_buf);
 err_unmap:
+	dma_buf_end_cpu_access(sinfo->dma_buf, 0, sinfo->size, DMA_FROM_DEVICE);
 	dma_buf_unmap_attachment(sinfo->attachment, sinfo->table,
 			DMA_BIDIRECTIONAL);
 err_detach:
@@ -136,14 +141,6 @@ static void mdss_mdp_splash_free_memory(struct msm_fb_data_type *mfd)
 			       DMA_BIDIRECTIONAL);
 	dma_buf_kunmap(sinfo->dma_buf, 0, sinfo->splash_buffer);
 
-	mdss_smmu_unmap_dma_buf(sinfo->table, MDSS_IOMMU_DOMAIN_UNSECURE, 0,
-				sinfo->dma_buf);
-	dma_buf_unmap_attachment(sinfo->attachment, sinfo->table,
-			DMA_BIDIRECTIONAL);
-	dma_buf_detach(sinfo->dma_buf, sinfo->attachment);
-	dma_buf_put(sinfo->dma_buf);
-
-	sinfo->splash_buffer = NULL;
 }
 
 static int mdss_mdp_splash_iommu_attach(struct msm_fb_data_type *mfd)
@@ -202,22 +199,6 @@ static void mdss_mdp_splash_unmap_splash_mem(struct msm_fb_data_type *mfd)
 
 		mfd->splash_info.iommu_dynamic_attached = false;
 	}
-}
-
-void mdss_mdp_release_splash_pipe(struct msm_fb_data_type *mfd)
-{
-	struct msm_fb_splash_info *sinfo;
-
-	if (!mfd || !mfd->splash_info.splash_pipe_allocated)
-		return;
-
-	sinfo = &mfd->splash_info;
-
-	if (sinfo->pipe_ndx[0] != INVALID_PIPE_INDEX)
-		mdss_mdp_overlay_release(mfd, sinfo->pipe_ndx[0]);
-	if (sinfo->pipe_ndx[1] != INVALID_PIPE_INDEX)
-		mdss_mdp_overlay_release(mfd, sinfo->pipe_ndx[1]);
-	sinfo->splash_pipe_allocated = false;
 }
 
 /*
@@ -363,8 +344,6 @@ static struct mdss_mdp_pipe *mdss_mdp_splash_get_pipe(
 	int ret;
 	struct mdss_mdp_data *buf;
 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
-	uint32_t image_size = SPLASH_IMAGE_WIDTH * SPLASH_IMAGE_HEIGHT
-						* SPLASH_IMAGE_BPP;
 
 	ret = mdss_mdp_overlay_pipe_setup(mfd, req, &pipe, NULL, true);
 	if (ret)
@@ -385,8 +364,14 @@ static struct mdss_mdp_pipe *mdss_mdp_splash_get_pipe(
 	}
 	mutex_unlock(&mdp5_data->list_lock);
 
-	buf->p[0].addr = mfd->splash_info.iova;
-	buf->p[0].len = image_size;
+	buf->p[0].srcp_table = mfd->splash_info.table;
+	buf->p[0].srcp_dma_buf = mfd->splash_info.dma_buf;
+	buf->p[0].srcp_attachment = mfd->splash_info.attachment;
+	buf->p[0].len = 0;
+	buf->p[0].addr = 0;
+	buf->p[0].offset = 0;
+	buf->p[0].skip_detach = false;
+	buf->p[0].mapped = false;
 	buf->num_planes = 1;
 	mdss_mdp_pipe_unmap(pipe);
 
@@ -406,6 +391,7 @@ static int mdss_mdp_splash_kickoff(struct msm_fb_data_type *mfd,
 	int ret;
 	bool use_single_pipe = false;
 	struct msm_fb_splash_info *sinfo;
+	int pipe_ndx = INVALID_PIPE_INDEX;
 
 	if (!mfd)
 		return -EINVAL;
@@ -479,7 +465,7 @@ static int mdss_mdp_splash_kickoff(struct msm_fb_data_type *mfd,
 		goto end;
 	}
 
-	sinfo->pipe_ndx[0] = pipe->ndx;
+	pipe_ndx = pipe->ndx;
 
 	if (!use_single_pipe) {
 		req->id = MSMFB_NEW_REQUEST;
@@ -489,27 +475,24 @@ static int mdss_mdp_splash_kickoff(struct msm_fb_data_type *mfd,
 		pipe = mdss_mdp_splash_get_pipe(mfd, req);
 		if (!pipe) {
 			pr_err("unable to allocate right base pipe\n");
-			mdss_mdp_overlay_release(mfd, sinfo->pipe_ndx[0]);
+			mdss_mdp_overlay_release(mfd, pipe_ndx);
 			ret = -EINVAL;
 			goto end;
 		}
-		sinfo->pipe_ndx[1] = pipe->ndx;
+		pipe_ndx |= pipe->ndx;
 	}
 	mutex_unlock(&mdp5_data->ov_lock);
 
 	ret = mfd->mdp.kickoff_fnc(mfd, NULL);
 	if (ret) {
 		pr_err("error in displaying image\n");
-		mdss_mdp_overlay_release(mfd, sinfo->pipe_ndx[0] |
-					sinfo->pipe_ndx[1]);
+		mdss_mdp_overlay_release(mfd, pipe_ndx);
 	}
 
 	kfree(req);
 	return ret;
 end:
 	kfree(req);
-	sinfo->pipe_ndx[0] = INVALID_PIPE_INDEX;
-	sinfo->pipe_ndx[1] = INVALID_PIPE_INDEX;
 	mutex_unlock(&mdp5_data->ov_lock);
 	return ret;
 }
@@ -517,9 +500,9 @@ end:
 static int mdss_mdp_display_splash_image(struct msm_fb_data_type *mfd)
 {
 	int rc = 0;
+    int gpio_50 =0 , gpio_51 =0;
+	uint8_t prod_id;
 	struct fb_info *fbi;
-	uint32_t image_len = SPLASH_IMAGE_WIDTH * SPLASH_IMAGE_HEIGHT
-						* SPLASH_IMAGE_BPP;
 	struct mdss_rect src_rect, dest_rect;
 	struct msm_fb_splash_info *sinfo;
 
@@ -532,78 +515,76 @@ static int mdss_mdp_display_splash_image(struct msm_fb_data_type *mfd)
 	fbi = mfd->fbi;
 	sinfo = &mfd->splash_info;
 
-	if (SPLASH_IMAGE_WIDTH > fbi->var.xres ||
-		  SPLASH_IMAGE_HEIGHT > fbi->var.yres ||
+	if (SPLASH_IMAGE_WIDTH_BADGER > fbi->var.xres ||
+		  SPLASH_IMAGE_HEIGHT_BADGER > fbi->var.yres ||
 		  SPLASH_IMAGE_BPP > (fbi->var.bits_per_pixel >> 3)) {
 		pr_err("invalid splash parameter configuration\n");
 		rc = -EINVAL;
 		goto end;
 	}
 
-	sinfo->pipe_ndx[0] = INVALID_PIPE_INDEX;
-	sinfo->pipe_ndx[1] = INVALID_PIPE_INDEX;
 
 	src_rect.x = 0;
 	src_rect.y = 0;
-	dest_rect.w = src_rect.w = SPLASH_IMAGE_WIDTH;
-	dest_rect.h = src_rect.h = SPLASH_IMAGE_HEIGHT;
-	dest_rect.x = (fbi->var.xres >> 1) - (SPLASH_IMAGE_WIDTH >> 1);
-	dest_rect.y = (fbi->var.yres >> 1) - (SPLASH_IMAGE_HEIGHT >> 1);
+    gpio_request(GP_GPIO_PRODUCT_ID_MSB, "gpio 50 for product id");	
+	gpio_request(GP_GPIO_PRODUCT_ID_LSB, "gpio 51 for product id");
+	gpio_50 = gpio_get_value(GP_GPIO_PRODUCT_ID_MSB);
+	gpio_51 = gpio_get_value(GP_GPIO_PRODUCT_ID_LSB);
+	
+	prod_id = (gpio_51) | (gpio_50 << 1);
+	
+	pr_err("product id = %d ", prod_id );
 
-	rc = mdss_mdp_splash_alloc_memory(mfd, image_len);
-	if (rc) {
-		pr_err("splash buffer allocation failed\n");
-		goto end;
+	if(prod_id == PRODUCT_BADGER)	
+	{
+	uint32_t image_len = SPLASH_IMAGE_WIDTH_BADGER * SPLASH_IMAGE_HEIGHT_BADGER
+						* SPLASH_IMAGE_BPP;
+    dest_rect.w = src_rect.w = SPLASH_IMAGE_WIDTH_BADGER;
+    dest_rect.h = src_rect.h = SPLASH_IMAGE_HEIGHT_BADGER;
+    dest_rect.x = (fbi->var.xres >> 1) - (SPLASH_IMAGE_WIDTH_BADGER >> 1); 
+    dest_rect.y = (fbi->var.yres >> 1) - (SPLASH_IMAGE_HEIGHT_BADGER >> 1); 
+
+    rc = mdss_mdp_splash_alloc_memory(mfd, image_len);
+    if (rc) {
+        pr_err("splash buffer allocation failed\n");
+        goto end;
+    }  	
+	memcpy(sinfo->splash_buffer, splash_bgr888_image_badger, image_len);
 	}
+	else
+	{
+	uint32_t image_len = SPLASH_IMAGE_WIDTH_BOOMER * SPLASH_IMAGE_HEIGHT_BOOMER
+						* SPLASH_IMAGE_BPP;
+    dest_rect.w = src_rect.w = SPLASH_IMAGE_WIDTH_BOOMER;
+    dest_rect.h = src_rect.h = SPLASH_IMAGE_HEIGHT_BOOMER;
+    dest_rect.x = (fbi->var.xres >> 1) - (SPLASH_IMAGE_WIDTH_BOOMER >> 1); 
+    dest_rect.y = (fbi->var.yres >> 1) - (SPLASH_IMAGE_HEIGHT_BOOMER >> 1); 
 
-	memcpy(sinfo->splash_buffer, splash_bgr888_image, image_len);
+    rc = mdss_mdp_splash_alloc_memory(mfd, image_len);
+    if (rc) {
+        pr_err("splash buffer allocation failed\n");
+        goto end;
+    }  	
+	memcpy(sinfo->splash_buffer, splash_bgr888_image_boomer, image_len);
+	}
+	
+	gpio_free(GP_GPIO_PRODUCT_ID_MSB);
+	gpio_free(GP_GPIO_PRODUCT_ID_LSB);
 
 	rc = mdss_mdp_splash_iommu_attach(mfd);
 	if (rc)
 		pr_debug("iommu dynamic attach failed\n");
 
 	rc = mdss_mdp_splash_kickoff(mfd, &src_rect, &dest_rect);
-	if (rc)
+	if (rc){
 		pr_err("splash image display failed\n");
-	else
-		sinfo->splash_pipe_allocated = true;
-end:
-	return rc;
-}
 
-static int mdss_mdp_splash_ctl_cb(struct notifier_block *self,
-					unsigned long event, void *data)
-{
-	struct msm_fb_splash_info *sinfo = container_of(self,
-					struct msm_fb_splash_info, notifier);
-	struct msm_fb_data_type *mfd;
-
-	if (!sinfo)
-		goto done;
-
-	mfd = container_of(sinfo, struct msm_fb_data_type, splash_info);
-
-	if (!mfd)
-		goto done;
-
-	if (event != MDP_NOTIFY_FRAME_DONE)
-		goto done;
-
-	if (!sinfo->frame_done_count) {
+	}else{
 		mdss_mdp_splash_unmap_splash_mem(mfd);
 		mdss_mdp_splash_cleanup(mfd, false);
-	/* wait for 2 frame done events before releasing memory */
-	} else if (sinfo->frame_done_count > MAX_FRAME_DONE_COUNT_WAIT &&
-			sinfo->splash_thread) {
-		complete(&sinfo->frame_done);
-		sinfo->splash_thread = NULL;
 	}
-
-	/* increase frame done count after pipes are staged from other client */
-	if (!sinfo->splash_pipe_allocated)
-		sinfo->frame_done_count++;
-done:
-	return NOTIFY_OK;
+end:
+	return rc;
 }
 
 static int mdss_mdp_splash_thread(void *data)
@@ -616,6 +597,8 @@ static int mdss_mdp_splash_thread(void *data)
 		pr_err("invalid input parameter\n");
 		goto end;
 	}
+        /*Sleep for 3 sec to show intermediate screen in 4 secs after camera bootup */
+        msleep(3000);
 
 	mdp5_data = mfd_to_mdp5_data(mfd);
 	lock_fb_info(mfd->fbi);
@@ -631,11 +614,6 @@ static int mdss_mdp_splash_thread(void *data)
 	mdss_fb_set_backlight(mfd, mfd->panel_info->bl_max >> 1);
 	mutex_unlock(&mfd->bl_lock);
 
-	init_completion(&mfd->splash_info.frame_done);
-
-	mfd->splash_info.notifier.notifier_call = mdss_mdp_splash_ctl_cb;
-	mdss_mdp_ctl_notifier_register(mdp5_data->ctl,
-				&mfd->splash_info.notifier);
 
 	ret = mdss_mdp_display_splash_image(mfd);
 	if (ret) {
@@ -646,13 +624,9 @@ static int mdss_mdp_splash_thread(void *data)
 		pr_err("splash image display failed\n");
 	}
 
-	/* wait for second display complete to release splash resources */
-	ret = wait_for_completion_killable(&mfd->splash_info.frame_done);
 
 	mdss_mdp_splash_free_memory(mfd);
 
-	mdss_mdp_ctl_notifier_unregister(mdp5_data->ctl,
-				&mfd->splash_info.notifier);
 end:
 	return ret;
 }

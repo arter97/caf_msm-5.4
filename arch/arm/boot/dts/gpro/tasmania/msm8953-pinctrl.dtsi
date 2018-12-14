@@ -1,0 +1,197 @@
+/* display */
+&mdss_dsi_active {
+    mux {
+        pins = "gpio40";
+    };
+
+    config {
+        pins = "gpio40";
+    };
+};
+
+&mdss_dsi_suspend {
+    mux {
+        pins = "gpio40";
+    };
+
+    config {
+        pins = "gpio40";
+    };
+};
+
+&soc {
+    tlmm: pinctrl@1000000 {
+        /* battery */
+            pmic_charge_enable: pmic_charge_enable {
+            mux {
+                pins = "gpio120";
+                function = "gpio";
+            };
+
+            config {
+                pins = "gpio120";
+                drive-strength = <2>;
+                bias-pull-down;
+                output-low;
+            };
+        };
+
+        /* mfi */
+        i2c_8 {
+            i2c_8_active: i2c_8_active {
+                /* active state */
+                mux {
+                    pins = "gpio98", "gpio99";
+                    function = "blsp_i2c8";
+                };
+                config {
+                    pins = "gpio98", "gpio99";
+                    drive-strength = <2>;
+                    bias-disable;
+                };
+            };
+            i2c_8_sleep: i2c_8_sleep {
+                /* suspended state */
+                mux {
+                    pins = "gpio98", "gpio99";
+                    function = "blsp_i2c8";
+                };
+                config {
+                    pins = "gpio98", "gpio99";
+                    drive-strength = <2>;
+                    bias-disable;
+                };
+            };
+        };
+
+        /* button */
+        tlmm_gpio_key {
+            gpio_key_active: gpio_key_active {
+                mux {
+                    pins = "gpio86", "gpio87";
+                };
+
+                config {
+                    pins = "gpio86", "gpio87";
+                };
+            };
+
+            gpio_key_suspend: gpio_key_suspend {
+                mux {
+                    pins = "gpio86", "gpio87";
+                };
+
+                config {
+                    pins = "gpio86", "gpio87";
+                };
+            };
+        };
+
+        /* buzzer */
+            cam_buzzer: cam_buzzer {
+            mux {
+                pins = "gpio33", "gpio66";
+                function = "gpio";
+            };
+
+            config {
+                pins = "gpio33", "gpio66";
+                bias-disable; /* No PULL */
+                drive-strength = <2>; /* 2 MA */
+            };
+        };
+
+        /* AMIC */
+        wcd9xxx_intr {
+            status = "disabled";
+        };
+        /* AMIC */
+        cdc_mclk2_pin {
+            cdc_mclk2_sleep: cdc_mclk2_sleep {
+                mux {
+                    pins = "gpio123"; /* GPIO66 is being used for Buzzer in Proto ..taking available GPIO123  */
+                    function = "pri_mi2s";
+                };
+                config {
+                    pins = "gpio123";
+                    drive-strength = <2>; /* 2 mA */
+                    bias-pull-down;       /* PULL DOWN */
+                };
+            };
+            cdc_mclk2_active: cdc_mclk2_active {
+                mux {
+                    pins = "gpio123";
+                    function = "pri_mi2s";
+                };
+                config {
+                    pins = "gpio123";
+                    drive-strength = <8>; /* 8 mA */
+                    bias-disable;         /* NO PULL */
+                };
+            };
+        };
+        /* Camera */
+        cam_sensor_rear_default: cam_sensor_rear_default {
+                mux {
+                        pins = "gpio39";
+                };
+                config {
+                        pins = "gpio39";
+                };
+        };
+        cam_sensor_rear_sleep: cam_sensor_rear_sleep {
+                /* RESET, STANDBY */
+                mux {
+                        pins = "gpio39";
+                };
+                config {
+                        pins ="gpio39";
+                };
+        };
+
+        /* GPS */
+        hsuart_active: default {
+            mux {
+                pins = "gpio12", "gpio13";
+            };
+
+            config {
+                pins = "gpio12", "gpio13";
+                drive-strength = <2>;
+            };
+        };
+
+        hsuart_sleep: sleep {
+            mux {
+                pins = "gpio12", "gpio13";
+            };
+
+            config {
+                pins = "gpio12", "gpio13";
+            };
+        };
+
+        cci {
+            cci1_active {
+                mux {
+                    pins = "gpio32";
+                };
+                config {
+                    pins = "gpio32";
+                };
+            };
+            cci1_suspend {
+                mux {
+                    pins = "gpio32";
+                };
+                config {
+                    pins = "gpio32";
+                };
+            };
+        };
+        /* end GPS */
+
+        /delete-node/cam_sensor_rear_default1;
+        /delete-node/cam_sensor_rear_sleep1;
+    };
+};

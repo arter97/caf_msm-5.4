@@ -1,0 +1,71 @@
+
+&mdss_mdp {
+        dsi_nvd_320p_video: qcom,mdss_dsi_nvd_320p_video {
+                qcom,mdss-dsi-panel-name = "New Vision Display Panel 320x480";
+                qcom,mdss-dsi-panel-controller = <&mdss_dsi0>;
+                qcom,mdss-dsi-panel-type = "dsi_video_mode";
+                qcom,mdss-dsi-panel-destination = "display_1";
+                qcom,mdss-dsi-panel-framerate = <60>;
+                qcom,mdss-dsi-virtual-channel-id = <0>;
+                qcom,mdss-dsi-stream = <0>;
+                qcom,mdss-dsi-panel-width = <320>;
+                qcom,mdss-dsi-panel-height = <480>;
+                qcom,mdss-dsi-h-front-porch = <38>;
+                qcom,mdss-dsi-h-back-porch = <50>;
+                qcom,mdss-dsi-h-pulse-width = <50>;
+                qcom,mdss-dsi-h-sync-skew = <0>;
+                qcom,mdss-dsi-v-back-porch = <4>;
+                qcom,mdss-dsi-v-front-porch = <8>;
+                qcom,mdss-dsi-v-pulse-width = <4>;
+                qcom,mdss-dsi-h-left-border = <0>;
+                qcom,mdss-dsi-h-right-border = <0>;
+                qcom,mdss-dsi-v-top-border = <0>;
+                qcom,mdss-dsi-v-bottom-border = <0>;
+                qcom,mdss-dsi-bpp = <24>;
+                qcom,mdss-dsi-color-order = "rgb_swap_rgb";
+                qcom,mdss-dsi-underflow-color = <0xff>;
+                qcom,mdss-dsi-border-color = <0>;
+                qcom,mdss-dsi-on-command = [05 01 00 00 0A 00 01 01
+                            05 01 00 00 AA 00 01 11
+                            05 01 00 00 00 00 01 13
+                            05 01 00 00 00 00 01 21
+                            15 01 00 00 00 00 02 36 48
+                            05 01 00 00 00 00 01 38
+                            15 01 00 00 00 00 02 3a 77
+                            15 01 00 00 00 00 02 f0 c3
+                            15 01 00 00 00 00 02 f0 96
+                            39 01 00 00 00 00 03 b1 a0 0b
+                            15 01 00 00 00 00 02 b4 01
+                            15 01 00 00 00 00 05 b5 08 04 00 19
+                            15 01 00 00 00 00 02 b7 06
+                            39 01 00 00 00 00 03 b9 02 c0
+                            39 01 00 00 00 00 03 c0 c0 00
+                            15 01 00 00 00 00 02 c1 09
+                            15 01 00 00 00 00 02 c5 20
+                            39 01 00 00 0a 00 0f e0 f0 06 0a 0a 08 05 30 43 46 37 13 13 2a 30
+                            39 01 00 00 00 00 0f e1 f0 06 0a 0a 08 05 30 43 46 37 13 13 2a 30
+                            39 01 00 00 00 00 08 e8 40 8a 00 00 2a 00 36
+                            15 01 00 00 00 00 02 c2 0f
+                            39 01 00 00 00 00 05 e7 27 02 42 b2
+                            05 01 00 00 05 00 01 29];
+                qcom,mdss-dsi-off-command = [05 01 00 00 50 00 01 28
+                             05 01 00 00 0A 00 01 10];
+                qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+                qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
+                qcom,mdss-dsi-h-sync-pulse = <1>;
+                qcom,mdss-dsi-traffic-mode = "non_burst_sync_pulse";
+                qcom,mdss-dsi-lane-map = "lane_map_0123";
+                qcom,mdss-dsi-bllp-eof-power-mode;
+                qcom,mdss-dsi-bllp-power-mode;
+                qcom,mdss-dsi-lane-0-state;
+                qcom,mdss-dsi-panel-timings = [51 0E 0A 00 2E 32 0E 12 0D 03 04 00];
+                qcom,mdss-dsi-t-clk-post = <0x1f>;
+                qcom,mdss-dsi-t-clk-pre = <0x2d>;
+                qcom,mdss-dsi-bl-min-level = <1>;
+                qcom,mdss-dsi-bl-max-level = <4095>;
+                qcom,mdss-dsi-dma-trigger = "trigger_sw";
+                qcom,mdss-dsi-mdp-trigger = "none";
+                qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+                qcom,mdss-dsi-reset-sequence = <1 1>, <0 5>, <1 120>;
+        };
+};

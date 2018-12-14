@@ -1,0 +1,35 @@
+#include "dsi-panel-nvd-st7796si-video.dtsi"
+#include "dsi-panel-jdi-st7796si-video.dtsi"
+#include "dsi-panel-usm-st7796si-video.dtsi"
+
+&dsi_panel_pwr_supply {
+	qcom,panel-supply-entry@0 {
+		qcom,supply-min-voltage = <2900000>;
+		qcom,supply-max-voltage = <3100000>;
+	};
+};
+
+&dsi_nvd_320p_video {
+	qcom,mdss-dsi-panel-timings-phy-v2 = [1e 19 04 05 02 03 04 a0
+		1e 19 04 05 02 03 04 a0
+		1e 19 04 05 02 03 04 a0
+		1e 19 04 05 02 03 04 a0
+		1e 0a 03 04 02 03 04 a0];
+};
+
+&dsi_jdi_320p_video {
+        qcom,mdss-dsi-panel-timings-phy-v2 = [1e 19 04 05 02 03 04 a0
+                1e 19 04 05 02 03 04 a0
+                1e 19 04 05 02 03 04 a0
+                1e 19 04 05 02 03 04 a0
+                1e 0a 03 04 02 03 04 a0];
+};
+
+&dsi_usm_320p_video {
+        qcom,mdss-dsi-panel-timings-phy-v2 = [1e 19 04 05 02 03 04 a0
+                1e 19 04 05 02 03 04 a0
+                1e 19 04 05 02 03 04 a0
+                1e 19 04 05 02 03 04 a0
+                1e 0a 03 04 02 03 04 a0];
+};
+

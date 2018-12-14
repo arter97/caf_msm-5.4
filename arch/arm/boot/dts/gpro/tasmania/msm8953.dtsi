@@ -1,0 +1,91 @@
+/{
+	aliases {
+		i2c8 = &i2c_8;
+	};
+	reserved-memory {
+		/delete-node/modem_region@0;
+		adsp_fw_mem: adsp_fw_region@0 {
+			reg = <0x0 0x86800000 0x0 0x1100000>;
+		};
+		wcnss_fw_mem: wcnss_fw_region@0 {
+			reg = <0x0 0x87900000 0x0 0x700000>;
+		};
+		cont_splash_mem: splash_region@0x90001000 {
+			reg = <0x0 0x90001000 0x0 0x200000>;
+		};
+	};
+	soc: soc { };
+};
+
+/* display */
+&i2c_2 {
+	/* DSI_TO_HDMI I2C configuration */
+	adv7533@39 {
+		status = "disabled";
+	};
+};
+
+&soc {
+	i2c_8: i2c@7af8000 { /* BLSP2 QUP3 */
+		compatible = "qcom,i2c-msm-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr";
+		reg = <0x7af8000 0x600>;
+		interrupt-names = "qup_irq";
+		interrupts = <0 302 0>;
+		qcom,clk-freq-out = <100000>;
+		qcom,clk-freq-in  = <19200000>;
+		clock-names = "iface_clk", "core_clk";
+		clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
+			<&clock_gcc clk_gcc_blsp2_qup4_i2c_apps_clk>;
+
+		pinctrl-names = "i2c_active", "i2c_sleep";
+		pinctrl-0 = <&i2c_8_active>;
+		pinctrl-1 = <&i2c_8_sleep>;
+		qcom,noise-rjct-scl = <0>;
+		qcom,noise-rjct-sda = <0>;
+		qcom,master-id = <84>;
+		dmas = <&dma_blsp2 10 64 0x20000020 0x20>,
+		    <&dma_blsp2 11 32 0x20000020 0x20>;
+		dma-names = "tx", "rx";
+		status = "okay";
+	};
+	/* GPS */
+	blsp1_uart1: uart@78b0000 {
+		status = "okay";
+	};
+	/* remove 31 */
+	cci: qcom,cci@1b0c000 {
+		gpios = <&tlmm 29 0>,
+			<&tlmm 30 0>,
+			<&tlmm 32 0>;
+	};
+	/* LDO4 */
+	qcom,rpm-smd {
+		rpm-regulator-ldoa4 {
+			qcom,resource-id = <0x4>;
+			compatible = "qcom,rpm-smd-regulator-resource";
+			qcom,hpm-min-load = <0x2710>;
+			qcom,resource-name = "ldoa";
+			status = "okay";
+			qcom,regulator-type = <0x0>;
+
+			regulator-l4 {
+				regulator-name = "pm8953_l4";
+				compatible = "qcom,rpm-smd-regulator";
+				qcom,set = <0x3>;
+				qcom,init-voltage = <0x1b7740>;
+				regulator-min-microvolt = <0x1b7740>;
+				regulator-max-microvolt = <0x1b7740>;
+				status = "okay";
+			};
+		};
+	};
+	/* end of GPS */
+
+	qcom,mss@4080000 {
+		/delete-property/memory-region;
+	};
+};
+

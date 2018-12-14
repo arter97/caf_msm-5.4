@@ -1,0 +1,7 @@
+/* display */
+&pm8953_adc_tm {
+	/delete-node/ chan@7;
+};
+
+/delete-node/secure_mem;
+

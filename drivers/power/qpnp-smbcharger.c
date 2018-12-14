@@ -39,6 +39,7 @@
 #include <linux/msm_bcl.h>
 #include <linux/ktime.h>
 #include <linux/pmic-voter.h>
+#include <uapi/linux/qpnp-smbcharger_if.h>
 
 /* Mask/Bit helpers */
 #define _SMB_MASK(BITS, POS) \
@@ -114,6 +115,7 @@ struct smbchg_chip {
 
 	/* configuration parameters */
 	int				iterm_ma;
+	int             pre_charge_current_ma;
 	int				usb_max_current_ma;
 	int				typec_current_ma;
 	int				dc_max_current_ma;
@@ -286,6 +288,8 @@ struct smbchg_chip {
 	struct votable			*aicl_deglitch_short_votable;
 	struct votable			*hvdcp_enable_votable;
 };
+static struct smbchg_chip *chip;
+extern void send_smbchg_event(uint64_t event);
 
 enum qpnp_schg {
 	QPNP_SCHG,
@@ -451,7 +455,7 @@ module_param_named(
 	int, S_IRUSR | S_IWUSR
 );
 
-static int smbchg_default_dcp_icl_ma = 1800;
+static int smbchg_default_dcp_icl_ma = 1500;
 module_param_named(
 	default_dcp_icl_ma, smbchg_default_dcp_icl_ma,
 	int, S_IRUSR | S_IWUSR
@@ -1010,6 +1014,18 @@ static int get_prop_charge_type(struct smbchg_chip *chip)
 	return POWER_SUPPLY_CHARGE_TYPE_NONE;
 }
 
+uint32_t gopro_get_batt_chg_status(void)
+{
+	return (uint32_t)get_prop_batt_status(chip);
+}
+EXPORT_SYMBOL_GPL(gopro_get_batt_chg_status);
+
+uint32_t gopro_get_batt_chg_type(void)
+{
+	return (uint32_t)get_prop_charge_type(chip);
+}
+EXPORT_SYMBOL_GPL(gopro_get_batt_chg_type);
+
 static int set_property_on_fg(struct smbchg_chip *chip,
 		enum power_supply_property prop, int val)
 {
@@ -1452,6 +1468,41 @@ static void use_pmi8996_tables(struct smbchg_chip *chip)
 	chip->tables.rchg_thr_mv = 150;
 	chip->tables.aicl_rerun_period_table = aicl_rerun_period;
 	chip->tables.aicl_rerun_period_len = ARRAY_SIZE(aicl_rerun_period);
+}
+
+#define CHGR_PCC_REG                   0xF1
+#define CHGR_PCC_MASK                  SMB_MASK(2, 0)
+
+static void smbchg_precharge_current_conf(struct smbchg_chip *chip)
+{
+	int rc = 0;
+	int index = 0;
+	int pcc_array[5] = { 100, 150, 200, 250, 550 };
+
+	for(index = 0; index < (sizeof(pcc_array));index++)
+	{
+		if(chip->pre_charge_current_ma == pcc_array[index])
+			break;
+	}
+	if(index > 4)
+	{
+		dev_err(chip->dev,"qcom,pre-charge-current value is incorrect %d",
+				chip->pre_charge_current_ma);
+		return;
+	}
+
+	rc = smbchg_sec_masked_write(chip,
+			chip->chgr_base + CHGR_PCC_REG,
+			CHGR_PCC_MASK, index);
+	if (rc) {
+		dev_err(chip->dev,
+				"Couldn't set precharge current rc = %d\n", rc);
+		return rc;
+	}
+	pr_smb(PR_STATUS, "set pre charge current (%d) configured in reg (%d)\n",
+			chip->pre_charge_current_ma,index);
+
+	return;
 }
 
 #define CMD_CHG_REG	0x42
@@ -6501,6 +6552,7 @@ static irqreturn_t batt_hot_handler(int irq, void *_chip)
 	smbchg_wipower_check(chip);
 	set_property_on_fg(chip, POWER_SUPPLY_PROP_HEALTH,
 			get_prop_batt_health(chip));
+	send_smbchg_event(QPNP_SMBCHG_BATT_HOT);
 	return IRQ_HANDLED;
 }
 
@@ -6519,6 +6571,8 @@ static irqreturn_t batt_cold_handler(int irq, void *_chip)
 	smbchg_wipower_check(chip);
 	set_property_on_fg(chip, POWER_SUPPLY_PROP_HEALTH,
 			get_prop_batt_health(chip));
+
+	send_smbchg_event(QPNP_SMBCHG_BATT_COLD);
 	return IRQ_HANDLED;
 }
 
@@ -6535,6 +6589,7 @@ static irqreturn_t batt_warm_handler(int irq, void *_chip)
 		power_supply_changed(&chip->batt_psy);
 	set_property_on_fg(chip, POWER_SUPPLY_PROP_HEALTH,
 			get_prop_batt_health(chip));
+	send_smbchg_event(QPNP_SMBCHG_BATT_WARM);
 	return IRQ_HANDLED;
 }
 
@@ -6551,6 +6606,7 @@ static irqreturn_t batt_cool_handler(int irq, void *_chip)
 		power_supply_changed(&chip->batt_psy);
 	set_property_on_fg(chip, POWER_SUPPLY_PROP_HEALTH,
 			get_prop_batt_health(chip));
+	send_smbchg_event(QPNP_SMBCHG_BATT_COOL);
 	return IRQ_HANDLED;
 }
 
@@ -6567,12 +6623,28 @@ static irqreturn_t batt_pres_handler(int irq, void *_chip)
 	smbchg_charging_status_change(chip);
 	set_property_on_fg(chip, POWER_SUPPLY_PROP_HEALTH,
 			get_prop_batt_health(chip));
+	if(reg & BAT_MISSING_BIT) {
+		send_smbchg_event(QPNP_SMBCHG_BATT_MISSING);
+	}
 	return IRQ_HANDLED;
 }
 
 static irqreturn_t vbat_low_handler(int irq, void *_chip)
 {
+	u8 reg = 0;
+	int rc = 0;
+	struct smbchg_chip *chip = _chip;
+
 	pr_warn_ratelimited("vbat low\n");
+	rc = smbchg_read(chip, &reg, chip->bat_if_base + RT_STS, 1);
+	if (rc < 0) {
+		dev_err(chip->dev, "Unable to read RT_STS rc = %d\n", rc);
+	} else {
+		pr_smb(PR_INTERRUPT, "triggered: 0x%02x\n", reg);
+		if(reg & BAT_LOW_BIT) {
+			send_smbchg_event(QPNP_SMBCHG_BATT_LOW);
+		}
+	}
 	return IRQ_HANDLED;
 }
 
@@ -6594,6 +6666,8 @@ static irqreturn_t chg_error_handler(int irq, void *_chip)
 			set_property_on_fg(chip,
 					POWER_SUPPLY_PROP_SAFETY_TIMER_EXPIRED,
 					1);
+			send_smbchg_event(QPNP_SMBCHG_CHG_ERR);
+
 	}
 
 	smbchg_parallel_usb_check_ok(chip);
@@ -6607,7 +6681,6 @@ static irqreturn_t chg_error_handler(int irq, void *_chip)
 static irqreturn_t fastchg_handler(int irq, void *_chip)
 {
 	struct smbchg_chip *chip = _chip;
-
 	pr_smb(PR_INTERRUPT, "p2f triggered\n");
 
 	if (is_usb_present(chip) || is_dc_present(chip)) {
@@ -6625,6 +6698,8 @@ static irqreturn_t fastchg_handler(int irq, void *_chip)
 static irqreturn_t chg_hot_handler(int irq, void *_chip)
 {
 	pr_warn_ratelimited("chg hot\n");
+	send_smbchg_event(QPNP_SMBCHG_TEMP_SHUTDOWN);
+
 	smbchg_wipower_check(_chip);
 	return IRQ_HANDLED;
 }
@@ -6632,7 +6707,6 @@ static irqreturn_t chg_hot_handler(int irq, void *_chip)
 static irqreturn_t chg_term_handler(int irq, void *_chip)
 {
 	struct smbchg_chip *chip = _chip;
-
 	pr_smb(PR_INTERRUPT, "tcc triggered\n");
 	/*
 	 * Charge termination is a pulse and not level triggered. That means,
@@ -6647,6 +6721,7 @@ static irqreturn_t chg_term_handler(int irq, void *_chip)
 	if (chip->psy_registered)
 		power_supply_changed(&chip->batt_psy);
 	smbchg_charging_status_change(chip);
+	send_smbchg_event(QPNP_SMBCHG_CHG_TERM);
 
 	return IRQ_HANDLED;
 }
@@ -6664,6 +6739,8 @@ static irqreturn_t taper_handler(int irq, void *_chip)
 		power_supply_changed(&chip->batt_psy);
 	smbchg_charging_status_change(chip);
 	smbchg_wipower_check(chip);
+	send_smbchg_event(QPNP_SMBCHG_CHG_TAPER);
+
 	return IRQ_HANDLED;
 }
 
@@ -6678,6 +6755,8 @@ static irqreturn_t recharge_handler(int irq, void *_chip)
 	if (chip->psy_registered)
 		power_supply_changed(&chip->batt_psy);
 	smbchg_charging_status_change(chip);
+	send_smbchg_event(QPNP_SMBCHG_CHG_RECHRG);
+
 	return IRQ_HANDLED;
 }
 
@@ -6691,6 +6770,8 @@ static irqreturn_t wdog_timeout_handler(int irq, void *_chip)
 	if (chip->psy_registered)
 		power_supply_changed(&chip->batt_psy);
 	smbchg_charging_status_change(chip);
+	send_smbchg_event(QPNP_SMBCHG_WDOG_TIMEOUT);
+
 	return IRQ_HANDLED;
 }
 
@@ -6766,6 +6847,8 @@ static irqreturn_t usbin_ov_handler(int irq, void *_chip)
 					"usb psy does not allow updating prop %d rc = %d\n",
 					POWER_SUPPLY_HEALTH_OVERVOLTAGE, rc);
 		}
+		send_smbchg_event(QPNP_SMBCHG_CHG_USB_OV_THR_CRSD);
+
 	} else {
 		chip->usb_ov_det = false;
 		/* If USB is present, then handle the USB insertion */
@@ -6790,7 +6873,6 @@ static irqreturn_t usbin_uv_handler(int irq, void *_chip)
 	int aicl_level = smbchg_get_aicl_level_ma(chip);
 	int rc;
 	u8 reg;
-
 	rc = smbchg_read(chip, &reg, chip->usb_chgpth_base + RT_STS, 1);
 	if (rc) {
 		pr_err("could not read rt sts: %d", rc);
@@ -6815,7 +6897,9 @@ static irqreturn_t usbin_uv_handler(int irq, void *_chip)
 	}
 
 	if (reg & USBIN_UV_BIT)
+	{
 		complete_all(&chip->usbin_uv_raised);
+	}
 	else
 		complete_all(&chip->usbin_uv_lowered);
 
@@ -6881,7 +6965,6 @@ static irqreturn_t src_detect_handler(int irq, void *_chip)
 	bool usb_present = is_usb_present(chip);
 	bool src_detect = is_src_detect_high(chip);
 	int rc;
-
 	pr_smb(PR_STATUS,
 		"%s chip->usb_present = %d usb_present = %d src_detect = %d hvdcp_3_det_ignore_uv=%d\n",
 		chip->hvdcp_3_det_ignore_uv ? "Ignoring":"",
@@ -6921,9 +7004,12 @@ static irqreturn_t src_detect_handler(int irq, void *_chip)
 
 	if (src_detect) {
 		update_usb_status(chip, usb_present, 0);
+		send_smbchg_event(QPNP_SMBCHG_CHG_USB_SRC_INSERTED);
+
 	} else {
 		update_usb_status(chip, 0, false);
 		chip->aicl_irq_count = 0;
+		send_smbchg_event(QPNP_SMBCHG_CHG_USB_SRC_REMOVED);
 	}
 out:
 	return IRQ_HANDLED;
@@ -7034,6 +7120,7 @@ static irqreturn_t usbid_change_handler(int irq, void *_chip)
 static int determine_initial_status(struct smbchg_chip *chip)
 {
 	union power_supply_propval type = {0, };
+	int rc = 0;
 
 	/*
 	 * It is okay to read the interrupt status here since
@@ -7061,6 +7148,11 @@ static int determine_initial_status(struct smbchg_chip *chip)
 		pr_smb(PR_MISC, "setting usb psy dp=f dm=f\n");
 		power_supply_set_dp_dm(chip->usb_psy,
 				POWER_SUPPLY_DP_DM_DPF_DMF);
+		rc = rerun_apsd(chip);
+		pr_smb(PR_MISC, "Rerunning APSD\n");
+		if (rc)
+			pr_err("APSD rerun failed rc=%d\n", rc);
+		msleep(500);
 		handle_usb_insertion(chip);
 	} else {
 		handle_usb_removal(chip);
@@ -7779,6 +7871,7 @@ static int smb_parse_dt(struct smbchg_chip *chip)
 	if (ocp_thresh >= 0)
 		smbchg_ibat_ocp_threshold_ua = ocp_thresh;
 	OF_PROP_READ(chip, chip->iterm_ma, "iterm-ma", rc, 1);
+	OF_PROP_READ(chip, chip->pre_charge_current_ma, "pre-charge-current", rc, 1);
 	OF_PROP_READ(chip, chip->cfg_fastchg_current_ma,
 			"fastchg-current-ma", rc, 1);
 	if (chip->cfg_fastchg_current_ma == -EINVAL)
@@ -7998,8 +8091,24 @@ do {									\
 	}								\
 } while (0)
 
+#define VBAT_LOW_CFG_REG			0xf1
+/*
+Threshold voltages are as follows
+1 - 2.50 V
+2 - 2.60 V
+3 - 2.70 V
+4 - 2.80 V
+5 - 2.90 V
+6 - 3.00 V
+7 - 3.10 V
+8 - 3.70 V
+9 - 2.88 V
+*/
+#define LOW_BAT_THRESHOLD			0x03
+
 static int smbchg_request_irqs(struct smbchg_chip *chip)
 {
+	u8 val = 0;
 	int rc = 0;
 	struct resource *resource;
 	struct spmi_resource *spmi_resource;
@@ -8064,6 +8173,11 @@ static int smbchg_request_irqs(struct smbchg_chip *chip)
 				"batt-missing", batt_pres_handler, flags, rc);
 			REQUEST_IRQ(chip, spmi_resource, chip->vbat_low_irq,
 				"batt-low", vbat_low_handler, flags, rc);
+			/*Configuring the low battery threshold voltage to get interrupt*/
+			val = LOW_BAT_THRESHOLD;
+			smbchg_write(chip, &val ,chip->bat_if_base
+			+ VBAT_LOW_CFG_REG, 1);
+
 			enable_irq_wake(chip->batt_hot_irq);
 			enable_irq_wake(chip->batt_warm_irq);
 			enable_irq_wake(chip->batt_cool_irq);
@@ -8421,7 +8535,6 @@ static void rerun_hvdcp_det_if_necessary(struct smbchg_chip *chip)
 static int smbchg_probe(struct spmi_device *spmi)
 {
 	int rc;
-	struct smbchg_chip *chip;
 	struct power_supply *usb_psy, *typec_psy = NULL;
 	struct qpnp_vadc_chip *vadc_dev = NULL, *vchg_vadc_dev = NULL;
 	const char *typec_psy_name;
@@ -8608,6 +8721,9 @@ static int smbchg_probe(struct spmi_device *spmi)
 		dev_err(&spmi->dev, "Unable to parse DT nodes: %d\n", rc);
 		goto votables_cleanup;
 	}
+
+	/* Configuring the precharge current after parsing the device tree */
+	smbchg_precharge_current_conf(chip);
 
 	rc = smbchg_regulator_init(chip);
 	if (rc) {

@@ -991,6 +991,7 @@ static int __ref kernel_init(void *unused)
 		pr_err("Failed to execute %s (error %d).  Attempting defaults...\n",
 			execute_command, ret);
 	}
+	printk(KERN_DEBUG "GOPRO: calling init here");
 	if (!try_to_run_init_process("/sbin/init") ||
 	    !try_to_run_init_process("/etc/init") ||
 	    !try_to_run_init_process("/bin/init") ||

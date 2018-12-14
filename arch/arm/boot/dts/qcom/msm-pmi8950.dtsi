@@ -116,7 +116,17 @@
 				qcom,fast-avg-setup = <0>;
 				qcom,vadc-thermal-node;
 			};
-
+			chan@10 {
+				 label = "sensor_therm";
+				 reg = <0x10>;
+                                 qcom,decimation = <0>;
+                                 qcom,pre-div-channel-scaling = <0>;
+                                 qcom,calibration-type = "ratiometric"; 
+                                 qcom,scale-function = <0>; 
+                                 qcom,hw-settle-time = <2>; 
+                                 qcom,fast-avg-setup = <2>; 
+                                 qcom,vadc-thermal-node;
+                        };
 			chan@43 {
 				label = "usb_dp";
 				reg = <0x43>;

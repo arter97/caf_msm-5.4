@@ -1,0 +1,50 @@
+
+qcom,3303405_gopro_tasmaniaatl_1220mah_averaged_masterslave_feb9th2018 {
+	/* #3303405_GoPro_TasmaniaATL_1220mAh_averaged_MasterSlave_Feb9th2018*/
+	qcom,max-voltage-uv = <4350000>;
+	qcom,nom-batt-capacity-mah = <1220>;
+	qcom,batt-id-kohm = <100>;
+	qcom,battery-beta = <3380>;
+	qcom,battery-type = "3303405_gopro_tasmaniaatl_1220mah_averaged_masterslave_feb9th2018";
+	qcom,chg-rslow-comp-c1 = <2517304>;
+	qcom,chg-rslow-comp-c2 = <3341774>;
+	qcom,chg-rs-to-rslow = <787116>;
+	qcom,chg-rslow-comp-thr = <0x9F>;
+	qcom,fg-cc-cv-threshold-mv = <4340>;
+	qcom,checksum = <0x7853>;
+	qcom,gui-version = "PMI8950GUI - 2.0.0.16";
+	qcom,fg-profile-data = [
+		 45 88 EE 84 
+		 07 88 FB 7D 
+		 3D 83 A8 71 
+		 96 7C 44 79 
+		 0F 82 FE 98 
+		 97 B6 F7 C1 
+		 9C 17 FC 83 
+		 42 7D 28 81 
+		 5A 77 32 83 
+		 64 79 DB 86 
+		 31 83 27 82 
+		 14 9A 4C BD 
+		 6A CA 71 11 
+		 C8 04 96 62 
+		 CE 6E B8 FE 
+		 DA 44 EA 3C 
+		 94 38 00 00 
+		 D2 47 51 39 
+		 3F 29 00 00 
+		 00 00 00 00 
+		 00 00 00 00 
+		 9A 6B FC 6A 
+		 29 7D 4F 79 
+		 2E 5E A5 63 
+		 A1 61 48 79 
+		 B7 12 A4 5B 
+		 8B 97 46 C9 
+		 0E 63 61 CF 
+		 5E A0 71 0C 
+		 28 00 FF 36 
+		 F0 11 30 03 
+		 00 00 00 0C 
+	];
+};

@@ -1357,7 +1357,6 @@ int mdss_mdp_overlay_start(struct msm_fb_data_type *mfd)
 	if (mdss_mdp_ctl_is_power_on(ctl)) {
 		if (!mdp5_data->mdata->batfet)
 			mdss_mdp_batfet_ctrl(mdp5_data->mdata, true);
-		mdss_mdp_release_splash_pipe(mfd);
 		return 0;
 	} else if (mfd->panel_info->cont_splash_enabled) {
 		if (mdp5_data->allow_kickoff) {

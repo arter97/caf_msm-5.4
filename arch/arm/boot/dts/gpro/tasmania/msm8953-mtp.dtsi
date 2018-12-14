@@ -1,0 +1,72 @@
+&soc {
+	/* button */
+	gpio_keys {
+		compatible = "gpio-keys";
+		input-name = "gpio-keys";
+		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
+		pinctrl-0 = <&gpio_key_active>;
+		pinctrl-1 = <&gpio_key_suspend>;
+		status = "disabled";
+	};
+};
+
+/* battery */
+&pmi8950_charger{
+        pinctrl-names = "default";
+        pinctrl-0 = <&pmic_charge_enable>;
+};
+
+/* sdcard */
+&sdhc_2 {
+	qcom,vdd-io-always-on;
+	qcom,vdd-io-lpm-sup;
+};
+
+/* Display */
+#include "dsi-panel-nvd-st7796si-video.dtsi"
+#include "dsi-panel-jdi-st7796si-video.dtsi"
+#include "dsi-panel-usm-st7796si-video.dtsi"
+
+&mdss_dsi {
+	hw-config = "single_dsi";
+};
+
+&mdss_dsi0 {
+	qcom,dsi-pref-prim-pan = <&dsi_jdi_320p_video>;
+	pinctrl-0 = <&mdss_dsi_active>;
+	pinctrl-1 = <&mdss_dsi_suspend>;
+	qcom,platform-reset-gpio = <&tlmm 40 0>;
+	/delete-property/qcom,platform-te-gpio;
+	/delete-property/qcom,platform-reset-gpio;
+	/delete-property/qcom,platform-bklight-en-gpio;
+	status = "okay";
+};
+
+&mdss_dsi1 {
+	qcom,bridge-index = <0>;
+	status = "disabled";
+};
+
+
+&dsi_nvd_320p_video {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,mdss-dsi-pan-enable-dynamic-fps;
+	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_clk_mode";
+};
+
+&dsi_jdi_320p_video {
+        qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+        qcom,mdss-dsi-pan-enable-dynamic-fps;
+        qcom,mdss-dsi-pan-fps-update = "dfps_immediate_clk_mode";
+};
+
+&dsi_usm_320p_video {
+        qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+        qcom,mdss-dsi-pan-enable-dynamic-fps;
+        qcom,mdss-dsi-pan-fps-update = "dfps_immediate_clk_mode";
+};
+
+
+&dsi_adv7533_1080p {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+};

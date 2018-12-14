@@ -33,6 +33,8 @@
 #include <linux/usb/android.h>
 
 #include <linux/qcom/diag_dload.h>
+#include <uapi/linux/qpnp-smbcharger_if.h>
+
 
 #include "gadget_chips.h"
 
@@ -97,6 +99,7 @@ static const char longname[] = "Gadget Android";
 #define MIDI_OUTPUT_PORTS   1
 #define MIDI_BUFFER_SIZE    1024
 #define MIDI_QUEUE_LENGTH   32
+extern void send_smbchg_event(uint64_t event);
 
 struct android_usb_function {
 	char *name;
@@ -435,6 +438,7 @@ static void android_work(struct work_struct *data)
 	} else if (cdev->config) {
 		uevent_envp = configured;
 		next_state = USB_CONFIGURED;
+		send_smbchg_event(QPNP_SMBCHG_USB_HOST);
 	} else if (dev->connected != dev->sw_connected) {
 		uevent_envp = dev->connected ? connected : disconnected;
 		next_state = dev->connected ? USB_CONNECTED : USB_DISCONNECTED;

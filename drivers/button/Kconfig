@@ -1,0 +1,5 @@
+config BUTTON
+tristate "Button driver to handle key events"
+default y
+help
+  BUTTON module

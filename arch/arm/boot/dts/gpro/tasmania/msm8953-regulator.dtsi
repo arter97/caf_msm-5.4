@@ -1,0 +1,20 @@
+/* Buzzer: To keep power to buzzer always on */
+&pm8953_l8 {
+	regulator-max-microvolt = <3000000>;
+	qcom,init-voltage = <3000000>;
+	regulator-always-on;
+};
+
+/* display */
+&pm8953_l5 {
+	regulator-always-on;
+};
+
+/* image sensor */
+&pm8953_l2 {
+    qcom,init-voltage = <1200000>;
+};
+
+&eldo2_8953 {
+    status = "disabled";
+};

@@ -94,6 +94,10 @@ static u32 mdss_fb_pseudo_palette[16] = {
 
 static struct msm_mdp_interface *mdp_instance;
 
+static bool splash_enabled = 0;
+module_param_named(splash_enabled,
+	splash_enabled,bool,S_IRUGO | S_IWUSR | S_IWGRP);
+
 static int mdss_fb_register(struct msm_fb_data_type *mfd);
 static int mdss_fb_open(struct fb_info *info, int user);
 static int mdss_fb_release(struct fb_info *info, int user);
@@ -502,14 +506,12 @@ static void __mdss_fb_idle_notify_work(struct work_struct *work)
 	struct delayed_work *dw = to_delayed_work(work);
 	struct msm_fb_data_type *mfd = container_of(dw, struct msm_fb_data_type,
 		idle_notify_work);
-
 	/* Notify idle-ness here */
 	pr_debug("Idle timeout %dms expired!\n", mfd->idle_time);
 	if (mfd->idle_time)
 		sysfs_notify(&mfd->fbi->dev->kobj, NULL, "idle_notify");
 	mfd->idle_state = MDSS_FB_IDLE;
 }
-
 
 static ssize_t mdss_fb_get_fps_info(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -1323,8 +1325,10 @@ static int mdss_fb_probe(struct platform_device *pdev)
 
 	mdss_fb_set_mdp_sync_pt_threshold(mfd, mfd->panel.type);
 
-	if (mfd->mdp.splash_init_fnc)
-		mfd->mdp.splash_init_fnc(mfd);
+	if ((mfd->mdp.splash_init_fnc) && splash_enabled)
+		{
+                    mfd->mdp.splash_init_fnc(mfd);
+		}
 
 	/*
 	 * Register with input driver for a callback for command mode panels.
@@ -1674,7 +1678,7 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 		 * as well as setting bl_level to bkl_lvl even though the
 		 * backlight has been set to the scaled value.
 		 */
-		if (mfd->bl_level_scaled == temp) {
+		if ((mfd->bl_level_scaled == temp) && temp!=0) {
 			mfd->bl_level = bkl_lvl;
 		} else {
 			if (mfd->bl_level != bkl_lvl)

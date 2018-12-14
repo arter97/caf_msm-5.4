@@ -1,0 +1,22 @@
+/* Entry Point for GoPro specific dts changes */
+
+#include "apq8053-mtp.dtsi"
+#include "msm8953-mtp.dtsi"
+#include "msm8953-audio.dtsi"
+#include "msm8953-audio-mtp.dtsi"
+#include "msm8953-pinctrl.dtsi"
+#include "msm8953-regulator.dtsi"
+#include "msm8953.dtsi"
+#include "msm-pm8953.dtsi"
+#include "msm-pmi8950.dtsi"
+#include "msm8953-mdss.dtsi"
+#include "msm8953-mdss-panels.dtsi"
+#include "msm8953-camera-sensor-mtp.dtsi"
+#include "msm8953-touch-screen.dtsi"
+#include "apq8053-iot-memory.dtsi"
+#include "msm8953-cdp-1200p.dtsi"
+#include "msm8953-iot-mtp.dtsi"
+#include "sdm450-iot-mtp.dtsi"
+/{
+    model = "GoPro. APQ8053 Tasmania";
+};

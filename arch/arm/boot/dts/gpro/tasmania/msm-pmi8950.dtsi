@@ -1,0 +1,104 @@
+&spmi_bus {
+	qcom,pmi8950@2 {
+		pmi8950_mpps: mpps {
+			mpp@a000 {
+				qcom,mode = <4>; /* AIN input */
+				qcom,invert = <0>; /* Enable MPP */
+				qcom,ain-route = <0>; /* AMUX 5 */
+				qcom,master-en = <1>;
+				qcom,src-sel = <0>; /* Function constant */
+				status = "okay";
+			};
+		};
+
+		/*
+			Note:
+			charge current and voltage shall be taken care as per
+			JEITA standard by PMIC and FG itself.
+			There are no register / device tree entry for it.
+			Ref: 80-P2536-5A_PM8953 + PMI8952 POWER MANAGEMENT IC DESIGN \
+			GUIDELINES-TRAINING SLIDES.pdf
+		 */
+
+		pmi8950_charger: qcom,qpnp-smbcharger {
+			qcom,float-voltage-mv = <4400>;
+			qcom,resume-delta-mv = <50>;
+			qcom,charging-timeout-mins = <384>;
+			qcom,fastchg-current-ma = <1200>;
+			qcom,pre-charge-current = <100>;
+			/* float voltage compensation value for 4.1Volt for jeita soft limits*/
+			qcom,float-voltage-comp = <13>;
+			qcom,fastchg-current-comp = <700>;
+			/* To avoid initial interrupts for batt_low and batt_missing */
+			qcom,bmd-pin-src = "bpd_id";
+			/delete-property/qcom,external-typec;
+			/delete-property/qcom,typec-psy-name;
+		};
+
+		pmi8950_fg: qcom,fg {
+			/*
+				Once temperature reached hard-limit on either side(cold, warm)
+				according to the Jeita Standard charging will be disabled.
+				setting cold hard limit to (0) degC to charge the battery.
+				Ref: 80-P2536-5A_PM8953 + PMI8952 POWER MANAGEMENT IC DESIGN
+				GUIDELINES-TRAINING SLIDES.pdf
+			*/
+			qcom,cold-bat-decidegc = <0>;
+			qcom,cool-bat-decidegc = <100>;
+			qcom,warm-bat-decidegc = <450>;
+			qcom,hot-bat-decidegc = <600>;
+			qcom,cold-hot-jeita-hysteresis = <30 50>;
+			qcom,fg-vbatt-low-threshold = <3300>;
+			qcom,irq-volt-empty-mv = <3250>;
+			qcom,bad-battery-detection-enable;
+			qcom,hold-soc-while-full;
+			qcom,fg-iterm-ma = <100>;
+			qcom,fg-chg-iterm-ma = <50>;
+			qcom,chg-term-ua = <50000>;
+			qcom,fg-cutoff-voltage-mv = <3300>;
+			qcom,irq-volt-empty-mv = <3250>;
+			qcom,fg-cc-cv-threshold-mv = <4340>;
+			qcom,resume-soc = <95>;
+		};
+		qcom,leds@a100 {
+			compatible = "qcom,leds-qpnp";
+			reg = <0xa100 0x100>;
+			status = "okay";
+			qcom,led_mpp_2 {
+				label = "mpp";
+				linux,name = "front_led";
+				linux,default-trigger = "hr-trigger";
+				qcom,default-state = "off";
+				qcom,current-setting = <5>;
+				qcom,max-current = <40>;
+				qcom,id = <6>;
+				qcom,source-sel = <1>;
+				qcom,mode-ctrl = <0x61>;
+				qcom,mode = "manual";
+			};
+		};
+		qcom,leds@a300 {
+			compatible = "qcom,leds-qpnp";
+			reg = <0xa300 0x100>;
+			status = "okay";
+			qcom,led_mpp_4 {
+				label = "mpp";
+				linux,name = "back_led";
+				linux,default-trigger = "hr-trigger";
+				qcom,default-state = "off";
+				qcom,current-setting = <5>;
+				qcom,max-current = <40>;
+				qcom,id = <6>;
+				qcom,source-sel = <1>;
+				qcom,mode-ctrl = <0x61>;
+				qcom,mode = "manual";
+			};
+		};
+	};
+
+	qcom,pmi8950@3 {
+		wled: qcom,leds@d800 {
+			qcom,led-strings-list = [00];
+		};
+	};
+};

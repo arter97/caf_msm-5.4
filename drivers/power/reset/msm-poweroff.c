@@ -25,6 +25,13 @@
 #include <linux/delay.h>
 #include <linux/qpnp/power-on.h>
 #include <linux/of_address.h>
+#include <linux/string.h>
+#include <linux/errno.h>
+#include <linux/slab.h>
+#include <linux/uaccess.h>
+#include <linux/cdev.h>
+#include <linux/device.h>
+#include <linux/fs.h>
 
 #include <asm/cacheflush.h>
 #include <asm/system_misc.h>
@@ -32,6 +39,8 @@
 #include <soc/qcom/scm.h>
 #include <soc/qcom/restart.h>
 #include <soc/qcom/watchdog.h>
+
+
 
 #define EMERGENCY_DLOAD_MAGIC1    0x322A4F99
 #define EMERGENCY_DLOAD_MAGIC2    0xC67E4350
@@ -45,6 +54,28 @@
 #define SCM_EDLOAD_MODE			0X01
 #define SCM_DLOAD_CMD			0x10
 
+#define MSM_PM_BUF_SIZE    80
+
+
+
+#define REBOOT_COLD 0
+#define REBOOT_WARM 1
+#define REBOOT_HARD 2
+#define REBOOT_SOFT 3
+#define REBOOT_GPIO 4
+
+#define RESTART_IOCTL_MAGIC            100
+
+
+//#define RESTART_REBOOT_COLD _IOW(RESTART_IOCTL_MAGIC, 0, char*)
+
+#define RESTART_REBOOT_COLD _IO(RESTART_IOCTL_MAGIC, 0)
+#define RESTART_REBOOT_WARM _IOW(RESTART_IOCTL_MAGIC, 1, char*)
+#define RESTART_REBOOT_HARD _IOW(RESTART_IOCTL_MAGIC, 2, char*)
+#define RESTART_REBOOT_SOFT _IOW(RESTART_IOCTL_MAGIC, 3, char*)
+#define RESTART_REBOOT_GPIO _IOW(RESTART_IOCTL_MAGIC, 4, char*)
+
+
 
 static int restart_mode;
 static void *restart_reason;
@@ -54,6 +85,15 @@ static bool scm_deassert_ps_hold_supported;
 static void __iomem *msm_ps_hold;
 static phys_addr_t tcsr_boot_misc_detect;
 static void scm_disable_sdi(void);
+
+static struct class *msm_pm_class;
+static struct device *msm_pm_device;
+char* msm_pm_buf;
+static int major;
+
+static struct kobject *msm_pm_kobject;
+static int gp_poweroff;
+
 
 #ifdef CONFIG_MSM_DLOAD_MODE
 /* Runtime could be only changed value once.
@@ -612,3 +652,131 @@ static int __init msm_restart_init(void)
 	return platform_driver_register(&msm_restart_driver);
 }
 device_initcall(msm_restart_init);
+
+
+static ssize_t store_msm_poweroff(struct kobject *kobj, struct kobj_attribute *attr,
+                      char *buf)
+{
+    pr_debug("Shutdown Command poweroff\n");
+    do_msm_poweroff();
+    return 1;
+}
+
+static ssize_t show_msm_poweroff(struct kobject *kobj, struct kobj_attribute *attr,
+                      char *buf, size_t count)
+{
+        pr_debug("Shutdown Command Status\n");
+        return sprintf(buf, "%s\n", "shutdown->echo store_msm_poweroff ");
+}
+
+static struct kobj_attribute msm_pm_attribute =__ATTR(gp_poweroff, 0660, show_msm_poweroff,
+                                                   store_msm_poweroff);
+
+
+static ssize_t msm_pm_write(struct file *file,
+                            const char __user * buffer, size_t length, loff_t * offset)
+{
+#if 0
+    for (i = 0; i < length && i < MSM_PM_BUF_SIZE; i++)
+        get_user(msm_pm_buf[i], buffer + i);
+#endif
+   copy_from_user(msm_pm_buf, buffer, length);
+   do_msm_restart(REBOOT_SOFT, msm_pm_buf);
+    /*
+     * Again, return the number of input characters used
+     */
+    return 0;
+}
+
+
+static long msm_pm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+    int ret = -1;
+    switch (cmd)
+    {
+    case RESTART_REBOOT_COLD:
+    {
+        //copy_from_user(msm_pm_buf,(void __user *)arg, sizeof(msm_pm_buf));
+
+        //do_msm_restart(REBOOT_COLD, msm_pm_buf);
+        do_msm_restart(REBOOT_COLD, NULL);
+        ret = 0;
+        break;
+    default:
+            break;
+        }
+    }
+
+    return ret;
+}
+
+static struct file_operations msm_pm_ops = {
+    .owner          = THIS_MODULE,
+    .unlocked_ioctl = msm_pm_ioctl,
+    .write          = msm_pm_write,
+};
+
+static int msm_pm_remove(void)
+{
+    device_destroy(msm_pm_class, MKDEV(major, 0));
+    class_destroy(msm_pm_class);
+    unregister_chrdev(major, "msm_pm_reboot");
+    kfree(msm_pm_buf);
+    return 0;
+}
+
+
+static int __init gp_msm_pm_init (void)
+{
+        int error = 0;
+
+        pr_debug("Module initialized successfully \n");
+
+        msm_pm_kobject = kobject_create_and_add("gp_pmic_ctrl",
+                                                 kernel_kobj);
+        if(!msm_pm_kobject)
+                return -ENOMEM;
+
+        error = sysfs_create_file(msm_pm_kobject, &msm_pm_attribute.attr);
+        if (error) {
+                pr_debug("failed to create the poweroff file in /sys/kernel/gp_pmic_ctrl\n");
+        }
+
+        msm_pm_buf = kmalloc(MSM_PM_BUF_SIZE, GFP_KERNEL);
+
+        major = register_chrdev(0, "msm_pm_reboot", &msm_pm_ops);
+        if ( major < 0 ) {
+            printk("register_chrdev(msm_pm): FAIL\n");
+        } else {
+            printk("register_chrdev(msm_pm): OK(major = %d)\n", major);
+        }
+        msm_pm_class = class_create(THIS_MODULE, "msm_pm_reboot");
+        if(IS_ERR(msm_pm_class)){
+            printk("msm_pm_class fail: FAIL\n");
+            return PTR_ERR(msm_pm_class);
+        } else {
+            printk("msm pm create: OK\n");
+        }
+
+
+        msm_pm_device = device_create(msm_pm_class, NULL, MKDEV(major,0), NULL, "msm_pm_reboot");
+        if(unlikely(IS_ERR(msm_pm_device))){
+            printk("msm pm device create: FAIL\n");
+            return PTR_ERR(msm_pm_device);
+        } else {
+            printk("msm pm device create: OK\n");
+        }
+
+        return error;
+}
+static void __exit gp_msm_pm_exit(void)
+{
+        pr_debug ("Module un initialized successfully \n");
+        kobject_put(msm_pm_kobject);
+        msm_pm_remove();
+}
+
+
+subsys_initcall(gp_msm_pm_init);
+
+module_exit(gp_msm_pm_exit);

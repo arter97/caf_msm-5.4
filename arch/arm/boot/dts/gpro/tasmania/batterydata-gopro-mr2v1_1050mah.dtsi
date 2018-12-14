@@ -1,0 +1,61 @@
+/* Delete previous data for battery */
+/{
+    /delete-node/ qcom,battery-data;
+};
+
+/* Create the battery data node for GoPro battery profile */
+/{
+        mtp_batterydata: qcom,battery-data {
+        qcom,batt-id-range-pct = <15>;
+        qcom,gopro_mr2v1_1050mah {
+            /* #2646461_GoPro_MR2v1_1050mAh_averaged_MasterSlave_Oct11th2016*/
+            qcom,max-voltage-uv = <4400000>;
+            qcom,nom-batt-capacity-mah = <1050>;
+            qcom,batt-id-kohm = <100>;
+            qcom,battery-beta = <3435>;
+            qcom,battery-type = "gopro_mr2v1_1050mah";
+            qcom,chg-rslow-comp-c1 = <8280812>;
+            qcom,chg-rslow-comp-c2 = <53229650>;
+            qcom,chg-rs-to-rslow = <755474>;
+            qcom,chg-rslow-comp-thr = <0xEB>;
+            qcom,chg-term-ua = <50000>;
+            qcom,fastchg_threshold = <3000>;
+            qcom,checksum = <0x57A7>;
+            qcom,gui-version = "PMI8950GUI - 2.0.0.16";
+            qcom,fg-profile-data = [
+                EA 83 19 7D
+                34 81 6E 77
+                68 83 17 75
+                56 89 04 94
+                49 82 FB 92
+                E8 AE B6 B3
+                5B 14 01 88
+                8D 7D 76 81
+                D8 77 50 83
+                09 6B D3 73
+                A2 85 30 82
+                14 9A 3E BD
+                37 CA 5A 0E
+                79 04 40 61
+                14 70 EE FC
+                BF 44 F4 3C
+                56 3A 00 00
+                6D 46 68 2A
+                5F 30 00 00
+                00 00 00 00
+                00 00 00 00
+                63 70 0D 70
+                97 69 EC 83
+                AD 66 4F 63
+                03 66 F0 71
+                95 5C 8D 5A
+                DC 81 F2 C3
+                11 CF 63 BA
+                64 A0 71 0C
+                28 00 FF 36
+                F0 11 30 03
+                00 00 00 0C
+            ];
+        };
+    };
+};

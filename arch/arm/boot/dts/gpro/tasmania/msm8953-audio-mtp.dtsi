@@ -1,0 +1,59 @@
+/* AMIC changes to disable any external codec control */
+
+&int_codec {
+	status = "okay";
+	/delete-property/asoc-wsa-codec-names;
+};
+
+&pm8953_diangu_dig {
+	status = "okay";
+};
+
+&pm8953_diangu_analog {
+	status = "okay";
+};
+
+&wsa881x_i2c_e {
+	status = "disabled";
+};
+
+&wsa881x_i2c_44 {
+	status = "disabled";
+};
+
+&wsa881x_i2c_f {
+	status = "disabled";
+};
+
+&wsa881x_i2c_45 {
+	status = "disabled";
+};
+
+&slim_msm {
+	status = "disabled";
+};
+
+&dai_slim {
+	status = "disabled";
+};
+
+&wcd9xxx_intc {
+	status = "disabled";
+};
+
+&clock_audio {
+	status = "disabled";
+};
+
+&wcd9335 {
+	status = "disabled";
+};
+
+&wcd_rst_gpio {
+	status = "disabled";
+};
+
+&ext_codec {
+	qcom,model = "msm8953-tasha-snd-card";
+	status = "disabled";
+};
