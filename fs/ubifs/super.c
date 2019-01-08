@@ -2065,6 +2065,8 @@ static int ubifs_fill_super(struct super_block *sb, void *data, int silent)
 		goto out_umount;
 	}
 
+	/* populate uuid into superblock structure */
+	memcpy(sb->s_uuid, c->uuid, sizeof(c->uuid));
 	mutex_unlock(&c->umount_mutex);
 	return 0;
 
