@@ -215,7 +215,7 @@ static long do_locks(unsigned int fd, unsigned int cmd,
 	ret = sys_fcntl64(fd, cmd, (unsigned long)&kernel);
 	set_fs(fs);
 
-	if (!ret && (cmd == F_GETLK64 || cmd == F_OFD_GETLK)) {
+	if (!ret && (cmd == F_GETLK64)) {
 		user.l_type	= kernel.l_type;
 		user.l_whence	= kernel.l_whence;
 		user.l_start	= kernel.l_start;
