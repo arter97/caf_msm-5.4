@@ -7428,11 +7428,10 @@ int q6asm_get_apr_service_id(int session_id)
 
 int q6asm_get_asm_topology(int session_id)
 {
-	int topology;
+	int topology = -EINVAL;
 
 	if (session_id <= 0 || session_id > SESSION_MAX) {
 		pr_err("%s: invalid session_id = %d\n", __func__, session_id);
-		topology = -EINVAL;
 		goto done;
 	}
 	if (session[session_id].ac == NULL) {
@@ -7447,11 +7446,10 @@ done:
 
 int q6asm_get_asm_app_type(int session_id)
 {
-	int app_type;
+	int app_type = -EINVAL;
 
 	if (session_id <= 0 || session_id > SESSION_MAX) {
 		pr_err("%s: invalid session_id = %d\n", __func__, session_id);
-		app_type = -EINVAL;
 		goto done;
 	}
 	if (session[session_id].ac == NULL) {
