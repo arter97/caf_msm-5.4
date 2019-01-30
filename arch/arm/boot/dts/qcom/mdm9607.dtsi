@@ -536,6 +536,25 @@
 			reg = <0x55>;
 		};
 
+		smi130_gyro@69{
+			compatible = "smi130_gyro";
+			reg = <0x69>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&sensor_int2_default>;
+			interrupt-parent = <&tlmm_pinmux>;
+			interrupts = <79 IRQ_TYPE_EDGE_RISING>;
+			smi130_gyro,gpio_irq = <&tlmm_pinmux 79 IRQ_TYPE_EDGE_RISING>;
+		};
+
+		smi130_acc@19{
+			compatible = "smi130_acc";
+			reg = <0x19>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&sensor_int1_default>;
+			interrupt-parent = <&tlmm_pinmux>;
+			interrupts = <78 IRQ_TYPE_EDGE_RISING>;
+		};
+
 		bmi160@68{
 			compatible = "bosch-sensortec,bmi160";
 			reg = <0x68>;
