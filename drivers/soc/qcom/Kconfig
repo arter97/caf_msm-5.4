@@ -195,6 +195,30 @@ config MSM_SMEM_LOGGING
 	  the shared memory logger at /dev/smem_log and a debugfs node
 	  named smem_log.
 
+config MSM_GLINK
+       bool "Generic Link (G-Link)"
+       help
+         G-Link is a generic link transport that replaces SMD.  It is used
+         within a System-on-Chip (SoC) for communication between both internal
+         processors and external peripherals.  The actual physical transport
+         is handled by transport plug-ins that can be individually enabled and
+         configured separately.
+
+config MSM_GLINK_LOOPBACK_SERVER
+       bool "Generic Link (G-Link) Loopback Server"
+       help
+         G-Link Loopback Server that enable loopback test framework to test
+         and validate the G-Link protocol stack. It support both local and
+         remote clients to configure the loopback server and echo back the
+         data received from the clients.
+
+config TRACER_PKT
+       bool "Tracer Packet"
+       help
+         Tracer Packet helps in profiling the performance of inter-
+         processor communication protocols. The profiling information
+         can be logged into the tracer packet itself.
+
 config MSM_SMP2P
 	bool "SMSM Point-to-Point (SMP2P)"
 	depends on MSM_SMEM
@@ -572,5 +596,15 @@ config MSM_PERFORMANCE_HOTPLUG_ON
           msm_performance.
 
 source "drivers/soc/qcom/memshare/Kconfig"
+
+config MSM_GLINK_SPI_XPRT
+       depends on MSM_GLINK
+       tristate "Generic Link (G-Link) SPI Transport"
+       help
+        G-Link SPI Transport is a Transport plug-in developed over SPI
+        bus. This transport plug-in performs marshaling of G-Link
+        commands & data to the appropriate SPI bus wire format and
+        allows for G-Link communication with remote subsystems that are
+        external to the System-on-Chip.
 
 endif # ARCH_MSM
