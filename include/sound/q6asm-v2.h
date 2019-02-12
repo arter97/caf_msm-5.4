@@ -163,6 +163,7 @@ struct audio_client {
 	int                    session;
 	app_cb		       cb;
 	atomic_t	       cmd_state;
+	atomic_t               mem_state;
 	/* Relative or absolute TS */
 	atomic_t	       time_flag;
 	atomic_t	       nowait_cmd_cnt;
@@ -173,14 +174,17 @@ struct audio_client {
 	struct apr_svc         *mmap_apr;
 	struct apr_svc         *apr2;
 	struct mutex	       cmd_lock;
+	struct device	       *dev;
 	/* idx:1 out port, 0: in port*/
 	struct audio_port_data port[2];
 	wait_queue_head_t      cmd_wait;
 	wait_queue_head_t      time_wait;
+	wait_queue_head_t      mem_wait;
 	int                    perf_mode;
-	int					   stream_id;
+	int		       stream_id;
 	/* audio cache operations fptr*/
 	int (*fptr_cache_ops)(struct audio_buffer *abuff, int cache_op);
+	atomic_t               unmap_cb_success;
 };
 
 void q6asm_audio_client_free(struct audio_client *ac);
