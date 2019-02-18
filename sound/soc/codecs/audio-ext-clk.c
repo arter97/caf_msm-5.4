@@ -49,6 +49,11 @@ struct audio_ext_pmi_clk {
 	struct clk c;
 };
 
+struct audio_bb_clk2 {
+	int gpio;
+	struct clk c;
+};
+
 static struct afe_clk_set digital_cdc_core_clk = {
 	Q6AFE_LPASS_CLK_CONFIG_API_VERSION,
 	Q6AFE_LPASS_CLK_ID_INTERNAL_DIGITAL_CODEC_CORE,
@@ -82,9 +87,20 @@ static struct audio_ext_ap_clk audio_ap_clk = {
 	},
 };
 
+static struct audio_bb_clk2 bb_clk2 = {
+	.gpio = -EINVAL,
+	.c = {
+		.dbg_name = "audio_ext_bb_clk2",
+		.ops = &clk_ops_dummy,
+		CLK_INIT(bb_clk2.c),
+	},
+};
+
+
 static struct clk_lookup audio_ref_clock[] = {
 	CLK_LIST(audio_ap_clk),
 	CLK_LIST(audio_pmi_clk),
+	CLK_LIST(bb_clk2),
 };
 
 
@@ -259,33 +275,12 @@ static int audio_ref_clk_probe(struct platform_device *pdev)
 	int ret;
 	struct clk *div_clk1;
 
-	ret = of_property_read_u32(pdev->dev.of_node,
-					"qcom,lpass-clock",
-					&audio_ap_clk.lpass_clock);
 	if (audio_ap_clk.lpass_clock) {
 		ret = audio_get_pinctrl(pdev);
 		if (ret)
 			pr_err("debug %s: Parsing pinctrl failed\n",
 				__func__);
 	} else {
-		clk_gpio = of_get_named_gpio(pdev->dev.of_node,
-					"qcom,audio-ref-clk-gpio", 0);
-		if (clk_gpio < 0) {
-			dev_err(&pdev->dev,
-			"Looking up %s property in node %s failed %d\n",
-				"qcom,audio-ref-clk-gpio",
-				pdev->dev.of_node->full_name,
-				clk_gpio);
-			ret = -EINVAL;
-			goto err;
-		}
-		ret = gpio_request(clk_gpio, "EXT_CLK");
-		if (ret) {
-			dev_err(&pdev->dev,
-				"Request ext clk gpio failed %d, err:%d\n",
-				clk_gpio, ret);
-			goto err;
-		}
 		if (of_property_read_bool(pdev->dev.of_node,
 				"qcom,node_has_rpm_clock")) {
 			div_clk1 = clk_get(&pdev->dev, "osr_clk");
@@ -297,6 +292,7 @@ static int audio_ref_clk_probe(struct platform_device *pdev)
 			}
 			audio_pmi_clk.c.parent = div_clk1;
 			audio_pmi_clk.gpio = clk_gpio;
+			bb_clk2.c.parent = div_clk1;
 		} else
 			audio_ap_clk.gpio = clk_gpio;
 	}
@@ -308,11 +304,11 @@ static int audio_ref_clk_probe(struct platform_device *pdev)
 		goto err_gpio;
 	 }
 
+	pr_debug("%s probe success\n", __func__);
 	return 0;
 
 err_gpio:
 	gpio_free(clk_gpio);
-err:
 	return ret;
 }
 
@@ -346,7 +342,7 @@ static int __init audio_ref_clk_platform_init(void)
 {
 	return platform_driver_register(&audio_ref_clk_driver);
 }
-module_init(audio_ref_clk_platform_init);
+arch_initcall(audio_ref_clk_platform_init);
 
 static void __exit audio_ref_clk_platform_exit(void)
 {

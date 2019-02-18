@@ -1278,7 +1278,6 @@ int regmap_bulk_write(struct regmap *map, unsigned int reg, const void *val,
 	if (reg % map->reg_stride)
 		return -EINVAL;
 
-	map->lock(map->lock_arg);
 
 	/* No formatting is require if val_byte is 1 */
 	if (val_bytes == 1) {
@@ -1307,15 +1306,16 @@ int regmap_bulk_write(struct regmap *map, unsigned int reg, const void *val,
 				return ret;
 		}
 	} else {
+		map->lock(map->lock_arg);
 		ret = _regmap_raw_write(map, reg, wval, val_bytes * val_count,
 					false);
+		map->unlock(map->lock_arg);
 	}
 
 	if (val_bytes != 1)
 		kfree(wval);
 
 out:
-	map->unlock(map->lock_arg);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(regmap_bulk_write);

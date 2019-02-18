@@ -7866,7 +7866,6 @@ static int __tavil_cdc_mclk_enable_locked(struct tavil_priv *tavil,
 		tavil_vote_svs(tavil, false);
 		tavil_dig_core_power_collapse(tavil, POWER_COLLAPSE);
 	}
-
 done:
 	return ret;
 }
@@ -9408,7 +9407,6 @@ err_mem:
 static int __tavil_enable_efuse_sensing(struct tavil_priv *tavil)
 {
 	int val, rc;
-
 	WCD9XXX_V2_BG_CLK_LOCK(tavil->resmgr);
 	__tavil_cdc_mclk_enable_locked(tavil, true);
 
@@ -9566,23 +9564,14 @@ static int tavil_probe(struct platform_device *pdev)
 	tavil->swr.plat_data.handle_irq = tavil_swrm_handle_irq;
 	tavil->swr.spkr_gain_offset = WCD934X_RX_GAIN_OFFSET_0_DB;
 
-	/* Register for Clock */
+	/* Regisiter for Clock */
 	wcd_ext_clk = devm_clk_get(tavil->wcd9xxx->dev, "audio_tx_mclk");
 	if (IS_ERR(wcd_ext_clk)) {
-		dev_err(tavil->wcd9xxx->dev, "%s: clk get %s failed\n",
+		dev_err(tavil->wcd9xxx->dev, "%s  clk get %s failed\n",
 			__func__, "audio_tx_mclk");
 		goto err_clk;
 	}
 	tavil->wcd_ext_clk = wcd_ext_clk;
-
-	/* enable the wcd_ext_clk */
-	ret = clk_set_rate(tavil->wcd_ext_clk, tavil->wcd9xxx->mclk_rate);
-	if (ret) {
-		dev_err(tavil->wcd9xxx->dev,
-			"%s: clk_set_rate with %u failed err %d\n",
-			__func__, tavil->wcd9xxx->mclk_rate, ret);
-		goto err_clk_rate;
-	}
 
 	ret = clk_prepare_enable(tavil->wcd_ext_clk);
 	if (ret) {
@@ -9591,7 +9580,6 @@ static int tavil_probe(struct platform_device *pdev)
 			__func__, "audio_tx_mclk", ret);
 		goto err_clk_rate;
 	}
-
 	set_bit(AUDIO_NOMINAL, &tavil->status_mask);
 	/* Update codec register default values */
 	dev_dbg(&pdev->dev, "%s: MCLK Rate = %x\n", __func__,
@@ -9609,6 +9597,10 @@ static int tavil_probe(struct platform_device *pdev)
 	__tavil_enable_efuse_sensing(tavil);
 	___tavil_get_codec_fine_version(tavil);
 	tavil_update_cpr_defaults(tavil);
+
+	regmap_update_bits(tavil->wcd9xxx->regmap,
+				   WCD934X_CLK_SYS_MCLK_PRG,
+				   0x30, 0x10);
 
 	/* Register with soc framework */
 	ret = snd_soc_register_codec(&pdev->dev, &soc_codec_dev_tavil_i2s,

@@ -75,7 +75,7 @@ int msm_gpioset_initialize(enum pinctrl_client client,
 {
 	struct pinctrl *pinctrl;
 	const char *gpioset_names = "qcom,msm-gpios";
-	const char *gpioset_combinations = "qcom,pinctrl-names";
+	const char *gpioset_combinations = "pinctrl-names";
 	const char *gpioset_names_str = NULL;
 	const char *gpioset_comb_str = NULL;
 	int num_strings = 0;

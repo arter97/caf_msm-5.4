@@ -156,6 +156,7 @@ snd-soc-max9877-objs := max9877.o
 snd-soc-tpa6130a2-objs := tpa6130a2.o
 
 obj-$(CONFIG_SND_SOC_WCD934X)    += wcd934x/
+obj-$(CONFIG_AUDIO_EXT_CLK)	+= audio-ext-clock.o
 obj-$(CONFIG_SND_SOC_WCD9XXX_V2) += snd-soc-wcd9xxx-v2.o
 obj-$(CONFIG_SND_SOC_WSA881X)    += snd-soc-wsa881x.o
 obj-$(CONFIG_SND_SOC_WCD_DSP_MGR)      += snd-soc-wcd-dsp-mgr.o snd-soc-wcd-dsp-utils.o
@@ -234,7 +235,6 @@ obj-$(CONFIG_SND_SOC_WCD9330)	+= snd-soc-wcd9330.o
 obj-$(CONFIG_SND_SOC_WCD9335)	+= snd-soc-wcd9335.o
 obj-$(CONFIG_SND_SOC_MSM8X10_WCD)	+= snd-soc-msm8x10-wcd.o wcd9xxx-resmgr.o wcd9xxx-mbhc.o
 obj-$(CONFIG_SND_SOC_WCD9335)	+= snd-soc-wcd9335.o
-obj-$(CONFIG_AUDIO_EXT_CLK)	+= audio-ext-clock.o
 obj-$(CONFIG_SND_SOC_WCD9XXX)   += snd-soc-wcd9xxx.o
 obj-$(CONFIG_SND_SOC_MSM8X16_WCD)	+= snd-soc-msm8x16-wcd.o msm8916-wcd-irq.o
 obj-$(CONFIG_SND_SOC_WCD_MBHC)  += snd-soc-wcd-mbhc.o
