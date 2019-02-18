@@ -87,6 +87,7 @@ static struct ima_rule_entry default_rules[] = {
 	 .flags = IMA_FUNC | IMA_MASK | IMA_UID},
 	{.action = MEASURE, .func = MODULE_CHECK, .flags = IMA_FUNC},
 	{.action = MEASURE, .func = FIRMWARE_CHECK, .flags = IMA_FUNC},
+	{.action = DONT_MEASURE, .fsuuid = {0x7A, 0x0C, 0x93, 0xE9, 0xD2, 0xFD, 0x46, 0x55, 0xA9, 0x4F, 0xA4, 0x57, 0x1A, 0xC9, 0xB5, 0xF7}, .flags = IMA_FSUUID},
 };
 
 static struct ima_rule_entry default_appraise_rules[] = {
@@ -100,12 +101,13 @@ static struct ima_rule_entry default_appraise_rules[] = {
 	{.action = DONT_APPRAISE, .fsmagic = SECURITYFS_MAGIC, .flags = IMA_FSMAGIC},
 	{.action = DONT_APPRAISE, .fsmagic = SELINUX_MAGIC, .flags = IMA_FSMAGIC},
 	{.action = DONT_APPRAISE, .fsmagic = CGROUP_SUPER_MAGIC, .flags = IMA_FSMAGIC},
+	{.action = DONT_APPRAISE, .fsuuid = {0x7A, 0x0C, 0x93, 0xE9, 0xD2, 0xFD, 0x46, 0x55, 0xA9, 0x4F, 0xA4, 0x57, 0x1A, 0xC9, 0xB5, 0xF7}, .flags = IMA_FSUUID},
 #ifndef CONFIG_IMA_APPRAISE_SIGNED_INIT
 	{.action = APPRAISE, .fowner = GLOBAL_ROOT_UID, .flags = IMA_FOWNER},
 #else
 	/* force signature */
-	{.action = APPRAISE, .fowner = GLOBAL_ROOT_UID,
-	 .flags = IMA_FOWNER | IMA_DIGSIG_REQUIRED},
+	{.action = APPRAISE, .fowner = INVALID_UID, .uid = INVALID_UID, .fsuuid = {0x6F, 0x2B, 0x9A, 0x5B, 0x32, 0x07, 0x4D, 0x8B, 0x84, 0x7C, 0x0F, 0x4F, 0xF9, 0xD9, 0x04, 0x85},
+	 .flags = IMA_FSUUID | IMA_DIGSIG_REQUIRED},
 #endif
 };
 
