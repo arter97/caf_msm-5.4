@@ -967,4 +967,17 @@ rdev_external_auth(struct cfg80211_registered_device *rdev,
 	trace_rdev_return_int(&rdev->wiphy, ret);
 	return ret;
 }
+
+static inline int rdev_update_owe_info(struct cfg80211_registered_device *rdev,
+				       struct net_device *dev,
+				       struct cfg80211_update_owe_info *oweinfo)
+{
+	int ret = -EOPNOTSUPP;
+
+	trace_rdev_update_owe_info(&rdev->wiphy, dev, oweinfo);
+	if (rdev->ops->update_owe_info)
+		ret = rdev->ops->update_owe_info(&rdev->wiphy, dev, oweinfo);
+	trace_rdev_return_int(&rdev->wiphy, ret);
+	return ret;
+}
 #endif /* __CFG80211_RDEV_OPS */
