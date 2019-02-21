@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2016, 2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -437,6 +437,8 @@ static int fifo_read(struct edge_info *einfo, void *_data, int len)
 	uint32_t fifo_size = einfo->rx_fifo_size;
 	uint32_t n;
 
+	if (read_index >= fifo_size || write_index >= fifo_size)
+		return 0;
 	while (len) {
 		ptr = einfo->rx_fifo + read_index;
 		if (read_index <= write_index)
@@ -480,6 +482,8 @@ static uint32_t fifo_write_body(struct edge_info *einfo, const void *_data,
 	uint32_t fifo_size = einfo->tx_fifo_size;
 	uint32_t n;
 
+	if (read_index >= fifo_size || *write_index >= fifo_size)
+		return 0;
 	while (len) {
 		ptr = einfo->tx_fifo + *write_index;
 		if (*write_index < read_index) {
