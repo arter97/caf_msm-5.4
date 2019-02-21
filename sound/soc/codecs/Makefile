@@ -143,10 +143,23 @@ snd-soc-wm-hubs-objs := wm_hubs.o
 snd-soc-msm-stub-objs := msm_stub.o
 obj-$(CONFIG_SND_SOC_MSM_HDMI_CODEC_RX) := msm_hdmi_codec_rx.o
 
+snd-soc-wcd934x-objs := wcd934x.o
+snd-soc-wcd9xxx-objs := wcd9xxx-resmgr.o
+snd-soc-wcd9xxx-v2-objs := wcd9xxx-common-v2.o wcd9xxx-resmgr-v2.o
+snd-soc-wsa881x-objs := wsa881x.o wsa881x-tables.o wsa881x-regmap.o
+snd-soc-wcd-dsp-utils-objs := wcd-dsp-utils.o
+snd-soc-wcd-dsp-mgr-objs := wcd-dsp-mgr.o
+snd-soc-wcd-spi-objs := wcd-spi.o
+
 # Amp
 snd-soc-max9877-objs := max9877.o
 snd-soc-tpa6130a2-objs := tpa6130a2.o
 
+obj-$(CONFIG_SND_SOC_WCD934X)    += wcd934x/
+obj-$(CONFIG_SND_SOC_WCD9XXX_V2) += snd-soc-wcd9xxx-v2.o
+obj-$(CONFIG_SND_SOC_WSA881X)    += snd-soc-wsa881x.o
+obj-$(CONFIG_SND_SOC_WCD_DSP_MGR)      += snd-soc-wcd-dsp-mgr.o snd-soc-wcd-dsp-utils.o
+obj-$(CONFIG_SND_SOC_WCD_SPI)  += snd-soc-wcd-spi.o
 obj-$(CONFIG_SND_SOC_88PM860X)	+= snd-soc-88pm860x.o
 obj-$(CONFIG_SND_SOC_AB8500_CODEC)	+= snd-soc-ab8500-codec.o
 obj-$(CONFIG_SND_SOC_AC97_CODEC)	+= snd-soc-ac97.o

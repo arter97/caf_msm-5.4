@@ -175,3 +175,7 @@ obj-$(CONFIG_MFD_LM3533)	+= lm3533-core.o lm3533-ctrlbank.o
 obj-$(CONFIG_VEXPRESS_CONFIG)	+= vexpress-config.o vexpress-sysreg.o
 obj-$(CONFIG_MFD_RETU)		+= retu-mfd.o
 obj-$(CONFIG_MFD_AS3711)	+= as3711.o
+obj-$(CONFIG_MSM_CDC_PINCTRL)   += msm-cdc-pinctrl.o
+obj-$(CONFIG_WCD9XXX_CODEC_UTIL) += wcd9xxx-utils.o
+obj-$(CONFIG_WCD934X_CODEC)      += msm-cdc-supply.o msm-cdc-pinctrl.o wcd9xxx-core.o wcd9xxx-irq.o \
+					wcd934x-regmap.o wcd934x-tables.o

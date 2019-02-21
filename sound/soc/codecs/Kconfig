@@ -88,6 +88,8 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_WM8580 if I2C
 	select SND_SOC_WM8711 if SND_SOC_I2C_AND_SPI
 	select SND_SOC_WM8727
+	select SND_SOC_WCD934X
+        select SND_SOC_WSA881X
 	select SND_SOC_WM8728 if SND_SOC_I2C_AND_SPI
 	select SND_SOC_WM8731 if SND_SOC_I2C_AND_SPI
 	select SND_SOC_WM8737 if SND_SOC_I2C_AND_SPI
@@ -133,6 +135,34 @@ config SND_SOC_ALL_CODECS
 	  be selected separately.
 
           If unsure select "N".
+
+config SND_SOC_WCD934X
+	tristate
+	depends on WCD934X_CODEC
+	select SND_SOC_WCD9XXX_V2
+	select AUDIO_EXT_CLK
+	select SND_SOC_WCD_SPI
+	select SND_SOC_WCD_DSP_MGR
+
+config SND_SOC_WSA881X
+	tristate
+	select MSM_CDC_PINCTRL
+	select REGMAP_SWR
+
+config SND_SOC_WCD9XXX_V2
+       tristate
+       default y if SND_SOC_WCD9335=y
+
+config AUDIO_EXT_CLK
+       tristate
+       default y if SND_SOC_WCD9335=y || SND_SOC_WCD9330=y || SND_SOC_SDM660_CDC=y
+
+config SND_SOC_WCD_DSP_MGR
+       tristate
+
+config SND_SOC_WCD_SPI
+       depends on CONFIG_SPI
+       tristate
 
 config SND_SOC_88PM860X
 	tristate
