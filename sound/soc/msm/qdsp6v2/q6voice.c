@@ -1,4 +1,4 @@
-/*  Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/*  Copyright (c) 2012-2016, 2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -6796,7 +6796,7 @@ static int32_t qdsp_cvp_callback(struct apr_client_data *data, void *priv)
 	}
 
 	if (data->opcode == APR_BASIC_RSP_RESULT) {
-		if (data->payload_size) {
+		if (data->payload_size >= (2 * sizeof(uint32_t))) {
 			ptr = data->payload;
 
 			pr_debug("%x %x\n", ptr[0], ptr[1]);
