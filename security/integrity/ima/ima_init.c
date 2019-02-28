@@ -138,5 +138,5 @@ int __init ima_init(void)
 
 	ima_init_policy();
 
-	return ima_fs_init();
+	return 0;
 }
