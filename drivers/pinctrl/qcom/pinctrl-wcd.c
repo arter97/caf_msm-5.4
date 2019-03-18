@@ -24,7 +24,7 @@
 #include <linux/mfd/wcd934x/registers.h>
 
 #include "../core.h"
-#include "../pinctrl-utils.h"
+#include "../pinconf.h"
 
 #define WCD_REG_DIR_CTL WCD934X_CHIP_TIER_CTRL_GPIO_CTL_OE
 #define WCD_REG_VAL_CTL WCD934X_CHIP_TIER_CTRL_GPIO_CTL_DATA
@@ -111,13 +111,64 @@ static int wcd_get_group_pins(struct pinctrl_dev *pctldev, unsigned pin,
 	*num_pins = 1;
 	return 0;
 }
+static int wcd_dt_node_to_map(struct pinctrl_dev *pctldev,
+			struct device_node *np,
+			struct pinctrl_map **map, unsigned *num_maps)
+{
+	struct pinctrl_map *new_map;
+	struct device_node *parent;
+	 unsigned long *cfg;
+	int cfg_cnt = 0;
+	int ret;
+	/*get pin configs */
+	parent = of_get_parent(np);
+
+	ret = pinconf_generic_parse_dt_config(np, &cfg, &cfg_cnt);
+	if (ret) {
+		dev_err(pctldev->dev, "properties incorrect\n");
+		return ret;
+	}
+	new_map = kzalloc(sizeof(*new_map) * cfg_cnt, GFP_KERNEL);
+	if (!new_map)
+		return -ENOMEM;
+
+	*num_maps = 0;
+	new_map[0].type = PIN_MAP_TYPE_CONFIGS_GROUP;
+	new_map[0].data.configs.group_or_pin = wcd_get_group_name(pctldev, 0);
+	new_map[0].data.configs.configs = cfg;
+	new_map[0].data.configs.num_configs = cfg_cnt;
+	dev_err(pctldev->dev, "maps: config  group %s num_configs : %d\n",
+				new_map[0].data.configs.group_or_pin,
+				new_map[0].data.configs.num_configs);
+	*num_maps += 1;
+	*map = new_map;
+	of_node_put(parent);
+	return 0;
+}
+
+void wcd_dt_free_map(struct pinctrl_dev *pctldev,
+		struct pinctrl_map *map, unsigned num_maps)
+{
+	int i;
+	for (i = 0; i < num_maps; i++) {
+		switch (map[i].type) {
+		case PIN_MAP_TYPE_CONFIGS_GROUP:
+		case PIN_MAP_TYPE_CONFIGS_PIN:
+			kfree(map[i].data.configs.configs);
+			break;
+		default:
+			break;
+		}
+	}
+	kfree(map);
+}
 
 static const struct pinctrl_ops wcd_pinctrl_ops = {
 	.get_groups_count       = wcd_get_groups_count,
 	.get_group_name         = wcd_get_group_name,
 	.get_group_pins         = wcd_get_group_pins,
-	.dt_node_to_map         = pinconf_generic_dt_node_to_map_group,
-	.dt_free_map            = pinctrl_utils_dt_free_map,
+	.dt_node_to_map         = wcd_dt_node_to_map,
+	.dt_free_map            = wcd_dt_free_map,
 };
 
 static int wcd_config_get(struct pinctrl_dev *pctldev,
@@ -156,19 +207,19 @@ static int wcd_config_get(struct pinctrl_dev *pctldev,
 	return 0;
 }
 
-static int wcd_config_set(struct pinctrl_dev *pctldev, unsigned int pin,
-				unsigned long *configs, unsigned nconfs)
+static int wcd_config_set(struct pinctrl_dev *pctldev, unsigned  pin,
+				unsigned long configs)
 {
 	struct wcd_gpio_priv *priv_data = pinctrl_dev_get_drvdata(pctldev);
 	struct wcd_gpio_pad *pad;
 	unsigned param, arg;
 	int i, ret;
-
+	 int nconfs = 1;
 	pad = pctldev->desc->pins[pin].drv_data;
 
 	for (i = 0; i < nconfs; i++) {
-		param = pinconf_to_config_param(configs[i]);
-		arg = pinconf_to_config_argument(configs[i]);
+		param = pinconf_to_config_param(configs);
+		arg = pinconf_to_config_argument(configs);
 
 		dev_dbg(priv_data->dev, "%s: param: %d arg: %d",
 			__func__, param, arg);
@@ -229,7 +280,7 @@ static int wcd_gpio_direction_input(struct gpio_chip *chip, unsigned pin)
 
 	config = pinconf_to_config_packed(PIN_CONFIG_INPUT_ENABLE, 1);
 
-	return wcd_config_set(priv_data->ctrl, pin, &config, 1);
+	return wcd_config_set(priv_data->ctrl, pin, config);
 }
 
 static int wcd_gpio_direction_output(struct gpio_chip *chip,
@@ -240,7 +291,7 @@ static int wcd_gpio_direction_output(struct gpio_chip *chip,
 
 	config = pinconf_to_config_packed(PIN_CONFIG_OUTPUT, val);
 
-	return wcd_config_set(priv_data->ctrl, pin, &config, 1);
+	return wcd_config_set(priv_data->ctrl, pin, config);
 }
 
 static int wcd_gpio_get(struct gpio_chip *chip, unsigned pin)
@@ -265,7 +316,7 @@ static void wcd_gpio_set(struct gpio_chip *chip, unsigned pin, int value)
 
 	config = pinconf_to_config_packed(PIN_CONFIG_OUTPUT, value);
 
-	wcd_config_set(priv_data->ctrl, pin, &config, 1);
+	wcd_config_set(priv_data->ctrl, pin, config);
 }
 
 static const struct gpio_chip wcd_gpio_chip = {
@@ -343,9 +394,9 @@ static int wcd_pinctrl_probe(struct platform_device *pdev)
 		ret = -ENOMEM;
 		goto err_name_alloc;
 	}
-	for (i = 0; i < npins; i++, pindesc++) {
+	for (i = 1; i <= npins; i++, pindesc++) {
 		name[i] = devm_kzalloc(dev, sizeof(char) * WCD_GPIO_STRING_LEN,
-				       GFP_KERNEL);
+					GFP_KERNEL);
 		if (!name[i]) {
 			ret = -ENOMEM;
 			goto err_pin;
@@ -391,7 +442,7 @@ static int wcd_pinctrl_probe(struct platform_device *pdev)
 	return 0;
 
 err_range:
-	gpiochip_remove(&priv_data->chip);
+	ret = gpiochip_remove(&priv_data->chip);
 err_chip:
 	pinctrl_unregister(priv_data->ctrl);
 err_pin:
@@ -413,9 +464,10 @@ err_priv_alloc:
 
 static int wcd_pinctrl_remove(struct platform_device *pdev)
 {
+	int ret;
 	struct wcd_gpio_priv *priv_data = platform_get_drvdata(pdev);
 
-	gpiochip_remove(&priv_data->chip);
+	ret = gpiochip_remove(&priv_data->chip);
 	pinctrl_unregister(priv_data->ctrl);
 
 	return 0;
