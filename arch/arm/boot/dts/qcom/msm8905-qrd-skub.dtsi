@@ -214,80 +214,356 @@
 };
 
 &soc {
-	sound {
-		compatible = "qcom,msm8x16-audio-codec";
-		qcom,model = "msm8909-skub-snd-card";
-		qcom,msm-snd-card-id = <0>;
-		qcom,msm-codec-type = "internal";
-		qcom,msm-ext-pa = "primary";
-		qcom,msm-mclk-freq = <9600000>;
-		qcom,msm-mbhc-hphl-swh = <1>;
-		qcom,msm-mbhc-gnd-swh = <0>;
-		qcom,msm-hs-micbias-type = "internal";
-		qcom,msm-micbias1-ext-cap;
-		qcom,msm-micbias2-ext-cap;
+	tavil_snd: sound-tavil {
+		status = "okay";
+		compatible = "qcom,msm8905-tavil-snd-card";
+		qcom,model = "msm8905-tavil-snd-card";
+                qcom,msm-snd-card-id = <0>;
+		qcom,msm-codec-type = "external";
+		qcom,wcn-btfm;
+		qcom,mi2s-audio-intf;
+		qcom,auxpcm-audio-intf;
+		qcom,ext-disp-audio-rx;
+		qcom,afe-rxtx-lb;
+		qcom,msm-ext-pa = "quaternary";
+		/* Only 4 MI2S are connected all are set to master to be check*/
+		qcom,msm-mi2s-master = <1>, <1>, <1>, <1>;
 		qcom,audio-routing =
+			"AIF4 VI", "MCLK",
 			"RX_BIAS", "MCLK",
-			"SPK_RX_BIAS", "MCLK",
-			"INT_LDO_H", "MCLK",
-			"MIC BIAS Internal1", "Handset Mic",
-			"MIC BIAS Internal2", "Headset Mic",
-			"AMIC1", "MIC BIAS Internal1",
-			"AMIC2", "MIC BIAS Internal2";
-		pinctrl-names = "cdc_lines_act",
-				"cdc_lines_sus";
-		pinctrl-0 = <&cdc_pdm_lines_act>;
-		pinctrl-1 = <&cdc_pdm_lines_sus>;
+			"MADINPUT", "MCLK",
+			"hifi amp", "LINEOUT1",
+			"hifi amp", "LINEOUT2",
+			"AMIC2", "MIC BIAS2",
+			"MIC BIAS2", "Headset Mic",
+			"AMIC3", "MIC BIAS2",
+			"MIC BIAS2", "ANCRight Headset Mic",
+			"AMIC4", "MIC BIAS2",
+			"MIC BIAS2", "ANCLeft Headset Mic",
+			"AMIC5", "MIC BIAS3",
+			"MIC BIAS3", "Handset Mic",
+			"DMIC0", "MIC BIAS1",
+			"MIC BIAS1", "Digital Mic0",
+			"DMIC1", "MIC BIAS1",
+			"MIC BIAS1", "Digital Mic1",
+			"DMIC2", "MIC BIAS3",
+			"MIC BIAS3", "Digital Mic2",
+			"DMIC3", "MIC BIAS3",
+			"MIC BIAS3", "Digital Mic3",
+			"DMIC4", "MIC BIAS4",
+			"MIC BIAS4", "Digital Mic4",
+			"DMIC5", "MIC BIAS4",
+			"MIC BIAS4", "Digital Mic5",
+			"SpkrLeft IN", "SPK1 OUT",
+			"SpkrRight IN", "SPK2 OUT";
 		asoc-platform = <&pcm0>, <&pcm1>, <&voip>, <&voice>,
 				<&loopback>, <&compress>, <&hostless>,
-				<&afe>, <&lsm>, <&routing>, <&lpa>,
-				<&voice_svc>;
+				<&afe>, <&lsm>, <&routing>, <&lpa>;
 		asoc-platform-names = "msm-pcm-dsp.0", "msm-pcm-dsp.1",
-				"msm-voip-dsp", "msm-pcm-voice", "msm-pcm-loopback",
-				"msm-compress-dsp", "msm-pcm-hostless", "msm-pcm-afe",
-				"msm-lsm-client", "msm-pcm-routing", "msm-pcm-lpa",
-				"msm-voice-svc";
+			"msm-voip-dsp", "msm-pcm-voice", "msm-pcm-loopback",
+			"msm-compress-dsp", "msm-pcm-hostless", "msm-pcm-afe",
+                        "msm-lsm-client", "msm-pcm-routing", "msm-pcm-lpa";
 		asoc-cpu = <&dai_pri_auxpcm>, <&dai_hdmi>,
-				<&dai_mi2s0>, <&dai_mi2s1>, <&dai_mi2s2>, <&dai_mi2s3>,
-				<&sb_0_rx>, <&sb_0_tx>, <&sb_1_rx>, <&sb_1_tx>,
-				<&sb_3_rx>, <&sb_3_tx>, <&sb_4_rx>, <&sb_4_tx>,
-				<&bt_sco_rx>, <&bt_sco_tx>,
-				<&bt_a2dp_rx>, <&int_fm_rx>, <&int_fm_tx>,
-				<&afe_pcm_rx>, <&afe_pcm_tx>, <&afe_proxy_rx>, <&afe_proxy_tx>,
-				<&incall_record_rx>, <&incall_record_tx>, <&incall_music_rx>,
-				<&incall_music_2_rx>;
+			<&dai_mi2s0>, <&dai_mi2s1>, <&dai_mi2s2>, <&dai_mi2s3>,
+			<&sb_0_rx>, <&sb_0_tx>, <&sb_1_rx>, <&sb_1_tx>,
+			<&sb_3_rx>, <&sb_3_tx>, <&sb_4_rx>, <&sb_4_tx>,
+			<&bt_sco_rx>, <&bt_sco_tx>,
+			<&bt_a2dp_rx>, <&int_fm_rx>, <&int_fm_tx>,
+			<&afe_pcm_rx>, <&afe_pcm_tx>, <&afe_proxy_rx>, <&afe_proxy_tx>,
+			<&incall_record_rx>, <&incall_record_tx>, <&incall_music_rx>,
+			<&incall_music_2_rx>;
 		asoc-cpu-names = "msm-dai-q6-auxpcm.1", "msm-dai-q6-hdmi.8",
-				"msm-dai-q6-mi2s.0", "msm-dai-q6-mi2s.1",
-				"msm-dai-q6-mi2s.2", "msm-dai-q6-mi2s.3",
-				"msm-dai-q6-dev.16384",	"msm-dai-q6-dev.16385",
-				"msm-dai-q6-dev.16386", "msm-dai-q6-dev.16387",
-				"msm-dai-q6-dev.16390", "msm-dai-q6-dev.16391",
-				"msm-dai-q6-dev.16392",	"msm-dai-q6-dev.16393",
-				"msm-dai-q6-dev.12288", "msm-dai-q6-dev.12289",
-				"msm-dai-q6-dev.12290",
-				"msm-dai-q6-dev.12292", "msm-dai-q6-dev.12293",
-				"msm-dai-q6-dev.224", "msm-dai-q6-dev.225",
-				"msm-dai-q6-dev.241", "msm-dai-q6-dev.240",
-				"msm-dai-q6-dev.32771", "msm-dai-q6-dev.32772",
-				"msm-dai-q6-dev.32773", "msm-dai-q6-dev.32770";
-		asoc-codec = <&stub_codec>, <&pm8909_conga_dig>;
-		asoc-codec-names = "msm-stub-codec.1", "tombak_codec";
+			"msm-dai-q6-mi2s.0", "msm-dai-q6-mi2s.1",
+			"msm-dai-q6-mi2s.2", "msm-dai-q6-mi2s.3",
+			"msm-dai-q6-dev.16384",	"msm-dai-q6-dev.16385",
+			"msm-dai-q6-dev.16386", "msm-dai-q6-dev.16387",
+			"msm-dai-q6-dev.16390", "msm-dai-q6-dev.16391",
+			"msm-dai-q6-dev.16392",	"msm-dai-q6-dev.16393",
+			"msm-dai-q6-dev.12288", "msm-dai-q6-dev.12289",
+			"msm-dai-q6-dev.12290",
+			"msm-dai-q6-dev.12292", "msm-dai-q6-dev.12293",
+			"msm-dai-q6-dev.224", "msm-dai-q6-dev.225",
+			"msm-dai-q6-dev.241", "msm-dai-q6-dev.240",
+			"msm-dai-q6-dev.32771", "msm-dai-q6-dev.32772",
+			"msm-dai-q6-dev.32773", "msm-dai-q6-dev.32770";
+		qcom,msm-mbhc-hphl-swh = <1>;
+		qcom,msm-mbhc-gnd-swh = <1>;
+		/*qcom,hph-en0-gpio = <&tavil_hph_en0>; /*PIN control tbc*/
+		/*qcom,hph-en1-gpio = <&tavil_hph_en1>;/*PIN control tbc*/
+		qcom,msm-mclk-freq = <9600000>;
+		asoc-codec = <&stub_codec>;/*, <&ext_disp_audio_codec>;*/
+		asoc-codec-names = "msm-stub-codec.1"; /*msm-ext-disp-audio-codec-rx*/
+                qcom,msm-gpios =
+                        "quat_i2s";
+		pinctrl-names = "cdc_lines_quat_ext_sus",
+				"cdc_lines_quat_ext_act";
+		pinctrl-0 = <&cdc_ext_tlmm_sus>;
+		pinctrl-1 = <&cdc_ext_tlmm_act>;
+		/* Only one WSA present so it should be 1 //TBC Soumya*/
+		/*qcom,wsa-max-devs = <2>;*/
+		/*qcom,wsa-max-devs = <1>;*/
+		/*qcom,wsa-devs = <&wsa881x_0211>, <&wsa881x_0212>,
+			<&wsa881x_0213>, <&wsa881x_0214>;
+		qcom,wsa-aux-dev-prefix = "SpkrLeft", "SpkrRight",
+			"SpkrLeft", "SpkrRight";*/
 	};
 
-	spi@78b9000 { /* BLSP1 QUP5 */
+	clock_audio: audio_ext_clk {
 		status = "okay";
-		qcom,shared;
-		mdss_spi_client {
-			reg = <0>;
-			compatible = "qcom,mdss-spi-client";
-			label = "MDSS SPI QUP5 CLIENT";
-			spi-max-frequency = <50000000>;
-		};
+                compatible = "qcom,audio-ref-clk";
+		clock-names = "osr_clk";
+		clocks = <&clock_rpm clk_bb_clk2>;
+		qcom,node_has_rpm_clock;
+		#clock-cells = <1>;
 	};
 
-	i2c@78b9000 {/* BLSP1 QUP5 */
-		status = "disabled";
+	cpe: qcom,msm-cpe-lsm {
+                compatible = "qcom,msm-cpe-lsm";
+        };
+	wcd9xxx_intc: wcd9xxx-irq {
+		status = "okay";
+		compatible = "qcom,wcd9xxx-irq";
+		interrupt-controller;
+		#interrupt-cells = <1>;
+		interrupt-parent = <&msm_gpio>;
+		qcom,gpio-connect = <&msm_gpio 49 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&wcd_intr_default>;
 	};
+
+
+	wcd_rst_gpio: msm_cdc_pinctrl@64 {
+		status = "okay";
+		compatible = "qcom,msm-cdc-pinctrl";
+		pinctrl-names = "aud_active", "aud_sleep";
+		pinctrl-0 = <&cdc_reset_active>;
+		pinctrl-1 = <&cdc_reset_sleep>;
+		qcom,lpi-gpios;
+	};
+
+        i2c_1: i2c@78b5000 { /* BLSP1 QUP1 */
+                compatible = "qcom,i2c-msm-v2";
+                #address-cells = <1>;
+                #size-cells = <0>;
+                reg-names = "qup_phys_addr";
+                reg = <0x78b5000 0x1000>;
+                interrupt-names = "qup_irq";
+                interrupts = <0 95 0>;
+                clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
+                         <&clock_gcc clk_gcc_blsp1_qup1_i2c_apps_clk>;
+                clock-names = "iface_clk", "core_clk";
+                qcom,clk-freq-out = <100000>;
+                qcom,clk-freq-in  = <19200000>;
+                pinctrl-names = "i2c_active", "i2c_sleep";
+                pinctrl-0 = <&i2c_1_active>;
+                pinctrl-1 = <&i2c_1_sleep>;
+                qcom,noise-rjct-scl = <0>;
+                qcom,noise-rjct-sda = <0>;
+                dmas = <&dma_blsp1 4 64 0x20000020 0x20>,
+                        <&dma_blsp1 5  32 0x20000020 0x20>;
+                dma-names = "tx", "rx";
+                qcom,master-id = <86>;
+		status = "ok";
+		wcd934x_cdc: tavil_codec@d {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				compatible = "qcom,tavil-i2c-pgd";
+				reg = <0x0d>;
+				status = "ok";
+				qcom,wcd-rst-gpio-node = <&wcd_rst_gpio>;
+				interrupt-parent = <&wcd9xxx_intc>;
+				interrupts = <0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
+						17 18 19 20 21 22 23 24 25 26 27 28 29
+						30>;
+				clock-names = "audio_tx_mclk";
+				clocks = <&clock_audio clk_bb_clk2>;
+				pinctrl-names = "default";
+				qcom,cdc-micbias1-mv = <1800>;
+				qcom,cdc-micbias2-mv = <1800>;
+				qcom,cdc-micbias3-mv = <1800>;
+				qcom,cdc-micbias4-mv = <1800>;
+
+				qcom,cdc-mclk-clk-rate = <9600000>;
+				qcom,cdc-dmic-sample-rate = <4800000>;
+				qcom,cdc-mad-dmic-rate = <600001>;
+				qcom,cdc-ecpp-dmic-rate = <1200000>;
+
+				qcom,wdsp-cmpnt-dev-name = "tavil_codec";
+
+				wcd: wcd_pinctrl@5 {
+					compatible = "qcom,wcd-pinctrl";
+					qcom,num-gpios = <5>;
+					gpio-controller;
+					#gpio-cells = <2>;
+
+					spkr_1_wcd_en_active: spkr_1_wcd_en_active {
+						mux {
+							pins = "gpio2";
+						};
+
+						config {
+							pins = "gpio2";
+							output-high;
+						};
+					};
+
+					spkr_1_wcd_en_sleep: spkr_1_wcd_en_sleep {
+						mux {
+							pins = "gpio2";
+						};
+
+						config {
+							pins = "gpio2";
+							input-enable;
+						};
+					};
+
+					spkr_2_wcd_en_active: spkr_2_sd_n_active {
+						mux {
+							pins = "gpio3";
+						};
+
+						config {
+							pins = "gpio3";
+							output-high;
+						};
+					};
+
+					spkr_2_wcd_en_sleep: spkr_2_sd_n_sleep {
+						mux {
+							pins = "gpio3";
+						};
+
+						config {
+							pins = "gpio3";
+							input-enable;
+						};
+					};
+
+					hph_en0_wcd_active: hph_en0_wcd_active {
+						mux {
+							pins = "gpio4";
+						};
+
+						config {
+							pins = "gpio4";
+							output-high;
+						};
+					};
+
+					hph_en0_wcd_sleep: hph_en0_wcd_sleep {
+						mux {
+							pins = "gpio4";
+						};
+
+						config {
+							pins = "gpio4";
+							output-low;
+						};
+					};
+
+					hph_en1_wcd_active: hph_en1_wcd_active {
+						mux {
+							pins = "gpio5";
+						};
+
+						config {
+							pins = "gpio5";
+							output-high;
+						};
+					};
+
+					hph_en1_wcd_sleep: hph_en1_wcd_sleep {
+						mux {
+							pins = "gpio5";
+						};
+
+						config {
+							pins = "gpio5";
+							output-low;
+						};
+					};
+				};
+
+				/*wsa_spkr_wcd_sd1: msm_cdc_pinctrll {
+					compatible = "qcom,msm-cdc-pinctrl";
+					pinctrl-names = "aud_active", "aud_sleep";
+					pinctrl-0 = <&spkr_1_wcd_en_active>;
+					pinctrl-1 = <&spkr_1_wcd_en_sleep>;
+				};
+
+				wsa_spkr_wcd_sd2: msm_cdc_pinctrlr {
+					compatible = "qcom,msm-cdc-pinctrl";
+					pinctrl-names = "aud_active", "aud_sleep";
+					pinctrl-0 = <&spkr_2_wcd_en_active>;
+					pinctrl-1 = <&spkr_2_wcd_en_sleep>;
+				};
+
+				tavil_hph_en0: msm_cdc_pinctrl_hph_en0 {
+					compatible = "qcom,msm-cdc-pinctrl";
+					pinctrl-names = "aud_active", "aud_sleep";
+					pinctrl-0 = <&hph_en0_wcd_active>;
+					pinctrl-1 = <&hph_en0_wcd_sleep>;
+				};
+
+				tavil_hph_en1: msm_cdc_pinctrl_hph_en1 {
+					compatible = "qcom,msm-cdc-pinctrl";
+					pinctrl-names = "aud_active", "aud_sleep";
+					pinctrl-0 = <&hph_en1_wcd_active>;
+					pinctrl-1 = <&hph_en1_wcd_sleep>;
+				};
+				swr_master {
+					compatible = "qcom,swr-wcd";
+					#address-cells = <2>;
+					#size-cells = <0>;
+
+					wsa881x_0211: wsa881x@20170211 {
+						compatible = "qcom,wsa881x";
+						reg = <0x00 0x20170211>;
+						qcom,spkr-sd-n-node = <&wsa_spkr_wcd_sd1>;
+					};
+
+					wsa881x_0212: wsa881x@20170212 {
+						compatible = "qcom,wsa881x";
+						reg = <0x00 0x20170212>;
+						qcom,spkr-sd-n-node = <&wsa_spkr_wcd_sd2>;
+					};
+
+					wsa881x_0213: wsa881x@21170213 {
+						compatible = "qcom,wsa881x";
+						reg = <0x00 0x21170213>;
+						qcom,spkr-sd-n-node = <&wsa_spkr_wcd_sd1>;
+					};
+
+					wsa881x_0214: wsa881x@21170214 {
+						compatible = "qcom,wsa881x";
+						reg = <0x00 0x21170214>;
+						qcom,spkr-sd-n-node = <&wsa_spkr_wcd_sd2>;
+					};
+				};*/
+
+				/*wcd_spi_0: wcd_spi {
+					compatible = "qcom,wcd-spi-v2";
+					qcom,master-bus-num = <0>;
+					qcom,chip-select = <0>;
+					qcom,max-frequency = <15000000>;
+					qcom,mem-base-addr = <0x100000>;
+				};*/
+			};
+	};
+        spi@78b9000 { /* BLSP1 QUP5 */
+                status = "okay";
+                qcom,shared;
+                mdss_spi_client {
+                        reg = <0>;
+                        compatible = "qcom,mdss-spi-client";
+                        label = "MDSS SPI QUP5 CLIENT";
+                        spi-max-frequency = <50000000>;
+                };
+        };
+        i2c@78b9000 {/* BLSP1 QUP5 */
+                status = "disabled";
+        };
 };
 
 &pm8909_mpps {
