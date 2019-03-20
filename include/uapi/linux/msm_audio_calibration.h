@@ -71,6 +71,7 @@ enum {
 	AFE_FB_SPKR_PROT_CAL_TYPE,
 	AFE_HW_DELAY_CAL_TYPE,
 	AFE_SIDETONE_CAL_TYPE,
+	AFE_TOPOLOGY_CAL_TYPE,
 
 	LSM_CUST_TOPOLOGY_CAL_TYPE,
 	LSM_TOPOLOGY_CAL_TYPE,
@@ -89,6 +90,8 @@ enum {
 	DTS_EAGLE_CAL_TYPE,
 	AUDIO_CORE_METAINFO_CAL_TYPE,
 	SRS_TRUMEDIA_CAL_TYPE,
+
+	ULP_LSM_TOPOLOGY_ID_CAL_TYPE,
 
 	MAX_CAL_TYPES,
 };
@@ -212,6 +215,14 @@ struct audio_cal_info_audvol {
 };
 
 struct audio_cal_info_afe {
+	int32_t		acdb_id;
+	/* RX_DEVICE or TX_DEVICE */
+	int32_t		path;
+	int32_t		sample_rate;
+};
+
+struct audio_cal_info_afe_top {
+	int32_t		topology;
 	int32_t		acdb_id;
 	/* RX_DEVICE or TX_DEVICE */
 	int32_t		path;
@@ -443,6 +454,17 @@ struct audio_cal_type_afe {
 struct audio_cal_afe {
 	struct audio_cal_header		hdr;
 	struct audio_cal_type_afe	cal_type;
+};
+
+struct audio_cal_type_afe_top {
+	struct audio_cal_type_header	cal_hdr;
+	struct audio_cal_data		cal_data;
+	struct audio_cal_info_afe_top	cal_info;
+};
+
+struct audio_cal_afe_top {
+	struct audio_cal_header		hdr;
+	struct audio_cal_type_afe_top	cal_type;
 };
 
 struct audio_cal_type_aanc {
