@@ -44,9 +44,13 @@ enum LSM_PARAM_TYPE {
 	LSM_DEREG_SND_MODEL,
 	LSM_CUSTOM_PARAMS,
 	LSM_POLLING_ENABLE,
+	LSM_DET_EVENT_TYPE,
 	/* driver ioctl will parse only so many params */
 	LSM_PARAMS_MAX,
 };
+
+#define LSM_DET_EVENT_TYPE_LEGACY 0
+#define LSM_DET_EVENT_TYPE_GENERIC 1
 
 /*
  * Data for LSM_ENDPOINT_DETECT_THRESHOLD param_type
@@ -84,6 +88,15 @@ struct snd_lsm_poll_enable {
 	bool poll_en;
 };
 
+/*
+ * Data for LSM_DET_EVENT_TYPE param_type
+ * @event_type: LSM_DET_EVENT_TYPE_LEGACY or LSM_DET_EVENT_TYPE_GENERIC
+ * @mode: Type of information in detection event payload
+ */
+struct snd_lsm_det_event_type {
+	__u32 event_type;
+	__u32 mode;
+};
 
 struct snd_lsm_sound_model_v2 {
 	__u8 __user *data;
@@ -182,5 +195,6 @@ struct snd_lsm_output_format_cfg {
 #define SNDRV_LSM_OUT_FORMAT_CFG _IOW('U', 0x0C, \
 				      struct snd_lsm_output_format_cfg)
 #define SNDRV_LSM_SET_PORT	_IO('U', 0x0D)
+#define SNDRV_LSM_GENERIC_DET_EVENT       _IOW('U', 0x10, struct snd_lsm_event_status)
 
 #endif
