@@ -224,9 +224,9 @@ static int tavil_enable_ext_mb_source(struct wcd_mbhc *mbhc,
 	if (turn_on) {
 		if (!(supply->ondemand_supply_count)) {
 			ret = snd_soc_dapm_force_enable_pin(
-				snd_soc_codec_get_dapm(codec),
+				&codec->dapm,
 				"MICBIAS_REGULATOR");
-			snd_soc_dapm_sync(snd_soc_codec_get_dapm(codec));
+			snd_soc_dapm_sync(&codec->dapm);
 		}
 		supply->ondemand_supply_count++;
 	} else {
@@ -234,9 +234,9 @@ static int tavil_enable_ext_mb_source(struct wcd_mbhc *mbhc,
 			supply->ondemand_supply_count--;
 		if (!(supply->ondemand_supply_count)) {
 			ret = snd_soc_dapm_disable_pin(
-				snd_soc_codec_get_dapm(codec),
+				&codec->dapm,
 				"MICBIAS_REGULATOR");
-		snd_soc_dapm_sync(snd_soc_codec_get_dapm(codec));
+		snd_soc_dapm_sync(&codec->dapm);
 		}
 	}
 
@@ -800,13 +800,13 @@ static bool tavil_hph_register_recovery(struct wcd_mbhc *mbhc)
 		return false;
 
 	wcd934x_mbhc->is_hph_recover = false;
-	snd_soc_dapm_force_enable_pin(snd_soc_codec_get_dapm(codec),
+	snd_soc_dapm_force_enable_pin(&codec->dapm,
 				      "RESET_HPH_REGISTERS");
-	snd_soc_dapm_sync(snd_soc_codec_get_dapm(codec));
+	snd_soc_dapm_sync(&codec->dapm);
 
-	snd_soc_dapm_disable_pin(snd_soc_codec_get_dapm(codec),
+	snd_soc_dapm_disable_pin(&codec->dapm,
 				 "RESET_HPH_REGISTERS");
-	snd_soc_dapm_sync(snd_soc_codec_get_dapm(codec));
+	snd_soc_dapm_sync(&codec->dapm);
 
 	return wcd934x_mbhc->is_hph_recover;
 }
@@ -886,7 +886,7 @@ static struct regulator *tavil_codec_find_ondemand_regulator(
 static int tavil_get_hph_type(struct snd_kcontrol *kcontrol,
 			      struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	struct wcd934x_mbhc *wcd934x_mbhc = tavil_soc_get_mbhc(codec);
 	struct wcd_mbhc *mbhc;
 
@@ -909,7 +909,7 @@ static int tavil_hph_impedance_get(struct snd_kcontrol *kcontrol,
 	uint32_t zl, zr;
 	bool hphr;
 	struct soc_multi_mixer_control *mc;
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	struct wcd934x_mbhc *wcd934x_mbhc = tavil_soc_get_mbhc(codec);
 
 	if (!wcd934x_mbhc) {

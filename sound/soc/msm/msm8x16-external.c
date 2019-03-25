@@ -34,6 +34,7 @@
 #include "qdsp6v2/msm-pcm-routing-v2.h"
 #include "../codecs/msm8x16-wcd.h"
 #include "../codecs/wcd934x/wcd934x.h"
+#include "../codecs/wcd934x/wcd934x-mbhc.h"
 #include "msm-audio-pinctrl.h"
 #include "../codecs/wsa881x.h"
 
@@ -130,42 +131,41 @@ static struct wcd_mbhc_config wcd_mbhc_cfg = {
 	.mono_stero_detection = false,
 	.swap_gnd_mic = NULL,
 	.hs_ext_micbias = true,
+	.moisture_en = true,
 };
 
 static void *def_ext_mbhc_cal(void)
 {
-	void *tasha_wcd_cal;
-	struct wcd_mbhc_btn_detect_cfg *btn_cfg;
-	u16 *btn_high;
+        void *wcd_mbhc_cal;
+        struct wcd_mbhc_btn_detect_cfg *btn_cfg;
+        u16 *btn_high;
 
-	tasha_wcd_cal = kzalloc(WCD_MBHC_CAL_SIZE(WCD_MBHC_DEF_BUTTONS,
-				WCD9XXX_MBHC_DEF_RLOADS), GFP_KERNEL);
-	if (!tasha_wcd_cal) {
-		pr_err("%s: out of memory\n", __func__);
-		return NULL;
-	}
+        wcd_mbhc_cal = kzalloc(WCD_MBHC_CAL_SIZE(WCD_MBHC_DEF_BUTTONS,
+                                WCD9XXX_MBHC_DEF_RLOADS), GFP_KERNEL);
+        if (!wcd_mbhc_cal)
+                return NULL;
 
-#define S(X, Y) ((WCD_MBHC_CAL_PLUG_TYPE_PTR(tasha_wcd_cal)->X) = (Y))
-	S(v_hs_max, 1500);
+#define S(X, Y) ((WCD_MBHC_CAL_PLUG_TYPE_PTR(wcd_mbhc_cal)->X) = (Y))
+        S(v_hs_max, 1600);
 #undef S
-#define S(X, Y) ((WCD_MBHC_CAL_BTN_DET_PTR(tasha_wcd_cal)->X) = (Y))
-	S(num_btn, WCD_MBHC_DEF_BUTTONS);
+#define S(X, Y) ((WCD_MBHC_CAL_BTN_DET_PTR(wcd_mbhc_cal)->X) = (Y))
+        S(num_btn, WCD_MBHC_DEF_BUTTONS);
 #undef S
 
-	btn_cfg = WCD_MBHC_CAL_BTN_DET_PTR(tasha_wcd_cal);
-	btn_high = ((void *)&btn_cfg->_v_btn_low) +
-		(sizeof(btn_cfg->_v_btn_low[0]) * btn_cfg->num_btn);
+        btn_cfg = WCD_MBHC_CAL_BTN_DET_PTR(wcd_mbhc_cal);
+        btn_high = ((void *)&btn_cfg->_v_btn_low) +
+                (sizeof(btn_cfg->_v_btn_low[0]) * btn_cfg->num_btn);
 
-	btn_high[0] = 75;
-	btn_high[1] = 150;
-	btn_high[2] = 237;
-	btn_high[3] = 450;
-	btn_high[4] = 500;
-	btn_high[5] = 590;
-	btn_high[6] = 675;
-	btn_high[7] = 780;
+        btn_high[0] = 75;
+        btn_high[1] = 150;
+        btn_high[2] = 237;
+        btn_high[3] = 500;
+        btn_high[4] = 500;
+        btn_high[5] = 500;
+        btn_high[6] = 500;
+        btn_high[7] = 500;
 
-	return tasha_wcd_cal;
+        return wcd_mbhc_cal;
 }
 #endif
 
@@ -1320,58 +1320,6 @@ static int conf_int_codec_mux(struct msm8916_asoc_mach_data *pdata)
 }
 #endif
 
-#ifdef CONFIG_SND_SOC_WCD_MBHC
-static void *def_msm8x16_wcd_mbhc_cal(void)
-{
-	void *msm8x16_wcd_cal;
-	struct wcd_mbhc_btn_detect_cfg *btn_cfg;
-	u16 *btn_low, *btn_high;
-
-	msm8x16_wcd_cal = kzalloc(WCD_MBHC_CAL_SIZE(WCD_MBHC_DEF_BUTTONS,
-				WCD_MBHC_DEF_RLOADS), GFP_KERNEL);
-	if (!msm8x16_wcd_cal) {
-		pr_err("%s: out of memory\n", __func__);
-		return NULL;
-	}
-
-#define S(X, Y) ((WCD_MBHC_CAL_PLUG_TYPE_PTR(msm8x16_wcd_cal)->X) = (Y))
-	S(v_hs_max, 1500);
-#undef S
-#define S(X, Y) ((WCD_MBHC_CAL_BTN_DET_PTR(msm8x16_wcd_cal)->X) = (Y))
-	S(num_btn, WCD_MBHC_DEF_BUTTONS);
-#undef S
-
-
-	btn_cfg = WCD_MBHC_CAL_BTN_DET_PTR(msm8x16_wcd_cal);
-	btn_low = btn_cfg->_v_btn_low;
-	btn_high = ((void *)&btn_cfg->_v_btn_low) +
-		(sizeof(btn_cfg->_v_btn_low[0]) * btn_cfg->num_btn);
-
-	/*
-	 * In SW we are maintaining two sets of threshold register
-	 * one for current source and another for Micbias.
-	 * all btn_low corresponds to threshold for current source
-	 * all bt_high corresponds to threshold for Micbias
-	 * Below thresholds are based on following resistances
-	 * 0-70    == Button 0
-	 * 110-180 == Button 1
-	 * 210-290 == Button 2
-	 * 360-680 == Button 3
-	 */
-	btn_low[0] = 75;
-	btn_high[0] = 75;
-	btn_low[1] = 150;
-	btn_high[1] = 150;
-	btn_low[2] = 237;
-	btn_high[2] = 237;
-	btn_low[3] = 450;
-	btn_high[3] = 450;
-	btn_low[4] = 500;
-	btn_high[4] = 500;
-
-	return msm8x16_wcd_cal;
-}
-#endif
 
 #if 0
 static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)

@@ -131,7 +131,7 @@ static void wcd_program_btn_threshold(const struct wcd_mbhc *mbhc, bool micbias)
 {
 	struct wcd_mbhc_btn_detect_cfg *btn_det;
 	struct snd_soc_codec *codec = mbhc->codec;
-	struct snd_soc_card *card = codec->component.card;
+	struct snd_soc_card *card = codec->card;
 	s16 *btn_low, *btn_high;
 
 	if (mbhc->mbhc_cfg->calibration == NULL) {
@@ -2399,6 +2399,7 @@ int wcd_mbhc_set_keycode(struct wcd_mbhc *mbhc)
 	return result;
 }
 
+#if 0
 static int wcd_mbhc_usb_c_analog_setup_gpios(struct wcd_mbhc *mbhc,
 					     bool active)
 {
@@ -2573,6 +2574,7 @@ static int wcd_mbhc_usb_c_analog_deinit(struct wcd_mbhc *mbhc)
 
 	return 0;
 }
+#endif
 
 static int wcd_mbhc_init_gpio(struct wcd_mbhc *mbhc,
 			      struct wcd_mbhc_config *mbhc_cfg,
@@ -2581,7 +2583,7 @@ static int wcd_mbhc_init_gpio(struct wcd_mbhc *mbhc,
 {
 	int rc = 0;
 	struct snd_soc_codec *codec = mbhc->codec;
-	struct snd_soc_card *card = codec->component.card;
+	struct snd_soc_card *card = codec->card;
 
 	dev_dbg(mbhc->codec->dev, "%s: gpio %s\n", __func__, gpio_dt_str);
 
@@ -2613,7 +2615,7 @@ int wcd_mbhc_start(struct wcd_mbhc *mbhc, struct wcd_mbhc_config *mbhc_cfg)
 
 	config = &mbhc_cfg->usbc_analog_cfg;
 	codec = mbhc->codec;
-	card = codec->component.card;
+	card = codec->card;
 
 	/* update the mbhc config */
 	mbhc->mbhc_cfg = mbhc_cfg;
@@ -2665,12 +2667,14 @@ int wcd_mbhc_start(struct wcd_mbhc *mbhc, struct wcd_mbhc_config *mbhc_cfg)
 
 		dev_dbg(mbhc->codec->dev, "%s: calling usb_c_analog_init\n",
 			__func__);
+#if 0
 		/* init PMI notifier */
 		rc = wcd_mbhc_usb_c_analog_init(mbhc);
 		if (rc) {
 			rc = EPROBE_DEFER;
 			goto err;
 		}
+#endif
 	}
 
 	/* Set btn key code */
@@ -2750,7 +2754,9 @@ void wcd_mbhc_stop(struct wcd_mbhc *mbhc)
 	}
 
 	if (mbhc->mbhc_cfg->enable_usbc_analog) {
+#if 0
 		wcd_mbhc_usb_c_analog_deinit(mbhc);
+#endif
 		/* free GPIOs */
 		if (config->usbc_en1_gpio > 0)
 			gpio_free(config->usbc_en1_gpio);
@@ -2786,7 +2792,7 @@ int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
 	int hph_swh = 0;
 	int gnd_swh = 0;
 	u32 hph_moist_config[3];
-	struct snd_soc_card *card = codec->component.card;
+	struct snd_soc_card *card = codec->card;
 	const char *hph_switch = "qcom,msm-mbhc-hphl-swh";
 	const char *gnd_switch = "qcom,msm-mbhc-gnd-swh";
 
@@ -2858,18 +2864,18 @@ int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
 	}
 
 	if (mbhc->headset_jack.jack == NULL) {
-		ret = snd_soc_card_jack_new(codec->component.card,
-					    "Headset Jack", WCD_MBHC_JACK_MASK,
-					    &mbhc->headset_jack, NULL, 0);
+		ret = snd_soc_jack_new(codec,
+				       "Headset Jack", WCD_MBHC_JACK_MASK,
+					&mbhc->headset_jack);
 		if (ret) {
 			pr_err("%s: Failed to create new jack\n", __func__);
 			return ret;
 		}
 
-		ret = snd_soc_card_jack_new(codec->component.card,
-					    "Button Jack",
-					    WCD_MBHC_JACK_BUTTON_MASK,
-					    &mbhc->button_jack, NULL, 0);
+		ret = snd_soc_jack_new(codec,
+					"Button Jack",
+					 WCD_MBHC_JACK_BUTTON_MASK,
+					 &mbhc->button_jack);
 		if (ret) {
 			pr_err("Failed to create new jack\n");
 			return ret;

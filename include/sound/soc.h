@@ -690,6 +690,17 @@ struct snd_soc_cache_ops {
 	int (*sync)(struct snd_soc_codec *codec);
 };
 
+struct snd_soc_component {
+	const char *name;
+	int id;
+	int num_dai;
+	struct device *dev;
+	struct snd_soc_card *card;
+	struct list_head list;
+
+	const struct snd_soc_component_driver *driver;
+};
+
 /* SoC Audio Codec device */
 struct snd_soc_codec {
 	const char *name;
@@ -746,6 +757,8 @@ struct snd_soc_codec {
 	struct dentry *debugfs_reg;
 	struct dentry *debugfs_dapm;
 #endif
+        /* component */
+        struct snd_soc_component component;
 };
 
 /* codec driver */
@@ -887,15 +900,6 @@ struct snd_soc_component_driver {
 	const char *name;
 };
 
-struct snd_soc_component {
-	const char *name;
-	int id;
-	int num_dai;
-	struct device *dev;
-	struct list_head list;
-
-	const struct snd_soc_component_driver *driver;
-};
 
 enum snd_soc_async_ops {
 	ASYNC_DPCM_SND_SOC_OPEN = 1 << 0,
