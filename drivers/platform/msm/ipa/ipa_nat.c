@@ -70,7 +70,7 @@ static int ipa_nat_mmap(struct file *filp, struct vm_area_struct *vma)
 	if (nat_ctx->is_sys_mem) {
 		IPADBG("Mapping system memory\n");
 		if (nat_ctx->is_mapped) {
-			IPAERR("mapping already exists, only 1 supported\n");
+			IPAERR_RL("mapping already exists, only 1 supported\n");
 			result = -EINVAL;
 			goto bail;
 		}
@@ -82,7 +82,7 @@ static int ipa_nat_mmap(struct file *filp, struct vm_area_struct *vma)
 				 nat_ctx->size);
 
 		if (result) {
-			IPAERR("unable to map memory. Err:%d\n", result);
+			IPAERR_RL("unable to map memory. Err:%d\n", result);
 			goto bail;
 		}
 		ipa_ctx->nat_mem.nat_base_address = nat_ctx->vaddr;
@@ -102,7 +102,7 @@ static int ipa_nat_mmap(struct file *filp, struct vm_area_struct *vma)
 		if (remap_pfn_range(
 			 vma, vma->vm_start,
 			 phys_addr >> PAGE_SHIFT, vsize, vma->vm_page_prot)) {
-			IPAERR("remap failed\n");
+			IPAERR_RL("remap failed\n");
 			result = -EAGAIN;
 			goto bail;
 		}
@@ -139,7 +139,7 @@ int create_nat_device(void)
 	mutex_lock(&nat_ctx->lock);
 	nat_ctx->class = class_create(THIS_MODULE, NAT_DEV_NAME);
 	if (IS_ERR(nat_ctx->class)) {
-		IPAERR("unable to create the class\n");
+		IPAERR_RL("unable to create the class\n");
 		result = -ENODEV;
 		goto vaddr_alloc_fail;
 	}
@@ -148,7 +148,7 @@ int create_nat_device(void)
 					1,
 					NAT_DEV_NAME);
 	if (result) {
-		IPAERR("alloc_chrdev_region err.\n");
+		IPAERR_RL("alloc_chrdev_region err.\n");
 		result = -ENODEV;
 		goto alloc_chrdev_region_fail;
 	}
@@ -158,7 +158,7 @@ int create_nat_device(void)
 			"%s", NAT_DEV_NAME);
 
 	if (IS_ERR(nat_ctx->dev)) {
-		IPAERR("device_create err:%ld\n", PTR_ERR(nat_ctx->dev));
+		IPAERR_RL("device_create err:%ld\n", PTR_ERR(nat_ctx->dev));
 		result = -ENODEV;
 		goto device_create_fail;
 	}
@@ -169,7 +169,7 @@ int create_nat_device(void)
 
 	result = cdev_add(&nat_ctx->cdev, nat_ctx->dev_num, 1);
 	if (result) {
-		IPAERR("cdev_add err=%d\n", -result);
+		IPAERR_RL("cdev_add err=%d\n", -result);
 		goto cdev_add_fail;
 	}
 	IPADBG("ipa nat dev added successful. major:%d minor:%d\n",
@@ -223,21 +223,21 @@ int allocate_nat_device(struct ipa_ioc_nat_alloc_mem *mem)
 
 	mutex_lock(&nat_ctx->lock);
 	if (strcmp(mem->dev_name, NAT_DEV_NAME)) {
-		IPAERR("Nat device name mismatch\n");
-		IPAERR("Expect: %s Recv: %s\n", NAT_DEV_NAME, mem->dev_name);
+		IPAERR_RL_RL("Nat device name mismatch\n");
+		IPAERR_RL_RL("Expect: %s Recv: %s\n", NAT_DEV_NAME, mem->dev_name);
 		result = -EPERM;
 		goto bail;
 	}
 
 	if (nat_ctx->is_dev != true) {
-		IPAERR("Nat device not created successfully during boot up\n");
+		IPAERR_RL("Nat device not created successfully during boot up\n");
 		result = -EPERM;
 		goto bail;
 	}
 
 	if (mem->size <= 0 ||
 			nat_ctx->is_dev_init == true) {
-		IPAERR("Invalid Parameters or device is already init\n");
+		IPAERR_RL_RL("Invalid Parameters or device is already init\n");
 		result = -EPERM;
 		goto bail;
 	}
@@ -249,7 +249,7 @@ int allocate_nat_device(struct ipa_ioc_nat_alloc_mem *mem)
 		   dma_alloc_coherent(ipa_ctx->pdev, mem->size,
 				   &nat_ctx->dma_handle, gfp_flags);
 		if (nat_ctx->vaddr == NULL) {
-			IPAERR("memory alloc failed\n");
+			IPAERR_RL("memory alloc failed\n");
 			result = -ENOMEM;
 			goto bail;
 		}
@@ -297,14 +297,14 @@ int ipa_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 	    init->index_offset >= ipa_ctx->nat_mem.size ||
 	    init->expn_rules_offset >= ipa_ctx->nat_mem.size ||
 	    init->index_expn_offset >= ipa_ctx->nat_mem.size) {
-		IPAERR("Table rules offset are not valid\n");
+		IPAERR_RL("Table rules offset are not valid\n");
 		result = -EPERM;
 		goto bail;
 	}
 
 	cmd = kmalloc(size, GFP_KERNEL);
 	if (!cmd) {
-		IPAERR("Failed to alloc immediate command object\n");
+		IPAERR_RL("Failed to alloc immediate command object\n");
 		result = -ENOMEM;
 		goto bail;
 	}
@@ -321,16 +321,16 @@ int ipa_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 			(init->expn_rules_offset > offset) ||
 			(init->index_offset > offset) ||
 			(init->index_expn_offset > offset)) {
-			IPAERR("Failed due to integer overflow\n");
-			IPAERR("nat.mem.dma_handle: 0x%pa\n",
+			IPAERR_RL("Failed due to integer overflow\n");
+			IPAERR_RL("nat.mem.dma_handle: 0x%pa\n",
 				&ipa_ctx->nat_mem.dma_handle);
-			IPAERR("ipv4_rules_offset: 0x%x\n",
+			IPAERR_RL("ipv4_rules_offset: 0x%x\n",
 				init->ipv4_rules_offset);
-			IPAERR("expn_rules_offset: 0x%x\n",
+			IPAERR_RL("expn_rules_offset: 0x%x\n",
 				init->expn_rules_offset);
-			IPAERR("index_offset: 0x%x\n",
+			IPAERR_RL("index_offset: 0x%x\n",
 				init->index_offset);
-			IPAERR("index_expn_offset: 0x%x\n",
+			IPAERR_RL("index_expn_offset: 0x%x\n",
 				init->index_expn_offset);
 			result = -EPERM;
 			goto free_cmd;
@@ -386,7 +386,7 @@ int ipa_nat_init_cmd(struct ipa_ioc_v4_nat_init *init)
 	desc.len = size;
 	IPADBG("posting v4 init command\n");
 	if (ipa_send_cmd(1, &desc)) {
-		IPAERR("Fail to send immediate command\n");
+		IPAERR_RL("Fail to send immediate command\n");
 		result = -EPERM;
 		goto free_cmd;
 	}
@@ -452,7 +452,7 @@ int ipa_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 
 	for (cnt = 0; cnt < dma->entries; cnt++) {
 		if (dma->dma[cnt].table_index >= 1) {
-			IPAERR("Invalid table index %d\n",
+			IPAERR_RL_RL("Invalid table index %d\n",
 				dma->dma[cnt].table_index);
 			ret = -EPERM;
 			goto bail;
@@ -463,7 +463,7 @@ int ipa_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 			if (dma->dma[cnt].offset >=
 				(ipa_ctx->nat_mem.size_base_tables + 1) *
 				NAT_TABLE_ENTRY_SIZE_BYTE) {
-				IPAERR("Invalid offset %d\n",
+				IPAERR_RL_RL("Invalid offset %d\n",
 					dma->dma[cnt].offset);
 				ret = -EPERM;
 				goto bail;
@@ -475,7 +475,7 @@ int ipa_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 			if (dma->dma[cnt].offset >=
 				ipa_ctx->nat_mem.size_expansion_tables *
 				NAT_TABLE_ENTRY_SIZE_BYTE) {
-				IPAERR("Invalid offset %d\n",
+				IPAERR_RL_RL("Invalid offset %d\n",
 					dma->dma[cnt].offset);
 				ret = -EPERM;
 				goto bail;
@@ -487,7 +487,7 @@ int ipa_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 			if (dma->dma[cnt].offset >=
 				(ipa_ctx->nat_mem.size_base_tables + 1) *
 				NAT_INTEX_TABLE_ENTRY_SIZE_BYTE) {
-				IPAERR("Invalid offset %d\n",
+				IPAERR_RL_RL("Invalid offset %d\n",
 					dma->dma[cnt].offset);
 				ret = -EPERM;
 				goto bail;
@@ -499,7 +499,7 @@ int ipa_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 			if (dma->dma[cnt].offset >=
 				ipa_ctx->nat_mem.size_expansion_tables *
 				NAT_INTEX_TABLE_ENTRY_SIZE_BYTE) {
-				IPAERR("Invalid offset %d\n",
+				IPAERR_RL_RL("Invalid offset %d\n",
 					dma->dma[cnt].offset);
 				ret = -EPERM;
 				goto bail;
@@ -508,7 +508,7 @@ int ipa_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 			break;
 
 		default:
-			IPAERR("Invalid base_addr %d\n",
+			IPAERR_RL("Invalid base_addr %d\n",
 				dma->dma[cnt].base_addr);
 			ret = -EPERM;
 			goto bail;
@@ -517,14 +517,14 @@ int ipa_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 	size = sizeof(struct ipa_desc) * dma->entries;
 	desc = kzalloc(size, GFP_KERNEL);
 	if (desc == NULL) {
-		IPAERR("Failed to alloc memory\n");
+		IPAERR_RL("Failed to alloc memory\n");
 		ret = -ENOMEM;
 		goto bail;
 	}
 	size = sizeof(struct ipa_nat_dma) * dma->entries;
 	cmd = kmalloc(size, GFP_KERNEL);
 	if (cmd == NULL) {
-		IPAERR("Failed to alloc memory\n");
+		IPAERR_RL("Failed to alloc memory\n");
 		ret = -ENOMEM;
 		goto bail;
 	}
@@ -545,7 +545,7 @@ int ipa_nat_dma_cmd(struct ipa_ioc_nat_dma_cmd *dma)
 
 		ret = ipa_send_cmd(1, &desc[cnt]);
 		if (ret == -EPERM)
-			IPAERR("Fail to send immediate command %d\n", cnt);
+			IPAERR_RL("Fail to send immediate command %d\n", cnt);
 	}
 
 bail:
@@ -608,7 +608,7 @@ int ipa_nat_del_cmd(struct ipa_ioc_v4_nat_del *del)
 	}
 	cmd = kmalloc(size, GFP_KERNEL);
 	if (cmd == NULL) {
-		IPAERR("Failed to alloc immediate command object\n");
+		IPAERR_RL("Failed to alloc immediate command object\n");
 		result = -ENOMEM;
 		goto bail;
 	}
@@ -633,7 +633,7 @@ int ipa_nat_del_cmd(struct ipa_ioc_v4_nat_del *del)
 	desc.pyld = (void *)cmd;
 	desc.len = size;
 	if (ipa_send_cmd(1, &desc)) {
-		IPAERR("Fail to send immediate command\n");
+		IPAERR_RL("Fail to send immediate command\n");
 		result = -EPERM;
 		goto free_mem;
 	}

@@ -2040,7 +2040,7 @@ static int ctrl_cmd_delete(const char *input)
 				list_del(&st_entry->list);
 		}
 	}
-	spin_unlock_bh(&uid_tag_data_tree_lock);
+        spin_unlock_bh(&uid_tag_data_tree_lock);
 	spin_unlock_bh(&sock_tag_list_lock);
 
 	sock_tag_tree_erase(&st_to_free_tree);
@@ -2245,12 +2245,12 @@ static int ctrl_cmd_tag(const char *input)
 	full_tag = combine_atag_with_uid(acct_tag, uid);
 
 	spin_lock_bh(&sock_tag_list_lock);
-	spin_lock_bh(&uid_tag_data_tree_lock);
+        spin_lock_bh(&uid_tag_data_tree_lock);
 	sock_tag_entry = get_sock_stat_nl(el_socket->sk);
 	tag_ref_entry = get_tag_ref(full_tag, &uid_tag_data_entry);
 	if (IS_ERR(tag_ref_entry)) {
 		res = PTR_ERR(tag_ref_entry);
-		spin_unlock_bh(&uid_tag_data_tree_lock);
+                spin_unlock_bh(&uid_tag_data_tree_lock);
 		spin_unlock_bh(&sock_tag_list_lock);
 		goto err_put;
 	}
@@ -2284,11 +2284,11 @@ static int ctrl_cmd_tag(const char *input)
 			pr_err("qtaguid: ctrl_tag(%s): "
 			       "socket tag alloc failed\n",
 			       input);
-			BUG_ON(tag_ref_entry->num_sock_tags <= 0);
-			tag_ref_entry->num_sock_tags--;
-			free_tag_ref_from_utd_entry(tag_ref_entry,
-						    uid_tag_data_entry);
-			spin_unlock_bh(&uid_tag_data_tree_lock);
+                        BUG_ON(tag_ref_entry->num_sock_tags <= 0);
+                        tag_ref_entry->num_sock_tags--;
+                        free_tag_ref_from_utd_entry(tag_ref_entry,
+                                                    uid_tag_data_entry);
+                        spin_unlock_bh(&uid_tag_data_tree_lock);
 			spin_unlock_bh(&sock_tag_list_lock);
 			res = -ENOMEM;
 			goto err_put;
@@ -2319,7 +2319,7 @@ static int ctrl_cmd_tag(const char *input)
 		sock_tag_tree_insert(sock_tag_entry, &sock_tag_tree);
 		atomic64_inc(&qtu_events.sockets_tagged);
 	}
-	spin_unlock_bh(&uid_tag_data_tree_lock);
+        spin_unlock_bh(&uid_tag_data_tree_lock);
 	spin_unlock_bh(&sock_tag_list_lock);
 	/* We keep the ref to the socket (file) until it is untagged */
 	CT_DEBUG("qtaguid: ctrl_tag(%s): done st@%p ...->f_count=%ld\n",
