@@ -131,6 +131,69 @@ const struct snd_soc_dapm_route tavil_i2s_audio_map[] = {
 	{"AIF2 CAP", NULL, "AIF2_CAP Mixer"},
 	{"AIF3 CAP", NULL, "AIF3_CAP Mixer"},
 
+	/* Virtual input widgets */
+	{"AIF1 CAP", NULL, "AIF1_CAP Mixer"},
+	{"AIF2 CAP", NULL, "AIF2_CAP Mixer"},
+	{"AIF3 CAP", NULL, "AIF3_CAP Mixer"},
+	{"AIF4 MAD", NULL, "AIF4_MAD Mixer"},
+
+	/* Virtual input widget Mixer */
+	{"AIF1_CAP Mixer", "I2S TX0", "I2S TX0"},
+	{"AIF1_CAP Mixer", "I2S TX1", "I2S TX1"},
+	{"AIF1_CAP Mixer", "I2S TX2", "I2S TX2"},
+	{"AIF1_CAP Mixer", "I2S TX3", "I2S TX3"},
+	{"AIF1_CAP Mixer", "I2S TX4", "I2S TX4"},
+	{"AIF1_CAP Mixer", "I2S TX5", "I2S TX5"},
+	{"AIF1_CAP Mixer", "I2S TX6", "I2S TX6"},
+	{"AIF1_CAP Mixer", "I2S TX7", "I2S TX7"},
+	{"AIF1_CAP Mixer", "I2S TX8", "I2S TX8"},
+	{"AIF1_CAP Mixer", "I2S TX9", "I2S TX9"},
+	{"AIF1_CAP Mixer", "I2S TX10", "I2S TX10"},
+	{"AIF1_CAP Mixer", "I2S TX11", "I2S TX11"},
+	{"AIF1_CAP Mixer", "I2S TX13", "I2S TX13"},
+
+	{"AIF2_CAP Mixer", "I2S TX0", "I2S TX0"},
+	{"AIF2_CAP Mixer", "I2S TX1", "I2S TX1"},
+	{"AIF2_CAP Mixer", "I2S TX2", "I2S TX2"},
+	{"AIF2_CAP Mixer", "I2S TX3", "I2S TX3"},
+	{"AIF2_CAP Mixer", "I2S TX4", "I2S TX4"},
+	{"AIF2_CAP Mixer", "I2S TX5", "I2S TX5"},
+	{"AIF2_CAP Mixer", "I2S TX6", "I2S TX6"},
+	{"AIF2_CAP Mixer", "I2S TX7", "I2S TX7"},
+	{"AIF2_CAP Mixer", "I2S TX8", "I2S TX8"},
+	{"AIF2_CAP Mixer", "I2S TX9", "I2S TX9"},
+	{"AIF2_CAP Mixer", "I2S TX10", "I2S TX10"},
+	{"AIF2_CAP Mixer", "I2S TX11", "I2S TX11"},
+	{"AIF2_CAP Mixer", "I2S TX13", "I2S TX13"},
+
+	{"AIF3_CAP Mixer", "I2S TX0", "I2S TX0"},
+	{"AIF3_CAP Mixer", "I2S TX1", "I2S TX1"},
+	{"AIF3_CAP Mixer", "I2S TX2", "I2S TX2"},
+	{"AIF3_CAP Mixer", "I2S TX3", "I2S TX3"},
+	{"AIF3_CAP Mixer", "I2S TX4", "I2S TX4"},
+	{"AIF3_CAP Mixer", "I2S TX5", "I2S TX5"},
+	{"AIF3_CAP Mixer", "I2S TX6", "I2S TX6"},
+	{"AIF3_CAP Mixer", "I2S TX7", "I2S TX7"},
+	{"AIF3_CAP Mixer", "I2S TX8", "I2S TX8"},
+	{"AIF3_CAP Mixer", "I2S TX9", "I2S TX9"},
+	{"AIF3_CAP Mixer", "I2S TX10", "I2S TX10"},
+	{"AIF3_CAP Mixer", "I2S TX11", "I2S TX11"},
+	{"AIF3_CAP Mixer", "I2S TX13", "I2S TX13"},
+
+	{"AIF4_MAD Mixer", "I2S TX13", "I2S TX13"},
+	{"I2S TX0", NULL, "CDC_IF TX0 MUX"},
+	{"I2S TX1", NULL, "CDC_IF TX1 MUX"},
+	{"I2S TX2", NULL, "CDC_IF TX2 MUX"},
+	{"I2S TX3", NULL, "CDC_IF TX3 MUX"},
+	{"I2S TX4", NULL, "CDC_IF TX4 MUX"},
+	{"I2S TX5", NULL, "CDC_IF TX5 MUX"},
+	{"I2S TX6", NULL, "CDC_IF TX6 MUX"},
+	{"I2S TX7", NULL, "CDC_IF TX7 MUX"},
+	{"I2S TX8", NULL, "CDC_IF TX8 MUX"},
+	{"I2S TX9", NULL, "CDC_IF TX9 MUX"},
+	{"I2S TX10", NULL, "CDC_IF TX10 MUX"},
+	{"I2S TX11", NULL, "CDC_IF TX11 MUX"},
+	{"I2S TX13", NULL, "CDC_IF TX13 MUX"},
 	/* CDC Rx interface with I2S */
 	{"CDC_IF RX0 MUX", "I2S_0 RX0", "I2S RX0 MUX"},
 	{"CDC_IF RX1 MUX", "I2S_0 RX1", "I2S RX1 MUX"},
@@ -159,6 +222,7 @@ const struct snd_soc_dapm_route tavil_i2s_audio_map[] = {
 	{"I2S RX6 MUX", "AIF2_PB", "AIF2 PB"},
 	{"I2S RX7 MUX", "AIF2_PB", "AIF2 PB"},
 };
+
 
 const struct snd_soc_dapm_route tavil_audio_map[] = {
 
@@ -252,6 +316,7 @@ const struct snd_soc_dapm_route tavil_audio_map[] = {
 	{"AIF4 VI", NULL, "AIF4_VI Mixer"},
 
 	/* CDC Tx interface with AIF1 */
+	/*
 	{"AIF1_CAP Mixer", NULL, "CDC_IF TX0 MUX"},
 	{"AIF1_CAP Mixer", NULL, "CDC_IF TX1 MUX"},
 	{"AIF1_CAP Mixer", NULL, "CDC_IF TX2 MUX"},
@@ -265,6 +330,7 @@ const struct snd_soc_dapm_route tavil_audio_map[] = {
 	{"AIF1_CAP Mixer", NULL, "CDC_IF TX10 MUX"},
 	{"AIF1_CAP Mixer", NULL, "CDC_IF TX11 MUX"},
 	{"AIF1_CAP Mixer", NULL, "CDC_IF TX13 MUX"},
+	*/
 
 	{"CDC_IF TX0 MUX", "DEC0", "ADC MUX0"},
 	{"CDC_IF TX0 MUX", "RX_MIX_TX0", "RX MIX TX0 MUX"},

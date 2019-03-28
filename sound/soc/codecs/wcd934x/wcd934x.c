@@ -1915,7 +1915,7 @@ static int tavil_codec_enable_i2s_path(struct snd_soc_dapm_widget *w,
 		dev_err(codec->dev, "%s Invalid i2s Id received", __func__);
 		return -EINVAL;
 	}
-
+		i2s_reg = WCD934X_DATA_HUB_I2S_0_CTL;
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		ret = snd_soc_update_bits(codec,
@@ -5977,94 +5977,94 @@ static const struct snd_kcontrol_new aif4_vi_mixer[] = {
 };
 
 static const struct snd_kcontrol_new aif1_cap_mixer[] = {
-	SOC_SINGLE_EXT("CDC_IF TX0", SND_SOC_NOPM, WCD934X_TX0, 1, 0,
+	SOC_SINGLE_EXT("I2S TX0", SND_SOC_NOPM, WCD934X_TX0, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX1", SND_SOC_NOPM, WCD934X_TX1, 1, 0,
+	SOC_SINGLE_EXT("I2S TX1", SND_SOC_NOPM, WCD934X_TX1, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX2", SND_SOC_NOPM, WCD934X_TX2, 1, 0,
+	SOC_SINGLE_EXT("I2S TX2", SND_SOC_NOPM, WCD934X_TX2, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX3", SND_SOC_NOPM, WCD934X_TX3, 1, 0,
+	SOC_SINGLE_EXT("I2S TX3", SND_SOC_NOPM, WCD934X_TX3, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX4", SND_SOC_NOPM, WCD934X_TX4, 1, 0,
+	SOC_SINGLE_EXT("I2S TX4", SND_SOC_NOPM, WCD934X_TX4, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX5", SND_SOC_NOPM, WCD934X_TX5, 1, 0,
+	SOC_SINGLE_EXT("I2S TX5", SND_SOC_NOPM, WCD934X_TX5, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX6", SND_SOC_NOPM, WCD934X_TX6, 1, 0,
+	SOC_SINGLE_EXT("I2S TX6", SND_SOC_NOPM, WCD934X_TX6, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX7", SND_SOC_NOPM, WCD934X_TX7, 1, 0,
+	SOC_SINGLE_EXT("I2S TX7", SND_SOC_NOPM, WCD934X_TX7, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX8", SND_SOC_NOPM, WCD934X_TX8, 1, 0,
+	SOC_SINGLE_EXT("I2S TX8", SND_SOC_NOPM, WCD934X_TX8, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX9", SND_SOC_NOPM, WCD934X_TX9, 1, 0,
+	SOC_SINGLE_EXT("I2S TX9", SND_SOC_NOPM, WCD934X_TX9, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX10", SND_SOC_NOPM, WCD934X_TX10, 1, 0,
+	SOC_SINGLE_EXT("I2S TX10", SND_SOC_NOPM, WCD934X_TX10, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX11", SND_SOC_NOPM, WCD934X_TX11, 1, 0,
+	SOC_SINGLE_EXT("I2S TX11", SND_SOC_NOPM, WCD934X_TX11, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX13", SND_SOC_NOPM, WCD934X_TX13, 1, 0,
+	SOC_SINGLE_EXT("I2S TX13", SND_SOC_NOPM, WCD934X_TX13, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
 };
 
 static const struct snd_kcontrol_new aif2_cap_mixer[] = {
-	SOC_SINGLE_EXT("CDC_IF TX0", SND_SOC_NOPM, WCD934X_TX0, 1, 0,
+	SOC_SINGLE_EXT("I2S TX0", SND_SOC_NOPM, WCD934X_TX0, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX1", SND_SOC_NOPM, WCD934X_TX1, 1, 0,
+	SOC_SINGLE_EXT("I2S TX1", SND_SOC_NOPM, WCD934X_TX1, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX2", SND_SOC_NOPM, WCD934X_TX2, 1, 0,
+	SOC_SINGLE_EXT("I2S TX2", SND_SOC_NOPM, WCD934X_TX2, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX3", SND_SOC_NOPM, WCD934X_TX3, 1, 0,
+	SOC_SINGLE_EXT("I2S TX3", SND_SOC_NOPM, WCD934X_TX3, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX4", SND_SOC_NOPM, WCD934X_TX4, 1, 0,
+	SOC_SINGLE_EXT("I2S TX4", SND_SOC_NOPM, WCD934X_TX4, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX5", SND_SOC_NOPM, WCD934X_TX5, 1, 0,
+	SOC_SINGLE_EXT("I2S TX5", SND_SOC_NOPM, WCD934X_TX5, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX6", SND_SOC_NOPM, WCD934X_TX6, 1, 0,
+	SOC_SINGLE_EXT("I2S TX6", SND_SOC_NOPM, WCD934X_TX6, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX7", SND_SOC_NOPM, WCD934X_TX7, 1, 0,
+	SOC_SINGLE_EXT("I2S TX7", SND_SOC_NOPM, WCD934X_TX7, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX8", SND_SOC_NOPM, WCD934X_TX8, 1, 0,
+	SOC_SINGLE_EXT("I2S TX8", SND_SOC_NOPM, WCD934X_TX8, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX9", SND_SOC_NOPM, WCD934X_TX9, 1, 0,
+	SOC_SINGLE_EXT("I2S TX9", SND_SOC_NOPM, WCD934X_TX9, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX10", SND_SOC_NOPM, WCD934X_TX10, 1, 0,
+	SOC_SINGLE_EXT("I2S TX10", SND_SOC_NOPM, WCD934X_TX10, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX11", SND_SOC_NOPM, WCD934X_TX11, 1, 0,
+	SOC_SINGLE_EXT("I2S TX11", SND_SOC_NOPM, WCD934X_TX11, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX13", SND_SOC_NOPM, WCD934X_TX13, 1, 0,
+	SOC_SINGLE_EXT("I2S TX13", SND_SOC_NOPM, WCD934X_TX13, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
 };
 
 static const struct snd_kcontrol_new aif3_cap_mixer[] = {
-	SOC_SINGLE_EXT("CDC_IF TX0", SND_SOC_NOPM, WCD934X_TX0, 1, 0,
+	SOC_SINGLE_EXT("I2S TX0", SND_SOC_NOPM, WCD934X_TX0, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX1", SND_SOC_NOPM, WCD934X_TX1, 1, 0,
+	SOC_SINGLE_EXT("I2S TX1", SND_SOC_NOPM, WCD934X_TX1, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX2", SND_SOC_NOPM, WCD934X_TX2, 1, 0,
+	SOC_SINGLE_EXT("I2S TX2", SND_SOC_NOPM, WCD934X_TX2, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX3", SND_SOC_NOPM, WCD934X_TX3, 1, 0,
+	SOC_SINGLE_EXT("I2S TX3", SND_SOC_NOPM, WCD934X_TX3, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX4", SND_SOC_NOPM, WCD934X_TX4, 1, 0,
+	SOC_SINGLE_EXT("I2S TX4", SND_SOC_NOPM, WCD934X_TX4, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX5", SND_SOC_NOPM, WCD934X_TX5, 1, 0,
+	SOC_SINGLE_EXT("I2S TX5", SND_SOC_NOPM, WCD934X_TX5, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX6", SND_SOC_NOPM, WCD934X_TX6, 1, 0,
+	SOC_SINGLE_EXT("I2S TX6", SND_SOC_NOPM, WCD934X_TX6, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX7", SND_SOC_NOPM, WCD934X_TX7, 1, 0,
+	SOC_SINGLE_EXT("I2S TX7", SND_SOC_NOPM, WCD934X_TX7, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX8", SND_SOC_NOPM, WCD934X_TX8, 1, 0,
+	SOC_SINGLE_EXT("I2S TX8", SND_SOC_NOPM, WCD934X_TX8, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX9", SND_SOC_NOPM, WCD934X_TX9, 1, 0,
+	SOC_SINGLE_EXT("I2S TX9", SND_SOC_NOPM, WCD934X_TX9, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX10", SND_SOC_NOPM, WCD934X_TX10, 1, 0,
+	SOC_SINGLE_EXT("I2S TX10", SND_SOC_NOPM, WCD934X_TX10, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX11", SND_SOC_NOPM, WCD934X_TX11, 1, 0,
+	SOC_SINGLE_EXT("I2S TX11", SND_SOC_NOPM, WCD934X_TX11, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
-	SOC_SINGLE_EXT("CDC_IF TX13", SND_SOC_NOPM, WCD934X_TX13, 1, 0,
+	SOC_SINGLE_EXT("I2S TX13", SND_SOC_NOPM, WCD934X_TX13, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
 };
 
 static const struct snd_kcontrol_new aif4_mad_mixer[] = {
-	SOC_SINGLE_EXT("CDC_IF TX13", SND_SOC_NOPM, WCD934X_TX13, 1, 0,
+	SOC_SINGLE_EXT("I2S TX13", SND_SOC_NOPM, WCD934X_TX13, 1, 0,
 			slim_tx_mixer_get, slim_tx_mixer_put),
 };
 
@@ -6891,19 +6891,19 @@ static const struct snd_soc_dapm_widget tavil_dapm_widgets[] = {
 		aif4_vi_mixer, ARRAY_SIZE(aif4_vi_mixer)),
 	SND_SOC_DAPM_INPUT("VIINPUT"),
 
-	SND_SOC_DAPM_MIXER("CDC_IF TX0", SND_SOC_NOPM, 0, 0, NULL, 0),
-	SND_SOC_DAPM_MIXER("CDC_IF TX1", SND_SOC_NOPM, 0, 0, NULL, 0),
-	SND_SOC_DAPM_MIXER("CDC_IF TX2", SND_SOC_NOPM, 0, 0, NULL, 0),
-	SND_SOC_DAPM_MIXER("CDC_IF TX3", SND_SOC_NOPM, 0, 0, NULL, 0),
-	SND_SOC_DAPM_MIXER("CDC_IF TX4", SND_SOC_NOPM, 0, 0, NULL, 0),
-	SND_SOC_DAPM_MIXER("CDC_IF TX5", SND_SOC_NOPM, 0, 0, NULL, 0),
-	SND_SOC_DAPM_MIXER("CDC_IF TX6", SND_SOC_NOPM, 0, 0, NULL, 0),
-	SND_SOC_DAPM_MIXER("CDC_IF TX7", SND_SOC_NOPM, 0, 0, NULL, 0),
-	SND_SOC_DAPM_MIXER("CDC_IF TX8", SND_SOC_NOPM, 0, 0, NULL, 0),
-	SND_SOC_DAPM_MIXER("CDC_IF TX9", SND_SOC_NOPM, 0, 0, NULL, 0),
-	SND_SOC_DAPM_MIXER("CDC_IF TX10", SND_SOC_NOPM, 0, 0, NULL, 0),
-	SND_SOC_DAPM_MIXER("CDC_IF TX11", SND_SOC_NOPM, 0, 0, NULL, 0),
-	SND_SOC_DAPM_MIXER("CDC_IF TX13", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_MIXER("I2S TX0", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_MIXER("I2S TX1", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_MIXER("I2S TX2", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_MIXER("I2S TX3", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_MIXER("I2S TX4", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_MIXER("I2S TX5", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_MIXER("I2S TX6", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_MIXER("I2S TX7", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_MIXER("I2S TX8", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_MIXER("I2S TX9", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_MIXER("I2S TX10", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_MIXER("I2S TX11", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_MIXER("I2S TX13", SND_SOC_NOPM, 0, 0, NULL, 0),
 
 	/* Digital Mic Inputs */
 	SND_SOC_DAPM_ADC_E("DMIC0", NULL, SND_SOC_NOPM, 0, 0,
@@ -7606,11 +7606,38 @@ static int tavil_hw_params(struct snd_pcm_substream *substream,
 			return -EINVAL;
 		};
 		tavil->dai[dai->id].rate = params_rate(params);
+		switch (params_rate(params)) {
+		case 8000:
+			tx_fs_rate = 0;
+			break;
+		case 16000:
+			tx_fs_rate = 1;
+			break;
+		case 32000:
+			tx_fs_rate = 2;
+			break;
+		case 48000:
+			tx_fs_rate = 3;
+			break;
+		case 96000:
+			tx_fs_rate = 4;
+			break;
+		case 192000:
+			tx_fs_rate = 5;
+			break;
+		case 384000:
+			tx_fs_rate = 6;
+			break;
+		default:
+			dev_err(tavil->dev,
+			"%s: Invalid TX sample rate: %d\n",
+			__func__, params_rate(params));
+			return -EINVAL;
+		};
+
 		snd_soc_update_bits(codec,
 			WCD934X_DATA_HUB_I2S_0_CTL,
 			0x40, i2s_bit_mode << 6);
-		if (tx_fs_rate > 1)
-			tx_fs_rate--;
 		snd_soc_update_bits(codec,
 			WCD934X_DATA_HUB_I2S_0_CTL,
 			0x3c, tx_fs_rate << 2);
@@ -7620,7 +7647,7 @@ static int tavil_hw_params(struct snd_pcm_substream *substream,
 
 		snd_soc_update_bits(codec,
 			WCD934X_DATA_HUB_I2S_TX0_CFG,
-			0x0C, 0x01);
+			0x0C, 0x04);
 
 		snd_soc_update_bits(codec,
 			WCD934X_DATA_HUB_I2S_TX1_0_CFG,
@@ -8191,7 +8218,7 @@ static const struct tavil_reg_mask_val tavil_codec_reg_i2c_defaults[] = {
 	{WCD934X_DATA_HUB_RX2_CFG, 0x03, 0x01},
 	{WCD934X_DATA_HUB_RX3_CFG, 0x03, 0x01},
 	{WCD934X_DATA_HUB_I2S_TX0_CFG, 0x01, 0x01},
-	{WCD934X_DATA_HUB_I2S_TX0_CFG, 0x04, 0x01},
+	{WCD934X_DATA_HUB_I2S_TX0_CFG, 0x04, 0x04},
 	{WCD934X_DATA_HUB_I2S_TX1_0_CFG, 0x01, 0x01},
 	{WCD934X_DATA_HUB_I2S_TX1_1_CFG, 0x05, 0x05},
 	{WCD934X_CHIP_TIER_CTRL_ALT_FUNC_EN, 0x1, 0x1},
