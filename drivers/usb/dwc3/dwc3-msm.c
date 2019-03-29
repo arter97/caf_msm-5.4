@@ -1628,6 +1628,11 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 		device_bus_suspend = true;
 
 	if (device_bus_suspend) {
+		/* bail out if resume interrupt has been seen */
+		if (!dwc->b_suspend) {
+			dev_err(mdwc->dev, "%s: Resumed, bail-out\n", __func__);
+			return -EBUSY;
+		}
 		/* pending device events unprocessed */
 		for (i = 0; i < dwc->num_event_buffers; i++) {
 			struct dwc3_event_buffer *evt = dwc->ev_buffs[i];
