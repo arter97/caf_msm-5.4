@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015, 2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,6 +11,8 @@
  * GNU General Public License for more details.
  *
  */
+#include <linux/kernel.h>
+#include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/ioctl.h>
 #include <linux/bitops.h>
@@ -171,14 +173,17 @@ int wcd_cal_create_hwdep(void *data, int node, struct snd_soc_codec *codec)
 	}
 
 	fw = fw_data->fw;
-	snprintf(hwname, strlen("Codec %s"), "Codec %s", codec->name);
-	err = snd_hwdep_new(codec->card->snd_card, hwname, node, &hwdep);
+	snprintf(hwname, strlen("Codec %s"), "Codec %s",
+		 codec->component.name);
+	err = snd_hwdep_new(codec->component.card->snd_card,
+			    hwname, node, &hwdep);
 	if (err < 0) {
 		dev_err(codec->dev, "%s: new hwdep failed %d\n",
 				__func__, err);
 		return err;
 	}
-	snprintf(hwdep->name, strlen("Codec %s"), "Codec %s", codec->name);
+	snprintf(hwdep->name, strlen("Codec %s"), "Codec %s",
+		 codec->component.name);
 	hwdep->iface = SNDRV_HWDEP_IFACE_AUDIO_CODEC;
 	hwdep->private_data = fw_data;
 	hwdep->ops.ioctl_compat = wcdcal_hwdep_ioctl_compat;

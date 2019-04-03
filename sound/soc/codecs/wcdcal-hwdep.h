@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014, 2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -34,7 +34,11 @@ struct firmware_cal {
 };
 
 struct snd_soc_codec;
-int wcd_cal_create_hwdep(void *fw, int node, struct snd_soc_codec *codec);
+static inline int wcd_cal_create_hwdep(void *fw, int node,
+			struct snd_soc_codec *codec)
+{
+	return 0;
+}
 struct firmware_cal *wcdcal_get_fw_cal(struct fw_info *fw_data,
 					enum wcd_cal_type type);
 #endif /* __WCD9XXX_HWDEP_H__ */

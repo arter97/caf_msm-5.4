@@ -1,4 +1,4 @@
-/* Copyright (c) 2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015, 2017 2019 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,6 +15,7 @@
 
 #define SWRM_BASE_ADDRESS				0x00
 
+#define SWRM_COMP_HW_VERSION                     SWRM_BASE_ADDRESS
 #define SWRM_COMP_CFG_ADDR			(SWRM_BASE_ADDRESS+0x00000004)
 #define SWRM_COMP_CFG_RMSK				0x3
 #define SWRM_COMP_CFG_IRQ_LEVEL_OR_PULSE_BMSK		0x2
@@ -136,8 +137,12 @@
 #define SWRM_ENUMERATOR_SLAVE_DEV_ID_2(m)   (SWRM_BASE_ADDRESS+0x534+0x8*m)
 
 #define SWRM_MCP_FRAME_CTRL_BANK_ADDR(m)    (SWRM_BASE_ADDRESS+0x101C+0x40*m)
-#define SWRM_MCP_FRAME_CTRL_BANK_RMSK			0x000007ff
+#define SWRM_MCP_FRAME_CTRL_BANK_RMSK			0x00ff07ff
 #define SWRM_MCP_FRAME_CTRL_BANK_SHFT			0
+#define SWRM_MCP_FRAME_CTRL_BANK_SSP_PERIOD_BMSK	0xff0000
+#define SWRM_MCP_FRAME_CTRL_BANK_SSP_PERIOD_SHFT	16
+#define SWRM_MCP_FRAME_CTRL_BANK_PHASE_BMSK		0xf800
+#define SWRM_MCP_FRAME_CTRL_BANK_PHASE_SHFT		11
 #define SWRM_MCP_FRAME_CTRL_BANK_CLK_DIV_VALUE_BMSK	0x700
 #define SWRM_MCP_FRAME_CTRL_BANK_CLK_DIV_VALUE_SHFT	8
 #define SWRM_MCP_FRAME_CTRL_BANK_ROW_CTRL_BMSK		0xF8

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017, 2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,7 +13,7 @@
 #ifndef __WCD9XXX_COMMON_V2_H__
 #define __WCD9XXX_COMMON_V2_H__
 
-#include <linux/mfd/wcd9xxx/core-resource.h>
+#include <linux/mfd/wcd9xxx/core.h>
 #include <linux/mfd/wcd9xxx/wcd9xxx_registers.h>
 
 enum wcd_clock_type {
@@ -42,12 +42,11 @@ struct wcd9xxx_resmgr_v2 {
 	struct mutex codec_bg_clk_lock;
 	struct mutex master_bias_lock;
 
+	enum codec_variant codec_type;
 	enum wcd_clock_type clk_type;
 
 	const struct wcd_resmgr_cb *resmgr_cb;
 	int sido_input_src;
-
-	u8 intf_type;
 };
 
 #define WCD9XXX_V2_BG_CLK_LOCK(resmgr)			\
@@ -75,8 +74,7 @@ int wcd_resmgr_enable_master_bias(struct wcd9xxx_resmgr_v2 *resmgr);
 int wcd_resmgr_disable_master_bias(struct wcd9xxx_resmgr_v2 *resmgr);
 struct wcd9xxx_resmgr_v2 *wcd_resmgr_init(
 		struct wcd9xxx_core_resource *core_res,
-		struct snd_soc_codec *codec,
-		u8 intf_type);
+		struct snd_soc_codec *codec);
 void wcd_resmgr_remove(struct wcd9xxx_resmgr_v2 *resmgr);
 int wcd_resmgr_post_init(struct wcd9xxx_resmgr_v2 *resmgr,
 			 const struct wcd_resmgr_cb *resmgr_cb,
@@ -87,4 +85,9 @@ int wcd_resmgr_disable_clk_block(struct wcd9xxx_resmgr_v2 *resmgr,
 				enum wcd_clock_type type);
 int wcd_resmgr_get_clk_type(struct wcd9xxx_resmgr_v2 *resmgr);
 void wcd_resmgr_post_ssr_v2(struct wcd9xxx_resmgr_v2 *resmgr);
+void wcd_resmgr_set_sido_input_src_locked(struct wcd9xxx_resmgr_v2 *resmgr,
+					  int sido_src);
+void wcd_resmgr_set_sido_input_src(struct wcd9xxx_resmgr_v2 *resmgr,
+					  int sido_src);
+
 #endif

@@ -18,6 +18,7 @@
 #include <linux/wait.h>
 #include <linux/sched.h>
 #include <linux/mfd/wcd9xxx/core-resource.h>
+#include <linux/mfd/wcd9xxx/core.h>
 
 
 static enum wcd9xxx_intf_status wcd9xxx_intf = -1;
@@ -49,14 +50,16 @@ int wcd9xxx_initialize_irq(
 }
 EXPORT_SYMBOL(wcd9xxx_initialize_irq);
 
+
+#ifndef CONFIG_SND_SOC_WCD934X
 int wcd9xxx_core_res_init(
 	struct wcd9xxx_core_resource *wcd9xxx_core_res,
 	int num_irqs, int num_irq_regs,
 	int (*codec_read)(struct wcd9xxx_core_resource*, unsigned short),
 	int (*codec_write)(struct wcd9xxx_core_resource*, unsigned short, u8),
-	int (*codec_bulk_read) (struct wcd9xxx_core_resource*, unsigned short,
+	int (*codec_bulk_read)(struct wcd9xxx_core_resource*, unsigned short,
 							int, u8*),
-	int (*codec_bulk_write) (struct wcd9xxx_core_resource*, unsigned short,
+	int (*codec_bulk_write)(struct wcd9xxx_core_resource*, unsigned short,
 							int, u8*))
 {
 	mutex_init(&wcd9xxx_core_res->pm_lock);
@@ -81,14 +84,17 @@ int wcd9xxx_core_res_init(
 	return 0;
 }
 EXPORT_SYMBOL(wcd9xxx_core_res_init);
+#endif
 
 void wcd9xxx_core_res_deinit(struct wcd9xxx_core_resource *wcd9xxx_core_res)
 {
 	pm_qos_remove_request(&wcd9xxx_core_res->pm_qos_req);
 	mutex_destroy(&wcd9xxx_core_res->pm_lock);
+#ifndef CONFIG_SND_SOC_WCD934X
 	wcd9xxx_core_res->codec_reg_read = NULL;
 	wcd9xxx_core_res->codec_reg_write = NULL;
 	wcd9xxx_core_res->codec_bulk_read = NULL;
+#endif
 }
 EXPORT_SYMBOL(wcd9xxx_core_res_deinit);
 

@@ -16,6 +16,7 @@
 #include <linux/types.h>
 #include <linux/interrupt.h>
 #include <linux/pm_qos.h>
+#include <sound/soc.h>
 
 #define WCD9XXX_MAX_IRQ_REGS 4
 #define WCD9XXX_MAX_NUM_IRQS (WCD9XXX_MAX_IRQ_REGS * 8)
@@ -69,7 +70,9 @@ struct wcd9xxx_core_resource {
 	int num_irqs;
 	int num_irq_regs;
 	u16 intr_reg[WCD9XXX_INTR_REG_MAX];
-
+#ifdef CONFIG_SND_SOC_WCD934X
+	struct regmap *wcd_core_regmap;
+#else
 	/* Callback functions to read/write codec registers */
 	int (*codec_reg_read) (struct wcd9xxx_core_resource *,
 				unsigned short);
@@ -79,13 +82,19 @@ struct wcd9xxx_core_resource {
 				unsigned short, int, u8 *);
 	int (*codec_bulk_write) (struct wcd9xxx_core_resource *,
 				unsigned short, int, u8 *);
-
+#endif
 	/* Pointer to parent container data structure */
 	void *parent;
 
 	struct device *dev;
+	struct irq_domain *domain;
 };
 
+#ifdef CONFIG_SND_SOC_WCD934X
+extern int wcd9xxx_core_res_init(
+	struct wcd9xxx_core_resource*,
+	int, int, struct regmap *);
+#else
 extern int wcd9xxx_core_res_init(
 	struct wcd9xxx_core_resource*,
 	int, int,
@@ -95,6 +104,7 @@ extern int wcd9xxx_core_res_init(
 							int, u8 *),
 	int (*codec_bulk_write) (struct wcd9xxx_core_resource *, unsigned short,
 							int, u8 *));
+#endif
 
 extern void wcd9xxx_core_res_deinit(
 	struct wcd9xxx_core_resource *);
@@ -133,10 +143,17 @@ void wcd9xxx_free_irq(struct wcd9xxx_core_resource *, int, void*);
 void wcd9xxx_enable_irq(struct wcd9xxx_core_resource *, int);
 void wcd9xxx_disable_irq(struct wcd9xxx_core_resource *, int);
 void wcd9xxx_disable_irq_sync(struct wcd9xxx_core_resource *, int);
+#ifdef CONFIG_SND_SOC_WCD934X
+int wcd9xxx_reg_read(struct snd_soc_codec *codec,
+	unsigned short reg);
+int wcd9xxx_reg_write(struct snd_soc_codec *codec,
+	unsigned short reg, u8 val);
+#else
 int wcd9xxx_reg_read(struct wcd9xxx_core_resource *,
 					 unsigned short);
 int wcd9xxx_reg_write(struct wcd9xxx_core_resource *,
 					  unsigned short, u8);
+#endif
 int wcd9xxx_bulk_read(struct wcd9xxx_core_resource *,
 					unsigned short, int, u8 *);
 int wcd9xxx_bulk_write(struct wcd9xxx_core_resource*,

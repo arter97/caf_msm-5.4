@@ -1,0 +1,6 @@
+config PINCTRL_WCD
+        tristate "Qualcomm Technologies, Inc WCD pin controller driver"
+        depends on WCD934X_CODEC
+        help
+        This is the pinctrl, pinmux, pinconf and gpiolib driver for the
+        WCD gpio controller block.

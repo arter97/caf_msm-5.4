@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, 2017, 2019 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -86,6 +86,13 @@
 #define BASE_CH_NUM 128
 
 
+#if defined(CONFIG_WCD9310_CODEC) || \
+	defined(CONFIG_WCD9304_CODEC) || \
+	defined(CONFIG_WCD9320_CODEC) || \
+	defined(CONFIG_WCD9330_CODEC) || \
+	defined(CONFIG_WCD9306_CODEC) || \
+	defined(CONFIG_WCD9335_CODEC) || \
+	defined(CONFIG_SND_SOC_MSM8X16_WCD)
 int wcd9xxx_init_slimslave(struct wcd9xxx *wcd9xxx,
 			   u8 wcd9xxx_pgd_la,
 			   unsigned int tx_num, unsigned int *tx_slot,
@@ -116,4 +123,78 @@ int wcd9xxx_rx_vport_validation(u32 port_id,
 int wcd9xxx_tx_vport_validation(u32 vtable, u32 port_id,
 				struct wcd9xxx_codec_dai_data *codec_dai,
 				u32 num_codec_dais);
+#else
+
+static inline int wcd9xxx_init_slimslave(struct wcd9xxx *wcd9xxx,
+			u8 wcd9xxx_pgd_la,
+			unsigned int tx_num, unsigned int *tx_slot,
+			unsigned int rx_num, unsigned int *rx_slot)
+{
+	return 0;
+}
+
+static inline int wcd9xxx_deinit_slimslave(struct wcd9xxx *wcd9xxx)
+{
+	return 0;
+}
+
+static inline int wcd9xxx_cfg_slim_sch_rx(struct wcd9xxx *wcd9xxx,
+			struct list_head *wcd9xxx_ch_list,
+			unsigned int rate, unsigned int bit_width,
+			u16 *grph)
+{
+	return 0;
+}
+
+static inline int wcd9xxx_cfg_slim_sch_tx(struct wcd9xxx *wcd9xxx,
+			struct list_head *wcd9xxx_ch_list,
+			unsigned int rate, unsigned int bit_width,
+			u16 *grph)
+{
+	return 0;
+}
+
+static inline int wcd9xxx_close_slim_sch_rx(struct wcd9xxx *wcd9xxx,
+			struct list_head *wcd9xxx_ch_list, u16 grph)
+{
+	return 0;
+}
+
+static inline int wcd9xxx_close_slim_sch_tx(struct wcd9xxx *wcd9xxx,
+			struct list_head *wcd9xxx_ch_list, u16 grph)
+{
+	return 0;
+}
+
+static inline int wcd9xxx_get_channel(struct wcd9xxx *wcd9xxx,
+	unsigned int *rx_ch, unsigned int *tx_ch)
+{
+	return 0;
+}
+
+static inline int wcd9xxx_get_slave_port(unsigned int ch_num)
+{
+	return 0;
+}
+
+static inline int wcd9xxx_disconnect_port(struct wcd9xxx *wcd9xxx,
+			struct list_head *wcd9xxx_ch_list, u16 grph)
+{
+	return 0;
+}
+
+static inline int wcd9xxx_rx_vport_validation(u32 port_id,
+			struct list_head *codec_dai_list)
+{
+	return 0;
+}
+
+static inline int wcd9xxx_tx_vport_validation(u32 vtable, u32 port_id,
+			struct wcd9xxx_codec_dai_data *codec_dai,
+			u32 num_codec_dais)
+{
+	return 0;
+}
+#endif
+
 #endif /* __WCD9310_SLIMSLAVE_H_ */

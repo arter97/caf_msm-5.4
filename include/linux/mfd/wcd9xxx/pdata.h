@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2017,2019 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,11 +10,11 @@
  * GNU General Public License for more details.
  */
 
-#ifndef __MFD_TABLA_PDATA_H__
+#ifndef __MFD_WCD9XXX_PDATA_H__
 
-#define __MFD_TABLA_PDATA_H__
+#define __MFD_WCD9XXX_PDATA_H__
 
-#include <linux/slimbus/slimbus.h>
+#include <linux/mfd/msm-cdc-supply.h>
 
 #define MICBIAS_EXT_BYP_CAP 0x00
 #define MICBIAS_NO_EXT_BYP_CAP 0x01
@@ -86,6 +86,8 @@
 #define WCD9XXX_DMIC_SAMPLE_RATE_6P144MHZ 6144000
 
 #define WCD9XXX_DMIC_SAMPLE_RATE_UNDEFINED 0
+
+#define WCD9XXX_DMIC_CLK_DRIVE_UNDEFINED 0
 
 struct wcd9xxx_amic {
 	/*legacy mode, txfe_enable and txfe_buff take 7 input
@@ -176,15 +178,17 @@ struct wcd9xxx_pdata {
 	int irq_base;
 	int num_irqs;
 	int reset_gpio;
+	struct device_node *wcd_rst_np;
 	struct wcd9xxx_amic amic_settings;
-	struct slim_device slimbus_slave_device;
 	struct wcd9xxx_micbias_setting micbias;
 	struct wcd9xxx_ocp_setting ocp;
-	struct wcd9xxx_regulator regulator[WCD9XXX_MAX_REGULATOR];
+	struct cdc_regulator *regulator;
+	int num_supplies;
 	u32 mclk_rate;
 	u32 dmic_sample_rate;
 	u32 mad_dmic_sample_rate;
-	enum codec_variant cdc_variant;
+	u32 ecpp_dmic_sample_rate;
+	u32 dmic_clk_drv;
 	u16 use_pinctrl;
 };
 

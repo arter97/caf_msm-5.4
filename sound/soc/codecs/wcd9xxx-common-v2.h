@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2017, 2019,  The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -34,7 +34,12 @@
 #define	WCD_CLSH_STATE_HPHL (0x01 << 1)
 #define	WCD_CLSH_STATE_HPHR (0x01 << 2)
 #define	WCD_CLSH_STATE_LO (0x01 << 3)
-#define WCD_CLSH_STATE_MAX 4
+
+/*
+ * Though number of CLSH states are 4, max state shoulbe be 5
+ * because state array index starts from 1.
+ */
+#define WCD_CLSH_STATE_MAX 5
 #define NUM_CLSH_STATES_V2 (0x01 << WCD_CLSH_STATE_MAX)
 
 
@@ -61,8 +66,10 @@ enum {
 	CLS_H_NORMAL = 0, /* Class-H Default */
 	CLS_H_HIFI, /* Class-H HiFi */
 	CLS_H_LP, /* Class-H Low Power */
-	CLS_AB, /* Class-AB */
+	CLS_AB, /* Class-AB Low HIFI*/
 	CLS_H_LOHIFI, /* LoHIFI */
+	CLS_H_ULP, /* Ultra Low power */
+	CLS_AB_HIFI, /* Class-AB */
 	CLS_NONE, /* None of the above modes */
 };
 
@@ -136,6 +143,12 @@ struct vbat_monitor_reg {
 	u32 writes[MAX_VBAT_MONITOR_WRITES];
 } __packed;
 
+struct wcd_reg_mask_val {
+	u16	reg;
+	u8	mask;
+	u8	val;
+};
+
 extern void wcd_clsh_fsm(struct snd_soc_codec *codec,
 		struct wcd_clsh_cdc_data *cdc_clsh_d,
 		u8 clsh_event, u8 req_state,
@@ -143,6 +156,8 @@ extern void wcd_clsh_fsm(struct snd_soc_codec *codec,
 
 extern void wcd_clsh_init(struct wcd_clsh_cdc_data *clsh);
 extern int wcd_clsh_get_clsh_state(struct wcd_clsh_cdc_data *clsh);
+extern void wcd_clsh_imped_config(struct snd_soc_codec *codec, int imped,
+		bool reset);
 
 enum {
 	RESERVED = 0,
