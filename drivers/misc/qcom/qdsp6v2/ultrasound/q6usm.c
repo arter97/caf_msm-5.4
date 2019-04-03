@@ -649,6 +649,7 @@ static int32_t q6usm_callback(struct apr_client_data *data, void *priv)
 					       dsp_flags);
 			return -EINVAL;
 		}
+
 		if (payload[READDONE_IDX_STATUS]) {
 			pr_err("%s: wrong READDONE[%d]; token[%d]\n",
 			       __func__,
