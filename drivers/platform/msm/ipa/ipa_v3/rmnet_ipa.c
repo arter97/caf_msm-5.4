@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2895,6 +2895,9 @@ static int __init ipa3_wwan_init(void)
 
 	mutex_init(&rmnet_ipa3_ctx->ipa_to_apps_pipe_handle_guard);
 	rmnet_ipa3_ctx->ipa3_to_apps_hdl = -1;
+
+	ipa3_qmi_init();
+
 	/* Register for Modem SSR */
 	rmnet_ipa3_ctx->subsys_notify_handle = subsys_notif_register_notifier(
 			SUBSYS_MODEM,
@@ -2908,6 +2911,7 @@ static int __init ipa3_wwan_init(void)
 static void __exit ipa3_wwan_cleanup(void)
 {
 	int ret;
+	ipa3_qmi_cleanup();
 	mutex_destroy(&rmnet_ipa3_ctx->ipa_to_apps_pipe_handle_guard);
 	ret = subsys_notif_unregister_notifier(
 		rmnet_ipa3_ctx->subsys_notify_handle, &ipa3_ssr_notifier);
