@@ -1050,8 +1050,9 @@ static void *wdsp_mgr_parse_phandle(struct wdsp_mgr_priv *wdsp,
 	/*ret = of_parse_phandle_with_fixed_args(mdev->of_node,
 					      "qcom,wdsp-components", 1,
 					      index, &pargs);*/
-	ret = of_parse_phandle_with_args(mdev->of_node,
-					      "qcom,wdsp-components", NULL,
+ret = of_parse_phandle_with_args(mdev->of_node,
+					      "qcom,wdsp-components",
+					      "#list-cell",
 					      index, &pargs);
 	if (ret) {
 		WDSP_ERR(wdsp, "parse_phandle at index %d failed %d",
@@ -1098,14 +1099,14 @@ static int wdsp_mgr_parse_dt_entries(struct wdsp_mgr_priv *wdsp)
 
 	ret = of_count_phandle_with_args(dev->of_node,
 					 "qcom,wdsp-components",
-					 NULL);
+					 "#list-cell");
 	if (ret == -ENOENT) {
 		WDSP_ERR(wdsp, "Property %s not defined in DT",
 			 "qcom,wdsp-components");
 		goto done;
-	} else if (ret != WDSP_CMPNT_TYPE_MAX * 2) {
+	} else if (ret != WDSP_CMPNT_TYPE_MAX) {
 		WDSP_ERR(wdsp, "Invalid phandle + arg count %d, expected %d",
-			 ret, WDSP_CMPNT_TYPE_MAX * 2);
+			 ret, WDSP_CMPNT_TYPE_MAX);
 		ret = -EINVAL;
 		goto done;
 	}
