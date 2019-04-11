@@ -1546,27 +1546,32 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 		case ASM_DATA_CMD_REMOVE_TRAILING_SILENCE:
 		case ASM_SESSION_CMD_REGISTER_FOR_RX_UNDERFLOW_EVENTS:
 		case ASM_STREAM_CMD_OPEN_WRITE_COMPRESSED:
-			pr_debug("%s: session %d opcode 0x%x token 0x%x Payload = [0x%x] stat 0x%x src %d dest %d\n",
-				__func__, ac->session,
-				data->opcode, data->token,
-				payload[0], payload[1],
-				data->src_port, data->dest_port);
-			if (payload[1] != 0) {
-				pr_err("%s: cmd = 0x%x returned error = 0x%x\n",
-					__func__, payload[0], payload[1]);
-				if (wakeup_flag) {
-					atomic_set(&ac->cmd_state, -payload[1]);
+			if (data->payload_size >= 2 * sizeof(uint32_t)) {
+				pr_debug("%s: session %d opcode 0x%x token 0x%x Payload = [0x%x] stat 0x%x src %d dest %d\n",
+					__func__, ac->session,
+					data->opcode, data->token,
+					payload[0], payload[1],
+					data->src_port, data->dest_port);
+				if (payload[1] != 0) {
+					pr_err("%s: cmd = 0x%x returned error = 0x%x\n",
+						__func__, payload[0], payload[1]);
+					if (wakeup_flag) {
+						atomic_set(&ac->cmd_state, -payload[1]);
+						wake_up(&ac->cmd_wait);
+					}
+					return 0;
+				}
+				if (atomic_read(&ac->cmd_state) && wakeup_flag) {
+					atomic_set(&ac->cmd_state, 0);
 					wake_up(&ac->cmd_wait);
 				}
-				return 0;
+				if (ac->cb)
+					ac->cb(data->opcode, data->token,
+						(uint32_t *)data->payload, ac->priv);
+			} else {
+				pr_err("%s: payload size of %x is less than expected.\n",
+					__func__, data->payload_size);
 			}
-			if (atomic_read(&ac->cmd_state) && wakeup_flag) {
-				atomic_set(&ac->cmd_state, 0);
-				wake_up(&ac->cmd_wait);
-			}
-			if (ac->cb)
-				ac->cb(data->opcode, data->token,
-					(uint32_t *)data->payload, ac->priv);
 			break;
 		case ASM_CMD_ADD_TOPOLOGIES:
 			if (data->payload_size >=
@@ -1637,10 +1642,10 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 				return -EINVAL;
 			}
 			spin_lock_irqsave(&port->dsp_lock, dsp_flags);
-			if (lower_32_bits(port->buf[data->token].phys) !=
+			if (data->payload_size >=2 && (lower_32_bits(port->buf[data->token].phys) !=
 			payload[0] ||
 			upper_32_bits(port->buf[data->token].phys) !=
-			payload[1]) {
+			payload[1])) {
 				pr_debug("%s: Expected addr %pa\n",
 				__func__, &port->buf[data->token].phys);
 				pr_err("%s: rxedl[0x%x] rxedu [0x%x]\n",
@@ -1673,18 +1678,34 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 		} else if (generic_get_data) {
 			generic_get_data->valid = 1;
 			if (generic_get_data->is_inband) {
-				pr_debug("%s: payload[1] = 0x%x, payload[2]=0x%x, payload[3]=0x%x\n",
-				  __func__, payload[1], payload[2], payload[3]);
-				generic_get_data->size_in_ints = payload[3]>>2;
-				for (i = 0; i < payload[3]>>2; i++) {
-					generic_get_data->ints[i] =
-								   payload[4+i];
-					pr_debug("%s: ASM callback val %i = %i\n",
-						 __func__, i, payload[4+i]);
+				if (data->payload_size >= 4 * sizeof(uint32_t)) {
+					dev_vdbg(ac->dev, "%s: Rxed opcode[0x%x] status[0x%x] token[%d]",
+						__func__,
+						payload[0],
+						payload[1],
+						data->token);
+					pr_debug("%s: payload[1] = 0x%x, payload[2]=0x%x, payload[3]=0x%x\n",
+						__func__, payload[1],
+						payload[2], payload[3]);
+					if (data->payload_size >=
+						(4 + (payload[3]>>2))
+						* sizeof(uint32_t)) {
+						generic_get_data->size_in_ints =
+							payload[3]>>2;
+						for (i = 0; i < payload[3]>>2; i++) {
+							generic_get_data->ints[i] =
+								payload[4+i];
+							pr_debug("%s: ASM callback val %i = %i\n",
+							 __func__, i, payload[4+i]);
+						}
+					}
+					pr_debug("%s: callback size in ints = %i\n",
+						 __func__,
+						generic_get_data->size_in_ints);
+				} else {
+					dev_err(ac->dev, "%s: payload size of %x is less than expected.\n",
+					__func__, data->payload_size);
 				}
-				pr_debug("%s: callback size in ints = %i\n",
-					 __func__,
-					generic_get_data->size_in_ints);
 			}
 			if (atomic_read(&ac->cmd_state) && wakeup_flag) {
 				atomic_set(&ac->cmd_state, 0);
