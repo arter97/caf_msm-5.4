@@ -340,6 +340,10 @@
 		qcom,lpi-gpios;
 	};
 
+       wcd-dsp-glink {
+                compatible = "qcom,wcd-dsp-glink";
+        };
+
         i2c_1: i2c@78b5000 { /* BLSP1 QUP1 */
                 compatible = "qcom,i2c-msm-v2";
                 #address-cells = <1>;
