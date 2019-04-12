@@ -1624,6 +1624,10 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 		return 0;
 	}
 
+	/* Disable core irq */
+	if (dwc->irq)
+		disable_irq(dwc->irq);
+
 	if (mdwc->otg_xceiv && mdwc->otg_xceiv->state == OTG_STATE_B_SUSPEND)
 		device_bus_suspend = true;
 
@@ -1631,6 +1635,8 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 		/* bail out if resume interrupt has been seen */
 		if (!dwc->b_suspend) {
 			dev_err(mdwc->dev, "%s: Resumed, bail-out\n", __func__);
+			if (dwc->irq)
+				enable_irq(dwc->irq);
 			return -EBUSY;
 		}
 		/* pending device events unprocessed */
@@ -1641,6 +1647,8 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 					__func__, evt->count / 4);
 				dbg_print_reg("PENDING DEVICE EVENT",
 						*(u32 *)(evt->buf + evt->lpos));
+				if (dwc->irq)
+					enable_irq(dwc->irq);
 				return -EBUSY;
 			}
 		}
@@ -1648,6 +1656,8 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 		if (!msm_bam_usb_lpm_ok(DWC3_CTRL)) {
 			dev_dbg(mdwc->dev, "%s: IPA handshake not finished, will suspend when done\n",
 					__func__);
+			if (dwc->irq)
+				enable_irq(dwc->irq);
 			return -EBUSY;
 		}
 	}
@@ -1666,6 +1676,8 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 		dev_dbg(mdwc->dev,
 			"%s: cable disconnected while not in idle otg state\n",
 			__func__);
+		if (dwc->irq)
+			enable_irq(dwc->irq);
 		return -EBUSY;
 	}
 
@@ -1708,17 +1720,18 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 			pr_err("%s(): Trying to go in LPM with state:%d\n",
 						__func__, dwc->gadget.state);
 			pr_err("%s(): LPM is not performed.\n", __func__);
+			if (dwc->irq)
+				enable_irq(dwc->irq);
 			return -EBUSY;
 		}
 	}
 
 	ret = dwc3_msm_prepare_suspend(mdwc);
-	if (ret)
+	if (ret) {
+		if (dwc->irq)
+			enable_irq(dwc->irq);
 		return ret;
-
-	/* Disable core irq */
-	if (dwc->irq)
-		disable_irq(dwc->irq);
+	}
 
 	if (!dcp && !host_bus_suspend)
 		dwc3_msm_write_reg(mdwc->base, QSCRATCH_CTRL_REG,
