@@ -24,6 +24,14 @@
 #include "mdss_panel.h"
 #include "mdss_spi_panel.h"
 #include "mdss_spi_client.h"
+
+
+#define GPIO_BG_LED     903
+#define BACK_LIGHT_GPIO  972
+
+volatile unsigned char te_detect_flag = 0;
+
+
 #include "mdp3.h"
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
@@ -188,6 +196,7 @@ static int mdss_spi_panel_power_on(struct mdss_panel_data *pdata)
 					__func__, ret);
 	}
 
+        gpio_set_value(GPIO_BG_LED, 1);
 	return ret;
 }
 
@@ -223,6 +232,7 @@ static int mdss_spi_panel_power_off(struct mdss_panel_data *pdata)
 				__func__, "PANEL_PM");
 	}
 
+        gpio_set_value(GPIO_BG_LED, 0);
 end:
 	return ret;
 }
@@ -1158,6 +1168,86 @@ static void mdss_spi_panel_bklt_pwm(struct spi_panel_data *ctrl, int level)
 	}
 }
 
+static void mdss_spi_panel_bklt_pulse_count(struct spi_panel_data *ctrl, int level)
+{
+        static volatile int LedCurrPulseCount = 1;
+        int i;
+        int count = 0;
+        int to_count = 0;
+        static int BacklightOn = 1;
+
+        if(level < 0 || level > 16)
+        {
+                pr_err("%s: Invalid bl level\n", __func__);
+                return;
+        }       
+
+        if (level == 0) 
+        {
+                if(BacklightOn)
+                {
+                        gpio_set_value(BACK_LIGHT_GPIO, 0);
+                        mdelay(5);
+                }
+                BacklightOn = 0;
+                LedCurrPulseCount = 0;
+                return;
+        }       
+
+        /*level=1,min_bright,to_count=16; level=16,max_bright,to_count=1*/
+        to_count = 16 - level + 1;
+
+        if(1 == BacklightOn)
+        {
+                if(LedCurrPulseCount > to_count)
+                {
+                        count = to_count + 16 - LedCurrPulseCount;
+                }
+                else if(LedCurrPulseCount < to_count)
+                {
+                        count = to_count - LedCurrPulseCount;
+                }
+                else
+                {
+                        count = 0;
+                }
+        }
+        else
+        {
+                count = to_count;
+        }
+
+        if(1 == BacklightOn)
+        {
+                for(i = 0; i < count; i++)
+                {
+                        gpio_set_value(BACK_LIGHT_GPIO, 0);
+                        udelay(2);
+                        gpio_set_value(BACK_LIGHT_GPIO, 1);
+                        udelay(2);
+                }       
+        }
+        else 
+        {
+                gpio_set_value(BACK_LIGHT_GPIO, 1);
+                udelay(40);
+                for(i = 1; i < count; i++)
+                {
+                        gpio_set_value(BACK_LIGHT_GPIO, 0);
+                        udelay(2);
+                        gpio_set_value(BACK_LIGHT_GPIO, 1);
+                        udelay(2);                      
+                }
+        }
+
+        LedCurrPulseCount = to_count;
+
+        if(0 == BacklightOn)
+        {
+                BacklightOn = 1;
+        }
+}
+
 static void mdss_spi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 							u32 bl_level)
 {
@@ -1192,6 +1282,7 @@ void mdss_spi_panel_bl_ctrl_update(struct mdss_panel_data *pdata,
 		break;
 	case SPI_BL_PWM:
 		mdss_spi_panel_bklt_pwm(ctrl_pdata, bl_level);
+                mdss_spi_panel_bklt_pulse_count(ctrl_pdata, bl_level);
 		break;
 	default:
 		pr_err("%s: Unknown bl_ctrl configuration %d\n",
@@ -1665,6 +1756,10 @@ static int mdss_spi_panel_probe(struct platform_device *pdev)
 		return rc;
 	}
 
+        gpio_direction_output(GPIO_BG_LED, 0);
+        rc = gpio_request(BACK_LIGHT_GPIO,"backlight_gpio");
+        rc = gpio_direction_output(BACK_LIGHT_GPIO,1);
+        gpio_set_value(BACK_LIGHT_GPIO,1);
 	pr_debug("%s: spi panel  initialized\n", __func__);
 	return 0;
 
