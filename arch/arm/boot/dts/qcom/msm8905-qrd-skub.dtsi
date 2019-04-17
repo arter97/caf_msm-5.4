@@ -340,7 +340,15 @@
 		qcom,lpi-gpios;
 	};
 
-       wcd-dsp-glink {
+        wdsp_mgr: qcom,wcd-dsp-mgr {
+		compatible = "qcom,wcd-dsp-mgr";
+		qcom,wdsp-components = <&wcd934x_cdc 0>,
+				       <&wcd_spi_0 1>,
+				       <&glink_spi_xprt_wdsp 2>;
+					qcom,img-filename = "cpe_9340";
+	};
+
+        wcd-dsp-glink {
                 compatible = "qcom,wcd-dsp-glink";
         };
 
@@ -370,6 +378,7 @@
 		wcd934x_cdc: tavil_codec@d {
 				#address-cells = <1>;
 				#size-cells = <0>;
+                                #list-cell = <1>;
 				compatible = "qcom,tavil-i2c-pgd";
 				reg = <0x0d>;
 				status = "ok";
@@ -474,13 +483,14 @@
 */
 				};
 
-				/*wcd_spi_0: wcd_spi {
+				wcd_spi_0: wcd_spi {
 					compatible = "qcom,wcd-spi-v2";
-					qcom,master-bus-num = <0>;
+                                        #list-cell = <1>;
+					qcom,master-bus-num = <4>;
 					qcom,chip-select = <0>;
 					qcom,max-frequency = <15000000>;
 					qcom,mem-base-addr = <0x100000>;
-				};*/
+				};
 			};
 	};
         spi@78b9000 { /* BLSP1 QUP5 */

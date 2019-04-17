@@ -133,6 +133,7 @@
 	glink_spi_xprt_wdsp: qcom,glink-spi-xprt-wdsp {
 		compatible = "qcom,glink-spi-xprt";
 		label = "wdsp";
+                #list-cell = <1>;
 		qcom,remote-fifo-config = <&glink_fifo_wdsp>;
 		qcom,qos-config = <&glink_qos_wdsp>;
 		qcom,ramp-time = <0x10>,
@@ -1227,7 +1228,6 @@
 		qcom,bam-consumer-pipe-index = <10>;
 		qcom,bam-producer-pipe-index = <11>;
 		qcom,master-id = <86>;
-		status = "disabled";
 	};
 
 	spi_5: spi@78b9000 { /* BLSP1 QUP5 */
@@ -1303,6 +1303,7 @@
 			<&dma_blsp1 11 32 0x20000020 0x20>;
 		dma-names = "tx", "rx";
 		qcom,master-id = <86>;
+		status = "disabled";
 	};
 
 	 i2c_5: i2c@78b9000 { /* BLSP1 QUP5 */
