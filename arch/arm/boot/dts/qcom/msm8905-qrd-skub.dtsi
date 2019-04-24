@@ -382,6 +382,11 @@
 				qcom,cdc-micbias3-mv = <1800>;
 				qcom,cdc-micbias4-mv = <1800>;
 
+				cdc-vdd-gpio-supply = <&pm8909_l15>;
+				qcom,cdc-vdd-gpio-voltage = <1800000 1800000>;
+				qcom,cdc-vdd-gpio-current = <650000>;
+				qcom,cdc-static-supplies = "cdc-vdd-gpio";
+
 				qcom,cdc-mclk-clk-rate = <9600000>;
 				qcom,cdc-dmic-sample-rate = <4800000>;
 				qcom,cdc-mad-dmic-rate = <600001>;

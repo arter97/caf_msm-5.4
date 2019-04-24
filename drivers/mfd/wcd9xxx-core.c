@@ -713,8 +713,6 @@ static int wcd9xxx_i2c_probe(struct i2c_client *client,
 			wcd9xxx->mclk_rate = pdata->mclk_rate;
 
 		wcd9xxx->num_of_supplies = pdata->num_supplies;
-		pdata->regulator = NULL;
-		pdata->num_supplies = 0;
 		if (wcd9xxx->num_of_supplies) {
 			ret = msm_cdc_init_supplies(wcd9xxx->dev,
 						&wcd9xxx->supplies,
