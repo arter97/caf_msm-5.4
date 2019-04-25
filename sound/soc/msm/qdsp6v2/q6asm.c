@@ -1808,9 +1808,8 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 					payload[0],
 					payload[1]);
 				if (wakeup_flag) {
-					if ((is_adsp_reg_event(payload[0]) >= 0)
-					|| (payload[0] ==
-					ASM_STREAM_CMD_SET_PP_PARAMS_V2))
+					if (payload[0] ==
+					ASM_STREAM_CMD_SET_PP_PARAMS_V2)
 						atomic_set(
 							&ac->cmd_state_pp,
 							payload[1]);
