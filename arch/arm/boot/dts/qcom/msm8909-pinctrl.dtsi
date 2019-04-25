@@ -243,11 +243,9 @@
 			qcom,pin-func = <2>;
 			label = "cdc-ext-tlmm-lines";
 			cdc_ext_tlmm_act: ext_tlmm_on {
-				bias-pull-up; /* pull up */
 				drive-strength = <8>;
 			};
 			cdc_ext_tlmm_sus: ext_tlmm_off {
-				bias-pull-down; /* pull down */
 				drive-strength = <2>;
 				bias-disable;
 			};
@@ -1005,42 +1003,6 @@
                                 bias-disable = <0>;
                         };
                 };
-
-		cdc_reset_sleep {
-                        qcom,pins = <&gp 65>;
-                        qcom,num-grp-pins = <1>;
-                        qcom,pin-func = <0>;
-                        label = "cdc_reset_sleep";
-                        cdc_reset_sleep: cdc_reset_sleep {
-                                drive-strength = <16>;
-                                bias-disable;
-				output-low;
-                        };
-		};
-
-		cdc_reset_active {
-                        qcom,pins = <&gp 65>;
-                        qcom,num-grp-pins = <1>;
-                        qcom,pin-func = <0>;
-                        label = "cdc_reset_active";
-                        cdc_reset_active: cdc_reset_active {
-                                drive-strength = <16>;
-                                bias-pull-down;
-                                output-high;
-                        };
-		};
-
-	        wcd_intr_default {
-			qcom,pins = <&gp 49>;
-                        qcom,num-grp-pins = <1>;
-                        qcom,pin-func = <0>;
-			label = "wcd_intr_default";
-			wcd_intr_default: wcd_intr_default {
-                                        drive-strength = <2>;
-                                        bias-pull-down;
-                                        input-enable;
-                                };
-		};
 
 		pmx_rd_ese_int {
 				qcom,pins = <&gp 35>;

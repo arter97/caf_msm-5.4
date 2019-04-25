@@ -133,7 +133,7 @@
 	glink_spi_xprt_wdsp: qcom,glink-spi-xprt-wdsp {
 		compatible = "qcom,glink-spi-xprt";
 		label = "wdsp";
-                #list-cell = <1>;
+		#list-cell = <1>;
 		qcom,remote-fifo-config = <&glink_fifo_wdsp>;
 		qcom,qos-config = <&glink_qos_wdsp>;
 		qcom,ramp-time = <0x10>,
