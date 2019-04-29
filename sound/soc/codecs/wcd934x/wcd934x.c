@@ -8865,6 +8865,13 @@ static int tavil_soc_codec_probe(struct snd_soc_codec *codec)
 		goto err_hwdep;
 	}
 
+	ret = wcd_cal_create_hwdep(tavil->fw_data,
+				   WCD9XXX_CODEC_HWDEP_NODE, codec);
+	if (IS_ERR_VALUE(ret)) {
+		dev_err(codec->dev, "%s hwdep failed %d\n", __func__, ret);
+		goto err_hwdep;
+	}
+
 	tavil->codec = codec;
 	for (i = 0; i < COMPANDER_MAX; i++)
 		tavil->comp_enabled[i] = 0;

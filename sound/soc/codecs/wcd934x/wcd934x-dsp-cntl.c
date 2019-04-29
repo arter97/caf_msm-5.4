@@ -1348,9 +1348,9 @@ void wcd_dsp_cntl_init(struct snd_soc_codec *codec,
 	 * so that we can access it during this component's bind call.
 	 */
 	*cntl = control;
-/*
+
 	ret = component_add(codec->dev, &wcd_ctrl_component_ops);
-*/
+
 	if (ret) {
 		dev_err(codec->dev, "%s: component_add failed, err = %d\n",
 			__func__, ret);
@@ -1385,10 +1385,10 @@ void wcd_dsp_cntl_deinit(struct wcd_dsp_cntl **cntl)
 	wcd_cntl_disable_memory(control, WCD_MEM_TYPE_SWITCHABLE);
 	wcd_cntl_disable_memory(control, WCD_MEM_TYPE_ALWAYS_ON);
 
-/*
+
 	component_del(codec->dev,
 		 &wcd_ctrl_component_ops);
-*/
+
 
 	mutex_destroy(&control->clk_mutex);
 	mutex_destroy(&control->ssr_mutex);
