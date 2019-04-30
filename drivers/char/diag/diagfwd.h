@@ -34,7 +34,7 @@ void process_lock_on_copy_complete(struct diag_nrt_wake_lock *lock);
 void diag_usb_legacy_notifier(void *, unsigned, struct diag_request *);
 long diagchar_ioctl(struct file *, unsigned int, unsigned long);
 int diag_device_write(void *, int, struct diag_request *);
-int mask_request_validate(unsigned char mask_buf[]);
+int mask_request_validate(unsigned char mask_buf[], int len);
 void diag_clear_reg(int);
 int chk_config_get_id(void);
 int chk_apps_only(void);
