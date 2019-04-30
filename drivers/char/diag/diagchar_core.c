@@ -1673,7 +1673,8 @@ static ssize_t diagchar_write(struct file *file, const char __user *buf,
 			return -EIO;
 		}
 		/* Check for proc_type */
-		remote_proc = diag_get_remote(*(int *)buf_copy);
+		if (payload_size >= sizeof(int))
+			remote_proc = diag_get_remote(*(int *)buf_copy);
 
 		if (remote_proc) {
 			token_offset = sizeof(int);
@@ -1688,7 +1689,7 @@ static ssize_t diagchar_write(struct file *file, const char __user *buf,
 		}
 		if (driver->mask_check) {
 			if (!mask_request_validate(buf_copy +
-							 token_offset)) {
+				token_offset, payload_size)) {
 				pr_alert("diag: mask request Invalid\n");
 				diagmem_free(driver, buf_copy, POOL_TYPE_COPY);
                                 buf_copy = NULL;
@@ -1734,7 +1735,8 @@ static ssize_t diagchar_write(struct file *file, const char __user *buf,
 			return -EIO;
 		}
 		/* Check for proc_type */
-		remote_proc =
+		if (payload_size >= sizeof(int))
+			remote_proc =
 			diag_get_remote(*(int *)driver->user_space_data_buf);
 
 		if (remote_proc) {
@@ -1751,7 +1753,7 @@ static ssize_t diagchar_write(struct file *file, const char __user *buf,
 		/* Check masks for On-Device logging */
 		if (driver->mask_check) {
 			if (!mask_request_validate(driver->user_space_data_buf +
-							 token_offset)) {
+					token_offset, payload_size)) {
 				pr_alert("diag: mask request Invalid\n");
 				return -EFAULT;
 			}
@@ -2152,15 +2154,19 @@ static int diag_real_time_info_init(void)
 	return 0;
 }
 
-int mask_request_validate(unsigned char mask_buf[])
+int mask_request_validate(unsigned char mask_buf[], int len)
 {
 	uint8_t packet_id;
 	uint8_t subsys_id;
 	uint16_t ss_cmd;
 
+	if (len <= 0)
+		return 0;
 	packet_id = mask_buf[0];
 
 	if (packet_id == DIAG_CMD_DIAG_SUBSYS_DELAY) {
+		if (len < 2*sizeof(uint8_t) + sizeof(uint16_t))
+			return 0;
 		subsys_id = mask_buf[1];
 		ss_cmd = *(uint16_t*)(mask_buf + 2);
 		switch (subsys_id) {
@@ -2178,6 +2184,8 @@ int mask_request_validate(unsigned char mask_buf[])
 		}
 	}
     	else if (packet_id == 0x4B) {
+		if (len < 2*sizeof(uint8_t) + sizeof(uint16_t))
+			return 0;
 		subsys_id = mask_buf[1];
 		ss_cmd = *(uint16_t *)(mask_buf + 2);
 		/* Packets with SSID which are allowed */
