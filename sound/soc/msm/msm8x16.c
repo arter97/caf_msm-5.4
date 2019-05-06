@@ -166,83 +166,6 @@ static void *def_tasha_mbhc_cal(void)
 }
 #endif
 
-void *def_tapan_mbhc_cal(void)
-{
-	void *tapan_cal;
-	struct wcd9xxx_mbhc_btn_detect_cfg *btn_cfg;
-	u16 *btn_low, *btn_high;
-	u8 *n_ready, *n_cic, *gain;
-
-	tapan_cal = kzalloc(WCD9XXX_MBHC_CAL_SIZE(WCD9XXX_MBHC_DEF_BUTTONS,
-						WCD9XXX_MBHC_DEF_RLOADS),
-			    GFP_KERNEL);
-	if (!tapan_cal) {
-		pr_err("%s: out of memory\n", __func__);
-		return NULL;
-	}
-
-#define S(X, Y) ((WCD9XXX_MBHC_CAL_GENERAL_PTR(tapan_cal)->X) = (Y))
-	S(t_ldoh, 100);
-	S(t_bg_fast_settle, 100);
-	S(t_shutdown_plug_rem, 255);
-	S(mbhc_nsa, 2);
-	S(mbhc_navg, 128);
-#undef S
-#define S(X, Y) ((WCD9XXX_MBHC_CAL_PLUG_DET_PTR(tapan_cal)->X) = (Y))
-	S(mic_current, TAPAN_PID_MIC_5_UA);
-	S(hph_current, TAPAN_PID_MIC_5_UA);
-	S(t_mic_pid, 100);
-	S(t_ins_complete, 250);
-	S(t_ins_retry, 200);
-#undef S
-#define S(X, Y) ((WCD9XXX_MBHC_CAL_PLUG_TYPE_PTR(tapan_cal)->X) = (Y))
-	S(v_no_mic, 30);
-	S(v_hs_max, 2450);
-#undef S
-#define S(X, Y) ((WCD9XXX_MBHC_CAL_BTN_DET_PTR(tapan_cal)->X) = (Y))
-	S(c[0], 62);
-	S(c[1], 124);
-	S(nc, 1);
-	S(n_meas, 5);
-	S(mbhc_nsc, 10);
-	S(n_btn_meas, 1);
-	S(n_btn_con, 2);
-	S(num_btn, WCD9XXX_MBHC_DEF_BUTTONS);
-	S(v_btn_press_delta_sta, 100);
-	S(v_btn_press_delta_cic, 50);
-#undef S
-	btn_cfg = WCD9XXX_MBHC_CAL_BTN_DET_PTR(tapan_cal);
-	btn_low = wcd9xxx_mbhc_cal_btn_det_mp(btn_cfg, MBHC_BTN_DET_V_BTN_LOW);
-	btn_high = wcd9xxx_mbhc_cal_btn_det_mp(btn_cfg,
-					       MBHC_BTN_DET_V_BTN_HIGH);
-	btn_low[0] = -50;
-	btn_high[0] = 20;
-	btn_low[1] = 21;
-	btn_high[1] = 61;
-	btn_low[2] = 62;
-	btn_high[2] = 104;
-	btn_low[3] = 105;
-	btn_high[3] = 148;
-	btn_low[4] = 149;
-	btn_high[4] = 189;
-	btn_low[5] = 190;
-	btn_high[5] = 228;
-	btn_low[6] = 229;
-	btn_high[6] = 269;
-	btn_low[7] = 270;
-	btn_high[7] = 500;
-	n_ready = wcd9xxx_mbhc_cal_btn_det_mp(btn_cfg, MBHC_BTN_DET_N_READY);
-	n_ready[0] = 80;
-	n_ready[1] = 12;
-	n_cic = wcd9xxx_mbhc_cal_btn_det_mp(btn_cfg, MBHC_BTN_DET_N_CIC);
-	n_cic[0] = 60;
-	n_cic[1] = 47;
-	gain = wcd9xxx_mbhc_cal_btn_det_mp(btn_cfg, MBHC_BTN_DET_GAIN);
-	gain[0] = 11;
-	gain[1] = 14;
-	return tapan_cal;
-}
-
 static struct afe_clk_cfg mi2s_rx_clk_v1 = {
 	AFE_API_VERSION_I2S_CONFIG,
 	Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ,
@@ -296,7 +219,6 @@ struct ext_cdc_tlmm_pinctrl_info {
 };
 
 static struct cdc_pdm_pinctrl_info pinctrl_info;
-struct ext_cdc_tlmm_pinctrl_info ext_cdc_pinctrl_info;
 
 static int mi2s_rx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
 static int bits_per_sample = 16;
@@ -317,7 +239,7 @@ static inline struct snd_mask *param_to_mask(struct snd_pcm_hw_params *p, int n)
 	return &(p->masks[n - SNDRV_PCM_HW_PARAM_FIRST_MASK]);
 }
 
-int msm8909_wsa881x_init(struct snd_soc_dapm_context *dapm)
+static int msm8909_wsa881x_init(struct snd_soc_dapm_context *dapm)
 {
 #ifdef CONFIG_SND_SOC_WSA881X
 	u8 spkleft_ports[WSA881X_MAX_SWR_PORTS] = {100, 101, 102, 106};
@@ -2617,7 +2539,7 @@ static struct snd_soc_card bear_cards[MAX_SND_CARDS] = {
 #endif
 };
 
-void disable_mclk(struct work_struct *work)
+static void disable_mclk(struct work_struct *work)
 {
 	struct msm8916_asoc_mach_data *pdata = NULL;
 	struct delayed_work *dwork;
@@ -2751,7 +2673,7 @@ static void msm8x16_dt_parse_cap_info(struct platform_device *pdev,
 	return;
 }
 
-int get_cdc_gpio_lines(struct pinctrl *pinctrl, int ext_pa)
+static int get_cdc_gpio_lines(struct pinctrl *pinctrl, int ext_pa)
 {
 	int ret;
 	pr_debug("%s\n", __func__);
@@ -2813,7 +2735,7 @@ int get_cdc_gpio_lines(struct pinctrl *pinctrl, int ext_pa)
 	return 0;
 }
 
-int populate_ext_snd_card_dt_data(struct platform_device *pdev)
+static int populate_ext_snd_card_dt_data(struct platform_device *pdev)
 {
 
 	int ret;

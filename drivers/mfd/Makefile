@@ -104,8 +104,6 @@ obj-$(CONFIG_WCD9335_CODEC)	+= wcd9xxx-core.o wcd9xxx-irq.o wcd9xxx-slimslave.o\
                                                 wcd9335-tables.o
 obj-$(CONFIG_SND_SOC_MSM8X16_WCD)	+= wcd9xxx-core.o wcd9xxx-irq.o\
 						wcd9xxx-slimslave.o wcd9xxx-core-resource.o
-obj-$(CONFIG_SND_SOC_MSM8909_WCD)	+= wcd9xxx-core.o wcd9xxx-irq.o\
-						wcd9xxx-slimslave.o wcd9xxx-core-resource.o
 
 ifeq ($(CONFIG_SA1100_ASSABET),y)
 obj-$(CONFIG_MCP_UCB1200)	+= ucb1x00-assabet.o

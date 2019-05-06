@@ -150,11 +150,14 @@ config SND_SOC_WCD934X_MBHC
         depends on SND_SOC_WCD934X
         select SND_SOC_WCD_MBHC
 
+config SND_SOC_WSA881X_SENSORS
+	tristate
 
 config SND_SOC_WSA881X
 	tristate
 	select MSM_CDC_PINCTRL
 	select REGMAP_SWR
+	select SND_SOC_WSA881X_SENSORS
 
 config SND_SOC_WCD9XXX_V2
        tristate
