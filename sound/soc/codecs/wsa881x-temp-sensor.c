@@ -34,7 +34,7 @@
  * Return: 0 on success or negative error code on failure.
  */
 int wsa881x_get_temp(struct thermal_zone_device *thermal,
-		     int *temp)
+		     unsigned long *temp)
 {
 	struct wsa881x_tz_priv *pdata;
 	struct snd_soc_codec *codec;

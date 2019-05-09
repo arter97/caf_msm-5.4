@@ -38,7 +38,7 @@
 #include "msm-audio-pinctrl.h"
 #include "../codecs/wsa881x.h"
 
-#define DRV_NAME "msm8x16-asoc-wcd"
+#define DRV_NAME "msm8x16-asoc-wcd-external"
 
 #define BTSCO_RATE_8KHZ 8000
 #define BTSCO_RATE_16KHZ 16000
@@ -222,7 +222,6 @@ struct ext_cdc_tlmm_pinctrl_info {
 };
 
 static struct cdc_pdm_pinctrl_info pinctrl_info;
-struct ext_cdc_tlmm_pinctrl_info ext_cdc_pinctrl_info;
 
 static int mi2s_rx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
 static int bits_per_sample = 16;
@@ -243,7 +242,7 @@ static inline struct snd_mask *param_to_mask(struct snd_pcm_hw_params *p, int n)
 	return &(p->masks[n - SNDRV_PCM_HW_PARAM_FIRST_MASK]);
 }
 
-int msm8909_wsa881x_init(struct snd_soc_dapm_context *dapm)
+static int msm8909_wsa881x_init(struct snd_soc_dapm_context *dapm)
 {
 #ifdef CONFIG_SND_SOC_WSA881X
 	u8 spkleft_ports[WSA881X_MAX_SWR_PORTS] = {100, 101, 102, 106};
@@ -2262,7 +2261,7 @@ static struct snd_soc_card bear_cards[MAX_SND_CARDS] = {
 
 };
 
-void disable_mclk(struct work_struct *work)
+static void disable_mclk(struct work_struct *work)
 {
 	struct msm8916_asoc_mach_data *pdata = NULL;
 	struct delayed_work *dwork;
@@ -2396,7 +2395,7 @@ static void msm8x16_dt_parse_cap_info(struct platform_device *pdev,
 	return;
 }
 
-int get_cdc_gpio_lines(struct pinctrl *pinctrl, int ext_pa)
+static int get_cdc_gpio_lines(struct pinctrl *pinctrl, int ext_pa)
 {
 	int ret;
 	pr_debug("%s\n", __func__);
@@ -2458,7 +2457,7 @@ int get_cdc_gpio_lines(struct pinctrl *pinctrl, int ext_pa)
 	return 0;
 }
 
-int populate_ext_snd_card_dt_data(struct platform_device *pdev)
+static int populate_ext_snd_card_dt_data(struct platform_device *pdev)
 {
 
 	int ret;

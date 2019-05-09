@@ -82,7 +82,7 @@ snd-soc-msm8x16-objs := msm8x16.o msm8939-slimbus.o msm-audio-pinctrl.o
 obj-$(CONFIG_SND_SOC_MSM8X16) += snd-soc-msm8x16.o
 
 # for MSM 8909 sound card driver
-snd-soc-msm8909-objs := msm8x16-external.o msm-audio-pinctrl.o
+snd-soc-msm8909-objs := msm8x16.o msm8x16-external.o msm-audio-pinctrl.o
 obj-$(CONFIG_SND_SOC_MSM8909) += snd-soc-msm8909.o
 
 # for MSM 8994 sound card driver

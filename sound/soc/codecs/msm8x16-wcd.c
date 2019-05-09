@@ -287,7 +287,7 @@ static int msm8x16_wcd_dt_parse_vreg_info(struct device *dev,
 	const char *vreg_name, bool ondemand);
 static struct msm8x16_wcd_pdata *msm8x16_wcd_populate_dt_pdata(
 	struct device *dev);
-static int msm8x16_wcd_enable_ext_mb_source(struct snd_soc_codec *codec,
+static int msm8x16_wcd_enable_ext_mb_source(struct wcd_mbhc *mbhc,
 					    bool turn_on);
 static void msm8x16_trim_btn_reg(struct snd_soc_codec *codec);
 static void msm8x16_wcd_set_micb_v(struct snd_soc_codec *codec);
@@ -501,9 +501,10 @@ static void msm8x16_wcd_compute_impedance(struct snd_soc_codec *codec, s16 l,
 }
 
 static struct firmware_cal *msm8x16_wcd_get_hwdep_fw_cal(
-		struct snd_soc_codec *codec,
+		struct wcd_mbhc *mbhc,
 		enum wcd_cal_type type)
 {
+	struct snd_soc_codec *codec = mbhc->codec;
 	struct msm8x16_wcd_priv *msm8x16_wcd;
 	struct firmware_cal *hwdep_cal;
 
@@ -938,10 +939,11 @@ skip_imped_detect:
 	pr_debug("%s: Impedance detection completed\n", __func__);
 }
 
-static int msm8x16_register_notifier(struct snd_soc_codec *codec,
+static int msm8x16_register_notifier(struct wcd_mbhc *mbhc,
 				     struct notifier_block *nblock,
 				     bool enable)
 {
+	struct snd_soc_codec *codec = mbhc->codec;
 	struct msm8x16_wcd_priv *msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
 
 	if (enable)
@@ -3376,9 +3378,10 @@ static void msm8x16_trim_btn_reg(struct snd_soc_codec *codec)
 		pr_debug("%s: This device is trimmed at ATE\n", __func__);
 	}
 }
-static int msm8x16_wcd_enable_ext_mb_source(struct snd_soc_codec *codec,
+static int msm8x16_wcd_enable_ext_mb_source(struct wcd_mbhc *mbhc,
 					    bool turn_on)
 {
+	struct snd_soc_codec *codec = mbhc->codec;
 	int ret = 0;
 	static int count;
 
