@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014, Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2014, 2020  Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -20,7 +20,7 @@
 #include <linux/qdsp6v2/apr.h>
 
 typedef void (*lsm_app_cb)(uint32_t opcode, uint32_t token,
-		       uint32_t *payload, void *priv);
+		        uint32_t *payload, uint16_t client_size, void *priv);
 
 struct lsm_sound_model {
 	dma_addr_t      phys;
@@ -118,6 +118,19 @@ struct lsm_cmd_reg_snd_model {
 	uint32_t	model_addr_lsw;
 	uint32_t	model_addr_msw;
 	uint32_t	mem_map_handle;
+} __packed;
+
+struct lsm_cmd_read_done {
+	struct apr_hdr hdr;
+	uint32_t status;
+	uint32_t buf_addr_lsw;
+	uint32_t buf_addr_msw;
+	uint32_t mem_map_handle;
+	uint32_t total_size;
+	uint32_t offset;
+	uint32_t timestamp_lsw;
+	uint32_t timestamp_msw;
+	uint32_t flags;
 } __packed;
 
 struct lsm_client *q6lsm_client_alloc(lsm_app_cb cb, void *priv);

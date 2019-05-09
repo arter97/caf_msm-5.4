@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, 2020 The Linux Foundation. All rights reserved.
 *
 * This program is free software; you can redistribute it and/or modify
 * it under the terms of the GNU General Public License version 2 and
@@ -6856,7 +6856,8 @@ struct srs_trumedia_params {
 #define LSM_SESSION_CMD_STOP				(0x00012A87)
 
 #define LSM_SESSION_EVENT_DETECTION_STATUS		(0x00012B00)
-
+#define LSM_SESSION_EVENT_DETECTION_STATUS_V2		(0x00012B01)
+#define LSM_DATA_EVENT_READ_DONE			(0x00012B02)
 #define LSM_MODULE_ID_VOICE_WAKEUP			(0x00012C00)
 #define LSM_PARAM_ID_ENDPOINT_DETECT_THRESHOLD		(0x00012C01)
 #define LSM_PARAM_ID_OPERATION_MODE			(0x00012C02)

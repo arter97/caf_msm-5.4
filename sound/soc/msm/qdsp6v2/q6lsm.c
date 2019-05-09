@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015, Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2015,2020 Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -83,7 +83,7 @@ static int q6lsm_callback(struct apr_client_data *data, void *priv)
 	}
 
 	if (data->opcode == RESET_EVENTS) {
-		pr_debug("%s: SSR event received 0x%x, event 0x%x, proc 0x%x\n",
+		  pr_debug("%s: SSR event received 0x%x, event 0x%x, proc 0x%x\n",
 			 __func__, data->opcode, data->reset_event,
 			 data->reset_proc);
 		return 0;
@@ -94,7 +94,32 @@ static int q6lsm_callback(struct apr_client_data *data, void *priv)
 			 "payload [0] = %x\n", __func__, client->session,
 		data->opcode, data->token, data->payload_size, payload[0]);
 
-	if (data->opcode == APR_BASIC_RSP_RESULT) {
+	if (data->opcode == LSM_DATA_EVENT_READ_DONE) {
+		struct lsm_cmd_read_done read_done;
+		token = data->token;
+		if (data->payload_size > sizeof(read_done) ||
+				data->payload_size < 6 * sizeof(payload[0])) {
+			pr_err("%s: read done error payload size %d expected size %zd\n",
+				__func__, data->payload_size,
+				sizeof(read_done));
+			return -EINVAL;
+		}
+		pr_debug("%s: opcode %x status %x lsw %x msw %x mem_map handle %x\n",
+			__func__, data->opcode, payload[0], payload[1],
+			payload[2], payload[3]);
+		read_done.status = payload[0];
+		read_done.buf_addr_lsw = payload[1];
+		read_done.buf_addr_msw = payload[2];
+		read_done.mem_map_handle = payload[3];
+		read_done.total_size = payload[4];
+		read_done.offset = payload[5];
+		if (client->cb)
+			client->cb(data->opcode, data->token,
+					(void *)&read_done,
+					sizeof(read_done),
+					client->priv);
+		return 0;
+	} else if (data->opcode == APR_BASIC_RSP_RESULT) {
 		token = data->token;
 		switch (payload[0]) {
 		case LSM_SESSION_CMD_START:
@@ -112,6 +137,14 @@ static int q6lsm_callback(struct apr_client_data *data, void *priv)
 					__func__, token, client->session);
 				return -EINVAL;
 			}
+			if (data->payload_size < 2 * sizeof(payload[0])) {
+				pr_err("%s: payload has invalid size[%d]\n",
+					__func__, data->payload_size);
+				return -EINVAL;
+			}
+			if (payload[1] != 0)
+				pr_err("%s: cmd %d failed status %d\n",
+				__func__, payload[0], payload[1]);
 			if (atomic_cmpxchg(&client->cmd_state,
 					   CMD_STATE_WAIT_RESP,
 					   CMD_STATE_CLEARED) ==
@@ -128,7 +161,7 @@ static int q6lsm_callback(struct apr_client_data *data, void *priv)
 
 	if (client->cb)
 		client->cb(data->opcode, data->token, data->payload,
-			   client->priv);
+				data->payload_size, client->priv);
 
 	return 0;
 }
@@ -661,6 +694,8 @@ static int q6lsm_mmapcallback(struct apr_client_data *data, void *priv)
 		pr_debug("%s: SSR event received 0x%x, event 0x%x,\n"
 			 "proc 0x%x SID 0x%x\n", __func__, data->opcode,
 			 data->reset_event, data->reset_proc, sid);
+		if (sid < LSM_MIN_SESSION_ID || sid > LSM_MAX_SESSION_ID)
+			pr_err("%s: Invalid session %d\n", __func__, sid);
 		lsm_common.common_client[sid].lsm_cal_phy_addr = 0;
 		return 0;
 	}
@@ -703,7 +738,8 @@ static int q6lsm_mmapcallback(struct apr_client_data *data, void *priv)
 	}
 	if (client->cb)
 		client->cb(data->opcode, data->token,
-			   data->payload, client->priv);
+			data->payload, data->payload_size,
+			client->priv);
 	return 0;
 }
 
