@@ -132,6 +132,15 @@ static struct wcd_mbhc_config wcd_mbhc_cfg = {
 	.swap_gnd_mic = NULL,
 	.hs_ext_micbias = true,
 	.moisture_en = true,
+        .key_code[0] = KEY_MEDIA,
+        .key_code[1] = KEY_VOICECOMMAND,
+        .key_code[2] = KEY_VOLUMEUP,
+        .key_code[3] = KEY_VOLUMEDOWN,
+        .key_code[4] = 0,
+        .key_code[5] = 0,
+        .key_code[6] = 0,
+        .key_code[7] = 0,
+        .linein_th = 5000,
 };
 
 static void *def_ext_mbhc_cal(void)
