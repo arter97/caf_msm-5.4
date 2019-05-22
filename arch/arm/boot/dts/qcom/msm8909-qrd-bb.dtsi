@@ -53,13 +53,13 @@
 		pinctrl-0 = <&gpio_key_active>;
 		pinctrl-1 = <&gpio_key_suspend>;
 
-		vol_up {
-			label = "volume_up";
+		bb_keys {
+			label = "bb_key";
 			gpios = <&msm_gpio 90 0x1>;
 			linux,input-type = <1>;
-			linux,code = <115>;
+			linux,code = <520>;
 			gpio-key,wakeup;
-			debounce-interval = <15>;
+			debounce-interval = <5>;
 		};
 	};
 };
