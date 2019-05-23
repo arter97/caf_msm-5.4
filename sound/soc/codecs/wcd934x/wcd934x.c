@@ -49,8 +49,6 @@
 #include "../wcd9xxx-resmgr-v2.h"
 #include "../wcdcal-hwdep.h"
 #include "wcd934x-dsd.h"
-#include <soc/qcom/subsystem_notif.h>
-#include <sound/q6core.h>
 
 #define WCD934X_RATES_MASK (SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |\
 			    SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |\
@@ -148,15 +146,6 @@ static const struct snd_kcontrol_new name##_mux = \
 #define TAVIL_VERSION_ENTRY_SIZE 17
 
 #define WCD934X_DIG_CORE_COLLAPSE_TIMER_MS  (5 * 1000)
-
-/*
- *50 Milliseconds sufficient for DSP bring up in the modem
- * after Sub System Restart
- */
-#define ADSP_STATE_READY_TIMEOUT_MS 50
-
-static void *modem_state_notifier;
-static struct snd_soc_codec *registered_codec;
 
 enum {
 	POWER_COLLAPSE,
@@ -8716,12 +8705,13 @@ static void tavil_mclk2_reg_defaults(struct tavil_priv *tavil)
 	}
 }
 
-static int tavil_device_down(struct snd_soc_codec *codec)
+static int tavil_device_down(struct wcd9xxx *wcd9xxx)
 {
+	struct snd_soc_codec *codec;
 	struct tavil_priv *priv;
 	int count;
 
-	pr_debug("%s:\n", __func__);
+	codec = (struct snd_soc_codec *)(wcd9xxx->ssr_priv);
 	priv = snd_soc_codec_get_drvdata(codec);
 	if (priv->swr.ctrl_data)
 		swrm_wcd_notify(priv->swr.ctrl_data[0].swr_pdev,
@@ -8732,19 +8722,20 @@ static int tavil_device_down(struct snd_soc_codec *codec)
 	wcd_dsp_ssr_event(priv->wdsp_cntl, WCD_CDC_DOWN_EVENT);
 	wcd_resmgr_set_sido_input_src_locked(priv->resmgr,
 					     SIDO_SOURCE_INTERNAL);
-	snd_soc_card_change_online_state(codec->card, 0);
 
 	return 0;
 }
 
-static int tavil_post_reset_cb(struct snd_soc_codec *codec)
+static int tavil_post_reset_cb(struct wcd9xxx *wcd9xxx)
 {
 	int i, ret = 0;
 	struct wcd9xxx *control;
+	struct snd_soc_codec *codec;
 	struct tavil_priv *tavil;
 	struct wcd9xxx_pdata *pdata;
 	struct wcd_mbhc *mbhc;
 
+	codec = (struct snd_soc_codec *)(wcd9xxx->ssr_priv);
 	tavil = snd_soc_codec_get_drvdata(codec);
 	control = dev_get_drvdata(codec->dev->parent);
 
@@ -8752,7 +8743,6 @@ static int tavil_post_reset_cb(struct snd_soc_codec *codec)
 				WCD_REGION_POWER_COLLAPSE_REMOVE,
 				WCD9XXX_DIG_CORE_REGION_1);
 
-	pr_debug("%s:\n", __func__);
 	mutex_lock(&tavil->codec_mutex);
 
 	tavil_vote_svs(tavil, true);
@@ -8762,7 +8752,6 @@ static int tavil_post_reset_cb(struct snd_soc_codec *codec)
 
 	dev_dbg(codec->dev, "%s: MCLK Rate = %x\n",
 		__func__, control->mclk_rate);
-	snd_soc_card_change_online_state(codec->card, 1);
 
 	if (control->mclk_rate == WCD934X_MCLK_CLK_12P288MHZ)
 		snd_soc_update_bits(codec, WCD934X_CODEC_RPM_CLK_MCLK_CFG,
@@ -8825,49 +8814,6 @@ done:
 	return ret;
 }
 
-static int modem_state_callback(struct notifier_block *nb, unsigned long value,
-			       void *priv)
-{
-	bool timedout;
-	unsigned long timeout;
-
-	if (value == SUBSYS_BEFORE_SHUTDOWN)
-		tavil_device_down(registered_codec);
-	else if (value == SUBSYS_AFTER_POWERUP) {
-
-		dev_dbg(registered_codec->dev,
-			"ADSP is about to power up. bring up codec\n");
-
-		if (!q6core_is_adsp_ready()) {
-			dev_dbg(registered_codec->dev,
-				"ADSP isn't ready\n");
-			timeout = jiffies +
-				  msecs_to_jiffies(ADSP_STATE_READY_TIMEOUT_MS);
-			while (!(timedout = time_after(jiffies, timeout))) {
-				if (!q6core_is_adsp_ready()) {
-					dev_dbg(registered_codec->dev,
-						"ADSP isn't ready\n");
-				} else {
-					dev_dbg(registered_codec->dev,
-						"ADSP is ready\n");
-					break;
-				}
-			}
-		} else {
-			dev_dbg(registered_codec->dev,
-				"%s: DSP is ready\n", __func__);
-		}
-		tavil_post_reset_cb(registered_codec);
-	}
-	return NOTIFY_OK;
-}
-
-static struct notifier_block modem_state_notifier_block = {
-	.notifier_call = modem_state_callback,
-	.priority = -INT_MAX,
-};
-
-
 static int tavil_soc_codec_probe(struct snd_soc_codec *codec)
 {
 	struct wcd9xxx *control;
@@ -8886,6 +8832,8 @@ static int tavil_soc_codec_probe(struct snd_soc_codec *codec)
 	tavil = snd_soc_codec_get_drvdata(codec);
 	tavil->intf_type = wcd9xxx_get_intf_type();
 
+	control->dev_down = tavil_device_down;
+	control->post_reset = tavil_post_reset_cb;
 	control->ssr_priv = (void *)codec;
 
 	/* Resource Manager post Init */
@@ -9017,16 +8965,6 @@ static int tavil_soc_codec_probe(struct snd_soc_codec *codec)
 	 */
 	tavil_vote_svs(tavil, false);
 
-	modem_state_notifier =
-	    subsys_notif_register_notifier("modem",
-					   &modem_state_notifier_block);
-	if (!modem_state_notifier) {
-		dev_err(codec->dev, "Failed to register modem state notifier\n"
-			);
-		ret = -ENOMEM;
-		goto err_pdata;
-	}
-	registered_codec = codec;
 	return ret;
 
 err_pdata:
