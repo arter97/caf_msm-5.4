@@ -2277,7 +2277,8 @@ static enum hrtimer_restart dwc3_gadget_ep_timer(struct hrtimer *hrtimer)
 
 	spin_lock_irqsave(&dwc->lock, flags);
 
-	if (!(atomic_read(&dwc->in_lpm)))
+	if (!(atomic_read(&dwc->in_lpm)) &&
+	     (dwc->link_state != DWC3_LINK_STATE_U3))
 		dwc3_endpoint_transfer_complete(dep->dwc, dep, &event, 1);
 
 	spin_unlock_irqrestore(&dwc->lock, flags);
