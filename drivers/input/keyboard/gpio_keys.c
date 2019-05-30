@@ -320,6 +320,33 @@ static struct attribute *gpio_keys_attrs[] = {
 	NULL,
 };
 
+int aovdet;
+static ssize_t aovdemo_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	pr_err("%s:\n", __func__);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", aovdet);
+}
+
+static ssize_t aovdemo_store(struct device *dev,
+		struct device_attribute *attr, char *buf, size_t count)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct gpio_keys_drvdata *ddata = platform_get_drvdata(pdev);
+	struct input_dev *input = ddata->input;
+	pr_err("%s:\n", __func__);
+	if (input) {
+		input_event(input, EV_KEY, 520, 1);
+		input_sync(input);
+		msleep(200);
+		input_event(input, EV_KEY, 520, 0);
+		input_sync(input);
+	}
+	return count;
+}
+static struct kobj_attribute aov_mod_attribute = __ATTR(aovdet,
+	S_IRUGO | S_IWUGO, (void *)aovdemo_show, (void *) aovdemo_store);
+
 static struct attribute_group gpio_keys_attr_group = {
 	.attrs = gpio_keys_attrs,
 };
@@ -815,6 +842,11 @@ static int gpio_keys_probe(struct platform_device *pdev)
 	}
 
 	device_init_wakeup(&pdev->dev, wakeup);
+	error = sysfs_create_file(&pdev->dev.kobj, &aov_mod_attribute.attr);
+	if (error) {
+		dev_err(&pdev->dev, "failed to create the scr_mod file\n");
+		return error;
+	}
 
 	return 0;
 
