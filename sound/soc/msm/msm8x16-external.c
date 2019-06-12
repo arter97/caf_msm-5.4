@@ -1629,6 +1629,20 @@ static struct snd_soc_codec_conf msm8909_codec_conf[] = {
 	},
 };
 
+static struct snd_soc_dai_link msm_afe_rxtx_lb_be_dai_link[] = {
+       {
+		.name = LPASS_BE_AFE_LOOPBACK_TX,
+		.stream_name = "AFE Loopback Capture",
+		.cpu_dai_name = "msm-dai-q6-dev.24577",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-tx",
+		.no_pcm = 1,
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
+	},
+};
+
 /* Digital audio interface glue - connects codec <---> CPU */
 static struct snd_soc_dai_link msm8x16_dai[] = {
 	/* FrontEnd DAI Links */
@@ -2233,7 +2247,8 @@ static struct snd_soc_dai_link msm8x16_9326_dai_links[
 #ifdef CONFIG_SND_SOC_WCD934X
 static struct snd_soc_dai_link msm8x16_934x_dai_links[
 				ARRAY_SIZE(msm8x16_dai) +
-				ARRAY_SIZE(msm8x16_934x_dai)];
+				ARRAY_SIZE(msm8x16_934x_dai) +
+				ARRAY_SIZE(msm_afe_rxtx_lb_be_dai_link)];
 #endif
 
 #ifdef CONFIG_WCD9335
@@ -2499,6 +2514,9 @@ static struct snd_soc_card *populate_ext_snd_card_dailinks(
 			sizeof(msm8x16_dai));
 	memcpy(msm8x16_934x_dai_links + ARRAY_SIZE(msm8x16_dai),
 		msm8x16_934x_dai, sizeof(msm8x16_934x_dai));
+	memcpy(msm8x16_934x_dai_links + ARRAY_SIZE(msm8x16_dai)
+		+ ARRAY_SIZE(msm8x16_934x_dai),
+		msm_afe_rxtx_lb_be_dai_link, sizeof(msm_afe_rxtx_lb_be_dai_link));
 
 	msm8909_dai_links = msm8x16_934x_dai_links;
 
