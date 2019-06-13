@@ -408,6 +408,11 @@ int thermal_sensor_trip(struct thermal_zone_device *tz,
 	if (list_empty(&tz->sensor.threshold_list))
 		return 0;
 
+	mutex_lock(&tz->lock);
+	tz->last_temperature = tz->temperature;
+	tz->temperature = (int)temp;
+	mutex_unlock(&tz->lock);
+
 	rcu_read_lock();
 	list_for_each_entry_rcu(pos, &tz->sensor.threshold_list, list) {
 		if ((pos->trip != trip) || (!pos->active))
@@ -1183,6 +1188,14 @@ trip_point_temp_show(struct device *dev, struct device_attribute *attr,
 }
 
 static ssize_t
+trip_temp_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct thermal_zone_device *tz = to_thermal_zone(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", tz->temperature);
+}
+
+static ssize_t
 trip_point_hyst_store(struct device *dev, struct device_attribute *attr,
 			const char *buf, size_t count)
 {
@@ -1507,6 +1520,7 @@ int power_actor_set_power(struct thermal_cooling_device *cdev,
 static DEVICE_ATTR(type, 0444, type_show, NULL);
 static DEVICE_ATTR(temp, 0444, temp_show, NULL);
 static DEVICE_ATTR(mode, 0644, mode_show, mode_store);
+static DEVICE_ATTR(trip_temp, 0444, trip_temp_show, NULL);
 static DEVICE_ATTR(passive, S_IRUGO | S_IWUSR, passive_show, passive_store);
 static DEVICE_ATTR(policy, S_IRUGO | S_IWUSR, policy_show, policy_store);
 
@@ -2267,6 +2281,11 @@ struct thermal_zone_device *thermal_zone_device_register(const char *type,
 	if (result)
 		goto unregister;
 
+	result = device_create_file(&tz->device, &dev_attr_trip_temp);
+	if (result)
+		goto unregister;
+
+
 	if (ops->get_mode) {
 		result = device_create_file(&tz->device, &dev_attr_mode);
 		if (result)
@@ -2411,6 +2430,7 @@ void thermal_zone_device_unregister(struct thermal_zone_device *tz)
 	if (tz->type[0])
 		device_remove_file(&tz->device, &dev_attr_type);
 	device_remove_file(&tz->device, &dev_attr_temp);
+	device_remove_file(&tz->device, &dev_attr_trip_temp);
 	if (tz->ops->get_mode)
 		device_remove_file(&tz->device, &dev_attr_mode);
 	device_remove_file(&tz->device, &dev_attr_policy);
