@@ -17,6 +17,7 @@
 #include <linux/debugfs.h>
 #include <linux/component.h>
 #include <linux/dma-mapping.h>
+#include <soc/qcom/ramdump.h>
 #include <sound/wcd-dsp-mgr.h>
 #include "wcd-dsp-utils.h"
 /* Forward declarations */
@@ -625,6 +626,7 @@ static void wdsp_collect_ramdumps(struct wdsp_mgr_priv *wdsp)
 {
 	struct wdsp_img_section img_section;
 	struct wdsp_err_signal_arg *data = &wdsp->dump_data.err_data;
+	struct ramdump_segment rd_seg;
 	int ret = 0;
 
 	if (wdsp->ssr_type != WDSP_SSR_TYPE_WDSP_DOWN ||
@@ -639,6 +641,11 @@ static void wdsp_collect_ramdumps(struct wdsp_mgr_priv *wdsp)
 	    data->remote_start_addr < wdsp->base_addr) {
 		WDSP_ERR(wdsp, "Invalid start addr 0x%x or dump_size 0x%zx",
 			 data->remote_start_addr, data->dump_size);
+		goto done;
+	}
+
+	if (!wdsp->dump_data.rd_dev) {
+		WDSP_ERR(wdsp, "Ramdump device is not setup");
 		goto done;
 	}
 
@@ -675,6 +682,14 @@ static void wdsp_collect_ramdumps(struct wdsp_mgr_priv *wdsp)
 			 wdsp->dump_data.rd_addr);
 		BUG_ON(1);
 	}
+
+	rd_seg.address = (unsigned long) wdsp->dump_data.rd_v_addr;
+	rd_seg.size = img_section.size;
+	rd_seg.v_address = wdsp->dump_data.rd_v_addr;
+
+	ret = do_ramdump(wdsp->dump_data.rd_dev, &rd_seg, 1);
+	if (ret < 0)
+		WDSP_ERR(wdsp, "do_ramdump failed with error %d", ret);
 
 err_read_dumps:
 	dma_free_coherent(wdsp->mdev, data->dump_size,
@@ -987,6 +1002,11 @@ static int wdsp_mgr_bind(struct device *dev)
 
 	wdsp->ops = &wdsp_ops;
 
+	/* Setup ramdump device */
+	wdsp->dump_data.rd_dev = create_ramdump_device("wdsp", dev);
+	if (!wdsp->dump_data.rd_dev)
+		dev_info(dev, "%s: create_ramdump_device failed\n", __func__);
+
 	ret = component_bind_all(dev, wdsp->ops);
 	if (IS_ERR_VALUE(ret))
 		WDSP_ERR(wdsp, "component_bind_all failed %d\n", ret);
@@ -1021,6 +1041,11 @@ static void wdsp_mgr_unbind(struct device *dev)
 	component_unbind_all(dev, wdsp->ops);
 
 	wdsp_mgr_debugfs_remove(wdsp);
+
+	if (wdsp->dump_data.rd_dev) {
+		destroy_ramdump_device(wdsp->dump_data.rd_dev);
+		wdsp->dump_data.rd_dev = NULL;
+	}
 
 	/* Clear all status bits */
 	wdsp->status = 0x00;
