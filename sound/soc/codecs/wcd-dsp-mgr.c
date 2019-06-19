@@ -777,6 +777,7 @@ static int wdsp_ssr_handler(struct wdsp_mgr_priv *wdsp, void *arg,
 		__wdsp_clr_ready_locked(wdsp, WDSP_SSR_STATUS_WDSP_READY);
 		wdsp_broadcast_event_downseq(wdsp, WDSP_EVENT_PRE_SHUTDOWN,
 					     NULL);
+		reinit_completion(&wdsp->ready_compl);
 		schedule_work(&wdsp->ssr_work);
 		break;
 
@@ -794,6 +795,7 @@ static int wdsp_ssr_handler(struct wdsp_mgr_priv *wdsp, void *arg,
 						     NULL);
 		}
 
+		reinit_completion(&wdsp->ready_compl);
 		schedule_work(&wdsp->ssr_work);
 		break;
 
@@ -1156,7 +1158,7 @@ static int wdsp_mgr_probe(struct platform_device *pdev)
 	mutex_init(&wdsp->api_mutex);
 	mutex_init(&wdsp->ssr_mutex);
 	wdsp->ssr_type = WDSP_SSR_TYPE_NO_SSR;
-	wdsp->ready_status = WDSP_SSR_STATUS_READY;
+	wdsp->ready_status = WDSP_SSR_STATUS_CDC_READY;
 	INIT_WORK(&wdsp->ssr_work, wdsp_ssr_work_fn);
 	init_completion(&wdsp->ready_compl);
 	dev_set_drvdata(mdev, wdsp);
