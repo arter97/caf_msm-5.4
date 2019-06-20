@@ -63,6 +63,7 @@ struct netns_ipv4 {
 	int sysctl_icmp_errors_use_inbound_ifaddr;
 
 	int sysctl_tcp_ecn;
+	int sysctl_tcp_min_snd_mss;
 
 	int sysctl_fwmark_reflect;
 	int sysctl_tcp_fwmark_accept;
