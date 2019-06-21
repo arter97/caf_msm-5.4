@@ -1362,7 +1362,7 @@ static int wsa881x_swr_up(struct swr_device *pdev)
 static int wsa881x_swr_down(struct swr_device *pdev)
 {
 	struct wsa881x_priv *wsa881x;
-	int ret;
+	int ret = 0;
 
 	wsa881x = swr_get_dev_data(pdev);
 	if (!wsa881x) {
@@ -1371,12 +1371,15 @@ static int wsa881x_swr_down(struct swr_device *pdev)
 	}
 	if (delayed_work_pending(&wsa881x->ocp_ctl_work))
 		cancel_delayed_work_sync(&wsa881x->ocp_ctl_work);
+/*
+ *    To fix wsa881x mute issue, temporary commenting
+
 	ret = wsa881x_gpio_ctrl(wsa881x, false);
 	if (ret)
 		dev_err(&pdev->dev, "%s: Failed to disable gpio\n", __func__);
 	else
 		wsa881x->state = WSA881X_DEV_DOWN;
-
+*/
 	return ret;
 }
 
