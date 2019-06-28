@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1811,9 +1811,9 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 	panel = mdp3_session->panel;
 	if (mdp3_session->first_commit) {
 		/*wait to ensure frame is sent to panel*/
-		if (panel_info->mipi.init_delay)
+		if (panel_info->mipi.post_init_delay)
 			msleep(((1000 / panel_info->mipi.frame_rate) + 1) *
-					panel_info->mipi.init_delay);
+					panel_info->mipi.post_init_delay);
 		else
 			msleep(1000 / panel_info->mipi.frame_rate);
 		mdp3_session->first_commit = false;
