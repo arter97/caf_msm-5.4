@@ -11,3 +11,5 @@ obj-$(CONFIG_QRTR_HAVEN) += qrtr-haven.o
 qrtr-haven-y	:= haven.o
 obj-$(CONFIG_QRTR_ETHERNET) += qrtr-ethernet.o
 qrtr-ethernet-y       := ethernet.o
+obj-$(CONFIG_QRTR_MHI_DEV) += qrtr-mhi-dev.o
+qrtr-mhi-dev-y	:= mhi_dev.o

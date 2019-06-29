@@ -77,4 +77,13 @@ config QRTR_ETHERNET
 	  ethernet adaption layer. Ethernet based ipcrouter is capable of
 	  handling byte stream data.
 
+config QRTR_MHI_DEV
+	tristate "MHI Device IPC Router channels"
+	depends on MSM_MHI_DEV || (COMPILE_TEST && MSM_MHI_DEV=n)
+	help
+	  Say Y here to support MHI base ipcrouter channels for device
+	  endpoint mode.  MHI is the transport used for external modem
+	  connections.  This driver enables QRTR to run on the modem device
+	  side.
+
 endif # QRTR
