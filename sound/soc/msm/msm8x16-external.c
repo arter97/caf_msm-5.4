@@ -1791,9 +1791,9 @@ static struct snd_soc_dai_link msm8x16_dai[] = {
 		.codec_name = "snd-soc-dummy",
 	},
 	{/* hw:x,11 */
-		.name = "Tertiary MI2S_TX Hostless",
-		.stream_name = "Tertiary MI2S_TX Hostless",
-		.cpu_dai_name = "TERT_MI2S_TX_HOSTLESS",
+		.name = "Quaternary MI2S_TX Hostless",
+		.stream_name = "Quaternary MI2S_TX Hostless",
+		.cpu_dai_name = "QUAT_MI2S_TX_HOSTLESS",
 		.platform_name  = "msm-pcm-hostless",
 		.dynamic = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
