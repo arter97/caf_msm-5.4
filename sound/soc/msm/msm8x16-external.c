@@ -1726,9 +1726,9 @@ static struct snd_soc_dai_link msm8x16_dai[] = {
 	},
 	/* Hostless PCM purpose */
 	{/* hw:x,5 */
-		.name = "Primary MI2S_RX Hostless",
-		.stream_name = "Primary MI2S_RX Hostless",
-		.cpu_dai_name = "PRI_MI2S_RX_HOSTLESS",
+		.name = "Quaternary MI2S_RX Hostless",
+		.stream_name = "Quaternary MI2S_RX Hostless",
+		.cpu_dai_name = "QUAT_MI2S_RX_HOSTLESS",
 		.platform_name	= "msm-pcm-hostless",
 		.dynamic = 1,
 		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
