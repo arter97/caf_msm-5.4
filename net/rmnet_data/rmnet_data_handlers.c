@@ -396,8 +396,15 @@ static int rmnet_map_egress_handler(struct sk_buff *skb,
 		trace_rmnet_map_checksum_uplink_packet(orig_dev, ckresult);
 		rmnet_stats_ul_checksum(ckresult);
 	}
+	if ((!(config->egress_data_format &
+	    RMNET_EGRESS_FORMAT_AGGREGATION)) ||
+	    ((orig_dev->features & NETIF_F_GSO) && skb_is_nonlinear(skb)))
+	    map_header = rmnet_map_add_map_header
+	    (skb, additional_header_length, RMNET_MAP_NO_PAD_BYTES);
+	else
+		map_header = rmnet_map_add_map_header
+		(skb, additional_header_length, RMNET_MAP_ADD_PAD_BYTES);
 
-	map_header = rmnet_map_add_map_header(skb, additional_header_length);
 
 	if (!map_header) {
 		LOGD("%s", "Failed to add MAP header to egress packet");
