@@ -342,26 +342,6 @@
         };
 };
 
-&spi_0 {
-	status = "okay";
-	ese@0 {
-		compatible = "qcom,ese";
-		reg = <0>;
-		spi-max-frequency = <960000>;
-		spi-cpol = <0>;
-		spi-cpha =<0>;
-		/* if no pwr req this must be 0 else 1*/
-		qcom,use_pwr_req = <1>;
-		qcom,ese_pwr_req = <&msm_gpio 31 0x00>;
-		/* if no intr req this must be 0 else 1*/
-		qcom,use_interrupt = <0>;
-		/*qcom,ese_intr = <&msm_gpio 35 0x00>;*/
-		pinctrl-names = "ese_active", "ese_suspend";
-		pinctrl-0 = <&ese_int_active &ese_disable_active>;
-		pinctrl-1 = <&ese_int_suspend &ese_disable_suspend>;
-	};
-};
-
 &i2c_2 {
         status = "okay";
         nq@28 {
@@ -371,7 +351,7 @@
                 qcom,nq-ven = <&msm_gpio 20 0x00>;
                 qcom,nq-firm = <&msm_gpio 23 0x00>;
                 qcom,nq-clkreq = <&pm8909_gpios 2 0x00>;
-                /*qcom,nq-esepwr = <&msm_gpio 31 0x00>;*/
+                qcom,nq-esepwr = <&msm_gpio 31 0x00>;
                 interrupt-parent = <&msm_gpio>;
                 qcom,clk-src = "BBCLK2";
                 interrupts = <21 0>;
