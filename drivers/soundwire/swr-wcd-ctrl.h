@@ -82,6 +82,7 @@ struct swr_mstr_ctrl {
 	struct completion broadcast;
 	struct mutex mlock;
 	struct mutex reslock;
+	int clk_ref_count;
 	u8 rcmd_id;
 	u8 wcmd_id;
 	void *handle; /* SWR Master handle from client for read and writes */
@@ -93,6 +94,7 @@ struct swr_mstr_ctrl {
 			void *data), void *swr_handle, int type);
 	int irq;
 	int version;
+	u32 num_dev;
 	int num_enum_slaves;
 	int slave_status;
 	struct swr_mstr_port *mstr_port;
