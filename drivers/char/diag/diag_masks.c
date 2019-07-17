@@ -1297,6 +1297,8 @@ static int diag_cmd_set_log_mask(unsigned char *src_buf, int src_len,
 
 	mutex_lock(&mask_info->lock);
 	for (i = 0; i < MAX_EQUIP_ID && !status; i++, mask++) {
+		if (!mask || !mask->ptr)
+			continue;
 		if (mask->equip_id != req->equip_id)
 			continue;
 		mutex_lock(&mask->lock);
@@ -1417,9 +1419,11 @@ static int diag_cmd_disable_log_mask(unsigned char *src_buf, int src_len,
 		return -EINVAL;
 	}
 	for (i = 0; i < MAX_EQUIP_ID; i++, mask++) {
-		mutex_lock(&mask->lock);
-		memset(mask->ptr, 0, mask->range);
-		mutex_unlock(&mask->lock);
+		if (mask && mask->ptr) {
+			mutex_lock(&mask->lock);
+			memset(mask->ptr, 0, mask->range);
+			mutex_unlock(&mask->lock);
+		}
 	}
 	mask_info->status = DIAG_CTRL_MASK_ALL_DISABLED;
 	mutex_unlock(&driver->md_session_lock);
