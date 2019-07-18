@@ -1840,11 +1840,6 @@ static const struct dev_pm_ops swrm_dev_pm_ops = {
 		swrm_suspend,
 		swrm_resume
 	)
-	SET_RUNTIME_PM_OPS(
-		swrm_runtime_suspend,
-		swrm_runtime_resume,
-		NULL
-	)
 };
 
 static struct of_device_id swrm_dt_match[] = {
