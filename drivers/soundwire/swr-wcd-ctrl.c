@@ -397,11 +397,18 @@ static int swrm_clk_request(struct swr_mstr_ctrl *swrm, bool enable)
 		return -EINVAL;
 
 	if (enable) {
-		swrm->clk(swrm->handle, true);
-		swrm->state = SWR_MSTR_UP;
-	} else {
+		swrm->clk_ref_count++;
+		if(swrm->clk_ref_count == 1) {
+		    swrm->clk(swrm->handle, true);
+		    swrm->state = SWR_MSTR_UP;
+		}
+	} else if(--swrm->clk_ref_count == 1 ) {
 		swrm->clk(swrm->handle, false);
 		swrm->state = SWR_MSTR_DOWN;
+	}
+	else if(swrm->clk_ref_count < 0) {
+	    pr_err("%s: swrm clk count mismatch \n",__func__);
+	    swrm->clk_ref_count = 0;
 	}
 	return 0;
 }
@@ -1168,8 +1175,9 @@ static irqreturn_t swr_mstr_interrupt(int irq, void *dev)
 	int status, chg_sts, i;
 	u8 devnum = 0;
 	int ret = IRQ_HANDLED;
-
-	pm_runtime_get_sync(&swrm->pdev->dev);
+	mutex_lock(&swrm->reslock);
+	swrm_clk_request(swrm, true);
+	mutex_unlock(&swrm->reslock);
 	intr_sts = swrm->read(swrm->handle, SWRM_INTERRUPT_STATUS);
 	intr_sts &= SWRM_INTERRUPT_STATUS_RMSK;
 	for (i = 0; i < SWRM_INTERRUPT_MAX; i++) {
@@ -1257,8 +1265,9 @@ static irqreturn_t swr_mstr_interrupt(int irq, void *dev)
 			break;
 		}
 	}
-	pm_runtime_mark_last_busy(&swrm->pdev->dev);
-	pm_runtime_put_autosuspend(&swrm->pdev->dev);
+	mutex_lock(&swrm->reslock);
+	swrm_clk_request(swrm, true);
+	mutex_unlock(&swrm->reslock);
 	return ret;
 }
 
@@ -1278,6 +1287,8 @@ static int swrm_get_logical_dev_num(struct swr_master *mstr, u64 dev_id,
 	int i;
 	u64 id = 0;
 	int ret = -EINVAL;
+	struct swr_device *swr_dev;
+	u32 num_dev = 0;
 	struct swr_mstr_ctrl *swrm = swr_get_ctrl_data(mstr);
 
 	if (!swrm) {
@@ -1285,27 +1296,39 @@ static int swrm_get_logical_dev_num(struct swr_master *mstr, u64 dev_id,
 			__func__);
 		return ret;
 	}
-
+	if(swrm->num_dev)
+	     num_dev = swrm->num_dev;
+	else
+	    num_dev = mstr->num_dev;
 	pm_runtime_get_sync(&swrm->pdev->dev);
-	for (i = 1; i < (mstr->num_dev + 1); i++) {
+	for (i = 1; i < (num_dev + 1); i++) {
 		id = ((u64)(swrm->read(swrm->handle,
 			    SWRM_ENUMERATOR_SLAVE_DEV_ID_2(i))) << 32);
 		id |= swrm->read(swrm->handle,
 			    SWRM_ENUMERATOR_SLAVE_DEV_ID_1(i));
-		if ((id & SWR_DEV_ID_MASK) == dev_id) {
-			if (swrm_get_device_status(swrm, i) == 0x01) {
-				*dev_num = i;
-				ret = 0;
-			} else {
-				dev_err(swrm->dev, "%s: device is not ready\n",
-					 __func__);
+	/*
+	 * As pm_runtime_get_sync brings all slaves out of reset
+	 * update logical device number for all slaves
+	 */
+	 list_for_each_entry(swr_dev, &mstr->devices, dev_list) {
+		if(swr_dev->addr == (id & SWR_DEV_ID_MASK)){
+		    u32 status = swrm_get_device_status(swrm,i);
+			if ((status == 0x01)|| (status == 0x02)){
+				swr_dev->dev_num = i;
+				if((id & SWR_DEV_ID_MASK)== dev_id){
+				 *dev_num = i;
+				 ret=0;
+				}
+				dev_dbg(swrm->dev, "%s: devnum %d is assigned for dev addr %lx\n",
+						__func__,i,swr_dev->addr);
 			}
-			goto found;
 		}
+	}
 	}
 	dev_dbg(swrm->dev, "%s: device id 0x%llx does not match with 0x%llx\n",
 		__func__, id, dev_id);
-found:
+	if(ret)
+	    dev_err(swrm->dev, "%s: device 0x%llx is not ready\n", __func__,dev_id);
 	pm_runtime_mark_last_busy(&swrm->pdev->dev);
 	pm_runtime_put_autosuspend(&swrm->pdev->dev);
 	return ret;
@@ -1449,13 +1472,14 @@ static int swrm_probe(struct platform_device *pdev)
 	swrm->wcmd_id = 0;
 	swrm->slave_status = 0;
 	swrm->num_rx_chs = 0;
+	swrm->clk_ref_count = 0;
 	swrm->state = SWR_MSTR_RESUME;
 	init_completion(&swrm->reset);
 	init_completion(&swrm->broadcast);
 	mutex_init(&swrm->mlock);
 	INIT_LIST_HEAD(&swrm->mport_list);
 	mutex_init(&swrm->reslock);
-
+	swrm->num_dev = 1;
 	ret = swrm->reg_irq(swrm->handle, swr_mstr_interrupt, swrm,
 			    SWR_IRQ_REGISTER);
 	if (ret) {
@@ -1715,6 +1739,9 @@ int swrm_wcd_notify(struct platform_device *pdev, u32 id, void *data)
 		mutex_lock(&swrm->reslock);
 		if ((swrm->state == SWR_MSTR_RESUME) ||
 		    (swrm->state == SWR_MSTR_UP)) {
+                       list_for_each_entry(swr_dev, &mstr->devices, dev_list)
+                               swr_reset_device(swr_dev);
+
 			dev_dbg(swrm->dev, "%s: SWR master is already UP: %d\n",
 				__func__, swrm->state);
 		} else {
@@ -1869,7 +1896,7 @@ static int __init swrm_init(void)
 {
 	return platform_driver_register(&swr_mstr_driver);
 }
-subsys_initcall(swrm_init);
+module_init(swrm_init);
 
 static void __exit swrm_exit(void)
 {
