@@ -40,8 +40,6 @@
 #include "debug.h"
 #include "io.h"
 
-#define MAX_ERROR_RECOVERY_TRIES	3
-
 static void dwc3_gadget_wakeup_interrupt(struct dwc3 *dwc, bool remote_wakeup);
 static int dwc3_gadget_wakeup_int(struct dwc3 *dwc);
 
@@ -1966,6 +1964,12 @@ static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on, int suspend)
 		dwc->pullups_connected = true;
 	} else {
 		dwc3_gadget_disable_irq(dwc);
+		/*
+		 * Reset the err_evt_seen so that the interrupts on
+		 * next connect/session is processed correctly.
+		 */
+		dwc->err_evt_seen = false;
+
 		__dwc3_gadget_ep_disable(dwc->eps[0]);
 		__dwc3_gadget_ep_disable(dwc->eps[1]);
 
@@ -3530,12 +3534,10 @@ static irqreturn_t dwc3_process_event_buf(struct dwc3 *dwc, u32 buf)
 			evt->lpos = (evt->lpos + left) %
 					DWC3_EVENT_BUFFERS_SIZE;
 			dwc3_writel(dwc->regs, DWC3_GEVNTCOUNT(buf), left);
-			if (dwc->retries_on_error < MAX_ERROR_RECOVERY_TRIES) {
-				if (dwc3_notify_event(dwc,
+			if (dwc3_notify_event(dwc,
 						DWC3_CONTROLLER_ERROR_EVENT, 0))
-					dwc->err_evt_seen = 0;
-				dwc->retries_on_error++;
-			}
+				dwc->err_evt_seen = 0;
+			dwc->retries_on_error++;
 			break;
 		}
 
