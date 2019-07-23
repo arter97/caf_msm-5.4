@@ -42,6 +42,8 @@ Optional:
 is a number
 - qcom,ipa-hw-mode: IPA hardware mode - Normal, Virtual memory allocation,
 memory allocation over a PCIe bridge
+- qcom,vlan_enable_mode: enable vlan for Ethernet, RNDIS and ECM driver.
+Default is 1 0 0.
 - qcom,msm-bus,name:            String representing the client-name
 - qcom,msm-bus,num-cases:       Total number of usecases
 - qcom,msm-bus,active-only:     Boolean context flag for requests in active or

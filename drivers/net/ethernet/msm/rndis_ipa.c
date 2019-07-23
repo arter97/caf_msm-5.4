@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, 2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, 2018-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,6 +13,7 @@
 #include <linux/atomic.h>
 #include <linux/errno.h>
 #include <linux/etherdevice.h>
+#include <linux/if_vlan.h>
 #include <linux/debugfs.h>
 #include <linux/in.h>
 #include <linux/stddef.h>
@@ -171,6 +172,7 @@ enum rndis_ipa_operation {
  * state is changed to RNDIS_IPA_CONNECTED_AND_UP
  * @xmit_error_delayed_work: work item for cases where IPA driver Tx fails
  * @state_lock: used to protect the state variable.
+ * @is_vlan_mode: should driver work in vlan mode?
  */
 struct rndis_ipa_dev {
 	struct net_device *net;
@@ -199,6 +201,7 @@ struct rndis_ipa_dev {
 	void (*device_ready_notify)(void);
 	struct delayed_work xmit_error_delayed_work;
 	spinlock_t state_lock; /* Spinlock for the state variable.*/
+	bool is_vlan_mode;
 };
 
 /**
@@ -225,17 +228,18 @@ static void rndis_ipa_tx_complete_notify(void *private,
 static void rndis_ipa_tx_timeout(struct net_device *net);
 static int rndis_ipa_stop(struct net_device *net);
 static void rndis_ipa_enable_data_path(struct rndis_ipa_dev *rndis_ipa_ctx);
-static struct sk_buff *rndis_encapsulate_skb(struct sk_buff *skb);
+static struct sk_buff *rndis_encapsulate_skb(struct sk_buff *skb,
+	struct rndis_ipa_dev *rndis_ipa_ctx);
 static void rndis_ipa_xmit_error(struct sk_buff *skb);
 static void rndis_ipa_xmit_error_aftercare_wq(struct work_struct *work);
 static void rndis_ipa_prepare_header_insertion(int eth_type,
 		const char *hdr_name, struct ipa_hdr_add *add_hdr,
-		const void *dst_mac, const void *src_mac);
+		const void *dst_mac, const void *src_mac, bool is_vlan_mode);
 static int rndis_ipa_hdrs_cfg(struct rndis_ipa_dev *rndis_ipa_ctx,
 		const void *dst_mac, const void *src_mac);
 static int rndis_ipa_hdrs_destroy(struct rndis_ipa_dev *rndis_ipa_ctx);
 static struct net_device_stats *rndis_ipa_get_stats(struct net_device *net);
-static int rndis_ipa_register_properties(char *netdev_name);
+static int rndis_ipa_register_properties(char *netdev_name, bool is_vlan_mode);
 static int rndis_ipa_deregister_properties(char *netdev_name);
 static void rndis_ipa_rm_notify(void *user_data, enum ipa_rm_event event,
 		unsigned long data);
@@ -262,7 +266,7 @@ static void rndis_ipa_debugfs_destroy(struct rndis_ipa_dev *rndis_ipa_ctx);
 static int rndis_ipa_ep_registers_cfg(u32 usb_to_ipa_hdl,
 		u32 ipa_to_usb_hdl, u32 max_xfer_size_bytes_to_dev,
 		u32 max_xfer_size_bytes_to_host, u32 mtu,
-		bool deaggr_enable);
+		bool deaggr_enable, bool is_vlan_mode);
 static int rndis_ipa_set_device_ethernet_addr(u8 *dev_ethaddr,
 		u8 device_ethaddr[]);
 static enum rndis_ipa_state rndis_ipa_next_state(
@@ -556,6 +560,12 @@ int rndis_ipa_init(struct ipa_usb_init_params *params)
 	}
 	RNDIS_IPA_DEBUG("Device Ethernet address set %pM\n", net->dev_addr);
 
+	if (ipa_is_vlan_mode(IPA_VLAN_IF_RNDIS,
+		&rndis_ipa_ctx->is_vlan_mode)) {
+		RNDIS_IPA_ERROR("couldn't acquire vlan mode, is ipa ready?\n");
+		goto fail_get_vlan_mode;
+	}
+
 	result = rndis_ipa_hdrs_cfg(rndis_ipa_ctx,
 			params->host_ethaddr,
 			params->device_ethaddr);
@@ -565,7 +575,8 @@ int rndis_ipa_init(struct ipa_usb_init_params *params)
 	}
 	RNDIS_IPA_DEBUG("IPA header-insertion configed for Ethernet+RNDIS\n");
 
-	result = rndis_ipa_register_properties(net->name);
+	result = rndis_ipa_register_properties(net->name,
+			rndis_ipa_ctx->is_vlan_mode);
 	if (result) {
 		RNDIS_IPA_ERROR("fail on properties set\n");
 		goto fail_register_tx;
@@ -600,6 +611,7 @@ fail_register_netdev:
 	rndis_ipa_deregister_properties(net->name);
 fail_register_tx:
 	rndis_ipa_hdrs_destroy(rndis_ipa_ctx);
+fail_get_vlan_mode:
 fail_set_device_ethernet:
 fail_hdrs_cfg:
 	rndis_ipa_debugfs_destroy(rndis_ipa_ctx);
@@ -700,7 +712,8 @@ int rndis_ipa_pipe_connect_notify(u32 usb_to_ipa_hdl,
 			max_xfer_size_bytes_to_dev,
 			max_xfer_size_bytes_to_host,
 			rndis_ipa_ctx->net->mtu,
-			rndis_ipa_ctx->deaggregation_enable);
+			rndis_ipa_ctx->deaggregation_enable,
+			rndis_ipa_ctx->is_vlan_mode);
 	if (result) {
 		RNDIS_IPA_ERROR("fail on ep cfg\n");
 		goto fail;
@@ -879,7 +892,7 @@ static netdev_tx_t rndis_ipa_start_xmit(struct sk_buff *skb,
 		goto out;
 	}
 
-	skb = rndis_encapsulate_skb(skb);
+	skb = rndis_encapsulate_skb(skb, rndis_ipa_ctx);
 	trace_rndis_tx_dp(skb->protocol);
 	ret = ipa_tx_dp(IPA_TO_USB_CLIENT, skb, NULL);
 	if (ret) {
@@ -1414,26 +1427,44 @@ static void rndis_ipa_xmit_error_aftercare_wq(struct work_struct *work)
  * This header shall be used for HW bridging for packets destined for
  *  tethered PC.
  * For SW data-path, this header won't be used.
+ * is_vlan_mode: should driver work in vlan mode?
  */
 static void rndis_ipa_prepare_header_insertion(int eth_type,
 		const char *hdr_name, struct ipa_hdr_add *add_hdr,
-		const void *dst_mac, const void *src_mac)
+		const void *dst_mac, const void *src_mac,
+		bool is_vlan_mode)
 {
 	struct ethhdr *eth_hdr;
+	struct vlan_ethhdr *eth_vlan_hdr;
 
 	add_hdr->hdr_len = sizeof(rndis_template_hdr);
 	add_hdr->is_partial = false;
 	strlcpy(add_hdr->name, hdr_name, IPA_RESOURCE_NAME_MAX);
 
 	memcpy(add_hdr->hdr, &rndis_template_hdr, sizeof(rndis_template_hdr));
-	eth_hdr = (struct ethhdr *)(add_hdr->hdr + sizeof(rndis_template_hdr));
-	memcpy(eth_hdr->h_dest, dst_mac, ETH_ALEN);
-	memcpy(eth_hdr->h_source, src_mac, ETH_ALEN);
-	eth_hdr->h_proto = htons(eth_type);
-	add_hdr->hdr_len += ETH_HLEN;
+
 	add_hdr->is_eth2_ofst_valid = true;
 	add_hdr->eth2_ofst = sizeof(rndis_template_hdr);
 	add_hdr->type = IPA_HDR_L2_ETHERNET_II;
+
+	if (is_vlan_mode) {
+		eth_vlan_hdr = (struct vlan_ethhdr *)(add_hdr->hdr +
+			sizeof(rndis_template_hdr));
+		memcpy(eth_vlan_hdr->h_dest, dst_mac, ETH_ALEN);
+		memcpy(eth_vlan_hdr->h_source, src_mac, ETH_ALEN);
+		eth_vlan_hdr->h_vlan_encapsulated_proto = htons(eth_type);
+		eth_vlan_hdr->h_vlan_proto = htons(ETH_P_8021Q);
+		add_hdr->hdr_len += VLAN_ETH_HLEN;
+		add_hdr->type = IPA_HDR_L2_802_1Q;
+	} else {
+		eth_hdr = (struct ethhdr *)(add_hdr->hdr +
+			sizeof(rndis_template_hdr));
+		memcpy(eth_hdr->h_dest, dst_mac, ETH_ALEN);
+		memcpy(eth_hdr->h_source, src_mac, ETH_ALEN);
+		eth_hdr->h_proto = htons(eth_type);
+		add_hdr->hdr_len += ETH_HLEN;
+		add_hdr->type = IPA_HDR_L2_ETHERNET_II;
+	}
 }
 
 /**
@@ -1472,9 +1503,9 @@ static int rndis_ipa_hdrs_cfg(struct rndis_ipa_dev *rndis_ipa_ctx,
 	ipv4_hdr = &hdrs->hdr[0];
 	ipv6_hdr = &hdrs->hdr[1];
 	rndis_ipa_prepare_header_insertion(ETH_P_IP, IPV4_HDR_NAME,
-		ipv4_hdr, dst_mac, src_mac);
+		ipv4_hdr, dst_mac, src_mac, rndis_ipa_ctx->is_vlan_mode);
 	rndis_ipa_prepare_header_insertion(ETH_P_IPV6, IPV6_HDR_NAME,
-		ipv6_hdr, dst_mac, src_mac);
+		ipv6_hdr, dst_mac, src_mac, rndis_ipa_ctx->is_vlan_mode);
 
 	hdrs->commit = 1;
 	hdrs->num_hdrs = 2;
@@ -1556,6 +1587,7 @@ static struct net_device_stats *rndis_ipa_get_stats(struct net_device *net)
  * rndis_ipa_register_properties() - set Tx/Rx properties needed
  *  by IPA configuration manager
  * @netdev_name: a string with the name of the network interface device
+ * @is_vlan_mode: should driver work in vlan mode?
  *
  * Register Tx/Rx properties to allow user space configuration (IPA
  * Configuration Manager):
@@ -1574,7 +1606,7 @@ static struct net_device_stats *rndis_ipa_get_stats(struct net_device *net)
  *   This rules shall be added based on the attribute mask supplied at
  *   this function, that is, always hit rule.
  */
-static int rndis_ipa_register_properties(char *netdev_name)
+static int rndis_ipa_register_properties(char *netdev_name, bool is_vlan_mode)
 {
 	struct ipa_tx_intf tx_properties = {0};
 	struct ipa_ioc_tx_intf_prop properties[2] = { {0}, {0} };
@@ -1584,23 +1616,26 @@ static int rndis_ipa_register_properties(char *netdev_name)
 	struct ipa_rx_intf rx_properties = {0};
 	struct ipa_ioc_rx_intf_prop *rx_ipv4_property;
 	struct ipa_ioc_rx_intf_prop *rx_ipv6_property;
+	enum ipa_hdr_l2_type hdr_l2_type = IPA_HDR_L2_ETHERNET_II;
 	int result = 0;
 
 	RNDIS_IPA_LOG_ENTRY();
 
+	if (is_vlan_mode)
+		hdr_l2_type = IPA_HDR_L2_802_1Q;
 	tx_properties.prop = properties;
 	ipv4_property = &tx_properties.prop[0];
 	ipv4_property->ip = IPA_IP_v4;
 	ipv4_property->dst_pipe = IPA_TO_USB_CLIENT;
 	strlcpy(ipv4_property->hdr_name, IPV4_HDR_NAME,
 			IPA_RESOURCE_NAME_MAX);
-	ipv4_property->hdr_l2_type = IPA_HDR_L2_ETHERNET_II;
+	ipv4_property->hdr_l2_type = hdr_l2_type;
 	ipv6_property = &tx_properties.prop[1];
 	ipv6_property->ip = IPA_IP_v6;
 	ipv6_property->dst_pipe = IPA_TO_USB_CLIENT;
 	strlcpy(ipv6_property->hdr_name, IPV6_HDR_NAME,
 			IPA_RESOURCE_NAME_MAX);
-	ipv6_property->hdr_l2_type = IPA_HDR_L2_ETHERNET_II;
+	ipv6_property->hdr_l2_type = hdr_l2_type;
 	tx_properties.num_props = 2;
 
 	rx_properties.prop = rx_ioc_properties;
@@ -1608,12 +1643,12 @@ static int rndis_ipa_register_properties(char *netdev_name)
 	rx_ipv4_property->ip = IPA_IP_v4;
 	rx_ipv4_property->attrib.attrib_mask = 0;
 	rx_ipv4_property->src_pipe = IPA_CLIENT_USB_PROD;
-	rx_ipv4_property->hdr_l2_type = IPA_HDR_L2_ETHERNET_II;
+	rx_ipv4_property->hdr_l2_type = hdr_l2_type;
 	rx_ipv6_property = &rx_properties.prop[1];
 	rx_ipv6_property->ip = IPA_IP_v6;
 	rx_ipv6_property->attrib.attrib_mask = 0;
 	rx_ipv6_property->src_pipe = IPA_CLIENT_USB_PROD;
-	rx_ipv6_property->hdr_l2_type = IPA_HDR_L2_ETHERNET_II;
+	rx_ipv6_property->hdr_l2_type = hdr_l2_type;
 	rx_properties.num_props = 2;
 
 	result = ipa_register_intf("rndis0", &tx_properties, &rx_properties);
@@ -1831,12 +1866,14 @@ out:
  * rndis_encapsulate_skb() - encapsulate the given Ethernet skb with
  *  an RNDIS header
  * @skb: packet to be encapsulated with the RNDIS header
+ * @rndis_ipa_ctx: main driver context
  *
  * Shall use a template header for RNDIS and update it with the given
  * skb values.
  * Ethernet is expected to be already encapsulate the packet.
  */
-static struct sk_buff *rndis_encapsulate_skb(struct sk_buff *skb)
+static struct sk_buff *rndis_encapsulate_skb(struct sk_buff *skb,
+		struct rndis_ipa_dev *rndis_ipa_ctx)
 {
 	struct rndis_pkt_hdr *rndis_hdr;
 	int payload_byte_len = skb->len;
@@ -1853,6 +1890,10 @@ static struct sk_buff *rndis_encapsulate_skb(struct sk_buff *skb)
 		dev_kfree_skb_any(skb);
 		skb = new_skb;
 	}
+
+	if (rndis_ipa_ctx->is_vlan_mode)
+		if (unlikely(skb->protocol != ETH_P_8021Q))
+			RNDIS_IPA_DEBUG("ether_type != ETH_P_8021Q && vlan\n");
 
 	/* make room at the head of the SKB to put the RNDIS header */
 	rndis_hdr = (struct rndis_pkt_hdr *)skb_push(skb,
@@ -1929,6 +1970,8 @@ static bool rm_enabled(struct rndis_ipa_dev *rndis_ipa_ctx)
  * @max_xfer_size_bytes_to_host: the maximum size, in bytes, that the host
  *  expects to receive from the device. supplied on REMOTE_NDIS_INITIALIZE_MSG.
  * @mtu: the netdev MTU size, in bytes
+ * @deaggr_enable: should deaggregation be enabled?
+ * @is_vlan_mode: should driver work in vlan mode?
  *
  * USB to IPA pipe:
  *  - de-aggregation
@@ -1946,7 +1989,8 @@ static int rndis_ipa_ep_registers_cfg(u32 usb_to_ipa_hdl,
 		u32 max_xfer_size_bytes_to_dev,
 		u32 max_xfer_size_bytes_to_host,
 		u32 mtu,
-		bool deaggr_enable)
+		bool deaggr_enable,
+		bool is_vlan_mode)
 {
 	int result;
 	struct ipa_ep_cfg *usb_to_ipa_ep_cfg;
@@ -1957,6 +2001,20 @@ static int rndis_ipa_ep_registers_cfg(u32 usb_to_ipa_hdl,
 	} else {
 		usb_to_ipa_ep_cfg = &usb_to_ipa_ep_cfg_deaggr_dis;
 		RNDIS_IPA_DEBUG("deaggregation disabled\n");
+	}
+
+	if (is_vlan_mode) {
+		usb_to_ipa_ep_cfg->hdr.hdr_len =
+			VLAN_ETH_HLEN + sizeof(struct rndis_pkt_hdr);
+		ipa_to_usb_ep_cfg.hdr.hdr_len =
+			VLAN_ETH_HLEN + sizeof(struct rndis_pkt_hdr);
+		ipa_to_usb_ep_cfg.hdr.hdr_additional_const_len = VLAN_ETH_HLEN;
+	} else {
+		usb_to_ipa_ep_cfg->hdr.hdr_len =
+			ETH_HLEN + sizeof(struct rndis_pkt_hdr);
+		ipa_to_usb_ep_cfg.hdr.hdr_len =
+			ETH_HLEN + sizeof(struct rndis_pkt_hdr);
+		ipa_to_usb_ep_cfg.hdr.hdr_additional_const_len = ETH_HLEN;
 	}
 
 	usb_to_ipa_ep_cfg->deaggr.max_packet_len = max_xfer_size_bytes_to_dev;
@@ -2308,6 +2366,14 @@ static void rndis_ipa_debugfs_init(struct rndis_ipa_dev *rndis_ipa_ctx)
 			&rndis_ipa_ctx->during_xmit_error);
 	if (!file) {
 		RNDIS_IPA_ERROR("fail to create during_xmit_error file\n");
+		goto fail_file;
+	}
+
+	file = debugfs_create_bool("is_vlan_mode", flags_read_only,
+		rndis_ipa_ctx->directory,
+		&rndis_ipa_ctx->is_vlan_mode);
+	if (!file) {
+		RNDIS_IPA_ERROR("fail to create is_vlan_mode file\n");
 		goto fail_file;
 	}
 

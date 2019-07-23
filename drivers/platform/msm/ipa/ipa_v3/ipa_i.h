@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1335,6 +1335,7 @@ struct ipa3_context {
 	u32 ipa_tz_unlock_reg_num;
 	struct ipa_tz_unlock_reg_info *ipa_tz_unlock_reg;
 	struct ipa_dma_task_info dma_task_info;
+	bool vlan_mode_iface[IPA_VLAN_IF_MAX];
 };
 
 /**
@@ -1375,6 +1376,7 @@ struct ipa3_plat_drv_res {
 	bool tethered_flow_control;
 	u32 ipa_tz_unlock_reg_num;
 	struct ipa_tz_unlock_reg_info *ipa_tz_unlock_reg;
+	u32 vlan_enable_mode[IPA_VLAN_IF_MAX];
 };
 
 struct ipa3_mem_partition {
@@ -2047,6 +2049,7 @@ int ipa3_iommu_map(struct iommu_domain *domain, unsigned long iova,
 int ipa3_ap_suspend(struct device *dev);
 int ipa3_ap_resume(struct device *dev);
 int ipa3_init_interrupts(void);
+int ipa3_is_vlan_mode(enum ipa_vlan_ifaces iface, u32 *res);
 struct iommu_domain *ipa3_get_smmu_domain(void);
 int ipa3_release_wdi_mapping(u32 num_buffers, struct ipa_wdi_buffer_info *info);
 int ipa3_create_wdi_mapping(u32 num_buffers, struct ipa_wdi_buffer_info *info);

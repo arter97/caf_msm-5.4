@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, 2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1108,6 +1108,7 @@ struct ipa_tz_unlock_reg_info {
 	u64 size;
 };
 
+
 #if defined CONFIG_IPA || defined CONFIG_IPA3
 
 /*
@@ -1479,6 +1480,17 @@ int ipa_register_ipa_ready_cb(void (*ipa_ready_cb)(void *user_data),
  * Returns: 0 on success, negative on failure
  */
 int ipa_tz_unlock_reg(struct ipa_tz_unlock_reg_info *reg_info, u16 num_regs);
+
+/**
+* ipa_is_vlan_mode - check if a LAN driver should load in VLAN mode
+* @iface - type of vlan capable device
+* @res - query result: true for vlan mode, false for non vlan mode
+*
+* API must be called after ipa_is_ready() returns true, otherwise it will fail
+*
+* Returns: 0 on success, negative on failure
+*/
+int ipa_is_vlan_mode(enum ipa_vlan_ifaces iface, bool *res);
 
 #else /* (CONFIG_IPA || CONFIG_IPA3) */
 
@@ -2211,6 +2223,11 @@ static inline int ipa_register_ipa_ready_cb(
 
 static inline int ipa_tz_unlock_reg(struct ipa_tz_unlock_reg_info *reg_info,
 	u16 num_regs)
+{
+	return -EPERM;
+}
+
+static inline int ipa_is_vlan_mode(enum ipa_vlan_ifaces iface, bool *res)
 {
 	return -EPERM;
 }

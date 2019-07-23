@@ -95,7 +95,8 @@
 #define IPA_IOCTL_ALLOC_IPV6CT_TABLE            53
 #define IPA_IOCTL_DEL_NAT_TABLE                 54
 #define IPA_IOCTL_DEL_IPV6CT_TABLE              55
-#define IPA_IOCTL_MAX                           56
+#define IPA_IOCTL_GET_VLAN_MODE                 56
+#define IPA_IOCTL_MAX                           57
 
 /**
  * max size of the header to be inserted
@@ -757,11 +758,13 @@ struct ipa_flt_rule {
  * IPA_HDR_L2_NONE: L2 header which isn't Ethernet II and isn't 802_3
  * IPA_HDR_L2_ETHERNET_II: L2 header of type Ethernet II
  * IPA_HDR_L2_802_3: L2 header of type 802_3
+ * IPA_HDR_L2_802_1Q: L2 header of type 802_1Q
  */
 enum ipa_hdr_l2_type {
 	IPA_HDR_L2_NONE,
 	IPA_HDR_L2_ETHERNET_II,
 	IPA_HDR_L2_802_3,
+	IPA_HDR_L2_802_1Q,
 	IPA_HDR_L2_MAX,
 };
 
@@ -2080,6 +2083,19 @@ enum odu_bridge_mode {
 	ODU_BRIDGE_MODE_MAX,
 };
 
+enum ipa_vlan_ifaces {
+	IPA_VLAN_IF_ETH,
+	IPA_VLAN_IF_RNDIS,
+	IPA_VLAN_IF_ECM
+};
+
+#define IPA_VLAN_IF_MAX (IPA_VLAN_IF_ECM + 1)
+
+struct ipa_ioc_get_vlan_mode {
+	enum ipa_vlan_ifaces iface;
+	uint32_t is_vlan_mode;
+};
+
 #define ODU_BRIDGE_IOC_SET_MODE _IOW(ODU_BRIDGE_IOC_MAGIC, \
 				ODU_BRIDGE_IOCTL_SET_MODE, \
 				enum odu_bridge_mode)
@@ -2088,4 +2104,7 @@ enum odu_bridge_mode {
 				ODU_BRIDGE_IOCTL_SET_LLV6_ADDR, \
 				struct in6_addr *)
 
+#define IPA_IOC_GET_VLAN_MODE _IOWR(IPA_IOC_MAGIC, \
+				IPA_IOCTL_GET_VLAN_MODE, \
+				struct ipa_ioc_get_vlan_mode *)
 #endif /* _UAPI_MSM_IPA_H_ */

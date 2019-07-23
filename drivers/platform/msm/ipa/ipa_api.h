@@ -391,6 +391,8 @@ struct ipa_api_controller {
 
 	int (*ipa_disable_wdi3_pipes)(int ipa_ep_idx_tx,
 		int ipa_ep_idx_rx);
+
+	int (*ipa_is_vlan_mode)(enum ipa_vlan_ifaces iface, bool *res);
 };
 
 #ifdef CONFIG_IPA

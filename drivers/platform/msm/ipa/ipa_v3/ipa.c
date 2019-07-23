@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -728,6 +728,8 @@ static long ipa3_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	struct ipa_ioc_rm_dependency rm_depend;
 	size_t sz;
 	int pre_entry;
+	u32 is_vlan_mode;
+	struct ipa_ioc_get_vlan_mode vlan_mode;
 
 	IPADBG("cmd=%x nr=%d\n", cmd, _IOC_NR(cmd));
 
@@ -1756,6 +1758,29 @@ static long ipa3_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		}
 		memcpy(param, &ipa3_ctx->ipa_hw_type, pyld_sz);
 		if (copy_to_user((u8 *)arg, param, pyld_sz)) {
+			retval = -EFAULT;
+			break;
+		}
+		break;
+
+	case IPA_IOC_GET_VLAN_MODE:
+		IPADBG("Received IPA_IOC_GET_VLAN_MODE\n");
+		if (copy_from_user(&vlan_mode, (const void __user *)arg,
+			sizeof(struct ipa_ioc_get_vlan_mode))) {
+			retval = -EFAULT;
+			break;
+		}
+		retval = ipa3_is_vlan_mode(
+			vlan_mode.iface,
+			&is_vlan_mode);
+		if (retval)
+			break;
+
+		vlan_mode.is_vlan_mode = is_vlan_mode;
+
+		if (copy_to_user((void __user *)arg,
+			&vlan_mode,
+			sizeof(struct ipa_ioc_get_vlan_mode))) {
 			retval = -EFAULT;
 			break;
 		}
@@ -4846,6 +4871,12 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 	ipa3_ctx->apply_rg10_wa = resource_p->apply_rg10_wa;
 	ipa3_ctx->gsi_ch20_wa = resource_p->gsi_ch20_wa;
 	ipa3_ctx->ipa3_active_clients_logging.log_rdy = false;
+
+	for (i = 0; i < IPA_VLAN_IF_MAX; i++)
+	{
+		ipa3_ctx->vlan_mode_iface[i] = resource_p->vlan_enable_mode[i];
+	}
+
 	if (resource_p->ipa_tz_unlock_reg) {
 		ipa3_ctx->ipa_tz_unlock_reg_num =
 			resource_p->ipa_tz_unlock_reg_num;
@@ -5356,6 +5387,7 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 	int i, result, pos;
 	struct resource *resource;
 	u32 *ipa_tz_unlock_reg;
+	u32 vlan_enable_mode[IPA_VLAN_IF_MAX];
 	int elem_num;
 
 	/* initialize ipa3_res */
@@ -5469,6 +5501,24 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 	IPADBG(": Use apps based flow control = %s\n",
 		ipa_drv_res->tethered_flow_control
 		? "True" : "False");
+
+	elem_num = of_property_count_elems_of_size(pdev->dev.of_node,
+		"qcom,vlan_enable_mode", sizeof(u32));
+
+	if (elem_num > 0 && elem_num < (IPA_VLAN_IF_MAX + 1)) {
+		result = of_property_read_u32_array(pdev->dev.of_node,
+			"qcom,vlan_enable_mode", vlan_enable_mode, elem_num);
+
+		if (result)
+		{
+			IPAERR("failed to read vlan enable mode\n");
+			return -EFAULT;
+		}
+		for (i = 0; i < elem_num; i++)
+		{
+			ipa_drv_res->vlan_enable_mode[i] = vlan_enable_mode[i];
+		}
+	}
 
 	if (of_property_read_bool(pdev->dev.of_node,
 		"qcom,use-gsi"))
