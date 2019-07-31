@@ -1538,6 +1538,13 @@ static int32_t q6asm_srvc_callback(struct apr_client_data *data, void *priv)
 	}
 
 	dir = (data->token & 0x0F);
+	if (dir != IN && dir != OUT) {
+		pr_err("%s: Invalid audio port index: %d\n", __func__, dir);
+		if ((sid > 0 && sid <= SESSION_MAX))
+			spin_unlock_irqrestore(
+				&(session[sid].session_lock), flags);
+		return 0;
+	}
 	port = &ac->port[dir];
 
 	switch (data->opcode) {
@@ -1728,6 +1735,7 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 		data->dest_port);
 	if ((data->opcode != ASM_DATA_EVENT_RENDERED_EOS) &&
 	    (data->opcode != ASM_DATA_EVENT_EOS) &&
+	    (data->opcode != ASM_SESSION_EVENTX_OVERFLOW) &&
 	    (data->opcode != ASM_SESSION_EVENT_RX_UNDERFLOW)) {
 		if (payload == NULL) {
 			pr_err("%s: payload is null\n", __func__);
@@ -1854,8 +1862,12 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 					(uint32_t *)data->payload, ac->priv);
 			break;
 		case ASM_DATA_EVENT_WATERMARK: {
-			pr_debug("%s: Watermark opcode[0x%x] status[0x%x]",
-				 __func__, payload[0], payload[1]);
+			if (data->payload_size >= 2 * sizeof(uint32_t))
+				pr_debug("%s: Watermark opcode[0x%x] status[0x%x]",
+					__func__, payload[0], payload[1]);
+			else
+				pr_err("%s: payload size of %x is less than expected.\n",
+					__func__, data->payload_size);
 			break;
 		}
 		case ASM_STREAM_CMD_GET_PP_PARAMS_V2:
@@ -1911,10 +1923,23 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 				return -EINVAL;
 			}
 			spin_lock_irqsave(&port->dsp_lock, dsp_flags);
-			if (lower_32_bits(port->buf[data->token].phys) !=
-			payload[0] ||
-			msm_audio_populate_upper_32_bits(
-				port->buf[data->token].phys) !=	payload[1]) {
+			if (data->token < 0 ||
+					data->token >= port->max_buf_cnt) {
+				pr_debug("%s: Invalid token buffer index %u\n",
+					__func__, data->token);
+				spin_unlock_irqrestore(&port->dsp_lock,
+								dsp_flags);
+				spin_unlock_irqrestore(
+					&(session[session_id].session_lock),
+					flags);
+				return -EINVAL;
+			}
+			if (data->payload_size >= 2 * sizeof(uint32_t) &&
+				(lower_32_bits(port->buf[data->token].phys) !=
+				payload[0] ||
+				msm_audio_populate_upper_32_bits(
+					port->buf[data->token].phys) !=
+						payload[1])) {
 				pr_debug("%s: Expected addr %pK\n",
 				__func__, &port->buf[data->token].phys);
 				pr_err("%s: rxedl[0x%x] rxedu [0x%x]\n",
@@ -2020,6 +2045,16 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 			}
 			spin_lock_irqsave(&port->dsp_lock, dsp_flags);
 			token = data->token;
+			if (token < 0 || token >= port->max_buf_cnt) {
+				pr_debug("%s: Invalid token buffer index %u\n",
+					__func__, token);
+				spin_unlock_irqrestore(&port->dsp_lock,
+								dsp_flags);
+				spin_unlock_irqrestore(
+					&(session[session_id].session_lock),
+					flags);
+				return -EINVAL;
+			}
 			port->buf[token].used = 0;
 			if (lower_32_bits(port->buf[token].phys) !=
 			payload[READDONE_IDX_BUFADD_LSW] ||
@@ -2093,6 +2128,18 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 		break;
 	case ASM_SESSION_CMDRSP_GET_MTMX_STRTR_PARAMS_V2:
 		q6asm_process_mtmx_get_param_rsp(ac, (void *) payload);
+		break;
+	case ASM_SESSION_CMDRSP_ADJUST_SESSION_CLOCK_V2:
+		if (data->payload_size >= 3 * sizeof(uint32_t))
+			pr_debug("%s: ASM_SESSION_CMDRSP_ADJUST_SESSION_CLOCK_V2 sesion %d status 0x%x msw %u lsw %u\n",
+				 __func__, ac->session,
+				 payload[0],
+				 payload[2],
+				 payload[1]);
+		else
+			pr_err("%s: payload size of %x is less than expected.\n",
+				__func__, data->payload_size);
+		wake_up(&ac->cmd_wait);
 		break;
 	case ASM_SESSION_CMDRSP_GET_PATH_DELAY_V2:
 		if (data->payload_size >= 3 * sizeof(uint32_t))
