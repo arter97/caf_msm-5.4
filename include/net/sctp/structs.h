@@ -1249,6 +1249,7 @@ struct sctp_endpoint {
 	__u16 active_key_id;
 	__u8  auth_enable:1,
 	      prsctp_enable:1,
+	      asconf_enable:1,
 	      reconf_enable:1;
 };
 
