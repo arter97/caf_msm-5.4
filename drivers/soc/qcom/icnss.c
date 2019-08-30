@@ -346,7 +346,7 @@ static int wlfw_msa_mem_info_send_sync_msg(void)
 	max_mapped_addr = penv->msa_pa + penv->msa_mem_size;
 	for (i = 0; i < resp.mem_region_info_len; i++) {
 		if (resp.mem_region_info[i].size > penv->msa_mem_size ||
-		    resp.mem_region_info[i].region_addr > max_mapped_addr ||
+		    resp.mem_region_info[i].region_addr >= max_mapped_addr ||
 		    resp.mem_region_info[i].region_addr < penv->msa_pa ||
 		    resp.mem_region_info[i].size +
 		    resp.mem_region_info[i].region_addr > max_mapped_addr) {
