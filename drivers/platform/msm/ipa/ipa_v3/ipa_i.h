@@ -1336,6 +1336,7 @@ struct ipa3_context {
 	struct ipa_tz_unlock_reg_info *ipa_tz_unlock_reg;
 	struct ipa_dma_task_info dma_task_info;
 	bool vlan_mode_iface[IPA_VLAN_IF_MAX];
+	bool fw_loaded;
 };
 
 /**
