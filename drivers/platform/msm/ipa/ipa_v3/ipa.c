@@ -4639,6 +4639,10 @@ static ssize_t ipa3_write(struct file *file, const char __user *buf,
 		return -EFAULT;
 	}
 
+	dbg_buff[count] = '\0';
+
+	IPAERR("user input string %s\n", dbg_buff);
+
 	/* Prevent consequent calls from trying to load the FW again. */
 	if (ipa3_is_ready())
 		return count;
@@ -4651,8 +4655,33 @@ static ssize_t ipa3_write(struct file *file, const char __user *buf,
 		IPA_ACTIVE_CLIENTS_INC_SIMPLE();
 
 		if (ipa3_is_msm_device()) {
+
+			/* Prevent multiple calls from trying to load the FW again. */
+			if (ipa3_ctx->fw_loaded) {
+				IPAERR("not load FW again\n");
+				return count;
+			}
+			/* Schedule WQ to load ipa-fws */
+			ipa3_ctx->fw_loaded = true;
+
 			result = ipa3_trigger_fw_loading_msms();
 		} else {
+			if (strnstr(dbg_buff, "vlan", strlen(dbg_buff))) {
+				if (strnstr(dbg_buff, "eth", strlen(dbg_buff)))
+					ipa3_ctx->vlan_mode_iface[IPA_VLAN_IF_ETH] =
+					true;
+				if (strnstr(dbg_buff, "rndis", strlen(dbg_buff)))
+					ipa3_ctx->vlan_mode_iface
+						[IPA_VLAN_IF_RNDIS] = true;
+				if (strnstr(dbg_buff, "ecm", strlen(dbg_buff)))
+					ipa3_ctx->vlan_mode_iface[IPA_VLAN_IF_ECM] = true;
+				/*
+				 * when vlan mode is passed to our dev we expect
+				 * another write
+				 */
+				return count;
+			}
+
 			if (!strcasecmp(dbg_buff, "MHI")) {
 				ipa3_ctx->ipa_config_is_mhi = true;
 				pr_info(
@@ -4661,6 +4690,14 @@ static ssize_t ipa3_write(struct file *file, const char __user *buf,
 				pr_info(
 				"IPA is loading with non MHI configuration\n");
 			}
+			/* Prevent multiple calls from trying to load the FW again. */
+			if (ipa3_ctx->fw_loaded) {
+				IPAERR("not load FW again\n");
+				return count;
+			}
+			/* Schedule WQ to load ipa-fws */
+			ipa3_ctx->fw_loaded = true;
+
 			result = ipa3_trigger_fw_loading_mdms();
 		}
 		/* No IPAv3.x chipsets that don't support FW loading */
@@ -4676,6 +4713,7 @@ static ssize_t ipa3_write(struct file *file, const char __user *buf,
 		}
 	}
 	return count;
+
 }
 
 /**
