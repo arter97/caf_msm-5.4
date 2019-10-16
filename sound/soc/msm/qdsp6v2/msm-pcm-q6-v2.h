@@ -123,8 +123,6 @@ struct output_meta_data_st {
 
 struct msm_plat_data {
 	int perf_mode;
-	int perf_mode_set;
-	struct snd_pcm *pcm;
 	struct mutex lock;
 };
 
