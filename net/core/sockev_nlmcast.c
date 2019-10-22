@@ -99,6 +99,7 @@ static int sockev_client_cb(struct notifier_block *nb,
 	NETLINK_CB(skb).dst_group = SKNLGRP_SOCKEV;
 
 	smsg = nlmsg_data(nlh);
+	memset(smsg, 0, sizeof(struct sknlsockevmsg));
 	smsg->pid = current->pid;
 	_sockev_event(event, smsg->event, sizeof(smsg->event));
 	smsg->skfamily = sk->sk_family;
