@@ -204,6 +204,7 @@ SECTIONS
 		INIT_DATA
 		INIT_SETUP(16)
 		INIT_CALLS
+		EARLY_INIT_CALLS
 		CON_INITCALL
 		INIT_RAM_FS
 		*(.init.rodata.* .init.bss)	/* from the EFI stub */

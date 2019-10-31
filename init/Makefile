@@ -12,6 +12,7 @@ else
 obj-$(CONFIG_BLK_DEV_INITRD)   += initramfs.o
 endif
 obj-$(CONFIG_GENERIC_CALIBRATE_DELAY) += calibrate.o
+obj-y                          += early_userspace.o
 
 obj-y                          += init_task.o
 

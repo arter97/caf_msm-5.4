@@ -24,6 +24,7 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/slab.h>
 #include <soc/qcom/boot_stats.h>
+#include <linux/early_async.h>
 
 #define SE_I2C_TX_TRANS_LEN		(0x26C)
 #define SE_I2C_RX_TRANS_LEN		(0x270)
@@ -1184,6 +1185,8 @@ static const struct i2c_algorithm geni_i2c_algo = {
 	.functionality	= geni_i2c_func,
 };
 
+static DECLARE_COMPLETION(geni_i2c_ready);
+
 static int geni_i2c_probe(struct platform_device *pdev)
 {
 	struct geni_i2c_dev *gi2c;
@@ -1368,6 +1371,7 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	place_marker(boot_marker);
 
 	dev_info(gi2c->dev, "I2C probed\n");
+	complete(&geni_i2c_ready);
 	return 0;
 }
 
@@ -1551,7 +1555,14 @@ static void __exit i2c_dev_exit(void)
 	platform_driver_unregister(&geni_i2c_driver);
 }
 
+static int __init i2c_dev_ready_wait(void)
+{
+	wait_for_completion(&geni_i2c_ready);
+	return 0;
+}
+
 module_init(i2c_dev_init);
+early_init(i2c_dev_ready_wait, EARLY_SUBSYS_2, EARLY_INIT_LEVEL0);
 module_exit(i2c_dev_exit);
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("platform:i2c_geni");
