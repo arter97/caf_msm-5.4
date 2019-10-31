@@ -37,6 +37,7 @@
  * license terms, and distributes only under these terms.
  */
 
+#include <linux/init.h>
 #include <linux/async.h>
 #include <linux/devfreq.h>
 #include <linux/nls.h>
@@ -9536,7 +9537,11 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	 */
 	ufshcd_set_ufs_dev_active(hba);
 
-	async_schedule(ufshcd_async_scan, hba);
+	if (is_early_userspace)
+		ufshcd_async_scan(hba, (async_cookie_t)0);
+	else
+		async_schedule(ufshcd_async_scan, hba);
+
 	ufs_sysfs_add_nodes(hba->dev);
 
 	return 0;
