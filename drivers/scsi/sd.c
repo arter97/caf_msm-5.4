@@ -3725,7 +3725,7 @@ static void __exit exit_sd(void)
 	}
 }
 
-module_init(init_sd);
+early_module_init(init_sd, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL8);
 module_exit(exit_sd);
 
 void sd_print_sense_hdr(struct scsi_disk *sdkp, struct scsi_sense_hdr *sshdr)

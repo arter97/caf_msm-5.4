@@ -5375,7 +5375,8 @@ static int __init gcc_scshrike_init(void)
 {
 	return platform_driver_register(&gcc_scshrike_driver);
 }
-subsys_initcall(gcc_scshrike_init);
+early_subsys_initcall(gcc_scshrike_init,  EARLY_SUBSYS_PLATFORM,
+EARLY_INIT_LEVEL0);
 
 static void __exit gcc_scshrike_exit(void)
 {

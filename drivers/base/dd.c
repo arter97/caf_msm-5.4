@@ -344,6 +344,7 @@ static int deferred_probe_initcall(void)
 	return 0;
 }
 late_initcall(deferred_probe_initcall);
+early_init(deferred_probe_initcall, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL6);
 
 static void __exit deferred_probe_exit(void)
 {
