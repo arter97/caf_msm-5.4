@@ -1846,7 +1846,7 @@ exit_netlink:
 	return ret;
 }
 
-subsys_initcall(thermal_init);
+early_subsys_initcall(thermal_init, EARLY_SUBSYS_PLATFORM, EARLY_INIT_LEVEL7);
 fs_initcall(thermal_netlink_init);
 #else
 static int __init thermal_init(void)
