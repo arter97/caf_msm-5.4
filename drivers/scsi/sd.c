@@ -3274,6 +3274,7 @@ static int sd_format_disk_name(char *prefix, int index, char *buf, int buflen)
 	return 0;
 }
 
+static DECLARE_COMPLETION(scsi_sd_probe_domain);
 /**
  *	sd_probe - called during driver initialization and whenever a
  *	new scsi device is attached to the system. It is called once
@@ -3411,7 +3412,7 @@ static int sd_probe(struct device *dev)
 	sd_printk(KERN_NOTICE, sdkp, "Attached SCSI %sdisk\n",
 		  sdp->removable ? "removable " : "");
 	scsi_autopm_put_device(sdp);
-
+	complete(&scsi_sd_probe_domain);
 	return 0;
 
  out_free_index:
@@ -3749,3 +3750,11 @@ void sd_print_result(const struct scsi_disk *sdkp, const char *msg, int result)
 			  "%s: Result: hostbyte=0x%02x driverbyte=0x%02x\n",
 			  msg, host_byte(result), driver_byte(result));
 }
+
+static int __init early_rootdev_wait(void)
+{
+	wait_for_completion(&scsi_sd_probe_domain);
+	return 0;
+}
+
+early_init(early_rootdev_wait, EARLY_SUBSYS_1, EARLY_INIT_LEVEL5);
