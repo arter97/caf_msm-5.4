@@ -27,6 +27,7 @@
 #include <linux/async.h>
 #include <linux/pm_runtime.h>
 #include <linux/pinctrl/devinfo.h>
+#include <linux/platform_device.h>
 
 #include "base.h"
 #include "power/power.h"
@@ -978,7 +979,8 @@ void device_initial_probe(struct device *dev)
  */
 static void __device_driver_lock(struct device *dev, struct device *parent)
 {
-	if (parent && dev->bus->need_parent_lock)
+	if (!(is_early_userspace && (dev->bus == &platform_bus_type))
+				&& parent && dev->bus->need_parent_lock)
 		device_lock(parent);
 	device_lock(dev);
 }
@@ -995,7 +997,8 @@ static void __device_driver_lock(struct device *dev, struct device *parent)
 static void __device_driver_unlock(struct device *dev, struct device *parent)
 {
 	device_unlock(dev);
-	if (parent && dev->bus->need_parent_lock)
+	if (!(is_early_userspace && (dev->bus == &platform_bus_type))
+				&& parent && dev->bus->need_parent_lock)
 		device_unlock(parent);
 }
 
