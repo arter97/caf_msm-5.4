@@ -14,3 +14,7 @@
 / {
 	qcom,msm-id = <322 0x10000>;
 };
+
+&modem_adsp_mem {
+        reg = <0x0 0x82a00000 0x0 0x03b00000>;
+};
