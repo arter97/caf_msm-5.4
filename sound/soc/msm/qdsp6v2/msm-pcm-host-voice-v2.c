@@ -799,8 +799,7 @@ void hpcm_notify_evt_processing(uint8_t *data, char *session,
 		break;
 	}
 	/*if not loopback push buff */
-	if (!(tp->push_after_write) ||
-	   (notify_evt->notify_mask == VSS_IVPCM_NOTIFY_MASK_TIMETICK)) {
+	if (!(tp->push_after_write)) {
 		push_buff_event.tap_point = notify_evt->tap_point;
 		push_buff_event.out_buf_mem_address =
 				tp->capture_dai_data.vocpcm_ion_buffer.paddr;
