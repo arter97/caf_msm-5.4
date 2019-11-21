@@ -946,15 +946,20 @@ static void gsi_ring_db(struct usb_ep *ep, struct usb_gsi_request *request)
 	int num_trbs = (dep->direction) ? (2 * (request->num_bufs) + 2)
 					: (request->num_bufs + 2);
 
-	gsi_dbl_address_lsb = devm_ioremap_nocache(mdwc->dev,
-					dbl_lo_addr, sizeof(u32));
-	if (!gsi_dbl_address_lsb)
-		dev_dbg(mdwc->dev, "Failed to get GSI DBL address LSB\n");
+	gsi_dbl_address_lsb = ioremap_nocache(dbl_lo_addr, sizeof(u32));
+	if (!gsi_dbl_address_lsb) {
+		dev_err(mdwc->dev, "Failed to map GSI DBL address LSB 0x%x\n",
+				dbl_lo_addr);
+		return;
+	}
 
-	gsi_dbl_address_msb = devm_ioremap_nocache(mdwc->dev,
-					dbl_hi_addr, sizeof(u32));
-	if (!gsi_dbl_address_msb)
-		dev_dbg(mdwc->dev, "Failed to get GSI DBL address MSB\n");
+	gsi_dbl_address_msb = ioremap_nocache(dbl_hi_addr, sizeof(u32));
+	if (!gsi_dbl_address_msb) {
+		dev_err(mdwc->dev, "Failed to map GSI DBL address MSB 0x%x\n",
+				dbl_hi_addr);
+		iounmap(gsi_dbl_address_lsb);
+		return;
+	}
 
 	offset = dwc3_trb_dma_offset(dep, &dep->trb_pool[num_trbs-1]);
 	dev_dbg(mdwc->dev, "Writing link TRB addr:%pKa to %pK (%x) for ep:%s\n",
@@ -962,6 +967,9 @@ static void gsi_ring_db(struct usb_ep *ep, struct usb_gsi_request *request)
 
 	writel_relaxed(offset, gsi_dbl_address_lsb);
 	writel_relaxed(0, gsi_dbl_address_msb);
+
+	iounmap(gsi_dbl_address_lsb);
+	iounmap(gsi_dbl_address_msb);
 }
 
 /*
