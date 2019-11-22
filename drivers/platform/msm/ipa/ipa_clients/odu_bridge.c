@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, 2019 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -152,6 +152,7 @@ struct odu_bridge_ctx {
 	void *logbuf_low;
 	struct completion rm_comp;
 	void (*wakeup_request)(void *);
+	atomic_t disconnect_in_progress;
 };
 static struct odu_bridge_ctx *odu_bridge_ctx;
 
@@ -357,7 +358,7 @@ fail_add_dependency_1:
 
 static int odu_bridge_disconnect_router(void)
 {
-	int res;
+	int res = 0;
 
 	ODU_BRIDGE_FUNC_ENTRY();
 
@@ -436,6 +437,8 @@ int odu_bridge_disconnect(void)
 	}
 
 	mutex_lock(&odu_bridge_ctx->lock);
+	atomic_set(&odu_bridge_ctx->disconnect_in_progress, 1);
+
 	if (odu_bridge_ctx->mode == ODU_BRIDGE_MODE_ROUTER) {
 		res = odu_bridge_disconnect_router();
 		if (res) {
@@ -453,6 +456,7 @@ int odu_bridge_disconnect(void)
 	odu_bridge_ctx->is_connected = false;
 	res = 0;
 out:
+	atomic_set(&odu_bridge_ctx->disconnect_in_progress, 0);
 	mutex_unlock(&odu_bridge_ctx->lock);
 	ODU_BRIDGE_FUNC_EXIT();
 	return res;
@@ -839,6 +843,12 @@ int odu_bridge_tx_dp(struct sk_buff *skb, struct ipa_tx_meta *metadata)
 	int res;
 
 	ODU_BRIDGE_FUNC_ENTRY();
+
+	if (unlikely(atomic_read(&odu_bridge_ctx->disconnect_in_progress))) {
+		ODU_BRIDGE_ERR("ODU bridge disconnect_in_progress\n");
+		res = -EFAULT;
+		goto out;
+	}
 
 	switch (odu_bridge_ctx->mode) {
 	case ODU_BRIDGE_MODE_ROUTER:
