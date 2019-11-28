@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2019, 2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1600,7 +1600,7 @@ free_dma:
 			if (last_pos < ecc_bytes_percw_in_bits)
 				num_zero_bits++;
 
-			if (num_zero_bits > 4) {
+			if (num_zero_bits > MAX_ECC_BIT_FLIPS) {
 				*erased_page = false;
 				goto free_mem;
 			}
@@ -1612,7 +1612,7 @@ free_dma:
 		ecc_temp += chip->ecc_parity_bytes;
 	}
 
-	if ((n == cwperpage) && (num_zero_bits <= 4))
+	if ((n == cwperpage) && (num_zero_bits <= MAX_ECC_BIT_FLIPS))
 		*erased_page = true;
 free_mem:
 	kfree(ecc);
@@ -1806,6 +1806,33 @@ static int msm_nand_read_oob(struct mtd_info *mtd, loff_t from,
 			goto free_dma;
 		/* Check for flash status errors */
 		pageerr = rawerr = 0;
+
+		/*
+		 * PAGE_ERASED bit will set only if all
+		 * CODEWORD_ERASED bit of all codewords
+		 * of the page is set.
+		 *
+		 * PAGE_ERASED bit is a 'logical and' of all
+		 * CODEWORD_ERASED bit of all codewords i.e.
+		 * even if one codeword is detected as not
+		 * an erased codeword, PAGE_ERASED bit will unset.
+		 */
+		for (n = rw_params.start_sector; n < cwperpage; n++) {
+			if ((dma_buffer->result[n].erased_cw_status &
+					(1 << PAGE_ERASED)) &&
+					(dma_buffer->result[n].buffer_status &
+					NUM_ERRORS)) {
+				err = msm_nand_is_erased_page(mtd,
+						from, ops,
+						&rw_params,
+						&erased_page);
+				if (err)
+					goto free_dma;
+				if (erased_page)
+					rawerr = -EIO;
+				break;
+			}
+		}
 		for (n = rw_params.start_sector; n < cwperpage; n++) {
 			if (dma_buffer->result[n].flash_status & (FS_OP_ERR |
 					FS_MPU_ERR)) {
