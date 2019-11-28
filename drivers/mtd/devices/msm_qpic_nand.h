@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016, 2018, 2021 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -159,11 +159,14 @@
 #define MSM_NAND_ERASED_CW_DETECT_CFG(info)	MSM_NAND_REG(info, 0x300E8)
 #define ERASED_CW_ECC_MASK	1
 #define AUTO_DETECT_RES		0
+#define N_MAX_ZEROS		2
+#define MAX_ECC_BIT_FLIPS	4
 #define MASK_ECC		(1 << ERASED_CW_ECC_MASK)
 #define RESET_ERASED_DET	(1 << AUTO_DETECT_RES)
 #define ACTIVE_ERASED_DET	(0 << AUTO_DETECT_RES)
+#define SET_N_MAX_ZEROS		(MAX_ECC_BIT_FLIPS << N_MAX_ZEROS)
 #define CLR_ERASED_PAGE_DET	(RESET_ERASED_DET | MASK_ECC)
-#define SET_ERASED_PAGE_DET	(ACTIVE_ERASED_DET | MASK_ECC)
+#define SET_ERASED_PAGE_DET	(ACTIVE_ERASED_DET | MASK_ECC | SET_N_MAX_ZEROS)
 
 #define MSM_NAND_ERASED_CW_DETECT_STATUS(info)  MSM_NAND_REG(info, 0x300EC)
 #define PAGE_ALL_ERASED		7
@@ -172,6 +175,7 @@
 #define CODEWORD_ERASED		4
 #define ERASED_PAGE	((1 << PAGE_ALL_ERASED) | (1 << PAGE_ERASED))
 #define ERASED_CW	((1 << CODEWORD_ALL_ERASED) | (1 << CODEWORD_ERASED))
+#define NUM_ERRORS		0x1f
 
 #define MSM_NAND_CTRL(info)		    MSM_NAND_REG(info, 0x30F00)
 #define BAM_MODE_EN	0
