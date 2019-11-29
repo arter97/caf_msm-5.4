@@ -2849,8 +2849,8 @@ static int msm_compr_audio_effects_config_put(struct snd_kcontrol *kcontrol,
 	if (fe_id >= MSM_FRONTEND_DAI_MAX) {
 		pr_err("%s Received out of bounds fe_id %lu\n",
 			__func__, fe_id);
-		ret = -EINVAL;
-		goto done;
+		return -EINVAL;
+
 	}
 
 	mutex_lock(&pdata->lock);
@@ -3128,8 +3128,7 @@ static int msm_compr_dec_params_put(struct snd_kcontrol *kcontrol,
 	if (fe_id >= MSM_FRONTEND_DAI_MAX) {
 		pr_err("%s Received out of bounds fe_id %lu\n",
 			__func__, fe_id);
-		rc = -EINVAL;
-		goto end;
+		return -EINVAL;
 	}
 
 	cstream = pdata->cstream[fe_id];
@@ -3137,14 +3136,12 @@ static int msm_compr_dec_params_put(struct snd_kcontrol *kcontrol,
 
 	if (!cstream || !dec_params) {
 		pr_err("%s: stream or dec_params inactive\n", __func__);
-		rc = -EINVAL;
-		goto end;
+		return -EINVAL;
 	}
 	prtd = cstream->runtime->private_data;
 	if (!prtd) {
 		pr_err("%s: cannot set dec_params\n", __func__);
-		rc = -EINVAL;
-		goto end;
+		return -EINVAL;
 	}
 
 	mutex_lock(&pdata->lock);
