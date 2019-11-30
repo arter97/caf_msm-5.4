@@ -171,8 +171,6 @@ struct mailbox_config_info {
  * @kwork:			Work to be executed when an irq is received.
  * @kworker:			Handle to the entity processing of
 				deferred commands.
- * @tasklet			Handle to tasklet to process incoming data
-				packets in atomic manner.
  * @task:			Handle to the task context used to run @kworker.
  * @use_ref:			Active uses of this transport use this to grab
  *				a reference.  Used for ssr synchronization.
@@ -213,7 +211,6 @@ struct edge_info {
 	struct kthread_work kwork;
 	struct kthread_worker kworker;
 	struct task_struct *task;
-	struct tasklet_struct tasklet;
 	struct srcu_struct use_ref;
 	bool in_ssr;
 	spinlock_t rx_lock;
@@ -535,6 +532,12 @@ static int fifo_write(struct edge_info *einfo, const void *data, int len)
 	uint32_t write_index = einfo->tx_ch_desc->write_index;
 
 	len = fifo_write_body(einfo, data, len, &write_index);
+
+	/* All data writes need to be flushed to memory before the write index
+	 * is updated. This protects against a race condition where the remote
+	 * reads stale data because the write index was written before the data.
+	 */
+	wmb();
 	einfo->tx_ch_desc->write_index = write_index;
 	send_irq(einfo);
 
@@ -570,6 +573,12 @@ static int fifo_write_complex(struct edge_info *einfo,
 	len1 = fifo_write_body(einfo, data1, len1, &write_index);
 	len2 = fifo_write_body(einfo, data2, len2, &write_index);
 	len3 = fifo_write_body(einfo, data3, len3, &write_index);
+
+	/* All data writes need to be flushed to memory before the write index
+	 * is updated. This protects against a race condition where the remote
+	 * reads stale data because the write index was written before the data.
+	 */
+	wmb();
 	einfo->tx_ch_desc->write_index = write_index;
 	send_irq(einfo);
 
@@ -806,6 +815,39 @@ static bool get_rx_fifo(struct edge_info *einfo)
 }
 
 /**
+ * tx_wakeup_worker() - worker function to wakeup tx blocked thread
+ * @work:	kwork associated with the edge to process commands on.
+ */
+static void tx_wakeup_worker(struct edge_info *einfo)
+{
+	struct glink_transport_if xprt_if = einfo->xprt_if;
+	bool trigger_wakeup = false;
+	bool trigger_resume = false;
+	unsigned long flags;
+
+	if (einfo->in_ssr)
+		return;
+
+	spin_lock_irqsave(&einfo->write_lock, flags);
+	if (fifo_write_avail(einfo)) {
+		if (einfo->tx_blocked_signal_sent)
+			einfo->tx_blocked_signal_sent = false;
+		if (einfo->tx_resume_needed) {
+			einfo->tx_resume_needed = false;
+			trigger_resume = true;
+		}
+	}
+	if (waitqueue_active(&einfo->tx_blocked_queue)) { /* tx waiting ?*/
+		trigger_wakeup = true;
+	}
+	spin_unlock_irqrestore(&einfo->write_lock, flags);
+	if (trigger_wakeup)
+		wake_up_all(&einfo->tx_blocked_queue);
+	if (trigger_resume)
+		xprt_if.glink_core_if_ptr->tx_resume(&xprt_if);
+}
+
+/**
  * __rx_worker() - process received commands on a specific edge
  * @einfo:	Edge to process commands on.
  * @atomic_ctx:	Indicates if the caller is in atomic context and requires any
@@ -828,7 +870,6 @@ static void __rx_worker(struct edge_info *einfo, bool atomic_ctx)
 	int i;
 	bool granted;
 	unsigned long flags;
-	bool trigger_wakeup = false;
 	int rcu_id;
 	uint16_t rcid;
 	uint32_t name_len;
@@ -853,22 +894,10 @@ static void __rx_worker(struct edge_info *einfo, bool atomic_ctx)
 		srcu_read_unlock(&einfo->use_ref, rcu_id);
 		return;
 	}
-	if (!atomic_ctx) {
-		if (einfo->tx_resume_needed && fifo_write_avail(einfo)) {
-			einfo->tx_resume_needed = false;
-			einfo->xprt_if.glink_core_if_ptr->tx_resume(
-							&einfo->xprt_if);
-		}
-		spin_lock_irqsave(&einfo->write_lock, flags);
-		if (waitqueue_active(&einfo->tx_blocked_queue)) {
-			einfo->tx_blocked_signal_sent = false;
-			trigger_wakeup = true;
-		}
-		spin_unlock_irqrestore(&einfo->write_lock, flags);
-		if (trigger_wakeup)
-			wake_up_all(&einfo->tx_blocked_queue);
-	}
 
+	if ((atomic_ctx) && ((einfo->tx_resume_needed) ||
+		(waitqueue_active(&einfo->tx_blocked_queue)))) /* tx waiting ?*/
+		tx_wakeup_worker(einfo);
 
 	/*
 	 * Access to the fifo needs to be synchronized, however only the calls
@@ -897,6 +926,7 @@ static void __rx_worker(struct edge_info *einfo, bool atomic_ctx)
 			cmd_data = d_cmd->data;
 			kfree(d_cmd);
 		} else {
+			memset(&cmd, 0, sizeof(cmd));
 			fifo_read(einfo, &cmd, sizeof(cmd));
 			cmd_data = NULL;
 		}
@@ -999,6 +1029,7 @@ static void __rx_worker(struct edge_info *einfo, bool atomic_ctx)
 								cmd_data)->size;
 					kfree(cmd_data);
 				} else {
+					memset(&intent, 0, sizeof(intent));
 					fifo_read(einfo, &intent,
 								sizeof(intent));
 				}
@@ -1159,18 +1190,6 @@ static void __rx_worker(struct edge_info *einfo, bool atomic_ctx)
 }
 
 /**
- * rx_worker_atomic() - worker function to process received command in atomic
- *			context.
- * @param:	The param parameter passed during initialization of the tasklet.
- */
-static void rx_worker_atomic(unsigned long param)
-{
-	struct edge_info *einfo = (struct edge_info *)param;
-
-	__rx_worker(einfo, true);
-}
-
-/**
  * rx_worker() - worker function to process received commands
  * @work:	kwork associated with the edge to process commands on.
  */
@@ -1189,7 +1208,7 @@ irqreturn_t irq_handler(int irq, void *priv)
 	if (einfo->rx_reset_reg)
 		writel_relaxed(einfo->out_irq_mask, einfo->rx_reset_reg);
 
-	tasklet_hi_schedule(&einfo->tasklet);
+	__rx_worker(einfo, true);
 	einfo->rx_irq_count++;
 
 	return IRQ_HANDLED;
@@ -1953,6 +1972,7 @@ static int tx_data(struct glink_transport_if *if_ptr, uint16_t cmd_id,
 	/* Need enough space to write the command and some data */
 	if (size <= sizeof(cmd)) {
 		einfo->tx_resume_needed = true;
+		send_tx_blocked_signal(einfo);
 		spin_unlock_irqrestore(&einfo->write_lock, flags);
 		srcu_read_unlock(&einfo->use_ref, rcu_id);
 		return -EAGAIN;
@@ -2167,6 +2187,7 @@ static int parse_qos_dt_params(struct device_node *node,
 		einfo->ramp_time_us[i] = arr32[i];
 
 	rc = 0;
+	kfree(arr32);
 	return rc;
 
 invalid_key:
@@ -2270,7 +2291,6 @@ static int glink_smem_native_probe(struct platform_device *pdev)
 	init_waitqueue_head(&einfo->tx_blocked_queue);
 	init_kthread_work(&einfo->kwork, rx_worker);
 	init_kthread_worker(&einfo->kworker);
-	tasklet_init(&einfo->tasklet, rx_worker_atomic, (unsigned long)einfo);
 	einfo->read_from_fifo = read_from_fifo;
 	einfo->write_to_fifo = write_to_fifo;
 	init_srcu_struct(&einfo->use_ref);
@@ -2371,7 +2391,6 @@ smem_alloc_fail:
 	flush_kthread_worker(&einfo->kworker);
 	kthread_stop(einfo->task);
 	einfo->task = NULL;
-	tasklet_kill(&einfo->tasklet);
 kthread_fail:
 	iounmap(einfo->out_irq_reg);
 ioremap_fail:
@@ -2457,7 +2476,6 @@ static int glink_rpm_native_probe(struct platform_device *pdev)
 	init_waitqueue_head(&einfo->tx_blocked_queue);
 	init_kthread_work(&einfo->kwork, rx_worker);
 	init_kthread_worker(&einfo->kworker);
-	tasklet_init(&einfo->tasklet, rx_worker_atomic, (unsigned long)einfo);
 	einfo->intentless = true;
 	einfo->read_from_fifo = memcpy32_fromio;
 	einfo->write_to_fifo = memcpy32_toio;
@@ -2619,7 +2637,6 @@ toc_init_fail:
 	flush_kthread_worker(&einfo->kworker);
 	kthread_stop(einfo->task);
 	einfo->task = NULL;
-	tasklet_kill(&einfo->tasklet);
 kthread_fail:
 	iounmap(msgram);
 msgram_ioremap_fail:
@@ -2748,7 +2765,6 @@ static int glink_mailbox_probe(struct platform_device *pdev)
 	init_waitqueue_head(&einfo->tx_blocked_queue);
 	init_kthread_work(&einfo->kwork, rx_worker);
 	init_kthread_worker(&einfo->kworker);
-	tasklet_init(&einfo->tasklet, rx_worker_atomic, (unsigned long)einfo);
 	einfo->read_from_fifo = read_from_fifo;
 	einfo->write_to_fifo = write_to_fifo;
 	init_srcu_struct(&einfo->use_ref);
@@ -2870,7 +2886,6 @@ smem_alloc_fail:
 	flush_kthread_worker(&einfo->kworker);
 	kthread_stop(einfo->task);
 	einfo->task = NULL;
-	tasklet_kill(&einfo->tasklet);
 kthread_fail:
 	iounmap(einfo->rx_reset_reg);
 rx_reset_ioremap_fail:
