@@ -101,6 +101,10 @@ static int msm_slim_2_tx_ch = 1;
 static int msm_vi_feed_tx_ch = 2;
 static int msm_slim_5_rx_ch = 1;
 static int msm_slim_6_rx_ch = 1;
+static int quat_mi2s_rx_ch = 1;
+static int quin_mi2s_rx_ch = 1;
+static int quat_mi2s_tx_ch = 1;
+static int quin_mi2s_tx_ch = 1;
 static int slim5_rx_sample_rate = SAMPLING_RATE_48KHZ;
 static int slim5_rx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
 static int slim6_rx_sample_rate = SAMPLING_RATE_48KHZ;
@@ -1000,6 +1004,82 @@ static int msm_vi_feed_tx_ch_put(struct snd_kcontrol *kcontrol,
 	return 1;
 }
 
+static int quat_mi2s_rx_ch_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: quat_mi2s_rx_ch  = %d\n", __func__,
+		 quat_mi2s_rx_ch);
+	ucontrol->value.integer.value[0] = quat_mi2s_rx_ch - 1;
+	return 0;
+}
+
+static int quat_mi2s_rx_ch_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	quat_mi2s_rx_ch = ucontrol->value.integer.value[0] + 1;
+
+	pr_debug("%s: quat_mi2s_rx_ch = %d\n", __func__,
+		 quat_mi2s_rx_ch);
+	return 1;
+}
+
+static int quin_mi2s_rx_ch_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: quin_mi2s_rx_ch  = %d\n", __func__,
+		 quin_mi2s_rx_ch);
+	ucontrol->value.integer.value[0] = quin_mi2s_rx_ch - 1;
+	return 0;
+}
+
+static int quin_mi2s_rx_ch_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	quin_mi2s_rx_ch = ucontrol->value.integer.value[0] + 1;
+
+	pr_debug("%s: quin_mi2s_rx_ch = %d\n", __func__,
+		 quin_mi2s_rx_ch);
+	return 1;
+}
+
+static int quat_mi2s_tx_ch_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: quat_mi2s_tx_ch  = %d\n", __func__,
+		 quat_mi2s_tx_ch);
+	ucontrol->value.integer.value[0] = quat_mi2s_tx_ch - 1;
+	return 0;
+}
+
+static int quat_mi2s_tx_ch_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	quat_mi2s_tx_ch = ucontrol->value.integer.value[0] + 1;
+
+	pr_debug("%s: quat_mi2s_tx_ch = %d\n", __func__,
+		 quat_mi2s_tx_ch);
+	return 1;
+}
+
+static int quin_mi2s_tx_ch_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: quin_mi2s_tx_ch  = %d\n", __func__,
+		 quin_mi2s_tx_ch);
+	ucontrol->value.integer.value[0] = quin_mi2s_tx_ch - 1;
+	return 0;
+}
+
+static int quin_mi2s_tx_ch_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	quin_mi2s_tx_ch = ucontrol->value.integer.value[0] + 1;
+
+	pr_debug("%s: quin_mi2s_tx_ch = %d\n", __func__,
+		 quin_mi2s_tx_ch);
+	return 1;
+}
+
 static int msm_slim_0_rx_ch_get(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
@@ -1826,6 +1906,7 @@ static char const *slim5_rx_bit_format_text[] = {"S16_LE", "S24_LE", "S24_3LE"};
 static const char *const proxy_rx_ch_text[] = {"One", "Two", "Three", "Four",
 	"Five", "Six", "Seven", "Eight"};
 static char const *slim6_rx_bit_format_text[] = {"S16_LE", "S24_LE", "S24_3LE"};
+static const char *const mi2s_ch_text[] = {"One", "Two", "Three", "Four"};
 
 static const struct soc_enum msm_snd_enum[] = {
 	SOC_ENUM_SINGLE_EXT(2, spk_function),
@@ -1858,6 +1939,7 @@ static const struct soc_enum msm_snd_enum[] = {
 			    slim4_rx_sample_rate_text),
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(slim4_rx_bit_format_text),
 			    slim4_rx_bit_format_text),
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(mi2s_ch_text), mi2s_ch_text),
 };
 
 static const char *const btsco_rate_text[] = {"BTSCO_RATE_8KHZ",
@@ -1955,6 +2037,18 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 	SOC_ENUM_EXT("SEC_TDM_TX_0 SampleRate", msm_snd_enum[15],
 			msm_sec_tdm_tx_0_sample_rate_get,
 			msm_sec_tdm_tx_0_sample_rate_put),
+	SOC_ENUM_EXT("QUAT_MI2S_RX Channels", msm_snd_enum[20],
+			quat_mi2s_rx_ch_get,
+			quat_mi2s_rx_ch_put),
+	SOC_ENUM_EXT("QUIN_MI2S_RX Channels", msm_snd_enum[20],
+			quin_mi2s_rx_ch_get,
+			quin_mi2s_rx_ch_put),
+	SOC_ENUM_EXT("QUAT_MI2S_TX Channels", msm_snd_enum[20],
+			quat_mi2s_tx_ch_get,
+			quat_mi2s_tx_ch_put),
+	SOC_ENUM_EXT("QUIN_MI2S_TX Channels", msm_snd_enum[20],
+			quin_mi2s_tx_ch_get,
+			quin_mi2s_tx_ch_put),
 };
 
 int msm_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
@@ -1969,6 +2063,70 @@ int msm_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	pr_debug("%s()\n", __func__);
 	rate->min = rate->max = 48000;
 	channels->min = channels->max = 2;
+
+	return 0;
+}
+
+int msm_quat_rx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+				struct snd_pcm_hw_params *params)
+{
+	struct snd_interval *rate = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_RATE);
+
+	struct snd_interval *channels = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	pr_debug("%s()\n", __func__);
+	rate->min = rate->max = 48000;
+	channels->min = channels->max = quat_mi2s_rx_ch;
+
+	return 0;
+}
+
+int msm_quin_rx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+				struct snd_pcm_hw_params *params)
+{
+	struct snd_interval *rate = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_RATE);
+
+	struct snd_interval *channels = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	pr_debug("%s()\n", __func__);
+	rate->min = rate->max = 48000;
+	channels->min = channels->max = quin_mi2s_rx_ch;
+
+	return 0;
+}
+
+int msm_quat_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+				struct snd_pcm_hw_params *params)
+{
+	struct snd_interval *rate = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_RATE);
+
+	struct snd_interval *channels = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	pr_debug("%s()\n", __func__);
+	rate->min = rate->max = 48000;
+	channels->min = channels->max = quat_mi2s_tx_ch;
+
+	return 0;
+}
+
+int msm_quin_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+				struct snd_pcm_hw_params *params)
+{
+	struct snd_interval *rate = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_RATE);
+
+	struct snd_interval *channels = hw_param_interval(params,
+					SNDRV_PCM_HW_PARAM_CHANNELS);
+
+	pr_debug("%s()\n", __func__);
+	rate->min = rate->max = 48000;
+	channels->min = channels->max = quin_mi2s_tx_ch;
 
 	return 0;
 }
