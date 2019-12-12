@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, 2019 The Linux Foundation. All rights reserved.
 
 * This program is free software; you can redistribute it and/or modify
 * it under the terms of the GNU General Public License version 2 and
@@ -29,6 +29,7 @@
 #include "msm-pcm-routing-v2.h"
 
 #define LOOPBACK_VOL_MAX_STEPS 0x2000
+static DEFINE_MUTEX(loopback_session_lock);
 
 static const DECLARE_TLV_DB_LINEAR(loopback_rx_vol_gain, 0,
 				LOOPBACK_VOL_MAX_STEPS);
@@ -209,6 +210,8 @@ static void stop_pcm(struct msm_pcm_loopback *pcm)
 
 	if (pcm->audio_client == NULL)
 		return;
+
+	mutex_lock(&loopback_session_lock);
 	q6asm_cmd(pcm->audio_client, CMD_CLOSE);
 
 	if (pcm->playback_substream != NULL) {
@@ -223,6 +226,7 @@ static void stop_pcm(struct msm_pcm_loopback *pcm)
 	}
 	q6asm_audio_client_free(pcm->audio_client);
 	pcm->audio_client = NULL;
+	mutex_unlock(&loopback_session_lock);
 }
 
 static int msm_pcm_close(struct snd_pcm_substream *substream)
