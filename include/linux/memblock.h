@@ -126,6 +126,11 @@ unsigned long memblock_free_all(void);
 void reset_node_managed_pages(pg_data_t *pgdat);
 void reset_all_zones_managed_pages(void);
 
+#ifdef CONFIG_MEMORY_HOTPLUG
+int memblock_dump_aligned_blocks_addr(char *buf);
+int memblock_dump_aligned_blocks_num(char *buf);
+#endif
+
 /* Low level functions */
 int memblock_add_range(struct memblock_type *type,
 		       phys_addr_t base, phys_addr_t size,
