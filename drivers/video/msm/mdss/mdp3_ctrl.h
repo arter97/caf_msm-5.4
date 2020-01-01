@@ -60,6 +60,10 @@ struct mdp3_session_data {
 	struct kthread_worker worker;
 	struct task_struct *thread;
 
+	struct kthread_work retire_work;
+	struct kthread_worker retire_worker;
+	struct task_struct *retire_thread;
+
 	atomic_t dma_done_cnt;
 	int histo_status;
 	struct mutex histo_lock;
@@ -85,7 +89,6 @@ struct mdp3_session_data {
 	/* For retire fence */
 	struct sw_sync_timeline *vsync_timeline;
 	int retire_cnt;
-	struct work_struct retire_work;
 	atomic_t secure_display;
 	int transition_state;
 };
