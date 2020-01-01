@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -264,7 +264,7 @@ static void mdp3_vsync_retire_handle_vsync(void *arg)
 	schedule_work(&mdp3_session->retire_work);
 }
 
-static void mdp3_vsync_retire_signal(struct msm_fb_data_type *mfd, int val)
+void mdp3_vsync_retire_signal(struct msm_fb_data_type *mfd, int val)
 {
 	struct mdp3_session_data *mdp3_session;
 
@@ -274,6 +274,9 @@ static void mdp3_vsync_retire_signal(struct msm_fb_data_type *mfd, int val)
 	if (mdp3_session->retire_cnt > 0) {
 		sw_sync_timeline_inc(mdp3_session->vsync_timeline, val);
 		mdp3_session->retire_cnt -= min(val, mdp3_session->retire_cnt);
+		pr_debug("Retire signaled! timeline val=%d remaining=%d\n",
+			mfd->mdp_sync_pt_data.timeline_value,
+			mdp3_session->retire_cnt);
 	}
 	mutex_unlock(&mfd->mdp_sync_pt_data.sync_mutex);
 }
@@ -3197,7 +3200,7 @@ int mdp3_ctrl_init(struct msm_fb_data_type *mfd)
 	mdp3_interface->lut_update = NULL;
 	mdp3_interface->configure_panel = mdp3_update_panel_info;
 	mdp3_interface->input_event_handler = NULL;
-	mdp3_interface->signal_retire_fence = NULL;
+	mdp3_interface->signal_retire_fence = mdp3_vsync_retire_signal;
 	mdp3_interface->is_twm_en = mdp3_is_twm_en;
 
 	mdp3_session = kzalloc(sizeof(struct mdp3_session_data), GFP_KERNEL);
