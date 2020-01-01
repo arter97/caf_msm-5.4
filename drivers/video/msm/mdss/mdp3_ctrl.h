@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, 2016-2018 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, 2016-2019 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -35,6 +35,9 @@ struct mdp3_buffer_queue {
 	int push_idx;
 	int pop_idx;
 };
+
+/*struct mdp3_session_data is MDP3 fb private data */
+#define mfd_to_mdp3_data(mfd)	(mfd->mdp.private1)
 
 struct mdp3_session_data {
 	struct mutex lock;
@@ -97,5 +100,6 @@ int mdp3_ctrl_reset(struct msm_fb_data_type *mfd);
 int mdp3_get_ion_client(struct msm_fb_data_type *mfd);
 int config_secure_display(struct mdp3_session_data *mdp3_session);
 void mdp3_flush_dma_done(struct mdp3_session_data *mdp3_session);
+void mdp3_vsync_retire_signal(struct msm_fb_data_type *mfd, int val);
 
 #endif /* MDP3_CTRL_H */
