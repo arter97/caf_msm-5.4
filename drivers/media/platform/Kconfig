@@ -242,4 +242,3 @@ config VIDEO_MEM2MEM_TESTDEV
 	  framework.
 endif #V4L_TEST_DRIVERS
 
-source "drivers/media/platform/msm/Kconfig"
