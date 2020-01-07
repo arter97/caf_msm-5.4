@@ -760,7 +760,6 @@ static const char *keys[KEY_MAX + 1] = {
 	[KEY_CLOSE] = "Close",			[KEY_PLAY] = "Play",
 	[KEY_FASTFORWARD] = "FastForward",	[KEY_BASSBOOST] = "BassBoost",
 	[KEY_PRINT] = "Print",			[KEY_HP] = "HP",
-	[KEY_CAMERA] = "Camera",		[KEY_SOUND] = "Sound",
 	[KEY_QUESTION] = "Question",		[KEY_EMAIL] = "Email",
 	[KEY_CHAT] = "Chat",			[KEY_SEARCH] = "Search",
 	[KEY_CONNECT] = "Connect",		[KEY_FINANCE] = "Finance",

@@ -425,7 +425,6 @@ struct input_keymap_entry {
 #define KEY_BASSBOOST		209
 #define KEY_PRINT		210	/* AC Print */
 #define KEY_HP			211
-#define KEY_CAMERA		212
 #define KEY_SOUND		213
 #define KEY_QUESTION		214
 #define KEY_EMAIL		215
@@ -703,20 +702,11 @@ struct input_keymap_entry {
 #define KEY_NUMERIC_STAR	0x20a
 #define KEY_NUMERIC_POUND	0x20b
 
-#define KEY_CAMERA_SNAPSHOT	0x2fe
-#define KEY_CAMERA_FOCUS	0x210
 #define KEY_WPS_BUTTON		0x211	/* WiFi Protected Setup key */
 
 #define KEY_TOUCHPAD_TOGGLE	0x212	/* Request switch touchpad on or off */
 #define KEY_TOUCHPAD_ON		0x213
 #define KEY_TOUCHPAD_OFF	0x214
-
-#define KEY_CAMERA_ZOOMIN	0x215
-#define KEY_CAMERA_ZOOMOUT	0x216
-#define KEY_CAMERA_UP		0x217
-#define KEY_CAMERA_DOWN		0x218
-#define KEY_CAMERA_LEFT		0x219
-#define KEY_CAMERA_RIGHT	0x21a
 
 #define KEY_ATTENDANT_ON	0x21b
 #define KEY_ATTENDANT_OFF	0x21c
@@ -873,7 +863,6 @@ struct input_keymap_entry {
 #define SW_LINEOUT_INSERT	0x06  /* set = inserted */
 #define SW_JACK_PHYSICAL_INSERT 0x07  /* set = mechanical switch set */
 #define SW_VIDEOOUT_INSERT	0x08  /* set = inserted */
-#define SW_CAMERA_LENS_COVER	0x09  /* set = lens covered */
 #define SW_KEYPAD_SLIDE		0x0a  /* set = keypad slide out */
 #define SW_FRONT_PROXIMITY	0x0b  /* set = front proximity sensor active */
 #define SW_ROTATE_LOCK		0x0c  /* set = rotate locked/disabled */

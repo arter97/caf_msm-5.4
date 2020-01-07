@@ -719,7 +719,6 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 		case 0x060: map_key_clear(KEY_INFO);		break; /* Data On Screen */
 		case 0x061: map_key_clear(KEY_SUBTITLE);	break; /* Closed Caption */
 		case 0x063: map_key_clear(KEY_VCR);		break; /* VCR/TV */
-		case 0x065: map_key_clear(KEY_CAMERA);		break; /* Snapshot */
 		case 0x069: map_key_clear(KEY_RED);		break;
 		case 0x06a: map_key_clear(KEY_GREEN);		break;
 		case 0x06b: map_key_clear(KEY_BLUE);		break;
@@ -872,7 +871,6 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 		switch (usage->hid & HID_USAGE) {
 		case 0x021: map_key_clear(KEY_PRINT);           break;
 		case 0x070: map_key_clear(KEY_HP);		break;
-		case 0x071: map_key_clear(KEY_CAMERA);		break;
 		case 0x072: map_key_clear(KEY_SOUND);		break;
 		case 0x073: map_key_clear(KEY_QUESTION);	break;
 		case 0x080: map_key_clear(KEY_EMAIL);		break;
