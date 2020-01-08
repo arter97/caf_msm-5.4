@@ -852,6 +852,18 @@
 		qcom,irq-mask = <0x8000>;
 		interrupts = <0 28 1>;
 		label = "mpss";
+		qcom,qos-config = <&glink_qos_modem>;
+		qcom,ramp-time = <0xaf>;
+	};
+
+	glink_qos_modem: qcom,glink-qos-config-modem {
+		compatible = "qcom,glink-qos-config";
+		qcom,flow-info = <0x3c 0x0>,
+				<0x3c 0x0>,
+				<0x3c 0x0>,
+				<0x3c 0x0>;
+		qcom,mtu-size = <0x800>;
+		qcom,tput-stats-cycle = <0xa>;
 	};
 
 	qcom,glink-smem-native-xprt-rpm@60000 {
