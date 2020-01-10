@@ -1186,7 +1186,6 @@ struct v4l2_input {
 
 /*  Values for the 'type' field */
 #define V4L2_INPUT_TYPE_TUNER		1
-#define V4L2_INPUT_TYPE_CAMERA		2
 
 /* field 'status' - general */
 #define V4L2_IN_ST_NO_POWER    0x00000001  /* Attached device is off */

@@ -233,8 +233,6 @@ static int soc_camera_enum_input(struct file *file, void *priv,
 	if (inp->index != 0)
 		return -EINVAL;
 
-	/* default is camera */
-	inp->type = V4L2_INPUT_TYPE_CAMERA;
 	inp->std  = V4L2_STD_UNKNOWN;
 	strcpy(inp->name, "Camera");
 

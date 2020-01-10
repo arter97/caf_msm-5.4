@@ -216,34 +216,6 @@ const char * const *v4l2_ctrl_get_menu(u32 id)
 		"Private Packet, IVTV Format",
 		NULL
 	};
-	static const char * const camera_power_line_frequency[] = {
-		"Disabled",
-		"50 Hz",
-		"60 Hz",
-		"Auto",
-		NULL
-	};
-	static const char * const camera_exposure_auto[] = {
-		"Auto Mode",
-		"Manual Mode",
-		"Shutter Priority Mode",
-		"Aperture Priority Mode",
-		NULL
-	};
-	static const char * const camera_exposure_metering[] = {
-		"Average",
-		"Center Weighted",
-		"Spot",
-		"Matrix",
-		NULL
-	};
-	static const char * const camera_auto_focus_range[] = {
-		"Auto",
-		"Normal",
-		"Macro",
-		"Infinity",
-		NULL
-	};
 	static const char * const colorfx[] = {
 		"None",
 		"Black & White",
@@ -261,41 +233,6 @@ const char * const *v4l2_ctrl_get_menu(u32 id)
 		"Solarization",
 		"Antique",
 		"Set Cb/Cr",
-		NULL
-	};
-	static const char * const auto_n_preset_white_balance[] = {
-		"Manual",
-		"Auto",
-		"Incandescent",
-		"Fluorescent",
-		"Fluorescent H",
-		"Horizon",
-		"Daylight",
-		"Flash",
-		"Cloudy",
-		"Shade",
-		NULL,
-	};
-	static const char * const camera_iso_sensitivity_auto[] = {
-		"Manual",
-		"Auto",
-		NULL
-	};
-	static const char * const scene_mode[] = {
-		"None",
-		"Backlight",
-		"Beach/Snow",
-		"Candle Light",
-		"Dusk/Dawn",
-		"Fall Colors",
-		"Fireworks",
-		"Landscape",
-		"Night",
-		"Party/Indoor",
-		"Portrait",
-		"Sports",
-		"Sunset",
-		"Text",
 		NULL
 	};
 	static const char * const tune_emphasis[] = {
@@ -443,28 +380,6 @@ const char * const *v4l2_ctrl_get_menu(u32 id)
 		"High",
 		NULL,
 	};
-
-	static const char * const flash_led_mode[] = {
-		"Off",
-		"Flash",
-		"Torch",
-		NULL,
-	};
-	static const char * const flash_strobe_source[] = {
-		"Software",
-		"External",
-		NULL,
-	};
-
-	static const char * const jpeg_chroma_subsampling[] = {
-		"4:4:4",
-		"4:2:2",
-		"4:2:0",
-		"4:1:1",
-		"4:1:0",
-		"Gray",
-		NULL,
-	};
 	static const char * const dv_tx_mode[] = {
 		"DVI-D",
 		"HDMI",
@@ -518,30 +433,12 @@ const char * const *v4l2_ctrl_get_menu(u32 id)
 		return mpeg_stream_type;
 	case V4L2_CID_MPEG_STREAM_VBI_FMT:
 		return mpeg_stream_vbi_fmt;
-	case V4L2_CID_POWER_LINE_FREQUENCY:
-		return camera_power_line_frequency;
-	case V4L2_CID_EXPOSURE_AUTO:
-		return camera_exposure_auto;
-	case V4L2_CID_EXPOSURE_METERING:
-		return camera_exposure_metering;
-	case V4L2_CID_AUTO_FOCUS_RANGE:
-		return camera_auto_focus_range;
 	case V4L2_CID_COLORFX:
 		return colorfx;
-	case V4L2_CID_AUTO_N_PRESET_WHITE_BALANCE:
-		return auto_n_preset_white_balance;
-	case V4L2_CID_ISO_SENSITIVITY_AUTO:
-		return camera_iso_sensitivity_auto;
-	case V4L2_CID_SCENE_MODE:
-		return scene_mode;
 	case V4L2_CID_TUNE_PREEMPHASIS:
 		return tune_emphasis;
 	case V4L2_CID_TUNE_DEEMPHASIS:
 		return tune_emphasis;
-	case V4L2_CID_FLASH_LED_MODE:
-		return flash_led_mode;
-	case V4L2_CID_FLASH_STROBE_SOURCE:
-		return flash_strobe_source;
 	case V4L2_CID_MPEG_VIDEO_HEADER_MODE:
 		return header_mode;
 	case V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE:
@@ -564,8 +461,6 @@ const char * const *v4l2_ctrl_get_menu(u32 id)
 		return mpeg_mpeg4_level;
 	case V4L2_CID_MPEG_VIDEO_MPEG4_PROFILE:
 		return mpeg4_profile;
-	case V4L2_CID_JPEG_CHROMA_SUBSAMPLING:
-		return jpeg_chroma_subsampling;
 	case V4L2_CID_DV_TX_MODE:
 		return dv_tx_mode;
 	case V4L2_CID_DV_TX_RGB_RANGE:
@@ -754,41 +649,6 @@ const char *v4l2_ctrl_get_name(u32 id)
 	case V4L2_CID_MPEG_VIDC_VIDEO_HEVC_TIER_LEVEL:
 		return "HEVC Tier and Level";
 
-	/* CAMERA controls */
-	/* Keep the order of the 'case's the same as in videodev2.h! */
-	case V4L2_CID_CAMERA_CLASS:		return "Camera Controls";
-	case V4L2_CID_EXPOSURE_AUTO:		return "Auto Exposure";
-	case V4L2_CID_EXPOSURE_ABSOLUTE:	return "Exposure Time, Absolute";
-	case V4L2_CID_EXPOSURE_AUTO_PRIORITY:	return "Exposure, Dynamic Framerate";
-	case V4L2_CID_PAN_RELATIVE:		return "Pan, Relative";
-	case V4L2_CID_TILT_RELATIVE:		return "Tilt, Relative";
-	case V4L2_CID_PAN_RESET:		return "Pan, Reset";
-	case V4L2_CID_TILT_RESET:		return "Tilt, Reset";
-	case V4L2_CID_PAN_ABSOLUTE:		return "Pan, Absolute";
-	case V4L2_CID_TILT_ABSOLUTE:		return "Tilt, Absolute";
-	case V4L2_CID_FOCUS_ABSOLUTE:		return "Focus, Absolute";
-	case V4L2_CID_FOCUS_RELATIVE:		return "Focus, Relative";
-	case V4L2_CID_FOCUS_AUTO:		return "Focus, Automatic Continuous";
-	case V4L2_CID_ZOOM_ABSOLUTE:		return "Zoom, Absolute";
-	case V4L2_CID_ZOOM_RELATIVE:		return "Zoom, Relative";
-	case V4L2_CID_ZOOM_CONTINUOUS:		return "Zoom, Continuous";
-	case V4L2_CID_PRIVACY:			return "Privacy";
-	case V4L2_CID_IRIS_ABSOLUTE:		return "Iris, Absolute";
-	case V4L2_CID_IRIS_RELATIVE:		return "Iris, Relative";
-	case V4L2_CID_AUTO_EXPOSURE_BIAS:	return "Auto Exposure, Bias";
-	case V4L2_CID_AUTO_N_PRESET_WHITE_BALANCE: return "White Balance, Auto & Preset";
-	case V4L2_CID_WIDE_DYNAMIC_RANGE:	return "Wide Dynamic Range";
-	case V4L2_CID_IMAGE_STABILIZATION:	return "Image Stabilization";
-	case V4L2_CID_ISO_SENSITIVITY:		return "ISO Sensitivity";
-	case V4L2_CID_ISO_SENSITIVITY_AUTO:	return "ISO Sensitivity, Auto";
-	case V4L2_CID_EXPOSURE_METERING:	return "Exposure, Metering Mode";
-	case V4L2_CID_SCENE_MODE:		return "Scene Mode";
-	case V4L2_CID_3A_LOCK:			return "3A Lock";
-	case V4L2_CID_AUTO_FOCUS_START:		return "Auto Focus, Start";
-	case V4L2_CID_AUTO_FOCUS_STOP:		return "Auto Focus, Stop";
-	case V4L2_CID_AUTO_FOCUS_STATUS:	return "Auto Focus, Status";
-	case V4L2_CID_AUTO_FOCUS_RANGE:		return "Auto Focus, Range";
-
 	/* FM Radio Modulator control */
 	/* Keep the order of the 'case's the same as in videodev2.h! */
 	case V4L2_CID_FM_TX_CLASS:		return "FM Radio Modulator Controls";
@@ -811,41 +671,6 @@ const char *v4l2_ctrl_get_name(u32 id)
 	case V4L2_CID_TUNE_PREEMPHASIS:		return "Pre-Emphasis";
 	case V4L2_CID_TUNE_POWER_LEVEL:		return "Tune Power Level";
 	case V4L2_CID_TUNE_ANTENNA_CAPACITOR:	return "Tune Antenna Capacitor";
-
-	/* Flash controls */
-	case V4L2_CID_FLASH_CLASS:		return "Flash Controls";
-	case V4L2_CID_FLASH_LED_MODE:		return "LED Mode";
-	case V4L2_CID_FLASH_STROBE_SOURCE:	return "Strobe Source";
-	case V4L2_CID_FLASH_STROBE:		return "Strobe";
-	case V4L2_CID_FLASH_STROBE_STOP:	return "Stop Strobe";
-	case V4L2_CID_FLASH_STROBE_STATUS:	return "Strobe Status";
-	case V4L2_CID_FLASH_TIMEOUT:		return "Strobe Timeout";
-	case V4L2_CID_FLASH_INTENSITY:		return "Intensity, Flash Mode";
-	case V4L2_CID_FLASH_TORCH_INTENSITY:	return "Intensity, Torch Mode";
-	case V4L2_CID_FLASH_INDICATOR_INTENSITY: return "Intensity, Indicator";
-	case V4L2_CID_FLASH_FAULT:		return "Faults";
-	case V4L2_CID_FLASH_CHARGE:		return "Charge";
-	case V4L2_CID_FLASH_READY:		return "Ready to Strobe";
-
-	/* JPEG encoder controls */
-	/* Keep the order of the 'case's the same as in videodev2.h! */
-	case V4L2_CID_JPEG_CLASS:		return "JPEG Compression Controls";
-	case V4L2_CID_JPEG_CHROMA_SUBSAMPLING:	return "Chroma Subsampling";
-	case V4L2_CID_JPEG_RESTART_INTERVAL:	return "Restart Interval";
-	case V4L2_CID_JPEG_COMPRESSION_QUALITY:	return "Compression Quality";
-	case V4L2_CID_JPEG_ACTIVE_MARKER:	return "Active Markers";
-
-	/* Image source controls */
-	case V4L2_CID_IMAGE_SOURCE_CLASS:	return "Image Source Controls";
-	case V4L2_CID_VBLANK:			return "Vertical Blanking";
-	case V4L2_CID_HBLANK:			return "Horizontal Blanking";
-	case V4L2_CID_ANALOGUE_GAIN:		return "Analogue Gain";
-
-	/* Image processing controls */
-	case V4L2_CID_IMAGE_PROC_CLASS:		return "Image Processing Controls";
-	case V4L2_CID_LINK_FREQ:		return "Link Frequency";
-	case V4L2_CID_PIXEL_RATE:		return "Pixel Rate";
-	case V4L2_CID_TEST_PATTERN:		return "Test Pattern";
 
 	/* DV controls */
 	case V4L2_CID_DV_CLASS:			return "Digital Video Controls";
@@ -887,17 +712,11 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_MPEG_VIDEO_MUTE:
 	case V4L2_CID_MPEG_VIDEO_GOP_CLOSURE:
 	case V4L2_CID_MPEG_VIDEO_PULLDOWN:
-	case V4L2_CID_EXPOSURE_AUTO_PRIORITY:
-	case V4L2_CID_FOCUS_AUTO:
-	case V4L2_CID_PRIVACY:
 	case V4L2_CID_AUDIO_LIMITER_ENABLED:
 	case V4L2_CID_AUDIO_COMPRESSION_ENABLED:
 	case V4L2_CID_PILOT_TONE_ENABLED:
 	case V4L2_CID_ILLUMINATORS_1:
 	case V4L2_CID_ILLUMINATORS_2:
-	case V4L2_CID_FLASH_STROBE_STATUS:
-	case V4L2_CID_FLASH_CHARGE:
-	case V4L2_CID_FLASH_READY:
 	case V4L2_CID_MPEG_VIDEO_DECODER_MPEG4_DEBLOCK_FILTER:
 	case V4L2_CID_MPEG_VIDEO_DECODER_SLICE_INTERFACE:
 	case V4L2_CID_MPEG_VIDEO_FRAME_RC_ENABLE:
@@ -906,22 +725,10 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_MPEG_VIDEO_H264_VUI_SAR_ENABLE:
 	case V4L2_CID_MPEG_VIDEO_MPEG4_QPEL:
 	case V4L2_CID_MPEG_VIDEO_REPEAT_SEQ_HEADER:
-	case V4L2_CID_WIDE_DYNAMIC_RANGE:
-	case V4L2_CID_IMAGE_STABILIZATION:
 	case V4L2_CID_RDS_RECEPTION:
 		*type = V4L2_CTRL_TYPE_BOOLEAN;
 		*min = 0;
 		*max = *step = 1;
-		break;
-	case V4L2_CID_PAN_RESET:
-	case V4L2_CID_TILT_RESET:
-	case V4L2_CID_FLASH_STROBE:
-	case V4L2_CID_FLASH_STROBE_STOP:
-	case V4L2_CID_AUTO_FOCUS_START:
-	case V4L2_CID_AUTO_FOCUS_STOP:
-		*type = V4L2_CTRL_TYPE_BUTTON;
-		*flags |= V4L2_CTRL_FLAG_WRITE_ONLY;
-		*min = *max = *step = *def = 0;
 		break;
 	case V4L2_CID_POWER_LINE_FREQUENCY:
 	case V4L2_CID_MPEG_AUDIO_SAMPLING_FREQ:
@@ -941,13 +748,8 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_MPEG_VIDEO_BITRATE_MODE:
 	case V4L2_CID_MPEG_STREAM_TYPE:
 	case V4L2_CID_MPEG_STREAM_VBI_FMT:
-	case V4L2_CID_EXPOSURE_AUTO:
-	case V4L2_CID_AUTO_FOCUS_RANGE:
 	case V4L2_CID_COLORFX:
-	case V4L2_CID_AUTO_N_PRESET_WHITE_BALANCE:
 	case V4L2_CID_TUNE_PREEMPHASIS:
-	case V4L2_CID_FLASH_LED_MODE:
-	case V4L2_CID_FLASH_STROBE_SOURCE:
 	case V4L2_CID_MPEG_VIDEO_HEADER_MODE:
 	case V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE:
 	case V4L2_CID_MPEG_VIDEO_H264_ENTROPY_MODE:
@@ -961,10 +763,6 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_MPEG_VIDEO_MPEG4_PROFILE:
 	case V4L2_CID_MPEG_VIDC_VIDEO_MPEG2_LEVEL:
 	case V4L2_CID_MPEG_VIDC_VIDEO_MPEG2_PROFILE:
-	case V4L2_CID_JPEG_CHROMA_SUBSAMPLING:
-	case V4L2_CID_ISO_SENSITIVITY_AUTO:
-	case V4L2_CID_EXPOSURE_METERING:
-	case V4L2_CID_SCENE_MODE:
 	case V4L2_CID_DV_TX_MODE:
 	case V4L2_CID_DV_TX_RGB_RANGE:
 	case V4L2_CID_DV_RX_RGB_RANGE:
@@ -982,18 +780,9 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_RDS_TX_RADIO_TEXT:
 		*type = V4L2_CTRL_TYPE_STRING;
 		break;
-	case V4L2_CID_ISO_SENSITIVITY:
-	case V4L2_CID_AUTO_EXPOSURE_BIAS:
-		*type = V4L2_CTRL_TYPE_INTEGER_MENU;
-		break;
 	case V4L2_CID_USER_CLASS:
-	case V4L2_CID_CAMERA_CLASS:
 	case V4L2_CID_MPEG_CLASS:
 	case V4L2_CID_FM_TX_CLASS:
-	case V4L2_CID_FLASH_CLASS:
-	case V4L2_CID_JPEG_CLASS:
-	case V4L2_CID_IMAGE_SOURCE_CLASS:
-	case V4L2_CID_IMAGE_PROC_CLASS:
 	case V4L2_CID_DV_CLASS:
 	case V4L2_CID_FM_RX_CLASS:
 		*type = V4L2_CTRL_TYPE_CTRL_CLASS;
@@ -1013,10 +802,6 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 		/* Max is calculated as RGB888 that is 2^24 */
 		*max = 0xFFFFFF;
 		break;
-	case V4L2_CID_FLASH_FAULT:
-	case V4L2_CID_JPEG_ACTIVE_MARKER:
-	case V4L2_CID_3A_LOCK:
-	case V4L2_CID_AUTO_FOCUS_STATUS:
 	case V4L2_CID_DV_TX_HOTPLUG:
 	case V4L2_CID_DV_TX_RXSENSE:
 	case V4L2_CID_DV_TX_EDID_PRESENT:
@@ -1090,16 +875,6 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_TUNE_ANTENNA_CAPACITOR:
 		*flags |= V4L2_CTRL_FLAG_SLIDER;
 		break;
-	case V4L2_CID_PAN_RELATIVE:
-	case V4L2_CID_TILT_RELATIVE:
-	case V4L2_CID_FOCUS_RELATIVE:
-	case V4L2_CID_IRIS_RELATIVE:
-	case V4L2_CID_ZOOM_RELATIVE:
-		*flags |= V4L2_CTRL_FLAG_WRITE_ONLY;
-		break;
-	case V4L2_CID_FLASH_STROBE_STATUS:
-	case V4L2_CID_AUTO_FOCUS_STATUS:
-	case V4L2_CID_FLASH_READY:
 	case V4L2_CID_DV_TX_HOTPLUG:
 	case V4L2_CID_DV_TX_RXSENSE:
 	case V4L2_CID_DV_TX_EDID_PRESENT:

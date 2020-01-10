@@ -83,26 +83,6 @@
 #define UVC_SU_CONTROL_UNDEFINED			0x00
 #define UVC_SU_INPUT_SELECT_CONTROL			0x01
 
-/* A.9.4. Camera Terminal Control Selectors */
-#define UVC_CT_CONTROL_UNDEFINED			0x00
-#define UVC_CT_SCANNING_MODE_CONTROL			0x01
-#define UVC_CT_AE_MODE_CONTROL				0x02
-#define UVC_CT_AE_PRIORITY_CONTROL			0x03
-#define UVC_CT_EXPOSURE_TIME_ABSOLUTE_CONTROL		0x04
-#define UVC_CT_EXPOSURE_TIME_RELATIVE_CONTROL		0x05
-#define UVC_CT_FOCUS_ABSOLUTE_CONTROL			0x06
-#define UVC_CT_FOCUS_RELATIVE_CONTROL			0x07
-#define UVC_CT_FOCUS_AUTO_CONTROL			0x08
-#define UVC_CT_IRIS_ABSOLUTE_CONTROL			0x09
-#define UVC_CT_IRIS_RELATIVE_CONTROL			0x0a
-#define UVC_CT_ZOOM_ABSOLUTE_CONTROL			0x0b
-#define UVC_CT_ZOOM_RELATIVE_CONTROL			0x0c
-#define UVC_CT_PANTILT_ABSOLUTE_CONTROL			0x0d
-#define UVC_CT_PANTILT_RELATIVE_CONTROL			0x0e
-#define UVC_CT_ROLL_ABSOLUTE_CONTROL			0x0f
-#define UVC_CT_ROLL_RELATIVE_CONTROL			0x10
-#define UVC_CT_PRIVACY_CONTROL				0x11
-
 /* A.9.5. Processing Unit Control Selectors */
 #define UVC_PU_CONTROL_UNDEFINED			0x00
 #define UVC_PU_BACKLIGHT_COMPENSATION_CONTROL		0x01
@@ -142,7 +122,6 @@
 
 /* B.2. Input Terminal Types */
 #define UVC_ITT_VENDOR_SPECIFIC				0x0200
-#define UVC_ITT_CAMERA					0x0201
 #define UVC_ITT_MEDIA_TRANSPORT_INPUT			0x0202
 
 /* B.3. Output Terminal Types */
@@ -243,24 +222,6 @@ struct uvc_output_terminal_descriptor {
 } __attribute__((__packed__));
 
 #define UVC_DT_OUTPUT_TERMINAL_SIZE			9
-
-/* 3.7.2.3. Camera Terminal Descriptor */
-struct uvc_camera_terminal_descriptor {
-	__u8  bLength;
-	__u8  bDescriptorType;
-	__u8  bDescriptorSubType;
-	__u8  bTerminalID;
-	__u16 wTerminalType;
-	__u8  bAssocTerminal;
-	__u8  iTerminal;
-	__u16 wObjectiveFocalLengthMin;
-	__u16 wObjectiveFocalLengthMax;
-	__u16 wOcularFocalLength;
-	__u8  bControlSize;
-	__u8  bmControls[3];
-} __attribute__((__packed__));
-
-#define UVC_DT_CAMERA_TERMINAL_SIZE(n)			(15+(n))
 
 /* 3.7.2.4. Selector Unit Descriptor */
 struct uvc_selector_unit_descriptor {
