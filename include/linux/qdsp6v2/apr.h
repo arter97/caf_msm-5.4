@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2016, 2020 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -137,6 +137,10 @@ struct apr_svc {
 	struct mutex m_lock;
 	spinlock_t w_lock;
 	uint8_t pkt_owner;
+#ifdef CONFIG_MSM_QDSP6_APRV2_VM
+	uint16_t vm_dest_svc;
+	uint32_t vm_handle;
+#endif
 };
 
 struct apr_client {
@@ -187,4 +191,18 @@ int apr_set_q6_state(enum apr_subsys_state state);
 void apr_set_subsys_state(void);
 const char *apr_get_lpass_subsys_name(void);
 uint16_t apr_get_reset_domain(uint16_t proc);
+#ifdef CONFIG_MSM_QDSP6_APRV2_VM
+static inline int apr_start_rx_rt(void *handle)
+{
+	return 0;
+}
+
+static inline int apr_end_rx_rt(void *handle)
+{
+	return 0;
+}
+#else
+int apr_start_rx_rt(void *handle);
+int apr_end_rx_rt(void *handle);
+#endif
 #endif

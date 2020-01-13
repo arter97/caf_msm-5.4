@@ -1,4 +1,4 @@
-/*  Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/*  Copyright (c) 2012-2016, 2020 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -79,6 +79,8 @@ static int voice_send_cvp_register_vol_cal_cmd(struct voice_data *v);
 static int voice_send_cvp_deregister_vol_cal_cmd(struct voice_data *v);
 static int voice_send_cvp_device_channels_cmd(struct voice_data *v);
 static int voice_send_cvp_topology_commit_cmd(struct voice_data *v);
+
+void *voice_get_cvp_apr_handle(void);
 
 static int voice_cvs_stop_playback(struct voice_data *v);
 static int voice_cvs_start_playback(struct voice_data *v);
@@ -7092,6 +7094,23 @@ static int voice_alloc_oob_mem_table(void)
 done:
 	mutex_unlock(&common.common_lock);
 	return rc;
+}
+
+void *voice_get_cvp_apr_handle(void)
+{
+	void *apr_cvp;
+	int ret = 0;
+
+	apr_cvp =  common.apr_q6_cvp;
+	if (!apr_cvp) {
+		pr_err("%s: apr_cvp is NULL.\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+	return apr_cvp;
+
+done:
+	return ret;
 }
 
 int voc_send_cvp_start_vocpcm(uint32_t session_id,
