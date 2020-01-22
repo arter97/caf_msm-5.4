@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1801,8 +1801,13 @@ static void dwc3_msm_notify_event(struct dwc3 *dwc, unsigned event,
 		reg |= DWC3_GCTL_CORESOFTRESET;
 		dwc3_msm_write_reg(mdwc->base, DWC3_GCTL, reg);
 
-		/* restart USB which performs full reset and reconnect */
-		schedule_work(&mdwc->restart_usb_work);
+		/*
+		 * If the core could not recover after MAX_ERROR_RECOVERY_TRIES,
+		 * skip the restart USB work and keep the core in softreset
+		 * state.
+		 */
+		if (dwc->retries_on_error < MAX_ERROR_RECOVERY_TRIES)
+			schedule_work(&mdwc->restart_usb_work);
 		break;
 	case DWC3_CONTROLLER_RESET_EVENT:
 		dev_dbg(mdwc->dev, "DWC3_CONTROLLER_RESET_EVENT received\n");
@@ -2095,7 +2100,8 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 		return -EBUSY;
 	}
 
-	if (!mdwc->in_host_mode && (mdwc->vbus_active && !mdwc->suspend)) {
+	if (!mdwc->in_host_mode && (mdwc->vbus_active && !mdwc->suspend) &&
+				!mdwc->in_restart) {
 		dev_dbg(mdwc->dev,
 			"Received wakeup event before the core suspend\n");
 		return -EBUSY;
