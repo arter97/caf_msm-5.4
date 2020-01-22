@@ -40,6 +40,8 @@
 #include "debug.h"
 #include "io.h"
 
+#define MAX_ERROR_RECOVERY_TRIES	3
+
 static void dwc3_gadget_wakeup_interrupt(struct dwc3 *dwc, bool remote_wakeup);
 static int dwc3_gadget_wakeup_int(struct dwc3 *dwc);
 
@@ -3050,6 +3052,8 @@ static void dwc3_gadget_conndone_interrupt(struct dwc3 *dwc)
 	dwc->speed = speed;
 	dwc->gadget.l1_supported = true;
 
+	/* Reset the retry on erratic error event count */
+	dwc->retries_on_error = 0;
 	dwc3_update_ram_clk_sel(dwc, speed);
 
 	switch (speed) {
@@ -3443,6 +3447,7 @@ static void dwc3_gadget_interrupt(struct dwc3 *dwc,
 		if (!dwc->err_evt_seen) {
 			dbg_event(0xFF, "ERROR", 0);
 			dev_vdbg(dwc->dev, "Erratic Error\n");
+			dbg_event(0xFF, "ERROR", dwc->retries_on_error);
 			dwc3_dump_reg_info(dwc);
 		}
 		dwc->dbg_gadget_events.erratic_error++;
@@ -3525,9 +3530,12 @@ static irqreturn_t dwc3_process_event_buf(struct dwc3 *dwc, u32 buf)
 			evt->lpos = (evt->lpos + left) %
 					DWC3_EVENT_BUFFERS_SIZE;
 			dwc3_writel(dwc->regs, DWC3_GEVNTCOUNT(buf), left);
-			if (dwc3_notify_event(dwc,
+			if (dwc->retries_on_error < MAX_ERROR_RECOVERY_TRIES) {
+				if (dwc3_notify_event(dwc,
 						DWC3_CONTROLLER_ERROR_EVENT, 0))
-				dwc->err_evt_seen = 0;
+					dwc->err_evt_seen = 0;
+				dwc->retries_on_error++;
+			}
 			break;
 		}
 
