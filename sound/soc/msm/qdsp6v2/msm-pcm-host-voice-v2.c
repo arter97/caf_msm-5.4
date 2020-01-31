@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, 2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2016, 2018, 2020 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -149,6 +149,7 @@ struct hpcm_drv {
 	struct mixer_conf mixer_conf;
 	struct ion_client *ion_client;
 	struct start_cmd start_cmd;
+	struct apr_svc *apr;
 };
 
 static struct hpcm_drv hpcm_drv;
@@ -1031,6 +1032,7 @@ static int msm_pcm_close(struct snd_pcm_substream *substream)
 		ret = -EINVAL;
 		goto done;
 	}
+	prtd->apr = voice_get_cvp_apr_handle();
 
 	wake_up(&dai_data->queue_wait);
 	mutex_lock(&prtd->lock);
@@ -1083,6 +1085,8 @@ static int msm_pcm_close(struct snd_pcm_substream *substream)
 	dai_data->pcm_size = 0;
 	dai_data->state = HPCM_CLOSED;
 	hpcm_reset_mixer_config(prtd);
+
+	apr_end_rx_rt(prtd->apr);
 
 done:
 	mutex_unlock(&prtd->lock);
@@ -1453,6 +1457,8 @@ static int msm_pcm_open(struct snd_pcm_substream *substream)
 		goto done;
 	}
 
+	prtd->apr = voice_get_cvp_apr_handle();
+
 	runtime->hw = msm_pcm_hardware;
 
 	ret = snd_pcm_hw_constraint_list(runtime, 0, SNDRV_PCM_HW_PARAM_RATE,
@@ -1483,6 +1489,7 @@ static int msm_pcm_open(struct snd_pcm_substream *substream)
 	dai_data->substream = substream;
 	runtime->private_data = prtd;
 
+	apr_start_rx_rt(prtd->apr);
 done:
 	mutex_unlock(&prtd->lock);
 	return ret;

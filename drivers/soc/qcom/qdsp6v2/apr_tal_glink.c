@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 The Linux Foundation.
+/* Copyright (c) 2016, 2020 The Linux Foundation.
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -112,6 +112,7 @@ static int __apr_tal_write(struct apr_svc_ch_dev *apr_ch, void *data,
 	int rc = 0;
 	unsigned long flags;
 
+	pr_debug("%s : %d \n", __func__,__LINE__);
 	spin_lock_irqsave(&apr_ch->w_lock, flags);
 	rc = glink_tx(apr_ch->handle, pkt_priv, data, len,
 			GLINK_TX_REQ_INTENT | GLINK_TX_ATOMIC);
@@ -371,6 +372,37 @@ unlock:
 	return rc ? NULL : apr_ch;
 }
 
+int apr_tal_start_rx_rt(struct apr_svc_ch_dev *apr_ch)
+{
+	int rc = 0;
+
+	if (!apr_ch || !apr_ch->handle) {
+		rc = -EINVAL;
+		goto exit;
+	}
+
+	mutex_lock(&apr_ch->m_lock);
+	rc = glink_start_rx_rt(apr_ch->handle);
+	mutex_unlock(&apr_ch->m_lock);
+exit:
+	return rc;
+}
+
+int apr_tal_end_rx_rt(struct apr_svc_ch_dev *apr_ch)
+{
+	int rc = 0;
+
+	if (!apr_ch || !apr_ch->handle) {
+		rc = -EINVAL;
+		goto exit;
+	}
+
+	mutex_lock(&apr_ch->m_lock);
+	rc = glink_end_rx_rt(apr_ch->handle);
+	mutex_unlock(&apr_ch->m_lock);
+exit:
+	return rc;
+}
 int apr_tal_close(struct apr_svc_ch_dev *apr_ch)
 {
 	int rc;
