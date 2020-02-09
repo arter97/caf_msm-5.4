@@ -1,7 +1,7 @@
 /*
  * f_audio.c -- USB Audio class function driver
   *
- * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015, 2019, The Linux Foundation. All rights reserved.
  * Copyright (C) 2008 Bryan Wu <cooloney@kernel.org>
  * Copyright (C) 2008 Analog Devices, Inc
  *
@@ -764,18 +764,18 @@ static int audio_set_intf_req(struct usb_function *f,
 			list_for_each_entry(con, &cs->control, list) {
 				if (con->type == con_sel) {
 					audio->set_con = con;
-					break;
+					audio->set_cmd = cmd;
+					req->context = audio;
+					req->complete = f_audio_complete;
+
+					return len;
 				}
 			}
 			break;
 		}
 	}
 
-	audio->set_cmd = cmd;
-	req->context = audio;
-	req->complete = f_audio_complete;
-
-	return len;
+	return -EOPNOTSUPP;
 }
 
 static int audio_get_intf_req(struct usb_function *f,
@@ -801,19 +801,19 @@ static int audio_get_intf_req(struct usb_function *f,
 			list_for_each_entry(con, &cs->control, list) {
 				if (con->type == con_sel && con->get) {
 					value = con->get(con, cmd);
-					break;
+					req->context = audio;
+					req->complete = f_audio_complete;
+					len = min_t(size_t, sizeof(value), len);
+					memcpy(req->buf, &value, len);
+
+					return len;
 				}
 			}
 			break;
 		}
 	}
 
-	req->context = audio;
-	req->complete = f_audio_complete;
-	len = min_t(size_t, sizeof(value), len);
-	memcpy(req->buf, &value, len);
-
-	return len;
+	return value;
 }
 
 static void audio_set_endpoint_complete(struct usb_ep *ep,
