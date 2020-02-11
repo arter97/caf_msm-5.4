@@ -1090,7 +1090,8 @@ static void mark_readonly(void)
 		 * flushed so that we don't hit false positives looking for
 		 * insecure pages which are W+X.
 		 */
-		rcu_barrier();
+		if (!is_early_userspace)
+			rcu_barrier();
 		mark_rodata_ro();
 		rodata_test();
 	} else
@@ -1115,8 +1116,12 @@ static int __ref kernel_init(void *unused)
 	kernel_init_freeable();
 	/* need to finish all async __init code before freeing the memory */
 	async_synchronize_full();
-	ftrace_free_init_mem();
-	free_initmem();
+	if (!is_early_userspace) {
+		ftrace_free_init_mem();
+		free_initmem();
+	} else {
+		early_subsys_finish();
+	}
 	mark_readonly();
 
 	/*
