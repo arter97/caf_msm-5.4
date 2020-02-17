@@ -41,6 +41,7 @@
 #define DWC3_EP0_BOUNCE_SIZE	2048
 #define DWC3_ENDPOINTS_NUM	32
 #define DWC3_XHCI_RESOURCES_NUM	2
+#define MAX_ERROR_RECOVERY_TRIES	3
 
 #define DWC3_SCRATCHBUF_SIZE	4096	/* each buffer is assumed to be 4KiB */
 #define DWC3_EVENT_BUFFERS_SIZE	(2 * PAGE_SIZE)
@@ -997,6 +998,7 @@ struct dwc3 {
 	wait_queue_head_t	wait_linkstate;
 	void			*dwc_ipc_log_ctxt;
 	int			last_fifo_depth;
+	int			retries_on_error;
 };
 
 /* -------------------------------------------------------------------------- */

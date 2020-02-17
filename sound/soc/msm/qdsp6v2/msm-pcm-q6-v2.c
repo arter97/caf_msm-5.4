@@ -812,7 +812,7 @@ static int msm_pcm_playback_close(struct snd_pcm_substream *substream)
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct snd_soc_pcm_runtime *soc_prtd = substream->private_data;
 	struct msm_audio *prtd = runtime->private_data;
-	struct msm_plat_data *pdata;
+	struct msm_plat_data *pdata = NULL;
 	uint32_t timeout;
 	int dir = 0;
 	int ret = 0;
@@ -820,7 +820,7 @@ static int msm_pcm_playback_close(struct snd_pcm_substream *substream)
 	pr_debug("%s: cmd_pending 0x%lx\n", __func__, prtd->cmd_pending);
 
 	pdata = (struct msm_plat_data *)
-		dev_get_drvdata(soc_prtd->platform->dev);
+			dev_get_drvdata(soc_prtd->platform->dev);
 	if (!pdata) {
 		pr_err("%s: platform data is NULL\n", __func__);
 		return -EINVAL;
@@ -859,7 +859,6 @@ static int msm_pcm_playback_close(struct snd_pcm_substream *substream)
 	kfree(prtd);
 	runtime->private_data = NULL;
 	mutex_unlock(&pdata->lock);
-
 	return 0;
 }
 
@@ -953,12 +952,12 @@ static int msm_pcm_capture_close(struct snd_pcm_substream *substream)
 	struct snd_soc_pcm_runtime *soc_prtd = substream->private_data;
 	struct msm_audio *prtd = runtime->private_data;
 	int dir = OUT;
-	struct msm_plat_data *pdata;
+	struct msm_plat_data *pdata = NULL;
 
 	pr_debug("%s\n", __func__);
 
 	pdata = (struct msm_plat_data *)
-		dev_get_drvdata(soc_prtd->platform->dev);
+			dev_get_drvdata(soc_prtd->platform->dev);
 	if (!pdata) {
 		pr_err("%s: platform data is NULL\n", __func__);
 		return -EINVAL;
@@ -1190,9 +1189,9 @@ static int msm_pcm_volume_ctl_put(struct snd_kcontrol *kcontrol,
 	struct snd_pcm_substream *substream =
 		vol->pcm->streams[SNDRV_PCM_STREAM_PLAYBACK].substream;
 	struct msm_audio *prtd;
-	int volume = ucontrol->value.integer.value[0];
 	struct snd_soc_pcm_runtime *soc_prtd = NULL;
 	struct msm_plat_data *pdata = NULL;
+	int volume = ucontrol->value.integer.value[0];
 
 	pr_debug("%s: volume : 0x%x\n", __func__, volume);
 	if (!substream) {
@@ -1207,8 +1206,13 @@ static int msm_pcm_volume_ctl_put(struct snd_kcontrol *kcontrol,
 		return 0;
 	}
 
+	soc_prtd = substream->private_data;
+	if (!soc_prtd) {
+		pr_err("%s: soc_prtd is NULL\n", __func__);
+		return -ENODEV;
+	}
 	pdata = (struct msm_plat_data *)
-		dev_get_drvdata(soc_prtd->platform->dev);
+			dev_get_drvdata(soc_prtd->platform->dev);
 	if (!pdata) {
 		pr_err("%s: pdata not found\n", __func__);
 		return -ENODEV;
@@ -1253,9 +1257,9 @@ static int msm_pcm_chmap_ctl_put(struct snd_kcontrol *kcontrol,
 	struct snd_pcm_chmap *info = snd_kcontrol_chip(kcontrol);
 	unsigned int idx = snd_ctl_get_ioffidx(kcontrol, &ucontrol->id);
 	struct snd_pcm_substream *substream;
-	struct msm_audio *prtd;
 	struct snd_soc_pcm_runtime *rtd = NULL;
 	struct msm_plat_data *pdata = NULL;
+	struct msm_audio *prtd;
 
 	pr_debug("%s", __func__);
 	substream = snd_pcm_chmap_substream(info, idx);
@@ -1265,7 +1269,7 @@ static int msm_pcm_chmap_ctl_put(struct snd_kcontrol *kcontrol,
 	rtd = substream->private_data;
 	if (rtd) {
 		pdata = (struct msm_plat_data *)
-			dev_get_drvdata(rtd->platform->dev);
+					dev_get_drvdata(rtd->platform->dev);
 		if (!pdata) {
 			pr_err("%s: pdata not found\n", __func__);
 			return -ENODEV;
@@ -1276,6 +1280,7 @@ static int msm_pcm_chmap_ctl_put(struct snd_kcontrol *kcontrol,
 		return 0;
 
 	mutex_lock(&pdata->lock);
+
 	prtd = substream->runtime->private_data;
 	if (prtd) {
 		prtd->set_channel_map = true;
