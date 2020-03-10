@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2013-2019, Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2020, Linux Foundation. All rights reserved.
  */
 
 #include <linux/acpi.h>
@@ -64,12 +64,11 @@ struct ufs_qcom_dev_params {
 
 static struct ufs_qcom_host *ufs_qcom_hosts[MAX_UFS_QCOM_HOSTS];
 
-static int ufs_qcom_set_bus_vote(struct ufs_qcom_host *host, int vote);
 static void ufs_qcom_get_default_testbus_cfg(struct ufs_qcom_host *host);
 static int ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(struct ufs_hba *hba,
 						       u32 clk_1us_cycles,
 						       u32 clk_40ns_cycles);
-static void ufs_qcom_parse_gear_limits(struct ufs_qcom_host *host);
+static void ufs_qcom_parse_limits(struct ufs_qcom_host *host);
 static void ufs_qcom_parse_lpm(struct ufs_qcom_host *host);
 static int ufs_qcom_set_dme_vs_core_clk_ctrl_max_freq_mode(struct ufs_hba *hba);
 
@@ -451,13 +450,54 @@ out:
 	return ret;
 }
 
+static int ufs_qcom_phy_power_on(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct phy *phy = host->generic_phy;
+	int ret = 0;
+
+	mutex_lock(&host->phy_mutex);
+	if (!host->is_phy_pwr_on) {
+		ret = phy_power_on(phy);
+		if (ret) {
+			mutex_unlock(&host->phy_mutex);
+			return ret;
+		}
+		host->is_phy_pwr_on = true;
+	}
+	mutex_unlock(&host->phy_mutex);
+
+	return ret;
+}
+
+static int ufs_qcom_phy_power_off(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct phy *phy = host->generic_phy;
+	int ret = 0;
+
+	mutex_lock(&host->phy_mutex);
+	if (host->is_phy_pwr_on) {
+		ret = phy_power_off(phy);
+		if (ret) {
+			mutex_unlock(&host->phy_mutex);
+			return ret;
+		}
+		host->is_phy_pwr_on = false;
+	}
+	mutex_unlock(&host->phy_mutex);
+
+	return ret;
+}
+
 static int ufs_qcom_power_up_sequence(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct phy *phy = host->generic_phy;
 	int ret = 0;
-	bool is_rate_B = (UFS_QCOM_LIMIT_HS_RATE == PA_HS_MODE_B)
-							? true : false;
+	enum phy_mode mode = (host->limit_rate == PA_HS_MODE_B) ?
+					PHY_MODE_UFS_HS_B : PHY_MODE_UFS_HS_A;
+	int submode = host->limit_phy_submode;
 
 	/* Reset UFS Host Controller and PHY */
 	ret = ufs_qcom_host_reset(hba);
@@ -465,45 +505,26 @@ static int ufs_qcom_power_up_sequence(struct ufs_hba *hba)
 		dev_warn(hba->dev, "%s: host reset returned %d\n",
 				  __func__, ret);
 
-#ifdef CONFIG_SCSI_UFSHCD_QTI
-	/* Use Rate-A for Gear4 on non-simulation platforms */
-	if (hba->phy_init_g4) {
-		if (!host->limit_rate)
-			is_rate_B = false;
-		else
-			is_rate_B = true;
-	}
+	if (host->hw_ver.major < 0x4)
+		submode = UFS_QCOM_PHY_SUBMODE_NON_G4;
+	phy_set_mode_ext(phy, mode, submode);
 
-	phy_set_mode_ext(phy,
-			 is_rate_B ? PHY_MODE_UFS_HS_B : PHY_MODE_UFS_HS_A,
-			 hba->phy_init_g4);
-#else
-	if (is_rate_B)
-		phy_set_mode(phy, PHY_MODE_UFS_HS_B);
-
-#endif
-	/* phy initialization - calibrate the phy */
-	ret = phy_init(phy);
+	ret = ufs_qcom_phy_power_on(hba);
 	if (ret) {
-		dev_err(hba->dev, "%s: phy init failed, ret = %d\n",
-			__func__, ret);
+		dev_err(hba->dev, "%s: phy power on failed, ret = %d\n",
+				 __func__, ret);
 		goto out;
 	}
 
-	/* power on phy - start serdes and phy's power and clocks */
-	ret = phy_power_on(phy);
+	ret = phy_calibrate(phy);
 	if (ret) {
-		dev_err(hba->dev, "%s: phy power on failed, ret = %d\n",
-			__func__, ret);
-		goto out_disable_phy;
+		dev_err(hba->dev, "%s: Failed to calibrate PHY %d\n",
+				  __func__, ret);
+		goto out;
 	}
 
 	ufs_qcom_select_unipro_mode(host);
 
-	return 0;
-
-out_disable_phy:
-	phy_exit(phy);
 out:
 	return ret;
 }
@@ -912,8 +933,7 @@ out:
 static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
-	struct phy *phy = host->generic_phy;
-	int ret = 0;
+	int err = 0;
 
 	/*
 	 * If UniPro link is not active or OFF, PHY ref_clk, main PHY analog
@@ -922,37 +942,21 @@ static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	 */
 	if (!ufs_qcom_is_link_active(hba)) {
 		ufs_qcom_disable_lane_clks(host);
-		if (host->is_phy_pwr_on) {
-			phy_power_off(phy);
-			host->is_phy_pwr_on = false;
-		}
 		if (host->vddp_ref_clk && ufs_qcom_is_link_off(hba))
-			ret = ufs_qcom_disable_vreg(hba->dev,
+			err = ufs_qcom_disable_vreg(hba->dev,
 					host->vddp_ref_clk);
 		if (host->vccq_parent && !hba->auto_bkops_enabled)
 			ufs_qcom_config_vreg(hba->dev,
 					host->vccq_parent, false);
-
 	}
 
-	return ret;
+	return err;
 }
 
 static int ufs_qcom_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
-	struct phy *phy = host->generic_phy;
 	int err;
-
-	if (!host->is_phy_pwr_on) {
-		err = phy_power_on(phy);
-		if (err) {
-			dev_err(hba->dev, "%s: failed enabling regs, err = %d\n",
-				__func__, err);
-			return 0;
-		}
-		host->is_phy_pwr_on = true;
-	}
 
 	if (host->vddp_ref_clk && (hba->rpm_lvl > UFS_PM_LVL_3 ||
 				   hba->spm_lvl > UFS_PM_LVL_3))
@@ -965,7 +969,6 @@ static int ufs_qcom_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	if (err)
 		return err;
 
-	hba->is_sys_suspended = false;
 	return 0;
 }
 
@@ -1065,7 +1068,7 @@ static int ufs_qcom_get_ib_ab(struct ufs_qcom_host *host, int index,
 	return 0;
 }
 
-static int ufs_qcom_set_bus_vote(struct ufs_qcom_host *host, int vote)
+static int __ufs_qcom_set_bus_vote(struct ufs_qcom_host *host, int vote)
 {
 	int err = 0;
 	struct qcom_bus_scale_data *d = host->qbsd;
@@ -1112,7 +1115,7 @@ static int ufs_qcom_update_bus_bw_vote(struct ufs_qcom_host *host)
 
 	vote = ufs_qcom_get_bus_vote(host, mode);
 	if (vote >= 0)
-		err = ufs_qcom_set_bus_vote(host, vote);
+		err = __ufs_qcom_set_bus_vote(host, vote);
 	else
 		err = vote;
 
@@ -1120,6 +1123,35 @@ static int ufs_qcom_update_bus_bw_vote(struct ufs_qcom_host *host)
 		dev_err(host->hba->dev, "%s: failed %d\n", __func__, err);
 	else
 		host->bus_vote.saved_vote = vote;
+	return err;
+}
+
+static int ufs_qcom_set_bus_vote(struct ufs_hba *hba, bool on)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	int vote, err;
+
+	/*
+	 * In case ufs_qcom_init() is not yet done, simply ignore.
+	 * This ufs_qcom_set_bus_vote() shall be called from
+	 * ufs_qcom_init() after init is done.
+	 */
+	if (!host)
+		return 0;
+
+	if (on) {
+		vote = host->bus_vote.saved_vote;
+		if (vote == host->bus_vote.min_bw_vote)
+			ufs_qcom_update_bus_bw_vote(host);
+	} else {
+		vote = host->bus_vote.min_bw_vote;
+	}
+
+	err = __ufs_qcom_set_bus_vote(host, vote);
+	if (err)
+		dev_err(hba->dev, "%s: set bus vote failed %d\n",
+				 __func__, err);
+
 	return err;
 }
 
@@ -1283,7 +1315,7 @@ static int ufs_qcom_bus_register(struct ufs_qcom_host *host)
 			err);
 
 	/* Full throttle */
-	err = ufs_qcom_set_bus_vote(host, host->bus_vote.max_bw_vote);
+	err = __ufs_qcom_set_bus_vote(host, host->bus_vote.max_bw_vote);
 	if (err)
 		dev_err(dev, "Error: (%d) Failed to set max bus vote\n", err);
 
@@ -1329,25 +1361,6 @@ static void ufs_qcom_dev_ref_clk_ctrl(struct ufs_qcom_host *host, bool enable)
 	}
 }
 
-#ifdef CONFIG_SCSI_UFSHCD_QTI
-static inline void ufs_qcom_set_hs_rate(struct ufs_hba *hba,
-					struct ufs_qcom_dev_params *params)
-{
-	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
-
-	params->hs_rate = PA_HS_MODE_B;
-	if (hba->phy_init_g4) {
-		if (!host->limit_rate)
-			params->hs_rate = PA_HS_MODE_A;
-	}
-}
-#else
-static inline void ufs_qcom_set_hs_rate(struct ufs_hba *hba,
-					struct ufs_qcom_dev_params *params)
-{
-
-}
-#endif
 static int ufs_qcom_pwr_change_notify(struct ufs_hba *hba,
 				enum ufs_notify_change_status status,
 				struct ufs_pa_layer_attr *dev_max_params,
@@ -1380,8 +1393,8 @@ static int ufs_qcom_pwr_change_notify(struct ufs_hba *hba,
 		ufs_qcom_cap.rx_pwr_hs = UFS_QCOM_LIMIT_RX_PWR_HS;
 		ufs_qcom_cap.tx_pwr_hs = UFS_QCOM_LIMIT_TX_PWR_HS;
 
-		ufs_qcom_cap.hs_rate = UFS_QCOM_LIMIT_HS_RATE;
-		ufs_qcom_set_hs_rate(hba, &ufs_qcom_cap);
+		ufs_qcom_cap.hs_rate = host->limit_rate;
+
 		ufs_qcom_cap.desired_working_mode =
 					UFS_QCOM_LIMIT_DESIRED_MODE;
 
@@ -1397,6 +1410,11 @@ static int ufs_qcom_pwr_change_notify(struct ufs_hba *hba,
 				ufs_qcom_cap.hs_tx_gear = UFS_HS_G2;
 			if (ufs_qcom_cap.hs_rx_gear > UFS_HS_G2)
 				ufs_qcom_cap.hs_rx_gear = UFS_HS_G2;
+		} else if (host->hw_ver.major < 0x4) {
+			if (ufs_qcom_cap.hs_tx_gear > UFS_HS_G3)
+				ufs_qcom_cap.hs_tx_gear = UFS_HS_G3;
+			if (ufs_qcom_cap.hs_rx_gear > UFS_HS_G3)
+				ufs_qcom_cap.hs_rx_gear = UFS_HS_G3;
 		}
 
 		ret = ufs_qcom_get_pwr_dev_param(&ufs_qcom_cap,
@@ -1576,8 +1594,7 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 				 enum ufs_notify_change_status status)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
-	int err;
-	int vote = 0;
+	int err = 0;
 
 	/*
 	 * In case ufs_qcom_init() is not yet done, simply ignore.
@@ -1587,39 +1604,42 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 	if (!host)
 		return 0;
 
-	if (on && (status == POST_CHANGE)) {
-		if (!host->is_phy_pwr_on) {
-			phy_power_on(host->generic_phy);
-			host->is_phy_pwr_on = true;
-		}
-		/* enable the device ref clock for HS mode*/
-		if (ufshcd_is_hs_mode(&hba->pwr_info))
-			ufs_qcom_dev_ref_clk_ctrl(host, true);
-		vote = host->bus_vote.saved_vote;
-		if (vote == host->bus_vote.min_bw_vote)
-			ufs_qcom_update_bus_bw_vote(host);
+	switch (status) {
+	case PRE_CHANGE:
+		if (on) {
+			err = ufs_qcom_set_bus_vote(hba, true);
+		} else {
+			if (!ufs_qcom_is_link_active(hba)) {
+				/* disable device ref_clk */
+				ufs_qcom_dev_ref_clk_ctrl(host, false);
 
-	} else if (!on && (status == PRE_CHANGE)) {
-		if ((ufshcd_is_auto_hibern8_supported(hba) &&
-			!!hba->ahit) ||
-			!ufs_qcom_is_link_active(hba)) {
-			/* disable device ref_clk */
-			ufs_qcom_dev_ref_clk_ctrl(host, false);
-			/* powering off PHY during aggressive clk gating */
-			if (host->is_phy_pwr_on) {
-				phy_power_off(host->generic_phy);
-				host->is_phy_pwr_on = false;
+				/* power off PHY during aggressive clk gating */
+				err = ufs_qcom_phy_power_off(hba);
+				if (err) {
+					dev_err(hba->dev, "%s: phy power off failed, ret = %d\n",
+							 __func__, err);
+					return err;
+				}
 			}
 		}
+		break;
+	case POST_CHANGE:
+		if (on) {
+			err = ufs_qcom_phy_power_on(hba);
+			if (err) {
+				dev_err(hba->dev, "%s: phy power on failed, ret = %d\n",
+						 __func__, err);
+				return err;
+			}
 
-
-		vote = host->bus_vote.min_bw_vote;
+			/* enable the device ref clock for HS mode*/
+			if (ufshcd_is_hs_mode(&hba->pwr_info))
+				ufs_qcom_dev_ref_clk_ctrl(host, true);
+		} else {
+			err = ufs_qcom_set_bus_vote(hba, false);
+		}
+		break;
 	}
-
-	err = ufs_qcom_set_bus_vote(host, vote);
-	if (err)
-		dev_err(hba->dev, "%s: set bus vote failed %d\n",
-				__func__, err);
 
 	return err;
 }
@@ -2013,6 +2033,21 @@ ufs_qcom_ioctl(struct scsi_device *dev, unsigned int cmd, void __user *buffer)
 	return err;
 }
 
+static void ufs_qcom_parse_pm_level(struct ufs_hba *hba)
+{
+	struct device *dev = hba->dev;
+	struct device_node *np = dev->of_node;
+
+	if (np) {
+		if (of_property_read_u32(np, "rpm-level",
+					 &hba->rpm_lvl))
+			hba->rpm_lvl = -1;
+		if (of_property_read_u32(np, "spm-level",
+					 &hba->spm_lvl))
+			hba->spm_lvl = -1;
+	}
+}
+
 /**
  * ufs_qcom_init - bind phy with controller
  * @hba: host controller instance
@@ -2140,14 +2175,20 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	err = ufs_qcom_parse_reg_info(host, "qcom,vddp-ref-clk",
 				      &host->vddp_ref_clk);
 
-	phy_init(host->generic_phy);
+	err = phy_init(host->generic_phy);
+	if (err) {
+		dev_err(hba->dev, "%s: phy init failed, err %d\n",
+				__func__, err);
+		goto out_variant_clear;
+	}
+	mutex_init(&host->phy_mutex);
 
 	if (host->vddp_ref_clk) {
 		err = ufs_qcom_enable_vreg(dev, host->vddp_ref_clk);
 		if (err) {
 			dev_err(dev, "%s: failed enabling ref clk supply: %d\n",
 				__func__, err);
-			goto out_unregister_bus;
+			goto out_phy_exit;
 		}
 	}
 
@@ -2166,7 +2207,8 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	if (err)
 		goto out_set_load_vccq_parent;
 
-	ufs_qcom_parse_gear_limits(host);
+	ufs_qcom_parse_pm_level(hba);
+	ufs_qcom_parse_limits(host);
 	ufs_qcom_parse_lpm(host);
 	if (host->disable_lpm)
 		pm_runtime_forbid(host->hba->dev);
@@ -2174,7 +2216,10 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	ufs_qcom_set_caps(hba);
 	ufs_qcom_advertise_quirks(hba);
 
-	ufs_qcom_setup_clocks(hba, true, POST_CHANGE);
+	ufs_qcom_set_bus_vote(hba, true);
+	/* enable the device ref clock for HS mode*/
+	if (ufshcd_is_hs_mode(&hba->pwr_info))
+		ufs_qcom_dev_ref_clk_ctrl(host, true);
 
 	if (hba->dev->id < MAX_UFS_QCOM_HOSTS)
 		ufs_qcom_hosts[hba->dev->id] = host;
@@ -2207,7 +2252,7 @@ out_set_load_vccq_parent:
 out_disable_vddp:
 	if (host->vddp_ref_clk)
 		ufs_qcom_disable_vreg(dev, host->vddp_ref_clk);
-out_unregister_bus:
+out_phy_exit:
 	phy_exit(host->generic_phy);
 out_variant_clear:
 	devm_kfree(dev, host);
@@ -2221,10 +2266,7 @@ static void ufs_qcom_exit(struct ufs_hba *hba)
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 
 	ufs_qcom_disable_lane_clks(host);
-	if (host->is_phy_pwr_on) {
-		phy_power_off(host->generic_phy);
-		host->is_phy_pwr_on = false;
-	}
+	ufs_qcom_phy_power_off(hba);
 	phy_exit(host->generic_phy);
 }
 
@@ -2674,12 +2716,11 @@ static void ufs_qcom_dump_dbg_regs(struct ufs_hba *hba)
 }
 
 /*
- * ufs_qcom_parse_gear_limits - read from DTS if gears should be limited
+ * ufs_qcom_parse_limits - read limits from DTS
  */
-static void ufs_qcom_parse_gear_limits(struct ufs_qcom_host *host)
+static void ufs_qcom_parse_limits(struct ufs_qcom_host *host)
 {
 	struct device_node *np = host->hba->dev->of_node;
-	int ret;
 
 	if (!np)
 		return;
@@ -2688,14 +2729,15 @@ static void ufs_qcom_parse_gear_limits(struct ufs_qcom_host *host)
 	host->limit_rx_hs_gear = UFS_QCOM_LIMIT_HSGEAR_RX;
 	host->limit_tx_pwm_gear = UFS_QCOM_LIMIT_PWMGEAR_TX;
 	host->limit_rx_pwm_gear = UFS_QCOM_LIMIT_PWMGEAR_RX;
+	host->limit_rate = UFS_QCOM_LIMIT_HS_RATE;
+	host->limit_phy_submode = UFS_QCOM_LIMIT_PHY_SUBMODE;
 
 	of_property_read_u32(np, "limit-tx-hs-gear", &host->limit_tx_hs_gear);
 	of_property_read_u32(np, "limit-rx-hs-gear", &host->limit_rx_hs_gear);
 	of_property_read_u32(np, "limit-tx-pwm-gear", &host->limit_tx_pwm_gear);
 	of_property_read_u32(np, "limit-rx-pwm-gear", &host->limit_rx_pwm_gear);
-	ret = of_property_read_u32(np, "limit-rate", &host->limit_rate);
-	if (ret)
-		host->limit_rate = 0;
+	of_property_read_u32(np, "limit-rate", &host->limit_rate);
+	of_property_read_u32(np, "limit-phy-submode", &host->limit_phy_submode);
 }
 
 /*

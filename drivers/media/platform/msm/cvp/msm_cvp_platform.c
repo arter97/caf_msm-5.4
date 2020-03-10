@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/debugfs.h>
@@ -100,7 +100,7 @@ static struct msm_cvp_common_data sm8250_common_data[] = {
 static struct msm_cvp_common_data sm8350_common_data[] = {
 	{
 		.key = "qcom,auto-pil",
-		.value = 0,
+		.value = 1,
 	},
 	{
 		.key = "qcom,never-unload-fw",

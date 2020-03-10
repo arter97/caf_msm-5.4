@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -286,6 +286,11 @@ static unsigned int eud_tx_empty(struct uart_port *port)
 		return 0;
 }
 
+static void eud_set_mctrl(struct uart_port *port, unsigned int mctrl)
+{
+	/* Nothing to set */
+}
+
 static void eud_stop_tx(struct uart_port *port)
 {
 	/* Disable Tx interrupt */
@@ -365,6 +370,7 @@ static int eud_verify_port(struct uart_port *port,
 /* serial functions supported */
 static const struct uart_ops eud_uart_ops = {
 	.tx_empty	= eud_tx_empty,
+	.set_mctrl	= eud_set_mctrl,
 	.stop_tx	= eud_stop_tx,
 	.start_tx	= eud_start_tx,
 	.stop_rx	= eud_stop_rx,
@@ -447,41 +453,53 @@ static void eud_uart_tx(struct eud_chip *chip)
 static irqreturn_t handle_eud_irq(int irq, void *data)
 {
 	struct eud_chip *chip = data;
-	u32 reg;
+	u8 reg;
 	u32 int_mask_en1 = readl_relaxed(chip->eud_reg_base +
 					EUD_REG_INT1_EN_MASK);
 
 	/* read status register and find out which interrupt triggered */
-	reg = readl_relaxed(chip->eud_reg_base + EUD_REG_INT_STATUS_1);
-	switch (reg & EUD_INT_ALL) {
-	case EUD_INT_RX:
+	reg = readb_relaxed(chip->eud_reg_base + EUD_REG_INT_STATUS_1);
+	dev_dbg(chip->dev, "EUD Interrupt is received status:%x\n", reg);
+
+	if (reg & EUD_INT_RX) {
 		dev_dbg(chip->dev, "EUD RX Interrupt is received\n");
 		eud_uart_rx(chip);
-		break;
-	case EUD_INT_TX:
+		reg &= ~EUD_INT_RX;
+	}
+
+	if (reg & EUD_INT_TX) {
 		if (EUD_INT_TX & int_mask_en1) {
 			dev_dbg(chip->dev, "EUD TX Interrupt is received\n");
 			eud_uart_tx(chip);
 		}
-		break;
-	case EUD_INT_VBUS:
+		reg &= ~EUD_INT_TX;
+	}
+
+	if (reg & EUD_INT_VBUS) {
 		dev_dbg(chip->dev, "EUD VBUS Interrupt is received\n");
 		chip->int_status = EUD_INT_VBUS;
 		usb_attach_detach(chip);
-		break;
-	case EUD_INT_CHGR:
+		reg &= ~EUD_INT_VBUS;
+	}
+
+	if (reg & EUD_INT_CHGR) {
 		dev_dbg(chip->dev, "EUD CHGR Interrupt is received\n");
 		chip->int_status = EUD_INT_CHGR;
 		chgr_enable_disable(chip);
-		break;
-	case EUD_INT_SAFE_MODE:
+		reg &= ~EUD_INT_CHGR;
+	}
+
+	if (reg & EUD_INT_SAFE_MODE) {
 		dev_dbg(chip->dev, "EUD SAFE MODE Interrupt is received\n");
 		pet_eud(chip);
-		break;
-	default:
-		dev_dbg(chip->dev, "Unknown EUD Interrupt is received\n");
+		reg &= ~EUD_INT_SAFE_MODE;
+	}
+
+	if (reg) {
+		dev_dbg(chip->dev, "Unhandled EUD interrupt status:%x\n", reg);
 		return IRQ_NONE;
 	}
+
 	return IRQ_HANDLED;
 }
 
@@ -593,6 +611,7 @@ static int msm_eud_probe(struct platform_device *pdev)
 
 	INIT_WORK(&chip->eud_work, eud_event_notifier);
 
+	pdev->id = 0;
 	port = &chip->port;
 	port->line = pdev->id;
 	port->type = PORT_EUD_UART;

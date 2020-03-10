@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2016-2020, The Linux Foundation. All rights reserved. */
 
 #ifndef _CNSS_MAIN_H
 #define _CNSS_MAIN_H
@@ -25,6 +25,8 @@
 #define CNSS_RDDM_TIMEOUT_MS		20000
 #define RECOVERY_TIMEOUT		60000
 #define TIME_CLOCK_FREQ_HZ		19200000
+#define CNSS_RAMDUMP_MAGIC		0x574C414E
+#define CNSS_RAMDUMP_VERSION		0
 
 #define CNSS_EVENT_SYNC   BIT(0)
 #define CNSS_EVENT_UNINTERRUPTIBLE BIT(1)
@@ -173,6 +175,21 @@ enum cnss_fw_dump_type {
 	CNSS_FW_IMAGE,
 	CNSS_FW_RDDM,
 	CNSS_FW_REMOTE_HEAP,
+	CNSS_FW_DUMP_TYPE_MAX,
+};
+
+struct cnss_dump_entry {
+	u32 type;
+	u32 entry_start;
+	u32 entry_num;
+};
+
+struct cnss_dump_meta_info {
+	u32 magic;
+	u32 version;
+	u32 chipset;
+	u32 total_entries;
+	struct cnss_dump_entry entry[CNSS_FW_DUMP_TYPE_MAX];
 };
 
 enum cnss_driver_event_type {
@@ -372,6 +389,9 @@ struct cnss_plat_data {
 	u64 dynamic_feature;
 	void *get_info_cb_ctx;
 	int (*get_info_cb)(void *ctx, void *event, int event_len);
+	u8 use_nv_mac;
+	u8 set_wlaon_pwr_ctrl;
+	struct kobject *shutdown_kobj;
 };
 
 #ifdef CONFIG_ARCH_QCOM

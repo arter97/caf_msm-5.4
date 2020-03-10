@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/bitops.h>
@@ -853,6 +853,7 @@ static const struct adc5_data adc5_data_pmic = {
 };
 
 static const struct adc5_data adc7_data_pmic = {
+	.full_scale_code_volt = 0x70e4,
 	.adc_chans = adc7_chans_pmic,
 	.decimation = (unsigned int [ADC5_DECIMATION_SAMPLES_MAX])
 				{85, 340, 1360},
@@ -941,6 +942,7 @@ static int adc5_get_dt_data(struct adc5_chip *adc, struct device_node *node)
 		adc_chan = &data->adc_chans[prop.channel];
 
 		iio_chan->channel = prop.channel;
+		iio_chan->channel2 = prop.sid;
 		iio_chan->datasheet_name = prop.datasheet_name;
 		iio_chan->extend_name = prop.datasheet_name;
 		iio_chan->info_mask_separate = adc_chan->info_mask;

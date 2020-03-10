@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2015-2016, 2018-2019, The Linux Foundation.
+ * Copyright (c) 2015-2016, 2018-2020, The Linux Foundation.
  * All rights reserved.
  */
 
@@ -986,13 +986,8 @@ int clk_zonda_pll_configure(struct clk_alpha_pll *pll, struct regmap *regmap,
 	int ret;
 
 	ret = __zonda_pll_is_enabled(pll, regmap);
-	if (ret < 0)
+	if (ret)
 		return ret;
-	else if (ret) {
-		pr_warn("%s PLL is already enabled\n",
-				clk_hw_get_name(&pll->clkr.hw));
-		return 0;
-	}
 
 	if (config->l)
 		ret |= regmap_write(regmap, PLL_L_VAL(pll), config->l);
@@ -1186,6 +1181,9 @@ static int clk_zonda_pll_set_rate(struct clk_hw *hw, unsigned long rate,
 
 	regmap_write(pll->clkr.regmap, PLL_ALPHA_VAL(pll), a);
 	regmap_write(pll->clkr.regmap, PLL_L_VAL(pll), l);
+
+	if (!clk_hw_is_enabled(hw))
+		return 0;
 
 	/* Wait before polling for the frequency latch */
 	udelay(5);
@@ -1939,13 +1937,8 @@ void clk_lucid_pll_configure(struct clk_alpha_pll *pll, struct regmap *regmap,
 	int ret;
 
 	ret = lucid_pll_is_enabled(pll, regmap);
-	if (ret < 0)
+	if (ret)
 		return;
-	else if (ret) {
-		pr_warn("%s PLL is already enabled\n",
-			clk_hw_get_name(&pll->clkr.hw));
-		return;
-	}
 
 	if (config->l)
 		regmap_write(regmap, PLL_L_VAL(pll), config->l);
@@ -2219,13 +2212,8 @@ int clk_lucid_5lpe_pll_configure(struct clk_alpha_pll *pll,
 	int ret;
 
 	ret = lucid_pll_is_enabled(pll, regmap);
-	if (ret < 0)
+	if (ret)
 		return ret;
-	else if (ret) {
-		pr_warn("%s PLL is already enabled\n",
-				clk_hw_get_name(&pll->clkr.hw));
-		return 0;
-	}
 
 	if (config->l)
 		ret |= regmap_write(regmap, PLL_L_VAL(pll), config->l);

@@ -46,7 +46,9 @@
 #include <linux/cma.h>
 #include <linux/of_platform.h>
 #include <linux/interconnect.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/qtee_shmbridge.h>
+#include "compat_qseecom.h"
 
 #define QSEECOM_DEV			"qseecom"
 #define QSEOS_VERSION_14		0x14
@@ -444,7 +446,7 @@ static int qseecom_query_ce_info(struct qseecom_dev_handle *data,
 static int __qseecom_unload_app(struct qseecom_dev_handle *data,
 				uint32_t app_id);
 
-static int get_qseecom_keymaster_status(char *str)
+static int __maybe_unused get_qseecom_keymaster_status(char *str)
 {
 	get_option(&str, &qseecom.is_apps_region_protected);
 	return 1;
@@ -5298,8 +5300,15 @@ int qseecom_process_listener_from_smcinvoke(uint32_t *result,
 	}
 
 	memset((void *)&dummy_app_entry, 0, sizeof(dummy_app_entry));
-	resp.result = *result;
-	resp.resp_type = *response_type;
+	/*
+	 * smcinvoke expects result in scm call resp.ret[1] and type in ret[0],
+	 * while qseecom expects result in ret[0] and type in ret[1].
+	 * To simplify API interface and code changes in smcinvoke, here
+	 * internally switch result and resp_type to let qseecom work with
+	 * smcinvoke and upstream scm driver protocol.
+	 */
+	resp.result = *response_type;
+	resp.resp_type = *result;
 	resp.data = *data;
 
 	dummy_private_data.client.app_id = *response_type;
@@ -5316,8 +5325,7 @@ int qseecom_process_listener_from_smcinvoke(uint32_t *result,
 	mutex_unlock(&app_access_lock);
 	if (ret)
 		pr_err("Failed on cmd %d for lsnr %d session %d, ret = %d\n",
-			(int)*result, (int)*response_type,
-			(int)*data, ret);
+			resp.result, resp.data, resp.resp_type, ret);
 	*result = resp.result;
 	*response_type = resp.resp_type;
 	*data = resp.data;
@@ -7494,7 +7502,7 @@ static void __qseecom_clean_data_sglistinfo(struct qseecom_dev_handle *data)
 	}
 }
 
-static long qseecom_ioctl(struct file *file,
+long qseecom_ioctl(struct file *file,
 			unsigned int cmd, unsigned long arg)
 {
 	int ret = 0;
@@ -8330,6 +8338,7 @@ static int qseecom_release(struct inode *inode, struct file *file)
 static const struct file_operations qseecom_fops = {
 	.owner = THIS_MODULE,
 	.unlocked_ioctl = qseecom_ioctl,
+	.compat_ioctl = compat_qseecom_ioctl,
 	.open = qseecom_open,
 	.release = qseecom_release
 };
@@ -9416,7 +9425,8 @@ static int qseecom_register_heap_shmbridge(uint32_t heapid, uint64_t *handle)
 	phys_addr_t heap_pa = 0;
 	size_t heap_size = 0;
 	struct device *ion_dev = NULL;
-	struct cma *cma = NULL;
+	struct device_node *node = NULL;
+	struct reserved_mem *rmem = NULL;
 	uint32_t ns_vmids[] = {VMID_HLOS};
 	uint32_t ns_vm_perms[] = {PERM_READ | PERM_WRITE};
 	int ret = 0;
@@ -9429,15 +9439,21 @@ static int qseecom_register_heap_shmbridge(uint32_t heapid, uint64_t *handle)
 		return ret;
 	}
 
-	cma = dev_get_cma_area(ion_dev);
-	if (!cma) {
-		pr_err("Failed to get Heap %d info\n", heapid);
-		return -ENODEV;
+	node = of_parse_phandle(ion_dev->of_node, "memory-region", 0);
+	if (!node) {
+		pr_err("unable to parse memory-region of heap %d\n", heapid);
+		return -EINVAL;
 	}
-	heap_pa = cma_get_base(cma);
-	heap_size = (size_t)cma_get_size(cma);
+	rmem = of_reserved_mem_lookup(node);
+	of_node_put(node);
+	if (!rmem) {
+		pr_err("unable to acquire memory-region of heap %d\n", heapid);
+		return -EINVAL;
+	}
+	heap_pa = rmem->base;
+	heap_size = (size_t)rmem->size;
 
-	pr_warn("get heap %d info: shmbridge created\n", heapid);
+	pr_debug("get heap %d info: shmbridge created\n", heapid);
 	return qtee_shmbridge_register(heap_pa,
 			heap_size, ns_vmids, ns_vm_perms, 1,
 			PERM_READ | PERM_WRITE, handle);

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  */
 
 #ifndef __MSM_CVP_RESOURCES_H__
@@ -83,8 +83,16 @@ struct bus_set {
 	u32 count;
 };
 
+enum power_state {
+	CVP_POWER_INIT,
+	CVP_POWER_ON,
+	CVP_POWER_OFF,
+	CVP_POWER_INVALID,
+};
+
 struct reset_info {
 	struct reset_control *rst;
+	enum power_state required_state;
 	const char *name;
 };
 

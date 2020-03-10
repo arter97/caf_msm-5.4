@@ -18,6 +18,7 @@ enum qcom_download_mode {
 	QCOM_DOWNLOAD_NODUMP	= 0x00,
 	QCOM_DOWNLOAD_EDL	= 0x01,
 	QCOM_DOWNLOAD_FULLDUMP	= 0x10,
+	QCOM_DOWNLOAD_MINIDUMP	= 0x20,
 };
 
 struct qcom_scm_hdcp_req {
@@ -275,8 +276,8 @@ static inline int qcom_scm_kgsl_set_smmu_aperture(
 		unsigned int num_context_bank) { return -ENODEV; }
 static inline int qcom_scm_smmu_prepare_atos_id(u64 dev_id, int cb_num,
 		int operation) { return -ENODEV; }
-static inline int qcom_mdf_assign_memory_to_subsys(struct device *dev,
-		u64 start_addr, u64 end_addr, phys_addr_t paddr, u64 size)
+static inline int qcom_mdf_assign_memory_to_subsys(u64 start_addr, u64 end_addr,
+						   phys_addr_t paddr, u64 size)
 		{ return -ENODEV; }
 static inline int qcom_scm_get_feat_version_cp(u64 *version)
 		{ return -ENODEV; }

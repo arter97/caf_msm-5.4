@@ -39,6 +39,7 @@
 #include <linux/extcon.h>
 #include <linux/reset.h>
 #include <linux/usb/dwc3-msm.h>
+#include <linux/usb/role.h>
 
 #include "core.h"
 #include "gadget.h"
@@ -149,6 +150,9 @@
 #define DWC3_GEVNTADRHI_EVNTADRHI_GSI_EN(n)	(n << 22)
 #define DWC3_GEVNTADRHI_EVNTADRHI_GSI_IDX(n)	(n << 16)
 #define DWC3_GEVENT_TYPE_GSI			0x3
+
+/* BAM pipe mask */
+#define MSM_PIPE_ID_MASK	(0x1F)
 
 enum dbm_reg {
 	DBM_EP_CFG,
@@ -359,6 +363,12 @@ static const char * const gsi_op_strings[] = {
 	"FREE_TRBS", "SET_CLR_BLOCK_DBL", "CHECK_FOR_SUSP",
 	"EP_DISABLE" };
 
+static const char * const usb_role_strings[] = {
+	"NONE",
+	"HOST",
+	"DEVICE"
+};
+
 struct dwc3_msm;
 
 struct extcon_nb {
@@ -468,6 +478,8 @@ struct dwc3_msm {
 
 	u64			dummy_gsi_db;
 	dma_addr_t		dummy_gsi_db_dma;
+
+	struct usb_role_switch *role_switch;
 };
 
 #define USB_HSPHY_3P3_VOL_MIN		3050000 /* uV */
@@ -1379,7 +1391,7 @@ static int gsi_prepare_trbs(struct usb_ep *ep, struct usb_gsi_request *req)
 	req->buf_base_addr = dma_alloc_attrs(dwc->sysdev, len, &req->dma,
 					GFP_KERNEL, dma_attr);
 	if (!req->buf_base_addr) {
-		dev_err(dwc->dev, "%s: buf_base_addr allocate failed %s\n",
+		dev_err(dwc->dev, "buf_base_addr allocate failed %s\n",
 				dep->name);
 		return -ENOMEM;
 	}
@@ -2737,7 +2749,7 @@ static int dwc3_msm_update_bus_bw(struct dwc3_msm *mdwc, enum bus_vote bv)
 	else if (bv == BUS_VOTE_NONE)
 		bv_index = BUS_VOTE_NONE;
 
-	for (i = 0; mdwc->icc_paths[i]; i++) {
+	for (i = 0; i < ARRAY_SIZE(mdwc->icc_paths); i++) {
 		ret = icc_set_bw(mdwc->icc_paths[i],
 				bus_vote_values[bv_index][i].avg,
 				bus_vote_values[bv_index][i].peak);
@@ -3548,6 +3560,79 @@ static int dwc3_msm_extcon_register(struct dwc3_msm *mdwc)
 	return 0;
 }
 
+static inline const char *usb_role_string(enum usb_role role)
+{
+	if (role < ARRAY_SIZE(usb_role_strings))
+		return usb_role_strings[role];
+
+	return "Invalid";
+}
+
+static enum usb_role dwc3_msm_usb_get_role(struct device *dev)
+{
+	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
+	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+	enum usb_role role;
+
+	if (mdwc->vbus_active)
+		role = USB_ROLE_DEVICE;
+	else if (mdwc->id_state == DWC3_ID_GROUND)
+		role = USB_ROLE_HOST;
+	else
+		role = USB_ROLE_NONE;
+
+	dbg_log_string("get_role:%s\n", usb_role_string(role));
+	return role;
+}
+
+static int dwc3_msm_usb_set_role(struct device *dev, enum usb_role role)
+{
+	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
+	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+	enum usb_role cur_role = USB_ROLE_NONE;
+
+	cur_role = dwc3_msm_usb_get_role(dev);
+
+	switch (role) {
+	case USB_ROLE_HOST:
+		mdwc->vbus_active = false;
+		mdwc->id_state = DWC3_ID_GROUND;
+		break;
+
+	case USB_ROLE_DEVICE:
+		mdwc->vbus_active = true;
+		mdwc->id_state = DWC3_ID_FLOAT;
+		break;
+
+	case USB_ROLE_NONE:
+		mdwc->vbus_active = false;
+		mdwc->id_state = DWC3_ID_FLOAT;
+		break;
+	}
+
+	dbg_log_string("cur_role:%s new_role:%s\n", usb_role_string(cur_role),
+						usb_role_string(role));
+
+	/*
+	 * For boot up without USB cable connected case, don't check
+	 * previous role value to allow resetting USB controller and
+	 * PHYs.
+	 */
+	if (mdwc->drd_state != DRD_STATE_UNDEFINED && cur_role == role) {
+		dbg_log_string("no USB role change");
+		return 0;
+	}
+
+	dwc3_ext_event_notify(mdwc);
+	return 0;
+}
+
+static struct usb_role_switch_desc role_desc = {
+	.set = dwc3_msm_usb_set_role,
+	.get = dwc3_msm_usb_get_role,
+	.allow_userspace_control = true,
+};
+
 static ssize_t mode_show(struct device *dev, struct device_attribute *attr,
 		char *buf)
 {
@@ -3737,6 +3822,63 @@ static void dwc3_init_dbm(struct dwc3_msm *mdwc)
 	mdwc->dbm_reset_ep_after_lpm = of_property_read_bool(mdwc->dev->of_node,
 			"qcom,reset-ep-after-lpm-resume");
 }
+
+static void dwc3_start_stop_host(struct dwc3_msm *mdwc, bool start)
+{
+	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+
+	if (start) {
+		dbg_log_string("start host mode");
+		mdwc->id_state = DWC3_ID_GROUND;
+		mdwc->vbus_active = false;
+	} else {
+		dbg_log_string("stop_host_mode started");
+		mdwc->id_state = DWC3_ID_FLOAT;
+		mdwc->vbus_active = false;
+	}
+
+	dwc3_ext_event_notify(mdwc);
+	dbg_event(0xFF, "flush_work", 0);
+	flush_work(&mdwc->resume_work);
+	drain_workqueue(mdwc->sm_usb_wq);
+	if (start)
+		dbg_log_string("host mode started");
+	else
+		dbg_log_string("stop_host_mode completed");
+}
+
+int dwc3_msm_release_ss_lane(struct device *dev)
+{
+	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
+	struct dwc3 *dwc = NULL;
+
+	if (mdwc == NULL) {
+		dev_err(dev, "dwc3-msm is not initialized yet.\n");
+		return -EAGAIN;
+	}
+
+	dwc = platform_get_drvdata(mdwc->dwc3);
+	if (dwc == NULL) {
+		dev_err(dev, "dwc3 controller is not initialized yet.\n");
+		return -EAGAIN;
+	}
+
+	dbg_event(0xFF, "ss_lane_release", 0);
+	if (mdwc->id_state != DWC3_ID_GROUND) {
+		dbg_log_string("USB host mode is not active");
+		return 0;
+	}
+
+	/* stop USB host mode */
+	dwc3_start_stop_host(mdwc, false);
+
+	/* restart USB host mode into high speed */
+	dwc->maximum_speed = USB_SPEED_HIGH;
+	dwc3_start_stop_host(mdwc, true);
+
+	return 0;
+}
+EXPORT_SYMBOL(dwc3_msm_release_ss_lane);
 
 static int dwc3_msm_probe(struct platform_device *pdev)
 {
@@ -4052,7 +4194,17 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		} else {
 			queue_delayed_work(mdwc->sm_usb_wq, &mdwc->sm_work, 0);
 		}
-	} else {
+	}
+
+	if (of_property_read_bool(node, "usb-role-switch")) {
+		role_desc.fwnode = dev_fwnode(&pdev->dev);
+		mdwc->role_switch = usb_role_switch_register(mdwc->dev,
+								&role_desc);
+		if (IS_ERR(mdwc->role_switch))
+			return PTR_ERR(mdwc->role_switch);
+	}
+
+	if (!mdwc->role_switch && !mdwc->extcon) {
 		switch (dwc->dr_mode) {
 		case USB_DR_MODE_OTG:
 			if (of_property_read_bool(node,
@@ -4108,6 +4260,7 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 	int i, ret_pm;
 
+	usb_role_switch_unregister(mdwc->role_switch);
 	device_remove_file(&pdev->dev, &dev_attr_mode);
 	device_remove_file(&pdev->dev, &dev_attr_speed);
 	device_remove_file(&pdev->dev, &dev_attr_bus_vote);

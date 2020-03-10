@@ -325,6 +325,77 @@ err:
 	return ret;
 }
 
+static ssize_t gadget_dev_desc_max_speed_show(struct config_item *item,
+					      char *page)
+{
+	enum usb_device_speed speed = to_gadget_info(item)->composite.max_speed;
+
+	return scnprintf(page, PAGE_SIZE, "%s\n", usb_speed_string(speed));
+}
+
+static ssize_t gadget_dev_desc_max_speed_store(struct config_item *item,
+					       const char *page, size_t len)
+{
+	struct gadget_info *gi = to_gadget_info(item);
+
+	mutex_lock(&gi->lock);
+
+	/* Prevent changing of max_speed after the driver is binded */
+	if (gi->composite.gadget_driver.udc_name)
+		goto err;
+
+	if (strncmp(page, "super-speed-plus", 16) == 0)
+		gi->composite.max_speed = USB_SPEED_SUPER_PLUS;
+	else if (strncmp(page, "super-speed", 11) == 0)
+		gi->composite.max_speed = USB_SPEED_SUPER;
+	else if (strncmp(page, "high-speed", 10) == 0)
+		gi->composite.max_speed = USB_SPEED_HIGH;
+	else if (strncmp(page, "full-speed", 10) == 0)
+		gi->composite.max_speed = USB_SPEED_FULL;
+	else if (strncmp(page, "low-speed", 9) == 0)
+		gi->composite.max_speed = USB_SPEED_LOW;
+	else
+		goto err;
+
+	gi->composite.gadget_driver.max_speed = gi->composite.max_speed;
+
+	mutex_unlock(&gi->lock);
+	return len;
+err:
+	mutex_unlock(&gi->lock);
+	return -EINVAL;
+}
+
+static ssize_t gadget_driver_match_existing_only_store(struct config_item *item,
+		const char *page, size_t len)
+{
+	struct gadget_info *gi = to_gadget_info(item);
+	struct usb_gadget_driver *gadget_driver = &(gi->composite.gadget_driver);
+	bool match_existing_only;
+	int ret;
+
+	ret = kstrtobool(page, &match_existing_only);
+	if (ret)
+		return ret;
+
+	if (match_existing_only)
+		gadget_driver->match_existing_only = 1;
+	else
+		gadget_driver->match_existing_only = 0;
+
+	return len;
+}
+
+static ssize_t gadget_driver_match_existing_only_show(struct config_item *item,
+		char *page)
+{
+	struct gadget_info *gi = to_gadget_info(item);
+	struct usb_gadget_driver *gadget_driver = &(gi->composite.gadget_driver);
+	bool match_existing_only = !!gadget_driver->match_existing_only;
+
+	return sprintf(page, "%s\n", match_existing_only ? "true" : "false");
+}
+
 CONFIGFS_ATTR(gadget_dev_desc_, bDeviceClass);
 CONFIGFS_ATTR(gadget_dev_desc_, bDeviceSubClass);
 CONFIGFS_ATTR(gadget_dev_desc_, bDeviceProtocol);
@@ -334,6 +405,8 @@ CONFIGFS_ATTR(gadget_dev_desc_, idProduct);
 CONFIGFS_ATTR(gadget_dev_desc_, bcdDevice);
 CONFIGFS_ATTR(gadget_dev_desc_, bcdUSB);
 CONFIGFS_ATTR(gadget_dev_desc_, UDC);
+CONFIGFS_ATTR(gadget_dev_desc_, max_speed);
+CONFIGFS_ATTR(gadget_, driver_match_existing_only);
 
 static struct configfs_attribute *gadget_root_attrs[] = {
 	&gadget_dev_desc_attr_bDeviceClass,
@@ -345,6 +418,8 @@ static struct configfs_attribute *gadget_root_attrs[] = {
 	&gadget_dev_desc_attr_bcdDevice,
 	&gadget_dev_desc_attr_bcdUSB,
 	&gadget_dev_desc_attr_UDC,
+	&gadget_dev_desc_attr_max_speed,
+	&gadget_attr_driver_match_existing_only,
 	NULL,
 };
 

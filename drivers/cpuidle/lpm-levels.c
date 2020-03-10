@@ -39,14 +39,13 @@
 #include <asm/cpuidle.h>
 #include "lpm-levels.h"
 #include <trace/events/power.h>
-#include "../clk/clk.h"
+#include <linux/clk.h>
 #define CREATE_TRACE_POINTS
 #include <trace/events/trace_msm_low_power.h>
 
 #define SCLK_HZ (32768)
 #define PSCI_POWER_STATE(reset) (reset << 30)
 #define PSCI_AFFINITY_LEVEL(lvl) ((lvl & 0x3) << 24)
-#define BIAS_HYST (bias_hyst * NSEC_PER_MSEC)
 
 enum {
 	MSM_LPM_LVL_DBG_SUSPEND_LIMITS = BIT(0),
@@ -81,9 +80,6 @@ struct lpm_cluster *lpm_root_node;
 static bool lpm_prediction = true;
 module_param_named(lpm_prediction, lpm_prediction, bool, 0664);
 
-static uint32_t bias_hyst;
-module_param_named(bias_hyst, bias_hyst, uint, 0664);
-
 struct lpm_history {
 	uint32_t resi[MAXSAMPLES];
 	int mode[MAXSAMPLES];
@@ -113,19 +109,7 @@ static void cluster_prepare(struct lpm_cluster *cluster,
 static bool sleep_disabled;
 module_param_named(sleep_disabled, sleep_disabled, bool, 0664);
 
-#ifdef CONFIG_LPM_SCHED_CPU_BUSY
-static u64 get_cpu_last_busy(int cpu)
-{
-	return sched_get_cpu_last_busy_time(cpu);
-}
-#else
-static u64 get_cpu_last_busy(int cpu)
-{
-	return 0;
-}
-#endif
-
-#ifdef CONFIG_LPM_CPU_ISOLATE
+#ifdef CONFIG_SCHED_WALT
 static bool check_cpu_isolated(int cpu)
 {
 	return cpu_isolated(cpu);
@@ -211,6 +195,11 @@ static void histtimer_cancel(void)
 {
 	unsigned int cpu = raw_smp_processor_id();
 	struct hrtimer *cpu_histtimer = &per_cpu(histtimer, cpu);
+	ktime_t time_rem;
+
+	time_rem = hrtimer_get_remaining(cpu_histtimer);
+	if (ktime_to_us(time_rem) <= 0)
+		return;
 
 	hrtimer_try_to_cancel(cpu_histtimer);
 }
@@ -256,11 +245,21 @@ static void clusttimer_cancel(void)
 {
 	int cpu = raw_smp_processor_id();
 	struct lpm_cluster *cluster = per_cpu(cpu_lpm, cpu)->parent;
+	ktime_t time_rem;
 
-	hrtimer_try_to_cancel(&cluster->histtimer);
+	time_rem = hrtimer_get_remaining(&cluster->histtimer);
+	if (ktime_to_us(time_rem) > 0)
+		hrtimer_try_to_cancel(&cluster->histtimer);
 
-	if (cluster->parent)
+	if (cluster->parent) {
+		time_rem = hrtimer_get_remaining(
+			&cluster->parent->histtimer);
+
+		if (ktime_to_us(time_rem) <= 0)
+			return;
+
 		hrtimer_try_to_cancel(&cluster->parent->histtimer);
+	}
 }
 
 static enum hrtimer_restart clusttimer_fn(struct hrtimer *h)
@@ -442,20 +441,10 @@ static void clear_predict_history(void)
 
 static void update_history(struct cpuidle_device *dev, int idx);
 
-static inline bool is_cpu_biased(int cpu)
-{
-	u64 now = sched_clock();
-	u64 last = get_cpu_last_busy(cpu);
-
-	if (!last)
-		return false;
-
-	return (now - last) < BIAS_HYST;
-}
-
 static inline bool lpm_disallowed(s64 sleep_us, int cpu)
 {
-	if ((sleep_disabled && !check_cpu_isolated(cpu)) || is_cpu_biased(cpu))
+	if ((sleep_disabled && !check_cpu_isolated(cpu)) ||
+						sched_lpm_disallowed_time(cpu))
 		return true;
 
 	if (sleep_us < 0)
@@ -881,6 +870,17 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 	}
 
 	if (level->notify_rpm) {
+		/*
+		 * Print enabled clocks and regulators which are on during
+		 * system suspend. This debug information is useful to know
+		 * which resources are enabled and preventing system level
+		 * LPMs (XO and Vmin).
+		 */
+		if (!from_idle) {
+			clock_debug_print_enabled();
+			regulator_debug_print_enabled();
+		}
+
 		cpu = get_next_online_cpu(from_idle);
 		cpumask_copy(&cpumask, cpumask_of(cpu));
 		clear_predict_history();
@@ -1223,11 +1223,11 @@ exit:
 	dev->last_residency = ktime_us_delta(ktime_get(), start);
 	update_history(dev, idx);
 	trace_cpu_idle_exit(idx, success);
-	local_irq_enable();
 	if (lpm_prediction && cpu->lpm_prediction) {
 		histtimer_cancel();
 		clusttimer_cancel();
 	}
+	local_irq_enable();
 	return idx;
 }
 

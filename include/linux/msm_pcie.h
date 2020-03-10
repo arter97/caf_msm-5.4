@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2014-2019, The Linux Foundation. All rights reserved.*/
+/* Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.*/
 
 #ifndef __MSM_PCIE_H
 #define __MSM_PCIE_H
@@ -12,6 +12,7 @@ enum msm_pcie_config {
 	MSM_PCIE_CONFIG_NO_CFG_RESTORE = 0x1,
 	MSM_PCIE_CONFIG_LINKDOWN = 0x2,
 	MSM_PCIE_CONFIG_NO_RECOVERY = 0x4,
+	MSM_PCIE_CONFIG_NO_L1SS_TO = 0x8,
 };
 
 enum msm_pcie_pm_opt {
@@ -54,16 +55,29 @@ struct msm_pcie_register_event {
 	u32 options;
 };
 
-#if IS_ENABLED(CONFIG_PCI_MSM_MSI)
 int msm_msi_init(struct device *dev);
-#else
-static inline int msm_msi_init(struct device *dev)
-{
-	return -EINVAL;
-}
-#endif
 
 #if IS_ENABLED(CONFIG_PCI_MSM)
+
+/**
+ * msm_pcie_allow_l1 - allow PCIe link to re-enter L1
+ * @pci_dev:		client's pci device structure
+ *
+ * This function gives PCIe clients the control to allow the link to re-enter
+ * L1. Should only be used after msm_pcie_prevent_l1 has been called.
+ */
+void msm_pcie_allow_l1(struct pci_dev *pci_dev);
+
+/**
+ * msm_pcie_prevent_l1 - keeps PCIe link out of L1
+ * @pci_dev:		client's pci device structure
+ *
+ * This function gives PCIe clients the control to exit and prevent the link
+ * from entering L1.
+ *
+ * Return 0 on success, negative value on error
+ */
+int msm_pcie_prevent_l1(struct pci_dev *pci_dev);
 
 /**
  * msm_pcie_set_link_bandwidth - updates the number of lanes and speed of PCIe
@@ -198,6 +212,15 @@ int msm_pcie_debug_info(struct pci_dev *dev, u32 option, u32 base,
 #else /* !CONFIG_PCI_MSM */
 static inline int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr,
 			void *user, void *data, u32 options)
+{
+	return -ENODEV;
+}
+
+static inline void msm_pcie_allow_l1(struct pci_dev *pci_dev)
+{
+}
+
+static inline int msm_pcie_prevent_l1(struct pci_dev *pci_dev)
 {
 	return -ENODEV;
 }

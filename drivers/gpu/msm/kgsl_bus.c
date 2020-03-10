@@ -10,20 +10,6 @@
 #include "kgsl_device.h"
 #include "kgsl_trace.h"
 
-static int gmu_bus_set(struct kgsl_device *device, int buslevel,
-		u32 ab)
-{
-	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
-	int ret;
-
-	ret = gmu_core_dcvs_set(device, INVALID_DCVS_IDX, buslevel);
-
-	if (!ret)
-		icc_set_bw(pwr->icc_path, MBps_to_icc(ab), 0);
-
-	return ret;
-}
-
 static int interconnect_bus_set(struct kgsl_device *device, int level,
 		u32 ab)
 {
@@ -132,7 +118,7 @@ u32 *kgsl_bus_get_table(struct platform_device *pdev,
 	if (num <= 0)
 		return ERR_PTR(-EINVAL);
 
-	levels = kcalloc(num, sizeof(*levels), GFP_KERNEL);
+	levels = devm_kcalloc(&pdev->dev, num, sizeof(*levels), GFP_KERNEL);
 	if (!levels)
 		return ERR_PTR(-ENOMEM);
 
@@ -179,20 +165,12 @@ done:
 		return PTR_ERR(pwr->icc_path);
 	}
 
-	if (gmu_core_scales_bandwidth(device))
-		pwr->bus_set = gmu_bus_set;
-	else
-		pwr->bus_set = interconnect_bus_set;
+	pwr->bus_set = interconnect_bus_set;
 
 	return 0;
 }
 
 void kgsl_bus_close(struct kgsl_device *device)
 {
-	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
-
-	kfree(pwr->ddr_table);
-
-	/* FIXME: Make sure icc put can handle NULL or IS_ERR */
-	icc_put(pwr->icc_path);
+	icc_put(device->pwrctrl.icc_path);
 }

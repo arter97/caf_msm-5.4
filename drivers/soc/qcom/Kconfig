@@ -57,6 +57,16 @@ config OVERRIDE_MEMORY_LIMIT
 	  hot-plugging.
 	  If unsure, say N
 
+config QCOM_MEM_BUF
+	bool "Qualcomm Technologies, Inc. Memory Buffer Sharing Driver"
+	depends on HH_MSGQ && HH_RM_DRV && ION_MSM_HEAPS && QCOM_SECURE_BUFFER
+	help
+	  Add support for lending memory from one virtual machine to another.
+	  This driver communicates with the hypervisor, as well as other
+	  virtual machines, to request and lend memory from and to VMs
+	  respectively.
+	  If unsure, say N
+
 config QCOM_GENI_SE
 	tristate "QCOM GENI Serial Engine Driver"
 	depends on ARCH_QCOM || COMPILE_TEST
@@ -95,6 +105,15 @@ config MSM_SPSS_UTILS
 	  Different file name is used for differnt SPSS HW versions,versions
 	  because the SPSS firmware size is too small to support multiple
 	  HW versions.
+
+config MSM_QBT_HANDLER
+	tristate "Event Handler for QTI Ultrasonic Fingerprint Sensor"
+	help
+	  This driver acts as a interrupt handler, where the interrupt is generated
+	  by the QTI Ultrasonic Fingerprint Sensor. It queues the events for each
+	  interrupt in an event queue and notifies the userspace to read the events
+	  from the queue. It also creates an input device to send key events such as
+	  KEY_POWER, KEY_HOME.
 
 config QCOM_GSBI
         tristate "QCOM General Serial Bus Interface"
@@ -284,6 +303,8 @@ config QCOM_QMI_HELPERS
 	depends on ARCH_QCOM || COMPILE_TEST
 	depends on NET
 
+source "drivers/soc/qcom/memshare/Kconfig"
+
 config QCOM_RMTFS_MEM
 	tristate "Qualcomm Remote Filesystem memory driver"
 	depends on ARCH_QCOM
@@ -428,7 +449,7 @@ config QCOM_DCC_V2
 
 config QCOM_MINIDUMP
 	tristate "QCOM Minidump Support"
-	depends on QCOM_SMEM && POWER_RESET_QCOM
+	depends on QCOM_SMEM && POWER_RESET_MSM
 	help
 	  This enables minidump feature. It allows various clients to
 	  register to dump their state at system bad state (panic/WDT,etc.,).
@@ -470,6 +491,14 @@ config QCOM_GLINK_PKT
 	  clients to communicate over G-Link via device nodes.
 	  This enable the userspace clients to read and write to
 	  some glink packets channel.
+
+config MSM_PERFORMANCE
+        tristate "msm performance driver to support userspace fmin/fmax request"
+        help
+          This driver can restrict max freq or min freq of cpu cluster
+          when requested by the userspace by changing the cpufreq policy
+          fmin and fmax. The user space can request  the cpu freq change by
+          writing cpu#:freq values
 
 config QMP_DEBUGFS_CLIENT
 	bool "Debugfs Client to communicate with AOP using QMP protocol"
@@ -545,6 +574,25 @@ config QTI_PMIC_GLINK
 	  firmware that runs on a remote subsystem like DSP which supports
 	  charging and gauging.
 	  This enables clients to read and write battery charging parameters.
+
+config QTI_BATTERY_GLINK_DEBUG
+	tristate "Enable support for QTI battery glink debug driver"
+	depends on QTI_PMIC_GLINK
+	depends on DEBUG_FS
+	help
+	  Qualcomm Technologies, Inc. battery glink debug driver helps to
+	  obtain debug information for battery charging and gauging over PMIC
+	  Glink from charger and gauging firmware running on a remote subsystem
+	  (e.g. DSP).
+
+config QTI_ALTMODE_GLINK
+	tristate "Type-C alternate mode over GLINK"
+	depends on QTI_PMIC_GLINK
+	help
+	  The Qualcomm Technologies, Inc. Type-C alternate mode driver provides
+	  an interface for Type-C alternate mode clients to receive data such
+	  as Pin Assignment Notifications from the Type-C stack running on a
+	  remote subsystem (e.g. DSP) via the PMIC GLINK interface.
 
 config MSM_CDSP_LOADER
 	tristate "CDSP loader support"
@@ -706,4 +754,13 @@ config QCOM_SMCINVOKE
 	 communication between QTI Secure Execution Environment (QSEE)
 	 and high level operating system. It exposes APIs for both
 	 userspace and kernel clients.
+
+config QCOM_GUESTVM
+	tristate "Enable Guest VM to be loaded by PIL"
+	help
+	   This driver invokes Peripheral Image Loader to load images of
+	   any guest Virtual Machine (VM). It also communicates with the
+	   Resource Manager driver to start the boot of VMs once it has
+	   successfully loaded the VM images in the designated memory.
+
 endmenu

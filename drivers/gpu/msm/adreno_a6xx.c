@@ -99,20 +99,31 @@ static u32 a612_pwrup_reglist[] = {
 	A6XX_RBBM_PERFCTR_CNTL,
 };
 
-static void a6xx_init(struct adreno_device *adreno_dev)
+static int a6xx_get_cp_init_cmds(struct adreno_device *adreno_dev);
+
+static int a6xx_init(struct adreno_device *adreno_dev)
 {
 	const struct adreno_a6xx_core *a6xx_core = to_a6xx_core(adreno_dev);
-	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 
 	adreno_dev->highest_bank_bit = a6xx_core->highest_bank_bit;
 
-	if (adreno_is_a650(adreno_dev) && of_fdt_get_ddrtype() == 0x7)
+	/* If the memory type is DDR 4, override the existing configuration */
+	if ((adreno_is_a650(adreno_dev) || adreno_is_a660(adreno_dev)) &&
+		of_fdt_get_ddrtype() == 0x7)
 		adreno_dev->highest_bank_bit = 15;
 
 	a6xx_crashdump_init(adreno_dev);
 
-	adreno_dev->pwrup_reglist = kgsl_allocate_global(device,
-		PAGE_SIZE, 0, KGSL_MEMDESC_PRIVILEGED, "powerup_register_list");
+	if (IS_ERR_OR_NULL(adreno_dev->pwrup_reglist)) {
+		adreno_dev->pwrup_reglist =
+				kgsl_allocate_global(KGSL_DEVICE(adreno_dev),
+					PAGE_SIZE, 0, KGSL_MEMDESC_PRIVILEGED,
+					"powerup_register_list");
+		if (IS_ERR(adreno_dev->pwrup_reglist))
+			return PTR_ERR(adreno_dev->pwrup_reglist);
+	}
+
+	return a6xx_get_cp_init_cmds(adreno_dev);
 }
 
 static void a6xx_protect_init(struct adreno_device *adreno_dev)
@@ -322,6 +333,39 @@ static void a6xx_llc_configure_gpu_scid(struct adreno_device *adreno_dev);
 static void a6xx_llc_configure_gpuhtw_scid(struct adreno_device *adreno_dev);
 static void a6xx_llc_enable_overrides(struct adreno_device *adreno_dev);
 
+static void a6xx_set_secvid(struct kgsl_device *device)
+{
+	static bool set;
+
+	if (set || !device->mmu.secured)
+		return;
+
+	kgsl_regwrite(device, A6XX_RBBM_SECVID_TSB_CNTL, 0x0);
+	kgsl_regwrite(device, A6XX_RBBM_SECVID_TSB_TRUSTED_BASE_LO,
+		lower_32_bits(KGSL_IOMMU_SECURE_BASE(&device->mmu)));
+	kgsl_regwrite(device, A6XX_RBBM_SECVID_TSB_TRUSTED_BASE_HI,
+		upper_32_bits(KGSL_IOMMU_SECURE_BASE(&device->mmu)));
+	kgsl_regwrite(device, A6XX_RBBM_SECVID_TSB_TRUSTED_SIZE,
+		KGSL_IOMMU_SECURE_SIZE);
+
+	if (ADRENO_QUIRK(ADRENO_DEVICE(device), ADRENO_QUIRK_SECVID_SET_ONCE))
+		set = true;
+}
+
+/*
+ * Some targets support marking certain transactions as always privileged which
+ * allows us to mark more memory as privileged without having to explicitly set
+ * the APRIV bit.  For those targets, choose the following transactions to be
+ * privileged by default:
+ * CDWRITE     [6:6] - Crashdumper writes
+ * CDREAD      [5:5] - Crashdumper reads
+ * RBRPWB      [3:3] - RPTR shadow writes
+ * RBPRIVLEVEL [2:2] - Memory accesses from PM4 packets in the ringbuffer
+ * RBFETCH     [1:1] - Ringbuffer reads
+ */
+#define A6XX_APRIV_DEFAULT \
+	((1 << 6) | (1 << 5) | (1 << 3) | (1 << 2) | (1 << 1))
+
 /*
  * a6xx_start() - Device start
  * @adreno_dev: Pointer to adreno device
@@ -408,6 +452,14 @@ static void a6xx_start(struct adreno_device *adreno_dev)
 	} else {
 		kgsl_regwrite(device, A6XX_CP_ROQ_THRESHOLDS_2, 0x010000C0);
 		kgsl_regwrite(device, A6XX_CP_ROQ_THRESHOLDS_1, 0x8040362C);
+	}
+
+	if (adreno_is_a660(adreno_dev)) {
+		kgsl_regwrite(device, A6XX_CP_LPAC_ROQ_THRESHOLDS_2,
+						0x00800060);
+		kgsl_regwrite(device, A6XX_CP_LPAC_ROQ_THRESHOLDS_1,
+						0x40202016);
+		kgsl_regwrite(device, A6XX_CP_LPAC_PROG_FIFO_SIZE, 0x00000080);
 	}
 
 	if (adreno_is_a612(adreno_dev) || adreno_is_a610(adreno_dev)) {
@@ -537,8 +589,6 @@ static void a6xx_start(struct adreno_device *adreno_dev)
 		patch_reglist = true;
 	}
 
-	a6xx_preemption_start(adreno_dev);
-
 	/*
 	 * We start LM here because we want all the following to be up
 	 * 1. GX HS
@@ -559,6 +609,11 @@ static void a6xx_start(struct adreno_device *adreno_dev)
 
 	if (adreno_is_a660v1(adreno_dev))
 		kgsl_regwrite(device, A6XX_RBBM_GBIF_CLIENT_QOS_CNTL, 0x0);
+
+	if (ADRENO_FEATURE(adreno_dev, ADRENO_APRIV))
+		kgsl_regwrite(device, A6XX_CP_APRIV_CNTL, A6XX_APRIV_DEFAULT);
+
+	a6xx_set_secvid(device);
 }
 
 /*
@@ -625,44 +680,54 @@ static int a6xx_microcode_load(struct adreno_device *adreno_dev)
 		CP_INIT_OPERATION_MODE_MASK | \
 		CP_INIT_REGISTER_INIT_LIST_WITH_SPINLOCK)
 
-static void _set_ordinals(struct adreno_device *adreno_dev,
-		unsigned int *cmds, unsigned int count)
+static int a6xx_get_cp_init_cmds(struct adreno_device *adreno_dev)
 {
-	unsigned int *start = cmds;
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+	u32 *cmds, i = 0;
+
+	if (adreno_dev->cp_init_cmds)
+		return 0;
+
+	adreno_dev->cp_init_cmds = devm_kzalloc(&device->pdev->dev, 12 << 2,
+				GFP_KERNEL);
+	if (!adreno_dev->cp_init_cmds)
+		return -ENOMEM;
+
+	cmds = (u32 *)adreno_dev->cp_init_cmds;
+
+	cmds[i++] = cp_type7_packet(CP_ME_INIT, 11);
 
 	/* Enabled ordinal mask */
-	*cmds++ = CP_INIT_MASK;
+	cmds[i++] = CP_INIT_MASK;
 
 	if (CP_INIT_MASK & CP_INIT_MAX_CONTEXT)
-		*cmds++ = 0x00000003;
+		cmds[i++] = 0x00000003;
 
 	if (CP_INIT_MASK & CP_INIT_ERROR_DETECTION_CONTROL)
-		*cmds++ = 0x20000000;
+		cmds[i++] = 0x20000000;
 
 	if (CP_INIT_MASK & CP_INIT_HEADER_DUMP) {
 		/* Header dump address */
-		*cmds++ = 0x00000000;
+		cmds[i++] = 0x00000000;
 		/* Header dump enable and dump size */
-		*cmds++ = 0x00000000;
+		cmds[i++] = 0x00000000;
 	}
 
 	if (CP_INIT_MASK & CP_INIT_UCODE_WORKAROUND_MASK)
-		*cmds++ = 0x00000000;
+		cmds[i++] = 0x00000000;
 
 	if (CP_INIT_MASK & CP_INIT_OPERATION_MODE_MASK)
-		*cmds++ = 0x00000002;
+		cmds[i++] = 0x00000002;
 
 	if (CP_INIT_MASK & CP_INIT_REGISTER_INIT_LIST_WITH_SPINLOCK) {
 		uint64_t gpuaddr = adreno_dev->pwrup_reglist->gpuaddr;
 
-		*cmds++ = lower_32_bits(gpuaddr);
-		*cmds++ = upper_32_bits(gpuaddr);
-		*cmds++ =  0;
+		cmds[i++] = lower_32_bits(gpuaddr);
+		cmds[i++] = upper_32_bits(gpuaddr);
+		cmds[i++] =  0;
 	}
 
-	/* Pad rest of the cmds with 0's */
-	while ((unsigned int)(cmds - start) < count)
-		*cmds++ = 0x0;
+	return 0;
 }
 
 /*
@@ -683,9 +748,7 @@ static int a6xx_send_cp_init(struct adreno_device *adreno_dev,
 	if (IS_ERR(cmds))
 		return PTR_ERR(cmds);
 
-	*cmds++ = cp_type7_packet(CP_ME_INIT, 11);
-
-	_set_ordinals(adreno_dev, cmds, 11);
+	memcpy(cmds, adreno_dev->cp_init_cmds, 12 << 2);
 
 	ret = adreno_ringbuffer_submit_spin(rb, NULL, 2000);
 	if (ret) {
@@ -768,20 +831,6 @@ static int a6xx_post_start(struct adreno_device *adreno_dev)
 }
 
 /*
- * Some targets support marking certain transactions as always privileged which
- * allows us to mark more memory as privileged without having to explicitly set
- * the APRIV bit.  For those targets, choose the following transactions to be
- * privileged by default:
- * CDWRITE     [6:6] - Crashdumper writes
- * CDREAD      [5:5] - Crashdumper reads
- * RBRPWB      [3:3] - RPTR shadow writes
- * RBPRIVLEVEL [2:2] - Memory accesses from PM4 packets in the ringbuffer
- * RBFETCH     [1:1] - Ringbuffer reads
- */
-#define A6XX_APRIV_DEFAULT \
-	((1 << 6) | (1 << 5) | (1 << 3) | (1 << 2) | (1 << 1))
-
-/*
  * a6xx_rb_start() - Start the ringbuffer
  * @adreno_dev: Pointer to adreno device
  */
@@ -791,6 +840,8 @@ static int a6xx_rb_start(struct adreno_device *adreno_dev)
 	struct kgsl_device *device = &adreno_dev->dev;
 	uint64_t addr;
 	int ret;
+
+	a6xx_preemption_start(adreno_dev);
 
 	addr = SCRATCH_RPTR_GPU_ADDR(device, rb->id);
 
@@ -810,9 +861,6 @@ static int a6xx_rb_start(struct adreno_device *adreno_dev)
 	ret = a6xx_microcode_load(adreno_dev);
 	if (ret)
 		return ret;
-
-	if (ADRENO_FEATURE(adreno_dev, ADRENO_APRIV))
-		kgsl_regwrite(device, A6XX_CP_APRIV_CNTL, A6XX_APRIV_DEFAULT);
 
 	/* Clear the SQE_HALT to start the CP engine */
 	kgsl_regwrite(device, A6XX_CP_SQE_CNTL, 1);
@@ -1249,7 +1297,15 @@ static const char *a6xx_fault_block_uche(struct kgsl_device *device,
 	unsigned int uche_client_id = 0;
 	static char str[40];
 
-	mutex_lock(&device->mutex);
+	/*
+	 * Smmu driver takes a vote on CX gdsc before calling the kgsl
+	 * pagefault handler. If there is contention for device mutex in this
+	 * path and the dispatcher fault handler is holding this lock, trying
+	 * to turn off CX gdsc will fail during the reset. So to avoid blocking
+	 * here, try to lock device mutex and return if it fails.
+	 */
+	if (!mutex_trylock(&device->mutex))
+		return "UCHE: unknown";
 
 	if (!kgsl_state_is_awake(device)) {
 		mutex_unlock(&device->mutex);
@@ -2385,14 +2441,6 @@ static unsigned int a6xx_register_offsets[ADRENO_REG_REGISTER_MAX] = {
 				A6XX_GMU_CM3_CFG),
 	ADRENO_REG_DEFINE(ADRENO_REG_GMU_RBBM_INT_UNMASKED_STATUS,
 				A6XX_GMU_RBBM_INT_UNMASKED_STATUS),
-	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_SECVID_TSB_TRUSTED_BASE,
-				A6XX_RBBM_SECVID_TSB_TRUSTED_BASE_LO),
-	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_SECVID_TSB_TRUSTED_BASE_HI,
-				A6XX_RBBM_SECVID_TSB_TRUSTED_BASE_HI),
-	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_SECVID_TSB_TRUSTED_SIZE,
-				A6XX_RBBM_SECVID_TSB_TRUSTED_SIZE),
-	ADRENO_REG_DEFINE(ADRENO_REG_RBBM_SECVID_TSB_CONTROL,
-				A6XX_RBBM_SECVID_TSB_CNTL),
 };
 
 static int cpu_gpu_lock(struct cpu_gpu_lock *lock)

@@ -351,12 +351,12 @@ static int a6xx_gmu_start(struct kgsl_device *device)
 		mask = 0xFFFFFFFF;
 	}
 
-	/* Set the log wptr index */
-	gmu_core_regwrite(device, A6XX_GPU_GMU_CX_GMU_PWR_COL_CP_RESP,
-			gmu->log_wptr_retention);
-
 	/* Bring GMU out of reset */
 	gmu_core_regwrite(device, A6XX_GMU_CM3_SYSRESET, 0);
+
+	/* Make sure the write is posted before moving ahead */
+	wmb();
+
 	if (timed_poll_check(device,
 			A6XX_GMU_CM3_FW_INIT_RESULT,
 			val, GMU_START_TIMEOUT, mask)) {
@@ -1058,6 +1058,25 @@ static int a6xx_gmu_fw_start(struct kgsl_device *device,
 	gmu_core_regwrite(device, A6XX_GMU_AHB_FENCE_RANGE_0,
 			GMU_FENCE_RANGE_MASK);
 
+	/*
+	 * Make sure that CM3 state is at reset value. Snapshot is changing
+	 * NMI bit and if we boot up GMU with NMI bit set GMU will boot
+	 * straight in to NMI handler without executing __main code
+	 */
+	gmu_core_regwrite(device, A6XX_GMU_CM3_CFG, 0x4052);
+
+	/**
+	 * We may have asserted gbif halt as part of reset sequence which may
+	 * not get cleared if the gdsc was not reset. So clear it before
+	 * attempting GMU boot.
+	 */
+	if (!adreno_is_a630(ADRENO_DEVICE(device)))
+		kgsl_regwrite(device, A6XX_GBIF_HALT, 0x0);
+
+	/* Set the log wptr index */
+	gmu_core_regwrite(device, A6XX_GPU_GMU_CX_GMU_PWR_COL_CP_RESP,
+			gmu->log_wptr_retention);
+
 	/* Pass chipid to GMU FW, must happen before starting GMU */
 
 	/* Keep Core and Major bitfields unchanged */
@@ -1729,6 +1748,13 @@ static int a6xx_gmu_wait_for_active_transition(
 	return -ETIMEDOUT;
 }
 
+static bool a6xx_gmu_scales_bandwidth(struct kgsl_device *device)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+
+	return (ADRENO_GPUREV(adreno_dev) >= ADRENO_REV_A640);
+}
+
 struct gmu_dev_ops adreno_a6xx_gmudev = {
 	.load_firmware = a6xx_gmu_load_firmware,
 	.oob_set = a6xx_gmu_oob_set,
@@ -1748,4 +1774,5 @@ struct gmu_dev_ops adreno_a6xx_gmudev = {
 	.wait_for_active_transition = a6xx_gmu_wait_for_active_transition,
 	.gmu2host_intr_mask = HFI_IRQ_MASK,
 	.gmu_ao_intr_mask = GMU_AO_INT_MASK,
+	.scales_bandwidth = a6xx_gmu_scales_bandwidth,
 };

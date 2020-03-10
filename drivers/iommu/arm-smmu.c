@@ -51,6 +51,7 @@
 
 #include <linux/qcom_scm.h>
 #include "arm-smmu.h"
+#include "iommu-logger.h"
 
 #define CREATE_TRACE_POINTS
 #include "arm-smmu-trace.h"
@@ -78,6 +79,7 @@
 #define ARM_SMMU_ICC_AVG_BW		0
 #define ARM_SMMU_ICC_PEAK_BW_HIGH	1000
 #define ARM_SMMU_ICC_PEAK_BW_LOW	0
+#define ARM_SMMU_ICC_ACTIVE_ONLY_TAG	0x3
 
 static int force_stage;
 module_param(force_stage, int, S_IRUGO);
@@ -196,8 +198,6 @@ static int __arm_smmu_domain_set_attr(struct iommu_domain *domain,
 				    enum iommu_attr attr, void *data);
 static int arm_smmu_domain_get_attr(struct iommu_domain *domain,
 				    enum iommu_attr attr, void *data);
-
-static void __arm_smmu_tlb_sync_timeout(struct arm_smmu_device *smmu);
 
 static inline int arm_smmu_rpm_get(struct arm_smmu_device *smmu)
 {
@@ -403,15 +403,25 @@ static void arm_smmu_interrupt_selftest(struct arm_smmu_device *smmu)
  *
  * device_group()
  * Hook for checking whether a device is compatible with a said group.
+ *
+ * tlb_sync_timeout()
+ * Hook for performing architecture-specific procedures to collect additional
+ * debugging information on a TLB sync timeout.
+ *
+ * device_remove()
+ * Hook for performing architecture-specific procedures prior to powering off
+ * the SMMU.
  */
 struct arm_smmu_arch_ops {
 	int (*init)(struct arm_smmu_device *smmu);
 	void (*device_reset)(struct arm_smmu_device *smmu);
-	phys_addr_t (*iova_to_phys_hard)(struct iommu_domain *domain,
+	phys_addr_t (*iova_to_phys_hard)(struct arm_smmu_domain *smmu_domain,
 					 dma_addr_t iova);
 	void (*init_context_bank)(struct arm_smmu_domain *smmu_domain,
 					struct device *dev);
 	int (*device_group)(struct device *dev, struct iommu_group *group);
+	void (*tlb_sync_timeout)(struct arm_smmu_device *smmu);
+	void (*device_remove)(struct arm_smmu_device *smmu);
 };
 
 static int arm_smmu_arch_init(struct arm_smmu_device *smmu)
@@ -455,6 +465,24 @@ static int arm_smmu_arch_device_group(struct device *dev,
 	if (!smmu->arch_ops->device_group)
 		return 0;
 	return smmu->arch_ops->device_group(dev, group);
+}
+
+static void arm_smmu_arch_tlb_sync_timeout(struct arm_smmu_device *smmu)
+{
+	if (!smmu->arch_ops || !smmu->arch_ops->tlb_sync_timeout)
+		return;
+
+	smmu->arch_ops->tlb_sync_timeout(smmu);
+}
+
+
+static void arm_smmu_arch_device_remove(struct arm_smmu_device *smmu)
+{
+	if (!smmu->arch_ops)
+		return;
+	if (!smmu->arch_ops->device_remove)
+		return;
+	return smmu->arch_ops->device_remove(smmu);
 }
 
 static void arm_smmu_arch_write_sync(struct arm_smmu_device *smmu)
@@ -892,6 +920,13 @@ static int __arm_smmu_tlb_sync(struct arm_smmu_device *smmu, int page,
 	unsigned int inc, delay;
 	u32 reg;
 
+	/*
+	 * Allowing an unbounded number of sync requests to be submitted when a
+	 * TBU is not processing sync requests can cause a TBU's command queue
+	 * to fill up. Once the queue is full, subsequent sync requests can
+	 * stall the CPU indefinitely. Avoid this by gating subsequent sync
+	 * requests after the first sync timeout on an SMMU.
+	 */
 	if (IS_ENABLED(CONFIG_IOMMU_TLBSYNC_DEBUG) &&
 	    test_bit(0, &smmu->sync_timed_out))
 		return -EINVAL;
@@ -913,7 +948,7 @@ static int __arm_smmu_tlb_sync(struct arm_smmu_device *smmu, int page,
 		goto out;
 
 	trace_tlbsync_timeout(smmu->dev, 0);
-	__arm_smmu_tlb_sync_timeout(smmu);
+	arm_smmu_arch_tlb_sync_timeout(smmu);
 
 out:
 	return -EINVAL;
@@ -1254,18 +1289,18 @@ static void print_ctx_regs(struct arm_smmu_device *smmu, struct arm_smmu_cfg
 	dev_err(smmu->dev,
 		"FSR    = 0x%08x [%s%s%s%s%s%s%s%s%s%s]\n",
 		fsr,
-		(fsr & 0x02) ?  (fsynr0 & 0x10 ?
+		(fsr & FSR_TF) ?  (fsynr0 & FSYNR0_WNR ?
 				 "TF W " : "TF R ") : "",
-		(fsr & 0x04) ? "AFF " : "",
-		(fsr & 0x08) ? (fsynr0 & 0x10 ?
+		(fsr & FSR_AFF) ? "AFF " : "",
+		(fsr & FSR_PF) ? (fsynr0 & FSYNR0_WNR ?
 				"PF W " : "PF R ") : "",
-		(fsr & 0x10) ? "EF " : "",
-		(fsr & 0x20) ? "TLBMCF " : "",
-		(fsr & 0x40) ? "TLBLKF " : "",
-		(fsr & 0x80) ? "MHF " : "",
-		(fsr & 0x100) ? "UUT " : "",
-		(fsr & 0x40000000) ? "SS " : "",
-		(fsr & 0x80000000) ? "MULTI " : "");
+		(fsr & FSR_EF) ? "EF " : "",
+		(fsr & FSR_TLBMCF) ? "TLBMCF " : "",
+		(fsr & FSR_TLBLKF) ? "TLBLKF " : "",
+		(fsr & FSR_ASF) ? "ASF " : "",
+		(fsr & FSR_UUT) ? "UUT " : "",
+		(fsr & FSR_SS) ? "SS " : "",
+		(fsr & FSR_MULTI) ? "MULTI " : "");
 
 	if (cfg->fmt == ARM_SMMU_CTX_FMT_AARCH32_S) {
 		dev_err(smmu->dev, "TTBR0  = 0x%pK\n",
@@ -1872,9 +1907,16 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 	struct msm_io_pgtable_info *pgtbl_info = &smmu_domain->pgtbl_info;
 	struct arm_smmu_cfg *cfg = &smmu_domain->cfg;
 	unsigned long quirks = 0;
+	struct iommu_group *group;
 
 	mutex_lock(&smmu_domain->init_mutex);
 	if (smmu_domain->smmu)
+		goto out_unlock;
+
+	group = iommu_group_get(dev);
+	ret = iommu_logger_register(&smmu_domain->logger, domain, group);
+	iommu_group_put(group);
+	if (ret)
 		goto out_unlock;
 
 	if (domain->type == IOMMU_DOMAIN_DMA) {
@@ -1882,7 +1924,7 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 		if (ret) {
 			dev_err(dev, "%s: default domain setup failed\n",
 				__func__);
-			goto out_unlock;
+			goto out_logger;
 		}
 	}
 
@@ -1939,7 +1981,7 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 
 	if (cfg->fmt == ARM_SMMU_CTX_FMT_NONE) {
 		ret = -EINVAL;
-		goto out_unlock;
+		goto out_logger;
 	}
 
 	switch (smmu_domain->stage) {
@@ -1987,7 +2029,7 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 		break;
 	default:
 		ret = -EINVAL;
-		goto out_unlock;
+		goto out_logger;
 	}
 
 #ifdef CONFIG_IOMMU_IO_PGTABLE_FAST
@@ -2001,7 +2043,7 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 
 	ret = arm_smmu_alloc_cb(domain, smmu, dev);
 	if (ret < 0)
-		goto out_unlock;
+		goto out_logger;
 
 	cfg->cbndx = ret;
 
@@ -2071,6 +2113,8 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 out_clear_smmu:
 	arm_smmu_destroy_domain_context(domain);
 	smmu_domain->smmu = NULL;
+out_logger:
+	iommu_logger_unregister(smmu_domain->logger);
 out_unlock:
 	mutex_unlock(&smmu_domain->init_mutex);
 	return ret;
@@ -2186,6 +2230,7 @@ static void arm_smmu_domain_free(struct iommu_domain *domain)
 	 */
 	arm_smmu_put_dma_cookie(domain);
 	arm_smmu_destroy_domain_context(domain);
+	iommu_logger_unregister(smmu_domain->logger);
 	kfree(smmu_domain);
 }
 
@@ -2645,16 +2690,19 @@ static int arm_smmu_setup_default_domain(struct device *dev,
 	if (ret)
 		str = "default";
 
-	if (!strcmp(str, "bypass"))
+	if (!strcmp(str, "bypass")) {
 		__arm_smmu_domain_set_attr(
 			domain, DOMAIN_ATTR_S1_BYPASS, &attr);
-	else if (!strcmp(str, "fastmap"))
-		__arm_smmu_domain_set_attr(
-			domain, DOMAIN_ATTR_FAST, &attr);
-	else if (!strcmp(str, "atomic"))
+	} else if (!strcmp(str, "fastmap")) {
+		/* Ensure DOMAIN_ATTR_ATOMIC is set for GKI */
 		__arm_smmu_domain_set_attr(
 			domain, DOMAIN_ATTR_ATOMIC, &attr);
-	else if (!strcmp(str, "disabled")) {
+		__arm_smmu_domain_set_attr(
+			domain, DOMAIN_ATTR_FAST, &attr);
+	} else if (!strcmp(str, "atomic")) {
+		__arm_smmu_domain_set_attr(
+			domain, DOMAIN_ATTR_ATOMIC, &attr);
+	} else if (!strcmp(str, "disabled")) {
 		/*
 		 * Don't touch hw, and don't allocate irqs or other resources.
 		 * Ensure the context bank is set to a valid value per dynamic
@@ -3141,7 +3189,7 @@ static phys_addr_t arm_smmu_iova_to_phys_hard(struct iommu_domain *domain,
 	if (smmu_domain->smmu->arch_ops &&
 	    smmu_domain->smmu->arch_ops->iova_to_phys_hard) {
 		ret = smmu_domain->smmu->arch_ops->iova_to_phys_hard(
-						domain, iova);
+						smmu_domain, iova);
 		goto out;
 	}
 
@@ -3478,11 +3526,6 @@ static int arm_smmu_domain_get_attr(struct iommu_domain *domain,
 					  smmu_domain->attributes);
 		ret = 0;
 		break;
-	case DOMAIN_ATTR_DEBUG:
-		*((int *)data) = test_bit(DOMAIN_ATTR_DEBUG,
-					  smmu_domain->attributes);
-		ret = 0;
-		break;
 	default:
 		ret = -ENODEV;
 		break;
@@ -3715,16 +3758,6 @@ static int __arm_smmu_domain_set_attr2(struct iommu_domain *domain,
 		} else {
 			ret = -ENOTSUPP;
 		}
-		break;
-	}
-	case DOMAIN_ATTR_DEBUG: {
-		int is_debug_domain = *((int *)data);
-
-		if (is_debug_domain)
-			set_bit(DOMAIN_ATTR_DEBUG, smmu_domain->attributes);
-		else
-			clear_bit(DOMAIN_ATTR_DEBUG, smmu_domain->attributes);
-		ret = 0;
 		break;
 	}
 	default:
@@ -4238,6 +4271,9 @@ static int arm_smmu_init_interconnect(struct arm_smmu_power_resources *pwr)
 				PTR_ERR(pwr->icc_path));
 		return pwr->icc_path ? PTR_ERR(pwr->icc_path) : -EINVAL;
 	}
+
+	if (of_property_read_bool(dev->of_node, "qcom,active-only"))
+		icc_set_tag(pwr->icc_path, ARM_SMMU_ICC_ACTIVE_ONLY_TAG);
 
 	return 0;
 }
@@ -4835,7 +4871,7 @@ static int arm_smmu_device_remove(struct platform_device *pdev)
 	arm_smmu_bus_init(NULL);
 	iommu_device_unregister(&smmu->iommu);
 
-	cancel_work_sync(&smmu->outstanding_tnx_work);
+	arm_smmu_arch_device_remove(smmu);
 
 	idr_destroy(&smmu->asid_idr);
 
@@ -4912,12 +4948,8 @@ static struct platform_driver arm_smmu_driver = {
 static struct platform_driver qsmmuv500_tbu_driver;
 static int __init arm_smmu_init(void)
 {
-	static bool registered;
-	int ret = 0;
+	int ret;
 	ktime_t cur;
-
-	if (registered)
-		return 0;
 
 	cur = ktime_get();
 	ret = platform_driver_register(&qsmmuv500_tbu_driver);
@@ -4925,9 +4957,12 @@ static int __init arm_smmu_init(void)
 		return ret;
 
 	ret = platform_driver_register(&arm_smmu_driver);
-	registered = !ret;
-	trace_smmu_init(ktime_us_delta(ktime_get(), cur));
+	if (ret) {
+		platform_driver_unregister(&qsmmuv500_tbu_driver);
+		return ret;
+	}
 
+	trace_smmu_init(ktime_us_delta(ktime_get(), cur));
 	return ret;
 }
 
@@ -4991,6 +5026,8 @@ struct qsmmuv500_archdata {
 	u32				version;
 	struct actlr_setting		*actlrs;
 	u32				actlr_tbl_size;
+	struct work_struct		outstanding_tnx_work;
+	struct arm_smmu_device		*smmu;
 };
 #define get_qsmmuv500_archdata(smmu)				\
 	((struct qsmmuv500_archdata *)(smmu->archdata))
@@ -5029,15 +5066,15 @@ static struct qsmmuv500_tbu_device *qsmmuv500_find_tbu(
  */
 static DEFINE_MUTEX(capture_reg_lock);
 
-static void arm_smmu_log_outstanding_transactions(struct work_struct *work)
+static void qsmmuv500_log_outstanding_transactions(struct work_struct *work)
 {
 	struct qsmmuv500_tbu_device *tbu = NULL;
 	u64 outstanding_tnxs;
 	u64 tcr_cntl_val, res;
-	struct arm_smmu_device *smmu = container_of(work,
-						    struct arm_smmu_device,
-						    outstanding_tnx_work);
-	struct qsmmuv500_archdata *data = get_qsmmuv500_archdata(smmu);
+	struct qsmmuv500_archdata *data = container_of(work,
+						struct qsmmuv500_archdata,
+						outstanding_tnx_work);
+	struct arm_smmu_device *smmu = data->smmu;
 	void __iomem *base;
 
 	if (!mutex_trylock(&capture_reg_lock)) {
@@ -5108,13 +5145,14 @@ bug:
 	BUG_ON(IS_ENABLED(CONFIG_IOMMU_TLBSYNC_DEBUG));
 }
 
-static void __arm_smmu_tlb_sync_timeout(struct arm_smmu_device *smmu)
+static void qsmmuv500_tlb_sync_timeout(struct arm_smmu_device *smmu)
 {
 	u32 sync_inv_ack, tbu_pwr_status, sync_inv_progress;
 	u32 tbu_inv_pending = 0, tbu_sync_pending = 0;
 	u32 tbu_inv_acked = 0, tbu_sync_acked = 0;
 	u32 tcu_inv_pending = 0, tcu_sync_pending = 0;
 	u32 tbu_ids = 0;
+	struct qsmmuv500_archdata *data = get_qsmmuv500_archdata(smmu);
 	int ret;
 
 	static DEFINE_RATELIMIT_STATE(_rs,
@@ -5194,10 +5232,17 @@ static void __arm_smmu_tlb_sync_timeout(struct arm_smmu_device *smmu)
 	}
 
 	if (tcu_sync_pending)
-		schedule_work(&smmu->outstanding_tnx_work);
+		schedule_work(&data->outstanding_tnx_work);
 	else
 out:
 		BUG_ON(IS_ENABLED(CONFIG_IOMMU_TLBSYNC_DEBUG));
+}
+
+static void qsmmuv500_device_remove(struct arm_smmu_device *smmu)
+{
+	struct qsmmuv500_archdata *data = get_qsmmuv500_archdata(smmu);
+
+	cancel_work_sync(&data->outstanding_tnx_work);
 }
 
 static bool arm_smmu_fwspec_match_smr(struct iommu_fwspec *fwspec,
@@ -5369,9 +5414,8 @@ static void qsmmuv500_ecats_unlock(struct arm_smmu_domain *smmu_domain,
  * Zero means failure.
  */
 static phys_addr_t qsmmuv500_iova_to_phys(
-		struct iommu_domain *domain, dma_addr_t iova, u32 sid)
+		struct arm_smmu_domain *smmu_domain, dma_addr_t iova, u32 sid)
 {
-	struct arm_smmu_domain *smmu_domain = to_smmu_domain(domain);
 	struct arm_smmu_device *smmu = smmu_domain->smmu;
 	struct arm_smmu_cfg *cfg = &smmu_domain->cfg;
 	struct qsmmuv500_tbu_device *tbu;
@@ -5531,23 +5575,21 @@ out_power_off:
 }
 
 static phys_addr_t qsmmuv500_iova_to_phys_hard(
-		struct iommu_domain *domain, dma_addr_t iova)
+					struct arm_smmu_domain *smmu_domain,
+					dma_addr_t iova)
 {
 	u16 sid;
-	struct arm_smmu_domain *smmu_domain = to_smmu_domain(domain);
+	struct msm_iommu_domain *msm_domain = &smmu_domain->domain;
 	struct arm_smmu_cfg *cfg = &smmu_domain->cfg;
 	struct arm_smmu_device *smmu = smmu_domain->smmu;
 	struct iommu_fwspec *fwspec;
 	u32 frsynra;
-	int is_debug_domain;
-
-	arm_smmu_domain_get_attr(domain, DOMAIN_ATTR_DEBUG, &is_debug_domain);
 
 	/* Check to see if the domain is associated with the test
 	 * device. If the domain belongs to the test device, then
 	 * pick the SID from fwspec.
 	 */
-	if (is_debug_domain) {
+	if (msm_domain->is_debug_domain) {
 		fwspec = dev_iommu_fwspec_get(smmu_domain->dev);
 		sid    = (u16)fwspec->ids[0];
 	} else {
@@ -5560,7 +5602,7 @@ static phys_addr_t qsmmuv500_iova_to_phys_hard(
 		frsynra &= CBFRSYNRA_SID_MASK;
 		sid      = frsynra;
 	}
-	return qsmmuv500_iova_to_phys(domain, iova, sid);
+	return qsmmuv500_iova_to_phys(smmu_domain, iova, sid);
 }
 
 static void qsmmuv500_release_group_iommudata(void *data)
@@ -5708,6 +5750,7 @@ static int qsmmuv500_arch_init(struct arm_smmu_device *smmu)
 
 	data->version = readl_relaxed(data->tcu_base + TCU_HW_VERSION_HLOS1);
 	smmu->archdata = data;
+	data->smmu = smmu;
 
 	ret = qsmmuv500_read_actlr_tbl(smmu);
 	if (ret)
@@ -5728,8 +5771,8 @@ static int qsmmuv500_arch_init(struct arm_smmu_device *smmu)
 	if (ret)
 		return ret;
 
-	INIT_WORK(&smmu->outstanding_tnx_work,
-		  arm_smmu_log_outstanding_transactions);
+	INIT_WORK(&data->outstanding_tnx_work,
+		  qsmmuv500_log_outstanding_transactions);
 
 	/* Attempt to register child devices */
 	ret = device_for_each_child(dev, smmu, qsmmuv500_tbu_register);
@@ -5744,6 +5787,8 @@ static struct arm_smmu_arch_ops qsmmuv500_arch_ops = {
 	.iova_to_phys_hard = qsmmuv500_iova_to_phys_hard,
 	.init_context_bank = qsmmuv500_init_cb,
 	.device_group = qsmmuv500_device_group,
+	.tlb_sync_timeout = qsmmuv500_tlb_sync_timeout,
+	.device_remove = qsmmuv500_device_remove,
 };
 
 static const struct of_device_id qsmmuv500_tbu_of_match[] = {

@@ -3,7 +3,7 @@
  *
  * This code is based on drivers/scsi/ufs/ufshcd.h
  * Copyright (C) 2011-2013 Samsung India Software Operations
- * Copyright (c) 2013-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
  *
  * Authors:
  *	Santosh Yaraganavi <santosh.sy@samsung.com>
@@ -214,9 +214,11 @@ struct ufshcd_lrb {
 	bool intr_cmd;
 	ktime_t issue_time_stamp;
 	ktime_t compl_time_stamp;
+#if IS_ENABLED(CONFIG_SCSI_UFS_CRYPTO)
 	bool crypto_enable;
 	u8 crypto_key_slot;
 	u64 data_unit_num;
+#endif /* CONFIG_SCSI_UFS_CRYPTO */
 
 	bool req_abort_skip;
 };
@@ -298,6 +300,8 @@ struct ufs_pwr_mode_info {
 	struct ufs_pa_layer_attr info;
 };
 
+union ufs_crypto_cfg_entry;
+
 /**
  * struct ufs_hba_variant_ops - variant specific callbacks
  * @name: variant name
@@ -325,6 +329,7 @@ struct ufs_pwr_mode_info {
  * @dbg_register_dump: used to dump controller debug information
  * @phy_initialization: used to initialize phys
  * @device_reset: called to issue a reset pulse on the UFS device
+ * @program_key: program an inline encryption key into a keyslot
  */
 struct ufs_hba_variant_ops {
 	const char *name;
@@ -354,6 +359,8 @@ struct ufs_hba_variant_ops {
 	void	(*dbg_register_dump)(struct ufs_hba *hba);
 	int	(*phy_initialization)(struct ufs_hba *);
 	void	(*device_reset)(struct ufs_hba *hba);
+	int	(*program_key)(struct ufs_hba *hba,
+			       const union ufs_crypto_cfg_entry *cfg, int slot);
 };
 
 struct keyslot_mgmt_ll_ops;
@@ -701,7 +708,6 @@ struct ufs_stats {
  * @crypto_capabilities: Content of crypto capabilities register (0x100)
  * @crypto_cap_array: Array of crypto capabilities
  * @crypto_cfg_register: Start of the crypto cfg array
- * @crypto_cfgs: Array of crypto configurations (i.e. config for each slot)
  * @ksm: the keyslot manager tied to this hba
  */
 struct ufs_hba {
@@ -918,9 +924,7 @@ struct ufs_hba {
 #define UFSHCD_CAP_POWER_COLLAPSE_DURING_HIBERN8 (1 << 7)
 	/* Allow standalone Hibern8 enter on idle */
 #define UFSHCD_CAP_HIBERN8_ENTER_ON_IDLE (1 << 5)
-	bool phy_init_g4;
 	struct rw_semaphore lock;
-	struct pinctrl *pctrl;
 	/* Bitmask for enabling debug prints */
 	u32 ufshcd_dbg_print;
 	/* If set, don't gate device ref_clk during clock gating */
@@ -939,7 +943,6 @@ struct ufs_hba {
 	bool auto_h8_err;
 	struct work_struct rls_work;
 	u32 dev_ref_clk_gating_wait;
-	bool force_g4;
 #endif
 	struct devfreq *devfreq;
 	struct ufs_clk_scaling clk_scaling;
@@ -960,7 +963,6 @@ struct ufs_hba {
 	union ufs_crypto_capabilities crypto_capabilities;
 	union ufs_crypto_cap_entry *crypto_cap_array;
 	u32 crypto_cfg_register;
-	union ufs_crypto_cfg_entry *crypto_cfgs;
 	struct keyslot_manager *ksm;
 #endif /* CONFIG_SCSI_UFS_CRYPTO */
 };
