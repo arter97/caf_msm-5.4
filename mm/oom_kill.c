@@ -914,7 +914,7 @@ static void __oom_kill_process(struct task_struct *victim, const char *message)
 		K(get_mm_counter(mm, MM_FILEPAGES)),
 		K(get_mm_counter(mm, MM_SHMEMPAGES)),
 		from_kuid(&init_user_ns, task_uid(victim)),
-		mm_pgtables_bytes(mm), victim->signal->oom_score_adj);
+		mm_pgtables_bytes(mm) >> 10, victim->signal->oom_score_adj);
 	task_unlock(victim);
 
 	/*
@@ -1174,7 +1174,6 @@ void add_to_oom_reaper(struct task_struct *p)
 {
 	static DEFINE_RATELIMIT_STATE(reaper_rs, DEFAULT_RATELIMIT_INTERVAL,
 						 DEFAULT_RATELIMIT_BURST);
-	struct oom_control oc = {};
 
 	if (!sysctl_reap_mem_on_sigkill)
 		return;
@@ -1190,11 +1189,10 @@ void add_to_oom_reaper(struct task_struct *p)
 	}
 	task_unlock(p);
 
-	if (__ratelimit(&reaper_rs) && p->signal->oom_score_adj == 0) {
+	if (!strcmp(current->comm, ULMK_MAGIC) && __ratelimit(&reaper_rs)
+			&& p->signal->oom_score_adj == 0) {
 		show_mem(SHOW_MEM_FILTER_NODES, NULL);
 		show_mem_call_notifiers();
-		if (sysctl_oom_dump_tasks)
-			dump_tasks(&oc);
 	}
 
 	put_task_struct(p);

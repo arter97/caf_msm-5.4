@@ -487,8 +487,7 @@ static int a6xx_rpmh_power_off_gpu(struct kgsl_device *device)
 
 	gmu_core_regwrite(device, A6XX_GMU_RSCC_CONTROL_REQ, 0);
 
-	if (ADRENO_FEATURE(adreno_dev, ADRENO_LM) &&
-			test_bit(ADRENO_LM_CTRL, &adreno_dev->pwrctrl_flag))
+	if (adreno_dev->lm_enabled)
 		gmu_core_regwrite(device, A6XX_GMU_AO_SPARE_CNTL, 0);
 
 	set_bit(GMU_RSCC_SLEEP_SEQ_DONE, &device->gmu_core.flags);
@@ -1104,6 +1103,9 @@ static int a6xx_gmu_fw_start(struct kgsl_device *device,
 	/* Populate the GMU version info before GMU boots */
 	load_gmu_version_info(device);
 
+	/* Clear any previously set cm3 fault */
+	atomic_set(&gmu->cm3_fault, 0);
+
 	ret = a6xx_gmu_start(device);
 	if (ret)
 		return ret;
@@ -1406,8 +1408,7 @@ static void a6xx_gmu_enable_lm(struct kgsl_device *device)
 	memset(adreno_dev->busy_data.throttle_cycles, 0,
 		sizeof(adreno_dev->busy_data.throttle_cycles));
 
-	if (!ADRENO_FEATURE(adreno_dev, ADRENO_LM) ||
-			!test_bit(ADRENO_LM_CTRL, &adreno_dev->pwrctrl_flag))
+	if (!adreno_dev->lm_enabled)
 		return;
 
 	/*

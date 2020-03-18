@@ -180,8 +180,11 @@
 #define IPA_v4_7_DST_GROUP_MAX		(1)
 
 #define IPA_v4_9_GROUP_UL_DL		(0)
-#define IPA_v4_9_SRC_GROUP_MAX		(1)
-#define IPA_v4_9_DST_GROUP_MAX		(1)
+#define IPA_v4_9_GROUP_DMA		(1)
+#define IPA_v4_9_GROUP_UC_RX		(2)
+#define IPA_v4_9_GROUP_DRB_IP		(3)
+#define IPA_v4_9_SRC_GROUP_MAX		(3)
+#define IPA_v4_9_DST_GROUP_MAX		(4)
 
 #define IPA_GROUP_MAX IPA_v3_0_GROUP_MAX
 
@@ -428,17 +431,17 @@ static const struct rsrc_min_max ipa3_rsrc_src_grp_config
 		{15, 15}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0} },
 	},
 	[IPA_4_9] = {
-		/* UL_DL   other are invalid */
+		/* UL_DL  DMA  UC_RX_Q  unused  unused  N/A */
 		[IPA_v4_0_RSRC_GRP_TYPE_SRC_PKT_CONTEXTS] = {
-		{1, 12}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0} },
+		{1, 12}, {1, 1}, {1, 12}, {0, 0}, {0, 0}, {0, 0} },
 		[IPA_v4_0_RSRC_GRP_TYPE_SRC_DESCRIPTOR_LISTS] = {
-		{20, 20}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0} },
+		{20, 20}, {2, 2}, {3, 3}, {0, 0}, {0, 0}, {0, 0} },
 		[IPA_v4_0_RSRC_GRP_TYPE_SRC_DESCRIPTOR_BUFF] = {
-		{38, 38}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0} },
+		{38, 38}, {4, 4}, {8, 8}, {0, 0}, {0, 0}, {0, 0} },
 		[IPA_v4_0_RSRC_GRP_TYPE_SRC_HPS_DMARS] = {
-		{0, 4}, {0, 0}, {0, 0},  {0, 0}, {0, 0}, {0, 0} },
+		{0, 4}, {0, 4}, {0, 4},  {0, 0}, {0, 0}, {0, 0} },
 		[IPA_v4_0_RSRC_GRP_TYPE_SRC_ACK_ENTRIES] = {
-		{30, 30}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0} },
+		{30, 30}, {8, 8}, {8, 8}, {0, 0}, {0, 0}, {0, 0} },
 	},
 
 };
@@ -532,11 +535,11 @@ static const struct rsrc_min_max ipa3_rsrc_dst_grp_config
 		{2, 2}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0} },
 	},
 	[IPA_4_9] = {
-		/* UL/DL/DPL, other are invalid */
+		/*UL/DL/DPL DM  uC  DRB IP unused unused */
 		[IPA_v4_0_RSRC_GRP_TYPE_DST_DATA_SECTORS] = {
-		{9, 9}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0} },
+		{9, 9}, {1, 1}, {1, 1}, {39, 39}, {0, 0}, {0, 0} },
 		[IPA_v4_0_RSRC_GRP_TYPE_DST_DPS_DMARS] = {
-		{2, 3}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0} },
+		{2, 3}, {1, 2}, {0, 2}, {0, 0}, {0, 0}, {0, 0} },
 	},
 
 };
@@ -606,7 +609,7 @@ static const struct rsrc_min_max ipa3_rsrc_rx_grp_config
 	[IPA_4_9] = {
 		/* unused  UL_DL  unused unused  UC_RX_Q  N/A */
 		[IPA_RSRC_GRP_TYPE_RX_HPS_CMDQ] = {
-		{3, 3}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0} },
+		{3, 3}, {3, 3}, {0, 0}, {0, 0}, {0, 0}, {0, 0} },
 	},
 
 };
@@ -3392,19 +3395,19 @@ static struct ipa3_mem_partition ipa_4_7_mem_part = {
 	.apps_hdr_size			= 0x200,
 	.apps_hdr_size_ddr		= 0x800,
 	.modem_hdr_proc_ctx_ofst	= 0xad0,
-	.modem_hdr_proc_ctx_size	= 0x200,
-	.apps_hdr_proc_ctx_ofst		= 0xcd0,
+	.modem_hdr_proc_ctx_size	= 0xAC0,
+	.apps_hdr_proc_ctx_ofst		= 0x1590,
 	.apps_hdr_proc_ctx_size		= 0x200,
 	.apps_hdr_proc_ctx_size_ddr	= 0x0,
-	.nat_tbl_ofst			= 0xee0,
-	.nat_tbl_size			= 0xd00,
-	.pdn_config_ofst		= 0x1be8,
+	.nat_tbl_ofst			= 0x17A0,
+	.nat_tbl_size			= 0x800,
+	.pdn_config_ofst		= 0x24A8,
 	.pdn_config_size		= 0x50,
-	.stats_quota_q6_ofst		= 0x1c40,
+	.stats_quota_q6_ofst		= 0x2500,
 	.stats_quota_q6_size		= 0x30,
-	.stats_quota_ap_ofst		= 0x1c70,
+	.stats_quota_ap_ofst		= 0x2530,
 	.stats_quota_ap_size		= 0x48,
-	.stats_tethering_ofst		= 0x1cb8,
+	.stats_tethering_ofst		= 0x2578,
 	.stats_tethering_size		= 0x238,
 	.stats_flt_v4_ofst		= 0,
 	.stats_flt_v4_size		= 0,
@@ -3414,29 +3417,29 @@ static struct ipa3_mem_partition ipa_4_7_mem_part = {
 	.stats_rt_v4_size		= 0,
 	.stats_rt_v6_ofst		= 0,
 	.stats_rt_v6_size		= 0,
-	.stats_fnr_ofst			= 0x1ef0,
+	.stats_fnr_ofst			= 0x27B0,
 	.stats_fnr_size			= 0x0,
-	.stats_drop_ofst		= 0x1ef0,
+	.stats_drop_ofst		= 0x27B0,
 	.stats_drop_size		= 0x20,
 	.modem_comp_decomp_ofst		= 0x0,
 	.modem_comp_decomp_size		= 0x0,
-	.modem_ofst			= 0x1f18,
-	.modem_size			= 0x100c,
-	.apps_v4_flt_hash_ofst	= 0x1f18,
+	.modem_ofst			= 0x27D8,
+	.modem_size			= 0x800,
+	.apps_v4_flt_hash_ofst	= 0x27B0,
 	.apps_v4_flt_hash_size	= 0x0,
-	.apps_v4_flt_nhash_ofst	= 0x1f18,
+	.apps_v4_flt_nhash_ofst	= 0x27B0,
 	.apps_v4_flt_nhash_size	= 0x0,
-	.apps_v6_flt_hash_ofst	= 0x1f18,
+	.apps_v6_flt_hash_ofst	= 0x27B0,
 	.apps_v6_flt_hash_size	= 0x0,
-	.apps_v6_flt_nhash_ofst	= 0x1f18,
+	.apps_v6_flt_nhash_ofst	= 0x27B0,
 	.apps_v6_flt_nhash_size	= 0x0,
-	.apps_v4_rt_hash_ofst	= 0x1f18,
+	.apps_v4_rt_hash_ofst	= 0x27B0,
 	.apps_v4_rt_hash_size	= 0x0,
-	.apps_v4_rt_nhash_ofst	= 0x1f18,
+	.apps_v4_rt_nhash_ofst	= 0x27B0,
 	.apps_v4_rt_nhash_size	= 0x0,
-	.apps_v6_rt_hash_ofst	= 0x1f18,
+	.apps_v6_rt_hash_ofst	= 0x27B0,
 	.apps_v6_rt_hash_size	= 0x0,
-	.apps_v6_rt_nhash_ofst	= 0x1f18,
+	.apps_v6_rt_nhash_ofst	= 0x27B0,
 	.apps_v6_rt_nhash_size	= 0x0,
 	.uc_descriptor_ram_ofst	= 0x3000,
 	.uc_descriptor_ram_size	= 0x0000,
@@ -7662,8 +7665,14 @@ static void ipa3_write_rsrc_grp_type_reg(int group_index,
 		if (src) {
 			switch (group_index) {
 			case IPA_v4_9_GROUP_UL_DL:
+			case IPA_v4_9_GROUP_DMA:
 				ipahal_write_reg_n_fields(
 					IPA_SRC_RSRC_GRP_01_RSRC_TYPE_n,
+					n, val);
+				break;
+			case IPA_v4_9_GROUP_UC_RX:
+				ipahal_write_reg_n_fields(
+					IPA_DST_RSRC_GRP_23_RSRC_TYPE_n,
 					n, val);
 				break;
 			default:
@@ -7675,8 +7684,15 @@ static void ipa3_write_rsrc_grp_type_reg(int group_index,
 		} else {
 			switch (group_index) {
 			case IPA_v4_9_GROUP_UL_DL:
+			case IPA_v4_9_GROUP_DMA:
 				ipahal_write_reg_n_fields(
 					IPA_DST_RSRC_GRP_01_RSRC_TYPE_n,
+					n, val);
+				break;
+			case IPA_v4_9_GROUP_UC_RX:
+			case IPA_v4_9_GROUP_DRB_IP:
+				ipahal_write_reg_n_fields(
+					IPA_DST_RSRC_GRP_23_RSRC_TYPE_n,
 					n, val);
 				break;
 			default:

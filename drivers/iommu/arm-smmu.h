@@ -209,6 +209,9 @@ enum arm_smmu_cbar_type {
 
 #define ARM_SMMU_CB_FSYNR0		0x68
 #define FSYNR0_WNR			BIT(4)
+#define FSYNR0_PNU			BIT(5)
+#define FSYNR0_IND			BIT(6)
+#define FSYNR0_NSATTR			BIT(8)
 
 #define ARM_SMMU_CB_FSYNR1		0x6c
 #define FSYNR1_BID			GENMASK(15, 13)
@@ -295,6 +298,30 @@ struct arm_smmu_power_resources {
 	spinlock_t			clock_refs_lock;
 	int				clock_refs_count;
 	int				regulator_defer;
+};
+
+/*
+ * attach_count
+ *	The SMR and S2CR registers are only programmed when the number of
+ *	devices attached to the iommu using these registers is > 0. This
+ *	is required for the "SID switch" use case for secure display.
+ *	Protected by stream_map_mutex.
+ */
+struct arm_smmu_s2cr {
+	struct iommu_group		*group;
+	int				count;
+	int				attach_count;
+	enum arm_smmu_s2cr_type		type;
+	enum arm_smmu_s2cr_privcfg	privcfg;
+	u8				cbndx;
+	bool				cb_handoff;
+	bool				pinned;
+};
+
+struct arm_smmu_smr {
+	u16				mask;
+	u16				id;
+	bool				valid;
 };
 
 struct arm_smmu_device {

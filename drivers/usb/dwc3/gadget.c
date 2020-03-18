@@ -2160,7 +2160,7 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	spin_unlock_irqrestore(&dwc->lock, flags);
 	if (!is_on && ret == -ETIMEDOUT) {
 		dev_err(dwc->dev, "%s: Core soft reset...\n", __func__);
-		dwc3_device_core_soft_reset(dwc);
+		ret = dwc3_device_core_soft_reset(dwc);
 	}
 	enable_irq(dwc->irq);
 
@@ -2808,6 +2808,13 @@ static int dwc3_gadget_ep_reclaim_trb_linear(struct dwc3_ep *dep,
 
 static bool dwc3_gadget_ep_request_completed(struct dwc3_request *req)
 {
+	/*
+	 * For OUT direction, host may send less than the setup
+	 * length. Return true for all OUT requests.
+	 */
+	if (!req->direction)
+		return true;
+
 	return req->request.actual == req->request.length;
 }
 
@@ -2832,7 +2839,7 @@ static int dwc3_gadget_ep_cleanup_completed_request(struct dwc3_ep *dep,
 
 	req->request.actual = req->request.length - req->remaining;
 
-	if (!dwc3_gadget_ep_request_completed(req) &&
+	if (!dwc3_gadget_ep_request_completed(req) ||
 			req->num_pending_sgs) {
 		__dwc3_gadget_kick_transfer(dep);
 		goto out;
