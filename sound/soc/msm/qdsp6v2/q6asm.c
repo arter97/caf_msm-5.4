@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -898,7 +898,7 @@ int q6asm_unmap_rtac_block(uint32_t *mem_map_handle)
 			__func__, result2);
 		result = result2;
 	} else {
-		mem_map_handle = 0;
+		*mem_map_handle = 0;
 	}
 
 	result2 = q6asm_mmap_apr_dereg();
