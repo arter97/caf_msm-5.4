@@ -58,6 +58,11 @@
 #define FASTRPC_CTX_MAX (256)
 #define FASTRPC_CTXID_MASK (0xFF0)
 
+#define ADSP_DOMAIN_ID (0)
+#define MDSP_DOMAIN_ID (1)
+#define SDSP_DOMAIN_ID (2)
+#define CDSP_DOMAIN_ID (3)
+
 #define IS_CACHE_ALIGNED(x) (((x) & ((L1_CACHE_BYTES)-1)) == 0)
 
 static inline uint64_t buf_page_start(uint64_t buf)
@@ -337,8 +342,18 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map)
 {
 	struct fastrpc_apps *me = &gfa;
 	struct fastrpc_file *fl = NULL;
+	int cid = -1, err = 0;
 	if (!map)
 		return;
+
+	cid = fl->cid;
+	VERIFY(err, cid >= ADSP_DOMAIN_ID && cid < NUM_CHANNELS);
+	if (err) {
+		err = -ECHRNG;
+		pr_err("adsprpc: ERROR:%s, Invalid channel id: %d, err:%d",
+			__func__, cid, err);
+		return;
+	}
 	if (map->flags == ADSP_MMAP_HEAP_ADDR) {
 		spin_lock(&me->hlock);
 		map->refs--;
@@ -1061,7 +1076,15 @@ static int fastrpc_invoke_send(struct smq_invoke_ctx *ctx,
 {
 	struct smq_msg msg = {0};
 	struct fastrpc_file *fl = ctx->fl;
-	int err = 0, len;
+	int err = 0, len, cid = -1;
+
+	cid = fl->cid;
+	VERIFY(err, cid >= ADSP_DOMAIN_ID && cid < NUM_CHANNELS);
+	if (err) {
+		err = -ECHRNG;
+		goto bail;
+	}
+
 	msg.pid = current->tgid;
 	msg.tid = current->pid;
 	if (kernel)
@@ -1078,6 +1101,7 @@ static int fastrpc_invoke_send(struct smq_invoke_ctx *ctx,
 	len = smd_write(fl->chan->chan, &msg, sizeof(msg));
 	spin_unlock(&fl->apps->hlock);
 	VERIFY(err, len == sizeof(msg));
+bail:
 	return err;
 }
 
@@ -1172,9 +1196,14 @@ static int fastrpc_internal_invoke(struct fastrpc_file *fl, uint32_t mode,
 {
 	struct smq_invoke_ctx *ctx = NULL;
 	struct fastrpc_ioctl_invoke *invoke = &invokefd->inv;
-	int cid = fl->cid;
-	int interrupted = 0;
-	int err = 0;
+	int err = 0, cid = -1, interrupted = 0;
+
+	cid = fl->cid;
+	VERIFY(err, cid >= ADSP_DOMAIN_ID && cid < NUM_CHANNELS);
+	if (err) {
+		err = -ECHRNG;
+		goto bail;
+	}
 
 	if (!kernel) {
 		VERIFY(err, 0 == context_restore_interrupted(fl, invokefd,
