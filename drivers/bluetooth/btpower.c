@@ -39,10 +39,13 @@ static const struct of_device_id bt_power_match_table[] = {
 };
 
 static struct bt_power_vreg_data bt_power_vreg_info[] = {
+	{NULL, "qcom,bt-vdd-pa", 0, 0, 0, false, false},
+	{NULL, "qcom,bt-chip-pwd", 0, 0, 0, false, false},
 	{NULL, "qcom,bt-vdd-aon", 950000, 950000, 0, false, true},
 	{NULL, "qcom,bt-vdd-dig", 950000, 952000, 0, false, true},
 	{NULL, "qcom,bt-vdd-rfa1", 1900000, 1900000, 0, false, true},
 	{NULL, "qcom,bt-vdd-rfa2", 1900000, 1900000, 0, false, true},
+	{NULL, "qcom,bt-vdd-rfa3", 1900000, 1900000, 0, false, true},
 	{NULL, "qcom,bt-vdd-asd", 0, 0, 0, false, false},
 };
 
