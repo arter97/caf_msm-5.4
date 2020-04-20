@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015, 2016, 2018 The Linux Foundation.
+/* Copyright (c) 2014-2015, 2016, 2018, 2020 The Linux Foundation.
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -155,25 +155,33 @@ int diag_md_write(int id, unsigned char *buf, int len, int ctx)
 		return -EIO;
 	}
 	pid = session_info->pid;
-	mutex_unlock(&driver->md_session_lock);
 
 	ch = &diag_md[id];
+
+	if (!ch) {
+		mutex_unlock(&driver->md_session_lock);
+		return -EINVAL;
+	}
 
 	spin_lock_irqsave(&ch->lock, flags);
 	for (i = 0; i < ch->num_tbl_entries && !found; i++) {
 		if (ch->tbl[i].buf != buf)
 			continue;
 		found = 1;
-		pr_err_ratelimited("diag: trying to write the same buffer buf: %pK, ctxt: %d len: %d at i: %d back to the table, proc: %d, mode: %d\n",
-				   buf, ctx, ch->tbl[i].len,
-				   i, id, driver->logging_mode);
+		pr_err_ratelimited("diag: trying to write the same buffer buf: %pK, len: %d back to the table for p: %d, t: %d, buf_num: %d proc: %d, i: %d\n",
+		buf, ch->tbl[i].len, GET_BUF_PERIPHERAL(ctx),
+		GET_BUF_TYPE(ctx), GET_BUF_NUM(ctx), id, i);
+		ch->tbl[i].buf = NULL;
+		ch->tbl[i].len = 0;
+		ch->tbl[i].ctx = 0;
 	}
-	spin_unlock_irqrestore(&ch->lock, flags);
 
-	if (found)
+	if (found) {
+		spin_unlock_irqrestore(&ch->lock, flags);
+		mutex_unlock(&driver->md_session_lock);
 		return -ENOMEM;
+	}
 
-	spin_lock_irqsave(&ch->lock, flags);
 	for (i = 0; i < ch->num_tbl_entries && !found; i++) {
 		if (ch->tbl[i].len == 0) {
 			ch->tbl[i].buf = buf;
@@ -184,6 +192,7 @@ int diag_md_write(int id, unsigned char *buf, int len, int ctx)
 		}
 	}
 	spin_unlock_irqrestore(&ch->lock, flags);
+	mutex_unlock(&driver->md_session_lock);
 
 	if (!found) {
 		pr_err_ratelimited("diag: Unable to find an empty space in table, please reduce logging rate, proc: %d\n",
@@ -229,19 +238,31 @@ int diag_md_copy_to_user(char __user *buf, int *pret, size_t buf_size,
 	uint8_t peripheral = 0;
 	struct diag_md_session_t *session_info = NULL;
 
+	if (!info)
+		return -EINVAL;
+
 	for (i = 0; i < NUM_DIAG_MD_DEV && !err; i++) {
 		ch = &diag_md[i];
 		for (j = 0; j < ch->num_tbl_entries && !err; j++) {
+			spin_lock_irqsave(&ch->lock, flags);
 			entry = &ch->tbl[j];
-			if (entry->len <= 0)
+			if (entry->len <= 0 || entry->buf == NULL) {
+				spin_unlock_irqrestore(&ch->lock, flags);
 				continue;
+			}
 			peripheral = GET_BUF_PERIPHERAL(entry->ctx);
 			/* Account for Apps data as well */
-			if (peripheral > NUM_PERIPHERALS)
+			if (peripheral > NUM_PERIPHERALS) {
+				spin_unlock_irqrestore(&ch->lock, flags);
 				goto drop_data;
+			}
+			spin_unlock_irqrestore(&ch->lock, flags);
 			session_info =
 			diag_md_session_get_peripheral(peripheral);
-			if (session_info && info &&
+			if (!session_info)
+				goto drop_data;
+
+			if (session_info &&
 				(session_info->pid != info->pid))
 				continue;
 			if ((info && (info->peripheral_mask &
