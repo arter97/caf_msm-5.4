@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2018, 2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,6 +30,7 @@
 #include "diagfwd_socket.h"
 #include "diag_mux.h"
 #include "diag_ipc_logging.h"
+#include "diag_memorydevice.h"
 
 struct data_header {
 	uint8_t control_char;
@@ -184,8 +185,11 @@ static int diag_add_hdlc_encoding(unsigned char *dest_buf, int *dest_len,
 
 static int check_bufsize_for_encoding(struct diagfwd_buf_t *buf, uint32_t len)
 {
+	int i, ctx = 0;
+	unsigned long flags;
 	uint32_t max_size = 0;
 	unsigned char *temp_buf = NULL;
+	struct diag_md_info *ch = NULL;
 
 	if (!buf || len == 0)
 		return -EINVAL;
@@ -198,15 +202,45 @@ static int check_bufsize_for_encoding(struct diagfwd_buf_t *buf, uint32_t len)
 			max_size = MAX_PERIPHERAL_HDLC_BUF_SZ;
 		}
 
+		mutex_lock(&driver->md_session_lock);
 		if (buf->len < max_size) {
+			if (driver->logging_mode == DIAG_MEMORY_DEVICE_MODE ||
+				driver->logging_mode == DIAG_MULTI_MODE) {
+				ch = &diag_md[DIAG_LOCAL_PROC];
+				if (!ch) {
+					mutex_unlock(&driver->md_session_lock);
+					return -EINVAL;
+				}
+				spin_lock_irqsave(&ch->lock, flags);
+				for (i = 0; i < ch->num_tbl_entries; i++) {
+					if (ch->tbl[i].buf == buf->data) {
+						ctx = ch->tbl[i].ctx;
+						ch->tbl[i].buf = NULL;
+						ch->tbl[i].len = 0;
+						ch->tbl[i].ctx = 0;
+						pr_err("diag: In %s,Flushed mdlog table entries before reallocating data buffer, p:%d, t:%d\n",
+						__func__,
+						GET_BUF_PERIPHERAL(ctx),
+						GET_BUF_TYPE(ctx));
+						break;
+					}
+				}
+				spin_unlock_irqrestore(&ch->lock, flags);
+			}
+
 			temp_buf = krealloc(buf->data, max_size +
 						APF_DIAG_PADDING,
 					    GFP_KERNEL);
-			if (!temp_buf)
+			if (!temp_buf) {
+				mutex_unlock(&driver->md_session_lock);
 				return -ENOMEM;
+			}
+			pr_err("diag: In %s,Reallocated data buffer: %pK with size: %d\n",
+				__func__,temp_buf, max_size);
 			buf->data = temp_buf;
 			buf->len = max_size;
 		}
+		mutex_unlock(&driver->md_session_lock);
 	}
 
 	return buf->len;
@@ -730,10 +764,12 @@ static void __diag_fwd_open(struct diagfwd_info *fwd_info)
 	if (!fwd_info->inited)
 		return;
 
-	if (fwd_info->buf_1)
-		atomic_set(&fwd_info->buf_1->in_busy, 0);
-	if (fwd_info->buf_2)
-		atomic_set(&fwd_info->buf_2->in_busy, 0);
+	if (driver->logging_mode != DIAG_USB_MODE) {
+		if (fwd_info->buf_1)
+			atomic_set(&fwd_info->buf_1->in_busy, 0);
+		if (fwd_info->buf_2)
+			atomic_set(&fwd_info->buf_2->in_busy, 0);
+	}
 
 	if (fwd_info->p_ops && fwd_info->p_ops->open)
 		fwd_info->p_ops->open(fwd_info->ctxt);
