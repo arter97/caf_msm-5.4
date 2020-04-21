@@ -22,6 +22,11 @@ enum {
 	WEST
 };
 
+#define HMSS_WEST	0x031BB000
+#define HMSS_EAST	0x035B7000
+#define HMSS_NORTH	0x039BC000
+#define HMSS_SOUTH	0x03DBE000
+
 #define FUNCTION(fname)					\
 	[msm_mux_##fname] = {				\
 		.name = #fname,				\
@@ -53,6 +58,10 @@ enum {
 		.intr_status_reg = 0x1000 * id + 0xc,	\
 		.intr_target_reg = 0x1000 * id + 0x8,	\
 		.tile = _tile,			\
+		.dir_conn_reg = _tile == WEST ? HMSS_WEST : \
+				_tile == EAST ? HMSS_EAST : \
+				_tile == NORTH ? HMSS_NORTH : \
+				HMSS_SOUTH, \
 		.mux_bit = 2,			\
 		.pull_bit = 0,			\
 		.drv_bit = 6,			\
@@ -1515,7 +1524,12 @@ static const struct msm_gpio_wakeirq_map sm8150_pdc_map[] = {
 	{ 142, 103 }, { 144, 115 }, { 147, 102 }, { 150, 107 }, { 152, 108 },
 };
 
-static const struct msm_pinctrl_soc_data sm8150_pinctrl = {
+static struct msm_dir_conn sm8150_dir_conn[] = {
+	  {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0},
+	  {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}
+};
+
+static struct msm_pinctrl_soc_data sm8150_pinctrl = {
 	.pins = sm8150_pins,
 	.npins = ARRAY_SIZE(sm8150_pins),
 	.functions = sm8150_functions,
@@ -1527,6 +1541,8 @@ static const struct msm_pinctrl_soc_data sm8150_pinctrl = {
 	.ntiles = ARRAY_SIZE(sm8150_tiles),
 	.wakeirq_map = sm8150_pdc_map,
 	.nwakeirq_map = ARRAY_SIZE(sm8150_pdc_map),
+	.dir_conn = sm8150_dir_conn,
+	.n_dir_conns = 0,
 };
 
 static int sm8150_pinctrl_probe(struct platform_device *pdev)
