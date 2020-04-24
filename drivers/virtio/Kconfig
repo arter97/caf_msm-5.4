@@ -84,6 +84,16 @@ config VIRTIO_MMIO
 
  	 If unsure, say N.
 
+config VIRTIO_MMIO_STUB
+	bool "Platform stub driver for virtio-mmio devices"
+	depends on VIRTIO_MMIO
+	select OF_DYNAMIC
+	---help---
+	 This driver makes possible hotplug for memory mapped virtio
+	 devices.
+
+	 If unsure, say N.
+
 config VIRTIO_MMIO_CMDLINE_DEVICES
 	bool "Memory mapped virtio devices parameter parsing"
 	depends on VIRTIO_MMIO
