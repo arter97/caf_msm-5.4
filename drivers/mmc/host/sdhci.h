@@ -657,6 +657,9 @@ struct sdhci_ops {
 				   dma_addr_t addr, int len, unsigned int cmd);
 	void	(*request_done)(struct sdhci_host *host,
 				struct mmc_request *mrq);
+	#if defined(CONFIG_SDC_QTI)
+	void    (*dump_vendor_regs)(struct sdhci_host *host);
+	#endif
 };
 
 #ifdef CONFIG_MMC_SDHCI_IO_ACCESSORS
