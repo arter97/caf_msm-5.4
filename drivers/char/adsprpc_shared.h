@@ -24,7 +24,7 @@
 #define FASTRPC_IOCTL_CONTROL   _IOWR('R', 12, struct fastrpc_ioctl_control)
 #define FASTRPC_IOCTL_MUNMAP_FD _IOWR('R', 13, struct fastrpc_ioctl_munmap_fd)
 #define FASTRPC_IOCTL_GET_DSP_INFO \
-		_IOWR('R', 17, struct fastrpc_ioctl_remote_dsp_capability)
+		_IOWR('R', 17, struct fastrpc_ioctl_capability)
 #define FASTRPC_IOCTL_INVOKE2   _IOWR('R', 18, struct fastrpc_ioctl_invoke2)
 
 
@@ -282,6 +282,7 @@ enum fastrpc_control_type {
 	FASTRPC_CONTROL_SMMU		=	2,
 	FASTRPC_CONTROL_KALLOC		=	3,
 	FASTRPC_CONTROL_WAKELOCK	=	4,
+	FASTRPC_CONTROL_PM		=	5,
 };
 
 struct fastrpc_ctrl_latency {
@@ -297,19 +298,25 @@ struct fastrpc_ctrl_wakelock {
 	uint32_t enable;	/* wakelock control enable */
 };
 
+struct fastrpc_ctrl_pm {
+	uint32_t timeout;	/* timeout(in ms) for PM to keep system awake */
+};
+
 struct fastrpc_ioctl_control {
 	uint32_t req;
 	union {
 		struct fastrpc_ctrl_latency lp;
 		struct fastrpc_ctrl_kalloc kalloc;
 		struct fastrpc_ctrl_wakelock wp;
+		struct fastrpc_ctrl_pm pm;
 	};
 };
 
-#define FASTRPC_MAX_DSP_ATTRIBUTES	(9)
-#define ASYNC_FASTRPC_CAP (8)
+#define FASTRPC_MAX_DSP_ATTRIBUTES	(256)
+#define FASTRPC_MAX_ATTRIBUTES	(257)
+#define ASYNC_FASTRPC_CAP (9)
 
-struct fastrpc_ioctl_remote_dsp_capability {
+struct fastrpc_ioctl_capability {
 	uint32_t domain;
 	uint32_t attribute_ID;
 	uint32_t capability;

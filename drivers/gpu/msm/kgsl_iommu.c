@@ -842,7 +842,7 @@ static void kgsl_iommu_enable_clk(struct kgsl_mmu *mmu)
 	struct kgsl_iommu *iommu = _IOMMU_PRIV(mmu);
 
 	if (!IS_ERR_OR_NULL(iommu->cx_gdsc))
-		regulator_enable(iommu->cx_gdsc);
+		WARN_ON(regulator_enable(iommu->cx_gdsc));
 
 	for (j = 0; j < KGSL_IOMMU_MAX_CLKS; j++) {
 		if (iommu->clks[j])
@@ -1084,13 +1084,15 @@ static int set_smmu_aperture(struct kgsl_device *device, int cb_num)
 {
 	int ret;
 
-	if (!qcom_scm_kgsl_set_smmu_aperture_available())
+	if (!test_bit(KGSL_MMU_SMMU_APERTURE, &device->mmu.features))
 		return 0;
 
 	ret = qcom_scm_kgsl_set_smmu_aperture(cb_num);
+	if (ret == -EBUSY)
+		ret = qcom_scm_kgsl_set_smmu_aperture(cb_num);
 
 	if (ret)
-		dev_err(device->dev, "Unable to set the SMMU aperture: %d\n",
+		dev_err(device->dev, "Unable to set the SMMU aperture: %d. The aperture needs to be set to use per-process pagetables\n",
 			ret);
 
 	return ret;
@@ -1249,12 +1251,17 @@ static int _init_secure_pt(struct kgsl_mmu *mmu, struct kgsl_pagetable *pt)
 	if (ret) {
 		dev_err(device->dev, "set DOMAIN_ATTR_SECURE_VMID failed: %d\n",
 			ret);
-		goto done;
+		_free_pt(ctx, pt);
+		return ret;
 	}
 
 	_enable_gpuhtw_llc(mmu, iommu_pt->domain);
 
 	ret = _attach_pt(iommu_pt, ctx);
+	if (ret) {
+		_free_pt(ctx, pt);
+		return ret;
+	}
 
 	iommu_set_fault_handler(iommu_pt->domain,
 				kgsl_iommu_fault_handler, pt);
@@ -1265,10 +1272,7 @@ static int _init_secure_pt(struct kgsl_mmu *mmu, struct kgsl_pagetable *pt)
 			kgsl_iommu_map_secure_global(mmu, &md->memdesc);
 	}
 
-done:
-	if (ret)
-		_free_pt(ctx, pt);
-	return ret;
+	return 0;
 }
 #else
 static int _init_secure_pt(struct kgsl_mmu *mmu, struct kgsl_pagetable *pt)
@@ -1381,7 +1385,8 @@ static struct kgsl_pagetable *kgsl_iommu_getpagetable(struct kgsl_mmu *mmu,
 {
 	struct kgsl_pagetable *pt;
 
-	if (!kgsl_mmu_is_perprocess(mmu) && (name != KGSL_MMU_SECURE_PT)) {
+	if (!kgsl_mmu_is_perprocess(mmu) && (name != KGSL_MMU_SECURE_PT) &&
+		(name != KGSL_MMU_GLOBAL_LPAC_PT)) {
 		name = KGSL_MMU_GLOBAL_PT;
 		if (mmu->defaultpagetable != NULL)
 			return mmu->defaultpagetable;
@@ -2412,6 +2417,7 @@ static int kgsl_iommu_probe_child(struct kgsl_device *device,
 	struct device_node *node = of_find_node_by_name(parent, name);
 	struct platform_device *pdev;
 	struct device_node *phandle;
+	int ret;
 
 	if (!node)
 		return -ENOENT;
@@ -2430,10 +2436,10 @@ static int kgsl_iommu_probe_child(struct kgsl_device *device,
 
 	of_node_put(phandle);
 
-	of_dma_configure(&pdev->dev, node, true);
+	ret = of_dma_configure(&pdev->dev, node, true);
 
 	of_node_put(node);
-	return 0;
+	return ret;
 }
 
 static void iommu_probe_lpac_context(struct kgsl_device *device,

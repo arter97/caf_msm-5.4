@@ -21,6 +21,7 @@
 #include "kgsl_bus.h"
 #include "kgsl_device.h"
 #include "kgsl_gmu.h"
+#include "kgsl_trace.h"
 #include "kgsl_util.h"
 
 struct gmu_iommu_context {
@@ -240,7 +241,7 @@ static struct gmu_memdesc *allocate_gmu_kmem(struct gmu_device *gmu,
 
 	case GMU_NONCACHED_USER:
 		/* Set start address for first uncached user alloc */
-		if (next_uncached_kernel_alloc == 0)
+		if (next_uncached_user_alloc == 0)
 			next_uncached_user_alloc = gmu->vma[mem_type].start;
 
 		if (addr == 0)
@@ -288,9 +289,13 @@ static int gmu_iommu_cb_probe(struct gmu_device *gmu,
 		return -ENODEV;
 
 	pdev = of_find_device_by_node(node);
-	of_dma_configure(&pdev->dev, node, true);
-
+	ret = of_dma_configure(&pdev->dev, node, true);
 	of_node_put(node);
+
+	if (ret) {
+		platform_device_put(pdev);
+		return ret;
+	}
 
 	ctx->pdev = pdev;
 	ctx->domain = iommu_domain_alloc(&platform_bus_type);
@@ -1260,12 +1265,22 @@ static int gmu_bus_set(struct kgsl_device *device, int buslevel,
 	u32 ab)
 {
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
-	int ret;
+	int ret = 0;
 
-	ret = gmu_core_dcvs_set(device, INVALID_DCVS_IDX, buslevel);
+	if (buslevel != pwr->cur_buslevel) {
+		ret = gmu_core_dcvs_set(device, INVALID_DCVS_IDX, buslevel);
+		if (ret)
+			return ret;
 
-	if (!ret)
+		pwr->cur_buslevel = buslevel;
+
+		trace_kgsl_buslevel(device, pwr->active_pwrlevel, buslevel);
+	}
+
+	if (ab != pwr->cur_ab) {
 		icc_set_bw(pwr->icc_path, MBps_to_icc(ab), 0);
+		pwr->cur_ab = ab;
+	}
 
 	return ret;
 }
@@ -1304,14 +1319,6 @@ static int gmu_probe(struct kgsl_device *device, struct platform_device *pdev)
 		return ret;
 
 	gmu->num_clks = ret;
-
-	/* Get a pointer to the GMU clock */
-	gmu->gmu_clk = kgsl_of_clk_by_name(gmu->clks, gmu->num_clks, "gmu_clk");
-	if (!gmu->gmu_clk) {
-		dev_err(&pdev->dev, "Couldn't get gmu_clk\n");
-		ret = -ENODEV;
-		goto error;
-	}
 
 	/* Set up GMU IOMMU and shared memory with GMU */
 	ret = gmu_iommu_init(gmu, pdev->dev.of_node);
@@ -1402,14 +1409,32 @@ error:
 	return ret;
 }
 
+static int gmu_clk_set_rate(struct gmu_device *gmu, const char *id,
+	unsigned long rate)
+{
+	struct clk *clk;
+
+	clk = kgsl_of_clk_by_name(gmu->clks, gmu->num_clks, id);
+	if (!clk)
+		return -ENODEV;
+
+	return clk_set_rate(clk, rate);
+}
+
 static int gmu_enable_clks(struct kgsl_device *device)
 {
 	struct gmu_device *gmu = KGSL_GMU_DEVICE(device);
 	int ret;
 
-	ret = clk_set_rate(gmu->gmu_clk, GMU_FREQUENCY);
+	ret = gmu_clk_set_rate(gmu, "gmu_clk", GMU_FREQUENCY);
 	if (ret) {
-		dev_err(&gmu->pdev->dev, "Unable to set GMU clock\n");
+		dev_err(&gmu->pdev->dev, "Unable to set the GMU clock\n");
+		return ret;
+	}
+
+	ret = gmu_clk_set_rate(gmu, "hub_clk", 150000000);
+	if (ret && ret != ENODEV) {
+		dev_err(&gmu->pdev->dev, "Unable to set the HUB clock\n");
 		return ret;
 	}
 

@@ -932,17 +932,17 @@ uclamp_eff_get(struct task_struct *p, enum uclamp_id clamp_id)
 	return uc_req;
 }
 
-unsigned int uclamp_eff_value(struct task_struct *p, enum uclamp_id clamp_id)
+unsigned long uclamp_eff_value(struct task_struct *p, enum uclamp_id clamp_id)
 {
 	struct uclamp_se uc_eff;
 
 	/* Task currently refcounted: use back-annotated (effective) value */
 	if (p->uclamp[clamp_id].active)
-		return p->uclamp[clamp_id].value;
+		return (unsigned long)p->uclamp[clamp_id].value;
 
 	uc_eff = uclamp_eff_get(p, clamp_id);
 
-	return uc_eff.value;
+	return (unsigned long)uc_eff.value;
 }
 
 /*
@@ -3792,28 +3792,32 @@ static void sched_tick_remote(struct work_struct *work)
 	 * statistics and checks timeslices in a time-independent way, regardless
 	 * of when exactly it is running.
 	 */
-	if (idle_cpu(cpu) || !tick_nohz_tick_stopped_cpu(cpu))
+	if (!tick_nohz_tick_stopped_cpu(cpu))
 		goto out_requeue;
 
 	rq_lock_irq(rq, &rf);
 	curr = rq->curr;
-	if (is_idle_task(curr) || cpu_is_offline(cpu))
+	if (cpu_is_offline(cpu))
 		goto out_unlock;
 
+	curr = rq->curr;
 	update_rq_clock(rq);
-	delta = rq_clock_task(rq) - curr->se.exec_start;
 
-	/*
-	 * Make sure the next tick runs within a reasonable
-	 * amount of time.
-	 */
-	WARN_ON_ONCE(delta > (u64)NSEC_PER_SEC * 3);
+	if (!is_idle_task(curr)) {
+		/*
+		 * Make sure the next tick runs within a reasonable
+		 * amount of time.
+		 */
+		delta = rq_clock_task(rq) - curr->se.exec_start;
+		WARN_ON_ONCE(delta > (u64)NSEC_PER_SEC * 3);
+	}
 	curr->sched_class->task_tick(rq, curr, 0);
 
+	calc_load_nohz_remote(rq);
 out_unlock:
 	rq_unlock_irq(rq, &rf);
-
 out_requeue:
+
 	/*
 	 * Run the remote tick once per second (1Hz). This arbitrary
 	 * frequency is large enough to avoid overload but short enough
@@ -5627,8 +5631,10 @@ unsigned int sched_lib_mask_force;
 bool is_sched_lib_based_app(pid_t pid)
 {
 	const char *name = NULL;
+	char *libname, *lib_list;
 	struct vm_area_struct *vma;
 	char path_buf[LIB_PATH_LENGTH];
+	char tmp_lib_name[LIB_PATH_LENGTH];
 	bool found = false;
 	struct task_struct *p;
 	struct mm_struct *mm;
@@ -5660,10 +5666,15 @@ bool is_sched_lib_based_app(pid_t pid)
 			if (IS_ERR(name))
 				goto release_sem;
 
-			if (strnstr(name, sched_lib_name,
+			strlcpy(tmp_lib_name, sched_lib_name, LIB_PATH_LENGTH);
+			lib_list = tmp_lib_name;
+			while ((libname = strsep(&lib_list, ","))) {
+				libname = skip_spaces(libname);
+				if (strnstr(name, libname,
 					strnlen(name, LIB_PATH_LENGTH))) {
-				found = true;
-				break;
+					found = true;
+					goto release_sem;
+				}
 			}
 		}
 	}
@@ -6972,6 +6983,8 @@ void __init sched_init(void)
 
 	init_uclamp();
 
+	walt_init_sched_boost(&root_task_group);
+
 	scheduler_running = 1;
 }
 
@@ -7178,38 +7191,6 @@ static inline struct task_group *css_tg(struct cgroup_subsys_state *css)
 }
 
 #if defined(CONFIG_SCHED_WALT) && defined(CONFIG_UCLAMP_TASK_GROUP)
-static inline void walt_init_sched_boost(struct task_group *tg)
-{
-	tg->sched_boost_no_override = false;
-	tg->sched_boost_enabled = true;
-	tg->colocate = false;
-	tg->colocate_update_disabled = false;
-}
-
-void update_cgroup_boost_settings(void)
-{
-	struct task_group *tg;
-
-	rcu_read_lock();
-	list_for_each_entry_rcu(tg, &task_groups, list) {
-		if (tg->sched_boost_no_override)
-			continue;
-
-		tg->sched_boost_enabled = false;
-	}
-	rcu_read_unlock();
-}
-
-void restore_cgroup_boost_settings(void)
-{
-	struct task_group *tg;
-
-	rcu_read_lock();
-	list_for_each_entry_rcu(tg, &task_groups, list)
-		tg->sched_boost_enabled = true;
-	rcu_read_unlock();
-}
-
 static void walt_schedgp_attach(struct cgroup_taskset *tset)
 {
 	struct task_struct *task;
@@ -7265,7 +7246,6 @@ static int sched_colocate_write(struct cgroup_subsys_state *css,
 	return 0;
 }
 #else
-static inline void walt_init_sched_boost(struct task_group *tg) { }
 static void walt_schedgp_attach(struct cgroup_taskset *tset) { }
 #endif /* CONFIG_SCHED_WALT */
 
@@ -7410,8 +7390,15 @@ void sched_move_task(struct task_struct *tsk)
 
 	if (queued)
 		enqueue_task(rq, tsk, queue_flags);
-	if (running)
+	if (running) {
 		set_next_task(rq, tsk);
+		/*
+		 * After changing group, the running task may have joined a
+		 * throttled one but it's still the running task. Trigger a
+		 * resched to make sure that task can still run.
+		 */
+		resched_curr(rq);
+	}
 
 	task_rq_unlock(rq, tsk, &rf);
 }
@@ -7605,7 +7592,7 @@ capacity_from_percent(char *buf)
 					     &req.percent);
 		if (req.ret)
 			return req;
-		if (req.percent > UCLAMP_PERCENT_SCALE) {
+		if ((u64)req.percent > UCLAMP_PERCENT_SCALE) {
 			req.ret = -ERANGE;
 			return req;
 		}

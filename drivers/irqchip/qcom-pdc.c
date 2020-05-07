@@ -539,3 +539,4 @@ fail:
 IRQCHIP_DECLARE(pdc_sdm845, "qcom,sdm845-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_sm8150, "qcom,sm8150-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_lahaina, "qcom,lahaina-pdc", qcom_pdc_init);
+IRQCHIP_DECLARE(pdc_shima, "qcom,shima-pdc", qcom_pdc_init);

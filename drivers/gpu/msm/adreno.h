@@ -189,6 +189,7 @@ enum adreno_gpurev {
 	ADRENO_REV_A615 = 615,
 	ADRENO_REV_A616 = 616,
 	ADRENO_REV_A618 = 618,
+	ADRENO_REV_A619 = 619,
 	ADRENO_REV_A620 = 620,
 	ADRENO_REV_A630 = 630,
 	ADRENO_REV_A640 = 640,
@@ -339,6 +340,11 @@ struct adreno_reglist {
 struct adreno_gpu_core {
 	enum adreno_gpurev gpurev;
 	unsigned int core, major, minor, patchid;
+	/**
+	 * @compatible: If specified, use the compatible string to match the
+	 * device
+	 */
+	const char *compatible;
 	unsigned long features;
 	struct adreno_gpudev *gpudev;
 	unsigned long gmem_base;
@@ -416,7 +422,6 @@ struct adreno_gpu_core {
  * @lm_threshold_count: register value for counter for lm threshold breakin
  * @lm_threshold_cross: number of current peaks exceeding threshold
  * @ifpc_count: Number of times the GPU went into IFPC
- * @speed_bin: Indicate which power level set to use
  * @highest_bank_bit: Value of the highest bank bit
  * @csdev: Pointer to a coresight device (if applicable)
  * @gpmu_throttle_counters - counteers for number of throttled clocks
@@ -428,7 +433,6 @@ struct adreno_gpu_core {
  * @gpuhtw_llc_slice: GPU pagetables system cache slice descriptor
  * @gpuhtw_llc_slice_enable: To enable the GPUHTW system cache slice or not
  * @zap_loaded: Used to track if zap was successfully loaded or not
- * @soc_hw_rev: Indicate which SOC hardware revision to use
  */
 struct adreno_device {
 	struct kgsl_device dev;    /* Must be first field in this struct */
@@ -499,7 +503,6 @@ struct adreno_device {
 	uint32_t lm_threshold_cross;
 	uint32_t ifpc_count;
 
-	unsigned int speed_bin;
 	unsigned int highest_bank_bit;
 	unsigned int quirks;
 
@@ -515,7 +518,6 @@ struct adreno_device {
 	void *gpuhtw_llc_slice;
 	bool gpuhtw_llc_slice_enable;
 	unsigned int zap_loaded;
-	unsigned int soc_hw_rev;
 	/**
 	 * @critpkts: Memory descriptor for 5xx critical packets if applicable
 	 */
@@ -1013,6 +1015,7 @@ static inline int adreno_is_a660v1(struct adreno_device *adreno_dev)
 ADRENO_TARGET(a610, ADRENO_REV_A610)
 ADRENO_TARGET(a612, ADRENO_REV_A612)
 ADRENO_TARGET(a618, ADRENO_REV_A618)
+ADRENO_TARGET(a619, ADRENO_REV_A619)
 ADRENO_TARGET(a620, ADRENO_REV_A620)
 ADRENO_TARGET(a630, ADRENO_REV_A630)
 ADRENO_TARGET(a640, ADRENO_REV_A640)
@@ -1022,14 +1025,14 @@ ADRENO_TARGET(a680, ADRENO_REV_A680)
 
 /*
  * All the derived chipsets from A615 needs to be added to this
- * list such as A616, A618 etc.
+ * list such as A616, A618, A619 etc.
  */
 static inline int adreno_is_a615_family(struct adreno_device *adreno_dev)
 {
 	unsigned int rev = ADRENO_GPUREV(adreno_dev);
 
 	return (rev == ADRENO_REV_A615 || rev == ADRENO_REV_A616 ||
-			rev == ADRENO_REV_A618);
+			rev == ADRENO_REV_A618 || rev == ADRENO_REV_A619);
 }
 
 /*
@@ -1301,7 +1304,9 @@ void adreno_context_debugfs_init(struct adreno_device *adreno_dev,
 static inline void adreno_debugfs_init(struct adreno_device *adreno_dev) { }
 static inline void adreno_context_debugfs_init(struct adreno_device *device,
 						struct adreno_context *context)
-						{ }
+{
+	context->debug_root = NULL;
+}
 #endif
 
 /**
@@ -1468,29 +1473,24 @@ static inline bool adreno_support_64bit(struct adreno_device *adreno_dev)
 static inline void adreno_ringbuffer_set_global(
 		struct adreno_device *adreno_dev, int name)
 {
-	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
-
-	kgsl_sharedmem_writel(device,
-		adreno_dev->ringbuffers[0].pagetable_desc,
+	kgsl_sharedmem_writel(adreno_dev->ringbuffers[0].pagetable_desc,
 		PT_INFO_OFFSET(current_global_ptname), name);
 }
 
 static inline void adreno_ringbuffer_set_pagetable(struct adreno_ringbuffer *rb,
 		struct kgsl_pagetable *pt)
 {
-	struct adreno_device *adreno_dev = ADRENO_RB_DEVICE(rb);
-	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	unsigned long flags;
 
 	spin_lock_irqsave(&rb->preempt_lock, flags);
 
-	kgsl_sharedmem_writel(device, rb->pagetable_desc,
+	kgsl_sharedmem_writel(rb->pagetable_desc,
 		PT_INFO_OFFSET(current_rb_ptname), pt->name);
 
-	kgsl_sharedmem_writeq(device, rb->pagetable_desc,
+	kgsl_sharedmem_writeq(rb->pagetable_desc,
 		PT_INFO_OFFSET(ttbr0), kgsl_mmu_pagetable_get_ttbr0(pt));
 
-	kgsl_sharedmem_writel(device, rb->pagetable_desc,
+	kgsl_sharedmem_writel(rb->pagetable_desc,
 		PT_INFO_OFFSET(contextidr),
 		kgsl_mmu_pagetable_get_contextidr(pt));
 

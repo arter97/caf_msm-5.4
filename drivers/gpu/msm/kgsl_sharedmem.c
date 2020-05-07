@@ -703,7 +703,7 @@ void kgsl_memdesc_init(struct kgsl_device *device,
 		memdesc->priv |= KGSL_MEMDESC_SECURE;
 
 	memdesc->flags = flags;
-	memdesc->dev = device->dev->parent;
+	memdesc->dev = &device->pdev->dev;
 
 	align = max_t(unsigned int,
 		(memdesc->flags & KGSL_MEMALIGN_MASK) >> KGSL_MEMALIGN_SHIFT,
@@ -813,38 +813,25 @@ kgsl_sharedmem_readl(const struct kgsl_memdesc *memdesc,
 	return 0;
 }
 
-int
-kgsl_sharedmem_writel(struct kgsl_device *device,
-			const struct kgsl_memdesc *memdesc,
+void
+kgsl_sharedmem_writel(const struct kgsl_memdesc *memdesc,
 			uint64_t offsetbytes,
 			uint32_t src)
 {
-	uint32_t *dst;
-
 	/* Quietly return if the memdesc isn't valid */
-	if (IS_ERR_OR_NULL(memdesc))
-		return -EINVAL;
+	if (IS_ERR_OR_NULL(memdesc) || WARN_ON(!memdesc->hostptr))
+		return;
 
-	if (WARN_ON(memdesc->hostptr == NULL))
-		return -EINVAL;
+	if (WARN_ON(!IS_ALIGNED(offsetbytes, sizeof(u32))))
+		return;
 
-	WARN_ON(offsetbytes % sizeof(uint32_t) != 0);
-	if (offsetbytes % sizeof(uint32_t) != 0)
-		return -EINVAL;
+	if (WARN_ON(offsetbytes > (memdesc->size - sizeof(u32))))
+		return;
 
-	WARN_ON(offsetbytes > (memdesc->size - sizeof(uint32_t)));
-	if (offsetbytes > (memdesc->size - sizeof(uint32_t)))
-		return -ERANGE;
-	dst = (uint32_t *)(memdesc->hostptr + offsetbytes);
-	*dst = src;
+	*((u32 *) (memdesc->hostptr + offsetbytes)) = src;
 
-	/*
-	 * We are writing to shared memory between CPU and GPU.
-	 * Make sure write above is posted immediately
-	 */
+	/* Make sure the write is posted before continuing */
 	wmb();
-
-	return 0;
 }
 
 int
@@ -876,49 +863,25 @@ kgsl_sharedmem_readq(const struct kgsl_memdesc *memdesc,
 	return 0;
 }
 
-int
-kgsl_sharedmem_writeq(struct kgsl_device *device,
-			const struct kgsl_memdesc *memdesc,
+void
+kgsl_sharedmem_writeq(const struct kgsl_memdesc *memdesc,
 			uint64_t offsetbytes,
 			uint64_t src)
 {
-	uint64_t *dst;
+	/* Quietly return if the memdesc isn't valid */
+	if (IS_ERR_OR_NULL(memdesc) || WARN_ON(!memdesc->hostptr))
+		return;
 
-	if (WARN_ON(memdesc == NULL || memdesc->hostptr == NULL))
-		return -EINVAL;
+	if (WARN_ON(!IS_ALIGNED(offsetbytes, sizeof(u64))))
+		return;
 
-	WARN_ON(offsetbytes % sizeof(uint32_t) != 0);
-	if (offsetbytes % sizeof(uint32_t) != 0)
-		return -EINVAL;
+	if (WARN_ON(offsetbytes > (memdesc->size - sizeof(u64))))
+		return;
 
-	WARN_ON(offsetbytes > (memdesc->size - sizeof(uint32_t)));
-	if (offsetbytes > (memdesc->size - sizeof(uint32_t)))
-		return -ERANGE;
-	dst = (uint64_t *)(memdesc->hostptr + offsetbytes);
-	*dst = src;
+	*((u64 *) (memdesc->hostptr + offsetbytes)) = src;
 
-	/*
-	 * We are writing to shared memory between CPU and GPU.
-	 * Make sure write above is posted immediately
-	 */
+	/* Make sure the write is posted before continuing */
 	wmb();
-
-	return 0;
-}
-
-int
-kgsl_sharedmem_set(struct kgsl_device *device,
-		const struct kgsl_memdesc *memdesc, uint64_t offsetbytes,
-		unsigned int value, uint64_t sizebytes)
-{
-	if (WARN_ON(memdesc == NULL || memdesc->hostptr == NULL))
-		return -EINVAL;
-
-	if (WARN_ON(offsetbytes + sizebytes > memdesc->size))
-		return -EINVAL;
-
-	memset(memdesc->hostptr + offsetbytes, value, sizebytes);
-	return 0;
 }
 
 static const char * const memtype_str[] = {
@@ -1194,7 +1157,7 @@ static int kgsl_alloc_contiguous(struct kgsl_device *device,
 	memdesc->priv |= priv;
 
 	memdesc->ops = &kgsl_contiguous_ops;
-	ret = _kgsl_alloc_contiguous(device->dev->parent, memdesc, size, 0);
+	ret = _kgsl_alloc_contiguous(&device->pdev->dev, memdesc, size, 0);
 
 	if (!ret)
 		KGSL_STATS_ADD(size, &kgsl_driver.stats.coherent,
