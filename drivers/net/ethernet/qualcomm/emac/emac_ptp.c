@@ -368,7 +368,7 @@ static void rtc_ns_sync_pps_in(struct emac_hw *hw)
 
 static void emac_ptp_rtc_ns_sync(struct emac_hw *hw)
 {
-	unsigned long flag;
+	unsigned long flag = 0;
 
 	spin_lock_irqsave(&hw->ptp_lock, flag);
 	rtc_ns_sync_pps_in(hw);
@@ -379,7 +379,7 @@ int emac_ptp_config(struct emac_hw *hw)
 {
 	struct timespec ts;
 	int ret = 0;
-	unsigned long flag;
+	unsigned long flag = 0;
 
 	spin_lock_irqsave(&hw->ptp_lock, flag);
 
@@ -410,7 +410,7 @@ unlock_out:
 int emac_ptp_stop(struct emac_hw *hw)
 {
 	int ret = 0;
-	unsigned long flag;
+	unsigned long flag = 0;
 
 	spin_lock_irqsave(&hw->ptp_lock, flag);
 
@@ -427,7 +427,7 @@ int emac_ptp_stop(struct emac_hw *hw)
 
 int emac_ptp_set_linkspeed(struct emac_hw *hw, u32 link_speed)
 {
-	unsigned long flag;
+	unsigned long flag = 0;
 
 	spin_lock_irqsave(&hw->ptp_lock, flag);
 	emac_reg_update32(hw, EMAC_1588, EMAC_P1588_CTRL_REG, ETH_MODE_SW,
@@ -457,7 +457,7 @@ void emac_ptp_intr(struct emac_hw *hw)
 static int emac_ptp_settime(struct emac_hw *hw, const struct timespec *ts)
 {
 	int ret = 0;
-	unsigned long flag;
+	unsigned long flag = 0;
 
 	spin_lock_irqsave(&hw->ptp_lock, flag);
 	if (!TEST_FLAG(hw, HW_PTP_EN))
@@ -472,7 +472,7 @@ static int emac_ptp_settime(struct emac_hw *hw, const struct timespec *ts)
 static int emac_ptp_gettime(struct emac_hw *hw, struct timespec *ts)
 {
 	int ret = 0;
-	unsigned long flag;
+	unsigned long flag = 0;
 
 	spin_lock_irqsave(&hw->ptp_lock, flag);
 	if (!TEST_FLAG(hw, HW_PTP_EN))
@@ -487,7 +487,7 @@ static int emac_ptp_gettime(struct emac_hw *hw, struct timespec *ts)
 int emac_ptp_adjtime(struct emac_hw *hw, s64 delta)
 {
 	int ret = 0;
-	unsigned long flag;
+	unsigned long flag = 0;
 
 	spin_lock_irqsave(&hw->ptp_lock, flag);
 	if (!TEST_FLAG(hw, HW_PTP_EN))
@@ -548,10 +548,11 @@ static ssize_t emac_ptp_sysfs_tstamp_set(struct device *dev,
 {
 	struct emac_adapter *adpt = netdev_priv(to_net_dev(dev));
 	struct timespec ts;
-	int ret;
+	int ret = -1;
 
 	getnstimeofday(&ts);
-	ret = emac_ptp_settime(&adpt->hw, &ts);
+	if (adpt != NULL)
+		ret = emac_ptp_settime(&adpt->hw, &ts);
 	if (!ret)
 		ret = count;
 
