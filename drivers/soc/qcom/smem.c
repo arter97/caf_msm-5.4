@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015, Sony Mobile Communications AB.
- * Copyright (c) 2012-2013, 2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2019-2020 The Linux Foundation. All rights reserved.
  */
 
 #include <linux/hwspinlock.h>
@@ -1050,10 +1050,51 @@ static int qcom_smem_remove(struct platform_device *pdev)
 	platform_device_unregister(__smem->socinfo);
 
 	hwspin_lock_free(__smem->hwlock);
+	/*
+	 * In case of Hibernation Restore __smem object is still valid
+	 * and we call probe again so same object get allocated again
+	 * that result into possible memory leak, hence explicitly freeing
+	 * it here.
+	 */
+	devm_kfree(&pdev->dev, __smem);
 	__smem = NULL;
 
 	return 0;
 }
+
+static int qcom_smem_freeze(struct device *dev)
+{
+	struct platform_device *pdev = container_of(dev, struct
+					platform_device, dev);
+	dev_dbg(dev, "%s\n", __func__);
+
+	qcom_smem_remove(pdev);
+
+	return 0;
+}
+
+static int qcom_smem_restore(struct device *dev)
+{
+	int ret = 0;
+	struct platform_device *pdev = container_of(dev, struct
+					platform_device, dev);
+	dev_dbg(dev, "%s\n", __func__);
+
+	/*
+	 * SMEM related information has to fetched again
+	 * during resuming from Hibernation, Hence call probe.
+	 */
+	ret = qcom_smem_probe(pdev);
+	if (ret)
+		dev_err(dev, "Error getting SMEM information");
+	return ret;
+}
+
+static const struct dev_pm_ops qcom_smem_pm_ops = {
+	.freeze_late = qcom_smem_freeze,
+	.restore_early = qcom_smem_restore,
+	.thaw_early = qcom_smem_restore,
+};
 
 static const struct of_device_id qcom_smem_of_match[] = {
 	{ .compatible = "qcom,smem" },
@@ -1068,6 +1109,7 @@ static struct platform_driver qcom_smem_driver = {
 		.name = "qcom-smem",
 		.of_match_table = qcom_smem_of_match,
 		.suppress_bind_attrs = true,
+		.pm = &qcom_smem_pm_ops,
 	},
 };
 
