@@ -44,4 +44,5 @@ static inline int in_exception_text(unsigned long ptr)
 }
 
 static inline void get_timer_count_hook_init(void) {}
+static inline void get_timer_freq_hook_init(void) {}
 #endif
