@@ -22,6 +22,16 @@ config INTERCONNECT_QCOM_SDM845
 	  This is a driver for the Qualcomm Network-on-Chip on sdm845-based
 	  platforms.
 
+config INTERCONNECT_QCOM_SM8150
+	tristate "SM8150 interconnect driver"
+	depends on INTERCONNECT_QCOM
+	depends on QCOM_RPMH && QCOM_COMMAND_DB && OF
+	select INTERCONNECT_QCOM_BCM_VOTER
+	select INTERCONNECT_QCOM_RPMH
+	help
+	  This is a driver for the Qualcomm Technologies, Inc. Network-on-Chip
+	  on sm8150-based platforms.
+
 config INTERCONNECT_QCOM_LAHAINA
 	tristate "LAHAINA interconnect driver"
 	depends on INTERCONNECT_QCOM
