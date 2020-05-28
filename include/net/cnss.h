@@ -106,7 +106,10 @@ struct cnss_platform_cap {
 enum cnss_driver_status {
 	CNSS_UNINITIALIZED,
 	CNSS_INITIALIZED,
-	CNSS_LOAD_UNLOAD
+	CNSS_LOAD_UNLOAD,
+	CNSS_RECOVERY,
+	CNSS_FW_DOWN,
+	CNSS_SSR_FAIL,
 };
 
 enum cnss_runtime_request {
