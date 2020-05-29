@@ -23,7 +23,7 @@
 #define HPHR_PA_DISABLE (0x01 << 2)
 #define SPKR_PA_DISABLE (0x01 << 3)
 
-#define NUM_DECIMATORS	2
+#define NUM_DECIMATORS	3
 
 #define MAX_REGULATOR	2
 
