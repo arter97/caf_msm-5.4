@@ -139,7 +139,7 @@ static int bt_vreg_disable(struct bt_power_vreg_data *vreg)
 	if (!vreg)
 		return rc;
 
-	pr_debug("vreg_disable for : %s\n", __func__, vreg->name);
+	pr_debug("%s: vreg_disable for : %s\n", __func__, vreg->name);
 
 	if (vreg->is_enabled) {
 		rc = regulator_disable(vreg->reg);
@@ -402,15 +402,19 @@ static int bt_dt_parse_vreg_info(struct device *dev,
 			vreg->min_vol = be32_to_cpup(&prop[0]);
 			vreg->max_vol = be32_to_cpup(&prop[1]);
 			vreg->load_curr = be32_to_cpup(&prop[2]);
-			vreg->is_retention_supp = be32_to_cpup(&prop[4]);
+			vreg->is_retention_supp = be32_to_cpup(&prop[3]);
 		}
 
 		pr_debug("%s: Got regulator: %s, min_vol: %u, max_vol: %u, load_curr: %u,is_retention_supp: %u\n",
 			__func__, vreg->name, vreg->min_vol, vreg->max_vol,
 			vreg->load_curr, vreg->is_retention_supp);
-	} else
+	} else {
 		pr_info("%s: %s is not provided in device tree\n",
 			__func__, vreg_name);
+		/* do not set voltage if vreg is not in device tree */
+		vreg->min_vol = 0;
+		vreg->max_vol = 0;
+	}
 
 	return 0;
 }
