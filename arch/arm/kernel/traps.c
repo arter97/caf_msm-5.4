@@ -756,12 +756,13 @@ late_initcall(arm_mrc_hook_init);
 
 #endif
 
-static int get_pct_trap(struct pt_regs *regs, unsigned int instr)
+static int get_timer_count_trap(struct pt_regs *regs, unsigned int instr)
 {
-	u64 cntpct;
+	u64 cval;
 	unsigned int res;
 	int rd = (instr >> 12) & 0xF;
 	int rn =  (instr >> 16) & 0xF;
+	int read_virtual = (instr >> 4) & 1;
 
 	res = arm_check_condition(instr, regs->ARM_cpsr);
 	if (res == ARM_OPCODE_CONDTEST_FAIL) {
@@ -771,26 +772,27 @@ static int get_pct_trap(struct pt_regs *regs, unsigned int instr)
 
 	if (rd == 15 || rn == 15)
 		return 1;
-	cntpct = arch_counter_get_cntpct();
-	regs->uregs[rd] = cntpct;
-	regs->uregs[rn] = cntpct >> 32;
+	cval = read_virtual ?
+		arch_counter_get_cntvct() : arch_counter_get_cntpct();
+	regs->uregs[rd] = cval;
+	regs->uregs[rn] = cval >> 32;
 	regs->ARM_pc += 4;
 	return 0;
 }
 
-static struct undef_hook get_pct_hook = {
-	.instr_mask	= 0x0ff00fff,
+static struct undef_hook get_timer_count_hook = {
+	.instr_mask	= 0x0ff00fef,
 	.instr_val	= 0x0c500f0e,
 	.cpsr_mask	= MODE_MASK,
 	.cpsr_val	= USR_MODE,
-	.fn		= get_pct_trap,
+	.fn		= get_timer_count_trap,
 };
 
-void get_pct_hook_init(void)
+void get_timer_count_hook_init(void)
 {
-	register_undef_hook(&get_pct_hook);
+	register_undef_hook(&get_timer_count_hook);
 }
-EXPORT_SYMBOL(get_pct_hook_init);
+EXPORT_SYMBOL(get_timer_count_hook_init);
 
 void __bad_xchg(volatile void *ptr, int size)
 {
@@ -799,6 +801,41 @@ void __bad_xchg(volatile void *ptr, int size)
 	BUG();
 }
 EXPORT_SYMBOL(__bad_xchg);
+
+static int get_freq_trap(struct pt_regs *regs, unsigned int instr)
+{
+	u32 fval;
+	unsigned int res;
+	int rd = (instr >> 12) & 0xF;
+
+	res = arm_check_condition(instr, regs->ARM_cpsr);
+	if (res == ARM_OPCODE_CONDTEST_FAIL) {
+		regs->ARM_pc += 4;
+		return 0;
+	}
+
+	if (rd == 15)
+		return 1;
+
+	fval = arch_timer_get_cntfrq();
+	regs->uregs[rd] = fval;
+	regs->ARM_pc += 4;
+	return 0;
+}
+
+static struct undef_hook get_freq_hook = {
+	.instr_mask	= 0x0fff0fff,
+	.instr_val	= 0x0e1e0f10,
+	.cpsr_mask	= MODE_MASK,
+	.cpsr_val	= USR_MODE,
+	.fn		= get_freq_trap,
+};
+
+void get_timer_freq_hook_init(void)
+{
+	register_undef_hook(&get_freq_hook);
+}
+EXPORT_SYMBOL(get_timer_freq_hook_init);
 
 /*
  * A data abort trap was taken, but we did not handle the instruction.
