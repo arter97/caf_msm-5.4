@@ -719,6 +719,64 @@ bad_len:
 	return -EPERM;
 }
 
+static int __check_free_space(uint32_t needed_bin, uint32_t mem_size)
+{
+	struct ipa_hdr_tbl *htbl = &ipa_ctx->hdr_tbl;
+	struct ipa_hdr_offset_entry *off_entry = NULL;
+	struct ipa_hdr_offset_entry *off_next = NULL;
+	struct ipa_hdr_entry *entry;
+	uint32_t available_sz = 0;
+	uint32_t pos = 0, i;
+
+	if (htbl->end + ipa_hdr_bin_sz[needed_bin] < mem_size)
+		return 0;
+
+	/* Clear reserved memory in free lists */
+	for (i = 0; i < IPA_HDR_BIN_MAX; i++) {
+		IPADBG("clearing free list of bin %d\n", i);
+		list_for_each_entry_safe(off_entry, off_next,
+				&htbl->head_free_offset_list[i],
+				link) {
+			IPADBG("clearing ofst bin %d ofst %d\n",
+				off_entry->bin, off_entry->offset);
+			available_sz += ipa_hdr_bin_sz[off_entry->bin];
+			list_del(&off_entry->link);
+			kmem_cache_free(ipa_ctx->hdr_offset_cache, off_entry);
+		}
+	}
+
+	IPADBG("available_sz = %d needed size = %d\n",
+			available_sz, ipa_hdr_bin_sz[needed_bin]);
+
+	/* If freed up space isnt enough, use hdr proc ctx tbl*/
+	if (available_sz < ipa_hdr_bin_sz[needed_bin])
+		return 1;
+
+	/* Else rearrange the hdr entries for compact fit */
+	list_for_each_entry_reverse(entry,
+			&htbl->head_hdr_entry_list, link) {
+		IPADBG("entry %s offset = %d entry bin = %d\n",
+			entry->name, entry->offset_entry->offset,
+			entry->offset_entry->bin);
+		if (entry->is_hdr_proc_ctx)
+			continue;
+		entry->offset_entry->offset = pos;
+		pos += ipa_hdr_bin_sz[entry->offset_entry->bin];
+		IPADBG("Modified ofst = %d\n", entry->offset_entry->offset);
+	}
+	htbl->end = pos;
+
+	/* Debug prints */
+	IPADBG("htbl ends at %d\n", htbl->end);
+	for (i = 0; i < IPA_HDR_BIN_MAX ; ++i) {
+		list_for_each_entry(off_entry,
+			&htbl->head_offset_list[i], link) {
+			IPADBG("ofst = %d bin= %d\n",
+				off_entry->offset, off_entry->bin);
+		}
+	}
+	return 0;
+}
 
 static int __ipa_add_hdr(struct ipa_hdr_add *hdr)
 {
@@ -728,6 +786,7 @@ static int __ipa_add_hdr(struct ipa_hdr_add *hdr)
 	struct ipa_hdr_tbl *htbl = &ipa_ctx->hdr_tbl;
 	int id;
 	int mem_size;
+	int use_hdr_proc_ctx_tbl;
 
 	if (hdr->hdr_len == 0 || hdr->hdr_len > IPA_HDR_MAX_SIZE) {
 		IPAERR("bad parm\n");
@@ -775,12 +834,13 @@ static int __ipa_add_hdr(struct ipa_hdr_add *hdr)
 		IPA_MEM_PART(apps_hdr_size_ddr);
 
 	if (list_empty(&htbl->head_free_offset_list[bin])) {
+		use_hdr_proc_ctx_tbl = __check_free_space(bin, mem_size);
 		/*
 		 * if header does not fit to table, place it in DDR
 		 * This is valid for IPA 2.5 and on,
 		 * with the exception of IPA2.6L.
 		 */
-		if (htbl->end + ipa_hdr_bin_sz[bin] > mem_size) {
+		if (use_hdr_proc_ctx_tbl) {
 			if (ipa_ctx->ipa_hw_type != IPA_HW_v2_5) {
 				IPAERR("not enough room for header\n");
 				goto bad_hdr_len;
@@ -810,6 +870,8 @@ static int __ipa_add_hdr(struct ipa_hdr_add *hdr)
 			list_add(&offset->link,
 					&htbl->head_offset_list[bin]);
 			entry->offset_entry = offset;
+			IPADBG(" New ofst for entry %s bin= %d ofst= %d\n",
+				entry->name, offset->bin, offset->offset);
 		}
 	} else {
 		entry->is_hdr_proc_ctx = false;
@@ -819,6 +881,8 @@ static int __ipa_add_hdr(struct ipa_hdr_add *hdr)
 				struct ipa_hdr_offset_entry, link);
 		list_move(&offset->link, &htbl->head_offset_list[bin]);
 		entry->offset_entry = offset;
+		IPADBG(" Entry %s use bin= %d ofst= %d ofst's bin =%d\n",
+			entry->name, bin, offset->offset, offset->bin);
 	}
 
 	list_add(&entry->link, &htbl->head_hdr_entry_list);
