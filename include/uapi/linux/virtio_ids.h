@@ -47,5 +47,6 @@
 #define VIRTIO_ID_FS           26 /* virtio filesystem */
 #define VIRTIO_ID_PMEM         27 /* virtio pmem */
 #define VIRTIO_ID_CLOCK        30 /* virtio clock */
+#define VIRTIO_ID_REGULATOR    31 /* virtio regulator */
 
 #endif /* _LINUX_VIRTIO_IDS_H */
