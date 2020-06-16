@@ -697,18 +697,18 @@ static int scc_sm8150_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	ret = qcom_cc_register_rcg_dfs(regmap, scc_dfs_clocks,
+			ARRAY_SIZE(scc_dfs_clocks));
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to register with DFS\n");
+		return ret;
+	}
+
 	clk_trion_pll_configure(&scc_pll, regmap, scc_pll.config);
 
 	ret = qcom_cc_really_probe(pdev, &scc_sm8150_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register SCC clocks\n");
-		return ret;
-	}
-
-	ret = qcom_cc_register_rcg_dfs(regmap, scc_dfs_clocks,
-			ARRAY_SIZE(scc_dfs_clocks));
-	if (ret) {
-		dev_err(&pdev->dev, "Failed to register with DFS\n");
 		return ret;
 	}
 
