@@ -163,6 +163,7 @@ struct spi_geni_master {
 	bool cmd_done;
 	bool set_miso_sampling;
 	u32 miso_sampling_ctrl_val;
+	bool disable_dma;
 };
 
 static struct spi_master *get_spi_master(struct device *dev)
@@ -1100,17 +1101,16 @@ static void setup_fifo_xfer(struct spi_transfer *xfer,
 
 	fifo_size =
 		(mas->tx_fifo_depth * mas->tx_fifo_width / mas->cur_word_len);
-	if (trans_len > fifo_size) {
-		if (mas->cur_xfer_mode != SE_DMA) {
-			mas->cur_xfer_mode = SE_DMA;
-			geni_se_select_mode(mas->base, mas->cur_xfer_mode);
-		}
-	} else {
-		if (mas->cur_xfer_mode != FIFO_MODE) {
-			mas->cur_xfer_mode = FIFO_MODE;
-			geni_se_select_mode(mas->base, mas->cur_xfer_mode);
-		}
-	}
+	/*
+	 * Controller has support to transfer data either in FIFO mode
+	 * or in SE_DMA mode. Either force the controller to choose FIFO
+	 * mode for transfers or select the mode dynamically based on
+	 * size of data.
+	 */
+	mas->cur_xfer_mode = SE_DMA;
+	if (mas->disable_dma || trans_len <= fifo_size)
+		mas->cur_xfer_mode = FIFO_MODE;
+	geni_se_select_mode(mas->base, mas->cur_xfer_mode);
 
 	geni_write_reg(spi_tx_cfg, mas->base, SE_SPI_TRANS_CFG);
 	geni_setup_m_cmd(mas->base, m_cmd, m_param);
@@ -1640,6 +1640,8 @@ static int spi_geni_probe(struct platform_device *pdev)
 				   geni_mas->irq, ret);
 		goto spi_geni_probe_unmap;
 	}
+	geni_mas->disable_dma = of_property_read_bool(pdev->dev.of_node,
+		"qcom,disable-dma");
 
 	spi->mode_bits = (SPI_CPOL | SPI_CPHA | SPI_LOOP | SPI_CS_HIGH);
 	spi->bits_per_word_mask = SPI_BPW_RANGE_MASK(4, 32);
