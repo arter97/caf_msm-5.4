@@ -1169,13 +1169,6 @@ uint32_t socinfo_get_id(void)
 }
 EXPORT_SYMBOL(socinfo_get_id);
 
-const char *socinfo_get_id_string(void)
-{
-	uint32_t id = socinfo_get_id();
-
-	return (socinfo) ? soc_id[id].name : NULL;
-}
-EXPORT_SYMBOL(socinfo_get_id_string);
 
 static const char *socinfo_machine(unsigned int id)
 {
@@ -1188,6 +1181,13 @@ static const char *socinfo_machine(unsigned int id)
 
 	return NULL;
 }
+
+const char *socinfo_get_id_string(void)
+{
+        uint32_t id = socinfo_get_id();
+        return socinfo_machine(id);
+}
+EXPORT_SYMBOL(socinfo_get_id_string);
 
 static int qcom_socinfo_probe(struct platform_device *pdev)
 {
