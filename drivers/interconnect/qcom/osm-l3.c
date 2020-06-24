@@ -15,6 +15,7 @@
 #include <dt-bindings/interconnect/qcom,osm-l3.h>
 
 #include "sdm845.h"
+#include "sm8150.h"
 
 #define LUT_MAX_ENTRIES			40U
 #define LUT_SRC				GENMASK(31, 30)
@@ -27,7 +28,7 @@
 #define REG_FREQ_LUT			0x110
 #define REG_PERF_STATE			0x920
 
-#define OSM_L3_MAX_LINKS		1
+#define OSM_L3_MAX_LINKS		6
 
 #define to_qcom_provider(_provider) \
 	container_of(_provider, struct qcom_osm_l3_icc_provider, provider)
@@ -80,6 +81,32 @@ static struct qcom_icc_node *sdm845_osm_l3_nodes[] = {
 const static struct qcom_icc_desc sdm845_icc_osm_l3 = {
 	.nodes = sdm845_osm_l3_nodes,
 	.num_nodes = ARRAY_SIZE(sdm845_osm_l3_nodes),
+};
+
+DEFINE_QNODE(sm8150_osm_apps_l3, SM8150_MASTER_OSM_L3_APPS, 1,
+		SM8150_SLAVE_OSM_L3, SM8150_SLAVE_OSM_L3_CLUSTER0,
+		SM8150_SLAVE_OSM_L3_CLUSTER1, SM8150_SLAVE_OSM_L3_CLUSTER2,
+		SM8150_SLAVE_OSM_L3_MISC, SM8150_SLAVE_OSM_L3_GPU);
+DEFINE_QNODE(sm8150_osm_l3, SM8150_SLAVE_OSM_L3, 1);
+DEFINE_QNODE(sm8150_osm_l3_cluster0, SM8150_SLAVE_OSM_L3_CLUSTER0, 1);
+DEFINE_QNODE(sm8150_osm_l3_cluster1, SM8150_SLAVE_OSM_L3_CLUSTER1, 1);
+DEFINE_QNODE(sm8150_osm_l3_cluster2, SM8150_SLAVE_OSM_L3_CLUSTER2, 1);
+DEFINE_QNODE(sm8150_osm_l3_misc, SM8150_SLAVE_OSM_L3_MISC, 1);
+DEFINE_QNODE(sm8150_osm_l3_gpu, SM8150_SLAVE_OSM_L3_GPU, 1);
+
+static struct qcom_icc_node *sm8150_osm_l3_nodes[] = {
+	[MASTER_OSM_L3_APPS] = &sm8150_osm_apps_l3,
+	[SLAVE_OSM_L3] = &sm8150_osm_l3,
+	[SLAVE_OSM_L3_CLUSTER0] = &sm8150_osm_l3_cluster0,
+	[SLAVE_OSM_L3_CLUSTER1] = &sm8150_osm_l3_cluster1,
+	[SLAVE_OSM_L3_CLUSTER2] = &sm8150_osm_l3_cluster2,
+	[SLAVE_OSM_L3_MISC] = &sm8150_osm_l3_misc,
+	[SLAVE_OSM_L3_GPU] = &sm8150_osm_l3_gpu,
+};
+
+static const struct qcom_icc_desc sm8150_icc_osm_l3 = {
+	.nodes = sm8150_osm_l3_nodes,
+	.num_nodes = ARRAY_SIZE(sm8150_osm_l3_nodes),
 };
 
 static int qcom_icc_aggregate(struct icc_node *node, u32 tag, u32 avg_bw,
@@ -250,6 +277,7 @@ err:
 
 static const struct of_device_id osm_l3_of_match[] = {
 	{ .compatible = "qcom,sdm845-osm-l3", .data = &sdm845_icc_osm_l3 },
+	{ .compatible = "qcom,sm8150-osm-l3", .data = &sm8150_icc_osm_l3 },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, osm_l3_of_match);

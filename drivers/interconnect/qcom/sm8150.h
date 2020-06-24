@@ -1,0 +1,17 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
+ * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ */
+
+#ifndef __DRIVERS_INTERCONNECT_QCOM_SM8150_H
+#define __DRIVERS_INTERCONNECT_QCOM_SM8150_H
+
+#define SM8150_MASTER_OSM_L3_APPS		593
+#define SM8150_SLAVE_OSM_L3			594
+#define SM8150_SLAVE_OSM_L3_CLUSTER0		595
+#define SM8150_SLAVE_OSM_L3_CLUSTER1		596
+#define SM8150_SLAVE_OSM_L3_CLUSTER2		597
+#define SM8150_SLAVE_OSM_L3_MISC		598
+#define SM8150_SLAVE_OSM_L3_GPU		599
+
+#endif
