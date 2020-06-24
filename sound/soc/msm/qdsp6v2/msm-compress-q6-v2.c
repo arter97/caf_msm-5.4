@@ -1135,7 +1135,7 @@ static int msm_compr_open(struct snd_compr_stream *cstream)
 	return 0;
 }
 
-static int msm_compr_free(struct snd_compr_stream *cstream)
+static int msm_compr_playback_free(struct snd_compr_stream *cstream)
 {
 	struct snd_compr_runtime *runtime;
 	struct msm_compr_audio *prtd;
