@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2019, 2020 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1093,9 +1093,15 @@ static int msm_pcm_volume_ctl_get(struct snd_kcontrol *kcontrol,
 	}
 
 	mutex_lock(&pdata->lock);
-	prtd = substream->runtime->private_data;
-	if (prtd)
-		ucontrol->value.integer.value[0] = prtd->volume;
+        if (substream->runtime) {
+                prtd = substream->runtime->private_data;
+                if (prtd)
+                        ucontrol->value.integer.value[0] = prtd->volume;
+
+        } else {
+                pr_debug("%s substream runtime not found\n", __func__);
+        }
+
 	mutex_unlock(&pdata->lock);
 	return 0;
 }
@@ -1133,11 +1139,16 @@ static int msm_pcm_volume_ctl_put(struct snd_kcontrol *kcontrol,
 	}
 
 	mutex_lock(&pdata->lock);
-	prtd = substream->runtime->private_data;
-	if (prtd) {
-		rc = msm_pcm_set_volume(prtd, volume);
-		prtd->volume = volume;
-	}
+        if (substream->runtime) {
+                prtd = substream->runtime->private_data;
+                if (prtd) {
+                        rc = msm_pcm_set_volume(prtd, volume);
+                        prtd->volume = volume;
+                }
+        } else {
+                pr_err("%s substream runtime not found\n", __func__);
+        }
+
 	mutex_unlock(&pdata->lock);
 	return rc;
 }
@@ -1194,6 +1205,8 @@ static int msm_pcm_chmap_ctl_put(struct snd_kcontrol *kcontrol,
 		return 0;
 
 	mutex_lock(&pdata->lock);
+        if (!substream->runtime)
+                goto done;
 	prtd = substream->runtime->private_data;
 	if (prtd) {
 		prtd->set_channel_map = true;
@@ -1201,6 +1214,7 @@ static int msm_pcm_chmap_ctl_put(struct snd_kcontrol *kcontrol,
 				prtd->channel_map[i] =
 				(char)(ucontrol->value.integer.value[i]);
 	}
+done:
 	mutex_unlock(&pdata->lock);
 	return 0;
 }
@@ -1237,8 +1251,9 @@ static int msm_pcm_chmap_ctl_get(struct snd_kcontrol *kcontrol,
 		return 0; /* no channels set */
 
 	mutex_lock(&pdata->lock);
+        if (!substream->runtime)
+                goto done;
 	prtd = substream->runtime->private_data;
-
 	if (prtd && prtd->set_channel_map == true) {
 		for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL; i++)
 			ucontrol->value.integer.value[i] =
@@ -1247,7 +1262,7 @@ static int msm_pcm_chmap_ctl_get(struct snd_kcontrol *kcontrol,
 		for (i = 0; i < PCM_FORMAT_MAX_NUM_CHANNEL; i++)
 			ucontrol->value.integer.value[i] = 0;
 	}
-
+done:
 	mutex_unlock(&pdata->lock);
 	return 0;
 }
