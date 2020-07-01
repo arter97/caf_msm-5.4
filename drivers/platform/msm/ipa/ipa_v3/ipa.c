@@ -4659,6 +4659,7 @@ static ssize_t ipa3_write(struct file *file, const char __user *buf,
 			/* Prevent multiple calls from trying to load the FW again. */
 			if (ipa3_ctx->fw_loaded) {
 				IPAERR("not load FW again\n");
+				IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
 				return count;
 			}
 			/* Schedule WQ to load ipa-fws */
@@ -4679,6 +4680,7 @@ static ssize_t ipa3_write(struct file *file, const char __user *buf,
 				 * when vlan mode is passed to our dev we expect
 				 * another write
 				 */
+				IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
 				return count;
 			}
 
@@ -4693,6 +4695,7 @@ static ssize_t ipa3_write(struct file *file, const char __user *buf,
 			/* Prevent multiple calls from trying to load the FW again. */
 			if (ipa3_ctx->fw_loaded) {
 				IPAERR("not load FW again\n");
+				IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
 				return count;
 			}
 			/* Schedule WQ to load ipa-fws */
