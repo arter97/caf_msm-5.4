@@ -166,7 +166,7 @@ config PINCTRL_QCOM_SSBI_PMIC
          devices are pm8058 and pm8921.
 
 config PINCTRL_SC7180
-	tristate "Qualcomm Technologies Inc SC7180 pin controller driver"
+	tristate "Qualcomm Technologies, Inc SC7180 pin controller driver"
 	depends on GPIOLIB && OF
 	select PINCTRL_MSM
 	help
@@ -175,7 +175,7 @@ config PINCTRL_SC7180
 	  Technologies Inc SC7180 platform.
 
 config PINCTRL_SDM660
-       tristate "Qualcomm Technologies Inc SDM660 pin controller driver"
+       tristate "Qualcomm Technologies, Inc SDM660 pin controller driver"
        depends on GPIOLIB && OF
        select PINCTRL_MSM
        help
@@ -184,7 +184,7 @@ config PINCTRL_SDM660
          Technologies Inc SDM660 platform.
 
 config PINCTRL_SDM845
-       tristate "Qualcomm Technologies Inc SDM845 pin controller driver"
+       tristate "Qualcomm Technologies, Inc SDM845 pin controller driver"
        depends on GPIOLIB && (OF || ACPI)
        select PINCTRL_MSM
        help
@@ -193,7 +193,7 @@ config PINCTRL_SDM845
          Technologies Inc SDM845 platform.
 
 config PINCTRL_SM8150
-       tristate "Qualcomm Technologies Inc SM8150 pin controller driver"
+       tristate "Qualcomm Technologies, Inc SM8150 pin controller driver"
        depends on GPIOLIB && OF
        select PINCTRL_MSM
        help
@@ -201,8 +201,17 @@ config PINCTRL_SM8150
          Qualcomm Technologies Inc TLMM block found on the Qualcomm
          Technologies Inc SM8150 platform.
 
+config PINCTRL_SA8195
+	tristate "Qualcomm Technologies, Inc SA8195 pin controller driver"
+	depends on GPIOLIB && OF
+	select PINCTRL_MSM
+	help
+	  This is the pinctrl, pinmux, pinconf and gpiolib driver for the
+	  Qualcomm Technologies Inc TLMM block found on the Qualcomm
+	  Technologies Inc SA8195 platform.
+
 config PINCTRL_LAHAINA
-	tristate "Qualcomm Technologies Inc LAHAINA pin controller driver"
+	tristate "Qualcomm Technologies, Inc LAHAINA pin controller driver"
 	depends on GPIOLIB && OF
 	select PINCTRL_MSM
 	help
@@ -213,7 +222,7 @@ config PINCTRL_LAHAINA
 	  If unsure, say N.
 
 config PINCTRL_SHIMA
-	tristate "Qualcomm Technologies Inc SHIMA pin controller driver"
+	tristate "Qualcomm Technologies, Inc SHIMA pin controller driver"
 	depends on GPIOLIB && OF
 	select PINCTRL_MSM
 	help
@@ -231,7 +240,7 @@ config PINCTRL_SLPI
 	   SLPI pin controller block.
 
 config PINCTRL_HOLI
-	tristate "Qualcomm Technologies Inc HOLI pin controller driver"
+	tristate "Qualcomm Technologies, Inc HOLI pin controller driver"
 	depends on GPIOLIB && OF
 	select PINCTRL_MSM
 	help
