@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# HAB configuration
+#
+config MSM_HAB
+	bool "Enable Multimedia driver Hypervisor Abstraction Layer"
+	select WANT_DEV_COREDUMP
+	help
+	  Multimedia driver hypervisor abstraction layer.
+	  Required for drivers to use the HAB API to communicate with the host
+	  OS.
+
+config MSM_HAB_DEFAULT_VMID
+	int
+	default 2
+	help
+	  The default HAB VMID.
+	  It will not be used when there are some other configuration sources,
+	  e.g., device tree.
