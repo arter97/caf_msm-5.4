@@ -53,6 +53,7 @@ enum {
 	HW_PLATFORM_RCM	= 21,
 	HW_PLATFORM_STP = 23,
 	HW_PLATFORM_SBC = 24,
+	HW_PLATFORM_ADP = 25,
 	HW_PLATFORM_HDK = 31,
 	HW_PLATFORM_INVALID
 };
@@ -74,6 +75,7 @@ static const char * const hw_platform[] = {
 	[HW_PLATFORM_DTV] = "DTV",
 	[HW_PLATFORM_STP] = "STP",
 	[HW_PLATFORM_SBC] = "SBC",
+	[HW_PLATFORM_ADP] = "ADP",
 	[HW_PLATFORM_HDK] = "HDK",
 };
 
@@ -109,6 +111,20 @@ static const char * const hw_platform_subtype[] = {
 	[PLATFORM_SUBTYPE_STRANGE] = "strange",
 	[PLATFORM_SUBTYPE_STRANGE_2A] = "strange_2a",
 	[PLATFORM_SUBTYPE_INVALID] = "Invalid",
+};
+
+enum {
+	PLATFORM_SUBTYPE_SA8155_ADP_STAR = 0x0,
+	PLATFORM_SUBTYPE_SA8155_ADP_AIR = 0x1,
+	PLATFORM_SUBTYPE_SA8155_ADP_ALCOR = 0x2,
+	PLATFORM_SUBTYPE_SA8155_ADP_INVALID,
+};
+
+static const char * const sa8155adp_hw_platform_subtype[] = {
+	[PLATFORM_SUBTYPE_SA8155_ADP_STAR] = "ADP_STAR",
+	[PLATFORM_SUBTYPE_SA8155_ADP_AIR] = "ADP_AIR",
+	[PLATFORM_SUBTYPE_SA8155_ADP_ALCOR] = "ADP_ALCOR",
+	[PLATFORM_SUBTYPE_SA8155_ADP_INVALID] = "INVALID",
 };
 
 /* Socinfo SMEM item structure */
@@ -427,6 +443,7 @@ msm_get_platform_subtype(struct device *dev,
 			char *buf)
 {
 	uint32_t hw_subtype;
+	const char *machine_name;
 
 	hw_subtype = socinfo_get_platform_subtype();
 	if (socinfo_get_platform_type() == HW_PLATFORM_QRD) {
@@ -436,6 +453,29 @@ msm_get_platform_subtype(struct device *dev,
 		}
 		return snprintf(buf, PAGE_SIZE, "%-.32s\n",
 					qrd_hw_platform_subtype[hw_subtype]);
+	}
+	if (socinfo_get_platform_type() == HW_PLATFORM_ADP) {
+		machine_name = socinfo_get_id_string();
+		if (machine_name) {
+			if ((strcmp(machine_name, "SA8155") == 0) ||
+				(strcmp(machine_name, "SA8155P") == 0)) {
+				if (hw_subtype >=
+					PLATFORM_SUBTYPE_SA8155_ADP_INVALID) {
+					pr_err("Invalid hardware platform sub type for adp found\n");
+					hw_subtype =
+					PLATFORM_SUBTYPE_SA8155_ADP_INVALID;
+				}
+				return snprintf(buf, PAGE_SIZE, "%-.32s\n",
+				sa8155adp_hw_platform_subtype[hw_subtype]);
+			} else {
+				pr_err("Invalid machine name for ADP platform\n");
+				return 0;
+			}
+		} else {
+			pr_err("Machine name is NULL for the ADP platform\n");
+			return 0;
+		}
+
 	} else {
 		if (hw_subtype >= PLATFORM_SUBTYPE_INVALID) {
 			pr_err("Invalid hardware platform subtype\n");
@@ -648,6 +688,8 @@ static const struct soc_id soc_id[] = {
 	{ 311, "APQ8096AU" },
 	{ 312, "APQ8096SG" },
 	{ 356, "KONA" },
+	{ 362, "SA8155" },
+	{ 367, "SA8155P" },
 	{ 415, "LAHAINA" },
 	{ 450, "SHIMA" },
 	{ 454, "HOLI" },
@@ -1169,13 +1211,6 @@ uint32_t socinfo_get_id(void)
 }
 EXPORT_SYMBOL(socinfo_get_id);
 
-const char *socinfo_get_id_string(void)
-{
-	uint32_t id = socinfo_get_id();
-
-	return (socinfo) ? soc_id[id].name : NULL;
-}
-EXPORT_SYMBOL(socinfo_get_id_string);
 
 static const char *socinfo_machine(unsigned int id)
 {
@@ -1188,6 +1223,13 @@ static const char *socinfo_machine(unsigned int id)
 
 	return NULL;
 }
+
+const char *socinfo_get_id_string(void)
+{
+        uint32_t id = socinfo_get_id();
+        return socinfo_machine(id);
+}
+EXPORT_SYMBOL(socinfo_get_id_string);
 
 static int qcom_socinfo_probe(struct platform_device *pdev)
 {
