@@ -619,7 +619,6 @@ config QTI_PMIC_GLINK_CLIENT_DEBUG
 config QTI_BATTERY_GLINK_DEBUG
 	tristate "Enable support for QTI battery glink debug driver"
 	depends on QTI_PMIC_GLINK
-	depends on DEBUG_FS
 	help
 	  Qualcomm Technologies, Inc. battery glink debug driver helps to
 	  obtain debug information for battery charging and gauging over PMIC
@@ -656,8 +655,19 @@ config MSM_PM
 	bool
 	select MSM_IDLE_STATS if DEBUG_FS
 	select QTI_SYSTEM_PM if QCOM_RPMH
+	select QTI_SYSTEM_PM_RPM if MSM_RPM_SMD && QGKI && QCOM_MPM
+	bool "Qualcomm Technologies, Inc. (QTI) Power Management Drivers"
+	help
+	  Platform specific power driver to manage cores and l2 low power
+	  modes. It interface with various system driver and put the cores
+	  into low power modes. It implements OS initiated scheme and
+	  determines last CPU to call into PSCI for cluster Low power
+	  modes.
 
 config QTI_SYSTEM_PM
+	bool
+
+config QTI_SYSTEM_PM_RPM
 	bool
 
 if MSM_PM
@@ -714,6 +724,15 @@ config QTI_DDR_STATS_LOG
 	  from AOP shared memory location such as DDR low power modes and DDR
 	  frequency residency and counts. The driver outputs information using
 	  sysfs.
+
+config QTI_SYS_PM_VX
+	tristate "Qualcomm Technologies Inc (QTI) System PM Violators Driver"
+	depends on QMP_DEBUGFS_CLIENT
+	help
+	  This option enables debug subystems that prevent system low power
+	  modes. The user sends a QMP message to AOP to record subsystems
+	  preventing deeper system low power modes. The data is stored in the
+	  MSGRAM by AOP and read and reported in the debugfs by this driver.
 
 config MSM_JTAGV8
 	bool "Debug and ETM trace support across power collapse for ARMv8"
@@ -816,7 +835,7 @@ config QCOM_GUESTVM
 
 config QCOM_HYP_CORE_CTL
 	bool "CPU reservation scheme for Hypervisor"
-	depends on QCOM_GUESTVM
+	depends on QCOM_GUESTVM && SCHED_WALT
 	help
 	  This driver reserve the specified CPUS by isolating them. The reserved
 	  CPUs can be assigned to the other guest OS by the hypervisor.
@@ -850,4 +869,12 @@ config QTI_HW_KEY_MANAGER
 	 HWKM hardware to perform key operations from the kernel which will
 	 be used for storage encryption.
 
+config QCOM_RTIC
+	bool "Enable Qualcomm Technologies, Inc. RTIC feature"
+	depends on QGKI
+	default y if QGKI
+	help
+	  This option enables QCOM Real Time Integrity Check feature. This
+	  will trigger RTIC kernel MP.s (measurement parameters) generation
+	  during the kernel build.
 endmenu

@@ -16,6 +16,7 @@
 
 struct hh_irq_entry {
 	hh_vmid_t vmid;
+	enum hh_vm_names vm_name;
 	hh_irq_handle_fn handle;
 	void *data;
 
@@ -80,11 +81,20 @@ static int hh_irq_lent_nb_handler(struct notifier_block *this,
 {
 	unsigned long flags;
 	enum hh_irq_label label;
+	enum hh_vm_names owner_name;
 	struct hh_irq_entry *entry;
 	struct hh_rm_notif_vm_irq_lent_payload *lent = data;
+	int ret;
 
 	if (cmd != HH_RM_NOTIF_VM_IRQ_LENT)
 		return NOTIFY_DONE;
+
+	ret = hh_rm_get_vm_name(lent->owner_vmid, &owner_name);
+	if (ret) {
+		pr_warn_ratelimited("%s: unknown name for vmid: %d\n", __func__,
+				    lent->owner_vmid);
+		return ret;
+	}
 
 	spin_lock_irqsave(&hh_irq_lend_lock, flags);
 	for (label = 0; label < HH_IRQ_LABEL_MAX; label++) {
@@ -93,8 +103,8 @@ static int hh_irq_lent_nb_handler(struct notifier_block *this,
 			continue;
 
 		if (label == lent->virq_label &&
-		    (entry->vmid == HH_VM_MAX ||
-		     entry->vmid == lent->owner_vmid)) {
+		    (entry->vm_name == HH_VM_MAX ||
+		     entry->vm_name == owner_name)) {
 			entry->vmid = lent->owner_vmid;
 			entry->virq_handle = lent->virq_handle;
 
@@ -131,17 +141,14 @@ int hh_irq_lend(enum hh_irq_label label, enum hh_vm_names name,
 	int ret, virq;
 	unsigned long flags;
 	struct hh_irq_entry *entry;
-	struct irq_data *irq_data;
 
 	if (label >= HH_IRQ_LABEL_MAX || !on_release)
 		return -EINVAL;
 
 	entry = &hh_irq_entries[label];
 
-	irq_data = irq_get_irq_data(irq);
-	if (!irq_data)
+	if (hh_rm_irq_to_virq(irq, &virq))
 		return -EINVAL;
-	virq = irq_data->hwirq;
 
 	spin_lock_irqsave(&hh_irq_lend_lock, flags);
 	if (entry->state != HH_IRQ_STATE_NONE) {
@@ -207,7 +214,6 @@ EXPORT_SYMBOL(hh_irq_reclaim);
 int hh_irq_wait_for_lend(enum hh_irq_label label, enum hh_vm_names name,
 			 hh_irq_handle_fn on_lend, void *data)
 {
-	int ret;
 	unsigned long flags;
 	struct hh_irq_entry *entry;
 
@@ -222,19 +228,13 @@ int hh_irq_wait_for_lend(enum hh_irq_label label, enum hh_vm_names name,
 		return -EINVAL;
 	}
 
-	ret = hh_rm_get_vmid(name, &entry->vmid);
-	if (ret) {
-		entry->state = HH_IRQ_STATE_NONE;
-		spin_unlock_irqrestore(&hh_irq_lend_lock, flags);
-		return ret;
-	}
-
+	entry->vm_name = name;
 	entry->handle = on_lend;
 	entry->data = data;
 	entry->state = HH_IRQ_STATE_WAIT_LEND;
 	spin_unlock_irqrestore(&hh_irq_lend_lock, flags);
 
-	return ret;
+	return 0;
 }
 EXPORT_SYMBOL(hh_irq_wait_for_lend);
 
@@ -242,17 +242,18 @@ EXPORT_SYMBOL(hh_irq_wait_for_lend);
  * hh_irq_accept: Register to receive interrupts with a lent vIRQ
  * @label: vIRQ high-level label
  * @irq: Linux IRQ# to associate vIRQ with. If don't care, use -1
+ * @type: IRQ flags to use when allowing RM to choose the IRQ. If irq parameter
+ *        is specified, then type is unused.
  *
  * Returns the Linux IRQ# that vIRQ was registered to on success.
  * Returns <0 on error
  * This function is not thread-safe w.r.t. IRQ lend state. Do not race with
  * with hh_irq_release or another hh_irq_accept with same label.
  */
-int hh_irq_accept(enum hh_irq_label label, int irq)
+int hh_irq_accept(enum hh_irq_label label, int irq, int type)
 {
 	struct hh_irq_entry *entry;
-	const struct irq_data *irq_data;
-	int virq;
+	u32 virq;
 
 	if (label >= HH_IRQ_LABEL_MAX)
 		return -EINVAL;
@@ -263,10 +264,8 @@ int hh_irq_accept(enum hh_irq_label label, int irq)
 		return -EINVAL;
 
 	if (irq != -1) {
-		irq_data = irq_get_irq_data(irq);
-		if (!irq_data)
+		if (hh_rm_irq_to_virq(irq, &virq))
 			return -EINVAL;
-		virq = irq_data->hwirq;
 	} else
 		virq = -1;
 
@@ -275,8 +274,7 @@ int hh_irq_accept(enum hh_irq_label label, int irq)
 		return virq;
 
 	if (irq == -1)
-		irq = hh_rm_virq_to_linux_irq(virq - 32, GIC_SPI,
-					      IRQ_TYPE_LEVEL_HIGH);
+		irq = hh_rm_virq_to_irq(virq, type);
 
 	return irq;
 }
@@ -304,7 +302,7 @@ int hh_irq_release(enum hh_irq_label label)
 	ret = hh_rm_vm_irq_release_notify(entry->vmid,
 					  entry->virq_handle);
 	if (!ret)
-		entry->state = HH_IRQ_STATE_NONE;
+		entry->state = HH_IRQ_STATE_WAIT_LEND;
 	return ret;
 }
 EXPORT_SYMBOL(hh_irq_release);

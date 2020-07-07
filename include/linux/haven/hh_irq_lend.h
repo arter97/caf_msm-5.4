@@ -13,7 +13,8 @@
 #include "hh_rm_drv.h"
 
 enum hh_irq_label {
-	HH_IRQ_LABEL_DUMMY, /* Remove me when you add a label! */
+	HH_IRQ_LABEL_SDE,
+	HH_IRQ_LABEL_TRUSTED_TOUCH,
 	HH_IRQ_LABEL_MAX
 };
 
@@ -25,7 +26,7 @@ int hh_irq_reclaim(enum hh_irq_label label);
 
 int hh_irq_wait_for_lend(enum hh_irq_label label, enum hh_vm_names name,
 			 hh_irq_handle_fn on_lend, void *data);
-int hh_irq_accept(enum hh_irq_label label, int hw_irq);
+int hh_irq_accept(enum hh_irq_label label, int irq, int type);
 int hh_irq_release(enum hh_irq_label label);
 
 #endif

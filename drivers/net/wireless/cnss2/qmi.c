@@ -27,6 +27,7 @@
 #define IMS_TIMEOUT                     QMI_WLFW_TIMEOUT_JF
 
 #define QMI_WLFW_MAX_RECV_BUF_SIZE	SZ_8K
+#define IMSPRIVATE_SERVICE_MAX_MSG_LEN	SZ_8K
 
 #define QMI_WLFW_MAC_READY_TIMEOUT_MS	50
 #define QMI_WLFW_MAC_READY_MAX_RETRY	200
@@ -77,12 +78,11 @@ static int cnss_wlfw_ind_register_send_sync(struct cnss_plat_data *plat_priv)
 
 	req->client_id_valid = 1;
 	req->client_id = WLFW_CLIENT_ID;
-	req->fw_ready_enable_valid = 1;
-	req->fw_ready_enable = 1;
 	req->request_mem_enable_valid = 1;
 	req->request_mem_enable = 1;
 	req->fw_mem_ready_enable_valid = 1;
 	req->fw_mem_ready_enable = 1;
+	/* fw_ready indication is replaced by fw_init_done in HST/HSP */
 	req->fw_init_done_enable_valid = 1;
 	req->fw_init_done_enable = 1;
 	req->pin_connect_result_enable_valid = 1;
@@ -97,6 +97,8 @@ static int cnss_wlfw_ind_register_send_sync(struct cnss_plat_data *plat_priv)
 	req->qdss_trace_free_enable = 1;
 	req->respond_get_info_enable_valid = 1;
 	req->respond_get_info_enable = 1;
+	req->wfc_call_twt_config_enable_valid = 1;
+	req->wfc_call_twt_config_enable = 1;
 
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_ind_register_resp_msg_v01_ei, resp);
@@ -150,6 +152,18 @@ qmi_registered:
 	kfree(resp);
 	return ret;
 }
+
+#ifdef CONFIG_CNSS2_DEBUG
+static inline u32 cnss_get_host_build_type(void)
+{
+	return QMI_HOST_BUILD_TYPE_PRIMARY_V01;
+}
+#else
+static inline u32 cnss_get_host_build_type(void)
+{
+	return QMI_HOST_BUILD_TYPE_SECONDARY_V01;
+}
+#endif
 
 static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 {
@@ -209,6 +223,9 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 		cnss_pr_dbg("Sending iova starting 0x%llx with size 0x%llx\n",
 			    req->ddr_range[0].start, req->ddr_range[0].size);
 	}
+
+	req->host_build_type_valid = 1;
+	req->host_build_type = cnss_get_host_build_type();
 
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_host_cap_resp_msg_v01_ei, resp);
@@ -1481,16 +1498,14 @@ out:
 	return ret;
 }
 
-int cnss_wlfw_wfc_call_status_send_sync(struct cnss_plat_data *plat_priv,
-					u32 data_len, const void *data)
+static int cnss_wlfw_wfc_call_status_send_sync
+	(struct cnss_plat_data *plat_priv,
+	 const struct ims_private_service_wfc_call_status_ind_msg_v01 *ind_msg)
 {
 	struct wlfw_wfc_call_status_req_msg_v01 *req;
 	struct wlfw_wfc_call_status_resp_msg_v01 *resp;
 	struct qmi_txn txn;
 	int ret = 0;
-
-	cnss_pr_dbg("Sending WFC call status: state: 0x%lx\n",
-		    plat_priv->driver_state);
 
 	req = kzalloc(sizeof(*req), GFP_KERNEL);
 	if (!req)
@@ -1502,13 +1517,38 @@ int cnss_wlfw_wfc_call_status_send_sync(struct cnss_plat_data *plat_priv,
 		return -ENOMEM;
 	}
 
-	req->wfc_call_status_len = data_len;
-	memcpy(req->wfc_call_status, data, req->wfc_call_status_len);
+	/**
+	 * WFC Call r1 design has CNSS as pass thru using opaque hex buffer.
+	 * But in r2 update QMI structure is expanded and as an effect qmi
+	 * decoded structures have padding. Thus we cannot use buffer design.
+	 * For backward compatibility for r1 design copy only wfc_call_active
+	 * value in hex buffer.
+	 */
+	req->wfc_call_status_len = sizeof(ind_msg->wfc_call_active);
+	req->wfc_call_status[0] = ind_msg->wfc_call_active;
+
+	/* wfc_call_active is mandatory in IMS indication */
+	req->wfc_call_active_valid = 1;
+	req->wfc_call_active = ind_msg->wfc_call_active;
+	req->all_wfc_calls_held_valid = ind_msg->all_wfc_calls_held_valid;
+	req->all_wfc_calls_held = ind_msg->all_wfc_calls_held;
+	req->is_wfc_emergency_valid = ind_msg->is_wfc_emergency_valid;
+	req->is_wfc_emergency = ind_msg->is_wfc_emergency;
+	req->twt_ims_start_valid = ind_msg->twt_ims_start_valid;
+	req->twt_ims_start = ind_msg->twt_ims_start;
+	req->twt_ims_int_valid = ind_msg->twt_ims_int_valid;
+	req->twt_ims_int = ind_msg->twt_ims_int;
+	req->media_quality_valid = ind_msg->media_quality_valid;
+	req->media_quality =
+		(enum wlfw_wfc_media_quality_v01)ind_msg->media_quality;
+
+	cnss_pr_dbg("CNSS->FW: WFC_CALL_REQ: state: 0x%lx\n",
+		    plat_priv->driver_state);
 
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_wfc_call_status_resp_msg_v01_ei, resp);
 	if (ret < 0) {
-		cnss_pr_err("Fail to initialize txn for WFC call status request: err %d\n",
+		cnss_pr_err("CNSS->FW: WFC_CALL_REQ: QMI Txn Init: Err %d\n",
 			    ret);
 		goto out;
 	}
@@ -1519,29 +1559,25 @@ int cnss_wlfw_wfc_call_status_send_sync(struct cnss_plat_data *plat_priv,
 			       wlfw_wfc_call_status_req_msg_v01_ei, req);
 	if (ret < 0) {
 		qmi_txn_cancel(&txn);
-		cnss_pr_err("Fail to send WFC call status request: err %d\n",
+		cnss_pr_err("CNSS->FW: WFC_CALL_REQ: QMI Send Err: %d\n",
 			    ret);
 		goto out;
 	}
 
 	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
 	if (ret < 0) {
-		cnss_pr_err("Fail to wait for response of WFC call status request, err %d\n",
+		cnss_pr_err("FW->CNSS: WFC_CALL_RSP: QMI Wait Err: %d\n",
 			    ret);
 		goto out;
 	}
 
 	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
-		cnss_pr_err("WFC call status request failed, result: %d, err: %d\n",
+		cnss_pr_err("FW->CNSS: WFC_CALL_RSP: Result: %d Err: %d\n",
 			    resp->resp.result, resp->resp.error);
 		ret = -resp->resp.result;
 		goto out;
 	}
-
-	kfree(req);
-	kfree(resp);
-	return 0;
-
+	ret = 0;
 out:
 	kfree(req);
 	kfree(resp);
@@ -1739,6 +1775,12 @@ static void cnss_wlfw_fw_mem_ready_ind_cb(struct qmi_handle *qmi_wlfw,
 			       0, NULL);
 }
 
+/**
+ * cnss_wlfw_fw_ready_ind_cb: FW ready indication handler (Helium arch)
+ *
+ * This event is not required for HST/ HSP as FW calibration done is
+ * provided in QMI_WLFW_CAL_DONE_IND_V01
+ */
 static void cnss_wlfw_fw_ready_ind_cb(struct qmi_handle *qmi_wlfw,
 				      struct sockaddr_qrtr *sq,
 				      struct qmi_txn *txn, const void *data)
@@ -1747,13 +1789,18 @@ static void cnss_wlfw_fw_ready_ind_cb(struct qmi_handle *qmi_wlfw,
 		container_of(qmi_wlfw, struct cnss_plat_data, qmi_wlfw);
 	struct cnss_cal_info *cal_info;
 
-	cnss_pr_dbg("Received QMI WLFW FW ready indication\n");
-
 	if (!txn) {
 		cnss_pr_err("Spurious indication\n");
 		return;
 	}
 
+	if (plat_priv->device_id == QCA6390_DEVICE_ID ||
+	    plat_priv->device_id == QCA6490_DEVICE_ID) {
+		cnss_pr_dbg("Ignore FW Ready Indication for HST/HSP");
+		return;
+	}
+
+	cnss_pr_dbg("Received QMI WLFW FW ready indication.\n");
 	cal_info = kzalloc(sizeof(*cal_info), GFP_KERNEL);
 	if (!cal_info)
 		return;
@@ -1970,6 +2017,113 @@ static void cnss_wlfw_respond_get_info_ind_cb(struct qmi_handle *qmi_wlfw,
 				       (void *)ind_msg->data,
 				       ind_msg->data_len);
 }
+
+static int cnss_ims_wfc_call_twt_cfg_send_sync
+	(struct cnss_plat_data *plat_priv,
+	 const struct wlfw_wfc_call_twt_config_ind_msg_v01 *ind_msg)
+{
+	struct ims_private_service_wfc_call_twt_config_req_msg_v01 *req;
+	struct ims_private_service_wfc_call_twt_config_rsp_msg_v01 *resp;
+	struct qmi_txn txn;
+	int ret = 0;
+
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
+
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
+	if (!resp) {
+		kfree(req);
+		return -ENOMEM;
+	}
+
+	req->twt_sta_start_valid = ind_msg->twt_sta_start_valid;
+	req->twt_sta_start = ind_msg->twt_sta_start;
+	req->twt_sta_int_valid = ind_msg->twt_sta_int_valid;
+	req->twt_sta_int = ind_msg->twt_sta_int;
+	req->twt_sta_upo_valid = ind_msg->twt_sta_upo_valid;
+	req->twt_sta_upo = ind_msg->twt_sta_upo;
+	req->twt_sta_sp_valid = ind_msg->twt_sta_sp_valid;
+	req->twt_sta_sp = ind_msg->twt_sta_sp;
+	req->twt_sta_dl_valid = req->twt_sta_dl_valid;
+	req->twt_sta_dl = req->twt_sta_dl;
+	req->twt_sta_config_changed_valid =
+				ind_msg->twt_sta_config_changed_valid;
+	req->twt_sta_config_changed = ind_msg->twt_sta_config_changed;
+
+	cnss_pr_dbg("CNSS->IMS: TWT_CFG_REQ: state: 0x%lx\n",
+		    plat_priv->driver_state);
+
+	ret =
+	qmi_txn_init(&plat_priv->ims_qmi, &txn,
+		     ims_private_service_wfc_call_twt_config_rsp_msg_v01_ei,
+		     resp);
+	if (ret < 0) {
+		cnss_pr_err("CNSS->IMS: TWT_CFG_REQ: QMI Txn Init Err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	ret =
+	qmi_send_request(&plat_priv->ims_qmi, NULL, &txn,
+			 QMI_IMS_PRIVATE_SERVICE_WFC_CALL_TWT_CONFIG_REQ_V01,
+		IMS_PRIVATE_SERVICE_WFC_CALL_TWT_CONFIG_REQ_MSG_V01_MAX_MSG_LEN,
+		ims_private_service_wfc_call_twt_config_req_msg_v01_ei, req);
+	if (ret < 0) {
+		qmi_txn_cancel(&txn);
+		cnss_pr_err("CNSS->IMS: TWT_CFG_REQ: QMI Send Err: %d\n", ret);
+		goto out;
+	}
+
+	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
+	if (ret < 0) {
+		cnss_pr_err("IMS->CNSS: TWT_CFG_RSP: QMI Wait Err: %d\n", ret);
+		goto out;
+	}
+
+	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
+		cnss_pr_err("IMS->CNSS: TWT_CFG_RSP: Result: %d Err: %d\n",
+			    resp->resp.result, resp->resp.error);
+		ret = -resp->resp.result;
+		goto out;
+	}
+	ret = 0;
+out:
+	kfree(req);
+	kfree(resp);
+	return ret;
+}
+
+static void cnss_wlfw_process_twt_cfg_ind(struct qmi_handle *qmi_wlfw,
+					  struct sockaddr_qrtr *sq,
+					  struct qmi_txn *txn,
+					  const void *data)
+{
+	struct cnss_plat_data *plat_priv =
+		container_of(qmi_wlfw, struct cnss_plat_data, qmi_wlfw);
+	const struct wlfw_wfc_call_twt_config_ind_msg_v01 *ind_msg = data;
+
+	if (!txn) {
+		cnss_pr_err("FW->CNSS: TWT_CFG_IND: Spurious indication\n");
+		return;
+	}
+
+	if (!ind_msg) {
+		cnss_pr_err("FW->CNSS: TWT_CFG_IND: Invalid indication\n");
+		return;
+	}
+	cnss_pr_dbg("FW->CNSS: TWT_CFG_IND: %x %llx, %x %x, %x %x, %x %x, %x %x, %x %x\n",
+		    ind_msg->twt_sta_start_valid, ind_msg->twt_sta_start,
+		    ind_msg->twt_sta_int_valid, ind_msg->twt_sta_int,
+		    ind_msg->twt_sta_upo_valid, ind_msg->twt_sta_upo,
+		    ind_msg->twt_sta_sp_valid, ind_msg->twt_sta_sp,
+		    ind_msg->twt_sta_dl_valid, ind_msg->twt_sta_dl,
+		    ind_msg->twt_sta_config_changed_valid,
+		    ind_msg->twt_sta_config_changed);
+
+	cnss_ims_wfc_call_twt_cfg_send_sync(plat_priv, ind_msg);
+}
+
 static struct qmi_msg_handler qmi_wlfw_msg_handlers[] = {
 	{
 		.type = QMI_INDICATION,
@@ -2046,6 +2200,14 @@ static struct qmi_msg_handler qmi_wlfw_msg_handlers[] = {
 		sizeof(struct wlfw_respond_get_info_ind_msg_v01),
 		.fn = cnss_wlfw_respond_get_info_ind_cb
 	},
+	{
+		.type = QMI_INDICATION,
+		.msg_id = QMI_WLFW_WFC_CALL_TWT_CONFIG_IND_V01,
+		.ei = wlfw_wfc_call_twt_config_ind_msg_v01_ei,
+		.decoded_size =
+		sizeof(struct wlfw_wfc_call_twt_config_ind_msg_v01),
+		.fn = cnss_wlfw_process_twt_cfg_ind
+	},
 	{}
 };
 
@@ -2091,6 +2253,12 @@ int cnss_wlfw_server_arrive(struct cnss_plat_data *plat_priv, void *data)
 
 	if (!plat_priv)
 		return -ENODEV;
+
+	if (test_bit(CNSS_QMI_WLFW_CONNECTED, &plat_priv->driver_state)) {
+		cnss_pr_err("Unexpected WLFW server arrive\n");
+		CNSS_ASSERT(0);
+		return -EINVAL;
+	}
 
 	ret = cnss_wlfw_connect_to_server(plat_priv, data);
 	if (ret < 0)
@@ -2460,35 +2628,34 @@ static void ims_subscribe_for_indication_resp_cb(struct qmi_handle *qmi,
 	}
 }
 
-static void ims_wfc_call_status_ind_cb(struct qmi_handle *ims_qmi,
-				       struct sockaddr_qrtr *sq,
-				       struct qmi_txn *txn, const void *data)
+static void
+cnss_ims_process_wfc_call_ind_cb(struct qmi_handle *ims_qmi,
+				 struct sockaddr_qrtr *sq,
+				 struct qmi_txn *txn, const void *data)
 {
 	struct cnss_plat_data *plat_priv =
 		container_of(ims_qmi, struct cnss_plat_data, ims_qmi);
 	const
 	struct ims_private_service_wfc_call_status_ind_msg_v01 *ind_msg = data;
-	u32 data_len = 0;
-
-	cnss_pr_dbg("Received IMS wfc call status indication\n");
 
 	if (!txn) {
-		cnss_pr_err("Spurious indication\n");
+		cnss_pr_err("IMS->CNSS: WFC_CALL_IND: Spurious indication\n");
 		return;
 	}
 
 	if (!ind_msg) {
-		cnss_pr_err("Invalid indication\n");
+		cnss_pr_err("IMS->CNSS: WFC_CALL_IND: Invalid indication\n");
 		return;
 	}
+	cnss_pr_dbg("IMS->CNSS: WFC_CALL_IND: %x, %x %x, %x %x, %x %llx, %x %x, %x %x\n",
+		    ind_msg->wfc_call_active, ind_msg->all_wfc_calls_held_valid,
+		    ind_msg->all_wfc_calls_held,
+		    ind_msg->is_wfc_emergency_valid, ind_msg->is_wfc_emergency,
+		    ind_msg->twt_ims_start_valid, ind_msg->twt_ims_start,
+		    ind_msg->twt_ims_int_valid, ind_msg->twt_ims_int,
+		    ind_msg->media_quality_valid, ind_msg->media_quality);
 
-	data_len = sizeof(*ind_msg);
-	if (data_len > QMI_WLFW_MAX_WFC_CALL_STATUS_DATA_SIZE_V01) {
-		cnss_pr_err("Exceed maxinum data len:%u\n", data_len);
-		return;
-	}
-
-	cnss_wlfw_wfc_call_status_send_sync(plat_priv, data_len, ind_msg);
+	cnss_wlfw_wfc_call_status_send_sync(plat_priv, ind_msg);
 }
 
 static struct qmi_msg_handler qmi_ims_msg_handlers[] = {
@@ -2508,7 +2675,7 @@ static struct qmi_msg_handler qmi_ims_msg_handlers[] = {
 		.ei = ims_private_service_wfc_call_status_ind_msg_v01_ei,
 		.decoded_size =
 		sizeof(struct ims_private_service_wfc_call_status_ind_msg_v01),
-		.fn = ims_wfc_call_status_ind_cb
+		.fn = cnss_ims_process_wfc_call_ind_cb
 	},
 	{}
 };

@@ -723,12 +723,15 @@ int __qcom_scm_sec_wdog_deactivate(struct device *dev)
 
 int __qcom_scm_sec_wdog_trigger(struct device *dev)
 {
+	int ret;
 	struct qcom_scm_desc desc = {
 		.svc = QCOM_SCM_SVC_BOOT,
 		.cmd = QCOM_SCM_BOOT_SEC_WDOG_TRIGGER,
 		.owner = ARM_SMCCC_OWNER_SIP,
 	};
-	int ret;
+
+	desc.args[0] = 0;
+	desc.arginfo = QCOM_SCM_ARGS(1);
 
 	ret = qcom_scm_call(dev, &desc);
 
@@ -1332,7 +1335,8 @@ int __qcom_scm_mem_protect_sd_ctrl(struct device *dev, u32 devid,
 	desc.args[1] = mem_addr;
 	desc.args[2] = mem_size;
 	desc.args[3] = vmid;
-	desc.arginfo = QCOM_SCM_ARGS(4);
+	desc.arginfo = QCOM_SCM_ARGS(4, QCOM_SCM_VAL,
+				     QCOM_SCM_RW, QCOM_SCM_VAL, QCOM_SCM_VAL);
 	ret = qcom_scm_call(dev, &desc);
 
 	return ret ? : desc.res[0];

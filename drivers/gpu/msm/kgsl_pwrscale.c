@@ -16,6 +16,7 @@ static struct devfreq_msm_adreno_tz_data adreno_tz_data = {
 		.max = 350,
 		.floating = true,
 	},
+	.mod_percent = 100,
 };
 
 /**
@@ -886,10 +887,10 @@ int kgsl_pwrscale_init(struct kgsl_device *device, struct platform_device *pdev,
 			KGSL_GOVERNOR_CALL_INTERVAL);
 
 	/* Add links to the devfreq sysfs nodes */
-	kgsl_gpu_sysfs_add_link(device->gpu_sysfs_kobj,
+	kgsl_gpu_sysfs_add_link(&device->gpu_sysfs_kobj,
 			 &pwrscale->devfreqptr->dev.kobj, "governor",
 			"gpu_governor");
-	kgsl_gpu_sysfs_add_link(device->gpu_sysfs_kobj,
+	kgsl_gpu_sysfs_add_link(&device->gpu_sysfs_kobj,
 			 &pwrscale->devfreqptr->dev.kobj,
 			"available_governors", "gpu_available_governor");
 

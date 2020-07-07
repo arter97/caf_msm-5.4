@@ -205,6 +205,7 @@ struct pde_opener {
 extern const struct inode_operations proc_link_inode_operations;
 extern const struct inode_operations proc_pid_link_inode_operations;
 extern const struct super_operations proc_sops;
+extern const struct file_operations proc_reclaim_operations;
 
 void proc_init_kmemcache(void);
 void set_proc_pid_nlink(void);
@@ -251,15 +252,6 @@ extern void proc_sys_evict_inode(struct inode *inode,
 static inline void proc_sys_init(void) { }
 static inline void proc_sys_evict_inode(struct  inode *inode,
 					struct ctl_table_header *head) { }
-#endif
-
-/*
- * uid.c
- */
-#ifdef CONFIG_PROC_UID
-extern int proc_uid_init(void);
-#else
-static inline void proc_uid_init(void) { }
 #endif
 
 /*

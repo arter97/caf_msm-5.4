@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2013-2014, 2017-2019, The Linux Foundation.
+ * Copyright (c) 2013-2014, 2017-2020, The Linux Foundation.
  * All rights reserved.
  */
 
@@ -11,12 +11,14 @@
 #include <linux/clk-provider.h>
 #include <linux/reset-controller.h>
 #include <linux/of.h>
+#include <linux/clk/qcom.h>
 
 #include "common.h"
 #include "clk-rcg.h"
 #include "clk-regmap.h"
 #include "reset.h"
 #include "gdsc.h"
+#include "vdd-level.h"
 
 struct qcom_cc {
 	struct qcom_reset_controller reset;
@@ -267,6 +269,14 @@ int qcom_cc_really_probe(struct platform_device *pdev,
 	reset->regmap = regmap;
 	reset->reset_map = desc->resets;
 
+	ret = clk_regulator_init(&pdev->dev, desc);
+	if (ret)
+		return ret;
+
+	ret = clk_vdd_proxy_vote(&pdev->dev, desc);
+	if (ret)
+		return ret;
+
 	if (desc->num_resets) {
 		ret = devm_reset_controller_register(dev, &reset->rcdev);
 		if (ret)
@@ -358,7 +368,27 @@ void qcom_cc_sync_state(struct device *dev, const struct qcom_cc_desc *desc)
 {
 	dev_info(dev, "sync-state\n");
 	clk_sync_state(dev);
+
+	clk_vdd_proxy_unvote(dev, desc);
 }
 EXPORT_SYMBOL(qcom_cc_sync_state);
+
+int qcom_clk_get_voltage(struct clk *clk, unsigned long rate)
+{
+	struct clk_regmap *rclk;
+	struct clk_hw *hw = __clk_get_hw(clk);
+	int vdd_level;
+
+	if (!clk_is_regmap_clk(hw))
+		return -EINVAL;
+
+	rclk = to_clk_regmap(hw);
+	vdd_level = clk_find_vdd_level(hw, &rclk->vdd_data, rate);
+	if (vdd_level < 0)
+		return vdd_level;
+
+	return rclk->vdd_data.vdd_class->vdd_uv[vdd_level];
+}
+EXPORT_SYMBOL(qcom_clk_get_voltage);
 
 MODULE_LICENSE("GPL v2");

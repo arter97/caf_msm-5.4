@@ -194,6 +194,7 @@ out:
 	kfree(resp_payload);
 	return ret;
 }
+EXPORT_SYMBOL(hh_rm_vm_irq_accept);
 
 /**
  * hh_rm_vm_irq_lend: Lend an IRQ to another VM
@@ -333,6 +334,7 @@ int hh_rm_vm_irq_lend_notify(hh_vmid_t vmid, int virq, int label,
 	return hh_rm_vm_irq_notify(&vmid, 1, HH_VM_IRQ_NOTIFY_FLAGS_LENT,
 				   *virq_handle);
 }
+EXPORT_SYMBOL(hh_rm_vm_irq_lend_notify);
 
 /**
  * hh_rm_vm_irq_release: Return a lent IRQ
@@ -389,6 +391,7 @@ int hh_rm_vm_irq_release_notify(hh_vmid_t vmid, hh_virq_handle_t virq_handle)
 	return hh_rm_vm_irq_notify(NULL, 0, HH_VM_IRQ_NOTIFY_FLAGS_RELEASED,
 				   virq_handle);
 }
+EXPORT_SYMBOL(hh_rm_vm_irq_release_notify);
 
 /**
  * hh_rm_vm_irq_reclaim: Return a lent IRQ
@@ -427,6 +430,7 @@ int hh_rm_vm_irq_reclaim(hh_virq_handle_t virq_handle)
 
 	return ret;
 }
+EXPORT_SYMBOL(hh_rm_vm_irq_reclaim);
 
 /**
  * hh_rm_vm_alloc_vmid: Return a vmid associated with the vm loaded into
@@ -981,8 +985,11 @@ EXPORT_SYMBOL(hh_rm_mem_reclaim);
  *
  *
  * On success, the function will return a pointer to an sg-list to convey where
- * the memory has been mapped. After the SG-List is no longer needed, the
- * caller must free the table. On a failure, a negative number will be returned.
+ * the memory has been mapped. If the @sgl_desc parameter was not NULL, then the
+ * return value will be a pointer to the same SG-List. Otherwise, the return
+ * value will be a pointer to a newly allocated SG-List. After the SG-List is
+ * no longer needed, the caller must free the table. On a failure, a negative
+ * number will be returned.
  */
 struct hh_sgl_desc *hh_rm_mem_accept(hh_memparcel_handle_t handle, u8 mem_type,
 				     u8 trans_type, u8 flags, hh_label_t label,
@@ -1052,18 +1059,19 @@ struct hh_sgl_desc *hh_rm_mem_accept(hh_memparcel_handle_t handle, u8 mem_type,
 		goto err_rm_call;
 	}
 
-	/*
-	 * TODO: Shouldn't we have an input for the number of SG entries
-	 * associated with the memparcel, so we can validate that the size of
-	 * the response buffer is what we expect?
-	 */
-	ret_sgl = kmemdup(resp_payload, offsetof(struct hh_sgl_desc,
-			  sgl_entries[resp_payload->n_sgl_entries]),
-			  GFP_KERNEL);
-	if (!ret_sgl)
-		ret_sgl = ERR_PTR(-ENOMEM);
 
-	kfree(resp_payload);
+	if (sgl_desc) {
+		ret_sgl = sgl_desc;
+	} else {
+		ret_sgl = kmemdup(resp_payload, offsetof(struct hh_sgl_desc,
+				sgl_entries[resp_payload->n_sgl_entries]),
+				  GFP_KERNEL);
+		if (!ret_sgl)
+			ret_sgl = ERR_PTR(-ENOMEM);
+
+		kfree(resp_payload);
+	}
+
 err_rm_call:
 	kfree(req_buf);
 	return ret_sgl;

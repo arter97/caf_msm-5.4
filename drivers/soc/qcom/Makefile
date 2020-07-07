@@ -43,7 +43,7 @@ obj-$(CONFIG_QCOM_SHIMA_LLCC) += llcc-shima.o
 obj-$(CONFIG_QCOM_SM8150_LLCC) += llcc-sm8150.o
 obj-$(CONFIG_QCOM_MINIDUMP) += msm_minidump.o minidump_log.o
 obj-$(CONFIG_QCOM_MEM_OFFLINE) += mem-offline.o
-obj-$(CONFIG_QCOM_MEM_BUF) += mem-buf.o
+obj-$(CONFIG_QCOM_MEM_BUF) += mem-buf.o mem_buf_dma_buf.o
 obj-$(CONFIG_QCOM_MEMORY_DUMP_V2) += memory_dump_v2.o
 obj-$(CONFIG_QCOM_DCC_V2) += dcc_v2.o
 obj-$(CONFIG_MSM_JTAGV8) += jtagv8.o jtagv8-etm.o
@@ -64,6 +64,7 @@ obj-$(CONFIG_QTI_BATTERY_GLINK_DEBUG) += qti_battery_debug.o
 obj-$(CONFIG_QTI_ALTMODE_GLINK) += altmode-glink.o
 obj-$(CONFIG_QTI_DDR_STATS_LOG) += ddr_stats.o
 obj-$(CONFIG_QTI_SYSTEM_PM) += system_pm.o
+obj-$(CONFIG_QTI_SYSTEM_PM_RPM) += system_pm_rpm.o
 obj-$(CONFIG_MSM_REMOTEQDSS) += remoteqdss.o
 obj-$(CONFIG_MSM_SPSS_UTILS) += spss_utils.o
 obj-$(CONFIG_MSM_IDLE_STATS)	+= lpm-stats.o
@@ -84,3 +85,4 @@ obj-$(CONFIG_QTI_HW_KEY_MANAGER) += hwkm.o crypto-qti-hwkm.o
 ifdef CONFIG_DEBUG_FS
 obj-$(CONFIG_MSM_RPM_SMD)   +=  rpm-smd-debug.o
 endif
+obj-$(CONFIG_QTI_SYS_PM_VX) += sys_pm_vx.o

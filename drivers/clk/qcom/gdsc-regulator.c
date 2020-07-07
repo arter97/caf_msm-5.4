@@ -374,9 +374,11 @@ static int gdsc_disable(struct regulator_dev *rdev)
 			udelay(TIMEOUT_US);
 		} else {
 			ret = poll_gdsc_status(sc, DISABLED);
-			if (ret)
+			if (ret) {
+				regmap_read(sc->regmap, REG_OFFSET, &regval);
 				dev_err(&rdev->dev, "%s disable timed out: 0x%x\n",
 					sc->rdesc.name, regval);
+			}
 		}
 
 		if (sc->domain_addr) {
@@ -499,6 +501,20 @@ static int gdsc_set_mode(struct regulator_dev *rdev, unsigned int mode)
 		 */
 		gdsc_mb(sc);
 		udelay(1);
+		/*
+		 * While switching from HW to SW mode, HW may be busy
+		 * updating internal required signals. Polling for PWR_ON
+		 * ensures that the GDSC switches to SW mode before software
+		 * starts to use SW mode.
+		 */
+		if (sc->is_gdsc_enabled) {
+			ret = poll_gdsc_status(sc, ENABLED);
+			if (ret) {
+				dev_err(&rdev->dev, "%s enable timed out\n",
+					sc->rdesc.name);
+				goto done;
+			}
+		}
 		sc->is_gdsc_hw_ctrl_mode = false;
 		break;
 	default:

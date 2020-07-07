@@ -64,7 +64,6 @@
 #include <linux/binfmts.h>
 #include <linux/sched/sysctl.h>
 #include <linux/sched/coredump.h>
-#include <linux/sched/stat.h>
 #include <linux/kexec.h>
 #include <linux/bpf.h>
 #include <linux/mount.h>
@@ -144,6 +143,8 @@ static int six_hundred_forty_kb = 640 * 1024;
 static unsigned int __maybe_unused half_million = 500000;
 static unsigned int __maybe_unused one_hundred_million = 100000000;
 static unsigned int __maybe_unused one_million = 1000000;
+static int __maybe_unused max_kswapd_threads = MAX_KSWAPD_THREADS;
+
 #ifdef CONFIG_SCHED_WALT
 static int neg_three = -3;
 static int three = 3;
@@ -242,10 +243,6 @@ static int proc_dostring_coredump(struct ctl_table *table, int write,
 #endif
 static int proc_dopipe_max_size(struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp, loff_t *ppos);
-#ifdef CONFIG_SCHED_WALT
-static int proc_douintvec_minmax_schedhyst(struct ctl_table *table, int write,
-		void __user *buffer, size_t *lenp, loff_t *ppos);
-#endif
 
 #ifdef CONFIG_MAGIC_SYSRQ
 /* Note: sysrq code uses its own private copy */
@@ -406,13 +403,6 @@ static struct ctl_table kern_table[] = {
 		.extra2		= &four,
 	},
 	{
-		.procname	= "sched_cpu_high_irqload",
-		.data		= &sysctl_sched_cpu_high_irqload,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
-	},
-	{
 		.procname	= "sched_group_upmigrate",
 		.data		= &sysctl_sched_group_upmigrate_pct,
 		.maxlen		= sizeof(unsigned int),
@@ -513,7 +503,7 @@ static struct ctl_table kern_table[] = {
 		.data		= &sysctl_sched_busy_hyst_enable_cpus,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
-		.proc_handler	= proc_douintvec_minmax_schedhyst,
+		.proc_handler	= sched_busy_hyst_handler,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= &two_hundred_fifty_five,
 	},
@@ -522,7 +512,7 @@ static struct ctl_table kern_table[] = {
 		.data		= &sysctl_sched_busy_hyst,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
-		.proc_handler	= proc_douintvec_minmax_schedhyst,
+		.proc_handler	= sched_busy_hyst_handler,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= &ns_per_sec,
 	},
@@ -531,16 +521,16 @@ static struct ctl_table kern_table[] = {
 		.data		= &sysctl_sched_coloc_busy_hyst_enable_cpus,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
-		.proc_handler	= proc_douintvec_minmax_schedhyst,
+		.proc_handler	= sched_busy_hyst_handler,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= &two_hundred_fifty_five,
 	},
 	{
-		.procname	= "sched_coloc_busy_hyst_ns",
-		.data		= &sysctl_sched_coloc_busy_hyst,
-		.maxlen		= sizeof(unsigned int),
+		.procname	= "sched_coloc_busy_hyst_cpu_ns",
+		.data		= &sysctl_sched_coloc_busy_hyst_cpu,
+		.maxlen		= sizeof(unsigned int) * NR_CPUS,
 		.mode		= 0644,
-		.proc_handler	= proc_douintvec_minmax_schedhyst,
+		.proc_handler	= sched_busy_hyst_handler,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= &ns_per_sec,
 	},
@@ -549,9 +539,18 @@ static struct ctl_table kern_table[] = {
 		.data		= &sysctl_sched_coloc_busy_hyst_max_ms,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
-		.proc_handler	= proc_douintvec_minmax_schedhyst,
+		.proc_handler	= sched_busy_hyst_handler,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= &one_hundred_thousand,
+	},
+	{
+		.procname	= "sched_coloc_busy_hyst_cpu_busy_pct",
+		.data		= &sysctl_sched_coloc_busy_hyst_cpu_busy_pct,
+		.maxlen		= sizeof(unsigned int) * NR_CPUS,
+		.mode		= 0644,
+		.proc_handler	= sched_busy_hyst_handler,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= &one_hundred,
 	},
 	{
 		.procname	= "sched_ravg_window_nr_ticks",
@@ -1828,6 +1827,17 @@ static struct ctl_table vm_table[] = {
 		.proc_handler	= watermark_boost_factor_sysctl_handler,
 		.extra1		= SYSCTL_ZERO,
 	},
+#ifdef CONFIG_MULTIPLE_KSWAPD
+	{
+		.procname	= "kswapd_threads",
+		.data		= &kswapd_threads,
+		.maxlen		= sizeof(kswapd_threads),
+		.mode		= 0644,
+		.proc_handler	= kswapd_threads_sysctl_handler,
+		.extra1		= SYSCTL_ONE,
+		.extra2		= &max_kswapd_threads,
+	},
+#endif
 	{
 		.procname	= "watermark_scale_factor",
 		.data		= &watermark_scale_factor,
@@ -3162,19 +3172,6 @@ static int proc_dostring_coredump(struct ctl_table *table, int write,
 	if (!error)
 		validate_coredump_safety();
 	return error;
-}
-#endif
-
-#ifdef CONFIG_SCHED_WALT
-static int proc_douintvec_minmax_schedhyst(struct ctl_table *table, int write,
-				void __user *buffer, size_t *lenp, loff_t *ppos)
-{
-	int ret = proc_douintvec_minmax(table, write, buffer, lenp, ppos);
-
-	if (!ret && write)
-		sched_update_hyst_times();
-
-	return ret;
 }
 #endif
 

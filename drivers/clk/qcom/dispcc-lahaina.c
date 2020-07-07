@@ -24,7 +24,11 @@
 #include "reset.h"
 #include "vdd-level.h"
 
-static DEFINE_VDD_REGULATORS(vdd_mm, VDD_NUM, 1, vdd_corner);
+static DEFINE_VDD_REGULATORS(vdd_mm, VDD_NOMINAL + 1, 1, vdd_corner);
+
+static struct clk_vdd_class *disp_cc_lahaina_regulators[] = {
+	&vdd_mm,
+};
 
 #define DISP_CC_MISC_CMD	0x8000
 
@@ -50,7 +54,7 @@ enum {
 };
 
 static struct pll_vco lucid_5lpe_vco[] = {
-	{ 249600000, 2000000000, 0 },
+	{ 249600000, 1750000000, 0 },
 };
 
 static const struct alpha_pll_config disp_cc_pll0_config = {
@@ -59,7 +63,10 @@ static const struct alpha_pll_config disp_cc_pll0_config = {
 	.alpha = 0xE000,
 	.config_ctl_val = 0x20485699,
 	.config_ctl_hi_val = 0x00002261,
-	.config_ctl_hi1_val = 0x029A699C,
+	.config_ctl_hi1_val = 0x2A9A699C,
+	.test_ctl_val = 0x00000000,
+	.test_ctl_hi_val = 0x00000000,
+	.test_ctl_hi1_val = 0x01800000,
 	.user_ctl_val = 0x00000000,
 	.user_ctl_hi_val = 0x00000805,
 	.user_ctl_hi1_val = 0x00000000,
@@ -86,8 +93,8 @@ static struct clk_alpha_pll disp_cc_pll0 = {
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_MIN] = 615000000,
 				[VDD_LOW] = 1066000000,
-				[VDD_LOW_L1] = 1600000000,
-				[VDD_NOMINAL] = 2000000000},
+				[VDD_LOW_L1] = 1500000000,
+				[VDD_NOMINAL] = 1750000000},
 		},
 	},
 };
@@ -98,7 +105,10 @@ static const struct alpha_pll_config disp_cc_pll1_config = {
 	.alpha = 0x4000,
 	.config_ctl_val = 0x20485699,
 	.config_ctl_hi_val = 0x00002261,
-	.config_ctl_hi1_val = 0x029A699C,
+	.config_ctl_hi1_val = 0x2A9A699C,
+	.test_ctl_val = 0x00000000,
+	.test_ctl_hi_val = 0x00000000,
+	.test_ctl_hi1_val = 0x01800000,
 	.user_ctl_val = 0x00000000,
 	.user_ctl_hi_val = 0x00000805,
 	.user_ctl_hi1_val = 0x00000000,
@@ -125,8 +135,8 @@ static struct clk_alpha_pll disp_cc_pll1 = {
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_MIN] = 615000000,
 				[VDD_LOW] = 1066000000,
-				[VDD_LOW_L1] = 1600000000,
-				[VDD_NOMINAL] = 2000000000},
+				[VDD_LOW_L1] = 1500000000,
+				[VDD_NOMINAL] = 1750000000},
 		},
 	},
 };
@@ -1515,6 +1525,8 @@ static const struct qcom_cc_desc disp_cc_lahaina_desc = {
 	.num_clks = ARRAY_SIZE(disp_cc_lahaina_clocks),
 	.resets = disp_cc_lahaina_resets,
 	.num_resets = ARRAY_SIZE(disp_cc_lahaina_resets),
+	.clk_regulators = disp_cc_lahaina_regulators,
+	.num_clk_regulators = ARRAY_SIZE(disp_cc_lahaina_regulators),
 };
 
 static const struct of_device_id disp_cc_lahaina_match_table[] = {
@@ -1528,13 +1540,6 @@ static int disp_cc_lahaina_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 	struct clk *clk;
 	int ret;
-
-	vdd_mm.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_mm");
-	if (IS_ERR(vdd_mm.regulator[0])) {
-		if (PTR_ERR(vdd_mm.regulator[0]) != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "Unable to get vdd_mm regulator\n");
-		return PTR_ERR(vdd_mm.regulator[0]);
-	}
 
 	regmap = qcom_cc_map(pdev, &disp_cc_lahaina_desc);
 	if (IS_ERR(regmap))

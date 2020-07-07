@@ -55,6 +55,8 @@
 #include <linux/clk.h>
 #include <linux/completion.h>
 #include <linux/regulator/consumer.h>
+#include <linux/devfreq.h>
+#include <linux/bitfield.h>
 #include "unipro.h"
 
 #include <asm/irq.h>
@@ -129,6 +131,20 @@ enum uic_link_state {
 				    UIC_LINK_ACTIVE_STATE)
 #define ufshcd_set_link_hibern8(hba) ((hba)->uic_link_state = \
 				    UIC_LINK_HIBERN8_STATE)
+
+#define ufshcd_set_ufs_dev_active(h) \
+	((h)->curr_dev_pwr_mode = UFS_ACTIVE_PWR_MODE)
+#define ufshcd_set_ufs_dev_sleep(h) \
+	((h)->curr_dev_pwr_mode = UFS_SLEEP_PWR_MODE)
+#define ufshcd_set_ufs_dev_poweroff(h) \
+	((h)->curr_dev_pwr_mode = UFS_POWERDOWN_PWR_MODE)
+#define ufshcd_is_ufs_dev_active(h) \
+	((h)->curr_dev_pwr_mode == UFS_ACTIVE_PWR_MODE)
+#define ufshcd_is_ufs_dev_sleep(h) \
+	((h)->curr_dev_pwr_mode == UFS_SLEEP_PWR_MODE)
+#define ufshcd_is_ufs_dev_poweroff(h) \
+	((h)->curr_dev_pwr_mode == UFS_POWERDOWN_PWR_MODE)
+
 enum {
 	/* errors which require the host controller reset for recovery */
 	UFS_ERR_HIBERN8_EXIT,
@@ -361,6 +377,9 @@ struct ufs_hba_variant_ops {
 	void	(*device_reset)(struct ufs_hba *hba);
 	int	(*program_key)(struct ufs_hba *hba,
 			       const union ufs_crypto_cfg_entry *cfg, int slot);
+	void	(*config_scaling_param)(struct ufs_hba *hba,
+					struct devfreq_dev_profile *profile,
+					void *data);
 };
 
 struct keyslot_mgmt_ll_ops;
@@ -379,6 +398,7 @@ struct ufs_hba_crypto_variant_ops {
 	int (*prepare_lrbp_crypto)(struct ufs_hba *hba,
 				   struct scsi_cmnd *cmd,
 				   struct ufshcd_lrb *lrbp);
+	int (*map_sg_crypto)(struct ufs_hba *hba, struct ufshcd_lrb *lrbp);
 	int (*complete_lrbp_crypto)(struct ufs_hba *hba,
 				    struct scsi_cmnd *cmd,
 				    struct ufshcd_lrb *lrbp);
@@ -412,14 +432,13 @@ enum clk_gating_state {
 struct ufs_clk_gating {
 #ifdef CONFIG_SCSI_UFSHCD_QTI
 	struct hrtimer gate_hrtimer;
-	struct work_struct gate_work;
 	unsigned long delay_ms_pwr_save;
 	unsigned long delay_ms_perf;
 	struct device_attribute delay_pwr_save_attr;
 	struct device_attribute delay_perf_attr;
-#else
-	struct delayed_work gate_work;
 #endif
+	struct delayed_work gate_work;
+
 	struct work_struct ungate_work;
 	enum clk_gating_state state;
 	unsigned long delay_ms;
@@ -493,19 +512,6 @@ struct ufshcd_cmd_log {
 	u32 seq_num;
 };
 
-#define UIC_ERR_REG_HIST_LENGTH 20
-/**
- * struct ufs_uic_err_reg_hist - keeps history of uic errors
- * @pos: index to indicate cyclic buffer position
- * @reg: cyclic buffer for registers value
- * @tstamp: cyclic buffer for time stamp
- */
-struct ufs_uic_err_reg_hist {
-	int pos;
-	u32 reg[UIC_ERR_REG_HIST_LENGTH];
-	ktime_t tstamp[UIC_ERR_REG_HIST_LENGTH];
-};
-
 /* UFS Host Controller debug print bitmask */
 #define UFSHCD_DBG_PRINT_CLK_FREQ_EN		UFS_BIT(0)
 #define UFSHCD_DBG_PRINT_UIC_ERR_HIST_EN	UFS_BIT(1)
@@ -524,7 +530,8 @@ struct ufs_uic_err_reg_hist {
 
 #endif
 
-#if defined(CONFIG_SCSI_UFSHCD_QTI) && defined(CONFIG_DEBUG_FS)
+#ifdef CONFIG_SCSI_UFSHCD_QTI
+#ifdef CONFIG_DEBUG_FS
 /**
  * struct ufshcd_req_stat - statistics for request handling times (in usec)
  * @min: shortest time measured
@@ -550,6 +557,7 @@ enum ts_types {
 	TS_FLUSH = 5,
 	TS_NUM_STATS = 6,
 };
+#endif
 
 enum ufshcd_ctx {
 	QUEUE_CMD,
@@ -609,12 +617,14 @@ struct ufs_stats {
 	ktime_t last_hibern8_exit_tstamp;
 
 #ifdef CONFIG_SCSI_UFSHCD_QTI
+#ifdef CONFIG_DEBUG_FS
 	bool enabled;
 	u64 **tag_stats;
 	int q_depth;
 	int err_stats[UFS_ERR_MAX];
 	struct ufshcd_req_stat req_stats[TS_NUM_STATS];
 	int query_stats_arr[UPIU_QUERY_OPCODE_MAX][MAX_QUERY_IDN];
+#endif
 	u32 pa_err_cnt_total;
 	u32 pa_err_cnt[UFS_EC_PA_MAX];
 	u32 dl_err_cnt_total;
@@ -623,21 +633,15 @@ struct ufs_stats {
 	u32 power_mode_change_cnt;
 	struct ufshcd_clk_ctx clk_hold;
 	struct ufshcd_clk_ctx clk_rel;
-	struct ufs_uic_err_reg_hist pa_err;
-	struct ufs_uic_err_reg_hist dl_err;
-	struct ufs_uic_err_reg_hist nl_err;
-	struct ufs_uic_err_reg_hist tl_err;
-	struct ufs_uic_err_reg_hist dme_err;
 	u32 last_intr_status;
 	ktime_t last_intr_ts;
-#else
+#endif
 	/* uic specific errors */
 	struct ufs_err_reg_hist pa_err;
 	struct ufs_err_reg_hist dl_err;
 	struct ufs_err_reg_hist nl_err;
 	struct ufs_err_reg_hist tl_err;
 	struct ufs_err_reg_hist dme_err;
-#endif
 
 	/* fatal errors */
 	struct ufs_err_reg_hist auto_hibern8_err;
@@ -927,11 +931,19 @@ struct ufs_hba {
 	 * inline crypto engine, if it is present
 	 */
 #define UFSHCD_CAP_CRYPTO (1 << 7)
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+	/*
+	 * This capability allows the host controller driver to turn-on
+	 * WriteBooster, if the underlying device supports it and is
+	 * provisioned to be used. This would increase the write performance.
+	 */
+#define	UFSHCD_CAP_WB_EN (1 << 8)
+#endif
 
 #ifdef CONFIG_SCSI_UFSHCD_QTI
-#define UFSHCD_CAP_POWER_COLLAPSE_DURING_HIBERN8 (1 << 7)
+#define UFSHCD_CAP_POWER_COLLAPSE_DURING_HIBERN8 (1 << 8)
 	/* Allow standalone Hibern8 enter on idle */
-#define UFSHCD_CAP_HIBERN8_ENTER_ON_IDLE (1 << 5)
+#define UFSHCD_CAP_HIBERN8_ENTER_ON_IDLE (1 << 9)
 	struct rw_semaphore lock;
 	/* Bitmask for enabling debug prints */
 	u32 ufshcd_dbg_print;
@@ -966,6 +978,10 @@ struct ufs_hba {
 	struct device		bsg_dev;
 	struct request_queue	*bsg_queue;
 
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+	bool wb_buf_flush_enabled;
+	bool wb_enabled;
+#endif
 #ifdef CONFIG_SCSI_UFS_CRYPTO
 	/* crypto */
 	union ufs_crypto_capabilities crypto_capabilities;
@@ -1049,6 +1065,18 @@ static inline bool ufshcd_is_embedded_dev(struct ufs_hba *hba)
 	    (hba->dev_info.b_device_sub_class == UFS_DEV_EMBEDDED_NON_BOOTABLE))
 		return true;
 	return false;
+}
+#else
+static inline bool ufshcd_is_auto_hibern8_enabled(struct ufs_hba *hba)
+{
+	return FIELD_GET(UFSHCI_AHIBERN8_TIMER_MASK, hba->ahit) ? true : false;
+}
+#endif
+
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+static inline bool ufshcd_is_wb_allowed(struct ufs_hba *hba)
+{
+	return hba->caps & UFSHCD_CAP_WB_EN;
 }
 #endif
 
@@ -1186,6 +1214,11 @@ static inline bool ufshcd_is_hs_mode(struct ufs_pa_layer_attr *pwr_info)
 		pwr_info->pwr_tx == FASTAUTO_MODE);
 }
 
+static inline int ufshcd_disable_host_tx_lcc(struct ufs_hba *hba)
+{
+	return ufshcd_dme_set(hba, UIC_ARG_MIB(PA_LOCAL_TX_LCC_ENABLE), 0);
+}
+
 /* Expose Query-Request API */
 int ufshcd_query_descriptor_retry(struct ufs_hba *hba,
 				  enum query_opcode opcode,
@@ -1211,18 +1244,6 @@ void ufshcd_auto_hibern8_update(struct ufs_hba *hba, u32 ahit);
 
 int ufshcd_hold(struct ufs_hba *hba, bool async);
 void ufshcd_release(struct ufs_hba *hba);
-
-#ifdef CONFIG_SCSI_UFSHCD_QTI
-void ufshcd_scsi_block_requests(struct ufs_hba *hba);
-void ufshcd_scsi_unblock_requests(struct ufs_hba *hba);
-int ufshcd_wait_for_doorbell_clr(struct ufs_hba *hba, u64 wait_timeout_us);
-int ufshcd_change_power_mode(struct ufs_hba *hba,
-			     struct ufs_pa_layer_attr *pwr_mode);
-
-extern void ufshcd_apply_pm_quirks(struct ufs_hba *hba);
-extern int ufshcd_scale_clks(struct ufs_hba *hba, bool scale_up);
-extern int ufshcd_read_device_desc(struct ufs_hba *hba, u8 *buf, u32 size);
-#endif
 
 int ufshcd_map_desc_id_to_length(struct ufs_hba *hba, enum desc_idn desc_id,
 	int *desc_length);
@@ -1376,8 +1397,17 @@ static inline void ufshcd_vops_device_reset(struct ufs_hba *hba)
 {
 	if (hba->vops && hba->vops->device_reset) {
 		hba->vops->device_reset(hba);
+		ufshcd_set_ufs_dev_active(hba);
 		ufshcd_update_reg_hist(&hba->ufs_stats.dev_reset, 0);
 	}
+}
+
+static inline void ufshcd_vops_config_scaling_param(struct ufs_hba *hba,
+						    struct devfreq_dev_profile
+						    *profile, void *data)
+{
+	if (hba->vops && hba->vops->config_scaling_param)
+		hba->vops->config_scaling_param(hba, profile, data);
 }
 
 extern struct ufs_pm_lvl_states ufs_pm_lvl_states[];

@@ -104,10 +104,12 @@ struct coresight_reg_clk {
 };
 
 /**
- * struct coresight_platform_data - data harvested from the DT specification
- * @nr_inport:	number of input ports for this component.
- * @nr_outport:	number of output ports for this component.
- * @conns:	Array of nr_outport connections from this component
+ * struct coresight_platform_data - data harvested from the firmware
+ * specification.
+ *
+ * @nr_inport:	Number of elements for the input connections.
+ * @nr_outport:	Number of elements for the output connections.
+ * @conns:	Sparse array of nr_outport connections from this component.
  * @reg_clk:	The clock this component is associated to.
  */
 struct coresight_platform_data {
@@ -341,8 +343,6 @@ static inline int coresight_enable_reg_clk(struct coresight_device *csdev)
 {
 	return -EINVAL;
 }
-static void coresight_disable_all_source_link(void) {};
-static void coresight_enable_all_source_link(void) {};
 #endif
 
 extern int coresight_get_cpu(struct device *dev);

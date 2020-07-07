@@ -18,12 +18,13 @@
 #define DSP_VM_NUM 2
 #define CVP_DSP_MAX_RESERVED 5
 #define CVP_DSP2CPU_RESERVED 8
-#define CVP_DSP_RESPONSE_TIMEOUT 1000
+#define CVP_DSP_RESPONSE_TIMEOUT 300
 #define CVP_INVALID_RPMSG_TYPE 0xBADDFACE
 
 int cvp_dsp_device_init(void);
 void cvp_dsp_device_exit(void);
 void cvp_dsp_send_hfi_queue(void);
+void cvp_dsp_init_hfi_queue_hdr(struct iris_hfi_device *device);
 
 enum CVP_DSP_COMMAND {
 	CPU2DSP_SEND_HFI_QUEUE = 0,

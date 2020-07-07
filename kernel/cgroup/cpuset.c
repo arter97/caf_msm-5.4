@@ -334,17 +334,6 @@ static struct cpuset top_cpuset = {
  */
 
 DEFINE_STATIC_PERCPU_RWSEM(cpuset_rwsem);
-
-void cpuset_read_lock(void)
-{
-	percpu_down_read(&cpuset_rwsem);
-}
-
-void cpuset_read_unlock(void)
-{
-	percpu_up_read(&cpuset_rwsem);
-}
-
 static DEFINE_SPINLOCK(callback_lock);
 
 static struct workqueue_struct *cpuset_migrate_mm_wq;
@@ -1028,8 +1017,8 @@ static int update_cpus_allowed(struct cpuset *cs, struct task_struct *p,
 #ifdef CONFIG_SCHED_WALT
 	int ret;
 
-	if (cpumask_subset(&p->cpus_requested, cs->cpus_allowed)) {
-		ret = set_cpus_allowed_ptr(p, &p->cpus_requested);
+	if (cpumask_subset(&p->wts.cpus_requested, cs->cpus_allowed)) {
+		ret = set_cpus_allowed_ptr(p, &p->wts.cpus_requested);
 		if (!ret)
 			return ret;
 	}

@@ -52,7 +52,7 @@ config QCOM_CLK_RPM
 
 config QCOM_CLK_SMD_RPM
 	tristate "RPM over SMD based Clock Controller"
-	depends on QCOM_SMD_RPM
+	depends on MSM_RPM_SMD
 	select QCOM_RPMCC
 	help
 	  The RPM (Resource Power Manager) is a dedicated hardware engine for
@@ -472,5 +472,32 @@ config SM_GCC_SHIMA
 	  SHIMA devices.
 	  Say Y if you want to use peripheral devices such as UART, SPI, I2C,
 	  USB, UFS, SD/eMMC, PCIe, etc.
+
+config SM_VIDEOCC_SHIMA
+	tristate "SHIMA Video Clock Controller"
+	depends on SM_GCC_SHIMA
+	help
+	  Support for the video clock controller on Qualcomm Technologies, Inc.
+	  SHIMA devices.
+	  Say Y if you want to support video devices and functionality such as
+	  video encode/decode.
+
+config SM_CAMCC_SHIMA
+	tristate "Shima Camera Clock Controller"
+	depends on SM_GCC_SHIMA
+	help
+	  Support for the camera clock controller on Qualcomm Technologies, Inc.
+	  SHIMA devices.
+	  Say Y if you want to support camera devices and functionality such as
+	  capturing pictures.
+
+config SM_GPUCC_SHIMA
+	tristate "SHIMA Graphics Clock Controller"
+	depends on SM_GCC_SHIMA
+	help
+	  Support for the graphics clock controller on Qualcomm Technologies, Inc.
+	  SHIMA devices.
+	  Say Y if you want to support graphics controller devices and
+	  functionality such as 3D graphics.
 
 endif

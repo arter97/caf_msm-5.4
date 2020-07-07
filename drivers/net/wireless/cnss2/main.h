@@ -25,6 +25,8 @@
 #define CNSS_RDDM_TIMEOUT_MS		20000
 #define RECOVERY_TIMEOUT		60000
 #define WLAN_WD_TIMEOUT_MS		60000
+#define WLAN_COLD_BOOT_CAL_TIMEOUT	60000
+#define WLAN_DRIVER_LOAD_TIMEOUT	90000
 #define TIME_CLOCK_FREQ_HZ		19200000
 #define CNSS_RAMDUMP_MAGIC		0x574C414E
 #define CNSS_RAMDUMP_VERSION		0
@@ -218,23 +220,25 @@ enum cnss_driver_event_type {
 };
 
 enum cnss_driver_state {
-	CNSS_QMI_WLFW_CONNECTED,
+	CNSS_QMI_WLFW_CONNECTED = 0,
 	CNSS_FW_MEM_READY,
 	CNSS_FW_READY,
-	CNSS_COLD_BOOT_CAL,
+	CNSS_IN_COLD_BOOT_CAL,
 	CNSS_DRIVER_LOADING,
-	CNSS_DRIVER_UNLOADING,
+	CNSS_DRIVER_UNLOADING = 5,
 	CNSS_DRIVER_IDLE_RESTART,
 	CNSS_DRIVER_IDLE_SHUTDOWN,
 	CNSS_DRIVER_PROBED,
 	CNSS_DRIVER_RECOVERY,
-	CNSS_FW_BOOT_RECOVERY,
+	CNSS_FW_BOOT_RECOVERY = 10,
 	CNSS_DEV_ERR_NOTIFY,
 	CNSS_DRIVER_DEBUG,
 	CNSS_COEX_CONNECTED,
 	CNSS_IMS_CONNECTED,
-	CNSS_IN_SUSPEND_RESUME,
+	CNSS_IN_SUSPEND_RESUME = 15,
 	CNSS_IN_REBOOT,
+	CNSS_COLD_BOOT_CAL_DONE,
+	CNSS_IN_PANIC,
 };
 
 struct cnss_recovery_data {
@@ -285,6 +289,7 @@ enum cnss_bdf_type {
 enum cnss_cal_status {
 	CNSS_CAL_DONE,
 	CNSS_CAL_TIMEOUT,
+	CNSS_CAL_FAILURE,
 };
 
 struct cnss_cal_info {
@@ -372,6 +377,7 @@ struct cnss_plat_data {
 	struct completion power_up_complete;
 	struct completion cal_complete;
 	struct mutex dev_lock; /* mutex for register access through debugfs */
+	struct mutex driver_ops_lock; /* mutex for external driver ops */
 	u32 device_freq_hz;
 	u32 diag_reg_read_addr;
 	u32 diag_reg_read_mem_type;
@@ -392,9 +398,9 @@ struct cnss_plat_data {
 	u64 dynamic_feature;
 	void *get_info_cb_ctx;
 	int (*get_info_cb)(void *ctx, void *event, int event_len);
+	bool cbc_enabled;
 	u8 use_nv_mac;
 	u8 set_wlaon_pwr_ctrl;
-	struct kobject *shutdown_kobj;
 };
 
 #ifdef CONFIG_ARCH_QCOM

@@ -47,6 +47,7 @@ static int cvp_dsp_send_cmd_sync(struct cvp_dsp_cmd_msg *cmd, uint32_t len)
 
 	dprintk(CVP_DSP, "%s: cmd = %d\n", __func__, cmd->type);
 
+	me->pending_dsp2cpu_rsp.type = cmd->type;
 	rc = cvp_dsp_send_cmd(cmd, len);
 	if (rc) {
 		dprintk(CVP_ERR, "%s: cvp_dsp_send_cmd failed rc=%d\n",
@@ -61,9 +62,8 @@ static int cvp_dsp_send_cmd_sync(struct cvp_dsp_cmd_msg *cmd, uint32_t len)
 		goto exit;
 	}
 
-	me->pending_dsp2cpu_rsp.type = CVP_INVALID_RPMSG_TYPE;
-
 exit:
+	me->pending_dsp2cpu_rsp.type = CVP_INVALID_RPMSG_TYPE;
 	return rc;
 }
 
@@ -153,9 +153,8 @@ static int cvp_dsp_rpmsg_probe(struct rpmsg_device *rpdev)
 	mutex_lock(&me->lock);
 	me->chan = rpdev;
 	me->state = DSP_PROBED;
+	complete(&me->completions[CPU2DSP_MAX_CMD]);
 	mutex_unlock(&me->lock);
-
-	cvp_dsp_send_hfi_queue();
 
 	return 0;
 }
@@ -182,24 +181,28 @@ static int cvp_dsp_rpmsg_callback(struct rpmsg_device *rpdev,
 	struct cvp_dsp_rsp_msg *rsp = (struct cvp_dsp_rsp_msg *)data;
 	struct cvp_dsp_apps *me = &gfa_cv;
 
-	dprintk(CVP_DSP, "%s: type = 0x%x ret = 0x%x\n",
-		__func__, rsp->type, rsp->ret);
+	dprintk(CVP_DSP, "%s: type = 0x%x ret = 0x%x len = 0x%x\n",
+		__func__, rsp->type, rsp->ret, len);
 
-	if (rsp->type == CPU2DSP_SUSPEND ||
-		rsp->type == CPU2DSP_RESUME) {
-		me->pending_dsp2cpu_rsp.type = CVP_INVALID_RPMSG_TYPE;
-		return 0;
-	}
-
-	if (me->pending_dsp2cpu_rsp.type != CVP_INVALID_RPMSG_TYPE ||
-		me->pending_dsp2cpu_cmd.type != CVP_INVALID_RPMSG_TYPE)
-		goto exit;
-
-	if (rsp->type < CPU2DSP_MAX_CMD) {
-		memcpy(&me->pending_dsp2cpu_rsp, rsp,
-			sizeof(struct cvp_dsp_rsp_msg));
-		complete(&me->completions[rsp->type]);
-	} else if (rsp->type < CVP_DSP_MAX_CMD) {
+	if (rsp->type < CPU2DSP_MAX_CMD && len == sizeof(*rsp)) {
+		if (me->pending_dsp2cpu_rsp.type == rsp->type) {
+			memcpy(&me->pending_dsp2cpu_rsp, rsp,
+				sizeof(struct cvp_dsp_rsp_msg));
+			complete(&me->completions[rsp->type]);
+		} else {
+			dprintk(CVP_ERR, "%s: CPU2DSP resp %d, pending %d\n",
+					__func__, rsp->type,
+					me->pending_dsp2cpu_rsp.type);
+			goto exit;
+		}
+	} else if (rsp->type < CVP_DSP_MAX_CMD &&
+			len == sizeof(struct cvp_dsp2cpu_cmd_msg)) {
+		if (me->pending_dsp2cpu_cmd.type != CVP_INVALID_RPMSG_TYPE) {
+			dprintk(CVP_ERR, "%s: DSP2CPU cmd:%d pending %d\n",
+					__func__, rsp->type,
+					me->pending_dsp2cpu_cmd.type);
+			goto exit;
+		}
 		memcpy(&me->pending_dsp2cpu_cmd, rsp,
 			sizeof(struct cvp_dsp2cpu_cmd_msg));
 		complete(&me->completions[CPU2DSP_MAX_CMD]);
@@ -229,12 +232,11 @@ int cvp_dsp_suspend(uint32_t session_flag)
 		goto exit;
 
 	/* Use cvp_dsp_send_cmd_sync after dsp driver is ready */
-	rc = cvp_dsp_send_cmd(&cmd, sizeof(struct cvp_dsp_cmd_msg));
+	rc = cvp_dsp_send_cmd_sync(&cmd, sizeof(struct cvp_dsp_cmd_msg));
 	if (rc) {
 		dprintk(CVP_ERR,
 			"%s: cvp_dsp_send_cmd failed rc = %d\n",
 			__func__, rc);
-		me->state = DSP_UNINIT;
 		goto exit;
 	}
 
@@ -258,12 +260,11 @@ int cvp_dsp_resume(uint32_t session_flag)
 		goto exit;
 
 	/* Use cvp_dsp_send_cmd_sync after dsp driver is ready */
-	rc = cvp_dsp_send_cmd(&cmd, sizeof(struct cvp_dsp_cmd_msg));
+	rc = cvp_dsp_send_cmd_sync(&cmd, sizeof(struct cvp_dsp_cmd_msg));
 	if (rc) {
 		dprintk(CVP_ERR,
 			"%s: cvp_dsp_send_cmd failed rc = %d\n",
 			__func__, rc);
-		me->state = DSP_UNINIT;
 		goto exit;
 	}
 
@@ -286,12 +287,13 @@ int cvp_dsp_shutdown(uint32_t session_flag)
 	if (me->state == DSP_INVALID)
 		goto exit;
 
-	me->state = DSP_UNINIT;
+	me->state = DSP_INACTIVE;
 	rc = cvp_dsp_send_cmd_sync(&cmd, sizeof(struct cvp_dsp_cmd_msg));
 	if (rc) {
 		dprintk(CVP_ERR,
 			"%s: cvp_dsp_send_cmd failed with rc = %d\n",
 			__func__, rc);
+		cvp_hyp_assign_from_dsp();
 		goto exit;
 	}
 
@@ -331,7 +333,6 @@ int cvp_dsp_register_buffer(uint32_t session_id, uint32_t buff_fd,
 	rc = cvp_dsp_send_cmd_sync(&cmd, sizeof(struct cvp_dsp_cmd_msg));
 	if (rc) {
 		dprintk(CVP_ERR, "%s send failed rc = %d\n", __func__, rc);
-		me->state = DSP_UNINIT;
 		goto exit;
 	}
 
@@ -369,7 +370,6 @@ int cvp_dsp_deregister_buffer(uint32_t session_id, uint32_t buff_fd,
 	rc = cvp_dsp_send_cmd_sync(&cmd, sizeof(struct cvp_dsp_cmd_msg));
 	if (rc) {
 		dprintk(CVP_ERR, "%s send failed rc = %d\n", __func__, rc);
-		me->state = DSP_UNINIT;
 		goto exit;
 	}
 
@@ -392,6 +392,68 @@ static struct rpmsg_driver cvp_dsp_rpmsg_client = {
 		.name = "qcom,msm_cvp_dsp_rpmsg",
 	},
 };
+
+static void cvp_dsp_set_queue_hdr_defaults(struct cvp_hfi_queue_header *q_hdr)
+{
+	q_hdr->qhdr_status = 0x1;
+	q_hdr->qhdr_type = CVP_IFACEQ_DFLT_QHDR;
+	q_hdr->qhdr_q_size = CVP_IFACEQ_QUEUE_SIZE / 4;
+	q_hdr->qhdr_pkt_size = 0;
+	q_hdr->qhdr_rx_wm = 0x1;
+	q_hdr->qhdr_tx_wm = 0x1;
+	q_hdr->qhdr_rx_req = 0x1;
+	q_hdr->qhdr_tx_req = 0x0;
+	q_hdr->qhdr_rx_irq_status = 0x0;
+	q_hdr->qhdr_tx_irq_status = 0x0;
+	q_hdr->qhdr_read_idx = 0x0;
+	q_hdr->qhdr_write_idx = 0x0;
+}
+
+void cvp_dsp_init_hfi_queue_hdr(struct iris_hfi_device *device)
+{
+	u32 i;
+	struct cvp_hfi_queue_table_header *q_tbl_hdr;
+	struct cvp_hfi_queue_header *q_hdr;
+	struct cvp_iface_q_info *iface_q;
+
+	for (i = 0; i < CVP_IFACEQ_NUMQ; i++) {
+		iface_q = &device->dsp_iface_queues[i];
+		iface_q->q_hdr = CVP_IFACEQ_GET_QHDR_START_ADDR(
+			device->dsp_iface_q_table.align_virtual_addr, i);
+		cvp_dsp_set_queue_hdr_defaults(iface_q->q_hdr);
+	}
+	q_tbl_hdr = (struct cvp_hfi_queue_table_header *)
+			device->dsp_iface_q_table.align_virtual_addr;
+	q_tbl_hdr->qtbl_version = 0;
+	q_tbl_hdr->device_addr = (void *)device;
+	strlcpy(q_tbl_hdr->name, "msm_cvp", sizeof(q_tbl_hdr->name));
+	q_tbl_hdr->qtbl_size = CVP_IFACEQ_TABLE_SIZE;
+	q_tbl_hdr->qtbl_qhdr0_offset =
+				sizeof(struct cvp_hfi_queue_table_header);
+	q_tbl_hdr->qtbl_qhdr_size = sizeof(struct cvp_hfi_queue_header);
+	q_tbl_hdr->qtbl_num_q = CVP_IFACEQ_NUMQ;
+	q_tbl_hdr->qtbl_num_active_q = CVP_IFACEQ_NUMQ;
+
+	iface_q = &device->dsp_iface_queues[CVP_IFACEQ_CMDQ_IDX];
+	q_hdr = iface_q->q_hdr;
+	q_hdr->qhdr_start_addr = iface_q->q_array.align_device_addr;
+	q_hdr->qhdr_type |= HFI_Q_ID_HOST_TO_CTRL_CMD_Q;
+
+	iface_q = &device->dsp_iface_queues[CVP_IFACEQ_MSGQ_IDX];
+	q_hdr = iface_q->q_hdr;
+	q_hdr->qhdr_start_addr = iface_q->q_array.align_device_addr;
+	q_hdr->qhdr_type |= HFI_Q_ID_CTRL_TO_HOST_MSG_Q;
+
+	iface_q = &device->dsp_iface_queues[CVP_IFACEQ_DBGQ_IDX];
+	q_hdr = iface_q->q_hdr;
+	q_hdr->qhdr_start_addr = iface_q->q_array.align_device_addr;
+	q_hdr->qhdr_type |= HFI_Q_ID_CTRL_TO_HOST_DEBUG_Q;
+	/*
+	 * Set receive request to zero on debug queue as there is no
+	 * need of interrupt from cvp hardware for debug messages
+	 */
+	q_hdr->qhdr_rx_req = 0;
+}
 
 void cvp_dsp_send_hfi_queue(void)
 {
@@ -426,7 +488,7 @@ void cvp_dsp_send_hfi_queue(void)
 		goto exit;
 	}
 
-	if (me->state != DSP_PROBED)
+	if (me->state != DSP_PROBED && me->state != DSP_INACTIVE)
 		goto exit;
 
 	rc = cvp_hyp_assign_to_dsp(addr, size);
@@ -436,12 +498,17 @@ void cvp_dsp_send_hfi_queue(void)
 		goto exit;
 	}
 
+	if (me->state == DSP_PROBED) {
+		cvp_dsp_init_hfi_queue_hdr(device);
+		dprintk(CVP_WARN,
+			"%s: Done init of HFI queue headers\n", __func__);
+	}
+
 	rc = cvp_dsp_send_cmd_hfi_queue((phys_addr_t *)addr, size);
 	if (rc) {
 		dprintk(CVP_WARN, "%s: Send HFI Queue failed rc = %d\n",
 			__func__, rc);
 
-		rc = cvp_hyp_assign_from_dsp();
 		goto exit;
 	}
 
@@ -482,6 +549,14 @@ wait_dsp:
 	if (me->state == DSP_INVALID)
 		goto exit;
 
+	if (me->state == DSP_UNINIT)
+		goto wait_dsp;
+
+	if (me->state == DSP_PROBED) {
+		cvp_dsp_send_hfi_queue();
+		goto wait_dsp;
+	}
+
 	cmd.type = me->pending_dsp2cpu_cmd.type;
 
 	if (rc == -ERESTARTSYS) {
@@ -491,8 +566,10 @@ wait_dsp:
 		switch (me->pending_dsp2cpu_cmd.type) {
 		case DSP2CPU_POWERON:
 		{
-			if (me->state == DSP_READY)
+			if (me->state == DSP_READY) {
+				cmd.ret = 0;
 				break;
+			}
 
 			mutex_unlock(&me->lock);
 			old_state = me->state;
@@ -561,13 +638,14 @@ int cvp_dsp_device_init(void)
 		goto register_bail;
 	}
 	snprintf(tname, sizeof(tname), "cvp-dsp-thread");
+	me->state = DSP_UNINIT;
 	me->dsp_thread = kthread_run(cvp_dsp_thread, me, tname);
 	if (!me->dsp_thread) {
 		dprintk(CVP_ERR, "%s create %s fail", __func__, tname);
 		rc = -ECHILD;
+		me->state = DSP_INVALID;
 		goto register_bail;
 	}
-	me->state = DSP_UNINIT;
 	return 0;
 
 register_bail:

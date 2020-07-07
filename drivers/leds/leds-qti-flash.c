@@ -44,9 +44,7 @@
 #define  SAFETY_TIMER_MAX_TIMEOUT_MS		1280
 #define  SAFETY_TIMER_MIN_TIMEOUT_MS		10
 #define  SAFETY_TIMER_STEP_SIZE		10
-
-/* Default timer duration is 200ms */
-#define  SAFETY_TIMER_DEFAULT_DURATION		 0x13
+#define  SAFETY_TIMER_DEFAULT_TIMEOUT_MS		200
 
 #define FLASH_LED_ITARGET(id)		(0x42 + id)
 #define  FLASH_LED_ITARGET_MASK		GENMASK(6, 0)
@@ -164,7 +162,8 @@ struct flash_switch_data {
  * @revision		: Revision of the flash LED module
  * @subtype		: Peripheral subtype of the flash LED module
  * @max_channels	: Maximum number of channels supported by flash module
- * @ref_count		: Reference count used to enable/disable flash LED
+ * @chan_en_map		: Bit map of individual channel enable
+ * @module_en		: Flag used to enable/disable flash LED module
  * @trigger_lmh		: Flag to enable lmh mitigation
  */
 struct qti_flash_led {
@@ -186,7 +185,8 @@ struct qti_flash_led {
 	u8		revision;
 	u8		subtype;
 	u8		max_channels;
-	u8		ref_count;
+	u8		chan_en_map;
+	bool		module_en;
 	bool		trigger_lmh;
 };
 
@@ -291,25 +291,24 @@ static int qti_flash_led_module_control(struct qti_flash_led *led,
 	u8 val;
 
 	if (enable) {
-		if (!led->ref_count) {
+		if (!led->module_en && led->chan_en_map) {
 			val = FLASH_MODULE_ENABLE;
 			rc = qti_flash_led_write(led, FLASH_ENABLE_CONTROL,
 						&val, 1);
 			if (rc < 0)
 				return rc;
+
+			led->module_en = true;
 		}
-
-		led->ref_count++;
 	} else {
-		if (led->ref_count)
-			led->ref_count--;
-
-		if (!led->ref_count) {
+		if (led->module_en && !led->chan_en_map) {
 			val = FLASH_MODULE_DISABLE;
 			rc = qti_flash_led_write(led, FLASH_ENABLE_CONTROL,
 						&val, 1);
 			if (rc < 0)
 				return rc;
+
+			led->module_en = false;
 		}
 	}
 
@@ -320,12 +319,16 @@ static int qti_flash_led_strobe(struct qti_flash_led *led,
 				struct flash_switch_data *snode,
 				u8 mask, u8 value)
 {
-	int rc;
+	int rc, i;
 	bool enable = mask & value;
 
 	spin_lock(&led->lock);
 
 	if (enable) {
+		for (i = 0; i < led->max_channels; i++)
+			if ((mask & BIT(i)) && (value & BIT(i)))
+				led->chan_en_map |= BIT(i);
+
 		rc = qti_flash_led_module_control(led, enable);
 		if (rc < 0)
 			goto error;
@@ -343,6 +346,11 @@ static int qti_flash_led_strobe(struct qti_flash_led *led,
 		if (rc < 0)
 			goto error;
 	} else {
+		for (i = 0; i < led->max_channels; i++)
+			if ((led->chan_en_map & BIT(i)) &&
+			    (mask & BIT(i)) && !(value & BIT(i)))
+				led->chan_en_map &= ~(BIT(i));
+
 		rc = qti_flash_led_masked_write(led, FLASH_EN_LED_CTRL,
 				mask, value);
 		if (rc < 0)
@@ -389,16 +397,10 @@ static int qti_flash_led_enable(struct flash_node_data *fnode)
 		return 0;
 	}
 
-	if (fnode->type == FLASH_LED_TYPE_FLASH && fnode->duration) {
+	if (fnode->type == FLASH_LED_TYPE_FLASH) {
 		val = fnode->duration | FLASH_LED_SAFETY_TIMER_EN;
 		rc = qti_flash_led_write(led,
 			FLASH_LED_SAFETY_TIMER(addr_offset), &val, 1);
-		if (rc < 0)
-			goto out;
-	} else {
-		rc = qti_flash_led_masked_write(led,
-			FLASH_LED_SAFETY_TIMER(addr_offset),
-			FLASH_LED_SAFETY_TIMER_EN_MASK, 0);
 		if (rc < 0)
 			goto out;
 	}
@@ -419,6 +421,9 @@ static int qti_flash_led_disable(struct flash_node_data *fnode)
 	struct qti_flash_led *led = fnode->led;
 	int rc;
 
+	if (!fnode->configured)
+		return -EINVAL;
+
 	spin_lock(&led->lock);
 	if ((fnode->strobe_sel == HW_STROBE) &&
 		gpio_is_valid(led->hw_strobe_gpio[fnode->id]))
@@ -435,6 +440,7 @@ static int qti_flash_led_disable(struct flash_node_data *fnode)
 	if (rc < 0)
 		goto out;
 
+	fnode->configured = false;
 	fnode->current_ma = 0;
 
 out:
@@ -462,11 +468,18 @@ static void qti_flash_led_brightness_set(struct led_classdev *led_cdev,
 	fnode = container_of(fdev, struct flash_node_data, fdev);
 	led = fnode->led;
 
-	if (brightness <= 0) {
+	if (!brightness) {
+		rc = qti_flash_led_strobe(fnode->led, NULL,
+			FLASH_LED_ENABLE(fnode->id), 0);
+		if (rc < 0) {
+			pr_err("Failed to destrobe LED, rc=%d\n", rc);
+			return;
+		}
+
 		rc = qti_flash_led_disable(fnode);
 		if (rc < 0)
-			pr_err("Failed to set brightness %d to LED\n",
-				brightness);
+			pr_err("Failed to disable LED\n");
+
 		return;
 	}
 
@@ -587,13 +600,28 @@ static int qti_flash_switch_disable(struct flash_switch_data *snode)
 	u8 led_dis = 0;
 
 	for (i = 0; i < led->num_fnodes; i++) {
+		if (!(snode->led_mask & BIT(led->fnode[i].id)) ||
+				!led->fnode[i].configured)
+			continue;
+
+		led_dis |= BIT(led->fnode[i].id);
+	}
+
+	rc = qti_flash_led_strobe(led, NULL, led_dis, ~led_dis);
+	if (rc < 0) {
+		pr_err("Failed to destrobe LEDs under with switch, rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	for (i = 0; i < led->num_fnodes; i++) {
 		/*
 		 * Do not turn OFF flash/torch device if
 		 * i. the device is not under this switch or
 		 * ii. brightness is not configured for device under this switch
 		 */
 		if (!(snode->led_mask & BIT(led->fnode[i].id)) ||
-			!led->fnode[i].configured)
+				!led->fnode[i].configured)
 			continue;
 
 		rc = qti_flash_led_disable(&led->fnode[i]);
@@ -602,15 +630,12 @@ static int qti_flash_switch_disable(struct flash_switch_data *snode)
 				&led->fnode[i].id);
 			break;
 		}
-
-		led_dis |= (1 << led->fnode[i].id);
-		led->fnode[i].configured = false;
 	}
 
 	snode->on_time_ms = 0;
 	snode->off_time_ms = 0;
 
-	return qti_flash_led_strobe(led, NULL, led_dis, ~led_dis);
+	return rc;
 }
 
 static void qti_flash_led_switch_brightness_set(
@@ -1032,6 +1057,8 @@ static ssize_t qti_flash_off_time_store(struct device *dev,
 	if (rc < 0)
 		return rc;
 
+	val = min_t(u64, val, SAFETY_TIMER_MAX_TIMEOUT_MS);
+
 	snode = container_of(led_cdev, struct flash_switch_data, cdev);
 	snode->off_time_ms = val;
 
@@ -1093,14 +1120,24 @@ static int qti_flash_strobe_set(struct led_classdev_flash *fdev,
 	if (fnode->enabled == state)
 		return 0;
 
+	if (state && !fnode->configured)
+		return -EINVAL;
+
 	mask = FLASH_LED_ENABLE(fnode->id);
 	value = state ? FLASH_LED_ENABLE(fnode->id) : 0;
 
 	rc = qti_flash_led_strobe(fnode->led, NULL, mask, value);
-	if (!rc) {
-		fnode->enabled = state;
-		if (!state)
-			fnode->configured = false;
+	if (rc < 0) {
+		pr_err("Failed to %s LED, rc=%d\n",
+			state ? "strobe" : "desrobe", rc);
+		return rc;
+	}
+	fnode->enabled = state;
+
+	if (!state) {
+		rc = qti_flash_led_disable(fnode);
+		if (rc < 0)
+			pr_err("Failed to disable LED %u\n", fnode->id);
 	}
 
 	return rc;
@@ -1125,12 +1162,10 @@ static int qti_flash_timeout_set(struct led_classdev_flash *fdev,
 	int rc = 0;
 	u8 val;
 
-	if (timeout < SAFETY_TIMER_MIN_TIMEOUT_MS ||
-		timeout > SAFETY_TIMER_MAX_TIMEOUT_MS)
-		return -EINVAL;
-
 	fnode = container_of(fdev, struct flash_node_data, fdev);
 	led = fnode->led;
+
+	timeout = timeout / 1000;
 
 	rc = timeout_to_code(timeout);
 	if (rc < 0)
@@ -1346,7 +1381,7 @@ static int register_flash_device(struct qti_flash_led *led,
 	struct led_flash_setting *setting;
 	const char *temp_string;
 	int rc;
-	u32 val, default_curr_ma;
+	u32 val, default_curr_ma, duration;
 
 	rc = of_property_read_string(node, "qcom,led-name",
 					&fnode->fdev.led_cdev.name);
@@ -1422,16 +1457,18 @@ static int register_flash_device(struct qti_flash_led *led,
 	fnode->max_current = val;
 	fnode->fdev.led_cdev.max_brightness = val;
 
-	fnode->duration = SAFETY_TIMER_DEFAULT_DURATION;
+	duration = SAFETY_TIMER_DEFAULT_TIMEOUT_MS;
 	rc = of_property_read_u32(node, "qcom,duration-ms", &val);
-	if (!rc) {
-		rc = timeout_to_code(val);
-		if (rc < 0) {
-			pr_err("Incorrect timeout configured %u\n", val);
-			return rc;
-		}
-		fnode->duration = rc;
+	if (!rc && (val >= SAFETY_TIMER_MIN_TIMEOUT_MS &&
+			val <= SAFETY_TIMER_MAX_TIMEOUT_MS))
+		duration = val;
+
+	rc = timeout_to_code(duration);
+	if (rc < 0) {
+		pr_err("Incorrect timeout configured %u\n", duration);
+		return rc;
 	}
+	fnode->duration = rc;
 
 	fnode->strobe_sel = SW_STROBE;
 	rc = of_property_read_u32(node, "qcom,strobe-sel", &val);
@@ -1470,10 +1507,10 @@ static int register_flash_device(struct qti_flash_led *led,
 	setting->val = default_curr_ma;
 
 	setting = &fnode->fdev.timeout;
-	setting->min = SAFETY_TIMER_MIN_TIMEOUT_MS;
-	setting->max = SAFETY_TIMER_MAX_TIMEOUT_MS;
-	setting->step = 1;
-	setting->val = SAFETY_TIMER_DEFAULT_DURATION;
+	setting->min = SAFETY_TIMER_MIN_TIMEOUT_MS * 1000;
+	setting->max = SAFETY_TIMER_MAX_TIMEOUT_MS * 1000;
+	setting->step = SAFETY_TIMER_STEP_SIZE * 1000;
+	setting->val = SAFETY_TIMER_DEFAULT_TIMEOUT_MS * 1000;
 
 	rc = led_classdev_flash_register(&led->pdev->dev, &fnode->fdev);
 	if (rc < 0) {

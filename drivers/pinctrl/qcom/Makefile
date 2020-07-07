@@ -28,3 +28,4 @@ obj-$(CONFIG_PINCTRL_LAHAINA) += pinctrl-lahaina.o
 obj-$(CONFIG_PINCTRL_SHIMA) += pinctrl-shima.o
 obj-$(CONFIG_PINCTRL_SLPI) += pinctrl-slpi.o
 obj-$(CONFIG_PINCTRL_HOLI) += pinctrl-holi.o
+obj-$(CONFIG_PINCTRL_SDXLEMUR) += pinctrl-sdxlemur.o

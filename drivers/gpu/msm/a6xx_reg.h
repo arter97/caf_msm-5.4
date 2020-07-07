@@ -119,8 +119,6 @@
 #define A6XX_VSC_ADDR_MODE_CNTL          0xC01
 
 /* LPAC registers */
-#define A6XX_CP_LPAC_ROQ_THRESHOLDS_1    0xB32
-#define A6XX_CP_LPAC_ROQ_THRESHOLDS_2    0xB33
 #define A6XX_CP_LPAC_PROG_FIFO_SIZE      0xB34
 
 /* RBBM registers */
@@ -726,6 +724,7 @@
 #define A6XX_UCHE_PERFCTR_UCHE_SEL_10       0xE26
 #define A6XX_UCHE_PERFCTR_UCHE_SEL_11       0xE27
 #define A6XX_UCHE_GBIF_GX_CONFIG            0xE3A
+#define A6XX_UCHE_CMDQ_CONFIG               0xE3C
 
 /* SP registers */
 #define A6XX_SP_ADDR_MODE_CNTL              0xAE01
@@ -972,8 +971,6 @@
 #define A6XX_GMU_CX_GMU_POWER_COUNTER_XOCLK_4_H	0x1F84D
 #define A6XX_GMU_CX_GMU_POWER_COUNTER_XOCLK_5_L	0x1F84E
 #define A6XX_GMU_CX_GMU_POWER_COUNTER_XOCLK_5_H	0x1F84F
-#define A6XX_GMU_CX_GMU_ALWAYS_ON_COUNTER_L	0x1F888
-#define A6XX_GMU_CX_GMU_ALWAYS_ON_COUNTER_H	0x1F889
 #define A6XX_GMU_PWR_COL_INTER_FRAME_CTRL	0x1F8C0
 #define A6XX_GMU_PWR_COL_INTER_FRAME_HYST	0x1F8C1
 #define A6XX_GMU_PWR_COL_SPTPRAC_HYST		0x1F8C2
@@ -1125,7 +1122,7 @@
  * now we are using a separate section for RSCC regsiters. Add the
  * offset for backward compatibility.
  */
-#define RSCC_OFFSET_LEGACY			0x23400
+#define RSCC_OFFSET_LEGACY			0x23000
 
 /* RGMU(PCC) registers in A6X_GMU_CX_0_NON_CONTEXT_DEC domain */
 #define A6XX_RGMU_CX_INTR_GEN_EN		0x1F80F

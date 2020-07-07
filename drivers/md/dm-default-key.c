@@ -230,7 +230,7 @@ static int default_key_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		goto bad;
 	}
 
-	err = blk_crypto_init_key(&dkc->key, raw_key, cipher->key_size,
+	err = blk_crypto_init_key(&dkc->key, raw_key, raw_key_size,
 				  dkc->is_hw_wrapped, cipher->mode_num,
 				  dkc->sector_size);
 	if (err) {
@@ -239,6 +239,7 @@ static int default_key_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	}
 
 	err = blk_crypto_start_using_mode(cipher->mode_num, dkc->sector_size,
+					  dkc->is_hw_wrapped,
 					  dkc->dev->bdev->bd_queue);
 	if (err) {
 		ti->error = "Error starting to use blk-crypto";

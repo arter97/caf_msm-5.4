@@ -1594,7 +1594,7 @@ static int gmu_start(struct kgsl_device *device)
 		/* Vote for minimal DDR BW for GMU to init */
 		level = pwr->pwrlevels[pwr->default_pwrlevel].bus_min;
 		icc_set_bw(pwr->icc_path, 0,
-			MBps_to_icc(pwr->ddr_table[level]));
+			kBps_to_icc(pwr->ddr_table[level]));
 
 		ret = gmu_dev_ops->rpmh_gpu_pwrctrl(device, GMU_FW_START,
 				GMU_COLD_BOOT, 0);
@@ -1739,20 +1739,12 @@ static void gmu_remove(struct kgsl_device *device)
 	memset(&device->gmu_core, 0, sizeof(device->gmu_core));
 }
 
-static bool gmu_regulator_isenabled(struct kgsl_device *device)
-{
-	struct gmu_device *gmu = KGSL_GMU_DEVICE(device);
-
-	return (gmu->gx_gdsc && regulator_is_enabled(gmu->gx_gdsc));
-}
-
 static struct gmu_core_ops gmu_ops = {
 	.init = gmu_init,
 	.start = gmu_start,
 	.stop = gmu_stop,
 	.dcvs_set = gmu_dcvs_set,
 	.snapshot = gmu_snapshot,
-	.regulator_isenabled = gmu_regulator_isenabled,
 	.suspend = gmu_suspend,
 	.acd_set = gmu_acd_set,
 };
