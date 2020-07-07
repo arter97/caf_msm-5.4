@@ -2073,10 +2073,6 @@ static int emac_close(struct net_device *netdev)
 	struct emac_hw *hw = &adpt->hw;
 	struct emac_phy *phy = &adpt->phy;
 
-	/* ensure no task is running and no reset is in progress */
-	while (TEST_N_SET_FLAG(adpt, ADPT_STATE_RESETTING))
-		/* Reset might take few 10s of ms */
-		msleep(EMAC_ADPT_RESET_WAIT_TIME);
 
 	pm_runtime_get_sync(netdev->dev.parent);
 
@@ -2100,7 +2096,6 @@ static int emac_close(struct net_device *netdev)
 
 	emac_free_all_rtx_descriptor(adpt);
 
-	CLR_FLAG(adpt, ADPT_STATE_RESETTING);
 	return 0;
 }
 
