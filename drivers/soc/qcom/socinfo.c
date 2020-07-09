@@ -79,6 +79,19 @@ static const char * const hw_platform[] = {
 	[HW_PLATFORM_HDK] = "HDK",
 };
 
+
+enum {
+	PLATFORM_SUBTYPE_SA8195_ADP_STAR = 0x0,
+	PLATFORM_SUBTYPE_SA8195_ADP_AIR = 0x1,
+	PLATFORM_SUBTYPE_SA8195_ADP_INVALID,
+};
+
+static const char * const sa8195adp_hw_platform_subtype[] = {
+	[PLATFORM_SUBTYPE_SA8195_ADP_STAR] = "ADP_STAR",
+	[PLATFORM_SUBTYPE_SA8195_ADP_AIR] = "ADP_AIR",
+	[PLATFORM_SUBTYPE_SA8195_ADP_INVALID] = "INVALID",
+};
+
 enum {
 	PLATFORM_SUBTYPE_QRD = 0x0,
 	PLATFORM_SUBTYPE_SKUAA = 0x1,
@@ -476,6 +489,27 @@ msm_get_platform_subtype(struct device *dev,
 			return 0;
 		}
 
+	}
+	if (socinfo_get_platform_type() == HW_PLATFORM_ADP) {
+		machine_name = socinfo_get_id_string();
+		if (machine_name) {
+			if (strcmp(machine_name, "SA8195P") == 0){
+				if (hw_subtype >=
+					PLATFORM_SUBTYPE_SA8195_ADP_INVALID) {
+					pr_err("Invalid hardware platform sub type for adp found\n");
+					hw_subtype =
+					PLATFORM_SUBTYPE_SA8195_ADP_INVALID;
+				}
+				return snprintf(buf, PAGE_SIZE, "%-.32s\n",
+				sa8195adp_hw_platform_subtype[hw_subtype]);
+			} else {
+				pr_err("Invalid machine name for ADP platform\n");
+				return 0;
+			}
+		} else {
+			pr_err("Machine name is NULL for the ADP platform\n");
+			return 0;
+		}
 	} else {
 		if (hw_subtype >= PLATFORM_SUBTYPE_INVALID) {
 			pr_err("Invalid hardware platform subtype\n");
@@ -692,6 +726,7 @@ static const struct soc_id soc_id[] = {
 	{ 367, "SA8155P" },
 	{ 415, "LAHAINA" },
 	{ 439, "LAHAINAP" },
+	{ 405, "SA8195P" },
 	{ 450, "SHIMA" },
 	{ 454, "HOLI" },
 	{ 458, "SDXLEMUR" },
