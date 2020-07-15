@@ -1946,7 +1946,7 @@ int emac_mac_up(struct emac_adapter *adpt)
 	adpt->phydev->supported |= SUPPORTED_Pause | SUPPORTED_Asym_Pause;
 	adpt->phydev->advertising |= SUPPORTED_Pause | SUPPORTED_Asym_Pause;
 
-	adpt->phydev->irq = PHY_IGNORE_INTERRUPT;
+	adpt->phydev->irq = PHY_POLL;
 
 	emac_napi_enable_all(adpt);
 	netif_start_queue(netdev);
@@ -2273,7 +2273,6 @@ static void emac_work_thread(struct work_struct *work)
 
 	emac_reinit_task_routine(adpt);
 
-	phy_mac_interrupt(adpt->phydev, !!(adpt->irq_status & ISR_GPHY_LINK));
 	adpt->irq_status &= ~ISR_GPHY_LINK;
 
 	adpt->phy.ops.periodic_task(adpt);

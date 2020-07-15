@@ -51,19 +51,13 @@ void emac_hw_set_mac_addr(struct emac_hw *hw, u8 *addr);
 /* TX Timestamp */
 bool emac_hw_read_tx_tstamp(struct emac_hw *hw, struct emac_hwtxtstamp *ts);
 
-#define IMR_NORMAL_MASK         (\
-		ISR_ERROR       |\
-		ISR_GPHY_LINK   |\
-		ISR_TX_PKT      |\
-		GPHY_WAKEUP_INT)
+#define IMR_NORMAL_MASK		(ISR_ERROR | ISR_OVER | ISR_TX_PKT)
 
 #define IMR_EXTENDED_MASK       (\
 		SW_MAN_INT      |\
 		ISR_OVER        |\
 		ISR_ERROR       |\
-		ISR_GPHY_LINK   |\
-		ISR_TX_PKT      |\
-		GPHY_WAKEUP_INT)
+		ISR_TX_PKT)
 
 #define ISR_RX_PKT      (\
 	RX_PKT_INT0     |\
