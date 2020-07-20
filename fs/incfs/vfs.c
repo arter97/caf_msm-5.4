@@ -1934,6 +1934,8 @@ static int file_open(struct inode *inode, struct file *file)
 	struct path backing_path = {};
 	int err = 0;
 	const struct cred *old_cred;
+	int flags = O_NOATIME | O_LARGEFILE |
+		(S_ISDIR(inode->i_mode) ? O_RDONLY : O_RDWR);
 
 	if (!mi)
 		return -EBADF;
@@ -1945,7 +1947,7 @@ static int file_open(struct inode *inode, struct file *file)
 
 	old_cred = override_creds(mi->mi_owner);
 	backing_file = dentry_open(&backing_path,
-			O_RDWR | O_NOATIME | O_LARGEFILE, current_cred());
+			flags, current_cred());
 	revert_creds(old_cred);
 	path_put(&backing_path);
 
