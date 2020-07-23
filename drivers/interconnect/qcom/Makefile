@@ -2,6 +2,7 @@
 
 icc-osm-l3-objs			:= osm-l3.o
 qnoc-qcs404-objs			:= qcs404.o
+qnoc-scshrike-objs			:= scshrike.o
 qnoc-sdm845-objs			:= sdm845.o
 qnoc-lahaina-objs			:= lahaina.o qnoc-qos.o
 qnoc-sdxlemur-objs			:= sdxlemur.o qnoc-qos.o
@@ -13,6 +14,7 @@ icc-rpmh-obj				:= icc-rpmh.o
 
 obj-$(CONFIG_INTERCONNECT_QCOM_OSM_L3) += icc-osm-l3.o
 obj-$(CONFIG_INTERCONNECT_QCOM_QCS404) += qnoc-qcs404.o
+obj-$(CONFIG_INTERCONNECT_QCOM_SCSHRIKE) += qnoc-scshrike.o
 obj-$(CONFIG_INTERCONNECT_QCOM_SDM845) += qnoc-sdm845.o
 obj-$(CONFIG_INTERCONNECT_QCOM_SM8150) += qnoc-sm8150.o
 obj-$(CONFIG_INTERCONNECT_QCOM_LAHAINA) += qnoc-lahaina.o
