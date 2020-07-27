@@ -45,6 +45,7 @@
  * @chip:           gpiochip handle.
  * @restart_nb:     restart notifier block.
  * @irq:            parent irq for the TLMM irq_chip.
+ * @n_dir_conns:    The number of pins directly connected to GIC.
  * @lock:           Spinlock to protect register resources as well
  *                  as msm_pinctrl data structures.
  * @enabled_irqs:   Bitmap of currently enabled irqs.
@@ -63,6 +64,7 @@ struct msm_pinctrl {
 
 	struct irq_chip irq_chip;
 	int irq;
+	int n_dir_conns;
 
 	raw_spinlock_t lock;
 
@@ -720,7 +722,7 @@ static bool is_gpio_dual_edge(struct irq_data *d, irq_hw_number_t *irq)
 	struct msm_dir_conn *dc;
 	int i;
 
-	for (i = pctrl->soc->n_dir_conns; i > 0; i--) {
+	for (i = pctrl->n_dir_conns; i > 0; i--) {
 		dc = &pctrl->soc->dir_conn[i];
 
 		if (dc->gpio == d->hwirq) {
@@ -981,7 +983,7 @@ static int select_dir_conn_mux(struct irq_data *d, irq_hw_number_t *irq,
 	struct msm_dir_conn *dc = NULL;
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
-	int i, n_dir_conns = pctrl->soc->n_dir_conns;
+	int i, n_dir_conns = pctrl->n_dir_conns;
 
 	for (i = n_dir_conns; i > 0; i--) {
 		dc = &pctrl->soc->dir_conn[i];
@@ -1067,7 +1069,7 @@ static int msm_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 	u32 val;
 
 	if (d->parent_data) {
-		if (pctrl->soc->n_dir_conns > 0) {
+		if (pctrl->n_dir_conns > 0) {
 			if (type == IRQ_TYPE_EDGE_BOTH)
 				add_dirconn_tlmm(d, pctrl);
 			else if (is_gpio_dual_edge(d, &irq))
@@ -1496,7 +1498,7 @@ int msm_gpio_mpm_wake_set(unsigned int gpio, bool enable)
 EXPORT_SYMBOL(msm_gpio_mpm_wake_set);
 
 int msm_pinctrl_probe(struct platform_device *pdev,
-		      struct msm_pinctrl_soc_data *soc_data)
+		      const struct msm_pinctrl_soc_data *soc_data)
 {
 	struct msm_pinctrl *pctrl;
 	struct resource *res;
@@ -1561,7 +1563,7 @@ int msm_pinctrl_probe(struct platform_device *pdev,
 		dc->irq = irq;
 		__irq_set_handler(irq, msm_gpio_dirconn_handler, false, NULL);
 		irq_set_irq_type(irq, IRQ_TYPE_EDGE_RISING);
-		soc_data->n_dir_conns++;
+		pctrl->n_dir_conns++;
 	}
 
 	platform_set_drvdata(pdev, pctrl);
