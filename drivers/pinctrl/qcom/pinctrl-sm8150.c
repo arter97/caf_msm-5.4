@@ -1545,7 +1545,6 @@ static struct msm_pinctrl_soc_data sm8150_pinctrl = {
 	.wakeirq_map = sm8150_pdc_map,
 	.nwakeirq_map = ARRAY_SIZE(sm8150_pdc_map),
 	.dir_conn = sm8150_dir_conn,
-	.n_dir_conns = 0,
 };
 
 static int sm8150_pinctrl_probe(struct platform_device *pdev)

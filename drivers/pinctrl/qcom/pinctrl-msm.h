@@ -148,7 +148,6 @@ struct msm_gpio_wakeirq_map {
  * @wakeirq_map:    The map of wakeup capable GPIOs and the pin at PDC/MPM
  * @nwakeirq_map:   The number of entries in @hierarchy_map
  * @dir_conn:       An array describing all the pins directly connected to GIC.
- * @ndirconns:      The number of pins directly connected to GIC
  */
 struct msm_pinctrl_soc_data {
 	const struct pinctrl_pin_desc *pins;
@@ -167,13 +166,12 @@ struct msm_pinctrl_soc_data {
 	struct pinctrl_qup *qup_regs;
 	unsigned int nqup_regs;
 	struct msm_dir_conn *dir_conn;
-	unsigned int n_dir_conns;
 };
 
 extern const struct dev_pm_ops msm_pinctrl_dev_pm_ops;
 
 int msm_pinctrl_probe(struct platform_device *pdev,
-		      struct msm_pinctrl_soc_data *soc_data);
+		      const struct msm_pinctrl_soc_data *soc_data);
 int msm_pinctrl_remove(struct platform_device *pdev);
 
 #endif
