@@ -1017,6 +1017,7 @@ gen_headers_out_arm = [
     "display/video/msm_hdmi_modes.h",
     "vidc/media/msm_media_info.h",
     "vidc/media/msm_vidc_utils.h",
+    "vidc/media/msm_vidc_private.h",
 ]
 
 genrule {
