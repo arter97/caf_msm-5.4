@@ -1032,7 +1032,7 @@ int geni_se_resources_init(struct se_geni_rsc *rsc,
 		geni_se_dev->bus_bw = icc_get(geni_se_dev->dev,
 					geni_se_dev->vectors[0].src,
 					geni_se_dev->vectors[0].dst);
-		if (IS_ERR_OR_NULL(geni_se_dev->bus_bw)) {
+		if (IS_ERR(geni_se_dev->bus_bw)) {
 			GENI_SE_ERR(geni_se_dev->log_ctx,
 				false, NULL,
 			"%s: Error creating bus client (Core2x)\n",
@@ -1048,7 +1048,7 @@ int geni_se_resources_init(struct se_geni_rsc *rsc,
 			geni_se_dev->bus_bw_noc = icc_get(geni_se_dev->dev,
 						geni_se_dev->vectors[1].src,
 						geni_se_dev->vectors[1].dst);
-			if (IS_ERR_OR_NULL(geni_se_dev->bus_bw_noc)) {
+			if (IS_ERR(geni_se_dev->bus_bw_noc)) {
 				GENI_SE_ERR(geni_se_dev->log_ctx,
 					false, NULL,
 				"%s: Error creating bus client (DDR)\n",
