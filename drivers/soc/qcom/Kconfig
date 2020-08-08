@@ -184,6 +184,15 @@ config QCOM_SM8150_LLCC
 	 can start using the LLCC slices.
 	 If unsure, say n.
 
+config QCOM_SA8195_LLCC
+	tristate "Qualcomm Technologies, Inc. SA8195 LLCC driver"
+	depends on QCOM_LLCC
+	help
+	  Say y or m here to enable the LLCC driver for SA8195 platform.
+	  This provides data required to configure LLCC so that clients
+	  can start using the LLCC slices.
+	  If unsure, say n.
+
 config QCOM_SDM845_LLCC
 	tristate "Qualcomm Technologies, Inc. SDM845 LLCC driver"
 	depends on QCOM_LLCC
