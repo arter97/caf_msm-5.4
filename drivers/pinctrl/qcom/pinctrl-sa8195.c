@@ -2260,7 +2260,6 @@ static struct msm_pinctrl_soc_data sa8195_pinctrl = {
 	.ngroups = ARRAY_SIZE(sa8195_groups),
 	.ngpios = 190,
 	.dir_conn = sa8195_dir_conn,
-	.n_dir_conns = ARRAY_SIZE(sa8195_dir_conn),
 };
 
 static int sa8195_pinctrl_probe(struct platform_device *pdev)
