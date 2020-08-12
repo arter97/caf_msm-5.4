@@ -1520,7 +1520,7 @@ static const struct qcom_cc_desc disp_cc_sm8150_desc = {
 
 static const struct of_device_id disp_cc_sm8150_match_table[] = {
 	{ .compatible = "qcom,sm8150-dispcc" },
-	{ .compatible = "qcom,sm8150-v2-dispcc" },
+	{ .compatible = "qcom,sm8150-dispcc-v2" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, disp_cc_sm8150_match_table);
@@ -1560,7 +1560,7 @@ static int disp_cc_sm8150_fixup(struct platform_device *pdev,
 	if (!compat || (compatlen <= 0))
 		return -EINVAL;
 
-	if (!strcmp(compat, "qcom,sm8150-v2-dispcc"))
+	if (!strcmp(compat, "qcom,sm8150-dispcc-v2"))
 		disp_cc_sm8150_fixup_sm8150v2(regmap);
 
 	return 0;

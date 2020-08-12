@@ -576,9 +576,9 @@ static const struct qcom_cc_desc scc_sm8150_desc = {
 
 static const struct of_device_id scc_sm8150_match_table[] = {
 	{ .compatible = "qcom,sm8150-scc" },
-	{ .compatible = "qcom,sm8150-v2-scc" },
+	{ .compatible = "qcom,sm8150-scc-v2" },
 	{ .compatible = "qcom,sa8155-scc" },
-	{ .compatible = "qcom,sa8155-v2-scc" },
+	{ .compatible = "qcom,sa8155-scc-v2" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, scc_sm8150_match_table);
@@ -660,12 +660,12 @@ static int scc_sm8150_fixup(struct platform_device *pdev, struct regmap *regmap)
 	if (!compat || (compatlen <= 0))
 		return -EINVAL;
 
-	if (!strcmp(compat, "qcom,sm8150-v2-scc") ||
-			!strcmp(compat, "qcom,sa8155-v2-scc"))
+	if (!strcmp(compat, "qcom,sm8150-scc-v2") ||
+			!strcmp(compat, "qcom,sa8155-scc-v2"))
 		scc_sm8150_fixup_sm8150v2(regmap);
 
 	if (!strcmp(compat, "qcom,sa8155-scc") ||
-			!strcmp(compat, "qcom,sa8155-v2-scc")) {
+			!strcmp(compat, "qcom,sa8155-scc-v2")) {
 		pdev->dev.driver->pm = &scc_sa8155_pm_ops;
 		dev_set_drvdata(&pdev->dev, regmap);
 	}
