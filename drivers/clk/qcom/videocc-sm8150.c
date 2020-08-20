@@ -264,9 +264,9 @@ static const struct qcom_cc_desc video_cc_sm8150_desc = {
 
 static const struct of_device_id video_cc_sm8150_match_table[] = {
 	{ .compatible = "qcom,sm8150-videocc" },
-	{ .compatible = "qcom,sm8150-v2-videocc" },
+	{ .compatible = "qcom,sm8150-videocc-v2" },
 	{ .compatible = "qcom,sa8155-videocc" },
-	{ .compatible = "qcom,sa8155-v2-videocc" },
+	{ .compatible = "qcom,sa8155-videocc-v2" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, video_cc_sm8150_match_table);
@@ -292,8 +292,8 @@ static int video_cc_sm8150_fixup(struct platform_device *pdev,
 	if (!compat || (compatlen <= 0))
 		return -EINVAL;
 
-	if (!strcmp(compat, "qcom,sm8150-v2-videocc") ||
-			!strcmp(compat, "qcom,sa8155-v2-videocc"))
+	if (!strcmp(compat, "qcom,sm8150-videocc-v2") ||
+			!strcmp(compat, "qcom,sa8155-videocc-v2"))
 		video_cc_sm8150_fixup_sm8150v2(regmap);
 
 	return 0;

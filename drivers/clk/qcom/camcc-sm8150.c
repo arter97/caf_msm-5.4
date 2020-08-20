@@ -2363,9 +2363,9 @@ static const struct qcom_cc_desc cam_cc_sm8150_desc = {
 
 static const struct of_device_id cam_cc_sm8150_match_table[] = {
 	{ .compatible = "qcom,sm8150-camcc" },
-	{ .compatible = "qcom,sm8150-v2-camcc" },
+	{ .compatible = "qcom,sm8150-camcc-v2" },
 	{ .compatible = "qcom,sa8155-camcc" },
-	{ .compatible = "qcom,sa8155-v2-camcc" },
+	{ .compatible = "qcom,sa8155-camcc-v2" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, cam_cc_sm8150_match_table);
@@ -2399,8 +2399,8 @@ static int cam_cc_sm8150_fixup(struct platform_device *pdev,
 	if (!compat || (compatlen <= 0))
 		return -EINVAL;
 
-	if (!strcmp(compat, "qcom,sm8150-v2-camcc") ||
-			!strcmp(compat, "qcom,sa8155-v2-camcc"))
+	if (!strcmp(compat, "qcom,sm8150-camcc-v2") ||
+			!strcmp(compat, "qcom,sa8155-camcc-v2"))
 		cam_cc_sm8150_fixup_sm8150v2(regmap);
 
 	return 0;

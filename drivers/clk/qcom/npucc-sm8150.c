@@ -548,9 +548,9 @@ static const struct qcom_cc_desc npu_cc_sm8150_desc = {
 
 static const struct of_device_id npu_cc_sm8150_match_table[] = {
 	{ .compatible = "qcom,sm8150-npucc" },
-	{ .compatible = "qcom,sm8150-v2-npucc" },
+	{ .compatible = "qcom,sm8150-npucc-v2" },
 	{ .compatible = "qcom,sa8155-npucc" },
-	{ .compatible = "qcom,sa8155-v2-npucc" },
+	{ .compatible = "qcom,sa8155-npucc-v2" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, npu_cc_sm8150_match_table);
@@ -587,8 +587,8 @@ static int npu_cc_sm8150_fixup(struct platform_device *pdev,
 	if (!compat || (compatlen <= 0))
 		return -EINVAL;
 
-	if (!strcmp(compat, "qcom,sm8150-v2-npucc") ||
-			!strcmp(compat, "qcom,sa8155-v2-npucc"))
+	if (!strcmp(compat, "qcom,sm8150-npucc-v2") ||
+			!strcmp(compat, "qcom,sa8155-npucc-v2"))
 		npu_cc_sm8150_fixup_sm8150v2(regmap);
 
 	return 0;
