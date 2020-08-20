@@ -1022,7 +1022,7 @@ struct v4l2_buffer {
  */
 static inline __u64 v4l2_timeval_to_ns(const struct timeval *tv)
 {
-	return (__u64)tv->tv_sec * 1000000000ULL + tv->tv_usec * 1000;
+	return (__u64)tv->tv_sec * 1000000000ULL + (__u64)tv->tv_usec * 1000;
 }
 
 /*  Flags for 'flags' field */
