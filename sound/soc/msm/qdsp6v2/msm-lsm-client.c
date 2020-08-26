@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014, Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2014, 2020 Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -44,42 +44,76 @@ struct lsm_priv {
 };
 
 static void lsm_event_handler(uint32_t opcode, uint32_t token,
-			      void *payload, void *priv)
+			      void *payload, uint16_t client_size,
+				void *priv)
 {
 	unsigned long flags;
-	struct snd_lsm_event_status *event_status;
+	uint16_t status = 0;
+	uint16_t payload_size = 0;
+	uint16_t index = 0;
 	struct lsm_priv *prtd = priv;
 	struct snd_pcm_substream *substream = prtd->substream;
 
 	pr_debug("%s: enter opcode 0x%x\n", __func__, opcode);
 	switch (opcode) {
 	case LSM_SESSION_EVENT_DETECTION_STATUS:
-		event_status = payload;
-
-		spin_lock_irqsave(&prtd->event_lock, flags);
-		prtd->event_status = krealloc(prtd->event_status,
-					      sizeof(*event_status) +
-					      event_status->payload_size,
-					      GFP_ATOMIC);
-		if (likely(prtd->event_status)) {
-			memcpy(prtd->event_status, event_status,
-			       sizeof(*event_status) +
-			       event_status->payload_size);
-			prtd->event_avail = 1;
-			spin_unlock_irqrestore(&prtd->event_lock, flags);
-			wake_up(&prtd->event_wait);
-		} else {
-			spin_unlock_irqrestore(&prtd->event_lock, flags);
-			pr_err("%s: Couldn't allocate %d bytes of memory\n",
-			       __func__, event_status->payload_size);
+		if (client_size < 3 * sizeof(uint8_t)) {
+			 pr_err("%s: client_size has invalid size[%d]\n",
+				__func__, client_size);
+		 	 return;
 		}
-		if (substream->timer_running)
-			snd_timer_interrupt(substream->timer, 1);
+		status = (uint16_t)((uint8_t *)payload)[0];
+		payload_size = (uint16_t)((uint8_t *)payload)[2];
+		index = 4;
+		pr_debug("%s: event detect status = %d payload size = %d\n",
+			 __func__, status , payload_size);
+	break;
+	case LSM_SESSION_EVENT_DETECTION_STATUS_V2:
+		if (client_size < 2 * sizeof(uint8_t)) {
+			pr_err("%s: client_size has invalid size[%d]\n",
+				__func__, client_size);
+		}
+		status = (uint16_t)((uint8_t *)payload)[0];
+		payload_size = (uint16_t)((uint8_t *)payload)[1];
+		index = 2;
+		pr_debug("%s: event detect status = %d payload size = %d\n",
+			 __func__, status , payload_size);
 		break;
 	default:
 		pr_debug("%s: Unsupported Event opcode 0x%x\n", __func__,
 			 opcode);
 		break;
+	}
+	if (opcode == LSM_SESSION_EVENT_DETECTION_STATUS ||
+		opcode == LSM_SESSION_EVENT_DETECTION_STATUS_V2) {
+		spin_lock_irqsave(&prtd->event_lock, flags);
+		prtd->event_status = krealloc(prtd->event_status,
+					      sizeof(struct snd_lsm_event_status) +
+					      payload_size,
+					      GFP_ATOMIC);
+		if (likely(prtd->event_status)) {
+			if (client_size >= (payload_size + index)) {
+				memcpy(prtd->event_status->payload,
+					&((uint8_t *)payload)[index],
+					payload_size);
+				prtd->event_avail = 1;
+				spin_unlock_irqrestore(&prtd->event_lock,
+								flags);
+				wake_up(&prtd->event_wait);
+			} else {
+				spin_unlock_irqrestore(&prtd->event_lock,
+								flags);
+				pr_err("%s: Failed to copy memory with invalid size = %d\n",
+					__func__, payload_size);
+				return;
+			}
+		} else {
+			spin_unlock_irqrestore(&prtd->event_lock, flags);
+			pr_err("%s: Couldn't allocate %d bytes of memory\n",
+			       __func__, payload_size);
+		}
+		if (substream->timer_running)
+			snd_timer_interrupt(substream->timer, 1);
 	}
 }
 
