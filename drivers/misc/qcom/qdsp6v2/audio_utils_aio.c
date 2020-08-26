@@ -63,7 +63,7 @@ ssize_t audio_aio_debug_read(struct file *file, char __user *buf,
 		mutex_unlock(&audio->lock);
 		/* Following variables are only useful for debugging when
 		 * when playback halts unexpectedly. Thus, no mutual exclusion
-		 * enforced
+		 * enforced.
 		 */
 		n += scnprintf(buffer + n, debug_bufmax - n,
 				"wflush %d\n", audio->wflush);
@@ -122,7 +122,10 @@ static int audio_aio_ion_lookup_vaddr(struct q6audio_aio *audio, void *addr,
 	list_for_each_entry(region_elt, &audio->ion_region_queue, list) {
 		if (addr >= region_elt->vaddr &&
 			addr < region_elt->vaddr + region_elt->len &&
-			addr + len <= region_elt->vaddr + region_elt->len) {
+			addr + len <= region_elt->vaddr + region_elt->len &&
+			addr + len > addr) {
+			/* to avoid integer addition overflow */
+
 			/* offset since we could pass vaddr inside a registerd
 			* ion buffer
 			*/
