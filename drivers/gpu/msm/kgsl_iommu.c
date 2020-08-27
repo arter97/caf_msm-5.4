@@ -2505,6 +2505,8 @@ static const char * const kgsl_iommu_clocks[] = {
 	"gcc_gpu_memnoc_gfx",
 	"gcc_gpu_snoc_dvm_gfx",
 	"gpu_cc_ahb",
+	"gcc_gpu_ahb",
+	"gcc_gpu_axi_clk",
 };
 
 static struct kgsl_mmu_ops kgsl_iommu_ops;
