@@ -578,7 +578,8 @@ static const struct of_device_id scc_sm8150_match_table[] = {
 	{ .compatible = "qcom,sm8150-scc" },
 	{ .compatible = "qcom,sm8150-scc-v2" },
 	{ .compatible = "qcom,sa8155-scc" },
-	{ .compatible = "qcom,sa8155-scc-v2" },
+	{ .compatible = "qcom,sa8195-scc" },
+	{ .compatible = "qcom,sa8195-scc-v2" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, scc_sm8150_match_table);
@@ -596,6 +597,7 @@ static int scc_sa8155_resume(struct device *dev)
 static const struct dev_pm_ops scc_sa8155_pm_ops = {
 	.restore_early = scc_sa8155_resume,
 };
+
 static void scc_sm8150_fixup_sm8150v2(struct regmap *regmap)
 {
 	/* 576 MHz Configuration */
@@ -665,9 +667,17 @@ static int scc_sm8150_fixup(struct platform_device *pdev, struct regmap *regmap)
 		scc_sm8150_fixup_sm8150v2(regmap);
 
 	if (!strcmp(compat, "qcom,sa8155-scc") ||
-			!strcmp(compat, "qcom,sa8155-scc-v2")) {
+			!strcmp(compat, "qcom,sa8155-scc-v2") ||
+			!strcmp(compat, "qcom,sa8195-scc") ||
+			!strcmp(compat, "qcom,sa8195-scc-v2")) {
 		pdev->dev.driver->pm = &scc_sa8155_pm_ops;
 		dev_set_drvdata(&pdev->dev, regmap);
+	}
+
+	if (!strcmp(compat, "qcom,sa8195-scc") ||
+			!strcmp(compat, "qcom,sa8195-scc-v2")) {
+		vdd_scc_cx.num_levels = VDD_MM_NUM;
+		vdd_scc_cx.cur_level = VDD_MM_NUM;
 	}
 
 	return 0;
@@ -678,12 +688,6 @@ static int scc_sm8150_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 	int ret;
 
-	regmap = qcom_cc_map(pdev, &scc_sm8150_desc);
-	if (IS_ERR(regmap)) {
-		pr_err("Failed to map the scc registers\n");
-		return PTR_ERR(regmap);
-	}
-
 	vdd_scc_cx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_scc_cx");
 	if (IS_ERR(vdd_scc_cx.regulator[0])) {
 		ret = PTR_ERR(vdd_scc_cx.regulator[0]);
@@ -691,6 +695,12 @@ static int scc_sm8150_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "Unable to get vdd_scc_cx regulator, ret=%d\n",
 				ret);
 		return ret;
+	}
+
+	regmap = qcom_cc_map(pdev, &scc_sm8150_desc);
+	if (IS_ERR(regmap)) {
+		pr_err("Failed to map the scc registers\n");
+		return PTR_ERR(regmap);
 	}
 
 	ret = scc_sm8150_fixup(pdev, regmap);
