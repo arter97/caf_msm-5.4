@@ -38,9 +38,12 @@
 				CNSS_EVENT_UNINTERRUPTIBLE)
 #define CNSS_EVENT_SYNC_UNKILLABLE (CNSS_EVENT_SYNC | CNSS_EVENT_UNKILLABLE)
 
+#define CNSS_FW_PATH_MAX_LEN 32
+
 enum cnss_dev_bus_type {
 	CNSS_BUS_NONE = -1,
 	CNSS_BUS_PCI,
+	CNSS_BUS_USB,
 };
 
 struct cnss_vreg_cfg {
@@ -385,7 +388,7 @@ struct cnss_plat_data {
 	u8 *diag_reg_read_buf;
 	u8 cal_done;
 	u8 powered_on;
-	char firmware_name[13];
+	char firmware_name[CNSS_FW_PATH_MAX_LEN];
 	struct completion rddm_complete;
 	struct completion recovery_complete;
 	struct cnss_control_params ctrl_params;
@@ -401,6 +404,8 @@ struct cnss_plat_data {
 	bool cbc_enabled;
 	u8 use_nv_mac;
 	u8 set_wlaon_pwr_ctrl;
+	u32 is_converged_dt;
+	struct device_node *dev_node;
 };
 
 #ifdef CONFIG_ARCH_QCOM
@@ -458,5 +463,7 @@ int cnss_minidump_add_region(struct cnss_plat_data *plat_priv,
 int cnss_minidump_remove_region(struct cnss_plat_data *plat_priv,
 				enum cnss_fw_dump_type type, int seg_no,
 				void *va, phys_addr_t pa, size_t size);
+const char *cnss_get_fw_path(struct cnss_plat_data *plat_priv);
+int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv);
 
 #endif /* _CNSS_MAIN_H */

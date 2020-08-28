@@ -7,6 +7,7 @@
 #include <linux/irq.h>
 #include <linux/module.h>
 #include <linux/msi.h>
+#include <linux/of_address.h>
 #include <linux/of.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/pm_runtime.h>
@@ -2082,6 +2083,7 @@ int cnss_pci_dev_powerup(struct cnss_pci_data *pci_priv)
 		break;
 	case QCA6290_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
+	case QCN7605_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 		ret = cnss_qca6290_powerup(pci_priv);
 		break;
@@ -2109,6 +2111,7 @@ int cnss_pci_dev_shutdown(struct cnss_pci_data *pci_priv)
 		break;
 	case QCA6290_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
+	case QCN7605_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 		ret = cnss_qca6290_shutdown(pci_priv);
 		break;
@@ -2136,6 +2139,7 @@ int cnss_pci_dev_crash_shutdown(struct cnss_pci_data *pci_priv)
 		break;
 	case QCA6290_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
+	case QCN7605_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 		cnss_qca6290_crash_shutdown(pci_priv);
 		break;
@@ -2163,6 +2167,7 @@ int cnss_pci_dev_ramdump(struct cnss_pci_data *pci_priv)
 		break;
 	case QCA6290_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
+	case QCN7605_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 		ret = cnss_qca6290_ramdump(pci_priv);
 		break;
@@ -3279,12 +3284,14 @@ int cnss_pci_load_m3(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct cnss_fw_mem *m3_mem = &plat_priv->m3_mem;
-	char filename[MAX_M3_FILE_NAME_LENGTH];
+	char filename[CNSS_FW_PATH_MAX_LEN];
 	const struct firmware *fw_entry;
 	int ret = 0;
 
 	if (!m3_mem->va && !m3_mem->size) {
-		snprintf(filename, sizeof(filename), DEFAULT_M3_FILE_NAME);
+		snprintf(filename, sizeof(filename),
+			 "%s" DEFAULT_M3_FILE_NAME,
+			 cnss_get_fw_path(plat_priv));
 
 		ret = request_firmware(&fw_entry, filename,
 				       &pci_priv->pci_dev->dev);
@@ -3369,7 +3376,73 @@ static int cnss_pci_smmu_fault_handler(struct iommu_domain *domain,
 	return -EINVAL;
 }
 
-static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
+static int cnss_pci_init_smmu_converged(struct cnss_pci_data *pci_priv)
+{
+	struct pci_dev *pci_dev = pci_priv->pci_dev;
+	struct resource res_tmp;
+	struct resource *res;
+	int index;
+	int ret;
+	struct device_node *dev_node;
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+
+	dev_node = (plat_priv->dev_node ?
+		    plat_priv->dev_node : plat_priv->plat_dev->dev.of_node);
+
+	pci_priv->iommu_domain = iommu_get_domain_for_dev(&pci_dev->dev);
+	index = of_property_match_string(dev_node, "reg-names",
+					 "smmu_iova_base");
+	if (index < 0) {
+		ret = -ENODATA;
+		goto out;
+	}
+	ret = of_address_to_resource(dev_node, index, &res_tmp);
+	if (ret)
+		goto out;
+
+	res = &res_tmp;
+
+	pci_priv = plat_priv->bus_priv;
+	if (of_property_read_bool(dev_node, "qcom,smmu-s1-enable")) {
+		cnss_pr_dbg("Enabling SMMU S1 stage\n");
+		pci_priv->smmu_s1_enable = true;
+		iommu_set_fault_handler(pci_priv->iommu_domain,
+					cnss_pci_smmu_fault_handler, pci_priv);
+	}
+
+	pci_priv->smmu_iova_start = res->start;
+	pci_priv->smmu_iova_len = resource_size(res);
+	cnss_pr_dbg("smmu_iova_start: %pa, smmu_iova_len: %zu\n",
+		    &pci_priv->smmu_iova_start,
+		    pci_priv->smmu_iova_len);
+
+	index = of_property_match_string(dev_node, "reg-names",
+					 "smmu_iova_ipa");
+	if (index < 0) {
+		ret = -ENODATA;
+		goto out;
+	}
+
+	ret = of_address_to_resource(dev_node, index, &res_tmp);
+	if (ret)
+		goto out;
+
+	res = &res_tmp;
+
+	pci_priv->smmu_iova_ipa_start = res->start;
+	pci_priv->smmu_iova_ipa_len = resource_size(res);
+	cnss_pr_dbg("%s - smmu_iova_ipa_start: %pa, smmu_iova_ipa_len: %zu\n",
+		    (plat_priv->is_converged_dt ?
+		    "converged dt" : "single dt"),
+		    &pci_priv->smmu_iova_ipa_start,
+		    pci_priv->smmu_iova_ipa_len);
+	return 0;
+
+out:
+	return ret;
+}
+
+static int cnss_pci_init_smmu_non_converged(struct cnss_pci_data *pci_priv)
 {
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -3422,6 +3495,16 @@ static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 	of_node_put(of_node);
 
 	return 0;
+}
+
+static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+
+	if (plat_priv->is_converged_dt)
+		return cnss_pci_init_smmu_converged(pci_priv);
+	else
+		return cnss_pci_init_smmu_non_converged(pci_priv);
 }
 
 static void cnss_pci_deinit_smmu(struct cnss_pci_data *pci_priv)
@@ -4363,7 +4446,8 @@ static int cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv)
 			return -EINVAL;
 		}
 		scnprintf(plat_priv->firmware_name,
-			  sizeof(plat_priv->firmware_name), FW_V2_FILE_NAME);
+			 sizeof(plat_priv->firmware_name),
+			 "%s" FW_V2_FILE_NAME, cnss_get_fw_path(plat_priv));
 		mhi_ctrl->fw_image = plat_priv->firmware_name;
 		break;
 	case QCA6490_DEVICE_ID:
@@ -4371,7 +4455,8 @@ static int cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv)
 		case FW_V2_NUMBER:
 			scnprintf(plat_priv->firmware_name,
 				  sizeof(plat_priv->firmware_name),
-				  FW_V2_FILE_NAME);
+				  "%s" FW_V2_FILE_NAME,
+				  cnss_get_fw_path(plat_priv));
 			break;
 		default:
 			break;
@@ -4427,7 +4512,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 
 	mhi_ctrl->priv_data = pci_priv;
 	mhi_ctrl->dev = &pci_dev->dev;
-	mhi_ctrl->of_node = (&plat_priv->plat_dev->dev)->of_node;
+	mhi_ctrl->of_node = plat_priv->dev_node;
 	mhi_ctrl->dev_id = pci_priv->device_id;
 	mhi_ctrl->domain = pci_domain_nr(pci_dev->bus);
 	mhi_ctrl->bus = pci_dev->bus->number;
@@ -4461,7 +4546,11 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	mhi_ctrl->bw_scale = cnss_mhi_bw_scale;
 
 	mhi_ctrl->rddm_size = pci_priv->plat_priv->ramdump_info_v2.ramdump_size;
-	mhi_ctrl->sbl_size = SZ_512K;
+	if (pci_priv->device_id == QCN7605_DEVICE_ID)
+		mhi_ctrl->sbl_size = SZ_256K;
+	else
+		mhi_ctrl->sbl_size = SZ_512K;
+
 	mhi_ctrl->seg_len = SZ_512K;
 	mhi_ctrl->fbc_download = true;
 
@@ -4530,6 +4619,54 @@ static void cnss_pci_config_regs(struct cnss_pci_data *pci_priv)
 	}
 }
 
+static int cnss_pci_get_dev_cfg_node(struct cnss_plat_data *plat_priv)
+{
+	struct device_node *child;
+	u32 id, i;
+	int id_n, ret;
+
+	if (!plat_priv->is_converged_dt) {
+		plat_priv->dev_node = plat_priv->plat_dev->dev.of_node;
+		return 0;
+	}
+
+	if (!plat_priv->device_id) {
+		cnss_pr_err("Invalid device id\n");
+		return -EINVAL;
+	}
+
+	for_each_available_child_of_node(plat_priv->plat_dev->dev.of_node,
+					 child) {
+		if (strcmp(child->name, "chip_cfg"))
+			continue;
+
+		id_n = of_property_count_u32_elems(child, "supported-ids");
+		if (id_n <= 0) {
+			cnss_pr_err("Device id is NOT set\n");
+			return -EINVAL;
+		}
+
+		for (i = 0; i < id_n; i++) {
+			ret = of_property_read_u32_index(child,
+							 "supported-ids",
+							 i, &id);
+			if (ret) {
+				cnss_pr_err("Failed to read supported ids\n");
+				return -EINVAL;
+			}
+
+			if (id == plat_priv->device_id) {
+				plat_priv->dev_node = child;
+				cnss_pr_dbg("got node[%s@%d] for device[0x%x]\n",
+					    child->name, i, id);
+				return 0;
+			}
+		}
+	}
+
+	return -EINVAL;
+}
+
 static int cnss_pci_probe(struct pci_dev *pci_dev,
 			  const struct pci_device_id *id)
 {
@@ -4559,9 +4696,18 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	plat_priv->device_id = pci_dev->device;
 	plat_priv->bus_priv = pci_priv;
 	snprintf(plat_priv->firmware_name, sizeof(plat_priv->firmware_name),
-		 DEFAULT_FW_FILE_NAME);
+		 "%s" DEFAULT_FW_FILE_NAME, cnss_get_fw_path(plat_priv));
 	mutex_init(&pci_priv->bus_lock);
 
+	ret = cnss_pci_get_dev_cfg_node(plat_priv);
+	if (ret) {
+		cnss_pr_err("Failed to get device cfg node, err = %d\n", ret);
+		goto reset_ctx;
+	}
+
+	ret = cnss_dev_specific_power_on(plat_priv);
+	if (ret)
+		goto reset_ctx;
 	ret = of_reserved_mem_device_init(dev);
 	if (ret)
 		cnss_pr_err("Failed to init reserved mem device, err = %d\n",
@@ -4606,6 +4752,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 		break;
 	case QCA6290_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
+	case QCN7605_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 		cnss_pci_set_wlaon_pwr_ctrl(pci_priv, false, false, false);
 		timer_setup(&pci_priv->dev_rddm_timer,
@@ -4698,6 +4845,7 @@ static const struct pci_device_id cnss_pci_id_table[] = {
 	{ QCA6174_VENDOR_ID, QCA6174_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
 	{ QCA6290_VENDOR_ID, QCA6290_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
 	{ QCA6390_VENDOR_ID, QCA6390_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
+	{ QCN7605_VENDOR_ID, QCN7605_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID},
 	{ QCA6490_VENDOR_ID, QCA6490_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID },
 	{ 0 }
 };

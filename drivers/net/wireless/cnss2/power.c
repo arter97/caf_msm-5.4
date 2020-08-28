@@ -42,6 +42,7 @@ static struct cnss_clk_cfg cnss_clk_list[] = {
 #define WLAN_EN_GPIO			"wlan-en-gpio"
 #define WLAN_EN_ACTIVE			"wlan_en_active"
 #define WLAN_EN_SLEEP			"wlan_en_sleep"
+#define WLAN_VREGS_PROP			"wlan_vregs"
 
 #define BOOTSTRAP_DELAY			1000
 #define WLAN_ENABLE_DELAY		1000
@@ -52,56 +53,6 @@ static struct cnss_clk_cfg cnss_clk_list[] = {
 #define MAX_TCS_NUM			8
 #define MAX_TCS_CMD_NUM			5
 #define BT_CXMX_VOLTAGE_MV		950
-
-static int cnss_get_vreg_single(struct cnss_plat_data *plat_priv,
-				struct cnss_vreg_info *vreg)
-{
-	int ret = 0;
-	struct device *dev;
-	struct regulator *reg;
-	const __be32 *prop;
-	char prop_name[MAX_PROP_SIZE] = {0};
-	int len;
-
-	dev = &plat_priv->plat_dev->dev;
-	reg = devm_regulator_get_optional(dev, vreg->cfg.name);
-	if (IS_ERR(reg)) {
-		ret = PTR_ERR(reg);
-		if (ret == -ENODEV)
-			return ret;
-		else if (ret == -EPROBE_DEFER)
-			cnss_pr_info("EPROBE_DEFER for regulator: %s\n",
-				     vreg->cfg.name);
-		else
-			cnss_pr_err("Failed to get regulator %s, err = %d\n",
-				    vreg->cfg.name, ret);
-		return ret;
-	}
-
-	vreg->reg = reg;
-
-	snprintf(prop_name, MAX_PROP_SIZE, "qcom,%s-config",
-		 vreg->cfg.name);
-
-	prop = of_get_property(dev->of_node, prop_name, &len);
-	if (!prop || len != (5 * sizeof(__be32))) {
-		cnss_pr_dbg("Property %s %s, use default\n", prop_name,
-			    prop ? "invalid format" : "doesn't exist");
-	} else {
-		vreg->cfg.min_uv = be32_to_cpup(&prop[0]);
-		vreg->cfg.max_uv = be32_to_cpup(&prop[1]);
-		vreg->cfg.load_ua = be32_to_cpup(&prop[2]);
-		vreg->cfg.delay_us = be32_to_cpup(&prop[3]);
-		vreg->cfg.need_unvote = be32_to_cpup(&prop[4]);
-	}
-
-	cnss_pr_dbg("Got regulator: %s, min_uv: %u, max_uv: %u, load_ua: %u, delay_us: %u, need_unvote: %u\n",
-		    vreg->cfg.name, vreg->cfg.min_uv,
-		    vreg->cfg.max_uv, vreg->cfg.load_ua,
-		    vreg->cfg.delay_us, vreg->cfg.need_unvote);
-
-	return 0;
-}
 
 static void cnss_put_vreg_single(struct cnss_plat_data *plat_priv,
 				 struct cnss_vreg_info *vreg)
@@ -232,55 +183,116 @@ static int cnss_vreg_off_single(struct cnss_vreg_info *vreg)
 	return ret;
 }
 
-static struct cnss_vreg_cfg *get_vreg_list(u32 *vreg_list_size,
-					   enum cnss_vreg_type type)
-{
-	switch (type) {
-	case CNSS_VREG_PRIM:
-		*vreg_list_size = CNSS_VREG_INFO_SIZE;
-		return cnss_vreg_list;
-	default:
-		cnss_pr_err("Unsupported vreg type 0x%x\n", type);
-		*vreg_list_size = 0;
-		return NULL;
-	}
-}
-
-static int cnss_get_vreg(struct cnss_plat_data *plat_priv,
-			 struct list_head *vreg_list,
-			 struct cnss_vreg_cfg *vreg_cfg,
-			 u32 vreg_list_size)
+/**
+ * For converged dt node, get the required vregs from property 'wlan_vregs',
+ * which is string array; if the property is present but no value is set,
+ * means no additional wlan verg is required.
+ * For non-converged dt, go through all vregs in static array 'cnss_vreg_list'.
+ */
+int cnss_get_vreg(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
 	int i;
 	struct cnss_vreg_info *vreg;
-	struct device *dev = &plat_priv->plat_dev->dev;
+	struct device *dev;
+	struct regulator *reg;
+	const __be32 *prop;
+	char prop_name[MAX_PROP_SIZE] = {0};
+	int len, id_n;
+	struct device_node *dt_node;
 
-	if (!list_empty(vreg_list)) {
+	if (!list_empty(&plat_priv->vreg_list) &&
+	    !plat_priv->is_converged_dt) {
 		cnss_pr_dbg("Vregs have already been updated\n");
 		return 0;
 	}
 
-	for (i = 0; i < vreg_list_size; i++) {
-		vreg = devm_kzalloc(dev, sizeof(*vreg), GFP_KERNEL);
-		if (!vreg)
-			return -ENOMEM;
+	dev = &plat_priv->plat_dev->dev;
+	dt_node = (plat_priv->dev_node ? plat_priv->dev_node : dev->of_node);
 
-		memcpy(&vreg->cfg, &vreg_cfg[i], sizeof(vreg->cfg));
-		ret = cnss_get_vreg_single(plat_priv, vreg);
-		if (ret != 0) {
+	if (plat_priv->is_converged_dt) {
+		id_n = of_property_count_strings(dt_node, WLAN_VREGS_PROP);
+		if (id_n <= 0) {
+			if (id_n == -ENODATA) {
+				cnss_pr_dbg("No additional vregs for: %s:%lx\n",
+					    dt_node->name,
+					    plat_priv->device_id);
+				return 0;
+			}
+
+			cnss_pr_err("property %s is invalid or missed: %s:%lx\n",
+				    WLAN_VREGS_PROP, dt_node->name,
+				    plat_priv->device_id);
+			return -EINVAL;
+		}
+	} else {
+		id_n = CNSS_VREG_INFO_SIZE;
+	}
+
+	for (i = 0; i < id_n; i++) {
+		vreg = devm_kzalloc(dev, sizeof(*vreg), GFP_KERNEL);
+		if (!vreg) {
+			ret = -ENOMEM;
+			goto out;
+		}
+
+		if (plat_priv->is_converged_dt) {
+			ret = of_property_read_string_index(dt_node,
+							    WLAN_VREGS_PROP, i,
+							    &vreg->cfg.name);
+			if (ret) {
+				devm_kfree(dev, vreg);
+				cnss_pr_err("Failed to read vreg ids\n");
+				goto out;
+			}
+		} else {
+			memcpy(&vreg->cfg, &cnss_vreg_list[i],
+			       sizeof(vreg->cfg));
+		}
+
+		reg = devm_regulator_get_optional(dev, vreg->cfg.name);
+		if (IS_ERR(reg)) {
+			ret = PTR_ERR(reg);
 			if (ret == -ENODEV) {
 				devm_kfree(dev, vreg);
 				continue;
-			} else {
-				devm_kfree(dev, vreg);
-				return ret;
-			}
+			} else if (ret == -EPROBE_DEFER)
+				cnss_pr_info("EPROBE_DEFER for regulator: %s\n",
+					     vreg->cfg.name);
+			else
+				cnss_pr_err("Failed to get regulator %s, err = %d\n",
+					    vreg->cfg.name, ret);
+
+			devm_kfree(dev, vreg);
+			goto out;
 		}
-		list_add_tail(&vreg->list, vreg_list);
+
+		vreg->reg = reg;
+		snprintf(prop_name, MAX_PROP_SIZE, "qcom,%s-config",
+			 vreg->cfg.name);
+		prop = of_get_property(dt_node, prop_name, &len);
+		if (!prop || len != (5 * sizeof(__be32))) {
+			cnss_pr_dbg("Property %s %s, use default\n", prop_name,
+				    prop ? "invalid format" : "doesn't exist");
+		} else {
+			vreg->cfg.min_uv = be32_to_cpup(&prop[0]);
+			vreg->cfg.max_uv = be32_to_cpup(&prop[1]);
+			vreg->cfg.load_ua = be32_to_cpup(&prop[2]);
+			vreg->cfg.delay_us = be32_to_cpup(&prop[3]);
+			vreg->cfg.need_unvote = be32_to_cpup(&prop[4]);
+		}
+
+		list_add_tail(&vreg->list, &plat_priv->vreg_list);
+		cnss_pr_dbg("Got regulator: %s, min_uv: %u, max_uv: %u, load_ua: %u, delay_us: %u, need_unvote: %u\n",
+			    vreg->cfg.name, vreg->cfg.min_uv,
+			    vreg->cfg.max_uv, vreg->cfg.load_ua,
+			    vreg->cfg.delay_us, vreg->cfg.need_unvote);
+
 	}
 
 	return 0;
+out:
+	return ret;
 }
 
 static void cnss_put_vreg(struct cnss_plat_data *plat_priv,
@@ -359,18 +371,12 @@ static int cnss_vreg_unvote(struct cnss_plat_data *plat_priv,
 int cnss_get_vreg_type(struct cnss_plat_data *plat_priv,
 		       enum cnss_vreg_type type)
 {
-	struct cnss_vreg_cfg *vreg_cfg;
 	u32 vreg_list_size = 0;
 	int ret = 0;
 
-	vreg_cfg = get_vreg_list(&vreg_list_size, type);
-	if (!vreg_cfg)
-		return -EINVAL;
-
 	switch (type) {
 	case CNSS_VREG_PRIM:
-		ret = cnss_get_vreg(plat_priv, &plat_priv->vreg_list,
-				    vreg_cfg, vreg_list_size);
+		ret = cnss_get_vreg(plat_priv);
 		break;
 	default:
 		cnss_pr_err("Unsupported vreg type 0x%x\n", type);
@@ -955,3 +961,22 @@ update_cpr:
 
 	return 0;
 }
+
+/**
+ * If it's converged dt, get device specific regulators and enable them.
+ */
+int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv)
+{
+	int ret;
+
+	if (!plat_priv->is_converged_dt)
+		return 0;
+
+	ret = cnss_get_vreg(plat_priv);
+	if (ret)
+		return ret;
+
+	plat_priv->powered_on = false;
+	return cnss_power_on_device(plat_priv);
+}
+
