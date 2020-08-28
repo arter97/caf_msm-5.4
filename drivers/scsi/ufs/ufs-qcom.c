@@ -9,6 +9,7 @@
 #include <linux/bitfield.h>
 #include <linux/platform_device.h>
 #include <linux/phy/phy.h>
+#include <linux/phy/phy-qcom-ufs.h>
 #include <linux/gpio/consumer.h>
 #include <linux/reset-controller.h>
 #include <linux/interconnect.h>
@@ -1685,9 +1686,6 @@ static void ufs_qcom_set_caps(struct ufs_hba *hba)
 			UFSHCD_CAP_HIBERN8_WITH_CLK_GATING |
 			UFSHCD_CAP_CLK_SCALING | UFSHCD_CAP_AUTO_BKOPS_SUSPEND |
 			UFSHCD_CAP_RPM_AUTOSUSPEND;
-#if defined(CONFIG_SCSI_UFSHCD_QTI)
-			hba->caps |= UFSHCD_CAP_WB_EN;
-#endif
 	}
 
 	if (host->hw_ver.major >= 0x2) {
@@ -2535,12 +2533,10 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	}
 
 	/* update phy revision information before calling phy_init() */
-	/*
-	 * FIXME:
-	 * ufs_qcom_phy_save_controller_version(host->generic_phy,
-	 *	host->hw_ver.major, host->hw_ver.minor, host->hw_ver.step);
-	 */
-	err = ufs_qcom_parse_reg_info(host, "qcom,vddp-ref-clk",
+	ufs_qcom_phy_save_controller_version(host->generic_phy,
+			host->hw_ver.major, host->hw_ver.minor, host->hw_ver.step);
+
+	 err = ufs_qcom_parse_reg_info(host, "qcom,vddp-ref-clk",
 				      &host->vddp_ref_clk);
 
 	err = phy_init(host->generic_phy);
