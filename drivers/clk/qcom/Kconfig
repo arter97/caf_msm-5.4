@@ -555,6 +555,15 @@ config SM_SCC_6150
 	  the sensor processor.  However, on some systems it is instead owned
 	  by the application processor.
 
+config SM_CAMCC_6150
+	tristate "SM6150 Camera Clock Controller"
+	select SM_GCC_6150
+	help
+	  Support for the camera clock controller on Qualcomm Technologies, Inc
+	  SM6150 devices.
+	  Say Y if you want to support camera devices and functionality such as
+	  capturing pictures.
+
 endif
 
 config VIRTIO_CLK
