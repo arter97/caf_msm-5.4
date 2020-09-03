@@ -1,0 +1,15 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
+ * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ */
+
+#ifndef __DRIVERS_INTERCONNECT_QCOM_SCSHRIKE_H
+#define __DRIVERS_INTERCONNECT_QCOM_SCSHRIKE_H
+
+#define SCSHRIKE_MASTER_OSM_L3_APPS		601
+#define SCSHRIKE_SLAVE_OSM_L3_CLUSTER0		602
+#define SCSHRIKE_SLAVE_OSM_L3_CLUSTER1		603
+#define SCSHRIKE_SLAVE_OSM_L3_MISC		604
+#define SCSHRIKE_SLAVE_OSM_L3_GPU		605
+
+#endif
