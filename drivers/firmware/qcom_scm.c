@@ -1136,6 +1136,9 @@ static void __exit qcom_scm_exit(void)
 {
 	platform_driver_unregister(&qcom_scm_driver);
 	qtee_shmbridge_driver_exit();
+#if IS_ENABLED(CONFIG_QCOM_SCM_QCPE)
+	__qcom_scm_qcpe_exit();
+#endif
 }
 module_exit(qcom_scm_exit);
 #endif
