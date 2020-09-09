@@ -168,7 +168,7 @@ static int panic_wdog_handler(struct notifier_block *this,
 {
 	struct msm_watchdog_data *wdog_dd = container_of(this,
 				struct msm_watchdog_data, panic_blk);
-	if (panic_timeout == 0) {
+	if (panic_timeout == 0 || crash_kexec_post_notifiers) {
 		__raw_writel(0, wdog_dd->base + WDT0_EN);
 		/* Make sure watchdog is enabled before notifying the caller */
 		mb();
