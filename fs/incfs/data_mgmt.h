@@ -117,6 +117,9 @@ struct mount_info {
 	 * to be freed for this SB otherwise it was created by lower level SB */
 	bool mi_index_free;
 
+
+	struct dentry *mi_incomplete_dir;
+
 	const struct cred *mi_owner;
 
 	struct mount_options mi_options;
