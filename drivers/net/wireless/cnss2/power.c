@@ -371,7 +371,6 @@ static int cnss_vreg_unvote(struct cnss_plat_data *plat_priv,
 int cnss_get_vreg_type(struct cnss_plat_data *plat_priv,
 		       enum cnss_vreg_type type)
 {
-	u32 vreg_list_size = 0;
 	int ret = 0;
 
 	switch (type) {
