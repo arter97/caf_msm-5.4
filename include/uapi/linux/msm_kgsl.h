@@ -340,6 +340,7 @@ enum kgsl_timestamp_type {
 #define KGSL_PROP_GAMING_BIN		0x26
 #define KGSL_PROP_QUERY_CAPABILITIES	0x27
 #define KGSL_PROP_CONTEXT_PROPERTY	0x28
+#define KGSL_PROP_MACROTILING_CHANNELS	0x29
 
 /*
  * kgsl_capabilities_properties returns a list of supported properties.

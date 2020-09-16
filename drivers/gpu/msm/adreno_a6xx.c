@@ -405,7 +405,7 @@ void a6xx_start(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	const struct adreno_a6xx_core *a6xx_core = to_a6xx_core(adreno_dev);
-	unsigned int mal, mode, hbb_hi = 0, hbb_lo = 0;
+	unsigned int mal, mode, hbb_hi = 0, hbb_lo = 0, channel = 0;
 	unsigned int uavflagprd_inv;
 	unsigned int amsbc = 0;
 	unsigned int rgb565_predicator = 0;
@@ -522,6 +522,10 @@ void a6xx_start(struct adreno_device *adreno_dev)
 		"qcom,ubwc-mode", &mode))
 		mode = 0;
 
+	if (of_property_read_u32(device->pdev->dev.of_node,
+		"qcom,macrotiling-channels", &channel))
+		channel = 0; /* unknown and keep reset value */
+
 	switch (mode) {
 	case KGSL_UBWC_1_0:
 		mode = 1;
@@ -541,6 +545,9 @@ void a6xx_start(struct adreno_device *adreno_dev)
 	default:
 		break;
 	}
+
+	if (channel == 8)
+		kgsl_regwrite(device, A6XX_RBBM_NC_MODE_CNTL, 1);
 
 	if (!WARN_ON(!adreno_dev->highest_bank_bit)) {
 		hbb_lo = (adreno_dev->highest_bank_bit - 13) & 3;
