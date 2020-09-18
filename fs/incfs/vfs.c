@@ -674,10 +674,9 @@ static long ioctl_get_block_count(struct file *f, void __user *arg)
 	struct incfs_get_block_count_args __user *args_usr_ptr = arg;
 	struct incfs_get_block_count_args args = {};
 	struct data_file *df = get_incfs_data_file(f);
-	int error;
 
 	if (!df)
-		error = -EINVAL;
+		return -EINVAL;
 
 	args.total_data_blocks_out = df->df_data_block_count;
 	args.filled_data_blocks_out = atomic_read(&df->df_data_blocks_written);
@@ -686,9 +685,9 @@ static long ioctl_get_block_count(struct file *f, void __user *arg)
 	args.filled_hash_blocks_out = atomic_read(&df->df_hash_blocks_written);
 
 	if (copy_to_user(args_usr_ptr, &args, sizeof(args)))
-		error = -EFAULT;
+		return -EFAULT;
 
-	return error;
+	return 0;
 }
 
 static long dispatch_ioctl(struct file *f, unsigned int req, unsigned long arg)
