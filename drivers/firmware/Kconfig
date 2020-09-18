@@ -244,6 +244,32 @@ config QCOM_SCM
 	  Qualcomm Technologies, Inc. "Secure Channel Manager"
 	  interface.
 
+choice
+	prompt "Enable SCM Interface based on Linux virtualization"
+	default QCOM_SCM_SMC
+	help
+	 Allows choice to decide on the need of backend support for
+	 Qualcomm Technologies, Inc. "Secure Channel Manager" to
+	 communicate with Qualcomm Technologies, Inc. secure world based
+	 on whether linux is virtualized or not.
+
+config QCOM_SCM_SMC
+	bool "Non-Virtualized Secure Channel Manager (SCM)"
+	depends on QCOM_SCM
+	help
+	 To enable Qualcomm Technologies, Inc. "Secure Channel Manager" on
+	 non-virtualized Linux.
+
+config QCOM_SCM_QCPE
+	bool "Para-Virtualized Secure Channel Manager (SCM) support over QCPE"
+	depends on QCOM_SCM
+	help
+	  To enable Secure Channel Mananger(SCM) support for SoC
+	  in virtualized Linux, where SCM backend is QCPE (QCOM Protected
+	  environment). The SCM channel will use QCOM HAB interface for
+	  front-end to back-end communication.
+endchoice
+
 config QTEE_SHM_BRIDGE
 	bool "QTI TEE shared memory bridge"
 	depends on QCOM_SCM

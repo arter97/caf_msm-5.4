@@ -261,6 +261,10 @@ extern int __qcom_scm_invoke_callback_response(struct device *dev,
 
 extern void __qcom_scm_init(void);
 
+#if IS_ENABLED(CONFIG_QCOM_SCM_QCPE)
+extern void __qcom_scm_qcpe_exit(void);
+#endif
+
 /* common error codes */
 #define QCOM_SCM_V2_EBUSY	-12
 #define QCOM_SCM_ENOMEM		-5
