@@ -578,6 +578,7 @@ static const struct of_device_id scc_sm8150_match_table[] = {
 	{ .compatible = "qcom,sm8150-scc" },
 	{ .compatible = "qcom,sm8150-scc-v2" },
 	{ .compatible = "qcom,sa8155-scc" },
+	{ .compatible = "qcom,sa8155-scc-v2" },
 	{ .compatible = "qcom,sa8195-scc" },
 	{ .compatible = "qcom,sa8195-scc-v2" },
 	{ }
