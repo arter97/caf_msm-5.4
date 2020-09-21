@@ -17,12 +17,19 @@
 #include <linux/scatterlist.h>
 #include <soc/qcom/secure_buffer.h>
 #include <linux/highmem.h>
+#include <linux/of.h>
 #include "msm_ion_priv.h"
 #include "ion_secure_util.h"
 
 struct ion_cma_heap {
 	struct msm_ion_heap heap;
 	struct cma *cma;
+};
+
+struct ion_cma_buffer_info {
+	void *cpu_addr;
+	dma_addr_t handle;
+	struct page *pages;
 };
 
 #define to_cma_heap(x) \
@@ -32,6 +39,18 @@ struct ion_cma_heap {
 static bool ion_heap_is_cma_heap_type(enum ion_heap_type type)
 {
 	return type == ION_HEAP_TYPE_DMA;
+}
+
+static bool ion_cma_has_kernel_mapping(struct ion_cma_heap *cma_heap)
+{
+	struct device *dev = cma_heap->heap.dev;
+	struct device_node *mem_region;
+
+	mem_region = of_parse_phandle(dev->of_node, "memory-region", 0);
+	if (!mem_region)
+		return false;
+
+	return !of_property_read_bool(mem_region, "no-map");
 }
 
 static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
@@ -47,80 +66,111 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
 	unsigned long align = get_order(size);
 	int ret;
 	struct device *dev = cma_heap->heap.dev;
+	struct ion_cma_buffer_info *info;
+
+	lock_state = kzalloc(sizeof(*info) + sizeof(*lock_state), GFP_KERNEL);
+	if (!lock_state)
+		return -ENOMEM;
+	info = (struct ion_cma_buffer_info *)(lock_state + sizeof(*lock_state));
 
 	if (ion_heap_is_cma_heap_type(buffer->heap->type) &&
 	    is_secure_allocation(buffer->flags)) {
 		pr_err("%s: CMA heap doesn't support secure allocations\n",
 		       __func__);
-		return -EINVAL;
+		goto free_info_lock_state;
 	}
 
 	if (align > CONFIG_CMA_ALIGNMENT)
 		align = CONFIG_CMA_ALIGNMENT;
 
-	pages = cma_alloc(cma_heap->cma, nr_pages, align, false);
-	if (!pages)
-		return -ENOMEM;
+	if (!ion_cma_has_kernel_mapping(cma_heap)) {
+		flags &= ~((unsigned long)ION_FLAG_CACHED);
+		buffer->flags = flags;
 
-	if (hlos_accessible_buffer(buffer)) {
-		if (PageHighMem(pages)) {
-			unsigned long nr_clear_pages = nr_pages;
-			struct page *page = pages;
-
-			while (nr_clear_pages > 0) {
-				void *vaddr = kmap_atomic(page);
-
-				memset(vaddr, 0, PAGE_SIZE);
-				kunmap_atomic(vaddr);
-				page++;
-				nr_clear_pages--;
-			}
-		} else {
-			memset(page_address(pages), 0, size);
+		info->cpu_addr = dma_alloc_wc(dev, size,
+						&info->handle,
+						GFP_KERNEL);
+		if (!info->cpu_addr) {
+			dev_err(dev, "failed to allocate buffer\n");
+			goto free_info_lock_state;
 		}
-	}
+		pages = pfn_to_page(PFN_DOWN(info->handle));
+	} else {
+		pages = cma_alloc(cma_heap->cma, nr_pages, align, false);
+		if (!pages)
+			return -ENOMEM;
+		if (hlos_accessible_buffer(buffer)) {
+			if (PageHighMem(pages)) {
+				unsigned long nr_clear_pages = nr_pages;
+				struct page *page = pages;
 
-	if (MAKE_ION_ALLOC_DMA_READY ||
-	    (!hlos_accessible_buffer(buffer)) ||
-	     (!ion_buffer_cached(buffer)))
-		ion_pages_sync_for_device(dev, pages, size,
-					  DMA_BIDIRECTIONAL);
+				while (nr_clear_pages > 0) {
+					void *vaddr = kmap_atomic(page);
+
+					memset(vaddr, 0, PAGE_SIZE);
+					kunmap_atomic(vaddr);
+					page++;
+					nr_clear_pages--;
+				}
+			} else	{
+				memset(page_address(pages), 0, size);
+			}
+		}
+
+		if (MAKE_ION_ALLOC_DMA_READY ||
+		   (!hlos_accessible_buffer(buffer)) ||
+		   (!ion_buffer_cached(buffer)))
+			ion_pages_sync_for_device(dev, pages, size,
+						  DMA_BIDIRECTIONAL);
+	}
 
 	table = kmalloc(sizeof(*table), GFP_KERNEL);
 	if (!table)
-		goto err;
+		goto err_alloc;
 
 	ret = sg_alloc_table(table, 1, GFP_KERNEL);
 	if (ret)
-		goto free_mem;
+		goto free_table;
 
 	sg_set_page(table->sgl, pages, size, 0);
-;
-	buffer->sg_table = table;
 
-	lock_state = kzalloc(sizeof(*lock_state), GFP_KERNEL);
-	if (!lock_state)
-		goto free_mem;
+	info->pages = pages;
+	buffer->sg_table = table;
 	buffer->priv_virt = lock_state;
 
 	ion_prepare_sgl_for_force_dma_sync(buffer->sg_table);
 	return 0;
 
-free_mem:
+free_table:
 	kfree(table);
-err:
-	cma_release(cma_heap->cma, pages, nr_pages);
+err_alloc:
+	if (info->cpu_addr)
+		dma_free_attrs(dev, size, info->cpu_addr, info->handle, 0);
+	else
+		cma_release(cma_heap->cma, pages, nr_pages);
+free_info_lock_state:
+	kfree(lock_state);
 	return -ENOMEM;
 }
 
 static void ion_cma_free(struct ion_buffer *buffer)
 {
 	struct ion_cma_heap *cma_heap = to_cma_heap(buffer->heap);
-	struct page *pages = sg_page(buffer->sg_table->sgl);
-	unsigned long nr_pages = PAGE_ALIGN(buffer->size) >> PAGE_SHIFT;
+	struct ion_cma_buffer_info *info = buffer->priv_virt +
+				sizeof(struct msm_ion_buf_lock_state);
 
-	/* release memory */
-	cma_release(cma_heap->cma, pages, nr_pages);
+	if (info->cpu_addr) {
+		struct device *dev = cma_heap->heap.dev;
+
+		dma_free_attrs(dev, PAGE_ALIGN(buffer->size), info->cpu_addr,
+				info->handle, 0);
+	} else {
+		struct page *pages = info->pages;
+
+		unsigned long nr_pages = PAGE_ALIGN(buffer->size) >> PAGE_SHIFT;
+		/* release memory */
+		cma_release(cma_heap->cma, pages, nr_pages);
+	}
 	/* release sg table */
 	sg_free_table(buffer->sg_table);
 	kfree(buffer->sg_table);
@@ -136,9 +186,6 @@ struct ion_heap *ion_cma_heap_create(struct ion_platform_heap *data)
 {
 	struct ion_cma_heap *cma_heap;
 	struct device *dev = (struct device *)data->priv;
-
-	if (!dev->cma_area)
-		return ERR_PTR(-EINVAL);
 
 	cma_heap = kzalloc(sizeof(*cma_heap), GFP_KERNEL);
 
@@ -209,9 +256,6 @@ struct ion_heap *ion_cma_secure_heap_create(struct ion_platform_heap *data)
 {
 	struct ion_cma_heap *cma_heap;
 	struct device *dev = (struct device *)data->priv;
-
-	if (!dev->cma_area)
-		return ERR_PTR(-EINVAL);
 
 	cma_heap = kzalloc(sizeof(*cma_heap), GFP_KERNEL);
 
