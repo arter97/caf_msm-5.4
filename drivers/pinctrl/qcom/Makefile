@@ -31,3 +31,4 @@ obj-$(CONFIG_PINCTRL_SHIMA) += pinctrl-shima.o
 obj-$(CONFIG_PINCTRL_SLPI) += pinctrl-slpi.o
 obj-$(CONFIG_PINCTRL_HOLI) += pinctrl-holi.o
 obj-$(CONFIG_PINCTRL_SDXLEMUR) += pinctrl-sdxlemur.o
+obj-$(CONFIG_PINCTRL_MAKENA) += pinctrl-makena.o
