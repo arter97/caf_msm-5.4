@@ -22,6 +22,8 @@ struct clk_virtio_desc {
 
 extern const struct clk_virtio_desc clk_virtio_sm8150_gcc;
 extern const struct clk_virtio_desc clk_virtio_sm8150_scc;
+extern const struct clk_virtio_desc clk_virtio_sm6150_gcc;
+extern const struct clk_virtio_desc clk_virtio_sm6150_scc;
 extern const struct clk_virtio_desc clk_virtio_sa8195p_gcc;
 
 #endif
