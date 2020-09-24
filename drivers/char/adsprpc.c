@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -57,6 +57,8 @@
 		} while (0)
 
 #define FASTRPC_CTX_MAGIC (0xbeeddeed)
+#define FASTRPC_CTX_MAX (256)
+#define FASTRPC_CTXID_MASK (0xFF0)
 
 #define IS_CACHE_ALIGNED(x) (((x) & ((L1_CACHE_BYTES)-1)) == 0)
 
@@ -157,6 +159,7 @@ struct smq_invoke_ctx {
 	struct overlap *overs;
 	struct overlap **overps;
 	unsigned int magic;
+	uint64_t ctxid;
 };
 
 struct smq_context_list {
@@ -191,6 +194,8 @@ struct fastrpc_apps {
 	spinlock_t wrlock;
 	spinlock_t hlock;
 	struct hlist_head htbl[RPC_HASH_SZ];
+	spinlock_t ctxlock;
+	struct smq_invoke_ctx *ctxtable[FASTRPC_CTX_MAX];
 };
 
 struct fastrpc_mmap {
@@ -347,7 +352,8 @@ static int context_alloc(struct fastrpc_apps *me, uint32_t kernel,
 				int cid,
 				struct smq_invoke_ctx **po)
 {
-	int err = 0, bufs, size = 0;
+	int err = 0, bufs, ii, size = 0;
+	struct fastrpc_apps *me = &gfa;
 	struct smq_invoke_ctx *ctx = 0;
 	struct smq_context_list *clst = &me->clst;
 	struct fastrpc_ioctl_invoke *invoke = &invokefd->inv;
@@ -406,6 +412,21 @@ static int context_alloc(struct fastrpc_apps *me, uint32_t kernel,
 	hlist_add_head(&ctx->hn, &clst->pending);
 	spin_unlock(&clst->hlock);
 
+	spin_lock(&me->ctxlock);
+	for (ii = 0; ii < FASTRPC_CTX_MAX; ii++) {
+		if (!me->ctxtable[ii]) {
+			me->ctxtable[ii] = ctx;
+			ctx->ctxid = (ptr_to_uint64(ctx) & ~0xFFF)|(ii << 4);
+			break;
+		}
+	}
+	spin_unlock(&me->ctxlock);
+	VERIFY(err, ii < FASTRPC_CTX_MAX);
+	if (err) {
+		pr_err("adsprpc: out of context memory\n");
+		goto bail;
+	}
+
 	*po = ctx;
 bail:
 	if (ctx && err)
@@ -463,6 +484,17 @@ static void context_free(struct smq_invoke_ctx *ctx, bool lock)
 	kfree(ctx->overps);
 	kfree(ctx->overs);
 	ctx->magic = 0;
+	ctx->ctxid = 0;
+
+	spin_lock(&me->ctxlock);
+	for (i = 0; i < FASTRPC_CTX_MAX; i++) {
+		if (me->ctxtable[i] == ctx) {
+			me->ctxtable[i] = NULL;
+			break;
+		}
+	}
+	spin_unlock(&me->ctxlock);
+
 	kfree(ctx);
 }
 
@@ -810,7 +842,7 @@ static int fastrpc_invoke_send(struct fastrpc_apps *me,
 	msg.tid = current->pid;
 	if (kernel)
 		msg.pid = 0;
-	msg.invoke.header.ctx = ctx;
+	msg.invoke.header.ctx = ctx->ctxid;
 	msg.invoke.header.handle = handle;
 	msg.invoke.header.sc = sc;
 	msg.invoke.page.addr = buf->phys;
@@ -841,18 +873,31 @@ static void fastrpc_read_handler(int cid)
 {
 	struct fastrpc_apps *me = &gfa;
 	struct smq_invoke_rsp rsp;
-	int err = 0;
+	int ret = 0;
+	uint32_t index;
 
 	do {
-		VERIFY(err, sizeof(rsp) == smd_read_from_cb(
-							me->channel[cid].chan,
-							&rsp, sizeof(rsp)));
+		ret = smd_read_from_cb(me->channel[cid].chan, &rsp,
+					sizeof(rsp));
+		if (ret != sizeof(rsp))
+			break;
+		index = (uint32_t)((rsp.ctx & FASTRPC_CTXID_MASK) >> 4);
+		VERIFY(err, index < FASTRPC_CTX_MAX);
 		if (err)
 			goto bail;
-		context_notify_user(rsp.ctx, rsp.retval);
-	} while (!err);
- bail:
-	return;
+
+		VERIFY(err, !IS_ERR_OR_NULL(me->ctxtable[index]));
+		if (err)
+			goto bail;
+
+		VERIFY(err, ((me->ctxtable[index]->ctxid == (rsp.ctx)) &&
+			me->ctxtable[index]->magic == FASTRPC_CTX_MAGIC));
+		if (err)
+			goto bail;
+
+		context_notify_user(me->ctxtable[index], rsp.retval);
+	} while (ret == sizeof(rsp));
+
 }
 
 static void smd_event_handler(void *priv, unsigned event)
@@ -883,6 +928,7 @@ static int fastrpc_init(void)
 
 	spin_lock_init(&me->hlock);
 	spin_lock_init(&me->wrlock);
+	spin_lock_init(&me->ctxlock);
 	mutex_init(&me->smd_mutex);
 	context_list_ctor(&me->clst);
 	for (i = 0; i < RPC_HASH_SZ; ++i)
