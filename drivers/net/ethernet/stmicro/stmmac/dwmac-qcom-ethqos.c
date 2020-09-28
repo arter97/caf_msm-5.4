@@ -323,7 +323,6 @@ static void
 ethqos_update_rgmii_clk_and_bus_cfg(struct qcom_ethqos *ethqos,
 				    unsigned int speed)
 {
-	int ret;
 
 	switch (speed) {
 	case SPEED_1000:
@@ -354,13 +353,7 @@ ethqos_update_rgmii_clk_and_bus_cfg(struct qcom_ethqos *ethqos,
 		ethqos->rgmii_clk_rate = 0;
 		break;
 	}
-#if 0
-	if (ethqos->bus_hdl) {
-		ret = msm_bus_scale_client_update_request(ethqos->bus_hdl,
-							  ethqos->vote_idx);
-		WARN_ON(ret);
-	}
-#endif
+
 	clk_set_rate(ethqos->rgmii_clk, ethqos->rgmii_clk_rate);
 }
 
