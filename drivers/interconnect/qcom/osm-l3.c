@@ -16,6 +16,7 @@
 
 #include "scshrike-l3.h"
 #include "sdm845.h"
+#include "sm6150-l3.h"
 #include "sm8150.h"
 
 #define LUT_MAX_ENTRIES			40U
@@ -110,7 +111,6 @@ static const struct qcom_icc_desc sm8150_icc_osm_l3 = {
 	.num_nodes = ARRAY_SIZE(sm8150_osm_l3_nodes),
 };
 
-
 DEFINE_QNODE(scshrike_osm_apps_l3, SCSHRIKE_MASTER_OSM_L3_APPS, 1,
 		SCSHRIKE_SLAVE_OSM_L3_CLUSTER0, SCSHRIKE_SLAVE_OSM_L3_CLUSTER1,
 		SCSHRIKE_SLAVE_OSM_L3_MISC, SCSHRIKE_SLAVE_OSM_L3_GPU);
@@ -131,6 +131,28 @@ static const struct qcom_icc_desc scshrike_icc_osm_l3 = {
 	.nodes = scshrike_osm_l3_nodes,
 	.num_nodes = ARRAY_SIZE(scshrike_osm_l3_nodes),
 };
+
+DEFINE_QNODE(sm6150_osm_apps_l3, SM6150_MASTER_OSM_L3_APPS, 1,
+		SM6150_SLAVE_OSM_L3_CLUSTER0, SM6150_SLAVE_OSM_L3_CLUSTER1,
+		SM6150_SLAVE_OSM_L3_MISC, SM6150_SLAVE_OSM_L3_GPU);
+DEFINE_QNODE(sm6150_osm_l3_cluster0, SM6150_SLAVE_OSM_L3_CLUSTER0, 1);
+DEFINE_QNODE(sm6150_osm_l3_cluster1, SM6150_SLAVE_OSM_L3_CLUSTER1, 1);
+DEFINE_QNODE(sm6150_osm_l3_misc, SM6150_SLAVE_OSM_L3_MISC, 1);
+DEFINE_QNODE(sm6150_osm_l3_gpu, SM6150_SLAVE_OSM_L3_GPU, 1);
+
+static struct qcom_icc_node *sm6150_osm_l3_nodes[] = {
+	[MASTER_OSM_L3_APPS] = &sm6150_osm_apps_l3,
+	[SLAVE_OSM_L3_CLUSTER0] = &sm6150_osm_l3_cluster0,
+	[SLAVE_OSM_L3_CLUSTER1] = &sm6150_osm_l3_cluster1,
+	[SLAVE_OSM_L3_MISC] = &sm6150_osm_l3_misc,
+	[SLAVE_OSM_L3_GPU] = &sm6150_osm_l3_gpu,
+};
+
+static const struct qcom_icc_desc sm6150_icc_osm_l3 = {
+	.nodes = sm6150_osm_l3_nodes,
+	.num_nodes = ARRAY_SIZE(sm6150_osm_l3_nodes),
+};
+
 static int qcom_icc_aggregate(struct icc_node *node, u32 tag, u32 avg_bw,
 		              u32 peak_bw, u32 *agg_avg, u32 *agg_peak)
 {
@@ -304,6 +326,7 @@ static const struct of_device_id osm_l3_of_match[] = {
 	{ .compatible = "qcom,sdm845-osm-l3", .data = &sdm845_icc_osm_l3 },
 	{ .compatible = "qcom,sm8150-osm-l3", .data = &sm8150_icc_osm_l3 },
 	{ .compatible = "qcom,scshrike-osm-l3", .data = &scshrike_icc_osm_l3 },
+	{ .compatible = "qcom,sm6150-osm-l3", .data = &sm6150_icc_osm_l3 },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, osm_l3_of_match);
