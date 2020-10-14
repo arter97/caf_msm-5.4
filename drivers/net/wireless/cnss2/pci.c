@@ -3376,73 +3376,7 @@ static int cnss_pci_smmu_fault_handler(struct iommu_domain *domain,
 	return -EINVAL;
 }
 
-static int cnss_pci_init_smmu_converged(struct cnss_pci_data *pci_priv)
-{
-	struct pci_dev *pci_dev = pci_priv->pci_dev;
-	struct resource res_tmp;
-	struct resource *res;
-	int index;
-	int ret;
-	struct device_node *dev_node;
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
-
-	dev_node = (plat_priv->dev_node ?
-		    plat_priv->dev_node : plat_priv->plat_dev->dev.of_node);
-
-	pci_priv->iommu_domain = iommu_get_domain_for_dev(&pci_dev->dev);
-	index = of_property_match_string(dev_node, "reg-names",
-					 "smmu_iova_base");
-	if (index < 0) {
-		ret = -ENODATA;
-		goto out;
-	}
-	ret = of_address_to_resource(dev_node, index, &res_tmp);
-	if (ret)
-		goto out;
-
-	res = &res_tmp;
-
-	pci_priv = plat_priv->bus_priv;
-	if (of_property_read_bool(dev_node, "qcom,smmu-s1-enable")) {
-		cnss_pr_dbg("Enabling SMMU S1 stage\n");
-		pci_priv->smmu_s1_enable = true;
-		iommu_set_fault_handler(pci_priv->iommu_domain,
-					cnss_pci_smmu_fault_handler, pci_priv);
-	}
-
-	pci_priv->smmu_iova_start = res->start;
-	pci_priv->smmu_iova_len = resource_size(res);
-	cnss_pr_dbg("smmu_iova_start: %pa, smmu_iova_len: %zu\n",
-		    &pci_priv->smmu_iova_start,
-		    pci_priv->smmu_iova_len);
-
-	index = of_property_match_string(dev_node, "reg-names",
-					 "smmu_iova_ipa");
-	if (index < 0) {
-		ret = -ENODATA;
-		goto out;
-	}
-
-	ret = of_address_to_resource(dev_node, index, &res_tmp);
-	if (ret)
-		goto out;
-
-	res = &res_tmp;
-
-	pci_priv->smmu_iova_ipa_start = res->start;
-	pci_priv->smmu_iova_ipa_len = resource_size(res);
-	cnss_pr_dbg("%s - smmu_iova_ipa_start: %pa, smmu_iova_ipa_len: %zu\n",
-		    (plat_priv->is_converged_dt ?
-		    "converged dt" : "single dt"),
-		    &pci_priv->smmu_iova_ipa_start,
-		    pci_priv->smmu_iova_ipa_len);
-	return 0;
-
-out:
-	return ret;
-}
-
-static int cnss_pci_init_smmu_non_converged(struct cnss_pci_data *pci_priv)
+static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 {
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -3453,12 +3387,16 @@ static int cnss_pci_init_smmu_non_converged(struct cnss_pci_data *pci_priv)
 	int ret = 0;
 
 	of_node = of_parse_phandle(pci_dev->dev.of_node, "qcom,iommu-group", 0);
-	if (!of_node)
+	if (!of_node) {
+		cnss_pr_err("No iommu group configuration\n");
 		return ret;
+	}
 
 	cnss_pr_dbg("Initializing SMMU\n");
 
 	pci_priv->iommu_domain = iommu_get_domain_for_dev(&pci_dev->dev);
+	if (!pci_priv->iommu_domain)
+		cnss_pr_err("No iommu domain found\n");
 	ret = of_property_read_string(of_node, "qcom,iommu-dma",
 				      &iommu_dma_type);
 	if (!ret && !strcmp("fastmap", iommu_dma_type)) {
@@ -3495,16 +3433,6 @@ static int cnss_pci_init_smmu_non_converged(struct cnss_pci_data *pci_priv)
 	of_node_put(of_node);
 
 	return 0;
-}
-
-static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
-{
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
-
-	if (plat_priv->is_converged_dt)
-		return cnss_pci_init_smmu_converged(pci_priv);
-	else
-		return cnss_pci_init_smmu_non_converged(pci_priv);
 }
 
 static void cnss_pci_deinit_smmu(struct cnss_pci_data *pci_priv)
@@ -4535,8 +4463,8 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 		mhi_ctrl->iova_stop = pci_priv->smmu_iova_start +
 					pci_priv->smmu_iova_len;
 	} else {
-		mhi_ctrl->iova_start = 0;
-		mhi_ctrl->iova_stop = UINT_MAX;
+		mhi_ctrl->iova_start = memblock_start_of_DRAM();
+		mhi_ctrl->iova_stop = memblock_end_of_DRAM();
 	}
 
 	mhi_ctrl->link_status = cnss_mhi_link_status;
