@@ -60,14 +60,14 @@
 #define TZ_PIL_PROTECT_MEM_SUBSYS_ID 0x0C
 #define TZ_PIL_CLEAR_PROTECT_MEM_SUBSYS_ID 0x0D
 #define TZ_PIL_AUTH_QDSP6_PROC 1
-
+#define VMID_SSC_Q6     5
+#define VMID_ADSP_Q6    6
 #define FASTRPC_DMAHANDLE_NOMAP (16)
 
 #define FASTRPC_ENOSUCH 39
 #define DEBUGFS_SIZE 3072
 #define UL_SIZE 25
 #define PID_SIZE 10
-
 #define AUDIO_PDR_ADSP_DTSI_PROPERTY_NAME        "qcom,fastrpc-adsp-audio-pdr"
 #define AUDIO_PDR_SERVICE_LOCATION_CLIENT_NAME   "audio_pdr_adsprpc"
 #define AUDIO_PDR_ADSP_SERVICE_NAME              "avs/audio"
@@ -6072,6 +6072,11 @@ static int fastrpc_probe(struct platform_device *pdev)
 	int err = 0;
 	struct fastrpc_apps *me = &gfa;
 	struct device *dev = &pdev->dev;
+	struct smq_phy_page range;
+	struct device_node *ion_node, *node;
+	struct platform_device *ion_pdev;
+	struct cma *cma;
+	uint32_t val;
 	int ret = 0;
 	uint32_t secure_domains = 0;
 
@@ -6101,13 +6106,49 @@ static int fastrpc_probe(struct platform_device *pdev)
 
 	if (of_device_is_compatible(dev->of_node,
 					"qcom,msm-adsprpc-mem-region")) {
-		me->dev = dev;
 		ret = of_reserved_mem_device_init_by_idx(dev, dev->of_node, 0);
 		if (ret) {
 			pr_warn("adsprpc: Error: %s: initialization of memory region adsp_mem failed with %d\n",
 				__func__, ret);
+			goto bail;
 		}
-		goto bail;
+		me->dev = dev;
+		range.addr = 0;
+		ion_node = of_find_compatible_node(NULL, NULL, "qcom,msm-ion");
+		if (ion_node) {
+			for_each_available_child_of_node(ion_node, node) {
+				if (of_property_read_u32(node, "reg", &val))
+					continue;
+				if (val != ION_ADSP_HEAP_ID)
+					continue;
+				ion_pdev = of_find_device_by_node(node);
+				if (!ion_pdev)
+					break;
+				cma = dev_get_cma_area(&ion_pdev->dev);
+				if (cma) {
+					range.addr = cma_get_base(cma);
+					range.size = (size_t)cma_get_size(cma);
+				}
+				break;
+			}
+		}
+		if (range.addr && !of_property_read_bool(dev->of_node,
+							 "restrict-access")) {
+			int srcVM[1] = {VMID_HLOS};
+			int destVM[3] = {VMID_HLOS, VMID_SSC_Q6,
+						VMID_ADSP_Q6};
+			int destVMperm[3] = {PERM_READ | PERM_WRITE | PERM_EXEC,
+				PERM_READ | PERM_WRITE | PERM_EXEC,
+				PERM_READ | PERM_WRITE | PERM_EXEC,
+				};
+
+			VERIFY(err, !hyp_assign_phys(range.addr, range.size,
+					srcVM, 1, destVM, destVMperm, 3));
+			if (err)
+				goto bail;
+			me->range.addr = range.addr;
+			me->range.size = range.size;
+		}
 	}
 	me->legacy_remote_heap = of_property_read_bool(dev->of_node,
 					"qcom,fastrpc-legacy-remote-heap");
