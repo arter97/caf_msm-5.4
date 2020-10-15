@@ -1048,8 +1048,10 @@ struct dwc3_scratchpad_array {
  * @role_sw: usb_role_switch handle
  * @role_switch_default_mode: default operation mode of controller while
  *			usb role is USB_ROLE_NONE.
- * @usb2_phy: pointer to USB2 PHY
- * @usb3_phy: pointer to USB3 PHY
+ * @usb2_phy: pointer to USB2 PHY 0
+ * @usb2_phy1: pointer to USB2 PHY 1
+ * @usb3_phy: pointer to USB3 PHY 0
+ * @usb3_phy: pointer to USB3 PHY 1
  * @usb2_generic_phy: pointer to USB2 PHY
  * @usb3_generic_phy: pointer to USB3 PHY
  * @phys_ready: flag to indicate that PHYs are ready
@@ -1150,6 +1152,7 @@ struct dwc3_scratchpad_array {
  * @bh_handled_evt_cnt: no. of events handled by tasklet per interrupt
  * @bh_dbg_index: index for capturing bh_completion_time and bh_handled_evt_cnt
  * @last_run_stop: timestamp denoting the last run_stop update
+ * @dual_port: If true, this core supports two ports
  */
 struct dwc3 {
 	struct work_struct	drd_work;
@@ -1183,8 +1186,8 @@ struct dwc3 {
 
 	struct reset_control	*reset;
 
-	struct usb_phy		*usb2_phy;
-	struct usb_phy		*usb3_phy;
+	struct usb_phy		*usb2_phy, *usb2_phy1;
+	struct usb_phy		*usb3_phy, *usb3_phy1;
 
 	struct phy		*usb2_generic_phy;
 	struct phy		*usb3_generic_phy;
@@ -1395,6 +1398,7 @@ struct dwc3 {
 	u32			gen2_tx_de_emph2;
 	u32			gen2_tx_de_emph3;
 	ktime_t			last_run_stop;
+	bool			dual_port;
 };
 
 #define INCRX_BURST_MODE 0
