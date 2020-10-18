@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2016,2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -144,7 +144,7 @@ static void _prev_entry(struct kgsl_process_private *priv,
 			ret->flags = entry->memdesc.flags;
 			ret->priv = entry->memdesc.priv;
 			ret->pending_free = entry->pending_free;
-			ret->pid = priv->pid;
+			ret->pid = pid_nr(priv->pid);
 		}
 
 		node = rb_next(&entry->node);
@@ -179,7 +179,7 @@ static void _next_entry(struct kgsl_process_private *priv,
 			ret->flags = entry->memdesc.flags;
 			ret->priv = entry->memdesc.priv;
 			ret->pending_free = entry->pending_free;
-			ret->pid = priv->pid;
+			ret->pid = pid_nr(priv->pid);
 		}
 
 		node = rb_prev(&entry->node);
