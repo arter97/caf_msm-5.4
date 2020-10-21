@@ -1785,13 +1785,15 @@ static int cnss_register_ramdump_v2(struct cnss_plat_data *plat_priv)
 	struct cnss_dump_data *dump_data;
 	struct msm_dump_entry dump_entry;
 	struct device *dev = &plat_priv->plat_dev->dev;
+	struct device_node *dt_node;
 	u32 ramdump_size = 0;
 
 	subsys_info = &plat_priv->subsys_info;
 	info_v2 = &plat_priv->ramdump_info_v2;
 	dump_data = &info_v2->dump_data;
+	dt_node = (plat_priv->dev_node ? plat_priv->dev_node : dev->of_node);
 
-	if (of_property_read_u32(dev->of_node, "qcom,wlan-ramdump-dynamic",
+	if (of_property_read_u32(dt_node, "qcom,wlan-ramdump-dynamic",
 				 &ramdump_size) == 0)
 		info_v2->ramdump_size = ramdump_size;
 
