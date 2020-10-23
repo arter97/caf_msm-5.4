@@ -67,6 +67,7 @@ obj-$(CONFIG_SDM_LPASSCC_845) += lpasscc-sdm845.o
 obj-$(CONFIG_SDM_VIDEOCC_845) += videocc-sdm845.o
 obj-$(CONFIG_SM_CAMCC_6150) += camcc-sm6150.o
 obj-$(CONFIG_SM_CAMCC_8150) += camcc-sm8150.o
+obj-$(CONFIG_SM_DEBUGCC_6150) += debugcc-sm6150.o
 obj-$(CONFIG_SM_DEBUGCC_8150) += debugcc-sm8150.o
 obj-$(CONFIG_SM_DISPCC_6150) += dispcc-sm6150.o
 obj-$(CONFIG_SM_DISPCC_8150) += dispcc-sm8150.o
