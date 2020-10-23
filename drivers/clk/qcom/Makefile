@@ -78,6 +78,7 @@ obj-$(CONFIG_SM_GPUCC_8150) += gpucc-sm8150.o
 obj-$(CONFIG_SM_NPUCC_8150) += npucc-sm8150.o
 obj-$(CONFIG_SM_SCC_6150) += scc-sm6150.o
 obj-$(CONFIG_SM_SCC_8150) += scc-sm8150.o
+obj-$(CONFIG_SM_VIDEOCC_6150) += videocc-sm6150.o
 obj-$(CONFIG_SM_VIDEOCC_8150) += videocc-sm8150.o
 obj-$(CONFIG_SM_CAMCC_SHIMA) += camcc-shima.o
 obj-$(CONFIG_SM_GPUCC_SHIMA) += gpucc-shima.o
