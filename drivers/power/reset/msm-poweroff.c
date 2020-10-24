@@ -19,6 +19,7 @@
 #include <linux/of_address.h>
 #include <linux/qcom_scm.h>
 #include <linux/nvmem-consumer.h>
+#include <linux/crash_dump.h>
 
 #include <asm/cacheflush.h>
 #include <asm/system_misc.h>
@@ -408,7 +409,8 @@ static void msm_restart_prepare(const char *cmd)
 	if (cmd != NULL && !strcmp(cmd, "qcom_dload"))
 		restart_mode = RESTART_DLOAD;
 
-	set_dload_mode(download_mode &&
+	if (!is_kdump_kernel())
+		set_dload_mode(download_mode &&
 			(in_panic || restart_mode == RESTART_DLOAD));
 
 	if (qpnp_pon_check_hard_reset_stored()) {
@@ -578,7 +580,8 @@ static int msm_restart_probe(struct platform_device *pdev)
 	restart_nb.priority = 200;
 	register_restart_handler(&restart_nb);
 
-	set_dload_mode(download_mode);
+	if (!is_kdump_kernel())
+		set_dload_mode(download_mode);
 	if (!download_mode)
 		qcom_scm_disable_sdi();
 
