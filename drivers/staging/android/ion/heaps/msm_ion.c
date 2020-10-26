@@ -483,6 +483,32 @@ static int msm_ion_get_heap_dt_data(struct device_node *node,
 	pnode = of_parse_phandle(node, "memory-region", 0);
 	if (pnode)
 		ret = init_reserved_memory(heap, pnode);
+	else {
+		int rc;
+		u64 base;
+		u64 size;
+
+		rc = of_property_read_u64(node, "qcom,ion-heap-base-addr", &base);
+		if (rc) {
+			pr_err("%s: error parsing ion-heap-base-addr : %d\n", __func__, rc);
+			base = 0;
+		}
+		else
+			heap->base = base;
+
+		rc = of_property_read_u64(node, "qcom,ion-heap-size", &size);
+		if (rc) {
+			pr_err("%s: error parsing ion-heap-size : %d\n", __func__, rc);
+			size = 0;
+		}
+		else
+			heap->size = size;
+
+		pr_err("%s: ION heap id=%d base=0x%llx, size=0x%llx\n",
+			__func__, heap->id, base, size);
+
+ 		ret = 0;
+	}
 
 	of_node_put(pnode);
 
