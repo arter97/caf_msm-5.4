@@ -1892,7 +1892,7 @@ static struct clk_branch cam_cc_cci_3_clk = {
 
 static struct clk_branch cam_cc_core_ahb_clk = {
 	.halt_reg = 0xc1c8,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT_DELAY,
 	.clkr = {
 		.enable_reg = 0xc1c8,
 		.enable_mask = BIT(0),
