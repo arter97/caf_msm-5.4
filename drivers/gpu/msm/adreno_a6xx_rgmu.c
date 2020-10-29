@@ -1305,7 +1305,13 @@ static int a6xx_rgmu_probe(struct kgsl_device *device,
 
 	device->gmu_core.gmu2gpu_offset = (res->start - device->reg_phys) >> 2;
 	device->gmu_core.reg_len = resource_size(res);
-	device->gmu_core.reg_virt = devm_ioremap_resource(&pdev->dev, res);
+	/*
+	 * We can't use devm_ioremap_resource here because we purposely double
+	 * map the gpu_cc registers for debugging purposes
+	 */
+	device->gmu_core.reg_virt = devm_ioremap(&pdev->dev,
+			res->start,
+			resource_size(res));
 
 	if (IS_ERR(device->gmu_core.reg_virt)) {
 		dev_err(&pdev->dev, "Unable to map the RGMU registers\n");
