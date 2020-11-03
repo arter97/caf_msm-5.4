@@ -2273,7 +2273,7 @@ static struct clk_branch gcc_cpuss_rbcpr_clk = {
 
 static struct clk_branch gcc_ddrss_gpu_axi_clk = {
 	.halt_reg = 0x71154,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_VOTED,
 	.clkr = {
 		.enable_reg = 0x71154,
 		.enable_mask = BIT(0),
@@ -2880,7 +2880,7 @@ static struct clk_branch gcc_pcie_1_mstr_axi_clk = {
 
 static struct clk_branch gcc_pcie_1_pipe_clk = {
 	.halt_reg = 0x8d024,
-	.halt_check = BRANCH_HALT_DELAY,
+	.halt_check = BRANCH_HALT_SKIP,
 	.clkr = {
 		.enable_reg = 0x52004,
 		.enable_mask = BIT(30),
@@ -2980,7 +2980,7 @@ static struct clk_branch gcc_pcie_2_mstr_axi_clk = {
 
 static struct clk_branch gcc_pcie_2_pipe_clk = {
 	.halt_reg = 0x9d024,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT_SKIP,
 	.clkr = {
 		.enable_reg = 0x52014,
 		.enable_mask = BIT(15),
@@ -3080,7 +3080,7 @@ static struct clk_branch gcc_pcie_3_mstr_axi_clk = {
 
 static struct clk_branch gcc_pcie_3_pipe_clk = {
 	.halt_reg = 0xa3024,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT_SKIP,
 	.clkr = {
 		.enable_reg = 0x52014,
 		.enable_mask = BIT(21),
@@ -4678,7 +4678,7 @@ static struct clk_branch gcc_usb3_mp_phy_com_aux_clk = {
 
 static struct clk_branch gcc_usb3_mp_phy_pipe_0_clk = {
 	.halt_reg = 0xa6058,
-	.halt_check = BRANCH_HALT,
+	.halt_check = BRANCH_HALT_SKIP,
 	.clkr = {
 		.enable_reg = 0xa6058,
 		.enable_mask = BIT(0),
@@ -4691,7 +4691,7 @@ static struct clk_branch gcc_usb3_mp_phy_pipe_0_clk = {
 
 static struct clk_branch gcc_usb3_mp_phy_pipe_1_clk = {
 	.halt_reg = 0xa605c,
-	.halt_check = BRANCH_HALT,
+	.halt_check = BRANCH_HALT_SKIP,
 	.clkr = {
 		.enable_reg = 0xa605c,
 		.enable_mask = BIT(0),

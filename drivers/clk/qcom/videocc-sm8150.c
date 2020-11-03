@@ -144,7 +144,7 @@ static struct clk_rcg2 video_cc_iris_clk_src = {
 
 static struct clk_branch video_cc_iris_ahb_clk = {
 	.halt_reg = 0x8f4,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_VOTED,
 	.clkr = {
 		.enable_reg = 0x8f4,
 		.enable_mask = BIT(0),
@@ -162,7 +162,7 @@ static struct clk_branch video_cc_iris_ahb_clk = {
 
 static struct clk_branch video_cc_mvs0_core_clk = {
 	.halt_reg = 0x890,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_VOTED,
 	.clkr = {
 		.enable_reg = 0x890,
 		.enable_mask = BIT(0),
@@ -180,7 +180,7 @@ static struct clk_branch video_cc_mvs0_core_clk = {
 
 static struct clk_branch video_cc_mvs1_core_clk = {
 	.halt_reg = 0x8d0,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_VOTED,
 	.clkr = {
 		.enable_reg = 0x8d0,
 		.enable_mask = BIT(0),
