@@ -358,6 +358,7 @@
 		<90 512 206000 960000>, <90 585 206000 960000>,    /* NOMINAL */
 		<90 512 206000 3600000>, <90 585 206000 3600000>;    /* TURBO */
 		qcom,bus-vector-names = "MIN", "SVS", "NOMINAL", "TURBO";
+		qcom,tethered-flow-control;
 	};
 
 	mhi_dev@87000 {
