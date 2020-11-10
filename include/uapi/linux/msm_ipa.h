@@ -219,6 +219,7 @@
  * maximal number of NAT PDNs in the PDN config table
  */
 #define IPA_MAX_PDN_NUM 5
+#define IPA_MAX_PDN_NUM_v4 5
 
 /**
  * enum ipa_client_type - names for the various IPA "clients"
@@ -777,6 +778,8 @@ enum ipa_rm_resource_name {
  * @IPA_HW_v4_5: IPA hardware version 4.5
  * @IPA_HW_v4_7: IPA hardware version 4.7
  * @IPA_HW_v4_9: IPA hardware version 4.9
+ * @IPA_HW_v4_11: IPA hardware version 4.11
+ * @IPA_HW_v5_0: IPA hardware version 5.0
  */
 enum ipa_hw_type {
 	IPA_HW_None = 0,
@@ -797,8 +800,10 @@ enum ipa_hw_type {
 	IPA_HW_v4_5 = 17,
 	IPA_HW_v4_7 = 18,
 	IPA_HW_v4_9 = 19,
+	IPA_HW_v4_11 = 20,
+	IPA_HW_v5_0 = 21,
 };
-#define IPA_HW_MAX (IPA_HW_v4_9 + 1)
+#define IPA_HW_MAX (IPA_HW_v5_0 + 1)
 
 #define IPA_HW_v4_0 IPA_HW_v4_0
 #define IPA_HW_v4_1 IPA_HW_v4_1
@@ -806,7 +811,8 @@ enum ipa_hw_type {
 #define IPA_HW_v4_5 IPA_HW_v4_5
 #define IPA_HW_v4_7 IPA_HW_v4_7
 #define IPA_HW_v4_9 IPA_HW_v4_9
-
+#define IPA_HW_v4_11 IPA_HW_v4_11
+#define IPA_HW_v5_0 IPA_HW_v5_0
 /**
  * struct ipa_rule_attrib - attributes of a routing/filtering
  * rule, all in LE
