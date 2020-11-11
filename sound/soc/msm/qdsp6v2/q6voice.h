@@ -94,6 +94,8 @@ struct stream_data {
 	uint32_t stream_mute_ramp_duration_ms;
 };
 
+#define MAX_VOL_STEP_UNINITIALIZED 0
+
 /* Device information payload structure */
 struct device_data {
 	uint32_t dev_mute;
@@ -105,6 +107,7 @@ struct device_data {
 	uint32_t volume_ramp_duration_ms;
 	uint32_t dev_mute_ramp_duration_ms;
 	uint32_t no_of_channels;
+	uint32_t max_vol_step;
 };
 
 struct voice_dev_route_state {
@@ -979,6 +982,8 @@ struct vss_istream_cmd_set_packet_exchange_mode_t {
 
 #define VSS_IVOLUME_CMD_SET_STEP			0x000112C2
 
+#define VSS_IVOLUME_CMD_SET_NUMBER_OF_STEPS		0x000112C1
+
 #define VSS_IVOCPROC_CMD_ENABLE				0x000100C6
 /**< No payload. Wait for APRV2_IBASIC_RSP_RESULT response. */
 
@@ -1127,6 +1132,12 @@ struct vss_ivocproc_cmd_set_volume_index_t {
 	 * provided in VSS_IVOCPROC_CMD_CACHE_VOLUME_CALIBRATION_TABLE and set
 	 * volume on the VDSP.
 	 */
+} __packed;
+
+struct vss_ivolume_cmd_set_number_of_steps_t
+{
+  uint32_t value;
+    /**< Number of volume steps. */
 } __packed;
 
 struct vss_ivolume_cmd_set_step_t {
@@ -1384,6 +1395,11 @@ struct cvp_set_vp3_data_cmd {
 struct cvp_set_rx_volume_index_cmd {
 	struct apr_hdr hdr;
 	struct vss_ivocproc_cmd_set_volume_index_t cvp_set_vol_idx;
+} __packed;
+
+struct cvp_set_rx_max_volume_step_cmd {
+	struct apr_hdr hdr;
+	struct vss_ivolume_cmd_set_number_of_steps_t cvp_set_max_vol_step;
 } __packed;
 
 struct cvp_set_rx_volume_step_cmd {
@@ -1779,6 +1795,7 @@ int voc_enable_device(uint32_t session_id);
 void voc_set_destroy_cvd_flag(bool is_destroy_cvd);
 void voc_set_vote_bms_flag(bool is_vote_bms);
 int voc_disable_topology(uint32_t session_id, uint32_t disable);
+int voc_set_max_rx_vol_step(uint32_t session_id, uint32_t dir, uint32_t max_vol_step);
 int voc_set_device_config(uint32_t session_id, uint8_t path_dir,
 			  uint8_t no_of_channels, uint32_t dev_port_id);
 uint32_t voice_get_topology(uint32_t topology_idx);

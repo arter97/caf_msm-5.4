@@ -58,6 +58,7 @@ static int voice_send_netid_timing_cmd(struct voice_data *v);
 static int voice_send_attach_vocproc_cmd(struct voice_data *v);
 static int voice_send_set_device_cmd(struct voice_data *v);
 static int voice_send_vol_step_cmd(struct voice_data *v);
+static int voice_send_max_vol_step_cmd(struct voice_data *v);
 static int voice_send_mvm_unmap_memory_physical_cmd(struct voice_data *v,
 						    uint32_t mem_handle);
 static int voice_send_mvm_cal_network_cmd(struct voice_data *v);
@@ -4907,6 +4908,66 @@ static int voice_send_vol_step_cmd(struct voice_data *v)
 	return 0;
 }
 
+static int voice_send_max_vol_step_cmd(struct voice_data *v)
+{
+	struct cvp_set_rx_max_volume_step_cmd cvp_max_vol_step_cmd;
+	int ret = 0;
+	void *apr_cvp;
+	u16 cvp_handle;
+	if (v == NULL) {
+		pr_err("%s: v is NULL\n", __func__);
+		return -EINVAL;
+	}
+	apr_cvp = common.apr_q6_cvp;
+
+	if (!apr_cvp) {
+		pr_err("%s: apr_cvp is NULL.\n", __func__);
+		return -EINVAL;
+	}
+	cvp_handle = voice_get_cvp_handle(v);
+
+	/* send volume index to cvp */
+	cvp_max_vol_step_cmd.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
+						APR_HDR_LEN(APR_HDR_SIZE),
+						APR_PKT_VER);
+	cvp_max_vol_step_cmd.hdr.pkt_size = APR_PKT_SIZE(APR_HDR_SIZE,
+				sizeof(cvp_max_vol_step_cmd) - APR_HDR_SIZE);
+	cvp_max_vol_step_cmd.hdr.src_port =
+				voice_get_idx_for_session(v->session_id);
+	cvp_max_vol_step_cmd.hdr.dest_port = cvp_handle;
+	cvp_max_vol_step_cmd.hdr.token = 0;
+	cvp_max_vol_step_cmd.hdr.opcode = VSS_IVOLUME_CMD_SET_NUMBER_OF_STEPS;
+	cvp_max_vol_step_cmd.cvp_set_max_vol_step.value = v->dev_rx.max_vol_step;
+
+	pr_debug("%s step_value:%d",
+			__func__,
+			cvp_max_vol_step_cmd.cvp_set_max_vol_step.value);
+
+	v->cvp_state = CMD_STATUS_FAIL;
+	v->async_err = 0;
+	ret = apr_send_pkt(apr_cvp, (uint32_t *) &cvp_max_vol_step_cmd);
+	if (ret < 0) {
+		pr_err("Fail in sending Max VOL step\n");
+		return -EINVAL;
+	}
+	ret = wait_event_timeout(v->cvp_wait,
+				 (v->cvp_state == CMD_STATUS_SUCCESS),
+				 msecs_to_jiffies(TIMEOUT_MS));
+	if (!ret) {
+		pr_err("%s: wait_event timeout\n", __func__);
+		return -EINVAL;
+	}
+	if (v->async_err > 0) {
+		pr_err("%s: DSP returned error[%s]\n",
+				__func__, adsp_err_get_err_str(
+				v->async_err));
+		ret = adsp_err_get_lnx_err_code(
+				v->async_err);
+		return ret;
+	}
+	return 0;
+}
+
 static int voice_cvs_start_record(struct voice_data *v, uint32_t rec_mode)
 {
 	int ret = 0;
@@ -5737,6 +5798,32 @@ int voc_set_rx_vol_step(uint32_t session_id, uint32_t dir, uint32_t vol_step,
 	return ret;
 }
 
+int voc_set_max_rx_vol_step(uint32_t session_id, uint32_t dir, uint32_t max_vol_step)
+{
+	struct voice_data *v = NULL;
+	int ret = 0;
+	struct voice_session_itr itr;
+
+	pr_debug("%s session id = %#x vol = %u", __func__, session_id,
+		max_vol_step);
+
+	voice_itr_init(&itr, session_id);
+	while (voice_itr_get_next_session(&itr, &v)) {
+		if (v != NULL) {
+			mutex_lock(&v->lock);
+			v->dev_rx.max_vol_step = max_vol_step;
+			mutex_unlock(&v->lock);
+		} else {
+			pr_err("%s: invalid session_id 0x%x\n", __func__,
+				session_id);
+			ret = -EINVAL;
+			break;
+		}
+	}
+
+	return ret;
+}
+
 int voc_set_device_config(uint32_t session_id, uint8_t path_dir,
 			  uint8_t no_of_channels, uint32_t port_id)
 {
@@ -6142,6 +6229,14 @@ int voc_start_voice_call(uint32_t session_id)
 		if (ret < 0) {
 			pr_err("setup voice failed\n");
 			goto fail;
+		}
+
+		if (v->dev_rx.max_vol_step != MAX_VOL_STEP_UNINITIALIZED) {
+			ret = voice_send_max_vol_step_cmd(v);
+			if (ret < 0) {
+				pr_err("setup max volume step command failed\n");
+				goto fail;
+			}
 		}
 
 		ret = voice_send_vol_step_cmd(v);
@@ -6811,6 +6906,7 @@ static int32_t qdsp_cvp_callback(struct apr_client_data *data, void *priv)
 			case VSS_IVOCPROC_CMD_SET_DEVICE_V2:
 			case VSS_IVOCPROC_CMD_SET_DEVICE_V3:
 			case VSS_IVOLUME_CMD_SET_STEP:
+			case VSS_IVOLUME_CMD_SET_NUMBER_OF_STEPS:
 			case VSS_IVOCPROC_CMD_ENABLE:
 			case VSS_IVOCPROC_CMD_DISABLE:
 			case APRV2_IBASIC_CMD_DESTROY_SESSION:
@@ -8358,6 +8454,7 @@ static int __init voice_init(void)
 		/* initialize dev_rx and dev_tx */
 		common.voice[i].dev_rx.dev_mute =  common.default_mute_val;
 		common.voice[i].dev_tx.dev_mute =  common.default_mute_val;
+		common.voice[i].dev_rx.max_vol_step = MAX_VOL_STEP_UNINITIALIZED;
 		common.voice[i].dev_rx.volume_step_value =
 					common.default_vol_step_val;
 		common.voice[i].dev_rx.volume_ramp_duration_ms =

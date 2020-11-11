@@ -576,6 +576,28 @@ done:
 	return ret;
 }
 
+static int msm_voice_max_volume_put(struct snd_kcontrol *kcontrol,
+					  struct snd_ctl_elem_value *ucontrol)
+{
+	int ret = 0;
+	int max_step = ucontrol->value.integer.value[0];
+	uint32_t session_id = ucontrol->value.integer.value[1];
+
+	if (max_step <= 0) {
+		pr_err(" %s Invalid arguments: %d\n", __func__, max_step);
+
+		ret = -EINVAL;
+		goto done;
+	}
+	pr_debug("%s: max_step = %d, session_id = %d\n", __func__, max_step,
+		 session_id);
+
+	ret = voc_set_max_rx_vol_step(session_id, RX_PATH, max_step);
+
+done:
+	return ret;
+}
+
 static int msm_voice_cvd_version_info(struct snd_kcontrol *kcontrol,
 				      struct snd_ctl_elem_info *uinfo)
 {
@@ -623,6 +645,9 @@ static struct snd_kcontrol_new msm_voice_controls[] = {
 	SOC_SINGLE_MULTI_EXT("Voice Topology Disable", SND_SOC_NOPM, 0,
 			     VSID_MAX, 0, 2, NULL,
 			     msm_voice_topology_disable_put),
+	SOC_SINGLE_MULTI_EXT("Voice Rx Max Gain Step", SND_SOC_NOPM, 0,
+			     VSID_MAX, 0, 2, NULL,
+			     msm_voice_max_volume_put),
 	SOC_SINGLE_MULTI_EXT("HD Voice Enable", SND_SOC_NOPM, 0, VSID_MAX, 0, 2,
 			     NULL, msm_voice_hd_voice_put),
 	{
