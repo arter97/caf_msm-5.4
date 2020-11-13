@@ -562,6 +562,7 @@ config QCOM_GLINK_PKT
 	  some glink packets channel.
 
 source "drivers/soc/qcom/hab/Kconfig"
+source "drivers/soc/qcom/hgsl/Kconfig"
 
 config MSM_PERFORMANCE
         tristate "msm performance driver to support userspace fmin/fmax request"
@@ -925,4 +926,5 @@ config RENAME_BLOCK_DEVICE
 	  Say 'Y' to to rename the block device node assigned by generic driver
 	  to a name that is needed. This is used for rename block device names
 	  created by default as sda1, sda2 etc. to the names that is needed.
+
 endmenu
