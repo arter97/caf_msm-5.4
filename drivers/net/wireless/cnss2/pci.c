@@ -3381,10 +3381,13 @@ static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct device_node *of_node;
+	struct device_node *dev_node;
+	struct resource res_tmp;
 	struct resource *res;
 	const char *iommu_dma_type;
 	u32 addr_win[2];
 	int ret = 0;
+	int index;
 
 	of_node = of_parse_phandle(pci_dev->dev.of_node, "qcom,iommu-group", 0);
 	if (!of_node) {
@@ -3410,8 +3413,7 @@ static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 					 addr_win, ARRAY_SIZE(addr_win));
 	if (ret) {
 		cnss_pr_err("Invalid SMMU size window, err = %d\n", ret);
-		of_node_put(of_node);
-		return ret;
+		goto out;
 	}
 
 	pci_priv->smmu_iova_start = addr_win[0];
@@ -3420,8 +3422,35 @@ static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 		    &pci_priv->smmu_iova_start,
 		    pci_priv->smmu_iova_len);
 
-	res = platform_get_resource_byname(plat_priv->plat_dev, IORESOURCE_MEM,
-					   "smmu_iova_ipa");
+	dev_node = (plat_priv->dev_node ?
+		    plat_priv->dev_node : plat_priv->plat_dev->dev.of_node);
+	if (plat_priv->is_converged_dt) {
+		index = of_property_match_string(dev_node, "reg-names",
+						 "smmu_iova_ipa");
+		if (index < 0) {
+			cnss_pr_err("failed to find reg smmu_iova_ipa\n");
+			ret = index;
+			goto out;
+		}
+
+		ret = of_address_to_resource(dev_node, index, &res_tmp);
+		if (ret) {
+			cnss_pr_err("failed to get resource\n");
+			goto out;
+		}
+
+		res = &res_tmp;
+	} else {
+		res = platform_get_resource_byname(plat_priv->plat_dev,
+						   IORESOURCE_MEM,
+						   "smmu_iova_ipa");
+		if (!res) {
+			cnss_pr_err("failed to find reg smmu_iova_ipa\n");
+			ret = -ENODATA;
+			goto out;
+		}
+	}
+
 	if (res) {
 		pci_priv->smmu_iova_ipa_start = res->start;
 		pci_priv->smmu_iova_ipa_len = resource_size(res);
@@ -3430,9 +3459,10 @@ static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 			    pci_priv->smmu_iova_ipa_len);
 	}
 
+out:
 	of_node_put(of_node);
 
-	return 0;
+	return ret;
 }
 
 static void cnss_pci_deinit_smmu(struct cnss_pci_data *pci_priv)
