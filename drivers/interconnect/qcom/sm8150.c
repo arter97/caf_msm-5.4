@@ -1478,6 +1478,7 @@ static struct qcom_icc_bcm bcm_mm3 = {
 static struct qcom_icc_bcm bcm_qup0 = {
 	.name = "QUP0",
 	.voter_idx = 0,
+	.vote_scale = 1,
 	.num_nodes = 3,
 	.nodes = { &qhm_qup0, &qhm_qup1,
 		   &qhm_qup2 },
