@@ -16,12 +16,20 @@
 struct fwnode_operations;
 struct device;
 
+/*
+* fwnode link flags
+*
+* LINKS_ADDED: The fwnode has already be parsed to add fwnode links.
+*/
+#define FWNODE_FLAG_LINKS_ADDED		BIT(0)
+
 struct fwnode_handle {
 	struct fwnode_handle *secondary;
 	const struct fwnode_operations *ops;
 	struct device *dev;
 	struct list_head suppliers;
 	struct list_head consumers;
+	u8 flags;
 
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
@@ -121,7 +129,7 @@ struct fwnode_operations {
 	(*graph_get_port_parent)(struct fwnode_handle *fwnode);
 	int (*graph_parse_endpoint)(const struct fwnode_handle *fwnode,
 				    struct fwnode_endpoint *endpoint);
-	int (*add_links)(struct fwnode_handle *fwnode,
+	int (*add_links)(const struct fwnode_handle *fwnode,
 			 struct device *dev);
 };
 
