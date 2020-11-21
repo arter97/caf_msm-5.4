@@ -1399,10 +1399,10 @@ static void fw_devlink_link_device(struct device *dev)
 
 	device_link_add_missing_supplier_links();
 
-	if (fw_devlink_flags && fwnode_has_op(dev->fwnode, add_links)) {
+	if (fwnode_has_op(dev->fwnode, add_links)) {
 		fw_ret = fwnode_call_int_op(dev->fwnode, add_links, dev);
 	} else {
-		if (fw_ret == -ENODEV && !fw_devlink_is_permissive())
+		if (fw_ret == -ENODEV)
 			device_link_wait_for_mandatory_supplier(dev);
 		else if (fw_ret)
 			device_link_wait_for_optional_supplier(dev);
