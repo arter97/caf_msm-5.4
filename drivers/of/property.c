@@ -1309,8 +1309,7 @@ static int of_link_property(struct device_node *con_np, const char *prop_name)
 static bool of_devlink = true;
 core_param(of_devlink, of_devlink, bool, 0);
 
-static int of_fwnode_add_links(const struct fwnode_handle *fwnode,
-				  struct device *dev)
+static int of_fwnode_add_links(const struct fwnode_handle *fwnode)
 {
 	struct property *p;
 	struct device_node *con_np = to_of_node(fwnode);
