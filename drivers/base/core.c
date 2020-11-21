@@ -948,11 +948,11 @@ static void __device_links_queue_sync_state(struct device *dev,
 	 */
 	dev->state_synced = true;
 
-	if (WARN_ON(!list_empty(&dev->links.defer_hook)))
+	if (WARN_ON(!list_empty(&dev->links.defer_sync)))
 		return;
 
 	get_device(dev);
-	list_add_tail(&dev->links.defer_hook, list);
+	list_add_tail(&dev->links.defer_sync, list);
 }
 
 /**
@@ -970,8 +970,8 @@ static void device_links_flush_sync_list(struct list_head *list,
 {
 	struct device *dev, *tmp;
 
-	list_for_each_entry_safe(dev, tmp, list, links.defer_hook) {
-		list_del_init(&dev->links.defer_hook);
+	list_for_each_entry_safe(dev, tmp, list, links.defer_sync) {
+		list_del_init(&dev->links.defer_sync);
 
 		if (dev != dont_lock_dev)
 			device_lock(dev);
@@ -1009,12 +1009,12 @@ void device_links_supplier_sync_state_resume(void)
 	if (defer_sync_state_count)
 		goto out;
 
-	list_for_each_entry_safe(dev, tmp, &deferred_sync, links.defer_hook) {
+	list_for_each_entry_safe(dev, tmp, &deferred_sync, links.defer_sync) {
 		/*
 		 * Delete from deferred_sync list before queuing it to
-		 * sync_list because defer_hook is used for both lists.
+		 * sync_list because defer_sync is used for both lists.
 		 */
-		list_del_init(&dev->links.defer_hook);
+		list_del_init(&dev->links.defer_sync);
 		__device_links_queue_sync_state(dev, &sync_list);
 	}
 out:
@@ -1032,8 +1032,8 @@ late_initcall(sync_state_resume_initcall);
 
 static void __device_links_supplier_defer_sync(struct device *sup)
 {
-	if (list_empty(&sup->links.defer_hook) && dev_has_sync_state(sup))
-		list_add_tail(&sup->links.defer_hook, &deferred_sync);
+	if (list_empty(&sup->links.defer_sync) && dev_has_sync_state(sup))
+		list_add_tail(&sup->links.defer_sync, &deferred_sync);
 }
 
 static void device_link_drop_managed(struct device_link *link)
@@ -1261,7 +1261,7 @@ void device_links_driver_cleanup(struct device *dev)
 		WRITE_ONCE(link->status, DL_STATE_DORMANT);
 	}
 
-	list_del_init(&dev->links.defer_hook);
+	list_del_init(&dev->links.defer_sync);
 	__device_links_no_driver(dev);
 
 	device_links_write_unlock();
@@ -1421,12 +1421,6 @@ static void fw_devlink_link_device(struct device *dev)
 		fw_ret = fwnode_call_int_op(dev->fwnode, add_links, dev);
 	} else {
 		fw_ret = -ENODEV;
-		/*
-		 * defer_hook is not used to add device to deferred_sync list
-		 * until device is bound. Since deferred fw devlink also blocks
-		 * probing, same list hook can be used for deferred_fw_devlink.
-		 */
-		list_add_tail(&dev->links.defer_hook, &deferred_fw_devlink);
 	}
 
 	if (fw_ret == -ENODEV)
@@ -2373,7 +2367,7 @@ void device_initialize(struct device *dev)
 	INIT_LIST_HEAD(&dev->links.consumers);
 	INIT_LIST_HEAD(&dev->links.suppliers);
 	INIT_LIST_HEAD(&dev->links.needs_suppliers);
-	INIT_LIST_HEAD(&dev->links.defer_hook);
+	INIT_LIST_HEAD(&dev->links.defer_sync);
 	dev->links.status = DL_DEV_NO_DRIVER;
 }
 EXPORT_SYMBOL_GPL(device_initialize);
