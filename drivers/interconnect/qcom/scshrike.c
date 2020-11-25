@@ -19,6 +19,11 @@
 #include "icc-rpmh.h"
 #include "bcm-voter.h"
 
+static LIST_HEAD(qnoc_probe_list);
+static DEFINE_MUTEX(probe_list_lock);
+
+static int probe_count;
+
 static struct qcom_icc_node qhm_a1noc_cfg = {
 	.name = "qhm_a1noc_cfg",
 	.id = MASTER_A1NOC_CFG,
@@ -2201,6 +2206,10 @@ static int qnoc_probe(struct platform_device *pdev)
 
 	dev_dbg(&pdev->dev, "Registered sm8150 ICC\n");
 
+	mutex_lock(&probe_list_lock);
+	list_add_tail(&qp->probe_list, &qnoc_probe_list);
+	mutex_unlock(&probe_list_lock);
+
 	return ret;
 err:
 	list_for_each_entry(node, &provider->nodes, node_list) {
@@ -2253,12 +2262,48 @@ static const struct of_device_id qnoc_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, qnoc_of_match);
 
+static void qnoc_sync_state(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct qcom_icc_provider *qp = platform_get_drvdata(pdev);
+	struct qcom_icc_bcm *bcm;
+	struct bcm_voter *voter;
+
+	mutex_lock(&probe_list_lock);
+	probe_count++;
+
+	if (probe_count < ARRAY_SIZE(qnoc_of_match) - 1) {
+		mutex_unlock(&probe_list_lock);
+		return;
+	}
+
+	list_for_each_entry(qp, &qnoc_probe_list, probe_list) {
+		int i;
+
+		for (i = 0; i < qp->num_voters; i++)
+			qcom_icc_bcm_voter_clear_init(qp->voters[i]);
+
+		for (i = 0; i < qp->num_bcms; i++) {
+			bcm = qp->bcms[i];
+			if (!bcm->keepalive)
+				continue;
+
+			voter = qp->voters[bcm->voter_idx];
+			qcom_icc_bcm_voter_add(voter, bcm);
+			qcom_icc_bcm_voter_commit(voter);
+		}
+	}
+
+	mutex_unlock(&probe_list_lock);
+}
+
 static struct platform_driver qnoc_driver = {
 	.probe = qnoc_probe,
 	.remove = qnoc_remove,
 	.driver = {
 		.name = "qnoc-scshrike",
 		.of_match_table = qnoc_of_match,
+		.sync_state = qnoc_sync_state,
 	},
 };
 
