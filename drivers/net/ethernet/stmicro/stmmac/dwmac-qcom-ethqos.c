@@ -221,8 +221,10 @@ void dwmac_qcom_program_avb_algorithm(struct stmmac_priv *priv,
 
 unsigned int dwmac_qcom_get_plat_tx_coal_frames(struct sk_buff *skb)
 {
-	bool is_udp;
 	unsigned int eth_type;
+#ifdef CONFIG_PTPSUPPORT_OBJ
+	bool is_udp;
+#endif
 
 	eth_type = dwmac_qcom_get_eth_type(skb->data);
 
