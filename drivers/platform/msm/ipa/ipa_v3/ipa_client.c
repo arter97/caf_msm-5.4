@@ -62,9 +62,19 @@ int ipa3_enable_data_path(u32 clnt_hdl)
 
 	IPADBG("Enabling data path\n");
 	if (IPA_CLIENT_IS_CONS(ep->client)) {
-		memset(&holb_cfg, 0 , sizeof(holb_cfg));
-		holb_cfg.en = IPA_HOLB_TMR_DIS;
+		memset(&holb_cfg, 0, sizeof(holb_cfg));
+		/*
+		 * Set HOLB on USB CONS to avoid IPA stall
+		 * if DPL client is not pulling the data
+		 * on other end from IPA hw.
+		 */
 		holb_cfg.tmr_val = 0;
+		if (ipa3_ctx->ipa_hw_type == IPA_HW_v3_5 &&
+			ep->client == IPA_CLIENT_USB_CONS) {
+			holb_cfg.en = IPA_HOLB_TMR_EN;
+			holb_cfg.tmr_val = IPA_HOLB_TMR_VAL;
+		} else
+			holb_cfg.en = IPA_HOLB_TMR_DIS;
 		res = ipa3_cfg_ep_holb(clnt_hdl, &holb_cfg);
 	}
 
@@ -1302,6 +1312,13 @@ int ipa3_request_gsi_channel(struct ipa_request_gsi_channel_params *params,
 		IPADBG("ep configuration successful\n");
 	} else {
 		IPADBG("Skipping endpoint configuration.\n");
+		if (IPA_CLIENT_IS_PROD(ipa3_ctx->ep[ipa_ep_idx].client) &&
+			ipa3_ctx->ep[ipa_ep_idx].client == IPA_CLIENT_USB_PROD)
+			if (ipa3_cfg_ep_seq(ipa_ep_idx,
+						&params->ipa_ep_cfg.seq)) {
+				IPAERR("fail to configure USB pipe seq\n");
+				goto ipa_cfg_ep_fail;
+			}
 	}
 
 	out_params->clnt_hdl = ipa_ep_idx;
@@ -2006,8 +2023,6 @@ int ipa3_xdci_disconnect(u32 clnt_hdl, bool should_force_clear, u32 qmi_req_id)
 	if (!ep->keep_ipa_awake)
 		IPA_ACTIVE_CLIENTS_INC_EP(ipa3_get_client_mapping(clnt_hdl));
 
-	ipa3_disable_data_path(clnt_hdl);
-
 	if (!IPA_CLIENT_IS_CONS(ep->client)) {
 		IPADBG("Stopping PROD channel - hdl=%d clnt=%d\n",
 			clnt_hdl, ep->client);
@@ -2031,6 +2046,9 @@ int ipa3_xdci_disconnect(u32 clnt_hdl, bool should_force_clear, u32 qmi_req_id)
 			goto stop_chan_fail;
 		}
 	}
+
+	ipa3_disable_data_path(clnt_hdl);
+
 	IPA_ACTIVE_CLIENTS_DEC_EP(ipa3_get_client_mapping(clnt_hdl));
 
 	IPADBG("exit\n");

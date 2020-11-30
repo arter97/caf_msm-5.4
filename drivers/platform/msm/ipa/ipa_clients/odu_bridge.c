@@ -1,4 +1,5 @@
-/* Copyright (c) 2014-2017, 2019 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, 2019, 2020 The Linux Foundation. All rights
+ * reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1280,6 +1281,12 @@ static int ipa_br_request_prod(void)
 
 	reinit_completion(&odu_bridge_ctx->rm_comp);
 	ODU_BRIDGE_DBG("requesting odu prod\n");
+
+	if (unlikely(atomic_read(&odu_bridge_ctx->disconnect_in_progress))) {
+		ODU_BRIDGE_ERR("ODU bridge disconnect_in_progress\n");
+		return -EPERM;
+	}
+
 	res = ipa_rm_request_resource(IPA_RM_RESOURCE_ODU_ADAPT_PROD);
 	if (res) {
 		if (res != -EINPROGRESS) {
@@ -1406,6 +1413,11 @@ int ipa_bridge_connect(u32 hdl)
 	if (odu_bridge_ctx->is_connected) {
 		ODU_BRIDGE_ERR("already connected\n");
 		return -EFAULT;
+	}
+
+	if (unlikely(atomic_read(&odu_bridge_ctx->disconnect_in_progress))) {
+		ODU_BRIDGE_ERR("ODU bridge disconnect_in_progress\n");
+		return -EPERM;
 	}
 
 	ret = ipa_br_request_prod();
