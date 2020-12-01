@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2015, 2017, 2019 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2015, 2017, 2019-2020 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3386,6 +3386,7 @@ static int __init diagchar_init(void)
 	mutex_init(&driver->delayed_rsp_mutex);
 	mutex_init(&apps_data_mutex);
 	mutex_init(&driver->msg_mask_lock);
+	mutex_init(&driver->hdlc_recovery_mutex);
 	init_waitqueue_head(&driver->wait_q);
 	INIT_WORK(&(driver->diag_drain_work), diag_drain_work_fn);
 	INIT_WORK(&(driver->update_user_clients),
