@@ -525,10 +525,18 @@ config QCOM_MINIDUMP
 	  Minidump would dump all registered entries, only when DLOAD mode
 	  is enabled.
 
+config QCOM_VIRT_MINIDUMP
+	tristate "QCOM Virtual Minidump Support"
+	help
+	  This enables virtual minidump feature. It allows various clients to
+	  register to dump their state at system bad state (panic/WDT,etc.,)
+	  on virtual machine. Minidump would dump all registered entries,
+	  only when DLOAD mode is enabled on host.
+
 config MINIDUMP_MAX_ENTRIES
 	int "Minidump Maximum num of entries"
 	default 200
-	depends on QCOM_MINIDUMP
+	depends on QCOM_MINIDUMP || QCOM_VIRT_MINIDUMP
 	help
 	  This defines maximum number of entries to be allocated for application
 	  subsytem in Minidump table.

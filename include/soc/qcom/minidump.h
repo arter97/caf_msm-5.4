@@ -30,7 +30,7 @@ struct md_region {
  *	Zero: on successful addition
  *	Negetive error number on failures
  */
-#if IS_ENABLED(CONFIG_QCOM_MINIDUMP)
+#if (IS_ENABLED(CONFIG_QCOM_MINIDUMP) || IS_ENABLED(CONFIG_QCOM_VIRT_MINIDUMP))
 extern int msm_minidump_add_region(const struct md_region *entry);
 extern int msm_minidump_remove_region(const struct md_region *entry);
 extern bool msm_minidump_enabled(void);
