@@ -748,6 +748,8 @@ struct ipa_stats {
 	u32 wan_repl_rx_empty;
 	u32 lan_rx_empty;
 	u32 lan_repl_rx_empty;
+	u32 flow_enable;
+	u32 flow_disable;
 };
 
 struct ipa_active_clients {
@@ -1550,4 +1552,6 @@ int ipa_uc_mhi_resume_channel(int channelHandle, bool LPTransitionRejected);
 int ipa_uc_mhi_stop_event_update_channel(int channelHandle);
 int ipa_uc_mhi_print_stats(char *dbg_buff, int size);
 int ipa_uc_memcpy(phys_addr_t dest, phys_addr_t src, int len);
+void ipa_flow_control(enum ipa_client_type ipa_client, bool enable,
+	uint32_t qmap_id);
 #endif /* _IPA_I_H_ */
