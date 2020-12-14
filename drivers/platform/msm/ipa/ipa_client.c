@@ -368,6 +368,7 @@ int ipa_disconnect(u32 clnt_hdl)
 {
 	int result;
 	struct ipa_ep_context *ep;
+	struct ipa_ep_cfg_ctrl ep_ctrl = {0};
 
 	if (clnt_hdl >= IPA_NUM_PIPES || ipa_ctx->ep[clnt_hdl].valid == 0) {
 		IPAERR("bad parm.\n");
@@ -378,6 +379,12 @@ int ipa_disconnect(u32 clnt_hdl)
 
 	if (!ep->keep_ipa_awake)
 		ipa_inc_client_enable_clks();
+
+	/* Set Disconnect in Progress flag. */
+	spin_lock(&ipa_ctx->disconnect_lock);
+	ep->disconnect_in_progress = true;
+	spin_unlock(&ipa_ctx->disconnect_lock);
+
 
 	result = ipa_disable_data_path(clnt_hdl);
 	if (result) {
@@ -424,9 +431,15 @@ int ipa_disconnect(u32 clnt_hdl)
 
 	ipa_delete_dflt_flt_rules(clnt_hdl);
 
-	spin_lock(&ipa_ctx->lan_rx_clnt_notify_lock);
+	spin_lock(&ipa_ctx->disconnect_lock);
+	/* If flow is enabled/disabled at this point, we restore the ep state.*/
+	if (ep->client == IPA_CLIENT_USB_PROD) {
+		ep_ctrl.ipa_ep_delay = false;
+		ep_ctrl.ipa_ep_suspend = false;
+		ipa_cfg_ep_ctrl(clnt_hdl, &ep_ctrl);
+	}
 	memset(&ipa_ctx->ep[clnt_hdl], 0, sizeof(struct ipa_ep_context));
-	spin_unlock(&ipa_ctx->lan_rx_clnt_notify_lock);
+	spin_unlock(&ipa_ctx->disconnect_lock);
 
 	ipa_dec_client_disable_clks();
 
