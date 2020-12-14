@@ -563,11 +563,18 @@ int ipa_resume_resource(enum ipa_rm_resource_name resource)
 		IPADBG("%d will be resumed on connect.\n", client);
 		if (ipa_ctx->ep[ipa_ep_idx].client == client &&
 		    ipa_should_pipe_be_suspended(client)) {
-			if (ipa_ctx->ep[ipa_ep_idx].valid) {
+			IPADBG(" ipa_should_pipe_be_suspended return value: true \n");
+			spin_lock(&ipa_ctx->disconnect_lock);
+			IPADBG("ipa_ctx->disconnect_lock acquired\n");
+			if (ipa_ctx->ep[ipa_ep_idx].valid &&
+			!ipa_ctx->ep[ipa_ep_idx].disconnect_in_progress) {
+			IPADBG("disconect is not in progress\n");
 				memset(&suspend, 0, sizeof(suspend));
 				suspend.ipa_ep_suspend = false;
 				ipa_cfg_ep_ctrl(ipa_ep_idx, &suspend);
 			}
+			spin_unlock(&ipa_ctx->disconnect_lock);
+			IPADBG("ipa_ctx->disconnect_lock released\n");
 		}
 	}
 
