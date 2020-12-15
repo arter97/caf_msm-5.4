@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2012-2016 Qualcomm Atheros, Inc.
+ * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -513,6 +514,13 @@ static inline int wil_rxdesc_phy_length(struct vring_rx_desc *d)
 static inline struct vring_rx_desc *wil_skb_rxdesc(struct sk_buff *skb)
 {
 	return (void *)skb->cb;
+}
+
+static inline __be16 wil_skb_get_protocol(struct sk_buff *skb)
+{
+	struct ethhdr *eth = (void *)skb->data;
+
+	return eth->h_proto;
 }
 
 void wil_netif_rx_any(struct sk_buff *skb, struct net_device *ndev);
