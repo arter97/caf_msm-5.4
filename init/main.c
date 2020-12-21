@@ -100,6 +100,7 @@
 #include <asm/setup.h>
 #include <asm/sections.h>
 #include <asm/cacheflush.h>
+#include <soc/qcom/boot_stats.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/initcall.h>
