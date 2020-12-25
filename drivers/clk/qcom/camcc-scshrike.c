@@ -1702,12 +1702,6 @@ static struct clk_rcg2 cam_cc_xo_clk_src = {
 		.num_parents = 2,
 		.ops = &clk_rcg2_ops,
 	},
-	.clkr.vdd_data = {
-		.vdd_class = &vdd_mm,
-		.num_rate_max = VDD_NUM,
-		.rate_max = (unsigned long[VDD_NUM]) {
-			[VDD_MIN] = 19200000},
-	},
 };
 
 static struct clk_branch cam_cc_bps_ahb_clk = {

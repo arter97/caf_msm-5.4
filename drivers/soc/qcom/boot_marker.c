@@ -118,6 +118,8 @@ static void boot_marker_cleanup(void)
 
 void place_marker(const char *name)
 {
+	if (IS_ERR_OR_NULL(dent_bkpi))
+		return;
 #ifdef CONFIG_HIBERNATION
 	if (!strcmp(name, "M - Image Kernel Start")) {
 		/* In restore phase, remove Cold Boot KPIs */
@@ -131,6 +133,8 @@ EXPORT_SYMBOL(place_marker);
 
 void destroy_marker(const char *name)
 {
+	if (IS_ERR_OR_NULL(dent_bkpi))
+		return;
 	_destroy_boot_marker((char *) name);
 }
 EXPORT_SYMBOL(destroy_marker);

@@ -963,12 +963,6 @@ static struct clk_rcg2 disp_cc_xo_clk_src = {
 		.flags = CLK_SET_RATE_PARENT,
 		.ops = &clk_rcg2_ops,
 	},
-	.clkr.vdd_data = {
-		.vdd_class = &vdd_mm,
-		.num_rate_max = VDD_NUM,
-		.rate_max = (unsigned long[VDD_NUM]) {
-			[VDD_MIN] = 19200000},
-	},
 };
 
 static struct clk_regmap_div disp_cc_mdss_byte0_div_clk_src = {

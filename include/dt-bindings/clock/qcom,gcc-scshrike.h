@@ -257,6 +257,8 @@
 #define GCC_PCIE_1_CLKREF_CLK					247
 #define GCC_PCIE_2_CLKREF_CLK					248
 #define GCC_PCIE_3_CLKREF_CLK					249
+#define GCC_NPU_AT_CLK						250
+#define GCC_NPU_TRIG_CLK						251
 
 /* GCC resets */
 #define GCC_EMAC_BCR						0
