@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2015,2017, The Linux Foundation. All rights
+/* Copyright (c) 2002,2007-2015,2017,2021, The Linux Foundation. All rights
  * reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -265,6 +265,7 @@ static inline int kgsl_allocate_global(struct kgsl_device *device,
 
 	memdesc->flags = flags;
 	memdesc->priv = priv;
+	spin_lock_init(&memdesc->lock);
 
 	ret = kgsl_sharedmem_alloc_contig(device, memdesc, (size_t) size);
 	if (ret == 0)

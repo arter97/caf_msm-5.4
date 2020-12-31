@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2017,2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -182,7 +182,6 @@ void kgsl_add_global_secure_entry(struct kgsl_device *device,
 	memdesc->gpuaddr = KGSL_IOMMU_SECURE_BASE;
 	kgsl_global_secure_pt_entry = memdesc;
 }
-
 
 static inline void _iommu_sync_mmu_pc(bool lock)
 {
@@ -1157,6 +1156,7 @@ static int _setstate_alloc(struct kgsl_device *device,
 {
 	int ret;
 
+	spin_lock_init(&iommu->setstate.lock);
 	ret = kgsl_sharedmem_alloc_contig(device, &iommu->setstate, PAGE_SIZE);
 
 	if (!ret) {
@@ -1986,6 +1986,11 @@ static int kgsl_iommu_get_gpuaddr(struct kgsl_pagetable *pagetable,
 		goto out;
 	}
 
+	/*
+	 * This path is only called in a non-SVM path with locks so we can be
+	 * sure we aren't racing with anybody so we don't need to worry about
+	 * taking the lock
+	 */
 	ret = _insert_gpuaddr(pagetable, addr, size);
 	if (ret == 0) {
 		memdesc->gpuaddr = addr;
