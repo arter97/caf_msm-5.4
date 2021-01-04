@@ -14,15 +14,25 @@
 #include <linux/interconnect.h>
 #include <linux/iopoll.h>
 #include <linux/regulator/consumer.h>
+#include <linux/pm_qos.h>
+#include <linux/cpu.h>
+#include <linux/cpumask.h>
+#include <linux/interrupt.h>
+#include <linux/of.h>
+#include <linux/reset.h>
 
 #include "sdhci-pltfm.h"
 #include "cqhci.h"
+#if defined(CONFIG_SDC_QTI)
+#include "../core/core.h"
+#endif
 
 #define CORE_MCI_VERSION		0x50
 #define CORE_VERSION_MAJOR_SHIFT	28
 #define CORE_VERSION_MAJOR_MASK		(0xf << CORE_VERSION_MAJOR_SHIFT)
 #define CORE_VERSION_MINOR_MASK		0xff
 #define CORE_VERSION_TARGET_MASK        0x000000FF
+#define SDHCI_MSM_VER_420               0x49
 
 #define CORE_MCI_GENERICS		0x70
 #define SWITCHABLE_SIGNALING_VOLTAGE	BIT(29)
@@ -98,6 +108,10 @@
 
 #define CORE_CDC_ERROR_CODE_MASK	0x7000000
 
+#define CQ_CMD_DBG_RAM                  0x110
+#define CQ_CMD_DBG_RAM_WA               0x150
+#define CQ_CMD_DBG_RAM_OL               0x154
+
 #define CORE_CSR_CDC_GEN_CFG		0x178
 #define CORE_CDC_SWITCH_BYPASS_OFF	BIT(0)
 #define CORE_CDC_SWITCH_RC_EN		BIT(1)
@@ -126,6 +140,8 @@
 #define CMUX_SHIFT_PHASE_MASK	(7 << CMUX_SHIFT_PHASE_SHIFT)
 
 #define MSM_MMC_AUTOSUSPEND_DELAY_MS	50
+#define MSM_PMQOS_UNVOTING_DELAY_MS	10 /* msec */
+#define MSM_CLK_GATING_DELAY_MS		200 /* msec */
 
 /* Timeout value to avoid infinite waiting for pwr_irq */
 #define MSM_PWR_IRQ_TIMEOUT_MS 5000
@@ -359,16 +375,42 @@ struct sdhci_msm_vreg_data {
 	struct sdhci_msm_reg_data *vdd_io_data;
 };
 
+/* Per cpu cluster qos group */
+struct qos_cpu_group {
+	cpumask_t mask;	/* CPU mask of cluster */
+	unsigned int *votes;	/* Different votes for cluster */
+	struct dev_pm_qos_request *qos_req;	/* Pointer to host qos request*/
+	bool voted;
+	struct sdhci_msm_host *host;
+	bool initialized;
+	bool curr_vote;
+};
+
+/* Per host qos request structure */
+struct sdhci_msm_qos_req {
+	struct qos_cpu_group *qcg;	/* CPU group per host */
+	unsigned int num_groups;	/* Number of groups */
+	unsigned int active_mask;	/* Active affine irq mask */
+};
+
+enum constraint {
+	QOS_PERF,
+	QOS_POWER,
+	QOS_MAX,
+};
+
 struct sdhci_msm_host {
 	struct platform_device *pdev;
 	void __iomem *core_mem;	/* MSM SDCC mapped address */
 	int pwr_irq;		/* power irq */
 	struct clk *bus_clk;	/* SDHC bus voter clock */
 	struct clk *xo_clk;	/* TCXO clk needed for FLL feature of cm_dll*/
-	struct clk_bulk_data bulk_clks[4]; /* core, iface, cal, sleep clocks */
+	/* core, iface, ice, cal, sleep clocks */
+	struct clk_bulk_data bulk_clks[5];
 	unsigned long clk_rate;
 	struct sdhci_msm_vreg_data *vreg_data;
 	struct mmc_host *mmc;
+	struct cqhci_host *cq_host;
 	bool use_14lpp_dll_reset;
 	bool tuning_done;
 	bool calibration_done;
@@ -389,14 +431,34 @@ struct sdhci_msm_host {
 	bool skip_bus_bw_voting;
 	struct sdhci_msm_bus_vote_data *bus_vote_data;
 	struct delayed_work bus_vote_work;
+	struct delayed_work pmqos_unvote_work;
+	struct delayed_work clk_gating_work;
 	bool pltfm_init_done;
 	bool core_3_0v_support;
 	bool use_7nm_dll;
 	struct sdhci_msm_dll_hsr *dll_hsr;
 	struct sdhci_msm_regs_restore regs_restore;
+	u32 *sup_ice_clk_table;
+	unsigned char sup_ice_clk_cnt;
+	u32 ice_clk_max;
+	u32 ice_clk_min;
+	u32 ice_clk_rate;
+	struct workqueue_struct *workq;	/* QoS work queue */
+	struct sdhci_msm_qos_req *sdhci_qos;
+	struct irq_affinity_notify affinity_notify;
+	struct device_attribute clk_gating;
+	struct device_attribute pm_qos;
+	u32 clk_gating_delay;
+	u32 pm_qos_delay;
+	bool cqhci_offset_changed;
+	bool reg_store;
+	struct reset_control *core_reset;
 };
 
 static struct sdhci_msm_host *sdhci_slot[2];
+
+static int sdhci_msm_update_qos_constraints(struct qos_cpu_group *qcg,
+					enum constraint type);
 
 static void sdhci_msm_bus_voting(struct sdhci_host *host, bool enable);
 
@@ -1143,7 +1205,13 @@ static int sdhci_msm_cm_dll_sdc4_calibration(struct sdhci_host *host)
 		ddr_cfg_offset = msm_offset->core_ddr_config;
 	else
 		ddr_cfg_offset = msm_offset->core_ddr_config_old;
-	writel_relaxed(DDR_CONFIG_POR_VAL, host->ioaddr + ddr_cfg_offset);
+
+	if (msm_host->dll_hsr->ddr_config)
+		config = msm_host->dll_hsr->ddr_config;
+	else
+		config = DDR_CONFIG_POR_VAL;
+
+	writel_relaxed(config, host->ioaddr + ddr_cfg_offset);
 
 	if (mmc->ios.enhanced_strobe) {
 		config = readl_relaxed(host->ioaddr +
@@ -1169,9 +1237,21 @@ static int sdhci_msm_cm_dll_sdc4_calibration(struct sdhci_host *host)
 		goto out;
 	}
 
-	config = readl_relaxed(host->ioaddr + msm_offset->core_vendor_spec3);
-	config |= CORE_PWRSAVE_DLL;
-	writel_relaxed(config, host->ioaddr + msm_offset->core_vendor_spec3);
+	/*
+	 * Set CORE_PWRSAVE_DLL bit in CORE_VENDOR_SPEC3.
+	 * When MCLK is gated OFF, it is not gated for less than 0.5us
+	 * and MCLK must be switched on for at-least 1us before DATA
+	 * starts coming. Controllers with 14lpp and later tech DLL cannot
+	 * guarantee above requirement. So PWRSAVE_DLL should not be
+	 * turned on for host controllers using this DLL.
+	 */
+	if (!msm_host->use_14lpp_dll_reset) {
+		config = readl_relaxed(host->ioaddr +
+				msm_offset->core_vendor_spec3);
+		config |= CORE_PWRSAVE_DLL;
+		writel_relaxed(config, host->ioaddr +
+				msm_offset->core_vendor_spec3);
+	}
 
 	/*
 	 * Drain writebuffer to ensure above DLL calibration
@@ -1566,11 +1646,30 @@ skip_hsr:
 	return ret;
 }
 
+static int sdhci_msm_parse_reset_data(struct device *dev,
+			struct sdhci_msm_host *msm_host)
+{
+	int ret = 0;
+
+	msm_host->core_reset = devm_reset_control_get(dev,
+					"core_reset");
+	if (IS_ERR(msm_host->core_reset)) {
+		ret = PTR_ERR(msm_host->core_reset);
+		dev_err(dev, "core_reset unavailable,err = %d\n",
+				ret);
+		msm_host->core_reset = NULL;
+	}
+
+	return ret;
+}
+
 /* Parse platform data */
 static bool sdhci_msm_populate_pdata(struct device *dev,
 						struct sdhci_msm_host *msm_host)
 {
 	struct device_node *np = dev->of_node;
+	int ice_clk_table_len;
+	u32 *ice_clk_table = NULL;
 
 	msm_host->vreg_data = devm_kzalloc(dev, sizeof(struct
 						    sdhci_msm_vreg_data),
@@ -1600,6 +1699,24 @@ static bool sdhci_msm_populate_pdata(struct device *dev,
 
 	if (sdhci_msm_dt_parse_hsr_info(dev, msm_host))
 		goto out;
+
+	if (!sdhci_msm_dt_get_array(dev, "qcom,ice-clk-rates",
+			&ice_clk_table, &ice_clk_table_len, 0)) {
+		if (ice_clk_table && ice_clk_table_len) {
+			if (ice_clk_table_len != 2) {
+				dev_err(dev, "Need max and min frequencies\n");
+				goto out;
+			}
+			msm_host->sup_ice_clk_table = ice_clk_table;
+			msm_host->sup_ice_clk_cnt = ice_clk_table_len;
+			msm_host->ice_clk_max = msm_host->sup_ice_clk_table[0];
+			msm_host->ice_clk_min = msm_host->sup_ice_clk_table[1];
+			dev_dbg(dev, "ICE clock rates (Hz): max: %u min: %u\n",
+				msm_host->ice_clk_max, msm_host->ice_clk_min);
+		}
+	}
+
+	sdhci_msm_parse_reset_data(dev, msm_host);
 
 	return false;
 out:
@@ -1672,8 +1789,10 @@ static void sdhci_msm_check_power_status(struct sdhci_host *host, u32 req_type)
 		return;
 	}
 
-	if (mmc->ops->get_cd && !mmc->ops->get_cd(mmc)) {
-		pr_debug("%s: card is not present. Do not wait for pwr irq\n",
+	if (mmc->card && mmc->ops->get_cd && !mmc->ops->get_cd(mmc) &&
+			(req_type & REQ_BUS_ON)) {
+		pr_debug(
+			"%s: Regulators are never turned on when SD card is removed so do not wait for pwr irq\n",
 				mmc_hostname(host->mmc));
 		return;
 	}
@@ -1843,7 +1962,7 @@ static int sdhci_msm_vreg_enable(struct sdhci_msm_reg_data *vreg)
 
 	if (!vreg->is_enabled) {
 		/* Set voltage level */
-		ret = sdhci_msm_vreg_set_voltage(vreg, vreg->high_vol_level,
+		ret = sdhci_msm_vreg_set_voltage(vreg, vreg->low_vol_level,
 						vreg->high_vol_level);
 		if (ret)
 			return ret;
@@ -1899,6 +2018,7 @@ static int sdhci_msm_setup_vreg(struct sdhci_msm_host *msm_host,
 	int ret = 0, i;
 	struct sdhci_msm_vreg_data *curr_slot;
 	struct sdhci_msm_reg_data *vreg_table[2];
+	struct mmc_host *mmc = msm_host->mmc;
 
 	curr_slot = msm_host->vreg_data;
 	if (!curr_slot) {
@@ -1909,6 +2029,10 @@ static int sdhci_msm_setup_vreg(struct sdhci_msm_host *msm_host,
 
 	vreg_table[0] = curr_slot->vdd_data;
 	vreg_table[1] = curr_slot->vdd_io_data;
+
+	/* When eMMC absent disable regulator marked as always_on */
+	if (!enable && vreg_table[1]->is_always_on && !mmc->card)
+		vreg_table[1]->is_always_on = false;
 
 	for (i = 0; i < ARRAY_SIZE(vreg_table); i++) {
 		if (vreg_table[i]) {
@@ -2060,7 +2184,8 @@ static void sdhci_msm_handle_pwr_irq(struct sdhci_host *host, int irq)
 		io_level = REQ_IO_HIGH;
 	}
 	if (irq_status & CORE_PWRCTL_BUS_OFF) {
-		if (msm_host->pltfm_init_done)
+		if (!(host->mmc->caps & MMC_CAP_NONREMOVABLE) ||
+		    msm_host->pltfm_init_done)
 			ret = sdhci_msm_setup_vreg(msm_host,
 					false, false);
 		if (!ret)
@@ -2222,8 +2347,14 @@ static void sdhci_msm_set_clock(struct sdhci_host *host, unsigned int clock)
 
 	msm_set_clock_rate_for_bus_mode(host, clock);
 out:
-	if (!msm_host->skip_bus_bw_voting)
-		sdhci_msm_bus_voting(host, !!clock);
+	/* Vote on bus only with clock frequency or when changing clock
+	 * frequency. No need to vote when setting clock frequency as 0
+	 * because after setting clock at 0, we release host, which will
+	 * eventually call host runtime suspend and unvoting would be
+	 * taken care in runtime suspend call.
+	 */
+	if (!msm_host->skip_bus_bw_voting && clock)
+		sdhci_msm_bus_voting(host, true);
 	__sdhci_msm_set_clock(host, clock);
 }
 
@@ -2233,7 +2364,8 @@ static void sdhci_msm_registers_save(struct sdhci_host *host)
 	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
 	const struct sdhci_msm_offset *msm_offset = msm_host->offset;
 
-	if (!msm_host->regs_restore.is_supported)
+	if (!msm_host->regs_restore.is_supported &&
+			!msm_host->reg_store)
 		return;
 
 	msm_host->regs_restore.vendor_func = readl_relaxed(host->ioaddr +
@@ -2296,8 +2428,9 @@ static void sdhci_msm_registers_restore(struct sdhci_host *host)
 	u32 irq_status;
 	struct mmc_ios ios = host->mmc->ios;
 
-	if (!msm_host->regs_restore.is_supported ||
-		!msm_host->regs_restore.is_valid)
+	if ((!msm_host->regs_restore.is_supported ||
+		!msm_host->regs_restore.is_valid) &&
+		!msm_host->reg_store)
 		return;
 
 	writel_relaxed(0, host->ioaddr + msm_offset->core_pwrctl_mask);
@@ -2593,32 +2726,10 @@ out:
 }
 
 /*
- * Internal work. Work to set 0 bandwidth for msm bus.
- */
-static void sdhci_msm_bus_work(struct work_struct *work)
-{
-	struct sdhci_msm_host *msm_host;
-	struct sdhci_host *host;
-
-	msm_host = container_of(work, struct sdhci_msm_host,
-				bus_vote_work.work);
-	host =  platform_get_drvdata(msm_host->pdev);
-
-	if (!msm_host->bus_vote_data->sdhc_ddr ||
-			!msm_host->bus_vote_data->cpu_sdhc)
-		return;
-	/* don't vote for 0 bandwidth if any request is in progress */
-	if (!host->mmc->ongoing_mrq)
-		sdhci_msm_bus_set_vote(msm_host, 0);
-	else
-		pr_debug("Transfer in progress. Skipping bus voting to 0\n");
-}
-
-/*
  * This function cancels any scheduled delayed work and sets the bus
  * vote based on bw (bandwidth) argument.
  */
-static void sdhci_msm_bus_cancel_work_and_set_vote(struct sdhci_host *host,
+static void sdhci_msm_bus_get_and_set_vote(struct sdhci_host *host,
 						unsigned int bw)
 {
 	int vote;
@@ -2629,28 +2740,8 @@ static void sdhci_msm_bus_cancel_work_and_set_vote(struct sdhci_host *host,
 		!msm_host->bus_vote_data->sdhc_ddr ||
 		!msm_host->bus_vote_data->cpu_sdhc)
 		return;
-	cancel_delayed_work_sync(&msm_host->bus_vote_work);
 	vote = sdhci_msm_bus_get_vote_for_bw(msm_host, bw);
 	sdhci_msm_bus_set_vote(msm_host, vote);
-}
-
-#define MSM_MMC_BUS_VOTING_DELAY	200 /* msecs */
-#define VOTE_ZERO  0
-
-/*
- * This function queues a work which will set the bandwidth
- * requirement to 0.
- */
-static void sdhci_msm_bus_queue_work(struct sdhci_host *host)
-{
-	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
-	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
-
-	if (msm_host->bus_vote_data &&
-		msm_host->bus_vote_data->curr_vote != VOTE_ZERO)
-		queue_delayed_work(system_wq,
-				   &msm_host->bus_vote_work,
-				   msecs_to_jiffies(MSM_MMC_BUS_VOTING_DELAY));
 }
 
 static struct sdhci_msm_bus_vote_data *sdhci_msm_get_bus_vote_data(struct device
@@ -2772,8 +2863,6 @@ static int sdhci_msm_bus_register(struct sdhci_msm_host *host,
 		return ret;
 	}
 
-	INIT_DELAYED_WORK(&host->bus_vote_work, sdhci_msm_bus_work);
-
 	return ret;
 }
 
@@ -2793,9 +2882,9 @@ static void sdhci_msm_bus_voting(struct sdhci_host *host, bool enable)
 
 	if (enable) {
 		bw = sdhci_get_bw_required(host, ios);
-		sdhci_msm_bus_cancel_work_and_set_vote(host, bw);
+		sdhci_msm_bus_get_and_set_vote(host, bw);
 	} else
-		sdhci_msm_bus_queue_work(host);
+		sdhci_msm_bus_get_and_set_vote(host, 0);
 }
 
 /*****************************************************************************\
@@ -2906,6 +2995,8 @@ static int sdhci_msm_cqe_add_host(struct sdhci_host *host,
 
 	msm_host->mmc->caps2 |= MMC_CAP2_CQE | MMC_CAP2_CQE_DCMD;
 	cq_host->ops = &sdhci_msm_cqhci_ops;
+	msm_host->cq_host = cq_host;
+	cq_host->offset_changed = msm_host->cqhci_offset_changed;
 
 	dma64 = host->flags & SDHCI_USE_64_BIT_DMA;
 
@@ -2945,6 +3036,138 @@ cleanup:
 	return ret;
 }
 
+
+
+#define MAX_TEST_BUS 60
+#define DRIVER_NAME "sdhci_msm"
+#define SDHCI_MSM_DUMP(f, x...) \
+	pr_err("%s: " DRIVER_NAME ": " f, mmc_hostname(host->mmc), ## x)
+#define DRV_NAME "cqhci-host"
+
+#if defined(CONFIG_SDC_QTI)
+static void sdhci_msm_cqe_dump_debug_ram(struct sdhci_host *host)
+{
+	int i = 0;
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+	const struct sdhci_msm_offset *msm_offset = msm_host->offset;
+
+	struct cqhci_host *cq_host;
+	u32 version;
+	u16 minor;
+	int offset;
+
+	if (msm_host->cq_host)
+		cq_host = msm_host->cq_host;
+	else
+		return;
+
+	version =  msm_host_readl(msm_host, host,
+				 msm_offset->core_mci_version);
+	minor = version & CORE_VERSION_TARGET_MASK;
+
+	/* registers offset changed starting from 4.2.0 */
+	offset = minor >= SDHCI_MSM_VER_420 ? 0 : 0x48;
+
+	if (cq_host->offset_changed)
+		offset += CQE_V5_VENDOR_CFG;
+	pr_err("---- Debug RAM dump ----\n");
+	pr_err(DRV_NAME ": Debug RAM wrap-around: 0x%08x | Debug RAM overlap: 0x%08x\n",
+	       cqhci_readl(cq_host, CQ_CMD_DBG_RAM_WA + offset),
+	       cqhci_readl(cq_host, CQ_CMD_DBG_RAM_OL + offset));
+
+	while (i < 16) {
+		pr_err(DRV_NAME ": Debug RAM dump [%d]: 0x%08x\n", i,
+		       cqhci_readl(cq_host, CQ_CMD_DBG_RAM + offset + (4 * i)));
+		i++;
+	}
+	pr_err("-------------------------\n");
+}
+
+
+static void sdhci_msm_dump_vendor_regs(struct sdhci_host *host)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+	const struct sdhci_msm_offset *msm_offset = msm_host->offset;
+
+	int tbsel, tbsel2;
+	int i, index = 0;
+	u32 test_bus_val = 0;
+	u32 debug_reg[MAX_TEST_BUS] = {0};
+
+	SDHCI_MSM_DUMP("----------- VENDOR REGISTER DUMP -----------\n");
+
+	if (msm_host->cq_host)
+		sdhci_msm_cqe_dump_debug_ram(host);
+
+	SDHCI_MSM_DUMP(
+			"Data cnt: 0x%08x | Fifo cnt: 0x%08x | Int sts: 0x%08x\n",
+		readl_relaxed(host->ioaddr + msm_offset->core_mci_data_cnt),
+		readl_relaxed(host->ioaddr + msm_offset->core_mci_fifo_cnt),
+		readl_relaxed(host->ioaddr + msm_offset->core_mci_status));
+	SDHCI_MSM_DUMP(
+			"DLL sts: 0x%08x | DLL cfg:  0x%08x | DLL cfg2: 0x%08x\n",
+		readl_relaxed(host->ioaddr + msm_offset->core_dll_status),
+		readl_relaxed(host->ioaddr + msm_offset->core_dll_config),
+		readl_relaxed(host->ioaddr + msm_offset->core_dll_config_2));
+	SDHCI_MSM_DUMP(
+			"DLL cfg3: 0x%08x | DLL usr ctl:  0x%08x | DDR cfg: 0x%08x\n",
+		readl_relaxed(host->ioaddr + msm_offset->core_dll_config_3),
+		readl_relaxed(host->ioaddr + msm_offset->core_dll_usr_ctl),
+		readl_relaxed(host->ioaddr + msm_offset->core_ddr_config));
+	SDHCI_MSM_DUMP(
+			"SDCC ver: 0x%08x | Vndr adma err : addr0: 0x%08x addr1: 0x%08x\n",
+		readl_relaxed(host->ioaddr + msm_offset->core_mci_version),
+		readl_relaxed(host->ioaddr +
+				msm_offset->core_vendor_spec_adma_err_addr0),
+		readl_relaxed(host->ioaddr +
+				msm_offset->core_vendor_spec_adma_err_addr1));
+	SDHCI_MSM_DUMP(
+			"Vndr func: 0x%08x | Vndr func2 : 0x%08x Vndr func3: 0x%08x\n",
+		readl_relaxed(host->ioaddr + msm_offset->core_vendor_spec),
+		readl_relaxed(host->ioaddr +
+			msm_offset->core_vendor_spec_func2),
+		readl_relaxed(host->ioaddr + msm_offset->core_vendor_spec3));
+
+	/*
+	 * tbsel indicates [2:0] bits and tbsel2 indicates [7:4] bits
+	 * of core_testbus_config register.
+	 *
+	 * To select test bus 0 to 7 use tbsel and to select any test bus
+	 * above 7 use (tbsel2 | tbsel) to get the test bus number. For eg,
+	 * to select test bus 14, write 0x1E to core_testbus_config register
+	 * i.e., tbsel2[7:4] = 0001, tbsel[2:0] = 110.
+	 */
+	for (tbsel2 = 0; tbsel2 < 7; tbsel2++) {
+		for (tbsel = 0; tbsel < 8; tbsel++) {
+			if (index >= MAX_TEST_BUS)
+				break;
+			test_bus_val =
+			(tbsel2 << msm_offset->core_testbus_sel2_bit) |
+				tbsel | msm_offset->core_testbus_ena;
+			writel_relaxed(test_bus_val, host->ioaddr +
+				msm_offset->core_testbus_config);
+			debug_reg[index++] = readl_relaxed(host->ioaddr +
+					msm_offset->core_sdcc_debug_reg);
+		}
+	}
+	for (i = 0; i < MAX_TEST_BUS; i = i + 4)
+		SDHCI_MSM_DUMP(
+				" Test bus[%d to %d]: 0x%08x 0x%08x 0x%08x 0x%08x\n",
+				i, i + 3, debug_reg[i], debug_reg[i+1],
+				debug_reg[i+2], debug_reg[i+3]);
+}
+
+#endif
+
+static void sdhci_msm_reset(struct sdhci_host *host, u8 mask)
+{
+	if ((host->mmc->caps2 & MMC_CAP2_CQE) && (mask & SDHCI_RESET_ALL))
+		cqhci_deactivate(host->mmc);
+	sdhci_reset(host, mask);
+}
+
 static const struct sdhci_msm_variant_ops mci_var_ops = {
 	.msm_readl_relaxed = sdhci_msm_mci_variant_readl_relaxed,
 	.msm_writel_relaxed = sdhci_msm_mci_variant_writel_relaxed,
@@ -2982,23 +3205,82 @@ static const struct of_device_id sdhci_msm_dt_match[] = {
 
 MODULE_DEVICE_TABLE(of, sdhci_msm_dt_match);
 
+static void sdhci_msm_hw_reset(struct sdhci_host *host)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+	struct platform_device *pdev = msm_host->pdev;
+	int ret = -EOPNOTSUPP;
+
+	if (!msm_host->core_reset) {
+		dev_err(&pdev->dev, "%s: failed, err = %d\n", __func__,
+				ret);
+		return;
+	}
+
+	msm_host->reg_store = true;
+	sdhci_msm_registers_save(host);
+	if (host->mmc->caps2 & MMC_CAP2_CQE) {
+		host->mmc->cqe_ops->cqe_disable(host->mmc);
+		host->mmc->cqe_enabled = false;
+	}
+
+	ret = reset_control_assert(msm_host->core_reset);
+	if (ret) {
+		dev_err(&pdev->dev, "%s: core_reset assert failed, err = %d\n",
+				__func__, ret);
+		goto out;
+	}
+
+	/*
+	 * The hardware requirement for delay between assert/deassert
+	 * is at least 3-4 sleep clock (32.7KHz) cycles, which comes to
+	 * ~125us (4/32768). To be on the safe side add 200us delay.
+	 */
+	usleep_range(200, 210);
+
+	ret = reset_control_deassert(msm_host->core_reset);
+	if (ret)
+		dev_err(&pdev->dev, "%s: core_reset deassert failed, err = %d\n",
+				__func__, ret);
+
+	sdhci_msm_registers_restore(host);
+	msm_host->reg_store = false;
+
+#if defined(CONFIG_SDC_QTI)
+	if (host->mmc->card)
+		mmc_power_cycle(host->mmc, host->mmc->card->ocr);
+#endif
+out:
+	return;
+}
+
 static const struct sdhci_ops sdhci_msm_ops = {
-	.reset = sdhci_reset,
+	.reset = sdhci_msm_reset,
 	.set_clock = sdhci_msm_set_clock,
 	.get_min_clock = sdhci_msm_get_min_clock,
 	.get_max_clock = sdhci_msm_get_max_clock,
 	.set_bus_width = sdhci_set_bus_width,
 	.set_uhs_signaling = sdhci_msm_set_uhs_signaling,
+
+#if defined(CONFIG_SDC_QTI)
+	.dump_vendor_regs = sdhci_msm_dump_vendor_regs,
+#endif
+
 	.write_w = sdhci_msm_writew,
 	.write_b = sdhci_msm_writeb,
 	.irq	= sdhci_msm_cqe_irq,
+	.hw_reset = sdhci_msm_hw_reset,
 };
 
 static const struct sdhci_pltfm_data sdhci_msm_pdata = {
 	.quirks = SDHCI_QUIRK_BROKEN_CARD_DETECTION |
 		  SDHCI_QUIRK_SINGLE_POWER_WRITE |
 		  SDHCI_QUIRK_CAP_CLOCK_BASE_BROKEN |
-		  SDHCI_QUIRK_NO_ENDATTR_IN_NOPDESC,
+		  SDHCI_QUIRK_NO_ENDATTR_IN_NOPDESC |
+		  SDHCI_QUIRK_MULTIBLOCK_READ_ACMD12 |
+		  SDHCI_QUIRK_DATA_TIMEOUT_USES_SDCLK,
+
 	.quirks2 = SDHCI_QUIRK2_PRESET_VALUE_BROKEN,
 	.ops = &sdhci_msm_ops,
 };
@@ -3050,6 +3332,583 @@ static void sdhci_set_default_hw_caps(struct sdhci_msm_host *msm_host,
 	if ((major == 1) && ((minor == 0x6e) || (minor == 0x71) ||
 				(minor == 0x72)))
 		msm_host->use_7nm_dll = true;
+}
+
+static void sdhci_msm_clkgate_bus_delayed_work(struct work_struct *work)
+{
+	struct sdhci_msm_host *msm_host = container_of(work,
+			struct sdhci_msm_host, clk_gating_work.work);
+	struct sdhci_host *host = mmc_priv(msm_host->mmc);
+
+	sdhci_msm_registers_save(host);
+	clk_bulk_disable_unprepare(ARRAY_SIZE(msm_host->bulk_clks),
+					msm_host->bulk_clks);
+	sdhci_msm_bus_voting(host, false);
+}
+
+/* Find cpu group qos from a given cpu */
+static struct qos_cpu_group *cpu_to_group(struct sdhci_msm_qos_req *r, int cpu)
+{
+	int i;
+	struct qos_cpu_group *g = r->qcg;
+
+	if (cpu < 0 || cpu > num_possible_cpus())
+		return NULL;
+
+	for (i = 0; i < r->num_groups; i++, g++) {
+		if (cpumask_test_cpu(cpu, &g->mask))
+			return &r->qcg[i];
+	}
+
+	return NULL;
+}
+
+/*
+ * Function to put qos vote. This takes qos cpu group of
+ * host and type of vote as input
+ */
+static int sdhci_msm_update_qos_constraints(struct qos_cpu_group *qcg,
+							enum constraint type)
+{
+	unsigned int vote;
+	int cpu, err;
+	struct dev_pm_qos_request *qos_req = qcg->qos_req;
+
+	if (type == QOS_MAX)
+		vote = S32_MAX;
+	else
+		vote = qcg->votes[type];
+
+	if (qcg->curr_vote == vote)
+		return 0;
+
+	for_each_cpu(cpu, &qcg->mask) {
+		err = dev_pm_qos_update_request(qos_req, vote);
+		if (err < 0)
+			return err;
+		++qos_req;
+	}
+
+	if (type == QOS_MAX)
+		qcg->voted = false;
+	else
+		qcg->voted = true;
+
+	qcg->curr_vote = vote;
+
+	return 0;
+}
+
+/* Unregister pm qos requests */
+static int remove_group_qos(struct qos_cpu_group *qcg)
+{
+	int err, cpu;
+	struct dev_pm_qos_request *qos_req = qcg->qos_req;
+
+	for_each_cpu(cpu, &qcg->mask) {
+		if (!dev_pm_qos_request_active(qos_req)) {
+			++qos_req;
+			continue;
+		}
+		err = dev_pm_qos_remove_request(qos_req);
+		if (err < 0)
+			return err;
+		qos_req++;
+	}
+
+	return 0;
+}
+
+/* Register pm qos request */
+static int add_group_qos(struct qos_cpu_group *qcg, enum constraint type)
+{
+	int cpu, err;
+	struct dev_pm_qos_request *qos_req = qcg->qos_req;
+
+	for_each_cpu(cpu, &qcg->mask) {
+		memset(qos_req, 0,
+				sizeof(struct dev_pm_qos_request));
+		err = dev_pm_qos_add_request(get_cpu_device(cpu),
+				qos_req,
+				DEV_PM_QOS_RESUME_LATENCY,
+				type);
+		if (err < 0)
+			return err;
+		qos_req++;
+	}
+	return 0;
+}
+
+/* Function to remove pm qos vote */
+static void sdhci_msm_unvote_qos_all(struct work_struct *work)
+{
+	struct sdhci_msm_host *msm_host = container_of(work,
+			struct sdhci_msm_host, pmqos_unvote_work.work);
+	struct sdhci_msm_qos_req *qos_req = msm_host->sdhci_qos;
+	struct qos_cpu_group *qcg;
+	int i, err;
+
+	if (!qos_req)
+		return;
+	qcg = qos_req->qcg;
+	for (i = 0; ((i < qos_req->num_groups) && qcg->initialized); i++,
+								qcg++) {
+		err = sdhci_msm_update_qos_constraints(qcg, QOS_MAX);
+		if (err)
+			dev_err(&msm_host->pdev->dev,
+				"Failed (%d) removing qos vote(%d)\n", err, i);
+	}
+}
+
+/* Function to vote pmqos from sdcc. */
+static void sdhci_msm_vote_pmqos(struct mmc_host *mmc, int cpu)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+	struct qos_cpu_group *qcg;
+
+	qcg = cpu_to_group(msm_host->sdhci_qos, cpu);
+	if (!qcg) {
+		dev_dbg(&msm_host->pdev->dev, "QoS group is undefined\n");
+		return;
+	}
+
+	if (qcg->voted)
+		return;
+
+	if (sdhci_msm_update_qos_constraints(qcg, QOS_PERF))
+		dev_err(&qcg->host->pdev->dev, "%s: update qos - failed\n",
+				__func__);
+	dev_dbg(&msm_host->pdev->dev, "Voted pmqos - cpu: %d\n", cpu);
+}
+
+/**
+ * sdhci_msm_irq_affinity_notify - Callback for affinity changes
+ * @notify: context as to what irq was changed
+ * @mask: the new affinity mask
+ *
+ * This is a callback function used by the irq_set_affinity_notifier function
+ * so that we may register to receive changes to the irq affinity masks.
+ */
+static void
+sdhci_msm_irq_affinity_notify(struct irq_affinity_notify *notify,
+		const cpumask_t *mask)
+{
+	struct sdhci_msm_host *msm_host =
+		container_of(notify, struct sdhci_msm_host, affinity_notify);
+	struct platform_device *pdev = msm_host->pdev;
+	struct sdhci_msm_qos_req *qos_req = msm_host->sdhci_qos;
+	struct qos_cpu_group *qcg;
+	int i, err;
+
+	if (!qos_req)
+		return;
+	/*
+	 * If device is in suspend mode, just update the active mask,
+	 * vote would be taken care when device resumes.
+	 */
+	msm_host->sdhci_qos->active_mask = cpumask_first(mask);
+	if (pm_runtime_status_suspended(&pdev->dev))
+		return;
+
+	/* Cancel previous scheduled work and unvote votes */
+	qcg = qos_req->qcg;
+	for (i = 0; i < qos_req->num_groups; i++, qcg++) {
+		err = sdhci_msm_update_qos_constraints(qcg, QOS_MAX);
+		if (err)
+			pr_err("%s: Failed (%d) removing qos vote of grp(%d)\n",
+					mmc_hostname(msm_host->mmc), err, i);
+	}
+
+	cancel_delayed_work_sync(&msm_host->pmqos_unvote_work);
+	sdhci_msm_vote_pmqos(msm_host->mmc,
+			msm_host->sdhci_qos->active_mask);
+}
+
+/**
+ * sdhci_msm_irq_affinity_release - Callback for affinity notifier release
+ * @ref: internal core kernel usage
+ *
+ * This is a callback function used by the irq_set_affinity_notifier function
+ * to inform the current notification subscriber that they will no longer
+ * receive notifications.
+ */
+static void
+inline sdhci_msm_irq_affinity_release(struct kref __always_unused *ref)
+{ }
+
+/* Function for settig up qos based on parsed dt entries */
+static int sdhci_msm_setup_qos(struct sdhci_msm_host *msm_host)
+{
+	struct platform_device *pdev = msm_host->pdev;
+	struct sdhci_msm_qos_req *qr = msm_host->sdhci_qos;
+	struct qos_cpu_group *qcg = qr->qcg;
+	struct mmc_host *mmc = msm_host->mmc;
+	struct sdhci_host *host = mmc_priv(mmc);
+	int i, err;
+
+	if (!msm_host->sdhci_qos)
+		return 0;
+
+	/* Affine irq to first set of mask */
+	WARN_ON(irq_set_affinity_hint(host->irq, &qcg->mask));
+
+	/* Setup notifier for case of affinity change/migration */
+	msm_host->affinity_notify.notify = sdhci_msm_irq_affinity_notify;
+	msm_host->affinity_notify.release = sdhci_msm_irq_affinity_release;
+	irq_set_affinity_notifier(host->irq, &msm_host->affinity_notify);
+
+	for (i = 0; i < qr->num_groups; i++, qcg++) {
+		qcg->qos_req = kcalloc(cpumask_weight(&qcg->mask),
+				sizeof(struct dev_pm_qos_request),
+				GFP_KERNEL);
+		if (!qcg->qos_req) {
+			dev_err(&pdev->dev, "Memory allocation failed\n");
+			if (!i)
+				return -ENOMEM;
+			goto free_mem;
+		}
+		err = add_group_qos(qcg, S32_MAX);
+		if (err < 0) {
+			dev_err(&pdev->dev, "Fail (%d) add qos-req: grp-%d\n",
+					err, i);
+			if (!i) {
+				kfree(qcg->qos_req);
+				return err;
+			}
+			goto free_mem;
+		}
+		qcg->initialized = true;
+		dev_dbg(&pdev->dev, "%s: qcg: 0x%08x | mask: 0x%08x\n",
+				 __func__, qcg, qcg->mask);
+	}
+
+	INIT_DELAYED_WORK(&msm_host->pmqos_unvote_work,
+			sdhci_msm_unvote_qos_all);
+
+	/* Vote pmqos during setup for first set of mask*/
+	sdhci_msm_update_qos_constraints(qr->qcg, QOS_PERF);
+	qr->active_mask = cpumask_first(&qr->qcg->mask);
+	return 0;
+
+free_mem:
+	while (i--) {
+		kfree(qcg->qos_req);
+		qcg--;
+	}
+
+	return err;
+}
+
+/*
+ * QoS init function. It parses dt entries and intializes data
+ * structures.
+ */
+static void sdhci_msm_qos_init(struct sdhci_msm_host *msm_host)
+{
+	struct platform_device *pdev = msm_host->pdev;
+	struct device_node *np = pdev->dev.of_node;
+	struct device_node *group_node;
+	struct sdhci_msm_qos_req *qr;
+	struct qos_cpu_group *qcg;
+	int i, err, mask = 0;
+
+	qr = kzalloc(sizeof(*qr), GFP_KERNEL);
+	if (!qr)
+		return;
+
+	msm_host->sdhci_qos = qr;
+
+	/* find numbers of qos child node present */
+	qr->num_groups = of_get_available_child_count(np);
+	dev_dbg(&pdev->dev, "num-groups: %d\n", qr->num_groups);
+	if (!qr->num_groups) {
+		dev_err(&pdev->dev, "QoS groups undefined\n");
+		kfree(qr);
+		msm_host->sdhci_qos = NULL;
+		return;
+	}
+	qcg = kzalloc(sizeof(*qcg) * qr->num_groups, GFP_KERNEL);
+	if (!qcg) {
+		msm_host->sdhci_qos = NULL;
+		kfree(qr);
+		return;
+	}
+
+	/*
+	 * Assign qos cpu group/cluster to host qos request and
+	 * read child entries of qos node
+	 */
+	qr->qcg = qcg;
+	for_each_available_child_of_node(np, group_node) {
+		err = of_property_read_u32(group_node, "mask", &mask);
+		if (err) {
+			dev_dbg(&pdev->dev, "Error reading group mask: %d\n",
+					err);
+			continue;
+		}
+		qcg->mask.bits[0] = mask;
+		if (!cpumask_subset(&qcg->mask, cpu_possible_mask)) {
+			dev_err(&pdev->dev, "Invalid group mask\n");
+			goto out_vote_err;
+		}
+
+		err = of_property_count_u32_elems(group_node, "vote");
+		if (err <= 0) {
+			dev_err(&pdev->dev, "1 vote is needed, bailing out\n");
+			goto out_vote_err;
+		}
+		qcg->votes = kmalloc(sizeof(*qcg->votes) * err, GFP_KERNEL);
+		if (!qcg->votes)
+			goto out_vote_err;
+		for (i = 0; i < err; i++) {
+			if (of_property_read_u32_index(group_node, "vote", i,
+						&qcg->votes[i]))
+				goto out_vote_err;
+		}
+		qcg->host = msm_host;
+		++qcg;
+	}
+	err = sdhci_msm_setup_qos(msm_host);
+	if (!err)
+		return;
+	dev_err(&pdev->dev, "Failed to setup PM QoS.\n");
+
+out_vote_err:
+	for (i = 0, qcg = qr->qcg; i < qr->num_groups; i++, qcg++)
+		kfree(qcg->votes);
+	kfree(qr->qcg);
+	kfree(qr);
+	msm_host->sdhci_qos = NULL;
+}
+
+static ssize_t show_sdhci_msm_clk_gating(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", msm_host->clk_gating_delay);
+}
+
+static ssize_t store_sdhci_msm_clk_gating(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+	uint32_t value;
+
+	if (!kstrtou32(buf, 0, &value)) {
+		msm_host->clk_gating_delay = value;
+		dev_info(dev, "set clk scaling work delay (%u)\n", value);
+	}
+
+	return count;
+}
+
+static ssize_t show_sdhci_msm_pm_qos(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", msm_host->pm_qos_delay);
+}
+
+static ssize_t store_sdhci_msm_pm_qos(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+	uint32_t value;
+
+	if (!kstrtou32(buf, 0, &value)) {
+		msm_host->pm_qos_delay = value;
+		dev_info(dev, "set pm qos work delay (%u)\n", value);
+	}
+
+	return count;
+}
+
+static void sdhci_msm_init_sysfs_gating_qos(struct device *dev)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+	int ret;
+
+	msm_host->clk_gating.show = show_sdhci_msm_clk_gating;
+	msm_host->clk_gating.store = store_sdhci_msm_clk_gating;
+	sysfs_attr_init(&msm_host->clk_gating.attr);
+	msm_host->clk_gating.attr.name = "clk_gating";
+	msm_host->clk_gating.attr.mode = 0644;
+	ret = device_create_file(dev, &msm_host->clk_gating);
+	if (ret) {
+		pr_err("%s: %s: failed creating clk gating attr: %d\n",
+				mmc_hostname(host->mmc), __func__, ret);
+	}
+
+	msm_host->pm_qos.show = show_sdhci_msm_pm_qos;
+	msm_host->pm_qos.store = store_sdhci_msm_pm_qos;
+	sysfs_attr_init(&msm_host->pm_qos.attr);
+	msm_host->pm_qos.attr.name = "pm_qos";
+	msm_host->pm_qos.attr.mode = 0644;
+	ret = device_create_file(dev, &msm_host->pm_qos);
+	if (ret) {
+		pr_err("%s: %s: failed creating pm qos attr: %d\n",
+				mmc_hostname(host->mmc), __func__, ret);
+	}
+}
+
+static void sdhci_msm_setup_pm(struct platform_device *pdev,
+			struct sdhci_msm_host *msm_host)
+{
+	pm_runtime_get_noresume(&pdev->dev);
+	pm_runtime_set_active(&pdev->dev);
+	pm_runtime_enable(&pdev->dev);
+	if (!(msm_host->mmc->caps & MMC_CAP_SYNC_RUNTIME_PM)) {
+		pm_runtime_set_autosuspend_delay(&pdev->dev,
+					 MSM_MMC_AUTOSUSPEND_DELAY_MS);
+		pm_runtime_use_autosuspend(&pdev->dev);
+	}
+}
+
+static int sdhci_msm_setup_ice_clk(struct sdhci_msm_host *msm_host,
+						struct platform_device *pdev)
+{
+	int ret = 0;
+	struct clk *clk;
+
+	msm_host->bulk_clks[2].clk = NULL;
+
+	/* Setup SDC ICE clock */
+	clk = devm_clk_get(&pdev->dev, "ice_core");
+	if (!IS_ERR(clk)) {
+		msm_host->bulk_clks[2].clk = clk;
+
+		/* Set maximum clock rate for ice clk */
+		ret = clk_set_rate(clk, msm_host->ice_clk_max);
+		if (ret) {
+			dev_err(&pdev->dev, "ICE_CLK rate set failed (%d) for %u\n",
+				ret, msm_host->ice_clk_max);
+			return ret;
+		}
+
+		msm_host->ice_clk_rate = msm_host->ice_clk_max;
+	}
+
+	return ret;
+}
+
+#if defined(CONFIG_SDC_QTI)
+static ssize_t err_state_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+
+	if (!host || !host->mmc)
+		return -EINVAL;
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", !!host->mmc->err_occurred);
+}
+
+static ssize_t err_state_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+	unsigned int val;
+
+	if (kstrtouint(buf, 0, &val))
+		return -EINVAL;
+	if (!host || !host->mmc)
+		return -EINVAL;
+
+	host->mmc->err_occurred = !!val;
+	if (!val)
+		memset(host->mmc->err_stats, 0, sizeof(host->mmc->err_stats));
+
+	return count;
+}
+static DEVICE_ATTR_RW(err_state);
+
+static ssize_t err_stats_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+	char tmp[100];
+
+	if (!host || !host->mmc)
+		return -EINVAL;
+
+	scnprintf(tmp, sizeof(tmp), "# Command Timeout Error: %d\n",
+		host->mmc->err_stats[MMC_ERR_CMD_TIMEOUT]);
+	strlcpy(buf, tmp, PAGE_SIZE);
+
+	scnprintf(tmp, sizeof(tmp), "# Command CRC Error: %d\n",
+		host->mmc->err_stats[MMC_ERR_CMD_CRC]);
+	strlcat(buf, tmp, PAGE_SIZE);
+
+	scnprintf(tmp, sizeof(tmp), "# Data Timeout Error: %d\n",
+		host->mmc->err_stats[MMC_ERR_DAT_TIMEOUT]);
+	strlcat(buf, tmp, PAGE_SIZE);
+
+	scnprintf(tmp, sizeof(tmp), "# Data CRC Error: %d\n",
+		host->mmc->err_stats[MMC_ERR_DAT_CRC]);
+	strlcat(buf, tmp, PAGE_SIZE);
+
+	scnprintf(tmp, sizeof(tmp), "# Auto-Cmd Error: %d\n",
+		host->mmc->err_stats[MMC_ERR_ADMA]);
+	strlcat(buf, tmp, PAGE_SIZE);
+
+	scnprintf(tmp, sizeof(tmp), "# ADMA Error: %d\n",
+		host->mmc->err_stats[MMC_ERR_ADMA]);
+	strlcat(buf, tmp, PAGE_SIZE);
+
+	scnprintf(tmp, sizeof(tmp), "# Tuning Error: %d\n",
+		host->mmc->err_stats[MMC_ERR_TUNING]);
+	strlcat(buf, tmp, PAGE_SIZE);
+
+	scnprintf(tmp, sizeof(tmp), "# Request Timedout Error: %d\n",
+		host->mmc->err_stats[MMC_ERR_REQ_TIMEOUT]);
+	strlcat(buf, tmp, PAGE_SIZE);
+
+	return strlen(buf);
+}
+static DEVICE_ATTR_RO(err_stats);
+
+static struct attribute *sdhci_msm_sysfs_attrs[] = {
+	&dev_attr_err_state.attr,
+	&dev_attr_err_stats.attr,
+	NULL
+};
+
+static const struct attribute_group sdhci_msm_sysfs_group = {
+	.name = "qcom",
+	.attrs = sdhci_msm_sysfs_attrs,
+};
+
+static int sdhci_msm_init_sysfs(struct platform_device *pdev)
+{
+	int ret;
+
+	ret = sysfs_create_group(&pdev->dev.kobj, &sdhci_msm_sysfs_group);
+	if (ret)
+		dev_err(&pdev->dev, "%s: Failed sdhci_msm sysfs group err=%d\n",
+			__func__, ret);
+	return ret;
+}
+#endif
+
+static void sdhci_msm_set_caps(struct sdhci_msm_host *msm_host)
+{
+	msm_host->mmc->caps |= MMC_CAP_AGGRESSIVE_PM | MMC_CAP_SYNC_RUNTIME_PM;
+	msm_host->mmc->caps |= MMC_CAP_WAIT_WHILE_BUSY | MMC_CAP_NEED_RSP_BUSY;
 }
 
 static int sdhci_msm_probe(struct platform_device *pdev)
@@ -3152,15 +4011,19 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	if (ret)
 		dev_warn(&pdev->dev, "core clock boost failed\n");
 
+	ret = sdhci_msm_setup_ice_clk(msm_host, pdev);
+	if (ret)
+		goto bus_clk_disable;
+
 	clk = devm_clk_get(&pdev->dev, "cal");
 	if (IS_ERR(clk))
 		clk = NULL;
-	msm_host->bulk_clks[2].clk = clk;
+	msm_host->bulk_clks[3].clk = clk;
 
 	clk = devm_clk_get(&pdev->dev, "sleep");
 	if (IS_ERR(clk))
 		clk = NULL;
-	msm_host->bulk_clks[3].clk = clk;
+	msm_host->bulk_clks[4].clk = clk;
 
 	ret = clk_bulk_prepare_enable(ARRAY_SIZE(msm_host->bulk_clks),
 				      msm_host->bulk_clks);
@@ -3176,6 +4039,9 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 		ret = PTR_ERR(msm_host->xo_clk);
 		dev_warn(&pdev->dev, "TCXO clk not present (%d)\n", ret);
 	}
+
+	INIT_DELAYED_WORK(&msm_host->clk_gating_work,
+			sdhci_msm_clkgate_bus_delayed_work);
 
 	ret = sdhci_msm_bus_register(msm_host, pdev);
 	if (ret && !msm_host->skip_bus_bw_voting) {
@@ -3248,6 +4114,13 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	if (core_major == 1 && core_minor >= 0x49)
 		msm_host->updated_ddr_cfg = true;
 
+	/* For SDHC v5.0.0 onwards, ICE 3.0 specific registers are added
+	 * in CQ register space, due to which few CQ registers are
+	 * shifted. Set cqhci_offset_changed boolean to use updated address.
+	 */
+	if (core_major == 1 && core_minor >= 0x6B)
+		msm_host->cqhci_offset_changed = true;
+
 	/*
 	 * Power on reset state may trigger power irq if previous status of
 	 * PWRCTL was either BUS_ON or IO_HIGH_V. So before enabling pwr irq
@@ -3283,21 +4156,27 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 		goto vreg_deinit;
 	}
 
-	msm_host->mmc->caps |= MMC_CAP_AGGRESSIVE_PM;
-	msm_host->mmc->caps |= MMC_CAP_WAIT_WHILE_BUSY;
-	msm_host->mmc->caps |= MMC_CAP_NEED_RSP_BUSY;
+	sdhci_msm_set_caps(msm_host);
 
 #if defined(CONFIG_SDC_QTI)
+	host->timeout_clk_div = 4;
 	msm_host->mmc->caps2 |= MMC_CAP2_CLK_SCALE;
 #endif
-	pm_runtime_get_noresume(&pdev->dev);
-	pm_runtime_set_active(&pdev->dev);
-	pm_runtime_enable(&pdev->dev);
-	pm_runtime_set_autosuspend_delay(&pdev->dev,
-					 MSM_MMC_AUTOSUSPEND_DELAY_MS);
-	pm_runtime_use_autosuspend(&pdev->dev);
+	sdhci_msm_setup_pm(pdev, msm_host);
 
 	host->mmc_host_ops.execute_tuning = sdhci_msm_execute_tuning;
+
+	msm_host->workq = create_workqueue("sdhci_msm_generic_swq");
+	if (!msm_host->workq)
+		dev_err(&pdev->dev, "Generic swq creation failed\n");
+
+	msm_host->clk_gating_delay = MSM_CLK_GATING_DELAY_MS;
+	msm_host->pm_qos_delay = MSM_PMQOS_UNVOTING_DELAY_MS;
+	/* Initialize pmqos */
+	sdhci_msm_qos_init(msm_host);
+	/* Initialize sysfs entries */
+	sdhci_msm_init_sysfs_gating_qos(dev);
+
 	if (of_property_read_bool(node, "supports-cqe"))
 		ret = sdhci_msm_cqe_add_host(host, pdev);
 	else
@@ -3312,7 +4191,9 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	 * value won't be over-written.
 	 */
 	host->mmc->max_busy_timeout = 0;
-
+#if defined(CONFIG_SDC_QTI)
+	sdhci_msm_init_sysfs(pdev);
+#endif
 	/*
 	 * Set platfm_init_done only after sdhci_add_host().
 	 * So that we don't turn off vqmmc while we reset sdhc as
@@ -3333,7 +4214,7 @@ vreg_deinit:
 	sdhci_msm_vreg_init(&pdev->dev, msm_host, false);
 bus_unregister:
 	if (!msm_host->skip_bus_bw_voting) {
-		sdhci_msm_bus_cancel_work_and_set_vote(host, 0);
+		sdhci_msm_bus_get_and_set_vote(host, 0);
 		sdhci_msm_bus_unregister(&pdev->dev, msm_host);
 	}
 clk_disable:
@@ -3352,6 +4233,9 @@ static int sdhci_msm_remove(struct platform_device *pdev)
 	struct sdhci_host *host = platform_get_drvdata(pdev);
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+	struct sdhci_msm_qos_req *r = msm_host->sdhci_qos;
+	struct qos_cpu_group *qcg;
+	int i;
 	int dead = (readl_relaxed(host->ioaddr + SDHCI_INT_STATUS) ==
 		    0xffffffff);
 
@@ -3360,6 +4244,19 @@ static int sdhci_msm_remove(struct platform_device *pdev)
 	sdhci_msm_vreg_init(&pdev->dev, msm_host, false);
 
 	pm_runtime_get_sync(&pdev->dev);
+
+	/* Add delay to complete resume where qos vote is scheduled */
+	if (!r)
+		goto skip_removing_qos;
+	qcg = r->qcg;
+	msleep(50);
+	for (i = 0; i < r->num_groups; i++, qcg++) {
+		sdhci_msm_update_qos_constraints(qcg, QOS_MAX);
+		remove_group_qos(qcg);
+	}
+	destroy_workqueue(msm_host->workq);
+
+skip_removing_qos:
 	pm_runtime_disable(&pdev->dev);
 	pm_runtime_put_noidle(&pdev->dev);
 
@@ -3368,7 +4265,7 @@ static int sdhci_msm_remove(struct platform_device *pdev)
 	if (!IS_ERR(msm_host->bus_clk))
 		clk_disable_unprepare(msm_host->bus_clk);
 	if (!msm_host->skip_bus_bw_voting) {
-		sdhci_msm_bus_cancel_work_and_set_vote(host, 0);
+		sdhci_msm_bus_get_and_set_vote(host, 0);
 		sdhci_msm_bus_unregister(&pdev->dev, msm_host);
 	}
 	sdhci_pltfm_free(pdev);
@@ -3380,11 +4277,19 @@ static __maybe_unused int sdhci_msm_runtime_suspend(struct device *dev)
 	struct sdhci_host *host = dev_get_drvdata(dev);
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+	struct sdhci_msm_qos_req *qos_req = msm_host->sdhci_qos;
 
-	sdhci_msm_registers_save(host);
-	clk_bulk_disable_unprepare(ARRAY_SIZE(msm_host->bulk_clks),
-				   msm_host->bulk_clks);
-	sdhci_msm_bus_voting(host, false);
+	if (!qos_req)
+		goto skip_qos;
+	queue_delayed_work(msm_host->workq,
+			&msm_host->pmqos_unvote_work,
+			msecs_to_jiffies(msm_host->pm_qos_delay));
+
+skip_qos:
+	queue_delayed_work(msm_host->workq,
+			&msm_host->clk_gating_work,
+			msecs_to_jiffies(msm_host->clk_gating_delay));
+
 	return 0;
 }
 
@@ -3393,28 +4298,63 @@ static __maybe_unused int sdhci_msm_runtime_resume(struct device *dev)
 	struct sdhci_host *host = dev_get_drvdata(dev);
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+	struct sdhci_msm_qos_req *qos_req = msm_host->sdhci_qos;
 	int ret;
 
-	ret = clk_bulk_prepare_enable(ARRAY_SIZE(msm_host->bulk_clks),
-				       msm_host->bulk_clks);
-	if (ret)
-		return ret;
+	ret = cancel_delayed_work_sync(&msm_host->clk_gating_work);
+	if (!ret) {
+		sdhci_msm_bus_voting(host, true);
+		ret = clk_bulk_prepare_enable(ARRAY_SIZE(msm_host->bulk_clks),
+					       msm_host->bulk_clks);
+		if (ret) {
+			dev_err(dev, "Failed to enable clocks %d\n", ret);
+			sdhci_msm_bus_voting(host, false);
+			return ret;
+		}
 
-	sdhci_msm_registers_restore(host);
-	/*
-	 * Whenever core-clock is gated dynamically, it's needed to
-	 * restore the SDR DLL settings when the clock is ungated.
-	 */
-	if (msm_host->restore_dll_config && msm_host->clk_rate)
-		return sdhci_msm_restore_sdr_dll_config(host);
+		sdhci_msm_registers_restore(host);
+		/*
+		 * Whenever core-clock is gated dynamically, it's needed to
+		 * restore the SDR DLL settings when the clock is ungated.
+		 */
+		if (msm_host->restore_dll_config && msm_host->clk_rate)
+			sdhci_msm_restore_sdr_dll_config(host);
+	}
 
-	sdhci_msm_bus_voting(host, true);
+	if (!qos_req)
+		return 0;
+	ret = cancel_delayed_work_sync(&msm_host->pmqos_unvote_work);
+	if (!ret)
+		sdhci_msm_vote_pmqos(msm_host->mmc,
+					msm_host->sdhci_qos->active_mask);
+
+	return 0;
+}
+
+static int sdhci_msm_suspend_late(struct device *dev)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+
+	if (!msm_host->sdhci_qos)
+		goto skip_qos;
+
+	if (flush_delayed_work(&msm_host->pmqos_unvote_work))
+		dev_dbg(dev, "%s Waited for pmqos_unvote_work to finish\n",
+			 __func__);
+
+skip_qos:
+	if (flush_delayed_work(&msm_host->clk_gating_work))
+		dev_dbg(dev, "%s Waited for clk_gating_work to finish\n",
+			 __func__);
 	return 0;
 }
 
 static const struct dev_pm_ops sdhci_msm_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
 				pm_runtime_force_resume)
+	SET_LATE_SYSTEM_SLEEP_PM_OPS(sdhci_msm_suspend_late, NULL)
 	SET_RUNTIME_PM_OPS(sdhci_msm_runtime_suspend,
 			   sdhci_msm_runtime_resume,
 			   NULL)
