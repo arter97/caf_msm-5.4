@@ -3641,6 +3641,10 @@ static int kgsl_check_gpu_addr_collision(
 	int ret = -EAGAIN;
 	struct kgsl_mem_entry *collision_entry = NULL;
 	spin_lock(&private->mem_lock);
+	if (entry->memdesc.gpuaddr) {
+		spin_unlock(&private->mem_lock);
+		return -EBUSY;
+	}
 	if (kgsl_sharedmem_region_empty(private, (uint64_t) addr,
 		(uint64_t) len, &collision_entry)) {
 
