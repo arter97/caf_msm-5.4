@@ -549,16 +549,18 @@ static int incfs_rmdir(struct dentry *dentry)
 
 static void maybe_delete_incomplete_file(struct data_file *df)
 {
-	char *file_id_str;
-	struct dentry *incomplete_file_dentry;
+	struct mount_info *mi = df->df_mount_info;
+	char *file_id_str = NULL;
+	struct dentry *incomplete_file_dentry = NULL;
+	const struct cred *old_cred = override_creds(mi->mi_owner);
 
 	if (atomic_read(&df->df_data_blocks_written) < df->df_data_block_count)
-		return;
+		goto out;
 
 	/* This is best effort - there is no useful action to take on failure */
 	file_id_str = file_id_to_str(df->df_id);
 	if (!file_id_str)
-		return;
+		goto out;
 
 	incomplete_file_dentry = incfs_lookup_dentry(
 					df->df_mount_info->mi_incomplete_dir,
@@ -577,6 +579,7 @@ static void maybe_delete_incomplete_file(struct data_file *df)
 out:
 	dput(incomplete_file_dentry);
 	kfree(file_id_str);
+	revert_creds(old_cred);
 }
 
 static long ioctl_fill_blocks(struct file *f, void __user *arg)
