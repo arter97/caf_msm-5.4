@@ -897,7 +897,7 @@ static void ipi_cpu_crash_stop(unsigned int cpu, struct pt_regs *regs)
 	sdei_mask_local_cpu();
 
 #ifdef CONFIG_HOTPLUG_CPU
-	if (cpu_ops[cpu]->cpu_die)
+	if ((cpu_ops[cpu]->cpu_die) && cpu)
 		cpu_ops[cpu]->cpu_die(cpu);
 #endif
 
