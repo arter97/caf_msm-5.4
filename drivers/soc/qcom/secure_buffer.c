@@ -239,10 +239,6 @@ int hyp_assign_table(struct sg_table *table,
 				break;
 		}
 
-		if (dest_nelems == -1)
-			set_each_page_of_sg(table, SECURE_PAGE_MAGIC);
-		else
-			set_each_page_of_sg(table, 0);
 	}
 
 
