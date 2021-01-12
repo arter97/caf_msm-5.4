@@ -60,6 +60,16 @@ enum qmi_ts_sensor {
 	QMI_TS_MMW_PA2,
 	QMI_TS_MMW_PA3,
 	QMI_TS_SDR_MMW,
+	QMI_TS_MSM_SKIN,
+	QMI_TS_BEAMER_N_THERM,
+	QMI_TS_BEAMER_E_THERM,
+	QMI_TS_BEAMER_W_THERM,
+	QMI_TS_QFE_RET_PA0_FR1,
+	QMI_TS_QFE_WTR_PA0_FR1,
+	QMI_TS_QFE_WTR_PA1_FR1,
+	QMI_TS_QFE_WTR_PA2_FR1,
+	QMI_TS_QFE_WTR_PA3_FR1,
+	QMI_TS_QFE_WTR0_FR1,
 	QMI_TS_MAX_NR
 };
 
@@ -121,6 +131,16 @@ static char sensor_clients[QMI_TS_MAX_NR][QMI_CLIENT_NAME_LENGTH] = {
 	{"mmw_pa2"},
 	{"mmw_pa3"},
 	{"sdr_mmw_therm"},
+	{"msm_skin_therm"},
+	{"beamer_n_therm"},
+	{"beamer_e_therm"},
+	{"beamer_w_therm"},
+	{"qfe_ret_pa0_fr1"},
+	{"qfe_wtr_pa0_fr1"},
+	{"qfe_wtr_pa1_fr1"},
+	{"qfe_wtr_pa2_fr1"},
+	{"qfe_wtr_pa3_fr1"},
+	{"qfe_wtr0_fr1"},
 };
 
 static int32_t encode_qmi(int32_t val)
@@ -448,6 +468,29 @@ static int verify_sensor_and_register(struct qmi_ts_instance *ts)
 					ts_node) {
 			if ((strncasecmp(qmi_sens->qmi_name,
 				ts_resp->sensor_list[i].sensor_id,
+				QMI_TS_SENSOR_ID_LENGTH_MAX_V01)))
+				continue;
+
+			qmi_sens->connection_active = true;
+			/*
+			 * Send a temperature request notification.
+			 */
+			qmi_ts_request(qmi_sens, true);
+			if (!qmi_sens->tz_dev)
+				ret = qmi_register_sensor_device(qmi_sens);
+			break;
+		}
+	}
+
+	/* Check and get sensor list extended */
+	for (i = 0; ts_resp->sensor_list_ext01_valid &&
+		 (i < ts_resp->sensor_list_ext01_len); i++) {
+		struct qmi_sensor *qmi_sens = NULL;
+
+		list_for_each_entry(qmi_sens, &ts->ts_sensor_list,
+					ts_node) {
+			if ((strncasecmp(qmi_sens->qmi_name,
+				ts_resp->sensor_list_ext01[i].sensor_id,
 				QMI_TS_SENSOR_ID_LENGTH_MAX_V01)))
 				continue;
 

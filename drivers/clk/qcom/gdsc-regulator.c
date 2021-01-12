@@ -57,6 +57,8 @@ struct gdsc {
 	struct regmap           *domain_addr;
 	struct regmap           *hw_ctrl;
 	struct regmap           *sw_reset;
+	struct regmap           *acd_reset;
+	struct regmap           *acd_misc_reset;
 	struct collapse_vote	collapse_vote;
 	struct clk		**clocks;
 	struct reset_control	**reset_clocks;
@@ -74,6 +76,7 @@ struct gdsc {
 	int			reset_count;
 	int			root_clk_idx;
 	u32			gds_timeout;
+	bool			skip_disable_before_enable;
 };
 
 enum gdscr_status {
@@ -162,6 +165,9 @@ static int gdsc_is_enabled(struct regulator_dev *rdev)
 	if (!sc->toggle_logic)
 		return !sc->resets_asserted;
 
+	if (sc->skip_disable_before_enable)
+		return false;
+
 	return sc->is_gdsc_enabled;
 }
 
@@ -170,6 +176,9 @@ static int gdsc_enable(struct regulator_dev *rdev)
 	struct gdsc *sc = rdev_get_drvdata(rdev);
 	uint32_t regval, hw_ctrl_regval = 0x0;
 	int i, ret = 0;
+
+	if (sc->skip_disable_before_enable)
+		return 0;
 
 	if (sc->root_en || sc->force_root_en) {
 		clk_prepare_enable(sc->clocks[sc->root_clk_idx]);
@@ -188,6 +197,13 @@ static int gdsc_enable(struct regulator_dev *rdev)
 			regmap_read(sc->sw_reset, REG_OFFSET, &regval);
 			regval |= BCR_BLK_ARES_BIT;
 			regmap_write(sc->sw_reset, REG_OFFSET, regval);
+
+			if (sc->acd_reset)
+				regmap_write(sc->acd_reset, REG_OFFSET, regval);
+
+			if (sc->acd_misc_reset)
+				regmap_write(sc->acd_misc_reset, REG_OFFSET, regval);
+
 			/*
 			 * BLK_ARES should be kept asserted for 1us before
 			 * being de-asserted.
@@ -197,6 +213,13 @@ static int gdsc_enable(struct regulator_dev *rdev)
 
 			regval &= ~BCR_BLK_ARES_BIT;
 			regmap_write(sc->sw_reset, REG_OFFSET, regval);
+
+			if (sc->acd_reset)
+				regmap_write(sc->acd_reset, REG_OFFSET, regval);
+
+			if (sc->acd_misc_reset)
+				regmap_write(sc->acd_misc_reset, REG_OFFSET, regval);
+
 			/* Make sure de-assert goes through before continuing */
 			gdsc_mb(sc);
 		}
@@ -350,6 +373,12 @@ static int gdsc_disable(struct regulator_dev *rdev)
 	udelay(1);
 
 	if (sc->toggle_logic) {
+		if (sc->sw_reset) {
+			if (sc->acd_misc_reset)
+				regmap_update_bits(sc->acd_misc_reset, REG_OFFSET,
+					BCR_BLK_ARES_BIT, BCR_BLK_ARES_BIT);
+		}
+
 		/* Disable gdsc */
 		if (sc->collapse_vote.regmap) {
 			regmap_update_bits(sc->collapse_vote.regmap, REG_OFFSET,
@@ -575,6 +604,19 @@ static int gdsc_parse_dt_data(struct gdsc *sc, struct device *dev,
 			return PTR_ERR(sc->sw_reset);
 	}
 
+	if (of_find_property(dev->of_node, "acd-reset", NULL)) {
+		sc->acd_reset = syscon_regmap_lookup_by_phandle(dev->of_node,
+								"acd-reset");
+		if (IS_ERR(sc->acd_reset))
+			return PTR_ERR(sc->acd_reset);
+	}
+
+	if (of_find_property(dev->of_node, "acd-misc-reset", NULL)) {
+		sc->acd_misc_reset = syscon_regmap_lookup_by_phandle(dev->of_node,
+							"acd-misc-reset");
+		if (IS_ERR(sc->acd_misc_reset))
+			return PTR_ERR(sc->acd_misc_reset);
+	}
 	if (of_find_property(dev->of_node, "hw-ctrl-addr", NULL)) {
 		sc->hw_ctrl = syscon_regmap_lookup_by_phandle(dev->of_node,
 								"hw-ctrl-addr");
@@ -606,6 +648,8 @@ static int gdsc_parse_dt_data(struct gdsc *sc, struct device *dev,
 					"qcom,no-status-check-on-disable");
 	sc->retain_ff_enable = of_property_read_bool(dev->of_node,
 						"qcom,retain-regs");
+	sc->skip_disable_before_enable = of_property_read_bool(dev->of_node,
+					"qcom,skip-disable-before-sw-enable");
 
 	if (of_find_property(dev->of_node, "qcom,collapse-vote", NULL)) {
 		ret = of_property_count_u32_elems(dev->of_node,

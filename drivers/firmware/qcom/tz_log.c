@@ -35,6 +35,7 @@
 #define TZBSP_FVER_MINOR_SHIFT          12
 #define TZBSP_DIAG_MAJOR_VERSION_V9     9
 #define TZBSP_DIAG_MINOR_VERSION_V2     2
+#define TZBSP_DIAG_MINOR_VERSION_V21     3
 
 /* TZ Diag Feature Version Id */
 #define QCOM_SCM_FEAT_DIAG_ID           0x06
@@ -191,6 +192,34 @@ struct tzdbg_log_v2_t {
 	uint8_t					log_buf[];
 };
 
+struct tzbsp_encr_info_for_log_chunk_t {
+	uint32_t size_to_encr;
+	uint8_t nonce[TZBSP_NONCE_LEN];
+	uint8_t tag[TZBSP_TAG_LEN];
+};
+
+/*
+ * Only `ENTIRE_LOG` will be used unless the
+ * "OEM_tz_num_of_diag_log_chunks_to_encr" devcfg field >= 2.
+ * If this is true, the diag log will be encrypted in two
+ * separate chunks: a smaller chunk containing only error
+ * fatal logs and a bigger "rest of the log" chunk. In this
+ * case, `ERR_FATAL_LOG_CHUNK` and `BIG_LOG_CHUNK` will be
+ * used instead of `ENTIRE_LOG`.
+ */
+enum tzbsp_encr_info_for_log_chunks_idx_t {
+	BIG_LOG_CHUNK = 0,
+	ENTIRE_LOG = 1,
+	ERR_FATAL_LOG_CHUNK = 1,
+	MAX_NUM_OF_CHUNKS,
+};
+
+struct tzbsp_encr_info_t {
+	uint32_t num_of_chunks;
+	struct tzbsp_encr_info_for_log_chunk_t chunks[MAX_NUM_OF_CHUNKS];
+	uint8_t key[TZBSP_AES_256_ENCRYPTED_KEY_SIZE];
+};
+
 /*
  * Diagnostic Table
  * Note: This is the reference data structure for tz diagnostic table
@@ -232,29 +261,63 @@ struct tzdbg_t {
 	/* Offset for Wakeup info */
 	uint32_t wakeup_info_off;
 
-	/*
-	 * VMID to EE Mapping
-	 */
-	struct tzdbg_vmid_t vmid_info[TZBSP_DIAG_NUM_OF_VMID];
-	/*
-	 * Boot Info
-	 */
-	struct tzdbg_boot_info_t  boot_info[TZBSP_MAX_CPU_COUNT];
-	/*
-	 * Reset Info
-	 */
-	struct tzdbg_reset_info_t reset_info[TZBSP_MAX_CPU_COUNT];
-	uint32_t num_interrupts;
-	struct tzdbg_int_t  int_info[TZBSP_DIAG_INT_NUM];
+	union {
+		/* The elements in below structure have to be used for TZ where
+		 * diag version = TZBSP_DIAG_MINOR_VERSION_V2
+		 */
+		struct {
 
-	/* Wake up info */
-	struct tzbsp_diag_wakeup_info_t  wakeup_info[TZBSP_MAX_CPU_COUNT];
+			/*
+			 * VMID to EE Mapping
+			 */
+			struct tzdbg_vmid_t vmid_info[TZBSP_DIAG_NUM_OF_VMID];
+			/*
+			 * Boot Info
+			 */
+			struct tzdbg_boot_info_t  boot_info[TZBSP_MAX_CPU_COUNT];
+			/*
+			 * Reset Info
+			 */
+			struct tzdbg_reset_info_t reset_info[TZBSP_MAX_CPU_COUNT];
+			uint32_t num_interrupts;
+			struct tzdbg_int_t  int_info[TZBSP_DIAG_INT_NUM];
+			/* Wake up info */
+			struct tzbsp_diag_wakeup_info_t  wakeup_info[TZBSP_MAX_CPU_COUNT];
 
-	uint8_t key[TZBSP_AES_256_ENCRYPTED_KEY_SIZE];
+			uint8_t key[TZBSP_AES_256_ENCRYPTED_KEY_SIZE];
 
-	uint8_t nonce[TZBSP_NONCE_LEN];
+			uint8_t nonce[TZBSP_NONCE_LEN];
 
-	uint8_t tag[TZBSP_TAG_LEN];
+			uint8_t tag[TZBSP_TAG_LEN];
+		};
+		/* The elements in below structure have to be used for TZ where
+		 * diag version = TZBSP_DIAG_MINOR_VERSION_V21
+		 */
+		struct {
+
+			uint32_t encr_info_for_log_off;
+
+			/*
+			 * VMID to EE Mapping
+			 */
+			struct tzdbg_vmid_t vmid_info_v2[TZBSP_DIAG_NUM_OF_VMID];
+			/*
+			 * Boot Info
+			 */
+			struct tzdbg_boot_info_t  boot_info_v2[TZBSP_MAX_CPU_COUNT];
+			/*
+			 * Reset Info
+			 */
+			struct tzdbg_reset_info_t reset_info_v2[TZBSP_MAX_CPU_COUNT];
+			uint32_t num_interrupts_v2;
+			struct tzdbg_int_t  int_info_v2[TZBSP_DIAG_INT_NUM];
+
+			/* Wake up info */
+			struct tzbsp_diag_wakeup_info_t  wakeup_info_v2[TZBSP_MAX_CPU_COUNT];
+
+			struct tzbsp_encr_info_t encr_info_for_log;
+		};
+	};
 
 	/*
 	 * We need at least 2K for the ring buffer
@@ -932,57 +995,54 @@ static int _disp_encrpted_log_stats(struct encrypted_log_info *enc_log_info,
 
 static int _disp_tz_log_stats(size_t count)
 {
-	if (!tzdbg.is_enlarged_buf) {
-		static struct tzdbg_log_pos_t log_start = {0};
-		struct tzdbg_log_t *log_ptr;
+	static struct tzdbg_log_pos_v2_t log_start_v2 = {0};
+	static struct tzdbg_log_pos_t log_start = {0};
+	struct tzdbg_log_v2_t *log_v2_ptr;
+	struct tzdbg_log_t *log_ptr;
 
-		log_ptr = (struct tzdbg_log_t *)(
-				(unsigned char *)tzdbg.diag_buf +
-				tzdbg.diag_buf->ring_off -
-				offsetof(struct tzdbg_log_t, log_buf));
+	log_ptr = (struct tzdbg_log_t *)((unsigned char *)tzdbg.diag_buf +
+			tzdbg.diag_buf->ring_off -
+			offsetof(struct tzdbg_log_t, log_buf));
 
+	log_v2_ptr = (struct tzdbg_log_v2_t *)((unsigned char *)tzdbg.diag_buf +
+			tzdbg.diag_buf->ring_off -
+			offsetof(struct tzdbg_log_v2_t, log_buf));
+
+	if (!tzdbg.is_enlarged_buf)
 		return _disp_log_stats(log_ptr, &log_start,
 				tzdbg.diag_buf->ring_len, count, TZDBG_LOG);
-	} else {
-		static struct tzdbg_log_pos_v2_t log_start_v2 = {0};
-		struct tzdbg_log_v2_t *log_v2_ptr;
 
-		log_v2_ptr = (struct tzdbg_log_v2_t *)(
-				(unsigned char *)tzdbg.diag_buf +
-				tzdbg.diag_buf->ring_off -
-				offsetof(struct tzdbg_log_v2_t, log_buf));
-		return _disp_log_stats_v2(log_v2_ptr, &log_start_v2,
-				tzdbg.diag_buf->ring_len, count, TZDBG_LOG);
-	}
+	return _disp_log_stats_v2(log_v2_ptr, &log_start_v2,
+			tzdbg.diag_buf->ring_len, count, TZDBG_LOG);
 }
 
 static int _disp_hyp_log_stats(size_t count)
 {
 	static struct hypdbg_log_pos_t log_start = {0};
 	uint8_t *log_ptr;
+	uint32_t log_len;
 
 	log_ptr = (uint8_t *)((unsigned char *)tzdbg.hyp_diag_buf +
 				tzdbg.hyp_diag_buf->ring_off);
+	log_len = tzdbg.hyp_debug_rw_buf_size - tzdbg.hyp_diag_buf->ring_off;
 
 	return __disp_hyp_log_stats(log_ptr, &log_start,
-			tzdbg.hyp_debug_rw_buf_size, count, TZDBG_HYP_LOG);
+			log_len, count, TZDBG_HYP_LOG);
 }
 
 static int _disp_qsee_log_stats(size_t count)
 {
-	if (!tzdbg.is_enlarged_buf) {
-		static struct tzdbg_log_pos_t log_start = {0};
+	static struct tzdbg_log_pos_t log_start = {0};
+	static struct tzdbg_log_pos_v2_t log_start_v2 = {0};
 
+	if (!tzdbg.is_enlarged_buf)
 		return _disp_log_stats(g_qsee_log, &log_start,
 			QSEE_LOG_BUF_SIZE - sizeof(struct tzdbg_log_pos_t),
 			count, TZDBG_QSEE_LOG);
-	} else {
-		static struct tzdbg_log_pos_v2_t log_start_v2 = {0};
 
-		return _disp_log_stats_v2(g_qsee_log_v2, &log_start_v2,
-			QSEE_LOG_BUF_SIZE - sizeof(struct tzdbg_log_pos_v2_t),
-			count, TZDBG_QSEE_LOG);
-	}
+	return _disp_log_stats_v2(g_qsee_log_v2, &log_start_v2,
+		QSEE_LOG_BUF_SIZE_V2 - sizeof(struct tzdbg_log_pos_v2_t),
+		count, TZDBG_QSEE_LOG);
 }
 
 static int _disp_hyp_general_stats(size_t count)
@@ -1029,8 +1089,7 @@ static ssize_t tzdbgfs_read_unencrypted(struct file *file, char __user *buf,
 
 	if (tz_id == TZDBG_BOOT || tz_id == TZDBG_RESET ||
 		tz_id == TZDBG_INTERRUPT || tz_id == TZDBG_GENERAL ||
-		tz_id == TZDBG_VMID || tz_id == TZDBG_LOG ||
-		tz_id == TZDBG_QSEE_LOG)
+		tz_id == TZDBG_VMID || tz_id == TZDBG_LOG)
 		memcpy_fromio((void *)tzdbg.diag_buf, tzdbg.virt_iobase,
 						debug_rw_buf_size);
 
@@ -1321,13 +1380,6 @@ err:
 static void tzdbgfs_exit(struct platform_device *pdev)
 {
 	struct dentry *dent_dir;
-
-	if (g_qsee_log) {
-		qtee_shmbridge_deregister(qseelog_shmbridge_handle);
-		dma_free_coherent(&pdev->dev, QSEE_LOG_BUF_SIZE,
-					 (void *)g_qsee_log, coh_pmem);
-	}
-	kzfree(tzdbg.disp_buf);
 	dent_dir = platform_get_drvdata(pdev);
 	debugfs_remove_recursive(dent_dir);
 }
@@ -1399,8 +1451,10 @@ static int tzdbg_get_tz_version(void)
 	if (
 	(((version >> TZBSP_FVER_MAJOR_SHIFT) & TZBSP_FVER_MAJOR_MINOR_MASK)
 			== TZBSP_DIAG_MAJOR_VERSION_V9) &&
+	((((version >> TZBSP_FVER_MINOR_SHIFT) & TZBSP_FVER_MAJOR_MINOR_MASK)
+			== TZBSP_DIAG_MINOR_VERSION_V2) ||
 	(((version >> TZBSP_FVER_MINOR_SHIFT) & TZBSP_FVER_MAJOR_MINOR_MASK)
-			== TZBSP_DIAG_MINOR_VERSION_V2))
+			== TZBSP_DIAG_MINOR_VERSION_V21)))
 		tzdbg.is_enlarged_buf = true;
 	else
 		tzdbg.is_enlarged_buf = false;
@@ -1557,10 +1611,10 @@ exit_free_diag_buf:
 static int tz_log_remove(struct platform_device *pdev)
 {
 	tzdbgfs_exit(pdev);
-	tzdbg_free_encrypted_log_buf(pdev);
-	tzdbg_free_qsee_log_buf(pdev);
 	dma_free_coherent(&pdev->dev, display_buf_size,
 			(void *)tzdbg.disp_buf, disp_buf_paddr);
+	tzdbg_free_encrypted_log_buf(pdev);
+	tzdbg_free_qsee_log_buf(pdev);
 	if (!tzdbg.is_encrypted_log_enabled)
 		kfree(tzdbg.diag_buf);
 	return 0;

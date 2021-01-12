@@ -10,8 +10,8 @@
 #include <linux/kernel.h>
 
 #include "ion_system_secure_heap.h"
-#include "ion_system_heap.h"
-#include "ion_page_pool.h"
+#include "ion_msm_system_heap.h"
+#include "ion_msm_page_pool.h"
 #include "msm_ion_priv.h"
 #include "ion_secure_util.h"
 
@@ -29,6 +29,7 @@ struct ion_system_secure_heap {
 	bool destroy_heap;
 	struct list_head prefetch_list;
 	struct delayed_work prefetch_work;
+	struct workqueue_struct *prefetch_wq;
 };
 
 struct prefetch_info {
@@ -68,6 +69,12 @@ static void ion_system_secure_heap_free(struct ion_buffer *buffer)
 
 	buffer->heap = secure_heap->sys_heap;
 	secure_heap->sys_heap->ops->free(buffer);
+	/*
+	 * Restore buffer's heap pointer to the system secure heap, so that
+	 * the ION memory accounting code uses the system secure heap's stats
+	 * instead of the system heap stats.
+	 */
+	buffer->heap = heap;
 }
 
 static int ion_system_secure_heap_allocate(struct ion_heap *heap,
@@ -146,19 +153,19 @@ out1:
 size_t ion_system_secure_heap_page_pool_total(struct ion_heap *heap,
 					      int vmid_flags)
 {
-	struct ion_system_heap *sys_heap;
-	struct ion_page_pool *pool;
+	struct ion_msm_system_heap *sys_heap;
+	struct ion_msm_page_pool *pool;
 	size_t total = 0;
 	int vmid, i;
 
-	sys_heap = to_system_heap(heap);
+	sys_heap = to_msm_system_heap(heap);
 	vmid = get_secure_vmid(vmid_flags);
 	if (vmid < 0)
 		return 0;
 
 	for (i = 0; i < NUM_ORDERS; i++) {
 		pool = sys_heap->secure_pools[vmid][i];
-		total += ion_page_pool_total(pool, true);
+		total += ion_msm_page_pool_total(pool, true);
 	}
 
 	return total << PAGE_SHIFT;
@@ -264,7 +271,8 @@ static int __ion_system_secure_heap_resize(struct ion_heap *heap,
 		goto out_free;
 	}
 	list_splice_tail_init(&items, &secure_heap->prefetch_list);
-	queue_delayed_work(system_unbound_wq, &secure_heap->prefetch_work,
+	queue_delayed_work(secure_heap->prefetch_wq,
+			   &secure_heap->prefetch_work,
 			   shrink ?  msecs_to_jiffies(SHRINK_DELAY) : 0);
 	spin_unlock_irqrestore(&secure_heap->work_lock, flags);
 
@@ -339,24 +347,33 @@ struct ion_heap *ion_system_secure_heap_create(struct ion_platform_heap *unused)
 	INIT_LIST_HEAD(&heap->prefetch_list);
 	INIT_DELAYED_WORK(&heap->prefetch_work,
 			  ion_system_secure_heap_prefetch_work);
+
+	heap->prefetch_wq = alloc_workqueue("system_secure_prefetch_wq",
+					    WQ_UNBOUND | WQ_FREEZABLE, 0);
+	if (!heap->prefetch_wq) {
+		pr_err("Failed to create system secure prefetch workqueue\n");
+		kfree(heap);
+		return ERR_PTR(-ENOMEM);
+	}
+
 	return &heap->heap.ion_heap;
 }
 
-struct page *alloc_from_secure_pool_order(struct ion_system_heap *heap,
+struct page *alloc_from_secure_pool_order(struct ion_msm_system_heap *heap,
 					  struct ion_buffer *buffer,
 					  unsigned long order)
 {
 	int vmid = get_secure_vmid(buffer->flags);
-	struct ion_page_pool *pool;
+	struct ion_msm_page_pool *pool;
 
 	if (!is_secure_vmid_valid(vmid))
 		return ERR_PTR(-EINVAL);
 
 	pool = heap->secure_pools[vmid][order_to_index(order)];
-	return ion_page_pool_alloc_pool_only(pool);
+	return ion_msm_page_pool_alloc_pool_only(pool);
 }
 
-struct page *split_page_from_secure_pool(struct ion_system_heap *heap,
+struct page *split_page_from_secure_pool(struct ion_msm_system_heap *heap,
 					 struct ion_buffer *buffer)
 {
 	int i, j;
@@ -400,7 +417,7 @@ got_page:
 	return page;
 }
 
-int ion_secure_page_pool_shrink(struct ion_system_heap *sys_heap,
+int ion_secure_page_pool_shrink(struct ion_msm_system_heap *sys_heap,
 				int vmid, int order_idx, int nr_to_scan)
 {
 	int ret, freed = 0;
@@ -408,14 +425,15 @@ int ion_secure_page_pool_shrink(struct ion_system_heap *sys_heap,
 	struct page *page, *tmp;
 	struct sg_table sgt;
 	struct scatterlist *sg;
-	struct ion_page_pool *pool = sys_heap->secure_pools[vmid][order_idx];
+	struct ion_msm_page_pool *pool =
+		sys_heap->secure_pools[vmid][order_idx];
 	LIST_HEAD(pages);
 
 	if (nr_to_scan == 0)
-		return ion_page_pool_total(pool, true);
+		return ion_msm_page_pool_total(pool, true);
 
 	while (freed < nr_to_scan) {
-		page = ion_page_pool_alloc_pool_only(pool);
+		page = ion_msm_page_pool_alloc_pool_only(pool);
 		if (IS_ERR(page))
 			break;
 		list_add(&page->lru, &pages);
@@ -443,7 +461,7 @@ int ion_secure_page_pool_shrink(struct ion_system_heap *sys_heap,
 
 	list_for_each_entry_safe(page, tmp, &pages, lru) {
 		list_del(&page->lru);
-		ion_page_pool_free_immediate(pool, page);
+		ion_msm_page_pool_free_immediate(pool, page);
 	}
 
 	sg_free_table(&sgt);
@@ -455,7 +473,7 @@ out1:
 	/* Restore pages to secure pool */
 	list_for_each_entry_safe(page, tmp, &pages, lru) {
 		list_del(&page->lru);
-		ion_page_pool_free(pool, page);
+		ion_msm_page_pool_free(pool, page);
 	}
 	return 0;
 out3:

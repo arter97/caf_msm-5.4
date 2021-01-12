@@ -42,6 +42,12 @@ do {									    \
 	ipc_log_string(ctxt, "%s[%s]: "x, "", __func__, ##__VA_ARGS__);	    \
 } while (0)
 
+#ifdef CONFIG_QMP_DEBUGFS_CLIENT
+#define QMP_BUG(x) BUG_ON(x)
+#else
+#define QMP_BUG(x) do {} while (0)
+#endif
+
 /**
  * enum qmp_local_state - definition of the local state machine
  * @LINK_DISCONNECTED:		Init state, waiting for ucore to start
@@ -211,6 +217,8 @@ struct qmp_device {
  */
 static void send_irq(struct qmp_device *mdev)
 {
+	int ret;
+
 	/*
 	 * Any data associated with this event must be visable to the remote
 	 * before the interrupt is triggered
@@ -218,8 +226,11 @@ static void send_irq(struct qmp_device *mdev)
 	wmb();
 
 	if (mdev->mbox_chan) {
-		mbox_send_message(mdev->mbox_chan, NULL);
+		ret = mbox_send_message(mdev->mbox_chan, NULL);
 		mbox_client_txdone(mdev->mbox_chan, 0);
+
+		if (ret < 0)
+			QMP_ERR(mdev->ilc, "failed to trigger ipcc irq %d\n", ret);
 	} else {
 		writel_relaxed(mdev->irq_mask, mdev->tx_irq_reg);
 	}
@@ -266,6 +277,7 @@ static void qmp_notify_timeout(struct work_struct *work)
 		return;
 	}
 	QMP_ERR(mbox->mdev->ilc, "tx timeout for %d\n", mbox->idx_in_flight);
+	QMP_BUG(mbox->tx_sent);
 	iowrite32(0, mbox->desc + mbox->mcore_mbox_offset);
 	mbox->tx_sent = false;
 	spin_unlock_irqrestore(&mbox->tx_lock, flags);
@@ -375,6 +387,7 @@ static int qmp_send_data(struct mbox_chan *chan, void *data)
 	struct qmp_pkt *pkt = (struct qmp_pkt *)data;
 	void __iomem *addr;
 	unsigned long flags;
+	u32 size;
 	int i;
 
 	if (!mbox || !data || !completion_done(&mbox->ch_complete))
@@ -396,13 +409,15 @@ static int qmp_send_data(struct mbox_chan *chan, void *data)
 
 	memcpy32_toio(addr + sizeof(pkt->size), pkt->data, pkt->size);
 	iowrite32(pkt->size, addr);
+	/* readback to ensure write reflects in msgram */
+	size = ioread32(addr);
 	mbox->tx_sent = true;
 	for (i = 0; i < mbox->ctrl.num_chans; i++) {
 		if (chan == &mbox->ctrl.chans[i])
 			mbox->idx_in_flight = i;
 	}
 	QMP_INFO(mdev->ilc, "Copied buffer to msgram sz:%d i:%d\n",
-		 pkt->size, mbox->idx_in_flight);
+		 size, mbox->idx_in_flight);
 	send_irq(mdev);
 	qmp_schedule_tx_timeout(mbox);
 	spin_unlock_irqrestore(&mbox->tx_lock, flags);
@@ -519,6 +534,7 @@ static irqreturn_t qmp_irq_handler(int irq, void *priv)
 
 	kthread_queue_work(&mdev->kworker, &mdev->kwork);
 	mdev->rx_irq_count++;
+	QMP_INFO(mdev->ilc, "Queued rx worker count:%d\n", mdev->rx_irq_count);
 
 	return IRQ_HANDLED;
 }
@@ -534,9 +550,12 @@ static void __qmp_rx_worker(struct qmp_mbox *mbox)
 	struct qmp_device *mdev = mbox->mdev;
 	unsigned long flags;
 
+	QMP_INFO(mdev->ilc, "Enter rx worker state:%d\n", mbox->local_state);
 	memcpy_fromio(&desc, mbox->desc, sizeof(desc));
-	if (desc.magic != QMP_MAGIC)
+	if (desc.magic != QMP_MAGIC) {
+		QMP_ERR(mdev->ilc, "wrong magic 0x:%x\n", desc.magic);
 		return;
+	}
 
 	mutex_lock(&mbox->state_lock);
 	switch (mbox->local_state) {
@@ -662,6 +681,7 @@ static void __qmp_rx_worker(struct qmp_mbox *mbox)
 	default:
 		QMP_ERR(mdev->ilc, "Local Channel State corrupted\n");
 	}
+	QMP_INFO(mdev->ilc, "Exit rx worker state:%d\n", mbox->local_state);
 	mutex_unlock(&mbox->state_lock);
 }
 

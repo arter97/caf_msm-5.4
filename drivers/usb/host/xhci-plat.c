@@ -370,21 +370,23 @@ static int xhci_plat_remove(struct platform_device *dev)
 	struct clk *reg_clk = xhci->reg_clk;
 	struct usb_hcd *shared_hcd = xhci->shared_hcd;
 
+	pm_runtime_get_sync(&dev->dev);
 	xhci->xhc_state |= XHCI_STATE_REMOVING;
 
 	usb_remove_hcd(shared_hcd);
-	xhci->shared_hcd = NULL;
 	usb_phy_shutdown(hcd->usb_phy);
 
 	usb_remove_hcd(hcd);
+	xhci->shared_hcd = NULL;
 	usb_put_hcd(shared_hcd);
 
 	clk_disable_unprepare(clk);
 	clk_disable_unprepare(reg_clk);
 	usb_put_hcd(hcd);
 
-	pm_runtime_set_suspended(&dev->dev);
 	pm_runtime_disable(&dev->dev);
+	pm_runtime_put_noidle(&dev->dev);
+	pm_runtime_set_suspended(&dev->dev);
 
 	return 0;
 }
@@ -419,6 +421,28 @@ static int __maybe_unused xhci_plat_runtime_suspend(struct device *dev)
 	return xhci_suspend(xhci, true);
 }
 
+static int xhci_plat_resume(struct device *dev)
+{
+	struct usb_hcd  *hcd = dev_get_drvdata(dev);
+	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
+	int ret;
+
+	if (!xhci)
+		return 0;
+
+	dev_dbg(dev, "xhci-plat resume\n");
+
+	ret = xhci_priv_resume_quirk(hcd);
+	if (ret)
+		return ret;
+
+	ret = pm_runtime_resume(dev);
+	if (ret)
+		dev_err(dev, "failed to resume xhci-plat (%d)\n", ret);
+
+	return ret;
+}
+
 static int __maybe_unused xhci_plat_runtime_resume(struct device *dev)
 {
 	struct usb_hcd  *hcd = dev_get_drvdata(dev);
@@ -441,7 +465,7 @@ static int __maybe_unused xhci_plat_runtime_resume(struct device *dev)
 }
 
 static const struct dev_pm_ops xhci_plat_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(NULL, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(NULL, xhci_plat_resume)
 
 	SET_RUNTIME_PM_OPS(xhci_plat_runtime_suspend,
 			   xhci_plat_runtime_resume,

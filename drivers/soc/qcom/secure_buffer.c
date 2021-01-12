@@ -23,6 +23,7 @@
 #define BATCH_MAX_SECTIONS 32
 
 static struct device *qcom_secure_buffer_dev;
+static bool vmid_cp_camera_preview_ro;
 
 static struct qcom_scm_current_perm_info *
 populate_dest_info(int *dest_vmids, int nelements, int *dest_perms,
@@ -161,6 +162,16 @@ static inline void set_each_page_of_sg(struct sg_table *table, u64 flag)
 }
 
 #define SECURE_PAGE_MAGIC 0xEEEEEEEE
+int page_accessible(unsigned long pfn)
+{
+	struct page *page = pfn_to_page(pfn);
+
+	if (page->private == SECURE_PAGE_MAGIC)
+		return 0;
+	else
+		return 1;
+}
+
 /*
  *  When -EADDRNOTAVAIL is returned the memory may no longer be in
  *  a usable state and should no longer be accessed by the HLOS.
@@ -325,7 +336,8 @@ EXPORT_SYMBOL(msm_secure_vmid_to_string);
 
 u32 msm_secure_get_vmid_perms(u32 vmid)
 {
-	if (vmid == VMID_CP_SEC_DISPLAY)
+	if (vmid == VMID_CP_SEC_DISPLAY || (vmid == VMID_CP_CAMERA_PREVIEW &&
+					    vmid_cp_camera_preview_ro))
 		return PERM_READ;
 	else if (vmid == VMID_CP_CDSP)
 		return PERM_READ | PERM_WRITE | PERM_EXEC;
@@ -336,17 +348,19 @@ EXPORT_SYMBOL(msm_secure_get_vmid_perms);
 
 static int qcom_secure_buffer_probe(struct platform_device *pdev)
 {
+	struct device *dev = &pdev->dev;
 	int ret;
 
-#ifdef CONFIG_ARM64
-	ret = dma_set_mask(&pdev->dev, DMA_BIT_MASK(64));
-#else
-	ret = dma_set_mask(&pdev->dev, DMA_BIT_MASK(32));
-#endif
-	if (!ret)
-		qcom_secure_buffer_dev = &pdev->dev;
+	if (IS_ENABLED(CONFIG_ARM64)) {
+		ret = dma_set_mask(dev, DMA_BIT_MASK(64));
+		if (ret)
+			return ret;
+	}
 
-	return ret;
+	qcom_secure_buffer_dev = dev;
+	vmid_cp_camera_preview_ro = of_property_read_bool(dev->of_node,
+					"qcom,vmid-cp-camera-preview-ro");
+	return 0;
 }
 
 static const struct of_device_id qcom_secure_buffer_of_match[] = {

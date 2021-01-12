@@ -27,6 +27,8 @@
 #include <linux/memremap.h>
 #include <linux/overflow.h>
 #include <linux/sizes.h>
+#include <linux/android_kabi.h>
+#include <linux/android_vendor.h>
 
 struct mempolicy;
 struct anon_vma;
@@ -112,6 +114,14 @@ extern int mmap_rnd_compat_bits __read_mostly;
 
 #ifndef __pa_symbol
 #define __pa_symbol(x)  __pa(RELOC_HIDE((unsigned long)(x), 0))
+#endif
+
+#ifndef __va_function
+#define __va_function(x) (x)
+#endif
+
+#ifndef __pa_function
+#define __pa_function(x) __pa_symbol(x)
 #endif
 
 #ifndef page_to_virt
@@ -459,6 +469,8 @@ struct vm_fault {
 					 */
 	unsigned long vma_flags;	/* Speculative Page Fault field */
 	pgprot_t vma_page_prot;		/* Speculative Page Fault field */
+	ANDROID_VENDOR_DATA(1);
+	ANDROID_VENDOR_DATA(2);
 };
 
 /* page entry size for vm->huge_fault() */
@@ -533,6 +545,11 @@ struct vm_operations_struct {
 	 */
 	struct page *(*find_special_page)(struct vm_area_struct *vma,
 					  unsigned long addr);
+
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
+	ANDROID_KABI_RESERVE(3);
+	ANDROID_KABI_RESERVE(4);
 };
 
 static inline void INIT_VMA(struct vm_area_struct *vma)
@@ -658,6 +675,10 @@ unsigned long vmalloc_to_pfn(const void *addr);
  * On nommu, vmalloc/vfree wrap through kmalloc/kfree directly, so there
  * is no special casing required.
  */
+
+#ifdef CONFIG_ENABLE_VMALLOC_SAVING
+extern bool is_vmalloc_addr(const void *x);
+#else
 static inline bool is_vmalloc_addr(const void *x)
 {
 #ifdef CONFIG_MMU
@@ -668,6 +689,7 @@ static inline bool is_vmalloc_addr(const void *x)
 	return false;
 #endif
 }
+#endif //CONFIG_ENABLE_VMALLOC_SAVING
 
 #ifndef is_ioremap_addr
 #define is_ioremap_addr(x) is_vmalloc_addr(x)
@@ -712,7 +734,13 @@ static inline void *kvcalloc(size_t n, size_t size, gfp_t flags)
 }
 
 extern void kvfree(const void *addr);
+extern void kvfree_sensitive(const void *addr, size_t len);
 
+/*
+ * Mapcount of compound page as a whole, does not include mapped sub-pages.
+ *
+ * Must be called only for compound pages or any their tail sub-pages.
+ */
 static inline int compound_mapcount(struct page *page)
 {
 	VM_BUG_ON_PAGE(!PageCompound(page), page);
@@ -732,10 +760,16 @@ static inline void page_mapcount_reset(struct page *page)
 
 int __page_mapcount(struct page *page);
 
+/*
+ * Mapcount of 0-order page; when compound sub-page, includes
+ * compound_mapcount().
+ *
+ * Result is undefined for pages which cannot be mapped into userspace.
+ * For example SLAB or special types of pages. See function page_has_type().
+ * They use this place in struct page differently.
+ */
 static inline int page_mapcount(struct page *page)
 {
-	VM_BUG_ON_PAGE(PageSlab(page), page);
-
 	if (unlikely(PageCompound(page)))
 		return __page_mapcount(page);
 	return atomic_read(&page->_mapcount) + 1;
@@ -786,7 +820,7 @@ enum compound_dtor_id {
 #ifdef CONFIG_HUGETLB_PAGE
 	HUGETLB_PAGE_DTOR,
 #endif
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+#if defined(CONFIG_TRANSPARENT_HUGEPAGE) || defined(CONFIG_GKI_OPT_FEATURES)
 	TRANSHUGE_PAGE_DTOR,
 #endif
 	NR_COMPOUND_DTORS,

@@ -473,8 +473,6 @@ static void msm_restart_prepare(const char *cmd)
 				(enum pon_restart_reason)reason);
 	}
 
-	flush_cache_all();
-
 	/*outer_flush_all is not supported by 64bit kernel*/
 #ifndef CONFIG_ARM64
 	outer_flush_all();
@@ -506,15 +504,6 @@ static int do_msm_restart(struct notifier_block *unused, unsigned long action,
 
 	msm_restart_prepare(cmd);
 
-	/*
-	 * Trigger a watchdog bite here and if this fails,
-	 * device will take the usual restart path.
-	 */
-	if (WDOG_BITE_ON_PANIC && in_panic)
-		msm_trigger_wdog_bite();
-
-	qcom_scm_disable_sdi();
-	qcom_scm_halt_spmi_pmic_arbiter();
 	deassert_ps_hold();
 
 	msleep(10000);
@@ -527,10 +516,8 @@ static void do_msm_poweroff(void)
 	pr_notice("Powering off the SoC\n");
 
 	set_dload_mode(0);
-	qcom_scm_disable_sdi();
 	qpnp_pon_system_pwr_off(PON_POWER_OFF_SHUTDOWN);
 
-	qcom_scm_halt_spmi_pmic_arbiter();
 	deassert_ps_hold();
 
 	msleep(10000);

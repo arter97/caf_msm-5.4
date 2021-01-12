@@ -25,17 +25,6 @@ config HH_CTRL
 	  hypervisor debug features.
 	  See Documentation/ABI/testing/sysfs-hypervisor-haven for more details.
 
-if HH_CTRL
-config HH_DISABLE_UART
-	bool "Disable Haven UART print during kernel boot"
-	default y
-	help
-	  The hypervisor UART driver is enabled at boot,
-	  however its use may conflict with use of the
-	  Linux driver. This config requests Haven to
-	  disable its UART driver.
-endif
-
 config HH_MSGQ
 	tristate "Haven Message Queue driver"
 	help
@@ -89,5 +78,14 @@ config HH_MEM_NOTIFIER
 	  interface for clients to transmit memory resources between virtual
 	  machines, and register callbacks that get invoked only when
 	  notifications pertaining to their memory resources arrive.
+
+config HH_VIRT_WATCHDOG
+	tristate "Haven Virtual Watchdog Driver"
+	depends on QCOM_WDT_CORE
+	help
+	  This enables the Qualcomm Technologies, Inc. watchdog module for
+	  the Haven hypervisor. It provides an interface to perform watchdog
+	  actions such as setting the bark/bite time and also petting the
+	  watchdog in the hypervisor.
 
 endif

@@ -1030,6 +1030,20 @@ int dwc3_core_init(struct dwc3 *dwc)
 		if (dwc->dis_tx_ipgap_linecheck_quirk)
 			reg |= DWC3_GUCTL1_TX_IPGAP_LINECHECK_DIS;
 
+		if (dwc->parkmode_disable_ss_quirk)
+			reg |= DWC3_GUCTL1_PARKMODE_DISABLE_SS;
+
+		/*
+		 * STAR: 9001415732: Host failure when Park mode is enabled:
+		 * Disable parkmode for Gen1 controllers to fix the stall
+		 * seen during host mode transfers on multiple endpoints.
+		 */
+		if (!dwc3_is_usb31(dwc)) {
+			reg |= DWC3_GUCTL1_PARKMODE_DISABLE_SS;
+			reg |= DWC3_GUCTL1_PARKMODE_DISABLE_HS;
+			reg |= DWC3_GUCTL1_PARKMODE_DISABLE_FSLS;
+		}
+
 		dwc3_writel(dwc->regs, DWC3_GUCTL1, reg);
 	}
 
@@ -1393,6 +1407,8 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 				"snps,dis-del-phy-power-chg-quirk");
 	dwc->dis_tx_ipgap_linecheck_quirk = device_property_read_bool(dev,
 				"snps,dis-tx-ipgap-linecheck-quirk");
+	dwc->parkmode_disable_ss_quirk = device_property_read_bool(dev,
+				"snps,parkmode-disable-ss-quirk");
 
 	dwc->tx_de_emphasis_quirk = device_property_read_bool(dev,
 				"snps,tx_de_emphasis_quirk");
@@ -1665,7 +1681,7 @@ static int dwc3_probe(struct platform_device *pdev)
 
 	snprintf(dma_ipc_log_ctx_name, sizeof(dma_ipc_log_ctx_name),
 					"%s.ep_events", dev_name(dwc->dev));
-	dwc->dwc_dma_ipc_log_ctxt = ipc_log_context_create(NUM_LOG_PAGES,
+	dwc->dwc_dma_ipc_log_ctxt = ipc_log_context_create(2 * NUM_LOG_PAGES,
 						dma_ipc_log_ctx_name, 0);
 	if (!dwc->dwc_dma_ipc_log_ctxt)
 		dev_err(dwc->dev, "Error getting ipc_log_ctxt for ep_events\n");
@@ -1708,6 +1724,8 @@ static int dwc3_remove(struct platform_device *pdev)
 
 	ipc_log_context_destroy(dwc->dwc_ipc_log_ctxt);
 	dwc->dwc_ipc_log_ctxt = NULL;
+	ipc_log_context_destroy(dwc->dwc_dma_ipc_log_ctxt);
+	dwc->dwc_dma_ipc_log_ctxt = NULL;
 	count--;
 	dwc3_instance[dwc->index] = NULL;
 
@@ -1981,13 +1999,13 @@ static int dwc3_resume(struct device *dev)
 	/* Check if platform glue driver handling PM, if not then handle here */
 	if (!dwc3_notify_event(dwc, DWC3_CORE_PM_RESUME_EVENT, 0)) {
 		/*
-		 * If the core was in host mode during suspend, then set the
-		 * runtime PM state as active to reflect actual state of device
-		 * which is now out of LPM. This allows runtime_suspend later.
+		 * If the core was in host mode during suspend, then perform
+		 * runtime resume which will do resume and set the runtime PM
+		 * state as active to reflect actual state of device which
+		 * is now out of LPM. This allows runtime_suspend later.
 		 */
-		if (dwc->current_dr_role == DWC3_GCTL_PRTCAP_HOST &&
-		    dwc->host_poweroff_in_pm_suspend)
-			goto runtime_set_active;
+		if (dwc->current_dr_role == DWC3_GCTL_PRTCAP_HOST)
+			pm_runtime_resume(dev);
 
 		return 0;
 	}
@@ -1997,11 +2015,6 @@ static int dwc3_resume(struct device *dev)
 	ret = dwc3_resume_common(dwc, PMSG_RESUME);
 	if (ret)
 		return ret;
-
-runtime_set_active:
-	pm_runtime_disable(dev);
-	pm_runtime_set_active(dev);
-	pm_runtime_enable(dev);
 
 	return 0;
 }

@@ -126,14 +126,19 @@ struct iommu_debug_device {
 	u64 phys;
 	size_t len;
 	struct list_head list;
-	struct mutex clk_lock;
-	unsigned int clk_count;
 	/* Protects domain */
 	struct mutex state_lock;
 #ifdef CONFIG_ARM64_PTDUMP_CORE
 	struct ptdump_info pt_info;
 #endif
 };
+
+static int __apply_to_new_mapping(struct seq_file *s,
+				    int (*fn)(struct device *dev,
+					      struct seq_file *s,
+					      struct iommu_domain *domain,
+					      void *priv),
+				    void *priv);
 
 static int iommu_debug_build_phoney_sg_table(struct device *dev,
 					     struct sg_table *table,
@@ -412,7 +417,7 @@ static void iommu_debug_device_profiling(struct seq_file *s,
 	struct iommu_domain *domain;
 	struct device *dev = ddev->dev;
 	unsigned long iova = 0x10000;
-	phys_addr_t paddr = 0xa000;
+	phys_addr_t paddr = 0x80000000;
 
 	if (iommu_debug_dma_reconfigure(ddev, attrs, 0, SZ_1G * 4ULL))
 		return;
@@ -430,10 +435,21 @@ static void iommu_debug_device_profiling(struct seq_file *s,
 		u32 map_elapsed_rem = 0, unmap_elapsed_rem = 0;
 		ktime_t tbefore, tafter, diff;
 		int i;
+		unsigned long align_mask = ~0UL;
+
+		if (IS_ENABLED(CONFIG_IOMMU_LIMIT_IOVA_ALIGNMENT))
+			align_mask <<= min_t(unsigned long,
+					     CONFIG_IOMMU_IOVA_ALIGNMENT +
+					     PAGE_SHIFT, fls_long(size - 1));
+		else
+			align_mask <<= fls_long(size - 1);
+
+		align_mask = ~align_mask;
 
 		for (i = 0; i < iters_per_op; ++i) {
 			tbefore = ktime_get();
-			if (iommu_map(domain, iova, paddr, size,
+			if (iommu_map(domain, __ALIGN_MASK(iova, align_mask),
+				      ALIGN(paddr, size), size,
 				      IOMMU_READ | IOMMU_WRITE)) {
 				seq_puts(s, "Failed to map\n");
 				continue;
@@ -443,7 +459,9 @@ static void iommu_debug_device_profiling(struct seq_file *s,
 			map_elapsed_ns += ktime_to_ns(diff);
 
 			tbefore = ktime_get();
-			unmapped = iommu_unmap(domain, iova, size);
+			unmapped = iommu_unmap(domain,
+					       __ALIGN_MASK(iova, align_mask),
+					       size);
 			if (unmapped != size) {
 				seq_printf(s,
 					   "Only unmapped %zx instead of %zx\n",
@@ -483,6 +501,16 @@ static void iommu_debug_device_profiling(struct seq_file *s,
 		struct sg_table table;
 		unsigned long chunk_size = SZ_4K;
 		int i;
+		unsigned long align_mask = ~0UL;
+
+		if (IS_ENABLED(CONFIG_IOMMU_LIMIT_IOVA_ALIGNMENT))
+			align_mask <<= min_t(unsigned long,
+					     CONFIG_IOMMU_IOVA_ALIGNMENT +
+					     PAGE_SHIFT, fls_long(size - 1));
+		else
+			align_mask <<= fls_long(size - 1);
+
+		align_mask = ~align_mask;
 
 		if (iommu_debug_build_phoney_sg_table(dev, &table, size,
 						      chunk_size)) {
@@ -493,8 +521,10 @@ static void iommu_debug_device_profiling(struct seq_file *s,
 
 		for (i = 0; i < iters_per_op; ++i) {
 			tbefore = ktime_get();
-			if (iommu_map_sg(domain, iova, table.sgl, table.nents,
-					 IOMMU_READ | IOMMU_WRITE) != size) {
+			if (iommu_map_sg(domain, __ALIGN_MASK(iova, align_mask),
+					 table.sgl, table.nents,
+					 IOMMU_READ | IOMMU_WRITE)
+			    != size) {
 				seq_puts(s, "Failed to map_sg\n");
 				goto next;
 			}
@@ -503,7 +533,9 @@ static void iommu_debug_device_profiling(struct seq_file *s,
 			map_elapsed_ns += ktime_to_ns(diff);
 
 			tbefore = ktime_get();
-			unmapped = iommu_unmap(domain, iova, size);
+			unmapped = iommu_unmap(domain,
+					       __ALIGN_MASK(iova, align_mask),
+					       size);
 			if (unmapped != size) {
 				seq_printf(s,
 					   "Only unmapped %zx instead of %zx\n",
@@ -647,10 +679,6 @@ static int iommu_debug_profiling_fast_dma_api_show(struct seq_file *s,
 	}
 	domain = ddev->domain;
 
-	if (iommu_enable_config_clocks(domain)) {
-		seq_puts(s, "Couldn't enable clocks\n");
-		goto out_detach;
-	}
 	for (experiment = 0; experiment < 2; ++experiment) {
 		size_t map_avg = 0, unmap_avg = 0;
 
@@ -667,7 +695,7 @@ static int iommu_debug_profiling_fast_dma_api_show(struct seq_file *s,
 			ns = ktime_to_ns(diff);
 			if (dma_mapping_error(dev, dma_addr)) {
 				seq_puts(s, "dma_map_single failed\n");
-				goto out_disable_config_clocks;
+				goto out_detach;
 			}
 			map_elapsed_ns[i] = ns;
 
@@ -702,8 +730,6 @@ static int iommu_debug_profiling_fast_dma_api_show(struct seq_file *s,
 		seq_printf(s, "] (avg: %zu)\n", unmap_avg);
 	}
 
-out_disable_config_clocks:
-	iommu_disable_config_clocks(domain);
 out_detach:
 	iommu_debug_dma_deconfigure(ddev);
 out_kfree:
@@ -727,7 +753,8 @@ static const struct file_operations iommu_debug_profiling_fast_dma_api_fops = {
 	.release = single_release,
 };
 
-static int __tlb_stress_sweep(struct device *dev, struct seq_file *s)
+static int __tlb_stress_sweep(struct device *dev, struct seq_file *s,
+				struct iommu_domain *domain, void *unused)
 {
 	int i, ret = 0;
 	u64 iova;
@@ -834,7 +861,7 @@ static unsigned long get_next_fib(struct fib_state *f)
  * Not actually random.  Just testing the fibs (and max - the fibs).
  */
 static int __rand_va_sweep(struct device *dev, struct seq_file *s,
-			   const size_t size)
+			   struct iommu_domain *domain, void *priv)
 {
 	u64 iova;
 	const u64 max = SZ_1G * 4ULL - 1;
@@ -842,6 +869,7 @@ static int __rand_va_sweep(struct device *dev, struct seq_file *s,
 	void *virt;
 	dma_addr_t dma_addr, dma_addr2;
 	struct fib_state fib;
+	const size_t size = (size_t)priv;
 
 	virt = (void *)__get_free_pages(GFP_KERNEL, get_order(size));
 	if (!virt) {
@@ -925,7 +953,7 @@ static int __check_mapping(struct device *dev, struct iommu_domain *domain,
 }
 
 static int __full_va_sweep(struct device *dev, struct seq_file *s,
-			   const size_t size, struct iommu_domain *domain)
+			   struct iommu_domain *domain, void *priv)
 {
 	u64 iova;
 	dma_addr_t dma_addr;
@@ -933,6 +961,7 @@ static int __full_va_sweep(struct device *dev, struct seq_file *s,
 	phys_addr_t phys;
 	const u64 max = SZ_1G * 4ULL - 1;
 	int ret = 0, i;
+	const size_t size = (size_t)priv;
 
 	virt = (void *)__get_free_pages(GFP_KERNEL, get_order(size));
 	if (!virt) {
@@ -945,24 +974,6 @@ static int __full_va_sweep(struct device *dev, struct seq_file *s,
 		return -ENOMEM;
 	}
 	phys = virt_to_phys(virt);
-
-	/*
-	 * A previous test might have made it so that the next IOVA that we
-	 * start to search from is not 0, so map the entire IOVA space, and
-	 * then unmap it to reset the starting IOVA to search from to address
-	 * 0.
-	 */
-	dma_addr = dma_map_single_attrs(dev, virt, SZ_1G * 4ULL, DMA_TO_DEVICE,
-					DMA_ATTR_SKIP_CPU_SYNC);
-	if (dma_mapping_error(dev, dma_addr)) {
-		dev_err_ratelimited(dev,
-				    "Failed to map all of the IOVA space\n");
-		ret = -ENOMEM;
-		goto out_free_pages;
-	}
-
-	dma_unmap_single_attrs(dev, dma_addr, SZ_1G * 4ULL, DMA_TO_DEVICE,
-			       DMA_ATTR_SKIP_CPU_SYNC);
 
 	for (iova = 0, i = 0; iova < max; iova += size, ++i) {
 		unsigned long expected = iova;
@@ -1015,7 +1026,6 @@ out:
 	for (iova = 0; iova < max; iova += size)
 		dma_unmap_single(dev, (dma_addr_t)iova, size, DMA_TO_DEVICE);
 
-out_free_pages:
 	free_pages((unsigned long)virt, get_order(size));
 	return ret;
 }
@@ -1025,29 +1035,27 @@ out_free_pages:
 			seq_printf(s, fmt, ##__VA_ARGS__);	\
 		})
 
-static int __functional_dma_api_va_test(struct device *dev, struct seq_file *s,
-				     struct iommu_domain *domain, void *priv)
+static int __functional_dma_api_va_test(struct seq_file *s)
 {
-	int i, j, ret = 0;
-	size_t *sz, *sizes = priv;
+	int ret = 0;
+	size_t *sz;
+	size_t sizes[] = {SZ_4K, SZ_8K, SZ_16K, SZ_64K, 0};
+	struct iommu_debug_device *ddev = s->private;
+	struct device *dev = ddev->dev;
 
-	for (j = 0; j < 1; ++j) {
-		for (sz = sizes; *sz; ++sz) {
-			for (i = 0; i < 2; ++i) {
-				ds_printf(dev, s, "Full VA sweep @%s %d",
-					       _size_to_string(*sz), i);
-				if (__full_va_sweep(dev, s, *sz, domain)) {
-					ds_printf(dev, s, "  -> FAILED\n");
-					ret = -EINVAL;
-				} else {
-					ds_printf(dev, s, "  -> SUCCEEDED\n");
-				}
-			}
+	for (sz = sizes; *sz; ++sz) {
+		ds_printf(dev, s, "Full VA sweep @%s",
+			       _size_to_string(*sz));
+		if (__apply_to_new_mapping(s, __full_va_sweep, (void *)*sz)) {
+			ds_printf(dev, s, "  -> FAILED\n");
+			ret = -EINVAL;
+		} else {
+			ds_printf(dev, s, "  -> SUCCEEDED\n");
 		}
 	}
 
 	ds_printf(dev, s, "bonus map:");
-	if (__full_va_sweep(dev, s, SZ_4K, domain)) {
+	if (__apply_to_new_mapping(s, __full_va_sweep, (void *)SZ_4K)) {
 		ds_printf(dev, s, "  -> FAILED\n");
 		ret = -EINVAL;
 	} else {
@@ -1055,20 +1063,18 @@ static int __functional_dma_api_va_test(struct device *dev, struct seq_file *s,
 	}
 
 	for (sz = sizes; *sz; ++sz) {
-		for (i = 0; i < 2; ++i) {
-			ds_printf(dev, s, "Rand VA sweep @%s %d",
-				   _size_to_string(*sz), i);
-			if (__rand_va_sweep(dev, s, *sz)) {
-				ds_printf(dev, s, "  -> FAILED\n");
-				ret = -EINVAL;
-			} else {
-				ds_printf(dev, s, "  -> SUCCEEDED\n");
-			}
+		ds_printf(dev, s, "Rand VA sweep @%s",
+			   _size_to_string(*sz));
+		if (__apply_to_new_mapping(s, __rand_va_sweep, (void *)*sz)) {
+			ds_printf(dev, s, "  -> FAILED\n");
+			ret = -EINVAL;
+		} else {
+			ds_printf(dev, s, "  -> SUCCEEDED\n");
 		}
 	}
 
 	ds_printf(dev, s, "TLB stress sweep");
-	if (__tlb_stress_sweep(dev, s)) {
+	if (__apply_to_new_mapping(s, __tlb_stress_sweep, NULL)) {
 		ds_printf(dev, s, "  -> FAILED\n");
 		ret = -EINVAL;
 	} else {
@@ -1076,7 +1082,7 @@ static int __functional_dma_api_va_test(struct device *dev, struct seq_file *s,
 	}
 
 	ds_printf(dev, s, "second bonus map:");
-	if (__full_va_sweep(dev, s, SZ_4K, domain)) {
+	if (__apply_to_new_mapping(s, __full_va_sweep, (void *)SZ_4K)) {
 		ds_printf(dev, s, "  -> FAILED\n");
 		ret = -EINVAL;
 	} else {
@@ -1291,12 +1297,7 @@ static int __apply_to_new_mapping(struct seq_file *s,
 	}
 
 	dev_err_ratelimited(dev, "testing with pgtables at %pa\n", &pt_phys);
-	if (iommu_enable_config_clocks(domain)) {
-		ds_printf(dev, s, "Couldn't enable clocks\n");
-		goto out_release_mapping;
-	}
 	ret = fn(dev, s, domain, priv);
-	iommu_disable_config_clocks(domain);
 
 out_release_mapping:
 	iommu_debug_dma_deconfigure(ddev);
@@ -1309,12 +1310,11 @@ out:
 static int iommu_debug_functional_fast_dma_api_show(struct seq_file *s,
 						    void *ignored)
 {
-	size_t sizes[] = {SZ_4K, SZ_8K, SZ_16K, SZ_64K, 0};
 	int ret = 0;
 
 	ret |= __apply_to_new_mapping(s, __functional_dma_api_alloc_test, NULL);
 	ret |= __apply_to_new_mapping(s, __functional_dma_api_basic_test, NULL);
-	ret |= __apply_to_new_mapping(s, __functional_dma_api_va_test, sizes);
+	ret |=  __functional_dma_api_va_test(s);
 	return ret;
 }
 
@@ -2027,96 +2027,6 @@ static const struct file_operations iommu_debug_dma_unmap_fops = {
 	.write	= iommu_debug_dma_unmap_write,
 };
 
-static ssize_t iommu_debug_config_clocks_write(struct file *file,
-					       const char __user *ubuf,
-					       size_t count, loff_t *offset)
-{
-	char buf;
-	struct iommu_debug_device *ddev = file->private_data;
-	struct device *dev = ddev->dev;
-
-	/* we're expecting a single character plus (optionally) a newline */
-	if (count > 2) {
-		dev_err_ratelimited(dev, "Invalid value\n");
-		return -EINVAL;
-	}
-
-	if (!ddev->domain) {
-		dev_err_ratelimited(dev, "No domain. Did you already attach?\n");
-		return -EINVAL;
-	}
-
-	if (copy_from_user(&buf, ubuf, 1)) {
-		dev_err_ratelimited(dev, "Couldn't copy from user\n");
-		return -EFAULT;
-	}
-
-	mutex_lock(&ddev->clk_lock);
-	switch (buf) {
-	case '0':
-		if (ddev->clk_count == 0) {
-			dev_err_ratelimited(dev, "Config clocks already disabled\n");
-			break;
-		}
-
-		if (--ddev->clk_count > 0)
-			break;
-
-		dev_err_ratelimited(dev, "Disabling config clocks\n");
-		iommu_disable_config_clocks(ddev->domain);
-		break;
-	case '1':
-		if (ddev->clk_count++ > 0)
-			break;
-
-		dev_err_ratelimited(dev, "Enabling config clocks\n");
-		if (iommu_enable_config_clocks(ddev->domain))
-			dev_err_ratelimited(dev, "Failed!\n");
-		break;
-	default:
-		dev_err_ratelimited(dev, "Invalid value. Should be 0 or 1.\n");
-		mutex_unlock(&ddev->clk_lock);
-		return -EINVAL;
-	}
-	mutex_unlock(&ddev->clk_lock);
-
-	return count;
-}
-
-static const struct file_operations iommu_debug_config_clocks_fops = {
-	.open	= simple_open,
-	.write	= iommu_debug_config_clocks_write,
-};
-
-static ssize_t iommu_debug_trigger_fault_write(
-		struct file *file, const char __user *ubuf, size_t count,
-		loff_t *offset)
-{
-	struct iommu_debug_device *ddev = file->private_data;
-	unsigned long flags;
-
-	if (kstrtoul_from_user(ubuf, count, 0, &flags)) {
-		pr_err_ratelimited("Invalid flags format\n");
-		return -EFAULT;
-	}
-
-	mutex_lock(&ddev->state_lock);
-	if (!ddev->domain) {
-		pr_err_ratelimited("No domain. Did you already attach?\n");
-		mutex_unlock(&ddev->state_lock);
-		return -EINVAL;
-	}
-	iommu_trigger_fault(ddev->domain, flags);
-
-	mutex_unlock(&ddev->state_lock);
-	return count;
-}
-
-static const struct file_operations iommu_debug_trigger_fault_fops = {
-	.open	= simple_open,
-	.write	= iommu_debug_trigger_fault_write,
-};
-
 #ifdef CONFIG_ARM64_PTDUMP_CORE
 static int ptdump_show(struct seq_file *s, void *v)
 {
@@ -2176,7 +2086,6 @@ static int iommu_debug_device_setup(struct device *dev)
 	if (!ddev)
 		return -ENOMEM;
 
-	mutex_init(&ddev->clk_lock);
 	mutex_init(&ddev->state_lock);
 	ddev->dev = dev;
 	dir = debugfs_create_dir(dev_name(dev), debugfs_tests_dir);
@@ -2308,20 +2217,6 @@ static int iommu_debug_device_setup(struct device *dev)
 	if (!debugfs_create_file("pte", 0600, dir, ddev,
 			&iommu_debug_pte_fops)) {
 		pr_err_ratelimited("Couldn't create iommu/devices/%s/pte debugfs file\n",
-		       dev_name(dev));
-		goto err_rmdir;
-	}
-
-	if (!debugfs_create_file("config_clocks", 0200, dir, ddev,
-				 &iommu_debug_config_clocks_fops)) {
-		pr_err_ratelimited("Couldn't create iommu/devices/%s/config_clocks debugfs file\n",
-		       dev_name(dev));
-		goto err_rmdir;
-	}
-
-	if (!debugfs_create_file("trigger-fault", 0200, dir, ddev,
-				 &iommu_debug_trigger_fault_fops)) {
-		pr_err_ratelimited("Couldn't create iommu/devices/%s/trigger-fault debugfs file\n",
 		       dev_name(dev));
 		goto err_rmdir;
 	}

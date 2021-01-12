@@ -103,6 +103,7 @@ struct geni_se_device {
 	struct bus_vectors *vectors;
 	int num_paths;
 	bool vote_for_bw;
+	struct se_geni_rsc wrapper_rsc;
 };
 
 #define HW_VER_MAJOR_MASK GENMASK(31, 28)
@@ -346,9 +347,12 @@ static int geni_se_select_dma_mode(void __iomem *base)
 	geni_write_reg(0xFFFFFFFF, base, SE_IRQ_EN);
 
 	common_geni_m_irq_en = geni_read_reg(base, SE_GENI_M_IRQ_EN);
-	if (proto != UART)
+	if (proto != UART) {
 		common_geni_m_irq_en &=
 			~(M_TX_FIFO_WATERMARK_EN | M_RX_FIFO_WATERMARK_EN);
+		if (proto != I3C)
+			common_geni_m_irq_en &= ~M_CMD_DONE_EN;
+	}
 
 	geni_write_reg(common_geni_m_irq_en, base, SE_GENI_M_IRQ_EN);
 	geni_dma_mode = geni_read_reg(base, SE_GENI_DMA_MODE_EN);
@@ -467,6 +471,14 @@ EXPORT_SYMBOL(geni_setup_s_cmd);
  */
 void geni_cancel_m_cmd(void __iomem *base)
 {
+	unsigned int common_geni_m_irq_en;
+	int proto = get_se_proto(base);
+
+	if (proto != UART && proto != I3C) {
+		common_geni_m_irq_en = geni_read_reg(base, SE_GENI_M_IRQ_EN);
+		common_geni_m_irq_en &= ~M_CMD_DONE_EN;
+		geni_write_reg(common_geni_m_irq_en, base, SE_GENI_M_IRQ_EN);
+	}
 	geni_write_reg(M_GENI_CMD_CANCEL, base, SE_GENI_M_CMD_CTRL_REG);
 }
 EXPORT_SYMBOL(geni_cancel_m_cmd);
@@ -649,7 +661,7 @@ static bool geni_se_check_bus_bw(struct geni_se_device *geni_se_dev)
 	bool bus_bw_update = false;
 	/* Convert agg ab into bytes per second */
 	unsigned long new_ab_in_hz = DEFAULT_BUS_WIDTH *
-					((2*geni_se_dev->cur_ab)*10000);
+					KHz(geni_se_dev->cur_ab);
 
 	new_bus_bw = max(geni_se_dev->cur_ib, new_ab_in_hz) /
 							DEFAULT_BUS_WIDTH;
@@ -1035,12 +1047,13 @@ int geni_se_resources_init(struct se_geni_rsc *rsc,
 		geni_se_dev->bus_bw = icc_get(geni_se_dev->dev,
 					geni_se_dev->vectors[0].src,
 					geni_se_dev->vectors[0].dst);
-		if (IS_ERR(geni_se_dev->bus_bw)) {
-			GENI_SE_ERR(geni_se_dev->log_ctx,
-				false, NULL,
-			"%s: Error creating bus client (Core2x)\n",
-								 __func__);
-			return -EFAULT;
+		if (IS_ERR_OR_NULL(geni_se_dev->bus_bw)) {
+			GENI_SE_ERR(geni_se_dev->log_ctx, false, NULL,
+				"%s: Error Get Path: (Core2x), %ld\n",
+				__func__, PTR_ERR(geni_se_dev->bus_bw));
+
+				return geni_se_dev->bus_bw ?
+				PTR_ERR(geni_se_dev->bus_bw) : -ENOENT;
 		}
 	}
 	rsc->ab = ab;
@@ -1051,13 +1064,17 @@ int geni_se_resources_init(struct se_geni_rsc *rsc,
 			geni_se_dev->bus_bw_noc = icc_get(geni_se_dev->dev,
 						geni_se_dev->vectors[1].src,
 						geni_se_dev->vectors[1].dst);
-			if (IS_ERR(geni_se_dev->bus_bw_noc)) {
-				GENI_SE_ERR(geni_se_dev->log_ctx,
-					false, NULL,
-				"%s: Error creating bus client (DDR)\n",
-								 __func__);
+
+			if (IS_ERR_OR_NULL(geni_se_dev->bus_bw_noc)) {
+				GENI_SE_ERR(geni_se_dev->log_ctx, false, NULL,
+					"%s: Error Get Path: (DDR), %ld\n",
+					 __func__,
+					PTR_ERR(geni_se_dev->bus_bw_noc));
 				icc_put(geni_se_dev->bus_bw);
-				return -EFAULT;
+				geni_se_dev->bus_bw = NULL;
+
+				return geni_se_dev->bus_bw_noc ?
+				PTR_ERR(geni_se_dev->bus_bw_noc) : -ENOENT;
 			}
 		}
 
@@ -1614,6 +1631,34 @@ out:
 	return NULL;
 }
 
+void geni_se_remove_earlycon_icc_vote(struct device *dev)
+{
+	struct platform_device *pdev;
+	struct device_node *parent;
+	struct device_node *child;
+	struct geni_se_device *geni_se_dev;
+	int ret;
+
+	parent = of_get_next_parent(dev->of_node);
+	for_each_child_of_node(parent, child) {
+		if (!of_device_is_compatible(child, "qcom,qupv3-geni-se"))
+			continue;
+
+		pdev = of_find_device_by_node(child);
+		if (!pdev)
+			continue;
+
+		geni_se_dev = platform_get_drvdata(pdev);
+		ret = geni_se_rmv_ab_ib(geni_se_dev, &geni_se_dev->wrapper_rsc);
+
+		if (ret)
+			dev_err(dev, "%s: Error %d during bus_bw_update\n", __func__,
+					ret);
+	}
+	of_node_put(parent);
+}
+EXPORT_SYMBOL(geni_se_remove_earlycon_icc_vote);
+
 static int geni_se_iommu_probe(struct device *dev)
 {
 	struct geni_se_device *geni_se_dev;
@@ -1704,6 +1749,31 @@ static int geni_se_probe(struct platform_device *pdev)
 		dev_err(dev, "%s Failed to allocate log context\n", __func__);
 
 	dev_set_drvdata(dev, geni_se_dev);
+
+	/*
+	 * TBD: Proxy vote on QUP core path on behalf of earlycon.
+	 * Once the ICC sync state feature is implemented, we can make
+	 * console UART as dummy consumer of ICC to get rid of this HACK
+	 */
+#if IS_ENABLED(CONFIG_SERIAL_MSM_GENI_CONSOLE)
+	geni_se_dev->wrapper_rsc.wrapper_dev = dev;
+	geni_se_dev->wrapper_rsc.ctrl_dev = dev;
+
+	ret = geni_se_resources_init(&geni_se_dev->wrapper_rsc,
+					UART_CONSOLE_CORE2X_VOTE,
+					(DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH));
+	if (ret) {
+		dev_err(dev, "Resources init failed: %d\n", ret);
+		return ret;
+	}
+
+	ret = geni_se_add_ab_ib(geni_se_dev, &geni_se_dev->wrapper_rsc);
+	if (ret) {
+		dev_err(dev, "%s: Error %d during bus_bw_update\n", __func__,
+				ret);
+		return ret;
+	}
+#endif
 
 	ret = of_platform_populate(dev->of_node, geni_se_dt_match, NULL, dev);
 	if (ret) {

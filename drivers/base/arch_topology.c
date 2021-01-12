@@ -21,6 +21,7 @@
 #include <linux/sched.h>
 #include <linux/smp.h>
 #include <linux/sched.h>
+#include <trace/hooks/topology.h>
 
 DEFINE_PER_CPU(unsigned long, freq_scale) = SCHED_CAPACITY_SCALE;
 DEFINE_PER_CPU(unsigned long, max_cpu_freq);
@@ -34,7 +35,9 @@ void arch_set_freq_scale(struct cpumask *cpus, unsigned long cur_freq,
 
 	scale = (cur_freq << SCHED_CAPACITY_SHIFT) / max_freq;
 
-	for_each_cpu(i, cpus) {
+	trace_android_vh_arch_set_freq_scale(cpus, cur_freq, max_freq, &scale);
+
+	for_each_cpu(i, cpus){
 		per_cpu(freq_scale, i) = scale;
 		per_cpu(max_cpu_freq, i) = max_freq;
 	}
@@ -54,6 +57,8 @@ void arch_set_max_freq_scale(struct cpumask *cpus,
 		return;
 
 	scale = (policy_max_freq << SCHED_CAPACITY_SHIFT) / max_freq;
+
+	trace_android_vh_arch_set_freq_scale(cpus, policy_max_freq, max_freq, &scale);
 
 	for_each_cpu(cpu, cpus)
 		per_cpu(max_freq_scale, cpu) = scale;
@@ -473,26 +478,6 @@ const struct cpumask *cpu_coregroup_mask(int cpu)
 	return core_mask;
 }
 
-#ifdef CONFIG_SCHED_WALT
-void update_possible_siblings_masks(unsigned int cpuid)
-{
-	struct cpu_topology *cpu_topo, *cpuid_topo = &cpu_topology[cpuid];
-	int cpu;
-
-	if (cpuid_topo->package_id == -1)
-		return;
-
-	for_each_possible_cpu(cpu) {
-		cpu_topo = &cpu_topology[cpu];
-
-		if (cpuid_topo->package_id != cpu_topo->package_id)
-			continue;
-		cpumask_set_cpu(cpuid, &cpu_topo->core_possible_sibling);
-		cpumask_set_cpu(cpu, &cpuid_topo->core_possible_sibling);
-	}
-}
-#endif
-
 void update_siblings_masks(unsigned int cpuid)
 {
 	struct cpu_topology *cpu_topo, *cpuid_topo = &cpu_topology[cpuid];
@@ -572,9 +557,6 @@ __weak int __init parse_acpi_topology(void)
 #if defined(CONFIG_ARM64) || defined(CONFIG_RISCV)
 void __init init_cpu_topology(void)
 {
-#ifdef CONFIG_SCHED_WALT
-	int cpu;
-#endif
 	reset_cpu_topology();
 
 	/*
@@ -585,11 +567,5 @@ void __init init_cpu_topology(void)
 		reset_cpu_topology();
 	else if (of_have_populated_dt() && parse_dt_topology())
 		reset_cpu_topology();
-#ifdef CONFIG_SCHED_WALT
-	else {
-		for_each_possible_cpu(cpu)
-			update_possible_siblings_masks(cpu);
-	}
-#endif
 }
 #endif

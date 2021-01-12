@@ -341,7 +341,7 @@ static int inotify_find_inode(const char __user *dirname, struct path *path,
 	if (error)
 		return error;
 	/* you can only watch an inode if you have read permissions on it */
-	error = inode_permission2(path->mnt, path->dentry->d_inode, MAY_READ);
+	error = inode_permission(path->dentry->d_inode, MAY_READ);
 	if (error) {
 		path_put(path);
 		return error;
@@ -635,7 +635,7 @@ static struct fsnotify_group *inotify_new_group(unsigned int max_events)
 		return ERR_PTR(-ENOMEM);
 	}
 	group->overflow_event = &oevent->fse;
-	fsnotify_init_event(group->overflow_event, NULL);
+	fsnotify_init_event(group->overflow_event, 0);
 	oevent->mask = FS_Q_OVERFLOW;
 	oevent->wd = -1;
 	oevent->sync_cookie = 0;
@@ -750,9 +750,10 @@ SYSCALL_DEFINE3(inotify_add_watch, int, fd, const char __user *, pathname,
 		goto fput_and_out;
 
 	/* support stacked filesystems */
-	if(path.dentry && path.dentry->d_op) {
+	if (path.dentry && path.dentry->d_op) {
 		if (path.dentry->d_op->d_canonical_path) {
-			path.dentry->d_op->d_canonical_path(&path, &alteredpath);
+			path.dentry->d_op->d_canonical_path(&path,
+							    &alteredpath);
 			canonical_path = &alteredpath;
 			path_put(&path);
 		}

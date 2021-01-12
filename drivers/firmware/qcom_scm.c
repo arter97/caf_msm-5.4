@@ -6,7 +6,6 @@
 #include <linux/init.h>
 #include <linux/cpumask.h>
 #include <linux/export.h>
-#include <linux/dma-direct.h>
 #include <linux/dma-mapping.h>
 #include <linux/module.h>
 #include <linux/types.h>
@@ -14,6 +13,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_platform.h>
+#include <linux/reboot.h>
 #include <linux/clk.h>
 #include <linux/reset-controller.h>
 #include <soc/qcom/qseecom_scm.h>
@@ -31,6 +31,7 @@ struct qcom_scm {
 	struct clk *iface_clk;
 	struct clk *bus_clk;
 	struct reset_controller_dev reset;
+	struct notifier_block restart_nb;
 
 	u64 dload_mode_addr;
 };
@@ -535,8 +536,7 @@ int qcom_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz,
 	struct qcom_scm_mem_map_info *mem_to_map;
 	phys_addr_t mem_to_map_phys;
 	phys_addr_t dest_phys;
-	phys_addr_t ptr_phys;
-	dma_addr_t ptr_dma;
+	dma_addr_t ptr_phys;
 	size_t mem_to_map_sz;
 	size_t dest_sz;
 	size_t src_sz;
@@ -553,10 +553,9 @@ int qcom_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz,
 	ptr_sz = ALIGN(src_sz, SZ_64) + ALIGN(mem_to_map_sz, SZ_64) +
 			ALIGN(dest_sz, SZ_64);
 
-	ptr = dma_alloc_coherent(__scm->dev, ptr_sz, &ptr_dma, GFP_KERNEL);
+	ptr = dma_alloc_coherent(__scm->dev, ptr_sz, &ptr_phys, GFP_KERNEL);
 	if (!ptr)
 		return -ENOMEM;
-	ptr_phys = dma_to_phys(__scm->dev, ptr_dma);
 
 	/* Fill source vmid detail */
 	src = ptr;
@@ -584,7 +583,7 @@ int qcom_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz,
 
 	ret = __qcom_scm_assign_mem(__scm->dev, mem_to_map_phys, mem_to_map_sz,
 				    ptr_phys, src_sz, dest_phys, dest_sz);
-	dma_free_coherent(__scm->dev, ptr_sz, ptr, ptr_dma);
+	dma_free_coherent(__scm->dev, ptr_sz, ptr, ptr_phys);
 	if (ret) {
 		dev_err(__scm->dev,
 			"Assign memory protection call failed %d\n", ret);
@@ -857,6 +856,21 @@ int qcom_scm_lmh_get_type(phys_addr_t payload, u64 payload_size,
 }
 EXPORT_SYMBOL(qcom_scm_lmh_get_type);
 
+int qcom_scm_lmh_fetch_data(u32 node_id, u32 debug_type, uint32_t *peak,
+		uint32_t *avg)
+{
+	int ret;
+
+	ret = __qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_LMH,
+					   QCOM_SCM_LMH_DEBUG_FETCH_DATA);
+	if (ret <= 0)
+		return ret;
+
+	return __qcom_scm_lmh_fetch_data(__scm->dev, node_id, debug_type,
+			peak, avg);
+}
+EXPORT_SYMBOL(qcom_scm_lmh_fetch_data);
+
 int qcom_scm_smmu_change_pgtbl_format(u64 dev_id, int cbndx)
 {
 	return __qcom_scm_smmu_change_pgtbl_format(__scm->dev, dev_id, cbndx);
@@ -980,6 +994,17 @@ bool qcom_scm_is_available(void)
 }
 EXPORT_SYMBOL(qcom_scm_is_available);
 
+static int qcom_scm_do_restart(struct notifier_block *this, unsigned long event,
+			      void *ptr)
+{
+	struct qcom_scm *scm = container_of(this, struct qcom_scm, restart_nb);
+
+	if (reboot_mode == REBOOT_WARM)
+		__qcom_scm_reboot(scm->dev);
+
+	return NOTIFY_OK;
+}
+
 static int qcom_scm_find_dload_address(struct device *dev, u64 *addr)
 {
 	struct device_node *tcsr;
@@ -1073,18 +1098,26 @@ static int qcom_scm_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	scm->restart_nb.notifier_call = qcom_scm_do_restart;
+	scm->restart_nb.priority = 130;
+	register_restart_handler(&scm->restart_nb);
+
 	__scm = scm;
 	__scm->dev = &pdev->dev;
 
 	__qcom_scm_init();
 
-#if CONFIG_ARM64
-	ret = dma_set_mask(&pdev->dev, DMA_BIT_MASK(64));
+	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
 	if (ret)
 		return ret;
-#endif
 
 	return 0;
+}
+
+static void qcom_scm_shutdown(struct platform_device *pdev)
+{
+	qcom_scm_disable_sdi();
+	qcom_scm_halt_spmi_pmic_arbiter();
 }
 
 static const struct of_device_id qcom_scm_dt_match[] = {
@@ -1117,6 +1150,7 @@ static struct platform_driver qcom_scm_driver = {
 		.of_match_table = qcom_scm_dt_match,
 	},
 	.probe = qcom_scm_probe,
+	.shutdown = qcom_scm_shutdown,
 };
 
 static int __init qcom_scm_init(void)
@@ -1130,6 +1164,15 @@ static int __init qcom_scm_init(void)
 	return qtee_shmbridge_driver_init();
 }
 subsys_initcall(qcom_scm_init);
+
+#ifdef CONFIG_QCOM_RTIC
+static int __init scm_mem_protection_init(void)
+{
+	return scm_mem_protection_init_do(__scm ? __scm->dev : NULL);
+}
+
+early_initcall(scm_mem_protection_init);
+#endif
 
 #if IS_MODULE(CONFIG_QCOM_SCM)
 static void __exit qcom_scm_exit(void)

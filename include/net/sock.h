@@ -69,6 +69,7 @@
 #include <net/smc.h>
 #include <net/l3mdev.h>
 #include <linux/android_kabi.h>
+#include <linux/android_vendor.h>
 
 /*
  * This structure really needs to be cleaned up.
@@ -521,6 +522,8 @@ struct sock {
 	ANDROID_KABI_RESERVE(6);
 	ANDROID_KABI_RESERVE(7);
 	ANDROID_KABI_RESERVE(8);
+
+	ANDROID_VENDOR_DATA(1);
 };
 
 enum sk_pacing {
@@ -859,6 +862,8 @@ static inline int sk_memalloc_socks(void)
 {
 	return static_branch_unlikely(&memalloc_socks_key);
 }
+
+void __receive_sock(struct file *file);
 #else
 
 static inline int sk_memalloc_socks(void)
@@ -866,6 +871,8 @@ static inline int sk_memalloc_socks(void)
 	return 0;
 }
 
+static inline void __receive_sock(struct file *file)
+{ }
 #endif
 
 static inline gfp_t sk_gfp_mask(const struct sock *sk, gfp_t gfp_mask)
@@ -1813,7 +1820,6 @@ static inline int sk_rx_queue_get(const struct sock *sk)
 
 static inline void sk_set_socket(struct sock *sk, struct socket *sock)
 {
-	sk_tx_queue_clear(sk);
 	sk->sk_socket = sock;
 }
 

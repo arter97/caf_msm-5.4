@@ -163,7 +163,7 @@ int synx_create(struct synx_session session_id,
 	if (rc) {
 		pr_err("[sess: %u] error initializing synx obj\n",
 			client->id);
-		goto clean_up;
+		goto clear;
 	}
 
 	rc = synx_util_init_handle(client, synx_obj, &h_synx);
@@ -180,7 +180,12 @@ int synx_create(struct synx_session session_id,
 	return 0;
 
 clean_up:
-	dma_fence_put(synx_obj->fence);
+	if (!synx_util_is_external_object(synx_obj)) {
+		dma_fence_remove_callback(synx_obj->fence,
+			&synx_obj->fence_cb);
+		dma_fence_put(synx_obj->fence);
+	}
+clear:
 	kfree(synx_obj);
 fail:
 	synx_put_client(client);
@@ -251,9 +256,11 @@ int synx_signal_core(struct synx_coredata *synx_obj,
 		 */
 		ret = bind_ops->deregister_callback(
 				synx_external_callback, data, sync_id);
-		if (ret < 0)
+		if (ret < 0) {
 			pr_err("deregistration fail on %d, type: %u, err: %d\n",
 				sync_id, type, ret);
+			continue;
+		}
 		pr_debug("signal external sync: %d, type: %u, status: %u\n",
 			sync_id, type, status);
 		/* optional function to enable external signaling */

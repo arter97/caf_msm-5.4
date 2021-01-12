@@ -9,6 +9,7 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
+#include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
@@ -468,6 +469,7 @@ int rpmh_rsc_send_data(struct rsc_drv *drv, const struct tcs_request *msg)
 	do {
 		ret = tcs_write(drv, msg);
 		if (ret == -EBUSY) {
+#ifdef QCOM_RPMH_QGKI_DEBUG
 			bool irq_sts;
 
 			irq_get_irqchip_state(drv->irq, IRQCHIP_STATE_PENDING,
@@ -476,6 +478,7 @@ int rpmh_rsc_send_data(struct rsc_drv *drv, const struct tcs_request *msg)
 					    drv->name, msg->cmds[0].addr,
 					    irq_sts ?
 					    "PENDING" : "NOT PENDING");
+#endif /* QCOM_RPMH_QGKI_DEBUG */
 			udelay(10);
 		}
 	} while (ret == -EBUSY);
@@ -641,9 +644,11 @@ int rpmh_rsc_write_pdc_data(struct rsc_drv *drv, const struct tcs_request *msg)
 {
 	int i;
 	void __iomem *addr = drv->base + RSC_PDC_DRV_DATA;
+	struct tcs_group *tcs = get_tcs_of_type(drv, CONTROL_TCS);
 	struct tcs_cmd *cmd;
 
-	if (!msg || !msg->cmds || msg->num_cmds != RSC_PDC_DATA_SIZE)
+	if (!msg || !msg->cmds || msg->num_cmds != RSC_PDC_DATA_SIZE ||
+	    !tcs->num_tcs)
 		return -EINVAL;
 
 	for (i = 0; i < msg->num_cmds; i++) {
@@ -931,12 +936,15 @@ static const struct of_device_id rpmh_drv_match[] = {
 	{ .compatible = "qcom,rpmh-rsc", },
 	{ }
 };
+MODULE_DEVICE_TABLE(of, rpmh_drv_match);
+
 
 static struct platform_driver rpmh_driver = {
 	.probe = rpmh_rsc_probe,
 	.driver = {
 		  .name = "rpmh",
 		  .of_match_table = rpmh_drv_match,
+		  .suppress_bind_attrs = true,
 	},
 };
 
@@ -945,3 +953,6 @@ static int __init rpmh_driver_init(void)
 	return platform_driver_register(&rpmh_driver);
 }
 arch_initcall(rpmh_driver_init);
+
+MODULE_DESCRIPTION("Qualcomm Technologies, Inc. RPMh Driver");
+MODULE_LICENSE("GPL v2");

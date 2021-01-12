@@ -3,13 +3,14 @@
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
  */
 
-#include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/err.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of_device.h>
 #include <linux/of.h>
+#include <linux/pm_clock.h>
+#include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 
 #include <dt-bindings/clock/qcom,dispcc-sm8150.h>
@@ -1569,22 +1570,7 @@ static int disp_cc_sm8150_fixup(struct platform_device *pdev,
 static int disp_cc_sm8150_probe(struct platform_device *pdev)
 {
 	struct regmap *regmap;
-	struct clk *clk;
 	int ret;
-
-	regmap = qcom_cc_map(pdev, &disp_cc_sm8150_desc);
-	if (IS_ERR(regmap)) {
-		pr_err("Failed to map the display CC registers\n");
-		return PTR_ERR(regmap);
-	}
-
-	clk = clk_get(&pdev->dev, "cfg_ahb_clk");
-	if (IS_ERR(clk)) {
-		if (PTR_ERR(clk) != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "Unable to get ahb clock handle\n");
-		return PTR_ERR(clk);
-	}
-	clk_put(clk);
 
 	vdd_mm.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_mm");
 	if (IS_ERR(vdd_mm.regulator[0])) {
@@ -1593,9 +1579,27 @@ static int disp_cc_sm8150_probe(struct platform_device *pdev)
 		return PTR_ERR(vdd_mm.regulator[0]);
 	}
 
+	pm_runtime_enable(&pdev->dev);
+	ret = pm_clk_create(&pdev->dev);
+	if (ret)
+		goto disable_pm_runtime;
+
+	ret = pm_clk_add(&pdev->dev, "cfg_ahb_clk");
+	if (ret < 0) {
+		dev_err(&pdev->dev, "Unable to get ahb clock handle\n");
+		goto destroy_pm_clk;
+	}
+
+	regmap = qcom_cc_map(pdev, &disp_cc_sm8150_desc);
+	if (IS_ERR(regmap)) {
+		pr_err("Failed to map the display CC registers\n");
+		ret = PTR_ERR(regmap);
+		goto destroy_pm_clk;
+	}
+
 	ret = disp_cc_sm8150_fixup(pdev, regmap);
 	if (ret)
-		return ret;
+		goto destroy_pm_clk;
 
 	clk_trion_pll_configure(&disp_cc_pll0, regmap, disp_cc_pll0.config);
 	clk_trion_pll_configure(&disp_cc_pll1, regmap, disp_cc_pll1.config);
@@ -1606,19 +1610,32 @@ static int disp_cc_sm8150_probe(struct platform_device *pdev)
 	ret = qcom_cc_really_probe(pdev, &disp_cc_sm8150_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register DISP CC clocks\n");
-		return ret;
+		goto destroy_pm_clk;
 	}
 
 	dev_info(&pdev->dev, "Registered DISP CC clocks\n");
 
+	return 0;
+
+destroy_pm_clk:
+	pm_clk_destroy(&pdev->dev);
+
+disable_pm_runtime:
+	pm_runtime_disable(&pdev->dev);
+
 	return ret;
 }
+
+static const struct dev_pm_ops disp_cc_sm8150_pm_ops = {
+	SET_RUNTIME_PM_OPS(pm_clk_suspend, pm_clk_resume, NULL)
+};
 
 static struct platform_driver disp_cc_sm8150_driver = {
 	.probe = disp_cc_sm8150_probe,
 	.driver = {
 		.name = "disp_cc-sm8150",
 		.of_match_table = disp_cc_sm8150_match_table,
+		.pm = &disp_cc_sm8150_pm_ops,
 	},
 };
 

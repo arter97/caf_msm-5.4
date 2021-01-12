@@ -504,7 +504,6 @@ suspend:
 					USB2_PHY_USB_PHY_HS_PHY_CTRL2,
 					USB2_AUTO_RESUME, 0);
 			}
-
 			msm_hsphy_enable_clocks(phy, false);
 		} else {/* Cable disconnect */
 			mutex_lock(&phy->phy_lock);

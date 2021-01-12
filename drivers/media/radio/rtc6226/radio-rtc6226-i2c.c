@@ -259,6 +259,8 @@ static void rtc6226_i2c_interrupt_handler(struct rtc6226_device *radio)
 		rtc6226_reset_rds_data(radio);
 		FMDBG("%s clear Seek/Tune bit\n", __func__);
 		if (radio->seek_tune_status == SEEK_PENDING) {
+			/* Enable the RDS as it was disabled before seek */
+			rtc6226_rds_on(radio);
 			FMDBG("posting RTC6226_EVT_SEEK_COMPLETE event\n");
 			rtc6226_q_event(radio, RTC6226_EVT_SEEK_COMPLETE);
 			/* post tune comp evt since seek results in a tune.*/
@@ -459,6 +461,14 @@ static int rtc6226_fm_vdd_reg_cfg(struct rtc6226_device *radio, bool on)
 			FMDERR("set_vol(%s) fail %d\n", vreg->name, rc);
 			return rc;
 		}
+		if (vreg->vdd_load) {
+			rc = regulator_set_load(vreg->reg, vreg->vdd_load);
+			if (rc < 0) {
+				FMDERR("%s Unable to set the load %d ,err=%d\n",
+				__func__, vreg->vdd_load, rc);
+				return rc;
+			}
+		}
 
 		rc = regulator_enable(vreg->reg);
 		if (rc < 0) {
@@ -484,6 +494,14 @@ static int rtc6226_fm_vdd_reg_cfg(struct rtc6226_device *radio, bool on)
 		if (rc < 0) {
 			FMDERR("set_vol(%s) fail %d\n", vreg->name, rc);
 			return rc;
+		}
+		if (vreg->vdd_load) {
+			rc = regulator_set_load(vreg->reg, 0);
+			if (rc < 0) {
+				FMDERR("%s Unable to set the load 0 ,err=%d\n",
+					__func__, rc);
+				return rc;
+			}
 		}
 	}
 	return rc;
@@ -765,6 +783,10 @@ static int rtc6226_i2c_probe(struct i2c_client *client,
 	radio->vddreg->reg = vddvreg;
 	radio->vddreg->name = "vdd";
 	radio->vddreg->is_enabled = false;
+	of_property_read_u32(client->dev.of_node,
+			"rtc6226,vdd-load", &radio->vddreg->vdd_load);
+	FMDERR("%s: rtc6226,vdd-load val %d\n",
+		__func__, radio->vddreg->vdd_load);
 	retval = rtc6226_dt_parse_vreg_info(&client->dev,
 			radio->vddreg, "rtc6226,vdd-supply-voltage");
 	if (retval < 0) {

@@ -8,6 +8,8 @@
 #include <linux/module.h>
 #include <linux/of_device.h>
 #include <linux/of.h>
+#include <linux/pm_clock.h>
+#include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 
 #include <dt-bindings/clock/qcom,gpucc-shima.h>
@@ -33,7 +35,7 @@ enum {
 };
 
 static struct pll_vco lucid_5lpe_vco[] = {
-	{ 249600000, 1750000000, 0 },
+	{ 249600000, 1800000000, 0 },
 };
 
 /* 468MHz Configuration */
@@ -72,7 +74,8 @@ static struct clk_alpha_pll gpu_cc_pll0 = {
 				[VDD_MIN] = 615000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1500000000,
-				[VDD_NOMINAL] = 1750000000},
+				[VDD_NOMINAL] = 1750000000,
+				[VDD_HIGH] = 1800000000},
 		},
 	},
 };
@@ -113,7 +116,8 @@ static struct clk_alpha_pll gpu_cc_pll1 = {
 				[VDD_MIN] = 615000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1500000000,
-				[VDD_NOMINAL] = 1750000000},
+				[VDD_NOMINAL] = 1750000000,
+				[VDD_HIGH] = 1800000000},
 		},
 	},
 };
@@ -259,19 +263,6 @@ static struct clk_branch gpu_cc_ahb_clk = {
 	},
 };
 
-static struct clk_branch gpu_cc_cb_clk = {
-	.halt_reg = 0x1170,
-	.halt_check = BRANCH_HALT_SKIP,
-	.clkr = {
-		.enable_reg = 0x1170,
-		.enable_mask = BIT(0),
-		.hw.init = &(struct clk_init_data){
-			.name = "gpu_cc_cb_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct clk_branch gpu_cc_crc_ahb_clk = {
 	.halt_reg = 0x107c,
 	.halt_check = BRANCH_HALT_VOTED,
@@ -302,7 +293,7 @@ static struct clk_branch gpu_cc_cx_gmu_clk = {
 				.hw = &gpu_cc_gmu_clk_src.clkr.hw,
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
+			.flags = CLK_SET_RATE_PARENT | CLK_DONT_HOLD_STATE,
 			.ops = &clk_branch2_aon_ops,
 		},
 	},
@@ -342,6 +333,7 @@ static struct clk_branch gpu_cc_cxo_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(struct clk_init_data){
 			.name = "gpu_cc_cxo_clk",
+			.flags = CLK_DONT_HOLD_STATE,
 			.ops = &clk_branch2_aon_ops,
 		},
 	},
@@ -408,7 +400,7 @@ static struct clk_branch gpu_cc_hub_cx_int_clk = {
 				.hw = &gpu_cc_hub_cx_int_div_clk_src.clkr.hw,
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
+			.flags = CLK_SET_RATE_PARENT | CLK_DONT_HOLD_STATE,
 			.ops = &clk_branch2_aon_ops,
 		},
 	},
@@ -455,7 +447,6 @@ static struct clk_branch gpu_cc_sleep_clk = {
 
 static struct clk_regmap *gpu_cc_shima_clocks[] = {
 	[GPU_CC_AHB_CLK] = &gpu_cc_ahb_clk.clkr,
-	[GPU_CC_CB_CLK] = &gpu_cc_cb_clk.clkr,
 	[GPU_CC_CRC_AHB_CLK] = &gpu_cc_crc_ahb_clk.clkr,
 	[GPU_CC_CX_GMU_CLK] = &gpu_cc_cx_gmu_clk.clkr,
 	[GPU_CC_CX_SNOC_DVM_CLK] = &gpu_cc_cx_snoc_dvm_clk.clkr,
@@ -519,19 +510,45 @@ static int gpu_cc_shima_probe(struct platform_device *pdev)
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
+	pm_runtime_enable(&pdev->dev);
+	ret = pm_clk_create(&pdev->dev);
+	if (ret)
+		goto disable_pm_runtime;
+
+	ret = pm_clk_add(&pdev->dev, "cfg_ahb");
+	if (ret < 0) {
+		dev_err(&pdev->dev, "Unable to get ahb clock handle\n");
+		goto destroy_pm_clk;
+	}
+
 	clk_lucid_5lpe_pll_configure(&gpu_cc_pll0, regmap, &gpu_cc_pll0_config);
 	clk_lucid_5lpe_pll_configure(&gpu_cc_pll1, regmap, &gpu_cc_pll1_config);
+
+	/* gpu_cc_cb_clk */
+	regmap_update_bits(regmap, 0x1170, BIT(0), BIT(0));
 
 	ret = qcom_cc_really_probe(pdev, &gpu_cc_shima_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register GPU CC clocks\n");
-		return ret;
+		goto destroy_pm_clk;
 	}
 
 	dev_info(&pdev->dev, "Registered GPU CC clocks\n");
 
+	return 0;
+
+destroy_pm_clk:
+	pm_clk_destroy(&pdev->dev);
+
+disable_pm_runtime:
+	pm_runtime_disable(&pdev->dev);
+
 	return ret;
 }
+
+static const struct dev_pm_ops gpu_cc_shima_pm_ops = {
+	SET_RUNTIME_PM_OPS(pm_clk_suspend, pm_clk_resume, NULL)
+};
 
 static void gpu_cc_shima_sync_state(struct device *dev)
 {
@@ -544,6 +561,7 @@ static struct platform_driver gpu_cc_shima_driver = {
 		.name = "gpu_cc-shima",
 		.of_match_table = gpu_cc_shima_match_table,
 		.sync_state = gpu_cc_shima_sync_state,
+		.pm = &gpu_cc_shima_pm_ops,
 	},
 };
 

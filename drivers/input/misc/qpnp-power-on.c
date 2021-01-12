@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/debugfs.h>
@@ -14,6 +14,7 @@
 #include <linux/log2.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/of_address.h>
 #include <linux/of_device.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
@@ -60,6 +61,7 @@ enum qpnp_pon_version {
 #define QPNP_PON_RT_STS(pon)			((pon)->base + 0x10)
 #define QPNP_PON_PULL_CTL(pon)			((pon)->base + 0x70)
 #define QPNP_PON_DBC_CTL(pon)			((pon)->base + 0x71)
+#define QPNP_PON_PBS_DBC_CTL(pon)		((pon)->pbs_base + 0x71)
 
 /* PON/RESET sources register addresses */
 #define QPNP_PON_REASON1(pon) \
@@ -207,6 +209,7 @@ struct qpnp_pon {
 	struct delayed_work	bark_work;
 	struct dentry		*debugfs;
 	u16			base;
+	u16			pbs_base;
 	u8			subtype;
 	u8			pon_ver;
 	u8			warm_reset_reason1;
@@ -449,9 +452,14 @@ static int qpnp_pon_get_dbc(struct qpnp_pon *pon, u32 *delay)
 	int rc;
 	unsigned int val;
 
-	rc = qpnp_pon_read(pon, QPNP_PON_DBC_CTL(pon), &val);
+	if (is_pon_gen3(pon) && pon->pbs_base)
+		rc = qpnp_pon_read(pon, QPNP_PON_PBS_DBC_CTL(pon), &val);
+	else
+		rc = qpnp_pon_read(pon, QPNP_PON_DBC_CTL(pon), &val);
+
 	if (rc)
 		return rc;
+
 	val &= QPNP_PON_DBC_DELAY_MASK(pon);
 
 	if (is_pon_gen2(pon) || is_pon_gen3(pon))
@@ -1983,7 +1991,8 @@ static void qpnp_pon_debugfs_remove(struct qpnp_pon *pon)
 static int qpnp_pon_read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 					int *reason_index_offset)
 {
-	unsigned int buf[2], reg;
+	unsigned int reg, reg1;
+	u8 buf[2];
 	int rc;
 
 	rc = qpnp_pon_read(pon, QPNP_PON_OFF_REASON(pon), &reg);
@@ -1991,10 +2000,10 @@ static int qpnp_pon_read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 		return rc;
 
 	if (reg & QPNP_GEN2_POFF_SEQ) {
-		rc = qpnp_pon_read(pon, QPNP_POFF_REASON1(pon), buf);
+		rc = qpnp_pon_read(pon, QPNP_POFF_REASON1(pon), &reg1);
 		if (rc)
 			return rc;
-		*reason = (u8)buf[0];
+		*reason = (u8)reg1;
 		*reason_index_offset = 0;
 	} else if (reg & QPNP_GEN2_FAULT_SEQ) {
 		rc = regmap_bulk_read(pon->regmap, QPNP_FAULT_REASON1(pon), buf,
@@ -2004,13 +2013,13 @@ static int qpnp_pon_read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 				QPNP_FAULT_REASON1(pon), rc);
 			return rc;
 		}
-		*reason = (u8)buf[0] | (u16)(buf[1] << 8);
+		*reason = buf[0] | (u16)(buf[1] << 8);
 		*reason_index_offset = POFF_REASON_FAULT_OFFSET;
 	} else if (reg & QPNP_GEN2_S3_RESET_SEQ) {
-		rc = qpnp_pon_read(pon, QPNP_S3_RESET_REASON(pon), buf);
+		rc = qpnp_pon_read(pon, QPNP_S3_RESET_REASON(pon), &reg1);
 		if (rc)
 			return rc;
-		*reason = (u8)buf[0];
+		*reason = (u8)reg1;
 		*reason_index_offset = POFF_REASON_S3_RESET_OFFSET;
 	}
 
@@ -2084,7 +2093,7 @@ static int qpnp_pon_read_hardware_info(struct qpnp_pon *pon, bool sys_reset)
 {
 	struct device *dev = pon->dev;
 	unsigned int reg = 0;
-	unsigned int buf[2];
+	u8 buf[2];
 	int reason_index_offset = 0;
 	unsigned int pon_sts = 0;
 	bool cold_boot;
@@ -2165,10 +2174,11 @@ static int qpnp_pon_read_hardware_info(struct qpnp_pon *pon, bool sys_reset)
 				QPNP_POFF_REASON1(pon), rc);
 			return rc;
 		}
-		poff_sts = buf[0] | (buf[1] << 8);
+		poff_sts = buf[0] | (u16)(buf[1] << 8);
 	}
 	index = ffs(poff_sts) - 1 + reason_index_offset;
-	if (index >= ARRAY_SIZE(qpnp_poff_reason) || index < 0) {
+	if (index >= ARRAY_SIZE(qpnp_poff_reason) || index < 0 ||
+					index < reason_index_offset) {
 		dev_info(dev, "PMIC@SID%d: Unknown power-off reason\n",
 			 to_spmi_device(dev->parent)->usid);
 	} else {
@@ -2269,7 +2279,8 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 	struct device_node *node;
 	struct qpnp_pon *pon;
 	unsigned long flags;
-	u32 base, delay;
+	u32 delay;
+	const __be32 *addr;
 	bool sys_reset, modem_reset;
 	int rc;
 
@@ -2284,12 +2295,16 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	rc = of_property_read_u32(dev->of_node, "reg", &base);
-	if (rc < 0) {
-		dev_err(dev, "reg property missing, rc=%d\n", rc);
-		return rc;
+	addr = of_get_address(dev->of_node, 0, NULL, NULL);
+	if (!addr) {
+		dev_err(dev, "reg property missing\n");
+		return -EINVAL;
 	}
-	pon->base = base;
+	pon->base = be32_to_cpu(*addr);
+
+	addr = of_get_address(dev->of_node, 1, NULL, NULL);
+	if (addr)
+		pon->pbs_base = be32_to_cpu(*addr);
 
 	sys_reset = of_property_read_bool(dev->of_node, "qcom,system-reset");
 	if (sys_reset && sys_reset_dev) {

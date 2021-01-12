@@ -64,6 +64,7 @@
 #include <soc/qcom/subsystem_restart.h>
 #include <linux/ioctl.h>
 #include <linux/ipc_logging.h>
+#include <linux/pm.h>
 
 #define SPCOM_LOG_PAGE_CNT 10
 
@@ -128,7 +129,7 @@
 #define SPCOM_MAX_READ_SIZE	(PAGE_SIZE)
 
 /* Current Process ID */
-#define current_pid() ((u32)(current->pid))
+#define current_pid() ((u32)(current->tgid))
 
 /*
  * After both sides get CONNECTED,
@@ -259,7 +260,8 @@ struct spcom_device {
 
 	/* rpmsg channels */
 	struct spcom_channel channels[SPCOM_MAX_CHANNELS];
-	atomic_t chdev_count;
+	unsigned int chdev_count;
+	struct mutex chdev_count_lock;
 
 	struct completion rpmsg_state_change;
 	atomic_t rpmsg_dev_count;
@@ -268,6 +270,7 @@ struct spcom_device {
 	/* rx data path */
 	struct list_head    rx_list_head;
 	spinlock_t          rx_lock;
+	atomic_t            rx_active_count;
 
 	int32_t nvm_ion_fd;
 	struct mutex ioctl_lock;
@@ -284,6 +287,34 @@ static int spcom_destroy_channel_chardev(const char *name);
 static struct spcom_channel *spcom_find_channel_by_name(const char *name);
 static int spcom_register_rpmsg_drv(struct spcom_channel *ch);
 static int spcom_unregister_rpmsg_drv(struct spcom_channel *ch);
+
+/**
+ * spcom_suspend() - spcom vote for PM runtime-suspend
+ *
+ * Suspend callback for the device
+ * Return 0 on Success, -EBUSY on rx in progress.
+ */
+static int spcom_suspend(struct device *dev)
+{
+	(void) *dev;
+	if (atomic_read(&spcom_dev->rx_active_count) > 0) {
+		spcom_pr_dbg("ch [%s]: rx_active_count\n",
+					 spcom_dev->rx_active_count);
+		return -EBUSY;
+	}
+
+	spcom_pr_err("channel voten\n");
+	return 0;
+}
+
+/**
+ * struct spcom_dev_pm_ops
+ *
+ * Set PM operations : Suspend, Resume, Idle
+ */
+static const struct dev_pm_ops spcom_dev_pm_ops = {
+	SET_RUNTIME_PM_OPS(spcom_suspend, NULL, NULL)
+};
 
 /**
  * spcom_is_channel_open() - channel is open on this side.
@@ -329,7 +360,9 @@ static int spcom_create_predefined_channels_chardev(void)
 
 		if (name[0] == 0)
 			break;
+		mutex_lock(&spcom_dev->chdev_count_lock);
 		ret = spcom_create_channel_chardev(name, false);
+		mutex_unlock(&spcom_dev->chdev_count_lock);
 		if (ret) {
 			spcom_pr_err("failed to create chardev [%s], ret [%d]\n",
 			       name, ret);
@@ -468,6 +501,7 @@ static int spcom_rx(struct spcom_channel *ch,
 	if (!ch->actual_rx_size) {
 		reinit_completion(&ch->rx_done);
 
+		atomic_inc(&spcom_dev->rx_active_count);
 		mutex_unlock(&ch->lock); /* unlock while waiting */
 		/* wait for rx response */
 		if (timeout_msec)
@@ -475,8 +509,8 @@ static int spcom_rx(struct spcom_channel *ch,
 						     &ch->rx_done, jiffies);
 		else
 			ret = wait_for_completion_interruptible(&ch->rx_done);
-
 		mutex_lock(&ch->lock);
+		atomic_dec(&spcom_dev->rx_active_count);
 		if (timeout_msec && timeleft == 0) {
 			spcom_pr_err("ch[%s]: timeout expired %d ms, set txn_id=%d\n",
 			       ch->name, timeout_msec, ch->txn_id);
@@ -501,7 +535,7 @@ static int spcom_rx(struct spcom_channel *ch,
 		}
 	} else {
 		spcom_pr_dbg("ch[%s]:rx data size [%zu], txn_id:%d\n",
-			     ch->name, ch->actual_rx_size, ch->txn_id);
+				ch->name, ch->actual_rx_size, ch->txn_id);
 	}
 	if (!ch->rpmsg_rx_buf) {
 		spcom_pr_err("ch[%s]:invalid rpmsg_rx_buf\n", ch->name);
@@ -621,7 +655,11 @@ static int spcom_handle_create_channel_command(void *cmd_buf, int cmd_size)
 		return -EINVAL;
 	}
 
+	mutex_lock(&spcom_dev->chdev_count_lock);
 	ret = spcom_create_channel_chardev(cmd->ch_name, cmd->is_sharable);
+	mutex_unlock(&spcom_dev->chdev_count_lock);
+	if (ret)
+		spcom_pr_err("failed to create ch[%s], ret [%d]\n", cmd->ch_name, ret);
 
 	return ret;
 }
@@ -1440,6 +1478,11 @@ static int spcom_device_open(struct inode *inode, struct file *filp)
 		return 0;
 	}
 
+	if (pid == 0) {
+		spcom_pr_err("unknown PID\n");
+		return -EINVAL;
+	}
+
 	ch = spcom_find_channel_by_name(name);
 	if (!ch) {
 		spcom_pr_err("ch[%s] doesn't exist, load app first\n", name);
@@ -1525,6 +1568,7 @@ static int spcom_device_release(struct inode *inode, struct file *filp)
 	const char *name = file_to_filename(filp);
 	int ret = 0;
 	int i = 0;
+	u32 pid = current_pid();
 
 	if (strcmp(name, "unknown") == 0) {
 		spcom_pr_err("name is unknown\n");
@@ -1538,6 +1582,11 @@ static int spcom_device_release(struct inode *inode, struct file *filp)
 	if (strcmp(name, "sp_ssr") == 0) {
 		spcom_pr_dbg("sp_ssr dev node skipped\n");
 		return 0;
+	}
+
+	if (pid == 0) {
+		spcom_pr_err("unknown PID\n");
+		return -EINVAL;
 	}
 
 	ch = filp->private_data;
@@ -1556,7 +1605,8 @@ static int spcom_device_release(struct inode *inode, struct file *filp)
 	}
 
 	for (i = 0; i < SPCOM_MAX_CHANNEL_CLIENTS; i++) {
-		if (ch->pid[i] == current_pid()) {
+		if (ch->pid[i] == pid) {
+			spcom_pr_dbg("PID [%x] is releasing ch [%s]\n", current->tgid, name);
 			ch->pid[i] = 0;
 			break;
 		}
@@ -1567,7 +1617,7 @@ static int spcom_device_release(struct inode *inode, struct file *filp)
 		 * Shared client is trying to close channel,
 		 * release the sync_lock if applicable
 		 */
-		if (ch->active_pid == current_pid()) {
+		if (ch->active_pid == pid) {
 			spcom_pr_dbg("active_pid [%x] is releasing ch [%s] sync lock\n",
 				 ch->active_pid, name);
 			/* No longer the current active user of the channel */
@@ -1937,7 +1987,7 @@ static int spcom_create_channel_chardev(const char *name, bool is_sharable)
 		goto exit_unregister_drv;
 	}
 
-	devt = spcom_dev->device_no + atomic_read(&spcom_dev->chdev_count);
+	devt = spcom_dev->device_no + spcom_dev->chdev_count;
 	priv = ch;
 	dev = device_create(cls, parent, devt, priv, name);
 	if (IS_ERR(dev)) {
@@ -1955,7 +2005,8 @@ static int spcom_create_channel_chardev(const char *name, bool is_sharable)
 		ret = -ENODEV;
 		goto exit_destroy_device;
 	}
-	atomic_inc(&spcom_dev->chdev_count);
+	spcom_dev->chdev_count++;
+
 	mutex_lock(&ch->lock);
 	ch->cdev = cdev;
 	ch->dev = dev;
@@ -2005,7 +2056,9 @@ static int spcom_destroy_channel_chardev(const char *name)
 	kfree(ch->cdev);
 	mutex_unlock(&ch->lock);
 
-	atomic_dec(&spcom_dev->chdev_count);
+	mutex_lock(&spcom_dev->chdev_count_lock);
+	spcom_dev->chdev_count--;
+	mutex_unlock(&spcom_dev->chdev_count_lock);
 
 
 	return 0;
@@ -2071,10 +2124,12 @@ static void spcom_unregister_chrdev(void)
 	cdev_del(&spcom_dev->cdev);
 	device_destroy(spcom_dev->driver_class, spcom_dev->device_no);
 	class_destroy(spcom_dev->driver_class);
-	unregister_chrdev_region(spcom_dev->device_no,
-				 atomic_read(&spcom_dev->chdev_count));
-	spcom_pr_dbg("control spcom device removed\n");
 
+	mutex_lock(&spcom_dev->chdev_count_lock);
+	unregister_chrdev_region(spcom_dev->device_no, spcom_dev->chdev_count);
+	mutex_unlock(&spcom_dev->chdev_count_lock);
+
+	spcom_pr_dbg("control spcom device removed\n");
 }
 
 static int spcom_parse_dt(struct device_node *np)
@@ -2417,8 +2472,10 @@ static int spcom_probe(struct platform_device *pdev)
 
 	spcom_dev = dev;
 	spcom_dev->pdev = pdev;
+	atomic_set(&spcom_dev->rx_active_count, 0);
 	/* start counting exposed channel char devices from 1 */
-	atomic_set(&spcom_dev->chdev_count, 1);
+	spcom_dev->chdev_count = 1;
+	mutex_init(&spcom_dev->chdev_count_lock);
 	init_completion(&spcom_dev->rpmsg_state_change);
 	atomic_set(&spcom_dev->rpmsg_dev_count, 0);
 	atomic_set(&spcom_dev->remove_in_progress, 0);
@@ -2551,8 +2608,9 @@ static struct platform_driver spcom_driver = {
 	.probe = spcom_probe,
 	.remove = spcom_remove,
 	.driver = {
-		.name = DEVICE_NAME,
-		.of_match_table = of_match_ptr(spcom_match_table),
+			.name = DEVICE_NAME,
+			.pm = &spcom_dev_pm_ops,
+			.of_match_table = of_match_ptr(spcom_match_table),
 	},
 };
 

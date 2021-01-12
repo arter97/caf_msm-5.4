@@ -19,7 +19,7 @@
 
 #define KGSL_MAX_CLKS 17
 
-#define KGSL_MAX_PWRLEVELS 10
+#define KGSL_MAX_PWRLEVELS 16
 
 #define KGSL_PWRFLAGS_POWER_ON 0
 #define KGSL_PWRFLAGS_CLK_ON   1
@@ -96,7 +96,7 @@ struct kgsl_pwrlevel {
  * @min_pwrlevel - minimum allowable powerlevel per the user
  * @num_pwrlevels - number of available power levels
  * @throttle_mask - LM throttle mask
- * @interval_timeout - timeout in jiffies to be idle before a power event
+ * @interval_timeout - timeout to be idle before a power event
  * @clock_times - Each GPU frequency's accumulated active time in us
  * @clk_stats - structure of clock statistics
  * @input_disable - To disable GPU wakeup on touch input event
@@ -110,7 +110,6 @@ struct kgsl_pwrlevel {
  * higher priority thread
  * isense_clk_indx - index of isense clock, 0 if no isense
  * isense_clk_on_level - isense clock rate is XO rate below this level.
- * tzone_name - pointer to thermal zone name of GPU temperature sensor
  */
 
 struct kgsl_pwrctrl {
@@ -121,6 +120,10 @@ struct kgsl_pwrctrl {
 	struct regulator *cx_gdsc;
 	/** @gx_gdsc: Pointer to the GX domain regulator if applicable */
 	struct regulator *gx_gdsc;
+	/** @gx_gdsc: Pointer to the GX domain parent supply */
+	struct regulator *gx_gdsc_parent;
+	/** @gx_gdsc_parent_min_corner: Minimum supply voltage for GX parent */
+	u32 gx_gdsc_parent_min_corner;
 	int isense_clk_indx;
 	int isense_clk_on_level;
 	unsigned long power_flags;
@@ -158,11 +161,14 @@ struct kgsl_pwrctrl {
 	bool superfast;
 	unsigned int gpu_bimc_int_clk_freq;
 	bool gpu_bimc_interface_enabled;
-	const char *tzone_name;
 	/** @icc_path: Interconnect path for the GPU (if applicable) */
 	struct icc_path *icc_path;
 	/** cur_ab: The last ab voted by the driver */
 	u32 cur_ab;
+	/** @minbw_timer - Timer struct for entering minimum bandwidth state */
+	struct timer_list minbw_timer;
+	/** @minbw_timeout - Timeout for entering minimum bandwidth state */
+	u32 minbw_timeout;
 };
 
 int kgsl_pwrctrl_init(struct kgsl_device *device);
@@ -194,7 +200,16 @@ kgsl_pwrctrl_active_freq(struct kgsl_pwrctrl *pwr)
 	return pwr->pwrlevels[pwr->active_pwrlevel].gpu_freq;
 }
 
-int kgsl_active_count_wait(struct kgsl_device *device, int count);
+/**
+ * kgsl_active_count_wait() - Wait for activity to finish.
+ * @device: Pointer to a KGSL device
+ * @count: Active count value to wait for
+ * @wait_jiffies: Jiffies to wait
+ *
+ * Block until the active_cnt value hits the desired value
+ */
+int kgsl_active_count_wait(struct kgsl_device *device, int count,
+	unsigned long wait_jiffies);
 void kgsl_pwrctrl_busy_time(struct kgsl_device *device, u64 time, u64 busy);
 void kgsl_pwrctrl_set_constraint(struct kgsl_device *device,
 			struct kgsl_pwr_constraint *pwrc, uint32_t id);
@@ -228,4 +243,12 @@ int kgsl_pwrctrl_axi(struct kgsl_device *device, int state);
  * off state if the active_cnt is 0 and the hardware is idle.
  */
 void kgsl_idle_check(struct work_struct *work);
+
+/**
+ * kgsl_pwrctrl_irq - Enable or disable gpu interrupts
+ * @device: Handle to the kgsl device
+ * @state: Variable to decide whether interrupts need to be enabled or disabled
+ *
+ */
+void kgsl_pwrctrl_irq(struct kgsl_device *device, int state);
 #endif /* __KGSL_PWRCTRL_H */

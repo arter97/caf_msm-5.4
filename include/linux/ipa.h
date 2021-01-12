@@ -6,10 +6,12 @@
 #ifndef _IPA_H_
 #define _IPA_H_
 
+#include <linux/if_ether.h>
+#include <linux/ip.h>
+#include <linux/ipv6.h>
 #include <linux/msm_ipa.h>
 #include <linux/skbuff.h>
 #include <linux/types.h>
-#include <linux/if_ether.h>
 #include <linux/ipa_qmi_service_v01.h>
 #include <linux/msm_gsi.h>
 
@@ -17,6 +19,23 @@
 #define IPA_BW_THRESHOLD_MAX 3
 
 #define IPA_MAX_CH_STATS_SUPPORTED 5
+
+/**
+ * the attributes of the socksv5 options
+ */
+#define IPA_SOCKSv5_ENTRY_VALID	(1ul << 0)
+#define IPA_SOCKSv5_IPV4	(1ul << 1)
+#define IPA_SOCKSv5_IPV6	(1ul << 2)
+#define IPA_SOCKSv5_OPT_TS	(1ul << 3)
+#define IPA_SOCKSv5_OPT_SACK	(1ul << 4)
+#define IPA_SOCKSv5_OPT_WS_STC	(1ul << 5)
+#define IPA_SOCKSv5_OPT_WS_DMC	(1ul << 6)
+
+#define IPA_SOCKsv5_ADD_COM_ID		15
+#define IPA_SOCKsv5_ADD_V6_V4_COM_PM	1
+#define IPA_SOCKsv5_ADD_V4_V6_COM_PM	2
+#define IPA_SOCKsv5_ADD_V6_V6_COM_PM	3
+
 /**
  * enum ipa_transport_type
  * transport type: either GSI or SPS
@@ -223,6 +242,10 @@ struct ipa_ep_cfg_hdr {
  * @hdr_little_endian: 0-Big Endian, 1-Little Endian
  * @hdr: The header structure. Used starting IPA4.5 where part of the info
  *	at the header structure is implemented via the EXT register at the H/W
+ * @hdr_bytes_to_remove_valid: 0-Ignore hdr_bytes_to_remove field, 1-Process
+ *	hdr_bytes_to_remove field
+ * @hdr_bytes_to_remove: desired bytes to remove from top of the packet for
+ *	partial L2 header retention
  */
 struct ipa_ep_cfg_hdr_ext {
 	u32 hdr_pad_to_alignment;
@@ -232,6 +255,8 @@ struct ipa_ep_cfg_hdr_ext {
 	bool hdr_total_len_or_pad_valid;
 	bool hdr_little_endian;
 	struct ipa_ep_cfg_hdr *hdr;
+	bool hdr_bytes_to_remove_valid;
+	u32 hdr_bytes_to_remove;
 };
 
 /**
@@ -425,6 +450,7 @@ struct ipa_ep_cfg_cfg {
 	enum ipa_cs_offload cs_offload_en;
 	u8 cs_metadata_hdr_offset;
 	u8 gen_qmb_master_sel;
+	u8 tx_instance;
 };
 
 /**
@@ -628,6 +654,7 @@ struct ipa_ext_intf {
  *  by IPA driver
  * @keep_ipa_awake: when true, IPA will not be clock gated
  * @napi_enabled: when true, IPA call client callback to start polling
+ * @bypass_agg: when true, IPA bypasses the aggregation
  */
 struct ipa_sys_connect_params {
 	struct ipa_ep_cfg ipa_ep_cfg;
@@ -639,6 +666,7 @@ struct ipa_sys_connect_params {
 	bool keep_ipa_awake;
 	struct napi_struct *napi_obj;
 	bool recycle_enabled;
+	bool bypass_agg;
 };
 
 /**
@@ -883,6 +911,24 @@ struct IpaHwRingStats_t {
 } __packed;
 
 /**
+ * struct ipa_uc_dbg_rtk_ring_stats - uC dbg stats info for RTK
+ * offloading protocol
+ * @commStats: common stats
+ * @trCount: transfer ring count
+ * @erCount: event ring count
+ * @totalAosCount: total AoS completion count
+ * @busyTime: total busy time
+ */
+struct ipa_uc_dbg_rtk_ring_stats {
+	struct IpaHwRingStats_t commStats;
+	u32 trCount;
+	u32 erCount;
+	u32 totalAosCount;
+	u64 busyTime;
+} __packed;
+
+
+/**
  * struct IpaHwStatsWDIRxInfoData_t - Structure holding the WDI Rx channel
  * structures
  *
@@ -974,6 +1020,8 @@ struct IpaHwStatsWDIInfoData_t {
  * uc is writing (WDI-2.0)
  * @rdy_comp_ring_size: size of the Rx_completion ring in bytes
  * expected to communicate about the Read pointer into the Rx Ring
+ * @is_txr_rn_db_pcie_addr: tx ring PCIE doorbell address
+ * @is_evt_rn_db_pcie_addr: event ring PCIE doorbell address
  */
 struct ipa_wdi_ul_params {
 	phys_addr_t rdy_ring_base_pa;
@@ -984,6 +1032,8 @@ struct ipa_wdi_ul_params {
 	u32 rdy_comp_ring_size;
 	u32 *rdy_ring_rp_va;
 	u32 *rdy_comp_ring_wp_va;
+	bool is_txr_rn_db_pcie_addr;
+	bool is_evt_rn_db_pcie_addr;
 };
 
 /**
@@ -992,6 +1042,8 @@ struct ipa_wdi_ul_params {
  * @rdy_ring_size: size of the Rx ring in bytes
  * @rdy_ring_rp_pa: physical address of the location through which IPA uc is
  * expected to communicate about the Read pointer into the Rx Ring
+ * @is_txr_rn_db_pcie_addr: tx ring PCIE doorbell address
+ * @is_evt_rn_db_pcie_addr: event ring PCIE doorbell address
  */
 struct ipa_wdi_ul_params_smmu {
 	struct sg_table rdy_ring;
@@ -1002,6 +1054,8 @@ struct ipa_wdi_ul_params_smmu {
 	u32 rdy_comp_ring_size;
 	u32 *rdy_ring_rp_va;
 	u32 *rdy_comp_ring_wp_va;
+	bool is_txr_rn_db_pcie_addr;
+	bool is_evt_rn_db_pcie_addr;
 };
 
 /**
@@ -1014,6 +1068,8 @@ struct ipa_wdi_ul_params_smmu {
  * write into to trigger the copy engine
  * @ce_ring_size: Copy Engine Ring size in bytes
  * @num_tx_buffers: Number of pkt buffers allocated
+ * @is_txr_rn_db_pcie_addr: tx ring PCIE doorbell address
+ * @is_evt_rn_db_pcie_addr: event ring PCIE doorbell address
  */
 struct ipa_wdi_dl_params {
 	phys_addr_t comp_ring_base_pa;
@@ -1022,6 +1078,8 @@ struct ipa_wdi_dl_params {
 	phys_addr_t ce_door_bell_pa;
 	u32 ce_ring_size;
 	u32 num_tx_buffers;
+	bool is_txr_rn_db_pcie_addr;
+	bool is_evt_rn_db_pcie_addr;
 };
 
 /**
@@ -1033,6 +1091,8 @@ struct ipa_wdi_dl_params {
  * write into to trigger the copy engine
  * @ce_ring_size: Copy Engine Ring size in bytes
  * @num_tx_buffers: Number of pkt buffers allocated
+ * @is_txr_rn_db_pcie_addr: tx ring PCIE doorbell address
+ * @is_evt_rn_db_pcie_addr: event ring PCIE doorbell address
  */
 struct ipa_wdi_dl_params_smmu {
 	struct sg_table comp_ring;
@@ -1041,6 +1101,8 @@ struct ipa_wdi_dl_params_smmu {
 	phys_addr_t ce_door_bell_pa;
 	u32 ce_ring_size;
 	u32 num_tx_buffers;
+	bool is_txr_rn_db_pcie_addr;
+	bool is_evt_rn_db_pcie_addr;
 };
 
 /**
@@ -1196,6 +1258,102 @@ struct ipa_smmu_out_params {
 	bool smmu_enable;
 	bool shared_cb;
 };
+
+struct iphdr_rsv {
+	struct iphdr ipv4_temp;  /* 20 bytes */
+	uint32_t rsv1;
+	uint32_t rsv2;
+	uint32_t rsv3;
+	uint32_t rsv4;
+	uint32_t rsv5;
+} __packed;
+
+union ip_hdr_temp {
+	struct iphdr_rsv ipv4_rsv;	/* 40 bytes */
+	struct ipv6hdr ipv6_temp;	/* 40 bytes */
+} __packed;
+
+struct ipa_socksv5_uc_tmpl {
+	uint16_t cmd_id;
+	uint16_t rsv;
+	uint32_t cmd_param;
+	uint16_t pkt_count;
+	uint16_t rsv2;
+	uint32_t byte_count;
+	union ip_hdr_temp ip_hdr;
+	/* 2B src/dst port */
+	uint16_t src_port;
+	uint16_t dst_port;
+
+	/* attribute mask */
+	uint32_t ipa_sockv5_mask;
+
+	/* reqquired update 4B/4B Seq/Ack/SACK */
+	uint32_t out_irs;
+	uint32_t out_iss;
+	uint32_t in_irs;
+	uint32_t in_iss;
+
+	/* option 10B: time-stamp */
+	uint32_t out_ircv_tsval;
+	uint32_t in_ircv_tsecr;
+	uint32_t out_ircv_tsecr;
+	uint32_t in_ircv_tsval;
+
+	/* option 2B: window-scaling/dynamic */
+	uint16_t in_isnd_wscale:4;
+	uint16_t out_isnd_wscale:4;
+	uint16_t in_ircv_wscale:4;
+	uint16_t out_ircv_wscale:4;
+	uint16_t MAX_WINDOW_SIZE;
+	/* 11*4 + 40 bytes = 84 bytes */
+	uint32_t rsv3;
+	uint32_t rsv4;
+	uint32_t rsv5;
+	uint32_t rsv6;
+	uint32_t rsv7;
+	uint32_t rsv8;
+	uint32_t rsv9;
+} __packed;
+/*reserve 16 bytes : 16 bytes+ 40 bytes + 44 bytes = 100 bytes (28 bytes left)*/
+
+struct ipa_socksv5_info {
+	/* ipa-uc info */
+	struct ipa_socksv5_uc_tmpl ul_out;
+	struct ipa_socksv5_uc_tmpl dl_out;
+
+	/* ipacm info */
+	struct ipacm_socksv5_info ul_in;
+	struct ipacm_socksv5_info dl_in;
+
+	/* output: handle (index) */
+	uint16_t handle;
+};
+
+struct ipa_ipv6_nat_uc_tmpl {
+	uint16_t cmd_id;
+	uint16_t rsv;
+	uint32_t cmd_param;
+	uint16_t pkt_count;
+	uint16_t rsv2;
+	uint32_t byte_count;
+	uint64_t private_address_lsb;
+	uint64_t private_address_msb;
+	uint64_t public_address_lsb;
+	uint64_t public_address_msb;
+	uint16_t private_port;
+	uint16_t public_port;
+	uint32_t rsv3;
+	uint64_t rsv4;
+	uint64_t rsv5;
+	uint64_t rsv6;
+	uint64_t rsv7;
+	uint64_t rsv8;
+	uint64_t rsv9;
+	uint64_t rsv10;
+	uint64_t rsv11;
+	uint64_t rsv12;
+} __packed;
 
 #if IS_ENABLED(CONFIG_IPA3)
 /*
@@ -1631,6 +1789,15 @@ int ipa_is_vlan_mode(enum ipa_vlan_ifaces iface, bool *res);
  * ipa_get_lan_rx_napi - returns true if NAPI is enabled in the LAN RX dp
  */
 bool ipa_get_lan_rx_napi(void);
+/*
+ * ipa_add_socksv5_conn - add socksv5 info to ipa driver
+ */
+int ipa_add_socksv5_conn(struct ipa_socksv5_info *info);
+
+/*
+ * ipa_del_socksv5_conn - del socksv5 info to ipa driver
+ */
+int ipa_del_socksv5_conn(uint32_t handle);
 
 int ipa_mhi_handle_ipa_config_req(struct ipa_config_req_msg_v01 *config_req);
 int ipa_wigig_save_regs(void);
@@ -1885,6 +2052,16 @@ static inline int ipa_is_vlan_mode(enum ipa_vlan_ifaces iface, bool *res)
 static inline bool ipa_get_lan_rx_napi(void)
 {
 	return false;
+}
+
+static inline int ipa_add_socksv5_conn(struct ipa_socksv5_info *info)
+{
+	return -EPERM;
+}
+
+static inline int ipa_del_socksv5_conn(uint32_t handle)
+{
+	return -EPERM;
 }
 
 static inline const struct ipa_gsi_ep_config *ipa_get_gsi_ep_info(
@@ -2166,3 +2343,4 @@ static inline int ipa_uc_dereg_rdyCB(void)
 }
 
 #endif /* _IPA_H_ */
+

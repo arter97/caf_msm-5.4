@@ -25,7 +25,8 @@
  * past its timer) and all system resources are released.  SUSPEND is	*
  * requested by the kernel and will be enforced upon all open devices.	*
  * RESET indicates that GPU or GMU hang happens. KGSL is handling	*
- * snapshot or recover GPU from hang.					*
+ * snapshot or recover GPU from hang. MINBW implies that DDR BW vote is	*
+ * set to non-zero minimum value.
  */
 
 #define KGSL_STATE_NONE		0x00000000
@@ -35,6 +36,7 @@
 #define KGSL_STATE_SUSPEND	0x00000010
 #define KGSL_STATE_AWARE	0x00000020
 #define KGSL_STATE_SLUMBER	0x00000080
+#define KGSL_STATE_MINBW	0x00000100
 
 /**
  * enum kgsl_event_results - result codes passed to an event callback when the
@@ -49,7 +51,6 @@ enum kgsl_event_results {
 };
 
 #define KGSL_FLAG_WAKE_ON_TOUCH BIT(0)
-#define KGSL_FLAG_SPARSE        BIT(1)
 
 /*
  * "list" of event types for ftrace symbolic magic
@@ -68,8 +69,7 @@ enum kgsl_event_results {
 	{ KGSL_CONTEXT_SAVE_GMEM, "SAVE_GMEM" }, \
 	{ KGSL_CONTEXT_IFH_NOP, "IFH_NOP" }, \
 	{ KGSL_CONTEXT_SECURE, "SECURE" }, \
-	{ KGSL_CONTEXT_NO_SNAPSHOT, "NO_SNAPSHOT" }, \
-	{ KGSL_CONTEXT_SPARSE, "SPARSE" }
+	{ KGSL_CONTEXT_NO_SNAPSHOT, "NO_SNAPSHOT" }
 
 #define KGSL_CONTEXT_ID(_context) \
 	((_context != NULL) ? (_context)->id : KGSL_MEMSTORE_GLOBAL)
@@ -148,7 +148,7 @@ struct kgsl_functable {
 		struct kgsl_context *context);
 	void (*resume)(struct kgsl_device *device);
 	int (*regulator_enable)(struct kgsl_device *device);
-	bool (*is_hw_collapsible)(struct kgsl_device *device);
+	bool (*prepare_for_power_off)(struct kgsl_device *device);
 	void (*regulator_disable)(struct kgsl_device *device);
 	void (*pwrlevel_change_settings)(struct kgsl_device *device,
 		unsigned int prelevel, unsigned int postlevel, bool post);
@@ -157,7 +157,6 @@ struct kgsl_functable {
 		const char *name, struct clk *clk, bool on);
 	void (*gpu_model)(struct kgsl_device *device, char *str,
 		size_t bufsz);
-	void (*stop_fault_timer)(struct kgsl_device *device);
 	/**
 	 * @query_property_list: query the list of properties
 	 * supported by the device. If 'list' is NULL just return the total
@@ -171,6 +170,7 @@ struct kgsl_functable {
 	int (*gpu_clock_set)(struct kgsl_device *device, u32 pwrlevel);
 	/** @gpu_bus_set: Target specific function to set gpu bandwidth */
 	int (*gpu_bus_set)(struct kgsl_device *device, int bus_level, u32 ab);
+	void (*deassert_gbif_halt)(struct kgsl_device *device);
 };
 
 struct kgsl_ioctl {
@@ -204,18 +204,6 @@ struct kgsl_memobj_node {
 	uint64_t size;
 	unsigned long flags;
 	unsigned long priv;
-};
-
-/**
- * struct kgsl_sparseobj_node - Sparse object descriptor
- * @node: Local list node for the sparse cmdbatch
- * @virt_id: Virtual ID to bind/unbind
- * @obj:  struct kgsl_sparse_binding_object
- */
-struct kgsl_sparseobj_node {
-	struct list_head node;
-	unsigned int virt_id;
-	struct kgsl_sparse_binding_object obj;
 };
 
 struct kgsl_device {
@@ -321,6 +309,8 @@ struct kgsl_device {
 	u32 speed_bin;
 	/** @gmu_fault: Set when a gmu or rgmu fault is encountered */
 	bool gmu_fault;
+	/** @timelines: xarray for the timelines */
+	struct xarray timelines;
 };
 
 #define KGSL_MMU_DEVICE(_mmu) \
@@ -372,6 +362,7 @@ struct kgsl_process_private;
  * across preemption
  * @total_fault_count: number of times gpu faulted in this context
  * @last_faulted_cmd_ts: last faulted command batch timestamp
+ * @gmu_registered: whether context is registered with gmu or not
  */
 struct kgsl_context {
 	struct kref refcount;
@@ -393,6 +384,12 @@ struct kgsl_context {
 	struct kgsl_mem_entry *user_ctxt_record;
 	unsigned int total_fault_count;
 	unsigned int last_faulted_cmd_ts;
+	bool gmu_registered;
+	/**
+	 * @gmu_dispatch_queue: dispatch queue id to which this context will be
+	 * submitted
+	 */
+	u32 gmu_dispatch_queue;
 };
 
 #define _context_comm(_c) \
@@ -440,10 +437,10 @@ struct kgsl_process_private {
 	struct kobject kobj;
 	struct dentry *debug_root;
 	struct {
-		uint64_t cur;
+		atomic64_t cur;
 		uint64_t max;
 	} stats[KGSL_MEM_ENTRY_MAX];
-	uint64_t gpumem_mapped;
+	atomic64_t gpumem_mapped;
 	struct idr syncsource_idr;
 	spinlock_t syncsource_lock;
 	int fd_count;
@@ -596,6 +593,27 @@ static inline int kgsl_state_is_awake(struct kgsl_device *device)
 		return false;
 }
 
+static inline bool kgsl_state_is_nap_or_minbw(struct kgsl_device *device)
+{
+	if (device->state == KGSL_STATE_NAP ||
+		device->state == KGSL_STATE_MINBW)
+		return true;
+
+	return false;
+}
+
+/**
+ * kgsl_start_idle_timer - Start the idle timer
+ * @device: A KGSL device handle
+ *
+ * Start the idle timer to expire in 'interval_timeout' milliseconds
+ */
+static inline void kgsl_start_idle_timer(struct kgsl_device *device)
+{
+	mod_timer(&device->idle_timer,
+			jiffies + msecs_to_jiffies(device->pwrctrl.interval_timeout));
+}
+
 int kgsl_readtimestamp(struct kgsl_device *device, void *priv,
 		enum kgsl_timestamp_type type, unsigned int *timestamp);
 
@@ -705,9 +723,6 @@ long kgsl_ioctl_copy_in(unsigned int kernel_cmd, unsigned int user_cmd,
 
 long kgsl_ioctl_copy_out(unsigned int kernel_cmd, unsigned int user_cmd,
 		unsigned long arg, unsigned char *ptr);
-
-void kgsl_sparse_bind(struct kgsl_process_private *private,
-		struct kgsl_drawobj_sparse *sparse);
 
 /**
  * kgsl_context_type - Return a symbolic string for the context type
