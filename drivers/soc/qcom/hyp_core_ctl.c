@@ -21,19 +21,24 @@
 #include <linux/debugfs.h>
 #include <linux/pm_qos.h>
 #include <linux/cpufreq.h>
+#include <linux/sched/sysctl.h>
 
 #include <linux/haven/hcall.h>
 #include <linux/haven/hh_errno.h>
 #include <linux/haven/hh_rm_drv.h>
 
 #define MAX_RESERVE_CPUS (num_possible_cpus()/2)
+#define SVM_STATE_RUNNING 1
+#define SVM_STATE_CPUS_SUSPENDED 2
+#define SVM_STATE_SYSTEM_SUSPENDED 3
 
 static DEFINE_PER_CPU(struct freq_qos_request, qos_min_req);
 static DEFINE_PER_CPU(unsigned int, qos_min_freq);
 
+unsigned int sysctl_hh_suspend_timeout_ms = 1000;
 /**
  * struct hyp_core_ctl_cpumap - vcpu to pcpu mapping for the other guest
- * @sid: System call id to be used while referring to this vcpu
+ * @cap_id: System call id to be used while referring to this vcpu
  * @pcpu: The physical CPU number corresponding to this vcpu
  * @curr_pcpu: The current physical CPU number corresponding to this vcpu.
  *             The curr_pcu is set to another CPU when the original assigned
@@ -41,7 +46,7 @@ static DEFINE_PER_CPU(unsigned int, qos_min_freq);
  *
  */
 struct hyp_core_ctl_cpu_map {
-	hh_capid_t sid;
+	hh_capid_t cap_id;
 	hh_label_t pcpu;
 	hh_label_t curr_pcpu;
 };
@@ -81,6 +86,10 @@ static struct hyp_core_ctl_cpu_map hh_cpumap[NR_CPUS];
 static bool is_vcpu_info_populated;
 static bool init_done;
 static int nr_vcpus;
+static bool freq_qos_init_done;
+static u64 vpmg_cap_id;
+static struct timer_list hh_suspend_timer;
+static bool is_vpm_group_info_populated;
 
 static inline void hyp_core_ctl_print_status(char *msg)
 {
@@ -111,12 +120,14 @@ static void hyp_core_ctl_undo_reservation(struct hyp_core_ctl_data *hcd)
 
 		cpumask_clear_cpu(cpu, &hcd->our_isolated_cpus);
 
-		qos_req = &per_cpu(qos_min_req, cpu);
-		ret = freq_qos_update_request(qos_req,
-						FREQ_QOS_MIN_DEFAULT_VALUE);
-		if (ret < 0)
-			pr_err("fail to update min freq for CPU%d ret=%d\n",
+		if (freq_qos_init_done) {
+			qos_req = &per_cpu(qos_min_req, cpu);
+			ret = freq_qos_update_request(qos_req,
+					FREQ_QOS_MIN_DEFAULT_VALUE);
+			if (ret < 0)
+				pr_err("fail to update min freq for CPU%d ret=%d\n",
 								cpu, ret);
+		}
 	}
 
 	hyp_core_ctl_print_status("undo_reservation_end");
@@ -162,7 +173,7 @@ static void finalize_reservation(struct hyp_core_ctl_data *hcd, cpumask_t *temp)
 	 * maintained in vcpu_adjust_mask and processed in the 2nd pass.
 	 */
 	for (i = 0; i < MAX_RESERVE_CPUS; i++) {
-		if (hcd->cpumap[i].sid == 0)
+		if (hcd->cpumap[i].cap_id == 0)
 			break;
 
 		orig_cpu = hcd->cpumap[i].pcpu;
@@ -179,11 +190,11 @@ static void finalize_reservation(struct hyp_core_ctl_data *hcd, cpumask_t *temp)
 			 * is available in final_reserved_cpus. so restore
 			 * the assignment.
 			 */
-			err = hh_hcall_vcpu_affinity_set(hcd->cpumap[i].sid,
+			err = hh_hcall_vcpu_affinity_set(hcd->cpumap[i].cap_id,
 								orig_cpu);
 			if (err != HH_ERROR_OK) {
-				pr_err("restore: fail to assign pcpu for vcpu#%d err=%d sid=%d cpu=%d\n",
-					i, err, hcd->cpumap[i].sid, orig_cpu);
+				pr_err("restore: fail to assign pcpu for vcpu#%d err=%d cap_id=%d cpu=%d\n",
+					i, err, hcd->cpumap[i].cap_id, orig_cpu);
 				continue;
 			}
 
@@ -224,11 +235,11 @@ static void finalize_reservation(struct hyp_core_ctl_data *hcd, cpumask_t *temp)
 		replacement_cpu = cpumask_any(temp);
 		cpumask_clear_cpu(replacement_cpu, temp);
 
-		err = hh_hcall_vcpu_affinity_set(hcd->cpumap[i].sid,
+		err = hh_hcall_vcpu_affinity_set(hcd->cpumap[i].cap_id,
 							replacement_cpu);
 		if (err != HH_ERROR_OK) {
-			pr_err("adjust: fail to assign pcpu for vcpu#%d err=%d sid=%d cpu=%d\n",
-				i, err, hcd->cpumap[i].sid, replacement_cpu);
+			pr_err("adjust: fail to assign pcpu for vcpu#%d err=%d cap_id=%d cpu=%d\n",
+				i, err, hcd->cpumap[i].cap_id, replacement_cpu);
 			continue;
 		}
 
@@ -279,9 +290,9 @@ static void hyp_core_ctl_do_reservation(struct hyp_core_ctl_data *hcd)
 
 		cpumask_set_cpu(i, &hcd->our_isolated_cpus);
 
-		qos_req = &per_cpu(qos_min_req, i);
 		min_freq = per_cpu(qos_min_freq, i);
-		if (min_freq) {
+		if (min_freq && freq_qos_init_done) {
+			qos_req = &per_cpu(qos_min_req, i);
 			ret = freq_qos_update_request(qos_req, min_freq);
 			if (ret < 0)
 				pr_err("fail to update min freq for CPU%d ret=%d\n",
@@ -339,9 +350,9 @@ static void hyp_core_ctl_do_reservation(struct hyp_core_ctl_data *hcd)
 
 			cpumask_set_cpu(i, &hcd->our_isolated_cpus);
 
-			qos_req = &per_cpu(qos_min_req, i);
 			min_freq = per_cpu(qos_min_freq, i);
-			if (min_freq) {
+			if (min_freq && freq_qos_init_done) {
+				qos_req = &per_cpu(qos_min_req, i);
 				ret = freq_qos_update_request(qos_req,
 								min_freq);
 				if (ret < 0)
@@ -386,12 +397,14 @@ static void hyp_core_ctl_do_reservation(struct hyp_core_ctl_data *hcd)
 
 			cpumask_clear_cpu(i, &hcd->our_isolated_cpus);
 
-			qos_req = &per_cpu(qos_min_req, i);
-			ret = freq_qos_update_request(qos_req,
+			if (freq_qos_init_done) {
+				qos_req = &per_cpu(qos_min_req, i);
+				ret = freq_qos_update_request(qos_req,
 						FREQ_QOS_MIN_DEFAULT_VALUE);
-			if (ret < 0)
-				pr_err("fail to update min freq for CPU%d ret=%d\n",
+				if (ret < 0)
+					pr_err("fail to update min freq for CPU%d ret=%d\n",
 								i, ret);
+			}
 
 			if (--unisolate_need == 0)
 				break;
@@ -408,20 +421,21 @@ done:
 static int hyp_core_ctl_thread(void *data)
 {
 	struct hyp_core_ctl_data *hcd = data;
+	unsigned long flags;
 
 	while (1) {
-		spin_lock(&hcd->lock);
+		spin_lock_irqsave(&hcd->lock, flags);
 		if (!hcd->pending) {
 			set_current_state(TASK_INTERRUPTIBLE);
-			spin_unlock(&hcd->lock);
+			spin_unlock_irqrestore(&hcd->lock, flags);
 
 			schedule();
 
-			spin_lock(&hcd->lock);
+			spin_lock_irqsave(&hcd->lock, flags);
 			set_current_state(TASK_RUNNING);
 		}
 		hcd->pending = false;
-		spin_unlock(&hcd->lock);
+		spin_unlock_irqrestore(&hcd->lock, flags);
 
 		if (kthread_should_stop())
 			break;
@@ -505,6 +519,7 @@ static int hyp_core_ctl_cpu_cooling_cb(struct notifier_block *nb,
 	const cpumask_t *thermal_cpus = cpu_cooling_get_max_level_cpumask();
 	struct freq_qos_request *qos_req;
 	int ret;
+	unsigned long flags;
 
 	if (!the_hcd)
 		return NOTIFY_DONE;
@@ -532,12 +547,14 @@ static int hyp_core_ctl_cpu_cooling_cb(struct notifier_block *nb,
 		if (cpumask_test_cpu(cpu, &the_hcd->our_isolated_cpus)) {
 			sched_unisolate_cpu(cpu);
 			cpumask_clear_cpu(cpu, &the_hcd->our_isolated_cpus);
-			qos_req = &per_cpu(qos_min_req, cpu);
-			ret = freq_qos_update_request(qos_req,
+			if (freq_qos_init_done) {
+				qos_req = &per_cpu(qos_min_req, cpu);
+				ret = freq_qos_update_request(qos_req,
 						FREQ_QOS_MIN_DEFAULT_VALUE);
-			if (ret < 0)
-				pr_err("fail to update min freq for CPU%d ret=%d\n",
+				if (ret < 0)
+					pr_err("fail to update min freq for CPU%d ret=%d\n",
 								cpu, ret);
+			}
 		}
 	} else {
 		/*
@@ -558,10 +575,10 @@ static int hyp_core_ctl_cpu_cooling_cb(struct notifier_block *nb,
 	}
 
 	if (the_hcd->reservation_enabled) {
-		spin_lock(&the_hcd->lock);
+		spin_lock_irqsave(&the_hcd->lock, flags);
 		the_hcd->pending = true;
 		wake_up_process(the_hcd->task);
-		spin_unlock(&the_hcd->lock);
+		spin_unlock_irqrestore(&the_hcd->lock, flags);
 	} else {
 		/*
 		 * When the reservation is enabled, the state machine
@@ -595,20 +612,25 @@ static int hyp_core_ctl_hp_offline(unsigned int cpu)
 	 * isolated by us. An offline CPU is considered
 	 * as reserved. So no further action is needed.
 	 */
-	if (cpumask_test_and_clear_cpu(cpu, &the_hcd->our_isolated_cpus))
+	if (cpumask_test_and_clear_cpu(cpu, &the_hcd->our_isolated_cpus)) {
 		sched_unisolate_cpu_unlocked(cpu);
-		qos_req = &per_cpu(qos_min_req, cpu);
-		ret = freq_qos_update_request(qos_req,
+		if (freq_qos_init_done) {
+			qos_req = &per_cpu(qos_min_req, cpu);
+			ret = freq_qos_update_request(qos_req,
 					FREQ_QOS_MIN_DEFAULT_VALUE);
-		if (ret < 0)
-			pr_err("fail to update min freq for CPU%d ret=%d\n",
+			if (ret < 0)
+				pr_err("fail to update min freq for CPU%d ret=%d\n",
 								cpu, ret);
+		}
+	}
 
 	return 0;
 }
 
 static int hyp_core_ctl_hp_online(unsigned int cpu)
 {
+	unsigned long flags;
+
 	if (!the_hcd || !the_hcd->reservation_enabled)
 		return 0;
 
@@ -616,12 +638,12 @@ static int hyp_core_ctl_hp_online(unsigned int cpu)
 	 * A reserved CPU is coming online. It should be isolated
 	 * to honor the reservation. So kick the state machine.
 	 */
-	spin_lock(&the_hcd->lock);
+	spin_lock_irqsave(&the_hcd->lock, flags);
 	if (cpumask_test_cpu(cpu, &the_hcd->final_reserved_cpus)) {
 		the_hcd->pending = true;
 		wake_up_process(the_hcd->task);
 	}
-	spin_unlock(&the_hcd->lock);
+	spin_unlock_irqrestore(&the_hcd->lock, flags);
 
 	return 0;
 }
@@ -629,15 +651,16 @@ static int hyp_core_ctl_hp_online(unsigned int cpu)
 static void hyp_core_ctl_init_reserve_cpus(struct hyp_core_ctl_data *hcd)
 {
 	int i;
+	unsigned long flags;
 
-	spin_lock(&hcd->lock);
+	spin_lock_irqsave(&hcd->lock, flags);
 	cpumask_clear(&hcd->reserve_cpus);
 
 	for (i = 0; i < MAX_RESERVE_CPUS; i++) {
-		if (hh_cpumap[i].sid == 0)
+		if (hh_cpumap[i].cap_id == 0)
 			break;
 
-		hcd->cpumap[i].sid = hh_cpumap[i].sid;
+		hcd->cpumap[i].cap_id = hh_cpumap[i].cap_id;
 		hcd->cpumap[i].pcpu = hh_cpumap[i].pcpu;
 		hcd->cpumap[i].curr_pcpu = hh_cpumap[i].curr_pcpu;
 		cpumask_set_cpu(hcd->cpumap[i].pcpu, &hcd->reserve_cpus);
@@ -645,10 +668,14 @@ static void hyp_core_ctl_init_reserve_cpus(struct hyp_core_ctl_data *hcd)
 	}
 
 	cpumask_copy(&hcd->final_reserved_cpus, &hcd->reserve_cpus);
-	spin_unlock(&hcd->lock);
+	spin_unlock_irqrestore(&hcd->lock, flags);
 	pr_info("reserve_cpus=%*pbl\n", cpumask_pr_args(&hcd->reserve_cpus));
 }
 
+/*
+ * Called when vm_status is STATUS_READY, multiple times before status
+ * moves to STATUS_RUNNING
+ */
 int hh_vcpu_populate_affinity_info(u32 cpu_idx, u64 cap_id)
 {
 	if (!init_done) {
@@ -656,13 +683,16 @@ int hh_vcpu_populate_affinity_info(u32 cpu_idx, u64 cap_id)
 		return -ENXIO;
 	}
 
-	hh_cpumap[nr_vcpus].sid = cap_id;
-	hh_cpumap[nr_vcpus].pcpu = cpu_idx;
-	hh_cpumap[nr_vcpus].curr_pcpu = cpu_idx;
+	if (!is_vcpu_info_populated) {
+		hh_cpumap[nr_vcpus].cap_id = cap_id;
+		hh_cpumap[nr_vcpus].pcpu = cpu_idx;
+		hh_cpumap[nr_vcpus].curr_pcpu = cpu_idx;
 
-	nr_vcpus++;
-	pr_debug("cpu_index:%u vcpu_cap_id:%llu nr_vcpus:%d\n",
+		nr_vcpus++;
+		pr_debug("cpu_index:%u vcpu_cap_id:%llu nr_vcpus:%d\n",
 					cpu_idx, cap_id, nr_vcpus);
+	}
+
 	return 0;
 }
 
@@ -672,15 +702,15 @@ static int hh_vcpu_done_populate_affinity_info(struct notifier_block *nb,
 	struct hh_rm_notif_vm_status_payload *vm_status_payload = data;
 	u8 vm_status = vm_status_payload->vm_status;
 
-	if (cmd != HH_RM_NOTIF_VM_STATUS ||
-					vm_status != HH_RM_VM_STATUS_RUNNING)
-		goto done;
+	if (cmd == HH_RM_NOTIF_VM_STATUS &&
+			vm_status == HH_RM_VM_STATUS_RUNNING &&
+			!is_vcpu_info_populated) {
+		mutex_lock(&the_hcd->reservation_mutex);
+		hyp_core_ctl_init_reserve_cpus(the_hcd);
+		is_vcpu_info_populated = true;
+		mutex_unlock(&the_hcd->reservation_mutex);
+	}
 
-	mutex_lock(&the_hcd->reservation_mutex);
-	hyp_core_ctl_init_reserve_cpus(the_hcd);
-	is_vcpu_info_populated = true;
-	mutex_unlock(&the_hcd->reservation_mutex);
-done:
 	return NOTIFY_DONE;
 }
 
@@ -688,17 +718,98 @@ static struct notifier_block hh_vcpu_nb = {
 	.notifier_call = hh_vcpu_done_populate_affinity_info,
 };
 
+static void hh_suspend_timer_callback(struct timer_list *t)
+{
+	pr_err("Warning:%ums timeout occurred while waiting for SVM suspend\n",
+							sysctl_hh_suspend_timeout_ms);
+}
+
+static inline void hh_del_suspend_timer(void)
+{
+	del_timer(&hh_suspend_timer);
+}
+
+static inline void hh_start_suspend_timer(void)
+{
+	mod_timer(&hh_suspend_timer, jiffies +
+			msecs_to_jiffies(sysctl_hh_suspend_timeout_ms));
+}
+
+static irqreturn_t hh_susp_res_irq_handler(int irq, void *data)
+{
+	int err;
+	uint64_t vpmg_state;
+	unsigned long flags;
+
+	err = hh_hcall_vpm_group_get_state(vpmg_cap_id, &vpmg_state);
+
+	if (err != HH_ERROR_OK) {
+		pr_err("Failed to get VPM Group state for cap_id=%llu err=%d\n",
+			vpmg_cap_id, err);
+		return IRQ_HANDLED;
+	}
+
+	spin_lock_irqsave(&the_hcd->lock, flags);
+	if (vpmg_state == SVM_STATE_RUNNING) {
+		if (!the_hcd->reservation_enabled)
+			pr_err_ratelimited("Reservation not enabled,unexpected SVM wake up\n");
+	} else if (vpmg_state == SVM_STATE_SYSTEM_SUSPENDED) {
+		hh_del_suspend_timer();
+	} else {
+		pr_err("VPM Group state invalid/non-existent\n");
+	}
+	spin_unlock_irqrestore(&the_hcd->lock, flags);
+	return IRQ_HANDLED;
+}
+
+int hh_vpm_grp_populate_info(u64 cap_id, int virq_num)
+{
+	int ret = 0;
+
+	if (!init_done) {
+		pr_err("%s: Driver probe failed\n", __func__);
+		return -ENXIO;
+	}
+
+	if (virq_num < 0) {
+		pr_err("%s: Invalid IRQ number\n", __func__);
+		return -EINVAL;
+	}
+
+	vpmg_cap_id = cap_id;
+	ret = request_irq(virq_num, hh_susp_res_irq_handler, 0,
+			"hh_susp_res_irq", NULL);
+	if (ret < 0) {
+		pr_err("%s: IRQ registration failed ret=%d\n", __func__, ret);
+		return ret;
+	}
+
+	timer_setup(&hh_suspend_timer, hh_suspend_timer_callback, 0);
+	is_vpm_group_info_populated = true;
+
+	return ret;
+}
+
 static void hyp_core_ctl_enable(bool enable)
 {
+	unsigned long flags;
+
 	mutex_lock(&the_hcd->reservation_mutex);
 	if (!is_vcpu_info_populated) {
 		pr_err("VCPU info isn't populated\n");
 		goto err_out;
 	}
 
-	spin_lock(&the_hcd->lock);
+	spin_lock_irqsave(&the_hcd->lock, flags);
 	if (enable == the_hcd->reservation_enabled)
 		goto out;
+
+	if (is_vpm_group_info_populated) {
+		if (enable)
+			hh_del_suspend_timer();
+		else
+			hh_start_suspend_timer();
+	}
 
 	trace_hyp_core_ctl_enable(enable);
 	pr_debug("reservation %s\n", enable ? "enabled" : "disabled");
@@ -707,7 +818,7 @@ static void hyp_core_ctl_enable(bool enable)
 	the_hcd->pending = true;
 	wake_up_process(the_hcd->task);
 out:
-	spin_unlock(&the_hcd->lock);
+	spin_unlock_irqrestore(&the_hcd->lock, flags);
 err_out:
 	mutex_unlock(&the_hcd->reservation_mutex);
 }
@@ -775,7 +886,7 @@ static ssize_t status_show(struct device *dev, struct device_attribute *attr,
 			   "Vcpu to Pcpu mappings:\n");
 
 	for (i = 0; i < MAX_RESERVE_CPUS; i++) {
-		if (hcd->cpumap[i].sid == 0)
+		if (hcd->cpumap[i].cap_id == 0)
 			break;
 
 		count += scnprintf(buf + count, PAGE_SIZE - count,
@@ -791,6 +902,43 @@ static ssize_t status_show(struct device *dev, struct device_attribute *attr,
 
 static DEVICE_ATTR_RO(status);
 
+static int init_freq_qos_req(void)
+{
+	int cpu, ret;
+	struct cpufreq_policy *policy;
+	struct freq_qos_request *qos_req;
+
+	for_each_possible_cpu(cpu) {
+		policy = cpufreq_cpu_get(cpu);
+		if (!policy) {
+			pr_err("cpufreq policy not found for cpu%d\n", cpu);
+			ret = -ESRCH;
+			goto remove_qos_req;
+		}
+
+		qos_req = &per_cpu(qos_min_req, cpu);
+		ret = freq_qos_add_request(&policy->constraints, qos_req,
+				FREQ_QOS_MIN, FREQ_QOS_MIN_DEFAULT_VALUE);
+		if (ret < 0) {
+			pr_err("Failed to add min freq constraint (%d)\n", ret);
+			cpufreq_cpu_put(policy);
+			goto remove_qos_req;
+		}
+		cpufreq_cpu_put(policy);
+	}
+
+	return 0;
+
+remove_qos_req:
+	for_each_possible_cpu(cpu) {
+		qos_req = &per_cpu(qos_min_req, cpu);
+		if (freq_qos_request_active(qos_req))
+			freq_qos_remove_request(qos_req);
+	}
+
+	return ret;
+}
+
 static ssize_t hcc_min_freq_store(struct device *dev,
 					struct device_attribute *attr,
 					const char *buf, size_t count)
@@ -803,6 +951,12 @@ static ssize_t hcc_min_freq_store(struct device *dev,
 	if (!is_vcpu_info_populated) {
 		pr_err("VCPU info isn't populated\n");
 		goto err_out;
+	}
+
+	if (!freq_qos_init_done) {
+		if (init_freq_qos_req())
+			goto err_out;
+		freq_qos_init_done = true;
 	}
 
 	while ((cp = strpbrk(cp + 1, " :")))
@@ -881,6 +1035,7 @@ static ssize_t write_reserve_cpus(struct file *file, const char __user *ubuf,
 	char kbuf[CPULIST_SZ];
 	int ret;
 	cpumask_t temp_mask;
+	unsigned long flags;
 
 	mutex_lock(&the_hcd->reservation_mutex);
 	if (!is_vcpu_info_populated) {
@@ -906,14 +1061,14 @@ static ssize_t write_reserve_cpus(struct file *file, const char __user *ubuf,
 		goto err_out;
 	}
 
-	spin_lock(&the_hcd->lock);
+	spin_lock_irqsave(&the_hcd->lock, flags);
 	if (the_hcd->reservation_enabled) {
 		count = -EPERM;
 		pr_err("reservation is enabled, can't change reserve_cpus\n");
 	} else {
 		cpumask_copy(&the_hcd->reserve_cpus, &temp_mask);
 	}
-	spin_unlock(&the_hcd->lock);
+	spin_unlock_irqrestore(&the_hcd->lock, flags);
 	mutex_unlock(&the_hcd->reservation_mutex);
 
 	return count;
@@ -946,37 +1101,15 @@ static int hyp_core_ctl_probe(struct platform_device *pdev)
 	int ret;
 	struct hyp_core_ctl_data *hcd;
 	struct sched_param param = { .sched_priority = MAX_RT_PRIO - 1 };
-	int cpu;
-	struct cpufreq_policy *policy;
-	struct freq_qos_request *qos_req;
 
 	ret = hh_rm_register_notifier(&hh_vcpu_nb);
 	if (ret)
 		return ret;
 
-	for_each_possible_cpu(cpu) {
-		policy = cpufreq_cpu_get(cpu);
-		if (!policy) {
-			pr_err("cpufreq policy not found for cpu%d\n", cpu);
-			ret = -ESRCH;
-			goto remove_qos_req;
-		}
-
-		qos_req = &per_cpu(qos_min_req, cpu);
-		ret = freq_qos_add_request(&policy->constraints, qos_req,
-				FREQ_QOS_MIN, FREQ_QOS_MIN_DEFAULT_VALUE);
-		if (ret < 0) {
-			pr_err("Failed to add min freq constraint (%d)\n", ret);
-			cpufreq_cpu_put(policy);
-			goto remove_qos_req;
-		}
-		cpufreq_cpu_put(policy);
-	}
-
 	hcd = kzalloc(sizeof(*hcd), GFP_KERNEL);
 	if (!hcd) {
 		ret = -ENOMEM;
-		goto remove_qos_req;
+		goto unregister_rm_notifier;
 	}
 
 	spin_lock_init(&hcd->lock);
@@ -1017,13 +1150,7 @@ stop_task:
 	kthread_stop(hcd->task);
 free_hcd:
 	kfree(hcd);
-remove_qos_req:
-	for_each_possible_cpu(cpu) {
-		qos_req = &per_cpu(qos_min_req, cpu);
-		if (freq_qos_request_active(qos_req))
-			freq_qos_remove_request(qos_req);
-	}
-
+unregister_rm_notifier:
 	hh_rm_unregister_notifier(&hh_vcpu_nb);
 
 	return ret;

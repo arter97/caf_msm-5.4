@@ -54,6 +54,7 @@
 #define NUM_OF_ENCRYPTED_KEY	3
 
 static void __iomem *pil_info_base;
+static void __iomem *pil_disable_timeout_base;
 static struct md_global_toc *g_md_toc;
 
 /**
@@ -359,8 +360,10 @@ static int pil_do_minidump(struct pil_desc *desc, void *ramdump_dev)
 	next_offset = prepare_minidump_segments(ramdump_segs, region_info_ss,
 						 ss_mdump_seg_cnt_ss,
 						 &ss_valid_seg_cnt);
-	if (next_offset < 0)
+	if (next_offset < 0) {
+		ret = -ENOMEM;
 		goto seg_mapping_fail;
+	}
 
 	if (desc->num_aux_minidump_ids > 0) {
 		ret = prepare_aux_minidump_segments(&ramdump_segs[next_offset],
@@ -371,7 +374,11 @@ static int pil_do_minidump(struct pil_desc *desc, void *ramdump_dev)
 			goto seg_mapping_fail;
 	}
 
-	ret = do_minidump(ramdump_dev, ramdump_segs, ss_valid_seg_cnt);
+	if (desc->minidump_as_elf32)
+		ret = do_minidump_elf32(ramdump_dev, ramdump_segs,
+					ss_valid_seg_cnt);
+	else
+		ret = do_minidump(ramdump_dev, ramdump_segs, ss_valid_seg_cnt);
 	if (ret)
 		pil_err(desc, "%s: Minidump collection failed for subsys %s rc:%d\n",
 			__func__, desc->name, ret);
@@ -452,22 +459,13 @@ int pil_do_ramdump(struct pil_desc *desc,
 
 	s = ramdump_segs;
 	list_for_each_entry(seg, &priv->segs, list) {
-		s->v_address = ioremap_wc(seg->paddr, seg->sz);
-		if (!s->v_address)
-			goto ioremap_err;
-
+		s->address = seg->paddr;
 		s->size = seg->sz;
 		s++;
 		map_cnt++;
 	}
 
 	ret = do_elf_ramdump(ramdump_dev, ramdump_segs, count);
-
-	s = ramdump_segs;
-	list_for_each_entry(seg, &priv->segs, list) {
-		iounmap(s->v_address);
-		s++;
-	}
 
 	kfree(ramdump_segs);
 
@@ -480,17 +478,6 @@ int pil_do_ramdump(struct pil_desc *desc,
 				(priv->region_end - priv->region_start));
 
 	return ret;
-
-ioremap_err:
-	/* Undo all the previous mappings */
-	s = ramdump_segs;
-	while (map_cnt--) {
-		iounmap(s->v_address);
-		s++;
-	}
-
-	kfree(ramdump_segs);
-	return -ENOMEM;
 }
 EXPORT_SYMBOL(pil_do_ramdump);
 
@@ -1490,6 +1477,7 @@ int pil_desc_init(struct pil_desc *desc)
 	void __iomem *addr;
 	void *ss_toc_addr;
 	int ret;
+	size_t size;
 	char buf[sizeof(priv->info->name)];
 	struct device_node *ofnode = desc->dev->of_node;
 
@@ -1518,6 +1506,15 @@ int pil_desc_init(struct pil_desc *desc)
 		&desc->minidump_id))
 		pr_err("minidump-id not found for %s\n", desc->name);
 	else {
+		if (IS_ERR_OR_NULL(g_md_toc)) {
+			/* Get Global minidump ToC*/
+			g_md_toc = qcom_smem_get(QCOM_SMEM_HOST_ANY,
+				SBL_MINIDUMP_SMEM_ID, &size);
+			if (PTR_ERR(g_md_toc) == -EPROBE_DEFER) {
+				g_md_toc = NULL;
+				pr_err("SMEM is not initialized.\n");
+			}
+		}
 		if (g_md_toc && g_md_toc->md_toc_init == true) {
 			ss_toc_addr = &g_md_toc->md_ss_toc[desc->minidump_id];
 			pr_debug("Minidump : ss_toc_addr for ss is %pa and desc->minidump_id is %d\n",
@@ -1573,6 +1570,9 @@ int pil_desc_init(struct pil_desc *desc)
 	if (!desc->unmap_fw_mem)
 		desc->unmap_fw_mem = unmap_fw_mem;
 
+	desc->minidump_as_elf32 = of_property_read_bool(
+					ofnode, "qcom,minidump-as-elf32");
+
 	return 0;
 err_parse_dt:
 	ida_simple_remove(&pil_ida, priv->id);
@@ -1618,49 +1618,61 @@ static int pil_pm_notify(struct notifier_block *b, unsigned long event, void *p)
 static struct notifier_block pil_pm_notifier = {
 	.notifier_call = pil_pm_notify,
 };
-
-static int __init msm_pil_init(void)
+static void __iomem * __init pil_get_resource(const char *prop,
+					resource_size_t *out_size)
 {
+	void __iomem *base_addr;
 	struct device_node *np;
 	struct resource res;
-	int i;
-	size_t size;
 
-	np = of_find_compatible_node(NULL, NULL, "qcom,msm-imem-pil");
+	np = of_find_compatible_node(NULL, NULL, prop);
 	if (!np) {
-		pr_warn("pil: failed to find qcom,msm-imem-pil node\n");
-		goto out;
+		pr_warn("pil: failed to find %s node\n", prop);
+		return NULL;
 	}
-	if (of_address_to_resource(np, 0, &res)) {
-		pr_warn("pil: address to resource on imem region failed\n");
-		goto out;
-	}
-	pil_info_base = ioremap(res.start, resource_size(&res));
-	if (!pil_info_base) {
-		pr_warn("pil: could not map imem region\n");
-		goto out;
-	}
-	if (__raw_readl(pil_info_base) == 0x53444247) {
-		pr_info("pil: pil-imem set to disable pil timeouts\n");
-		disable_timeouts = true;
-	}
-	for (i = 0; i < resource_size(&res)/sizeof(u32); i++)
-		writel_relaxed(0, pil_info_base + (i * sizeof(u32)));
 
-	/* Get Global minidump ToC*/
-	g_md_toc = qcom_smem_get(QCOM_SMEM_HOST_ANY, SBL_MINIDUMP_SMEM_ID,
-				 &size);
-	pr_debug("Minidump: g_md_toc is %pa\n", &g_md_toc);
-	if (PTR_ERR(g_md_toc) == -EPROBE_DEFER) {
-		pr_err("SMEM is not initialized.\n");
-		return -EPROBE_DEFER;
+	if (of_address_to_resource(np, 0, &res)) {
+		pr_warn("pil: address to resource for %s failed\n", prop);
+		return NULL;
+	}
+
+	base_addr = ioremap(res.start, resource_size(&res));
+	if (!base_addr) {
+		pr_warn("pil: could not map region for %s\n", prop);
+		return NULL;
+	}
+
+	if (out_size)
+		*out_size = resource_size(&res);
+
+	return base_addr;
+}
+static int __init msm_pil_init(void)
+{
+	resource_size_t res_size;
+	int i;
+
+	pil_info_base = pil_get_resource("qcom,msm-imem-pil", &res_size);
+	if (pil_info_base) {
+		for (i = 0; i < res_size / sizeof(u32); i++)
+			writel_relaxed(0, pil_info_base + (i * sizeof(u32)));
+	}
+
+	pil_disable_timeout_base =
+		pil_get_resource("qcom,msm-imem-pil-disable-timeout", NULL);
+	if (pil_disable_timeout_base) {
+		if (__raw_readl(pil_disable_timeout_base) == 0x53444247) {
+			pr_info("pil: pil-imem set to disable pil timeouts\n");
+			disable_timeouts = true;
+		}
+
+		iounmap(pil_disable_timeout_base);
 	}
 
 	pil_wq = alloc_workqueue("pil_workqueue", WQ_HIGHPRI | WQ_UNBOUND, 0);
 	if (!pil_wq)
 		pr_warn("pil: Defaulting to sequential firmware loading.\n");
 
-out:
 	return register_pm_notifier(&pil_pm_notifier);
 }
 subsys_initcall(msm_pil_init);

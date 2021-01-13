@@ -1031,8 +1031,20 @@ static int of_link_to_phandle(struct device *dev, struct device_node *sup_np,
 	 * Find the device node that contains the supplier phandle.  It may be
 	 * @sup_np or it may be an ancestor of @sup_np.
 	 */
-	while (sup_np && !of_find_property(sup_np, "compatible", NULL))
+	while (sup_np) {
+
+		/* Don't allow linking to a disabled supplier */
+		if (!of_device_is_available(sup_np)) {
+			of_node_put(sup_np);
+			sup_np = NULL;
+		}
+
+		if (of_find_property(sup_np, "compatible", NULL))
+			break;
+
 		sup_np = of_get_next_parent(sup_np);
+	}
+
 	if (!sup_np) {
 		dev_dbg(dev, "Not linking to %pOFP - No device\n", tmp_np);
 		return -ENODEV;
@@ -1192,6 +1204,21 @@ DEFINE_SIMPLE_PROP(interrupt_parent, "interrupt-parent", NULL)
 DEFINE_SIMPLE_PROP(dmas, "dmas", "#dma-cells")
 DEFINE_SIMPLE_PROP(power_domains, "power-domains", "#power-domain-cells")
 DEFINE_SIMPLE_PROP(hwlocks, "hwlocks", "#hwlock-cells")
+DEFINE_SIMPLE_PROP(extcon, "extcon", NULL)
+DEFINE_SIMPLE_PROP(interrupts_extended, "interrupts-extended",
+					"#interrupt-cells")
+DEFINE_SIMPLE_PROP(nvmem_cells, "nvmem-cells", NULL)
+DEFINE_SIMPLE_PROP(phys, "phys", "#phy-cells")
+DEFINE_SIMPLE_PROP(wakeup_parent, "wakeup-parent", NULL)
+DEFINE_SIMPLE_PROP(pinctrl0, "pinctrl-0", NULL)
+DEFINE_SIMPLE_PROP(pinctrl1, "pinctrl-1", NULL)
+DEFINE_SIMPLE_PROP(pinctrl2, "pinctrl-2", NULL)
+DEFINE_SIMPLE_PROP(pinctrl3, "pinctrl-3", NULL)
+DEFINE_SIMPLE_PROP(pinctrl4, "pinctrl-4", NULL)
+DEFINE_SIMPLE_PROP(pinctrl5, "pinctrl-5", NULL)
+DEFINE_SIMPLE_PROP(pinctrl6, "pinctrl-6", NULL)
+DEFINE_SIMPLE_PROP(pinctrl7, "pinctrl-7", NULL)
+DEFINE_SIMPLE_PROP(pinctrl8, "pinctrl-8", NULL)
 DEFINE_SUFFIX_PROP(regulators, "-supply", NULL)
 DEFINE_SUFFIX_PROP(gpio, "-gpio", "#gpio-cells")
 DEFINE_SUFFIX_PROP(gpios, "-gpios", "#gpio-cells")
@@ -1216,6 +1243,20 @@ static const struct supplier_bindings of_supplier_bindings[] = {
 	{ .parse_prop = parse_dmas, },
 	{ .parse_prop = parse_power_domains, },
 	{ .parse_prop = parse_hwlocks, },
+	{ .parse_prop = parse_extcon, },
+	{ .parse_prop = parse_interrupts_extended, },
+	{ .parse_prop = parse_nvmem_cells, },
+	{ .parse_prop = parse_phys, },
+	{ .parse_prop = parse_wakeup_parent, },
+	{ .parse_prop = parse_pinctrl0, },
+	{ .parse_prop = parse_pinctrl1, },
+	{ .parse_prop = parse_pinctrl2, },
+	{ .parse_prop = parse_pinctrl3, },
+	{ .parse_prop = parse_pinctrl4, },
+	{ .parse_prop = parse_pinctrl5, },
+	{ .parse_prop = parse_pinctrl6, },
+	{ .parse_prop = parse_pinctrl7, },
+	{ .parse_prop = parse_pinctrl8, },
 	{ .parse_prop = parse_regulators, },
 	{ .parse_prop = parse_gpio, },
 	{ .parse_prop = parse_gpios, },
@@ -1282,7 +1323,7 @@ static int of_link_to_suppliers(struct device *dev,
 		if (of_link_property(dev, con_np, p->name))
 			ret = -ENODEV;
 
-	for_each_child_of_node(con_np, child)
+	for_each_available_child_of_node(con_np, child)
 		if (of_link_to_suppliers(dev, child) && !ret)
 			ret = -EAGAIN;
 

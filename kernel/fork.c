@@ -1800,6 +1800,25 @@ static __always_inline void delayed_free_task(struct task_struct *tsk)
 		free_task(tsk);
 }
 
+static void copy_oom_score_adj(u64 clone_flags, struct task_struct *tsk)
+{
+	/* Skip if kernel thread */
+	if (!tsk->mm)
+		return;
+
+	/* Skip if spawning a thread or using vfork */
+	if ((clone_flags & (CLONE_VM | CLONE_THREAD | CLONE_VFORK)) != CLONE_VM)
+		return;
+
+	/* We need to synchronize with __set_oom_adj */
+	mutex_lock(&oom_adj_mutex);
+	set_bit(MMF_MULTIPROCESS, &tsk->mm->flags);
+	/* Update the values in case they were changed after copy_signal */
+	tsk->signal->oom_score_adj = current->signal->oom_score_adj;
+	tsk->signal->oom_score_adj_min = current->signal->oom_score_adj_min;
+	mutex_unlock(&oom_adj_mutex);
+}
+
 /*
  * This creates a new process as a copy of the old one,
  * but does not actually start it yet.
@@ -2274,6 +2293,8 @@ static __latent_entropy struct task_struct *copy_process(
 	trace_task_newtask(p, clone_flags);
 	uprobe_copy_process(p, clone_flags);
 
+	copy_oom_score_adj(clone_flags, p);
+
 	return p;
 
 bad_fork_cancel_cgroup:
@@ -2468,11 +2489,11 @@ long do_fork(unsigned long clone_flags,
 	      int __user *child_tidptr)
 {
 	struct kernel_clone_args args = {
-		.flags		= (clone_flags & ~CSIGNAL),
+		.flags		= (lower_32_bits(clone_flags) & ~CSIGNAL),
 		.pidfd		= parent_tidptr,
 		.child_tid	= child_tidptr,
 		.parent_tid	= parent_tidptr,
-		.exit_signal	= (clone_flags & CSIGNAL),
+		.exit_signal	= (lower_32_bits(clone_flags) & CSIGNAL),
 		.stack		= stack_start,
 		.stack_size	= stack_size,
 	};
@@ -2490,8 +2511,9 @@ long do_fork(unsigned long clone_flags,
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 {
 	struct kernel_clone_args args = {
-		.flags		= ((flags | CLONE_VM | CLONE_UNTRACED) & ~CSIGNAL),
-		.exit_signal	= (flags & CSIGNAL),
+		.flags		= ((lower_32_bits(flags) | CLONE_VM |
+				    CLONE_UNTRACED) & ~CSIGNAL),
+		.exit_signal	= (lower_32_bits(flags) & CSIGNAL),
 		.stack		= (unsigned long)fn,
 		.stack_size	= (unsigned long)arg,
 	};
@@ -2552,11 +2574,11 @@ SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 #endif
 {
 	struct kernel_clone_args args = {
-		.flags		= (clone_flags & ~CSIGNAL),
+		.flags		= (lower_32_bits(clone_flags) & ~CSIGNAL),
 		.pidfd		= parent_tidptr,
 		.child_tid	= child_tidptr,
 		.parent_tid	= parent_tidptr,
-		.exit_signal	= (clone_flags & CSIGNAL),
+		.exit_signal	= (lower_32_bits(clone_flags) & CSIGNAL),
 		.stack		= newsp,
 		.tls		= tls,
 	};

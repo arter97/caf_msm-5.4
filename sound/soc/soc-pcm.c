@@ -2113,6 +2113,15 @@ static int dpcm_fe_dai_shutdown(struct snd_pcm_substream *substream)
 
 	dpcm_set_fe_update_state(fe, stream, SND_SOC_DPCM_UPDATE_FE);
 
+#ifdef CONFIG_AUDIO_QGKI
+	dev_dbg(fe->dev, "ASoC: close FE %s\n", fe->dai_link->name);
+
+	/* now shutdown the frontend */
+	soc_pcm_close(substream);
+
+	/* shutdown the BEs */
+	dpcm_be_dai_shutdown(fe, substream->stream);
+#else
 	/* shutdown the BEs */
 	dpcm_be_dai_shutdown(fe, substream->stream);
 
@@ -2120,6 +2129,7 @@ static int dpcm_fe_dai_shutdown(struct snd_pcm_substream *substream)
 
 	/* now shutdown the frontend */
 	soc_pcm_close(substream);
+#endif
 
 	/* run the stream event for each BE */
 	dpcm_dapm_stream_event(fe, stream, SND_SOC_DAPM_STREAM_STOP);
@@ -2429,7 +2439,8 @@ int dpcm_be_dai_trigger(struct snd_soc_pcm_runtime *fe, int stream,
 		switch (cmd) {
 		case SNDRV_PCM_TRIGGER_START:
 			if ((be->dpcm[stream].state != SND_SOC_DPCM_STATE_PREPARE) &&
-			    (be->dpcm[stream].state != SND_SOC_DPCM_STATE_STOP))
+			    (be->dpcm[stream].state != SND_SOC_DPCM_STATE_STOP) &&
+			    (be->dpcm[stream].state != SND_SOC_DPCM_STATE_PAUSED))
 				continue;
 
 			ret = dpcm_do_trigger(dpcm, be_substream, cmd);
@@ -2459,7 +2470,8 @@ int dpcm_be_dai_trigger(struct snd_soc_pcm_runtime *fe, int stream,
 			be->dpcm[stream].state = SND_SOC_DPCM_STATE_START;
 			break;
 		case SNDRV_PCM_TRIGGER_STOP:
-			if (be->dpcm[stream].state != SND_SOC_DPCM_STATE_START)
+			if ((be->dpcm[stream].state != SND_SOC_DPCM_STATE_START) &&
+			    (be->dpcm[stream].state != SND_SOC_DPCM_STATE_PAUSED))
 				continue;
 
 			if (!snd_soc_dpcm_can_be_free_stop(fe, be, stream))
@@ -2759,6 +2771,10 @@ void dpcm_be_dai_prepare_async(struct snd_soc_pcm_runtime *fe, int stream,
 							    dpcm, domain);
 		} else {
 			dpcm_async[i++] = dpcm;
+			if (i == DPCM_MAX_BE_USERS) {
+				dev_dbg(fe->dev, "ASoC: MAX backend users!\n");
+				break;
+			}
 		}
 	}
 

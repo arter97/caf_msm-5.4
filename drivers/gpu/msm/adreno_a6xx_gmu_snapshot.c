@@ -5,6 +5,7 @@
 
 #include "a6xx_reg.h"
 #include "adreno.h"
+#include "adreno_a6xx.h"
 #include "adreno_a6xx_gmu.h"
 #include "adreno_snapshot.h"
 #include "kgsl_device.h"
@@ -55,6 +56,8 @@ static const unsigned int a660_gmu_registers[] = {
 	0x1F966, 0x1F96B, 0x1F970, 0x1F970, 0x1F972, 0x1F979, 0x1F9CD, 0x1F9D4,
 	0x1FA02, 0x1FA03, 0x20000, 0x20001, 0x20004, 0x20004, 0x20008, 0x20012,
 	0x20018, 0x20018,
+	/* GMU AO LPAC */
+	0x23B30, 0x23B30,
 };
 
 static const unsigned int a630_rscc_snapshot_registers[] = {
@@ -377,13 +380,9 @@ void a6xx_gmu_device_snapshot(struct kgsl_device *device,
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct a6xx_gmu_device *gmu = to_a6xx_gmu(adreno_dev);
-	unsigned int val;
 
 	kgsl_snapshot_add_section(device, KGSL_SNAPSHOT_SECTION_GMU_MEMORY,
 		snapshot, a6xx_gmu_snapshot_itcm, gmu);
-
-	kgsl_snapshot_add_section(device, KGSL_SNAPSHOT_SECTION_GMU_MEMORY,
-		snapshot, a6xx_gmu_snapshot_dtcm, gmu);
 
 	a6xx_gmu_snapshot_versions(device, gmu, snapshot);
 
@@ -407,15 +406,25 @@ void a6xx_gmu_device_snapshot(struct kgsl_device *device,
 	snapshot_rscc_registers(adreno_dev, snapshot);
 
 	if (!a6xx_gmu_gx_is_on(device))
-		return;
+		goto dtcm;
 
 	/* Set fence to ALLOW mode so registers can be read */
 	kgsl_regwrite(device, A6XX_GMU_AO_AHB_FENCE_CTRL, 0);
 	/* Make sure the previous write posted before reading */
 	wmb();
-	kgsl_regread(device, A6XX_GMU_AO_AHB_FENCE_CTRL, &val);
 
 	adreno_snapshot_registers(device, snapshot,
 			a6xx_gmu_gx_registers,
 			ARRAY_SIZE(a6xx_gmu_gx_registers) / 2);
+
+	/* A stalled SMMU can lead to NoC timeouts when host accesses DTCM */
+	if (a6xx_is_smmu_stalled(device)) {
+		dev_err(&gmu->pdev->dev,
+			"Not dumping dtcm because SMMU is stalled\n");
+		return;
+	}
+
+dtcm:
+	kgsl_snapshot_add_section(device, KGSL_SNAPSHOT_SECTION_GMU_MEMORY,
+		snapshot, a6xx_gmu_snapshot_dtcm, gmu);
 }

@@ -2,17 +2,17 @@
 if (ARCH_QCOM || COMPILE_TEST)
 
 config PINCTRL_MSM
-	tristate "Qualcomm generic pin controller driver framework"
+	tristate "Qualcomm generic pin controller driver"
 	select PINMUX
 	select PINCONF
 	select GENERIC_PINCONF
 	select GPIOLIB_IRQCHIP
 	help
-	  This is a Qualcomm generic pin controller driver framework
-	  that is used by platform specific drivers to enable the
-	  Top Level Mode Multiplexer (TLMM) hardware block. Say Y
-	  here to compile statically, or M here to compile it as a
-	  module. If unsure, say N.
+          This is Qualcomm Technologies, Inc msm platform TLMM
+	  generic driver. This provides interfaces to chipset specific
+	  clients drivers use the TLMM block.
+	  Say yes here to enable Qualcomm TLMM driver.
+
 
 config PINCTRL_APQ8064
 	tristate "Qualcomm APQ8064 pin controller driver"
@@ -219,6 +219,17 @@ config PINCTRL_SA8195
 	  Qualcomm Technologies Inc TLMM block found on the Qualcomm
 	  Technologies Inc SA8195 platform.
 
+config PINCTRL_SDMSHRIKE
+	tristate "Qualcomm Technologies Inc SDMSHRIKE pin controller driver"
+	depends on GPIOLIB && OF
+	select PINCTRL_MSM
+	help
+          This is the pinctrl, pinmux, pinconf and gpiolib driver for the
+          Qualcomm Technologies Inc Top Level Mode Multiplexer block (TLMM)
+          block found on the Qualcomm Technologies Inc SDMSHRIKE platform.
+          Say Y here to compile statically, or M here to compile it as a module.
+          If unsure, say N.
+
 config PINCTRL_LAHAINA
 	tristate "Qualcomm Technologies, Inc LAHAINA pin controller driver"
 	depends on GPIOLIB && OF
@@ -259,6 +270,28 @@ config PINCTRL_HOLI
 	  Say Y here to compile statically, or M here to compile it as a module.
 	  If unsure, say N.
 
+config PINCTRL_YUPIK
+	tristate "Qualcomm Technologies Inc YUPIK pin controller driver"
+	depends on GPIOLIB && OF
+	select PINCTRL_MSM
+	help
+	  This is the pinctrl, pinmux, pinconf and gpiolib driver for the
+	  Qualcomm Technologies Inc Top Level Mode Multiplexer block (TLMM)
+	  block found on the Qualcomm Technologies Inc YUPIK platform.
+	  Say Y here to compile statically, or M here to compile it as a module.
+	  If unsure, say N.
+
+config PINCTRL_SCUBA
+        tristate "Qualcomm Technologies Inc SCUBA pin controller driver"
+        depends on GPIOLIB && OF
+        select PINCTRL_MSM
+        help
+          This is the pinctrl, pinmux, pinconf and gpiolib driver for the
+          Qualcomm Technologies Inc Top Level Mode Multiplexer block (TLMM)
+          block found on the Qualcomm Technologies Inc SCUBA platform.
+          Say Y here to compile statically, or M here to compile it as a module.
+          If unsure, say N.
+
 config PINCTRL_SDXLEMUR
 	tristate "Qualcomm Technologies Inc SDXLEMUR pin controller driver"
 	depends on GPIOLIB && OF
@@ -279,6 +312,37 @@ config PINCTRL_MAKENA
           Qualcomm Technologies Inc Top Level Mode Multiplexer block (TLMM)
           block found on the Qualcomm Technologies Inc MAKENA platform.
           Say Y here to compile statically, or M here to compile it as a module.
+
+config PINCTRL_SDXNIGHTJAR
+	tristate "Qualcomm Technologies Inc NIGHTJAR pin controller driver"
+	depends on GPIOLIB && OF
+	select PINCTRL_MSM
+	help
+	  This is the pinctrl, pinmux, pinconf and gpiolib driver for the
+	  Qualcomm Technologies Inc Top Level Mode Multiplexer block (TLMM)
+	  block found on the Qualcomm Technologies Inc SDXNIGHTJAR platform.
+	  Say Y here to compile statically, or M here to compile it as a module.
+	  If unsure, say N.
+
+config PINCTRL_MONACO
+	tristate "Qualcomm Technologies Inc MONACO pin controller driver"
+	depends on GPIOLIB && OF
+	select PINCTRL_MSM
+	help
+	  This is the pinctrl, pinmux, pinconf and gpiolib driver for the
+	  Qualcomm Technologies Inc Top Level Mode Multiplexer block (TLMM)
+	  block found on the Qualcomm Technologies Inc MONACO platform.
+	  Say Y here to compile statically, or M here to compile it as a module.
+	  If unsure, say N.
+
+config PINCTRL_SLPI
+        tristate "Qualcomm Technologies, Inc SLPI pin controller driver"
+	depends on GPIOLIB && OF
+	help
+	  Sensor Low Power Island(SLPI) has a Pin controller which can support
+	  14 pin configurations. This is the pinctrl, pinmux and  pinconf
+	  driver for the SLPI pin controller block.
+	  Say Y here to compile statically, or M here to compile it as a module.
           If unsure, say N.
 
 endif

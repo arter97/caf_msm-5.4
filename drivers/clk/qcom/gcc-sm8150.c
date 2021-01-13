@@ -1922,7 +1922,7 @@ static struct clk_branch gcc_cpuss_rbcpr_clk = {
 
 static struct clk_branch gcc_ddrss_gpu_axi_clk = {
 	.halt_reg = 0x71154,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_VOTED,
 	.clkr = {
 		.enable_reg = 0x71154,
 		.enable_mask = BIT(0),
@@ -4363,10 +4363,6 @@ static int gcc_sm8150_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 	int ret;
 
-	regmap = qcom_cc_map(pdev, &gcc_sm8150_desc);
-	if (IS_ERR(regmap))
-		return PTR_ERR(regmap);
-
 	vdd_cx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_cx");
 	if (IS_ERR(vdd_cx.regulator[0])) {
 		if (!(PTR_ERR(vdd_cx.regulator[0]) == -EPROBE_DEFER))
@@ -4382,6 +4378,10 @@ static int gcc_sm8150_probe(struct platform_device *pdev)
 				"Unable to get vdd_cx_ao regulator\n");
 		return PTR_ERR(vdd_cx_ao.regulator[0]);
 	}
+
+	regmap = qcom_cc_map(pdev, &gcc_sm8150_desc);
+	if (IS_ERR(regmap))
+		return PTR_ERR(regmap);
 
 	/* Disable the GPLL0 active input to NPU and GPU via MISC registers */
 	regmap_update_bits(regmap, 0x4d110, 0x3, 0x3);

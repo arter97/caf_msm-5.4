@@ -16,6 +16,17 @@
 
 #include <clocksource/arm_arch_timer.h>
 
+#ifdef CONFIG_ARM
+#ifndef readq_relaxed
+#define readq_relaxed(a) ({			\
+	u64 val = readl_relaxed((a) + 4);	\
+	val <<= 32;				\
+	val |=  readl_relaxed((a));		\
+	val;					\
+})
+#endif
+#endif
+
 struct stats_config {
 	u32 offset_addr;
 	u32 num_records;

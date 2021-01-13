@@ -24,6 +24,7 @@
 #include <linux/mmc/slot-gpio.h>
 
 #include "core.h"
+#include "crypto.h"
 #include "host.h"
 #include "slot-gpio.h"
 #include "pwrseq.h"
@@ -223,11 +224,15 @@ int mmc_of_parse(struct mmc_host *host)
 	bool cd_cap_invert, cd_gpio_invert = false;
 #if defined(CONFIG_SDC_QTI)
 	const char *lower_bus_speed = NULL;
-	struct device_node *np = dev->of_node;
+	struct device_node *np;
 #endif
 
 	if (!dev || !dev_fwnode(dev))
 		return 0;
+
+#if defined(CONFIG_SDC_QTI)
+	np = dev->of_node;
+#endif
 
 	/* "bus-width" is translated to MMC_CAP_*_BIT_DATA flags */
 	if (device_property_read_u32(dev, "bus-width", &bus_width) < 0) {
@@ -731,6 +736,12 @@ int mmc_add_host(struct mmc_host *host)
 	mmc_add_host_debugfs(host);
 #endif
 
+#ifdef CONFIG_MMC_IPC_LOGGING
+	host->ipc_log_ctxt = ipc_log_context_create(NUM_LOG_PAGES, dev_name(&host->class_dev), 0);
+	if (!host->ipc_log_ctxt)
+		pr_err("%s: Error getting ipc_log_ctxt\n", __func__);
+#endif
+
 #if defined(CONFIG_SDC_QTI)
 	err = sysfs_create_group(&host->class_dev.kobj, &clk_scaling_attr_grp);
 	if (err)
@@ -764,6 +775,11 @@ void mmc_remove_host(struct mmc_host *host)
 	mmc_remove_host_debugfs(host);
 #endif
 
+#ifdef CONFIG_MMC_IPC_LOGGING
+	ipc_log_context_destroy(host->ipc_log_ctxt);
+	host->ipc_log_ctxt = NULL;
+#endif
+
 #if defined(CONFIG_SDC_QTI)
 	sysfs_remove_group(&host->class_dev.kobj, &clk_scaling_attr_grp);
 #endif
@@ -782,6 +798,7 @@ EXPORT_SYMBOL(mmc_remove_host);
  */
 void mmc_free_host(struct mmc_host *host)
 {
+	mmc_crypto_free_host(host);
 	mmc_pwrseq_free(host);
 	put_device(&host->class_dev);
 }

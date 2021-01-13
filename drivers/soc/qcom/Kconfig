@@ -17,7 +17,7 @@ config QCOM_AOSS_QMP
 	  Subsystem (AOSS) using Qualcomm Messaging Protocol (QMP).
 
 config QCOM_COMMAND_DB
-	bool "Qualcomm Technologies, Inc. Command DB driver"
+	tristate "Qualcomm Technologies, Inc. Command DB driver"
 	depends on ARCH_QCOM || COMPILE_TEST
 	depends on OF_RESERVED_MEM
 	help
@@ -148,6 +148,16 @@ config QCOM_IPCC
          Say Y here to compile the driver as a part of kernel or M to compile
          as a module.
 
+config QCOM_RIMPS
+	tristate "Qualcomm Technologies, Inc. Rimps driver"
+	depends on MAILBOX
+	help
+	 Qualcomm Technologies, Inc. RIMPS driver for MSM devices. This driver
+	 acts as a mailbox controller to do doorbell between Apss and Rimps
+	 subsystem. Say yes here to enable rx and tx channel between both
+	 the subsystems.
+	 If unsure, say n.
+
 config QCOM_LLCC
 	tristate "Qualcomm Technologies, Inc. LLCC driver"
 	depends on ARCH_QCOM || COMPILE_TEST
@@ -162,6 +172,15 @@ config QCOM_LAHAINA_LLCC
 	depends on QCOM_LLCC
 	help
 	  Say y or m here to enable the LLCC driver for Lahaina platform.
+	  This provides data required to configure LLCC so that clients
+	  can start using the LLCC slices.
+	  If unsure, say n.
+
+config QCOM_SDXLEMUR_LLCC
+	tristate "Qualcomm Technologies, Inc. SDXLEMUR LLCC driver"
+	depends on QCOM_LLCC
+	help
+	  Say y or m here to enable the LLCC driver for SDXLEMUR platform.
 	  This provides data required to configure LLCC so that clients
 	  can start using the LLCC slices.
 	  If unsure, say n.
@@ -189,6 +208,12 @@ config QCOM_SA8195_LLCC
 	depends on QCOM_LLCC
 	help
 	  Say y or m here to enable the LLCC driver for SA8195 platform.
+
+config QCOM_YUPIK_LLCC
+	tristate "Qualcomm Technologies, Inc. YUPIK LLCC driver"
+	depends on QCOM_LLCC
+	help
+	  Say y or m here to enable the LLCC driver for Yupik platform.
 	  This provides data required to configure LLCC so that clients
 	  can start using the LLCC slices.
 	  If unsure, say n.
@@ -374,6 +399,16 @@ config QCOM_QMI_HELPERS
 
 source "drivers/soc/qcom/memshare/Kconfig"
 
+config QCOM_QFPROM_SYS
+	tristate "Qualcomm Technologies, Inc. QFPROM_SYS driver "
+	depends on QCOM_QFPROM
+	help
+	  Qualcomm Technologies, Inc. QFPROM_SYS driver. The QFPROM SYS driver
+	  provides access to the child nodes of QFPROM to user space. The cell
+	  values are exported as sysfs entries.
+
+	  Say y here to enable QFPROM SYS support.
+
 config QCOM_RMTFS_MEM
 	tristate "Qualcomm Remote Filesystem memory driver"
 	depends on ARCH_QCOM
@@ -395,8 +430,8 @@ config MSM_CORE_HANG_DETECT
 	  enabled or disabled dynamically.
 
 config QCOM_RPMH
-	bool "Qualcomm RPM-Hardened (RPMH) Communication"
-	depends on ARCH_QCOM && ARM64 || COMPILE_TEST
+	tristate "Qualcomm RPM-Hardened (RPMH) Communication"
+	depends on ARCH_QCOM || COMPILE_TEST
 	help
 	  Support for communication with the hardened-RPM blocks in
 	  Qualcomm Technologies Inc (QTI) SoCs. RPMH communication uses an
@@ -404,8 +439,16 @@ config QCOM_RPMH
 	  of hardware components aggregate requests for these resources and
 	  help apply the aggregated state on the resource.
 
+config QCOM_RPMH_QGKI_DEBUG
+	bool "Enhance RPMh debug for QGKI variants"
+	depends on QCOM_RPMH
+	help
+	  Adding debug prints increases latency of handling RPMh requests. This
+	  is specially notable during the boot process. Let's selectively remove
+	  some tracing that are more informative than an actual error.
+
 config QCOM_RPMHPD
-	bool "Qualcomm RPMh Power domain driver"
+	tristate "Qualcomm RPMh Power domain driver"
 	depends on QCOM_RPMH && QCOM_COMMAND_DB
 	help
 	  QCOM RPMh Power domain driver to support power-domains with
@@ -533,6 +576,37 @@ config QCOM_VIRT_MINIDUMP
 	  on virtual machine. Minidump would dump all registered entries,
 	  only when DLOAD mode is enabled on host.
 
+config QCOM_DYN_MINIDUMP_STACK
+	bool "QTI Dynamic Minidump Stack Registration Support"
+	depends on QCOM_MINIDUMP
+	help
+	  This enables minidump dynamic current stack registration feature.
+	  It allows current task stack to be available in minidump, for cases
+	  where CPU is unable to register it from IPI_CPU_STOP. The stack data
+	  can be used to unwind stack frames.
+
+config QCOM_MINIDUMP_FTRACE
+	bool "QCOM Minidump Support"
+	depends on QGKI && QCOM_MINIDUMP
+	help
+	  This enables ftrace buffer registration in minidump table.
+	  This allows dumping ftrace buffer content as part of
+	  minidump dumps.
+
+config QCOM_MINIDUMP_PANIC_DUMP
+	bool "QCOM Minidump Panic dumps Support"
+	depends on QGKI && QCOM_MINIDUMP
+	help
+	  This enables various dumps collection in minidump table,
+	  on panic.
+
+config QCOM_MINIDUMP_PANIC_CPU_CONTEXT
+	bool "QCOM Minidump Panic dumps Support"
+	depends on ARM64 && QCOM_MINIDUMP_PANIC_DUMP
+	help
+	  This enables cpu context collection in minidump table,
+	  on panic.
+
 config MINIDUMP_MAX_ENTRIES
 	int "Minidump Maximum num of entries"
 	default 200
@@ -540,6 +614,16 @@ config MINIDUMP_MAX_ENTRIES
 	help
 	  This defines maximum number of entries to be allocated for application
 	  subsytem in Minidump table.
+
+config QCOM_MICRODUMP
+	tristate "Qualcomm Technologies, Inc. Microdump Support"
+	depends on MSM_SUBSYSTEM_RESTART
+	depends on QCOM_SMEM
+	help
+	  This enables microdump feature. It collects
+	  crash data from SMEM whenever modem subsytem
+	  crashes and stores it under /dev to expose
+	  to user space.
 
 config QCOM_APR
 	tristate "Qualcomm APR Bus (Asynchronous Packet Router)"
@@ -579,6 +663,26 @@ config MSM_PERFORMANCE
           when requested by the userspace by changing the cpufreq policy
           fmin and fmax. The user space can request  the cpu freq change by
           writing cpu#:freq values
+
+config QTI_PLH
+	bool "Qualcomm Technologies Inc. RIMPS PLH interface"
+	depends on ARM_SCMI_PROTOCOL && MSM_PERFORMANCE
+	default n
+	help
+	  Interface between RIMPS PLH and userspace.
+
+	  This interface is responsible for handling the communication
+	  with RIMPS PLH such as passing tunables, enable and disable.
+
+config MSM_PERFORMANCE_QGKI
+	bool "Enable QGKI features"
+        depends on QGKI
+        help
+          This option enables full functionality of MSM_PERFORMANCE for
+          QGKI flavor. This is not defined in GKI builds wherein the driver
+          offers minimal functionality of changing the min and max frequency
+          of a given cluster. The user space can request  the cpu freq change
+          by writing cpu#:freq values
 
 config QMP_DEBUGFS_CLIENT
 	bool "Debugfs Client to communicate with AOP using QMP protocol"
@@ -683,6 +787,14 @@ config QTI_ALTMODE_GLINK
 	  as Pin Assignment Notifications from the Type-C stack running on a
 	  remote subsystem (e.g. DSP) via the PMIC GLINK interface.
 
+config QTI_PMIC_PON_LOG
+	tristate "PMIC PON log parser driver"
+	help
+	  The PMIC PON log driver parses PMIC power-on, power-off, and fault
+	  information out of a binary log stored in the SDAM memory found on
+	  some Qualcomm Technologies, Inc. PMIC devices.  This driver is useful
+	  when debugging unexpected power-off scenarios.
+
 config MSM_CDSP_LOADER
 	tristate "CDSP loader support"
 	help
@@ -718,6 +830,55 @@ config QTI_SYSTEM_PM
 
 config QTI_SYSTEM_PM_RPM
 	bool
+
+config QTI_PLH_SCMI_CLIENT
+	tristate "Qualcomm Technologies Inc. SCMI client driver for PLH"
+	depends on QTI_PLH
+	default n
+	help
+	  SCMI client driver registers itself with SCMI framework for PLH
+	  vendor protocol, and also registers with the plh interface driver
+	  msm_performance.
+
+	  This driver deliver the PLH vendor protocol handle to interface
+	  driver, and interface driver will use this handle to communicate
+	  with RIMPS PLH.
+
+config QTI_HW_MEMLAT
+	tristate "Qualcomm Technologies Inc. RIMPS memlat interface driver"
+	depends on PERF_EVENTS
+	default n
+	help
+	  Interface driver between RIMPS memlat and userspace.
+
+	  This driver is responsible for handling the communication with
+	  RIMPS memlat such as setting up PMU events, passing tunables, frequency
+	  table, PMU counters and saving the values of PMU counters during LPM and
+	  hotplug.
+
+config QTI_HW_MEMLAT_SCMI_CLIENT
+	tristate "Qualcomm Technologies Inc. SCMI client driver for HW MEMLAT"
+	depends on QTI_HW_MEMLAT
+	default n
+	help
+	  SCMI client driver registers itself with SCMI framework for memlat
+	  vendor protocol, and also registers with the memlat hw interface
+	  driver.
+
+	  This driver deliver the memlat vendor protocol handle to interface
+	  driver, and interface driver will use this handle to communicate with
+	  memlat HW.
+
+config QTI_HW_MEMLAT_LOG
+	tristate "Qualcomm Technologies Inc. HW MEMLAT Logging"
+	depends on IPC_LOGGING && QCOM_RIMPS
+	default n
+	help
+	  Memlat hw logging driver, this driver has the infra to collect logs
+	  generated in MEMLAT HW and log the buffers.
+
+	  This driver register with IPC_Logging framework, to have dedicated
+	  buffer for memlat hw device.
 
 if MSM_PM
 menuconfig MSM_IDLE_STATS
@@ -767,7 +928,6 @@ config QTI_RPM_STATS_LOG
 config QTI_DDR_STATS_LOG
 	tristate "Qualcomm Technologies Inc (QTI) DDR Stats Driver"
 	depends on QCOM_RPMH
-	depends on QGKI
 	help
 	  This option enables a driver which reads DDR statistical information
 	  from AOP shared memory location such as DDR low power modes and DDR
@@ -808,7 +968,6 @@ config QCOM_FSA4480_I2C
 
 config QCOM_SOC_SLEEP_STATS
 	tristate "Qualcomm Technologies, Inc. (QTI) SoC sleep stats driver"
-	depends on QGKI
 	help
 	  Qualcomm Technologies Inc (QTI) SoC sleep stats driver to read
 	  the shared memory exported by the remote processor related to
@@ -825,23 +984,119 @@ config QCOM_CDSP_RM
 	  to improve RPC latency. The driver also registers cooling devices for
 	  CDSP subsystem and implements Cx ipeak limit management.
 
-config QCOM_WATCHDOG
-	tristate "Qualcomm Watchdog Support"
+config CDSPRM_VTCM_DYNAMIC_DEBUG
+	bool "Enable for VTCM parition test enablement"
+	help
+	  The VTCM dynamic debug flag is used to enable the vtcm partition test
+	  feature from the debugfs node from cdsprm driver.When the test is
+	  enabled, the vtcm partition details are sent to the CDSP via rpmsg
+	  channel.
+
+config QCOM_WDT_CORE
+	tristate "Qualcomm Technologies, Inc. Watchdog Support"
 	depends on ARCH_QCOM
 	help
-          This enables the watchdog module. It causes kernel panic if the
-          watchdog times out. It allows for detection of cpu hangs and
-          deadlocks. It does not run during the bootup process, so it will
-          not catch any early lockups.
+	   This enables the watchdog framework for Qualcomm Technologies, Inc.
+	   devices. It causes a kernel panic if the watchdog times out. It allows
+	   for the detection of cpu hangs and deadlocks. It does not run during the
+	   bootup process, so it will not catch any early lockups. Enabling this
+	   only enables the framework, an individual Qualcomm Technologies, Inc.
+	   watchdog module must be loaded along with this for watchdog
+	   functionality.
+
+config QCOM_SOC_WATCHDOG
+	tristate "Qualcomm Technologies, Inc. Soc Watchdog"
+	depends on QCOM_WDT_CORE
+	help
+	  This enables the Qualcomm Technologies, Inc. watchdog module for the
+	  Soc. It provides an interface to perform watchdog actions such as
+	  setting the bark/bite time and also petting the hardware watchdog. To
+	  utilize this the Qualcomm Technologies, Inc. watchdog framework must
+	  also be enabled.
+
+config QCOM_IRQ_STAT
+	bool "QCOM IRQ stats"
+	depends on QGKI && QCOM_WDT_CORE
+	help
+	  This give irq stats for top hitter at
+	  watchdog pet, watchdog bark and kernel panics.
+	  This provides additional debug information
+	  for irq counts on cpu and ipi counts.
+
+config QCOM_INITIAL_LOGBUF
+	bool "QCOM save initial log_buf"
+	depends on QGKI && QCOM_WDT_CORE
+	help
+	  This enables to keep copy of initial log_buf
+	  of minimum 512KB from bootup. It can help in
+	  debugging issues which are manifestation
+	  of failure during initial bootup.
 
 config QCOM_FORCE_WDOG_BITE_ON_PANIC
-	bool "QCOM force watchdog bite"
-	depends on QCOM_WATCHDOG
+	bool "QCOM force watchdog bite on panic"
+	depends on QCOM_WDT_CORE
 	help
 	  This forces a watchdog bite when the device restarts
 	  due to a kernel panic. On certain MSM SoCs,
 	  this provides additional debugging
 	  information.
+
+config QCOM_WDOG_BITE_EARLY_PANIC
+	bool "QCOM early panic watchdog bite"
+	depends on QCOM_WDT_CORE && QCOM_FORCE_WDOG_BITE_ON_PANIC
+	help
+	  This forces a watchdog bite early in panic sequence. On certain
+	  MSM SoCs, this provides us additional debugging information at the
+	  context of the crash. If this option is disabled, then bite occurs
+	  later in panic, which permits more of the restart sequence to run
+	  (e.g. more dmesg to flushed to console).
+
+config QCOM_WATCHDOG_BARK_TIME
+	depends on QCOM_WDT_CORE
+	int "Qualcomm Technologies, Inc. Watchdog bark time in ms"
+	default 11000
+	range 11000 11000
+	help
+	  The amount of time, in milliseconds, that should elapse after
+	  a watchdog timer reset before a bark interrupt is sent from the
+	  watchdog.
+
+config QCOM_WATCHDOG_PET_TIME
+	depends on QCOM_WDT_CORE
+	int "Qualcomm Technologies, Inc. Watchdog pet time in ms"
+	default 9360
+	range 9360 9360
+	help
+	  The amount of time, in milliseconds, that should elapse before
+	  a watchdog pet is initiated to reset the watchdog timer to 0.
+
+config QCOM_WATCHDOG_IPI_PING
+	depends on QCOM_WDT_CORE
+	bool "Qualcomm Technologies, Inc. Watchdog ipi ping"
+	default y
+	help
+	  This boolean flag gives the watchdog driver the ability to send a
+	  keep-alive ping to other cpu's if it is set to 1. Otherwise, when
+	  it is set to 0 no keep alive pings will be sent.
+
+config QCOM_WATCHDOG_WAKEUP_ENABLE
+	depends on QCOM_WDT_CORE
+	bool "Qualcomm Technologies, Inc. Watchdog wakeup enable"
+	default y
+	help
+	  This boolean flag allows the non secure watchdog counter to freeze
+	  and unfreeze automatically across the system suspend and resume
+	  path.
+
+config QCOM_WATCHDOG_USERSPACE_PET
+	depends on QCOM_WDT_CORE
+	bool "Qualcomm Technologies, Inc. Watchdog user pet enable"
+	default n
+	help
+	  This boolean flag allows enabling the userspace-watchdog feature.
+	  This feature requires userspace to pet the watchdog every in an
+	  interval that matches the time set in the pet-time config.
+	  The feature is supported through device sysfs files.
 
 config MSM_SPCOM
          depends on QCOM_GLINK
@@ -935,4 +1190,5 @@ config RENAME_BLOCK_DEVICE
 	  to a name that is needed. This is used for rename block device names
 	  created by default as sda1, sda2 etc. to the names that is needed.
 
+source "drivers/soc/qcom/icnss2/Kconfig"
 endmenu

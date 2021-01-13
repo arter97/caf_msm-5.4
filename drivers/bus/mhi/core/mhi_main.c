@@ -244,11 +244,17 @@ static enum mhi_ee mhi_translate_dev_ee(struct mhi_controller *mhi_cntrl,
 
 enum mhi_ee mhi_get_exec_env(struct mhi_controller *mhi_cntrl)
 {
+	int ret;
 	u32 exec;
-	int ret = mhi_read_reg(mhi_cntrl, mhi_cntrl->bhi, BHI_EXECENV, &exec);
+
+	if (!mhi_cntrl || !mhi_cntrl->bhi)
+		return MHI_EE_MAX;
+
+	ret = mhi_read_reg(mhi_cntrl, mhi_cntrl->bhi, BHI_EXECENV, &exec);
 
 	return (ret) ? MHI_EE_MAX : mhi_translate_dev_ee(mhi_cntrl, exec);
 }
+EXPORT_SYMBOL(mhi_get_exec_env);
 
 enum mhi_dev_state mhi_get_mhi_state(struct mhi_controller *mhi_cntrl)
 {
@@ -258,6 +264,7 @@ enum mhi_dev_state mhi_get_mhi_state(struct mhi_controller *mhi_cntrl)
 				     MHISTATUS_MHISTATE_SHIFT, &state);
 	return ret ? MHI_STATE_MAX : state;
 }
+EXPORT_SYMBOL(mhi_get_mhi_state);
 
 int mhi_queue_sclist(struct mhi_device *mhi_dev,
 		     struct mhi_chan *mhi_chan,
@@ -1207,19 +1214,21 @@ int mhi_process_ctrl_ev_ring(struct mhi_controller *mhi_cntrl,
 				enum MHI_PM_STATE new_state;
 
 				/*
-				 * Don't process sys error if device support
-				 * rddm since we will be processing rddm ee
-				 * event instead of sys error state change event
+				 * Allow move to SYS_ERROR even if RDDM is
+				 * supported so that core driver is inactive
+				 * with anticipation of an upcoming RDDM event
 				 */
-				if (mhi_cntrl->ee == MHI_EE_RDDM ||
-				    mhi_cntrl->rddm_image)
-					break;
-
-				MHI_ERR("MHI system error detected\n");
 				write_lock_irq(&mhi_cntrl->pm_lock);
+				/* skip if RDDM event was already processed */
+				if (mhi_cntrl->ee == MHI_EE_RDDM) {
+					write_unlock_irq(&mhi_cntrl->pm_lock);
+					break;
+				}
 				new_state = mhi_tryset_pm_state(mhi_cntrl,
 							MHI_PM_SYS_ERR_DETECT);
 				write_unlock_irq(&mhi_cntrl->pm_lock);
+
+				MHI_ERR("MHI system error detected\n");
 				if (new_state == MHI_PM_SYS_ERR_DETECT)
 					mhi_process_sys_err(mhi_cntrl);
 				break;
@@ -1257,6 +1266,22 @@ int mhi_process_ctrl_ev_ring(struct mhi_controller *mhi_cntrl,
 				st = MHI_ST_TRANSITION_MISSION_MODE;
 				break;
 			case MHI_EE_RDDM:
+				if (mhi_cntrl->ee == MHI_EE_RDDM ||
+				    mhi_cntrl->power_down)
+					break;
+
+				MHI_ERR("RDDM event occurred!\n");
+				write_lock_irq(&mhi_cntrl->pm_lock);
+				mhi_cntrl->ee = MHI_EE_RDDM;
+				write_unlock_irq(&mhi_cntrl->pm_lock);
+
+				/* notify critical clients */
+				mhi_control_error(mhi_cntrl);
+
+				mhi_cntrl->status_cb(mhi_cntrl,
+						     mhi_cntrl->priv_data,
+						     MHI_CB_EE_RDDM);
+				wake_up_all(&mhi_cntrl->state_event);
 				break;
 			default:
 				MHI_ERR("Unhandled EE event:%s\n",
@@ -1528,13 +1553,14 @@ void mhi_ev_task(unsigned long data)
 {
 	struct mhi_event *mhi_event = (struct mhi_event *)data;
 	struct mhi_controller *mhi_cntrl = mhi_event->mhi_cntrl;
+	unsigned long flags;
 
 	MHI_VERB("Enter for ev_index:%d\n", mhi_event->er_index);
 
 	/* process all pending events */
-	spin_lock_bh(&mhi_event->lock);
+	spin_lock_irqsave(&mhi_event->lock, flags);
 	mhi_event->process_event(mhi_cntrl, mhi_event, U32_MAX);
-	spin_unlock_bh(&mhi_event->lock);
+	spin_unlock_irqrestore(&mhi_event->lock, flags);
 }
 
 void mhi_ctrl_ev_task(unsigned long data)
@@ -1623,8 +1649,6 @@ irqreturn_t mhi_intvec_threaded_handlr(int irq_number, void *dev)
 	enum MHI_PM_STATE pm_state = 0;
 	enum mhi_ee ee = 0;
 
-	MHI_VERB("Enter\n");
-
 	write_lock_irq(&mhi_cntrl->pm_lock);
 	if (!MHI_REG_ACCESS_VALID(mhi_cntrl->pm_state)) {
 		write_unlock_irq(&mhi_cntrl->pm_lock);
@@ -1638,20 +1662,20 @@ irqreturn_t mhi_intvec_threaded_handlr(int irq_number, void *dev)
 		TO_MHI_EXEC_STR(ee),
 		TO_MHI_STATE_STR(state));
 
-	if (mhi_cntrl->power_down) {
-		write_unlock_irq(&mhi_cntrl->pm_lock);
-		goto exit_intvec;
-	}
-
 	if (state == MHI_STATE_SYS_ERR) {
 		MHI_ERR("MHI system error detected\n");
 		pm_state = mhi_tryset_pm_state(mhi_cntrl,
 					       MHI_PM_SYS_ERR_DETECT);
 	}
-	write_unlock_irq(&mhi_cntrl->pm_lock);
 
-	if (ee == MHI_EE_RDDM) {
-		write_lock_irq(&mhi_cntrl->pm_lock);
+	if (mhi_cntrl->rddm_supported) {
+		/* exit as power down is already initiated */
+		if (mhi_cntrl->power_down || ee != MHI_EE_RDDM) {
+			write_unlock_irq(&mhi_cntrl->pm_lock);
+			goto exit_intvec;
+		}
+
+		/* prevent multiple entries for RDDM execution environment */
 		if (mhi_cntrl->ee == MHI_EE_RDDM) {
 			write_unlock_irq(&mhi_cntrl->pm_lock);
 			goto exit_intvec;
@@ -1660,15 +1684,18 @@ irqreturn_t mhi_intvec_threaded_handlr(int irq_number, void *dev)
 		write_unlock_irq(&mhi_cntrl->pm_lock);
 
 		MHI_ERR("RDDM event occurred!\n");
-		mhi_cntrl->status_cb(mhi_cntrl, mhi_cntrl->priv_data,
-				     MHI_CB_EE_RDDM);
-		wake_up_all(&mhi_cntrl->state_event);
 
 		/* notify critical clients with early notifications */
 		mhi_control_error(mhi_cntrl);
 
+		mhi_cntrl->status_cb(mhi_cntrl, mhi_cntrl->priv_data,
+				     MHI_CB_EE_RDDM);
+		wake_up_all(&mhi_cntrl->state_event);
+
 		goto exit_intvec;
 	}
+
+	write_unlock_irq(&mhi_cntrl->pm_lock);
 
 	/* if device is in RDDM, don't bother processing SYS_ERR */
 	if (ee != MHI_EE_RDDM && pm_state == MHI_PM_SYS_ERR_DETECT) {
@@ -1683,8 +1710,6 @@ irqreturn_t mhi_intvec_threaded_handlr(int irq_number, void *dev)
 	}
 
 exit_intvec:
-	MHI_VERB("Exit\n");
-
 	return IRQ_HANDLED;
 }
 
@@ -1693,19 +1718,21 @@ irqreturn_t mhi_intvec_handlr(int irq_number, void *dev)
 
 	struct mhi_controller *mhi_cntrl = dev;
 	u32 in_reset = -1;
+	int ret = 0;
 
 	/* wake up any events waiting for state change */
 	MHI_VERB("Enter\n");
 	if (unlikely(mhi_cntrl->initiate_mhi_reset)) {
-		mhi_read_reg_field(mhi_cntrl, mhi_cntrl->regs, MHICTRL,
+		ret = mhi_read_reg_field(mhi_cntrl, mhi_cntrl->regs, MHICTRL,
 			MHICTRL_RESET_MASK, MHICTRL_RESET_SHIFT, &in_reset);
+
 		mhi_cntrl->initiate_mhi_reset = !!in_reset;
 	}
 	wake_up_all(&mhi_cntrl->state_event);
-	MHI_VERB("Exit\n");
+	MHI_VERB("Exit: ret %d\n", ret);
 
 	if (MHI_IN_MISSION_MODE(mhi_cntrl->ee))
-		queue_work(mhi_cntrl->special_wq, &mhi_cntrl->special_work);
+		queue_work(mhi_cntrl->wq, &mhi_cntrl->special_work);
 
 	return IRQ_WAKE_THREAD;
 }
@@ -1896,7 +1923,8 @@ int mhi_prepare_channel(struct mhi_controller *mhi_cntrl,
 	return 0;
 
 error_dec_pendpkt:
-	atomic_dec(&mhi_cntrl->pending_pkts);
+	if (in_mission_mode)
+		atomic_dec(&mhi_cntrl->pending_pkts);
 error_pm_state:
 	if (!mhi_chan->offload_ch)
 		mhi_deinit_chan_ctxt(mhi_cntrl, mhi_chan);
@@ -2033,19 +2061,22 @@ static void __mhi_unprepare_channel(struct mhi_controller *mhi_cntrl,
 {
 	int ret;
 	bool in_mission_mode = false;
+	bool notify = false;
 
 	MHI_LOG("Entered: unprepare channel:%d\n", mhi_chan->chan);
 
 	/* no more processing events for this channel */
 	mutex_lock(&mhi_chan->mutex);
 	write_lock_irq(&mhi_chan->lock);
-	if (mhi_chan->ch_state != MHI_CH_STATE_ENABLED) {
+	if (mhi_chan->ch_state != MHI_CH_STATE_ENABLED &&
+	    mhi_chan->ch_state != MHI_CH_STATE_SUSPENDED) {
 		MHI_LOG("chan:%d is already disabled\n", mhi_chan->chan);
 		write_unlock_irq(&mhi_chan->lock);
 		mutex_unlock(&mhi_chan->mutex);
 		return;
 	}
-
+	if (mhi_chan->ch_state == MHI_CH_STATE_SUSPENDED)
+		notify = true;
 	mhi_chan->ch_state = MHI_CH_STATE_DISABLED;
 	write_unlock_irq(&mhi_chan->lock);
 
@@ -2086,6 +2117,10 @@ error_invalid_state:
 	if (!mhi_chan->offload_ch) {
 		mhi_reset_chan(mhi_cntrl, mhi_chan);
 		mhi_deinit_chan_ctxt(mhi_cntrl, mhi_chan);
+
+		/* notify waiters to proceed with unbinding channel */
+		if (notify)
+			wake_up_all(&mhi_cntrl->state_event);
 	}
 	MHI_LOG("chan:%d successfully resetted\n", mhi_chan->chan);
 	mutex_unlock(&mhi_chan->mutex);
@@ -2107,15 +2142,15 @@ int mhi_debugfs_mhi_regdump_show(struct seq_file *m, void *d)
 		int offset;
 		void __iomem *base;
 	} debug_reg[] = {
+		{ "BHI_ERRDBG2", BHI_ERRDBG2, bhi_base},
+		{ "BHI_ERRDBG3", BHI_ERRDBG3, bhi_base},
+		{ "BHI_ERRDBG1", BHI_ERRDBG1, bhi_base},
+		{ "BHI_ERRCODE", BHI_ERRCODE, bhi_base},
+		{ "BHI_EXECENV", BHI_EXECENV, bhi_base},
+		{ "BHI_STATUS", BHI_STATUS, bhi_base},
 		{ "MHI_CNTRL", MHICTRL, mhi_base},
 		{ "MHI_STATUS", MHISTATUS, mhi_base},
 		{ "MHI_WAKE_DB", 0, wake_db},
-		{ "BHI_EXECENV", BHI_EXECENV, bhi_base},
-		{ "BHI_STATUS", BHI_STATUS, bhi_base},
-		{ "BHI_ERRCODE", BHI_ERRCODE, bhi_base},
-		{ "BHI_ERRDBG1", BHI_ERRDBG1, bhi_base},
-		{ "BHI_ERRDBG2", BHI_ERRDBG2, bhi_base},
-		{ "BHI_ERRDBG3", BHI_ERRDBG3, bhi_base},
 		{ "BHIE_TXVEC_DB", BHIE_TXVECDB_OFFS, bhie_base},
 		{ "BHIE_TXVEC_STATUS", BHIE_TXVECSTATUS_OFFS, bhie_base},
 		{ "BHIE_RXVEC_DB", BHIE_RXVECDB_OFFS, bhie_base},
@@ -2356,7 +2391,8 @@ static int mhi_update_channel_state(struct mhi_controller *mhi_cntrl,
 		 mhi_chan->chan, cmd == MHI_CMD_START_CHAN ? "START" : "STOP");
 
 	/* if channel is not active state state do not allow to state change */
-	if (mhi_chan->ch_state != MHI_CH_STATE_ENABLED) {
+	if (mhi_chan->ch_state != MHI_CH_STATE_ENABLED &&
+	    mhi_chan->ch_state != MHI_CH_STATE_SUSPENDED) {
 		ret = -EINVAL;
 		MHI_LOG("channel:%d is not in active state, ch_state%d\n",
 			mhi_chan->chan, mhi_chan->ch_state);
@@ -2602,7 +2638,8 @@ int mhi_get_remote_time_sync(struct mhi_device *mhi_dev,
 	local_irq_disable();
 
 	*t_host = mhi_cntrl->time_get(mhi_cntrl, mhi_cntrl->priv_data);
-	*t_dev = readq_relaxed_no_log(mhi_tsync->time_reg);
+	*t_dev = (u64)readl_relaxed_no_log(mhi_tsync->time_reg_hi) << 32 |
+			readl_relaxed_no_log(mhi_tsync->time_reg_lo);
 
 	local_irq_enable();
 	preempt_enable();
@@ -2680,8 +2717,11 @@ int mhi_get_remote_time(struct mhi_device *mhi_dev,
 	tsync_node->cb_func = cb_func;
 	tsync_node->mhi_dev = mhi_dev;
 
-	if (mhi_tsync->db_response_pending)
+	if (mhi_tsync->db_response_pending) {
+		mhi_device_put(mhi_cntrl->mhi_dev,
+			       MHI_VOTE_DEVICE | MHI_VOTE_BUS);
 		goto skip_tsync_db;
+	}
 
 	mhi_tsync->int_sequence++;
 	if (mhi_tsync->int_sequence == 0xFFFFFFFF)
@@ -2752,15 +2792,15 @@ void mhi_debug_reg_dump(struct mhi_controller *mhi_cntrl)
 		int offset;
 		void __iomem *base;
 	} debug_reg[] = {
+		{ "BHI_ERRDBG2", BHI_ERRDBG2, bhi_base},
+		{ "BHI_ERRDBG3", BHI_ERRDBG3, bhi_base},
+		{ "BHI_ERRDBG1", BHI_ERRDBG1, bhi_base},
+		{ "BHI_ERRCODE", BHI_ERRCODE, bhi_base},
+		{ "BHI_EXECENV", BHI_EXECENV, bhi_base},
+		{ "BHI_STATUS", BHI_STATUS, bhi_base},
 		{ "MHI_CNTRL", MHICTRL, mhi_base},
 		{ "MHI_STATUS", MHISTATUS, mhi_base},
 		{ "MHI_WAKE_DB", 0, wake_db},
-		{ "BHI_EXECENV", BHI_EXECENV, bhi_base},
-		{ "BHI_STATUS", BHI_STATUS, bhi_base},
-		{ "BHI_ERRCODE", BHI_ERRCODE, bhi_base},
-		{ "BHI_ERRDBG1", BHI_ERRDBG1, bhi_base},
-		{ "BHI_ERRDBG2", BHI_ERRDBG2, bhi_base},
-		{ "BHI_ERRDBG3", BHI_ERRDBG3, bhi_base},
 		{ "BHIE_TXVEC_DB", BHIE_TXVECDB_OFFS, bhie_base},
 		{ "BHIE_TXVEC_STATUS", BHIE_TXVECSTATUS_OFFS, bhie_base},
 		{ "BHIE_RXVEC_DB", BHIE_RXVECDB_OFFS, bhie_base},

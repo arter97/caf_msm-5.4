@@ -1164,12 +1164,11 @@ retry:
 		err = -EINVAL;
 		goto free_card;
 	}
-
+done:
 #if defined(CONFIG_SDC_QTI)
 	card->clk_scaling_highest = mmc_sd_get_max_clock(card);
 	card->clk_scaling_lowest = host->f_min;
 #endif
-done:
 	host->card = card;
 	return 0;
 
@@ -1238,6 +1237,7 @@ static int _mmc_sd_suspend(struct mmc_host *host)
 	}
 #endif
 	mmc_claim_host(host);
+	mmc_log_string(host, "Enter\n");
 
 	if (mmc_card_suspended(host->card))
 		goto out;
@@ -1252,6 +1252,7 @@ static int _mmc_sd_suspend(struct mmc_host *host)
 
 out:
 	mmc_release_host(host);
+	mmc_log_string(host, "Exit err: %d\n", err);
 	return err;
 }
 
@@ -1280,6 +1281,7 @@ static int _mmc_sd_resume(struct mmc_host *host)
 	int err = 0;
 
 	mmc_claim_host(host);
+	mmc_log_string(host, "Enter\n");
 
 	if (!mmc_card_suspended(host->card))
 		goto out;
@@ -1298,6 +1300,7 @@ static int _mmc_sd_resume(struct mmc_host *host)
 #endif
 out:
 	mmc_release_host(host);
+	mmc_log_string(host, "Exit err: %d\n", err);
 	return err;
 }
 
@@ -1307,6 +1310,7 @@ out:
 static int mmc_sd_resume(struct mmc_host *host)
 {
 	pm_runtime_enable(&host->card->dev);
+	mmc_log_string(host, "done\n");
 	return 0;
 }
 

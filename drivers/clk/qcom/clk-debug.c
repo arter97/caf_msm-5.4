@@ -10,6 +10,7 @@
 #include <linux/clk-provider.h>
 #include <linux/of.h>
 #include <linux/bitops.h>
+#include <linux/clk/qcom.h>
 #include <linux/mfd/syscon.h>
 
 #include "clk-regmap.h"
@@ -22,10 +23,12 @@ static DEFINE_MUTEX(clk_debug_lock);
 
 #define TCXO_DIV_4_HZ		4800000
 #define SAMPLE_TICKS_1_MS	0x1000
-#define SAMPLE_TICKS_14_MS	0x10000
+#define SAMPLE_TICKS_27_MS	0x20000
 
 #define XO_DIV4_CNT_DONE	BIT(25)
 #define CNT_EN			BIT(20)
+#define CLR_CNT			BIT(21)
+#define XO_DIV4_TERM_CNT_MASK	GENMASK(19, 0)
 #define MEASURE_CNT		GENMASK(24, 0)
 #define CBCR_ENA		BIT(0)
 
@@ -35,19 +38,31 @@ static u32 run_measurement(unsigned int ticks, struct regmap *regmap,
 {
 	u32 regval;
 
-	/* Stop counters and set the XO4 counter start value. */
-	regmap_write(regmap, ctl_reg, ticks);
+	/*
+	 * Clear CNT_EN to bring it to good known state and
+	 * set CLK_CNT to clear previous count.
+	 */
+	regmap_update_bits(regmap, ctl_reg, CNT_EN, 0x0);
+	regmap_update_bits(regmap, ctl_reg, CLR_CNT, CLR_CNT);
 
-	regmap_read(regmap, status_reg, &regval);
+	/*
+	 * Wait for timer to become ready
+	 * Ideally SW should poll for MEASURE_CNT
+	 * but since CLR_CNT is not available across targets
+	 * add 1 us delay to let CNT clear /
+	 * counter will clear within 3 reference cycle of 4.8 MHz.
+	 */
+	udelay(1);
 
-	/* Wait for timer to become ready. */
-	while ((regval & XO_DIV4_CNT_DONE) != 0) {
-		cpu_relax();
-		regmap_read(regmap, status_reg, &regval);
-	}
+	regmap_update_bits(regmap, ctl_reg, CLR_CNT, 0x0);
 
-	/* Run measurement and wait for completion. */
-	regmap_write(regmap, ctl_reg, (CNT_EN|ticks));
+	/*
+	 * Run measurement and wait for completion.
+	 */
+	regmap_update_bits(regmap, ctl_reg, XO_DIV4_TERM_CNT_MASK,
+			   ticks & XO_DIV4_TERM_CNT_MASK);
+
+	regmap_update_bits(regmap, ctl_reg, CNT_EN, CNT_EN);
 
 	regmap_read(regmap, status_reg, &regval);
 
@@ -56,12 +71,10 @@ static u32 run_measurement(unsigned int ticks, struct regmap *regmap,
 		regmap_read(regmap, status_reg, &regval);
 	}
 
-	/* Return measured ticks. */
+	regmap_update_bits(regmap, ctl_reg, CNT_EN, 0x0);
+
 	regmap_read(regmap, status_reg, &regval);
 	regval &= MEASURE_CNT;
-
-	/* Stop the counters */
-	regmap_write(regmap, ctl_reg, ticks);
 
 	return regval;
 }
@@ -94,12 +107,12 @@ static unsigned long clk_debug_mux_measure_rate(struct clk_hw *hw)
 	 * then the clock must be off.
 	 */
 
-	/* Run a short measurement. (~1 ms) */
+	/* Run a short measurement. (~1ms) */
 	raw_count_short = run_measurement(SAMPLE_TICKS_1_MS, meas->regmap,
 				data->ctl_reg, data->status_reg);
 
-	/* Run a full measurement. (~14 ms) */
-	raw_count_full = run_measurement(SAMPLE_TICKS_14_MS, meas->regmap,
+	/* Run a full measurement. (~27ms) */
+	raw_count_full = run_measurement(SAMPLE_TICKS_27_MS, meas->regmap,
 				data->ctl_reg, data->status_reg);
 
 	gcc_xo4_reg &= ~BIT(0);
@@ -111,7 +124,7 @@ static unsigned long clk_debug_mux_measure_rate(struct clk_hw *hw)
 	else {
 		/* Compute rate in Hz. */
 		raw_count_full = ((raw_count_full * 10) + 15) * TCXO_DIV_4_HZ;
-		do_div(raw_count_full, ((SAMPLE_TICKS_14_MS * 10) + 35));
+		do_div(raw_count_full, ((SAMPLE_TICKS_27_MS * 10) + 35));
 		ret = (raw_count_full * multiplier);
 	}
 
@@ -254,11 +267,21 @@ static u32 get_mux_divs(struct clk_hw *mux)
 
 static int clk_debug_measure_get(void *data, u64 *val)
 {
+	struct clk_regmap *rclk = NULL;
 	struct clk_debug_mux *mux;
 	struct clk_hw *hw = data;
 	struct clk_hw *parent;
 	int ret = 0;
 	u32 regval;
+
+	if (clk_is_regmap_clk(hw))
+		rclk = to_clk_regmap(hw);
+
+	if (rclk) {
+		ret = clk_runtime_get_regmap(rclk);
+		if (ret)
+			return ret;
+	}
 
 	mutex_lock(&clk_debug_lock);
 
@@ -294,6 +317,8 @@ static int clk_debug_measure_get(void *data, u64 *val)
 	}
 exit:
 	mutex_unlock(&clk_debug_lock);
+	if (rclk)
+		clk_runtime_put_regmap(rclk);
 	return ret;
 }
 
@@ -345,6 +370,14 @@ int map_debug_bases(struct platform_device *pdev, const char *base,
 				PTR_ERR(mux->regmap));
 		return PTR_ERR(mux->regmap);
 	}
+
+	/*
+	 * syscon_regmap_lookup_by_phandle prepares the 0th clk handle provided
+	 * in the device node. The debug clock controller prepares/enables/
+	 * disables the required clock, thus detach the clock.
+	 */
+	regmap_mmio_detach_clk(mux->regmap);
+
 	return 0;
 }
 EXPORT_SYMBOL(map_debug_bases);
@@ -469,7 +502,7 @@ static const struct file_operations list_rates_fops = {
 	.release	= seq_release,
 };
 
-static void clk_debug_print_hw(struct clk_hw *hw, struct seq_file *f)
+void clk_debug_print_hw(struct clk_hw *hw, struct seq_file *f)
 {
 	struct clk_regmap *rclk;
 
@@ -477,12 +510,18 @@ static void clk_debug_print_hw(struct clk_hw *hw, struct seq_file *f)
 		return;
 
 	clk_debug_print_hw(clk_hw_get_parent(hw), f);
-	seq_printf(f, "%s\n", clk_hw_get_name(hw));
+	clock_debug_output(f, "%s\n", clk_hw_get_name(hw));
 
 	if (clk_is_regmap_clk(hw)) {
 		rclk = to_clk_regmap(hw);
+
+		if (clk_runtime_get_regmap(rclk))
+			return;
+
 		if (rclk->ops && rclk->ops->list_registers)
 			rclk->ops->list_registers(f, hw);
+
+		clk_runtime_put_regmap(rclk);
 	}
 }
 
@@ -524,3 +563,48 @@ void clk_common_debug_init(struct clk_hw *hw, struct dentry *dentry)
 
 };
 
+/**
+ * qcom_clk_dump - dump the HW specific registers associated with this clock
+ * @clk: clock source
+ * @calltrace: indicates whether calltrace is required
+ *
+ * This function attempts to print all the registers associated with the
+ * clock and it's parents.
+ */
+void qcom_clk_dump(struct clk *clk, bool calltrace)
+{
+	struct clk_hw *hw;
+
+	if (IS_ERR_OR_NULL(clk))
+		return;
+
+	hw = __clk_get_hw(clk);
+	if (IS_ERR_OR_NULL(hw))
+		return;
+
+	pr_info("Dumping %s Registers:\n", clk_hw_get_name(hw));
+	WARN_CLK(hw, calltrace, "");
+}
+EXPORT_SYMBOL(qcom_clk_dump);
+
+/**
+ * qcom_clk_bulk_dump - dump the HW specific registers associated with clocks
+ * @clks: the clk_bulk_data table of consumer
+ * @num_clks: the number of clk_bulk_data
+ * @calltrace: indicates whether calltrace is required
+ *
+ * This function attempts to print all the registers associated with the
+ * clock and it's parents for all the clocks in the list.
+ */
+void qcom_clk_bulk_dump(int num_clks, struct clk_bulk_data *clks,
+			bool calltrace)
+{
+	int i;
+
+	if (IS_ERR_OR_NULL(clks))
+		return;
+
+	for (i = 0; i < num_clks; i++)
+		qcom_clk_dump(clks[i].clk, calltrace);
+}
+EXPORT_SYMBOL(qcom_clk_bulk_dump);

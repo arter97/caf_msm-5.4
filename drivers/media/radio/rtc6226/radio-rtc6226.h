@@ -199,7 +199,8 @@
 #define SEEK_PENDING 2
 #define SCAN_PENDING 3
 #define START_SCAN 1
-#define WAIT_TIMEOUT_MSEC 7000
+#define TUNE_TIMEOUT_MSEC 3000
+#define SEEK_TIMEOUT_MSEC 15000
 
 #define RTC6226_MIN_SRCH_MODE 0x00
 #define RTC6226_MAX_SRCH_MODE 0x02
@@ -458,6 +459,7 @@ struct fm_power_vreg_data {
 	/* voltage levels to be set */
 	unsigned int low_vol_level;
 	unsigned int high_vol_level;
+	int vdd_load;
 	/* is this regulator enabled? */
 	bool is_enabled;
 };
@@ -694,3 +696,4 @@ int rtc6226_cancel_seek(struct rtc6226_device *radio);
 void rtc6226_rds_handler(struct work_struct *worker);
 void rtc6226_q_event(struct rtc6226_device *radio, enum rtc6226_evt_t event);
 int rtc6226_reset_rds_data(struct rtc6226_device *radio);
+int rtc6226_rds_on(struct rtc6226_device *radio);

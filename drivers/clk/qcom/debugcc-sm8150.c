@@ -888,7 +888,6 @@ static struct clk_hw *debugcc_sm8150_hws[] = {
 
 static const struct of_device_id clk_debug_match_table[] = {
 	{ .compatible = "qcom,sm8150-debugcc" },
-	{ .compatible = "qcom,sm8150-debugcc-v2" },
 	{ }
 };
 

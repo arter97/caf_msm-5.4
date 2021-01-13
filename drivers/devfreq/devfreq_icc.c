@@ -220,7 +220,7 @@ int devfreq_add_icc(struct device *dev)
 	}
 
 	p = &d->dp;
-	p->polling_ms = 50;
+	p->polling_ms = 500;
 	p->target = icc_target;
 	p->get_dev_status = icc_get_dev_status;
 
@@ -338,6 +338,22 @@ static struct platform_driver devfreq_icc_driver = {
 	},
 };
 
-module_platform_driver(devfreq_icc_driver);
+static int __init devfreq_icc_init(void)
+{
+	int ret;
+
+	ret = platform_driver_register(&devfreq_icc_driver);
+	if (ret)
+		pr_err("devfreq_icc register failed %d\n", ret);
+	return ret;
+}
+late_initcall(devfreq_icc_init);
+
+static __exit void devfreq_icc_exit(void)
+{
+	platform_driver_unregister(&devfreq_icc_driver);
+}
+module_exit(devfreq_icc_exit);
+
 MODULE_DESCRIPTION("Device DDR bandwidth voting driver MSM SoCs");
 MODULE_LICENSE("GPL v2");

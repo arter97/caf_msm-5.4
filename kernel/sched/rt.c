@@ -9,10 +9,16 @@
 
 #include <linux/interrupt.h>
 
+#include <trace/events/sched.h>
+
 #include "walt.h"
+
+#include <trace/hooks/sched.h>
 
 int sched_rr_timeslice = RR_TIMESLICE;
 int sysctl_sched_rr_timeslice = (MSEC_PER_SEC / HZ) * RR_TIMESLICE;
+/* More than 4 hours if BW_SHIFT equals 20. */
+static const u64 max_rt_runtime = MAX_BW;
 
 static int do_sched_rt_period_timer(struct rt_bandwidth *rt_b, int overrun);
 
@@ -1532,6 +1538,12 @@ select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags)
 	struct rq *rq;
 	bool may_not_preempt;
 	bool test;
+	int target_cpu = -1;
+
+	trace_android_rvh_select_task_rq_rt(p, cpu, sd_flag,
+					flags, &target_cpu);
+	if (target_cpu >= 0)
+		return target_cpu;
 
 	/* For anything but wake ups, just return the task_cpu */
 	if (sd_flag != SD_BALANCE_WAKE && sd_flag != SD_BALANCE_FORK)
@@ -1818,6 +1830,7 @@ static int rt_energy_aware_wake_cpu(struct task_struct *task)
 	int best_cpu_idle_idx = INT_MAX;
 	int cpu_idle_idx = -1;
 	bool boost_on_big = rt_boost_on_big();
+	bool best_cpu_lt = true;
 
 	rcu_read_lock();
 
@@ -1844,19 +1857,35 @@ retry:
 		}
 
 		for_each_cpu_and(cpu, lowest_mask, sched_group_span(sg)) {
+			bool lt;
+
+			trace_sched_cpu_util(cpu);
+
 			if (cpu_isolated(cpu))
 				continue;
 
 			if (sched_cpu_high_irqload(cpu))
 				continue;
 
-			util = cpu_util(cpu);
-
-			if (__cpu_overutilized(cpu, util + tutil))
+			if (__cpu_overutilized(cpu, tutil))
 				continue;
 
-			/* Find the least loaded CPU */
-			if (util > best_cpu_util)
+			util = cpu_util(cpu);
+
+			lt = (walt_low_latency_task(cpu_rq(cpu)->curr) ||
+				walt_nr_rtg_high_prio(cpu));
+
+			/*
+			 * When the best is suitable and the current is not,
+			 * skip it
+			 */
+			if (lt && !best_cpu_lt)
+				continue;
+			/*
+			 * Either both are sutilable or unsuitable, load takes
+			 * precedence.
+			 */
+			if (!(best_cpu_lt ^ lt) && (util > best_cpu_util))
 				continue;
 
 			/*
@@ -1890,6 +1919,7 @@ retry:
 			best_cpu_util = util;
 			best_cpu = cpu;
 			best_capacity = capacity_orig;
+			best_cpu_lt = lt;
 		}
 
 	} while (sg = sg->next, sg != sd->groups);
@@ -1917,6 +1947,11 @@ static int find_lowest_rq(struct task_struct *task)
 	int this_cpu = smp_processor_id();
 	int cpu = -1;
 	int ret;
+	int lowest_cpu = -1;
+
+	trace_android_rvh_find_lowest_rq(task, lowest_mask, &lowest_cpu);
+	if (lowest_cpu >= 0)
+		return lowest_cpu;
 
 	/* Make sure the mask is initialized first */
 	if (unlikely(!lowest_mask))
@@ -2820,6 +2855,12 @@ static int tg_set_rt_bandwidth(struct task_group *tg,
 	if (rt_period == 0)
 		return -EINVAL;
 
+	/*
+	 * Bound quota to defend quota against overflow during bandwidth shift.
+	 */
+	if (rt_runtime != RUNTIME_INF && rt_runtime > max_rt_runtime)
+		return -EINVAL;
+
 	mutex_lock(&rt_constraints_mutex);
 	read_lock(&tasklist_lock);
 	err = __rt_schedulable(tg, rt_period, rt_runtime);
@@ -2941,7 +2982,9 @@ static int sched_rt_global_validate(void)
 		return -EINVAL;
 
 	if ((sysctl_sched_rt_runtime != RUNTIME_INF) &&
-		(sysctl_sched_rt_runtime > sysctl_sched_rt_period))
+		((sysctl_sched_rt_runtime > sysctl_sched_rt_period) ||
+		 ((u64)sysctl_sched_rt_runtime *
+			NSEC_PER_USEC > max_rt_runtime)))
 		return -EINVAL;
 
 	return 0;

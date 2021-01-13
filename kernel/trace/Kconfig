@@ -99,6 +99,14 @@ config IPC_LOGGING
 
 	  If in doubt, say no.
 
+config IPC_LOG_MINIDUMP_BUFFERS
+        int "Ipc log buffers count that can be dumped with minidump"
+	depends on IPC_LOGGING
+        default 0
+        help
+          This option is used to configure maximum number of ipc log
+          buffers that can be dumped by minidump.
+
 config PREEMPTIRQ_TRACEPOINTS
 	bool
 	depends on TRACE_PREEMPT_TOGGLE || TRACE_IRQFLAGS
@@ -409,7 +417,6 @@ config PROFILE_ANNOTATED_BRANCHES
 config PROFILE_ALL_BRANCHES
 	bool "Profile all if conditionals" if !FORTIFY_SOURCE
 	select TRACE_BRANCH_PROFILING
-	imply CC_DISABLE_WARN_MAYBE_UNINITIALIZED  # avoid false positives
 	help
 	  This tracer profiles all branch conditions. Every if ()
 	  taken in the kernel is recorded whether it hit or miss.
@@ -514,6 +521,19 @@ config KPROBE_EVENTS
 	  This option is also required by perf-probe subcommand of perf tools.
 	  If you want to use perf tools, this option is strongly recommended.
 
+config KPROBES_QGKI
+	bool "Enable kprobe debug module on QGKI"
+	depends on KPROBES
+	depends on QGKI
+	default y
+	help
+	  This enables the kprobe debug module on QGKI builds
+	  which aids in dynamic debugging.
+
+	  This module can be used to insert kprobe at any offset
+	  within a function and get required data and also provides
+	  additional debug functionalities on top of normal kprobes.
+
 config KPROBE_EVENTS_ON_NOTRACE
 	bool "Do NOT protect notrace function from kprobe events"
 	depends on KPROBE_EVENTS
@@ -531,6 +551,18 @@ config KPROBE_EVENTS_ON_NOTRACE
 	  This option disables such protection and allows you to put kprobe
 	  events on ftrace functions for debugging ftrace by itself.
 	  Note that this might let you shoot yourself in the foot.
+
+	  If unsure, say N.
+
+config KPROBES_DEBUG
+	bool "support bug on kprobe events"
+	depends on KPROBE_EVENTS
+	select HIST_TRIGGERS
+	default n
+	help
+	  This exports the required function and structures to
+	  allow the kprobe module to search for and use synthetic
+	  events which will aid in debugging.
 
 	  If unsure, say N.
 

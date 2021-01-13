@@ -167,6 +167,7 @@ static int start_log_trans(struct btrfs_trans_handle *trans,
 		if (ret)
 			goto out;
 
+		set_bit(BTRFS_ROOT_HAS_LOG_TREE, &root->state);
 		clear_bit(BTRFS_ROOT_MULTI_LOG_TASKS, &root->state);
 		root->log_start_pid = current->pid;
 	}
@@ -192,6 +193,9 @@ out:
 static int join_running_log_trans(struct btrfs_root *root)
 {
 	int ret = -ENOENT;
+
+	if (!test_bit(BTRFS_ROOT_HAS_LOG_TREE, &root->state))
+		return ret;
 
 	mutex_lock(&root->log_mutex);
 	if (root->log_root) {
@@ -3136,16 +3140,10 @@ int btrfs_sync_log(struct btrfs_trans_handle *trans,
 	btrfs_init_log_ctx(&root_log_ctx, NULL);
 
 	mutex_lock(&log_root_tree->log_mutex);
-	atomic_inc(&log_root_tree->log_batch);
-	atomic_inc(&log_root_tree->log_writers);
 
 	index2 = log_root_tree->log_transid % 2;
 	list_add_tail(&root_log_ctx.list, &log_root_tree->log_ctxs[index2]);
 	root_log_ctx.log_transid = log_root_tree->log_transid;
-
-	mutex_unlock(&log_root_tree->log_mutex);
-
-	mutex_lock(&log_root_tree->log_mutex);
 
 	/*
 	 * Now we are safe to update the log_root_tree because we're under the
@@ -3153,12 +3151,6 @@ int btrfs_sync_log(struct btrfs_trans_handle *trans,
 	 * open until we drop the log_mutex.
 	 */
 	ret = update_log_root(trans, log, &new_root_item);
-
-	if (atomic_dec_and_test(&log_root_tree->log_writers)) {
-		/* atomic_dec_and_test implies a barrier */
-		cond_wake_up_nomb(&log_root_tree->log_writer_wait);
-	}
-
 	if (ret) {
 		if (!list_empty(&root_log_ctx.list))
 			list_del_init(&root_log_ctx.list);
@@ -3203,8 +3195,6 @@ int btrfs_sync_log(struct btrfs_trans_handle *trans,
 		wait_log_commit(log_root_tree,
 				root_log_ctx.log_transid - 1);
 	}
-
-	wait_for_writer(log_root_tree);
 
 	/*
 	 * now that we've moved on to the tree of log tree roots,
@@ -3327,6 +3317,7 @@ int btrfs_free_log(struct btrfs_trans_handle *trans, struct btrfs_root *root)
 	if (root->log_root) {
 		free_log_tree(trans, root->log_root);
 		root->log_root = NULL;
+		clear_bit(BTRFS_ROOT_HAS_LOG_TREE, &root->state);
 	}
 	return 0;
 }
@@ -4049,11 +4040,8 @@ static noinline int copy_items(struct btrfs_trans_handle *trans,
 						fs_info->csum_root,
 						ds + cs, ds + cs + cl - 1,
 						&ordered_sums, 0);
-				if (ret) {
-					btrfs_release_path(dst_path);
-					kfree(ins_data);
-					return ret;
-				}
+				if (ret)
+					break;
 			}
 		}
 	}
@@ -4066,7 +4054,6 @@ static noinline int copy_items(struct btrfs_trans_handle *trans,
 	 * we have to do this after the loop above to avoid changing the
 	 * log tree while trying to change the log tree.
 	 */
-	ret = 0;
 	while (!list_empty(&ordered_sums)) {
 		struct btrfs_ordered_sum *sums = list_entry(ordered_sums.next,
 						   struct btrfs_ordered_sum,
@@ -4242,6 +4229,9 @@ static int btrfs_log_prealloc_extents(struct btrfs_trans_handle *trans,
 	const u64 ino = btrfs_ino(inode);
 	struct btrfs_path *dst_path = NULL;
 	bool dropped_extents = false;
+	u64 truncate_offset = i_size;
+	struct extent_buffer *leaf;
+	int slot;
 	int ins_nr = 0;
 	int start_slot;
 	int ret;
@@ -4256,9 +4246,43 @@ static int btrfs_log_prealloc_extents(struct btrfs_trans_handle *trans,
 	if (ret < 0)
 		goto out;
 
+	/*
+	 * We must check if there is a prealloc extent that starts before the
+	 * i_size and crosses the i_size boundary. This is to ensure later we
+	 * truncate down to the end of that extent and not to the i_size, as
+	 * otherwise we end up losing part of the prealloc extent after a log
+	 * replay and with an implicit hole if there is another prealloc extent
+	 * that starts at an offset beyond i_size.
+	 */
+	ret = btrfs_previous_item(root, path, ino, BTRFS_EXTENT_DATA_KEY);
+	if (ret < 0)
+		goto out;
+
+	if (ret == 0) {
+		struct btrfs_file_extent_item *ei;
+
+		leaf = path->nodes[0];
+		slot = path->slots[0];
+		ei = btrfs_item_ptr(leaf, slot, struct btrfs_file_extent_item);
+
+		if (btrfs_file_extent_type(leaf, ei) ==
+		    BTRFS_FILE_EXTENT_PREALLOC) {
+			u64 extent_end;
+
+			btrfs_item_key_to_cpu(leaf, &key, slot);
+			extent_end = key.offset +
+				btrfs_file_extent_num_bytes(leaf, ei);
+
+			if (extent_end > i_size)
+				truncate_offset = extent_end;
+		}
+	} else {
+		ret = 0;
+	}
+
 	while (true) {
-		struct extent_buffer *leaf = path->nodes[0];
-		int slot = path->slots[0];
+		leaf = path->nodes[0];
+		slot = path->slots[0];
 
 		if (slot >= btrfs_header_nritems(leaf)) {
 			if (ins_nr > 0) {
@@ -4296,7 +4320,7 @@ static int btrfs_log_prealloc_extents(struct btrfs_trans_handle *trans,
 				ret = btrfs_truncate_inode_items(trans,
 							 root->log_root,
 							 &inode->vfs_inode,
-							 i_size,
+							 truncate_offset,
 							 BTRFS_EXTENT_DATA_KEY);
 			} while (ret == -EAGAIN);
 			if (ret)

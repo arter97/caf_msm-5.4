@@ -34,8 +34,16 @@
 #include <linux/prefetch.h>
 #include <linux/memcontrol.h>
 #include <linux/random.h>
-
 #include <trace/events/kmem.h>
+#ifdef CONFIG_QCOM_MINIDUMP_PANIC_DUMP
+#include <soc/qcom/minidump.h>
+#include <linux/debugfs.h>
+#include <linux/jhash.h>
+#endif
+
+#ifdef CONFIG_SLUB_DEBUG
+#include <linux/debugfs.h>
+#endif
 
 #include "internal.h"
 
@@ -642,6 +650,20 @@ static void slab_fix(struct kmem_cache *s, char *fmt, ...)
 	vaf.va = &args;
 	pr_err("FIX %s: %pV\n", s->name, &vaf);
 	va_end(args);
+}
+
+static bool freelist_corrupted(struct kmem_cache *s, struct page *page,
+			       void *freelist, void *nextfree)
+{
+	if ((s->flags & SLAB_CONSISTENCY_CHECKS) &&
+	    !check_valid_pointer(s, page, nextfree)) {
+		object_err(s, page, freelist, "Freechain corrupt");
+		freelist = NULL;
+		slab_fix(s, "Isolate corrupted freechain");
+		return true;
+	}
+
+	return false;
 }
 
 static void print_trailer(struct kmem_cache *s, struct page *page, u8 *p)
@@ -1388,6 +1410,11 @@ static inline void inc_slabs_node(struct kmem_cache *s, int node,
 static inline void dec_slabs_node(struct kmem_cache *s, int node,
 							int objects) {}
 
+static bool freelist_corrupted(struct kmem_cache *s, struct page *page,
+			       void *freelist, void *nextfree)
+{
+	return false;
+}
 #endif /* CONFIG_SLUB_DEBUG */
 
 /*
@@ -2093,6 +2120,14 @@ static void deactivate_slab(struct kmem_cache *s, struct page *page,
 	while (freelist && (nextfree = get_freepointer(s, freelist))) {
 		void *prior;
 		unsigned long counters;
+
+		/*
+		 * If 'nextfree' is invalid, it is possible that the object at
+		 * 'freelist' is already corrupted.  So isolate all objects
+		 * starting at 'freelist'.
+		 */
+		if (freelist_corrupted(s, page, freelist, nextfree))
+			break;
 
 		do {
 			prior = page->freelist;
@@ -4389,6 +4424,7 @@ void *__kmalloc_track_caller(size_t size, gfp_t gfpflags, unsigned long caller)
 
 	return ret;
 }
+EXPORT_SYMBOL(__kmalloc_track_caller);
 
 #ifdef CONFIG_NUMA
 void *__kmalloc_node_track_caller(size_t size, gfp_t gfpflags,
@@ -4419,6 +4455,7 @@ void *__kmalloc_node_track_caller(size_t size, gfp_t gfpflags,
 
 	return ret;
 }
+EXPORT_SYMBOL(__kmalloc_node_track_caller);
 #endif
 
 #ifdef CONFIG_SYSFS
@@ -4533,6 +4570,9 @@ struct location {
 	long max_pid;
 	DECLARE_BITMAP(cpus, NR_CPUS);
 	nodemask_t nodes;
+#ifdef CONFIG_STACKTRACE
+	unsigned long addrs[TRACK_ADDRS_COUNT]; /* Called from address */
+#endif
 };
 
 struct loc_track {
@@ -4575,6 +4615,7 @@ static int add_location(struct loc_track *t, struct kmem_cache *s,
 	struct location *l;
 	unsigned long caddr;
 	unsigned long age = jiffies - track->when;
+	unsigned int i = 0;
 
 	start = -1;
 	end = t->count;
@@ -4632,6 +4673,15 @@ static int add_location(struct loc_track *t, struct kmem_cache *s,
 	t->count++;
 	l->count = 1;
 	l->addr = track->addr;
+#ifdef CONFIG_STACKTRACE
+	for (i = 0; i < TRACK_ADDRS_COUNT; i++)
+		if (l->addrs[i]) {
+			l->addrs[i] = track->addrs[i];
+			continue;
+		} else
+			break;
+
+#endif
 	l->sum_time = age;
 	l->min_time = age;
 	l->max_time = age;
@@ -4742,6 +4792,176 @@ static int list_locations(struct kmem_cache *s, char *buf,
 		len += sprintf(buf, "No data\n");
 	return len;
 }
+
+#ifdef CONFIG_QCOM_MINIDUMP_PANIC_DUMP
+
+#define STACK_HASH_SEED 0x9747b28c
+
+static unsigned long slab_owner_filter;
+static unsigned long slab_owner_handles_size = SZ_16K;
+static int num_handles;
+
+bool is_slub_debug_enabled(void)
+{
+	if (slub_debug)
+		return true;
+	return false;
+}
+
+static bool find_stack(u32 handle,
+		 char *md_slabowner_dump_addr, char *cur)
+{
+	int *handles, i;
+
+	handles = (int *) (md_slabowner_dump_addr +
+			md_slabowner_dump_size - slab_owner_handles_size);
+
+	for (i = 0; i < num_handles; i++)
+		if (handle == handles[i])
+			return true;
+
+	if ((handles + num_handles)
+		< (int *)(md_slabowner_dump_addr +
+			md_slabowner_dump_size)) {
+		handles[num_handles] = handle;
+		num_handles += 1;
+	} else {
+		pr_err_ratelimited("Can't stores handles increase slab_owner_handle_size\n");
+	}
+	return false;
+}
+
+/* Calculate hash for a stack */
+static u32 hash_stack(unsigned long *entries, unsigned int size)
+{
+	return jhash2((u32 *)entries,
+			       size * sizeof(unsigned long) / sizeof(u32),
+			       STACK_HASH_SEED);
+}
+
+static ssize_t dump_tracking(char *buf, size_t size, struct kmem_cache *s,
+			void *object)
+{
+	struct track *t;
+	int ret;
+	u32 handle, nr_entries;
+
+	if (!(s->flags & SLAB_STORE_USER))
+		return 0;
+
+	t = get_track(s, object, TRACK_ALLOC);
+	if (!t->addr)
+		return 0;
+
+#ifdef CONFIG_STACKTRACE
+	{
+		int i;
+
+		for (i = 0; i < TRACK_ADDRS_COUNT; i++)
+			if (t->addrs[i])
+				continue;
+			else
+				break;
+		nr_entries = i;
+		handle = hash_stack(t->addrs, nr_entries);
+
+		if ((buf > (md_slabowner_dump_addr +
+			md_slabowner_dump_size - slab_owner_handles_size))
+			|| !find_stack(handle, md_slabowner_dump_addr, buf)) {
+
+			ret = scnprintf(buf, size, "%p %u %u\n",
+				object, handle, nr_entries);
+			if (ret == size)
+				goto err;
+
+			for (i = 0; i < nr_entries; i++) {
+				ret += scnprintf(buf + ret, size - ret,
+						"%p\n", (void *)t->addrs[i]);
+				if (ret == size)
+					goto err;
+			}
+		} else {
+			ret = scnprintf(buf, size, "%p %u %u\n",
+					object, handle, 0);
+		}
+	}
+#else
+	ret = scnprintf(buf, size, "%p %p\n", object, (void *)t->addr);
+
+#endif
+err:
+	return ret;
+}
+
+void md_dump_slabowner(void)
+{
+	struct kmem_cache *s;
+	int node;
+	char *buf = md_slabowner_dump_addr;
+	struct kmem_cache_node *n;
+	void *addr;
+	void *p;
+	ssize_t ret, size = md_slabowner_dump_size;
+	int i;
+
+	for (i = 0; i <= KMALLOC_SHIFT_HIGH; i++) {
+		if (!test_bit(i, &slab_owner_filter))
+			continue;
+		s = kmalloc_caches[KMALLOC_NORMAL][i];
+		if (!s)
+			continue;
+		ret = scnprintf(buf, size, "%s\n", s->name);
+		if (ret == size)
+			return;
+		buf += ret;
+		size -= ret;
+		for_each_kmem_cache_node(s, node, n) {
+			unsigned long flags;
+			struct page *page;
+
+			if (!atomic_long_read(&n->nr_slabs))
+				continue;
+
+			spin_lock_irqsave(&n->list_lock, flags);
+
+			list_for_each_entry(page, &n->partial, lru) {
+				addr = page_address(page);
+				slab_lock(page);
+				for_each_object(p, s, addr, page->objects) {
+					ret  = dump_tracking(buf, size, s, p);
+					if (ret == size) {
+						pr_err("slabowner minidump region exhausted\n");
+						return;
+					}
+					buf += ret;
+					size -= ret;
+				}
+				slab_unlock(page);
+			}
+			list_for_each_entry(page, &n->full, lru) {
+				addr = page_address(page);
+				slab_lock(page);
+				for_each_object(p, s, addr, page->objects) {
+					ret  = dump_tracking(buf, size, s, p);
+					if (ret == size) {
+						pr_err("slabowner minidump region exhausted\n");
+						return;
+					}
+					buf += ret;
+					size -= ret;
+				}
+				slab_unlock(page);
+			}
+			spin_unlock_irqrestore(&n->list_lock, flags);
+		}
+		ret = scnprintf(buf, size, "\n");
+		if (ret == size)
+			return;
+		buf += ret;
+		size -= ret;
+	}
+}
+#endif /* CONFIG_QCOM_MINIDUMP_PANIC_DUMP */
 #endif	/* CONFIG_SLUB_DEBUG */
 
 #ifdef SLUB_RESILIENCY_TEST
@@ -5657,7 +5877,8 @@ static void memcg_propagate_slab_attrs(struct kmem_cache *s)
 		 */
 		if (buffer)
 			buf = buffer;
-		else if (root_cache->max_attr_size < ARRAY_SIZE(mbuf))
+		else if (root_cache->max_attr_size < ARRAY_SIZE(mbuf) &&
+			 !IS_ENABLED(CONFIG_SLUB_STATS))
 			buf = mbuf;
 		else {
 			buffer = (char *) get_zeroed_page(GFP_KERNEL);
@@ -5812,8 +6033,10 @@ static int sysfs_slab_add(struct kmem_cache *s)
 
 	s->kobj.kset = kset;
 	err = kobject_init_and_add(&s->kobj, &slab_ktype, NULL, "%s", name);
-	if (err)
+	if (err) {
+		kobject_put(&s->kobj);
 		goto out;
+	}
 
 	err = sysfs_create_group(&s->kobj, &slab_attr_group);
 	if (err)
@@ -5880,6 +6103,94 @@ struct saved_alias {
 
 static struct saved_alias *alias_list;
 
+#ifdef CONFIG_SLUB_DEBUG
+static struct dentry *slab_debugfs_top;
+
+static int alloc_trace_locations(struct seq_file *seq, struct kmem_cache *s,
+			enum track_item alloc)
+{
+	unsigned long i;
+	struct loc_track t = { 0, 0, NULL };
+	int node;
+	unsigned long *map = kmalloc(BITS_TO_LONGS(oo_objects(s->max)) *
+			sizeof(unsigned long), GFP_KERNEL);
+	struct kmem_cache_node *n;
+
+	if (!map || !alloc_loc_track(&t, PAGE_SIZE / sizeof(struct location),
+			GFP_KERNEL)) {
+		kfree(map);
+		return -ENOMEM;
+	}
+	/* Push back cpu slabs */
+	flush_all(s);
+
+	for_each_kmem_cache_node(s, node, n) {
+		unsigned long flags;
+		struct page *page;
+
+		if (!atomic_long_read(&n->nr_slabs))
+			continue;
+
+		spin_lock_irqsave(&n->list_lock, flags);
+		list_for_each_entry(page, &n->partial, lru)
+			process_slab(&t, s, page, alloc, map);
+		list_for_each_entry(page, &n->full, lru)
+			process_slab(&t, s, page, alloc, map);
+		spin_unlock_irqrestore(&n->list_lock, flags);
+	}
+
+	for (i = 0; i < t.count; i++) {
+		struct location *l = &t.loc[i];
+		unsigned int j = 0;
+
+		seq_printf(seq,
+		"alloc_list: call_site=%pS count=%zu object_size=%zu slab_size=%zu slab_name=%s\n",
+			(void *)l->addr, l->count, s->object_size, s->size, s->name);
+#ifdef CONFIG_STACKTRACE
+		for (j = 0; j < TRACK_ADDRS_COUNT; j++)
+			if (l->addrs[j]) {
+				seq_printf(seq, "%pS\n", l->addrs[j]);
+				continue;
+			} else
+				break;
+#endif
+	}
+
+	free_loc_track(&t);
+	kfree(map);
+	return 0;
+}
+
+static int slab_debug_alloc_trace(struct seq_file *seq,
+					void *ignored)
+{
+
+	struct kmem_cache *slab;
+
+	list_for_each_entry(slab, &slab_caches, list) {
+		if (!(slab->flags & SLAB_STORE_USER))
+			continue;
+		alloc_trace_locations(seq, slab, TRACK_ALLOC);
+	}
+
+	return 0;
+}
+
+static int slab_debug_alloc_trace_open(struct inode *inode,
+					struct file *file)
+{
+	return single_open(file, slab_debug_alloc_trace,
+					inode->i_private);
+}
+
+static const struct file_operations slab_debug_alloc_fops = {
+	.open    = slab_debug_alloc_trace_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+#endif
+
 static int sysfs_slab_alias(struct kmem_cache *s, const char *name)
 {
 	struct saved_alias *al;
@@ -5902,6 +6213,89 @@ static int sysfs_slab_alias(struct kmem_cache *s, const char *name)
 	alias_list = al;
 	return 0;
 }
+
+#ifdef CONFIG_QCOM_MINIDUMP_PANIC_DUMP
+static ssize_t slab_owner_filter_write(struct file *file,
+					  const char __user *ubuf,
+					  size_t count, loff_t *offset)
+{
+	unsigned long filter;
+	int bit, i;
+	struct kmem_cache *s;
+
+	if (kstrtoul_from_user(ubuf, count, 0, &filter)) {
+		pr_err_ratelimited("Invalid format for filter\n");
+		return -EINVAL;
+	}
+
+	for (i = 0, bit = 1; filter >= bit; bit *= 2, i++) {
+		if (filter & bit) {
+			s = kmalloc_caches[KMALLOC_NORMAL][i];
+			if (!s) {
+				pr_err("Invalid filter : %lx kmalloc-%d doesn't exist\n",
+						filter, bit);
+				return -EINVAL;
+			}
+		}
+	}
+	slab_owner_filter = filter;
+	return count;
+}
+
+static ssize_t slab_owner_filter_read(struct file *file, char __user *ubuf,
+				       size_t count, loff_t *offset)
+{
+	char buf[64];
+
+	snprintf(buf, sizeof(buf), "0x%lx\n", slab_owner_filter);
+	return simple_read_from_buffer(ubuf, count, offset, buf, strlen(buf));
+}
+
+static const struct file_operations proc_slab_owner_filter_ops = {
+	.open	= simple_open,
+	.write	= slab_owner_filter_write,
+	.read	= slab_owner_filter_read,
+};
+
+static ssize_t slab_owner_handle_write(struct file *file,
+					  const char __user *ubuf,
+					  size_t count, loff_t *offset)
+{
+	unsigned long size;
+
+	if (kstrtoul_from_user(ubuf, count, 0, &size)) {
+		pr_err_ratelimited("Invalid format for handle size\n");
+		return -EINVAL;
+	}
+
+	if (size) {
+		if (size > (md_slabowner_dump_size / SZ_16K)) {
+			pr_err_ratelimited("size : %lu KB exceeds max size : %lu KB\n",
+				size, (md_slabowner_dump_size / SZ_16K));
+			goto err;
+		}
+		slab_owner_handles_size = size * SZ_1K;
+	}
+err:
+	return count;
+}
+
+static ssize_t slab_owner_handle_read(struct file *file, char __user *ubuf,
+				       size_t count, loff_t *offset)
+{
+	char buf[64];
+
+	snprintf(buf, sizeof(buf), "%lu KB\n",
+			(slab_owner_handles_size / SZ_1K));
+	return simple_read_from_buffer(ubuf, count, offset, buf, strlen(buf));
+}
+
+static const struct file_operations proc_slab_owner_handle_ops = {
+	.open	= simple_open,
+	.write	= slab_owner_handle_write,
+	.read	= slab_owner_handle_read,
+};
+#endif
 
 static int __init slab_sysfs_init(void)
 {
@@ -5926,6 +6320,15 @@ static int __init slab_sysfs_init(void)
 			       s->name);
 	}
 
+#ifdef CONFIG_SLUB_DEBUG
+	if (slub_debug) {
+		slab_debugfs_top = debugfs_create_dir("slab", NULL);
+		if (!IS_ERR(slab_debugfs_top))
+			debugfs_create_file("alloc_trace", 0400, slab_debugfs_top,
+					NULL, &slab_debug_alloc_fops);
+	}
+#endif
+
 	while (alias_list) {
 		struct saved_alias *al = alias_list;
 
@@ -5937,6 +6340,21 @@ static int __init slab_sysfs_init(void)
 		kfree(al);
 	}
 
+#ifdef CONFIG_QCOM_MINIDUMP_PANIC_DUMP
+	if (slub_debug) {
+		int i;
+
+		debugfs_create_file("slab_owner_filter", 0400, NULL, NULL,
+			    &proc_slab_owner_filter_ops);
+		debugfs_create_file("slab_owner_handles_size_kb", 0400,
+				NULL, NULL, &proc_slab_owner_handle_ops);
+
+		for (i = 0; i <= KMALLOC_SHIFT_HIGH; i++) {
+			if (kmalloc_caches[KMALLOC_NORMAL][i])
+				set_bit(i, &slab_owner_filter);
+		}
+	}
+#endif
 	mutex_unlock(&slab_mutex);
 	resiliency_test();
 	return 0;

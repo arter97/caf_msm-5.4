@@ -954,9 +954,9 @@ static int profile_groups_print(struct seq_file *s, void *unused)
 {
 	struct kgsl_device *device = (struct kgsl_device *) s->private;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
-	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
-	struct adreno_perfcounters *counters = gpudev->perfcounters;
-	struct adreno_perfcount_group *group;
+	const struct adreno_perfcounters *counters =
+		ADRENO_PERFCOUNTERS(adreno_dev);
+	const struct adreno_perfcount_group *group;
 	int i, j, used;
 
 	mutex_lock(&device->mutex);
@@ -1024,7 +1024,7 @@ void adreno_profile_init(struct adreno_device *adreno_dev)
 	profile->shared_size = ADRENO_PROFILE_SHARED_BUF_SIZE_DWORDS;
 	profile->shared_buffer =  kgsl_allocate_global(device,
 			profile->shared_size * sizeof(unsigned int),
-			0, 0, "profile");
+			0, 0, 0, "profile");
 	if (IS_ERR(profile->shared_buffer)) {
 		profile->shared_size = 0;
 		return;

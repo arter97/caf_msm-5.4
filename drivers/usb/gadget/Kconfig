@@ -459,7 +459,7 @@ config USB_CONFIGFS_F_UAC1_LEGACY
 	  to be present on the device.
 
 config USB_CONFIGFS_F_UAC2
-	bool "Audio Class 2.0"
+	tristate "Audio Class 2.0"
 	depends on USB_CONFIGFS
 	depends on SND
 	select USB_LIBCOMPOSITE
@@ -594,6 +594,14 @@ config USB_CONFIGFS_F_GSI
 	  over GSI. This driver provides USB RMNET/RNDIS/ECM/MBIM/DPL
 	  related functionalities using GSI hardware accelerated data
 	  path and control path.
+
+config USB_LOW_MEM_VARIANT
+	bool "USB Memory optimization"
+	help
+	  Memory requirement for buffers can vary from target to target.
+	  Enable this option if memory optimization is required for any
+	  low memory variant target. In such case memory needed to be
+	  allocated to buffers of various function drivers can be reduced.
 
 config USB_FUNC_WAKEUP_SUPPORTED
 	bool "USB Function Remote Wakeup support"

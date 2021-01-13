@@ -187,16 +187,6 @@ static int qcedev_release(struct inode *inode, struct file *file);
 static int start_cipher_req(struct qcedev_control *podev);
 static int start_sha_req(struct qcedev_control *podev);
 
-static const struct file_operations qcedev_fops = {
-	.owner = THIS_MODULE,
-	.unlocked_ioctl = qcedev_ioctl,
-#ifdef CONFIG_COMPAT
-	.compat_ioctl = compat_qcedev_ioctl,
-#endif
-	.open = qcedev_open,
-	.release = qcedev_release,
-};
-
 static struct qcedev_control qce_dev[] = {
 	{
 		.magic = QCEDEV_MAGIC,
@@ -1988,11 +1978,21 @@ long qcedev_ioctl(struct file *file,
 
 exit_free_qcedev_areq:
 	if (cmd != QCEDEV_IOCTL_MAP_BUF_REQ &&
-		cmd != QCEDEV_IOCTL_UNMAP_BUF_REQ)
+		cmd != QCEDEV_IOCTL_UNMAP_BUF_REQ && podev != NULL)
 		qcedev_ce_high_bw_req(podev, false);
 	kfree(qcedev_areq);
 	return err;
 }
+
+static const struct file_operations qcedev_fops = {
+	.owner = THIS_MODULE,
+	.unlocked_ioctl = qcedev_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl = compat_qcedev_ioctl,
+#endif
+	.open = qcedev_open,
+	.release = qcedev_release,
+};
 
 static int qcedev_probe_device(struct platform_device *pdev)
 {

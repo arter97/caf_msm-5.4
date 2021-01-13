@@ -321,6 +321,21 @@ struct dma_buf_ops {
 	void (*vunmap)(struct dma_buf *, void *vaddr);
 
 	/**
+	 * @get_uuid
+	 *
+	 * This is called by dma_buf_get_uuid to get the UUID which identifies
+	 * the buffer to virtio devices.
+	 *
+	 * This callback is optional.
+	 *
+	 * Returns:
+	 *
+	 * 0 on success or a negative error code on failure. On success uuid
+	 * will be populated with the buffer's UUID.
+	 */
+	int (*get_uuid)(struct dma_buf *dmabuf, uuid_t *uuid);
+
+	/**
 	 * @get_flags:
 	 *
 	 * This is called by dma_buf_get_flags and is used to get the buffer's
@@ -334,6 +349,18 @@ struct dma_buf_ops {
 	 */
 	int (*get_flags)(struct dma_buf *dmabuf, unsigned long *flags);
 };
+
+/**
+ * dma_buf_destructor - dma-buf destructor function
+ * @dmabuf:	[in]	pointer to dma-buf
+ * @dtor_data:	[in]	destructor data associated with this buffer
+ *
+ * The dma-buf destructor which is called when the dma-buf is freed.
+ *
+ * If the destructor returns an error the dma-buf's exporter release function
+ * won't be called.
+ */
+typedef int (*dma_buf_destructor)(struct dma_buf *dmabuf, void *dtor_data);
 
 /**
  * struct dma_buf - shared buffer object
@@ -375,10 +402,15 @@ struct dma_buf {
 	void *vmap_ptr;
 	const char *exp_name;
 	const char *name;
+	spinlock_t name_lock; /* spinlock to protect name access */
 	struct module *owner;
 	struct list_head list_node;
 	void *priv;
 	struct dma_resv *resv;
+#ifdef CONFIG_DMABUF_DESTRUCTOR_SUPPORT
+	dma_buf_destructor dtor;
+	void *dtor_data;
+#endif
 
 	/* poll support */
 	wait_queue_head_t poll;
@@ -395,10 +427,12 @@ struct dma_buf {
  * struct msm_dma_buf - Holds the meta data associated with a shared buffer
  * object, as well as the buffer object.
  * @refs: list entry for dma-buf reference tracking
+ * @i_ino: inode number
  * @dma_buf: the shared buffer object
  */
 struct msm_dma_buf {
 	struct list_head refs;
+	unsigned long i_ino;
 	struct dma_buf dma_buf;
 };
 
@@ -520,4 +554,29 @@ int dma_buf_mmap(struct dma_buf *, struct vm_area_struct *,
 void *dma_buf_vmap(struct dma_buf *);
 void dma_buf_vunmap(struct dma_buf *, void *vaddr);
 int dma_buf_get_flags(struct dma_buf *dmabuf, unsigned long *flags);
+int dma_buf_get_uuid(struct dma_buf *dmabuf, uuid_t *uuid);
+
+#ifdef CONFIG_DMABUF_DESTRUCTOR_SUPPORT
+/**
+ * dma_buf_set_destructor - set the dma-buf's destructor
+ * @dmabuf:		[in]	pointer to dma-buf
+ * @dma_buf_destructor	[in]	the destructor function
+ * @dtor_data:		[in]	destructor data associated with this buffer
+ */
+static inline int dma_buf_set_destructor(struct dma_buf *dmabuf,
+					 dma_buf_destructor dtor,
+					 void *dtor_data)
+{
+	dmabuf->dtor = dtor;
+	dmabuf->dtor_data = dtor_data;
+	return 0;
+}
+#else
+static inline int dma_buf_set_destructor(struct dma_buf *dmabuf,
+					 dma_buf_destructor dtor,
+					 void *dtor_data)
+{
+	return -ENOTSUPP;
+}
+#endif
 #endif /* __DMA_BUF_H__ */

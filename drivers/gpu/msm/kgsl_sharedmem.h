@@ -5,6 +5,7 @@
 #ifndef __KGSL_SHAREDMEM_H
 #define __KGSL_SHAREDMEM_H
 
+#include <linux/bitfield.h>
 #include <linux/dma-mapping.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
@@ -106,6 +107,7 @@ int kgsl_allocate_kernel(struct kgsl_device *device,
  * kgsl_allocate_global - Allocate a global GPU memory object
  * @device: A GPU device handle
  * @size: Size of the allocation in bytes
+ * @padding: Amount of extra adding to add to the VA allocation
  * @flags: Control flags for the allocation
  * @priv: Internal flags for the allocation
  * @name: Name of the allocation (for the debugfs file)
@@ -117,7 +119,7 @@ int kgsl_allocate_kernel(struct kgsl_device *device,
  * failure.
  */
 struct kgsl_memdesc *kgsl_allocate_global(struct kgsl_device *device,
-		u64 size, u64 flags, u32 priv, const char *name);
+		u64 size, u32 padding, u64 flags, u32 priv, const char *name);
 
 /**
  * kgsl_allocate_global_fixed - Allocate a global GPU memory object from a fixed
@@ -359,4 +361,18 @@ static inline void kgsl_free_sgt(struct sg_table *sgt)
 	}
 }
 
+/**
+ * kgsl_cachemode_is_cached - Return true if the passed flags indicate a cached
+ * buffer
+ * @flags: A bitmask of KGSL_MEMDESC_ flags
+ *
+ * Return: true if the flags indicate a cached buffer
+ */
+static inline bool kgsl_cachemode_is_cached(u64 flags)
+{
+	u64 mode = FIELD_GET(KGSL_CACHEMODE_MASK, flags);
+
+	return (mode != KGSL_CACHEMODE_UNCACHED &&
+		mode != KGSL_CACHEMODE_WRITECOMBINE);
+}
 #endif /* __KGSL_SHAREDMEM_H */

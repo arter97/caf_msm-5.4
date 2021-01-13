@@ -105,6 +105,7 @@ struct walt_sched_stats {
 	int nr_big_tasks;
 	u64 cumulative_runnable_avg_scaled;
 	u64 pred_demands_sum_scaled;
+	unsigned int nr_rtg_high_prio_tasks;
 };
 
 struct walt_task_group {
@@ -239,7 +240,13 @@ extern void init_sched_groups_capacity(int cpu, struct sched_domain *sd);
 #ifdef CONFIG_64BIT
 # define NICE_0_LOAD_SHIFT	(SCHED_FIXEDPOINT_SHIFT + SCHED_FIXEDPOINT_SHIFT)
 # define scale_load(w)		((w) << SCHED_FIXEDPOINT_SHIFT)
-# define scale_load_down(w)	((w) >> SCHED_FIXEDPOINT_SHIFT)
+# define scale_load_down(w) \
+({ \
+	unsigned long __w = (w); \
+	if (__w) \
+		__w = max(2UL, __w >> SCHED_FIXEDPOINT_SHIFT); \
+	__w; \
+})
 #else
 # define NICE_0_LOAD_SHIFT	(SCHED_FIXEDPOINT_SHIFT)
 # define scale_load(w)		(w)
@@ -2064,6 +2071,8 @@ extern void init_dl_rq_bw_ratio(struct dl_rq *dl_rq);
 #define BW_SHIFT		20
 #define BW_UNIT			(1 << BW_SHIFT)
 #define RATIO_SHIFT		8
+#define MAX_BW_BITS		(64 - BW_SHIFT)
+#define MAX_BW			((1ULL << MAX_BW_BITS) - 1)
 unsigned long to_ratio(u64 period, u64 runtime);
 
 extern void init_entity_runnable_average(struct sched_entity *se);
@@ -2983,10 +2992,23 @@ static inline bool task_in_related_thread_group(struct task_struct *p)
 	return (rcu_access_pointer(p->wts.grp) != NULL);
 }
 
+static inline bool task_rtg_high_prio(struct task_struct *p)
+{
+	return task_in_related_thread_group(p) &&
+		(p->prio <= sysctl_walt_rtg_cfs_boost_prio);
+}
+
 static inline struct walt_related_thread_group
 *task_related_thread_group(struct task_struct *p)
 {
 	return rcu_dereference(p->wts.grp);
+}
+
+/* applying the task threshold for all types of low latency tasks. */
+static inline bool walt_low_latency_task(struct task_struct *p)
+{
+	return p->wts.low_latency &&
+		(task_util(p) < sysctl_walt_low_latency_task_threshold);
 }
 
 /* Is frequency of two cpus synchronized with each other? */
@@ -3035,14 +3057,21 @@ extern struct walt_sched_cluster *rq_cluster(struct rq *rq);
 #ifdef CONFIG_UCLAMP_TASK_GROUP
 static inline bool task_sched_boost(struct task_struct *p)
 {
-	struct cgroup_subsys_state *css = task_css(p, cpu_cgrp_id);
+	struct cgroup_subsys_state *css;
 	struct task_group *tg;
+	bool sched_boost_enabled;
 
-	if (!css)
+	rcu_read_lock();
+	css = task_css(p, cpu_cgrp_id);
+	if (!css) {
+		rcu_read_unlock();
 		return false;
+	}
 	tg = container_of(css, struct task_group, css);
+	sched_boost_enabled = tg->wtg.sched_boost_enabled;
+	rcu_read_unlock();
 
-	return tg->wtg.sched_boost_enabled;
+	return sched_boost_enabled;
 }
 
 extern int sync_cgroup_colocation(struct task_struct *p, bool insert);
@@ -3112,17 +3141,20 @@ void note_task_waking(struct task_struct *p, u64 wallclock);
 
 static inline bool task_placement_boost_enabled(struct task_struct *p)
 {
-	if (task_sched_boost(p))
-		return sched_boost_policy() != SCHED_BOOST_NONE;
+	if (likely(sched_boost_policy() == SCHED_BOOST_NONE))
+		return false;
 
-	return false;
+	return task_sched_boost(p);
 }
 
 static inline enum sched_boost_policy task_boost_policy(struct task_struct *p)
 {
-	enum sched_boost_policy policy = task_sched_boost(p) ?
-						sched_boost_policy() :
-						SCHED_BOOST_NONE;
+	enum sched_boost_policy policy;
+
+	if (likely(sched_boost_policy() == SCHED_BOOST_NONE))
+		return SCHED_BOOST_NONE;
+
+	policy = task_sched_boost(p) ? sched_boost_policy() : SCHED_BOOST_NONE;
 	if (policy == SCHED_BOOST_ON_BIG) {
 		/*
 		 * Filter out tasks less than min task util threshold
@@ -3336,4 +3368,19 @@ extern void dequeue_task_core(struct rq *rq, struct task_struct *p, int flags);
 extern void walt_init_sched_boost(struct task_group *tg);
 #else
 static inline void walt_init_sched_boost(struct task_group *tg) {}
+#endif
+
+#ifdef CONFIG_SCHED_WALT
+static inline void walt_irq_work_queue(struct irq_work *work)
+{
+	if (likely(cpu_online(raw_smp_processor_id())))
+		irq_work_queue(work);
+	else
+		irq_work_queue_on(work, cpumask_any(cpu_online_mask));
+}
+#else
+static inline void walt_irq_work_queue(struct irq_work *work)
+{
+	irq_work_queue(work);
+}
 #endif

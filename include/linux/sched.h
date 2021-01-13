@@ -32,6 +32,7 @@
 #include <linux/posix-timers.h>
 #include <linux/rseq.h>
 #include <linux/android_kabi.h>
+#include <linux/android_vendor.h>
 
 /* task_struct member predeclarations (sorted alphabetically): */
 struct audit_context;
@@ -117,18 +118,6 @@ struct task_group;
 #define task_contributes_to_load(task)	((task->state & TASK_UNINTERRUPTIBLE) != 0 && \
 					 (task->flags & PF_FROZEN) == 0 && \
 					 (task->state & TASK_NOLOAD) == 0)
-
-/*
- * Enum for display driver to provide varying refresh rates
- */
-enum fps {
-	FPS0 = 0,
-	FPS30 = 30,
-	FPS48 = 48,
-	FPS60 = 60,
-	FPS90 = 90,
-	FPS120 = 120,
-};
 
 enum task_boost_type {
 	TASK_BOOST_NONE = 0,
@@ -548,8 +537,13 @@ DECLARE_PER_CPU_READ_MOSTLY(int, sched_load_boost);
 
 #ifdef CONFIG_QCOM_HYP_CORE_CTL
 extern int hh_vcpu_populate_affinity_info(u32 cpu_index, u64 cap_id);
+extern int hh_vpm_grp_populate_info(u64 cap_id, int virq_num);
 #else
 static inline int hh_vcpu_populate_affinity_info(u32 cpu_index, u64 cap_id)
+{
+	return 0;
+}
+static inline int  hh_vpm_grp_populate_info(u64 cap_id, int virq_num)
 {
 	return 0;
 }
@@ -562,12 +556,14 @@ register_cpu_cycle_counter_cb(struct cpu_cycle_counter_cb *cb);
 extern void
 sched_update_cpu_freq_min_max(const cpumask_t *cpus, u32 fmin, u32 fmax);
 extern void free_task_load_ptrs(struct task_struct *p);
-extern void sched_set_refresh_rate(enum fps fps);
 extern int set_task_boost(int boost, u64 period);
 extern void walt_update_cluster_topology(void);
 
 #define RAVG_HIST_SIZE_MAX  5
 #define NUM_BUSY_BUCKETS 10
+
+#define WALT_LOW_LATENCY_PROCFS	BIT(0)
+#define WALT_LOW_LATENCY_BINDER	BIT(1)
 
 struct walt_task_struct {
 	/*
@@ -614,11 +610,11 @@ struct walt_task_struct {
 	u16				demand_scaled;
 	u16				pred_demand_scaled;
 	u64				active_time;
-	u64				last_win_size;
 	int				boost;
 	bool				wake_up_idle;
 	bool				misfit;
-	bool				low_latency;
+	bool				rtg_high_prio;
+	u8				low_latency;
 	u64				boost_period;
 	u64				boost_expires;
 	u64				last_sleep_ts;
@@ -630,6 +626,7 @@ struct walt_task_struct {
 	struct list_head		grp_list;
 	u64				cpu_cycles;
 	cpumask_t			cpus_requested;
+	bool				iowaited;
 };
 
 #else
@@ -645,8 +642,6 @@ static inline void free_task_load_ptrs(struct task_struct *p) { }
 
 static inline void sched_update_cpu_freq_min_max(const cpumask_t *cpus,
 					u32 fmin, u32 fmax) { }
-
-static inline void sched_set_refresh_rate(enum fps fps) { }
 
 static inline void set_task_boost(int boost, u64 period) { }
 static inline void walt_update_cluster_topology(void) { }
@@ -1124,8 +1119,8 @@ struct task_struct {
 	struct seccomp			seccomp;
 
 	/* Thread group tracking: */
-	u32				parent_exec_id;
-	u32				self_exec_id;
+	u64				parent_exec_id;
+	u64				self_exec_id;
 
 	/* Protection against (de-)allocation: mm, files, fs, tty, keyrings, mems_allowed, mempolicy: */
 	spinlock_t			alloc_lock;
@@ -1465,6 +1460,8 @@ struct task_struct {
 	unsigned long			lowest_stack;
 	unsigned long			prev_lowest_stack;
 #endif
+
+	ANDROID_VENDOR_DATA_ARRAY(1, 3);
 
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);

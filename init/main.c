@@ -525,14 +525,16 @@ static void __init report_meminit(void)
 {
 	const char *stack;
 
-	if (IS_ENABLED(CONFIG_INIT_STACK_ALL))
-		stack = "all";
+	if (IS_ENABLED(CONFIG_INIT_STACK_ALL_PATTERN))
+		stack = "all(pattern)";
+	else if (IS_ENABLED(CONFIG_INIT_STACK_ALL_ZERO))
+		stack = "all(zero)";
 	else if (IS_ENABLED(CONFIG_GCC_PLUGIN_STRUCTLEAK_BYREF_ALL))
-		stack = "byref_all";
+		stack = "byref_all(zero)";
 	else if (IS_ENABLED(CONFIG_GCC_PLUGIN_STRUCTLEAK_BYREF))
-		stack = "byref";
+		stack = "byref(zero)";
 	else if (IS_ENABLED(CONFIG_GCC_PLUGIN_STRUCTLEAK_USER))
-		stack = "__user";
+		stack = "__user(zero)";
 	else
 		stack = "off";
 
@@ -556,6 +558,8 @@ static void __init mm_init(void)
 	init_debug_pagealloc();
 	report_meminit();
 	mem_init();
+	/* page_owner must be initialized after buddy is ready */
+	page_ext_init_flatmem_late();
 	kmem_cache_init();
 	kmemleak_init();
 	pgtable_init();
@@ -694,7 +698,6 @@ asmlinkage __visible void __init start_kernel(void)
 	boot_init_stack_canary();
 
 	time_init();
-	printk_safe_init();
 	perf_event_init();
 	profile_init();
 	call_function_init();
@@ -783,6 +786,8 @@ asmlinkage __visible void __init start_kernel(void)
 
 	/* Do the rest non-__init'ed, we're now alive */
 	arch_call_rest_init();
+
+	prevent_tail_call_optimization();
 }
 
 /* Call all constructor functions linked into the kernel. */

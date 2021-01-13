@@ -13,9 +13,13 @@
 #include "adreno_a6xx_gmu.h"
 #include "adreno_a6xx_rgmu.h"
 
+/* Snapshot section size of each CP preemption record for A6XX  */
+#define A6XX_SNAPSHOT_CP_CTXRECORD_SIZE_IN_BYTES (64 * 1024)
+
 extern const struct adreno_power_ops a6xx_gmu_power_ops;
 extern const struct adreno_power_ops a6xx_rgmu_power_ops;
 extern const struct adreno_power_ops a630_gmu_power_ops;
+extern const struct adreno_power_ops a6xx_hwsched_power_ops;
 
 /**
  * struct a6xx_device - Container for the a6xx_device
@@ -89,6 +93,8 @@ struct adreno_a6xx_core {
 	bool gx_cpr_toggle;
 	/** @highest_bank_bit: The bit of the highest DDR bank */
 	u32 highest_bank_bit;
+	/** @ctxt_record_size: Size of the preemption record in bytes */
+	u64 ctxt_record_size;
 };
 
 #define CP_CLUSTER_FE		0x0
@@ -180,6 +186,34 @@ struct cpu_gpu_lock {
 #define A6XX_CP_RB_CNTL_DEFAULT (((ilog2(4) << 8) & 0x1F00) | \
 		(ilog2(KGSL_RB_DWORDS >> 1) & 0x3F))
 
+/* Size of the CP_INIT pm4 stream in dwords */
+#define A6XX_CP_INIT_DWORDS 12
+
+#define A6XX_INT_MASK \
+	((1 << A6XX_INT_CP_AHB_ERROR) |			\
+	 (1 << A6XX_INT_ATB_ASYNCFIFO_OVERFLOW) |	\
+	 (1 << A6XX_INT_RBBM_GPC_ERROR) |		\
+	 (1 << A6XX_INT_CP_SW) |			\
+	 (1 << A6XX_INT_CP_HW_ERROR) |			\
+	 (1 << A6XX_INT_CP_IB2) |			\
+	 (1 << A6XX_INT_CP_IB1) |			\
+	 (1 << A6XX_INT_CP_RB) |			\
+	 (1 << A6XX_INT_CP_CACHE_FLUSH_TS) |		\
+	 (1 << A6XX_INT_RBBM_ATB_BUS_OVERFLOW) |	\
+	 (1 << A6XX_INT_RBBM_HANG_DETECT) |		\
+	 (1 << A6XX_INT_UCHE_OOB_ACCESS) |		\
+	 (1 << A6XX_INT_UCHE_TRAP_INTR) |		\
+	 (1 << A6XX_INT_TSB_WRITE_ERROR))
+
+#define A6XX_HWSCHED_INT_MASK \
+	((1 << A6XX_INT_CP_AHB_ERROR) |			\
+	 (1 << A6XX_INT_ATB_ASYNCFIFO_OVERFLOW) |	\
+	 (1 << A6XX_INT_RBBM_GPC_ERROR) |		\
+	 (1 << A6XX_INT_RBBM_ATB_BUS_OVERFLOW) |	\
+	 (1 << A6XX_INT_UCHE_OOB_ACCESS) |		\
+	 (1 << A6XX_INT_UCHE_TRAP_INTR) |		\
+	 (1 << A6XX_INT_TSB_WRITE_ERROR))
+
 /**
  * to_a6xx_core - return the a6xx specific GPU core struct
  * @adreno_dev: An Adreno GPU device handle
@@ -226,6 +260,35 @@ static inline int timed_poll_check(struct kgsl_device *device,
 	return 0;
 }
 
+/**
+ * a6xx_is_smmu_stalled() - Check whether smmu is stalled or not
+ * @device: Pointer to KGSL device
+ *
+ * Return - True if smmu is stalled or false otherwise
+ */
+static inline bool a6xx_is_smmu_stalled(struct kgsl_device *device)
+{
+	u32 val;
+
+	kgsl_regread(device, A6XX_RBBM_STATUS3, &val);
+
+	return val & BIT(24);
+}
+
+/**
+ * a6xx_cx_regulator_disable_wait - Disable a cx regulator and wait for it
+ * @reg: A &struct regulator handle
+ * @device: kgsl device struct
+ * @timeout: Time to wait (in milliseconds)
+ *
+ * Disable the regulator and wait @timeout milliseconds for it to enter the
+ * disabled state.
+ *
+ * Return: True if the regulator was disabled or false if it timed out
+ */
+bool a6xx_cx_regulator_disable_wait(struct regulator *reg,
+				struct kgsl_device *device, u32 timeout);
+
 /* Preemption functions */
 void a6xx_preemption_trigger(struct adreno_device *adreno_dev);
 void a6xx_preemption_schedule(struct adreno_device *adreno_dev);
@@ -270,6 +333,15 @@ u64 a6xx_read_alwayson(struct adreno_device *adreno_dev);
  * time we boot the gpu
  */
 void a6xx_start(struct adreno_device *adreno_dev);
+
+/**
+ * a6xx_sqe_unhalt - Unhalt the SQE engine
+ * @adreno_dev: An Adreno GPU handle
+ *
+ * Points the hardware to the microcode location in memory and then
+ * unhalts the SQE so that it can fetch instructions from DDR
+ */
+void a6xx_unhalt_sqe(struct adreno_device *adreno_dev);
 
 /**
  * a6xx_init - Initialize a6xx resources
@@ -318,4 +390,54 @@ int a6xx_microcode_read(struct adreno_device *adreno_dev);
 int a6xx_probe_common(struct platform_device *pdev,
 	struct  adreno_device *adreno_dev, u32 chipid,
 	const struct adreno_gpu_core *gpucore);
+
+/**
+ * a6xx_hw_isidle - Check whether a6xx gpu is idle or not
+ * @adreno_dev: An Adreno GPU handle
+ *
+ * Return: True if gpu is idle, otherwise false
+ */
+bool a6xx_hw_isidle(struct adreno_device *adreno_dev);
+
+/**
+ * a6xx_spin_idle_debug - Debug logging used when gpu fails to idle
+ * @adreno_dev: An Adreno GPU handle
+ *
+ * This function logs interesting registers and triggers a snapshot
+ */
+void a6xx_spin_idle_debug(struct adreno_device *adreno_dev,
+	const char *str);
+
+/**
+ * a6xx_perfcounter_update - Update the IFPC perfcounter list
+ * @adreno_dev: An Adreno GPU handle
+ * @reg: Perfcounter reg struct to add/remove to the list
+ * @update_reg: true if the perfcounter needs to be programmed by the CPU
+ *
+ * Return: 0 on success or -EBUSY if the lock couldn't be taken
+ */
+int a6xx_perfcounter_update(struct adreno_device *adreno_dev,
+	struct adreno_perfcount_register *reg, bool update_reg);
+
+extern const struct adreno_perfcounters adreno_a630_perfcounters;
+extern const struct adreno_perfcounters adreno_a6xx_perfcounters;
+extern const struct adreno_perfcounters adreno_a6xx_legacy_perfcounters;
+
+/**
+ * a6xx_rdpm_mx_freq_update - Update the mx frequency
+ * @gmu: An Adreno GMU handle
+ * @freq: Frequency in KHz
+ *
+ * This function communicates GPU mx frequency(in Mhz) changes to rdpm.
+ */
+void a6xx_rdpm_mx_freq_update(struct a6xx_gmu_device *gmu, u32 freq);
+
+/**
+ * a6xx_rdpm_cx_freq_update - Update the cx frequency
+ * @gmu: An Adreno GMU handle
+ * @freq: Frequency in KHz
+ *
+ * This function communicates GPU cx frequency(in Mhz) changes to rdpm.
+ */
+void a6xx_rdpm_cx_freq_update(struct a6xx_gmu_device *gmu, u32 freq);
 #endif

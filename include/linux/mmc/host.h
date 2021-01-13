@@ -18,6 +18,7 @@
 #include <linux/mmc/card.h>
 #include <linux/mmc/pm.h>
 #include <linux/dma-direction.h>
+#include <linux/ipc_logging.h>
 
 struct mmc_ios {
 	unsigned int	clock;			/* clock rate */
@@ -81,6 +82,31 @@ struct mmc_ios {
 };
 
 struct mmc_host;
+#if defined(CONFIG_SDC_QTI)
+enum mmc_load {
+	MMC_LOAD_HIGH,
+	MMC_LOAD_LOW,
+};
+#endif
+
+#if defined(CONFIG_SDC_QTI)
+enum {
+	MMC_ERR_CMD_TIMEOUT,
+	MMC_ERR_CMD_CRC,
+	MMC_ERR_DAT_TIMEOUT,
+	MMC_ERR_DAT_CRC,
+	MMC_ERR_AUTO_CMD,
+	MMC_ERR_ADMA,
+	MMC_ERR_TUNING,
+	MMC_ERR_CMDQ_RED,
+	MMC_ERR_CMDQ_GCE,
+	MMC_ERR_CMDQ_ICCE,
+	MMC_ERR_REQ_TIMEOUT,
+	MMC_ERR_CMDQ_REQ_TIMEOUT,
+	MMC_ERR_ICE_CFG,
+	MMC_ERR_MAX,
+};
+#endif
 
 #if defined(CONFIG_SDC_QTI)
 enum {
@@ -114,6 +140,9 @@ struct mmc_host_ops {
 			    int err);
 	void	(*pre_req)(struct mmc_host *host, struct mmc_request *req);
 	void	(*request)(struct mmc_host *host, struct mmc_request *req);
+	/* Submit one request to host in atomic context. */
+	int	(*request_atomic)(struct mmc_host *host,
+				  struct mmc_request *req);
 
 	/*
 	 * Avoid calling the next three functions too often or in a "fast
@@ -191,6 +220,9 @@ struct mmc_host_ops {
 	 */
 	int	(*multi_io_quirk)(struct mmc_card *card,
 				  unsigned int direction, int blk_size);
+#if defined(CONFIG_SDC_QTI)
+	int     (*notify_load)(struct mmc_host *host, enum mmc_load);
+#endif
 };
 
 struct mmc_cqe_ops {
@@ -235,6 +267,15 @@ struct mmc_cqe_ops {
 	 * will have zero data bytes transferred.
 	 */
 	void	(*cqe_recovery_finish)(struct mmc_host *host);
+#if defined(CONFIG_SDC_QTI)
+	/*
+	 * Update the request queue with keyslot manager details. This keyslot
+	 * manager will be used by block crypto to configure the crypto Engine
+	 * for data encryption.
+	 */
+	void	(*cqe_crypto_update_queue)(struct mmc_host *host,
+					struct request_queue *queue);
+#endif
 };
 
 struct mmc_async_req {
@@ -295,11 +336,6 @@ enum dev_state {
 	DEV_SUSPENDING = 1,
 	DEV_SUSPENDED,
 	DEV_RESUMED,
-};
-
-enum mmc_load {
-	MMC_LOAD_HIGH,
-	MMC_LOAD_LOW,
 };
 
 /**
@@ -459,9 +495,12 @@ struct mmc_host {
 #define MMC_CAP2_CQE_DCMD	(1 << 24)	/* CQE can issue a direct command */
 #define MMC_CAP2_AVOID_3_3V	(1 << 25)	/* Host must negotiate down from 3.3V */
 #define MMC_CAP2_MERGE_CAPABLE	(1 << 26)	/* Host can merge a segment over the segment size */
+#define MMC_CAP2_CRYPTO		(1 << 27)	/* Host supports inline encryption */
 #if defined(CONFIG_SDC_QTI)
-#define MMC_CAP2_CLK_SCALE      (1 << 27)       /* Allow dynamic clk scaling */
+#define MMC_CAP2_CLK_SCALE      (1 << 28)       /* Allow dynamic clk scaling */
+#define MMC_CAP2_SLEEP_AWAKE	(1 << 29)	/* Use Sleep/Awake (CMD5) */
 #endif
+
 	int			fixed_drv_type;	/* fixed driver type for non-removable media */
 
 	mmc_pm_flag_t		pm_caps;	/* supported pm features */
@@ -479,6 +518,9 @@ struct mmc_host {
 	spinlock_t		lock;		/* lock for claim and bus ops */
 
 	struct mmc_ios		ios;		/* current io bus settings */
+#if defined(CONFIG_SDC_QTI)
+	struct mmc_ios		cached_ios;
+#endif
 
 	/* group bitfields together to minimize padding */
 	unsigned int		use_spi_crc:1;
@@ -494,7 +536,9 @@ struct mmc_host {
 
 	int			rescan_disable;	/* disable card detection */
 	int			rescan_entered;	/* used with nonremovable devices */
-
+#if defined(CONFIG_SDC_QTI)
+	bool			corrupted_card; /* good/bad associated card */
+#endif
 	int			need_retune;	/* re-tuning is needed */
 	int			hold_retune;	/* hold off re-tuning */
 	unsigned int		retune_period;	/* re-tuning period in secs */
@@ -526,6 +570,11 @@ struct mmc_host {
 
 	struct led_trigger	*led;		/* activity led */
 
+#ifdef CONFIG_MMC_IPC_LOGGING
+	void *ipc_log_ctxt;
+	bool stop_tracing;
+#endif
+
 #ifdef CONFIG_REGULATOR
 	bool			regulator_enabled; /* regulator state */
 #endif
@@ -556,9 +605,16 @@ struct mmc_host {
 	int			cqe_qdepth;
 	bool			cqe_enabled;
 	bool			cqe_on;
+#ifdef CONFIG_MMC_CRYPTO
+	struct keyslot_manager	*ksm;
+	void *crypto_DO_NOT_USE[7];
+#endif /* CONFIG_MMC_CRYPTO */
 
 	/* Host Software Queue support */
 	bool			hsq_enabled;
+#if defined(CONFIG_SDC_QTI)
+	bool                    need_hw_reset;
+#endif
 
 #if defined(CONFIG_SDC_QTI)
 	atomic_t active_reqs;
@@ -574,6 +630,16 @@ void mmc_remove_host(struct mmc_host *);
 void mmc_free_host(struct mmc_host *);
 int mmc_of_parse(struct mmc_host *host);
 int mmc_of_parse_voltage(struct device_node *np, u32 *mask);
+
+#ifdef CONFIG_MMC_IPC_LOGGING
+#define NUM_LOG_PAGES		10
+#define mmc_log_string(mmc_host, fmt, ...)	do {\
+	if ((mmc_host)->ipc_log_ctxt && !(mmc_host)->stop_tracing)	\
+		ipc_log_string((mmc_host)->ipc_log_ctxt, "%s: " fmt, __func__, ##__VA_ARGS__);	\
+	} while (0)
+#else
+#define mmc_log_string(mmc_host, fmt, ...)	do { } while (0)
+#endif
 
 static inline void *mmc_priv(struct mmc_host *host)
 {

@@ -85,6 +85,7 @@ struct gadget_info {
 	struct usb_composite_driver composite;
 	struct usb_composite_dev cdev;
 	bool use_os_desc;
+	bool unbinding;
 	char b_vendor_code;
 	char qw_sign[OS_STRING_QW_SIGN_LEN];
 	spinlock_t spinlock;
@@ -277,9 +278,12 @@ static int unregister_gadget(struct gadget_info *gi)
 	if (!gi->composite.gadget_driver.udc_name)
 		return -ENODEV;
 
+	gi->unbinding = true;
 	ret = usb_gadget_unregister_driver(&gi->composite.gadget_driver);
 	if (ret)
 		return ret;
+
+	gi->unbinding = false;
 	kfree(gi->composite.gadget_driver.udc_name);
 	gi->composite.gadget_driver.udc_name = NULL;
 	return 0;
@@ -291,6 +295,9 @@ static ssize_t gadget_dev_desc_UDC_store(struct config_item *item,
 	struct gadget_info *gi = to_gadget_info(item);
 	char *name;
 	int ret;
+
+	if (strlen(page) < len)
+		return -EOVERFLOW;
 
 	name = kstrdup(page, GFP_KERNEL);
 	if (!name)
@@ -1321,9 +1328,9 @@ static void purge_configs_funcs(struct gadget_info *gi)
 
 		cfg = container_of(c, struct config_usb_cfg, c);
 
-		list_for_each_entry_safe(f, tmp, &c->functions, list) {
+		list_for_each_entry_safe_reverse(f, tmp, &c->functions, list) {
 
-			list_move_tail(&f->list, &cfg->func_list);
+			list_move(&f->list, &cfg->func_list);
 			if (f->unbind) {
 				dev_dbg(&gi->cdev.gadget->dev,
 					"unbind function '%s'/%p\n",
@@ -1626,7 +1633,8 @@ static void android_disconnect(struct usb_gadget *gadget)
 	acc_disconnect();
 #endif
 	gi->connected = 0;
-	schedule_work(&gi->work);
+	if (!gi->unbinding)
+		schedule_work(&gi->work);
 	composite_disconnect(gadget);
 }
 

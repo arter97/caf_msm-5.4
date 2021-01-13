@@ -76,12 +76,12 @@ static struct hwkm_device *km_device;
 
 #define qti_hwkm_readl(hwkm, reg, dest)				\
 	(((dest) == KM_MASTER) ?				\
-	(readl_relaxed((hwkm)->km_base + (reg))) :		\
-	(readl_relaxed((hwkm)->ice_base + (reg))))
+	(readl_relaxed((void __iomem *)((hwkm)->km_base + (reg)))) :	\
+	(readl_relaxed((void __iomem *)((hwkm)->ice_base + (reg)))))
 #define qti_hwkm_writel(hwkm, val, reg, dest)			\
 	(((dest) == KM_MASTER) ?				\
-	(writel_relaxed((val), (hwkm)->km_base + (reg))) :	\
-	(writel_relaxed((val), (hwkm)->ice_base + (reg))))
+	(writel_relaxed((val), (void __iomem *)((hwkm)->km_base + (reg)))) :\
+	(writel_relaxed((val), (void __iomem *)((hwkm)->ice_base + (reg)))))
 #define qti_hwkm_setb(hwkm, reg, nr, dest) {			\
 	u32 val = qti_hwkm_readl(hwkm, reg, dest);		\
 	val |= (0x1 << nr);					\
@@ -142,6 +142,8 @@ static int qti_hwkm_master_transaction(struct hwkm_device *dev,
 {
 	int i = 0;
 	int err = 0;
+	u32 val = 0;
+	uint32_t rsp_discard;
 
 	// Clear CMD FIFO
 	qti_hwkm_setb(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_CTL,
@@ -153,8 +155,11 @@ static int qti_hwkm_master_transaction(struct hwkm_device *dev,
 	/* Write memory barrier */
 	wmb();
 
-	// Clear previous CMD errors
-	qti_hwkm_writel(dev, 0x0, QTI_HWKM_MASTER_RG_BANK2_BANKN_ESR,
+	// Clear previous CMD errors, write 1 to err bits
+	val = qti_hwkm_readl(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_ESR,
+			KM_MASTER);
+	qti_hwkm_writel(dev, val,
+			QTI_HWKM_MASTER_RG_BANK2_BANKN_ESR,
 			KM_MASTER);
 	/* Write memory barrier */
 	wmb();
@@ -171,6 +176,22 @@ static int qti_hwkm_master_transaction(struct hwkm_device *dev,
 		pr_err("%s: CMD_FIFO_CLEAR_BIT not set\n", __func__);
 		err = -1;
 		return -err;
+	}
+
+	if (qti_hwkm_testb(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_IRQ_STATUS,
+			RSP_FIFO_NOT_EMPTY, KM_MASTER)) {
+		while (qti_hwkm_get_reg_data(dev,
+			QTI_HWKM_MASTER_RG_BANK2_BANKN_STATUS,
+			RSP_FIFO_AVAILABLE_DATA, RSP_FIFO_AVAILABLE_DATA_MASK,
+			KM_MASTER) > 0) {
+			rsp_discard = qti_hwkm_readl(dev,
+				QTI_HWKM_MASTER_RG_BANK2_RSP_0, KM_MASTER);
+		}
+		// Clear RSP_FIFO_NOT_EMPTY status bit
+		qti_hwkm_setb(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_IRQ_STATUS,
+			RSP_FIFO_NOT_EMPTY, KM_MASTER);
+		/* Write memory barrier */
+		wmb();
 	}
 
 	for (i = 0; i < cmd_words; i++) {
@@ -253,6 +274,8 @@ static int qti_hwkm_ice_transaction(struct hwkm_device *dev,
 {
 	int i = 0;
 	int err = 0;
+	u32 val = 0;
+	uint32_t rsp_discard;
 
 	// Clear CMD FIFO
 	qti_hwkm_setb(dev, QTI_HWKM_ICE_RG_BANK0_BANKN_CTL,
@@ -264,9 +287,13 @@ static int qti_hwkm_ice_transaction(struct hwkm_device *dev,
 	/* Write memory barrier */
 	wmb();
 
-	// Clear previous CMD errors
-	qti_hwkm_writel(dev, 0x0, QTI_HWKM_ICE_RG_BANK0_BANKN_ESR,
+	// Clear previous CMD errors, write 1 to err bits
+	val = qti_hwkm_readl(dev, QTI_HWKM_ICE_RG_BANK0_BANKN_ESR,
 			ICEMEM_SLAVE);
+	qti_hwkm_writel(dev, val,
+			QTI_HWKM_ICE_RG_BANK0_BANKN_ESR,
+			ICEMEM_SLAVE);
+
 	/* Write memory barrier */
 	wmb();
 
@@ -282,6 +309,22 @@ static int qti_hwkm_ice_transaction(struct hwkm_device *dev,
 		pr_err("%s: CMD_FIFO_CLEAR_BIT not set\n", __func__);
 		err = -1;
 		return err;
+	}
+
+	if (qti_hwkm_testb(dev, QTI_HWKM_ICE_RG_BANK0_BANKN_IRQ_STATUS,
+			RSP_FIFO_NOT_EMPTY, ICEMEM_SLAVE)) {
+		while (qti_hwkm_get_reg_data(dev,
+			QTI_HWKM_ICE_RG_BANK0_BANKN_STATUS,
+			RSP_FIFO_AVAILABLE_DATA, RSP_FIFO_AVAILABLE_DATA_MASK,
+			ICEMEM_SLAVE) > 0) {
+			rsp_discard = qti_hwkm_readl(dev,
+				QTI_HWKM_ICE_RG_BANK0_RSP_0, ICEMEM_SLAVE);
+		}
+		// Clear RSP_FIFO_NOT_EMPTY status bit
+		qti_hwkm_setb(dev, QTI_HWKM_ICE_RG_BANK0_BANKN_IRQ_STATUS,
+			RSP_FIFO_NOT_EMPTY, ICEMEM_SLAVE);
+		/* Write memory barrier */
+		wmb();
 	}
 
 	for (i = 0; i < cmd_words; i++) {
@@ -502,6 +545,19 @@ static int qti_handle_key_unwrap_import(const struct hwkm_cmd *cmd_in,
 	if (cmd_in->unwrap.sz != EXPECTED_UNWRAP_KEY_SIZE) {
 		pr_err("%s: Invalid key size - %d\n", __func__,
 						cmd_in->unwrap.sz);
+		return -EINVAL;
+	}
+
+	/*
+	 * Unwrap in HWKM does not do an integrity check for the last byte
+	 * (68th byte) as it is a noop. However, we need to make sure no
+	 * part of the keyblob provided was tampered with, even though it
+	 * is a noop. Adding an explicit check for the last byte before
+	 * providing to unwrap command.
+	 */
+	if ((cmd_in->unwrap.wkb[EXPECTED_UNWRAP_KEY_SIZE - 1]) != 0x00) {
+		pr_err("%s: Last byte corrupted, expecting zero value\n",
+								__func__);
 		return -EINVAL;
 	}
 
@@ -965,17 +1021,15 @@ static int qti_hwkm_get_device_tree_data(struct platform_device *pdev,
 
 	hwkm_dev->km_res = platform_get_resource_byname(pdev,
 				IORESOURCE_MEM, "km_master");
-	hwkm_dev->ice_res = platform_get_resource_byname(pdev,
-				IORESOURCE_MEM, "ice_slave");
-	if (!hwkm_dev->km_res || !hwkm_dev->ice_res) {
+
+	if (!hwkm_dev->km_res) {
 		pr_err("%s: No memory available for IORESOURCE\n", __func__);
 		return -ENOMEM;
 	}
 
 	hwkm_dev->km_base = devm_ioremap_resource(dev, hwkm_dev->km_res);
-	hwkm_dev->ice_base = devm_ioremap_resource(dev, hwkm_dev->ice_res);
 
-	if (IS_ERR(hwkm_dev->km_base) || IS_ERR(hwkm_dev->ice_base)) {
+	if (IS_ERR(hwkm_dev->km_base)) {
 		ret = PTR_ERR(hwkm_dev->km_base);
 		pr_err("%s: Error = %d mapping HWKM memory\n", __func__, ret);
 		goto out;
@@ -1157,9 +1211,15 @@ static int qti_hwkm_set_tpkey(void)
 	return 0;
 }
 
-int qti_hwkm_init(void)
+int qti_hwkm_init(void __iomem *hwkm_slave_mmio_base)
 {
 	int ret = 0;
+
+	if (!hwkm_slave_mmio_base) {
+		pr_err("%s: HWKM ICE slave mmio invalid\n", __func__);
+		return -EINVAL;
+	}
+	km_device->ice_base = hwkm_slave_mmio_base;
 
 	ret = qti_hwkm_ice_init_sequence(km_device);
 	if (ret) {

@@ -55,6 +55,8 @@
 #include <trace/events/initcall.h>
 #define CREATE_TRACE_POINTS
 #include <trace/events/printk.h>
+#undef CREATE_TRACE_POINTS
+#include <trace/hooks/debug.h>
 
 #include "console_cmdline.h"
 #include "braille.h"
@@ -460,6 +462,18 @@ static char __log_buf[__LOG_BUF_LEN] __aligned(LOG_ALIGN);
 static char *log_buf = __log_buf;
 static u32 log_buf_len = __LOG_BUF_LEN;
 
+/*
+ * We cannot access per-CPU data (e.g. per-CPU flush irq_work) before
+ * per_cpu_areas are initialised. This variable is set to true when
+ * it's safe to access per-CPU data.
+ */
+static bool __printk_percpu_data_ready __read_mostly;
+
+bool printk_percpu_data_ready(void)
+{
+	return __printk_percpu_data_ready;
+}
+
 /* Return log buffer address */
 char *log_buf_addr_get(void)
 {
@@ -600,6 +614,47 @@ static u32 truncate_msg(u16 *text_len, u16 *trunc_msg_len,
 	return msg_used_size(*text_len + *trunc_msg_len, 0, pad_len);
 }
 
+#ifdef CONFIG_QCOM_INITIAL_LOGBUF
+static inline void copy_boot_log(struct printk_log *msg)
+{
+	unsigned int bytes_to_copy;
+	unsigned int avail_buf;
+	static unsigned int boot_log_offset;
+
+	if (!boot_log_buf)
+		goto out;
+
+	avail_buf = boot_log_buf_size - boot_log_offset;
+	if (!avail_buf || (avail_buf < sizeof(*msg)))
+		goto out;
+
+	if (copy_early_boot_log) {
+		bytes_to_copy = log_next_idx;
+
+		if (avail_buf < bytes_to_copy)
+			bytes_to_copy = avail_buf;
+
+		memcpy(boot_log_buf + boot_log_offset, log_buf, bytes_to_copy);
+		boot_log_offset += bytes_to_copy;
+		copy_early_boot_log = false;
+		goto out;
+	}
+
+	bytes_to_copy = msg->len;
+	if (!bytes_to_copy)
+		bytes_to_copy = sizeof(*msg);
+
+	if (avail_buf < bytes_to_copy)
+		bytes_to_copy = avail_buf;
+
+	memcpy(boot_log_buf + boot_log_offset, msg, bytes_to_copy);
+	boot_log_offset += bytes_to_copy;
+
+out:
+	return;
+}
+#endif
+
 /* insert record into the buffer, discard old ones, update heads */
 static int log_store(u32 caller_id, int facility, int level,
 		     enum log_flags flags, u64 ts_nsec,
@@ -658,6 +713,9 @@ static int log_store(u32 caller_id, int facility, int level,
 	/* insert message */
 	log_next_idx += msg->len;
 	log_next_seq++;
+#ifdef CONFIG_QCOM_INITIAL_LOGBUF
+	copy_boot_log(msg);
+#endif
 
 	return msg->text_len;
 }
@@ -1146,11 +1204,27 @@ static void __init log_buf_add_cpu(void)
 static inline void log_buf_add_cpu(void) {}
 #endif /* CONFIG_SMP */
 
+static void __init set_percpu_data_ready(void)
+{
+	printk_safe_init();
+	/* Make sure we set this flag only after printk_safe() init is done */
+	barrier();
+	__printk_percpu_data_ready = true;
+}
+
 void __init setup_log_buf(int early)
 {
 	unsigned long flags;
 	char *new_log_buf;
 	unsigned int free;
+
+	/*
+	 * Some archs call setup_log_buf() multiple times - first is very
+	 * early, e.g. from setup_arch(), and second - when percpu_areas
+	 * are initialised.
+	 */
+	if (!early)
+		set_percpu_data_ready();
 
 	if (log_buf != __log_buf)
 		return;
@@ -1979,6 +2053,7 @@ asmlinkage int vprintk_emit(int facility, int level,
 	pending_output = (curr_log_seq != log_next_seq);
 	logbuf_unlock_irqrestore(flags);
 
+	trace_android_vh_printk_store(facility, level);
 	/* If called from the scheduler, we can not call up(). */
 	if (!in_sched && pending_output) {
 		/*
@@ -2972,6 +3047,9 @@ static DEFINE_PER_CPU(struct irq_work, wake_up_klogd_work) = {
 
 void wake_up_klogd(void)
 {
+	if (!printk_percpu_data_ready())
+		return;
+
 	preempt_disable();
 	if (waitqueue_active(&log_wait)) {
 		this_cpu_or(printk_pending, PRINTK_PENDING_WAKEUP);
@@ -2982,6 +3060,9 @@ void wake_up_klogd(void)
 
 void defer_console_output(void)
 {
+	if (!printk_percpu_data_ready())
+		return;
+
 	preempt_disable();
 	__this_cpu_or(printk_pending, PRINTK_PENDING_OUTPUT);
 	irq_work_queue(this_cpu_ptr(&wake_up_klogd_work));

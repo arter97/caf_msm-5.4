@@ -191,13 +191,12 @@ enum iommu_attr {
 #define DOMAIN_ATTR_EARLY_MAP			(EXTENDED_ATTR_BASE + 13)
 #define DOMAIN_ATTR_PAGE_TABLE_IS_COHERENT	(EXTENDED_ATTR_BASE + 14)
 #define DOMAIN_ATTR_PAGE_TABLE_FORCE_COHERENT	(EXTENDED_ATTR_BASE + 15)
-#define DOMAIN_ATTR_PAGE_TABLE_FORCE_NON_COHERENT (EXTENDED_ATTR_BASE + 16)
-#define DOMAIN_ATTR_USE_LLC_NWA			(EXTENDED_ATTR_BASE + 17)
-#define DOMAIN_ATTR_SPLIT_TABLES		(EXTENDED_ATTR_BASE + 18)
-#define DOMAIN_ATTR_FAULT_MODEL_NO_CFRE		(EXTENDED_ATTR_BASE + 19)
-#define DOMAIN_ATTR_FAULT_MODEL_NO_STALL	(EXTENDED_ATTR_BASE + 20)
-#define DOMAIN_ATTR_FAULT_MODEL_HUPCF		(EXTENDED_ATTR_BASE + 21)
-#define DOMAIN_ATTR_EXTENDED_MAX		(EXTENDED_ATTR_BASE + 22)
+#define DOMAIN_ATTR_USE_LLC_NWA			(EXTENDED_ATTR_BASE + 16)
+#define DOMAIN_ATTR_SPLIT_TABLES		(EXTENDED_ATTR_BASE + 17)
+#define DOMAIN_ATTR_FAULT_MODEL_NO_CFRE		(EXTENDED_ATTR_BASE + 18)
+#define DOMAIN_ATTR_FAULT_MODEL_NO_STALL	(EXTENDED_ATTR_BASE + 19)
+#define DOMAIN_ATTR_FAULT_MODEL_HUPCF		(EXTENDED_ATTR_BASE + 20)
+#define DOMAIN_ATTR_EXTENDED_MAX		(EXTENDED_ATTR_BASE + 21)
 
 /* These are the possible reserved region types */
 enum iommu_resv_type {
@@ -390,10 +389,7 @@ struct iommu_ops {
  *          to an iommu domain
  * @iova_to_phys_hard: translate iova to physical address using IOMMU hardware
  * @is_iova_coherent: checks coherency of the given iova
- * @trigger_fault: trigger a fault on the device attached to an iommu domain
  * @tlbi_domain: Invalidate all TLBs covering an iommu domain
- * @enable_config_clocks: Enable all config clocks for this domain's IOMMU
- * @disable_config_clocks: Disable all config clocks for this domain's IOMMU
  * @iova_to_pte: translate iova to Page Table Entry (PTE).
  * @iommu_ops: the standard iommu ops
  */
@@ -404,10 +400,7 @@ struct msm_iommu_ops {
 					 dma_addr_t iova,
 					 unsigned long trans_flags);
 	bool (*is_iova_coherent)(struct iommu_domain *domain, dma_addr_t iova);
-	void (*trigger_fault)(struct iommu_domain *domain, unsigned long flags);
 	void (*tlbi_domain)(struct iommu_domain *domain);
-	int (*enable_config_clocks)(struct iommu_domain *domain);
-	void (*disable_config_clocks)(struct iommu_domain *domain);
 	uint64_t (*iova_to_pte)(struct iommu_domain *domain, dma_addr_t iova);
 	struct iommu_ops iommu_ops;
 };
@@ -658,9 +651,6 @@ static inline void iommu_iotlb_gather_add_page(struct iommu_domain *domain,
 		gather->start = start;
 }
 
-extern void iommu_trigger_fault(struct iommu_domain *domain,
-				unsigned long flags);
-
 /* PCI device grouping function */
 extern struct iommu_group *pci_device_group(struct device *dev);
 /* Generic device grouping function */
@@ -674,23 +664,6 @@ static inline void iommu_tlbiall(struct iommu_domain *domain)
 
 	if (ops->tlbi_domain)
 		ops->tlbi_domain(domain);
-}
-
-static inline int iommu_enable_config_clocks(struct iommu_domain *domain)
-{
-	struct msm_iommu_ops *ops = to_msm_iommu_ops(domain->ops);
-
-	if (ops->enable_config_clocks)
-		return ops->enable_config_clocks(domain);
-	return 0;
-}
-
-static inline void iommu_disable_config_clocks(struct iommu_domain *domain)
-{
-	struct msm_iommu_ops *ops = to_msm_iommu_ops(domain->ops);
-
-	if (ops->disable_config_clocks)
-		ops->disable_config_clocks(domain);
 }
 
 /**
@@ -1086,21 +1059,7 @@ static inline void iommu_device_unlink(struct device *dev, struct device *link)
 {
 }
 
-static inline void iommu_trigger_fault(struct iommu_domain *domain,
-				       unsigned long flags)
-{
-}
-
 static inline void iommu_tlbiall(struct iommu_domain *domain)
-{
-}
-
-static inline int iommu_enable_config_clocks(struct iommu_domain *domain)
-{
-	return 0;
-}
-
-static inline void iommu_disable_config_clocks(struct iommu_domain *domain)
 {
 }
 

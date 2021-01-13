@@ -717,7 +717,7 @@ struct xhci_ep_ctx {
  * 4 - TRB error
  * 5-7 - reserved
  */
-#define EP_STATE_MASK		(0xf)
+#define EP_STATE_MASK		(0x7)
 #define EP_STATE_DISABLED	0
 #define EP_STATE_RUNNING	1
 #define EP_STATE_HALTED		2
@@ -1695,6 +1695,7 @@ struct xhci_bus_state {
 	/* Which ports are waiting on RExit to U0 transition. */
 	unsigned long		rexit_ports;
 	struct completion	rexit_done[USB_MAXCHILDREN];
+	struct completion	u3exit_done[USB_MAXCHILDREN];
 };
 
 
@@ -2060,6 +2061,8 @@ void xhci_free_container_ctx(struct xhci_hcd *xhci,
 /* xHCI host controller glue */
 typedef void (*xhci_get_quirks_t)(struct device *, struct xhci_hcd *);
 int xhci_handshake(void __iomem *ptr, u32 mask, u32 done, int usec);
+int xhci_handshake_check_state(struct xhci_hcd *xhci,
+		void __iomem *ptr, u32 mask, u32 done, int usec);
 void xhci_quiesce(struct xhci_hcd *xhci);
 int xhci_halt(struct xhci_hcd *xhci);
 int xhci_start(struct xhci_hcd *xhci);
@@ -2123,8 +2126,9 @@ void xhci_find_new_dequeue_state(struct xhci_hcd *xhci,
 void xhci_queue_new_dequeue_state(struct xhci_hcd *xhci,
 		unsigned int slot_id, unsigned int ep_index,
 		struct xhci_dequeue_state *deq_state);
-void xhci_cleanup_stalled_ring(struct xhci_hcd *xhci, unsigned int ep_index,
-		unsigned int stream_id, struct xhci_td *td);
+void xhci_cleanup_stalled_ring(struct xhci_hcd *xhci, unsigned int slot_id,
+			       unsigned int ep_index, unsigned int stream_id,
+			       struct xhci_td *td);
 void xhci_stop_endpoint_command_watchdog(struct timer_list *t);
 void xhci_handle_command_timeout(struct work_struct *work);
 

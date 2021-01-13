@@ -306,7 +306,8 @@ config SM_DEBUGCC_8150
 	help
 	  Support for the debug clock controller on Qualcomm Technologies, Inc
 	  SM8150 devices.
-	  Say Y if you want to support the clock measurement functionality.
+	  Say Y if you want to support the debug clocks such as
+	  clock measurement functionality.
 
 config SM_DISPCC_8150
 	tristate "SM8150 Display Clock Controller"
@@ -331,7 +332,8 @@ config SM_GPUCC_8150
 	help
 	  Support for the graphics clock controller on Qualcomm Technologies, Inc.
 	  sm8150 devices.
-	  Say Y if you want to support graphics controller devices.
+	  Say Y if you want to support graphics controller devices and
+	  functionality such as 3D graphics.
 
 config SM_NPUCC_8150
 	tristate "SM8150 NPU Clock Controller"
@@ -339,7 +341,8 @@ config SM_NPUCC_8150
 	help
 	  Support for the NPU Clock Controller on Qualcomm Technologies, Inc.
 	  sm8150 devices.
-	  Say Y if you want to support Network Processing Unit.
+	  Say Y if you want to enable use of the Network Processing Unit in
+	  order to speed up certain types of calculations.
 
 config SM_SCC_8150
 	tristate "SM8150 Sensor Clock Controller"
@@ -597,6 +600,112 @@ config SM_DEBUGCC_6150
 	help
 	  Support for the debug clock controller on Qualcomm Technologies, Inc
 	  SM6150 devices.
+
+config SM_GPUCC_HOLI
+	tristate "HOLI Graphics Clock Controller"
+	select SM_GCC_HOLI
+	help
+	  Support for the graphics clock controller on Qualcomm Technologies,
+	  Inc. HOLI devices.
+	  Say Y if you want to support graphics controller devices and
+	  functionality such as 3D graphics.
+
+config SM_DISPCC_SHIMA
+	tristate "SHIMA Display Clock Controller"
+	depends on SM_GCC_SHIMA
+	help
+	  Support for the display clock controller on Qualcomm Technologies, Inc.
+	  Shima devices.
+	  Say Y if you want to support display devices and functionality such as
+	  splash screen.
+
+config SM_DEBUGCC_SHIMA
+	tristate "SHIMA Debug Clock Controller"
+	depends on SM_GCC_SHIMA
+	help
+	  Support for the debug clock controller on Qualcomm Technologies, Inc.
+	  Shima devices.
+	  Say Y if you want to support the debug clocks such as clock measurement
+	  functionality.
+
+config SM_DISPCC_HOLI
+	tristate "HOLI Display Clock Controller"
+	select SM_GCC_HOLI
+	help
+	  Support for the display clock controller on Qualcomm Technologies,
+	  Inc. HOLI devices.
+	  Say Y if you want to support display devices and functionality such as
+	  splash screen.
+
+config SM_DEBUGCC_HOLI
+	tristate "HOLI Debug Clock Controller"
+	depends on SM_GCC_HOLI
+	help
+	  Support for the debug clock controller on Qualcomm Technologies, Inc.
+	  HOLI devices.
+	  Say Y if you want to support the debug clocks such as
+	  clock measurement functionality.
+
+config SDX_GCC_LEMUR
+	tristate "SDXLEMUR Global Clock Controller"
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the global clock controller on Qualcomm Technologies, Inc.
+	  SDXLEMUR devices.
+	  Say Y if you want to use peripheral devices such as UART, SPI, I2C,
+	  USB, UFS, SD/eMMC, PCIe, etc.
+
+config SDX_DEBUGCC_LEMUR
+	tristate "SDXLEMUR Debug Clock Controller"
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the debug clock controller on Qualcomm Technologies, Inc.
+	  sdxlemur devices.
+	  Say Y if you want to support the debug clocks such as
+	  clock measurement functionality.
+
+config CLOCK_CPU_SDXLEMUR
+	bool "CPU SDXLEMUR Clock Controller"
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the cpu clock controller on SDXLEMUR
+	  based devices.
+	  Say Y if you want to support CPU clock scaling using
+	  CPUfreq drivers for dynamic power management.
+
+config SM_GCC_YUPIK
+	tristate "YUPIK Global Clock Controller"
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the global clock controller on Qualcomm Technologies, Inc.
+	  YUPIK devices.
+	  Say Y if you want to use peripheral devices such as UART, SPI, I2C,
+	  USB, UFS, SD/eMMC, PCIe, etc.
+
+config SM_GPUCC_YUPIK
+	tristate "YUPIK Graphics Clock Controller"
+	select SM_GCC_YUPIK
+	help
+	  Support for the graphics clock controller on Qualcomm Technologies, Inc.
+	  YUPIK devices.
+	  Say Y if you want to support graphics controller devices and
+	  functionality such as 3D graphics.
+
+config SDX_GCC_NIGHTJAR
+	tristate "SDXNIGHTJAR Global Clock Controller"
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the global clock controller on Qualcomm Technologies, Inc.
+	  SDXNIGHTJAR devices.
+	  Say Y if you want to use peripheral devices such as UART, SPI, I2C,
+	  USB, SD/eMMC, PCIe, etc.
+
+config SDX_DEBUGCC_NIGHTJAR
+	tristate "SDXNIGHTJAR Debug Clock Controller"
+	select SDX_GCC_NIGHTJAR
+	help
+	  Support for the debug clock controller on Qualcomm Technologies, Inc.
+	  sdxnightjar devices.
 	  Say Y if you want to support the debug clocks such as
 	  clock measurement functionality.
 

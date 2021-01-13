@@ -177,8 +177,9 @@ static int build_unified_table(struct cc_limits_data *cc_cdev,
 static struct cc_limits_data *opp_init(int *cpus)
 {
 	int cpu1, cpu2;
-	struct device *cpu1_dev, *cpu2_dev;
-	struct limits_freq_table *cpu1_freq_table, *cpu2_freq_table;
+	struct device *cpu1_dev = NULL, *cpu2_dev = NULL;
+	struct limits_freq_table *cpu1_freq_table = NULL;
+	struct limits_freq_table *cpu2_freq_table = NULL;
 	struct limits_freq_table *cpu_freq_table[CPU_MAP_CT];
 	int table_ct[CPU_MAP_CT], ret = 0;
 	struct cc_limits_data *cc_cdev = NULL;
@@ -227,12 +228,11 @@ opp_err_exit:
 	return ERR_PTR(-ENODEV);
 }
 
-static int cc_init(struct device *dev, int *cpus)
+static int cc_init(struct device_node *np, int *cpus)
 {
 	struct cc_limits_data *cc_cdev;
 	int idx = 0, ret = 0;
 	struct cpufreq_policy *policy;
-	struct device_node *np = dev->of_node;
 
 	mutex_lock(&cc_list_lock);
 	list_for_each_entry(cc_cdev, &cc_cdev_list, node) {
@@ -323,7 +323,7 @@ static int cc_cooling_probe(struct platform_device *pdev)
 				}
 			}
 		}
-		ret = cc_init(dev, cpu_map);
+		ret = cc_init(subsys_np, cpu_map);
 	}
 
 	return ret;

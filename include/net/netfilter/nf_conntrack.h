@@ -15,6 +15,11 @@
 
 #include <linux/bitops.h>
 #include <linux/compiler.h>
+#include <linux/android_kabi.h>
+#include <linux/android_vendor.h>
+#ifdef CONFIG_NF_CONNTRACK_SIP_SEGMENTATION
+#include <linux/list.h>
+#endif
 
 #include <linux/netfilter/nf_conntrack_common.h>
 #include <linux/netfilter/nf_conntrack_tcp.h>
@@ -24,9 +29,21 @@
 
 #include <net/netfilter/nf_conntrack_tuple.h>
 
+#ifdef CONFIG_NF_CONNTRACK_SIP_SEGMENTATION
+#define SIP_LIST_ELEMENTS       2
+#endif
+
 struct nf_ct_udp {
 	unsigned long	stream_ts;
 };
+
+#ifdef CONFIG_NF_CONNTRACK_SIP_SEGMENTATION
+struct sip_length {
+	int msg_length[SIP_LIST_ELEMENTS];
+	int skb_len[SIP_LIST_ELEMENTS];
+	int data_len[SIP_LIST_ELEMENTS];
+};
+#endif
 
 /* per conntrack: protocol private data */
 union nf_conntrack_proto {
@@ -54,6 +71,11 @@ struct nf_conntrack_net {
 
 #include <net/netfilter/ipv4/nf_conntrack_ipv4.h>
 #include <net/netfilter/ipv6/nf_conntrack_ipv6.h>
+
+/* Handle NATTYPE Stuff,only if NATTYPE module was defined */
+#ifdef CONFIG_IP_NF_TARGET_NATTYPE_MODULE
+#include <linux/netfilter_ipv4/ipt_NATTYPE.h>
+#endif
 
 struct nf_conn {
 	/* Usage count in here is 1 for hash table, 1 per skb,
@@ -87,7 +109,7 @@ struct nf_conn {
 	struct hlist_node	nat_bysource;
 #endif
 	/* all members below initialized via memset */
-	u8 __nfct_init_offset[0];
+	struct { } __nfct_init_offset;
 
 	/* If we were expected by an expectation, this will be it */
 	struct nf_conn *master;
@@ -103,8 +125,28 @@ struct nf_conn {
 	/* Extensions */
 	struct nf_ct_ext *ext;
 
+#ifdef CONFIG_IP_NF_TARGET_NATTYPE_MODULE
+	unsigned long nattype_entry;
+#endif
+
+#ifdef CONFIG_ENABLE_SFE
+	void *sfe_entry;
+#endif
+#ifdef CONFIG_NF_CONNTRACK_SIP_SEGMENTATION
+	struct list_head sip_segment_list;
+	const char *dptr_prev;
+	struct sip_length segment;
+	bool sip_original_dir;
+	bool sip_reply_dir;
+#endif
+
 	/* Storage reserved for other modules, must be the last member */
 	union nf_conntrack_proto proto;
+
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
+
+	ANDROID_VENDOR_DATA(1);
 };
 
 static inline struct nf_conn *
@@ -288,6 +330,9 @@ extern struct hlist_nulls_head *nf_conntrack_hash;
 extern unsigned int nf_conntrack_htable_size;
 extern seqcount_t nf_conntrack_generation;
 extern unsigned int nf_conntrack_max;
+#ifdef CONFIG_ENABLE_SFE
+extern unsigned int nf_conntrack_pkt_threshold;
+#endif
 
 /* must be called with rcu read lock held */
 static inline void

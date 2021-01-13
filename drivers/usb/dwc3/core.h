@@ -270,9 +270,15 @@
 #define DWC3_GUCTL_HSTINAUTORETRY	BIT(14)
 
 /* Global User Control 1 Register */
+#define DWC3_GUCTL1_PARKMODE_DISABLE_SS	BIT(17)
 #define DWC3_GUCTL1_TX_IPGAP_LINECHECK_DIS	BIT(28)
 #define DWC3_GUCTL1_DEV_L1_EXIT_BY_HW	BIT(24)
 #define DWC3_GUCTL1_IP_GAP_ADD_ON(n)	(n << 21)
+
+#define DWC3_GUCTL1_PARKMODE_DISABLE_SS		BIT(17)
+#define DWC3_GUCTL1_PARKMODE_DISABLE_HS		BIT(16)
+#define DWC3_GUCTL1_PARKMODE_DISABLE_FSLS	BIT(15)
+
 #define DWC3_GUCTL1_L1_SUSP_THRLD_EN_FOR_HOST	BIT(8)
 
 /* Global Status Register */
@@ -337,6 +343,10 @@
 #define DWC31_GTXFIFOSIZ_TXFDEF(n)	((n) & 0x7fff)	/* DWC_usb31 only */
 #define DWC3_GTXFIFOSIZ_TXFDEF(n)	((n) & 0xffff)
 #define DWC3_GTXFIFOSIZ_TXFSTADDR(n)	((n) & 0xffff0000)
+
+/* Global RX Fifo Size Register */
+#define DWC31_GRXFIFOSIZ_RXFDEP(n)	((n) & 0x7fff)	/* DWC_usb31 only */
+#define DWC3_GRXFIFOSIZ_RXFDEP(n)	((n) & 0xffff)
 
 /* Global Event Size Registers */
 #define DWC3_GEVNTSIZ_INTMASK		BIT(31)
@@ -1110,6 +1120,8 @@ struct dwc3_scratchpad_array {
  *			change quirk.
  * @dis_tx_ipgap_linecheck_quirk: set if we disable u2mac linestate
  *			check during HS transmit.
+ * @parkmode_disable_ss_quirk: set if we need to disable all SuperSpeed
+ *			instances in park mode.
  * @tx_de_emphasis_quirk: set if we enable Tx de-emphasis quirk
  * @tx_de_emphasis: Tx de-emphasis value
  * 	0	- -6dB de-emphasis
@@ -1137,6 +1149,7 @@ struct dwc3_scratchpad_array {
  * @bh_completion_time: time taken for taklet completion
  * @bh_handled_evt_cnt: no. of events handled by tasklet per interrupt
  * @bh_dbg_index: index for capturing bh_completion_time and bh_handled_evt_cnt
+ * @last_run_stop: timestamp denoting the last run_stop update
  */
 struct dwc3 {
 	struct work_struct	drd_work;
@@ -1324,6 +1337,7 @@ struct dwc3 {
 	unsigned		dis_u2_freeclk_exists_quirk:1;
 	unsigned		dis_del_phy_power_chg_quirk:1;
 	unsigned		dis_tx_ipgap_linecheck_quirk:1;
+	unsigned		parkmode_disable_ss_quirk:1;
 
 	unsigned		tx_de_emphasis_quirk:1;
 	unsigned		tx_de_emphasis:2;
@@ -1380,6 +1394,7 @@ struct dwc3 {
 	u32			gen2_tx_de_emph1;
 	u32			gen2_tx_de_emph2;
 	u32			gen2_tx_de_emph3;
+	ktime_t			last_run_stop;
 };
 
 #define INCRX_BURST_MODE 0
@@ -1679,6 +1694,7 @@ enum dwc3_notify_event {
 	DWC3_CONTROLLER_NOTIFY_OTG_EVENT,
 	DWC3_CONTROLLER_SET_CURRENT_DRAW_EVENT,
 	DWC3_CONTROLLER_NOTIFY_DISABLE_UPDXFER,
+	DWC3_CONTROLLER_PULLUP,
 
 	/* USB GSI event buffer related notification */
 	DWC3_GSI_EVT_BUF_ALLOC,

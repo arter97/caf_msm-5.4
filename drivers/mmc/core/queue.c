@@ -18,6 +18,7 @@
 #include "queue.h"
 #include "block.h"
 #include "core.h"
+#include "crypto.h"
 #include "card.h"
 #include "host.h"
 
@@ -102,16 +103,24 @@ static enum blk_eh_timer_return mmc_cqe_timed_out(struct request *req)
 	enum mmc_issue_type issue_type = mmc_issue_type(mq, req);
 	bool recovery_needed = false;
 
+#if defined(CONFIG_SDC_QTI)
+	host->err_stats[MMC_ERR_CMDQ_REQ_TIMEOUT]++;
+#endif
+	mmc_log_string(host,
+		"Request timed out! Active reqs: %d Req: %p Tag: %d\n",
+		mmc_cqe_qcnt(mq), req, req->tag);
 	switch (issue_type) {
 	case MMC_ISSUE_ASYNC:
 	case MMC_ISSUE_DCMD:
 		if (host->cqe_ops->cqe_timeout(host, mrq, &recovery_needed)) {
 			if (recovery_needed)
-				__mmc_cqe_recovery_notifier(mq);
+				mmc_cqe_recovery_notifier(mrq);
 			return BLK_EH_RESET_TIMER;
 		}
-		/* No timeout (XXX: huh? comment doesn't make much sense) */
-		blk_mq_complete_request(req);
+		mmc_log_string(host,
+			"Timeout even before req reaching LDD,completing the req. Active reqs: %d Req: %p Tag: %d\n",
+			mmc_cqe_qcnt(mq), req, req->tag);
+		/* The request has gone already */
 		return BLK_EH_DONE;
 	default:
 		/* Timeout is handled by mmc core */
@@ -127,18 +136,14 @@ static enum blk_eh_timer_return mmc_mq_timed_out(struct request *req,
 	struct mmc_card *card = mq->card;
 	struct mmc_host *host = card->host;
 	unsigned long flags;
-	int ret;
+	bool ignore_tout;
 
 	spin_lock_irqsave(&mq->lock, flags);
 
-	if (mq->recovery_needed || !mq->use_cqe || host->hsq_enabled)
-		ret = BLK_EH_RESET_TIMER;
-	else
-		ret = mmc_cqe_timed_out(req);
-
+	ignore_tout = mq->recovery_needed || !mq->use_cqe || host->hsq_enabled;
 	spin_unlock_irqrestore(&mq->lock, flags);
 
-	return ret;
+	return ignore_tout ? BLK_EH_RESET_TIMER : mmc_cqe_timed_out(req);
 }
 
 static void mmc_mq_recovery_handler(struct work_struct *work)
@@ -417,6 +422,11 @@ static void mmc_setup_queue(struct mmc_queue *mq, struct mmc_card *card)
 	mutex_init(&mq->complete_lock);
 
 	init_waitqueue_head(&mq->wait);
+
+#if defined(CONFIG_SDC_QTI) && defined(CONFIG_MMC_CQHCI_CRYPTO)
+	if (host->cqe_ops && host->cqe_ops->cqe_crypto_update_queue)
+		host->cqe_ops->cqe_crypto_update_queue(host, mq->queue);
+#endif
 }
 
 static inline bool mmc_merge_capable(struct mmc_host *host)
@@ -491,6 +501,7 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card)
 	blk_queue_rq_timeout(mq->queue, 60 * HZ);
 
 	mmc_setup_queue(mq, card);
+	mmc_crypto_setup_queue(host, mq->queue);
 	return 0;
 
 free_tag_set:

@@ -509,7 +509,7 @@ struct iommu_group *iommu_group_alloc(void)
 				   NULL, "%d", group->id);
 	if (ret) {
 		ida_simple_remove(&iommu_group_ida, group->id);
-		kfree(group);
+		kobject_put(&group->kobj);
 		return ERR_PTR(ret);
 	}
 
@@ -1428,7 +1428,7 @@ struct iommu_group *iommu_group_get_for_dev(struct device *dev)
 
 	return group;
 }
-EXPORT_SYMBOL(iommu_group_get_for_dev);
+EXPORT_SYMBOL_GPL(iommu_group_get_for_dev);
 
 struct iommu_domain *iommu_group_default_domain(struct iommu_group *group)
 {
@@ -2030,7 +2030,6 @@ size_t iommu_unmap(struct iommu_domain *domain,
 
 	iommu_iotlb_gather_init(&iotlb_gather);
 	ret = __iommu_unmap(domain, iova, size, &iotlb_gather);
-	iommu_tlb_sync(domain, &iotlb_gather);
 
 	return ret;
 }
@@ -2232,23 +2231,6 @@ void iommu_put_resv_regions(struct device *dev, struct list_head *list)
 
 	if (ops && ops->put_resv_regions)
 		ops->put_resv_regions(dev, list);
-}
-
-/**
- * iommu_trigger_fault() - trigger an IOMMU fault
- * @domain: iommu domain
- *
- * Triggers a fault on the device to which this domain is attached.
- *
- * This function should only be used for debugging purposes, for obvious
- * reasons.
- */
-void iommu_trigger_fault(struct iommu_domain *domain, unsigned long flags)
-{
-	struct msm_iommu_ops *ops = to_msm_iommu_ops(domain->ops);
-
-	if (ops->trigger_fault)
-		ops->trigger_fault(domain, flags);
 }
 
 struct iommu_resv_region *iommu_alloc_resv_region(phys_addr_t start,

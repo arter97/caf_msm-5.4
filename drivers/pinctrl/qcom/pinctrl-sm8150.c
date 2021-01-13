@@ -1532,7 +1532,7 @@ static struct msm_dir_conn sm8150_dir_conn[] = {
 	  {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}
 };
 
-static struct msm_pinctrl_soc_data sm8150_pinctrl = {
+static const struct msm_pinctrl_soc_data sm8150_pinctrl = {
 	.pins = sm8150_pins,
 	.npins = ARRAY_SIZE(sm8150_pins),
 	.functions = sm8150_functions,

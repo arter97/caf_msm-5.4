@@ -6,6 +6,7 @@
  */
 
 #include <linux/gfp.h>
+#include <linux/hardirq.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/printk.h>
@@ -216,14 +217,14 @@ void cfi_module_add(struct module *mod, unsigned long min_addr,
 {
 	update_shadow(mod, min_addr, max_addr, add_module_to_shadow);
 }
-EXPORT_SYMBOL(cfi_module_add);
+EXPORT_SYMBOL_GPL(cfi_module_add);
 
 void cfi_module_remove(struct module *mod, unsigned long min_addr,
 	unsigned long max_addr)
 {
 	update_shadow(mod, min_addr, max_addr, remove_module_from_shadow);
 }
-EXPORT_SYMBOL(cfi_module_remove);
+EXPORT_SYMBOL_GPL(cfi_module_remove);
 
 static inline cfi_check_fn ptr_to_check_fn(const struct cfi_shadow __rcu *s,
 	unsigned long ptr)
@@ -246,33 +247,36 @@ static inline cfi_check_fn ptr_to_check_fn(const struct cfi_shadow __rcu *s,
 
 static inline cfi_check_fn find_module_cfi_check(void *ptr)
 {
+	cfi_check_fn f = CFI_CHECK_FN;
 	struct module *mod;
 
 	preempt_disable();
 	mod = __module_address((unsigned long)ptr);
+	if (mod)
+		f = mod->cfi_check;
 	preempt_enable();
 
-	if (mod)
-		return mod->cfi_check;
-
-	return CFI_CHECK_FN;
+	return f;
 }
 
 static inline cfi_check_fn find_cfi_check(void *ptr)
 {
-#ifdef CONFIG_CFI_CLANG_SHADOW
+	bool rcu;
 	cfi_check_fn f;
 
-	if (!rcu_access_pointer(cfi_shadow))
-		return CFI_CHECK_FN; /* No loaded modules */
+	rcu = rcu_is_watching();
+	if (!rcu)
+		rcu_nmi_enter();
 
+#ifdef CONFIG_CFI_CLANG_SHADOW
 	/* Look up the __cfi_check function to use */
-	rcu_read_lock();
-	f = ptr_to_check_fn(rcu_dereference(cfi_shadow), (unsigned long)ptr);
-	rcu_read_unlock();
+	rcu_read_lock_sched();
+	f = ptr_to_check_fn(rcu_dereference_sched(cfi_shadow),
+			    (unsigned long)ptr);
+	rcu_read_unlock_sched();
 
 	if (f)
-		return f;
+		goto out;
 
 	/*
 	 * Fall back to find_module_cfi_check, which works also for a larger
@@ -280,7 +284,13 @@ static inline cfi_check_fn find_cfi_check(void *ptr)
 	 */
 #endif /* CONFIG_CFI_CLANG_SHADOW */
 
-	return find_module_cfi_check(ptr);
+	f = find_module_cfi_check(ptr);
+
+out:
+	if (!rcu)
+		rcu_nmi_exit();
+
+	return f;
 }
 
 void cfi_slowpath_handler(uint64_t id, void *ptr, void *diag)
@@ -292,14 +302,14 @@ void cfi_slowpath_handler(uint64_t id, void *ptr, void *diag)
 	else /* Don't allow unchecked modules */
 		handle_cfi_failure(ptr);
 }
-EXPORT_SYMBOL(cfi_slowpath_handler);
+EXPORT_SYMBOL_GPL(cfi_slowpath_handler);
 #endif /* CONFIG_MODULES */
 
 void cfi_failure_handler(void *data, void *ptr, void *vtable)
 {
 	handle_cfi_failure(ptr);
 }
-EXPORT_SYMBOL(cfi_failure_handler);
+EXPORT_SYMBOL_GPL(cfi_failure_handler);
 
 void __cfi_check_fail(void *data, void *ptr)
 {

@@ -367,6 +367,9 @@ void *memblock_alloc_try_nid(phys_addr_t size, phys_addr_t align,
 
 static inline void * __init memblock_alloc(phys_addr_t size,  phys_addr_t align)
 {
+
+	memblock_dbg("%s: %llu bytes align=0x%llx %pS\n",
+			__func__, (u64)size, (u64)align, (void *)_RET_IP_);
 	return memblock_alloc_try_nid(size, align, MEMBLOCK_LOW_LIMIT,
 				      MEMBLOCK_ALLOC_ACCESSIBLE, NUMA_NO_NODE);
 }
@@ -531,6 +534,11 @@ static inline unsigned long memblock_region_reserved_end_pfn(const struct memblo
 	for (i = 0, rgn = &memblock_type->regions[0];			\
 	     i < memblock_type->cnt;					\
 	     i++, rgn = &memblock_type->regions[i])
+#define for_each_memblock_rev(memblock_type, region)	\
+	for (region = memblock.memblock_type.regions + \
+			memblock.memblock_type.cnt - 1;	\
+	     region >= memblock.memblock_type.regions;	\
+	     region--)
 
 extern void *alloc_large_system_hash(const char *tablename,
 				     unsigned long bucketsize,

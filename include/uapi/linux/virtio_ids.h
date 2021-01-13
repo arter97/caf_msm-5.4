@@ -46,6 +46,7 @@
 #define VIRTIO_ID_IOMMU        23 /* virtio IOMMU */
 #define VIRTIO_ID_FS           26 /* virtio filesystem */
 #define VIRTIO_ID_PMEM         27 /* virtio pmem */
+#define VIRTIO_ID_MAC80211_HWSIM 29 /* virtio mac80211-hwsim */
 #define VIRTIO_ID_CLOCK        30 /* virtio clock */
 #define VIRTIO_ID_REGULATOR    31 /* virtio regulator */
 #define VIRTIO_ID_I2C          32 /* virtio i2c */

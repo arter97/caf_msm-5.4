@@ -26,6 +26,12 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
 
+#undef CREATE_TRACE_POINTS
+#include <trace/hooks/dtask.h>
+
+#undef CREATE_TRACE_POINTS
+#include <trace/hooks/sched.h>
+
 /*
  * Export tracepoints that act as a bare tracehook (ie: have no trace event
  * associated with them) to allow external modules to probe them.
@@ -38,6 +44,7 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(pelt_se_tp);
 EXPORT_TRACEPOINT_SYMBOL_GPL(sched_overutilized_tp);
 
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
+EXPORT_SYMBOL_GPL(runqueues);
 
 #if defined(CONFIG_SCHED_DEBUG) && defined(CONFIG_JUMP_LABEL)
 /*
@@ -1251,18 +1258,23 @@ static void uclamp_fork(struct task_struct *p)
 		return;
 
 	for_each_clamp_id(clamp_id) {
-		unsigned int clamp_value = uclamp_none(clamp_id);
-
-		/* By default, RT tasks always get 100% boost */
-		if (sched_feat(SUGOV_RT_MAX_FREQ) &&
-			       unlikely(rt_task(p) &&
-			       clamp_id == UCLAMP_MIN)) {
-
-			clamp_value = uclamp_none(UCLAMP_MAX);
-		}
-
-		uclamp_se_set(&p->uclamp_req[clamp_id], clamp_value, false);
+		uclamp_se_set(&p->uclamp_req[clamp_id],
+			      uclamp_none(clamp_id), false);
 	}
+}
+
+static void __init init_uclamp_rq(struct rq *rq)
+{
+	enum uclamp_id clamp_id;
+	struct uclamp_rq *uc_rq = rq->uclamp;
+
+	for_each_clamp_id(clamp_id) {
+		uc_rq[clamp_id] = (struct uclamp_rq) {
+			.value = uclamp_none(clamp_id)
+		};
+	}
+
+	rq->uclamp_flags = 0;
 }
 
 static void __init init_uclamp(void)
@@ -1273,11 +1285,8 @@ static void __init init_uclamp(void)
 
 	mutex_init(&uclamp_mutex);
 
-	for_each_possible_cpu(cpu) {
-		memset(&cpu_rq(cpu)->uclamp, 0,
-				sizeof(struct uclamp_rq)*UCLAMP_CNT);
-		cpu_rq(cpu)->uclamp_flags = 0;
-	}
+	for_each_possible_cpu(cpu)
+		init_uclamp_rq(cpu_rq(cpu));
 
 	for_each_clamp_id(clamp_id) {
 		uclamp_se_set(&init_task.uclamp_req[clamp_id],
@@ -1323,6 +1332,8 @@ static inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 	p->sched_class->enqueue_task(rq, p, flags);
 	walt_update_last_enqueue(p);
 	trace_sched_enq_deq_task(p, 1, cpumask_bits(&p->cpus_mask)[0]);
+
+	trace_android_rvh_enqueue_task(rq, p);
 }
 
 static inline void dequeue_task(struct rq *rq, struct task_struct *p, int flags)
@@ -1342,6 +1353,8 @@ static inline void dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 		early_detection_notify(rq, sched_ktime_clock());
 #endif
 	trace_sched_enq_deq_task(p, 0, cpumask_bits(&p->cpus_mask)[0]);
+
+	trace_android_rvh_dequeue_task(rq, p);
 }
 
 void activate_task(struct rq *rq, struct task_struct *p, int flags)
@@ -1527,6 +1540,7 @@ static struct rq *move_queued_task(struct rq *rq, struct rq_flags *rf,
 
 	WRITE_ONCE(p->on_rq, TASK_ON_RQ_MIGRATING);
 	dequeue_task(rq, p, DEQUEUE_NOCLOCK);
+	rq_unpin_lock(rq, rf);
 	double_lock_balance(rq, cpu_rq(new_cpu));
 	if (!(rq->clock_update_flags & RQCF_UPDATED))
 		update_rq_clock(rq);
@@ -1694,7 +1708,7 @@ static int __set_cpus_allowed_ptr(struct task_struct *p,
 		goto out;
 	}
 
-	if (cpumask_equal(p->cpus_ptr, new_mask))
+	if (cpumask_equal(&p->cpus_mask, new_mask))
 		goto out;
 
 #ifdef CONFIG_SCHED_WALT
@@ -2093,10 +2107,14 @@ static int select_fallback_rq(int cpu, struct task_struct *p, bool allow_iso)
 	int nid = cpu_to_node(cpu);
 	const struct cpumask *nodemask = NULL;
 	enum { cpuset, possible, fail, bug } state = cpuset;
-	int dest_cpu;
+	int dest_cpu = -1;
 #ifdef CONFIG_SCHED_WALT
 	int isolated_candidate = -1;
 #endif
+
+	trace_android_rvh_select_fallback_rq(cpu, p, &dest_cpu);
+	if (dest_cpu >= 0)
+		return dest_cpu;
 
 	/*
 	 * If the node that the CPU is on has been offlined, cpu_to_node()
@@ -2810,6 +2828,7 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	p->wts.boost_expires		= 0;
 	p->wts.boost_period		= 0;
 	p->wts.low_latency		= 0;
+	p->wts.iowaited			= false;
 #endif
 	INIT_LIST_HEAD(&p->se.group_node);
 
@@ -2975,6 +2994,7 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 	 * Make sure we do not leak PI boosting priority to the child.
 	 */
 	p->prio = current->normal_prio;
+	trace_android_rvh_prepare_prio_fork(p);
 
 	uclamp_fork(p);
 
@@ -3007,6 +3027,7 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 		p->sched_class = &fair_sched_class;
 
 	init_entity_runnable_average(&p->se);
+	trace_android_rvh_finish_prio_fork(p);
 
 	/*
 	 * The child is not yet in the pid-hash so no cgroup attach races,
@@ -3016,6 +3037,7 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 	 * Silence PROVE_RCU.
 	 */
 	raw_spin_lock_irqsave(&p->pi_lock, flags);
+	rseq_migrate(p);
 	/*
 	 * We're setting the CPU for the first time, we don't migrate,
 	 * so use __set_task_cpu().
@@ -3082,6 +3104,7 @@ void wake_up_new_task(struct task_struct *p)
 	 * as we're not fully set-up yet.
 	 */
 	p->recent_used_cpu = task_cpu(p);
+	rseq_migrate(p);
 	__set_task_cpu(p, select_task_rq(p, task_cpu(p), SD_BALANCE_FORK, 0, 1));
 #endif
 	rq = __task_rq_lock(p, &rf);
@@ -3769,6 +3792,8 @@ void scheduler_tick(void)
 
 	if (curr->sched_class == &fair_sched_class)
 		check_for_migration(rq, curr);
+
+	trace_android_vh_scheduler_tick(rq);
 }
 
 #ifdef CONFIG_NO_HZ_FULL
@@ -3834,7 +3859,6 @@ static void sched_tick_remote(struct work_struct *work)
 	if (cpu_is_offline(cpu))
 		goto out_unlock;
 
-	curr = rq->curr;
 	update_rq_clock(rq);
 
 	if (!is_idle_task(curr)) {
@@ -4552,6 +4576,7 @@ void rt_mutex_setprio(struct task_struct *p, struct task_struct *pi_task)
 	struct rq_flags rf;
 	struct rq *rq;
 
+	trace_android_rvh_rtmutex_prepare_setprio(p, pi_task);
 	/* XXX used to be waiter->prio, not waiter->task->prio */
 	prio = __rt_effective_prio(pi_task, p->normal_prio);
 
@@ -4624,7 +4649,8 @@ void rt_mutex_setprio(struct task_struct *p, struct task_struct *pi_task)
 	 */
 	if (dl_prio(prio)) {
 		if (!dl_prio(p->normal_prio) ||
-		    (pi_task && dl_entity_preempt(&pi_task->dl, &p->dl))) {
+		    (pi_task && dl_prio(pi_task->prio) &&
+		     dl_entity_preempt(&pi_task->dl, &p->dl))) {
 			p->dl.dl_boosted = 1;
 			queue_flag |= ENQUEUE_REPLENISH;
 		} else
@@ -4682,6 +4708,7 @@ void set_user_nice(struct task_struct *p, long nice)
 	 */
 	rq = task_rq_lock(p, &rf);
 	update_rq_clock(rq);
+	trace_android_rvh_set_user_nice(p, &nice);
 
 	/*
 	 * The RT priorities are set via sched_setscheduler(), but we still
@@ -4905,6 +4932,8 @@ static void __setscheduler(struct rq *rq, struct task_struct *p,
 		p->sched_class = &rt_sched_class;
 	else
 		p->sched_class = &fair_sched_class;
+
+	trace_android_rvh_setscheduler(p);
 }
 
 /*
@@ -6198,6 +6227,7 @@ void sched_show_task(struct task_struct *p)
 		(unsigned long)task_thread_info(p)->flags);
 
 	print_worker_info(KERN_INFO, p);
+	trace_android_vh_sched_show_task(p);
 	show_stack(p, NULL);
 	put_task_stack(p);
 }
@@ -6436,13 +6466,14 @@ void idle_task_exit(void)
 	struct mm_struct *mm = current->active_mm;
 
 	BUG_ON(cpu_online(smp_processor_id()));
+	BUG_ON(current != this_rq()->idle);
 
 	if (mm != &init_mm) {
 		switch_mm(mm, &init_mm, current);
-		current->active_mm = &init_mm;
 		finish_arch_post_lock_switch();
 	}
-	mmdrop(mm);
+
+	/* finish_cpu(), as ran on the BP, will clean up the active_mm state */
 }
 
 /*
@@ -7020,7 +7051,9 @@ void __init sched_init(void)
 
 	init_uclamp();
 
+#ifdef CONFIG_CGROUP_SCHED
 	walt_init_sched_boost(&root_task_group);
+#endif
 
 	scheduler_running = 1;
 }
@@ -7767,6 +7800,8 @@ static DEFINE_MUTEX(cfs_constraints_mutex);
 
 const u64 max_cfs_quota_period = 1 * NSEC_PER_SEC; /* 1s */
 static const u64 min_cfs_quota_period = 1 * NSEC_PER_MSEC; /* 1ms */
+/* More than 203 days if BW_SHIFT equals 20. */
+static const u64 max_cfs_runtime = MAX_BW * NSEC_PER_USEC;
 
 static int __cfs_schedulable(struct task_group *tg, u64 period, u64 runtime);
 
@@ -7792,6 +7827,12 @@ static int tg_set_cfs_bandwidth(struct task_group *tg, u64 period, u64 quota)
 	 * feasibility.
 	 */
 	if (period > max_cfs_quota_period)
+		return -EINVAL;
+
+	/*
+	 * Bound quota to defend quota against overflow during bandwidth shift.
+	 */
+	if (quota != RUNTIME_INF && quota > max_cfs_runtime)
 		return -EINVAL;
 
 	/*
