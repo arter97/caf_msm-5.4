@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  *
  */
 
@@ -108,6 +108,7 @@ struct qcom_icc_bcm {
 	u64 vote_scale;
 	bool dirty;
 	bool keepalive;
+	bool inited;
 	struct bcm_db aux_data;
 	struct list_head list;
 	struct list_head ws_list;
