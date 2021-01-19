@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2015-2020, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2015-2021, The Linux Foundation. All rights reserved. */
 
 #ifndef _CNSS_QMI_H
 #define _CNSS_QMI_H
@@ -26,6 +26,7 @@ struct cnss_qmi_event_fw_mem_file_save_data {
 	char file_name[QMI_WLFW_MAX_STR_LEN_V01 + 1];
 };
 
+#define FW_ID_BASE 7
 #ifdef CONFIG_CNSS2_QMI
 #include "coexistence_service_v01.h"
 #include "ip_multimedia_subsystem_private_service_v01.h"
